@@ -18,8 +18,8 @@
  */
 
 import { sumarDias } from '../calendario/fechas.core.js'
-import { aCobrar, envioSaldado, num, turnosDe } from './reglas.core.js'
-import { diaDeRepartoVecino, proximoDiaDeReparto } from './core'
+import { num, turnosDe } from './reglas.core.js'
+import { diaDeRepartoVecino, nombreDeMarca, proximoDiaDeReparto } from './core'
 import type { Envio } from './tipos'
 
 /**
@@ -100,54 +100,31 @@ export function diasQueOfrecemos(hoy: string): string[] {
 }
 
 /**
- * La línea de la plata: cuánto sale el envío y cómo se abona.
+ * La línea de la plata: **cuánto sale el envío, y nada más.**
  *
- * 🔴 **El número que se le pide a la clienta es SIEMPRE `aCobrar`**, la misma función que imprime el
- * ticket y que dibuja la hoja del día. El papel, la pantalla y el WhatsApp tienen que decir el mismo
- * número: si acá se sumara a mano, un envío ya pago le pediría plata en la puerta a alguien a quien
- * el sistema le prometió por escrito que no pagaba nada.
+ * 🔴 **Dice SÓLO el envío, y es una decisión de Bruno del 18-ago-2026** —*«dejalo que diga solo el
+ * envío, sin el total»*—. La versión anterior nombraba también el saldo del pedido y la suma que la
+ * puerta iba a cobrar. ⚠️ **La consecuencia, dicha para que nadie la «arregle» de vuelta sin
+ * saberlo**: en una fila con saldo del pedido el mensaje nombra $ 4.200 y el cadete cobra $ 16.342.
+ * Está aceptado —el ticket sigue diciendo el número entero y `aCobrar` sigue siendo la única
+ * cuenta—, pero el mensaje **ya no es** el lugar donde ese número se promete.
  *
- * 🔑 **Saldado cambia el texto, no lo borra.** Decirle «podés abonar» a quien ya lo pagó es el mismo
- * error que el KPI que mandaba a reclamarle plata a una clienta que ya había pagado. Y son dos
- * frases distintas porque son dos hechos distintos: uno ya entró, el otro no entra nunca.
+ * 🔴 **Y la forma de pago NO se nombra**, por el mismo mensaje de Bruno: *«depende mucho de qué
+ * seleccionó en la compra, entonces no nos metamos en eso»*. Una línea que diga «efectivo o
+ * transferencia» es una afirmación sobre lo que la clienta ya eligió en el checkout, y este archivo
+ * no tiene ese dato. ⛔ No se vuelve a agregar sin traerlo.
  *
- * 🔴 **La forma de pago va SÓLO si queda algo por pagar** (18-ago-2026, con el texto que pasó Bruno).
- * «Podés abonar en efectivo o transferencia» abajo de un envío bonificado sin saldo de pedido es una
- * invitación a pagar algo que no se cobra — el mismo modo de falla que «se abona al recibir» sobre un
- * envío ya pago, que es justo lo que este archivo viene evitando desde que existe.
- *
- * ⚠️ **Y el texto nuevo dejó de decir CUÁNDO se paga.** El anterior decía «se abona al recibir»;
- * éste ofrece transferencia, que es antes. Es lo que pidió Bruno y está bien dicho, pero abre un
- * hecho que el sistema todavía no sabe: si la clienta transfiere, alguien tiene que tildar
- * `envio_pagado` **antes de que salga la moto**, o el cadete le vuelve a pedir la plata en la puerta
- * con el ticket en la mano. El mensaje no puede resolverlo solo.
+ * 🔑 **Saldado cambia el texto, no lo borra.** Ponerle un costo a quien ya lo pagó —o a quien se lo
+ * regalamos— es el mismo error que el KPI que mandaba a reclamarle plata a una clienta que ya había
+ * pagado. Y son dos frases distintas porque son dos hechos distintos: uno ya entró, el otro no entra
+ * nunca.
  */
 function laPlata(e: Envio, donde: string): string {
-  const envio = num(e.monto_envio)
-  const total = aCobrar(e)
   const destino = donde ? ` a ${donde}` : ''
-  const comoSePaga = ' Podés abonar en efectivo o transferencia.'
-
-  if (envioSaldado(e)) {
-    // ⛔ Bonificado y pagado no se colapsan: uno es plata que no entró nunca y el otro plata que ya
-    // entró. Preguntar por `envio_bonificado` primero es la misma precedencia que el ticket.
-    const cabeza = e.envio_bonificado ? `El envío${destino} va sin cargo` : `El envío${destino} ya está pago`
-    return total > 0 ? `${cabeza}, y quedan ${money(total)} del pedido.${comoSePaga}` : `${cabeza}.`
-  }
-
-  // El desglose va **sólo cuando se cobran dos cosas**, igual que en el ticket: repetir el mismo
-  // número en chico al lado del grande invita a leer el chico.
-  //
-  // 🔑 **Acá abajo `total` y `envio + pedido` son el MISMO número, y eso es un resultado del `if` de
-  // arriba, no una casualidad.** Se midió: el mutante que reemplaza `money(total)` por la suma a
-  // mano **sobrevive a la suite entera**, y es un equivalente legítimo — a esta línea sólo se llega
-  // con el envío SIN saldar, que es justo el caso en que `aCobrar` no resta nada. La protección
-  // contra sumar a mano la da la guarda, no el nombre de la función. ⛔ Por eso el desglose no se
-  // saca de adentro del `else`: afuera, la suma a mano volvería a cobrarle el envío a quien ya lo
-  // pagó, y ningún test de acá lo vería.
-  return total > envio
-    ? `El costo del envío${destino} es de ${money(envio)}, y quedan ${money(total - envio)} del pedido: ${money(total)} en total.${comoSePaga}`
-    : `El costo del envío${destino} es de ${money(envio)}.${comoSePaga}`
+  // ⛔ Bonificado primero, como en el ticket: son dos tildes distintas y no se colapsan.
+  if (e.envio_bonificado) return `El envío${destino} va sin cargo.`
+  if (e.envio_pagado) return `El envío${destino} ya está pago.`
+  return `El costo del envío${destino} es de ${money(num(e.monto_envio))}.`
 }
 
 /**
@@ -171,7 +148,9 @@ function laPlata(e: Envio, donde: string): string {
 export function mensajeParaLaClienta(e: Envio, hoy: string): string | null {
   if (!(num(e.monto_envio) > 0)) return null
 
-  const marca = e.store === 'zattia' ? 'Zattia' : 'BDI'
+  // 🔴 «BDI Accesorios», no «BDI»: el mismo nombre que imprime el ticket, y sale del mismo lugar.
+  // Cuando cada papel tenía su tabla, el ticket decía el largo y el WhatsApp el corto.
+  const marca = nombreDeMarca(e.store)
   const pila = String(e.cliente || '').trim().split(/\s+/)[0]
   const nombre = pila ? pila.charAt(0).toUpperCase() + pila.slice(1) : ''
   // 🔴 **Los espacios de más se juntan, y no es cosmética.** Medido en prod: 3 de las 11 direcciones

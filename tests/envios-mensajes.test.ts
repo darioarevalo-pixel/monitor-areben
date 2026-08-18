@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { aCobrar, turnosDe } from '@/lib/envios/reglas.core.js'
-import { linkWhatsapp } from '@/lib/envios/core'
+import { linkWhatsapp, nombreDeMarca } from '@/lib/envios/core'
 import { cuandoPasamos, diaEnCriollo, diasQueOfrecemos, mensajeParaLaClienta } from '@/lib/envios/mensajes'
 import type { Envio } from '@/lib/envios/tipos'
 
@@ -46,31 +46,46 @@ const con = (p: Partial<Envio>): Envio => ({ ...base, ...p })
 /** Un lunes. La grilla: lun tarde · mar mañana y tarde · mié tarde · jue mañana y tarde · vie tarde. */
 const LUNES = '2026-08-17'
 
-describe('🔴 la plata del mensaje es la misma que la del ticket', () => {
-  it('🔴 el número de «al recibir» sale de `aCobrar`, no de una suma escrita en el texto', () => {
-    // El mutante: sumar acá `monto_envio + monto_pedido_a_cobrar` sin mirar los tildes. Da el mismo
-    // número en el caso normal y de más en el envío ya pago, o sea que el mensaje le pide plata en
-    // la puerta a alguien a quien el sistema ya le cobró.
+/**
+ * 🔴 **El mensaje dice SÓLO el envío** (decisión de Bruno, 18-ago-2026: *«dejalo que diga solo el
+ * envío, sin el total»*), y **no nombra la forma de pago** (*«depende mucho de qué seleccionó en la
+ * compra, entonces no nos metamos en eso»*).
+ *
+ * ⚠️ Estos tests fijan una **decisión**, no una verdad: la versión anterior nombraba el total que la
+ * puerta iba a cobrar, y sacarlo significa que en una fila con saldo del pedido el mensaje dice
+ * $ 4.200 y el cadete cobra $ 16.342. Está aceptado. Por eso los tests son explícitos: para que
+ * volver a poner el total sea un cambio que alguien decide, y no uno que se cuela «arreglando».
+ */
+describe('🔴 la plata del mensaje: sólo el envío', () => {
+  it('🔴 con saldo del pedido, el mensaje NO lo nombra ni suma el total', () => {
+    // El mutante es volver a la versión anterior. Los dos números tienen que estar ausentes: el del
+    // pedido ($ 17.500) y el de la suma ($ 21.800).
     const e = con({ monto_envio: 4300, monto_pedido_a_cobrar: 17500 })
-    const m = mensajeParaLaClienta(e, LUNES) || ''
     expect(aCobrar(e)).toBe(21800)
-    expect(m).toContain('$ 21.800')
+    const m = mensajeParaLaClienta(e, LUNES) || ''
+    expect(m).toContain('El costo del envío a Riobamba 1234, Rosario es de $ 4.300.')
+    expect(m).not.toContain('$ 17.500')
+    expect(m).not.toContain('$ 21.800')
+    expect(m).not.toContain('del pedido')
+    expect(m).not.toContain('en total')
   })
 
-  it('🔴 el desglose sale SÓLO cuando se cobran dos cosas', () => {
-    // Repetir el mismo número en chico al lado del grande invita a leer el chico. Mismo criterio
-    // que el ticket.
-    expect(mensajeParaLaClienta(con({ monto_pedido_a_cobrar: 17500 }), LUNES)).toContain(
-      'El costo del envío a Riobamba 1234, Rosario es de $ 4.300, y quedan $ 17.500 del pedido: $ 21.800 en total.',
-    )
-    expect(mensajeParaLaClienta(con({}), LUNES)).not.toContain('del pedido')
+  it('🔴 y NUNCA nombra la forma de pago: ese dato lo eligió la clienta en el checkout', () => {
+    // El mutante es la línea que estuvo puesta unas horas. No la puede afirmar este archivo: acá no
+    // hay un solo campo que diga qué medio de pago se eligió en la compra.
+    for (const p of [{}, { monto_pedido_a_cobrar: 17500 }, { envio_bonificado: true }, { envio_pagado: true }]) {
+      const m = mensajeParaLaClienta(con(p), LUNES) || ''
+      expect(m).not.toContain('efectivo')
+      expect(m).not.toContain('transferencia')
+      expect(m).not.toContain('Podés abonar')
+    }
   })
 
   it('🔴 un envío YA PAGO no dice cuánto sale', () => {
     // Es el mismo error que el KPI que mandaba a reclamarle plata a una clienta que ya había pagado,
     // pero por escrito y a la clienta.
     const m = mensajeParaLaClienta(con({ envio_pagado: true }), LUNES) || ''
-    expect(m).toContain('ya está pago')
+    expect(m).toContain('El envío a Riobamba 1234, Rosario ya está pago.')
     expect(m).not.toContain('El costo del envío')
     expect(m).not.toContain('$ 4.300')
   })
@@ -83,45 +98,12 @@ describe('🔴 la plata del mensaje es la misma que la del ticket', () => {
     expect(m).not.toContain('ya está pago')
   })
 
-  it('con el envío saldado pero saldo del pedido, sigue pidiendo lo del pedido', () => {
-    const e = con({ envio_pagado: true, monto_pedido_a_cobrar: 17500 })
-    const m = mensajeParaLaClienta(e, LUNES) || ''
-    expect(aCobrar(e)).toBe(17500)
-    expect(m).toContain('$ 17.500')
-  })
-})
-
-/**
- * 🔴 **La forma de pago no es decoración: es una invitación a pagar.**
- *
- * El texto lo pasó Bruno el 18-ago-2026 pegado al costo del envío. Pegarlo al final del bloque sin
- * mirar si queda algo por cobrar le dice «podés abonar en efectivo o transferencia» a una clienta a
- * la que le regalamos el envío y no le debe nada — el mismo modo de falla que «se abona al recibir»
- * sobre un envío ya pago, que este archivo viene evitando desde que existe.
- */
-describe('🔴 «efectivo o transferencia» va sólo si queda algo por pagar', () => {
-  it('🔴 un envío bonificado SIN saldo del pedido no invita a abonar nada', () => {
-    const m = mensajeParaLaClienta(con({ envio_bonificado: true }), LUNES) || ''
-    expect(m).toContain('El envío a Riobamba 1234, Rosario va sin cargo.')
-    expect(m).not.toContain('Podés abonar')
-  })
-
-  it('🔴 y un envío ya pago SIN saldo del pedido, tampoco', () => {
-    expect(mensajeParaLaClienta(con({ envio_pagado: true }), LUNES)).not.toContain('Podés abonar')
-  })
-
-  it('con saldo del pedido SÍ va, aunque el envío esté saldado', () => {
-    // El mutante es colgar la forma de pago del envío en vez de colgarla del total: la clienta tiene
-    // $ 17.500 que pagar y el mensaje no le dice cómo.
-    const m = mensajeParaLaClienta(con({ envio_bonificado: true, monto_pedido_a_cobrar: 17500 }), LUNES) || ''
-    expect(m).toContain('va sin cargo, y quedan $ 17.500 del pedido.')
-    expect(m).toContain('Podés abonar en efectivo o transferencia.')
-  })
-
-  it('y en el caso normal va pegada al costo del envío, como la escribió Bruno', () => {
-    expect(mensajeParaLaClienta(con({}), LUNES)).toContain(
-      'El costo del envío a Riobamba 1234, Rosario es de $ 4.300. Podés abonar en efectivo o transferencia.',
-    )
+  it('🔴 y saldado con saldo del pedido TAMPOCO nombra el pedido', () => {
+    // El caso que más tentaba a dejar el saldo puesto: el envío no se cobra pero la puerta sí. La
+    // decisión vale igual — el número entero vive en el ticket.
+    const m = mensajeParaLaClienta(con({ envio_pagado: true, monto_pedido_a_cobrar: 17500 }), LUNES) || ''
+    expect(m).toContain('ya está pago.')
+    expect(m).not.toContain('$ 17.500')
   })
 })
 
@@ -146,8 +128,8 @@ describe('🔴 «esperamos tu confirmación» viaja pegada a los días', () => {
   it('el mensaje entero, tal como sale al chat', () => {
     // 🔑 El oráculo que mira lo que ve la clienta y no un pedazo: los tres renglones, en orden.
     expect(mensajeParaLaClienta(con({}), LUNES)).toBe(
-      'Hola Ana! Te escribimos de BDI por tu pedido #20913.\n' +
-        'El costo del envío a Riobamba 1234, Rosario es de $ 4.300. Podés abonar en efectivo o transferencia.\n' +
+      'Hola Ana! Te escribimos de BDI Accesorios por tu pedido #20913.\n' +
+        'El costo del envío a Riobamba 1234, Rosario es de $ 4.300.\n' +
         'Podríamos enviar el martes 18 (a la mañana o a la tarde) o el miércoles 19 a la tarde.\n' +
         '¡Esperamos tu confirmación!',
     )
@@ -218,9 +200,20 @@ describe('🔴 el día: SIEMPRE se propone, porque esto es el primer contacto', 
 })
 
 describe('el resto del mensaje', () => {
-  it('la marca sale de la fila y el nombre es el de pila, capitalizado', () => {
-    expect(mensajeParaLaClienta(con({}), LUNES)).toContain('Hola Ana! Te escribimos de BDI por tu pedido #20913.')
-    expect(mensajeParaLaClienta(con({ store: 'zattia' }), LUNES)).toContain('de Zattia')
+  it('🔴 la marca es la LARGA, la misma que imprime el ticket', () => {
+    // 🔴 El mutante es la tabla escrita a mano que había acá: `store === 'zattia' ? 'Zattia' : 'BDI'`.
+    // No fallaba nada — y los dos papeles que recibe la misma clienta decían nombres distintos, el
+    // ticket «BDI Accesorios» y el WhatsApp «BDI». Lo cazó Bruno leyendo el mensaje.
+    expect(mensajeParaLaClienta(con({}), LUNES)).toContain('Hola Ana! Te escribimos de BDI Accesorios por tu pedido #20913.')
+    expect(mensajeParaLaClienta(con({ store: 'zattia' }), LUNES)).toContain('Te escribimos de Zattia por tu pedido')
+  })
+
+  it('🔴 y sale del MISMO lugar que el ticket, no de una tabla propia', () => {
+    // Texto contra texto: lo que este test defiende es que haya UNA tabla. Con dos, la que se
+    // escriba más corta la próxima vez vuelve a contradecir al papel sin romper un solo test.
+    expect(nombreDeMarca('bdi')).toBe('BDI Accesorios')
+    expect(nombreDeMarca('zattia')).toBe('Zattia')
+    expect(mensajeParaLaClienta(con({}), LUNES)).toContain(nombreDeMarca('bdi'))
   })
 
   it('🔴 los espacios de más de la dirección se juntan', () => {

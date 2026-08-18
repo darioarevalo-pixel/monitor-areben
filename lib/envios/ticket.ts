@@ -35,7 +35,7 @@
 
 import { abrirRollo, ANCHO, M, MIN, COLA, W, type Medidor, type OpBase } from '../rollo80'
 import { imprimirPdf } from '../etiquetas/pdf'
-import { aCobrar, direccionCompleta, estaTodoPago } from './core'
+import { aCobrar, direccionCompleta, estaTodoPago, nombreDeMarca } from './core'
 import type { Envio } from './tipos'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,8 +49,6 @@ export type { Medidor }
 const altoPlata = (dice: TextoDePlata) => (dice.detalle ? 29 : 24)
 
 const plata = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
-
-const NOMBRE_MARCA: Record<string, string> = { bdi: 'BDI Accesorios', zattia: 'Zattia' }
 
 /** El bloque de plata es la única op propia de este papel; el resto las dibuja el rollo. */
 export type OpPlata = { k: 'plata'; y: number; alto: number; dice: TextoDePlata }
@@ -106,7 +104,7 @@ export function armarTicket(e: Envio, partir: Medidor): { ops: Op[]; alto: numbe
   }
 
   // Encabezado. Chico a propósito: la marca sirve para armar la mochila, no en la puerta.
-  ops.push({ k: 'txt', txt: NOMBRE_MARCA[e.store] || e.store, y, tam: 9, bold: false, align: 'izq', gris: 110 })
+  ops.push({ k: 'txt', txt: nombreDeMarca(e.store), y, tam: 9, bold: false, align: 'izq', gris: 110 })
   if (e.orden_numero) ops.push({ k: 'txt', txt: `#${e.orden_numero}`, y, tam: 9, bold: true, align: 'der' })
   y += 4.5
   regla()

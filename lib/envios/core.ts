@@ -10,6 +10,7 @@
 import { sumarDias } from '../calendario'
 import { normalizeArgPhone } from '../crm/core'
 import { rotuloFecha } from '../fechas/semana'
+import { CUENTAS } from '../cuentas'
 import { LOCALIDAD_DEL_CP } from './direccion.core.js'
 import { OFFSET_AR_MS } from './portal.core.js'
 import { aCobrar, cuentaDelCadete as cuentaDelCadeteJs, ESTADOS_CERRADOS, ESTADOS_EN_CASA, netoDelEnvio, num, pagoAlLocal, tarifaCadete, turnosDe } from './reglas.core.js'
@@ -226,6 +227,26 @@ export function linkWhatsapp(e: Envio, mensaje?: string | null): string | null {
   const tel = normalizeArgPhone(e.telefono)
   if (!tel) return null
   return mensaje ? `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}` : `https://wa.me/${tel}`
+}
+
+/**
+ * **Cómo se llama la marca cuando la lee la clienta.** «BDI Accesorios», no «BDI».
+ *
+ * 🔴 **Existe porque los dos papeles que ella recibe se contradecían.** El ticket pegado al paquete
+ * decía «BDI Accesorios» y el WhatsApp decía «BDI»: cada uno tenía su propia tabla escrita al lado
+ * del lugar donde se usaba, y la del mensaje se escribió más corta sin que nada fallara. Lo cazó
+ * Bruno leyendo el mensaje, no un test — porque **ninguna de las dos estaba mal sola**.
+ *
+ * 🔑 **El nombre sale de `CUENTAS`, que ya es el registro de las marcas** (lo mismo que rotula el
+ * selector del menú). ⛔ No se escribe una cuarta tabla acá: la que quedó en
+ * `components/usuarios/Resumen.tsx` dice «BDI» a propósito —es una grilla interna de permisos, donde
+ * el nombre largo no entra y no lo lee nadie de afuera— y por eso no se toca.
+ *
+ * El `|| store` es la red de siempre: un `store` que no esté en el registro devuelve lo que vino en
+ * vez de `undefined`, que en un ticket se imprimiría como un hueco.
+ */
+export function nombreDeMarca(store: Marca | string): string {
+  return CUENTAS[store as Marca]?.nombre || String(store)
 }
 
 /**
