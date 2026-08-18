@@ -387,11 +387,26 @@ el cheque**, y desde ese momento **el riesgo de devaluación lo toma el proveedo
 - La columna **«En pesos» de una cuota con cheque ya emitido no es una conversión: es un dato duro**,
   y el simulador no debería moverla.
 - El que sí corre riesgo cambiario es **sólo lo que todavía no tiene cheque**.
-- ⇒ El dato que falta para modelarlo bien no es «a qué dólar convertimos», sino **desde cuándo hay
-  cheque emitido, y por qué monto en pesos**. Hoy no hay dónde guardarlo.
+- ⇒ El dato que hacía falta no era «a qué dólar convertimos», sino **a cuánto se pesificó esa
+  compra**. ✅ **Ya se guarda** (`compras_condiciones.cotizacion`, `41e6050`).
 
 ⚠️ Esto invalida una afirmación que estuvo escrita: «hay ~$27M de pagos con el monto en pesos sin
 fijar». Era una premisa nunca verificada.
+
+### ✅ Cómo quedó (`41e6050`)
+
+- **`cotizacion` es UNA POR IMPORTACIÓN, no una por cuota**: los cheques se emiten todos juntos, el
+  mismo día y al mismo cambio. Una por cuota invitaría a cargar cuatro números donde hay uno.
+- Se carga en el editor de la economía y **sólo aparece en USD**: en ARS la deuda ya está en pesos y
+  preguntar el cambio sería pedir un dato que no existe.
+- 🔑 **Sin cotización no se inventa**: `montoPesos` queda en `null` y la tabla dice «falta a cuánto
+  se pesificó». Un 0 diría que la cuota no cuesta nada — la más cara de las tres afirmaciones.
+- 🔴 **Y la cobertura se CORTA de ahí en adelante**, no sólo en su fila: es acumulada, así que
+  saltear el hueco daría una deuda más chica que la real y una cobertura que tranquiliza de más.
+- ⛔ **Se fue el `useState(1380)`** y con él la línea «movelo para ver cuánto pesa una devaluación»:
+  para una deuda ya pesificada, esa simulación es sobre un riesgo que ya no se corre.
+- Tres mutantes muertos: pesificar a cero cuando falta el dato, saltear el hueco en la cobertura, y
+  volver al 1380 fijo.
 
 ## Pendiente
 
@@ -399,9 +414,6 @@ fijar». Era una premisa nunca verificada.
   arriba). `fecha_ingreso` ya dice que llegó: hoy no se usa para esto.
 - ⚠️ **No hay forma de reordenar las metas.** `orden` se asigna al crear (`usadas.length`) y el
   editor no lo expone: una rampa 25 → 50 → 100 se lee en el orden en que se cargó.
-- 🔴 **No hay dónde guardar que una cuota ya tiene cheque emitido, ni por qué monto en pesos** (ver
-  arriba). Mientras tanto, «En pesos» simula sobre una deuda que en la vida real puede estar ya
-  fijada. Es el mismo hueco que «no hay dónde marcar una cuota como PAGADA».
 - ⚠️ **La ventana de 30 días esconde una rampa.** Medido el 18-ago: online venía de ~4,0
   compras/día en junio-julio y hizo **10,9** en los últimos 7 días, pero el medido de la meta dice
   **6,1** porque promedia 30 días. No está mal calculado — es que para un objetivo de escalado el
