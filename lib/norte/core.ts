@@ -1,0 +1,310 @@
+/**
+ * El motor de **Norte**: stock que entra contra el que sale, pagos que vienen, metas y su avance.
+ *
+ * Todo acá es **puro**: sin React, sin red, y sin `Date.now()` — la fecha de hoy entra siempre por
+ * parámetro. No es purismo: es lo que permite que `tests/norte.test.ts` fije un día y compare
+ * contra números medidos a mano. Una función que mira el reloj adentro no se puede testear contra
+ * una medición del pasado.
+ *
+ * ## 🔑 El oráculo de este archivo
+ *
+ * Que los tests estén en verde **no alcanza**. La verificación real es que `entradaDiaria` y
+ * `ritmoDeSalida` reproduzcan lo que se midió a mano el 17-ago-2026 sobre la ventana 6→16-ago:
+ * **entran 479 fundas/día y salen 237,7**. Ese caso está clavado en el banco a propósito. Si
+ * alguien cambia una fórmula y ese test se cae, la fórmula está mal — no el test.
+ *
+ * ## Lo que este archivo NO hace
+ *
+ * ⛔ No decide. Imprime la brecha y el semáforo; qué se hace con eso lo firma una persona. Es la
+ * misma línea que `lib/meta-ads/rentabilidad.core.js`: el techo lo calcula el código, lo guarda
+ * alguien.
+ */
+
+import { canalDe, type Canal } from '../liquidacion/resultado'
+import type {
+  AvanceMeta,
+  ImportacionProyectada,
+  Meta,
+  Pago,
+  PuntoStock,
+  RitmoCanal,
+  Veredicto,
+} from './tipos'
+
+// ── Fechas ────────────────────────────────────────────────────────────────────
+//
+// Todo va en ISO `YYYY-MM-DD` y en UTC a propósito: una proyección a 90 días que cruza el cambio
+// de hora se corre un día si se usa la zona local, y ese día se ve como un pago adelantado.
+
+const DIA_MS = 86400000
+
+/** `YYYY-MM-DD` → epoch ms (UTC). Devuelve `NaN` si la fecha no sirve. */
+export function aMs(fecha: string): number {
+  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return NaN
+  return Date.parse(fecha + 'T00:00:00Z')
+}
+
+/** epoch ms → `YYYY-MM-DD`. */
+export function aISO(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/** Días enteros de `a` a `b`. Negativo si `b` es anterior. */
+export function diasEntre(a: string, b: string): number {
+  return Math.round((aMs(b) - aMs(a)) / DIA_MS)
+}
+
+/** `fecha` + `n` días, en ISO. */
+export function sumarDias(fecha: string, n: number): string {
+  return aISO(aMs(fecha) + n * DIA_MS)
+}
+
+/** ¿La fecha es un ISO usable? El KV guarda `''` cuando todavía no hay fecha estimada. */
+export function fechaValida(fecha: string): boolean {
+  return !Number.isNaN(aMs(fecha))
+}
+
+// ── El ritmo de salida ────────────────────────────────────────────────────────
+
+/** Una venta, reducida a lo único que Norte necesita de ella. */
+export type FilaVenta = { canal: string | null; unidades: number }
+
+/**
+ * Fundas por día que salen, abierto por canal.
+ *
+ * ⚠️ **`ventas.store` NO es la marca** («Local», «Depósito Minorista» son sucursales). La marca es
+ * contra qué base se consultó, y por eso no aparece acá: quien llama ya eligió la base. Esta
+ * trampa costó una conclusión errada el 17-ago.
+ *
+ * `contribPorCanal` viene de la economía unitaria (`meta_ads_rentabilidad` por línea). Un canal sin
+ * contribución cargada suma unidades y aporta 0 — se ve en pantalla que falta el dato, en vez de
+ * inventarle un margen.
+ */
+export function ritmoDeSalida(
+  ventas: FilaVenta[],
+  dias: number,
+  contribPorCanal: Partial<Record<Canal, number>>,
+): RitmoCanal[] {
+  if (dias <= 0) return []
+  const acc = new Map<Canal, number>()
+  for (const v of ventas) {
+    const c = canalDe(v.canal)
+    acc.set(c, (acc.get(c) || 0) + (Number(v.unidades) || 0))
+  }
+  return [...acc.entries()]
+    .map(([canal, unidades]) => {
+      const unidadesDia = unidades / dias
+      const contribUnidad = contribPorCanal[canal] ?? 0
+      return { canal, unidadesDia, contribUnidad, contribDia: unidadesDia * contribUnidad }
+    })
+    .sort((a, b) => b.unidadesDia - a.unidadesDia)
+}
+
+/** El total de fundas por día que salen, sumando todos los canales. */
+export function salidaDiaria(ritmo: RitmoCanal[]): number {
+  return ritmo.reduce((a, r) => a + r.unidadesDia, 0)
+}
+
+/** La contribución por día, sumando todos los canales. */
+export function contribucionDiaria(ritmo: RitmoCanal[]): number {
+  return ritmo.reduce((a, r) => a + r.contribDia, 0)
+}
+
+// ── El ritmo de entrada ───────────────────────────────────────────────────────
+
+/**
+ * Fundas por día que **entran** en una ventana.
+ *
+ * 🔑 Cuenta sólo lo que llega **dentro** de `[desde, hasta]` y que **todavía no arribó**: una
+ * importación ya arribada no vuelve a entrar, su stock ya está contado en el depósito.
+ *
+ * Es la mitad que faltaba del análisis del 17-ago. Mirando de a un lote todo cerraba; el problema
+ * apareció al sumar los tres que venían.
+ */
+export function entradaDiaria(imps: ImportacionProyectada[], desde: string, hasta: string): number {
+  const dias = diasEntre(desde, hasta)
+  if (dias <= 0) return 0
+  const unidades = imps
+    .filter((i) => !i.arribada && fechaValida(i.llega) && i.llega >= desde && i.llega <= hasta)
+    .reduce((a, i) => a + i.unidades, 0)
+  return unidades / dias
+}
+
+// ── La proyección de stock ────────────────────────────────────────────────────
+
+/**
+ * El stock día a día: arranca en `stockInicial`, suma cada importación el día que llega y resta
+ * el ritmo de salida.
+ *
+ * ⚠️ **El stock nunca baja de cero**, y eso es a propósito: si se agota, lo que falta no se vende
+ * (no hay mercadería), no se debe. Dejarlo negativo dibujaría una venta que no puede ocurrir.
+ */
+export function proyectarStock(args: {
+  stockInicial: number
+  desde: string
+  hasta: string
+  importaciones: ImportacionProyectada[]
+  salidaDia: number
+}): PuntoStock[] {
+  const { stockInicial, desde, hasta, importaciones, salidaDia } = args
+  const total = diasEntre(desde, hasta)
+  if (total < 0) return []
+
+  const entradas = new Map<string, number>()
+  for (const i of importaciones) {
+    if (i.arribada || !fechaValida(i.llega)) continue
+    entradas.set(i.llega, (entradas.get(i.llega) || 0) + i.unidades)
+  }
+
+  const puntos: PuntoStock[] = []
+  let stock = stockInicial
+  for (let d = 0; d <= total; d++) {
+    const fecha = sumarDias(desde, d)
+    const entra = entradas.get(fecha) || 0
+    stock += entra
+    const sale = Math.min(stock, salidaDia)
+    stock -= sale
+    puntos.push({ fecha, entra, sale, stock })
+  }
+  return puntos
+}
+
+/** El primer día en que el stock queda en cero. `null` si no se agota en la ventana. */
+export function diaDeAgotamiento(puntos: PuntoStock[]): string | null {
+  const p = puntos.find((x) => x.stock <= 0)
+  return p ? p.fecha : null
+}
+
+// ── El calendario de pagos ────────────────────────────────────────────────────
+
+/**
+ * Las cuotas de todas las importaciones que tengan condiciones cargadas, ordenadas por fecha.
+ *
+ * ⚠️ **Las importaciones sin condiciones NO aparecen**, y quien dibuja tiene que decirlo. Asumirles
+ * un costo promedio sería inventar una deuda: el número se vería razonable y estaría mal.
+ *
+ * 🔑 **Los plazos cuentan desde la FACTURA, no desde la llegada.** El 17-ago se leyó «30 y 60»
+ * contra la fecha de arribo y dio una cuota vencida que no existía; con la fecha de factura correcta
+ * la misma compra estaba al día. Un mes de diferencia da vuelta la conclusión.
+ */
+export function calendarioDePagos(imps: ImportacionProyectada[], cotizacion: number): Pago[] {
+  const pagos: Pago[] = []
+  for (const imp of imps) {
+    const c = imp.condiciones
+    if (!c || !fechaValida(c.fechaFactura) || !c.cuotas?.length) continue
+    const unidades = c.unidades ?? imp.unidades
+    const total = unidades * c.costoUnitario
+    c.cuotas.forEach((cuota, i) => {
+      const monto = total * (cuota.pct / 100)
+      pagos.push({
+        // La fecha pactada gana; `dias` es el default. Ver el docblock de `Cuota`.
+        fecha: cuota.fecha && fechaValida(cuota.fecha) ? cuota.fecha : sumarDias(c.fechaFactura, cuota.dias),
+        importacionId: imp.id,
+        etiqueta: `${imp.desc || 'Importación'} · cuota ${i + 1} de ${c.cuotas.length}`,
+        monto,
+        moneda: c.moneda,
+        montoPesos: c.moneda === 'USD' ? monto * cotizacion : monto,
+      })
+    })
+  }
+  return pagos.sort((a, b) => a.fecha.localeCompare(b.fecha))
+}
+
+/** Cuántas importaciones quedaron afuera del calendario por no tener condiciones cargadas. */
+export function sinCondiciones(imps: ImportacionProyectada[]): ImportacionProyectada[] {
+  return imps.filter((i) => !i.arribada && (!i.condiciones || !i.condiciones.cuotas?.length))
+}
+
+/**
+ * Para cada pago, cuánta contribución acumuló el negocio hasta esa fecha.
+ *
+ * ⚠️ **Cobertura no es caja disponible.** Esa contribución es la misma con la que se paga la
+ * estructura: que un pago esté «cubierto 1,8×» dice que el negocio genera lo suficiente, no que la
+ * plata esté en la cuenta. La pantalla tiene que decirlo — si no, el número se lee como un permiso.
+ */
+export function coberturaDePagos(
+  pagos: Pago[],
+  desde: string,
+  contribDia: number,
+): { pago: Pago; contribAcumulada: number; cobertura: number }[] {
+  let acumDeuda = 0
+  return pagos.map((pago) => {
+    acumDeuda += pago.montoPesos
+    const dias = Math.max(0, diasEntre(desde, pago.fecha))
+    const contribAcumulada = dias * contribDia
+    return { pago, contribAcumulada, cobertura: acumDeuda > 0 ? contribAcumulada / acumDeuda : Infinity }
+  })
+}
+
+// ── El veredicto ──────────────────────────────────────────────────────────────
+
+/** Debajo de esto la brecha se considera empate: entra y sale lo mismo, sin margen. */
+const MARGEN_AJUSTADO = 0.1
+
+/**
+ * El semáforo y la frase de arriba de todo.
+ *
+ * El titular se arma acá y no en el componente **a propósito**: es el resultado del cálculo, y así
+ * el test puede fijarlo. Una frase armada en el JSX se cambia sin que nada se ponga en rojo.
+ */
+export function veredicto(entranDia: number, salenDia: number): Veredicto {
+  const brechaDia = entranDia - salenDia
+  const n = (x: number) => Math.round(x).toLocaleString('es-AR')
+
+  if (entranDia <= 0 || salenDia <= 0) {
+    return {
+      estado: 'sin-datos',
+      entranDia,
+      salenDia,
+      brechaDia,
+      titular: entranDia <= 0 ? 'No hay importaciones con fecha en la ventana' : 'No hay ventas para medir el ritmo',
+    }
+  }
+  if (brechaDia > entranDia * MARGEN_AJUSTADO) {
+    return {
+      estado: 'no-llega',
+      entranDia,
+      salenDia,
+      brechaDia,
+      titular: `Entran ${n(entranDia)} fundas por día y salen ${n(salenDia)}: faltan vender ${n(brechaDia)} por día`,
+    }
+  }
+  if (brechaDia > -entranDia * MARGEN_AJUSTADO) {
+    return {
+      estado: 'ajustado',
+      entranDia,
+      salenDia,
+      brechaDia,
+      titular: `Entran ${n(entranDia)} fundas por día y salen ${n(salenDia)}: empata, sin margen`,
+    }
+  }
+  return {
+    estado: 'holgado',
+    entranDia,
+    salenDia,
+    brechaDia,
+    titular: `Salen ${n(salenDia)} fundas por día contra ${n(entranDia)} que entran: el stock baja`,
+  }
+}
+
+// ── Las metas ─────────────────────────────────────────────────────────────────
+
+/**
+ * El avance de una meta, con el ritmo que haría falta para llegar a la fecha.
+ *
+ * 🔑 **`veces` es el número que ordena la conversación**, más que el porcentaje: «estamos al 9%» se
+ * escucha parecido a «estamos al 30%», pero «hay que multiplicar por 11» no.
+ */
+export function avanceDeMeta(meta: Meta, hoy: string): AvanceMeta {
+  const { objetivo, medido } = meta
+  const falta = Math.max(0, objetivo - medido)
+  const pct = objetivo > 0 ? Math.min(100, Math.max(0, (medido / objetivo) * 100)) : 0
+  const veces = medido > 0 ? objetivo / medido : Infinity
+
+  let porSemana: number | null = null
+  if (meta.fechaObjetivo && fechaValida(meta.fechaObjetivo) && fechaValida(hoy)) {
+    const dias = diasEntre(hoy, meta.fechaObjetivo)
+    porSemana = dias > 0 ? falta / (dias / 7) : falta
+  }
+  return { meta, pct, falta, veces, porSemana }
+}
