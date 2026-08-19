@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useMonitorStore } from '@/store/useMonitorStore'
-import { userRole } from '@/lib/permisos'
+import { veVentasHistoricas } from '@/lib/permisos'
 import { color, useToast } from '@/components/ui'
 
 /**
@@ -29,7 +29,7 @@ export function useRecargarDatos(): { recargar: () => Promise<void>; cargando: b
     if (cargando) return
     setCargando(true)
     try {
-      await cargar(marca, userRole(perfil), true)
+      await cargar(marca, veVentasHistoricas(perfil, marca), true)
       toast.ok('Datos recargados (' + marca.toUpperCase() + ')')
     } catch (e) {
       toast.error('No se pudo recargar: ' + (e as Error).message)

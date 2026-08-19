@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useMonitorStore } from '@/store/useMonitorStore'
 import { useSesion } from '@/components/SesionProvider'
-import { userRole } from '@/lib/permisos'
+import { veVentasHistoricas } from '@/lib/permisos'
 import type { DatosETL } from '@/lib/etl/tipos'
 import type { EstadoCarga, Origen } from '@/store/useMonitorStore'
 
@@ -40,7 +40,7 @@ export function useDatosMonitor(): {
   const marcaCargada = useMonitorStore((s) => s.marca)
 
   useEffect(() => {
-    cargar(marca, userRole(perfil))
+    cargar(marca, veVentasHistoricas(perfil, marca))
   }, [marca, perfil, cargar])
 
   const listoParaEstaMarca = estado === 'listo' && marcaCargada === marca

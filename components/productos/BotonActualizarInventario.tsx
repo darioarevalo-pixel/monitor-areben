@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useMonitorStore } from '@/store/useMonitorStore'
-import { userRole } from '@/lib/permisos'
+import { veVentasHistoricas } from '@/lib/permisos'
 import { dispararSyncStock } from '@/lib/sync-gn'
 import { color, useToast } from '@/components/ui'
 
@@ -26,7 +26,7 @@ export function BotonActualizarInventario() {
     try {
       const done = await dispararSyncStock(marca, setLabel)
       setLabel('↻ Recargando…')
-      await cargar(marca, userRole(perfil), true)
+      await cargar(marca, veVentasHistoricas(perfil, marca), true)
       if (done) toast.ok('Inventario actualizado (' + marca.toUpperCase() + ')')
       else
         toast.aviso(

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { traerDatos } from '@/lib/datos'
+import { desdeVentas, traerDatos } from '@/lib/datos'
 import { CUENTAS } from '@/lib/cuentas'
 import { esVentaTecnica } from '@/lib/etl/helpers'
 
@@ -17,6 +17,9 @@ import { esVentaTecnica } from '@/lib/etl/helpers'
  */
 
 const AHORA = new Date('2026-07-16T12:00:00.000Z')
+/** Los dos cortes de `AHORA`, calculados con la misma función que usa el store. */
+const DESDE_ADMIN = desdeVentas(true, AHORA)
+const DESDE_CORTO = desdeVentas(false, AHORA)
 
 /** URLs pedidas, en orden. */
 let pedidas: string[] = []
@@ -100,7 +103,7 @@ afterEach(() => { vi.unstubAllGlobals() })
 describe('traerDatos: mismos queries que fetchFresh', () => {
   it('BDI: los selects del legacy, tal cual', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     // 🔑 **Sin `unit_cost`**: el costo salió del navegador con la pieza B del escalón 3 de la Fase
     // S. Lo sirve `api/_costos.js` gateado por permiso y se mergea sobre estas mismas filas.
@@ -120,7 +123,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
     // Que el select siga siendo el mismo lo miran los tests de arriba; lo que mira éste es **por
     // dónde sale**, que es lo único que el revoke de la base va a permitir.
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     for (const t of ['inventario', 'ventas_por_mes', 'ventas_por_categoria_mes', 'fundas_por_modelo_mes']) {
       expect(pedidas.some((u) => u.startsWith(CUENTAS.bdi.url) && u.includes(`/rest/v1/${t}?`))).toBe(true)
@@ -131,7 +134,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
 
   it('BDI no pide variante_color_manual: la tabla es de Zattia', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     expect(pedidas.some((u) => u.includes('variante_color_manual'))).toBe(false)
     expect(datos.colorManual).toEqual([])
@@ -139,7 +142,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
 
   it('Zattia: productos trae proveedor, ventas no trae channel_id, y no pide fundas', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    const datos = await traerDatos({ marca: 'zattia', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'zattia', desde: DESDE_ADMIN })
 
     expect(selectDe('productos')).toBe('id,name,category,sku,proveedor,retailer_price,created_at,active')
     expect(selectDe('ventas')).toBe('id,date_sale,channel')
@@ -151,7 +154,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
 
   it('pega a la URL de la cuenta que corresponde', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'zattia', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'zattia', desde: DESDE_ADMIN })
     // `/api/datos?recurso=costos` es del propio monitor, no de Supabase: es la puerta por la que
     // entra `unit_cost` desde que salió del navegador.
     expect(
@@ -163,7 +166,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
     // 🔴 El test que se rompe si alguien vuelve a poner `unit_cost` en el select del ETL. Ese select
     // corre con la **anon key**, que viaja en el bundle: es exactamente lo que la pieza B cerró.
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(pedidas.some((u) => u.includes('unit_cost'))).toBe(false)
     expect(pedidas.some((u) => u.includes('/api/datos?recurso=costos'))).toBe(true)
   })
@@ -182,7 +185,7 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
       const filas = tabla === 'productos' ? [{ id: 7 }, { id: 9 }] : []
       return new Response(JSON.stringify(filas), { status: 200, headers: { 'Content-Range': '0-0/0' } })
     }))
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(datos.productos.find((p) => String(p.id) === '7')?.unit_cost).toBe(4500)
     // El que la puerta no devolvió queda en `null`, que es lo que `computarDatos` lee como
     // `sinCosto` — el mismo estado que cuando GN no manda el costo.
@@ -193,22 +196,48 @@ describe('traerDatos: mismos queries que fetchFresh', () => {
     // El costo es un enriquecimiento opcional: quien no lo puede ver —o el día que la puerta falle—
     // igual necesita que el Monitor abra. `traerCostos` no lanza nunca.
     vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('recurso=costos') }))
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(datos.productos.every((p) => p.unit_cost == null)).toBe(true)
   })
 })
 
-describe('rango de ventas por rol (index.html:2084)', () => {
-  it('admin: desde 2025-01-01', async () => {
+describe('desdeVentas: el corte de la ventana', () => {
+  /**
+   * 🔴 **La ventana cuelga del PERMISO, no del flag de admin** (18-ago-2026). Antes era
+   * `rol === 'marketing' ? 35 días : todo`, y al abrirle «Por producto» y «Ventas mensuales» a
+   * Marketing eso habría mostrado **35 días de ventas bajo una columna que dice 90**, sin un error.
+   * Quién tiene historia completa lo decide `veVentasHistoricas` (`lib/permisos.core.js`); acá sólo
+   * se prueba que el booleano se traduzca al corte.
+   */
+  it('con historia completa, desde el piso histórico', () => {
+    expect(desdeVentas(true, AHORA)).toBe('2025-01-01')
+  })
+
+  it('sin historia completa, los últimos 35 días', () => {
+    expect(desdeVentas(false, AHORA)).toBe('2026-06-11')
+  })
+
+  // La mitad que hace falta para que el test de arriba no pase por casualidad: el corto SE MUEVE
+  // con el día y el largo NO. Un `desdeVentas` que devolviera siempre la misma fecha pasaría los
+  // dos primeros casos.
+  it('el corte corto se mueve con el día y el largo no', () => {
+    const otroMes = new Date('2026-09-20T12:00:00.000Z')
+    expect(desdeVentas(false, otroMes)).toBe('2026-08-16')
+    expect(desdeVentas(true, otroMes)).toBe('2025-01-01')
+  })
+})
+
+describe('rango de ventas, tal como se lo pide a Supabase', () => {
+  it('el corte largo viaja al filtro de `ventas`', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(queryDe('ventas')).toContain('date_sale=gte.2025-01-01')
   })
 
   // No es cosmético: recorta el rango de TODO lo que el ETL computa.
-  it('marketing: solo los últimos 35 días', async () => {
+  it('y el corto también', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'marketing', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_CORTO })
     expect(queryDe('ventas')).toContain('date_sale=gte.2026-06-11')
   })
 })
@@ -218,7 +247,7 @@ describe('detalles y paginación', () => {
     vi.stubGlobal('fetch', mockFetch({
       filas: (t, url) => (t === 'ventas' && esSonda(url) ? [{ id: 55 }] : []),
     }))
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(queryDe('venta_detalles')).toContain('sale_id=gte.55')
   })
 
@@ -226,7 +255,7 @@ describe('detalles y paginación', () => {
   // traería detalles de ventas que el ETL no tiene, o le faltarían los de las que sí.
   it('la sonda del mínimo usa el mismo rango de fechas que ventas', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'marketing', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_CORTO })
 
     const sonda = pedidas.find(esSonda)
     expect(sonda).toBeDefined()
@@ -236,7 +265,7 @@ describe('detalles y paginación', () => {
 
   it('sin ventas, detalles arranca en 0 (y no rompe)', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(queryDe('venta_detalles')).toContain('sale_id=gte.0')
   })
 
@@ -257,7 +286,7 @@ describe('detalles y paginación', () => {
       return new Response(JSON.stringify(filas), { status: 200, headers: { 'Content-Range': '0-0/0' } })
     }))
 
-    const datos = traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     await vi.waitFor(() => expect(pedidas.some((u) => u.includes('/venta_detalles?'))).toBe(true))
     soltarVentas()
     await datos
@@ -270,7 +299,7 @@ describe('detalles y paginación', () => {
       totalPorTabla: { productos: 2500 },
       filas: (t) => (t === 'productos' ? Array.from({ length: 1000 }, (_, i) => ({ id: i })) : []),
     }))
-    await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     const offsets = pedidas.filter((u) => u.includes('/productos?')).map((u) => u.match(/offset=(\d+)/)?.[1])
     expect(offsets).toEqual(['0', '1000', '2000'])
@@ -281,7 +310,7 @@ describe('degradados: el legacy sigue andando y el port también', () => {
   // index.html:2077: algunas bases no tienen sku/barcode en inventario.
   it('si inventario no tiene sku/barcode, reintenta con el select corto', async () => {
     vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('/inventario?') && u.includes('barcode') }))
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     const inv = pedidas.filter((u) => u.includes('/inventario?'))
     expect(inv.some((u) => u.includes('barcode'))).toBe(true)
@@ -292,7 +321,7 @@ describe('degradados: el legacy sigue andando y el port también', () => {
   // index.html:2065: el .catch(() => []) del legacy.
   it('si variante_color_manual falla, Zattia sigue sin colores', async () => {
     vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('variante_color_manual') }))
-    const datos = await traerDatos({ marca: 'zattia', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'zattia', desde: DESDE_ADMIN })
     expect(datos.colorManual).toEqual([])
   })
 
@@ -303,7 +332,7 @@ describe('degradados: el legacy sigue andando y el port también', () => {
       falla: esSonda,
       filas: (t) => (t === 'ventas' ? [{ id: 771 }, { id: 55 }, { id: 900 }] : []),
     }))
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     expect(queryDe('venta_detalles')).toContain('sale_id=gte.55')
     expect(datos.detalles).toEqual([])
@@ -313,12 +342,12 @@ describe('degradados: el legacy sigue andando y el port también', () => {
   // (y no quedar en un rechazo sin dueño mientras las otras ocho tablas siguen bajando).
   it('si venta_detalles falla, traerDatos lanza', async () => {
     vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('/venta_detalles?') }))
-    await expect(traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })).rejects.toThrow('venta_detalles')
+    await expect(traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })).rejects.toThrow('venta_detalles')
   })
 
   it('si GitHub no contesta, syncMeta queda null y los datos llegan igual', async () => {
     vi.stubGlobal('fetch', mockFetch({ falla: (u) => u.includes('api.github.com') }))
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
     expect(datos.syncMeta).toBeNull()
     expect(datos.productos).toEqual([])
   })
@@ -329,7 +358,7 @@ describe('el payload tiene el contrato que espera el caché del legacy', () => {
   // el iframe lee un caché que no entiende: dos mundos, números distintos.
   it('las 9 claves de saveCache, ni una más ni una menos', async () => {
     vi.stubGlobal('fetch', mockFetch())
-    const datos = await traerDatos({ marca: 'bdi', rol: 'admin', today: AHORA })
+    const datos = await traerDatos({ marca: 'bdi', desde: DESDE_ADMIN })
 
     expect(Object.keys(datos).sort()).toEqual(
       ['colorManual', 'detalles', 'inventario', 'productos', 'syncMeta', 'ventas', 'vmCat', 'vmFundas', 'vmMes'].sort(),

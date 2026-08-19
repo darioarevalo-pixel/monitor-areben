@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { CUENTAS } from '@/lib/cuentas'
-import { esAdmin, puedeVer, userRole, type Perfil } from '@/lib/permisos'
+import { esAdmin, puedeVer, veVentasHistoricas, type Perfil } from '@/lib/permisos'
 import { leerCache, mapaColorManual } from '@/lib/cache'
-import { traerDatos } from '@/lib/datos'
+import { desdeVentas, traerDatos } from '@/lib/datos'
 import { computarDatos } from '@/lib/etl/computar'
 import { leerIngresos } from '@/lib/kv/cliente'
 import { leerCajon } from '@/lib/solicitudes/cajon'
@@ -45,17 +45,21 @@ function puedeVerAds(perfil: Perfil | null, marcas: Marca[]): boolean {
  * caché local aunque esté vencido —el mismo que ya usa el equipo— y, si no
  * hay, la red. Mismo cómputo que el store (`computarDatos` + `mapaColorManual`).
  */
-async function cargarETL(marca: Marca, rol: 'admin' | 'marketing', today: Date): Promise<DatosETL> {
+async function cargarETL(marca: Marca, desde: string, today: Date): Promise<DatosETL> {
+  // ⚠️ El caché se lee **sin pedirle la ventana**: Gerencial mira agregados de los últimos días y
+  // le sirve cualquier entrada que ya esté en el disco. Pedir el sello obligaría a bajar 14,7 MB
+  // por marca cada vez que el usuario de al lado dejó una entrada más corta, para mover un número
+  // que las dos ventanas contestan igual.
   const cache = await leerCache(marca, true)
-  const payload = cache?.data ?? (await traerDatos({ marca, rol, today }))
+  const payload = cache?.data ?? (await traerDatos({ marca, desde }))
   return computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })
 }
 
 /** Carga todo lo de una marca, tolerando que falle cada fuente por separado. */
-async function cargarMarca(marca: Marca, rol: 'admin' | 'marketing', today: Date): Promise<DatosMarca> {
+async function cargarMarca(marca: Marca, desde: string, today: Date): Promise<DatosMarca> {
   const errores: string[] = []
   const [etlR, fotosR, internasR, ingresosR, tnR] = await Promise.allSettled([
-    cargarETL(marca, rol, today),
+    cargarETL(marca, desde, today),
     leerCajon<Solicitud>('sesionfotos', marca),
     leerCajon<SolicitudInterna>('solicitudesinternas', marca),
     leerIngresos<Ingreso>(marca),
@@ -128,10 +132,9 @@ export function useGerencial(): EstadoGerencial {
         return
       }
       if (vivo) setCargando(true)
-      const rol = userRole(perfil)
       const today = new Date()
       const [datos, ads] = await Promise.all([
-        Promise.all(marcas.map((m) => cargarMarca(m, rol, today))),
+        Promise.all(marcas.map((m) => cargarMarca(m, desdeVentas(veVentasHistoricas(perfil, m), today), today))),
         puedeVerAds(perfil, marcas) ? cargarAds() : Promise.resolve({ accionables: [], error: null }),
       ])
       if (!vivo) return

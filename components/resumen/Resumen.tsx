@@ -3,7 +3,7 @@
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { useMonitorStore } from '@/store/useMonitorStore'
-import { userRole } from '@/lib/permisos'
+import { veVentasHistoricas } from '@/lib/permisos'
 import { computarKpis, estadoSync, fmtFechaVenta } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, DatosGate, KpiCard, Notice, color, font, space } from '@/components/ui'
@@ -24,7 +24,7 @@ export function Resumen() {
   const { perfil, marca } = useSesion()
   const { datos, estado, error, progreso, origen } = useDatosMonitor()
   const cargar = useMonitorStore((s) => s.cargar)
-  const refrescar = () => cargar(marca, userRole(perfil), true)
+  const refrescar = () => cargar(marca, veVentasHistoricas(perfil, marca), true)
   const refrescando = estado === 'cargando'
 
   return (

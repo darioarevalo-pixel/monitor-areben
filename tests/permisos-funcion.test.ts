@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ACCESO_POR_FUNCION, estaExcluido, funcionQueDa, marcaExcluir, puedeSub, puedeVer, seccionesDeFuncion, type Perfil } from '@/lib/permisos'
+import { ACCESO_POR_FUNCION, estaExcluido, funcionQueDa, marcaExcluir, puedeSub, puedeVer, seccionesDeFuncion, veVentasHistoricas, type Perfil } from '@/lib/permisos'
 import { categoriasDe, keysDeCat, NAV_CATS, PERM_CAT, sectorVisible } from '@/lib/nav'
 
 const perfil = (over: Partial<Perfil> = {}): Perfil => ({
@@ -197,5 +197,82 @@ describe('nav — la puerta del sector propio (Solicitudes)', () => {
   it('solicitudes es la ÚNICA key que cruza categorías: si aparece otra, este cambio la alcanza', () => {
     const cruzan = [...new Set(NAV_CATS.flatMap((c) => keysDeCat(c)))].filter((k) => categoriasDe(k).length > 1)
     expect(cruzan).toEqual(['solicitudes'])
+  })
+})
+
+
+/**
+ * 🔴 **Qué ve Marketing de Análisis, y qué NO** (18-ago-2026, decisión de Bruno).
+ *
+ * Las campañas se arman sobre el dato fino de venta, así que la función `marketing` sumó cinco
+ * secciones **por `keys`** y no el área `analisis` entera. Este bloque es la lista, ejercida: es la
+ * diferencia entre abrirle el dato de venta y abrirle el costo.
+ */
+describe('permisos — Marketing y el dato fino de venta', () => {
+  const mkt = perfil({ funcion: ['marketing'] })
+
+  it('ve las cinco de venta, sin tildar nada', () => {
+    for (const k of ['productos', 'variantes', 'ventas-mensuales', 'colores', 'talles']) {
+      expect(puedeVer(mkt, 'bdi', k), k).toBe(true)
+    }
+  })
+
+  it('⛔ y NO ve el costo ni el control de administración', () => {
+    for (const k of ['margenes', 'comisiones', 'verif-ventas', 'liquidacion', 'resumen']) {
+      expect(puedeVer(mkt, 'bdi', k), k).toBe(false)
+    }
+  })
+
+  it('lo suyo sigue estando (no se rompió nada al sumar las keys)', () => {
+    for (const k of ['mkt-ventas', 'marketing', 'canjes', 'calendario', 'meta-ads', 'solicitudes']) {
+      expect(puedeVer(mkt, 'bdi', k), k).toBe(true)
+    }
+  })
+
+  it('las cinco valen en las DOS marcas: la función no es por marca', () => {
+    expect(puedeVer(mkt, 'zattia', 'productos')).toBe(true)
+    expect(puedeVer(mkt, 'zattia', 'margenes')).toBe(false)
+  })
+})
+
+/**
+ * 🔴 **La ventana de ventas cuelga del permiso, no del flag de admin.**
+ *
+ * Antes era `esAdmin ? toda la historia : 35 días`. Con «Por producto» y «Ventas mensuales»
+ * abiertas a Marketing eso habría mostrado **35 días de ventas bajo una columna que dice 90**, y la
+ * comparación contra el año anterior vacía — las dos **sin un error**.
+ */
+describe('permisos — veVentasHistoricas', () => {
+  it('el admin la tiene siempre, aunque no tenga ninguna sección tildada', () => {
+    expect(veVentasHistoricas(perfil({ admin: true }), 'bdi')).toBe(true)
+  })
+
+  it('la función marketing la tiene, porque tiene las tres del análisis fino', () => {
+    expect(veVentasHistoricas(perfil({ funcion: ['marketing'] }), 'bdi')).toBe(true)
+  })
+
+  it('⛔ el resto del equipo NO: es lo que evita bajar 14,7 MB a quien no los mira', () => {
+    expect(veVentasHistoricas(perfil({ funcion: ['local'] }), 'bdi')).toBe(false)
+    expect(veVentasHistoricas(perfil({ funcion: ['deposito'] }), 'bdi')).toBe(false)
+    expect(veVentasHistoricas(perfil(), 'bdi')).toBe(false)
+  })
+
+  it('alcanza con UNA de las tres tildada a mano, sin función', () => {
+    expect(veVentasHistoricas(perfil({ acceso: { bdi: { 'ventas-mensuales': true }, zattia: {} } }), 'bdi')).toBe(true)
+  })
+
+  // 🔑 Es POR MARCA, como el permiso del que cuelga: alguien con «Por producto» sólo en BDI baja
+  // la historia de BDI y los 35 días de Zattia. Un booleano global le daría de más en la otra.
+  it('es por marca', () => {
+    const u = perfil({ acceso: { bdi: { productos: true }, zattia: {} } })
+    expect(veVentasHistoricas(u, 'bdi')).toBe(true)
+    expect(veVentasHistoricas(u, 'zattia')).toBe(false)
+  })
+
+  // ⚠️ Colores y Talles salen del mismo payload pero NO son las que justifican la ventana larga:
+  // si alguna vez la necesitan, esta línea se cae y hay que decidirlo, no descubrirlo.
+  it('Colores y Talles solas no dan historia completa', () => {
+    const u = perfil({ acceso: { bdi: { colores: true, talles: true }, zattia: {} } })
+    expect(veVentasHistoricas(u, 'bdi')).toBe(false)
   })
 })

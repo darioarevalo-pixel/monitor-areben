@@ -17,7 +17,7 @@
 import { create } from 'zustand'
 import { computarDatos } from '@/lib/etl/computar'
 import { guardarCache, leerCache, mapaColorManual, type PayloadCache } from '@/lib/cache'
-import { traerDatos } from '@/lib/datos'
+import { desdeVentas, traerDatos } from '@/lib/datos'
 import type { Marca } from '@/lib/nav.datos'
 import type { DatosETL } from '@/lib/etl/tipos'
 
@@ -38,7 +38,14 @@ type MonitorState = {
   /** Última tabla que terminó de bajar. Alimenta el cartel de progreso. */
   progreso: string | null
 
-  cargar: (marca: Marca, rol: 'admin' | 'marketing', forzar?: boolean) => Promise<void>
+  /**
+   * `historiaCompleta` decide **cuánta venta se baja** y sale de `veVentasHistoricas(perfil, marca)`,
+   * o sea del permiso. Se pasa como booleano y no como fecha porque el corte se calcula acá una
+   * sola vez, con el mismo `today` que va a `traerDatos`, y el string resultante es el que sella el
+   * caché: si el llamador lo calculara por su cuenta, serían dos cortes que se despegan cruzando la
+   * medianoche y el sello dejaría de coincidir consigo mismo.
+   */
+  cargar: (marca: Marca, historiaCompleta: boolean, forzar?: boolean) => Promise<void>
   limpiar: () => void
 }
 
@@ -58,9 +65,11 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
   origen: null,
   progreso: null,
 
-  async cargar(marca, rol, forzar = false) {
+  async cargar(marca, historiaCompleta, forzar = false) {
     // Ya están los datos de esta marca y nadie pidió refrescar: no hacer nada.
     if (!forzar && get().marca === marca && get().estado === 'listo') return
+
+    const desde = desdeVentas(historiaCompleta, ahora())
 
     set({ marca, error: null, progreso: null })
 
@@ -69,7 +78,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
 
     // ── Camino 1: caché fresco (< 6 h) ────────────────────────────────────────
     if (!forzar) {
-      const fresco = await leerCache(marca, false)
+      const fresco = await leerCache(marca, false, desde)
       if (fresco) {
         const edadMin = Math.round((Date.now() - fresco.timestamp) / 60000)
         set({ datos: computar(fresco.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: false } })
@@ -77,12 +86,12 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       }
 
       // ── Camino 2: caché vencido → mostrarlo igual y refrescar atrás ─────────
-      const vencido = await leerCache(marca, true)
+      const vencido = await leerCache(marca, true, desde)
       if (vencido) {
         const edadMin = Math.round((Date.now() - vencido.timestamp) / 60000)
         set({ datos: computar(vencido.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: true } })
         try {
-          await refrescar(marca, rol, set)
+          await refrescar(marca, desde, set)
         } catch {
           // El refresco de fondo que falla no rompe nada: se sigue viendo lo viejo.
           set((s) => ({ origen: s.origen?.tipo === 'cache' ? { ...s.origen, refrescando: false } : s.origen }))
@@ -94,7 +103,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
     // ── Camino 3: sin caché (o refresco forzado) ──────────────────────────────
     set({ estado: 'cargando' })
     try {
-      await refrescar(marca, rol, set)
+      await refrescar(marca, desde, set)
     } catch (e) {
       set({ estado: 'error', error: e instanceof Error ? e.message : String(e), progreso: null })
     }
@@ -108,15 +117,14 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
 /** Baja todo de la red, guarda el caché y publica los datos. Lanza si el fetch falla. */
 async function refrescar(
   marca: Marca,
-  rol: 'admin' | 'marketing',
+  desde: string,
   set: (partial: Partial<MonitorState>) => void,
 ): Promise<void> {
   const today = ahora()
   let tiempos: { tablas: number; detalles: number; total: number } | null = null
   const payload = await traerDatos({
     marca,
-    rol,
-    today,
+    desde,
     onProgress: (label) => set({ progreso: label }),
     onTiempos: (t) => {
       tiempos = t
@@ -131,7 +139,7 @@ async function refrescar(
   // que publica `origen`. Además, asignarlo a una variable y usarla es lo que impide
   // olvidarse el `await` — el ESLint del repo no tiene reglas type-aware, así que un
   // `guardarCache()` suelto no sería error de compilación.
-  const guardado = await guardarCache(marca, payload, Date.now())
+  const guardado = await guardarCache(marca, payload, Date.now(), desde)
 
   const t0 = performance.now()
   const datos = computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })

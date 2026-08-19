@@ -32,6 +32,57 @@ const payloadVacio = (): PayloadCache => ({
   detalles: [], syncMeta: null,
 })
 
+/**
+ * 🔴 **El sello de VENTANA (18-ago-2026).** Desde que la ventana de ventas cuelga del permiso y no
+ * del flag de admin, dos usuarios de la misma máquina pueden tener cortes distintos sobre **la
+ * misma clave** —que es sólo la marca—. Sin este sello, la entrada corta de uno se le sirve al
+ * siguiente y «Ventas 90 d» muestra 35 días con el rótulo de 90: **sin un error, sin un log, y con
+ * la pantalla entera pareciendo sana**. Es el mismo modo de falla que ya cerró el sello de marca.
+ */
+describe('cache — sello de ventana', () => {
+  it('guarda el corte y devuelve la entrada cuando coincide', async () => {
+    expect(await guardarCache('bdi', payloadVacio(), Date.now(), '2025-01-01')).toEqual({ ok: true })
+    const e = await leerCache('bdi', false, '2025-01-01')
+    expect(e).not.toBeNull()
+    expect(e!.desde).toBe('2025-01-01')
+  })
+
+  it('🔴 descarta la entrada CORTA cuando se pide la larga', async () => {
+    await guardarCache('bdi', payloadVacio(), Date.now(), '2026-07-14')
+    expect(await leerCache('bdi', false, '2025-01-01')).toBeNull()
+  })
+
+  // La otra dirección, que no es simétrica en el daño pero sí en la regla: servirle una entrada
+  // larga a quien no ve el análisis le deja en el navegador historia que no le corresponde.
+  it('🔴 y descarta la LARGA cuando se pide la corta', async () => {
+    await guardarCache('bdi', payloadVacio(), Date.now(), '2025-01-01')
+    expect(await leerCache('bdi', false, '2026-07-14')).toBeNull()
+  })
+
+  it('una entrada vieja, sin sello de ventana, tampoco vale', async () => {
+    await mem.guardar(claveCache('bdi'), { timestamp: Date.now(), data: payloadVacio(), marca: 'bdi' as Marca })
+    expect(await leerCache('bdi', false, '2025-01-01')).toBeNull()
+  })
+
+  /**
+   * ⚠️ **Sin pedir ventana sigue valiendo cualquier entrada, y es a propósito**: Gerencial lee lo
+   * que haya en el disco (`cargarETL`) porque mira agregados que las dos ventanas contestan igual,
+   * y exigirle el sello lo mandaría a bajar 14,7 MB por marca cada vez que el usuario de al lado
+   * dejó una entrada más corta.
+   */
+  it('el llamador que no pide ventana recibe la entrada igual', async () => {
+    await guardarCache('bdi', payloadVacio(), Date.now(), '2026-07-14')
+    const e = await leerCache('bdi', true)
+    expect(e).not.toBeNull()
+  })
+
+  // El sello de ventana NO reemplaza al de marca: los dos tienen que seguir cortando.
+  it('el sello de marca sigue cortando aunque la ventana coincida', async () => {
+    await mem.guardar(claveCache('zattia'), { timestamp: Date.now(), data: payloadVacio(), marca: 'bdi' as Marca, desde: '2025-01-01' })
+    expect(await leerCache('zattia', false, '2025-01-01')).toBeNull()
+  })
+})
+
 describe('cache — sello de marca', () => {
   it('guardarCache estampa la marca y leerCache la devuelve para la misma marca', async () => {
     expect(await guardarCache('zattia', payloadVacio(), Date.now())).toEqual({ ok: true })

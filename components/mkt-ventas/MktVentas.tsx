@@ -27,7 +27,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useMonitorStore } from '@/store/useMonitorStore'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { userRole } from '@/lib/permisos'
+import { veVentasHistoricas } from '@/lib/permisos'
 import { estadoSync, fmtFechaVenta } from '@/lib/resumen'
 import { hoyIso, sumarDias } from '@/lib/fechas/dia'
 import { escalonVigente, serieDiaria, techoDeLaRampa } from '@/lib/mkt-ventas/core'
@@ -49,7 +49,7 @@ export function MktVentas() {
   const { datos, error, progreso, origen, estado } = useDatosMonitor()
   const { metas, error: errorMetas } = useMetas(marca)
   const cargar = useMonitorStore((s) => s.cargar)
-  const refrescar = () => cargar(marca, userRole(perfil), true)
+  const refrescar = () => cargar(marca, veVentasHistoricas(perfil, marca), true)
   const refrescando = estado === 'cargando'
 
   const hoy = useMemo(() => hoyIso(), [])

@@ -20,6 +20,11 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 
 ## ⛔ Lo que comparte con otras secciones
 
+- 🔴 **La ventana de ventas del ETL cuelga de esta sección, y toca a TODA la app.**
+  `veVentasHistoricas` (`lib/permisos.core.js`) decide si alguien baja la historia completa o 35
+  días, y lo decide por `SECCIONES_ANALISIS_VENTAS`. `desdeVentas` (`lib/datos.ts`) traduce el
+  booleano al corte, y **ese mismo string sella el caché** (`lib/cache.ts`). Tocar cualquiera de las
+  tres le cambia el payload a las ~22 pantallas que usan `useDatosMonitor`.
 - 🔴 **`api/_liquidacion.js` tiene CINCO llaves desde el 18-ago-2026** (eran cuatro). La quinta es
   ésta, y son **dos caminos distintos**: `?resultado=1` en un **GET** —campañas e ítems, pasados por
   `sinPlataDeCosto()`— y las actions `ventas-campania` / `stock-campania` en un **POST**. ⚠️ Las dos
@@ -75,9 +80,25 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   distinto sobre la misma campaña.
 - ⚠️ **`puedeSincronizar` va en `false` y no es un olvido**: traer las ventas del día al espejo
   escribe en producción y hoy pide admin.
-- ⚠️ **La serie son 34 días, no 90.** El techo lo pone `desdeVentas` (`lib/datos.ts`): quien no es
-  admin baja **35 días** de ventas. Pedir más devolvería días en cero que no son cero, son «no bajó».
-  La flecha que se acaba **dice por qué**.
+- ⚠️ **La serie son 34 días, no 90**, y eso NO cambió al abrirle Análisis a Marketing: el techo lo
+  pone `desdeVentas` para quien no ve el análisis fino, y **quien sí lo ve baja desde 2025-01-01**.
+  Se dejó en 34 porque es el piso garantizado para cualquiera que abra la sección. Pedir más
+  devolvería días en cero que no son cero, son «no bajó»; la flecha que se acaba **dice por qué**.
+- 🔴 🔑 **Marketing abre CINCO secciones de Análisis por `keys`, no el área.** `productos` ·
+  `variantes` · `ventas-mensuales` · `colores` · `talles`. ⛔ Lo que el área arrastraría y queda
+  afuera **a propósito**: `margenes` y `comisiones` (costo y markup), `verif-ventas`, `resumen` y
+  `liquidacion` entera. Decisión de Bruno.
+- 🔴 🔑 **Y eso obligó a mover DOS piezas compartidas, o el dato salía truncado y callado**:
+  1. **La ventana dejó de colgar de `esAdmin`.** Con el flag, «Ventas 90 d» habría mostrado **35
+     días bajo una columna que dice 90** y la comparación contra el año anterior habría salido
+     vacía, las dos **sin un error**. ⇒ `veVentasHistoricas(perfil, store)`, y `userRole()` —cuyo
+     único llamador era éste— se fue.
+  2. **El caché de IndexedDB necesitaba sello de ventana.** `claveCache` es **sólo la marca**: con
+     dos ventanas conviviendo, la entrada corta de un usuario se le servía al siguiente. Es el mismo
+     modo de falla que ya había cerrado el sello de marca, y se cierra igual.
+  ⚠️ **Gerencial lee el caché SIN pedir ventana, a propósito**: mira agregados que las dos ventanas
+  contestan igual, y exigirle el sello lo mandaría a bajar 14,7 MB por marca cada vez que el usuario
+  de al lado dejó una entrada más corta.
 
 ## Lo que ya se rompió acá
 
@@ -101,10 +122,10 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - ▶️ **El botón «Actualizar ventas»** (tanda 3 del plan): el trabajo ya existe en
   `api/_liquidacion.js` (`action:'sincronizar-ventas'`, 1,2 s medidos) pero pide `admin` **y un id
   de campaña**, porque su antirrebote vive en `datos.ventasSync`. Sale a `api/_ventas-hoy.js`.
-- ▶️ **Abrir Por producto / variante / mensuales / colores / talles a Marketing** (tanda 5), que
-  arrastra dos 🔴: la ventana de ventas tiene que colgar del permiso y no del flag de admin, y **el
-  caché de IndexedDB necesita sello de ventana** (`claveCache` es sólo la marca ⇒ la entrada corta
-  de un usuario se le sirve al siguiente, callada).
+- 🔴 ▶️ **Nadie con perfil de Marketing caminó esto todavía**: todo se ejerció con admin, así que
+  lo que NO se ejerció es justamente el camino nuevo —`veVentasHistoricas` dando `true` por la
+  función y no por el flag de admin, y las cinco secciones de Análisis apareciéndole en el menú—.
+  Los usuarios de prueba los crea Bruno.
 - ⚠️ **Se caminó en prod con perfil ADMIN, no con uno de Marketing.** Lo que el admin no ejerce es
   el `puedeVerAlguna` de la llave `?metas=1` con la función `marketing` — los usuarios de prueba los
   crea Bruno. ▶️ Falta eso.
@@ -120,7 +141,10 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
   gate no cortó»**, que es la señal que ese arnés existe para dar: el 403 tiene que salir **antes**
   de tocar la base. Los dos que hay que ver caer ahí son abrir la llave a todas las actions y
   hacer que `leeVentasDeProductos` acepte cualquier POST.
-- **13 mutantes del núcleo, 13 muertos con `AssertionError`** (baseline en 0 antes de mutar). Los que hay que
+- **13 mutantes del núcleo + 11 de la ventana, el caché y los permisos, todos muertos con
+  `AssertionError`** (baseline en 0 antes de mutar). Los que hay que ver caer si se toca eso:
+  `veVentasHistoricas` volviendo a `esAdmin(perfil)` solo, el sello de ventana que no corta, y
+  `DIAS_SIN_HISTORIA` de 35 a 30. Los que hay que
   ver caer si se toca el núcleo: `compras += 1 → += 0`, el `!==` del canal, `[...futuras].sort()[0]`
   → el último, y `>= 0 → > 0` en la fecha del escalón (el día del vencimiento todavía cuenta).
 - 🔑 **El oráculo de la serie es `psql`, no un fixture.** Se exportan las ventas de 34 días y el

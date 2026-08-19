@@ -70,6 +70,16 @@ export type EntradaCache = {
    * catálogo y el stock equivocados— sin depender de que el refresco de fondo la pise.
    */
   marca?: Marca
+  /**
+   * 🔴 **Desde qué fecha se bajaron las ventas de esta entrada.** Se estampa al guardar y se valida
+   * al leer, igual que `marca`. Existe desde que la ventana dejó de colgar del flag de admin
+   * (18-ago-2026): con dos ventanas conviviendo, la entrada CORTA de un usuario se le servía al
+   * siguiente **sin un error** —«Ventas 90 d» mostrando 35 días con el rótulo de 90— y una entrada
+   * larga servida a quien no ve el análisis le filtraba historia que no le corresponde.
+   *
+   * Las entradas viejas no lo traen y por eso se descartan solas: es una bajada de más, una vez.
+   */
+  desde?: string
 }
 
 export type ResultadoGuardado = { ok: true } | { ok: false; motivo: string }
@@ -100,7 +110,7 @@ export function limpiarCacheLegacy(): void {
 }
 
 /** `ignorarVencimiento` habilita el stale-while-revalidate del store (camino 2). */
-export async function leerCache(marca: Marca, ignorarVencimiento = false): Promise<EntradaCache | null> {
+export async function leerCache(marca: Marca, ignorarVencimiento = false, desde?: string): Promise<EntradaCache | null> {
   try {
     limpiarCacheLegacy()
     const cached = await almacenActivo().leer<EntradaCache>(claveCache(marca))
@@ -108,6 +118,9 @@ export async function leerCache(marca: Marca, ignorarVencimiento = false): Promi
     // Sello de marca: una entrada de otra marca (o sin sello, de una versión vieja) no es
     // válida para esta marca, sin importar la edad.
     if (cached.marca !== marca) return null
+    // Sello de ventana: mismo criterio que el de marca. `undefined` en los dos lados sigue
+    // valiendo, para el llamador que todavía no la pide (Gerencial lee lo que haya).
+    if (desde !== undefined && cached.desde !== desde) return null
     if (!ignorarVencimiento && Date.now() - cached.timestamp > TTL_MS) return null
     return cached
   } catch {
@@ -120,9 +133,9 @@ export async function leerCache(marca: Marca, ignorarVencimiento = false): Promi
  * Guarda el payload. **Nunca lanza**: devuelve el resultado para que el llamador lo muestre.
  * Que un caché no se guarde tiene que ser visible — invisible ya nos costó una vez.
  */
-export async function guardarCache(marca: Marca, data: PayloadCache, timestamp: number): Promise<ResultadoGuardado> {
+export async function guardarCache(marca: Marca, data: PayloadCache, timestamp: number, desde?: string): Promise<ResultadoGuardado> {
   try {
-    await almacenActivo().guardar(claveCache(marca), { timestamp, data, marca })
+    await almacenActivo().guardar(claveCache(marca), { timestamp, data, marca, desde })
     return { ok: true }
   } catch (e) {
     const motivo = e instanceof Error ? `${e.name}: ${e.message}` : String(e)

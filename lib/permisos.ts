@@ -14,6 +14,7 @@ import type { Marca } from './nav.datos'
 import {
   ACCESO_POR_FUNCION as ACCESO_POR_FUNCION_JS,
   esAdmin as esAdminJs,
+  veVentasHistoricas as veVentasHistoricasJs,
   estaExcluido as estaExcluidoJs,
   KEYS_PARA_TODOS as KEYS_PARA_TODOS_JS,
   marcaDePermisos as marcaDePermisosJs,
@@ -174,9 +175,15 @@ export function puedeAtenderRetiroLocal(perfil: Perfil | null): boolean {
   return puedeAtenderRetiroLocalJs(perfil)
 }
 
-/** Port de _userRole() (index.html:9324): el legacy lo usa para limitar la carga de datos. */
-export function userRole(perfil: Perfil | null): 'admin' | 'marketing' {
-  return esAdmin(perfil) ? 'admin' : 'marketing'
+/**
+ * ¿Le corresponde la historia COMPLETA de ventas, o los últimos 35 días? La implementación —y el
+ * porqué de que cuelgue del permiso y no del flag de admin— vive en `lib/permisos.core.js`.
+ *
+ * Reemplazó a `userRole()`, que era el port de `_userRole()` del legacy (index.html:9324) y cuyo
+ * único llamador era justamente esto: decidir cuánta venta baja el ETL.
+ */
+export function veVentasHistoricas(perfil: Perfil | null, store: string): boolean {
+  return veVentasHistoricasJs(perfil, store)
 }
 
 /** Si el perfil tiene cuenta fija, el switch de marca no se muestra (renderUserInfo, index.html:9542). */

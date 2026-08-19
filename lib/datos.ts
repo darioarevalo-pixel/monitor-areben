@@ -91,16 +91,25 @@ export async function fetchUltimoSync(workflowFile: string | null): Promise<Sync
  * totales por mes— y que el navegador baje sólo el detalle reciente. Eso es un proyecto, no un
  * cambio de constante.
  */
-function desdeVentas(rol: 'admin' | 'marketing', today: Date): string {
-  return rol === 'marketing'
-    ? new Date(today.getTime() - 35 * 86400000).toISOString().slice(0, 10)
-    : '2025-01-01'
+export function desdeVentas(historiaCompleta: boolean, today: Date): string {
+  return historiaCompleta
+    ? PISO_HISTORICO
+    : new Date(today.getTime() - DIAS_SIN_HISTORIA * 86400000).toISOString().slice(0, 10)
 }
+
+/** Desde dónde baja ventas quien SÍ ve el análisis fino. Es la historia entera que hay cargada. */
+const PISO_HISTORICO = '2025-01-01'
+/** Lo que baja el resto: alcanza para las ventanas de 7/15/30 días del ETL, y nada más. */
+const DIAS_SIN_HISTORIA = 35
 
 export type OpcionesFetch = {
   marca: Marca
-  rol: 'admin' | 'marketing'
-  today: Date
+  /**
+   * Desde qué fecha se bajan las ventas (`YYYY-MM-DD`). Lo calcula `desdeVentas()` y **lo pasa el
+   * llamador**, no se deduce acá: el store necesita el MISMO string para sellar el caché, y dos
+   * cómputos del mismo corte se despegarían justo cruzando la medianoche.
+   */
+  desde: string
   /** Se llama con cada tabla que termina, para mover la barra de progreso. */
   onProgress?: (label: string) => void
   /**
@@ -116,7 +125,7 @@ export type OpcionesFetch = {
 }
 
 /** Trae las 8 tablas crudas de una marca, listas para computarDatos o para el caché. */
-export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: OpcionesFetch): Promise<PayloadCache> {
+export async function traerDatos({ marca, desde, onProgress, onTiempos }: OpcionesFetch): Promise<PayloadCache> {
   const cuenta: Cuenta = CUENTAS[marca]
   const esZattia = marca === 'zattia'
 
@@ -140,7 +149,6 @@ export async function traerDatos({ marca, rol, today, onProgress, onTiempos }: O
   // se cae, vuelve `{}` y cada producto queda `sinCosto`, que es lo que hay que mostrar.
   const costosPromise = traerCostos(marca)
 
-  const desde = desdeVentas(rol, today)
   const t0 = performance.now()
 
   // `venta_detalles` es la tabla más grande y su filtro sale del mínimo id de `ventas`. Esperar a
