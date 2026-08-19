@@ -180,6 +180,11 @@ export function computarPendientes(productos: ProductoGN[], idx: IndiceTn, guard
     if (!tn) continue
     if (guardadas[String(tn.id)]) continue
     const vieja = /<table/i.test(tn.raw_desc || '')
+    // 🔑 Acá va `has_desc` A PROPÓSITO, y NO `prosaDe` de `lib/tn-desc/prosa.ts`. La
+    // pregunta de esta cola es «¿la ficha tiene ALGO?», no «¿tiene prosa?»: un producto
+    // cuya descripción es sólo una tabla vieja SÍ es candidato a que le pongamos la
+    // nueva. Migrarlo a prosa achicaría la cola de talles sin que nadie lo haya pedido.
+    // Marketing sí se migró (mide calidad de la ficha, que es otra pregunta).
     if (!vieja && !tn.has_desc) continue
     out.push({
       tn,

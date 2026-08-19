@@ -12,15 +12,25 @@
 import type { Producto, FilaVenta, FilaDetalle } from '../etl/tipos'
 import type { Marca } from '../nav.datos'
 import { indexarTn, matchTn, type TnProducto } from '../tn'
+import { prosaDe, type Prosa } from '../tn-desc/prosa'
 
 /** El estado de la ficha en TN, en orden de prioridad (el primero que aplica gana). */
-export type Calidad = 'not-in-tn' | 'no-publicado' | 'sin-foto' | 'sin-desc' | 'sin-tabla' | 'pocas-fotos' | 'ok'
+export type Calidad =
+  | 'not-in-tn'
+  | 'no-publicado'
+  | 'sin-foto'
+  | 'sin-desc'
+  | 'sin-tabla'
+  | 'prosa-corta'
+  | 'pocas-fotos'
+  | 'ok'
 
 /** Las opciones del filtro multi de estado (mktMatchCalidad). */
 export type FiltroCalidad =
   | 'sin-foto'
   | 'pocas-fotos'
   | 'sin-desc'
+  | 'prosa-corta'
   | 'sin-tabla'
   | 'sin-foto-desc'
   | 'no-publicado'
@@ -36,6 +46,11 @@ export type ItemMkt = {
   categoriasTN: string[]
   categoriasTNStr: string
   calidad: Calidad
+  /**
+   * La descripción de verdad, sin la tabla de talles que vive en el MISMO campo.
+   * 🔑 Se calcula UNA vez acá: `prosaDe` pela HTML y no es gratis en 3.000 filas.
+   */
+  prosa: Prosa
   topLowStock: boolean
   ingresoMes: string | null
 }
@@ -64,11 +79,13 @@ export function buildLista(productos: Producto[], tnProducts: TnProducto[], marc
       const tn = matchTn(gn, idx)
       if (!tn) return null // Marketing solo muestra productos que están en TN
       const stockReal = gn.stock || 0
+      const prosa = prosaDe(tn.raw_desc)
       let calidad: Calidad = 'ok'
       if (!tn.published) calidad = 'no-publicado'
       else if (tn.image_count === 0) calidad = 'sin-foto'
-      else if (!tn.has_desc) calidad = 'sin-desc'
+      else if (prosa.banda === 'nada') calidad = 'sin-desc'
       else if (verTalles && !tieneTabla(tn)) calidad = 'sin-tabla'
+      else if (prosa.banda === 'corta') calidad = 'prosa-corta'
       else if ((tn.image_count ?? 0) <= 2) calidad = 'pocas-fotos'
       return {
         gn,
@@ -78,6 +95,7 @@ export function buildLista(productos: Producto[], tnProducts: TnProducto[], marc
         categoriasTN: tn.categories || [],
         categoriasTNStr: (tn.categories || []).join(', '),
         calidad,
+        prosa,
         topLowStock: (gn.sales30 || 0) >= 5 && stockReal <= 5,
         ingresoMes: gn.ingresoMes || (tn.created_at ? tn.created_at.substring(0, 7) : null),
       }
@@ -91,9 +109,10 @@ export function matchCalidad(x: ItemMkt, c: FiltroCalidad, marca: Marca): boolea
   const img = tn.image_count ?? 0
   if (c === 'sin-foto') return img === 0
   if (c === 'pocas-fotos') return img > 0 && img <= 2
-  if (c === 'sin-desc') return !tn.has_desc
-  if (c === 'sin-tabla') return aplicaTalles(marca) && !!tn.has_desc && !tieneTabla(tn)
-  if (c === 'sin-foto-desc') return img === 0 && !tn.has_desc
+  if (c === 'sin-desc') return x.prosa.banda === 'nada'
+  if (c === 'prosa-corta') return x.prosa.banda === 'corta'
+  if (c === 'sin-tabla') return aplicaTalles(marca) && x.prosa.banda !== 'nada' && !tieneTabla(tn)
+  if (c === 'sin-foto-desc') return img === 0 && x.prosa.banda === 'nada'
   if (c === 'no-publicado') return !tn.published
   if (c === 'var-sin-foto') return img > 0 && (tn.variantes_total || 0) > 1 && (tn.variantes_sin_foto || []).length > 0
   if (c === 'top-low-stock') return x.topLowStock
@@ -152,14 +171,22 @@ export function filtrarYOrdenar(base: ItemMkt[], f: Filtros, orden: OrdenState, 
 }
 
 /** Los KPIs del encabezado. Port de los conteos de mktRenderStats. */
-export type Stats = { sinFoto: number; sinDesc: number; sinTabla: number; sinAmbos: number; topLow: number }
+export type Stats = {
+  sinFoto: number
+  sinDesc: number
+  prosaCorta: number
+  sinTabla: number
+  sinAmbos: number
+  topLow: number
+}
 
 export function calcularStats(base: ItemMkt[], marca: Marca): Stats {
   return {
     sinFoto: base.filter((x) => (x.tn.image_count ?? 0) === 0).length,
-    sinDesc: base.filter((x) => !x.tn.has_desc).length,
-    sinTabla: aplicaTalles(marca) ? base.filter((x) => x.tn.has_desc && !tieneTabla(x.tn)).length : 0,
-    sinAmbos: base.filter((x) => (x.tn.image_count ?? 0) === 0 && !x.tn.has_desc).length,
+    sinDesc: base.filter((x) => x.prosa.banda === 'nada').length,
+    prosaCorta: base.filter((x) => x.prosa.banda === 'corta').length,
+    sinTabla: aplicaTalles(marca) ? base.filter((x) => x.prosa.banda !== 'nada' && !tieneTabla(x.tn)).length : 0,
+    sinAmbos: base.filter((x) => (x.tn.image_count ?? 0) === 0 && x.prosa.banda === 'nada').length,
     topLow: base.filter((x) => x.topLowStock).length,
   }
 }

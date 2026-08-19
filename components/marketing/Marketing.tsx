@@ -79,6 +79,7 @@ const OPCIONES_CALIDAD: { v: FiltroCalidad; label: string }[] = [
   { v: 'sin-foto', label: 'Sin foto en TN' },
   { v: 'pocas-fotos', label: 'Pocas fotos (1-2)' },
   { v: 'sin-desc', label: 'Sin descripción' },
+  { v: 'prosa-corta', label: 'Descripción corta (menos de 120 caracteres)' },
   { v: 'sin-tabla', label: 'Le falta tabla de talles (Zattia)' },
   { v: 'sin-foto-desc', label: 'Sin foto NI descripción' },
   { v: 'no-publicado', label: 'Oculto en TN' },
@@ -273,6 +274,14 @@ export function Marketing() {
           activo={calidadUnica('sin-desc')}
           accionActiva="Quitar filtro ✕"
           onClick={() => toggleCalidadUnica('sin-desc')}
+        />
+        <KpiCard
+          label="Descripción corta"
+          value={stats.prosaCorta}
+          tone="warning"
+          activo={calidadUnica('prosa-corta')}
+          accionActiva="Quitar filtro ✕"
+          onClick={() => toggleCalidadUnica('prosa-corta')}
         />
         {talles && (
           <KpiCard
@@ -712,8 +721,11 @@ function CalidadTN({ x, talles }: { x: ItemMkt; talles: boolean }) {
       <Badge tone={img === 0 ? 'danger' : img <= 2 ? 'warning' : 'success'}>
         {img === 0 ? 'Sin foto' : `${img} ${img === 1 ? 'foto' : 'fotos'}`}
       </Badge>
-      {!x.tn.has_desc && <Badge tone="danger">Sin descripción</Badge>}
-      {talles && x.tn.has_desc && !tieneTabla(x.tn) && <Badge tone="warning">Sin tabla de talles</Badge>}
+      {x.prosa.banda === 'nada' && <Badge tone="danger">Sin descripción</Badge>}
+      {x.prosa.banda === 'corta' && <Badge tone="warning">Descripción corta ({x.prosa.largo})</Badge>}
+      {talles && x.prosa.banda !== 'nada' && !tieneTabla(x.tn) && (
+        <Badge tone="warning">Sin tabla de talles</Badge>
+      )}
       {!x.tn.published && <Badge tone="neutral">Oculto</Badge>}
     </span>
   )
