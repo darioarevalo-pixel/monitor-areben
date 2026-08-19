@@ -384,6 +384,8 @@ export function PortalCadete({ token }: { token: string | null }) {
         </div>
       ) : null}
 
+      <ComoSeUsa />
+
       {!hoja.envios.length ? (
         <Tarjetón>
           <p style={{ color: 'var(--mo-mut)', margin: 0 }}>Ese día no hay envíos cargados.</p>
@@ -571,6 +573,47 @@ function Flecha({ hacia, a, onIr }: { hacia: 'anterior' | 'siguiente'; a: string
 }
 
 /** El marco de una tarjeta, igual en las dos formas. */
+/**
+ * «¿Cómo uso esto?» — lo mínimo para que el cadete no tenga que llamar al local.
+ *
+ * ⛔ **No usa `<Instructivo>` del kit aunque haga exactamente esto**: la regla de este archivo es
+ * que el portal no importa componentes del kit —se baja con datos del teléfono, arriba de una
+ * moto— y sí sus tokens. Son veinte líneas de `<details>`; el bundle del kit no.
+ *
+ * 🔑 **Va plegado y arriba de las tarjetas.** Plegado es una sola línea para el que ya sabe;
+ * arriba es el único lugar donde lo encuentra el que no sabe, que es justamente el que no va a
+ * scrollear buscando ayuda.
+ *
+ * Lo que dice son las cuatro cosas que la pantalla no puede explicar sola: que el día está acotado,
+ * que la hora la pone el sistema y volver atrás la borra, qué significa «No cobré», y que el link
+ * se cambia solo. Las reglas de plata —qué se cobra y por qué— viven en el manual del local.
+ */
+function ComoSeUsa() {
+  return (
+    <details
+      style={{
+        border: '1px solid var(--mo-brand-border)',
+        background: 'var(--mo-brand-bg)',
+        borderRadius: 12,
+        padding: '10px 14px',
+        marginBottom: 12,
+      }}
+    >
+      <summary style={{ cursor: 'pointer', fontSize: 15, fontWeight: 600, color: 'var(--mo-brand)' }}>¿Cómo uso esto?</summary>
+      <ol style={{ margin: '10px 0 2px', paddingLeft: 20, fontSize: 14, color: 'var(--mo-ink2)', lineHeight: 1.7 }}>
+        <li>Arriba está el día. Sólo podés tocar el de hoy y el de al lado.</li>
+        <li>Cada tarjeta es una entrega: dirección, teléfono y cuánto cobrar. «WhatsApp» abre el chat con el mensaje ya escrito.</li>
+        <li>«Marcar entregado» le pone la hora sola. Si te equivocaste, «No entregado» la borra.</li>
+        <li>Si te pagaron por transferencia al local, «No cobré».</li>
+        <li>«Mi cuenta» es tu saldo y lo que rendiste. Es de sólo lectura.</li>
+      </ol>
+      <div style={{ marginTop: 8, fontSize: 13, color: 'var(--mo-warning-ink)' }}>
+        ⚠️ La dirección manda, no el nombre. Y el link se cambia el 1º de cada mes: cuando deje de andar, pedí el nuevo en el local.
+      </div>
+    </details>
+  )
+}
+
 function Tarjetón({ apagado, children }: { apagado?: boolean; children: React.ReactNode }) {
   return (
     <div

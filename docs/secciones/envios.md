@@ -11,6 +11,7 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | Portal del cadete | `components/envios/PortalCadete.tsx` + `lib/envios/portal.core.js` |
 | **La cuenta de la puerta** | `lib/envios/reglas.core.js` |
 | Lo de la pantalla | `lib/envios/core.ts` · `cliente.ts` · `tipos.ts` |
+| **La ayuda de la pantalla** | el **manual** vive en la base (`seccion: envios`, se edita sin deploy) · el **tour** en `lib/envios/guia.ts` + `lib/guia/core.ts` + `components/ui/Guia.tsx` + `store/useGuia.ts`, y las anclas `data-guia` adentro de `Envios.tsx` |
 | **El mensaje a la clienta** | `lib/envios/mensajes.ts` — puro y con tests, molde de `lib/canjes/mensajes.ts`. Lo abre el botón de WhatsApp de la fila (`Direccion`), **sólo en la bandeja «Sin fecha»** |
 | **Los dos papeles** | `lib/envios/ticket.ts` (el que va pegado al paquete) · `lib/envios/recibo.ts` (el del movimiento de la cuenta), los dos sobre **`lib/rollo80.ts`** — la geometría del rollo, el medidor y el dibujo de textos y reglas. ⛔ **Las medidas del rollo no se copian**: `lib/sesionfotos/ticket.ts` es un tercer papel de 80 mm que **no está migrado a propósito** (su interlineado es 0.42 contra 0.38) |
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
@@ -272,6 +273,53 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
   · ⛔ **`cuentaDelCadete` vive en `reglas.core.js`**, no en `core.ts`: la necesitaban dos handlers y
   el portal no puede importar TypeScript. Copiarla era la otra salida y es la que este módulo prohíbe.
   `CAMPOS_CIERRE` se mudó por lo mismo — la usaban dos.
+
+## La ayuda: un manual y un tour, que contestan cosas distintas
+
+🔑 **El manual dice QUÉ hacés y qué pasa si sale mal; el tour dice DÓNDE se aprieta.** Separarlos es
+lo que evita que se contradigan: dos textos que cuentan lo mismo derivan, y el día que cambie una
+regla se corrige en un solo lado. Por eso en `lib/envios/guia.ts` **no hay una sola regla de
+negocio** —ni el precio que nunca es $0, ni el entregado sin cobrar— y en el manual no hay ninguna
+coordenada de pantalla.
+
+- **El manual** es una fila de la tabla `manuales` con `seccion: 'envios'` (base de BDI, sin marca).
+  Lo carga `scripts/manual.mjs` **sin publicar** y lo publica Bruno de un click, igual que las
+  novedades. Publicado, aparece solo el botón «📘 Cómo se usa» del `SeccionHeader`.
+  🔴 **`manual-guardar` es un `upsert` con `publicado: !!m.publicado`**: un cuerpo que no manda el
+  campo **despublica** el manual en silencio y el botón desaparece de la pantalla. Por eso el script
+  **lee la fila entera antes de pisarla** y conserva `publicado` y `orden`, y sin `--editar` no
+  escribe nada.
+- **El tour** lo lanza el mismo botón («Mostrame en la pantalla», en el pie del manual). Si la
+  pantalla tiene tour y **no** tiene manual, el botón ES el tour: si no, la sección quedaría muda
+  hasta que alguien publique un texto, y el tour no se podría ni ejercer en prod.
+- 🔑 **Los pasos los registra la sección en `store/useGuia`, no un mapa del shell**: cada sección es
+  un chunk aparte (`next/dynamic`), así que un registro estático le bajaría los pasos de las 42 a
+  todo el mundo. `setPestania` viaja con ellos porque el paso sabe en qué pestaña vive el control,
+  pero la pestaña es de la sección.
+- 🔴 🔑 **Cada paso tiene DOS anclas y por eso no envejece.** `ancla` es algo que está SIEMPRE en esa
+  pestaña (la card de arriba, un botón del encabezado) y `anclaFina` es el control puntual, que
+  puede no existir: «Sugerir precios (N)» **desaparece** si no hay filas sin cotizar, la tabla no
+  está con la bandeja vacía, y la card del link del cadete se dibuja recién cuando vuelve su propia
+  lectura. **Cuando el fino no está, el paso NO se saltea**: se para en el estable y el texto dice
+  cuándo aparece. Un tour que saltea en silencio le enseña una pantalla que no es la suya y le
+  esconde justo el botón que vino a buscar. Por eso en `lib/guia/core.ts` **no existe ninguna
+  función que filtre pasos**, y `siNoEsta` es obligatoria por el TIPO (unión discriminada) cuando
+  hay `anclaFina`.
+- ⚠️ **`Th` no propaga props sueltas**, así que un `data-guia` puesto ahí se pierde sin fallar: el de
+  la columna de precio va en un `<span>` adentro.
+- ⚠️ El de WhatsApp va **sólo con `conMensaje`**: en la hoja del día ese botón es el chat pelado y el
+  paso habla del PRIMER mensaje.
+- **`tests/guia.test.ts`** afirma texto contra texto que cada ancla existe en el JSX, que no queda
+  ninguna **huérfana**, y que las pestañas que los pasos nombran son las que `Tabs` tiene de verdad.
+  **5 mutantes, 5 muertos**: usar el ancla fina aunque no esté · callarse el «si no está» · invertir
+  siguiente/anterior · sacar el `data-guia` de «Sugerir precios» · renombrar una pestaña.
+- ⛔ **El portal del cadete tiene su propio «¿Cómo uso esto?» escrito a mano** (`ComoSeUsa`, un
+  `<details>` plegado): no puede usar `<Instructivo>` del kit porque **la regla de ese archivo es no
+  importar componentes del kit** —se baja con datos del teléfono, arriba de una moto— y tampoco
+  puede pedir un manual, porque `?recurso=sistema` exige usuario y él entra con token + PIN.
+- ⛔ **El tour no arranca solo la primera vez.** El equipo ya tiene un cartel modal bloqueante (el de
+  las novedades importantes); una segunda cosa que se pone adelante sin que la pidan es la que
+  enseña a cerrar carteles sin leerlos.
 
 ## Lo que ya se rompió acá
 

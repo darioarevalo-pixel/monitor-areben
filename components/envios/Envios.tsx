@@ -62,6 +62,8 @@ import {
   turnosDe,
 } from '@/lib/envios/core'
 import { mensajeParaLaClienta } from '@/lib/envios/mensajes'
+import { GUIA_ENVIOS } from '@/lib/envios/guia'
+import { useGuia } from '@/store/useGuia'
 import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
@@ -119,6 +121,16 @@ export function Envios() {
   const [pestania, setPestania] = useState<'dia' | 'pendientes' | 'cuenta' | 'zonas'>('dia')
   const [agendando, setAgendando] = useState<Envio | null>(null)
   const [viendoPedido, setViendoPedido] = useState<Envio | null>(null)
+
+  // El tour de «Cómo se usa». Los pasos se registran acá y no en un mapa del shell para que viajen
+  // en el chunk de esta sección: el registro estático se lo bajaría todo el mundo. `setPestania` va
+  // con ellos porque los pasos saben en qué pestaña vive cada control, pero la pestaña es de acá.
+  const registrarGuia = useGuia((s) => s.registrar)
+  const olvidarGuia = useGuia((s) => s.olvidar)
+  useEffect(() => {
+    registrarGuia(GUIA_ENVIOS, (p) => setPestania(p as 'dia' | 'pendientes' | 'cuenta' | 'zonas'))
+    return olvidarGuia
+  }, [registrarGuia, olvidarGuia])
 
   // 🔑 **La hoja es del DÍA, no del turno.** Un día con reparto de mañana y de tarde es un día:
   // el cadete es el mismo, la rendición es una, y tener que acordarse de mirar los dos turnos por
@@ -203,7 +215,7 @@ export function Envios() {
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
       <HeaderAcciones>
-        <Button variant="outline" onClick={traer} disabled={trayendo}>
+        <Button variant="outline" onClick={traer} disabled={trayendo} data-guia="envios.traer">
           {trayendo ? 'Trayendo…' : 'Traer los de Tienda Nube'}
         </Button>
         {/* Un botón por marca presente, más el de todas. Sólo aparecen si el día tiene las dos:
@@ -221,7 +233,7 @@ export function Envios() {
               </Button>
             ))
           : null}
-        <Button variant="solid" tone="brand" iconLeft={<Icono nombre="impresora" />} onClick={() => void imprimir()}>
+        <Button variant="solid" tone="brand" iconLeft={<Icono nombre="impresora" />} onClick={() => void imprimir()} data-guia="envios.imprimir">
           {marcasDelDia.length > 1 ? 'Imprimir todos' : 'Imprimir tickets'}
         </Button>
       </HeaderAcciones>
@@ -252,7 +264,10 @@ export function Envios() {
           {/* 🔑 El botón va ACÁ y no adentro de `Pendientes`: ese componente se reemplaza entero por
               el `EmptyState` cuando no hay nada, y la bandeja vacía es justo el caso que este botón
               resuelve —la clienta que escribió antes de que exista un pedido en Tienda Nube—. */}
-          <Card>
+          {/* `data-guia`: el ancla ESTABLE de la bandeja. Los pasos de «Sin fecha» se paran acá
+              cuando el control fino del que hablan no está en pantalla (la tabla vacía, el botón de
+              sugerir que desaparece si no hay nada sin cotizar). Ver `lib/envios/guia.ts`. */}
+          <Card data-guia="envios.bandeja">
             <Button variant="outline" onClick={() => setEditando(envioNuevoAMano({ marca: marcaActiva }))}>
               Cargar uno a mano
             </Button>
@@ -272,7 +287,8 @@ export function Envios() {
         </>
       ) : (
       <>
-      <Card>
+      {/* `data-guia`: el ancla estable de la hoja del día (ver `lib/envios/guia.ts`). */}
+      <Card data-guia="envios.dia">
         <div style={{ display: 'flex', gap: space[4], alignItems: 'flex-end', flexWrap: 'wrap' }}>
           {/* 🔑 Las flechas saltan al día de reparto anterior y al siguiente, no al día calendario:
               el sábado, el domingo y el resto de los días sin moto son pantallas siempre vacías, y
@@ -591,7 +607,11 @@ function Pendientes({
           {/* Se llamaba «Dónde va», que describía la pregunta en vez de nombrar el dato. */}
           <Th>Dirección</Th>
           <Th>Pedido</Th>
-          <Th>Precio del envío</Th>
+          {/* El `data-guia` va en el span y no en el `<Th>`: `Th` no propaga props sueltas, así que
+              ahí el atributo se perdería en silencio y el tour apuntaría al vacío. */}
+          <Th>
+            <span data-guia="envios.precio">Precio del envío</span>
+          </Th>
           <Th />
           {/* El tilde de cobrado va al final: es lo último que se decide, después de cotizar. */}
           <Th>Pago del envío</Th>
@@ -689,7 +709,7 @@ function SugerirPrecios({
   return (
     <Card>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button variant="outline" disabled={pidiendo} onClick={() => void pedir()}>
+        <Button variant="outline" disabled={pidiendo} onClick={() => void pedir()} data-guia="envios.sugerir">
           {pidiendo ? 'Preguntándole al mapa…' : `Sugerir precios (${sinPrecio.length})`}
         </Button>
         <span style={{ opacity: 0.7, fontSize: 13 }}>
@@ -841,7 +861,7 @@ function LinkDelCadete() {
     : ''
 
   return (
-    <Card>
+    <Card data-guia="envios.link">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
         <div>
           <strong>El link del cadete</strong>
@@ -963,11 +983,14 @@ function Direccion({ envio, conMensaje = false }: { envio: Envio; conMensaje?: b
           gris, como el de llamar, que también es un chat pelado) y al lado va **el motivo, escrito**.
           🔑 El motivo dice qué falta y desaparece solo al cotizar: no es un cartel permanente. */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {/* El `data-guia` va sólo donde el mensaje se arma: en la hoja del día este botón es el
+            chat pelado, y el paso del tour habla del PRIMER mensaje (`lib/envios/guia.ts`). */}
         {wa ? (
           <a
             href={wa}
             target="_blank"
             rel="noopener noreferrer"
+            data-guia={conMensaje ? 'envios.whatsapp' : undefined}
             {...dice(
               mensaje
                 ? `Escribirle por WhatsApp a ${envio.telefono}, con el envío y el día ya escritos`
@@ -1049,6 +1072,7 @@ function AccionesDeFila({
         disabled={!ok}
         iconLeft={<Icono nombre="calendario" />}
         onClick={() => onAgendar(envio)}
+        data-guia="envios.agendar"
         {...dice(ok ? 'Mandar a un día de reparto' : motivo || 'No puede salir todavía')}
       />
       <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => onEditar(envio)} {...dice('Editar el envío')} />
@@ -1582,7 +1606,7 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
     return (
       <div style={{ display: 'grid', gap: space[4] }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button variant="outline" onClick={() => setAnotando(true)}>
+          <Button variant="outline" onClick={() => setAnotando(true)} data-guia="envios.anotar">
             Anotar un movimiento
           </Button>
         </div>
@@ -1618,7 +1642,7 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button variant="outline" onClick={() => setAnotando(true)}>
+        <Button variant="outline" onClick={() => setAnotando(true)} data-guia="envios.anotar">
           Anotar un movimiento
         </Button>
       </div>

@@ -11,6 +11,7 @@ import { PortalCadete } from '@/components/envios/PortalCadete'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { SeccionHeader } from '@/components/layout/SeccionHeader'
 import { CartelNovedad } from '@/components/novedades/CartelNovedad'
+import { Guia } from '@/components/ui/Guia'
 import { AccionesProvider } from '@/components/layout/acciones'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/Confirm'
@@ -140,6 +141,13 @@ export default function Seccion() {
             que un cliente nunca lo puede llegar a ver.
           */}
           <CartelNovedad />
+          {/*
+            El tour de «Cómo se usa». Va acá por el mismo motivo que el cartel: no pertenece a
+            ninguna sección, y montarlo adentro de una lo desmontaría en cada re-render de ella.
+            Los PASOS los registra cada sección en `store/useGuia` (así viajan en su chunk); esto es
+            sólo el dibujo, y sin pasos registrados no pinta nada.
+          */}
+          <Guia />
           <div className="shell-main">
             {/* Topbar: solo existe abajo de 900px (la regla vive en globals.css). Es la
                 puerta al menú cuando el sidebar se convirtió en cajón. */}
