@@ -216,152 +216,44 @@ describe('la cuenta fija sigue mandando', () => {
  * `etiquetado` y **a nada más**.
  */
 /**
- * La QUINTA llave de `_liquidacion`: Ventas de Marketing (`mkt-ventas`).
+ * 🔴 **Ventas de Marketing NO abre `_liquidacion`, y eso es una decisión, no un olvido.**
  *
- * Marketing arma las campañas sobre el resultado del sale, así que ve **qué se vendió de lo
- * liquidado** — pero esta sección es de Dirección por el costo, y eso no se mueve. Lo que fija este
- * bloque es dónde queda el borde: qué abre la llave y, sobre todo, qué **no**.
+ * El resultado del sale llegó a estar en esa pantalla —con una quinta llave que servía los ítems
+ * sin costo— y **lo sacó Bruno mirándolo**: *«esto en la vista marketing borralo, sólo sirve en
+ * análisis»*. Con el bloque se fue la llave: una puerta de permisos sin consumidor es peor que no
+ * tenerla, porque nadie la mira y sigue abierta.
+ *
+ * Este bloque existe para que volver a abrirla sea **una decisión con un test en rojo adelante** y
+ * no un `||` que alguien agrega sin darse cuenta de qué está sirviendo.
  */
-/**
- * 🔴 **`_mkt-ventas` es la única puerta de esa sección que ESCRIBE** —`ventas`, `venta_detalles` y
- * `clientes` del espejo de producción— **y la única que gasta cupo de Gestión Nube**. Su gate es lo
- * único entre una sesión cualquiera del Monitor y una escritura en las dos bases.
- */
-describe('_mkt-ventas · la puerta que escribe', () => {
+describe('_liquidacion · Ventas de Marketing no entra', () => {
   const SOLO_MKT = { name: 'Marketing', admin: false, cuenta: null, acceso: { bdi: { 'mkt-ventas': true } }, funcion: [] }
-  const post = (extra: Record<string, unknown> = {}) =>
-    conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action: 'traer-ventas-hoy', ...extra } })
 
-  it('🔴 sin la sección no entra, aunque tenga sesión válida', async () => {
-    sesionDe(SIN_NADA)
-    const res = await llamar('_mkt-ventas', post())
-    expect(res.code).toBe(403)
-  })
-
-  it('🔴 tampoco con la sección en la OTRA marca', async () => {
-    sesionDe({ name: 'Marketing', admin: false, cuenta: null, acceso: { zattia: { 'mkt-ventas': true } }, funcion: [] })
-    const res = await llamar('_mkt-ventas', post())
-    expect(res.code).toBe(403)
-  })
-
-  // El GET contesta cuándo se apretó el botón por última vez, y NO escribe. Igual pide la sección:
-  // el gate está arriba del `if (req.method)`, así que la respuesta es 403 y no un 405 que
-  // insinuaría que la puerta existe para cualquiera.
-  it('🔴 el GET también pide la sección', async () => {
-    sesionDe(SIN_NADA)
-    const res = await llamar('_mkt-ventas', conSesion({ query: { store: 'bdi' } }))
-    expect(res.code).toBe(403)
-  })
-
-  it('un método que no es GET ni POST se rechaza', async () => {
+  it('🔴 el GET no entra, ni pelado ni con `?resultado=1`', async () => {
     sesionDe(SOLO_MKT)
-    const res = await llamar('_mkt-ventas', conSesion({ method: 'DELETE', query: { store: 'bdi' } }))
-    expect(res.code).toBe(405)
+    for (const query of [{ store: 'bdi' }, { store: 'bdi', resultado: '1' }]) {
+      const res = await llamar('_liquidacion', conSesion({ query }))
+      expect(res.code, JSON.stringify(query)).toBe(403)
+    }
   })
 
-  it('una acción que no es la suya se rechaza antes de tocar la base', async () => {
+  it('🔴 tampoco las dos lecturas que hace el Resultado por POST', async () => {
     sesionDe(SOLO_MKT)
-    const res = await llamar('_mkt-ventas', post({ action: 'cualquier-otra' }))
-    expect(res.code).toBe(400)
+    for (const action of ['ventas-campania', 'stock-campania', 'aplicar', 'crear']) {
+      const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action, liq: 'l1', pids: ['1'] } }))
+      expect(res.code, `action «${action}»`).toBe(403)
+    }
   })
 
-  it('con la sección SÍ entra — si no, todo lo de arriba estaría verde por prohibir todo', async () => {
-    sesionDe(SOLO_MKT)
+  // La mitad que evita el falso positivo de «prohibir todo»: con la sección de Liquidación SÍ entra.
+  it('con Liquidación sí entra — si no, lo de arriba estaría verde por la razón equivocada', async () => {
+    sesionDe({ name: 'Análisis', admin: false, cuenta: null, acceso: { bdi: { liquidacion: true } }, funcion: [] })
     try {
-      const res = await llamar('_mkt-ventas', post())
+      const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi' } }))
       expect(res.code).not.toBe(403)
     } catch (e) {
       expect(String(e)).toContain('LLEGÓ A LA BASE')
     }
-  })
-})
-
-describe('_liquidacion · la llave de Ventas de Marketing', () => {
-  const SOLO_MKT = { name: 'Marketing', admin: false, cuenta: null, acceso: { bdi: { 'mkt-ventas': true } }, funcion: [] }
-  const postDe = (body: Record<string, unknown>) =>
-    conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', ...body } })
-
-  it('🔴 el GET pelado NO entra: sin `?resultado=1` contesta la campaña con el costo adentro', async () => {
-    // El que importa de este lado. Si esto deja de dar 403, Marketing se baja `foto.costo` de cada
-    // producto de cada campaña — que es la razón por la que la sección es de Dirección.
-    sesionDe(SOLO_MKT)
-    const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi' } }))
-    expect(res.code).toBe(403)
-  })
-
-  it('🔴 `aplicar` tampoco: escribir precios en la tienda pide Liquidación', async () => {
-    sesionDe(SOLO_MKT)
-    const res = await llamar('_liquidacion', postDe({ action: 'aplicar', liq: 'l1', pids: ['1'], modo: 'poner' }))
-    expect(res.code).toBe(403)
-  })
-
-  it('🔴 ninguna otra action se cuela, ni siquiera mandando `?resultado=1`', async () => {
-    sesionDe(SOLO_MKT)
-    const acciones = ['crear', 'borrar', 'guardar-item', 'estado-item', 'revisar', 'quitar-item', 'sumar-items', 'decidir-masivo', 'renombrar', 'estado', 'sincronizar-ventas', 'etiquetado']
-    for (const action of acciones) {
-      const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi', resultado: '1' }, body: { store: 'bdi', action, liq: 'l1', pids: ['1'] } }))
-      expect(res.code, `action «${action}» no puede entrar con la llave de Marketing`).toBe(403)
-    }
-  })
-
-  it('el GET con `?resultado=1` SÍ entra — si no, todo lo de arriba estaría verde por prohibir todo', async () => {
-    sesionDe(SOLO_MKT)
-    try {
-      const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi', resultado: '1' } }))
-      expect(res.code).not.toBe(403)
-    } catch (e) {
-      expect(String(e)).toContain('LLEGÓ A LA BASE')
-    }
-  })
-
-  it('y las dos LECTURAS que hace el Resultado por POST también', async () => {
-    sesionDe(SOLO_MKT)
-    for (const action of ['ventas-campania', 'stock-campania']) {
-      try {
-        const res = await llamar('_liquidacion', postDe({ action, liq: 'l1', pids: ['1'] }))
-        expect(res.code, action).not.toBe(403)
-      } catch (e) {
-        expect(String(e)).toContain('LLEGÓ A LA BASE')
-      }
-    }
-  })
-
-  it('sin la sección no entra, aunque mande `?resultado=1`', async () => {
-    sesionDe(SIN_NADA)
-    const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi', resultado: '1' } }))
-    expect(res.code).toBe(403)
-  })
-})
-
-describe('_liquidacion · el costo no sale por la llave de Marketing', () => {
-  /**
-   * 🔴 **Se ejerce la función, no se argumenta el comentario.** Es la única garantía de que
-   * `foto.costo` no viaja, y este handler ya tuvo un docblock afirmando durante días algo que era
-   * falso.
-   */
-  it('borra costo, sinCosto, margen y markup — y deja intacto todo lo demás', async () => {
-    const { sinPlataDeCosto } = await import('../api/_liquidacion.js')
-    const item = {
-      pid: '1',
-      estado: 'aplicado',
-      foto: { nombre: 'Funda', sku: 'F-1', costo: 4200, sinCosto: false, precioNormal: 12000, stock: 30, ventas90: 18, imagen: 'x.jpg' },
-      decision: { precioSale: 8000, pctDesc: 33, markup: 90, margen: 47, nota: 'ok', porQuien: 'Bruno' },
-    }
-    const limpio = sinPlataDeCosto(item) as typeof item
-    expect(limpio.foto).not.toHaveProperty('costo')
-    expect(limpio.foto).not.toHaveProperty('sinCosto')
-    expect(limpio.decision).not.toHaveProperty('margen')
-    expect(limpio.decision).not.toHaveProperty('markup')
-    // La otra mitad: si borrara de más, la pantalla del Resultado se queda sin con qué contar.
-    expect(limpio.foto).toEqual({ nombre: 'Funda', sku: 'F-1', precioNormal: 12000, stock: 30, ventas90: 18, imagen: 'x.jpg' })
-    expect(limpio.decision).toEqual({ precioSale: 8000, pctDesc: 33, nota: 'ok', porQuien: 'Bruno' })
-    expect(limpio.pid).toBe('1')
-    expect(limpio.estado).toBe('aplicado')
-  })
-
-  it('no explota con un ítem sin foto ni decisión', async () => {
-    const { sinPlataDeCosto } = await import('../api/_liquidacion.js')
-    expect(sinPlataDeCosto({ pid: '9' })).toEqual({ pid: '9', foto: {}, decision: {} })
   })
 })
 

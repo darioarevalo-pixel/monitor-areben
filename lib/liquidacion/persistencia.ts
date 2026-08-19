@@ -64,32 +64,6 @@ export async function leerItems(store: Marca, liqId: string): Promise<Liquidacio
   return (d.items || []) as LiquidacionItem[]
 }
 
-/**
- * Lo mismo que `leerCampanias` + `leerItems`, pero por la **llave de Ventas de Marketing**
- * (`?resultado=1`): el servidor contesta los ítems **sin `foto.costo`, `foto.sinCosto`,
- * `decision.margen` ni `decision.markup`**.
- *
- * 🔑 **Devuelve `LiquidacionItem` igual, y no un tipo recortado.** Los cuatro campos que faltan no
- * los lee nadie en el camino del Resultado (medido con grep en `resultado.ts` y en `Resultado.tsx`
- * antes de escribir esto), así que un tipo aparte obligaría a duplicar `resultadoCampania` para que
- * lo acepte — o sea, dos implementaciones de la cuenta que importa, para proteger cuatro campos que
- * ya protege el servidor. ⚠️ Si alguna vez el Resultado necesita el costo, esto se cae en el
- * typecheck y no en la pantalla.
- */
-export async function leerCampaniasParaResultado(store: Marca): Promise<Liquidacion[]> {
-  const r = await apiFetch(`${API}&store=${store}&resultado=1&nc=${Date.now()}`)
-  const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las campañas de liquidación.')
-  return (d.campanias || []) as Liquidacion[]
-}
-
-export async function leerItemsParaResultado(store: Marca, liqId: string): Promise<LiquidacionItem[]> {
-  const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&resultado=1&nc=${Date.now()}`)
-  const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los productos de la campaña.')
-  return (d.items || []) as LiquidacionItem[]
-}
-
 /** Lo que la campaña tiene, en dos columnas: qué pid ya está y en qué estado quedó. */
 export interface PidsCampania {
   campania: { id: string; nombre: string; estado: EstadoCampania }

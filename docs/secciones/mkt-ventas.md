@@ -11,7 +11,7 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 
 - `components/mkt-ventas/` — `MktVentas.tsx` (la pantalla) · `Objetivo.tsx` (la barra) ·
   `ContadorDiario.tsx` (las flechas) · `VentaGeneral.tsx` (por canal + los que más salieron) ·
-  `ResultadoSale.tsx` (monta el Resultado de Liquidación) · `useMetas.ts`.
+  `useMetas.ts`.
 - `lib/mkt-ventas/core.ts` — `serieDiaria`, `escalonVigente`, `techoDeLaRampa`, `medirElDia`,
   `resumenPorCanal`, `losQueMasSalieron`, `unidadDeLaMeta`.
 - `lib/mkt-ventas/persistencia.ts` — el cliente del botón.
@@ -35,12 +35,6 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   `crearClienteGN`** (`scripts/lib/gn-fetch.mjs`) y no hay que unificarlos: aquél espera **hasta 300
   segundos por corte, hasta cinco veces**, que está bien para un job de Actions con 20 minutos y se
   come entera una función de Vercel de 30 s. El de acá corta en 5-30 s × 3.
-- 🔴 **`api/_liquidacion.js` tiene CINCO llaves desde el 18-ago-2026** (eran cuatro). La quinta es
-  ésta, y son **dos caminos distintos**: `?resultado=1` en un **GET** —campañas e ítems, pasados por
-  `sinPlataDeCosto()`— y las actions `ventas-campania` / `stock-campania` en un **POST**. ⚠️ Las dos
-  del POST van **por el nombre de la action y no por un flag de query**, al revés que `etiquetado`,
-  y la diferencia es que son **lecturas**: `etiquetado` pedía las dos condiciones porque escribe una
-  fila. Cualquier otra action con esta llave cae en la rama de siempre y contesta 403.
 - 🔴 **`api/_norte.js` tiene DOS llaves desde el 18-ago-2026.** `?metas=1` contesta **sólo
   `norte_metas`** y elige `['norte', 'mkt-ventas']` **antes** del `puedeVerAlguna`. Tocar ese gate
   le cambia el acceso a Dirección. El porqué está comentado ahí mismo — y **antes de tocar el
@@ -63,9 +57,16 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   porque esa `unidad` es la que Norte **escribe en la base** como espejo de la fila y no puede
   depender de quién esté mirando. ⚠️ **Límite conocido y con test**: los medidores de plata siguen
   diciendo `$/funda` — hoy no se ve (son de Dirección y Zattia no tiene metas).
-- 🔑 **El orden de la pantalla va de lo PERMANENTE a lo EXCEPCIONAL, y lo eligió Bruno**: el
-  objetivo · el día de hoy · **cómo viene la venta** · el resultado del sale, *«porque la
-  liquidación siempre es excepcional»*.
+- 🔴 ⛔ **EL RESULTADO DEL SALE NO VA ACÁ, y llegó a estar.** Se montó el 18-ago-2026 —era la
+  segunda tarjeta del tablero de Bruno— y **lo sacó él mismo mirándolo, esa misma noche**: *«esto en
+  la vista marketing borralo, sólo sirve en análisis»*. 🔑 **Con el bloque se fue la quinta llave de
+  `api/_liquidacion.js`** (el `?resultado=1` y las dos lecturas del POST): una puerta de permisos
+  **sin consumidor es peor que no tenerla**, porque nadie la mira y sigue abierta. ⇒ volver a
+  montarlo pide **reabrirla a propósito**, y hay un test en rojo esperando
+  (`_liquidacion · Ventas de Marketing no entra`, 4 mutantes).
+- 🔑 **El orden de la pantalla va de lo PERMANENTE a lo EXCEPCIONAL**: el objetivo · el día de hoy ·
+  **cómo viene la venta**. Lo excepcional —el sale— se mira en Liquidación, que es donde se decide
+  el precio.
 - 🔴 🔑 **La ventana de «cómo viene la venta» la decide `cortesDeVentas`, NO un `hoy − 30` propio.**
   La primera versión recortaba por su cuenta y quedaba **desfasada un día** del `sales30` del ETL,
   que es de donde sale el ranking de al lado ⇒ **dos ventanas de 30 días adentro de una tarjeta que
@@ -126,18 +127,6 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - ⚠️ **El día lo decide el navegador**, que está en Argentina — el mismo criterio de la Agenda. ⛔ No
   se usa `diaArgentino` (`lib/envios/portal.core.js`): ésa existe porque el **servidor** corre en
   UTC. Lo que sí está mal en las dos es `toISOString().slice(0,10)`, que da el día UTC.
-- 🔑 **`sinPlataDeCosto()` borra en vez de elegir qué copiar.** Saca `foto.costo`, `foto.sinCosto`,
-  `decision.margen` y `decision.markup`, y deja pasar todo lo demás. Una lista **blanca** dejaría
-  afuera lo que alguien agregue después —la pantalla pierde un dato y nadie sabe por qué—; la negra
-  deja pasar de más sólo si aparece un campo de costo **nuevo**, que es un cambio que se nota al
-  escribirlo. ⚠️ Si aparece uno, va ahí.
-- 🔑 **El Resultado se MONTA, no se reescribe.** `lib/liquidacion/resultado.ts` y
-  `components/liquidacion/Resultado.tsx` **no leen costo, margen ni markup** —grep en las dos puntas
-  da cero, medido antes de escribir la llave—, así que la pantalla sale idéntica y el payload deja
-  de llevar el costo. Una segunda versión sería garantizar que algún día las dos pantallas contesten
-  distinto sobre la misma campaña.
-- ⚠️ **`puedeSincronizar` va en `false` y no es un olvido**: traer las ventas del día al espejo
-  escribe en producción y hoy pide admin.
 - ⚠️ **La serie son 34 días, no 90**, y eso NO cambió al abrirle Análisis a Marketing: el techo lo
   pone `desdeVentas` para quien no ve el análisis fino, y **quien sí lo ve baja desde 2025-01-01**.
   Se dejó en 34 porque es el piso garantizado para cualquiera que abra la sección. Pedir más
@@ -223,19 +212,7 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
   daba 24 · 19 · 17, y ésa fue la pista de las dos ventanas.
 - Los últimos 10 días de BDI, para volver a cotejar: **16 · 11 · 8 · 12 · 5 · 14 · 10 · 14 · 3 · 9**
   compras online (17-ago hacia atrás).
-- ✅ 🔑 **El resultado del sale, caminado y con el oráculo EN EL PAYLOAD, no en lo dibujado**
-  (18-ago-2026, Zattia, «Sale Invierno Agosto 2026»). Dos mitades:
-  1. **Los mismos cuatro números en las dos pantallas** —Liquidación → Resultado (payload con costo)
-     y Ventas de Marketing (sin costo)—: vendido **205** (10% del stock) · facturado **$4.753.250** ·
-     resignado **$2.730.700** · levante **2,2×** (34,2/día vs 15,4), más los 4 descartados en 0 y los
-     **6 agotados de 23**.
-  2. 🔴 **El cuerpo servido, capturado enganchando `fetch`**: la llave vieja trae `costo`, `sinCosto`,
-     `margen` y `markup` (**203 KB**) y la de Marketing **no trae ninguno de los cuatro** (**181 KB**),
-     con `precioNormal` presente en las dos. ⇒ el cero no es un payload vacío: es el filtro haciendo
-     algo. ⛔ Mirar sólo la pantalla no lo habría probado —los cuatro campos no se dibujan— y mirar
-     sólo la llave nueva tampoco: **hace falta la mitad que SÍ los trae**.
-- ⚠️ **BDI no tiene ninguna campaña** (medido: `select count(*) from liquidaciones` da 0) ⇒ ahí lo
-  que se ejerció es el cartel de vacío, no el resultado.
+
 - ✅ **Caminada en producción el 18-ago-2026**, con `psql` al lado en cada paso: hoy **1/3**, la
   flecha atrás a 17-ago **16/28** (barra 64 % contra el escalón de 25), el piso en **jue 16-jul**
   **7/11** con la flecha apagada y el cartel que dice por qué, y **Zattia sin objetivo cargado**

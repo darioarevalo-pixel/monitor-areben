@@ -2,7 +2,7 @@
 
 /**
  * Ventas (key `mkt-ventas`, área Marketing) — el objetivo del sector, el contador diario de ventas
- * online y el resultado del sale.
+ * online y cómo viene la venta en general.
  *
  * # Por qué existe
  *
@@ -20,6 +20,10 @@
  *    exactamente igual que un día flojo.
  * 3. **La barra mide el escalón vigente de la rampa y el título dice el techo** — el porqué está
  *    en `Objetivo.tsx`.
+ * 4. ⛔ **El resultado del sale NO va acá.** Llegó a estar y lo sacó Bruno mirándolo: *«esto en la
+ *    vista marketing borralo, sólo sirve en análisis»*. Vive en Liquidación, que es donde se decide
+ *    el precio. Con él se fue la quinta llave de `api/_liquidacion.js` —una puerta de permisos sin
+ *    consumidor es peor que no tenerla— así que **volver a montarlo pide reabrirla**.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -38,7 +42,6 @@ import { useMetas } from './useMetas'
 import { Objetivo } from './Objetivo'
 import { ContadorDiario } from './ContadorDiario'
 import { VentaGeneral } from './VentaGeneral'
-import { ResultadoSale } from './ResultadoSale'
 
 /**
  * Cuántos días de serie se arman. Es el techo de historia de un usuario que no es admin
@@ -185,12 +188,6 @@ export function MktVentas() {
 
               <VentaGeneral porCanal={porCanal} top={top} dias={diasGeneral} onDias={setDiasGeneral} articulo={articulo} />
 
-              {/* 🔑 **El orden va de lo permanente a lo excepcional**, y lo eligió Bruno: el
-                  objetivo · el día de hoy · cómo viene la venta · y recién ahí el sale, *«porque la
-                  liquidación siempre es excepcional»*. Además es lo único de la pantalla que pide
-                  sus propios datos al servidor, así que su demora no puede quedar delante de lo que
-                  ya está en la mano. */}
-              <ResultadoSale />
             </>
           )
         }}
