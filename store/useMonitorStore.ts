@@ -70,8 +70,39 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
     if (!forzar && get().marca === marca && get().estado === 'listo') return
 
     const desde = desdeVentas(historiaCompleta, ahora())
+    const cambiaDeMarca = get().marca !== marca
 
-    set({ marca, error: null, progreso: null })
+    /**
+     * 🔴 **Al cambiar de marca, `estado` baja a `'cargando'` EN EL MISMO `set` que la marca.**
+     *
+     * Antes acá iba `set({ marca })` a secas y `estado` se quedaba en `'listo'` de la marca
+     * anterior. Durante el `await leerCache` de abajo, el guard de `useDatosMonitor`
+     * —`estado === 'listo' && marcaCargada === marca`, que existe exactamente para esto— daba
+     * **true con los datos viejos**: la pantalla mostraba los números de una marca bajo el nombre
+     * de la otra. Se vio en producción el 18-ago-2026, con «BDI Accesorios» en el selector y el
+     * contador y el sync de Zattia abajo. Sin un error y con la pantalla pareciendo sana.
+     *
+     * `datos` y `origen` se limpian junto con eso aunque el guard ya alcance: dejar el payload de
+     * la otra marca en el store es un arma cargada para el próximo que lea `datos` sin preguntar.
+     */
+    set(
+      cambiaDeMarca
+        ? { marca, datos: null, estado: 'cargando', error: null, origen: null, progreso: null }
+        : { marca, error: null, progreso: null },
+    )
+
+    /**
+     * 🔴 **La otra puerta del mismo defecto: la carrera.** Volver a la marca anterior mientras la
+     * primera bajada sigue en vuelo hacía que ésa publicara **tarde y encima** — los datos de
+     * Zattia quedaban bajo el rótulo de BDI, y ahí se quedaban. Por eso **todo lo que publica pasa
+     * por acá**: si el store ya está en otra marca, lo que llega tarde se descarta.
+     *
+     * ⚠️ Lo que NO se descarta es el **guardado del caché**: la bajada es válida y ya se pagó, así
+     * que cambiar de marca a mitad no la tira.
+     */
+    const publicar = (parcial: Partial<MonitorState>) => {
+      if (get().marca === marca) set(parcial)
+    }
 
     const computar = (payload: PayloadCache, today: Date) =>
       computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })
@@ -81,7 +112,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       const fresco = await leerCache(marca, false, desde)
       if (fresco) {
         const edadMin = Math.round((Date.now() - fresco.timestamp) / 60000)
-        set({ datos: computar(fresco.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: false } })
+        publicar({ datos: computar(fresco.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: false } })
         return
       }
 
@@ -89,23 +120,24 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       const vencido = await leerCache(marca, true, desde)
       if (vencido) {
         const edadMin = Math.round((Date.now() - vencido.timestamp) / 60000)
-        set({ datos: computar(vencido.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: true } })
+        publicar({ datos: computar(vencido.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: true } })
         try {
-          await refrescar(marca, desde, set)
+          await refrescar(marca, desde, publicar)
         } catch {
           // El refresco de fondo que falla no rompe nada: se sigue viendo lo viejo.
-          set((s) => ({ origen: s.origen?.tipo === 'cache' ? { ...s.origen, refrescando: false } : s.origen }))
+          const o = get().origen
+          publicar({ origen: o?.tipo === 'cache' ? { ...o, refrescando: false } : o })
         }
         return
       }
     }
 
     // ── Camino 3: sin caché (o refresco forzado) ──────────────────────────────
-    set({ estado: 'cargando' })
+    publicar({ estado: 'cargando' })
     try {
-      await refrescar(marca, desde, set)
+      await refrescar(marca, desde, publicar)
     } catch (e) {
-      set({ estado: 'error', error: e instanceof Error ? e.message : String(e), progreso: null })
+      publicar({ estado: 'error', error: e instanceof Error ? e.message : String(e), progreso: null })
     }
   },
 
@@ -118,14 +150,15 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
 async function refrescar(
   marca: Marca,
   desde: string,
-  set: (partial: Partial<MonitorState>) => void,
+  /** El `set` guardado por marca de `cargar()`. ⛔ No recibe el `set` pelado: ver el porqué allá. */
+  publicar: (partial: Partial<MonitorState>) => void,
 ): Promise<void> {
   const today = ahora()
   let tiempos: { tablas: number; detalles: number; total: number } | null = null
   const payload = await traerDatos({
     marca,
     desde,
-    onProgress: (label) => set({ progreso: label }),
+    onProgress: (label) => publicar({ progreso: label }),
     onTiempos: (t) => {
       tiempos = t
     },
@@ -145,7 +178,7 @@ async function refrescar(
   const datos = computarDatos(payload, { today, colorManualMap: mapaColorManual(payload.colorManual) })
   loguearTiempos(marca, tiempos, performance.now() - t0, guardado.ok)
 
-  set({
+  publicar({
     datos,
     estado: 'listo',
     origen: guardado.ok ? { tipo: 'red' } : { tipo: 'red', sinCache: guardado.motivo },

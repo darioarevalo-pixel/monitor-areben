@@ -135,17 +135,17 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - **El lint rechaza `setState` síncrono en un `useEffect`** (`react-hooks/set-state-in-effect`) y
   dejó el CI en rojo en la primera versión de `useMetas`. El patrón bueno es el de `useMarketing` y
   `useTnImages`: caché a nivel de módulo, **leído en el render**; el effect sólo dispara el fetch.
-- 🔴 ⚠️ **AL CAMBIAR DE MARCA, LA PANTALLA MUESTRA UNOS SEGUNDOS LOS NÚMEROS DE LA OTRA CON EL
-  RÓTULO DE ÉSTA** — y **no es de esta sección**: es del store del ETL, o sea de las ~22 pantallas
-  que usan `useDatosMonitor`. Visto caminándola el 18-ago-2026: con «BDI Accesorios» arriba, el
-  contador decía **6/6** (Zattia) y el sync **17/8 03:34** (Zattia), cuando BDI daba 7/11 y 18/8
-  03:55. 🔑 **La causa**: `cargar()` hace `set({ marca })` **antes** de `await leerCache(marca)`
-  (`store/useMonitorStore.ts`), así que durante ese await `marcaCargada` ya es la nueva y `estado`
-  sigue en `'listo'` de la anterior ⇒ el guard `listoParaEstaMarca` de `useDatosMonitor` —que existe
-  exactamente para esto, y su docstring lo dice— **da `true` con los datos viejos**. Se cuela sólo
-  cuando la marca nueva tiene caché (el caso normal); sin caché el `estado` pasa a `'cargando'` y el
-  guard sí frena. ⛔ **No se arregló acá**: es un store compartido y esto es una sección de
-  Marketing. ▶️ Lo decide Bruno.
+- 🏁 🔴 **AL CAMBIAR DE MARCA, LA PANTALLA MOSTRABA LOS NÚMEROS DE LA OTRA CON EL RÓTULO DE ÉSTA
+  — CERRADO** (18-ago-2026). Lo destapó caminar esta sección pero **no era de acá**: era del store
+  del ETL, o sea de las ~22 pantallas que usan `useDatosMonitor`. Con «BDI Accesorios» arriba, el
+  contador decía **6/6** y el sync **17/8 03:34**, los dos de Zattia. 🔑 **Eran DOS puertas, no una**
+  —la segunda apareció recién al escribir el test—: (1) `cargar()` hacía `set({ marca })` **antes**
+  del `await leerCache`, así que durante ese await el guard `listoParaEstaMarca` daba `true` con los
+  datos viejos; (2) **la carrera**: volver a la marca anterior mientras la primera bajada seguía en
+  vuelo hacía que ésa publicara **tarde y encima**, y ahí se quedaba. ⇒ el `set` que cambia de marca
+  baja `estado` a `'cargando'` y limpia `datos`, y **todo lo que publica pasa por un `publicar()`
+  que descarta si el store ya está en otra marca**. ⚠️ El **guardado del caché no** se descarta: la
+  bajada ya se pagó. 📌 `tests/store-marca.test.ts`, **9 mutantes, 9 muertos**.
 
 ## Pendiente
 
