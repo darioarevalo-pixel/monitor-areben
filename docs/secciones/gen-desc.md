@@ -130,14 +130,71 @@ la pantalla, ni el validador, ni la tabla se enteran.
   que el modelo tiene para describir la prenda, y **los 41 mudos no tienen ni insumo ni prosa
   previa**, así que sin foto escribirían a partir del nombre y nada más.
 
+## Publicar en la tienda (tanda 4, 19-ago-2026)
+
+El botón **«Publicar en la tienda»** aparece en la fila cuando el borrador está aprobado, y
+escribe **un producto por vez**. Nadie va a leer 370 borradores de corrido; la corrida masiva
+sigue sin existir a propósito.
+
+🔴 **El orden es el invariante, y es el único motivo por el que esto vive en el servidor.**
+TiendaNube no tiene historial: `html_previo` es la única copia que va a existir del texto
+anterior. Los cuatro pasos van seguidos en `api/_tn-desc.js`, `op:'publicar'`:
+
+1. **Leer fresco** — `GET tn-categorias?accion=descripcion&productId=`. No sale del audit, que
+   está cacheado: un respaldo sacado de un caché de hace media hora es el respaldo de otra cosa.
+2. **Respaldar y CONFIRMAR** — `html_previo` + `hash_previo`, estado `escribiendo`. Si esto
+   falla, se corta acá y la tienda no se toca.
+3. **Escribir con compare-and-swap** — `POST accion:'descripcion-prosa'` con `hashPrevio`. Del
+   otro lado se relee la descripción y, si el hash no coincide, **muere en 409 sin escribir**:
+   alguien la tocó en el medio (pegaron una tabla de talles, el local editó a mano) y el
+   respaldo guardado ya es de otra versión.
+4. **Releer y verificar** — ⛔ un 200 del `PUT` no prueba que la escritura haya pasado. Se
+   vuelve a leer el producto y se compara; si no coincide, la fila queda con `verificado:false`
+   y la pantalla dice «se escribió, pero la relectura no coincide», **no «listo»**.
+
+🔑 **Va del lado del servidor y no del navegador** para que cerrar la pestaña en el medio no
+pueda dejar la tienda escrita y la fila diciendo que no.
+
+🔑 **Se compone una sola vez, en `lib/tn-desc/bloques.core.js`.** `bdi-catalogo` recibe el texto
+ya armado y sólo se hace las preguntas que necesitan la tienda delante. Dos composiciones del
+mismo campo es lo que se desincroniza. Por eso `bloques`, `generarHtml` y `esc` bajaron a `.js`
+plano: el que compone es un handler de `api/`, que **no puede importar TypeScript**.
+
+🔑 **El HTML sale del borrador GUARDADO, no de lo que manda el navegador**: lo que se aprobó es
+lo que se publica. Y sólo sale a la tienda un borrador en estado `aprobado`.
+
+🔴 **El residuo se conserva salvo que alguien lo destilde a mano**, y la pantalla lo muestra
+antes (avisando si adentro hay una imagen). No hay default destructivo: descartar es
+irreversible y del lado de TiendaNube no hay historial para darse cuenta.
+
+## 🔴 La colisión del wrapper de 680px (encontrada al arrancar esta tanda)
+
+`generarHtml` envuelve la prosa en un `<div style="…max-width:680px…">`, que es **la misma firma**
+con la que el generador de talles reconoce y borra su envoltorio viejo. Dos consecuencias, las
+dos medidas antes de escribir una sola descripción:
+
+- **`prosaDe` daba 0 caracteres sobre nuestro propio texto** ⇒ el producto recién redactado iba a
+  seguir contando como «sin descripción» en el KPI de Marketing y en el filtro de esta pantalla.
+- **Pegar la tabla de talles después borraba la prosa entera**, dejando `<!--PROSA-INI-->
+  <!--PROSA-FIN-->` vacío. Y no hay historial: ese texto no quedaba en ningún lado.
+
+La regla que lo arregla ya estaba escrita («primero los bloques firmados, después los tags»):
+estaba aplicada al bloque de talles y no al de prosa, en las dos puntas. Ahora el bloque de prosa
+se extrae **antes** de tocar wrappers en `lib/tn-desc/prosa.ts` y en
+`bdi-catalogo/api/_desc-talles.js`.
+
+🔑 **El test que tenía que cazarlo existía y estaba verde**: su fixture era un `<p>` pelado adentro
+de las marcas, no el HTML que sale de `generarHtml`. Ahora el fixture es la salida real.
+
+⚠️ `bdi-catalogo` no tiene runner de tests. Por eso las dos reglas puras viven en `api/_desc-talles.js`
+y `api/_desc-prosa.js`, y se ejercen con `node scripts/check-desc-talles.mjs` y
+`node scripts/check-desc-prosa.mjs` — sin credenciales, y **saliendo 1 si algo falla**.
+
 ## Lo que TODAVÍA no hace
 
-⛔ **Nada de esta pantalla llega a la tienda.** Guarda insumo y borrador aprobado en
-`tn_descripciones` y se para ahí. Publicar es otro verbo, en otro repo
-(`bdi-catalogo/api/tn-categorias.js`), y va en su propia tanda — junto con el compare-and-swap
-por hash y la relectura de verificación, porque **un 200 del `PUT` no prueba que la escritura
-haya pasado**. `lib/tn-desc/bloques.ts` ya tiene la composición y el invariante
-`conservaLaTabla` listos para ese día.
+⛔ **No hay verbo de vuelta todavía.** El respaldo (`html_previo`) está guardado y es la única
+copia que existe, pero restaurarlo desde la pantalla no está hecho: hoy se recupera leyendo la
+fila. Es la próxima tanda y es barata, justamente porque el respaldo ya está.
 
 🔴 ▶️ **Falta `ANTHROPIC_API_KEY` en Vercel.** Sin eso el botón «Redactar con IA» contesta un 500
 con ese texto y el resto de Redacción anda igual. **Es el único eslabón de la tanda que no se pudo

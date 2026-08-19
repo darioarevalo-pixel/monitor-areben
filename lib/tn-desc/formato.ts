@@ -7,15 +7,14 @@
  * `api/_tn-desc-ia.js` — un handler de `api/` corre en Node sin pasar por el compilador de
  * Next y **no puede importar TypeScript**.
  *
- * Lo que sí vive acá es `generarHtml`, que sólo lo usa la pantalla: pinta, y para pintar
- * necesita `esc` de `lib/gen-talles/core.ts`.
+ * ⚠️ `generarHtml` TAMBIÉN bajó al `.js` (19-ago-2026): el HTML que sale a la tienda lo arma
+ * `api/_tn-desc.js` a partir del borrador aprobado que está guardado, no el navegador.
  *
  * 🔑 El borrador es DATO (`{parrafo, bullets}`), no texto libre ni HTML. El HTML lo arma
  * `generarHtml`, igual que `lib/gen-talles/core.ts` arma la tabla: así el estilo vive en un
  * lugar solo y las reglas se prueban sin pintar nada.
  */
 
-import { esc } from '../gen-talles/core'
 import {
   ETIQUETAS as ETIQUETAS_JS,
   MAX_PARRAFO as MAX_PARRAFO_JS,
@@ -25,6 +24,7 @@ import {
   PROSA_INI as PROSA_INI_JS,
   PROSA_FIN as PROSA_FIN_JS,
   validarBorrador as validarBorradorJs,
+  generarHtml as generarHtmlJs,
 } from './formato.core.js'
 
 export type Bullet = { etiqueta: string; texto: string }
@@ -71,14 +71,9 @@ export function validarBorrador(b: Borrador, ctx: Contexto): Problema[] {
 /**
  * El HTML autónomo (estilos inline, como el de la tabla) que se pega en la descripción,
  * envuelto en la firma AREBEN-PROSA para poder reemplazarlo después sin tocar el resto.
+ * La implementación está en `formato.core.js`, porque el que arma este HTML para escribirlo
+ * en la tienda es un handler de `api/`.
  */
 export function generarHtml(b: Borrador): string {
-  const items = (b.bullets || [])
-    .map((x) => `<li style="margin-bottom:4px;"><b>${esc((x.etiqueta || '').trim())}:</b> ${esc((x.texto || '').trim())}</li>`)
-    .join('')
-  let h = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#222;">'
-  h += `<p style="font-size:15px;line-height:1.6;margin:0 0 12px;">${esc((b.parrafo || '').trim())}</p>`
-  if (items) h += `<ul style="font-size:14px;line-height:1.5;margin:0;padding-left:18px;">${items}</ul>`
-  h += '</div>'
-  return PROSA_INI + h + PROSA_FIN
+  return generarHtmlJs(b)
 }

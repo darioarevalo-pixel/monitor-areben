@@ -45,6 +45,12 @@ export type FilaCola = {
   aprobado_por: string | null
   aprobado_at: string | null
   updated_at: string | null
+  /** 🔑 La ÚNICA copia del texto que había antes. TiendaNube no tiene historial. */
+  html_previo: string | null
+  /** ⛔ Que el PUT diera 200 no alcanza: esto es la relectura. */
+  verificado: boolean | null
+  escrito_at: string | null
+  error: string | null
 }
 
 const cacheProductos: Partial<Record<Marca, ProductoTn[]>> = {}
@@ -214,5 +220,37 @@ export function useGenDesc(marca: Marca) {
     [marca],
   )
 
-  return { ...estado, cargar, refrescar, guardar, redactar }
+  /**
+   * Publica el borrador aprobado en TiendaNube. Es el único botón de la pantalla que sale a
+   * la tienda en vivo.
+   *
+   * 🔑 El navegador no compone ni escribe: manda `op:'publicar'` y el servidor hace los
+   * cuatro pasos seguidos —leer fresco, respaldar, escribir con compare-and-swap, releer—.
+   * Va así para que cerrar la pestaña en el medio no pueda dejar la tienda escrita y la fila
+   * diciendo que no.
+   *
+   * 🔴 Devuelve `verificado` aparte de `ok`: un 200 del PUT no prueba que la escritura haya
+   * pasado, y esa diferencia tiene que llegar hasta la pantalla.
+   */
+  const publicar = useCallback(
+    async (tnId: string, conservarResiduo: boolean): Promise<{ error: string | null; verificado: boolean }> => {
+      try {
+        const r = await apiFetch(COLA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'publicar', conservarResiduo }),
+        })
+        const d = await r.json()
+        await cargar()
+        if (!r.ok || !d?.ok) return { error: d?.error || `Error ${r.status}`, verificado: false }
+        return { error: null, verificado: !!d.verificado }
+      } catch (e) {
+        await cargar()
+        return { error: e instanceof Error ? e.message : 'No se pudo publicar.', verificado: false }
+      }
+    },
+    [marca, cargar],
+  )
+
+  return { ...estado, cargar, refrescar, guardar, redactar, publicar }
 }

@@ -13,10 +13,14 @@
 import { matchTn, type IndiceTn, type TnProducto } from '../tn'
 import type { Plantilla, TablaGuardada } from './plantillas'
 
-/** Escape HTML idéntico al `esc` del legacy (index.html:3075). No tocar: rige la paridad byte. */
-export function esc(s: unknown): string {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
+/**
+ * Escape HTML idéntico al `esc` del legacy (index.html:3075). No tocar: rige la paridad byte.
+ * 🔑 La implementación bajó a `lib/esc.core.js` porque la prosa de Redacción también la
+ * necesita y ese camino termina en `api/`, que no puede importar TypeScript. Se re-exporta
+ * acá para que ningún import de esta sección cambie.
+ */
+import { esc } from '../esc.core.js'
+export { esc }
 
 /** Talles desde el input de texto: separados por coma o salto de línea. Port de _gtTalles. */
 export function parseTalles(str: string): string[] {

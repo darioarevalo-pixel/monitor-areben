@@ -36,7 +36,11 @@ create table if not exists tn_descripciones (
   html_escrito   text,                              -- lo que quedó, releído de TN
   verificado     boolean,                           -- ⛔ que el PUT diera 200 no alcanza
 
-  estado         text not null default 'sin-insumo',-- sin-insumo|con-insumo|borrador|aprobado|escrito|falla
+  -- sin-insumo|con-insumo|borrador|aprobado|escribiendo|escrito|falla
+  -- 🔑 `escribiendo` es el estado que existe ENTRE el respaldo y la confirmación de la tienda.
+  -- Sin él, una corrida que se corta a la mitad deja la fila diciendo «aprobado» con la tienda
+  -- ya escrita — o sea, indistinguible de una que nadie tocó.
+  estado         text not null default 'sin-insumo',
   aprobado_por   text,
   aprobado_at    timestamptz,
   escrito_at     timestamptz,

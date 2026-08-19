@@ -13,6 +13,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const llamadas: string[] = []
 /** Lo último que se mandó a escribir. Es lo que permite mirar QUÉ quedó, no sólo que no falló. */
 let escrito: Record<string, unknown> | null = null
+/** Cada `update` por separado: el orden de los pasos ES la regla en `publicar`. */
+const updates: Record<string, unknown>[] = []
 /** Lo que la base contesta al buscar la fila. `null` = la fila existe pero sin borrador. */
 let filaGuardada: Record<string, unknown> | null = { borrador: { parrafo: 'x', bullets: [] } }
 
@@ -21,7 +23,7 @@ function tabla() {
     select: () => q, eq: () => q, order: () => q,
     maybeSingle: async () => ({ data: filaGuardada, error: null }),
     upsert: async (fila: Record<string, unknown>) => { llamadas.push('upsert'); escrito = fila; return { error: null } },
-    update: (fila: Record<string, unknown>) => { llamadas.push('update'); escrito = fila; return q },
+    update: (fila: Record<string, unknown>) => { llamadas.push('update'); updates.push(fila); escrito = fila; return q },
     delete: () => { llamadas.push('delete'); return q },
     then: (r: (v: unknown) => void) => r({ data: [], error: null }),
   }
@@ -78,6 +80,7 @@ async function llamar(req: unknown) {
 
 beforeEach(() => {
   llamadas.length = 0
+  updates.length = 0
   escrito = null
   filaGuardada = { borrador: { parrafo: 'x', bullets: [] } }
   vi.resetModules()
@@ -164,5 +167,138 @@ describe('marketing sí', () => {
     const res = await llamar({ ...post({ op: 'insumo' }), body: { recurso: 'tn-desc', store: 'zattia', op: 'insumo' } })
     expect(res.code).toBe(400)
     expect(llamadas).toEqual([])
+  })
+})
+
+/**
+ * `publicar`: el único verbo de este archivo que sale a la tienda en vivo.
+ *
+ * 🔴 Lo que se prueba acá es el ORDEN, no que «no falle». TiendaNube no tiene historial: la
+ * fila `html_previo` es la única copia que va a existir del texto anterior. Si la tienda se
+ * escribe antes de que el respaldo confirme, y el respaldo falla, el texto de antes no está
+ * en ningún lado del mundo.
+ */
+describe('publicar: el respaldo va ANTES que la tienda', () => {
+  /** El diario de lo que pasó, en orden: los `update` de la base y las llamadas al catálogo. */
+  let diario: string[] = []
+  /** Lo que contesta el catálogo al escribir. Se cambia por test. */
+  let respEscribir: { status: number; body: Record<string, unknown> } = {
+    status: 200,
+    body: { ok: true, escrito: 'lo que quedó', verificado: true },
+  }
+  const HTML_ACTUAL = '<h5>Top de red.</h5><!--AREBEN-TALLES-INI--><table><tr><td>S</td></tr></table><!--AREBEN-TALLES-FIN-->'
+  /** Lo que el catálogo recibió en el POST de escritura. Es lo que va a quedar en la tienda. */
+  let mandado: Record<string, unknown> = {}
+
+  function catalogoFalso(perfil: unknown) {
+    diario = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+        if (!String(url).includes('tn-categorias')) return { ok: true, json: async () => ({ ok: true, perfil }) }
+        if (!init || init.method !== 'POST') {
+          diario.push('tn:leer')
+          return { ok: true, status: 200, json: async () => ({ ok: true, html: HTML_ACTUAL, hash: 'HASH-1', lang: 'es' }) }
+        }
+        diario.push('tn:escribir')
+        mandado = JSON.parse(String(init.body))
+        return { ok: respEscribir.status === 200, status: respEscribir.status, json: async () => respEscribir.body }
+      }),
+    )
+  }
+
+  const APROBADA = { borrador: { parrafo: 'Camisa de gasa liviana.', bullets: [{ etiqueta: 'Tela', texto: 'gasa' }] }, estado: 'aprobado' }
+
+  beforeEach(() => {
+    filaGuardada = { ...APROBADA }
+    respEscribir = { status: 200, body: { ok: true, escrito: 'lo que quedó', verificado: true } }
+    mandado = {}
+  })
+
+  it('🔴 el respaldo se escribe y confirma ANTES de tocar la tienda', async () => {
+    catalogoFalso(MKT)
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(200)
+    // La lectura fresca, el respaldo, y RECIÉN AHÍ la escritura.
+    expect(updates[0]?.html_previo).toBe(HTML_ACTUAL)
+    expect(updates[0]?.hash_previo).toBe('HASH-1')
+    expect(updates[0]?.estado).toBe('escribiendo')
+    expect(diario).toEqual(['tn:leer', 'tn:escribir'])
+    expect(updates.length).toBe(2) // respaldo + registro de lo escrito
+  })
+
+  it('🔴 si el respaldo NO se puede guardar, la tienda no se toca', async () => {
+    catalogoFalso(MKT)
+    const mod = await import('@supabase/supabase-js')
+    // La base falla justo en el `update` del respaldo.
+    vi.spyOn(mod, 'createClient').mockReturnValue({
+      from: () => ({
+        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: APROBADA, error: null }) }) }) }),
+        update: () => ({ eq: () => ({ eq: async () => ({ error: { message: 'la base dijo que no' } }) }) }),
+      }),
+    } as never)
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(500)
+    expect(String(res.body?.error)).toContain('no se escribió en la tienda')
+    expect(diario).toEqual(['tn:leer']) // ⛔ nunca se llamó a escribir
+  })
+
+  it('lo que se manda a la tienda sale del borrador GUARDADO, y conserva la tabla', async () => {
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar' }))
+    const nuevo = String(mandado.nuevo)
+    expect(nuevo).toContain('AREBEN-PROSA-INI')
+    expect(nuevo).toContain('Camisa de gasa liviana.')
+    expect(nuevo).toContain('<!--AREBEN-TALLES-INI--><table><tr><td>S</td></tr></table><!--AREBEN-TALLES-FIN-->')
+    expect(nuevo).toContain('<h5>Top de red.</h5>') // el residuo se conserva por defecto
+    expect(mandado.hashPrevio).toBe('HASH-1') // el compare-and-swap viaja
+  })
+
+  it('destildar «conservar» tira el residuo, pero NUNCA la tabla', async () => {
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar', conservarResiduo: false }))
+    const nuevo = String(mandado.nuevo)
+    expect(nuevo).not.toContain('<h5>Top de red.</h5>')
+    expect(nuevo).toContain('<!--AREBEN-TALLES-INI-->')
+  })
+
+  it('⛔ un borrador que NO está aprobado no sale a la tienda', async () => {
+    catalogoFalso(MKT)
+    filaGuardada = { ...APROBADA, estado: 'borrador' }
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(400)
+    expect(diario).toEqual([]) // ni siquiera se leyó la tienda
+    expect(llamadas).toEqual([])
+  })
+
+  it('⛔ y el local no puede publicar: es el mismo permiso que aprobar', async () => {
+    catalogoFalso(LOCAL)
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(403)
+    expect(diario).toEqual([])
+  })
+
+  it('🔑 un 409 (alguien la tocó en el medio) se pasa tal cual y la fila queda en «falla»', async () => {
+    catalogoFalso(MKT)
+    respEscribir = { status: 409, body: { error: 'La descripción cambió en TiendaNube desde que la leíste.', hashActual: 'HASH-2' } }
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(409)
+    expect(res.body?.hashActual).toBe('HASH-2')
+    const ultimo = updates[updates.length - 1]
+    expect(ultimo?.estado).toBe('falla')
+    expect(String(ultimo?.error)).toContain('cambió en TiendaNube')
+    // 🔑 El respaldo queda igual: es el texto que sigue estando en la tienda.
+    expect(updates[0]?.html_previo).toBe(HTML_ACTUAL)
+  })
+
+  it('🔴 un PUT con 200 y relectura que NO coincide queda marcado, no silenciado', async () => {
+    catalogoFalso(MKT)
+    respEscribir = { status: 200, body: { ok: true, escrito: 'otra cosa', verificado: false } }
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(200)
+    expect(res.body?.verificado).toBe(false)
+    const ultimo = updates[updates.length - 1]
+    expect(ultimo?.verificado).toBe(false)
+    expect(String(ultimo?.error)).toContain('relectura')
   })
 })

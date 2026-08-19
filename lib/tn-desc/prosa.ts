@@ -30,6 +30,11 @@ const RE_BLOQUE_PROSA = /<!--AREBEN-PROSA-INI-->([\s\S]*?)<!--AREBEN-PROSA-FIN--
 /** Una `<table>` suelta: las 149 tablas legacy de Zattia que no tienen la firma. */
 const RE_TABLA = /<table[\s\S]*?<\/table>/gi
 
+// El balanceo de `<div>` vive en `bloques.core.js`: lo necesitan las dos preguntas (medir la
+// prosa, y conservar la tabla vieja verbatim al componer). Una sola implementación.
+import { ubicarWrapper } from './bloques.core.js'
+export { ubicarWrapper }
+
 /** Las entidades que TiendaNube devuelve en las descripciones de Zattia. */
 const ENTIDADES: Record<string, string> = {
   nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
@@ -46,32 +51,6 @@ export function desescapar(s: string): string {
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
     .replace(/&([a-zA-Z]+);/g, (m, n) => ENTIDADES[n] ?? m)
-}
-
-/**
- * Dónde empieza y termina UN wrapper del generador viejo (div con `max-width:680px`),
- * contando el balance de `<div>`. Port fiel de `removeOneWrapper` de
- * `removeOneWrapper` de `bdi-catalogo/api/_desc-talles.js`: si el cierre no balancea devuelve `null` — un HTML roto no
- * se "arregla" adivinando.
- *
- * 🔑 Devuelve las POSICIONES y no el html recortado, porque hay dos preguntas distintas
- * sobre lo mismo: `sacarWrappers` quiere lo de AFUERA (para medir la prosa) y
- * `lib/tn-desc/bloques.ts` quiere lo de ADENTRO (para conservar la tabla vieja verbatim).
- * Una sola implementación del balanceo, dos lectores.
- */
-export function ubicarWrapper(html: string): { ini: number; fin: number } | null {
-  const m = /<div[^>]*max-width:\s*680px[^>]*>/i.exec(html)
-  if (!m) return null
-  let depth = 1
-  const re = /<\/?div\b[^>]*>/gi
-  re.lastIndex = m.index + m[0].length
-  let mm: RegExpExecArray | null
-  while ((mm = re.exec(html))) {
-    if (mm[0].slice(0, 2).toLowerCase() === '</') depth--
-    else depth++
-    if (depth === 0) return { ini: m.index, fin: mm.index + mm[0].length }
-  }
-  return null
 }
 
 function sacarUnWrapper(html: string): string {

@@ -5,20 +5,33 @@
 //   POST { recurso:'tn-desc', store, tn_id, nombre?, op:'insumo',   insumo }
 //   POST { recurso:'tn-desc', store, tn_id, op:'borrador', borrador:{parrafo,bullets} }
 //   POST { recurso:'tn-desc', store, tn_id, op:'aprobar' }
+//   POST { recurso:'tn-desc', store, tn_id, op:'publicar', conservarResiduo? }
 //   POST { recurso:'tn-desc', store, tn_id, op:'quitar' }
 //
 // 🔑 Dos niveles de permiso, y la línea está donde está el costo: cargar el INSUMO ("gasa,
 // botones nacarados") lo hace el local y sólo pide la sección; aprobar un borrador pide el
 // sub `publicar`, porque de ahí en adelante el texto sale a la tienda en vivo.
 //
-// ⛔ Este archivo NO escribe en TiendaNube. Escribir es otro verbo, en otro repo
-// (`bdi-catalogo/api/tn-categorias.js`), y no hay ningún camino que haga las dos cosas.
+// 🔴 `publicar` es el único verbo que sale a la tienda, y el ORDEN es el invariante: el
+// respaldo (`html_previo`) se escribe y confirma ANTES de que TiendaNube se entere. Si el
+// respaldo falla, no se escribe nada — TiendaNube no tiene historial, así que esa fila es la
+// única copia que va a existir del texto anterior.
+//
+// El monitor no habla con TiendaNube: le pide a `bdi-catalogo` (que tiene el token) que lea
+// fresco y que escriba con compare-and-swap. Va del lado del servidor y no del navegador para
+// que cerrar la pestaña no pueda dejar la tienda escrita y la fila diciendo que no.
 //
 // Es un archivo `_`: NO es una ruta. Entra por api/datos.js (el plan Hobby de Vercel admite
 // 12 funciones por deploy y cada archivo de ruta cuenta una).
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna, puedeSub, esAdmin } from '../lib/permisos.core.js';
+import { generarHtml } from '../lib/tn-desc/formato.core.js';
+import { componer, conservaLaTabla } from '../lib/tn-desc/bloques.core.js';
+
+// El repo que tiene el token de TiendaNube. El monitor NUNCA habla con TiendaNube directo:
+// las credenciales de la tienda viven de aquel lado y de uno solo.
+const CATALOGO = process.env.CATALOGO_URL || 'https://bdi-catalogo.vercel.app/api/tn-categorias';
 
 // `tn_descripciones` tiene RLS PRENDIDO: la clave pública no entra ni a leer ni a escribir.
 // Acá pesa más que en ninguna otra tabla, porque adentro vive `html_previo` — la ÚNICA copia
@@ -164,6 +177,100 @@ export default async function handler(req, res) {
         .eq('tn_id', tnId);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    if (op === 'publicar') {
+      // Se conserva la prosa vieja sin marcar (y los `<img>` que vengan con ella) salvo que
+      // quien revisa lo haya visto en pantalla y lo haya destildado. Sin default destructivo.
+      const conservarResiduo = body.conservarResiduo !== false;
+      const sobre = req.headers && req.headers['x-monitor-auth'];
+      if (!sobre) return res.status(400).json({ error: 'Falta la credencial para hablar con el catálogo.' });
+
+      // ⛔ Sólo sale a la tienda un borrador APROBADO. El HTML se arma acá, del borrador
+      // guardado — no de lo que mande el navegador: lo que se aprobó es lo que se publica.
+      const { data: fila, error: eFila } = await supabase
+        .from('tn_descripciones')
+        .select('borrador, estado')
+        .eq('store', store)
+        .eq('tn_id', tnId)
+        .maybeSingle();
+      if (eFila) throw new Error(eFila.message);
+      if (!fila || !fila.borrador) return res.status(400).json({ error: 'no hay borrador guardado' });
+      if (fila.estado !== 'aprobado') {
+        return res.status(400).json({ error: `sólo se publica un borrador aprobado (esta fila está en «${fila.estado}»)` });
+      }
+
+      // 1. Leer la descripción FRESCA de TiendaNube. No sale del audit, que está cacheado: lo
+      //    que se lee acá es lo que se va a respaldar y lo que se va a comparar antes de pisar.
+      const rLeer = await fetch(`${CATALOGO}?store=${store}&accion=descripcion&productId=${encodeURIComponent(tnId)}`, {
+        headers: { 'x-monitor-auth': sobre },
+      });
+      const dLeer = await rLeer.json().catch(() => ({}));
+      if (!rLeer.ok || !dLeer.ok) {
+        return res.status(502).json({ error: dLeer.error || `No se pudo leer la descripción en TiendaNube (${rLeer.status})` });
+      }
+      const actual = typeof dLeer.html === 'string' ? dLeer.html : '';
+
+      // 2. Componer. Una sola vez y en un lugar solo (`lib/tn-desc/bloques.core.js`).
+      const nuevo = componer(actual, generarHtml(fila.borrador), { conservarResiduo });
+      if (!conservaLaTabla(actual, nuevo)) {
+        return res.status(500).json({ error: 'La composición se come la tabla de talles. No se escribió nada.' });
+      }
+
+      // 3. 🔴 EL RESPALDO VA PRIMERO, y tiene que CONFIRMAR. Si esto falla, se corta acá: sin
+      //    respaldo, escribir en la tienda destruye el único ejemplar del texto anterior.
+      const { error: eResp } = await supabase
+        .from('tn_descripciones')
+        .update({ html_previo: actual, hash_previo: dLeer.hash, estado: 'escribiendo', error: null, updated_at: ahora })
+        .eq('store', store)
+        .eq('tn_id', tnId);
+      if (eResp) return res.status(500).json({ error: `No se pudo guardar el respaldo, así que no se escribió en la tienda: ${eResp.message}` });
+
+      // 4. Recién ahora, la tienda. `hashPrevio` es lo que hace el compare-and-swap del otro
+      //    lado: si alguien la tocó entre la lectura y esto, muere en 409 sin escribir.
+      let rEsc, dEsc;
+      try {
+        rEsc = await fetch(CATALOGO + `?store=${store}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-monitor-auth': sobre },
+          body: JSON.stringify({ accion: 'descripcion-prosa', productId: tnId, nuevo, hashPrevio: dLeer.hash }),
+        });
+        dEsc = await rEsc.json().catch(() => ({}));
+      } catch (e) {
+        dEsc = { error: e.message };
+        rEsc = { ok: false, status: 0 };
+      }
+
+      // 5. Lo que pasó queda escrito, salga como salga. Una fila que no dice cuándo se
+      //    escribió ni si se verificó es indistinguible de una que nunca se tocó.
+      if (!rEsc.ok || !dEsc.ok) {
+        const motivo = dEsc.error || `Error ${rEsc.status} al escribir en TiendaNube`;
+        await supabase
+          .from('tn_descripciones')
+          .update({ estado: 'falla', error: motivo, updated_at: new Date().toISOString() })
+          .eq('store', store)
+          .eq('tn_id', tnId);
+        // El 409 se pasa tal cual: significa «alguien la tocó, volvé a mirarla», y es lo único
+        // que quien aprieta puede resolver (recargar y republicar). No es un error nuestro.
+        return res.status(rEsc.status === 409 ? 409 : 502).json({ ok: false, error: motivo, hashActual: dEsc.hashActual || null });
+      }
+
+      const fin = new Date().toISOString();
+      const { error: eFin } = await supabase
+        .from('tn_descripciones')
+        .update({
+          html_escrito: typeof dEsc.escrito === 'string' ? dEsc.escrito : null,
+          verificado: !!dEsc.verificado,
+          estado: 'escrito',
+          escrito_at: fin,
+          error: dEsc.verificado ? null : 'El PUT dio 200 pero la relectura no coincide.',
+          updated_at: fin,
+        })
+        .eq('store', store)
+        .eq('tn_id', tnId);
+      if (eFin) throw new Error(eFin.message);
+
+      return res.status(200).json({ ok: true, verificado: !!dEsc.verificado, conservarResiduo });
     }
 
     return res.status(400).json({ error: `op desconocida: ${op || '(vacía)'}` });

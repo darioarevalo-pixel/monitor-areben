@@ -6,6 +6,7 @@ import {
 } from '@/components/ui'
 import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
+import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import {
   ETIQUETAS, MAX_BULLET, MAX_PARRAFO, MIN_BULLETS, MAX_BULLETS, generarHtml, validarBorrador,
@@ -20,19 +21,21 @@ import type { Borrador } from '@/lib/tn-desc/formato'
  * palabras» que escribe el local. Y no había ningún formato base: de 369, UNO tenía formato
  * rico y convivían tres dialectos.
  *
- * ⛔ Esta pantalla NO escribe en TiendaNube. Guarda el insumo y el borrador aprobado en
- * `tn_descripciones`, y ahí se para. Publicar es otro verbo, en otro repo, y va en su tanda.
+ * 🔴 Desde el 19-ago-2026 esta pantalla SÍ sale a la tienda, pero por un solo botón y de a un
+ * producto: «Publicar en la tienda», y sólo sobre un borrador ya aprobado. El navegador no
+ * compone ni escribe: el servidor lee fresco, respalda, escribe con compare-and-swap y relee.
  */
 
 const BORRADOR_VACIO: Borrador = { parrafo: '', bullets: [{ etiqueta: 'Tela', texto: '' }, { etiqueta: 'Calce', texto: '' }, { etiqueta: 'Detalle', texto: '' }] }
 
-type Filtro = 'sin-desc' | 'corta' | 'con-insumo' | 'aprobados' | 'todos'
+type Filtro = 'sin-desc' | 'corta' | 'con-insumo' | 'aprobados' | 'en-la-tienda' | 'todos'
 
 const FILTROS: { v: Filtro; label: string }[] = [
   { v: 'sin-desc', label: 'Sin descripción' },
   { v: 'corta', label: 'Descripción corta' },
   { v: 'con-insumo', label: 'Con insumo cargado' },
   { v: 'aprobados', label: 'Aprobados' },
+  { v: 'en-la-tienda', label: 'Publicados en la tienda' },
   { v: 'todos', label: 'Todos los publicados' },
 ]
 
@@ -40,7 +43,7 @@ export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, puedePublicar, error, refrescar, guardar, redactar } = useGenDesc(marca)
+  const { cargando, productos, cola, puedePublicar, error, refrescar, guardar, redactar, publicar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('sin-desc')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
@@ -53,6 +56,7 @@ export function GenDesc() {
       corta: publicados.filter((p) => p.prosa.banda === 'corta').length,
       conInsumo: publicados.filter((p) => (cola[p.id]?.insumo || '').trim()).length,
       aprobados: publicados.filter((p) => cola[p.id]?.estado === 'aprobado').length,
+      enLaTienda: publicados.filter((p) => cola[p.id]?.estado === 'escrito').length,
     }),
     [publicados, cola],
   )
@@ -64,6 +68,7 @@ export function GenDesc() {
       if (filtro === 'corta') return p.prosa.banda === 'corta'
       if (filtro === 'con-insumo') return !!(fila?.insumo || '').trim()
       if (filtro === 'aprobados') return fila?.estado === 'aprobado'
+      if (filtro === 'en-la-tienda') return fila?.estado === 'escrito' || fila?.estado === 'falla'
       return true
     })
     // Primero los mudos: son los que hoy salen a la calle sin decir nada.
@@ -76,8 +81,9 @@ export function GenDesc() {
     <div style={{ display: 'grid', gap: 16 }}>
       <Notice tone="neutral">
         Acá se prepara el texto: se carga el <b>insumo</b> (3 o 4 palabras: la tela y el detalle que
-        la foto no dice) y se escribe el borrador con el formato base. <b>Nada sale a la tienda desde
-        esta pantalla</b> — publicar es un paso aparte que todavía no está.
+        la foto no dice) y se escribe el borrador con el formato base. Recién cuando el borrador
+        está <b>aprobado</b> aparece el botón de publicar, que escribe en la tienda de a un producto
+        y guarda el texto anterior antes de pisarlo.
       </Notice>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }}>
@@ -85,6 +91,7 @@ export function GenDesc() {
         <KpiCard label="Descripción corta" value={stats.corta} tone="warning" activo={filtro === 'corta'} onClick={() => setFiltro('corta')} />
         <KpiCard label="Con insumo" value={stats.conInsumo} tone="neutral" activo={filtro === 'con-insumo'} onClick={() => setFiltro('con-insumo')} />
         <KpiCard label="Aprobados" value={stats.aprobados} tone="success" activo={filtro === 'aprobados'} onClick={() => setFiltro('aprobados')} />
+        <KpiCard label="En la tienda" value={stats.enLaTienda} tone="success" activo={filtro === 'en-la-tienda'} onClick={() => setFiltro('en-la-tienda')} />
       </div>
 
       <Toolbar>
@@ -128,6 +135,14 @@ export function GenDesc() {
                 modelo,
               })
             }
+            onPublicar={async (conservarResiduo) => {
+              const { error: err, verificado } = await publicar(p.id, conservarResiduo)
+              if (err) toast.error(err)
+              else if (verificado) toast.ok('Publicado en la tienda.')
+              // ⛔ El PUT dio 200 y la relectura no coincidió: no se dice «listo».
+              else toast.error('Se escribió, pero la relectura no coincide. Miralo en la tienda.')
+              return err
+            }}
             onGuardar={async (cuerpo) => {
               const err = await guardar({ tn_id: p.id, nombre: p.name, ...cuerpo })
               toast[err ? 'error' : 'ok'](err || 'Guardado.')
@@ -142,7 +157,7 @@ export function GenDesc() {
 }
 
 function FilaProducto({
-  p, fila, abierto, onAbrir, puedePublicar, onRedactar, onGuardar,
+  p, fila, abierto, onAbrir, puedePublicar, onRedactar, onGuardar, onPublicar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
@@ -151,6 +166,7 @@ function FilaProducto({
   puedePublicar: boolean
   onRedactar: (modelo: string, insumo: string) => Promise<ResultadoIA>
   onGuardar: (cuerpo: Record<string, unknown>) => Promise<string | null>
+  onPublicar: (conservarResiduo: boolean) => Promise<string | null>
 }) {
   const [insumo, setInsumo] = useState(fila?.insumo || '')
   const [borrador, setBorrador] = useState<Borrador>(fila?.borrador || BORRADOR_VACIO)
@@ -158,6 +174,17 @@ function FilaProducto({
   const [modelo, setModelo] = useState<string>(MODELO_POR_DEFECTO)
   const [redactando, setRedactando] = useState(false)
   const [ia, setIa] = useState<ResultadoIA | null>(null)
+  const [conservarResiduo, setConservarResiduo] = useState(true)
+  const [publicando, setPublicando] = useState(false)
+
+  /**
+   * Lo que hay hoy en la ficha además de la prosa nuestra: la prosa vieja sin marcar y los
+   * `<img>` (19 de los 369 publicados tienen uno). Se muestra para que quien publica DECIDA:
+   * el default conserva, y tirarlo es un tilde que hay que sacar a mano.
+   * ⚠️ Sale del catálogo cacheado, así que es orientativo: la composición de verdad la hace el
+   * servidor sobre la descripción fresca.
+   */
+  const partes = useMemo(() => partir(p.raw_desc), [p.raw_desc])
 
   const problemas = useMemo(
     () => validarBorrador(borrador, { variantes: p.variantes, insumo, nombre: p.name }),
@@ -205,6 +232,9 @@ function FilaProducto({
           {p.prosa.banda === 'nada' && <Badge tone="danger">Sin descripción</Badge>}
           {p.prosa.banda === 'corta' && <Badge tone="warning">Corta</Badge>}
           {fila?.estado === 'aprobado' && <Badge tone="success">Aprobado</Badge>}
+          {fila?.estado === 'escrito' && <Badge tone={fila.verificado ? 'success' : 'warning'}>{fila.verificado ? 'En la tienda' : 'Escrito sin verificar'}</Badge>}
+          {fila?.estado === 'escribiendo' && <Badge tone="warning">Quedó a medias</Badge>}
+          {fila?.estado === 'falla' && <Badge tone="danger">No se pudo publicar</Badge>}
           {fila?.estado === 'borrador' && <Badge tone="neutral">Borrador</Badge>}
           {!!(fila?.insumo || '').trim() && fila?.estado !== 'aprobado' && <Badge tone="neutral">Con insumo</Badge>}
         </span>
@@ -319,6 +349,71 @@ function FilaProducto({
               </div>
               {!fila?.borrador && !vacio && (
                 <div style={{ fontSize: 12, color: '#666' }}>Para aprobar, primero guardá el borrador.</div>
+              )}
+
+              {/* ── El único botón que sale a la tienda en vivo ── */}
+              {(fila?.estado === 'aprobado' || fila?.estado === 'escrito' || fila?.estado === 'falla' || fila?.estado === 'escribiendo') && (
+                <>
+                  <hr style={{ border: 0, borderTop: '1px solid #eee' }} />
+
+                  {fila.estado === 'escribiendo' && (
+                    <Notice tone="warning">
+                      Esta ficha quedó <b>a medias</b>: se guardó el respaldo y no llegó la confirmación de
+                      la tienda. Mirá cómo está en TiendaNube antes de volver a publicar.
+                    </Notice>
+                  )}
+                  {fila.estado === 'falla' && <Notice tone="danger">{fila.error || 'No se pudo publicar.'}</Notice>}
+                  {fila.estado === 'escrito' && (
+                    <Notice tone={fila.verificado ? 'success' : 'warning'}>
+                      {fila.verificado
+                        ? `Publicado${fila.escrito_at ? ' el ' + new Date(fila.escrito_at).toLocaleString('es-AR') : ''}. El texto anterior quedó guardado acá.`
+                        : 'Se escribió, pero al releerla no coincidía con lo que se mandó. Miralo en la tienda.'}
+                    </Notice>
+                  )}
+
+                  {/* 🔴 Los `<img>` y la prosa vieja se conservan salvo que alguien lo destilde
+                      a mano: TiendaNube no tiene historial, así que un descarte por default
+                      sería irreversible y silencioso. La tabla de talles NO se toca nunca. */}
+                  {!!partes.residuo && (
+                    <div>
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
+                        <input
+                          type="checkbox"
+                          checked={conservarResiduo}
+                          onChange={(e) => setConservarResiduo(e.target.checked)}
+                          style={{ marginTop: 3 }}
+                        />
+                        <span>
+                          Conservar lo que ya había en la ficha además de la tabla de talles
+                          {partes.residuo.includes('<img') && <b> (incluye una imagen)</b>}. Si lo
+                          destildás, eso <b>se pierde</b>: TiendaNube no guarda el texto anterior.
+                          <div style={{ fontSize: 12, color: '#666', background: '#fafafa', padding: 8, borderRadius: 6, marginTop: 6, maxHeight: 90, overflow: 'auto' }}>
+                            {partes.residuo}
+                          </div>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Button
+                      size="sm"
+                      disabled={publicando}
+                      onClick={() => {
+                        void (async () => {
+                          setPublicando(true)
+                          await onPublicar(conservarResiduo)
+                          setPublicando(false)
+                        })()
+                      }}
+                    >
+                      {publicando ? 'Publicando…' : fila.estado === 'aprobado' ? 'Publicar en la tienda' : 'Volver a publicar'}
+                    </Button>
+                    <span style={{ fontSize: 12, color: '#666' }}>
+                      La tabla de talles se conserva siempre. El texto anterior se guarda antes de pisarlo.
+                    </span>
+                  </div>
+                </>
               )}
             </>
           )}
