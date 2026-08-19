@@ -110,9 +110,25 @@ no una opinión sobre la prosa.
 - ⚠️ **Sonnet 5 está con precio de intro hasta el 31-ago-2026** ($2/$10 en vez de $3/$15). Está
   modelado con su fecha: cobrarle de más al comparar empujaría la decisión hacia Haiku por un
   motivo que no es real.
+⛔ **Y no se cambia de proveedor.** Decidido el 19-ago-2026 con el prompt ya escrito y contado:
+el catálogo entero sale **US$1,14 una sola vez** con Haiku. Un modelo más barato de otra empresa
+ahorra centavos y suma una key, un SDK y un proveedor que mantener — y como rompe el formato más
+seguido, se lo come el reintento (dos llamadas en vez de una) más el rato de alguien releyendo
+borradores feos. **Dentro de Anthropic tampoco hay nada más abajo**: Haiku 3.5 está retirado y
+Haiku 3 se retiró en abril de 2026. La plata de esta tanda no está en la API: está en las horas de
+leer 370 borradores.
+
+📌 Si algún día igual se prueba otro proveedor, **no hay que rehacer nada**: el núcleo recibe la
+función de llamada por parámetro, así que es una `llamar` distinta en el handler (~20 líneas) y ni
+la pantalla, ni el validador, ni la tabla se enteran.
+
 - ⚠️ **El CDN de TiendaNube no redimensiona a pedido.** Probado el 19-ago-2026 sobre una foto real:
   `-480-480`, `-480-640`, `-480-600` y `-240-240` contestan **403**; sólo resuelve el archivo
   guardado (hoy `-1024-1024`). Son ~1.400 tokens de imagen, o sea US$0,0014 con Haiku.
+- ⚠️ **La foto es el 77% del costo de entrada** (1.398 tokens de 1.824). Sacarla bajaría los 370 a
+  US$0,62 — el único ahorro real que hay acá, y son cincuenta centavos. ⛔ No se saca: es lo único
+  que el modelo tiene para describir la prenda, y **los 41 mudos no tienen ni insumo ni prosa
+  previa**, así que sin foto escribirían a partir del nombre y nada más.
 
 ## Lo que TODAVÍA no hace
 
