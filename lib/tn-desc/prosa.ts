@@ -46,13 +46,19 @@ export function desescapar(s: string): string {
 }
 
 /**
- * Saca UN wrapper del generador viejo (div con `max-width:680px`) contando el balance
- * de `<div>`. Port fiel de `removeOneWrapper` de `api/tn-categorias.js:35-47`: si el
- * cierre no balancea, no toca nada — un HTML roto no se "arregla" adivinando.
+ * Dónde empieza y termina UN wrapper del generador viejo (div con `max-width:680px`),
+ * contando el balance de `<div>`. Port fiel de `removeOneWrapper` de
+ * `api/tn-categorias.js:35-47`: si el cierre no balancea devuelve `null` — un HTML roto no
+ * se "arregla" adivinando.
+ *
+ * 🔑 Devuelve las POSICIONES y no el html recortado, porque hay dos preguntas distintas
+ * sobre lo mismo: `sacarWrappers` quiere lo de AFUERA (para medir la prosa) y
+ * `lib/tn-desc/bloques.ts` quiere lo de ADENTRO (para conservar la tabla vieja verbatim).
+ * Una sola implementación del balanceo, dos lectores.
  */
-function sacarUnWrapper(html: string): string {
+export function ubicarWrapper(html: string): { ini: number; fin: number } | null {
   const m = /<div[^>]*max-width:\s*680px[^>]*>/i.exec(html)
-  if (!m) return html
+  if (!m) return null
   let depth = 1
   const re = /<\/?div\b[^>]*>/gi
   re.lastIndex = m.index + m[0].length
@@ -60,9 +66,14 @@ function sacarUnWrapper(html: string): string {
   while ((mm = re.exec(html))) {
     if (mm[0].slice(0, 2).toLowerCase() === '</') depth--
     else depth++
-    if (depth === 0) return html.slice(0, m.index) + html.slice(mm.index + mm[0].length)
+    if (depth === 0) return { ini: m.index, fin: mm.index + mm[0].length }
   }
-  return html
+  return null
+}
+
+function sacarUnWrapper(html: string): string {
+  const w = ubicarWrapper(html)
+  return w ? html.slice(0, w.ini) + html.slice(w.fin) : html
 }
 
 /** Saca todos los wrappers del generador viejo. */
