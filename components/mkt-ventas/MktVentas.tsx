@@ -115,15 +115,16 @@ export function MktVentas() {
 
       <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="kpis" onReintentar={refrescar}>
         {(d) => {
+          // Un solo reloj para TODA la pantalla: las dos mitades de la línea de arriba («hace 17 h»
+          // y «traídas hace 3 min») serían dos instantes distintos con dos `new Date()`, y la
+          // ventana de «cómo viene la venta» tiene que ser la misma que mira el ETL.
+          const ahora = new Date()
           const serie = serieDiaria(d.ventas, d.detalles, 'online', hoy, DIAS_DE_SERIE)
-          const porCanal = resumenPorCanal(d.ventas, d.detalles, hoy, diasGeneral)
+          const porCanal = resumenPorCanal(d.ventas, d.detalles, ahora, diasGeneral)
           const top = losQueMasSalieron(d.allProductos, diasGeneral)
           const dia = serie.find((x) => x.fecha === fecha) ?? null
           const escalon = metas ? escalonVigente(metas, hoy) : null
           const techo = metas ? techoDeLaRampa(metas) : null
-          // Un solo reloj para las dos mitades de la línea: si «hace 17 h» y «traídas hace 3 min»
-          // salieran de dos `new Date()` distintos, serían dos instantes en la misma frase.
-          const ahora = new Date()
           const sync = estadoSync(d.syncMeta, ahora)
           const ventaReciente = fmtFechaVenta(d.maxVentaDate)
 

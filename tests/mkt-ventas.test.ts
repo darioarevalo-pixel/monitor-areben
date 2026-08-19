@@ -168,6 +168,8 @@ describe('medirElDia: la unidad la decide el medidor', () => {
 
 
 describe('resumenPorCanal: cómo viene la venta en general', () => {
+  // Mediodía local del 18-ago: `cortesDeVentas` recorta desde ahí hacia atrás conservando la hora.
+  const AHORA = new Date('2026-08-18T12:00:00')
   const ventas = [
     venta(1, '2026-08-18', 'Tienda Nube'),
     venta(2, '2026-08-17', 'Tienda Nube'),
@@ -178,11 +180,24 @@ describe('resumenPorCanal: cómo viene la venta en general', () => {
   const detalles = [renglon(1, 2), renglon(2, 3), renglon(3, 1), renglon(4, 500), renglon(5, 9)]
 
   it('parte los tres canales, en compras y en unidades', () => {
-    expect(resumenPorCanal(ventas, detalles, '2026-08-18', 2)).toEqual([
+    expect(resumenPorCanal(ventas, detalles, AHORA, 30)).toEqual([
       { canal: 'online', compras: 2, unidades: 5 },
       { canal: 'local', compras: 1, unidades: 1 },
       { canal: 'mayorista', compras: 1, unidades: 500 },
     ])
+  })
+
+  /**
+   * 🔴 **La ventana la decide `cortesDeVentas`, la MISMA del ETL** — no un `hoy - N` propio. Es lo
+   * que hace que estos números y el `sales30` del ranking de al lado signifiquen los mismos 30
+   * días: la primera versión recortaba por su cuenta y quedaba desfasada un día.
+   */
+  it('7 días recorta lo que 30 incluye, con el corte del ETL', () => {
+    const viejas = [venta(9, '2026-08-01', 'Tienda Nube')]
+    const r7 = resumenPorCanal([...ventas, ...viejas], [...detalles, renglon(9, 7)], AHORA, 7)
+    const r30 = resumenPorCanal([...ventas, ...viejas], [...detalles, renglon(9, 7)], AHORA, 30)
+    expect(r7.find((c) => c.canal === 'online')).toEqual({ canal: 'online', compras: 2, unidades: 5 })
+    expect(r30.find((c) => c.canal === 'online')).toEqual({ canal: 'online', compras: 3, unidades: 12 })
   })
 
   /**
@@ -191,14 +206,12 @@ describe('resumenPorCanal: cómo viene la venta en general', () => {
    * pretende ser el total, esta línea es la que hay que mirar antes.
    */
   it('la venta técnica queda afuera de los tres', () => {
-    const total = resumenPorCanal(ventas, detalles, '2026-08-18', 2).reduce((a, c) => a + c.unidades, 0)
+    const total = resumenPorCanal(ventas, detalles, AHORA, 30).reduce((a, c) => a + c.unidades, 0)
     expect(total).toBe(506)
     expect(serieDiaria(ventas, detalles, null, '2026-08-18', 2).reduce((a, d) => a + d.unidades, 0)).toBe(515)
   })
 
-  it('respeta la ventana', () => {
-    expect(resumenPorCanal(ventas, detalles, '2026-08-18', 1)[0]).toEqual({ canal: 'online', compras: 1, unidades: 2 })
-  })
+
 })
 
 const prod = (id: string, s7: number, s30: number): Producto =>

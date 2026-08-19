@@ -22,7 +22,8 @@ import type { FilaDetalle, FilaVenta, Producto } from '@/lib/etl/tipos'
 import { unidadDe } from '@/lib/norte/medidores'
 import type { Medicion } from '@/lib/norte/tipos'
 import type { MetaGuardada } from '@/lib/norte/persistencia'
-import { diasEntre, sumarDias } from '@/lib/fechas/dia'
+import { cortesDeVentas } from '@/lib/etl/helpers'
+import { diasEntre, hoyIso, sumarDias } from '@/lib/fechas/dia'
 
 /**
  * Un día del contador.
@@ -168,19 +169,37 @@ export function medirElDia(meta: MetaGuardada, dia: DiaDeVenta | null): Medicion
  * 🔑 **Se arma sumando la misma `serieDiaria`, no con una consulta nueva.** El corte de canal, el
  * de día y el «una venta de cero unidades igual es una compra» ya viven ahí: una segunda cuenta
  * sobre las mismas filas es la forma de que esta tarjeta y el contador de arriba se contradigan.
+ *
+ * 🔴 **La ventana la decide `cortesDeVentas`, y NO un `hoy - 30` propio.** La primera versión
+ * recortaba por su cuenta y quedaba desfasada un día del `sales30` del ETL, que es de donde sale el
+ * ranking de acá abajo: **dos ventanas de 30 días adentro de una tarjeta que dice «Últimos 30
+ * días» una sola vez**. Se vio cotejando contra `psql` —CORSET FRANK daba 24 por un lado y 22 por
+ * el otro— y es exactamente lo que ese helper existe para impedir: «una sola definición de los
+ * últimos 30 días» (su docstring). El filtro por `new Date(fecha) >= corte` es la MISMA comparación
+ * que hace `lib/etl/computar.ts`.
  */
 export type VentaDeCanal = { canal: 'online' | 'local' | 'mayorista'; compras: number; unidades: number }
+
+/**
+ * Cuántos días de serie se arman antes de recortar con el corte del ETL. Es el mismo techo que usa
+ * el contador (lo que baja un no-admin, menos un día de gracia): con 30 días de ventana alcanza y
+ * sobra, y pedir más devolvería días en cero que no son cero, son «no bajó».
+ */
+const DIAS_DE_LA_SERIE = 34
 
 export const CANALES_DEL_RESUMEN: VentaDeCanal['canal'][] = ['online', 'local', 'mayorista']
 
 export function resumenPorCanal(
   ventas: FilaVenta[],
   detalles: FilaDetalle[],
-  hasta: string,
-  dias: number,
+  today: Date,
+  dias: 7 | 30,
 ): VentaDeCanal[] {
+  const cortes = cortesDeVentas(today)
+  const corte = dias === 7 ? cortes.c7 : cortes.c30
   return CANALES_DEL_RESUMEN.map((canal) => {
-    const serie = serieDiaria(ventas, detalles, canal, hasta, dias)
+    const serie = serieDiaria(ventas, detalles, canal, hoyIso(today), DIAS_DE_LA_SERIE)
+      .filter((d) => new Date(d.fecha) >= corte)
     return {
       canal,
       compras: serie.reduce((a, d) => a + d.compras, 0),
@@ -200,8 +219,6 @@ export function resumenPorCanal(
  * ⛔ **No hay ventana de 90 días acá.** Quien no ve el análisis fino baja 35 días de venta
  * (`desdeVentas`), así que un «90 d» le mostraría 35 bajo un rótulo que dice 90.
  */
-export type DIAS_DEL_RESUMEN = 7 | 30
-
 export function losQueMasSalieron(productos: Producto[], dias: 7 | 30, cuantos = 8): Producto[] {
   const de = (p: Producto) => (dias === 7 ? p.sales7 : p.sales30)
   // ⚠️ Sin copia explícita **a propósito**: `.filter()` ya devuelve un array nuevo, así que el
