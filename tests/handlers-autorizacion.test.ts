@@ -222,6 +222,51 @@ describe('la cuenta fija sigue mandando', () => {
  * liquidado** — pero esta sección es de Dirección por el costo, y eso no se mueve. Lo que fija este
  * bloque es dónde queda el borde: qué abre la llave y, sobre todo, qué **no**.
  */
+/**
+ * 🔴 **`_mkt-ventas` es la única puerta de esa sección que ESCRIBE** —`ventas`, `venta_detalles` y
+ * `clientes` del espejo de producción— **y la única que gasta cupo de Gestión Nube**. Su gate es lo
+ * único entre una sesión cualquiera del Monitor y una escritura en las dos bases.
+ */
+describe('_mkt-ventas · la puerta que escribe', () => {
+  const SOLO_MKT = { name: 'Marketing', admin: false, cuenta: null, acceso: { bdi: { 'mkt-ventas': true } }, funcion: [] }
+  const post = (extra: Record<string, unknown> = {}) =>
+    conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action: 'traer-ventas-hoy', ...extra } })
+
+  it('🔴 sin la sección no entra, aunque tenga sesión válida', async () => {
+    sesionDe(SIN_NADA)
+    const res = await llamar('_mkt-ventas', post())
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 tampoco con la sección en la OTRA marca', async () => {
+    sesionDe({ name: 'Marketing', admin: false, cuenta: null, acceso: { zattia: { 'mkt-ventas': true } }, funcion: [] })
+    const res = await llamar('_mkt-ventas', post())
+    expect(res.code).toBe(403)
+  })
+
+  it('el GET no escribe nada: sólo se entra por POST', async () => {
+    sesionDe(SOLO_MKT)
+    const res = await llamar('_mkt-ventas', conSesion({ query: { store: 'bdi' } }))
+    expect(res.code).toBe(405)
+  })
+
+  it('una acción que no es la suya se rechaza antes de tocar la base', async () => {
+    sesionDe(SOLO_MKT)
+    const res = await llamar('_mkt-ventas', post({ action: 'cualquier-otra' }))
+    expect(res.code).toBe(400)
+  })
+
+  it('con la sección SÍ entra — si no, todo lo de arriba estaría verde por prohibir todo', async () => {
+    sesionDe(SOLO_MKT)
+    try {
+      const res = await llamar('_mkt-ventas', post())
+      expect(res.code).not.toBe(403)
+    } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+    }
+  })
+})
+
 describe('_liquidacion · la llave de Ventas de Marketing', () => {
   const SOLO_MKT = { name: 'Marketing', admin: false, cuenta: null, acceso: { bdi: { 'mkt-ventas': true } }, funcion: [] }
   const postDe = (body: Record<string, unknown>) =>

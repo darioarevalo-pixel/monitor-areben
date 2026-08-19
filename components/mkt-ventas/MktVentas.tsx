@@ -31,7 +31,8 @@ import { veVentasHistoricas } from '@/lib/permisos'
 import { estadoSync, fmtFechaVenta } from '@/lib/resumen'
 import { hoyIso, sumarDias } from '@/lib/fechas/dia'
 import { escalonVigente, serieDiaria, techoDeLaRampa } from '@/lib/mkt-ventas/core'
-import { Button, DatosGate, Notice, color, font, space } from '@/components/ui'
+import { Button, DatosGate, Notice, color, font, space, useToast } from '@/components/ui'
+import { traerVentasDeHoy } from '@/lib/mkt-ventas/persistencia'
 import { useMetas } from './useMetas'
 import { Objetivo } from './Objetivo'
 import { ContadorDiario } from './ContadorDiario'
@@ -55,12 +56,39 @@ export function MktVentas() {
   const hoy = useMemo(() => hoyIso(), [])
   const [offset, setOffset] = useState(0)
   const fecha = sumarDias(hoy, offset)
+  const toast = useToast()
+  const [trayendo, setTrayendo] = useState(false)
+
+  /**
+   * 🔑 **Son DOS pasos y los dos hacen falta.** El primero le pide a Gestión Nube las ventas de hoy
+   * y las escribe en el espejo; el segundo vuelve a bajar el ETL, porque **lo que dibuja el contador
+   * está en IndexedDB, no en el espejo**. Sin el segundo, el botón escribiría en la base y la
+   * pantalla no se movería — que se lee como «no anduvo».
+   *
+   * ⚠️ El segundo cuesta ~20 s (son ~14,7 MB por marca) y por eso el botón dice lo que va a hacer.
+   */
+  const traerHoy = async () => {
+    setTrayendo(true)
+    try {
+      const t = await traerVentasDeHoy(marca)
+      if (t.salteado) toast.info('Las ventas de hoy ya se trajeron hace menos de un minuto.')
+      else toast.ok(`Gestión Nube devolvió ${t.ventas} venta${t.ventas === 1 ? '' : 's'}. Actualizando la pantalla…`)
+      await cargar(marca, veVentasHistoricas(perfil, marca), true)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTrayendo(false)
+    }
+  }
 
   return (
     <>
       <HeaderAcciones>
         <Button variant="outline" onClick={refrescar} loading={refrescando} title="Vuelve a bajar el espejo de Supabase">
           {refrescando ? 'Actualizando…' : 'Actualizar datos'}
+        </Button>
+        <Button onClick={traerHoy} loading={trayendo} title="Le pide a Gestión Nube las ventas de hoy, las guarda y vuelve a bajar los datos (tarda ~20 s)">
+          {trayendo ? 'Trayendo…' : 'Traer las ventas de hoy'}
         </Button>
       </HeaderAcciones>
 

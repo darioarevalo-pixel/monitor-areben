@@ -28,6 +28,7 @@ import costos from './_costos.js';
 import espejo from './_espejo.js';
 import memo from './_memo.js';
 import norte from './_norte.js';
+import mktVentas from './_mkt-ventas.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -46,6 +47,9 @@ const RECURSOS = {
   // que vienen y sus plazos de pago. Entra por aca —y no por un archivo de ruta propio— porque el
   // plan Hobby admite 12 funciones y cada ruta cuenta una.
   norte,
+  // Ventas de Marketing: un solo verbo, traer las ventas de hoy al espejo. Entra por acá y no por
+  // un archivo de ruta propio por lo mismo que `norte` — el plan Hobby admite 12 funciones.
+  'mkt-ventas': mktVentas,
   liquidacion,
   atencion,
   // `sistema` y `agenda` son los que no tienen marca: novedades, manuales y las promociones

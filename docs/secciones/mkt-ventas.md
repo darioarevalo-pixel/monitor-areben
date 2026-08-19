@@ -13,8 +13,13 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   `ContadorDiario.tsx` (las flechas) · `ResultadoSale.tsx` (monta el Resultado de Liquidación) ·
   `useMetas.ts`.
 - `lib/mkt-ventas/core.ts` — `serieDiaria`, `escalonVigente`, `techoDeLaRampa`, `medirElDia`.
-- **Handler propio no tiene.** Las ventas salen del ETL que la sección ya tiene por
-  `useDatosMonitor()`, y los objetivos de `api/_norte.js` con `?metas=1` (ver abajo).
+- `lib/mkt-ventas/persistencia.ts` — el cliente del botón.
+- **Handler:** `api/_mkt-ventas.js`, por `/api/datos?recurso=mkt-ventas`. **Un solo verbo**
+  (`traer-ventas-hoy`). Todo lo demás sale del ETL que la sección ya tiene por `useDatosMonitor()`,
+  de `api/_norte.js` con `?metas=1`, y de `api/_liquidacion.js` con `?resultado=1`.
+- `api/_gn.js` y `api/_ventas-hoy.js` — el `fetch` a Gestión Nube y el trabajo de traer las ventas
+  del día. **Salieron de `api/_liquidacion.js` sin cambiarles una línea**, porque los comparten los
+  dos botones. ⚠️ Ninguno de los dos es función de Vercel (prefijo `_`; el techo son 12 y hay 7).
 - Tabla: `norte_metas` (`sql/migrate-norte.sql`), que es de Norte. Acá **sólo se lee**.
 - Tests: `tests/mkt-ventas.test.ts`.
 
@@ -25,6 +30,10 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   días, y lo decide por `SECCIONES_ANALISIS_VENTAS`. `desdeVentas` (`lib/datos.ts`) traduce el
   booleano al corte, y **ese mismo string sella el caché** (`lib/cache.ts`). Tocar cualquiera de las
   tres le cambia el payload a las ~22 pantallas que usan `useDatosMonitor`.
+- 🔴 **`api/_gn.js` lo comparten `_liquidacion.js` y `_ventas-hoy.js`.** ⛔ **No es
+  `crearClienteGN`** (`scripts/lib/gn-fetch.mjs`) y no hay que unificarlos: aquél espera **hasta 300
+  segundos por corte, hasta cinco veces**, que está bien para un job de Actions con 20 minutos y se
+  come entera una función de Vercel de 30 s. El de acá corta en 5-30 s × 3.
 - 🔴 **`api/_liquidacion.js` tiene CINCO llaves desde el 18-ago-2026** (eran cuatro). La quinta es
   ésta, y son **dos caminos distintos**: `?resultado=1` en un **GET** —campañas e ítems, pasados por
   `sinPlataDeCosto()`— y las actions `ventas-campania` / `stock-campania` en un **POST**. ⚠️ Las dos
@@ -56,6 +65,19 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   devuelve `null` y no cero: un 0 % afirma «no avanzamos» —una frase sobre el negocio— y lo que pasa
   es que nadie cargó la meta, que es una frase sobre el dato. **Zattia y Stunned no tienen ninguna**
   (medido el 18-ago: las 3 filas de `norte_metas` son de BDI).
+- 🔴 🔑 **El botón «Traer las ventas de hoy» son DOS pasos, y los dos hacen falta.** El primero le
+  pide a GN las ventas del día y las escribe en el espejo; el segundo **vuelve a bajar el ETL**,
+  porque lo que dibuja el contador está en IndexedDB y no en el espejo. Sin el segundo, el botón
+  escribiría en la base y la pantalla no se movería —que se lee como «no anduvo»—. ⚠️ El segundo
+  cuesta ~20 s (~14,7 MB por marca) y por eso el botón dice lo que va a hacer.
+- 🔴 **El antirrebote de acá es lo ÚNICO que frena el gasto de cupo de Gestión Nube.** El
+  `concurrency: gestion-nube` que comparten los ocho workflows **no alcanza a una función de
+  Vercel**. Vive en una fila propia de `sync_state` (`ventas-hoy-mkt`) y es **por marca**. ⛔ No se
+  fundió con el de Liquidación, que vive en `datos.ventasSync` de **la campaña**: son dos preguntas
+  distintas y fundirlas haría que apretar en una pantalla frene la otra sin que nada lo diga.
+- 🔑 **`ventas-hoy-mkt` es una fila PROPIA, no la de `diario`.** Los cinco lectores de `sync_state`
+  filtran por `clave = 'diario'` (medido con grep antes de escribirlo): pisarla haría que «el sync
+  corrió hace 3 minutos» lo diga un botón y no el sync, que es otra cosa.
 - 🔴 **El dato de hoy llega mañana, y por eso la línea «leído hace X» va SIEMPRE.** El único reloj
   agendado es `sync-diario.yml` (`0 6 * * *`, o sea ~3 de la mañana acá); `sync-ventas-hoy.yml`
   existe pero es `workflow_dispatch` puro. Medido el 18-ago a las 16:52 ART: el espejo tenía **1
@@ -119,9 +141,6 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 
 ## Pendiente
 
-- ▶️ **El botón «Actualizar ventas»** (tanda 3 del plan): el trabajo ya existe en
-  `api/_liquidacion.js` (`action:'sincronizar-ventas'`, 1,2 s medidos) pero pide `admin` **y un id
-  de campaña**, porque su antirrebote vive en `datos.ventasSync`. Sale a `api/_ventas-hoy.js`.
 - 🔴 ▶️ **Nadie con perfil de Marketing caminó esto todavía**: todo se ejerció con admin, así que
   lo que NO se ejerció es justamente el camino nuevo —`veVentasHistoricas` dando `true` por la
   función y no por el flag de admin, y las cinco secciones de Análisis apareciéndole en el menú—.
@@ -144,7 +163,11 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
 - **13 mutantes del núcleo + 11 de la ventana, el caché y los permisos, todos muertos con
   `AssertionError`** (baseline en 0 antes de mutar). Los que hay que ver caer si se toca eso:
   `veVentasHistoricas` volviendo a `esAdmin(perfil)` solo, el sello de ventana que no corta, y
-  `DIAS_SIN_HISTORIA` de 35 a 30. Los que hay que
+  `DIAS_SIN_HISTORIA` de 35 a 30.
+- **11 mutantes más sobre el botón y la ventana de GN, los 11 muertos**: el antirrebote que no
+  frena, el borde del minuto (`>=` → `>`), el gate que ignora la marca, y —el que más importa— la
+  ventana de fechas pasando de la hora de Argentina a UTC, que a las 21:30 pediría las ventas de
+  mañana justo cuando el local cierra. Los que hay que
   ver caer si se toca el núcleo: `compras += 1 → += 0`, el `!==` del canal, `[...futuras].sort()[0]`
   → el último, y `>= 0 → > 0` en la fecha del escalón (el día del vencimiento todavía cuenta).
 - 🔑 **El oráculo de la serie es `psql`, no un fixture.** Se exportan las ventas de 34 días y el

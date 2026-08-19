@@ -34,7 +34,11 @@ import { esAdmin, puedeSub, puedeVerAlguna, SECCIONES_ANALISIS_VENTAS } from '..
 // histórica. Se importa en vez de copiarse por lo que ya costó una vez: ese código vivía duplicado
 // adentro de `sync-diario.js` y `sync-diario-zattia.js`, las copias se separaron, y de esa deriva
 // salió que Zattia no tenga CRM ni márgenes (ver el encabezado de `ventas-espejo.mjs`).
-import { guardarVentasBatch } from '../scripts/lib/ventas-espejo.mjs';
+// El `fetch` a GN, sus dos tokens y la pausa del rate limit. Salieron de acá el 18-ago-2026 porque
+// los necesita también el botón de Ventas de Marketing; el porqué de que NO sea `crearClienteGN`
+// está escrito allá.
+import { dormir, GN_BASE, GN_TOKENS, gnFetch, PAUSA_GN } from './_gn.js';
+import { traerVentasDeHoy } from './_ventas-hoy.js';
 // La bitácora: qué precio se escribió en Gestión Nube y cuál se sacó. En `.core.js` porque este
 // handler es el que la escribe y no puede importar TypeScript, y porque el backfill histórico
 // (`scripts/backfill-liquidacion-bitacora.mjs`) arma la fila con el MISMO código que el registro
@@ -82,9 +86,6 @@ const txtOrNull = (v) => (v == null || v === '' ? null : String(v));
 // El precio de liquidación rige en el local Y online, y **la conexión es GN → TN**: se escribe en
 // Gestión Nube y GN lo propaga a Tienda Nube. Escribirlo derecho en TN es ir contra la corriente
 // —el sync de GN lo pisa— aunque el token de TN pueda hacerlo.
-const GN_BASE = 'https://www.gestionnube.com/api/v1';
-const GN_TOKENS = { bdi: process.env.GN_TOKEN, zattia: process.env.GN_TOKEN_ZATTIA };
-
 // Cuántos productos por viaje. Lo fija el tope de GN, no el gusto: son 2 consultas por segundo, y
 // con la pausa de 1200 ms cinco tardan ~7 s, que entra cómodo en el tiempo de una función. Espejo
 // de `TOPE_APLICAR` en `lib/liquidacion/core.ts`.
@@ -94,18 +95,8 @@ const TOPE_APLICAR = 5;
 // fija el rate limit sino el tamaño del payload: 50 ítems con su foto congelada.
 const TOPE_MASIVO = 50;
 
-// 🔑 **Dos topes distintos, y el que muerde es el segundo.** GN limita 60 consultas por minuto *y*
-// 2 por segundo, contadas por segundo de reloj: con 600 ms de pausa el PATCH rebota `429`. Van 1200.
-const PAUSA_GN = 1200;
-
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
-
 // ── Traer las ventas de hoy al espejo ────────────────────────────────────────────────────────────
 //
-// Cuántas páginas de 50 ventas se bajan como mucho. Es un techo de seguridad, no un tope esperado:
-// dos días de la marca más movida no llegan a una página. **Si muerde, se avisa** (`truncado`) en
-// vez de devolver un número corto que parece completo.
-const TOPE_PAGINAS_VENTAS = 10;
 
 // Cuánto tiene que pasar entre dos sincronizadas de la misma campaña.
 const ESPERA_SYNC_VENTAS = 60_000;
@@ -115,20 +106,9 @@ function fechaAR(ms) {
   return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
 }
 
-/**
- * Qué rango se le pide a Gestión Nube: **ayer y hoy**, no sólo hoy.
- *
- * 🔑 **El día lo decide Argentina, no el reloj de la función.** Vercel corre en UTC, así que a las
- * 21:30 de Buenos Aires `new Date().toISOString().slice(0,10)` ya devuelve el día siguiente: el
- * botón pediría las ventas de mañana y traería cero **justo a la hora en que el local cierra**, que
- * es cuando más se lo va a apretar. Es el mismo criterio que usa `scripts/sync-ventas-hoy.js`.
- *
- * Ayer entra igual de gratis (una venta cargada pasada la medianoche puede quedar fechada el día
- * anterior) y el guardado es idempotente, así que retraerla no ensucia nada.
- */
-export function ventanaVentasHoy(ahoraMs) {
-  return { desde: fechaAR(ahoraMs - 86400000), hasta: fechaAR(ahoraMs) };
-}
+// El rango que se le pide a GN se mudó a `api/_ventas-hoy.js` junto con el bucle que lo usa. Se
+// re-exporta para no romper a quien ya la importa de acá (`tests/liquidacion-sync-ventas.test.ts`).
+export { ventanaVentasHoy } from './_ventas-hoy.js';
 
 /**
  * Si el botón puede volver a correr. `ultimo` es el ISO de la sincronizada anterior.
@@ -149,32 +129,6 @@ export function puedeSincronizarVentas(ultimo, ahoraMs, esperaMs = ESPERA_SYNC_V
   return ahoraMs - t >= esperaMs;
 }
 
-/**
- * `fetch` a GN que respeta el rate limit.
- *
- * 🔑 **Se le hace caso al `retry-after` que manda GN**, que es correcto (medido: dice 15 y el
- * `x-ratelimit-reset` cae 15 s después). Esperar de más es peor que esperar de menos: un backoff de
- * 62 s se come tres ventanas enteras y encuentra la cuota igual de vacía, porque el tope está
- * **compartido con los otros sistemas de la casa** y puede estar en `remaining: 0` sin que nosotros
- * hayamos consultado nada.
- */
-async function gnFetch(url, opts, tries = 3) {
-  let last;
-  for (let a = 1; a <= tries; a++) {
-    try {
-      const r = await fetch(url, opts);
-      if (r.ok || (r.status !== 429 && r.status < 500)) return r;
-      last = r;
-      if (a < tries) {
-        const esperar = Math.min(Math.max(Number(r.headers.get('retry-after')) || 15, 5), 30);
-        await dormir(esperar * 1000);
-        continue;
-      }
-      return r;
-    } catch (e) { last = e; if (a < tries) { await dormir(900 * a); continue; } throw e; }
-  }
-  return last;
-}
 
 /**
  * Cuántos ítems tiene cada campaña y en qué estado. **Una sola vez**: lo piden las dos ramas del
@@ -1134,9 +1088,6 @@ export default async function handler(req, res) {
       if (!puede.admin) {
         return res.status(403).json({ error: 'Traer las ventas de hoy al espejo lo puede hacer un admin.' });
       }
-      const token = GN_TOKENS[store];
-      if (!token) return res.status(500).json({ error: `Falta el token de Gestión Nube de ${store} en el servidor.` });
-
       const { data: previo, error: e0 } = await supabase.from('liquidaciones')
         .select('datos').eq('store', store).eq('id', id).maybeSingle();
       if (e0) throw new Error(e0.message);
@@ -1150,37 +1101,18 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, salteado: true, ventasSync: d.ventasSync, ventas: 0, detalles: 0 });
       }
 
-      const { desde: dSync, hasta: hSync } = ventanaVentasHoy(ahoraMs);
-      const filas = [];
-      let truncado = false;
-      for (let pagina = 1; pagina <= TOPE_PAGINAS_VENTAS; pagina++) {
-        const r = await gnFetch(
-          `${GN_BASE}/ventas/obtener?from=${dSync}&to=${hSync}&include_details=1&per_page=50&page=${pagina}`,
-          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } },
-        );
-        const j = await r.json().catch(() => null);
-        if (!r.ok) {
-          const detalle = j && (j.message || j.error) ? `: ${j.message || j.error}` : '';
-          return res.status(502).json({ error: `Gestión Nube contestó ${r.status}${detalle}` });
-        }
-        const pag = Array.isArray(j?.data) ? j.data : [];
-        filas.push(...pag);
-        if (!j?.meta?.has_more_pages || !pag.length) break;
-        if (pagina === TOPE_PAGINAS_VENTAS) { truncado = true; break; }
-        await dormir(PAUSA_GN);
-      }
-
-      // `completo:false` es Zattia, cuya tabla `ventas` todavía no tiene cliente ni costo. El
-      // criterio no se elige acá: es el mismo booleano que pasa su sync diario.
-      const conteo = filas.length
-        ? await guardarVentasBatch(supabase, filas, { completo: store !== 'zattia' })
-        : { ventas: 0, detalles: 0, clientes: 0 };
+      // El bucle de páginas y el guardado viven en `api/_ventas-hoy.js`: los comparte con el botón
+      // de Ventas de Marketing. Lo que NO se comparte es el antirrebote de arriba, que es por
+      // campaña — el porqué está allá.
+      const traido = await traerVentasDeHoy(supabase, store, ahoraMs);
+      if (!traido.ok) return res.status(traido.status).json({ error: traido.error });
+      const { truncado, ...conteo } = traido;
 
       const { error } = await supabase.from('liquidaciones')
         .update({ datos: { ...d, ventasSync: ahora }, updated_at: ahora }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);
 
-      return res.status(200).json({ ok: true, ventasSync: ahora, truncado, ...conteo });
+      return res.status(200).json({ ok: true, ventasSync: ahora, truncado, ventas: conteo.ventas, detalles: conteo.detalles, clientes: conteo.clientes });
     }
 
     if (b.action === 'aplicar') {
