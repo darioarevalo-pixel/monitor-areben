@@ -13,7 +13,7 @@
  * por vez. Ver `lib/marketing/core.ts` y `lib/gen-talles/core.ts`.
  */
 
-/** La firma del generador propio. Espejo de `MARK_INI/FIN` de `api/tn-categorias.js:32`. */
+/** La firma del generador propio. Espejo de `MARK_INI/FIN` de `bdi-catalogo/api/_desc-talles.js`. */
 const RE_BLOQUE_TALLES = /<!--AREBEN-TALLES-INI-->[\s\S]*?<!--AREBEN-TALLES-FIN-->/g
 
 /**
@@ -23,6 +23,9 @@ const RE_BLOQUE_TALLES = /<!--AREBEN-TALLES-INI-->[\s\S]*?<!--AREBEN-TALLES-FIN-
  */
 export const PROSA_INI = '<!--AREBEN-PROSA-INI-->'
 export const PROSA_FIN = '<!--AREBEN-PROSA-FIN-->'
+
+/** El bloque de prosa firmado, con su contenido en el grupo 1. */
+const RE_BLOQUE_PROSA = /<!--AREBEN-PROSA-INI-->([\s\S]*?)<!--AREBEN-PROSA-FIN-->/g
 
 /** Una `<table>` suelta: las 149 tablas legacy de Zattia que no tienen la firma. */
 const RE_TABLA = /<table[\s\S]*?<\/table>/gi
@@ -48,7 +51,7 @@ export function desescapar(s: string): string {
 /**
  * Dónde empieza y termina UN wrapper del generador viejo (div con `max-width:680px`),
  * contando el balance de `<div>`. Port fiel de `removeOneWrapper` de
- * `api/tn-categorias.js:35-47`: si el cierre no balancea devuelve `null` — un HTML roto no
+ * `removeOneWrapper` de `bdi-catalogo/api/_desc-talles.js`: si el cierre no balancea devuelve `null` — un HTML roto no
  * se "arregla" adivinando.
  *
  * 🔑 Devuelve las POSICIONES y no el html recortado, porque hay dos preguntas distintas
@@ -91,12 +94,27 @@ export function sacarWrappers(html: string): string {
  * Saca del HTML todo lo que NO es prosa: el bloque firmado de talles, los wrappers del
  * generador viejo y las `<table>` sueltas.
  *
- * 🔴 El ORDEN es la regla: primero los bloques, después los tags. Al revés, pelar los
- * tags destruye el `<table>` y la prosa se traga la tabla entera — que es exactamente
- * el defecto que tiene hoy `has_desc`.
+ * 🔴 El ORDEN es la regla: primero los bloques FIRMADOS, después los wrappers, y recién
+ * al final los tags. Al revés, pelar los tags destruye el `<table>` y la prosa se traga
+ * la tabla entera — que es exactamente el defecto que tiene hoy `has_desc`.
+ *
+ * 🔴 Y el bloque de PROSA sale del camino ANTES que los wrappers, no después. `generarHtml`
+ * lo envuelve en un `<div style="…max-width:680px…">`, que es LA MISMA FIRMA con la que
+ * `sacarWrappers` reconoce el envoltorio del generador viejo de talles. Sin sacarlo primero,
+ * medir la prosa que nosotros mismos acabamos de publicar da CERO — o sea que el producto
+ * recién arreglado seguiría contando como «sin descripción» en Marketing y en la propia
+ * pantalla de Redacción. Medido el 19-ago-2026 sobre la salida real de `generarHtml`.
  */
 export function sinTablas(raw: string): string {
-  return sacarWrappers(String(raw || '').replace(RE_BLOQUE_TALLES, '')).replace(RE_TABLA, '')
+  const marcada: string[] = []
+  const resto = String(raw || '').replace(RE_BLOQUE_PROSA, (_m, dentro: string) => {
+    marcada.push(dentro)
+    return ' '
+  })
+  // Lo que está adentro del bloque firmado es prosa POR DEFINICIÓN: lo escribimos nosotros
+  // con el formato base. No pasa por `sacarWrappers` ni por `RE_TABLA`.
+  const otra = sacarWrappers(resto.replace(RE_BLOQUE_TALLES, '')).replace(RE_TABLA, '')
+  return [marcada.join(' '), otra].filter((x) => x.trim()).join(' ')
 }
 
 /** En qué banda cae una ficha. `corta` son las «6 o 7 palabras» que escribe el local. */

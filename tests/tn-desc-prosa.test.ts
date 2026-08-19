@@ -15,6 +15,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { prosaDe, tieneProsa, sinTablas, sacarWrappers, desescapar, LARGO_OK } from '../lib/tn-desc/prosa'
+import { generarHtml } from '../lib/tn-desc/formato'
 
 /** Lo que hace hoy `has_desc` en `bdi-catalogo/api/tiendanube-audit.js:155`. */
 const hasDescDelAudit = (raw: string) =>
@@ -82,6 +83,49 @@ describe('prosaDe: lo que sí es prosa', () => {
   it('una prosa marcada NO se saca: eso es justamente lo que arreglamos', () => {
     const raw = '<!--AREBEN-PROSA-INI--><p>Camisa de gasa liviana.</p><!--AREBEN-PROSA-FIN-->' + BLOQUE_TALLES
     expect(prosaDe(raw).texto).toBe('Camisa de gasa liviana.')
+  })
+
+  /**
+   * 🔴 El fixture es la salida REAL de `generarHtml`, no un `<p>` pelado adentro de las
+   * marcas. La diferencia no es cosmética: `generarHtml` envuelve la prosa en un
+   * `<div style="…max-width:680px…">`, que es la misma firma que `sacarWrappers` usa para
+   * reconocer el envoltorio del generador viejo de talles. Con el fixture inventado esto
+   * daba verde y con el HTML de verdad medía CERO caracteres — o sea que el producto
+   * recién redactado seguía contando como «sin descripción».
+   */
+  it('la prosa que publicamos DE VERDAD se mide: el wrapper de 680px no se la come', () => {
+    const html = generarHtml({
+      parrafo: 'Camisa de gasa liviana que cae sola y acompaña el cuerpo sin marcar.',
+      bullets: [
+        { etiqueta: 'Tela', texto: 'gasa liviana con caída' },
+        { etiqueta: 'Calce', texto: 'holgado' },
+        { etiqueta: 'Detalle', texto: 'botones nacarados' },
+      ],
+    })
+    expect(html).toContain('max-width:680px') // ← la firma que se pisaba está puesta
+    const p = prosaDe(html)
+    expect(p.texto).toContain('Camisa de gasa liviana')
+    expect(p.texto).toContain('botones nacarados')
+    expect(p.banda).toBe('ok')
+    // Y con la tabla abajo, sigue midiendo la prosa y nada de la tabla.
+    const conTabla = prosaDe(html + BLOQUE_TALLES)
+    expect(conTabla.texto).toBe(p.texto)
+    expect(conTabla.texto).not.toContain('Contorno cintura')
+  })
+
+  it('la prosa marcada convive con la prosa vieja sin marcar: se suman las dos', () => {
+    const html = generarHtml({
+      parrafo: 'Camisa de gasa.',
+      bullets: [
+        { etiqueta: 'Tela', texto: 'gasa' },
+        { etiqueta: 'Calce', texto: 'holgado' },
+        { etiqueta: 'Detalle', texto: 'botones' },
+      ],
+    })
+    // Es el caso de `componer` con `conservarResiduo`: la vieja queda abajo del bloque.
+    const p = prosaDe(html + '<h5>Top de red.</h5>' + BLOQUE_TALLES)
+    expect(p.texto).toContain('Camisa de gasa')
+    expect(p.texto).toContain('Top de red.')
   })
 })
 

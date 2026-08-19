@@ -18,7 +18,7 @@ import { PROSA_INI, PROSA_FIN } from './formato'
 import { ubicarWrapper } from './prosa'
 
 const RE_PROSA = /<!--AREBEN-PROSA-INI-->[\s\S]*?<!--AREBEN-PROSA-FIN-->/
-/** La firma de la tabla. Espejo de `MARK_INI/FIN` de `bdi-catalogo/api/tn-categorias.js:32`. */
+/** La firma de la tabla. Espejo de `MARK_INI/FIN` de `bdi-catalogo/api/_desc-talles.js`. */
 const RE_TALLES = /<!--AREBEN-TALLES-INI-->[\s\S]*?<!--AREBEN-TALLES-FIN-->/
 const RE_TABLA = /<table[\s\S]*?<\/table>/i
 
