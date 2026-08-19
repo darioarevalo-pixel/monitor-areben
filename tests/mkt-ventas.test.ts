@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { escalonVigente, medirElDia, serieDiaria, techoDeLaRampa, type DiaDeVenta } from '@/lib/mkt-ventas/core'
+import { escalonVigente, losQueMasSalieron, medirElDia, resumenPorCanal, serieDiaria, techoDeLaRampa, unidadDeLaMeta, type DiaDeVenta } from '@/lib/mkt-ventas/core'
+import type { Producto } from '@/lib/etl/tipos'
 import type { FilaDetalle, FilaVenta } from '@/lib/etl/tipos'
 import type { MetaGuardada } from '@/lib/norte/persistencia'
 
@@ -162,5 +163,93 @@ describe('medirElDia: la unidad la decide el medidor', () => {
     const m = medirElDia(meta({ key: 'd', objetivo: 100 }), null)
     expect(m.valor).toBeNull()
     expect(m.motivo).toBeTruthy()
+  })
+})
+
+
+describe('resumenPorCanal: cómo viene la venta en general', () => {
+  const ventas = [
+    venta(1, '2026-08-18', 'Tienda Nube'),
+    venta(2, '2026-08-17', 'Tienda Nube'),
+    venta(3, '2026-08-18', 'Mi Local'),
+    venta(4, '2026-08-18', 'Mayorista'),
+    venta(5, '2026-08-18', 'Ninguno'),
+  ]
+  const detalles = [renglon(1, 2), renglon(2, 3), renglon(3, 1), renglon(4, 500), renglon(5, 9)]
+
+  it('parte los tres canales, en compras y en unidades', () => {
+    expect(resumenPorCanal(ventas, detalles, '2026-08-18', 2)).toEqual([
+      { canal: 'online', compras: 2, unidades: 5 },
+      { canal: 'local', compras: 1, unidades: 1 },
+      { canal: 'mayorista', compras: 1, unidades: 500 },
+    ])
+  })
+
+  /**
+   * 🔑 **Los tres canales NO suman el total de la marca, y es a propósito.** El canal vacío cae en
+   * `tecnica` por `canalDe` —sesión de fotos, fallas— y ésas no son venta. Si algún día el resumen
+   * pretende ser el total, esta línea es la que hay que mirar antes.
+   */
+  it('la venta técnica queda afuera de los tres', () => {
+    const total = resumenPorCanal(ventas, detalles, '2026-08-18', 2).reduce((a, c) => a + c.unidades, 0)
+    expect(total).toBe(506)
+    expect(serieDiaria(ventas, detalles, null, '2026-08-18', 2).reduce((a, d) => a + d.unidades, 0)).toBe(515)
+  })
+
+  it('respeta la ventana', () => {
+    expect(resumenPorCanal(ventas, detalles, '2026-08-18', 1)[0]).toEqual({ canal: 'online', compras: 1, unidades: 2 })
+  })
+})
+
+const prod = (id: string, s7: number, s30: number): Producto =>
+  ({ id, name: `P${id}`, sku: null, sales7: s7, sales30: s30, stock: 10, lifespan: 5 }) as unknown as Producto
+
+describe('losQueMasSalieron', () => {
+  const ps = [prod('a', 1, 50), prod('b', 9, 10), prod('c', 0, 0), prod('d', 4, 30)]
+
+  it('ordena por la ventana pedida, y las dos ventanas ordenan distinto', () => {
+    expect(losQueMasSalieron(ps, 30).map((p) => p.id)).toEqual(['a', 'd', 'b'])
+    expect(losQueMasSalieron(ps, 7).map((p) => p.id)).toEqual(['b', 'd', 'a'])
+  })
+
+  it('el que no vendió nada no entra: un ranking con ceros no es un ranking', () => {
+    expect(losQueMasSalieron(ps, 30).map((p) => p.id)).not.toContain('c')
+  })
+
+  it('corta en los primeros', () => {
+    expect(losQueMasSalieron(ps, 30, 2).map((p) => p.id)).toEqual(['a', 'd'])
+  })
+
+  it('no reordena el array que le pasan', () => {
+    const original = ps.map((p) => p.id)
+    losQueMasSalieron(ps, 7)
+    expect(ps.map((p) => p.id)).toEqual(original)
+  })
+})
+
+/**
+ * 🔴 **Zattia no vende fundas.** El catálogo de `MEDIDORES` está escrito en BDI («Fundas por día que
+ * salen») porque nació con Norte, que es Dirección. Esta pantalla existe en las dos marcas.
+ */
+describe('unidadDeLaMeta: la unidad en la palabra de la marca', () => {
+  it('el medidor de unidades habla de lo que vende cada marca', () => {
+    expect(unidadDeLaMeta('unidades-dia', 'fundas')).toBe('fundas/día')
+    expect(unidadDeLaMeta('unidades-dia', 'prendas')).toBe('prendas/día')
+  })
+
+  // Una compra es una compra, venda fundas o prendas: acá NO se traduce.
+  it('el medidor de compras dice lo mismo en las dos', () => {
+    expect(unidadDeLaMeta('ventas-dia', 'fundas')).toBe(unidadDeLaMeta('ventas-dia', 'prendas'))
+    expect(unidadDeLaMeta('ventas-dia', 'prendas')).toBe('ventas/día')
+  })
+
+  /**
+   * ⚠️ **Límite conocido, escrito para que se vea**: los medidores de plata siguen diciendo la
+   * palabra del catálogo (`$/funda`). Hoy no se ve —son de Dirección y Zattia no tiene ninguna meta
+   * cargada— y traducirlos pediría tocar `MEDIDORES`, que es lo que Norte **escribe en la base**
+   * como espejo de la fila. El día que Zattia tenga una meta de plata, esta línea es la que avisa.
+   */
+  it('un medidor de plata sigue diciendo lo del catálogo — límite conocido', () => {
+    expect(unidadDeLaMeta('contrib-unidad', 'prendas')).toBe('$/funda')
   })
 })

@@ -2,9 +2,8 @@
 
 import { Barra, Card, color, font, space, weight } from '@/components/ui'
 import { avanceDeMeta } from '@/lib/norte/core'
-import { unidadDe } from '@/lib/norte/medidores'
 import type { MetaGuardada } from '@/lib/norte/persistencia'
-import { medirElDia, type DiaDeVenta } from '@/lib/mkt-ventas/core'
+import { medirElDia, unidadDeLaMeta, type DiaDeVenta } from '@/lib/mkt-ventas/core'
 import { rotuloFecha } from '@/lib/fechas/semana'
 
 /**
@@ -21,7 +20,7 @@ import { rotuloFecha } from '@/lib/fechas/semana'
  *    (que devuelve `null` y no cero): un 0% afirma «no avanzamos», que es una frase sobre el
  *    negocio, y acá lo que pasa es que nadie cargó la meta — una frase sobre el dato.
  */
-export function Objetivo({ escalon, techo, dia, hoy }: { escalon: MetaGuardada | null; techo: MetaGuardada | null; dia: DiaDeVenta | null; hoy: string }) {
+export function Objetivo({ escalon, techo, dia, hoy, articulo }: { escalon: MetaGuardada | null; techo: MetaGuardada | null; dia: DiaDeVenta | null; hoy: string; articulo: { singular: string; plural: string } }) {
   if (!escalon || !techo) {
     return (
       <Card style={{ marginBottom: space[4] }}>
@@ -34,7 +33,7 @@ export function Objetivo({ escalon, techo, dia, hoy }: { escalon: MetaGuardada |
   }
 
   const avance = avanceDeMeta(escalon, medirElDia(escalon, dia), hoy)
-  const unidad = unidadDe(escalon.medidor)
+  const unidad = unidadDeLaMeta(escalon.medidor, articulo.plural)
   const pct = avance.pct
   const tono = pct === null ? color.mut2 : pct >= 100 ? color.success : pct >= 60 ? color.brandSolid : color.warning
 

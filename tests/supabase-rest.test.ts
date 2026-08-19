@@ -47,7 +47,7 @@ function supabaseCon(n: number) {
   return { llamadas, pico: () => picoEnVuelo, fetchFalso }
 }
 
-const CUENTA: Cuenta = { nombre: 'test', url: 'https://x.supabase.co', key: 'k', syncWorkflow: 'w.yml' }
+const CUENTA: Cuenta = { nombre: 'test', url: 'https://x.supabase.co', key: 'k', syncWorkflow: 'w.yml', articulo: { singular: 'cosa', plural: 'cosas' } }
 const traer = (params = 'select=id') => fetchAll<{ id: number }>(CUENTA, 'ventas', params)
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })

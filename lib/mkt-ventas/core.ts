@@ -18,7 +18,8 @@
 // `canalDe` se importa del re-export tipado y NO del `.core.js`: ese archivo dice, textual, «acá
 // sólo se le pone el tipo, una vez». Escribir la firma de nuevo acá sería la segunda vez.
 import { canalDe } from '@/lib/liquidacion/resultado'
-import type { FilaDetalle, FilaVenta } from '@/lib/etl/tipos'
+import type { FilaDetalle, FilaVenta, Producto } from '@/lib/etl/tipos'
+import { unidadDe } from '@/lib/norte/medidores'
 import type { Medicion } from '@/lib/norte/tipos'
 import type { MetaGuardada } from '@/lib/norte/persistencia'
 import { diasEntre, sumarDias } from '@/lib/fechas/dia'
@@ -127,6 +128,22 @@ export function techoDeLaRampa(metas: MetaGuardada[]): MetaGuardada | null {
 }
 
 /**
+ * La unidad de un medidor **dicha en la palabra de la marca**.
+ *
+ * 🔴 **El catálogo de `MEDIDORES` está escrito en BDI.** `unidades-dia` se llama ahí «Fundas por día
+ * que salen» y su unidad es `fundas/día`, y está bien: nació con Norte, que es Dirección y mira BDI.
+ * Pero esta pantalla existe en las dos marcas, y **Zattia no vende fundas**. Traducirlo acá y no en
+ * el catálogo es a propósito: la `unidad` de `MEDIDORES` también es la que Norte **escribe en la
+ * base** como espejo de la fila, y ésa no puede depender de quién esté mirando.
+ *
+ * ⚠️ Sólo se traduce el medidor que cuenta unidades. `ventas-dia` dice `ventas/día` en las dos: una
+ * compra es una compra, venda fundas o prendas.
+ */
+export function unidadDeLaMeta(medidor: string, plural: string): string {
+  return medidor === 'unidades-dia' ? `${plural}/día` : unidadDe(medidor)
+}
+
+/**
  * Qué mide una meta en un día puntual: `compras` para el medidor `ventas-dia`, `unidades` para
  * `unidades-dia`.
  *
@@ -139,4 +156,57 @@ export function medirElDia(meta: MetaGuardada, dia: DiaDeVenta | null): Medicion
   if (meta.medidor === 'ventas-dia') return { valor: dia.compras, motivo: null }
   if (meta.medidor === 'unidades-dia') return { valor: dia.unidades, motivo: null }
   return { valor: null, motivo: `«${meta.medidor}» se mide con la plata del dashboard y esta pantalla no la trae` }
+}
+
+
+/**
+ * Cómo viene la venta **en general**, partida por canal.
+ *
+ * Lo pidió Bruno el 18-ago-2026: la sección contestaba el objetivo online y el resultado del sale,
+ * y *«la liquidación siempre es excepcional»* — faltaba el piso contra el que se lee todo eso.
+ *
+ * 🔑 **Se arma sumando la misma `serieDiaria`, no con una consulta nueva.** El corte de canal, el
+ * de día y el «una venta de cero unidades igual es una compra» ya viven ahí: una segunda cuenta
+ * sobre las mismas filas es la forma de que esta tarjeta y el contador de arriba se contradigan.
+ */
+export type VentaDeCanal = { canal: 'online' | 'local' | 'mayorista'; compras: number; unidades: number }
+
+export const CANALES_DEL_RESUMEN: VentaDeCanal['canal'][] = ['online', 'local', 'mayorista']
+
+export function resumenPorCanal(
+  ventas: FilaVenta[],
+  detalles: FilaDetalle[],
+  hasta: string,
+  dias: number,
+): VentaDeCanal[] {
+  return CANALES_DEL_RESUMEN.map((canal) => {
+    const serie = serieDiaria(ventas, detalles, canal, hasta, dias)
+    return {
+      canal,
+      compras: serie.reduce((a, d) => a + d.compras, 0),
+      unidades: serie.reduce((a, d) => a + d.unidades, 0),
+    }
+  })
+}
+
+/**
+ * Los que más salieron en la ventana, por unidades.
+ *
+ * ⚠️ **Son de TODOS los canales**, y por eso van al lado del corte de arriba y no adentro: el ETL
+ * guarda `sales7/30/90` por producto sin partir por canal, y partirlo acá pediría cruzar
+ * `venta_detalles` con el canal de cada venta — otra cuenta, sobre las mismas filas, que podría
+ * contradecir a la de al lado. Se dice en la pantalla en vez de insinuar lo que no es.
+ *
+ * ⛔ **No hay ventana de 90 días acá.** Quien no ve el análisis fino baja 35 días de venta
+ * (`desdeVentas`), así que un «90 d» le mostraría 35 bajo un rótulo que dice 90.
+ */
+export type DIAS_DEL_RESUMEN = 7 | 30
+
+export function losQueMasSalieron(productos: Producto[], dias: 7 | 30, cuantos = 8): Producto[] {
+  const de = (p: Producto) => (dias === 7 ? p.sales7 : p.sales30)
+  // ⚠️ Sin copia explícita **a propósito**: `.filter()` ya devuelve un array nuevo, así que el
+  // `.sort()` de abajo ordena la copia y no el `allProductos` del store. El `[...productos]` que
+  // había era ruido —sugería que sin él se mutaba el array del llamador, y no— y lo delató un
+  // mutante que sobrevivió: sacarlo no cambiaba nada.
+  return productos.filter((p) => de(p) > 0).sort((a, b) => de(b) - de(a)).slice(0, cuantos)
 }

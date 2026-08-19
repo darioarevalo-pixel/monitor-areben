@@ -11,16 +11,21 @@ import type { DiaDeVenta } from '@/lib/mkt-ventas/core'
  * diseño: es hasta dónde llegan las ventas que bajó el navegador (35 días para quien no es admin,
  * `lib/datos.ts`). Una flecha gris sin explicación se lee como que la pantalla se rompió.
  *
- * 🔑 **Se muestran compras Y fundas juntas.** Online son 1,9 fundas por compra: quien mira el
+ * 🔑 **Se muestran compras Y unidades juntas.** Online son 1,9 unidades por compra: quien mira el
  * contador para decidir una campaña necesita las dos, y tenerlas al lado es lo que impide leer un
  * número con la unidad del otro.
+ *
+ * 🔴 **El rótulo de las unidades sale de la MARCA** (`articuloDe`). Decía «Fundas online» a secas y
+ * en Zattia eso habla del negocio de al lado: Zattia vende ropa. Lo cazó Bruno mirando la pantalla.
  */
 export function ContadorDiario({
-  dia, fecha, hoy, puedeAtras, puedeAdelante, onMover, tope,
+  dia, fecha, hoy, puedeAtras, puedeAdelante, onMover, tope, articulo,
 }: {
   dia: DiaDeVenta | null
   fecha: string
   hoy: string
+  /** Cómo se llama lo que vende esta marca: «fundas» en BDI, «prendas» en Zattia. */
+  articulo: { singular: string; plural: string }
   puedeAtras: boolean
   puedeAdelante: boolean
   onMover: (n: number) => void
@@ -47,7 +52,11 @@ export function ContadorDiario({
 
       <div className="mo-kpis" style={{ marginTop: space[4] }}>
         <KpiCard label="Compras online" value={(dia?.compras ?? 0).toLocaleString('es-AR')} sub="Pedidos de Tienda Nube" />
-        <KpiCard label="Fundas online" value={(dia?.unidades ?? 0).toLocaleString('es-AR')} sub="Unidades de esos pedidos" />
+        <KpiCard
+          label={`${articulo.plural.charAt(0).toUpperCase()}${articulo.plural.slice(1)} online`}
+          value={(dia?.unidades ?? 0).toLocaleString('es-AR')}
+          sub="Unidades de esos pedidos"
+        />
       </div>
 
       {!puedeAtras && (

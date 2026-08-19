@@ -29,13 +29,15 @@ import { useMonitorStore } from '@/store/useMonitorStore'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { veVentasHistoricas } from '@/lib/permisos'
 import { estadoSync, fmtFechaVenta, fmtHace } from '@/lib/resumen'
+import { articuloDe } from '@/lib/cuentas'
 import { hoyIso, sumarDias } from '@/lib/fechas/dia'
-import { escalonVigente, serieDiaria, techoDeLaRampa } from '@/lib/mkt-ventas/core'
+import { escalonVigente, losQueMasSalieron, resumenPorCanal, serieDiaria, techoDeLaRampa } from '@/lib/mkt-ventas/core'
 import { Button, DatosGate, Notice, color, font, space, useToast } from '@/components/ui'
 import { leerUltimaTraida, traerVentasDeHoy } from '@/lib/mkt-ventas/persistencia'
 import { useMetas } from './useMetas'
 import { Objetivo } from './Objetivo'
 import { ContadorDiario } from './ContadorDiario'
+import { VentaGeneral } from './VentaGeneral'
 import { ResultadoSale } from './ResultadoSale'
 
 /**
@@ -53,6 +55,9 @@ export function MktVentas() {
   const refrescar = () => cargar(marca, veVentasHistoricas(perfil, marca), true)
   const refrescando = estado === 'cargando'
 
+  // Cómo se llama lo que vende esta marca. ⛔ No se escribe «fundas» en ningún rótulo: en Zattia
+  // eso habla del negocio de al lado.
+  const articulo = articuloDe(marca)
   const hoy = useMemo(() => hoyIso(), [])
   const [offset, setOffset] = useState(0)
   const fecha = sumarDias(hoy, offset)
@@ -64,6 +69,7 @@ export function MktVentas() {
    * de apretar el botón **sigue teniendo razón**—, y ésta dice cuándo se trajeron las de hoy.
    */
   const [traidoEn, setTraidoEn] = useState<string | null>(null)
+  const [diasGeneral, setDiasGeneral] = useState<7 | 30>(30)
 
   useEffect(() => {
     let vivo = true
@@ -110,6 +116,8 @@ export function MktVentas() {
       <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="kpis" onReintentar={refrescar}>
         {(d) => {
           const serie = serieDiaria(d.ventas, d.detalles, 'online', hoy, DIAS_DE_SERIE)
+          const porCanal = resumenPorCanal(d.ventas, d.detalles, hoy, diasGeneral)
+          const top = losQueMasSalieron(d.allProductos, diasGeneral)
           const dia = serie.find((x) => x.fecha === fecha) ?? null
           const escalon = metas ? escalonVigente(metas, hoy) : null
           const techo = metas ? techoDeLaRampa(metas) : null
@@ -155,7 +163,7 @@ export function MktVentas() {
                   No pude leer los objetivos: <b>{errorMetas}</b>. El contador de abajo igual cuenta.
                 </Notice>
               ) : (
-                <Objetivo escalon={escalon} techo={techo} dia={dia} hoy={hoy} />
+                <Objetivo escalon={escalon} techo={techo} dia={dia} hoy={hoy} articulo={articulo} />
               )}
 
               <ContadorDiario
@@ -163,20 +171,24 @@ export function MktVentas() {
                 fecha={fecha}
                 hoy={hoy}
                 tope={DIAS_DE_SERIE}
+                articulo={articulo}
                 puedeAtras={offset > -(DIAS_DE_SERIE - 1)}
                 puedeAdelante={offset < 0}
                 onMover={(n) => setOffset((o) => o + n)}
               />
 
-              <p style={{ fontSize: font.sm, color: color.mut2 }}>
+              <p style={{ fontSize: font.sm, color: color.mut2, marginBottom: space[6] }}>
                 Online son las ventas de Tienda Nube. El día lo decide tu computadora, y las ventas
                 salen del espejo de Gestión Nube, no de la tienda en vivo.
               </p>
 
-              {/* El resultado del sale va ABAJO y no arriba: el objetivo y el día de hoy se miran
-                  todos los días, y esto se mira cuando hay una campaña andando. Es también lo único
-                  de la pantalla que pide sus propios datos al servidor, así que su demora no puede
-                  quedar delante de lo que ya está en la mano. */}
+              <VentaGeneral porCanal={porCanal} top={top} dias={diasGeneral} onDias={setDiasGeneral} articulo={articulo} />
+
+              {/* 🔑 **El orden va de lo permanente a lo excepcional**, y lo eligió Bruno: el
+                  objetivo · el día de hoy · cómo viene la venta · y recién ahí el sale, *«porque la
+                  liquidación siempre es excepcional»*. Además es lo único de la pantalla que pide
+                  sus propios datos al servidor, así que su demora no puede quedar delante de lo que
+                  ya está en la mano. */}
               <ResultadoSale />
             </>
           )

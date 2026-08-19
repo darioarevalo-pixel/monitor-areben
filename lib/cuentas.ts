@@ -25,6 +25,15 @@ export type Cuenta = {
   key: string
   /** Workflow de GitHub Actions que sincroniza esta marca (para "última actualización"). */
   syncWorkflow: string
+  /**
+   * **Cómo se llama lo que vende esta marca.** BDI vende fundas y Zattia vende ropa: una pantalla
+   * que dice «Fundas online» sobre Zattia está hablando del negocio de al lado.
+   *
+   * 🔑 **Hasta el 18-ago-2026 el repo lo esquivaba scopeando la sección**: `fundas-modelo` es
+   * `brands: ['bdi']`, así que la única pantalla que nombraba la unidad no existía en Zattia. Ventas
+   * de Marketing es la primera **cross-marca** que la nombra, y ahí el rodeo se acabó.
+   */
+  articulo: { singular: string; plural: string }
 }
 
 export const CUENTAS: Record<Marca, Cuenta> = {
@@ -33,13 +42,26 @@ export const CUENTAS: Record<Marca, Cuenta> = {
     url: 'https://srqzzffmiiescffabtlc.supabase.co',
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNycXp6ZmZtaWllc2NmZmFidGxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzNzg1NDksImV4cCI6MjA5MDk1NDU0OX0.UJGWTPCXhhxv2Q-4twUBvOivPLUk0SSQvyvtEkDmWLg',
     syncWorkflow: 'sync-diario.yml',
+    articulo: { singular: 'funda', plural: 'fundas' },
   },
   zattia: {
     nombre: 'Zattia',
     url: 'https://avmdktmyseonacxycimz.supabase.co',
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2bWRrdG15c2VvbmFjeHljaW16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTUzNDcsImV4cCI6MjA5MTA3MTM0N30.mqm1dhY2HUHlSUHyTfNjA7MphjicbKJqFo6jc_guTRo',
     syncWorkflow: 'sync-diario-zattia.yml',
+    articulo: { singular: 'prenda', plural: 'prendas' },
   },
+}
+
+/**
+ * Lo que vende la marca, en plural y en minúscula: `fundas` · `prendas`.
+ *
+ * Va acá y no en la sección que lo usa porque **no es de una sección**: la próxima pantalla
+ * cross-marca que cuente unidades se va a topar con lo mismo, y dos listas de sustantivos se
+ * despegan en la marca que una agregue y la otra no.
+ */
+export function articuloDe(marca: Marca): { singular: string; plural: string } {
+  return CUENTAS[marca].articulo
 }
 
 /** Repo donde corren los workflows de sync. Port de GH_REPO (index.html:1897). */

@@ -10,8 +10,8 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 ## Dónde vive
 
 - `components/mkt-ventas/` — `MktVentas.tsx` (la pantalla) · `Objetivo.tsx` (la barra) ·
-  `ContadorDiario.tsx` (las flechas) · `ResultadoSale.tsx` (monta el Resultado de Liquidación) ·
-  `useMetas.ts`.
+  `ContadorDiario.tsx` (las flechas) · `VentaGeneral.tsx` (por canal + los que más salieron) ·
+  `ResultadoSale.tsx` (monta el Resultado de Liquidación) · `useMetas.ts`.
 - `lib/mkt-ventas/core.ts` — `serieDiaria`, `escalonVigente`, `techoDeLaRampa`, `medirElDia`.
 - `lib/mkt-ventas/persistencia.ts` — el cliente del botón.
 - **Handler:** `api/_mkt-ventas.js`, por `/api/datos?recurso=mkt-ventas`. **Un solo verbo**
