@@ -69,6 +69,51 @@ No se colgó de `gen-talles` a propósito: pegar una tabla de medidas es mecáni
 redactar reescribe el texto de venta de la tienda (y va a gastar plata en una API externa).
 Colgarlo ahí habilitaría a todos los que hoy pegan tablas sin que nadie toque un checkbox.
 
+## El redactor con IA (tanda 3, 19-ago-2026)
+
+El borrador lo puede escribir un modelo. **No cambió nada de lo de arriba**: ni la tabla, ni la
+pantalla, ni el validador, ni `bloques.ts`. Sólo cambió de dónde vienen `{parrafo, bullets}`.
+
+- **`lib/tn-desc/redactor.core.js`** — el prompt, el esquema, el costo y el reintento. No habla
+  con la red: recibe la función de llamada por parámetro, y por eso `tests/tn-desc-redactor.test.ts`
+  ejerce el camino entero —reintento incluido— sin API key y sin gastar un centavo.
+- **`api/_tn-desc-ia.js`** — recurso `tn-desc-ia` de `api/datos.js`. Es el único endpoint del
+  monitor que **gasta plata por apretar un botón**, así que pide el sub `gen-desc.publicar`, el
+  mismo que aprobar. ⛔ No guarda: devuelve el borrador y se para.
+
+🔴 **El reintento es carga estructural, igual que `validarBorrador`.** El JSON Schema de structured
+outputs fija la FORMA (que venga un `parrafo` y bullets con etiqueta de la lista cerrada) y nada
+más: no soporta `minItems`/`maxItems`/`maxLength`, así que «3 o 4 bullets» y «hasta 220 caracteres»
+no se pueden pedir ahí, y «no nombres los colores de ESTE producto» menos. Cuando el validador
+rechaza, los problemas vuelven al modelo —**todos juntos**— y se pide de nuevo. Dos intentos.
+
+🔑 **Las variantes viajan EN EL PROMPT, no sólo en el validador.** Si el modelo no sabe que «arena»
+es un color de este producto, lo escribe, se lo rechazan, y se paga un reintento por algo que se
+podía decir de entrada.
+
+🔑 **`formato.core.js`: por qué el validador bajó a JS plano.** El reintento necesita validar, y ese
+camino termina en `api/_tn-desc-ia.js` — un handler de `api/` corre en Node sin pasar por el
+compilador de Next y **no puede importar TypeScript** (es el motivo de `lib/permisos.core.js`).
+`formato.ts` quedó como el re-export tipado: ningún import de la pantalla ni de los tests cambió.
+⚠️ La unión `Etiqueta` se declara a mano en el `.ts` porque TS infiere `string[]` de un `.js`; que
+las dos no se separen lo cuida un test, porque **media regla en cada lado no se ve mal de ningún
+lado**: una etiqueta agregada sólo en el `.js` la aceptaría el validador y la rechazaría el `<select>`.
+
+### El modelo se elige en la pantalla, y el costo se muestra
+
+Arranca en **Haiku 4.5** por decisión de Bruno; se puede pasar a **Sonnet 5** desde el mismo
+desplegable y comparar los dos textos con el costo real de cada uno al lado. Eso es lo que decide,
+no una opinión sobre la prosa.
+
+- ⚠️ **Haiku 4.5 rechaza `output_config.effort` con un 400.** Va sólo donde el modelo lo acepta; si
+  no, la comparación sería entre dos configuraciones y no entre dos modelos.
+- ⚠️ **Sonnet 5 está con precio de intro hasta el 31-ago-2026** ($2/$10 en vez de $3/$15). Está
+  modelado con su fecha: cobrarle de más al comparar empujaría la decisión hacia Haiku por un
+  motivo que no es real.
+- ⚠️ **El CDN de TiendaNube no redimensiona a pedido.** Probado el 19-ago-2026 sobre una foto real:
+  `-480-480`, `-480-640`, `-480-600` y `-240-240` contestan **403**; sólo resuelve el archivo
+  guardado (hoy `-1024-1024`). Son ~1.400 tokens de imagen, o sea US$0,0014 con Haiku.
+
 ## Lo que TODAVÍA no hace
 
 ⛔ **Nada de esta pantalla llega a la tienda.** Guarda insumo y borrador aprobado en
@@ -78,8 +123,15 @@ por hash y la relectura de verificación, porque **un 200 del `PUT` no prueba qu
 haya pasado**. `lib/tn-desc/bloques.ts` ya tiene la composición y el invariante
 `conservaLaTabla` listos para ese día.
 
-⛔ Tampoco hay IA todavía: el borrador se tipea. El día que lo escriba un modelo no cambian ni
-la tabla, ni la pantalla, ni el validador — sólo de dónde vienen `{parrafo, bullets}`.
+🔴 ▶️ **Falta `ANTHROPIC_API_KEY` en Vercel.** Sin eso el botón «Redactar con IA» contesta un 500
+con ese texto y el resto de Redacción anda igual. **Es el único eslabón de la tanda que no se pudo
+ejercer**: todo lo demás está probado contra un modelo falso, pero que la llamada real funcione no
+lo prueba ningún test — el oráculo es apretar el botón una vez y ver el borrador.
 
-▶️ La migración `scripts/apply-tn-descripciones.mjs` **la corre Bruno**: es escritura en las
-bases de producción.
+⛔ Tampoco hay corrida masiva: se redacta de a uno, desde la fila. Pasar los 370 de una es otro
+verbo (y otra tanda), porque nadie va a leer 370 borradores de corrido.
+
+✅ La migración `scripts/apply-tn-descripciones.mjs` **corrió el 19-ago-2026** en las dos bases. El
+oráculo fue la app en vivo, no la consola: `GET /api/datos?recurso=tn-desc&store=zattia` contesta
+`200 {"ok":true,"filas":[]}` — que además prueba que en Vercel está la service key de Zattia, porque
+el handler devuelve un 500 con nombre y apellido si la clave que agarra es la pública.

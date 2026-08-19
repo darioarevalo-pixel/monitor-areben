@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { validarBorrador, generarHtml, ETIQUETAS, MAX_PARRAFO, MAX_BULLET } from '../lib/tn-desc/formato'
-import type { Borrador, Contexto } from '../lib/tn-desc/formato'
+import type { Borrador, Contexto, Etiqueta } from '../lib/tn-desc/formato'
 
 const ok: Borrador = {
   parrafo: 'Una camisa fluida que resuelve el día y aguanta la noche sin que te cambies.',
@@ -135,5 +135,17 @@ describe('generarHtml', () => {
   })
   it('sin bullets no deja una lista vacía colgada', () => {
     expect(generarHtml({ parrafo: 'Sola.', bullets: [] })).not.toContain('<ul')
+  })
+})
+
+describe('el .js y los tipos no se separan', () => {
+  it('ETIQUETAS es exactamente la unión declarada en formato.ts', () => {
+    // 🔑 Las reglas viven en `formato.core.js` (JS plano, para que las alcance
+    // `api/_tn-desc-ia.js`) y la unión `Etiqueta` se declara a mano en el `.ts`, porque
+    // TypeScript infiere `string[]` de un archivo JS. Agregar una etiqueta en el `.js` sin
+    // tocar el `.ts` la dejaría andando en el validador y rechazada por el `<select>` de la
+    // pantalla: media regla en cada lado, y ninguna mitad se ve mal sola.
+    const declaradas: Etiqueta[] = ['Tela', 'Calce', 'Cuello', 'Escote', 'Detalle', 'Largo', 'Manga', 'Espalda']
+    expect([...ETIQUETAS]).toEqual(declaradas)
   })
 })

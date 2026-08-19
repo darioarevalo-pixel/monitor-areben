@@ -10,11 +10,12 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|norte|fotos-verificadas|tn-desc|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
 import tnDesc from './_tn-desc.js';
+import tnDescIa from './_tn-desc-ia.js';
 import metaFunnel from './_meta-funnel.js';
 import calendario from './_calendario.js';
 import liquidacion from './_liquidacion.js';
@@ -42,6 +43,11 @@ const RECURSOS = {
   disenos,
   'fotos-verificadas': fotosVerificadas,
   'tn-desc': tnDesc,
+  // El redactor con IA. Entra por acá y no por un archivo propio como todo el resto, y además
+  // va SEPARADO de `tn-desc` a propósito: `tn-desc` guarda y no gasta un peso, éste no guarda
+  // nada y factura en cada llamada. Mezclarlos dejaría el gasto atrás del mismo `op` que un
+  // guardado.
+  'tn-desc-ia': tnDescIa,
   'meta-funnel': metaFunnel,
   'meta-rentabilidad': metaRentabilidad,
   calendario,

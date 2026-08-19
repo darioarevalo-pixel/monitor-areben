@@ -20,6 +20,7 @@ import type { Borrador } from '@/lib/tn-desc/formato'
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const COLA = '/api/datos?recurso=tn-desc'
+const IA = '/api/datos?recurso=tn-desc-ia'
 
 export type ProductoTn = {
   id: string
@@ -83,6 +84,18 @@ async function bajarAudit(marca: Marca, refrescar = false): Promise<void> {
     })()
   }
   await enVuelo[marca]
+}
+
+/** Lo que contesta el redactor. `borrador` puede venir CON problemas: se muestra igual. */
+export type ResultadoIA = {
+  ok: boolean
+  error: string | null
+  borrador: Borrador | null
+  problemas: { campo: string; motivo: string }[]
+  intentos: number
+  modeloNombre: string
+  /** Dólares de esta corrida, sumando los reintentos. Lo calcula el servidor. */
+  costo: number
 }
 
 export type EstadoGenDesc = {
@@ -174,5 +187,32 @@ export function useGenDesc(marca: Marca) {
     [marca, cargar],
   )
 
-  return { ...estado, cargar, refrescar, guardar }
+  /**
+   * Le pide un borrador al modelo. **No guarda nada**: devuelve el texto para que alguien lo
+   * mire. Guardar y aprobar siguen siendo dos botones aparte, y los aprieta una persona.
+   *
+   * 🔴 Es la única llamada de la pantalla que gasta plata, así que el error se devuelve para
+   * mostrarlo tal cual: un fallo silencioso acá se lee como «el modelo no supo qué decir» y
+   * lleva a apretar de nuevo, que cuesta otra vez.
+   */
+  const redactar = useCallback(
+    async (cuerpo: Record<string, unknown>): Promise<ResultadoIA> => {
+      const vacio = { ok: false, borrador: null, problemas: [], intentos: 0, modeloNombre: '', costo: 0 }
+      try {
+        const r = await apiFetch(IA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc-ia', store: marca, ...cuerpo }),
+        })
+        const d = await r.json()
+        if (!r.ok || !d?.ok) return { ...vacio, ...d, ok: false, error: d?.error || `Error ${r.status}` }
+        return d as ResultadoIA
+      } catch (e) {
+        return { ...vacio, error: e instanceof Error ? e.message : 'No se pudo redactar.' }
+      }
+    },
+    [marca],
+  )
+
+  return { ...estado, cargar, refrescar, guardar, redactar }
 }

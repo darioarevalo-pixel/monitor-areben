@@ -16,6 +16,7 @@
     "fixture-etl": "node scripts/fixture-etl.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.119.0",
     "@supabase/supabase-js": "^2.101.1",
     "@vercel/blob": "^2.6.1",
     "jsbarcode": "^3.12.3",

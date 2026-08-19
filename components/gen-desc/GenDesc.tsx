@@ -5,7 +5,8 @@ import {
   Badge, Button, Card, EmptyState, Field, Input, KpiCard, Notice, Select, Toolbar, useToast,
 } from '@/components/ui'
 import { useSesion } from '@/components/SesionProvider'
-import { useGenDesc, type FilaCola, type ProductoTn } from './useGenDesc'
+import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
+import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import {
   ETIQUETAS, MAX_BULLET, MAX_PARRAFO, MIN_BULLETS, MAX_BULLETS, generarHtml, validarBorrador,
 } from '@/lib/tn-desc/formato'
@@ -39,7 +40,7 @@ export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, puedePublicar, error, refrescar, guardar } = useGenDesc(marca)
+  const { cargando, productos, cola, puedePublicar, error, refrescar, guardar, redactar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('sin-desc')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
@@ -115,6 +116,18 @@ export function GenDesc() {
             abierto={abierto === p.id}
             onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
             puedePublicar={puedePublicar}
+            onRedactar={(modelo, insumo) =>
+              redactar({
+                tn_id: p.id,
+                nombre: p.name,
+                insumo,
+                variantes: p.variantes,
+                categorias: p.categories,
+                prosaActual: p.prosa.texto,
+                imagen: p.imagenes[0]?.src || null,
+                modelo,
+              })
+            }
             onGuardar={async (cuerpo) => {
               const err = await guardar({ tn_id: p.id, nombre: p.name, ...cuerpo })
               toast[err ? 'error' : 'ok'](err || 'Guardado.')
@@ -129,18 +142,22 @@ export function GenDesc() {
 }
 
 function FilaProducto({
-  p, fila, abierto, onAbrir, puedePublicar, onGuardar,
+  p, fila, abierto, onAbrir, puedePublicar, onRedactar, onGuardar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
   abierto: boolean
   onAbrir: () => void
   puedePublicar: boolean
+  onRedactar: (modelo: string, insumo: string) => Promise<ResultadoIA>
   onGuardar: (cuerpo: Record<string, unknown>) => Promise<string | null>
 }) {
   const [insumo, setInsumo] = useState(fila?.insumo || '')
   const [borrador, setBorrador] = useState<Borrador>(fila?.borrador || BORRADOR_VACIO)
   const [guardando, setGuardando] = useState(false)
+  const [modelo, setModelo] = useState<string>(MODELO_POR_DEFECTO)
+  const [redactando, setRedactando] = useState(false)
+  const [ia, setIa] = useState<ResultadoIA | null>(null)
 
   const problemas = useMemo(
     () => validarBorrador(borrador, { variantes: p.variantes, insumo, nombre: p.name }),
@@ -150,6 +167,19 @@ function FilaProducto({
 
   const setBullet = (i: number, campo: 'etiqueta' | 'texto', v: string) =>
     setBorrador((b) => ({ ...b, bullets: b.bullets.map((x, j) => (j === i ? { ...x, [campo]: v } : x)) }))
+
+  /**
+   * 🔑 El insumo que se le manda al modelo es el del CAMPO, no el guardado: si alguien acaba
+   * de tipear «gasa» y todavía no apretó «Guardar el insumo», redactar sin eso pediría el
+   * texto sin el único dato que hace falta — y la regla de la tela lo dejaría sin bullet.
+   */
+  const pedirIa = async () => {
+    setRedactando(true)
+    const r = await onRedactar(modelo, insumo)
+    setRedactando(false)
+    setIa(r)
+    if (r.borrador) setBorrador(r.borrador)
+  }
 
   const correr = async (cuerpo: Record<string, unknown>) => {
     setGuardando(true)
@@ -201,6 +231,27 @@ function FilaProducto({
           {puedePublicar && (
             <>
               <hr style={{ border: 0, borderTop: '1px solid #eee' }} />
+
+              <Toolbar>
+                <Field label="Modelo">
+                  <Select value={modelo} onChange={(e) => setModelo(e.target.value)} style={{ width: 150 }}>
+                    {Object.entries(MODELOS).map(([id, m]) => (
+                      <option key={id} value={id}>{(m as { nombre: string }).nombre}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Button size="sm" variant="outline" disabled={redactando} onClick={() => void pedirIa()}>
+                  {redactando ? 'Redactando…' : 'Redactar con IA'}
+                </Button>
+                {ia && !ia.error && (
+                  <span style={{ fontSize: 12, color: '#666' }}>
+                    {ia.modeloNombre} · {ia.intentos === 1 ? 'un intento' : `${ia.intentos} intentos`} ·{' '}
+                    <b>US${ia.costo.toFixed(4)}</b>
+                  </span>
+                )}
+              </Toolbar>
+              {ia?.error && <Notice tone="danger">{ia.error}</Notice>}
+
               <Field label={`Párrafo (máximo ${MAX_PARRAFO})`} hint="Una o dos frases. No nombres colores ni talles: los muestra el selector de variantes.">
                 <Input value={borrador.parrafo} onChange={(e) => setBorrador((b) => ({ ...b, parrafo: e.target.value }))} />
               </Field>
