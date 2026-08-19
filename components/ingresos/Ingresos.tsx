@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { esAdmin as esAdminDe, puedeSub } from '@/lib/permisos'
 import { credencialConPrompt } from '@/lib/sesion'
-import { imgAThumbYSubir } from '@/lib/imagenes'
+import { borrarDeBlob, imgAThumbYSubir } from '@/lib/imagenes'
 import { MODELOS_AUTOCOMPLETE } from '@/lib/ingresos/modelos'
 import {
   agregarBloque,
@@ -18,6 +18,7 @@ import {
   cargarBase,
   celdaGet,
   driveId,
+  esVideoReproducible,
   esVideoUrl,
   estadoDe,
   ESTADOS,
@@ -46,6 +47,7 @@ import {
 import { indiceNombresGN, productoEnGN, type IndiceGN, type ProductoGN } from '@/lib/ingresos/gn'
 import type { Bloque, GalleryItem, Ingreso, VistaIngresos } from '@/lib/ingresos/tipos'
 import { nuevoId, useIngresos } from './useIngresos'
+import { useSubirGaleria } from './useSubirGaleria'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Card, color as paleta, useConfirmar } from '@/components/ui'
 
@@ -66,8 +68,11 @@ const obtenerCred = () => credencialConPrompt('del Monitor')
 
 type Media = { tipo: 'img' | 'video'; url: string; nombre?: string }
 
-/** La mutación pura que persiste el hook. En `null` cuando la persona solo puede mirar. */
-type Guardar = (mutar: (l: Ingreso[]) => Ingreso[]) => void
+/**
+ * La mutación pura que persiste el hook. En `null` cuando la persona solo puede mirar.
+ * El segundo argumento avisa si el KV se lo quedó — lo usa el × de la galería, que borra un archivo.
+ */
+type Guardar = (mutar: (l: Ingreso[]) => Ingreso[], luego?: (guardado: boolean) => void) => void
 
 export function Ingresos() {
   const { marca, perfil } = useSesion()
@@ -335,22 +340,44 @@ function thumbBg(it: GalleryItem): React.CSSProperties {
   return {}
 }
 
-function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: boolean; guardar: (m: (l: Ingreso[]) => Ingreso[]) => void; onMedia: (m: Media) => void }) {
+function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: boolean; guardar: Guardar; onMedia: (m: Media) => void }) {
   const { pedirTexto } = useConfirmar()
   const items = g.gallery || []
-  if (!items.length && !editable) return null
 
-  const onFotos = (files: FileList | null) => {
-    const fs = Array.from(files || [])
-    fs.forEach((f) =>
-      subirFotoIngreso(f, (url) => guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: 'img', url, nombre: f.name || '' })), 520),
-    )
-  }
+  /**
+   * Lo que llega del Blob entra a la galería como un ítem más: la URL es corta, así que el KV
+   * compartido guarda lo mismo que guardaba con un link pegado a mano.
+   */
+  const alSubir = useCallback(
+    ({ url, clase, nombre }: { url: string; clase: 'video' | 'imagen'; nombre: string }) =>
+      guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: clase === 'video' ? 'video' : 'img', url, nombre })),
+    [g.id, guardar],
+  )
+  const subida = useSubirGaleria(alSubir)
+
+  if (!items.length && !editable && !subida.enCurso.length) return null
+
   const onLink = async () => {
     const url = (await pedirTexto('Pegá el link de la foto o video (YouTube, Google Drive, etc.)', '', { titulo: 'Agregar por link', ok: 'Siguiente' }))?.trim()
     if (!url) return
     const nombre = (await pedirTexto('Nombre o descripción (opcional)', '', { titulo: 'Agregar por link', ok: 'Agregar' }))?.trim() || ''
     guardar((l) => agregarGaleria(l, g.id, { id: nuevoId(), tipo: esVideoUrl(url) ? 'video' : 'img', url, nombre }))
+  }
+
+  /**
+   * Sacar un ítem son DOS cosas: desaparece de la galería —que es lo que la persona pidió y lo único
+   * que se ve— y el archivo se borra del Blob. Sin la segunda, cada video sacado se quedaba arriba
+   * para siempre; hasta esta tanda, nada borraba nunca.
+   *
+   * 🔑 **El borrado espera a que el KV confirme.** Es la única operación de la sección que no se
+   * puede deshacer: si el guardado falla —pass equivocada, KV caído—, al recargar el ítem vuelve, y
+   * con el archivo ya borrado volvería roto. Todo lo demás de acá es texto que una recarga repone.
+   */
+  const onQuitar = (it: GalleryItem) => {
+    guardar(
+      (l) => quitarGaleria(l, g.id, it.id),
+      (guardado) => { if (guardado) void borrarDeBlob(it.url) },
+    )
   }
 
   return (
@@ -374,7 +401,7 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
             ) : null}
             {editable && (
               <button
-                onClick={() => guardar((l) => quitarGaleria(l, g.id, it.id))}
+                onClick={() => onQuitar(it)}
                 title="Quitar"
                 style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)', cursor: 'pointer', fontSize: 12, color: paleta.danger, lineHeight: 1 }}
               >
@@ -383,20 +410,59 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
             )}
           </div>
         ))}
+
+        {/* Lo que está subiendo ocupa su lugar en la fila: sin esto, elegir un video de 60 MB no
+            cambia nada en pantalla durante un minuto y se elige de nuevo. */}
+        {subida.enCurso.map((f) => (
+          <div
+            key={f.key}
+            title={f.motivo || f.nombre}
+            style={{
+              width: 84, height: 84, borderRadius: 8, border: `1px dashed ${f.estado === 'fallada' ? paleta.danger : paleta.line2}`,
+              background: paleta.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 4, padding: 4, textAlign: 'center', position: 'relative',
+            }}
+          >
+            <span style={{ fontSize: 18 }}>{f.estado === 'fallada' ? '⚠️' : f.clase === 'video' ? '🎬' : '🖼'}</span>
+            <span style={{ fontSize: 9, color: f.estado === 'fallada' ? paleta.danger : paleta.mut, lineHeight: 1.2, maxWidth: 76, overflow: 'hidden' }}>
+              {f.estado === 'fallada' ? 'No se pudo subir' : 'Subiendo…'}
+            </span>
+            {f.estado === 'fallada' && (
+              <button
+                onClick={() => subida.descartar(f.key)}
+                title={f.motivo || 'Descartar'}
+                style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)', cursor: 'pointer', fontSize: 12, color: paleta.danger, lineHeight: 1 }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+
         {editable && (
           <>
             <label style={{ width: 84, height: 84, border: `1px dashed ${paleta.mut2}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: paleta.mut2, fontSize: 11, textAlign: 'center', background: paleta.bg }}>
               + foto
-              <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { onFotos(e.target.files); e.currentTarget.value = '' }} />
+              <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { subida.agregar(e.target.files); e.currentTarget.value = '' }} />
             </label>
+            <label style={{ width: 84, height: 84, border: `1px dashed ${paleta.mut2}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: paleta.mut2, fontSize: 11, textAlign: 'center', background: paleta.bg }}>
+              + video
+              <input type="file" accept="video/*" multiple style={{ display: 'none' }} onChange={(e) => { subida.agregar(e.target.files); e.currentTarget.value = '' }} />
+            </label>
+            {/* El link sigue: lo que ya vive en Drive o en YouTube no se baja para volver a subirlo. */}
             <button onClick={onLink} style={{ width: 84, height: 84, border: `1px dashed ${paleta.mut2}`, borderRadius: 8, cursor: 'pointer', color: paleta.mut2, fontSize: 11, background: paleta.bg, lineHeight: 1.3 }}>
               + link
               <br />
-              (video)
+              (Drive/YouTube)
             </button>
           </>
         )}
       </div>
+      {subida.enCurso.some((f) => f.estado === 'fallada') && (
+        <div style={{ fontSize: 11, color: paleta.danger, marginTop: 6 }}>
+          {subida.enCurso.find((f) => f.estado === 'fallada')?.motivo}
+        </div>
+      )}
     </div>
   )
 }
@@ -887,8 +953,17 @@ function MediaModal({ media, onClose }: { media: Media; onClose: () => void }) {
       inner = <iframe width="100%" height="480" src={`https://www.youtube.com/embed/${yt}`} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen style={{ borderRadius: 10, display: 'block', border: 'none' }} />
     } else if (dr) {
       inner = <iframe width="100%" height="480" src={`https://drive.google.com/file/d/${dr}/preview`} allow="autoplay" allowFullScreen style={{ borderRadius: 10, display: 'block', border: 'none' }} />
-    } else if (/\.mp4(\?|$)/i.test(media.url)) {
-      inner = <video src={media.url} controls autoPlay onClick={stop} style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: 10, display: 'block', margin: 'auto' }} />
+    } else if (esVideoReproducible(media.url)) {
+      // ⚠️ El `<video>` puede no poder con un `.mov` según con qué códec lo exportó el celular, y ahí
+      // el player muestra su propio cartel sin decir qué hacer. El link de abajo es esa salida.
+      inner = (
+        <>
+          <video src={media.url} controls autoPlay onClick={stop} style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: 10, display: 'block', margin: 'auto' }} />
+          <a href={media.url} target="_blank" rel="noreferrer" onClick={stop} style={{ color: '#fff', fontSize: 12, opacity: 0.85, display: 'inline-block', marginTop: 8 }}>
+            Si no se ve, abrilo aparte ↗
+          </a>
+        </>
+      )
     } else {
       // Sin preview embebible: abrir en pestaña nueva y cerrar.
       if (typeof window !== 'undefined') window.open(media.url, '_blank')

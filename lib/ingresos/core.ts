@@ -120,9 +120,24 @@ export function driveId(u: string): string | null {
   const m = String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/)
   return m ? m[1] : null
 }
-/** ¿El link es de video? Port del test de ingLinkAdd. */
+/**
+ * Las extensiones de video que el visor sabe reproducir con un `<video>`.
+ *
+ * ⚠️ **`.mov` no estaba y es el formato del caso real**: lo que manda la proveedora desde el celular
+ * sale en `.mov` tanto como en `.mp4`. Sin él, el ítem se guardaba como si fuera una FOTO —`tipo:
+ * 'img'`— y la galería intentaba dibujar un video adentro de un `<img>`: un recuadro roto, sin
+ * ningún cartel que dijera por qué.
+ */
+const EXT_VIDEO = /\.(mp4|mov|m4v|webm|avi)(\?|$)/i
+
+/** ¿Esta URL es un video? Port del test de ingLinkAdd, más los archivos subidos al Blob. */
 export function esVideoUrl(url: string): boolean {
-  return /youtube\.com|youtu\.be|vimeo\.com|drive\.google\.com|\.mp4(\?|$)/i.test(url)
+  return /youtube\.com|youtu\.be|vimeo\.com|drive\.google\.com/i.test(url) || EXT_VIDEO.test(url)
+}
+
+/** ¿El visor puede reproducirlo él mismo, sin iframe de YouTube ni de Drive? */
+export function esVideoReproducible(url: string): boolean {
+  return EXT_VIDEO.test(url)
 }
 
 // ── Normalización / migración de formato viejo (port de ingNormalizar) ──────────

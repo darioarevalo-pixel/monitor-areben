@@ -24,6 +24,8 @@ import { describe, expect, it } from 'vitest'
 const raiz = join(__dirname, '..')
 const puerta = readFileSync(join(raiz, 'api/blob-upload.js'), 'utf8')
 const hook = readFileSync(join(raiz, 'components/meta-ads/piezas/useSubirPiezas.ts'), 'utf8')
+/** El segundo que sube por el mismo camino: la galería de Ingresos proyectados. */
+const hookIngresos = readFileSync(join(raiz, 'components/ingresos/useSubirGaleria.ts'), 'utf8')
 const apiFetch = readFileSync(join(raiz, 'lib/api-fetch.ts'), 'utf8')
 
 /** El nombre del header es el contrato entre las dos puntas: si cambia de un lado, tiene que cambiar del otro. */
@@ -51,6 +53,16 @@ describe('blob-upload — el permiso de subida se pide CON la sesión', () => {
   it('🔑 el header que manda el hook es el que lee `credenciales()`', () => {
     const auth = readFileSync(join(raiz, 'api/_auth.js'), 'utf8')
     expect(auth, `el servidor no lee «${HEADER}»: el contrato se partió`).toContain(HEADER)
+  })
+
+  it('🔴 el hook de la galería de Ingresos hace lo MISMO (subió por el mismo camino después)', () => {
+    // Cuando la galería aprendió a subir videos, la trampa ya estaba documentada y arriba en este
+    // mismo archivo — y aun así es una línea que se puede olvidar, porque la pantalla anda hasta que
+    // alguien arrastra el primer archivo. Que el segundo hook esté acá es lo que la fija para los dos.
+    expect(hookIngresos).toContain('headers:')
+    expect(hookIngresos).toContain(HEADER)
+    expect(hookIngresos).toContain('sobreDeAuth')
+    expect(hookIngresos).toContain('No encuentro tu sesión del Monitor')
   })
 
   it('sin sesión el hook ni intenta subir, y lo dice', () => {

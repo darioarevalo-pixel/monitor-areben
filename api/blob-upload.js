@@ -1,9 +1,10 @@
 // Sube archivos a Vercel Blob y devuelve su URL pública. **Dos caminos, una sola función.**
 //
 //   POST { dataUrl, prefix? }                  → miniaturas: el archivo viaja en el body
-//   POST { type: 'blob.generate-client-token' } → piezas: el archivo NO pasa por acá
+//   POST { type: 'blob.generate-client-token' } → archivos grandes: el archivo NO pasa por acá
+//   POST { accion: 'borrar', url }              → saca del Blob un archivo ya subido
 //
-// El primero es el de siempre (Fundas, Ingresos, Diseños): una data URL chica que produce
+// El primero es el de siempre (Fundas, Diseños): una data URL chica que produce
 // `lib/imagenes.imgAThumb` y que `_blob.js` sube del lado del servidor.
 //
 // 🔑 **El segundo existe porque un video no entra por el primero.** El body de una función de Vercel
@@ -18,37 +19,57 @@
 // registra (avisa sólo si se le da un `callbackUrl` sin handler), y no hace falta: el browser
 // recibe la URL del Blob al terminar y es él quien la manda al plan. Nada que guardar de este lado.
 //
-// ⚠️ Es una de las 12 funciones del plan Hobby. El camino nuevo entra como una rama de la que ya
-// existía justamente para no gastar otra.
+// El tercero es el que faltaba desde el principio: **nada borraba nunca**. Con miniaturas de 30 KB
+// daba igual; desde que la galería de Ingresos sube videos de la proveedora, un ítem que se saca de
+// la pantalla y deja el archivo arriba para siempre es espacio que se paga y no se recupera.
+//
+// ⚠️ Es una de las 12 funciones del plan Hobby. Los dos caminos nuevos entran como ramas de la que
+// ya existía justamente para no gastar otra.
 //
 // Seguridad: mismo modelo que observaciones.js — exige un usuario válido del Monitor (login
 // server-side contra el KV). No es admin-only: Fundas la usan no-admins.
 // Si el Blob no está configurado, responde 500 y el cliente cae a guardar base64 (degradación).
 import { handleUpload } from '@vercel/blob/client';
-import { hayBlob, subirDataUrl } from './_blob.js';
+import { borrarBlob, hayBlob, subirDataUrl } from './_blob.js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
+import { TIPOS_MEDIA } from '../lib/media.core.js';
 import { TIPOS_PIEZA } from '../lib/meta-ads/pieza.core.js';
+import { esAdmin, puedeSub } from '../lib/permisos.core.js';
 
 const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos']);
 
-/** La carpeta del Blob donde viven las piezas de Meta. Es la única que admite el camino de cliente. */
-const CARPETA_PIEZAS = 'piezas';
-
-// Lo que Meta acepta como pieza, en tipos MIME, sale de `MIME_POR_EXTENSION` (`pieza.core.js`) y no
-// de una lista propia: es la misma tabla de la que el cliente deduce el `contentType` que manda a
-// mano. Escrita dos veces, agregar un formato de un solo lado deja un archivo que la pantalla
-// acepta y el servidor rechaza con un cartel del SDK que no nombra el tipo.
-//
-// ⚠️ **La lista es estricta a propósito.** Un archivo que llega de Drive puede venir como
-// `application/octet-stream`, y si eso se aceptara acá, cualquier cosa podría subirse al Blob con
-// una sesión del Monitor.
+/**
+ * ⭐ **Las carpetas que admiten el camino de cliente, con su tope y sus formatos.**
+ *
+ * La carpeta la fija el servidor mirando el `pathname` que manda el browser; lo que no está en esta
+ * tabla no se firma. Sin eso, una sesión del Monitor sirve para escribir en cualquier carpeta del
+ * Blob, incluidas las de Fundas y las de los reclamos.
+ *
+ * Los topes son distintos porque los archivos lo son: una pieza de Meta puede ser un video largo en
+ * buena calidad, y lo que manda la proveedora por chat para mostrar el producto es un clip corto.
+ * En los dos casos el tope existe para que un archivo equivocado falle rápido y no se lleve el
+ * cuarto de hora de alguien.
+ */
+const CARPETAS_CLIENTE = {
+  piezas: { tipos: TIPOS_PIEZA, tope: 512 * 1024 * 1024 },
+  ingresos: { tipos: TIPOS_MEDIA, tope: 200 * 1024 * 1024 },
+};
 
 /**
- * El techo de una pieza. Meta admite bastante más, pero el que sube es un browser con la red de la
- * oficina: 512 MB ya es un video largo en buena calidad, y un tope explícito es lo que evita que un
- * archivo equivocado se lleve el cuarto de hora de alguien antes de fallar.
+ * De qué carpetas se puede borrar, y quién.
+ *
+ * ⛔ **Sólo `ingresos`.** Borrar es la única operación de acá que destruye algo, así que la lista
+ * arranca con lo único que hoy tiene un botón que lo pide —el × de la galería— y no con «todas las
+ * que se pueden subir». Una pieza de Meta ya subida puede estar viva adentro de un aviso: borrarla
+ * del Blob no rompe el aviso (Meta se queda con su copia), pero tampoco lo pidió nadie.
+ *
+ * 🔑 **El permiso es el mismo que dibuja el botón** (`ingresos.editar` o admin): si el servidor
+ * pidiera menos, el × de una pantalla de sólo-lectura serviría igual desde la consola.
  */
-const TOPE_PIEZA_BYTES = 512 * 1024 * 1024;
+const CARPETAS_BORRABLES = ['ingresos'];
+
+/** Ingresos proyectados es sólo de BDI (`brands: ['bdi']` en el registro de secciones). */
+const puedeBorrarIngresos = (perfil) => esAdmin(perfil) || puedeSub(perfil, 'bdi', 'ingresos', 'editar');
 
 export default async function handler(req, res) {
   if (soloMismoOrigen(req, res, 'POST, OPTIONS')) return;
@@ -63,13 +84,23 @@ export default async function handler(req, res) {
   // `useSubirPiezas` se lo pasa por la opción `headers` de `upload()`. Sin eso este guard contesta
   // **403 a un usuario perfectamente logueado** y el SDK lo traduce a «Failed to retrieve the client
   // token», un cartel que no menciona la sesión por ningún lado. Pasó en prod el 9-ago-2026.
-  if (!(await exigirUsuario(req, res))) return;
+  const perfil = await exigirUsuario(req, res);
+  if (!perfil) return;
 
   const body = req.body || {};
 
   // El camino de cliente se reconoce por el sobre que manda el SDK, no por un parámetro nuestro.
   if (typeof body.type === 'string' && body.type.startsWith('blob.')) {
     return await permisoDeSubida(req, res, body);
+  }
+
+  if (body.accion === 'borrar') {
+    if (!puedeBorrarIngresos(perfil)) {
+      return res.status(403).json({ error: 'No tenés permiso para borrar archivos de Ingresos proyectados.' });
+    }
+    const r = await borrarBlob(body.url, CARPETAS_BORRABLES);
+    if (!r.ok) return res.status(r.status || 500).json({ error: r.error });
+    return res.status(200).json({ ok: true });
   }
 
   const prefix = PREFIJOS.has(body.prefix) ? body.prefix : 'fundas';
@@ -82,9 +113,9 @@ export default async function handler(req, res) {
  * Firma el permiso con el que el browser sube directo al Blob.
  *
  * ⛔ **La carpeta la fija el servidor, no el cliente.** El `pathname` llega del browser y podría
- * decir cualquier cosa; lo único que se acepta es que empiece con `piezas/`. Sin este chequeo, una
- * sesión del Monitor sirve para escribir en cualquier carpeta del Blob, incluidas las de Fundas y
- * las de los reclamos.
+ * decir cualquier cosa; lo único que se acepta es que empiece con una de `CARPETAS_CLIENTE`. Sin
+ * este chequeo, una sesión del Monitor sirve para escribir en cualquier carpeta del Blob, incluidas
+ * las de Fundas y las de los reclamos.
  *
  */
 async function permisoDeSubida(req, res, body) {
@@ -93,12 +124,16 @@ async function permisoDeSubida(req, res, body) {
       request: req,
       body,
       onBeforeGenerateToken: async (pathname) => {
-        if (!String(pathname || '').startsWith(`${CARPETA_PIEZAS}/`)) {
-          throw new Error(`Las piezas van en la carpeta «${CARPETA_PIEZAS}».`);
+        const carpeta = String(pathname || '').split('/')[0];
+        const reglas = Object.prototype.hasOwnProperty.call(CARPETAS_CLIENTE, carpeta) && String(pathname).includes('/')
+          ? CARPETAS_CLIENTE[carpeta]
+          : null;
+        if (!reglas) {
+          throw new Error(`Los archivos van en una de estas carpetas: ${Object.keys(CARPETAS_CLIENTE).join(', ')}.`);
         }
         return {
-          allowedContentTypes: TIPOS_PIEZA,
-          maximumSizeInBytes: TOPE_PIEZA_BYTES,
+          allowedContentTypes: reglas.tipos,
+          maximumSizeInBytes: reglas.tope,
           // Dos personas suben `reel.mp4` el mismo día y ninguna pisa a la otra.
           addRandomSuffix: true,
         };
@@ -107,7 +142,7 @@ async function permisoDeSubida(req, res, body) {
     return res.status(200).json(salida);
   } catch (e) {
     // El SDK tira con el motivo adentro; devolverlo tal cual es lo que hace que el cartel del
-    // browser diga «pesa más de 512 MB» en vez de «falló la subida».
+    // browser diga «pesa más de la cuenta» en vez de «falló la subida».
     return res.status(400).json({ error: (e && e.message) || 'No se pudo autorizar la subida.' });
   }
 }

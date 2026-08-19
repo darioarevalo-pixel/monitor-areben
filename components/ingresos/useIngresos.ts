@@ -25,8 +25,13 @@ export type EstadoIngresos = {
   /**
    * Aplica una mutación pura (lista → lista) optimista y agenda el guardado (debounce
    * 600 ms, como el legacy). Sin permiso de escritura o sin `cargado`, no hace nada.
+   *
+   * `luego` avisa **si el KV se lo quedó** (`false` también cuando no se intentó). Existe por un
+   * caso que no se puede deshacer: sacar un ítem de la galería borra el archivo del Blob, y hacerlo
+   * cuando el guardado falló destruye el archivo de un ítem que al recargar vuelve a aparecer, con
+   * la URL muerta. Todo lo demás es texto y una recarga lo repone; un archivo borrado, no.
    */
-  guardar: (mutar: (l: Ingreso[]) => Ingreso[]) => void
+  guardar: (mutar: (l: Ingreso[]) => Ingreso[], luego?: (guardado: boolean) => void) => void
 }
 
 /**
@@ -58,6 +63,8 @@ export function useIngresos(marca: Marca, puedeEscribir: boolean, obtenerCred: O
   // Refs para el guardado con debounce (no re-crean `guardar` en cada render).
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendienteRef = useRef<Ingreso[] | null>(null)
+  /** Los avisos de "¿quedó guardado?" del lote que junte el debounce. Se corren todos juntos. */
+  const avisosRef = useRef<((guardado: boolean) => void)[]>([])
   const marcaRef = useRef(marca)
   const cargadoRef = useRef(false)
   const credRef = useRef(obtenerCred)
@@ -103,14 +110,21 @@ export function useIngresos(marca: Marca, puedeEscribir: boolean, obtenerCred: O
   }, [])
 
   const guardar = useCallback(
-    (mutar: (l: Ingreso[]) => Ingreso[]) => {
-      if (!puedeEscribir) return
+    (mutar: (l: Ingreso[]) => Ingreso[], luego?: (guardado: boolean) => void) => {
+      if (!puedeEscribir) {
+        luego?.(false)
+        return
+      }
       setData((prev) => {
         const next = mutar(prev ?? [])
         pendienteRef.current = next
         return next
       })
-      if (!cargadoRef.current) return // sin lectura previa: no se persiste (borraría todo)
+      if (!cargadoRef.current) {
+        luego?.(false)
+        return // sin lectura previa: no se persiste (borraría todo)
+      }
+      if (luego) avisosRef.current.push(luego)
       setEstadoGuardado('guardando')
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(async () => {
@@ -128,6 +142,10 @@ export function useIngresos(marca: Marca, puedeEscribir: boolean, obtenerCred: O
           if (r.prohibido) guardarAdminPass('') // pass equivocada: se re-pide en el próximo guardado
           setEstadoGuardado('error')
         }
+        // El lote entero comparte suerte: se guarda el array completo, así que o entró todo o nada.
+        const avisos = avisosRef.current
+        avisosRef.current = []
+        avisos.forEach((f) => f(r.ok))
       }, 600)
     },
     [puedeEscribir],

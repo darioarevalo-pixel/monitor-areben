@@ -7,6 +7,7 @@ import {
   conItemsDerivados,
   derivarItems,
   driveId,
+  esVideoReproducible,
   esVideoUrl,
   estadoDe,
   filaIgualar,
@@ -130,6 +131,20 @@ describe('ingresos/core — media', () => {
     expect(esVideoUrl('https://youtu.be/x')).toBe(true)
     expect(esVideoUrl('https://ejemplo.com/foto.jpg')).toBe(false)
     expect(esVideoUrl('https://cdn.com/clip.mp4')).toBe(true)
+  })
+
+  it('🔴 el `.mov` del celular es un VIDEO (subido al Blob, no linkeado)', () => {
+    // Sin esto el ítem nacía con `tipo: 'img'` y la galería dibujaba un video adentro de un `<img>`:
+    // un recuadro roto sin ningún cartel que dijera por qué. Es el formato que sale de un iPhone.
+    expect(esVideoUrl('https://x.public.blob.vercel-storage.com/ingresos/producto-a1.mov')).toBe(true)
+    expect(esVideoReproducible('https://x.public.blob.vercel-storage.com/ingresos/producto-a1.mov')).toBe(true)
+    expect(esVideoUrl('https://x.public.blob.vercel-storage.com/ingresos/foto-a1.jpg')).toBe(false)
+  })
+
+  it('el visor reproduce sólo lo que es un archivo: YouTube y Drive van por iframe', () => {
+    expect(esVideoUrl('https://youtu.be/x')).toBe(true)
+    expect(esVideoReproducible('https://youtu.be/x'), 'un link de YouTube no se puede meter en un <video>').toBe(false)
+    expect(esVideoReproducible('https://drive.google.com/file/d/1AbC/view')).toBe(false)
   })
 })
 

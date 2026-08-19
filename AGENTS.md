@@ -110,6 +110,10 @@ ya tienen ficha:
 - Ventas de Marketing → **leer `docs/secciones/mkt-ventas.md`** antes de tocar
   `components/mkt-ventas/`, `lib/mkt-ventas/` o la llave `?metas=1` de `api/_norte.js` — ⛔ esa
   llave saca objetivos del área de Dirección: por ahí puede viajar la meta, **nunca plata**.
+- Ingresos proyectados → **leer `docs/secciones/ingresos.md`** antes de tocar
+  `components/ingresos/`, `lib/ingresos/`, `lib/media.core.js` o `api/blob-upload.js`. ⛔ **Sacar un
+  ítem de la galería BORRA el archivo del Blob** — y `api/blob-upload.js` lo comparten Fundas,
+  Diseños y las piezas de Meta.
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está

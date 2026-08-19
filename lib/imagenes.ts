@@ -108,3 +108,105 @@ export function imgAThumbYSubir(
     cbs.onError,
   )
 }
+
+/**
+ * Achica una imagen y devuelve un **archivo** (no un data URL), listo para `upload()` de
+ * `@vercel/blob/client`.
+ *
+ * # Por qué existe teniendo `imgAThumb` al lado
+ *
+ * `imgAThumb` produce base64 porque su destino es una función de Vercel, que recibe el archivo
+ * adentro del body. Eso trae dos límites que en una galería de fotos de producto se sienten: el body
+ * topea en ~4,5 MB (y `_blob.js` corta antes, en 1,5 MB) y, cuando la subida falla, el que llama
+ * guarda **el base64 en el KV compartido** — una foto grande ahí adentro la paga toda la sección en
+ * cada lectura.
+ *
+ * Por el camino de cliente los bytes van del browser al Blob directo, así que no hace falta base64
+ * en ningún momento. Lo que sí hace falta es achicar igual: la foto que sale de un celular pesa 4-8
+ * MB y en la galería se ve a 84 px, o a pantalla completa cuando se amplía. **1.500 px de lado
+ * máximo es lo que hace que ampliar sirva** —antes se subían a 520 y la lupa mostraba una miniatura
+ * estirada— sin que la grilla tenga que bajar megas por foto.
+ *
+ * ⚠️ **El fondo se pinta blanco antes de dibujar.** Un PNG con transparencia sobre un canvas vacío
+ * sale con el fondo NEGRO al pasar a JPEG, y las fotos de producto con fondo recortado son
+ * exactamente el caso donde eso pasa.
+ */
+export function achicarAArchivo(file: File, max = 1500, calidad = 0.82): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'))
+    reader.onload = (e) => {
+      const src = e.target?.result
+      if (typeof src !== 'string') return reject(new Error('No se pudo leer la imagen.'))
+      const img = new Image()
+      img.onerror = () => reject(new Error('No se pudo leer la imagen.'))
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height))
+        const cv = document.createElement('canvas')
+        cv.width = Math.max(1, Math.round(img.width * k))
+        cv.height = Math.max(1, Math.round(img.height * k))
+        const ctx = cv.getContext('2d')
+        if (!ctx) return reject(new Error('No se pudo procesar la imagen.'))
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(0, 0, cv.width, cv.height)
+        ctx.drawImage(img, 0, 0, cv.width, cv.height)
+        cv.toBlob(
+          (blob) => {
+            if (!blob) return reject(new Error('No se pudo procesar la imagen.'))
+            const base = (file.name || 'foto').replace(/\.[^.]+$/, '')
+            resolve(new File([blob], `${base}.jpg`, { type: 'image/jpeg' }))
+          },
+          'image/jpeg',
+          calidad,
+        )
+      }
+      img.src = src
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * ¿Esta URL es un archivo de NUESTRO Blob? Es la misma pregunta que se hace el servidor antes de
+ * borrar (`pathnameDeBlob`, `api/_blob.js`); acá evita el viaje de ida.
+ */
+export function esUrlDeBlob(url: string): boolean {
+  try {
+    const u = new URL(String(url || ''))
+    return u.protocol === 'https:' && /\.blob\.vercel-storage\.com$/i.test(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Saca del Blob un archivo ya subido. `true` si se borró (o si ya no estaba).
+ *
+ * 🔑 **Se llama al sacar el ítem de la pantalla, no antes ni después.** Hasta acá nada borraba
+ * nunca: quitar una foto de la galería la sacaba del KV y dejaba el archivo arriba para siempre.
+ * Con miniaturas de 30 KB daba igual; con los videos de la proveedora, no.
+ *
+ * ⚠️ **No lanza y el que llama no lo espera para seguir.** Lo que la persona pidió es que el ítem
+ * desaparezca de la galería, y eso ya pasó; que el archivo no se haya podido borrar es un problema
+ * de espacio, no de ella. Un error acá se anota en la consola y no frena nada.
+ */
+export async function borrarDeBlob(url: string): Promise<boolean> {
+  // Un base64 viejo, un link de YouTube o uno de Drive no son archivos nuestros: no hay nada que
+  // borrar y preguntárselo al servidor sería un 400 por cada ítem que se saca.
+  if (!esUrlDeBlob(url)) return false
+  try {
+    const r = await apiFetch('/api/blob-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'borrar', url }),
+    })
+    if (!r.ok) {
+      console.warn('[blob] no se pudo borrar:', r.status)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.warn('[blob] no se pudo borrar:', e instanceof Error ? e.message : e)
+    return false
+  }
+}
