@@ -3,7 +3,7 @@
 import { useCallback } from 'react'
 import { categoriaDesde, descripcionDe, tituloDesde } from '@/lib/nav'
 import { useRegistrarSlot } from '@/components/layout/acciones'
-import { BotonManual } from '@/components/layout/BotonManual'
+import { AyudaDeSeccion } from '@/components/layout/AyudaDeSeccion'
 
 /**
  * Encabezado uniforme de cada sección servida por el shell: eyebrow de categoría +
@@ -41,11 +41,12 @@ export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: str
         <h1 className="seccion-titulo">{titulo}</h1>
         {desc && <p className="seccion-desc">{desc}</p>}
         {/*
-          El manual de esta pantalla, si lo hay. Va ACÁ y no adentro de `seccion-acciones`: ese div
-          es un portal que llenan las secciones, y meterle un hijo fijo haría que el orden de los
-          botones dependa de quién montó primero. Se dibuja solo si hay manual publicado.
+          La ayuda de esta pantalla —«Manual de uso» y «Tour virtual»—, si la hay. Va ACÁ y no
+          adentro de `seccion-acciones`: ese div es un portal que llenan las secciones, y meterle un
+          hijo fijo haría que el orden de los botones dependa de quién montó primero. Cada uno de los
+          dos se dibuja sólo si existe.
         */}
-        <BotonManual seccion={seccion} />
+        <AyudaDeSeccion seccion={seccion} />
       </div>
       <div className="seccion-acciones" ref={ref} />
     </header>

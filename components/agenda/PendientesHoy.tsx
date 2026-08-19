@@ -142,7 +142,7 @@ function hora(iso: string | null): string {
 /**
  * «Cómo se hace»: el manual enganchado a este pendiente.
  *
- * Es el mismo mecanismo que `BotonManual` del encabezado, pero por **id** y no por sección: un
+ * Es el mismo mecanismo que `AyudaDeSeccion` del encabezado, pero por **id** y no por sección: un
  * procedimiento como "cómo se cierra la caja" no cuelga de ninguna pantalla y por eso se elige a
  * mano al cargar. El cuerpo se pide recién al abrirlo; el título ya viaja en el índice del shell.
  */

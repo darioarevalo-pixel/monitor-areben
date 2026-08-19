@@ -289,9 +289,12 @@ coordenada de pantalla.
   campo **despublica** el manual en silencio y el botón desaparece de la pantalla. Por eso el script
   **lee la fila entera antes de pisarla** y conserva `publicado` y `orden`, y sin `--editar` no
   escribe nada.
-- **El tour** lo lanza el mismo botón («Mostrame en la pantalla», en el pie del manual). Si la
-  pantalla tiene tour y **no** tiene manual, el botón ES el tour: si no, la sección quedaría muda
-  hasta que alguien publique un texto, y el tour no se podría ni ejercer en prod.
+- **Son DOS botones del mismo nivel** en el encabezado: **«📘 Manual de uso»** y **«👉 Tour
+  virtual»** (`components/layout/AyudaDeSeccion.tsx`). 🔴 **Lo corrigió Bruno viéndolo el 19-ago**:
+  el tour salía del **pie del modal del manual**, o sea que para encontrarlo había que abrir primero
+  otra cosa — y quien busca «mostrame dónde se aprieta» no lo va a buscar adentro de un texto. Cada
+  uno se dibuja **sólo si existe**, así que una sección sin manual publicado igual puede tener tour
+  (y al revés).
 - 🔑 **Los pasos los registra la sección en `store/useGuia`, no un mapa del shell**: cada sección es
   un chunk aparte (`next/dynamic`), así que un registro estático le bajaría los pasos de las 42 a
   todo el mundo. `setPestania` viaja con ellos porque el paso sabe en qué pestaña vive el control,
