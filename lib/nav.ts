@@ -186,6 +186,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   'meta-ads': 'meta-ads',
   tncat: 'tienda-nube',
   'gen-talles': 'talles',
+  'gen-desc': 'talles',
   integraciones: 'integraciones',
   // Administración / Compras
   reposicion: 'reposicion',
@@ -345,6 +346,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'sesion-fotos': 'Pedí productos para la sesión de fotos y controlá su retiro y devolución.',
   tncat: 'Herramientas de la tienda online, por área: fotos, categorías, visibilidad y descripciones.',
   'gen-talles': 'Generador de tablas de talles para las descripciones de TiendaNube.',
+  'gen-desc': 'Cola de descripciones: el insumo que carga el local y el borrador que se aprueba antes de salir a la tienda.',
   disenos: 'Tablero para elegir diseños con el equipo: votación, opiniones y PDF.',
   envios: 'La hoja del cadete: los envíos que salen hoy, con la dirección, lo que hay que cobrar y la etiqueta para pegar.',
   etiquetas: 'Etiquetas de 5 × 2,5 cm con código de barras, y la cola de lo que hay que reetiquetar porque le cambió el precio.',

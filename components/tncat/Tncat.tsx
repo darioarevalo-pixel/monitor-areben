@@ -20,6 +20,13 @@ import { color, font, space } from '@/components/ui'
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), {
   loading: () => <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>,
 })
+// Redacción es una SECCIÓN aparte (`gen-desc`), no un sub de `tncat`, y se monta acá igual
+// que la tabla de talles porque la persona la busca en el mismo lugar. El permiso es propio:
+// redactar gasta plata en una API externa y reescribe el texto de venta de la tienda, así que
+// no se cuelga del permiso de pegar una tabla de medidas.
+const GenDesc = dynamic(() => import('@/components/gen-desc/GenDesc').then((m) => m.GenDesc), {
+  loading: () => <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>,
+})
 
 /**
  * Tienda Nube: las herramientas que escriben sobre la tienda online, agrupadas por SUBÁREA.
@@ -37,7 +44,7 @@ const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then
  * Acá adentro no hay pestañas: la subárea sale de la URL y esta pantalla solo elige qué
  * mostrar. Si la dirección no trae ninguna, cae en la primera que la persona pueda ver.
  */
-type Sub = 'fotos' | 'categorias' | 'visibilidad' | 'descripciones'
+type Sub = 'fotos' | 'categorias' | 'visibilidad' | 'descripciones' | 'redaccion'
 
 export function Tncat() {
   const { marca, perfil } = useSesion()
@@ -49,12 +56,14 @@ export function Tncat() {
   const verAsig = marca === 'zattia' && (admin || puedeSub(perfil, marca, 'tncat', 'asignar'))
   const verOcultar = admin || puedeSub(perfil, marca, 'tncat', 'ocultar')
   const verTalles = admin || puedeVer(perfil, marca, 'gen-talles')
+  const verRedaccion = admin || puedeVer(perfil, marca, 'gen-desc')
 
   const subs: { key: Sub; label: string; hint: string; ok: boolean }[] = [
     { key: 'fotos', label: 'Fotos', hint: 'Subir fotos y revisar que estén pegadas al color', ok: verImg },
     { key: 'categorias', label: 'Categorías', hint: 'Asignar y quitar categorías de la tienda', ok: verCat || verAsig },
     { key: 'visibilidad', label: 'Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
     { key: 'descripciones', label: 'Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
+    { key: 'redaccion', label: 'Redacción', hint: 'La cola de descripciones: el insumo del local y el borrador que se aprueba', ok: verRedaccion },
   ]
   const visibles = subs.filter((s) => s.ok)
 
@@ -71,7 +80,7 @@ export function Tncat() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Qué herramienta se está usando. El encabezado de la página dice "Tienda Nube" y
-          desde el sidebar no siempre queda claro en cuál de las cuatro caíste.
+          desde el sidebar no siempre queda claro en cuál de las cinco caíste.
           Antes era una línea de color flotando sobre el lienzo, sin pertenecer a nada;
           ahora es el encabezado del bloque que sigue, con su regla abajo. */}
       <header style={{ borderBottom: `1px solid ${color.line}`, paddingBottom: space[3] }}>
@@ -85,6 +94,7 @@ export function Tncat() {
       {activa === 'categorias' && <Categorias marca={marca} verCat={verCat} verAsig={verAsig} />}
       {activa === 'visibilidad' && <Visibilidad marca={marca} />}
       {activa === 'descripciones' && <GenTalles />}
+      {activa === 'redaccion' && <GenDesc />}
     </div>
   )
 }

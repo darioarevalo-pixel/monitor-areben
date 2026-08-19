@@ -38,6 +38,7 @@ const Colores = dynamic(() => import('@/components/colores/Colores').then((m) =>
 const SolicitudesInternas = dynamic(() => import('@/components/solicitudes-internas/SolicitudesInternas').then((m) => m.SolicitudesInternas), { loading: Cargando })
 const Solicitudes = dynamic(() => import('@/components/solicitudes/Solicitudes').then((m) => m.Solicitudes), { loading: Cargando })
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), { loading: Cargando })
+const GenDesc = dynamic(() => import('@/components/gen-desc/GenDesc').then((m) => m.GenDesc), { loading: Cargando })
 const Atencion = dynamic(() => import('@/components/atencion/Atencion').then((m) => m.Atencion), { loading: Cargando })
 const Agenda = dynamic(() => import('@/components/agenda/Agenda').then((m) => m.Agenda), { loading: Cargando })
 const Novedades = dynamic(() => import('@/components/novedades/Novedades').then((m) => m.Novedades), { loading: Cargando })
@@ -262,6 +263,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   // descripción de TN (payload byte-idéntico, endpoint intacto) + lista de pendientes
   // (Zattia). Rollback: mover esta línea de vuelta a SOMBRAS.
   'gen-talles': GenTalles,
+  'gen-desc': GenDesc,
   // El flip de Cupones (18-jul-2026, Tanda B #3): `/cupones` lo sirve el shell.
   // CRUD de descuentos por cliente para el local (KV kind `cupones`, misma clave del
   // iframe → sin migración de datos; merge por-cupón con `cargado`). Gate de creación

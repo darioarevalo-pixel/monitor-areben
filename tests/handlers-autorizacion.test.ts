@@ -75,6 +75,7 @@ const PUERTAS = [
   { archivo: '_solicitudes', llave: 'solicitudes', que: 'las solicitudes' },
   { archivo: '_tn-ignorados', llave: 'tncat', que: 'los productos apartados de la revisión' },
   { archivo: '_tn-fotos-verificadas', llave: 'tncat', que: 'las fotos ya verificadas' },
+  { archivo: '_tn-desc', llave: 'gen-desc', que: 'la cola de descripciones' },
   { archivo: '_fallas', llave: 'postventa-deposito', que: 'las fallas' },
   { archivo: '_reclamos', llave: 'reclamos-local', que: 'los reclamos y sus tokens' },
   { archivo: 'sku-map', llave: 'integraciones', que: 'el mapeo de SKU' },

@@ -79,6 +79,9 @@ refresco es una llamada por vista, y el paso que estuvo roto una semana con el j
 conocimiento está fresco y escribirlo cuesta cinco minutos. No se escriben las 49 de una. Las que
 ya tienen ficha:
 
+- Redacción (descripciones de producto) → **leer `docs/secciones/gen-desc.md`** antes de tocar
+  `components/gen-desc/`, `lib/tn-desc/` o `api/_tn-desc.js`. ⛔ `lib/tn-desc/bloques.ts` decide
+  qué se conserva del campo `description` de TiendaNube, que **no tiene historial**.
 - Envíos del día → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`,
   `lib/envios/`, `api/_envios.js` o `api/_cadete.js`.
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar

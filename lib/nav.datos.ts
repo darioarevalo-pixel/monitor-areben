@@ -355,6 +355,22 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "gen-desc",
+    "area": "marketing",
+    "label": "Redacción",
+    "info": "Cola de descripciones de producto: el insumo que carga el local y el borrador que se aprueba antes de que salga a la tienda.",
+    "brands": [
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "publicar",
+        "label": "Aprobar y publicar",
+        "info": "Escribir el borrador aprobado en la descripción de TiendaNube. Sin esto sólo se puede cargar el insumo."
+      }
+    ]
+  },
+  {
     "key": "exhib",
     "area": "local",
     "label": "Chequeo de exhibición",
@@ -932,7 +948,8 @@ export const NAV_CATS: NavCat[] = [
           { "ruta": "/tncat/fotos", "label": "Fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
           { "ruta": "/tncat/categorias", "label": "Categorías", "icono": "tn-categorias", "key": "tncat", "sub": ["categorias", "asignar"] },
           { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "icono": "tn-visibilidad", "key": "tncat", "sub": "ocultar" },
-          { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "icono": "talles", "key": "gen-talles" }
+          { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "icono": "talles", "key": "gen-talles" },
+          { "ruta": "/tncat/redaccion", "label": "Redacción", "icono": "talles", "key": "gen-desc" }
         ]
       }
     ],
