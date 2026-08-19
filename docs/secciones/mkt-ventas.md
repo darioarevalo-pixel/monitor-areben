@@ -12,7 +12,8 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 - `components/mkt-ventas/` — `MktVentas.tsx` (la pantalla) · `Objetivo.tsx` (la barra) ·
   `ContadorDiario.tsx` (las flechas) · `VentaGeneral.tsx` (por canal + los que más salieron) ·
   `ResultadoSale.tsx` (monta el Resultado de Liquidación) · `useMetas.ts`.
-- `lib/mkt-ventas/core.ts` — `serieDiaria`, `escalonVigente`, `techoDeLaRampa`, `medirElDia`.
+- `lib/mkt-ventas/core.ts` — `serieDiaria`, `escalonVigente`, `techoDeLaRampa`, `medirElDia`,
+  `resumenPorCanal`, `losQueMasSalieron`, `unidadDeLaMeta`.
 - `lib/mkt-ventas/persistencia.ts` — el cliente del botón.
 - **Handler:** `api/_mkt-ventas.js`, por `/api/datos?recurso=mkt-ventas`. **Un solo verbo**
   (`traer-ventas-hoy`). Todo lo demás sale del ETL que la sección ya tiene por `useDatosMonitor()`,
@@ -52,6 +53,33 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
 
 ## Reglas que el código no dice
 
+- 🔴 🔑 **ZATTIA NO VENDE FUNDAS, y ésta es la PRIMERA pantalla cross-marca que nombra la unidad.**
+  El contador decía «Fundas online» sobre Zattia, que vende ropa: hablaba del negocio de al lado.
+  Lo cazó Bruno mirándola. 🔑 **Hasta acá el repo lo esquivaba scopeando la sección**:
+  `fundas-modelo` es `brands: ['bdi']`, así que la única pantalla que nombraba la unidad no existía
+  en Zattia. ⇒ el sustantivo sale de **`articuloDe(marca)`** (`lib/cuentas.ts`, donde ya vive
+  `nombre`): **funda** / **prenda**. ⚠️ El catálogo de `MEDIDORES` también está escrito en BDI
+  («Fundas por día que salen») ⇒ **`unidadDeLaMeta` lo traduce en la PANTALLA y no en el catálogo**,
+  porque esa `unidad` es la que Norte **escribe en la base** como espejo de la fila y no puede
+  depender de quién esté mirando. ⚠️ **Límite conocido y con test**: los medidores de plata siguen
+  diciendo `$/funda` — hoy no se ve (son de Dirección y Zattia no tiene metas).
+- 🔑 **El orden de la pantalla va de lo PERMANENTE a lo EXCEPCIONAL, y lo eligió Bruno**: el
+  objetivo · el día de hoy · **cómo viene la venta** · el resultado del sale, *«porque la
+  liquidación siempre es excepcional»*.
+- 🔴 🔑 **La ventana de «cómo viene la venta» la decide `cortesDeVentas`, NO un `hoy − 30` propio.**
+  La primera versión recortaba por su cuenta y quedaba **desfasada un día** del `sales30` del ETL,
+  que es de donde sale el ranking de al lado ⇒ **dos ventanas de 30 días adentro de una tarjeta que
+  dice «Últimos 30 días» una sola vez**. Se cazó cotejando contra `psql`: CORSET FRANK daba **24**
+  por un lado y **22** por el otro, y la diferencia eran el día del borde y las ventas técnicas. Es
+  justo lo que ese helper existe para impedir —«una sola definición de los últimos 30 días»—.
+- ⛔ **La venta general llega hasta 30 días y NO hay 90.** Quien no ve el análisis fino baja 35 días
+  (`desdeVentas`) ⇒ un «90 d» le mostraría 35 bajo un rótulo que dice 90, sin un error.
+- ⚠️ **Los tres canales del resumen NO suman el total de la marca**: el canal vacío cae en `tecnica`
+  por `canalDe` —sesión de fotos, fallas— y ésas no son venta. Hay un test que lo fija con los dos
+  números al lado.
+- ⚠️ **El ranking «los que más salieron» es de TODOS los canales**, no sólo online, y **la pantalla
+  lo dice**: el ETL guarda `sales7/30/90` por producto sin partir por canal, y partirlo acá sería
+  una segunda cuenta sobre las mismas filas que podría contradecir a la de arriba.
 - 🔴 🔑 **FUNDAS ≠ COMPRAS, y por canal la brecha es brutal.** Bruno escribió «100 fundas diarias» y
   las tres metas que cargó ese mismo día son de **compras** (`medidor: ventas-dia`). Medido en BDI a
   30 días: online **1,9 fundas por compra**, local 1,5, **mayorista 76,9**. Un objetivo cargado en
@@ -189,6 +217,10 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
   `GROUP BY` de SQL, y se compara contra `serieDiaria` — dos implementaciones distintas del mismo
   corte. Medido el 18-ago sobre **851 ventas y 5.354 renglones**: idénticas, y **el oráculo se
   verificó mutando** (`compras += 2` lo pone en rojo), o sea no pasa por vacío.
+- ✅ **La venta general, cotejada contra `psql` en Zattia** (18-ago): por canal **local 389 compras /
+  541 prendas · online 110 / 179 · mayorista 0**, idéntico. Y el ranking **22 · 17 · 17** — que sólo
+  cierra con la ventana del ETL (desde el 21-jul) **y sin las técnicas**: con la ventana ingenua
+  daba 24 · 19 · 17, y ésa fue la pista de las dos ventanas.
 - Los últimos 10 días de BDI, para volver a cotejar: **16 · 11 · 8 · 12 · 5 · 14 · 10 · 14 · 3 · 9**
   compras online (17-ago hacia atrás).
 - ✅ 🔑 **El resultado del sale, caminado y con el oráculo EN EL PAYLOAD, no en lo dibujado**
