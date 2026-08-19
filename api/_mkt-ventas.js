@@ -65,15 +65,28 @@ export default async function handler(req, res) {
   if (!puedeVerAlguna(perfil, store, ['mkt-ventas'])) {
     return res.status(403).json({ error: 'No tenés acceso a Ventas de Marketing en esta marca.' });
   }
-  if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
-
+  // 🔑 **El método y la acción se validan ANTES de crear el cliente de Supabase.** Tenerlo al revés
+  // fue un descuido de una vuelta: con `createClient` arriba, un `DELETE` o una acción inventada
+  // llegaban a la base para después ser rechazados. Lo cazó `tests/handlers-autorizacion.test.ts`,
+  // que es exactamente para lo que existe: el corte tiene que salir **antes** de tocar la base.
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
   const b = req.body || {};
-  if (b.action !== 'traer-ventas-hoy') return res.status(400).json({ error: 'acción desconocida' });
+  if (req.method === 'POST' && b.action !== 'traer-ventas-hoy') return res.status(400).json({ error: 'acción desconocida' });
 
   const cfg = CFG[store];
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });
   const supabase = createClient(cfg.url, cfg.key);
 
+  // 🔴 **Cuándo se apretó el botón por última vez, y por qué la pantalla lo necesita.** La línea de
+  // «leído hace X» de la sección sale del último run del workflow diario, o sea del reloj de la
+  // madrugada. Después de apretar el botón, esa línea seguía diciendo «hace 17 h» **al lado de un
+  // número leído hace dos minutos** — se vio caminándola en producción el 18-ago-2026, con el
+  // contador saltando de 1 a 15 compras y la línea sin moverse. Son dos hechos distintos y los dos
+  // van escritos; **este GET es el segundo**. ⛔ No escribe nada.
+  if (req.method === 'GET') {
+    const { data } = await supabase.from('sync_state').select('updated_at').eq('clave', CLAVE_SYNC).maybeSingle();
+    return res.status(200).json({ ok: true, traidoEn: data?.updated_at || null });
+  }
   try {
     const ahoraMs = Date.now();
     const ahora = new Date(ahoraMs).toISOString();

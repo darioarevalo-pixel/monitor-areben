@@ -75,6 +75,14 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   Vercel**. Vive en una fila propia de `sync_state` (`ventas-hoy-mkt`) y es **por marca**. ⛔ No se
   fundió con el de Liquidación, que vive en `datos.ventasSync` de **la campaña**: son dos preguntas
   distintas y fundirlas haría que apretar en una pantalla frene la otra sin que nada lo diga.
+- 🔴 🔑 **La línea de «leído hace X» y la del botón son DOS hechos, y van los dos.** Aquélla sale
+  del último run del workflow diario (`fetchUltimoSync`, o sea GitHub Actions) y **después de
+  apretar el botón sigue teniendo razón**: el reloj de la madrugada corrió cuando corrió. Lo que
+  faltaba era la otra mitad. Se vio caminándola: el contador saltó de **1 a 15 compras** y la línea
+  seguía diciendo «hace 17 h» — un número de hace dos minutos bajo un rótulo de hace diecisiete.
+  ⇒ el GET de `api/_mkt-ventas.js` contesta `traidoEn` y la frase suma «las de hoy, traídas a mano
+  hace N min». 🔑 **Las dos mitades comparten un solo `new Date()`**: dos relojes en la misma frase
+  son dos instantes.
 - 🔑 **`ventas-hoy-mkt` es una fila PROPIA, no la de `diario`.** Los cinco lectores de `sync_state`
   filtran por `clave = 'diario'` (medido con grep antes de escribirlo): pisarla haría que «el sync
   corrió hace 3 minutos» lo diga un botón y no el sync, que es otra cosa.
@@ -145,6 +153,13 @@ un proyecto»*. Hasta acá **Marketing no veía una sola pantalla de ventas** �
   lo que NO se ejerció es justamente el camino nuevo —`veVentasHistoricas` dando `true` por la
   función y no por el flag de admin, y las cinco secciones de Análisis apareciéndole en el menú—.
   Los usuarios de prueba los crea Bruno.
+- ✅ 🏁 **EL BOTÓN SE EJERCIÓ A MANO EN PRODUCCIÓN** (18-ago-2026 21:22 ART, BDI), con `psql` de
+  oráculo: online del 18-ago **1 → 15 compras** y **3 → 35 fundas** —idéntico a lo que dibujó la
+  pantalla, que pasó de 4 % a 60 %—, el **17-ago intacto en 21** (el upsert de «ayer y hoy» no
+  duplicó nada) y `sync_state.diario` **sin moverse**. ✅ Y el **antirrebote también**: el segundo
+  toque contestó `{"ok":true,"salteado":true,…}` con 200 y `sync_state` **no se movió**.
+  ⚠️ Se ejerció a las 21:22 de Argentina, o sea con `current_date` de Postgres ya en el día
+  siguiente — el caso exacto que la ventana en hora AR existe para cubrir.
 - ⚠️ **Se caminó en prod con perfil ADMIN, no con uno de Marketing.** Lo que el admin no ejerce es
   el `puedeVerAlguna` de la llave `?metas=1` con la función `marketing` — los usuarios de prueba los
   crea Bruno. ▶️ Falta eso.

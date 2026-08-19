@@ -22,17 +22,17 @@
  *    en `Objetivo.tsx`.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useMonitorStore } from '@/store/useMonitorStore'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { veVentasHistoricas } from '@/lib/permisos'
-import { estadoSync, fmtFechaVenta } from '@/lib/resumen'
+import { estadoSync, fmtFechaVenta, fmtHace } from '@/lib/resumen'
 import { hoyIso, sumarDias } from '@/lib/fechas/dia'
 import { escalonVigente, serieDiaria, techoDeLaRampa } from '@/lib/mkt-ventas/core'
 import { Button, DatosGate, Notice, color, font, space, useToast } from '@/components/ui'
-import { traerVentasDeHoy } from '@/lib/mkt-ventas/persistencia'
+import { leerUltimaTraida, traerVentasDeHoy } from '@/lib/mkt-ventas/persistencia'
 import { useMetas } from './useMetas'
 import { Objetivo } from './Objetivo'
 import { ContadorDiario } from './ContadorDiario'
@@ -58,6 +58,20 @@ export function MktVentas() {
   const fecha = sumarDias(hoy, offset)
   const toast = useToast()
   const [trayendo, setTrayendo] = useState(false)
+  /**
+   * Cuándo se apretó el botón por última vez. Es un hecho DISTINTO del run del sync diario, y va al
+   * lado y no en lugar: la línea de arriba dice cuándo corrió el reloj de la madrugada —y después
+   * de apretar el botón **sigue teniendo razón**—, y ésta dice cuándo se trajeron las de hoy.
+   */
+  const [traidoEn, setTraidoEn] = useState<string | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    leerUltimaTraida(marca).then((t) => vivo && setTraidoEn(t))
+    return () => {
+      vivo = false
+    }
+  }, [marca])
 
   /**
    * 🔑 **Son DOS pasos y los dos hacen falta.** El primero le pide a Gestión Nube las ventas de hoy
@@ -71,6 +85,7 @@ export function MktVentas() {
     setTrayendo(true)
     try {
       const t = await traerVentasDeHoy(marca)
+      setTraidoEn(t.traidoEn)
       if (t.salteado) toast.info('Las ventas de hoy ya se trajeron hace menos de un minuto.')
       else toast.ok(`Gestión Nube devolvió ${t.ventas} venta${t.ventas === 1 ? '' : 's'}. Actualizando la pantalla…`)
       await cargar(marca, veVentasHistoricas(perfil, marca), true)
@@ -98,7 +113,10 @@ export function MktVentas() {
           const dia = serie.find((x) => x.fecha === fecha) ?? null
           const escalon = metas ? escalonVigente(metas, hoy) : null
           const techo = metas ? techoDeLaRampa(metas) : null
-          const sync = estadoSync(d.syncMeta, new Date())
+          // Un solo reloj para las dos mitades de la línea: si «hace 17 h» y «traídas hace 3 min»
+          // salieran de dos `new Date()` distintos, serían dos instantes en la misma frase.
+          const ahora = new Date()
+          const sync = estadoSync(d.syncMeta, ahora)
           const ventaReciente = fmtFechaVenta(d.maxVentaDate)
 
           return (
@@ -123,6 +141,12 @@ export function MktVentas() {
                   <>El sync está fallando — no hay ninguna corrida exitosa reciente. Los números de abajo son viejos.</>
                 ) : (
                   <>No pude leer el estado del sync, así que no sé qué tan actuales son estos números.</>
+                )}
+                {traidoEn && (
+                  <span style={{ color: color.mut }}>
+                    {' · '}Las de hoy, traídas a mano{' '}
+                    <strong style={{ color: color.ink2 }}>{fmtHace(ahora.getTime() - Date.parse(traidoEn))}</strong>
+                  </span>
                 )}
               </Notice>
 

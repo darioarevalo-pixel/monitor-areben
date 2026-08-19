@@ -244,9 +244,18 @@ describe('_mkt-ventas · la puerta que escribe', () => {
     expect(res.code).toBe(403)
   })
 
-  it('el GET no escribe nada: sólo se entra por POST', async () => {
-    sesionDe(SOLO_MKT)
+  // El GET contesta cuándo se apretó el botón por última vez, y NO escribe. Igual pide la sección:
+  // el gate está arriba del `if (req.method)`, así que la respuesta es 403 y no un 405 que
+  // insinuaría que la puerta existe para cualquiera.
+  it('🔴 el GET también pide la sección', async () => {
+    sesionDe(SIN_NADA)
     const res = await llamar('_mkt-ventas', conSesion({ query: { store: 'bdi' } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('un método que no es GET ni POST se rechaza', async () => {
+    sesionDe(SOLO_MKT)
+    const res = await llamar('_mkt-ventas', conSesion({ method: 'DELETE', query: { store: 'bdi' } }))
     expect(res.code).toBe(405)
   })
 
