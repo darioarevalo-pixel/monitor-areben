@@ -296,8 +296,20 @@ coordenada de pantalla.
   un chunk aparte (`next/dynamic`), así que un registro estático le bajaría los pasos de las 42 a
   todo el mundo. `setPestania` viaja con ellos porque el paso sabe en qué pestaña vive el control,
   pero la pestaña es de la sección.
+- 🔴 🔑 **EL ANCLA ESTABLE ES LA PESTAÑA, no la card de arriba** (lo corrigió Bruno caminándolo,
+  19-ago): el paso que hablaba de la bandeja estaba anclado a la card de «Cargar uno a mano», o sea
+  que **decía «Sin fecha» y resaltaba otro botón**. Señalar una cosa mientras se nombra otra enseña
+  mal **y se ve perfecto en un test**. Las anclas de pestaña viajan en `TabItem.guia` → `Tabs` las
+  escribe como `data-guia`, y el test afirma **esa línea también**: sin ella el campo queda puesto,
+  el ancla no llega al DOM y el globo se para en el centro sin que nada falle.
+- 🔴 🔑 **Y el globo hay que RE-MEDIRLO seguido, no sólo con scroll y resize** (mismo día, mismo
+  origen): el último paso vive en «Cuenta del cadete», que trae sus datos por fetch — se medía el
+  botón, llegaban los datos, la tabla empujaba todo para abajo **y el recorte quedaba arriba, sobre
+  un rectángulo vacío**. Ningún listener se entera de eso. Va un latido de 200 ms (`CADA_MS`) que
+  sólo re-renderiza si la caja cambió de verdad; adivinar qué va a mover el layout no es una
+  estrategia.
 - 🔴 🔑 **Cada paso tiene DOS anclas y por eso no envejece.** `ancla` es algo que está SIEMPRE en esa
-  pestaña (la card de arriba, un botón del encabezado) y `anclaFina` es el control puntual, que
+  pestaña (la pestaña misma) y `anclaFina` es el control puntual, que
   puede no existir: «Sugerir precios (N)» **desaparece** si no hay filas sin cotizar, la tabla no
   está con la bandeja vacía, y la card del link del cadete se dibuja recién cuando vuelve su propia
   lectura. **Cuando el fino no está, el paso NO se saltea**: se para en el estable y el texto dice
@@ -313,6 +325,9 @@ coordenada de pantalla.
   ninguna **huérfana**, y que las pestañas que los pasos nombran son las que `Tabs` tiene de verdad.
   **5 mutantes, 5 muertos**: usar el ancla fina aunque no esté · callarse el «si no está» · invertir
   siguiente/anterior · sacar el `data-guia` de «Sugerir precios» · renombrar una pestaña.
+- 🔑 **Los cuatro estados los pidió Bruno mirando el tour**, y son un paso propio: el camino
+  `pendiente → preparado → en_transito → entregado` está en el código, pero **«en tránsito es cuando
+  se lo entregás al cadete» no se deduce de ningún lado**. Van también en el manual.
 - ⛔ **El portal del cadete tiene su propio «¿Cómo uso esto?» escrito a mano** (`ComoSeUsa`, un
   `<details>` plegado): no puede usar `<Instructivo>` del kit porque **la regla de ese archivo es no
   importar componentes del kit** —se baja con datos del teléfono, arriba de una moto— y tampoco

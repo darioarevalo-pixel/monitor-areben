@@ -245,9 +245,9 @@ export function Envios() {
         value={pestania}
         onChange={(k) => setPestania(k as 'dia' | 'pendientes' | 'cuenta' | 'zonas')}
         items={[
-          { key: 'dia', label: 'El día' },
-          { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.' },
-          { key: 'cuenta', label: 'Cuenta del cadete', hint: 'Lo que se debe de un lado o del otro, arrastrado día a día.' },
+          { key: 'dia', label: 'El día', guia: 'envios.tab.dia' },
+          { key: 'pendientes', label: 'Sin fecha', badge: pendientes.length || undefined, hint: 'Pedidos cotizados esperando que el cliente confirme el día.', guia: 'envios.tab.pendientes' },
+          { key: 'cuenta', label: 'Cuenta del cadete', hint: 'Lo que se debe de un lado o del otro, arrastrado día a día.', guia: 'envios.tab.cuenta' },
           // Va última y es de otra frecuencia: las otras tres se abren todos los días, ésta cuando
           // cambian los precios. Pero es de Envíos —quien cotiza es quien mira el mapa— y una
           // sección propia en el menú costaría los dos espejos de permisos por una pantalla mensual.
@@ -264,10 +264,7 @@ export function Envios() {
           {/* 🔑 El botón va ACÁ y no adentro de `Pendientes`: ese componente se reemplaza entero por
               el `EmptyState` cuando no hay nada, y la bandeja vacía es justo el caso que este botón
               resuelve —la clienta que escribió antes de que exista un pedido en Tienda Nube—. */}
-          {/* `data-guia`: el ancla ESTABLE de la bandeja. Los pasos de «Sin fecha» se paran acá
-              cuando el control fino del que hablan no está en pantalla (la tabla vacía, el botón de
-              sugerir que desaparece si no hay nada sin cotizar). Ver `lib/envios/guia.ts`. */}
-          <Card data-guia="envios.bandeja">
+          <Card>
             <Button variant="outline" onClick={() => setEditando(envioNuevoAMano({ marca: marcaActiva }))}>
               Cargar uno a mano
             </Button>
@@ -287,8 +284,7 @@ export function Envios() {
         </>
       ) : (
       <>
-      {/* `data-guia`: el ancla estable de la hoja del día (ver `lib/envios/guia.ts`). */}
-      <Card data-guia="envios.dia">
+      <Card>
         <div style={{ display: 'flex', gap: space[4], alignItems: 'flex-end', flexWrap: 'wrap' }}>
           {/* 🔑 Las flechas saltan al día de reparto anterior y al siguiente, no al día calendario:
               el sábado, el domingo y el resto de los días sin moto son pantallas siempre vacías, y
@@ -365,7 +361,9 @@ export function Envios() {
                     <Th>Marca</Th>
                     <Th>Pedido</Th>
                     <Th>Cobra</Th>
-                    <Th>Estado</Th>
+                    <Th>
+                      <span data-guia="envios.estado">Estado</span>
+                    </Th>
                     <Th />
                   </Tr>
                 </THead>

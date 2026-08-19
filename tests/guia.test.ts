@@ -18,14 +18,17 @@ import { GUIA_ENVIOS } from '@/lib/envios/guia'
 
 const raiz = join(__dirname, '..')
 const jsx = readFileSync(join(raiz, 'components/envios/Envios.tsx'), 'utf8')
+const tabs = readFileSync(join(raiz, 'components/ui/Tabs.tsx'), 'utf8')
 
-/** Los `data-guia` que el JSX pone de verdad, sea literal o adentro de un ternario. */
+/** Los `data-guia` que el JSX pone de verdad: literales, adentro de un ternario, o vía `TabItem.guia`. */
 function anclasDelJsx(fuente: string): Set<string> {
   const halladas = new Set<string>()
   // Las clases de caracteres van acotadas a `[\w.]` a propósito: un `[^"]+` se come media pantalla
   // cuando el atributo es un ternario, y el test empieza a hablar de anclas que no existen.
   for (const m of fuente.matchAll(/data-guia="([\w.]+)"/g)) halladas.add(m[1])
   for (const m of fuente.matchAll(/data-guia=\{[^}]*?'([\w.]+)'/g)) halladas.add(m[1])
+  // El ancla de una pestaña no se escribe como atributo: viaja en el `TabItem` y la pone `Tabs`.
+  for (const m of fuente.matchAll(/\bguia: '([\w.]+)'/g)) halladas.add(m[1])
   return halladas
 }
 
@@ -85,6 +88,13 @@ describe('la guía de Envíos no puede envejecer', () => {
     for (const ancla of anclasDelJsx(jsx)) {
       expect(usadas, `data-guia="${ancla}" no lo nombra ningún paso de lib/envios/guia.ts`).toContain(ancla)
     }
+  })
+
+  it('🔴 y `Tabs` sigue escribiendo el ancla de la pestaña', () => {
+    // Sin esta línea el `guia: 'envios.tab.dia'` del `TabItem` quedaría puesto y **no llegaría al
+    // DOM**: el test de arriba lo daría por existente y el tour se pararía en el centro de la
+    // pantalla. Es el mismo agujero que tiene `Th`, que no propaga props sueltas.
+    expect(tabs).toContain('data-guia={it.guia}')
   })
 
   it('las pestañas de los pasos son las que la pantalla tiene de verdad', () => {

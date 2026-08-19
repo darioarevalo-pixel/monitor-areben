@@ -32,6 +32,17 @@ const GLOBO_W = 320
 const MARGEN = 10
 /** Cuántos frames se espera a que aparezca el ancla. Un cambio de pestaña tarda uno o dos. */
 const REINTENTOS = 8
+/**
+ * Cada cuánto se vuelve a medir mientras el globo está abierto.
+ *
+ * 🔴 **Lo pidió un defecto visto en prod**: el último paso vive en «Cuenta del cadete», que trae sus
+ * datos por fetch. Se medía el botón, llegaban los datos, la tabla empujaba todo para abajo **y el
+ * recorte quedaba arriba, sobre un rectángulo vacío**. No hubo scroll ni resize, así que ningún
+ * listener se enteró. Medir seguido es la única forma que no depende de adivinar qué va a mover el
+ * layout — y no cuesta nada: `getBoundingClientRect` sobre un elemento, y sólo re-renderiza si la
+ * caja cambió de verdad.
+ */
+const CADA_MS = 200
 
 function buscar(ancla: string): HTMLElement | null {
   if (typeof document === 'undefined') return null
@@ -45,6 +56,16 @@ function sinAnimacion(): boolean {
 }
 
 type Caja = { top: number; left: number; ancho: number; alto: number }
+
+/** Redondeada: el rect trae subpíxeles que oscilan solos y harían re-renderizar sin que se mueva nada. */
+function cajaDe(el: HTMLElement): Caja {
+  const b = el.getBoundingClientRect()
+  return { top: Math.round(b.top), left: Math.round(b.left), ancho: Math.round(b.width), alto: Math.round(b.height) }
+}
+
+function mismaCaja(a: Caja | null, b: Caja): boolean {
+  return !!a && a.top === b.top && a.left === b.left && a.ancho === b.ancho && a.alto === b.alto
+}
 
 export function Guia() {
   const { pasos, paso, irAPestania, ir } = useGuia()
@@ -60,8 +81,8 @@ export function Guia() {
     setResuelto(r)
     const el = buscar(r.ancla)
     if (!el) return false
-    const b = el.getBoundingClientRect()
-    setCaja({ top: b.top, left: b.left, ancho: b.width, alto: b.height })
+    const b = cajaDe(el)
+    setCaja((prev) => (mismaCaja(prev, b) ? prev : b))
     return true
   }, [actual])
 
@@ -108,10 +129,14 @@ export function Guia() {
     document.addEventListener('keydown', onKey)
     window.addEventListener('scroll', remedir, true)
     window.addEventListener('resize', remedir)
+    // El latido: lo que mueve el layout no siempre avisa (datos que llegan por fetch, una card que
+    // aparece, una fila que se recarga). Ver `CADA_MS`.
+    const latido = window.setInterval(remedir, CADA_MS)
     return () => {
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', remedir, true)
       window.removeEventListener('resize', remedir)
+      window.clearInterval(latido)
     }
   }, [paso, medir, ir])
 

@@ -9,6 +9,14 @@ export type TabItem = {
   disabled?: boolean
   badge?: React.ReactNode
   hint?: string
+  /**
+   * `data-guia` de esta pestaña, para que el tour de «Cómo se usa» pueda pararse encima.
+   *
+   * 🔑 La pestaña es el ancla ESTABLE de todo lo que vive adentro de ella: la tabla desaparece con
+   * la lista vacía y media barra de botones sólo existe en algún estado, pero la pestaña está
+   * siempre. Ver `lib/guia/core.ts`.
+   */
+  guia?: string
 }
 
 export type TabsProps = {
@@ -47,7 +55,7 @@ export function Tabs({ items, value, onChange, variant = 'pill', style }: TabsPr
         }
         return (
           <button
-            key={it.key} role="tab" aria-selected={active} disabled={off} title={it.hint}
+            key={it.key} role="tab" aria-selected={active} disabled={off} title={it.hint} data-guia={it.guia}
             onClick={() => !off && onChange(it.key)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(variant === 'pill' ? pill : underline) }}
           >
