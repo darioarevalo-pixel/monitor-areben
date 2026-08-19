@@ -52,6 +52,18 @@ export type Supuestos = {
   tnTransf: number
   /** Comisión de la pasarela por transferencia, en %. */
   pasTransf: number
+  /** Derecho de Registro e Inspección (municipal), en %. Nace en 0: ver el comentario del core. */
+  drei: number
+  /**
+   * Lo que la tienda absorbe de envío por pedido, **con IVA** y **por PEDIDO, no por unidad**.
+   * De la ganancia sale su neto; de la caja, entero. Cero si el cliente lo paga o si retira.
+   */
+  envio: number
+  /**
+   * 🔑 Si el IVA débito **se netea contra un saldo a favor** en vez de salir en efectivo. Prendido
+   * habilita el segundo techo, el de caja. ⛔ El recupero no es ganancia: va en su propio renglón.
+   */
+  saldoIva: boolean
   /** Unidades por pedido. Del por-unidad al por-compra, que es lo que Meta cobra. */
   unidades: number
   /** Qué parte de la contribución se le entrega a la pauta, en %. El resto es ganancia. */
@@ -74,6 +86,7 @@ export type Canal = {
   producto: number
   iibb: number
   cheque: number
+  drei: number
   /** Tienda Nube + pasarela. */
   comision: number
   /** Lo que queda para pauta y ganancia. */
@@ -92,16 +105,32 @@ export type Rentabilidad = {
   unidad: Canal
   /** Lo que factura una compra. Es el ticket contra el que Meta calcula el ROAS. */
   ticket: number
-  /** Lo que deja una compra para pauta y ganancia. */
+  /** Lo que deja una compra para pauta y ganancia. **Es la GANANCIA**, sin el recupero de saldo. */
   contribPedido: number
+  /**
+   * El IVA débito que se netea contra el saldo a favor en vez de pagarse. **No es ganancia**: es
+   * plata propia que se descongela, de un stock finito, y la libera cualquier venta facturada.
+   * Cero cuando `saldoIva` está apagado.
+   */
+  recuperoPedido: number
+  /** Ganancia + recupero: la caja que entra por la compra. Igual a `contribPedido` sin saldo. */
+  cajaPedido: number
   /** La proporción del ticket que sobrevive, en %. */
   margenPct: number
+  /** Lo mismo, contando el recupero. */
+  margenCajaPct: number
   /** El ROAS donde la pauta se come toda la ganancia. Debajo de acá se pierde plata. */
   roasBE: number
-  /** 🔑 El semáforo: lo máximo que se puede pagar por una compra. */
+  /** El de equilibrio contando el recupero. Es el más bajo de los dos. */
+  roasBECaja: number
+  /** 🔑 El semáforo: lo máximo que se puede pagar por una compra. Es el de GANANCIA, a propósito. */
   costoMax: number
+  /** El techo si además se cuenta el recupero. Sirve para un empujón con fecha, no como regla. */
+  costoMaxCaja: number
   /** El ROAS que corresponde a ese techo. Es objetivo, no piso. */
   roasObj: number
+  /** El objetivo del techo de caja. */
+  roasObjCaja: number
   /** Cuántas veces entra el costo de hoy en el techo. Es el aire que hay para escalar. */
   aire: number
   /** El presupuesto diario que sostiene el objetivo de ventas al precio del techo. */

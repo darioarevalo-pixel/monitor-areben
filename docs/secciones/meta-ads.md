@@ -212,6 +212,31 @@ Y tres que aparecieron **usándolo**, no leyéndolo:
   `meta_ads_rentabilidad`: 1 (sólo BDI; Zattia y Stunned muestran los defaults prestados) ·
   `meta_ads_favorito`, `meta_ads_etapa` y `meta_ads_ideas`: 0.
 
+## Rentabilidad: DREI, envío y saldo de IVA (19-ago-2026)
+
+Los 19 supuestos pasaron a 22. Los tres nuevos salieron de medir la economía online de **Zattia**,
+que el modelo de las fundas no podía expresar:
+
+- **`drei`** — el municipal de Rosario, 0,75%. Sale de la contribución como el IIBB.
+- **`envio`** — lo que la tienda absorbe por **PEDIDO** (⛔ no por unidad: no se multiplica por
+  `unidades`). Se carga **con IVA**, y 🔑 **de la ganancia sale su NETO** —el crédito se descuenta
+  como cualquier compra con factura— **pero de la caja sale entero**, porque con saldo a favor que
+  no se consume ese crédito sólo engorda el pozo.
+- **`saldoIva`** — si el IVA débito **se netea contra un saldo a favor** en vez de pagarse. Prendido
+  aparece un segundo techo, `costoMaxCaja`, y `recuperoPedido` deja de ser 0.
+
+🔴 **El recupero NO se suma adentro de `contribPedido`, y eso es deliberado.** No es ganancia: es
+plata propia que se descongela. No se repite (el saldo es un stock finito), no depende de la calidad
+de la venta (una vendida a pérdida libera el mismo IVA) y **no la genera la pauta** (la libera igual
+una venta del local con tarjeta). ⇒ **`costoMax` —el del semáforo— sigue siendo el de GANANCIA**;
+`costoMaxCaja` es un techo extra para un empujón deliberado y con fecha. `escenariosDeFreno` y
+`proyeccionStock` siguen colgando de la ganancia, a propósito.
+
+⚠️ **Los tres nacen NEUTROS (`0`, `0`, `false`) y no es una omisión.** `normalizar()` arranca en
+`DEFAULTS` y una clave que la fila guardada no tiene se queda con el default ⇒ **un default ≠ 0 le
+cambiaría el techo, en silencio, a toda línea ya guardada**. El primer test del bloque nuevo de
+`tests/meta-ads-rentabilidad.test.ts` clava que la fila de BDI sigue dando **$9.101**.
+
 ## Pendiente
 
 - ▶️ 🔴 **Cargar los umbrales y crear las reglas** mirando el calibrador. Son 10 minutos y es lo que

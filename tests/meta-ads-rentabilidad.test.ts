@@ -222,3 +222,107 @@ describe('normalizar — lo que se guarda no puede ser cualquier cosa', () => {
     expect(normalizar(una)).toEqual(una)
   })
 })
+
+/**
+ * Los tres renglones que entraron el 19-ago-2026 para poder cargar la economía de ZATTIA: DREI, el
+ * costo de envío y el saldo de IVA a favor.
+ *
+ * 🔑 **El primero de estos tests es el más importante y no habla de ninguno de los tres**: nacen
+ * neutros porque `normalizar()` arranca en `DEFAULTS` y una clave que la fila guardada no tiene se
+ * queda con el default. Un default ≠ 0 le habría cambiado el techo **en silencio** a BDI, que tiene
+ * fila desde el 13-ago. Si alguien mueve esos defaults, este test lo caza antes que la pantalla.
+ */
+describe('DREI, envío y saldo de IVA', () => {
+  /** La fila que Bruno guardó el 13-ago-2026, tal cual está en `meta_ads_rentabilidad`. */
+  const FILA_BDI = {
+    iva: 21, mix: 50, iibb: 4, costo: 1700, raspa: 12.5, stock: 11000, cheque: 1.2, precio: 14490,
+    transf: 10, reparto: 50, acumulan: true, costoHoy: 2472, tnTransf: 0, unidades: 2.6,
+    usaRaspa: 100, pasTransf: 1, tnTarjeta: 1, ventasDia: 100, pasTarjeta: 8,
+  }
+
+  it('🔴 los tres nacen neutros: la fila guardada de BDI sigue dando el mismo techo', () => {
+    const r = calcularRentabilidad(normalizar(FILA_BDI))
+    expect(centavos(r.costoMax)).toBe(9101)
+    expect(r.recuperoPedido).toBe(0)
+    expect(r.cajaPedido).toBe(r.contribPedido)
+    expect(r.roasBECaja).toBe(r.roasBE)
+  })
+
+  it('el DREI sale de la contribución, y en las dos puntas del mix', () => {
+    const con = calcularRentabilidad({ ...DEFAULTS, drei: 0.75 })
+    for (const c of [con.tarjeta, con.transferencia]) {
+      expect(centavos(c.drei)).toBe(centavos(c.bruto * 0.0075))
+      expect(c.contrib).toBeCloseTo(c.neto - c.producto - c.iibb - c.cheque - c.drei - c.comision, 6)
+    }
+    expect(con.contribPedido).toBeLessThan(calcularRentabilidad(DEFAULTS).contribPedido)
+  })
+
+  it('el envío es del PEDIDO y no de la unidad: no se multiplica por las unidades', () => {
+    const una = calcularRentabilidad({ ...DEFAULTS, envio: 7710, unidades: 1 })
+    const cinco = calcularRentabilidad({ ...DEFAULTS, envio: 7710, unidades: 5 })
+    const baseUna = calcularRentabilidad({ ...DEFAULTS, unidades: 1 })
+    const baseCinco = calcularRentabilidad({ ...DEFAULTS, unidades: 5 })
+    // El mismo descuento en las dos, aunque una tenga cinco veces más unidades.
+    expect(baseUna.contribPedido - una.contribPedido).toBeCloseTo(baseCinco.contribPedido - cinco.contribPedido, 6)
+  })
+
+  it('de la GANANCIA el envío sale NETO, porque se factura con IVA', () => {
+    const sin = calcularRentabilidad(DEFAULTS)
+    const con = calcularRentabilidad({ ...DEFAULTS, envio: 7710 })
+    expect(sin.contribPedido - con.contribPedido).toBeCloseTo(7710 / 1.21, 6)
+  })
+
+  it('de la CAJA sale ENTERO: con saldo a favor el crédito del envío no vuelve nunca', () => {
+    const con = calcularRentabilidad({ ...DEFAULTS, envio: 7710, saldoIva: true })
+    const sinEnvio = calcularRentabilidad({ ...DEFAULTS, saldoIva: true })
+    expect(sinEnvio.cajaPedido - con.cajaPedido).toBeCloseTo(7710, 6)
+    // Y la diferencia entre las dos lecturas es exactamente el IVA del envío.
+    expect((sinEnvio.contribPedido - con.contribPedido) - (sinEnvio.cajaPedido - con.cajaPedido))
+      .toBeCloseTo(7710 / 1.21 - 7710, 6)
+  })
+
+  it('el recupero es el IVA débito del ticket, y NO entra en la ganancia', () => {
+    const s: Supuestos = { ...DEFAULTS, saldoIva: true }
+    const con = calcularRentabilidad(s)
+    const sin = calcularRentabilidad(DEFAULTS)
+    expect(con.recuperoPedido).toBeCloseTo(con.ticket * (21 / 121), 6)
+    // 🔑 La ganancia y el techo del semáforo NO se mueven: el recupero vive en su propio renglón.
+    expect(con.contribPedido).toBeCloseTo(sin.contribPedido, 6)
+    expect(con.costoMax).toBeCloseTo(sin.costoMax, 6)
+    // Lo que aparece es el segundo techo, y es más alto.
+    expect(con.cajaPedido).toBeCloseTo(con.contribPedido + con.recuperoPedido, 6)
+    expect(con.costoMaxCaja).toBeGreaterThan(con.costoMax)
+    expect(con.roasBECaja).toBeLessThan(con.roasBE)
+  })
+
+  it('apagado, el recupero es cero y las dos lecturas son la misma', () => {
+    const r = calcularRentabilidad({ ...DEFAULTS, saldoIva: false, envio: 7710 })
+    expect(r.recuperoPedido).toBe(0)
+    expect(r.cajaPedido).toBeCloseTo(r.contribPedido, 6)
+    expect(r.costoMaxCaja).toBeCloseTo(r.costoMax, 6)
+  })
+
+  it('`saldoIva` sólo cambia con un booleano de verdad, como `acumulan`', () => {
+    expect(normalizar({ saldoIva: true }).saldoIva).toBe(true)
+    expect(normalizar({ saldoIva: 'true' }).saldoIva).toBe(DEFAULTS.saldoIva)
+    expect(normalizar({ saldoIva: 1 }).saldoIva).toBe(DEFAULTS.saldoIva)
+  })
+
+  it('la economía online de Zattia, cargada entera, da los dos números medidos', () => {
+    const zattia: Supuestos = {
+      ...DEFAULTS,
+      precio: 30430, raspa: 0, usaRaspa: 0, transf: 10, acumulan: false, mix: 50,
+      costo: 14657, iva: 21, iibb: 3, drei: 0.75, cheque: 1.2,
+      tnTarjeta: 0, pasTarjeta: 9, tnTransf: 0, pasTransf: 1,
+      unidades: 1.59, envio: 0, saldoIva: true, reparto: 50, costoHoy: 1229,
+    }
+    const r = calcularRentabilidad(zattia)
+    // Ganancia ~$10.251 y caja ~$18.228 por pedido, con el ticket de $45.964 de la mezcla 50/50.
+    expect(centavos(r.ticket)).toBeGreaterThan(45000)
+    expect(centavos(r.ticket)).toBeLessThan(47000)
+    expect(r.roasBE).toBeGreaterThan(4.2)
+    expect(r.roasBE).toBeLessThan(4.8)
+    expect(r.roasBECaja).toBeGreaterThan(2.3)
+    expect(r.roasBECaja).toBeLessThan(2.7)
+  })
+})

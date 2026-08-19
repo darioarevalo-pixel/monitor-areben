@@ -111,6 +111,14 @@ function DeUnaLinea({ laLinea, visibles, setLinea }: {
           sub={<>Hoy pagás {plata(s.costoHoy)} · <b>{decimal(r.aire)}× de aire</b></>}
           info={<InfoPopover titulo="Techo por compra">El semáforo. Es lo máximo que se puede pagar por una compra sin comerse más ganancia de la que se decidió entregarle a la pauta.</InfoPopover>}
         />
+        {s.saldoIva && (
+          <KpiCard
+            label="Techo con el saldo"
+            value={plata(r.costoMaxCaja)}
+            sub={<>Equilibrio de caja: <b>{equis(r.roasBECaja)}</b></>}
+            info={<InfoPopover titulo="Techo con el saldo">Suma el IVA que se netea contra el saldo a favor en vez de pagarse. 🔴 <b>No es ganancia</b>: es plata propia que se descongela, de un stock finito, y la libera cualquier venta facturada. Sirve para un empujón deliberado y con fecha; <b>la regla permanente es el techo de arriba</b>.</InfoPopover>}
+          />
+        )}
         <KpiCard
           label="ROAS objetivo"
           value={equis(r.roasObj)}
@@ -256,15 +264,28 @@ function Regla({ r }: { r: Resultado }) {
 /** De lo que paga el cliente a lo que queda: la cascada de una compra entera. */
 function Cascada({ s, r }: { s: Supuestos; r: Resultado }) {
   const u = s.unidades
-  const filas: Array<[string, string, number, 'subtotal' | 'resta' | 'total']> = [
+  const filas: ReadonlyArray<readonly [string, string, number, 'subtotal' | 'resta' | 'total']> = [
     ['Ingreso bruto', `${decimal(u)} unidades con descuento`, r.unidad.bruto * u, 'subtotal'],
     ['IVA', `${decimal(s.iva)}%`, -r.unidad.iva * u, 'resta'],
     ['Ingreso neto', '', r.unidad.neto * u, 'subtotal'],
     ['Producto', `${decimal(u)} × ${plata(s.costo)} sin IVA`, -r.unidad.producto * u, 'resta'],
     ['Ingresos Brutos', `${decimal(s.iibb)}%`, -r.unidad.iibb * u, 'resta'],
+    ...(s.drei > 0 ? [['DREI', `${decimal(s.drei)}%`, -r.unidad.drei * u, 'resta'] as const] : []),
     ['Impuesto al cheque', `${decimal(s.cheque)}%`, -r.unidad.cheque * u, 'resta'],
     ['Comisiones', 'Tienda Nube + pasarela, según el mix', -r.unidad.comision * u, 'resta'],
+    // El envío es del pedido y se factura con IVA: de la ganancia sale su neto.
+    ...(s.envio > 0
+      ? [['Envío', `${plata(s.envio)} con IVA, por pedido`, -(s.envio / (1 + s.iva / 100)), 'resta'] as const]
+      : []),
     ['Queda para pauta y ganancia', '', r.contribPedido, 'total'],
+    // 🔑 El recupero va DESPUÉS del total de ganancia, nunca sumado adentro: no lo generó la venta.
+    ...(s.saldoIva
+      ? ([
+          ['El IVA vuelve', 'se netea contra el saldo a favor', r.recuperoPedido, 'resta'],
+          ...(s.envio > 0 ? [['Envío, lo que falta', 'de la caja sale entero', -(s.envio - s.envio / (1 + s.iva / 100)), 'resta'] as const] : []),
+          ['Caja que entra', 'ganancia + recupero', r.cajaPedido, 'total'],
+        ] as const)
+      : []),
   ]
 
   return (

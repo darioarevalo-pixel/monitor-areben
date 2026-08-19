@@ -137,6 +137,7 @@ export function PanelesDeSupuestos({ s, cambiar, soloLectura = false }: {
         <Campo label="Costo del producto" pista="sin IVA">{num('costo', { step: 50, prefix: '$', width: 116 })}</Campo>
         <Campo label="IVA">{num('iva', { max: 100, step: 0.5, prefix: '%' })}</Campo>
         <Campo label="Ingresos Brutos" pista="Santa Fe">{num('iibb', { max: 100, prefix: '%' })}</Campo>
+        <Campo label="DREI" pista="municipal">{num('drei', { max: 100, prefix: '%' })}</Campo>
         <Campo label="Impuesto al cheque">{num('cheque', { max: 100, prefix: '%' })}</Campo>
         <div style={{ ...titulo, fontSize: font.xs, marginTop: space[1] }}>Con tarjeta</div>
         <Campo label="Tienda Nube">{num('tnTarjeta', { max: 100, prefix: '%' })}</Campo>
@@ -156,9 +157,23 @@ export function PanelesDeSupuestos({ s, cambiar, soloLectura = false }: {
           label="De la ganancia, a la pauta" valor={`${Math.round(s.reparto)}%`} min={10} max={100} step={5}
           value={s.reparto} izq="conservador" der="al hueso" onChange={(n) => cambiar('reparto', n)} soloLectura={soloLectura}
         />
+        <Campo label="Envío que absorbe la tienda" pista="por pedido, con IVA">{num('envio', { step: 100, prefix: '$', width: 116 })}</Campo>
         <Campo label="Ventas por día" pista="el objetivo">{num('ventasDia', { step: 5, width: 116 })}</Campo>
         <Campo label="Stock" pista="unidades">{num('stock', { step: 100, width: 116 })}</Campo>
         <Campo label="Lo que pagás hoy" pista="por compra">{num('costoHoy', { step: 50, prefix: '$', width: 116 })}</Campo>
+      </div>
+
+      <div style={panel}>
+        <div style={titulo}>Saldo de IVA a favor</div>
+        <Campo label="¿El IVA se netea contra el saldo?" pista="en vez de pagarse">
+          <Conmutador si={s.saldoIva} onChange={(v) => cambiar('saldoIva', v)} soloLectura={soloLectura} />
+        </Campo>
+        <p style={{ fontSize: font.xs, color: color.mut2, margin: 0, lineHeight: 1.5 }}>
+          Prendelo sólo si hay saldo a favor que no se consume. Cuando está prendido aparece un
+          segundo techo, el de <b>caja</b>. ⛔ El recupero <b>no es ganancia</b>: es plata propia que
+          se descongela, de un stock finito, y la libera cualquier venta facturada — también una del
+          local con tarjeta. <b>La regla permanente es el techo de ganancia.</b>
+        </p>
       </div>
     </div>
   )
