@@ -669,6 +669,7 @@ export {
   num,
   ORIGENES,
   pagoAlLocal,
+  parcheAlSacarDelDia,
   rotuloDeSaldo,
   selloDeEntrega,
   siguienteEstado,

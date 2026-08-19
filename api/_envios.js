@@ -61,6 +61,7 @@ import {
   FILTRO_BANDEJA,
   montoDelMovimiento,
   num,
+  parcheAlSacarDelDia,
   TURNOS,
   validarEnvio,
   validarMovimiento,
@@ -329,7 +330,18 @@ export default async function handler(req, res) {
 
       let parche;
       if (b.action === 'desagendar') {
-        parche = { fecha: null, turno: null };
+        // 🔴 **Se lee antes de escribir por lo mismo que `agendar`**: el parche depende del estado
+        // en el que está la fila. Un `entregado` que se saca del día cae en la bandeja —el filtro
+        // pregunta `fecha is null` y nada más— y ahí no tiene un solo botón encima, porque los
+        // cerrados no dibujan el de estado ni llevan el cartel de «volvió». Quién se reabre y quién
+        // no lo decide `parcheAlSacarDelDia`, que es donde se puede afirmar.
+        const { data: actual, error: eLeer } = await supabase
+          .from('envios_reparto')
+          .select('estado')
+          .eq('id', id)
+          .maybeSingle();
+        if (eLeer) throw new Error(eLeer.message);
+        parche = parcheAlSacarDelDia(actual);
       } else {
         if (!esFechaIso(b.fecha)) return res.status(400).json({ error: 'Falta el día del reparto (YYYY-MM-DD).' });
         if (!TURNOS.includes(b.turno)) return res.status(400).json({ error: `El turno tiene que ser ${TURNOS.join(' o ')}.` });

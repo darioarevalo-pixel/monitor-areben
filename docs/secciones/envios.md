@@ -109,6 +109,19 @@ para `CAMPOS`, `CAMPOS_CUENTA` y `FILTRO_BANDEJA`: viven ahí porque en el handl
 - 🔑 **El día del reparto lo confirma el CLIENTE, no la orden.** Las órdenes de TN caen en la bandeja
   «Sin fecha», que **no es una bandeja de entrada: es la lista de trabajo** (`fecha is null` OR
   `estado='no_entregado'`). `fecha` y `turno` van los dos o ninguno (check `envios_fecha_turno_juntos`).
+- 🔴 **Sacar del día a un `entregado` lo REABRE; a un `no_entregado`, no** (19-ago-2026,
+  `parcheAlSacarDelDia` en `reglas.core.js`). El filtro de la bandeja pregunta `fecha is null` **sin
+  mirar el estado**, así que un cerrado desagendado caía ahí igual — y ahí no tenía un solo verbo
+  encima: los cerrados no dibujan el botón de estado (`siguienteEstado` devuelve `null`) y el cartel
+  de «volvió» es sólo de `no_entregado`. Quedaba una fila que la única forma de sacar era **borrarla**.
+  ⛔ **Los dos cerrados se parecen y son opuestos**: el `no_entregado` vive en la bandeja a propósito,
+  con su cartel y con el rastro que `agendar` le apila (`conIntentoFallido`); reabrirlo borra los dos,
+  y ése es el mutante que sale solo al escribir `ESTADOS_CERRADOS.includes(...)` en vez del
+  `=== 'entregado'`. 🔑 **Se va también `entregado_en` y `cobrado`**, por la misma regla que rige
+  «Corregir»: una hora exacta de entrega sobre un envío que se sacó del día es el registro preciso de
+  algo que no pasó. El handler **lee la fila antes de escribir**, igual que `agendar`, y el test que
+  lo obliga es texto contra texto (`tests/envios-desagendar-handler.test.ts`): la función pura puede
+  estar perfecta y el handler seguir armando el parche a mano, con 200 y la bandeja igual de rota.
 - 🔑 **La grilla de turnos NO se valida en el servidor**: la pantalla ofrece los que existen y avisa
   si se fuerza otro. Un envío especial un sábado tiene que poder salir sin tocar código.
 - 🏁 **«Cerrar el día» SE SACÓ** (17-ago-2026, lo pidió Bruno después de preguntarme para qué servía).
@@ -479,11 +492,25 @@ coordenada de pantalla.
   vale**: se rehizo hasta verlo aplicado en el archivo.
   ✅ **Mirado en PDF con `qlmanage`**, seis casos: el único arreglo de aire —el autor pegado a una
   nota de tres renglones, que se leía como su cuarto renglón— **no lo dijo ningún test**.
-- ▶️ 🔴 **Imprimir con la térmica del local: lo único que falta de los dos papeles.** El ticket y el
-  recibo se miraron página por página con `qlmanage` (⚠️ `pdftoppm` no está instalado), pero
-  **ninguno salió nunca por la impresora real**: falta ver el encuadre, si el negro del PAGADO sale
-  limpio en papel térmico, y dónde corta la cuchilla. ⚠️ **El botón no se puede apretar desde el
-  Chrome automatizado**: `imprimirPdf` hace `pdf.autoPrint()`, que mata el puente de la extensión.
+- 🔴 🔑 **EL TICKET SALIÓ POR LA TÉRMICA Y EL ENCUADRE ESTABA MAL — y NO es del archivo**
+  (19-ago-2026, el primero que se imprimió de verdad). Salió con **~15 cm de papel en blanco ARRIBA**
+  del texto. La página que arma `armarTicket` mide **80 × 82 mm** (`Math.max(MIN, y + COLA)`, y para
+  el caso mediano —marca, nº, dirección de un renglón, nombre, teléfono, bloque PAGADO— el dibujo
+  termina a los **61,6 mm**). 🔑 **El oráculo que descarta el archivo es la ESCALA**: «PAGADO» son
+  26 pt ≈ 6,4 mm y en la foto mide 6,3 mm sobre los 80 mm del rollo ⇒ **imprime 1:1, sin escalar**, o
+  sea que ese blanco es papel que el trabajo pidió, no un PDF grande. ⇒ **el que elige el tamaño de
+  hoja es Chrome**, no nosotros: `imprimirPdf` hace `pdf.autoPrint()` sobre un iframe oculto y el
+  diálogo sale con el papel que el sistema tenga por default para esa impresora, que en las térmicas
+  de 80 mm suele ser **80 × 297 mm**. Se corrige en **Más opciones → Tamaño del papel** (rollo /
+  continuo, márgenes en Ninguno, escala 100 %), que Chrome guarda **por impresora y sólo para
+  Chrome** ⇒ ⛔ **no toca la configuración del sistema de ventas, que usa la MISMA impresora** por
+  ESC/POS directo y por eso sí sale bien. ⚠️ **El botón no se puede apretar desde el Chrome
+  automatizado**: `pdf.autoPrint()` mata el puente de la extensión ⇒ **esto lo verifica una persona
+  con el papel en la mano**.
+- ▶️ Del papel quedan sin ver: si el negro del PAGADO sale limpio en térmico y dónde corta la
+  cuchilla. Y **todo ticket PAGADO lleva ~2 cm de cola en blanco** por el piso de `MIN = 82`, que
+  existe porque jsPDF acuesta la página sola si el formato sale más ancho que alto: sacarlo pide
+  manejar ese volteo, y **`lib/rollo80.ts` no tiene hoy ningún test de geometría propio**.
 - ✅ **El agujero de ida y vuelta, CERRADO** (17-ago-2026). Se abrió como «si la clienta paga después
   no hay forma de sacar el "no cobró"», y **la pregunta a Bruno lo dio vuelta**: como un pedido no se
   entrega impago, ese tilde nunca significó una deuda pendiente, así que **no había nada que saldar —

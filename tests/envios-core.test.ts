@@ -33,6 +33,7 @@ import {
   CAMPOS_MOVIMIENTO,
   claseDelMovimiento,
   pagoAlLocal,
+  parcheAlSacarDelDia,
   quienCobro,
   valorDeCobro,
   envioNuevoAMano,
@@ -865,6 +866,57 @@ describe('el camino del paquete', () => {
 describe('🔴 la bandeja trae también lo que volvió', () => {
   it('el filtro pregunta por las dos cosas', () => {
     expect(FILTRO_BANDEJA).toBe('fecha.is.null,estado.eq.no_entregado')
+  })
+})
+
+/**
+ * Sacar del día: la otra punta de la bandeja, y la que dejaba filas presas.
+ *
+ * 🔴 El filtro de arriba pregunta `fecha is null` **sin mirar el estado**, así que un `entregado`
+ * desagendado cae en la bandeja igual. Y ahí no tiene un solo verbo encima: `siguienteEstado`
+ * devuelve `null` para los cerrados —la pantalla no dibuja el botón— y el cartel de «volvió» es
+ * sólo de `no_entregado`. Quedaba una fila que la única forma de sacar era borrarla.
+ *
+ * Los dos cerrados se parecen y son opuestos, y por eso hay un test para cada uno.
+ */
+describe('🔴 sacar del día reabre al entregado, y sólo a él', () => {
+  it('siempre se van la fecha y el turno', () => {
+    const p = parcheAlSacarDelDia(con({ estado: 'preparado' }))
+    expect(p.fecha).toBeNull()
+    expect(p.turno).toBeNull()
+  })
+
+  it('🔴 un entregado vuelve a pendiente: en la bandeja tiene que poder moverse', () => {
+    const p = parcheAlSacarDelDia(con({ estado: 'entregado' }))
+    expect(p.estado).toBe('pendiente')
+  })
+
+  // 🔑 Una hora exacta de entrega sobre un envío que se sacó del día es el registro preciso de algo
+  // que no pasó. Misma regla que «Corregir»: volver atrás borra el sello.
+  it('🔴 y se lleva el sello de entrega y el tilde de cobro', () => {
+    const p = parcheAlSacarDelDia(con({ estado: 'entregado', entregado_en: '2026-08-19T13:45:33Z', cobrado: true }))
+    expect(p.entregado_en).toBeNull()
+    expect(p.cobrado).toBeNull()
+  })
+
+  // 🔴 EL test. El mutante que reabre los dos cerrados de una —`ESTADOS_CERRADOS.includes(...)` en
+  // vez del `=== 'entregado'`— es el que sale solo al escribirlo, y da verde en el caso de arriba.
+  // Un `no_entregado` reabierto pierde el cartel de «volvió» y `agendar` deja de apilar su intento:
+  // la bandeja lo muestra como un pedido nuevo y la pregunta «cuántas entregas fallan» se apaga.
+  it('🔴 un no_entregado NO se reabre: ahí vive a propósito, con su cartel y su rastro', () => {
+    const p = parcheAlSacarDelDia(con({ estado: 'no_entregado' }))
+    expect(p.estado).toBeUndefined()
+    expect(p).toEqual({ fecha: null, turno: null })
+  })
+
+  it('a un pendiente no se le toca nada más', () => {
+    expect(parcheAlSacarDelDia(con({ estado: 'pendiente' }))).toEqual({ fecha: null, turno: null })
+  })
+
+  // El handler la llama con lo que devuelve la lectura, y esa lectura puede venir vacía si la fila
+  // se borró en el medio. Sin esto el `update` ni llega: tira antes.
+  it('una fila que ya no está no rompe', () => {
+    expect(parcheAlSacarDelDia(null)).toEqual({ fecha: null, turno: null })
   })
 })
 
