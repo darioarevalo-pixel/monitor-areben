@@ -40,9 +40,21 @@ export async function recalcularCategorias(store: Marca): Promise<CatRecalc> {
   const r = await apiFetch(catUrl(store))
   return r.json()
 }
-/** Aplica el diff calculado en la tienda EN VIVO. Port de tncatAplicar. */
+/**
+ * Aplica el diff calculado en la tienda EN VIVO. Port de tncatAplicar.
+ *
+ * 🔑 Manda `accion:'auto-modelos'` aunque el servidor todavía acepte el POST pelado. El
+ * POST sin `accion` era el ÚNICO verbo de este endpoint sin nombre, y por eso era también
+ * el destino al que caía cualquier acción que `bdi-catalogo` no conociera —así se
+ * recategorizó Zattia entera el 13-ago-2026—. Con la acción puesta, el día que el servidor
+ * saque el fallback del POST pelado esta llamada ya está del lado correcto.
+ */
 export async function aplicarCategorias(store: Marca): Promise<CatAplicar> {
-  const r = await apiFetch(catUrl(store), { method: 'POST' })
+  const r = await apiFetch(catUrl(store), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accion: 'auto-modelos' }),
+  })
   return r.json()
 }
 
