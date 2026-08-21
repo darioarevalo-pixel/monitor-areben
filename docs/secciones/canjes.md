@@ -17,6 +17,7 @@ Es la sección más grande del monitor (~18.700 líneas con tests) y **cruza cin
 | servidor | `api/_canjes.js` (**2.227**) y `api/_canje-portal.js`, por `api/postventa.js?recurso=canjes` y `?recurso=canje` |
 | la llave del portal | `api/_canje-token.js` — qué abre un token. **La comparten el portal y `api/blob-upload.js`** |
 | el contenido | `components/canjes/PortalContenido.tsx` + `useSubirContenido.ts` (ella) · `ContenidoDeElla.tsx` (el equipo) |
+| el archivo en Drive | `lib/drive/subir.ts` (el browser sube) · `lib/canjes/drive.ts` (los nombres) · acción `evidencia-archivada` |
 | mostrador | `components/cupones/CanjesLocal.tsx` — la pestaña del local, adentro de **Cupones** |
 | base | 8 tablas `canje_*` en la base de **BDI, para las tres marcas** (`sql/migrate-canjes.sql`) |
 | tests | 8 archivos `tests/canje*.test.ts`, ~3.300 líneas |
@@ -134,6 +135,40 @@ no re-preguntarlas.**
   los cuales 20 modelos con stock completo y **sin ninguna categoría**. Por eso los ocultos son un
   filtro propio y «Revisar el stock» manda por el **stock**, no por la publicación.
 
+## El contenido: el buzón es el Blob, el archivo es Drive
+
+Dos tandas del 21-ago-2026, y la segunda **borra**. Leer esto antes de tocar `ContenidoDeElla.tsx`,
+`lib/drive/subir.ts` o la acción `evidencia-archivada` de `api/_canjes.js`.
+
+- **Ella sube desde su link** (`PortalContenido` + `useSubirContenido`) y el archivo cae en el Blob,
+  en `canjes/<id>/`. Antes se le pedía una carpeta de Drive y **no funcionaba**: permisos de Google,
+  no tener cuenta, no saber usarlo. Terminaba llegando por WhatsApp, comprimido.
+- **El equipo lo manda a Drive** desde la ficha, y **eso borra la copia del Blob**: no es un
+  respaldo, es una mudanza. Después de eso `archivo_url` apunta a una URL muerta a propósito
+  —queda como registro de por dónde entró— y el link de `drive_url` es la única forma de llegar al
+  material. Por eso el servidor **anota antes de borrar**: al revés, un update que falla después de
+  un borrado que salió bien pierde el archivo sin que nadie se entere.
+- 🔴 **Los bytes NO pasan por el servidor.** Van del Blob al browser y del browser a Drive, con la
+  cuenta de Google de quien apreta (scope `drive.file`, el mismo cliente OAuth que trae piezas de
+  Meta). ⛔ Desde el servidor no se puede: una service account no tiene Drive propio, y un video no
+  entra por el body de 4,5 MB de una función.
+- 🔑 **Medido el 21-ago-2026 contra un Drive real, porque todo esto podía no poderse**: un archivo de
+  más de 5 MB obliga a la subida por partes, que devuelve la dirección de la sesión en un encabezado
+  —y el navegador **sí lo puede leer** desde nuestro origen (probado con 6 MB, subidos y borrados)—;
+  **escribir adentro de una carpeta ajena funciona con sólo saber su id**, sin pasar por el Picker; y
+  el Blob deja leer sus bytes desde el monitor, que es lo que permite mostrar el avance.
+- 🔴 **La carpeta se guarda en el canje (`drive_carpeta_id`), no se busca por nombre.** Google da el
+  permiso **por archivo y por persona**: la subcarpeta que creó la sesión de uno no la ve la app de
+  otro, así que buscarla por nombre haría una gemela por cada persona que archive.
+- **Los nombres los decidió Bruno** y viven en `lib/canjes/drive.ts`: subcarpeta
+  `2026-08-21 · @lucia.mendez · C-0064` (la fecha es la del **primer archivo que dejó ella**, para
+  que Drive las ordene por orden de llegada) y adentro `01-IMG_4821.jpg`, numerado y con el nombre
+  que le puso el teléfono de ella. ⚠️ Vercel Blob le pega un sufijo de **30 caracteres al azar**
+  antes de la extensión y `nombreOriginal` se lo saca — sólo si calza exacto.
+- 🔴 **El link de Drive de la marca ya no viaja al portal.** Los dos carteles que mandaban a la
+  creadora a la carpeta se sacaron: esa carpeta es el archivo **interno** y el portal está abierto a
+  internet. `tests/canje-portal.test.ts` chequea que la cadena no aparezca en el JSON.
+
 ## Lo que ya se rompió acá
 
 - 🔴 **`itemDeVitrinaDelBody` es lista blanca** (`api/_canjes.js:377`): un campo nuevo que no se
@@ -169,19 +204,12 @@ no re-preguntarlas.**
   tarda. Hace dos idas —crear la venta en GN y recién después registrar—, así que el candidato obvio
   es esa cadena, con el cliente esperando adelante. **Nadie midió cuánto tarda**: es una queja, no un
   número. Primero medir.
-- ▶️ **La conexión con Drive.** El buzón resuelve el lado de ella; el archivo definitivo sigue siendo
-  Drive y hoy se llega con **«Bajar todo»** (baja los archivos de a uno, no arma un ZIP). El camino
-  planificado es el del navegador: `lib/drive/picker.ts` ya tiene el cliente OAuth con scope
-  `drive.file`, así que marketing elige la carpeta con el Picker y el botón sube de Blob a Drive
-  **sin credenciales guardadas y sin funciones nuevas**. ⛔ Desde el servidor no: una service account
-  no tiene Drive propio. Junto con eso se decide **si al archivar se borra del Blob** — el verbo ya
-  existe (`borrarBlob`) y es lo único que le pone techo al espacio.
 - ▶️ **Nadie midió cuánto pesa el store del Blob, y no lo puede medir Bruno**: el monitor deploya en
   el Vercel **de Darío** (Hobby, con cuota incluida), así que `vercel blob list` va con esa cuenta.
-  Con videos de creadoras deja de ser teórico rápido.
-- ⛔ **`canjes` NO está en `CARPETAS_BORRABLES`** (`api/blob-upload.js`) y el bloque del panel **no
-  ofrece borrar**: borrar la fila dejaría el archivo arriba, huérfano y pago — que es exactamente lo
-  que le pasó a la galería de Ingresos durante meses. Se decide con lo de Drive.
+  Desde que existe «Mandar a Drive» el buzón se vacía solo, pero lo viejo sigue arriba.
+- ⛔ **El bloque del panel sigue sin ofrecer BORRAR a secas.** Sacar la fila dejaría el archivo
+  arriba, huérfano y pago — lo que le pasó a Ingresos durante meses. Lo único que borra del Blob es
+  archivar en Drive, y esa acción escribe primero dónde quedó.
 - ▶️ **Falta cargar `email_pedido` en las tres marcas**: sin eso la tarjeta «Mail» de la orden sale
   vacía.
 - ⚠️ **`acuerdo` quedó tercero en el orden de la lista por decisión de quien lo escribió, no de
@@ -195,7 +223,7 @@ no re-preguntarlas.**
 
 ## Cómo se prueba
 
-`npx vitest run tests/canjes-flujo.test.ts --reporter=dot` es el flujo entero; los otros ocho, por
+`npx vitest run tests/canjes-flujo.test.ts --reporter=dot` es el flujo entero; los otros nueve, por
 nombre. Lo que no es obvio:
 
 - 🔴 **`tests/canje-contenido.test.ts` es el único del módulo que prueba COMPORTAMIENTO del
@@ -208,6 +236,10 @@ nombre. Lo que no es obvio:
   frena una venta duplicada y **GN no permite anular por API**: dos toques seguidos serían dos ventas
   y dos veces el stock descontado. Hay test y se cazó **mutando la guarda** — si se toca esa zona,
   volver a mutarla.
+- 🔴 **`tests/canje-drive.test.ts` cubre el único verbo del módulo que DESTRUYE**: archivar borra el
+  archivo del Blob. Fija el orden (anotar y después borrar), que la URL borrada salga de la fila y no
+  del pedido, que sólo se toque la carpeta `canjes` y que la subcarpeta no se pise. **9 mutantes, 9
+  muertos.** Lo que ningún test puede ejercer es Drive: eso se camina a mano con una carpeta real.
 - **La subida no se puede ejercer con un test**: hace falta un canje real en `en_curso` con token
   vivo y **abrir el link desde un celular**. Lo que hay que mandar es una foto, un video de más de
   8 MB (arriba de ahí el SDK lo parte y reintenta por pedazos) y un `.mov` de iPhone, que es el

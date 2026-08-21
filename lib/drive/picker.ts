@@ -212,7 +212,7 @@ function guardarToken(token: string, segundos: number): void {
  * un efecto: llamado fuera del gesto, el navegador lo bloquea y Google contesta
  * `popup_failed_to_open`, que acá se traduce a un cartel que nombra el bloqueo.
  */
-async function pedirToken(): Promise<string> {
+export async function pedirToken(): Promise<string> {
   const vigente = tokenGuardado()
   if (vigente) return vigente
 
@@ -381,7 +381,7 @@ export async function bajarDeDrive(
  * **la instrucción exacta** de qué hay que ir a tocar. Reemplazarlo por un «no se pudo bajar» es
  * quedarse con lo lindo y tirar lo único que servía.
  */
-async function motivoDeDrive(r: Response): Promise<string> {
+export async function motivoDeDrive(r: Response): Promise<string> {
   try {
     const t = await r.text()
     const j = JSON.parse(t) as { error?: { message?: string } }
@@ -392,7 +392,7 @@ async function motivoDeDrive(r: Response): Promise<string> {
   }
 }
 
-async function leerConAvance(
+export async function leerConAvance(
   cuerpo: ReadableStream<Uint8Array>,
   total: number,
   onAvance?: (pct: number | null) => void,

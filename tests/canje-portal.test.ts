@@ -76,7 +76,9 @@ describe('lo que ve la creadora en el link público', () => {
     expect(salida.marca).toBe('Zattia')
     expect(salida.datos.calle).toBe('Av. Siempreviva')
     expect(salida.datos.dni).toBe('38111222')
-    expect(salida.driveUrl).toContain('drive.google.com')
+    // 🔴 La carpeta de Drive de la marca **no viaja** (21-ago-2026). Es el archivo interno del
+    // equipo y esto es un portal abierto a internet: el `json` de abajo lo vuelve a chequear.
+    expect(json).not.toContain('drive.google.com')
   })
 
   // El corazón del test: la plata y el juicio interno no salen a internet.
@@ -170,7 +172,7 @@ describe('lo que ve la creadora en el link público', () => {
     const vacio = paraLaPersona({ id: 1, store: 'bdi', estado: 'acuerdo' }, null, null)
     expect(vacio.datos.calle).toBeNull()
     expect(vacio.datos.modelo_celular).toBeNull()
-    expect(vacio.driveUrl).toBeNull()
+    expect(JSON.stringify(vacio)).not.toContain('drive')
   })
 })
 

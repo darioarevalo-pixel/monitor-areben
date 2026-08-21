@@ -61,6 +61,8 @@
 //   POST { action:'entregable-agregar'|'entregable-quitar', … }  → lo que prometió publicar.
 //   POST { action:'evidencia-agregar', id, entregable_id, … }    → la carga el EQUIPO, no ella.
 //   POST { action:'evidencia-verificar', id, evidencia_id, ok }  → sin verificar, no cuenta.
+//   POST { action:'evidencia-archivada', id, evidencia_id, drive_url } → ya está en Drive: se anota
+//                                                                  y se saca del buzón (Blob).
 //   POST { action:'cerrar', id, incompleto?, motivo? }           → congela el balance. `incompleto` exige el sub `cerrar`.
 //   POST { action:'no-conservado', id, motivo }                  → devolvió o vendió lo que le mandamos.
 //
@@ -74,6 +76,9 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // El costo de un producto, con la clave de servicio. Una sola implementación para los tres que lo
 // leen del lado del servidor (ver `api/_costos.js`).
 import { leerCostos } from './_costos.js';
+// Borrar del Blob lo que ya está archivado en Drive. El token del store vive en el servidor: el
+// browser sube a Drive pero **no puede borrar del buzón**, y por eso el archivado vuelve por acá.
+import { borrarBlob } from './_blob.js';
 // Los permisos se IMPORTAN, no se copian: es la única implementación, la misma que usa la app.
 // Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
 import { esAdmin, puedeAtenderRetiroLocal, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
@@ -137,7 +142,7 @@ const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota,
   balance_alcance, balance_interacciones, balance_cpm, balance_puntaje_manual, balance_nota,
   cerrado_incompleto, cierre_motivo, cerrado_por, cerrado_at,
   producto_no_conservado, producto_no_conservado_motivo, producto_no_conservado_por, producto_no_conservado_at,
-  cancelado_motivo, usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
+  cancelado_motivo, drive_carpeta_id, usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 
 /**
  * Lo que se ve de un canje **de otra marca**: marca, fecha y si está cerrado. Nada más.
@@ -2031,6 +2036,60 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('canje_evidencias').delete().eq('id', eid).eq('canje_id', canjeId);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * El archivo ya está en Drive ⇒ se anota a dónde fue y se saca del buzón.
+     *
+     * 🔑 **Los bytes no pasan por acá.** Del Blob a Drive va el browser, con la cuenta de Google de
+     * quien apreta (`lib/drive/subir.ts`): una service account no tiene Drive propio, y mandar
+     * videos por una función de Vercel choca contra el límite de 4,5 MB del body. Lo único que el
+     * servidor sabe hacer que el browser no es **borrar del Blob**, porque el token del store vive
+     * acá. Por eso esto no verifica que el archivo esté en Drive: no tiene con qué preguntárselo.
+     * Lo que sí hace es no aceptar cualquier link.
+     *
+     * 🔴 **Primero se anota, después se borra.** Al revés, un borrado que sale bien seguido de un
+     * update que falla deja la fila apuntando a una URL muerta y **el material se pierde**: nadie
+     * sabría que está en Drive. En este orden, lo peor que pasa es un archivo huérfano en el Blob
+     * —caro, no perdido— y la pantalla lo puede volver a mandar.
+     */
+    if (action === 'evidencia-archivada') {
+      const eid = parseInt(b.evidencia_id, 10);
+      if (!eid) return res.status(400).json({ error: 'falta evidencia_id' });
+      const driveUrl = texto(b.drive_url);
+      // El link que devuelve Drive al crear el archivo. Se mira el host, como en `pathnameDeBlob`:
+      // lo que llega es un texto del browser y termina siendo un `<a href>` en la ficha.
+      if (!driveUrl || !/^https:\/\/(drive|docs)\.google\.com\//.test(driveUrl)) {
+        return res.status(400).json({ error: 'el link tiene que ser de Google Drive' });
+      }
+      const { data: ev, error: eLeer } = await supabase.from('canje_evidencias')
+        .select('id, archivo_url, drive_url').eq('id', eid).eq('canje_id', canjeId).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      if (!ev) return res.status(404).json({ error: 'esa evidencia no es de este canje' });
+
+      const { error } = await supabase.from('canje_evidencias')
+        .update({ drive_url: driveUrl, drive_at: ahora(), drive_por: usuario, updated_at: ahora() })
+        .eq('id', eid).eq('canje_id', canjeId);
+      if (error) throw new Error(error.message);
+
+      // La subcarpeta del canje viaja con el primer archivo y se guarda **una sola vez**: el que
+      // archiva después escribe adentro de la que ya existe, aunque Drive no se la muestre a su
+      // sesión (el permiso de Google es por persona). Sin `is null` un segundo archivado pisaría la
+      // carpeta buena con la gemela que acaba de crear.
+      const carpetaId = texto(b.carpeta_id);
+      if (carpetaId && !canje.drive_carpeta_id && /^[A-Za-z0-9_-]{10,200}$/.test(carpetaId)) {
+        await supabase.from('canjes').update({ drive_carpeta_id: carpetaId, updated_at: ahora() })
+          .eq('id', canjeId).is('drive_carpeta_id', null);
+      }
+
+      // ⛔ La URL a borrar sale de LA FILA, nunca del body: si viniera de afuera, esta acción sería
+      // un borrado del Blob a pedido con sólo saber un id de evidencia.
+      let buzon = 'sin archivo';
+      if (ev.archivo_url) {
+        const r = await borrarBlob(ev.archivo_url, ['canjes']);
+        buzon = r.ok ? 'borrado' : 'quedó arriba';
+      }
+      return res.status(200).json({ ok: true, buzon });
     }
 
     // ── La plata ──────────────────────────────────────────────────────────────

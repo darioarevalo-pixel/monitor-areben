@@ -85,7 +85,6 @@ type Vista = {
   retiroLocal: boolean
   despachado: boolean
   confirmadoAt: string | null
-  driveUrl: string | null
   envio: Envio | null
   datos: Datos
   /** Lo que ella ya subió. La arma el servidor de `canje_evidencias`, filtrada por `subido_por`. */
@@ -414,7 +413,6 @@ export function CanjePortal({ token }: { token: string | null }) {
             carpeta={vista.carpetaContenido}
             archivos={vista.contenido}
             puedeSubir={vista.puedeSubir}
-            driveUrl={vista.driveUrl}
             onSubido={registrarContenido}
           />
         )}
@@ -570,14 +568,12 @@ export function CanjePortal({ token }: { token: string | null }) {
         </>
       )}
 
-      {vista?.driveUrl && (
-        <div style={{ background: '#f5f5f7', borderRadius: 10, padding: 14, marginTop: 20, fontSize: 14, lineHeight: 1.5 }}>
-          Cuando tengas el contenido, dejanos las fotos y los videos{' '}
-          <a href={vista.driveUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#4f46e5' }}>
-            en esta carpeta
-          </a>. No hace falta ahora.
-        </div>
-      )}
+      {/* 🔴 Acá vivía «dejanos las fotos y los videos en esta carpeta», con el link de Drive de la
+          marca. Se sacó el 21-ago-2026: **ella ya no va a Drive**, sube desde este mismo link
+          (`PortalContenido`), y esa carpeta es ahora el archivo definitivo del equipo — el botón
+          «Mandar a Drive» de la ficha la usa. El cartel no molestaba porque `drive_url` estaba en
+          `null` en las tres marcas; cargarla, que es lo que pide la tanda 2, lo habría revivido y
+          la habría mandado de nuevo al lugar que no funcionaba. */}
 
       {error && (
         <div style={{ background: '#fef2f2', color: '#991b1b', padding: 12, borderRadius: 10, marginTop: 16, fontSize: 14 }}>

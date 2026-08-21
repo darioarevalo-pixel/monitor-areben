@@ -37,15 +37,13 @@ const celda: React.CSSProperties = {
 }
 
 export function PortalContenido({
-  token, carpeta, archivos, puedeSubir, driveUrl, onSubido,
+  token, carpeta, archivos, puedeSubir, onSubido,
 }: {
   token: string | null
   /** La manda el servidor. ⛔ No se arma acá. */
   carpeta: string | null
   archivos: ArchivoSubido[]
   puedeSubir: boolean
-  /** La carpeta de la marca, si está cargada. Queda como alternativa, ya no como el camino. */
-  driveUrl: string | null
   /** Registra el archivo recién subido. Devuelve la fila para dibujarla en el momento. */
   onSubido: (item: { url: string; clase: ClaseMedia }) => Promise<void>
 }) {
@@ -130,14 +128,9 @@ export function PortalContenido({
         </p>
       )}
 
-      {/* La carpeta de la marca deja de ser el camino y queda como alternativa. Sólo aparece si
-          alguien la cargó en Ajustes — hoy está en `null` en las tres marcas. */}
-      {driveUrl && (
-        <p style={{ color: '#9ca3af', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>
-          Si preferís, también podés dejarlo{' '}
-          <a href={driveUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#6b7280' }}>en esta carpeta</a>.
-        </p>
-      )}
+      {/* 🔴 Acá abajo estaba «si preferís, también podés dejarlo en esta carpeta», con el Drive de
+          la marca. Se sacó junto con el otro cartel: esa carpeta es ahora **el archivo del equipo**
+          —donde cae lo que se manda desde la ficha— y no un lugar donde ella pueda dejar nada. */}
     </div>
   )
 }

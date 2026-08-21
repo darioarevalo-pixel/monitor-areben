@@ -82,3 +82,25 @@ export function tamanioDeDrive(doc: Pick<DocDrive, 'sizeBytes'>): number {
   const n = Number(doc?.sizeBytes ?? 0)
   return Number.isFinite(n) && n > 0 ? n : 0
 }
+
+/**
+ * El id de una carpeta de Drive a partir del link que se pega en Ajustes.
+ *
+ * Google reparte el mismo link en tres formas —la de la barra de direcciones, la de «Compartir» y
+ * la vieja de `?id=`— y todas llegan pegadas de un WhatsApp. Se aceptan las tres, y también el id
+ * pelado: alguien va a pegar sólo eso alguna vez.
+ *
+ * ⛔ **No acepta el link de un ARCHIVO** (`/file/d/<id>`): subir adentro de un archivo no existe, y
+ * Drive contestaría un error que no se parece en nada al problema real.
+ */
+export function idDeCarpetaDrive(url: string | null | undefined): string | null {
+  const t = String(url || '').trim()
+  if (!t) return null
+  // El id pelado: 25 caracteres o más del alfabeto de Drive, sin nada alrededor.
+  if (/^[A-Za-z0-9_-]{25,}$/.test(t)) return t
+  const enCamino = t.match(/\/folders\/([A-Za-z0-9_-]{10,})/)
+  if (enCamino) return enCamino[1]
+  const enQuery = t.match(/[?&]id=([A-Za-z0-9_-]{10,})/)
+  if (enQuery && /drive\.google\.com/.test(t)) return enQuery[1]
+  return null
+}

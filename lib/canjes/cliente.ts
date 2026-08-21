@@ -711,6 +711,22 @@ export async function borrarEvidencia(store: CanjeStore, id: number, evidenciaId
   await postear({ store, action: 'evidencia-borrar', id, evidencia_id: evidenciaId })
 }
 
+/**
+ * El archivo ya quedó en Drive ⇒ se anota el link y **el servidor lo borra del buzón**.
+ *
+ * ⚠️ Se llama **de a un archivo, y recién cuando Drive confirmó ese archivo**. Avisar de a tandas
+ * dejaría un video que falló contado como archivado, y el borrado del Blob es lo que lo volvería
+ * imposible de recuperar.
+ *
+ * `carpetaId` viaja para que el canje se quede con la subcarpeta de Drive: el que archive después
+ * escribe adentro de ésa, aunque su sesión de Google no la vea (ver `lib/drive/subir.ts`).
+ */
+export async function archivadaEnDrive(
+  store: CanjeStore, id: number, evidenciaId: number, driveUrl: string, carpetaId?: string,
+): Promise<void> {
+  await postear({ store, action: 'evidencia-archivada', id, evidencia_id: evidenciaId, drive_url: driveUrl, carpeta_id: carpetaId })
+}
+
 // ── Plata y cierre ──────────────────────────────────────────────────────────────
 
 export async function registrarPago(store: CanjeStore, id: number, nota?: string): Promise<void> {

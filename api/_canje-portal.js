@@ -152,7 +152,7 @@ function unArchivo(e) {
  * es lo único de esta respuesta que ella misma escribió: no sale de su ficha ni del canje.
  *
  * @returns {{ numero: string, marca: string, pide: 'talles'|'modelo_celular', despachado: boolean,
- *   confirmadoAt: string|null, driveUrl: string|null, envio: Record<string, any>|null,
+ *   confirmadoAt: string|null, envio: Record<string, any>|null,
  *   datos: Record<string, any>, contenido: Record<string, any>[], puedeSubir: boolean,
  *   carpetaContenido: string,
  *   vitrina: Record<string, any>|null, elegidos: Record<string, any>[] }}
@@ -184,9 +184,10 @@ export function paraLaPersona(canje, persona, cfg, vitrina, items, contenido) {
     // modo lectura con el aviso, en vez de un 404 que la haría escribirnos para nada.
     despachado: canje.envio_estado === 'hecho' || !!canje.entregado_at || canje.estado === 'en_curso',
     confirmadoAt: canje.datos_confirmados_at || null,
-    // La carpeta de Drive. Desde el 21-ago-2026 **ya no es el camino**: es la alternativa para
-    // quien prefiera usarla. Sigue siendo opcional — si la marca no la cargó, no aparece.
-    driveUrl: (cfg && cfg.drive_url) || null,
+    // 🔴 Acá viajaba `driveUrl`, la carpeta de Drive de la marca. **Ya no**: desde el 21-ago-2026
+    // ella sube por este mismo link y esa carpeta pasó a ser el archivo interno del equipo, así que
+    // mandarla era publicar un link de la empresa en un portal abierto a internet, para dibujar un
+    // cartel que la mandaba al lugar que no funcionaba.
     // Por dónde va, una vez que salió. `null` mientras no se despachó.
     envio: elEnvio(canje),
     datos,
@@ -458,7 +459,7 @@ export default async function handler(req, res) {
       supabase.from('canje_personas')
         .select(`${CAMPOS_PERSONA.join(', ')}, talles, modelo_celular`)
         .eq('id', canje.persona_id).maybeSingle(),
-      supabase.from('canje_config').select('drive_url, tope_evidencias_por_canje').eq('store', canje.store).maybeSingle(),
+      supabase.from('canje_config').select('tope_evidencias_por_canje').eq('store', canje.store).maybeSingle(),
       traerVitrina(supabase, canje.vitrina_id),
       // Todos los items del canje, no sólo los suyos: el saldo del tope los cuenta a todos.
       supabase.from('canje_items')

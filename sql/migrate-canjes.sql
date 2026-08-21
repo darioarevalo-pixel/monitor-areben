@@ -618,3 +618,29 @@ create index if not exists canjes_retiro_local_idx
 -- por esto —guardaba sólo el número y no podía chequear si alguien la había anulado— y acá la venta
 -- del canje se puede anular a mano igual, porque **GN no permite deshacerla por API**.
 alter table canjes add column if not exists gn_venta_id bigint;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 21-ago-2026 · Tanda 2 del contenido: el archivo final es Drive, el Blob es el buzón.
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- La tanda 1 hizo que la creadora suba desde su link, y el archivo queda en Vercel Blob. Pero el
+-- Blob es un buzón, no un archivo: la cuota es la del Vercel de Darío y con videos de creadoras
+-- deja de ser teórica rápido. El botón «Mandar a Drive» de la ficha sube cada archivo a la carpeta
+-- de la marca (`canje_config.drive_url`) y **borra el del Blob apenas Drive confirma**.
+--
+-- Por eso hace falta guardar a dónde fue: sin esto, borrar del Blob dejaría la fila apuntando a una
+-- URL muerta y nadie sabría que el material existe. `archivo_url` NO se limpia a propósito — queda
+-- como registro de por dónde entró, y es lo que hace que un archivo ya archivado se reconozca
+-- (`drive_url is not null`) en vez de volver a mandarse.
+alter table canje_evidencias add column if not exists drive_url text;
+alter table canje_evidencias add column if not exists drive_at  timestamptz;
+alter table canje_evidencias add column if not exists drive_por text;
+
+-- La subcarpeta de Drive de ESTE canje, para no crear una por persona que archive.
+--
+-- 🔴 Google da el permiso **por archivo y por persona**: la carpeta que creó la sesión de uno NO la
+-- ve la app de otro, así que buscarla por nombre haría que el segundo que archiva cree una carpeta
+-- gemela. Guardando el id, el segundo escribe adentro de la primera —escribir en una carpeta por id
+-- funciona con sólo tener permiso de edición en Drive; se midió el 21-ago-2026 contra una carpeta
+-- creada a mano, sin pasar por el selector—.
+alter table canjes add column if not exists drive_carpeta_id text;

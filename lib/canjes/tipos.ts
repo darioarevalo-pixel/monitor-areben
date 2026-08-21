@@ -559,6 +559,13 @@ export type CanjeRow = {
 
   cancelado_motivo?: string | null
 
+  /**
+   * La subcarpeta de Drive donde se archiva el contenido de este canje. La guarda el **primer**
+   * archivado y la reusa el resto: Google da el permiso por archivo y por persona, así que la
+   * carpeta que creó una sesión no la ve la app de otra y buscarla por nombre haría una gemela.
+   */
+  drive_carpeta_id?: string | null
+
   usuario?: string | null
   historial?: CanjeEvento[]
   created_at: string
@@ -630,6 +637,14 @@ export type CanjeEvidencia = {
   verificada_por?: string | null
   verificada_at?: string | null
   rechazada_motivo?: string | null
+  /**
+   * Dónde quedó archivado en Drive. **Con esto cargado, el archivo ya NO está en el buzón**: el
+   * Blob se borra apenas Drive confirma, así que `archivo_url` apunta a una URL muerta y queda
+   * sólo como registro de por dónde entró.
+   */
+  drive_url?: string | null
+  drive_at?: string | null
+  drive_por?: string | null
   usuario?: string | null
   created_at: string
   updated_at?: string | null
