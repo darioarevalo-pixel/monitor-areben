@@ -219,15 +219,21 @@ export default async function parteGet(res, perfil, q) {
   }
   const orden = (m) => [...m.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  // 🔴 El cruce con la caja se corta en el último día que la tienda TIENE cargado. El espejo lo
-  // llena el sync de las 3 AM ⇒ el día en curso está vacío, y una fila con gasto y cero pedidos se
-  // lee como un día catastrófico en vez de como un día que todavía no se sincronizó.
-  const ultimoDiaCaja = ventasRes.ultimo || '';
-  const serieCaja = orden(porFechaLinea).filter((d) => !ultimoDiaCaja || d.fecha <= ultimoDiaCaja);
-  const caja = cruzarConLaCaja(serieCaja, ventasRes.porDia || {});
-
-  // Las fechas de la cabecera salen de lo que Meta devolvió, no de un cálculo nuestro.
+  // Las fechas salen de lo que META devolvió, no de un cálculo nuestro: la zona es de la cuenta y
+  // Vercel corre en UTC.
   const fechaDe = (rows) => String((rows && rows[0] && rows[0].date_start) || '').slice(0, 10);
+
+  // 🔴 **El cruce se corta en el último día CERRADO, que es el `ayer` que contestó Meta.**
+  // Dos motivos distintos, y hacen falta los dos:
+  //   1. El espejo de la tienda lo llena el sync de las 3 AM, así que el día en curso puede estar
+  //      vacío ⇒ una fila con gasto y cero pedidos se lee como un día catastrófico.
+  //   2. 🔴 Y aunque NO esté vacío —a las 17 h ya hay pedidos cargados— sigue siendo medio día de
+  //      gasto contra medio día de pedidos, y arrastra para abajo el promedio de la última ventana,
+  //      que es justo la que se resta contra la anterior para sacar el marginal. Medido el 21-ago
+  //      corriendo esto contra la pauta real: el día en curso entraba con 4 pedidos y $4.983.
+  // ⛔ Cortar «donde la tienda tenga datos» sólo tapa el caso 1, y es el menos peligroso.
+  const ultimoCerrado = fechaDe(ayerRes.rows) || ventasRes.ultimo || '';
+  const caja = cruzarConLaCaja(orden(porFechaLinea), ventasRes.porDia || {}, ultimoCerrado);
 
   const texto = renderParte({
     hoy,

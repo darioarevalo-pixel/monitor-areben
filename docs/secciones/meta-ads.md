@@ -257,9 +257,14 @@ propósito, para no volver a tocar los tres textos que las cuentan).
   Nube subía 47%, porque el CAPI subió la atribución del 40% al 89%. La columna `atrib%` está en la
   misma tabla justamente para que eso se lea solo. Los pedidos salen de `ventas` con
   `channel = 'Tienda Nube'`, ⛔ sin filtrar por estado (una venta anulada se ELIMINA en GN).
-- 🔴 **El cruce se corta en el último día que la tienda tiene cargado**: el espejo lo llena el sync
-  de las 3 AM ⇒ el día en curso viene vacío, y una fila con gasto y cero pedidos se lee como un día
-  catastrófico en vez de como uno que no se sincronizó.
+- 🔴 🔑 **El cruce se corta en el último día CERRADO** (el `ayer` que contestó Meta), por DOS
+  motivos y hacen falta los dos: el espejo lo llena el sync de las 3 AM ⇒ el día en curso puede venir
+  vacío; **y aunque no venga vacío sigue siendo medio día de gasto contra medio día de pedidos**, y
+  arrastra el promedio de la ventana que decide el marginal. ⛔ Cortar «donde la tienda tenga datos»
+  sólo tapa el primero. Medido el 21-ago corriéndolo contra la pauta real: el día en curso entraba
+  con 4 pedidos y $4.983, y el marginal salía **$6.322 en vez de $5.843** — 8% para arriba.
+- 🔴 **Un costo con denominador 0 se imprime VACÍO, nunca `0`**: un 0 en una columna de costos se lee
+  como «ese día las compras salieron gratis». Misma familia que el `atrib` que devuelve `null`.
 - 🔴 **`marginalEntreVentanas` devuelve `null` con MOTIVO cuando no se puede calcular**, y esa es la
   mitad de la función: con Δpedidos ≤ 0 la división da un costo negativo que se lee perfecto y
   significaría «cada pedido nuevo te devuelve plata».

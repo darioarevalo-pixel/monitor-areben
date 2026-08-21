@@ -89,9 +89,12 @@ export const limpiar = core.limpiar as (s: unknown) => string
 export const veredicto = core.veredicto as (gasto: number, compras: number, techo: number | undefined) => string
 export const sumar = core.sumar as (filas: FilaAviso[]) => Record<string, number>
 export const porConjunto = core.porConjunto as (filas: FilaAviso[]) => (FilaAviso & { filas: FilaAviso[] })[]
+/** `hasta` es el último día CERRADO. En la práctica no es opcional: sin él entra el día en curso
+ *  con medio día de gasto contra medio día de pedidos, justo en la ventana que decide el marginal. */
 export const cruzarConLaCaja = core.cruzarConLaCaja as (
   serie: DiaDePauta[],
   pedidosPorDia: Record<string, number>,
+  hasta?: string,
 ) => DiaCruzado[]
 /**
  * Sólo mira `fecha`, `gasto` y `pedidos`, y el tipo lo dice: pedir un `DiaCruzado` entero obligaría

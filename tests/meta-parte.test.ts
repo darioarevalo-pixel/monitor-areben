@@ -93,6 +93,26 @@ describe('cruzarConLaCaja — las dos versiones del mismo hecho', () => {
     expect(c[0].atrib).toBeNull()
   })
 
+  it('🔴 corta en el último día CERRADO: el día en curso NO entra', () => {
+    // Salió de correr el parte contra la pauta real el 21-ago-2026: el día en curso entraba con
+    // medio día de gasto (4 pedidos, $4.983) y arrastraba para abajo el promedio de la ÚLTIMA
+    // ventana, que es la que se resta contra la anterior para sacar el marginal.
+    // ⛔ Cortar «donde la tienda tenga datos» no alcanza: a las 17 h la tienda ya tiene pedidos.
+    const conHoy = [...serie, { fecha: '2026-08-21', gasto: 4983, compras: 3 }]
+    expect(cruzarConLaCaja(conHoy, { '2026-08-21': 4 })).toHaveLength(3)
+    expect(cruzarConLaCaja(conHoy, { '2026-08-21': 4 }, '2026-08-20')).toHaveLength(2)
+  })
+
+  it('🔴 un costo sin denominador va VACÍO, no en 0 — un 0 ahí se lee «gratis»', () => {
+    const t = renderParte({
+      caja: cruzarConLaCaja([{ fecha: '2026-08-05', gasto: 7061, compras: 0 }], { '2026-08-05': 4 }),
+      techos: { bdi: 7093 },
+    })
+    const fila = t.split('\n').find((l) => l.startsWith('2026-08-05|'))!
+    // pedidos 4 con $7.061 => $1.765 el pedido; compras 0 => la celda del costo por compra VACÍA.
+    expect(fila.split('|')).toEqual(['2026-08-05', '4', '7061', '1765', '0', '', '0'])
+  })
+
   it('una atribución de más del 100% NO se recorta', () => {
     // Meta atribuye a 7 días al clic: una compra de hoy puede venir de un clic de anteayer.
     const c = cruzarConLaCaja([{ fecha: '2026-08-20', gasto: 5000, compras: 12 }], { '2026-08-20': 10 })
