@@ -40,7 +40,9 @@ el motivo duro está escrito arriba del `create table`.
   18-ago-2026. ⇒ **el orden del ritual es parte del diseño: acta el viernes, cerrar el lunes.**
 - 🔑 **Los avances los redacta la IA leyendo los mensajes de commit de los repos**, no los escribe
   el equipo: los repos de Areben commitean en prosa de negocio. Escala medida: ~640 commits en 14
-  días, 10 repos. ⚠️ **No se ejecuta solo** — alguien tiene que correrlo el viernes.
+  días, 10 repos; la semana del 17 al 23 fueron **323 commits en 8 repos** (marketing 154, monitor
+  104, y **Moldea y Creativa en cero — que también se escribe**). ⚠️ **No se ejecuta solo** —
+  alguien tiene que correrlo el viernes.
 - 🔑 **Una novedad NO es un avance** (dicho por Bruno). Por eso el memo no cuelga de `novedades`: la
   novedad hay que redactarla y decidir a quién le llega, y colgarlo de ahí obligaba a escribir dos
   veces lo mismo.
@@ -65,13 +67,64 @@ el motivo duro está escrito arriba del `create table`.
   llamada de la semana nueva). Entran después de un screenshot. **No es un defecto de la app** —
   verificarlo antes de reportarlo.
 
+## El ritual: quién hace qué, y qué se puede automatizar
+
+El orden es **acta y foto el viernes, cerrar el lunes**, y no es una preferencia: cerrar apaga los
+tres bloques (ver arriba).
+
+| paso | quién | estado |
+|---|---|---|
+| Tomar la foto de señales | una persona, el **viernes** | 🏁 se ejerció el 21-ago-2026 |
+| Los 8 avances | los redacta la IA de los commits | 🏁 cargados el 21-ago **por API** |
+| El acta (7 temas) | **Bruno y Darío**, nadie más | ▶️ arranca en la 17 al 23 |
+| Cerrar | una persona, el **lunes** | ⛔ nunca un cron |
+
+🔑 **Los avances se pueden escribir por la API y no hace falta el navegador** (que en esta pantalla
+se come el primer clic): `POST /api/datos?recurso=memo` con `accion:'guardar-campo'` y el header
+`x-monitor-auth: base64({user,pass})` — `MONITOR_PASS` del `.env`, igual que `scripts/test-reingreso.mjs`.
+Medido el 21-ago: **8 de 8 en 200, en 7 segundos**, y las 8 filas verificadas byte a byte contra el
+original leyendo `memo_campo` aparte. ⛔ El `autor` sale de la **sesión**, nunca del body.
+
+🏁 **El recordatorio ya no depende de que alguien se acuerde**: son dos pendientes rutinarios en la
+**Agenda operativa**, con `destino {tipo:'seccion', key:'memo'}` (o sea admins) — viernes `dias:[5]`
+"tomar la foto y escribir el acta" y lunes `dias:[1]` "cerrar la semana que terminó". Aparecen en
+Hoy, en Inicio y en el badge, y **Cumplimiento mide si se hicieron**. El motor es
+`lib/agenda/reglas.core.js` y el handler `api/_agenda.js` (la sección todavía no tiene ficha propia).
+🔴 `dias` se indexa con `getDay()`, **0 = domingo**: el viernes es el 5. Verificarlo corriendo
+`aplicaEn` sobre los siete días, no leyendo la fila.
+
+### 🔴 Automatizar la FOTO sería una segunda implementación, no un cron
+
+Es la tentación obvia y hay que decirle que no por ahora. Las señales las arma `useGerencial()` **en
+el navegador**: baja el payload del ETL (**~14,7 MB por marca**), el cajón de sesiónfotos, el de
+solicitudes internas, los ingresos del KV y el índice de precios de TN, y recién ahí corren los
+detectores (`detectarDeMarca`, todo TS). Un cron tiene que rehacer eso del lado del servidor — que
+es exactamente lo que la sección de arriba dice que no se hace.
+
+Lo que sí quedó medido, por si algún día se paga:
+
+- ✅ **Meta Ads no hace falta**: `resumirSenales` filtra `area !== 'ads'`.
+- ✅ **El handler ya es a prueba de cron**: `accion:'senales'` mira `senales_tomadas_at` y si ya está
+  contesta `yaEstaba:true` **sin tocar nada**, así que correrlo de más no puede pisar la foto.
+
+### ✅ El barato es el cron de los AVANCES, y las piezas ya están todas
+
+Sin código nuevo de infraestructura: **13 workflows de GitHub Actions** con cron, secretos y candados
+de concurrencia · `@anthropic-ai/sdk` ya es dependencia y `ANTHROPIC_API_KEY` ya está en Vercel (la
+usa Redacción, `api/_tn-desc-ia.js`) · los 10 repos están en GitHub · y el POST de `guardar-campo` ya
+está ejercido. Forma: los viernes, juntar los commits de la semana por repo con la API de GitHub,
+redactar los ocho con el modelo, y **dejarlos cargados para que los editen** — nunca cerrar.
+
+📌 **La decisión de cuándo pagarlo ya estaba escrita**: "si el ritual aguanta 3-4 semanas, se
+automatiza". Con el pendiente del viernes puesto, ahora **Cumplimiento tiene el dato** de cuántas
+veces se olvidó — que es lo que hace que la decisión no sea una corazonada.
+
 ## Pendiente
 
-- ▶️ **"Tomar la foto de hoy" nunca se apretó.** 🔑 **El momento es el VIERNES**: se sella una sola
-  vez (`senales_tomadas_at` y el handler contesta `yaEstaba` si ya está) y no se recalcula, así que
-  apretarlo un martes deja el capital parado del martes como la foto de la semana.
-- ▶️ **El acta**: la semana `w2026-08-10` se cerró **sin acta, por decisión de Bruno** ("va a ser
-  complicado que lo armemos, lo armamos esta semana"). El acta arranca en la 17 al 23.
+- ▶️ **El acta de la semana 17 al 23**: es la primera que la lleva. La `w2026-08-10` se cerró **sin
+  acta, por decisión de Bruno** ("va a ser complicado que lo armemos, lo armamos esta semana") ⇒ ⛔
+  no se re-abre.
+- ▶️ **El cron de los avances** (arriba): decidido el enfoque, sin escribir.
 - ⚠️ **El costo por compra de Stunned sale de UNA sola observación** ($9.886 con 1 compra). Es un
   número real, no una medición.
 
