@@ -11,6 +11,8 @@ import {
   ATTR as ATTR_JS,
   CAMPOS_INSIGHTS as CAMPOS_INSIGHTS_JS,
   COMPRA as COMPRA_JS,
+  FUNNEL as FUNNEL_JS,
+  TIPO_FUNNEL as TIPO_FUNNEL_JS,
   RE_PERFIL as RE_PERFIL_JS,
   RE_SEGUIDOR as RE_SEGUIDOR_JS,
   accion as accionJs,
@@ -40,7 +42,13 @@ export type Metricas = {
   seguidores: number
 }
 
+/** Un paso del embudo de compra, con el `action_type` con el que Meta lo nombra. */
+export type PasoDelEmbudo = { key: string; label: string; type: string }
+
 export const ATTR = ATTR_JS as string
+/** 🔑 Una sola lista, dos consumidores: el embudo de la cuenta y la proyección por aviso del parte. */
+export const FUNNEL = FUNNEL_JS as PasoDelEmbudo[]
+export const TIPO_FUNNEL = TIPO_FUNNEL_JS as Record<string, string>
 export const COMPRA = COMPRA_JS as string
 export const CAMPOS_INSIGHTS = CAMPOS_INSIGHTS_JS as string
 export const RE_PERFIL = RE_PERFIL_JS as RegExp

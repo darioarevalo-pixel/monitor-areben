@@ -26,11 +26,13 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
+import { ParteDelDia } from '@/components/meta-ads/parte/ParteDelDia'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
 import { HallazgosPanel } from '@/components/meta-ads/reglas/HallazgosPanel'
 import { PodaPendiente, usePoda, type Resumen } from '@/components/meta-ads/reglas/PodaPendiente'
 import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { ComoViene } from '@/components/meta-ads/tendencia/ComoViene'
+import { useMeta } from '@/components/meta-ads/ContextoMeta'
 import { useCampanias, type Campanias } from '@/components/meta-ads/useCampanias'
 import { VentanaEtapas } from '@/components/meta-ads/VentanaEtapas'
 import { plata } from '@/lib/meta-ads/formato'
@@ -45,6 +47,8 @@ import {
 
 export function Panel() {
   const m = useCampanias()
+  // El eje: el parte es de UNA cuenta publicitaria y de UNA línea.
+  const { laCuenta, linea } = useMeta()
   const d = m.diagPorLinea
   // 🔑 Los hallazgos salen de la BASE, no de Meta: se ven aunque el censo falle. Por eso viajan
   // aparte de `m.estado` y se dibujan afuera del `fase === 'ok'`.
@@ -107,6 +111,12 @@ export function Panel() {
           que el día que el token se venza, ésta es la pantalla que sigue diciendo algo.
           Va después de «qué hay que decidir» porque es contexto, no una tarea. */}
       <ComoViene dias={m.dias} />
+
+      {/* 🔑 Va al final y NO depende de `fase === 'ok'`: se arma con su propia llamada, así que
+          sigue estando aunque el censo del Panel haya fallado. Y va después de «qué hay que
+          decidir» por lo mismo que «Cómo viene»: esto es la materia prima de una decisión, no la
+          decisión. */}
+      <ParteDelDia cuenta={laCuenta ? laCuenta.id : null} linea={linea === 'todas' ? undefined : linea} />
 
       {m.estado.fase === 'ok' && d && <AlAire diagPorLinea={d} />}
     </div>

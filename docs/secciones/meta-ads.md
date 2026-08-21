@@ -237,6 +237,39 @@ una venta del local con tarjeta). ⇒ **`costoMax` —el del semáforo— sigue 
 cambiaría el techo, en silencio, a toda línea ya guardada**. El primer test del bloque nuevo de
 `tests/meta-ads-rentabilidad.test.ts` clava que la fila de BDI sigue dando **$9.101**.
 
+## El parte del día (21-ago-2026)
+
+`GET /api/meta-ads?recurso=parte&account=<id>[&linea=bdi]` → un TEXTO PLANO con todo lo que hace
+falta para decidir presupuestos. Botón «Parte del día» en el **Panel** (⛔ no es una vista nueva: a
+propósito, para no volver a tocar los tres textos que las cuentan).
+
+- 🔑 **Existe porque analizar un día costaba ~12 llamadas al navegador** y cada vuelta traía el JSON
+  entero de Meta. El armado es puro (`lib/meta-ads/parte.core.js` + `parte.ts`), la conversación
+  vive en `api/_meta-parte.js`.
+- 🔑 **Cinco llamadas a Graph, no veintisiete.** Pedir el detalle de cuenta tres veces (hoy, ayer,
+  serie) son 9 cada vez. ⛔ **No se pide solo**: no hay `useEffect` que lo traiga al abrir el Panel,
+  porque el cupo de la Marketing API es un porcentaje de la cuenta.
+- 🔴 **Los días los resuelve META, no nosotros.** `date_preset=today` / `yesterday` se calculan en la
+  zona de la CUENTA, y la fecha de la cabecera sale del `date_start` que Meta devuelve. Vercel corre
+  en UTC y calcular «hoy» del lado del servidor ya falló dos veces acá (el sufijo de las copias).
+- 🔴 🔑 **El bloque que decide es `PEDIDOS REALES vs META`, y el oráculo NO son las `purchases`.**
+  Medido el 20-ago: Meta bajó el costo por compra 34% mientras el costo por pedido REAL de Tienda
+  Nube subía 47%, porque el CAPI subió la atribución del 40% al 89%. La columna `atrib%` está en la
+  misma tabla justamente para que eso se lea solo. Los pedidos salen de `ventas` con
+  `channel = 'Tienda Nube'`, ⛔ sin filtrar por estado (una venta anulada se ELIMINA en GN).
+- 🔴 **El cruce se corta en el último día que la tienda tiene cargado**: el espejo lo llena el sync
+  de las 3 AM ⇒ el día en curso viene vacío, y una fila con gasto y cero pedidos se lee como un día
+  catastrófico en vez de como uno que no se sincronizó.
+- 🔴 **`marginalEntreVentanas` devuelve `null` con MOTIVO cuando no se puede calcular**, y esa es la
+  mitad de la función: con Δpedidos ≤ 0 la división da un costo negativo que se lee perfecto y
+  significaría «cada pedido nuevo te devuelve plata».
+- 🔑 **`FUNNEL` y `TIPO_FUNNEL` bajaron a `lib/meta-ads/metricas.core.js`** el 21-ago, cuando apareció
+  el segundo lector: el embudo de la cuenta y la proyección por aviso tienen que mirar el MISMO
+  `action_type` o dejan de dar lo mismo sin que nada falle. `tests/meta-parte.test.ts` lo amarra
+  texto contra texto sobre los DOS archivos de `api/`.
+- ⚠️ `techosDiarios` se indexa por **NOMBRE** de conjunto (es la única llave que traen las filas de
+  insights ya agregadas). Dos conjuntos homónimos en campañas distintas compartirían fila.
+
 ## Pendiente
 
 - ▶️ 🔴 **Cargar los umbrales y crear las reglas** mirando el calibrador. Son 10 minutos y es lo que

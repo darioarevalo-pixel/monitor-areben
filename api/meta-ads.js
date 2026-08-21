@@ -25,6 +25,11 @@
 //                                             → TODOS los avisos de todas las cuentas que ve el
 //                                               perfil, con sus números de la foto diaria y su
 //                                               pieza. Ver `api/_meta-biblioteca.js`.
+//   GET /api/meta-ads?recurso=parte&account=<id>[&linea=bdi]
+//                                             → EL PARTE DEL DÍA: hoy contra ayer por conjunto y
+//                                               por aviso, embudo, serie, y el cruce contra los
+//                                               PEDIDOS REALES de la tienda. Texto plano listo
+//                                               para copiar. Ver `api/_meta-parte.js`.
 //   POST /api/meta-ads?recurso=favorito       → marcar/desmarcar una pieza. No toca Meta.
 //   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
 //   GET /api/meta-ads?recurso=auditoria       → QUIÉN accionó sobre la pauta y cómo quedó. Ver
@@ -70,7 +75,7 @@ import { piezaDe, rescatarMiniaturas, TOPE_IDS_GRAPH } from '../lib/meta-ads/cre
 // Y cómo se leen los números de una fila de insights. Salió de acá adentro cuando la foto diaria
 // (`scripts/snapshot-meta.mjs`) necesitó leerlas igual desde un script: dos lecturas distintas de
 // `omni_purchase` no fallan ruidosamente, devuelven dos cifras de ventas parecidas y distintas.
-import { accion, accionRe, ATTR, COMPRA, metricasDe, num, RE_PERFIL, RE_SEGUIDOR, sumaAcciones } from '../lib/meta-ads/metricas.core.js';
+import { accion, accionRe, ATTR, COMPRA, FUNNEL, metricasDe, num, RE_PERFIL, RE_SEGUIDOR, sumaAcciones, TIPO_FUNNEL } from '../lib/meta-ads/metricas.core.js';
 import { leerAsignaciones } from './_meta-lineas.js';
 import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
@@ -79,6 +84,7 @@ import reglasPost, { reglasGet } from './_meta-reglas.js';
 import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
 import informesPost, { informesGet } from './_meta-informes.js';
 import tendenciaGet from './_meta-tendencia.js';
+import parteGet from './_meta-parte.js';
 
 // La lista de períodos y las dos ventanas del censo viven en `lib/meta-ads/ventana.core.js`: eran
 // cuatro copias de la misma decisión y las cuatro contestaban otra ventana en silencio cuando les
@@ -149,6 +155,10 @@ export default async function handler(req, res) {
   if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), q.dias);
   if (q.recurso === 'mejoras') return await mejoras(res, perfil, String(q.campania || ''));
   if (q.recurso === 'diagnostico') return await diagnostico(res, perfil, q.probar === '1');
+  // El parte va DESPUÉS del guard del token, a diferencia de la tendencia y los informes: sin Meta
+  // no hay parte que armar —el día de hoy sólo existe allá— y contestar media tabla con la mitad de
+  // la base sería peor que decir que no se pudo.
+  if (q.recurso === 'parte') return await parteGet(res, perfil, q);
   // `auditoria` ya se despachó arriba, antes del guard del token. Ver el comentario de allá.
 
   // El rango sale de UNA sola lectura de la query: `qs` es lo que viaja a Graph y `eco` lo que se
@@ -1071,14 +1081,8 @@ async function detalle(res, account, rango, rangoEco) {
 
 // `accion`, `sumaAcciones` y `accionRe` viven en `lib/meta-ads/metricas.core.js` (importadas arriba).
 
-// Pasos del embudo de compra, en orden, con su action_type de Meta.
-const FUNNEL = [
-  { key: 'link_click', label: 'Clic al enlace', type: 'link_click' },
-  { key: 'landing_page_view', label: 'Visita a la web', type: 'landing_page_view' },
-  { key: 'add_to_cart', label: 'Agregó al carrito', type: 'omni_add_to_cart' },
-  { key: 'initiate_checkout', label: 'Inició compra', type: 'omni_initiated_checkout' },
-  { key: 'purchase', label: 'Compró', type: 'omni_purchase' },
-];
+// `FUNNEL` y `TIPO_FUNNEL` viven en `lib/meta-ads/metricas.core.js`: los comparte el parte.
+
 // Embudo (cantidad + costo por paso) de una fila de insights.
 function embudoDe(row) {
   const spend = num(row.spend);
@@ -1119,6 +1123,14 @@ function adDe(row) {
     purchases: accion(row.actions, COMPRA),
     revenue: accion(row.action_values, COMPRA),
     roas: accion(row.purchase_roas, COMPRA),
+    // 🔑 Los tres pasos de ANTES de la compra, por aviso. Meta los manda en el mismo `actions` que
+    // ya se pide para las compras —o sea que no cuestan una llamada ni un campo más— y la
+    // proyección los tiraba. Es lo único que deja comparar dos piezas que todavía no vendieron,
+    // que son casi todas casi siempre: el costo por CARRITO se mueve mucho antes que el costo por
+    // compra, y con 3 compras en un día el costo por compra no distingue nada.
+    lpv: accion(row.actions, TIPO_FUNNEL.landing_page_view),
+    carritos: accion(row.actions, TIPO_FUNNEL.add_to_cart),
+    checkouts: accion(row.actions, TIPO_FUNNEL.initiate_checkout),
     perfil: accionRe(row.actions, RE_PERFIL),
     seguidores: accionRe(row.actions, RE_SEGUIDOR),
   };

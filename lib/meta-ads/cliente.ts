@@ -17,6 +17,9 @@ import type { DecisionVista, RespuestaDecisiones } from './decisiones'
 import type { Informe, InformeResumen, RespuestaInforme, RespuestaInformes } from './informes'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type { RespuestaTendencia } from './tendencia'
+
+/** Lo que contesta `?recurso=parte`: el texto listo para copiar y qué no se pudo leer. */
+export type RespuestaParte = { ok: true; texto: string; faltantes: string[] }
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
   RespuestaCuentas, RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,
@@ -582,6 +585,23 @@ export function traerBiblioteca(rango: RangoUI): Promise<Lectura<RespuestaBiblio
  */
 export function traerTendencia(dias: number): Promise<Lectura<RespuestaTendencia>> {
   return pedir<RespuestaTendencia>(new URLSearchParams({ recurso: 'tendencia', dias: String(dias) }))
+}
+
+/**
+ * El PARTE DEL DÍA: todo lo que hace falta para decidir presupuestos, en un texto plano.
+ *
+ * 🔑 **Devuelve texto y no un objeto a propósito.** El destino de esto es el portapapeles: se pega
+ * en un chat o en una nota y ahí tiene que poder leerse tal cual, ya agregado por conjunto, ya
+ * comparado contra ayer y ya juzgado contra el techo. Armar la tabla del lado del navegador
+ * obligaría a mantener dos formatos del mismo parte.
+ *
+ * `faltantes` dice qué bloque no se pudo leer. Un bloque vacío por una falla se ve igual que uno
+ * vacío porque no hubo nada, y esa es la diferencia entre un día flojo y un dato roto.
+ */
+export function traerParte(account: string, linea?: string): Promise<Lectura<RespuestaParte>> {
+  const p = new URLSearchParams({ recurso: 'parte', account })
+  if (linea) p.set('linea', linea)
+  return pedir<RespuestaParte>(p)
 }
 
 /**
