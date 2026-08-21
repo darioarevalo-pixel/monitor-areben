@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { imgAThumbYSubir } from '@/lib/imagenes'
-import { aplicarTally, contarPorEstado, ordenar, sanearImportado, tallyVotos } from '@/lib/disenos/core'
-import { crearRonda, subirImagen, traerBoletas, VOT_PAGE } from '@/lib/disenos/cliente'
+import { contarPorEstado, ordenar, sanearImportado } from '@/lib/disenos/core'
+import { VotacionPanel, textoPromedio, type PuntajesDeRonda } from '@/components/disenos/VotacionPanel'
 import { reporteDecisiones, reporteGaleria, reporteLimpio } from '@/lib/disenos/pdf'
 import { DB_ESTADOS, type Diseno, type EstadoDiseno, type OrdenDiseno } from '@/lib/disenos/tipos'
 import { borrarDiseno, guardarDisenos, leerDisenos, leerLocales, localesParaImportar } from '@/lib/disenos/persistencia'
@@ -12,6 +12,25 @@ import { Button, Card as Superficie, Chips, Notice, Select, Tabs, color, space, 
 
 let seq = 0
 const newId = () => 'd' + Date.now() + '_' + seq++
+
+/** Lo que la ronda que se está mirando dice de un diseño. `promedio: null` = no lo votó nadie. */
+type Puntaje = { n: number; promedio: number | null }
+
+/**
+ * La chapita del puntaje de la ronda. Vive sobre la foto y no reemplaza a los 👍/👎: son dos
+ * votaciones distintas —la de la mesa y la del link— y taparlas una con la otra es justo el error
+ * que tenía la versión anterior.
+ */
+function ChapaPuntaje({ pt }: { pt: Puntaje }) {
+  return (
+    <div
+      title={pt.n ? `${pt.n} ${pt.n === 1 ? 'persona puntuó' : 'personas puntuaron'} este diseño en la ronda` : 'Nadie puntuó este diseño en la ronda'}
+      style={{ position: 'absolute', left: 5, bottom: 5, background: 'rgba(15,23,42,.78)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 20 }}
+    >
+      {pt.promedio == null ? 'sin votos' : `★ ${textoPromedio(pt.promedio)} (${pt.n})`}
+    </div>
+  )
+}
 
 export function Disenos() {
   const { confirmar, avisar } = useConfirmar()
@@ -24,12 +43,13 @@ export function Disenos() {
   const [view, setView] = useState<'kanban' | 'galeria'>('kanban')
   const [orden, setOrden] = useState<OrdenDiseno>('carga')
   const [galFiltro, setGalFiltro] = useState<'todos' | EstadoDiseno>('todos')
-  const [vot, setVot] = useState<{ id: string; createdAt: number } | null>(null)
+  /** El resumen de la ronda que se esté mirando, sólo para las chapitas. NO se persiste: los
+   *  votos viven en `disenos_votos` y se calculan al leer (ver `VotacionPanel`). */
+  const [puntajes, setPuntajes] = useState<PuntajesDeRonda | null>(null)
   const [hidratado, setHidratado] = useState(false)
 
   const [preview, setPreview] = useState<string | null>(null)
   const [votOpen, setVotOpen] = useState(false)
-  const [votStatus, setVotStatus] = useState('')
   const [repChooser, setRepChooser] = useState(false)
   const [quickOn, setQuickOn] = useState(false)
   const [quickIndex, setQuickIndex] = useState(0)
@@ -62,7 +82,6 @@ export function Disenos() {
       try {
         setView((localStorage.getItem('monitor_db_view') as 'kanban' | 'galeria') || 'kanban')
         setOrden((localStorage.getItem('monitor_db_orden') as OrdenDiseno) || 'carga')
-        setVot(JSON.parse(localStorage.getItem('monitor_db_votsession') || 'null'))
       } catch {
         /* defaults */
       }
@@ -105,9 +124,6 @@ export function Disenos() {
   useEffect(() => {
     if (hidratado) try { localStorage.setItem('monitor_db_orden', orden) } catch {}
   }, [orden, hidratado])
-  useEffect(() => {
-    if (hidratado) try { localStorage.setItem('monitor_db_votsession', JSON.stringify(vot)) } catch {}
-  }, [vot, hidratado])
 
   // ── Acciones sobre diseños ──
   const setCampo = (id: string, campo: 'name' | 'nota', val: string) => setDisenos((ds) => ds.map((d) => (d.id === id ? { ...d, [campo]: val } : d)))
@@ -230,44 +246,6 @@ export function Disenos() {
     reader.readAsText(file)
   }
 
-  // ── Votación online ──
-  const crearVot = async () => {
-    if (!disenos.length) return avisar('Cargá diseños primero.')
-    if (vot) {
-      const ok = await confirmar({
-        titulo: 'Crear una ronda nueva',
-        tono: 'warning',
-        ok: 'Crear ronda nueva',
-        mensaje: 'El link anterior deja de sumar votos. Si hay gente votando ahora, esos votos se pierden.',
-      })
-      if (!ok) return
-    }
-    setVotStatus('Creando ronda…')
-    try {
-      const id = await crearRonda(disenos.map((d) => ({ id: d.id, name: d.name })))
-      setVot({ id, createdAt: Date.now() })
-      for (let i = 0; i < disenos.length; i++) {
-        setVotStatus(`Subiendo imágenes… ${i + 1}/${disenos.length}`)
-        await subirImagen(id, disenos[i].id, disenos[i].url)
-      }
-      setVotStatus('Link listo. Compartilo con tu equipo. Cuando voten, tocá "Traer votos".')
-    } catch (e) {
-      setVotStatus('Error: ' + (e as Error).message)
-    }
-  }
-  const traerVot = async () => {
-    if (!vot) return
-    setVotStatus('Trayendo votos…')
-    try {
-      const ballots = await traerBoletas(vot.id)
-      setDisenos((ds) => aplicarTally(ds, tallyVotos(ballots)))
-      const quienes = ballots.map((b) => b.name || '?').join(', ') || '—'
-      setVotStatus(`${ballots.length} persona(s) votaron: ${quienes}. Los votos del tablero se actualizaron.`)
-    } catch (e) {
-      setVotStatus('Error: ' + (e as Error).message)
-    }
-  }
-
   // ── Revisión rápida ──
   const cola = disenos.filter((d) => d.estado === 'revisar')
   const clasificar = (est: EstadoDiseno) => {
@@ -366,7 +344,7 @@ export function Disenos() {
           Solo diseños
         </Button>
         <Button variant="outline" onClick={() => (disenos.length ? setVotOpen(true) : void avisar('Cargá diseños primero.'))}>
-          Votación online
+          Votación por link
         </Button>
         <Button variant="ghost" onClick={() => void exportar()}>
           Exportar
@@ -422,7 +400,7 @@ export function Disenos() {
           {(() => {
             const items = ordenar(galFiltro === 'todos' ? disenos : disenos.filter((d) => d.estado === galFiltro), orden)
             return items.length
-              ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>{items.map((d) => <CardGal key={d.id} d={d} onPreview={setPreview} onVoto={votar} onEstado={setEstado} onQuitar={quitar} />)}</div>
+              ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>{items.map((d) => <CardGal key={d.id} d={d} pt={puntajes?.[d.id]} onPreview={setPreview} onVoto={votar} onEstado={setEstado} onQuitar={quitar} />)}</div>
               : <div style={{ textAlign: 'center', color: color.mut2, padding: 30 }}>No hay diseños en este filtro.</div>
           })()}
         </>
@@ -433,7 +411,7 @@ export function Disenos() {
             return (
               <div key={e.k} style={{ flex: '1 1 0', minWidth: 210, background: e.bg, border: `1px solid ${color.line}`, borderRadius: 11, padding: 9 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: e.color, marginBottom: 9, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{e.ico} {e.lbl}</span><span style={{ background: '#fff', border: `1px solid ${color.line}`, borderRadius: 10, padding: '0 7px', fontSize: 11, color: color.ink2 }}>{items.length}</span></div>
-                {items.length ? items.map((d) => <Card key={d.id} d={d} onPreview={setPreview} onCampo={setCampo} onVoto={votar} onEstado={setEstado} onQuitar={quitar} />) : <div style={{ fontSize: 11, color: color.mut2, textAlign: 'center', padding: '14px 0' }}>—</div>}
+                {items.length ? items.map((d) => <Card key={d.id} d={d} pt={puntajes?.[d.id]} onPreview={setPreview} onCampo={setCampo} onVoto={votar} onEstado={setEstado} onQuitar={quitar} />) : <div style={{ fontSize: 11, color: color.mut2, textAlign: 'center', padding: '14px 0' }}>—</div>}
               </div>
             )
           })}
@@ -458,42 +436,27 @@ export function Disenos() {
         </Modal>
       )}
 
-      {votOpen && (
-        <Modal onClose={() => setVotOpen(false)} maxWidth={480}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><div style={{ fontSize: 16, fontWeight: 700 }}>Votación online</div><button onClick={() => setVotOpen(false)} style={cerrarBtn}>✕</button></div>
-          {!vot ? (
-            <>
-              <div style={{ fontSize: 13, color: color.ink2, lineHeight: 1.5 }}>Generá un link para que tu equipo vote los <b>{disenos.length}</b> diseños desde el celular. Los votos se juntan acá.</div>
-              <button onClick={crearVot} style={{ marginTop: 14, background: color.brandSolid, color: '#fff', width: '100%', padding: 11, borderRadius: 9, fontWeight: 600, cursor: 'pointer', border: 'none' }}>Crear link de votación</button>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 13, color: color.ink2, marginBottom: 8 }}>Compartí este link con tu equipo:</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input readOnly value={`${VOT_PAGE}?id=${vot.id}`} onClick={(e) => e.currentTarget.select()} style={{ flex: 1, fontSize: 12, padding: 9, border: `1px solid ${color.line2}`, borderRadius: 8 }} />
-                <button onClick={() => { navigator.clipboard?.writeText(`${VOT_PAGE}?id=${vot.id}`).then(() => setVotStatus('Link copiado.'), () => setVotStatus('Copialo manualmente.')) }} style={{ background: color.ink, color: '#fff', padding: '0 14px', borderRadius: 8, cursor: 'pointer', border: 'none' }}>Copiar</button>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button onClick={traerVot} style={{ flex: 1, background: color.success, color: '#fff', padding: 11, borderRadius: 9, fontWeight: 600, cursor: 'pointer', border: 'none' }}>Traer votos</button>
-                <a href={`${VOT_PAGE}?id=${vot.id}`} target="_blank" rel="noopener noreferrer" style={{ flex: 'none', background: '#fff', border: `1px solid ${color.line2}`, color: color.ink2, padding: '11px 14px', borderRadius: 9, textDecoration: 'none' }}>Ver página</a>
-              </div>
-              <button onClick={crearVot} style={{ marginTop: 8, background: '#fff', border: `1px solid ${color.line}`, color: color.mut, width: '100%', padding: 8, borderRadius: 9, fontSize: 12, cursor: 'pointer' }}>Crear ronda nueva (reemplaza el link)</button>
-            </>
-          )}
-          <div style={{ fontSize: 12, color: color.mut, marginTop: 12, minHeight: 16, lineHeight: 1.4 }}>{votStatus}</div>
-        </Modal>
-      )}
+      <VotacionPanel
+        abierto={votOpen}
+        onCerrar={() => setVotOpen(false)}
+        marca={marca}
+        disenos={disenos}
+        onPuntajes={setPuntajes}
+      />
 
       {quickOn && <QuickModal disenos={disenos} cola={cola} index={quickIndex} onClose={() => setQuickOn(false)} onClasificar={clasificar} onSaltar={saltar} onCampo={setCampo} />}
     </Superficie>
   )
 }
 
-function Card({ d, onPreview, onCampo, onVoto, onEstado, onQuitar }: { d: Diseno; onPreview: (u: string) => void; onCampo: (id: string, c: 'name' | 'nota', v: string) => void; onVoto: (id: string, t: 'up' | 'down') => void; onEstado: (id: string, e: EstadoDiseno) => void; onQuitar: (id: string) => void }) {
+function Card({ d, pt, onPreview, onCampo, onVoto, onEstado, onQuitar }: { d: Diseno; pt?: Puntaje; onPreview: (u: string) => void; onCampo: (id: string, c: 'name' | 'nota', v: string) => void; onVoto: (id: string, t: 'up' | 'down') => void; onEstado: (id: string, e: EstadoDiseno) => void; onQuitar: (id: string) => void }) {
   return (
     <div style={{ background: '#fff', border: `1px solid ${color.line}`, borderRadius: 9, padding: 8, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.04)' }}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={d.url} alt="" onClick={() => onPreview(d.url)} style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 6, cursor: 'zoom-in', background: color.bg2 }} />
+      <div style={{ position: 'relative' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={d.url} alt="" onClick={() => onPreview(d.url)} style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 6, cursor: 'zoom-in', background: color.bg2, display: 'block' }} />
+        {pt && <ChapaPuntaje pt={pt} />}
+      </div>
       <input defaultValue={d.name} onChange={(e) => onCampo(d.id, 'name', e.target.value)} placeholder="Nombre del diseño" style={{ width: '100%', fontSize: 12, fontWeight: 600, border: 'none', borderBottom: `1px solid ${color.bg2}`, margin: '6px 0 4px', padding: '2px 0', boxSizing: 'border-box' }} />
       <textarea defaultValue={d.nota} onChange={(e) => onCampo(d.id, 'nota', e.target.value)} placeholder="Pros / contras / notas…" style={{ width: '100%', fontSize: 11, color: color.ink2, border: `1px solid ${color.line}`, borderRadius: 6, padding: 5, minHeight: 42, resize: 'vertical', boxSizing: 'border-box' }} />
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
@@ -506,7 +469,7 @@ function Card({ d, onPreview, onCampo, onVoto, onEstado, onQuitar }: { d: Diseno
   )
 }
 
-function CardGal({ d, onPreview, onVoto, onEstado, onQuitar }: { d: Diseno; onPreview: (u: string) => void; onVoto: (id: string, t: 'up' | 'down') => void; onEstado: (id: string, e: EstadoDiseno) => void; onQuitar: (id: string) => void }) {
+function CardGal({ d, pt, onPreview, onVoto, onEstado, onQuitar }: { d: Diseno; pt?: Puntaje; onPreview: (u: string) => void; onVoto: (id: string, t: 'up' | 'down') => void; onEstado: (id: string, e: EstadoDiseno) => void; onQuitar: (id: string) => void }) {
   const e = DB_ESTADOS.find((x) => x.k === d.estado) || DB_ESTADOS[0]
   return (
     <div style={{ border: `1px solid ${color.line}`, borderTop: `4px solid ${e.color}`, borderRadius: 9, overflow: 'hidden', background: '#fff' }}>
@@ -514,6 +477,7 @@ function CardGal({ d, onPreview, onVoto, onEstado, onQuitar }: { d: Diseno; onPr
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={d.url} alt="" onClick={() => onPreview(d.url)} style={{ width: '100%', height: 140, objectFit: 'cover', cursor: 'zoom-in', background: color.bg2, display: 'block' }} />
         <button onClick={(ev) => { ev.stopPropagation(); onQuitar(d.id) }} title="Eliminar" style={{ position: 'absolute', top: 5, right: 5, width: 24, height: 24, padding: 0, border: 'none', borderRadius: '50%', background: 'rgba(0,0,0,.55)', color: '#fff', fontSize: 13, lineHeight: 1, cursor: 'pointer' }}>✕</button>
+        {pt && <ChapaPuntaje pt={pt} />}
       </div>
       <div style={{ padding: 6 }}>
         <div style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.name}>{d.name || '—'}</div>

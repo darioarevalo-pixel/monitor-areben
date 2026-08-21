@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aplicarTally, contarPorEstado, ordenar, sanearImportado, tallyVotos, type Boleta } from '../lib/disenos/core'
+import { contarPorEstado, ordenar, sanearImportado } from '../lib/disenos/core'
 import type { Diseno } from '../lib/disenos/tipos'
 
 const D = (over: Partial<Diseno>): Diseno => ({ id: 'x', name: '', url: 'data:,', nota: '', up: 0, down: 0, estado: 'revisar', ...over })
@@ -27,25 +27,6 @@ describe('ordenar', () => {
     const orig = arr.map((d) => d.id)
     ordenar(arr, 'tildes')
     expect(arr.map((d) => d.id)).toEqual(orig)
-  })
-})
-
-describe('tallyVotos / aplicarTally', () => {
-  it('cuenta up/down por designId', () => {
-    const ballots: Boleta[] = [
-      { name: 'Ana', votes: { a: 'up', b: 'down' } },
-      { name: 'Leo', votes: { a: 'up' } },
-      { name: 'Sin votos' },
-    ]
-    const t = tallyVotos(ballots)
-    expect(t.a).toEqual({ up: 2, down: 0 })
-    expect(t.b).toEqual({ up: 0, down: 1 })
-  })
-  it('aplicarTally sobrescribe up/down (0 si no votado)', () => {
-    const ds = [D({ id: 'a', up: 9, down: 9 }), D({ id: 'z', up: 5, down: 5 })]
-    const out = aplicarTally(ds, { a: { up: 2, down: 1 } })
-    expect(out[0]).toMatchObject({ id: 'a', up: 2, down: 1 })
-    expect(out[1]).toMatchObject({ id: 'z', up: 0, down: 0 })
   })
 })
 

@@ -6,6 +6,7 @@ import { useAvisosPoll } from '@/components/layout/useAvisosPoll'
 import { LoginScreen } from '@/components/LoginScreen'
 import { ReclamoPublico } from '@/components/reclamos/ReclamoPublico'
 import { CanjePortal } from '@/components/canjes/CanjePortal'
+import { VotacionPortal } from '@/components/disenos/VotacionPortal'
 import { LegalPublico } from '@/components/legal/LegalPublico'
 import { PortalCadete } from '@/components/envios/PortalCadete'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -72,7 +73,13 @@ export default function Seccion() {
    * interna de Envíos —ésa tiene la cuenta corriente y deja borrar— y por eso no puede ser la misma
    * ruta. Se defiende con token + PIN. Ver `api/_cadete.js`.
    */
-  const esPortalCliente = key === 'reclamo' || key === 'canje' || key === 'legal' || key === 'cadete'
+  /**
+   * `/votacion/<token>` es el cuarto, y el más interno de todos: el equipo puntúa los diseños del
+   * tablero de Compras desde el celular. Igual va por acá y no detrás del login, porque vota gente
+   * que no tiene por qué tener cuenta en el Monitor, y pedirle que se loguee para poner cinco
+   * estrellas es garantizar que no vote. Se defiende con el token. Ver `api/_disenos-votacion.js`.
+   */
+  const esPortalCliente = key === 'reclamo' || key === 'canje' || key === 'legal' || key === 'cadete' || key === 'votacion'
 
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
@@ -104,6 +111,7 @@ export default function Seccion() {
     const token = Array.isArray(partes) ? partes[1] ?? null : null
     if (key === 'legal') return <LegalPublico pagina={token} />
     if (key === 'cadete') return <PortalCadete token={token} />
+    if (key === 'votacion') return <VotacionPortal token={token} />
     return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} />
   }
 

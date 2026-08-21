@@ -10,9 +10,11 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
+import disenosRondas from './_disenos-rondas.js';
+import disenosVotacion from './_disenos-votacion.js';
 import fotosVerificadas from './_tn-fotos-verificadas.js';
 import tnDesc from './_tn-desc.js';
 import tnDescIa from './_tn-desc-ia.js';
@@ -41,6 +43,13 @@ import { soloMismoOrigen } from './_auth.js';
 const RECURSOS = {
   ignorados,
   disenos,
+  // Las rondas de votación del tablero de diseños. Son DOS recursos y no uno a propósito:
+  // `disenos-rondas` pide sesión y permiso de la sección, y `votacion` **no pide nada** porque lo
+  // abre el equipo desde el celular con el link. Mismo criterio que `reclamos`/`reclamo` y
+  // `canjes`/`canje` en `api/postventa.js`: un verbo abierto no convive con verbos con login en el
+  // mismo archivo, que es como se cuela el que se olvidó de pedir la sesión.
+  'disenos-rondas': disenosRondas,
+  votacion: disenosVotacion,
   'fotos-verificadas': fotosVerificadas,
   'tn-desc': tnDesc,
   // El redactor con IA. Entra por acá y no por un archivo propio como todo el resto, y además

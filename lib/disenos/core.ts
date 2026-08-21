@@ -1,7 +1,11 @@
 /**
- * Lógica pura del tablero de diseños: orden, tally de la votación online y
- * saneado del import. Port de dbOrdenar/dbVotTraer(tally)/dbImportar(limpio)
- * (index.html:3510/3609/3647).
+ * Lógica pura del tablero de diseños: orden y saneado del import. Port de dbOrdenar/dbImportar
+ * (index.html:3510/3647).
+ *
+ * ⛔ Acá **no** está la votación por link: eso es `votacion.core.js`, y a propósito no vuelca nada
+ * sobre el documento del diseño. El tally que vivía acá pisaba los `up`/`down` que el equipo pone
+ * a mano en la oficina cada vez que se traían los votos online — dos votaciones distintas
+ * tapándose una a la otra.
  */
 
 import type { Diseno, EstadoDiseno, OrdenDiseno } from './tipos'
@@ -14,30 +18,6 @@ export function ordenar(arr: Diseno[], orden: OrdenDiseno): Diseno[] {
   else if (orden === 'cruces') a.sort((x, y) => (y.down || 0) - (x.down || 0) || nm(x, y))
   else if (orden === 'saldo') a.sort((x, y) => (y.up || 0) - (y.down || 0) - ((x.up || 0) - (x.down || 0)) || nm(x, y))
   return a
-}
-
-/** Una boleta de votación online. */
-export type Boleta = { name?: string; votes?: Record<string, 'up' | 'down'> }
-
-/** Cuenta los votos de las boletas por designId. Port del tally de dbVotTraer @3609-3610. */
-export function tallyVotos(ballots: Boleta[]): Record<string, { up: number; down: number }> {
-  const tally: Record<string, { up: number; down: number }> = {}
-  ;(ballots || []).forEach((b) =>
-    Object.entries(b.votes || {}).forEach(([did, v]) => {
-      tally[did] = tally[did] || { up: 0, down: 0 }
-      if (v === 'up') tally[did].up++
-      else if (v === 'down') tally[did].down++
-    }),
-  )
-  return tally
-}
-
-/** Vuelca el tally sobre los diseños (up/down). Port de dbVotTraer @3611. */
-export function aplicarTally(disenos: Diseno[], tally: Record<string, { up: number; down: number }>): Diseno[] {
-  return disenos.map((d) => {
-    const t = tally[d.id] || { up: 0, down: 0 }
-    return { ...d, up: t.up, down: t.down }
-  })
 }
 
 /** Sanea un tablero importado: descarta lo inválido, normaliza estados/votos. Port de dbImportar @3647. */

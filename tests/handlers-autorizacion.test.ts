@@ -72,6 +72,7 @@ const PUERTAS = [
   { archivo: '_conteos-deposito', llave: 'conteo-deposito', que: 'los conteos del depósito' },
   { archivo: '_inventario-vivo', llave: 'conteo', que: 'el stock vivo de GN' },
   { archivo: '_disenos', llave: 'disenos', que: 'el tablero de diseños' },
+  { archivo: '_disenos-rondas', llave: 'disenos', que: 'las rondas de votación (y sus tokens)' },
   { archivo: '_solicitudes', llave: 'solicitudes', que: 'las solicitudes' },
   { archivo: '_tn-ignorados', llave: 'tncat', que: 'los productos apartados de la revisión' },
   { archivo: '_tn-fotos-verificadas', llave: 'tncat', que: 'las fotos ya verificadas' },
