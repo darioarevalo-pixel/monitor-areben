@@ -31,6 +31,12 @@ const apiFetch = readFileSync(join(raiz, 'lib/api-fetch.ts'), 'utf8')
 /** El nombre del header es el contrato entre las dos puntas: si cambia de un lado, tiene que cambiar del otro. */
 const HEADER = 'x-monitor-auth'
 
+/**
+ * ⚠️ **Este archivo NO describe el endpoint entero.** Desde el 21-ago-2026 `blob-upload.js` tiene
+ * una cuarta rama que corre **sin sesión**: la creadora de un canje subiendo su contenido con el
+ * token de su link. Esa rama va ANTES de `exigirUsuario` y se prueba en `canje-contenido.test.ts`,
+ * con comportamiento y no con texto. Lo de acá abajo sigue valiendo para las otras tres.
+ */
 describe('blob-upload — el permiso de subida se pide CON la sesión', () => {
   it('la puerta exige usuario (si esto desaparece, el resto del archivo no significa nada)', () => {
     // Sin esta aserción, sacarle el guard al endpoint dejaría los tests de abajo pasando en verde

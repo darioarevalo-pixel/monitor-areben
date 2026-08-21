@@ -34,6 +34,7 @@ import { BloqueSeleccion } from './BloqueSeleccion'
 import { SelectorModelo } from './SelectorModelo'
 import { BloqueEnvio } from './BloqueEnvio'
 import { BloqueEntregables } from './BloqueEntregables'
+import { ContenidoDeElla } from './ContenidoDeElla'
 import { CierreBalance } from './CierreBalance'
 import { GrillaEntregables, listaAPedido, pedidoALista, totalPedido, type PedidoPorTipo } from './GrillaEntregables'
 import { MensajeParaCopiar } from './ProponerCanje'
@@ -332,6 +333,10 @@ export function FichaCanje({
         onCambio={() => void recargar()}
         editable={editable}
       />
+      {/* El material crudo que dejó ella en su link. Va PEGADO a los entregables porque es lo que
+          se mira mientras se decide si cumplió, pero es su propio bloque: no es la prueba de que
+          publicó, y confundirlos es lo que hacía que se leyeran como «Sólo captura». */}
+      <ContenidoDeElla evidencias={evidencias} />
       {/* Cómo lo recibe. Va ARRIBA del envío y desde la propuesta, no sólo al proponer: "ya lo
           acordamos y después me dice que pasa por el local" es el caso normal. Sólo en las marcas
           que tienen local; en las demás no hay nada que elegir. */}

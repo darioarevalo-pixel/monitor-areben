@@ -21,10 +21,14 @@ Blob**, carpeta `ingresos/`, por `api/blob-upload.js` (una de las 12 funciones d
 
 ## ⛔ Lo que comparte con otras secciones
 
-- **`api/blob-upload.js` es de tres pantallas**: Fundas y Diseños (miniaturas por el body), las
-  **piezas de Meta Ads** y esta galería (las dos por el camino de cliente). Los topes y formatos de
-  cada carpeta están en `CARPETAS_CLIENTE`; tocar el de una sin mirar la otra le cambia el límite a
-  alguien que no pidió nada.
+- **`api/blob-upload.js` es de cuatro pantallas**: Fundas y Diseños (miniaturas por el body), las
+  **piezas de Meta Ads** y esta galería (las dos por el camino de cliente), y **el contenido que
+  sube la creadora de un canje**. Los topes y formatos de cada carpeta están en `CARPETAS_CLIENTE`;
+  tocar el de una sin mirar la otra le cambia el límite a alguien que no pidió nada.
+- 🔴 **Y desde el 21-ago-2026 ese archivo tiene una rama SIN SESIÓN**: la de canjes se identifica con
+  el token del link de ella y corre **antes** de `exigirUsuario`. Sus reglas viven aparte
+  (`api/_canje-token.js`, con su propio tope y su propia carpeta) y no tocan `CARPETAS_CLIENTE`,
+  pero **un guard nuevo puesto arriba de todo se lo come también el portal**.
 - **La tabla de formatos es `lib/media.core.js`**, compartida con Meta Ads (`pieza.core.js` la
   re-exporta con sus nombres de siempre). Un formato nuevo es **una línea ahí**, nunca una lista
   nueva: adentro de Meta llegó a haber tres listas sueltas y agregar un formato en una sola dejaba un

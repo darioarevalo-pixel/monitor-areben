@@ -209,8 +209,8 @@ export function Ajustes({
         </label>
       </SectionCard>
 
-      <SectionCard title="Dónde se guardan los archivos" subtitle="Una sola carpeta por marca. El sistema no la organiza.">
-        <Field label="Carpeta de Drive" hint="Lo que caiga ahí se ordena a mano después" width={420}>
+      <SectionCard title="Dónde se archiva el contenido" subtitle="Una sola carpeta por marca. El sistema no la organiza.">
+        <Field label="Carpeta de Drive" hint="Es el archivo final, no por donde entra: ella sube desde su link" width={420}>
           <Input value={drive} onChange={(e) => setDrive(e.target.value)} disabled={off} placeholder="https://drive.google.com/…" />
         </Field>
       </SectionCard>

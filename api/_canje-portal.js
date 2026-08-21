@@ -4,6 +4,8 @@
 //   GET  /api/postventa?recurso=canje&token=XXX               → lo poco que ella ve, prellenado.
 //   POST { recurso:'canje', token, accion:'guardar', datos, elecciones? }
 //                                                             → sus datos + lo que eligió, junto.
+//   POST { recurso:'canje', token, accion:'contenido', url, tipo }
+//                                                             → registra UN archivo ya subido al Blob.
 //
 // CÓMO SE PROTEGE (no hay sesión: la llave es el token)
 //   - El token son 64 hex aleatorios, único por canje, con vencimiento, y `cancelar` lo revoca.
@@ -36,19 +38,11 @@
 //   - **Escribe en su propia columna del renglón**: los items que carga ella van con
 //     `origen:'persona'`, y los del equipo no se tocan nunca desde acá. Siguen siendo dos
 //     escritores sin coordinarse, igual que arriba.
-import { createClient } from '@supabase/supabase-js';
 import { seVaDelTope } from '../lib/canjes/reglas.core.js';
-
-/** La misma base maestra de `_canjes.js`. Si algún día se separa por marca, cambian los dos. */
-function cfgMaestra() {
-  return {
-    url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co',
-    key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY,
-  };
-}
-
-/** Estados en los que el link todavía sirve. Antes de `acuerdo` no hay token; después ya se cerró. */
-const ABIERTO = ['acuerdo', 'preparando', 'en_curso'];
+import {
+  buscarPorToken, carpetaDeCanje, clienteMaestro, contarEvidencias, esTokenDeCanje,
+  esUrlDeContenido, topeDeEvidencias,
+} from './_canje-token.js';
 
 /** Las únicas columnas del canje que se leen. */
 const CANJE_COLS = `id, store, estado, persona_id, token_vence, datos_confirmados_at, envio_estado, entregado_at,
@@ -138,6 +132,15 @@ const recorte = (v, max) => {
 };
 
 /**
+ * Un archivo suyo, como sale a su pantalla. Tres campos y ninguno más: de `canje_evidencias`
+ * quedan afuera `verificada`, `rechazada_motivo` y `metricas`, que son nuestra lectura de lo que
+ * ella entregó. Que un archivo esté «sin verificar» es una tarea nuestra, no una nota para ella.
+ */
+function unArchivo(e) {
+  return { id: e.id, url: e.archivo_url, tipo: e.archivo_tipo === 'video' ? 'video' : 'imagen', at: e.created_at || null };
+}
+
+/**
  * Lo que se le muestra: sus propios datos y nada más. Ni el tope, ni el monto, ni los productos, ni
  * lo que se le exigió publicar, ni una palabra del criterio con el que se la eligió.
  *
@@ -145,12 +148,16 @@ const recorte = (v, max) => {
  * campo de más acá no rompe ninguna pantalla — simplemente se filtra, en silencio, hacia afuera.
  * `tests/canje-portal.test.ts` le pasa una fila con todo lo sensible adentro y verifica que no salga.
  *
+ * `contenido` son las filas de `canje_evidencias` que subió ella. Va al final y por separado porque
+ * es lo único de esta respuesta que ella misma escribió: no sale de su ficha ni del canje.
+ *
  * @returns {{ numero: string, marca: string, pide: 'talles'|'modelo_celular', despachado: boolean,
  *   confirmadoAt: string|null, driveUrl: string|null, envio: Record<string, any>|null,
- *   datos: Record<string, any>,
+ *   datos: Record<string, any>, contenido: Record<string, any>[], puedeSubir: boolean,
+ *   carpetaContenido: string,
  *   vitrina: Record<string, any>|null, elegidos: Record<string, any>[] }}
  */
-export function paraLaPersona(canje, persona, cfg, vitrina, items) {
+export function paraLaPersona(canje, persona, cfg, vitrina, items, contenido) {
   const store = canje.store;
   const p = persona || {};
   const datos = {};
@@ -177,11 +184,24 @@ export function paraLaPersona(canje, persona, cfg, vitrina, items) {
     // modo lectura con el aviso, en vez de un 404 que la haría escribirnos para nada.
     despachado: canje.envio_estado === 'hecho' || !!canje.entregado_at || canje.estado === 'en_curso',
     confirmadoAt: canje.datos_confirmados_at || null,
-    // La carpeta donde deja las fotos. Opcional: si la marca no la cargó, la sección no aparece.
+    // La carpeta de Drive. Desde el 21-ago-2026 **ya no es el camino**: es la alternativa para
+    // quien prefiera usarla. Sigue siendo opcional — si la marca no la cargó, no aparece.
     driveUrl: (cfg && cfg.drive_url) || null,
     // Por dónde va, una vez que salió. `null` mientras no se despachó.
     envio: elEnvio(canje),
     datos,
+    // Lo que ya subió, para que la pantalla lo dibuje y ella vea que llegó. Ver `unArchivo`.
+    contenido: (contenido || []).filter((e) => e && e.archivo_url).map(unArchivo),
+    // 🔑 La carpeta del Blob, armada acá. El permiso de subida se firma sobre el `pathname` que
+    // manda el browser, así que el browser tiene que decir uno — y lo que se le pasa es éste, para
+    // que no lo calcule él. El servidor lo vuelve a exigir al firmar (`permisoDeLaCreadora`) y al
+    // registrar la URL (`esUrlDeContenido`): mandarlo no afloja ninguna de las dos.
+    carpetaContenido: carpetaDeCanje(canje.id),
+    // ⚠️ Es una pista para la pantalla, no el control: el que decide es el servidor, dos veces
+    // (antes de firmar el permiso y antes de registrar la URL). Acá se cuentan sólo los suyos
+    // porque es lo único que se trajo; el tope de verdad cuenta la tabla entera y puede cortar
+    // antes. Que corte antes se ve como un cartel, no como un archivo perdido.
+    puedeSubir: (contenido || []).length < topeDeEvidencias(cfg),
     ...laVitrina(canje, vitrina, items),
   };
 }
@@ -418,19 +438,6 @@ async function traerVitrina(supabase, vitrinaId) {
   return { ...v, items: items || [] };
 }
 
-/** Busca el canje del token. Devuelve null si no existe, venció, no arrancó o ya terminó. */
-async function buscarPorToken(supabase, token) {
-  const { data, error } = await supabase.from('canjes').select(CANJE_COLS).eq('token', token).maybeSingle();
-  // El error se loguea aunque ella vea 404 igual. Sin esto, un problema de base (una columna que no
-  // existe, credenciales vencidas) se ve EXACTAMENTE igual que un link inválido y nadie entiende
-  // por qué "el link no anda". Ya pasó con el portal de reclamos.
-  if (error) console.error(`[canje-portal] ${error.message}`);
-  if (!data) return null;
-  if (data.token_vence && new Date(data.token_vence).getTime() < Date.now()) return null;
-  if (!ABIERTO.includes(data.estado)) return null;
-  return data;
-}
-
 export default async function handler(req, res) {
   // Este endpoint NO usa `soloMismoOrigen`: lo abre ella desde su celular, con el link.
   res.setHeader('Cache-Control', 'no-store');
@@ -438,33 +445,77 @@ export default async function handler(req, res) {
 
   const token = String((req.method === 'POST' ? (req.body || {}).token : req.query.token) || '').trim();
   // Un token con forma inválida ni siquiera se consulta.
-  if (!/^[a-f0-9]{32,128}$/i.test(token)) return res.status(404).json({ error: 'no encontrado' });
+  if (!esTokenDeCanje(token)) return res.status(404).json({ error: 'no encontrado' });
 
-  const cfgDb = cfgMaestra();
-  if (!cfgDb.url || !cfgDb.key) return res.status(500).json({ error: 'No se pudo abrir el formulario. Escribinos y lo resolvemos.' });
-  const supabase = createClient(cfgDb.url, cfgDb.key);
+  const supabase = clienteMaestro();
+  if (!supabase) return res.status(500).json({ error: 'No se pudo abrir el formulario. Escribinos y lo resolvemos.' });
 
   try {
-    const canje = await buscarPorToken(supabase, token);
+    const canje = await buscarPorToken(supabase, token, CANJE_COLS);
     if (!canje) return res.status(404).json({ error: 'no encontrado' });
 
-    const [{ data: persona }, { data: cfg }, vitrina, { data: items }] = await Promise.all([
+    const [{ data: persona }, { data: cfg }, vitrina, { data: items }, { data: contenido }] = await Promise.all([
       supabase.from('canje_personas')
         .select(`${CAMPOS_PERSONA.join(', ')}, talles, modelo_celular`)
         .eq('id', canje.persona_id).maybeSingle(),
-      supabase.from('canje_config').select('drive_url').eq('store', canje.store).maybeSingle(),
+      supabase.from('canje_config').select('drive_url, tope_evidencias_por_canje').eq('store', canje.store).maybeSingle(),
       traerVitrina(supabase, canje.vitrina_id),
       // Todos los items del canje, no sólo los suyos: el saldo del tope los cuenta a todos.
       supabase.from('canje_items')
         .select('nombre, variante, cantidad, pvp_unit, origen, estado').eq('canje_id', canje.id),
+      // Lo que ella misma subió. Se lee de la MISMA tabla que la prueba de publicación
+      // (`canje_evidencias`), filtrada por quién la cargó: el modelo previó `subido_por` desde el
+      // día uno y hasta hoy no había forma de que valiera `'persona'`.
+      supabase.from('canje_evidencias')
+        .select('id, archivo_url, archivo_tipo, created_at')
+        .eq('canje_id', canje.id).eq('subido_por', 'persona').order('id'),
     ]);
 
     if (req.method === 'GET') {
-      return res.status(200).json({ ok: true, canje: paraLaPersona(canje, persona, cfg, vitrina, items) });
+      return res.status(200).json({ ok: true, canje: paraLaPersona(canje, persona, cfg, vitrina, items, contenido) });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
     const accion = String((req.body || {}).accion || '');
+
+    // ── El contenido que sube ella ────────────────────────────────────────────
+    // Registra UN archivo que su celular ya subió al Blob. Los bytes no pasaron por acá (el permiso
+    // lo firmó `api/blob-upload.js` y la subida fue directa), así que lo que llega es un string de
+    // afuera y hay que tratarlo como tal: `esUrlDeContenido` exige que sea del Blob y de la carpeta
+    // de ESTE canje.
+    if (accion === 'contenido') {
+      const url = String((req.body || {}).url || '').trim();
+      if (!esUrlDeContenido(url, canje.id)) return res.status(400).json({ error: 'Ese archivo no se subió desde acá.' });
+      const tipo = (req.body || {}).tipo === 'video' ? 'video' : 'imagen';
+
+      // El mismo tope que aplica `evidencia-agregar` en `api/_canjes.js`, contra la misma tabla. Se
+      // vuelve a mirar acá aunque `blob-upload.js` ya lo haya mirado antes de firmar: entre firmar
+      // y registrar pasa la subida entera, y el tope lo puede haber cruzado otra tanda en paralelo.
+      const previas = await contarEvidencias(supabase, canje.id);
+      const tope = topeDeEvidencias(cfg);
+      if (previas >= tope) return res.status(409).json({ error: 'Ya subiste todo lo que entra. Si falta algo, escribinos.' });
+
+      const ahoraIso = new Date().toISOString();
+      const { data: fila, error: eEv } = await supabase.from('canje_evidencias').insert({
+        canje_id: canje.id,
+        // Suelta a propósito: ella manda el material, **no declara qué entregable cumple**. Atarlo a
+        // un entregable es un juicio, y los juicios los hace el equipo desde el panel.
+        entregable_id: null,
+        archivo_url: url,
+        archivo_tipo: tipo,
+        subido_por: 'persona',
+        // ⛔ Nace SIN verificar, y una evidencia sin verificar no cuenta para el cumplimiento. Que
+        // suba diez fotos no puede cerrarle un reel solo.
+        verificada: false,
+        usuario: 'creadora',
+        created_at: ahoraIso,
+        updated_at: ahoraIso,
+      }).select('id, archivo_url, archivo_tipo, created_at').single();
+      if (eEv) throw new Error(eEv.message);
+
+      return res.status(200).json({ ok: true, archivo: unArchivo(fila) });
+    }
+
     if (accion !== 'guardar') return res.status(400).json({ error: 'acción desconocida' });
 
     // Después del despacho la dirección ya viajó con el paquete: dejarla editar sería hacerle creer

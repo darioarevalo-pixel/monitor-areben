@@ -16,6 +16,11 @@
  *   - **Se guarda todo junto, una vez.** Al revés que las fotos de un reclamo, acá no hay nada que
  *     se pierda si se corta: es un formulario corto y el botón está siempre a la vista.
  *
+ * **El contenido (21-ago-2026).** Una vez que el pedido llegó, el mismo link es por donde ella nos
+ * pasa las fotos y los videos. Antes se le pedía que los dejara en una carpeta de Drive y eso se
+ * trababa por permisos de Google: terminaba llegando por WhatsApp. La pantalla está en
+ * `PortalContenido`; acá se queda el estado, porque la lista se refresca al subir cada archivo.
+ *
  * **La vitrina (tanda 2).** Si el canje tiene una colgada, antes de los datos elige productos: la
  * grilla de fotos, las opciones de cada uno tal como las tiene la tienda, y arriba cuánto le queda.
  * Va primero porque es la parte que engancha, y la dirección después, que es el trámite. Los dos
@@ -31,8 +36,10 @@
  * miró y estaba bien".
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PortalContenido, type ArchivoSubido } from '@/components/canjes/PortalContenido'
 import { PortalVitrina, type Eleccion, type Opcion, type ProductoVitrina, type Vitrina } from '@/components/canjes/PortalVitrina'
+import type { ClaseMedia } from '@/lib/media'
 
 const API = '/api/postventa?recurso=canje'
 
@@ -81,6 +88,12 @@ type Vista = {
   driveUrl: string | null
   envio: Envio | null
   datos: Datos
+  /** Lo que ella ya subió. La arma el servidor de `canje_evidencias`, filtrada por `subido_por`. */
+  contenido: ArchivoSubido[]
+  /** Pista para la pantalla; el tope de verdad lo hace cumplir el servidor, dos veces. */
+  puedeSubir: boolean
+  /** La carpeta del Blob, armada por el servidor. ⛔ No se calcula acá. */
+  carpetaContenido: string
   vitrina: Vitrina | null
   elegidos: Elegido[]
 }
@@ -188,6 +201,25 @@ export function CanjePortal({ token }: { token: string | null }) {
   }, [token])
 
   const set = (k: string) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+  /**
+   * Registra un archivo que ya está en el Blob y lo suma a la grilla en el momento.
+   *
+   * 🔑 **Va uno por uno, apenas cada archivo termina de subir.** No hay `onUploadCompleted` (ver el
+   * encabezado de `api/blob-upload.js`): el que le avisa al servidor que el archivo existe es este
+   * fetch. Si tira, el hook marca esa fila como fallada y ella reintenta — lo que ya subió antes
+   * queda guardado igual, que es todo el punto de no juntarlos y mandarlos al final.
+   */
+  const registrarContenido = useCallback(async ({ url, clase }: { url: string; clase: ClaseMedia }) => {
+    const r = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, accion: 'contenido', url, tipo: clase === 'video' ? 'video' : 'imagen' }),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d?.ok) throw new Error(d?.error || 'No se pudo guardar ese archivo.')
+    setVista((v) => (v ? { ...v, contenido: [...v.contenido, d.archivo as ArchivoSubido] } : v))
+  }, [token])
 
   const vitrina = vista?.vitrina || null
   /** Sólo se manda `elecciones` si de verdad estaba eligiendo: si no, el guardado es el de siempre. */
@@ -372,6 +404,20 @@ export function CanjePortal({ token }: { token: string | null }) {
         <p style={{ color: '#6b7280', lineHeight: 1.5 }}>
           Los datos quedaron como estaban. Si algo no coincide, escribinos y lo vemos.
         </p>
+
+        {/* El buzón del contenido, sólo cuando el pedido YA LLEGÓ: antes no tiene nada que
+            mandarnos y pedírselo sería apurarla. `llego` alcanza como corte porque las dos formas
+            de entregar —el despacho y el retiro en el local— estampan `entregado_at`. */}
+        {llego && (
+          <PortalContenido
+            token={token}
+            carpeta={vista.carpetaContenido}
+            archivos={vista.contenido}
+            puedeSubir={vista.puedeSubir}
+            driveUrl={vista.driveUrl}
+            onSubido={registrarContenido}
+          />
+        )}
       </div>
     )
   }

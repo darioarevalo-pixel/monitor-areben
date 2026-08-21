@@ -252,6 +252,18 @@ export function mensajeAcuerdo(
  * "Ya salió". Lleva el seguimiento sólo si la vía lo tiene: mandarle un código a alguien que va a
  * retirar en mano es ruido, y mandarle un link que no funciona es peor.
  */
+/**
+ * Dónde nos deja el contenido. **Nombra el link sin repetirlo**: en el despacho no hace falta
+ * pegarlo de nuevo —es el mismo que ya recibió para cargar sus datos— y armarlo pediría el token,
+ * que en esta pantalla no está a mano. El botón de subir le aparece ahí adentro apenas el pedido
+ * figura entregado.
+ *
+ * 🔑 Antes acá se le pedía una carpeta de Drive, y eso se trababa por permisos de Google: terminaba
+ * mandando todo por WhatsApp, comprimido.
+ */
+const CONTENIDO_POR_EL_LINK =
+  'Las fotos y los videos nos los podés dejar en el mismo link que te pasamos, directo desde el celular.'
+
 export function mensajeDespacho(
   persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
   c: Pick<CanjeRow, 'store' | 'envio_via' | 'envio_seguimiento'>,
@@ -265,6 +277,8 @@ export function mensajeDespacho(
       `¡Hola ${vos}! Ya tenemos tu pedido de ${STORE_LABEL[c.store]} listo para que lo pases a buscar.`,
       '',
       'Avisanos cuándo te queda cómodo.',
+      '',
+      CONTENIDO_POR_EL_LINK,
     ].join('\n')
   }
 
@@ -275,7 +289,7 @@ export function mensajeDespacho(
   } else if (via) {
     lineas.push('', `Va por ${VIA_ENVIO_LABEL[via]}.`)
   }
-  lineas.push('', 'Cuando te llegue, contanos qué te pareció.')
+  lineas.push('', 'Cuando te llegue, contanos qué te pareció.', '', CONTENIDO_POR_EL_LINK)
   return lineas.join('\n')
 }
 
@@ -323,6 +337,12 @@ export function mensajeIntentoEntrega(
 export function mensajeRecordatorio(
   persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
   faltantes: { tipo: CanjeEntregable['tipo']; cuantas: number }[],
+  /**
+   * Su link, si se pudo leer el token. Va **al final y sólo si existe**: es la vía para el material
+   * crudo —las fotos y los videos que nos entrega—, que es otra cosa que el link de la publicación
+   * que se le pide arriba. Sin token el mensaje sale como salía siempre, sin una línea colgada.
+   */
+  link?: string | null,
 ): string {
   const vos = comoLaLlamamos(persona)
   const partes = faltantes.map((f) =>
@@ -332,9 +352,11 @@ export function mensajeRecordatorio(
     ? partes[0] ?? ''
     : `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`
 
-  return [
+  const lineas = [
     `¡Hola ${vos}! ¿Cómo va?`,
     '',
     `Te consulto por ${lista} que habíamos quedado. Si ya las subiste pasame el link así lo registramos, y si necesitás más tiempo no hay drama, avisame.`,
-  ].join('\n')
+  ]
+  if (link) lineas.push('', `Y las fotos y los videos podés subirlos acá, directo desde el celular: ${link}`)
+  return lineas.join('\n')
 }

@@ -119,7 +119,8 @@ ya tienen ficha:
 - Ingresos proyectados → **leer `docs/secciones/ingresos.md`** antes de tocar
   `components/ingresos/`, `lib/ingresos/`, `lib/media.core.js` o `api/blob-upload.js`. ⛔ **Sacar un
   ítem de la galería BORRA el archivo del Blob** — y `api/blob-upload.js` lo comparten Fundas,
-  Diseños y las piezas de Meta.
+  Diseños, las piezas de Meta y **el contenido que sube la creadora de un canje SIN SESIÓN**: esa
+  rama va antes de `exigirUsuario`, así que un guard nuevo "arriba de todo" no tiene sesión detrás.
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está

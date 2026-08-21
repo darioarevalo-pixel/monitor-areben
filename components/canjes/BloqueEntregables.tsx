@@ -7,6 +7,12 @@
  * mucho pedirle, y ella ya sabe lo que acordó — no se le corre atrás por el sistema. Marketing
  * pega el link de cada publicación y los números a mano.
  *
+ * ⚠️ **Eso sigue valiendo para el CUMPLIMIENTO, y dejó de valer para el MATERIAL** (21-ago-2026).
+ * Ella sí sube por su link las fotos y los videos que nos entrega —antes se le pedía una carpeta de
+ * Drive y se trababa por permisos de Google—, pero eso es material crudo: llega suelto, sin
+ * verificar, y **no dice qué entregable cumple**. Se dibuja aparte, en `ContenidoDeElla`, y por eso
+ * las suyas se sacan de `sueltas` acá abajo.
+ *
  * ⚠️ Una evidencia **sin verificar no cuenta**. Sin ese paso, pegar un link roto cerraría el canje,
  * y el cumplimiento es justamente lo único que este módulo existe para medir.
  */
@@ -17,8 +23,10 @@ import {
   StatusPill, color, font, space, weight, useConfirmar, useToast, type Tone,
 } from '@/components/ui'
 import {
-  agregarEntregable, agregarEvidencia, borrarEvidencia, quitarEntregable, verificarEvidencia,
+  agregarEntregable, agregarEvidencia, borrarEvidencia, leerToken, linkDelPortal, quitarEntregable,
+  verificarEvidencia,
 } from '@/lib/canjes/cliente'
+import { contenidoDeElla } from '@/components/canjes/ContenidoDeElla'
 import { mensajeRecordatorio } from '@/lib/canjes/mensajes'
 import {
   ENTREGABLE_LABEL, TIPOS_ENTREGABLE, cumplimiento, entregableEnCriollo,
@@ -42,7 +50,10 @@ export function BloqueEntregables({
   const [cargandoEvidencia, setCargandoEvidencia] = useState<CanjeEntregable | null>(null)
 
   const cump = cumplimiento(entregables, evidencias, new Date())
-  const sueltas = evidencias.filter((e) => e.entregable_id == null)
+  // Las que subió ella tienen su propio bloque (`ContenidoDeElla`): acá quedarían como «Sin
+  // entregable asociado · Sólo captura», que no dice nada de lo que son.
+  const deElla = new Set(contenidoDeElla(evidencias).map((e) => e.id))
+  const sueltas = evidencias.filter((e) => e.entregable_id == null && !deElla.has(e.id))
 
   async function quitar(e: CanjeEntregable) {
     const ok = await confirmar({
@@ -100,12 +111,22 @@ export function BloqueEntregables({
           {persona && (
             <CopyButton
               label="Copiar recordatorio"
-              getText={() => mensajeRecordatorio(
-                persona,
-                // Lo que FALTA, no lo comprometido: pedirle 3 historias cuando ya subió 2 es la
-                // forma más rápida de que deje de contestar.
-                cump.vencidos.map((v) => ({ tipo: v.entregable.tipo, cuantas: v.comprometidas - v.cumplidas })),
-              )}
+              onError={(e) => toast.error(String(e?.message || e))}
+              // 🔑 El token se lee **al apretar**, no al montar la ficha: `getText` se espera, así
+              // que el pedido cuesta sólo cuando alguien de verdad va a escribirle. Si falla, el
+              // mensaje sale igual sin la línea del link en vez de no salir.
+              getText={async () => {
+                const link = await leerToken(canje.store, canje.id)
+                  .then((t) => (t.token ? linkDelPortal(t.token) : null))
+                  .catch(() => null)
+                return mensajeRecordatorio(
+                  persona,
+                  // Lo que FALTA, no lo comprometido: pedirle 3 historias cuando ya subió 2 es la
+                  // forma más rápida de que deje de contestar.
+                  cump.vencidos.map((v) => ({ tipo: v.entregable.tipo, cuantas: v.comprometidas - v.cumplidas })),
+                  link,
+                )
+              }}
             />
           )}
         </div>
