@@ -106,7 +106,7 @@ describe('cruzarConLaCaja — las dos versiones del mismo hecho', () => {
   it('🔴 un costo sin denominador va VACÍO, no en 0 — un 0 ahí se lee «gratis»', () => {
     const t = renderParte({
       caja: cruzarConLaCaja([{ fecha: '2026-08-05', gasto: 7061, compras: 0 }], { '2026-08-05': 4 }),
-      techos: { bdi: 7093 },
+      techos: { bdi: 6755 },
     })
     const fila = t.split('\n').find((l) => l.startsWith('2026-08-05|'))!
     // pedidos 4 con $7.061 => $1.765 el pedido; compras 0 => la celda del costo por compra VACÍA.
@@ -169,7 +169,7 @@ describe('renderParte — lo que el texto afirma', () => {
     hoy: [aviso(), aviso({ aviso: 'AD02', conjunto: 'CONJ B', gasto: 500, compras: 0, carritos: 4 })],
     ayer: [aviso({ gasto: 900 }), aviso({ conjunto: 'CONJ MUERTO', gasto: 2000, compras: 0 })],
     serie: [{ fecha: '2026-08-20', gasto: 1500, compras: 1, revenue: 3000 }],
-    techos: { bdi: 7093 },
+    techos: { bdi: 6755 },
     techosDiarios: { 'CONJ A': 3500, 'CONJ B': 1500 },
     caja: cruzarConLaCaja([{ fecha: '2026-08-20', gasto: 1500, compras: 1 }], { '2026-08-20': 3 }),
     meta: { cuenta: '1145878766790149', hoy: '2026-08-21', ayer: '2026-08-20' },

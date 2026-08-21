@@ -235,7 +235,28 @@ una venta del local con tarjeta). ⇒ **`costoMax` —el del semáforo— sigue 
 ⚠️ **Los tres nacen NEUTROS (`0`, `0`, `false`) y no es una omisión.** `normalizar()` arranca en
 `DEFAULTS` y una clave que la fila guardada no tiene se queda con el default ⇒ **un default ≠ 0 le
 cambiaría el techo, en silencio, a toda línea ya guardada**. El primer test del bloque nuevo de
-`tests/meta-ads-rentabilidad.test.ts` clava que la fila de BDI sigue dando **$9.101**.
+`tests/meta-ads-rentabilidad.test.ts` clava el techo que da la fila de BDI.
+
+## 🔴 El techo de BDI se corrigió el 21-ago-2026: $9.101 → $6.755
+
+`unidades` pasó de **2,6 a 1,93**. El 2,6 era un número **derivado** del ticket; el 1,93 está medido
+con `scripts/medir-economia-bdi.mjs` en tres ventanas (n=91 / 213 / 448 ⇒ 1,92 / 1,93 / 1,86) y por
+los **dos caminos** que la base ofrece (`ventas.items_sold` y la suma de `venta_detalles.quantity`),
+que coinciden exactamente. El chequeo cruzado del script da 4,1% ⇒ **las unidades explican casi toda
+la diferencia** y no hizo falta mover ningún otro supuesto. El ROAS break-even NO se movió: 1,72.
+
+- 🔑 **`FILA_BDI` en `tests/meta-ads-rentabilidad.test.ts` es una COPIA de producción.** Cuando
+  alguien guarde la fila desde la pantalla, ese fixture queda afirmando algo falso sobre «la fila
+  guardada» **y el test sigue verde**, porque una copia no sabe que quedó vieja. Se relee con
+  `psql "$DATABASE_URL_BDI" -A -t -c "select supuestos from meta_ads_rentabilidad where linea='bdi'"`.
+- ⛔ **No se tocaron `costo` (medido $1.708 contra $1.700: mueve el techo $8) ni `mix`.** Cuál de
+  MercadoPago / PagoNube cuenta como «transferencia» para el modelo es una **decisión**, no una
+  medición: el script mide 58% / 35% / 6% de contado y no alcanza para deducirlo.
+- 🔴 ▶️ **`DEFAULTS.unidades` sigue en 2,6 y eso quedó abierto a propósito.** Su comentario dice que
+  es «la economía real de las fundas de BDI», y ya no coincide con la fila medida de BDI. Bajarlo a
+  1,93 le movería el techo a **Zattia y Stunned**, que no tienen fila y muestran estos defaults
+  prestados — y Zattia ya tiene su economía medida aparte ($5.125 de ganancia): lo que corresponde
+  ahí es **cargarle su fila**, no ajustarle el préstamo. Lo decide Bruno.
 
 ## El parte del día (21-ago-2026)
 

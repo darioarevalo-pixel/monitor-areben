@@ -233,16 +233,27 @@ describe('normalizar — lo que se guarda no puede ser cualquier cosa', () => {
  * fila desde el 13-ago. Si alguien mueve esos defaults, este test lo caza antes que la pantalla.
  */
 describe('DREI, envío y saldo de IVA', () => {
-  /** La fila que Bruno guardó el 13-ago-2026, tal cual está en `meta_ads_rentabilidad`. */
+  /**
+   * La fila de BDI **tal cual está en `meta_ads_rentabilidad`**, releída el 21-ago-2026.
+   *
+   * ⚠️ **Es una COPIA de producción, no un caso inventado**: el día que alguien guarde la fila desde
+   * `/meta-ads/rentabilidad`, esto queda diciendo algo falso sobre «la fila guardada» y hay que
+   * traerla de nuevo. Ya pasó una vez: el 21-ago `unidades` bajó de **2,6 a 1,93** —el 2,6 era un
+   * número DERIVADO del ticket y lo medido sobre 213 pedidos reales es 1,93— y el techo pasó de
+   * **$9.101 a $6.755**. El test siguió verde con la copia vieja, porque una copia no sabe que
+   * quedó vieja. Se relee con:
+   *
+   *     psql "$DATABASE_URL_BDI" -A -t -c "select supuestos from meta_ads_rentabilidad where linea='bdi'"
+   */
   const FILA_BDI = {
     iva: 21, mix: 50, iibb: 4, costo: 1700, raspa: 12.5, stock: 11000, cheque: 1.2, precio: 14490,
-    transf: 10, reparto: 50, acumulan: true, costoHoy: 2472, tnTransf: 0, unidades: 2.6,
+    transf: 10, reparto: 50, acumulan: true, costoHoy: 2472, tnTransf: 0, unidades: 1.93,
     usaRaspa: 100, pasTransf: 1, tnTarjeta: 1, ventasDia: 100, pasTarjeta: 8,
   }
 
   it('🔴 los tres nacen neutros: la fila guardada de BDI sigue dando el mismo techo', () => {
     const r = calcularRentabilidad(normalizar(FILA_BDI))
-    expect(centavos(r.costoMax)).toBe(9101)
+    expect(centavos(r.costoMax)).toBe(6755)
     expect(r.recuperoPedido).toBe(0)
     expect(r.cajaPedido).toBe(r.contribPedido)
     expect(r.roasBECaja).toBe(r.roasBE)
