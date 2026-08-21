@@ -400,7 +400,7 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar }: { ronda: Ronda; b
               </Tr>
             </THead>
             <TBody>
-              {res.map((d, i) => (
+              {res.map((d, i) => [
                 <Tr key={d.id}>
                   <Td>{d.promedio == null ? '—' : i + 1}</Td>
                   <Td>
@@ -421,17 +421,24 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar }: { ronda: Ronda; b
                         {abierto === d.id ? 'Ocultar' : 'Quién'}
                       </Button>
                     )}
-                    {abierto === d.id && (
-                      <div style={{ fontSize: 11, color: color.ink2, marginTop: 4, lineHeight: 1.5 }}>
+                  </Td>
+                </Tr>,
+                // El desglose va en un renglón PROPIO y a todo el ancho, no adentro de la última
+                // celda: ahí entra en 70 px y con cuatro votantes se lee cortado.
+                abierto === d.id ? (
+                  <Tr key={d.id + '-quien'}>
+                    <Td colSpan={6}>
+                      <div style={{ fontSize: 12, color: color.ink2, lineHeight: 1.6, padding: '2px 0 6px' }}>
                         {boletas
                           .filter((b) => b.puntajes?.[d.id])
-                          .map((b) => `${b.nombre || 'Sin nombre'}: ${b.puntajes[d.id]}`)
-                          .join(' · ')}
+                          .sort((a, b) => (b.puntajes[d.id] || 0) - (a.puntajes[d.id] || 0))
+                          .map((b) => `${b.nombre || 'Sin nombre'} ★${b.puntajes[d.id]}`)
+                          .join('  ·  ')}
                       </div>
-                    )}
-                  </Td>
-                </Tr>
-              ))}
+                    </Td>
+                  </Tr>
+                ) : null,
+              ])}
             </TBody>
           </table>
         </TableWrap>
