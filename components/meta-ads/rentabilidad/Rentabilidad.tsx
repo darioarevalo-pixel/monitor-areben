@@ -81,7 +81,7 @@ export function Rentabilidad() {
  * su propia economía, y arrastrar lo que se estaba editando de BDI a la pestaña de Zattia sería
  * mostrarle a Zattia los números de otro producto.
  */
-function DeUnaLinea({ laLinea, visibles, setLinea }: {
+export function DeUnaLinea({ laLinea, visibles, setLinea }: {
   laLinea: LineaPauta
   visibles: LineaPauta[]
   setLinea: (l: LineaPauta) => void
@@ -92,14 +92,48 @@ function DeUnaLinea({ laLinea, visibles, setLinea }: {
 
   const pestañas: TabItem[] = visibles.map((l) => ({ key: l, label: ETIQUETA_LINEA[l] }))
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+  const cabecera = (
+    <>
       {/* Sin «Todas»: el umbral es de UNA economía. Sólo si hay más de una para elegir. */}
       {visibles.length > 1 && (
         <Tabs items={pestañas} value={laLinea} onChange={(k) => setLinea(k as LineaPauta)} />
       )}
-
       {m.error && <Notice tone="danger">{m.error}</Notice>}
+    </>
+  )
+
+  /**
+   * 🔴 **Mientras carga no se dibuja UN SOLO número.**
+   *
+   * El hook arranca en `DEFAULTS` —la economía de las fundas de BDI— y recién después llega la fila
+   * de la línea. Como este componente va con `key={laLinea}`, **cambiar de marca lo remonta**, así
+   * que ese arranque se repintaba en cada cambio de pestaña: durante un cuadro, las cinco tarjetas
+   * y las cuatro tablas afirmaban un techo de **$9.101** que no es el de ninguna línea guardada —ni
+   * siquiera el de BDI, que está en $6.755 desde el 21-ago—. Lo reportó Bruno el 22-ago-2026 y lo
+   * describió exacto: «cada vez que cambio de marca, incluso en la de BDI, primero me aparece el
+   * rendimiento anterior de BDI de 9 mil pesos de techo por compra».
+   *
+   * 🔑 **El defecto era MEDIA regla en la pantalla**: `cargando` existía y lo miraba únicamente el
+   * cartel de `DeDondeSalen`, en la columna angosta. O sea que el cartel decía «leyendo…» mientras
+   * el número grande de al lado afirmaba una cifra — que es peor que no mostrar nada, porque un
+   * número dibujado no se lee como provisorio. Es la misma familia que el default que se hace pasar
+   * por un dato medido, la advertencia que ya estaba escrita en `DEFAULTS` y en el hook.
+   *
+   * ⛔ No alcanza con dejar de remontar (sacar la `key`): eso arrastraría lo editado de una línea a
+   * la otra, que es un defecto peor y está decidido al revés a propósito. El arreglo es no pintar.
+   */
+  if (m.cargando) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+        {cabecera}
+        <Notice tone="neutral">Leyendo el umbral de {ETIQUETA_LINEA[laLinea]}…</Notice>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      {cabecera}
 
       <Regla r={r} />
 
@@ -165,9 +199,15 @@ function DeUnaLinea({ laLinea, visibles, setLinea }: {
  * lectura falló. El del medio es el que importa: los defaults son la economía de las fundas de BDI,
  * y mostrárselos a Zattia sin decirlo haría pasar el techo de un producto por el de otro.
  */
+/**
+ * De dónde salen los números que se están viendo.
+ *
+ * ⚠️ **Ya no pregunta por `cargando`**: desde el 22-ago-2026 el padre no dibuja nada mientras carga,
+ * así que acá `cargando` es siempre `false`. El guard que estaba —y que era lo ÚNICO que miraba esa
+ * bandera— es justo lo que hacía creíble el defecto: este cartel decía «leyendo…» al lado de un
+ * techo de $9.101 dibujado como un hecho.
+ */
 function DeDondeSalen({ m, linea }: { m: EstadoRentabilidad; linea: LineaPauta }) {
-  if (m.cargando) return <Notice tone="neutral">Leyendo el umbral de {ETIQUETA_LINEA[linea]}…</Notice>
-
   if (!m.origen.guardado) {
     return (
       <Notice tone="warning">

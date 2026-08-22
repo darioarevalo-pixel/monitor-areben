@@ -198,6 +198,21 @@ Y tres que aparecieron **usándolo**, no leyéndolo:
 - ⚠️ **Una campaña pausada no aparecía en NINGUNA parte de la pantalla**: el reparto era `alAire` /
   `sinEntrega` / `sin asignar`, y lo que no está `ACTIVE` no caía en ninguno. La invariante que
   faltaba, hoy con test: **los tres cortes reparten todas las campañas y ninguna aparece dos veces**.
+- 🔴 🔑 **Rentabilidad afirmaba $9.101 durante un cuadro, en TODAS las líneas** (22-ago-2026, lo vio
+  Bruno): *«cada vez que cambio de marca, incluso en la de BDI, primero me aparece el rendimiento
+  anterior de BDI de 9 mil pesos de techo por compra»*. `useRentabilidad` arranca en `DEFAULTS` y
+  `DeUnaLinea` va con `key={laLinea}` ⇒ **cambiar de pestaña remonta** y repinta ese arranque. El
+  techo de los defaults no es el de ninguna línea guardada — ni el de BDI, que está en $6.755.
+  🔑 **El defecto era MEDIA regla en la pantalla**: `cargando` existía y lo miraba **sólo** el cartel
+  de `DeDondeSalen`, en la columna angosta ⇒ el cartel decía «leyendo…» mientras el número grande de
+  al lado afirmaba una cifra. **Un número dibujado no se lee como provisorio**, así que avisar al
+  costado es peor que no mostrar nada. Hoy el padre no dibuja **ni un número** mientras carga, y
+  `tests/meta-ads-rentabilidad-pantalla.test.tsx` lo amarra. ⛔ **No se arregla sacando la `key`**:
+  eso arrastraría lo editado de una línea a la otra, que está decidido al revés a propósito.
+  🔑 **El oráculo es `renderToStaticMarkup`, y es exacto y no una aproximación**: no corre
+  `useEffect`, así que devuelve **el primer cuadro** — el único estado donde el defecto vivía. Un
+  test que esperara el fin de la carga no podría verlo nunca. Verificado en rojo antes que en verde:
+  sin el guard, 2 de 3 casos caen y el mensaje imprime el `$ 9.101` que vio Bruno.
 
 ## Medido contra la base el 16-ago-2026
 
@@ -297,6 +312,54 @@ propósito, para no volver a tocar los tres textos que las cuentan).
   insights ya agregadas). Dos conjuntos homónimos en campañas distintas compartirían fila.
 
 ## Pendiente
+
+### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)
+
+Se deciden en Ads Manager a mano: **la API no cambia creativos ni sube videos**, y apagar un conjunto
+sí se puede desde el monitor.
+
+1. ▶️ **Apagar los 3 conjuntos de `ZATTIA - TRAFICO - 21/-05` que entregan** — `TEST INTERESES 1
+   ZATTIA - 22/05` ($1.815/día), `(4) - 20/7` ($1.683), `(5) - 23/7` ($783). **Libera $4.281/día**,
+   el 34% de lo que gasta Zattia.
+   🔴 🔑 **El motivo NO es «los clicks no convierten», y esa lectura estaba mal**: lo corrigió Bruno
+   — **todas las campañas de tráfico van a Instagram y NUNCA a la tienda** ⇒ sus 24.554 clicks no
+   podían comprar, y ⛔ **no se comparan contra los de la campaña de ventas**. El motivo real es que
+   **lo único que compran son seguidores, y salen $5.859 cada uno** (80 en 94 días, $475.575).
+   ⚠️ Y al revés sí vale: **una campaña de VENTAS también genera visitas al perfil**, porque el que
+   se interesa entra a ver el Instagram ⇒ apagar tráfico no deja el perfil en cero.
+2. ▶️ **Mover el video que sirve a una campaña de VENTAS**: `AD 01 - REEL NUEVOS INGRESOS - 22/05`
+   hizo **12.168 clicks —la mitad de todo el tráfico de Zattia—** con CTR 5,79% y CPC $14, y es el
+   gancho de «nuevos ingresos», que es justo lo que se va a lanzar. Va en un conjunto optimizando
+   `Comprar`, con la estructura del `AD 1 - SWEATERS & FITS SEMANA` ($1.343/compra).
+   🔴 **Es una apuesta, no un ganador probado**: ese CTR se midió contra un destino de Instagram, no
+   contra la tienda. ⛔ **Y no elegir por CTR**: en esta cuenta el aviso de PEOR CTR (`SWEATERS -
+   REEL COLORES`, 1,95%) es de los mejores por costo ($2.345) y uno de 5,51% (`FALDAS 4 COLORES`) es
+   el peor ($7.706).
+3. ▶️ **Escalar VENTAS de a UN escalón, midiendo el marginal.** Techo $6.046/compra contra $3.069
+   que paga hoy ⇒ 1,97× de aire. 🔴 **Zattia no tiene medido su costo por compra MARGINAL** —el que
+   frenó a BDI en $6.755—, así que la plata liberada ⛔ no se vuelca de una.
+4. ⚠️ **FALDAS falló en las dos campañas** (3 avisos en tráfico y `FALDAS 4 COLORES` a $7.706 en
+   ventas), pero **probablemente sea ESTACIÓN y no creativo**: en agosto todavía es invierno y los
+   sweaters son los que convierten. ⛔ No matar los creativos de verano por lo que midieron en agosto.
+
+### ▶️ Rentabilidad
+
+- 🏁 **Zattia YA tiene su fila** (22-ago, verificada por relectura): techo **$6.046**, ROAS BE 3,99×
+  de ganancia y 2,36× de caja, `saldoIva` prendido, objetivo 40 ventas/día (lo decidió Bruno).
+  🔑 **Se cargó con el régimen SIN LIQUIDACIÓN** (251 pedidos, 20-may→11-ago): la liquidación arranca
+  el 13-ago y hunde el markup de 2,22× a 1,59×, y calibrar el semáforo sobre una promo lo descalibra
+  solo el día que la promo termina. ▶️ Falta **Stunned**.
+- 🔴 ▶️ **`rentabilidad.core.js` cobra IIBB sobre el BRUTO y `lib/comisiones/core.ts` sobre el NETO**
+  (línea 61). Misma marca, dos márgenes: el techo de Zattia da $6.046 con base bruta y $6.171 con
+  base neta (2,1%), y le pega igual a BDI. ⛔ No se tocó: cambiarlo mueve **el techo ya guardado de
+  BDI en silencio**, que es el modo de falla que advierte el comentario de `DEFAULTS`. Lo decide Bruno.
+- ⚠️ **El modelo no tiene dónde poner la comisión de la pasarela sobre el ENVÍO COBRADO** (~$338 por
+  pedido en el 43% de Zattia que despacha) ⇒ el techo queda optimista ~3,7%. Meterlo en el campo
+  `envio` —que dice «lo que absorbe la tienda»— sería mentirle a su etiqueta.
+- 🔴 **`total_cost` es NULL antes del 20-may-2026 en la base de Zattia**: cualquier ventana anterior
+  promedia mercadería sobre 334 pedidos y COGS sobre menos, y el markup de mayo da **18,4×**.
+
+### ▶️ Lo de antes
 
 - ▶️ 🔴 **Cargar los umbrales y crear las reglas** mirando el calibrador. Son 10 minutos y es lo que
   destraba las automatizaciones, los escalones (que sin `roas_objetivo` ni `techo_diario_crudo` no
