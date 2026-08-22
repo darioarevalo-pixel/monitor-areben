@@ -118,6 +118,34 @@ variante de internas pasada por parámetro.
 - ▶️ Las claves viejas del KV (`sesionfotos:<marca>`) quedaron **intactas como respaldo** y nadie
   las lee desde el 31-jul (`MIGRACION_LISTA = true`). Volver atrás es poner el flag en false.
 
+- ▶️ 🔴 **Stunned hace sesiones de fotos y no tiene dónde pedir la ropa.** Bruno lo dijo el
+  22-ago-2026 con estas palabras: *«sí se le hacen sesiones, pero no tiene sección en el monitor
+  todavía; es un creador de problemas»*. 🔑 **La pregunta no es "crear la sección": es si Stunned
+  pasa a ser una tercera `Marca` o sigue siendo una LÍNEA de Zattia** — y el repo ya la contestó
+  cuatro veces por el segundo camino (`lib/meta-ads/lineas.ts` con `baseDeLinea('stunned') ===
+  'zattia'` y su test, más `memo`, `conteo-estandar`, `sku-map` y `canjes`). ⛔ Tercera `Marca` no:
+  `CUENTAS` es `Record<Marca, Cuenta>` y pediría una tercera base de Supabase **que no existe**
+  (Stunned comparte el GestiónNube de Zattia), más los `brands` de las ~40 secciones y el padrón —
+  `bdi | zattia` son **514 apariciones en 143 archivos**.
+  Como línea, lo medido el 22-ago es que falta poco y **ninguna migración**:
+  1. `api/_solicitudes.js:63` rechaza con 400 todo store que no sea `bdi|zattia` ⇒ aceptar
+     `stunned` y mandarlo a la base de Zattia en `cfgFor`. 🔑 **La tabla `solicitudes` ya tiene
+     columna `store` y la clave es `store,id`**: entran como filas nuevas.
+  2. El permiso de esa misma puerta (`puedeVerAlguna`) lo contesta `baseDeLinea`, el helper que ya
+     usa Meta Ads.
+  3. 🟢 **La cola de "qué falta fotografiar" de Stunned YA se puede leer hoy**:
+     `tiendanube-audit?store=stunned` tiene storeId (7516263) y token propios en `bdi-catalogo`.
+  4. 🔴 **El agujero real: `api/tn-subir-imagen.js:6-8` sólo conoce `bdi` y `zattia`** — y es la
+     puerta por la que se sube la foto a la web, que es el final del ciclo. Son dos líneas; las
+     envs `TIENDANUBE_*_STUNNED` **ya existen**, las usan `tn-categorias` y `tiendanube-audit`.
+  5. `lib/nav.datos.ts` (`sesion-fotos` → `brands: ["bdi","zattia"]`): acá está la decisión de
+     diseño, no el trabajo — selector de línea **adentro de Zattia** (como Meta Ads, y el equipo no
+     aprende un lugar nuevo) o entrada aparte.
+  ⚠️ **Lo que decide si esto alcanza y no se puede saber leyendo**: si el stock de Stunned en el GN
+  de Zattia se separa del de Zattia. De eso depende que *«el sistema decide depósito o local según
+  stock»* no le prometa al equipo una prenda de la marca de al lado. Si no se separa, el punto 1 no
+  alcanza y hay que mirar el ETL.
+
 ## Lo que se midió, y lo que nunca se ejerció (16-ago-2026)
 
 Contra las dos bases, no contra la memoria: **BDI 10 solicitudes** (todas de fotos, 1-jul → 28-jul,
