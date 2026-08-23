@@ -219,7 +219,13 @@ export function PedidosClientes() {
                         <Badge tone="neutral" subtle>{g.porTipo.no_trabajamos} no lo trabajamos</Badge>
                       )}
                       {g.porTipo.sin_stock > 0 && <Badge tone="warning" subtle>{g.porTipo.sin_stock} sin stock</Badge>}
+                      {/* 🔴 Los dos van juntos y no sólo el verde. Caminarlo en prod (23-ago-2026)
+                          mostró que con «1 conseguido» al lado de un 3, el descartado queda
+                          invisible: el total sigue diciendo la verdad y **la pantalla afirma que
+                          quedan 2 pendientes cuando queda 1**. Un estado que no se nombra se lee
+                          como el default. */}
                       {g.conseguidos > 0 && <Badge tone="success" subtle>{g.conseguidos} conseguido{g.conseguidos > 1 ? 's' : ''}</Badge>}
+                      {g.descartados > 0 && <Badge tone="neutral" subtle>{g.descartados} descartado{g.descartados > 1 ? 's' : ''}</Badge>}
                       <div style={{ fontSize: font.lg, fontWeight: 700, minWidth: 34, textAlign: 'right' }}>{g.total}</div>
                     </div>
                   </div>
