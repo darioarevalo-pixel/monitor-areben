@@ -334,7 +334,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   resumen: 'Panel principal con los KPIs del negocio.',
   productos: 'Ventas, vida útil y stock de cada producto, con selección de outlet.',
   variantes: 'Ventas y stock por variante (talle, modelo o color).',
-  'ventas-mensuales': 'Evolución de ventas mes a mes, por categoría y canal.',
+  'ventas-mensuales': 'La venta mes a mes por categoría y canal, y día a día en plata y unidades.',
   margenes: 'Markup y margen de cada producto disponible, contra el objetivo.',
   comisiones: 'Margen neto real por forma de pago y canal, con simulador por producto.',
   colores: 'Ventas por color y análisis de agotamiento por variante.',
