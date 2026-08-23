@@ -20,9 +20,22 @@
  *    cierra deja la duda de si guardó, y a la duda le sigue anotarlo de nuevo (y contarlo dos veces).
  * 3. **El tipo y el canal se recuerdan entre altas.** Quien está repasando el stock del sábado
  *    anota cinco `sin_stock` seguidos y elige una sola vez.
+ * 4. **Elegir el artículo es OPCIONAL y está plegado.** Lo que no trabajamos no existe en ningún
+ *    catálogo nuestro —no hay nada que elegir, y ése es el caso más común— así que el buscador no
+ *    puede estar delante del camino corto. Se abre solo cuando ya se sabe cuál es el artículo:
+ *    cuando se entra desde una fila de producto de Atención.
+ *
+ * # Por qué el artículo se ELIGE y no se escribe (24-ago-2026, pedido de Bruno)
+ *
+ * 🔑 «Si no lo tenemos está perfecto; ahora si está sin stock, estaría bueno seleccionar el
+ * artículo». Las dos mitades de «faltante» no se anotan igual: lo que se ACABÓ ya existe —tiene
+ * ficha, variante y SKU en Gestión Nube—, y escribirlo a mano tira las tres cosas y le deja al que
+ * compra un texto que tiene que volver a buscar. Además el buscador muestra **el stock de hoy**, que
+ * es lo único que puede desmentir en el momento un «no hay» que en realidad está en el depósito.
  */
 
 import { useState } from 'react'
+import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import {
   Badge,
   Button,
@@ -47,6 +60,12 @@ type Props = {
   abierto: boolean
   /** Lo que la persona ya escribió en otra parte — el buscador de Atención que no encontró nada. */
   textoInicial?: string
+  /**
+   * Con esto el alta abre con el buscador de artículo **abierto y sembrado** con este texto, y el
+   * tipo en `sin_stock`. Lo manda la fila de un producto encontrado en Atención: ahí ya se sabe
+   * cuál es el artículo y lo único que falta es la variante.
+   */
+  articuloInicial?: string
   onCerrar: () => void
   onAnotado?: () => void
 }
@@ -64,10 +83,20 @@ export function AnotarFaltante(props: Props) {
   return <Formulario {...props} />
 }
 
-function Formulario({ marca, textoInicial = '', onCerrar, onAnotado }: Props) {
+function Formulario({ marca, textoInicial = '', articuloInicial, onCerrar, onAnotado }: Props) {
   const toast = useToast()
   const [texto, setTexto] = useState(textoInicial)
-  const [tipo, setTipo] = useState<TipoFaltante>('no_trabajamos')
+  const [tipo, setTipo] = useState<TipoFaltante>(articuloInicial ? 'sin_stock' : 'no_trabajamos')
+  /** El artículo de Gestión Nube, cuando se eligió. `null` es el caso normal de lo que no trabajamos. */
+  const [articulo, setArticulo] = useState<ArticuloGN | null>(null)
+  /**
+   * Con qué texto arranca el buscador de artículo, y `null` cuando está plegado.
+   *
+   * 🔴 **La semilla se congela al abrir y no es `texto` en vivo.** Sembrarlo con lo que se está
+   * tipeando haría que el buscador salga a Gestión Nube en cada tecla: `inicial` es una dependencia
+   * del efecto que dispara la búsqueda.
+   */
+  const [semillaArticulo, setSemillaArticulo] = useState<string | null>(articuloInicial ?? null)
   const [canal, setCanal] = useState<CanalPedido>('local')
   const [cliente, setCliente] = useState('')
   const [nota, setNota] = useState('')
@@ -91,11 +120,21 @@ function Formulario({ marca, textoInicial = '', onCerrar, onAnotado }: Props) {
         canal,
         cliente: cliente.trim() || null,
         nota: nota.trim() || null,
+        // Los tres viajan juntos: sin `producto_id`, el servidor tira el sku y la variante — un sku
+        // suelto no tiene con qué agrupar y una variante sola no dice de qué producto es.
+        producto_id: articulo ? articulo.product_id : null,
+        sku: articulo?.sku || null,
+        variante: articulo?.size_name || null,
       })
       setRecien((l) => [t, ...l])
       setTexto('')
       setCliente('')
       setNota('')
+      // El artículo NO se recuerda entre altas, al revés que el tipo y el canal: el siguiente
+      // faltante es otro producto, y un artículo pegado del anterior se guarda sin que nadie lo
+      // mire — y a diferencia del canal, un artículo equivocado manda a reponer lo que no falta.
+      setArticulo(null)
+      setSemillaArticulo(null)
       onAnotado?.()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo anotar.')
@@ -125,6 +164,75 @@ function Formulario({ marca, textoInicial = '', onCerrar, onAnotado }: Props) {
             autoFocus
           />
         </Field>
+
+        {/* 🔴 **El artículo va DESPUÉS del texto y plegado.** Lo que no trabajamos —el caso más
+            común— no está en ningún catálogo nuestro: un buscador delante del campo obligaría a
+            todos a pasar por una búsqueda que para la mitad no puede dar nada. Se abre solo cuando
+            se entra desde una fila de producto de Atención, que es cuando ya se sabe cuál es. */}
+        {/* ⛔ Este bloque NO va adentro de un `Field`: el `Field` del kit es un `<label>`, y un
+            `<button>` adentro de un label lo activa también el clic en el rótulo —y el buscador
+            trae una lista de botones—. Se dibuja el mismo rótulo a mano. */}
+        <div style={{ display: 'grid', gap: 4 }}>
+          <span style={{ fontSize: font.xs, color: color.mut, fontWeight: 500 }}>¿Cuál artículo es?</span>
+          {articulo ? (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: space[3], padding: '8px 10px',
+                border: `1px solid ${color.line}`, borderRadius: 10, background: color.bg2,
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: font.sm, fontWeight: 600, color: color.ink }}>
+                  {articulo.product_name || '—'}
+                  {articulo.size_name ? <span style={{ color: color.mut }}> · {articulo.size_name}</span> : null}
+                </div>
+                {/* El stock de hoy va a la vista a propósito: es lo único que puede desmentir en el
+                    momento un «no hay» que en realidad está en el depósito. */}
+                <div style={{ fontSize: font.xs, color: color.mut2, display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'monospace' }}>{articulo.sku || 's/sku'}</span>
+                  <span>stock hoy {articulo.available_quantity ?? 0}</span>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setArticulo(null)}>
+                Quitar
+              </Button>
+            </div>
+          ) : !marca ? (
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              Elegí una marca en el encabezado para poder buscar el artículo.
+            </div>
+          ) : semillaArticulo !== null ? (
+            <div style={{ display: 'grid', gap: space[2] }}>
+              <BuscarArticuloGN
+                marca={marca}
+                mostrarCosto={false}
+                inicial={semillaArticulo}
+                placeholder="Buscá el artículo por nombre, SKU o código de barras…"
+                onSelect={(a) => {
+                  setArticulo(a)
+                  // El texto pasa a ser el nombre del catálogo: es lo que la lista muestra como
+                  // etiqueta del grupo, y escrito a mano cada uno lo nombra distinto.
+                  if (a.product_name) setTexto(a.product_name)
+                  // El tipo lo sigue mandando la persona; esto es sólo el default que casi siempre
+                  // corresponde. Elegir el artículo con «no lo trabajamos» es un caso real: el
+                  // producto sí, ese talle nunca.
+                  setTipo('sin_stock')
+                  setSemillaArticulo(null)
+                }}
+              />
+              <Button size="sm" variant="ghost" onClick={() => setSemillaArticulo(null)}>
+                Dejarlo sin artículo
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="soft" iconLeft="🔎" onClick={() => setSemillaArticulo(texto)}>
+              Elegir el artículo del catálogo
+            </Button>
+          )}
+          <span style={{ fontSize: font.xs, color: color.mut2 }}>
+            Para lo que sí vendemos y se acabó. Quedan el SKU y el talle, que es con lo que se repone.
+          </span>
+        </div>
 
         {/* 🔑 Las dos cosas que la palabra «faltante» quiere decir, separadas acá y no después: son
             dos decisiones distintas (comprar variedad / reponer) y nadie va a volver a clasificar

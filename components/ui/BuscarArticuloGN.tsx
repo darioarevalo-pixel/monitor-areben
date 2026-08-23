@@ -42,8 +42,27 @@ type FilaInv = {
 }
 type FilaProd = { id: number | string; retailer_price: number | string | null }
 
-export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { marca: Marca; onSelect: (a: ArticuloGN) => void; mostrarCosto?: boolean }) {
-  const [q, setQ] = useState('')
+export function BuscarArticuloGN({
+  marca,
+  onSelect,
+  mostrarCosto = true,
+  inicial = '',
+  placeholder = 'Buscar o escanear: SKU, nombre o código de barras…',
+}: {
+  marca: Marca
+  onSelect: (a: ArticuloGN) => void
+  mostrarCosto?: boolean
+  /**
+   * Lo que la persona ya escribió en otra parte, para no hacérselo escribir de nuevo: hoy lo usa
+   * Faltantes, que llega desde el buscador de Atención con el nombre del producto en la mano.
+   *
+   * ⛔ Siembra el campo y dispara la búsqueda, **nunca elige solo**: una sola coincidencia no es una
+   * confirmación, y acá lo que se elige es la VARIANTE (el talle), que el texto de entrada no dice.
+   */
+  inicial?: string
+  placeholder?: string
+}) {
+  const [q, setQ] = useState(inicial)
   const [rows, setRows] = useState<ArticuloGN[]>([])
   const [cargando, setCargando] = useState(false)
   const [abierto, setAbierto] = useState(false)
@@ -126,6 +145,19 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
+  // La búsqueda sembrada sale por un timer y no derecho en el efecto: `setCargando(true)` es
+  // síncrono adentro de `buscar` y el lint del repo (`react-hooks/set-state-in-effect`) lo rechaza
+  // —con razón: es un render encadenado—. Es el mismo camino que usa el tipeo.
+  useEffect(() => {
+    const t = inicial.trim()
+    if (t.length < 2) return
+    const id = setTimeout(() => {
+      setAbierto(true)
+      void buscar(t)
+    }, 0)
+    return () => clearTimeout(id)
+  }, [inicial, buscar])
+
   const elegir = (a: ArticuloGN) => {
     onSelect(a)
     // Se limpia el buscador para poder agregar el siguiente producto de una (útil en Cambios).
@@ -143,7 +175,7 @@ export function BuscarArticuloGN({ marca, onSelect, mostrarCosto = true }: { mar
         value={q}
         onChange={onChange}
         onFocus={() => q.trim().length >= 2 && setAbierto(true)}
-        placeholder="Buscar o escanear: SKU, nombre o código de barras…"
+        placeholder={placeholder}
       />
       {abierto && (cargando || rows.length > 0) && (
         <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: `1px solid ${color.line}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', maxHeight: 280, overflowY: 'auto' }}>

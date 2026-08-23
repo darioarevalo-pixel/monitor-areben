@@ -101,3 +101,35 @@ exception when duplicate_object then null; end $$;
 -- `api/_pedidos-clientes.js`, que usa la service key y no mira RLS.
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
 alter table pedidos_clientes enable row level security;
+
+-- ─────────────────────────────────────────────────────────────────────────────────────────────
+-- 24-ago-2026 — EL ARTÍCULO ELEGIDO (pedido de Bruno: «si está sin stock, estaría bueno
+-- seleccionar el artículo»).
+--
+-- 🔑 **Las dos mitades de «faltante» no se anotan igual, y eso es lo que tapan estas columnas.**
+-- Lo que NO trabajamos sólo se puede escribir —no existe en ningún catálogo nuestro, no hay nada
+-- que elegir— y por eso el alta nació siendo un campo de texto. Pero lo que se ACABÓ sí existe:
+-- tiene ficha en Gestión Nube, tiene variante y tiene SKU. Escribirlo a mano ahí es tirar las tres
+-- cosas y dejarle al que compra un texto que tiene que volver a buscar.
+--
+-- Las tres son NULL siempre que se haya escrito a mano, que es el caso normal de `no_trabajamos`.
+--
+--   producto_id  el `product_id` de Gestión Nube (mirror `inventario`/`productos`). Es la LLAVE con
+--                la que agrupa el ranking cuando está: ver `claveDePedido` en `reglas.core.js`.
+--   sku          el de la VARIANTE elegida — es con lo que se repone, y es lo único de acá que
+--                sirve para pedirle el producto al proveedor.
+--   variante     el talle/color como lo muestra GN («Talle 2»). Es rótulo, no llave: la llave es el
+--                sku. Va aparte y NO adentro de `texto` a propósito — con el talle adentro, la
+--                etiqueta del grupo pasaría a ser la de UN talle y el renglón afirmaría que los 7
+--                pedidos son de ése.
+--
+-- ⛔ No hay check de coherencia con `tipo`, y no es un olvido: un artículo elegido con
+-- `no_trabajamos` es un caso real —«el corset sí, pero el talle 2 no lo traemos nunca»—, y un
+-- constraint ahí convertiría ese caso en un 500 sin que nadie entienda por qué.
+alter table pedidos_clientes add column if not exists producto_id text;
+alter table pedidos_clientes add column if not exists sku         text;
+alter table pedidos_clientes add column if not exists variante    text;
+
+-- Lo que va a preguntar Compras: «de este producto, ¿cuántos me pidieron?».
+create index if not exists idx_pedidos_clientes_producto
+  on pedidos_clientes (store, producto_id) where producto_id is not null;

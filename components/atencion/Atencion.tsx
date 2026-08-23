@@ -67,7 +67,12 @@ export function Atencion() {
    * como «no piden nada que no tengamos», que es una conclusión sobre el negocio sacada de que
    * nadie cargó.
    */
-  const [anotando, setAnotando] = useState<string | null>(null)
+  /**
+   * El alta de faltante abierta, y **con qué**. `texto` es lo que ya se escribió; `articulo` es el
+   * nombre del producto cuando se entra desde su fila —ahí ya se sabe cuál es y lo que falta es la
+   * variante, así que el buscador de artículo abre solo—. `null` = cerrada.
+   */
+  const [anotando, setAnotando] = useState<{ texto: string; articulo?: string } | null>(null)
   const buscador = useRef<HTMLInputElement>(null)
 
   // El catálogo se baja recién cuando hay algo escrito: ver el docblock del hook.
@@ -169,7 +174,7 @@ export function Atencion() {
         )}
         {/* Sin `puedeEditar`: anotar un faltante lo hace cualquiera que esté atendiendo. El permiso
             que gatea esto es el de esta pantalla, no el de Faltantes — ver `api/_pedidos-clientes.js`. */}
-        <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando(busqueda.trim())}>
+        <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando({ texto: busqueda.trim() })}>
           Anotar un faltante
         </Button>
       </HeaderAcciones>
@@ -265,7 +270,7 @@ export function Atencion() {
             title="Ningún producto con ese nombre"
             hint="Probá con una palabra sola, o con el SKU. Si no lo tenemos, anotalo: es lo que después decide qué se compra."
             action={
-              <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando(busqueda.trim())}>
+              <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando({ texto: busqueda.trim() })}>
                 Anotar «{busqueda.trim()}» como faltante
               </Button>
             }
@@ -274,7 +279,13 @@ export function Atencion() {
           <>
             <div style={{ display: 'grid', gap: 6 }}>
               {productos.hallados.map((p) => (
-                <FilaProducto key={String(p.id)} p={p} link={linkProducto(marca, p.handle)} plantilla={plantillaProd} />
+                <FilaProducto
+                  key={String(p.id)}
+                  p={p}
+                  link={linkProducto(marca, p.handle)}
+                  plantilla={plantillaProd}
+                  onSinStock={() => setAnotando({ texto: p.name, articulo: p.name })}
+                />
               ))}
             </div>
             {productos.total > productos.hallados.length && (
@@ -421,7 +432,8 @@ export function Atencion() {
       <AnotarFaltante
         marca={marca}
         abierto={anotando !== null}
-        textoInicial={anotando ?? ''}
+        textoInicial={anotando?.texto ?? ''}
+        articuloInicial={anotando?.articulo}
         onCerrar={() => setAnotando(null)}
       />
     </>
@@ -433,8 +445,24 @@ export function Atencion() {
  *
  * Sin stock ni variantes a propósito — ver el docblock de `ProductoTienda`. Sin precio se muestra
  * "sin precio" y **nunca** `$0`: en un chat con un cliente eso no es un detalle de formato.
+ *
+ * 🔑 **«Sin stock» es el otro momento en que el dato existe.** El `EmptyState` de acá abajo cubre lo
+ * que no tenemos; esto cubre lo que sí vendemos y se acabó — el producto está en pantalla, así que
+ * el alta se abre con el buscador de artículo apuntado a él y lo único que queda es el talle.
+ * ⚠️ El botón NO afirma que esté sin stock: este payload no trae stock (ver `ProductoTienda`). Lo
+ * dice quien atiende, y el buscador de Gestión Nube le muestra el stock de hoy antes de anotarlo.
  */
-function FilaProducto({ p, link, plantilla }: { p: ProductoTienda; link: string | null; plantilla: string }) {
+function FilaProducto({
+  p,
+  link,
+  plantilla,
+  onSinStock,
+}: {
+  p: ProductoTienda
+  link: string | null
+  plantilla: string
+  onSinStock: () => void
+}) {
   const precio = precioVigente(p)
   const precioTxt = precio == null ? '' : formatMoney(precio)
   const foto = p.images?.[0]
@@ -473,6 +501,9 @@ function FilaProducto({ p, link, plantilla }: { p: ProductoTienda; link: string 
         ) : (
           <Badge tone="neutral" subtle>sin link</Badge>
         )}
+        <Button size="sm" variant="ghost" iconLeft="🗒️" onClick={onSinStock} title="Anotarlo como faltante: lo vendemos y se acabó.">
+          Sin stock
+        </Button>
       </div>
     </div>
   )

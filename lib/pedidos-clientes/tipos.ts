@@ -43,6 +43,17 @@ export type PedidoCliente = {
   cliente: string | null
   estado: EstadoPedido
   nota: string | null
+  /**
+   * El artículo elegido del catálogo de Gestión Nube, cuando se eligió. Los tres son `null` si se
+   * escribió a mano — el caso normal de `no_trabajamos`, que no existe en ningún catálogo nuestro.
+   *
+   * 🔴 `producto_id` no es un adorno: **es la llave con la que agrupa el ranking** cuando está
+   * (`claveDePedido`). `sku` es el de la VARIANTE, que es con lo que se repone, y `variante` es su
+   * rótulo («Talle 2») — rótulo y no llave, y por eso no va adentro de `texto`.
+   */
+  producto_id: string | null
+  sku: string | null
+  variante: string | null
   /** Cuándo se lo pidieron. ISO. Es lo que define la ventana del ranking. */
   creado_en: string
   creado_por: string | null
@@ -60,6 +71,10 @@ export type PedidoNuevo = {
   cliente?: string | null
   estado?: EstadoPedido
   nota?: string | null
+  /** El artículo elegido. `sku` y `variante` sólo se guardan si viaja `producto_id`. */
+  producto_id?: string | null
+  sku?: string | null
+  variante?: string | null
 }
 
 /**
@@ -86,6 +101,15 @@ export type GrupoFaltante = {
   porTipo: Record<TipoFaltante, number>
   /** Por dónde llegó, sin repetir y en el orden de `CANALES`. */
   canales: CanalPedido[]
+  /**
+   * El artículo del grupo, cuando el grupo se armó por `producto_id` (o sea: cuando lo eligieron
+   * del catálogo). `null` en los grupos de texto escrito a mano.
+   *
+   * ⚠️ `skus` son TODAS las variantes que pidieron de ese producto, no una: el grupo cuenta el
+   * producto y los talles son el detalle. Mostrar uno solo afirmaría que los 7 pedidos son de ése.
+   */
+  productoId: string | null
+  skus: string[]
   /** El pedido más reciente del grupo. ISO. */
   ultimo: string
   /** Las filas, de la más nueva a la más vieja. */

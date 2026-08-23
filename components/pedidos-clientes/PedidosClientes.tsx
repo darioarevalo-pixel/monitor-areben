@@ -205,6 +205,16 @@ export function PedidosClientes() {
                       {/* La etiqueta es el texto tal como lo escribieron, no la clave normalizada:
                           ver `etiquetaDe` en el núcleo. */}
                       <div style={{ fontWeight: 600, color: color.ink }}>{g.etiqueta}</div>
+                      {/* 🔑 Los SKU van en el renglón del ranking porque son lo que se hace DESPUÉS
+                          de leerlo: el que compra no vuelve a buscar el producto por nombre. Van
+                          todos los pedidos —son los talles— y no el primero: uno solo afirmaría que
+                          las 7 veces fueron de ése. */}
+                      {g.skus.length > 0 && (
+                        <div style={{ fontSize: font.xs, color: color.mut, fontFamily: 'monospace' }}>
+                          {g.skus.slice(0, 3).join(' · ')}
+                          {g.skus.length > 3 ? ` +${g.skus.length - 3}` : ''}
+                        </div>
+                      )}
                       <div style={{ fontSize: font.xs, color: color.mut2 }}>
                         {g.canales.map((c) => ETIQUETA_CANAL[c]).join(' · ')}
                         {g.ultimo ? ` · último ${haceCuanto(g.ultimo, ahora) || g.ultimo}` : ''}
@@ -258,6 +268,14 @@ export function PedidosClientes() {
                     <Tr key={p.id}>
                       <Td>
                         <div style={{ fontWeight: 600 }}>{p.texto}</div>
+                        {/* El artículo elegido, cuando lo eligieron. Es la diferencia entre «me
+                            pidieron un corset» y «me pidieron el talle 2, sku ZT-1043-2». */}
+                        {p.producto_id && (
+                          <div style={{ fontSize: font.xs, color: color.mut }}>
+                            {p.variante ? `${p.variante} · ` : ''}
+                            <span style={{ fontFamily: 'monospace' }}>{p.sku || 's/sku'}</span>
+                          </div>
+                        )}
                         {(p.cliente || p.nota) && (
                           <div style={{ fontSize: font.xs, color: color.mut2 }}>
                             {[p.cliente, p.nota].filter(Boolean).join(' · ')}

@@ -15,9 +15,18 @@ marca (`sql/migrate-atencion.sql`).
 
 ## ⛔ Lo que comparte con otras secciones
 
-- **`components/pedidos-clientes/AnotarFaltante.tsx`** se monta acá, en dos lugares: el botón del
-  encabezado y el `action` del `EmptyState` de «Productos de la tienda». ⛔ Antes de tocarlo, leer
+- **`components/pedidos-clientes/AnotarFaltante.tsx`** se monta acá, en **tres** lugares: el botón
+  del encabezado, el `action` del `EmptyState` de «Productos de la tienda» y el botón **«Sin
+  stock»** de cada fila de producto (24-ago-2026). ⛔ Antes de tocarlo, leer
   `docs/secciones/pedidos-clientes.md` — es la misma pieza en las dos pantallas.
+  🔑 **Los dos botones del buscador son los dos momentos en que el dato existe**: el `EmptyState` es
+  *no lo tenemos* (se escribe, no hay nada que elegir) y la fila es *lo tenemos y se acabó* (se
+  elige el artículo, y queda el SKU con el que se repone). ⚠️ El botón de la fila **no afirma** que
+  esté sin stock —este payload no trae stock—: lo dice quien atiende, y el buscador de Gestión Nube
+  le muestra el stock de hoy antes de que lo anote.
+- **`components/ui/BuscarArticuloGN.tsx`**, que abre el alta con la búsqueda ya sembrada. Es el
+  mismo picker de Post-venta, Canjes y Cambios: la prop `inicial` se agregó para esto y **siembra,
+  nunca elige sola** — lo que se elige ahí es la variante, que el texto de entrada no dice.
 - **`BandaPromoHoy`** (`components/agenda/`) con `canal="web"`.
 - **`traerAudit`** (`lib/tn-audit.ts`), que también usan las pantallas de Tienda Nube.
 

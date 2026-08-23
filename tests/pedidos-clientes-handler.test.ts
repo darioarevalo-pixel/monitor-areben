@@ -243,3 +243,35 @@ describe('la cuenta fija manda también acá', () => {
     expect(res.code).toBe(200)
   })
 })
+
+
+/**
+ * El artículo elegido (24-ago-2026). Lo que se fija acá es que las tres columnas nuevas **lleguen a
+ * la base**: el handler es el único lugar donde se puede ver si viajaron, porque la pantalla dice
+ * «anotado» igual.
+ */
+describe('el artículo elegido llega a la base', () => {
+  it('anota el producto, el sku y la variante', async () => {
+    sesionDe(SOLO_ATIENDE)
+    const res = await llamar(post({
+      store: 'bdi',
+      action: 'guardar',
+      pedido: { texto: 'Corset Bianca', tipo: 'sin_stock', producto_id: '77', sku: 'ZT-1043-2', variante: 'Talle 2' },
+    }))
+    expect(res.code).toBe(200)
+    const fila = h.acciones.find((a) => a.verbo === 'upsert')?.v as Record<string, unknown>
+    expect(fila.producto_id).toBe('77')
+    expect(fila.sku).toBe('ZT-1043-2')
+    expect(fila.variante).toBe('Talle 2')
+    expect(fila.tipo).toBe('sin_stock')
+  })
+
+  it('un sku sin producto no entra a medias', async () => {
+    sesionDe(SOLO_ATIENDE)
+    const res = await llamar(post({ store: 'bdi', action: 'guardar', pedido: { texto: 'body de encaje', sku: 'ZT-9' } }))
+    expect(res.code).toBe(200)
+    const fila = h.acciones.find((a) => a.verbo === 'upsert')?.v as Record<string, unknown>
+    expect(fila.producto_id).toBeNull()
+    expect(fila.sku).toBeNull()
+  })
+})

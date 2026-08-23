@@ -10,10 +10,10 @@
  * segunda pantalla que lo necesite lo copia con un paso de menos.
  */
 
-import { CANALES, claveDeTexto } from './reglas.core.js'
+import { CANALES, claveDePedido } from './reglas.core.js'
 import type { CanalPedido, GrupoFaltante, PedidoCliente, Ranking, TipoFaltante, Ventana } from './tipos'
 
-export { CANALES, CAMPOS, ESTADOS, TIPOS, claveDeTexto, filaDe, validarPedido } from './reglas.core.js'
+export { CANALES, CAMPOS, ESTADOS, TIPOS, claveDePedido, claveDeTexto, filaDe, validarPedido } from './reglas.core.js'
 
 /** Cómo se lee cada tipo en pantalla. El rótulo dice la decisión, no la categoría. */
 export const ETIQUETA_TIPO: Record<TipoFaltante, string> = {
@@ -77,7 +77,9 @@ export function rankear(pedidos: PedidoCliente[], ventana: Ventana): Ranking {
       fueraDeVentana++
       continue
     }
-    const clave = claveDeTexto(p.texto)
+    // 🔑 La llave sale del ARTÍCULO cuando lo eligieron del catálogo, y del texto cuando lo
+    // escribieron. Ver `claveDePedido`: un id nunca junta dos productos distintos, el texto sí.
+    const clave = claveDePedido(p)
     if (!clave) {
       sinClave++
       continue
@@ -111,8 +113,10 @@ function grupoDe(clave: string, filas: PedidoCliente[]): GrupoFaltante {
   let conseguidos = 0
   let descartados = 0
   const canales = new Set<CanalPedido>()
+  const skus = new Set<string>()
 
   for (const p of ordenadas) {
+    if (p.sku) skus.add(p.sku)
     if (p.tipo === 'sin_stock') porTipo.sin_stock++
     else porTipo.no_trabajamos++
     if (p.estado === 'conseguido') conseguidos++
@@ -130,6 +134,10 @@ function grupoDe(clave: string, filas: PedidoCliente[]): GrupoFaltante {
     descartados,
     porTipo,
     canales: CANALES.filter((c: string) => canales.has(c as CanalPedido)) as CanalPedido[],
+    // El id sale de las filas y no de la clave: así el grupo de texto escrito a mano lo deja en
+    // `null` sin ningún caso especial, que es exactamente lo que significa (nadie eligió artículo).
+    productoId: ordenadas.find((p) => p.producto_id)?.producto_id ?? null,
+    skus: [...skus].sort(),
     ultimo: ordenadas[0]?.creado_en ?? '',
     pedidos: ordenadas,
   }

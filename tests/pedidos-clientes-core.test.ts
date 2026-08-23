@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  claveDePedido,
   claveDeTexto,
   comoSeConto,
   filaDe,
@@ -39,6 +40,9 @@ function pedido(p: Partial<PedidoCliente>): PedidoCliente {
     cliente: null,
     estado: 'pedido',
     nota: null,
+    producto_id: null,
+    sku: null,
+    variante: null,
     creado_en: hace(1),
     creado_por: 'Alguien',
     ...p,
@@ -307,5 +311,103 @@ describe('validarPedido y filaDe: lo que entra a la base', () => {
     expect(f.tipo).toBe('no_trabajamos')
     expect(f.canal).toBe('local')
     expect(f.estado).toBe('pedido')
+  })
+})
+
+
+/**
+ * El artículo elegido (24-ago-2026). Lo que se defiende acá es el mismo número de siempre: que
+ * «cuántas veces me lo pidieron» siga significando algo cuando el producto entra por dos puertas —
+ * escrito a mano y elegido del catálogo de Gestión Nube—.
+ */
+describe('claveDePedido: agrupar por el artículo elegido', () => {
+  it('junta dos pedidos del mismo artículo aunque los hayan escrito distinto', () => {
+    const a = pedido({ producto_id: '77', texto: 'Corset Bianca', sku: 'ZT-1' })
+    const b = pedido({ producto_id: '77', texto: 'corsette bianka', sku: 'ZT-2' })
+    expect(claveDePedido(a)).toBe(claveDePedido(b))
+    const r = rankear([a, b], ventanaDeDias(30, ahora))
+    expect(r.grupos).toHaveLength(1)
+    expect(r.grupos[0].total).toBe(2)
+  })
+
+  /** Lo que ningún texto puede prometer: dos productos que se llaman igual no se suman. */
+  it('NO junta dos artículos distintos que se llaman igual', () => {
+    const r = rankear(
+      [pedido({ producto_id: '77', texto: 'Corset Bianca' }), pedido({ producto_id: '78', texto: 'Corset Bianca' })],
+      ventanaDeDias(30, ahora),
+    )
+    expect(r.grupos).toHaveLength(2)
+  })
+
+  /**
+   * El precio elegido a sabiendas: escrito a mano y elegido del catálogo son dos grupos. Sub-agrupar
+   * deja los dos renglones a la vista con casi el mismo nombre; sobre-agrupar sumaría dos productos
+   * distintos en un número plausible que nadie puede contrastar. Ver el docblock de `claveDePedido`.
+   */
+  it('deja en dos grupos el mismo producto escrito a mano y elegido del catálogo', () => {
+    const r = rankear(
+      [pedido({ texto: 'Corset Bianca' }), pedido({ producto_id: '77', texto: 'Corset Bianca' })],
+      ventanaDeDias(30, ahora),
+    )
+    expect(r.grupos).toHaveLength(2)
+    expect(r.contadas).toBe(2)
+  })
+
+  it('sin artículo elegido, la llave sigue siendo la del texto', () => {
+    expect(claveDePedido(pedido({ texto: 'fundas iPhone 15' }))).toBe(claveDeTexto('funda iphone 15'))
+  })
+
+  /** Los talles son el detalle del grupo, no cuatro productos: el ranking contesta «qué comprar». */
+  it('agrupa por producto y muestra TODOS los sku pedidos, no el primero', () => {
+    const r = rankear(
+      [
+        pedido({ producto_id: '77', texto: 'Corset Bianca', sku: 'ZT-1043-2', variante: 'Talle 2' }),
+        pedido({ producto_id: '77', texto: 'Corset Bianca', sku: 'ZT-1043-1', variante: 'Talle 1' }),
+        pedido({ producto_id: '77', texto: 'Corset Bianca', sku: 'ZT-1043-2', variante: 'Talle 2' }),
+      ],
+      ventanaDeDias(30, ahora),
+    )
+    expect(r.grupos).toHaveLength(1)
+    expect(r.grupos[0].total).toBe(3)
+    expect(r.grupos[0].productoId).toBe('77')
+    expect(r.grupos[0].skus).toEqual(['ZT-1043-1', 'ZT-1043-2'])
+  })
+
+  it('un grupo escrito a mano no inventa artículo ni sku', () => {
+    const r = rankear([pedido({ texto: 'body de encaje' })], ventanaDeDias(30, ahora))
+    expect(r.grupos[0].productoId).toBeNull()
+    expect(r.grupos[0].skus).toEqual([])
+  })
+})
+
+describe('filaDe con artículo: las tres columnas viajan juntas', () => {
+  it('guarda el artículo elegido tal como vino', () => {
+    const f = filaDe(
+      { store: 'bdi', texto: 'Corset Bianca', tipo: 'sin_stock', producto_id: 77, sku: ' ZT-1043-2 ', variante: 'Talle 2' },
+      'Sofi',
+      '2026-08-24T12:00:00.000Z',
+    )
+    expect(f.producto_id).toBe('77')
+    expect(f.sku).toBe('ZT-1043-2')
+    expect(f.variante).toBe('Talle 2')
+  })
+
+  /**
+   * 🔴 Un sku sin `producto_id` no tiene con qué agrupar y una variante sola no dice de qué producto
+   * es: la fila entraría a la base a medias, se vería bien en la lista y mandaría a reponer algo que
+   * el ranking cuenta en otro renglón.
+   */
+  it('tira el sku y la variante si no vino el producto', () => {
+    const f = filaDe({ store: 'bdi', texto: 'body', sku: 'ZT-9', variante: 'Talle 1' }, null, '2026-08-24T12:00:00.000Z')
+    expect(f.producto_id).toBeNull()
+    expect(f.sku).toBeNull()
+    expect(f.variante).toBeNull()
+  })
+
+  it('lo escrito a mano deja las tres en null', () => {
+    const f = filaDe({ store: 'bdi', texto: 'body de encaje' }, null, '2026-08-24T12:00:00.000Z')
+    expect(f.producto_id).toBeNull()
+    expect(f.sku).toBeNull()
+    expect(f.variante).toBeNull()
   })
 })
