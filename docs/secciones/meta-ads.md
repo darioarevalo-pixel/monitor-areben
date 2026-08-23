@@ -254,6 +254,10 @@ cambiaría el techo, en silencio, a toda línea ya guardada**. El primer test de
 
 ## 🔴 El techo de BDI se corrigió el 21-ago-2026: $9.101 → $6.755
 
+> ⚠️ **Superado el 22-ago**: con el DREI y el recupero prendidos el techo de ganancia es **$6.668** y
+> el que manda en BDI es el de **CAJA, $8.686**. Ver la sección de abajo. Lo de acá sigue valiendo
+> para entender **cómo se midió `unidades`**.
+
 `unidades` pasó de **2,6 a 1,93**. El 2,6 era un número **derivado** del ticket; el 1,93 está medido
 con `scripts/medir-economia-bdi.mjs` en tres ventanas (n=91 / 213 / 448 ⇒ 1,92 / 1,93 / 1,86) y por
 los **dos caminos** que la base ofrece (`ventas.items_sold` y la suma de `venta_detalles.quantity`),
@@ -272,6 +276,121 @@ la diferencia** y no hizo falta mover ningún otro supuesto. El ROAS break-even 
   1,93 le movería el techo a **Zattia y Stunned**, que no tienen fila y muestran estos defaults
   prestados — y Zattia ya tiene su economía medida aparte ($5.125 de ganancia): lo que corresponde
   ahí es **cargarle su fila**, no ajustarle el préstamo. Lo decide Bruno.
+
+## 🏁 22-ago-2026: el recupero de IVA y el DREI, y **en BDI manda el techo de CAJA**
+
+Lo decidió Bruno. Los dos campos **faltaban en el jsonb** de la fila de BDI y caían al default
+(`saldoIva:false`, `drei:0`), **siendo el mismo CUIT y la misma ciudad que Zattia**, que ya los
+tenía. No era una decisión: era el default.
+
+| BDI | antes | ahora |
+|---|---|---|
+| contribución por pedido | $13.511 | **$13.337** (el DREI la baja) |
+| recupero de IVA | — | **$4.035** |
+| caja por pedido | — | **$17.371** |
+| techo de ganancia (50%) | $6.755 | **$6.668** |
+| **techo de CAJA (50%)** | — | **$8.686 ← EL QUE MANDA EN BDI** |
+
+⚠️ **En Zattia la regla permanente sigue siendo la de GANANCIA** ($6.046) y la de caja es un techo
+extra con fecha. **En BDI es al revés, y el motivo es concreto**: BDI importa las fundas ⇒ genera el
+crédito, y **su mayorista no se factura** (confirmado por Bruno el 22-ago) ⇒ **online es el único
+canal que consume el pozo**. Mientras eso sea así, el recupero es incremental a la pauta.
+
+- 🔑 **Y no es «gastarse la ganancia»**: al 50% de caja quedan **$4.651 por pedido**, el 35% de la
+  contribución. El que sí la come es el break-even de caja ($17.371), que no lo propone nadie.
+- 🔑 **La curva es plana**: pagar $6.668 o $8.686 deja **casi la misma ganancia total** ($186.542 vs
+  $179.722 por día, ±4%). Lo que compra el de caja es **38% más volumen** (28,0 → 38,6 pedidos/día)
+  y **$43.000/día más de saldo liberado**. La decisión no la manda la ganancia.
+- 🔴 ▶️ **EL TRIPWIRE: falta medir a qué ritmo crece el saldo de IVA.** Es el único número que dice
+  cuándo **se apaga** esta regla. El día que el mayorista se facture, el techo extra sobra y hay que
+  volver a $6.668.
+
+## 🔴 La elasticidad de BDI es 0,55 — y es lo que dimensiona TODO el presupuesto
+
+Medida el 22-ago por regresión log-log de **pedidos reales de Tienda Nube** contra gasto diario, en
+tres ventanas: **0,535 · 0,551 · 0,560** (n = 52 / 43 / 66 días). Los pedidos suben **menos que
+proporcionalmente** al gasto. Se ve sin modelo en la serie semanal: **el gasto ×6 y los pedidos ×2,4
+⇒ el costo por pedido se duplicó** ($1.131 el 13-jul → $2.882 el 10-ago).
+
+| | el techo de caja se toca en | pauta/mes |
+|---|---|---|
+| elasticidad 0,50 | 30,6 pedidos/día | $7,97M |
+| **0,55 (el medido)** | **38,6 pedidos/día** | **$10,07M** |
+| 0,60 | 51,7 pedidos/día | $13,48M |
+
+**Y las 100 ventas/día cuestan $40,4M a $85,2M por mes**, o sea **$13.476 a $28.394 por pedido**,
+contra una contribución de $13.337 ⇒ **se llega al objetivo perdiendo plata.**
+🔑 **El objetivo no lo traba la plata: lo traba la eficiencia.**
+
+- 🔴 ⛔ **El marginal LINEAL no sirve para extrapolar.** Está bien medido ($3.600-$4.385 por cuatro
+  ventanas, $4.108 por OLS con R²=0,72) y **describe bien el tramo 4→14 pedidos/día**, pero
+  **predice 124 pedidos/día con $15M** — más que el objetivo. Fuera del tramo medido, miente.
+- ⚠️ **La ventana en la que se midió tenía CINCO cambios simultáneos** (CAPI de `Comprar`,
+  ADVANTAGE+, promo de 2ª unidad, envío gratis a $44.000 y el banco de 5 celdas, todos entre el 18
+  y el 19-ago). Que dé estable en tres ventanas **no la vuelve independiente**: son ventanas
+  solapadas del mismo período. Y si el ADV+ canibalizó —está medido que **redirigió gasto, no lo
+  sumó**— parte del rendimiento decreciente es canibalización y no saturación.
+  ⇒ ▶️ **Re-medirla en ventana limpia.**
+
+## 🔴🔑 $62.043 POR DÍA: lo que necesita UN conjunto para salir de aprendizaje
+
+Meta pide **50 conversiones por semana por conjunto**. Al techo de $8.686 eso son **7,14 compras/día
+= $62.043/día en un solo conjunto**.
+
+| un conjunto a… | conv/semana | de lo que Meta pide |
+|---|---|---|
+| $10.000/día | 8 | **16%** |
+| $20.000/día | 16 | 32% |
+| $35.000/día | 28 | 56% |
+| **$62.043/día** | **50** | **100%** |
+
+🔑 **Esto dimensiona la estructura entera**: el presupuesto de BDI al techo ($335.642/día) aguanta
+**5,4 conjuntos** fuera de aprendizaje. **Hoy, con $53.703/día, aguanta 0,87 — ni uno.**
+⇒ Es la explicación del `6 → 4 → 1` de la escalada, y de que `GIRLHOOD FRIO` haga ~21 de 50.
+
+### La forma de los tests, decidida por Bruno el 22-ago
+
+> **Celdas de $10.000/día con 2 o 3 anuncios, que gane el mejor, buscando diversidad creativa.**
+> A $10.000 una sola venta ya deja la celda debajo del techo ⇒ **el downside está acotado.**
+
+Dos reglas para que el test sirva:
+
+1. 🔴 ⛔ **No se rankea por COMPRAS**: a $10.000/día son ~1,15 compras/día ⇒ **6 en cinco días**, y
+   con 6 eventos no se distingue nada. ⛔ **Y tampoco por CTR** — está medido acá que **no predice
+   la compra**: el aviso de peor CTR resultó de los mejores por costo.
+   ⇒ 🔑 **Se rankea por COSTO POR CARRITO.** El embudo da 10-15 carritos por compra ⇒ **~69 carritos
+   por celda en cinco días**: es la única señal con volumen y cerca de la venta.
+2. 🔴 **El ganador NO se queda en $10.000.** Hay que mudarlo a un conjunto con **$62.043/día**, o se
+   encontró un ganador y se lo dejó donde no puede rendir. **El test es de $10.000; el destino del
+   ganador es de $62.000.**
+
+## 🔑 El techo es de ADQUISICIÓN: pauta + creativos, no la pauta sola
+
+Un peso en Meta y un peso en un editor **compran lo mismo**: pedidos. Si el techo se compara sólo
+contra la pauta, cualquier costo creativo se mete por afuera y **el techo deja de significar nada**.
+
+⇒ **La regla de gobierno del gasto creativo** (⛔ y **NO hay cupo de piezas**, se retiró la cuota de
+«10 a 12 videos por semana»):
+
+> **Se suma edición mientras el costo por venta TOTAL (pauta + edición) quede debajo del techo y el
+> ROAS arriba de su objetivo. El límite es el resultado, no el volumen.**
+
+A 38,6 pedidos/día el sobre son **$10,07M/mes entre las dos cosas**. Con **$1,04M/mes de edición**
+(10,3% del sobre) quedan $9,02M de pauta, y **se paga si agrega 2,60 pedidos/día — un 6,7%**.
+Verificado por el camino largo: sacarle ese millón a Meta cuesta 2,25 pedidos/día, así que la
+eficiencia tiene que subir **6,2%** para empatar ⇒ **la vara publicada es medio punto conservadora.**
+
+🔑 **Por qué la vara es baja**: hoy se corre sobre las mismas piezas hasta que se gastan —
+`GIRLHOOD FRIO` perdió **la mitad del CTR en 10 días con los clics sostenidos**. Eso es desgaste de
+pieza, y **es el mecanismo de la elasticidad 0,55**. Cualquier cosa que lo rompa rinde más de 6,7%.
+
+⚠️ **Y el modo de falla de la regla**: un editor externo nuevo **no arranca a la tasa de acierto de
+hoy**, así que el mes 1 va a mostrar que no se paga y la regla dirá «cortá» justo cuando hay que
+tener paciencia. ▶️ **Hace falta una ventana de arranque excluida de la regla.**
+
+📌 El desarrollo completo, con el detalle por marca y el para-qué corporativo, está en el documento
+de Marketing (`~/Documents/quien-hace-que/definicion-marketing.md`) y en `norte`, que es donde vive
+**el objetivo**: esta ficha tiene **las reglas**.
 
 ## El parte del día (21-ago-2026)
 
