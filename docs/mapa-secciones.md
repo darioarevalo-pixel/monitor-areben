@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-53 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+54 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -20,7 +20,9 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 (con `lib/` propio)
 
 **Compras** — `fundas-modelo → components/fundas + lib/fundas` · `proveedores` · `ingresos` ·
-`disenos`
+`disenos` · `pedidos-clientes → components/pedidos-clientes + lib/pedidos-clientes` (Faltantes: lo
+que los clientes piden y no tenemos. **Se anota desde `atencion`**, que es la pantalla abierta
+mientras se atiende; acá se lee el ranking)
 
 **Clientes** — `clientes → components/crm + lib/crm` (+ panel `/panel/<telefono>` →
 `components/panel`, el iframe que la extensión de Chrome pega al costado de WhatsApp Web)

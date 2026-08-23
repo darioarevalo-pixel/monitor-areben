@@ -90,6 +90,10 @@ ya tienen ficha:
 - Mensajes de clientes → **leer `docs/secciones/buzon.md`** antes de tocar `components/buzon/`,
   `lib/buzon/`, `api/_buzon.js` o `sql/migrate-buzon.sql`. ⛔ **`lib/buzon/core.ts` es el freno de
   Envíos**: un paquete con un mensaje sin resolver no avanza sin que alguien lea.
+- Faltantes y Atención al cliente → **leer `docs/secciones/pedidos-clientes.md` y
+  `docs/secciones/atencion.md`** antes de tocar `components/pedidos-clientes/`,
+  `components/atencion/`, sus `lib/` o sus dos handlers: Atención **monta el alta de Faltantes**, y
+  ahí **anotar ≠ decidir** — dos permisos distintos en el mismo handler.
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar
   `components/conteo-deposito/`, `lib/conteo-deposito/` o `api/_conteos-deposito.js`.
   ⛔ **`lib/conteo-deposito/core.ts` es de las CUATRO pantallas de conteo**, que ajustan stock.

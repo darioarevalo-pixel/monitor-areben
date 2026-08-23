@@ -47,6 +47,7 @@ const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) =>
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
 const Envios = dynamic(() => import('@/components/envios/Envios').then((m) => m.Envios), { loading: Cargando })
 const Buzon = dynamic(() => import('@/components/buzon/Buzon').then((m) => m.Buzon), { loading: Cargando })
+const PedidosClientes = dynamic(() => import('@/components/pedidos-clientes/PedidosClientes').then((m) => m.PedidosClientes), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
 const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), { loading: Cargando })
@@ -293,6 +294,9 @@ export const SECCIONES: Record<string, ComponentType> = {
   // en la misma mochila. Cada envío sí guarda la suya, y para los de TN sale sola.
   envios: Envios,
   buzon: Buzon,
+  // Faltantes. Es de **Compras** —ahí se decide qué traer— aunque lo que la llena salga del
+  // mostrador: el alta vive adentro de `atencion`, ver `api/_pedidos-clientes.js`.
+  'pedidos-clientes': PedidosClientes,
   // El flip de Comisiones (18-jul-2026): `/comisiones` lo sirve el shell. Margen neto
   // real por forma de pago × canal (comisiones/financiación/IIBB/DREI/Ganancias/IVA) +
   // simulador por producto + break-even + piso + lista de precios de sale (XLSX/PDF).

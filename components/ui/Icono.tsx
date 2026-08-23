@@ -119,6 +119,21 @@ const TRAZOS = {
       <circle cx="16.5" cy="19" r="1.3" />
     </>
   ),
+  /**
+   * Faltantes — el estante con un hueco.
+   *
+   * 🔑 El hueco punteado es el ícono: lo que la sección muestra no son productos, es **el lugar
+   * donde el producto no está**. Un changuito o una lista dirían "compras" o "pendientes", que es
+   * lo que hay en media pantalla del menú, y perderían lo único que esta sección aporta.
+   */
+  faltantes: (
+    <>
+      <path d="M2.6 15.2h18.8" />
+      <rect x="3.4" y="8.4" width="5" height="6.8" rx="0.8" />
+      <rect x="15.6" y="8.4" width="5" height="6.8" rx="0.8" />
+      <rect x="9.7" y="8.4" width="4.6" height="6.8" rx="0.8" strokeDasharray="2 2" />
+    </>
+  ),
   /** Clientes — dos personas. */
   clientes: (
     <>

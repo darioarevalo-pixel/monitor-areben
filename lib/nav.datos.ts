@@ -145,6 +145,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "pedidos-clientes",
+    "area": "compras",
+    "label": "Faltantes",
+    "info": "Lo que los clientes piden y no tenemos, con el ranking de lo más pedido en una ventana de días. Separa lo que no trabajamos (variedad para comprar) de lo que se acabó (reposición). Se anota desde Atención al cliente, que es la pantalla abierta mientras se atiende.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "proveedores",
     "area": "compras",
     "label": "Proveedores",
@@ -996,6 +1006,7 @@ export const NAV_CATS: NavCat[] = [
       "icono": "compras",
     "label": "Compras",
     "keys": [
+      "pedidos-clientes",
       "fundas-modelo",
       "ingresos",
       "proveedores",

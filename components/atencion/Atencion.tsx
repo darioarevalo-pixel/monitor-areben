@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { BandaPromoHoy } from '@/components/agenda/BandaPromoHoy'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { AnotarFaltante } from '@/components/pedidos-clientes/AnotarFaltante'
 import { useAtencion } from './useAtencion'
 import { useProductosTienda } from './useProductosTienda'
 import {
@@ -57,6 +58,16 @@ export function Atencion() {
   const [form, setForm] = useState<ItemAtencion | null>(null)
   /** Cuál de las dos plantillas se está editando, o `null`. */
   const [editandoPlantilla, setEditandoPlantilla] = useState<'modelo' | 'producto' | null>(null)
+  /**
+   * El alta de Faltantes, con lo que se venía buscando adentro.
+   *
+   * 🔴 **Vive acá y no sólo en su sección.** Lo que un cliente pide y no tenemos se escucha en esta
+   * pantalla —es la que está abierta mientras se atiende—, y una lista que obliga a salir, buscar
+   * otra sección y volver no se llena nunca. Con la trampa de que después esa sección vacía se lee
+   * como «no piden nada que no tengamos», que es una conclusión sobre el negocio sacada de que
+   * nadie cargó.
+   */
+  const [anotando, setAnotando] = useState<string | null>(null)
   const buscador = useRef<HTMLInputElement>(null)
 
   // El catálogo se baja recién cuando hay algo escrito: ver el docblock del hook.
@@ -156,6 +167,11 @@ export function Atencion() {
             Agregar link o mensaje
           </Button>
         )}
+        {/* Sin `puedeEditar`: anotar un faltante lo hace cualquiera que esté atendiendo. El permiso
+            que gatea esto es el de esta pantalla, no el de Faltantes — ver `api/_pedidos-clientes.js`. */}
+        <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando(busqueda.trim())}>
+          Anotar un faltante
+        </Button>
       </HeaderAcciones>
 
       {at.error && <Notice tone="danger">{at.error}</Notice>}
@@ -240,7 +256,20 @@ export function Atencion() {
             <Button variant="ghost" size="sm" onClick={prod.pedir}>Reintentar</Button>
           </Notice>
         ) : productos.hallados.length === 0 ? (
-          <EmptyState icon="🔎" title="Ningún producto con ese nombre" hint="Probá con una palabra sola, o con el SKU." />
+          /* 🔑 **Éste es el momento exacto en que el dato existe.** Alguien buscó lo que le acaban de
+             pedir y la tienda no lo tiene: es la única vez en todo el día en que el sistema sabe que
+             hubo un faltante, y hasta hoy no pasaba nada. El botón viene con la búsqueda adentro, así
+             que anotar cuesta un clic y no hay que volver a escribirlo. */
+          <EmptyState
+            icon="🔎"
+            title="Ningún producto con ese nombre"
+            hint="Probá con una palabra sola, o con el SKU. Si no lo tenemos, anotalo: es lo que después decide qué se compra."
+            action={
+              <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando(busqueda.trim())}>
+                Anotar «{busqueda.trim()}» como faltante
+              </Button>
+            }
+          />
         ) : (
           <>
             <div style={{ display: 'grid', gap: 6 }}>
@@ -388,6 +417,13 @@ export function Atencion() {
           }
         />
       )}
+
+      <AnotarFaltante
+        marca={marca}
+        abierto={anotando !== null}
+        textoInicial={anotando ?? ''}
+        onCerrar={() => setAnotando(null)}
+      />
     </>
   )
 }

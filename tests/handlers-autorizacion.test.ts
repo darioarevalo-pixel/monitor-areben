@@ -90,6 +90,9 @@ const PUERTAS = [
   // Nació con gate (23-ago-2026). Entra igual: lo que guarda es correspondencia de clientes, y el
   // 403 antes de tocar la base es lo que no se ve en ninguna pantalla.
   { archivo: '_buzon', llave: 'buzon', que: 'los mensajes de clientes' },
+  // También nació con gate (23-ago-2026). Entra igual por la mitad que `puedeVer` no cubre: su
+  // tabla vive en la base de CADA marca, así que la `store` del request elige a qué base se pega.
+  { archivo: '_pedidos-clientes', llave: 'pedidos-clientes', que: 'los faltantes' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */
@@ -168,6 +171,7 @@ const CLAVADA_A_ZATTIA = [
   { archivo: '_calendario', llave: 'calendario', que: 'el calendario de la otra marca' },
   { archivo: '_atencion', llave: 'atencion', que: 'la bandeja de atención de la otra marca' },
   { archivo: '_meta-funnel', llave: 'meta-ads', que: 'la pauta de la otra marca' },
+  { archivo: '_pedidos-clientes', llave: 'pedidos-clientes', que: 'los faltantes de la otra marca' },
 ] as const
 
 describe('la cuenta fija sigue mandando', () => {
