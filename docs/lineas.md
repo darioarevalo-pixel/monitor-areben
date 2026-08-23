@@ -53,8 +53,19 @@ antes de `computarDatos`.
 - **Es derivado y sincrónico** (`useMemo`), no un segundo estado que se publica. Por eso no puede
   repetir el defecto de agosto —publicar tarde los datos de una marca bajo el rótulo de la otra—:
   entre el payload y la línea no hay un solo `await` donde meterse.
-- **`ventas` no se filtra**: una venta mixta es de las dos líneas. Unidades y plata cierran exactas
-  (908 + 19 = 927 u; $22.381.563 + $619.710 = $23.001.273); las **ventas se solapan en 6**.
+- **Una venta entra si TIENE UN RENGLÓN de la línea.** La mixta queda en las dos —el ticket no se
+  corta al medio, mismo criterio que Norte y el Memo—, y de 634 ventas en 30 días 620 tienen renglón
+  de Zattia y 19 de Stunned, **5 en las dos**. ⚠️ La venta **sin ningún** renglón de producto activo
+  no es de ninguna línea y no se le regala a ninguna: **1 de 634** (0,16 %).
+
+  🔴 **La primera versión no filtraba `ventas` y estaba mal.** «Una venta mixta es de las dos, así
+  que no se filtra» confundía dos cosas: dejarlas todas no es dejar las mixtas en las dos, es dejar
+  también las que no tienen nada de la línea. **Lo encontró caminar la pantalla con los 4.246 tests
+  en verde**: «Cómo viene la venta» de Stunned mostraba **1 prenda online con 140 compras** y 17 en
+  el local con 463, porque `serieDiaria` (`lib/mkt-ventas/core.ts`) cuenta las compras recorriendo
+  `ventas` y las unidades desde `detalles`. Una cifra de la marca entera al lado de una de la línea,
+  sin rótulo — justo lo que el selector existe para que no pase. 📌 El test que lo cubría **afirmaba
+  el defecto**: decía «las ventas NO se filtran» y estaba verde.
 
 ### Lo que cuesta, medido (22-ago-2026, payload real de Zattia)
 

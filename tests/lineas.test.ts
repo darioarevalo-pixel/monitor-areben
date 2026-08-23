@@ -109,10 +109,16 @@ function payload(over: Partial<PayloadCache> = {}): PayloadCache {
       { product_id: 99, product_name: 'Nueva Stunned', size_id: 10, size_name: 'S', available_quantity: 2, store_name: 'Local', sku: 'STU-NUEVA' },
       { product_id: 98, product_name: 'Nueva Zattia', size_id: 10, size_name: 'S', available_quantity: 4, store_name: 'Local', sku: 'ZAT-NUEVA' },
     ],
-    ventas: [{ id: 500, date_sale: '2026-08-20', channel: 'online' }],
+    ventas: [
+      { id: 500, date_sale: '2026-08-20', channel: 'online' }, // MIXTA: Zattia + Stunned
+      { id: 501, date_sale: '2026-08-20', channel: 'local' }, // sólo Zattia
+      { id: 502, date_sale: '2026-08-20', channel: 'local' }, // sin renglón de producto conocido
+    ],
     detalles: [
       { sale_id: 500, product_id: 1, size_id: 10, size: 'S', quantity: 1 },
       { sale_id: 500, product_id: 2, size_id: 10, size: 'S', quantity: 1 },
+      { sale_id: 501, product_id: 1, size_id: 10, size: 'S', quantity: 1 },
+      { sale_id: 502, product_id: 777, size_id: 10, size: 'S', quantity: 1 },
     ],
     vmMes: [{ mes: '2026-08', channel: 'online', cantidad_ventas: 634, total_items: 927 }],
     vmCat: [],
@@ -130,8 +136,11 @@ describe('filtrarPorLinea', () => {
   })
 
   it('los detalles siguen al producto', () => {
-    expect(filtrarPorLinea(payload(), 'stunned').detalles.map((d) => d.product_id)).toEqual([2])
-    expect(filtrarPorLinea(payload(), 'zattia').detalles.map((d) => d.product_id)).toEqual([1])
+    const par = (d: { sale_id: number | string; product_id: number | string | null }) => `${d.sale_id}/${d.product_id}`
+    expect(filtrarPorLinea(payload(), 'stunned').detalles.map(par)).toEqual(['500/2'])
+    expect(filtrarPorLinea(payload(), 'zattia').detalles.map(par)).toEqual(['500/1', '501/1'])
+    // El renglón del producto que no está en `productos` (777) no es de ninguna línea.
+    expect(filtrarPorLinea(payload(), 'zattia').detalles.map(par)).not.toContain('502/777')
   })
 
   it('🔴 el inventario TAMBIÉN se filtra: si no, todas las variantes de la otra línea se vuelven huérfanas', () => {
@@ -148,11 +157,28 @@ describe('filtrarPorLinea', () => {
     expect(filtrarPorLinea(payload(), 'zattia').inventario.some((i) => i.product_id === 99)).toBe(false)
   })
 
-  it('🔑 las ventas NO se filtran: una venta mixta es de las dos líneas', () => {
-    // El ticket es uno solo y no se corta al medio. Mismo criterio que Norte y el Memo, y por eso la
-    // fila «Ventas» no suma a lo ancho. Medido en prod: 6 ventas mixtas en 30 días.
-    expect(filtrarPorLinea(payload(), 'stunned').ventas).toHaveLength(1)
-    expect(filtrarPorLinea(payload(), 'zattia').ventas).toHaveLength(1)
+  it('🔴 una venta entra sólo si TIENE UN RENGLÓN de la línea', () => {
+    // La primera versión no filtraba `ventas` —«la mixta es de las dos, así que no se filtra»— y eso
+    // dejaba también las que no tienen NADA de la línea. Se vio caminando: «Cómo viene la venta» de
+    // Stunned decía 1 prenda online con 140 compras, porque `serieDiaria` cuenta las compras desde
+    // `ventas` y las unidades desde `detalles`.
+    expect(filtrarPorLinea(payload(), 'stunned').ventas.map((v) => v.id)).toEqual([500])
+    expect(filtrarPorLinea(payload(), 'zattia').ventas.map((v) => v.id)).toEqual([500, 501])
+  })
+
+  it('🔑 la venta MIXTA queda en las dos: el ticket no se corta al medio', () => {
+    // Mismo criterio que Norte y el Memo, y por eso la fila «Ventas» no suma a lo ancho. Medido en
+    // prod: de 634 ventas, 620 tienen renglón de Zattia y 19 de Stunned — 5 cuentan en las dos.
+    const z = filtrarPorLinea(payload(), 'zattia').ventas.map((v) => v.id)
+    const st = filtrarPorLinea(payload(), 'stunned').ventas.map((v) => v.id)
+    expect(z).toContain(500)
+    expect(st).toContain(500)
+  })
+
+  it('⚠️ la venta sin ningún renglón conocido no se le regala a ninguna línea', () => {
+    // Medido: 1 de 634 en producción. No es de ninguna, así que no entra en ninguna.
+    expect(filtrarPorLinea(payload(), 'zattia').ventas.some((v) => v.id === 502)).toBe(false)
+    expect(filtrarPorLinea(payload(), 'stunned').ventas.some((v) => v.id === 502)).toBe(false)
   })
 
   it('🔴 las vistas materializadas por mes pasan INTACTAS: no se pueden partir', () => {

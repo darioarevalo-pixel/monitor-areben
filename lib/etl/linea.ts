@@ -34,12 +34,24 @@ import type { PayloadCache } from '@/lib/cache'
  * `linea` es de las que cuelgan de la marca del payload (`lineasDeMarca`). Para `bdi` no hay nada
  * que partir y se devuelve el mismo objeto.
  *
- * 🔑 **`ventas` NO se filtra, y no es un olvido.** Una venta mixta —una prenda de Zattia y una de
- * Stunned en el mismo ticket— pertenece a las dos líneas: el ticket es uno solo y no se puede cortar
- * al medio. Es el mismo criterio con el que Norte y el Memo dicen que la fila «Ventas» **no suma a
- * lo ancho**. Medido el 22-ago contra producción, en 30 días son **6 ventas** las que cuentan en las
- * dos; unidades y plata, en cambio, cierran exactas (908 + 19 = 927 u · $22.381.563 + $619.710 =
- * $23.001.273).
+ * 🔑 **Una venta es de la línea si TIENE UN RENGLÓN de la línea** — no se corta al medio.
+ *
+ * Una venta mixta (una prenda de Zattia y una de Stunned en el mismo ticket) queda en **las dos**,
+ * que es el mismo criterio con el que Norte y el Memo dicen que la fila «Ventas» **no suma a lo
+ * ancho**. Medido el 22-ago contra producción: de 634 ventas en 30 días, 620 tienen renglón de
+ * Zattia y 19 de Stunned — **5 cuentan en las dos**.
+ *
+ * 🔴 **La primera versión de esto NO filtraba `ventas` y estaba mal.** El razonamiento era «una
+ * venta mixta es de las dos, así que no se filtra», y confundía dos cosas: dejarlas **todas** no es
+ * dejar las mixtas en las dos, es dejar también las que no tienen nada de la línea. Se vio
+ * caminando la pantalla, con los 4.246 tests en verde: «Cómo viene la venta» de Stunned mostraba
+ * **1 prenda online con 140 compras** y 17 en el local con 463, porque `serieDiaria`
+ * (`lib/mkt-ventas/core.ts`) cuenta las compras recorriendo `ventas` y las unidades desde
+ * `detalles`. Una cifra de la marca entera al lado de una de la línea, sin rótulo — exactamente lo
+ * que el selector existe para que no pase.
+ *
+ * ⚠️ **Lo que queda afuera de las dos líneas**: la venta sin **ningún** renglón de producto activo.
+ * Medido: **1 de 634** (0,16 %). No es de ninguna línea y por eso no se le regala a ninguna.
  */
 export function filtrarPorLinea(payload: PayloadCache, linea: Linea): PayloadCache {
   if (linea === 'bdi') return payload
@@ -50,6 +62,9 @@ export function filtrarPorLinea(payload: PayloadCache, linea: Linea): PayloadCac
   const idsTodos = new Set(payload.productos.map((p) => String(p.id)))
   const productos = payload.productos.filter((p) => deLaLinea(p.sku))
   const ids = new Set(productos.map((p) => String(p.id)))
+
+  const detalles = payload.detalles.filter((d) => ids.has(String(d.product_id)))
+  const conRenglon = new Set(detalles.map((d) => String(d.sale_id)))
 
   return {
     ...payload,
@@ -67,6 +82,12 @@ export function filtrarPorLinea(payload: PayloadCache, linea: Linea): PayloadCac
       const pid = String(i.product_id)
       return idsTodos.has(pid) ? ids.has(pid) : deLaLinea(i.sku)
     }),
-    detalles: payload.detalles.filter((d) => ids.has(String(d.product_id))),
+    detalles,
+    /**
+     * Las ventas que tienen al menos un renglón de la línea. Las mixtas sobreviven en las dos —es el
+     * punto—; la que no tiene nada de esta línea se va, y con ella el número de compras deja de ser
+     * el de la marca entera.
+     */
+    ventas: payload.ventas.filter((v) => conRenglon.has(String(v.id))),
   }
 }
