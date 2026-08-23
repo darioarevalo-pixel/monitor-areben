@@ -364,46 +364,26 @@ corte está bien: **1 online · 17 local**, igual que el `select`, y «Los que m
 STU. ⚠️ **En `/variantes` no se puede mirar el mutante de las huérfanas**: se dibujan en **Etiquetas**
 (`allVariantesHuerfanas`), que a propósito no tiene selector — buscar la palabra ahí no prueba nada.
 
-## ▶️ La novedad al equipo está ESCRITA y RETENIDA a propósito
+## 🏁 La novedad al equipo: TRES, una por sector, cargadas como borrador (23-ago-2026)
 
-Decisión de Bruno (22-ago-2026): *«la novedad la hacemos conjunta, cuando hagamos todo lo de
-Stunned»*. ⛔ **No publicarla suelta** — va una sola, al cerrar el resto (la sesión de fotos de
-Stunned y lo que salga con ella).
+Decisión de Bruno: **el mensaje de cada sector es distinto según lo que ese sector VE**, así que una
+sola novedad para todos habría contado ocho pantallas a gente que abre una. El script ya sabía
+hacerlo —`--destino=roles:…` sale de los permisos que ya existen, así que se ajusta solo—:
 
-⚠️ **Mientras tanto el equipo no está avisado y los números YA cambiaron**: desde el 22-ago las cinco
-pantallas con selector muestran Zattia sola, ~3 % menos que antes. Si alguien pregunta por qué le
-bajó un número, es esto.
+| a quién | título | qué le cuenta |
+|---|---|---|
+| `roles:local,deposito` | Stunned aparece en Solicitudes con su etiqueta | el chip, y que **el trabajo no cambia**: misma mercadería, mismo depósito. Lo único: una sesión que mezcla líneas son **dos pedidos** |
+| `roles:administracion` | Stunned: qué cambia y qué no en tus pantallas | el chip, y que **Reposición y Caducados NO cambian** a propósito (mercadería entera). Más el aviso de por qué un número de Zattia puede sonar más bajo |
+| `roles:marketing` | Stunned tiene sus propias pestañas (y su propio objetivo) | las seis pantallas que ve, la rampa propia (1 · 2 · 5), que la pestaña decide **a qué tienda van las fotos**, y que «Ventas mensuales» no tiene pestañas |
 
-El borrador, para no reescribirlo:
+Las tres van con `--marca=zattia`: queda afuera quien está clavado a BDI.
 
-> En Zattia, **Resumen, Ventas, Por producto, Por variante, Margen por producto, Marketing, Sesión de
-> fotos y la Carga de imágenes de Tienda Nube** ahora se miran por línea: arriba de cada una hay dos
-> pestañas, **Zattia** y **Stunned**.
->
-> **Arranca en Zattia.** Eso quiere decir que los números de esas pantallas ahora son **de Zattia
-> sola**: antes venían con Stunned adentro, sin decirlo. La diferencia es chica pero real — son 28
-> productos y 195 unidades, unos $620.000 de venta en los últimos 30 días — así que si alguno te
-> suena un poco más bajo que ayer, es esto: lo que falta está en la pestaña de al lado.
->
-> Stunned no tiene sección propia y no la va a tener: está cargada adentro del sistema de Zattia y se
-> la reconoce por el SKU, que empieza con **STU**.
->
-> **Sesión de fotos de Stunned**: ahora se pide desde la pestaña Stunned y queda en su propia lista.
-> Es la pestaña la que decide a qué tienda van después las fotos, así que **una sesión que mezcla las
-> dos líneas son dos solicitudes**, una por pestaña. En la lista de Solicitudes y en el Inicio cada
-> una lleva su etiqueta, igual que BDI y Zattia. Para el depósito y el local no cambia nada: se
-> prepara y se devuelve igual, y la mercadería sigue siendo una sola.
->
-> **Carga de imágenes**: la pestaña elige a qué tienda sube la foto. Antes las fotos de Stunned no
-> tenían por dónde subir desde el Monitor.
->
-> ⚠️ **«Ventas mensuales» no tiene las pestañas** y sigue mostrando el total de Zattia con Stunned
-> adentro. No es un olvido: ese cuadro se calcula de otra manera y no se puede separar.
->
-> Las pantallas de trabajo del local —Exhibición, Etiquetas, Liquidación, Reposición, Sesión de
-> fotos— **no cambiaron**: siguen mostrando toda la mercadería junta, que es como hay que verla para
-> trabajar.
+⛔ **Dirección no lleva novedad** (decisión de Bruno): son él y Darío, y lo suyo —Resumen, Márgenes y
+Norte › Metas— se habla directo.
 
-Se publica con `node scripts/novedad.mjs "Título" cuerpo.md --destino=seccion:resumen --marca=zattia`
-(deja BORRADOR; ⛔ el script no tiene `--publicar` a propósito). ▶️ **Falta decidir el destino**: el
-selector toca **ocho** secciones, así que `--destino` por sección alcanza sólo a una.
+🔑 **El cuerpo vive en la novedad cargada**, no acá: las tres están en `/novedades` › «Sin publicar»
+y **nadie las ve hasta que Bruno apriete Publicar** (el script no tiene `--publicar` a propósito).
+
+⚠️ Mientras tanto **el equipo no está avisado y los números YA cambiaron**: desde el 22-ago las
+pantallas con selector muestran Zattia sola, ~3 % menos que antes.
+
