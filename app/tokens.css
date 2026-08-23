@@ -84,6 +84,13 @@
   --mo-marca-bdi-bg: #dbeafe;
   --mo-marca-zattia-fg: #6d28d9;
   --mo-marca-zattia-bg: #ede9fe;
+  /* Stunned NO es una marca: es una LÍNEA adentro de Zattia (`docs/lineas.md`). Lleva chip propio
+     igual, y por la misma razón que existen los otros dos: aparece en listas MEZCLADA con Zattia
+     —las solicitudes de sesión de fotos—, y ahí «Zattia» sobre una prenda de Stunned es una cifra
+     con el rótulo de al lado. Verde azulado a propósito: contra el violeta de Zattia se separa de
+     un golpe de vista, que es lo único que estos tres colores tienen que lograr. */
+  --mo-marca-stunned-fg: #0f766e;
+  --mo-marca-stunned-bg: #ccfbf1;
   /* Mayorista (CRM): mismo criterio, es una etiqueta de identidad y tiene que
      distinguirse del acento de la app para leerse como categoría de cliente. */
   --mo-mayorista-fg: #6d28d9;

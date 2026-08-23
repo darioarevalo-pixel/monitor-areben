@@ -15,7 +15,7 @@
 
 import { apiFetch } from '../api-fetch'
 import { invalidarAudit, traerAudit } from '../tn-audit'
-import type { Marca } from '../nav'
+import type { Linea } from '../lineas'
 import type {
   AsigAplicar,
   AsigMatched,
@@ -30,13 +30,13 @@ import type {
 } from './tipos'
 
 const BASE = 'https://bdi-catalogo.vercel.app/api'
-const catUrl = (store: Marca) => `${BASE}/tn-categorias?store=${store}`
-const imgUrl = (store: Marca) => `${BASE}/tn-subir-imagen?store=${store}`
-const auditUrl = (store: Marca) => `${BASE}/tiendanube-audit?store=${store}`
+const catUrl = (store: Linea) => `${BASE}/tn-categorias?store=${store}`
+const imgUrl = (store: Linea) => `${BASE}/tn-subir-imagen?store=${store}`
+const auditUrl = (store: Linea) => `${BASE}/tiendanube-audit?store=${store}`
 
 // ── Categorías por modelo (card 1) ──────────────────────────────────────────────
 /** Recalcula el diff de categorías por stock (read-only). Port de tncatCargar. */
-export async function recalcularCategorias(store: Marca): Promise<CatRecalc> {
+export async function recalcularCategorias(store: Linea): Promise<CatRecalc> {
   const r = await apiFetch(catUrl(store))
   return r.json()
 }
@@ -49,7 +49,7 @@ export async function recalcularCategorias(store: Marca): Promise<CatRecalc> {
  * recategorizó Zattia entera el 13-ago-2026—. Con la acción puesta, el día que el servidor
  * saque el fallback del POST pelado esta llamada ya está del lado correcto.
  */
-export async function aplicarCategorias(store: Marca): Promise<CatAplicar> {
+export async function aplicarCategorias(store: Linea): Promise<CatAplicar> {
   const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -60,7 +60,7 @@ export async function aplicarCategorias(store: Marca): Promise<CatAplicar> {
 
 // ── Asignar categoría por Excel (card 4) ────────────────────────────────────────
 /** Lista de categorías de la tienda (para el select). Port de tncatAsigInit. */
-export async function traerCategorias(store: Marca): Promise<Categoria[]> {
+export async function traerCategorias(store: Linea): Promise<Categoria[]> {
   const r = await apiFetch(`${catUrl(store)}&accion=cats`)
   const d = await r.json()
   if (!d.ok || !d.categorias) throw new Error(d.error || 'No se pudieron cargar las categorías')
@@ -74,7 +74,7 @@ export async function traerCategorias(store: Marca): Promise<Categoria[]> {
  * terminar un sale, donde las subcategorías (`SALE · …`) son temporales y hay que sacárselas a 260
  * productos — borrar la categoría en Tienda Nube no es lo mismo.
  */
-export async function previsualizarAsignar(store: Marca, categoriaId: string, nombres: string[], sacar = false): Promise<AsigPreview> {
+export async function previsualizarAsignar(store: Linea, categoriaId: string, nombres: string[], sacar = false): Promise<AsigPreview> {
   const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,7 +83,7 @@ export async function previsualizarAsignar(store: Marca, categoriaId: string, no
   return r.json()
 }
 /** Aplica un lote de asignaciones en la tienda EN VIVO. Port del fetch de tncatAsigAplicar. */
-export async function aplicarAsignarLote(store: Marca, items: AsigMatched[]): Promise<AsigAplicar> {
+export async function aplicarAsignarLote(store: Linea, items: AsigMatched[]): Promise<AsigAplicar> {
   const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -94,7 +94,7 @@ export async function aplicarAsignarLote(store: Marca, items: AsigMatched[]): Pr
 
 // ── Publicar (card 2, botón "Subir y publicar") ─────────────────────────────────
 /** Publica (hace visibles) productos en la tienda EN VIVO. Port del fetch de tnImgSubirYPublicar. */
-export async function publicar(store: Marca, ids: (string | number)[]): Promise<{ ok: boolean; publicados?: number; errores?: unknown[]; error?: string }> {
+export async function publicar(store: Linea, ids: (string | number)[]): Promise<{ ok: boolean; publicados?: number; errores?: unknown[]; error?: string }> {
   const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,7 +105,7 @@ export async function publicar(store: Marca, ids: (string | number)[]): Promise<
 
 // ── Ocultar agotados (card 5) ───────────────────────────────────────────────────
 /** Oculta (despublica) productos en la tienda EN VIVO. Espejo de publicar(), reversible con publicar(). */
-export async function despublicar(store: Marca, ids: (string | number)[]): Promise<{ ok: boolean; ocultados?: number; errores?: unknown[]; error?: string }> {
+export async function despublicar(store: Linea, ids: (string | number)[]): Promise<{ ok: boolean; ocultados?: number; errores?: unknown[]; error?: string }> {
   const r = await apiFetch(catUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -118,16 +118,16 @@ export async function despublicar(store: Marca, ids: (string | number)[]): Promi
 /**
  * Lista de productos con sus colores (para el datalist y el match). Port de tnImgInit/Recargar.
  *
- * Cacheada por marca mientras vive la pestaña: es el endpoint más lento de la sección (~2,5 s
+ * Cacheada por línea mientras vive la pestaña: es el endpoint más lento de la sección (~2,5 s
  * medidos) y se pedía de nuevo en cada montaje de la card. Lo que devuelve son los productos y
  * sus colores —o sea, las variantes de TiendaNube—, que no cambian por subir una foto. Para el
  * caso en que sí cambien (se creó un producto recién) está el botón "Recargar productos", que
  * es `bust` y saltea el caché.
  */
-const productosImg = new Map<Marca, ProductoImg[]>()
-const productosImgEnVuelo = new Map<Marca, Promise<ProductoImg[]>>()
+const productosImg = new Map<Linea, ProductoImg[]>()
+const productosImgEnVuelo = new Map<Linea, Promise<ProductoImg[]>>()
 
-export async function traerProductosImg(store: Marca, bust = false): Promise<ProductoImg[]> {
+export async function traerProductosImg(store: Linea, bust = false): Promise<ProductoImg[]> {
   if (!bust) {
     const ya = productosImg.get(store)
     if (ya) return ya
@@ -148,12 +148,12 @@ export async function traerProductosImg(store: Marca, bust = false): Promise<Pro
   return p
 }
 
-/** Tira la lista cacheada de la marca. */
-export function invalidarProductosImg(store: Marca): void {
+/** Tira la lista cacheada de la línea. */
+export function invalidarProductosImg(store: Linea): void {
   productosImg.delete(store)
 }
 /** Sube una imagen (y, si viene `color`, la vincula a la variante). ESCRIBE. Port del fetch de tnImgSubirTodo. */
-export async function subirImagen(store: Marca, body: { product_id: string | number; image: string; filename: string; color?: string }): Promise<SubirResp> {
+export async function subirImagen(store: Linea, body: { product_id: string | number; image: string; filename: string; color?: string }): Promise<SubirResp> {
   const r = await apiFetch(imgUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -163,7 +163,7 @@ export async function subirImagen(store: Marca, body: { product_id: string | num
   return { ...j, ok: r.ok && j.ok }
 }
 /** Revincula el color de una imagen YA subida (por image_id, no re-sube). ESCRIBE. Port de tnImgRevincular/fchkVincular. */
-export async function vincularColor(store: Marca, product_id: string | number, image_id: string | number, color: string): Promise<SubirResp> {
+export async function vincularColor(store: Linea, product_id: string | number, image_id: string | number, color: string): Promise<SubirResp> {
   const r = await apiFetch(imgUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -173,7 +173,7 @@ export async function vincularColor(store: Marca, product_id: string | number, i
   return { ...j, ok: r.ok && j.ok }
 }
 /** Quita (desvincula) la foto de las variantes de un color: PUT image_id null en TN. ESCRIBE. Espejo de vincularColor. */
-export async function desvincularColor(store: Marca, product_id: string | number, color: string): Promise<SubirResp> {
+export async function desvincularColor(store: Linea, product_id: string | number, color: string): Promise<SubirResp> {
   const r = await apiFetch(imgUrl(store), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -190,7 +190,7 @@ export async function desvincularColor(store: Marca, product_id: string | number
  * Es el payload pesado (`?variantes=1`). Va por `traerAudit`, que lo cachea y con eso le
  * ahorra la bajada a quien después pida el liviano: es el mismo objeto con dos campos de más.
  */
-export async function auditVariantes(store: Marca, refrescar = false): Promise<ProductoFchk[]> {
+export async function auditVariantes(store: Linea, refrescar = false): Promise<ProductoFchk[]> {
   return traerAudit<ProductoFchk>(store, { variantes: true, refrescar })
 }
 
@@ -198,12 +198,12 @@ export async function auditVariantes(store: Marca, refrescar = false): Promise<P
  * Productos de la tienda con sus categorías (sin el detalle por variante, que pesa el doble).
  * Es lo que permite recorrer la tienda POR categoría en vez de a ciegas.
  */
-export async function auditProductos(store: Marca, refrescar = false): Promise<ProductoCat[]> {
+export async function auditProductos(store: Linea, refrescar = false): Promise<ProductoCat[]> {
   return traerAudit<ProductoCat>(store, { refrescar })
 }
 
 /** Refresca el caché del audit de Marketing tras subir/publicar (así las fotos nuevas se ven ya). Port de _mktBustAudit. */
-export async function bustAudit(store: Marca): Promise<void> {
+export async function bustAudit(store: Linea): Promise<void> {
   // Primero lo de acá, que es sincrónico y no puede fallar: si se cae la llamada, igual queda
   // invalidado y la próxima lectura baja de nuevo. Al revés, un throw dejaría el caché local
   // sirviendo la tienda de antes de escribir.

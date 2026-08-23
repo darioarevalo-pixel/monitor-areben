@@ -94,9 +94,14 @@ falle nada. Lo defiende `tests/lineas.test.ts`.
 ### 🔴 Es opt-in por pantalla, y eso es la mitad del diseño
 
 Un filtro global **no se puede**. Las pantallas **operativas** —Exhibición, Etiquetas, Liquidación,
-Reposición, Caducados, Sesión de fotos— tienen que seguir viendo la mercadería del local **entera**:
-partirlas haría desaparecer las prendas de Stunned del trabajo del local, que es lo contrario de lo
-que se pidió. Sin el flag, `useDatosMonitor` devuelve exactamente lo de siempre.
+Reposición, Caducados— tienen que seguir viendo la mercadería del local **entera**: partirlas haría
+desaparecer las prendas de Stunned del trabajo del local, que es lo contrario de lo que se pidió.
+Sin el flag, `useDatosMonitor` devuelve exactamente lo de siempre.
+
+**Sesión de fotos es la excepción, y la excepción tiene un motivo que no es mirar** (22-ago-2026): su
+ciclo **termina subiendo la foto a una Tienda Nube**, y ésa es la única cosa que Stunned NO comparte
+con Zattia. Por eso su solicitud es una fila aparte y su catálogo se corta. Ver la sección de abajo.
+⚠️ El precio: una sesión que fotografía las dos líneas son **dos solicitudes**.
 
 ### 🔴 «Ventas mensuales» no puede llevar selector
 
@@ -114,6 +119,55 @@ Ponerle el selector sin tocar eso mostraría el total de la marca con el rótulo
 | Canjes · sync TN→GN · `sku_map` | `store = 'stunned'` |
 | Etiquetas | fusiona el catálogo de TN de Stunned |
 | **Resumen · Ventas de Marketing · Por producto · Por variante · Márgenes** | **selector de línea** (22-ago-2026) |
+| **Sesión de fotos** | **selector + historial propio** (`store='stunned'`), 22-ago-2026 |
+| **Marketing · Tienda Nube › Carga de imágenes** | **selector** (22-ago-2026): hablan con **una** Tienda Nube |
+| Solicitudes (la lista) · Inicio · el chip de marca | el resumen y el aviso traen `linea` además de `marca` |
+
+## Los TRES stores de Stunned, que no son el mismo (22-ago-2026)
+
+🔴 **Ésta es la confusión que puede salir cara, y ninguno de sus dos errores falla solo.**
+
+| a quién se le habla | store | por qué |
+|---|---|---|
+| Supabase (la base) | `zattia` | `baseDeLinea`; Stunned no tiene base propia |
+| Gestión Nube (la venta técnica) | `zattia` | mismo GN, mismo depósito, mismo local, mismo stock |
+| la fila de `solicitudes` | **`stunned`** | historial propio; la clave de la tabla ya es `store,id` |
+| Tienda Nube (catálogo, fotos, links) | **`stunned`** | tienda propia: store 7516263, token propio, `stunned.com.ar` |
+
+- Mandarle `store:'stunned'` a `api/crear-venta.js` **crea la venta igual**, pero sin cliente:
+  `SF_CFG.stunned` existe sólo para `tn_import` y tiene `client_id: null`.
+- Mandarle `zattia` a Tienda Nube sube la foto de una prenda de Stunned **a la tienda de Zattia**.
+
+El par lo nombra `destinosDe` (`components/solicitudes/useHistorialSolicitudes.ts`), en un solo
+lugar, y lo defiende `tests/lineas-solicitudes.test.ts` con mutantes.
+
+### 🔴 La mitad que casi se olvida: el aviso
+
+La solicitud podía crearse y guardarse bien y **no la veía nadie**. `store/useAvisos.ts` pedía el
+cajón **por marca**, y esa lista es la pantalla `/solicitudes` — de donde el local saca qué preparar.
+Una solicitud que no aparece ahí **no se prepara nunca**. Hoy las de fotos se piden por LÍNEA (las
+internas no: se piden sobre la mercadería del local, que es una sola), y `ResumenSolicitud`/`Aviso`
+llevan **`marca` y `linea` por separado**: la marca es adónde salta la app, la línea es lo que dice
+el chip. Con un solo campo, o el chip miente o el salto va a una marca que no existe.
+
+### ⚠️ El cruce GN ⨯ TN de Stunned se apoya en el NOMBRE, no en el SKU
+
+Medido el 22-ago-2026: en Gestión Nube **los 28 productos de Stunned tienen `sku = 'STUNNED'`**, los
+28 el mismo — los códigos `STU-REM-0001-S` viven a nivel **variante** (`inventario`), y son los que
+Tienda Nube trae como `sku` del producto. O sea que `matchTn` (`lib/tn.ts:65`) falla por SKU y
+resuelve por el **fallback de nombre** ("todas las palabras de ≥3 letras del nombre de GN están en el
+nombre de TN"). Corrido contra los dos catálogos reales: **28 de 28 matchean**, ninguno se cae.
+
+🔑 Dos consecuencias: `esStunned` sigue andando (`STUNNED` empieza con `stu`), y **Marketing de
+Stunned no pierde productos hoy** — pero el día que alguien renombre una publicación en la tienda y
+no en GN, ese producto **desaparece** de la lista sin cartel, porque `buildLista` descarta lo que no
+matchea. El arreglo de fondo sería cargar el SKU real a nivel producto en GN.
+
+### El chip de Stunned
+
+`MarcaChip` toma una `Linea` y tiene su color en `app/tokens.css` (verde azulado, para separarse del
+violeta de Zattia de un golpe de vista). No es decoración: es lo único que distingue una solicitud de
+Stunned de una de Zattia en una lista que las mezcla.
 
 ## ⚠️ Lo que el separador no puede hacer
 
@@ -122,6 +176,14 @@ El prefijo de SKU es la única señal y **no está siempre**: 96 productos activ
 contestar «no». Hoy ninguno es de Stunned —0 productos con «stunned» en el nombre y sin SKU STU—,
 pero **el día que carguen uno de Stunned sin SKU, su plata cae en Zattia sin que falle nada**. No hay
 otra columna en la base con la que cruzarlo.
+
+## 🔴 El `|| BDI` que había en `lib/tienda.core.js`
+
+`tiendaBaseUrl` y `adminBaseUrl` terminaban en `|| TIENDA_BASE.bdi`, así que **cualquier** clave
+desconocida salía con un link de BDI: bien formado, clickeable y copiable a un cliente. Es el mismo
+"por descarte" que `baseDeLinea` mató en los permisos, viviendo en otro archivo. Hoy devuelven
+`null` y las tres líneas están en los dos mapas. De paso cayó la **sexta copia** de "cuál es el admin
+de cada tienda", que se le había escapado a la consolidación: `tnAdminUrl` (`lib/exhib/core.ts`).
 
 ## El oráculo, y su trampa
 
@@ -167,8 +229,9 @@ bajó un número, es esto.
 
 El borrador, para no reescribirlo:
 
-> En Zattia, **Resumen, Ventas, Por producto, Por variante y Margen por producto** ahora se miran por
-> línea: arriba de cada una hay dos pestañas, **Zattia** y **Stunned**.
+> En Zattia, **Resumen, Ventas, Por producto, Por variante, Margen por producto, Marketing, Sesión de
+> fotos y la Carga de imágenes de Tienda Nube** ahora se miran por línea: arriba de cada una hay dos
+> pestañas, **Zattia** y **Stunned**.
 >
 > **Arranca en Zattia.** Eso quiere decir que los números de esas pantallas ahora son **de Zattia
 > sola**: antes venían con Stunned adentro, sin decirlo. La diferencia es chica pero real — son 28
@@ -177,6 +240,15 @@ El borrador, para no reescribirlo:
 >
 > Stunned no tiene sección propia y no la va a tener: está cargada adentro del sistema de Zattia y se
 > la reconoce por el SKU, que empieza con **STU**.
+>
+> **Sesión de fotos de Stunned**: ahora se pide desde la pestaña Stunned y queda en su propia lista.
+> Es la pestaña la que decide a qué tienda van después las fotos, así que **una sesión que mezcla las
+> dos líneas son dos solicitudes**, una por pestaña. En la lista de Solicitudes y en el Inicio cada
+> una lleva su etiqueta, igual que BDI y Zattia. Para el depósito y el local no cambia nada: se
+> prepara y se devuelve igual, y la mercadería sigue siendo una sola.
+>
+> **Carga de imágenes**: la pestaña elige a qué tienda sube la foto. Antes las fotos de Stunned no
+> tenían por dónde subir desde el Monitor.
 >
 > ⚠️ **«Ventas mensuales» no tiene las pestañas** y sigue mostrando el total de Zattia con Stunned
 > adentro. No es un olvido: ese cuadro se calcula de otra manera y no se puede separar.
@@ -187,4 +259,4 @@ El borrador, para no reescribirlo:
 
 Se publica con `node scripts/novedad.mjs "Título" cuerpo.md --destino=seccion:resumen --marca=zattia`
 (deja BORRADOR; ⛔ el script no tiene `--publicar` a propósito). ▶️ **Falta decidir el destino**: el
-selector toca cinco secciones, así que `--destino` por sección alcanza sólo a una.
+selector toca **ocho** secciones, así que `--destino` por sección alcanza sólo a una.

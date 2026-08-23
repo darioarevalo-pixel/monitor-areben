@@ -23,7 +23,6 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { Lightbox } from '@/components/productos/Lightbox'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -31,6 +30,8 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import { ponerPuenteFotos } from '@/lib/sesionfotos/puente'
 import type { Variante } from '@/lib/etl/tipos'
 import { adminBaseUrl, linkProducto } from '@/lib/tienda'
+import { baseDeLinea, type Linea } from '@/lib/lineas'
+import { SelectorLinea } from '@/components/ui'
 import {
   aplicaTalles,
   buildLista,
@@ -99,9 +100,15 @@ const FILTROS_VACIOS: Filtros = {
 
 export function Marketing() {
   const { avisar } = useConfirmar()
-  const { marca } = useSesion()
-  const { datos } = useDatosMonitor()
-  const audit = useMarketing(marca)
+  // 🔑 **Por línea, y las DOS mitades tienen que cortarse juntas** (22-ago-2026): los productos del
+  // Gestión Nube por `porLinea`, y el catálogo de Tienda Nube por `?store=`. Stunned comparte el GN
+  // de Zattia pero tiene **tienda propia**, así que cruzar los 667 productos de Zattia contra la TN
+  // de Stunned —o al revés— no da una lista corta: da una lista MENTIROSA, porque `buildLista`
+  // descarta lo que no matchea y `matchTn` cae a un match por palabras del nombre.
+  const { datos, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
+  const audit = useMarketing(linea)
+  // Lo que no depende de la tienda —si la marca lleva tabla de talles— cuelga de la marca base.
+  const marca = baseDeLinea(linea)
   const productos = datos?.allProductos ?? null
   const listo = !!productos && !!audit.data
 
@@ -227,6 +234,7 @@ export function Marketing() {
 
   return (
     <div>
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
       <HeaderAcciones>
         {actualizado && (
           <span style={{ fontSize: font.xs, color: color.mut2 }}>
@@ -519,7 +527,7 @@ export function Marketing() {
               <Fila
                 key={x.gn.id}
                 x={x}
-                marca={marca}
+                linea={linea}
                 talles={talles}
                 selMode={selMode}
                 tildado={sel.has(String(x.gn.id))}
@@ -579,7 +587,7 @@ const BARRA: React.CSSProperties = {
 // ── Una fila de producto (+ su detalle expandible) ─────────────────────────────────
 function Fila({
   x,
-  marca,
+  linea,
   talles,
   selMode,
   tildado,
@@ -593,7 +601,8 @@ function Fila({
   onFoto,
 }: {
   x: ItemMkt
-  marca: 'bdi' | 'zattia'
+  /** ⚠️ Los links a la TIENDA van por la LÍNEA, no por la marca: Stunned tiene la suya. */
+  linea: Linea
   talles: boolean
   selMode: boolean
   tildado: boolean
@@ -678,7 +687,7 @@ function Fila({
           <span style={{ display: 'inline-flex', gap: 10, fontSize: font.sm }}>
             {handle ? (
               <a
-                href={linkProducto(marca, handle) || undefined}
+                href={linkProducto(linea, handle) || undefined}
                 target="_blank"
                 rel="noreferrer"
                 title="Ver en la tienda"
@@ -689,7 +698,7 @@ function Fila({
             ) : null}
             {tnId ? (
               <a
-                href={`${adminBaseUrl(marca)}/${tnId}`}
+                href={`${adminBaseUrl(linea)}/${tnId}`}
                 target="_blank"
                 rel="noreferrer"
                 title="Editar la ficha en el admin de TN"

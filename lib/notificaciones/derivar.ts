@@ -8,13 +8,13 @@
  */
 
 import { esAdmin, puedeSub, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
-import { baseDeLinea } from '@/lib/lineas'
 import { numeroCanje, type CanjeStore } from '@/lib/canjes/tipos'
 import { faltantes, salio } from '@/lib/sesionfotos/core'
 import { veTodo, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { pendientesDeTrabajo } from '@/lib/inicio/core'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
+import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
 import type { Aviso } from './tipos'
 
@@ -31,9 +31,10 @@ export function avisosDeAprobacion(resumenes: ResumenSolicitud[], perfil: Perfil
   return resumenes
     .filter((r) => r.estadoLabel === 'Pendiente de aprobar')
     .map((r) => ({
-      id: `aprobacion:${r.marca}:${r.id}`,
+      id: `aprobacion:${r.linea}:${r.id}`,
       tipo: 'aprobacion' as const,
       marca: r.marca,
+      linea: r.linea,
       titulo: r.titulo || 'Consumo interno',
       detalle: `${r.unidades} u. · ${r.creadoPor || 'sin responsable'}`,
       ruta: '/solicitudes',
@@ -50,9 +51,10 @@ export function avisosDeSolicitud(resumenes: ResumenSolicitud[], perfil: Perfil 
   if (veTodo(perfil)) return []
   if (!tieneFuncion(perfil, 'local') && !tieneFuncion(perfil, 'deposito')) return []
   return pendientesDeTrabajo(resumenes).map((r) => ({
-    id: `solicitud:${r.marca}:${r.id}`,
+    id: `solicitud:${r.linea}:${r.id}`,
     tipo: 'solicitud' as const,
     marca: r.marca,
+    linea: r.linea,
     titulo: r.titulo || 'Solicitud',
     detalle: `${r.unidades} u. · ${r.estadoLabel}`,
     ruta: rutaDe(r),
@@ -68,16 +70,17 @@ export function avisosDeSolicitud(resumenes: ResumenSolicitud[], perfil: Perfil 
  *
  * Lo ve quien coordina (marketing, administración, dirección), no el sector que prepara.
  */
-export function avisosDeNoDevueltos(sols: Solicitud[], marca: Marca, perfil: Perfil | null): Aviso[] {
+export function avisosDeNoDevueltos(sols: Solicitud[], linea: Linea, perfil: Perfil | null): Aviso[] {
   if (!veTodo(perfil)) return []
   return sols
     .filter((s) => salio(s) && s.estado !== 'cerrada' && s.estado !== 'devuelta')
     .map((s) => ({ s, falta: faltantes(s).reduce((a, f) => a + f.falta, 0) }))
     .filter((x) => x.falta > 0)
     .map(({ s, falta }) => ({
-      id: `no-devuelto:${marca}:${s.id}`,
+      id: `no-devuelto:${linea}:${s.id}`,
       tipo: 'no-devuelto' as const,
-      marca,
+      marca: baseDeLinea(linea),
+      linea,
       titulo: s.descripcion || 'Solicitud',
       detalle: `${falta} ${falta === 1 ? 'unidad sin devolver' : 'unidades sin devolver'}`,
       ruta: '/solicitudes',
@@ -106,6 +109,7 @@ export function avisosDeFallas(fallas: FallaRow[], marca: Marca, perfil: Perfil 
       id: `falla-por-enviar:${marca}`,
       tipo: 'falla-por-enviar' as const,
       marca,
+      linea: marca,
       titulo: pendientes.length === 1 ? '1 falla para llevar al depósito' : `${pendientes.length} fallas para llevar al depósito`,
       detalle: `${u} ${u === 1 ? 'unidad' : 'unidades'} esperando en el local`,
       ruta: '/postventa-local',
@@ -133,7 +137,9 @@ export function avisosDeFallas(fallas: FallaRow[], marca: Marca, perfil: Perfil 
  * así que el `null` es inalcanzable — está para que el tipo cierre sin apagar el aviso del helper.
  */
 function marcaDelCanje(store: CanjeStore): Marca {
-  return baseDeLinea(store) ?? 'zattia'
+  // Sin `?? 'zattia'`: `CanjeStore` es una línea, y para una línea `baseDeLinea` es total. El
+  // default estaba de más y era el mismo "por descarte" que el helper existe para no tener.
+  return baseDeLinea(store)
 }
 
 /**
@@ -161,6 +167,8 @@ export function avisosDeCanjeAprobacion(
       id: `canje-aprobacion:${c.id}`,
       tipo: 'canje-aprobacion' as const,
       marca: marcaDelCanje(c.store),
+      // El canje SÍ sabe de qué línea es: `CanjeStore` ya incluye `stunned`.
+      linea: c.store,
       titulo: c.titulo || `Canje ${numeroCanje(c.id)}`,
       detalle: c.persona ? `${c.persona} · esperando tu firma` : 'Esperando tu firma',
       ruta: '/canjes',
@@ -197,6 +205,7 @@ export function avisosDeCanjeVencido(
       id: 'canje-vencido',
       tipo: 'canje-vencido' as const,
       marca: marcaActiva,
+      linea: marcaActiva,
       titulo: total === 1 ? '1 entregable vencido' : `${total} entregables vencidos`,
       detalle: personas.size === 1
         ? `${[...personas][0]} no publicó lo que acordó`

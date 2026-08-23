@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
+import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { KindLista } from '@/lib/kv/cliente'
 import { aplicarDiff, diffSolicitudes, leerCajon } from '@/lib/solicitudes/cajon'
 import { useToast } from '@/components/ui'
@@ -29,7 +30,34 @@ import type { Credencial } from '@/lib/sesion'
  * Lo único que varía entre los dos usos va en `opts`: el `kind` (qué preset/cajón), el
  * estado post-venta (`cargada` vs `retirada`) y qué `crearVentas`/`idsParaCerrar` (distinto
  * `comments` de GN y gate de cierre).
+ *
+ * # 🔑 El eje es la LÍNEA para el cajón y la MARCA para Gestión Nube (22-ago-2026)
+ *
+ * El motor recibe una `Linea`, no una `Marca`, porque Stunned tiene **historial propio**: sus
+ * solicitudes son filas nuevas de la misma tabla, separadas por la columna `store` que ya es parte
+ * de la clave (`store,id`). Eso es lo que la hace una lista aparte y no un filtro.
+ *
+ * ⛔ **Todo lo que sale de la app va con `baseDeLinea(linea)`, nunca con la línea**: la venta de
+ * Gestión Nube, la consulta de si se anuló y la prioridad de retiro de Reposición. Stunned no tiene
+ * GN propio —comparte el de Zattia, medido: mismo depósito, mismo local, mismo stock— así que su
+ * venta técnica es **byte-idéntica** a la de Zattia y se la reconoce por la descripción y el id de
+ * la solicitud. 🔴 Mandarle `store:'stunned'` a `api/crear-venta.js` NO falla y es peor que fallar:
+ * su `SF_CFG.stunned` existe sólo para `tn_import` y tiene **`client_id: null`**, así que la venta
+ * saldría sin cliente.
  */
+
+/**
+ * **Los dos destinos de una solicitud, que NO son el mismo store.**
+ *
+ * `cajon` es dónde vive la fila (la línea: Stunned tiene historial propio) y `gn` es a quién se le
+ * pide la venta (la marca base: Stunned no tiene Gestión Nube propio). Está acá, con nombre, en vez
+ * de repartido en los cuatro llamados, porque la vez que se confundan es la vez que
+ * `api/crear-venta.js` reciba `store:'stunned'` — que **no falla**: su `SF_CFG.stunned` existe sólo
+ * para `tn_import` y tiene `client_id: null`, así que la venta técnica saldría sin cliente en GN.
+ */
+export function destinosDe(linea: Linea): { cajon: Linea; gn: Marca } {
+  return { cajon: linea, gn: baseDeLinea(linea) }
+}
 
 /** Forma mínima que el motor necesita de cada solicitud. */
 type SolBase = { id: string; estado: string; ventas?: Partial<Record<Origen, VentaGN>> }
@@ -57,11 +85,12 @@ export type OpcionesHistorial<T> = {
   etiqueta: string
   /** Estado que toma la solicitud al crear la venta GN ('cargada' en fotos, 'retirada' en internas). */
   estadoTrasVenta: string
+  /** ⚠️ `store` es la MARCA base de la línea: lo que entiende Gestión Nube. */
   crearVentas: (s: T, ctx: { store: Marca; cred: Credencial }) => Promise<{ ventas: Partial<Record<Origen, VentaGN>>; errores: string[] }>
   idsParaCerrar: (data: T[], marca: Marca) => Promise<string[]>
 }
 
-export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: OpcionesHistorial<T>): HistorialSolicitudes<T> {
+export function useHistorialSolicitudes<T extends SolBase>(linea: Linea, opts: OpcionesHistorial<T>): HistorialSolicitudes<T> {
   const toast = useToast()
   const { kind, etiqueta, estadoTrasVenta, crearVentas, idsParaCerrar } = opts
   const noLeido = `No se pudo leer el historial de ${etiqueta}, así que no se guarda nada: guardar ahora borraría lo que hay. Recargá y probá de nuevo.`
@@ -74,10 +103,11 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
   const [tick, setTick] = useState(0)
 
   const recargar = useCallback(() => setTick((t) => t + 1), [])
-  const marcaRef = useRef(marca)
+  // La línea manda para el cajón; la marca base, para todo lo que sale de la app.
+  const lineaRef = useRef(linea)
   useEffect(() => {
-    marcaRef.current = marca
-  }, [marca])
+    lineaRef.current = linea
+  }, [linea])
 
   useEffect(() => {
     let vivo = true
@@ -86,7 +116,8 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
       setError(null)
       setData(null)
       setCargado(false)
-      const [lista, prio] = await Promise.all([leerCajon<T>(kind, marca), leerPrioridadRetiro(marca)])
+      const d = destinosDe(linea)
+      const [lista, prio] = await Promise.all([leerCajon<T>(kind, d.cajon), leerPrioridadRetiro(d.gn)])
       if (!vivo) return
       setPrioridad(prio)
       if (lista.ok) {
@@ -102,7 +133,7 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
     return () => {
       vivo = false
     }
-  }, [marca, tick, kind])
+  }, [linea, tick, kind])
 
   const persistir = useCallback(
     async (mutar: (l: T[]) => T[]): Promise<boolean> => {
@@ -110,9 +141,9 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
         toast.error(noLeido)
         return false
       }
-      const marcaAlGuardar = marcaRef.current
+      const lineaAlGuardar = lineaRef.current
       setData((prev) => (prev ? mutar(prev) : prev)) // optimista
-      const fresca = await leerCajon<T>(kind, marcaAlGuardar)
+      const fresca = await leerCajon<T>(kind, destinosDe(lineaAlGuardar).cajon)
       if (!fresca.ok) {
         toast.error('No se pudo re-leer el historial para guardar sin pisar cambios de otros: ' + fresca.motivo)
         return false
@@ -120,12 +151,12 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
       const merged = mutar(fresca.dato)
       // Solo lo que cambió respecto de lo que acabamos de leer: las demás solicitudes ni
       // se tocan, así dos personas trabajando a la vez no se pisan.
-      const r = await aplicarDiff(kind, marcaAlGuardar, diffSolicitudes(fresca.dato, merged))
+      const r = await aplicarDiff(kind, destinosDe(lineaAlGuardar).cajon, diffSolicitudes(fresca.dato, merged))
       if (!r.ok) {
         toast.error('No se pudo guardar: ' + r.motivo)
         return false
       }
-      if (marcaRef.current === marcaAlGuardar) setData(merged)
+      if (lineaRef.current === lineaAlGuardar) setData(merged)
       return true
     },
     [cargado, kind, noLeido, toast],
@@ -134,14 +165,14 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
   const crearVentasDe = useCallback(
     async (s: T, cred: Credencial): Promise<ResultadoCrearGen> => {
       if (!cargado) return { tipo: 'no-leido' }
-      const marcaAhora = marcaRef.current
-      const fresca = await leerCajon<T>(kind, marcaAhora)
+      const lineaAhora = lineaRef.current
+      const fresca = await leerCajon<T>(kind, destinosDe(lineaAhora).cajon)
       if (!fresca.ok) return { tipo: 'no-leido' }
       const fresh = fresca.dato.find((x) => x.id === s.id) ?? null
       if (fresh?.ventas && Object.keys(fresh.ventas).length) {
         return { tipo: 'ya-tenia', ventas: fresh.ventas, estadoSol: fresh.estado }
       }
-      const { ventas, errores } = await crearVentas(s, { store: marcaAhora, cred })
+      const { ventas, errores } = await crearVentas(s, { store: destinosDe(lineaAhora).gn, cred })
       if (Object.keys(ventas).length) {
         await persistir((l) => l.map((x) => (x.id === s.id ? ({ ...x, ventas: { ...(x.ventas || {}), ...ventas }, estado: estadoTrasVenta } as T) : x)))
       }
@@ -152,7 +183,7 @@ export function useHistorialSolicitudes<T extends SolBase>(marca: Marca, opts: O
 
   const cerrarAnuladas = useCallback(async (): Promise<number> => {
     if (!data) return 0
-    const cerrar = await idsParaCerrar(data, marcaRef.current)
+    const cerrar = await idsParaCerrar(data, destinosDe(lineaRef.current).gn)
     if (!cerrar.length) return 0
     await persistir((l) => l.map((x) => (cerrar.includes(x.id) ? ({ ...x, estado: 'cerrada' } as T) : x)))
     return cerrar.length

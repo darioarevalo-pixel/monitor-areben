@@ -45,6 +45,26 @@ import type { EstadoCarga, Origen } from '@/store/useMonitorStore'
  * línea no hay un solo `await` donde meterse. La misma razón hace que cambiar de línea **no baje
  * nada**: recomputa lo que ya está en memoria.
  */
+/**
+ * **Sólo la línea**, sin el ETL: qué línea se está mirando, entre cuáles se puede elegir y cómo
+ * cambiarla. La usa `useDatosMonitor` y también las pantallas que llevan selector **sin** colgar
+ * del ETL —la carga de imágenes de Tienda Nube, que habla con la tienda y no con el espejo—.
+ *
+ * 🔑 **Existe para que la normalización se escriba una sola vez.** La línea guardada puede no
+ * existir en la marca activa (se eligió Stunned y se pasó a BDI); resolverlo en cada pantalla sería
+ * la misma regla copiada, y las copias se despegan (`lib/lineas.core.js` es el archivo que existe
+ * porque eso ya pasó ocho veces).
+ */
+export function useLinea(): { linea: Linea; setLinea: (linea: Linea) => void; lineas: Linea[] } {
+  const { marca } = useSesion()
+  const lineaElegida = useMonitorStore((s) => s.linea)
+  const setLinea = useMonitorStore((s) => s.setLinea)
+  const lineas = useMemo(() => lineasDeMarca(marca), [marca])
+  // La que manda es la de la marca, no la guardada: el rótulo tiene que poder decirse siempre.
+  const linea = lineas.includes(lineaElegida) ? lineaElegida : lineas[0]
+  return { linea, setLinea, lineas }
+}
+
 export function useDatosMonitor(opciones?: { porLinea?: boolean }): {
   datos: DatosETL | null
   estado: EstadoCarga
@@ -66,18 +86,11 @@ export function useDatosMonitor(opciones?: { porLinea?: boolean }): {
   const progreso = useMonitorStore((s) => s.progreso)
   const origen = useMonitorStore((s) => s.origen)
   const marcaCargada = useMonitorStore((s) => s.marca)
-  const lineaElegida = useMonitorStore((s) => s.linea)
-  const setLinea = useMonitorStore((s) => s.setLinea)
+  const { linea, setLinea, lineas } = useLinea()
 
   useEffect(() => {
     cargar(marca, veVentasHistoricas(perfil, marca))
   }, [marca, perfil, cargar])
-
-  const lineas = useMemo(() => lineasDeMarca(marca), [marca])
-
-  // La línea guardada puede no existir en la marca activa (se eligió Stunned y se pasó a BDI). La
-  // que manda es la de la marca, no la guardada: el rótulo tiene que poder decirse siempre.
-  const linea = lineas.includes(lineaElegida) ? lineaElegida : lineas[0]
 
   const listoParaEstaMarca = estado === 'listo' && marcaCargada === marca
   const corta = !!opciones?.porLinea && lineas.length > 1

@@ -14,10 +14,19 @@ el cliente, en el momento.** Y del otro lado no hay historial: lo que se pisa, s
 | panel | `components/tncat/` (11 archivos; los caros: `FotosCard.tsx` **816** · `FichaProducto.tsx` 492 · `ImagenesCard.tsx` 443 · `AsignarCard.tsx` 310) |
 | lógica | `lib/tncat/` (16 archivos; `auditoria.ts` **451** · `prioridad.ts` **371** · `cliente.ts` 204) |
 | caché del catálogo | `lib/tn-audit.ts` — **no es de esta sección**, lo comparten cinco más |
-| servidor que escribe | **ninguno del monitor**: `tn-categorias`, `tn-subir-imagen` y `tiendanube-audit` son de **`bdi-catalogo`** (otro repo, otro proyecto de Vercel) |
+| servidor que escribe | **ninguno del monitor**: `tn-categorias`, `tn-subir-imagen` y `tiendanube-audit` son de **`bdi-catalogo`** (otro repo, otro proyecto de Vercel) — los tres conocen `?store=bdi\|zattia\|stunned` |
 | puertas propias | `api/_tn-ignorados.js` y `api/_tn-fotos-verificadas.js`, las dos por `api/datos.js?recurso=ignorados\|fotos-verificadas` |
 | base | `tn_ignorados` y `tn_fotos_verificadas`, **una por marca** (`sql/migrate-tn-*.sql`) |
 | tests | 9 archivos `tests/tncat*.test.ts`, ~1.330 líneas |
+
+🔑 **La Carga de imágenes lleva selector de línea** (22-ago-2026): escribe en **una** Tienda Nube, y
+Stunned tiene la suya (store 7516263, token propio, `stunned.com.ar`) aunque comparta la base de
+Zattia. Es el final del ciclo de la sesión de fotos — antes la foto de una prenda de Stunned no tenía
+por dónde subir, porque `bdi-catalogo/api/tn-subir-imagen.js` sólo conocía dos tiendas.
+⛔ **Las otras cards NO lo llevan**: la revisión de fotos, los agotados y el con-stock se apoyan en
+`tn_ignorados` y `tn_fotos_verificadas`, que son **una tabla por marca** y todavía no saben de
+líneas. Dárselo sin eso mostraría los ignorados de Zattia sobre el catálogo de Stunned.
+El eje entero está en `docs/lineas.md`.
 
 🔑 **No es una pantalla: son CUATRO subáreas**, cada una con su URL y su entrada de sidebar
 (`/tncat/fotos` · `/categorias` · `/visibilidad` · `/descripciones`). La subárea sale del **2º tramo

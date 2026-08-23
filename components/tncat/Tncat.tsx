@@ -103,7 +103,7 @@ export function Tncat() {
 function Fotos({ marca }: { marca: Marca }) {
   return (
     <>
-      <ImagenesCard marca={marca} />
+      <ImagenesCard />
       <FotosCard marca={marca} />
     </>
   )

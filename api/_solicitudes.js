@@ -4,9 +4,13 @@
 // `solicitudesinternas:<marca>`), donde el historial entero era un solo JSON que se
 // reescribía completo en cada guardado. Acá cada solicitud es una fila y se escribe sola.
 //
-//   GET  ?store=bdi|zattia[&kind=sesionfotos|solicitudesinternas][&limit=]  → lista.
+//   GET  ?store=bdi|zattia|stunned[&kind=sesionfotos|solicitudesinternas][&limit=]  → lista.
 //   POST { store, solicitud }        → upsert de UNA solicitud (por store+id).
 //   POST { store, action:'borrar', id } → la borra.
+//
+// `stunned` es una LÍNEA, no una marca (ver docs/lineas.md): sus filas viven en la MISMA tabla de
+// la base de Zattia, separadas por la columna `store`, que ya es parte de la clave (`store,id`).
+// Quién decide a qué base va es `baseDeLinea`, el helper del núcleo — acá no se escribe la regla.
 //
 // El documento completo va en `datos`; las columnas de al lado se derivan de él para poder
 // filtrar. La fuente de verdad es SIEMPRE `datos`: si mañana el motor agrega un campo, viaja
@@ -17,9 +21,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
+import { baseDeLinea } from '../lib/lineas.core.js';
 
 function cfgFor(store) {
-  if (store === 'zattia') {
+  // Stunned comparte la base de Zattia: la traducción la hace el núcleo, no un `||` acá.
+  if (baseDeLinea(store) === 'zattia') {
     return {
       url: process.env.ZATTIA_SUPABASE_URL,
       key: process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY,
@@ -60,7 +66,9 @@ export default async function handler(req, res) {
   if (!perfil) return;
 
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
-  if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+  // 🔴 La lista literal que había acá era la que dejaba a Stunned sin sesión de fotos. `baseDeLinea`
+  // acepta las tres líneas y devuelve `null` ante cualquier otra cosa — nunca una marca por descarte.
+  if (!baseDeLinea(store)) return res.status(400).json({ error: 'store inválido (usá bdi, zattia o stunned)' });
 
   // 🔴 Hasta el 13-ago-2026 el control terminaba en `exigirUsuario`: cualquier cuenta válida del
   // Monitor —los puestos compartidos incluidos— leía el historial de solicitudes de las dos marcas y podía borrarlas.

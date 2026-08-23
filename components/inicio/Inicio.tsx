@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
+import { useLinea } from '@/components/fundas/useDatosMonitor'
 import { esAdmin, puedeVer, tieneFuncion } from '@/lib/permisos'
 import { ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 
@@ -51,6 +52,7 @@ import type { Aviso } from '@/lib/notificaciones/tipos'
  */
 export function Inicio() {
   const { perfil, marca, setMarca } = useSesion()
+  const { setLinea } = useLinea()
   const router = useRouter()
   const admin = esAdmin(perfil)
   const ve = (k: string) => admin || puedeVer(perfil, marca, k)
@@ -115,6 +117,9 @@ export function Inicio() {
    */
   const ir = (a: Aviso) => {
     if (marca !== a.marca) setMarca(a.marca)
+    // La línea también: un aviso de Stunned salta a la cuenta de Zattia —es su base— pero la
+    // pantalla tiene que abrir en la pestaña de Stunned, que es donde está la solicitud.
+    setLinea(a.linea)
     if (a.ruta === '/sesion-fotos') ponerVerSolicitud(a.id.split(':').slice(2).join(':'))
     router.push(a.ruta)
   }
@@ -238,7 +243,7 @@ export function Inicio() {
                   >
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <MarcaChip marca={a.marca} />
+                        <MarcaChip marca={a.linea} />
                         {a.ts > corte && (
                           <span style={{ fontSize: font.xs, fontWeight: 700, color: '#fff', background: color.warning, borderRadius: 6, padding: '1px 7px' }}>NUEVO</span>
                         )}

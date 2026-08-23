@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
+import { useLinea } from '@/components/fundas/useDatosMonitor'
 import { ponerAltaSolicitud, ponerVerSolicitud } from '@/lib/sesionfotos/puente'
 import type { TipoSol } from '@/lib/sesionfotos/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -36,6 +37,7 @@ const horaCorta = (creado: number, fecha: string) => {
  */
 export function Solicitudes() {
   const { perfil, marca, setMarca } = useSesion()
+  const { setLinea } = useLinea()
   const router = useRouter()
   const [filtro, setFiltro] = useFiltroUrl<GrupoEstado | 'todas'>('f', 'todas')
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
@@ -70,6 +72,9 @@ export function Solicitudes() {
 
   const ver = (r: ResumenSolicitud) => {
     if (marca !== r.marca) setMarca(r.marca)
+    // ⚠️ La línea también, y por eso el resumen la trae: Sesión de fotos abre en la pestaña de la
+    // línea, y sin esto una solicitud de Stunned abriría la pantalla en Zattia — donde no está.
+    setLinea(r.linea)
     if (r.seccion === 'sesion-fotos') ponerVerSolicitud(r.id)
     router.push(r.seccion === 'sesion-fotos' ? '/sesion-fotos' : '/solicitudes-internas')
   }
@@ -136,7 +141,7 @@ export function Solicitudes() {
             >
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <MarcaChip marca={r.marca} />
+                  <MarcaChip marca={r.linea} />
                   <span style={{ fontWeight: 600, color: color.ink }}>{r.titulo}</span>
                   <span style={{ fontSize: font.xs, fontWeight: 700, color: r.color, background: r.bg, borderRadius: 6, padding: '1px 7px' }}>{r.estadoLabel}</span>
                   {r.estadoTag ? (

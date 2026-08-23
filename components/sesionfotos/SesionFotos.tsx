@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
+import { SelectorLinea } from '@/components/ui'
+import type { DatosETL } from '@/lib/etl/tipos'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useSesionFotos } from './useSesionFotos'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
@@ -85,10 +87,29 @@ type CrearVentasDe = (s: Solicitud, cred: Credencial) => Promise<ResultadoCrearG
 
 const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de fotos'
 
+/**
+ * Sesión de fotos **por línea** (22-ago-2026). Es la única de las operativas que lleva selector, y
+ * la razón no es mirar: es que la solicitud de Stunned **va a otro lado**. Sus filas viven aparte
+ * (`store='stunned'`) porque el ciclo termina subiendo la foto a la Tienda Nube de Stunned, que es
+ * otra tienda con otro token — mientras que Exhibición, Etiquetas o Liquidación son el trabajo del
+ * local sobre la mercadería, que es una sola y no se parte (`docs/lineas.md`).
+ *
+ * ⚠️ **El catálogo se corta con la línea, y eso es a propósito**: con las dos mezcladas se podría
+ * meter una prenda de Zattia en una solicitud de Stunned, cuyas fotos van a la otra tienda. El
+ * precio es que una sesión que fotografía las dos líneas son **dos solicitudes**.
+ */
 export function SesionFotos() {
-  const { marca } = useSesion()
-  const sf = useSesionFotos(marca)
-  return <SolicitudesInner sf={sf} preset={PRESET_FOTOS} />
+  const { datos, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
+  const sf = useSesionFotos(linea)
+  return (
+    <SolicitudesInner
+      sf={sf}
+      preset={PRESET_FOTOS}
+      datos={datos}
+      clave={linea}
+      selector={<SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />}
+    />
+  )
 }
 
 /**
@@ -96,40 +117,67 @@ export function SesionFotos() {
  * Fase B): recibe el hook ya llamado (por eso las dos entradas usan su propio hook sin
  * romper las reglas de hooks) + el `preset` que las distingue. Fotos = preset default;
  * internas pasa PRESET_INTERNAS.
+ *
+ * 🔑 **`datos` lo pasa el llamador, no lo pide este componente.** Cada entrada decide si el ETL
+ * viene cortado por línea (fotos) o entero (internas): pedirlo acá con un flag obligaría a
+ * `useDatosMonitor` a computar la misma partición dos veces, una por cada hook montado.
  */
-export function SolicitudesInner({ sf, preset }: { sf: HistorialSolicitudes<Solicitud>; preset: PresetSolicitud }) {
-  const { marca } = useSesion()
+export function SolicitudesInner({
+  sf,
+  preset,
+  datos,
+  clave,
+  selector,
+}: {
+  sf: HistorialSolicitudes<Solicitud>
+  preset: PresetSolicitud
+  /** El ETL de la línea (fotos) o de la marca entera (internas). `null` mientras carga. */
+  datos: DatosETL | null
+  /** Qué remonta el contenido: la línea en fotos, la marca en internas. */
+  clave: string
+  /** El selector de línea, dibujado arriba de todo. Sólo lo manda Sesión de fotos. */
+  selector?: React.ReactNode
+}) {
   // allVariantes del ETL → mapa código-de-barras → vid para el escaneo. Se baja en
   // paralelo con el historial; hasta que esté, el escaneo va deshabilitado.
-  const { datos } = useDatosMonitor()
   const mapaBc = useMemo(() => construirMapaBc(datos?.allVariantes ?? []), [datos])
   const catalogoListo = !!datos
 
   if (sf.error && !sf.data) {
     return (
       <div style={{ padding: 16, color: color.dangerInk, fontSize: 13 }}>
+        {selector}
         No se pudo leer el historial de {preset.etiqueta}: {sf.error}
       </div>
     )
   }
-  if (!sf.data) return <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>
+  if (!sf.data)
+    return (
+      <div style={{ padding: 16, color: color.mut2 }}>
+        {selector}
+        Cargando…
+      </div>
+    )
 
-  // key={marca}: al cambiar de cuenta, el estado de UI (qué solicitud se ve, la
+  // key={clave}: al cambiar de cuenta —o de línea— el estado de UI (qué solicitud se ve, la
   // selección) se resetea remontando, sin setState en effects.
   return (
-    <Contenido
-      key={marca}
-      preset={preset}
-      data={sf.data}
-      prioridad={sf.prioridad}
-      persistir={sf.persistir}
-      crearVentasDe={sf.crearVentasDe}
-      cerrarAnuladas={sf.cerrarAnuladas}
-      mapaBc={mapaBc}
-      catalogoListo={catalogoListo}
-      variantes={datos?.allVariantes ?? []}
-      productos={datos?.allProductos ?? []}
-    />
+    <>
+      {selector}
+      <Contenido
+        key={clave}
+        preset={preset}
+        data={sf.data}
+        prioridad={sf.prioridad}
+        persistir={sf.persistir}
+        crearVentasDe={sf.crearVentasDe}
+        cerrarAnuladas={sf.cerrarAnuladas}
+        mapaBc={mapaBc}
+        catalogoListo={catalogoListo}
+        variantes={datos?.allVariantes ?? []}
+        productos={datos?.allProductos ?? []}
+      />
+    </>
   )
 }
 

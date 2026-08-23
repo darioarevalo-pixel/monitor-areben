@@ -17,6 +17,7 @@ import { create } from 'zustand'
 import { leerCajon } from '@/lib/solicitudes/cajon'
 import { leerFallas } from '@/lib/postventa/fallas/cliente'
 import { marcasVisibles } from '@/lib/inicio/core'
+import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeFallas, avisosDeNoDevueltos, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
@@ -95,15 +96,21 @@ export const useAvisos = create<AvisosState>((set, get) => ({
       const marcas = marcasVisibles(perfil, marca)
       const porMarca = await Promise.all(
         marcas.map(async (m) => {
-          const [f, i, fallas] = await Promise.all([
-            leerCajon<Solicitud>('sesionfotos', m),
+          // 🔴 **Las de FOTOS se piden por LÍNEA, las internas por marca.** Sin esto la sesión de
+          // fotos de Stunned existiría pero **no la vería nadie**: ésta es la lista de la que sale
+          // el aviso y la pantalla `/solicitudes`, o sea por dónde el local se entera de que hay
+          // algo para preparar. Una solicitud que no aparece acá no se prepara nunca.
+          const [porFoto, i, fallas] = await Promise.all([
+            Promise.all(
+              lineasDeMarca(m).map(async (l) => ({ l, r: await leerCajon<Solicitud>('sesionfotos', l) })),
+            ),
             leerCajon<SolicitudInterna>('solicitudesinternas', m),
             // Una falla que no se pudo leer no puede tumbar el resto de los avisos.
             leerFallas(m).catch(() => []),
           ])
-          const solsFoto = f.ok ? f.dato : []
+          const solsFoto = porFoto.flatMap(({ r }) => (r.ok ? r.dato : []))
           const resumenes = [
-            ...solsFoto.map((s) => resumenFoto(s, m)),
+            ...porFoto.flatMap(({ l, r }) => (r.ok ? r.dato.map((s) => resumenFoto(s, l)) : [])),
             ...(i.ok ? i.dato.map((s) => resumenInterna(s, m)) : []),
           ]
           return { m, resumenes, solsFoto, fallas }

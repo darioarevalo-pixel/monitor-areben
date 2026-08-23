@@ -1,6 +1,7 @@
 'use client'
 
 import { useSesion } from '@/components/SesionProvider'
+import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { SolicitudesInner } from '@/components/sesionfotos/SesionFotos'
 import { PRESET_INTERNAS } from '@/components/solicitudes/preset'
 import type { HistorialSolicitudes } from '@/components/solicitudes/useHistorialSolicitudes'
@@ -21,6 +22,16 @@ import { useSolicitudesInternas as useHistorial } from './useSolicitudesInternas
  */
 export function SolicitudesInternas() {
   const { marca } = useSesion()
+  // ⛔ Sin `porLinea`: lo interno se pide sobre la mercadería del local, que es UNA sola. Acá el
+  // ciclo no termina en ninguna Tienda Nube, que es lo que en fotos justifica partir el catálogo.
+  const { datos } = useDatosMonitor()
   const sf = useHistorial(marca)
-  return <SolicitudesInner sf={sf as unknown as HistorialSolicitudes<Solicitud>} preset={PRESET_INTERNAS} />
+  return (
+    <SolicitudesInner
+      sf={sf as unknown as HistorialSolicitudes<Solicitud>}
+      preset={PRESET_INTERNAS}
+      datos={datos}
+      clave={marca}
+    />
+  )
 }

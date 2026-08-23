@@ -185,7 +185,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "marketing",
     "area": "marketing",
     "label": "Marketing",
-    "info": "Armado de publicaciones (fotos + textos) para redes y TiendaNube.",
+    "info": "Armado de publicaciones (fotos + textos) para redes y TiendaNube. En Zattia tiene dos pestañas, Zattia y Stunned, porque cada una tiene su propia tienda online.",
     "brands": [
       "bdi",
       "zattia"
@@ -232,7 +232,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "sesion-fotos",
     "area": "marketing",
     "label": "Sesión de fotos",
-    "info": "Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial.",
+    "info": "Solicitud de productos para sesión de fotos: elegís las variantes, el sistema decide depósito o local según stock, genera 2 reportes (con SKU) y guarda el historial. En Zattia tiene dos pestañas, Zattia y Stunned: cada línea pide y guarda por separado, porque las fotos van a tiendas distintas. Para el depósito y el local no cambia nada.",
     "brands": [
       "bdi",
       "zattia"
@@ -392,7 +392,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "imagenes",
         "label": "Carga de imágenes",
-        "info": "Subir fotos y asignarlas a las variantes.",
+        "info": "Subir fotos y asignarlas a las variantes. En Zattia elegí la pestaña antes de subir: la foto va a la tienda de la línea que diga arriba, y Zattia y Stunned son dos tiendas distintas.",
         "brands": [
           "bdi",
           "zattia"

@@ -11,6 +11,7 @@
 
 import { esAdmin, tieneFuncion, type Perfil } from '@/lib/permisos'
 import type { Marca } from '@/lib/nav'
+import { baseDeLinea, type Linea } from '@/lib/lineas'
 import { retiradoCompleto } from '@/lib/sesionfotos/core'
 import type { Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import type { SolicitudInterna } from '@/lib/solicitudes-internas/tipos'
@@ -21,7 +22,16 @@ export type GrupoEstado = 'pendiente' | 'enproceso' | 'conventagn' | 'devuelta' 
 
 export type ResumenSolicitud = {
   id: string
+  /** La marca: para el permiso, la base y el salto de cuenta al abrirla. */
   marca: Marca
+  /**
+   * La línea: para el rótulo y para abrir la pantalla en la pestaña correcta.
+   *
+   * 🔑 **Son dos campos y no uno** porque contestan cosas distintas: una solicitud de Stunned se
+   * lee y se guarda en la base de Zattia (`marca`) pero **no es de Zattia** (`linea`). Con un solo
+   * campo, o el chip miente o el salto de cuenta manda a una marca que no existe.
+   */
+  linea: Linea
   tipo: TipoSolicitud
   titulo: string
   subtitulo: string // motivo/tipo (internas) o descripción corta
@@ -94,11 +104,12 @@ function estadoInterna(s: SolicitudInterna): { label: string; tag?: string; grup
   }
 }
 
-export function resumenFoto(s: Solicitud, marca: Marca): ResumenSolicitud {
+/** ⚠️ Toma la LÍNEA: la sesión de fotos de Stunned es una lista aparte (`docs/lineas.md`). */
+export function resumenFoto(s: Solicitud, linea: Linea): ResumenSolicitud {
   const e = estadoFoto(s)
   const items = s.items || []
   return {
-    id: String(s.id), marca, tipo: 'foto',
+    id: String(s.id), marca: baseDeLinea(linea), linea, tipo: 'foto',
     titulo: s.descripcion || '(sin descripción)', subtitulo: 'Sesión de fotos',
     estadoLabel: e.label, estadoTag: e.tag, color: e.color, bg: e.bg, grupo: e.grupo,
     creadoPor: s.creadoPor || '', creado: s.creado || 0, fecha: s.fecha || '',
@@ -111,7 +122,8 @@ export function resumenInterna(s: SolicitudInterna, marca: Marca): ResumenSolici
   const e = estadoInterna(s)
   const items = s.items || []
   return {
-    id: String(s.id), marca, tipo: 'interna',
+    // Las internas no se parten por línea: se piden sobre la mercadería del local, que es una sola.
+    id: String(s.id), marca, linea: marca, tipo: 'interna',
     titulo: s.descripcion || s.motivo || '(sin descripción)',
     subtitulo: `Interna · ${s.tipo === 'consumo' ? 'Consumo' : 'Retornable'}${s.motivo ? ' · ' + s.motivo : ''}`,
     estadoLabel: e.label, estadoTag: e.tag, color: e.color, bg: e.bg, grupo: e.grupo,

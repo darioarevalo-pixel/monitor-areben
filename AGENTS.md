@@ -134,11 +134,16 @@ secciones sin `store`). El menú y los permisos se definen a mano en `lib/nav.da
 
 ## Líneas de negocio
 
-**⛔ Antes de tocar `lib/lineas.core.js`, `lib/etl/linea.ts`, `lib/margenes.ts` o de darle el selector
-de línea a una pantalla, leer `docs/lineas.md`.** Stunned **no es una `Marca`**: es una línea adentro
-de Zattia y lo único que la separa es el prefijo de SKU. El corte por línea es **opt-in por pantalla**
-(`useDatosMonitor({ porLinea: true })`) porque las pantallas operativas tienen que seguir viendo la
-mercadería del local entera, y **«Ventas mensuales» no puede llevarlo**: sale de vistas ya agregadas.
+**⛔ Antes de tocar `lib/lineas.core.js`, `lib/etl/linea.ts`, `lib/margenes.ts`, `lib/tienda.core.js`
+o de darle el selector de línea a una pantalla, leer `docs/lineas.md`.** Stunned **no es una
+`Marca`**: es una línea adentro de Zattia y lo único que la separa es el prefijo de SKU. El corte es
+**opt-in por pantalla** (`useDatosMonitor({ porLinea: true })`) porque las operativas tienen que
+seguir viendo la mercadería del local entera, y **«Ventas mensuales» no puede llevarlo**.
+
+🔴 **Stunned tiene TRES stores según a quién se le hable, y confundirlos no falla solo**: la base de
+Supabase y Gestión Nube son los de **Zattia** (`baseDeLinea`), pero la **Tienda Nube es propia** y
+las filas de `solicitudes` van con `store='stunned'`. Mandarle `stunned` a `api/crear-venta.js` crea
+la venta sin cliente; mandarle `zattia` a Tienda Nube sube la foto a la tienda equivocada.
 
 ## Comandos
 

@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav'
 import { bustAudit, publicar, subirImagen, traerProductosImg, vincularColor } from '@/lib/tncat/cliente'
 import { colorPorNombre, findProd, matchByFilename } from '@/lib/tncat/matching'
 import type { FotoImg, GrupoImg, ProductoImg } from '@/lib/tncat/tipos'
-import { Button, Card, color, space, useConfirmar, useToast } from '@/components/ui'
+import { Button, Card, color, SelectorLinea, space, useConfirmar, useToast } from '@/components/ui'
+import { useLinea } from '@/components/fundas/useDatosMonitor'
 
 /**
  * Carga de imágenes a TN (card 2). Un bloque por producto con varias fotos: se
@@ -15,7 +15,19 @@ import { Button, Card, color, space, useConfirmar, useToast } from '@/components
  *
  * ⚠️ Subir/publicar/revincular ESCRIBEN en la tienda online en vivo.
  */
-export function ImagenesCard({ marca }: { marca: Marca }) {
+/**
+ * 🔑 **Lleva selector de línea porque escribe en UNA Tienda Nube** (22-ago-2026). Stunned comparte
+ * el Gestión Nube de Zattia pero tiene tienda propia, y ésta es la puerta por la que la foto llega
+ * a la web: es el final del ciclo de la sesión de fotos. Sin la línea, la foto de una prenda de
+ * Stunned no tenía adónde subir — `bdi-catalogo/api/tn-subir-imagen.js` sólo conocía dos tiendas.
+ *
+ * ⛔ **Las otras cards de tncat NO la llevan todavía**: la revisión de fotos y los agotados se
+ * apoyan en `tn_ignorados` y `tn_fotos_verificadas`, que son **una tabla por marca** y todavía no
+ * saben de líneas. Darles el selector sin eso mostraría los ignorados de Zattia sobre el catálogo
+ * de Stunned.
+ */
+export function ImagenesCard() {
+  const { linea, lineas, setLinea } = useLinea()
   const { confirmar, avisar } = useConfirmar()
   const toast = useToast()
   const [productos, setProductos] = useState<ProductoImg[]>([])
@@ -41,19 +53,19 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      // Al cambiar de marca, reset (los productos y grupos son de esa cuenta).
+      // Al cambiar de línea, reset (los productos y grupos son de esa tienda).
       setProductos([])
       setGrupos([])
       setActivo(null)
       try {
-        const ps = await traerProductosImg(marca)
+        const ps = await traerProductosImg(linea)
         if (vivo) setProductos(ps)
       } catch {
         /* queda vacío */
       }
     })()
     return () => { vivo = false }
-  }, [marca])
+  }, [linea])
 
   // Actualiza la url (thumbnail) de una foto cuando el FileReader termina.
   const setFotoUrl = useCallback((gid: number, fid: number, url: string) => {
@@ -187,7 +199,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
   const recargarProductos = async () => {
     setRecargando(true)
     try {
-      const ps = await traerProductosImg(marca, true)
+      const ps = await traerProductosImg(linea, true)
       setProductos(ps)
       // Reintentar el match de los grupos sin producto.
       setGrupos((prev) =>
@@ -240,7 +252,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
             body.color = ft.color
             colorUsado.add(ft.color)
           }
-          const j = await subirImagen(marca, body)
+          const j = await subirImagen(linea, body)
           if (j.ok) {
             ok++
             let aviso: string | null = null
@@ -267,9 +279,9 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
         {err ? <span style={{ color: color.danger }}> · {err} con error: {[...new Set(errMsgs)].slice(0, 2).join(' / ')}</span> : null}
       </>,
     )
-    if (ok) bustAudit(marca)
+    if (ok) bustAudit(linea)
     return { ok, err, sinSubir: pendientes - ok }
-  }, [marca, actualizarFoto, avisar])
+  }, [linea, actualizarFoto, avisar])
 
   const revincular = async (gid: number, fid: number) => {
     const g = gruposRef.current.find((x) => x.id === gid)
@@ -277,7 +289,7 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     if (!g || !ft || !ft.imageId || !ft.color) return
     setInfo('Revinculando color…')
     try {
-      const j = await vincularColor(marca, g.productId!, ft.imageId, ft.color)
+      const j = await vincularColor(linea, g.productId!, ft.imageId, ft.color)
       if (j.ok && (j.variantesObjetivo ?? 0) > 0 && (j.variantesAsignadas ?? 0) >= (j.variantesObjetivo ?? 0)) {
         actualizarFoto(gid, fid, { avisoColor: null })
         setInfo(<span style={{ color: color.success }}>Color vinculado.</span>)
@@ -318,10 +330,10 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
     if (!ok) return
     setPublicando(true)
     try {
-      const d = await publicar(marca, ids)
+      const d = await publicar(linea, ids)
       if (d.ok) {
         setInfo(<><span style={{ color: color.success }}>{d.publicados} producto(s) publicado(s) en TiendaNube</span>{d.errores && d.errores.length ? <span style={{ color: color.danger }}> · {d.errores.length} con error</span> : null}</>)
-        bustAudit(marca)
+        bustAudit(linea)
       } else {
         toast.error('No se pudo publicar: ' + (d.error || 'error desconocido'))
       }
@@ -342,6 +354,9 @@ export function ImagenesCard({ marca }: { marca: Marca }) {
       <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 12px' }}>
         Agregá un producto y soltale <b>todas sus fotos</b> juntas. Repetí por cada producto (o por color). Después subís todo de una.
       </div>
+      {/* ⚠️ Va arriba de todo y no al lado de un botón: cada foto que se sube abajo entra a la
+          tienda de la línea que diga acá, y son dos tiendas distintas. */}
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
 
       <label
         onDragOver={(e) => { e.preventDefault() }}

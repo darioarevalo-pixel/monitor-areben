@@ -1,12 +1,13 @@
 /**
- * La tienda pública de cada marca — la cara tipada.
+ * La tienda pública de cada LÍNEA — la cara tipada. Stunned tiene tienda propia aunque comparta
+ * la base de Zattia: por eso la clave acá es `Linea` y no `Marca`.
  *
  * ⚠️ **La lógica no vive acá: vive en `lib/tienda.core.js`**, en JS plano, porque `api/_atencion.js`
  * necesita el dominio de la tienda y los handlers de `api/*.js` no pueden importar TypeScript. El
  * porqué está en el docblock del core. Misma forma que `lib/permisos.ts` sobre `lib/permisos.core.js`.
  */
 
-import type { Marca } from './nav.datos'
+import type { Linea } from './lineas'
 import {
   ADMIN_BASE as ADMIN_BASE_JS,
   adminBaseUrl as adminBaseUrlJs,
@@ -17,17 +18,22 @@ import {
   tiendaBaseUrl as tiendaBaseUrlJs,
 } from './tienda.core.js'
 
-export const TIENDA_BASE = TIENDA_BASE_JS as Record<Marca, string>
-export const ADMIN_BASE = ADMIN_BASE_JS as Record<Marca, string>
+export const TIENDA_BASE = TIENDA_BASE_JS as Record<Linea, string>
+export const ADMIN_BASE = ADMIN_BASE_JS as Record<Linea, string>
 
-/** El dominio público de la tienda, sin barra al final. */
-export const tiendaBaseUrl = tiendaBaseUrlJs as (marca: Marca) => string
+/**
+ * El dominio público de la tienda, sin barra al final.
+ *
+ * Con una `Linea` es total; con un `string` cualquiera puede ser `null` (ver el core: ya no cae a
+ * BDI por descarte). Misma sobrecarga que `baseDeLinea`, y por la misma razón.
+ */
+export const tiendaBaseUrl = tiendaBaseUrlJs as { (linea: Linea): string; (linea: string): string | null }
 
 /** El admin de Tienda Nube, hasta `/products`. */
-export const adminBaseUrl = adminBaseUrlJs as (marca: Marca) => string
+export const adminBaseUrl = adminBaseUrlJs as { (linea: Linea): string; (linea: string): string | null }
 
 /** El link público del producto, o `null` si no hay handle (nunca `/productos/undefined`). */
-export const linkProducto = linkProductoJs as (marca: Marca, handle?: string | null) => string | null
+export const linkProducto = linkProductoJs as (linea: Linea, handle?: string | null) => string | null
 
 /**
  * Lo que la tienda cobra hoy: la promo si existe. `null` es "sin precio", nunca cero.

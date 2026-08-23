@@ -6,7 +6,8 @@
  */
 
 import { CATS_GENERICAS, esFundaCat, esModeloCat, esPromo } from '../reposicion/grupos'
-import { ofertaVigente, type OfertaVigente } from '../tienda'
+import { adminBaseUrl, ofertaVigente, type OfertaVigente } from '../tienda'
+import type { Linea } from '../lineas'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstado, type ExhibEstados, type ExhibItem } from './tipos'
 
 /** Id estable de una variante: barcode si hay, si no productId|talle. Port de _exhibId. */
@@ -135,11 +136,17 @@ export function agruparPDF(items: ExhibItem[], estados: ExhibEstados): Record<Gr
   return grupos
 }
 
-/** Link al producto en el admin de TN para corregir la categoría. Port de _tnAdminUrl. */
-export function tnAdminUrl(tnId: string | number | null, marca: 'zattia' | 'bdi'): string | null {
+/**
+ * Link al producto en el admin de TN para corregir la categoría. Port de _tnAdminUrl.
+ *
+ * 🔑 **El dominio sale de `lib/tienda.core.js`, no de un ternario acá.** Ésta era la sexta copia de
+ * "cuál es el admin de cada tienda" —la que se le escapó a la consolidación— y con Stunned adentro
+ * del mapa una copia más es una tienda menos que aparece el día que se la agrega.
+ */
+export function tnAdminUrl(tnId: string | number | null, linea: Linea): string | null {
   if (!tnId) return null
-  const base = marca === 'zattia' ? 'https://zattiaco.mitiendanube.com/admin/products' : 'https://bdiaccesorios4.mitiendanube.com/admin/products'
-  return base + '/' + tnId
+  const base = adminBaseUrl(linea)
+  return base ? base + '/' + tnId : null
 }
 
 /**

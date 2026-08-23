@@ -3,7 +3,7 @@
  *
  * `tiendanube-audit` devuelve la tienda entera y lo consumen cinco secciones (Márgenes,
  * Comisiones, Reposición, Productos, Gerencial) más las cinco cards de tncat. Hasta acá había
- * **dos caminos separados** al mismo endpoint: el caché por marca de `useTnImages` (que pedía
+ * **dos caminos separados** al mismo endpoint: el caché por línea de `useTnImages` (que pedía
  * el payload liviano) y las funciones sueltas de `lib/tncat/cliente.ts` (que no cacheaban
  * nada). En `/tncat/fotos` eso significaba bajar la tienda dos veces —y una de ellas es la
  * versión `?variantes=1`, que pesa el doble.
@@ -19,24 +19,28 @@
  *
  * Todo sale por `apiFetch`: manda la credencial de quien está usando el Monitor. Antes el
  * camino de `useTnImages` iba con `fetch` pelado, sin credencial — el único que quedaba así.
+ *
+ * 🔑 **La clave es la LÍNEA y no la marca** (22-ago-2026): Stunned comparte la base de Zattia pero
+ * **no su Tienda Nube** —store 7516263, token propio, `stunned.com.ar`—, así que `?store=stunned`
+ * es otro catálogo (28 productos, medido). Para `bdi` y `zattia` no cambia nada.
  */
 
 import { apiFetch } from './api-fetch'
 import { indexarTn, type IndiceTn, type TnProducto } from './tn'
-import type { Marca } from './nav'
+import type { Linea } from './lineas'
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 
 /** `variantes` trae además el detalle por variante (color, foto propia, sku, stock). Pesa el doble. */
 type Nivel = 'liviano' | 'variantes'
-const clave = (marca: Marca, nivel: Nivel) => `${marca}|${nivel}`
+const clave = (linea: Linea, nivel: Nivel) => `${linea}|${nivel}`
 
 const cache = new Map<string, unknown[]>()
 const enVuelo = new Map<string, Promise<unknown[]>>()
 
-async function bajar(marca: Marca, nivel: Nivel, refrescar: boolean): Promise<unknown[]> {
+async function bajar(linea: Linea, nivel: Nivel, refrescar: boolean): Promise<unknown[]> {
   const url =
-    `${AUDIT}?store=${marca}` +
+    `${AUDIT}?store=${linea}` +
     (nivel === 'variantes' ? '&variantes=1' : '') +
     (refrescar ? `&refresh=1&nc=${Math.random()}` : '')
   const r = await apiFetch(url)
@@ -46,29 +50,29 @@ async function bajar(marca: Marca, nivel: Nivel, refrescar: boolean): Promise<un
 }
 
 /**
- * El catálogo de la marca. `T` es la vista que le interesa al llamador (`TnProducto`,
+ * El catálogo de la línea. `T` es la vista que le interesa al llamador (`TnProducto`,
  * `ProductoFchk`, `ProductoCat`): todos son subconjuntos del mismo objeto del endpoint.
  *
  * Con `refrescar` se pide de nuevo salteando los dos cachés, el de acá y el de allá.
  */
 export async function traerAudit<T>(
-  marca: Marca,
+  linea: Linea,
   opts: { variantes?: boolean; refrescar?: boolean } = {},
 ): Promise<T[]> {
   const nivel: Nivel = opts.variantes ? 'variantes' : 'liviano'
-  const k = clave(marca, nivel)
+  const k = clave(linea, nivel)
 
   if (opts.refrescar) {
-    invalidarAudit(marca) // el otro nivel también quedó viejo
+    invalidarAudit(linea) // el otro nivel también quedó viejo
   } else {
     const propio = cache.get(k)
     if (propio) return propio as T[]
 
     if (nivel === 'liviano') {
       // El rico sirve al liviano: es el mismo objeto con dos campos de más.
-      const rico = cache.get(clave(marca, 'variantes'))
+      const rico = cache.get(clave(linea, 'variantes'))
       if (rico) return rico as T[]
-      const ricoEnVuelo = enVuelo.get(clave(marca, 'variantes'))
+      const ricoEnVuelo = enVuelo.get(clave(linea, 'variantes'))
       if (ricoEnVuelo) {
         try {
           return (await ricoEnVuelo) as T[]
@@ -82,7 +86,7 @@ export async function traerAudit<T>(
     if (yendo) return yendo as Promise<T[]>
   }
 
-  const p = bajar(marca, nivel, !!opts.refrescar)
+  const p = bajar(linea, nivel, !!opts.refrescar)
     .then((filas) => {
       cache.set(k, filas)
       return filas
@@ -94,10 +98,10 @@ export async function traerAudit<T>(
   return p as Promise<T[]>
 }
 
-/** Tira lo cacheado de la marca (los dos niveles y los índices derivados). */
-export function invalidarAudit(marca: Marca): void {
-  cache.delete(clave(marca, 'liviano'))
-  cache.delete(clave(marca, 'variantes'))
+/** Tira lo cacheado de la línea (los dos niveles y los índices derivados). */
+export function invalidarAudit(linea: Linea): void {
+  cache.delete(clave(linea, 'liviano'))
+  cache.delete(clave(linea, 'variantes'))
 }
 
 /**
@@ -118,16 +122,16 @@ export function indicesDe(products: TnProducto[]): { fotos: IndiceTn; promo: Ind
   return par
 }
 
-/** Los índices de la marca si el catálogo ya está bajado; `undefined` si todavía no. Síncrono. */
-export function indicesCacheados(marca: Marca): { fotos: IndiceTn; promo: IndiceTn } | undefined {
-  const p = (cache.get(clave(marca, 'variantes')) ?? cache.get(clave(marca, 'liviano'))) as TnProducto[] | undefined
+/** Los índices de la línea si el catálogo ya está bajado; `undefined` si todavía no. Síncrono. */
+export function indicesCacheados(linea: Linea): { fotos: IndiceTn; promo: IndiceTn } | undefined {
+  const p = (cache.get(clave(linea, 'variantes')) ?? cache.get(clave(linea, 'liviano'))) as TnProducto[] | undefined
   return p ? indicesDe(p) : undefined
 }
 
-/** Los índices de la marca, bajando el catálogo si hace falta. Si TN falla, índices vacíos. */
-export async function asegurarIndices(marca: Marca): Promise<{ fotos: IndiceTn; promo: IndiceTn }> {
+/** Los índices de la línea, bajando el catálogo si hace falta. Si TN falla, índices vacíos. */
+export async function asegurarIndices(linea: Linea): Promise<{ fotos: IndiceTn; promo: IndiceTn }> {
   try {
-    return indicesDe(await traerAudit<TnProducto>(marca))
+    return indicesDe(await traerAudit<TnProducto>(linea))
   } catch {
     // Igual que el legacy: la tabla queda con "Sin foto" en vez de romperse.
     return { fotos: indexarTn([]), promo: indexarTn([]) }

@@ -20,7 +20,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import { leerLista, type KindLista } from '@/lib/kv/cliente'
-import type { Marca } from '@/lib/nav.datos'
+import type { Linea } from '@/lib/lineas'
 
 /** Ver api/postventa.js: los tres recursos comparten una función por el límite del plan. */
 const API = '/api/postventa?recurso=solicitudes'
@@ -40,7 +40,7 @@ type ConId = { id: string }
 
 export type LecturaCajon<T> = { ok: true; dato: T[] } | { ok: false; motivo: string }
 
-async function leerTabla<T>(kind: KindLista, store: Marca): Promise<LecturaCajon<T>> {
+async function leerTabla<T>(kind: KindLista, store: Linea): Promise<LecturaCajon<T>> {
   try {
     const r = await apiFetch(`${API}&store=${store}&kind=${kind}&nc=${Date.now()}`)
     const d = await r.json().catch(() => null)
@@ -52,19 +52,28 @@ async function leerTabla<T>(kind: KindLista, store: Marca): Promise<LecturaCajon
 }
 
 /**
- * Lee el historial de una marca. Mientras dure la convivencia devuelve la unión de la
- * tabla y el KV (gana la tabla).
+ * Lee el historial de una LÍNEA. Mientras dure la convivencia devuelve la unión de la tabla y el
+ * KV (gana la tabla).
+ *
+ * 🔑 **`store` es la línea y no la marca** (22-ago-2026): la sesión de fotos de Stunned es una lista
+ * aparte —filas `store='stunned'` de la misma tabla de Zattia, la clave ya era `store,id`—. Quién
+ * traduce a base de datos es el servidor (`api/_solicitudes.js`), con `baseDeLinea`.
  *
  * Falla cerrada, igual que antes: si la fuente de verdad no se pudo leer, devuelve `ok:false`
  * en vez de una lista vacía. Es lo que sostiene la disciplina de `cargado` río arriba —
  * guardar sobre una lista vacía borraría el historial.
  */
-export async function leerCajon<T extends ConId>(kind: KindLista, store: Marca): Promise<LecturaCajon<T>> {
+export async function leerCajon<T extends ConId>(kind: KindLista, store: Linea): Promise<LecturaCajon<T>> {
   const tabla = await leerTabla<T>(kind, store)
   if (!tabla.ok) return tabla
   if (MIGRACION_LISTA) return tabla
 
-  const kv = await leerLista<T>(kind, store)
+  // ⚠️ El KV nunca tuvo claves de Stunned: sus solicitudes NACEN en la tabla, así que la red de la
+  // mudanza no le aplica y pedirle `sesionfotos:stunned` al KV sería pedir una clave que no existe.
+  const marcaKv = store === 'bdi' || store === 'zattia' ? store : null
+  if (!marcaKv) return tabla
+
+  const kv = await leerLista<T>(kind, marcaKv)
   // El KV es la red, no la fuente: si no se pudo leer, seguimos con la tabla.
   if (!kv.ok) return tabla
 
@@ -75,7 +84,7 @@ export async function leerCajon<T extends ConId>(kind: KindLista, store: Marca):
 }
 
 /** Guarda (upsert) una sola solicitud. */
-export async function guardarSolicitud<T extends ConId>(kind: KindLista, store: Marca, solicitud: T): Promise<{ ok: boolean; motivo?: string }> {
+export async function guardarSolicitud<T extends ConId>(kind: KindLista, store: Linea, solicitud: T): Promise<{ ok: boolean; motivo?: string }> {
   try {
     const r = await apiFetch(API, {
       method: 'POST',
@@ -90,7 +99,7 @@ export async function guardarSolicitud<T extends ConId>(kind: KindLista, store: 
   }
 }
 
-async function borrarSolicitud(store: Marca, id: string): Promise<{ ok: boolean; motivo?: string }> {
+async function borrarSolicitud(store: Linea, id: string): Promise<{ ok: boolean; motivo?: string }> {
   try {
     const r = await apiFetch(API, {
       method: 'POST',
@@ -124,7 +133,7 @@ export function diffSolicitudes<T extends ConId>(previa: T[], nueva: T[]): { gua
 }
 
 /** Aplica un diff contra la tabla. Devuelve el primer error, si hubo. */
-export async function aplicarDiff<T extends ConId>(kind: KindLista, store: Marca, diff: { guardar: T[]; borrar: string[] }): Promise<{ ok: boolean; motivo?: string }> {
+export async function aplicarDiff<T extends ConId>(kind: KindLista, store: Linea, diff: { guardar: T[]; borrar: string[] }): Promise<{ ok: boolean; motivo?: string }> {
   for (const s of diff.guardar) {
     const r = await guardarSolicitud(kind, store, s)
     if (!r.ok) return r

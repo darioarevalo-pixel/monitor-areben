@@ -1,4 +1,5 @@
 import type { Marca } from '@/lib/nav'
+import type { Linea } from '@/lib/lineas'
 import type { Tone } from '@/components/ui/tokens'
 
 /**
@@ -23,7 +24,14 @@ export type Aviso = {
   /** Estable entre refrescos: es lo que permite comparar "esto ya lo vi". */
   id: string
   tipo: TipoAviso
+  /** La marca: adónde salta la app al tocar el aviso, y con qué permisos se lo mira. */
   marca: Marca
+  /**
+   * La línea, para el rótulo. 🔑 **No es lo mismo que `marca`**: un aviso de una solicitud de
+   * Stunned salta a la cuenta de Zattia —es su base— pero el chip tiene que decir «Stunned», o el
+   * aviso afirma una marca que no es la de la mercadería (`docs/lineas.md`).
+   */
+  linea: Linea
   titulo: string
   detalle: string
   /** Adónde lleva el clic. */

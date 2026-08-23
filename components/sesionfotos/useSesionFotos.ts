@@ -1,6 +1,6 @@
 'use client'
 
-import type { Marca } from '@/lib/nav.datos'
+import type { Linea } from '@/lib/lineas'
 import { crearVentas, idsParaCerrar } from '@/lib/sesionfotos/ventas'
 import type { EstadoSolicitud, Origen, Solicitud, VentaGN } from '@/lib/sesionfotos/tipos'
 import { useHistorialSolicitudes, type HistorialSolicitudes } from '@/components/solicitudes/useHistorialSolicitudes'
@@ -12,6 +12,10 @@ import type { Credencial } from '@/lib/sesion'
  * con Solicitudes internas); acá solo se fijan el kind del KV, el estado post-venta
  * (`cargada`) y el módulo de ventas de fotos. La API pública (EstadoSF/ResultadoCrear)
  * no cambió, así que el componente no se toca.
+ *
+ * Desde el 22-ago-2026 el eje es la **línea**, no la marca: la sesión de fotos de Stunned es una
+ * lista aparte (filas `store='stunned'` de la misma tabla, misma base de Zattia). El porqué —y por
+ * qué la venta de GN igual sale como Zattia— está en el docblock del motor.
  */
 
 export type ResultadoCrear =
@@ -23,8 +27,8 @@ export type EstadoSF = HistorialSolicitudes<Solicitud> & {
   crearVentasDe: (s: Solicitud, cred: Credencial) => Promise<ResultadoCrear>
 }
 
-export function useSesionFotos(marca: Marca): EstadoSF {
-  return useHistorialSolicitudes<Solicitud>(marca, {
+export function useSesionFotos(linea: Linea): EstadoSF {
+  return useHistorialSolicitudes<Solicitud>(linea, {
     kind: 'sesionfotos',
     etiqueta: 'Sesión de fotos',
     estadoTrasVenta: 'cargada',

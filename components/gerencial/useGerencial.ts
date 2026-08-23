@@ -9,6 +9,7 @@ import { desdeVentas, traerDatos } from '@/lib/datos'
 import { computarDatos } from '@/lib/etl/computar'
 import { leerIngresos } from '@/lib/kv/cliente'
 import { leerCajon } from '@/lib/solicitudes/cajon'
+import { lineasDeMarca } from '@/lib/lineas'
 import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { traerDetalleCuenta, traerOverview } from '@/lib/meta-ads/cliente'
 import type { Marca } from '@/lib/nav.datos'
@@ -60,7 +61,9 @@ async function cargarMarca(marca: Marca, desde: string, today: Date): Promise<Da
   const errores: string[] = []
   const [etlR, fotosR, internasR, ingresosR, tnR] = await Promise.allSettled([
     cargarETL(marca, desde, today),
-    leerCajon<Solicitud>('sesionfotos', marca),
+    // Las dos líneas: el ETL de arriba es la marca ENTERA (sin `porLinea`), así que dejar afuera
+    // las sesiones de fotos de Stunned sería contar menos solicitudes sobre el mismo stock.
+    Promise.all(lineasDeMarca(marca).map((l) => leerCajon<Solicitud>('sesionfotos', l))),
     leerCajon<SolicitudInterna>('solicitudesinternas', marca),
     leerIngresos<Ingreso>(marca),
     asegurarTnPromo(marca),
@@ -69,7 +72,7 @@ async function cargarMarca(marca: Marca, desde: string, today: Date): Promise<Da
   const etl = etlR.status === 'fulfilled' ? etlR.value : null
   if (etlR.status === 'rejected') errores.push('no se pudieron cargar ventas/stock')
 
-  const fotos = fotosR.status === 'fulfilled' && fotosR.value.ok ? fotosR.value.dato : []
+  const fotos = fotosR.status === 'fulfilled' ? fotosR.value.flatMap((r) => (r.ok ? r.dato : [])) : []
   const internas = internasR.status === 'fulfilled' && internasR.value.ok ? internasR.value.dato : []
   const ingresos = ingresosR.status === 'fulfilled' && ingresosR.value.ok ? ingresosR.value.dato : []
   const tnPromo = tnR.status === 'fulfilled' ? tnR.value : null

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav'
+import type { Linea } from '@/lib/lineas'
 import type { TnProducto } from '@/lib/tn'
 
 /**
@@ -16,18 +16,23 @@ import type { TnProducto } from '@/lib/tn'
  * Sigue el patrón de useTnImages para no romper el CI: el caché (y el error) viven a
  * nivel de módulo y se LEEN en el render; el effect solo dispara el fetch y fuerza un
  * re-render al terminar (nada de setState síncrono en el body del effect).
+ *
+ * 🔑 **La clave del caché es la LÍNEA, no la marca** (22-ago-2026). Stunned tiene **Tienda Nube
+ * propia** —store 7516263, token propio, `stunned.com.ar`— aunque comparta la base de Zattia, así
+ * que `?store=stunned` devuelve otro catálogo: medido, **28 productos**. Cachearlo bajo `zattia`
+ * mostraría el catálogo de una línea con el rótulo de la otra.
  */
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 
 export type AuditData = { products: TnProducto[]; categories: Record<string, unknown>; cachedAt: number | null }
 
-const cache: Partial<Record<Marca, AuditData>> = {}
-const errores: Partial<Record<Marca, string>> = {}
-const enVuelo: Partial<Record<Marca, Promise<void>>> = {}
+const cache: Partial<Record<Linea, AuditData>> = {}
+const errores: Partial<Record<Linea, string>> = {}
+const enVuelo: Partial<Record<Linea, Promise<void>>> = {}
 
-async function pegar(marca: Marca, forzar: boolean): Promise<AuditData> {
-  const url = `${AUDIT}?store=${marca}` + (forzar ? `&refresh=1&nc=${Math.random()}` : '')
+async function pegar(linea: Linea, forzar: boolean): Promise<AuditData> {
+  const url = `${AUDIT}?store=${linea}` + (forzar ? `&refresh=1&nc=${Math.random()}` : '')
   const r = await fetch(url)
   if (!r.ok) throw new Error('HTTP ' + r.status)
   const d = await r.json()
@@ -38,22 +43,22 @@ async function pegar(marca: Marca, forzar: boolean): Promise<AuditData> {
   }
 }
 
-/** Baja la marca (una sola vez por marca, de-dup por enVuelo). No fuerza refresh. */
-async function cargar(marca: Marca): Promise<void> {
-  if (cache[marca]) return
-  if (!enVuelo[marca]) {
-    enVuelo[marca] = (async () => {
+/** Baja el catálogo de la línea (una sola vez por línea, de-dup por enVuelo). No fuerza refresh. */
+async function cargar(linea: Linea): Promise<void> {
+  if (cache[linea]) return
+  if (!enVuelo[linea]) {
+    enVuelo[linea] = (async () => {
       try {
-        cache[marca] = await pegar(marca, false)
-        delete errores[marca]
+        cache[linea] = await pegar(linea, false)
+        delete errores[linea]
       } catch (e) {
-        errores[marca] = e instanceof Error ? e.message : String(e)
+        errores[linea] = e instanceof Error ? e.message : String(e)
       } finally {
-        enVuelo[marca] = undefined
+        enVuelo[linea] = undefined
       }
     })()
   }
-  await enVuelo[marca]
+  await enVuelo[linea]
 }
 
 export type EstadoMkt = {
@@ -64,28 +69,28 @@ export type EstadoMkt = {
   refrescar: () => Promise<void>
 }
 
-export function useMarketing(marca: Marca): EstadoMkt {
-  const data = cache[marca] ?? null
-  const error = errores[marca] ?? null
+export function useMarketing(linea: Linea): EstadoMkt {
+  const data = cache[linea] ?? null
+  const error = errores[linea] ?? null
   const [, forzar] = useState(0)
-  const marcaRef = useRef(marca)
+  const lineaRef = useRef(linea)
   useEffect(() => {
-    marcaRef.current = marca
-  }, [marca])
+    lineaRef.current = linea
+  }, [linea])
 
   useEffect(() => {
-    if (cache[marca]) return
+    if (cache[linea]) return
     let vivo = true
-    cargar(marca).then(() => {
+    cargar(linea).then(() => {
       if (vivo) forzar((n) => n + 1)
     })
     return () => {
       vivo = false
     }
-  }, [marca])
+  }, [linea])
 
   const refrescar = useCallback(async () => {
-    const m = marcaRef.current
+    const m = lineaRef.current
     try {
       cache[m] = await pegar(m, true)
       delete errores[m]

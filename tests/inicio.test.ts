@@ -176,6 +176,7 @@ const aviso = (over: Partial<Aviso>): Aviso => ({
   id: 'a1',
   tipo: 'solicitud',
   marca: 'bdi',
+  linea: 'bdi',
   titulo: 'Algo',
   detalle: '',
   ruta: '/solicitudes',

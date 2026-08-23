@@ -25,7 +25,17 @@ export const LINEAS = LINEAS_JS as readonly Linea[]
 export const ETIQUETA_LINEA = ETIQUETA_LINEA_JS as Record<Linea, string>
 
 export const esLinea = esLineaJs as (x: unknown) => boolean
-export const baseDeLinea = baseDeLineaJs as (linea: string) => Marca | null
+/**
+ * 🔑 **Con una `Linea` es TOTAL; con un `string` cualquiera puede ser `null`.** Las dos firmas son
+ * la misma función —el runtime está en el core y no cambia—: la sobrecarga sólo le dice al
+ * compilador lo que el core ya garantiza, para que quien tiene una `Linea` en la mano no tenga que
+ * inventar un default. Un `?? 'zattia'` en el llamador es exactamente el defecto que `baseDeLinea`
+ * existe para no tener.
+ */
+export const baseDeLinea = baseDeLineaJs as {
+  (linea: Linea): Marca
+  (linea: string): Marca | null
+}
 export const lineasDeMarca = lineasDeMarcaJs as (marca: Marca) => Linea[]
 export const esStunned = esStunnedJs as (sku: string | null | undefined) => boolean
 export const lineaDe = lineaDeJs as (store: Marca | string, sku: string | null | undefined) => Linea
