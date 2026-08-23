@@ -37,6 +37,21 @@
 
 (() => {
   const FUENTE = 'bdi-crm-panel'
+
+  /**
+   * El rastro de la apertura de chats, en la consola de WhatsApp.
+   *
+   * 🔑 **Está prendido a propósito y no detrás de un flag.** Lo único que puede fallar acá son
+   * puertas internas de WhatsApp que cambian sin aviso, y el síntoma no es un error: es que
+   * *tarda*, porque cae sola al camino lento. Sin este rastro, la única forma de saber por qué es
+   * pegar código en la consola a mano — que es exactamente lo que hubo que hacer el 23-ago-2026.
+   * Son dos renglones por clic y sólo en WhatsApp Web.
+   */
+  function rastro(txt) {
+    try {
+      console.log('[BDI] ' + txt)
+    } catch {}
+  }
   // Un vistazo cada 400 ms. Es una lectura de memoria —no toca la red ni la pantalla— y al no
   // depender del HTML no hace falta escuchar cambios del documento, que era lo caro y lo frágil.
   //
@@ -92,20 +107,62 @@
    * extensión cae a la navegación de siempre: más lenta, pero nunca deja de funcionar. Por eso
    * cada paso está envuelto y no se da nada por sentado.
    */
+  /**
+   * El identificador interno de un número. **Es el paso que más se rompe** y el que produce el
+   * `invalid wid` de WhatsApp, así que se prueban las tres formas conocidas en vez de apostar a
+   * una: la fábrica de usuarios, y armarlo a mano con y sin el sufijo `@c.us`.
+   */
+  function widDe(digitos) {
+    const W = window.require('WAWebWidFactory')
+    const intentos = [
+      ['createUserWidOrThrow', () => W.createUserWidOrThrow(digitos)],
+      ['createWid@c.us', () => W.createWid(digitos + '@c.us')],
+      ['createWid', () => W.createWid(digitos)],
+    ]
+    for (const [nombre, f] of intentos) {
+      try {
+        const wid = f()
+        if (wid) return { wid, via: nombre }
+      } catch (e) {
+        rastro('wid falló con ' + nombre + ': ' + (e && e.message))
+      }
+    }
+    return { wid: null, via: '' }
+  }
+
   async function abrirChatDe(numero) {
     const digitos = String(numero || '').replace(/\D/g, '')
-    if (digitos.length < 8) return false
+    if (digitos.length < 8) {
+      rastro('número corto: ' + digitos)
+      return false
+    }
     try {
-      const wid = window.require('WAWebWidFactory').createUserWidOrThrow(digitos)
+      const { wid, via } = widDe(digitos)
+      if (!wid) {
+        rastro('no se pudo armar el wid de ' + digitos)
+        return false
+      }
       const Chats = window.require('WAWebChatCollection').ChatCollection
       // `get` resuelve el caso normal —la conversación ya existe en memoria— sin esperar nada.
       let chat = typeof Chats.get === 'function' ? Chats.get(wid) : null
-      if (!chat && typeof Chats.getLatestChatForWid === 'function') chat = await Chats.getLatestChatForWid(wid)
-      if (!chat && typeof Chats.find === 'function') chat = await Chats.find(wid)
-      if (!chat) return false
+      let comoLoEncontro = chat ? 'get' : ''
+      if (!chat && typeof Chats.getLatestChatForWid === 'function') {
+        chat = await Chats.getLatestChatForWid(wid)
+        if (chat) comoLoEncontro = 'getLatestChatForWid'
+      }
+      if (!chat && typeof Chats.find === 'function') {
+        chat = await Chats.find(wid)
+        if (chat) comoLoEncontro = 'find'
+      }
+      if (!chat) {
+        rastro('wid ok (' + via + ') pero no hay conversación para ' + digitos)
+        return false
+      }
       window.require('WAWebCmd').Cmd.openChatAt(chat)
+      rastro('abierto ' + digitos + ' · wid por ' + via + ' · chat por ' + comoLoEncontro)
       return true
-    } catch {
+    } catch (e) {
+      rastro('se rompió abriendo ' + digitos + ': ' + (e && e.message))
       return false
     }
   }

@@ -69,7 +69,10 @@ function pedirAbrirChat(tel) {
 
     setTimeout(() => {
       // Nadie atendió: no hay nadie del otro lado, así que el que pidió tiene que navegar.
-      if (!entrada.acusado && esperando.delete(pedido)) resolve(false)
+      if (!entrada.acusado && esperando.delete(pedido)) {
+        console.log('[BDI] nadie atendió el pedido de abrir el chat: se navega (recarga WhatsApp)')
+        resolve(false)
+      }
     }, PLAZO_ACK)
 
     setTimeout(() => {
