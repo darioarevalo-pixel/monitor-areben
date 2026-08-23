@@ -43,6 +43,8 @@ const API = 'https://bdi-catalogo.vercel.app/api/ingresos'
 export type KindMapa = 'crmtel' | 'crmseg' | 'crmleads' | 'talles'
 /** `cupones` guarda su array bajo `{cupones}` (otra clave más del mismo endpoint). */
 export type KindCupones = 'cupones'
+/** `mensajes` guarda el banco de mensajes del CRM bajo `{bank}` (array de grupos). */
+export type KindBanco = 'mensajes'
 /** `verifventas` guarda el checklist de anuladas bajo `{resueltas}` (un mapa). */
 export type KindResueltas = 'verifventas'
 /**
@@ -163,6 +165,38 @@ export async function guardarCupones<T>({ store, cupones, cargado }: OpcionesGua
   })
   if (!r.ok) return r
   return { ok: true, total: Number(r.dato.total ?? cupones.length) }
+}
+
+/**
+ * Lee el banco de mensajes del CRM (`kind=mensajes`, forma `{bank:[...]}`).
+ *
+ * ⚠️ La clave existe y tiene los 25 mensajes de fábrica, así que el modo de falla es real:
+ * la guarda del servidor es `!Array.isArray(bank)` y **`[]` pasa**
+ * (bdi-catalogo/api/ingresos.js:118). Un array vacío confirmado por el servidor es éxito;
+ * una lectura fallida es otra cosa y bloquea el guardado.
+ */
+export async function leerBanco<T = unknown>(store: Marca): Promise<Lectura<T[]>> {
+  const r = await pedir(`${API}?kind=mensajes&store=${store}&nc=${Date.now()}`)
+  if (!r.ok) return r
+  return { ok: true, dato: Array.isArray(r.dato.bank) ? (r.dato.bank as T[]) : [] }
+}
+
+export type OpcionesGuardarBanco<T> = {
+  store: Marca
+  banco: T[]
+  /** Obligatorio: sin lectura previa, guardar deja el banco vacío y no hay backup. */
+  cargado: boolean
+}
+
+export async function guardarBanco<T>({ store, banco, cargado }: OpcionesGuardarBanco<T>): Promise<Escritura> {
+  if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const r = await pedir(`${API}?kind=mensajes&store=${store}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, bank: banco }),
+  })
+  if (!r.ok) return r
+  return { ok: true, total: Number(r.dato.total ?? banco.length) }
 }
 
 /**
