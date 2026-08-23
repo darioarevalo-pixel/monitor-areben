@@ -74,9 +74,18 @@ export function mapDetalleRow(d, saleId) {
 }
 
 /**
- * El padrón de clientes sale de las ventas: GN no tiene endpoint de clientes. De cada
- * cliente queda la versión de su venta MÁS RECIENTE — si se mudó, vale el domicilio
- * nuevo, no el de la primera compra.
+ * Descubre clientes NUEVOS a partir de las ventas. De cada uno queda la versión de su venta MÁS
+ * RECIENTE.
+ *
+ * 🔴 **Lo que sale de acá ya no actualiza al cliente que existe** (el `upsert` de abajo va con
+ * `ignoreDuplicates`). El comentario que estaba acá decía "GN no tiene endpoint de clientes" y era
+ * falso: existe, lo que faltaba era el permiso `clients:read` en la clave. Desde el 23-ago-2026 el
+ * padrón lo mantiene `scripts/sync-clientes.js`, que lee la FICHA.
+ *
+ * Por qué importa la diferencia: la venta expone un solo teléfono (`client_phone`) y **el WhatsApp
+ * está en el otro campo de la ficha** (`cellphone_number`). Mientras esto mandaba, 526 de los 785
+ * clientes mayoristas figuraban sin teléfono, y 463 lo tenían cargado. Peor: como el upsert pisaba
+ * todas las columnas, una venta sin teléfono **borraba un teléfono bueno**.
  */
 export function extraerClientesDeVentas(rows) {
   const map = new Map()
@@ -117,7 +126,11 @@ export async function guardarVentasBatch(supabase, rawRows, { completo = true } 
     if (error) throw new Error(`Error guardando ventas: ${error.message}`)
   }
   for (let i = 0; i < clientes.length; i += 500) {
-    const { error } = await supabase.from('clientes').upsert(clientes.slice(i, i + 500), { onConflict: 'id' })
+    // `ignoreDuplicates`: inserta al que no existe y NO toca al que ya está. Ver el comentario de
+    // `extraerClientesDeVentas` — la ficha manda, la venta sólo descubre.
+    const { error } = await supabase
+      .from('clientes')
+      .upsert(clientes.slice(i, i + 500), { onConflict: 'id', ignoreDuplicates: true })
     if (error) throw new Error(`Error guardando clientes: ${error.message}`)
   }
   for (let i = 0; i < detalles.length; i += 2000) {

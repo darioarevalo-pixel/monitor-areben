@@ -1,0 +1,37 @@
+name: Sync padrón de clientes — Gestión Nube
+
+# 🔒 Mismo candado que los otros ocho workflows que hablan con GN: comparten el cupo de la API por
+# IP y los cortes por ráfaga aparecen cuando dos jobs se pisan. Ver la nota de sync-diario.yml.
+concurrency:
+  group: gestion-nube
+  cancel-in-progress: false
+
+on:
+  # 07:00 UTC, una hora después del diario. El candado igual los serializa, pero arrancar separados
+  # evita que este job se pase la primera hora esperando su turno.
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar sync de clientes
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # 🔴 Clave APARTE: `GN_TOKEN` no tiene el permiso `clients:read`. Es la clave 113
+          # "Clientes BDI", creada sólo con ese permiso.
+          GN_TOKEN_CLIENTES: ${{ secrets.GN_TOKEN_CLIENTES }}
+        run: node scripts/sync-clientes.js

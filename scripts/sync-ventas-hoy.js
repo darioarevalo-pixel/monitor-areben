@@ -150,7 +150,12 @@ async function guardar(rawRows) {
   }
   if (clientes.length) {
     for (let i = 0; i < clientes.length; i += 500) {
-      const { error } = await supabase.from('clientes').upsert(clientes.slice(i, i + 500), { onConflict: 'id' });
+      // `ignoreDuplicates`: sólo da de alta al que no existe. Actualizar la ficha es tarea de
+      // `sync-clientes.js`, que lee el padrón de GN — la venta no trae el WhatsApp y pisaba con
+      // vacío el teléfono que sí estaba bien.
+      const { error } = await supabase
+        .from('clientes')
+        .upsert(clientes.slice(i, i + 500), { onConflict: 'id', ignoreDuplicates: true });
       if (error) throw new Error(`Error guardando clientes: ${error.message}`);
     }
   }

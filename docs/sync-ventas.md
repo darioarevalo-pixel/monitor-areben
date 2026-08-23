@@ -11,6 +11,7 @@ en cada mensaje de cada sesión.
 |---|---|
 | **el cliente HTTP de Gestión Nube** | `scripts/lib/gn-fetch.mjs` |
 | mapeo y guardado de ventas | `scripts/lib/ventas-espejo.mjs` |
+| **padrón de clientes** (la ficha, con el WhatsApp) | `scripts/sync-clientes.js` + `scripts/lib/clientes-espejo.mjs` |
 | borrado de las que GN ya no tiene | `scripts/lib/purga-ventas.mjs` |
 | histórico anterior a la ventana | `scripts/purga-historica.js` (arranca en simulación) |
 | refresco de las vistas | `scripts/lib/refrescar-vistas.mjs` + `sql/migrate-refresco-vistas.sql` |
@@ -30,6 +31,17 @@ incremental, así que una venta quedaba congelada en la foto de su primer día y
 sumando plata — GN no devuelve las anuladas con un estado: dejan de venir. El mapeo y el guardado son
 una sola implementación para las dos marcas; `completo: false` es Zattia, cuya tabla todavía no tiene
 cliente ni costo.
+
+🔴 **Los clientes salen de la FICHA, no de la venta — y por eso los syncs de ventas no los
+actualizan.** Los cuatro upsert de `clientes` de los syncs de ventas van con `ignoreDuplicates`:
+dan de alta al que no existe y no tocan al que ya está. Hasta el 23-ago-2026 el padrón se deducía
+de las ventas y eso costaba dos cosas: la ficha completada DESPUÉS de la compra no llegaba nunca, y
+**el WhatsApp no viaja en la venta** (la ficha tiene dos teléfonos, la venta expone `phone_number` y
+el que se carga a mano es `cellphone_number`). Eran 526 de 785 mayoristas "sin teléfono", con 463
+cargados. Peor: como el upsert pisaba todas las columnas, una venta sin teléfono **borraba uno
+bueno**. ⚠️ `sync-clientes.js` necesita `GN_TOKEN_CLIENTES` — la clave 113, la única con
+`clients:read`; `GN_TOKEN` da 403 "Invalid ability provided". Y `GET /clientes` **ignora en
+silencio** `?id=` y `?search=`: hay que paginar el padrón entero.
 
 🔴 **La purga va DESPUÉS del upsert.** Si una venta cambió de fecha, mirarla antes la mostraría con la
 fecha vieja y se borraría por "desaparecida".

@@ -130,7 +130,8 @@ async function flushBatch(rawRows) {
   if (clientes.length) {
     for (let i = 0; i < clientes.length; i += 500) {
       const lote = clientes.slice(i, i + 500);
-      const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id' });
+      // `ignoreDuplicates`: sólo alta. La ficha (con el WhatsApp) la mantiene sync-clientes.js.
+      const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id', ignoreDuplicates: true });
       if (error) throw new Error(`Error guardando clientes: ${error.message}`);
     }
   }

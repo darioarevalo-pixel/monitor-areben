@@ -169,7 +169,8 @@ async function syncVentas() {
     const BATCH_C = 500;
     for (let i = 0; i < clientes.length; i += BATCH_C) {
       const lote = clientes.slice(i, i + BATCH_C);
-      const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id' });
+      // `ignoreDuplicates`: sólo alta. La ficha (con el WhatsApp) la mantiene sync-clientes.js.
+      const { error } = await supabase.from('clientes').upsert(lote, { onConflict: 'id', ignoreDuplicates: true });
       if (error) throw new Error(`Error guardando clientes (lote ${i}): ${error.message}`);
     }
   }
