@@ -131,6 +131,41 @@ export function filtrarLeads(leads: MapaLeads, { q, verArchivados, today }: Opci
   return conSeg
 }
 
+/**
+ * Los leads que entran en la lista del día, con el MISMO criterio que los clientes
+ * (`filtrarOrdenar` + `FILTROS_POR_DIA` de core.ts).
+ *
+ * 🔑 **Por qué existe.** Medido el 23-ago-2026: hay 37 leads cargados y **sólo 4 tienen un
+ * contacto registrado**. No es que no sirvan —6 de los 37 ya compraron—, es que viven en una
+ * pestaña aparte, sin fechas ni "para hoy", así que en el momento de trabajar no aparecen. Un
+ * prospecto que no entra en la lista del día no se contacta nunca.
+ *
+ * ⚠️ **Sólo los activos.** El que ya compró es cliente y sale por el otro lado; el descartado
+ * se descartó.
+ *
+ * ⚠️ **Los leads no tienen temperatura**, así que la regla de "al frío no se le escribe" no los
+ * toca. Un lead recién cargado es, por definición, alguien con quien se está hablando.
+ *
+ * 🔑 **El lead SIN AGENDAR (`none`) entra igual, y es la mitad del problema.** Medido el
+ * 23-ago-2026: de 28 leads activos, **25 no tienen ni cadencia ni fecha** — vienen del CRM viejo,
+ * donde cargarlos no obligaba a agendarlos. En un cliente, `none` significa "no está en
+ * seguimiento" y se lo deja afuera; en un lead activo significa "lo cargaste para hablarle y
+ * nunca le pusiste fecha", que es justo el que hay que rescatar. Van al final de la lista, que
+ * es donde `filtrarLeads` ya los deja.
+ */
+export function leadsDelDia(
+  leads: MapaLeads,
+  { seg, hoy, manana, today }: { seg: string; hoy?: string; manana?: string; today: Date },
+): LeadConSeg[] {
+  const lista = filtrarLeads(leads, { q: '', verArchivados: false, today })
+  const sinAgendar = (l: LeadConSeg) => l._seg.estado === 'none' || l._seg.estado === 'pendiente'
+  if (seg === 'atrasados') return lista.filter((l) => sinAgendar(l) || (!!l._seg.proximo && !!hoy && l._seg.proximo < hoy))
+  if (seg === 'hoy') return lista.filter((l) => !!hoy && l._seg.proximo === hoy)
+  if (seg === 'manana') return lista.filter((l) => !!manana && l._seg.proximo === manana)
+  if (seg === 'semana') return lista.filter((l) => l._seg.estado === 'vencido' || l._seg.estado === 'semana' || sinAgendar(l))
+  return []
+}
+
 // ── Mutaciones ───────────────────────────────────────────────────────────────
 // El legacy muta leadsData en el lugar y llama a leadsGuardar (14177-14247).
 // Acá devuelven un mapa nuevo: React necesita otra referencia, y así el guardado

@@ -8,15 +8,17 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 ## Dónde vive
 
 - Pantalla: `components/crm/` (`CRM.tsx` la tabla, `ClienteModal.tsx` la ficha, `Leads.tsx`,
-  `Metricas.tsx`, `GuiaTrabajo.tsx`, `useCRM.ts` la carga).
+  `LeadsDelDia.tsx` el bloque de leads arriba de la lista del día, `BancoMensajes.tsx` la ventana
+  de los textos de WhatsApp, `Metricas.tsx`, `GuiaTrabajo.tsx`, `useCRM.ts` la carga).
 - Panel: `components/panel/PanelWhatsApp.tsx` + `lib/crm/panel.ts`. La ruta la resuelve la
   catch-all (`app/[[...seccion]]/page.tsx`, rama `esPanel`), **no** es un archivo de ruta propio.
-- Dominio: `lib/crm/` — `core.ts` (agregado RFM, 485 líneas), `seguimiento.ts` (las escrituras),
-  `leads.ts`, `metricas.ts`, `tipos.ts`, `telefono.core.js`.
+- Dominio: `lib/crm/` — `core.ts` (agregado RFM + las dos etapas del día), `seguimiento.ts` (las
+  escrituras), `leads.ts`, `mensajes.ts` (el banco), `metricas.ts`, `tipos.ts`, `telefono.core.js`.
 - Servidor: `api/_crm.js`, por la puerta `api/datos?recurso=crm`. Cuatro acciones: padrón (sin
   `action`), `detalles`, `ventas` y `panel`.
 - Datos: Supabase `clientes` / `ventas` / `venta_detalles` (**bdi-only por esquema**: esas tablas
-  no existen en Zattia) + cuatro mapas del KV de bdi-catalogo: `crmseg`, `crmtel`, `crmleads`.
+  no existen en Zattia) + cuatro claves del KV de bdi-catalogo: `crmseg`, `crmtel`, `crmleads` y
+  `mensajes` (esta última es un ARRAY bajo `{bank}`, no un mapa).
 - Extensión de Chrome: `extension/` (no se despliega; se carga a mano en el navegador).
 - Tests: `tests/crm-*.test.ts`. El del panel es `tests/crm-panel.test.ts`.
 
@@ -66,6 +68,39 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 - ⚠️ **La sesión del panel es aparte.** Adentro de un iframe de otro sitio, Chrome le da al monitor
   un `localStorage` particionado: hay que entrar una vez más ahí adentro, aunque el monitor esté
   abierto en otra pestaña. No es un bug y no se puede evitar sin cookies de terceros.
+- 🔑 **El día tiene DOS etapas, y los fríos son la segunda.** Los chips de día (Atrasados / Hoy /
+  Mañana / Esta semana) sacan a los 🧊 fríos (`sinFrios`), y el chip **🧊 Recuperar** trae la
+  tanda de fríos del día: `TANDA_FRIOS` = 10, los que más compraron entre los que están vencidos.
+  ⚠️ **No es un descarte**: Bruno trabaja fríos todos los días y tiene buenas recuperaciones; lo
+  que no funciona es tenerlos mezclados, porque entonces no se termina ninguna de las dos listas.
+  Medido el 23-ago-2026: 50 de los ~300 atrasados eran fríos.
+- 🔑 **La tanda rota sola y no guarda nada.** Al registrarle el contacto a un frío se le fija el
+  próximo, sale de vencidos y suben los diez siguientes. Un "ya lo mostré hoy" persistido sería
+  un dato más que mantener para el mismo resultado.
+- 🔴 **`friosParaRecuperar` incluye el estado `none`.** `setTemperatura` **no carga ninguna
+  fecha**: un cliente sin cadencia ni fecha manual que se marca frío queda en `none` y, sin esa
+  línea, salía de la lista del día por frío y de la de recuperación por no tener fecha —
+  desaparecía del sistema en silencio. Hoy los 67 fríos tienen fecha; el caso se abre solo la
+  próxima vez que se enfríe a alguien sin seguimiento.
+- 🔑 **Los contadores de los chips salen de `contarPorDia`, no de `contarKpis`.** `contarKpis` es
+  paridad con el legacy y no sabe de fríos: contarlos ahí hacía que el chip dijera 302 y la tabla
+  mostrara 252. La misma función cuenta y filtra.
+- 🔑 **Los leads entran en la lista del día** (`leadsDelDia` + `LeadsDelDia.tsx`), como bloque
+  arriba de la tabla y no como filas: la tabla tiene 5 columnas de compras y un lead no compró
+  nunca. Medido el 23-ago-2026: 37 leads cargados, **4 con un contacto registrado** y 6 que igual
+  compraron — no sobran, no aparecían cuando se trabaja.
+- 🔴 **Un lead `none` (sin cadencia ni fecha) entra igual en Atrasados.** 25 de los 28 activos
+  estaban así: vienen del CRM viejo, donde cargar un lead no obligaba a agendarlo. Con la regla
+  de los clientes, el bloque habría mostrado 3 de 28 y el problema seguía intacto. Y al marcarle
+  "Le escribí hoy" se le pone cadencia **semanal** si no tiene — el mismo default del formulario
+  del panel —, porque si no vuelve a quedar sin fecha y reaparece para siempre.
+- 🔴 **El bloque de leads relee el mapa antes de escribir.** La pestaña Leads tiene su propia
+  copia en memoria y guarda el mapa entero: sin la relectura, un clic en el bloque pisaría lo que
+  se acabara de hacer allá. Misma disciplina que el panel de WhatsApp.
+- 🔑 **El banco de mensajes se edita desde una VENTANA, no una pestaña** (botón "Mensajes", al
+  lado de "Guía de trabajo"). Se retoca cada tanto, no todos los días. **Los grupos los arma el
+  que vende**: la división de fábrica (dormido / objeciones / canal) no es la de nadie. Se carga
+  al abrirse, no con la sección.
 - ⚠️ **No reponer el botón de WhatsApp en la tabla.** Bruno tiene a todos los clientes agendados y
   los busca por nombre. Este panel es justamente la dirección contraria: trae el monitor a donde ya
   se trabaja.
@@ -93,7 +128,18 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   cliente. Es una línea de estado en `CRM.tsx` (`modalId`) leída de la URL.
 - ⚠️ Los contactos registrados **todavía no se muestran en ningún lado**: el embudo de la Parte 9
   (contactados → respondieron → compraron) hay que sumarlo a la pestaña Métricas. Hasta que eso
-  pase, el dato se junta pero no se lee.
+  pase, el dato se junta pero no se lee. Medido el 23-ago-2026: `contactos[]` tiene **0 entradas**
+  — el panel recién arrancó.
+- ▶️ **El banco de mensajes todavía no se ve en el panel de WhatsApp.** Ya se edita desde la
+  sección; falta que el panel muestre los grupos con `[Nombre]` completado (`completar`, en
+  `lib/crm/mensajes.ts`) y un botón para copiar cada uno. ⚠️ Escribir el texto **adentro** del
+  cuadro de WhatsApp quedó descartado por ahora: es la parte que ellos cambian seguido.
+- ▶️ **`[producto]` NO se completa solo, a propósito.** En un mensaje de postventa es lo que
+  compró el cliente, pero en uno de novedad es lo que acaba de llegar —igual para todos ese día—
+  y eso el sistema no lo sabe. Rellenarlo con la última compra manda "¿cómo te fue con la funda?"
+  a alguien que la llevó hace ocho meses.
+- ▶️ La **temperatura casi no está cargada**: 7 calientes, 4 templados, 67 fríos y **693 sin
+  marcar** (que se leen como templados). Hoy la única marca que filtra de verdad es la de frío.
 - ⚠️ El monitor **no manda `X-Frame-Options` ni `frame-ancestors`**, o sea que cualquier sitio lo
   puede embeber. Hoy eso es lo que hace posible el panel; el día que se acote, hay que dejar
   entrar al origen de la extensión.
@@ -118,6 +164,13 @@ teléfonos ya migrado — `localStorage.PhoneNumberHidingThreadPromotionMigratio
 `require('WAWebChatCollection').ChatCollection.getActive()` → `chat.contact.phoneNumber`. El store
 `contact` de IndexedDB (7.418 registros, `id: …@lid` → `phoneNumber: …@c.us`) sirve de respaldo y
 se puede leer desde el content script, que comparte origen con la página.
+
+⚠️ **El side panel es de la VENTANA, no de la pestaña.** Abierto una vez se queda abierto al
+cambiar de pestaña, y la ficha de un cliente aparecía al costado de cualquier sitio. Desde la
+v0.2.1 `background.js` lo habilita por pestaña (`chrome.sidePanel.setOptions`): prendido en
+WhatsApp, apagado en todo lo demás, con un repaso de las pestañas ya abiertas al despertar el
+service worker. No pide el permiso `tabs`: sin permiso, `tab.url` viene vacío y eso ya significa
+"no es WhatsApp".
 
 ⚠️ Eso obliga a que el script corra en el **mundo de la página** (`world: "MAIN"` en el manifest);
 el mundo aislado de la extensión no ve `window.require`. Por eso la extensión tiene dos scripts:

@@ -11,6 +11,7 @@ import {
   leadEstadoSeg,
   leadInstaHref,
   leadNuevo,
+  leadsDelDia,
   setCadencia,
   setCampo,
   setEstado,
@@ -190,5 +191,92 @@ describe('hoyISO', () => {
   it('usa la fecha local, no la UTC (por eso no pasa por toISOString)', () => {
     // 2026-07-17T02:00Z en Argentina (UTC-3) es todavía el 16.
     expect(hoyISO(new Date(2026, 6, 17, 0, 30))).toBe('2026-07-17')
+  })
+})
+
+describe('leadsDelDia · los leads entran en la lista del día', () => {
+  // El mismo día que usa el resto del archivo, para no arrastrar dos relojes.
+  const HOY = '2026-07-17'
+  const MANANA = '2026-07-18'
+  const opts = { hoy: HOY, manana: MANANA, today: AHORA }
+
+  const conFecha = (id: string, proximo: string | null, extra: Partial<Lead> = {}): Lead =>
+    lead({ id, nombre: id, cadencia: 'semanal', proximo_manual: proximo, ultimo_contacto: '2026-07-01', ...extra })
+
+  const atrasado = conFecha('atrasado', '2026-07-10')
+  const deHoy = conFecha('deHoy', HOY)
+  const deManana = conFecha('deManana', MANANA)
+  const deLaSemana = conFecha('deLaSemana', '2026-07-22')
+  const lejano = conFecha('lejano', '2026-09-01')
+  // Cadencia puesta y ningún contacto todavía: la misma deuda que un vencido, sin fecha.
+  const sinPrimerContacto = lead({ id: 'sinPrimer', nombre: 'sinPrimer', cadencia: 'semanal', ultimo_contacto: null, proximo_manual: null })
+
+  const mapa: MapaLeads = Object.fromEntries(
+    [atrasado, deHoy, deManana, deLaSemana, lejano, sinPrimerContacto].map((l) => [l.id, l]),
+  )
+  const ids = (seg: string) => leadsDelDia(mapa, { seg, ...opts }).map((l) => l.id)
+
+  it('"Hoy" trae exactamente los de hoy', () => {
+    expect(ids('hoy')).toEqual(['deHoy'])
+  })
+
+  it('"Mañana" trae los del próximo día hábil que le pasa la pantalla', () => {
+    expect(ids('manana')).toEqual(['deManana'])
+  })
+
+  it('"Atrasados" son los vencidos y el que nunca se contactó; los de hoy todavía no', () => {
+    expect(ids('atrasados').sort()).toEqual(['atrasado', 'sinPrimer'])
+  })
+
+  it('"Esta semana" suma lo atrasado y lo de los próximos 7 días, y deja afuera lo lejano', () => {
+    const s = ids('semana')
+    expect(s).toContain('atrasado')
+    expect(s).toContain('deHoy')
+    expect(s).toContain('deLaSemana')
+    expect(s).not.toContain('lejano')
+  })
+
+  it('el lead SIN AGENDAR entra en Atrasados: es el que se cargó y nunca se le puso fecha', () => {
+    // 25 de los 28 leads activos estaban así el 23-ago-2026. Si `none` quedara afuera, el
+    // bloque mostraría 3 leads y el problema seguiría intacto.
+    const suelto = lead({ id: 'suelto', nombre: 'suelto', cadencia: '', ultimo_contacto: null, proximo_manual: null })
+    const conSuelto: MapaLeads = { ...mapa, suelto }
+    expect(leadsDelDia(conSuelto, { seg: 'atrasados', ...opts }).map((l) => l.id)).toContain('suelto')
+    expect(leadsDelDia(conSuelto, { seg: 'semana', ...opts }).map((l) => l.id)).toContain('suelto')
+    // Pero no se cuela en un día concreto: no tiene fecha que pueda coincidir.
+    expect(leadsDelDia(conSuelto, { seg: 'hoy', ...opts }).map((l) => l.id)).not.toContain('suelto')
+  })
+
+  it('el sin agendar va AL FINAL: primero los que tienen fecha vencida', () => {
+    const suelto = lead({ id: 'suelto', nombre: 'aaa', cadencia: '', ultimo_contacto: null, proximo_manual: null })
+    const r = leadsDelDia({ ...mapa, suelto }, { seg: 'semana', ...opts })
+    expect(r[r.length - 1].id).toBe('suelto')
+  })
+
+  it('un filtro que no es de día no trae nada: el bloque sólo existe en la lista del día', () => {
+    expect(leadsDelDia(mapa, { seg: 'todos', ...opts })).toEqual([])
+    expect(leadsDelDia(mapa, { seg: 'frios', ...opts })).toEqual([])
+  })
+
+  it('los que ya compraron y los descartados no aparecen: sólo se trabaja el activo', () => {
+    const conArchivados: MapaLeads = {
+      ...mapa,
+      compro: conFecha('compro', '2026-07-10', { estado: 'comprado' }),
+      fuera: conFecha('fuera', '2026-07-10', { estado: 'descartado' }),
+    }
+    const r = leadsDelDia(conArchivados, { seg: 'atrasados', ...opts }).map((l) => l.id)
+    expect(r).not.toContain('compro')
+    expect(r).not.toContain('fuera')
+  })
+
+  it('sin `hoy` esos filtros no traen cualquier cosa', () => {
+    expect(leadsDelDia(mapa, { seg: 'hoy', today: AHORA })).toEqual([])
+    expect(leadsDelDia(mapa, { seg: 'manana', today: AHORA })).toEqual([])
+  })
+
+  it('el más urgente primero: es el orden en que se los va a llamar', () => {
+    const orden = leadsDelDia(mapa, { seg: 'semana', ...opts }).map((l) => l._seg.estado)
+    expect(orden[0]).toBe('vencido')
+    expect(orden[orden.length - 1]).toBe('semana')
   })
 })

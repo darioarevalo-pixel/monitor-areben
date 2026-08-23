@@ -4,10 +4,12 @@ import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
 import { TEMP_UI } from './temperatura'
 import { Leads } from './Leads'
+import { LeadsDelDia } from './LeadsDelDia'
 import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
 import { GuiaTrabajo, type AccionGuia } from './GuiaTrabajo'
-import { contarKpis, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
+import { BancoMensajes } from './BancoMensajes'
+import { FILTROS_POR_DIA, TANDA_FRIOS, contarKpis, contarPorDia, filtrarOrdenar, normalizeArgPhone, siguienteTemperatura } from '@/lib/crm/core'
 import { feriadosDe, proximoHabil } from '@/lib/crm/agenda.core.js'
 import { sumarDias } from '@/lib/calendario/fechas.core.js'
 import {
@@ -204,8 +206,13 @@ export function CRM() {
   const [verDescartados, setVerDescartados] = useState(false)
   const [sort, setSort] = useState({ col: 'total_amount', dir: -1 })
   const [guia, setGuia] = useState(false)
+  // El banco de mensajes se carga al abrirse, no con la sección: es una consulta más al KV que
+  // la mayoría de los días no se usa.
+  const [mensajes, setMensajes] = useState(false)
   const [vista, setVista] = useState<'clientes' | 'leads' | 'metricas'>('clientes')
   const [modalId, setModalId] = useState<number | null>(null)
+  // La ficha de lead que hay que abrir al saltar desde la lista del día.
+  const [leadId, setLeadId] = useState<string | null>(null)
   const { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg, guardarTel } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
@@ -225,14 +232,10 @@ export function CRM() {
     return proximoHabil(sumarDias(hoy, 1), feriadosDe([anio, anio + 1])) as string
   }, [hoy])
 
-  const porDia = useMemo(() => {
-    const a = agregado.activos
-    return {
-      atrasados: a.filter((c) => c.seg_estado === 'pendiente' || (!!c.proximo_contacto && c.proximo_contacto < hoy)).length,
-      hoy: a.filter((c) => c.proximo_contacto === hoy).length,
-      manana: a.filter((c) => c.proximo_contacto === manana).length,
-    }
-  }, [agregado, hoy, manana])
+  // Los cuatro contadores salen de `contarPorDia`, la MISMA función que decide qué filas
+  // muestra la tabla. Contarlos acá a mano es lo que hacía que el chip dijera 302 y abajo
+  // aparecieran 252: los fríos ya no entran en la lista del día.
+  const porDia = useMemo(() => contarPorDia(agregado.activos, hoy, manana), [agregado, hoy, manana])
 
   const lista = useMemo(
     () => filtrarOrdenar(verDescartados ? agregado.descartados : agregado.activos, { q: q.trim().toLowerCase(), seg: verDescartados ? 'todos' : seg, sort, hoy, manana }),
@@ -320,6 +323,9 @@ export function CRM() {
         {/* Va siempre visible y primero: es lo que se abre al empezar el día, en cualquier
             pestaña de la sección. */}
         <Button variant="outline" onClick={() => setGuia(true)}>Guía de trabajo</Button>
+        {/* Al lado de la guía y no adentro: los mensajes se editan acá, pero se usan en el panel
+            de WhatsApp. Es la única pantalla donde se pueden cambiar. */}
+        <Button variant="outline" onClick={() => setMensajes(true)}>Mensajes</Button>
         <Button variant="ghost" onClick={recargar}>Recalcular</Button>
         {vista !== 'metricas' && (
           <>
@@ -356,7 +362,7 @@ export function CRM() {
         />
 
         {vista === 'leads' ? (
-          <Leads />
+          <Leads abrirId={leadId} />
         ) : vista === 'metricas' ? (
           <Metricas ventas={ventas} cargando={cargando} />
         ) : (
@@ -386,10 +392,58 @@ export function CRM() {
                   { key: 'atrasados', label: '⚠️ Atrasados', n: porDia.atrasados, title: 'Vencían antes de hoy y no se los llamó. Es la deuda: si crece, el plan se está desarmando.' },
                   { key: 'hoy', label: 'Hoy', n: porDia.hoy, title: `Los agendados para hoy (${fmtFecha(hoy)})` },
                   { key: 'manana', label: `Mañana · ${fmtFecha(manana).slice(0, 5)}`, n: porDia.manana, title: `El próximo día hábil (${fmtFecha(manana)}). Un viernes salta al lunes, y al martes si el lunes es feriado.` },
-                  { key: 'semana', label: 'Esta semana', n: kpis.contactar, title: 'Todo lo que vence dentro de los próximos 7 días, más lo atrasado.' },
+                  { key: 'semana', label: 'Esta semana', n: porDia.semana, title: 'Todo lo que vence dentro de los próximos 7 días, más lo atrasado.' },
+                  // La segunda etapa del día, no un filtro más: se abre cuando terminaste la
+                  // lista de arriba. Por eso está acá y no escondido en el select de segmentos.
+                  { key: 'recuperar', label: '🧊 Recuperar', n: porDia.recuperar, title: `La tanda de fríos de hoy: los ${TANDA_FRIOS} que más compraron, entre los que están vencidos. Mañana suben los siguientes.` },
                 ]}
               />
+              {/* Los fríos salen de la lista del día, pero NO en silencio: el número está a la
+                  vista y lleva a su propia lista. Sin este renglón, un día se pregunta dónde
+                  fueron a parar 50 personas y no hay forma de saberlo desde la pantalla. */}
+              {/* Los fríos no entran acá arriba, pero NO se ocultan: el número está a la vista y
+                  lleva a su etapa. Sin este renglón, un día se pregunta dónde fueron a parar 50
+                  personas y no hay forma de saberlo desde la pantalla. */}
+              {seg !== 'recuperar' && porDia.friosFuera > 0 && (
+                <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[2] }}>
+                  Además hay {porDia.friosFuera} 🧊 fríos vencidos, que van aparte.{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setVerDescartados(false); setSeg('recuperar') }}
+                    style={{ background: 'none', border: 0, padding: 0, color: color.brand, cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+                  >
+                    Ver la tanda de hoy
+                  </button>
+                </div>
+              )}
+              {seg === 'recuperar' && (
+                <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[2] }}>
+                  La tanda de hoy: los {TANDA_FRIOS} que más te compraron, de {porDia.friosFuera} fríos
+                  vencidos. A medida que los vas registrando, suben los que siguen.{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setVerDescartados(false); setSeg('frios') }}
+                    style={{ background: 'none', border: 0, padding: 0, color: color.brand, cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+                  >
+                    Ver los {frios} fríos
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Los leads del mismo filtro, arriba de la tabla: son parte de la lista del día,
+                no de otra pantalla. Ver `LeadsDelDia`. */}
+            {FILTROS_POR_DIA.has(seg) && !verDescartados && (
+              <LeadsDelDia
+                seg={seg}
+                hoy={hoy}
+                manana={manana}
+                onAbrirLead={(id) => {
+                  setLeadId(id)
+                  setVista('leads')
+                }}
+              />
+            )}
 
             {/* Las tarjetas son FILTROS, no adornos: tocar una filtra la tabla de abajo.
                 Antes eran `.stat` idénticas a las de un tablero, así que no se notaba. */}
@@ -473,6 +527,7 @@ export function CRM() {
 
       {clienteModal && <ClienteModal key={clienteModal.id} cliente={clienteModal} crmSeg={crmSeg} mutar={mutar} onCerrar={() => setModalId(null)} />}
       {guia && <GuiaTrabajo onCerrar={() => setGuia(false)} onIr={irDesdeGuia} />}
+      {mensajes && <BancoMensajes onCerrar={() => setMensajes(false)} />}
     </>
   )
 }

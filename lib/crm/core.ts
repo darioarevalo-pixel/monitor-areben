@@ -160,6 +160,88 @@ export function paraContactar(c: ClienteCRM): boolean {
   return c.seg_estado === 'vencido' || c.seg_estado === 'pendiente' || c.seg_estado === 'semana'
 }
 
+/**
+ * Los que quedan afuera de la lista del día por estar marcados 🧊 Frío.
+ *
+ * 🔑 **Al frío no se le escribe.** Es una decisión comercial, no una prioridad: un frío no es
+ * "el último de la fila", es alguien a quien hoy no se contacta — cerró el local, no contesta
+ * nunca, o cuesta más de lo que deja. Medido el 23-ago-2026: de ~300 atrasados, **50 eran
+ * fríos**. Dejarlos adentro no los hace contactar; hace que la lista se vea imposible y que no
+ * se abra ninguno.
+ *
+ * ⚠️ **Afuera de la lista del día NO quiere decir afuera del día.** Los fríos se trabajan todos
+ * los días y de ahí salen buenas recuperaciones; lo que no funciona es tenerlos mezclados,
+ * porque entonces no se termina ninguna de las dos listas. Por eso son **otra etapa**, con su
+ * propio filtro (`recuperar`) y su propio cupo — ver `TANDA_FRIOS`.
+ */
+export const esFrio = (c: ClienteCRM): boolean => c.temperatura === 'frio'
+
+/** La lista del día sin los fríos. */
+export function sinFrios(lista: ClienteCRM[]): ClienteCRM[] {
+  return lista.filter((c) => !esFrio(c))
+}
+
+/**
+ * Cuántos fríos entran en la tanda de recuperación de un día.
+ *
+ * 🔑 **Es un cupo, no un filtro.** Los fríos vencidos son ~50 y la lista completa son 67: si la
+ * etapa de recuperación los mostrara todos, volvería a pasar lo mismo que motivó separarlos —
+ * se ve una pila, no se empieza. Diez se terminan; la lista entera no.
+ *
+ * ⚠️ **La tanda ROTA sola y por eso no guarda nada.** Son los que están vencidos, ordenados por
+ * lo que compraron: al registrarle el contacto a uno se le fija el próximo y sale de vencidos,
+ * así que mañana suben los diez siguientes. Un "ya lo mostré hoy" guardado en algún lado sería
+ * un dato más que mantener para el mismo resultado.
+ */
+export const TANDA_FRIOS = 10
+
+/**
+ * ¿Este frío entra en la tanda de recuperación?
+ *
+ * Es `paraContactar` **más el que no tiene seguimiento** (`none`). La diferencia importa: marcar
+ * a alguien como frío NO le carga ninguna fecha —`setTemperatura` sólo cambia la marca—, así que
+ * un cliente sin cadencia ni fecha manual que se marca frío queda en `none`. Sin esta línea sale
+ * de la lista del día por ser frío y no entra en la de recuperación por no tener fecha:
+ * **desaparece del sistema, en silencio y sin que nadie lo note.**
+ *
+ * Medido el 23-ago-2026: los 67 fríos tienen fecha, así que hoy no le pasa a ninguno. Es el caso
+ * que se abre solo, la próxima vez que se enfríe a alguien que nunca estuvo en seguimiento.
+ */
+export function friosParaRecuperar(c: ClienteCRM): boolean {
+  return esFrio(c) && (paraContactar(c) || c.seg_estado === 'none')
+}
+
+export type ConteoPorDia = {
+  atrasados: number
+  hoy: number
+  manana: number
+  semana: number
+  /** Cuántos fríos quedaron afuera de la semana. Es el número que la pantalla muestra. */
+  friosFuera: number
+  /** El tamaño de la tanda de recuperación de hoy: lo que hay, con techo de `TANDA_FRIOS`. */
+  recuperar: number
+}
+
+/**
+ * Los contadores de los chips de la lista del día, con la MISMA regla que la tabla.
+ *
+ * Existe para que no puedan divergir: mientras los chips se contaban con `contarKpis` (que es
+ * paridad con el legacy y no sabe de fríos) y la tabla filtraba por su cuenta, el chip decía
+ * 302 y abajo aparecían 252 filas.
+ */
+export function contarPorDia(activos: ClienteCRM[], hoy: string, manana: string): ConteoPorDia {
+  const l = sinFrios(activos)
+  const atrasado = (c: ClienteCRM) => c.seg_estado === 'pendiente' || (!!c.proximo_contacto && c.proximo_contacto < hoy)
+  return {
+    atrasados: l.filter(atrasado).length,
+    hoy: l.filter((c) => c.proximo_contacto === hoy).length,
+    manana: l.filter((c) => c.proximo_contacto === manana).length,
+    semana: l.filter(paraContactar).length,
+    friosFuera: activos.filter(friosParaRecuperar).length,
+    recuperar: Math.min(TANDA_FRIOS, activos.filter(friosParaRecuperar).length),
+  }
+}
+
 // ── Prioridad comercial de la lista del día ──────────────────────────────────
 
 /**
@@ -340,6 +422,14 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort, hoy, manana 
   } else if (seg === 'sin-difusion') {
     // Clientes que compraron pero todavía no están en el canal de difusión.
     out = out.filter((c) => !c.en_difusion)
+  } else if (seg === 'recuperar') {
+    // La etapa de recuperación del día: los fríos que tocan, con cupo. Ordenados por lo que
+    // compraron — el que más conviene recuperar primero, igual que la lista completa de fríos.
+    // El corte a `TANDA_FRIOS` va ANTES del buscador, igual que en `top`: la tanda es la tanda,
+    // y buscar adentro de ella no la agranda.
+    out = out.filter(friosParaRecuperar)
+    out.sort((a, b) => b.total_amount - a.total_amount)
+    out = out.slice(0, TANDA_FRIOS)
   } else if (seg === 'frios') {
     // Lista de recuperación: SOLO los fríos, y todos — también los que están al día.
     // No lleva orden propio a propósito: cae en el orden de columnas de abajo, que por
@@ -347,6 +437,10 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort, hoy, manana 
     // conviene recuperar, y desde ahí se puede reordenar por cualquier columna.
     out = out.filter((c) => c.temperatura === 'frio')
   } else if (FILTROS_POR_DIA.has(seg)) {
+    // 🔑 Los fríos no entran en la lista del día. Ver `esFrio`: al frío no se le escribe, así
+    // que ocupar la lista de trabajo con ellos sólo la vuelve inabordable. Siguen enteros en
+    // el filtro `frios`, que es la lista de recuperación.
+    out = sinFrios(out)
     if (seg === 'atrasados') {
       // La deuda: vencía ANTES de hoy y no se lo llamó. Los `pendiente` entran también —
       // tienen cadencia y nunca se les registró un contacto, que es la misma deuda sin

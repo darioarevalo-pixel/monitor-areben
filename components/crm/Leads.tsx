@@ -51,7 +51,11 @@ const fmtFecha = (d: string | null) => {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : '—'
 }
 
-export function Leads() {
+/**
+ * `abrirId` — la ficha a abrir apenas se entra. La usa el bloque "Leads para contactar" de la
+ * lista del día: tocar un nombre ahí tiene que llevar a SU ficha, no a la lista pelada.
+ */
+export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
   const { confirmar } = useConfirmar()
   const [leads, setLeads] = useState<MapaLeads>({})
   const [cargado, setCargado] = useState(false)
@@ -59,7 +63,7 @@ export function Leads() {
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [verArchivados, setVerArchivados] = useState(false)
-  const [abierto, setAbierto] = useState<string | null>(null)
+  const [abierto, setAbierto] = useState<string | null>(abrirId || null)
   const [nota, setNota] = useState('')
 
   useEffect(() => {

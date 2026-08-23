@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   TEMPERATURA_DEFAULT,
   TOP_LIMIT,
+  TANDA_FRIOS,
   contarKpis,
+  contarPorDia,
   filtrarOrdenar,
   idsTop,
   paraContactar,
@@ -100,14 +102,18 @@ describe('idsTop · quién es "cuenta clave"', () => {
 })
 
 describe('la lista del día ordena por prioridad y recién después por fecha', () => {
-  it('el frío atrasado 200 días queda DEBAJO del caliente que vence recién esta semana', () => {
+  it('el frío atrasado 200 días NO entra en la lista del día, por atrasado que esté', () => {
+    // Antes quedaba debajo del caliente; desde el 23-ago-2026 no aparece. Al frío no se le
+    // escribe: mostrarlo no lo hace contactar, sólo agranda la pila. Se trabaja en `frios`.
     const frioViejo = enLista('frio', 'vencido', -200)
     const calienteFuturo = enLista('caliente', 'semana', 6)
     const orden = filtrarOrdenar([frioViejo, calienteFuturo], { q: '', seg: 'semana', sort: SORT })
-    expect(orden.map((c) => c.id)).toEqual([calienteFuturo.id, frioViejo.id])
+    expect(orden.map((c) => c.id)).toEqual([calienteFuturo.id])
+    // Y siguen enteros en su propia lista, con todo y los que están al día.
+    expect(filtrarOrdenar([frioViejo, calienteFuturo], { q: '', seg: 'frios', sort: SORT }).map((c) => c.id)).toEqual([frioViejo.id])
   })
 
-  it('los cuatro grupos salen en orden, aunque el frío sea el más atrasado', () => {
+  it('los grupos salen en orden, y el frío más atrasado ni aparece', () => {
     // El chico es caliente y NO entra al top por monto → caja rápida. Encima es el MENOS
     // urgente de los cuatro: si mandara la fecha, saldría último.
     const cajaRapida = enLista('caliente', 'semana', 7, 10_000)
@@ -117,7 +123,8 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
     const frio = enLista('frio', 'vencido', -300, 30_000)
 
     const orden = filtrarOrdenar([...rellenoTop(), frio, templado, cuentaClave, cajaRapida], { q: '', seg: 'semana', sort: SORT })
-    expect(orden.map((c) => c.id)).toEqual([cajaRapida.id, cuentaClave.id, templado.id, frio.id])
+    // El frío ya no sale al final: no sale. Los otros tres conservan su orden.
+    expect(orden.map((c) => c.id)).toEqual([cajaRapida.id, cuentaClave.id, templado.id])
   })
 
   it('dentro de un mismo grupo sigue mandando la urgencia de la fecha', () => {
@@ -211,11 +218,15 @@ describe('la tarjeta "Para contactar" y la tabla dan el mismo número', () => {
     enLista('templado', 'none', 0), // no entra
   ]
 
-  it('coinciden', () => {
-    const tarjeta = contarKpis(clientes).contactar
+  it('coinciden — y el chip se cuenta con contarPorDia, no con contarKpis', () => {
+    // `contarKpis` es paridad con el legacy y no sabe de fríos: si el chip se contara con eso,
+    // diría 4 y la tabla mostraría 3. Ese fue exactamente el desfasaje del 23-ago.
+    const chip = contarPorDia(clientes, '2026-08-13', '2026-08-14').semana
     const tabla = filtrarOrdenar(clientes, { q: '', seg: 'semana', sort: SORT }).length
-    expect(tarjeta).toBe(tabla)
-    expect(tarjeta).toBe(4)
+    expect(chip).toBe(tabla)
+    expect(chip).toBe(3)
+    expect(contarKpis(clientes).contactar).toBe(4) // el de siempre, con el frío adentro
+    expect(contarPorDia(clientes, '2026-08-13', '2026-08-14').friosFuera).toBe(1)
   })
 
   it('paraContactar incluye a los de esta semana', () => {
@@ -277,14 +288,14 @@ describe('filtros por día (Atrasados · Hoy · Mañana · Esta semana)', () => 
     expect(filtrarOrdenar(TODOS, { q: '', sort: SORT, seg: 'manana' })).toEqual([])
   })
 
-  it('adentro de "Hoy" la temperatura ordena, que es lo que arregla el cruce', () => {
-    // El cruce que motivó el filtro: un 🧊 Frío agendado para hoy se iba al fondo de los
-    // 295 de la semana. Filtrando por día queda al final de LOS DE HOY, donde se lo ve.
+  it('adentro de "Hoy" la temperatura ordena, y el frío ni siquiera entra', () => {
+    // 23-ago-2026: al frío no se le escribe (`esFrio`), así que sale de la lista del día en
+    // vez de quedar al final. Entre los que quedan sigue mandando la temperatura.
     const frio = conFecha(HOY, 'vencido', 0, 'frio')
     const caliente = conFecha(HOY, 'vencido', 0, 'caliente')
     const templado = conFecha(HOY, 'vencido', 0, 'templado')
     const orden = filtrarOrdenar([frio, templado, caliente], { ...OPTS, seg: 'hoy' })
-    expect(orden.map((c) => c.temperatura)).toEqual(['caliente', 'templado', 'frio'])
+    expect(orden.map((c) => c.temperatura)).toEqual(['caliente', 'templado'])
   })
 
   it('el buscador se combina con el filtro del día', () => {
@@ -313,5 +324,67 @@ describe('el botón de la tabla', () => {
     expect(despues['7'].cadencia).toBe('semanal')
     expect(despues['7'].es_mayorista).toBe(true)
     expect(despues['7'].notas).toEqual([{ fecha: '2026-07-01', texto: 'x' }])
+  })
+})
+
+describe('🧊 Recuperar · la tanda de fríos del día', () => {
+  const SORT2 = { col: 'total_amount', dir: -1 }
+  const frio = (n: number, total: number, estado: EstadoSeg = 'vencido') =>
+    cli({ id: n, name: 'frio' + n, temperatura: 'frio', seg_estado: estado, total_amount: total, dias_proximo: -5 })
+
+  it('trae SÓLO fríos: el tibio vencido es de la otra etapa', () => {
+    const tibio = cli({ id: 99, temperatura: 'templado', seg_estado: 'vencido', total_amount: 9_000_000 })
+    const r = filtrarOrdenar([tibio, frio(1, 100)], { q: '', seg: 'recuperar', sort: SORT2 })
+    expect(r.map((c) => c.id)).toEqual([1])
+  })
+
+  it('el frío que está al día no entra: no hay nada que recuperar hoy', () => {
+    const r = filtrarOrdenar([frio(1, 100, 'aldia'), frio(2, 50, 'vencido')], { q: '', seg: 'recuperar', sort: SORT2 })
+    expect(r.map((c) => c.id)).toEqual([2])
+  })
+
+  it('primero el que más compró: es el que más conviene recuperar', () => {
+    const r = filtrarOrdenar([frio(1, 100), frio(2, 5000), frio(3, 900)], { q: '', seg: 'recuperar', sort: SORT2 })
+    expect(r.map((c) => c.id)).toEqual([2, 3, 1])
+  })
+
+  it('la tanda tiene techo: no se muestran los 50 fríos vencidos de golpe', () => {
+    const muchos = Array.from({ length: 40 }, (_, i) => frio(i + 1, (40 - i) * 1000))
+    const r = filtrarOrdenar(muchos, { q: '', seg: 'recuperar', sort: SORT2 })
+    expect(r).toHaveLength(TANDA_FRIOS)
+    expect(r[0].id).toBe(1) // el que más compró
+  })
+
+  it('el buscador no agranda la tanda: filtra adentro de los diez', () => {
+    const muchos = Array.from({ length: 40 }, (_, i) => cli({ id: i + 1, name: 'frio ' + (i + 1), temperatura: 'frio', seg_estado: 'vencido', total_amount: (40 - i) * 1000 }))
+    const r = filtrarOrdenar(muchos, { q: 'frio 40', seg: 'recuperar', sort: SORT2 })
+    expect(r).toEqual([]) // el 40 es el que menos compró: quedó fuera de la tanda
+  })
+
+  it('el frío SIN seguimiento entra igual: marcar frío no le carga ninguna fecha', () => {
+    // El agujero que cierra: `setTemperatura` sólo cambia la marca. Un cliente sin cadencia ni
+    // fecha manual queda en `none`; sin esta regla salía de la lista del día por frío y de la de
+    // recuperación por no tener fecha, o sea desaparecía del sistema sin que nadie lo notara.
+    const suelto = cli({ id: 7, temperatura: 'frio', seg_estado: 'none', total_amount: 300 })
+    const r = filtrarOrdenar([suelto, frio(1, 100)], { q: '', seg: 'recuperar', sort: SORT2 })
+    expect(r.map((c) => c.id)).toEqual([7, 1])
+    expect(contarPorDia([suelto], '2026-08-13', '2026-08-14').recuperar).toBe(1)
+  })
+
+  it('el que está al día sigue afuera: eso no es "sin seguimiento", es "ya agendado"', () => {
+    expect(filtrarOrdenar([frio(1, 100, 'aldia')], { q: '', seg: 'recuperar', sort: SORT2 })).toEqual([])
+  })
+
+  it('el contador del chip dice lo mismo que la tabla', () => {
+    const muchos = Array.from({ length: 40 }, (_, i) => frio(i + 1, (40 - i) * 1000))
+    const conteo = contarPorDia(muchos, '2026-08-13', '2026-08-14')
+    expect(conteo.recuperar).toBe(filtrarOrdenar(muchos, { q: '', seg: 'recuperar', sort: SORT2 }).length)
+    expect(conteo.friosFuera).toBe(40) // el total sigue a la vista, aunque la tanda sea de 10
+  })
+
+  it('con pocos fríos la tanda es lo que hay, no diez fijos', () => {
+    const r = filtrarOrdenar([frio(1, 100), frio(2, 200)], { q: '', seg: 'recuperar', sort: SORT2 })
+    expect(r).toHaveLength(2)
+    expect(contarPorDia([frio(1, 100), frio(2, 200)], '2026-08-13', '2026-08-14').recuperar).toBe(2)
   })
 })
