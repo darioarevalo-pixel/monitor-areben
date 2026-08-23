@@ -319,6 +319,24 @@ contribución sin dashboard.
 ⚠️ **Falta cargar los escalones de Stunned**: hasta que estén, su pestaña dice «Sin metas cargadas»,
 que es verdad y no miente a nadie.
 
+### 🔴 Y caminar Norte encontró un tercero: la línea elegida sobrevivía al cambio de MARCA
+
+Con el selector recién deployado, pasar de **BDI a Zattia** dejaba la tabla de Metas mostrando **los
+objetivos de BDI (100 · 25 · 50) bajo el rótulo de Zattia**, con el selector **sin ninguna pestaña
+marcada**. La causa: el selector es un `useState`, que se inicializa **una sola vez**.
+
+🔴 **No era sólo de mirar**: «Agregar meta» en ese estado habría **escrito en la base de BDI** estando
+parado en Zattia.
+
+⇒ La regla vive en el núcleo, `lineaVigente(elegida, marca)` (`lib/lineas.core.js`): la elegida vale
+**sólo si pertenece a la marca**, si no cae a la marca. Es **derivada, no un efecto** — con un
+`useEffect` habría un render en el que la pantalla dibuja lo de la marca anterior. La próxima pantalla
+con selector la hereda en vez de repetir el `useState`. Lo defiende `tests/lineas.test.ts` con
+mutante.
+
+🔑 **Es el mismo defecto que el selector vino a matar** —una cifra de un lado con el rótulo del otro—
+sólo que en el otro eje, y **con 4.295 tests en verde**. 📌 [[MEMORY_probar]]
+
 ### 🏁 Lo que SÍ anduvo en las cinco
 
 La partición cierra en las tres pantallas de Análisis: **639 + 28 = 667 productos** y

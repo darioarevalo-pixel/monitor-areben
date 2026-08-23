@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { baseDeLinea, esStunned, lineaDe, lineasDeMarca, LINEAS } from '@/lib/lineas'
+import { baseDeLinea, esStunned, lineaDe, lineaVigente, lineasDeMarca, LINEAS } from '@/lib/lineas'
 import { esStunned as esStunnedMemo, lineaDe as lineaDeMemo } from '@/lib/memo/foto.core.js'
 import { lineaDe as lineaDeConteo } from '@/lib/conteo-estandar/core'
 import { marcaDePermisos, puedeVerAlguna } from '@/lib/permisos'
@@ -195,5 +195,42 @@ describe('filtrarPorLinea', () => {
   it('en BDI no hay nada que partir', () => {
     const p = payload()
     expect(filtrarPorLinea(p, 'bdi')).toBe(p)
+  })
+})
+
+/**
+ * 🔴 **La elección de línea no sobrevive a un cambio de MARCA** (23-ago-2026).
+ *
+ * El selector de línea de una pantalla es un `useState`, que se inicializa una sola vez. En Norte
+ * eso significaba que al pasar de BDI a Zattia la tabla de Metas seguía mostrando **los objetivos de
+ * BDI, bajo el rótulo de Zattia**, con el selector sin ninguna pestaña marcada — y «Agregar meta»
+ * habría escrito en la base de BDI estando parado en Zattia.
+ *
+ * 🔑 **Lo encontró caminar la pantalla con 4.295 tests en verde**, y es el mismo defecto que el
+ * selector vino a matar —una cifra de un lado con el rótulo del otro— sólo que en el otro eje.
+ * Por eso la regla vive en el núcleo y no en el componente: la próxima pantalla con selector la
+ * hereda en vez de repetir el `useState`.
+ */
+describe('lineaVigente: la línea elegida vale sólo dentro de su marca', () => {
+  it('🔴 una línea de OTRA marca no se muestra: cae a la marca', () => {
+    // El caso exacto de Norte: se eligió BDI y después se cambió la marca a Zattia.
+    expect(lineaVigente('bdi', 'zattia')).toBe('zattia')
+    expect(lineaVigente('stunned', 'bdi')).toBe('bdi')
+  })
+
+  it('la línea propia se respeta', () => {
+    expect(lineaVigente('stunned', 'zattia')).toBe('stunned')
+    expect(lineaVigente('zattia', 'zattia')).toBe('zattia')
+    expect(lineaVigente('bdi', 'bdi')).toBe('bdi')
+  })
+
+  it('sin elegir nada contesta la marca, que es el default de todos los selectores', () => {
+    expect(lineaVigente(null, 'zattia')).toBe('zattia')
+    expect(lineaVigente(null, 'bdi')).toBe('bdi')
+  })
+
+  it('⛔ no inventa una línea con basura: contesta la marca', () => {
+    expect(lineaVigente('' as never, 'zattia')).toBe('zattia')
+    expect(lineaVigente('inventada' as never, 'zattia')).toBe('zattia')
   })
 })

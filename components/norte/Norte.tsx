@@ -31,7 +31,7 @@ import {
   veredicto,
 } from '@/lib/norte/core'
 import { porUnidad, ventanaUltimos } from '@/lib/norte/contribucion'
-import { ETIQUETA_LINEA, lineasDeMarca, type Linea } from '@/lib/lineas'
+import { ETIQUETA_LINEA, lineaVigente, lineasDeMarca, type Linea } from '@/lib/lineas'
 import type { Contribucion, EstadoVeredicto, ImportacionProyectada, Peldano } from '@/lib/norte/tipos'
 import {
   Badge,
@@ -89,7 +89,15 @@ export function Norte() {
    * escribirse.
    */
   const lineasDeAca = useMemo(() => lineasDeMarca(marca), [marca])
-  const [lineaMetas, setLineaMetas] = useState<Linea>(marca)
+  /**
+   * 🔴 La elección **no sobrevive a un cambio de marca**, y por eso es derivada y no el estado
+   * directo: `useState` se inicializa una sola vez, así que al pasar de BDI a Zattia la pantalla
+   * mostraba **los objetivos de BDI bajo el rótulo de Zattia**, con el selector sin ninguna pestaña
+   * marcada — y «Agregar meta» habría escrito en la base de BDI. `lineaVigente` lo resuelve en el
+   * núcleo. 📌 Lo encontró caminar la pantalla; los 4.295 tests estaban en verde.
+   */
+  const [lineaElegida, setLineaElegida] = useState<Linea | null>(null)
+  const lineaMetas = lineaVigente(lineaElegida, marca)
   const { metas: metasBajadas, error: errorMetas, recargar: recargarMetas } = useMetas(lineaMetas)
   const metas = useMemo(() => metasBajadas || [], [metasBajadas])
   /** `true` cuando se están mirando los objetivos de una línea que no es la marca (hoy: Stunned). */
@@ -580,7 +588,7 @@ export function Norte() {
             }
           >
             {lineasDeAca.length > 1 && (
-              <SelectorLinea linea={lineaMetas} lineas={lineasDeAca} onChange={setLineaMetas} />
+              <SelectorLinea linea={lineaMetas} lineas={lineasDeAca} onChange={setLineaElegida} />
             )}
 
             {errorMetas && <Notice tone="warning">No se pudieron leer los objetivos: {errorMetas}</Notice>}
