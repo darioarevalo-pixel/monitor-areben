@@ -11,9 +11,26 @@
  */
 
 import { useId, useMemo, useState } from 'react'
-import { indiceDe, parsearMd, type Bloque, type Trozo } from '@/lib/markdown/core'
+import { indiceDe, parsearMd, type Bloque, type ItemLista, type Trozo } from '@/lib/markdown/core'
 import { Plegable } from '@/components/ui/Plegable'
-import { color, font, radius, space, weight } from '@/components/ui/tokens'
+import { Notice } from '@/components/ui/Notice'
+import { TableWrap, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
+import { color, font, radius, space, weight, type Tone } from '@/components/ui/tokens'
+
+/**
+ * Los tres recuadros, y con qué se pintan.
+ *
+ * 🔑 **Un manual se lee por su jerarquía** —esto es la regla, esto es lo que muerde, esto no se hace
+ * nunca— y en markdown corrido todo pesa igual: por eso se lee plano aunque esté bien escrito. Tres
+ * tonos alcanzan; un cuarto obligaría a elegir entre dos parecidos cada vez que se escribe uno.
+ *
+ * Los rótulos van en castellano porque los escribe y los lee el equipo, no un programador.
+ */
+const RECUADRO: Record<string, { tone: Tone; icono: string; titulo: string }> = {
+  regla: { tone: 'brand', icono: '📌', titulo: 'La regla' },
+  ojo: { tone: 'warning', icono: '⚠️', titulo: 'Ojo' },
+  nunca: { tone: 'danger', icono: '⛔', titulo: 'Nunca' },
+}
 
 export type MarkdownProps = {
   texto: string
@@ -68,7 +85,7 @@ function Indice({
   uid,
   abiertoAlPrincipio,
 }: {
-  titulos: { nivel: 2 | 3; texto: string; ancla: string }[]
+  titulos: { nivel: 2 | 3 | 4; texto: string; ancla: string }[]
   uid: string
   abiertoAlPrincipio: boolean
 }) {
@@ -108,9 +125,9 @@ function Indice({
               height: 'auto',
               background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
               textAlign: 'left', color: color.brand, fontSize: font.sm,
-              // El subtítulo se sangra: el índice tiene que dejar ver la FORMA del manual, no sólo
-              // sus renglones.
-              paddingLeft: t.nivel === 3 ? space[4] : 0,
+              // Cada nivel se sangra un escalón: el índice tiene que dejar ver la FORMA del
+              // manual, no sólo sus renglones.
+              paddingLeft: (t.nivel - 2) * space[4],
               fontWeight: t.nivel === 2 ? weight.semibold : weight.normal,
             }}
           >
@@ -124,7 +141,7 @@ function Indice({
 
 function BloqueMd({ b, compacto, uid }: { b: Bloque; compacto: boolean; uid: string }) {
   if (b.t === 'titulo') {
-    const Tag = b.nivel === 2 ? 'h2' : 'h3'
+    const Tag = b.nivel === 2 ? 'h2' : b.nivel === 3 ? 'h3' : 'h4'
     return (
       <Tag
         id={`${uid}-${b.ancla}`}
@@ -134,7 +151,9 @@ function BloqueMd({ b, compacto, uid }: { b: Bloque; compacto: boolean; uid: str
           scrollMarginTop: space[3],
           fontSize: b.nivel === 2 ? (compacto ? font.base : font.lg) : font.base,
           fontWeight: weight.semibold,
-          color: color.ink,
+          // El `####` es un rótulo adentro de una sección, no un escalón más de tamaño: a partir
+          // del tercer tamaño de letra la jerarquía deja de leerse y empieza a adivinarse.
+          color: b.nivel === 4 ? color.mut : color.ink,
         }}
       >
         <Trozos ts={b.hijos} />
@@ -155,16 +174,49 @@ function BloqueMd({ b, compacto, uid }: { b: Bloque; compacto: boolean; uid: str
     )
   }
 
-  if (b.t === 'lista') {
-    const Tag = b.ordenada ? 'ol' : 'ul'
+  if (b.t === 'lista') return <Lista ordenada={b.ordenada} items={b.items} />
+
+  if (b.t === 'tabla') {
     return (
-      <Tag style={{ margin: 0, paddingLeft: 22, display: 'grid', gap: space[1] }}>
-        {b.items.map((it, i) => (
-          <li key={i}>
-            <Trozos ts={it} />
-          </li>
-        ))}
-      </Tag>
+      // `TableWrap` trae su propio scroll horizontal, así que una tabla ancha **no rompe el modal**
+      // de «Cómo se usa», que es donde el manual se lee en menos ancho.
+      <TableWrap>
+        <THead>
+          <Tr>
+            {b.encabezado.map((c, i) => (
+              <Th key={i} align={ALINEACION[b.alineacion[i]]}>
+                <Trozos ts={c} />
+              </Th>
+            ))}
+          </Tr>
+        </THead>
+        <TBody>
+          {b.filas.map((f, i) => (
+            <Tr key={i}>
+              {f.map((c, j) => (
+                <Td key={j} align={ALINEACION[b.alineacion[j]]} wrap>
+                  <Trozos ts={c} />
+                </Td>
+              ))}
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+    )
+  }
+
+  if (b.t === 'recuadro') {
+    const r = RECUADRO[b.tono]
+    return (
+      <Notice tone={r.tone} icon={r.icono}>
+        <div style={{ display: 'grid', gap: space[2] }}>
+          {b.parrafos.map((pp, i) => (
+            <p key={i} style={{ margin: 0 }}>
+              <Trozos ts={pp} />
+            </p>
+          ))}
+        </div>
+      </Notice>
     )
   }
 
@@ -173,6 +225,42 @@ function BloqueMd({ b, compacto, uid }: { b: Bloque; compacto: boolean; uid: str
       <Trozos ts={b.hijos} />
     </p>
   )
+}
+
+/** El markdown dice de qué lado va el contenido; la `Table` del kit lo dice con otras palabras. */
+const ALINEACION = { izq: 'left', centro: 'center', der: 'right' } as const
+
+/**
+ * Una lista, con su nivel de anidado.
+ *
+ * La sub-lista se dibuja **adentro del `<li>` del padre** y no como una lista hermana: si colgara
+ * afuera, un renglón sangrado dejaría de pertenecer a nada apenas alguien reordene los ítems.
+ */
+function Lista({ ordenada, items }: { ordenada: boolean; items: ItemLista[] }) {
+  const Tag = ordenada ? 'ol' : 'ul'
+  return (
+    <Tag style={{ margin: 0, paddingLeft: 22, display: 'grid', gap: space[1] }}>
+      {items.map((it, i) => (
+        <li key={i}>
+          <Trozos ts={it.hijos} />
+          {it.sub && (
+            <SubTag ordenada={it.sub.ordenada}>
+              {it.sub.items.map((sub, j) => (
+                <li key={j}>
+                  <Trozos ts={sub} />
+                </li>
+              ))}
+            </SubTag>
+          )}
+        </li>
+      ))}
+    </Tag>
+  )
+}
+
+function SubTag({ ordenada, children }: { ordenada: boolean; children: React.ReactNode }) {
+  const Tag = ordenada ? 'ol' : 'ul'
+  return <Tag style={{ margin: `${space[1]}px 0 0`, paddingLeft: 20, display: 'grid', gap: space[1] }}>{children}</Tag>
 }
 
 function Trozos({ ts }: { ts: Trozo[] }) {

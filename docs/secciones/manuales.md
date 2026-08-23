@@ -58,6 +58,21 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
   `.mo-modal-body` el scroll suave no mueve nada —el `scrollTop` se queda en 0—, mientras que el
   salto directo lleva el mismo contenedor a 4.497. En la página el suave andaba: por eso el defecto
   sólo aparecía en dos de los tres lugares donde se lee un manual, y ningún test lo toca.
+- 🔑 **Los bloques nuevos se pintan con el KIT, no con markup** (23-ago-2026): la tabla con
+  `TableWrap/Th/Td` y el recuadro con `Notice`. Por eso «entender tablas» no agrandó la superficie
+  de ataque —sigue sin salir un string de HTML del parser—: agrandó el vocabulario.
+- 🔑 **Tres reglas de tolerancia, y las tres son la misma**: lo que no matchea se ve tal cual.
+  ⇒ una tabla **sin la fila de guiones no es una tabla**, es un párrafo con pipes (y la fila tiene
+  que ser guiones de verdad: sin mirar la forma de cada celda, cualquier renglón con un guion
+  convertiría al de arriba en encabezado) · un `>` que **no** abre con `[!REGLA]`, `[!OJO]` o
+  `[!NUNCA]` se ve con el `>` adelante, porque las citas comunes acá no existen · y **un renglón
+  sangrado no abre una lista**.
+- 🔴 **La sangría de un sub-renglón son 4 espacios o un tab, NO 2.** El patrón de primer nivel
+  acepta hasta 3, así que en los manuales ya escritos un ítem con 2 adelante **ya es de primer
+  nivel**: pedir 4 no le cambia la forma a nada de lo cargado.
+- ⚠️ **Los botones de tabla y recuadro NO son toggle**, a diferencia de los demás de la barra: una
+  tabla no se desarma sacándole un prefijo, y un botón que a veces borra tres renglones no se
+  aprieta tranquilo.
 - ⚠️ **Con un manual abierto las dos listas se esconden.** El manual se dibuja arriba de ellas, así
   que dejarlas obligaba a scrollear la lista entera para volver.
 
@@ -74,12 +89,10 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
 
 ## Pendiente
 
-- ▶️ **El editor no tiene barra de formato**, aunque `lib/markdown/barra.ts` existe, está testeada y
-  la usa `components/novedades/EditorNovedad.tsx`. Es asimetría, no una decisión.
-- ▶️ **Faltan los bloques que sacan lo plano**: tablas (con la `Table` del kit), recuadros
-  (`> [!REGLA]` · `[!OJO]` · `[!NUNCA]`, con el `Notice` del kit), listas anidadas y `####`.
 - ▶️ **Imágenes**, y **«qué rutinas de la Agenda explica este manual»** — la consulta inversa de
   `manual_id`, que además le da al cartel de borrado el número que hoy no tiene.
+- ⚠️ **La barra ofrece UN recuadro (`[!OJO]`) y los tres se escriben cambiando la palabra.** Está
+  dicho en el `hint` del campo; si resulta que nadie encuentra los otros dos, son tres botones.
 
 ## Cómo se prueba
 
@@ -94,3 +107,5 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   tiene que avisar y dejar la lista igual, no una pantalla vacía.
 - **Un manual sin publicar con un perfil que no edita**: no tiene que aparecer ni en la lista ni
   detrás del botón del encabezado.
+- **Una tabla ancha adentro del modal** de «Cómo se usa», que es donde el manual se lee en menos
+  ancho: tiene que scrollear sola y no empujar el modal.

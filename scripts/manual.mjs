@@ -33,8 +33,9 @@
 //     `orden`** tal como estaban. Editar el texto no es una decisión sobre si se publica.
 //
 // El cuerpo va por ARCHIVO y no por argumento: es markdown con saltos de línea y comillas.
-// ⛔ El markdown del repo NO tiene imágenes ni tablas (`lib/markdown/core.ts`): `## ### - 1.
-// **negrita** _cursiva_ `código` [texto](url)` y nada más.
+// ⛔ El markdown del repo es el chico de `lib/markdown/core.ts`: `## ### #### - 1.` (y un nivel de
+// anidado con 4 espacios) · `**negrita** _cursiva_ `código` [texto](url)` · tablas con pipes y su
+// fila de guiones · `> [!REGLA]` `> [!OJO]` `> [!NUNCA]`. Sin imágenes y sin HTML.
 import { readFileSync } from 'node:fs'
 import { authKv } from './lib/kv-auth.mjs'
 

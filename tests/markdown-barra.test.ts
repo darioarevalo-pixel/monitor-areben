@@ -101,3 +101,44 @@ describe('lo que escribe la barra lo entiende el parser', () => {
     expect(parsearMd(aplicar('uno\ndos', 0, 7, 'numerada').texto)[0]).toMatchObject({ t: 'lista', ordenada: true })
   })
 })
+
+describe('los bloques que se insertan enteros', () => {
+  it('la tabla entra con su fila de guiones y deja marcada la primera columna', () => {
+    const r = aplicar('', 0, 0, 'tabla')
+    // Que salga parseable es lo único que importa: si no trae la fila de guiones, el botón escribe
+    // un párrafo con pipes y el que lo aprieta no se entera.
+    expect(parsearMd(r.texto)[0].t).toBe('tabla')
+    expect(r.texto.slice(r.ini, r.fin)).toBe('Qué')
+  })
+
+  it('arranca en su propio renglón y despegada del párrafo de arriba', () => {
+    const r = aplicar('Un párrafo.', 11, 11, 'tabla')
+    expect(r.texto.startsWith('Un párrafo.\n\n|')).toBe(true)
+    // Pegada al párrafo, el parser la leería como parte del párrafo y no se dibujaría.
+    expect(parsearMd(r.texto).map((b) => b.t)).toEqual(['parrafo', 'tabla'])
+  })
+
+  it('el recuadro se lleva puesto lo que estaba marcado', () => {
+    const r = aplicar('No anules en GN.', 0, 16, 'recuadro')
+    const b = parsearMd(r.texto)
+    expect(b[0]).toMatchObject({ t: 'recuadro', tono: 'ojo' })
+    expect(b[0].t === 'recuadro' && b[0].parrafos[0].map((t) => t.v).join('')).toBe('No anules en GN.')
+    // Y deja marcado el rótulo, que es la palabra que hay que cambiar por REGLA o NUNCA.
+    expect(r.texto.slice(r.ini, r.fin)).toBe('OJO')
+  })
+
+  it('⛔ NO son toggle: apretarlo dos veces pone dos, no borra el primero', () => {
+    // Una tabla no se desarma sacándole un prefijo, y un botón que a veces borra tres renglones no
+    // se aprieta tranquilo.
+    const uno = aplicar('', 0, 0, 'tabla')
+    const dos = aplicar(uno.texto, uno.texto.length, uno.texto.length, 'tabla')
+    expect(parsearMd(dos.texto).filter((b) => b.t === 'tabla')).toHaveLength(2)
+  })
+
+  it('el toggle de título ahora también destilda un ####', () => {
+    // `regexCualquierPrefijo` tenía #{2,3}: sin actualizarlo, poner «Título» sobre un #### dejaba
+    // `## #### así`.
+    const r = aplicar('#### Un rótulo', 0, 14, 'titulo')
+    expect(r.texto).toBe('## Un rótulo')
+  })
+})

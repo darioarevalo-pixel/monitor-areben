@@ -9,11 +9,11 @@
  * que lo cargado sea una de ellas.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { guardarManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
-import { Button, Field, Input, Markdown, Modal, Select, color, font, radius, space, useToast } from '@/components/ui'
+import { BarraFormato, Button, Field, Input, Markdown, Modal, Select, color, font, radius, space, useFormato, useToast } from '@/components/ui'
 
 export function EditorManual({
   manual,
@@ -30,6 +30,8 @@ export function EditorManual({
   const [seccion, setSeccion] = useState<string>(manual.seccion || '')
   const [publicado, setPublicado] = useState(manual.publicado)
   const [guardando, setGuardando] = useState(false)
+  const caja = useRef<HTMLTextAreaElement>(null)
+  const { marcar, atajos } = useFormato(caja, setCuerpo)
 
   const secciones = useMemo(
     () => todasLasKeys().map((k) => ({ k, label: tituloLimpio(k) })).sort((a, b) => a.label.localeCompare(b.label, 'es')),
@@ -79,19 +81,25 @@ export function EditorManual({
         </Select>
       </Field>
 
-      <Field label="El manual" hint="Entra ## y ### para títulos, - para listas, 1. para pasos numerados, **negrita** y [texto](link).">
+      <Field
+        label="El manual"
+        hint="Marcá lo que quieras y tocá un botón (⌘B negrita, ⌘I cursiva, ⌘K link). Los recuadros son tres y se escriben > [!REGLA] · > [!OJO] · > [!NUNCA]. Para colgar un renglón del de arriba, sangralo con 4 espacios."
+      >
+        <BarraFormato marcar={marcar} />
         <textarea
+          ref={caja}
           className="mo-input mo-input--multi"
           rows={16}
           value={cuerpo}
           onChange={(e) => setCuerpo(e.target.value)}
+          onKeyDown={atajos}
           style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', fontSize: font.sm }}
         />
       </Field>
 
       <div style={{ fontSize: font.xs, color: color.mut2, margin: `${space[1]}px 0` }}>Así se va a ver:</div>
       <div style={{ background: color.bg2, border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[4], minHeight: 60 }}>
-        {cuerpo.trim() ? <Markdown texto={cuerpo} /> : <span style={{ fontSize: font.sm, color: color.mut2 }}>Escribí algo arriba.</span>}
+        {cuerpo.trim() ? <Markdown texto={cuerpo} indice="cerrado" /> : <span style={{ fontSize: font.sm, color: color.mut2 }}>Escribí algo arriba.</span>}
       </div>
 
       <label style={{ display: 'flex', gap: space[2], alignItems: 'flex-start', marginTop: space[4], fontSize: font.sm, color: color.ink2 }}>

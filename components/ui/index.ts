@@ -23,6 +23,7 @@ export { Plegable, type PlegableProps } from '@/components/ui/Plegable'
 export { Instructivo, type InstructivoProps } from '@/components/ui/Instructivo'
 export { Guia } from '@/components/ui/Guia'
 export { Markdown, type MarkdownProps } from '@/components/ui/Markdown'
+export { BarraFormato, useFormato, type Formato } from '@/components/ui/BarraFormato'
 export { CopyButton, type CopyButtonProps } from '@/components/ui/CopyButton'
 
 // ── Rediseño jul-2026 ──

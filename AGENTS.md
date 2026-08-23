@@ -142,7 +142,7 @@ ya tienen ficha:
   otro repo (`bdi-catalogo`). ⛔ **Gestión Nube no anula ventas por API**: por eso stock tiene botón
   masivo y ventas no, y eso NO se empareja.
 - Manuales → **leer `docs/secciones/manuales.md`** antes de tocar `components/manuales/`,
-  `lib/manuales/`, `lib/markdown/` o `components/ui/Markdown.tsx`. ⛔ **El parser NO es de Manuales**:
+  `lib/manuales/`, `lib/markdown/`, `components/ui/Markdown.tsx` o `components/ui/BarraFormato.tsx`. ⛔ **El parser NO es de Manuales**:
   lo comparten Novedades, la Guía y la Agenda —incluidos los pasos de la promo bancaria que se leen
   con el cliente delante—, así que un cambio ahí se camina en cinco pantallas.
 - Agenda operativa → **leer `docs/secciones/agenda.md`** antes de tocar `components/agenda/`,

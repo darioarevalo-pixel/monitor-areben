@@ -11,10 +11,12 @@
  * sanitizar, a convertir en las dos direcciones, y dejaría afuera lo ya guardado y
  * `scripts/novedad.mjs`. Poner los mismos caracteres que se escribirían a mano no rompe nada.
  *
- * Hay dos formas nada más:
+ * Hay tres formas:
  * - **envolver** la selección (`**`, `_`, `` ` ``, y el link, que es un caso aparte);
  * - **prefijar cada línea tocada** (`## `, `### `, `- `, `1. `), y es un **toggle**: si las líneas ya
- *   lo tienen, se lo saca. Sin eso, poner una lista por error no tiene vuelta más que a mano.
+ *   lo tienen, se lo saca. Sin eso, poner una lista por error no tiene vuelta más que a mano;
+ * - **insertar un bloque entero** (la tabla, el recuadro). ⚠️ Ésos **no son toggle**: una tabla no se
+ *   desarma sacándole un prefijo, y un botón que a veces borra tres renglones no se aprieta tranquilo.
  */
 
 export type Marca =
@@ -26,6 +28,8 @@ export type Marca =
   | 'lista'
   | 'numerada'
   | 'link'
+  | 'tabla'
+  | 'recuadro'
 
 /** El texto resultante y dónde queda la selección, que es lo que el textarea tiene que reponer. */
 export type Resultado = { texto: string; ini: number; fin: number }
@@ -43,6 +47,14 @@ const PREFIJOS: Partial<Record<Marca, string>> = {
   numerada: '1. ',
 }
 
+/**
+ * El esqueleto de una tabla.
+ *
+ * Tres columnas y una fila vacía porque casi todo un manual es «qué · quién · cuándo»: se llena
+ * encima en vez de arrancar de una tabla de una celda que después hay que agrandar a mano.
+ */
+const TABLA = '| Qué | Quién | Cuándo |\n| --- | --- | --- |\n|  |  |  |'
+
 /** Qué escribe cada botón cuando no hay nada marcado, para el `title` del botón. */
 export const AYUDA: Record<Marca, string> = {
   negrita: 'Negrita — **así**',
@@ -53,12 +65,21 @@ export const AYUDA: Record<Marca, string> = {
   lista: 'Lista — un - por renglón',
   numerada: 'Lista numerada — 1. por renglón',
   link: 'Link — [texto](https://…)',
+  tabla: 'Tabla — qué · quién · cuándo',
+  recuadro: 'Recuadro — cambiá OJO por REGLA o NUNCA',
 }
 
 export function aplicar(texto: string, ini: number, fin: number, m: Marca): Resultado {
   const a = Math.max(0, Math.min(ini, fin))
   const b = Math.min(texto.length, Math.max(ini, fin))
   if (m === 'link') return envolverLink(texto, a, b)
+  if (m === 'tabla') return insertarBloque(texto, a, b, () => TABLA, 2, 3)
+  // El recuadro se lleva puesto lo que estuviera marcado, que es como uno lo usa: se escribe el
+  // aviso y recién después se decide que va en un recuadro.
+  if (m === 'recuadro') {
+    const sel = texto.slice(a, b).trim()
+    return insertarBloque(texto, a, b, () => `> [!OJO]\n> ${sel}`, 4, 3)
+  }
   const par = ENVOLVENTES[m]
   if (par) return envolver(texto, a, b, par)
   return prefijar(texto, a, b, PREFIJOS[m] as string, m === 'numerada')
@@ -96,6 +117,22 @@ function envolverLink(texto: string, a: number, b: number): Resultado {
 }
 
 /**
+ * Poner un bloque entero donde está el cursor, y dejar marcada la palabra que hay que reemplazar.
+ *
+ * 🔑 **Arranca en su propio renglón y despegado de lo de arriba**, porque el parser necesita la línea
+ * limpia: una tabla pegada al párrafo anterior se lee como parte del párrafo y no se dibuja. `desde`
+ * y `largo` marcan el primer hueco a llenar (`Qué` en la tabla, `OJO` en el recuadro) para que se
+ * escriba encima sin tener que ir a buscarlo con el mouse.
+ */
+function insertarBloque(texto: string, a: number, b: number, armar: (sel: string) => string, desde: number, largo: number): Resultado {
+  const antes = texto.slice(0, a)
+  const salto = !antes || antes.endsWith('\n\n') ? '' : antes.endsWith('\n') ? '\n' : '\n\n'
+  const cuerpo = armar(texto.slice(a, b))
+  const inicio = antes.length + salto.length
+  return { texto: antes + salto + cuerpo + texto.slice(b), ini: inicio + desde, fin: inicio + desde + largo }
+}
+
+/**
  * Prefijar cada línea que la selección toca, aunque la toque por un solo carácter: nadie marca el
  * último `\n` a propósito, y una lista a la que le falta el último renglón es un bug a los ojos.
  */
@@ -129,5 +166,5 @@ function regexPrefijo(prefijo: string): RegExp {
 
 /** Los prefijos son excluyentes entre sí: un renglón no es título y lista a la vez. */
 function regexCualquierPrefijo(): RegExp {
-  return /^(#{2,3}\s|[-*]\s|\d+\.\s)/
+  return /^(#{2,4}\s|[-*]\s|\d+\.\s)/
 }
