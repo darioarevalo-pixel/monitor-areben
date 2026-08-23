@@ -154,3 +154,37 @@ como si lo fuera cuesta media hora.
 
 ⚠️ Y el `coalesce` no es cosmético: `p.sku ilike 'stu%'` da **NULL** en los 96 sin SKU, así que sin
 él ni `stu` ni `not stu` los agarra y el total de Zattia sale corto.
+
+## ▶️ La novedad al equipo está ESCRITA y RETENIDA a propósito
+
+Decisión de Bruno (22-ago-2026): *«la novedad la hacemos conjunta, cuando hagamos todo lo de
+Stunned»*. ⛔ **No publicarla suelta** — va una sola, al cerrar el resto (la sesión de fotos de
+Stunned y lo que salga con ella).
+
+⚠️ **Mientras tanto el equipo no está avisado y los números YA cambiaron**: desde el 22-ago las cinco
+pantallas con selector muestran Zattia sola, ~3 % menos que antes. Si alguien pregunta por qué le
+bajó un número, es esto.
+
+El borrador, para no reescribirlo:
+
+> En Zattia, **Resumen, Ventas, Por producto, Por variante y Margen por producto** ahora se miran por
+> línea: arriba de cada una hay dos pestañas, **Zattia** y **Stunned**.
+>
+> **Arranca en Zattia.** Eso quiere decir que los números de esas pantallas ahora son **de Zattia
+> sola**: antes venían con Stunned adentro, sin decirlo. La diferencia es chica pero real — son 28
+> productos y 195 unidades, unos $620.000 de venta en los últimos 30 días — así que si alguno te
+> suena un poco más bajo que ayer, es esto: lo que falta está en la pestaña de al lado.
+>
+> Stunned no tiene sección propia y no la va a tener: está cargada adentro del sistema de Zattia y se
+> la reconoce por el SKU, que empieza con **STU**.
+>
+> ⚠️ **«Ventas mensuales» no tiene las pestañas** y sigue mostrando el total de Zattia con Stunned
+> adentro. No es un olvido: ese cuadro se calcula de otra manera y no se puede separar.
+>
+> Las pantallas de trabajo del local —Exhibición, Etiquetas, Liquidación, Reposición, Sesión de
+> fotos— **no cambiaron**: siguen mostrando toda la mercadería junta, que es como hay que verla para
+> trabajar.
+
+Se publica con `node scripts/novedad.mjs "Título" cuerpo.md --destino=seccion:resumen --marca=zattia`
+(deja BORRADOR; ⛔ el script no tiene `--publicar` a propósito). ▶️ **Falta decidir el destino**: el
+selector toca cinco secciones, así que `--destino` por sección alcanza sólo a una.
