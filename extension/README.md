@@ -15,6 +15,10 @@ dijo la última vez, y los botones para anotar cómo te fue y cuándo volver a h
 
 Después de eso queda abierto solo y va cambiando de cliente a medida que cambiás de chat.
 
+**El panel vive únicamente en la pestaña de WhatsApp.** Si te vas a otra pestaña desaparece, y al
+volver a WhatsApp vuelve a aparecer. Por eso el clic en el ícono sólo abre el panel estando en
+WhatsApp Web: en cualquier otra pestaña no hay nada que abrir.
+
 ## Qué hace y qué no
 
 - Lee **el número del chat abierto** y nada más. No lee mensajes, no los guarda y no los manda a
