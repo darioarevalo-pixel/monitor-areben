@@ -37,9 +37,13 @@
 
 (() => {
   const FUENTE = 'bdi-crm-panel'
-  // Un vistazo por segundo. Es una lectura de memoria, no toca la red ni la pantalla; y al no
+  // Un vistazo cada 400 ms. Es una lectura de memoria —no toca la red ni la pantalla— y al no
   // depender del HTML no hace falta escuchar cambios del documento, que era lo caro y lo frágil.
-  const CADA = 1000
+  //
+  // Estaba en 1000 y se nota: es el retraso entre abrir un chat a mano y ver su ficha. Cuando el
+  // chat se abre desde la lista del día no importa —la ficha ya se pidió por id, sin esperar esto—,
+  // pero abriendo conversaciones a mano es todo lo que hay.
+  const CADA = 400
 
   /** El teléfono del chat abierto, o null. Nunca tira: si algo cambió, devuelve null. */
   function telefonoDelChatAbierto() {
@@ -72,6 +76,49 @@
 
     return { tel: null, motivo: 'sin-telefono' }
   }
+
+  /**
+   * Abrir la conversación de un número SIN recargar WhatsApp.
+   *
+   * 🔑 **Por qué no alcanza con `send?phone=`.** Esa dirección abre bien el chat, pero es una
+   * navegación: WhatsApp Web se recarga entero, y eso son varios segundos por cada cliente de la
+   * lista del día. Pedirle a la aplicación que ya está cargada que cambie de conversación es
+   * instantáneo.
+   *
+   * Verificado en la cuenta de BDI el 23-ago-2026: se toma el chat abierto, se saca su número, se
+   * busca desde cero por ese número y se lo vuelve a abrir — `encontrado true`, sin recarga.
+   *
+   * ⚠️ Son puertas internas, igual que `getActive()`. Si alguna cambia, esto devuelve `false` y la
+   * extensión cae a la navegación de siempre: más lenta, pero nunca deja de funcionar. Por eso
+   * cada paso está envuelto y no se da nada por sentado.
+   */
+  async function abrirChatDe(numero) {
+    const digitos = String(numero || '').replace(/\D/g, '')
+    if (digitos.length < 8) return false
+    try {
+      const wid = window.require('WAWebWidFactory').createUserWidOrThrow(digitos)
+      const Chats = window.require('WAWebChatCollection').ChatCollection
+      // `get` resuelve el caso normal —la conversación ya existe en memoria— sin esperar nada.
+      let chat = typeof Chats.get === 'function' ? Chats.get(wid) : null
+      if (!chat && typeof Chats.getLatestChatForWid === 'function') chat = await Chats.getLatestChatForWid(wid)
+      if (!chat && typeof Chats.find === 'function') chat = await Chats.find(wid)
+      if (!chat) return false
+      window.require('WAWebCmd').Cmd.openChatAt(chat)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // El pedido llega de `content.js`, que lo recibió del panel. Se contesta siempre —con `ok` en
+  // true o false— para que del otro lado se sepa si hay que caer a la navegación.
+  window.addEventListener('message', async (e) => {
+    if (e.source !== window) return
+    const d = e.data
+    if (!d || d.fuente !== FUENTE || d.tipo !== 'abrir-chat') return
+    const ok = await abrirChatDe(d.tel)
+    window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-listo', ok, pedido: d.pedido }, '*')
+  })
 
   let ultimo = 'arranque'
   setInterval(() => {

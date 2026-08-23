@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ficha del cliente — BDI",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Muestra la ficha del CRM del monitor al costado del chat de WhatsApp Web.",
   "permissions": [
     "sidePanel"

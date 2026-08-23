@@ -104,7 +104,14 @@ window.addEventListener('message', (e) => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tab = tabs && tabs[0]
     if (!tab || !tab.id) return
-    chrome.tabs.update(tab.id, { url: 'https://web.whatsapp.com/send?phone=' + numero })
+    // 🔑 Primero por adentro: se le pide a la aplicación que ya está cargada que cambie de
+    // conversación. Es instantáneo. La navegación queda de respaldo — abre bien, pero recarga
+    // WhatsApp Web entero, y eso son varios segundos por cada cliente de la lista.
+    chrome.tabs.sendMessage(tab.id, { tipo: 'abrir-chat', tel: numero }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.ok) {
+        chrome.tabs.update(tab.id, { url: 'https://web.whatsapp.com/send?phone=' + numero })
+      }
+    })
   })
 })
 

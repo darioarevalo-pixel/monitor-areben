@@ -41,6 +41,16 @@ Dos pasos, y el segundo se olvida siempre:
 1. En `chrome://extensions`, apretá el **⟳** de la extensión.
 2. **Recargá la pestaña de WhatsApp Web.** Los cambios no entran solos en una pestaña ya abierta.
 
+## Qué pasa cuando tocás un nombre en la lista
+
+Dos cosas a la vez, y por eso se siente rápido:
+
+1. **La ficha** se pide en ese mismo instante, por el id del cliente —que la lista ya sabe—, sin
+   esperar a que la conversación abra.
+2. **El chat** se abre pidiéndole a WhatsApp que cambie de conversación, sin recargar la página.
+   Si esa puerta interna deja de funcionar, la extensión cae sola a la dirección de siempre
+   (`send?phone=`): abre igual, pero recarga WhatsApp Web y tarda varios segundos.
+
 ## Si un día deja de aparecer la ficha
 
 Lo que se rompe es siempre lo mismo: de dónde sale el número de la conversación. Está en una sola

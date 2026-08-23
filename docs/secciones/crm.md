@@ -67,9 +67,14 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   cosas a la vez. Cuando el chat abre, si el teléfono coincide con el pedido no se vuelve a buscar
   nada.
 - 🔑 **Abrir el chat lo hace la EXTENSIÓN, no el panel.** Adentro corre el monitor en un iframe: no
-  puede tocar la pestaña de WhatsApp. Manda el teléfono por `postMessage` y `sidepanel.js` navega
-  a `send?phone=<n>`. 🔴 Ese listener **filtra por origen** (`monitorareben.vercel.app`): sin eso,
-  cualquier página embebida podría hacer navegar la pestaña de WhatsApp a donde quiera.
+  puede tocar la pestaña de WhatsApp. Manda el teléfono por `postMessage`. 🔴 El listener de
+  `sidepanel.js` **filtra por origen** (`monitorareben.vercel.app`): sin eso, cualquier página
+  embebida podría hacer navegar la pestaña de WhatsApp a donde quiera.
+- 🔑 **El chat se abre POR ADENTRO, sin recargar WhatsApp** (v0.4.0): `WidFactory.createUserWidOrThrow`
+  → `ChatCollection.get` / `getLatestChatForWid` → `Cmd.openChatAt`. Verificado en la cuenta de BDI
+  el 23-ago-2026. `send?phone=` abre bien pero **recarga WhatsApp Web entero**, y eso son varios
+  segundos por cada cliente de la lista; queda de respaldo automático (con un plazo de 1,5 s en
+  `content.js`, porque `pagina.js` puede no estar cargado o haberse roto).
 - 🔑 **El panel NO baja el CRM.** La sección baja 27.990 ventas y 12.485 clientes (~6 s, 5 MB)
   porque muestra una tabla de todos; el panel se rearma en cada cambio de chat, así que pide la
   consulta puntual (`action:'panel'`). Es la única razón por la que esa acción existe.
