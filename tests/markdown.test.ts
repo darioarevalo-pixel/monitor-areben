@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { parsearMd, parsearTrozos, type Bloque } from '@/lib/markdown/core'
+import { indiceDe, parsearMd, parsearTrozos, type Bloque } from '@/lib/markdown/core'
 
 /** El texto plano de un bloque, para no escribir el árbol entero en cada expect. */
 function plano(b: Bloque): string {
@@ -134,5 +134,45 @@ describe('lo que no se acepta como link', () => {
   it('`//` no cuenta como ruta interna aunque empiece con barra', () => {
     // El navegador la resuelve como externa con el protocolo actual. Es el caso que se cuela solo.
     expect(parsearTrozos('[x](//evil.com)')[0]).toMatchObject({ t: 'texto' })
+  })
+})
+
+describe('el índice: las anclas de los títulos', () => {
+  it('el ancla sale del texto, sin acentos y en kebab', () => {
+    expect(indiceDe(parsearMd('## Configuración de la caja'))).toEqual([
+      { nivel: 2, texto: 'Configuración de la caja', ancla: 'configuracion-de-la-caja' },
+    ])
+  })
+
+  it('el formato de adentro no ensucia ni el texto ni el ancla', () => {
+    const i = indiceDe(parsearMd('## Cómo se **cierra** la `caja`'))
+    expect(i[0].texto).toBe('Cómo se cierra la caja')
+    expect(i[0].ancla).toBe('como-se-cierra-la-caja')
+  })
+
+  /**
+   * 🔑 El caso entero por el que el ancla la calcula el parser y no la pantalla: el componente ve
+   * un título por vez y no puede saber que ya hubo otro igual. Sin esto, el índice de un manual con
+   * dos «Cómo se hace» manda siempre al primero, y en silencio.
+   */
+  it('dos títulos iguales NO comparten ancla', () => {
+    const i = indiceDe(parsearMd('## Cómo se hace\n### Cómo se hace\n## Cómo se hace'))
+    expect(i.map((x) => x.ancla)).toEqual(['como-se-hace', 'como-se-hace-2', 'como-se-hace-3'])
+  })
+
+  it('un título sin una sola letra tiene ancla igual, y única', () => {
+    // Un `id` vacío no es un ancla rota: es un ancla que apunta a cualquier lado.
+    const i = indiceDe(parsearMd('## 🎉\n## ✅'))
+    expect(i.map((x) => x.ancla)).toEqual(['titulo', 'titulo-2'])
+  })
+
+  it('un documento sin títulos no tiene índice, y no explota', () => {
+    expect(indiceDe(parsearMd('Un párrafo suelto.\n\n- y una lista'))).toEqual([])
+    expect(indiceDe(parsearMd(''))).toEqual([])
+  })
+
+  it('respeta el orden del documento y conserva el nivel', () => {
+    const i = indiceDe(parsearMd('## Uno\n### Uno bis\n## Dos'))
+    expect(i.map((x) => `${x.nivel}:${x.ancla}`)).toEqual(['2:uno', '3:uno-bis', '2:dos'])
   })
 })

@@ -26,6 +26,13 @@
  * Y nada más: sin tablas, sin imágenes, sin citas, sin HTML, sin listas anidadas, sin tachado. Las
  * URL sueltas **no** se autolinkean: si querés un link, corchetes.
  *
+ * # Por qué el ancla la calcula el PARSER y no la pantalla
+ *
+ * Cada título sale con su `ancla` —su nombre en la URL— y con eso `indiceDe` arma la tabla de
+ * contenidos. Podría hacerlo el componente, pero **la única forma de que dos títulos iguales no
+ * terminen con la misma ancla es verlos a los dos**, y el que ve el documento entero es este. Un
+ * manual con dos «Cómo se hace» mandaría siempre al primero, en silencio.
+ *
  * ⚠️ La cursiva es con **guion bajo y no con asterisco simple**: `*x*` choca con el `* item` de las
  * listas. Entró con la barra de formato del editor (`lib/markdown/barra.ts`) — un botón de cursiva
  * que escribiera algo que el parser no entiende sería peor que no tener el botón.
@@ -41,7 +48,8 @@ export type Trozo =
   | { t: 'link'; v: string; href: string; externo: boolean }
 
 export type Bloque =
-  | { t: 'titulo'; nivel: 2 | 3; hijos: Trozo[] }
+  /** `ancla` es única dentro del documento: ver `aAncla` y el encabezado. */
+  | { t: 'titulo'; nivel: 2 | 3; hijos: Trozo[]; ancla: string }
   | { t: 'parrafo'; hijos: Trozo[] }
   | { t: 'lista'; ordenada: boolean; items: Trozo[][] }
   | { t: 'codigo'; texto: string }
@@ -51,10 +59,42 @@ const NUMERO = /^\s{0,3}\d+\.\s+(.*)$/
 const TITULO = /^(#{2,3})\s+(.*)$/
 const CERCA = /^\s*```/
 
+/** El texto pelado de una línea ya parseada: `**Cómo** se hace` → `Cómo se hace`. */
+const textoDe = (ts: Trozo[]) => ts.map((t) => t.v).join('')
+
+/**
+ * El nombre de un título en la URL.
+ *
+ * Sin acentos y sin eñe (`configuración` → `configuracion`) porque el ancla viaja en un link que se
+ * copia y se pega en WhatsApp, y ahí un carácter no-ASCII se escapa a `%CC%81` y el link deja de
+ * leerse. Se corta a 60: un título largo hace un link impresentable y no agrega nada.
+ *
+ * ⚠️ Puede quedar vacía —un título que es sólo un emoji— y por eso el llamador tiene un fallback:
+ * un `id` vacío no es un ancla rota, es un ancla que apunta a cualquier lado.
+ */
+function aAncla(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+}
+
 export function parsearMd(texto: string): Bloque[] {
   const lineas = String(texto || '').replace(/\r\n?/g, '\n').split('\n')
   const bloques: Bloque[] = []
   let parrafo: string[] = []
+  // Cuántas veces se usó cada ancla. La segunda «Cómo se hace» es `como-se-hace-2`, como GitHub:
+  // repetir el nombre haría que el índice mandara siempre a la primera y nadie sabría por qué.
+  const anclasUsadas = new Map<string, number>()
+  const anclaUnica = (base: string) => {
+    const raiz = base || 'titulo'
+    const n = (anclasUsadas.get(raiz) || 0) + 1
+    anclasUsadas.set(raiz, n)
+    return n === 1 ? raiz : `${raiz}-${n}`
+  }
 
   const cerrarParrafo = () => {
     if (!parrafo.length) return
@@ -84,7 +124,13 @@ export function parsearMd(texto: string): Bloque[] {
     const tit = TITULO.exec(linea)
     if (tit) {
       cerrarParrafo()
-      bloques.push({ t: 'titulo', nivel: tit[1].length as 2 | 3, hijos: parsearTrozos(tit[2]) })
+      const hijos = parsearTrozos(tit[2])
+      bloques.push({
+        t: 'titulo',
+        nivel: tit[1].length as 2 | 3,
+        hijos,
+        ancla: anclaUnica(aAncla(textoDe(hijos))),
+      })
       continue
     }
 
@@ -201,4 +247,20 @@ function hrefSeguro(crudo: string): string | null {
   if (!h || h.startsWith('//')) return null
   if (h.startsWith('/')) return h
   return /^https?:\/\//i.test(h) ? h : null
+}
+
+/**
+ * Los títulos de un documento, en orden: la tabla de contenidos.
+ *
+ * 🔑 **Es una función y no un `useMemo` adentro del componente** porque es lo que hace que el índice
+ * se pueda probar sin montar nada: dos títulos iguales, un título con formato adentro, un manual
+ * sin ningún título. Lo que la pantalla decide es si dibujarlo; qué dice, se decide acá.
+ *
+ * ⚠️ **Un solo título no es un índice**: el llamador lo dibuja recién con dos o más. Un índice de un
+ * renglón ocupa lugar y no ahorra ningún scroll.
+ */
+export function indiceDe(bloques: Bloque[]): { nivel: 2 | 3; texto: string; ancla: string }[] {
+  return bloques
+    .filter((b): b is Extract<Bloque, { t: 'titulo' }> => b.t === 'titulo')
+    .map((b) => ({ nivel: b.nivel, texto: textoDe(b.hijos), ancla: b.ancla }))
 }

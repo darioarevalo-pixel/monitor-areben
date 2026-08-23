@@ -170,7 +170,7 @@ function BotonComoSeHace({ manualId }: { manualId: string }) {
       {abierto && (
         <Modal abierto ancho="ancho" onCerrar={() => setAbierto(false)} titulo={indice.titulo}>
           {error ? <Notice tone="danger">{error}</Notice>
-            : manual ? <Markdown texto={manual.cuerpo} />
+            : manual ? <Markdown texto={manual.cuerpo} indice="cerrado" />
             : <div style={{ color: color.mut }}>Abriendo…</div>}
         </Modal>
       )}

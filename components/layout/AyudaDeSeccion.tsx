@@ -83,7 +83,7 @@ export function AyudaDeSeccion({ seccion }: { seccion: string }) {
             </>
           }
         >
-          {error ? <Notice tone="warning">{error}</Notice> : manual ? <Markdown texto={manual.cuerpo} /> : <span>Buscando…</span>}
+          {error ? <Notice tone="warning">{error}</Notice> : manual ? <Markdown texto={manual.cuerpo} indice="cerrado" /> : <span>Buscando…</span>}
         </Modal>
       )}
     </div>

@@ -10,36 +10,121 @@
  * Los estilos salen de los tokens y no de una hoja aparte: es un bloque de lectura, no una pantalla.
  */
 
-import { useMemo } from 'react'
-import { parsearMd, type Bloque, type Trozo } from '@/lib/markdown/core'
+import { useId, useMemo, useState } from 'react'
+import { indiceDe, parsearMd, type Bloque, type Trozo } from '@/lib/markdown/core'
+import { Plegable } from '@/components/ui/Plegable'
 import { color, font, radius, space, weight } from '@/components/ui/tokens'
 
 export type MarkdownProps = {
   texto: string
   /** Para achicarlo cuando va adentro de un cartel y no de una página. */
   compacto?: boolean
+  /**
+   * Dibuja la tabla de contenidos arriba, y desde ahí se salta a cada título.
+   *
+   * 🔑 **Va acá y no en la sección Manuales** porque el mismo manual se lee en TRES lugares —la
+   * página, el modal de «Manual de uso» del encabezado de cada pantalla y el «Cómo se hace» de un
+   * pendiente— y los tres tienen el mismo problema: hay que bajar y bajar para encontrar algo.
+   * `'abierto'` en la página, `'cerrado'` en los modales, donde el índice desplegado se comería la
+   * pantalla antes de que se lea una línea.
+   */
+  indice?: 'abierto' | 'cerrado'
 }
 
-export function Markdown({ texto, compacto = false }: MarkdownProps) {
+export function Markdown({ texto, compacto = false, indice }: MarkdownProps) {
   const bloques = useMemo(() => parsearMd(texto), [texto])
   const gap = compacto ? space[2] : space[3]
+  /**
+   * El prefijo de los `id`.
+   *
+   * 🔴 **Sin esto el salto va al lugar equivocado**: en la pantalla de Manuales conviven el manual
+   * abierto y la vista previa del editor, los dos con los mismos títulos ⇒ dos `id` iguales, y
+   * `getElementById` devuelve el primero que encuentra, que puede ser el del otro documento.
+   */
+  const uid = useId()
+  const titulos = useMemo(() => (indice ? indiceDe(bloques) : []), [indice, bloques])
 
   return (
     <div style={{ display: 'grid', gap, fontSize: compacto ? font.sm : font.base, color: color.ink2, lineHeight: 1.55 }}>
+      {/* Con un solo título no hay nada que recorrer: un índice de un renglón ocupa lugar y no
+          ahorra ningún scroll. */}
+      {indice && titulos.length > 1 && <Indice titulos={titulos} uid={uid} abiertoAlPrincipio={indice === 'abierto'} />}
       {bloques.map((b, i) => (
-        <BloqueMd key={i} b={b} compacto={compacto} />
+        <BloqueMd key={i} b={b} compacto={compacto} uid={uid} />
       ))}
     </div>
   )
 }
 
-function BloqueMd({ b, compacto }: { b: Bloque; compacto: boolean }) {
+/**
+ * La tabla de contenidos.
+ *
+ * Se usa el `Plegable` del kit y no un `<details>` pelado por lo que ese componente resuelve: la
+ * línea de ayuda **se lee esté abierto o cerrado**, así que adentro de un modal —donde nace
+ * plegado— igual se sabe cuántos títulos hay antes de decidir si vale la pena abrirlo.
+ */
+function Indice({
+  titulos,
+  uid,
+  abiertoAlPrincipio,
+}: {
+  titulos: { nivel: 2 | 3; texto: string; ancla: string }[]
+  uid: string
+  abiertoAlPrincipio: boolean
+}) {
+  const [abierto, setAbierto] = useState(abiertoAlPrincipio)
+
+  const ir = (ancla: string) => {
+    // Por `id` y no por un ref: el título vive adentro del árbol de bloques, que se rearma entero
+    // cada vez que cambia el texto, y guardar refs de algo que se remonta es guardar nodos muertos.
+    // `scrollIntoView` sube por el ancestro que scrollea, así que anda igual en la página que
+    // adentro del modal, que es el caso que se rompe callado.
+    document.getElementById(`${uid}-${ancla}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  return (
+    <Plegable
+      abierto={abierto}
+      onToggle={() => setAbierto((x) => !x)}
+      titulo="En este manual"
+      ayuda={`${titulos.length} títulos. Tocá uno para ir directo.`}
+    >
+      <div style={{ display: 'grid', gap: space[1] }}>
+        {titulos.map((t) => (
+          <button
+            key={t.ancla}
+            type="button"
+            onClick={() => ir(t.ancla)}
+            style={{
+              // `height: auto` por la regla legacy `.shell-content button`, que le fija a todo botón
+              // la altura de un control: un título largo se desborda.
+              height: 'auto',
+              background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+              textAlign: 'left', color: color.brand, fontSize: font.sm,
+              // El subtítulo se sangra: el índice tiene que dejar ver la FORMA del manual, no sólo
+              // sus renglones.
+              paddingLeft: t.nivel === 3 ? space[4] : 0,
+              fontWeight: t.nivel === 2 ? weight.semibold : weight.normal,
+            }}
+          >
+            {t.texto}
+          </button>
+        ))}
+      </div>
+    </Plegable>
+  )
+}
+
+function BloqueMd({ b, compacto, uid }: { b: Bloque; compacto: boolean; uid: string }) {
   if (b.t === 'titulo') {
     const Tag = b.nivel === 2 ? 'h2' : 'h3'
     return (
       <Tag
+        id={`${uid}-${b.ancla}`}
         style={{
           margin: 0,
+          // Para que el título no quede pegado al borde de arriba cuando se llega saltando.
+          scrollMarginTop: space[3],
           fontSize: b.nivel === 2 ? (compacto ? font.base : font.lg) : font.base,
           fontWeight: weight.semibold,
           color: color.ink,

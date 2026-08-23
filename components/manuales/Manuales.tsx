@@ -10,6 +10,19 @@
  *
  * Se leen **en la misma página, no en un modal**: un manual se lee largo, y un modal empuja a
  * cerrarlo antes de terminar.
+ *
+ * # Con un manual abierto, las listas se esconden
+ *
+ * Y no es cosmética: el manual se dibuja ARRIBA de las dos listas, así que al terminar de leerlo
+ * había que scrollear la lista entera para volver. Queda el buscador, el manual y un «volver» — que
+ * es lo que hace falta mientras se lee uno, y nada más.
+ *
+ * # El manual abierto vive en la URL
+ *
+ * `?manual=<id>` con `useFiltroUrl`, el mismo mecanismo de los filtros del resto de la app. Sirve
+ * para dos cosas que antes no existían: **mandarle a alguien un manual**, y que un manual pueda
+ * linkear a otro (`hrefSeguro` acepta las rutas internas que empiezan con `/`). El `id` es opaco,
+ * así que el link se copia con el botón: no está pensado para escribirlo a mano.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -21,8 +34,8 @@ import { NUEVO, type Manual, type ManualIndice } from '@/lib/manuales/tipos'
 import { coincide } from '@/lib/texto'
 import { tituloLimpio } from '@/lib/nav'
 import {
-  Badge, Button, EmptyState, Esqueleto, Input, Markdown, Notice, SectionCard,
-  color, font, space, useConfirmar, useToast,
+  Badge, Button, CopyButton, EmptyState, Esqueleto, Input, Markdown, Notice, SectionCard,
+  color, font, space, useConfirmar, useFiltroUrl, useToast,
 } from '@/components/ui'
 
 export function Manuales() {
@@ -34,6 +47,7 @@ export function Manuales() {
   const [abierto, setAbierto] = useState<Manual | null>(null)
   const [editando, setEditando] = useState<Manual | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [idUrl, setIdUrl] = useFiltroUrl<string>('manual', '')
 
   useEffect(() => {
     if (!cargado) void cargar()
@@ -46,13 +60,40 @@ export function Manuales() {
   const dePantalla = filtrados.filter((m) => m.seccion)
   const sueltos = filtrados.filter((m) => !m.seccion)
 
-  const abrir = async (m: ManualIndice) => {
-    setError(null)
-    try {
-      setAbierto(await leerManual(m.id))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo abrir.')
+  /**
+   * 🔑 **La URL es la única fuente de cuál manual está abierto.** Abrirlo es escribir su id ahí, y
+   * este efecto lo resuelve al cuerpo; no hay un segundo camino que abra sin pasar por acá. Eso es
+   * lo que hace que llegar por un link y hacer clic en la lista sean exactamente lo mismo — si
+   * fueran dos funciones, una de las dos se iba a olvidar de algo.
+   *
+   * ⚠️ Si el id no existe —un manual borrado, un link viejo— se avisa arriba y **la URL se limpia**:
+   * sin eso el efecto lo reintentaría en cada render y el cartel de error se repondría solo.
+   */
+  useEffect(() => {
+    if (!cargado || !idUrl || abierto?.id === idUrl) return
+    let vivo = true
+    ;(async () => {
+      try {
+        const completo = await leerManual(idUrl)
+        if (!vivo) return
+        setAbierto(completo)
+        // El error se limpia al acertar y no al empezar: mientras carga, lo último que se sabe
+        // sigue siendo lo que dice la pantalla.
+        setError(null)
+      } catch (e) {
+        if (!vivo) return
+        setError(e instanceof Error ? e.message : 'No se pudo abrir.')
+        setIdUrl('')
+      }
+    })()
+    return () => {
+      vivo = false
     }
+  }, [cargado, idUrl, abierto?.id, setIdUrl])
+
+  const cerrar = () => {
+    setAbierto(null)
+    setIdUrl('')
   }
 
   const editar = async (m: ManualIndice) => {
@@ -75,7 +116,7 @@ export function Manuales() {
       if (!ok) return
       try {
         await borrarManual(m.id)
-        setAbierto(null)
+        cerrar()
         await cargar()
         toast.ok('Borrado.')
       } catch (e) {
@@ -93,7 +134,7 @@ export function Manuales() {
       }}
     >
       <button
-        onClick={() => void abrir(m)}
+        onClick={() => setIdUrl(m.id)}
         style={{
           height: 'auto', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
           textAlign: 'left', flex: 1, minWidth: 0, color: color.ink, fontSize: font.sm, fontWeight: 600,
@@ -136,9 +177,14 @@ export function Manuales() {
           title={abierto.titulo}
           subtitle={abierto.seccion ? `Se lee también desde ${tituloLimpio(abierto.seccion)}, en «Cómo se usa».` : undefined}
         >
-          <Markdown texto={abierto.cuerpo} />
+          <Markdown texto={abierto.cuerpo} indice="abierto" />
           <div style={{ display: 'flex', gap: space[1], marginTop: space[4], flexWrap: 'wrap' }}>
-            <Button variant="ghost" size="sm" onClick={() => setAbierto(null)}>Cerrar</Button>
+            <Button variant="ghost" size="sm" onClick={cerrar}>← Volver a todos los manuales</Button>
+            {/* El link con el id adentro, para mandárselo a alguien. El dominio sale de `window` y
+                no escrito a mano: el monitor se abre por más de un dominio y uno fijo acá sería el
+                equivocado justo cuando alguien lo pega en un chat. Se arma al hacer clic, así que
+                nunca corre en el servidor. */}
+            <CopyButton getText={() => `${window.location.origin}/manuales?manual=${abierto.id}`} label="Copiar el link" share />
             {puede.editarManuales && (
               <>
                 <Button variant="soft" size="sm" iconLeft="✏️" onClick={() => setEditando(abierto)}>Editar</Button>
@@ -149,6 +195,11 @@ export function Manuales() {
         </SectionCard>
       )}
 
+      {/* 🔑 Con uno abierto, las dos listas se van. El manual se dibuja ARRIBA de ellas, así que
+          dejarlas obligaba a scrollear la lista entera para volver — el «bajar y bajar» que esta
+          tanda vino a sacar. El buscador queda, para saltar a otro sin volver. */}
+      {!abierto && (
+        <>
       <SectionCard
         title="De una pantalla del monitor"
         subtitle="Cada uno se lee también desde su propia pantalla, con el botón «Cómo se usa»."
@@ -181,6 +232,8 @@ export function Manuales() {
           </div>
         )}
       </SectionCard>
+        </>
+      )}
 
       {editando && (
         <EditorManual
