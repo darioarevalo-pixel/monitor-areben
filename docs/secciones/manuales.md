@@ -133,6 +133,13 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
 
 ## Pendiente
 
+- 🔴 **HOY NINGUNA RUTINA APUNTA A NINGÚN MANUAL** (medido en producción el 23-ago-2026, mirando la
+  pestaña «Cargar» de la Agenda en las dos marcas: cero renglones «· con manual»). O sea que la
+  flecha está construida **de los dos lados y vacía de los dos lados**: el selector «Cómo se hace»
+  del alta de un pendiente existe desde que existe la Agenda y no se usó nunca, y por eso el pie
+  nuevo del manual no se le dibuja a nadie todavía. ⇒ **Lo que falta no es código: es que el manual
+  de Envíos quede enganchado a la rutina de Envíos.** Hasta que eso pase, ni el pie ni el conteo del
+  cartel de borrado se pueden caminar.
 - ▶️ **Un índice para `agenda_items.manual_id`**, que hoy no existe:
   `create index if not exists idx_agenda_items_manual on agenda_items (manual_id) where manual_id is not null;`
   Con las decenas de filas de hoy no cambia nada — entra cuando se toque el `.sql` por otra razón.
