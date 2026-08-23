@@ -1,5 +1,5 @@
 /**
- * El día como `YYYY-MM-DD`, **en la zona de quien mira**.
+ * El día como `YYYY-MM-DD`, **en la zona de quien mira**. Acá sólo se le pone el tipo, una vez.
  *
  * # Por qué existe este archivo
  *
@@ -7,6 +7,11 @@
  * otra sección había que arrastrar el módulo entero al chunk. Y la app ya tenía **cuatro** copias
  * del mismo formateo a mano (`lib/crm/leads.ts`, `lib/crm/core.ts`, `lib/canjes/reglas.core.js`,
  * el propio Calendario), así que la quinta iba a escribirse sola.
+ *
+ * 📌 **El cuerpo se mudó a `dia.core.js`** el 23-ago-2026, cuando `api/_ventas-diarias.js` tuvo que
+ * enumerar los días de un rango: `api/` corre en Node sin el compilador de Next y no puede importar
+ * TypeScript, así que la quinta copia estaba por escribirse ahí. Acá quedó el re-export tipado y
+ * **ningún import cambió**.
  *
  * ⚠️ **Quedan copias vivas y a propósito**: `addDiasISO` de `lib/crm/core.ts` es esta misma
  * `sumarDias` letra por letra, pero el CRM es de otra sección y de otra mano — se unifica el día
@@ -20,26 +25,13 @@
  * es mañana.
  */
 
-/** El día de `d` (por default, hoy) como `YYYY-MM-DD` local. */
-export function hoyIso(d: Date = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+import { diasEntre as diasEntreJs, hoyIso as hoyIsoJs, sumarDias as sumarDiasJs } from './dia.core.js'
 
-/**
- * Sumar (o restar) días a una fecha ISO, en la zona local.
- *
- * Se construye la fecha con `T00:00:00` —medianoche **local**— y no con `Date.parse(iso)`, que la
- * interpreta como medianoche UTC: con esa, en Argentina el día vuelve corrido una jornada.
- */
-export function sumarDias(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00')
-  d.setDate(d.getDate() + n)
-  return hoyIso(d)
-}
+/** El día de `d` (por default, hoy) como `YYYY-MM-DD` local. */
+export const hoyIso: (d?: Date) => string = hoyIsoJs
+
+/** Sumar (o restar) días a una fecha ISO, en la zona local. */
+export const sumarDias: (iso: string, n: number) => string = sumarDiasJs
 
 /** Los días de `desde` a `hasta` (positivo si `hasta` es posterior). */
-export function diasEntre(desde: string, hasta: string): number {
-  const a = new Date(desde + 'T00:00:00').getTime()
-  const b = new Date(hasta + 'T00:00:00').getTime()
-  return Math.round((b - a) / 86400000)
-}
+export const diasEntre: (desde: string, hasta: string) => number = diasEntreJs

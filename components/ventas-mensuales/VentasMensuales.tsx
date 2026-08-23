@@ -17,10 +17,12 @@ import {
 } from '@/lib/ventas-mensuales'
 import type { EstadisticaMensual } from '@/lib/etl/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
+import { VentasDiarias } from './VentasDiarias'
 import {
   Card,
   DatosGate,
   Select,
+  Tabs,
   TBody,
   THead,
   TableWrap,
@@ -35,11 +37,25 @@ import {
 } from '@/components/ui'
 
 /**
- * "📅 Ventas mensuales" (key `ventas-mensuales`, BDI + Zattia).
+ * "📅 Ventas mensuales" (key `ventas-mensuales`, BDI + Zattia). **Dos pestañas.**
  *
- * Selector de período + gráfico de barras (items por mes) + tabla por categoría + tabla
+ * *Por mes*: selector de período + gráfico de barras (items por mes) + tabla por categoría + tabla
  * por canal. Read-only sobre `allMonthlyStats` del store del ETL; la lógica vive en
  * `lib/ventas-mensuales.ts` con paridad contra el legacy y no se toca.
+ *
+ * *Día a día*: la venta de cada día, en plata y en unidades, con el corte por canal y contra la
+ * semana anterior (`components/ventas-mensuales/VentasDiarias.tsx`).
+ *
+ * 🔑 **Por qué la serie diaria es una PESTAÑA y no una sección nueva** (decisión de Bruno,
+ * 23-ago-2026): es la misma pregunta en otra granularidad, y la serie de ventas ya tiene casa. Una
+ * sección nueva habría estrenado un permiso propio — y un permiso que nadie tilda es una pantalla
+ * que no ve nadie. Adentro de ésta, quien ya mira las ventas mensuales encuentra el día sin que
+ * haya que otorgarle nada.
+ *
+ * ⚠️ **Las dos pestañas NO comparten la fuente y por eso no comparten el selector.** «Por mes» sale
+ * del ETL que ya está en el navegador; «Día a día» pide al servidor, porque la plata por renglón
+ * **no está en el ETL** (ver `lib/liquidacion/ventas.ts`). Cada una trae su propio control al
+ * header.
  *
  * Rediseño jul-2026 (patrón Analítica): el período va al header —es el control que manda
  * sobre toda la pantalla— y **queda en la URL**, así refrescar no te devuelve a los 12
@@ -48,6 +64,27 @@ import {
  * antes, al correrse a la derecha, no se sabía qué mes se estaba mirando.
  */
 export function VentasMensuales() {
+  // 🔑 La pestaña vive en la URL como todo filtro de esta pantalla: compartir el link de la venta
+  // del día tiene que abrir la venta del día, no la serie mensual.
+  const [tab, setTab] = useFiltroUrl<string>('t', 'mes')
+
+  return (
+    <>
+      <Tabs
+        items={[
+          { key: 'mes', label: 'Por mes', guia: 'ventas-mes' },
+          { key: 'dia', label: 'Día a día', guia: 'ventas-dia' },
+        ]}
+        value={tab === 'dia' ? 'dia' : 'mes'}
+        onChange={setTab}
+        style={{ marginBottom: space[4] }}
+      />
+      {tab === 'dia' ? <VentasDiarias /> : <PorMes />}
+    </>
+  )
+}
+
+function PorMes() {
   const { datos, error, progreso, origen } = useDatosMonitor()
   const [periodoStr, setPeriodo] = useFiltroUrl<string>('p', '12')
   const periodo = (parseInt(periodoStr) || 12) as Periodo

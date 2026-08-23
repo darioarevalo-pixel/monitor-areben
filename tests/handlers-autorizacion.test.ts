@@ -93,6 +93,10 @@ const PUERTAS = [
   // También nació con gate (23-ago-2026). Entra igual por la mitad que `puedeVer` no cubre: su
   // tabla vive en la base de CADA marca, así que la `store` del request elige a qué base se pega.
   { archivo: '_pedidos-clientes', llave: 'pedidos-clientes', que: 'los faltantes' },
+  // Nació con gate (23-ago-2026). Entra igual porque es la puerta que sirve PLATA por día: es
+  // exactamente lo que el ETL no baja al navegador, así que acá el 403 no lo respalda ningún
+  // recorte del bundle.
+  { archivo: '_ventas-diarias', llave: 'ventas-mensuales', que: 'la venta diaria en plata' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */
@@ -172,6 +176,7 @@ const CLAVADA_A_ZATTIA = [
   { archivo: '_atencion', llave: 'atencion', que: 'la bandeja de atención de la otra marca' },
   { archivo: '_meta-funnel', llave: 'meta-ads', que: 'la pauta de la otra marca' },
   { archivo: '_pedidos-clientes', llave: 'pedidos-clientes', que: 'los faltantes de la otra marca' },
+  { archivo: '_ventas-diarias', llave: 'ventas-mensuales', que: 'la venta diaria de la otra marca' },
 ] as const
 
 describe('la cuenta fija sigue mandando', () => {

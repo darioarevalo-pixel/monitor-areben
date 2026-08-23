@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -35,6 +35,7 @@ import buzon from './_buzon.js';
 import pedidosClientes from './_pedidos-clientes.js';
 import norte from './_norte.js';
 import mktVentas from './_mkt-ventas.js';
+import ventasDiarias from './_ventas-diarias.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -69,6 +70,11 @@ const RECURSOS = {
   // Ventas de Marketing: un solo verbo, traer las ventas de hoy al espejo. Entra por acá y no por
   // un archivo de ruta propio por lo mismo que `norte` — el plan Hobby admite 12 funciones.
   'mkt-ventas': mktVentas,
+  // La venta día a día, por canal, en unidades y en plata. Es la otra pestaña de Ventas mensuales y
+  // entra por acá y no por un archivo de ruta propio, como todo el resto (12 funciones en Hobby).
+  // Existe como puerta porque **el ETL no baja la plata** y no se lo va a hacer bajar: el
+  // razonamiento está en `lib/liquidacion/ventas.ts`. Sólo GET, no escribe nada.
+  'ventas-diarias': ventasDiarias,
   liquidacion,
   atencion,
   // `sistema` y `agenda` son los que no tienen marca: novedades, manuales y las promociones

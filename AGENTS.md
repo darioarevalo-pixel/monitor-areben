@@ -94,6 +94,10 @@ ya tienen ficha:
   `docs/secciones/atencion.md`** antes de tocar `components/pedidos-clientes/`,
   `components/atencion/`, sus `lib/` o sus dos handlers: Atención **monta el alta de Faltantes**, y
   ahí **anotar ≠ decidir** — dos permisos distintos en el mismo handler.
+- Ventas mensuales → **leer `docs/secciones/ventas-mensuales.md`** antes de tocar
+  `components/ventas-mensuales/`, `lib/ventas-diarias/` o `api/_ventas-diarias.js`. ⛔ Son **dos
+  pestañas con dos fuentes**: «Por mes» sale del ETL y «Día a día» del servidor, porque **el ETL no
+  baja la plata**.
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar
   `components/conteo-deposito/`, `lib/conteo-deposito/` o `api/_conteos-deposito.js`.
   ⛔ **`lib/conteo-deposito/core.ts` es de las CUATRO pantallas de conteo**, que ajustan stock.

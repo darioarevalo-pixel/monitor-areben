@@ -25,7 +25,7 @@
  * Puro: no lee la hora ni la red. `hoy` entra por parámetro.
  */
 
-import { CANALES as CANALES_JS, canalDe as canalDeJs } from './canal.core.js'
+import { CANALES as CANALES_JS, ETIQUETA_CANAL as ETIQUETA_CANAL_JS, canalDe as canalDeJs } from './canal.core.js'
 import type { EstadoItem, LiquidacionItem } from './tipos'
 import type { LineaVenta } from './ventas'
 
@@ -50,6 +50,12 @@ export const CANALES = CANALES_JS as readonly Canal[]
  * pueden importar TypeScript. Acá sólo se le pone el tipo, una vez.
  */
 export const canalDe: (nombre: string | null) => Canal = canalDeJs
+
+/**
+ * Cómo se llama cada canal en la pantalla. **El rótulo vive en `canal.core.js`** por lo mismo que
+ * la lista: el día que un canal no tenga nombre, no se dibuja mal — desaparece.
+ */
+export const ETIQUETA_CANAL = ETIQUETA_CANAL_JS as Record<Canal, string>
 
 /**
  * Si el precio de sale llegó a estar puesto, leído desde lo que se cobró.
