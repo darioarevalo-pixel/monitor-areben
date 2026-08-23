@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { aplicar } from '@/lib/markdown/barra'
+import { aplicar, insertarImagen } from '@/lib/markdown/barra'
 import { parsearMd, parsearTrozos } from '@/lib/markdown/core'
 
 /** Marca `palabra` dentro de `texto` y aplica la marca, para no contar índices a mano en cada test. */
@@ -155,5 +155,42 @@ describe('los bloques que se insertan enteros', () => {
     // `## #### así`.
     const r = aplicar('#### Un rótulo', 0, 14, 'titulo')
     expect(r.texto).toBe('## Un rótulo')
+  })
+})
+
+describe('insertar una imagen', () => {
+  const URL_BLOB = 'https://abc.public.blob.vercel-storage.com/manuales/foto-x7f2q1.jpg'
+
+  it('entra en su propio renglón y el parser la ve como imagen', () => {
+    const r = insertarImagen('Antes.', 6, 6, URL_BLOB, '')
+    // Lo que importa no es dónde quedó el salto sino que el parser vea dos bloques.
+    expect(parsearMd(r.texto).map((b) => b.t)).toEqual(['parrafo', 'imagen'])
+  })
+
+  /**
+   * 🔴 El mismo defecto que tenía la tabla: insertar con el cursor en medio de un renglón dejaba lo
+   * de abajo pegado al bloque. Una imagen pegada a un párrafo **deja de ser una imagen**: pasa a ser
+   * un `!` con un link al lado, y eso no se ve hasta la vista previa.
+   */
+  it('despega también lo de ABAJO: el párrafo que sigue no se come la imagen', () => {
+    const r = insertarImagen('Arriba.\nAbajo.', 8, 8, URL_BLOB, '')
+    expect(parsearMd(r.texto).map((b) => b.t)).toEqual(['parrafo', 'imagen', 'parrafo'])
+  })
+
+  it('deja marcado el rótulo, que es lo único que hay que escribir', () => {
+    const r = insertarImagen('', 0, 0, URL_BLOB, '')
+    expect(r.texto.slice(r.ini, r.fin)).toBe('Qué se ve')
+  })
+
+  it('con un rótulo dado, lo usa y lo marca entero', () => {
+    const r = insertarImagen('', 0, 0, URL_BLOB, 'La caja abierta')
+    expect(r.texto).toBe(`![La caja abierta](${URL_BLOB})`)
+    expect(r.texto.slice(r.ini, r.fin)).toBe('La caja abierta')
+  })
+
+  it('lo que estaba marcado NO se pisa: la imagen se agrega, no reemplaza', () => {
+    const r = insertarImagen('hola mundo', 0, 5, URL_BLOB, '')
+    expect(r.texto).toContain('hola')
+    expect(r.texto).toContain('mundo')
   })
 })

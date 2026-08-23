@@ -25,6 +25,20 @@ export type Manual = {
   updated_at?: string
 }
 
+/**
+ * Una rutina de la Agenda que apunta a este manual.
+ *
+ * 🔑 **Es la flecha al revés.** `agenda_items.manual_id` cuelga de la tabla `manuales` y hasta acá
+ * sólo servía para dibujar el botón «Cómo se hace» en el pendiente. Leída al revés contesta otra
+ * pregunta —**para qué se usa este texto**— y le da al cartel de borrado el número que no tenía.
+ */
+export type RutinaDeManual = {
+  id: string
+  titulo: string
+  /** `pendiente` pide tilde; `aviso` sólo informa. Es lo mismo que `ClaseItem` de la Agenda. */
+  clase: 'pendiente' | 'aviso'
+}
+
 /** Lo que viaja en el GET del shell: sin `cuerpo`, que se pide al abrir. */
 export type ManualIndice = Pick<Manual, 'id' | 'seccion' | 'titulo' | 'publicado'>
 

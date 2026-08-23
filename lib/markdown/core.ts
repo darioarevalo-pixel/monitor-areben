@@ -29,9 +29,18 @@
  *   `> [!REGLA]` · `> [!OJO]` · `> [!NUNCA]`, que se pintan con el `Notice` del kit
  *   `**negrita**` · `_cursiva_` · `` `código` `` · ```` ``` ```` para un bloque
  *   `[texto](url)` con http://, https:// o una ruta interna `/…`
+ *   `![qué se ve](url)` **sola en su renglón**, que es una imagen
  *
- * Y nada más: sin imágenes, sin citas comunes, sin HTML, sin tachado, sin dos niveles de anidado.
- * Las URL sueltas **no** se autolinkean: si querés un link, corchetes.
+ * Y nada más: sin citas comunes, sin HTML, sin tachado, sin dos niveles de anidado. Las URL sueltas
+ * **no** se autolinkean: si querés un link, corchetes.
+ *
+ * # La imagen es un BLOQUE, nunca va adentro de un párrafo
+ *
+ * 🔑 Un manual muestra una pantalla entera, no un iconito en medio de una frase: dejarla inline
+ * obligaría a decidir alto, alineación y qué pasa cuando el renglón no entra, para un caso que no
+ * existe. Un `![…](…)` escrito en medio de un párrafo cae en `parsearTrozos` y ahí es un `!` seguido
+ * de un link normal — o sea que **se sigue viendo y se sigue pudiendo abrir**, que es lo que pide la
+ * regla de oro.
  *
  * # Por qué el ancla la calcula el PARSER y no la pantalla
  *
@@ -78,6 +87,8 @@ export type Bloque =
   /** `alineacion` tiene una entrada por columna del encabezado, y las filas ya vienen emparejadas. */
   | { t: 'tabla'; encabezado: Trozo[][]; alineacion: Alineacion[]; filas: Trozo[][][] }
   | { t: 'recuadro'; tono: TonoRecuadro; parrafos: Trozo[][] }
+  /** `src` ya pasó por `hrefSeguro`: lo que no pasa no llega acá, se ve como texto. */
+  | { t: 'imagen'; alt: string; src: string }
 
 const VINETA = /^ {0,3}[-*]\s+(.*)$/
 const NUMERO = /^ {0,3}\d+\.\s+(.*)$/
@@ -91,6 +102,13 @@ const NUMERO = /^ {0,3}\d+\.\s+(.*)$/
 const SUB_VINETA = /^(?:\t| {4,})[-*]\s+(.*)$/
 const SUB_NUMERO = /^(?:\t| {4,})\d+\.\s+(.*)$/
 const TITULO = /^(#{2,4})\s+(.*)$/
+/**
+ * Una imagen, **sola en su renglón**: `![qué se ve](url)`.
+ *
+ * El `alt` puede venir vacío —`![](url)`— y se acepta: obligar a escribirlo no lo haría mejor, y
+ * una imagen que no se dibuja porque le falta el rótulo es peor que una sin rótulo.
+ */
+const IMAGEN = /^ {0,3}!\[([^\]]*)\]\(([^)]*)\)\s*$/
 const CERCA = /^\s*```/
 /** Una línea de cita: `> lo que sea`. El rótulo se mira aparte. */
 const CITA = /^ {0,3}>\s?(.*)$/
@@ -199,6 +217,21 @@ export function parsearMd(texto: string): Bloque[] {
         ancla: anclaUnica(aAncla(textoDe(hijos))),
       })
       continue
+    }
+
+    // Una imagen sola en su renglón. Va antes que todo lo de abajo porque no comparte forma con
+    // nada: lo único que puede confundirla es el párrafo, que es el último recurso.
+    const img = IMAGEN.exec(linea)
+    if (img) {
+      const src = hrefSeguro(img[2])
+      if (src) {
+        cerrarParrafo()
+        bloques.push({ t: 'imagen', alt: img[1].trim(), src })
+        continue
+      }
+      // Un `src` que no pasa la lista blanca **no dibuja nada y no desaparece**: cae al párrafo de
+      // abajo y se ve tal cual se escribió, con los corchetes. Es la regla de oro de siempre, y acá
+      // importa más que en un link: una imagen rota no se puede clickear para ver a dónde iba.
     }
 
     // Un recuadro: `> [!REGLA]` y abajo lo que dice. ⚠️ Va ANTES de la tabla y de las listas

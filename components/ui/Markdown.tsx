@@ -205,6 +205,29 @@ function BloqueMd({ b, compacto, uid }: { b: Bloque; compacto: boolean; uid: str
     )
   }
 
+  if (b.t === 'imagen') {
+    return (
+      /*
+       * `loading="lazy"` porque un manual con seis capturas se abre igual de rápido que uno sin
+       * ninguna: las de abajo se bajan cuando se llega.
+       *
+       * ⚠️ **`maxWidth: '100%'` y `height: 'auto'`, las dos**: sin el alto automático una captura
+       * ancha se achica a lo ancho y se estira a lo alto adentro del modal de «Cómo se usa», que es
+       * donde el manual se lee en menos ancho.
+       */
+      // eslint-disable-next-line @next/next/no-img-element -- URL del Blob, sin loader de next/image
+      <img
+        src={b.src}
+        alt={b.alt}
+        loading="lazy"
+        style={{
+          display: 'block', maxWidth: '100%', height: 'auto',
+          border: `1px solid ${color.line}`, borderRadius: radius.md, background: color.bg2,
+        }}
+      />
+    )
+  }
+
   if (b.t === 'recuadro') {
     const r = RECUADRO[b.tono]
     return (

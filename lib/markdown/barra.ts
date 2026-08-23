@@ -17,6 +17,9 @@
  *   lo tienen, se lo saca. Sin eso, poner una lista por error no tiene vuelta más que a mano;
  * - **insertar un bloque entero** (la tabla, el recuadro). ⚠️ Ésos **no son toggle**: una tabla no se
  *   desarma sacándole un prefijo, y un botón que a veces borra tres renglones no se aprieta tranquilo.
+ *
+ * Y aparte de las tres, `insertarImagen`, que no es un botón de la barra sino el final de una
+ * subida: llega con una URL que nadie escribió a mano. Ver su comentario.
  */
 
 export type Marca =
@@ -83,6 +86,29 @@ export function aplicar(texto: string, ini: number, fin: number, m: Marca): Resu
   const par = ENVOLVENTES[m]
   if (par) return envolver(texto, a, b, par)
   return prefijar(texto, a, b, PREFIJOS[m] as string, m === 'numerada')
+}
+
+/**
+ * Mete una imagen **ya subida** donde está el cursor, en su propio renglón.
+ *
+ * 🔑 **No es un botón de la barra y no toma la selección**: la URL sale de una subida que tardó, y
+ * en el medio la persona pudo haber escrito o movido el cursor. Por eso la posición se lee recién
+ * en el momento de insertar, y lo único que se marca es el `alt` —para escribir encima qué se ve—,
+ * que es lo único que ella puede corregir. La URL no se toca a mano.
+ *
+ * El renglón sale despegado de arriba y de abajo por la misma razón que la tabla: pegado a un
+ * párrafo, el parser lo lee como parte del párrafo y ahí `![…](…)` deja de ser una imagen y pasa a
+ * ser un `!` con un link al lado.
+ */
+export function insertarImagen(texto: string, ini: number, fin: number, src: string, alt: string): Resultado {
+  // 🔴 **La selección se COLAPSA al final en vez de reemplazarse**, al revés que la tabla y el
+  // recuadro. Los dos se llevan puesto lo marcado a propósito —el recuadro envuelve el aviso que
+  // uno acaba de escribir—, pero acá lo marcado no tiene nada que ver con la imagen: es la palabra
+  // que quedó seleccionada de antes, y borrarla sería borrar texto **después de una subida que
+  // tardó**, o sea justo cuando nadie está mirando el textarea.
+  const fin2 = Math.min(texto.length, Math.max(0, Math.max(ini, fin)))
+  const rotulo = alt.trim() || 'Qué se ve'
+  return insertarBloque(texto, fin2, fin2, () => `![${rotulo}](${src})`, 2, rotulo.length)
 }
 
 /**

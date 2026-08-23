@@ -1,6 +1,7 @@
 // "Sistema" — Novedades (y más adelante los Manuales). Tabla `novedades` + `novedades_leidas`.
 //
-//   GET  ?recurso=sistema                              → { ok, novedades, leidas, puede }
+//   GET  ?recurso=sistema                              → { ok, novedades, leidas, manuales, puede }
+//   GET  ?recurso=sistema&vista=manual&id=…&rutinas=1  → { ok, manual, rutinas }
 //   GET  ?recurso=sistema&vista=credenciales           → { ok, credenciales }   ⚠️ SOLO admin
 //   POST { recurso:'sistema', action:'leida', id, version }
 //   POST { recurso:'sistema', action:'novedad-guardar', novedad, subirVersion? }
@@ -86,7 +87,36 @@ export default async function handler(req, res) {
       if (error) throw new Error(error.message);
       if (!data) return res.status(404).json({ error: 'ese manual ya no existe' });
       if (!data.publicado && !editarManuales) return res.status(403).json({ error: 'ese manual todavía no está publicado' });
-      return res.status(200).json({ ok: true, manual: data });
+
+      // # Qué rutinas de la Agenda explica este manual
+      //
+      // La flecha existía en un solo sentido: `agenda_items.manual_id` apunta acá y el manual no
+      // sabía nada. Cerrarla es esta query, y hace dos cosas de una: la pantalla puede decir para
+      // qué se usa lo que se está leyendo, y el cartel de borrado puede decir **cuántas rutinas
+      // quedan colgadas** — `manual_id` es `text` pelado, sin `references`, así que borrar el manual
+      // no falla ni limpia nada: el botón "Cómo se hace" simplemente deja de dibujarse.
+      //
+      // 🔑 **Se pide sólo cuando la pantalla la va a mostrar** (`?rutinas=1`, la sección Manuales).
+      // El manual se lee en tres lugares y los otros dos son modales —el "Manual de uso" del
+      // encabezado y el "Cómo se hace" de un pendiente—: ahí esta lista no aporta (en el segundo
+      // sería el pendiente hablando de sí mismo) y sería una query por cada apertura.
+      //
+      // ⛔ **NO se filtra por destino ni por marca**, a diferencia del GET de la Agenda. Ahí la
+      // pregunta es "¿qué me toca?" y mostrar lo ajeno es ruido; acá es "¿para qué sirve este
+      // texto?", que no le pide nada a nadie. Y si se filtrara, el conteo del borrado mentiría justo
+      // para el admin: desde la tanda 1, un destino con nombre y apellido **no le llega**.
+      let rutinas = [];
+      if (String(req.query.rutinas || '') === '1') {
+        const { data: rs, error: errRut } = await supabase
+          .from('agenda_items')
+          .select('id, titulo, clase')
+          .eq('manual_id', id)
+          .eq('activo', true)
+          .order('titulo');
+        if (errRut) throw new Error(errRut.message);
+        rutinas = rs || [];
+      }
+      return res.status(200).json({ ok: true, manual: data, rutinas });
     }
 
     if (req.method === 'GET' && String(req.query.vista || '') === 'lecturas') {

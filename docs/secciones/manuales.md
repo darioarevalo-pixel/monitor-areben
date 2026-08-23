@@ -9,7 +9,8 @@ vez»—. Un manual no vence y no avisa: se busca cuando hace falta.
 
 ## Dónde vive
 
-`components/manuales/` (`Manuales.tsx` la lista y la lectura · `EditorManual.tsx` el alta) ·
+`components/manuales/` (`Manuales.tsx` la lista y la lectura · `EditorManual.tsx` el alta ·
+`BotonImagen.tsx` la subida) ·
 `lib/manuales/` · handler **`api/_sistema.js`, compartido con Novedades**, por
 `datos.js?recurso=sistema` · tabla `manuales` **en la base de BDI** (un manual no tiene marca) ·
 `sql/migrate-manuales.sql` + `scripts/apply-manuales.mjs` · CLI de carga `scripts/manual.mjs` ·
@@ -24,7 +25,12 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
 - **`api/_sistema.js` es de Novedades y de Manuales.** El GET trae las dos cosas de una: por eso el
   botón «Cómo se usa» de cualquier pantalla **no dispara ningún fetch para saber si existe**.
 - **`agenda_items.manual_id` cuelga de esta tabla** — es lo que hace que la rutina avise y el manual
-  explique. Ver «Lo que ya se rompió».
+  explique, y desde el 23-ago-2026 **se lee en los dos sentidos**. Ver «Lo que ya se rompió».
+- 🔴 **`api/blob-upload.js` es de cinco pantallas**, y una de sus ramas **no tiene sesión** (la
+  creadora de un canje). Manuales entra por el camino del body —una data URL que sube la función—,
+  que es el más chico de los dos: lo único que se le tocó es una palabra en `PREFIJOS`, para que las
+  capturas caigan en `manuales/` y no mezcladas con las miniaturas de Fundas. ⛔ **Antes de tocar ese
+  archivo, `docs/secciones/ingresos.md`.**
 
 ## Reglas que el código no dice
 
@@ -73,6 +79,37 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
 - ⚠️ **Los botones de tabla y recuadro NO son toggle**, a diferencia de los demás de la barra: una
   tabla no se desarma sacándole un prefijo, y un botón que a veces borra tres renglones no se
   aprieta tranquilo.
+- 🔑 **La flecha con la Agenda se lee en los dos sentidos** (23-ago-2026). La rutina apunta al
+  manual (`agenda_items.manual_id`) y el manual, al pie, dice qué rutinas se hacen con él. Es una
+  segunda query y **sólo la pide la sección** (`?rutinas=1`): en los dos modales donde también se
+  lee un manual no aporta —en el «Cómo se hace» de un pendiente sería el pendiente hablando de sí
+  mismo— y sería una query por apertura.
+- ⛔ **Esa lista NO se filtra por destino ni por marca**, a diferencia del GET de la Agenda. Allá la
+  pregunta es «¿qué me toca?» y lo ajeno es ruido; acá es «¿para qué sirve este texto?», que no le
+  pide nada a nadie. Y filtrar haría **mentir al cartel de borrado justo para el admin**: desde la
+  tanda 1 un destino con nombre y apellido no le llega, así que contaría de menos.
+- ⚠️ **Sólo las rutinas ACTIVAS.** Una apagada no le toca a nadie: nombrarla haría que el manual
+  prometiera un trabajo que no está pasando.
+- 🔑 **La imagen es un BLOQUE, sola en su renglón** (`![qué se ve](url)`). Un `![…](…)` en medio de
+  un párrafo es un `!` y un link — se sigue viendo y se sigue pudiendo abrir, que es la regla de oro.
+  El `src` pasa por el mismo `hrefSeguro` que los links: `javascript:`, `data:` y `//otro-dominio`
+  **no dibujan nada y no desaparecen**, se ven escritos.
+- 🔴 **La URL del Blob es PÚBLICA**: la ve cualquiera que la tenga, sin sesión del monitor. Una
+  captura de producción lleva nombre, dirección y teléfono de clientas reales ⇒ el editor lo avisa
+  **arriba del campo y no en el `hint`**, porque el único momento en que ese aviso sirve es antes de
+  elegir el archivo. Es el mismo motivo por el que la **Guía** (`components/ui/Guia.tsx`) se sigue
+  parando sobre el botón de verdad en vez de mostrar una foto.
+- ⚠️ **Borrar el renglón del texto NO borra el archivo del Blob.** Queda huérfano, y es la decisión
+  correcta: la alternativa es que sacar una foto de un manual la borre de otro que la use.
+- 🔑 **La imagen se achica con `achicarAArchivo` y no con `imgAThumb`**: la segunda dibuja sobre un
+  canvas sin fondo, así que **un PNG con transparencia sale con el fondo NEGRO** al pasar a JPEG — y
+  la captura de una pantalla es exactamente ese caso. El techo del body son 1,5 MB (`api/_blob.js`);
+  a 1.500 px y calidad 0,82 una captura pesa bastante menos, y si se pasa el servidor contesta 413
+  con un mensaje que se lee.
+- 🔴 **El botón «Imagen» NO se lleva puesto lo que estuviera marcado**, al revés que los de tabla y
+  recuadro: la selección se colapsa al final. Lo marcado no tiene nada que ver con la imagen —es la
+  palabra que quedó de antes— y borrarla sería borrar texto **después de una subida que tardó**, o
+  sea justo cuando nadie mira el textarea.
 - ⚠️ **Con un manual abierto las dos listas se esconden.** El manual se dibuja arriba de ellas, así
   que dejarlas obligaba a scrollear la lista entera para volver.
 
@@ -90,12 +127,17 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
   el valor viejo se recorta. Va en `useLayoutEffect`, que corre después del commit por definición.
 - 🔴 **`agenda_items.manual_id` es `text` pelado, sin `references`**: borrar un manual deja las
   rutinas apuntando a la nada. No falla —el botón «Cómo se hace» simplemente no se dibuja— y **el
-  cartel de borrado no lo avisa**, porque desde el manual todavía no se puede saber cuántas son.
+  cartel de borrado lo callaba**. 🏁 Desde el 23-ago-2026 el cartel las nombra, porque el conteo
+  viaja con el manual. ⛔ El `references` sigue sin estar: ponerlo ahora obligaría a decidir qué pasa
+  con las rutinas al borrar (¿se van con él?), y la respuesta correcta es que **no se vayan**.
 
 ## Pendiente
 
-- ▶️ **Imágenes**, y **«qué rutinas de la Agenda explica este manual»** — la consulta inversa de
-  `manual_id`, que además le da al cartel de borrado el número que hoy no tiene.
+- ▶️ **Un índice para `agenda_items.manual_id`**, que hoy no existe:
+  `create index if not exists idx_agenda_items_manual on agenda_items (manual_id) where manual_id is not null;`
+  Con las decenas de filas de hoy no cambia nada — entra cuando se toque el `.sql` por otra razón.
+- ▶️ **Mirar cuánto pesa la carpeta `manuales/` del Blob** (`vercel blob list`) cuando empiece a
+  haber capturas: nada las borra, ni siquiera sacarlas del texto.
 - ⚠️ **La barra ofrece UN recuadro (`[!OJO]`) y los tres se escriben cambiando la palabra.** Está
   dicho en el `hint` del campo; si resulta que nadie encuentra los otros dos, son tres botones.
 
@@ -114,3 +156,8 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   detrás del botón del encabezado.
 - **Una tabla ancha adentro del modal** de «Cómo se usa», que es donde el manual se lee en menos
   ancho: tiene que scrollear sola y no empujar el modal.
+- 🔴 **La subida de una imagen entera**: elegir un archivo, ver que entra en su propio renglón, que
+  la vista previa la dibuja, guardar, y **abrir el manual en otra pestaña** — que la URL del Blob
+  siga sirviendo es lo único que dice que se subió de verdad. Ningún test toca el Blob.
+- **Y el pie de rutinas**: abrir un manual que tenga una rutina apuntándole (Agenda → «Cómo se
+  hace»), ver la lista al pie, y **apretar Borrar sin confirmar** para leer que el cartel las nombra.

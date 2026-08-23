@@ -40,8 +40,14 @@ export function imgAThumb(file: File | null | undefined, cb: (url: string) => vo
   reader.readAsDataURL(file)
 }
 
-/** Carpeta lógica del Blob según la sección que sube. */
-export type PrefijoBlob = 'fundas' | 'ingresos' | 'disenos'
+/**
+ * Carpeta lógica del Blob según la sección que sube.
+ *
+ * ⚠️ Es espejo del `PREFIJOS` de `api/blob-upload.js`: lo que no está allá **se guarda igual, pero
+ * en `fundas/`**, porque el handler cae al default en vez de rechazar. Un prefijo nuevo son las dos
+ * líneas o ninguna.
+ */
+export type PrefijoBlob = 'fundas' | 'ingresos' | 'disenos' | 'manuales'
 
 /**
  * Sube un data URL (thumb base64) a Vercel Blob vía `/api/blob-upload` y devuelve
@@ -163,6 +169,36 @@ export function achicarAArchivo(file: File, max = 1500, calidad = 0.82): Promise
       img.src = src
     }
     reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * Achica una imagen y devuelve un **data URL**, para el camino del body (`subirBlob`).
+ *
+ * # Por qué reusa `achicarAArchivo` en vez de `imgAThumb`
+ *
+ * Las dos achican, pero `imgAThumb` nació para una miniatura de 256 px: dibuja sobre un canvas sin
+ * fondo, así que **un PNG con transparencia sale con el fondo NEGRO al pasar a JPEG**. La captura de
+ * una pantalla del monitor es exactamente eso. `achicarAArchivo` ya pinta el fondo blanco y ya está
+ * probado en la galería de Ingresos; lo único que falta es volver el archivo a base64, porque el
+ * body de la función recibe texto.
+ *
+ * ⚠️ **El techo del body es 1,5 MB** (`api/_blob.js`), y a 1.500 px con calidad 0,82 una captura
+ * pesa bastante menos. Si aun así se pasa, el servidor contesta 413 con un mensaje que se lee, y
+ * eso es mejor que abrirle a los manuales el camino de cliente —que es el que firma permisos de
+ * subida y hoy tiene una rama sin sesión (ver `docs/secciones/ingresos.md`)—.
+ */
+export async function achicarADataUrl(file: File, max = 1500, calidad = 0.82): Promise<string> {
+  const chico = await achicarAArchivo(file, max, calidad)
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'))
+    reader.onload = (e) => {
+      const url = e.target?.result
+      if (typeof url !== 'string') return reject(new Error('No se pudo leer la imagen.'))
+      resolve(url)
+    }
+    reader.readAsDataURL(chico)
   })
 }
 

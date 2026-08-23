@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react'
-import { aplicar, AYUDA, type Marca } from '@/lib/markdown/barra'
+import { aplicar, AYUDA, insertarImagen, type Marca, type Resultado } from '@/lib/markdown/barra'
 import { Button } from '@/components/ui/Button'
 import { space } from '@/components/ui/tokens'
 
@@ -37,6 +37,13 @@ const BOTONES: { m: Marca; label: string; estilo?: React.CSSProperties }[] = [
 
 export type Formato = {
   marcar: (m: Marca) => void
+  /**
+   * Mete una imagen ya subida donde está el cursor.
+   *
+   * ⚠️ **La usa el editor de Manuales y no la barra**: el botón que la dispara abre el explorador de
+   * archivos, sube, y recién entonces hay una URL. Por eso no es una `Marca` más.
+   */
+  imagen: (src: string, alt: string) => void
   atajos: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
 }
 
@@ -71,15 +78,26 @@ export function useFormato(
     el.setSelectionRange(p.ini, p.fin)
   }, [texto, caja])
 
-  const marcar = useCallback(
-    (m: Marca) => {
+  /**
+   * Lo que comparten todos los botones: leer la selección **del textarea de verdad**, aplicar, y
+   * dejar anotado dónde tiene que quedar el cursor cuando React haya pintado el texto nuevo.
+   */
+  const escribir = useCallback(
+    (hacer: (texto: string, ini: number, fin: number) => Resultado) => {
       const el = caja.current
       if (!el) return
-      const r = aplicar(el.value, el.selectionStart, el.selectionEnd, m)
+      const r = hacer(el.value, el.selectionStart, el.selectionEnd)
       pendiente.current = { ini: r.ini, fin: r.fin }
       setTexto(r.texto)
     },
     [caja, setTexto],
+  )
+
+  const marcar = useCallback((m: Marca) => escribir((t, a, b) => aplicar(t, a, b, m)), [escribir])
+
+  const imagen = useCallback(
+    (src: string, alt: string) => escribir((t, a, b) => insertarImagen(t, a, b, src, alt)),
+    [escribir],
   )
 
   const atajos = useCallback(
@@ -94,12 +112,17 @@ export function useFormato(
     [marcar],
   )
 
-  return { marcar, atajos }
+  return { marcar, imagen, atajos }
 }
 
-export function BarraFormato({ marcar }: { marcar: (m: Marca) => void }) {
+/**
+ * `children` es el hueco del final de la fila: lo usa el editor de Manuales para su botón de subir
+ * una imagen, que **no es un botón de formato** —abre el explorador de archivos y tarda— pero se
+ * aprieta desde el mismo lugar. Novedades no le pasa nada y la barra queda igual que antes.
+ */
+export function BarraFormato({ marcar, children }: { marcar: (m: Marca) => void; children?: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', marginBottom: space[1] }}>
+    <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', marginBottom: space[1], alignItems: 'center' }}>
       {BOTONES.map((b) => (
         <Button
           key={b.m}
@@ -114,6 +137,7 @@ export function BarraFormato({ marcar }: { marcar: (m: Marca) => void }) {
           {b.label}
         </Button>
       ))}
+      {children}
     </div>
   )
 }

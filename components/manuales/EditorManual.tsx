@@ -10,10 +10,11 @@
  */
 
 import { useMemo, useRef, useState } from 'react'
+import { BotonImagen } from './BotonImagen'
 import { guardarManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
-import { BarraFormato, Button, Field, Input, Markdown, Modal, Select, color, font, radius, space, useFormato, useToast } from '@/components/ui'
+import { BarraFormato, Button, Field, Input, Markdown, Modal, Notice, Select, color, font, radius, space, useFormato, useToast } from '@/components/ui'
 
 export function EditorManual({
   manual,
@@ -31,7 +32,7 @@ export function EditorManual({
   const [publicado, setPublicado] = useState(manual.publicado)
   const [guardando, setGuardando] = useState(false)
   const caja = useRef<HTMLTextAreaElement>(null)
-  const { marcar, atajos } = useFormato(caja, cuerpo, setCuerpo)
+  const { marcar, imagen, atajos } = useFormato(caja, cuerpo, setCuerpo)
 
   const secciones = useMemo(
     () => todasLasKeys().map((k) => ({ k, label: tituloLimpio(k) })).sort((a, b) => a.label.localeCompare(b.label, 'es')),
@@ -83,9 +84,21 @@ export function EditorManual({
 
       <Field
         label="El manual"
-        hint="Marcá lo que quieras y tocá un botón (⌘B negrita, ⌘I cursiva, ⌘K link). Los recuadros son tres y se escriben > [!REGLA] · > [!OJO] · > [!NUNCA]. Para colgar un renglón del de arriba, sangralo con 4 espacios."
+        hint="Marcá lo que quieras y tocá un botón (⌘B negrita, ⌘I cursiva, ⌘K link). Los recuadros son tres y se escriben > [!REGLA] · > [!OJO] · > [!NUNCA]. Para colgar un renglón del de arriba, sangralo con 4 espacios. Una imagen va sola en su renglón: escribí encima de «Qué se ve» para decir qué muestra."
       >
-        <BarraFormato marcar={marcar} />
+        <BarraFormato marcar={marcar}>
+          {/* La imagen entra donde está el cursor, con el rótulo marcado para escribirle encima. */}
+          <BotonImagen onSubida={(url) => imagen(url, '')} />
+        </BarraFormato>
+        {/*
+          🔴 Va acá arriba y no en el `hint`: se lee **antes** de elegir el archivo, que es el único
+          momento en que sirve. La URL del Blob es pública y una captura de producción lleva datos de
+          clientas de verdad.
+        */}
+        <Notice tone="warning" icon="⚠️" style={{ marginBottom: space[1] }}>
+          Si subís una captura, recortá lo que estás explicando: el archivo queda en una dirección
+          pública, y una pantalla entera muestra nombres, direcciones y teléfonos de clientas.
+        </Notice>
         <textarea
           ref={caja}
           className="mo-input mo-input--multi"

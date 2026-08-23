@@ -3,12 +3,16 @@
 /**
  * El tour de una pantalla: recorta el control REAL y le pone un globo al lado.
  *
- * Es la respuesta a "mostrame dónde se aprieta", y existe en vez de capturas por tres motivos
- * medidos: el markdown del repo **no tiene imágenes** (`lib/markdown/core.ts` devuelve datos, nunca
- * HTML, y por eso no hay sanitizador); una captura de producción lleva **nombre,
- * dirección y teléfono de clientas reales**; y una captura **queda vieja el día que cambie un
- * botón, sin que nadie se entere**. Esto se para sobre el botón de verdad, y si el botón se fue,
+ * Es la respuesta a "mostrame dónde se aprieta", y sigue existiendo en vez de una captura por dos
+ * motivos que no cambiaron: una captura de producción lleva **nombre, dirección y teléfono de
+ * clientas reales** —y la URL del Blob donde se sube es pública—, y **queda vieja el día que cambie
+ * un botón, sin que nadie se entere**. Esto se para sobre el botón de verdad, y si el botón se fue,
  * `tests/guia.test.ts` se pone rojo.
+ *
+ * ⚠️ El tercer motivo se venció el 23-ago-2026: el markdown del repo **ya entiende imágenes**
+ * (`![qué se ve](url)`, sola en su renglón). Sigue devolviendo datos y no HTML, así que tampoco por
+ * ahí entró un sanitizador. Una captura en un manual es una decisión que se toma mirando los otros
+ * dos motivos, no algo que el parser impida.
  *
  * # Dónde vive cada cosa
  *

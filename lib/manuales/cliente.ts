@@ -5,7 +5,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { Manual } from './tipos'
+import type { Manual, RutinaDeManual } from './tipos'
 
 const API = '/api/datos?recurso=sistema'
 
@@ -13,12 +13,25 @@ export function nuevoId(): string {
   return `m${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-/** El cuerpo de un manual. Se pide al abrirlo: el índice del GET general no lo trae. */
-export async function leerManual(id: string): Promise<Manual> {
-  const r = await apiFetch(`${API}&vista=manual&id=${encodeURIComponent(id)}&nc=${Date.now()}`)
+async function pedirManual(id: string, conRutinas: boolean): Promise<{ manual: Manual; rutinas: RutinaDeManual[] }> {
+  const rut = conRutinas ? '&rutinas=1' : ''
+  const r = await apiFetch(`${API}&vista=manual&id=${encodeURIComponent(id)}${rut}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer el manual.')
-  return d.manual as Manual
+  return { manual: d.manual as Manual, rutinas: (d.rutinas || []) as RutinaDeManual[] }
+}
+
+/** El cuerpo de un manual. Se pide al abrirlo: el índice del GET general no lo trae. */
+export async function leerManual(id: string): Promise<Manual> {
+  return (await pedirManual(id, false)).manual
+}
+
+/**
+ * El cuerpo **y las rutinas que lo explican**. Las pide la sección Manuales y nadie más: en los dos
+ * modales donde también se lee un manual esa lista no aporta, y sería una query por apertura.
+ */
+export function leerManualConRutinas(id: string): Promise<{ manual: Manual; rutinas: RutinaDeManual[] }> {
+  return pedirManual(id, true)
 }
 
 /** ⚠️ El `Content-Type: application/json` no es opcional. Ver `lib/novedades/cliente.ts`. */

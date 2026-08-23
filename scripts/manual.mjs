@@ -35,7 +35,10 @@
 // El cuerpo va por ARCHIVO y no por argumento: es markdown con saltos de línea y comillas.
 // ⛔ El markdown del repo es el chico de `lib/markdown/core.ts`: `## ### #### - 1.` (y un nivel de
 // anidado con 4 espacios) · `**negrita** _cursiva_ `código` [texto](url)` · tablas con pipes y su
-// fila de guiones · `> [!REGLA]` `> [!OJO]` `> [!NUNCA]`. Sin imágenes y sin HTML.
+// fila de guiones · `> [!REGLA]` `> [!OJO]` `> [!NUNCA]` · `![qué se ve](url)` **sola en su
+// renglón**. Sin HTML.
+// ⚠️ Una imagen puesta desde acá tiene que apuntar a algo que ya esté subido: este script escribe
+// texto, no sube archivos. El que sube es el botón «Imagen» del editor.
 import { readFileSync } from 'node:fs'
 import { authKv } from './lib/kv-auth.mjs'
 

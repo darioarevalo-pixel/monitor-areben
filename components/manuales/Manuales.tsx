@@ -25,18 +25,54 @@
  * así que el link se copia con el botón: no está pensado para escribirlo a mano.
  */
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { EditorManual } from './EditorManual'
 import { useSistema } from '@/store/useSistema'
-import { borrarManual, leerManual, nuevoId } from '@/lib/manuales/cliente'
-import { NUEVO, type Manual, type ManualIndice } from '@/lib/manuales/tipos'
+import { borrarManual, leerManual, leerManualConRutinas, nuevoId } from '@/lib/manuales/cliente'
+import { NUEVO, type Manual, type ManualIndice, type RutinaDeManual } from '@/lib/manuales/tipos'
 import { coincide } from '@/lib/texto'
 import { tituloLimpio } from '@/lib/nav'
 import {
   Badge, Button, CopyButton, EmptyState, Esqueleto, Input, Markdown, Notice, SectionCard,
   color, font, space, useConfirmar, useFiltroUrl, useToast,
 } from '@/components/ui'
+
+/**
+ * «Este manual explica estas rutinas» — el pie del manual abierto.
+ *
+ * 🔑 **Es lo que lo saca de ser un documento suelto.** Hasta hoy la flecha iba en un solo sentido:
+ * la rutina de la Agenda apuntaba al manual con el botón «Cómo se hace», y el manual no sabía para
+ * qué se usaba. Leerlo al revés contesta la pregunta con la que se llega a un manual por un link —
+ * *«¿esto de qué es?»*— sin tener que abrir la Agenda y buscarlo.
+ *
+ * ⚠️ **Sólo las activas.** Una rutina apagada no le toca a nadie, y nombrarla acá haría que el
+ * manual prometiera un trabajo que no está pasando.
+ */
+function RutinasQueExplica({ rutinas }: { rutinas: RutinaDeManual[] }) {
+  if (!rutinas.length) return null
+  return (
+    <div style={{ marginTop: space[4], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2] }}>
+        Con esto se hacen {rutinas.length === 1 ? 'esta rutina de la Agenda' : `estas ${rutinas.length} rutinas de la Agenda`}:
+      </div>
+      <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', alignItems: 'center' }}>
+        {rutinas.map((r) => (
+          <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.ink2, border: `1px solid ${color.line}`, borderRadius: 999, padding: '3px 10px' }}>
+            {/* El aviso se distingue del pendiente porque no se tilda: quien lee esto tiene que
+                saber si lo que va a encontrar en la Agenda le pide una acción o sólo le avisa. */}
+            <span aria-hidden>{r.clase === 'aviso' ? '📣' : '☑️'}</span>
+            {r.titulo}
+          </span>
+        ))}
+        <Link href="/agenda" style={{ fontSize: font.sm, color: color.brand, fontWeight: 600 }}>
+          Ver la Agenda →
+        </Link>
+      </div>
+    </div>
+  )
+}
 
 export function Manuales() {
   const toast = useToast()
@@ -45,6 +81,8 @@ export function Manuales() {
 
   const [busqueda, setBusqueda] = useState('')
   const [abierto, setAbierto] = useState<Manual | null>(null)
+  /** Las rutinas de la Agenda que explica el manual abierto. Viajan con él, en la misma request. */
+  const [rutinas, setRutinas] = useState<RutinaDeManual[]>([])
   const [editando, setEditando] = useState<Manual | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [idUrl, setIdUrl] = useFiltroUrl<string>('manual', '')
@@ -74,9 +112,10 @@ export function Manuales() {
     let vivo = true
     ;(async () => {
       try {
-        const completo = await leerManual(idUrl)
+        const { manual, rutinas: rs } = await leerManualConRutinas(idUrl)
         if (!vivo) return
-        setAbierto(completo)
+        setAbierto(manual)
+        setRutinas(rs)
         // El error se limpia al acertar y no al empezar: mientras carga, lo último que se sabe
         // sigue siendo lo que dice la pantalla.
         setError(null)
@@ -93,6 +132,7 @@ export function Manuales() {
 
   const cerrar = () => {
     setAbierto(null)
+    setRutinas([])
     setIdUrl('')
   }
 
@@ -104,14 +144,24 @@ export function Manuales() {
     }
   }
 
-  const onBorrar = (m: Manual) =>
-    void confirmar({
+  /**
+   * 🔑 **El cartel dice lo que se lleva puesto, y hasta hoy callaba la mitad.** Avisaba que la
+   * pantalla perdía el botón «Cómo se usa», pero no que las rutinas que lo explican quedan
+   * apuntando a la nada: `agenda_items.manual_id` es `text` pelado, sin `references`, así que el
+   * borrado no falla ni limpia nada y el botón «Cómo se hace» simplemente deja de dibujarse. Ahora
+   * el número está en la mano —viajó con el manual— y se dice.
+   */
+  const onBorrar = (m: Manual) => {
+    const cuelgan = rutinas.length
+      ? ` Y ${rutinas.length === 1 ? '1 rutina de la Agenda se queda' : `${rutinas.length} rutinas de la Agenda se quedan`} sin el «Cómo se hace»: ${rutinas.map((r) => `«${r.titulo}»`).join(', ')}.`
+      : ''
+    return void confirmar({
       titulo: `Borrar «${m.titulo}»`,
       tono: 'danger',
       ok: 'Borrar',
-      mensaje: m.seccion
+      mensaje: (m.seccion
         ? 'Se va para todos, y esa pantalla deja de mostrar el botón «Cómo se usa».'
-        : 'Se va para todos.',
+        : 'Se va para todos.') + cuelgan,
     }).then(async (ok) => {
       if (!ok) return
       try {
@@ -123,6 +173,7 @@ export function Manuales() {
         toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
       }
     })
+  }
 
   if (!cargado) return <Esqueleto />
 
@@ -178,6 +229,7 @@ export function Manuales() {
           subtitle={abierto.seccion ? `Se lee también desde ${tituloLimpio(abierto.seccion)}, en «Cómo se usa».` : undefined}
         >
           <Markdown texto={abierto.cuerpo} indice="abierto" />
+          <RutinasQueExplica rutinas={rutinas} />
           <div style={{ display: 'flex', gap: space[1], marginTop: space[4], flexWrap: 'wrap' }}>
             <Button variant="ghost" size="sm" onClick={cerrar}>← Volver a todos los manuales</Button>
             {/* El link con el id adentro, para mandárselo a alguien. El dominio sale de `window` y

@@ -29,6 +29,7 @@ function plano(b: Bloque): string {
     return [b.encabezado, ...b.filas].map((f) => f.map(texto).join(' | ')).join(' / ')
   }
   if (b.t === 'recuadro') return b.parrafos.map(texto).join(' // ')
+  if (b.t === 'imagen') return `![${b.alt}](${b.src})`
   return b.hijos.map((t) => t.v).join('')
 }
 
@@ -331,5 +332,50 @@ describe('#### es un cuarto nivel de título', () => {
 
   it('##### ya no: cinco no es un nivel, es un error de tipeo', () => {
     expect(parsearMd('##### Cinco')[0].t).toBe('parrafo')
+  })
+})
+
+describe('imágenes', () => {
+  const URL_BLOB = 'https://abc123.public.blob.vercel-storage.com/manuales/foto-x7f2q1.jpg'
+
+  it('sola en su renglón es un bloque, con su rótulo y su URL', () => {
+    const b = parsearMd(`Antes.\n\n![La caja, abierta](${URL_BLOB})\n\nDespués.`)
+    expect(b.map((x) => x.t)).toEqual(['parrafo', 'imagen', 'parrafo'])
+    expect(b[1]).toMatchObject({ t: 'imagen', alt: 'La caja, abierta', src: URL_BLOB })
+  })
+
+  it('el rótulo puede venir vacío: una imagen sin alt se dibuja igual', () => {
+    const b = parsearMd(`![](${URL_BLOB})`)
+    expect(b[0]).toMatchObject({ t: 'imagen', alt: '' })
+  })
+
+  /**
+   * 🔑 La regla de oro donde más importa: una imagen rota no se puede clickear para ver a dónde
+   * iba, así que lo que no pasa la lista blanca tiene que quedar **escrito** en la pantalla.
+   */
+  it('un src que no pasa la lista blanca NO dibuja nada y NO desaparece', () => {
+    const b = parsearMd('![x](javascript:alert(1))')
+    expect(b[0].t).toBe('parrafo')
+    expect(plano(b[0])).toContain('javascript:alert(1)')
+  })
+
+  it('`//otro-dominio.com` tampoco pasa: empieza con barra y no es una ruta interna', () => {
+    expect(parsearMd('![x](//evil.com/f.png)')[0].t).toBe('parrafo')
+  })
+
+  it('una ruta interna sí, que es como se apunta a algo del propio monitor', () => {
+    expect(parsearMd('![el logo](/logo.png)')[0]).toMatchObject({ t: 'imagen', src: '/logo.png' })
+  })
+
+  it('en medio de un párrafo NO es una imagen: es un `!` y un link, y se sigue viendo', () => {
+    // Es block-only a propósito. Lo que no puede pasar es que el renglón se coma la URL.
+    const b = parsearMd(`Mirá ![esto](${URL_BLOB}) que pasa.`)
+    expect(b[0].t).toBe('parrafo')
+    expect(b[0].t === 'parrafo' && b[0].hijos.some((t) => t.t === 'link' && t.href === URL_BLOB)).toBe(true)
+  })
+
+  it('adentro de un recuadro tampoco: el recuadro es de párrafos', () => {
+    const b = parsearMd(`> [!OJO]\n> ![x](${URL_BLOB})`)
+    expect(b[0].t).toBe('recuadro')
   })
 })

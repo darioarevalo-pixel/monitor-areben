@@ -54,7 +54,10 @@ import { TIPOS_MEDIA } from '../lib/media.core.js';
 import { TIPOS_PIEZA } from '../lib/meta-ads/pieza.core.js';
 import { esAdmin, puedeSub } from '../lib/permisos.core.js';
 
-const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos']);
+// ⚠️ Lo que NO está acá no se rechaza: cae al default (`fundas`). Por eso agregar una carpeta es
+// una línea acá y una en el `PrefijoBlob` de `lib/imagenes.ts`, o los archivos de una sección nueva
+// terminan mezclados con las miniaturas de Fundas y sin forma de distinguirlos después.
+const PREFIJOS = new Set(['fundas', 'ingresos', 'disenos', 'manuales']);
 
 /**
  * ⭐ **Las carpetas que admiten el camino de cliente, con su tope y sus formatos.**
