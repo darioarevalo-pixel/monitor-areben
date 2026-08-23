@@ -6,6 +6,7 @@
 //   POST { recurso:'crm', action:'detalles', ids:[…] }     → { ok, detalles:[{sale_id,…,unit_price,total}] }
 //   POST { recurso:'crm', action:'ventas', modo, flagged } → { ok, ventas:[{id,date_sale,total_price,…}] }
 //   POST { recurso:'crm', action:'panel', tel|clienteId }   → { ok, encontrado, cliente, ventas, detalles }
+//   POST { recurso:'crm', action:'lista', ids:[…] }         → { ok, clientes:[{id,name,phone,total_amount}] }
 //
 // Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
 // padrón, que es como nació: el navegador viejo no manda el campo.
@@ -105,6 +106,11 @@ const PAGINA = 1000;
 // aire, pero el que se pasa no recibe un error legible: recibe una respuesta cortada, que del otro
 // lado se ve como un JSON.parse roto. Mejor decirlo.
 const TOPE_RESPUESTA = 4 * 1024 * 1024;
+
+// Cuántos ids acepta `action:'lista'`. Con la lista en 25 y los fríos vencidos en ~67, hoy se
+// piden ~90; el techo está para que un llamador roto no convierta la consulta acotada en el
+// padrón entero, que es justo lo que este endpoint existe para evitar.
+const TOPE_IDS_LISTA = 300;
 
 /**
  * Trae una página de `ventas` detrás de otra hasta que se acaben, con el filtro que le pasen.
@@ -337,6 +343,50 @@ async function panelPorTelefono(supabase, body, res) {
   return res.status(200).json({ ok: true, via, ...(await fichaDelPanel(supabase, ids[0])) });
 }
 
+/**
+ * Los datos que le faltan a la lista del día del panel: nombre, teléfono y total comprado de un
+ * puñado de clientes.
+ *
+ * 🔑 **Existe para NO bajar el CRM adentro de WhatsApp.** Quién entra en la lista lo decide el KV
+ * (fecha, cadencia, temperatura, descarte), que el panel ya tiene y pesa nada. Lo único que no
+ * está ahí es el nombre — y el total, que ordena la tanda de fríos igual que en la sección. Se
+ * piden **de los que quedaron**, que son decenas, no de los 12.485 del padrón.
+ *
+ * ⚠️ El total se suma acá y no se lee de ninguna vista: no hay una con totales por cliente. Son
+ * las ventas de ~90 clientes, no las 27.990, y se pagina igual — el corte de 1.000 filas de
+ * PostgREST muerde con menos clientes de los que parece (el que más tiene anda por 60 ventas).
+ */
+async function listaDelPanel(supabase, body, res) {
+  const crudos = Array.isArray(body.ids) ? body.ids : [];
+  // Mismo saneo que el resto del archivo: estos ids se concatenan en el `in.(…)` de PostgREST.
+  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, TOPE_IDS_LISTA);
+  if (!ids.length) return res.status(200).json({ ok: true, clientes: [] });
+
+  const { data: clientes, error } = await supabase.from('clientes').select('id, name, phone').in('id', ids);
+  if (error) throw new Error(error.message);
+
+  // El total comprado, para que la tanda de fríos salga en el mismo orden que en la sección.
+  const totales = new Map();
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error: e2 } = await supabase
+      .from('ventas')
+      .select('client_id, total_price')
+      .in('client_id', ids)
+      .order('id', { ascending: true })
+      .range(desde, desde + PAGINA - 1);
+    if (e2) throw new Error(e2.message);
+    for (const v of data || []) {
+      totales.set(v.client_id, (totales.get(v.client_id) || 0) + (parseFloat(v.total_price) || 0));
+    }
+    if ((data || []).length < PAGINA) break;
+  }
+
+  return res.status(200).json({
+    ok: true,
+    clientes: (clientes || []).map((c) => ({ ...c, total_amount: totales.get(c.id) || 0 })),
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
@@ -362,6 +412,15 @@ export default async function handler(req, res) {
   if (accion === 'panel') {
     try {
       return await panelPorTelefono(supabase, body, res);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+
+  // ── La lista del día del panel: nombre + teléfono + total de un puñado de ids. ───────────────
+  if (accion === 'lista') {
+    try {
+      return await listaDelPanel(supabase, body, res);
     } catch (e) {
       return res.status(500).json({ ok: false, error: e.message });
     }

@@ -21,7 +21,8 @@
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
-import { calcularAgregado, resumenCompras, segmentoCliente } from './core'
+import { TANDA_FRIOS, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
+import { friosDelDia, listaDelDia, type FilaListaDia } from './lista-dia'
 import type {
   ClienteCRM,
   FilaCliente,
@@ -30,6 +31,7 @@ import type {
   MapaSeguimiento,
   ResumenCompras,
   Segmento,
+  Temperatura,
 } from './tipos'
 
 /** Cómo se resolvió el número del chat. `cola` es el único que puede estar equivocado. */
@@ -154,6 +156,84 @@ export function armarFicha(d: RespuestaPanel, crmSeg: MapaSeguimiento, today: Da
     compras: resumenCompras(ventas, detalles),
     via: d.via || '',
   }
+}
+
+// ── La lista del día ─────────────────────────────────────────────────────────
+
+/** Una fila de la lista del día, ya con nombre y teléfono. */
+export type FilaAgenda = {
+  id: number
+  nombre: string
+  telefono: string
+  /** Negativo = atrasado; 0 = vence hoy; null = tiene cadencia y nunca se lo contactó. */
+  dias: number | null
+  temperatura: Temperatura
+  nota: string
+  total: number
+}
+
+type RespuestaLista = { ok?: boolean; clientes?: Array<{ id: number; name: string; phone: string; total_amount: number }>; error?: string }
+
+export type ResultadoAgenda =
+  | { ok: true; lista: FilaAgenda[]; frios: FilaAgenda[] }
+  | { ok: false; motivo: string }
+
+/**
+ * La lista del día del panel: quiénes hay que contactar, en orden, con nombre y teléfono.
+ *
+ * 🔑 **Dos pasos, y el orden importa.** Primero se decide QUIÉN entra, con el KV solo
+ * (`lib/crm/lista-dia.ts`): son 771 entradas y pesan nada. Recién después se piden los nombres —
+ * de esos ~90 y no de los 12.485 del padrón. Al revés sería bajar el CRM adentro de WhatsApp, que
+ * es lo que este panel existe para no hacer.
+ *
+ * ⚠️ **Un id sin cliente se cae de la lista, en silencio y a propósito.** El KV puede tener
+ * entradas de clientes que ya no están en Supabase (borrados en Gestión Nube); mostrarlos como
+ * "(sin nombre)" sería ofrecer contactar a alguien que no existe.
+ */
+export async function traerAgenda(crmSeg: MapaSeguimiento, today: Date): Promise<ResultadoAgenda> {
+  const tibios = listaDelDia(crmSeg, today)
+  const friosCrudos = friosDelDia(crmSeg, today)
+  const ids = [...tibios, ...friosCrudos].map((f) => f.id)
+  if (!ids.length) return { ok: true, lista: [], frios: [] }
+
+  let d: RespuestaLista
+  try {
+    const r = await apiFetch('/api/datos?recurso=crm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'lista', ids }),
+    })
+    d = (await r.json().catch(() => ({}))) as RespuestaLista
+    if (!r.ok || !d.ok) return { ok: false, motivo: d.error || `Error ${r.status} trayendo la lista.` }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+  }
+
+  const porId = new Map((d.clientes || []).map((c) => [c.id, c]))
+  const armar = (f: FilaListaDia): FilaAgenda | null => {
+    const c = porId.get(f.id)
+    if (!c) return null
+    return {
+      id: f.id,
+      nombre: c.name || '(sin nombre)',
+      telefono: normalizeArgPhone(c.phone) || '',
+      dias: f.dias,
+      temperatura: f.temperatura,
+      nota: f.nota ? f.nota.texto : '',
+      total: c.total_amount || 0,
+    }
+  }
+
+  const lista = tibios.map(armar).filter((f): f is FilaAgenda => !!f)
+  // Los fríos SÍ salen por lo que compraron, igual que en la sección, y recién acá se cortan:
+  // el total lo trajo el servidor, no estaba en el KV.
+  const frios = friosCrudos
+    .map(armar)
+    .filter((f): f is FilaAgenda => !!f)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, TANDA_FRIOS)
+
+  return { ok: true, lista, frios }
 }
 
 export type GuardadoSeg =

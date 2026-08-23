@@ -10,12 +10,15 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 - Pantalla: `components/crm/` (`CRM.tsx` la tabla, `ClienteModal.tsx` la ficha, `Leads.tsx`,
   `LeadsDelDia.tsx` el bloque de leads arriba de la lista del día, `BancoMensajes.tsx` la ventana
   de los textos de WhatsApp, `Metricas.tsx`, `GuiaTrabajo.tsx`, `useCRM.ts` la carga).
-- Panel: `components/panel/PanelWhatsApp.tsx` + `lib/crm/panel.ts`. La ruta la resuelve la
+- Panel: `components/panel/PanelWhatsApp.tsx` (dos solapas: Cliente y Hoy) +
+  `components/panel/AgendaDelDia.tsx` (la lista del día) + `lib/crm/panel.ts` +
+  `lib/crm/lista-dia.ts` (quién entra en la lista, con el KV solo). La ruta la resuelve la
   catch-all (`app/[[...seccion]]/page.tsx`, rama `esPanel`), **no** es un archivo de ruta propio.
 - Dominio: `lib/crm/` — `core.ts` (agregado RFM + las dos etapas del día), `seguimiento.ts` (las
   escrituras), `leads.ts`, `mensajes.ts` (el banco), `metricas.ts`, `tipos.ts`, `telefono.core.js`.
-- Servidor: `api/_crm.js`, por la puerta `api/datos?recurso=crm`. Cuatro acciones: padrón (sin
-  `action`), `detalles`, `ventas` y `panel`.
+- Servidor: `api/_crm.js`, por la puerta `api/datos?recurso=crm`. Cinco acciones: padrón (sin
+  `action`), `detalles`, `ventas`, `panel` y `lista` (nombre + teléfono + total de un puñado de
+  ids, para la lista del día del panel).
 - Datos: Supabase `clientes` / `ventas` / `venta_detalles` (**bdi-only por esquema**: esas tablas
   no existen en Zattia) + cuatro claves del KV de bdi-catalogo: `crmseg`, `crmtel`, `crmleads` y
   `mensajes` (esta última es un ARRAY bajo `{bank}`, no un mapa).
@@ -39,6 +42,20 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   (`guardarConRelectura`): se queda abierto horas al costado de WhatsApp mientras la sección, en
   otra pestaña, toca la misma clave. Sin la relectura, un clic en el panel a las 6 de la tarde
   pisaría todo lo que se hizo en el CRM desde la mañana.
+- 🔑 **La lista del día del panel se arma en DOS pasos, y el orden importa.** Primero quién entra,
+  con el KV solo (`lista-dia.ts`: 771 entradas, pesan nada); después el nombre, el teléfono y el
+  total, de esos ~90 y no de los 12.485 del padrón (`action:'lista'`). Al revés sería bajar el CRM
+  adentro de WhatsApp.
+- ⚠️ **UNA divergencia conocida entre el panel y la sección, y es a propósito.** En la sección,
+  entre dos calientes, el que más compró baja un escalón (`prioridadContacto`); eso necesita el
+  total de cada uno, o sea las ventas. En el panel los calientes salen mezclados, por fecha. Los
+  FRÍOS sí respetan el criterio de la sección —primero el que más compró—: son pocos y sus totales
+  vienen con los nombres. `tests/crm-lista-dia.test.ts` fija lo que NO puede divergir: quién está
+  vencido, con qué fecha y con cuántos días.
+- 🔑 **Abrir el chat lo hace la EXTENSIÓN, no el panel.** Adentro corre el monitor en un iframe: no
+  puede tocar la pestaña de WhatsApp. Manda el teléfono por `postMessage` y `sidepanel.js` navega
+  a `send?phone=<n>`. 🔴 Ese listener **filtra por origen** (`monitorareben.vercel.app`): sin eso,
+  cualquier página embebida podría hacer navegar la pestaña de WhatsApp a donde quiera.
 - 🔑 **El panel NO baja el CRM.** La sección baja 27.990 ventas y 12.485 clientes (~6 s, 5 MB)
   porque muestra una tabla de todos; el panel se rearma en cada cambio de chat, así que pide la
   consulta puntual (`action:'panel'`). Es la única razón por la que esa acción existe.
@@ -121,9 +138,10 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   ▶️ Falta ver en el uso diario **cuántos chats cruzan bien** contra el padrón — 722 de 785
   mayoristas tienen teléfono usable, así que el resto va a caer en "número nuevo".
 - ▶️ Ponerle un ícono a la extensión: hoy Chrome le pone el cuadradito gris por defecto.
-- ▶️ Del diseño acordado, la versión mínima dejó afuera: **guiones** de la guía de ventas que
-  escriben en el cuadro de WhatsApp, la **pestaña con la lista del día**, "**pidió y no teníamos**",
-  el tilde de **difusión** y el **de dónde salió** del lead.
+- ✅ **La lista del día ya está adentro del panel** (v0.3.0, 23-ago-2026): solapa "Hoy", 25 para
+  contactar + la tanda de 10 fríos, y tocar un nombre abre su chat.
+- ▶️ Del diseño acordado quedan afuera: **guiones** de la guía de ventas que escriben en el cuadro
+  de WhatsApp, "**pidió y no teníamos**", el tilde de **difusión** y el **de dónde salió** del lead.
 - ▶️ "Abrir la ficha completa" lleva a `/clientes` a secas: **la sección no tiene deep link** a un
   cliente. Es una línea de estado en `CRM.tsx` (`modalId`) leída de la URL.
 - ⚠️ Los contactos registrados **todavía no se muestran en ningún lado**: el embudo de la Parte 9

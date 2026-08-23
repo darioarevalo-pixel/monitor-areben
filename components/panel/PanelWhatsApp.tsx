@@ -9,6 +9,7 @@ import { buscarFicha, guardarConRelectura, type FichaPanel, type RespuestaPanel 
 import { armarFicha } from '@/lib/crm/panel'
 import { agregarNota, escribiHoy, hoyISO, registrarContacto, setProximoManual, setTemperatura } from '@/lib/crm/seguimiento'
 import { leadNuevo, nuevoIdLead, type Lead, type MapaLeads } from '@/lib/crm/leads'
+import { AgendaDelDia } from './AgendaDelDia'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
 import type { FilaCliente, MapaSeguimiento, MapaTelefonos, ResultadoContacto } from '@/lib/crm/tipos'
@@ -128,10 +129,36 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
   const [guardando, setGuardando] = useState(false)
   const [nota, setNota] = useState('')
   const [today] = useState(() => new Date())
+  /**
+   * Qué se está mirando. Sin chat abierto arranca en la lista: es la pantalla con la que se
+   * empieza el día, y un cartel diciendo "abrí un chat" no le sirve a nadie que todavía no sabe a
+   * quién abrir. Con un chat abierto arranca en la ficha, que es a lo que se vino.
+   */
+  const [solapa, setSolapa] = useState<'cliente' | 'hoy'>(tel ? 'cliente' : 'hoy')
+  /**
+   * ¿Corre adentro del panel de la extensión? Estar embebido es la única forma de saberlo desde
+   * acá: el contenedor es de otro origen (`chrome-extension://…`) y no se puede leer. Alcanza —lo
+   * único que decide es si el clic en un nombre puede abrir un chat o no.
+   *
+   * Se mide una sola vez, al montar. No hay riesgo de desajuste con el HTML del servidor: la
+   * página no llega a renderizar el panel hasta que resolvió la sesión, que es cosa del navegador.
+   */
+  const [enExtension] = useState(() => typeof window !== 'undefined' && window.parent !== window)
 
   // El teléfono normalizado es la identidad del chat: lo que llega de la URL puede venir con
   // cualquier forma y no se compara crudo con nada.
   const telNorm = useMemo(() => normalizeArgPhone(tel), [tel])
+
+  // Al cambiar de chat se vuelve a la ficha: el chat cambió porque se eligió a alguien (desde la
+  // lista o a mano en WhatsApp), y lo que se quiere ver de ese alguien es su ficha.
+  //
+  // Va como ajuste durante el render y no como efecto: es el patrón de React para reaccionar a un
+  // cambio de props, y no encadena un render de más como sí lo haría un `setState` en un efecto.
+  const [telSolapa, setTelSolapa] = useState(telNorm)
+  if (telNorm && telNorm !== telSolapa) {
+    setTelSolapa(telNorm)
+    setSolapa('cliente')
+  }
 
   const decir = useCallback((txt: string, mal?: boolean) => {
     setAviso({ txt, mal })
@@ -233,16 +260,71 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
     [estado, guardando, decir, today],
   )
 
+  /**
+   * Abrir el chat de alguien de la lista.
+   *
+   * ⚠️ **Esto no navega nada por su cuenta**: acá adentro corre el monitor en un iframe del side
+   * panel de Chrome, que no puede tocar la pestaña de WhatsApp. Le pasa el teléfono al contenedor
+   * (`sidepanel.js`) y la extensión navega. Fuera de la extensión no lo escucha nadie, y por eso
+   * `AgendaDelDia` avisa cuando está en una pestaña común.
+   */
+  const abrirChat = (telefono: string) => {
+    if (!telefono) return
+    try {
+      window.parent.postMessage({ fuente: 'bdi-crm-panel', tipo: 'abrir-chat', tel: telefono }, '*')
+    } catch (_e) {
+      decir('No pude abrir el chat desde acá.', true)
+    }
+  }
+
+  const solapas = (
+    <div style={{ display: 'flex', borderBottom: `1px solid ${color.line2}`, background: color.bg2 }}>
+      {([
+        ['cliente', 'Cliente'],
+        ['hoy', 'Hoy'],
+      ] as const).map(([k, txt]) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => setSolapa(k)}
+          style={{
+            flex: 1,
+            padding: '7px 4px',
+            fontSize: font.xs,
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: 0,
+            borderBottom: `2px solid ${solapa === k ? color.brandSolid : 'transparent'}`,
+            background: 'none',
+            color: solapa === k ? color.brand : color.mut,
+          }}
+        >
+          {txt}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (solapa === 'hoy')
+    return (
+      <Envoltorio aviso={aviso}>
+        {solapas}
+        <AgendaDelDia crmSeg={crmSeg} today={today} onAbrirChat={abrirChat} puedeAbrirChat={enExtension} />
+      </Envoltorio>
+    )
+
   if (!telNorm)
     return (
       <Envoltorio>
-        <Vacio texto="Abrí el chat de una persona para ver su ficha. Los grupos no tienen ficha." />
+        {solapas}
+        <Vacio texto="Abrí el chat de una persona para ver su ficha, o mirá la lista en “Hoy”." />
       </Envoltorio>
     )
-  if (estado.t === 'cargando') return <Envoltorio><Cargando /></Envoltorio>
+  if (estado.t === 'cargando') return <Envoltorio>{solapas}<Cargando /></Envoltorio>
   if (estado.t === 'error')
     return (
       <Envoltorio>
+        {solapas}
         <Vacio texto={estado.motivo} mal />
       </Envoltorio>
     )
@@ -250,6 +332,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
   if (estado.t === 'varios')
     return (
       <Envoltorio>
+        {solapas}
         <div style={{ padding: space[3] }}>
           <p style={{ fontSize: font.sm, color: color.ink2, marginTop: 0 }}>
             Ese teléfono figura en más de un cliente. ¿Cuál es?
@@ -278,6 +361,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
   if (estado.t === 'desconocido')
     return (
       <Envoltorio aviso={aviso}>
+        {solapas}
         <NuevoLead tel={telNorm} onListo={(txt) => decir(txt)} onError={(txt) => decir(txt, true)} />
       </Envoltorio>
     )
@@ -291,6 +375,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
 
   return (
     <Envoltorio aviso={aviso}>
+      {solapas}
       {/* Encabezado */}
       <div style={{ padding: `${space[3]}px ${space[3]}px ${space[2]}px` }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>

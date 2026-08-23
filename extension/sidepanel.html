@@ -5,15 +5,16 @@
     <title>Ficha del cliente</title>
     <style>
       html, body { margin: 0; height: 100%; background: #fff; font: 13px/1.4 system-ui, -apple-system, sans-serif; }
-      iframe { border: 0; width: 100%; height: 100%; display: block; }
-      #aviso { padding: 16px; color: #6b7280; display: none; }
-      body.sin-chat #aviso { display: block; }
-      body.sin-chat iframe { display: none; }
+      /* El panel ocupa todo y el aviso queda abajo, en una franja: sin chat abierto el panel sigue
+         sirviendo —muestra la lista del día— y el aviso sólo explica por qué no hay ficha. */
+      body { display: flex; flex-direction: column; }
+      iframe { border: 0; width: 100%; flex: 1; display: block; }
+      #aviso { padding: 8px 12px; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; background: #f9fafb; }
     </style>
   </head>
-  <body class="sin-chat">
-    <div id="aviso">Abrí el chat de una persona en WhatsApp Web.</div>
+  <body>
     <iframe id="panel" title="Ficha del cliente"></iframe>
+    <div id="aviso">Abrí el chat de una persona en WhatsApp Web.</div>
     <script src="sidepanel.js"></script>
   </body>
 </html>

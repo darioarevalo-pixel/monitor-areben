@@ -27,6 +27,7 @@
 // entrar una vez más. Después queda, como en cualquier pestaña.
 
 const BASE = 'https://monitorareben.vercel.app/panel/'
+const ORIGEN = 'https://monitorareben.vercel.app'
 
 const iframe = document.getElementById('panel')
 const aviso = document.getElementById('aviso')
@@ -47,19 +48,50 @@ const MOTIVOS = {
   'sin-api': 'No puedo leer con quién estás hablando. Probá recargando WhatsApp Web; si sigue igual, WhatsApp cambió algo y hay que ajustar la extensión.',
 }
 
+/**
+ * 🔑 **Sin chat abierto el panel se carga igual, sin número.** Antes mostraba un cartel y nada
+ * más; desde que el panel tiene la solapa "Hoy" —la lista de a quién contactar— esa es justamente
+ * la pantalla con la que se empieza el día, y esconderla hasta que se abra un chat dejaba al que
+ * todavía no sabe a quién abrir mirando un cartel que le dice que abra un chat.
+ */
 function mostrar(tel, motivo) {
   const limpio = (tel || '').replace(/\D/g, '')
+  // El cartel se actualiza SIEMPRE, aunque el número no haya cambiado: pasar de un chat sin
+  // teléfono a un grupo no cambia el panel pero sí el motivo, y el cartel es lo único que lo dice.
+  aviso.textContent = limpio ? '' : MOTIVOS[motivo] || MOTIVOS['sin-chat']
+  aviso.style.display = limpio ? 'none' : ''
   if (limpio === actual) return
   actual = limpio
-  document.body.classList.toggle('sin-chat', !limpio)
-  if (!limpio) {
-    aviso.textContent = MOTIVOS[motivo] || MOTIVOS['sin-chat']
-    return
-  }
   // Sólo se toca `src` cuando el número cambió de verdad. Reasignarlo con el mismo valor recarga
   // el iframe entero, y con él se iría lo que se esté escribiendo en el campo de la nota.
   iframe.src = BASE + limpio
 }
+
+/**
+ * Abrir el chat de alguien que se tocó en la lista del panel.
+ *
+ * 🔴 **Se acepta SÓLO lo que viene del origen del monitor.** Sin ese filtro, cualquier página
+ * embebida podría hacer que la pestaña de WhatsApp navegue a donde quiera. Y el teléfono se
+ * limpia a dígitos antes de armar la URL: es lo único que se toma de afuera.
+ *
+ * `send?phone=` abre la conversación con ese número —la que ya existe, si existe— y no manda
+ * nada: es la misma URL con la que se verificó la lectura del teléfono en agosto.
+ */
+window.addEventListener('message', (e) => {
+  if (e.origin !== ORIGEN) return
+  const d = e.data
+  if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'abrir-chat') return
+  const numero = String(d.tel || '').replace(/\D/g, '')
+  if (!numero) return
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs && tabs[0]
+    if (!tab || !tab.id) return
+    chrome.tabs.update(tab.id, { url: 'https://web.whatsapp.com/send?phone=' + numero })
+  })
+})
+
+// Arranca en la lista: el panel se abre y ya hay algo que hacer, sin esperar a ningún chat.
+mostrar('', 'sin-chat')
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.tipo === 'chat') mostrar(msg.tel, msg.motivo)
