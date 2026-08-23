@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Marca } from '@/lib/nav.datos'
+import type { Linea } from '@/lib/lineas'
 import { borrarMeta, guardarMeta, type MetaGuardada } from '@/lib/norte/persistencia'
 import { claveDeMeta } from '@/lib/norte/core'
 import { MEDIDORES, medidorDe } from '@/lib/norte/medidores'
@@ -26,13 +26,14 @@ const CANALES_META: readonly Canal[] = CANALES.filter((c) => c !== 'tecnica')
  * renombrar la primera.
  */
 export function EditorMeta({
-  marca,
+  linea,
   meta,
   usadas,
   onListo,
   onCancelar,
 }: {
-  marca: Marca
+  /** 🔑 Una LÍNEA, no una marca: Stunned tiene su propia rampa (`docs/lineas.md`). */
+  linea: Linea
   /** `null` = una meta nueva. */
   meta: MetaGuardada | null
   /** Las claves que ya existen, para no pisar ninguna. */
@@ -59,7 +60,7 @@ export function EditorMeta({
     setGuardando(true)
     setError(null)
     try {
-      await guardarMeta(marca, {
+      await guardarMeta(linea, {
         key: meta?.key || claveDeMeta(label, usadas),
         label: label.trim(),
         medidor,
@@ -81,7 +82,7 @@ export function EditorMeta({
     setGuardando(true)
     setError(null)
     try {
-      await borrarMeta(marca, meta.key)
+      await borrarMeta(linea, meta.key)
       onListo()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo borrar.')

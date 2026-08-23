@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { leerIngresos } from '@/lib/kv/cliente'
 import { bloqueU, normalizar, totalU } from '@/lib/ingresos/core'
 import type { Ingreso } from '@/lib/ingresos/tipos'
-import { leerNorte, type MetaGuardada } from '@/lib/norte/persistencia'
+import { leerNorte } from '@/lib/norte/persistencia'
 import type { Condiciones, Contribucion, ImportacionProyectada, Pyl } from '@/lib/norte/tipos'
 
 /** Lo que se muestra cuando la lectura de Norte falló entera: sin dato y sin inventar. */
@@ -57,7 +57,6 @@ export function cruzar(ingresos: Ingreso[], condiciones: Condiciones[]): Importa
 
 export type EstadoNorte = {
   importaciones: ImportacionProyectada[]
-  metas: MetaGuardada[]
   /** La plata que deja cada canal. La calcula el servidor: el ETL no trae precios. */
   contribucion: Contribucion
   /** El otro corte de la misma plata: el P&L por línea. Mismo viaje y misma ventana. */
@@ -72,7 +71,7 @@ export type EstadoNorte = {
  * Carga lo que Norte necesita de afuera del ETL: las importaciones proyectadas y su economía.
  *
  * Las dos lecturas van **en paralelo y con `allSettled`**: si el KV de ingresos no contesta, las
- * metas y las condiciones igual se muestran. Cortar todo porque falló una de las dos fuentes deja
+ * condiciones y la plata igual se muestran. Cortar todo porque falló una de las dos fuentes deja
  * la pantalla en blanco sin decir cuál, que es el modo de falla más caro de diagnosticar.
  */
 export function useNorte(marca: Marca): EstadoNorte {
@@ -92,7 +91,6 @@ export function useNorte(marca: Marca): EstadoNorte {
   const [cargado, setCargado] = useState<{
     clave: string
     importaciones: ImportacionProyectada[]
-    metas: MetaGuardada[]
     contribucion: Contribucion
     pyl: Pyl
     admin: boolean
@@ -117,7 +115,6 @@ export function useNorte(marca: Marca): EstadoNorte {
       setCargado({
         clave,
         importaciones: cruzar(listaIngresos, datos?.condiciones || []),
-        metas: datos?.metas || [],
         contribucion: datos?.contribucion || SIN_CONTRIBUCION,
         pyl: datos?.pyl || SIN_PYL,
         admin: datos?.puede.admin || false,
@@ -132,7 +129,6 @@ export function useNorte(marca: Marca): EstadoNorte {
   const listo = cargado?.clave === clave
   return {
     importaciones: listo ? cargado.importaciones : [],
-    metas: listo ? cargado.metas : [],
     contribucion: listo ? cargado.contribucion : SIN_CONTRIBUCION,
     pyl: listo ? cargado.pyl : SIN_PYL,
     admin: listo ? cargado.admin : false,

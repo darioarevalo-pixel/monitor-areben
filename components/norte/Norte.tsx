@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useSesion } from '@/components/SesionProvider'
 import { useNorte } from './useNorte'
+import { useMetas } from '@/components/mkt-ventas/useMetas'
 import { EditorCondiciones } from './EditorCondiciones'
 import { EditorMeta } from './EditorMeta'
 import { TablaMetas } from './TablaMetas'
@@ -30,6 +31,7 @@ import {
   veredicto,
 } from '@/lib/norte/core'
 import { porUnidad, ventanaUltimos } from '@/lib/norte/contribucion'
+import { ETIQUETA_LINEA, lineasDeMarca, type Linea } from '@/lib/lineas'
 import type { Contribucion, EstadoVeredicto, ImportacionProyectada, Peldano } from '@/lib/norte/tipos'
 import {
   Badge,
@@ -38,6 +40,7 @@ import {
   EmptyState,
   Notice,
   SectionCard,
+  SelectorLinea,
   TBody,
   THead,
   TableWrap,
@@ -74,7 +77,23 @@ import {
 export function Norte() {
   const { marca } = useSesion()
   const { datos, error: errorDatos, progreso, origen } = useDatosMonitor()
-  const { importaciones, metas, contribucion, pyl, admin, cargando, error, recargar } = useNorte(marca)
+  const { importaciones, contribucion, pyl, admin, cargando, error, recargar } = useNorte(marca)
+
+  /**
+   * **La línea cuyos objetivos se están mirando**, que no es la de todo el resto de la pantalla.
+   *
+   * 🔴 Norte entero —ritmo, stock, pagos, contribución— es de la MARCA y no se parte: el P&L por
+   * línea ya sale de `pylPorLinea`, adentro del mismo número. Lo único que tiene rampa propia es el
+   * objetivo, porque Stunned se mide contra el suyo en la pantalla de Ventas. Acá el selector está
+   * para **cargarlo y verlo**, que es lo que faltaba: sin él, la rampa de Stunned no tenía dónde
+   * escribirse.
+   */
+  const lineasDeAca = useMemo(() => lineasDeMarca(marca), [marca])
+  const [lineaMetas, setLineaMetas] = useState<Linea>(marca)
+  const { metas: metasBajadas, error: errorMetas, recargar: recargarMetas } = useMetas(lineaMetas)
+  const metas = useMemo(() => metasBajadas || [], [metasBajadas])
+  /** `true` cuando se están mirando los objetivos de una línea que no es la marca (hoy: Stunned). */
+  const otraLinea = lineaMetas !== marca
   const [editando, setEditando] = useState<string | null>(null)
   /** `{nueva:true}` o `{key}`: qué meta está abierta en el editor. `null` = ninguna. */
   const [metaEditando, setMetaEditando] = useState<{ nueva?: boolean; key?: string } | null>(null)
@@ -184,13 +203,29 @@ export function Norte() {
    */
   const hayPlata = Boolean(contribucion.disponible && contribucion.canales?.length)
 
-  /** El avance de cada meta activa, medido contra el mismo `ritmo` que se muestra arriba. */
+  /**
+   * El avance de cada meta activa, medido contra el mismo `ritmo` que se muestra arriba.
+   *
+   * 🔴 **La rampa de otra línea se muestra SIN medir, y con el motivo puesto.** El `ritmo` de esta
+   * pantalla sale de `useDatosMonitor()` **sin** `porLinea`: es la venta de la marca entera. Medir
+   * el objetivo de Stunned contra él sería el mismo defecto que se acaba de arreglar en Ventas —un
+   * número plausible, con el rótulo equivocado— sólo que del otro lado. `medido: null` con motivo
+   * ya es un camino que la tabla dibuja (es el de las metas de contribución sin dashboard).
+   */
   const avances = useMemo(
     () =>
       metas
         .filter((m) => m.activa)
-        .map((m) => avanceDeMeta(m, medirMeta(m, { ritmo, hayPlata }), hoy)),
-    [metas, ritmo, hayPlata, hoy],
+        .map((m) =>
+          avanceDeMeta(
+            m,
+            otraLinea
+              ? { valor: null, motivo: `el medido de ${ETIQUETA_LINEA[lineaMetas]} está en Ventas: acá el ritmo es de la marca entera` }
+              : medirMeta(m, { ritmo, hayPlata }),
+            hoy,
+          ),
+        ),
+    [metas, ritmo, hayPlata, hoy, otraLinea, lineaMetas],
   )
 
   /**
@@ -544,14 +579,20 @@ export function Norte() {
               ) : undefined
             }
           >
+            {lineasDeAca.length > 1 && (
+              <SelectorLinea linea={lineaMetas} lineas={lineasDeAca} onChange={setLineaMetas} />
+            )}
+
+            {errorMetas && <Notice tone="warning">No se pudieron leer los objetivos: {errorMetas}</Notice>}
+
             {metaEditando && (
               <EditorMeta
-                marca={marca}
+                linea={lineaMetas}
                 meta={metaEditando.nueva ? null : metas.find((m) => m.key === metaEditando.key) || null}
                 usadas={metas.map((m) => m.key)}
                 onListo={() => {
                   setMetaEditando(null)
-                  recargar()
+                  recargarMetas()
                 }}
                 onCancelar={() => setMetaEditando(null)}
               />
@@ -565,12 +606,23 @@ export function Norte() {
             />
 
             <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
+              {otraLinea ? (
+                <>
+                  Éstos son los objetivos de <b>{ETIQUETA_LINEA[lineaMetas]}</b>, que se cargan y se editan
+                  acá pero <b>no se miden acá</b>: el ritmo, el stock y la plata de esta pantalla son de la marca
+                  entera. El avance de {ETIQUETA_LINEA[lineaMetas]} se ve en <b>Ventas</b>, que sí está cortada por
+                  línea.
+                </>
+              ) : (
+                <>
               El medido de cada meta se calcula al abrir, contra{' '}
               {ventanaEtl ? `la venta del ${ventanaEtl.desde} al ${ventanaEtl.hasta}` : 'la venta de los últimos 30 días'}
               : no se guarda en ningún lado. ⚠️ Las metas de contribución necesitan el dashboard conectado — sin él dicen
               por qué no se pudieron medir, en vez de mostrar cero.
               {apagadas.length > 0 &&
                 ` Las apagadas van al final, en gris y sin medir: se editan igual, y ahí se vuelven a prender o se borran.`}
+                </>
+              )}
             </div>
           </SectionCard>
         </div>

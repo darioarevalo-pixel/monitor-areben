@@ -119,6 +119,7 @@ Ponerle el selector sin tocar eso mostraría el total de la marca con el rótulo
 | Canjes · sync TN→GN · `sku_map` | `store = 'stunned'` |
 | Etiquetas | fusiona el catálogo de TN de Stunned |
 | **Resumen · Ventas de Marketing · Por producto · Por variante · Márgenes** | **selector de línea** (22-ago-2026) |
+| **Norte › Metas** | **selector PARCIAL** (23-ago-2026): sólo los objetivos: el resto de la pantalla es de la marca |
 | **Sesión de fotos** | **selector + historial propio** (`store='stunned'`), 22-ago-2026 |
 | **Marketing · Tienda Nube › Carga de imágenes** | **selector** (22-ago-2026): hablan con **una** Tienda Nube |
 | Solicitudes (la lista) · Inicio · el chip de marca | el resumen y el aviso traen `linea` además de `marca` |
@@ -268,6 +269,12 @@ hacía leer como que Stunned rinde el doble. Alcanzaba también al chip **«en o
 encendía en Stunned) y a **«Generar sale»**, que sobre productos STU salía con los precios de la
 tienda equivocada.
 
+**Caminado en prod el 23-ago, después del deploy** (`a148559`): en Márgenes › Stunned el GET sale a
+`tiendanube-audit?store=stunned` —el oráculo de alambre, porque el arreglo no agrega ni una cadena
+nueva al bundle—, **ninguna de las 25 tarjetas dice «sin foto»** (eran 24 de 24), las 25 valoran con
+el precio de promo y el **markup promedio bajó de 180 % a 107 %**, al lado del 88 % de Zattia. En Por
+producto › Stunned el chip **«en oferta hoy» se enciende**, que antes no pasaba nunca.
+
 El arreglo son **tres firmas y cuatro llamadas**: los hooks toman `Linea`, y las tres pantallas con
 selector le pasan `linea`. ⚠️ **`Marca` sigue entrando a propósito** —es un subconjunto de `Linea`—
 porque **Comisiones, Reposición, Gerencial, Liquidación y las cards de tncat son de mercadería
@@ -279,16 +286,38 @@ hook de TN puede recibir `marca`, y sin selector ninguno puede recibir `linea`. 
 en ninguna función —`matchTn` es puro y correcto, `tn-audit` ya era por línea—, estaba en **qué
 argumento le pasa la pantalla**, que es justo lo que un test de unidad no mira.
 
-### 2. 🔴 El objetivo de Norte de la pantalla Ventas es el de la MARCA — ABIERTO
+### 2. ✅ El objetivo de Norte de la pantalla Ventas era el de la MARCA — Stunned tiene rampa propia
 
-`useMetas(marca)` (`components/mkt-ventas/MktVentas.tsx:56`). Medido: la tarjeta es **idéntica en las
-dos pestañas** («40 compras por día online al sáb 31-oct · escalón 10 ventas/día para el mar 8-sep»),
-que es la rampa de **Zattia**. O sea: **la venta de Stunned se mide contra el objetivo de Zattia, con
-el rótulo de Stunned**.
+`useMetas(marca)` (`components/mkt-ventas/MktVentas.tsx`). Medido antes: la tarjeta era **idéntica en
+las dos pestañas** («40 compras por día online al sáb 31-oct · escalón 10 ventas/día para el mar
+8-sep»), que es la rampa de **Zattia**. O sea: **la venta de Stunned se medía contra el objetivo de
+Zattia, con el rótulo de Stunned** — y la venta de abajo sí estaba cortada por línea.
 
-⛔ **No es un bug a tapar**: `api/_norte.js:267` rechaza todo `store` que no sea `bdi|zattia`, así que
-el objetivo de Stunned **no tiene dónde vivir**. Que Stunned tenga rampa propia —y cuál— es una
-decisión de Bruno. Hasta que la haya, la tarjeta afirma algo que no es.
+**Decisión de Bruno (23-ago-2026): Stunned tiene rampa propia.** Cómo quedó:
+
+| | |
+|---|---|
+| dónde viven sus filas | `norte_metas` de la base de **Zattia**, con `store='stunned'` — igual que `solicitudes` |
+| por qué se puede | la PK es `(key, store)`: las dos rampas conviven sin pisarse |
+| quién manda para credenciales y permisos | la **marca** (`baseDeLinea`), nunca el `store` crudo |
+| qué abre la línea | **sólo los objetivos** (`?metas=1`, POST `meta`, `borrar-meta`) |
+| qué NO abre | condiciones de compra, contribución y P&L: `contribucionDe` mira la venta **entera** de la base y `skusDe` sólo reparte en Zattia ⇒ un `?store=stunned` por ahí devolvería la plata de Zattia con el rótulo de Stunned, el mismo defecto del otro lado. El handler lo rechaza con 400 |
+
+🔑 **De paso se cerró una puerta de más**: las metas viajaban **por dos caminos** —el pedido grande de
+Norte y `?metas=1`— y el grande no sabe de líneas. Con las dos, la pantalla de Norte habría tenido
+que elegir a cuál creerle según la pestaña abierta. Ahora la puerta es una sola y es la que corta por
+línea; `leerNorte` ya no trae metas.
+
+**En Norte el selector es PARCIAL, y eso es la decisión**: corta **sólo el bloque de Metas**. El
+ritmo, el stock, los pagos y la contribución de esa pantalla son de la marca entera —el P&L por línea
+ya sale de `pylPorLinea`, adentro del mismo número—, así que la rampa de otra línea se lista
+**sin medir, con el motivo puesto** («el medido de Stunned está en Ventas: acá el ritmo es de la marca
+entera»). Medir el objetivo de Stunned contra el ritmo de Zattia sería el defecto que se acaba de
+arreglar, del otro lado. El camino de `medido: null` + motivo ya existía: es el de las metas de
+contribución sin dashboard.
+
+⚠️ **Falta cargar los escalones de Stunned**: hasta que estén, su pestaña dice «Sin metas cargadas»,
+que es verdad y no miente a nadie.
 
 ### 🏁 Lo que SÍ anduvo en las cinco
 

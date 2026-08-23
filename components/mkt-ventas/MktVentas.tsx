@@ -53,7 +53,8 @@ const DIAS_DE_SERIE = 34
 export function MktVentas() {
   const { perfil, marca } = useSesion()
   const { datos, error, progreso, origen, estado, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
-  const { metas, error: errorMetas } = useMetas(marca)
+  // 🔴 Por LÍNEA: con la marca, la pestaña Stunned mostraba la rampa de Zattia con su rótulo.
+  const { metas, error: errorMetas } = useMetas(linea)
   const cargar = useMonitorStore((s) => s.cargar)
   const refrescar = () => cargar(marca, veVentasHistoricas(perfil, marca), true)
   const refrescando = estado === 'cargando'

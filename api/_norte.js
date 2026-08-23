@@ -1,6 +1,7 @@
 // Norte (Dirección) — tablas `compras_condiciones` y `norte_metas` (ver sql/migrate-norte.sql).
 //
-//   GET  ?recurso=norte&store=bdi|zattia
+//   GET  ?recurso=norte&store=bdi|zattia            → condiciones + contribución + P&L (sin metas)
+//   GET  ?recurso=norte&store=bdi|zattia|stunned&metas=1  → SÓLO los objetivos, por LÍNEA
 //   POST { recurso:'norte', store, condiciones:{ingresoId, fechaFactura, moneda, cuotas:[{dias,pct,fecha?}],
 //                                               costos:[{bloqueId,nombre,costo,unidades}], nota,
 //                                               confirmado, fechaIngreso, cotizacion} }
@@ -35,6 +36,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
+import { baseDeLinea, esLinea } from '../lib/lineas.core.js';
 import { contribucionPorCanal, ventanaUltimos } from '../lib/norte/contribucion.core.js';
 import { pylPorLinea } from '../lib/norte/pyl.core.js';
 import { canalDeMeta, esMedidor, medidorDe } from '../lib/norte/medidores.core.js';
@@ -42,8 +44,13 @@ import { sanearCostos } from '../lib/norte/costos.core.js';
 import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 
-function cfgFor(store) {
-  if (store === 'zattia') {
+/**
+ * Las credenciales de la base. ⚠️ **Toma una MARCA, no una línea**: Stunned no tiene base propia y
+ * un `store` crudo acá caería al `else` —o sea a la de BDI— sin que nada avise. La marca la saca
+ * `baseDeLinea` en el handler.
+ */
+function cfgFor(marca) {
+  if (marca === 'zattia') {
     return {
       url: process.env.ZATTIA_SUPABASE_URL,
       key: process.env.ZATTIA_SUPABASE_SERVICE_KEY || process.env.ZATTIA_SUPABASE_KEY,
@@ -263,8 +270,14 @@ export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
 
+  // 🔑 **Acá `store` es una LÍNEA, y la marca sale de ella.** Stunned no tiene base ni permisos
+  // propios (`docs/lineas.md`): sus filas de `norte_metas` viven en la base de **Zattia** con
+  // `store='stunned'`, exactamente como las de `solicitudes`. La PK es `(key, store)`, así que las
+  // dos rampas conviven sin pisarse.
   const store = String((req.method === 'POST' ? (req.body || {}).store : req.query.store) || '').toLowerCase();
-  if (!['bdi', 'zattia'].includes(store)) return res.status(400).json({ error: 'store inválido (usá bdi o zattia)' });
+  if (!esLinea(store)) return res.status(400).json({ error: 'store inválido (usá bdi, zattia o stunned)' });
+  // La marca manda para **credenciales y permisos**; la línea, sólo para elegir las filas.
+  const marca = baseDeLinea(store);
 
   // 🔑 **La segunda llave de este handler, con el molde de las cuatro de `api/_liquidacion.js`.**
   // La sección que hay que poder ver se elige **antes** del `puedeVerAlguna`, no con un segundo
@@ -278,13 +291,26 @@ export default async function handler(req, res) {
   // alcanza jamás con esta llave**: la rama corta con `return` antes de que se mire un `action`.
   const soloMetas = req.method === 'GET' && String(req.query.metas || '') === '1';
   const secciones = soloMetas ? ['norte', 'mkt-ventas'] : ['norte'];
-  if (!puedeVerAlguna(perfil, store, secciones)) {
+
+  // 🔴 **La línea abre SÓLO los objetivos, y el resto sigue siendo de la marca.** Ni la
+  // contribución ni el P&L ni las condiciones de compra saben de líneas: `contribucionDe` mira la
+  // venta ENTERA de la base y `skusDe` sólo reparte en Zattia. Dejar pasar `stunned` por esas
+  // ramas devolvería la plata de Zattia con el rótulo de Stunned — que es exactamente el defecto
+  // que la línea vino a matar en la pantalla de Ventas. El P&L por línea ya existe y sale por
+  // `pylPorLinea`, adentro del pedido de la marca.
+  const esDeMetas = soloMetas || (req.method === 'POST' && !!(req.body || {}).meta) ||
+    (req.method === 'POST' && (req.body || {}).action === 'borrar-meta');
+  if (store !== marca && !esDeMetas) {
+    return res.status(400).json({ error: `${store} es una línea: sólo tiene objetivos propios, no P&L ni compras.` });
+  }
+
+  if (!puedeVerAlguna(perfil, marca, secciones)) {
     const que = soloMetas ? 'los objetivos' : 'Norte';
     return res.status(403).json({ error: `No tenés acceso a ${que} en esta marca.` });
   }
 
-  const cfg = cfgFor(store);
-  if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${store}.` });
+  const cfg = cfgFor(marca);
+  if (!cfg.url || !cfg.key) return res.status(500).json({ error: `Faltan credenciales de Supabase para ${marca}.` });
   const supabase = createClient(cfg.url, cfg.key);
 
   const admin = esAdmin(perfil);
@@ -307,16 +333,11 @@ export default async function handler(req, res) {
       // Los dos cortes de la plata salen en el mismo viaje que el resto, y **no pueden tumbar la
       // sección**: si el dashboard no contesta o la venta no se puede leer, Norte pierde la columna
       // de plata y el P&L, y lo dice en los dos. Mismo criterio que las metas.
-      const [c, m, plata] = await Promise.all([
+      const [c, plata] = await Promise.all([
         supabase
           .from('compras_condiciones')
           .select('ingreso_id, fecha_factura, costos, moneda, cotizacion, cuotas, nota, confirmado, fecha_ingreso, actualizado_por, actualizado_en')
           .eq('store', store),
-        supabase
-          .from('norte_metas')
-          .select('key, label, medidor, canal, objetivo, fecha_objetivo, orden, activa')
-          .eq('store', store)
-          .order('orden', { ascending: true }),
         (async () => {
           const reglas = await reglasDelDashboard();
           if (reglas.error) return sinPlata(reglas.error, null);
@@ -346,10 +367,10 @@ export default async function handler(req, res) {
           actualizadoPor: r.actualizado_por,
           actualizadoEn: r.actualizado_en,
         })),
-        // Las metas NO tumban Norte si la tabla todavía no está migrada en esta marca: se pierden
-        // los objetivos y el resto (stock, pagos, ritmo) sigue sirviendo. Mismo criterio que el
-        // calendario con las decisiones.
-        metas: m.error ? [] : (m.data || []).map(aMeta),
+        // ⛔ **Las metas ya no viajan acá** (23-ago-2026): la única puerta es `?metas=1`, que ahora
+        // toma una LÍNEA. Mandarlas por los dos caminos daba dos fuentes para la misma tabla, y la
+        // del viaje grande no sabe de líneas — la pantalla de Norte habría tenido que elegir cuál
+        // creerle según qué pestaña esté abierta.
         contribucion: plata.contribucion,
         // El mismo viaje, el otro corte: cuánto deja cada línea, hasta la contribución.
         pyl: plata.pyl,

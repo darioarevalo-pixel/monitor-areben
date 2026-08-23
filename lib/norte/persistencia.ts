@@ -21,6 +21,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
+import type { Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav.datos'
 import type { Condiciones, Contribucion, Meta, Pyl } from './tipos'
 
@@ -30,7 +31,6 @@ export type MetaGuardada = Meta & { orden: number; activa: boolean }
 
 export type DatosNorte = {
   condiciones: Condiciones[]
-  metas: MetaGuardada[]
   /** La plata que deja cada canal, calculada en el servidor contra la venta real. */
   contribucion: Contribucion
   /** El otro corte de la misma plata: el P&L «por arriba» de cada línea, hasta la contribución. */
@@ -39,7 +39,9 @@ export type DatosNorte = {
 }
 
 /**
- * Lee las condiciones y las metas de una marca.
+ * Lee las condiciones de una marca, con los dos cortes de la plata.
+ *
+ * ⛔ **Las metas ya no salen por acá**: son de la LÍNEA y tienen su propia puerta (`leerMetas`).
  *
  * `nc` rompe el caché del navegador: sin eso, guardar y recargar mostraba lo viejo, que se lee como
  * «no se guardó» y hace que alguien vuelva a guardar encima.
@@ -50,7 +52,6 @@ export async function leerNorte(store: Marca): Promise<DatosNorte> {
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer Norte.')
   return {
     condiciones: (d.condiciones || []) as Condiciones[],
-    metas: (d.metas || []) as MetaGuardada[],
     contribucion: (d.contribucion || { disponible: false, motivo: null, ventana: null }) as Contribucion,
     pyl: (d.pyl || { disponible: false, motivo: null, ventana: null }) as Pyl,
     puede: d.puede || { admin: false },
@@ -58,14 +59,20 @@ export async function leerNorte(store: Marca): Promise<DatosNorte> {
 }
 
 /**
- * Sólo los objetivos de una marca, por la llave `?metas=1`.
+ * Sólo los objetivos de una **LÍNEA**, por la llave `?metas=1`.
  *
  * Existe para la sección **Ventas de Marketing**, que dibuja la barra del objetivo del sector y no
  * tiene —ni debe tener— acceso a Norte: `leerNorte` trae además las condiciones de compra, la
  * contribución por canal y el P&L, o sea plata de Dirección. Del otro lado, el handler elige la
  * sección a chequear **antes** del `puedeVerAlguna` y contesta con `norte_metas` y nada más.
+ *
+ * 🔴 **Toma una `Linea` y no una `Marca` desde el 23-ago-2026.** Con la marca, la pestaña Stunned
+ * de Ventas mostraba **la rampa de Zattia con el rótulo de Stunned** —tarjeta idéntica en las dos—:
+ * la venta ya se medía por línea y el objetivo contra el que se comparaba era el de al lado.
+ * ⚠️ Las otras tres funciones siguen tomando `Marca` a propósito: las condiciones de compra y el
+ * P&L son de la marca, y el handler rechaza la línea en esas ramas.
  */
-export async function leerMetas(store: Marca): Promise<MetaGuardada[]> {
+export async function leerMetas(store: Linea): Promise<MetaGuardada[]> {
   const r = await apiFetch(`${API}&store=${store}&metas=1&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los objetivos.')
@@ -91,10 +98,10 @@ export function borrarCondiciones(store: Marca, ingresoId: string): Promise<void
   return postear({ store, action: 'borrar-condiciones', ingresoId }, 'No se pudo borrar.')
 }
 
-export function guardarMeta(store: Marca, meta: MetaGuardada): Promise<void> {
+export function guardarMeta(store: Linea, meta: MetaGuardada): Promise<void> {
   return postear({ store, meta }, 'No se pudo guardar la meta.')
 }
 
-export function borrarMeta(store: Marca, key: string): Promise<void> {
+export function borrarMeta(store: Linea, key: string): Promise<void> {
   return postear({ store, action: 'borrar-meta', key }, 'No se pudo borrar la meta.')
 }

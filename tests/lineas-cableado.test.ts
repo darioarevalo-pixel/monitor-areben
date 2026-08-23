@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 /**
- * **La pantalla que tiene selector de línea le habla a la Tienda Nube de la LÍNEA.**
+ * **La pantalla que tiene selector de línea no le pasa la MARCA a nada que corte por línea.**
  *
  * Esto existe porque el defecto no está en ninguna función: está en **qué argumento le pasa la
  * pantalla al hook**. `lib/tn-audit.ts` bajaba por línea desde el 22-ago-2026 y `matchTn` es puro y
@@ -25,8 +25,12 @@ import { fileURLToPath } from 'node:url'
 
 const raiz = fileURLToPath(new URL('..', import.meta.url))
 
-/** Los tres caminos de la app al catálogo de Tienda Nube (`components/productos/useTnImages.ts`). */
-const HOOKS = ['useTnImages', 'useTnPromo', 'asegurarTnPromo']
+/**
+ * Lo que corta por línea y una pantalla puede pedir mal: los tres caminos al catálogo de Tienda
+ * Nube (`components/productos/useTnImages.ts`) y los objetivos de Norte (`useMetas`), que el 23-ago
+ * fallaron por lo mismo — la firma pedía una `Marca` y la pantalla se la daba.
+ */
+const HOOKS = ['useTnImages', 'useTnPromo', 'asegurarTnPromo', 'useMetas']
 
 function tsx(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -58,14 +62,18 @@ const archivos = tsx(`${raiz}/components`).map((f) => ({
 const conSelector = archivos.filter((a) => a.src.includes('<SelectorLinea') && !a.ruta.includes('/ui/'))
 const llamanTn = archivos.filter((a) => argumentos(a.src).length > 0)
 
-describe('el catálogo de TN se pide por LÍNEA donde hay selector', () => {
+describe('lo que corta por línea se pide por LÍNEA donde hay selector', () => {
   it('las pantallas con selector existen y son las ocho conocidas', () => {
     // Si este número cambia sin que cambie la lista de abajo, alguien agregó un selector y no miró
     // qué más había que cortar. Es exactamente lo que pasó el 22-ago con las cinco de plata.
+    // ⚠️ **En Norte el selector es PARCIAL y a propósito**: corta sólo el bloque de Metas —el
+    // ritmo, el stock, los pagos y la contribución son de la marca entera— y por eso su rampa de
+    // otra línea se muestra **sin medir**, con el motivo puesto. Ver `components/norte/Norte.tsx`.
     expect(conSelector.map((a) => a.ruta).sort()).toEqual([
       '/components/margenes/Margenes.tsx',
       '/components/marketing/Marketing.tsx',
       '/components/mkt-ventas/MktVentas.tsx',
+      '/components/norte/Norte.tsx',
       '/components/productos/ProductosTable.tsx',
       '/components/resumen/Resumen.tsx',
       '/components/sesionfotos/SesionFotos.tsx',
@@ -74,14 +82,14 @@ describe('el catálogo de TN se pide por LÍNEA donde hay selector', () => {
     ])
   })
 
-  it('🔴 con selector, ningún hook de TN recibe `marca`', () => {
+  it('🔴 con selector, ningún hook por línea recibe `marca`', () => {
     const culpables = conSelector
       .map((a) => ({ ruta: a.ruta, args: argumentos(a.src).filter((x) => x === 'marca') }))
       .filter((x) => x.args.length)
     expect(culpables).toEqual([])
   })
 
-  it('🔴 sin selector, ningún hook de TN recibe `linea`', () => {
+  it('🔴 sin selector, ningún hook por línea recibe `linea`', () => {
     const rutasConSelector = new Set(conSelector.map((a) => a.ruta))
     const culpables = llamanTn
       .filter((a) => !rutasConSelector.has(a.ruta))
