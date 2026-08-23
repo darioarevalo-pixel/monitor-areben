@@ -316,8 +316,27 @@ entera»). Medir el objetivo de Stunned contra el ritmo de Zattia sería el defe
 arreglar, del otro lado. El camino de `medido: null` + motivo ya existía: es el de las metas de
 contribución sin dashboard.
 
-⚠️ **Falta cargar los escalones de Stunned**: hasta que estén, su pestaña dice «Sin metas cargadas»,
-que es verdad y no miente a nadie.
+**La rampa de Stunned, cargada el 23-ago-2026** (decisión de Bruno) desde la UI de Norte —el verbo que
+escribe se ejerce a mano— y verificada contra `psql`:
+
+| meta | medidor · canal | objetivo | para cuándo |
+|---|---|---|---|
+| 1 compra por dia online | `ventas-dia` · online | 1 | 2026-09-08 |
+| 2 compras por dia online | `ventas-dia` · online | 2 | 2026-09-30 |
+| 5 compras por dia online | `ventas-dia` · online | 5 | 2026-10-31 |
+
+Mismo medidor, canal y fechas que la de Zattia (10 · 20 · 40), que quedó **intacta**, igual que la de
+BDI (25 · 50 · 100). Arranca casi en cero a propósito: Stunned vende **17 en el local y 1 online**
+cada 30 días, y la rampa es del proyecto de venta **online**.
+
+🏁 **Caminado en prod**: Ventas › Stunned dice ahora «**5 compras por dia online al sáb 31-oct**·
+escalón **1 ventas/día** para el mar 8-sep», y la pestaña Zattia al lado sigue con la suya (40 · 10).
+Antes las dos decían lo mismo.
+
+⚠️ **Dos rótulos que quedaron feos y no se tocaron** (no son de este cambio): el catálogo de
+medidores dice «**Fundas** por día que salen» y «Contribución por **funda**» también en Zattia, donde
+⛔ no se nombra el negocio de al lado; y la unidad no pluraliza, así que el escalón de 1 se lee
+«**1 ventas/día**».
 
 ### 🔴 Y caminar Norte encontró un tercero: la línea elegida sobrevivía al cambio de MARCA
 
