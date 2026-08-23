@@ -56,6 +56,13 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 - ⚠️ **`es_mayorista` no es cosmético**: arma la consulta de ventas. El KV se lee SIEMPRE antes que
   las ventas, y un `Promise.all` "de sentido común" hace desaparecer a los 274 clientes ★ en
   silencio (está comentado en `useCRM.ts`, pero se pierde de vista al refactorizar).
+- 🔴 **Adentro del panel, el ingreso con Google da 403 y no tiene arreglo del lado nuestro.**
+  `entrarConGoogle` manda la ventana entera a Google (flujo de redirección) y Google **rechaza su
+  login dentro de un iframe**, por política propia. Se entra con **usuario + contraseña**, que es lo
+  que el panel necesita una sola vez. El arreglo de verdad, si algún día molesta: abrir el ingreso
+  en una ventana aparte (`window.open`, donde Google sí lo acepta) y que ésa le devuelva el token al
+  panel por `postMessage` — las dos son del mismo origen, así que puede guardarlo en el
+  `localStorage` particionado.
 - ⚠️ **La sesión del panel es aparte.** Adentro de un iframe de otro sitio, Chrome le da al monitor
   un `localStorage` particionado: hay que entrar una vez más ahí adentro, aunque el monitor esté
   abierto en otra pestaña. No es un bug y no se puede evitar sin cookies de terceros.
@@ -75,9 +82,10 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 
 ## Pendiente
 
-- ▶️ **Falta probar el arreglo del 23-ago** (v0.2.0 de la extensión) contra un chat de un cliente.
-  La lectura del número quedó verificada punta a punta contra el chat propio, pero no contra una
-  ficha real del CRM: falta ver que el cruce por teléfono encuentre al cliente.
+- ✅ **Probado en WhatsApp real el 23-ago-2026** (v0.2.0): la ficha aparece al costado del chat.
+  ▶️ Falta ver en el uso diario **cuántos chats cruzan bien** contra el padrón — 722 de 785
+  mayoristas tienen teléfono usable, así que el resto va a caer en "número nuevo".
+- ▶️ Ponerle un ícono a la extensión: hoy Chrome le pone el cuadradito gris por defecto.
 - ▶️ Del diseño acordado, la versión mínima dejó afuera: **guiones** de la guía de ventas que
   escriben en el cuadro de WhatsApp, la **pestaña con la lista del día**, "**pidió y no teníamos**",
   el tilde de **difusión** y el **de dónde salió** del lead.
