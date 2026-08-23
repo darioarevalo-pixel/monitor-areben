@@ -19,11 +19,16 @@ window.addEventListener('message', (e) => {
   // La respuesta a un pedido de abrir chat. ⚠️ Va ANTES del camino del chat activo: aquel mensaje
   // no lleva `tipo`, así que sin esta salida temprana una respuesta se leería como "cambió el
   // chat, y el teléfono es undefined".
+  if (e.data.tipo === 'abrir-chat-ack') {
+    const p = esperando.get(e.data.pedido)
+    if (p) p.acusado = true
+    return
+  }
   if (e.data.tipo === 'abrir-chat-listo') {
-    const resolver = esperando.get(e.data.pedido)
-    if (resolver) {
+    const p = esperando.get(e.data.pedido)
+    if (p) {
       esperando.delete(e.data.pedido)
-      resolver(!!e.data.ok)
+      p.resolver(!!e.data.ok)
     }
     return
   }
@@ -39,19 +44,38 @@ window.addEventListener('message', (e) => {
 /**
  * Le pide a la página que abra una conversación, y contesta si pudo.
  *
- * ⚠️ **El timeout no es paranoia**: `pagina.js` corre en el mundo de WhatsApp y puede no estar
- * cargado todavía (o haberse roto contra un cambio de WhatsApp). Sin plazo, el panel se quedaría
- * esperando una respuesta que no llega y el clic no haría nada. Con plazo, el que pidió cae a la
- * navegación de siempre: más lenta, pero funciona.
+ * 🔑 **Dos plazos, y esa es toda la gracia.**
+ *
+ * - **`PLAZO_ACK` (300 ms)**: cuánto se espera a saber si hay alguien atendiendo. `pagina.js` corre
+ *   en el mundo de WhatsApp y puede no estar cargado (una pestaña abierta desde antes de actualizar
+ *   la extensión) o haberse roto contra un cambio de WhatsApp. El acuse llega apenas recibe el
+ *   pedido, así que 300 ms alcanzan de sobra.
+ * - **`PLAZO_ABRIR` (8 s)**: una vez que se sabe que alguien atiende, se lo espera de verdad.
+ *   Buscar una conversación que no está en memoria tarda lo suyo.
+ *
+ * ⚠️ **Un solo plazo corto es peor que ninguno.** Con 1,5 s para todo, una búsqueda lenta se daba
+ * por fallada, se navegaba —recargando WhatsApp entero— y encima el chat terminaba abriéndose por
+ * el otro camino: las dos cosas, una arriba de la otra. Eso eran 4 segundos.
  */
+const PLAZO_ACK = 300
+const PLAZO_ABRIR = 8000
+
 function pedirAbrirChat(tel) {
   return new Promise((resolve) => {
     const pedido = proximoPedido++
-    esperando.set(pedido, resolve)
+    const entrada = { resolver: resolve, acusado: false }
+    esperando.set(pedido, entrada)
     window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat', tel, pedido }, '*')
+
     setTimeout(() => {
+      // Nadie atendió: no hay nadie del otro lado, así que el que pidió tiene que navegar.
+      if (!entrada.acusado && esperando.delete(pedido)) resolve(false)
+    }, PLAZO_ACK)
+
+    setTimeout(() => {
+      // Atendió pero nunca contestó. Raro, y aun así hay que soltar al que espera.
       if (esperando.delete(pedido)) resolve(false)
-    }, 1500)
+    }, PLAZO_ABRIR)
   })
 }
 

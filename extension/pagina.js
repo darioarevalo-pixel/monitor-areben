@@ -116,6 +116,12 @@
     if (e.source !== window) return
     const d = e.data
     if (!d || d.fuente !== FUENTE || d.tipo !== 'abrir-chat') return
+    // 🔑 **Acuse inmediato, y recién después el resultado.** Buscar una conversación que no está
+    // en memoria puede tardar segundos (WhatsApp la va a buscar a su base local). Con un solo
+    // mensaje al final, el que espera no puede distinguir "todavía estoy buscando" de "acá no hay
+    // nadie escuchando" — y si se cansa y navega, se terminan haciendo LAS DOS cosas: la
+    // navegación recarga WhatsApp y encima el chat se abría igual. Eso eran los 4 segundos.
+    window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-ack', pedido: d.pedido }, '*')
     const ok = await abrirChatDe(d.tel)
     window.postMessage({ fuente: FUENTE, tipo: 'abrir-chat-listo', ok, pedido: d.pedido }, '*')
   })
