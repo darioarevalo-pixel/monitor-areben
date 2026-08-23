@@ -22,16 +22,30 @@
  *
  * La lógica de "¿a quién le llega?" **es una sola** y vive en `lib/novedades/destino.core.js`: la
  * usa el handler de novedades y el de la agenda, sin copiar una línea. Lo que se repite son estos
- * tres controles, porque extraerlos obligaría a tocar el editor de Novedades, que es código
- * compartido con Darío. Si mañana se toca ese archivo por otra razón, salen de ahí.
+ * controles, porque extraerlos obligaría a tocar el editor de Novedades, que es código compartido
+ * con Darío. Si mañana se toca ese archivo por otra razón, salen de ahí.
+ *
+ * ⚠️ Y desde el 23-ago-2026 ya no son los mismos tres: **"a una persona" existe sólo acá**. Es un
+ * pedido de la Agenda (las doce rutinas de marketing le salían a las tres), y una novedad dirigida
+ * a una sola persona todavía no se pidió.
+ *
+ * # De dónde sale la lista del equipo
+ *
+ * Del padrón, que vive en el KV de `bdi-catalogo` y es **admin-only** (`traerConfigAdmin`). ⛔ No se
+ * inventó un endpoint: en Hobby quedan cinco funciones y ésta es la misma puerta que ya usa la
+ * pantalla de Usuarios. Se pide **recién cuando alguien elige "a una persona"**, no al abrir el
+ * modal, y en las sesiones de Google no abre ningún prompt (el token alcanza). Hoy no recorta a
+ * nadie: cargar rutinas es de admin (`agenda.cargar`, 0 de 16 lo tienen tildado a mano).
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
 import { CLASES, hoyIso, type ClaseItem, type Destino, type ItemAgenda } from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
+import { credencialConPrompt, traerConfigAdmin } from '@/lib/sesion'
+import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { useSistema } from '@/store/useSistema'
 import type { Marca } from '@/lib/nav.datos'
 import { EditorRegla, Tilde, toggleEnLista } from './EditorRegla'
@@ -40,6 +54,15 @@ const MARCAS: { key: Marca; label: string }[] = [
   { key: 'bdi', label: 'BDI' },
   { key: 'zattia', label: 'Zattia' },
 ]
+
+/**
+ * Alguien a quien se le puede dirigir un pendiente.
+ *
+ * 🔑 **Lo que se guarda es `name`, el usuario de login**, y el apodo es sólo para reconocerlo en
+ * la lista: el apodo se cambia en Config y el que quedara guardado en el destino envejecería solo.
+ * Los puestos compartidos (`Local`, `Depósito`) entran igual: ahí "quién" es el puesto.
+ */
+type Persona = { name: string; apodo: string }
 
 /**
  * Uno nuevo, con el esqueleto de regla que corresponde a cada clase.
@@ -82,6 +105,10 @@ export function ModalItem({
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const manuales = useSistema((s) => s.manuales)
+  const [gente, setGente] = useState<Persona[] | null>(null)
+  const [errorGente, setErrorGente] = useState<string | null>(null)
+  // Un ref y no un estado: sirve para no pedir el padrón dos veces, y no tiene que redibujar nada.
+  const pedida = useRef(false)
 
   const set = <K extends keyof ItemAgenda>(k: K, v: ItemAgenda[K]) => setIt((x) => ({ ...x, [k]: v }))
 
@@ -100,8 +127,53 @@ export function ModalItem({
     set('destino', nuevos.length ? { tipo: 'roles', roles: nuevos } : { tipo: 'todos' })
   }
 
+  /**
+   * El padrón, para poder elegir gente. Se pide **una sola vez y sólo si hace falta**, y el efecto
+   * cubre los dos caminos: recién elegido "a una persona", o abierto para editar uno que ya estaba
+   * dirigido.
+   *
+   * ⚠️ Falla de la única forma que puede fallar: si quien carga no es admin, vuelve 403. No se cae
+   * a un campo de texto libre a propósito — un nombre mal tipeado es un pendiente que no le sale a
+   * nadie y que nadie reclama, que es el peor final posible para esta pantalla.
+   */
+  useEffect(() => {
+    if (it.destino.tipo !== 'personas' || pedida.current) return
+    pedida.current = true
+    let vivo = true
+    ;(async () => {
+      const r = await traerConfigAdmin<UsuarioConfig>(await credencialConPrompt())
+      if (!vivo) return
+      if (r.ok) {
+        setGente(
+          r.users
+            .map((u) => ({ name: u.name, apodo: u.apodo || u.name }))
+            .sort((a, b) => a.apodo.localeCompare(b.apodo, 'es')),
+        )
+      } else setErrorGente(r.error)
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [it.destino.tipo])
+
+  const togglePersona = (name: string) => {
+    const actuales = it.destino.tipo === 'personas' ? it.destino.personas : []
+    // ⚠️ A diferencia de los roles, destildar al último NO cae a "todos": acá la lista arranca
+    // vacía siempre (no hay un default razonable que pre-tildar), y saltar al otro destino cada
+    // vez que alguien se arrepiente sería pelear con quien está eligiendo. Lo que no puede pasar
+    // —guardarlo vacío y que el servidor lo lea como "para todos"— lo frena `guardar()`.
+    set('destino', { tipo: 'personas', personas: toggleEnLista(actuales, name) })
+  }
+
   const guardar = async () => {
     setError(null)
+    // 🔴 El servidor normaliza una lista vacía a "para todo el equipo" (`normalizarDestino`), que es
+    // la red correcta para un dato roto pero la respuesta equivocada para alguien que eligió "a una
+    // persona" y todavía no eligió cuál: se guardaría al revés de lo que quiso, y en silencio.
+    if (it.destino.tipo === 'personas' && it.destino.personas.length === 0) {
+      setError('Elegí al menos a una persona, o cambiá «A quién le toca» a otra opción.')
+      return
+    }
     setGuardando(true)
     try {
       await onGuardar({
@@ -215,12 +287,16 @@ export function ModalItem({
                 const t = e.target.value
                 set('destino', t === 'seccion'
                   ? { tipo: 'seccion', key: 'atencion' }
-                  : t === 'roles' ? { tipo: 'roles', roles: ['local'] } : { tipo: 'todos' })
+                  : t === 'roles' ? { tipo: 'roles', roles: ['local'] }
+                  // Arranca vacío y no con alguien pre-tildado: el default de los roles ("local")
+                  // es el caso normal, y acá no hay ninguna persona que sea el caso normal.
+                  : t === 'personas' ? { tipo: 'personas', personas: [] } : { tipo: 'todos' })
               }}
             >
               <option value="todos">A todo el equipo</option>
               <option value="seccion">A quien usa una pantalla</option>
               <option value="roles">A ciertos roles</option>
+              <option value="personas">A una persona en particular</option>
             </Select>
           </Field>
 
@@ -247,6 +323,33 @@ export function ModalItem({
                   />
                 ))}
               </div>
+            </Field>
+          )}
+
+          {d.tipo === 'personas' && (
+            <Field
+              label="¿A quién?"
+              hint="Le llega sólo a quien tildes acá, y a nadie más: tampoco a vos, aunque seas administrador. Los puestos compartidos (Local, Depósito) también se pueden elegir — ahí el dueño es el puesto y no una persona."
+            >
+              {errorGente ? (
+                <Notice tone="warning">
+                  No se pudo leer la lista del equipo: {errorGente} Elegir por nombre necesita ser
+                  administrador; mientras tanto, se puede acotar por rol.
+                </Notice>
+              ) : !gente ? (
+                <span style={{ fontSize: font.sm, color: color.mut2 }}>Buscando al equipo…</span>
+              ) : (
+                <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                  {gente.map((g) => (
+                    <Tilde
+                      key={g.name}
+                      puesto={d.personas.includes(g.name)}
+                      label={g.apodo === g.name ? g.name : `${g.apodo} (${g.name})`}
+                      onToggle={() => togglePersona(g.name)}
+                    />
+                  ))}
+                </div>
+              )}
             </Field>
           )}
         </div>

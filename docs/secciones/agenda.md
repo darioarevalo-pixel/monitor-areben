@@ -46,6 +46,22 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   lo suyo sin permiso nuevo. ⇒ ⛔ no darle el sub a nadie «para que pueda usar la agenda».
 - 🔑 **El alcance del tilde no sale de un permiso sino del `destino`, y se filtra en el handler.**
   Si filtrara sólo la pantalla, un pendiente ajeno igual encendería el badge del menú.
+- 🔴 **`{tipo:'personas'}` es la ÚNICA forma de destino que el admin no recibe**, y es a propósito
+  (23-ago-2026, decisión de Bruno). Nació acá: las doce rutinas de marketing se habían cargado con
+  `roles:['marketing']` porque no había otra forma, y Sofi, Cande y Cami comparten el rol ⇒ **las
+  doce le salían a las tres**. Si además se las llevara el admin, el «Hoy» del que carga sería la
+  suma de los «Hoy» de los quince. ⚠️ **Consecuencia que se paga**: `paraMi` es también el candado
+  del tilde, así que el admin ve el pendiente ajeno en «Cargar» y en «Cumplimiento», lo edita y lo
+  borra, pero **no lo puede tildar** (403). La regla vive en `lib/novedades/destino.core.js` y la
+  comparte Novedades, aunque su editor no ofrezca la opción.
+- 🔑 **Se guarda `perfil.name`, no el mail.** Es la única clave que existe para todos: los puestos
+  compartidos (`Local`, `Depósito`, `bdilocal`) tienen `email: null`. De yapa, entonces, una rutina
+  se le puede asignar a un **puesto**. Es la misma clave de `agenda_items.autor` y `agenda_hechos.usuario`.
+- ⚠️ **La lista del equipo la trae `traerConfigAdmin` y es admin-only** (`ModalItem.tsx`): se pide
+  recién cuando alguien elige «a una persona», y en las sesiones de Google no abre ningún prompt.
+  ⛔ No hay campo de texto libre para escribir el nombre: un nombre mal tipeado sería un pendiente
+  que no le sale a nadie y que nadie reclama. Si el padrón no se puede leer, la opción avisa y no
+  se puede usar.
 - 🔑 **La pestaña «Hoy» tiene una regla de oro: que sea corta.** *Un aviso que se ignora doce veces
   enseña a ignorar el número trece.* Por eso lo vencido y lo que todavía no arrancó viven en
   «Cargar», que es de administración. Antes de sumar un bloque a «Hoy», la pregunta es si se
@@ -84,7 +100,10 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   no nombra los pendientes rutinarios, que es la mitad de la sección. Es una descripción, no una
   regla: se corrige el texto.
 - ▶️ **Cargar las 12 rutinas de marketing.** Las carga Bruno una vez, porque la rutina es la línea y
-  la línea es de él.
+  la línea es de él. Desde el 23-ago-2026 van **con nombre** —`destino: {tipo:'personas'}`— y no con
+  `roles:['marketing']`: si no, le salen a las tres.
+- ⚠️ **Las que ya estén cargadas por rol NO se migran solas.** Hay que abrirlas y reasignarlas: el
+  destino viejo sigue siendo válido y el motor no adivina cuál de las tres es la dueña.
 
 ## Cómo se prueba
 
@@ -97,3 +116,7 @@ Lo que el test **no** ejerce y hay que caminar a mano:
 - **El tilde con un perfil que NO es admin**, que es quien la va a usar todos los días. Con el admin
   todo anda porque saltea el sub.
 - El `destino`: un pendiente ajeno **no** tiene que encender el badge del menú.
+- 🔴 **El destino por persona no se puede caminar con un admin**, que es el caso que se agregó para
+  arreglar: entrá con un usuario `prueba-*` del padrón, mirá que la rutina dirigida a él **sale en
+  «Hoy» y prende el badge**, y con otro que no sale ni prende. Y con el admin, que el tilde ajeno
+  devuelve 403.

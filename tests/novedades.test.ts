@@ -93,6 +93,29 @@ describe('destino: a quién le llega', () => {
     expect(esParaMi({ tipo: 'roles', roles: ['deposito'] }, perfil({ admin: true }))).toBe(true)
   })
 
+  it('por persona: le llega a quien lleva el nombre, y a nadie más', () => {
+    const d = { tipo: 'personas', personas: ['sofi', 'cande'] }
+    expect(esParaMi(d, perfil({ name: 'sofi' }))).toBe(true)
+    expect(esParaMi(d, perfil({ name: 'cami' }))).toBe(false)
+    // Un puesto compartido se elige igual: ahí el dueño es el puesto y no una persona.
+    expect(esParaMi({ tipo: 'personas', personas: ['Depósito'] }, perfil({ name: 'Depósito' }))).toBe(true)
+  })
+
+  /**
+   * 🔑 Ésta es la línea entera del cambio del 23-ago-2026, y la única excepción al atajo del admin.
+   * Si se cae, el «Hoy» del que carga las rutinas vuelve a ser la suma de los «Hoy» de los quince.
+   */
+  it('lo dirigido por nombre NO lo recibe el admin', () => {
+    expect(esParaMi({ tipo: 'personas', personas: ['sofi'] }, perfil({ name: 'bruno', admin: true }))).toBe(false)
+    // Y le sigue llegando lo suyo, obvio.
+    expect(esParaMi({ tipo: 'personas', personas: ['bruno'] }, perfil({ name: 'bruno', admin: true }))).toBe(true)
+  })
+
+  it('elegir a alguien por nombre ya dijo todo: la marca no lo puede sacar', () => {
+    const d = { tipo: 'personas', personas: ['sofi'], marca: 'zattia' }
+    expect(esParaMi(d, perfil({ name: 'sofi', cuenta: 'bdi' }))).toBe(true)
+  })
+
   it('sin perfil no le llega nada', () => {
     expect(esParaMi({ tipo: 'todos' }, null)).toBe(false)
   })
@@ -101,6 +124,20 @@ describe('destino: a quién le llega', () => {
     expect(normalizarDestino({ tipo: 'roles', roles: [] })).toEqual({ tipo: 'todos' })
     expect(normalizarDestino({ tipo: 'seccion' })).toEqual({ tipo: 'todos' })
     expect(normalizarDestino('cualquier cosa')).toEqual({ tipo: 'todos' })
+  })
+
+  it('una lista de personas vacía también, y la basura de adentro se descarta', () => {
+    expect(normalizarDestino({ tipo: 'personas', personas: [] })).toEqual({ tipo: 'todos' })
+    expect(normalizarDestino({ tipo: 'personas' })).toEqual({ tipo: 'todos' })
+    expect(normalizarDestino({ tipo: 'personas', personas: ['sofi', '', null, 3] })).toEqual({
+      tipo: 'personas',
+      personas: ['sofi'],
+    })
+    // La marca se conserva aunque el resto se caiga, igual que en los roles.
+    expect(normalizarDestino({ tipo: 'personas', personas: [], marca: 'zattia' })).toEqual({
+      tipo: 'todos',
+      marca: 'zattia',
+    })
   })
 })
 

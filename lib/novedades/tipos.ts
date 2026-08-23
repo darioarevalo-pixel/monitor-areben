@@ -17,11 +17,16 @@ export type EstadoNovedad = 'borrador' | 'publicada' | 'archivada'
  *
  * `marca` es ortogonal al tipo y **ausente significa las dos**: acota a quién le llega, no de quién
  * es la novedad, que sigue siendo una sola fila sin marca.
+ *
+ * ⚠️ `personas` es la única forma que **no la recibe el admin**: lo que se dirige por nombre es de
+ * quien lleva el nombre. Hoy la usa sólo la Agenda; el editor de Novedades no la ofrece.
  */
 export type Destino =
   | { tipo: 'todos'; marca?: Marca }
   | { tipo: 'seccion'; key: string; marca?: Marca }
   | { tipo: 'roles'; roles: string[]; marca?: Marca }
+  /** Por nombre de usuario (`perfil.name`), no por mail: los puestos compartidos no tienen. */
+  | { tipo: 'personas'; personas: string[]; marca?: Marca }
 
 export type Novedad = {
   id: string

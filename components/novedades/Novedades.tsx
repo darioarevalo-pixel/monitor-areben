@@ -50,7 +50,12 @@ function aQuien(d?: Destino): string | null {
       ? null
       : d.tipo === 'seccion'
         ? `A quien usa ${tituloLimpio(d.key)}`
-        : `A ${d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r).join(', ')}`
+        : // El editor de Novedades no ofrece «a una persona» —la usa sólo la Agenda—, pero el tipo
+          // es uno solo para las dos, así que la tarjeta lo sabe leer igual: una novedad cargada a
+          // mano o por un editor futuro no puede quedar sin decir a quién le llegó.
+          d.tipo === 'personas'
+          ? `A ${d.personas.join(', ')}`
+          : `A ${d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r).join(', ')}`
   if (!quien) return marca ? `A todo el equipo de ${marca}` : null
   return marca ? `${quien} · ${marca}` : quien
 }
