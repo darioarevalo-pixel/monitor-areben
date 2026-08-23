@@ -5,6 +5,7 @@
 //   POST { recurso:'crm', ids:[…] }                        → { ok, clientes:[{id,name,email,…}] }
 //   POST { recurso:'crm', action:'detalles', ids:[…] }     → { ok, detalles:[{sale_id,…,unit_price,total}] }
 //   POST { recurso:'crm', action:'ventas', modo, flagged } → { ok, ventas:[{id,date_sale,total_price,…}] }
+//   POST { recurso:'crm', action:'panel', tel|clienteId }   → { ok, encontrado, cliente, ventas, detalles }
 //
 // Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
 // padrón, que es como nació: el navegador viejo no manda el campo.
@@ -48,6 +49,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
+import { buscarPorTelefono, indexarTelefonos } from '../lib/crm/telefono.core.js';
+import { esVentaTecnica } from '../lib/etl/tecnica.core.js';
 
 // El select del CRM, palabra por palabra el de `lib/crm/datos.ts` (SEL_CLIENTES). Un campo de menos
 // y el agregado computa otra cosa sin un solo error en consola.
@@ -180,6 +183,160 @@ async function ventasDelCrm(supabase, body, res) {
   return res.status(200).send(cuerpo);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// LA CONSULTA PUNTUAL POR TELÉFONO (el panel de WhatsApp)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// La sección Clientes baja el CRM entero: 27.990 ventas y el padrón de 12.485. Son ~6 s y 5 MB, y
+// están bien pagados una vez por mañana. **Adentro de WhatsApp no**: ahí el panel se rearma cada
+// vez que se cambia de chat, y una carga así lo volvería inusable.
+//
+// Por eso esta acción es al revés que las otras tres: en vez de traer todo para que el navegador
+// filtre, resuelve UN cliente y le trae sólo lo suyo. Son 3 consultas chicas y ninguna trae más de
+// lo que entra en la pantalla.
+//
+// El problema real es el primer paso —de un número de teléfono a un `client_id`—, porque el padrón
+// guarda el teléfono **tal como se cargó en Gestión Nube**: con 0, con 15, con guiones, con
+// paréntesis. No hay forma de preguntarle eso a PostgREST, así que se normalizan los 12.500 de
+// este lado y se compara normalizado contra normalizado (`lib/crm/telefono.core.js`).
+//
+// 🔑 **Ese índice se arma una vez y queda en memoria de la función.** Son 2 columnas y ~13
+// páginas; el costo aparece en la primera consulta después de un arranque en frío y no en las
+// siguientes. `TTL_INDICE` es lo que se tarda en ver un cliente nuevo o un teléfono recién
+// corregido: 10 minutos, contra un padrón que se sincroniza una vez por día (07:00 UTC,
+// `sync-clientes.yml`). Bajarlo no trae datos más frescos, trae más consultas.
+//
+// ⚠️ La memoria de una función de Vercel **no es un caché compartido**: cada instancia tiene la
+// suya y ninguna se entera de las otras. Está bien para esto (el índice se puede reconstruir
+// entero en cualquier momento y no guarda nada que se pueda perder), y estaría mal para cualquier
+// cosa que hubiera que invalidar a mano.
+const TTL_INDICE = 10 * 60 * 1000;
+
+// Cuántos pedidos hacia atrás se pide el detalle. El panel muestra **lo último que llevó** y poco
+// más; traer las 60 compras de un cliente grande sería pagar el detalle entero para dibujar tres
+// renglones.
+const VENTAS_CON_DETALLE = 20;
+
+let indiceTel = null;
+let indiceVence = 0;
+// Si dos chats se abren juntos, el segundo espera al índice del primero en vez de armar otro.
+let indiceEnVuelo = null;
+
+async function armarIndice(supabase) {
+  const filas = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('id, phone')
+      .not('phone', 'is', null)
+      .order('id')
+      .range(desde, desde + PAGINA - 1);
+    if (error) throw new Error(error.message);
+    filas.push(...(data || []));
+    if ((data || []).length < PAGINA) break;
+  }
+  return indexarTelefonos(filas);
+}
+
+async function indiceDeTelefonos(supabase, ahora) {
+  if (indiceTel && ahora < indiceVence) return indiceTel;
+  if (!indiceEnVuelo) {
+    indiceEnVuelo = (async () => {
+      try {
+        indiceTel = await armarIndice(supabase);
+        indiceVence = ahora + TTL_INDICE;
+        return indiceTel;
+      } finally {
+        indiceEnVuelo = null;
+      }
+    })();
+  }
+  return indiceEnVuelo;
+}
+
+/** Las ventas de UN cliente, sin las técnicas. Son pocas: el que más tiene anda por 60. */
+async function ventasDelCliente(supabase, id) {
+  const { data, error } = await supabase
+    .from('ventas')
+    .select(COLUMNAS_VENTAS)
+    .eq('client_id', id)
+    .order('date_sale', { ascending: false })
+    .order('id', { ascending: false })
+    .range(0, PAGINA - 1);
+  if (error) throw new Error(error.message);
+  // El mismo filtro que hace la sección Clientes en el navegador (`datos.ts`): los clientes
+  // internos de Gestión Nube —"Sesión de fotos", "Falla", "Cambio"— tienen `client_id` como
+  // cualquier persona, y sin esto entran como compras de $0.
+  return (data || []).filter((v) => !esVentaTecnica(v));
+}
+
+/**
+ * La ficha de un cliente para el panel: quién es, qué compró y qué se llevó la última vez.
+ *
+ * Es la misma información que la sección arma agregando 27.990 ventas, pedida para uno solo. El
+ * cálculo (totales, segmento, resumen de compras) lo hace el navegador con `lib/crm/core.ts`, que
+ * es el mismo código que usa la ficha grande: acá no se recalcula nada, para que las dos pantallas
+ * no puedan decir números distintos.
+ */
+async function fichaDelPanel(supabase, id) {
+  const { data: filas, error } = await supabase.from('clientes').select(COLUMNAS).eq('id', id).limit(1);
+  if (error) throw new Error(error.message);
+  const cliente = (filas || [])[0] || null;
+  if (!cliente) return { encontrado: false };
+
+  const ventas = await ventasDelCliente(supabase, id);
+  const ids = ventas.slice(0, VENTAS_CON_DETALLE).map((v) => v.id);
+
+  let detalles = [];
+  if (ids.length) {
+    for (let desde = 0; ; desde += PAGINA) {
+      const { data, error: e2 } = await supabase
+        .from('venta_detalles')
+        .select(COLUMNAS_DETALLE)
+        .in('sale_id', ids)
+        .order('sale_id')
+        .range(desde, desde + PAGINA - 1);
+      if (e2) throw new Error(e2.message);
+      detalles.push(...(data || []));
+      if ((data || []).length < PAGINA) break;
+    }
+  }
+  return { encontrado: true, cliente, ventas, detalles };
+}
+
+/**
+ * El chat abierto en WhatsApp → la ficha del CRM.
+ *
+ * Con `clienteId` es directo (lo manda el panel cuando el teléfono lo tenía el KV de teléfonos, o
+ * cuando el usuario eligió entre dos candidatos). Con `tel` pasa por el índice.
+ *
+ * Tres desenlaces, y los tres son respuestas normales con 200: **encontrado**, **no está en el
+ * padrón** (el panel ofrece guardarlo como lead) y **hay más de un candidato** (el panel pregunta).
+ * Un número desconocido es el caso más común del día, no un error.
+ */
+async function panelPorTelefono(supabase, body, res) {
+  const idPedido = Number(body.clienteId);
+  if (Number.isInteger(idPedido) && idPedido > 0) {
+    return res.status(200).json({ ok: true, via: 'id', ...(await fichaDelPanel(supabase, idPedido)) });
+  }
+
+  const tel = String(body.tel || '');
+  if (!tel) return res.status(400).json({ ok: false, error: 'falta tel (o clienteId)' });
+
+  const indice = await indiceDeTelefonos(supabase, Date.now());
+  const { ids, via } = buscarPorTelefono(indice, tel);
+
+  if (!ids.length) return res.status(200).json({ ok: true, encontrado: false, via: '' });
+
+  if (ids.length > 1) {
+    const { data, error } = await supabase.from('clientes').select(COLUMNAS).in('id', ids);
+    if (error) throw new Error(error.message);
+    return res.status(200).json({ ok: true, encontrado: false, via, candidatos: data || [] });
+  }
+
+  return res.status(200).json({ ok: true, via, ...(await fichaDelPanel(supabase, ids[0])) });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
@@ -200,6 +357,15 @@ export default async function handler(req, res) {
   const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
   if (!key) return res.status(500).json({ error: 'Falta la clave de Supabase de BDI en el entorno.' });
   const supabase = createClient(url, key);
+
+  // ── La ficha de UN cliente para el panel de WhatsApp. Tampoco lleva `ids`. ────────────────────
+  if (accion === 'panel') {
+    try {
+      return await panelPorTelefono(supabase, body, res);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
 
   // ── Las ventas del CRM (escalón 5). No lleva `ids`: el filtro es el modo del select. ──────────
   if (accion === 'ventas') {

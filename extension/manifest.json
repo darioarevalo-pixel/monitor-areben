@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Ficha del cliente — BDI",
+  "version": "0.1.0",
+  "description": "Muestra la ficha del CRM del monitor al costado del chat de WhatsApp Web.",
+  "permissions": ["sidePanel"],
+  "host_permissions": ["https://web.whatsapp.com/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Ficha del cliente" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

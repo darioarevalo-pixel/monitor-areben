@@ -37,6 +37,8 @@ import type {
   Temperatura,
 } from './tipos'
 
+import { normalizeArgPhone as normalizeArgPhoneJs } from './telefono.core.js'
+
 // ── Constantes de negocio (index.html:13105-13113) ───────────────────────────
 export const CADENCIA_DIAS: Record<string, number> = { semanal: 7, quincenal: 15, mensual: 30 }
 export const RIESGO_MIN_DAYS = 30 // entre estos dos días → "en riesgo"
@@ -98,21 +100,13 @@ export function diasDesde(d: string | null, today: Date): number | null {
 /**
  * normalizeArgPhone (13122). Devuelve dígitos listos para wa.me, o '' si no se
  * puede normalizar. El '' es lo que cuenta como "sin teléfono" en los KPIs.
+ *
+ * 🔑 **La implementación se mudó a `telefono.core.js`** (JS plano) cuando el panel de WhatsApp
+ * necesitó normalizar teléfonos **del lado del servidor**, en `api/_crm.js`, que no puede importar
+ * TypeScript. Esto es el re-export tipado, igual que `lib/permisos.ts` sobre `permisos.core.js`:
+ * los que ya la importaban de acá no cambian nada, y no hay una segunda copia que se despegue.
  */
-export function normalizeArgPhone(phone: string | null | undefined): string {
-  if (!phone) return ''
-  let p = String(phone).replace(/[^\d]/g, '')
-  if (!p) return ''
-  if (p.startsWith('00')) p = p.slice(2)
-  if (p.startsWith('54')) {
-    return p.startsWith('549') ? p : '549' + p.slice(2)
-  }
-  if (p.startsWith('0')) p = p.slice(1)
-  if (p.length === 10) return '549' + p
-  if (p.length === 11 && p.startsWith('9')) return '54' + p
-  if (p.length >= 12 && p.length <= 13) return p
-  return ''
-}
+export const normalizeArgPhone: (phone: string | null | undefined) => string = normalizeArgPhoneJs
 
 /** PostgREST devuelve numeric como string; el legacy hace parseFloat en cada uso. */
 function num(v: number | string | null | undefined): number {

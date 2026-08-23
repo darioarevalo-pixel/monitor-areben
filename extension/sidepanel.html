@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ficha del cliente</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; font: 13px/1.4 system-ui, -apple-system, sans-serif; }
+      iframe { border: 0; width: 100%; height: 100%; display: block; }
+      #aviso { padding: 16px; color: #6b7280; display: none; }
+      body.sin-chat #aviso { display: block; }
+      body.sin-chat iframe { display: none; }
+    </style>
+  </head>
+  <body class="sin-chat">
+    <div id="aviso">Abrí el chat de una persona en WhatsApp Web.</div>
+    <iframe id="panel" title="Ficha del cliente"></iframe>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

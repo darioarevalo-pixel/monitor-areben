@@ -121,6 +121,10 @@ ya tienen ficha:
   ítem de la galería BORRA el archivo del Blob** — y `api/blob-upload.js` lo comparten Fundas,
   Diseños, las piezas de Meta y **el contenido que sube la creadora de un canje SIN SESIÓN**: esa
   rama va antes de `exigirUsuario`, así que un guard nuevo "arriba de todo" no tiene sesión detrás.
+- Clientes (CRM) y el panel de WhatsApp → **leer `docs/secciones/crm.md`** antes de tocar
+  `components/crm/`, `components/panel/`, `lib/crm/` o la acción `panel` de `api/_crm.js`. ⛔ **La
+  clave `crm:seg:bdi` no tiene backup**: 305 clientes y sus notas, reescritos enteros en cada
+  guardado. ⛔ **`lib/crm/telefono.core.js` es también de Envíos, Canjes y el portal del cadete.**
 - Meta Ads → **leer `docs/secciones/meta-ads.md`** antes de tocar `components/meta-ads/`,
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está

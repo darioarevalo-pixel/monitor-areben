@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
+import { TEMP_UI } from './temperatura'
 import { Leads } from './Leads'
 import { Metricas } from './Metricas'
 import { ClienteModal } from './ClienteModal'
@@ -49,34 +50,6 @@ const SEGMENTOS = [
   { v: 'sin-tel', t: 'Sin teléfono (cargar)' },
 ]
 
-/**
- * El badge de temperatura. Los textos son los que se ven en pantalla: sin tecnicismos y
- * sin explicar el mecanismo — el usuario marca "cómo viene" la relación, no configura un
- * criterio de ordenamiento.
- */
-const TEMP_UI: Record<Temperatura, { txt: string; ayuda: string; fg: string; bg: string; bd: string }> = {
-  caliente: {
-    txt: '🔥 Caliente',
-    ayuda: 'Viene comprando o quedaron en hablar. Va primero en la lista del día.',
-    fg: color.dangerInk,
-    bg: color.dangerBg,
-    bd: color.dangerBorder,
-  },
-  templado: {
-    txt: '🟡 Templado',
-    ayuda: 'Ni frío ni caliente. Tocá para marcarlo frío.',
-    fg: color.warningInk,
-    bg: color.warningBg,
-    bd: color.warningBorder,
-  },
-  frio: {
-    txt: '🧊 Frío',
-    ayuda: 'No contesta o dejó de comprar. Se va al fondo de la lista del día.',
-    fg: color.mut,
-    bg: 'transparent',
-    bd: color.line2,
-  },
-}
 
 const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 function fmtFecha(d: string | null): string {

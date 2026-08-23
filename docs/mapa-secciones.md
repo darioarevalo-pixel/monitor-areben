@@ -22,7 +22,8 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 **Compras** — `fundas-modelo → components/fundas + lib/fundas` · `proveedores` · `ingresos` ·
 `disenos`
 
-**Clientes** — `clientes → components/crm + lib/crm`
+**Clientes** — `clientes → components/crm + lib/crm` (+ panel `/panel/<telefono>` →
+`components/panel`, el iframe que la extensión de Chrome pega al costado de WhatsApp Web)
 
 **Local** — `envios → components/envios + lib/envios` (+ portal `/cadete/<token>`) ·
 `atencion → components/atencion + lib/atencion` ·

@@ -45,6 +45,23 @@ export type Nota = {
 }
 
 /**
+ * Cómo salió un intento de contacto. Son las cuatro respuestas que Bruno anota hoy en una libreta
+ * y las cuatro que pide la Parte 9 de la guía de ventas para medir el embudo del día
+ * (contactados → respondieron → compraron).
+ *
+ * 🔑 **No se deducen de nada.** El CRM ya sabe cuándo se habló (`ultimo_contacto`) y si compró
+ * (las ventas), pero entre esas dos puntas está lo que decide si el camino funciona: cuántos
+ * contestaron. Ese dato no existe en ninguna tabla — sólo lo puede poner el que habló.
+ */
+export type ResultadoContacto = 'contesto' | 'no_contesto' | 'pidio_precio' | 'no_interesa'
+
+/** Un intento de contacto registrado desde el panel de WhatsApp. */
+export type Contacto = {
+  fecha: string
+  resultado: ResultadoContacto
+}
+
+/**
  * Qué tan viva está la relación con el cliente, marcada A MANO. No se deduce de las
  * ventas: un cliente puede llevar 6 meses sin comprar y estar caliente porque quedaron
  * en hablar la semana que viene, y otro puede haber comprado hace 20 días y estar frío
@@ -77,6 +94,16 @@ export type Seguimiento = {
    * a propósito — no hay que migrar nada.
    */
   temperatura?: Temperatura
+  /**
+   * Los intentos de contacto, el más nuevo primero. Campo agregado en ago-2026 con el panel de
+   * WhatsApp: como `temperatura`, es **aditivo** —las entradas que ya viven en el KV no lo tienen
+   * y se leen como lista vacía—, así que no hay nada que migrar.
+   *
+   * ⚠️ Se recorta a los últimos `TOPE_CONTACTOS` (ver `seguimiento.ts`). Los 305 clientes viven en
+   * **una sola clave del KV** que se reescribe entera en cada guardado: una lista sin techo la
+   * hace crecer para siempre y el que paga es cada POST.
+   */
+  contactos?: Contacto[]
 }
 
 /** `crm:seg:<marca>`: id de cliente → seguimiento. */

@@ -50,6 +50,11 @@ const config = [
       // `--max-warnings 0` se pone rojo apenas alguien pide cobertura una vez.
       'coverage/**',
       'next-env.d.ts',
+      // `extension/` es la extensión de Chrome del panel de WhatsApp: no es parte de la app de
+      // Next ni se despliega con ella (se carga a mano en el navegador). Corre en el entorno de
+      // las extensiones —`chrome.*`, `document` de otra página— que no es ninguno de los dos que
+      // esta config sabe describir.
+      'extension/**',
     ],
   },
   ...(Array.isArray(next) ? next : [next]),

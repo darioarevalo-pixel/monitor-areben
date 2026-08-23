@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createElement, useEffect, useState } from 'react'
 import { useAvisosPoll } from '@/components/layout/useAvisosPoll'
@@ -19,7 +20,17 @@ import { ConfirmProvider } from '@/components/ui/Confirm'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe } from '@/components/secciones/registro'
 import { esDeMarca, esKeyValida, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
-import { esAdmin, marcasConAcceso, puedeVer } from '@/lib/permisos'
+import { esAdmin, marcasConAcceso, puedeVer, puedeVerAlguna } from '@/lib/permisos'
+import { Cargando } from '@/components/secciones/Cargando'
+
+/**
+ * El panel de WhatsApp: la ruta que la extensión de Chrome mete en un iframe al costado del chat.
+ *
+ * Va con `dynamic` y no con un import estático como los portales públicos porque arrastra el
+ * dominio del CRM entero (`lib/crm/*`): estático, lo bajaría también el que entra a Inicio.
+ * ⚠️ El 2º argumento va como objeto literal inline — Turbopack lo exige en build.
+ */
+const PanelWhatsApp = dynamic(() => import('@/components/panel/PanelWhatsApp').then((m) => m.PanelWhatsApp), { loading: Cargando })
 
 /**
  * Sección por defecto. **Es Inicio, y es una decisión de producto, no una herencia.**
@@ -50,12 +61,17 @@ export default function Seccion() {
   // topbar y la tapa oscura) y lo cierra un tercero (navegar a una sección).
   const [menuAbierto, setMenuAbierto] = useState(false)
 
-  // El refresco de avisos vive acá y no en una sección: el contador del sidebar tiene que
-  // encenderse estés donde estés. Se llama antes de cualquier return temprano (regla de hooks).
-  useAvisosPoll()
-
   const partes = params.seccion
   const key = Array.isArray(partes) ? partes[0] : (partes ?? DEFAULT_TAB)
+
+  // El refresco de avisos vive acá y no en una sección: el contador del sidebar tiene que
+  // encenderse estés donde estés. Se llama antes de cualquier return temprano (regla de hooks), y
+  // por eso la `key` se resuelve arriba de todo.
+  //
+  // Apagado en el panel de WhatsApp, que no dibuja sidebar: su iframe se recarga en cada cambio de
+  // chat, así que serían tres pedidos por cambio (más un intervalo cada 3 minutos) para encender un
+  // contador que esa pantalla no muestra.
+  useAvisosPoll(key !== 'panel')
 
   /**
    * Los links públicos (`/reclamo/<token>` para el cliente, `/canje/<token>` para la creadora) NO
@@ -81,6 +97,16 @@ export default function Seccion() {
    */
   const esPortalCliente = key === 'reclamo' || key === 'canje' || key === 'legal' || key === 'cadete' || key === 'votacion'
 
+  /**
+   * `/panel/<telefono>` es el quinto camino que no es una sección, y el único que **sí** pide
+   * sesión: es el CRM visto de a un cliente, adentro de un iframe que la extensión de Chrome pega
+   * al costado de WhatsApp Web. No está en el nav —no se entra a mano— y por eso no tiene entrada
+   * propia en `PERM_CAT`: se defiende con el permiso de **Clientes**, el mismo que la sección y el
+   * mismo que exige `api/_crm.js` del otro lado. Un permiso nuevo para la misma información sería
+   * una segunda puerta a la misma habitación, y la que se olvida de cerrar es siempre la segunda.
+   */
+  const esPanel = key === 'panel'
+
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
   //
@@ -100,9 +126,9 @@ export default function Seccion() {
           : puedeVer(perfil, marca, key)))
 
   useEffect(() => {
-    if (esPortalCliente) return
+    if (esPortalCliente || esPanel) return
     if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
-  }, [cargando, perfil, permitida, key, router, esPortalCliente])
+  }, [cargando, perfil, permitida, key, router, esPortalCliente, esPanel])
 
   // Va acá adentro y NO como ruta propia de Next porque cada ruta es una función serverless y el
   // proyecto está en el tope del plan Hobby (pasarse frena todos los deploys en silencio). Sale
@@ -117,6 +143,22 @@ export default function Seccion() {
 
   if (cargando) return <div className="login-screen" />
   if (!perfil) return <LoginScreen />
+
+  /**
+   * El panel sale ACÁ: después del login y antes del shell.
+   *
+   * Sin sidebar, sin encabezado y sin el cartel de novedades — mide 360 px de ancho adentro de
+   * WhatsApp y ahí el chrome del monitor no es contexto, es la mitad de la pantalla. El gate es
+   * `puedeVerAlguna` y no `puedeVer` pelado para que coincida exactamente con el de `api/_crm.js`:
+   * si fueran distintos, la cuenta fija vería el panel vacío o al revés.
+   */
+  if (esPanel) {
+    if (!puedeVerAlguna(perfil, 'bdi', ['clientes'])) {
+      return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso a Clientes.</div>
+    }
+    return <PanelWhatsApp tel={Array.isArray(partes) ? (partes[1] ?? null) : null} />
+  }
+
   if (!permitida) return <div className="login-screen" />
 
   // createElement y no <Seccion />: la regla "Cannot create components during

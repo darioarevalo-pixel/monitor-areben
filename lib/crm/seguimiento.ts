@@ -11,7 +11,7 @@
  */
 
 import { addDiasISO } from './core'
-import type { MapaSeguimiento, Seguimiento, Temperatura } from './tipos'
+import type { Contacto, MapaSeguimiento, ResultadoContacto, Seguimiento, Temperatura } from './tipos'
 
 /** Fecha local YYYY-MM-DD. Port de hoyISO (13279): usa el día REAL, no el TODAY
  *  congelado, para que "Hablé hoy" y las notas no queden con fecha vieja. */
@@ -85,6 +85,44 @@ export function agregarNota(crmSeg: MapaSeguimiento, id: number | string, texto:
   const { mapa, k } = conEntrada(crmSeg, id)
   const notas = [{ fecha, texto }, ...(mapa[k].notas || [])].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
   return { ...mapa, [k]: { ...mapa[k], notas } }
+}
+
+/**
+ * Cuántos intentos de contacto se guardan por cliente.
+ *
+ * Los 305 clientes viven en **una sola clave del KV** que se reescribe entera en cada guardado, así
+ * que una lista sin techo se paga en cada POST y para siempre. Cincuenta son más de dos años al
+ * ritmo real (dos contactos por mes al que más se le habla), y el embudo de la Parte 9 se mide por
+ * mes: nadie va a preguntar por el intento número 51.
+ */
+export const TOPE_CONTACTOS = 50
+
+/**
+ * Registra cómo salió el contacto de hoy: el "¿CÓMO TE FUE?" del panel de WhatsApp.
+ *
+ * Hace **dos** cosas y las dos importan:
+ *
+ *  1. Anota el resultado en `contactos`. Es el dato que hoy no existe en ningún lado y del que
+ *     salen las métricas del embudo (contactados → respondieron → compraron).
+ *  2. Pisa `ultimo_contacto` con la fecha. Contestar la pregunta ES haber hablado, y si no se
+ *     tocara, la cadencia seguiría contando desde la última vez y el cliente volvería a aparecer
+ *     mañana en la lista del día como si nadie le hubiera escrito.
+ *
+ * Lo que **no** hace: tocar la temperatura. Un "no le interesa" parece un cliente frío y muchas
+ * veces lo es, pero decidirlo solo es cambiar a mano un dato que el panel muestra al lado — la
+ * temperatura se marca clickeándola, y que la máquina la mueva sola es cómo se pierde la confianza
+ * en lo que dice la pantalla.
+ */
+export function registrarContacto(
+  crmSeg: MapaSeguimiento,
+  id: number | string,
+  resultado: ResultadoContacto,
+  fecha: string,
+): MapaSeguimiento {
+  const { mapa, k } = conEntrada(crmSeg, id)
+  const nuevo: Contacto = { fecha, resultado }
+  const contactos = [nuevo, ...(mapa[k].contactos || [])].slice(0, TOPE_CONTACTOS)
+  return { ...mapa, [k]: { ...mapa[k], contactos, ultimo_contacto: fecha } }
 }
 
 /** Borra la nota en el índice `idx`. Port de crmBorrarNota (13553). */
