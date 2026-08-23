@@ -140,5 +140,17 @@ with d as (
 select count(distinct sale_id) ventas, sum(quantity) u, round(sum(total)) plata from d where stu;
 ```
 
+### ⚠️ La segunda trampa: la ventana de la pantalla no es la de tu `select`
+
+`resumenPorCanal` recorta con `cortesDeVentas` (`lib/etl/helpers.ts:177`), que hace `today - 30 días`
+sobre un **instante**, no sobre una medianoche — y compara contra `new Date('2026-07-24')`, que
+JavaScript parsea como **UTC**. En Rosario (UTC−3) eso cae 3 h antes del corte, así que **a partir de
+las 21:00 el primer día de la ventana se cae solo**.
+
+Medido el 22-ago a las 22:10: la pantalla decía Stunned **local 17 · online 1** y el `select` de
+24-jul a 22-ago daba **18 y 1**. La de más era la venta del 24-jul. Con la ventana real —25-jul a
+22-ago— el `select` da **17 y 1**, al peso. **No era un defecto del corte por línea**, y perseguirlo
+como si lo fuera cuesta media hora.
+
 ⚠️ Y el `coalesce` no es cosmético: `p.sku ilike 'stu%'` da **NULL** en los 96 sin SKU, así que sin
 él ni `stu` ni `not stu` los agarra y el total de Zattia sale corto.
