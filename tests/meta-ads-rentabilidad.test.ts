@@ -234,29 +234,62 @@ describe('normalizar — lo que se guarda no puede ser cualquier cosa', () => {
  */
 describe('DREI, envío y saldo de IVA', () => {
   /**
-   * La fila de BDI **tal cual está en `meta_ads_rentabilidad`**, releída el 21-ago-2026.
+   * La fila de BDI **tal cual está en `meta_ads_rentabilidad`**, releída el 22-ago-2026.
    *
    * ⚠️ **Es una COPIA de producción, no un caso inventado**: el día que alguien guarde la fila desde
    * `/meta-ads/rentabilidad`, esto queda diciendo algo falso sobre «la fila guardada» y hay que
-   * traerla de nuevo. Ya pasó una vez: el 21-ago `unidades` bajó de **2,6 a 1,93** —el 2,6 era un
-   * número DERIVADO del ticket y lo medido sobre 213 pedidos reales es 1,93— y el techo pasó de
-   * **$9.101 a $6.755**. El test siguió verde con la copia vieja, porque una copia no sabe que
-   * quedó vieja. Se relee con:
+   * traerla de nuevo. **Ya pasó DOS veces, y las dos el test siguió verde**, porque una copia no
+   * sabe que quedó vieja:
+   *
+   *   - **21-ago**: `unidades` bajó de 2,6 a 1,93 —el 2,6 era un número DERIVADO del ticket y lo
+   *     medido sobre 213 pedidos reales es 1,93— y el techo pasó de $9.101 a $6.755.
+   *   - **22-ago**: se prendieron `saldoIva` y `drei` (los dos faltaban en el jsonb y caían al
+   *     default). BDI es el MISMO CUIT y la MISMA ciudad que Zattia, que ya los tenía. El techo de
+   *     ganancia pasó a **$6.668** y apareció el segundo techo, el de caja: **$8.686**.
+   *
+   * Se relee con:
    *
    *     psql "$DATABASE_URL_BDI" -A -t -c "select supuestos from meta_ads_rentabilidad where linea='bdi'"
    */
   const FILA_BDI = {
-    iva: 21, mix: 50, iibb: 4, costo: 1700, raspa: 12.5, stock: 11000, cheque: 1.2, precio: 14490,
-    transf: 10, reparto: 50, acumulan: true, costoHoy: 2472, tnTransf: 0, unidades: 1.93,
-    usaRaspa: 100, pasTransf: 1, tnTarjeta: 1, ventasDia: 100, pasTarjeta: 8,
+    iva: 21, mix: 50, iibb: 4, costo: 1700, drei: 0.75, raspa: 12.5, stock: 11000, cheque: 1.2,
+    precio: 14490, transf: 10, reparto: 50, acumulan: true, costoHoy: 2472, saldoIva: true,
+    tnTransf: 0, unidades: 1.93, usaRaspa: 100, pasTransf: 1, tnTarjeta: 1, ventasDia: 100,
+    pasTarjeta: 8,
   }
 
-  it('🔴 los tres nacen neutros: la fila guardada de BDI sigue dando el mismo techo', () => {
-    const r = calcularRentabilidad(normalizar(FILA_BDI))
-    expect(centavos(r.costoMax)).toBe(6755)
+  /**
+   * 🔑 **Lo que protege este test es `DEFAULTS`, no la fila de BDI** — y por eso ahora corre sobre
+   * `DEFAULTS` y no sobre `FILA_BDI`.
+   *
+   * Nacen neutros porque `normalizar()` arranca en `DEFAULTS` y una clave ausente se queda con el
+   * default. Un default ≠ 0 le cambiaría el techo **en silencio** a cualquier línea que ya tenga
+   * fila. Ésa es la invariante, y es permanente.
+   *
+   * ⚠️ Antes este caso usaba `FILA_BDI` para comprobarlo, y eso lo ataba a que BDI no los usara
+   * nunca. El 22-ago BDI los prendió y el test **habría fallado por la razón equivocada**: no
+   * porque los defaults se hubieran movido, sino porque una fila decidió usar los campos. Son dos
+   * cosas distintas y ahora tienen dos tests.
+   */
+  it('🔴 los tres nacen neutros EN LOS DEFAULTS: una clave ausente no mueve ningún techo', () => {
+    const r = calcularRentabilidad(normalizar({}))
+    expect(DEFAULTS.drei).toBe(0)
+    expect(DEFAULTS.envio).toBe(0)
+    expect(DEFAULTS.saldoIva).toBe(false)
     expect(r.recuperoPedido).toBe(0)
     expect(r.cajaPedido).toBe(r.contribPedido)
     expect(r.roasBECaja).toBe(r.roasBE)
+  })
+
+  it('la fila guardada de BDI: con el recupero y el DREI prendidos son DOS techos', () => {
+    const r = calcularRentabilidad(normalizar(FILA_BDI))
+    expect(centavos(r.costoMax)).toBe(6668) // el de GANANCIA
+    expect(centavos(r.costoMaxCaja)).toBe(8686) // el de CAJA, que es el que manda en BDI
+    expect(centavos(r.recuperoPedido)).toBe(4035)
+    expect(centavos(r.cajaPedido)).toBe(centavos(r.contribPedido + r.recuperoPedido))
+    // El de caja es más alto, pero sigue MUY debajo del break-even de ganancia: pagar el techo de
+    // caja deja ganancia contable, no la come.
+    expect(r.costoMaxCaja).toBeLessThan(r.contribPedido)
   })
 
   it('el DREI sale de la contribución, y en las dos puntas del mix', () => {
