@@ -122,7 +122,67 @@ type Estado =
   | { t: 'desconocido' }
   | { t: 'varios'; candidatos: FilaCliente[] }
 
-export function PanelWhatsApp({ tel }: { tel: string | null }) {
+export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
+  /**
+   * 🔑 **Cambiar de chat NO recarga el panel.**
+   *
+   * Antes la extensión cambiaba el `src` del iframe en cada chat, o sea que por cada cliente se
+   * volvían a bajar el bundle, la sesión y las 771 entradas del KV — segundos, cada vez, para
+   * mostrar algo que sólo cambia de cliente. Ahora el contenedor manda el número por
+   * `postMessage` y acá sólo cambia este estado: lo único que se pide es la ficha nueva.
+   *
+   * La URL sigue trayendo el primer número (`telInicial`), que es lo que hace que el panel
+   * funcione también abierto a mano.
+   */
+  const [telChat, setTelChat] = useState<string | null>(telInicial)
+
+  /**
+   * A quién se pidió ver desde la lista del día, con su id.
+   *
+   * 🔑 **Pedir la ficha por id se saltea el cruce por teléfono** —el índice de 12.500 números que
+   * el servidor arma y cachea— y, sobre todo, **no espera a que WhatsApp abra el chat**: el clic
+   * dispara las dos cosas a la vez y la ficha suele estar antes que la conversación.
+   */
+  const [pedido, setPedido] = useState<{ id: number; tel: string } | null>(null)
+
+  // Si la extensión sí recarga el iframe (primera carga, o el panel todavía no estaba listo), el
+  // número nuevo llega por la URL. Va como ajuste durante el render, que es el patrón de React
+  // para reaccionar a un cambio de props sin encadenar un render de más.
+  const [telUrl, setTelUrl] = useState(telInicial)
+  if (telInicial !== telUrl) {
+    setTelUrl(telInicial)
+    setTelChat(telInicial)
+  }
+
+  useEffect(() => {
+    const alMensaje = (e: MessageEvent) => {
+      // Sólo lo que manda el contenedor de la extensión. El origen no se puede verificar desde
+      // acá (`chrome-extension://…` es opaco), así que se filtra por la firma del mensaje y por
+      // que venga del padre — que es lo único que puede hablarle a este iframe.
+      if (e.source !== window.parent) return
+      const d = e.data
+      if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'chat') return
+      const nuevo = String(d.tel || '') || null
+      setTelChat(nuevo)
+      // El chat lo abrió WhatsApp; si es el que se pidió desde la lista, la ficha ya está puesta.
+      setPedido((p) => (p && normalizeArgPhone(p.tel) === normalizeArgPhone(nuevo || '') ? p : null))
+    }
+    window.addEventListener('message', alMensaje)
+    return () => window.removeEventListener('message', alMensaje)
+  }, [])
+
+  return <PanelInterno tel={telChat} pedido={pedido} setPedido={setPedido} />
+}
+
+function PanelInterno({
+  tel,
+  pedido,
+  setPedido,
+}: {
+  tel: string | null
+  pedido: { id: number; tel: string } | null
+  setPedido: (p: { id: number; tel: string } | null) => void
+}) {
   const [estado, setEstado] = useState<Estado>({ t: 'cargando' })
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
@@ -209,7 +269,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
     //
     // Y sin el KV tampoco: la ficha se calcula CON el seguimiento (cadencia, notas, temperatura),
     // y sin él saldría dibujada en blanco y después parpadearía.
-    if (!telNorm || !kvListo) return
+    if ((!telNorm && !pedido) || !kvListo) return
     let activo = true
     ;(async () => {
       setEstado({ t: 'cargando' })
@@ -219,7 +279,9 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
       // servidor, cuando `mutar` ya la recalcula sola con el mapa nuevo.
       const mapaSeg = kv.current.seg
 
-      const r = await buscarFicha({ tel: telNorm }, mapaSeg, today)
+      // Con id no hace falta cruzar por teléfono: se pide derecho. Es el camino de la lista del
+      // día, y el que permite mostrar la ficha sin esperar a que WhatsApp termine de abrir el chat.
+      const r = await buscarFicha(pedido ? { clienteId: pedido.id } : { tel: telNorm }, mapaSeg, today)
       if (!activo) return
 
       if (r.estado === 'encontrado') {
@@ -257,7 +319,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
     return () => {
       activo = false
     }
-  }, [telNorm, today, kvListo])
+  }, [telNorm, today, kvListo, pedido])
 
   // ── Guardado ───────────────────────────────────────────────────────────────
 
@@ -296,8 +358,12 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
    * (`sidepanel.js`) y la extensión navega. Fuera de la extensión no lo escucha nadie, y por eso
    * `AgendaDelDia` avisa cuando está en una pestaña común.
    */
-  const abrirChat = (telefono: string) => {
+  const abrirChat = (id: number, telefono: string) => {
     if (!telefono) return
+    // Primero la ficha —es nuestra y sale ya— y después el chat, que lo abre WhatsApp y tarda lo
+    // que tarde. Al revés se ve el panel en blanco mientras la conversación carga.
+    setPedido({ id, tel: telefono })
+    setSolapa('cliente')
     try {
       window.parent.postMessage({ fuente: 'bdi-crm-panel', tipo: 'abrir-chat', tel: telefono }, '*')
     } catch (_e) {

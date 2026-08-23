@@ -35,14 +35,14 @@ function cuando(dias: number | null): string {
   return `en ${dias} días`
 }
 
-function Fila({ f, onAbrir }: { f: FilaAgenda; onAbrir: (tel: string) => void }) {
+function Fila({ f, onAbrir }: { f: FilaAgenda; onAbrir: (id: number, tel: string) => void }) {
   const t = TEMP_UI[f.temperatura]
   const sinTel = !f.telefono
   return (
     <button
       type="button"
       disabled={sinTel}
-      onClick={() => onAbrir(f.telefono)}
+      onClick={() => onAbrir(f.id, f.telefono)}
       title={sinTel ? 'No tiene teléfono cargado, así que no puedo abrir el chat' : 'Abrir el chat'}
       style={{
         display: 'block',
@@ -95,7 +95,7 @@ export function AgendaDelDia({
 }: {
   crmSeg: MapaSeguimiento
   today: Date
-  onAbrirChat: (tel: string) => void
+  onAbrirChat: (id: number, tel: string) => void
   puedeAbrirChat: boolean
 }) {
   const [estado, setEstado] = useState<{ t: 'cargando' } | { t: 'error'; motivo: string } | { t: 'ok'; lista: FilaAgenda[]; frios: FilaAgenda[] }>({ t: 'cargando' })

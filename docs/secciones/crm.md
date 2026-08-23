@@ -58,6 +58,14 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   FRÍOS sí respetan el criterio de la sección —primero el que más compró—: son pocos y sus totales
   vienen con los nombres. `tests/crm-lista-dia.test.ts` fija lo que NO puede divergir: quién está
   vencido, con qué fecha y con cuántos días.
+- 🔑 **Cambiar de chat NO recarga el panel.** La extensión le pasa el número por `postMessage` y
+  adentro sólo cambia un estado. Reasignar el `src` del iframe —como se hacía— volvía a bajar el
+  bundle, revalidar la sesión y releer las 771 entradas del KV **por cada cliente**. El `src` queda
+  para la primera carga y para cuando el panel todavía no cargó (`load` del iframe).
+- 🔑 **Desde la lista, la ficha se pide por `clienteId` y no por teléfono.** Se saltea el índice de
+  12.500 números y, sobre todo, **no espera a que WhatsApp abra el chat**: el clic dispara las dos
+  cosas a la vez. Cuando el chat abre, si el teléfono coincide con el pedido no se vuelve a buscar
+  nada.
 - 🔑 **Abrir el chat lo hace la EXTENSIÓN, no el panel.** Adentro corre el monitor en un iframe: no
   puede tocar la pestaña de WhatsApp. Manda el teléfono por `postMessage` y `sidepanel.js` navega
   a `send?phone=<n>`. 🔴 Ese listener **filtra por origen** (`monitorareben.vercel.app`): sin eso,

@@ -285,12 +285,16 @@ async function ventasDelCliente(supabase, id) {
  * no puedan decir números distintos.
  */
 async function fichaDelPanel(supabase, id) {
-  const { data: filas, error } = await supabase.from('clientes').select(COLUMNAS).eq('id', id).limit(1);
-  if (error) throw new Error(error.message);
-  const cliente = (filas || [])[0] || null;
+  // Las dos consultas van juntas: ninguna necesita el resultado de la otra, y el panel se rearma
+  // en cada chat. Encadenadas se pagaba una ida y vuelta de más por cliente, siempre.
+  const [ficha, ventas] = await Promise.all([
+    supabase.from('clientes').select(COLUMNAS).eq('id', id).limit(1),
+    ventasDelCliente(supabase, id),
+  ]);
+  if (ficha.error) throw new Error(ficha.error.message);
+  const cliente = (ficha.data || [])[0] || null;
   if (!cliente) return { encontrado: false };
 
-  const ventas = await ventasDelCliente(supabase, id);
   const ids = ventas.slice(0, VENTAS_CON_DETALLE).map((v) => v.id);
 
   let detalles = [];

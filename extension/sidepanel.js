@@ -54,6 +54,22 @@ const MOTIVOS = {
  * la pantalla con la que se empieza el día, y esconderla hasta que se abra un chat dejaba al que
  * todavía no sabe a quién abrir mirando un cartel que le dice que abra un chat.
  */
+// ¿Ya cargó el panel alguna vez? Mientras no haya cargado, el único camino es el `src`.
+let cargado = false
+iframe.addEventListener('load', () => {
+  cargado = true
+})
+
+/**
+ * 🔑 **Cambiar de chat NO recarga el panel.**
+ *
+ * Antes cada chat reasignaba el `src` del iframe, o sea que por cada cliente el panel volvía a
+ * bajar el bundle del monitor, revalidar la sesión y releer las 771 entradas del KV — segundos,
+ * cada vez, para cambiar de cliente. Ahora el número se le pasa por `postMessage` y adentro sólo
+ * cambia un estado: lo único que se pide es la ficha nueva.
+ *
+ * El `src` queda para la primera carga y para el caso en que el panel todavía no esté listo.
+ */
 function mostrar(tel, motivo) {
   const limpio = (tel || '').replace(/\D/g, '')
   // El cartel se actualiza SIEMPRE, aunque el número no haya cambiado: pasar de un chat sin
@@ -62,9 +78,11 @@ function mostrar(tel, motivo) {
   aviso.style.display = limpio ? 'none' : ''
   if (limpio === actual) return
   actual = limpio
-  // Sólo se toca `src` cuando el número cambió de verdad. Reasignarlo con el mismo valor recarga
-  // el iframe entero, y con él se iría lo que se esté escribiendo en el campo de la nota.
-  iframe.src = BASE + limpio
+  if (!cargado || !iframe.contentWindow) {
+    iframe.src = BASE + limpio
+    return
+  }
+  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'chat', tel: limpio }, ORIGEN)
 }
 
 /**
