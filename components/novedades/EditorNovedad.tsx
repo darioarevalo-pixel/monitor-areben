@@ -65,7 +65,7 @@ export function EditorNovedad({
     setDestino(nuevos.length ? { tipo: 'roles', roles: nuevos, marca } : { tipo: 'todos', marca })
   }
 
-  const { marcar, atajos } = useFormato(caja, setCuerpo)
+  const { marcar, atajos } = useFormato(caja, cuerpo, setCuerpo)
 
   const guardar = async () => {
     if (!titulo.trim()) return void toast.error('Poné un título: es lo que se ve en la lista y en el cartel.')

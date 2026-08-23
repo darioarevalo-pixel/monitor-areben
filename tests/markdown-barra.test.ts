@@ -135,6 +135,21 @@ describe('los bloques que se insertan enteros', () => {
     expect(parsearMd(dos.texto).filter((b) => b.t === 'tabla')).toHaveLength(2)
   })
 
+  it('🔴 insertar en medio de un texto NO se lleva puesto lo que sigue', () => {
+    // Sin el salto de cierre, el párrafo de abajo se convertía en la última fila de la tabla, y no
+    // se veía hasta la vista previa. Pasó caminando el editor en prod.
+    const r = aplicar('Antes.\nDespués.', 6, 6, 'tabla')
+    const b = parsearMd(r.texto)
+    expect(b.map((x) => x.t)).toEqual(['parrafo', 'tabla', 'parrafo'])
+    expect(b[2].t === 'parrafo' && b[2].hijos.map((t) => t.v).join('')).toBe('Después.')
+  })
+
+  it('el recuadro tampoco: lo de abajo queda afuera del recuadro', () => {
+    const r = aplicar('| a |\n|---|\n| 1 |', 0, 0, 'recuadro')
+    const b = parsearMd(r.texto)
+    expect(b.map((x) => x.t)).toEqual(['recuadro', 'tabla'])
+  })
+
   it('el toggle de título ahora también destilda un ####', () => {
     // `regexCualquierPrefijo` tenía #{2,3}: sin actualizarlo, poner «Título» sobre un #### dejaba
     // `## #### así`.

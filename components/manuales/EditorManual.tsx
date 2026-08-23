@@ -31,7 +31,7 @@ export function EditorManual({
   const [publicado, setPublicado] = useState(manual.publicado)
   const [guardando, setGuardando] = useState(false)
   const caja = useRef<HTMLTextAreaElement>(null)
-  const { marcar, atajos } = useFormato(caja, setCuerpo)
+  const { marcar, atajos } = useFormato(caja, cuerpo, setCuerpo)
 
   const secciones = useMemo(
     () => todasLasKeys().map((k) => ({ k, label: tituloLimpio(k) })).sort((a, b) => a.label.localeCompare(b.label, 'es')),

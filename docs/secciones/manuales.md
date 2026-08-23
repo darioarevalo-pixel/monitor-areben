@@ -83,6 +83,11 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
 - 🔴 **`scripts/manual.mjs` DESPUBLICA en silencio.** Correrlo de nuevo sobre un manual publicado lo
   deja en borrador, porque el upsert escribe `publicado: !!m.publicado`. Para eso está `--editar`,
   que lee la fila antes y conserva `publicado` y `orden`. ⚠️ Ese script escribe en **producción**.
+- 🔴 **La barra reponía la selección con un `requestAnimationFrame` y NO funcionaba** (23-ago-2026,
+  caminando el editor en prod, y venía así desde que la barra nació en Novedades): el foco se quedaba
+  en el botón y `selectionStart` en 0 ⇒ **cada bloque se insertaba arriba de todo**, encima de lo que
+  ya había. El rAF puede correr antes de que React pinte el valor nuevo, y `setSelectionRange` sobre
+  el valor viejo se recorta. Va en `useLayoutEffect`, que corre después del commit por definición.
 - 🔴 **`agenda_items.manual_id` es `text` pelado, sin `references`**: borrar un manual deja las
   rutinas apuntando a la nada. No falla —el botón «Cómo se hace» simplemente no se dibuja— y **el
   cartel de borrado no lo avisa**, porque desde el manual todavía no se puede saber cuántas son.

@@ -126,10 +126,16 @@ function envolverLink(texto: string, a: number, b: number): Resultado {
  */
 function insertarBloque(texto: string, a: number, b: number, armar: (sel: string) => string, desde: number, largo: number): Resultado {
   const antes = texto.slice(0, a)
+  const despues = texto.slice(b)
   const salto = !antes || antes.endsWith('\n\n') ? '' : antes.endsWith('\n') ? '\n' : '\n\n'
+  // 🔴 Y también hay que despegar lo que sigue. Sin esto, insertar con el cursor en medio de un
+  // renglón deja el resto pegado a la última línea del bloque —el párrafo de abajo se convierte en
+  // la última fila de la tabla, o en el último renglón del recuadro— y no se ve hasta la vista
+  // previa. Pasó caminando el editor en prod el 23-ago-2026.
+  const cierre = !despues || despues.startsWith('\n\n') ? '' : despues.startsWith('\n') ? '\n' : '\n\n'
   const cuerpo = armar(texto.slice(a, b))
   const inicio = antes.length + salto.length
-  return { texto: antes + salto + cuerpo + texto.slice(b), ini: inicio + desde, fin: inicio + desde + largo }
+  return { texto: antes + salto + cuerpo + cierre + despues, ini: inicio + desde, fin: inicio + desde + largo }
 }
 
 /**
