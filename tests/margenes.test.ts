@@ -30,9 +30,26 @@ describe('computarFilas · disponibles + exclusiones', () => {
     prod({ id: '5', name: 'Stunned', sku: 'STU-001', stock: 5, unit_cost: 100, retailer_price: 250 }),
   ]
 
-  it('sólo con stock, costo y precio; excluye SKU "stu"', () => {
-    const filas = computarFilas(productos, indexarTn([]), 130)
+  it('sólo con stock, costo y precio', () => {
+    const filas = computarFilas(productos, indexarTn([]), 130, 'zattia')
     expect(filas.map((f) => f.p.id)).toEqual(['1'])
+  })
+
+  // 🔴 Hasta el 22-ago-2026 el SKU "stu" salía SIEMPRE, y por eso los 28 productos de Stunned no
+  // tenían margen en ninguna pantalla ni cartel que lo dijera. Ahora es un corte que se pide: la
+  // misma lista, con la otra línea, devuelve el otro producto y no vacío.
+  it('🔴 la línea CORTA, no borra: Stunned devuelve los suyos', () => {
+    expect(computarFilas(productos, indexarTn([]), 130, 'stunned').map((f) => f.p.id)).toEqual(['5'])
+  })
+
+  it('en BDI no hay corte: el prefijo STU no significa nada ahí', () => {
+    expect(computarFilas(productos, indexarTn([]), 130, 'bdi').map((f) => f.p.id)).toEqual(['1', '5'])
+  })
+
+  it('las dos líneas juntas no pierden ni repiten ninguna fila disponible', () => {
+    const z = computarFilas(productos, indexarTn([]), 130, 'zattia').map((f) => f.p.id)
+    const s = computarFilas(productos, indexarTn([]), 130, 'stunned').map((f) => f.p.id)
+    expect([...z, ...s].sort()).toEqual(['1', '5'])
   })
 
   // Cuando el token de GN pierde `costs:read` la API deja de mandar `unit_cost` y TODOS los
@@ -52,12 +69,12 @@ describe('computarFilas · disponibles + exclusiones', () => {
 
   it('sin ningún costo cargado, todos los disponibles quedan contados', () => {
     const todos = [1, 2, 3].map((i) => prod({ id: String(i), stock: 5, retailer_price: 250, unit_cost: 0, sinCosto: true }))
-    expect(computarFilas(todos, indexarTn([]), 130)).toHaveLength(0)
+    expect(computarFilas(todos, indexarTn([]), 130, 'zattia')).toHaveLength(0)
     expect(ocultosPorFaltaDeCosto(todos)).toBe(3)
   })
 
   it('markup y margen sobre el minorista si no hay promo', () => {
-    const [f] = computarFilas([productos[0]], indexarTn([]), 130)
+    const [f] = computarFilas([productos[0]], indexarTn([]), 130, 'zattia')
     expect(f.markup).toBeCloseTo(150) // 250/100 - 1 = 1.5 → 150%
     expect(f.margin).toBeCloseTo(60) // (250-100)/250 = 0.6 → 60%
     expect(f.desfase).toBeCloseTo(20) // 150 - 130
@@ -67,7 +84,7 @@ describe('computarFilas · disponibles + exclusiones', () => {
 
   it('usa la promo de TN si existe (más barata) y trae la foto', () => {
     const idx = indexarTn([{ sku: 'P1', name: 'A', promo_price: 200, images: ['x.jpg'] }])
-    const [f] = computarFilas([prod({ id: '1', name: 'A', sku: 'P1', stock: 5, unit_cost: 100, retailer_price: 250 })], idx, 130)
+    const [f] = computarFilas([prod({ id: '1', name: 'A', sku: 'P1', stock: 5, unit_cost: 100, retailer_price: 250 })], idx, 130, 'zattia')
     expect(f.esPromo).toBe(true)
     expect(f.precio).toBe(200)
     expect(f.markup).toBeCloseTo(100) // 200/100 - 1
@@ -84,6 +101,7 @@ describe('buscar / ordenar / resumen', () => {
     ],
     indexarTn([]),
     130,
+    'zattia',
   )
 
   it('buscar por nombre', () => {

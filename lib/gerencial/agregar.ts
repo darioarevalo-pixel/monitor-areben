@@ -41,7 +41,11 @@ export function detectarDeMarca(d: DatosMarca, u: Umbrales, now: Date): Accionab
     out.push(...detectarComercial(d.marca, d.etl, u))
     out.push(...detectarCaducados(d.marca, d.etl.allProductos, u))
     if (d.tnPromo) {
-      out.push(...detectarPrecios(d.marca, computarFilas(d.etl.allProductos, d.tnPromo, OBJETIVO_DEFAULT), u))
+      // 🔑 La línea es la BASE de la marca (`bdi` · `zattia`), no la que esté eligiendo alguien en
+      // otra pantalla: Gerencial no tiene selector y sus avisos son de la marca. Con esto conserva
+      // exactamente lo que avisaba hasta el 22-ago-2026 —Zattia sin Stunned— en vez de heredarlo de
+      // un default. El día que Stunned tenga que avisar acá, se decide y se escribe.
+      out.push(...detectarPrecios(d.marca, computarFilas(d.etl.allProductos, d.tnPromo, OBJETIVO_DEFAULT, d.marca), u))
     }
   }
   out.push(...detectarOperativo(d.marca, d.fotos, d.internas, d.etl, u, now))

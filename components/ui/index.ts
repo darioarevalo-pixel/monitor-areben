@@ -13,6 +13,7 @@ export { Field, Input, Select, NumberField, type FieldProps, type InputProps, ty
 export { PasoCantidad, type PasoCantidadProps } from '@/components/ui/PasoCantidad'
 export { Toolbar, type ToolbarProps } from '@/components/ui/Toolbar'
 export { Tabs, type TabItem, type TabsProps } from '@/components/ui/Tabs'
+export { SelectorLinea, type SelectorLineaProps } from '@/components/ui/SelectorLinea'
 export { EmptyState, type EmptyStateProps } from '@/components/ui/EmptyState'
 export { KpiCard, type KpiCardProps } from '@/components/ui/KpiCard'
 export { TableWrap, THead, TBody, TFoot, Tr, Th, Td, type ThProps, type TdProps } from '@/components/ui/Table'

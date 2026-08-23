@@ -8,6 +8,7 @@
  */
 
 import { esAdmin, puedeSub, puedeVer, tieneFuncion, type Perfil } from '@/lib/permisos'
+import { baseDeLinea } from '@/lib/lineas'
 import { numeroCanje, type CanjeStore } from '@/lib/canjes/tipos'
 import { faltantes, salio } from '@/lib/sesionfotos/core'
 import { veTodo, type ResumenSolicitud } from '@/lib/solicitudes/overview'
@@ -123,9 +124,16 @@ export function avisosDeFallas(fallas: FallaRow[], marca: Marca, perfil: Perfil 
 // Stunned no es una `Marca` del monitor, así que sus avisos se cuelgan de `zattia`, que es de
 // donde cuelgan también sus permisos.
 
-/** De qué marca del monitor cuelga un canje. Espejo de `marcaDePermisos` en `api/_canjes.js`. */
+/**
+ * De qué marca del monitor cuelga un canje.
+ *
+ * 📌 Era una copia a mano de `marcaDePermisos` («espejo de `api/_canjes.js`»), o sea la quinta de la
+ * misma regla. Ahora la contesta `baseDeLinea` (`lib/lineas.core.js`) como todas las demás. El `??
+ * 'zattia'` no es un default por descarte: `CanjeStore` son las tres líneas y las tres tienen base,
+ * así que el `null` es inalcanzable — está para que el tipo cierre sin apagar el aviso del helper.
+ */
 function marcaDelCanje(store: CanjeStore): Marca {
-  return store === 'bdi' ? 'bdi' : 'zattia'
+  return baseDeLinea(store) ?? 'zattia'
 }
 
 /**

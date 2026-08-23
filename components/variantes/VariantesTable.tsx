@@ -21,6 +21,7 @@ import {
   MiniBar,
   Paginacion,
   Select,
+  SelectorLinea,
   TBody,
   THead,
   TableWrap,
@@ -51,7 +52,7 @@ type ColOrden = 'name' | 'size' | 'lastSale' | 'sales7' | 'sales30' | 'enSale30'
 type FiltroSale = '' | 'con' | 'sin' | 'hoy'
 
 export function VariantesTable() {
-  const { datos, error, progreso, origen } = useDatosMonitor()
+  const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { marca } = useSesion()
   const vendido = useVendidoSale(marca)
   const promoIdx = useTnPromo(marca)
@@ -123,70 +124,73 @@ export function VariantesTable() {
   )
 
   return (
-    <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
-      {() => (
-        <>
-          <FilterBar>
-            <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar variante…" />
-            <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 200 }} aria-label="Estado">
-              <option value="">Todos los estados</option>
-              <option value="nuevo">Nuevo</option>
-              <option value="crecimiento">Crecimiento</option>
-              <option value="madurez">Madurez</option>
-              <option value="declive">Declive</option>
-              <option value="dormido">Dormido</option>
-              <option value="obsoleto">Obsoleto</option>
-            </Select>
-            <Select
-              value={filtroSale}
-              onChange={(e) => setFiltroSale(e.target.value as FiltroSale)}
-              disabled={!vendido}
-              style={{ width: 210 }}
-              aria-label="Ventas de sale"
-            >
-              <option value="">Con y sin sale</option>
-              <option value="sin">Sin ventas de sale</option>
-              <option value="con">Sólo lo vendido en sale</option>
-              <option value="hoy">En oferta hoy en la tienda</option>
-            </Select>
-          </FilterBar>
+    <>
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
+        {() => (
+          <>
+            <FilterBar>
+              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar variante…" />
+              <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 200 }} aria-label="Estado">
+                <option value="">Todos los estados</option>
+                <option value="nuevo">Nuevo</option>
+                <option value="crecimiento">Crecimiento</option>
+                <option value="madurez">Madurez</option>
+                <option value="declive">Declive</option>
+                <option value="dormido">Dormido</option>
+                <option value="obsoleto">Obsoleto</option>
+              </Select>
+              <Select
+                value={filtroSale}
+                onChange={(e) => setFiltroSale(e.target.value as FiltroSale)}
+                disabled={!vendido}
+                style={{ width: 210 }}
+                aria-label="Ventas de sale"
+              >
+                <option value="">Con y sin sale</option>
+                <option value="sin">Sin ventas de sale</option>
+                <option value="con">Sólo lo vendido en sale</option>
+                <option value="hoy">En oferta hoy en la tienda</option>
+              </Select>
+            </FilterBar>
 
-          {ordenada.length === 0 ? (
-            <EmptyState icon="🔍" title="Ninguna variante coincide" hint={busqueda ? `Nada para "${busqueda}".` : 'Probá con otro estado.'} dashed />
-          ) : (
-            <>
-              <TableWrap maxHeight={620}>
-                <THead>
-                  <Tr>
-                    {th('name', 'Producto')}
-                    {th('size', 'Variante')}
-                    {th('lastSale', 'Última venta')}
-                    {th('sales7', 'Ventas 7d', 'right')}
-                    {th('sales30', 'Ventas 30d', 'right')}
-                    {th('enSale30', 'En sale 30d', 'right')}
-                    {th('lifespan', 'Vida útil est.')}
-                    {th('stock', 'Stock', 'right')}
-                    <Th>Estado</Th>
-                  </Tr>
-                </THead>
-                <TBody>
-                  {slice.map((v) => (
-                    <FilaVariante
-                      key={v.id}
-                      v={v}
-                      enSale={vendido?.porVar.get(v.id) ?? null}
-                      ofertaHoy={pidsEnOferta.has(String(v.pid))}
-                    />
-                  ))}
-                </TBody>
-              </TableWrap>
+            {ordenada.length === 0 ? (
+              <EmptyState icon="🔍" title="Ninguna variante coincide" hint={busqueda ? `Nada para "${busqueda}".` : 'Probá con otro estado.'} dashed />
+            ) : (
+              <>
+                <TableWrap maxHeight={620}>
+                  <THead>
+                    <Tr>
+                      {th('name', 'Producto')}
+                      {th('size', 'Variante')}
+                      {th('lastSale', 'Última venta')}
+                      {th('sales7', 'Ventas 7d', 'right')}
+                      {th('sales30', 'Ventas 30d', 'right')}
+                      {th('enSale30', 'En sale 30d', 'right')}
+                      {th('lifespan', 'Vida útil est.')}
+                      {th('stock', 'Stock', 'right')}
+                      <Th>Estado</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {slice.map((v) => (
+                      <FilaVariante
+                        key={v.id}
+                        v={v}
+                        enSale={vendido?.porVar.get(v.id) ?? null}
+                        ofertaHoy={pidsEnOferta.has(String(v.pid))}
+                      />
+                    ))}
+                  </TBody>
+                </TableWrap>
 
-              <Paginacion pagina={pageClamp} paginas={paginas} total={ordenada.length} onCambiar={setPage} singular="variante" plural="variantes" />
-            </>
-          )}
-        </>
-      )}
-    </DatosGate>
+                <Paginacion pagina={pageClamp} paginas={paginas} total={ordenada.length} onCambiar={setPage} singular="variante" plural="variantes" />
+              </>
+            )}
+          </>
+        )}
+      </DatosGate>
+    </>
   )
 }
 

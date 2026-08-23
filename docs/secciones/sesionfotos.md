@@ -141,10 +141,14 @@ variante de internas pasada por parámetro.
   5. `lib/nav.datos.ts` (`sesion-fotos` → `brands: ["bdi","zattia"]`): acá está la decisión de
      diseño, no el trabajo — selector de línea **adentro de Zattia** (como Meta Ads, y el equipo no
      aprende un lugar nuevo) o entrada aparte.
-  ⚠️ **Lo que decide si esto alcanza y no se puede saber leyendo**: si el stock de Stunned en el GN
-  de Zattia se separa del de Zattia. De eso depende que *«el sistema decide depósito o local según
-  stock»* no le prometa al equipo una prenda de la marca de al lado. Si no se separa, el punto 1 no
-  alcanza y hay que mirar el ETL.
+  ✅ **MEDIDO el 22-ago-2026, y contesta el ⚠️ que quedaba**: el stock de Stunned **NO se separa** en
+  el GN. Sus **195 unidades** (de 6.218) viven en los mismos `Deposito` (17) y `Local` (178) que
+  Zattia, y lo único que las distingue es el prefijo de SKU. 🔑 **Eso NO rompe «el sistema decide
+  depósito o local según stock»**, porque esa decisión se toma **por variante** y el stock es por
+  variante: no puede prometer la prenda de al lado. Lo que sí hay que cortar es el **catálogo** que
+  se ofrece al armar la solicitud —hoy mostraría los 2.676 de Zattia mezclados—, y para eso ya está
+  `esStunned` en `lib/lineas.core.js` (ver `docs/lineas.md`). ⇒ el punto 1 alcanza; no hay que mirar
+  el ETL.
 
 ## Lo que se midió, y lo que nunca se ejerció (16-ago-2026)
 

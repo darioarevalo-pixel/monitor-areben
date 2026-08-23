@@ -26,6 +26,7 @@ import {
   Notice,
   NumberField,
   Select,
+  SelectorLinea,
   color,
   font,
   space,
@@ -47,7 +48,7 @@ import {
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
 export function Margenes() {
-  const { datos, error, progreso, origen } = useDatosMonitor()
+  const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { marca } = useSesion()
   const tnPromo = useTnPromo(marca)
 
@@ -58,7 +59,7 @@ export function Margenes() {
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
   // Mientras TN no cargó se usa un índice vacío: precio = minorista, sin foto.
   const idx = useMemo(() => tnPromo ?? indexarTn([]), [tnPromo])
-  const filas = useMemo(() => computarFilas(productos, idx, objetivo), [productos, idx, objetivo])
+  const filas = useMemo(() => computarFilas(productos, idx, objetivo, linea), [productos, idx, objetivo, linea])
   // Los que quedan afuera porque Gestión Nube no mandó el costo. Sin esto la pantalla se ve vacía
   // y parece que no hay stock, cuando el problema es el permiso del token.
   const sinCosto = useMemo(() => ocultosPorFaltaDeCosto(productos), [productos])
@@ -75,6 +76,7 @@ export function Margenes() {
         </label>
       </HeaderAcciones>
 
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
       <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tarjetas">
         {() => (
           <>

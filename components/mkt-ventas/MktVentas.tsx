@@ -36,7 +36,7 @@ import { estadoSync, fmtFechaVenta, fmtHace } from '@/lib/resumen'
 import { articuloDe } from '@/lib/cuentas'
 import { hoyIso, sumarDias } from '@/lib/fechas/dia'
 import { escalonVigente, losQueMasSalieron, resumenPorCanal, serieDiaria, techoDeLaRampa } from '@/lib/mkt-ventas/core'
-import { Button, DatosGate, Notice, color, font, space, useToast } from '@/components/ui'
+import { Button, DatosGate, Notice, SelectorLinea, color, font, space, useToast } from '@/components/ui'
 import { leerUltimaTraida, traerVentasDeHoy } from '@/lib/mkt-ventas/persistencia'
 import { useMetas } from './useMetas'
 import { Objetivo } from './Objetivo'
@@ -52,7 +52,7 @@ const DIAS_DE_SERIE = 34
 
 export function MktVentas() {
   const { perfil, marca } = useSesion()
-  const { datos, error, progreso, origen, estado } = useDatosMonitor()
+  const { datos, error, progreso, origen, estado, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { metas, error: errorMetas } = useMetas(marca)
   const cargar = useMonitorStore((s) => s.cargar)
   const refrescar = () => cargar(marca, veVentasHistoricas(perfil, marca), true)
@@ -116,6 +116,7 @@ export function MktVentas() {
         </Button>
       </HeaderAcciones>
 
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
       <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="kpis" onReintentar={refrescar}>
         {(d) => {
           // Un solo reloj para TODA la pantalla: las dos mitades de la línea de arriba («hace 17 h»

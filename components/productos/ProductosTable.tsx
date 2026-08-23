@@ -43,6 +43,7 @@ import {
   Notice,
   Paginacion,
   Select,
+  SelectorLinea,
   TBody,
   THead,
   TableWrap,
@@ -94,7 +95,7 @@ const ROTULO_EN_CAMPANIA: Record<EstadoItem, string> = {
 }
 
 export function ProductosTable() {
-  const { datos, error, progreso, origen } = useDatosMonitor()
+  const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { marca } = useSesion()
   const tnIdx = useTnImages(marca)
   // El índice completo de TN (el mismo payload que las fotos, ya bajado) para saber qué producto
@@ -261,247 +262,250 @@ export function ProductosTable() {
   )
 
   return (
-    <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
-      {(d) => (
-        <>
-          <HeaderAcciones>
-            <BotonActualizarInventario />
-            {/*
-              El PDF queda: sigue siendo la forma de mirar la selección en papel o de mandársela a
-              alguien. "Mandar a liquidación" es el camino nuevo —la campaña se guarda en la base y
-              la ve todo el equipo—, y las dos salen de la MISMA selección.
-            */}
-            <MandarALiquidacion
-              seleccion={productos.filter((p) => outletSel.has(p.id))}
-              liqFijada={camp.campania}
-              onListo={() => {
-                setOutletSel(new Set())
-                // Sin esto, los que acaban de entrar seguirían viéndose como disponibles hasta
-                // recargar — que es exactamente el problema que este modo vino a resolver.
-                camp.recargar()
-              }}
-            />
-            <Button variant="solid" tone="brand" onClick={() => void generarSale()} loading={generando} disabled={!outletSel.size}>
-              Generar sale{outletSel.size ? ` (${outletSel.size})` : ''}
-            </Button>
-          </HeaderAcciones>
-
-          <FilterBar>
-            <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto…" />
-            <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 180 }} aria-label="Estado">
-              <option value="">Todos los estados</option>
-              <option value="nuevo">Nuevo</option>
-              <option value="crecimiento">Crecimiento</option>
-              <option value="madurez">Madurez</option>
-              <option value="declive">Declive</option>
-              <option value="dormido">Dormido</option>
-              <option value="obsoleto">Obsoleto</option>
-            </Select>
-            <Select value={proveedor} onChange={(e) => setProveedor(e.target.value)} style={{ width: 190 }} aria-label="Proveedor">
-              <option value="">Todos los proveedores</option>
-              {listaProv.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </Select>
-            {meses.length > 0 && (
-              <MenuMulti
-                opciones={meses.map(({ mes, cantidad }) => ({ key: mes, label: mesLabel(mes), n: cantidad }))}
-                seleccion={ingresos}
-                onCambiar={setIngresos}
-                vacio="Todos los meses"
-                etiqueta={(n, unico) => (n === 1 && unico ? unico : `${n} meses`)}
+    <>
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
+      <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="tabla">
+        {(d) => (
+          <>
+            <HeaderAcciones>
+              <BotonActualizarInventario />
+              {/*
+                El PDF queda: sigue siendo la forma de mirar la selección en papel o de mandársela a
+                alguien. "Mandar a liquidación" es el camino nuevo —la campaña se guarda en la base y
+                la ve todo el equipo—, y las dos salen de la MISMA selección.
+              */}
+              <MandarALiquidacion
+                seleccion={productos.filter((p) => outletSel.has(p.id))}
+                liqFijada={camp.campania}
+                onListo={() => {
+                  setOutletSel(new Set())
+                  // Sin esto, los que acaban de entrar seguirían viéndose como disponibles hasta
+                  // recargar — que es exactamente el problema que este modo vino a resolver.
+                  camp.recargar()
+                }}
               />
-            )}
-            <Select value={modoVU} onChange={(e) => setModoVU(e.target.value as ModoVidaUtil)} style={{ width: 210 }} aria-label="Modo de vida útil">
-              <option value="7d">Vida útil: últimos 7d</option>
-              <option value="15d">Vida útil: últimos 15d</option>
-              <option value="30d">Vida útil: últimos 30d</option>
-              <option value="firstSale">Vida útil: desde 1ª venta</option>
-            </Select>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-              <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
-              Ocultar sin stock
-            </label>
+              <Button variant="solid" tone="brand" onClick={() => void generarSale()} loading={generando} disabled={!outletSel.size}>
+                Generar sale{outletSel.size ? ` (${outletSel.size})` : ''}
+              </Button>
+            </HeaderAcciones>
 
-            {/*
-              El filtro de sale. «Sin ventas de sale» es el que se usa para decidir reposición: deja
-              a la vista sólo lo que se movió a precio de lista. No se esconde cuando la marca
-              todavía no cargó —el selector estaría a veces sí y a veces no— pero elegir algo con
-              `vendido` en null dejaría la tabla vacía sin explicación, así que espera al dato.
-            */}
-            <Select
-              value={filtroSale}
-              onChange={(e) => setFiltroSale(e.target.value as FiltroSale)}
-              disabled={!vendido}
-              style={{ width: 210 }}
-              aria-label="Ventas de sale"
-            >
-              <option value="">Con y sin sale</option>
-              <option value="sin">Sin ventas de sale</option>
-              <option value="con">Sólo lo vendido en sale</option>
-              <option value="hoy">En oferta hoy en la tienda</option>
-            </Select>
-
-            {/*
-              La lista de campañas se pide al tocar el selector, no al montar la tabla: casi ninguna
-              visita a "Por producto" va a liquidar algo, y sería un request por visita. Con `?liq=`
-              en la URL la campaña activa ya vino con su nombre, así que se puede dibujar sin lista.
-            */}
-            <Select
-              value={camp.liq}
-              onFocus={camp.pedirAbiertas}
-              onMouseDown={camp.pedirAbiertas}
-              onChange={(e) => {
-                camp.entrar(e.target.value)
-                // Salir NO lo apaga: apagarle un filtro a alguien que lo dejó puesto a propósito
-                // es peor que dejarlo.
-                if (e.target.value) setOcultarSinStock(true)
-              }}
-              style={{ width: 230 }}
-              aria-label="Campaña de liquidación"
-            >
-              <option value="">Sin campaña</option>
-              {/* La activa se dibuja aunque la lista todavía no esté: si no, el selector se vería
-                  en "Sin campaña" mientras la tabla ya está marcando productos. */}
-              {camp.liq && !(camp.abiertas || []).some((c) => c.id === camp.liq) && (
-                <option value={camp.liq}>{camp.campania?.nombre || 'Cargando…'}</option>
-              )}
-              {(camp.abiertas || []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre} ({c.conteo.total})
-                </option>
-              ))}
-            </Select>
-
-            {camp.liq && (
-              <Select
-                value={enCampania}
-                onChange={(e) => setEnCampania(e.target.value as '' | 'faltan' | 'estan')}
-                style={{ width: 190 }}
-                aria-label="Ya está en la campaña"
-              >
-                <option value="">Todos ({filtradaBase.length})</option>
-                <option value="faltan">Sin mandar ({porFaltar.length})</option>
-                <option value="estan">Ya en la campaña ({filtradaBase.length - porFaltar.length})</option>
+            <FilterBar>
+              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto…" />
+              <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 180 }} aria-label="Estado">
+                <option value="">Todos los estados</option>
+                <option value="nuevo">Nuevo</option>
+                <option value="crecimiento">Crecimiento</option>
+                <option value="madurez">Madurez</option>
+                <option value="declive">Declive</option>
+                <option value="dormido">Dormido</option>
+                <option value="obsoleto">Obsoleto</option>
               </Select>
-            )}
-          </FilterBar>
+              <Select value={proveedor} onChange={(e) => setProveedor(e.target.value)} style={{ width: 190 }} aria-label="Proveedor">
+                <option value="">Todos los proveedores</option>
+                {listaProv.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
+              {meses.length > 0 && (
+                <MenuMulti
+                  opciones={meses.map(({ mes, cantidad }) => ({ key: mes, label: mesLabel(mes), n: cantidad }))}
+                  seleccion={ingresos}
+                  onCambiar={setIngresos}
+                  vacio="Todos los meses"
+                  etiqueta={(n, unico) => (n === 1 && unico ? unico : `${n} meses`)}
+                />
+              )}
+              <Select value={modoVU} onChange={(e) => setModoVU(e.target.value as ModoVidaUtil)} style={{ width: 210 }} aria-label="Modo de vida útil">
+                <option value="7d">Vida útil: últimos 7d</option>
+                <option value="15d">Vida útil: últimos 15d</option>
+                <option value="30d">Vida útil: últimos 30d</option>
+                <option value="firstSale">Vida útil: desde 1ª venta</option>
+              </Select>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                <input type="checkbox" checked={ocultarSinStock} onChange={(e) => setOcultarSinStock(e.target.checked)} style={{ accentColor: 'var(--mo-brand-solid)' }} />
+                Ocultar sin stock
+              </label>
 
-          {camp.error && <Notice tone="warning" style={{ marginBottom: space[3] }}>{camp.error}</Notice>}
+              {/*
+                El filtro de sale. «Sin ventas de sale» es el que se usa para decidir reposición: deja
+                a la vista sólo lo que se movió a precio de lista. No se esconde cuando la marca
+                todavía no cargó —el selector estaría a veces sí y a veces no— pero elegir algo con
+                `vendido` en null dejaría la tabla vacía sin explicación, así que espera al dato.
+              */}
+              <Select
+                value={filtroSale}
+                onChange={(e) => setFiltroSale(e.target.value as FiltroSale)}
+                disabled={!vendido}
+                style={{ width: 210 }}
+                aria-label="Ventas de sale"
+              >
+                <option value="">Con y sin sale</option>
+                <option value="sin">Sin ventas de sale</option>
+                <option value="con">Sólo lo vendido en sale</option>
+                <option value="hoy">En oferta hoy en la tienda</option>
+              </Select>
 
-          {camp.campania && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: space[3],
-                flexWrap: 'wrap',
-                marginBottom: space[3],
-                padding: '8px 12px',
-                background: color.bg2,
-                border: `1px solid ${color.line}`,
-                borderRadius: radius.lg,
-                fontSize: font.base,
-                color: color.ink,
-              }}
-            >
-              <span>
-                Sumando a <b>{camp.campania.nombre}</b>
-                <span style={{ color: color.mut }}>
-                  {' · '}
-                  {filtradaBase.length - porFaltar.length} de {filtradaBase.length} de este filtro ya están
-                  {/* Si no se dice, los dos números no cierran con lo que uno tenía en la cabeza. */}
-                  {ocultarSinStock && ' · sin stock ocultos'}
+              {/*
+                La lista de campañas se pide al tocar el selector, no al montar la tabla: casi ninguna
+                visita a "Por producto" va a liquidar algo, y sería un request por visita. Con `?liq=`
+                en la URL la campaña activa ya vino con su nombre, así que se puede dibujar sin lista.
+              */}
+              <Select
+                value={camp.liq}
+                onFocus={camp.pedirAbiertas}
+                onMouseDown={camp.pedirAbiertas}
+                onChange={(e) => {
+                  camp.entrar(e.target.value)
+                  // Salir NO lo apaga: apagarle un filtro a alguien que lo dejó puesto a propósito
+                  // es peor que dejarlo.
+                  if (e.target.value) setOcultarSinStock(true)
+                }}
+                style={{ width: 230 }}
+                aria-label="Campaña de liquidación"
+              >
+                <option value="">Sin campaña</option>
+                {/* La activa se dibuja aunque la lista todavía no esté: si no, el selector se vería
+                    en "Sin campaña" mientras la tabla ya está marcando productos. */}
+                {camp.liq && !(camp.abiertas || []).some((c) => c.id === camp.liq) && (
+                  <option value={camp.liq}>{camp.campania?.nombre || 'Cargando…'}</option>
+                )}
+                {(camp.abiertas || []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre} ({c.conteo.total})
+                  </option>
+                ))}
+              </Select>
+
+              {camp.liq && (
+                <Select
+                  value={enCampania}
+                  onChange={(e) => setEnCampania(e.target.value as '' | 'faltan' | 'estan')}
+                  style={{ width: 190 }}
+                  aria-label="Ya está en la campaña"
+                >
+                  <option value="">Todos ({filtradaBase.length})</option>
+                  <option value="faltan">Sin mandar ({porFaltar.length})</option>
+                  <option value="estan">Ya en la campaña ({filtradaBase.length - porFaltar.length})</option>
+                </Select>
+              )}
+            </FilterBar>
+
+            {camp.error && <Notice tone="warning" style={{ marginBottom: space[3] }}>{camp.error}</Notice>}
+
+            {camp.campania && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: space[3],
+                  flexWrap: 'wrap',
+                  marginBottom: space[3],
+                  padding: '8px 12px',
+                  background: color.bg2,
+                  border: `1px solid ${color.line}`,
+                  borderRadius: radius.lg,
+                  fontSize: font.base,
+                  color: color.ink,
+                }}
+              >
+                <span>
+                  Sumando a <b>{camp.campania.nombre}</b>
+                  <span style={{ color: color.mut }}>
+                    {' · '}
+                    {filtradaBase.length - porFaltar.length} de {filtradaBase.length} de este filtro ya están
+                    {/* Si no se dice, los dos números no cierran con lo que uno tenía en la cabeza. */}
+                    {ocultarSinStock && ' · sin stock ocultos'}
+                  </span>
                 </span>
-              </span>
-              <Button size="sm" variant="soft" tone="brand" onClick={marcarLosQueFaltan} disabled={!porFaltar.length}>
-                Marcar los que faltan ({porFaltar.length})
-              </Button>
-              <Button size="sm" variant="ghost" onClick={camp.salir} style={{ marginLeft: 'auto' }}>
-                Salir de la campaña
-              </Button>
-            </div>
-          )}
+                <Button size="sm" variant="soft" tone="brand" onClick={marcarLosQueFaltan} disabled={!porFaltar.length}>
+                  Marcar los que faltan ({porFaltar.length})
+                </Button>
+                <Button size="sm" variant="ghost" onClick={camp.salir} style={{ marginLeft: 'auto' }}>
+                  Salir de la campaña
+                </Button>
+              </div>
+            )}
 
-          {/* La selección sobrevive a filtros y páginas: si no se dice, se termina
-              generando un PDF con productos que ya no están a la vista. */}
-          {outletSel.size > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: space[3],
-                flexWrap: 'wrap',
-                marginBottom: space[3],
-                padding: '8px 12px',
-                background: color.brandBg,
-                border: `1px solid ${color.brandBorder}`,
-                borderRadius: 'var(--mo-r-lg)',
-                fontSize: font.base,
-                color: color.brand,
-              }}
-            >
-              <span>
-                <b>{outletSel.size}</b> {outletSel.size === 1 ? 'producto marcado' : 'productos marcados'} para el sale
-                {outletSel.size > slice.filter((p) => outletSel.has(p.id)).length && <span style={{ opacity: 0.8 }}> (algunos fuera de esta página o del filtro)</span>}
-              </span>
-              <Button size="sm" variant="ghost" tone="brand" onClick={() => setOutletSel(new Set())} style={{ marginLeft: 'auto' }}>
-                Limpiar selección
-              </Button>
-            </div>
-          )}
+            {/* La selección sobrevive a filtros y páginas: si no se dice, se termina
+                generando un PDF con productos que ya no están a la vista. */}
+            {outletSel.size > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: space[3],
+                  flexWrap: 'wrap',
+                  marginBottom: space[3],
+                  padding: '8px 12px',
+                  background: color.brandBg,
+                  border: `1px solid ${color.brandBorder}`,
+                  borderRadius: 'var(--mo-r-lg)',
+                  fontSize: font.base,
+                  color: color.brand,
+                }}
+              >
+                <span>
+                  <b>{outletSel.size}</b> {outletSel.size === 1 ? 'producto marcado' : 'productos marcados'} para el sale
+                  {outletSel.size > slice.filter((p) => outletSel.has(p.id)).length && <span style={{ opacity: 0.8 }}> (algunos fuera de esta página o del filtro)</span>}
+                </span>
+                <Button size="sm" variant="ghost" tone="brand" onClick={() => setOutletSel(new Set())} style={{ marginLeft: 'auto' }}>
+                  Limpiar selección
+                </Button>
+              </div>
+            )}
 
-          {ordenada.length === 0 ? (
-            <EmptyState icon="🔍" title="Ningún producto coincide" hint={busqueda ? `Nada para "${busqueda}".` : 'Probá aflojando los filtros.'} dashed />
-          ) : (
-            <>
-              <TableWrap maxHeight={640}>
-                <THead>
-                  <Tr>
-                    <Th width={36} />
-                    <Th width={78}>Foto</Th>
-                    {th('name', 'Producto')}
-                    {th('lastSale', 'Última venta')}
-                    {th('sales7', 'Ventas 7d', 'right')}
-                    {th('sales30', 'Ventas 30d', 'right')}
-                    {th('sales90', 'Ventas 90d', 'right')}
-                    {th('enSale30', 'En sale 30d', 'right')}
-                    {th('lifespan', 'Vida útil est.')}
-                    {th('stock', 'Stock', 'right')}
-                    <Th>Estado</Th>
-                  </Tr>
-                </THead>
-                <TBody>
-                  {slice.map((p) => (
-                    <FilaProducto
-                      key={p.id}
-                      p={p}
-                      modoVU={modoVU}
-                      tnIdx={tnIdx}
-                      enSale={vendido?.porPid.get(p.id) ?? null}
-                      ofertaHoy={enOfertaHoy.has(p.id)}
-                      datos={d}
-                      marcado={outletSel.has(p.id)}
-                      yaEsta={camp.liq ? camp.yaEstan[p.id] : undefined}
-                      onMarcar={(on) => toggleOutlet(p.id, on)}
-                      expandido={expandido === p.id}
-                      onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
-                      onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
-                    />
-                  ))}
-                </TBody>
-              </TableWrap>
+            {ordenada.length === 0 ? (
+              <EmptyState icon="🔍" title="Ningún producto coincide" hint={busqueda ? `Nada para "${busqueda}".` : 'Probá aflojando los filtros.'} dashed />
+            ) : (
+              <>
+                <TableWrap maxHeight={640}>
+                  <THead>
+                    <Tr>
+                      <Th width={36} />
+                      <Th width={78}>Foto</Th>
+                      {th('name', 'Producto')}
+                      {th('lastSale', 'Última venta')}
+                      {th('sales7', 'Ventas 7d', 'right')}
+                      {th('sales30', 'Ventas 30d', 'right')}
+                      {th('sales90', 'Ventas 90d', 'right')}
+                      {th('enSale30', 'En sale 30d', 'right')}
+                      {th('lifespan', 'Vida útil est.')}
+                      {th('stock', 'Stock', 'right')}
+                      <Th>Estado</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {slice.map((p) => (
+                      <FilaProducto
+                        key={p.id}
+                        p={p}
+                        modoVU={modoVU}
+                        tnIdx={tnIdx}
+                        enSale={vendido?.porPid.get(p.id) ?? null}
+                        ofertaHoy={enOfertaHoy.has(p.id)}
+                        datos={d}
+                        marcado={outletSel.has(p.id)}
+                        yaEsta={camp.liq ? camp.yaEstan[p.id] : undefined}
+                        onMarcar={(on) => toggleOutlet(p.id, on)}
+                        expandido={expandido === p.id}
+                        onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
+                        onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
+                      />
+                    ))}
+                  </TBody>
+                </TableWrap>
 
-              <Paginacion pagina={pageClamp} paginas={paginas} total={ordenada.length} onCambiar={setPage} singular="producto" plural="productos" />
-            </>
-          )}
+                <Paginacion pagina={pageClamp} paginas={paginas} total={ordenada.length} onCambiar={setPage} singular="producto" plural="productos" />
+              </>
+            )}
 
-          {lightbox && <Lightbox imagenes={lightbox.imagenes} nombre={lightbox.nombre} onClose={() => setLightbox(null)} />}
-        </>
-      )}
-    </DatosGate>
+            {lightbox && <Lightbox imagenes={lightbox.imagenes} nombre={lightbox.nombre} onClose={() => setLightbox(null)} />}
+          </>
+        )}
+      </DatosGate>
+    </>
   )
 }
 

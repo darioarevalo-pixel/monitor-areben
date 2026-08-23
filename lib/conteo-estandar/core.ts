@@ -6,6 +6,7 @@
  * del Excel, `ordenarModelo` y el cliente del conteo de depósito (mismo endpoint).
  */
 
+import { esStunned } from '../lineas'
 import type { FilaVivo } from '../inventario-vivo/tipos'
 import type { ConteoHistorial } from '../conteo-deposito/tipos'
 import type { CeDetalleConteo, CeEstadoProd, CeFilaAjuste, CePreview, CeProducto, CeResumen, CeState, Linea } from './tipos'
@@ -17,9 +18,15 @@ export function normBc(b: unknown): string {
   return String(b || '').trim().toUpperCase()
 }
 
-/** La línea de un producto: stunned si alguna variante tiene SKU que empieza con STU. Port de _ceLineaOf. */
+/**
+ * La línea de un producto: stunned si **alguna** variante tiene SKU de Stunned. Port de _ceLineaOf.
+ *
+ * 🔑 La regla del prefijo no se escribe acá: es `esStunned` de `lib/lineas.core.js`, la misma que
+ * usan el memo, Norte y el filtro del ETL. Lo propio de esta pantalla es el **`some`**: acá la
+ * unidad es el producto y sus variantes, no un SKU suelto.
+ */
 export function lineaDe(variants: { sku?: string }[]): Linea {
-  return (variants || []).some((v) => /^STU/i.test(String(v.sku || ''))) ? 'stunned' : 'zattia'
+  return (variants || []).some((v) => esStunned(v.sku)) ? 'stunned' : 'zattia'
 }
 
 /** Total de un talle = exhibido + depósito. Port de _ceTotal. */

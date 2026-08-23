@@ -6,7 +6,7 @@ import { useMonitorStore } from '@/store/useMonitorStore'
 import { veVentasHistoricas } from '@/lib/permisos'
 import { computarKpis, estadoSync, fmtFechaVenta } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, DatosGate, KpiCard, Notice, color, font, space } from '@/components/ui'
+import { Button, DatosGate, KpiCard, Notice, SelectorLinea, color, font, space } from '@/components/ui'
 
 /**
  * "📈 Resumen / KPIs" (key `resumen`, BDI + Zattia).
@@ -22,7 +22,7 @@ import { Button, DatosGate, KpiCard, Notice, color, font, space } from '@/compon
  */
 export function Resumen() {
   const { perfil, marca } = useSesion()
-  const { datos, estado, error, progreso, origen } = useDatosMonitor()
+  const { datos, estado, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const cargar = useMonitorStore((s) => s.cargar)
   const refrescar = () => cargar(marca, veVentasHistoricas(perfil, marca), true)
   const refrescando = estado === 'cargando'
@@ -33,6 +33,7 @@ export function Resumen() {
         <Button variant="outline" onClick={refrescar} loading={refrescando} title="Trae los datos más nuevos de Supabase">{refrescando ? 'Actualizando…' : ' Actualizar datos'}</Button>
       </HeaderAcciones>
 
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
       <DatosGate datos={datos} error={error} progreso={progreso} origen={origen} esqueleto="kpis" onReintentar={refrescar}>
         {(d) => {
           const kpis = computarKpis(d)

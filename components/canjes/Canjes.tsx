@@ -75,7 +75,10 @@ export function Canjes() {
   const est = useCanjes(store)
 
   // Qué firmas tiene, para que el modal anticipe si la propuesta sale directo o va a la firma.
-  const susNiveles = useMemo(() => nivelesQueFirma(perfil, marcaDePermisos(store)), [perfil, store])
+  // `marcaDePermisos` devuelve `null` ante una store desconocida —desde el 22-ago-2026 ya no
+  // contesta Zattia por descarte—, pero `store` acá es una `CanjeStore`: las tres tienen base, así
+  // que el `null` es inalcanzable y el `??` sólo hace cerrar el tipo.
+  const susNiveles = useMemo(() => nivelesQueFirma(perfil, marcaDePermisos(store) ?? 'zattia'), [perfil, store])
 
   const canjeCreado = useCallback(async (id: number) => {
     setProponiendoA(null)

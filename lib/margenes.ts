@@ -6,6 +6,7 @@
  * (`lib/tn.ts`). El objetivo por defecto es 130% de markup.
  */
 
+import { esStunned, type Linea } from '@/lib/lineas'
 import type { Producto } from './etl/tipos'
 import { matchTn, type IndiceTn } from './tn'
 
@@ -39,13 +40,28 @@ export function ocultosPorFaltaDeCosto(productos: Producto[]): number {
 }
 
 /**
- * Filas base: sólo disponibles (stock>0, costo>0, precio>0) y sin los SKU "stu"
- * (Stunned, otra marca cargada en el GN de Zattia). Port de index.html:8535-8552.
+ * Filas base: sólo disponibles (stock>0, costo>0, precio>0), y **de la línea que se pide**.
+ *
+ * # 🔴 Por qué `linea` es obligatorio y no tiene default
+ *
+ * Hasta el 22-ago-2026 acá había un `.filter(p => !/^stu/i.test(p.sku))` fijo, heredado del legacy
+ * (index.html:8535-8552): **los 28 productos de Stunned no tenían margen en ninguna pantalla, y
+ * ninguna lo decía**. No era por falta de datos —25 de los 28 tienen costo cargado—, era «esto es
+ * otra marca, no la mires acá».
+ *
+ * Con el selector de línea eso pasa a ser un filtro, y el filtro **se pide**. Sin parámetro
+ * obligatorio los dos llamadores de Gerencial heredarían por omisión lo que decida el default, y un
+ * default acá significa avisar (o callar) sobre precios de una línea que nadie eligió. Es la misma
+ * regla de siempre: la decisión vive en el núcleo con el parámetro puesto, no en quien llama.
+ *
+ * ⚠️ El corte por SKU es `esStunned` (`lib/lineas.core.js`), la misma regla que usan el memo, Norte,
+ * los conteos y el filtro del ETL — antes estaba escrita acá por tercera vez y **haciendo otra cosa**.
  */
-export function computarFilas(productos: Producto[], promoIdx: IndiceTn, objetivo: number): FilaMargen[] {
+export function computarFilas(productos: Producto[], promoIdx: IndiceTn, objetivo: number, linea: Linea): FilaMargen[] {
+  const quiereStunned = linea === 'stunned'
   return productos
     .filter((p) => (p.stock || 0) > 0 && p.unit_cost > 0 && p.retailer_price > 0)
-    .filter((p) => !(p.sku && /^stu/i.test(p.sku)))
+    .filter((p) => linea === 'bdi' || esStunned(p.sku) === quiereStunned)
     .map((p) => {
       const tn = matchTn(p, promoIdx)
       const promo = tn && (tn.promo_price ?? 0) > 0 ? tn.promo_price! : null

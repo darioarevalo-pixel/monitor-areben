@@ -17,6 +17,7 @@
 import { create } from 'zustand'
 import { computarDatos } from '@/lib/etl/computar'
 import { guardarCache, leerCache, mapaColorManual, type PayloadCache } from '@/lib/cache'
+import type { Linea } from '@/lib/lineas'
 import { desdeVentas, traerDatos } from '@/lib/datos'
 import type { Marca } from '@/lib/nav.datos'
 import type { DatosETL } from '@/lib/etl/tipos'
@@ -32,6 +33,17 @@ export type Origen =
 type MonitorState = {
   marca: Marca | null
   datos: DatosETL | null
+  /**
+   * El payload **crudo** que produjo `datos`, tal como salió del caché o de la red.
+   *
+   * Se conserva desde el 22-ago-2026 para poder **partirlo por línea** sin bajar nada: las pantallas
+   * de plata de Zattia pueden pedir Zattia sola o Stunned sola, y eso es `filtrarPorLinea` +
+   * `computarDatos` sobre esto mismo (ver `components/fundas/useDatosMonitor.ts`).
+   *
+   * 🔑 **No hay una segunda clave de caché ni una segunda bajada**: el caché sigue siendo uno por
+   * marca (`lib/cache.ts`), y la línea es un corte que se calcula encima.
+   */
+  payload: PayloadCache | null
   estado: EstadoCarga
   error: string | null
   origen: Origen | null
@@ -47,6 +59,17 @@ type MonitorState = {
    */
   cargar: (marca: Marca, historiaCompleta: boolean, forzar?: boolean) => Promise<void>
   limpiar: () => void
+
+  /**
+   * Qué línea miran las pantallas que saben de líneas. Vive acá y no adentro de cada pantalla para
+   * que elegir «Stunned» en Resumen siga valiendo al pasar a Márgenes: es la misma pregunta.
+   *
+   * ⚠️ **Es estado de PANTALLA, no de datos**: no dispara ninguna carga, y las pantallas que no
+   * preguntan por la línea no se enteran de que existe. Arranca en `'zattia'` por decisión de Bruno
+   * (22-ago-2026): **nunca una cifra mezclada sin rótulo**.
+   */
+  linea: Linea
+  setLinea: (linea: Linea) => void
 }
 
 /**
@@ -60,10 +83,16 @@ const ahora = () => new Date()
 export const useMonitorStore = create<MonitorState>((set, get) => ({
   marca: null,
   datos: null,
+  payload: null,
   estado: 'vacio',
   error: null,
   origen: null,
   progreso: null,
+  linea: 'zattia',
+
+  setLinea(linea) {
+    set({ linea })
+  },
 
   async cargar(marca, historiaCompleta, forzar = false) {
     // Ya están los datos de esta marca y nadie pidió refrescar: no hacer nada.
@@ -87,7 +116,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
      */
     set(
       cambiaDeMarca
-        ? { marca, datos: null, estado: 'cargando', error: null, origen: null, progreso: null }
+        ? { marca, datos: null, payload: null, estado: 'cargando', error: null, origen: null, progreso: null }
         : { marca, error: null, progreso: null },
     )
 
@@ -112,7 +141,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       const fresco = await leerCache(marca, false, desde)
       if (fresco) {
         const edadMin = Math.round((Date.now() - fresco.timestamp) / 60000)
-        publicar({ datos: computar(fresco.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: false } })
+        publicar({ datos: computar(fresco.data, ahora()), payload: fresco.data, estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: false } })
         return
       }
 
@@ -120,7 +149,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
       const vencido = await leerCache(marca, true, desde)
       if (vencido) {
         const edadMin = Math.round((Date.now() - vencido.timestamp) / 60000)
-        publicar({ datos: computar(vencido.data, ahora()), estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: true } })
+        publicar({ datos: computar(vencido.data, ahora()), payload: vencido.data, estado: 'listo', origen: { tipo: 'cache', edadMin, refrescando: true } })
         try {
           await refrescar(marca, desde, publicar)
         } catch {
@@ -142,7 +171,7 @@ export const useMonitorStore = create<MonitorState>((set, get) => ({
   },
 
   limpiar() {
-    set({ marca: null, datos: null, estado: 'vacio', error: null, origen: null, progreso: null })
+    set({ marca: null, datos: null, payload: null, estado: 'vacio', error: null, origen: null, progreso: null })
   },
 }))
 
@@ -180,6 +209,7 @@ async function refrescar(
 
   publicar({
     datos,
+    payload,
     estado: 'listo',
     origen: guardado.ok ? { tipo: 'red' } : { tipo: 'red', sinCache: guardado.motivo },
     error: null,

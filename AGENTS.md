@@ -132,6 +132,14 @@ ya tienen ficha:
 el área de cada una, y lo que no se adivina (el portal del cadete, las once vistas de Meta, las tres
 secciones sin `store`). El menú y los permisos se definen a mano en `lib/nav.datos.ts`.
 
+## Líneas de negocio
+
+**⛔ Antes de tocar `lib/lineas.core.js`, `lib/etl/linea.ts`, `lib/margenes.ts` o de darle el selector
+de línea a una pantalla, leer `docs/lineas.md`.** Stunned **no es una `Marca`**: es una línea adentro
+de Zattia y lo único que la separa es el prefijo de SKU. El corte por línea es **opt-in por pantalla**
+(`useDatosMonitor({ porLinea: true })`) porque las pantallas operativas tienen que seguir viendo la
+mercadería del local entera, y **«Ventas mensuales» no puede llevarlo**: sale de vistas ya agregadas.
+
 ## Comandos
 
 ```bash
@@ -155,7 +163,7 @@ Todo lo que entra al contexto se re-paga en cada turno posterior: un output larg
 varias veces su tamaño.
 
 - **Tests: uno por vez.** `npx vitest run tests/<archivo>.test.ts --reporter=dot`. La suite completa
-  son 89 archivos y su salida entera queda en contexto — correrla solo si se pide.
+  son 206 archivos y su salida entera queda en contexto — correrla solo si se pide.
 - **Comandos largos van cortados**: `git log`, builds y deploys con `| tail -30`.
 - **Avisar el `/clear` al cerrar cada unidad de trabajo** — Bruno no lo tiene que pedir; el marcador
   natural es después de deployar y verificar. El criterio no es "cambió el tema" sino **"¿vamos a

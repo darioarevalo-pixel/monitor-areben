@@ -218,3 +218,13 @@ npx vitest run tests/mkt-ventas.test.ts --reporter=dot
   **7/11** con la flecha apagada y el cartel que dice por qué, y **Zattia sin objetivo cargado**
   dibujando el cartel y **no una barra en 0 %** (su 16-jul, 6/6, también cotejado). Los cuatro
   números salieron del `GROUP BY` de psql, no de la misma pantalla.
+
+## El selector de línea (22-ago-2026)
+
+Esta pantalla es una de las cinco que llevan **selector de línea** en Zattia: `Zattia` · `Stunned`,
+arrancando en Zattia. ⇒ **el contador del día y el «cómo viene la venta» son de UNA línea**, nunca de
+la mezcla. ⛔ El día que se estrenó, los números de Zattia bajaron ~3 % respecto de lo que mostraba
+antes (28 productos, 195 unidades, $619.710 en 30 días, que ahora están en la pestaña de al lado).
+
+📌 El porqué, el costo medido y lo que el corte **no** puede hacer están en `docs/lineas.md`.
+⚠️ Las metas (`?metas=1`) **no se cortan por línea**: se cargan por marca y ninguna es de Stunned.

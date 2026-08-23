@@ -149,7 +149,7 @@ export function marcasConAcceso(perfil: Perfil | null, key: string, marcas: read
  * un sub propio: un sub habría que tildarlo usuario por usuario. Ver el docblock del core.
  */
 /** De qué marca del monitor cuelgan los permisos de una `store`. Stunned NO es una marca. */
-export const marcaDePermisos: (store: string) => Marca = marcaDePermisosJs
+export const marcaDePermisos: (store: string) => Marca | null = marcaDePermisosJs
 
 /** Las cuatro pantallas de conteo físico, que comparten los endpoints de stock vivo. */
 export const SECCIONES_CONTEO: readonly string[] = SECCIONES_CONTEO_JS
