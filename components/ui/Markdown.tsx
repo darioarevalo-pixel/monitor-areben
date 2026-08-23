@@ -77,9 +77,16 @@ function Indice({
   const ir = (ancla: string) => {
     // Por `id` y no por un ref: el título vive adentro del árbol de bloques, que se rearma entero
     // cada vez que cambia el texto, y guardar refs de algo que se remonta es guardar nodos muertos.
-    // `scrollIntoView` sube por el ancestro que scrollea, así que anda igual en la página que
-    // adentro del modal, que es el caso que se rompe callado.
-    document.getElementById(`${uid}-${ancla}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // `scrollIntoView` sube por el ancestro que scrollea, así que sirve igual en la página que
+    // adentro del modal.
+    //
+    // 🔴 **Sin `behavior: 'smooth'`, y eso está MEDIDO** (23-ago-2026, caminando el modal de «Manual
+    // de uso» en prod): adentro de `.mo-modal-body` el scroll suave **no mueve nada** —el
+    // `scrollTop` se queda en 0— mientras que el salto directo lleva el mismo contenedor a 4.497.
+    // En la página el suave andaba, así que el defecto sólo se ve en dos de los tres lugares donde
+    // se lee un manual, y ningún test lo toca. Y de paso es lo que conviene: en un documento de
+    // 6.000 px, esperar la animación para llegar a un título es peor que aparecer ahí.
+    document.getElementById(`${uid}-${ancla}`)?.scrollIntoView({ block: 'start' })
   }
 
   return (

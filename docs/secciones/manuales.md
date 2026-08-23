@@ -54,6 +54,10 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
   Abrirlo es escribir su id ahí; no hay un segundo camino. Por eso llegar por un link y hacer clic
   en la lista son exactamente lo mismo. El `id` es opaco (`m<epoch>_<rand>`) ⇒ **el link se copia
   con el botón**, no se escribe.
+- 🔴 **El salto del índice va SIN `behavior: 'smooth'`, y está medido.** Adentro de
+  `.mo-modal-body` el scroll suave no mueve nada —el `scrollTop` se queda en 0—, mientras que el
+  salto directo lleva el mismo contenedor a 4.497. En la página el suave andaba: por eso el defecto
+  sólo aparecía en dos de los tres lugares donde se lee un manual, y ningún test lo toca.
 - ⚠️ **Con un manual abierto las dos listas se esconden.** El manual se dibuja arriba de ellas, así
   que dejarlas obligaba a scrollear la lista entera para volver.
 
@@ -83,9 +87,9 @@ tests `tests/manuales.test.ts` y `tests/markdown.test.ts`.
 
 Lo que el test **no** ejerce y hay que caminar a mano:
 
-- 🔴 **El salto del índice ADENTRO de un modal**, que es el que se rompe callado: en la página
-  scrollea el documento y en el modal tiene que scrollear el modal. Abrir el mismo manual por
-  «Cómo se usa» desde su pantalla.
+- 🔴 **El salto del índice ADENTRO de un modal**, que es el que se rompe callado —y ya se rompió
+  una vez, ver arriba—: en la página scrollea el documento y en el modal tiene que scrollear el
+  modal. Abrir el mismo manual por «Cómo se usa» desde su pantalla y saltar a un título del final.
 - **El link**: copiarlo con el botón y **pegarlo en otra pestaña**. Y un id que ya no existe, que
   tiene que avisar y dejar la lista igual, no una pantalla vacía.
 - **Un manual sin publicar con un perfil que no edita**: no tiene que aparecer ni en la lista ni
