@@ -15,9 +15,14 @@ dijo la última vez, y los botones para anotar cómo te fue y cuándo volver a h
 
 Después de eso queda abierto solo y va cambiando de cliente a medida que cambiás de chat.
 
-**El panel vive únicamente en la pestaña de WhatsApp.** Si te vas a otra pestaña desaparece, y al
-volver a WhatsApp vuelve a aparecer. Por eso el clic en el ícono sólo abre el panel estando en
-WhatsApp Web: en cualquier otra pestaña no hay nada que abrir.
+**El panel vive únicamente en la pestaña de WhatsApp.** Si te vas a otra pestaña —o a otra
+ventana de Chrome— desaparece, y al volver a WhatsApp vuelve a aparecer. Por eso el clic en el
+ícono sólo abre el panel estando en WhatsApp Web: en cualquier otra pestaña no hay nada que abrir.
+
+> Si venís de la v0.2.1 y el panel te seguía apareciendo en todos lados: eso era el panel
+> **global** que declaraba el manifest. Apagarlo pestaña por pestaña no alcanzaba, porque el
+> global gana. Desde la v0.2.2 el manifest no declara ninguno y cada pestaña de WhatsApp lo
+> enciende por su cuenta.
 
 ## Qué hace y qué no
 

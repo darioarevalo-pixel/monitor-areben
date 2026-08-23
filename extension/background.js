@@ -1,9 +1,7 @@
-// El service worker. Hace tres cosas y ninguna más.
+// El service worker. Hace dos cosas y ninguna más.
 //
-// 1. Que el ícono de la barra abra el panel. Chrome sólo deja abrir el side panel desde un gesto
-//    del usuario; con esto, ese gesto es el clic en el ícono.
-// 2. Que el panel exista SÓLO en las pestañas de WhatsApp Web (ver abajo).
-// 3. Reenviar el número del chat al panel. El mensaje del content script viaja igual aunque el
+// 1. Que el panel exista SÓLO en las pestañas de WhatsApp Web (ver abajo).
+// 2. Reenviar el número del chat al panel. El mensaje del content script viaja igual aunque el
 //    panel esté cerrado: si no hay quien escuche, se pierde, que es lo correcto.
 //
 // No guarda estado a propósito: un service worker de MV3 se apaga solo a los 30 segundos de
@@ -11,49 +9,62 @@
 // necesita saber en qué chat está, se lo pregunta al content script (`que-chat`).
 
 const WA = 'https://web.whatsapp.com/'
+const PANEL = 'sidepanel.html'
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
-  repasarTodas()
-})
+const esWA = (url) => typeof url === 'string' && url.startsWith(WA)
 
-// Al despertar el service worker (se apaga solo a los 30 s), las pestañas que ya estaban
-// abiertas nunca dispararon un evento. Sin este repaso, el panel queda habilitado en pestañas
-// viejas hasta que se las toca.
-chrome.runtime.onStartup.addListener(() => repasarTodas())
+/**
+ * 🔴 **El side panel de Chrome es de la VENTANA, no de la pestaña**, y tiene DOS niveles: uno
+ * global y uno por pestaña. El manifest declaraba `side_panel.default_path`, que es el global:
+ * con eso puesto, el panel se muestra en todas las pestañas y **apagarlo por pestaña no
+ * alcanza**. Fue el intento fallido de la v0.2.1 — la ficha seguía apareciendo al costado de
+ * cualquier sitio, con el código de apagado corriendo bien.
+ *
+ * Lo que funciona es al revés: el manifest ya NO declara panel, el global se apaga acá de
+ * entrada, y cada pestaña de WhatsApp enciende el suyo con su propio `path`. Así no hay nada
+ * que mostrar en las demás, en vez de haber algo que hay que apagar a tiempo.
+ *
+ * 🔑 **Lo que `setOptions` deja escrito SOBREVIVE al service worker.** No es estado de este
+ * archivo: es del navegador. Por eso el panel abre bien aunque el worker esté dormido en el
+ * momento del clic — la pestaña ya quedó habilitada antes.
+ */
 
+// Va en el nivel de arriba, no adentro de `onInstalled`: se aplica cada vez que el worker
+// despierta. La v0.2.2 lo puso en `false` para manejar el clic a mano y el panel dejó de abrir
+// — `sidePanel.open()` sólo vale como respuesta INMEDIATA a un gesto del usuario, y consultar
+// la pestaña antes ya rompe esa ventana. El comportamiento nativo no tiene ese problema.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
+
+async function ajustar(tabId, url) {
+  if (tabId == null) return
+  try {
+    await chrome.sidePanel.setOptions(esWA(url) ? { tabId, path: PANEL, enabled: true } : { tabId, enabled: false })
+  } catch (e) {
+    // La pestaña se cerró entre el evento y esta llamada. Pasa y no es un error.
+  }
+}
+
+/**
+ * ⚠️ `tab.url` viene vacío en las pestañas donde la extensión no tiene permiso — que son todas
+ * menos WhatsApp. Eso NO es un problema: sin url no es WhatsApp y el panel se apaga, que es
+ * exactamente lo que se busca. Por eso esto no pide el permiso `tabs`, que daría la dirección de
+ * cada pestaña que se abre.
+ */
 async function repasarTodas() {
+  try {
+    await chrome.sidePanel.setOptions({ enabled: false }) // el global, apagado
+  } catch (e) {}
   try {
     const tabs = await chrome.tabs.query({})
     await Promise.all(tabs.map((t) => ajustar(t.id, t.url)))
   } catch (e) {}
 }
 
-/**
- * 🔑 El side panel de Chrome es de la VENTANA, no de la pestaña: abierto una vez, se queda
- * abierto mientras se cambia de pestaña, y la ficha de un cliente aparecería al costado del
- * home banking. Se acota habilitándolo por pestaña: prendido en WhatsApp, apagado en todo lo
- * demás. Chrome cierra el panel solo al pasar a una pestaña donde está apagado, y lo vuelve a
- * mostrar al volver.
- *
- * ⚠️ `tab.url` viene vacío en las pestañas donde la extensión no tiene permiso — que son todas
- * menos WhatsApp. Eso NO es un problema acá: sin url no es WhatsApp, y el panel se apaga, que
- * es exactamente lo que se busca. Por eso esto no pide el permiso `tabs`, que daría la
- * dirección de cada pestaña que el usuario abre.
- */
-async function ajustar(tabId, url) {
-  const esWA = typeof url === 'string' && url.startsWith(WA)
-  try {
-    await chrome.sidePanel.setOptions(
-      esWA ? { tabId, path: 'sidepanel.html', enabled: true } : { tabId, enabled: false },
-    )
-  } catch (e) {
-    // La pestaña se cerró entre el evento y esta llamada. Pasa y no es un error.
-  }
-}
+// Al instalar y al despertar: las pestañas que ya estaban abiertas nunca dispararon un evento.
+chrome.runtime.onInstalled.addListener(() => repasarTodas())
+chrome.runtime.onStartup.addListener(() => repasarTodas())
+repasarTodas()
 
-// Al cambiar de pestaña y al navegar dentro de una (WhatsApp Web es una sola página que cambia
-// la dirección sin recargar, así que `onUpdated` también avisa por `info.url`).
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId)
@@ -63,4 +74,16 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.url || info.status === 'complete') ajustar(tabId, tab.url)
+})
+
+/**
+ * ⚠️ **Cambiar de VENTANA no dispara `tabs.onActivated`.** Con dos ventanas de Chrome abiertas,
+ * la pestaña activa de la otra nunca pasaba por el ajuste y el panel se quedaba como estaba.
+ */
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, windowId })
+    if (tab) await ajustar(tab.id, tab.url)
+  } catch (e) {}
 })

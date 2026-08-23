@@ -165,12 +165,23 @@ teléfonos ya migrado — `localStorage.PhoneNumberHidingThreadPromotionMigratio
 `contact` de IndexedDB (7.418 registros, `id: …@lid` → `phoneNumber: …@c.us`) sirve de respaldo y
 se puede leer desde el content script, que comparte origen con la página.
 
-⚠️ **El side panel es de la VENTANA, no de la pestaña.** Abierto una vez se queda abierto al
-cambiar de pestaña, y la ficha de un cliente aparecía al costado de cualquier sitio. Desde la
-v0.2.1 `background.js` lo habilita por pestaña (`chrome.sidePanel.setOptions`): prendido en
-WhatsApp, apagado en todo lo demás, con un repaso de las pestañas ya abiertas al despertar el
-service worker. No pide el permiso `tabs`: sin permiso, `tab.url` viene vacío y eso ya significa
-"no es WhatsApp".
+🔴 **El side panel es de la VENTANA, no de la pestaña, y tiene DOS niveles.** Abierto una vez se
+quedaba abierto al cambiar de pestaña, y la ficha de un cliente aparecía al costado de cualquier
+sitio. Costó tres intentos (v0.2.1 → v0.2.3, 23-ago-2026); lo que hay que saber para no repetirlos:
+
+- **Habilitarlo por pestaña NO alcanza si el manifest declara `side_panel.default_path`**: ése es
+  el panel GLOBAL y gana. Fue la v0.2.1, con el código de apagado corriendo perfecto. La versión
+  que anda no declara panel en el manifest: apaga el global (`setOptions({enabled:false})`, sin
+  `tabId`) y cada pestaña de WhatsApp enciende el suyo con su `path`.
+- **Cambiar de VENTANA no dispara `tabs.onActivated`.** Hace falta `windows.onFocusChanged`
+  también, o la pestaña activa de la otra ventana nunca pasa por el ajuste.
+- ⚠️ **No manejar el clic del ícono a mano.** La v0.2.2 puso `openPanelOnActionClick:false` para
+  decidir en `action.onClicked`, y **el panel dejó de abrir**: `sidePanel.open()` sólo vale como
+  respuesta INMEDIATA a un gesto, y consultar la pestaña antes ya rompe esa ventana. Con el
+  comportamiento nativo no hace falta: lo que `setOptions` deja escrito sobrevive al service
+  worker (es estado del navegador), así que la pestaña ya está habilitada cuando llega el clic.
+- No pide el permiso `tabs`: sin permiso, `tab.url` viene vacío y eso ya significa "no es
+  WhatsApp".
 
 ⚠️ Eso obliga a que el script corra en el **mundo de la página** (`world: "MAIN"` en el manifest);
 el mundo aislado de la extensión no ve `window.require`. Por eso la extensión tiene dos scripts:
