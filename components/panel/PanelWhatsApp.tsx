@@ -174,23 +174,50 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
     }
   }, [])
 
+  /**
+   * 🔴 **El KV se lee SIEMPRE, haya chat o no.**
+   *
+   * Antes se leía adentro del efecto de la ficha, después del `if (!telNorm) return`. Mientras el
+   * panel sólo mostraba la ficha del chat abierto eso alcanzaba; con la solapa "Hoy" dejó de
+   * alcanzar y de la peor manera: sin chat abierto el mapa quedaba vacío, así que la lista del día
+   * decía **"no hay nadie para contactar"** con 300 vencidos adentro. Un error que se lee como un
+   * dato tranquilizador es peor que uno que se lee como error.
+   */
+  const kv = useRef<{ seg: MapaSeguimiento; tel: MapaTelefonos }>({ seg: {}, tel: {} })
+  const [kvListo, setKvListo] = useState(false)
+
   useEffect(() => {
-    // Sin número no hay nada que buscar (pasa en los grupos y en la pantalla de bienvenida). El
-    // cartel lo pone el render, no un setState acá adentro.
-    if (!telNorm) return
     let activo = true
     ;(async () => {
-      setEstado({ t: 'cargando' })
-
-      // El KV primero: la ficha se calcula CON el seguimiento (cadencia, notas, temperatura), y
-      // sin él saldría dibujada en blanco y después parpadearía.
       const [seg, telKv] = await Promise.all([
         leerMapa<MapaSeguimiento[string]>('crmseg', 'bdi'),
         leerMapa<string>('crmtel', 'bdi'),
       ])
       if (!activo) return
-      const mapaSeg = seg.ok ? seg.dato : {}
-      setCrmSeg(mapaSeg)
+      kv.current = { seg: seg.ok ? seg.dato : {}, tel: telKv.ok ? telKv.dato : {} }
+      setCrmSeg(kv.current.seg)
+      setKvListo(true)
+    })()
+    return () => {
+      activo = false
+    }
+  }, [])
+
+  useEffect(() => {
+    // Sin número no hay nada que buscar (pasa en los grupos y en la pantalla de bienvenida). El
+    // cartel lo pone el render, no un setState acá adentro.
+    //
+    // Y sin el KV tampoco: la ficha se calcula CON el seguimiento (cadencia, notas, temperatura),
+    // y sin él saldría dibujada en blanco y después parpadearía.
+    if (!telNorm || !kvListo) return
+    let activo = true
+    ;(async () => {
+      setEstado({ t: 'cargando' })
+
+      // ⚠️ El mapa se lee del ref y NO del estado a propósito: si este efecto dependiera de
+      // `crmSeg`, cada guardado de seguimiento —que lo cambia— volvería a pedirle la ficha al
+      // servidor, cuando `mutar` ya la recalcula sola con el mapa nuevo.
+      const mapaSeg = kv.current.seg
 
       const r = await buscarFicha({ tel: telNorm }, mapaSeg, today)
       if (!activo) return
@@ -214,7 +241,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
       // `clientes`**: viven sólo en el KV, que el servidor no lee. Sin este paso, todos esos
       // clientes aparecerían como números nuevos y se ofrecería cargarlos como lead — o sea,
       // duplicarlos.
-      const mapaTel: MapaTelefonos = telKv.ok ? telKv.dato : {}
+      const mapaTel: MapaTelefonos = kv.current.tel
       const idx = indexarTelefonos(Object.entries(mapaTel).map(([id, phone]) => ({ id, phone })))
       const { ids } = buscarPorTelefono(idx, telNorm)
       if (ids.length === 1) {
@@ -230,7 +257,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
     return () => {
       activo = false
     }
-  }, [telNorm, today])
+  }, [telNorm, today, kvListo])
 
   // ── Guardado ───────────────────────────────────────────────────────────────
 
@@ -251,6 +278,7 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
         decir('No se pudo guardar: ' + r.motivo, true)
         return
       }
+      kv.current = { ...kv.current, seg: r.mapa }
       setCrmSeg(r.mapa)
       // Recalcular con el mapa recién guardado, sin volver a pedirle nada al servidor: las ventas
       // y el padrón no cambiaron, lo que cambió es el seguimiento.
@@ -309,7 +337,11 @@ export function PanelWhatsApp({ tel }: { tel: string | null }) {
     return (
       <Envoltorio aviso={aviso}>
         {solapas}
-        <AgendaDelDia crmSeg={crmSeg} today={today} onAbrirChat={abrirChat} puedeAbrirChat={enExtension} />
+        {kvListo ? (
+          <AgendaDelDia crmSeg={crmSeg} today={today} onAbrirChat={abrirChat} puedeAbrirChat={enExtension} />
+        ) : (
+          <Cargando />
+        )}
       </Envoltorio>
     )
 

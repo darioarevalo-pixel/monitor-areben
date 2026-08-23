@@ -42,6 +42,12 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   (`guardarConRelectura`): se queda abierto horas al costado de WhatsApp mientras la sección, en
   otra pestaña, toca la misma clave. Sin la relectura, un clic en el panel a las 6 de la tarde
   pisaría todo lo que se hizo en el CRM desde la mañana.
+- 🔴 **El panel lee el KV SIEMPRE, haya chat abierto o no.** Estaba adentro del efecto de la
+  ficha, después del `if (!telNorm) return`: con la solapa "Hoy", abrir el panel sin chat dejaba el
+  mapa vacío y la lista anunciaba **"No hay nadie para contactar hoy"** con ~300 vencidos adentro.
+  Un error que se lee como una buena noticia no lo reporta nadie. Hoy son dos efectos separados y
+  la lista no se monta hasta que `kvListo`. ⚠️ El efecto de la ficha lee el mapa de un **ref** y no
+  del estado: si dependiera de `crmSeg`, cada guardado volvería a pedirle la ficha al servidor.
 - 🔑 **La lista del día del panel se arma en DOS pasos, y el orden importa.** Primero quién entra,
   con el KV solo (`lista-dia.ts`: 771 entradas, pesan nada); después el nombre, el teléfono y el
   total, de esos ~90 y no de los 12.485 del padrón (`action:'lista'`). Al revés sería bajar el CRM
