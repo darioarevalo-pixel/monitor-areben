@@ -75,8 +75,9 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 
 ## Pendiente
 
-- ▶️ **Falta probarlo en WhatsApp Web de verdad**: la extensión se cargó pero nadie la ejerció
-  contra un chat real. Lo primero que puede fallar es `numeroDelChat()` (`extension/content.js`).
+- ▶️ **Falta probar el arreglo del 23-ago** (v0.2.0 de la extensión) contra un chat de un cliente.
+  La lectura del número quedó verificada punta a punta contra el chat propio, pero no contra una
+  ficha real del CRM: falta ver que el cruce por teléfono encuentre al cliente.
 - ▶️ Del diseño acordado, la versión mínima dejó afuera: **guiones** de la guía de ventas que
   escriben en el cuadro de WhatsApp, la **pestaña con la lista del día**, "**pidió y no teníamos**",
   el tilde de **difusión** y el **de dónde salió** del lead.
@@ -92,6 +93,34 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   Sosa) y 63 sin ficha. Al de la característica de más lo rescata el segundo intento del cruce; a
   los otros no.
 
+## 🔴 WhatsApp ya no publica el teléfono (23-ago-2026)
+
+Lo primero que se probó no anduvo, y la causa no era el selector: **el dato ya no está en la
+página**. Medido sobre la cuenta de BDI (WhatsApp Business, build de 2026 con el ocultamiento de
+teléfonos ya migrado — `localStorage.PhoneNumberHidingThreadPromotionMigrationState === "migrated"`):
+
+- El `data-id` de un mensaje era `false_5493834270554@c.us_3EB0…` y **ahora es sólo el id del
+  mensaje** (`3EB0E65E341B647932F5`).
+- **No queda un teléfono en ningún atributo de la página.** Se recorrieron todos.
+- Las conversaciones se identifican con un **LID** (`###############@lid`), un número interno de 15
+  dígitos que no es el teléfono de nadie. `#main` sigue existiendo; el jid, no.
+- El store `lid-pn-mapping` de IndexedDB, que sonaba al puente obvio, **está vacío** (0 registros).
+
+⇒ Ningún retoque de selectores lo arregla. El teléfono se saca de la memoria de la aplicación:
+`require('WAWebChatCollection').ChatCollection.getActive()` → `chat.contact.phoneNumber`. El store
+`contact` de IndexedDB (7.418 registros, `id: …@lid` → `phoneNumber: …@c.us`) sirve de respaldo y
+se puede leer desde el content script, que comparte origen con la página.
+
+⚠️ Eso obliga a que el script corra en el **mundo de la página** (`world: "MAIN"` en el manifest);
+el mundo aislado de la extensión no ve `window.require`. Por eso la extensión tiene dos scripts:
+`pagina.js` (MAIN, lee) y `content.js` (aislado, habla con el panel) que se pasan el número por
+`window.postMessage`.
+
+🔑 **El cambio deja la extensión MENOS frágil que antes para el día a día**: ya no depende del HTML,
+así que los rediseños de WhatsApp —que son seguidos— dejan de romperla. Lo que ahora puede cambiar
+sin aviso es esa puerta interna; cuando pase, lo que hay que buscar es el reemplazo de
+`getActive()` y el resto queda igual.
+
 ## Cómo se prueba
 
     npx vitest run tests/crm-panel.test.ts --reporter=dot
@@ -103,6 +132,12 @@ Lo que los tests **no** cubren y hay que ejercer a mano:
   ⚠️ La **primera** llamada después de un rato arma el índice de 12.500 teléfonos: si tarda más de
   3-4 s, hay que mirar cuánto pesa esa consulta antes de tocar otra cosa.
 - La extensión entera. `chrome://extensions` → Modo de desarrollador → Cargar descomprimida sobre
-  `extension/`. Ver `extension/README.md`.
+  `extension/`. Ver `extension/README.md`. ⚠️ Al cambiar un archivo hay que apretar el ⟳ de la
+  extensión **y recargar la pestaña de WhatsApp**: los content scripts no entran solos en las
+  pestañas ya abiertas.
+- La lectura del número, sin tocar ninguna conversación de un cliente: abrir el chat propio
+  (`web.whatsapp.com/send?phone=<el número de la cuenta>`) y comprobar en la consola que
+  `require('WAWebChatCollection').ChatCollection.getActive().contact.phoneNumber` sea ese mismo
+  número. Es como se verificó el arreglo del 23-ago.
 - El guardado. Se verifica como todo lo que toca el KV del CRM: **el diff contra el dump tiene que
   ser exactamente el cliente tocado** (`scripts/crm-kv.mjs --dump`).

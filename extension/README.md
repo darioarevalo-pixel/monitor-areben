@@ -25,8 +25,18 @@ Después de eso queda abierto solo y va cambiando de cliente a medida que cambi�
   escribió último).
 - Un chat recién abierto, sin ningún mensaje, tampoco: el número sale de los mensajes.
 
+## Si cambiaste algo de esta carpeta
+
+Dos pasos, y el segundo se olvida siempre:
+
+1. En `chrome://extensions`, apretá el **⟳** de la extensión.
+2. **Recargá la pestaña de WhatsApp Web.** Los cambios no entran solos en una pestaña ya abierta.
+
 ## Si un día deja de aparecer la ficha
 
-WhatsApp Web cambia su HTML cada tanto y lo que se rompe es siempre lo mismo: de dónde sale el
-número. Está en una sola función, `numeroDelChat()` de `content.js`, y arriba está explicado cómo
-lo saca. No hay nada más que mantener de este lado.
+Lo que se rompe es siempre lo mismo: de dónde sale el número de la conversación. Está en una sola
+función, `telefonoDelChatAbierto()` de `pagina.js`, y arriba está explicado de dónde lo saca y por
+qué. No hay nada más que mantener de este lado.
+
+El panel te va a decir qué pasó en vez de quedarse mudo: si dice "no puedo leer con quién estás
+hablando", WhatsApp movió esa puerta de lugar.
