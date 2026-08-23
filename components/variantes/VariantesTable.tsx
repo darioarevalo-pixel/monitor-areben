@@ -55,7 +55,8 @@ export function VariantesTable() {
   const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { marca } = useSesion()
   const vendido = useVendidoSale(marca)
-  const promoIdx = useTnPromo(marca)
+  // Por LÍNEA: con la marca, «en oferta hoy» no se encendía nunca en Stunned (docblock de `useTnImages`).
+  const promoIdx = useTnPromo(linea)
 
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')

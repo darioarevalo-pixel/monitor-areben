@@ -243,6 +243,61 @@ honesto al oráculo es que **cambiar de línea resetea `productos` a `[]`**. Y `
 cachea por línea **en memoria**: ir a Zattia y volver a Stunned **no vuelve a pedir**, así que la
 medición se hace con la página recién cargada.
 
+## 🔴 Caminar las OCHO encontró dos defectos que los 4.246 tests no ven (23-ago-2026)
+
+La lista de pasos decía «caminarlo» y nombraba **tres** pantallas. El selector está en **ocho**
+(`grep -l SelectorLinea components/`): SesionFotos, Marketing, ImagenesCard, **Resumen,
+ProductosTable, VariantesTable, Margenes, MktVentas**. **Las cinco que faltaban eran las que tenían
+los defectos.** ⛔ Una lista de pasos a caminar no reemplaza contar las pantallas que el cambio tocó.
+
+### 1. ✅ La foto y el PRECIO de TN se pedían por MARCA, no por línea — ARREGLADO
+
+`useTnPromo` / `useTnImages` / `asegurarTnPromo` (`components/productos/useTnImages.ts`) recibían una
+`Marca`. `lib/tn-audit.ts` ya bajaba por línea desde el 22-ago, pero las pantallas le pasaban
+`zattia` estando en Stunned ⇒ `matchTn` no engancha nunca y `lib/margenes.ts:66-72` cae al `else`:
+**`foto = null` y `precio = retailer_price`**.
+
+Medido en prod antes del arreglo: Márgenes con Stunned daba **24 de 24 «sin foto»** y Por producto
+**0 de 28 con foto**, contra **401 imágenes** y 47 de 50 en Zattia — y Marketing, que sí cruzaba por
+línea, decía que **sólo 3 de 28** no tienen foto en TN.
+
+🔴 **Lo grave no era la foto, era el markup**: **304 de 449** tarjetas de Zattia (**68 %**) valoran
+con el precio de **promo** y las 24 de Stunned con el de **lista** ⇒ el «markup promedio **180 %**»
+de Stunned al lado del «**88 %**» de Zattia **no era la misma medición**, y el rótulo de línea lo
+hacía leer como que Stunned rinde el doble. Alcanzaba también al chip **«en oferta hoy»** (nunca se
+encendía en Stunned) y a **«Generar sale»**, que sobre productos STU salía con los precios de la
+tienda equivocada.
+
+El arreglo son **tres firmas y cuatro llamadas**: los hooks toman `Linea`, y las tres pantallas con
+selector le pasan `linea`. ⚠️ **`Marca` sigue entrando a propósito** —es un subconjunto de `Linea`—
+porque **Comisiones, Reposición, Gerencial, Liquidación y las cards de tncat son de mercadería
+ENTERA** y tienen que seguir pidiendo la marca. Cambiar `tn-audit` no era el camino: de ahí comen
+también ellas.
+
+🔑 **Lo amarra `tests/lineas-tn-por-linea.test.ts`, y en las dos direcciones**: con selector ningún
+hook de TN puede recibir `marca`, y sin selector ninguno puede recibir `linea`. El defecto no estaba
+en ninguna función —`matchTn` es puro y correcto, `tn-audit` ya era por línea—, estaba en **qué
+argumento le pasa la pantalla**, que es justo lo que un test de unidad no mira.
+
+### 2. 🔴 El objetivo de Norte de la pantalla Ventas es el de la MARCA — ABIERTO
+
+`useMetas(marca)` (`components/mkt-ventas/MktVentas.tsx:56`). Medido: la tarjeta es **idéntica en las
+dos pestañas** («40 compras por día online al sáb 31-oct · escalón 10 ventas/día para el mar 8-sep»),
+que es la rampa de **Zattia**. O sea: **la venta de Stunned se mide contra el objetivo de Zattia, con
+el rótulo de Stunned**.
+
+⛔ **No es un bug a tapar**: `api/_norte.js:267` rechaza todo `store` que no sea `bdi|zattia`, así que
+el objetivo de Stunned **no tiene dónde vivir**. Que Stunned tenga rampa propia —y cuál— es una
+decisión de Bruno. Hasta que la haya, la tarjeta afirma algo que no es.
+
+### 🏁 Lo que SÍ anduvo en las cinco
+
+La partición cierra en las tres pantallas de Análisis: **639 + 28 = 667 productos** y
+**1.656 + 112 = 1.768 variantes** (Resumen, Por producto y Por variante dan lo mismo). En Ventas el
+corte está bien: **1 online · 17 local**, igual que el `select`, y «Los que más salieron» trae sólo
+STU. ⚠️ **En `/variantes` no se puede mirar el mutante de las huérfanas**: se dibujan en **Etiquetas**
+(`allVariantesHuerfanas`), que a propósito no tiene selector — buscar la palabra ahí no prueba nada.
+
 ## ▶️ La novedad al equipo está ESCRITA y RETENIDA a propósito
 
 Decisión de Bruno (22-ago-2026): *«la novedad la hacemos conjunta, cuando hagamos todo lo de

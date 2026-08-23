@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
-import { useSesion } from '@/components/SesionProvider'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import {
   OBJETIVO_DEFAULT,
@@ -49,8 +48,10 @@ const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
 export function Margenes() {
   const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
-  const { marca } = useSesion()
-  const tnPromo = useTnPromo(marca)
+  // 🔴 El índice va por LÍNEA: con la marca, Stunned cruzaba contra el catálogo de Zattia
+  // (nunca matchea) y las 24 tarjetas salían sin foto y valuadas a precio de LISTA, o sea con un
+  // markup que no es comparable con el de al lado. Ver el docblock de `useTnImages`.
+  const tnPromo = useTnPromo(linea)
 
   const [objetivo, setObjetivo] = useState(OBJETIVO_DEFAULT)
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')

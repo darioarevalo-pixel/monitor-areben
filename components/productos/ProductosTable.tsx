@@ -97,10 +97,10 @@ const ROTULO_EN_CAMPANIA: Record<EstadoItem, string> = {
 export function ProductosTable() {
   const { datos, error, progreso, origen, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const { marca } = useSesion()
-  const tnIdx = useTnImages(marca)
+  const tnIdx = useTnImages(linea)
   // El índice completo de TN (el mismo payload que las fotos, ya bajado) para saber qué producto
   // tiene una oferta puesta HOY, incluidas las que se cargaron a mano y la bitácora no conoce.
-  const promoIdx = useTnPromo(marca)
+  const promoIdx = useTnPromo(linea)
   const vendido = useVendidoSale(marca)
   const toast = useToast()
 
@@ -247,7 +247,9 @@ export function ProductosTable() {
     if (!outletSel.size || generando) return
     setGenerando(true)
     try {
-      const promoIdx = await asegurarTnPromo(marca)
+      // Por LÍNEA: sobre productos de Stunned, con la marca el sale salía con los precios de
+      // la tienda equivocada. Ver el docblock de `useTnImages`.
+      const promoIdx = await asegurarTnPromo(linea)
       const sel = productos.filter((p) => outletSel.has(p.id))
       await generarReporteSale(sel, promoIdx, modoVU)
     } finally {
