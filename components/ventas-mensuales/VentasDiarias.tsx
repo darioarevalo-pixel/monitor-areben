@@ -251,7 +251,19 @@ function Contenido({
                   <Td align="right">{entero(f.total.unidades)}</Td>
                   <Td align="right">{formatMoney(f.total.plata)}</Td>
                   {canales.map((c) => <Td key={c} align="right">{fmt(valor(f.porCanal[c]))}</Td>)}
-                  <Td align="right"><Delta pct={variacion(valor(f.total), f.previo ? valor(f.previo) : null)} /></Td>
+                  {/*
+                    🔴 **Un día que no cerró NO lleva porcentaje.** Caminándolo en producción el
+                    23-ago-2026, Zattia dibujaba «▼ 100%» sobre el domingo que todavía no había
+                    vendido nada a las 8 de la mañana: medio día contra un día entero **siempre** da
+                    para abajo, y ese número afirma una caída que no pasó. Es el mismo cero que la
+                    barra clara y el chip evitan en el gráfico, colado por la única columna que no
+                    miraba `completo`.
+                  */}
+                  <Td align="right">
+                    {f.completo === false
+                      ? <span style={{ color: color.mut2 }}>sin cerrar</span>
+                      : <Delta pct={variacion(valor(f.total), f.previo ? valor(f.previo) : null)} />}
+                  </Td>
                 </Tr>
               ))}
             </TBody>
@@ -292,7 +304,7 @@ function AlPie({
 
   const lineas: React.ReactNode[] = [
     medidoHasta
-      ? `El espejo de ventas está leído hasta el ${diaCorto(medidoHasta)}${incompletos > 0 ? `: el día de hoy se está midiendo y su barra va más clara` : ''}.`
+      ? `El espejo de ventas está leído hasta el ${diaCorto(medidoHasta)}.${incompletos > 0 ? ` ${entero(incompletos)} día${incompletos === 1 ? '' : 's'} todavía se está${incompletos === 1 ? '' : 'n'} midiendo: su barra va más clara, su fila no lleva variación — y los totales de arriba SÍ lo cuentan, así que van cortos contra una semana anterior entera.` : ''}`
       : 'No se pudo saber hasta cuándo está leído el espejo, así que ningún día se puede dar por cerrado.',
     `Facturado = lo de los renglones, menos el descuento, más el envío — la misma cuenta que usa Dirección. Cotejado contra el total que trae Gestión Nube en cada venta: ${cierra ? `coincide (${formatMoney(brecha)} de diferencia en ${entero(control.ventas)} ventas)` : `DIFIERE en ${formatMoney(brecha)} sobre ${entero(control.ventas)} ventas`}.`,
   ]

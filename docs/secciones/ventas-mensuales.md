@@ -80,8 +80,18 @@ barra.
 
 ## Lo que ya se rompió acá
 
-- Todavía nada de la pestaña nueva. Lo que sí se rompió en la vecina y de lo que ésta copió el
-  recaudo: el store del ETL **publicaba los datos de una marca bajo el nombre de la otra**
+- 🔴 **Caminarlo en producción encontró el defecto que los 4.513 tests no vieron** (23-ago-2026): la
+  fila del día que **todavía se está midiendo** mostraba «▼ 100%». Medio día contra un día entero da
+  siempre para abajo, y ese porcentaje **afirma una caída que no pasó**. Es el mismo cero que la
+  barra clara y el chip evitan en el gráfico, colado por la única columna que no miraba `completo`.
+  Ahora esa celda dice «sin cerrar». ⇒ **al agregar una columna que compara, preguntarse si las dos
+  mitades están cerradas.**
+- ⚠️ **Y el gráfico se ve VACÍO por el puente de Chrome, no por la app**: la pestaña del instrumento
+  queda `hidden`, `requestAnimationFrame` no corre (medido: 0 frames en un segundo) y la animación
+  de las barras de recharts nunca arranca — las barras existen en el DOM con altura 0,6 px. La línea
+  de la semana anterior sí se dibuja, que es lo que hace el diagnóstico confuso. **Se destrabó al
+  hacer visible la pestaña.** Primera hipótesis cuando «el gráfico no dibuja»: el instrumento.
+- Lo que se rompió en la vecina y de lo que ésta copió el recaudo: el store del ETL **publicaba los datos de una marca bajo el nombre de la otra**
   (18-ago-2026). Por eso `useVentasDiarias` **vacía la serie antes de pedir la nueva** al cambiar de
   marca: acá lo que queda dibujado son barras y totales, que no se leen como «está cargando».
 
@@ -110,7 +120,11 @@ npx vitest run tests/handlers-autorizacion.test.ts # el 403 antes de tocar la ba
 - 🔴 **Zattia no se puede ejercer desde esta Mac**: sin `ZATTIA_SUPABASE_SERVICE_KEY` local, la anon
   contesta `permission denied for table ventas` (la Fase S le revocó el `select`). En Vercel la
   service key está. Los números esperados de Zattia para 14 días al 23-ago-2026, sacados con `psql`:
-  **394 compras, 600 unidades, $12.661.703** y 4 ventas técnicas.
+  **394 compras, 600 unidades, $12.661.703** y 4 ventas técnicas. ✅ **Caminado en prod el
+  23-ago-2026 y cotejado contra `psql` en las DOS marcas, al peso**: BDI 30 días → 832 compras,
+  8.737 unidades, $37.204.857; Zattia 30 días → 605 compras, 894 unidades, $20.256.515. En Zattia
+  el pie no dibuja la línea de «Otros canales» y la tabla no tiene columnas de mayorista, porque no
+  hay — que es la mitad que prueba que los canales salen de lo que tuvo movimiento.
 - 🔑 **12 mutantes, 12 muertos.** El que hay que ver caer es `f.completo === false` → `=== true` en
   `totalDelTramo`: salió **vivo** la primera vez porque el fixture tenía dos días completos y dos
   incompletos, y contar unos o los otros daba el mismo número. Un tramo de prueba necesita los dos

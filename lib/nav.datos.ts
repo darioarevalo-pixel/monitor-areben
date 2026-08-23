@@ -120,7 +120,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "ventas-mensuales",
     "area": "analisis",
     "label": "Ventas mensuales",
-    "info": "Evolución de las ventas mes a mes.",
+    "info": "La venta mes a mes, y día a día con el corte por canal.",
     "brands": [
       "bdi",
       "zattia"
