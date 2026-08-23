@@ -358,7 +358,7 @@ export function Integraciones() {
         const res = aplicarResultadoTanda([r], [r], d)
         if (res.fallaron) throw new Error(res.rows[0]?.err || 'No se pudo escribir en TN.')
         setDryRows((rs) => rs.map((x) => (x.sku === r.sku ? { ...x, tn: r.gn, delta: 0, err: null } : x)))
-        setDryMsg(`✓ ${r.sku}: el stock en TN quedó en ${r.gn}.`)
+        setDryMsg(`${r.sku}: el stock en TN quedó en ${r.gn}.`)
       } catch (e) {
         setDryError((e as Error).message)
       } finally {
@@ -429,7 +429,7 @@ export function Integraciones() {
     }
 
     const quedaron = candidatas.length - escritas - fallaron
-    setDryMsg(`✓ ${escritas} de ${candidatas.length} escritas en TN. Corré el dry-run de nuevo (lee TN de verdad) para confirmarlo.`)
+    setDryMsg(`${escritas} de ${candidatas.length} escritas en TN. Corré el dry-run de nuevo (lee TN de verdad) para confirmarlo.`)
     if (fallaron || quedaron) {
       setDryError(
         [

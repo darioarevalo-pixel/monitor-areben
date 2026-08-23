@@ -132,6 +132,15 @@ ya tienen ficha:
   `lib/meta-ads/`, `api/meta-ads.js`, `api/_meta-*.js`, `scripts/*meta*` o los cuatro workflows de
   Meta. ⛔ **Escribe en una API externa y gasta cupo**: los cinco candados de permisos, qué está
   medido y qué nunca se ejerció están ahí, no en el código.
+- Integraciones (GN↔TN de Stunned) → **leer `docs/secciones/integraciones.md`** antes de tocar
+  `components/integraciones/`, `lib/sku-map/`, `lib/sync-tn/`, `api/sku-map.js` o `api/_sync-tn.js`.
+  ⛔ **Escribe en la TIENDA VIVA y en la contabilidad**, y la mitad que escribe la tienda está en
+  otro repo (`bdi-catalogo`). ⛔ **Gestión Nube no anula ventas por API**: por eso stock tiene botón
+  masivo y ventas no, y eso NO se empareja.
+- Agenda operativa → **leer `docs/secciones/agenda.md`** antes de tocar `components/agenda/`,
+  `lib/agenda/` o `api/_agenda.js`. ⛔ **La ve todo el equipo** (`KEYS_PARA_TODOS`) y **tildar no
+  pide permiso**: no hay nada que destrabar. ⛔ Las promos y los pendientes son **un solo motor**
+  (`reglas.core.js`) — una rutina nueva se carga, no se construye.
 
 ## Mapa de secciones
 
