@@ -339,6 +339,19 @@ const TRAZOS = {
       <circle cx="16.6" cy="16.8" r="1.8" />
     </>
   ),
+  /**
+   * Mensajes de clientes — un sobre con un punto: hay algo adentro que nadie abrió.
+   *
+   * El punto no es decoración: la sección existe por lo que NO se leyó, y un sobre a secas se lee
+   * como "correo", que es la carpeta donde el problema vive hoy.
+   */
+  buzon: (
+    <>
+      <rect x="3" y="5.5" width="15" height="13" rx="1.6" />
+      <path d="M3.4 7 10.5 12l7.1-5" />
+      <circle cx="19" cy="6" r="2.4" />
+    </>
+  ),
   /** Canjes — dos flechas que se cruzan: le mandamos producto, nos manda contenido. */
   canjes: (
     <>

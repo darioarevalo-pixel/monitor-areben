@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-52 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+53 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -26,6 +26,8 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 `components/panel`, el iframe que la extensión de Chrome pega al costado de WhatsApp Web)
 
 **Local** — `envios → components/envios + lib/envios` (+ portal `/cadete/<token>`) ·
+`buzon → components/buzon + lib/buzon` (los mensajes de clientes sin resolver; su efecto real está
+en Envíos, que pregunta antes de dejar avanzar el paquete de esa orden) ·
 `atencion → components/atencion + lib/atencion` ·
 `conteo → components/conteo-local-bdi` · `conteo-estandar-zattia` y
 `conteo-estandar-stunned → components/conteo-estandar` · `cupones` · `etiquetas` · `exhib` ·

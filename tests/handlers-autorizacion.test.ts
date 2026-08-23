@@ -87,6 +87,9 @@ const PUERTAS = [
   { archivo: '_calendario', llave: 'calendario', que: 'el calendario editorial' },
   { archivo: '_atencion', llave: 'atencion', que: 'la bandeja de atención al cliente' },
   { archivo: '_meta-funnel', llave: 'meta-ads', que: 'el embudo de Meta Ads' },
+  // Nació con gate (23-ago-2026). Entra igual: lo que guarda es correspondencia de clientes, y el
+  // 403 antes de tocar la base es lo que no se ve en ninguna pantalla.
+  { archivo: '_buzon', llave: 'buzon', que: 'los mensajes de clientes' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */

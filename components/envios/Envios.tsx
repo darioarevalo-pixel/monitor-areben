@@ -62,6 +62,8 @@ import {
   turnosDe,
 } from '@/lib/envios/core'
 import { mensajeParaLaClienta } from '@/lib/envios/mensajes'
+import { abiertosDe, avisoDeDespacho, frenaElDespacho, resumenDe } from '@/lib/buzon/core'
+import type { IndiceAbiertos } from '@/lib/buzon/tipos'
 import { GUIA_ENVIOS } from '@/lib/envios/guia'
 import { useGuia } from '@/store/useGuia'
 import { Icono } from '@/components/ui/Icono'
@@ -109,7 +111,7 @@ const ESTADO_TONE: Record<string, Tone> = {
  * análisis por marca deja de estar ciego sin que la operación cambie.
  */
 export function Envios() {
-  const { fecha, setFecha, envios, pendientes, cargando, error, recargar, traerDeTiendaNube } = useEnvios()
+  const { fecha, setFecha, envios, pendientes, cargando, error, abiertos, errorBuzon, recargar, traerDeTiendaNube } = useEnvios()
   const { confirmar } = useConfirmar()
   const toast = useToast()
   // La marca del header. Es la que siembra el alta a mano: la bandeja filtra por marca, así que una
@@ -164,13 +166,44 @@ export function Envios() {
     }
   }
 
+  /**
+   * El freno: antes de dejar avanzar un paquete, ¿esta clienta escribió y nadie lo resolvió?
+   *
+   * ⚠️ **Avisa y deja pasar**, mismo criterio que la advertencia de duplicado de Integraciones: un
+   * freno duro deja al mostrador sin salida un sábado a la tarde, y lo que hace falta es que la
+   * persona LEA. Devuelve `true` cuando se puede seguir.
+   *
+   * 🔑 La pregunta —qué estados despachan, qué mensajes cuentan, qué dice el cartel— vive entera en
+   * `lib/buzon/core.ts`. Acá sólo se pregunta: escrita adentro de este archivo, la segunda pantalla
+   * que la necesite la copia con una condición de menos.
+   */
+  async function dejaAvanzar(e: Envio): Promise<boolean> {
+    const msjs = abiertosDe(e, abiertos)
+    if (!msjs.length) return true
+    const { titulo, mensaje } = avisoDeDespacho(msjs)
+    return confirmar({
+      titulo,
+      mensaje: <div style={{ whiteSpace: 'pre-wrap' }}>{mensaje}</div>,
+      ok: 'Seguir igual',
+      cancelar: 'Voy a leerlo',
+      tono: 'danger',
+    })
+  }
+
   async function tildar(e: Envio, estado: EstadoEnvio) {
+    if (frenaElDespacho(estado) && !(await dejaAvanzar(e))) return
     try {
       await cambiarEstado(e.id, estado)
       await recargar()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo cambiar el estado.')
     }
+  }
+
+  /** Mandar a un día también es hacer avanzar el paquete: es el paso en el que se decide que sale. */
+  async function pedirDia(e: Envio) {
+    if (!(await dejaAvanzar(e))) return
+    setAgendando(e)
   }
 
   /**
@@ -238,6 +271,16 @@ export function Envios() {
         </Button>
       </HeaderAcciones>
 
+      {/* 🔴 Que el buzón no conteste se DICE. Callado, la pantalla se comporta igual que un día sin
+          mensajes —ninguna pastilla, ningún cartel al despachar— y el freno se apaga entero sin que
+          nadie se entere. Es el mismo defecto que un 403 leído como «no hay datos». */}
+      {errorBuzon && (
+        <Notice tone="warning">
+          Hoy no se pudieron leer los mensajes de clientes: <strong>esta pantalla no te va a avisar</strong> si
+          una clienta escribió antes de que el paquete salga. ({errorBuzon})
+        </Notice>
+      )}
+
       {/* Las dos primeras no son dos pantallas: el pendiente y el del día son el mismo envío en dos
           momentos de su vida, y el paso de uno al otro —ponerle precio y mandarlo a un día— es el
           trabajo. La tercera es la otra mitad de la operación: la plata que queda dando vueltas. */}
@@ -275,7 +318,8 @@ export function Envios() {
           <Pendientes
             envios={pendientes}
             cargando={cargando}
-            onAgendar={setAgendando}
+            abiertos={abiertos}
+            onAgendar={pedirDia}
             onEditar={setEditando}
             onBorrar={borrar}
             onRecargar={recargar}
@@ -374,6 +418,7 @@ export function Envios() {
                         <div style={{ fontWeight: 600 }}>{e.cliente || 'Sin nombre'}</div>
                         {e.orden_numero ? <div style={{ opacity: 0.6, fontSize: 12 }}>#{e.orden_numero}</div> : null}
                         {e.origen === 'manual' ? <Badge>a mano</Badge> : null}
+                        <PastillaMensaje envio={e} abiertos={abiertos} />
                       </Td>
                       <Td>
                         <Direccion envio={e} />
@@ -553,6 +598,24 @@ function EstadoDelEnvio({ envio, onCambiar }: { envio: Envio; onCambiar: (e: Env
 }
 
 /**
+ * **La pastilla de «esta clienta escribió».**
+ *
+ * Va en la celda del cliente de las DOS tablas —la bandeja y la hoja del día— porque el paquete se
+ * puede despachar desde cualquiera de las dos. Lleva el asunto y no sólo el ícono: un cartel que
+ * dice «hay un mensaje» sin decir cuál se aprende a ignorar en una semana.
+ */
+function PastillaMensaje({ envio, abiertos }: { envio: Envio; abiertos: IndiceAbiertos }) {
+  const msjs = abiertosDe(envio, abiertos)
+  if (!msjs.length) return null
+  return (
+    <div style={{ marginTop: 2 }}>
+      <Badge tone="danger">📩 {msjs.length > 1 ? `${msjs.length} mensajes sin resolver` : 'mensaje sin resolver'}</Badge>
+      <div style={{ fontSize: 12, color: color.danger, maxWidth: 240 }}>{resumenDe(msjs[0])}</div>
+    </div>
+  )
+}
+
+/**
  * La bandeja: los pedidos cotizados que todavía no tienen día.
  *
  * 🔑 **Existe porque el día lo confirma el cliente, no la orden.** Antes, la única forma de anotar
@@ -566,6 +629,7 @@ function EstadoDelEnvio({ envio, onCambiar }: { envio: Envio; onCambiar: (e: Env
 function Pendientes({
   envios,
   cargando,
+  abiertos,
   onAgendar,
   onEditar,
   onBorrar,
@@ -574,6 +638,7 @@ function Pendientes({
 }: {
   envios: Envio[]
   cargando: boolean
+  abiertos: IndiceAbiertos
   onAgendar: (e: Envio) => void
   onEditar: (e: Partial<Envio>) => void
   onBorrar: (e: Envio) => Promise<void>
@@ -631,6 +696,7 @@ function Pendientes({
                   <Badge tone="danger">volvió{e.fecha ? ` del ${rotuloDeDia(e.fecha) || e.fecha}` : ''}</Badge>
                 </div>
               ) : null}
+              <PastillaMensaje envio={e} abiertos={abiertos} />
             </Td>
             <Td>
               <Direccion envio={e} conMensaje />

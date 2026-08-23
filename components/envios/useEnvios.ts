@@ -12,6 +12,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso, sumarDias } from '@/lib/calendario'
 import { leerCuenta, leerDia, leerOrdenesTN, leerPendientes, leerZonas } from '@/lib/envios/cliente'
+import { leerMensajes } from '@/lib/buzon/cliente'
+import { indiceDeAbiertos } from '@/lib/buzon/core'
+import type { IndiceAbiertos } from '@/lib/buzon/tipos'
 import { cuentaDelCadete, marcasATraer, ordenAEnvio, vaAlReparto, vaPorCorreo } from '@/lib/envios/core'
 import { apiFetch } from '@/lib/api-fetch'
 import type { CuentaCadete, Envio, Traida, ZonaDeReparto } from '@/lib/envios/tipos'
@@ -41,6 +44,18 @@ export type EstadoEnvios = {
   pendientes: Envio[]
   cargando: boolean
   error: string | null
+  /**
+   * Los mensajes de clientes SIN resolver, indexados por `marca|orden`. Es lo que le permite a la
+   * pantalla avisar antes de dejar avanzar un paquete cuya clienta escribió y nadie contestó.
+   */
+  abiertos: IndiceAbiertos
+  /**
+   * 🔴 **Que el buzón no conteste tiene que DECIRSE.** Sin esto, un 500 del buzón deja el índice
+   * vacío y la pantalla se comporta exactamente igual que un día sin mensajes: el freno se apaga
+   * entero, en silencio, y nadie se entera hasta que sale un paquete que no tenía que salir. Es el
+   * mismo defecto que el 403 leído como "sin datos".
+   */
+  errorBuzon: string | null
   recargar: () => Promise<void>
   traerDeTiendaNube: () => Promise<Traida>
 }
@@ -54,6 +69,8 @@ export function useEnvios(): EstadoEnvios {
   const [todosLosPendientes, setTodosLosPendientes] = useState<Envio[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [abiertos, setAbiertos] = useState<IndiceAbiertos>(() => new Map())
+  const [errorBuzon, setErrorBuzon] = useState<string | null>(null)
 
   const [tick, setTick] = useState(0)
 
@@ -80,6 +97,18 @@ export function useEnvios(): EstadoEnvios {
         if (!vivo) return
         setEnvios(d.envios)
         setTodosLosPendientes(p)
+        // El buzón va DESPUÉS y en su propio try: que no conteste no puede dejar sin hoja al
+        // cadete. Pero tampoco puede pasar callado — ver `errorBuzon`.
+        try {
+          const msjs = await leerMensajes(true)
+          if (!vivo) return
+          setAbiertos(indiceDeAbiertos(msjs))
+          setErrorBuzon(null)
+        } catch (e) {
+          if (!vivo) return
+          setAbiertos(new Map())
+          setErrorBuzon(e instanceof Error ? e.message : 'No se pudieron leer los mensajes de clientes.')
+        }
       } catch (e) {
         if (!vivo) return
         setError(e instanceof Error ? e.message : 'No se pudo leer el día.')
@@ -173,7 +202,7 @@ export function useEnvios(): EstadoEnvios {
     [todosLosPendientes, marcaActiva],
   )
 
-  return { fecha, setFecha, envios, pendientes, cargando, error, recargar, traerDeTiendaNube }
+  return { fecha, setFecha, envios, pendientes, cargando, error, abiertos, errorBuzon, recargar, traerDeTiendaNube }
 }
 
 /**

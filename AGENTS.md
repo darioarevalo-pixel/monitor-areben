@@ -87,6 +87,9 @@ ya tienen ficha:
   portal ABIERTO**, y los resultados de la ronda no se escriben nunca en el diseño.
 - Envíos del día → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`,
   `lib/envios/`, `api/_envios.js` o `api/_cadete.js`.
+- Mensajes de clientes → **leer `docs/secciones/buzon.md`** antes de tocar `components/buzon/`,
+  `lib/buzon/`, `api/_buzon.js` o `sql/migrate-buzon.sql`. ⛔ **`lib/buzon/core.ts` es el freno de
+  Envíos**: un paquete con un mensaje sin resolver no avanza sin que alguien lea.
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar
   `components/conteo-deposito/`, `lib/conteo-deposito/` o `api/_conteos-deposito.js`.
   ⛔ **`lib/conteo-deposito/core.ts` es de las CUATRO pantallas de conteo**, que ajustan stock.

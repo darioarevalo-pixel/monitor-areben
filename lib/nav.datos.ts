@@ -303,6 +303,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "buzon",
+    "area": "local",
+    "label": "Mensajes de clientes",
+    "info": "Lo que la clienta escribió (por mail o por donde sea) y todavía no se resolvió, atado al número de orden. Mientras un mensaje esté sin resolver, Envíos avisa antes de dejar avanzar el paquete de esa orden: es lo que evita que un cambio pedido el domingo se despache el lunes sin leer.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "etiquetas",
     "area": "local",
     "label": "Etiquetas",
@@ -864,6 +874,7 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "atencion",
       "envios",
+      "buzon",
       "solicitudes",
       "cupones",
       "postventa-local",
