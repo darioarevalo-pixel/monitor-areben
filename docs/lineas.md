@@ -217,6 +217,32 @@ como si lo fuera cuesta media hora.
 ⚠️ Y el `coalesce` no es cosmético: `p.sku ilike 'stu%'` da **NULL** en los 96 sin SKU, así que sin
 él ni `stu` ni `not stu` los agarra y el total de Zattia sale corto.
 
+### Caminado en prod el 23-ago-2026, y los dos oráculos que sirvieron
+
+Los tests verdes no dicen si la app viva hace esto. Se ejerció a mano, contra producción:
+
+- **Sesión de fotos › Stunned** trae historial propio (vacío) y sólo los STU. 🔑 **El oráculo tiene
+  que ser de DOS LADOS**: en la pestaña **Zattia**, buscar `STU` contesta **«Sin resultados con
+  stock»**. Con un solo lado no se distingue «filtra» de «no filtra, pero igual no había nada».
+  ⚠️ La lista de «Agregar producto» está cortada en 20 (`.slice(0, 20)`, `SesionFotos.tsx`): **contar
+  ahí no verifica los 28**.
+- Una solicitud de prueba salió **arriba de todo en `/solicitudes` con el chip `Stunned`**, al lado de
+  los de BDI y Zattia (31 → 32; se borró después: dejarla es hacer que el local prepare un pedido que
+  no existe). Es el camino que casi se va invisible.
+- **Marketing › Stunned: 28 productos, 3 sin foto en TN.** Zattia al lado: 614 y 51.
+
+🔑 **Y así se mira el deploy de `bdi-catalogo` sin acceso a su Vercel** (es el de Darío): en
+**Tienda Nube › Carga de imágenes**, con la página **recién cargada**, el `datalist#tnimg-prods` trae
+**706** (Zattia); al tocar **Stunned** sale el GET a
+`bdi-catalogo.vercel.app/api/tn-subir-imagen?store=stunned&productos=1` y el datalist pasa a **28**
+con SKUs `STU-…`. Eso prueba las dos cosas de una: el deploy y la env `TIENDANUBE_TOKEN_STUNNED`.
+
+⚠️ **Mirar la pantalla no alcanza**: `recargarProductos` (`components/tncat/ImagenesCard.tsx`) tiene
+un `catch { /* nada */ }` — si el fetch falla **no dice nada y deja la lista vieja**. Lo que hace
+honesto al oráculo es que **cambiar de línea resetea `productos` a `[]`**. Y `traerProductosImg`
+cachea por línea **en memoria**: ir a Zattia y volver a Stunned **no vuelve a pedir**, así que la
+medición se hace con la página recién cargada.
+
 ## ▶️ La novedad al equipo está ESCRITA y RETENIDA a propósito
 
 Decisión de Bruno (22-ago-2026): *«la novedad la hacemos conjunta, cuando hagamos todo lo de
