@@ -211,12 +211,14 @@ function Hoy({
         <Titulo>🏦 Promociones bancarias de hoy</Titulo>
         {promos.length === 0 ? (
           // El vacío es información, no una falla: "hoy no hay promo" es exactamente lo que hay que
-          // poder contestarle al cliente, y hay que leerlo sin dudar de si la pantalla cargó.
-          <EmptyState
-            icon="🏦"
-            title="Hoy no corre ninguna promoción bancaria."
-            hint="Si el cliente pregunta, la respuesta es que hoy no hay."
-          />
+          // poder contestarle al cliente, y hay que leerlo sin dudar de si la pantalla cargó. Por eso
+          // ⛔ NO se oculta. Lo que cambia es el PESO: un renglón y no una tarjeta de media pantalla,
+          // para que "Lo que hay que hacer hoy" —lo que sí tiene trabajo adentro— entre en la misma
+          // vista. El día que hay promo, la tarjeta vuelve a ocupar lo que tiene que ocupar.
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut }}>
+            <span aria-hidden="true">🏦</span>
+            Hoy no corre ninguna promoción bancaria.
+          </div>
         ) : (
           promos.map((p) => <TarjetaPromo key={p.id} promo={p} />)
         )}

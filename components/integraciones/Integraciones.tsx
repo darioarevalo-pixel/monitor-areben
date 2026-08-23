@@ -25,13 +25,14 @@ import { proponerMapeo, type GnVar, type TnVar } from '@/lib/sku-map/proponer'
 import type { MatchMetodo, SkuMapRow } from '@/lib/sku-map/tipos'
 import { importarOrden, leerOrdenes, leerProcesados } from '@/lib/sync-tn/cliente'
 import { TEXTO_MOTIVO, planificar } from '@/lib/sync-tn/core'
+import { aplicarResultadoTanda, candidatasDeStock, enTandas, marcarSinConfirmar, type DryRow, type RespStock } from '@/lib/sync-tn/stock.core'
 import { CFG_STUNNED, CORTE_STUNNED } from '@/lib/sync-tn/config'
 // La MISMA función que usa `api/crear-venta.js` para escribir la nota en GN: lo que se ve acá es
 // literalmente lo que va a quedar guardado.
 import { notaTnImport } from '@/lib/sync-tn/nota.core.js'
 import type { MotivoCola, PlanSync, PlanVenta } from '@/lib/sync-tn/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Badge as BadgeKit, Button, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space } from '@/components/ui'
+import { Badge as BadgeKit, Button, ConfirmDetalle, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias' // acción 'stock'
@@ -49,6 +50,15 @@ const STORE = 'stunned' as const
  * un humano mire el cartel amarillo antes de crear la venta.
  */
 const ESCRITURA_HABILITADA = true
+
+/**
+ * Cuántas variantes entran en cada llamada de "Aplicar las N con diferencia".
+ *
+ * ⛔ No son las 500 que acepta el handler: `api/tn-categorias.js` (acción 'stock') hace un PUT a
+ * Tienda Nube **por variante y en serie**, así que 500 no entran en el timeout de la función y
+ * además chocan el rate limit de TN. Se manda en tandas y se muestra el avance.
+ */
+const TANDA_STOCK = 20
 
 /** Tope del rango de fechas del dry-run de ventas: TN es lento y el endpoint corta a los 20 s. */
 const RANGO_MAX_DIAS = 31
@@ -88,7 +98,6 @@ type TnAuditProducto = {
 }
 
 /** Una fila del dry-run de stock: qué haría el sync con esta variante. */
-type DryRow = { sku: string; nombre: string | null; tnProductId: string | null; tnVariantId: string | null; gn: number; tn: number | null; delta: number | null }
 
 /** Qué tan confiable es cada forma de emparejar un SKU de GN con una variante de TN. */
 const META: Record<MatchMetodo, { txt: string; tone: 'success' | 'warning' | 'danger' | 'action' }> = {
@@ -111,6 +120,7 @@ function Badge({ m }: { m?: MatchMetodo | null }) {
 }
 
 export function Integraciones() {
+  const { confirmar } = useConfirmar()
   const [tab, setTab] = useState<'mapeo' | 'stock' | 'ventas'>('mapeo')
   const [rows, setRows] = useState<SkuMapRow[]>([])
   const [cargando, setCargando] = useState(true)
@@ -124,6 +134,7 @@ export function Integraciones() {
   const [dryMsg, setDryMsg] = useState<string | null>(null)
   const [dryError, setDryError] = useState<string | null>(null)
   const [aplicando, setAplicando] = useState<string | null>(null) // sku que se está escribiendo
+  const [progreso, setProgreso] = useState<{ hechas: number; total: number } | null>(null) // "12 de 47" mientras corre la tanda
 
   // Dry-run de ventas (TN → GN)
   const [vDesde, setVDesde] = useState(CORTE_STUNNED || hace(7))
@@ -133,6 +144,10 @@ export function Integraciones() {
   const [vMsg, setVMsg] = useState<string | null>(null)
   const [vError, setVError] = useState<string | null>(null)
   const [vImportando, setVImportando] = useState<string | null>(null) // número de orden que se está escribiendo
+
+  // Cuántas filas escribiría el botón masivo. Es la MISMA regla que usa `aplicarTodas`, no una
+  // cuenta parecida: el número del botón y lo que el botón hace no pueden separarse.
+  const conDiferencia = useMemo(() => candidatasDeStock(dryRows).length, [dryRows])
 
   const recargar = useCallback(async () => {
     setCargando(true)
@@ -300,31 +315,132 @@ export function Integraciones() {
     }
   }, [])
 
-  // Escribe el stock de UNA variante en TN (GN→TN). Es el primer write real a la tienda en vivo:
-  // por eso va con confirmación y de a una. Setea el valor absoluto de GN.
-  const aplicarUno = useCallback(async (r: DryRow) => {
-    if (r.tnProductId == null || r.tnVariantId == null || r.delta == null || r.delta === 0) return
-    if (typeof window !== 'undefined' && !window.confirm(`Escribir stock ${r.gn} en Tienda Nube para ${r.sku}?\n(hoy TN tiene ${r.tn})`)) return
-    setAplicando(r.sku)
+  // La ÚNICA llamada que escribe stock en la tienda viva. La usan el botón de la fila y el masivo:
+  // una sola puerta para que el error no tenga dos formas distintas de contarse.
+  // tn-categorias lee la tienda del query param (?store=), no del body. Sin esto asume 'bdi'.
+  const escribirTanda = useCallback(async (filas: DryRow[]): Promise<RespStock> => {
+    const resp = await apiFetch(`${TN_STOCK_API}?store=${STORE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'stock', updates: filas.map((r) => ({ product_id: r.tnProductId, variant_id: r.tnVariantId, stock: r.gn })) }),
+    })
+    const d = (await resp.json().catch(() => null)) as RespStock | null
+    if (!d?.ok) throw new Error(d?.error || `El endpoint contestó ${resp.status}.`)
+    return d
+  }, [])
+
+  // Escribe el stock de UNA variante en TN (GN→TN). Es un write real a la tienda en vivo: por eso
+  // va con confirmación. Setea el valor absoluto de GN.
+  const aplicarUno = useCallback(
+    async (r: DryRow) => {
+      if (r.tnProductId == null || r.tnVariantId == null || r.delta == null || r.delta === 0) return
+      const ok = await confirmar({
+        titulo: `Escribir stock en Tienda Nube · ${r.sku}`,
+        tono: 'warning',
+        ok: `Escribir ${r.gn}`,
+        mensaje: (
+          <>
+            <p>Se escribe el stock de Gestión Nube en esa variante de la tienda. Es la tienda en vivo.</p>
+            <div style={{ marginTop: space[3] }}>
+              <ConfirmDetalle label="Producto" valor={r.nombre ?? '—'} />
+              <ConfirmDetalle label="Hoy en Tienda Nube" valor={r.tn == null ? '—' : r.tn} />
+              <ConfirmDetalle label="Queda en" valor={r.gn} />
+            </div>
+          </>
+        ),
+      })
+      if (!ok) return
+      setAplicando(r.sku)
+      setDryError(null)
+      setDryMsg(null)
+      try {
+        const d = await escribirTanda([r])
+        const res = aplicarResultadoTanda([r], [r], d)
+        if (res.fallaron) throw new Error(res.rows[0]?.err || 'No se pudo escribir en TN.')
+        setDryRows((rs) => rs.map((x) => (x.sku === r.sku ? { ...x, tn: r.gn, delta: 0, err: null } : x)))
+        setDryMsg(`✓ ${r.sku}: el stock en TN quedó en ${r.gn}.`)
+      } catch (e) {
+        setDryError((e as Error).message)
+      } finally {
+        setAplicando(null)
+      }
+    },
+    [confirmar, escribirTanda],
+  )
+
+  // Escribe TODAS las filas con diferencia, en tandas. Con el stock de Stunned entero, hacerlo de a
+  // una son decenas de clicks; lo que NO puede pasar es que el botón diga "listo" sobre una tanda
+  // que volvió a medias, así que cada fila se resuelve sola (`lib/sync-tn/stock.core.ts`).
+  const aplicarTodas = useCallback(async () => {
+    const candidatas = candidatasDeStock(dryRows)
+    if (!candidatas.length) return
+    const ok = await confirmar({
+      titulo: 'Escribir stock en Tienda Nube',
+      tono: 'warning',
+      ok: `Escribir ${candidatas.length}`,
+      mensaje: (
+        <>
+          <p>
+            En cada variante se escribe <b>el stock que tiene Gestión Nube</b> (el valor absoluto, no una diferencia). Es la tienda en vivo y Tienda Nube{' '}
+            <b>no deshace</b> esto: para volver atrás hay que escribir de nuevo.
+          </p>
+          <div style={{ marginTop: space[3] }}>
+            <ConfirmDetalle label="Variantes a escribir" valor={candidatas.length} />
+            <ConfirmDetalle label="Tandas" valor={`${Math.ceil(candidatas.length / TANDA_STOCK)} de hasta ${TANDA_STOCK}`} />
+          </div>
+        </>
+      ),
+    })
+    if (!ok) return
+
     setDryError(null)
     setDryMsg(null)
+    setProgreso({ hechas: 0, total: candidatas.length })
+    // Las filas se llevan en una variable local y no con el updater de `setDryRows`: los contadores
+    // se suman en el mismo paso, y un updater puede correr dos veces (StrictMode) y contar doble.
+    // Nadie más las toca mientras corre: todos los botones de la pestaña quedan bloqueados.
+    let filas = dryRows
+    let escritas = 0
+    let fallaron = 0
+    let procesadas = 0
+    let cortado: string | null = null
     try {
-      // tn-categorias lee la tienda del query param (?store=), no del body. Sin esto asume 'bdi'.
-      const resp = await apiFetch(`${TN_STOCK_API}?store=${STORE}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'stock', updates: [{ product_id: r.tnProductId, variant_id: r.tnVariantId, stock: r.gn }] }),
-      })
-      const d = await resp.json().catch(() => null)
-      if (!d?.ok || d.aplicados !== 1) throw new Error(d?.errores?.[0]?.msg || d?.error || 'No se pudo escribir en TN.')
-      setDryRows((rs) => rs.map((x) => (x.sku === r.sku ? { ...x, tn: r.gn, delta: 0 } : x)))
-      setDryMsg(`✓ ${r.sku}: el stock en TN quedó en ${r.gn}.`)
-    } catch (e) {
-      setDryError((e as Error).message)
+      for (const tanda of enTandas(candidatas, TANDA_STOCK)) {
+        try {
+          const d = await escribirTanda(tanda)
+          const res = aplicarResultadoTanda(filas, tanda, d)
+          filas = res.rows
+          escritas += res.ok
+          fallaron += res.fallaron
+          setDryRows(filas)
+        } catch (e) {
+          // La tanda no contestó: no se sabe si TN quedó escrito. Se marcan sin confirmar y se
+          // FRENA — seguir escribiendo arriba de un estado que no se conoce es lo que no se hace.
+          cortado = (e as Error).message
+          filas = marcarSinConfirmar(filas, tanda, cortado)
+          setDryRows(filas)
+          break
+        }
+        procesadas += tanda.length
+        setProgreso({ hechas: procesadas, total: candidatas.length })
+      }
     } finally {
-      setAplicando(null)
+      setProgreso(null)
     }
-  }, [])
+
+    const quedaron = candidatas.length - escritas - fallaron
+    setDryMsg(`✓ ${escritas} de ${candidatas.length} escritas en TN. Corré el dry-run de nuevo (lee TN de verdad) para confirmarlo.`)
+    if (fallaron || quedaron) {
+      setDryError(
+        [
+          fallaron ? `${fallaron} fallaron y quedan con su diferencia` : '',
+          quedaron ? `${quedaron} quedaron sin confirmar${cortado ? ` (${cortado})` : ''}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ') + '. El detalle está en cada fila.',
+      )
+    }
+  }, [confirmar, dryRows, escribirTanda])
 
   // Dry-run de VENTAS: las órdenes de la tienda de Stunned contra lo que ya está en GN.
   // Junta las tres fuentes y se las da al motor puro (lib/sync-tn/core.ts), que decide todo.
@@ -406,9 +522,16 @@ export function Integraciones() {
             <Button variant="solid" tone="brand" onClick={proponer} loading={proponiendo}>{proponiendo ? 'Proponiendo…' : 'Proponer / actualizar mapeo'}</Button>
           </>
         ) : tab === 'stock' ? (
-          <Button variant="solid" tone="brand" onClick={() => void correrDryRun()} loading={dryLoading}>
-            {dryLoading ? 'Comparando…' : 'Correr dry-run'}
-          </Button>
+          <>
+            {conDiferencia > 0 && (
+              <Button variant="outline" tone="warning" onClick={() => void aplicarTodas()} loading={progreso != null} disabled={dryLoading || aplicando != null}>
+                {progreso ? `Escribiendo… ${progreso.hechas} de ${progreso.total}` : `Aplicar las ${conDiferencia} con diferencia`}
+              </Button>
+            )}
+            <Button variant="solid" tone="brand" onClick={() => void correrDryRun()} loading={dryLoading} disabled={progreso != null}>
+              {dryLoading ? 'Comparando…' : 'Correr dry-run'}
+            </Button>
+          </>
         ) : (
           <>
             <label style={{ fontSize: font.sm, color: color.ink2, display: 'inline-flex', alignItems: 'center', gap: space[2] }}>
@@ -502,8 +625,8 @@ export function Integraciones() {
       ) : tab === 'stock' ? (
         <>
           <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
-            Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar en una fila. El stock de GN es la suma de todas las
-            ubicaciones (Depósito + Local); el sync pondría TN = GN.
+            Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar —en una fila, o el botón de arriba para todas las que
+            tienen diferencia—. El stock de GN es la suma de todas las ubicaciones (Depósito + Local); el sync pondría TN = GN.
           </Notice>
 
           {dryMsg && (
@@ -532,7 +655,7 @@ export function Integraciones() {
                 {dryRows.map((r) => {
                   const cambia = r.delta != null && r.delta !== 0
                   return (
-                    <Tr key={r.sku} style={cambia ? { background: color.warningBg } : undefined}>
+                    <Tr key={r.sku} style={r.err ? { background: color.dangerBg } : cambia ? { background: color.warningBg } : undefined}>
                       <Td wrap strong>
                         {r.nombre ?? '—'}
                       </Td>
@@ -552,13 +675,25 @@ export function Integraciones() {
                               TN {r.tn} → {r.gn}
                             </span>
                             {r.tnProductId && r.tnVariantId && (
-                              <Button size="sm" variant="outline" tone="success" onClick={() => void aplicarUno(r)} loading={aplicando === r.sku} disabled={aplicando != null}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                tone="success"
+                                onClick={() => void aplicarUno(r)}
+                                loading={aplicando === r.sku}
+                                disabled={aplicando != null || progreso != null}
+                              >
                                 {aplicando === r.sku ? 'Escribiendo…' : 'Aplicar'}
                               </Button>
                             )}
                           </span>
                         ) : (
                           <span style={{ color: color.successInk }}>ya coincide</span>
+                        )}
+                        {/* El error va EN la fila y no en un cartel de arriba: una tanda puede volver
+                            a medias y "12 fallaron" sin decir cuáles no sirve para arreglar nada. */}
+                        {r.err && (
+                          <div style={{ marginTop: space[2], fontSize: font.sm, color: color.dangerInk }}>⚠ {r.err}</div>
                         )}
                       </Td>
                     </Tr>
