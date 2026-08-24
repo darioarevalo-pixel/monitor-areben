@@ -1,8 +1,13 @@
 name: Automatizaciones de Meta Ads
 
-# 07:00 UTC = 04:00 en Argentina: media hora después de `meta-snapshot.yml`, que es de quien depende.
-# Si la foto de hoy todavía no está, las reglas evaluarían la de ayer y el Panel amanecería con un
-# día de atraso sin decirlo.
+# 10:50 UTC = 07:50 en Argentina, y aterriza ~08:30: media hora después de `meta-snapshot.yml`,
+# que es de quien depende. Si la foto de hoy todavía no está, las reglas evaluarían la de ayer y el
+# Panel amanecería con un día de atraso sin decirlo.
+# 🔴 Los 30 minutos de separación son el contrato: se movió de las 04:00 a las 08:00 el 23-ago-2026
+# PORQUE se movió la foto, no por sí mismo. ⛔ Tocar una hora sin la otra rompe la cadena en
+# silencio — el motor sale verde igual, evaluando un día que no está cerrado.
+# 🔑 La foto tiene AHORA un segundo corte a la tarde (~20:00). Éste NO lo sigue a propósito: las
+# reglas juzgan días CERRADOS, y a las 20:00 el día va por el 85%.
 #
 # 🔑 A diferencia de la foto, esto NO habla con Meta: lee `meta_ads_snapshot_dia` de Supabase y nada
 # más. No necesita `META_ADS_TOKEN`, no consume cupo de Graph, y sigue andando el día que Meta se
@@ -17,7 +22,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '50 10 * * *'
   workflow_dispatch:
     inputs:
       calibrar:

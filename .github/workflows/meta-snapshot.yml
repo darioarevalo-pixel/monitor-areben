@@ -1,8 +1,21 @@
 name: Foto diaria de Meta Ads
 
-# 06:30 UTC = 03:30 en Argentina: media hora después del sync diario, y con el día de ayer ya
-# cerrado en la zona de las cuentas. Corre acá y no en Vercel porque son decenas de llamadas
-# paginadas a Graph por cuenta y Hobby corta a los 10 s.
+# DOS cortes por día, y ninguno a las 4 de la mañana: a esa hora la foto sólo servía para que el
+# motor de reglas la encontrara hecha, y el día EN CURSO quedaba con 4 horas de gasto adentro —
+# inservible para decidir. Los horarios son de trabajo, no de cron:
+#   · 10:20 UTC = 07:20 en Argentina  → aterriza ~08:00. AYER ya está cerrado y con 8 horas de
+#     reatribución encima (a las 03:30 tenía 3,5): el número de la mañana es MEJOR que el de antes.
+#   · 22:20 UTC = 19:20 en Argentina  → aterriza ~20:00. El día en curso al ~85%: sirve para ver
+#     cómo viene, ⛔ NO para juzgarlo contra un día cerrado.
+# 🔑 Los 40 minutos de adelanto NO son un capricho: el scheduler de GitHub dispara esto entre 35 y
+# 59 minutos TARDE, medido sobre 8 corridas seguidas (cron '30 6' arrancó 07:05, 07:07, 07:11,
+# 07:12, 07:14, 07:14, 07:28). Pedir las 08:00 en punto da las 08:40.
+# 🔴 El de la mañana ARRASTRA a `meta-reglas.yml`, que lee la foto y corre 30 minutos después.
+# Mover uno solo deja al motor evaluando un día partido al 85% y no lo dice. Se mueven juntos.
+# 🔑 Que se corra a mano no rompe nada: cada corrida reescribe los últimos 4 días (DIAS_RELECTURA),
+# así que un corte a pedido es idempotente. `gh workflow run meta-snapshot.yml`, ~40 s.
+# Corre acá y no en Vercel porque son decenas de llamadas paginadas a Graph por cuenta y Hobby
+# corta a los 10 s.
 # 🔒 Candado propio: éste escribe en Meta sin que nadie lo apriete. Con el cron horario, una
 # corrida que se pasara de los 60 minutos arrancaría encima de sí misma y habría dos procesos
 # avanzando los mismos planes sobre cuentas publicitarias reales. Hoy tarda ~34 s, así que es un
@@ -13,7 +26,8 @@ concurrency:
 
 on:
   schedule:
-    - cron: '30 6 * * *'
+    - cron: '20 10 * * *'
+    - cron: '20 22 * * *'
   workflow_dispatch:
     inputs:
       backfill:
