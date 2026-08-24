@@ -11,9 +11,11 @@ import { useGerencial } from '@/components/gerencial/useGerencial'
 import { useSesion } from '@/components/SesionProvider'
 import {
   LABEL_LINEA, LINEAS_MEMO, SISTEMAS, TEMAS,
-  costoPorCompra, delta, etiquetaSemana, semaforoPauta, semanaAnterior, semanaSiguiente, ticketPromedio,
-  type Bloque, type Campo, type Foto, type Linea, type Semana, type Senales,
+  costoPorCompra, delta, etiquetaSemana, resumirCanales, semaforoPauta, semanaAnterior,
+  semanaSiguiente, ticketPromedio,
+  type Bloque, type Campo, type Foto, type Linea, type Semana, type Senales, type VentaLinea,
 } from '@/lib/memo/tipos'
+import { ETIQUETA_CANAL, type Canal } from '@/lib/liquidacion/resultado'
 import { resumirSenales, semanaHoy, useAutoguardado, useMemoSemanal } from './useMemoSemanal'
 
 /**
@@ -177,12 +179,19 @@ function BloqueFoto({ foto, calculando, congelada }: { foto: Foto | null; calcul
 
       <TablaVenta foto={foto} lineas={lineas} />
       <div style={{ height: space[5] }} />
+      <TablaCanal foto={foto} />
+      <div style={{ height: space[5] }} />
       <TablaPauta foto={foto} lineas={lineas} />
 
       <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[3], lineHeight: 1.6 }}>
         Stunned es una línea de Zattia (los SKU que empiezan con <code>STU</code>), no una marca
-        aparte. Una venta que mezcla las dos cuenta como un ticket en cada una: el facturado y las
+        aparte. Una venta que mezcla las dos cuenta como un ticket en cada una: la mercadería y las
         unidades sí se reparten bien.
+        <br />
+        <strong>«Mercadería» no es «Facturado»:</strong> la tabla por línea no lleva el descuento ni
+        el envío, porque son de la venta entera y una venta mixta no se puede partir. La tabla por
+        canal sí los lleva —ahí cada venta tiene un solo canal— y es la que coincide con «Día a día»
+        de Ventas mensuales.
       </div>
     </SectionCard>
   )
@@ -206,13 +215,18 @@ function TablaVenta({ foto, lineas }: { foto: Foto; lineas: Linea[] }) {
   return (
     <>
       <div style={{ fontSize: font.md, fontWeight: 600, color: color.ink2, marginBottom: space[2] }}>
-        Venta, contra la semana del {foto.previa.ini.slice(8)} al {foto.previa.fin.slice(8)}
+        Venta por línea, contra la semana del {foto.previa.ini.slice(8)} al {foto.previa.fin.slice(8)}
       </div>
       <TableWrap>
         <THead>
           <Tr>
             <Th>Línea</Th>
-            <Th align="right">Facturado</Th>
+            {/* 🔴 Dice «Mercadería» y no «Facturado» a propósito: acá el descuento y el envío NO
+                están, porque son de la VENTA y una venta mixta no se puede partir entre dos líneas
+                sin inventar un criterio. La tabla de canal de abajo sí los lleva, y la brecha
+                medida el 24-ago-2026 fue de $1.081.927 en una semana. Con el mismo rótulo, el
+                lector cita el número que le tocó. */}
+            <Th align="right">Mercadería</Th>
             <Th align="right">vs. anterior</Th>
             <Th align="right">Unidades</Th>
             <Th align="right">Tickets</Th>
@@ -241,6 +255,132 @@ function TablaVenta({ foto, lineas }: { foto: Foto; lineas: Linea[] }) {
         </TBody>
       </TableWrap>
     </>
+  )
+}
+
+/**
+ * Mayorista contra todo lo que no es mayorista, con el resto desglosado.
+ *
+ * 🔴 **Una semana cerrada antes del 24-ago-2026 no tiene este corte**, y no hay verbo de reabrir el
+ * memo. El renglón dice «no se midió esa semana» en vez de dibujar ceros: un cero acá se leería
+ * como «no hubo venta mayorista», que es un dato falso y para siempre.
+ *
+ * ⚠️ Las cuentas (qué es minorista, qué queda fuera del total) salen de `resumirCanales`, no de
+ * este JSX. Es la misma regla que ya mordió en `semaforoPauta`: escrita dos veces, sacarla de un
+ * lado la deja viva en el otro.
+ */
+function TablaCanal({ foto }: { foto: Foto }) {
+  const titulo = (
+    <div style={{ fontSize: font.md, fontWeight: 600, color: color.ink2, marginBottom: space[2] }}>
+      Venta por canal, contra la semana del {foto.previa.ini.slice(8)} al {foto.previa.fin.slice(8)}
+    </div>
+  )
+
+  if (!foto.canal) {
+    return (
+      <>
+        {titulo}
+        <Notice tone="neutral">
+          Esta semana se cerró antes de que el memo midiera el canal, y una semana cerrada no se
+          recalcula. <strong>No se midió</strong> — no es cero.
+        </Notice>
+      </>
+    )
+  }
+
+  const r = resumirCanales(foto.canal.actual)
+  const prev = resumirCanales(foto.canal.previa)
+  const nombres = foto.canal.nombres || {}
+  const parte = (v: number) => (r.total.facturado > 0 ? (v / r.total.facturado) * 100 : null)
+
+  return (
+    <>
+      {titulo}
+
+      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
+        <TarjetaCanal titulo="Mayorista" v={r.mayorista} previo={prev.mayorista.facturado} parte={parte(r.mayorista.facturado)} />
+        <TarjetaCanal titulo="Minorista" v={r.minorista} previo={prev.minorista.facturado} parte={parte(r.minorista.facturado)}
+          detalle="Local + Online + Otros canales" />
+      </div>
+
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Canal</Th>
+            <Th align="right">Facturado</Th>
+            <Th align="right">vs. anterior</Th>
+            <Th align="right">Unidades</Th>
+            <Th align="right">Tickets</Th>
+            <Th align="right">Ticket promedio</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {r.desglose.map(({ canal, venta }) => (
+            <Tr key={canal}>
+              <Td>
+                {ETIQUETA_CANAL[canal as Canal] || canal}
+                {/* ⚠️ «Otros canales» es una bolsa: sin los nombres crudos nadie puede preguntar
+                    qué cayó adentro, y hoy adentro está Mercadolibre. */}
+                {nombres[canal]?.length ? (
+                  <div style={{ fontSize: font.xs, color: color.mut2 }}>{nombres[canal].join(' · ')}</div>
+                ) : null}
+              </Td>
+              <Td align="right">{formatMoney(venta.facturado)}</Td>
+              <Td align="right">
+                <Variacion actual={venta.facturado} previo={foto.canal!.previa[canal]?.facturado ?? 0} />
+              </Td>
+              <Td align="right">{venta.unidades.toLocaleString('es-AR')}</Td>
+              <Td align="right">{venta.tickets.toLocaleString('es-AR')}</Td>
+              <Td align="right">{formatMoney(ticketPromedio(venta))}</Td>
+            </Tr>
+          ))}
+          <Tr>
+            <Td><strong>Total</strong></Td>
+            <Td align="right"><strong>{formatMoney(r.total.facturado)}</strong></Td>
+            <Td align="right"><Variacion actual={r.total.facturado} previo={prev.total.facturado} /></Td>
+            <Td align="right"><strong>{r.total.unidades.toLocaleString('es-AR')}</strong></Td>
+            <Td align="right"><strong>{r.total.tickets.toLocaleString('es-AR')}</strong></Td>
+            <Td align="right"><strong>{formatMoney(ticketPromedio(r.total))}</strong></Td>
+          </Tr>
+        </TBody>
+      </TableWrap>
+
+      {/* 🔴 Técnica se muestra SIEMPRE, también en cero: adentro cae el canal vacío, así que el día
+          que Gestión Nube deje de mandar `channel` todas las ventas aparecen acá en vez de
+          evaporarse. Un renglón que sólo se dibuja cuando tiene número no puede avisar de nada. */}
+      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[3], lineHeight: 1.6 }}>
+        <strong>Fuera del total:</strong> {ETIQUETA_CANAL.tecnica} — {formatMoney(r.tecnica.facturado)} en{' '}
+        {r.tecnica.tickets.toLocaleString('es-AR')} movimiento(s)
+        {nombres.tecnica?.length ? ` (${nombres.tecnica.join(' · ')})` : ''}. No son ventas: las crea el
+        monitor para descontar stock (sesión de fotos, fallas y canjes).
+        <br />
+        Acá los <strong>tickets suman</strong> —una venta tiene un solo canal—, al revés que en la
+        tabla por línea de arriba, donde una venta mixta cuenta un ticket en cada una.
+      </div>
+    </>
+  )
+}
+
+function TarjetaCanal({
+  titulo, v, previo, parte, detalle,
+}: {
+  titulo: string
+  v: VentaLinea
+  previo: number
+  parte: number | null
+  detalle?: string
+}) {
+  return (
+    <Card padding={3} style={{ flex: '1 1 220px', minWidth: 220 }}>
+      <div style={{ fontSize: font.sm, color: color.mut2 }}>{titulo}</div>
+      <div style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{formatMoney(v.facturado)}</div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1] }}>
+        <Variacion actual={v.facturado} previo={previo} />
+        {parte === null ? null : ` · ${parte.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% del total`}
+        {' · '}{v.tickets.toLocaleString('es-AR')} tickets
+      </div>
+      {detalle && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1] }}>{detalle}</div>}
+    </Card>
   )
 }
 

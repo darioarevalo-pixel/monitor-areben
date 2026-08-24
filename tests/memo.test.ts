@@ -4,8 +4,8 @@ import {
   lunesDe, semanaAnterior, semanaDe, semanaSiguiente, sumarDias,
 } from '@/lib/memo/semana.core.js'
 import {
-  costoPorCompra, delta, esStunned, fusionarVenta, lineaDe, pautaPorLinea, semaforoPauta,
-  ticketPromedio, ventaPorLinea,
+  costoPorCompra, delta, esStunned, fusionarPorCanal, fusionarVenta, lineaDe, pautaPorLinea,
+  resumirCanales, semaforoPauta, ticketPromedio, ventaPorCanal, ventaPorLinea,
 } from '@/lib/memo/foto.core.js'
 
 /**
@@ -225,5 +225,129 @@ describe('la pauta', () => {
     // Sin techo cargado no hay semáforo: verde por defecto sería decir "rinde" sin saberlo.
     expect(semaforoPauta(p(500), 0)).toBe('sin-dato')
     expect(semaforoPauta(undefined, 1000)).toBe('sin-dato')
+  })
+})
+
+describe('la venta por canal: mayorista contra el resto', () => {
+  // El mismo enredo de fechas que por línea, más el que sólo aparece acá: una venta tiene UN canal.
+  // El envío y el descuento viven en la VENTA, no en el renglón: la 102 lleva las dos cosas.
+  const ventas = [
+    { id: 100, date_sale: '2026-08-10', channel: 'Mi Local', discount: 0, shipping_cost: 0 },
+    { id: 101, date_sale: '2026-08-11', channel: 'Mayorista', discount: 0, shipping_cost: 0 },
+    { id: 102, date_sale: '2026-08-12', channel: 'Tienda Nube', discount: 3000, shipping_cost: 5000 },
+    { id: 103, date_sale: '2026-08-13', channel: 'Mercadolibre', discount: 0, shipping_cost: 0 },
+    { id: 104, date_sale: '2026-08-14', channel: 'Ninguno', discount: 0, shipping_cost: 0 },
+    { id: 110, date_sale: '2026-08-20', channel: 'Mayorista', discount: 0, shipping_cost: 0 }, // fuera de la semana
+  ]
+  const detalles = [
+    { sale_id: 100, quantity: 2, total: 20000 },
+    { sale_id: 101, quantity: 10, total: 100000 },
+    { sale_id: 102, quantity: 1, total: 15000 },
+    { sale_id: 103, quantity: 1, total: 8000 },
+    { sale_id: 104, quantity: 1, total: 3000 },
+    { sale_id: 110, quantity: 50, total: 500000 }, // fuera de la semana
+  ]
+  const args = { ventas, detalles, desde: '2026-08-10', hasta: '2026-08-16' }
+
+  it('🔴 filtra por la FECHA de la venta, no por el rango de sale_id', () => {
+    // La 110 es mayorista y del 20 de agosto. Si entrara, mayorista mostraría $600.000 en vez de
+    // $100.000 — un número perfectamente plausible.
+    const { canales } = ventaPorCanal(args)
+    expect(canales.mayorista.facturado).toBe(100000)
+  })
+
+  it('clasifica con canalDe: no hay un segundo criterio acá', () => {
+    const { canales } = ventaPorCanal(args)
+    expect(canales.local.facturado).toBe(20000)
+    expect(canales.online.facturado).toBe(17000) // 15.000 − 3.000 de descuento + 5.000 de envío
+    expect(canales.otro.facturado).toBe(8000)
+    expect(canales.tecnica.facturado).toBe(3000)
+  })
+
+  it('🔴 los tickets por canal SÍ suman, al revés que por línea', () => {
+    // Una venta mixta cuenta un ticket en cada línea; una venta tiene UN canal. Las dos tablas se
+    // leen una al lado de la otra y por eso la diferencia está escrita.
+    const { canales } = ventaPorCanal(args)
+    const tickets = Object.values(canales).reduce((a, v) => a + v.tickets, 0)
+    expect(tickets).toBe(5) // las cinco ventas de la semana, ni una repetida
+  })
+
+  it('🔴 el descuento y el envío se aplican UNA vez por venta, no por renglón', () => {
+    // La forma de fallar es sumarlos adentro del bucle de detalles: con tres productos, el envío
+    // entraría tres veces. El número sigue siendo plausible y nadie lo nota.
+    const { canales } = ventaPorCanal({
+      ventas: [{ id: 300, date_sale: '2026-08-11', channel: 'Tienda Nube', discount: 1000, shipping_cost: 2000 }],
+      detalles: [
+        { sale_id: 300, quantity: 1, total: 10000 },
+        { sale_id: 300, quantity: 1, total: 10000 },
+        { sale_id: 300, quantity: 1, total: 10000 },
+      ],
+      desde: '2026-08-10', hasta: '2026-08-16',
+    })
+    expect(canales.online.facturado).toBe(31000) // 30.000 − 1.000 + 2.000
+    expect(canales.online.tickets).toBe(1)
+  })
+
+  it('🔑 el facturado del canal NO es el de la línea: acá lleva descuento y envío', () => {
+    // Documentado porque las dos tablas se leen una al lado de la otra y la brecha medida en la
+    // semana del 10 al 16 fue de $1.081.927 (6,9 %). Por eso las columnas se llaman distinto.
+    const { canales } = ventaPorCanal(args)
+    const soloMercaderia = 15000
+    expect(canales.online.facturado).not.toBe(soloMercaderia)
+  })
+
+  it('guarda los nombres crudos que cayeron en cada canal', () => {
+    // Sin esto, «Otros canales» es una bolsa que nadie puede auditar: hoy adentro hay Mercadolibre,
+    // mañana puede haber cualquier cosa que Gestión Nube invente.
+    const { nombres } = ventaPorCanal(args)
+    expect(nombres.otro).toEqual(['Mercadolibre'])
+    expect(nombres.local).toEqual(['Mi Local'])
+  })
+
+  it('un canal vacío cae en técnica CON nombre, no se evapora', () => {
+    const { canales, nombres } = ventaPorCanal({
+      ventas: [{ id: 200, date_sale: '2026-08-11', channel: null, discount: 0, shipping_cost: 0 }],
+      detalles: [{ sale_id: 200, quantity: 1, total: 7000 }],
+      desde: '2026-08-10', hasta: '2026-08-16',
+    })
+    expect(canales.tecnica.facturado).toBe(7000)
+    expect(nombres.tecnica).toEqual(['Sin canal'])
+  })
+
+  it('fusiona las dos bases: los números se suman y los nombres se unen sin repetir', () => {
+    const a = { canales: { mayorista: { facturado: 100, unidades: 1, tickets: 1 } }, nombres: { mayorista: ['Mayorista'] } }
+    const b = { canales: { mayorista: { facturado: 50, unidades: 2, tickets: 1 } }, nombres: { mayorista: ['Mayorista'], otro: ['Mercadolibre'] } }
+    expect(fusionarPorCanal(a, b)).toEqual({
+      canales: { mayorista: { facturado: 150, unidades: 3, tickets: 2 } },
+      nombres: { mayorista: ['Mayorista'], otro: ['Mercadolibre'] },
+    })
+  })
+
+  it('el resumen: mayorista + minorista = total, y minorista es local + online + otros', () => {
+    const { canales } = ventaPorCanal(args)
+    const r = resumirCanales(canales)
+    expect(r.mayorista.facturado).toBe(100000)
+    expect(r.minorista.facturado).toBe(45000) // 20.000 + 17.000 + 8.000
+    expect(r.total.facturado).toBe(r.mayorista.facturado + r.minorista.facturado)
+    expect(r.desglose.map((d) => d.canal)).toEqual(['local', 'online', 'otro'])
+  })
+
+  it('🔴 técnica queda FUERA del total, pero con su número', () => {
+    // Sumarla inflaría la venta con movimientos que nadie cobró (sesión de fotos, fallas, canjes).
+    const { canales } = ventaPorCanal(args)
+    const r = resumirCanales(canales)
+    expect(r.tecnica.facturado).toBe(3000)
+    expect(r.total.facturado).toBe(145000)
+    expect(r.total.facturado).not.toBe(148000)
+  })
+
+  it('un canal sin ventas es cero explícito en el desglose, no un hueco', () => {
+    const r = resumirCanales({ mayorista: { facturado: 5, unidades: 1, tickets: 1 } })
+    expect(r.minorista).toEqual({ facturado: 0, unidades: 0, tickets: 0 })
+    expect(r.desglose).toHaveLength(3)
+  })
+
+  it('sin foto de canal, resumir no explota (semanas cerradas antes de que existiera el corte)', () => {
+    expect(resumirCanales(undefined).total.facturado).toBe(0)
   })
 })

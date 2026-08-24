@@ -47,7 +47,7 @@ import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { claveValida, cerrada, esFecha, hoyAr, idSemana, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
-import { fusionarVenta, pautaPorLinea, ventaPorLinea } from '../lib/memo/foto.core.js';
+import { fusionarPorCanal, fusionarVenta, pautaPorLinea, ventaPorCanal, ventaPorLinea } from '../lib/memo/foto.core.js';
 
 /** La base maestra: el memo no tiene marca. Mismo criterio que novedades. */
 function clienteMaestro() {
@@ -83,8 +83,12 @@ async function traerRango(store, desde, hasta) {
   if (!sb) return { error: `Faltan credenciales de ${store}.`, ventas: [], detalles: [], skuPor: null };
 
   try {
+    // `channel`, `discount` y `shipping_cost` viajan en la MISMA consulta: son tres columnas más de
+    // las filas que ya se traen, no un viaje nuevo. Sin `channel` no existe el corte por canal, y
+    // sin las otras dos el memo llamaría «facturado» a la mercadería pelada — 6,9 % de más que la
+    // pestaña «Día a día», que usa `facturadoDeVenta` sobre las mismas ventas.
     const ventas = await leerTodo(sb, 'ventas', (q) =>
-      q.select('id, date_sale').gte('date_sale', desde).lte('date_sale', hasta).order('id'));
+      q.select('id, date_sale, channel, discount, shipping_cost').gte('date_sale', desde).lte('date_sale', hasta).order('id'));
     if (!ventas.length) return { ventas: [], detalles: [], skuPor: null };
 
     // `venta_detalles` no tiene fecha propia: el sale_id es el único puente. El rango de ids
@@ -159,6 +163,12 @@ async function calcularFoto(sb, sem) {
   const ventaActual = fusionarVenta(vb.actual, vz.actual);
   const ventaPrevia = fusionarVenta(vb.previa, vz.previa);
 
+  // El canal se calcula sobre las MISMAS filas que ya están en memoria: es otro corte del mismo
+  // rango, no otra consulta. Va sin `store` ni `skuPor` porque el canal no depende de la línea.
+  const porCanal = (r, d, h) => ventaPorCanal({ ventas: r.ventas, detalles: r.detalles, desde: d, hasta: h });
+  const canalActual = fusionarPorCanal(porCanal(bdi, sem.ini, sem.fin), porCanal(zattia, sem.ini, sem.fin));
+  const canalPrevio = fusionarPorCanal(porCanal(bdi, prev.ini, prev.fin), porCanal(zattia, prev.ini, prev.fin));
+
   const cols = 'fecha, linea, spend, compras, revenue';
   const { filas, error } = await leerSnapshot(sb, { cols, desde: prev.ini, hasta: sem.fin, nivel: 'campania' });
   if (error) problemas.push(`Meta Ads: ${error}`);
@@ -170,6 +180,12 @@ async function calcularFoto(sb, sem) {
     semana: { ini: sem.ini, fin: sem.fin },
     previa: { ini: prev.ini, fin: prev.fin },
     venta: { actual: ventaActual, previa: ventaPrevia },
+    // 🔴 Las semanas cerradas ANTES del 24-ago-2026 no tienen esta clave, y no hay verbo de
+    // reabrir. La pantalla tiene que decir «no se midió esa semana»: rellenarla con ceros da un
+    // número plausible y falso para siempre.
+    // `nombres` es sólo de la semana actual: los de la previa no se muestran en ningún lado y
+    // guardar un dato que nadie lee lo vuelve verdad para siempre en el jsonb del cierre.
+    canal: { actual: canalActual.canales, previa: canalPrevio.canales, nombres: canalActual.nombres },
     pauta: { actual: pautaActual, previa: pautaPrevia },
     techos: await techosDe(sb),
     problemas,

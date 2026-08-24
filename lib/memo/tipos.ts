@@ -19,10 +19,12 @@ import {
   sumarDias as sumarDiasJs,
 } from './semana.core.js'
 import {
+  CANALES_MINORISTA as CANALES_MINORISTA_JS,
   LABEL_LINEA as LABEL_LINEA_JS,
   LINEAS_MEMO as LINEAS_MEMO_JS,
   costoPorCompra as costoPorCompraJs,
   delta as deltaJs,
+  resumirCanales as resumirCanalesJs,
   semaforoPauta as semaforoPautaJs,
   ticketPromedio as ticketPromedioJs,
 } from './foto.core.js'
@@ -42,6 +44,17 @@ export type Foto = {
   semana: { ini: string; fin: string }
   previa: { ini: string; fin: string }
   venta: { actual: Record<string, VentaLinea>; previa: Record<string, VentaLinea> }
+  /**
+   * Venta por canal. **Opcional a propósito**: las semanas cerradas antes del 24-ago-2026 se
+   * congelaron sin este corte y no hay verbo de reabrir. `undefined` significa «no se midió esa
+   * semana» y la pantalla lo dice así — un cero acá sería un número plausible y falso para siempre.
+   */
+  canal?: {
+    actual: Record<string, VentaLinea>
+    previa: Record<string, VentaLinea>
+    /** Los nombres crudos de Gestión Nube que cayeron en cada canal. Sin esto, `otro` no se audita. */
+    nombres: Record<string, string[]>
+  }
   pauta: { actual: Record<string, PautaLinea>; previa: Record<string, PautaLinea> }
   techos: Record<string, number>
   /** Fuentes que no se pudieron leer. Se muestran: media foto sin aviso se lee como foto entera. */
@@ -97,6 +110,20 @@ export const semanaSiguiente = semanaSiguienteJs as (s: Semana) => Semana
 export const cerrada = cerradaJs as (s: Semana, hoy: string) => boolean
 export const etiquetaSemana = etiquetaSemanaJs as (s: Semana) => string
 export const claveValida = claveValidaJs as (bloque: string, clave: string) => boolean
+
+/** El corte por canal: `mayorista + minorista = total`, y `tecnica` viaja aparte y con nombre. */
+export type ResumenCanales = {
+  mayorista: VentaLinea
+  minorista: VentaLinea
+  desglose: { canal: string; venta: VentaLinea }[]
+  tecnica: VentaLinea
+  total: VentaLinea
+}
+
+export const CANALES_MINORISTA = CANALES_MINORISTA_JS as string[]
+export const resumirCanales = resumirCanalesJs as (
+  porCanal: Record<string, VentaLinea> | undefined,
+) => ResumenCanales
 
 export const ticketPromedio = ticketPromedioJs as (v: VentaLinea | undefined) => number | null
 export const costoPorCompra = costoPorCompraJs as (p: PautaLinea | undefined) => number | null

@@ -1,8 +1,8 @@
 # Memo semanal — ficha de sección
 
 Sección `memo`, área Dirección, **sólo admins**. Es el depósito semanal de lo que pasó: los números
-que arma el monitor (lunes a domingo), el avance de los ocho sistemas y el acta que escriben Bruno
-y Darío. No reemplazó ninguna pantalla — nació el 15-ago-2026 como la otra mitad de Gerencial.
+que arma el monitor (lunes a domingo) —venta **por línea**, venta **por canal** y pauta—, el avance
+de los ocho sistemas y el acta que escriben Bruno y Darío. No reemplazó ninguna pantalla — nació el 15-ago-2026 como la otra mitad de Gerencial.
 
 🔑 **Gerencial es "qué decidir ahora": señales vivas, sin memoria y sin corte. Éste es "qué pasó",
 con fecha y con firma.** Sirve de criterio general: si una pantalla no tiene pasado, le falta la
@@ -27,6 +27,13 @@ el motivo duro está escrito arriba del `create table`.
   Recalcularlas del lado del servidor sería una segunda implementación de la misma pregunta.
 - **La venta sale de la consulta del servidor que usa Liquidación** (`lib/liquidacion/ventas.ts`),
   acotada por rango — **no del ETL**, y el porqué está comentado arriba de `ventaPorLinea`.
+- **El canal lo clasifica `lib/liquidacion/canal.core.js`**, la misma implementación que usan
+  `api/_norte.js` y la pestaña «Día a día» de Ventas mensuales — y **`CANALES_MINORISTA` vive ahí**,
+  no acá. 🔴 Esa lista ya había nacido **dos veces** (declarada y sin usar en `resultado.ts`, y de
+  nuevo en `foto.core.js` el 24-ago-2026): se unificó el mismo día.
+- **«Lo facturado» sale de `facturadoDeVenta`** (`lib/norte/contribucion.core.js`), la misma cuenta
+  que usan Norte y «Día a día». Escribirla de nuevo haría que dos pantallas contesten distinto sobre
+  la misma semana.
 - **La pauta sale del snapshot de Meta Ads** (`lib/meta-ads/leer-snapshot.core.js` +
   `rentabilidad.core.js`): los techos de rentabilidad son los mismos que mira Meta.
 
@@ -43,6 +50,25 @@ el motivo duro está escrito arriba del `create table`.
   días, 10 repos; la semana del 17 al 23 fueron **323 commits en 8 repos** (marketing 154, monitor
   104, y **Moldea y Creativa en cero — que también se escribe**). ⚠️ **No se ejecuta solo** —
   alguien tiene que correrlo el viernes.
+- 🔴 🔑 **«Mercadería» y «Facturado» son DOS columnas distintas y por eso se llaman distinto.** La
+  tabla **por línea** muestra sólo la mercadería: el descuento y el envío son **de la venta**, y una
+  venta mixta (Zattia + Stunned) no se puede partir entre dos líneas sin inventar un criterio. La
+  tabla **por canal** sí los lleva, porque una venta tiene **un** canal. **La brecha no es chica:
+  medida el 24-ago-2026 sobre la semana del 10 al 16, $15.776.896 contra $14.694.969 — $1.081.927,
+  un 6,9 %.** Con el mismo rótulo en las dos, el lector cita el número que le tocó.
+- 🔴 🔑 **Los tickets por canal SUMAN; los tickets por línea NO.** Las dos tablas están una al lado
+  de la otra y se leen como comparables. Una venta mixta cuenta un ticket en cada línea; una venta
+  tiene un solo canal. Está dicho al pie de la pantalla, que es donde el lector lo necesita.
+- ⚠️ **`tecnica` va FUERA del total del corte por canal, pero SIEMPRE con nombre y con número**, aun
+  en cero. No son ventas (las crea el monitor para descontar stock), pero adentro cae también el
+  canal vacío: el día que Gestión Nube deje de mandar `channel`, **todas** las ventas aparecen ahí
+  en vez de evaporarse. ⚠️ «Día a día» las descarta con `esVentaTecnica` (criterio positivo) y el
+  memo las agrupa con `canalDe` (el vacío cae adentro): **son dos preguntas distintas y no se
+  unifican** — el motivo está escrito en `canal.core.js`. Medido el 24-ago: las dos dan 6.
+- ⚠️ **«Otros canales» muestra al lado los nombres crudos** que cayeron adentro (hoy *Mercadolibre*
+  y *Otro Canal*). Sin eso es una bolsa que nadie puede auditar. 📌 Y ahí se ve algo que sorprende:
+  BDI tiene un canal llamado literalmente **«Minorista»** que `canalDe` manda a **Local** — 1 venta
+  y $14.382 en la semana del 10 al 16. No es un defecto; se ve porque el nombre crudo está a la vista.
 - 🔑 **Una novedad NO es un avance** (dicho por Bruno). Por eso el memo no cuelga de `novedades`: la
   novedad hay que redactarla y decidir a quién le llega, y colgarlo de ahí obligaba a escribir dos
   veces lo mismo.
@@ -63,6 +89,10 @@ el motivo duro está escrito arriba del `create table`.
   registró 1, la excepción siguió callando. El motivo está comentado en `foto.core.js:semaforoPauta`.
   🔑 **La regla estaba escrita DOS veces** —el núcleo y la pantalla recalculando inline— y por eso
   sacarla de un lado la dejaba viva en el otro. **Y el test que había defendía la excepción.**
+- 🔴 **Un ticket lo descarta NO TENER UN SOLO RENGLÓN, ⛔ nunca que sus renglones sumen cero.** El
+  primer intento del corte por canal descartaba las ventas de $0 y 0 unidades, y eso hacía que los
+  tickets por canal ya no sumaran la cantidad real de ventas: la semana del 10 al 16 daba **257
+  «Local» contra las 259 que cuenta la base**. Lo cazó el contraste contra `psql`, no un test.
 - ⚠️ **El puente de Chrome se come el primer clic de esta pantalla** (comprobado por red: no sale la
   llamada de la semana nueva). Entran después de un screenshot. **No es un defecto de la app** —
   verificarlo antes de reportarlo.
@@ -125,15 +155,28 @@ veces se olvidó — que es lo que hace que la decisión no sea una corazonada.
   acta, por decisión de Bruno** ("va a ser complicado que lo armemos, lo armamos esta semana") ⇒ ⛔
   no se re-abre.
 - ▶️ **El cron de los avances** (arriba): decidido el enfoque, sin escribir.
+- 🔴 **Las semanas cerradas antes del 24-ago-2026 no tienen el corte por canal** y **no hay verbo de
+  reabrir**. `Foto.canal` es opcional a propósito y la pantalla dice **«no se midió esa semana»**.
+  ⛔ Rellenarlas con ceros da un número plausible y falso para siempre.
 - ⚠️ **El costo por compra de Stunned sale de UNA sola observación** ($9.886 con 1 compra). Es un
   número real, no una medición.
 
 ## Cómo se prueba
 
-`npx vitest run tests/memo.test.ts --reporter=dot` (26 casos).
+`npx vitest run tests/memo.test.ts --reporter=dot` (38 casos).
 
 Lo que no es obvio:
 
+- 🔑 **El oráculo del corte por canal viene por otro camino que el hecho, y son dos.** El primero es
+  **`psql`**: la misma semana agrupada por canal del lado de la base. El segundo es **«Día a día» de
+  Ventas mensuales**, que usa el mismo `canalDe` y el mismo `facturadoDeVenta` — si difieren, uno
+  miente. Medido el 24-ago-2026 sobre la semana del 10 al 16, corriendo los dos núcleos sobre
+  exactamente las mismas filas: **$14.664.887 y 414 tickets en los dos**, y los cinco canales al
+  peso contra `psql` en las dos marcas. La única diferencia es `tecnica`, y es la buscada.
+- **Seis mutantes de este bloque, seis muertos** (24-ago): mandar `mayorista` a `local` · sacar el
+  tope de fecha (entra la venta de la semana siguiente) · tickets sin deduplicar · sumar `tecnica`
+  al total · guardar el canal clasificado en vez del nombre crudo · sacar `otro` de minorista.
+  ⚠️ La mutación se confirma con `grep` **antes** de leer el rojo: un «vivo» suele ser el arnés.
 - 🔑 **El oráculo del cierre no es la pantalla**: `memo_semana` leída aparte con la service key.
   Medido el 18-ago con cuatro lecturas del mismo número en cuatro momentos (parcial, jsonb del
   cierre, recálculo en vivo tras reabrir, jsonb del segundo cierre) — **idénticas**.
