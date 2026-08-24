@@ -1,12 +1,22 @@
 /**
- * Los tres reportes PDF del tablero de diseños: decisiones (por estado), galería
- * (grilla con votos) y limpio (solo imágenes). Cliente-only (jsPDF dinámico). Port de
- * dbReporte/dbReporteGaleria/dbReporteLimpioGen (index.html:3760/3808/3873).
+ * Los tres reportes PDF del tablero de diseños: decisiones (por estado), galería (grilla) y limpio
+ * (solo imágenes). Cliente-only (jsPDF dinámico). Los tres salen del mismo diálogo
+ * (`components/disenos/ReportePDF.tsx`): eran tres botones sueltos en la barra para tres variantes
+ * del mismo papel.
+ *
+ * 🔑 **El puntaje entra por parámetro, no sale del diseño.** El resultado de la ronda es derivado y
+ * ⛔ nunca se escribe en el documento del diseño (`docs/secciones/disenos.md`). Hasta ago-2026 estos
+ * reportes imprimían "A favor / En contra" desde los 👍/👎 del tablero — que sobre los 37 diseños de
+ * BDI valían **0 y 0**: el papel con el que se decidía la compra no decía nada.
  */
 
 import { agregarImagenFit, compartirODescargarPDF, precargarImagenes } from '../pdf'
-import { ordenar } from './core'
+import { etiquetaPuntaje, ordenar } from './core'
 import { DB_ESTADOS, type Diseno, type EstadoDiseno, type OrdenDiseno } from './tipos'
+import type { PuntajesDeRonda } from './votacion'
+
+/** El pie de cada foto: lo que dijo la ronda, o "sin votos" con todas las letras. */
+const puntajeDe = (puntajes: PuntajesDeRonda | null | undefined, d: Diseno) => etiquetaPuntaje(puntajes?.[d.id])
 
 /**
  * Las fotos de los diseños viven en Vercel Blob, o sea que `d.url` es una URL remota y jsPDF
@@ -18,8 +28,8 @@ const dibujable = (fotos: Map<string, string>, d: Diseno) => fotos.get(d.url) ??
 const fechaLarga = () => new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
 const hoy = () => new Date().toISOString().slice(0, 10)
 
-/** Reporte de decisiones: confirmados → duda → rechazados → por revisar, con votos y notas. */
-export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
+/** Reporte de decisiones: confirmados → duda → rechazados → por revisar, con el puntaje de la ronda. */
+export async function reporteDecisiones(disenos: Diseno[], puntajes?: PuntajesDeRonda | null, tituloRonda?: string): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const fotos = await precargarImagenes(disenos.map((d) => d.url))
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
@@ -32,7 +42,7 @@ export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
   pdf.setFont('helvetica', 'normal')
   pdf.setTextColor(120)
   y += 6
-  pdf.text(`${fechaLarga()}  ·  ${disenos.length} diseños evaluados`, M, y)
+  pdf.text(`${fechaLarga()}  ·  ${disenos.length} diseños evaluados${tituloRonda ? '  ·  votación: ' + tituloRonda : ''}`, M, y)
   pdf.setTextColor(0)
   y += 8
   const orden: EstadoDiseno[] = ['confirmado', 'duda', 'rechazado', 'revisar']
@@ -67,11 +77,7 @@ export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
       pdf.setTextColor(90)
-      pdf.text(`A favor: ${d.up}     En contra: ${d.down}`, tx, y + 11)
-      if (d.nota) {
-        pdf.setTextColor(60)
-        pdf.text(pdf.splitTextToSize(d.nota, W - M - tx - 2).slice(0, 3), tx, y + 17)
-      }
+      pdf.text(puntajeDe(puntajes, d), tx, y + 11)
       pdf.setTextColor(0)
       pdf.setDrawColor(228)
       pdf.line(M, y + ROW - 3, W - M, y + ROW - 3)
@@ -82,16 +88,16 @@ export async function reporteDecisiones(disenos: Diseno[]): Promise<void> {
   await compartirODescargarPDF(pdf, `seleccion-disenos-${hoy()}.pdf`, 'Selección de diseños')
 }
 
-/** Reporte galería: grilla 3 columnas con foto, nombre, votos y barra de estado. */
-export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno): Promise<void> {
+/** Reporte galería: grilla 3 columnas con foto, nombre, puntaje y barra de estado. */
+export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno, puntajes?: PuntajesDeRonda | null, tituloRonda?: string): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const fotos = await precargarImagenes(disenos.map((d) => d.url))
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   const W = 210, M = 10, cols = 3, gap = 5
   const cellW = (W - 2 * M - (cols - 1) * gap) / cols
   const imgH = 74, cellH = imgH + 16
-  const items = ordenar(disenos, orden)
-  const ordLbl = ({ carga: 'orden de carga', tildes: 'más votos a favor', cruces: 'más en contra', saldo: 'mejor saldo' } as Record<OrdenDiseno, string>)[orden] || ''
+  const items = ordenar(disenos, orden, puntajes)
+  const ordLbl = ({ puntaje: 'puntaje de la ronda', carga: 'orden de carga', nombre: 'nombre' } as Record<OrdenDiseno, string>)[orden] || ''
   const estadoColor: Record<EstadoDiseno, [number, number, number]> = { revisar: [107, 114, 128], confirmado: [22, 163, 74], duda: [217, 119, 6], rechazado: [220, 38, 38] }
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(15)
@@ -99,7 +105,7 @@ export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno): Pro
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
   pdf.setTextColor(120)
-  pdf.text(`${fechaLarga()} · ${items.length} diseños${ordLbl ? ' · orden: ' + ordLbl : ''}`, M, 19)
+  pdf.text(`${fechaLarga()} · ${items.length} diseños${ordLbl ? ' · orden: ' + ordLbl : ''}${tituloRonda ? ' · votación: ' + tituloRonda : ''}`, M, 19)
   pdf.setTextColor(0)
   let col = 0
   let y = 24
@@ -122,7 +128,7 @@ export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno): Pro
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8)
     pdf.setTextColor(80)
-    pdf.text(`A favor ${d.up || 0}    En contra ${d.down || 0}`, x, y + imgH + 10)
+    pdf.text(puntajeDe(puntajes, d), x, y + imgH + 10)
     pdf.setTextColor(0)
     col++
     if (col >= cols) {
@@ -134,8 +140,8 @@ export async function reporteGaleria(disenos: Diseno[], orden: OrdenDiseno): Pro
 }
 
 /** Reporte limpio: solo imágenes (filtrado por estado o todos). */
-export async function reporteLimpio(disenos: Diseno[], orden: OrdenDiseno, filtro: EstadoDiseno | 'todos'): Promise<boolean> {
-  const items = ordenar(filtro === 'todos' ? disenos : disenos.filter((d) => d.estado === filtro), orden)
+export async function reporteLimpio(disenos: Diseno[], orden: OrdenDiseno, filtro: EstadoDiseno | 'todos', puntajes?: PuntajesDeRonda | null): Promise<boolean> {
+  const items = ordenar(filtro === 'todos' ? disenos : disenos.filter((d) => d.estado === filtro), orden, puntajes)
   if (!items.length) return false
   const { jsPDF } = await import('jspdf')
   const fotos = await precargarImagenes(items.map((d) => d.url))

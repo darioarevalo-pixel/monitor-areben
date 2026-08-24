@@ -26,10 +26,36 @@ export type Ronda = {
   token_vence: string
   cerrada_at: string | null
   creada_por: string | null
-  disenos: DisenoDeRonda[]
   created_at: string
   /** Cuántas personas votaron. Lo calcula el servidor en una sola consulta. */
   votantes: number
+  /**
+   * Cuántos diseños entraron a la ronda.
+   *
+   * 🔑 Es un número y no la lista: el snapshot congela la `url` de cada diseño y los viejos la
+   * tienen en base64, así que el listado —hasta 50 rondas— mandaba megas de fotos para que la
+   * pantalla usara `.length`. La lista completa sigue viniendo en `vista=resultados`, que es la
+   * única que pinta miniaturas.
+   */
+  nDisenos: number
+}
+
+/** Lo que la ronda dice de UN diseño. `promedio: null` = no lo votó nadie, ⛔ nunca 0. */
+export type PuntajeDiseno = { n: number; promedio: number | null }
+
+/** El resumen de una ronda, por id de diseño. Es lo que pinta el ★ de cada tarjeta. */
+export type PuntajesDeRonda = Record<string, PuntajeDiseno>
+
+/** La cabecera de la ronda que se está mirando, sin su snapshot. */
+export type CabeceraDeRonda = Pick<Ronda, 'id' | 'titulo' | 'token_vence' | 'cerrada_at' | 'created_at' | 'nDisenos'>
+
+export type ResumenDeRonda = {
+  /** `null` cuando la marca todavía no tuvo ninguna ronda. */
+  ronda: CabeceraDeRonda | null
+  votantes: number
+  /** El promedio de TODOS los puntajes de la ronda. `null` si no votó nadie. */
+  general: number | null
+  puntajes: PuntajesDeRonda
 }
 
 export type Boleta = { votante_id: string; nombre: string; puntajes: Record<string, number>; updated_at: string }
@@ -70,9 +96,32 @@ export async function leerToken(store: Marca, id: string): Promise<string> {
   return d.token as string
 }
 
-export async function leerResultados(store: Marca, id: string): Promise<{ ronda: Ronda; boletas: Boleta[] }> {
+/** La ronda tal como vuelve de `vista=resultados`: con el snapshot, porque ahí se pintan las fotos. */
+export type RondaConDisenos = Ronda & { disenos: DisenoDeRonda[] }
+
+export async function leerResultados(store: Marca, id: string): Promise<{ ronda: RondaConDisenos; boletas: Boleta[] }> {
   const d = await pedir(`${API}&store=${store}&id=${encodeURIComponent(id)}&vista=resultados&nc=${Date.now()}`)
-  return { ronda: d.ronda as Ronda, boletas: (d.boletas || []) as Boleta[] }
+  return { ronda: d.ronda as RondaConDisenos, boletas: (d.boletas || []) as Boleta[] }
+}
+
+/**
+ * El resumen de una ronda: la cabecera y `{n, promedio}` por diseño. **Nada de fotos.**
+ *
+ * 🔑 Es la puerta que hace posible el ★ en cada tarjeta del tablero, que es donde Bruno lo pidió.
+ * Pedirlo por `vista=resultados` habría costado el snapshot entero —con las fotos en base64 de los
+ * diseños viejos— en cada entrada a la sección. Esta vista pesa ~1 KB tenga o no base64.
+ *
+ * Sin `id` devuelve **la última ronda creada**. Es una regla explícita y no "la abierta": con dos
+ * rondas, "la última" es predecible y no cambia sola el día que una vence.
+ */
+export async function leerResumenRonda(store: Marca, id?: string): Promise<ResumenDeRonda> {
+  const d = await pedir(`${API}&store=${store}&vista=resumen${id ? `&id=${encodeURIComponent(id)}` : ''}&nc=${Date.now()}`)
+  return {
+    ronda: (d.ronda || null) as CabeceraDeRonda | null,
+    votantes: Number(d.votantes) || 0,
+    general: d.general == null ? null : Number(d.general),
+    puntajes: (d.puntajes || {}) as PuntajesDeRonda,
+  }
 }
 
 /**

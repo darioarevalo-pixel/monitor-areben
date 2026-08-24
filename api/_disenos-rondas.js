@@ -21,7 +21,7 @@ import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
-import { snapshotDeRonda } from '../lib/disenos/votacion.core.js';
+import { resumenLiviano, snapshotDeRonda } from '../lib/disenos/votacion.core.js';
 
 /** Días que vive el link. Cerrar la ronda lo revoca antes. Reclamos usa 15 y canjes 45; una ronda
  *  de diseños se decide en una semana, y 30 deja aire sin que un link quede dando vueltas un año. */
@@ -44,8 +44,28 @@ function cfgFor(store) {
 /** 64 hex. Nunca sembrado en el SQL: un token escrito en un archivo del repo es un token quemado. */
 const nuevoToken = () => randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
 
-/** Las columnas del listado. El `token` no está, y por eso no puede filtrarse por error. */
-const COLS_LISTADO = 'id, store, titulo, token_vence, cerrada_at, creada_por, disenos, created_at';
+/**
+ * Las columnas del listado. El `token` no está, y por eso no puede filtrarse por error.
+ *
+ * 🔑 **`disenos` tampoco.** El snapshot congela la `url` de cada diseño y los viejos la tienen en
+ * base64, así que el listado —hasta 50 rondas— mandaba megas de fotos para que la pantalla usara
+ * `disenos.length`. Ahora sale `nDisenos`, que es un número. El snapshot completo se sigue
+ * mandando en `vista=resultados`, la única pantalla que pinta miniaturas.
+ */
+const COLS_LISTADO = 'id, store, titulo, token_vence, cerrada_at, creada_por, created_at';
+
+/** Lo mismo más el snapshot, para las dos vistas que sí lo necesitan. */
+const COLS_CON_DISENOS = COLS_LISTADO + ', disenos';
+
+/** Cuántos votaron cada ronda, en UNA consulta y no una por ronda. */
+async function votantesDe(supabase, ids) {
+  if (!ids.length) return {};
+  const { data, error } = await supabase.from('disenos_votos').select('ronda_id').in('ronda_id', ids);
+  if (error) throw new Error(error.message);
+  const acc = {};
+  for (const v of data || []) acc[v.ronda_id] = (acc[v.ronda_id] || 0) + 1;
+  return acc;
+}
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -79,9 +99,10 @@ export default async function handler(req, res) {
 
       if (vista === 'resultados') {
         if (!id) return res.status(400).json({ error: 'falta id' });
-        const { data: ronda, error: e1 } = await supabase.from('disenos_rondas').select(COLS_LISTADO).eq('store', store).eq('id', id).maybeSingle();
+        const { data: ronda, error: e1 } = await supabase.from('disenos_rondas').select(COLS_CON_DISENOS).eq('store', store).eq('id', id).maybeSingle();
         if (e1) throw new Error(e1.message);
         if (!ronda) return res.status(404).json({ error: 'ronda no encontrada' });
+        ronda.nDisenos = Array.isArray(ronda.disenos) ? ronda.disenos.length : 0;
         const { data: votos, error: e2 } = await supabase
           .from('disenos_votos')
           .select('votante_id, nombre, puntajes, updated_at')
@@ -91,28 +112,71 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, ronda, boletas: votos || [] });
       }
 
-      // El listado trae el snapshot completo (con las URLs de las fotos) porque la pantalla lo usa
-      // para pintar las miniaturas del resultado sin volver a pedir el tablero.
+      // El resumen: la cabecera de una ronda y `{n, promedio}` por diseño. **Sin una sola foto.**
+      //
+      // 🔑 Existe para que el ★ pueda estar en cada tarjeta del tablero, que es donde sirve. Por
+      // `vista=resultados` eso costaría el snapshot entero —con las fotos en base64 de los diseños
+      // viejos— en cada entrada a la sección, en cada cambio de pestaña y en cada cambio de marca.
+      // Acá el snapshot se lee (hace falta para saber qué ids entran) pero **no se devuelve**: lo
+      // consume `resumenLiviano`, que es la misma disciplina de whitelist que `paraElVotante` pero
+      // por peso en vez de por privacidad. Payload ~1 KB, haya base64 o no.
+      //
+      // Sin `id` devuelve **la última ronda creada**. Es una regla explícita y no "la abierta": con
+      // dos rondas, "la última" es predecible y no cambia sola el día que una vence.
+      if (vista === 'resumen') {
+        let q = supabase.from('disenos_rondas').select(COLS_CON_DISENOS).eq('store', store);
+        if (id) q = q.eq('id', id);
+        else q = q.order('created_at', { ascending: false }).limit(1);
+        const { data: filas, error: e1 } = await q;
+        if (e1) throw new Error(e1.message);
+        const ronda = (filas || [])[0];
+        // Sin ronda no es un error: es una marca que todavía no votó nada. La pantalla tiene que
+        // poder decir "todavía no hay ninguna ronda" y no "no se pudo leer".
+        if (!ronda) return res.status(200).json({ ok: true, ronda: null, votantes: 0, general: null, puntajes: {} });
+        const { data: votos, error: e2 } = await supabase
+          .from('disenos_votos')
+          .select('nombre, puntajes')
+          .eq('ronda_id', ronda.id);
+        if (e2) throw new Error(e2.message);
+        const boletas = votos || [];
+        const todos = boletas.flatMap((b) => Object.values(b.puntajes || {})).filter((n) => Number.isFinite(n));
+        return res.status(200).json({
+          ok: true,
+          ronda: {
+            id: ronda.id,
+            titulo: ronda.titulo,
+            token_vence: ronda.token_vence,
+            cerrada_at: ronda.cerrada_at,
+            created_at: ronda.created_at,
+            nDisenos: Array.isArray(ronda.disenos) ? ronda.disenos.length : 0,
+          },
+          votantes: boletas.length,
+          // El promedio de la ronda entera. `null` y nunca 0: sin votos no es la peor nota.
+          general: todos.length ? todos.reduce((a, b) => a + b, 0) / todos.length : null,
+          puntajes: resumenLiviano(ronda, boletas),
+        });
+      }
+
       const { data, error } = await supabase
         .from('disenos_rondas')
-        .select(COLS_LISTADO)
+        .select(COLS_CON_DISENOS)
         .eq('store', store)
         .order('created_at', { ascending: false })
         .limit(50);
       if (error) throw new Error(error.message);
       const rondas = data || [];
 
-      // Cuántos votaron cada una, en UNA consulta y no una por ronda.
-      let porRonda = {};
-      if (rondas.length) {
-        const { data: votos, error: e2 } = await supabase
-          .from('disenos_votos')
-          .select('ronda_id')
-          .in('ronda_id', rondas.map((r) => r.id));
-        if (e2) throw new Error(e2.message);
-        porRonda = (votos || []).reduce((acc, v) => ({ ...acc, [v.ronda_id]: (acc[v.ronda_id] || 0) + 1 }), {});
-      }
-      return res.status(200).json({ ok: true, rondas: rondas.map((r) => ({ ...r, votantes: porRonda[r.id] || 0 })) });
+      const porRonda = await votantesDe(supabase, rondas.map((r) => r.id));
+      // `disenos` se descarta acá: se pidió sólo para contar. Es lo que evita mandar hasta 50
+      // snapshots con fotos para que la pantalla escriba "34 diseños".
+      return res.status(200).json({
+        ok: true,
+        rondas: rondas.map(({ disenos, ...r }) => ({
+          ...r,
+          nDisenos: Array.isArray(disenos) ? disenos.length : 0,
+          votantes: porRonda[r.id] || 0,
+        })),
+      });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });

@@ -190,10 +190,10 @@ export function conItemsDerivados(g: Ingreso): Ingreso {
 }
 
 // ── Mutaciones inmutables (para el estado de React) ─────────────────────────────
-function mapIngreso(list: Ingreso[], id: string, fn: (g: Ingreso) => Ingreso): Ingreso[] {
+export function mapIngreso(list: Ingreso[], id: string, fn: (g: Ingreso) => Ingreso): Ingreso[] {
   return list.map((g) => (g.id === id ? fn(g) : g))
 }
-function mapBloque(g: Ingreso, bid: string, fn: (b: Bloque) => Bloque): Ingreso {
+export function mapBloque(g: Ingreso, bid: string, fn: (b: Bloque) => Bloque): Ingreso {
   return { ...g, bloques: (g.bloques || []).map((b) => (b.id === bid ? fn(b) : b)) }
 }
 

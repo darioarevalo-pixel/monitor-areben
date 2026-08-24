@@ -84,7 +84,8 @@ ya tienen ficha:
   qué se conserva del campo `description` de TiendaNube, que **no tiene historial**.
 - Diseños → **leer `docs/secciones/disenos.md`** antes de tocar `components/disenos/`,
   `lib/disenos/`, `api/_disenos*.js` o `sql/migrate-disenos*.sql`. ⛔ **`/votacion/<token>` es un
-  portal ABIERTO**, y los resultados de la ronda no se escriben nunca en el diseño.
+  portal ABIERTO**, y los resultados de la ronda no se escriben nunca en el diseño. ⛔ Los
+  confirmados salen a Ingresos por `lib/ingresos/puente.ts`, que escribe en el KV de Darío.
 - Envíos del día → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`,
   `lib/envios/`, `api/_envios.js` o `api/_cadete.js`.
 - Mensajes de clientes → **leer `docs/secciones/buzon.md`** antes de tocar `components/buzon/`,

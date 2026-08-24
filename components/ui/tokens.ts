@@ -31,6 +31,7 @@ export const color = {
   bg: 'var(--mo-bg)',
   bg2: 'var(--mo-bg2)',
   line: 'var(--mo-line)', // borde estándar de cards/tablas
+  scrim: 'var(--mo-scrim)', // velo oscuro SOBRE una foto (chapitas, lightbox)
   line2: 'var(--mo-line2)', // borde de inputs
 
   // Marca — ÍNDIGO (acento de firma: acción, activo, foco)

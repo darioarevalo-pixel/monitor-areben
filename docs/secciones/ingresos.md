@@ -37,6 +37,58 @@ Blob**, carpeta `ingresos/`, por `api/blob-upload.js` (una de las 12 funciones d
   plazos— vive en la base, no en este KV, porque **el GET de este KV está abierto**.
 - `useSubirGaleria.ts` es gemelo de `components/meta-ads/piezas/useSubirPiezas.ts`. Un bug del camino
   de subida está casi seguro en los dos.
+- 🆕 **El primer eslabón de la cadena es Diseños** (`docs/secciones/disenos.md`): los diseños
+  confirmados del tablero entran acá como columnas por
+  `components/ingresos/PasarAImportacion.tsx` + `lib/ingresos/puente.ts`. Vive **de este lado** y no
+  del de Diseños a propósito: todo lo que ese botón sabe (que el KV se reescribe entero, que sin
+  `cargado` no se escribe, que el gate del otro repo pide admin, que la carpeta del Blob es
+  `ingresos`) es conocimiento de esta sección, y duplicarlo allá lo dejaría despegarse.
+
+## El puente desde Diseños
+
+Antes de esto, un diseño elegido se re-tipeaba y se volvía a subir a mano acá. La cadena entera es
+**Diseños** (elegir) → **Ingresos** (modelos + cantidades + proveedor = la orden) → **GN** (el
+nombre comercial) → **Norte** (qué se vendió de esa compra), y estaba cortada en el primer eslabón.
+El costo está medido: **352 de 2.873 unidades** que Norte no pudo contar porque los diseños no
+estaban cargados.
+
+- 🔴 **El nombre que viaja es el COMERCIAL, y se edita en el modal.** El `name` del tablero nace del
+  **nombre del archivo** (medido el 24-ago-2026: los 37 de BDI se llamaban `NUEVA (12)`, `SI (3)`…).
+  ⚠️ Y la heurística obvia para detectarlo (`^(img|dsc|foto|whatsapp)\d`) caza **0 de 37**: por eso
+  el nombre es un paso obligatorio del diálogo y no una advertencia condicional. **Sin nombre no
+  viaja**: `normalizar('')` no matchea nunca contra GN.
+- 🔴 **`img` NUNCA empieza con `data:`.** Los diseños viejos tienen la foto embebida; el puente la
+  sube al Blob **antes** de tocar el KV, y si eso falla manda `img: ''`. Esta clave se reescribe
+  entera en cada guardado y la lee además Norte: una foto embebida se paga en las dos secciones,
+  para siempre. Lo fija `tests/ingresos-puente.test.ts`.
+- 🔴 **`disenoId` es un campo propio, ⛔ no el `id` de la columna.** `celdas` está indexado por el id
+  de columna: meter ahí ids de otro sistema mezcla dos keyspaces con ciclos de vida distintos, y un
+  id que además significa "de dónde vino" deja huérfanos indistinguibles.
+- 🔑 **La idempotencia cuelga del KV, no de la marca en el diseño.** `yaEnLaImportacion` mira
+  **todos los bloques** de la importación destino sobre una lectura fresca. Apretar dos veces es la
+  operación normal: contesta `Entraron 0. 34 ya estaban.`
+- 🔑 **El destino nuevo nace con CERO columnas vacías** (`bloqueParaElPuente`). `nuevoBloque` deja 10
+  huecos, que es lo que quiere quien arma la importación a mano, no quien la recibe llena.
+- 🔑 **Orden inviolable: primero el KV, después la marca en el diseño.** Y se relee una **tercera**
+  vez para verificar antes de marcar: si no verifica, no se marca nada y el aviso dice que repetir
+  es seguro.
+- **Permisos**: pide `ingresos.editar` (o admin) **además** del permiso de Diseños — este botón hace
+  lo mismo que la vista Editar. `ingresos.nombre` no alcanza. ⚠️ Y el candado de verdad es el del
+  otro repo, que pide **admin**: el 403 se traduce nombrando esa causa, no como "error al guardar".
+- **En Zattia el botón no se renderiza** (`esDeMarca('ingresos', marca)`), no se deshabilita: Zattia
+  no importa fundas y su menú ni siquiera tiene esta sección, así que no hay a dónde ir a mirar.
+- ⚠️ **El riesgo que más probablemente haga abandonar la función**: 34 columnas × ~20 modelos son
+  **680 celdas** y la grilla se vuelve incómoda. El modal avisa arriba de 15 columnas por bloque.
+
+Oráculo del puente, por otro camino que la pantalla que escribió (el GET del KV está abierto):
+
+```bash
+curl -s 'https://bdi-catalogo.vercel.app/api/ingresos?store=bdi' \
+  | jq '[.ingresos[].bloques[].disenos[] | select(.img|startswith("data:"))] | length'   # 0
+```
+
+⛔ **La primera pasada va con UN diseño, no con 34**: es la única forma de descubrir un error de
+forma sin haber reescrito el KV entero.
 
 ## Reglas que el código no dice
 

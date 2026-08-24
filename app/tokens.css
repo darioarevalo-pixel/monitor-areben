@@ -38,6 +38,10 @@
   --mo-bg: #f8fafc; /* tinte sutil DENTRO de una card */
   --mo-bg2: #eff3f8; /* zebra, hover de fila, chips apagados */
   --mo-line: #dfe5ec; /* borde de cards y tablas */
+  /* Velo oscuro sobre una imagen: el fondo del lightbox y la chapita del ★ sobre la foto. Es el
+     único color del kit que no se elige por contraste con el papel sino por encima de una foto
+     cualquiera, y por eso no puede salir de la paleta. */
+  --mo-scrim: rgba(15, 23, 42, 0.78);
   --mo-line2: #cbd4df; /* borde de inputs */
 
   /* ── Acento de firma: ÍNDIGO ───────────────────────────── */

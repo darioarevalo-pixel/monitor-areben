@@ -7,6 +7,7 @@ import {
   quienesVotaron,
   ranking,
   resumen,
+  resumenLiviano,
   sanearPuntajes,
   sinNingunVoto,
   snapshotDeRonda,
@@ -168,5 +169,53 @@ describe('resumen y ranking', () => {
   it('quienesVotaron: sin repetir, ordenado, y sin rellenar los vacíos', () => {
     expect(quienesVotaron(boletas)).toEqual(['Ana', 'Leo'])
     expect(quienesVotaron([{ nombre: '  ' }, {}])).toEqual([])
+  })
+})
+
+/**
+ * La OTRA barrera de este archivo. `paraElVotante` recorta por privacidad; `resumenLiviano` recorta
+ * por **peso**, y las dos existen por el mismo motivo de fondo: lo que sale se arma campo por
+ * campo, nunca con un spread.
+ *
+ * El snapshot de la ronda congela la `url` tal cual estaba, y los diseños viejos la tienen en
+ * base64 (9 de los 37 de BDI, medido el 24-ago-2026). El ★ tiene que estar en cada tarjeta del
+ * tablero, o sea que esto se pide **al entrar a la sección** — si se llevara las fotos, se
+ * pagarían enteras en cada entrada, en cada cambio de pestaña y en cada cambio de marca.
+ */
+describe('resumenLiviano — lo que cuesta el ★ de cada tarjeta', () => {
+  const conBase64 = {
+    disenos: [
+      { id: 'a', name: 'Cerezas', url: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ' },
+      { id: 'b', name: 'Mariposa', url: 'https://blob.vercel-storage.com/disenos/x.jpg' },
+    ],
+  }
+  const boletas = [
+    { nombre: 'Ana', puntajes: { a: 5 } },
+    { nombre: 'Leo', puntajes: { a: 4 } },
+  ]
+
+  it('cada diseño trae EXACTAMENTE n y promedio', () => {
+    const out = resumenLiviano(conBase64, boletas)
+    expect(Object.keys(out).sort()).toEqual(['a', 'b'])
+    expect(Object.keys(out.a).sort()).toEqual(['n', 'promedio'])
+    expect(out.a).toEqual({ n: 2, promedio: 4.5 })
+  })
+
+  it('🔴 la foto NO sale: ni la data URL ni la del Blob', () => {
+    const crudo = JSON.stringify(resumenLiviano(conBase64, boletas))
+    expect(crudo).not.toContain('data:')
+    expect(crudo).not.toContain('base64')
+    expect(crudo).not.toContain('blob.vercel-storage.com')
+    expect(crudo).not.toContain('Cerezas')
+  })
+
+  it('el que nadie votó dice null, ⛔ nunca 0', () => {
+    expect(resumenLiviano(conBase64, boletas).b).toEqual({ n: 0, promedio: null })
+    expect(resumenLiviano(conBase64, []).a).toEqual({ n: 0, promedio: null })
+  })
+
+  it('una ronda sin diseños devuelve un objeto vacío y no se cae', () => {
+    expect(resumenLiviano({}, [])).toEqual({})
+    expect(resumenLiviano({ disenos: [] }, boletas)).toEqual({})
   })
 })

@@ -1,10 +1,15 @@
 'use client'
 
 /**
- * Las rondas de votación, vistas desde adentro: abrir una, pasar el link, y leer quién puso qué.
+ * Las rondas de votación: abrir una, pasar el link, y leer quién puso qué.
  *
- * Vive aparte de `Disenos.tsx` porque son dos cosas distintas —el tablero es de todos los días,
- * esto se abre cuando hay que decidir— y porque `Disenos.tsx` ya es el archivo largo de la sección.
+ * 🔑 **Es una pestaña, no un modal.** Hasta ago-2026 esto se abría con un botón de la barra y los
+ * resultados quedaban dos clics adentro de un diálogo. Y se notó: la única ronda que existía tuvo
+ * 10 votantes y un ranking limpio de 5,00 a 1,29 — y **ningún diseño se movió a Confirmado**. El
+ * resultado no llegaba a ser una decisión porque no estaba donde se decide.
+ *
+ * Por eso además de salir del modal, la tabla de resultados gana **«Confirmar los N mejores»**: el
+ * verbo que convierte el ranking en una decisión, que es lo único que no existía.
  *
  * ⛔ **Los resultados NO se escriben en el documento del diseño.** Son derivados: viven en
  * `disenos_votos` y se calculan al leer. Esto es a propósito y arregla el defecto de la votación
@@ -26,34 +31,27 @@ import {
   linkDeVotacion,
   type Boleta,
   type Ronda,
+  type RondaConDisenos,
 } from '@/lib/disenos/votacion'
+import { textoPromedio } from '@/lib/disenos/core'
 import type { Diseno } from '@/lib/disenos/tipos'
 import type { Marca } from '@/lib/nav.datos'
-import { Badge, Button, CopyButton, EmptyState, Input, Modal, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, space, useConfirmar, useToast } from '@/components/ui'
+import { Badge, Button, CopyButton, EmptyState, Input, Notice, Select, TBody, THead, TableWrap, Td, Th, Tr, color, space, useConfirmar, useToast } from '@/components/ui'
 
-/** Lo que la sección necesita para pintar la chapita de cada tarjeta. */
-export type PuntajesDeRonda = Record<string, { n: number; promedio: number | null }>
-
-/** Un promedio siempre con una decimal y coma, como se escribe acá. `null` es "sin votos". */
-export function textoPromedio(p: number | null): string {
-  return p == null ? '—' : p.toFixed(1).replace('.', ',')
-}
-
-type Vista = { modo: 'lista' } | { modo: 'nueva' } | { modo: 'resultados'; ronda: Ronda; boletas: Boleta[] }
+type Vista = { modo: 'lista' } | { modo: 'nueva' } | { modo: 'resultados'; ronda: RondaConDisenos; boletas: Boleta[] }
 
 export function VotacionPanel({
-  abierto,
-  onCerrar,
   marca,
   disenos,
-  onPuntajes,
+  onCambio,
+  onConfirmar,
 }: {
-  abierto: boolean
-  onCerrar: () => void
   marca: Marca
   disenos: Diseno[]
-  /** Se llama con el resumen de la ronda que se está mirando, para las chapitas del tablero. */
-  onPuntajes: (p: PuntajesDeRonda | null) => void
+  /** Crear, cerrar o borrar una ronda cambia el ★ del tablero: se avisa para que se recargue. */
+  onCambio: () => void
+  /** Manda los ids al tablero como confirmados. Es la salida del ranking. */
+  onConfirmar: (ids: string[]) => void
 }) {
   const toast = useToast()
   const { confirmar } = useConfirmar()
@@ -80,14 +78,13 @@ export function VotacionPanel({
   // El setState va dentro del await y no en el cuerpo del effect: el linter del repo rechaza el
   // setState síncrono ahí (dispara renders en cascada). Mismo patrón que el resto de las secciones.
   useEffect(() => {
-    if (!abierto) return
     let vivo = true
     ;(async () => {
       await recargar()
       if (vivo) setCargando(false)
     })()
     return () => { vivo = false }
-  }, [abierto, recargar])
+  }, [recargar])
 
   const empezarNueva = () => {
     setTitulo(`Diseños ${new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long' })}`)
@@ -109,6 +106,7 @@ export function VotacionPanel({
       )
       setLinkNuevo(link)
       await recargar()
+      onCambio()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
@@ -120,8 +118,6 @@ export function VotacionPanel({
     try {
       const { ronda, boletas } = await leerResultados(marca, r.id)
       setVista({ modo: 'resultados', ronda, boletas })
-      const res = resumen(ronda, boletas)
-      onPuntajes(Object.fromEntries(res.map((d) => [d.id, { n: d.n, promedio: d.promedio }])))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
@@ -138,6 +134,7 @@ export function VotacionPanel({
     try {
       await cerrarRonda(marca, r.id)
       await recargar()
+      onCambio()
       toast.ok('Votación cerrada.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -154,16 +151,16 @@ export function VotacionPanel({
     if (!ok) return
     try {
       await borrarRonda(marca, r.id)
-      onPuntajes(null)
       setVista({ modo: 'lista' })
       await recargar()
+      onCambio()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
   }
 
   return (
-    <Modal abierto={abierto} onCerrar={onCerrar} titulo="Votación por link" ancho="ancho">
+    <>
       {error && <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>{error}</Notice>}
 
       {vista.modo === 'nueva' && (
@@ -186,6 +183,7 @@ export function VotacionPanel({
           boletas={vista.boletas}
           onVolver={() => setVista({ modo: 'lista' })}
           onRefrescar={() => void verResultados(vista.ronda)}
+          onConfirmar={onConfirmar}
         />
       )}
 
@@ -222,7 +220,7 @@ export function VotacionPanel({
           )}
         </>
       )}
-    </Modal>
+    </>
   )
 }
 
@@ -235,7 +233,7 @@ function Fila({ r, marca, expandida, onExpandir, onResultados, onCerrar, onBorra
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{r.titulo || 'Sin título'}</div>
           <div style={{ fontSize: 12, color: color.mut }}>
-            {r.disenos.length} {r.disenos.length === 1 ? 'diseño' : 'diseños'} ·{' '}
+            {r.nDisenos} {r.nDisenos === 1 ? 'diseño' : 'diseños'} ·{' '}
             {/* El cero afirma: "nadie votó todavía" no es lo mismo que "0 votos" perdido en una fila. */}
             {r.votantes === 0 ? 'nadie votó todavía' : `${r.votantes} ${r.votantes === 1 ? 'persona votó' : 'personas votaron'}`}
             {r.creada_por ? ` · la abrió ${r.creada_por}` : ''}
@@ -353,13 +351,18 @@ function Nueva({ titulo, setTitulo, disenos, elegidos, setElegidos, creando, lin
   )
 }
 
-function Resultados({ ronda, boletas, onVolver, onRefrescar }: { ronda: Ronda; boletas: Boleta[]; onVolver: () => void; onRefrescar: () => void }) {
+function Resultados({ ronda, boletas, onVolver, onRefrescar, onConfirmar }: { ronda: RondaConDisenos; boletas: Boleta[]; onVolver: () => void; onRefrescar: () => void; onConfirmar: (ids: string[]) => void }) {
+  const { confirmar } = useConfirmar()
   const [abierto, setAbierto] = useState<string | null>(null)
+  const [cuantos, setCuantos] = useState(10)
   const res = ranking(resumen(ronda, boletas))
   const sinVotos = sinNingunVoto(res)
   const nombres = quienesVotaron(boletas)
   // El promedio de la ronda entera: sirve para saber si el lote gustó o no, más allá del orden.
   const general = calcPromedio(boletas.flatMap((b) => Object.values(b.puntajes || {})))
+  // ⛔ Los que nadie votó no son candidatos: un promedio nulo no es un cero, es "no se sabe".
+  const conVotos = res.filter((d) => d.promedio != null)
+  const tope = Math.min(cuantos, conVotos.length)
 
   return (
     <div>
@@ -383,6 +386,52 @@ function Resultados({ ronda, boletas, onVolver, onRefrescar }: { ronda: Ronda; b
           <Button size="sm" variant="ghost" onClick={onVolver}>Volver</Button>
         </div>
       </div>
+
+      {/*
+        🔑 La salida del ranking, y el único agregado de verdad de esta pantalla.
+        Sin esto, la votación termina en una tabla que hay que trasladar a mano al tablero de a un
+        clic por diseño — y medido: con 10 votantes y 34 diseños puntuados, no se trasladó ninguno.
+        Los que nadie votó NO entran nunca, por más que se pida un número más grande que la lista.
+      */}
+      {conVotos.length > 0 && (
+        <Notice tone="brand" style={{ marginBottom: space[3] }}>
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>Pasar al tablero como <b>confirmados</b> los</span>
+            <Select
+              value={String(tope)}
+              onChange={(e) => setCuantos(Number(e.target.value))}
+              style={{ width: 90 }}
+              aria-label="Cuántos confirmar"
+            >
+              {[3, 5, 10, 15, 20, conVotos.length].filter((n, i, a) => n <= conVotos.length && a.indexOf(n) === i).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </Select>
+            <span>mejores de la ronda.</span>
+            <span style={{ color: color.mut, fontSize: 12 }}>
+              {tope === conVotos.length ? 'Son todos los que alguien votó' : `Del ★ ${textoPromedio(conVotos[0].promedio)} al ★ ${textoPromedio(conVotos[tope - 1].promedio)}`}
+              {sinVotos ? ` · los ${sinVotos} sin votos no entran` : ''}
+            </span>
+            <Button
+              size="sm"
+              variant="solid"
+              tone="brand"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => void (async () => {
+                const elegidos = conVotos.slice(0, tope)
+                const ok = await confirmar({
+                  titulo: `Confirmar ${tope} ${tope === 1 ? 'diseño' : 'diseños'}`,
+                  ok: `Confirmar ${tope === 1 ? 'el mejor' : 'los ' + tope}`,
+                  mensaje: `Pasan a «Confirmados» en el tablero, para todo el equipo: ${elegidos.map((d) => d.name || 'sin nombre').join(', ')}.`,
+                })
+                if (ok) onConfirmar(elegidos.map((d) => d.id))
+              })()}
+            >
+              Confirmar {tope === 1 ? 'el mejor' : 'los ' + tope}
+            </Button>
+          </div>
+        </Notice>
+      )}
 
       {!res.length ? (
         <EmptyState icon="🗳" title="La ronda no tiene diseños" dashed />
