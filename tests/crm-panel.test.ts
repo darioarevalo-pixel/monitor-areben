@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { buscarPorTelefono, indexarTelefonos, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
-import { registrarContacto, TOPE_CONTACTOS } from '@/lib/crm/seguimiento'
+import {
+  cumplirPendiente,
+  registrarContacto,
+  setDespacho,
+  setPendiente,
+  setTenerEnCuenta,
+  TOPE_CONTACTOS,
+} from '@/lib/crm/seguimiento'
 import { armarFicha } from '@/lib/crm/panel'
 import type { MapaSeguimiento } from '@/lib/crm/tipos'
 
@@ -168,5 +175,69 @@ describe('armarFicha', () => {
     )
     expect(f.cliente.id).toBe(500)
     expect(f.cliente.total_sales).toBe(1)
+  })
+})
+
+/**
+ * Los tres campos que se separaron de la nota (📦 despacho · 📌 tener en cuenta · ⏳ pendiente).
+ *
+ * Escriben en `crm:seg:bdi`, la clave sin backup de 744 clientes que se reescribe ENTERA en cada
+ * guardado. Lo que se prueba acá es lo que no avisa cuando falla: que un campo vacío no deje la
+ * clave puesta (el mapa engorda para siempre y el diff contra el dump se vuelve ilegible) y que
+ * tachar el pendiente no se lleve puesto nada más.
+ */
+describe('los tres campos del contexto', () => {
+  const base: MapaSeguimiento = {
+    '1': { cadencia: 'semanal', notas: [{ fecha: '2026-08-01', texto: 'le mandé los ingresos' }] },
+    '2': { cadencia: 'mensual' },
+  }
+
+  it('guarda el texto sin espacios de más y no toca al otro cliente', () => {
+    const r = setTenerEnCuenta(base, 1, '  tiene 4 locales en Santiago  ')
+    expect(r['1'].tener_en_cuenta).toBe('tiene 4 locales en Santiago')
+    expect(r['2']).toEqual(base['2'])
+    // El mapa que llegó no se toca: la capa de arriba compara y persiste el nuevo.
+    expect(base['1'].tener_en_cuenta).toBeUndefined()
+  })
+
+  it('🔴 vacío BORRA la clave, no la deja en cadena vacía', () => {
+    const con = setDespacho(base, 1, 'Vía Cargo, sucursal Catamarca')
+    expect(con['1'].despacho).toBe('Vía Cargo, sucursal Catamarca')
+    const sin = setDespacho(con, 1, '   ')
+    expect('despacho' in sin['1']).toBe(false)
+  })
+
+  it('un cliente que nunca se tocó nace con la entrada completa', () => {
+    const r = setPendiente({}, 9, 'preguntar por reposición')
+    expect(r['9']).toEqual({ cadencia: '', ultimo_contacto: null, proximo_manual: null, notas: [], pendiente: 'preguntar por reposición' })
+  })
+
+  it('conserva lo que ya tenía el cliente', () => {
+    const r = setPendiente(base, 1, 'controlar recepción')
+    expect(r['1'].cadencia).toBe('semanal')
+    expect(r['1'].notas).toHaveLength(1)
+  })
+})
+
+describe('tachar el pendiente', () => {
+  const base: MapaSeguimiento = { '1': { cadencia: 'semanal', notas: [], pendiente: 'preguntar por reposición' } }
+
+  it('lo saca de arriba y deja la constancia en las notas', () => {
+    const r = cumplirPendiente(base, 1, '2026-08-24')
+    expect('pendiente' in r['1']).toBe(false)
+    expect(r['1'].notas).toEqual([{ fecha: '2026-08-24', texto: '✅ preguntar por reposición' }])
+  })
+
+  it('sin pendiente cargado devuelve el MISMO mapa: no hay POST que hacer', () => {
+    const vacio: MapaSeguimiento = { '1': { cadencia: 'semanal', notas: [] } }
+    expect(cumplirPendiente(vacio, 1, '2026-08-24')).toBe(vacio)
+    // Y tampoco por un cliente que no existe en el mapa.
+    expect(cumplirPendiente(vacio, 77, '2026-08-24')).toBe(vacio)
+  })
+
+  it('no pisa las notas que ya había: la nueva va primero', () => {
+    const con: MapaSeguimiento = { '1': { notas: [{ fecha: '2026-08-01', texto: 'le avisé de los ingresos' }], pendiente: 'controlar recepción' } }
+    const r = cumplirPendiente(con, 1, '2026-08-24')
+    expect(r['1'].notas?.map((n) => n.texto)).toEqual(['✅ controlar recepción', 'le avisé de los ingresos'])
   })
 })

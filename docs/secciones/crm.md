@@ -52,6 +52,22 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   con el KV solo (`lista-dia.ts`: 771 entradas, pesan nada); después el nombre, el teléfono y el
   total, de esos ~90 y no de los 12.485 del padrón (`action:'lista'`). Al revés sería bajar el CRM
   adentro de WhatsApp.
+- 🔑 **La nota no es una cosa, son CUATRO** (24-ago-2026). En `crm:seg:bdi` conviven ahora
+  `pendiente` (⏳ una línea, con tilde de "listo"), `tener_en_cuenta` (📌 cómo es el cliente, no
+  vence), `despacho` (📦 cómo se le manda) y la bitácora `notas` de siempre. Salió de contar las
+  375 notas cargadas: el ~70% es "lo que hice", dura horas, y **tapaba** a las otras dos porque
+  sólo se veía la última. Las notas viejas **no se migraron** — se quedan en la bitácora, que es
+  donde estaban bien.
+  ⚠️ Los tres campos nuevos se guardan **sin la clave cuando están vacíos** (`conTexto` en
+  `seguimiento.ts`, no `conPatch`): tres claves en `''` por 744 clientes se pagan en cada POST del
+  mapa entero, y ensucian el diff contra el dump que es como se verifica que no se pisó nada.
+  ⚠️ **`cumplirPendiente` devuelve el mismo mapa por identidad** si no hay pendiente cargado, para
+  que la capa de arriba pueda ahorrarse un POST de 133 KB.
+- ⚠️ **`NOTAS_RAPIDAS` vive en `lib/crm/seguimiento.ts`, no en cada pantalla.** Son los seis textos
+  que Bruno escribe de verdad (contados sobre las 375 notas: cubren más de la mitad) y los dibujan
+  **la ficha del CRM y el panel de WhatsApp**. Estaban duplicados con listas distintas. **Escriben
+  en el cuadro, no guardan solas**: casi siempre hay algo que agregarle, y una nota guardada de un
+  toque equivocado hay que ir a borrarla a la sección.
 - ⚠️ **UNA divergencia conocida entre el panel y la sección, y es a propósito.** En la sección,
   entre dos calientes, el que más compró baja un escalón (`prioridadContacto`); eso necesita el
   total de cada uno, o sea las ventas. En el panel los calientes salen mezclados, por fecha. Los
@@ -178,6 +194,10 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   sección; falta que el panel muestre los grupos con `[Nombre]` completado (`completar`, en
   `lib/crm/mensajes.ts`) y un botón para copiar cada uno. ⚠️ Escribir el texto **adentro** del
   cuadro de WhatsApp quedó descartado por ahora: es la parte que ellos cambian seguido.
+- ✅ **Las notas separadas en cuatro y el repaso visual del panel: hechos el 24-ago-2026.** Ver
+  el bloque del final. Lo que sigue afuera del panel: el embudo en Métricas (y recién ahí bajar
+  "¿Cómo te fue?" a dos botones), la ciudad y el Instagram cargables desde el panel, los
+  seguidores de Instagram y el banco de mensajes.
 - ▶️ **`[producto]` NO se completa solo, a propósito.** En un mensaje de postventa es lo que
   compró el cliente, pero en uno de novedad es lo que acaba de llegar —igual para todos ese día—
   y eso el sistema no lo sabe. Rellenarlo con la última compra manda "¿cómo te fue con la funda?"
@@ -356,3 +376,55 @@ internas de WhatsApp que ya nos costaron una tarde, así que va después del bot
 Los tres números los eligió el que escribió esto, no el que vende: **25 en la lista del día**, el
 orden (calientes arriba, y dentro de cada grupo el más atrasado primero) y **qué se ve de cada
 uno** (nombre · hace cuánto vence · última nota). Se revisan después de un día de uso real.
+
+---
+
+# ✅ 24-ago-2026 — las notas en cuatro lugares + el repaso visual del panel
+
+Los puntos **1** y **4** del plan de arriba, hechos. Los otros cuatro quedan como estaban y en el
+mismo orden. Lo que hay que saber y no se deduce del código:
+
+## Lo que cambió
+
+- **Tres campos nuevos en `crm:seg:bdi`**: `pendiente`, `tener_en_cuenta`, `despacho`. Aditivos:
+  las entradas viejas no los tienen y se leen como vacío. **Nada que migrar y ninguna nota tocada.**
+- **En el panel** (`components/panel/PanelWhatsApp.tsx`, `Contexto`) van **arriba de todo**, que es
+  lo que se mira al abrir un chat. 🔑 **Lo cargado se ve; lo que falta es un chip de puntitos**
+  (`+ 📌 Tener en cuenta`): tres cuadros vacíos esperando texto ocupan media pantalla para no decir
+  nada, y la pantalla mide 350 px. El panel arranca del tamaño de lo que se sabe del cliente.
+- **En la sección** (`ClienteModal.tsx`, `CampoSeg`) se ven los tres siempre: ahí hay lugar. Sin
+  esto, lo cargado desde WhatsApp no se veía en el CRM.
+- **El tilde del pendiente** (`cumplirPendiente`) lo borra **y deja la constancia como nota**
+  (`✅ <texto>`). Borrarlo a secas perdía lo único que el sistema no reconstruye solo.
+- **Visual**: cada sección es una tarjeta sobre fondo gris (antes eran rayitas de 1 px sobre el
+  mismo fondo, que en una columna angosta se leen como un bloque largo); los botones pasaron de
+  `ghost` a `outline` **con el tono de lo que significan** (Contestó verde, No le interesa rojo,
+  Pidió precio índigo) — eran texto suelto y son la acción principal del panel; los números del
+  encabezado se leen como números y no como etiquetas; **la lista de compras se corta a 3** con un
+  "Ver los 8", que era lo que empujaba los botones abajo del borde en los clientes grandes.
+- **Las notas ahora muestran 2 con un "Ver las 12"**, no una sola. Mostrar sólo la última es lo que
+  las enterraba.
+- **El cuadro de la nota se vacía SÓLO si se guardó.** Antes se borraba igual cuando el POST fallaba
+  — justo cuando el cartel dice que no se guardó.
+
+## Decisiones que se tomaron acá (y por qué)
+
+- **Las notas rápidas escriben en el cuadro, no guardan solas.** Era la pregunta abierta del plan.
+  La ficha del CRM ya lo hacía así desde antes y el motivo se sostiene: casi siempre hay algo que
+  agregarle al texto base. Cambiarlo es una línea si en el uso real molesta.
+- **"¿Cómo te fue?" sigue con los CUATRO botones.** Bajarlo a dos está acordado, pero **después**
+  del embudo en Métricas: sacar opciones de algo que todavía no se lee en ningún lado no cambia
+  nada y saca datos.
+- **Las 375 notas viejas no se repartieron en los campos nuevos.** Ninguna máquina sabe si "le
+  mandé los ingresos" es bitácora o pendiente, y adivinar mal llena de ruido el renglón que se
+  inventó justo para que no lo tenga.
+
+## ▶️ Lo que falta probar (no lo cubren los tests)
+
+Los tests cubren las escrituras puras (`tests/crm-panel.test.ts`: el vacío borra la clave, el tilde
+no se lleva otras notas, el mapa no se muta). Lo que hay que ejercer a mano:
+
+1. **En el navegador**: cargar los tres campos en un cliente y verificar como siempre —
+   `scripts/crm-kv.mjs --dump`, el diff tiene que ser **exactamente ese cliente**.
+2. **En el panel real**, que es lo único que dice si el chip de "falta cargar" se entiende o pasa
+   desapercibido.

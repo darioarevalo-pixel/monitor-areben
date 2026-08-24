@@ -79,6 +79,78 @@ export const escribiHoy = (crmSeg: MapaSeguimiento, id: number | string, dias: n
 export const setProximoManual = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
   conPatch(crmSeg, id, { proximo_manual: value || null })
 
+/**
+ * Campo de texto libre del seguimiento (`despacho`, `tener_en_cuenta`, `pendiente`).
+ *
+ * ⚠️ **Vacío BORRA la clave**, no la deja en `''`. No es prolijidad: `crm:seg:bdi` pesa 133 KB y
+ * el POST reescribe el mapa ENTERO en cada guardado, así que tres claves vacías por cada uno de
+ * los 744 clientes se pagan en cada clic del panel. Y además mantiene la verificación de siempre
+ * legible: el diff contra el dump tiene que ser exactamente el cliente tocado, sin claves nuevas
+ * apareciendo en gente que nadie tocó.
+ */
+function conTexto(
+  crmSeg: MapaSeguimiento,
+  id: number | string,
+  campo: 'despacho' | 'tener_en_cuenta' | 'pendiente',
+  valor: string,
+): MapaSeguimiento {
+  const { mapa, k } = conEntrada(crmSeg, id)
+  const txt = (valor || '').trim()
+  const entrada: Seguimiento = { ...mapa[k] }
+  if (txt) entrada[campo] = txt
+  else delete entrada[campo]
+  return { ...mapa, [k]: entrada }
+}
+
+/** 📦 Cómo se le manda. El dato que hoy vive sólo en el chat. */
+export const setDespacho = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
+  conTexto(crmSeg, id, 'despacho', value)
+
+/** 📌 Cómo es el cliente. No vence. */
+export const setTenerEnCuenta = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
+  conTexto(crmSeg, id, 'tener_en_cuenta', value)
+
+/** ⏳ Lo que quedó para la próxima. */
+export const setPendiente = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
+  conTexto(crmSeg, id, 'pendiente', value)
+
+/**
+ * Tachar el pendiente: lo borra y **deja la constancia como nota**.
+ *
+ * Borrarlo a secas perdería lo único que el sistema no puede reconstruir solo (que eso se hizo, y
+ * cuándo). La bitácora es justamente el lugar de "lo que hice", así que la constancia va ahí y el
+ * renglón de arriba queda limpio para lo próximo.
+ *
+ * Sin pendiente cargado devuelve el mismo mapa **por identidad**: la capa de arriba puede
+ * comparar y ahorrarse un POST de 133 KB.
+ */
+export function cumplirPendiente(crmSeg: MapaSeguimiento, id: number | string, fecha: string): MapaSeguimiento {
+  const txt = (crmSeg[String(id)]?.pendiente || '').trim()
+  if (!txt) return crmSeg
+  return conTexto(agregarNota(crmSeg, id, '✅ ' + txt, fecha), id, 'pendiente', '')
+}
+
+/**
+ * Los seis textos que Bruno escribe de verdad, sacados de contar las 375 notas cargadas: mandar la
+ * comunidad (98), avisar de los ingresos (58), preguntar por reposición (23), controlar recepción
+ * (11), consultar si llegó bien y el cierre. **Cubren más de la mitad de lo que se escribe.**
+ *
+ * 🔑 **Escriben en el cuadro, NO guardan solas.** Casi siempre hay algo que agregarle al texto base
+ * antes de dejarlo asentado, y una nota que se guarda de un toque equivocado hay que ir a borrarla
+ * a la sección. Un toque + Enter ya es rápido.
+ *
+ * Viven acá y no en cada pantalla porque son las mismas en la ficha del CRM y en el panel de
+ * WhatsApp: dos listas separadas se despegan en la primera que alguien edite.
+ */
+export const NOTAS_RAPIDAS = [
+  '👥 Le mandé la comunidad',
+  '🆕 Le avisé de los ingresos',
+  '🔄 Preguntar por reposición',
+  '✅ Consultar si llegó bien',
+  '📥 Controlar recepción',
+  '🔥 En cierre / cotizando',
+]
+
 /** Agrega una nota y reordena por fecha desc (sort estable: conserva el orden de
  *  carga entre notas del mismo día). Port de crmAgregarNota (13537). */
 export function agregarNota(crmSeg: MapaSeguimiento, id: number | string, texto: string, fecha: string): MapaSeguimiento {

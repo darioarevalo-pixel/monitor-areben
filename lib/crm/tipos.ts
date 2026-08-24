@@ -89,6 +89,43 @@ export type Seguimiento = {
   /** Instagram / página del cliente (crmSetPagina, index.html:13493). */
   pagina?: string
   /**
+   * ═══ Los tres campos que se separaron de `notas` (ago-2026) ═══
+   *
+   * Medido sobre las 375 notas cargadas en 251 clientes: en un solo campo conviven TRES cosas con
+   * vidas distintas —lo que hice (~70%, dura horas), lo que hay que hacer la próxima (~15%, dura
+   * hasta que se cumple) y cómo es el cliente (poquísimas, no vence nunca)— y como sólo se ve la
+   * última, la más frecuente tapa a las otras dos. "Tiene 4 locales en Santiago" queda enterrada
+   * bajo cinco "le mandé los ingresos" y no se lee nunca más.
+   *
+   * Los tres son **aditivos** (como `temperatura` y `contactos`): las entradas viejas no los
+   * tienen y se leen como vacío. No hay nada que migrar, y las notas ya cargadas se quedan donde
+   * están — nadie las reparte a mano.
+   *
+   * ⚠️ Se guardan **sin la clave cuando están vacíos**, no en `''`. `crm:seg:bdi` pesa 133 KB y se
+   * reescribe ENTERO en cada guardado: tres claves vacías por 744 clientes se pagarían en cada
+   * clic del panel. Ver `conTexto` en `seguimiento.ts`.
+   */
+
+  /**
+   * 📦 Cómo se le manda: transporte, sucursal, a nombre de quién.
+   *
+   * 🔑 **Este dato no existe en ninguna otra parte del sistema.** La sección Envíos es del local
+   * (Tienda Nube + cadete); la logística mayorista se acuerda por WhatsApp y se pierde en el chat.
+   * Va como texto libre a propósito: se carga más rápido y aguanta cualquier caso raro. Si algún
+   * día hay que filtrar por transporte, ahí se separa en campos.
+   */
+  despacho?: string
+  /** 📌 Cómo es el cliente. La nota que no vence nunca y hoy queda enterrada. */
+  tener_en_cuenta?: string
+  /**
+   * ⏳ Lo que quedó para la próxima vez. Una línea.
+   *
+   * 🔑 **Lo que lo hace distinto de una nota es que DESAPARECE al cumplirse** — el tilde lo borra
+   * y deja la constancia en la bitácora (`cumplirPendiente`). Una nota pendiente que no se puede
+   * tachar se convierte en ruido en dos semanas.
+   */
+  pendiente?: string
+  /**
    * Temperatura de la relación. Campo agregado en ago-2026, POSTERIOR al legacy: las 305
    * entradas que ya viven en el KV no lo tienen y caen a `TEMPERATURA_DEFAULT`. Es aditivo
    * a propósito — no hay que migrar nada.

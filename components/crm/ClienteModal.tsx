@@ -4,28 +4,24 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import {
   agregarNota,
   borrarNota,
+  cumplirPendiente,
   escribiHoy,
   hoyISO,
+  NOTAS_RAPIDAS,
   setDescartado,
+  setDespacho,
   setDifusion,
   setMayorista,
   setPagina,
+  setPendiente,
   setProximoManual,
+  setTenerEnCuenta,
 } from '@/lib/crm/seguimiento'
 import { detallesPorVenta, esDescartado, resumenCompras } from '@/lib/crm/core'
 import { leadInstaHref } from '@/lib/crm/leads'
 import { traerDetalles } from '@/lib/crm/datos'
 import type { ClienteCRM, FilaDetalle, MapaSeguimiento, ResumenCompras } from '@/lib/crm/tipos'
 import { Button, Card, KpiCard, color, toneSolidHover } from '@/components/ui'
-
-/** Los cinco textos que Bruno escribe todo el tiempo. Se insertan en el cuadro, no se guardan. */
-const NOTAS_RAPIDAS = [
-  '🔥 En cierre / cotizando',
-  '📦 Pidió catálogo',
-  '⏳ Me dijo que me avisa',
-  '🔄 Preguntar por reposición',
-  '❄️ Sin respuesta',
-]
 
 /** Punto de estado del seguimiento (era 🔴/🟡/🟢: un emoji trae su propio color y no se tematiza). */
 function Punto({ col }: { col: string }) {
@@ -244,6 +240,40 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
 
           <div style={{ marginTop: 10, fontSize: 13 }}>{proxLinea}</div>
 
+          {/*
+            Los tres campos que se separaron de la nota. Acá se ven los tres siempre (hay lugar);
+            en el panel de WhatsApp, que es angosto, los vacíos se pliegan a un chip.
+            Se guardan al perder el foco, como Página / Instagram: cada guardado POSTea el mapa
+            entero. Vaciar el cuadro borra el campo.
+          */}
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: `1px dashed ${color.line}` }}>
+            <CampoSeg
+              etiqueta="⏳ Pendiente para la próxima"
+              valor={seg.pendiente || ''}
+              placeholder="Qué quedó para la próxima vez…"
+              onGuardar={(v) => mutar((sg) => setPendiente(sg, c.id, v))}
+              accion={
+                (seg.pendiente || '').trim() ? (
+                  <Button size="sm" variant="soft" tone="success" title="Ya está hecho: lo saca de acá y lo deja anotado en las notas" onClick={() => mutar((sg) => cumplirPendiente(sg, c.id, hoyISO()))}>
+                    ✓ Listo
+                  </Button>
+                ) : null
+              }
+            />
+            <CampoSeg
+              etiqueta="📌 Para tener en cuenta"
+              valor={seg.tener_en_cuenta || ''}
+              placeholder="Cómo es este cliente: locales, con quién se habla, cuándo conviene escribirle…"
+              onGuardar={(v) => mutar((sg) => setTenerEnCuenta(sg, c.id, v))}
+            />
+            <CampoSeg
+              etiqueta="📦 Cómo se le manda"
+              valor={seg.despacho || ''}
+              placeholder="Transporte, sucursal, a nombre de quién…"
+              onGuardar={(v) => mutar((sg) => setDespacho(sg, c.id, v))}
+            />
+          </div>
+
           <div style={{ marginTop: 14 }}>
             <label style={{ fontSize: 11, color: color.mut, display: 'block', marginBottom: 4 }}>Nota de seguimiento</label>
             {/* Las notas rápidas ESCRIBEN en el cuadro, no guardan: casi siempre hay algo
@@ -385,6 +415,49 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
           </table>
         </div>
       </Card>
+    </div>
+  )
+}
+
+/**
+ * Un campo de texto del seguimiento que se guarda al perder el foco.
+ *
+ * ⚠️ **En el blur y no por tecla**: cada guardado POSTea el mapa entero de los 744 clientes. Es la
+ * misma disciplina que Página / Instagram, unas líneas más arriba.
+ *
+ * Es NO CONTROLADO (`defaultValue` + `key`) a propósito: el modal se keyea por cliente, así que al
+ * cambiar de ficha el cuadro se re-inicializa solo y no hace falta ningún efecto de sincronización.
+ */
+function CampoSeg({
+  etiqueta,
+  valor,
+  placeholder,
+  onGuardar,
+  accion,
+}: {
+  etiqueta: string
+  valor: string
+  placeholder: string
+  onGuardar: (v: string) => void
+  accion?: React.ReactNode
+}) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+        <label style={{ fontSize: 11, color: color.mut }}>{etiqueta}</label>
+        {accion}
+      </div>
+      <textarea
+        key={valor}
+        rows={2}
+        defaultValue={valor}
+        placeholder={placeholder}
+        onBlur={(e) => {
+          const txt = e.target.value.trim()
+          if (txt !== valor.trim()) onGuardar(txt)
+        }}
+        style={{ width: '100%', padding: 8, fontSize: 13, resize: 'vertical', border: `1px solid ${color.line2}`, borderRadius: 6, fontFamily: 'inherit', boxSizing: 'border-box' }}
+      />
     </div>
   )
 }

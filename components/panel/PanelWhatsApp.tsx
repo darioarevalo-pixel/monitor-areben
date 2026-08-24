@@ -2,17 +2,29 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
-import { color, font, radius, space } from '@/components/ui/tokens'
+import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { CADENCIA_DIAS, siguienteTemperatura } from '@/lib/crm/core'
 import { buscarFicha, guardarConRelectura, type FichaPanel, type RespuestaPanel } from '@/lib/crm/panel'
 import { armarFicha } from '@/lib/crm/panel'
-import { agregarNota, escribiHoy, hoyISO, registrarContacto, setProximoManual, setTemperatura } from '@/lib/crm/seguimiento'
+import {
+  agregarNota,
+  cumplirPendiente,
+  escribiHoy,
+  hoyISO,
+  NOTAS_RAPIDAS,
+  registrarContacto,
+  setDespacho,
+  setPendiente,
+  setProximoManual,
+  setTemperatura,
+  setTenerEnCuenta,
+} from '@/lib/crm/seguimiento'
 import { leadNuevo, nuevoIdLead, type Lead, type MapaLeads } from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
-import type { FilaCliente, MapaSeguimiento, MapaTelefonos, ResultadoContacto } from '@/lib/crm/tipos'
+import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota, ResultadoContacto } from '@/lib/crm/tipos'
 
 /**
  * El panel que la extensión de Chrome pega al costado de WhatsApp Web.
@@ -73,12 +85,20 @@ const SEG_TXT: Record<string, string> = {
  * Son las de la libreta, con las palabras de la libreta. **"No le interesa" no apaga al cliente ni
  * lo marca frío**: deja registrado que esta vez dijo que no, que es un dato distinto de que la
  * relación esté muerta. La temperatura se sigue marcando a mano, arriba.
+ *
+ * ⚠️ **Siguen siendo cuatro a propósito.** Está acordado bajarlas a dos ("Me respondió" + "Este no
+ * va": no contestar es una resta, el sistema ya sabe a cuántos se escribió), pero recién **después**
+ * de que el embudo exista en Métricas. Hasta entonces el botón no tiene a dónde ir a parar, y
+ * sacar opciones de algo que todavía no se lee en ningún lado es mover la silla sin apagar el fuego.
+ *
+ * El `tone` es lo que hace que se lean como botones y no como texto suelto: cada uno con el color
+ * de lo que significa.
  */
-const RESULTADOS: { v: ResultadoContacto; txt: string; ayuda: string }[] = [
-  { v: 'contesto', txt: 'Contestó', ayuda: 'Hubo conversación, aunque no haya comprado.' },
-  { v: 'no_contesto', txt: 'No contestó', ayuda: 'Se le escribió y no respondió.' },
-  { v: 'pidio_precio', txt: 'Pidió precio', ayuda: 'Está mirando: hay que volver.' },
-  { v: 'no_interesa', txt: 'No le interesa', ayuda: 'Dijo que no esta vez.' },
+const RESULTADOS: { v: ResultadoContacto; txt: string; ayuda: string; tone: Tone }[] = [
+  { v: 'contesto', txt: 'Contestó', ayuda: 'Hubo conversación, aunque no haya comprado.', tone: 'success' },
+  { v: 'no_contesto', txt: 'No contestó', ayuda: 'Se le escribió y no respondió.', tone: 'neutral' },
+  { v: 'pidio_precio', txt: 'Pidió precio', ayuda: 'Está mirando: hay que volver.', tone: 'brand' },
+  { v: 'no_interesa', txt: 'No le interesa', ayuda: 'Dijo que no esta vez.', tone: 'danger' },
 ]
 
 /** Los tres plazos de "volver a hablarle" + la fecha a dedo. */
@@ -88,14 +108,62 @@ const PLAZOS: { dias: number; txt: string }[] = [
   { dias: 15, txt: 'En 15 días' },
 ]
 
-function Bloque({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+/**
+ * Los tres campos que se separaron de la nota, en el orden en que se miran al abrir un chat:
+ * primero lo que hay que hacer, después con quién se está hablando, al final cómo se le manda.
+ *
+ * `corto` es la etiqueta del chip de "todavía no está cargado": en un panel de 350 px, "Pendiente
+ * para la próxima" ocupa un renglón entero para decir que está vacío.
+ */
+const CAMPOS = [
+  {
+    k: 'pendiente' as const,
+    icono: '⏳',
+    titulo: 'Pendiente para la próxima',
+    corto: 'Pendiente',
+    ph: 'Qué quedó para la próxima vez…',
+  },
+  {
+    k: 'tener_en_cuenta' as const,
+    icono: '📌',
+    titulo: 'Para tener en cuenta',
+    corto: 'Tener en cuenta',
+    ph: 'Cómo es este cliente: locales, con quién se habla, cuándo conviene escribirle…',
+  },
+  {
+    k: 'despacho' as const,
+    icono: '📦',
+    titulo: 'Cómo se le manda',
+    corto: 'Cómo se le manda',
+    ph: 'Transporte, sucursal, a nombre de quién…',
+  },
+]
+
+/**
+ * Una sección del panel.
+ *
+ * Antes eran rayitas: bloques separados por una línea de 1 px sobre el mismo fondo, que en una
+ * columna angosta se leen como un solo bloque largo. Ahora cada uno es una tarjeta sobre el fondo
+ * gris, que es lo que hace que se vean las partes sin tener que leerlas.
+ */
+function Bloque({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
-    <div style={{ padding: `${space[2]}px ${space[3]}px`, borderTop: `1px solid ${color.line}` }}>
-      <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
-        {titulo}
-      </div>
+    <section
+      style={{
+        background: color.surface,
+        border: `1px solid ${color.line}`,
+        borderRadius: radius.lg,
+        padding: `${space[2]}px ${space[3]}px ${space[3]}px`,
+        margin: `0 ${space[2]}px ${space[2]}px`,
+      }}
+    >
+      {titulo && (
+        <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
+          {titulo}
+        </div>
+      )}
       {children}
-    </div>
+    </section>
   )
 }
 
@@ -202,7 +270,6 @@ function PanelInterno({
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
   const [guardando, setGuardando] = useState(false)
-  const [nota, setNota] = useState('')
   const [today] = useState(() => new Date())
   /**
    * Qué se está mirando. Sin chat abierto arranca en la lista: es la pantalla con la que se
@@ -345,15 +412,15 @@ function PanelInterno({
    * después de haberlo guardado bien.
    */
   const mutar = useCallback(
-    async (fn: (m: MapaSeguimiento) => MapaSeguimiento, exito: string) => {
-      if (estado.t !== 'ficha' || guardando) return
+    async (fn: (m: MapaSeguimiento) => MapaSeguimiento, exito: string): Promise<boolean> => {
+      if (estado.t !== 'ficha' || guardando) return false
       setGuardando(true)
       const r = await guardarConRelectura(fn)
-      if (!vivo.current) return
+      if (!vivo.current) return false
       setGuardando(false)
       if (!r.ok) {
         decir('No se pudo guardar: ' + r.motivo, true)
-        return
+        return false
       }
       kv.current = { ...kv.current, seg: r.mapa }
       setCrmSeg(r.mapa)
@@ -361,6 +428,7 @@ function PanelInterno({
       // y el padrón no cambiaron, lo que cambió es el seguimiento.
       setEstado({ t: 'ficha', ficha: armarFicha(estado.crudo, r.mapa, today), crudo: estado.crudo })
       decir(exito)
+      return true
     },
     [estado, guardando, decir, today],
   )
@@ -483,177 +551,409 @@ function PanelInterno({
   const { cliente: c, compras, segmento, via } = estado.ficha
   const seg = crmSeg[String(c.id)] || {}
   const t = TEMP_UI[c.temperatura]
-  const ultNota = (c.notas || [])[0] || null
+  const notas = c.notas || []
   const ultimoContacto = (seg.contactos || [])[0] || null
 
   return (
     <Envoltorio aviso={aviso}>
       {solapas}
-      {/* Encabezado */}
-      <div style={{ padding: `${space[3]}px ${space[3]}px ${space[2]}px` }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>{c.name || `#${c.id}`}</div>
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>
-              {c.city || 'sin ciudad'} · #{c.id}
-            </div>
-          </div>
-          <button
-            onClick={() => mutar((m) => setTemperatura(m, c.id, siguienteTemperatura(c.temperatura)), 'Listo')}
-            title={`${t.txt} — ${t.ayuda}`}
-            disabled={guardando}
-            style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${t.bd}`, background: t.bg, color: t.fg }}
-          >
-            {t.txt}
-          </button>
-        </div>
-
-        {via === 'cola' && (
-          <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
-            El teléfono no coincide exacto con el de la ficha (difieren en el principio). Fijate que sea esta persona.
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-          <Dato k="Pedidos" v={String(c.total_sales)} />
-          <Dato k="Total" v={fmtMonto(c.total_amount)} />
-          <Dato k="Último" v={c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`} />
-        </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          {SEG_TXT[segmento] && <Chip tone={segmento === 'dormidos' || segmento === 'riesgo' ? 'alerta' : 'neutro'}>{SEG_TXT[segmento]}</Chip>}
-          {c.proximo_contacto && (
-            <Chip tone={c.dias_proximo !== null && c.dias_proximo < 0 ? 'alerta' : 'neutro'}>
-              Volver a hablarle: {fmtFecha(c.proximo_contacto)}
-            </Chip>
-          )}
-          {ultimoContacto && (
-            <Chip>
-              {fmtFecha(ultimoContacto.fecha)}: {RESULTADOS.find((r) => r.v === ultimoContacto.resultado)?.txt.toLowerCase()}
-            </Chip>
-          )}
-        </div>
-      </div>
-
-      {/* Lo último que llevó */}
-      <Bloque titulo="Lo último que llevó">
-        {compras.ultima ? (
-          <>
-            <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>{fmtFecha(compras.ultima.fecha)}</div>
-            {compras.ultima.items.slice(0, 8).map((d, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm, padding: '2px 0' }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {d.quantity}× {d.product_name}
-                  {d.size ? ` (${d.size})` : ''}
-                </span>
-                <span style={{ color: color.mut, whiteSpace: 'nowrap' }}>{fmtMonto(parseFloat(String(d.unit_price)) || 0)}</span>
+      <div style={{ paddingTop: space[2] }}>
+        {/* Encabezado */}
+        <Bloque>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>{c.name || `#${c.id}`}</div>
+              <div style={{ fontSize: font.xs, color: color.mut2 }}>
+                {c.city || 'sin ciudad'} · #{c.id}
               </div>
-            ))}
-          </>
-        ) : (
-          <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no le vendimos nada.</div>
-        )}
-      </Bloque>
-
-      {/* ¿Cómo te fue? */}
-      <Bloque titulo="¿Cómo te fue?">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          {RESULTADOS.map((r) => (
-            <Button
-              key={r.v}
-              size="sm"
-              variant="ghost"
+            </div>
+            <button
+              onClick={() => mutar((m) => setTemperatura(m, c.id, siguienteTemperatura(c.temperatura)), 'Listo')}
+              title={`${t.txt} — ${t.ayuda}`}
               disabled={guardando}
-              title={r.ayuda}
-              onClick={() => mutar((m) => registrarContacto(m, c.id, r.v, hoyISO()), 'Anotado')}
+              style={{ cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${t.bd}`, background: t.bg, color: t.fg }}
             >
-              {r.txt}
-            </Button>
-          ))}
-        </div>
-      </Bloque>
-
-      {/* Volver a hablarle */}
-      <Bloque titulo="Volver a hablarle">
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PLAZOS.map((p) => (
-            <Button
-              key={p.dias}
-              size="sm"
-              variant="ghost"
-              disabled={guardando}
-              onClick={() => mutar((m) => escribiHoy(m, c.id, p.dias), 'Listo')}
-            >
-              {p.txt}
-            </Button>
-          ))}
-          <input
-            className="mo-input"
-            type="date"
-            value={c.proximo_contacto || ''}
-            disabled={guardando}
-            onChange={(e) => mutar((m) => setProximoManual(m, c.id, e.target.value), 'Listo')}
-            style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
-          />
-        </div>
-        {seg.cadencia && (
-          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 5 }}>
-            Cadencia {seg.cadencia} (cada {CADENCIA_DIAS[seg.cadencia] || 30} días)
+              {t.txt}
+            </button>
           </div>
-        )}
-      </Bloque>
 
-      {/* Nota */}
-      <Bloque titulo="Nota">
-        {ultNota && (
-          <div style={{ fontSize: font.sm, color: color.mut, marginBottom: 6 }}>
-            <span style={{ color: color.mut2 }}>{fmtFecha(ultNota.fecha)}: </span>
-            {ultNota.texto}
+          {via === 'cola' && (
+            <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: radius.sm, padding: '4px 8px' }}>
+              El teléfono no coincide exacto con el de la ficha (difieren en el principio). Fijate que sea esta persona.
+            </div>
+          )}
+
+          {/*
+            Los números como números. Antes la etiqueta y el valor tenían casi el mismo tamaño, así
+            que "Pedidos 12" se leía como una frase; lo que se mira de un vistazo es el 12.
+          */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <Dato k="Pedidos" v={String(c.total_sales)} />
+            <Dato k="Total" v={fmtMonto(c.total_amount)} />
+            <Dato k="Último" v={c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`} />
           </div>
-        )}
-        <textarea
-          className="mo-input"
-          value={nota}
-          disabled={guardando}
-          placeholder="Qué quedó pendiente…"
-          onChange={(e) => setNota(e.target.value)}
-          rows={2}
-          style={{ width: '100%', fontSize: font.sm, resize: 'vertical' }}
-        />
-        <Button
-          size="sm"
-          disabled={guardando || !nota.trim()}
-          style={{ marginTop: 6 }}
-          onClick={async () => {
-            const texto = nota.trim()
-            await mutar((m) => agregarNota(m, c.id, texto, hoyISO()), 'Nota guardada')
-            setNota('')
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            {SEG_TXT[segmento] && <Chip tone={segmento === 'dormidos' || segmento === 'riesgo' ? 'alerta' : 'neutro'}>{SEG_TXT[segmento]}</Chip>}
+            {c.proximo_contacto && (
+              <Chip tone={c.dias_proximo !== null && c.dias_proximo < 0 ? 'alerta' : 'neutro'}>
+                Volver a hablarle: {fmtFecha(c.proximo_contacto)}
+              </Chip>
+            )}
+            {ultimoContacto && (
+              <Chip>
+                {fmtFecha(ultimoContacto.fecha)}: {RESULTADOS.find((r) => r.v === ultimoContacto.resultado)?.txt.toLowerCase()}
+              </Chip>
+            )}
+          </div>
+        </Bloque>
+
+        {/*
+          Lo que hay que saber de esta persona, arriba de todo: es a lo que se vino. El `key` con el
+          id del cliente es lo que hace que al cambiar de chat no quede abierto el editor del
+          anterior —ni su borrador— sobre la ficha de otro.
+        */}
+        <Contexto
+          key={c.id}
+          seg={seg}
+          guardando={guardando}
+          onGuardar={(campo, valor) => {
+            const setter = campo === 'pendiente' ? setPendiente : campo === 'despacho' ? setDespacho : setTenerEnCuenta
+            mutar((m) => setter(m, c.id, valor), 'Guardado')
           }}
-        >
-          Guardar nota
-        </Button>
-      </Bloque>
+          onTachar={() => mutar((m) => cumplirPendiente(m, c.id, hoyISO()), 'Listo, queda en las notas')}
+        />
 
-      <div style={{ padding: space[3], borderTop: `1px solid ${color.line}` }}>
-        <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>
-          Abrir la ficha completa ↗
-        </a>
+        {/* Lo último que llevó */}
+        <Bloque titulo="Lo último que llevó">
+          {compras.ultima ? (
+            <>
+              <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>{fmtFecha(compras.ultima.fecha)}</div>
+              <ListaCompra items={compras.ultima.items} />
+            </>
+          ) : (
+            <div style={{ fontSize: font.sm, color: color.mut2 }}>Todavía no le vendimos nada.</div>
+          )}
+        </Bloque>
+
+        {/* ¿Cómo te fue? */}
+        <Bloque titulo="¿Cómo te fue?">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {RESULTADOS.map((r) => (
+              <Button
+                key={r.v}
+                size="sm"
+                variant="outline"
+                tone={r.tone}
+                fullWidth
+                disabled={guardando}
+                title={r.ayuda}
+                onClick={() => mutar((m) => registrarContacto(m, c.id, r.v, hoyISO()), 'Anotado')}
+              >
+                {r.txt}
+              </Button>
+            ))}
+          </div>
+        </Bloque>
+
+        {/* Volver a hablarle */}
+        <Bloque titulo="Volver a hablarle">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {PLAZOS.map((p) => (
+              <Button
+                key={p.dias}
+                size="sm"
+                variant="outline"
+                disabled={guardando}
+                onClick={() => mutar((m) => escribiHoy(m, c.id, p.dias), 'Listo')}
+              >
+                {p.txt}
+              </Button>
+            ))}
+            <input
+              className="mo-input"
+              type="date"
+              value={c.proximo_contacto || ''}
+              disabled={guardando}
+              onChange={(e) => mutar((m) => setProximoManual(m, c.id, e.target.value), 'Listo')}
+              style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
+            />
+          </div>
+          {seg.cadencia && (
+            <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 5 }}>
+              Cadencia {seg.cadencia} (cada {CADENCIA_DIAS[seg.cadencia] || 30} días)
+            </div>
+          )}
+        </Bloque>
+
+        {/* Notas: la bitácora de lo que se hizo. Lo que hay que TENER EN CUENTA ya está arriba. */}
+        <Notas
+          key={`notas-${c.id}`}
+          notas={notas}
+          guardando={guardando}
+          onGuardar={(texto) => mutar((m) => agregarNota(m, c.id, texto, hoyISO()), 'Nota guardada')}
+        />
+
+        <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
+          <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>
+            Abrir la ficha completa ↗
+          </a>
+        </div>
       </div>
     </Envoltorio>
   )
 }
 
+/**
+ * Los tres campos que se separaron de la nota.
+ *
+ * 🔑 **Lo que está cargado se ve; lo que no, es un chip chiquito.** Tres cuadros vacíos esperando
+ * texto ocupan media pantalla para no decir nada, y la pantalla es la de un panel al costado de
+ * WhatsApp. Así el panel arranca del tamaño de lo que se sabe del cliente y crece con el uso.
+ *
+ * ⚠️ **Se guarda en el BLUR, no por tecla.** Cada guardado POSTea el mapa entero de 133 KB con los
+ * 744 clientes adentro: guardar mientras se escribe sería un POST por letra. Enter también guarda
+ * (Shift+Enter hace renglón nuevo), que es la convención de WhatsApp y ya es la del cuadro de notas.
+ * Para borrar un campo se vacía el cuadro: guardar vacío saca la clave.
+ */
+function Contexto({
+  seg,
+  guardando,
+  onGuardar,
+  onTachar,
+}: {
+  seg: MapaSeguimiento[string]
+  guardando: boolean
+  onGuardar: (campo: 'pendiente' | 'tener_en_cuenta' | 'despacho', valor: string) => void
+  onTachar: () => void
+}) {
+  const [abierto, setAbierto] = useState<string | null>(null)
+  const valor = (k: (typeof CAMPOS)[number]['k']) => (seg[k] || '').trim()
+  const llenos = CAMPOS.filter((x) => valor(x.k) || abierto === x.k)
+  const vacios = CAMPOS.filter((x) => !valor(x.k) && abierto !== x.k)
+
+  return (
+    <Bloque>
+      {llenos.map((campo) => (
+        <div key={campo.k} style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: font.xs, fontWeight: 700, color: color.mut2 }}>
+              {campo.icono} {campo.titulo}
+            </span>
+            {campo.k === 'pendiente' && valor('pendiente') && abierto !== 'pendiente' && (
+              <Button size="sm" variant="ghost" tone="success" disabled={guardando} title="Ya está hecho: lo saca de acá y lo deja anotado en las notas" onClick={onTachar}>
+                ✓ Listo
+              </Button>
+            )}
+          </div>
+          {abierto === campo.k ? (
+            <textarea
+              autoFocus
+              className="mo-input"
+              rows={2}
+              defaultValue={valor(campo.k)}
+              placeholder={campo.ph}
+              disabled={guardando}
+              onBlur={(e) => {
+                const txt = e.target.value.trim()
+                setAbierto(null)
+                if (txt !== valor(campo.k)) onGuardar(campo.k, txt)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                }
+              }}
+              style={{ width: '100%', fontSize: font.sm, resize: 'vertical', marginTop: 2 }}
+            />
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setAbierto(campo.k)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setAbierto(campo.k)
+              }}
+              title="Tocá para editar"
+              style={{ fontSize: font.sm, color: color.ink, cursor: 'text', whiteSpace: 'pre-wrap', lineHeight: 1.35 }}
+            >
+              {valor(campo.k)}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {vacios.length > 0 && (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: llenos.length ? 4 : 0 }}>
+          {vacios.map((campo) => (
+            <button
+              key={campo.k}
+              type="button"
+              onClick={() => setAbierto(campo.k)}
+              disabled={guardando}
+              title={campo.ph}
+              style={{
+                fontSize: 11,
+                color: color.mut2,
+                background: 'transparent',
+                border: `1px dashed ${color.line2}`,
+                borderRadius: radius.pill,
+                padding: '3px 9px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              + {campo.icono} {campo.corto}
+            </button>
+          ))}
+        </div>
+      )}
+    </Bloque>
+  )
+}
+
+/**
+ * Lo último que llevó, cortado a 3 renglones.
+ *
+ * Un cliente grande se comía media pantalla con la lista de compras y empujaba abajo del borde lo
+ * que sí se usa —los botones de registrar—, que es peor que no mostrarla: se ve la parte que no se
+ * toca y hay que buscar la que sí.
+ */
+function ListaCompra({ items }: { items: FilaDetalle[] }) {
+  const [todo, setTodo] = useState(false)
+  const TOPE = 3
+  const visibles = todo ? items : items.slice(0, TOPE)
+  return (
+    <>
+      {visibles.map((d, i) => (
+        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: font.sm, padding: '2px 0' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {d.quantity}× {d.product_name}
+            {d.size ? ` (${d.size})` : ''}
+          </span>
+          <span style={{ color: color.mut, whiteSpace: 'nowrap' }}>{fmtMonto(parseFloat(String(d.unit_price)) || 0)}</span>
+        </div>
+      ))}
+      {items.length > TOPE && (
+        <button
+          type="button"
+          onClick={() => setTodo((v) => !v)}
+          style={{ marginTop: 4, padding: 0, background: 'none', border: 0, color: color.brand, fontSize: font.xs, fontWeight: 600, cursor: 'pointer' }}
+        >
+          {todo ? 'Ver menos' : `Ver los ${items.length}`}
+        </button>
+      )}
+    </>
+  )
+}
+
+/**
+ * La bitácora: lo que se hizo, con fecha.
+ *
+ * Los seis botones **escriben en el cuadro, no guardan solos** (`NOTAS_RAPIDAS`, la misma lista que
+ * la ficha del CRM): casi siempre hay algo que agregarle al texto base, y una nota guardada de un
+ * toque equivocado hay que ir a borrarla a la sección.
+ *
+ * Y se ve más de una: mostrar sólo la última es lo que enterraba las notas viejas. Las de arriba
+ * ahora son los tres campos, así que esto es historial y se puede desplegar cuando hace falta.
+ */
+function Notas({ notas, guardando, onGuardar }: { notas: Nota[]; guardando: boolean; onGuardar: (texto: string) => Promise<boolean> }) {
+  const [texto, setTexto] = useState('')
+  const [todo, setTodo] = useState(false)
+  const caja = useRef<HTMLTextAreaElement>(null)
+  const TOPE = 2
+  const visibles = todo ? notas : notas.slice(0, TOPE)
+
+  const guardar = async () => {
+    const txt = texto.trim()
+    if (!txt || guardando) return
+    // ⚠️ El cuadro se vacía SÓLO si se guardó. Si el POST falla —el KV entero, 133 KB, se
+    // reescribe en cada nota— lo escrito se queda ahí para volver a intentar; borrarlo igual
+    // perdía la nota justo cuando el aviso dice que no se guardó.
+    if (await onGuardar(txt)) setTexto('')
+  }
+
+  return (
+    <Bloque titulo="Notas">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+        {NOTAS_RAPIDAS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            disabled={guardando}
+            onClick={() => {
+              setTexto((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t))
+              caja.current?.focus()
+            }}
+            style={{
+              fontSize: 11,
+              color: color.ink2,
+              background: color.bg2,
+              border: `1px solid ${color.line}`,
+              borderRadius: radius.pill,
+              padding: '3px 9px',
+              cursor: 'pointer',
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <textarea
+        ref={caja}
+        className="mo-input"
+        value={texto}
+        disabled={guardando}
+        placeholder="Qué hablaron… (Enter guarda)"
+        onChange={(e) => setTexto(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            void guardar()
+          }
+        }}
+        rows={2}
+        style={{ width: '100%', fontSize: font.sm, resize: 'vertical' }}
+      />
+      <Button size="sm" variant="outline" disabled={guardando || !texto.trim()} style={{ marginTop: 6 }} onClick={guardar}>
+        Guardar nota
+      </Button>
+
+      <div style={{ marginTop: 8 }}>
+        {visibles.map((n, i) => (
+          <div key={i} style={{ fontSize: font.sm, color: color.mut, padding: '3px 0' }}>
+            <span style={{ color: color.mut2 }}>{fmtFecha(n.fecha)}: </span>
+            {n.texto}
+          </div>
+        ))}
+        {!notas.length && <div style={{ fontSize: font.sm, color: color.mut2 }}>Sin notas todavía.</div>}
+        {notas.length > TOPE && (
+          <button
+            type="button"
+            onClick={() => setTodo((v) => !v)}
+            style={{ marginTop: 4, padding: 0, background: 'none', border: 0, color: color.brand, fontSize: font.xs, fontWeight: 600, cursor: 'pointer' }}
+          >
+            {todo ? 'Ver menos' : `Ver las ${notas.length}`}
+          </button>
+        )}
+      </div>
+    </Bloque>
+  )
+}
+
+/** Un número del encabezado: el valor manda, la etiqueta acompaña. */
 function Dato({ k, v }: { k: string; v: string }) {
   return (
-    <div>
-      <div style={{ fontSize: font.xs, color: color.mut2 }}>{k}</div>
-      <div style={{ fontSize: font.sm, fontWeight: 600, color: color.ink }}>{v}</div>
+    <div style={{ flex: 1, minWidth: 0, background: color.bg2, borderRadius: radius.md, padding: '5px 8px' }}>
+      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
+      <div style={{ fontSize: 10, color: color.mut2, textTransform: 'uppercase', letterSpacing: 0.3 }}>{k}</div>
     </div>
   )
 }
 
 function Envoltorio({ children, aviso }: { children: React.ReactNode; aviso?: { txt: string; mal?: boolean } | null }) {
   return (
-    <div style={{ background: color.surface, color: color.ink, minHeight: '100vh', fontSize: font.sm }}>
+    <div style={{ background: color.bg, color: color.ink, minHeight: '100vh', fontSize: font.sm, paddingBottom: space[3] }}>
       {aviso && (
         <div
           style={{
