@@ -37,8 +37,12 @@ import type {
 /** Cómo se resolvió el número del chat. `cola` es el único que puede estar equivocado. */
 export type ViaCruce = 'exacto' | 'cola' | 'id' | ''
 
+/** Cuánto tardó cada paso del lado del servidor. Ver `panelPorTelefono` en `api/_crm.js`. */
+export type MsPanel = { indice: number; ficha: number; cacheIndice?: boolean }
+
 export type RespuestaPanel = {
   ok?: boolean
+  ms?: MsPanel
   encontrado?: boolean
   via?: ViaCruce
   cliente?: FilaCliente
@@ -76,6 +80,7 @@ export async function buscarFicha(
   today: Date,
 ): Promise<ResultadoBusqueda> {
   let d: RespuestaPanel
+  const t0 = Date.now()
   try {
     const r = await apiFetch('/api/datos?recurso=crm', {
       method: 'POST',
@@ -88,6 +93,16 @@ export async function buscarFicha(
   } catch (e) {
     return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) }
   }
+  // 🔑 El reparto del tiempo, en la consola. "Tarda mucho" no se puede investigar sin saber qué
+  // parte tarda: acá se ve si se fue en armar el índice de 12.500 teléfonos (la primera consulta
+  // después de un rato) o en traer la ficha.
+  try {
+    const m = d.ms
+    console.log(
+      `[BDI] ficha en ${Date.now() - t0}ms` +
+        (m ? ` · servidor ${m.indice + m.ficha}ms (índice ${m.indice}${m.cacheIndice === false ? ' RECIÉN ARMADO' : ''}, ficha ${m.ficha})` : ''),
+    )
+  } catch {}
 
   if (d.candidatos && d.candidatos.length > 1) return { estado: 'varios', candidatos: d.candidatos }
   if (!d.encontrado || !d.cliente) return { estado: 'desconocido' }

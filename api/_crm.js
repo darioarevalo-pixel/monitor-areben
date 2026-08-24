@@ -216,7 +216,12 @@ async function ventasDelCrm(supabase, body, res) {
 // suya y ninguna se entera de las otras. Está bien para esto (el índice se puede reconstruir
 // entero en cualquier momento y no guarda nada que se pueda perder), y estaría mal para cualquier
 // cosa que hubiera que invalidar a mano.
-const TTL_INDICE = 10 * 60 * 1000;
+// ⚠️ Estaba en 10 minutos y se pagaba: el padrón se sincroniza **una vez por día** (07:00 UTC,
+// `sync-clientes.yml`), así que 10 minutos no traían nada más fresco — traían rearmar el índice
+// varias veces por mañana, y cada rearmado es el primer chat esperando. Con 6 horas, el peor caso
+// sigue siendo "ver un cliente cargado hoy con hasta 6 h de demora", contra un padrón que de todas
+// formas se actualiza una vez al día.
+const TTL_INDICE = 6 * 60 * 60 * 1000;
 
 // Cuántos pedidos hacia atrás se pide el detalle. El panel muestra **lo último que llevó** y poco
 // más; traer las 60 compras de un cliente grande sería pagar el detalle entero para dibujar tres
@@ -228,18 +233,33 @@ let indiceVence = 0;
 // Si dos chats se abren juntos, el segundo espera al índice del primero en vez de armar otro.
 let indiceEnVuelo = null;
 
+/**
+ * El padrón de teléfonos, en páginas de a `EN_VUELO`.
+ *
+ * 🔑 **Paralelo y no en fila.** Son ~13 páginas de 1.000 y ninguna depende de la anterior:
+ * encadenadas se pagan 13 idas y vueltas seguidas, y eso es lo que hacía esperar al primer chat
+ * después de un rato. Se piden de a tandas y se corta cuando una tanda vuelve incompleta.
+ */
 async function armarIndice(supabase) {
   const filas = [];
-  for (let desde = 0; ; desde += PAGINA) {
-    const { data, error } = await supabase
+  const pagina = (n) =>
+    supabase
       .from('clientes')
       .select('id, phone')
       .not('phone', 'is', null)
       .order('id')
-      .range(desde, desde + PAGINA - 1);
-    if (error) throw new Error(error.message);
-    filas.push(...(data || []));
-    if ((data || []).length < PAGINA) break;
+      .range(n * PAGINA, n * PAGINA + PAGINA - 1);
+
+  for (let tanda = 0; ; tanda++) {
+    const nros = Array.from({ length: EN_VUELO }, (_, i) => tanda * EN_VUELO + i);
+    const res = await Promise.all(nros.map(pagina));
+    let corta = false;
+    for (const { data, error } of res) {
+      if (error) throw new Error(error.message);
+      filas.push(...(data || []));
+      if ((data || []).length < PAGINA) corta = true;
+    }
+    if (corta) break;
   }
   return indexarTelefonos(filas);
 }
@@ -324,27 +344,40 @@ async function fichaDelPanel(supabase, id) {
  * padrón** (el panel ofrece guardarlo como lead) y **hay más de un candidato** (el panel pregunta).
  * Un número desconocido es el caso más común del día, no un error.
  */
+/**
+ * Los tiempos de cada paso, que viajan en la respuesta.
+ *
+ * 🔑 **Sin esto, "tarda 6 segundos" no se puede investigar**: del lado del navegador todo es una
+ * sola espera. Son tres números y se miden igual que se responde.
+ */
 async function panelPorTelefono(supabase, body, res) {
+  const t0 = Date.now();
   const idPedido = Number(body.clienteId);
   if (Number.isInteger(idPedido) && idPedido > 0) {
-    return res.status(200).json({ ok: true, via: 'id', ...(await fichaDelPanel(supabase, idPedido)) });
+    const ficha = await fichaDelPanel(supabase, idPedido);
+    return res.status(200).json({ ok: true, via: 'id', ms: { indice: 0, ficha: Date.now() - t0 }, ...ficha });
   }
 
   const tel = String(body.tel || '');
   if (!tel) return res.status(400).json({ ok: false, error: 'falta tel (o clienteId)' });
 
+  const habiaIndice = !!(indiceTel && Date.now() < indiceVence);
   const indice = await indiceDeTelefonos(supabase, Date.now());
+  const tIndice = Date.now() - t0;
   const { ids, via } = buscarPorTelefono(indice, tel);
 
-  if (!ids.length) return res.status(200).json({ ok: true, encontrado: false, via: '' });
+  const ms = () => ({ indice: tIndice, ficha: Date.now() - t0 - tIndice, cacheIndice: habiaIndice });
+
+  if (!ids.length) return res.status(200).json({ ok: true, encontrado: false, via: '', ms: ms() });
 
   if (ids.length > 1) {
     const { data, error } = await supabase.from('clientes').select(COLUMNAS).in('id', ids);
     if (error) throw new Error(error.message);
-    return res.status(200).json({ ok: true, encontrado: false, via, candidatos: data || [] });
+    return res.status(200).json({ ok: true, encontrado: false, via, candidatos: data || [], ms: ms() });
   }
 
-  return res.status(200).json({ ok: true, via, ...(await fichaDelPanel(supabase, ids[0])) });
+  const ficha = await fichaDelPanel(supabase, ids[0]);
+  return res.status(200).json({ ok: true, via, ms: ms(), ...ficha });
 }
 
 /**
