@@ -13,10 +13,20 @@
  * para todo el equipo.
  */
 
-import { DB_ESTADOS, type EstadoDiseno } from '@/lib/disenos/tipos'
+import type { EstadoDiseno } from '@/lib/disenos/tipos'
 import { Button, color, radius, space } from '@/components/ui'
 
-const MOVER: EstadoDiseno[] = ['confirmado', 'duda', 'rechazado']
+/**
+ * Los botones dicen la ACCIÓN, no el estado. `DB_ESTADOS` tiene los rótulos de las columnas
+ * («Confirmados», «Rechazados»), y usarlos acá dejaba un botón que decía «Rechazados» — un
+ * sustantivo en plural donde tiene que haber un verbo, y encima idéntico al chip del filtro que
+ * está tres centímetros más arriba y hace otra cosa.
+ */
+const MOVER: { k: EstadoDiseno; verbo: (n: number) => string; ico: string }[] = [
+  { k: 'confirmado', ico: '✅', verbo: (n) => (n === 1 ? 'Confirmar el elegido' : `Confirmar los ${n}`) },
+  { k: 'duda', ico: '🤔', verbo: () => 'Pasar a duda' },
+  { k: 'rechazado', ico: '❌', verbo: () => 'Rechazar' },
+]
 
 export function BarraLote({ n, onEstado, onQuitar, onLimpiar }: { n: number; onEstado: (e: EstadoDiseno) => void; onQuitar: () => void; onLimpiar: () => void }) {
   if (!n) return null
@@ -40,14 +50,11 @@ export function BarraLote({ n, onEstado, onQuitar, onLimpiar }: { n: number; onE
       <b style={{ fontSize: 13, color: color.brand }}>
         {n} {n === 1 ? 'elegido' : 'elegidos'}
       </b>
-      {MOVER.map((k) => {
-        const e = DB_ESTADOS.find((x) => x.k === k)!
-        return (
-          <Button key={k} size="sm" variant="outline" onClick={() => onEstado(k)}>
-            {e.ico} {k === 'confirmado' ? `Confirmar ${n === 1 ? 'el elegido' : 'los ' + n}` : e.lbl}
-          </Button>
-        )
-      })}
+      {MOVER.map((m) => (
+        <Button key={m.k} size="sm" variant="outline" onClick={() => onEstado(m.k)}>
+          {m.ico} {m.verbo(n)}
+        </Button>
+      ))}
       <Button size="sm" variant="ghost" tone="danger" onClick={onQuitar}>
         Quitar {n === 1 ? 'el elegido' : 'los ' + n}
       </Button>

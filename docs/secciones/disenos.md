@@ -113,6 +113,18 @@ veces: la barra de lote del Tablero y «Confirmar los N mejores» en la tabla de
   `tests/disenos-persistencia.test.ts` afirma que `leerLocales`/`localesParaImportar` **no están
   exportadas**. Sin un array que subir, el bug no está arreglado: no se puede escribir.
 
+- 🔴 **Y caminar el rediseño encontró DOS que ningún test veía** (24-ago-2026):
+  1. **Mientras cargaba, la pantalla decía «Todavía no hay diseños en el tablero».** El tablero de
+     BDI son 277 kB —nueve fotos quedaron en base64— y mientras viajaba, una lista vacía estaba
+     afirmando que no había nada. Ahora va `Esqueleto` mientras `!hidratado`. ⛔ El `EmptyState`
+     **sólo** puede salir cuando ya se sabe que está vacío.
+  2. **El orden por defecto nunca llegaba a ser el puntaje.** Estaba como
+     `useState(hayRonda ? 'puntaje' : 'carga')`, y `hayRonda` viene en un **segundo** request: en
+     el primer render siempre vale `false`, así que el estado se quedaba en «orden de carga» para
+     siempre. La ronda llegaba, el ★ aparecía en las tarjetas, y la grilla seguía sin ordenar por
+     él. 🔑 El arreglo es **derivar** (`ordenElegido ?? (hayRonda ? …)`), no sincronizar: un valor
+     que depende de algo que llega tarde no puede vivir en un `useState` sembrado temprano.
+
 ## Pendiente
 
 - 🔴 **Los blobs de Diseños no se borran nunca.** `CARPETAS_BORRABLES = ['ingresos']`

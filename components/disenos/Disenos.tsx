@@ -297,6 +297,7 @@ export function Disenos() {
             disenos={disenos}
             puntajes={ronda.puntajes}
             hayRonda={!!ronda.ronda}
+            cargando={!hidratado && !errorCarga}
             onCambiar={(mutar) => setDisenos(mutar)}
             onNombre={setNombre}
             onEstado={setEstado}

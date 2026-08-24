@@ -35,6 +35,7 @@ import {
   Button,
   Chips,
   EmptyState,
+  Esqueleto,
   FilterBar,
   Paginacion,
   Select,
@@ -49,6 +50,7 @@ export function Tablero({
   disenos,
   puntajes,
   hayRonda,
+  cargando,
   onCambiar,
   onNombre,
   onEstado,
@@ -59,6 +61,8 @@ export function Tablero({
   disenos: Diseno[]
   puntajes: PuntajesDeRonda
   hayRonda: boolean
+  /** Todavía no volvió la base. ⛔ No es lo mismo que "no hay nada" — ver abajo. */
+  cargando: boolean
   /** Aplica una mutación pura al tablero. Un solo `setDisenos` ⇒ un solo POST. */
   onCambiar: (mutar: (ds: Diseno[]) => Diseno[]) => void
   onNombre: (id: string, v: string) => void
@@ -71,9 +75,12 @@ export function Tablero({
   const { confirmar } = useConfirmar()
   const [q, setQcrudo] = useFiltroUrl<string>('q', '')
   const [estado, setEstadoCrudo] = useFiltroUrl<EstadoDiseno | 'todos'>('e', 'todos')
-  // El orden por defecto es el puntaje sólo si hay una ronda: sin votos, ordenar por puntaje es
-  // ordenar por nada y el orden de carga es más honesto.
-  const [orden, setOrden] = useState<OrdenDiseno>(hayRonda ? 'puntaje' : 'carga')
+  // 🔑 `null` = "nadie lo eligió todavía", y el default se DERIVA. Guardarlo con `useState(hayRonda
+  // ? …)` parece igual y no lo es: `hayRonda` llega en un segundo request, así que en el primer
+  // render siempre vale `false` y el `useState` se queda con «orden de carga» para siempre — la
+  // ronda llegaba, el ★ aparecía en las tarjetas, y la grilla seguía sin ordenar por él.
+  const [ordenElegido, setOrden] = useState<OrdenDiseno | null>(null)
+  const orden: OrdenDiseno = ordenElegido ?? (hayRonda ? 'puntaje' : 'carga')
   const [pagina, setPagina] = useState(1)
   const [selCruda, setSel] = useState<Set<string>>(new Set())
 
@@ -156,7 +163,14 @@ export function Tablero({
         </Select>
       </FilterBar>
 
-      {!disenos.length ? (
+      {/*
+        🔴 Cargando NO es lo mismo que vacío. El tablero de BDI son 277 kB —nueve fotos quedaron
+        embebidas en base64— y mientras viaja la pantalla decía «Todavía no hay diseños en el
+        tablero»: una lista vacía afirmando que no hay nada, que es justo lo que no puede hacer.
+      */}
+      {cargando ? (
+        <Esqueleto forma="tarjetas" />
+      ) : !disenos.length ? (
         <EmptyState
           icon="🖼"
           title="Todavía no hay diseños en el tablero"
