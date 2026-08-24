@@ -78,6 +78,7 @@ function mostrar(tel, motivo) {
   aviso.style.display = limpio ? 'none' : ''
   if (limpio === actual) return
   actual = limpio
+  console.log('[BDI] sidepanel: chat =', limpio || '(ninguno)', '· panel cargado:', cargado)
   if (!cargado || !iframe.contentWindow) {
     iframe.src = BASE + limpio
     return
@@ -87,7 +88,11 @@ function mostrar(tel, motivo) {
 
 /** Le pasa el número al panel. Se usa al cambiar de chat y cuando el panel lo pide al armarse. */
 function avisarAlPanel(numero) {
-  if (!iframe.contentWindow) return
+  if (!iframe.contentWindow) {
+    console.log('[BDI] sidepanel: no hay panel al que avisarle')
+    return
+  }
+  console.log('[BDI] sidepanel: le paso el número al panel:', numero)
   iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'chat', tel: numero }, ORIGEN)
 }
 
@@ -110,6 +115,7 @@ window.addEventListener('message', (e) => {
   // —cuando el panel todavía puede estar cargando— y si se pierde, no hay quien lo repita: la
   // ficha se queda diciendo "abrí un chat" con el chat abierto.
   if (d.tipo === 'que-chat') {
+    console.log('[BDI] sidepanel: el panel preguntó. actual =', actual || '(ninguno)')
     if (actual) avisarAlPanel(actual)
     return
   }
