@@ -23,7 +23,7 @@ import {
   TableWrap, THead, TBody, Tr, Th, Td, useFiltroUrl,
   color, font, space, weight, type ChipOpt, type Tone,
 } from '@/components/ui'
-import { esCiego, type CanjeVencido, type CanjeVisible } from '@/lib/canjes/cliente'
+import { esCiego, type CanjeSinRevisar, type CanjeVencido, type CanjeVisible } from '@/lib/canjes/cliente'
 import {
   ABIERTOS, decorarCanjes, filtrarCanjes, ordenarCanjes,
   type CtxLista, type FiltroEstado,
@@ -46,11 +46,13 @@ const ESTADO_TONE: Record<EstadoCanje, Tone> = {
 }
 
 export function ListaCanjes({
-  canjes, personas, vencidos, marcasVisibles, claveUrl, soloAprobaciones, onAbrir,
+  canjes, personas, vencidos, sinRevisar, marcasVisibles, claveUrl, soloAprobaciones, onAbrir,
 }: {
   canjes: CanjeVisible[]
   personas: CanjePersona[]
   vencidos: CanjeVencido[]
+  /** Resumido por el servidor: cuánto material subió ella y nadie miró, por canje. */
+  sinRevisar: CanjeSinRevisar[]
   /** Para el filtro de marca. Con una sola no se dibuja: sería un control que no hace nada. */
   marcasVisibles: CanjeStore[]
   /**
@@ -72,7 +74,8 @@ export function ListaCanjes({
   const ctx = useMemo<CtxLista>(() => ({
     personas: new Map(personas.map((p) => [p.id, { nombre: nombrePersona(p), instagram: p.instagram }])),
     vencidos: new Map(vencidos.map((v) => [v.canjeId, v.cuantas])),
-  }), [personas, vencidos])
+    sinRevisar: new Map(sinRevisar.map((v) => [v.canjeId, v.cuantas])),
+  }), [personas, vencidos, sinRevisar])
 
   // Los ciegos se sacan de una: sobre un canje de una marca que no tenemos no hay nada que hacer
   // desde acá. El cast se queda en este borde y `lib/canjes/lista.ts` no ve la unión nunca.
@@ -96,6 +99,9 @@ export function ListaCanjes({
     // los llama "En tránsito"— sino la lista que se revisa todos los días.
     { key: 'transito', label: 'En tránsito', n: sinEstado.filter(enTransito).length },
     { key: 'vencidos', label: 'Con vencidos', n: sinEstado.filter((c) => c._vencidos > 0).length },
+    // Lo que ella ya mandó y nadie miró. Va al lado de los vencidos a propósito: son las dos caras
+    // del mismo tramo, y hasta ahora sólo se veía la que le reclama a ella.
+    { key: 'sin-revisar', label: 'Contenido sin revisar', n: sinEstado.filter((c) => c._sinRevisar > 0).length },
     { key: 'cerrados', label: 'Cerrados', n: sinEstado.filter((c) => c.estado === 'cerrado').length },
     { key: 'todos', label: 'Todos', n: sinEstado.length },
   ], [sinEstado])
@@ -185,6 +191,13 @@ export function ListaCanjes({
                       {cuantas ? (
                         <Badge tone="danger" subtle>
                           {cuantas === 1 ? '1 vencido' : `${cuantas} vencidos`}
+                        </Badge>
+                      ) : null}
+                      {/* Trabajo hecho que está esperando: es lo único de esta fila que no le
+                          reclama nada a ella, nos lo reclama a nosotros. */}
+                      {c._sinRevisar ? (
+                        <Badge tone="brand" subtle>
+                          {c._sinRevisar === 1 ? '1 sin revisar' : `${c._sinRevisar} sin revisar`}
                         </Badge>
                       ) : null}
                       {c.cerrado_incompleto ? <Badge tone="warning" subtle>Cerrado igual</Badge> : null}

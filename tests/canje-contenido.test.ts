@@ -30,6 +30,12 @@ type Mundo = {
   config: Record<string, unknown> | null
   evidencias: number
   insertado: Record<string, unknown> | null
+  /** La fila que devuelve un `maybeSingle()` sobre `canje_evidencias`: la que se va a borrar. */
+  evidencia: Record<string, unknown> | null
+  /** Qué pasó, en orden: es lo que prueba que el Blob se borra ANTES que la fila. */
+  pasos: string[]
+  /** Si el `del()` del Blob tiene que fallar. */
+  blobFalla: boolean
   /** Se prende si alguien consulta la base. Es lo que prueba que un gate cortó ANTES. */
   tocoLaBase: boolean
 }
@@ -42,6 +48,12 @@ function nuevoMundo(): Mundo {
     config: { drive_url: null, tope_evidencias_por_canje: 30 },
     evidencias: 0,
     insertado: null,
+    evidencia: {
+      id: 99, archivo_url: 'https://abc.public.blob.vercel-storage.com/canjes/12/reel-x9.mp4',
+      subido_por: 'persona', verificada: false, rechazada_motivo: null, entregable_id: null, drive_url: null,
+    },
+    pasos: [],
+    blobFalla: false,
     tocoLaBase: false,
   }
 }
@@ -52,8 +64,9 @@ function nuevoMundo(): Mundo {
  */
 function fakeSupabase() {
   const desde = (tabla: string) => {
-    const ctx: { tabla: string; head: boolean; insert: Record<string, unknown> | null } =
-      { tabla, head: false, insert: null }
+    const ctx: {
+      tabla: string; head: boolean; insert: Record<string, unknown> | null; uno: boolean; borra: boolean
+    } = { tabla, head: false, insert: null, uno: false, borra: false }
 
     const resolver = async () => {
       mundo.tocoLaBase = true
@@ -61,12 +74,15 @@ function fakeSupabase() {
         mundo.insertado = ctx.insert
         return { data: { id: 99, ...ctx.insert, created_at: '2026-08-21T00:00:00Z' }, error: null }
       }
+      if (ctx.borra) {
+        mundo.pasos.push(`fila:${ctx.tabla}`)
+        return { data: null, error: null }
+      }
       if (ctx.tabla === 'canjes') return { data: mundo.canje, error: null }
       if (ctx.tabla === 'canje_config') return { data: mundo.config, error: null }
       if (ctx.tabla === 'canje_evidencias') {
-        return ctx.head
-          ? { data: null, count: mundo.evidencias, error: null }
-          : { data: [], error: null }
+        if (ctx.head) return { data: null, count: mundo.evidencias, error: null }
+        return ctx.uno ? { data: mundo.evidencia, error: null } : { data: [], error: null }
       }
       return { data: null, error: null }
     }
@@ -76,8 +92,9 @@ function fakeSupabase() {
       eq: () => api,
       order: () => api,
       insert: (row: Record<string, unknown>) => { ctx.insert = row; return api },
-      maybeSingle: () => resolver(),
-      single: () => resolver(),
+      delete: () => { ctx.borra = true; return api },
+      maybeSingle: () => { ctx.uno = true; return resolver() },
+      single: () => { ctx.uno = true; return resolver() },
       // El `count` se espera sin `.maybeSingle()`: la cadena tiene que ser esperable ella misma.
       then: (ok: (v: unknown) => unknown, mal: (e: unknown) => unknown) => resolver().then(ok, mal),
     }
@@ -87,6 +104,18 @@ function fakeSupabase() {
 }
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => fakeSupabase() }))
+
+/**
+ * El SDK del Blob del lado del servidor. Lo único que se le pide acá es `del()`, y lo que el test
+ * mira es **cuándo** se llamó: el borrado del archivo tiene que pasar ANTES del de la fila.
+ */
+vi.mock('@vercel/blob', () => ({
+  del: async (url: string) => {
+    if (mundo.blobFalla) throw new Error('el Blob se cayó')
+    mundo.pasos.push(`blob:${url}`)
+  },
+  put: async () => ({ url: 'https://abc.public.blob.vercel-storage.com/x' }),
+}))
 
 /**
  * El SDK del Blob, reducido a lo único que este handler le pide: correr `onBeforeGenerateToken` con
@@ -327,5 +356,107 @@ describe('el portal registra el archivo que ya subió', () => {
     const res = await portal({ token: TOKEN, accion: 'borrar-todo', url: URL_OK })
     expect(res.code).toBe(400)
     expect(mundo.insertado).toBe(null)
+  })
+})
+
+/**
+ * **Borrar lo que subió mal.** Es el único verbo del portal que destruye, y el único del módulo que
+ * borra sin que quede nada en Drive, así que lo que se fija acá es de dónde sale la URL, en qué
+ * orden pasan las dos cosas, y cuándo el servidor dice que no.
+ */
+describe('contenido-borrar — sacar del buzón lo que subió mal', () => {
+  const borrar = (evidenciaId: unknown = 99) =>
+    portal({ token: TOKEN, accion: 'contenido-borrar', evidencia_id: evidenciaId })
+
+  it('borra el archivo del Blob PRIMERO y la fila después', async () => {
+    const res = await borrar()
+    expect(res.code).toBe(200)
+    expect(mundo.pasos).toEqual([
+      'blob:https://abc.public.blob.vercel-storage.com/canjes/12/reel-x9.mp4',
+      'fila:canje_evidencias',
+    ])
+  })
+
+  it('🔴 si el Blob falla NO se borra la fila: un archivo huérfano no se puede volver a encontrar', async () => {
+    mundo.blobFalla = true
+    const res = await borrar()
+    expect(res.code).toBe(500)
+    expect(mundo.pasos).toEqual([])
+  })
+
+  it('lo que ya tocó el equipo no se cae solo', async () => {
+    const tocados: [string, Record<string, unknown>][] = [
+      ['ya está en Drive', { drive_url: 'https://drive.google.com/file/d/1' }],
+      ['ya la verificaron', { verificada: true }],
+      ['ya la rechazaron con un motivo', { rechazada_motivo: 'está movida' }],
+      ['ya la ataron a un entregable', { entregable_id: 3 }],
+    ]
+    for (const [porQue, campos] of tocados) {
+      mundo = nuevoMundo()
+      mundo.evidencia = { ...mundo.evidencia, ...campos }
+      const res = await borrar()
+      expect(res.code, porQue).toBe(409)
+      expect(mundo.pasos, porQue).toEqual([])
+    }
+  })
+
+  it('🔴 no borra lo que subió el EQUIPO, aunque sea de este canje', async () => {
+    mundo.evidencia = { ...mundo.evidencia, subido_por: 'equipo' }
+    const res = await borrar()
+    expect(res.code).toBe(404)
+    expect(mundo.pasos).toEqual([])
+  })
+
+  it('una evidencia que no es de este canje no existe — mismo 404, no dice nada de más', async () => {
+    // El `.eq('canje_id')` del handler la filtra: la base no devuelve fila.
+    mundo.evidencia = null
+    const res = await borrar()
+    expect(res.code).toBe(404)
+    expect(mundo.pasos).toEqual([])
+  })
+
+  it('sin evidencia_id no se toca nada', async () => {
+    // Sin el campo, y con las formas de basura que un cliente roto puede mandar.
+    const sinCampo = await portal({ token: TOKEN, accion: 'contenido-borrar' })
+    expect(sinCampo.code).toBe(400)
+    for (const malo of [null, '', 'abc', 0]) {
+      mundo = nuevoMundo()
+      const res = await borrar(malo)
+      expect(res.code, String(malo)).toBe(400)
+      expect(mundo.pasos, String(malo)).toEqual([])
+    }
+  })
+
+  it('⛔ la URL sale de la FILA, nunca del body: mandar otra no borra otra cosa', async () => {
+    const res = await portal({
+      token: TOKEN,
+      accion: 'contenido-borrar',
+      evidencia_id: 99,
+      url: 'https://abc.public.blob.vercel-storage.com/ingresos/foto.jpg',
+    })
+    expect(res.code).toBe(200)
+    expect(mundo.pasos[0]).toBe('blob:https://abc.public.blob.vercel-storage.com/canjes/12/reel-x9.mp4')
+  })
+})
+
+/**
+ * **Desde cuándo tiene buzón.** Es la regla que comparten el portal (dibuja o no dibuja) y el
+ * servidor, y la que cambió el 24-ago-2026: con retiro en el local se abre desde que aceptó.
+ */
+describe('buzonAbierto — dos cortes, no uno', () => {
+  it('con envío, recién cuando el pedido llegó', async () => {
+    const { buzonAbierto } = await import('@/lib/canjes/reglas.core.js')
+    expect(buzonAbierto({ retiro_local: false, entregado_at: null })).toBe(false)
+    expect(buzonAbierto({ retiro_local: false, entregado_at: '2026-08-21T10:00:00Z' })).toBe(true)
+  })
+
+  it('con retiro en el local, desde que aceptó: no hay tránsito que esperar', async () => {
+    const { buzonAbierto } = await import('@/lib/canjes/reglas.core.js')
+    expect(buzonAbierto({ retiro_local: true, entregado_at: null })).toBe(true)
+  })
+
+  it('sin canje no se dibuja nada', async () => {
+    const { buzonAbierto } = await import('@/lib/canjes/reglas.core.js')
+    expect(buzonAbierto(null)).toBe(false)
   })
 })

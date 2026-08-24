@@ -93,6 +93,12 @@ type Vista = {
   puedeSubir: boolean
   /** La carpeta del Blob, armada por el servidor. ⛔ No se calcula acá. */
   carpetaContenido: string
+  /**
+   * ¿Ya tiene buzón? **No es `despachado`**: con envío se abre cuando el pedido llegó, y con retiro
+   * en el local desde que aceptó. Lo decide el servidor con la misma regla con la que después acepta
+   * o rechaza el archivo (`buzonAbierto`, en `lib/canjes/reglas.core.js`).
+   */
+  buzonAbierto: boolean
   vitrina: Vitrina | null
   elegidos: Elegido[]
 }
@@ -218,6 +224,22 @@ export function CanjePortal({ token }: { token: string | null }) {
     const d = await r.json().catch(() => null)
     if (!r.ok || !d?.ok) throw new Error(d?.error || 'No se pudo guardar ese archivo.')
     setVista((v) => (v ? { ...v, contenido: [...v.contenido, d.archivo as ArchivoSubido] } : v))
+  }, [token])
+
+  /**
+   * Sacar uno que subió mal. **La fila se saca recién cuando el servidor confirmó**, no antes: acá
+   * el optimismo se paga con una foto que desaparece de su pantalla y sigue estando en la nuestra,
+   * y ella no tiene forma de enterarse.
+   */
+  const borrarContenido = useCallback(async (id: number) => {
+    const r = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, accion: 'contenido-borrar', evidencia_id: id }),
+    })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d?.ok) throw new Error(d?.error || 'No se pudo borrar ese archivo.')
+    setVista((v) => (v ? { ...v, contenido: v.contenido.filter((a) => a.id !== id) } : v))
   }, [token])
 
   const vitrina = vista?.vitrina || null
@@ -359,6 +381,19 @@ export function CanjePortal({ token }: { token: string | null }) {
             ? 'Ya tenemos tu pedido y tus datos. Lo preparamos y te avisamos por acá cuando salga. Si necesitás cambiar algo, escribinos.'
             : 'Ya tenemos tus datos. Preparamos el pedido y te avisamos por acá cuando salga.'}
         </p>
+        {/* Con retiro en el local el buzón ya está abierto, y esta pantalla es donde queda parada
+            después de mandar sus datos: sin esto lo perdería hasta la próxima vez que abriera el
+            link, que puede ser nunca. */}
+        {vista?.buzonAbierto && (
+          <PortalContenido
+            token={token}
+            carpeta={vista.carpetaContenido}
+            archivos={vista.contenido}
+            puedeSubir={vista.puedeSubir}
+            onSubido={registrarContenido}
+            onBorrar={borrarContenido}
+          />
+        )}
       </div>
     )
   }
@@ -404,16 +439,19 @@ export function CanjePortal({ token }: { token: string | null }) {
           Los datos quedaron como estaban. Si algo no coincide, escribinos y lo vemos.
         </p>
 
-        {/* El buzón del contenido, sólo cuando el pedido YA LLEGÓ: antes no tiene nada que
-            mandarnos y pedírselo sería apurarla. `llego` alcanza como corte porque las dos formas
-            de entregar —el despacho y el retiro en el local— estampan `entregado_at`. */}
-        {llego && (
+        {/* El buzón del contenido. El corte lo decide el servidor (`buzonAbierto`) y no esta
+            pantalla: con envío se abre cuando el pedido llegó —antes no tiene nada que mandarnos y
+            pedírselo sería apurarla— y con retiro en el local, desde que aceptó. ⚠️ Antes el corte
+            era `llego` acá adentro, y eso dejaba a las de retiro sin buzón hasta que alguien del
+            mostrador marcaba la entrega. */}
+        {vista.buzonAbierto && (
           <PortalContenido
             token={token}
             carpeta={vista.carpetaContenido}
             archivos={vista.contenido}
             puedeSubir={vista.puedeSubir}
             onSubido={registrarContenido}
+            onBorrar={borrarContenido}
           />
         )}
       </div>
@@ -592,6 +630,25 @@ export function CanjePortal({ token }: { token: string | null }) {
       >
         {guardando ? 'Guardando…' : eligiendo ? 'Confirmar mi pedido' : yaConfirmo ? 'Confirmar' : 'Enviar mis datos'}
       </button>
+
+      {/*
+        El buzón, abajo del formulario. Acá `buzonAbierto` **sólo puede ser cierto con retiro en el
+        local**: con envío se abre recién cuando el pedido llegó, y para entonces esta pantalla ya no
+        se dibuja (la reemplaza «Tu pedido llegó»). O sea que no hay dos buzones, hay uno en cada
+        momento en que existe.
+
+        Va después del botón a propósito: lo primero que tiene que hacer es mandarnos sus datos.
+      */}
+      {vista?.buzonAbierto && (
+        <PortalContenido
+          token={token}
+          carpeta={vista.carpetaContenido}
+          archivos={vista.contenido}
+          puedeSubir={vista.puedeSubir}
+          onSubido={registrarContenido}
+          onBorrar={borrarContenido}
+        />
+      )}
     </div>
   )
 }

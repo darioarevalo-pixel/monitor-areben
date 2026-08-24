@@ -86,6 +86,36 @@ no re-preguntarlas.**
   encima.** Medido en la vitrina «Girlhood Collection» (19 productos activos): el iPhone 11 tiene
   **uno** y el iPhone 12 **ninguno**, mientras GN dice 3.205 y 901. Se **cayeron dos canjes** por
   acordar con alguien cuyo modelo no teníamos.
+- 🆕 🔑 **EL BUZÓN SE ABRE EN DOS MOMENTOS DISTINTOS, y el segundo es nuevo** (24-ago-2026, decisión
+  de Bruno): con envío, cuando el pedido **llegó**; con **retiro en el local, desde que aceptó**. No
+  hay tránsito que esperar, y —esto es lo que se pagaba— el retiro **no tiene ningún mensaje
+  posterior**: el que nombra el buzón sale del bloque de envío, que con retiro local ni se dibuja.
+  La regla vive en `buzonAbierto` (`lib/canjes/reglas.core.js`) porque la contestan los dos lados: el
+  portal decide si lo dibuja y el servidor si acepta el archivo.
+  - Por eso, con retiro local, el link **vuelve a ser el botón que la pantalla empuja** y sale también
+    en `preparando` y `en_curso`: antes, después de la entrega, no había forma de volver a pasárselo.
+    Y `mensajeLinkDatos` tiene su variante — no le promete un envío que no va a existir y le dice
+    dónde deja el contenido.
+  - ⛔ **El mostrador no reparte el link** (y no es un olvido): la rendija de `puedeAtenderRetiroLocal`
+    deja pasar **una** vista de lectura y tres acciones, y `vista=token` no es ninguna. Repartir
+    tokens desde ahí es abrir la rendija, y no hace falta: cuando llega al local ya lo tiene.
+- 🆕 🔑 **AHORA SE PUEDE BORRAR, de los dos lados** (24-ago-2026). Ella, desde su link
+  (`contenido-borrar`), **sólo lo suyo y sólo mientras nadie lo tocó**: verificado, rechazado, atado
+  a un entregable o ya en Drive contesta 409 —un archivo que ya se dio por cumplido no se puede caer
+  solo—. El equipo, desde la ficha, mientras no esté en Drive.
+  - 🔴 **El orden es el inverso al de archivar, y a propósito**: primero el Blob, después la fila.
+    Archivar tiene que anotar antes de destruir porque lo caro es perder el material; borrar tiene
+    que destruir antes de anotar porque lo caro es dejarlo **arriba, huérfano y pago** — la
+    enfermedad que Ingresos tuvo durante meses. Si el Blob falla, no se borra la fila.
+  - 🔑 **Lo que faltaba no era el botón: era que `evidencia-borrar` borrara el archivo.** Sacaba la
+    fila sola, y por eso el bloque del contenido no ofrecía borrar.
+- 🆕 🔑 **QUE ELLA SUBA YA SE VE SIN ENTRAR A LA FICHA** (24-ago-2026): séptimo aviso derivado
+  (`canje-contenido`), agrupado, en la campanita y en Inicio, más el chip **«Contenido sin revisar»**
+  y una chapita en la fila. Antes, subir seis videos **no movía un solo píxel**: el canje se queda en
+  el tramo `contenido`, que es el del fondo —«esperando que publique»—, así que la lista se veía
+  igual con material esperando que sin nada. ⚠️ El resumen viaja **con el listado** (`sinRevisar`,
+  como `vencidos`): el poll de avisos corre cada 3 minutos y una consulta por canje serían decenas de
+  idas a la base para pintar un número. ⛔ No toca `PESO_TRAMO`: el orden de la lista ya está decidido.
 - 🔑 **EL CONTENIDO ENTRA POR SU LINK, Y DRIVE PASÓ A SER EL ARCHIVO** (21-ago-2026, decisión de
   Bruno). Antes se le pedía que dejara las fotos y los videos en `canje_config.drive_url`: se
   trababa por permisos de Google, por no tener cuenta o por no saber usarlo, y terminaba llegando
@@ -161,9 +191,10 @@ Dos tandas del 21-ago-2026, y la segunda **borra**. Leer esto antes de tocar `Co
   permiso **por archivo y por persona**: la subcarpeta que creó la sesión de uno no la ve la app de
   otro, así que buscarla por nombre haría una gemela por cada persona que archive.
 - **Los nombres los decidió Bruno** y viven en `lib/canjes/drive.ts`: subcarpeta
-  `2026-08-21 · @lucia.mendez · C-0064` (la fecha es la del **primer archivo que dejó ella**, para
-  que Drive las ordene por orden de llegada) y adentro `01-IMG_4821.jpg`, numerado y con el nombre
-  que le puso el teléfono de ella. ⚠️ Vercel Blob le pega un sufijo de **30 caracteres al azar**
+  `@lucia.mendez · 2026-08-21 · C-0064` —🆕 **el nombre primero** (24-ago-2026): la carpeta se busca
+  por quién es, y ordenar por fecha es una columna de Drive; la fecha es la del **primer archivo que
+  dejó ella**— y adentro `01-IMG_4821.jpg`, numerado y con el nombre que le puso el teléfono de ella.
+  ⚠️ **Las carpetas ya creadas no se renombran**: `drive_carpeta_id` se guarda una sola vez. ⚠️ Vercel Blob le pega un sufijo de **30 caracteres al azar**
   antes de la extensión y `nombreOriginal` se lo saca — sólo si calza exacto.
 - 🔴 **El link de Drive de la marca ya no viaja al portal.** Los dos carteles que mandaban a la
   creadora a la carpeta se sacaron: esa carpeta es el archivo **interno** y el portal está abierto a
@@ -207,9 +238,6 @@ Dos tandas del 21-ago-2026, y la segunda **borra**. Leer esto antes de tocar `Co
 - ▶️ **Nadie midió cuánto pesa el store del Blob, y no lo puede medir Bruno**: el monitor deploya en
   el Vercel **de Darío** (Hobby, con cuota incluida), así que `vercel blob list` va con esa cuenta.
   Desde que existe «Mandar a Drive» el buzón se vacía solo, pero lo viejo sigue arriba.
-- ⛔ **El bloque del panel sigue sin ofrecer BORRAR a secas.** Sacar la fila dejaría el archivo
-  arriba, huérfano y pago — lo que le pasó a Ingresos durante meses. Lo único que borra del Blob es
-  archivar en Drive, y esa acción escribe primero dónde quedó.
 - ▶️ **Falta cargar `email_pedido` en las tres marcas**: sin eso la tarjeta «Mail» de la orden sale
   vacía.
 - ⚠️ **`acuerdo` quedó tercero en el orden de la lista por decisión de quien lo escribió, no de
@@ -220,6 +248,15 @@ Dos tandas del 21-ago-2026, y la segunda **borra**. Leer esto antes de tocar `Co
   el catálogo de TN sólo se lee desde el panel.
 - ⚠️ `umbral_aprobacion_alta` sigue en `null`, o sea que **todo va a firma alta**.
 - ▶️ La novedad del retiro en el local quedó en **borrador**, sin publicar.
+
+## Dónde está parado uno
+
+🆕 **La pestaña, la ficha abierta y la marca de la sección viven en la URL** (`?t=&persona=&canje=&m=`,
+con `useFiltroUrl`, 24-ago-2026). Antes eran `useState` con inicializador constante, así que recargar
+—o salir a otra sección y volver, que desmonta el chunk— devolvía al Padrón; y lo peor: **los filtros
+de la lista sí sobrevivían** (viven en la URL desde siempre) y quedaban aplicados en una pestaña que
+ya no se estaba mirando. ⛔ **No sacar el `key={tab}` de `ListaCanjes`**: `useFiltroUrl` lee la URL
+una sola vez al montar, y ese remount es lo único que hace que cada pestaña relea sus filtros.
 
 ## Cómo se prueba
 
@@ -240,6 +277,10 @@ nombre. Lo que no es obvio:
   archivo del Blob. Fija el orden (anotar y después borrar), que la URL borrada salga de la fila y no
   del pedido, que sólo se toque la carpeta `canjes` y que la subcarpeta no se pise. **9 mutantes, 9
   muertos.** Lo que ningún test puede ejercer es Drive: eso se camina a mano con una carpeta real.
+- 🆕 **El buzón con retiro local y el borrado se caminan a mano**: un canje de BDI con «lo retira» en
+  `acuerdo` tiene que mostrar el buzón **antes** de que pase a buscarlo, y borrar una foto desde el
+  link tiene que dejar la fila afuera de la base **y** la URL del Blob en 404. Que ella no pueda
+  borrar una ya verificada es lo único que sí prueba un test.
 - **La subida no se puede ejercer con un test**: hace falta un canje real en `en_curso` con token
   vivo y **abrir el link desde un celular**. Lo que hay que mandar es una foto, un video de más de
   8 MB (arriba de ahí el SDK lo parte y reintenta por pedazos) y un `.mov` de iPhone, que es el

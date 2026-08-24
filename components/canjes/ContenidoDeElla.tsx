@@ -24,13 +24,18 @@
  * pasa a mostrar el link de Drive en vez de la miniatura. Eso es lo único que le pone techo al
  * espacio, y lo decidió Bruno el 21-ago-2026 sabiendo que se pierden las miniaturas.
  *
- * ⚠️ **Sigue sin haber borrar a secas.** Sacar la fila dejaría el archivo arriba, huérfano y pago —
- * que es exactamente lo que le pasó a la galería de Ingresos durante meses.
+ * 🆕 **Y desde el 24-ago-2026 se puede borrar a secas**, que antes no: lo que faltaba no era el
+ * botón sino que el servidor borrara **también el archivo del Blob**. Sacar sólo la fila deja los
+ * bytes arriba, huérfanos y pagos —lo que le pasó a la galería de Ingresos durante meses—, así que
+ * el verbo se arregló en `evidencia-borrar` y recién después apareció acá.
+ *
+ * ⛔ **No se ofrece sobre lo que ya está en Drive**: ahí el Blob ya se vació y lo único que quedaría
+ * por borrar es el registro de dónde fue a parar el material, que es justo lo que no hay que perder.
  */
 
 import { useState } from 'react'
-import { Barra, Button, EmptyState, Notice, SectionCard, color, font, space, weight } from '@/components/ui'
-import { archivadaEnDrive, numeroDe } from '@/lib/canjes/cliente'
+import { Barra, Button, EmptyState, Notice, SectionCard, color, font, space, useConfirmar, weight } from '@/components/ui'
+import { archivadaEnDrive, borrarEvidencia, numeroDe } from '@/lib/canjes/cliente'
 import { nombreArchivoDrive, nombreCarpetaCanje } from '@/lib/canjes/drive'
 import { type CanjeConfig, type CanjeEvidencia, type CanjePersona, type CanjeRow, type CanjeStore } from '@/lib/canjes/tipos'
 import { idDeCarpetaDrive } from '@/lib/drive/archivos'
@@ -69,6 +74,30 @@ export function ContenidoDeElla({
   const [enCurso, setEnCurso] = useState<EnCurso | null>(null)
   const [motivo, setMotivo] = useState<string | null>(null)
   const [mandando, setMandando] = useState(false)
+  const { confirmar } = useConfirmar()
+
+  /**
+   * Sacar uno del buzón. **Borra el archivo, no la fila sola** (lo hace el servidor), así que la
+   * confirmación dice lo que de verdad pasa: no se puede deshacer y el material no está en ningún
+   * otro lado todavía.
+   */
+  async function borrar(e: CanjeEvidencia) {
+    const ok = await confirmar({
+      titulo: '¿Borrar este archivo?',
+      mensaje: 'Se borra del buzón y no se puede recuperar: todavía no está en Drive. '
+        + 'Si lo que querés es archivarlo, usá «Mandar a Drive».',
+      ok: 'Borrar',
+      tono: 'danger',
+    })
+    if (!ok) return
+    setMotivo(null)
+    try {
+      await borrarEvidencia(store, canje.id, e.id)
+      onCambio()
+    } catch (err) {
+      setMotivo((err as Error)?.message || 'No se pudo borrar ese archivo.')
+    }
+  }
 
   async function mandar() {
     if (!carpetaMarca || !pendientes.length) return
@@ -142,7 +171,12 @@ export function ContenidoDeElla({
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: space[2] }}>
             {suyas.map((e) => (
-              <Archivo key={e.id} ev={e} enCurso={enCurso?.id === e.id ? enCurso : null} />
+              <Archivo
+                key={e.id}
+                ev={e}
+                enCurso={enCurso?.id === e.id ? enCurso : null}
+                onBorrar={mandando ? undefined : () => void borrar(e)}
+              />
             ))}
           </div>
         </div>
@@ -156,7 +190,14 @@ export function ContenidoDeElla({
  * la miniatura; una vez archivado el archivo ya no existe ahí, así que dibujar la miniatura sería
  * un cuadrado roto. Por eso el archivado muestra el link a Drive y nada más.
  */
-function Archivo({ ev, enCurso }: { ev: CanjeEvidencia; enCurso: EnCurso | null }) {
+function Archivo({
+  ev, enCurso, onBorrar,
+}: {
+  ev: CanjeEvidencia
+  enCurso: EnCurso | null
+  /** `undefined` mientras se está archivando: borrar a mitad de una tanda es pedir un archivo perdido. */
+  onBorrar?: () => void
+}) {
   const esVideo = ev.archivo_tipo === 'video'
 
   if (ev.drive_url) {
@@ -216,11 +257,24 @@ function Archivo({ ev, enCurso }: { ev: CanjeEvidencia; enCurso: EnCurso | null 
           </span>
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: space[1], marginTop: 4, fontSize: font.sm }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[2], marginTop: 4, fontSize: font.sm }}>
           <span style={{ color: color.mut2 }}>{esVideo ? 'Video' : 'Foto'}</span>
           <a href={paraBajar(ev.archivo_url!)} style={{ marginLeft: 'auto', color: color.brand, fontWeight: weight.medium }}>
             Bajar
           </a>
+          {onBorrar && (
+            <button
+              type="button"
+              onClick={onBorrar}
+              title="Borrar este archivo del buzón"
+              style={{
+                border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+                color: color.danger, fontFamily: 'inherit', fontSize: font.sm, fontWeight: weight.medium,
+              }}
+            >
+              Borrar
+            </button>
+          )}
         </div>
       )}
     </div>

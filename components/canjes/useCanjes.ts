@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useConfirmar, useToast } from '@/components/ui'
 import {
-  borrarPersona, leerCanjes, type CanjeVencido, type CanjeVisible, type DatosCanjes, type VitrinaEnLista,
+  borrarPersona, leerCanjes, type CanjeSinRevisar, type CanjeVencido, type CanjeVisible, type DatosCanjes, type VitrinaEnLista,
 } from '@/lib/canjes/cliente'
 import { calcularPuntaje, contextoDePuntaje, type ContextoPuntaje, type Puntaje } from '@/lib/canjes/puntaje'
 import { estadoDeContacto, ordenarPorContacto, type Seguimiento } from '@/lib/canjes/seguimiento'
@@ -42,6 +42,8 @@ export type EstadoCanjes = {
   canjes: CanjeVisible[]
   /** Resumido por el servidor: qué canjes tienen entregables obligatorios vencidos. */
   vencidos: CanjeVencido[]
+  /** Ídem, del otro lado: qué canjes tienen material que ella subió y nadie miró. */
+  sinRevisar: CanjeSinRevisar[]
   config: CanjeConfig | null
   /** Las de todas las marcas visibles: el modal de propuesta deja elegir la marca. */
   configs: CanjeConfig[]
@@ -55,7 +57,10 @@ export type EstadoCanjes = {
   parchearPersona: (p: CanjePersona) => void
 }
 
-const VACIO: DatosCanjes = { personas: [], canjes: [], vencidos: [], config: null, configs: [], vitrinas: [], marcasVisibles: [] }
+const VACIO: DatosCanjes = {
+  personas: [], canjes: [], vencidos: [], sinRevisar: [],
+  config: null, configs: [], vitrinas: [], marcasVisibles: [],
+}
 
 export function useCanjes(store: CanjeStore): EstadoCanjes {
   const [datos, setDatos] = useState<DatosCanjes>(VACIO)
@@ -146,6 +151,7 @@ export function useCanjes(store: CanjeStore): EstadoCanjes {
     ctxPuntaje,
     canjes: datos.canjes,
     vencidos: datos.vencidos,
+    sinRevisar: datos.sinRevisar,
     config: datos.config,
     configs: datos.configs,
     vitrinas: datos.vitrinas,

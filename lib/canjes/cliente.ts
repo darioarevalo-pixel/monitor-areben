@@ -64,10 +64,25 @@ export type CanjeVencido = {
   desde: number
 }
 
+/**
+ * Un canje con material que ella subió y nadie miró. Mismo resumen que los vencidos, del otro lado:
+ * aquél es lo que ella nos debe, éste es lo que le debemos nosotros.
+ */
+export type CanjeSinRevisar = {
+  canjeId: number
+  store: CanjeStore
+  persona_id: number
+  /** Cuántos archivos están esperando que alguien los mire. */
+  cuantas: number
+  /** Timestamp del más viejo: hace cuánto que están ahí. */
+  desde: number
+}
+
 export type DatosCanjes = {
   personas: CanjePersona[]
   canjes: CanjeVisible[]
   vencidos: CanjeVencido[]
+  sinRevisar: CanjeSinRevisar[]
   /** La de la marca en la que se está parado. */
   config: CanjeConfig | null
   /**
@@ -98,6 +113,7 @@ export async function leerCanjes(store: CanjeStore): Promise<DatosCanjes> {
     personas: (d.personas as CanjePersona[]) || [],
     canjes: (d.canjes as CanjeVisible[]) || [],
     vencidos: (d.vencidos as CanjeVencido[]) || [],
+    sinRevisar: (d.sinRevisar as CanjeSinRevisar[]) || [],
     config: (d.config as CanjeConfig) || null,
     configs: (d.configs as CanjeConfig[]) || [],
     vitrinas: (d.vitrinas as VitrinaEnLista[]) || [],

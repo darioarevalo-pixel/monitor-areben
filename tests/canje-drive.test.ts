@@ -47,12 +47,16 @@ describe('el link de la carpeta que se pega en Ajustes', () => {
 })
 
 describe('cómo se llama lo que queda en Drive', () => {
-  it('la subcarpeta arranca por la fecha, para que Drive las ordene solas', () => {
+  it('la subcarpeta arranca por el nombre, después la fecha y después el canje', () => {
     expect(nombreCarpetaCanje('2026-08-21', 'lucia.mendez', 'C-0064'))
-      .toBe('2026-08-21 · @lucia.mendez · C-0064')
+      .toBe('@lucia.mendez · 2026-08-21 · C-0064')
     // El @ que alguien haya dejado tipeado no se duplica.
     expect(nombreCarpetaCanje('2026-08-21', '@lucia.mendez', 'C-0064'))
-      .toBe('2026-08-21 · @lucia.mendez · C-0064')
+      .toBe('@lucia.mendez · 2026-08-21 · C-0064')
+  })
+
+  it('sin Instagram no queda un separador colgando adelante', () => {
+    expect(nombreCarpetaCanje('2026-08-21', '', 'C-0064')).toBe('2026-08-21 · C-0064')
   })
 
   it('🔴 una barra en el nombre no crea una carpeta fantasma', () => {
@@ -90,6 +94,7 @@ type Mundo = {
   updates: { tabla: string; campos: Record<string, unknown> }[]
   borrados: { url: string; carpetas: string[] }[]
   fallaElUpdate: boolean
+  fallaElBlob: boolean
 }
 
 let mundo: Mundo
@@ -102,14 +107,20 @@ function nuevoMundo(): Mundo {
     updates: [],
     borrados: [],
     fallaElUpdate: false,
+    fallaElBlob: false,
   }
 }
 
 function fakeSupabase() {
   const desde = (tabla: string) => {
-    const ctx: { tabla: string; update: Record<string, unknown> | null } = { tabla, update: null }
+    const ctx: { tabla: string; update: Record<string, unknown> | null; borra: boolean } =
+      { tabla, update: null, borra: false }
 
     const resolver = async () => {
+      if (ctx.borra) {
+        mundo.pasos.push(`borrarFila:${ctx.tabla}`)
+        return { data: null, error: null }
+      }
       if (ctx.update) {
         if (mundo.fallaElUpdate && ctx.tabla === 'canje_evidencias') {
           return { data: null, error: { message: 'se cayó la base' } }
@@ -130,6 +141,7 @@ function fakeSupabase() {
       is: () => api,
       order: () => api,
       update: (row: Record<string, unknown>) => { ctx.update = row; return api },
+      delete: () => { ctx.borra = true; return api },
       maybeSingle: () => resolver(),
       single: () => resolver(),
       then: (ok: (v: unknown) => unknown, mal: (e: unknown) => unknown) => resolver().then(ok, mal),
@@ -152,7 +164,15 @@ vi.mock('@/api/_blob.js', () => ({
   borrarBlob: async (url: string, carpetas: string[]) => {
     mundo.pasos.push('borrarBlob')
     mundo.borrados.push({ url, carpetas })
-    return { ok: true }
+    return mundo.fallaElBlob ? { ok: false, status: 500, error: 'se cayó' } : { ok: true }
+  },
+  // El de verdad mira el host además del camino. Acá alcanza con eso: lo que este archivo prueba es
+  // **cuándo** se llama al borrado, no cómo se parsea una URL (eso vive en su propio test).
+  pathnameDeBlob: (url: string) => {
+    try {
+      const u = new URL(String(url))
+      return /\.blob\.vercel-storage\.com$/i.test(u.hostname) ? u.pathname.replace(/^\/+/, '') : null
+    } catch { return null }
   },
 }))
 
@@ -256,5 +276,73 @@ describe('evidencia-archivada — anotar dónde quedó y sacarlo del buzón', ()
     expect(res.code).toBe(200)
     expect(res.body?.buzon).toBe('sin archivo')
     expect(mundo.borrados).toHaveLength(0)
+  })
+})
+
+/**
+ * **Borrar una evidencia desde el panel.** Hasta el 24-ago-2026 esto sacaba la fila y dejaba el
+ * archivo arriba: por eso el bloque del contenido de ella no ofrecía borrar, y por eso lo que se
+ * arregló primero fue el verbo y no el botón.
+ *
+ * Es el mismo par de operaciones que archivar, **en el orden inverso**, y esa inversión es
+ * deliberada: allá lo caro es perder el material (la fila es lo único que dice dónde quedó), acá lo
+ * caro es dejarlo arriba sin ninguna fila que lo nombre.
+ */
+describe('evidencia-borrar — sacar la fila Y el archivo', () => {
+  async function borrar(body: Record<string, unknown> = {}) {
+    const mod = await import('@/api/_canjes.js')
+    const res = resFalso()
+    await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
+      { method: 'POST', headers: {}, query: {}, body: { store: 'bdi', action: 'evidencia-borrar', id: 12, evidencia_id: 99, ...body } },
+      res,
+    )
+    return res
+  }
+
+  it('borra el Blob primero y la fila después', async () => {
+    const res = await borrar()
+    expect(res.code).toBe(200)
+    expect(mundo.pasos).toEqual(['borrarBlob', 'borrarFila:canje_evidencias'])
+    // Y sólo se toca la carpeta de canjes, nunca la de Ingresos ni la de Meta.
+    expect(mundo.borrados[0]).toEqual({ url: BLOB, carpetas: ['canjes'] })
+  })
+
+  it('🔴 si el Blob no se pudo borrar, la fila se queda: un huérfano no se puede volver a encontrar', async () => {
+    mundo.fallaElBlob = true
+    const res = await borrar()
+    expect(res.code).toBe(500)
+    expect(mundo.pasos).toEqual(['borrarBlob'])
+  })
+
+  it('lo que ya está en Drive sólo pierde el registro: el Blob ya se vació al archivar', async () => {
+    mundo.evidencia = { id: 99, archivo_url: BLOB, drive_url: DRIVE }
+    const res = await borrar()
+    expect(res.code).toBe(200)
+    expect(mundo.pasos).toEqual(['borrarFila:canje_evidencias'])
+  })
+
+  it('una evidencia que es un LINK y no un archivo no manda a borrar nada', async () => {
+    mundo.evidencia = { id: 99, archivo_url: 'https://instagram.com/p/abc', drive_url: null }
+    const res = await borrar()
+    expect(res.code).toBe(200)
+    expect(mundo.pasos).toEqual(['borrarFila:canje_evidencias'])
+  })
+
+  it('⛔ tampoco borra de otra carpeta del Blob, aunque la fila la nombre', async () => {
+    mundo.evidencia = {
+      id: 99,
+      archivo_url: 'https://abc123.public.blob.vercel-storage.com/ingresos/foto.jpg',
+      drive_url: null,
+    }
+    const res = await borrar()
+    expect(res.code).toBe(200)
+    expect(mundo.pasos).toEqual(['borrarFila:canje_evidencias'])
+  })
+
+  it('una evidencia de otro canje no se borra', async () => {
+    mundo.evidencia = null
+    const res = await borrar()
+    expect(res.code).toBe(404)
+    expect(mundo.pasos).toEqual([])
   })
 })

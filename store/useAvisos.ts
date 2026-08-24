@@ -19,7 +19,7 @@ import { leerFallas } from '@/lib/postventa/fallas/cliente'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeFallas, avisosDeNoDevueltos, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeNoDevueltos, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
 import { nombrePersona, type CanjeRow } from '@/lib/canjes/tipos'
 import { vistoHasta } from '@/lib/notificaciones/visto'
@@ -62,7 +62,7 @@ type AvisosState = {
 async function avisosDeCanjes(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
   // Cualquiera de las tres marcas sirve para la lectura: el handler devuelve todo lo que el perfil
   // puede ver, y el `store` sólo decide qué viene ciego.
-  const { canjes, personas, vencidos } = await leerCanjes(marca)
+  const { canjes, personas, vencidos, sinRevisar } = await leerCanjes(marca)
   const nombrePorId = new Map(personas.map((p) => [p.id, nombrePersona(p)]))
 
   const propios = canjes.filter((c) => !esCiego(c)) as CanjeRow[]
@@ -73,6 +73,12 @@ async function avisosDeCanjes(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
     ),
     ...avisosDeCanjeVencido(
       vencidos.map((v) => ({ ...v, persona: nombrePorId.get(v.persona_id) ?? 'Alguien' })),
+      perfil,
+      marca,
+    ),
+    // Sale del MISMO pedido: el resumen viaja con el listado, así que el aviso no cuesta un fetch.
+    ...avisosDeContenidoSinRevisar(
+      sinRevisar.map((v) => ({ ...v, persona: nombrePorId.get(v.persona_id) ?? 'Alguien' })),
       perfil,
       marca,
     ),

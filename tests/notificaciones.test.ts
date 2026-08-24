@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   avisosDeAprobacion,
+  avisosDeContenidoSinRevisar,
   avisosDeFallas,
   avisosDeNoDevueltos,
   avisosDeSolicitud,
@@ -135,5 +136,57 @@ describe('orden y conteo de nuevos', () => {
     expect(contarNuevos(avisos, 500)).toBe(1)
     expect(contarNuevos(avisos, 0)).toBe(2)
     expect(contarNuevos(avisos, 1000)).toBe(0)
+  })
+})
+
+/**
+ * El séptimo aviso: **material que ella ya subió y nadie miró**.
+ *
+ * Es el único de los siete que avisa de trabajo YA HECHO esperando del otro lado. Los otros seis
+ * son cosas que esperan que alguien decida; éste es una foto que llegó a un buzón que nadie abre —
+ * y hasta que existió, subir seis videos no movía un solo píxel en el monitor.
+ */
+describe('avisos de contenido sin revisar', () => {
+  const conCanjes = perfil({ acceso: { bdi: { canjes: true } } } as Partial<Perfil>)
+  const uno = { canjeId: 5, store: 'bdi' as const, persona: 'Lucía', cuantas: 2, desde: 1000 }
+
+  it('es UN aviso agrupado, no uno por creadora', () => {
+    const r = avisosDeContenidoSinRevisar(
+      [uno, { canjeId: 6, store: 'bdi', persona: 'Nadia', cuantas: 3, desde: 2000 }],
+      conCanjes,
+      'bdi',
+    )
+    expect(r).toHaveLength(1)
+    expect(r[0].titulo).toBe('5 archivos sin revisar')
+    expect(r[0].detalle).toContain('2 creadoras')
+  })
+
+  it('🔑 el id NO lleva la cantidad: revisar uno no puede hacer que el aviso vuelva a ser nuevo', () => {
+    const a = avisosDeContenidoSinRevisar([uno], conCanjes, 'bdi')[0]
+    const b = avisosDeContenidoSinRevisar([{ ...uno, cuantas: 1 }], conCanjes, 'bdi')[0]
+    expect(a.id).toBe(b.id)
+  })
+
+  it('ordena por el archivo más VIEJO: lo que importa es hace cuánto está esperando', () => {
+    const r = avisosDeContenidoSinRevisar(
+      [{ ...uno, desde: 5000 }, { canjeId: 6, store: 'bdi', persona: 'Nadia', cuantas: 1, desde: 900 }],
+      conCanjes,
+      'bdi',
+    )
+    expect(r[0].ts).toBe(900)
+  })
+
+  it('con una sola creadora la nombra', () => {
+    const r = avisosDeContenidoSinRevisar([uno], conCanjes, 'bdi')
+    expect(r[0].titulo).toBe('2 archivos sin revisar')
+    expect(r[0].detalle).toContain('Lucía')
+  })
+
+  it('sin acceso a Canjes no hay aviso: nadie ve un aviso de algo a lo que no puede entrar', () => {
+    expect(avisosDeContenidoSinRevisar([uno], perfil(), 'bdi')).toEqual([])
+  })
+
+  it('sin nada sin revisar, ningún aviso', () => {
+    expect(avisosDeContenidoSinRevisar([], conCanjes, 'bdi')).toEqual([])
   })
 })

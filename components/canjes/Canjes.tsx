@@ -23,7 +23,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  Button, Card, Field, Input, Modal, Notice, Tabs, useToast,
+  Button, Card, Field, Input, Modal, Notice, Tabs, useFiltroUrl, useToast,
   color, font, space, type TabItem,
 } from '@/components/ui'
 import { crearPersona, esCiego } from '@/lib/canjes/cliente'
@@ -43,6 +43,22 @@ import { ProponerCanje } from './ProponerCanje'
 import { useCanjes } from './useCanjes'
 import { Vitrinas } from './Vitrinas'
 
+type TabCanjes = 'personas' | 'canjes' | 'aprobaciones' | 'vitrinas' | 'ajustes'
+
+const TABS_VALIDAS: readonly TabCanjes[] = ['personas', 'canjes', 'aprobaciones', 'vitrinas', 'ajustes']
+
+/**
+ * El id que viaja en la URL, o `null`.
+ *
+ * Lo que no es un entero positivo escrito tal cual no abre ninguna ficha: un `?canje=12abc` que
+ * pasara como 12 abriría algo que nadie pidió, y un `?canje=0` es la ficha que no existe.
+ */
+function idDeUrl(v: string): number | null {
+  const t = v.trim()
+  const n = parseInt(t, 10)
+  return String(n) === t && n > 0 ? n : null
+}
+
 export function Canjes() {
   const { marca, perfil } = useSesion()
   const toast = useToast()
@@ -55,12 +71,38 @@ export function Canjes() {
   )
 
   // Arranca en la marca activa del header si está entre las posibles; si no, la primera que haya.
-  const [store, setStore] = useState<CanjeStore>(() =>
-    marcasPosibles.includes(marca) ? marca : (marcasPosibles[0] ?? 'bdi'),
+  const marcaInicial = useMemo<CanjeStore>(
+    () => (marcasPosibles.includes(marca) ? marca : (marcasPosibles[0] ?? 'bdi')),
+    [marcasPosibles, marca],
   )
-  const [tab, setTab] = useState<'personas' | 'canjes' | 'aprobaciones' | 'vitrinas' | 'ajustes'>('personas')
-  const [abierta, setAbierta] = useState<number | null>(null)
-  const [canjeAbierto, setCanjeAbierto] = useState<number | null>(null)
+
+  /*
+    🔑 **Dónde está parado uno vive en la URL, no en `useState`.** Antes eran cuatro `useState` con
+    inicializador constante, así que recargar la página —o salir a otra sección y volver, que
+    desmonta el chunk— devolvía al Padrón: se perdían la pestaña y la ficha abierta, mientras los
+    filtros de la lista SÍ sobrevivían (viven en la URL desde siempre) y quedaban aplicados en una
+    pestaña que ya no se estaba mirando.
+
+    Es el mismo `useFiltroUrl` de Liquidación (el detalle abierto) y de Diseños (la pestaña).
+    ⚠️ Lee la URL **una sola vez al montar**: por eso lo que venga de afuera se valida acá abajo y no
+    se confía, y por eso el `key={tab}` de `ListaCanjes` sigue siendo necesario.
+  */
+  const [storeUrl, setStoreUrl] = useFiltroUrl<string>('m', marcaInicial)
+  const [tabUrl, setTabUrl] = useFiltroUrl<string>('t', 'personas')
+  const [personaUrl, setPersonaUrl] = useFiltroUrl<string>('persona', '')
+  const [canjeUrl, setCanjeUrl] = useFiltroUrl<string>('canje', '')
+
+  // Un link con basura abre el Padrón de la marca de siempre, no una pantalla rota: lo que no está
+  // en el catálogo se descarta, y un id que no es un número no abre ninguna ficha.
+  const store: CanjeStore = marcasPosibles.includes(storeUrl as CanjeStore) ? (storeUrl as CanjeStore) : marcaInicial
+  const tab = (TABS_VALIDAS as readonly string[]).includes(tabUrl) ? (tabUrl as TabCanjes) : 'personas'
+  const abierta = idDeUrl(personaUrl)
+  const canjeAbierto = idDeUrl(canjeUrl)
+
+  const setStore = setStoreUrl
+  const setTab = useCallback((k: TabCanjes) => setTabUrl(k), [setTabUrl])
+  const setAbierta = useCallback((id: number | null) => setPersonaUrl(id ? String(id) : ''), [setPersonaUrl])
+  const setCanjeAbierto = useCallback((id: number | null) => setCanjeUrl(id ? String(id) : ''), [setCanjeUrl])
   const [dandoAlta, setDandoAlta] = useState(false)
   const [cargandoVarias, setCargandoVarias] = useState(false)
   /** A quién se le está proponiendo algo desde la lista, sin entrar a su ficha. */
@@ -84,9 +126,9 @@ export function Canjes() {
     setProponiendoA(null)
     await est.recargar()
     setCanjeAbierto(id)
-  }, [est])
+  }, [est, setCanjeAbierto])
 
-  const abrir = useCallback((id: number) => setAbierta(id), [])
+  const abrir = useCallback((id: number) => setAbierta(id), [setAbierta])
 
   // Cuántos esperan firma: va como badge en la pestaña, que es donde se mira sin entrar.
   const esperandoFirma = useMemo(
@@ -130,8 +172,11 @@ export function Canjes() {
           items={marcasPosibles.map<TabItem>((m) => ({ key: m, label: STORE_LABEL[m] }))}
           value={store}
           onChange={(k) => {
-            setStore(k as CanjeStore)
+            setStore(k)
+            // Las DOS fichas, no una: la del canje también es de la marca que se está dejando, y
+            // quedaba abierta mostrando un canje de otra marca.
             setAbierta(null)
+            setCanjeAbierto(null)
           }}
         />
         <span style={{ color: color.mut2, fontSize: font.sm }}>
@@ -150,7 +195,7 @@ export function Canjes() {
           pestañas se vuelven a ver al volver. */}
       {!abierta && !canjeAbierto && (
         <div style={{ marginBottom: space[5] }}>
-          <Tabs items={tabs} value={tab} onChange={(k) => setTab(k as typeof tab)} variant="underline" />
+          <Tabs items={tabs} value={tab} onChange={(k) => setTab(k as TabCanjes)} variant="underline" />
         </div>
       )}
 
@@ -227,6 +272,7 @@ export function Canjes() {
             canjes={est.canjes}
             personas={est.personas}
             vencidos={est.vencidos}
+            sinRevisar={est.sinRevisar}
             marcasVisibles={est.marcasVisibles}
             soloAprobaciones={tab === 'aprobaciones'}
             onAbrir={setCanjeAbierto}

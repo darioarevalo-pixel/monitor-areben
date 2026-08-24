@@ -20,7 +20,7 @@
  * Para mirar una foto grande, la pestaña alcanza.
  */
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useSubirContenido } from '@/components/canjes/useSubirContenido'
 import type { ClaseMedia } from '@/lib/media'
 
@@ -31,13 +31,19 @@ const boton: React.CSSProperties = {
   border: 'none', background: '#4f46e5', color: '#fff', fontFamily: 'inherit', cursor: 'pointer',
 }
 
+/** Los dos botones de la confirmación. Grandes para el dedo, chicos para la celda. */
+const botonChico = (fondo: string): React.CSSProperties => ({
+  padding: '6px 14px', fontSize: 13, borderRadius: 8, border: 'none',
+  background: fondo, color: '#fff', fontFamily: 'inherit', cursor: 'pointer',
+})
+
 const celda: React.CSSProperties = {
   width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 10,
   background: '#e5e7eb', display: 'block',
 }
 
 export function PortalContenido({
-  token, carpeta, archivos, puedeSubir, onSubido,
+  token, carpeta, archivos, puedeSubir, onSubido, onBorrar,
 }: {
   token: string | null
   /** La manda el servidor. ⛔ No se arma acá. */
@@ -46,9 +52,28 @@ export function PortalContenido({
   puedeSubir: boolean
   /** Registra el archivo recién subido. Devuelve la fila para dibujarla en el momento. */
   onSubido: (item: { url: string; clase: ClaseMedia }) => Promise<void>
+  /** Saca uno que subió mal. El servidor sólo la deja mientras nadie lo haya tocado del otro lado. */
+  onBorrar: (id: number) => Promise<void>
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const { enCurso, subiendo, agregar, descartar } = useSubirContenido(token, carpeta, onSubido)
+  /** Cuál está preguntando "¿lo borro?". Uno solo por vez: son celdas de 100 px. */
+  const [preguntando, setPreguntando] = useState<number | null>(null)
+  const [borrando, setBorrando] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function borrar(id: number) {
+    setBorrando(id)
+    setError(null)
+    try {
+      await onBorrar(id)
+      setPreguntando(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo borrar ese archivo.')
+    } finally {
+      setBorrando(null)
+    }
+  }
 
   return (
     <div style={{ marginTop: 28, textAlign: 'left' }}>
@@ -61,21 +86,62 @@ export function PortalContenido({
       {(archivos.length > 0 || enCurso.length > 0) && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
           {archivos.map((a) => (
-            <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{ position: 'relative' }}>
-              {a.tipo === 'video' ? (
-                <video src={a.url} style={celda} preload="metadata" muted playsInline />
+            <div key={a.id} style={{ position: 'relative' }}>
+              <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                {a.tipo === 'video' ? (
+                  <video src={a.url} style={celda} preload="metadata" muted playsInline />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element -- portal público: se dibuja
+                     con estilos propios y sin el runtime de imágenes de Next. */
+                  <img src={a.url} alt="" style={celda} />
+                )}
+                {a.tipo === 'video' && (
+                  <span style={{
+                    position: 'absolute', bottom: 6, left: 6, fontSize: 12, color: '#fff',
+                    background: 'rgba(0,0,0,.55)', borderRadius: 6, padding: '2px 6px',
+                  }}>▶</span>
+                )}
+              </a>
+
+              {/*
+                La ✕ para el que se subió mal —la foto movida, el video que no era—. Antes no había
+                forma de sacarlo: quedaba ahí y nos lo aclaraba por WhatsApp, que es justo lo que
+                este buzón vino a evitar.
+
+                ⛔ **La confirmación va adentro de la celda, no en un `confirm()`**: un diálogo del
+                navegador bloquea todo, y acá adentro un `window.confirm` en un teléfono es la forma
+                más rápida de que se pierda la subida que está en curso.
+              */}
+              {preguntando === a.id ? (
+                <div style={{
+                  position: 'absolute', inset: 0, borderRadius: 10, background: 'rgba(17,24,39,.82)',
+                  display: 'grid', placeItems: 'center', gap: 6, padding: 6, textAlign: 'center',
+                }}>
+                  <span style={{ color: '#fff', fontSize: 12 }}>¿Lo borramos?</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" onClick={() => void borrar(a.id)} disabled={borrando === a.id} style={botonChico('#dc2626')}>
+                      {borrando === a.id ? '…' : 'Sí'}
+                    </button>
+                    <button type="button" onClick={() => setPreguntando(null)} style={botonChico('#4b5563')}>
+                      No
+                    </button>
+                  </div>
+                </div>
               ) : (
-                /* eslint-disable-next-line @next/next/no-img-element -- portal público: se dibuja
-                   con estilos propios y sin el runtime de imágenes de Next. */
-                <img src={a.url} alt="" style={celda} />
+                <button
+                  type="button"
+                  aria-label="Borrar este archivo"
+                  onClick={() => { setError(null); setPreguntando(a.id) }}
+                  style={{
+                    position: 'absolute', top: 6, right: 6, width: 28, height: 28, borderRadius: 14,
+                    border: 'none', background: 'rgba(17,24,39,.6)', color: '#fff', fontSize: 15,
+                    lineHeight: 1, cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  ✕
+                </button>
               )}
-              {a.tipo === 'video' && (
-                <span style={{
-                  position: 'absolute', bottom: 6, left: 6, fontSize: 12, color: '#fff',
-                  background: 'rgba(0,0,0,.55)', borderRadius: 6, padding: '2px 6px',
-                }}>▶</span>
-              )}
-            </a>
+            </div>
           ))}
           {/* Cada archivo falla por su cuenta: el que se cayó se ve y se descarta sin tocar el resto. */}
           {enCurso.map((f) => (
@@ -102,6 +168,12 @@ export function PortalContenido({
             </div>
           ))}
         </div>
+      )}
+
+      {error && (
+        <p style={{ background: '#fef2f2', color: '#991b1b', padding: 10, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>
+          {error}
+        </p>
       )}
 
       {puedeSubir ? (

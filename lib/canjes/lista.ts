@@ -17,7 +17,7 @@ import {
 // ── El filtro ───────────────────────────────────────────────────────────────────
 
 export type FiltroEstado =
-  | 'abiertos' | 'respuesta' | 'aprobacion' | 'transito' | 'vencidos' | 'cerrados' | 'todos'
+  | 'abiertos' | 'respuesta' | 'aprobacion' | 'transito' | 'vencidos' | 'sin-revisar' | 'cerrados' | 'todos'
 
 /** Lo que sigue pidiendo trabajo de alguien. Es el default: la lista es para trabajar. */
 export const ABIERTOS: TramoCanje[] = [
@@ -43,6 +43,8 @@ export type CtxLista = {
   personas: Map<number, { nombre: string; instagram: string }>
   /** Cuántos entregables vencidos tiene cada canje, por id. */
   vencidos: Map<number, number>
+  /** Cuántos archivos subió ella y nadie miró, por id de canje. */
+  sinRevisar: Map<number, number>
 }
 
 // ── La fecha ────────────────────────────────────────────────────────────────────
@@ -73,6 +75,15 @@ export type CanjeDecorado = CanjeRow & {
   _peso: number
   /** Cuántos entregables vencidos tiene. 0 = ninguno. */
   _vencidos: number
+  /**
+   * Cuántos archivos suyos están esperando que alguien los mire. 0 = ninguno.
+   *
+   * 🔑 **No es un tramo nuevo y no toca el orden.** El tramo dice de quién es la pelota, y con
+   * material sin revisar la pelota sigue siendo nuestra igual que sin él; lo que cambia es que hay
+   * algo concreto para hacer. Meterlo en `PESO_TRAMO` habría reordenado una lista que ya está
+   * decidida.
+   */
+  _sinRevisar: number
 }
 
 /**
@@ -92,6 +103,7 @@ export function decorarCanjes(canjes: CanjeRow[], ctx: CtxLista): CanjeDecorado[
       _tramo: tramo,
       _peso: PESO_TRAMO[tramo],
       _vencidos: ctx.vencidos.get(c.id) || 0,
+      _sinRevisar: ctx.sinRevisar.get(c.id) || 0,
     }
   })
 }
@@ -104,6 +116,7 @@ export function pasaPorEstado(c: CanjeDecorado, f: FiltroEstado): boolean {
   if (f === 'aprobacion') return c.estado === 'propuesta'
   if (f === 'transito') return enTransito(c)
   if (f === 'vencidos') return c._vencidos > 0
+  if (f === 'sin-revisar') return c._sinRevisar > 0
   if (f === 'cerrados') return c.estado === 'cerrado'
   return true
 }

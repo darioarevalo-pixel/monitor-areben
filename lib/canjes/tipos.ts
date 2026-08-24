@@ -17,6 +17,7 @@
  * encima y las re-exporta, así que quien importa de `tipos` sigue viendo lo mismo de siempre.
  */
 import {
+  buzonAbierto as buzonAbiertoJS,
   controlDelTope as controlDelTopeJS,
   esTerminal as esTerminalJS,
   ESTADOS as ESTADOS_JS,
@@ -235,6 +236,14 @@ export function enTransito(c: Pick<CanjeRow, 'envio_estado' | 'entregado_at'>): 
  * si un día Zattia abre local, se agrega acá y no en dos lados.
  */
 export const retiroLocalDisponible: (store: string | null | undefined) => boolean = retiroLocalDisponibleJS
+
+/**
+ * ¿Ya puede subir el contenido por su link? Con retiro en el local, desde que aceptó; con envío,
+ * recién cuando el pedido llegó. El porqué está en `reglas.core.js`.
+ */
+export const buzonAbierto: (
+  c: Pick<CanjeRow, 'retiro_local' | 'entregado_at'> | null | undefined,
+) => boolean = buzonAbiertoJS
 
 /**
  * Si el local ya puede entregarlo. **De acá salen el botón habilitado y la validación del handler**,

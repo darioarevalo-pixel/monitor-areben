@@ -223,16 +223,18 @@ export function FichaCanje({
               <Button variant="solid" tone="brand" onClick={() => void acepto()}>Aceptó</Button>
             </>
           )}
-          {/* Con retiro en el local el link es un paso de más: no hay dirección que pedirle y los
-              datos se completan en el mostrador. Sigue accesible desde "Ver el link" si hiciera
-              falta, pero deja de ser el botón que la pantalla empuja. */}
-          {canje.estado === 'acuerdo' && (
-            <Button
-              variant={canje.retiro_local ? 'outline' : 'solid'}
-              tone="brand"
-              onClick={() => setMostrandoLink(true)}
-            >
-              {canje.retiro_local ? 'Ver el link' : 'Mandarle el link'}
+          {/*
+            🔴 **Con retiro en el local el link NO es un paso de más, y decir que lo era costó
+            caro**: es el único momento del canje en que se le puede nombrar el buzón del contenido.
+            Al que se le manda por correo se lo dice el mensaje del despacho; el retiro no tiene ese
+            mensaje, porque el bloque de envío ni se dibuja. Por eso acá el botón es igual de sólido
+            y sale también después de la entrega —en `en_curso`, que es cuando ella tiene el producto
+            y nos debe el contenido—, que era justo cuando no había forma de volver a pasárselo.
+          */}
+          {(canje.estado === 'acuerdo'
+            || (canje.retiro_local && (canje.estado === 'preparando' || canje.estado === 'en_curso'))) && (
+            <Button variant="solid" tone="brand" onClick={() => setMostrandoLink(true)}>
+              Mandarle el link
             </Button>
           )}
           {editable && (
@@ -806,7 +808,7 @@ function MandarLink({
   // Con vitrina el link no es un formulario: es la pantalla donde elige. El mensaje lo dice, o lo
   // abre esperando un trámite.
   const conVitrina = !!canje.vitrina_id && !canje.seleccion_cerrada_at
-  const texto = link ? mensajeLinkDatos(persona, store, link, esPrimeraVez, conVitrina) : ''
+  const texto = link ? mensajeLinkDatos(persona, store, link, esPrimeraVez, conVitrina, !!canje.retiro_local) : ''
   const tel = normalizeArgPhone(persona.telefono)
 
   return (

@@ -9,10 +9,13 @@
  * el material de una creadora termina mezclado con el de otra a la primera vez que alguien arrastra
  * algo de lugar.
  *
- * Lo decidió Bruno el 21-ago-2026, mirando los nombres puestos al lado:
+ * Lo decidió Bruno el 21-ago-2026, mirando los nombres puestos al lado, y lo corrigió el 24-ago:
  *
- *  - **La carpeta lleva la fecha adelante** para que Drive las ordene solas por orden de llegada,
- *    después la cuenta de Instagram y el número del canje.
+ *  - **La carpeta arranca por el nombre** —la cuenta de Instagram—, después la fecha y después el
+ *    número del canje. ⚠️ Antes la fecha iba adelante, para que Drive las ordenara solas por orden
+ *    de llegada; se cambió a sabiendas de que eso se pierde: la carpeta se busca **por quién es**,
+ *    y ordenar por fecha es una columna de Drive, mientras que buscar a alguien entre cuarenta
+ *    carpetas que empiezan todas con `2026-` no lo es.
  *  - **Los archivos van numerados y conservan el nombre que les puso el teléfono de ella.** El
  *    número es lo que les da orden; el nombre original es lo que permite rastrear el que ella
  *    todavía tiene en su galería cuando pregunta por uno.
@@ -27,16 +30,20 @@ function limpio(t: string): string {
 }
 
 /**
- * La subcarpeta del canje: `2026-08-21 · @lucia.mendez · C-0064`.
+ * La subcarpeta del canje: `@lucia.mendez · 2026-08-21 · C-0064`.
  *
  * La fecha es la del **primer archivo que dejó ella**, no la de hoy: la carpeta cuenta cuándo llegó
  * el material, y archivarlo dos semanas después no cambia ese hecho. Sin fecha (un caso que no
- * debería pasar) queda igual armado, con lo que sí se sabe.
+ * debería pasar) queda igual armado, con lo que sí se sabe — y sin Instagram también, que es el
+ * caso en que el nombre nuevo se parece al viejo.
+ *
+ * ⚠️ **Las carpetas ya creadas no se renombran**: la subcarpeta se guarda en `canjes.drive_carpeta_id`
+ * la primera vez y lo que se archive después entra en ésa. Este cambio vale para las nuevas.
  */
 export function nombreCarpetaCanje(fechaISO: string | null | undefined, instagram: string, numero: string): string {
   const partes = [
-    limpio(fechaISO || ''),
     instagram ? `@${limpio(instagram).replace(/^@+/, '')}` : '',
+    limpio(fechaISO || ''),
     limpio(numero),
   ].filter(Boolean)
   return partes.join(' · ')

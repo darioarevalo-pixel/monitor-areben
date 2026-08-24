@@ -41,6 +41,7 @@ const CTX: CtxLista = {
     [3, { nombre: 'Nadia Ruiz', instagram: 'nadia' }],
   ]),
   vencidos: new Map([[9, 2]]),
+  sinRevisar: new Map([[9, 3]]),
 }
 
 const decorar = (cs: CanjeRow[]) => decorarCanjes(cs, CTX)
@@ -137,7 +138,7 @@ describe('fechaDeLista — una sola fecha, la que se ve', () => {
 
 // ── Los chips ────────────────────────────────────────────────────────────────────
 
-describe('filtrarCanjes — los siete chips filtran lo mismo que antes', () => {
+describe('filtrarCanjes — los ocho chips filtran lo suyo', () => {
   const lista = decorar([
     canje({ id: 1, estado: 'propuesta' }),
     canje({ id: 2, estado: 'enviada' }),
@@ -160,6 +161,12 @@ describe('filtrarCanjes — los siete chips filtran lo mismo que antes', () => {
     expect(ids('transito')).toEqual([4])
     expect(ids('vencidos')).toEqual([9])
     expect(ids('cerrados')).toEqual([6])
+  })
+
+  it('«contenido sin revisar» es lo que nos espera a NOSOTROS, no lo que le reclamamos a ella', () => {
+    // El 9 es el mismo canje que tiene vencidos: las dos cosas conviven —le debemos mirar lo que
+    // mandó y ella nos debe lo que falta— y por eso son dos chips y no uno.
+    expect(ids('sin-revisar')).toEqual([9])
   })
 
   it('"todos" no filtra nada, ni siquiera los cancelados', () => {

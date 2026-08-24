@@ -6,6 +6,8 @@
 //                                                             → sus datos + lo que eligió, junto.
 //   POST { recurso:'canje', token, accion:'contenido', url, tipo }
 //                                                             → registra UN archivo ya subido al Blob.
+//   POST { recurso:'canje', token, accion:'contenido-borrar', evidencia_id }
+//                                                             → saca uno que subió mal (borra el Blob).
 //
 // CÓMO SE PROTEGE (no hay sesión: la llave es el token)
 //   - El token son 64 hex aleatorios, único por canje, con vencimiento, y `cancelar` lo revoca.
@@ -38,7 +40,8 @@
 //   - **Escribe en su propia columna del renglón**: los items que carga ella van con
 //     `origen:'persona'`, y los del equipo no se tocan nunca desde acá. Siguen siendo dos
 //     escritores sin coordinarse, igual que arriba.
-import { seVaDelTope } from '../lib/canjes/reglas.core.js';
+import { borrarBlob } from './_blob.js';
+import { buzonAbierto, seVaDelTope } from '../lib/canjes/reglas.core.js';
 import {
   buscarPorToken, carpetaDeCanje, clienteMaestro, contarEvidencias, esTokenDeCanje,
   esUrlDeContenido, topeDeEvidencias,
@@ -154,7 +157,7 @@ function unArchivo(e) {
  * @returns {{ numero: string, marca: string, pide: 'talles'|'modelo_celular', despachado: boolean,
  *   confirmadoAt: string|null, envio: Record<string, any>|null,
  *   datos: Record<string, any>, contenido: Record<string, any>[], puedeSubir: boolean,
- *   carpetaContenido: string,
+ *   carpetaContenido: string, buzonAbierto: boolean,
  *   vitrina: Record<string, any>|null, elegidos: Record<string, any>[] }}
  */
 export function paraLaPersona(canje, persona, cfg, vitrina, items, contenido) {
@@ -198,6 +201,11 @@ export function paraLaPersona(canje, persona, cfg, vitrina, items, contenido) {
     // que no lo calcule él. El servidor lo vuelve a exigir al firmar (`permisoDeLaCreadora`) y al
     // registrar la URL (`esUrlDeContenido`): mandarlo no afloja ninguna de las dos.
     carpetaContenido: carpetaDeCanje(canje.id),
+    // Desde cuándo tiene buzón. **No es lo mismo que `despachado`**: con envío se abre cuando el
+    // pedido llegó, y con retiro en el local desde que aceptó (no hay tránsito que esperar, y a
+    // esta altura ya sabe que lo pasa a buscar). La regla vive en `reglas.core.js` porque también
+    // decide si el servidor acepta el archivo.
+    buzonAbierto: buzonAbierto(canje),
     // ⚠️ Es una pista para la pantalla, no el control: el que decide es el servidor, dos veces
     // (antes de firmar el permiso y antes de registrar la URL). Acá se cuentan sólo los suyos
     // porque es lo único que se trajo; el tope de verdad cuenta la tabla entera y puede cortar
@@ -515,6 +523,48 @@ export default async function handler(req, res) {
       if (eEv) throw new Error(eEv.message);
 
       return res.status(200).json({ ok: true, archivo: unArchivo(fila) });
+    }
+
+    /**
+     * Sacar un archivo que subió mal. **Es el único verbo del portal que destruye.**
+     *
+     * 🔴 **Primero el Blob y después la fila**, al revés que `evidencia-archivada`, y por el motivo
+     * opuesto: allá lo caro es perder el material (la fila es lo único que dice dónde quedó), y acá
+     * lo caro es que el archivo se quede arriba, huérfano y pago, sin ninguna fila que lo nombre —
+     * que es exactamente lo que le pasó a la galería de Ingresos durante meses. Si el borrado de la
+     * fila falla, el archivo ya no está y volver a intentar es inofensivo: borrar del Blob algo que
+     * no está **no es un error**.
+     *
+     * ⛔ **La URL sale de la fila, nunca del body**: si viniera de afuera, esto sería un borrado del
+     * Blob a pedido con sólo tener un token de canje.
+     *
+     * 🔑 **Sólo lo suyo y sólo mientras nadie lo tocó** (decisión de Bruno, 24-ago-2026). Una vez
+     * que el equipo la verificó, la ató a un entregable o la mandó a Drive, ese archivo dejó de ser
+     * un borrador suyo: es la prueba de algo que ya se dio por cumplido, y que se caiga sola
+     * cerraría un canje sobre una evidencia que no existe.
+     */
+    if (accion === 'contenido-borrar') {
+      const eid = parseInt((req.body || {}).evidencia_id, 10);
+      if (!eid) return res.status(400).json({ error: 'falta evidencia_id' });
+
+      const { data: ev, error: eLeer } = await supabase.from('canje_evidencias')
+        .select('id, archivo_url, subido_por, verificada, rechazada_motivo, entregable_id, drive_url')
+        .eq('id', eid).eq('canje_id', canje.id).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      // El 404 es el mismo para "no existe" y para "es de otro canje": desde afuera no se puede
+      // averiguar nada con un id ajeno.
+      if (!ev || ev.subido_por !== 'persona') return res.status(404).json({ error: 'Ese archivo no está.' });
+      if (ev.drive_url || ev.verificada || ev.rechazada_motivo || ev.entregable_id != null) {
+        return res.status(409).json({ error: 'Ese archivo ya lo tomamos nosotros. Si algo está mal, escribinos.' });
+      }
+
+      if (ev.archivo_url) {
+        const r = await borrarBlob(ev.archivo_url, ['canjes']);
+        if (!r.ok) return res.status(500).json({ error: 'No se pudo borrar el archivo. Probá de nuevo.' });
+      }
+      const { error: eDel } = await supabase.from('canje_evidencias').delete().eq('id', eid).eq('canje_id', canje.id);
+      if (eDel) throw new Error(eDel.message);
+      return res.status(200).json({ ok: true });
     }
 
     if (accion !== 'guardar') return res.status(400).json({ error: 'acción desconocida' });

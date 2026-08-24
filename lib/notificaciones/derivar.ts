@@ -217,6 +217,50 @@ export function avisosDeCanjeVencido(
   ]
 }
 
+/**
+ * Material que ella ya subió por su link y **nadie miró todavía**.
+ *
+ * 🔴 Es el aviso que faltaba y el que más se paga: los otros seis son cosas que esperan que alguien
+ * decida, y éste es trabajo **ya hecho** —por ella, del otro lado— que se queda quieto. El canje se
+ * hunde en el tramo `contenido`, que es el de "esperando que publique", así que el que mira la lista
+ * ve exactamente lo mismo cuando ella no mandó nada y cuando mandó seis videos.
+ *
+ * **Agrupado en un solo aviso**, como los vencidos: cuatro creadoras que subieron no son cuatro
+ * recordatorios, es una tarde de trabajo. Y el `id` **no lleva la cantidad** por lo mismo que allá:
+ * si la llevara, verificar un archivo cambiaría el id y el aviso volvería a contarse como nuevo.
+ *
+ * El `ts` es el del archivo **más viejo**: lo que ordena no es que llegó algo, es hace cuánto que
+ * está esperando.
+ */
+export function avisosDeContenidoSinRevisar(
+  sinRevisar: { canjeId: number; store: CanjeStore; persona: string; cuantas: number; desde: number }[],
+  perfil: Perfil | null,
+  marcaActiva: Marca,
+): Aviso[] {
+  const visibles = sinRevisar.filter((v) => puedeVer(perfil, marcaDelCanje(v.store), 'canjes'))
+  if (!visibles.length) return []
+
+  const personas = new Set(visibles.map((v) => v.persona))
+  const total = visibles.reduce((a, v) => a + v.cuantas, 0)
+  const masViejo = Math.min(...visibles.map((v) => v.desde).filter(Boolean))
+
+  return [
+    {
+      id: 'canje-contenido',
+      tipo: 'canje-contenido' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: total === 1 ? '1 archivo sin revisar' : `${total} archivos sin revisar`,
+      detalle: personas.size === 1
+        ? `${[...personas][0]} subió contenido y todavía no lo miramos`
+        : `${personas.size} creadoras subieron contenido y todavía no lo miramos`,
+      ruta: '/canjes',
+      ts: Number.isFinite(masViejo) ? masViejo : 0,
+      tono: 'brand' as const,
+    },
+  ]
+}
+
 /** Orden de lectura: lo más nuevo arriba. */
 export function ordenarAvisos(avisos: Aviso[]): Aviso[] {
   return avisos.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))

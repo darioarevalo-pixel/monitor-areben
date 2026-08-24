@@ -153,6 +153,18 @@ export function mensajePropuesta(
 // ── El link del portal ──────────────────────────────────────────────────────────
 
 /**
+ * Dónde nos deja el contenido. **Nombra el link sin repetirlo**: en el despacho no hace falta
+ * pegarlo de nuevo —es el mismo que ya recibió para cargar sus datos— y armarlo pediría el token,
+ * que en esa pantalla no está a mano. El botón de subir le aparece ahí adentro apenas el buzón se
+ * abre: con envío, cuando el pedido llega; con retiro en el local, desde que aceptó.
+ *
+ * 🔑 Antes acá se le pedía una carpeta de Drive, y eso se trababa por permisos de Google: terminaba
+ * mandando todo por WhatsApp, comprimido.
+ */
+const CONTENIDO_POR_EL_LINK =
+  'Las fotos y los videos nos los podés dejar en el mismo link que te pasamos, directo desde el celular.'
+
+/**
  * El link para que cargue sus datos. **Hay dos versiones y la diferencia importa:** no es lo mismo
  * la primera vez que la quinta.
  *
@@ -167,6 +179,13 @@ export function mensajePropuesta(
  * de ser un trámite ("cargá tus datos") y pasó a ser lo divertido ("elegí lo que te guste"). Un
  * mensaje que arranca por la dirección hace que el link parezca un formulario, que es exactamente
  * lo que hay que evitar para que lo abra.
+ *
+ * 🔴 **Con retiro en el local hay que decir dos cosas distintas**, y las dos se pagaban caras: que
+ * **no le pedimos dirección** (el mensaje de siempre le prometía un envío que no va a existir) y
+ * **dónde nos deja el contenido**. Esto último no es un mimo: al que se le manda por correo se lo
+ * nombra el mensaje del despacho, y ese mensaje **no existe para el retiro** —el bloque de envío ni
+ * siquiera se dibuja—, así que este link era el único momento del canje entero en que se le podía
+ * decir, y no lo decía.
  */
 export function mensajeLinkDatos(
   persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
@@ -175,6 +194,8 @@ export function mensajeLinkDatos(
   esPrimeraVez: boolean,
   /** `true` si el canje tiene una vitrina colgada: además de los datos, elige los productos. */
   conVitrina = false,
+  /** `true` si lo pasa a buscar por el local: no hay dirección que pedirle y el buzón ya está abierto. */
+  retiroLocal = false,
 ): string {
   const vos = comoLaLlamamos(persona)
   const queDato = queDatoPide(store) === 'talles' ? 'tus talles' : 'el modelo de tu celular'
@@ -183,10 +204,25 @@ export function mensajeLinkDatos(
     return [
       `¡Hola ${vos}! Te escribimos de ${STORE_LABEL[store]}.`,
       '',
-      'Te dejo el link para que elijas lo que más te guste y nos dejes la dirección para mandártelo:',
+      retiroLocal
+        ? 'Te dejo el link para que elijas lo que más te guste y lo dejes listo para cuando pases por el local:'
+        : 'Te dejo el link para que elijas lo que más te guste y nos dejes la dirección para mandártelo:',
       link,
       '',
-      `Ah: cuando entres nos vas a tener que decir ${queDato}, así te mandamos lo que te queda bien.`,
+      `Ah: cuando entres nos vas a tener que decir ${queDato}, así te damos lo que te queda bien.`,
+      ...(retiroLocal ? ['', CONTENIDO_POR_EL_LINK] : []),
+    ].join('\n')
+  }
+
+  if (retiroLocal) {
+    return [
+      `¡Hola ${vos}! Te escribimos de ${STORE_LABEL[store]}.`,
+      '',
+      `Como lo pasás a buscar por el local, no necesitamos dirección: sólo cómo contactarte y ${queDato}.`,
+      'Te dejo el link, son dos minutos:',
+      link,
+      '',
+      CONTENIDO_POR_EL_LINK,
     ].join('\n')
   }
 
@@ -252,18 +288,6 @@ export function mensajeAcuerdo(
  * "Ya salió". Lleva el seguimiento sólo si la vía lo tiene: mandarle un código a alguien que va a
  * retirar en mano es ruido, y mandarle un link que no funciona es peor.
  */
-/**
- * Dónde nos deja el contenido. **Nombra el link sin repetirlo**: en el despacho no hace falta
- * pegarlo de nuevo —es el mismo que ya recibió para cargar sus datos— y armarlo pediría el token,
- * que en esta pantalla no está a mano. El botón de subir le aparece ahí adentro apenas el pedido
- * figura entregado.
- *
- * 🔑 Antes acá se le pedía una carpeta de Drive, y eso se trababa por permisos de Google: terminaba
- * mandando todo por WhatsApp, comprimido.
- */
-const CONTENIDO_POR_EL_LINK =
-  'Las fotos y los videos nos los podés dejar en el mismo link que te pasamos, directo desde el celular.'
-
 export function mensajeDespacho(
   persona: Pick<CanjePersona, 'nombre' | 'apellido' | 'instagram' | 'instagram_raw'>,
   c: Pick<CanjeRow, 'store' | 'envio_via' | 'envio_seguimiento'>,

@@ -78,7 +78,7 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { leerCostos } from './_costos.js';
 // Borrar del Blob lo que ya está archivado en Drive. El token del store vive en el servidor: el
 // browser sube a Drive pero **no puede borrar del buzón**, y por eso el archivado vuelve por acá.
-import { borrarBlob } from './_blob.js';
+import { borrarBlob, pathnameDeBlob } from './_blob.js';
 // Los permisos se IMPORTAN, no se copian: es la única implementación, la misma que usa la app.
 // Ver el docblock de `lib/permisos.core.js` para por qué está en JS plano.
 import { esAdmin, puedeAtenderRetiroLocal, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
@@ -727,6 +727,9 @@ export default async function handler(req, res) {
         // necesita, y sin esto habría que pedir los entregables de cada canje en cada refresco de
         // los avisos — una consulta por canje, cada tres minutos, para pintar un número.
         vencidos: await resumenDeVencidos(propios.data || []),
+        // Lo mismo, del otro lado del mostrador: lo que ella ya mandó y nadie miró. Viaja acá por el
+        // mismo motivo que los vencidos —lo pide el aviso del sidebar— y no cuesta un fetch nuevo.
+        sinRevisar: await resumenDeContenidoSinRevisar(propios.data || []),
         config,
         configs: (configs || []).filter((c) => visibles.includes(c.store)),
         vitrinas: vitrinas || [],
@@ -2030,9 +2033,35 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    /**
+     * Sacar una evidencia. **Desde el 24-ago-2026 también borra el archivo del Blob**, y ese es el
+     * punto: antes sacaba la fila y dejaba los bytes arriba, huérfanos y pagos —la enfermedad de la
+     * galería de Ingresos—, y por eso el bloque del contenido de ella no ofrecía borrar.
+     *
+     * 🔴 **Primero el Blob y después la fila**, al revés que `evidencia-archivada` y por el motivo
+     * opuesto: allá lo caro es perder el material y acá lo caro es dejarlo arriba sin nadie que lo
+     * nombre. Si la fila no se llega a borrar, el archivo ya no está y reintentar es inofensivo.
+     *
+     * ⛔ La URL sale de la fila, nunca del body. Y si el archivo **ya está en Drive** no se toca el
+     * Blob: ahí no hay nada que borrar (archivar ya lo borró) y lo que se saca es sólo el registro.
+     */
     if (action === 'evidencia-borrar') {
       const eid = parseInt(b.evidencia_id, 10);
       if (!eid) return res.status(400).json({ error: 'falta evidencia_id' });
+
+      const { data: ev, error: eLeer } = await supabase.from('canje_evidencias')
+        .select('id, archivo_url, drive_url').eq('id', eid).eq('canje_id', canjeId).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      if (!ev) return res.status(404).json({ error: 'esa evidencia no es de este canje' });
+
+      // Sólo lo que vive en NUESTRA carpeta del Blob. Una evidencia puede ser el link a un posteo,
+      // y ahí no hay nada que borrar: `pathnameDeBlob` es lo que separa los dos casos sin adivinar.
+      const camino = ev.archivo_url ? pathnameDeBlob(ev.archivo_url) : null;
+      if (camino && !ev.drive_url && camino.split('/')[0] === 'canjes') {
+        const r = await borrarBlob(ev.archivo_url, ['canjes']);
+        if (!r.ok) return res.status(500).json({ error: 'No se pudo borrar el archivo del buzón. No se sacó nada.' });
+      }
+
       const { error } = await supabase.from('canje_evidencias').delete().eq('id', eid).eq('canje_id', canjeId);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
@@ -2213,6 +2242,47 @@ export default async function handler(req, res) {
       prev.cuantas += comprometidas - cumplidas;
       // La fecha del vencimiento más viejo: es la que ordena el aviso.
       const ts = Date.parse(e.vence_el) || 0;
+      prev.desde = prev.desde == null ? ts : Math.min(prev.desde, ts);
+      porCanje.set(e.canje_id, prev);
+    }
+    const porId = new Map(canjes.map((c) => [c.id, c]));
+    return [...porCanje.entries()].map(([canjeId, v]) => ({
+      canjeId,
+      store: porId.get(canjeId)?.store || null,
+      persona_id: porId.get(canjeId)?.persona_id || null,
+      cuantas: v.cuantas,
+      desde: v.desde || 0,
+    }));
+  }
+
+  /**
+   * Un renglón por canje con material que ella subió y **nadie miró todavía**.
+   *
+   * 🔴 **Sin esto, que suba seis videos no movía un solo píxel en el monitor.** El canje se queda en
+   * el tramo `contenido` —el del fondo, el de "esperando que publique"— y ahí no se distingue el que
+   * está esperando a que ella haga algo del que está esperando a que lo hagamos nosotros. El
+   * material llegaba y se enteraba el que abriera esa ficha.
+   *
+   * 🔑 **Una sola consulta para todo el conjunto**, como `resumenDeVencidos` y por el mismo motivo:
+   * esto lo pide el poll de los avisos cada tres minutos, y una consulta por canje serían decenas de
+   * idas a la base cada vez para pintar un número.
+   *
+   * Sin revisar = subida por ella, sin verificar, sin rechazo escrito y **todavía en el buzón**: lo
+   * que ya se archivó en Drive es material que alguien tocó, aunque no lo haya verificado.
+   */
+  async function resumenDeContenidoSinRevisar(canjes) {
+    const abiertos = canjes.filter((c) => !TERMINALES.includes(c.estado)).map((c) => c.id);
+    if (!abiertos.length) return [];
+    const { data } = await supabase.from('canje_evidencias')
+      .select('canje_id, created_at, subido_por, verificada, rechazada_motivo, drive_url, archivo_url')
+      .in('canje_id', abiertos).eq('subido_por', 'persona');
+    const porCanje = new Map();
+    for (const e of data || []) {
+      if (!e.archivo_url || e.verificada || e.rechazada_motivo || e.drive_url) continue;
+      const prev = porCanje.get(e.canje_id) || { cuantas: 0, desde: null };
+      prev.cuantas += 1;
+      // La más vieja: es hace cuánto que el material está esperando que alguien lo mire.
+      const ts = Date.parse(e.created_at) || 0;
       prev.desde = prev.desde == null ? ts : Math.min(prev.desde, ts);
       porCanje.set(e.canje_id, prev);
     }
