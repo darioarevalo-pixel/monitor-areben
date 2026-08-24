@@ -124,6 +124,14 @@ export type Solicitud = {
   verif?: Record<string, number>
   /** Conteo de devolución por vid (fase devolución). */
   devuelto?: Record<string, number>
+  /**
+   * Qué se fotografió, por vid. **La ausencia de una clave significa «sin contestar»**, que es una
+   * respuesta de primera y no un cero: ver `lib/sesionfotos/fotografiado.ts`.
+   *
+   * ⛔ No confundir con `faltantes()`, que es lo que salió y no volvió: una prenda puede volver sin
+   * fotografiarse y fotografiarse sin volver.
+   */
+  fotos?: Record<string, RegistroFoto>
   eliminados?: ItemEliminado[]
   /** Historial de cambios (edición): agregar/quitar/cambiar cantidad/editar, con hora y motivo. */
   cambios?: Cambio[]
@@ -145,6 +153,9 @@ export type Solicitud = {
   aprobadoFecha?: string
   rechazadoMotivo?: string
 }
+
+/** Lo que se anota por variante al contestar si se fotografió. */
+export type RegistroFoto = { ok: boolean; motivo?: string; por?: string; ts?: number }
 
 /** Fase de verificación por escaneo. */
 export type Fase = 'retiro' | 'devolucion'

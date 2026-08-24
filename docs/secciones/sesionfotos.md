@@ -195,6 +195,47 @@ una producción) · `faltante` (un producto ya a la venta no tiene foto).
 - ⚠️ **La dueña de cada disparador (Cande / Sofi) NO está en el código, a propósito**: la gente
   cambia y eso se carga como molde en la Agenda, igual que los pasos del ingreso.
 
+## Qué se fotografió: el resultado, que no se registraba (24-ago-2026)
+
+🔴 **El módulo entero seguía la LOGÍSTICA y no sabía nada del RESULTADO.** Sabía qué se pidió
+(`items`), qué se preparó (`verif`), qué salió (`salioEfectivo`) y qué volvió (`devuelto`) — y con
+eso una solicitud podía llegar a **`cerrada`**, el estado que se lee como «terminó bien», **sin una
+sola foto sacada** y sin que quedara registro. Cerrar significaba «volvió la mercadería».
+
+Ahora hay un mapa `fotos` por vid (`lib/sesionfotos/fotografiado.ts`). Sin migración: la solicitud
+entera vive en el jsonb/KV.
+
+- 🔑 **TRES respuestas, no dos: sí · no · SIN CONTESTAR.** No es un lujo, es forzado. Con un mapa de
+  «fotografiados», las 30 solicitudes viejas dirían que **no fotografiaron nada**; con uno de «no
+  fotografiados», dirían que **fotografiaron todo**. Las dos formas hacen que la ausencia de dato
+  afirme algo que nadie escribió. La tercera respuesta es lo único que deja que la pantalla diga
+  «esto todavía no lo contestó nadie» — mismo criterio que el `no_se` del «¿rindió?» de un canje, y
+  la razón por la que `resumenFotos` **no suma `sinContestar` a `no`**.
+- ⛔ **No confundir con `faltantes()`**, que es lo que salió y NO VOLVIÓ. Son dos ejes y se cruzan de
+  las cuatro maneras: se puede fotografiar algo que no volvió, y devolver algo que no se fotografió.
+  Hay un bloque de tests que fija justamente eso.
+- 🔴 **Sólo se pregunta por lo que SALIÓ** (`fotografiables` filtra por `salioEfectivo > 0`): pedir
+  que se conteste por lo que nunca salió del depósito ensuciaría el «sin contestar» con renglones
+  que nadie puede contestar. Es el mismo criterio con que `esperadoEn` calcula la devolución.
+- 🔑 **Contestar por error no es irreversible**: volver a apretar la respuesta elegida la devuelve a
+  «sin contestar» (`conRespuestaFoto(..., null)`). Si marcar fuera definitivo, la única salida sería
+  mentir en el otro sentido.
+- ⛔ **El atajo «el resto sí» NO pisa lo ya contestado.** Sólo toca lo que está sin contestar: si
+  borrara un «este no se pudo», el atajo estaría destruyendo el dato más caro de la pantalla.
+- 🔑 **El motivo del «no» es texto libre con sugerencias de placeholder** (`MOTIVOS_SIN_FOTO`), no un
+  catálogo cerrado: nadie caminó todavía una sesión anotando por qué no se pudo, y fijar la lista
+  ahora sería inventar el vocabulario del trabajo antes de escucharlo.
+- 🔑 **Lo no fotografiado vuelve a la cola SOLO**, y por eso este mapa no es una lista de tareas: la
+  cola de fotos sale del estado de Tienda Nube (el color sigue sin foto), no de un pendiente que
+  haya que crear. Lo que este mapa agrega es lo que la cola **no** puede saber: que ya se intentó,
+  y por qué falló.
+- ⚠️ **La fila del historial ahora dice el resultado** («3 de 8 fotografiadas · 2 sin contestar»).
+  Sin eso, una sesión cerrada sin una sola foto se ve igual que una que salió perfecta: las dos
+  dicen «cerrada». Se calcula en el componente y **no** en `filaHistorial` porque `resumenFotos`
+  importa de `core` y sería un ciclo.
+- ▶️ **Nadie lo contestó todavía en una sesión real**: las 30 solicitudes existentes arrancan las 30
+  en «sin contestar», que es exactamente lo que la pantalla debe decir.
+
 ## Lo que se midió, y lo que nunca se ejerció (16-ago-2026)
 
 Contra las dos bases, no contra la memoria: **BDI 10 solicitudes** (todas de fotos, 1-jul → 28-jul,
@@ -220,6 +261,7 @@ Sobre esas 30 filas:
 ```bash
 npx vitest run tests/sesionfotos-core.test.ts --reporter=dot   # y draft / escaneo / ventas
 npx vitest run tests/solicitudes-disparador.test.ts --reporter=dot   # el tercer eje: de dónde viene
+npx vitest run tests/sesionfotos-fotografiado.test.ts --reporter=dot # el resultado: qué se fotografió
 ```
 
 - 🔴 **Verde no dice nada sobre la venta.** Los tests de `ventas.ts` verifican que el **payload** sea

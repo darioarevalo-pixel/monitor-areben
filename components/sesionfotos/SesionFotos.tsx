@@ -77,6 +77,15 @@ import {
 } from '@/lib/sesionfotos/core'
 import { MOTIVOS_CAMBIO } from '@/lib/sesionfotos/tipos'
 import { DISPARADOR_AYUDA, DISPARADOR_LABEL, DISPARADORES, type Disparador, esDisparador } from '@/lib/solicitudes/disparador'
+import {
+  conRespuestaFoto,
+  contestarElResto,
+  fotografiables,
+  hayQuePreguntar,
+  MOTIVOS_SIN_FOTO,
+  respuestaFoto,
+  resumenFotos,
+} from '@/lib/sesionfotos/fotografiado'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
@@ -577,6 +586,10 @@ function Historial({
                       sesión de ingreso se le sumaron faltantes. */}
                   {esFotosHist ? ` · ${f.disparadores.length ? f.disparadores.map((d) => DISPARADOR_LABEL[d]).join(' + ') : 'sin origen'}` : ''}
                 </div>
+                {/* El resultado, en la fila. Sin esto, una sesión cerrada sin una sola foto se ve
+                    igual que una que salió perfecta: las dos dicen «cerrada». Se calcula acá y no
+                    en `filaHistorial` porque `resumenFotos` importa de `core` y sería un ciclo. */}
+                {esFotosHist ? <ResultadoFotos s={s} /> : null}
               </div>
               <Button size="sm" variant="outline" onClick={() => onVer(s.id)}>
                 Ver
@@ -698,6 +711,10 @@ function Detalle({
   // De dónde viene (ingreso · campaña · faltante): solo el cajón de fotos lo lleva, y se
   // muestra aunque falte. `esDisparador` filtra lo que venga raro del KV.
   const esFotosDet = preset.kind === PRESET_FOTOS.kind
+  // El resultado de la sesión: qué se fotografió de todo lo que salió. Sólo tiene sentido en el
+  // cajón de fotos, y sólo una vez que salió algo (antes no hay nada que contestar).
+  const preguntarFotos = esFotosDet && hayQuePreguntar(s)
+  const resFotos = resumenFotos(s)
   const dispDet = esDisparador(s.disparador) ? s.disparador : null
   const pendienteDeAprobar = necesitaAprobacion(s) && s.estado === 'pendiente'
   const esAprobador = admin || puedeSub(perfilDetalle, marcaDetalle, preset.seccionKey, 'aprobar')
@@ -1103,6 +1120,83 @@ function Detalle({
             ))}
           </div>
           {editable ? <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>Asigná bolsas con el campo de bolsa de cada ítem (próxima libre: {proxBolsa}).</div> : null}
+        </div>
+      ) : null}
+
+      {/* ¿Qué se fotografió? El RESULTADO de la sesión, que hasta el 24-ago-2026 no se registraba en
+          ningún lado: una solicitud podía llegar a `cerrada` sin una sola foto sacada.
+          🔴 Se muestra el «sin contestar» en vez de asumirlo: no saber si se fotografió no es lo
+          mismo que saber que no. */}
+      {preguntarFotos ? (
+        <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '10px 12px', margin: '10px 0', background: color.bg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            <div style={{ fontWeight: 700 }}>
+              ¿Qué se fotografió?{' '}
+              <span style={{ fontWeight: 400, fontSize: 13, color: color.mut2 }}>
+                {resFotos.si} sí · {resFotos.no} no ·{' '}
+                <b style={{ color: resFotos.sinContestar ? color.warningInk : color.mut2 }}>{resFotos.sinContestar} sin contestar</b>
+                {' '}de {resFotos.total}
+              </span>
+            </div>
+            {editable && resFotos.sinContestar > 0 ? (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Button size="sm" variant="outline" onClick={() => setWork((w) => contestarElResto(w, true, { por: usuario, ts: Date.now() }))}>
+                  El resto sí ({resFotos.sinContestar})
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <div style={{ fontSize: 12, color: color.mut2, marginBottom: 8 }}>
+            Lo que no se fotografió sigue sin foto en la tienda, así que va a volver a aparecer en la cola.
+            Marcarlo acá deja el registro de que ya se intentó, y por qué.
+          </div>
+          {fotografiables(s).map((i) => {
+            const r = respuestaFoto(s, i.vid)
+            const motivo = (s.fotos || {})[i.vid]?.motivo
+            return (
+              <div key={i.vid} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, padding: '3px 0', borderTop: `1px solid ${color.bg2}` }}>
+                <span style={{ flex: 1, minWidth: 150 }}>
+                  {i.nombre} · {i.variante}
+                  {i.sku ? <span style={{ color: color.mut2 }}> · {i.sku}</span> : null}
+                  {r === 'no' && motivo ? <span style={{ color: color.mut2 }}> — «{motivo}»</span> : null}
+                </span>
+                {editable ? (
+                  <span style={{ display: 'inline-flex', gap: 4 }}>
+                    {/* Volver a apretar lo ya elegido lo devuelve a «sin contestar»: contestar por
+                        error no puede ser irreversible. */}
+                    <BotonMini
+                      label="Sí"
+                      acento={r === 'si'}
+                      onClick={() => setWork((w) => conRespuestaFoto(w, i.vid, r === 'si' ? null : true, { por: usuario, ts: Date.now() }))}
+                    />
+                    <BotonMini
+                      label="No"
+                      acento={r === 'no'}
+                      onClick={() => {
+                        if (r === 'no') {
+                          setWork((w) => conRespuestaFoto(w, i.vid, null, { por: usuario, ts: Date.now() }))
+                          return
+                        }
+                        void (async () => {
+                          const m = await pedirTexto(`¿Por qué no se pudo fotografiar "${i.nombre} · ${i.variante}"?`, '', {
+                            titulo: 'No se fotografió',
+                            placeholder: MOTIVOS_SIN_FOTO.join(' · '),
+                            ok: 'Marcar',
+                          })
+                          if (m === null) return // cancelar no debe marcarlo
+                          setWork((w) => conRespuestaFoto(w, i.vid, false, { por: usuario, motivo: m.trim(), ts: Date.now() }))
+                        })()
+                      }}
+                    />
+                  </span>
+                ) : (
+                  <span style={{ color: r === 'si' ? color.successInk : r === 'no' ? color.dangerInk : color.mut2, fontWeight: 600 }}>
+                    {r === 'si' ? '✓ sí' : r === 'no' ? '✗ no' : 'sin contestar'}
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
       ) : null}
 
@@ -1839,6 +1933,22 @@ function ScanInput({ disabled, placeholder, onScan }: { disabled: boolean; place
         background: disabled ? color.bg : '#fff',
       }}
     />
+  )
+}
+
+/**
+ * El resultado de una sesión, en una línea. El «sin contestar» se dice con el mismo peso que los
+ * otros dos: es lo que distingue «no se fotografió» de «nadie lo anotó».
+ */
+function ResultadoFotos({ s }: { s: Solicitud }) {
+  if (!hayQuePreguntar(s)) return null
+  const r = resumenFotos(s)
+  return (
+    <div style={{ fontSize: 12, color: color.mut2 }}>
+      📷 {r.si} de {r.total} fotografiadas
+      {r.no ? <span style={{ color: color.dangerInk }}> · {r.no} no</span> : null}
+      {r.sinContestar ? <span style={{ color: color.warningInk }}> · {r.sinContestar} sin contestar</span> : null}
+    </div>
   )
 }
 
