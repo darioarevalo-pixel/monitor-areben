@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
+import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 
 // Cargar .env manualmente (sin dependencia de dotenv)
 function loadEnv() {
@@ -54,8 +55,15 @@ async function syncProductos() {
     updated_at:       p.updated_at || null,
   }));
   console.log(`[productos] ${productos.length} registros. Guardando en Supabase...`);
+  // 🔴 Ver `scripts/lib/costos-espejo.mjs`: que NINGÚN producto traiga `unit_cost` no es un dato,
+  // es un token sin `costs:read`, y escribirlo como NULL borra el costo del espejo en silencio.
+  const costos = revisarCostos(rows);
+  if (costos.problema) console.error(`[productos] ⚠️  ${costos.problema}`);
+  else console.log(`[productos] costo legible en ${costos.conCosto}/${costos.total}.`);
+  const paraGuardar = sinCostoSiNoSeVe(productos, costos.legible);
+
   if (!productos.length) return 0;
-  const { error } = await supabase.from('productos').upsert(productos, { onConflict: 'id' });
+  const { error } = await supabase.from('productos').upsert(paraGuardar, { onConflict: 'id' });
   if (error) throw new Error(`Error guardando productos: ${error.message}`);
   console.log(`[productos] OK`);
   return productos.length;

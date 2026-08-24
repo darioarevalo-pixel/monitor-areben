@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
+import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 
 function loadEnv() {
   try {
@@ -57,6 +58,13 @@ async function main() {
   }));
 
   console.log(`[productos] ${productos.length} registros. Guardando en Supabase...`);
+  // 🔴 Ver `scripts/lib/costos-espejo.mjs`: que NINGÚN producto traiga `unit_cost` no es un dato,
+  // es un token sin `costs:read`, y escribirlo como NULL borra el costo del espejo en silencio.
+  const costos = revisarCostos(rows);
+  if (costos.problema) console.error(`[productos] ⚠️  ${costos.problema}`);
+  else console.log(`[productos] costo legible en ${costos.conCosto}/${costos.total}.`);
+  const paraGuardar = sinCostoSiNoSeVe(productos, costos.legible);
+
 
   if (!productos.length) {
     console.log('Nada que guardar.');
@@ -65,7 +73,7 @@ async function main() {
 
   const BATCH = 500;
   for (let i = 0; i < productos.length; i += BATCH) {
-    const lote = productos.slice(i, i + BATCH);
+    const lote = paraGuardar.slice(i, i + BATCH);
     process.stdout.write(`  upsert ${i + lote.length}/${productos.length}...\r`);
     const { error } = await supabase.from('productos').upsert(lote, { onConflict: 'id' });
     if (error) throw new Error(`Error guardando lote (offset ${i}): ${error.message}`);

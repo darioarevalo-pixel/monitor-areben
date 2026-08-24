@@ -6,6 +6,7 @@ import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './l
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
+import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 
 /**
  * Lo que salió mal SIN frenar el sync (una purga, el refresco de vistas, el
@@ -106,8 +107,21 @@ async function cargarProductos() {
     };
   });
   console.log(`[productos] ${productos.length} descargados (${inactiveIds.size} inactivos).`);
+
+  // 🔴 El costo, antes de guardarlo. «No lo mandó NINGUNO» no es «estos productos no tienen costo»:
+  // es un token sin `costs:read`, y `p.unit_cost ?? null` convertía una cosa en la otra sin un solo
+  // error — 450 productos de BDI en NULL durante meses, con el job en VERDE. El detalle y el porqué
+  // del criterio están en `scripts/lib/costos-espejo.mjs`.
+  const costos = revisarCostos(rows);
+  if (costos.problema) {
+    console.error(`[productos] ⚠️  ${costos.problema}`);
+    problemas.push(costos.problema);
+  } else {
+    console.log(`[productos] costo legible en ${costos.conCosto}/${costos.total}.`);
+  }
+
   await desactivarBorrados(gnIds);
-  return { inactiveIds, varBarcode, prodSku, productos };
+  return { inactiveIds, varBarcode, prodSku, productos: sinCostoSiNoSeVe(productos, costos.legible) };
 }
 
 async function guardarProductos(productos) {

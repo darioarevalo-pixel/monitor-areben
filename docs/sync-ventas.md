@@ -43,6 +43,21 @@ bueno**. ⚠️ `sync-clientes.js` necesita `GN_TOKEN_CLIENTES` — la clave 113
 `clients:read`; `GN_TOKEN` da 403 "Invalid ability provided". Y `GET /clientes` **ignora en
 silencio** `?id=` y `?search=`: hay que paginar el padrón entero.
 
+🔴 **`p.unit_cost ?? null` convertía «el token no puede verlo» en «el producto no tiene costo».**
+Sin un error, sin un log: el sync corría, terminaba en verde y el upsert pisaba el espejo con NULL.
+Sobrevivió meses — medido el 24-ago-2026, **BDI tenía 450 productos y 0 con `unit_cost`**, mientras
+los tres tokens locales devuelven el costo en 50 de 50 (ejercido ese día contra GN con
+`GN_TOKEN`, `GN_TOKEN_VIEJO` y `GN_TOKEN_ZATTIA`). Lo único distinto es el token de **GitHub
+Actions**, que no tiene `costs:read` — el mismo patrón de habilidades que ya obliga a
+`GN_TOKEN_CLIENTES` para `sync-clientes.js`. Ahora los cuatro scripts pasan por
+`scripts/lib/costos-espejo.mjs`: si **NINGUNO** de los N productos trae `unit_cost`, eso no es un
+dato, **la columna se saca del upsert** (así el `ON CONFLICT` no la toca y el espejo conserva lo que
+tenía) y el problema entra a `problemas[]`. 🔑 **El criterio es «ninguno» y no un umbral**: con el
+permiso puesto GN manda el campo en todos, con 0 en los que no tienen costo cargado —en Zattia son
+769 de 2.676—, así que **el cero es un costo real** y un umbral dispararía con un catálogo legítimo.
+⛔ **Correr el sync a mano con el token bueno NO lo arregla**: escribe los costos y la corrida de las
+06:00 del día siguiente los borra. Un arreglo que dura 18 horas.
+
 🔴 **La purga va DESPUÉS del upsert.** Si una venta cambió de fecha, mirarla antes la mostraría con la
 fecha vieja y se borraría por "desaparecida".
 

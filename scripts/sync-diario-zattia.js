@@ -6,6 +6,7 @@ import { DIAS_REPASO, fechaDesdeRepaso, purgarVentas, purgarDetalles } from './l
 import { guardarVentasBatch } from './lib/ventas-espejo.mjs';
 import { refrescarVistas } from './lib/refrescar-vistas.mjs';
 import { crearClienteGN } from './lib/gn-fetch.mjs';
+import { revisarCostos, sinCostoSiNoSeVe } from './lib/costos-espejo.mjs';
 
 /** Ver el comentario gemelo en sync-diario.js: lo que falló sin frenar el sync. */
 const problemas = [];
@@ -114,8 +115,19 @@ async function cargarProductos() {
   } catch (e) {
     problemas.push(`SKU del espejo: ${e.message} (los productos nuevos pueden quedar sin sku)`);
   }
+  // 🔴 Mismo guard que el sync de BDI, y por eso la regla vive en un solo archivo: que NINGÚN
+  // producto traiga `unit_cost` no es un dato, es un token sin `costs:read`. Zattia hoy los tiene
+  // (2.676 de 2.676, 1.907 con valor > 0) — justamente por eso el día que se caigan hay que verlo.
+  const costos = revisarCostos(rows);
+  if (costos.problema) {
+    console.error(`[productos] ⚠️  ${costos.problema}`);
+    problemas.push(costos.problema);
+  } else {
+    console.log(`[productos] costo legible en ${costos.conCosto}/${costos.total}.`);
+  }
+
   await desactivarBorrados(gnIds);
-  return { inactiveIds, varBarcode, prodSku, productos };
+  return { inactiveIds, varBarcode, prodSku, productos: sinCostoSiNoSeVe(productos, costos.legible) };
 }
 
 async function guardarProductos(productos) {
