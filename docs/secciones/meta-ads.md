@@ -348,6 +348,12 @@ Meta pide **50 conversiones por semana por conjunto**. Al techo de $8.686 eso so
 **5,4 conjuntos** fuera de aprendizaje. **Hoy, con $53.703/día, aguanta 0,87 — ni uno.**
 ⇒ Es la explicación del `6 → 4 → 1` de la escalada, y de que `GIRLHOOD FRIO` haga ~21 de 50.
 
+🔴 ⛔ **Lo que NO se sigue de esto, y se venía afirmando igual: «entonces no se pueden tener muchos
+conjuntos».** Las 50 conv/semana son de la documentación de Meta y dicen cuándo un conjunto **sale
+de aprendizaje** — no dicen que agregar conjuntos encarezca al resto. Eso era una inferencia, y el
+23-ago-2026 se midió y **no da**: ver la sección de abajo. El número de arriba queda; la
+consecuencia que se le colgaba, no.
+
 ### La forma de los tests, decidida por Bruno el 22-ago
 
 > **Celdas de $10.000/día con 2 o 3 anuncios, que gane el mejor, buscando diversidad creativa.**
@@ -358,8 +364,11 @@ Dos reglas para que el test sirva:
 1. 🔴 ⛔ **No se rankea por COMPRAS**: a $10.000/día son ~1,15 compras/día ⇒ **6 en cinco días**, y
    con 6 eventos no se distingue nada. ⛔ **Y tampoco por CTR** — está medido acá que **no predice
    la compra**: el aviso de peor CTR resultó de los mejores por costo.
-   ⇒ 🔑 **Se rankea por COSTO POR CARRITO.** El embudo da 10-15 carritos por compra ⇒ **~69 carritos
-   por celda en cinco días**: es la única señal con volumen y cerca de la venta.
+   ⇒ ⛔ **«Se rankea por COSTO POR CARRITO» QUEDÓ RETIRADO el 23-ago-2026.** Era la idea correcta
+   —buscar la señal con volumen— sobre una premisa que no se había medido. Cuando se guardaron los
+   carritos y se pudo medir: **la correlación entre costo por carrito y costo por compra es −0,07**
+   (n=14 conjuntos de BDI). Cero. La tasa carrito→compra va de **0% a 9,1%** ⇒ se compran carritos
+   baratos que no valen lo mismo. Ver la sección del 23-ago más abajo.
 2. 🔴 **El ganador NO se queda en $10.000.** Hay que mudarlo a un conjunto con **$62.043/día**, o se
    encontró un ganador y se lo dejó donde no puede rendir. **El test es de $10.000; el destino del
    ganador es de $62.000.**
@@ -429,6 +438,120 @@ propósito, para no volver a tocar los tres textos que las cuentan).
   texto contra texto sobre los DOS archivos de `api/`.
 - ⚠️ `techosDiarios` se indexa por **NOMBRE** de conjunto (es la única llave que traen las filas de
   insights ya agregadas). Dos conjuntos homónimos en campañas distintas compartirían fila.
+
+## 🔴🔴 23-ago-2026: dos doctrinas de este documento se cayeron MEDIDAS
+
+Las dos eran inferencias razonables encima de números correctos, y las dos se pudieron falsar el
+mismo día porque ese día la foto empezó a guardar el embudo (`carritos`, `checkouts`, `lpv`,
+commit `0bf11e0`). 🔑 **El primer uso de una métrica con más n no es decidir: es re-preguntarle a lo
+que ya se había afirmado con menos n.** Ahí estaban las dos.
+
+### 1. ⛔ La fragmentación NO encarece la pauta — medido
+
+El núcleo de BDI (`GIRLHOOD FRIO` + `TEST BROAD BDI` + `MODELO x SIMILAR`), antes y después de
+prender las **5 celdas del banco** el 19-ago:
+
+| | antes (12-18) | después (19-23) | |
+|---|---|---|---|
+| **CPM** | **$1.496** | **$1.492** | **idéntico** |
+| CTR | 4,90% | 3,94% | −20% |
+| costo por carrito | $169 | $240 | +42% |
+| **carrito→compra** | **4,4%** | **4,3%** | **idéntico** |
+
+🔑 **Si hubiera superposición en la subasta entre celdas propias, el CPM SUBE.** No se movió un
+peso, y la mitad de abajo del embudo quedó clavada. ⇒ **se puede testear en paralelo.**
+
+🔑 **El oráculo que queda vale más que la doctrina que se cayó: el CPM del núcleo es el tripwire.**
+Se sube un escalón de celdas, se mira si el CPM del núcleo se movió, y recién ahí el siguiente.
+**El límite se descubre, no se supone** — y cuando aparezca, cuesta un escalón.
+🔴 ⛔ **Y lo medido son 5 celdas, no 30**: decir «medí que no pasa nada, andá a 30» sobre el MISMO
+similar 1% es el error de extrapolar otra vez. Por eso el escalón y el tripwire.
+
+### 2. ⛔ El costo por carrito no reemplaza a la compra
+
+**Correlación con el costo por compra: −0,07** (n=14). `GIRLHOOD FRIO` $139/carrito → CPA $3.937 ✅,
+pero `CREATIVO 3` $194/carrito → CPA **$15.511**, y `FUNDAS MENOS 15MIL` $502/carrito (casi el peor)
+→ CPA **$5.520** (bueno). La tasa carrito→compra va de **0% a 9,1%**.
+⇒ Corrido hacia atrás sobre el banco de 5, un corte en $400/carrito **se equivoca más que la regla
+de la venta**: mataba a `FUNDAS MENOS 15MIL` y aprobaba a `GIRLY CASES` (**35 carritos, 0 compras**).
+
+▶️ **La pista que queda viva es el CHECKOUT**: convierte ~20% parejo en los conjuntos sanos
+(GIRLHOOD FRIO 21% · ADV+ 21% · TEST BROAD 20% · UNBOXING 20%) ⇒ *costo por checkout × 5 ≈ CPA*.
+⛔ **No afirmado**: n=14, y con CPAs armados sobre 1-2 compras.
+
+🔑 **Lo que el carrito SÍ muestra, y antes no se veía:** hay piezas que hacen carritos y **no venden
+nunca** (`GIRLY CASES` 35/0, `CREATIVO 1` 54/0). Esas piezas hacen bien su trabajo y **la venta se
+muere ABAJO del carrito** — el problema no es el video.
+
+## 🏁 La regla del test de creativos (23-ago-2026)
+
+**$10.000, conjunto propio, UN solo aviso, decisión al día siguiente.** Y **tres puertas**:
+
+| resultado a los $10.000 | veredicto |
+|---|---|
+| **0 ventas** | **muere** |
+| **1 venta** | **NO se aprueba: va otra tanda de $10.000** |
+| **2 o más** | **aprobado** |
+
+**Por qué no dos puertas.** A $10.000 con el techo en $6.755 el test compra **1,5 ventas
+esperadas** ⇒ con «1 venta = aprobado», la probabilidad de aprobar según lo que la pieza realmente
+cuesta: $6.755 → 77% · $13.510 (2× el techo) → 52% · **$20.000 (3× el techo) → 39%**.
+**Un desastre de 3× el techo pasa 4 de cada 10 veces.** Y corrido hacia atrás sobre el banco de 5,
+**mató a `FUNDAS MENOS 15MIL` por $7** (primera venta a los $10.007; terminó comprando a $5.463,
+debajo del techo) **y aprobó a `UNBOXING` por $60** (a los $10.060; terminó en $8.139, arriba).
+🔑 La puerta del medio es simplemente **no decidir cuando no se sabe**: hoy «1 venta» es la
+respuesta más común tanto de una pieza buena como de una mala.
+
+⛔ **Y NO se reparte en 3 días.** Se llegó a recomendar $3.500/día × 3 con el argumento de que «el
+día 1 sale 1,7× más caro» ($11.049 vs $6.514) — eso salía de **5 compras**. Con las métricas que
+tienen n de verdad (36.249 impresiones, 99 carritos) el día 1 sale **más barato**: CPM $1.538 vs
+$1.791, **costo por carrito $251 vs $277**.
+
+🔑 **Un test que anda no es gasto: vende.** `IP AZUL` $5.350 y `FUNDAS MENOS 15MIL` $5.520, los dos
+debajo del techo. De los 16 conjuntos de BDI con historia, **6 compran debajo del techo — 38%**, no
+«1 de cada 5» (⚠️ con sesgo de supervivencia: los muy malos se apagaron antes).
+
+## 🔴🔑 El desgaste creativo tiene FIRMA: CTR abajo con el CPM CLAVADO
+
+`AD02 - GIRLHOOD COLLECTION`, la pieza más grande de BDI: **CTR 6,80% → 3,92% (−42%)** y
+**CPC $26 → $49 (+88%)** con el **CPM en $1.777 → $1.801: 0%**.
+
+🔑 **El CPM decide de quién es la culpa.** Si la subasta se hubiera puesto cara, el CPM sube. No se
+movió ⇒ cuesta lo mismo mostrar el aviso y **la gente dejó de clickearlo**. Es la pieza, no el
+mercado. ⇒ ⛔ **antes de explicar un costo que sube con «está caro Meta», mirar el CPM.**
+
+Y el calendario cierra: el último creativo nuevo con presupuesto real debutó el **19-ago**; el
+costo por pedido REAL de BDI subió **$2.989 (17-ago) → $5.059 (23-ago), +69%**.
+⇒ 🔑 **La elasticidad de 0,55-0,59 no es una ley de Meta: es la firma de quedarse sin creativos.**
+El cuello para las 100 ventas **no es la plata ni la cuenta publicitaria: es cuántas piezas entran.**
+
+⚠️ Y el `AD02 - 3 LOOKS 3 FUNDAS - 22/8` recibió **$434 en dos días** porque se lo metió en un
+conjunto que ya tenía un aviso instalado: **Meta concentra entre avisos.** Una pieza nueva al lado
+de una con historial no recibe entrega. **Conjunto propio o no se testeó nada.**
+
+## ✅ El ADVANTAGE+ no está reprobado — corrige la lectura del 22-ago
+
+Su **día 1** gastó $25.189 por **1 compra** e inflaba toda comparación que lo incluyera.
+
+| ventana | ADV+ | GIRLHOOD FRIO |
+|---|---|---|
+| con el día 1 (18-23) | $6.807 | — |
+| **sin el día 1 (19-23)** | **$6.262** (93% del techo) | **$5.389** (80%) |
+
+Lo sólido, porque no depende de compras: **el click de la misma pieza sale $47 adentro del ADV+ y
+$36 afuera (+31%)**. 🔴 Se le baja **de a 20%** y no de un salto: Meta dice que un cambio de
+presupuesto reinicia el aprendizaje **según su magnitud** (*«de 100 a 101 es muy poco probable; de
+100 a 1.000 es muy probable»*) ⇒ de $25.000 a $12.000 cae del lado probable; −20% no.
+
+## La foto ya no se saca a las 4 de la mañana (23-ago-2026)
+
+**Dos cortes: ~08:00 y ~20:00** (y `meta-reglas` se movió con la de la mañana, porque depende de
+ella). El de las 03:30 no era para nadie: estaba ahí para que el motor de reglas la encontrara
+hecha, y dejaba el día EN CURSO con 4 horas de gasto adentro.
+🔑 **Y se puede cortar a pedido: `gh workflow run meta-snapshot.yml`, ~40 s, idempotente** (cada
+corrida reescribe los últimos 4 días). Con `-f backfill=N` para más atrás.
+🔑 **El scheduler de GitHub dispara 35-59 minutos TARDE** (medido sobre 8 corridas seguidas) ⇒ el
+cron pide 07:20 y 19:20 para aterrizar a las 8 y a las 20.
 
 ## Pendiente
 
