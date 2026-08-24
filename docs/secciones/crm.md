@@ -540,3 +540,49 @@ adelante.
   (133 de los 273 mayoristas). Distribución de "compra cada X días": 31-60 → 60 · 61-120 → 60 ·
   16-30 → 48 · 8-15 → 23 · 3-7 → 7 · 1-2 → 3. Los 570 restantes no llegan a 3 compras: ven los tres
   plazos de siempre y nada más.
+
+## ✅ 24-ago-2026 — "ya es cliente mío, cambió de número" + fuera el Excel de teléfonos
+
+Lo preguntó Bruno usándolo: *"¿qué pasa si un cliente modificó su número, qué debería hacer para
+que la ficha siga abriendo?"*. La respuesta honesta era: **cambiarlo en Gestión Nube y esperar a la
+madrugada** (`sync-clientes.yml` corre 07:00 UTC). En el momento de la conversación, nada.
+
+### El botón nuevo
+
+La pantalla de número desconocido pasó a tener **dos caminos** (`NumeroNuevo` en
+`PanelWhatsApp.tsx`):
+
+1. **Ya es cliente mío, cambió de número** → busca por nombre y engancha el número.
+2. **Es alguien nuevo** → el formulario de lead de siempre.
+
+Antes había uno solo, y el caso más común es el primero: ofrecerle "guardar como lead" a alguien
+que ya compró 8 veces crea un prospecto duplicado de un cliente.
+
+- 🔑 **Enganchar NO pisa el número viejo.** El nuevo va a `crm:tel`, el que tenga GN sigue en el
+  padrón, y el panel mira el padrón primero: **los dos abren la misma ficha**. Es lo que uno quiere
+  cuando alguien cambia de línea pero sigue contestando por la vieja un tiempo.
+- ⚠️ **La búsqueda va sólo contra los clientes del CRM** (`action:'buscar'`, con los ids del KV que
+  el panel ya tiene). El padrón tiene **14.131** personas —cada consumidor final que pasó por el
+  local—; ofrecerlos todos para "es un cliente mío" es ofrecer 14.000 que no lo son.
+- ⚠️ El patrón del `ilike` va como **parámetro** de supabase-js y con los `%`/`_` escapados: lo
+  escribe una persona y termina en la query string de PostgREST.
+- Después de enganchar, la ficha se recarga **por id**: el índice de teléfonos del servidor se
+  rearma cada 6 h, así que buscar por teléfono todavía no lo encontraría.
+- Sirve igual para los **66 clientes del CRM sin ningún teléfono**: la primera vez que escriben,
+  quedan enganchados.
+
+### La subida del Excel de teléfonos salió
+
+Existía porque la API de ventas de GN no expone el celular. **Eso lo resolvió el sync del padrón**
+(23-ago-2026, corre solo todas las madrugadas).
+
+**Medido antes de sacarla**: de las **653 entradas** que el Excel dejó en `crm:tel`, **las 653 dicen
+exactamente lo mismo que el padrón**. Ninguna aportaba nada — y volver a subir el archivo sólo
+servía para **pisar** los números enganchados a mano, porque el merge era `{...override, ...excel}`.
+
+- ⚠️ **`crm:tel` NO se borró y se sigue leyendo.** Cambió quién lo escribe: ahora `vincularTelefono`,
+  de a un cliente por vez. Las 653 entradas redundantes se dejan (borrar la única copia de algo, por
+  unos KB, no se paga).
+- Se fueron con ella: `parsearTelefonos` (`lib/crm/seguimiento.ts`), `guardarTel` (`useCRM`) y sus
+  tests. `crmTelOverride` se sigue leyendo — `calcularAgregado` lo usa para el teléfono de los que
+  el padrón no tiene.

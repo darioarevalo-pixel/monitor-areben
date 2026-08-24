@@ -293,3 +293,48 @@ export async function guardarLeadsConRelectura(
   const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa, cargado: true })
   return r.ok ? { ok: true, mapa } : { ok: false, motivo: r.motivo }
 }
+
+// ── Enganchar un número a un cliente que ya existe ───────────────────────────
+
+/**
+ * Buscar clientes del CRM por nombre.
+ *
+ * Es la mitad de arriba de "ya es cliente mío": el cliente cambió de número, escribe del nuevo y
+ * el panel no lo reconoce. Se lo busca por nombre y se lo engancha.
+ *
+ * ⚠️ **Se le pasan los ids del CRM**, que el panel ya tiene del KV. Sin eso el servidor buscaría en
+ * los 14.131 del padrón —cada consumidor final que pasó por el local— y ofrecería 14.000 personas
+ * que no son clientes mayoristas.
+ */
+export async function buscarClientesPorNombre(q: string, ids: number[]): Promise<FilaCliente[]> {
+  try {
+    const r = await apiFetch('/api/datos?recurso=crm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'buscar', q, ids }),
+    })
+    const d = (await r.json().catch(() => ({}))) as { ok?: boolean; clientes?: FilaCliente[] }
+    return r.ok && d.ok ? d.clientes || [] : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Guardar que este número es de este cliente, en `crm:tel:bdi`.
+ *
+ * 🔑 **El número viejo no se pierde.** Éste se guarda acá; el que Gestión Nube tenga sigue en el
+ * padrón, y el panel busca primero en el padrón y después acá. O sea que después de enganchar,
+ * **los dos números abren la misma ficha** — que es lo que uno quiere cuando alguien cambia de
+ * línea pero sigue contestando por la vieja un tiempo.
+ *
+ * Con relectura, como todo lo que toca el KV: el mapa se reescribe entero y la sección Clientes
+ * puede estar tocándolo en otra pestaña.
+ */
+export async function vincularTelefono(clienteId: number, tel: string): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const previo = await leerMapa<string>('crmtel', 'bdi')
+  if (!previo.ok) return { ok: false, motivo: previo.motivo }
+  const mapa = { ...previo.dato, [String(clienteId)]: tel }
+  const r = await guardarMapa({ kind: 'crmtel', store: 'bdi', mapa, cargado: true })
+  return r.ok ? { ok: true } : { ok: false, motivo: r.motivo }
+}

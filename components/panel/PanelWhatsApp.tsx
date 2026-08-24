@@ -6,7 +6,15 @@ import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { siguienteTemperatura } from '@/lib/crm/core'
 import { plazoEnPalabras, ritmoDeCompra } from '@/lib/crm/ritmo'
-import { buscarFicha, guardarConRelectura, guardarLeadsConRelectura, type FichaPanel, type RespuestaPanel } from '@/lib/crm/panel'
+import {
+  buscarClientesPorNombre,
+  buscarFicha,
+  guardarConRelectura,
+  guardarLeadsConRelectura,
+  vincularTelefono,
+  type FichaPanel,
+  type RespuestaPanel,
+} from '@/lib/crm/panel'
 import { armarFicha } from '@/lib/crm/panel'
 import {
   agregarNota,
@@ -307,6 +315,7 @@ function PanelInterno({
   // cualquier forma y no se compara crudo con nada.
   const telNorm = useMemo(() => normalizeArgPhone(tel), [tel])
 
+
   // Al cambiar de chat se vuelve a la ficha: el chat cambió porque se eligió a alguien (desde la
   // lista o a mano en WhatsApp), y lo que se quiere ver de ese alguien es su ficha.
   //
@@ -343,6 +352,14 @@ function PanelInterno({
    */
   const kv = useRef<{ seg: MapaSeguimiento; tel: MapaTelefonos; leads: MapaLeads }>({ seg: {}, tel: {}, leads: {} })
   const [kvListo, setKvListo] = useState(false)
+  /**
+   * Los ids de los clientes del CRM, para la búsqueda por nombre de "ya es cliente mío". Salen del
+   * KV, que ya está cargado: el servidor busca sólo entre ellos y no entre los 14.131 del padrón.
+   */
+  const idsCRM = useMemo(
+    () => (kvListo ? Object.keys(crmSeg).map(Number).filter((n) => Number.isFinite(n)) : []),
+    [crmSeg, kvListo],
+  )
 
   useEffect(() => {
     let activo = true
@@ -648,8 +665,19 @@ function PanelInterno({
     return (
       <Envoltorio aviso={aviso}>
         {solapas}
-        <NuevoLead
+        <NumeroNuevo
           tel={telNorm}
+          idsCRM={idsCRM}
+          onVinculado={async (cliente) => {
+            // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
+            // se rearma cada 6 h, así que buscar por teléfono todavía no lo encontraría.
+            setEstado({ t: 'cargando' })
+            const r = await buscarFicha({ clienteId: cliente.id }, kv.current.seg, today)
+            if (!vivo.current) return
+            if (r.estado === 'encontrado') setEstado({ t: 'ficha', ficha: r.ficha, crudo: r.crudo })
+            else setEstado({ t: 'desconocido' })
+            decir(`Listo: este número ahora abre la ficha de ${cliente.name || 'ese cliente'}`)
+          }}
           onGuardado={(lead) => {
             // 🔑 Se queda en la ficha del prospecto recién creado, no en un cartel de "listo".
             // Cargar el lead y agendarlo son el mismo momento de la conversación; mandarlo a otra
@@ -1236,6 +1264,166 @@ function FichaLead({
   )
 }
 
+// ── Número desconocido: o es un cliente que ya existe, o es un prospecto nuevo ───────────────
+
+/**
+ * Qué hacer con un número que no está.
+ *
+ * 🔴 **Antes acá había un solo camino: guardarlo como lead.** Y el caso más común no es ése — es
+ * **un cliente que cambió de número**. Ofrecerle "guardar como lead" a alguien que ya te compró 8
+ * veces es crear un prospecto duplicado de un cliente, y la ficha con sus compras sigue sin
+ * aparecer. La única salida real era cambiarlo en Gestión Nube, que el monitor trae recién a la
+ * madrugada siguiente: en el momento de la conversación, no servía.
+ *
+ * 🔑 **Enganchar el número NO pisa el viejo.** El nuevo se guarda en `crm:tel` y el que tenga
+ * Gestión Nube sigue en el padrón; el panel mira el padrón primero y `crm:tel` después, así que
+ * después de enganchar **los dos números abren la misma ficha**.
+ *
+ * También sirve para los **66 clientes del CRM que no tienen ningún teléfono cargado**: la primera
+ * vez que escriben, quedan enganchados.
+ */
+function NumeroNuevo({
+  tel,
+  idsCRM,
+  onVinculado,
+  onGuardado,
+  onError,
+}: {
+  tel: string
+  idsCRM: number[]
+  onVinculado: (cliente: FilaCliente) => void
+  onGuardado: (lead: Lead) => void
+  onError: (t: string) => void
+}) {
+  const [camino, setCamino] = useState<'elegir' | 'cliente' | 'lead'>('elegir')
+
+  if (camino === 'lead') return <NuevoLead tel={tel} onGuardado={onGuardado} onError={onError} onVolver={() => setCamino('elegir')} />
+  if (camino === 'cliente')
+    return <VincularCliente tel={tel} idsCRM={idsCRM} onVinculado={onVinculado} onError={onError} onVolver={() => setCamino('elegir')} />
+
+  return (
+    <div style={{ padding: space[3] }}>
+      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Número nuevo</div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 12 }}>{tel} · no está en el CRM</div>
+
+      <Button variant="outline" fullWidth style={{ marginBottom: 8, justifyContent: 'flex-start' }} onClick={() => setCamino('cliente')}>
+        Ya es cliente mío, cambió de número
+      </Button>
+      <Button variant="outline" fullWidth style={{ justifyContent: 'flex-start' }} onClick={() => setCamino('lead')}>
+        Es alguien nuevo, guardarlo como lead
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * Buscar al cliente por nombre y engancharle este número.
+ *
+ * La búsqueda va contra el servidor y **sólo entre los clientes del CRM**: el padrón tiene 14.131
+ * personas, que son todas las que pasaron por el local, y ninguna de ésas es a quien se está
+ * buscando.
+ */
+function VincularCliente({
+  tel,
+  idsCRM,
+  onVinculado,
+  onError,
+  onVolver,
+}: {
+  tel: string
+  idsCRM: number[]
+  onVinculado: (cliente: FilaCliente) => void
+  onError: (t: string) => void
+  onVolver: () => void
+}) {
+  const [q, setQ] = useState('')
+  /** Lo último que contestó el servidor, CON la consulta que lo pidió. */
+  const [resultados, setResultados] = useState<{ q: string; filas: FilaCliente[] } | null>(null)
+  const [guardando, setGuardando] = useState(false)
+
+  const texto = q.trim()
+  const corto = texto.length < 2
+
+  /**
+   * Se busca al soltar la tecla un momento, no en cada letra: cada búsqueda es una consulta al
+   * servidor y escribir "Nicolás" son siete.
+   *
+   * 🔑 **La respuesta viaja con la consulta que la pidió.** Dos búsquedas seguidas pueden volver
+   * en cualquier orden: sin eso, la lista de "Nico" puede quedar dibujada abajo de "Nicolás".
+   */
+  useEffect(() => {
+    if (corto) return
+    let activo = true
+    const t = window.setTimeout(async () => {
+      const filas = await buscarClientesPorNombre(texto, idsCRM)
+      if (activo) setResultados({ q: texto, filas })
+    }, 300)
+    return () => {
+      activo = false
+      window.clearTimeout(t)
+    }
+  }, [texto, corto, idsCRM])
+
+  const alDia = resultados && resultados.q === texto ? resultados.filas : null
+
+  const enganchar = async (c: FilaCliente) => {
+    if (guardando) return
+    setGuardando(true)
+    const r = await vincularTelefono(c.id, tel)
+    setGuardando(false)
+    if (!r.ok) {
+      onError('No se pudo guardar: ' + r.motivo)
+      return
+    }
+    onVinculado(c)
+  }
+
+  return (
+    <div style={{ padding: space[3] }}>
+      <button
+        type="button"
+        onClick={onVolver}
+        style={{ background: 'none', border: 0, padding: 0, color: color.brand, fontSize: font.xs, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}
+      >
+        ← Volver
+      </button>
+      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>¿Quién es?</div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 10 }}>
+        Buscalo por nombre y {tel} va a abrir su ficha de ahora en más. El número que tenga cargado sigue funcionando igual.
+      </div>
+
+      <input
+        className="mo-input"
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Nombre del cliente o del local"
+        style={{ width: '100%', marginBottom: 8 }}
+      />
+
+      {!corto && !alDia && <div style={{ fontSize: font.sm, color: color.mut2 }}>Buscando…</div>}
+      {alDia && !alDia.length && (
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>Ninguno con ese nombre entre los clientes del CRM.</div>
+      )}
+      {(alDia || []).map((c) => (
+          <Button
+            key={c.id}
+            variant="outline"
+            fullWidth
+            disabled={guardando}
+            style={{ justifyContent: 'flex-start', marginBottom: 6, textAlign: 'left' }}
+            onClick={() => enganchar(c)}
+          >
+            <span>
+              {c.name || `#${c.id}`}
+              <span style={{ color: color.mut2, fontSize: font.xs }}> · {c.city || 'sin ciudad'}</span>
+            </span>
+          </Button>
+      ))}
+    </div>
+  )
+}
+
 // ── Número desconocido → lead ────────────────────────────────────────────────
 
 /**
@@ -1248,7 +1436,17 @@ function FichaLead({
  * Escribe en `crm:leads:bdi`, con la misma disciplina que la pestaña Leads: se lee primero y sin
  * lectura buena no se guarda, porque el POST reescribe el mapa entero.
  */
-function NuevoLead({ tel, onGuardado, onError }: { tel: string; onGuardado: (lead: Lead) => void; onError: (t: string) => void }) {
+function NuevoLead({
+  tel,
+  onGuardado,
+  onError,
+  onVolver,
+}: {
+  tel: string
+  onGuardado: (lead: Lead) => void
+  onError: (t: string) => void
+  onVolver: () => void
+}) {
   const [nombre, setNombre] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [instagram, setInstagram] = useState('')
@@ -1279,7 +1477,14 @@ function NuevoLead({ tel, onGuardado, onError }: { tel: string; onGuardado: (lea
 
   return (
     <div style={{ padding: space[3] }}>
-      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Número nuevo</div>
+      <button
+        type="button"
+        onClick={onVolver}
+        style={{ background: 'none', border: 0, padding: 0, color: color.brand, fontSize: font.xs, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}
+      >
+        ← Volver
+      </button>
+      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Prospecto nuevo</div>
       <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 10 }}>{tel} · todavía no compró</div>
 
       <input className="mo-input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre o local" style={{ width: '100%', marginBottom: 6 }} />

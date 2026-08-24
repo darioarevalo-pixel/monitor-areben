@@ -13,7 +13,6 @@ import { FILTROS_POR_DIA, TANDA_FRIOS, contarKpis, contarPorDia, filtrarOrdenar,
 import { feriadosDe, proximoHabil } from '@/lib/crm/agenda.core.js'
 import { sumarDias } from '@/lib/calendario/fechas.core.js'
 import {
-  parsearTelefonos,
   setDescartado,
   setDifusion,
   setPagina,
@@ -21,9 +20,8 @@ import {
 } from '@/lib/crm/seguimiento'
 import type { ClienteCRM, MapaSeguimiento, Seguimiento, Temperatura } from '@/lib/crm/tipos'
 import type { ModoCanal } from '@/lib/crm/datos'
-import { leerXlsx } from '@/lib/excel'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { BuscarInput, Button, Chips, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar, useToast } from '@/components/ui'
+import { BuscarInput, Button, Chips, KpiCard, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space } from '@/components/ui'
 
 /**
  * El CRM en Next. Port de la vista Clientes (index.html:1703-1801 + renderCRM/
@@ -198,8 +196,6 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
 }
 
 export function CRM() {
-  const { avisar } = useConfirmar()
-  const toast = useToast()
   const [modo, setModo] = useState<ModoCanal>('10')
   const [q, setQ] = useState('')
   const [seg, setSeg] = useState('todos')
@@ -213,7 +209,7 @@ export function CRM() {
   const [modalId, setModalId] = useState<number | null>(null)
   // La ficha de lead que hay que abrir al saltar desde la lista del día.
   const [leadId, setLeadId] = useState<string | null>(null)
-  const { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg, guardarTel } = useCRM(modo)
+  const { cargando, error, agregado, ventas, crmSeg, cargado, hoy, recargar, guardarSeg } = useCRM(modo)
 
   const kpis = useMemo(() => contarKpis(agregado.activos), [agregado])
   // Los que compraron pero todavía no están en el canal de difusión. Se cuenta
@@ -272,29 +268,20 @@ export function CRM() {
   const onTemperatura = (id: number, val: Temperatura) => mutar((s) => setTemperatura(s, id, val))
 
 
-  const cargarTelefonos = async (file: File | undefined) => {
-    if (!file) return
-    if (!agregado.activos.length) {
-      await avisar('Primero esperá a que cargue la lista de clientes.')
-      return
-    }
-    try {
-      const aoa = await leerXlsx(file)
-      const idsCRM = new Set(agregado.activos.map((c) => String(c.id)))
-      const res = parsearTelefonos(aoa, idsCRM, normalizeArgPhone)
-      if (!res.ok) {
-        toast.error(res.motivo)
-        return
-      }
-      // El merge acumula sobre lo ya cargado (crmTelOverride es el único mapa sin
-      // otra copia); guardarTel exige `cargado`, así un GET fallido no lo vacía.
-      if (await guardarTel({ ...crmTelOverride, ...res.map })) {
-        toast.ok(`Se vincularon ${res.vinculados} teléfonos a clientes del CRM (match por ID). Los botones de WhatsApp ya funcionan.`)
-      }
-    } catch (err) {
-      toast.error('No pude leer el Excel: ' + (err instanceof Error ? err.message : String(err)))
-    }
-  }
+  /**
+   * 🔴 **La subida del Excel de teléfonos salió el 24-ago-2026.** Existía porque la API de ventas
+   * de Gestión Nube no expone el celular, así que el número había que traerlo del export a mano.
+   * **Eso lo resolvió el sync del padrón de clientes** (`scripts/sync-clientes.js`, 23-ago-2026,
+   * corre solo todas las madrugadas): hoy el teléfono viene de la ficha de GN.
+   *
+   * Medido antes de sacarlo: de las **653 entradas** que dejó el Excel en `crm:tel`, **las 653
+   * dicen exactamente lo mismo que el padrón**. Ninguna aportaba nada, y volver a subir el archivo
+   * sólo servía para **pisar** los números enganchados a mano desde el panel de WhatsApp — que es
+   * lo que ahora escribe ese mapa cuando un cliente cambia de línea.
+   *
+   * ⚠️ **El mapa `crm:tel` NO se borró** y se sigue leyendo: cambió quién lo escribe, no para qué
+   * sirve. Lo escribe `vincularTelefono` (`lib/crm/panel.ts`), de a un cliente por vez.
+   */
 
   const tarjetas = [
     { key: 'frios', label: '🧊 Fríos', n: frios },
@@ -327,26 +314,6 @@ export function CRM() {
             de WhatsApp. Es la única pantalla donde se pueden cambiar. */}
         <Button variant="outline" onClick={() => setMensajes(true)}>Mensajes</Button>
         <Button variant="ghost" onClick={recargar}>Recalcular</Button>
-        {vista !== 'metricas' && (
-          <>
-        {/* Es un <label> porque abre un file picker; se le da la forma del botón primario. */}
-        <label
-          className="mo-btn mo-btn--md"
-          style={{
-            '--_bg': color.brandSolid,
-            '--_fg': '#fff',
-            '--_bd': color.brandSolid,
-            '--_bg-hover': 'var(--mo-brand-solid-hover)',
-            cursor: cargado ? 'pointer' : 'not-allowed',
-            opacity: cargado ? 1 : 0.55,
-          } as React.CSSProperties}
-          title={cargado ? 'Importar teléfonos del export de clientes de GN' : 'El KV no se pudo leer: guardado bloqueado'}
-        >
-          Cargar teléfonos
-          <input type="file" accept=".xlsx" disabled={!cargado} onChange={(e) => { cargarTelefonos(e.target.files?.[0]); e.target.value = '' }} style={{ display: 'none' }} />
-        </label>
-          </>
-        )}
       </HeaderAcciones>
 
       <div>

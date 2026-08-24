@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { buscarPorTelefono, indexarTelefonos, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import {
   cumplirPendiente,
@@ -8,7 +8,8 @@ import {
   setTenerEnCuenta,
   TOPE_CONTACTOS,
 } from '@/lib/crm/seguimiento'
-import { armarFicha } from '@/lib/crm/panel'
+import { armarFicha, vincularTelefono } from '@/lib/crm/panel'
+import { _olvidarVistas } from '@/lib/kv/cliente'
 import type { MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
@@ -239,5 +240,67 @@ describe('tachar el pendiente', () => {
     const con: MapaSeguimiento = { '1': { notas: [{ fecha: '2026-08-01', texto: 'le avisé de los ingresos' }], pendiente: 'controlar recepción' } }
     const r = cumplirPendiente(con, 1, '2026-08-24')
     expect(r['1'].notas?.map((n) => n.texto)).toEqual(['✅ controlar recepción', 'le avisé de los ingresos'])
+  })
+})
+
+/**
+ * Enganchar un número a un cliente que ya existe ("ya es cliente mío, cambió de número").
+ *
+ * 🔴 Escribe en `crm:tel:bdi`, que **se reescribe entera en cada guardado**. Lo que se prueba es lo
+ * único que puede salir caro: que agregue una entrada y no que reemplace el mapa. Son 653
+ * teléfonos y no hay copia del lado del servidor.
+ */
+describe('vincularTelefono', () => {
+  const resp = (body: unknown) => ({ ok: true, status: 200, json: async () => body })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    _olvidarVistas()
+  })
+
+  it('agrega el cliente SIN pisar los que ya estaban', async () => {
+    const previos = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [String(i), '11' + i]))
+    const enviado: Record<string, string> = {}
+    vi.stubGlobal('fetch', (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        Object.assign(enviado, JSON.parse(String(init.body)).map)
+        return Promise.resolve(resp({ ok: true, total: 31 }))
+      }
+      return Promise.resolve(resp({ ok: true, map: previos }))
+    })
+
+    expect(await vincularTelefono(999, '5493834270554')).toEqual({ ok: true })
+    expect(Object.keys(enviado)).toHaveLength(31)
+    expect(enviado['999']).toBe('5493834270554')
+    expect(enviado['0']).toBe('110')
+  })
+
+  it('🔴 si no se pudo LEER, no escribe: guardar ahora borraría los 653', async () => {
+    const post = vi.fn()
+    vi.stubGlobal('fetch', (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        post()
+        return Promise.resolve(resp({ ok: true }))
+      }
+      return Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'KV no configurado' }) })
+    })
+
+    const r = await vincularTelefono(999, '5493834270554')
+    expect(r.ok).toBe(false)
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('cambiarle el número a un cliente que ya tenía uno lo reemplaza, no lo duplica', async () => {
+    const enviado: Record<string, string> = {}
+    vi.stubGlobal('fetch', (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        Object.assign(enviado, JSON.parse(String(init.body)).map)
+        return Promise.resolve(resp({ ok: true, total: 1 }))
+      }
+      return Promise.resolve(resp({ ok: true, map: { '7': '5491111111111' } }))
+    })
+
+    await vincularTelefono(7, '5492222222222')
+    expect(enviado).toEqual({ '7': '5492222222222' })
   })
 })

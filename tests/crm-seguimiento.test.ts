@@ -4,14 +4,12 @@ import {
   borrarNota,
   escribiHoy,
   hoyISO,
-  parsearTelefonos,
   setDescartado,
   setMayorista,
   setPagina,
   setProximoManual,
   setTemperatura,
 } from '@/lib/crm/seguimiento'
-import { normalizeArgPhone } from '@/lib/crm/core'
 import type { MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
@@ -94,33 +92,3 @@ describe('notas', () => {
 
 // ── Parseo de teléfonos ───────────────────────────────────────────────────────
 
-describe('parsearTelefonos', () => {
-  const idsCRM = new Set(['100', '200'])
-
-  it('vincula por id_interno/celular, solo clientes del CRM, y normaliza', () => {
-    const aoa: unknown[][] = [
-      ['id_interno', 'celular', 'otra'],
-      ['100', '11 2345-6789', 'x'],
-      ['200', '', 'y'], // sin teléfono → no cuenta
-      ['999', '11 1111-1111', 'z'], // no está en el CRM → se ignora
-    ]
-    const res = parsearTelefonos(aoa, idsCRM, normalizeArgPhone)
-    expect(res.ok).toBe(true)
-    if (res.ok) {
-      expect(res.vinculados).toBe(1)
-      expect(res.map['100']).toBe('11 2345-6789')
-      expect(res.map['999']).toBeUndefined()
-    }
-  })
-
-  it('cae al header `telefono` si no hay `celular`, y a `id` si no hay `id_interno`', () => {
-    const aoa: unknown[][] = [['id', 'telefono'], ['200', '11 8765-4321']]
-    const res = parsearTelefonos(aoa, idsCRM, normalizeArgPhone)
-    expect(res.ok && res.map['200']).toBe('11 8765-4321')
-  })
-
-  it('falla claro si faltan las columnas o no hay matches', () => {
-    expect(parsearTelefonos([['nombre', 'mail']], idsCRM, normalizeArgPhone).ok).toBe(false)
-    expect(parsearTelefonos([['id_interno', 'celular'], ['999', '11 1111-1111']], idsCRM, normalizeArgPhone).ok).toBe(false)
-  })
-})

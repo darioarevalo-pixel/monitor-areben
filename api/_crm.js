@@ -7,6 +7,7 @@
 //   POST { recurso:'crm', action:'ventas', modo, flagged } → { ok, ventas:[{id,date_sale,total_price,…}] }
 //   POST { recurso:'crm', action:'panel', tel|clienteId }   → { ok, encontrado, cliente, ventas, detalles }
 //   POST { recurso:'crm', action:'lista', ids:[…] }         → { ok, clientes:[{id,name,phone,total_amount}] }
+//   POST { recurso:'crm', action:'buscar', q, ids:[…] }     → { ok, clientes:[{id,name,city,phone}] }
 //
 // Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
 // padrón, que es como nació: el navegador viejo no manda el campo.
@@ -424,6 +425,54 @@ async function listaDelPanel(supabase, body, res) {
   });
 }
 
+/** Cuántos clientes devuelve la búsqueda por nombre. Es para elegir uno, no para explorar. */
+const TOPE_BUSQUEDA = 12;
+
+/**
+ * Buscar un cliente por nombre, para engancharle el número desde el panel de WhatsApp.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════════
+ * POR QUÉ EXISTE
+ * ═══════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Un cliente cambia de número y te escribe del nuevo. El panel no lo reconoce —busca por teléfono
+ * y ese teléfono no es de nadie— y lo único que sabía ofrecer era guardarlo como lead: crear un
+ * prospecto de alguien que ya es cliente. La salida existía pero no servía en el momento: cambiarlo
+ * en Gestión Nube, que el monitor trae recién a la madrugada siguiente.
+ *
+ * Con esto se lo engancha en el acto, y **el número viejo sigue funcionando**: el nuevo se guarda
+ * en `crm:tel` y el viejo sigue viniendo del padrón. Los dos abren la misma ficha.
+ *
+ * ⚠️ **Busca sólo entre los clientes del CRM** (`ids`), no entre los 14.131 del padrón. El padrón
+ * tiene a cada consumidor final que pasó por el local; ofrecerlos todos para "es un cliente mío"
+ * es ofrecer 14.000 personas que no lo son. Los ids salen del KV, que el panel ya tiene cargado.
+ *
+ * ⚠️ `ilike` con el patrón como PARÁMETRO de supabase-js, no concatenado: el texto lo escribe una
+ * persona y termina en la query string de PostgREST. Los `%` y `_` que traiga se escapan.
+ */
+async function buscarClientes(supabase, body, res) {
+  const q = String(body.q || '').trim();
+  if (q.length < 2) return res.status(200).json({ ok: true, clientes: [] });
+
+  const crudos = Array.isArray(body.ids) ? body.ids : [];
+  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return res.status(200).json({ ok: true, clientes: [] });
+
+  // Los comodines de LIKE que venga escribiendo la persona son texto, no comodines.
+  const patron = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+
+  const { data, error } = await supabase
+    .from('clientes')
+    .select('id, name, city, phone')
+    .in('id', ids)
+    .ilike('name', patron)
+    .order('name')
+    .limit(TOPE_BUSQUEDA);
+  if (error) throw new Error(error.message);
+
+  return res.status(200).json({ ok: true, clientes: data || [] });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
 
@@ -458,6 +507,15 @@ export default async function handler(req, res) {
   if (accion === 'lista') {
     try {
       return await listaDelPanel(supabase, body, res);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+
+  // ── Buscar un cliente por nombre, para engancharle un número nuevo desde el panel. ───────────
+  if (accion === 'buscar') {
+    try {
+      return await buscarClientes(supabase, body, res);
     } catch (e) {
       return res.status(500).json({ ok: false, error: e.message });
     }

@@ -53,7 +53,6 @@ export type EstadoCRM = {
   /** Persiste un mapa de seguimiento nuevo (optimista + POST del mapa entero). */
   guardarSeg: (nuevo: MapaSeguimiento) => Promise<boolean>
   /** Persiste un mapa de teléfonos nuevo. */
-  guardarTel: (nuevo: MapaTelefonos) => Promise<boolean>
 }
 
 const VACIO: Agregado = { activos: [], descartados: [] }
@@ -160,20 +159,16 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
     [cargado, toast],
   )
 
-  const guardarTel = useCallback(
-    async (nuevo: MapaTelefonos): Promise<boolean> => {
-      setCrmTelOverride(nuevo)
-      const r = await guardarMapa({ kind: 'crmtel', store: 'bdi', mapa: nuevo, cargado })
-      if (!r.ok) toast.error('No se pudieron guardar los teléfonos: ' + r.motivo)
-      return r.ok
-    },
-    [cargado, toast],
-  )
-
   const hoy =
     today.getFullYear() +
     '-' + String(today.getMonth() + 1).padStart(2, '0') +
     '-' + String(today.getDate()).padStart(2, '0')
 
-  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg, guardarTel }
+  /**
+   * ⚠️ `crmTelOverride` se sigue LEYENDO —`calcularAgregado` lo usa para el teléfono de los
+   * clientes que el padrón no tiene— pero ya no se escribe desde acá: la subida del Excel salió el
+   * 24-ago-2026 y ahora ese mapa lo escribe el panel de WhatsApp, de a un cliente por vez
+   * (`vincularTelefono`).
+   */
+  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg }
 }
