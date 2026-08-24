@@ -70,9 +70,9 @@ export function DecidirReclamo({
   const [expectativa, setExpectativa] = useState<Expectativa | ''>(reclamo.expectativa ?? '')
   const [montoAcordado, setMontoAcordado] = useState<number | ''>('')
   /**
-   * ¿Se le devuelve el envío de ida? Lo decide el MOTIVO, no quien resuelve: sólo cuando el cliente
-   * no recibió nada. Dejarlo a criterio hacía que el mismo caso se resolviera distinto según quién
-   * lo tocara.
+   * ¿Se le devuelve el envío de ida? Lo decide el MOTIVO, no quien resuelve: cuando el error fue
+   * NUESTRO, o cuando el cliente no recibió nada. Dejarlo a criterio hacía que el mismo caso se
+   * resolviera distinto según quién lo tocara.
    */
   const envioDelMotivo = devuelveElEnvioDeIda(reclamo.motivo)
 

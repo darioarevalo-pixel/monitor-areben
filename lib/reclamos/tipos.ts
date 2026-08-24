@@ -12,6 +12,11 @@
  */
 
 import type { Marca } from '@/lib/nav.datos'
+import {
+  EFECTOS_RESOLUCION as EFECTOS_RESOLUCION_JS,
+  pendientesDe as pendientesDeJs,
+  saleUnEnvio as saleUnEnvioJs,
+} from './efectos.core.js'
 
 // ── Los ejes ────────────────────────────────────────────────────────────────────
 
@@ -190,9 +195,6 @@ export const MOTIVOS_CAMBIO: MotivoReclamo[] = ['talle', 'arrepentimiento', 'no_
  */
 export const NUNCA_SALIO: MotivoReclamo[] = ['faltante', 'sin_stock']
 
-/** Motivos donde el error es NUESTRO. Sirve para separar lo que se puede corregir de lo que no. */
-export const ERROR_PROPIO: MotivoReclamo[] = ['falla', 'faltante', 'mal_armado', 'sin_stock']
-
 // ── El perfil de cada motivo ────────────────────────────────────────────────────
 //
 // Todo lo que cambia de un caso a otro sale de acá, y sale de **dos preguntas físicas**: ¿el
@@ -218,8 +220,15 @@ export type PerfilMotivo = {
   salio: boolean
   /** ¿La unidad existe físicamente? Separa `faltante` (sí, reingresar) de `sin_stock` (no, dar de baja). */
   unidadExiste: boolean
-  /** ¿El cliente llegó a recibir algo? Es lo que decide si se le devuelve el envío de ida. */
+  /** ¿El cliente llegó a recibir algo? Junto con `errorPropio` decide si se le devuelve el envío. */
   recibioAlgo: boolean
+  /**
+   * ¿El error fue NUESTRO?
+   *
+   * No es lo mismo que "hay un problema": que a alguien no le entre el talle es un problema y no es
+   * culpa nuestra. Lo que define esta pregunta es **quién paga el envío de ida**.
+   */
+  errorPropio: boolean
   /** ¿El reclamo es sobre la venta entera? Entonces no se destildan productos. */
   ventaCompleta: boolean
   /** ¿Quién decide? En casi todos nosotros, con la evidencia. En `sin_stock`, el cliente. */
@@ -241,56 +250,75 @@ export type PerfilMotivo = {
 export const PERFIL_MOTIVO: Record<MotivoReclamo, PerfilMotivo> = {
   talle: {
     ayuda: 'Llegó lo que pidió, en buen estado, pero no le entra. Es lo que mide si la guía de talles está bien.',
-    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
     fotos: 'si_quiere_plata', expectativas: ['otro_producto', 'plata'], retencion: true,
   },
   arrepentimiento: {
     ayuda: 'Se arrepintió, sin más. Llegó bien y es lo que pidió: no mide nada nuestro.',
-    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
     fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
   },
   no_esperaba: {
     ayuda: 'Llegó lo que pidió pero no era como se lo imaginaba. Es lo que mide si la ficha de producto (fotos, descripción, medidas) está engañando.',
-    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    // ⚠️ Hoy este motivo mezcla DOS casos: "no me gustó" (no es nuestro) y "la publicación está mal"
+    // (sí lo es). Va en `false` porque el grueso es el primero, y devolver el envío en cada "no me
+    // gustó" es regalar plata. Cuando se separe en dos motivos, el segundo va en `true`.
+    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
     fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
   },
   falla: {
     ayuda: 'Llegó con un defecto: mancha, costura, rotura. Error nuestro o del proveedor. Las fotos son la prueba y las decidimos nosotros.',
-    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: true, ventaCompleta: false, decideCliente: false,
     fotos: 'siempre', expectativas: ['mismo_producto', 'plata', 'otro_producto'], retencion: true,
   },
   faltante: {
     ayuda: 'El paquete llegó pero faltaba un producto adentro. La unidad sigue en el depósito: no salió. Distinto de "pedido mal armado", donde llegó otra cosa en su lugar.',
-    salio: false, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    salio: false, unidadExiste: true, recibioAlgo: true, errorPropio: true, ventaCompleta: false, decideCliente: false,
     fotos: 'de_lo_recibido', expectativas: ['completar', 'plata'], retencion: false,
   },
   mal_armado: {
     ayuda: 'Le llegó un producto distinto al que compró. Hay que corregir dos stocks: el que pidió no salió y el que se mandó por error salió sin descontarse.',
-    salio: false, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    salio: false, unidadExiste: true, recibioAlgo: true, errorPropio: true, ventaCompleta: false, decideCliente: false,
     fotos: 'siempre', expectativas: ['completar', 'plata'], retencion: false,
   },
   no_llego: {
     ayuda: 'El pedido nunca llegó a destino: se perdió en el transporte. Va sobre la venta completa y en paralelo se le reclama al transportista, que es plata recuperable.',
-    salio: true, unidadExiste: false, recibioAlgo: false, ventaCompleta: true, decideCliente: true,
+    // 🔑 El error es del TRANSPORTISTA, no nuestro — y aun así se le devuelve el envío, porque no
+    // recibió nada. Son dos razones distintas para el mismo resultado, y por eso son dos preguntas.
+    salio: true, unidadExiste: false, recibioAlgo: false, errorPropio: false, ventaCompleta: true, decideCliente: true,
     fotos: 'nunca', expectativas: ['completar', 'plata'], retencion: false,
   },
   sin_stock: {
     ayuda: 'Entró la venta pero el producto no existe. El cliente no recibió nada ni está enterado: se le avisa y ELIGE ÉL entre cambiarlo o que le devolvamos la plata.',
-    salio: false, unidadExiste: false, recibioAlgo: false, ventaCompleta: true, decideCliente: true,
+    salio: false, unidadExiste: false, recibioAlgo: false, errorPropio: true, ventaCompleta: true, decideCliente: true,
     fotos: 'nunca', expectativas: ['otro_producto', 'plata'], retencion: false,
   },
   // Históricos: quedan para que una fila vieja no reviente. Se comportan como su equivalente.
   no_era_lo_esperado: {
     ayuda: 'Motivo histórico. Usá "No era lo que esperaba".',
-    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: true,
+    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
     fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
   },
   otro: {
     ayuda: 'Motivo histórico, sin flujo propio. Elegí el que corresponda.',
-    salio: true, unidadExiste: true, recibioAlgo: true, ventaCompleta: false, decideCliente: false,
+    // Catch-all, y también lo que se guarda en un cambio sin motivo. No se puede afirmar que el
+    // error fue nuestro, así que no se regala el envío.
+    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: false,
     fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
   },
 }
+
+/**
+ * Motivos donde el error es NUESTRO. Separa lo que se puede corregir de lo que no, y **decide si se
+ * le devuelve el envío de ida** — ver `devuelveElEnvioDeIda`.
+ *
+ * ⚠️ Era una lista escrita a mano, al lado de un perfil que ya contestaba todo lo demás. Nadie la
+ * usaba, así que nunca se despegó; pero es exactamente la forma que produjo el bug de los
+ * pendientes. Ahora **sale del perfil**: agregar un motivo obliga a contestar si el error es
+ * nuestro, en vez de dejarlo silenciosamente afuera de una lista.
+ */
+export const ERROR_PROPIO: MotivoReclamo[] = (Object.keys(PERFIL_MOTIVO) as MotivoReclamo[])
+  .filter((m) => PERFIL_MOTIVO[m].errorPropio)
 
 /** El texto del ⓘ de cada motivo: cuándo se usa, para no tener que adivinar cuál asignar. */
 export function ayudaDeMotivo(m: MotivoReclamo): string {
@@ -340,12 +368,26 @@ export function hayUnidadFisica(m: MotivoReclamo): boolean {
 /**
  * ¿Se le devuelve también el envío de ida?
  *
- * Sólo cuando **no recibió nada** (`no_llego`, `sin_stock`). En todo el resto la devolución es del
- * producto únicamente: el envío se prestó el servicio, llegó. Antes esto era un checkbox libre que
- * se podía tildar en cualquier caso.
+ * Por **dos razones distintas**, y alcanza con una:
+ *
+ *   - **El error fue nuestro** (falla, faltante, producto equivocado, falta de stock). Cobrarle el
+ *     envío de algo que salió mal por culpa nuestra es cobrarle nuestro error.
+ *   - **No recibió nada** (`no_llego`, `sin_stock`). No hay servicio que cobrar: el paquete no llegó.
+ *
+ * Si no se cumple ninguna —se arrepintió, no le gustó, no le entró— la devolución es **del producto
+ * únicamente**: el envío prestó su servicio y llegó.
+ *
+ * 🔑 `no_llego` entra por la segunda y no por la primera: el error es del transportista. Que sean
+ * dos preguntas y no una es lo que deja pedirle esa plata al correo sin dejar de devolvérsela al
+ * cliente.
+ *
+ * ⚠️ Hasta el 24-ago-2026 esto era sólo `!recibioAlgo`, así que una falla o un pedido mal armado se
+ * devolvían **sin** el envío. Antes de eso era un checkbox libre, y el mismo caso se resolvía
+ * distinto según quién lo tocara.
  */
 export function devuelveElEnvioDeIda(m: MotivoReclamo): boolean {
-  return !PERFIL_MOTIVO[m].recibioAlgo
+  const p = PERFIL_MOTIVO[m]
+  return p.errorPropio || !p.recibioAlgo
 }
 
 /**
@@ -1083,6 +1125,15 @@ export type ReclamoRow = {
    * solo cambia el artículo.
    */
   reingreso_estado?: PendienteEstado | null
+  /**
+   * Lo que sale HACIA el cliente: el cambio, la reposición y el reenvío. Se tilda cuando el paquete
+   * se despachó de verdad.
+   *
+   * ⚠️ No lo cubría nada. En el cambio existe `solicitud_envio`, pero eso es el requisito para
+   * **facturar** — se puede facturar y no despachar nunca, y el reclamo cerraba igual. En la
+   * reposición y el reenvío no había ni eso: el envío era un cartel en pantalla.
+   */
+  envio_nuevo_estado?: PendienteEstado | null
   /** La solicitud de etiqueta (EM####) del envío del cambio. Se guarda SIN el prefijo. */
   solicitud_envio?: string | null
   falla_ids?: number[]
@@ -1199,6 +1250,49 @@ export function tokenVencido(vence: string | null | undefined): boolean {
  *   - **No hay plata que devolver** salvo que la diferencia haya quedado a favor del cliente.
  *   - Lo que sí hay, y no existía como pendiente, es **reingresar a mano** el producto que volvió.
  */
+/**
+ * La tabla de efectos: qué movimientos deja cada resolución.
+ *
+ * ⚠️ **La lógica no vive acá: vive en `lib/reclamos/efectos.core.js`**, en JS plano, porque la
+ * necesita `api/_reclamos.js` y los handlers no pueden importar TypeScript. Es el mismo arreglo que
+ * `lib/permisos.ts` / `lib/permisos.core.js`, y por la misma razón: cuando la regla se copia, las
+ * copias se despegan. Acá sólo se le ponen los tipos.
+ *
+ * `pendientesDe` es la contracara de `faltantesParaCerrar`: una **deriva** los pendientes al
+ * decidir, la otra **lee** los que quedaron para decir qué falta. Nadie más los deriva.
+ */
+export type EfectosResolucion = {
+  plata: string
+  anulaVenta: string
+  reingreso: string
+  cobro: string
+  envioNuevo: string
+  ayuda: string
+}
+
+export const EFECTOS_RESOLUCION = EFECTOS_RESOLUCION_JS as Record<Compensacion, EfectosResolucion>
+
+export type PendientesDerivados = {
+  reintegro_estado: PendienteEstado
+  stock_estado: PendienteEstado
+  reingreso_estado: PendienteEstado
+  cobro_estado: PendienteEstado
+  envio_nuevo_estado: PendienteEstado
+}
+
+/** Los pendientes que deja una decisión. Es lo que `decidir` guarda en la fila. */
+export function pendientesDe(opciones: {
+  compensacion: Compensacion
+  diferencia?: number | null
+}): PendientesDerivados {
+  return pendientesDeJs(opciones) as PendientesDerivados
+}
+
+/** ¿Esta resolución manda algo al cliente? Son el cambio, la reposición y el reenvío. */
+export function saleUnEnvio(compensacion: Compensacion): boolean {
+  return saleUnEnvioJs(compensacion)
+}
+
 export function estaDecidido(d: ReclamoRow): boolean {
   return !!d.compensacion
 }
@@ -1232,6 +1326,9 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   }
 
   if (d.tn_stock_estado === 'pendiente') faltan.push('dar de baja el producto en Gestión Nube')
+  // Lo que sale hacia el cliente. Va acá y no adentro del `if (cambio)` porque las tres
+  // resoluciones que mandan algo —cambio, reposición, reenvío— tienen el mismo pendiente.
+  if (d.envio_nuevo_estado === 'pendiente') faltan.push('despachar lo que se le manda')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
   if (d.destino_prenda === 'stock' && d.estado !== 'recibido' && d.estado !== 'cerrado') faltan.push('recibir el producto')

@@ -8,8 +8,10 @@ import {
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
   ayudaDeMotivo, decideElCliente, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
-  hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
+  hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa, ERROR_PROPIO,
+  type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
+  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -324,16 +326,46 @@ describe('el perfil del motivo', () => {
     })
   })
 
-  describe('devuelveElEnvioDeIda: sólo si no recibió nada', () => {
-    it('no llegó y sin stock: se devuelve producto + envío', () => {
+  /**
+   * El envío de ida: dos razones distintas, alcanza con una.
+   *
+   * ⚠️ El oráculo **no es lo que hacía el código**: hasta el 24-ago devolvía sólo cuando el cliente
+   * no había recibido nada, y una falla se devolvía SIN el envío. La regla es de negocio — si el
+   * error fue nuestro, no se le cobra el envío de nuestro error — así que los casos se afirman por
+   * lo que corresponde, no por lo que la función devolvía.
+   */
+  describe('devuelveElEnvioDeIda: si el error fue nuestro, o si no recibió nada', () => {
+    it('si el error fue NUESTRO se devuelve el envío, aunque haya recibido el paquete', () => {
+      for (const m of ['falla', 'faltante', 'mal_armado'] as MotivoReclamo[]) {
+        expect(devuelveElEnvioDeIda(m), m).toBe(true)
+        // Y estos tres SÍ recibieron algo: es la parte que antes lo dejaba en false.
+        expect(PERFIL_MOTIVO[m].recibioAlgo, m).toBe(true)
+      }
+    })
+
+    it('si no recibió nada se devuelve entero: no hay servicio que cobrar', () => {
       expect(devuelveElEnvioDeIda('no_llego')).toBe(true)
       expect(devuelveElEnvioDeIda('sin_stock')).toBe(true)
     })
 
-    // El envío se prestó: el paquete llegó. Devolverlo es regalar plata.
-    it('en los otros seis, la devolución es del producto únicamente', () => {
-      for (const m of TODOS.filter((x) => x !== 'no_llego' && x !== 'sin_stock')) {
+    it('"no llegó" entra por no haber recibido nada, NO por ser culpa nuestra', () => {
+      expect(PERFIL_MOTIVO.no_llego.errorPropio).toBe(false)
+      expect(PERFIL_MOTIVO.no_llego.recibioAlgo).toBe(false)
+      // Que sean dos preguntas es lo que deja reclamarle esa plata al transportista.
+      expect(devuelveElEnvioDeIda('no_llego')).toBe(true)
+    })
+
+    // El envío prestó su servicio: el paquete llegó y era lo que pidió. Devolverlo es regalar plata.
+    it('si el error NO fue nuestro, la devolución es del producto únicamente', () => {
+      for (const m of ['talle', 'arrepentimiento', 'no_esperaba'] as MotivoReclamo[]) {
         expect(devuelveElEnvioDeIda(m), m).toBe(false)
+      }
+    })
+
+    it('ERROR_PROPIO sale del perfil, no de una lista escrita a mano', () => {
+      expect([...ERROR_PROPIO].sort()).toEqual(['falla', 'faltante', 'mal_armado', 'sin_stock'])
+      for (const m of TODOS) {
+        expect(ERROR_PROPIO.includes(m), m).toBe(PERFIL_MOTIVO[m].errorPropio)
       }
     })
   })
@@ -1188,5 +1220,161 @@ describe('calcularCambio', () => {
     const c = calcularCambio({ devueltos: [item(5000), item(5000)], nuevos: [item(12000)], orden: ORDEN_LIMPIA })
     expect(c.devueltos).toBe(10000)
     expect(c.diferencia).toBe(2000)
+  })
+})
+
+/**
+ * La tabla de efectos.
+ *
+ * Es donde se decide qué pendientes deja cada resolución, y por eso es donde entró el bug que
+ * trabó el módulo: `reenvio`, `cupon` y `ninguna` encendían "devolver la plata" y "anular la venta
+ * en GN" porque no estaban en las dos condiciones escritas a mano que había en `decidir`.
+ *
+ * ⚠️ El oráculo de estos tests **no es el código viejo**: es qué pasa de verdad con la plata y con
+ * el stock en cada caso. Por eso las tres resoluciones arregladas se afirman por lo que
+ * corresponde, no por lo que la API devolvía antes.
+ */
+describe('la tabla de efectos', () => {
+  const TODAS: Compensacion[] = [
+    'plata_total', 'plata_parcial', 'otro_producto', 'otra_unidad', 'reenvio', 'cupon', 'ninguna',
+  ]
+
+  it('tiene una fila por resolución, sin faltar ninguna ni sobrar', () => {
+    expect(Object.keys(EFECTOS_RESOLUCION).sort()).toEqual([...TODAS].sort())
+  })
+
+  it('cada fila contesta las seis preguntas', () => {
+    for (const c of TODAS) {
+      const f = EFECTOS_RESOLUCION[c]
+      for (const k of ['plata', 'anulaVenta', 'reingreso', 'cobro', 'envioNuevo', 'ayuda'] as const) {
+        expect(f[k], `${c}.${k}`).toBeTruthy()
+      }
+    }
+  })
+
+  // ── Lo que se arregló ─────────────────────────────────────────────────────────
+
+  it('un REENVÍO no devuelve plata ni anula la venta: el cliente se queda con lo que compró', () => {
+    const p = pendientesDe({ compensacion: 'reenvio' })
+    expect(p.reintegro_estado).toBe('no_aplica')
+    expect(p.stock_estado).toBe('no_aplica')
+    // Y sí manda algo: es la única razón por la que existe esta resolución.
+    expect(saleUnEnvio('reenvio')).toBe(true)
+  })
+
+  it('un CUPÓN no devuelve plata ni anula la venta, y no manda nada', () => {
+    const p = pendientesDe({ compensacion: 'cupon' })
+    expect(p.reintegro_estado).toBe('no_aplica')
+    expect(p.stock_estado).toBe('no_aplica')
+    expect(saleUnEnvio('cupon')).toBe(false)
+  })
+
+  it('NINGUNA no anula la venta: "no se compensa" no es "se deshace la compra"', () => {
+    const p = pendientesDe({ compensacion: 'ninguna' })
+    expect(p.stock_estado).toBe('no_aplica')
+    expect(p.reintegro_estado).toBe('no_aplica')
+  })
+
+  it('cupón y "sin compensación" no dejan NINGÚN pendiente', () => {
+    for (const c of ['cupon', 'ninguna'] as Compensacion[]) {
+      expect(Object.values(pendientesDe({ compensacion: c })), c).toEqual(
+        ['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'],
+      )
+    }
+  })
+
+  it('el reenvío deja UN solo pendiente: despachar lo que se le manda', () => {
+    const p = pendientesDe({ compensacion: 'reenvio' })
+    expect(p.envio_nuevo_estado).toBe('pendiente')
+    expect([p.reintegro_estado, p.stock_estado, p.reingreso_estado, p.cobro_estado])
+      .toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
+  })
+
+  // ── Lo que NO tenía que cambiar ───────────────────────────────────────────────
+
+  it('devolver la plata sigue devolviendo la plata y anulando la venta', () => {
+    for (const c of ['plata_total', 'plata_parcial'] as Compensacion[]) {
+      const p = pendientesDe({ compensacion: c })
+      expect(p.reintegro_estado, c).toBe('pendiente')
+      expect(p.stock_estado, c).toBe('pendiente')
+      expect(p.reingreso_estado, c).toBe('no_aplica')
+    }
+  })
+
+  it('mandarle otra unidad igual no toca ni la plata ni la venta', () => {
+    const p = pendientesDe({ compensacion: 'otra_unidad' })
+    expect(p).toEqual({
+      reintegro_estado: 'no_aplica', stock_estado: 'no_aplica',
+      reingreso_estado: 'no_aplica', cobro_estado: 'no_aplica',
+      // Lo único que queda por hacer es mandársela.
+      envio_nuevo_estado: 'pendiente',
+    })
+    expect(saleUnEnvio('otra_unidad')).toBe(true)
+  })
+
+  // ── El cambio: los dos condicionales miran el mismo número ────────────────────
+
+  it('en un cambio la venta NUNCA se anula, y siempre hay que reingresar lo devuelto', () => {
+    for (const diferencia of [-5000, 0, 5000]) {
+      const p = pendientesDe({ compensacion: 'otro_producto', diferencia })
+      expect(p.stock_estado, String(diferencia)).toBe('no_aplica')
+      expect(p.reingreso_estado, String(diferencia)).toBe('pendiente')
+    }
+  })
+
+  it('en un cambio sale plata SOLO si la diferencia quedó a favor del cliente', () => {
+    expect(pendientesDe({ compensacion: 'otro_producto', diferencia: -5000 }).reintegro_estado).toBe('pendiente')
+    expect(pendientesDe({ compensacion: 'otro_producto', diferencia: 5000 }).reintegro_estado).toBe('no_aplica')
+    expect(pendientesDe({ compensacion: 'otro_producto', diferencia: 0 }).reintegro_estado).toBe('no_aplica')
+  })
+
+  it('en un cambio se cobra SOLO si quedó plata a cobrar', () => {
+    expect(pendientesDe({ compensacion: 'otro_producto', diferencia: 5000 }).cobro_estado).toBe('pendiente')
+    expect(pendientesDe({ compensacion: 'otro_producto', diferencia: -5000 }).cobro_estado).toBe('no_aplica')
+    expect(pendientesDe({ compensacion: 'otro_producto', diferencia: 0 }).cobro_estado).toBe('no_aplica')
+  })
+
+  it('un cambio sin diferencia calculada todavía no cobra ni devuelve nada', () => {
+    const p = pendientesDe({ compensacion: 'otro_producto', diferencia: null })
+    expect(p.reintegro_estado).toBe('no_aplica')
+    expect(p.cobro_estado).toBe('no_aplica')
+  })
+
+  // ── El borde ──────────────────────────────────────────────────────────────────
+
+  it('una resolución que no está en la tabla no enciende ningún pendiente', () => {
+    const p = pendientesDe({ compensacion: 'inventada' as Compensacion })
+    expect(Object.values(p)).toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
+  })
+
+  it('sólo dejan un envío por despachar las tres que le mandan algo al cliente', () => {
+    const mandan = TODAS.filter((c) => pendientesDe({ compensacion: c }).envio_nuevo_estado === 'pendiente')
+    expect(mandan.sort()).toEqual(['otra_unidad', 'otro_producto', 'reenvio'])
+    // Y `saleUnEnvio` tiene que decir exactamente lo mismo: son la misma fila de la tabla.
+    expect(TODAS.filter(saleUnEnvio).sort()).toEqual(mandan.sort())
+  })
+
+  it('un reclamo no cierra con el envío sin despachar', () => {
+    const base = {
+      id: 1, store: 'bdi', estado: 'resuelto', items: [], motivo: 'faltante',
+      compensacion: 'reenvio', stock_estado: 'no_aplica', reintegro_estado: 'no_aplica',
+      tn_stock_estado: 'no_aplica', reclamo_correo_estado: 'no_aplica',
+    } as unknown as ReclamoRow
+    expect(faltantesParaCerrar({ ...base, envio_nuevo_estado: 'pendiente' }))
+      .toContain('despachar lo que se le manda')
+    expect(faltantesParaCerrar({ ...base, envio_nuevo_estado: 'hecho' }))
+      .not.toContain('despachar lo que se le manda')
+    // Y un reenvío ya despachado no deja NADA pendiente: era el último eslabón.
+    expect(faltantesParaCerrar({ ...base, envio_nuevo_estado: 'hecho' })).toEqual([])
+  })
+
+  it('sólo devuelven plata las resoluciones que de verdad sacan plata de la caja', () => {
+    const conPlata = TODAS.filter((c) => pendientesDe({ compensacion: c, diferencia: -1 }).reintegro_estado === 'pendiente')
+    expect(conPlata.sort()).toEqual(['otro_producto', 'plata_parcial', 'plata_total'])
+  })
+
+  it('sólo anulan la venta las resoluciones que deshacen la compra', () => {
+    const anulan = TODAS.filter((c) => pendientesDe({ compensacion: c }).stock_estado === 'pendiente')
+    expect(anulan.sort()).toEqual(['plata_parcial', 'plata_total'])
   })
 })

@@ -44,6 +44,7 @@ import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
+import { pendientesDe } from '../lib/reclamos/efectos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -75,7 +76,7 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle,
   monto_total, pago_metodo, pago_gateway, devolver_envio, retorno_sugerido, retorno_decidido,
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
-  tn_stock_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
+  tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
   pagado, cobro_estado, envio_paga, reingreso_estado,
@@ -295,22 +296,13 @@ export default async function handler(req, res) {
         estado: esCambio ? 'borrador' : (vuelve ? 'en_transito' : 'resuelto'),
         // ── Los pendientes ────────────────────────────────────────────────────────
         //
-        // **En un cambio son otros**, y tratarlo como una devolución lo dejaba imposible de
-        // cerrar: se le exigía anular la venta original y devolver plata, y ninguna de las dos
-        // corresponde. El cliente se queda con la compra —solo cambia el artículo—, así que la
-        // venta NO se anula; y la plata sale únicamente si la diferencia quedó a favor suyo.
-        // Lo que sí hay que hacer, y no existía como pendiente, es reingresar a mano lo devuelto:
-        // GN no acepta una venta negativa por API.
-        reintegro_estado: esCambio
-          ? (diferencia != null && diferencia < 0 ? 'pendiente' : 'no_aplica')
-          // Sin plata que devolver (le mandamos otra unidad o un cupón), el pendiente no aplica.
-          : (compensacion === 'otra_unidad' || compensacion === 'ninguna' ? 'no_aplica' : 'pendiente'),
-        // Si se le manda otra unidad igual, el cliente se queda con lo que compró: **la venta
-        // original NO se anula**. Anularla devolvería al stock una unidad que nunca volvió y
-        // dejaría la venta sin registrar. En el resto de los casos sí hay que anularla.
-        stock_estado: esCambio || compensacion === 'otra_unidad' ? 'no_aplica' : 'pendiente',
-        reingreso_estado: esCambio ? 'pendiente' : 'no_aplica',
-        cobro_estado: esCambio && diferencia != null && diferencia > 0 ? 'pendiente' : 'no_aplica',
+        // Salen enteros de `EFECTOS_RESOLUCION` (`lib/reclamos/efectos.core.js`): una fila por
+        // resolución con las mismas seis preguntas. Antes se derivaban acá con dos condiciones
+        // escritas a mano, y **tres de las siete resoluciones no estaban en ellas** — `reenvio`,
+        // `cupon` y `ninguna` encendían "devolver la plata" y "anular la venta en GN", que no
+        // corresponden en ninguna de las tres. Agregar una resolución ya no es acordarse de dos
+        // listas: es agregar una fila.
+        ...pendientesDe({ compensacion, diferencia }),
       };
       await apilar(supabase, id, { estado: extra.estado, at: ahora(), usuario, nota: `decidido: ${destino} · ${compensacion}` }, extra);
       return res.status(200).json({ ok: true, estado: extra.estado });
@@ -467,7 +459,7 @@ export default async function handler(req, res) {
       if (b.cobro_estado !== undefined && COBROS.includes(b.cobro_estado)) campos.cobro_estado = b.cobro_estado;
       if (b.reclamo_correo_estado !== undefined && PENDIENTES.includes(b.reclamo_correo_estado)) campos.reclamo_correo_estado = b.reclamo_correo_estado;
       // Los pendientes se pueden volver atrás a mano si alguien se apuró a tildarlos.
-      for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado', 'reingreso_estado']) {
+      for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado', 'reingreso_estado', 'envio_nuevo_estado']) {
         if (b[k] !== undefined && PENDIENTES.includes(b[k])) campos[k] = b[k];
       }
       if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });

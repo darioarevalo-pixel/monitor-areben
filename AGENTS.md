@@ -154,6 +154,11 @@ ya tienen ficha:
   `lib/agenda/` o `api/_agenda.js`. ⛔ **La ve todo el equipo** (`KEYS_PARA_TODOS`) y **tildar no
   pide permiso**: no hay nada que destrabar. ⛔ Las promos y los pendientes son **un solo motor**
   (`reglas.core.js`) — una rutina nueva se carga, no se construye.
+- Reclamos y Cambios → **leer `docs/secciones/reclamos.md`** antes de tocar `components/reclamos/`,
+  `components/postventa/`, `lib/reclamos/`, `api/_reclamos.js` o `api/_reclamo.js`. ⛔ **Acá vive la
+  plata**, y un error no rompe ninguna pantalla: se ve en la caja o en el stock. ⛔ Los pendientes de
+  cada resolución salen SOLO de `lib/reclamos/efectos.core.js` — duplicar esa derivación es el bug
+  que ya tuvo. ⛔ `/reclamo/<token>` es un portal ABIERTO.
 
 ## Mapa de secciones
 
@@ -218,8 +223,10 @@ varias veces su tamaño.
 
 ## Estado del trabajo
 
-- **⛔ Reclamos y Cambios: frenado.** El flujo no convence; no construir ahí hasta que Bruno
-  devuelva el mapa marcado.
+- **Reclamos y Cambios: destrabado (24-ago-2026)** y en rediseño — los 8 motivos pasan a **11
+  casos** y el módulo se reorganiza como un chasis: inicio común, **el escenario** (el nivel que hoy
+  no existe), final común. 🔴 **`sql/migrate-reclamos-efectos.sql` está SIN CORRER y su bloque 2 va
+  ANTES de deployar.** El detalle, en la ficha.
 - **Repo compartido con Darío.** Los refactors grandes se coordinan antes de empezar.
 
 ## Estilo
