@@ -112,6 +112,42 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
 - ⚠️ **Los filtros de stock y ventas dependen del ETL**, que carga aparte y tarda: hasta que llega
   quedan atenuados. Un cambio que los prenda antes vuelve a mostrar "0 problemas" mientras carga.
 
+## La cola de fotos → una sesión de fotos (24-ago-2026)
+
+La vista **«Esto es lo que hay que fotografiar»** terminaba en un Excel: alguien lo abría y volvía a
+buscar cada producto, a mano, en el buscador del borrador de Sesión de fotos. Ahora tiene al lado
+**«Pedir una sesión de fotos»**, que cruza a Gestión Nube y abre el borrador con los productos y
+**las variantes sin foto ya tildadas** (`lib/tncat/a-sesion-fotos.ts`).
+
+- 🔑 **El cruce es el mismo criterio que el stock por variante**: código exacto, **SKU primero y
+  barcode después**, igual que `stockDeVariante`. Si los dos se contestaran distinto, el stock que
+  muestra la cola y el producto que abre el borrador serían de productos diferentes. El guard del
+  código vacío vive **sólo en el índice**: repetirlo en la búsqueda lo volvía inalcanzable —
+  [[feedback_areben_guard_duplicado_lo_caza_el_mutante]].
+- 🔴 **Se cruza contra `allVariantes`, las MISMAS que va a expandir el borrador.** `expandirProductos`
+  descarta en silencio (`continue`) las variantes sin stock, así que pedir una sin stock es un tilde
+  que se pierde sin aviso. Hay un test que corre la cadena entera —cruzar → expandir → tildar— y
+  afirma que **no falta ninguna**.
+- 🔴 **Lo que queda afuera se dice ANTES de navegar, con el motivo**, porque cada motivo es una
+  acción distinta: `sin-cruce` (mapear el SKU) · `sin-producto-gn` (cargarlo en GN: la variante es
+  huérfana) · `sin-stock` (esperar el ingreso) · `ambiguo` (el código lleva a dos productos).
+  Si no se pudo cruzar ninguno **no se navega**: un borrador vacío se lee como que no había nada
+  que fotografiar.
+- 🆕 🔴 **Medido sobre el ETL real de las dos marcas (24-ago), el filtro grande NO es el cruce, es el
+  stock**: **1.197 de 2.916** variantes de GN en BDI y **619 de 1.627** en Zattia están **en cero**
+  (41 % y 38 %). ⚠️ Es sobre TODAS las variantes de GN, no sobre las de la cola — sirve de cota, no
+  de pronóstico. El plan avisaba del cruce (89,5 % / 73,3 %) y la escala del descarte por stock es
+  mayor.
+- 🆕 ⚠️ **El caso `ambiguo` NO es hipotético**: **7 SKUs en BDI y 13 en Zattia** llevan a dos
+  productos distintos de Gestión Nube (por barcode: **0 en las dos**). Son pocos, y por eso mismo
+  elegir uno «porque casi siempre da igual» sería un error invisible.
+- 🔑 **La puerta sabe de dónde viene y no pregunta**: esta lista es, por definición, lo que está a la
+  venta sin foto de su color ⇒ manda `disparador: 'faltante'`. Es lo contrario del botón de
+  Marketing, que sirve igual para una campaña y por eso manda `null` — ver
+  `lib/solicitudes/disparador.ts`.
+- ▶️ **Nadie lo caminó todavía contra la tienda real**: el cruce se probó con fixtures y con el ETL
+  bajado, no apretando el botón en prod.
+
 ## Lo que ya se rompió acá
 
 Todos los modos de falla de esta sección son **el mismo**: la pantalla dice que está todo bien
@@ -153,6 +189,7 @@ cada combinación color × modelo es una publicación distinta en Mercado Libre.
 
 ```bash
 npx vitest run tests/tncat.test.ts --reporter=dot        # y los otros 8 tests/tncat-*.test.ts
+npx vitest run tests/tncat-a-sesion-fotos.test.ts --reporter=dot   # el puente a Sesión de fotos
 ```
 
 🔴 **Los 9 tests son de lógica pura y NINGUNO toca `lib/tncat/cliente.ts`.** Cubren el cruce, el

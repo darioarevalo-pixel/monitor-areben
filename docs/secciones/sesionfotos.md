@@ -184,9 +184,14 @@ una producción) · `faltante` (un producto ya a la venta no tiene foto).
   **«sin origen»**, no se esconde: es un dato que falta, no un origen.
 - ⚠️ Sin migración: la solicitud entera vive en el jsonb/KV. Las **30 solicitudes anteriores** no
   tienen disparador y no se les inventa uno.
-- ▶️ **Todavía ninguna puerta lo llena sola.** `disparadorPorPuerta('ingreso'|'faltantes')` está
-  escrito y probado, pero el paso «foto» del molde de ingreso y la cola de faltantes todavía no lo
-  llaman — eso es lo que sigue. Hoy el valor lo pone a mano quien arma la sesión.
+- 🆕 🏁 **La cola de fotos ya es una puerta que lo llena sola** (24-ago): «Pedir una sesión de fotos»
+  en la auditoría de fotos de Tienda Nube manda `disparador: 'faltante'`, los productos cruzados a
+  GN y **las variantes sin foto tildadas** — ver `docs/secciones/tncat.md`. El puente ahora lleva
+  `{pids, vids, disparador}` (`SeleccionFotos`) en vez de sólo `pids`; Marketing manda
+  `{pids, vids: [], disparador: null}`, que es «este producto, elegí vos los talles».
+- ▶️ **Falta que la del INGRESO lo llene sola.** El paso «foto» del molde de ingreso todavía no llama a
+  `disparadorPorPuerta('ingreso')`. En las altas que no vienen de la cola, el valor lo pone a mano
+  quien arma la sesión.
 - ⚠️ **La dueña de cada disparador (Cande / Sofi) NO está en el código, a propósito**: la gente
   cambia y eso se carga como molde en la Agenda, igual que los pasos del ingreso.
 

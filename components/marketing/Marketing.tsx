@@ -208,7 +208,10 @@ export function Marketing() {
       void avisar('Tildá al menos un producto para mandar a Sesión de fotos.')
       return
     }
-    ponerPuenteFotos([...sel])
+    // Marketing manda el producto entero y sin tildar: acá se elige QUÉ producto, no qué talle.
+    // Y sin disparador: este botón sirve igual para una campaña que para tapar un faltante, así
+    // que lo pregunta el borrador (`disparadorPorPuerta('marketing')` devuelve null por lo mismo).
+    ponerPuenteFotos({ pids: [...sel], vids: [], disparador: null })
     setSelMode(false)
     router.push('/sesion-fotos')
   }

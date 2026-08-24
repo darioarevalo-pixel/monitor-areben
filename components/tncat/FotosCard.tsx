@@ -28,6 +28,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -37,6 +38,8 @@ import type { Marca } from '@/lib/nav'
 import { auditVariantes, bustAudit, desvincularColor, vincularColor } from '@/lib/tncat/cliente'
 import { stockPorProductoTn, ventas90PorProductoTn } from '@/lib/tncat/agotados'
 import { indexarStockGn } from '@/lib/tncat/stock-variante'
+import { cruzarParaSesion, MOTIVO_EXCLUIDO_LABEL, porMotivo } from '@/lib/tncat/a-sesion-fotos'
+import { ponerPuenteFotos } from '@/lib/sesionfotos/puente'
 import { exportarPendientesXLSX } from '@/lib/tncat/export'
 import {
   aplicarRecortes,
@@ -65,7 +68,8 @@ const MAX = 80
 const detalle = (errores?: string[]) => (errores?.length ? errores.join(' · ') : '')
 
 export function FotosCard({ marca }: { marca: Marca }) {
-  const { pedirTexto } = useConfirmar()
+  const router = useRouter()
+  const { pedirTexto, avisar, confirmar } = useConfirmar()
   const toast = useToast()
   const { perfil } = useSesion()
   const { datos } = useDatosMonitor()
@@ -334,6 +338,58 @@ export function FotosCard({ marca }: { marca: Marca }) {
     }
   }
 
+  /**
+   * La cola de fotos → el borrador de una sesión.
+   *
+   * Es la misma lista que exporta el Excel, pero en vez de terminar en un archivo que alguien
+   * vuelve a tipear en el buscador del borrador, cruza a Gestión Nube y abre la solicitud con los
+   * productos y **las variantes sin foto ya tildadas**.
+   *
+   * 🔴 El cruce no es total (BDI 89,5 % / Zattia 73,3 %), así que lo que queda afuera se dice
+   * ANTES de navegar, con el motivo de cada uno: no es lo mismo «no cruza por código» (mapear el
+   * SKU) que «no queda una unidad» (esperar el ingreso). Si no se pudo cruzar ninguno, no se
+   * navega: abrir un borrador vacío se lee como que no había nada que fotografiar.
+   */
+  const mandarASesion = async () => {
+    if (!datos) return
+    const { pedir, excluidos } = cruzarParaSesion(
+      lista.map((f) => f.producto),
+      datos.allVariantes,
+      datos.allVariantesHuerfanas ?? [],
+    )
+    if (!pedir.length) {
+      await avisar({
+        titulo: 'No hay nada para pedir',
+        mensaje: excluidos.length
+          ? `Ninguno de los ${excluidos.length} productos de la cola se pudo llevar a una sesión: ` +
+            porMotivo(excluidos).map((x) => `${x.n} ${MOTIVO_EXCLUIDO_LABEL[x.motivo]}`).join(' · ') + '.'
+          : 'No hay productos esperando una foto en esta vista.',
+      })
+      return
+    }
+    const unidades = pedir.reduce((a, p) => a + p.vids.length, 0)
+    const detalleExcluidos = porMotivo(excluidos)
+      .map((x) => `• ${x.n} ${MOTIVO_EXCLUIDO_LABEL[x.motivo]}`)
+      .join('\n')
+    const ok = await confirmar({
+      titulo: 'Pedir una sesión de fotos',
+      mensaje:
+        `Se abre un borrador con ${pedir.length} ${pedir.length === 1 ? 'producto' : 'productos'} y ` +
+        `${unidades} ${unidades === 1 ? 'variante tildada' : 'variantes tildadas'}.` +
+        (detalleExcluidos ? `\n\nQuedan afuera ${excluidos.length}:\n${detalleExcluidos}` : ''),
+      ok: 'Abrir el borrador',
+    })
+    if (!ok) return
+    ponerPuenteFotos({
+      pids: pedir.map((p) => p.pid),
+      vids: pedir.flatMap((p) => p.vids),
+      // 🔑 Acá la puerta SÍ sabe de dónde viene: esta lista es, por definición, lo que está a la
+      // venta sin foto de su color. Por eso no se pregunta.
+      disparador: 'faltante',
+    })
+    router.push('/sesion-fotos')
+  }
+
   const restaurar = async (fila: FilaAuditoria) => {
     const id = String(fila.producto.id)
     setIgnorados((prev) => {
@@ -538,7 +594,12 @@ export function FotosCard({ marca }: { marca: Marca }) {
               <b>Esto es lo que hay que fotografiar</b>, ordenado por la mercadería que tiene parada sin foto de su
               color. Las unidades salen de Gestión Nube (local + depósito). Los que dicen «sin dato» no se pudieron
               cruzar por código — se muestran igual, porque no saber no es lo mismo que no tener.
-              <div style={{ marginTop: space[2] }}>
+              <div style={{ marginTop: space[2], display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                {/* El Excel saca la lista de la app; esto la mete en el trabajo. Antes, para pedir
+                    la mercadería había que buscar cada producto de nuevo, a mano, en el borrador. */}
+                <Button size="sm" variant="solid" disabled={!datos} onClick={() => void mandarASesion()}>
+                  Pedir una sesión de fotos
+                </Button>
                 <Button size="sm" variant="outline" loading={exportando} onClick={() => void exportar()}>
                   Exportar a Excel ({lista.length} {lista.length === 1 ? 'producto' : 'productos'})
                 </Button>

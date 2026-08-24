@@ -16,15 +16,34 @@ import type { Disparador } from '../solicitudes/disparador'
  * sin venir de Marketing, no arrastre una selección anterior.
  */
 
-let pendiente: string[] | null = null
-
-/** Marketing deja acá los ids de producto elegidos y navega a Sesión de fotos. */
-export function ponerPuenteFotos(pids: string[]): void {
-  pendiente = pids.map(String)
+/**
+ * Lo que una pantalla deja para que el borrador se abra cargado.
+ *
+ * Empezó siendo `string[]` (los pids que tildaba Marketing) y creció cuando la cola de fotos
+ * necesitó mandar **qué variantes** hay que fotografiar, no sólo qué productos: la cola sabe que
+ * al negro le falta la foto y al blanco no, y perder eso obligaba a volver a tildar a mano lo que
+ * la pantalla anterior ya había decidido.
+ *
+ * `vids` vacío es legítimo y es lo que manda Marketing: «este producto, elegí vos los talles».
+ */
+export type SeleccionFotos = {
+  /** Ids de producto de Gestión Nube a expandir en el borrador. */
+  pids: string[]
+  /** Variantes a dejar TILDADAS. Vacío = ninguna (el borrador abre todo sin tildar). */
+  vids: string[]
+  /** De dónde viene la sesión, cuando la puerta lo sabe. Ver `lib/solicitudes/disparador.ts`. */
+  disparador: Disparador | null
 }
 
-/** Sesión de fotos toma (una sola vez) los ids pendientes, o null si no vino de Marketing. */
-export function tomarPuenteFotos(): string[] | null {
+let pendiente: SeleccionFotos | null = null
+
+/** Una pantalla deja acá lo elegido y navega a Sesión de fotos. */
+export function ponerPuenteFotos(sel: SeleccionFotos): void {
+  pendiente = { pids: sel.pids.map(String), vids: sel.vids.map(String), disparador: sel.disparador }
+}
+
+/** Sesión de fotos toma (una sola vez) lo pendiente, o null si entraron por su cuenta. */
+export function tomarPuenteFotos(): SeleccionFotos | null {
   const p = pendiente
   pendiente = null
   return p

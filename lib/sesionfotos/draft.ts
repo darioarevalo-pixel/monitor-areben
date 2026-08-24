@@ -80,6 +80,36 @@ export function expandirProductos(draft: Draft, pids: string[], variantes: Varia
   return { ...draft, prods }
 }
 
+/**
+ * Tilda las variantes cuyo `vid` viene en la lista, y deja el resto como está.
+ *
+ * Es lo que hace que la cola de fotos abra el borrador con **lo que hay que fotografiar ya
+ * elegido**: la pantalla anterior sabe que al negro le falta la foto y al blanco no, y volver a
+ * tildarlo a mano es rehacer una decisión que ya se tomó.
+ *
+ * 🔴 Un `vid` que no está en el borrador se ignora en silencio A PROPÓSITO, pero eso no puede ser
+ * la única red: `expandirProductos` deja afuera las variantes SIN STOCK, así que el que arma la
+ * lista tiene que filtrarlas antes (lo hace `cruzarParaSesion`). Si no, el tilde se pierde y la
+ * sesión sale con menos de lo que se pidió sin que nadie se entere.
+ */
+export function tildarVariantes(draft: Draft, vids: string[]): Draft {
+  const pedidos = new Set(vids.map(String))
+  if (!pedidos.size) return draft
+  return {
+    ...draft,
+    prods: draft.prods.map((p) => ({
+      ...p,
+      variantes: p.variantes.map((v) => (pedidos.has(String(v.vid)) ? { ...v, sel: true } : v)),
+    })),
+  }
+}
+
+/** Los `vid` pedidos que NO quedaron en el borrador. Vacío = entró todo lo que se pidió. */
+export function vidsAusentes(draft: Draft, vids: string[]): string[] {
+  const hay = new Set(draft.prods.flatMap((p) => p.variantes.map((v) => String(v.vid))))
+  return [...new Set(vids.map(String))].filter((v) => !hay.has(v))
+}
+
 /** Resultado agrupado del buscador incremental. Port de la data de sfAddBuscar. */
 export type ResultadoBusqueda = {
   pid: string

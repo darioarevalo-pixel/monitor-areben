@@ -36,6 +36,8 @@ import {
   buscarProductos,
   draftVacio,
   expandirProductos,
+  tildarVariantes,
+  vidsAusentes,
   escanearDraft,
   procesarDraft,
   quitarManual,
@@ -78,7 +80,7 @@ import { DISPARADOR_AYUDA, DISPARADOR_LABEL, DISPARADORES, type Disparador, esDi
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
-import { tomarAltaSolicitud, tomarPuenteFotos, tomarVerSolicitud, type AltaSolicitud } from '@/lib/sesionfotos/puente'
+import { tomarAltaSolicitud, tomarPuenteFotos, tomarVerSolicitud, type AltaSolicitud, type SeleccionFotos } from '@/lib/sesionfotos/puente'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { Badge, Button, Icono, color, useConfirmar, useToast } from '@/components/ui'
 
@@ -213,10 +215,10 @@ function Contenido({
   const puedeRetiroDep = puedeRetirar(perfil, 'deposito')
   const puedeRetiroLoc = puedeRetirar(perfil, 'local')
 
-  // Puente desde Marketing: si venimos con una selección de productos, abrimos el
+  // Puente desde Marketing o desde la cola de fotos: si venimos con una selección, abrimos el
   // borrador ya pre-cargado. Se toma UNA vez al montar (tomar consume), en el
   // inicializador de estado para no dispararlo en cada render.
-  const [pidsPuente] = useState<string[] | null>(() => tomarPuenteFotos())
+  const [selPuente] = useState<SeleccionFotos | null>(() => tomarPuenteFotos())
   // Puente desde Inicio: si venimos a ver una solicitud puntual, abrimos su detalle.
   const [verInicial] = useState<string | null>(() => tomarVerSolicitud())
   // Puente desde Solicitudes: el alta ya eligió motivo + destino, así que el borrador se
@@ -227,7 +229,7 @@ function Contenido({
   const [viendo, setViendo] = useState<string | null>(verInicial)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
-  const [armando, setArmando] = useState(!!pidsPuente?.length || !!altaInicial)
+  const [armando, setArmando] = useState(!!selPuente?.pids.length || !!altaInicial)
 
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
@@ -269,7 +271,7 @@ function Contenido({
           catalogoListo={catalogoListo}
           variantes={variantes}
           productos={productos}
-          pidsIniciales={pidsPuente}
+          desdePuente={selPuente}
           alta={altaInicial}
           onCancelar={() => setArmando(false)}
           onCreada={(id) => {
@@ -1349,7 +1351,7 @@ function Draft({
   catalogoListo,
   variantes,
   productos,
-  pidsIniciales,
+  desdePuente,
   alta,
   onCancelar,
   onCreada,
@@ -1364,7 +1366,7 @@ function Draft({
   variantes: Variante[]
   productos: Producto[]
   /** Ids de producto que llegan por el puente desde Marketing (borrador pre-cargado). */
-  pidsIniciales?: string[] | null
+  desdePuente?: SeleccionFotos | null
   /** Motivo + destino elegidos en Solicitudes al pedir el alta. */
   alta?: AltaSolicitud | null
   onCancelar: () => void
@@ -1384,15 +1386,28 @@ function Draft({
   // Todo borrador nace con motivo y destino: son dos campos de la solicitud, no una capa
   // de "las internas". Si el alta vino de Solicitudes, arranca con lo que se eligió ahí.
   const draftInicial = () =>
-    draftVacio(alta?.motivo || motivosDe(preset)[0] || MOTIVO_DEFAULT, alta?.tipo || DESTINO_DEFAULT, alta?.disparador ?? null)
+    draftVacio(alta?.motivo || motivosDe(preset)[0] || MOTIVO_DEFAULT, alta?.tipo || DESTINO_DEFAULT, alta?.disparador ?? desdePuente?.disparador ?? null)
   // El tercer eje solo se pregunta en el cajón de fotos: una moldería o una muestra no
   // salen de un ingreso ni de un hueco del catálogo.
   const pideDisparador = preset.kind === PRESET_FOTOS.kind
-  // Con puente desde Marketing, arranca con esos productos expandidos (variantes con
-  // stock, sin tildar) — el mismo estado que "Traer producto" de a uno. Inicializador
-  // de useState: corre una sola vez.
+  // Con puente (Marketing o la cola de fotos), arranca con esos productos expandidos y con las
+  // variantes que la pantalla anterior ya eligió TILDADAS — el resto, sin tildar, como siempre.
+  // Inicializador de useState: corre una sola vez.
   const [draft, setDraft] = useState<DraftT>(() =>
-    pidsIniciales?.length ? expandirProductos(draftInicial(), pidsIniciales, variantes, productos) : draftInicial(),
+    desdePuente?.pids.length
+      ? tildarVariantes(expandirProductos(draftInicial(), desdePuente.pids, variantes, productos), desdePuente.vids)
+      : draftInicial(),
+  )
+  /**
+   * Lo que se pidió y NO entró: variantes que la cola mandó y el borrador no pudo expandir. Debería
+   * ser vacío —`cruzarParaSesion` ya filtra las que no tienen stock— y justamente por eso se
+   * muestra: si aparece, es que las dos pantallas están mirando inventarios distintos, y eso hay
+   * que verlo, no descubrirlo cuando la sesión sale corta.
+   */
+  const [faltaronDelPuente] = useState<string[]>(() =>
+    desdePuente?.vids.length
+      ? vidsAusentes(tildarVariantes(expandirProductos(draftInicial(), desdePuente.pids, variantes, productos), desdePuente.vids), desdePuente.vids)
+      : [],
   )
   const [origenSel, setOrigenSel] = useState<Origen>(prioridad)
   const [busqueda, setBusqueda] = useState('')
@@ -1452,6 +1467,13 @@ function Draft({
 
   return (
     <div>
+      {faltaronDelPuente.length ? (
+        <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 9, padding: '9px 12px', marginBottom: 10, fontSize: 13, color: color.warningInk }}>
+          ⚠ <b>{faltaronDelPuente.length}</b> {faltaronDelPuente.length === 1 ? 'variante que se pidió no entró' : 'variantes que se pidieron no entraron'} al borrador
+          (no aparecen con stock en Gestión Nube). Revisá que no falte nada antes de crear la solicitud.
+        </div>
+      ) : null}
+
       {/* Motivo (para qué sale) + destino (si vuelve). Dos ejes independientes: cualquier
           motivo puede tener cualquier destino — la foto de una remera vuelve, la de un
           vidrio templado no. Los dos botones están SIEMPRE visibles, con su explicación. */}
