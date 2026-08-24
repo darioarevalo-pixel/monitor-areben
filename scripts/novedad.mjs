@@ -6,6 +6,14 @@
 //
 //   node scripts/novedad.mjs "Título" cuerpo.md [--importante] [--dry] [--destino=…] [--marca=…]
 //   node scripts/novedad.mjs --listar
+//   node scripts/novedad.mjs "Título" cuerpo.md --id=n1787…   ← CORREGIR un borrador ya cargado
+//
+// # Por qué existe `--id`
+//
+// Sin él, corregir una frase de un borrador deja DOS borradores casi iguales, y el que publica
+// tiene que adivinar cuál. El handler ya upsertea por id, así que reusar el id es editar.
+// ⛔ Y sólo sobre un BORRADOR: si esa novedad ya está publicada, el script corta. Reescribirle el
+// cuerpo a algo que el equipo ya leyó es cambiar el pasado — para eso se carga una nueva.
 //
 // # A quién le llega (--destino)
 //
@@ -116,8 +124,31 @@ try {
   process.exit(1)
 }
 
+/** `--id=n…` para pisar un borrador existente en vez de crear otro. */
+const idPedido = (args.find((a) => a.startsWith('--id=')) || '').slice('--id='.length)
+
+if (idPedido && !dry) {
+  // ⛔ El candado: se pregunta en qué estado está ANTES de escribirle encima. Un borrador se
+  // corrige; una publicada, no — el equipo ya la leyó y cambiarle el cuerpo es cambiar el pasado.
+  const r = await fetch(API, { headers })
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) {
+    console.error(`✗ no pude leer las novedades para chequear el estado de ${idPedido}`)
+    process.exit(1)
+  }
+  const ya = (d.novedades || []).find((n) => n.id === idPedido)
+  if (!ya) {
+    console.error(`✗ no existe ninguna novedad con id ${idPedido}.`)
+    process.exit(1)
+  }
+  if (ya.estado !== 'borrador') {
+    console.error(`✗ "${ya.titulo}" está ${ya.estado}, no en borrador. No se pisa: cargá una nueva.`)
+    process.exit(1)
+  }
+}
+
 const novedad = {
-  id: `n${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  id: idPedido || `n${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   titulo,
   cuerpo,
   importante,
