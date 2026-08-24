@@ -47,9 +47,12 @@ Dos cosas a la vez, y por eso se siente rápido:
 
 1. **La ficha** se pide en ese mismo instante, por el id del cliente —que la lista ya sabe—, sin
    esperar a que la conversación abra.
-2. **El chat** se abre pidiéndole a WhatsApp que cambie de conversación, sin recargar la página.
-   Si esa puerta interna deja de funcionar, la extensión cae sola a la dirección de siempre
-   (`send?phone=`): abre igual, pero recarga WhatsApp Web y tarda varios segundos.
+2. **El chat** se abre mandando a WhatsApp a la dirección de esa conversación, y eso **recarga
+   WhatsApp Web**: son unos segundos, y no se pueden evitar. Se intentó pedirle a la aplicación ya
+   cargada que cambie de conversación —encontrarla funciona, mostrarla no— y está explicado en
+   `pagina.js` para que nadie lo repita a ciegas.
+
+Por eso el orden importa: mientras WhatsApp carga la conversación, la ficha ya está en el panel.
 
 ## Si un día deja de aparecer la ficha
 

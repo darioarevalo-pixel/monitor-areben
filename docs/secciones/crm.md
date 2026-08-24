@@ -70,11 +70,18 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   puede tocar la pestaña de WhatsApp. Manda el teléfono por `postMessage`. 🔴 El listener de
   `sidepanel.js` **filtra por origen** (`monitorareben.vercel.app`): sin eso, cualquier página
   embebida podría hacer navegar la pestaña de WhatsApp a donde quiera.
-- 🔑 **El chat se abre POR ADENTRO, sin recargar WhatsApp** (v0.4.0): `WidFactory.createUserWidOrThrow`
-  → `ChatCollection.get` / `getLatestChatForWid` → `Cmd.openChatAt`. Verificado en la cuenta de BDI
-  el 23-ago-2026. `send?phone=` abre bien pero **recarga WhatsApp Web entero**, y eso son varios
-  segundos por cada cliente de la lista; queda de respaldo automático (con un plazo de 1,5 s en
-  `content.js`, porque `pagina.js` puede no estar cargado o haberse roto).
+- ⛔ **Abrir el chat SIN recargar WhatsApp: probado y no se puede** (23-ago-2026). `send?phone=`
+  recarga WhatsApp Web entero, ~5 s por cliente, y es lo que más se siente del circuito. Lo que se
+  intentó y hasta dónde llegó, para que nadie lo repita a ciegas: el wid se arma bien
+  (`createUserWidOrThrow` con sólo dígitos), la conversación se encuentra **en 0 ms**
+  (`ChatCollection.get`) — pero **mostrarla falla**: `Cmd.openChatBottom`, `openChatAt` y
+  `openChatFromUnread` se rompen las tres con *Cannot read properties of undefined* sobre un chat
+  traído de la colección, y funcionan con `getActive()`. O sea que al modelo le falta algo que sólo
+  tiene el chat ya abierto; ahí encalla y ahí habría que retomar. ⚠️ Ojo `getLatestChatForWid`:
+  devuelve un REGISTRO de la base, truthy y sin `id`, así que hay que validar antes de aceptarlo —
+  aceptarlo fue lo que enmascaró el problema media hora.
+- 🔑 **Lo que sí compensa la demora**: la ficha no espera al chat. Se pide por `clienteId` en el
+  mismo instante del clic, así que mientras WhatsApp recarga, el panel ya tiene al cliente.
 - 🔑 **El panel NO baja el CRM.** La sección baja 27.990 ventas y 12.485 clientes (~6 s, 5 MB)
   porque muestra una tabla de todos; el panel se rearma en cada cambio de chat, así que pide la
   consulta puntual (`action:'panel'`). Es la única razón por la que esa acción existe.
