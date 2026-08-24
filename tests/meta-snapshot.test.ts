@@ -105,6 +105,34 @@ describe('de fila de insights a fila de la tabla', () => {
     expect(f.roas).toBe(3.4)
   })
 
+  it('🔑 el embudo se guarda: carritos, checkouts y visitas a la web salen de `actions`', () => {
+    const conEmbudo = {
+      ...row,
+      actions: [
+        ...row.actions,
+        { action_type: 'omni_add_to_cart', value: '231' },
+        { action_type: 'omni_initiated_checkout', value: '45' },
+        { action_type: 'landing_page_view', value: '640' },
+      ],
+    }
+    const f = filaSnapshot(conEmbudo, 'conjunto', '1145878766790149')!
+    expect(f.carritos).toBe(231)
+    expect(f.checkouts).toBe(45)
+    expect(f.lpv).toBe(640)
+    // Y el embudo tiene que cerrar hacia abajo: no puede haber más compras que checkouts.
+    expect(f.compras).toBeLessThanOrEqual(f.checkouts!)
+  })
+
+  it('🔴 sin el action_type los tres dan 0, que NO es lo mismo que el null de las filas viejas', () => {
+    // `accion()` sobre un array que no trae el tipo devuelve 0, igual que un día que de verdad no
+    // tuvo carritos. Por eso las filas anteriores al 23-ago-2026 quedan en null en la base y no en
+    // 0: acá se fija que la función efectivamente no distingue, para que nadie espere que sí.
+    const f = filaSnapshot(row, 'conjunto', '1145878766790149')!
+    expect(f.carritos).toBe(0)
+    expect(f.checkouts).toBe(0)
+    expect(f.lpv).toBe(0)
+  })
+
   it('una fila sin fecha o sin id se descarta, en vez de escribirse con una fecha inventada', () => {
     expect(filaSnapshot({ ...row, date_start: undefined }, 'conjunto', '1')).toBeNull()
     expect(filaSnapshot({ ...row, adset_id: undefined }, 'conjunto', '1')).toBeNull()

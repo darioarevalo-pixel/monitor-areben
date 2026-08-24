@@ -95,6 +95,19 @@ create table if not exists meta_ads_snapshot_dia (
 alter table meta_ads_snapshot_dia add column if not exists estado_real   text;
 alter table meta_ads_snapshot_dia add column if not exists diario_crudo  bigint;
 
+-- El embudo, agregado el 23-ago-2026. Graph YA los mandaba: `CAMPOS_INSIGHTS` pide `actions` y
+-- `FUNNEL` tiene los tres `action_type` desde antes — se leían para la pantalla y se tiraban al
+-- guardar. Cero llamadas nuevas a Meta.
+-- 🔑 Por qué importan: con $10.000 un test compra ~1,5 COMPRAS y ~30 CARRITOS. Decidir si una
+-- pieza sirve con n=1,5 es tirar una moneda (medido: la regla de "1 venta = aprobado" mató una
+-- pieza buena por $7 y aprobó una mala por $60). Con 30 eventos se decide.
+-- 🔴 Nacen NULL y las filas viejas se quedan NULL A PROPÓSITO: un 0 en "carritos" dice "esta
+-- pieza no hizo agregar ninguno", y eso es una afirmación que estas filas no pueden hacer.
+-- Quien las lea tiene que distinguir "no lo medíamos" de "dio cero".
+alter table meta_ads_snapshot_dia add column if not exists carritos      numeric;
+alter table meta_ads_snapshot_dia add column if not exists checkouts     numeric;
+alter table meta_ads_snapshot_dia add column if not exists lpv           numeric;
+
 -- Las tres consultas reales:
 --   1. la serie de UN objeto (el gráfico de tendencia, y el "viene cayendo" del escalado)
 --   2. todo lo de una línea en un rango (el Panel y los candidatos a escalar/podar)

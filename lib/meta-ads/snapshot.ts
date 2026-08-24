@@ -59,6 +59,12 @@ export type FilaSnapshot = {
   compras: number
   revenue: number
   roas: number
+  /** 🔴 Los tres del embudo son `null` en toda fila anterior al 23-ago-2026: antes NO se guardaban.
+   *  `null` es "no lo medíamos" y `0` es "no hubo ninguno" — quien los lea no puede confundirlos,
+   *  porque un 0 en un denominador imprime un costo de $0, que se lee "gratis". */
+  carritos: number | null
+  checkouts: number | null
+  lpv: number | null
   visitas_perfil: number
   seguidores: number
 }

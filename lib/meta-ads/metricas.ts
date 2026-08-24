@@ -38,6 +38,9 @@ export type Metricas = {
   purchases: number
   revenue: number
   roas: number
+  carritos: number
+  checkouts: number
+  lpv: number
   perfil: number
   seguidores: number
 }
