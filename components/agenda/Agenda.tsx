@@ -382,6 +382,9 @@ function FilaItem({
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
             {rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
+            {/* La regla sola miente cuando el ítem arrastra: dice "los martes" y en la pantalla del
+                local aparece un jueves. Acá se lee de una, sin abrir el modal. */}
+            {i.arrastra && ' · queda hasta que se tilde'}
             {i.marcas.length > 0 && ` · sólo ${i.marcas.join(' y ')}`}
             {i.manualId && ' · con manual'}
           </div>

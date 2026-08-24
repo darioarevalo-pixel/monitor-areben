@@ -77,8 +77,11 @@ const CLASES = ['pendiente', 'aviso'];
 const CAMPOS =
   'id, banco, medio, beneficio, regla, desde, hasta, condiciones, pasos, canales, marcas, activa, autor, created_at';
 
+// 🔑 `datos` es lo accesorio del ítem, y las columnas de al lado son proyecciones para filtrar y
+// ordenar: un campo nuevo viaja por ahí **sin migración**. Estuvo en la tabla desde el día uno y
+// vacía; la primera que la usa es `arrastra`.
 const CAMPOS_ITEM =
-  'id, clase, titulo, cuerpo, regla, destino, marcas, manual_id, activo, autor, created_at';
+  'id, clase, titulo, cuerpo, regla, destino, marcas, manual_id, activo, datos, autor, created_at';
 
 const CAMPOS_HECHO = 'item_id, fecha, usuario, nota, hecho_at';
 
@@ -198,6 +201,9 @@ export default async function handler(req, res) {
         marcas: i.marcas || [],
         manualId: i.manual_id || null,
         activo: i.activo,
+        // Sigue apareciendo hasta que lo tilden. El arrastre lo resuelve `pendientesDe()` en el
+        // cliente: acá viaja la bandera y nada más.
+        arrastra: !!(i.datos && i.datos.arrastra),
         autor: i.autor,
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
@@ -417,6 +423,9 @@ export default async function handler(req, res) {
         marcas,
         manual_id: it.manualId ? String(it.manualId) : null,
         activo: it.activo === undefined ? true : !!it.activo,
+        // ⚠️ Se escribe entera, no se mezcla con lo que había: el formulario manda el ítem completo,
+        // así que un merge escondería un campo que la pantalla creyó haber borrado.
+        datos: { arrastra: String(it.clase) === 'pendiente' && !!it.arrastra },
         autor: yo,
         updated_at: new Date().toISOString(),
       };

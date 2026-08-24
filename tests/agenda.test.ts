@@ -62,6 +62,7 @@ const item = (i: Partial<ItemAgenda> = {}): ItemAgenda => ({
   marcas: [],
   manualId: null,
   activo: true,
+  arrastra: false,
   autor: null,
   creado: '2026-07-01T10:00:00.000Z',
   paraMi: true,
@@ -459,5 +460,114 @@ describe('entradasDelMes(): la grilla no puede discrepar con lo que se ve ese d�
 
   it('un mes sin nada devuelve un mapa vacío, no un día por celda', () => {
     expect(entradasDelMes({ promos: [], items: [], hechos: [] }, 2026, 8).size).toBe(0)
+  })
+})
+
+/**
+ * El arrastre — lo que destraba las cuatro reuniones semanales.
+ *
+ * Lo que se prueba acá no es "aparece": es **que aparezca UNA vez** y que **un solo tilde la cierre**.
+ * Las dos fallas de este cambio son silenciosas y opuestas: cuatro renglones donde va uno (y la
+ * pantalla se vuelve ilegible justo la semana en que algo se atrasó), o un tilde que apaga la
+ * ocurrencia de un día y deja las otras tres prendidas para siempre — un rojo que no se puede apagar.
+ *
+ * Los martes de agosto de 2026 son 4, 11, 18 y 25; el 13 y el 20 son jueves.
+ */
+describe('pendientesDe(): lo que arrastra queda hasta que se tilda', () => {
+  const reunion = item({ id: 'r1', titulo: 'Semanal de comunidad', arrastra: true, regla: { tipo: 'semanal', dias: [2] } })
+
+  // La del 4 se hizo: es lo que fija dónde arranca lo que se debe. Sin ningún tilde, un pendiente
+  // que arrastra viene debiéndose desde su primera ocurrencia, que también es correcto pero no es
+  // lo que se está probando acá.
+  const laDel4 = [hecho({ itemId: 'r1', fecha: '2026-08-04' })]
+
+  it('sigue estando un día en que la regla no corre, y dice de cuándo viene', () => {
+    const r = pendientesDe([reunion], laDel4, '2026-08-13')
+    expect(r).toHaveLength(1)
+    expect(r[0].desde).toBe('2026-08-11')
+    expect(r[0].hecho).toBe(null)
+  })
+
+  it('sin la bandera, lo de siempre: el jueves ya no está', () => {
+    expect(pendientesDe([item({ id: 'r1', regla: { tipo: 'semanal', dias: [2] } })], [], '2026-08-13')).toEqual([])
+  })
+
+  it('dos ocurrencias abiertas son UNA fila: es la misma reunión, no dos', () => {
+    const r = pendientesDe([reunion], laDel4, '2026-08-20')
+    expect(r).toHaveLength(1)
+    // Viene del primer martes que quedó sin hacer...
+    expect(r[0].desde).toBe('2026-08-11')
+    // ...pero el tilde va a la última vez que cayó, que es la única fecha que el servidor acepta.
+    expect(r[0].fecha).toBe('2026-08-18')
+  })
+
+  it('un solo tilde cierra el arrastre entero', () => {
+    const hechos = [hecho({ itemId: 'r1', fecha: '2026-08-18' })]
+    expect(pendientesDe([reunion], hechos, '2026-08-20')).toEqual([])
+    // Y la semana siguiente vuelve a pedirse, como cualquier semanal.
+    const r = pendientesDe([reunion], hechos, '2026-08-25')
+    expect(r).toHaveLength(1)
+    expect(r[0].desde).toBe(null)
+    expect(r[0].fecha).toBe('2026-08-25')
+  })
+
+  it('el día en que sí corre y ya se tildó se ve tildado, no arrastrando', () => {
+    const r = pendientesDe([reunion], [hecho({ itemId: 'r1', fecha: '2026-08-11' })], '2026-08-11')
+    expect(r[0].hecho?.fecha).toBe('2026-08-11')
+    expect(r[0].desde).toBe(null)
+  })
+
+  it('el badge cuenta la misma fila que muestra la lista', () => {
+    expect(contarSinTildar([reunion], [], '2026-08-20')).toBe(1)
+    expect(contarSinTildar([reunion], [hecho({ itemId: 'r1', fecha: '2026-08-18' })], '2026-08-20')).toBe(0)
+  })
+
+  it('no arrastra desde antes de haberse cargado: una rutina nueva no viene debiendo', () => {
+    const nueva = item({ ...reunion, creado: '2026-08-17T10:00:00.000Z' })
+    const r = pendientesDe([nueva], [], '2026-08-20')
+    expect(r[0].desde).toBe('2026-08-18')
+  })
+
+  it('apagado no arrastra: apagarlo dice "ya no va", y lo que ya no va no se debe', () => {
+    expect(pendientesDe([item({ ...reunion, activo: false })], [], '2026-08-20')).toEqual([])
+  })
+
+  it('no mira más atrás que la ventana de acuse: sin tildes no se puede afirmar nada', () => {
+    // El GET manda 30 días de tildes. El 30-sep está a más de 30 días del 11-ago, así que el
+    // arrastre arranca en el martes más viejo que sí entra en la ventana.
+    const r = pendientesDe([reunion], [], '2026-09-30')
+    expect(r[0].desde! >= '2026-08-31').toBe(true)
+  })
+})
+
+describe('cumplimiento(): lo que arrastra cuenta una vez por racha', () => {
+  const reunion = item({ id: 'r1', titulo: 'Semanal de pauta', arrastra: true, regla: { tipo: 'semanal', dias: [2] } })
+
+  it('cuatro semanas debiéndose son UN incumplimiento, no cuatro', () => {
+    const filas = cumplimiento([reunion], [], '2026-08-25', 30)
+    expect(filas).toHaveLength(1)
+    expect(filas[0].fecha).toBe('2026-07-28')
+    expect(filas[0].hecho).toBe(null)
+  })
+
+  it('el tilde cierra la racha y deja abierta la siguiente, sin dejar rojos colgados', () => {
+    const filas = cumplimiento([reunion], [hecho({ itemId: 'r1', fecha: '2026-08-11' })], '2026-08-25', 30)
+    expect(filas.map((f) => f.fecha)).toEqual(['2026-08-18', '2026-08-11'])
+    expect(filas.find((f) => f.fecha === '2026-08-11')?.hecho).not.toBe(null)
+    expect(filas.find((f) => f.fecha === '2026-08-18')?.hecho).toBe(null)
+  })
+
+  it('sin la bandera cuenta una fila por ocurrencia, como siempre', () => {
+    const suelto = item({ id: 'r1', regla: { tipo: 'semanal', dias: [2] } })
+    expect(cumplimiento([suelto], [], '2026-08-25', 30).length).toBeGreaterThan(1)
+  })
+})
+
+describe('entradasDelMes(): la grilla del mes muestra lo programado, no la deuda', () => {
+  const reunion = item({ id: 'r1', arrastra: true, regla: { tipo: 'semanal', dias: [2] } })
+
+  it('el pendiente que arrastra no se pinta todos los días desde su origen', () => {
+    const mapa = entradasDelMes({ promos: [], items: [reunion], hechos: [] }, 2026, 8)
+    expect([...mapa.keys()]).toEqual(['2026-08-04', '2026-08-11', '2026-08-18', '2026-08-25'])
   })
 })

@@ -86,6 +86,9 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
     marcas: [],
     manualId: null,
     activo: true,
+    // Apagado por defecto: casi toda rutina es del día y se vence con el día. Lo que arrastra es la
+    // excepción —las reuniones—, y una excepción no se pone de default.
+    arrastra: false,
     autor: null,
     creado: null,
     paraMi: true,
@@ -389,11 +392,24 @@ export function ModalItem({
           )}
         </div>
 
-        <Tilde
-          puesto={it.activo}
-          label={it.activo ? 'Prendido' : 'Apagado'}
-          onToggle={() => set('activo', !it.activo)}
-        />
+        <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap', alignItems: 'center' }}>
+          <Tilde
+            puesto={it.activo}
+            label={it.activo ? 'Prendido' : 'Apagado'}
+            onToggle={() => set('activo', !it.activo)}
+          />
+          {/*
+            Sólo para los pendientes: un aviso no se tilda, así que no hay nada que quede pendiente
+            de tildar. Ofrecerlo ahí sería prometer un comportamiento que no existe.
+          */}
+          {it.clase === 'pendiente' && (
+            <Tilde
+              puesto={it.arrastra}
+              label={it.arrastra ? 'Queda hasta que se tilde' : 'Se vence con el día'}
+              onToggle={() => set('arrastra', !it.arrastra)}
+            />
+          )}
+        </div>
       </div>
     </Modal>
   )

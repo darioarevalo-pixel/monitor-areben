@@ -99,6 +99,21 @@ export type ItemAgenda = {
   /** El manual que explica cómo se hace, si lo hay. Es el `id` de la tabla `manuales`. */
   manualId: string | null
   activo: boolean
+  /**
+   * ¿Sigue apareciendo hasta que alguien lo tilda?
+   *
+   * 🔑 **No es una regla, es una bandera del ítem** — y eso no es un detalle de implementación: la
+   * regla contesta "¿esto cae este día?" y tiene que seguir siendo **pura y ciega a los tildes**,
+   * porque es lo único que garantiza que la grilla de Mes y lo que el local ve ese día no puedan
+   * discrepar. El arrastre se resuelve una capa más arriba, en `pendientesDe()`, que ya recibe los
+   * hechos.
+   *
+   * Existe porque las reuniones **no ocupan un día fijo: aparecen y quedan**. Si la del lunes no se
+   * hizo, el lunes siguiente no la reemplaza — es la misma reunión, no dos. Cargarlas como
+   * `semanal` a secas da lo contrario: aparecen el lunes y se evaporan el martes, que es
+   * exactamente lo que enseña a ignorarlas.
+   */
+  arrastra: boolean
   autor: string | null
   creado: string | null
   /**

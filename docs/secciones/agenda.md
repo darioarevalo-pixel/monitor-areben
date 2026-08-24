@@ -40,6 +40,26 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 - 🔑 **La regla se guarda, la ocurrencia se calcula.** Una rutina semanal no genera una fila por
   día. Está explicado en `reglas.core.js`; lo que importa acá es la consecuencia: **no hay dónde
   editar «el martes que viene»**, se edita la regla y cambian todos los martes.
+- 🆕 🔑 **Lo que ARRASTRA es una bandera del ítem, ⛔ nunca una sexta regla** (24-ago-2026, pedido de
+  Bruno para las cuatro reuniones semanales: *no ocupan un día fijo — aparecen y **quedan** hasta que
+  se completan*). `aplicaEn()` y `ocurrencias()` siguen siendo **puras y ciegas a los tildes**: es lo
+  único que garantiza que la grilla de Mes y lo que el local ve ese día no puedan discrepar. El
+  arrastre se resuelve una capa arriba, en `pendientesDe()`, que ya recibe los hechos.
+  - 🔑 **El arrastre se corta con el ÚLTIMO tilde, no con el de cada ocurrencia.** Es lo que hace que
+    tildar una vez cierre cuatro semanas; si cada ocurrencia se cerrara sola, cuatro semanas sin
+    hacerla pedirían cuatro tildes y el renglón volvería tres veces. Dos ocurrencias abiertas son
+    **una fila**, la más vieja, y el renglón dice de cuándo viene.
+  - 🔴 **El tilde no va al día que se está mirando: va a la última vez que la regla cayó**
+    (`ultimaOcurrencia`). Es la única fecha que el handler acepta —rechaza un tilde en un día en que
+    la rutina no corre, `api/_agenda.js`— y encima es la verdad: la reunión de los martes que se hace
+    el jueves se asienta el martes. Por eso el handler **no se tocó**.
+  - ⛔ **El Mes no arrastra** (`pendientesDe(..., { arrastre: false })`): muestra lo programado, no la
+    deuda. En Cumplimiento sí, pero **una fila por racha**: cuatro semanas debiéndose son un
+    incumplimiento, no cuatro.
+  - 🔴 **El techo es `DIAS_CUMPLIMIENTO = 30`**: los tildes más viejos no viajan al navegador, así que
+    más atrás no se puede afirmar que algo esté sin hacer. El arrastre se corta ahí.
+  - ⚠️ **Quincenal no existe** entre las cinco reglas. Lo más cercano sin motor nuevo son dos ítems
+    `mensual` (día 1 y día 15).
 - 🔴 **Los permisos ya están medidos y NO hay nada que destrabar** (padrón leído el 23-ago-2026):
   **0 de 16 usuarios tienen `agenda.cargar` tildado**, pero el admin lo saltea ⇒ hoy cargan Bruno y
   Darío. 🔑 **Y alcanza, porque tildar «Hecho» NO pide `agenda.cargar`**: todo el equipo ve y tilda
@@ -102,6 +122,8 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 - ▶️ **Cargar las 12 rutinas de marketing.** Las carga Bruno una vez, porque la rutina es la línea y
   la línea es de él. Desde el 23-ago-2026 van **con nombre** —`destino: {tipo:'personas'}`— y no con
   `roles:['marketing']`: si no, le salen a las tres.
+- 🆕 ▶️ **Cargar las 4 reuniones semanales** (comunidad, pauta, diseño y la mensual del sector), que
+  es para lo que se escribió el arrastre. La quincenal de diseño necesita la decisión de arriba.
 - ⚠️ **Las que ya estén cargadas por rol NO se migran solas.** Hay que abrirlas y reasignarlas: el
   destino viejo sigue siendo válido y el motor no adivina cuál de las tres es la dueña.
 
@@ -116,6 +138,10 @@ Lo que el test **no** ejerce y hay que caminar a mano:
 - **El tilde con un perfil que NO es admin**, que es quien la va a usar todos los días. Con el admin
   todo anda porque saltea el sub.
 - El `destino`: un pendiente ajeno **no** tiene que encender el badge del menú.
+- 🆕 **El arrastre, de punta a punta**: cargá un pendiente semanal con «Queda hasta que se tilde», no
+  lo tildes dos semanas y mirá que aparezca **una sola vez** (no dos), que diga de cuándo viene, que
+  el badge del menú cuente lo mismo, y que **un solo tilde lo apague**. Después mirá Cumplimiento:
+  tiene que haber **una** fila, no una por semana.
 - 🔴 **El destino por persona no se puede caminar con un admin**, que es el caso que se agregó para
   arreglar: entrá con un usuario `prueba-*` del padrón, mirá que la rutina dirigida a él **sale en
   «Hoy» y prende el badge**, y con otro que no sale ni prende. Y con el admin, que el tilde ajeno

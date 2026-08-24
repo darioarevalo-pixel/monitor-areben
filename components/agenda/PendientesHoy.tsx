@@ -20,6 +20,7 @@ import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
 import { feriadoDe, pendientesDe, type PendienteHoy } from '@/lib/agenda'
+import { rotuloFecha } from '@/lib/fechas/semana'
 import { leerManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
 import { useAgenda } from '@/store/useAgenda'
@@ -44,24 +45,28 @@ export function PendientesHoy({
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
       {lista.map((p) => (
-        <Renglon key={p.item.id} p={p} fecha={fecha} yo={perfil?.name ?? ''} />
+        <Renglon key={p.item.id} p={p} yo={perfil?.name ?? ''} />
       ))}
     </div>
   )
 }
 
-function Renglon({ p, fecha, yo }: { p: PendienteHoy; fecha: string; yo: string }) {
+function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
   const marcar = useAgenda((s) => s.marcar)
   const desmarcar = useAgenda((s) => s.desmarcar)
   const [error, setError] = useState<string | null>(null)
   const hecho = p.hecho
-  const feriado = feriadoDe(fecha)
+  const feriado = feriadoDe(p.fecha)
 
+  // 🔑 El tilde va a `p.fecha`, que **no siempre es hoy**: en un pendiente que arrastra es la última
+  // vez que la regla cayó. Es la única fecha que el servidor acepta (rechaza un tilde en un día en
+  // que la rutina no corre) y es la que corta el arrastre entero: la reunión de los martes que se
+  // hace el jueves queda asentada el martes, y no vuelve a aparecer el viernes.
   const toggle = async () => {
     setError(null)
     try {
-      if (hecho) await desmarcar(p.item.id, fecha)
-      else await marcar(p.item.id, fecha, yo)
+      if (hecho) await desmarcar(p.item.id, p.fecha)
+      else await marcar(p.item.id, p.fecha, yo)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar el tilde.')
     }
@@ -108,6 +113,12 @@ function Renglon({ p, fecha, yo }: { p: PendienteHoy; fecha: string; yo: string 
               cerrado, y hay feriados que se trabaja. Quien mira decide.
             */}
             {feriado && <StatusPill tone="warning" label={`feriado · ${feriado}`} />}
+            {/*
+              De cuándo viene. Un pendiente que aparece un día en que su regla no corre se lee como
+              un bug si no dice por qué está: acá dice que es la misma reunión que quedó abierta, no
+              una nueva. Y es el dato con el que se decide si todavía tiene sentido hacerla.
+            */}
+            {p.desde && <StatusPill tone="warning" label={`viene del ${rotuloFecha(p.desde)}`} />}
           </div>
 
           {p.item.cuerpo && (

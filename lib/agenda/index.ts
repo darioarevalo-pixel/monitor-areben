@@ -128,8 +128,83 @@ export function hechoDe(hechos: Hecho[], itemId: string, fecha: FechaIso): Hecho
   return hechos.find((h) => h.itemId === itemId && h.fecha === fecha) ?? null
 }
 
-/** Un pendiente del día con su tilde al lado. `hecho` en `null` es lo que falta hacer. */
-export type PendienteHoy = { item: ItemAgenda; hecho: Hecho | null }
+/**
+ * Hasta dónde mira hacia atrás el arrastre.
+ *
+ * 🔴 **No es una preferencia: es el techo del dato.** El GET manda los tildes de los últimos
+ * `DIAS_CUMPLIMIENTO` días (`api/_agenda.js`), así que más atrás el navegador **no puede saber si
+ * la ocurrencia se tildó**. Mirar más lejos que eso sería inventar un pendiente sobre una ausencia
+ * de datos, que es la peor clase de rojo: el que no se puede apagar.
+ */
+const VENTANA_ARRASTRE = DIAS_CUMPLIMIENTO
+
+/** El día del último tilde de este ítem, mirando hasta `hasta` inclusive. `null` si nunca se tildó. */
+function ultimoTilde(hechos: Hecho[], itemId: string, hasta: FechaIso): FechaIso | null {
+  let ultimo: FechaIso | null = null
+  for (const h of hechos) {
+    if (h.itemId !== itemId || h.fecha > hasta) continue
+    if (!ultimo || h.fecha > ultimo) ultimo = h.fecha
+  }
+  return ultimo
+}
+
+/**
+ * El día en que el ítem cayó por última vez, mirando desde `hasta` hacia atrás.
+ *
+ * 🔑 **Es adónde va el tilde de un pendiente que arrastra**, y por eso no puede ser "hoy" a secas:
+ * `api/_agenda.js` rechaza un tilde en un día en que la regla no corre, y con razón. La reunión de
+ * los martes que se hace el jueves se asienta en **el martes**, que es la ocurrencia que cierra.
+ */
+export function ultimaOcurrencia(item: ItemAgenda, hasta: FechaIso): FechaIso | null {
+  const piso = item.creado ? item.creado.slice(0, 10) : null
+  for (let i = 0; i <= VENTANA_ARRASTRE; i++) {
+    const f = sumarDias(hasta, -i)
+    if (piso && f < piso) return null
+    if (aplicaEn(item.regla, f)) return f
+  }
+  return null
+}
+
+/**
+ * La ocurrencia más vieja que quedó sin hacer y **sigue debiéndose** hoy, o `null`.
+ *
+ * Sólo para los ítems con `arrastra`. Tres cosas que no se deducen del nombre:
+ *
+ * 1. 🔑 **El arrastre se corta con el último tilde.** Todo lo anterior a ese día está cerrado, aunque
+ *    tuviera ocurrencias sin tildar: son la misma reunión, no cuatro. Es lo que hace que **tildar
+ *    una vez cierre las cuatro semanas** — si cada ocurrencia se cerrara sola, cuatro semanas sin
+ *    hacerla pedirían cuatro tildes y el renglón reaparecería tres veces.
+ * 2. **Nada anterior al día en que se cargó el ítem**: una rutina cargada hoy no viene debiendo de
+ *    antes. Mismo criterio que `cumplimiento()`.
+ * 3. **Un ítem apagado no arrastra.** Apagarlo dice "ya no va", y lo que ya no va no se debe.
+ */
+export function ocurrenciaAbierta(item: ItemAgenda, hechos: Hecho[], hasta: FechaIso): FechaIso | null {
+  if (!item.arrastra || !item.activo) return null
+  const corte = ultimoTilde(hechos, item.id, hasta)
+  const piso = item.creado ? item.creado.slice(0, 10) : null
+  let abierta: FechaIso | null = null
+  for (let i = 0; i <= VENTANA_ARRASTRE; i++) {
+    const f = sumarDias(hasta, -i)
+    if (corte && f <= corte) break
+    if (piso && f < piso) break
+    if (aplicaEn(item.regla, f)) abierta = f
+  }
+  return abierta
+}
+
+/**
+ * Un pendiente del día con su tilde al lado. `hecho` en `null` es lo que falta hacer.
+ *
+ * `fecha` es **la ocurrencia que este renglón cierra**, y es adónde viaja el tilde: para casi todo
+ * es el día que se está mirando, y para uno que arrastra es la última vez que cayó. `desde` es de
+ * cuándo viene, y va en `null` cuando no viene arrastrando de ningún lado.
+ */
+export type PendienteHoy = {
+  item: ItemAgenda
+  hecho: Hecho | null
+  fecha: FechaIso
+  desde: FechaIso | null
+}
 
 /**
  * Los pendientes de una persona en un día, con su acuse.
@@ -140,19 +215,37 @@ export type PendienteHoy = { item: ItemAgenda; hecho: Hecho | null }
  *
  * Sólo lo que es `paraMi`: el destino ya se filtró en el servidor, pero quien carga recibe todos los
  * ítems para administrarlos y no le corresponde tildar los ajenos.
+ *
+ * 🔑 **Acá, y sólo acá, se resuelve el arrastre.** Un ítem con `arrastra` cae hoy también si quedó
+ * debiendo de antes, y en ese caso **es UNA fila, no una por semana**: dos ocurrencias abiertas
+ * colapsan en la más vieja, que es la que el renglón nombra. `opts.arrastre = false` lo apaga, y lo
+ * usa la grilla del Mes, que muestra lo programado y no la deuda.
  */
 export function pendientesDe(
   items: ItemAgenda[],
   hechos: Hecho[],
   fecha: FechaIso,
-  opts: { marca?: Marca } = {},
+  opts: { marca?: Marca; arrastre?: boolean } = {},
 ): PendienteHoy[] {
-  const { marca } = opts
+  const { marca, arrastre = true } = opts
   return items
-    .filter((i) => i.clase === 'pendiente' && i.paraMi && vaEl(i, fecha))
+    .filter((i) => i.clase === 'pendiente' && i.paraMi)
     .filter((i) => !marca || i.marcas.length === 0 || i.marcas.includes(marca))
     .sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'))
-    .map((item) => ({ item, hecho: hechoDe(hechos, item.id, fecha) }))
+    .map((item): PendienteHoy | null => {
+      const abierta = arrastre ? ocurrenciaAbierta(item, hechos, fecha) : null
+      // Con algo abierto, el tilde va a la última vez que cayó —la que el handler acepta— y cierra
+      // todo lo que venía atrás. Sin nada abierto, esto es el pendiente de siempre: el de hoy.
+      const dia = abierta ? ultimaOcurrencia(item, fecha) : (vaEl(item, fecha) ? fecha : null)
+      if (!dia) return null
+      return {
+        item,
+        hecho: hechoDe(hechos, item.id, dia),
+        fecha: dia,
+        desde: abierta && abierta !== fecha ? abierta : null,
+      }
+    })
+    .filter((p): p is PendienteHoy => p !== null)
 }
 
 /**
@@ -231,7 +324,10 @@ export function entradasDelMes(
       ...avisosDe(datos.items, fecha, opts).map(
         (item): EntradaMes => ({ key: `a-${item.id}`, tipo: 'aviso', item }),
       ),
-      ...pendientesDe(datos.items, datos.hechos, fecha, opts).map(
+      // ⛔ **El Mes no arrastra**: muestra la ocurrencia programada, no la deuda. Es la pantalla con
+      // la que se planifica, y un pendiente que se pinta todos los días desde su origen la vuelve
+      // ilegible justo en el mes en que algo se atrasó. La deuda se ve en Hoy y en Cumplimiento.
+      ...pendientesDe(datos.items, datos.hechos, fecha, { ...opts, arrastre: false }).map(
         ({ item, hecho }): EntradaMes => ({ key: `i-${item.id}`, tipo: 'pendiente', item, hecho }),
       ),
     ]
@@ -257,6 +353,12 @@ export type FilaCumplimiento = { fecha: FechaIso; item: ItemAgenda; hecho: Hecho
  *    después de las 21:00 puede esconder su primera ocurrencia; es preferible a acusar de más.
  * 2. **Un ítem apagado no sigue sumando ocurrencias**, pero sus tildes viejos se siguen viendo:
  *    apagarlo dice "ya no va", no "nunca pasó".
+ *
+ * 🔑 **Lo que arrastra cuenta una vez por racha, no una por ocurrencia.** Una reunión que se debe
+ * hace cuatro semanas es **un** incumplimiento, no cuatro: contarla cuatro veces la haría pesar
+ * como cuatro rutinas distintas y hundiría el porcentaje del mes por un solo tema. Y al revés,
+ * tildarla apagaría un rojo y dejaría tres prendidos para siempre, que es un rojo que no se puede
+ * apagar.
  */
 export function cumplimiento(
   items: ItemAgenda[],
@@ -264,6 +366,14 @@ export function cumplimiento(
   hasta: FechaIso,
   dias: number = DIAS_CUMPLIMIENTO,
 ): FilaCumplimiento[] {
+  // Los días que se emiten de cada ítem que arrastra, calculados una sola vez por ítem: adentro del
+  // bucle habría que rehacer la racha entera en cada uno de los treinta días.
+  const deArrastre = new Map<string, Set<FechaIso>>()
+  for (const item of items) {
+    if (item.clase !== 'pendiente' || !item.arrastra) continue
+    deArrastre.set(item.id, fechasDeRachas(item, hechos, hasta, dias))
+  }
+
   const out: FilaCumplimiento[] = []
   for (let i = 0; i < dias; i++) {
     const fecha = sumarDias(hasta, -i)
@@ -273,10 +383,38 @@ export function cumplimiento(
       if (item.creado && fecha < item.creado.slice(0, 10)) continue
       const hecho = hechoDe(hechos, item.id, fecha)
       if (!item.activo && !hecho) continue
+      if (item.arrastra && !deArrastre.get(item.id)?.has(fecha)) continue
       out.push({ fecha, item, hecho })
     }
   }
   return out
+}
+
+/**
+ * De las ocurrencias de un ítem que arrastra, cuáles se muestran: **una por racha**.
+ *
+ * Una racha es lo que va desde la primera ocurrencia sin hacer hasta el tilde que la cierra. Se
+ * emite el día del tilde —el día en que efectivamente se hizo— y, si al final quedó algo abierto, el
+ * día en que empezó a deberse, que es el dato que importa: hace cuánto que viene.
+ */
+function fechasDeRachas(item: ItemAgenda, hechos: Hecho[], hasta: FechaIso, dias: number): Set<FechaIso> {
+  const emitidas = new Set<FechaIso>()
+  const piso = item.creado ? item.creado.slice(0, 10) : null
+  let abierta: FechaIso | null = null
+  // De la más vieja a la más nueva: una racha sólo se puede cerrar hacia adelante.
+  for (let i = dias - 1; i >= 0; i--) {
+    const fecha = sumarDias(hasta, -i)
+    if (!aplicaEn(item.regla, fecha)) continue
+    if (piso && fecha < piso) continue
+    if (hechoDe(hechos, item.id, fecha)) {
+      emitidas.add(fecha)
+      abierta = null
+    } else if (!abierta) {
+      abierta = fecha
+    }
+  }
+  if (abierta) emitidas.add(abierta)
+  return emitidas
 }
 
 /**
