@@ -14,6 +14,7 @@
 
 import type { Producto, Variante } from '../etl/tipos'
 import { normBc, vidDeBarcode } from './escaneo'
+import type { Disparador } from '../solicitudes/disparador'
 import type { ItemSolicitud, Origen, Solicitud, TipoSol } from './tipos'
 
 export type DraftVar = {
@@ -39,10 +40,17 @@ export type Draft = {
   /** Capa de Solicitudes internas (opcional): motivo + tipo (retornable/consumo). Ausente en fotos. */
   motivo?: string
   tipo?: TipoSol
+  /**
+   * De qué proceso viene (ingreso · campaña · faltante). Lo pone la PUERTA por la que se
+   * abrió el borrador, o lo elige quien lo arma cuando la puerta no puede saberlo.
+   * `null`/ausente es un estado legítimo: se guarda vacío y la fila lo muestra vacío, en
+   * vez de que la pantalla invente un origen. Ver `lib/solicitudes/disparador.ts`.
+   */
+  disparador?: Disparador | null
 }
 
-export function draftVacio(motivo?: string, tipo?: TipoSol): Draft {
-  return { desc: '', prods: [], pendientes: [], manuales: [], motivo, tipo }
+export function draftVacio(motivo?: string, tipo?: TipoSol, disparador?: Disparador | null): Draft {
+  return { desc: '', prods: [], pendientes: [], manuales: [], motivo, tipo, disparador: disparador ?? null }
 }
 
 const stockVar = (v: Variante) => (v.local || 0) + (v.deposito || 0)
@@ -228,7 +236,11 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
     items.push({ vid: 'man_' + mn.mid, pid: null, sid: null, nombre: desc, variante: '', sku: '', qty, origen: 'deposito', nuevo: true, manual: true })
   })
   if (!items.length) return null
-  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items }
+  // El disparador viaja en la solicitud solo si el borrador lo trae: `null` no se guarda,
+  // porque una clave con `null` en el KV se lee igual que una ausente y ensucia el diff del
+  // cajón (`diffSolicitudes` compara por JSON).
+  const disp = draft.disparador ? { disparador: draft.disparador } : {}
+  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items, ...disp }
   // Capa internas: si el borrador trae `tipo`, es una solicitud interna. El consumo nace
   // `pendiente` (necesita aprobación); el retornable nace `aprobada`. Fotos: `pendiente`.
   if (draft.tipo != null) {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { useLinea } from '@/components/fundas/useDatosMonitor'
 import { ponerAltaSolicitud, ponerVerSolicitud } from '@/lib/sesionfotos/puente'
+import type { Disparador } from '@/lib/solicitudes/disparador'
 import type { TipoSol } from '@/lib/sesionfotos/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -87,7 +88,7 @@ export function Solicitudes() {
    * corresponde, con el borrador ya abierto y configurado (puente `ponerAltaSolicitud`).
    * El usuario no ve "secciones": pide una solicitud y sigue.
    */
-  const crear = (a: { motivo: string; tipo: TipoSol }) => {
+  const crear = (a: { motivo: string; tipo: TipoSol; disparador: Disparador | null }) => {
     setPidiendo(false)
     ponerAltaSolicitud(a)
     router.push(presetPorMotivo(a.motivo).kind === 'sesionfotos' ? '/sesion-fotos' : '/solicitudes-internas')

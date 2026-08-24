@@ -74,6 +74,7 @@ import {
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
 import { MOTIVOS_CAMBIO } from '@/lib/sesionfotos/tipos'
+import { DISPARADOR_AYUDA, DISPARADOR_LABEL, DISPARADORES, type Disparador, esDisparador } from '@/lib/solicitudes/disparador'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
@@ -443,7 +444,14 @@ function Historial({
   // Local ve solo lo de local, Depósito solo lo suyo — el mismo recorte que ya hacía
   // /solicitudes. Quien ve todo (marketing, administración, dirección) no recorta nada.
   const origenesHist = useMemo(() => (veTodo(perfilHist) ? undefined : origenesDe(perfilHist)), [perfilHist])
-  const visibles = useMemo(() => historialVisible(data, verCerradas, origenesHist), [data, verCerradas, origenesHist])
+  // Filtro por proceso: «mostrame los faltantes» es la pregunta que el campo vino a
+  // contestar, y encuentra también los que se sumaron a una sesión de otro origen.
+  const esFotosHist = preset.kind === PRESET_FOTOS.kind
+  const [filtroDisp, setFiltroDisp] = useState<Disparador | null>(null)
+  const visibles = useMemo(
+    () => historialVisible(data, verCerradas, origenesHist, esFotosHist ? filtroDisp : null),
+    [data, verCerradas, origenesHist, esFotosHist, filtroDisp],
+  )
   const [chequeando, setChequeando] = useState(false)
   // Consumos pendientes de aprobación (para el aprobador). Lo define el DESTINO de cada
   // solicitud, no la sección: una de sesión de fotos también puede ser consumo.
@@ -505,11 +513,26 @@ function Historial({
           </label>
         )}
       </div>
-      <div style={{ fontSize: 12, color: color.mut2, letterSpacing: 0, marginBottom: 6 }}>
-        Historial
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 6 }}>
+        <div style={{ fontSize: 12, color: color.mut2, letterSpacing: 0 }}>Historial</div>
+        {esFotosHist ? (
+          <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            De dónde viene
+            <select
+              value={filtroDisp || ''}
+              onChange={(e) => setFiltroDisp((e.target.value || null) as Disparador | null)}
+              style={{ padding: '3px 6px', border: `1px solid ${color.line2}`, borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+            >
+              <option value="">Todas</option>
+              {DISPARADORES.map((d) => <option key={d} value={d}>{DISPARADOR_LABEL[d]}</option>)}
+            </select>
+          </label>
+        ) : null}
       </div>
       {visibles.length === 0 ? (
-        <div style={{ color: color.mut2, fontSize: 13 }}>Todavía no hay solicitudes.</div>
+        <div style={{ color: color.mut2, fontSize: 13 }}>
+          {filtroDisp ? `Ninguna solicitud viene de "${DISPARADOR_LABEL[filtroDisp]}".` : 'Todavía no hay solicitudes.'}
+        </div>
       ) : (
         visibles.map((s) => {
           const f = filaHistorial(s)
@@ -547,6 +570,10 @@ function Historial({
                 </div>
                 <div style={{ fontSize: 12, color: color.mut2 }}>
                   {f.fecha} · <MarcaOrigen o="deposito" soloIcono size={12} /> {f.dep} · <MarcaOrigen o="local" soloIcono size={12} /> {f.loc} · {f.estado}
+                  {/* De dónde viene. Vacío se dice «sin origen»: es un dato que falta, no un
+                      origen — esconderlo lo volvería invisible. Son varios cuando a una
+                      sesión de ingreso se le sumaron faltantes. */}
+                  {esFotosHist ? ` · ${f.disparadores.length ? f.disparadores.map((d) => DISPARADOR_LABEL[d]).join(' + ') : 'sin origen'}` : ''}
                 </div>
               </div>
               <Button size="sm" variant="outline" onClick={() => onVer(s.id)}>
@@ -666,6 +693,10 @@ function Detalle({
   // Aprobación: la pide el DESTINO (consumo = baja definitiva), no la sección por la que
   // se entró. Un consumo sin aprobar no puede generar la venta en GN.
   const esConsumo = s.tipo === 'consumo'
+  // De dónde viene (ingreso · campaña · faltante): solo el cajón de fotos lo lleva, y se
+  // muestra aunque falte. `esDisparador` filtra lo que venga raro del KV.
+  const esFotosDet = preset.kind === PRESET_FOTOS.kind
+  const dispDet = esDisparador(s.disparador) ? s.disparador : null
   const pendienteDeAprobar = necesitaAprobacion(s) && s.estado === 'pendiente'
   const esAprobador = admin || puedeSub(perfilDetalle, marcaDetalle, preset.seccionKey, 'aprobar')
   const onAprobar = () => setWork((w) => ({ ...w, estado: 'aprobada', aprobadoPor: usuario, aprobadoFecha: new Date().toISOString() }))
@@ -944,6 +975,14 @@ function Detalle({
           <span style={{ fontSize: 11, fontWeight: 700, color: esConsumo ? color.warningInk : color.successInk, background: esConsumo ? color.warningBg : color.successBg, border: `1px solid ${esConsumo ? color.warningBorder : color.successBorder}`, borderRadius: 6, padding: '2px 8px' }}>
             {esConsumo ? 'Consumo (baja definitiva)' : 'Retornable'}{s.motivo ? ` · ${s.motivo}` : ''}
           </span>
+          {/* De dónde viene. Se muestra también cuando FALTA: una sesión sin origen anotado
+              es un dato que falta, y taparlo lo vuelve invisible justo cuando se está
+              empezando a usar el campo. */}
+          {esFotosDet ? (
+            <span style={{ fontSize: 11, fontWeight: 700, color: dispDet ? color.ink2 : color.mut2, background: color.bg, border: `1px solid ${color.line2}`, borderRadius: 6, padding: '2px 8px' }}>
+              {dispDet ? DISPARADOR_LABEL[dispDet] : 'Sin origen'}
+            </span>
+          ) : null}
           {s.estado === 'rechazada' ? <span style={{ color: color.dangerInk }}>✗ Rechazada{s.rechazadoMotivo ? `: ${s.rechazadoMotivo}` : ''}</span> : null}
           {s.aprobadoPor && s.estado !== 'rechazada' && s.estado !== 'pendiente' ? <span style={{ color: color.success }}>✓ Aprobada por {s.aprobadoPor}</span> : null}
           {pendienteDeAprobar && esAprobador ? (
@@ -1344,7 +1383,11 @@ function Draft({
 
   // Todo borrador nace con motivo y destino: son dos campos de la solicitud, no una capa
   // de "las internas". Si el alta vino de Solicitudes, arranca con lo que se eligió ahí.
-  const draftInicial = () => draftVacio(alta?.motivo || motivosDe(preset)[0] || MOTIVO_DEFAULT, alta?.tipo || DESTINO_DEFAULT)
+  const draftInicial = () =>
+    draftVacio(alta?.motivo || motivosDe(preset)[0] || MOTIVO_DEFAULT, alta?.tipo || DESTINO_DEFAULT, alta?.disparador ?? null)
+  // El tercer eje solo se pregunta en el cajón de fotos: una moldería o una muestra no
+  // salen de un ingreso ni de un hueco del catálogo.
+  const pideDisparador = preset.kind === PRESET_FOTOS.kind
   // Con puente desde Marketing, arranca con esos productos expandidos (variantes con
   // stock, sin tildar) — el mismo estado que "Traer producto" de a uno. Inicializador
   // de useState: corre una sola vez.
@@ -1423,6 +1466,22 @@ function Draft({
             {motivosVisibles(draft.motivo).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
+        {pideDisparador ? (
+          <label style={{ fontSize: 13, color: color.ink2, display: 'flex', alignItems: 'center', gap: 6 }}>
+            De dónde viene
+            <select
+              value={draft.disparador || ''}
+              onChange={(e) => setDraft((d) => ({ ...d, disparador: (e.target.value || null) as Disparador | null }))}
+              style={{ padding: '7px 10px', border: `1px solid ${color.line2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+            >
+              <option value="">— sin especificar —</option>
+              {DISPARADORES.map((d) => <option key={d} value={d}>{DISPARADOR_LABEL[d]}</option>)}
+            </select>
+            {draft.disparador ? (
+              <InfoPopover titulo={DISPARADOR_LABEL[draft.disparador]}>{DISPARADOR_AYUDA[draft.disparador]}</InfoPopover>
+            ) : null}
+          </label>
+        ) : null}
         <span style={{ fontSize: 13, color: color.ink2 }}>Destino:</span>
         {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
           <span key={t} style={{ display: 'inline-flex', alignItems: 'center' }}>

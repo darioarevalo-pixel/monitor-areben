@@ -59,6 +59,13 @@ export type ItemSolicitud = {
   /** Prenda sin código: control a mano, no genera venta ni toca stock. */
   manual?: boolean
   /**
+   * De qué proceso vino ESTE ítem, cuando no es el de la solicitud entera. Ausente = el de
+   * la solicitud, que es el caso normal. Existe para el caso que no se podía escribir: el
+   * faltante de catálogo que se suma a una sesión ya armada por un ingreso o una campaña.
+   * Ver `lib/solicitudes/disparador.ts`.
+   */
+  disparador?: string
+  /**
    * Bolsa (1..N) a la que se asigna el ítem para el armado/packing de la sesión: se
    * reparten los productos en bolsas numeradas, cada una un look/outfit. Ausente =
    * sin asignar. Organizativo: no toca GN ni stock. Un ítem entero va a una bolsa.
@@ -127,6 +134,13 @@ export type Solicitud = {
    */
   motivo?: string
   tipo?: TipoSol
+  /**
+   * Qué proceso hizo nacer la solicitud: `ingreso` | `campania` | `faltante`. Es un eje
+   * aparte del motivo y del destino, y NO cambia el cajón ni la aprobación — ver
+   * `lib/solicitudes/disparador.ts`. Ausente en todas las solicitudes anteriores al
+   * 24-ago-2026 y en las que se crean por una puerta que no sabe de dónde vienen.
+   */
+  disparador?: string
   aprobadoPor?: string
   aprobadoFecha?: string
   rechazadoMotivo?: string

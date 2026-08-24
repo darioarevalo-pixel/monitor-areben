@@ -8,6 +8,7 @@
  * Cada función es un port literal; los números de línea apuntan al original.
  */
 
+import { type Disparador, disparadoresDe, tieneDisparador } from '../solicitudes/disparador'
 import type { Cambio, EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
 
 /** El mapa de conteo de la fase: `verif` para preparado, `devuelto` para la vuelta. */
@@ -166,6 +167,13 @@ export type FilaHistorial = {
   cerrada: boolean
   /** Unidades sin devolver que se muestran como badge ⏳; 0 si no aplica. */
   porDevolver: number
+  /**
+   * De qué proceso(s) viene la sesión. Vacío = no se anotó (todas las anteriores al
+   * 24-ago-2026, y las que se crean por una puerta que no lo sabe). La fila muestra el
+   * vacío en vez de taparlo: una sesión sin origen es un dato que falta, no un origen.
+   * Son varios porque a una sesión de ingreso se le pueden sumar faltantes.
+   */
+  disparadores: Disparador[]
 }
 
 export function filaHistorial(s: Solicitud): FilaHistorial {
@@ -183,6 +191,7 @@ export function filaHistorial(s: Solicitud): FilaHistorial {
     loc: unidadesOrigen(s, 'local'),
     cerrada,
     porDevolver,
+    disparadores: disparadoresDe(s),
   }
 }
 
@@ -191,8 +200,18 @@ export function filaHistorial(s: Solicitud): FilaHistorial {
  * orden en que vienen del KV (más nueva primero, como las inserta sfProcesar con
  * unshift). Port de sfHistorialHtml (index.html:10271-10273).
  */
-export function historialVisible(data: Solicitud[], verCerradas: boolean, origenes?: Origen[]): Solicitud[] {
-  const porEstado = (data || []).filter((s) => verCerradas || s.estado !== 'cerrada')
+export function historialVisible(
+  data: Solicitud[],
+  verCerradas: boolean,
+  origenes?: Origen[],
+  disparador?: Disparador | null,
+): Solicitud[] {
+  const porEstado = (data || [])
+    .filter((s) => verCerradas || s.estado !== 'cerrada')
+    // El filtro por proceso mira la solicitud Y sus ítems: buscar «faltante» tiene que
+    // encontrar también el faltante que se sumó a una sesión de ingreso, que es justo el
+    // caso para el que existe el campo. `undefined`/`null` = sin filtrar.
+    .filter((s) => !disparador || tieneDisparador(s, disparador))
   // Recorte por sector: sin esto, un usuario de Local que entra por /sesion-fotos veía TODAS las
   // solicitudes de la marca, incluidas las 100% de depósito — mientras que entrando por
   // /solicitudes veía solo las suyas. Eran dos puertas al mismo dato con criterios distintos.

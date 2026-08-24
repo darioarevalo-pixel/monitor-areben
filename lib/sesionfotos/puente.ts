@@ -1,3 +1,5 @@
+import type { Disparador } from '../solicitudes/disparador'
+
 /**
  * El puente Marketing → Sesión de fotos. Port del global `sfPendMkt`
  * (index.html:9656): Marketing tilda productos, los deja acá y navega a
@@ -56,7 +58,15 @@ export function tomarVerSolicitud(): string | null {
  * ir), así que la elección viaja acá y el borrador se abre ya configurado. Sin esto, el
  * usuario elegiría el motivo dos veces: una para llegar y otra adentro.
  */
-export type AltaSolicitud = { motivo: string; tipo: 'retornable' | 'consumo' }
+export type AltaSolicitud = {
+  motivo: string
+  tipo: 'retornable' | 'consumo'
+  /**
+   * De qué proceso viene, cuando la puerta lo sabe (`disparadorPorPuerta`). `null`/ausente
+   * = la puerta no lo sabe y lo pregunta el borrador. Ver `lib/solicitudes/disparador.ts`.
+   */
+  disparador?: Disparador | null
+}
 
 let alta: AltaSolicitud | null = null
 

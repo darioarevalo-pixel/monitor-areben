@@ -152,6 +152,44 @@ variante de internas pasada por parámetro.
   esta pantalla) y **Tienda Nube › Carga de imágenes** llevan el mismo selector, y
   `bdi-catalogo/api/tn-subir-imagen.js` ya conoce `stunned`. Detalle en `docs/lineas.md`.
 
+## De dónde viene la sesión: el tercer eje (24-ago-2026)
+
+Una sesión de fotos **no se pide sola**: la dispara un proceso. Hasta el 24-ago la app ya sabía
+cuál —Marketing dejaba pids en `ponerPuenteFotos`, el aviso de ingreso sembraba los pasos en la
+Agenda, la cola de faltantes está por existir— y **lo tiraba**: los tres caminos terminaban en el
+mismo borrador anónimo. El campo `disparador` (`lib/solicitudes/disparador.ts`) lo anota.
+
+| eje | qué contesta | quién lo decide | qué gobierna |
+|---|---|---|---|
+| `motivo` | para qué sale | quien pide | 🔴 **el CAJÓN** (`presetPorMotivo`) y con él el cliente de GN |
+| `tipo` (destino) | si vuelve | quien pide | la aprobación (`necesitaAprobacion`) |
+| `disparador` | **de dónde viene** | **la puerta** | nada — es dato, no comportamiento |
+
+Los tres valores: `ingreso` (llegó mercadería y hay que publicarla) · `campania` (Marketing arma
+una producción) · `faltante` (un producto ya a la venta no tiene foto).
+
+- 🔴 **Por qué NO son tres motivos más.** `presetPorMotivo` rutea comparando contra el string
+  exacto `'Sesión de fotos'`. Meterlos en `MOTIVOS` habría mandado **toda sesión nueva** al cajón
+  de Solicitudes internas, en silencio y con la venta de GN a nombre de otro cliente. Son ejes
+  distintos y viven en campos distintos; hay un test que lo fija
+  (`tests/solicitudes-disparador.test.ts`).
+- 🔑 **El disparador vive en la solicitud Y en el ítem.** El del ítem es opcional y ausente
+  significa «el de la solicitud». Existe para el caso que antes no se podía escribir: el
+  **faltante que se suma a una sesión ya armada** por un ingreso o una campaña. Por eso el filtro
+  del historial mira los ítems y no sólo la cabecera — si mirara sólo la cabecera, mentiría por
+  omisión justo en ese caso.
+- 🔴 **La puerta que no sabe devuelve `null`, no un default.** El botón «mandar a Sesión de fotos»
+  de Marketing sirve igual para una campaña que para tapar un faltante ⇒ `disparadorPorPuerta`
+  contesta `null` y la pantalla **pregunta**. Y una solicitud sin disparador se muestra como
+  **«sin origen»**, no se esconde: es un dato que falta, no un origen.
+- ⚠️ Sin migración: la solicitud entera vive en el jsonb/KV. Las **30 solicitudes anteriores** no
+  tienen disparador y no se les inventa uno.
+- ▶️ **Todavía ninguna puerta lo llena sola.** `disparadorPorPuerta('ingreso'|'faltantes')` está
+  escrito y probado, pero el paso «foto» del molde de ingreso y la cola de faltantes todavía no lo
+  llaman — eso es lo que sigue. Hoy el valor lo pone a mano quien arma la sesión.
+- ⚠️ **La dueña de cada disparador (Cande / Sofi) NO está en el código, a propósito**: la gente
+  cambia y eso se carga como molde en la Agenda, igual que los pasos del ingreso.
+
 ## Lo que se midió, y lo que nunca se ejerció (16-ago-2026)
 
 Contra las dos bases, no contra la memoria: **BDI 10 solicitudes** (todas de fotos, 1-jul → 28-jul,
@@ -168,11 +206,15 @@ Sobre esas 30 filas:
 - ⚠️ **19 de 30 no tienen `motivo`**: son anteriores a la Fase 2 y el catálogo viejo tenía otras
   opciones. Abrir una vieja no le cambia el motivo por mirarla, y eso es a propósito
   (`SesionFotos.tsx:1288`). Los que sí hay: Moldería 5, Sesión de fotos 5, Video/contenido 1.
+- ⚠️ **30 de 30 sin `disparador`**: el campo nació el 24-ago-2026 y arranca vacío en todas. La
+  pantalla las muestra como «sin origen» — una lista de «sin origen» se lee como «falta cargarlo»,
+  que es lo cierto, y no como «no vienen de ningún lado».
 
 ## Cómo se prueba
 
 ```bash
 npx vitest run tests/sesionfotos-core.test.ts --reporter=dot   # y draft / escaneo / ventas
+npx vitest run tests/solicitudes-disparador.test.ts --reporter=dot   # el tercer eje: de dónde viene
 ```
 
 - 🔴 **Verde no dice nada sobre la venta.** Los tests de `ventas.ts` verifican que el **payload** sea
