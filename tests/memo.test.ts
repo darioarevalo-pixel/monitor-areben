@@ -7,6 +7,7 @@ import {
   costoPorCompra, delta, esStunned, fusionarPorCanal, fusionarVenta, lineaDe, pautaPorLinea,
   resumirCanales, semaforoPauta, ticketPromedio, ventaPorCanal, ventaPorLinea,
 } from '@/lib/memo/foto.core.js'
+import { LINEAS, MARCAS } from '@/lib/lineas.core.js'
 
 /**
  * El memo semanal. Lo que se prueba acá es lo que, si se rompe, rompe callado: la semana en el huso
@@ -349,5 +350,67 @@ describe('la venta por canal: mayorista contra el resto', () => {
 
   it('sin foto de canal, resumir no explota (semanas cerradas antes de que existiera el corte)', () => {
     expect(resumirCanales(undefined).total.facturado).toBe(0)
+  })
+})
+
+describe('🔴 el canal se guarda POR MARCA, y fusionarlo es una lectura y no la foto', () => {
+  // El defecto que esto viene a matar: hasta el 24-ago-2026 el handler sumaba las dos bases y la
+  // pantalla dibujaba un solo «Local». La tabla de arriba va por línea (BDI / Zattia / Stunned), así
+  // que el lector arrastraba el rótulo: en la semana del 17 al 23, «Local $6.168.837» son $1.591.710
+  // de BDI y $4.577.127 de Zattia. El número fusionado es cierto y la lectura es 3,9× de más.
+  const bdi = {
+    canales: {
+      local: { facturado: 1591710, unidades: 170, tickets: 113 },
+      online: { facturado: 2678283, unidades: 197, tickets: 99 },
+    },
+    nombres: { local: ['Mi Local'], online: ['Tienda Nube'] },
+  }
+  const zattia = {
+    canales: {
+      local: { facturado: 4577127, unidades: 230, tickets: 159 },
+      online: { facturado: 1951984, unidades: 100, tickets: 58 },
+    },
+    nombres: { local: ['Mi Local'], online: ['Tienda Nube'] },
+  }
+
+  it('cada marca conserva SU número: el local de BDI no es el local de la empresa', () => {
+    // La forma de fallar es que las dos marcas terminen apuntando al mismo objeto acumulado.
+    expect(resumirCanales(bdi.canales).minorista.facturado).toBe(4269993)
+    expect(resumirCanales(zattia.canales).minorista.facturado).toBe(6529111)
+    expect(bdi.canales.local.facturado).not.toBe(zattia.canales.local.facturado)
+  })
+
+  it('🔑 las partes ATAN con el total de la empresa, al peso', () => {
+    // El total no se guarda: lo arma la pantalla fusionando las marcas. Si algún día deja de atar,
+    // hay dos respuestas para el mismo número y la que se cita es la que le tocó al lector.
+    const juntas = fusionarPorCanal(bdi, zattia)
+    expect(juntas.canales.local.facturado).toBe(1591710 + 4577127)
+    expect(juntas.canales.online.facturado).toBe(2678283 + 1951984)
+    expect(resumirCanales(juntas.canales).total.facturado).toBe(
+      resumirCanales(bdi.canales).total.facturado + resumirCanales(zattia.canales).total.facturado,
+    )
+  })
+
+  it('🔴 fusionar NO puede pisar la parte de cada marca', () => {
+    // Si `fusionarVenta` acumulara sobre el objeto que recibe, leer el total de la empresa dejaría
+    // el número de BDI ya sumado con el de Zattia — y la próxima lectura de la misma foto daría otra
+    // cosa. Es el defecto que no falla: nadie vuelve a mirar el mismo número dos veces.
+    const antes = bdi.canales.local.facturado
+    fusionarPorCanal(bdi, zattia)
+    fusionarPorCanal(bdi, zattia)
+    expect(bdi.canales.local.facturado).toBe(antes)
+  })
+
+  it('una marca sin ventas no rompe la fusión ni desaparece del total', () => {
+    const juntas = fusionarPorCanal(bdi, { canales: {}, nombres: {} })
+    expect(juntas.canales.local.facturado).toBe(1591710)
+  })
+
+  it('🔑 las MARCAS salen de las líneas, no de una lista escrita a mano', () => {
+    // Stunned es una línea de Zattia, no una tercera base: si apareciera acá, el memo pediría un
+    // corte por canal de una base que no existe y la columna saldría en cero — un cero que afirma.
+    expect(MARCAS).toEqual(['bdi', 'zattia'])
+    expect(MARCAS).not.toContain('stunned')
+    expect(MARCAS.every((m) => LINEAS.includes(m))).toBe(true)
   })
 })

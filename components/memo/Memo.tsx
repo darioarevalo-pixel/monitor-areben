@@ -10,10 +10,11 @@ import {
 import { useGerencial } from '@/components/gerencial/useGerencial'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  LABEL_LINEA, LINEAS_MEMO, SISTEMAS, TEMAS,
-  costoPorCompra, delta, etiquetaSemana, resumirCanales, semaforoPauta, semanaAnterior,
-  semanaSiguiente, ticketPromedio,
-  type Bloque, type Campo, type Foto, type Linea, type Semana, type Senales, type VentaLinea,
+  LABEL_LINEA, LINEAS_MEMO, MARCAS_MEMO, SISTEMAS, TEMAS,
+  costoPorCompra, delta, etiquetaSemana, fusionarPorCanal, resumirCanales, semaforoPauta,
+  semanaAnterior, semanaSiguiente, ticketPromedio,
+  type Bloque, type Campo, type CanalDeMarca, type Foto, type Linea, type Semana, type Senales,
+  type VentaLinea,
 } from '@/lib/memo/tipos'
 import { ETIQUETA_CANAL, type Canal } from '@/lib/liquidacion/resultado'
 import { resumirClavados as resumirClav } from '@/lib/clavados/tipos'
@@ -262,20 +263,24 @@ function TablaVenta({ foto, lineas }: { foto: Foto; lineas: Linea[] }) {
 }
 
 /**
- * Mayorista contra todo lo que no es mayorista, con el resto desglosado.
+ * Mayorista contra todo lo que no es mayorista, **una tabla por marca**.
  *
- * 🔴 **Una semana cerrada antes del 24-ago-2026 no tiene este corte**, y no hay verbo de reabrir el
- * memo. El renglón dice «no se midió esa semana» en vez de dibujar ceros: un cero acá se leería
- * como «no hubo venta mayorista», que es un dato falso y para siempre.
+ * 🔴 **Iba fusionado hasta el 24-ago-2026 y ése era el defecto.** La tabla de arriba va por línea
+ * (BDI / Zattia / Stunned) y ésta dibujaba un solo «Local»: el lector arrastra el rótulo y lee como
+ * de BDI un número que es de las dos. En la semana del 17 al 23, «Local $6.168.837» son $1.591.710
+ * de BDI y $4.577.127 de Zattia — **3,9× de más**. Pedido por Bruno: por marca, «así se puede medir
+ * el progreso».
  *
- * ⚠️ Las cuentas (qué es minorista, qué queda fuera del total) salen de `resumirCanales`, no de
- * este JSX. Es la misma regla que ya mordió en `semaforoPauta`: escrita dos veces, sacarla de un
- * lado la deja viva en el otro.
+ * 🔴 **Una semana cerrada antes de ese día no tiene el corte**, y no hay verbo de reabrir el memo.
+ * Dice «no se midió esa semana» en vez de dibujar ceros: un cero acá se leería como «no hubo venta
+ * mayorista», que es un dato falso y para siempre. Y una cerrada **con el corte pero fusionado** se
+ * dibuja entera, rotulada «las dos marcas juntas»: repartirla sería inventar el dato que falta.
  */
 function TablaCanal({ foto }: { foto: Foto }) {
   const titulo = (
     <div style={{ fontSize: font.md, fontWeight: 600, color: color.ink2, marginBottom: space[2] }}>
-      Venta por canal, contra la semana del {foto.previa.ini.slice(8)} al {foto.previa.fin.slice(8)}
+      Venta por canal y por marca, contra la semana del {foto.previa.ini.slice(8)} al{' '}
+      {foto.previa.fin.slice(8)}
     </div>
   )
 
@@ -291,19 +296,99 @@ function TablaCanal({ foto }: { foto: Foto }) {
     )
   }
 
-  const r = resumirCanales(foto.canal.actual)
-  const prev = resumirCanales(foto.canal.previa)
-  const nombres = foto.canal.nombres || {}
+  // 🔴 Una semana congelada con la forma vieja (fusionada, hasta el 24-ago-2026) tiene los números
+  // pero **no de qué marca es cada uno**, y no hay verbo de reabrir. Se dibuja entera y rotulada
+  // como lo que es: repartirla entre las dos marcas sería inventar el dato que falta.
+  const marcas = foto.canal.marcas
+  if (!marcas) {
+    return (
+      <>
+        {titulo}
+        <Notice tone="neutral">
+          Esta semana se congeló <strong>antes</strong> de que el memo abriera el canal por marca:
+          los números están, pero suman las dos marcas y ya no se pueden separar.
+        </Notice>
+        <div style={{ height: space[3] }} />
+        <BloqueCanal
+          titulo="Las dos marcas juntas"
+          datos={{
+            actual: foto.canal.actual || {},
+            previa: foto.canal.previa || {},
+            nombres: foto.canal.nombres || {},
+          }}
+        />
+      </>
+    )
+  }
+
+  // El total de la empresa se ARMA acá y no se guarda: dos copias del mismo número son dos
+  // respuestas el día que una cambie. Es el número que se leía antes de abrir por marca.
+  const juntas = fusionarPorCanal(
+    ...MARCAS_MEMO.map((m) => ({ canales: marcas[m]?.actual, nombres: marcas[m]?.nombres })),
+  )
+  const juntasPrevia = fusionarPorCanal(...MARCAS_MEMO.map((m) => ({ canales: marcas[m]?.previa })))
+  const r = resumirCanales(juntas.canales)
+  const prev = resumirCanales(juntasPrevia.canales)
   const parte = (v: number) => (r.total.facturado > 0 ? (v / r.total.facturado) * 100 : null)
 
   return (
     <>
       {titulo}
 
-      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
+      <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: space[2] }}>
+        Las dos marcas juntas
+      </div>
+      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', marginBottom: space[4] }}>
         <TarjetaCanal titulo="Mayorista" v={r.mayorista} previo={prev.mayorista.facturado} parte={parte(r.mayorista.facturado)} />
         <TarjetaCanal titulo="Minorista" v={r.minorista} previo={prev.minorista.facturado} parte={parte(r.minorista.facturado)}
           detalle="Local + Online + Otros canales" />
+      </div>
+
+      {/* 🔴 Una marca sin ventas se dibuja igual, en cero: el bloque que sólo aparece cuando tiene
+          número no puede avisar de que esa marca no vendió — ni de que su base no se pudo leer,
+          que ya viaja en `problemas`. */}
+      {MARCAS_MEMO.map((m) => (
+        <div key={m} style={{ marginBottom: space[4] }}>
+          <BloqueCanal
+            titulo={LABEL_LINEA[m]}
+            datos={marcas[m] || { actual: {}, previa: {}, nombres: {} }}
+          />
+        </div>
+      ))}
+
+      <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.6 }}>
+        Acá los <strong>tickets suman</strong> —una venta tiene un solo canal—, al revés que en la
+        tabla por línea de arriba, donde una venta mixta cuenta un ticket en cada una.
+        <br />
+        <strong>Stunned no tiene columna propia acá y no es un olvido:</strong> es una línea adentro
+        de Zattia, y el descuento y el envío son de la venta entera. Partirlos entre dos líneas de
+        la misma venta pedía inventar un criterio, así que su plata está adentro de Zattia.
+      </div>
+    </>
+  )
+}
+
+/**
+ * El corte por canal de UNA marca: las dos tarjetas del corte que pidió Bruno (mayorista contra
+ * todo lo demás), la tabla de canales y la técnica al pie.
+ *
+ * 🔴 **Existe porque el memo pasó a mostrar el mismo bloque tres veces** —BDI, Zattia y, en las
+ * semanas viejas, las dos juntas—. Con el JSX repetido, el día que cambie el corte una de las
+ * copias se queda vieja **y las dos se leen una al lado de la otra**.
+ *
+ * ⚠️ Las cuentas (qué es minorista, qué queda fuera del total) salen de `resumirCanales`, no de
+ * este JSX. Es la misma regla que ya mordió en `semaforoPauta`: escrita dos veces, sacarla de un
+ * lado la deja viva en el otro.
+ */
+function BloqueCanal({ titulo, datos }: { titulo: string; datos: CanalDeMarca }) {
+  const r = resumirCanales(datos.actual)
+  const prev = resumirCanales(datos.previa)
+  const nombres = datos.nombres || {}
+
+  return (
+    <>
+      <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink, marginBottom: space[2] }}>
+        {titulo}
       </div>
 
       <TableWrap>
@@ -330,13 +415,21 @@ function TablaCanal({ foto }: { foto: Foto }) {
               </Td>
               <Td align="right">{formatMoney(venta.facturado)}</Td>
               <Td align="right">
-                <Variacion actual={venta.facturado} previo={foto.canal!.previa[canal]?.facturado ?? 0} />
+                <Variacion actual={venta.facturado} previo={datos.previa[canal]?.facturado ?? 0} />
               </Td>
               <Td align="right">{venta.unidades.toLocaleString('es-AR')}</Td>
               <Td align="right">{venta.tickets.toLocaleString('es-AR')}</Td>
               <Td align="right">{formatMoney(ticketPromedio(venta))}</Td>
             </Tr>
           ))}
+          <Tr>
+            <Td><strong>Mayorista</strong></Td>
+            <Td align="right"><strong>{formatMoney(r.mayorista.facturado)}</strong></Td>
+            <Td align="right"><Variacion actual={r.mayorista.facturado} previo={prev.mayorista.facturado} /></Td>
+            <Td align="right">{r.mayorista.unidades.toLocaleString('es-AR')}</Td>
+            <Td align="right">{r.mayorista.tickets.toLocaleString('es-AR')}</Td>
+            <Td align="right">{formatMoney(ticketPromedio(r.mayorista))}</Td>
+          </Tr>
           <Tr>
             <Td><strong>Total</strong></Td>
             <Td align="right"><strong>{formatMoney(r.total.facturado)}</strong></Td>
@@ -351,14 +444,11 @@ function TablaCanal({ foto }: { foto: Foto }) {
       {/* 🔴 Técnica se muestra SIEMPRE, también en cero: adentro cae el canal vacío, así que el día
           que Gestión Nube deje de mandar `channel` todas las ventas aparecen acá en vez de
           evaporarse. Un renglón que sólo se dibuja cuando tiene número no puede avisar de nada. */}
-      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[3], lineHeight: 1.6 }}>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[2], lineHeight: 1.6 }}>
         <strong>Fuera del total:</strong> {ETIQUETA_CANAL.tecnica} — {formatMoney(r.tecnica.facturado)} en{' '}
         {r.tecnica.tickets.toLocaleString('es-AR')} movimiento(s)
         {nombres.tecnica?.length ? ` (${nombres.tecnica.join(' · ')})` : ''}. No son ventas: las crea el
         monitor para descontar stock (sesión de fotos, fallas y canjes).
-        <br />
-        Acá los <strong>tickets suman</strong> —una venta tiene un solo canal—, al revés que en la
-        tabla por línea de arriba, donde una venta mixta cuenta un ticket en cada una.
       </div>
     </>
   )

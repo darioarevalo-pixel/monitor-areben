@@ -47,7 +47,7 @@ import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { claveValida, cerrada, esFecha, hoyAr, idSemana, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
-import { fusionarPorCanal, fusionarVenta, pautaPorLinea, ventaPorCanal, ventaPorLinea } from '../lib/memo/foto.core.js';
+import { fusionarVenta, pautaPorLinea, ventaPorCanal, ventaPorLinea } from '../lib/memo/foto.core.js';
 import { renglonClavado, resumirClavados, ventaPorProducto } from '../lib/clavados/core.js';
 
 /** La base maestra: el memo no tiene marca. Mismo criterio que novedades. */
@@ -166,9 +166,23 @@ async function calcularFoto(sb, sem) {
 
   // El canal se calcula sobre las MISMAS filas que ya están en memoria: es otro corte del mismo
   // rango, no otra consulta. Va sin `store` ni `skuPor` porque el canal no depende de la línea.
+  //
+  // 🔴 🔑 **Se guarda ABIERTO POR MARCA y ⛔ no fusionado.** Hasta el 24-ago-2026 las dos bases se
+  // sumaban acá con `fusionarPorCanal` y la pantalla dibujaba un solo «Local». Ese número es de la
+  // empresa, pero la tabla de arriba va por línea (BDI / Zattia / Stunned) y el lector arrastra el
+  // rótulo: en la semana del 17 al 23 «Local $6.168.837» se lee como de BDI, y el local de BDI son
+  // $1.591.710 — **3,9× de más**, porque $4.577.127 son de Zattia. Pedido por Bruno el 24-ago: por
+  // marca *«así se puede medir el progreso»*. El total de la empresa **no se guarda**: lo arma la
+  // pantalla fusionando las partes, y dos copias del mismo número son dos respuestas.
   const porCanal = (r, d, h) => ventaPorCanal({ ventas: r.ventas, detalles: r.detalles, desde: d, hasta: h });
-  const canalActual = fusionarPorCanal(porCanal(bdi, sem.ini, sem.fin), porCanal(zattia, sem.ini, sem.fin));
-  const canalPrevio = fusionarPorCanal(porCanal(bdi, prev.ini, prev.fin), porCanal(zattia, prev.ini, prev.fin));
+  const canalDeMarca = (r) => {
+    const actual = porCanal(r, sem.ini, sem.fin);
+    const previa = porCanal(r, prev.ini, prev.fin);
+    // `nombres` es sólo de la semana actual: los de la previa no se muestran en ningún lado, y
+    // guardar un dato que nadie lee lo vuelve verdad para siempre en el jsonb del cierre.
+    return { actual: actual.canales, previa: previa.canales, nombres: actual.nombres };
+  };
+  const canalPorMarca = { bdi: canalDeMarca(bdi), zattia: canalDeMarca(zattia) };
 
   // Los clavados de las dos marcas. Reusan las ventas de 14 días que ya están en memoria para la
   // semana; el mes va acotado a los productos marcados.
@@ -194,9 +208,10 @@ async function calcularFoto(sb, sem) {
     // 🔴 Las semanas cerradas ANTES del 24-ago-2026 no tienen esta clave, y no hay verbo de
     // reabrir. La pantalla tiene que decir «no se midió esa semana»: rellenarla con ceros da un
     // número plausible y falso para siempre.
-    // `nombres` es sólo de la semana actual: los de la previa no se muestran en ningún lado y
-    // guardar un dato que nadie lee lo vuelve verdad para siempre en el jsonb del cierre.
-    canal: { actual: canalActual.canales, previa: canalPrevio.canales, nombres: canalActual.nombres },
+    // 🔴 Y `marcas` es lo que distingue esta forma de la fusionada que se guardó hasta el
+    // 24-ago-2026: una semana congelada con la vieja tiene los números, pero no se puede saber de
+    // qué marca es cada uno. La pantalla lo rotula «las dos marcas juntas» en vez de partirlo.
+    canal: { marcas: canalPorMarca },
     // 🔴 Opcional igual que `canal`: las semanas cerradas antes de que existiera este bloque no lo
     // tienen y no hay verbo de reabrir. La pantalla dice «no se midió esa semana», ⛔ nunca cero.
     clavados: { renglones: clavRenglones, resumen: resumirClavados(clavRenglones) },

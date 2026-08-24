@@ -1,8 +1,8 @@
 # Memo semanal — ficha de sección
 
 Sección `memo`, área Dirección, **sólo admins**. Es el depósito semanal de lo que pasó: los números
-que arma el monitor (lunes a domingo) —venta **por línea**, venta **por canal**, el recupero de los
-**clavados** y la pauta—, el avance
+que arma el monitor (lunes a domingo) —venta **por línea**, venta **por canal y por marca**, el
+recupero de los **clavados** y la pauta—, el avance
 de los ocho sistemas y el acta que escriben Bruno y Darío. No reemplazó ninguna pantalla — nació el 15-ago-2026 como la otra mitad de Gerencial.
 
 🔑 **Gerencial es "qué decidir ahora": señales vivas, sin memoria y sin corte. Éste es "qué pasó",
@@ -61,6 +61,18 @@ el motivo duro está escrito arriba del `create table`.
   tabla **por canal** sí los lleva, porque una venta tiene **un** canal. **La brecha no es chica:
   medida el 24-ago-2026 sobre la semana del 10 al 16, $15.776.896 contra $14.694.969 — $1.081.927,
   un 6,9 %.** Con el mismo rótulo en las dos, el lector cita el número que le tocó.
+- 🔴 🔑 **El corte por canal va ABIERTO POR MARCA, y fusionarlo era el defecto.** Hasta el
+  24-ago-2026 el handler sumaba las dos bases y la pantalla dibujaba un solo «Local». El número era
+  cierto —es el de la empresa— pero **la tabla de al lado va por línea** (BDI / Zattia / Stunned) y
+  el lector arrastra el rótulo: en la semana del 17 al 23, «Local $6.168.837» son **$1.591.710 de
+  BDI y $4.577.127 de Zattia**, o sea **3,9× de más** leído como BDI. Lo pidió Bruno el 24-ago:
+  *«así se puede medir el progreso»*. 🔑 **El total de la empresa NO se guarda**: lo arma la pantalla
+  fusionando las partes con `fusionarPorCanal`. Dos copias del mismo número son dos respuestas.
+- ⚠️ **Stunned no tiene columna en el corte por canal, y no es un olvido.** El descuento y el envío
+  son **de la venta entera**: partirlos entre dos líneas de la misma venta pide inventar un criterio,
+  que es justo lo que la columna «Mercadería» de la otra tabla existe para no hacer. Su plata está
+  adentro de Zattia, y la pantalla lo dice al pie. El eje que se abre acá es la **marca** (una venta
+  sale de **una** base), no la línea.
 - 🔴 🔑 **Los tickets por canal SUMAN; los tickets por línea NO.** Las dos tablas están una al lado
   de la otra y se leen como comparables. Una venta mixta cuenta un ticket en cada línea; una venta
   tiene un solo canal. Está dicho al pie de la pantalla, que es donde el lector lo necesita.
@@ -164,12 +176,19 @@ veces se olvidó — que es lo que hace que la decisión no sea una corazonada.
   reabrir**. `Foto.canal` es opcional a propósito y la pantalla dice **«no se midió esa semana»**.
   ⛔ Rellenarlas con ceros da un número plausible y falso para siempre. Lo mismo vale para
   `Foto.clavados`, que nació el mismo día.
+- 🔴 **Hay TRES formas de `Foto.canal` y `marcas` es lo que las distingue**: sin la clave `canal`
+  («no se midió»), con `canal` pero sin `marcas` (congelada fusionada — los números están y ya no se
+  pueden separar: la pantalla los rotula **«las dos marcas juntas»**), y con `marcas` (la de ahora).
+  ⛔ Repartir una fusionada entre las dos marcas es inventar el dato que falta. Medido el 24-ago: la
+  única semana congelada, `w2026-08-10`, **no tiene `canal` en absoluto**, así que hoy la forma del
+  medio no existe en la base — el camino está igual porque no cuesta nada y el jsonb es para
+  siempre.
 - ⚠️ **El costo por compra de Stunned sale de UNA sola observación** ($9.886 con 1 compra). Es un
   número real, no una medición.
 
 ## Cómo se prueba
 
-`npx vitest run tests/memo.test.ts --reporter=dot` (38 casos).
+`npx vitest run tests/memo.test.ts --reporter=dot` (43 casos).
 
 Lo que no es obvio:
 
@@ -183,6 +202,14 @@ Lo que no es obvio:
   tope de fecha (entra la venta de la semana siguiente) · tickets sin deduplicar · sumar `tecnica`
   al total · guardar el canal clasificado en vez del nombre crudo · sacar `otro` de minorista.
   ⚠️ La mutación se confirma con `grep` **antes** de leer el rojo: un «vivo» suele ser el arnés.
+- **Dos más por el corte por marca, los dos muertos con `AssertionError`** (24-ago): que
+  `fusionarVenta` acumule **sobre el objeto que recibe** —leer el total de la empresa dejaría el
+  número de BDI ya sumado con el de Zattia, y nadie mira el mismo número dos veces— y que `MARCAS`
+  se escriba como las `LINEAS`, que mete a **Stunned como si fuera una tercera base**.
+- 🔴 **Lo que ningún test ejerce es la FORMA que arma el handler** (`canal: { marcas: … }`): los
+  cores se prueban sueltos y `api/_memo.js` no entra en la suite. El oráculo de eso es prod contra
+  `psql` — medido el 24-ago sobre la semana del 17 al 23, marca por marca: BDI local $1.591.710 /
+  online $2.678.283, Zattia local $4.577.127 / online $1.951.984.
 - 🔑 **El oráculo del cierre no es la pantalla**: `memo_semana` leída aparte con la service key.
   Medido el 18-ago con cuatro lecturas del mismo número en cuatro momentos (parcial, jsonb del
   cierre, recálculo en vivo tras reabrir, jsonb del segundo cierre) — **idénticas**.

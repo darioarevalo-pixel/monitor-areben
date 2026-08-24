@@ -24,21 +24,40 @@ import {
   LINEAS_MEMO as LINEAS_MEMO_JS,
   costoPorCompra as costoPorCompraJs,
   delta as deltaJs,
+  fusionarPorCanal as fusionarPorCanalJs,
   resumirCanales as resumirCanalesJs,
   semaforoPauta as semaforoPautaJs,
   ticketPromedio as ticketPromedioJs,
 } from './foto.core.js'
 
+import { MARCAS as MARCAS_JS } from '../lineas.core.js'
+
 import type { RenglonClavado, ResumenClavados } from '../clavados/tipos'
+import type { Marca } from '../nav.datos'
 
 /** Las tres líneas del negocio. Stunned no es una marca: es una línea de Zattia. */
 export type Linea = 'bdi' | 'zattia' | 'stunned'
+
+export type { Marca }
 
 export type Semana = { id: string; ini: string; fin: string }
 
 export type Bloque = 'acta' | 'avance'
 
 export type VentaLinea = { facturado: number; unidades: number; tickets: number }
+
+/**
+ * La venta por canal de UNA marca: la semana, la anterior, y los nombres crudos de Gestión Nube que
+ * cayeron en cada canal.
+ *
+ * ⚠️ **`nombres` es sólo de la semana actual** — los de la previa no se muestran en ningún lado, y
+ * guardar un dato que nadie lee lo vuelve verdad para siempre en el jsonb del cierre.
+ */
+export type CanalDeMarca = {
+  actual: Record<string, VentaLinea>
+  previa: Record<string, VentaLinea>
+  nombres: Record<string, string[]>
+}
 export type PautaLinea = { gasto: number; compras: number; revenue: number }
 
 /** Venta y pauta: los dos bloques que se pueden congelar sin mentir. */
@@ -52,10 +71,21 @@ export type Foto = {
    * semana» y la pantalla lo dice así — un cero acá sería un número plausible y falso para siempre.
    */
   canal?: {
-    actual: Record<string, VentaLinea>
-    previa: Record<string, VentaLinea>
-    /** Los nombres crudos de Gestión Nube que cayeron en cada canal. Sin esto, `otro` no se audita. */
-    nombres: Record<string, string[]>
+    /**
+     * 🔴 **Abierto POR MARCA desde el 24-ago-2026, y `marcas` es lo que distingue las dos formas.**
+     * Antes las dos bases se sumaban en el handler y la pantalla dibujaba un solo «Local»: en la
+     * semana del 17 al 23 eso son $6.168.837, de los que **$4.577.127 son de Zattia** y $1.591.710
+     * de BDI. Leído bajo el rótulo de la tabla de arriba —que sí va por línea— es 3,9× de más.
+     *
+     * `undefined` (la clave entera) es «no se midió esa semana». `canal` **sin** `marcas` es una
+     * semana congelada con la forma vieja: los números están, pero no se puede saber de qué marca
+     * es cada uno, y la pantalla los rotula «las dos marcas juntas» en vez de inventar el reparto.
+     */
+    marcas?: Record<string, CanalDeMarca>
+    /** La forma vieja, fusionada. Sólo la traen las semanas congeladas antes del 24-ago-2026. */
+    actual?: Record<string, VentaLinea>
+    previa?: Record<string, VentaLinea>
+    nombres?: Record<string, string[]>
   }
   /**
    * El recupero de los clavados. **Opcional a propósito**, igual que `canal`: las semanas cerradas
@@ -129,6 +159,23 @@ export type ResumenCanales = {
 }
 
 export const CANALES_MINORISTA = CANALES_MINORISTA_JS as string[]
+
+/**
+ * Las dos marcas, en el orden en que se dibujan. Sale de `lib/lineas.core.js` **derivada de las
+ * líneas**: escribir `['bdi','zattia']` acá sería la quinta copia de esa lista en el repo.
+ */
+export const MARCAS_MEMO = MARCAS_JS as Marca[]
+
+/**
+ * Junta la venta por canal de varias marcas. La pantalla la usa para el total de la empresa, que
+ * **no se guarda en la foto**: dos copias del mismo número son dos respuestas el día que una cambie.
+ */
+export const fusionarPorCanal = fusionarPorCanalJs as (
+  ...partes: (CanalPorMarca | undefined)[]
+) => { canales: Record<string, VentaLinea>; nombres: Record<string, string[]> }
+
+/** Lo que `fusionarPorCanal` sabe leer: el corte de una marca en un momento. */
+type CanalPorMarca = { canales?: Record<string, VentaLinea>; nombres?: Record<string, string[]> }
 export const resumirCanales = resumirCanalesJs as (
   porCanal: Record<string, VentaLinea> | undefined,
 ) => ResumenCanales
