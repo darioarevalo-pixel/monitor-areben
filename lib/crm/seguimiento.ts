@@ -10,7 +10,7 @@
  * el diff contra el dump sea exactamente el cliente tocado.
  */
 
-import { addDiasISO } from './core'
+import { addDiasISO, diaHabil } from './core'
 import type { Contacto, MapaSeguimiento, ResultadoContacto, Seguimiento, Temperatura } from './tipos'
 
 /** Fecha local YYYY-MM-DD. Port de hoyISO (13279): usa el día REAL, no el TODAY
@@ -70,14 +70,23 @@ export const setDifusion = (crmSeg: MapaSeguimiento, id: number | string, value:
 export const setTemperatura = (crmSeg: MapaSeguimiento, id: number | string, value: Temperatura) =>
   conPatch(crmSeg, id, { temperatura: value })
 
-/** "Le escribí hoy": fija el próximo a hoy + `dias`. */
+/**
+ * "Le escribí hoy": fija el próximo a hoy + `dias`, **corrido al lunes si cae fin de semana**
+ * (ver `diaHabil`).
+ */
 export const escribiHoy = (crmSeg: MapaSeguimiento, id: number | string, dias: number, today?: Date) => {
   const hoy = hoyISO(today)
-  return conPatch(crmSeg, id, { ultimo_contacto: hoy, proximo_manual: addDiasISO(hoy, dias) })
+  return conPatch(crmSeg, id, { ultimo_contacto: hoy, proximo_manual: diaHabil(addDiasISO(hoy, dias)) })
 }
 
+/**
+ * La fecha elegida en el calendario. También pasa por `diaHabil`: la regla es del dato, no del
+ * botón — un sábado agendado a mano se pierde igual que uno calculado.
+ *
+ * ⚠️ Vacío sigue significando "sin fecha" y no se toca.
+ */
 export const setProximoManual = (crmSeg: MapaSeguimiento, id: number | string, value: string) =>
-  conPatch(crmSeg, id, { proximo_manual: value || null })
+  conPatch(crmSeg, id, { proximo_manual: value ? diaHabil(value) : null })
 
 /**
  * Campo de texto libre del seguimiento (`despacho`, `tener_en_cuenta`, `pendiente`).

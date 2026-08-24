@@ -10,6 +10,7 @@ import {
   setProximoManual,
   setTemperatura,
 } from '@/lib/crm/seguimiento'
+import { diaHabil, PLAZOS_DIAS } from '@/lib/crm/core'
 import type { MapaSeguimiento } from '@/lib/crm/tipos'
 
 /**
@@ -92,3 +93,49 @@ describe('notas', () => {
 
 // ── Parseo de teléfonos ───────────────────────────────────────────────────────
 
+/**
+ * Ningún próximo contacto puede caer en fin de semana.
+ *
+ * Lo pidió Bruno el 24-ago-2026: la venta mayorista es de lunes a viernes, así que un recordatorio
+ * para el sábado se pierde — el lunes ya está viejo y se mezcla con los atrasados. La regla es del
+ * DATO y no del botón: vale para los plazos calculados y también para la fecha elegida a mano.
+ */
+describe('el próximo contacto nunca cae en fin de semana', () => {
+  // 2026-08-24 es LUNES. +5 = sábado 29, +6 = domingo 30, +7 = lunes 31.
+  const LUNES = new Date(2026, 7, 24)
+
+  it('sábado y domingo se corren al lunes; el resto queda como está', () => {
+    expect(diaHabil('2026-08-29')).toBe('2026-08-31') // sábado → lunes
+    expect(diaHabil('2026-08-30')).toBe('2026-08-31') // domingo → lunes
+    expect(diaHabil('2026-08-28')).toBe('2026-08-28') // viernes
+    expect(diaHabil('2026-08-31')).toBe('2026-08-31') // lunes
+  })
+
+  it('🔑 corre para ADELANTE: pediste 15 días, no 13', () => {
+    // Al revés estaría contactando ANTES de lo pedido, que es peor que un poco después.
+    expect(diaHabil('2026-08-29') > '2026-08-29').toBe(true)
+  })
+
+  it('"le escribí hoy, en 5 días" cae sábado y se guarda el lunes', () => {
+    const r = escribiHoy({}, 1, 5, LUNES)
+    expect(r['1'].proximo_manual).toBe('2026-08-31')
+    expect(r['1'].ultimo_contacto).toBe('2026-08-24')
+  })
+
+  it('un plazo que NO cae en fin de semana no se toca', () => {
+    expect(escribiHoy({}, 1, 3, LUNES)['1'].proximo_manual).toBe('2026-08-27') // jueves
+  })
+
+  it('la fecha elegida a mano también: la regla es del dato, no del botón', () => {
+    expect(setProximoManual({}, 1, '2026-08-30')['1'].proximo_manual).toBe('2026-08-31')
+  })
+
+  it('vacío sigue siendo "sin fecha", no un lunes', () => {
+    expect(setProximoManual({}, 1, '')['1'].proximo_manual).toBe(null)
+  })
+
+  it('los siete plazos son los mismos en todas las pantallas', () => {
+    // Con dos listas distintas, el mismo cliente se agenda distinto según desde dónde se lo toque.
+    expect([...PLAZOS_DIAS]).toEqual([1, 2, 3, 7, 15, 21, 30])
+  })
+})

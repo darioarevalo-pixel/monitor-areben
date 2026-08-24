@@ -586,3 +586,27 @@ servía para **pisar** los números enganchados a mano, porque el merge era `{..
 - Se fueron con ella: `parsearTelefonos` (`lib/crm/seguimiento.ts`), `guardarTel` (`useCRM`) y sus
   tests. `crmTelOverride` se sigue leyendo — `calcularAgregado` lo usa para el teléfono de los que
   el padrón no tiene.
+
+## ✅ 24-ago-2026 — los plazos: siete números, el calendario adelante y nada en fin de semana
+
+Bruno después de un día de uso: *"funciona más el calendario de cuándo volver a contactar, y
+necesito más opciones — mañana, 1 2 3, 7 15 21 y 30, que sea medio factor común para que no sea
+grande esa sección. Y la fecha tiene que ser un día que no sea fin de semana."*
+
+- **De tres botones a siete fichitas.** "En 1 semana" ocupaba un renglón para dar una opción; un
+  título ("En cuántos días") con siete números ocupa uno solo y da siete. `PLAZOS_DIAS` vive en
+  `lib/crm/core.ts` y lo usan **las tres pantallas** — panel cliente, panel prospecto y ficha del
+  CRM: con listas distintas, el mismo cliente se agenda distinto según desde dónde se lo toque.
+- **Cada fichita dice en qué día cae** (`title`: "En 15 días · lun 8/9"), ya corrido. Un "15" pelado
+  obliga a la cuenta de cabeza, que es lo que hacía preferir el calendario.
+- **El calendario pasó a ancho completo**, debajo: es lo que más se usa.
+- 🔑 **`diaHabil` corre sábado y domingo al LUNES, y es regla del DATO, no del botón**: la aplican
+  `escribiHoy`, `escribiHoyLead` y también `setProximoManual` (la fecha elegida a mano). Corre para
+  adelante — al revés estaría contactando antes de lo pedido.
+- ⚠️ **Si la fecha se corrió, el panel lo dice** ("Ese día es fin de semana: quedó el lun 31/8").
+  Un cambio silencioso en el dato que se acaba de tocar es cómo se deja de creer en la pantalla.
+- ⚠️ **No sabe de feriados.** Una tabla de feriados hay que mantenerla todos los años y el día que
+  se desactualiza miente en silencio; un feriado se ve el día que pasa y se corre a mano.
+- **Lo ya guardado no se migró**: medido, **10 de los 744 clientes** tienen fecha de fin de semana
+  (y 0 de los leads). Se acomodan solas la próxima vez que se las toque. Reescribir el KV entero
+  para diez fechas no se paga.

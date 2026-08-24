@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI } from '@/components/crm/temperatura'
-import { siguienteTemperatura } from '@/lib/crm/core'
+import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
 import { plazoEnPalabras, ritmoDeCompra } from '@/lib/crm/ritmo'
 import {
   buscarClientesPorNombre,
@@ -122,12 +122,72 @@ const SEG_TXT: Record<string, string> = {
  * hacen las dos cosas: anotan el contacto y corren la fecha.
  */
 
-/** Los tres plazos de "volver a hablarle" + la fecha a dedo. */
-const PLAZOS: { dias: number; txt: string }[] = [
-  { dias: 3, txt: 'En 3 días' },
-  { dias: 7, txt: 'En 1 semana' },
-  { dias: 15, txt: 'En 15 días' },
-]
+/**
+ * La fila de "en cuántos días", que reemplazó a los tres botones de frase completa.
+ *
+ * Bruno, después de un día de uso: *"me parece que funciona más el calendario, y necesito más
+ * opciones de recontacto — mañana, 1 2 3, 7 15 21 y 30, que sea medio factor común para que no sea
+ * grande esa sección"*. Tres botones que decían "En 1 semana" ocupaban tres renglones para dar tres
+ * opciones; **siete números debajo de un título ocupan uno solo y dan siete**.
+ *
+ * ⚠️ **Cada fichita muestra en qué día cae**, y ya corrido al lunes si caía fin de semana. Un "15"
+ * pelado obliga a hacer la cuenta de cabeza, que es justo lo que hacía que se usara el calendario.
+ */
+function Plazos({ guardando, onElegir }: { guardando: boolean; onElegir: (dias: number) => void }) {
+  const hoy = hoyISO()
+  return (
+    <>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>En cuántos días</div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+        {PLAZOS_DIAS.map((d) => {
+          const cae = diaHabil(addDiasISO(hoy, d))
+          return (
+            <button
+              key={d}
+              type="button"
+              disabled={guardando}
+              onClick={() => onElegir(d)}
+              title={`${d === 1 ? 'Mañana' : `En ${d} días`} · ${diaYFecha(cae)}`}
+              style={{
+                minWidth: 34,
+                padding: '4px 8px',
+                fontSize: font.sm,
+                fontWeight: 600,
+                color: color.ink2,
+                background: color.surface,
+                border: `1px solid ${color.line2}`,
+                borderRadius: radius.md,
+                cursor: guardando ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {d}
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+/**
+ * Qué decir después de elegir una fecha en el calendario.
+ *
+ * 🔑 **Si la fecha se corrió, hay que decirlo.** El sábado elegido se guarda como lunes (ver
+ * `diaHabil`); un cambio silencioso en el dato que se acaba de tocar es cómo se deja de creer en
+ * la pantalla.
+ */
+function avisoFecha(elegida: string): string {
+  if (!elegida) return 'Listo'
+  const habil = diaHabil(elegida)
+  return habil === elegida ? `Listo · ${diaYFecha(habil)}` : `Ese día es fin de semana: quedó el ${diaYFecha(habil)}`
+}
+
+/** "lun 1/9". El día de la semana es lo que hace entender un "en 15" sin contar con los dedos. */
+function diaYFecha(iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  const dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+  return `${dias[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`
+}
 
 /**
  * Los tres campos que se separaron de la nota, en el orden en que se miran al abrir un chat:
@@ -812,27 +872,16 @@ function PanelInterno({
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {PLAZOS.map((p) => (
-              <Button
-                key={p.dias}
-                size="sm"
-                variant="outline"
-                disabled={guardando}
-                onClick={() => mutar((m) => escribiHoy(m, c.id, p.dias), 'Listo')}
-              >
-                {p.txt}
-              </Button>
-            ))}
-            <input
-              className="mo-input"
-              type="date"
-              value={c.proximo_contacto || ''}
-              disabled={guardando}
-              onChange={(e) => mutar((m) => setProximoManual(m, c.id, e.target.value), 'Listo')}
-              style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
-            />
-          </div>
+          <Plazos guardando={guardando} onElegir={(d) => mutar((m) => escribiHoy(m, c.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
+          {/* El calendario, ancho: es lo que más se usa. */}
+          <input
+            className="mo-input"
+            type="date"
+            value={c.proximo_contacto || ''}
+            disabled={guardando}
+            onChange={(e) => mutar((m) => setProximoManual(m, c.id, e.target.value), avisoFecha(e.target.value))}
+            style={{ width: '100%', fontSize: font.sm }}
+          />
         </Bloque>
 
         {/* Notas: la bitácora de lo que se hizo. Lo que hay que TENER EN CUENTA ya está arriba. */}
@@ -1195,27 +1244,15 @@ function FichaLead({
       </Bloque>
 
       <Bloque titulo="Volver a hablarle">
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PLAZOS.map((pl) => (
-            <Button
-              key={pl.dias}
-              size="sm"
-              variant="outline"
-              disabled={guardando}
-              onClick={() => onMutar((m) => escribiHoyLead(m, lead.id, pl.dias), 'Listo')}
-            >
-              {pl.txt}
-            </Button>
-          ))}
-          <input
-            className="mo-input"
-            type="date"
-            value={lead.proximo_manual || ''}
-            disabled={guardando}
-            onChange={(e) => onMutar((m) => setProximoLead(m, lead.id, e.target.value), 'Listo')}
-            style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
-          />
-        </div>
+        <Plazos guardando={guardando} onElegir={(d) => onMutar((m) => escribiHoyLead(m, lead.id, d), `Listo · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`)} />
+        <input
+          className="mo-input"
+          type="date"
+          value={lead.proximo_manual || ''}
+          disabled={guardando}
+          onChange={(e) => onMutar((m) => setProximoLead(m, lead.id, e.target.value), avisoFecha(e.target.value))}
+          style={{ width: '100%', fontSize: font.sm }}
+        />
       </Bloque>
 
       <Notas

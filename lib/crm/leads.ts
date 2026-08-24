@@ -12,7 +12,7 @@
  * verificación, no acá.
  */
 
-import { addDiasISO, diasHasta } from './core'
+import { addDiasISO, diaHabil, diasHasta } from './core'
 import { cola, normalizeArgPhone } from './telefono.core.js'
 import type { EstadoSeg, Nota } from './tipos'
 
@@ -205,9 +205,11 @@ export function hableHoy(leads: MapaLeads, id: string, hoy: Date = new Date()): 
   return conLead(leads, id, (l) => ({ ...l, ultimo_contacto: hoyISO(hoy), proximo_manual: null }))
 }
 
-/** leadsSetProximoManual (14197). */
+/**
+ * leadsSetProximoManual (14197). Pasa por `diaHabil`: ningún próximo contacto cae en fin de semana.
+ */
 export function setProximoManual(leads: MapaLeads, id: string, val: string): MapaLeads {
-  return conLead(leads, id, (l) => ({ ...l, proximo_manual: val || null }))
+  return conLead(leads, id, (l) => ({ ...l, proximo_manual: val ? diaHabil(val) : null }))
 }
 
 /** leadsAgregarNota (14203): las notas se guardan más nueva primero. */
@@ -297,5 +299,6 @@ export function leadsPorTelefono(leads: MapaLeads, tel: string): { leads: Lead[]
  * fecha se fija DESPUÉS o se pierde.
  */
 export function escribiHoyLead(leads: MapaLeads, id: string, dias: number, hoy: Date = new Date()): MapaLeads {
+  // `setProximoManual` ya corre el fin de semana al lunes.
   return setProximoManual(hableHoy(leads, id, hoy), id, addDiasISO(hoyISO(hoy), dias))
 }

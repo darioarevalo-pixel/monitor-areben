@@ -83,6 +83,40 @@ export function addDiasISO(iso: string, n: number): string {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
 }
 
+/**
+ * Corre la fecha al lunes si cayó sábado o domingo.
+ *
+ * 🔑 **Ningún próximo contacto puede caer en fin de semana**: la venta mayorista se hace de lunes a
+ * viernes, así que un recordatorio para el sábado es un recordatorio que se pierde — el lunes ya
+ * quedó viejo y se mezcla con el resto de los atrasados. Lo pidió Bruno el 24-ago-2026.
+ *
+ * **Corre para adelante y no para atrás**: si pediste "en 15 días" y cae sábado, el lunes son 17.
+ * Al revés estaría contactando antes de lo que pidió, que es peor que un poco después.
+ *
+ * ⚠️ **No sabe de feriados.** Un feriado se ve el día que pasa y se corre a mano; una tabla de
+ * feriados hay que mantenerla todos los años y el día que se desactualiza miente en silencio.
+ */
+export function diaHabil(iso: string): string {
+  if (!iso) return iso
+  const d = new Date(iso + 'T00:00:00')
+  const dia = d.getDay() // 0 domingo, 6 sábado
+  if (dia === 6) return addDiasISO(iso, 2)
+  if (dia === 0) return addDiasISO(iso, 1)
+  return iso
+}
+
+/**
+ * Los plazos de "volver a hablarle", en un solo lugar.
+ *
+ * Los dibujan el panel de WhatsApp, la ficha del cliente y la de los prospectos; con tres listas
+ * distintas, el mismo cliente se agenda distinto según desde dónde lo toques.
+ *
+ * 🔑 **Son números, no frases.** Van como fila de fichitas debajo de "En cuántos días", que es lo
+ * que deja poner siete opciones sin que la sección se coma la pantalla — el panel mide 350 px.
+ * Salieron de lo que Bruno pidió: *"mañana, 1 2 3, 7 15 21 y 30, que sea medio factor común"*.
+ */
+export const PLAZOS_DIAS = [1, 2, 3, 7, 15, 21, 30] as const
+
 /** diasHasta (13283). Compara contra la medianoche local de `today`, no contra la hora. */
 export function diasHasta(iso: string | null, today: Date): number | null {
   if (!iso) return null

@@ -17,7 +17,7 @@ import {
   setProximoManual,
   setTenerEnCuenta,
 } from '@/lib/crm/seguimiento'
-import { detallesPorVenta, esDescartado, resumenCompras } from '@/lib/crm/core'
+import { detallesPorVenta, esDescartado, PLAZOS_DIAS, resumenCompras } from '@/lib/crm/core'
 import { leadInstaHref } from '@/lib/crm/leads'
 import { traerDetalles } from '@/lib/crm/datos'
 import type { ClienteCRM, FilaDetalle, MapaSeguimiento, ResumenCompras } from '@/lib/crm/tipos'
@@ -223,10 +223,13 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
               de días por separado. La fecha del final reprograma SIN marcar contacto de
               hoy, que es lo correcto cuando solo se corre la fecha. */}
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${color.line}` }}>
-            <div style={{ fontSize: 11, color: color.mut, marginBottom: 5 }}>Le escribí hoy — recordarme en:</div>
+            {/* Los mismos plazos que el panel de WhatsApp (`PLAZOS_DIAS`): con dos listas distintas,
+                el mismo cliente se agenda distinto según desde dónde lo toques. Y la fecha que sale
+                nunca cae en fin de semana — de eso se encarga `escribiHoy`. */}
+            <div style={{ fontSize: 11, color: color.mut, marginBottom: 5 }}>Le escribí hoy — recordarme en cuántos días:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-              {([[1, 'Mañana'], [2, 'En 2 días'], [7, 'En 1 semana'], [30, 'En 30 días']] as [number, string][]).map(([d, t]) => (
-                <Button key={d} size="sm" variant="soft" tone="brand" onClick={() => mutar((s) => escribiHoy(s, c.id, d))}>{t}</Button>
+              {PLAZOS_DIAS.map((d) => (
+                <Button key={d} size="sm" variant="soft" tone="brand" title={d === 1 ? 'Mañana' : `En ${d} días`} onClick={() => mutar((s) => escribiHoy(s, c.id, d))}>{d}</Button>
               ))}
               <input
                 type="date"
