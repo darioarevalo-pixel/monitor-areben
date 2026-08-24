@@ -449,7 +449,11 @@ function TablaClavados({ foto }: { foto: Foto }) {
         </Card>
         <Card padding={3} style={{ flex: '1 1 220px', minWidth: 220 }}>
           <div style={{ fontSize: font.sm, color: color.mut2 }}>Capital que sigue parado</div>
-          <div style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{formatMoney(r.parado)}</div>
+          {/* 🔴 Con NINGUNO medible, «$0» diría que ya no queda nada parado — que es lo contrario de
+              lo que pasa. Es el mismo cero que afirma del porcentaje, y se calla igual. */}
+          <div style={{ fontSize: font.xl, fontWeight: 700, color: r.sinCosto === r.productos ? color.mut2 : color.ink }}>
+            {r.sinCosto === r.productos ? 'no medible' : formatMoney(r.parado)}
+          </div>
           <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1] }}>
             {r.pct === null
               ? 'sin costo no hay porcentaje'

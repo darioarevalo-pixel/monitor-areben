@@ -43,6 +43,13 @@ constante nueva.
   stock**. Se estampa perezosamente en el GET, y eso es inocuo **sólo porque ningún número depende de
   ella**. El día que alguien haga depender el recupero de este sello, un producto que se agotó el
   martes y que nadie miró hasta septiembre va a caer en la semana equivocada.
+- 🔴 🔑 **El que no tiene costo tampoco aporta al NUMERADOR del porcentaje.** Lo encontró caminar
+  prod el 24-ago-2026 y el guard por renglón no alcanzaba: con **un** clavado sin costo, `parado`
+  sumaba 0 y el total daba **«100 % recuperado»** con cero productos medibles. `resumirClavados`
+  lleva `recuperadoMedible` aparte por eso — si el recupero de un producto cuyo denominador se
+  desconoce entrara al numerador, **cada clavado sin costo empujaría el porcentaje hacia arriba**. Y
+  la pantalla dice **«no medible»** en vez de «$0» cuando no hay ninguno medible: un $0 de capital
+  parado afirma que ya no queda nada parado, que es lo contrario de lo que pasa.
 - 🔴 🔑 **Sin costo NO hay porcentaje, y «costo 0» es lo mismo que «sin costo».** Un costo 0 hace que
   el capital parado dé 0 y el recupero dé **100 %**: un número perfecto y falso. Los dos casos van
   como **«no medible»**, y la pantalla dice **cuántos son** — un total sin ese número al lado se lee
@@ -72,17 +79,23 @@ constante nueva.
 
 ## Cómo se prueba
 
-`npx vitest run tests/clavados.test.ts --reporter=dot` (15 casos) y el padrón de gates de
+`npx vitest run tests/clavados.test.ts --reporter=dot` (17 casos) y el padrón de gates de
 `tests/handlers-autorizacion.test.ts`, donde `_clavados` está anotado.
 
 Lo que no es obvio:
 
-- **Siete mutantes, siete muertos** (24-ago-2026): costo 0 tratado como medible · el recupero mirando
+- 🔴 **Y lo que encontró el defecto del «100 %» no fue un test: fue caminarlo en prod** con un
+  producto real de BDI. Los 15 casos estaban verdes. El oráculo fue `psql` contra la respuesta del
+  handler — el recupero de la semana dio **$802.757 en los dos**, y al lado el resumen decía
+  `sinCosto: 1` y `pct: 100` a la vez, que es la contradicción que ningún test miraba.
+- **Nueve mutantes, nueve muertos** (24-ago-2026): costo 0 tratado como medible · el recupero mirando
   el estado en vez del rango · sin tope de fecha · los sin costo entrando como cero al parado · el
   porcentaje calculado sin denominador · `agotado` saliendo de la columna en vez del stock · el
-  porcentaje medido contra el parado solo. ⚠️ **Dos mutantes más resultaron EQUIVALENTES** (`costo
-  null → 0`, que cae igual en el `c <= 0`; y `parado += r.parado || 0`, que suma 0): un mutante vivo
-  no siempre es un agujero de tests, a veces es una mutación que no cambia nada.
+  porcentaje medido contra el parado solo · el porcentaje usando el recupero TOTAL en vez del medible
+  · el recupero sin costo aportando al numerador (los dos últimos son el defecto de arriba).
+  ⚠️ **Dos mutantes más resultaron EQUIVALENTES** (`costo null → 0`, que cae igual en el `c <= 0`; y
+  `parado += r.parado || 0`, que suma 0): un mutante vivo no siempre es un agujero de tests, a veces
+  es una mutación que no cambia nada — y darlo por agujero manda a escribir un test que no prueba nada.
 - 🔑 **El oráculo del RLS no es el `relrowsecurity` ni el `has_table_privilege`**, que dice
   `anon lee: true` con RLS puesto. Es escribir una fila real con la service key y **pedirla con la
   anon por PostgREST**: da `[]`, y el POST anónimo da 401. Ejercido el 24-ago-2026, y la fila borrada.

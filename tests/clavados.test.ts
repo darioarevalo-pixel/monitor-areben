@@ -121,6 +121,27 @@ describe('el total del bloque', () => {
     expect(r.productos).toBe(2)
   })
 
+  it('🔴 con TODOS sin costo, el porcentaje es null — no 100 %', () => {
+    // El defecto que encontró caminar prod el 24-ago-2026: BDI no tiene costos, así que `parado`
+    // sumaba 0 y `recuperado / (0 + recuperado)` daba **100 % recuperado** con cero productos
+    // medibles. Es exactamente el número que este módulo existe para no mostrar.
+    const r = resumirClavados([{ ...base, recuperado: 802757, parado: null }])
+    expect(r.sinCosto).toBe(1)
+    expect(r.recuperado).toBe(802757)
+    expect(r.pct).toBeNull()
+  })
+
+  it('🔴 el que no tiene costo tampoco aporta al NUMERADOR del porcentaje', () => {
+    // Si aportara, cada clavado sin costo empujaría el porcentaje hacia arriba: el medible da
+    // 100/(900+100) = 10 %, y sumarle los 500 del que no se puede medir lo llevaría a 40 %.
+    const r = resumirClavados([
+      { ...base, recuperado: 100, parado: 900 },
+      { ...base, recuperado: 500, parado: null },
+    ])
+    expect(r.recuperado).toBe(600) // la plata que volvió de verdad, entera
+    expect(r.pct).toBeCloseTo(10, 5) // pero el porcentaje sólo mira lo medible
+  })
+
   it('cuenta los agotados, que son los que ya cerraron su ciclo', () => {
     const r = resumirClavados([
       { ...base, recuperado: 10, parado: 0, agotado: true },
