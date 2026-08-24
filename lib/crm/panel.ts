@@ -21,6 +21,7 @@
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
+import type { MapaLeads } from './leads'
 import { TANDA_FRIOS, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
 import { friosDelDia, listaDelDia, type FilaListaDia } from './lista-dia'
 import type {
@@ -272,5 +273,23 @@ export async function guardarConRelectura(
   if (!previo.ok) return { ok: false, motivo: previo.motivo }
   const mapa = patch(previo.dato)
   const r = await guardarMapa({ kind: 'crmseg', store: 'bdi', mapa, cargado: true })
+  return r.ok ? { ok: true, mapa } : { ok: false, motivo: r.motivo }
+}
+
+export type GuardadoLeads = { ok: true; mapa: MapaLeads } | { ok: false; motivo: string }
+
+/**
+ * Lo mismo para los leads, y por el mismo motivo: `crm:leads:bdi` también se reescribe entera.
+ *
+ * El panel queda abierto horas mientras la pestaña de Leads, en el CRM, toca la misma clave. Sin
+ * la relectura, poner una fecha desde WhatsApp a la tarde pisaría todo lo que se cargó a la mañana.
+ */
+export async function guardarLeadsConRelectura(
+  patch: (mapa: MapaLeads) => MapaLeads,
+): Promise<GuardadoLeads> {
+  const previo = await leerMapa<MapaLeads[string]>('crmleads', 'bdi')
+  if (!previo.ok) return { ok: false, motivo: previo.motivo }
+  const mapa = patch(previo.dato)
+  const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa, cargado: true })
   return r.ok ? { ok: true, mapa } : { ok: false, motivo: r.motivo }
 }

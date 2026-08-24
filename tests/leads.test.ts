@@ -12,6 +12,8 @@ import {
   leadInstaHref,
   leadNuevo,
   leadsDelDia,
+  leadsPorTelefono,
+  escribiHoyLead,
   setCadencia,
   setCampo,
   setEstado,
@@ -278,5 +280,64 @@ describe('leadsDelDia · los leads entran en la lista del día', () => {
     const orden = leadsDelDia(mapa, { seg: 'semana', ...opts }).map((l) => l._seg.estado)
     expect(orden[0]).toBe('vencido')
     expect(orden[orden.length - 1]).toBe('semana')
+  })
+})
+
+/**
+ * Reconocer al prospecto cuando se vuelve a su chat.
+ *
+ * 🔴 El panel no miraba acá: buscaba en el padrón, después en `crm:tel`, y si no aparecía daba el
+ * número por nuevo **y ofrecía cargarlo otra vez**. Medido sobre los 40 leads reales el
+ * 24-ago-2026: **2 números duplicados** hechos exactamente así.
+ */
+describe('leadsPorTelefono', () => {
+  const leads: MapaLeads = {
+    a: { ...leadNuevo('a'), nombre: 'Maximo', telefono: '3834270554' },
+    b: { ...leadNuevo('b'), nombre: 'Ana', telefono: '+54 9 11 5555-4444' },
+    c: { ...leadNuevo('c'), nombre: 'Sin número', telefono: '' },
+  }
+
+  it('encuentra al prospecto sin importar cómo se cargó el número', () => {
+    expect(leadsPorTelefono(leads, '5493834270554').leads.map((l) => l.id)).toEqual(['a'])
+    expect(leadsPorTelefono(leads, '5491155554444').leads.map((l) => l.id)).toEqual(['b'])
+  })
+
+  it('un número que no está no inventa ningún prospecto', () => {
+    expect(leadsPorTelefono(leads, '5491199998888').leads).toEqual([])
+    expect(leadsPorTelefono(leads, '').leads).toEqual([])
+  })
+
+  it('🔴 el caso real: el mismo número en dos prospectos devuelve LOS DOS', () => {
+    // "Maximo" y "Maximo Valdiviezo" existen así en el KV. Elegir uno solo sería anotar el
+    // contacto en la ficha del otro, en silencio.
+    const dobles: MapaLeads = { ...leads, d: { ...leadNuevo('d'), nombre: 'Maximo Valdiviezo', telefono: '0383 4270554' } }
+    expect(leadsPorTelefono(dobles, '5493834270554').leads.map((l) => l.nombre).sort()).toEqual(['Maximo', 'Maximo Valdiviezo'])
+  })
+
+  it('un prospecto sin teléfono no se cruza con nadie', () => {
+    expect(leadsPorTelefono({ c: leads.c }, '5493834270554').leads).toEqual([])
+  })
+})
+
+describe('escribiHoyLead', () => {
+  const hoy = new Date(2026, 7, 24)
+  const base: MapaLeads = { a: { ...leadNuevo('a', hoy), nombre: 'Ana', cadencia: 'mensual' } }
+
+  it('marca el contacto de hoy Y fija la fecha, de un saque', () => {
+    const r = escribiHoyLead(base, 'a', 7, hoy)
+    expect(r.a.ultimo_contacto).toBe('2026-08-24')
+    expect(r.a.proximo_manual).toBe('2026-08-31')
+  })
+
+  it('🔑 la fecha se fija DESPUÉS de limpiar: si no, `hableHoy` se la lleva puesta', () => {
+    const conFecha: MapaLeads = { a: { ...base.a, proximo_manual: '2026-12-01' } }
+    expect(escribiHoyLead(conFecha, 'a', 3, hoy).a.proximo_manual).toBe('2026-08-27')
+  })
+
+  it('no muta el mapa que recibió ni toca a los demás', () => {
+    const otros: MapaLeads = { ...base, b: { ...leadNuevo('b', hoy), nombre: 'Beto' } }
+    const r = escribiHoyLead(otros, 'a', 3, hoy)
+    expect(otros.a.proximo_manual).toBe(null)
+    expect(r.b).toEqual(otros.b)
   })
 })

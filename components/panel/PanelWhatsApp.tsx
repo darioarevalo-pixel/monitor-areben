@@ -5,7 +5,7 @@ import { Button } from '@/components/ui'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { CADENCIA_DIAS, siguienteTemperatura } from '@/lib/crm/core'
-import { buscarFicha, guardarConRelectura, type FichaPanel, type RespuestaPanel } from '@/lib/crm/panel'
+import { buscarFicha, guardarConRelectura, guardarLeadsConRelectura, type FichaPanel, type RespuestaPanel } from '@/lib/crm/panel'
 import { armarFicha } from '@/lib/crm/panel'
 import {
   agregarNota,
@@ -20,7 +20,22 @@ import {
   setTemperatura,
   setTenerEnCuenta,
 } from '@/lib/crm/seguimiento'
-import { leadNuevo, nuevoIdLead, type Lead, type MapaLeads } from '@/lib/crm/leads'
+import {
+  agregarNota as agregarNotaLead,
+  escribiHoyLead,
+  leadInstaHref,
+  leadNuevo,
+  leadsPorTelefono,
+  LEAD_ESTADO_LABEL,
+  nuevoIdLead,
+  setCadencia as setCadenciaLead,
+  setEstado as setEstadoLead,
+  setProximoManual as setProximoLead,
+  leadEstadoSeg,
+  type EstadoLead,
+  type Lead,
+  type MapaLeads,
+} from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
@@ -189,6 +204,9 @@ type Estado =
   | { t: 'ficha'; ficha: FichaPanel; crudo: RespuestaPanel }
   | { t: 'desconocido' }
   | { t: 'varios'; candidatos: FilaCliente[] }
+  /** El chat es de un prospecto ya cargado. Antes esto no existía y se ofrecía cargarlo de nuevo. */
+  | { t: 'lead'; lead: Lead }
+  | { t: 'varios-leads'; candidatos: Lead[] }
 
 export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
   /**
@@ -325,18 +343,22 @@ function PanelInterno({
    * decía **"no hay nadie para contactar"** con 300 vencidos adentro. Un error que se lee como un
    * dato tranquilizador es peor que uno que se lee como error.
    */
-  const kv = useRef<{ seg: MapaSeguimiento; tel: MapaTelefonos }>({ seg: {}, tel: {} })
+  const kv = useRef<{ seg: MapaSeguimiento; tel: MapaTelefonos; leads: MapaLeads }>({ seg: {}, tel: {}, leads: {} })
   const [kvListo, setKvListo] = useState(false)
 
   useEffect(() => {
     let activo = true
     ;(async () => {
-      const [seg, telKv] = await Promise.all([
+      // 🔑 Los leads se leen ACÁ, con los otros dos, y no cuando hacen falta: el chat de un
+      // prospecto se abre igual de rápido que el de un cliente, y pedir el mapa recién en ese
+      // momento agregaría una espera justo en la pantalla que existe para no esperar.
+      const [seg, telKv, leadsKv] = await Promise.all([
         leerMapa<MapaSeguimiento[string]>('crmseg', 'bdi'),
         leerMapa<string>('crmtel', 'bdi'),
+        leerMapa<MapaLeads[string]>('crmleads', 'bdi'),
       ])
       if (!activo) return
-      kv.current = { seg: seg.ok ? seg.dato : {}, tel: telKv.ok ? telKv.dato : {} }
+      kv.current = { seg: seg.ok ? seg.dato : {}, tel: telKv.ok ? telKv.dato : {}, leads: leadsKv.ok ? leadsKv.dato : {} }
       setCrmSeg(kv.current.seg)
       setKvListo(true)
     })()
@@ -396,6 +418,26 @@ function PanelInterno({
           return
         }
       }
+
+      /**
+       * 🔴 **Tercer intento: los leads.** Esto faltaba, y se pagaba dos veces: al volver al chat
+       * de un prospecto ya cargado el panel lo daba por número nuevo **y ofrecía cargarlo otra
+       * vez** (de ahí los 2 duplicados que había el 24-ago), y no había forma de ponerle fecha ni
+       * nota desde el chat (25 de 31 activos sin ninguna fecha).
+       *
+       * Va al final a propósito: si la persona ya compró, la ficha de cliente dice más que la de
+       * prospecto.
+       */
+      const enc = leadsPorTelefono(kv.current.leads, telNorm)
+      if (enc.leads.length === 1) {
+        setEstado({ t: 'lead', lead: enc.leads[0] })
+        return
+      }
+      if (enc.leads.length > 1) {
+        setEstado({ t: 'varios-leads', candidatos: enc.leads })
+        return
+      }
+
       setEstado({ t: 'desconocido' })
     })()
     return () => {
@@ -431,6 +473,33 @@ function PanelInterno({
       return true
     },
     [estado, guardando, decir, today],
+  )
+
+  /**
+   * Lo mismo para los leads. Es otra clave del KV (`crm:leads:bdi`) y otra pantalla, pero la
+   * disciplina es idéntica: relee, aplica, persiste y **deja el lead nuevo a la vista**.
+   *
+   * ⚠️ Actualiza también `kv.current.leads`, que es de donde sale el cruce por teléfono. Sin eso,
+   * cambiar de chat y volver mostraría el lead como estaba antes del cambio.
+   */
+  const mutarLead = useCallback(
+    async (id: string, fn: (m: MapaLeads) => MapaLeads, exito: string): Promise<boolean> => {
+      if (guardando) return false
+      setGuardando(true)
+      const r = await guardarLeadsConRelectura(fn)
+      if (!vivo.current) return false
+      setGuardando(false)
+      if (!r.ok) {
+        decir('No se pudo guardar: ' + r.motivo, true)
+        return false
+      }
+      kv.current = { ...kv.current, leads: r.mapa }
+      const actualizado = r.mapa[id]
+      if (actualizado) setEstado({ t: 'lead', lead: actualizado })
+      decir(exito)
+      return true
+    },
+    [guardando, decir],
   )
 
   /**
@@ -539,11 +608,60 @@ function PanelInterno({
       </Envoltorio>
     )
 
+  if (estado.t === 'varios-leads')
+    return (
+      <Envoltorio aviso={aviso}>
+        {solapas}
+        <div style={{ padding: space[3] }}>
+          <p style={{ fontSize: font.sm, color: color.ink2, marginTop: 0 }}>
+            Ese teléfono está en más de un prospecto. ¿Cuál es?
+          </p>
+          {estado.candidatos.map((l) => (
+            <Button
+              key={l.id}
+              variant="outline"
+              fullWidth
+              style={{ justifyContent: 'flex-start', marginBottom: 6 }}
+              onClick={() => setEstado({ t: 'lead', lead: l })}
+            >
+              {l.nombre || 'sin nombre'}
+              <span style={{ color: color.mut2, fontSize: font.xs }}> · {l.ciudad || 'sin ciudad'}</span>
+            </Button>
+          ))}
+        </div>
+      </Envoltorio>
+    )
+
+  if (estado.t === 'lead')
+    return (
+      <Envoltorio aviso={aviso}>
+        {solapas}
+        <FichaLead
+          key={estado.lead.id}
+          lead={estado.lead}
+          today={today}
+          guardando={guardando}
+          onMutar={(fn, exito) => mutarLead(estado.lead.id, fn, exito)}
+        />
+      </Envoltorio>
+    )
+
   if (estado.t === 'desconocido')
     return (
       <Envoltorio aviso={aviso}>
         {solapas}
-        <NuevoLead tel={telNorm} onListo={(txt) => decir(txt)} onError={(txt) => decir(txt, true)} />
+        <NuevoLead
+          tel={telNorm}
+          onGuardado={(lead) => {
+            // 🔑 Se queda en la ficha del prospecto recién creado, no en un cartel de "listo".
+            // Cargar el lead y agendarlo son el mismo momento de la conversación; mandarlo a otra
+            // pantalla para la fecha es exactamente lo que hacía que los leads no se agendaran.
+            kv.current = { ...kv.current, leads: { ...kv.current.leads, [lead.id]: lead } }
+            setEstado({ t: 'lead', lead })
+            decir('Guardado como lead')
+          }}
+          onError={(txt) => decir(txt, true)}
+        />
       </Envoltorio>
     )
 
@@ -984,6 +1102,149 @@ function Vacio({ texto, mal }: { texto: string; mal?: boolean }) {
   return <div style={{ padding: space[3], color: mal ? color.danger : color.mut2, fontSize: font.sm }}>{texto}</div>
 }
 
+/**
+ * La ficha de un prospecto ya cargado.
+ *
+ * 🔴 **No existía, y era un agujero con dos bocas.** Al volver al chat de un lead, el panel lo
+ * daba por número nuevo y ofrecía **cargarlo de nuevo** (el 24-ago-2026 ya había 2 duplicados
+ * hechos así), y no había manera de agendarlo ni de anotarle nada sin salir de WhatsApp — que es
+ * justo lo que el panel existe para evitar. Medido el mismo día: **25 de 31 leads activos sin
+ * ninguna fecha**.
+ *
+ * Tiene lo que hace falta para un prospecto y nada más: cuándo volver a hablarle, qué se habló, y
+ * los dos desenlaces que cambian lo que el sistema hace con él (compró / no va). Lo que no tiene
+ * es el resumen de compras, por el motivo obvio.
+ */
+function FichaLead({
+  lead,
+  today,
+  guardando,
+  onMutar,
+}: {
+  lead: Lead
+  today: Date
+  guardando: boolean
+  onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
+}) {
+  const seg = leadEstadoSeg(lead, today)
+  const insta = leadInstaHref(lead.instagram)
+  const notas = Array.isArray(lead.notas) ? lead.notas : []
+
+  return (
+    <div style={{ paddingTop: space[2] }}>
+      <Bloque>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>
+              {lead.nombre || 'Sin nombre'}
+            </div>
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              {lead.ciudad || 'sin ciudad'}
+              {insta && (
+                <>
+                  {' · '}
+                  <a href={insta} target="_blank" rel="noreferrer" style={{ color: color.brand, textDecoration: 'none' }}>
+                    {lead.instagram}
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
+          <Chip tone={lead.estado === 'activo' ? 'neutro' : 'ok'}>{LEAD_ESTADO_LABEL[lead.estado]}</Chip>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <Chip>Todavía no compró</Chip>
+          {seg.proximo && (
+            <Chip tone={seg.estado === 'vencido' ? 'alerta' : 'neutro'}>Volver a hablarle: {fmtFecha(seg.proximo)}</Chip>
+          )}
+          {!seg.proximo && <Chip tone="alerta">Sin agendar</Chip>}
+        </div>
+      </Bloque>
+
+      <Bloque titulo="Volver a hablarle">
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {PLAZOS.map((pl) => (
+            <Button
+              key={pl.dias}
+              size="sm"
+              variant="outline"
+              disabled={guardando}
+              onClick={() => onMutar((m) => escribiHoyLead(m, lead.id, pl.dias), 'Listo')}
+            >
+              {pl.txt}
+            </Button>
+          ))}
+          <input
+            className="mo-input"
+            type="date"
+            value={lead.proximo_manual || ''}
+            disabled={guardando}
+            onChange={(e) => onMutar((m) => setProximoLead(m, lead.id, e.target.value), 'Listo')}
+            style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
+          />
+        </div>
+        {/* La cadencia es lo que hace que vuelva a aparecer solo, sin tener que acordarse. */}
+        <select
+          className="mo-input"
+          value={lead.cadencia || ''}
+          disabled={guardando}
+          onChange={(e) => onMutar((m) => setCadenciaLead(m, lead.id, e.target.value), 'Listo')}
+          style={{ width: '100%', marginTop: 6, fontSize: font.xs, height: 28 }}
+        >
+          <option value="">Sin cadencia fija</option>
+          <option value="semanal">Hablarle cada semana</option>
+          <option value="quincenal">Cada 15 días</option>
+          <option value="mensual">Una vez por mes</option>
+        </select>
+      </Bloque>
+
+      <Notas
+        notas={notas}
+        guardando={guardando}
+        onGuardar={(texto) => onMutar((m) => agregarNotaLead(m, lead.id, texto), 'Nota guardada')}
+      />
+
+      <Bloque titulo="¿En qué quedó?">
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {([
+            ['comprado', '✓ Ya compró', 'success'],
+            ['descartado', '✕ Este no va', 'danger'],
+          ] as [EstadoLead, string, Tone][]).map(([est, txt, tone]) => (
+            <Button
+              key={est}
+              size="sm"
+              variant="outline"
+              tone={tone}
+              disabled={guardando || lead.estado === est}
+              onClick={() => onMutar((m) => setEstadoLead(m, lead.id, est), 'Listo')}
+            >
+              {txt}
+            </Button>
+          ))}
+          {lead.estado !== 'activo' && (
+            <Button size="sm" variant="ghost" disabled={guardando} onClick={() => onMutar((m) => setEstadoLead(m, lead.id, 'activo'), 'Listo')}>
+              Volver a activo
+            </Button>
+          )}
+        </div>
+        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 6 }}>
+          {/* Que "ya compró" NO lo convierte en cliente hay que decirlo: el que lo toca espera que
+              la próxima vez aparezca la ficha con las compras, y eso pasa cuando la venta entra
+              por Gestión Nube, no acá. */}
+          Cuando la venta entre por Gestión Nube va a aparecer solo como cliente, con sus compras.
+        </div>
+      </Bloque>
+
+      <div style={{ padding: `0 ${space[3]}px ${space[3]}px` }}>
+        <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>
+          Verlo en Leads ↗
+        </a>
+      </div>
+    </div>
+  )
+}
+
 // ── Número desconocido → lead ────────────────────────────────────────────────
 
 /**
@@ -996,13 +1257,12 @@ function Vacio({ texto, mal }: { texto: string; mal?: boolean }) {
  * Escribe en `crm:leads:bdi`, con la misma disciplina que la pestaña Leads: se lee primero y sin
  * lectura buena no se guarda, porque el POST reescribe el mapa entero.
  */
-function NuevoLead({ tel, onListo, onError }: { tel: string; onListo: (t: string) => void; onError: (t: string) => void }) {
+function NuevoLead({ tel, onGuardado, onError }: { tel: string; onGuardado: (lead: Lead) => void; onError: (t: string) => void }) {
   const [nombre, setNombre] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [instagram, setInstagram] = useState('')
   const [cadencia, setCadencia] = useState('semanal')
   const [guardando, setGuardando] = useState(false)
-  const [guardado, setGuardado] = useState(false)
 
   const guardar = async () => {
     if (!nombre.trim() || guardando) return
@@ -1022,21 +1282,8 @@ function NuevoLead({ tel, onListo, onError }: { tel: string; onListo: (t: string
       onError('No se pudo guardar el lead: ' + r.motivo)
       return
     }
-    setGuardado(true)
-    onListo('Guardado como lead')
+    onGuardado(lead)
   }
-
-  if (guardado)
-    return (
-      <div style={{ padding: space[3] }}>
-        <div style={{ fontSize: font.sm, color: color.ink }}>
-          <b>{nombre}</b> quedó guardado como lead.
-        </div>
-        <a href="/clientes" target="_blank" rel="noreferrer" style={{ fontSize: font.sm, color: color.brand, textDecoration: 'none' }}>
-          Verlo en Leads ↗
-        </a>
-      </div>
-    )
 
   return (
     <div style={{ padding: space[3] }}>

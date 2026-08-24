@@ -13,6 +13,7 @@
  */
 
 import { addDiasISO, CADENCIA_DIAS, diasHasta } from './core'
+import { cola, normalizeArgPhone } from './telefono.core.js'
 import type { EstadoSeg, Nota } from './tipos'
 
 export type EstadoLead = 'activo' | 'comprado' | 'descartado'
@@ -236,4 +237,57 @@ export function eliminar(leads: MapaLeads, id: string): MapaLeads {
 /** leadsAgregar (14067). */
 export function agregar(leads: MapaLeads, id: string, hoy: Date = new Date()): MapaLeads {
   return { ...leads, [id]: leadNuevo(id, hoy) }
+}
+
+// ── Encontrar el lead del chat abierto ───────────────────────────────────────
+
+/**
+ * ¿De qué lead es este teléfono?
+ *
+ * 🔴 **Existe porque el panel de WhatsApp no miraba acá.** Buscaba en el padrón, después en
+ * `crm:tel`, y si no aparecía daba el número por desconocido **y ofrecía cargarlo como lead otra
+ * vez**. Medido el 24-ago-2026 sobre los 40 leads reales: **2 números ya están duplicados**
+ * ("Maximo"/"Maximo Valdiviezo", "Ximena"/"Ximena") — el mismo prospecto cargado dos veces porque
+ * al volver a su chat el panel no lo reconocía. Y 25 de los 31 activos no tienen ninguna fecha,
+ * porque desde el chat no había forma de ponérsela.
+ *
+ * Cruza con el mismo criterio que los clientes (`telefono.core.js`): exacto primero, últimos 8
+ * dígitos después. **Devuelve TODOS los que coinciden**, no el primero: con dos candidatos hay que
+ * preguntar, porque elegir solo es anotar el contacto en la ficha de otro, en silencio.
+ */
+export function leadsPorTelefono(leads: MapaLeads, tel: string): { leads: Lead[]; via: string } {
+  const lista = Object.values(leads)
+
+  /**
+   * ⚠️ **No se usa `indexarTelefonos`, y no es por gusto.** Ese índice descarta toda fila sin id
+   * numérico entero, y los ids de los leads son texto (`l1756…_12345`): pasarlos por ahí devuelve
+   * vacío SIEMPRE, sin error y sin aviso. Es el mismo cruce de dos pasos, a mano, sobre 40
+   * prospectos — no sobre los 12.500 del padrón, que es para lo que existe el índice.
+   */
+  const n = normalizeArgPhone(tel)
+  if (n) {
+    const exacto = lista.filter((l) => normalizeArgPhone(l.telefono || '') === n)
+    if (exacto.length) return { leads: exacto, via: 'exacto' }
+  }
+  const c = cola(tel)
+  if (c) {
+    const aprox = lista.filter((l) => cola(l.telefono || '') === c)
+    if (aprox.length) return { leads: aprox, via: 'cola' }
+  }
+  return { leads: [], via: '' }
+}
+
+/**
+ * "Le escribí hoy, recordarme en N días" para un lead.
+ *
+ * Es el gemelo de `escribiHoy` de `seguimiento.ts`, que los leads no tenían: `hableHoy` marca el
+ * contacto y deja que la cadencia calcule el próximo, y `setProximoManual` fija la fecha sin marcar
+ * contacto. Los botones del panel necesitan **las dos cosas de un saque**, que es lo que hace el
+ * botón equivalente del cliente.
+ *
+ * ⚠️ El orden importa: `hableHoy` limpia `proximo_manual` (para que mande la cadencia), así que la
+ * fecha se fija DESPUÉS o se pierde.
+ */
+export function escribiHoyLead(leads: MapaLeads, id: string, dias: number, hoy: Date = new Date()): MapaLeads {
+  return setProximoManual(hableHoy(leads, id, hoy), id, addDiasISO(hoyISO(hoy), dias))
 }

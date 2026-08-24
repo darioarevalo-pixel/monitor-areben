@@ -52,6 +52,16 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   con el KV solo (`lista-dia.ts`: 771 entradas, pesan nada); después el nombre, el teléfono y el
   total, de esos ~90 y no de los 12.485 del padrón (`action:'lista'`). Al revés sería bajar el CRM
   adentro de WhatsApp.
+- 🔴 **El panel mira TRES lugares para saber de quién es el chat, y el tercero faltaba.** Padrón
+  (servidor) → `crm:tel` → **`crm:leads`** (24-ago-2026). Sin el tercero, volver al chat de un
+  prospecto ya cargado lo daba por número nuevo **y ofrecía cargarlo otra vez**: el 24-ago ya había
+  **2 números duplicados** hechos así ("Maximo"/"Maximo Valdiviezo", "Ximena"/"Ximena"), y **25 de
+  31 leads activos sin ninguna fecha**, porque desde el chat no se podía agendar.
+  Los leads van **últimos** a propósito: si la persona ya compró, la ficha de cliente dice más.
+- ⚠️ **`indexarTelefonos` NO sirve para los leads.** Descarta toda fila sin id numérico entero
+  (`Number.isInteger`) y los ids de los leads son texto (`l1756…_12345`): pasarlos por ahí devuelve
+  vacío **siempre, sin error y sin aviso**. `leadsPorTelefono` hace el mismo cruce de dos pasos a
+  mano sobre los 40 prospectos (`cola` se exporta justo para eso). Lo cazó un test, no el navegador.
 - 🔴 **DOS guardas contra el borrado en masa, y cubren cosas distintas** (la segunda, 24-ago-2026).
   `cargado` cubre **"no pude leer"**: sin lectura previa no se escribe. Lo que faltaba era
   **"leí bien y vino vacío"** — si la clave se borrara o venciera del lado del servidor, la lectura
@@ -449,3 +459,29 @@ no se lleva otras notas, el mapa no se muta). Lo que hay que ejercer a mano:
    `scripts/crm-kv.mjs --dump`, el diff tiene que ser **exactamente ese cliente**.
 2. **En el panel real**, que es lo único que dice si el chip de "falta cargar" se entiende o pasa
    desapercibido.
+
+## ✅ 24-ago-2026 (tarde) — el panel ya reconoce a los prospectos
+
+Lo reportó Bruno usándolo: *"a los que le cargué el número, cuando vuelvo a abrirlos no tengo forma
+de aplicarle cuándo lo tengo que recontactar ni poner notas"*. Dos síntomas, una causa: **el panel
+nunca miraba `crm:leads`**.
+
+- **Ficha de prospecto** (`FichaLead` en `PanelWhatsApp.tsx`): cuándo volver a hablarle (los 3
+  plazos + fecha + **cadencia**, que es lo que lo hace volver solo a la lista), notas con los mismos
+  botones rápidos, y los dos desenlaces que cambian lo que el sistema hace: **✓ Ya compró** /
+  **✕ Este no va**. Sin resumen de compras, por el motivo obvio.
+- **Cargar un lead ya no termina en un cartel**: cae derecho en su ficha. Cargarlo y agendarlo son
+  el mismo momento de la conversación; mandarlo a otra pantalla para la fecha es exactamente lo que
+  hacía que no se agendaran.
+- **Con dos prospectos en el mismo número, pregunta** en vez de elegir — igual que con los clientes.
+- `escribiHoyLead` es el gemelo de `escribiHoy` que los leads no tenían. ⚠️ El orden importa:
+  `hableHoy` limpia `proximo_manual`, así que la fecha se fija DESPUÉS o se pierde.
+- Guardar pasa por `guardarLeadsConRelectura`: `crm:leads:bdi` también se reescribe entera y la
+  pestaña de Leads toca la misma clave.
+
+▶️ **Lo que queda de esto:**
+1. **Los 2 leads duplicados hay que unirlos a mano** (o borrar el que sobre) — el arreglo evita los
+   nuevos, no limpia los viejos.
+2. **Los leads todavía NO están en la solapa "Hoy" del panel.** En la sección sí
+   (`LeadsDelDia.tsx`); en el panel la lista es sólo de clientes. Es lo que haría que los 25 sin
+   fecha aparezcan solos.
