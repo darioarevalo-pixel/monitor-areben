@@ -644,3 +644,30 @@ alter table canje_evidencias add column if not exists drive_por text;
 -- funciona con sólo tener permiso de edición en Drive; se midió el 21-ago-2026 contra una carpeta
 -- creada a mano, sin pasar por el selector—.
 alter table canjes add column if not exists drive_carpeta_id text;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 14. ¿Rindió? — el resultado comercial del canje (24-ago-2026)
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- Del canje ya está registrado TODO menos esto: el retiro (`entregado_at`), el tránsito, la
+-- publicación (las evidencias verificadas) y lo que costó (el balance). Lo único que no queda en
+-- ningún lado es **si sirvió**, que es la pregunta con la que se decide volver a llamarla.
+--
+-- 🔴 **Es una opinión registrada, y hay que llamarla así.** No hay con qué medirlo: no existe un
+-- código ni un link propio de la creadora (`canjes.cupon_codigo` es el cupón de 100 % interno de la
+-- marca, el que hace que la orden marque $0), `ventas.discount` es un monto sin código, y el espejo
+-- no guarda la orden de Tienda Nube. Poner una columna que diga «vendió» sugiriendo que se midió
+-- sería peor que no tenerla.
+--
+-- 🔑 **Se escribe DESPUÉS del cierre, y por eso es una acción aparte.** `cerrado` es terminal —el
+-- grafo no tiene salida y `cerrar` contesta 409 si ya está cerrado— pero la venta que un canje
+-- empuja llega días o semanas después: preguntarlo adentro de `cerrar` lo condena a contestarse
+-- siempre «todavía no sé».
+--
+-- ⛔ NO entra al puntaje de la persona (`lib/canjes/puntaje.ts`). Ese archivo se escribió antes de
+-- tener datos y su propia advertencia es que el riesgo no es que el score se equivoque, sino que
+-- alguien decida a quién no llamar mirándolo. Cuatro valores tipeados a ojo no son un insumo de eso.
+alter table canjes add column if not exists resultado      text;
+alter table canjes add column if not exists resultado_nota text;
+alter table canjes add column if not exists resultado_por  text;
+alter table canjes add column if not exists resultado_at   timestamptz;

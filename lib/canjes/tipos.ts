@@ -28,6 +28,7 @@ import {
   MOTIVOS_NO_ACEPTO as MOTIVOS_NO_ACEPTO_JS,
   numeroCanje as numeroCanjeJS,
   puedeIr as puedeIrJS,
+  RESULTADOS as RESULTADOS_JS,
   retiroLocalDisponible as retiroLocalDisponibleJS,
   TERMINALES as TERMINALES_JS,
   TRANSICIONES as TRANSICIONES_JS,
@@ -235,6 +236,25 @@ export function enTransito(c: Pick<CanjeRow, 'envio_estado' | 'entregado_at'>): 
  * Es una función y no una constante suelta para que la pantalla y el servidor pregunten lo mismo:
  * si un día Zattia abre local, se agrega acá y no en dos lados.
  */
+/**
+ * El resultado comercial de un canje. Cuatro valores, y `no_se` es el que evita que «no sé» se
+ * registre como «nada» — la diferencia entre las dos es lo que dice si la pregunta se está usando.
+ */
+export type ResultadoCanje = 'vendio' | 'algo' | 'nada' | 'no_se'
+
+export const RESULTADOS = RESULTADOS_JS as ResultadoCanje[]
+
+/**
+ * Lo que se lee en la pantalla. ⚠️ Ninguno afirma una medición: son las palabras con las que se
+ * contesta a ojo, porque a ojo es como se contesta.
+ */
+export const RESULTADO_LABEL: Record<ResultadoCanje, string> = {
+  vendio: 'Sí, se notó en la venta',
+  algo: 'Algo movió',
+  nada: 'No se notó',
+  no_se: 'No sabría decir',
+}
+
 export const retiroLocalDisponible: (store: string | null | undefined) => boolean = retiroLocalDisponibleJS
 
 /**
@@ -561,6 +581,11 @@ export type CanjeRow = {
   cerrado_at?: string | null
 
   /** Devolvió o vendió lo que le mandamos. Penaliza el puntaje; sin flujo de reingreso. */
+  /** ¿Rindió? Se contesta **después** de cerrar. `null` = todavía no lo contestó nadie. */
+  resultado?: ResultadoCanje | null
+  resultado_nota?: string | null
+  resultado_por?: string | null
+  resultado_at?: string | null
   producto_no_conservado: boolean
   producto_no_conservado_motivo?: string | null
   producto_no_conservado_por?: string | null

@@ -201,6 +201,11 @@ export function ListaCanjes({
                         </Badge>
                       ) : null}
                       {c.cerrado_incompleto ? <Badge tone="warning" subtle>Cerrado igual</Badge> : null}
+                      {/* Cerrado y sin contestar si sirvió. Es la única pregunta del canje que se
+                          hace DESPUÉS de cerrarlo, así que sin esta chapita no la ve nadie. */}
+                      {c.estado === 'cerrado' && !c.resultado ? (
+                        <Badge tone="neutral" subtle>¿Rindió? sin contestar</Badge>
+                      ) : null}
                       {c.producto_no_conservado ? <Badge tone="danger" subtle>No lo conservó</Badge> : null}
                     </span>
                   </Td>

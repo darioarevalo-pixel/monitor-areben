@@ -109,6 +109,23 @@ no re-preguntarlas.**
     enfermedad que Ingresos tuvo durante meses. Si el Blob falla, no se borra la fila.
   - 🔑 **Lo que faltaba no era el botón: era que `evidencia-borrar` borrara el archivo.** Sacaba la
     fila sola, y por eso el bloque del contenido no ofrecía borrar.
+- 🆕 🔑 **EL «¿RINDIÓ?» SE CONTESTA DESPUÉS DE CERRAR, Y ES UNA OPINIÓN** (24-ago-2026). Del canje ya
+  estaba registrado todo menos si sirvió: el retiro (`entregado_at`), el tránsito, la publicación
+  (evidencias verificadas) y lo que costó (el balance).
+  - 🔑 **Es la única acción que escribe sobre un canje terminal** (`action:'resultado'`), y esa
+    excepción es el diseño: la venta que un canje empuja llega días o semanas **después** del
+    cierre, así que preguntarlo adentro de `cerrar` lo condena a contestarse siempre «no sabría
+    decir». No mueve el estado, no toca el balance, escribe cuatro columnas y nada más.
+  - 🔴 **No hay con qué medirlo, y por eso la pantalla dice que es a ojo**: no existe código ni link
+    propio de la creadora —`canjes.cupon_codigo` es el cupón de 100 % **interno de la marca**—,
+    `ventas.discount` es un monto **sin código** y el espejo no guarda la orden de TN. Un rótulo que
+    sonara a medición sería una mentira prolija.
+  - 🔑 **`no_se` es uno de los cuatro valores a propósito**: sin él, el que no sabe pone «nada» y el
+    canje queda registrado como un fracaso que nadie midió. Y el vacío tampoco alcanza, porque un
+    vacío es «todavía no lo contestaron».
+  - ⛔ **No entra al puntaje** (`lib/canjes/puntaje.ts`): ese archivo se escribió antes de tener
+    datos y su propia advertencia es que el riesgo no es que el score se equivoque, sino que alguien
+    decida a quién no llamar mirándolo.
 - 🆕 🔑 **QUE ELLA SUBA YA SE VE SIN ENTRAR A LA FICHA** (24-ago-2026): séptimo aviso derivado
   (`canje-contenido`), agrupado, en la campanita y en Inicio, más el chip **«Contenido sin revisar»**
   y una chapita en la fila. Antes, subir seis videos **no movía un solo píxel**: el canje se queda en

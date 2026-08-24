@@ -17,10 +17,10 @@ import {
   Button, Field, Input, KpiCard, Notice, SectionCard,
   color, font, space, weight, useToast,
 } from '@/components/ui'
-import { cerrarCanje, marcarNoConservado, registrarPago } from '@/lib/canjes/cliente'
+import { cerrarCanje, guardarResultado, marcarNoConservado, registrarPago } from '@/lib/canjes/cliente'
 import {
-  calcularBalance, faltantesParaCerrarCanje,
-  type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow,
+  calcularBalance, faltantesParaCerrarCanje, RESULTADO_LABEL, RESULTADOS,
+  type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow, type ResultadoCanje,
 } from '@/lib/canjes/tipos'
 
 const money = (n: number | null | undefined) => (n == null ? '—' : `$${Number(n).toLocaleString('es-AR')}`)
@@ -164,6 +164,9 @@ export function CierreBalance({
         </>
       )}
 
+      {/* El «¿rindió?», que sólo existe una vez cerrado. Ver `Rindio`. */}
+      {yaCerrado && <Rindio canje={canje} onCambio={onCambio} />}
+
       {/* Devolvió o vendió lo que le mandamos. Un flag y nada más: sin flujo de reingreso ni
           enganche con Reclamos — pasa dos veces al año y cada caso es distinto. */}
       {canje.entregado_at && !canje.producto_no_conservado && (
@@ -193,5 +196,78 @@ export function CierreBalance({
         </div>
       )}
     </SectionCard>
+  )
+}
+
+/**
+ * **¿Rindió?** — lo último que faltaba registrar de un canje, y lo único que no se puede medir.
+ *
+ * 🔑 **Aparece recién cuando el canje está cerrado, y eso es el diseño, no una restricción**: la
+ * venta que un canje empuja llega días o semanas después. Preguntarlo adentro del cierre lo
+ * condenaría a contestarse siempre «no sabría decir», que es justo el dato que no sirve.
+ *
+ * ⚠️ **La pantalla dice que es una opinión.** No existe ningún dato que ate una venta a una
+ * creadora —no hay código ni link propio de ella, y el espejo de ventas guarda el descuento como un
+ * monto sin código—, así que un rótulo que sonara a medición sería una mentira prolija. Se contesta
+ * a ojo y se lee como lo que es.
+ *
+ * ⛔ No entra al puntaje de la persona: ver el encabezado de `lib/canjes/puntaje.ts`.
+ */
+function Rindio({ canje, onCambio }: { canje: CanjeRow; onCambio: () => void }) {
+  const toast = useToast()
+  const [nota, setNota] = useState(canje.resultado_nota ?? '')
+  const [guardando, setGuardando] = useState<ResultadoCanje | null>(null)
+
+  async function contestar(r: ResultadoCanje) {
+    setGuardando(r)
+    try {
+      await guardarResultado(canje.store, canje.id, r, nota.trim() || null)
+      onCambio()
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(null)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: space[5], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+      <div style={{ fontWeight: weight.semibold }}>¿Rindió?</div>
+      <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
+        A ojo, y a sabiendas: no hay forma de medir qué vendió una creadora. Lo que se registra es lo
+        que le pareció a quien lo siguió — y se puede cambiar cuando se sepa más.
+      </div>
+
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
+        {RESULTADOS.map((r) => (
+          <Button
+            key={r}
+            size="sm"
+            variant={canje.resultado === r ? 'solid' : 'outline'}
+            tone={canje.resultado === r ? 'brand' : 'neutral'}
+            loading={guardando === r}
+            onClick={() => void contestar(r)}
+          >
+            {RESULTADO_LABEL[r]}
+          </Button>
+        ))}
+      </div>
+
+      {/* ⚠️ La nota se guarda **al elegir una opción**, y por eso el hint lo dice: un campo que se
+          escribe y no tiene botón propio es un texto que se pierde al cambiar de pantalla. Volver a
+          tocar la opción que ya está elegida vuelve a guardarla. */}
+      <Field
+        label="Con qué se vio"
+        hint="Lo que el número no dice: si vino gente al local, si preguntaron por algo puntual. Se guarda al elegir una de las cuatro."
+      >
+        <Input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Opcional" />
+      </Field>
+
+      {canje.resultado_at && (
+        <div style={{ color: color.mut2, fontSize: font.sm, marginTop: space[1] }}>
+          Lo contestó {canje.resultado_por || 'alguien'} el {canje.resultado_at.slice(0, 10)}
+        </div>
+      )}
+    </div>
   )
 }

@@ -89,7 +89,7 @@ import { normalizarInstagram } from '../lib/canjes/instagram.core.js';
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
 // Las reglas duras, LA implementación. El grafo lo consulta `puedeIr` y por eso `TRANSICIONES` no
 // se importa: se importaba sólo para re-exportarlo al test de espejo, que ya no existe.
-import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, numeroCanje, puedeIr, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
+import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, numeroCanje, puedeIr, RESULTADOS, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -142,6 +142,7 @@ const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota,
   balance_alcance, balance_interacciones, balance_cpm, balance_puntaje_manual, balance_nota,
   cerrado_incompleto, cierre_motivo, cerrado_por, cerrado_at,
   producto_no_conservado, producto_no_conservado_motivo, producto_no_conservado_por, producto_no_conservado_at,
+  resultado, resultado_nota, resultado_por, resultado_at,
   cancelado_motivo, drive_carpeta_id, usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 
 /**
@@ -2196,6 +2197,34 @@ export default async function handler(req, res) {
         producto_no_conservado_motivo: motivo,
         producto_no_conservado_por: usuario,
         producto_no_conservado_at: ahora(),
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * ¿Rindió? — el resultado comercial, contestado **después** del cierre.
+     *
+     * 🔑 **Es la única acción que escribe sobre un canje terminal**, y esa excepción es el punto:
+     * la venta que un canje empuja llega días o semanas después de cerrarlo, así que preguntarlo
+     * adentro de `cerrar` lo condena a contestarse siempre «todavía no sé». Toca cuatro columnas y
+     * ninguna más: no reabre el canje, no mueve el estado y no toca el balance.
+     *
+     * ⚠️ **Es una opinión, no una medición**, y la pantalla lo dice con esas palabras: no existe
+     * ningún dato que ate una venta a una creadora (ver la §14 de `sql/migrate-canjes.sql`).
+     */
+    if (action === 'resultado') {
+      const valor = texto(b.resultado);
+      if (!RESULTADOS.includes(valor)) {
+        return res.status(400).json({ error: `resultado inválido (usá ${RESULTADOS.join(', ')})` });
+      }
+      if (canje.estado !== 'cerrado') {
+        return res.status(409).json({ error: 'El «¿rindió?» se contesta después de cerrar el canje.' });
+      }
+      await apilar(supabase, 'canjes', canjeId, { at: ahora(), usuario, nota: `¿rindió?: ${valor}` }, {
+        resultado: valor,
+        resultado_nota: texto(b.resultado_nota),
+        resultado_por: usuario,
+        resultado_at: ahora(),
       });
       return res.status(200).json({ ok: true });
     }

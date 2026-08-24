@@ -346,3 +346,68 @@ describe('evidencia-borrar — sacar la fila Y el archivo', () => {
     expect(mundo.pasos).toEqual([])
   })
 })
+
+/**
+ * **El «¿rindió?»** — la única acción del módulo que escribe sobre un canje **terminal**.
+ *
+ * Esa excepción es todo el punto: `cerrado` es hoja del grafo y `cerrar` contesta 409 si ya está
+ * cerrado, pero la venta que un canje empuja llega días o semanas después. Preguntarlo adentro del
+ * cierre lo condena a contestarse siempre «no sabría decir».
+ *
+ * Lo que se fija acá es el borde: que entre **sólo** con el canje cerrado, que no acepte cualquier
+ * palabra, y que **no mueva el estado ni el balance** — reabrir un canje por contestar una pregunta
+ * sería mucho peor que no poder contestarla.
+ */
+describe('resultado — se contesta después de cerrar', () => {
+  async function contestar(body: Record<string, unknown> = {}) {
+    const mod = await import('@/api/_canjes.js')
+    const res = resFalso()
+    await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
+      { method: 'POST', headers: {}, query: {}, body: { store: 'bdi', action: 'resultado', id: 12, resultado: 'vendio', ...body } },
+      res,
+    )
+    return res
+  }
+
+  it('con el canje cerrado, escribe las cuatro columnas y NADA más', async () => {
+    mundo.canje = { ...mundo.canje, estado: 'cerrado' }
+    const res = await contestar({ resultado_nota: 'vino gente al local preguntando' })
+    expect(res.code).toBe(200)
+
+    const campos = mundo.updates.find((u) => u.tabla === 'canjes')?.campos ?? {}
+    expect(campos.resultado).toBe('vendio')
+    expect(campos.resultado_nota).toBe('vino gente al local preguntando')
+    expect(campos.resultado_por).toBeTruthy()
+    expect(campos.resultado_at).toBeTruthy()
+    // ⛔ No reabre nada: el estado y el balance no se tocan.
+    expect(campos.estado).toBeUndefined()
+    expect(campos.balance_nota).toBeUndefined()
+    expect(campos.cerrado_at).toBeUndefined()
+  })
+
+  it('🔴 sobre un canje que NO está cerrado no se puede contestar', async () => {
+    for (const estado of ['acuerdo', 'preparando', 'en_curso']) {
+      mundo = nuevoMundo()
+      mundo.canje = { ...mundo.canje, estado }
+      const res = await contestar()
+      expect(res.code, estado).toBe(409)
+      expect(mundo.updates, estado).toEqual([])
+    }
+  })
+
+  it('sólo las cuatro respuestas, y `no_se` es una de ellas', async () => {
+    mundo.canje = { ...mundo.canje, estado: 'cerrado' }
+    for (const bueno of ['vendio', 'algo', 'nada', 'no_se']) {
+      mundo = nuevoMundo()
+      mundo.canje = { ...mundo.canje, estado: 'cerrado' }
+      expect((await contestar({ resultado: bueno })).code, bueno).toBe(200)
+    }
+    for (const malo of ['', 'si', 'VENDIO', 'no se', 'true', null]) {
+      mundo = nuevoMundo()
+      mundo.canje = { ...mundo.canje, estado: 'cerrado' }
+      const res = await contestar({ resultado: malo })
+      expect(res.code, String(malo)).toBe(400)
+      expect(mundo.updates, String(malo)).toEqual([])
+    }
+  })
+})

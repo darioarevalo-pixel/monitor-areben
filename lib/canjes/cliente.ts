@@ -16,7 +16,7 @@ import { baseDeCostos, numeroCanje } from './tipos'
 import type {
   Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
   CanjeStore, CanjeVitrina, EstadoCanje, EstadoVitrina, IntentoEntrega, NivelAprobacion,
-  OpcionVitrina, TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad, ViaEnvio,
+  OpcionVitrina, ResultadoCanje, TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad, ViaEnvio,
 } from './tipos'
 
 const API = '/api/postventa?recurso=canjes'
@@ -782,6 +782,17 @@ export async function cerrarCanje(
     incompleto: datos.incompleto === true,
     cierre_motivo: datos.cierre_motivo,
   })
+}
+
+/**
+ * ¿Rindió? **Se contesta después de cerrar**, y es la única acción que escribe sobre un canje
+ * terminal: la venta que empuja un canje llega días o semanas más tarde, así que preguntarlo dentro
+ * del cierre lo condena a contestarse siempre «no sabría decir».
+ */
+export async function guardarResultado(
+  store: CanjeStore, id: number, resultado: ResultadoCanje, nota?: string | null,
+): Promise<void> {
+  await postear({ store, action: 'resultado', id, resultado, resultado_nota: nota ?? null })
 }
 
 /** Devolvió o vendió lo que le mandamos. Un flag y nada más: sin flujo de reingreso. */
