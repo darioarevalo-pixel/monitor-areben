@@ -41,29 +41,30 @@ function leadsReales(): MapaLeads | null {
 const lead = (p: Partial<Lead> = {}): Lead => ({ ...leadNuevo('l1', AHORA), ...p })
 
 describe('leadEstadoSeg', () => {
-  it('sin cadencia ni fecha manual → no hay seguimiento', () => {
+  it('sin fecha no hay seguimiento', () => {
     expect(leadEstadoSeg(lead(), AHORA)).toEqual({ proximo: null, estado: 'none', dias: null })
   })
 
-  it('con cadencia pero sin primer contacto → pendiente', () => {
-    expect(leadEstadoSeg(lead({ cadencia: 'semanal' }), AHORA).estado).toBe('pendiente')
+  /**
+   * 🔴 La cadencia salió el 24-ago-2026, por decisión de Bruno: en un prospecto no hay historia de
+   * compras de la cual salga ningún ritmo, así que la única que sabe cuándo volver es la persona
+   * que acaba de hablar con él. Lo que quedó guardado en el KV **se ignora**, no se borra.
+   */
+  it('🔴 la cadencia guardada ya no agenda nada: sin fecha es "sin agendar"', () => {
+    expect(leadEstadoSeg(lead({ cadencia: 'semanal' }), AHORA).estado).toBe('none')
+    expect(leadEstadoSeg(lead({ cadencia: 'semanal', ultimo_contacto: '2026-07-14' }), AHORA)).toEqual({
+      proximo: null,
+      estado: 'none',
+      dias: null,
+    })
+    // Ni siquiera una cadencia inventada, que antes caía a 30 días.
+    expect(leadEstadoSeg(lead({ cadencia: 'inventada', ultimo_contacto: '2026-07-01' }), AHORA).proximo).toBe(null)
   })
 
-  it('la cadencia calcula el próximo desde el último contacto', () => {
-    // semanal = 7 días (CADENCIA_DIAS)
-    const s = leadEstadoSeg(lead({ cadencia: 'semanal', ultimo_contacto: '2026-07-14' }), AHORA)
-    expect(s.proximo).toBe('2026-07-21')
-    expect(s.estado).toBe('semana')
-  })
-
-  it('la fecha manual le gana a la cadencia', () => {
+  it('manda la fecha puesta a mano, esté o no la cadencia vieja', () => {
     const s = leadEstadoSeg(lead({ cadencia: 'semanal', ultimo_contacto: '2026-07-14', proximo_manual: '2026-08-30' }), AHORA)
     expect(s.proximo).toBe('2026-08-30')
     expect(s.estado).toBe('aldia')
-  })
-
-  it('una cadencia desconocida cae a 30 días', () => {
-    expect(leadEstadoSeg(lead({ cadencia: 'inventada', ultimo_contacto: '2026-07-01' }), AHORA).proximo).toBe('2026-07-31')
   })
 
   it('los umbrales: hoy o antes → vencido, ≤7 → semana, más → al día', () => {
@@ -210,8 +211,9 @@ describe('leadsDelDia · los leads entran en la lista del día', () => {
   const deManana = conFecha('deManana', MANANA)
   const deLaSemana = conFecha('deLaSemana', '2026-07-22')
   const lejano = conFecha('lejano', '2026-09-01')
-  // Cadencia puesta y ningún contacto todavía: la misma deuda que un vencido, sin fecha.
-  const sinPrimerContacto = lead({ id: 'sinPrimer', nombre: 'sinPrimer', cadencia: 'semanal', ultimo_contacto: null, proximo_manual: null })
+  // Cargado y nunca agendado: la misma deuda que un vencido, sin fecha. (Antes esto se conseguía
+  // con una cadencia y ningún contacto; desde que la cadencia salió, es simplemente no tener fecha.)
+  const sinPrimerContacto = lead({ id: 'sinPrimer', nombre: 'sinPrimer', ultimo_contacto: null, proximo_manual: null })
 
   const mapa: MapaLeads = Object.fromEntries(
     [atrasado, deHoy, deManana, deLaSemana, lejano, sinPrimerContacto].map((l) => [l.id, l]),
@@ -249,10 +251,12 @@ describe('leadsDelDia · los leads entran en la lista del día', () => {
     expect(leadsDelDia(conSuelto, { seg: 'hoy', ...opts }).map((l) => l.id)).not.toContain('suelto')
   })
 
-  it('el sin agendar va AL FINAL: primero los que tienen fecha vencida', () => {
-    const suelto = lead({ id: 'suelto', nombre: 'aaa', cadencia: '', ultimo_contacto: null, proximo_manual: null })
+  it('los sin agendar van AL FINAL: primero los que tienen fecha vencida', () => {
+    const suelto = lead({ id: 'suelto', nombre: 'aaa', ultimo_contacto: null, proximo_manual: null })
     const r = leadsDelDia({ ...mapa, suelto }, { seg: 'semana', ...opts })
-    expect(r[r.length - 1].id).toBe('suelto')
+    // Los dos sin fecha quedan al fondo; entre ellos ordena el nombre, y eso no importa.
+    expect(r.slice(-2).map((l) => l.id).sort()).toEqual(['sinPrimer', 'suelto'])
+    expect(r[0]._seg.estado).toBe('vencido')
   })
 
   it('un filtro que no es de día no trae nada: el bloque sólo existe en la lista del día', () => {
@@ -279,7 +283,8 @@ describe('leadsDelDia · los leads entran en la lista del día', () => {
   it('el más urgente primero: es el orden en que se los va a llamar', () => {
     const orden = leadsDelDia(mapa, { seg: 'semana', ...opts }).map((l) => l._seg.estado)
     expect(orden[0]).toBe('vencido')
-    expect(orden[orden.length - 1]).toBe('semana')
+    // Al fondo el que no tiene fecha: no hay atraso que medir, y el que sí la tiene es más urgente.
+    expect(orden[orden.length - 1]).toBe('none')
   })
 })
 

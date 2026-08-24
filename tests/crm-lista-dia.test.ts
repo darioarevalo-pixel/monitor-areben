@@ -21,7 +21,7 @@ describe('listaDelDia · quién entra', () => {
     1: seg({ proximo_manual: '2026-08-10' }), // vencido hace 13
     2: seg({ proximo_manual: '2026-08-23' }), // vence hoy
     3: seg({ proximo_manual: '2026-08-30' }), // la semana que viene
-    4: seg({ cadencia: 'semanal' }), // pendiente: nunca contactado
+    4: seg({ cadencia: 'semanal' }), // cadencia vieja SIN fecha: desde el 24-ago no agenda nada
     5: seg({ proximo_manual: '2026-08-01', descartado: true }),
     6: seg({}), // sin seguimiento
   }
@@ -36,8 +36,11 @@ describe('listaDelDia · quién entra', () => {
     expect(ids).not.toContain(3)
   })
 
-  it('el que tiene cadencia y nunca fue contactado entra: es la misma deuda sin fecha', () => {
-    expect(ids).toContain(4)
+  it('🔴 la cadencia vieja YA NO agenda: sin fecha a mano, el cliente no entra', () => {
+    // Hasta el 24-ago-2026 éste entraba como "pendiente". Se sacó la cadencia porque no decidía
+    // nada (medido: 744 de 771 con fecha a mano, que le gana siempre, y 0 clientes gobernados por
+    // ella) y porque ninguna pantalla dejaba ponerla. Lo que queda en el KV no molesta: se ignora.
+    expect(ids).not.toContain(4)
   })
 
   it('el descartado no entra', () => {
@@ -67,12 +70,12 @@ describe('listaDelDia · el orden', () => {
     expect(listaDelDia(mapa, HOY).map((f) => f.id)).toEqual([2, 1, 3])
   })
 
-  it('el que nunca fue contactado va al final de su temperatura: no hay atraso que medir', () => {
+  it('el que sólo tiene la cadencia vieja no está: en la lista van los que tienen fecha', () => {
     const mapa: MapaSeguimiento = {
       1: seg({ cadencia: 'semanal' }),
       2: seg({ proximo_manual: '2026-08-22' }),
     }
-    expect(listaDelDia(mapa, HOY).map((f) => f.id)).toEqual([2, 1])
+    expect(listaDelDia(mapa, HOY).map((f) => f.id)).toEqual([2])
   })
 
   it('sin temperatura marcada se lee como templado, como en toda la app', () => {

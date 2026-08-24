@@ -12,7 +12,7 @@
  * verificación, no acá.
  */
 
-import { addDiasISO, CADENCIA_DIAS, diasHasta } from './core'
+import { addDiasISO, diasHasta } from './core'
 import { cola, normalizeArgPhone } from './telefono.core.js'
 import type { EstadoSeg, Nota } from './tipos'
 
@@ -74,18 +74,26 @@ export function leadNuevo(id: string, hoy: Date = new Date()): Lead {
   }
 }
 
-/** leadEstadoSeg (13980). Misma forma que estadoSeguimiento, sobre el lead. */
+/**
+ * leadEstadoSeg (13980). Misma forma que estadoSeguimiento, sobre el lead: **la fecha que se
+ * puso a mano y nada más**.
+ *
+ * 🔴 La cadencia salió el 24-ago-2026, acá también y por decisión de Bruno: *"lo sacaría también
+ * al de leads y le pondría la fecha del próximo recontacto; eso lo elijo yo al momento de ver si
+ * está frío o caliente"*. En un prospecto es todavía más claro que en un cliente — no hay historia
+ * de compras de la cual salga ningún ritmo, así que la única que sabe cuándo volver es la persona
+ * que acaba de hablar con él.
+ *
+ * Medido ese día: de 31 leads activos, la cadencia le calculaba la fecha a **2**. Esos dos quedan
+ * sin fecha, o sea "sin agendar" — y **siguen entrando en la lista del día**, que es justamente
+ * donde se les pone una.
+ */
 export function leadEstadoSeg(lead: Lead, today: Date): SegLead {
-  const cad = lead.cadencia || ''
-  let proximo: string | null = lead.proximo_manual || null
-  if (!proximo && cad && lead.ultimo_contacto) proximo = addDiasISO(lead.ultimo_contacto, CADENCIA_DIAS[cad] || 30)
-  if (!cad && !proximo) return { proximo: null, estado: 'none', dias: null }
-  const dias = proximo ? diasHasta(proximo, today) : null
-  let estado: EstadoSeg
-  if (!proximo) estado = 'pendiente'
-  else if ((dias as number) <= 0) estado = 'vencido'
-  else if ((dias as number) <= 7) estado = 'semana'
-  else estado = 'aldia'
+  const proximo: string | null = lead.proximo_manual || null
+  if (!proximo) return { proximo: null, estado: 'none', dias: null }
+  // `proximo` ya se sabe no vacío: `diasHasta` sólo devuelve null cuando no hay fecha.
+  const dias = diasHasta(proximo, today) as number
+  const estado: EstadoSeg = dias <= 0 ? 'vencido' : dias <= 7 ? 'semana' : 'aldia'
   return { proximo, estado, dias }
 }
 

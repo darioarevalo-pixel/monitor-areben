@@ -8,10 +8,9 @@ import {
   borrarNota,
   eliminar,
   filtrarLeads,
-  hableHoy,
+  escribiHoyLead,
   leadInstaHref,
   nuevoIdLead,
-  setCadencia,
   setCampo,
   setEstado,
   setProximoManual,
@@ -227,14 +226,10 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 12, color: color.mut }}>Cadencia:</label>
-              <select value={l.cadencia} onChange={(e) => persistir(setCadencia(leads, l.id, e.target.value))}>
-                <option value="">Sin cadencia</option>
-                <option value="semanal">Semanal</option>
-                <option value="quincenal">Quincenal</option>
-                <option value="mensual">Mensual</option>
-              </select>
-              <Button size="sm" variant="outline" onClick={() => persistir(hableHoy(leads, l.id))}>Hablé hoy</Button>
+              {/* La cadencia salió el 24-ago-2026 (ver `leadEstadoSeg`): cuándo volver lo elige la
+                  persona que acaba de hablar, no una regla. "Hablé hoy" agenda a una semana, que
+                  es el default de siempre y se corre en el calendario de al lado. */}
+              <Button size="sm" variant="outline" onClick={() => persistir(escribiHoyLead(leads, l.id, 7))}>Hablé hoy</Button>
               <label style={{ fontSize: 12, color: color.mut }}>Próximo:</label>
               <input type="date" value={l.proximo_manual || ''} onChange={(e) => persistir(setProximoManual(leads, l.id, e.target.value))} />
             </div>

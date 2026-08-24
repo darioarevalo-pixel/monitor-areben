@@ -124,23 +124,33 @@ export function esDescartado(id: number | string, crmSeg: MapaSeguimiento): bool
 /**
  * estadoSeguimiento (13293).
  *
- * El próximo contacto sale de una fecha fijada a mano O de la cadencia sobre el
- * último contacto. Sin cadencia y sin fecha manual → no hay seguimiento.
+ * **El próximo contacto es la fecha que se puso a mano. Punto.**
+ *
+ * 🔴 **Hasta el 24-ago-2026 había una segunda regla: la cadencia sobre el último contacto.**
+ * Se sacó, y la razón es que no hacía nada. Medido sobre los 771 clientes reales ese día:
+ * 44 tenían cadencia cargada, **744 tenían fecha a mano —que le gana siempre— y en 0 clientes
+ * la cadencia decidía la fecha**. Peor: ninguna pantalla de la app dejaba ponerla (las 44 venían
+ * del sistema viejo), así que el panel mostraba "Cadencia mensual (cada 30 días)" al lado de una
+ * fecha que salía de otro lado. Un cartel que miente es peor que no tener el cartel.
+ *
+ * Lo decidió Bruno: *"la cadencia puede sacarse y que sea todo manual, con sugerencias de en
+ * cuánto tiempo recontactar"*. La sugerencia se calcula de lo que el cliente ya hace (cada cuánto
+ * compra), que es un dato que existe, en vez de un campo que hay que mantener.
+ *
+ * ⚠️ El estado `pendiente` ("tiene cadencia y nunca se lo contactó") **ya no se produce**: sin
+ * fecha es `none`. El valor sigue en el tipo porque lo leen pantallas que todavía lo mapean.
+ * ⚠️ `cadencia` se sigue devolviendo tal como está guardado —no se borra nada del KV— pero no
+ * entra en ninguna cuenta.
  */
 export function estadoSeguimiento(id: number | string, crmSeg: MapaSeguimiento, today: Date): Seg {
   const s = crmSeg[String(id)] || {}
-  const cad = s.cadencia || ''
   const notas: Nota[] = Array.isArray(s.notas) ? s.notas : []
-  let proximo: string | null = s.proximo_manual || null
-  if (!proximo && cad && s.ultimo_contacto) proximo = addDiasISO(s.ultimo_contacto, CADENCIA_DIAS[cad] || 30)
-  if (!cad && !proximo) return { cadencia: '', ultimo: s.ultimo_contacto || null, proximo: null, estado: 'none', dias: null, notas }
-  const dias = proximo ? diasHasta(proximo, today) : null
-  let estado: EstadoSeg
-  if (!proximo) estado = 'pendiente' // tiene cadencia pero todavía no hay fecha
-  else if ((dias as number) <= 0) estado = 'vencido'
-  else if ((dias as number) <= 7) estado = 'semana'
-  else estado = 'aldia'
-  return { cadencia: cad, ultimo: s.ultimo_contacto || null, proximo, estado, dias, notas }
+  const proximo: string | null = s.proximo_manual || null
+  if (!proximo) return { cadencia: '', ultimo: s.ultimo_contacto || null, proximo: null, estado: 'none', dias: null, notas }
+  // `proximo` ya se sabe no vacío: `diasHasta` sólo devuelve null cuando no hay fecha.
+  const dias = diasHasta(proximo, today) as number
+  const estado: EstadoSeg = dias <= 0 ? 'vencido' : dias <= 7 ? 'semana' : 'aldia'
+  return { cadencia: '', ultimo: s.ultimo_contacto || null, proximo, estado, dias, notas }
 }
 
 /**

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
 import { Button, color, font, space, useToast } from '@/components/ui'
-import { hableHoy, leadsDelDia, setCadencia, type Lead, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
+import { escribiHoyLead, leadsDelDia, type Lead, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 
 /**
  * Los leads que hay que contactar hoy, arriba de la lista de clientes.
@@ -73,13 +73,12 @@ export function LeadsDelDia({
         toast.error('No se pudo leer los leads, así que no se guarda: guardar ahora borraría los que hay.')
         return
       }
-      // 🔑 Sin cadencia, marcar el contacto NO agenda nada: el lead vuelve a quedar sin fecha y
-      // reaparece mañana igual, para siempre. Los 25 leads viejos están así. Se le pone la misma
-      // cadencia por defecto que usa el formulario del panel de WhatsApp al cargar uno nuevo —
-      // semanal—, que después se cambia desde la ficha.
-      const actual = previo.dato[id]
-      const base = actual && !actual.cadencia ? setCadencia(previo.dato, id, 'semanal') : previo.dato
-      const nuevo = hableHoy(base, id)
+      // 🔑 Marcar el contacto tiene que AGENDAR algo, si no el lead vuelve a quedar sin fecha y
+      // reaparece mañana igual, para siempre (los 25 leads viejos estaban así). Antes esto se
+      // resolvía poniéndole una cadencia semanal por atrás; desde que la cadencia salió
+      // (24-ago-2026) se agenda derecho a una semana, que era lo que esa cadencia terminaba
+      // haciendo. La fecha se corre desde la ficha.
+      const nuevo = escribiHoyLead(previo.dato, id, 7)
       const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa: nuevo, cargado: true })
       setOcupado(null)
       if (!r.ok) {

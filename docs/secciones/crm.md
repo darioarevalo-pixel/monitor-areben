@@ -485,3 +485,58 @@ nunca miraba `crm:leads`**.
 2. **Los leads todavía NO están en la solapa "Hoy" del panel.** En la sección sí
    (`LeadsDelDia.tsx`); en el panel la lista es sólo de clientes. Es lo que haría que los 25 sin
    fecha aparezcan solos.
+
+## ✅ 24-ago-2026 (noche) — fuera "¿Cómo te fue?" y fuera la cadencia
+
+Las dos las decidió Bruno el primer día de uso real, y las dos tienen el número al lado.
+
+### "¿Cómo te fue?" salió del panel
+
+*"No voy a usar por ahora el cómo te fue. Siento que es post-contacto y si no me responde no tengo
+forma de usarlo."* Es el argumento bueno: **en el momento de escribir todavía no sabés qué pasó**, y
+volver más tarde al chat de cada uno para marcarlo es el trabajo extra que hizo que el CRM viejo no
+se usara. No se pierde nada hoy: el embudo no existe en ninguna pantalla.
+
+- **Lo guardado NO se borró** y `registrarContacto` sigue en `lib/crm/seguimiento.ts`.
+- ▶️ El día que el embudo exista, el camino es que la extensión **mire si entró un mensaje después
+  del nuestro** y lo deduzca sola. El botón manual ya se probó y perdió.
+- ⚠️ Con esto, **lo único que marca "le escribí hoy" son los botones de Volver a hablarle**, que
+  hacen las dos cosas: anotan el contacto y corren la fecha.
+
+### La cadencia salió del CRM entero
+
+Medido sobre los 771 clientes: **44 la tenían cargada, 744 tienen fecha a mano —que le gana
+siempre— y en 0 clientes la cadencia decidía la fecha**. Peor: **ninguna pantalla dejaba ponerla**
+(las 44 venían del sistema viejo), así que el panel mostraba "Cadencia mensual (cada 30 días)" al
+lado de una fecha que salía de otro lado. Un cartel que miente es peor que no tener cartel.
+
+Sacada de **las tres fórmulas** (`estadoSeguimiento`, `estadoDe` de lista-dia, `leadEstadoSeg`) y de
+**las cuatro pantallas** (panel cliente, panel prospecto, alta de lead, ficha de Leads).
+
+- ⚠️ **No se borró nada del KV**: lo que está guardado se ignora.
+- ⚠️ El estado `pendiente` **ya no se produce**: sin fecha, es `none`. Sigue en el tipo porque hay
+  pantallas que todavía lo mapean.
+- **Impacto real**: 1 cliente y 2 leads perdieron su fecha calculada. Los leads sin fecha **siguen
+  entrando en la lista del día** como "sin agendar", que es donde se les pone una.
+- `LeadsDelDia` le ponía una cadencia semanal por atrás para que "Hablé hoy" agendara algo; ahora
+  usa `escribiHoyLead(…, 7)`, que era lo que esa cadencia terminaba haciendo.
+
+### En su lugar: la sugerencia calculada (`lib/crm/ritmo.ts`)
+
+*"Que sea todo manual, con sugerencias de en cuánto tiempo recontactar."* La diferencia es de dónde
+sale el número: **no de un campo que hay que mantener, sino de lo que el cliente ya hace**.
+
+🔑 **Y lo que se muestra no es el promedio, es cuánto falta**: "compra cada 27 días, la última fue
+hace 17" ⇒ botón **"En 10 días"**. Eso contesta la pregunta que uno tiene abierta con el chat
+adelante.
+
+- **Mediana, no promedio**: un pedido raro corre el promedio y no corre la mediana.
+- **Días con compra, no ventas**: dos pedidos el mismo día son una sola vez.
+- **Menos de 3 compras → no dice nada.** Un número inventado se lee igual de convincente que uno
+  bueno. Tope de 120 días: más allá no es "volver a hablarle".
+- ⚠️ **Si ya le toca, NO hay botón, hay un dato** ("Ya le tocaba comprar"). Agendarlo para hoy lo
+  dejaría en la lista de hoy después de haberle escrito.
+- **Medido el 24-ago-2026 contra las 28.260 ventas reales**: sugerencia para **201 de 771 clientes**
+  (133 de los 273 mayoristas). Distribución de "compra cada X días": 31-60 → 60 · 61-120 → 60 ·
+  16-30 → 48 · 8-15 → 23 · 3-7 → 7 · 1-2 → 3. Los 570 restantes no llegan a 3 compras: ven los tres
+  plazos de siempre y nada más.

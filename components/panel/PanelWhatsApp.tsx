@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI } from '@/components/crm/temperatura'
-import { CADENCIA_DIAS, siguienteTemperatura } from '@/lib/crm/core'
+import { siguienteTemperatura } from '@/lib/crm/core'
+import { plazoEnPalabras, ritmoDeCompra } from '@/lib/crm/ritmo'
 import { buscarFicha, guardarConRelectura, guardarLeadsConRelectura, type FichaPanel, type RespuestaPanel } from '@/lib/crm/panel'
 import { armarFicha } from '@/lib/crm/panel'
 import {
@@ -13,7 +14,6 @@ import {
   escribiHoy,
   hoyISO,
   NOTAS_RAPIDAS,
-  registrarContacto,
   setDespacho,
   setPendiente,
   setProximoManual,
@@ -28,7 +28,6 @@ import {
   leadsPorTelefono,
   LEAD_ESTADO_LABEL,
   nuevoIdLead,
-  setCadencia as setCadenciaLead,
   setEstado as setEstadoLead,
   setProximoManual as setProximoLead,
   leadEstadoSeg,
@@ -39,7 +38,7 @@ import {
 import { AgendaDelDia } from './AgendaDelDia'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
-import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota, ResultadoContacto } from '@/lib/crm/tipos'
+import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
 
 /**
  * El panel que la extensión de Chrome pega al costado de WhatsApp Web.
@@ -95,26 +94,25 @@ const SEG_TXT: Record<string, string> = {
 }
 
 /**
- * Las cuatro respuestas del "¿Cómo te fue?".
+ * 🔴 **"¿Cómo te fue?" salió del panel el 24-ago-2026.** Los cuatro botones (contestó / no
+ * contestó / pidió precio / no le interesa) eran el bloque más grande de la pantalla y estaban
+ * arriba de todo.
  *
- * Son las de la libreta, con las palabras de la libreta. **"No le interesa" no apaga al cliente ni
- * lo marca frío**: deja registrado que esta vez dijo que no, que es un dato distinto de que la
- * relación esté muerta. La temperatura se sigue marcando a mano, arriba.
+ * Lo dijo Bruno el primer día de uso, y el argumento es el que vale: **es post-contacto**. En el
+ * momento en que le escribís todavía no sabés qué pasó, y volver más tarde al chat de cada uno
+ * para marcarlo es exactamente el trabajo extra que hizo que el CRM viejo no se usara ("me costaba
+ * el registro y el proceso"). Un botón que exige una segunda visita no se toca nunca.
  *
- * ⚠️ **Siguen siendo cuatro a propósito.** Está acordado bajarlas a dos ("Me respondió" + "Este no
- * va": no contestar es una resta, el sistema ya sabe a cuántos se escribió), pero recién **después**
- * de que el embudo exista en Métricas. Hasta entonces el botón no tiene a dónde ir a parar, y
- * sacar opciones de algo que todavía no se lee en ningún lado es mover la silla sin apagar el fuego.
+ * Y no se pierde nada hoy: el embudo de la Parte 9 (contactados → respondieron → compraron) no
+ * existe en ninguna pantalla, así que el dato se juntaba sin que nadie lo leyera.
  *
- * El `tone` es lo que hace que se lean como botones y no como texto suelto: cada uno con el color
- * de lo que significa.
+ * ⚠️ **Lo guardado NO se borra** y `registrarContacto` sigue existiendo: el día que el embudo
+ * exista, el camino bueno es que la extensión mire **si entró un mensaje después del nuestro** y
+ * lo deduzca sola, sin preguntar nada. Eso está sin probar; el botón manual ya se probó y perdió.
+ *
+ * ⚠️ Con esto, lo único que marca "le escribí hoy" son los botones de **Volver a hablarle**, que
+ * hacen las dos cosas: anotan el contacto y corren la fecha.
  */
-const RESULTADOS: { v: ResultadoContacto; txt: string; ayuda: string; tone: Tone }[] = [
-  { v: 'contesto', txt: 'Contestó', ayuda: 'Hubo conversación, aunque no haya comprado.', tone: 'success' },
-  { v: 'no_contesto', txt: 'No contestó', ayuda: 'Se le escribió y no respondió.', tone: 'neutral' },
-  { v: 'pidio_precio', txt: 'Pidió precio', ayuda: 'Está mirando: hay que volver.', tone: 'brand' },
-  { v: 'no_interesa', txt: 'No le interesa', ayuda: 'Dijo que no esta vez.', tone: 'danger' },
-]
 
 /** Los tres plazos de "volver a hablarle" + la fecha a dedo. */
 const PLAZOS: { dias: number; txt: string }[] = [
@@ -670,7 +668,8 @@ function PanelInterno({
   const seg = crmSeg[String(c.id)] || {}
   const t = TEMP_UI[c.temperatura]
   const notas = c.notas || []
-  const ultimoContacto = (seg.contactos || [])[0] || null
+  // Las ventas ya están en la ficha: la sugerencia no le pide nada más al servidor.
+  const ritmo = ritmoDeCompra(c.ventas || [], today)
 
   return (
     <Envoltorio aviso={aviso}>
@@ -717,11 +716,6 @@ function PanelInterno({
                 Volver a hablarle: {fmtFecha(c.proximo_contacto)}
               </Chip>
             )}
-            {ultimoContacto && (
-              <Chip>
-                {fmtFecha(ultimoContacto.fecha)}: {RESULTADOS.find((r) => r.v === ultimoContacto.resultado)?.txt.toLowerCase()}
-              </Chip>
-            )}
           </div>
         </Bloque>
 
@@ -753,28 +747,43 @@ function PanelInterno({
           )}
         </Bloque>
 
-        {/* ¿Cómo te fue? */}
-        <Bloque titulo="¿Cómo te fue?">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {RESULTADOS.map((r) => (
-              <Button
-                key={r.v}
-                size="sm"
-                variant="outline"
-                tone={r.tone}
-                fullWidth
-                disabled={guardando}
-                title={r.ayuda}
-                onClick={() => mutar((m) => registrarContacto(m, c.id, r.v, hoyISO()), 'Anotado')}
-              >
-                {r.txt}
-              </Button>
-            ))}
-          </div>
-        </Bloque>
-
         {/* Volver a hablarle */}
         <Bloque titulo="Volver a hablarle">
+          {/*
+            🔑 **La sugerencia sale de lo que el cliente ya hace, no de un campo.** Reemplaza a la
+            cadencia, que había que cargar a mano y que en 0 de los 771 clientes decidía la fecha.
+            Y lo que se muestra no es el promedio —que solo no dice nada— sino **cuánto falta**:
+            "compra cada 22 días, la última fue hace 20" ⇒ le toca en 2.
+
+            ⚠️ Sugiere y no decide: es un botón más, con el número puesto. Elige el que habla.
+          */}
+          {ritmo && (
+            <div style={{ marginBottom: 8 }}>
+              {/*
+                ⚠️ **Cuando ya le toca NO hay botón, hay un dato.** Agendarlo para hoy lo dejaría
+                en la lista de hoy después de haberle escrito, o sea que reaparecería mañana como
+                si nada. Si ya está pasado, lo que hay que elegir es un plazo hacia adelante — y
+                eso lo elige el que está hablando, con el dato a la vista.
+              */}
+              {ritmo.enDias > 0 && (
+                <Button
+                  size="sm"
+                  variant="soft"
+                  tone="brand"
+                  fullWidth
+                  disabled={guardando}
+                  onClick={() => mutar((m) => escribiHoy(m, c.id, ritmo.enDias), 'Listo')}
+                >
+                  {plazoEnPalabras(ritmo.enDias)}
+                </Button>
+              )}
+              <div style={{ fontSize: font.xs, color: color.mut2, marginTop: ritmo.enDias > 0 ? 4 : 0, textAlign: 'center' }}>
+                {ritmo.enDias === 0 && <b style={{ color: color.warningInk }}>Ya le tocaba comprar. </b>}
+                Compra cada {ritmo.cadaDias} {ritmo.cadaDias === 1 ? 'día' : 'días'} · la última fue hace{' '}
+                {ritmo.desdeUltima === 0 ? 'nada' : ritmo.desdeUltima === 1 ? '1 día' : `${ritmo.desdeUltima} días`}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {PLAZOS.map((p) => (
               <Button
@@ -796,11 +805,6 @@ function PanelInterno({
               style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
             />
           </div>
-          {seg.cadencia && (
-            <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 5 }}>
-              Cadencia {seg.cadencia} (cada {CADENCIA_DIAS[seg.cadencia] || 30} días)
-            </div>
-          )}
         </Bloque>
 
         {/* Notas: la bitácora de lo que se hizo. Lo que hay que TENER EN CUENTA ya está arriba. */}
@@ -1184,19 +1188,6 @@ function FichaLead({
             style={{ height: 28, fontSize: font.xs, flex: '1 1 120px', minWidth: 120 }}
           />
         </div>
-        {/* La cadencia es lo que hace que vuelva a aparecer solo, sin tener que acordarse. */}
-        <select
-          className="mo-input"
-          value={lead.cadencia || ''}
-          disabled={guardando}
-          onChange={(e) => onMutar((m) => setCadenciaLead(m, lead.id, e.target.value), 'Listo')}
-          style={{ width: '100%', marginTop: 6, fontSize: font.xs, height: 28 }}
-        >
-          <option value="">Sin cadencia fija</option>
-          <option value="semanal">Hablarle cada semana</option>
-          <option value="quincenal">Cada 15 días</option>
-          <option value="mensual">Una vez por mes</option>
-        </select>
       </Bloque>
 
       <Notas
@@ -1261,7 +1252,6 @@ function NuevoLead({ tel, onGuardado, onError }: { tel: string; onGuardado: (lea
   const [nombre, setNombre] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [instagram, setInstagram] = useState('')
-  const [cadencia, setCadencia] = useState('semanal')
   const [guardando, setGuardando] = useState(false)
 
   const guardar = async () => {
@@ -1274,7 +1264,9 @@ function NuevoLead({ tel, onGuardado, onError }: { tel: string; onGuardado: (lea
       return
     }
     const id = nuevoIdLead(Date.now(), Math.random())
-    const lead: Lead = { ...leadNuevo(id), nombre: nombre.trim(), telefono: tel, ciudad: ciudad.trim(), instagram: instagram.trim(), cadencia }
+    // Sin fecha: se elige en la ficha, que es donde cae al guardar. "Eso lo elijo yo al momento
+    // de ver si está frío o caliente" — y en el alta todavía no se sabe.
+    const lead: Lead = { ...leadNuevo(id), nombre: nombre.trim(), telefono: tel, ciudad: ciudad.trim(), instagram: instagram.trim() }
     const mapa: MapaLeads = { ...previo.dato, [id]: lead }
     const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa, cargado: true })
     setGuardando(false)
@@ -1293,12 +1285,6 @@ function NuevoLead({ tel, onGuardado, onError }: { tel: string; onGuardado: (lea
       <input className="mo-input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre o local" style={{ width: '100%', marginBottom: 6 }} />
       <input className="mo-input" value={ciudad} onChange={(e) => setCiudad(e.target.value)} placeholder="Ciudad" style={{ width: '100%', marginBottom: 6 }} />
       <input className="mo-input" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@instagram" style={{ width: '100%', marginBottom: 6 }} />
-      <select className="mo-input" value={cadencia} onChange={(e) => setCadencia(e.target.value)} style={{ width: '100%', marginBottom: 10 }}>
-        <option value="semanal">Hablarle cada semana</option>
-        <option value="quincenal">Cada 15 días</option>
-        <option value="mensual">Una vez por mes</option>
-      </select>
-
       <Button size="sm" disabled={!nombre.trim() || guardando} onClick={guardar}>
         {guardando ? 'Guardando…' : 'Guardar como lead'}
       </Button>

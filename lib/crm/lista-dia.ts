@@ -21,7 +21,7 @@
  * sus totales se piden al servidor junto con los nombres.
  */
 
-import { addDiasISO, CADENCIA_DIAS, diasHasta } from './core'
+import { diasHasta } from './core'
 import type { EstadoSeg, MapaSeguimiento, Nota, Temperatura } from './tipos'
 import { TEMPERATURA_DEFAULT } from './core'
 
@@ -30,7 +30,7 @@ export const TOPE_LISTA = 25
 
 export type FilaListaDia = {
   id: number
-  /** `YYYY-MM-DD`, o null si tiene cadencia y todavía no se lo contactó nunca. */
+  /** `YYYY-MM-DD`. Siempre hay fecha: sin fecha el cliente no entra en la lista. */
   proximo: string | null
   /** Días hasta el próximo contacto: negativo = atrasado. null cuando no hay fecha. */
   dias: number | null
@@ -45,25 +45,26 @@ export type FilaListaDia = {
  * partiendo del mapa crudo en vez del `ClienteCRM` agregado.
  *
  * ⚠️ Se calcula igual **a propósito**: si esto se desviara, el panel diría que un cliente está
- * vencido y la sección que está al día, sobre el mismo dato. La regla es una sola: fecha manual,
- * o cadencia sobre el último contacto.
+ * vencido y la sección que está al día, sobre el mismo dato. La regla es una sola: **la fecha que
+ * se puso a mano** (la cadencia salió el 24-ago-2026; el porqué está en `estadoSeguimiento`).
  */
 function estadoDe(s: MapaSeguimiento[string], today: Date): { proximo: string | null; dias: number | null; estado: EstadoSeg } {
-  const cad = s.cadencia || ''
-  let proximo: string | null = s.proximo_manual || null
-  if (!proximo && cad && s.ultimo_contacto) proximo = addDiasISO(s.ultimo_contacto, CADENCIA_DIAS[cad] || 30)
-  if (!cad && !proximo) return { proximo: null, dias: null, estado: 'none' }
-  const dias = proximo ? diasHasta(proximo, today) : null
-  if (!proximo) return { proximo: null, dias: null, estado: 'pendiente' }
-  if ((dias as number) <= 0) return { proximo, dias, estado: 'vencido' }
-  if ((dias as number) <= 7) return { proximo, dias, estado: 'semana' }
+  const proximo: string | null = s.proximo_manual || null
+  if (!proximo) return { proximo: null, dias: null, estado: 'none' }
+  // `proximo` ya se sabe no vacío: `diasHasta` sólo devuelve null cuando no hay fecha.
+  const dias = diasHasta(proximo, today) as number
+  if (dias <= 0) return { proximo, dias, estado: 'vencido' }
+  if (dias <= 7) return { proximo, dias, estado: 'semana' }
   return { proximo, dias, estado: 'aldia' }
 }
 
 /**
- * Los que ya vencen: `vencido` (que incluye los de HOY — `dias === 0`) y `pendiente` (tiene
- * cadencia y nunca se lo contactó). Los de "esta semana" quedan afuera: en una columna angosta,
- * al costado del chat, lo que sirve es lo que hay que hacer ahora.
+ * Los que ya vencen: `vencido`, que incluye los de HOY (`dias === 0`). Los de "esta semana"
+ * quedan afuera: en una columna angosta, al costado del chat, lo que sirve es lo que hay que
+ * hacer ahora.
+ *
+ * ⚠️ `pendiente` sigue contando por si alguna entrada vieja lo trae, pero desde que salió la
+ * cadencia **no se produce más**: sin fecha, el cliente es `none` y no está en la lista.
  */
 const yaVence = (e: EstadoSeg) => e === 'vencido' || e === 'pendiente'
 
@@ -94,8 +95,8 @@ const ORDEN_TEMP: Record<Temperatura, number> = { caliente: 0, templado: 1, frio
 /**
  * La primera etapa: tibios y calientes que ya vencen, del más atrasado al menos.
  *
- * El `pendiente` (cadencia puesta, ningún contacto todavía) va al final de su temperatura: no
- * tiene fecha contra la cual medir el atraso, y quien sí la tiene es más urgente.
+ * El `pendiente` —que ya no se produce, ver `yaVence`— va al final de su temperatura: no tiene
+ * fecha contra la cual medir el atraso, y quien sí la tiene es más urgente.
  */
 export function listaDelDia(crmSeg: MapaSeguimiento, today: Date, tope: number = TOPE_LISTA): FilaListaDia[] {
   return filas(crmSeg, today)
