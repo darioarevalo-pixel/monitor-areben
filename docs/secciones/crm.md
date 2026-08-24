@@ -52,6 +52,27 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
   con el KV solo (`lista-dia.ts`: 771 entradas, pesan nada); después el nombre, el teléfono y el
   total, de esos ~90 y no de los 12.485 del padrón (`action:'lista'`). Al revés sería bajar el CRM
   adentro de WhatsApp.
+- 🔴 **DOS guardas contra el borrado en masa, y cubren cosas distintas** (la segunda, 24-ago-2026).
+  `cargado` cubre **"no pude leer"**: sin lectura previa no se escribe. Lo que faltaba era
+  **"leí bien y vino vacío"** — si la clave se borrara o venciera del lado del servidor, la lectura
+  sale `{ok:true, dato:{}}`, un éxito indistinguible de una clave nueva, y el guardado siguiente
+  escribe un mapa de un cliente encima de 771. Ahora `lib/kv/cliente.ts` **anota cuántas entradas
+  llegó a ver en cada clave y rechaza la escritura que encoja a menos de la mitad** (`motivoSiEncoge`,
+  piso de 20 entradas). Vale para los mapas, las listas, los cupones, el banco y las resueltas: la
+  clave sin backup del CRM no es la única así.
+  ⚠️ **La cuenta es por pantalla abierta**, y tiene que serlo: una clave que de verdad está vacía
+  —marca nueva, sección estrenada— tiene que poder escribirse. Lo que impide es que una pantalla que
+  YA vio 771 guarde 3.
+  ⚠️ **No protege de borrar de a uno**: 400 clientes borrados uno por uno pasan. Para eso está la
+  copia diaria, que es la otra mitad.
+- 🔑 **La copia diaria corre sola en la Mac** (24-ago-2026), no en Vercel:
+  `~/Library/LaunchAgents/com.bdi.respaldo-crm.plist` → `scripts/crm-kv.mjs --dump --out
+  ~/Bruno/respaldos-crm --conservar 30`, todos los días 13:30. Va **fuera del repo** (un `git clean`
+  se llevaría puesta una copia guardada adentro) y **fuera de Vercel** porque el dump necesita
+  `MONITOR_PASS`, que en la Mac ya está en el `.env` y en Vercel habría que cargar a mano.
+  ⚠️ **Si el dump sale incompleto no poda**: cambiar 30 copias buenas por una rota es peor que no
+  copiar. ⛔ La contra de este camino: **si la Mac está apagada todo el día, ese día no hay copia**.
+  El log de la última corrida es `~/Bruno/respaldos-crm/_ultimo.log`.
 - 🔑 **La nota no es una cosa, son CUATRO** (24-ago-2026). En `crm:seg:bdi` conviven ahora
   `pendiente` (⏳ una línea, con tilde de "listo"), `tener_en_cuenta` (📌 cómo es el cliente, no
   vence), `despacho` (📦 cómo se le manda) y la bitácora `notas` de siempre. Salió de contar las

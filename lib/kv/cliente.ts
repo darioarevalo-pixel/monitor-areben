@@ -63,6 +63,60 @@ export type Lectura<T> = { ok: true; dato: T } | { ok: false; motivo: string }
 
 export type Escritura = { ok: true; total: number } | { ok: false; motivo: string }
 
+/**
+ * ═══ LA SEGUNDA GUARDA: "no puede encoger de golpe" ═══
+ *
+ * `cargado` cubre el caso **"no pude leer"**. No cubre el otro, que es el que quedaba abierto:
+ * **"leí bien y vino vacío"**. Si la clave del KV se borrara o venciera del lado del servidor, la
+ * lectura sale `{ok:true, dato:{}}` —un éxito legítimo, indistinguible de una clave nueva— y el
+ * guardado siguiente escribe un mapa de un solo cliente. Los otros 770 se van, y no hay backup.
+ *
+ * La guarda es la que haría cualquiera a ojo: **si hace un rato había 771 y ahora se va a guardar
+ * con 3, eso no es una edición, es un accidente.** Se anota cuánto se llegó a ver en cada clave y
+ * se rechaza la escritura que encoja más de la mitad.
+ *
+ * Vive acá y no en el CRM porque la clave sin backup no es la única: el historial de fotos, las
+ * solicitudes internas, los cupones y el banco de mensajes se guardan igual (la clave entera, de
+ * cero, en cada toque).
+ *
+ * ⚠️ **La cuenta es por pantalla abierta, no global.** Al recargar arranca en cero, y tiene que ser
+ * así: una clave que de verdad está vacía —una marca nueva, una sección recién estrenada— tiene que
+ * poder escribirse. Lo que la guarda impide es lo otro: que una pantalla que YA vio 771 clientes
+ * guarde 3.
+ *
+ * ⚠️ **No protege de borrar de a uno.** Nadie puede vaciar la lista sin querer de un clic, pero
+ * tampoco hay nada que detenga a alguien que borre 400 clientes uno por uno. Para eso está la copia
+ * diaria, que es la otra mitad de la red.
+ */
+const vistas = new Map<string, number>()
+
+/** Debajo de esto no hay nada que proteger: una lista de 5 puede pasar a 2 con toda razón. */
+const PISO_VIGILADO = 20
+
+/** Guardar menos de la mitad de lo que se llegó a ver es un accidente, no una edición. */
+const FRACCION_MINIMA = 0.5
+
+/** Anota cuánto se vio en una clave. Sólo sube: lo que importa es el máximo que hubo. */
+function anotarVistas(clave: string, cantidad: number) {
+  vistas.set(clave, Math.max(vistas.get(clave) ?? 0, cantidad))
+}
+
+/**
+ * ¿Esta escritura encoge la clave de golpe? Devuelve el motivo del rechazo, o `null` si está bien.
+ *
+ * El mensaje va en las palabras del que lo va a leer en pantalla, no en las del que lo escribió:
+ * dice qué pasó, que no se guardó nada y qué hacer.
+ */
+function motivoSiEncoge(clave: string, cantidad: number): string | null {
+  const antes = vistas.get(clave) ?? 0
+  if (antes < PISO_VIGILADO) return null
+  if (cantidad >= Math.floor(antes * FRACCION_MINIMA)) return null
+  return (
+    `No se guardó nada: se iba a guardar con ${cantidad} cuando hace un rato había ${antes}. ` +
+    `Recargá la pantalla y fijate que estén todos antes de volver a tocar.`
+  )
+}
+
 export const MOTIVO_NO_LEIDO =
   'No se pudo leer el KV, así que no se guarda nada: guardar ahora borraría lo que hay.'
 
@@ -94,8 +148,9 @@ async function pedir(url: string, init?: RequestInit): Promise<Lectura<Record<st
 export async function leerMapa<T = unknown>(kind: KindMapa, store: Marca): Promise<Lectura<Record<string, T>>> {
   const r = await pedir(`${API}?kind=${kind}&store=${store}&nc=${Date.now()}`)
   if (!r.ok) return r
-  const map = r.dato.map
-  return { ok: true, dato: (map && typeof map === 'object' ? map : {}) as Record<string, T> }
+  const map = (r.dato.map && typeof r.dato.map === 'object' ? r.dato.map : {}) as Record<string, T>
+  anotarVistas(`${kind}:${store}`, Object.keys(map).length)
+  return { ok: true, dato: map }
 }
 
 /**
@@ -110,7 +165,9 @@ export async function leerMapa<T = unknown>(kind: KindMapa, store: Marca): Promi
 export async function leerLista<T = unknown>(kind: KindLista, store: Marca): Promise<Lectura<T[]>> {
   const r = await pedir(`${API}?kind=${kind}&store=${store}&nc=${Date.now()}`)
   if (!r.ok) return r
-  return { ok: true, dato: Array.isArray(r.dato.list) ? (r.dato.list as T[]) : [] }
+  const list = Array.isArray(r.dato.list) ? (r.dato.list as T[]) : []
+  anotarVistas(`${kind}:${store}`, list.length)
+  return { ok: true, dato: list }
 }
 
 export type OpcionesGuardarLista<T> = {
@@ -128,6 +185,8 @@ export type OpcionesGuardarLista<T> = {
 
 export async function guardarLista<T>({ kind, store, lista, cargado }: OpcionesGuardarLista<T>): Promise<Escritura> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const encoge = motivoSiEncoge(`${kind}:${store}`, lista.length)
+  if (encoge) return { ok: false, motivo: encoge }
   const r = await pedir(`${API}?kind=${kind}&store=${store}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -146,7 +205,9 @@ export async function guardarLista<T>({ kind, store, lista, cargado }: OpcionesG
 export async function leerCupones<T = unknown>(store: Marca): Promise<Lectura<T[]>> {
   const r = await pedir(`${API}?kind=cupones&store=${store}&nc=${Date.now()}`)
   if (!r.ok) return r
-  return { ok: true, dato: Array.isArray(r.dato.cupones) ? (r.dato.cupones as T[]) : [] }
+  const lista = Array.isArray(r.dato.cupones) ? (r.dato.cupones as T[]) : []
+  anotarVistas(`cupones:${store}`, lista.length)
+  return { ok: true, dato: lista }
 }
 
 export type OpcionesGuardarCupones<T> = {
@@ -158,6 +219,8 @@ export type OpcionesGuardarCupones<T> = {
 
 export async function guardarCupones<T>({ store, cupones, cargado }: OpcionesGuardarCupones<T>): Promise<Escritura> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const encoge = motivoSiEncoge(`cupones:${store}`, cupones.length)
+  if (encoge) return { ok: false, motivo: encoge }
   const r = await pedir(`${API}?kind=cupones&store=${store}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -178,7 +241,9 @@ export async function guardarCupones<T>({ store, cupones, cargado }: OpcionesGua
 export async function leerBanco<T = unknown>(store: Marca): Promise<Lectura<T[]>> {
   const r = await pedir(`${API}?kind=mensajes&store=${store}&nc=${Date.now()}`)
   if (!r.ok) return r
-  return { ok: true, dato: Array.isArray(r.dato.bank) ? (r.dato.bank as T[]) : [] }
+  const bank = Array.isArray(r.dato.bank) ? (r.dato.bank as T[]) : []
+  anotarVistas(`mensajes:${store}`, bank.length)
+  return { ok: true, dato: bank }
 }
 
 export type OpcionesGuardarBanco<T> = {
@@ -190,6 +255,8 @@ export type OpcionesGuardarBanco<T> = {
 
 export async function guardarBanco<T>({ store, banco, cargado }: OpcionesGuardarBanco<T>): Promise<Escritura> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const encoge = motivoSiEncoge(`mensajes:${store}`, banco.length)
+  if (encoge) return { ok: false, motivo: encoge }
   const r = await pedir(`${API}?kind=mensajes&store=${store}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -206,8 +273,9 @@ export async function guardarBanco<T>({ store, banco, cargado }: OpcionesGuardar
 export async function leerResueltas<T = unknown>(store: Marca): Promise<Lectura<Record<string, T>>> {
   const r = await pedir(`${API}?kind=verifventas&store=${store}&nc=${Date.now()}`)
   if (!r.ok) return r
-  const m = r.dato.resueltas
-  return { ok: true, dato: (m && typeof m === 'object' ? m : {}) as Record<string, T> }
+  const m = (r.dato.resueltas && typeof r.dato.resueltas === 'object' ? r.dato.resueltas : {}) as Record<string, T>
+  anotarVistas(`verifventas:${store}`, Object.keys(m).length)
+  return { ok: true, dato: m }
 }
 
 export type OpcionesGuardarResueltas<T> = {
@@ -219,6 +287,8 @@ export type OpcionesGuardarResueltas<T> = {
 
 export async function guardarResueltas<T>({ store, resueltas, cargado }: OpcionesGuardarResueltas<T>): Promise<Escritura> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const encoge = motivoSiEncoge(`verifventas:${store}`, Object.keys(resueltas).length)
+  if (encoge) return { ok: false, motivo: encoge }
   const r = await pedir(`${API}?kind=verifventas&store=${store}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -295,6 +365,8 @@ export type OpcionesGuardarMapa<T> = {
 
 export async function guardarMapa<T>({ kind, store, mapa, cargado }: OpcionesGuardarMapa<T>): Promise<Escritura> {
   if (!cargado) return { ok: false, motivo: MOTIVO_NO_LEIDO }
+  const encoge = motivoSiEncoge(`${kind}:${store}`, Object.keys(mapa).length)
+  if (encoge) return { ok: false, motivo: encoge }
   const r = await pedir(`${API}?kind=${kind}&store=${store}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -302,4 +374,12 @@ export async function guardarMapa<T>({ kind, store, mapa, cargado }: OpcionesGua
   })
   if (!r.ok) return r
   return { ok: true, total: Number(r.dato.total ?? Object.keys(mapa).length) }
+}
+
+/**
+ * Sólo para los tests: la memoria de "cuántos había" es de módulo y se arrastra entre casos.
+ * No la usa ninguna pantalla.
+ */
+export function _olvidarVistas() {
+  vistas.clear()
 }

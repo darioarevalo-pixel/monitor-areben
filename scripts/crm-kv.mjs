@@ -22,6 +22,8 @@
  * ---
  *   node scripts/crm-kv.mjs --dump                → baja las 4 claves (READ-ONLY)
  *   node scripts/crm-kv.mjs --dump --store zattia
+ *   node scripts/crm-kv.mjs --dump --out ~/Bruno/respaldos-crm --conservar 30
+ *                                                 → el respaldo automático de todos los días
  *   node scripts/crm-kv.mjs --restore <carpeta> --kind crmseg --si-estoy-seguro
  *
  * El dump va a tests/fixtures/kv/<store>-<timestamp>/, que está gitignoreado
@@ -31,7 +33,7 @@
  * (27-jul-2026) ninguna kind se lee anónima — ver scripts/lib/kv-auth.mjs.
  */
 
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { authKv } from './lib/kv-auth.mjs'
@@ -55,6 +57,38 @@ const valor = (f, def) => {
 }
 
 const store = valor('--store', 'bdi')
+
+/**
+ * Dónde se dejan las copias. Por defecto adentro del repo (gitignoreado), que es lo que sirve
+ * para probar una escritura. El respaldo automático de todos los días pasa `--out` para dejarlas
+ * FUERA del repo: una copia que se borra con un `git clean` no es una copia.
+ */
+const salida = valor('--out', join(RAIZ, 'tests', 'fixtures', 'kv'))
+
+/**
+ * Cuántas copias se conservan. Sin el flag no se borra nada (es lo que corresponde cuando lo
+ * corre una persona a mano). El automático pasa `--conservar 30`.
+ *
+ * ⚠️ Sólo poda carpetas que **este script haya creado**: las que empiezan con `<store>-` y tienen
+ * el `_resumen.json` adentro. Borrar por posición en un listado es cómo se borra otra cosa.
+ */
+function podar(cuantas) {
+  if (!cuantas || cuantas < 1) return
+  let carpetas = []
+  try {
+    carpetas = readdirSync(salida, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith(`${store}-`))
+      .map((d) => d.name)
+      .filter((n) => existsSync(join(salida, n, '_resumen.json')))
+      .sort()
+  } catch {
+    return
+  }
+  for (const vieja of carpetas.slice(0, Math.max(0, carpetas.length - cuantas))) {
+    rmSync(join(salida, vieja), { recursive: true, force: true })
+    console.log(`  · se borró la copia vieja ${vieja}`)
+  }
+}
 
 /**
  * Un GET al KV. Distingue los tres desenlaces que al legacy se le mezclan en uno:
@@ -85,7 +119,7 @@ function contar(dato, campo) {
 
 async function dump() {
   const sello = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const destino = join(RAIZ, 'tests', 'fixtures', 'kv', `${store}-${sello}`)
+  const destino = join(salida, `${store}-${sello}`)
   mkdirSync(destino, { recursive: true })
 
   console.log(`\nDump del KV del CRM · store=${store}\n`)
@@ -110,9 +144,12 @@ async function dump() {
   writeFileSync(join(destino, '_resumen.json'), JSON.stringify({ store, fecha: new Date().toISOString(), kinds: resumen }, null, 1))
   console.log(`\nGuardado en ${destino.replace(RAIZ + '/', '')}`)
   if (fallos) {
+    // 🔴 No se poda: si esta copia salió incompleta, borrar las viejas es cambiar la red buena
+    // por una rota. La poda va DESPUÉS de saber que la copia de hoy sirve.
     console.log(`\n⚠️  ${fallos} de ${KINDS.length} fallaron: el dump está INCOMPLETO, no sirve de red.`)
     process.exit(1)
   }
+  podar(Number(valor('--conservar', 0)))
   console.log('\nEste dump es la red para cualquier prueba de escritura del CRM. Sin sandbox, no hay otra.\n')
 }
 
