@@ -168,6 +168,21 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
       setPedido((p) => (p && normalizeArgPhone(p.tel) === normalizeArgPhone(nuevo || '') ? p : null))
     }
     window.addEventListener('message', alMensaje)
+    /**
+     * 🔴 **Preguntar al montar, y no sólo esperar el aviso.**
+     *
+     * El aviso de "cambió el chat" se manda una vez y no se reintenta: si llega mientras esta
+     * pantalla todavía se está armando —que es lo normal la primera vez, con el bundle y la sesión
+     * cargando—, **se pierde y no hay quien lo repita**. El síntoma es exactamente el que se vio:
+     * la lista del día funciona, y la ficha dice "abrí el chat de una persona" con el chat abierto.
+     *
+     * Antes no pasaba porque el número venía en la URL del panel, así que estaba ahí desde el
+     * primer render. Al dejar de recargar el iframe (que es lo que hizo rápido el cambio de chat)
+     * se abrió este agujero.
+     */
+    try {
+      window.parent.postMessage({ fuente: 'bdi-crm-panel', tipo: 'que-chat' }, '*')
+    } catch {}
     return () => window.removeEventListener('message', alMensaje)
   }, [])
 

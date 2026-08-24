@@ -82,7 +82,13 @@ function mostrar(tel, motivo) {
     iframe.src = BASE + limpio
     return
   }
-  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'chat', tel: limpio }, ORIGEN)
+  avisarAlPanel(limpio)
+}
+
+/** Le pasa el número al panel. Se usa al cambiar de chat y cuando el panel lo pide al armarse. */
+function avisarAlPanel(numero) {
+  if (!iframe.contentWindow) return
+  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'chat', tel: numero }, ORIGEN)
 }
 
 /**
@@ -98,7 +104,17 @@ function mostrar(tel, motivo) {
 window.addEventListener('message', (e) => {
   if (e.origin !== ORIGEN) return
   const d = e.data
-  if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'abrir-chat') return
+  if (!d || d.fuente !== 'bdi-crm-panel') return
+
+  // El panel pregunta al terminar de armarse. 🔴 Sin esto, el aviso del chat se manda una sola vez
+  // —cuando el panel todavía puede estar cargando— y si se pierde, no hay quien lo repita: la
+  // ficha se queda diciendo "abrí un chat" con el chat abierto.
+  if (d.tipo === 'que-chat') {
+    if (actual) avisarAlPanel(actual)
+    return
+  }
+
+  if (d.tipo !== 'abrir-chat') return
   const numero = String(d.tel || '').replace(/\D/g, '')
   if (!numero) return
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
