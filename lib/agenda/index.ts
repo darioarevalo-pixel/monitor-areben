@@ -119,8 +119,17 @@ export function promosDe(
  * Más corto que `corre()` de la promo porque **una rutina no tiene ventana de vigencia**: no vence,
  * se apaga. Lo que corre entre dos fechas se dice con `{tipo:'rango'}`, que es la regla.
  */
+/**
+ * ¿Es un molde y no una rutina? Un molde existe para que el disparador del ingreso lo clone: no
+ * corre ningún día, no enciende el badge y no entra en Cumplimiento. Se lo ve y se lo edita en
+ * «Cargar», que es su único lugar.
+ */
+export function esPlantilla(item: ItemAgenda): boolean {
+  return !!item.plantilla
+}
+
 export function vaEl(item: ItemAgenda, fecha: FechaIso): boolean {
-  return item.activo && aplicaEn(item.regla, fecha)
+  return item.activo && !esPlantilla(item) && aplicaEn(item.regla, fecha)
 }
 
 /** El tilde de este ítem en este día, o `null` si nadie lo marcó. La ausencia ES "no está hecho". */
@@ -179,7 +188,7 @@ export function ultimaOcurrencia(item: ItemAgenda, hasta: FechaIso): FechaIso | 
  * 3. **Un ítem apagado no arrastra.** Apagarlo dice "ya no va", y lo que ya no va no se debe.
  */
 export function ocurrenciaAbierta(item: ItemAgenda, hechos: Hecho[], hasta: FechaIso): FechaIso | null {
-  if (!item.arrastra || !item.activo) return null
+  if (!item.arrastra || !item.activo || esPlantilla(item)) return null
   const corte = ultimoTilde(hechos, item.id, hasta)
   const piso = item.creado ? item.creado.slice(0, 10) : null
   let abierta: FechaIso | null = null
@@ -370,7 +379,7 @@ export function cumplimiento(
   // bucle habría que rehacer la racha entera en cada uno de los treinta días.
   const deArrastre = new Map<string, Set<FechaIso>>()
   for (const item of items) {
-    if (item.clase !== 'pendiente' || !item.arrastra) continue
+    if (item.clase !== 'pendiente' || !item.arrastra || esPlantilla(item)) continue
     deArrastre.set(item.id, fechasDeRachas(item, hechos, hasta, dias))
   }
 
@@ -378,7 +387,7 @@ export function cumplimiento(
   for (let i = 0; i < dias; i++) {
     const fecha = sumarDias(hasta, -i)
     for (const item of items) {
-      if (item.clase !== 'pendiente') continue
+      if (item.clase !== 'pendiente' || esPlantilla(item)) continue
       if (!aplicaEn(item.regla, fecha)) continue
       if (item.creado && fecha < item.creado.slice(0, 10)) continue
       const hecho = hechoDe(hechos, item.id, fecha)

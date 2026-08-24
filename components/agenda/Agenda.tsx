@@ -28,14 +28,14 @@ import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  Button, Card, EmptyState, Esqueleto, Notice, StatusPill, Tabs,
+  Button, Card, EmptyState, Esqueleto, Field, Input, Modal, Notice, StatusPill, Tabs,
   color, font, space, weight, useConfirmar, useToast, type TabItem,
 } from '@/components/ui'
 import {
   avisosDe, contarSinTildar, corre, hoyIso, pendientesDe, promosDe, rotuloBeneficio, rotuloRegla, vaEl,
   type ItemAgenda, type Promo,
 } from '@/lib/agenda'
-import { borrarItem, borrarPromo, guardarItem, guardarPromo } from '@/lib/agenda/cliente'
+import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } from '@/lib/agenda/cliente'
 import { tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
 import { useAgenda } from '@/store/useAgenda'
@@ -55,6 +55,7 @@ export function Agenda() {
   const [tab, setTab] = useState<'hoy' | 'mes' | 'carga' | 'cumplimiento'>('hoy')
   const [editando, setEditando] = useState<Promo | null>(null)
   const [editandoItem, setEditandoItem] = useState<ItemAgenda | null>(null)
+  const [sembrando, setSembrando] = useState(false)
 
   const hoy = hoyIso()
   const deHoy = promosDe(promos, hoy, { marca })
@@ -138,6 +139,12 @@ export function Agenda() {
             lee de una; un `<select>` escondido adentro de otro formulario, no.
           */}
           <Button variant="outline" onClick={() => setEditandoItem(itemVacio('aviso'))}>Nuevo aviso</Button>
+          {/*
+            🔑 **Es el disparador del ingreso, y existe porque hoy no existe ninguno**: dos manuales
+            se apoyan en «el aviso de ingreso de Administración» y ese aviso era una persona
+            acordándose. Siembra los pasos que estén cargados como molde, con la fecha del ingreso.
+          */}
+          <Button variant="outline" onClick={() => setSembrando(true)}>Ingresó mercadería</Button>
         </HeaderAcciones>
       )}
 
@@ -168,6 +175,14 @@ export function Agenda() {
         />
       )}
       {tab === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
+
+      {sembrando && (
+        <ModalIngreso
+          moldes={items.filter((i) => i.plantilla === 'ingreso').length}
+          onCerrar={() => setSembrando(false)}
+          onListo={async () => { setSembrando(false); await cargar() }}
+        />
+      )}
 
       {editando && (
         <ModalPromo inicial={editando} onCerrar={() => setEditando(null)} onGuardar={onGuardar} />
@@ -372,7 +387,11 @@ function FilaItem({
               cada uno es la fricción que hace que nadie revise.
             */}
             {i.clase === 'aviso' && <StatusPill tone="warning" label="sólo avisa" />}
-            {!i.activo ? (
+            {/* Un molde no corre ningún día: sin esta chapita se lee «hoy no toca» y parece una
+                rutina rota. Acá es donde se lo edita, así que acá es donde tiene que decirlo. */}
+            {i.plantilla === 'ingreso' ? (
+              <StatusPill tone="action" label="molde · lista de ingreso" />
+            ) : !i.activo ? (
               <StatusPill tone="neutral" label="apagado" />
             ) : vaEl(i, hoy) ? (
               <StatusPill tone="success" label={i.clase === 'aviso' ? 'se avisa hoy' : 'toca hoy'} />
@@ -381,7 +400,9 @@ function FilaItem({
             )}
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
-            {rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
+            {i.plantilla === 'ingreso'
+              ? `a los ${i.offsetDias ?? 0} días del ingreso`
+              : rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
             {/* La regla sola miente cuando el ítem arrastra: dice "los martes" y en la pantalla del
                 local aparece un jueves. Acá se lee de una, sin abrir el modal. */}
             {i.arrastra && ' · queda hasta que se tilde'}
@@ -426,4 +447,89 @@ function EstadoPromo({ promo, hoy }: { promo: Promo; hoy: string }) {
   return corre(promo, hoy)
     ? <StatusPill tone="success" label="corre hoy" />
     : <StatusPill tone="neutral" label="hoy no toca" />
+}
+
+/**
+ * «Ingresó mercadería» — el disparador de la lista corta.
+ *
+ * 🔴 **Existe porque hoy el disparador es una persona acordándose.** Dos manuales («Sesiones de
+ * fotos» y «Cómo se lanza un producto») se apoyan en un aviso de ingreso automático que nunca
+ * existió, y el flujo que dispara —nombre → descripción → precio → foto → publicación → pantallas—
+ * es, según el manual, **el que más se cae**: al no haber fecha grande, nadie lo mira.
+ *
+ * 🔑 **No inventa los renglones**: clona los ítems marcados como molde. Si no hay ninguno lo dice y
+ * no siembra nada — es preferible a crear seis pendientes de mentira que después nadie tilda.
+ */
+function ModalIngreso({ moldes, onCerrar, onListo }: {
+  moldes: number
+  onCerrar: () => void
+  onListo: () => Promise<void>
+}) {
+  const toast = useToast()
+  const [nombre, setNombre] = useState('')
+  const [fecha, setFecha] = useState(hoyIso())
+  const [guardando, setGuardando] = useState(false)
+
+  async function sembrar() {
+    if (!nombre.trim()) return
+    setGuardando(true)
+    try {
+      const r = await sembrarIngreso(nombre.trim(), fecha)
+      if (r.ya) toast.ok('Ese ingreso ya estaba cargado: no se duplicó nada.')
+      else toast.ok(`Listo: ${r.creados} ${r.creados === 1 ? 'pendiente' : 'pendientes'}.`)
+      await onListo()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo sembrar el ingreso.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Modal
+      abierto
+      onCerrar={onCerrar}
+      titulo="Ingresó mercadería"
+      pie={
+        <>
+          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+          <Button
+            variant="solid"
+            tone="brand"
+            loading={guardando}
+            disabled={!nombre.trim() || moldes === 0}
+            onClick={() => void sembrar()}
+          >
+            Cargar los pendientes
+          </Button>
+        </>
+      }
+    >
+      {moldes === 0 ? (
+        <Notice tone="warning">
+          <b>Todavía no hay ningún paso cargado como molde.</b> Se cargan una sola vez desde «Nuevo
+          pendiente», tildando «Es un paso de la lista de ingreso» y poniéndole la dueña y a los
+          cuántos días va. Después, cada ingreso los clona solo.
+        </Notice>
+      ) : (
+        <>
+          <Field
+            label="Qué entró"
+            hint="Va adelante del título de cada pendiente, así se agrupan de un vistazo. Ej: «IMP2», «Camperas invierno»."
+          >
+            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="IMP2" />
+          </Field>
+          <div style={{ marginTop: space[3] }}>
+            <Field label="Cuándo entró" hint="Desde acá se cuentan los días de cada paso." width={200}>
+              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            </Field>
+          </div>
+          <div style={{ marginTop: space[3], color: color.mut, fontSize: font.sm }}>
+            Se van a crear <b>{moldes}</b> {moldes === 1 ? 'pendiente' : 'pendientes'}, cada uno con
+            su dueña. El mismo ingreso cargado dos veces no los duplica.
+          </div>
+        </>
+      )}
+    </Modal>
+  )
 }

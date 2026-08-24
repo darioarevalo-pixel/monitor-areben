@@ -571,3 +571,33 @@ describe('entradasDelMes(): la grilla del mes muestra lo programado, no la deuda
     expect([...mapa.keys()]).toEqual(['2026-08-04', '2026-08-11', '2026-08-18', '2026-08-25'])
   })
 })
+
+/**
+ * **Los moldes del ingreso.** Un ítem marcado como plantilla no es una rutina: es el renglón que el
+ * disparador clona cuando entra mercadería. Lo que se fija acá es que **no corra**: un molde que
+ * aparece en Hoy es un pendiente que nadie va a poder tildar nunca —no es de ningún día— y que
+ * encima enciende el badge todos los días.
+ */
+describe('los moldes no corren: existen para clonarse', () => {
+  const molde = item({ id: 'm1', titulo: 'Cargar el nombre', plantilla: 'ingreso', offsetDias: 0, regla: { tipo: 'diaria' } })
+
+  it('no sale en Hoy ni enciende el badge, aunque su regla sea diaria', () => {
+    expect(pendientesDe([molde], [], '2026-08-11')).toEqual([])
+    expect(contarSinTildar([molde], [], '2026-08-11')).toBe(0)
+    expect(vaEl(molde, '2026-08-11')).toBe(false)
+  })
+
+  it('tampoco entra en el Mes ni en Cumplimiento', () => {
+    expect(entradasDelMes({ promos: [], items: [molde], hechos: [] }, 2026, 8).size).toBe(0)
+    expect(cumplimiento([molde], [], '2026-08-25', 30)).toEqual([])
+  })
+
+  it('un molde que además arrastra sigue sin arrastrar nada', () => {
+    const conArrastre = item({ ...molde, arrastra: true })
+    expect(pendientesDe([conArrastre], [], '2026-08-20')).toEqual([])
+  })
+
+  it('y un aviso marcado como molde tampoco avisa', () => {
+    expect(avisosDe([item({ ...molde, clase: 'aviso' })], '2026-08-11')).toEqual([])
+  })
+})

@@ -99,6 +99,39 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   se carga bajo `zattia` y Stunned se nombra en el título.
 - ⚠️ **Del día 29 en adelante no se puede pedir por número** (`MAX_DIA_MES = 28`): qué hacer en
   febrero es una decisión de la persona, no del motor. Para eso está `dia:'ultimo'`.
+- 🆕 🔑 **EL DISPARADOR DEL INGRESO: los renglones salen de MOLDES, no del código** (24-ago-2026).
+  Dos manuales («Sesiones de fotos» y «Cómo se lanza un producto») se apoyan en «el aviso de ingreso
+  de Administración, automático», y ese aviso **nunca existió**: lo disparaba una persona
+  acordándose, que es exactamente lo que los dos manuales prohíben.
+  - **Un molde es un ítem más** (`datos.plantilla = 'ingreso'`, con `datos.offsetDias`), cargado con
+    el mismo formulario de siempre. 🔑 **Y por eso no se escribieron los seis pasos en el repo**: la
+    dueña de cada uno cambia cuando cambia la gente, y así cambiarla es editar un ítem en vez de
+    hacer un deploy.
+  - 🔴 **Un molde NO corre**: lo filtra `vaEl()`, así que no sale en Hoy, no enciende el badge, no
+    entra en el Mes ni en Cumplimiento. Se lo ve —con su chapita— sólo en «Cargar», que es donde se
+    lo edita.
+  - **El clon nace `unica` con la fecha del ingreso + los días del molde, y ARRASTRA**: un paso del
+    lanzamiento que se evapora al día siguiente es justo el que «se cae porque nadie lo mira». ⛔ Y
+    no queda marcado como molde, o se clonaría a sí mismo en el próximo ingreso.
+  - **El agrupador es el prefijo del título** (`IMP2 · …`) y ⛔ no se escribe un motor hasta haberlo
+    usado dos veces (decisión de Bruno).
+  - **La idempotencia es por `datos.ingreso` = `fecha·nombre`**, no por «ya corrió hoy»: un webhook
+    que reintenta no puede dejar doce pendientes. ⛔ Y no se re-crea lo que alguien haya borrado a
+    mano: borrar un renglón es una decisión.
+- 🆕 🔴 **LA PUERTA DE INGRESOS CORRE ANTES DE `exigirUsuario`, y sin `INGRESO_SECRETO` está
+  CERRADA.** Del otro lado está `ingreso2.arebensrl.com`, que es de Gerardo y no tiene SSO, así que
+  la llave es un secreto compartido por header (`x-ingreso-secreto`). Tres cosas que no se tocan:
+  el secreto se compara **antes** de consultar la base; **una variable que falta contesta 503, no
+  «pase»** —ese es el modo de falla que convierte un olvido de configuración en un endpoint
+  público—; y lo único que la puerta puede hacer es **sembrar la plantilla**, con el nombre acotado
+  a 80 caracteres sin saltos de línea y un tope diario. El molde de todo esto es la cara pública de
+  `api/blob-upload.js`, donde el orden de los guards es la mitad de la seguridad.
+
+  ```bash
+  curl -X POST 'https://monitor.arebensrl.com/api/datos?recurso=agenda' \
+    -H 'Content-Type: application/json' -H 'x-ingreso-secreto: <el secreto>' \
+    -d '{"action":"ingreso-externo","nombre":"IMP2","fecha":"2026-08-24"}'
+  ```
 - 🔑 **Es el tablero donde van las rutinas repetitivas de marketing** — decisión de proceso de Bruno
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen
@@ -122,6 +155,11 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 - ▶️ **Cargar las 12 rutinas de marketing.** Las carga Bruno una vez, porque la rutina es la línea y
   la línea es de él. Desde el 23-ago-2026 van **con nombre** —`destino: {tipo:'personas'}`— y no con
   `roles:['marketing']`: si no, le salen a las tres.
+- 🆕 ▶️ **Poner `INGRESO_SECRETO` en Vercel** y pasarle a Gerardo el `curl` de arriba. Sin esa
+  variable la puerta contesta 503 a propósito; el alta a mano («Ingresó mercadería») anda igual.
+- 🆕 ▶️ **Cargar los pasos del ingreso como moldes** (nombre · descripción · precio · foto ·
+  publicación · pantallas, con su dueña y a los cuántos días). Hasta que estén, el botón lo avisa y
+  no siembra nada.
 - 🆕 ▶️ **Cargar las 4 reuniones semanales** (comunidad, pauta, diseño y la mensual del sector), que
   es para lo que se escribió el arrastre. La quincenal de diseño necesita la decisión de arriba.
 - ⚠️ **Las que ya estén cargadas por rol NO se migran solas.** Hay que abrirlas y reasignarlas: el
@@ -129,7 +167,9 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 
 ## Cómo se prueba
 
-`npx vitest run tests/agenda.test.ts`.
+`npx vitest run tests/agenda.test.ts` (el motor) y `tests/agenda-ingreso.test.ts` (el disparador y
+su puerta) — 🆕 **el segundo es el primero que prueba `api/_agenda.js`**, que hasta el 24-ago-2026
+no tenía ninguno.
 
 Lo que el test **no** ejerce y hay que caminar a mano:
 

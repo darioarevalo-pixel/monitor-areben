@@ -74,6 +74,17 @@ const CANALES = ['mostrador', 'web'];
 const MARCAS = ['bdi', 'zattia'];
 const CLASES = ['pendiente', 'aviso'];
 
+/**
+ * Los moldes que existen. Hoy uno solo: el ingreso de mercadería.
+ *
+ * Es una lista blanca y no un booleano porque el segundo disparador ya está a la vista (el cambio
+ * de condición comercial, en el manual 08), y un `esPlantilla: true` no sabría de cuál es.
+ */
+const PLANTILLAS = ['ingreso'];
+
+/** Cuántos ítems puede sembrar la puerta en un día. Es un techo de cordura, no una regla de uso. */
+const TOPE_SEMBRADO_DIARIO = 60;
+
 const CAMPOS =
   'id, banco, medio, beneficio, regla, desde, hasta, condiciones, pasos, canales, marcas, activa, autor, created_at';
 
@@ -139,7 +150,106 @@ function normalizarBeneficio(b) {
   return { error: 'Tipo de beneficio desconocido (descuento, reintegro o cuotas).' };
 }
 
+/**
+ * Sembrar la lista corta de un ingreso: **clona los moldes** con la fecha del ingreso.
+ *
+ * 🔑 **Los renglones no están escritos acá y eso es el diseño.** Salen de los ítems marcados como
+ * molde (`datos.plantilla === 'ingreso'`), que se cargan una vez con el mismo formulario de
+ * siempre: así la dueña de cada paso —que cambia cuando cambia la gente— se edita en una pantalla
+ * y no en un deploy. Sin moldes cargados no hace nada y lo dice, en vez de fingir que sembró.
+ *
+ * 🔑 **La idempotencia es por `clave`**, no por «ya corrió hoy»: el mismo ingreso avisado dos veces
+ * —el reintento de un webhook, alguien que aprieta dos veces— no puede duplicar seis pendientes.
+ *
+ * Devuelve `{ creados, ya }`: `ya` cuenta el caso en que estaba sembrado y no se tocó nada.
+ */
+async function sembrarIngreso(supabase, { nombre, fecha, autor }) {
+  const limpio = String(nombre || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
+  if (!limpio) return { error: 'Falta el nombre del ingreso.' };
+  if (!esFechaIso(fecha)) return { error: 'La fecha del ingreso tiene que ser YYYY-MM-DD.' };
+
+  const clave = `${fecha}·${limpio.toLowerCase()}`;
+
+  const { data: existentes, error: eLeer } = await supabase.from('agenda_items')
+    .select('id, clase, titulo, cuerpo, regla, destino, marcas, manual_id, datos, created_at');
+  if (eLeer) throw new Error(eLeer.message);
+  const todos = existentes || [];
+
+  // Ya sembrado: no se toca nada. ⛔ Ni siquiera se re-crea lo que alguien haya borrado a mano —
+  // borrar un renglón es una decisión, y volver a ponerlo sería discutírsela.
+  if (todos.some((i) => i.datos && i.datos.ingreso === clave)) return { creados: 0, ya: true };
+
+  const hoy = hoyUtc();
+  const sembradosHoy = todos.filter((i) => i.datos && i.datos.ingreso && String(i.created_at || '').slice(0, 10) === hoy).length;
+  if (sembradosHoy >= TOPE_SEMBRADO_DIARIO) return { error: 'Se llegó al tope de ingresos sembrados por hoy.' };
+
+  const moldes = todos
+    .filter((i) => i.datos && i.datos.plantilla === 'ingreso')
+    .sort((a, b) => (Number(a.datos.offsetDias) || 0) - (Number(b.datos.offsetDias) || 0) || String(a.titulo).localeCompare(String(b.titulo), 'es'));
+  if (!moldes.length) return { error: 'No hay ningún paso cargado como plantilla de ingreso.' };
+
+  const filas = moldes.map((m, n) => ({
+    id: `it${Date.now()}_${n}_${Math.random().toString(36).slice(2, 8)}`,
+    clase: m.clase,
+    // El prefijo es el agrupador, y es un prefijo a propósito: ⛔ no se escribe un motor de
+    // agrupación hasta haberlo usado dos veces (decisión de Bruno, 24-ago-2026).
+    titulo: `${limpio} · ${m.titulo}`,
+    cuerpo: m.cuerpo,
+    // Un día puntual: lo del ingreso pasa una vez. El molde dice a cuántos días de la llegada.
+    regla: { tipo: 'unica', fecha: masDias(fecha, Math.max(0, Number(m.datos.offsetDias) || 0)) },
+    destino: m.destino,
+    marcas: m.marcas || [],
+    manual_id: m.manual_id || null,
+    activo: true,
+    // 🔑 El clon **arrastra**: es la razón de ser de esto. Un paso del lanzamiento que se evapora al
+    // día siguiente es exactamente el que «se cae porque nadie lo mira». ⛔ Y NO es plantilla: si lo
+    // fuera, el molde se clonaría a sí mismo en el próximo ingreso.
+    datos: { arrastra: true, ingreso: clave },
+    autor,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from('agenda_items').insert(filas);
+  if (error) throw new Error(error.message);
+  return { creados: filas.length, ya: false };
+}
+
 export default async function handler(req, res) {
+  /*
+    🔴 **La puerta del ingreso, y va ANTES de exigir la sesión.** La llama el sistema de Ingresos
+    (`ingreso2.arebensrl.com`, que es de Gerardo y ni siquiera tiene SSO), así que del otro lado no
+    hay ninguna sesión del Monitor: la llave es un secreto compartido.
+
+    El orden de los guards es la mitad de la seguridad, como en `api/blob-upload.js`. Por eso:
+
+     - **Sin `INGRESO_SECRETO` configurado, la puerta está CERRADA**, no abierta. Una variable que
+       falta no puede significar «que pase cualquiera»: es el modo de falla que convierte un olvido
+       de configuración en un endpoint público.
+     - **Se compara antes de tocar la base.** Lo que no trae el secreto no cuesta una consulta.
+     - **Lo único que puede hacer es sembrar la plantilla.** No elige destinatarios, no escribe
+       texto libre más allá del nombre del ingreso (80 caracteres, sin saltos de línea) y tiene tope
+       diario. Una puerta abierta a internet que pudiera crear cualquier ítem de la Agenda le
+       escribe a todo el equipo.
+  */
+  if (req.method === 'POST' && String((req.body || {}).action || '') === 'ingreso-externo') {
+    const esperado = process.env.INGRESO_SECRETO || '';
+    const trajo = String(req.headers['x-ingreso-secreto'] || '');
+    if (!esperado) return res.status(503).json({ error: 'La puerta del ingreso no está configurada.' });
+    if (!trajo || trajo !== esperado) return res.status(401).json({ error: 'no autorizado' });
+
+    const cfgP = cfgMaestra();
+    if (!cfgP.url || !cfgP.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
+    const sb = createClient(cfgP.url, cfgP.key);
+    const b = req.body || {};
+    const r = await sembrarIngreso(sb, {
+      nombre: b.nombre,
+      fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
+      autor: 'Ingresos',
+    });
+    if (r.error) return res.status(400).json({ error: r.error });
+    return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
+  }
+
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
 
@@ -204,6 +314,9 @@ export default async function handler(req, res) {
         // Sigue apareciendo hasta que lo tilden. El arrastre lo resuelve `pendientesDe()` en el
         // cliente: acá viaja la bandera y nada más.
         arrastra: !!(i.datos && i.datos.arrastra),
+        // El molde del disparador del ingreso. Un molde no corre ningún día: lo filtra `vaEl`.
+        plantilla: (i.datos && i.datos.plantilla) || null,
+        offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
         autor: i.autor,
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
@@ -395,6 +508,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    /**
+     * El alta a mano: «entró mercadería». Siembra los mismos moldes que la puerta.
+     *
+     * Pide `agenda.cargar` como todo lo que escribe en la Agenda: sembrar seis pendientes con dueña
+     * es cargar rutinas, no tildarlas.
+     */
+    if (action === 'ingreso') {
+      // El permiso ya lo pidió el guard de arriba («de acá para abajo, todo pide el sub»): repetirlo
+      // acá sería la segunda implementación de la misma regla, que es justo lo que este repo no hace.
+      const r = await sembrarIngreso(supabase, {
+        nombre: b.nombre,
+        fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
+        autor: yo,
+      });
+      if (r.error) return res.status(400).json({ error: r.error });
+      return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
+    }
+
     if (action === 'guardar-item') {
       const it = b.item || {};
       const id = String(it.id || '');
@@ -425,7 +556,11 @@ export default async function handler(req, res) {
         activo: it.activo === undefined ? true : !!it.activo,
         // ⚠️ Se escribe entera, no se mezcla con lo que había: el formulario manda el ítem completo,
         // así que un merge escondería un campo que la pantalla creyó haber borrado.
-        datos: { arrastra: String(it.clase) === 'pendiente' && !!it.arrastra },
+        datos: {
+          arrastra: String(it.clase) === 'pendiente' && !!it.arrastra,
+          ...(PLANTILLAS.includes(String(it.plantilla)) ? { plantilla: String(it.plantilla) } : {}),
+          ...(Number.isFinite(Number(it.offsetDias)) ? { offsetDias: Math.max(0, Math.min(90, Math.trunc(Number(it.offsetDias)))) } : {}),
+        },
         autor: yo,
         updated_at: new Date().toISOString(),
       };

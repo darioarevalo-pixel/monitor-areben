@@ -89,6 +89,8 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
     // Apagado por defecto: casi toda rutina es del día y se vence con el día. Lo que arrastra es la
     // excepción —las reuniones—, y una excepción no se pone de default.
     arrastra: false,
+    plantilla: null,
+    offsetDias: null,
     autor: null,
     creado: null,
     paraMi: true,
@@ -410,6 +412,46 @@ export function ModalItem({
             />
           )}
         </div>
+
+        {/*
+          El molde del ingreso. Un ítem marcado así **no corre ningún día**: existe para que el
+          disparador lo clone con la fecha del ingreso, y por eso al prenderlo la regla deja de
+          importar (el clon nace como «un día puntual»).
+
+          🔑 Está acá y no en una pantalla propia porque es exactamente el mismo formulario: el
+          molde lleva título, dueña, marca y manual, que es todo lo que un paso necesita.
+        */}
+        {it.clase === 'pendiente' && (
+          <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+            <Tilde
+              puesto={it.plantilla === 'ingreso'}
+              label={it.plantilla === 'ingreso'
+                ? 'Es un paso de la lista de ingreso (no corre solo)'
+                : 'Es una rutina normal'}
+              onToggle={() => set('plantilla', it.plantilla === 'ingreso' ? null : 'ingreso')}
+            />
+            {it.plantilla === 'ingreso' && (
+              <div style={{ marginTop: space[2], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <Field
+                  label="A los cuántos días"
+                  hint="0 = el día que entra la mercadería. El nombre y el precio traban todo lo demás; la publicación puede ir a los dos."
+                  width={200}
+                >
+                  <Input
+                    type="number"
+                    min={0}
+                    max={90}
+                    value={it.offsetDias == null ? '' : String(it.offsetDias)}
+                    onChange={(e) => set('offsetDias', e.target.value === '' ? null : Number(e.target.value))}
+                  />
+                </Field>
+                <div style={{ color: color.mut, fontSize: font.sm, paddingBottom: space[2] }}>
+                  La regla de arriba no se usa en los moldes: el clon nace con la fecha del ingreso.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   )

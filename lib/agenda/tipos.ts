@@ -114,6 +114,25 @@ export type ItemAgenda = {
    * exactamente lo que enseña a ignorarlas.
    */
   arrastra: boolean
+  /**
+   * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` es el único hoy.
+   *
+   * 🔑 **Un molde no corre.** No sale en Hoy, no enciende el badge, no entra en el Mes ni en
+   * Cumplimiento: existe para que el disparador lo clone con la fecha del ingreso. Vive en la
+   * pestaña «Cargar», que es donde se lo edita — y ahí sí se ve, con su chapita.
+   *
+   * 🔑 **Por qué un molde y no seis renglones escritos en el código**: la dueña de cada paso cambia
+   * (la gente entra y sale), y con el molde cambiarla es editar un ítem con el formulario que ya
+   * existe. Escritos en el repo, cada cambio de dueña sería un deploy.
+   */
+  plantilla?: string | null
+  /**
+   * A cuántos días del ingreso cae este paso. Sólo para los moldes.
+   *
+   * El nombre y el precio van el día 0 —traban todo lo demás—, la publicación a los dos días. Es la
+   * columna «cuándo» del manual, escrita en un número para que el disparador pueda ponerle fecha.
+   */
+  offsetDias?: number | null
   autor: string | null
   creado: string | null
   /**

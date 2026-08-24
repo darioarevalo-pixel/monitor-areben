@@ -48,6 +48,32 @@ async function postear(body: Record<string, unknown>, siFalla: string): Promise<
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || siFalla)
 }
 
+/**
+ * El mismo POST, pero devolviendo lo que contestó el servidor. Es aparte de `postear` para no
+ * cambiarle el tipo a los seis verbos que no miran la respuesta.
+ */
+async function postearConRespuesta(body: Record<string, unknown>, siFalla: string): Promise<Record<string, unknown>> {
+  const r = await apiFetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recurso: 'agenda', ...body }),
+  })
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || siFalla)
+  return d as Record<string, unknown>
+}
+
+/**
+ * «Entró mercadería»: siembra la lista corta del ingreso clonando los moldes.
+ *
+ * Devuelve cuántos renglones creó, o `ya: true` si ese ingreso ya estaba sembrado — el mismo aviso
+ * dos veces no puede dejar doce pendientes.
+ */
+export async function sembrarIngreso(nombre: string, fecha: FechaIso): Promise<{ creados: number; ya: boolean }> {
+  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha }, 'No se pudo sembrar el ingreso.')
+  return { creados: Number(d?.creados) || 0, ya: !!d?.ya }
+}
+
 export function guardarPromo(promo: Promo): Promise<void> {
   return postear({ action: 'guardar-promo', promo }, 'No se pudo guardar la promoción.')
 }
