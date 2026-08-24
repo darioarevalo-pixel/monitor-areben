@@ -96,6 +96,7 @@
     const firma = r.tel || 'x:' + r.motivo
     if (firma === ultimo) return
     ultimo = firma
+    console.log('[BDI] pagina: chat abierto →', r.tel || '(sin número: ' + r.motivo + ')')
     // Viaja por la ventana porque este mundo no tiene acceso a las APIs de la extensión. Lo levanta
     // `content.js`, que sí las tiene.
     window.postMessage({ fuente: FUENTE, tel: r.tel, motivo: r.motivo }, '*')

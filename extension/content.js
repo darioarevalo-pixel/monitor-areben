@@ -13,6 +13,7 @@ window.addEventListener('message', (e) => {
   // cosa embebida en la página podría decirle al panel que abra la ficha de otra persona.
   if (e.source !== window || !e.data || e.data.fuente !== FUENTE) return
   ultimo = { tel: e.data.tel || null, motivo: e.data.motivo || '' }
+  console.log('[BDI] content: recibí de la página', ultimo.tel || '(sin número)', '· se lo mando al panel')
   // Si el panel está cerrado no hay quien reciba esto, y Chrome lo reporta como error. No es un
   // error: es el estado normal mientras nadie lo abrió.
   chrome.runtime.sendMessage({ tipo: 'chat', ...ultimo }).catch(() => {})
@@ -21,5 +22,8 @@ window.addEventListener('message', (e) => {
 // El panel pregunta al abrirse: puede abrirse con un chat ya abierto desde hace rato, o sea sin
 // ningún cambio por delante que lo avise.
 chrome.runtime.onMessage.addListener((msg, _remitente, responder) => {
-  if (msg && msg.tipo === 'que-chat') responder(ultimo)
+  if (msg && msg.tipo === 'que-chat') {
+    console.log('[BDI] content: me preguntaron y contesto', ultimo.tel || '(sin número: ' + ultimo.motivo + ')')
+    responder(ultimo)
+  }
 })
