@@ -39,7 +39,7 @@ async function ajustar(tabId, url) {
   if (tabId == null) return
   try {
     await chrome.sidePanel.setOptions(esWA(url) ? { tabId, path: PANEL, enabled: true } : { tabId, enabled: false })
-  } catch (e) {
+  } catch (_e) {
     // La pestaña se cerró entre el evento y esta llamada. Pasa y no es un error.
   }
 }
@@ -53,11 +53,11 @@ async function ajustar(tabId, url) {
 async function repasarTodas() {
   try {
     await chrome.sidePanel.setOptions({ enabled: false }) // el global, apagado
-  } catch (e) {}
+  } catch (_e) {}
   try {
     const tabs = await chrome.tabs.query({})
     await Promise.all(tabs.map((t) => ajustar(t.id, t.url)))
-  } catch (e) {}
+  } catch (_e) {}
 }
 
 // Al instalar y al despertar: las pestañas que ya estaban abiertas nunca dispararon un evento.
@@ -69,7 +69,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId)
     await ajustar(tabId, tab.url)
-  } catch (e) {}
+  } catch (_e) {}
 })
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
@@ -85,5 +85,5 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   try {
     const [tab] = await chrome.tabs.query({ active: true, windowId })
     if (tab) await ajustar(tab.id, tab.url)
-  } catch (e) {}
+  } catch (_e) {}
 })

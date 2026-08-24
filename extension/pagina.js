@@ -57,6 +57,13 @@
 
 (() => {
   const FUENTE = 'bdi-crm-panel'
+  // Un vistazo cada 400 ms. Es una lectura de memoria —no toca la red ni la pantalla— y al no
+  // depender del HTML no hace falta escuchar cambios del documento, que era lo caro y lo frágil.
+  //
+  // Estuvo en 1000 y se nota: es el retraso entre abrir un chat a mano y ver su ficha. Cuando el
+  // chat se abre desde la lista del día no importa —la ficha ya se pidió por id, sin esperar esto—,
+  // pero abriendo conversaciones a mano es todo lo que hay.
+  const CADA = 400
 
   /** El teléfono del chat abierto, o null. Nunca tira: si algo cambió, devuelve null. */
   function telefonoDelChatAbierto() {
@@ -96,7 +103,6 @@
     const firma = r.tel || 'x:' + r.motivo
     if (firma === ultimo) return
     ultimo = firma
-    console.log('[BDI] pagina: chat abierto →', r.tel || '(sin número: ' + r.motivo + ')')
     // Viaja por la ventana porque este mundo no tiene acceso a las APIs de la extensión. Lo levanta
     // `content.js`, que sí las tiene.
     window.postMessage({ fuente: FUENTE, tel: r.tel, motivo: r.motivo }, '*')

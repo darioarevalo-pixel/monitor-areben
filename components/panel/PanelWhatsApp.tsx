@@ -163,7 +163,6 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
       const d = e.data
       if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'chat') return
       const nuevo = String(d.tel || '') || null
-      console.log('[BDI] panel: me avisaron el chat', nuevo)
       setTelChat(nuevo)
       // El chat lo abrió WhatsApp; si es el que se pidió desde la lista, la ficha ya está puesta.
       setPedido((p) => (p && normalizeArgPhone(p.tel) === normalizeArgPhone(nuevo || '') ? p : null))
@@ -182,7 +181,6 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
      * se abrió este agujero.
      */
     try {
-      console.log('[BDI] panel: listo, pregunto en qué chat estamos (embebido:', window.parent !== window, ')')
       window.parent.postMessage({ fuente: 'bdi-crm-panel', tipo: 'que-chat' }, '*')
     } catch {}
     return () => window.removeEventListener('message', alMensaje)

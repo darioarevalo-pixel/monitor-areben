@@ -50,11 +50,6 @@ const config = [
       // `--max-warnings 0` se pone rojo apenas alguien pide cobertura una vez.
       'coverage/**',
       'next-env.d.ts',
-      // `extension/` es la extensión de Chrome del panel de WhatsApp: no es parte de la app de
-      // Next ni se despliega con ella (se carga a mano en el navegador). Corre en el entorno de
-      // las extensiones —`chrome.*`, `document` de otra página— que no es ninguno de los dos que
-      // esta config sabe describir.
-      'extension/**',
     ],
   },
   ...(Array.isArray(next) ? next : [next]),
@@ -104,6 +99,37 @@ const config = [
         setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly',
         clearInterval: 'readonly', __dirname: 'readonly', crypto: 'readonly',
         structuredClone: 'readonly', Blob: 'readonly', FormData: 'readonly',
+      },
+    },
+    rules: {
+      'no-undef': 'error',
+    },
+  },
+  {
+    // 🔴 **La extensión de Chrome, y entró el 23-ago-2026 pagando el mismo peaje que `lib/`.**
+    //
+    // Estaba en `ignores` con un argumento razonable —no es parte de la app de Next, no se
+    // despliega con ella, corre en un entorno que esta config no describía—. El resultado fue el
+    // de siempre: `pagina.js` quedó **sin ninguna red**. Un borrado se llevó puesta la constante
+    // `CADA` del `setInterval` de al lado, `node --check` pasó (es sintaxis válida) y el script
+    // murió en su última línea con un `ReferenceError`. Síntoma: la extensión arrancaba, no
+    // detectaba ningún chat, y la ficha del cliente no aparecía más — tres versiones buscándolo.
+    //
+    // `no-undef` lo cazaba en un segundo. Es exactamente el caso que este archivo ya documenta
+    // dos veces más arriba; describir el entorno cuesta diez renglones y no describirlo costó una
+    // tarde.
+    files: ['extension/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      // Scripts clásicos, no módulos: el manifest los inyecta con `<script>`, no con `import`.
+      sourceType: 'script',
+      globals: {
+        // Las dos mitades del mundo de una extensión: la página donde se inyecta…
+        window: 'readonly', document: 'readonly', console: 'readonly', location: 'readonly',
+        setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly',
+        clearInterval: 'readonly', performance: 'readonly', MessageEvent: 'readonly',
+        // …y las APIs de la extensión, que es lo único que `content.js` puede tocar de más.
+        chrome: 'readonly',
       },
     },
     rules: {
