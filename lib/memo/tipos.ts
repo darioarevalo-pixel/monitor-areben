@@ -29,6 +29,8 @@ import {
   ticketPromedio as ticketPromedioJs,
 } from './foto.core.js'
 
+import type { RenglonClavado, ResumenClavados } from '../clavados/tipos'
+
 /** Las tres líneas del negocio. Stunned no es una marca: es una línea de Zattia. */
 export type Linea = 'bdi' | 'zattia' | 'stunned'
 
@@ -55,6 +57,12 @@ export type Foto = {
     /** Los nombres crudos de Gestión Nube que cayeron en cada canal. Sin esto, `otro` no se audita. */
     nombres: Record<string, string[]>
   }
+  /**
+   * El recupero de los clavados. **Opcional a propósito**, igual que `canal`: las semanas cerradas
+   * antes de que existiera el bloque no lo tienen y no hay verbo de reabrir. `undefined` significa
+   * «no se midió esa semana».
+   */
+  clavados?: { renglones: RenglonClavado[]; resumen: ResumenClavados }
   pauta: { actual: Record<string, PautaLinea>; previa: Record<string, PautaLinea> }
   techos: Record<string, number>
   /** Fuentes que no se pudieron leer. Se muestran: media foto sin aviso se lee como foto entera. */

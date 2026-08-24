@@ -11,6 +11,8 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { CeldaEnSale } from '@/components/liquidacion/CeldaEnSale'
 import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
+import { MarcaClavado } from '@/components/clavados/MarcaClavado'
+import { useClavados, type Clavados } from '@/components/clavados/useClavados'
 import { useVendidoSale } from '@/components/liquidacion/useVendidoSale'
 import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
 import { ofertaHoy, type EnSale } from '@/lib/liquidacion/vendido'
@@ -111,6 +113,8 @@ export function ProductosTable() {
    * «Agregar productos» de la campaña, que navega con `?liq=<id>`.
    */
   const camp = useCampaniaAbierta(marca)
+  // Los clavados de la marca: un pedido para toda la tabla, no uno por fila.
+  const clavados = useClavados(marca)
 
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
@@ -491,6 +495,7 @@ export function ProductosTable() {
                         marcado={outletSel.has(p.id)}
                         yaEsta={camp.liq ? camp.yaEstan[p.id] : undefined}
                         onMarcar={(on) => toggleOutlet(p.id, on)}
+                        clavados={clavados}
                         expandido={expandido === p.id}
                         onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
                         onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
@@ -521,6 +526,7 @@ function FilaProducto({
   marcado,
   yaEsta,
   onMarcar,
+  clavados,
   expandido,
   onToggle,
   onFoto,
@@ -534,6 +540,8 @@ function FilaProducto({
   ofertaHoy: boolean
   datos: DatosETL
   marcado: boolean
+  /** Los clavados de la marca. La fila sólo pregunta si el suyo está adentro. */
+  clavados: Clavados
   /** En qué estado está este producto dentro de la campaña activa, si está. */
   yaEsta?: EstadoItem
   onMarcar: (on: boolean) => void
@@ -620,6 +628,9 @@ function FilaProducto({
               {ROTULO_EN_CAMPANIA[yaEsta]}
             </div>
           )}
+          {/* «Clavado»: ya se le bajó el precio y lo que se mide de acá en adelante es cuánta plata
+              vuelve. Vive en components/clavados/ — esta fila es del repo compartido. */}
+          <MarcaClavado p={p} clavados={clavados} />
         </Td>
         <Td tall style={{ color: color.mut }}>
           {p.lastSale || <span style={{ color: color.mut2 }}>Sin ventas</span>}

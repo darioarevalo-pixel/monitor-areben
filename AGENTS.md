@@ -160,6 +160,13 @@ ya tienen ficha:
 el área de cada una, y lo que no se adivina (el portal del cadete, las once vistas de Meta, las tres
 secciones sin `store`). El menú y los permisos se definen a mano en `lib/nav.datos.ts`.
 
+## Clavados
+
+**⛔ Antes de tocar `lib/clavados/`, `api/_clavados.js`, `components/clavados/` o el bloque de
+clavados del memo, leer `docs/clavados.md`.** No lo calcula el sistema: es una decisión que se marca
+en la fila del producto. 🔴 **El recupero de una semana sale de la venta de esa semana, nunca del
+estado de hoy**, y **sin costo no hay porcentaje** (un costo 0 lo haría dar 100 %).
+
 ## Líneas de negocio
 
 **⛔ Antes de tocar `lib/lineas.core.js`, `lib/etl/linea.ts`, `lib/margenes.ts`, `lib/tienda.core.js`

@@ -97,6 +97,10 @@ const PUERTAS = [
   // exactamente lo que el ETL no baja al navegador, así que acá el 403 no lo respalda ningún
   // recorte del bundle.
   { archivo: '_ventas-diarias', llave: 'ventas-mensuales', que: 'la venta diaria en plata' },
+  // Nació con gate (24-ago-2026). Entra igual por la misma mitad que `_pedidos-clientes`: su tabla
+  // vive en la base de CADA marca, así que la `store` del request elige a qué base se pega — y acá
+  // además el GET cruza contra `productos.unit_cost`, que es plata.
+  { archivo: '_clavados', llave: 'productos', que: 'los clavados de la marca' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */
@@ -176,6 +180,7 @@ const CLAVADA_A_ZATTIA = [
   { archivo: '_atencion', llave: 'atencion', que: 'la bandeja de atención de la otra marca' },
   { archivo: '_meta-funnel', llave: 'meta-ads', que: 'la pauta de la otra marca' },
   { archivo: '_pedidos-clientes', llave: 'pedidos-clientes', que: 'los faltantes de la otra marca' },
+  { archivo: '_clavados', llave: 'productos', que: 'los clavados de la otra marca' },
   { archivo: '_ventas-diarias', llave: 'ventas-mensuales', que: 'la venta diaria de la otra marca' },
 ] as const
 

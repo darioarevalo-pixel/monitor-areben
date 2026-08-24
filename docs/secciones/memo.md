@@ -1,7 +1,8 @@
 # Memo semanal — ficha de sección
 
 Sección `memo`, área Dirección, **sólo admins**. Es el depósito semanal de lo que pasó: los números
-que arma el monitor (lunes a domingo) —venta **por línea**, venta **por canal** y pauta—, el avance
+que arma el monitor (lunes a domingo) —venta **por línea**, venta **por canal**, el recupero de los
+**clavados** y la pauta—, el avance
 de los ocho sistemas y el acta que escriben Bruno y Darío. No reemplazó ninguna pantalla — nació el 15-ago-2026 como la otra mitad de Gerencial.
 
 🔑 **Gerencial es "qué decidir ahora": señales vivas, sin memoria y sin corte. Éste es "qué pasó",
@@ -27,6 +28,10 @@ el motivo duro está escrito arriba del `create table`.
   Recalcularlas del lado del servidor sería una segunda implementación de la misma pregunta.
 - **La venta sale de la consulta del servidor que usa Liquidación** (`lib/liquidacion/ventas.ts`),
   acotada por rango — **no del ETL**, y el porqué está comentado arriba de `ventaPorLinea`.
+- **Los clavados son de `lib/clavados/` y se marcan en Productos** — ⛔ leer `docs/clavados.md`. El
+  memo **lee** la selección; no es donde se llena. 🔴 El recupero de cada semana sale de la venta de
+  esa semana y **no** del estado de hoy: el stock llega a 0 justo en la semana en que el recupero se
+  completó, y medirlo por estado borraría del informe al producto que mejor salió.
 - **El canal lo clasifica `lib/liquidacion/canal.core.js`**, la misma implementación que usan
   `api/_norte.js` y la pestaña «Día a día» de Ventas mensuales — y **`CANALES_MINORISTA` vive ahí**,
   no acá. 🔴 Esa lista ya había nacido **dos veces** (declarada y sin usar en `resultado.ts`, y de
@@ -157,7 +162,8 @@ veces se olvidó — que es lo que hace que la decisión no sea una corazonada.
 - ▶️ **El cron de los avances** (arriba): decidido el enfoque, sin escribir.
 - 🔴 **Las semanas cerradas antes del 24-ago-2026 no tienen el corte por canal** y **no hay verbo de
   reabrir**. `Foto.canal` es opcional a propósito y la pantalla dice **«no se midió esa semana»**.
-  ⛔ Rellenarlas con ceros da un número plausible y falso para siempre.
+  ⛔ Rellenarlas con ceros da un número plausible y falso para siempre. Lo mismo vale para
+  `Foto.clavados`, que nació el mismo día.
 - ⚠️ **El costo por compra de Stunned sale de UNA sola observación** ($9.886 con 1 compra). Es un
   número real, no una medición.
 

@@ -48,6 +48,7 @@ import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { claveValida, cerrada, esFecha, hoyAr, idSemana, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
 import { fusionarPorCanal, fusionarVenta, pautaPorLinea, ventaPorCanal, ventaPorLinea } from '../lib/memo/foto.core.js';
+import { renglonClavado, resumirClavados, ventaPorProducto } from '../lib/clavados/core.js';
 
 /** La base maestra: el memo no tiene marca. Mismo criterio que novedades. */
 function clienteMaestro() {
@@ -169,6 +170,16 @@ async function calcularFoto(sb, sem) {
   const canalActual = fusionarPorCanal(porCanal(bdi, sem.ini, sem.fin), porCanal(zattia, sem.ini, sem.fin));
   const canalPrevio = fusionarPorCanal(porCanal(bdi, prev.ini, prev.fin), porCanal(zattia, prev.ini, prev.fin));
 
+  // Los clavados de las dos marcas. Reusan las ventas de 14 días que ya están en memoria para la
+  // semana; el mes va acotado a los productos marcados.
+  const [clavBdi, clavZat] = await Promise.all([
+    clavadosDe('bdi', sem, bdi.ventas, bdi.detalles),
+    clavadosDe('zattia', sem, zattia.ventas, zattia.detalles),
+  ]);
+  if (clavBdi.error) problemas.push(clavBdi.error);
+  if (clavZat.error) problemas.push(clavZat.error);
+  const clavRenglones = [...clavBdi.renglones, ...clavZat.renglones];
+
   const cols = 'fecha, linea, spend, compras, revenue';
   const { filas, error } = await leerSnapshot(sb, { cols, desde: prev.ini, hasta: sem.fin, nivel: 'campania' });
   if (error) problemas.push(`Meta Ads: ${error}`);
@@ -186,10 +197,96 @@ async function calcularFoto(sb, sem) {
     // `nombres` es sólo de la semana actual: los de la previa no se muestran en ningún lado y
     // guardar un dato que nadie lee lo vuelve verdad para siempre en el jsonb del cierre.
     canal: { actual: canalActual.canales, previa: canalPrevio.canales, nombres: canalActual.nombres },
+    // 🔴 Opcional igual que `canal`: las semanas cerradas antes de que existiera este bloque no lo
+    // tienen y no hay verbo de reabrir. La pantalla dice «no se midió esa semana», ⛔ nunca cero.
+    clavados: { renglones: clavRenglones, resumen: resumirClavados(clavRenglones) },
     pauta: { actual: pautaActual, previa: pautaPrevia },
     techos: await techosDe(sb),
     problemas,
   };
+}
+
+
+/**
+ * El recupero de los clavados de UNA marca: cuánta plata volvió de los productos a los que ya se
+ * les bajó el precio, en la semana y en el mes.
+ *
+ * 🔴 🔑 **Los dos números salen del RANGO de fechas, ⛔ nunca del estado de hoy.** Un clavado que se
+ * agotó el martes tiene que aparecer en la foto de esa semana con toda su plata: es justo el que
+ * mejor salió, y medirlo por su estado lo borraría del informe que existe para mostrarlo. Por eso
+ * `visto_en_cero` no entra acá — sólo dice desde cuándo lo venimos viendo en cero.
+ *
+ * ⚠️ **La plata de acá es MERCADERÍA**, no «lo facturado»: el descuento y el envío son de la venta
+ * entera y no se pueden repartir entre los productos de un ticket sin inventar un criterio. Es el
+ * mismo motivo por el que la tabla por línea dice «Mercadería», y la pantalla lo llama igual.
+ *
+ * ⚠️ **`ventasSemana` y `detallesSemana` son los que YA se bajaron** para la foto (14 días): la
+ * semana no cuesta un viaje nuevo. El mes sí, y va acotado a los productos marcados.
+ */
+async function clavadosDe(store, sem, ventasSemana, detallesSemana) {
+  const sb = clienteDe(store);
+  if (!sb) return { error: `Faltan credenciales de ${store}.`, renglones: [] };
+
+  try {
+    const { data, error } = await sb.from('clavados').select('*').eq('store', store);
+    if (error) throw new Error(error.message);
+    const filas = data || [];
+    if (!filas.length) return { renglones: [] };
+
+    const ids = [...new Set(filas.map((f) => Number(f.producto_id)).filter((n) => Number.isInteger(n) && n > 0))];
+
+    // Stock y costo del espejo. El stock se SUMA por producto: `inventario` está partido por
+    // variante y por depósito, y leer una fila daría el stock de un talle.
+    const stock = new Map();
+    const costo = new Map();
+    for (let i = 0; i < ids.length; i += 200) {
+      const grupo = ids.slice(i, i + 200);
+      const inv = await leerTodo(sb, 'inventario', (q) =>
+        q.select('product_id, available_quantity').in('product_id', grupo).order('product_id'));
+      for (const f of inv) {
+        const k = String(f.product_id);
+        stock.set(k, (stock.get(k) || 0) + (Number(f.available_quantity) || 0));
+      }
+      const prods = await leerTodo(sb, 'productos', (q) =>
+        q.select('id, unit_cost').in('id', grupo).order('id'));
+      // ⛔ `?? null`, ⛔ nunca `|| 0`: un costo que el sync no pudo leer llega como `null` hasta el
+      // núcleo, que es el que sabe que eso es «no medible».
+      for (const p of prods) costo.set(String(p.id), p.unit_cost ?? null);
+    }
+
+    const porSemana = ventaPorProducto({ ventas: ventasSemana, detalles: detallesSemana, desde: sem.ini, hasta: sem.fin });
+
+    // El mes que CONTIENE el final de la semana. Una semana a caballo de dos meses cae en el mes en
+    // que terminó, que es el mismo criterio con el que se cierra.
+    const mesIni = `${sem.fin.slice(0, 7)}-01`;
+    const ventasMes = await leerTodo(sb, 'ventas', (q) =>
+      q.select('id, date_sale').gte('date_sale', mesIni).lte('date_sale', sem.fin).order('id'));
+    let porMes = new Map();
+    if (ventasMes.length) {
+      const min = ventasMes[0].id;
+      const max = ventasMes[ventasMes.length - 1].id;
+      // Acotado a los productos marcados: es un puñado, y bajar el mes entero de `venta_detalles`
+      // para leer cinco filas sería pagar el payload de la sección más cara del monitor.
+      const detallesMes = await leerTodo(sb, 'venta_detalles', (q) =>
+        q.select('sale_id, product_id, quantity, total').in('product_id', ids)
+          .gte('sale_id', min).lte('sale_id', max).order('sale_id'));
+      porMes = ventaPorProducto({ ventas: ventasMes, detalles: detallesMes, desde: mesIni, hasta: sem.fin });
+    }
+
+    const renglones = filas.map((f) => {
+      const pid = String(f.producto_id);
+      const base = renglonClavado({
+        clavado: f, venta: porSemana.get(pid), stock: stock.get(pid) ?? 0,
+        costo: costo.has(pid) ? costo.get(pid) : null,
+      });
+      const mes = porMes.get(pid);
+      return { ...base, store, mes: mes ? mes.mercaderia : 0, mesIni };
+    });
+
+    return { renglones };
+  } catch (e) {
+    return { error: `clavados de ${store}: ${e.message}`, renglones: [] };
+  }
 }
 
 /** ¿Ese id es una semana de verdad? Un id que no es un lunes crearía semanas fantasma. */

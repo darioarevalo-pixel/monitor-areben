@@ -210,12 +210,16 @@ describe('los documentos que AGENTS.md sacó afuera siguen mandados a leer', () 
   const parrafos = fueraDelIndice.split(/\n\s*\n/)
   const nombrados = [...new Set([...fueraDelIndice.matchAll(/docs\/[\w.-]+\.md/g)].map((m) => m[0]))]
 
-  it('AGENTS.md nombra el mapa, el sync y las líneas', () => {
-    // 🔑 La lista va clavada a propósito: es lo que hace que el CUARTO documento sea una decisión y
-    // no un archivo que aparece. `docs/lineas.md` entró el 22-ago-2026 con el selector de línea —
+  it('AGENTS.md nombra el mapa, el sync, las líneas y los clavados', () => {
+    // 🔑 La lista va clavada a propósito: es lo que hace que el documento SIGUIENTE sea una decisión
+    // y no un archivo que aparece. `docs/lineas.md` entró el 22-ago-2026 con el selector de línea —
     // Stunned no es una `Marca` y el corte por línea es opt-in por pantalla, dos cosas que no se
     // deducen leyendo el código y que valen en cada sesión que toca una pantalla de plata.
-    expect(nombrados.sort()).toEqual(['docs/lineas.md', RUTA_MAPA, 'docs/sync-ventas.md'])
+    // `docs/clavados.md` entró el 24-ago-2026 y es el cuarto: son TRES piezas en tres lugares —la
+    // tabla, el chip en la fila de Productos y el bloque del memo— y quien toque una sin saber de
+    // las otras rompe el número sin que falle nada. Además lleva la regla que no se deduce leyendo:
+    // el recupero de una semana sale de la venta de esa semana, nunca del estado de hoy.
+    expect(nombrados.sort()).toEqual(['docs/clavados.md', 'docs/lineas.md', RUTA_MAPA, 'docs/sync-ventas.md'])
   })
 
   it('apuntan a archivos que existen', () => {

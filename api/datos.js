@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -36,6 +36,7 @@ import pedidosClientes from './_pedidos-clientes.js';
 import norte from './_norte.js';
 import mktVentas from './_mkt-ventas.js';
 import ventasDiarias from './_ventas-diarias.js';
+import clavados from './_clavados.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -75,6 +76,7 @@ const RECURSOS = {
   // Existe como puerta porque **el ETL no baja la plata** y no se lo va a hacer bajar: el
   // razonamiento está en `lib/liquidacion/ventas.ts`. Sólo GET, no escribe nada.
   'ventas-diarias': ventasDiarias,
+  clavados,
   liquidacion,
   atencion,
   // `sistema` y `agenda` son los que no tienen marca: novedades, manuales y las promociones

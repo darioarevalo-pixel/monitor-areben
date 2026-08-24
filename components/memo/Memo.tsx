@@ -16,6 +16,7 @@ import {
   type Bloque, type Campo, type Foto, type Linea, type Semana, type Senales, type VentaLinea,
 } from '@/lib/memo/tipos'
 import { ETIQUETA_CANAL, type Canal } from '@/lib/liquidacion/resultado'
+import { resumirClavados as resumirClav } from '@/lib/clavados/tipos'
 import { resumirSenales, semanaHoy, useAutoguardado, useMemoSemanal } from './useMemoSemanal'
 
 /**
@@ -180,6 +181,8 @@ function BloqueFoto({ foto, calculando, congelada }: { foto: Foto | null; calcul
       <TablaVenta foto={foto} lineas={lineas} />
       <div style={{ height: space[5] }} />
       <TablaCanal foto={foto} />
+      <div style={{ height: space[5] }} />
+      <TablaClavados foto={foto} />
       <div style={{ height: space[5] }} />
       <TablaPauta foto={foto} lineas={lineas} />
 
@@ -381,6 +384,140 @@ function TarjetaCanal({
       </div>
       {detalle && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1] }}>{detalle}</div>}
     </Card>
+  )
+}
+
+/**
+ * Recupero de los clavados: cuánta plata vuelve de lo que ya se remarcó.
+ *
+ * 🔴 **Un clavado agotado sigue en la tabla y con toda su plata.** Es el que mejor salió, y medirlo
+ * por su estado de hoy lo borraría justo del informe que existe para mostrarlo. La plata sale de la
+ * venta de la semana, no de si hoy queda stock.
+ *
+ * 🔴 **Sin costo NO hay porcentaje, y se dice cuántos son.** Un recupero sin denominador no dice si
+ * vamos bien o mal, y un costo 0 lo haría dar 100 %. Hoy en BDI son los 450 productos.
+ */
+function TablaClavados({ foto }: { foto: Foto }) {
+  const titulo = (
+    <div style={{ fontSize: font.md, fontWeight: 600, color: color.ink2, marginBottom: space[2] }}>
+      Recupero de los clavados
+    </div>
+  )
+
+  if (!foto.clavados) {
+    return (
+      <>
+        {titulo}
+        <Notice tone="neutral">
+          Esta semana se cerró antes de que el memo midiera los clavados, y una semana cerrada no se
+          recalcula. <strong>No se midió</strong> — no es cero.
+        </Notice>
+      </>
+    )
+  }
+
+  const { renglones } = foto.clavados
+  if (!renglones.length) {
+    return (
+      <>
+        {titulo}
+        <EmptyState
+          icon="🏷️"
+          title="Todavía no hay ningún producto marcado como clavado"
+          hint="Se marcan desde la fila del producto, en Productos: es donde se mira uno para decidir bajarle el precio."
+          dashed
+        />
+      </>
+    )
+  }
+
+  // ⛔ El resumen se recalcula del núcleo y no se lee del jsonb: una semana cerrada vieja podría
+  // traer un resumen con otra forma, y la regla de qué entra al total vive en un solo lugar.
+  const r = resumirClav(renglones)
+  const mesIni = renglones.find((x) => x.mesIni)?.mesIni
+
+  return (
+    <>
+      {titulo}
+      <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
+        <Card padding={3} style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <div style={{ fontSize: font.sm, color: color.mut2 }}>Recuperado esta semana</div>
+          <div style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{formatMoney(r.recuperado)}</div>
+          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1] }}>
+            {r.productos} producto(s) marcado(s) · {r.agotados} ya agotado(s)
+          </div>
+        </Card>
+        <Card padding={3} style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <div style={{ fontSize: font.sm, color: color.mut2 }}>Capital que sigue parado</div>
+          <div style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{formatMoney(r.parado)}</div>
+          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1] }}>
+            {r.pct === null
+              ? 'sin costo no hay porcentaje'
+              : `${r.pct.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% recuperado`}
+            {r.sinCosto > 0 && ` · ${r.sinCosto} sin costo, afuera de esta cuenta`}
+          </div>
+        </Card>
+      </div>
+
+      {/* 🔴 El aviso va SIEMPRE que haya alguno sin costo, y no escondido en un tooltip: el total de
+          al lado se lee como si cubriera todo, y hoy en BDI no cubre nada. */}
+      {r.sinCosto > 0 && (
+        <Notice tone="warning" icon="⚠" style={{ marginBottom: space[3] }}>
+          {r.sinCosto} de {r.productos} no tienen costo cargado en el espejo, así que su capital
+          parado <strong>no se puede medir</strong> y queda afuera del total y del porcentaje. No es
+          cero: es que no se sabe.
+        </Notice>
+      )}
+
+      <TableWrap>
+        <THead>
+          <Tr>
+            <Th>Producto</Th>
+            <Th align="right">Recuperado (semana)</Th>
+            <Th align="right">En el mes</Th>
+            <Th align="right">Unidades</Th>
+            <Th align="right">Stock</Th>
+            <Th align="right">Sigue parado</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {renglones.map((c) => (
+            <Tr key={`${c.store}:${c.producto_id}:${c.marcado_en}`}>
+              <Td>
+                {c.nombre || `#${c.producto_id}`}
+                <div style={{ fontSize: font.xs, color: color.mut2 }}>
+                  {c.sku ? `${c.sku} · ` : ''}{c.store === 'bdi' ? 'BDI' : 'Zattia'}
+                  {c.agotado ? ' · agotado' : ''}
+                </div>
+              </Td>
+              <Td align="right">{formatMoney(c.recuperado)}</Td>
+              <Td align="right">{formatMoney(c.mes ?? 0)}</Td>
+              <Td align="right">{c.unidades.toLocaleString('es-AR')}</Td>
+              <Td align="right">{c.stock.toLocaleString('es-AR')}</Td>
+              <Td align="right">
+                {c.parado === null ? (
+                  <span style={{ color: color.mut2 }} title="El espejo no tiene el costo de este producto: sin costo, el capital parado no se puede calcular. Un cero acá diría que ya se recuperó todo.">
+                    sin costo
+                  </span>
+                ) : (
+                  formatMoney(c.parado)
+                )}
+              </Td>
+            </Tr>
+          ))}
+        </TBody>
+      </TableWrap>
+
+      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[3], lineHeight: 1.6 }}>
+        Un clavado <strong>sigue siendo clavado aunque venda</strong>: ya se le bajó el precio, y lo
+        que se mide es cuánta plata vuelve. El que se agotó igual cuenta acá con todo lo que facturó
+        esta semana — el número sale de la venta, no de cómo está hoy.
+        <br />
+        Es <strong>mercadería</strong>: el descuento y el envío son de la venta entera y no se pueden
+        repartir entre los productos de un ticket.
+        {mesIni && <> El mes va desde el {mesIni.slice(8)} de {mesIni.slice(5, 7)}.</>}
+      </div>
+    </>
   )
 }
 
