@@ -257,3 +257,102 @@ Lo que los tests **no** cubren y hay que ejercer a mano:
   número. Es como se verificó el arreglo del 23-ago.
 - El guardado. Se verifica como todo lo que toca el KV del CRM: **el diff contra el dump tiene que
   ser exactamente el cliente tocado** (`scripts/crm-kv.mjs --dump`).
+
+## ▶️ Lo que sigue — acordado con Bruno el 23-ago-2026 (de noche)
+
+Todo esto salió de mirar los datos reales, no de suponer. Los números están para que la próxima
+sesión no tenga que volver a medirlos.
+
+### 1. Las notas: hoy son TRES cosas en un solo renglón
+
+Medido sobre las **375 notas** cargadas en **251 clientes**:
+
+| Tipo | Ejemplos reales | Cuánto | Cuánto dura |
+|---|---|---|---|
+| **Lo que hice** | "le mandé para que entre a la comunidad" (98), "le avisé de los ingresos" (58) | ~70% | horas |
+| **Lo que hay que hacer** | "🔄 preguntar por reposición" (23), "controlar recepción" (11) | ~15% | hasta que se cumple |
+| **Cómo es el cliente** | "tiene 4 locales en Santiago", "es dueña de @apple_cellfree…", "la próxima enviar por otro transporte que no sea Correo", "el número de siempre no funciona" | poquísimas | **no vence nunca** |
+
+🔴 **El problema es estructural, no de redacción**: los tres van al mismo campo y sólo se ve el
+último. Como el tipo 1 es el más frecuente, **tapa a los otros dos** — una nota de junio que dice
+"tiene 4 locales" queda enterrada bajo cinco "le mandé los ingresos" y no se ve nunca más.
+
+🔑 **Qué función tiene que tener la nota**: decir, al abrir el chat, **qué tener en cuenta con esta
+persona y qué quedó pendiente**. No ser el diario de lo que se hizo — eso el sistema ya lo sabe
+solo (la fecha de contacto).
+
+**Lo acordado — cuatro lugares, todos en `crm:seg:bdi`:**
+
+1. **📦 Despacho** (siempre visible). Cómo se le manda: transporte, sucursal, a nombre de quién.
+   ⚠️ **Ese dato hoy no existe en ningún lado**: la sección Envíos es del local (Tienda Nube +
+   cadete), la logística mayorista se acuerda por WhatsApp y se pierde ahí. Va como **texto libre**
+   —se carga más rápido y aguanta cualquier caso raro—; si algún día hay que filtrar por
+   transporte, ahí se separa en campos.
+2. **📌 Para tener en cuenta** (siempre visible). El tipo 3 de arriba. No vence.
+3. **⏳ Pendiente para la próxima** (una línea, con tilde de "listo"). El tipo 2. **Desaparece al
+   cumplirse**, que es lo que hoy no pasa.
+4. **Notas** (la bitácora de siempre) + **6 botones de nota rápida**, sacados de lo que Bruno
+   escribe de verdad: comunidad · ingresos · preguntar por reposición · ya compró, consultar si
+   llegó bien · controlar recepción · en cierre/cotizando. Cubren **más de la mitad** de las 375.
+   ▶️ Falta definir: ¿un toque guarda, o escribe en el cuadro para poder agregarle algo?
+
+⚠️ **Cada campo nuevo se paga en cada clic**: `crm:seg:bdi` pesa **133 KB** y se reescribe entero
+en cada guardado. Con esto queda en ~200 KB, que es cómodo — pero es la razón para no ir sumando
+campos "por si acaso". "Cómo paga" quedó propuesto y **sin decidir**, justamente por eso.
+
+### 2. Datos del cliente que se cargan mientras se conversa
+
+- **Ciudad**: de los **744 clientes del CRM, 626 NO la tienen** (118 sí). El "sin ciudad" del panel
+  no es un bug: Gestión Nube no la tiene. Se carga del lado del monitor, como ya se hace con los
+  teléfonos (`crm:tel`), sin tocar GN.
+- **Instagram**: el campo ya existe (`pagina`) y **91 de 771** lo tienen. Falta poder verlo y
+  escribirlo **desde el panel**, que es donde uno se entera.
+- **Lo que falta, marcado**: un "falta ciudad" apagado y clickeable que deja escribir ahí mismo.
+  Suave, no alarma. Es lo que convierte la ficha en algo que se completa solo con el uso.
+
+### 3. Métricas de Instagram (seguidores) — POSIBLE, SIN VERIFICAR
+
+Meta tiene *Business Discovery*: dado un `@usuario`, devuelve seguidores, publicaciones, biografía
+y foto. El monitor **ya habla con esa API** (`lib/meta-ads/graph.core.js`, v25.0, `META_ADS_TOKEN`).
+
+⛔ **No probado, y hay dos riesgos reales**: funciona **sólo con cuentas de empresa/creador** (una
+cuenta personal no devuelve nada), y hay que confirmar que ese token tenga los permisos de
+Instagram, que son otros que los de publicidad. **`META_ADS_TOKEN` no está en el `.env` local**, así
+que la prueba tiene que correr en el servidor.
+
+▶️ **Probar ANTES de construir nada alrededor**: si la mitad de los clientes tiene cuenta personal,
+no vale la pena.
+
+### 4. El panel se ve plano — y hay algo peor que plano
+
+🔴 **Los botones no parecen botones.** "Contestó / No contestó / Pidió precio / No le interesa" se
+leen como texto suelto, y es la acción principal del panel. Idem "En 3 días / En 1 semana".
+
+Lo acordado: botones con borde y color según el sentido; los números (pedidos/total/último) como
+números y no como etiquetas; **cortar la lista de "lo último que llevó" a 3 renglones con un "ver
+los 8"** (hoy un cliente grande se come media pantalla y empuja abajo lo que se usa); secciones con
+cuerpo en vez de rayitas.
+
+### 5. "¿Cómo te fue?": de cuatro botones a dos
+
+🔑 **No hace falta marcar a los que NO contestaron**: el sistema ya sabe a cuántos se contactó ese
+día (`ultimo_contacto`), así que **"no contestó" es una resta**. De los cuatro botones:
+
+- **"Me respondió"** — se queda. Es el único dato que no se puede deducir de ninguna tabla.
+- **"No le interesa"** → se queda pero como lo que es: **"Este no va"**, que lo marca frío y lo
+  manda a la tanda de recuperación. No es una estadística: **cambia lo que el sistema hace**.
+- **"Pidió precio"** y **"No contestó"** — se van.
+
+⚠️ **Y el orden importa**: hasta que exista el embudo en Métricas, ese botón es un clic al vacío.
+Bruno lo dijo con todas las letras — *"no entiendo qué impacto tendría"*— y tiene razón. **Primero
+la pantalla que muestra el número, después el botón.**
+
+▶️ **Idea a explorar**: "contestó" se puede deducir **sin preguntar** — la extensión puede ver si
+entró un mensaje después del nuestro, sin leer el contenido de nada. Depende de las mismas puertas
+internas de WhatsApp que ya nos costaron una tarde, así que va después del botón manual, no antes.
+
+### 6. Ajustar con el uso real (no decidir antes de usarlo)
+
+Los tres números los eligió el que escribió esto, no el que vende: **25 en la lista del día**, el
+orden (calientes arriba, y dentro de cada grupo el más atrasado primero) y **qué se ve de cada
+uno** (nombre · hace cuánto vence · última nota). Se revisan después de un día de uso real.
