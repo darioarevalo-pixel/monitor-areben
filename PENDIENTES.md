@@ -126,12 +126,24 @@ Los 3 hallazgos del día por mail o al buzón, a la mañana, después de la foto
 Glosario mínimo y consistente en pantalla: conjunto → «celda/público», `estado_real` → «¿está
 entregando?», etc. Barato y se nota enseguida.
 
-## 4. Lo que hay que preguntar antes de construir
+## 4. ✅ CONTESTADO: se construye PARA BRUNO
 
-🔴 **¿Quién tiene que poder usar el módulo?** Las 37 acciones son de una sola persona. No es el
-mismo trabajo «que Bruno decida más rápido» que «que Darío o el equipo puedan operar la pauta sin
-Bruno»: la segunda pide mucha más traducción y mucha menos confianza en el criterio de quien mira.
-**Sin esa respuesta, P1 y P5 se pueden hacer para el usuario equivocado.**
+**Lo contestó Bruno el 25-ago-2026: «todo para Bruno».** El módulo se construye para que **una sola
+persona experta decida más rápido**, ⛔ no para que el equipo pueda operar la pauta sin ella.
+
+🔑 **Y eso reordena la lista de arriba**, porque lo escaso pasa a ser el TIEMPO de esa persona, no
+su comprensión:
+
+- **P2 (motor de reglas) y P3 (el parte como pantalla) SUBEN a lo primero.** «Qué hago hoy» es
+  exactamente lo que le falta a alguien que ya sabe leer los números.
+- **P4 (que salga a buscarte) sube también**: si hay un solo operador, lo que no le llega no existe.
+- **P1 se angosta**: de las dos mitades —«qué hace» y «qué ESCRIBE»— la que sigue valiendo es la
+  segunda. No hace falta enseñarle qué es un conjunto; hace falta que antes de apretar sepa **qué
+  se toca, dónde, y si se puede volver atrás**. Es lo que pidió textual.
+- **P5 (traducir el idioma) BAJA casi a cero.** Era para un lector no experto y no lo hay.
+
+⚠️ Si algún día entra otra persona a operar la pauta, **P5 vuelve y P1 se ensancha**. Anotarlo acá
+antes de rehacerlo.
 
 ## 5. Fricción concreta ya detectada (chica, y se arregla sola)
 
