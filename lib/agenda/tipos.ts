@@ -115,6 +115,24 @@ export type ItemAgenda = {
    */
   arrastra: boolean
   /**
+   * Cuántos días después de la ocurrencia sigue apareciendo, si arrastra. `null` = **sin tope**.
+   *
+   * 🔑 **No todo lo que arrastra arrastra igual.** Una reunión que no se hizo es la misma reunión
+   * dentro de tres semanas: tiene que quedar hasta que alguien la tilde, y `null` dice eso. Una
+   * pasada rutinaria no — Bruno, 24-ago, cargando las rutinas de Administración: *«Tienda Nube sí
+   * tiene arrastre, pero hasta 2 días; ya el tercero no arrastra.»* Sin tope, el renglón de la
+   * pasada del lunes que nadie tildó se queda para siempre, y **un contador que no baja se deja de
+   * mirar en una semana** — el mismo argumento por el que los avisos no encienden el badge.
+   *
+   * ⚠️ Se cuenta desde la ocurrencia, en días corridos: `2` puesto en algo que cae lunes y jueves
+   * quiere decir que el lunes se debe lunes, martes y miércoles, y el jueves ya no.
+   *
+   * Se resuelve en `ocurrenciaAbierta()` y **tiene que cortar igual en `fechasDeRachas()`**, o
+   * Cumplimiento contaría como una sola racha lo que en Hoy ya son dos renglones distintos. Es el
+   * mismo par de siempre: los dos lados o ninguno. Ignorado si `arrastra` es `false`.
+   */
+  arrastraDias?: number | null
+  /**
    * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` es el único hoy.
    *
    * 🔑 **Un molde no corre.** No sale en Hoy, no enciende el badge, no entra en el Mes ni en
@@ -185,19 +203,46 @@ export type Hecho = {
 export type DatosAgenda = {
   promos: Promo[]
   items: ItemAgenda[]
-  /** Sólo los últimos días: es lo que mira Cumplimiento. Ver `DIAS_CUMPLIMIENTO`. */
+  /**
+   * El acuse, en **dos tramos**: los últimos `DIAS_CUMPLIMIENTO` días de todos los ítems —lo que
+   * mira Cumplimiento— más la cola vieja, hasta `DIAS_ARRASTRE`, **sólo de los que arrastran**.
+   * Los dos vienen mezclados en una lista: quien la lee no tiene que saber de dónde salió cada uno.
+   */
   hechos: Hecho[]
   puede: { cargar: boolean }
 }
 
 /**
- * Cuántos días hacia atrás viaja el acuse en el GET.
+ * Cuántos días hacia atrás viaja el acuse **de todos los ítems** en el GET.
  *
  * No es un límite de producto: es que la pregunta real de gerencia es "¿esta semana se hizo?", y
  * traerse la historia entera para contestarla crecería sin techo. Un mes cubre la ventana en que
  * todavía se puede hacer algo con la respuesta.
  */
 export const DIAS_CUMPLIMIENTO = 30
+
+/**
+ * Cuántos días hacia atrás puede mirar el arrastre — el techo de lo que un pendiente puede deber.
+ *
+ * 🔑 **Es más grande que `DIAS_CUMPLIMIENTO` y por eso son dos constantes y no una.** Estuvieron
+ * pegadas hasta el 25-ago y el empate no era una decisión: el arrastre miraba treinta días porque
+ * era lo que el GET mandaba. Eso alcanza para una reunión semanal y **no** alcanza para un ingreso
+ * de mercadería, que —Bruno, 24-ago— *«a veces más rápido, a veces más lento, no podemos decir la
+ * cantidad de días»*: un paso que quede sin tildar más de un mes se evaporaba **callado**, que es
+ * exactamente lo que el disparador vino a evitar.
+ *
+ * 🔴 **Sigue siendo el techo del dato, no una preferencia**: más atrás de lo que el GET manda, el
+ * navegador no puede saber si la ocurrencia se tildó, y un rojo sobre una ausencia de datos es un
+ * rojo que no se puede apagar. Por eso subirlo acá **obliga** a subir el tramo profundo del GET
+ * (`api/_agenda.js`), y por eso ese tramo se acota a los ítems que arrastran: medido el 25-ago, el
+ * acuse entero de los últimos 30 días eran 6 filas (0,8 KB de un GET de 28,5 KB), pero con la
+ * agenda cargada como está —32 pendientes vivos, 6 ocurrencias por día— traerse 120 días de
+ * **todos** serían ~97 KB, y eso antes del primer clon de ingreso. Acotado a los que arrastran, la
+ * cola crece con la cantidad de ítems que arrastran, no con el uso diario.
+ *
+ * Cuatro meses: es lo más largo que alguien puede mirar un renglón viejo y todavía reconocerlo.
+ */
+export const DIAS_ARRASTRE = 120
 
 export const CLASES: { key: ClaseItem; label: string }[] = [
   { key: 'pendiente', label: 'Pide que lo tilden' },

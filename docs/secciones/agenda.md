@@ -56,8 +56,40 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   - ⛔ **El Mes no arrastra** (`pendientesDe(..., { arrastre: false })`): muestra lo programado, no la
     deuda. En Cumplimiento sí, pero **una fila por racha**: cuatro semanas debiéndose son un
     incumplimiento, no cuatro.
-  - 🔴 **El techo es `DIAS_CUMPLIMIENTO = 30`**: los tildes más viejos no viajan al navegador, así que
-    más atrás no se puede afirmar que algo esté sin hacer. El arrastre se corta ahí.
+  - 🔴 **El techo es el dato, no una preferencia**: los tildes que no viajan al navegador no se
+    pueden mirar, así que el arrastre se corta donde termina el acuse que manda el GET. 🆕 Desde el
+    25-ago **son dos ventanas y no una** (`lib/agenda/tipos.ts`): `DIAS_CUMPLIMIENTO = 30` para el
+    informe, y `DIAS_ARRASTRE = 120` para el arrastre. Estuvieron pegadas hasta ese día y el empate
+    no era una decisión: el arrastre miraba 30 días porque era lo que el GET mandaba, y con eso **un
+    paso de un ingreso lento se evaporaba callado el día 31** — Bruno, 24-ago: *«a veces más rápido,
+    a veces más lento, no podemos decir la cantidad de días»*.
+    - 🔑 **El GET manda el acuse en DOS tramos** (`api/_agenda.js`): los últimos 30 días de **todos**
+      los ítems, más la cola vieja hasta los 120 **sólo de los que arrastran** (y ⛔ no de los
+      moldes, que no corren ningún día). Acotarla es lo que la hace crecer con la cantidad de ítems
+      que arrastran y no con el uso diario — medido el 25-ago: 32 pendientes vivos generan 6
+      ocurrencias por día, así que 120 días de todos serían ~544 tildes (~73 KB) contra un GET que
+      hoy pesa 28,5 KB entero. Los dos tramos no se solapan (`.lt` / `.gte`), así que se concatenan.
+    - 🔴 **Los dos lados o ninguno**: subir `DIAS_ARRASTRE` sin subir el tramo profundo del GET hace
+      que el navegador vea una ocurrencia vieja sin tilde y la llame pendiente **cuando el tilde
+      existe y no viajó**. Es el peor rojo: el que no se puede apagar.
+  - 🆕 🔑 **No todo lo que arrastra arrastra igual: `arrastraDias`** (25-ago-2026, pedido de Bruno del
+    24-ago: *«Tienda Nube sí tiene arrastre, pero hasta 2 días; ya el tercero no arrastra»*). Es un
+    campo del ítem —viaja en `datos`, **sin migración**—: `null` o vacío es **sin tope**, que es lo
+    que tienen las cuatro reuniones y los clones del ingreso; un número lo baja solo pasados esos
+    días desde el día en que caía. Sin él, el renglón de una pasada que nadie tildó se queda para
+    siempre, y **un contador que no baja se deja de mirar en una semana**.
+    - Se resuelve en `ocurrenciaAbierta()` y **corta igual en `fechasDeRachas()`**: con tope de 2,
+      tildar el jueves ⛔ **no** cierra el lunes —desde el jueves ya no se puede tildar el lunes—, así
+      que contarlos como una racha escondería la pasada del lunes. Pasado el tope la racha se cierra
+      sin cumplir y la siguiente ocurrencia empieza una nueva. ⛔ `aplicaEn()` y `ocurrencias()` no
+      se tocaron.
+    - ⚠️ **Lo vencido igual entra en Cumplimiento**: en Hoy el renglón ya no se ve, pero no haberse
+      hecho sigue siendo no haberse hecho. Es el mismo criterio del pendiente que no arrastra.
+    - 🔴 **`0` es un tope de verdad** («se vence con el día») y ⛔ no «sin tope». En el servidor lo
+      cuida `esTope()`: `Number(null)` es **0**, no `NaN`, así que el `Number.isFinite(Number(x))` que
+      alcanza para `offsetDias` acá convertiría «sin tope» en «vence hoy».
+    - **El molde se lo pasa al clon**: el formulario del molde es el mismo que el de una rutina, así
+      que un campo que se puede cargar ahí tiene que viajar, o la pantalla afirma algo que no es.
   - ⚠️ **Quincenal no existe** entre las cinco reglas. Lo más cercano sin motor nuevo son dos ítems
     `mensual` (día 1 y día 15).
 - 🔴 **Los permisos ya están medidos y NO hay nada que destrabar** (padrón leído el 23-ago-2026):
@@ -243,6 +275,11 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   lo tildes dos semanas y mirá que aparezca **una sola vez** (no dos), que diga de cuándo viene, que
   el badge del menú cuente lo mismo, y que **un solo tilde lo apague**. Después mirá Cumplimiento:
   tiene que haber **una** fila, no una por semana.
+- 🆕 **El tope del arrastre**: al mismo pendiente ponele «Hasta cuántos días después» en **2** y mirá
+  que en el listado de «Cargar» el renglón deje de decir *«queda hasta que se tilde»* y diga *«queda
+  hasta 2 días después»*. Después dejalo pasar: al tercer día el renglón **y el badge** tienen que
+  bajar solos, y en Cumplimiento esa ocurrencia tiene que seguir apareciendo sin hacer. ⚠️ El campo
+  **sólo se dibuja si el ítem arrastra**: apagando el arrastre desaparece, que es lo correcto.
 - 🔴 **El destino por persona no se puede caminar con un admin**, que es el caso que se agregó para
   arreglar: entrá con un usuario `prueba-*` del padrón, mirá que la rutina dirigida a él **sale en
   «Hoy» y prende el badge**, y con otro que no sale ni prende. Y con el admin, que el tilde ajeno

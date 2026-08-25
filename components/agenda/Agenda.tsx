@@ -412,8 +412,11 @@ function FilaItem({
                 }`
               : rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
             {/* La regla sola miente cuando el ítem arrastra: dice "los martes" y en la pantalla del
-                local aparece un jueves. Acá se lee de una, sin abrir el modal. */}
-            {i.arrastra && ' · queda hasta que se tilde'}
+                local aparece un jueves. Acá se lee de una, sin abrir el modal — y el tope va en el
+                mismo renglón: «queda hasta que se tilde» a secas sería falso en las que sí vencen. */}
+            {i.arrastra && (i.arrastraDias == null
+              ? ' · queda hasta que se tilde'
+              : ` · queda hasta ${i.arrastraDias} ${i.arrastraDias === 1 ? 'día' : 'días'} después`)}
             {i.marcas.length > 0 && ` · sólo ${i.marcas.join(' y ')}`}
             {i.manualId && ' · con manual'}
           </div>

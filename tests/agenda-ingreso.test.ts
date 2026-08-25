@@ -28,10 +28,14 @@ type Fila = Record<string, unknown>
 
 type Mundo = {
   items: Fila[]
+  /** Todos los tildes que hay en la base, sin ventana: la ventana la tiene que poner el handler. */
+  hechos: Fila[]
   insertados: Fila[]
   tocoLaBase: boolean
   hayPerfil: boolean
   puedeCargar: boolean
+  /** Los filtros con que el handler pidió `agenda_hechos`, una entrada por consulta. */
+  consultasHechos: { gte?: string; lt?: string; in?: string[] }[]
 }
 
 let mundo: Mundo
@@ -51,12 +55,15 @@ const molde = (over: Partial<Fila> = {}): Fila => ({
 })
 
 function nuevoMundo(): Mundo {
-  return { items: [molde()], insertados: [], tocoLaBase: false, hayPerfil: true, puedeCargar: true }
+  return { items: [molde()], hechos: [], insertados: [], tocoLaBase: false, hayPerfil: true, puedeCargar: true, consultasHechos: [] }
 }
 
 function fakeSupabase() {
   const desde = (tabla: string) => {
-    const ctx: { tabla: string; insert: Fila[] | null } = { tabla, insert: null }
+    // ⚠️ Los filtros se **guardan**, no se ignoran: la mitad de lo que hay que probar del GET del
+    // acuse es con qué ventana se pidió cada tramo, y un fake que devuelve todo igual daría verde
+    // con el handler pidiendo cualquier cosa.
+    const ctx: { tabla: string; insert: Fila[] | null; gte?: string; lt?: string; in?: string[] } = { tabla, insert: null }
     const resolver = async () => {
       mundo.tocoLaBase = true
       if (ctx.insert) {
@@ -64,13 +71,26 @@ function fakeSupabase() {
         return { data: null, error: null }
       }
       if (ctx.tabla === 'agenda_items') return { data: mundo.items, error: null }
+      if (ctx.tabla === 'agenda_hechos') {
+        mundo.consultasHechos.push({ gte: ctx.gte, lt: ctx.lt, in: ctx.in })
+        const data = mundo.hechos.filter((h) => {
+          const f = String(h.fecha)
+          if (ctx.gte && f < ctx.gte) return false
+          if (ctx.lt && f >= ctx.lt) return false
+          if (ctx.in && !ctx.in.includes(String(h.item_id))) return false
+          return true
+        })
+        return { data, error: null }
+      }
       return { data: [], error: null }
     }
     const api: Record<string, unknown> = {
       select: () => api,
       eq: () => api,
       order: () => api,
-      gte: () => api,
+      gte: (_c: string, v: string) => { ctx.gte = v; return api },
+      lt: (_c: string, v: string) => { ctx.lt = v; return api },
+      in: (_c: string, v: string[]) => { ctx.in = v; return api },
       insert: (filas: Fila[]) => { ctx.insert = filas; return api },
       upsert: (filas: Fila[]) => { ctx.insert = filas; return api },
       maybeSingle: () => resolver(),
@@ -120,6 +140,36 @@ const desdeAfuera = (body: Record<string, unknown> = {}, secreto = 'el-secreto')
 
 const desdeAdentro = (body: Record<string, unknown> = {}) =>
   llamar({ action: 'ingreso', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', marca: 'bdi', ...body })
+
+async function leerAgenda() {
+  const mod = await import('@/api/_agenda.js')
+  const res = resFalso()
+  await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
+    { method: 'GET', headers: {}, query: {}, body: {} }, res,
+  )
+  return res
+}
+
+/** Un pendiente cualquiera de la Agenda — ⛔ no un molde: los moldes no arrastran nada. */
+const rutina = (over: Partial<Fila> = {}): Fila => ({
+  id: 'r1',
+  clase: 'pendiente',
+  titulo: 'Semanal de comunidad',
+  cuerpo: null,
+  regla: { tipo: 'semanal', dias: [2] },
+  destino: { tipo: 'todos' },
+  marcas: [],
+  manual_id: null,
+  activo: true,
+  datos: { arrastra: true },
+  autor: 'Bruno',
+  created_at: '2026-01-05T10:00:00.000Z',
+  ...over,
+})
+
+const tilde = (over: Partial<Fila> = {}): Fila => ({
+  item_id: 'r1', fecha: '2026-08-20', usuario: 'Bruno', nota: null, hecho_at: null, ...over,
+})
 
 beforeEach(() => {
   vi.resetModules()
@@ -180,6 +230,28 @@ describe('sembrar: los renglones salen de los moldes, no del código', () => {
     expect(datos.arrastra).toBe(true)
     expect(datos.plantilla).toBeUndefined()
     expect(datos.ingreso).toBe('2026-08-24·imp2')
+  })
+
+  it('el clon arrastra SIN TOPE: lo que tarda un ingreso no se puede decir de antemano', async () => {
+    await desdeAfuera()
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBeUndefined()
+  })
+
+  it('...salvo que el molde le ponga uno: el campo del formulario tiene que viajar', async () => {
+    mundo.items = [molde({ datos: { plantilla: 'ingreso', offsetDias: 0, arrastraDias: 3 } })]
+    await desdeAfuera()
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBe(3)
+  })
+
+  it('🔴 un tope en 0 en el molde es CERO y no "sin tope": `Number(null)` también da 0', async () => {
+    mundo.items = [molde({ datos: { plantilla: 'ingreso', offsetDias: 0, arrastraDias: 0 } })]
+    await desdeAfuera()
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBe(0)
+    // Y el molde sin el campo, o con `null`, sigue siendo sin tope.
+    mundo.insertados = []
+    mundo.items = [molde({ id: 'm9', datos: { plantilla: 'ingreso', offsetDias: 0, arrastraDias: null } })]
+    await desdeAfuera({ nombre: 'IMP3' })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBeUndefined()
   })
 
   it('cada molde cae a los días que dice, y salen en ese orden', async () => {
@@ -542,5 +614,83 @@ describe('cargar un molde: en qué puertas corre se guarda con el ítem', () => 
     )
     const items = res.body?.items as Record<string, unknown>[]
     expect(items[0].puertas).toEqual([])
+  })
+})
+
+/**
+ * **El acuse del GET, en dos tramos** (25-ago-2026).
+ *
+ * Es la otra mitad del arrastre, y la que se rompe callada: `ocurrenciaAbierta()` mira hacia atrás
+ * `DIAS_ARRASTRE` días, y si el GET mandara menos tildes que eso, el navegador vería una ocurrencia
+ * vieja sin tilde y la llamaría pendiente **cuando el tilde existe y no viajó**. Un rojo que no se
+ * puede apagar. Los dos lados o ninguno, y acá se prueba el lado del servidor.
+ *
+ * 🔑 Se prueba **con qué filtros se pidió**, no sólo qué volvió: un fake que devuelve todo igual
+ * daría verde con el handler pidiendo cualquier ventana.
+ */
+describe('GET: el acuse viejo viaja sólo de los ítems que arrastran', () => {
+  const DIAS_CUMPLIMIENTO = 30
+  const DIAS_ARRASTRE = 120
+  const dias = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+  const hace = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+
+  it('son dos consultas: la corta de todos y la profunda acotada a los que arrastran', async () => {
+    mundo.items = [rutina(), rutina({ id: 'n1', titulo: 'Rutina suelta', datos: { arrastra: false } })]
+    await leerAgenda()
+    expect(mundo.consultasHechos).toHaveLength(2)
+    const [corto, profundo] = mundo.consultasHechos
+    expect(corto.in).toBeUndefined()
+    expect(profundo.in).toEqual(['r1'])
+  })
+
+  it('los dos tramos no se solapan y juntos cubren la ventana entera del arrastre', async () => {
+    mundo.items = [rutina()]
+    await leerAgenda()
+    const [corto, profundo] = mundo.consultasHechos
+    // El profundo termina justo donde arranca el corto: concatenar no puede duplicar nada.
+    expect(profundo.lt).toBe(corto.gte)
+    expect(dias(profundo.gte!, corto.gte!)).toBe(DIAS_ARRASTRE - DIAS_CUMPLIMIENTO)
+  })
+
+  it('🔴 un tilde de hace 60 días llega si el ítem arrastra, y NO si no arrastra', async () => {
+    mundo.items = [rutina(), rutina({ id: 'n1', titulo: 'Rutina suelta', datos: { arrastra: false } })]
+    mundo.hechos = [tilde({ item_id: 'r1', fecha: hace(60) }), tilde({ item_id: 'n1', fecha: hace(60) })]
+    const res = await leerAgenda()
+    const hechos = (res.body?.hechos || []) as { itemId: string }[]
+    expect(hechos.map((h) => h.itemId)).toEqual(['r1'])
+  })
+
+  it('lo de adentro de los 30 días sigue llegando de todos, arrastren o no', async () => {
+    mundo.items = [rutina({ id: 'n1', titulo: 'Rutina suelta', datos: { arrastra: false } })]
+    mundo.hechos = [tilde({ item_id: 'n1', fecha: hace(3) })]
+    const res = await leerAgenda()
+    expect((res.body?.hechos as unknown[]).length).toBe(1)
+  })
+
+  it('sin ningún ítem que arrastre no hay segunda consulta: ⛔ nada de un `in` vacío', async () => {
+    mundo.items = [rutina({ id: 'n1', datos: { arrastra: false } })]
+    await leerAgenda()
+    expect(mundo.consultasHechos).toHaveLength(1)
+  })
+
+  it('un MOLDE no pide cola vieja aunque diga que arrastra: un molde no corre ningún día', async () => {
+    mundo.items = [molde({ datos: { plantilla: 'ingreso', offsetDias: 0, arrastra: true } })]
+    await leerAgenda()
+    expect(mundo.consultasHechos).toHaveLength(1)
+  })
+
+  it('el tope por ítem viaja al navegador, y sin tope viaja `null`', async () => {
+    mundo.items = [
+      rutina({ id: 'r1', datos: { arrastra: true, arrastraDias: 2 } }),
+      rutina({ id: 'r2', datos: { arrastra: true } }),
+      // 🔴 El 0 es un tope de verdad («se vence con el día»), y es el que se pierde con cualquier
+      // atajo de los que confunden «vacío» con «cero».
+      rutina({ id: 'r3', datos: { arrastra: true, arrastraDias: 0 } }),
+    ]
+    const res = await leerAgenda()
+    const items = (res.body?.items || []) as { id: string; arrastraDias: number | null }[]
+    expect(items.find((i) => i.id === 'r1')?.arrastraDias).toBe(2)
+    expect(items.find((i) => i.id === 'r2')?.arrastraDias).toBe(null)
+    expect(items.find((i) => i.id === 'r3')?.arrastraDias).toBe(0)
   })
 })

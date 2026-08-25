@@ -97,8 +97,31 @@ const CAMPOS_ITEM =
 
 const CAMPOS_HECHO = 'item_id, fecha, usuario, nota, hecho_at';
 
-/** Los días de acuse que viajan en el GET. Espejo de `DIAS_CUMPLIMIENTO` en `lib/agenda/tipos.ts`. */
+/** Los días de acuse que viajan en el GET **de todos los ítems**. Espejo de `lib/agenda/tipos.ts`. */
 const DIAS_CUMPLIMIENTO = 30;
+
+/**
+ * Hasta dónde va la cola vieja del acuse, **sólo de los ítems que arrastran**. Espejo de
+ * `DIAS_ARRASTRE` en `lib/agenda/tipos.ts`.
+ *
+ * 🔴 **Los dos lados o ninguno.** `ocurrenciaAbierta()` mira hacia atrás exactamente este número de
+ * días; si el GET mandara menos, el navegador vería una ocurrencia vieja sin tilde y la llamaría
+ * pendiente cuando en realidad el tilde existe y no viajó. Un rojo que no se puede apagar.
+ */
+const DIAS_ARRASTRE = 120;
+
+/**
+ * ¿Esto es un tope de arrastre y no la ausencia de uno?
+ *
+ * 🔴 ⛔ **`Number(null)` es `0`, no `NaN`**, así que el `Number.isFinite(Number(x))` que alcanza para
+ * `offsetDias` acá mentiría: convertiría «sin tope» en «vence el mismo día», que es el renglón que
+ * desaparece antes de que nadie lo vea. Por eso `null`, `undefined` y `''` se descartan a mano.
+ */
+function esTope(v) {
+  if (v === null || v === undefined || v === '') return false;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0;
+}
 
 /**
  * El día de hoy en UTC, que es el reloj del servidor.
@@ -259,7 +282,18 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
     // 🔑 `puerta` y `marca` quedan en el clon aunque nada las lea todavía: son el ÚNICO rastro de
     // por qué este ingreso sembró nueve renglones y no diez. Sin ellas, «faltó el de la
     // descripción» no se puede contestar sin adivinar. ⛔ Ninguna entra en `clave`.
-    datos: { arrastra: true, ingreso: clave, puerta, marca },
+    datos: {
+      arrastra: true,
+      ingreso: clave,
+      puerta,
+      marca,
+      // 🔑 El tope lo pone el MOLDE, no el disparador: el formulario del molde es el mismo que el
+      // de una rutina, así que si alguien le carga «hasta N días» ahí, tiene que valer para lo que
+      // siembre — una pantalla que ofrece un campo que después no viaja igual afirma algo que no
+      // es cierto. Sin tope en el molde, el clon queda hasta que lo tilden, que es el caso normal
+      // del ingreso: lo que tarda no se puede decir de antemano.
+      ...(esTope(m.datos.arrastraDias) ? { arrastraDias: Math.trunc(Number(m.datos.arrastraDias)) } : {}),
+    },
     autor,
     updated_at: new Date().toISOString(),
   }));
@@ -375,6 +409,40 @@ export default async function handler(req, res) {
       if (ite.error) throw new Error(ite.error.message);
       if (hec.error) throw new Error(hec.error.message);
 
+      /*
+        🔑 **El segundo tramo del acuse: la cola vieja, y sólo de los que arrastran.**
+
+        Un pendiente que arrastra se debe hasta que alguien lo tilde, y un ingreso de mercadería
+        —Bruno, 24-ago: «a veces más rápido, a veces más lento»— puede tardar más de un mes. Con la
+        ventana de treinta días, ese renglón se evaporaba **callado** el día 31: no se hizo, no está
+        tildado, y desaparece igual. Ver `DIAS_ARRASTRE`.
+
+        🔴 **Por qué acotado a los que arrastran y no subiendo la ventana de todos.** Medido el
+        25-ago contra producción: el acuse entero de 30 días eran 6 filas (0,8 KB de un GET de
+        28,5 KB), pero la agenda tal como está cargada —32 pendientes vivos— genera 6 ocurrencias
+        por día, así que 120 días de **todos** serían ~544 tildes (~73 KB), y eso antes del primer
+        clon de ingreso. Acotada a los que arrastran, la cola crece con la cantidad de ítems que
+        arrastran y no con el uso diario, que es lo que hace la diferencia entre un techo y una
+        cuenta que sube sola.
+
+        Va en una consulta aparte y no en un `.or()` porque necesita los ids, que salen de `qi`: es
+        un viaje más, contra un GET que hoy tarda ~900 ms. `.lt(desdeHechos)` deja los dos tramos
+        sin solapamiento, así que se concatenan y no hay que deduplicar.
+      */
+      const idsArrastre = (ite.data || [])
+        .filter((i) => String(i.clase) === 'pendiente' && i.datos && i.datos.arrastra && !i.datos.plantilla)
+        .map((i) => i.id);
+      let colaVieja = [];
+      if (idsArrastre.length) {
+        const desdeArrastre = masDias(hoyUtc(), -(DIAS_ARRASTRE + 1));
+        const vie = await supabase.from('agenda_hechos').select(CAMPOS_HECHO)
+          .in('item_id', idsArrastre)
+          .gte('fecha', desdeArrastre)
+          .lt('fecha', desdeHechos);
+        if (vie.error) throw new Error(vie.error.message);
+        colaVieja = vie.data || [];
+      }
+
       // Las marcas que esta persona puede mirar. Quien no está clavado a una son las dos; quien sí,
       // la suya y nada más — y para ésa, lo de la otra marca no es que no se dibuje: **no viaja**.
       // La pantalla igual filtra por la marca del header, que es la que está mirando en este momento;
@@ -397,6 +465,9 @@ export default async function handler(req, res) {
         // Sigue apareciendo hasta que lo tilden. El arrastre lo resuelve `pendientesDe()` en el
         // cliente: acá viaja la bandera y nada más.
         arrastra: !!(i.datos && i.datos.arrastra),
+        // Cuántos días se debe, si arrastra. **`null` = sin tope**, que es lo que tienen las
+        // reuniones y los clones del ingreso. Lo resuelve `ocurrenciaAbierta()`; acá viaja el número.
+        arrastraDias: i.datos && Number.isFinite(i.datos.arrastraDias) ? i.datos.arrastraDias : null,
         // El molde del disparador del ingreso. Un molde no corre ningún día: lo filtra `vaEl`.
         plantilla: (i.datos && i.datos.plantilla) || null,
         offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
@@ -416,7 +487,10 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         items: visibles,
-        hechos: (hec.data || [])
+        // Los dos tramos, mezclados: el corto de todos y la cola vieja de los que arrastran. Quien
+        // los lee no tiene por qué saber de qué consulta salió cada uno — `.lt`/`.gte` los dejaron
+        // sin solapar, así que concatenar alcanza.
+        hechos: [...(hec.data || []), ...colaVieja]
           .filter((h) => idsVisibles.has(h.item_id))
           .map((h) => ({
             itemId: h.item_id,
@@ -649,6 +723,13 @@ export default async function handler(req, res) {
         // así que un merge escondería un campo que la pantalla creyó haber borrado.
         datos: {
           arrastra: String(it.clase) === 'pendiente' && !!it.arrastra,
+          // ⚠️ Sólo se guarda si arrastra Y trae número: **`null` es el caso normal** —sin tope,
+          // queda hasta que lo tilden— y escribirlo sería guardar un campo que dice lo mismo que no
+          // estar. Se acota a `DIAS_ARRASTRE` porque más allá el GET no manda el acuse: un tope de
+          // 400 días prometería un arrastre que la pantalla no puede sostener.
+          ...(String(it.clase) === 'pendiente' && !!it.arrastra && esTope(it.arrastraDias)
+            ? { arrastraDias: Math.min(DIAS_ARRASTRE, Math.trunc(Number(it.arrastraDias))) }
+            : {}),
           ...(PLANTILLAS.includes(String(it.plantilla)) ? { plantilla: String(it.plantilla) } : {}),
           ...(Number.isFinite(Number(it.offsetDias)) ? { offsetDias: Math.max(0, Math.min(90, Math.trunc(Number(it.offsetDias)))) } : {}),
           // ⚠️ Sólo se guarda si hay alguna: la lista vacía **es** el caso normal (el paso corre en las

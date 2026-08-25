@@ -18,6 +18,7 @@ import {
   rotuloRegla,
   vaEl,
   MAX_VENTANA_DIAS,
+  DIAS_ARRASTRE,
 } from '@/lib/agenda'
 import type { Hecho, ItemAgenda, Promo, Regla } from '@/lib/agenda'
 
@@ -533,10 +534,99 @@ describe('pendientesDe(): lo que arrastra queda hasta que se tilda', () => {
   })
 
   it('no mira más atrás que la ventana de acuse: sin tildes no se puede afirmar nada', () => {
-    // El GET manda 30 días de tildes. El 30-sep está a más de 30 días del 11-ago, así que el
-    // arrastre arranca en el martes más viejo que sí entra en la ventana.
-    const r = pendientesDe([reunion], [], '2026-09-30')
-    expect(r[0].desde! >= '2026-08-31').toBe(true)
+    // El GET manda `DIAS_ARRASTRE` días de tildes de los ítems que arrastran. Más atrás no se puede
+    // afirmar que no se hizo, así que el arrastre arranca en el martes más viejo de la ventana.
+    // La rutina se carga en enero para que el techo sea la ventana y no el día en que se cargó.
+    const vieja = item({ ...reunion, creado: '2026-01-05T10:00:00.000Z' })
+    const r = pendientesDe([vieja], [], '2026-09-30')
+    expect(r[0].desde! >= '2026-06-02').toBe(true)
+    // Y el 30-sep menos 120 días es junio: la ventana de verdad se agrandó, no quedó en los 30.
+    expect(r[0].desde! < '2026-08-31').toBe(true)
+    expect(DIAS_ARRASTRE).toBeGreaterThan(30)
+  })
+})
+
+/**
+ * El tope por ítem: `arrastraDias`.
+ *
+ * Lo pidió Bruno el 24-ago cargando las rutinas de Administración: *«Tienda Nube sí tiene arrastre,
+ * pero hasta 2 días; ya el tercero no arrastra.»* Sin tope, el renglón de una pasada que nadie
+ * tildó se queda para siempre, y un contador que no baja se deja de mirar en una semana.
+ *
+ * Agosto de 2026 arranca sábado ⇒ los lunes son 3, 10, 17, 24 y los jueves 6, 13, 20, 27.
+ */
+describe('arrastraDias: no todo lo que arrastra arrastra igual', () => {
+  const base = { id: 'p1', titulo: 'La pasada por Tienda Nube', arrastra: true, regla: { tipo: 'semanal' as const, dias: [1, 4] } }
+  const conTope = item({ ...base, arrastraDias: 2 })
+  const sinTope = item({ ...base, arrastraDias: null })
+
+  it('dentro del tope sigue debiéndose, y dice de cuándo viene', () => {
+    // Viernes 14: el jueves 13 quedó sin hacer y está a un día.
+    const r = pendientesDe([conTope], [], '2026-08-14')
+    expect(r).toHaveLength(1)
+    expect(r[0].desde).toBe('2026-08-13')
+  })
+
+  it('pasado el tope el renglón se baja solo — y sin tope seguiría ahí', () => {
+    // Domingo 16: el jueves 13 quedó a tres días, y el tope dice dos.
+    expect(pendientesDe([conTope], [], '2026-08-16')).toEqual([])
+    expect(pendientesDe([sinTope], [], '2026-08-16')).toHaveLength(1)
+  })
+
+  it('el badge baja con el renglón: es la misma lista', () => {
+    expect(contarSinTildar([conTope], [], '2026-08-14')).toBe(1)
+    expect(contarSinTildar([conTope], [], '2026-08-16')).toBe(0)
+  })
+
+  it('tope 0 es "se vence con el día", no "sin tope"', () => {
+    // 🔴 El caso que rompe si en el servidor `Number(null)` se cuela como 0.
+    const cero = item({ ...base, arrastraDias: 0 })
+    expect(pendientesDe([cero], [], '2026-08-13')).toHaveLength(1)
+    expect(pendientesDe([cero], [], '2026-08-14')).toEqual([])
+  })
+
+  it('un tope más largo que la ventana no agranda nada: el techo sigue siendo el dato', () => {
+    const enorme = item({ ...base, arrastraDias: 4000, creado: '2026-01-05T10:00:00.000Z' })
+    const r = pendientesDe([enorme], [], '2026-09-30')
+    expect(r[0].desde! >= '2026-06-02').toBe(true)
+  })
+
+  it('el tope no toca a los que no arrastran', () => {
+    const suelto = item({ ...base, arrastra: false, arrastraDias: 2 })
+    expect(pendientesDe([suelto], [], '2026-08-14')).toEqual([])
+  })
+})
+
+describe('cumplimiento(): con tope, cada ocurrencia vencida cuenta sola', () => {
+  const base = { id: 'p1', titulo: 'La pasada por Tienda Nube', arrastra: true, regla: { tipo: 'semanal' as const, dias: [1, 4] } }
+
+  it('cuatro pasadas sin hacer con tope de 2 son CUATRO incumplimientos, no una racha', () => {
+    // Del 31-jul al 13-ago caen el 3, el 6, el 10 y el 13, y entre una y otra pasan más de 2 días:
+    // ninguna puede cerrar a la anterior, así que ninguna se traga a las demás.
+    const filas = cumplimiento([item({ ...base, arrastraDias: 2 })], [], '2026-08-13', 14)
+    expect(filas.map((f) => f.fecha).sort()).toEqual(['2026-08-03', '2026-08-06', '2026-08-10', '2026-08-13'])
+  })
+
+  it('sin tope son las mismas cuatro pasadas y UNA sola racha', () => {
+    const filas = cumplimiento([item({ ...base, arrastraDias: null })], [], '2026-08-13', 14)
+    expect(filas.map((f) => f.fecha)).toEqual(['2026-08-03'])
+  })
+
+  it('el borde: a los EXACTOS días del tope todavía se debe, y por eso la racha no se corta ahí', () => {
+    // Lunes y miércoles, tope 2 ⇒ del lunes al miércoles hay exactamente 2 días. «Hasta 2 días
+    // después» incluye el segundo, así que el miércoles todavía cierra al lunes: una racha, no dos.
+    const lunMie = item({ ...base, arrastraDias: 2, regla: { tipo: 'semanal', dias: [1, 3] } })
+    expect(pendientesDe([lunMie], [], '2026-08-05')[0].desde).toBe('2026-08-03')
+    const filas = cumplimiento([lunMie], [], '2026-08-12', 12)
+    expect(filas.map((f) => f.fecha).sort()).toEqual(['2026-08-03', '2026-08-10'])
+  })
+
+  it('un tilde cierra lo suyo y no lo de la racha anterior, que ya había vencido', () => {
+    const filas = cumplimiento([item({ ...base, arrastraDias: 2 })], [hecho({ itemId: 'p1', fecha: '2026-08-06' })], '2026-08-13', 14)
+    expect(filas.map((f) => f.fecha).sort()).toEqual(['2026-08-03', '2026-08-06', '2026-08-10', '2026-08-13'])
+    // El 6 se ve tildado; el 3, que venció antes de que lo tildaran, se ve sin hacer.
+    expect(filas.find((f) => f.fecha === '2026-08-06')?.hecho).not.toBe(null)
+    expect(filas.find((f) => f.fecha === '2026-08-03')?.hecho).toBe(null)
   })
 })
 

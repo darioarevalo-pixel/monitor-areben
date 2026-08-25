@@ -40,7 +40,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
-import { CLASES, hoyIso, PUERTAS, type ClaseItem, type Destino, type ItemAgenda, type Puerta } from '@/lib/agenda'
+import { CLASES, DIAS_ARRASTRE, hoyIso, PUERTAS, type ClaseItem, type Destino, type ItemAgenda, type Puerta } from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
@@ -90,6 +90,9 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
     // Apagado por defecto: casi toda rutina es del día y se vence con el día. Lo que arrastra es la
     // excepción —las reuniones—, y una excepción no se pone de default.
     arrastra: false,
+    // Sin tope: mientras arrastre, queda hasta que lo tilden. El tope es lo excepcional y se carga
+    // a mano en las dos o tres rutinas que sí se vencen (la pasada de Tienda Nube, hasta 2 días).
+    arrastraDias: null,
     plantilla: null,
     offsetDias: null,
     // Vacío = las cuatro puertas, que es el caso normal: cuatro de los seis pasos no cambian.
@@ -415,6 +418,38 @@ export function ModalItem({
             />
           )}
         </div>
+
+        {/*
+          El tope del arrastre.
+
+          🔑 **Aparece sólo cuando arrastra**, porque sin arrastre no quiere decir nada — y vacío es
+          el caso normal: una reunión que no se hizo es la misma reunión dentro de tres semanas y
+          tiene que quedar hasta que alguien la tilde. El tope existe para lo otro: *«Tienda Nube sí
+          tiene arrastre, pero hasta 2 días; ya el tercero no arrastra»* (Bruno, 24-ago). Sin él, el
+          renglón de una pasada que nadie tildó se queda para siempre, y un contador que no baja se
+          deja de mirar en una semana.
+
+          ⛔ No se le pone un default: elegir un número acá por la persona sería decidir, para todas
+          las rutinas que ya están cargadas, que dejan de deberse en una fecha que nadie eligió.
+        */}
+        {it.clase === 'pendiente' && it.arrastra && (
+          <div style={{ marginTop: space[3], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field
+              label="Hasta cuántos días después"
+              hint="Vacío = queda hasta que lo tilden, sin fecha de vencimiento. Un número lo baja solo pasados esos días desde el día en que caía."
+              width={220}
+            >
+              <Input
+                type="number"
+                min={0}
+                max={DIAS_ARRASTRE}
+                placeholder="sin tope"
+                value={it.arrastraDias == null ? '' : String(it.arrastraDias)}
+                onChange={(e) => set('arrastraDias', e.target.value === '' ? null : Number(e.target.value))}
+              />
+            </Field>
+          </div>
+        )}
 
         {/*
           El molde del ingreso. Un ítem marcado así **no corre ningún día**: existe para que el

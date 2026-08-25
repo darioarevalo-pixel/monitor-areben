@@ -10,9 +10,9 @@
  * reglas, no las lee en voz alta.
  */
 
-import { diasDelMes, FECHAS_COMERCIALES, hoyIso, iso, resolverComercial, sumarDias } from '@/lib/calendario'
+import { diasDelMes, diasEntre, FECHAS_COMERCIALES, hoyIso, iso, resolverComercial, sumarDias } from '@/lib/calendario'
 import type { Marca } from '@/lib/nav.datos'
-import { DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Puerta, type Regla } from './tipos'
+import { DIAS_ARRASTRE, DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Puerta, type Regla } from './tipos'
 import {
   CLAVES_PUERTA as CLAVES_PUERTA_JS,
   moldeCorreEn as moldeCorreEnJs,
@@ -157,12 +157,27 @@ export function hechoDe(hechos: Hecho[], itemId: string, fecha: FechaIso): Hecho
 /**
  * Hasta dónde mira hacia atrás el arrastre.
  *
- * 🔴 **No es una preferencia: es el techo del dato.** El GET manda los tildes de los últimos
- * `DIAS_CUMPLIMIENTO` días (`api/_agenda.js`), así que más atrás el navegador **no puede saber si
- * la ocurrencia se tildó**. Mirar más lejos que eso sería inventar un pendiente sobre una ausencia
- * de datos, que es la peor clase de rojo: el que no se puede apagar.
+ * 🔴 **No es una preferencia: es el techo del dato.** Más atrás de lo que el GET manda, el navegador
+ * **no puede saber si la ocurrencia se tildó**, y mirar más lejos que eso sería inventar un
+ * pendiente sobre una ausencia de datos: la peor clase de rojo, el que no se puede apagar.
+ *
+ * ⚠️ Por eso este número **no se toca solo**: es el espejo del tramo profundo del GET
+ * (`api/_agenda.js`), que manda el acuse viejo de los ítems que arrastran. Los dos lados o ninguno.
  */
-const VENTANA_ARRASTRE = DIAS_CUMPLIMIENTO
+const VENTANA_ARRASTRE = DIAS_ARRASTRE
+
+/**
+ * Cuántos días puede deberse este ítem: su tope, acotado por el techo del dato.
+ *
+ * `arrastraDias` en `null` o ausente es **sin tope**, que es lo que tienen las reuniones y los
+ * clones del ingreso: quedan hasta que alguien los tilde. Un tope más largo que la ventana no
+ * agranda nada — lo que el GET no mandó no se puede mirar igual.
+ */
+function topeArrastre(item: ItemAgenda): number {
+  const tope = item.arrastraDias
+  if (typeof tope !== 'number' || !Number.isFinite(tope) || tope < 0) return VENTANA_ARRASTRE
+  return Math.min(tope, VENTANA_ARRASTRE)
+}
 
 /** El día del último tilde de este ítem, mirando hasta `hasta` inclusive. `null` si nunca se tildó. */
 function ultimoTilde(hechos: Hecho[], itemId: string, hasta: FechaIso): FechaIso | null {
@@ -203,13 +218,17 @@ export function ultimaOcurrencia(item: ItemAgenda, hasta: FechaIso): FechaIso | 
  * 2. **Nada anterior al día en que se cargó el ítem**: una rutina cargada hoy no viene debiendo de
  *    antes. Mismo criterio que `cumplimiento()`.
  * 3. **Un ítem apagado no arrastra.** Apagarlo dice "ya no va", y lo que ya no va no se debe.
+ * 4. **El tope del ítem manda sobre los tres anteriores** (`arrastraDias`): pasado el tope, la
+ *    ocurrencia deja de deberse aunque nadie la haya tildado. Es lo que separa una reunión —que es
+ *    la misma dentro de tres semanas— de una pasada rutinaria, que al tercer día ya no se hace.
  */
 export function ocurrenciaAbierta(item: ItemAgenda, hechos: Hecho[], hasta: FechaIso): FechaIso | null {
   if (!item.arrastra || !item.activo || esPlantilla(item)) return null
   const corte = ultimoTilde(hechos, item.id, hasta)
   const piso = item.creado ? item.creado.slice(0, 10) : null
+  const tope = topeArrastre(item)
   let abierta: FechaIso | null = null
-  for (let i = 0; i <= VENTANA_ARRASTRE; i++) {
+  for (let i = 0; i <= tope; i++) {
     const f = sumarDias(hasta, -i)
     if (corte && f <= corte) break
     if (piso && f < piso) break
@@ -422,16 +441,32 @@ export function cumplimiento(
  * Una racha es lo que va desde la primera ocurrencia sin hacer hasta el tilde que la cierra. Se
  * emite el día del tilde —el día en que efectivamente se hizo— y, si al final quedó algo abierto, el
  * día en que empezó a deberse, que es el dato que importa: hace cuánto que viene.
+ *
+ * 🔑 **El tope del ítem corta la racha, y tiene que cortarla acá igual que en `ocurrenciaAbierta`.**
+ * Con `arrastraDias: 2`, tildar el jueves **no** cierra el lunes —desde el jueves ya no se puede
+ * tildar el lunes—, así que contarlos como una sola racha escondería la pasada del lunes. Pasado el
+ * tope la racha se cierra sin cumplir y la ocurrencia siguiente empieza una nueva.
+ *
+ * ⚠️ Lo que quedó abierto se emite **aunque ya haya vencido el tope**: en Hoy ese renglón ya no se
+ * ve, pero no haberse hecho sigue siendo no haberse hecho, y Cumplimiento es justo el informe de
+ * eso. Es el mismo criterio que tiene hoy un pendiente que no arrastra: se venció con el día y
+ * aparece igual en el mes.
  */
 function fechasDeRachas(item: ItemAgenda, hechos: Hecho[], hasta: FechaIso, dias: number): Set<FechaIso> {
   const emitidas = new Set<FechaIso>()
   const piso = item.creado ? item.creado.slice(0, 10) : null
+  const tope = topeArrastre(item)
   let abierta: FechaIso | null = null
   // De la más vieja a la más nueva: una racha sólo se puede cerrar hacia adelante.
   for (let i = dias - 1; i >= 0; i--) {
     const fecha = sumarDias(hasta, -i)
     if (!aplicaEn(item.regla, fecha)) continue
     if (piso && fecha < piso) continue
+    // La racha anterior venció antes de llegar hasta acá: se cierra sin cumplir y ésta arranca sola.
+    if (abierta && diasEntre(abierta, fecha) > tope) {
+      emitidas.add(abierta)
+      abierta = null
+    }
     if (hechoDe(hechos, item.id, fecha)) {
       emitidas.add(fecha)
       abierta = null
