@@ -69,7 +69,7 @@ No se colgó de `gen-talles` a propósito: pegar una tabla de medidas es mecáni
 redactar reescribe el texto de venta de la tienda (y va a gastar plata en una API externa).
 Colgarlo ahí habilitaría a todos los que hoy pegan tablas sin que nadie toque un checkbox.
 
-## El redactor con IA (tanda 3, 19-ago-2026)
+## El redactor con IA (tanda 3, 19-ago-2026 · pasado a Gemini el 24-ago-2026)
 
 El borrador lo puede escribir un modelo. **No cambió nada de lo de arriba**: ni la tabla, ni la
 pantalla, ni el validador, ni `bloques.ts`. Sólo cambió de dónde vienen `{parrafo, bullets}`.
@@ -81,11 +81,11 @@ pantalla, ni el validador, ni `bloques.ts`. Sólo cambió de dónde vienen `{par
   monitor que **gasta plata por apretar un botón**, así que pide el sub `gen-desc.publicar`, el
   mismo que aprobar. ⛔ No guarda: devuelve el borrador y se para.
 
-🔴 **El reintento es carga estructural, igual que `validarBorrador`.** El JSON Schema de structured
-outputs fija la FORMA (que venga un `parrafo` y bullets con etiqueta de la lista cerrada) y nada
-más: no soporta `minItems`/`maxItems`/`maxLength`, así que «3 o 4 bullets» y «hasta 220 caracteres»
-no se pueden pedir ahí, y «no nombres los colores de ESTE producto» menos. Cuando el validador
-rechaza, los problemas vuelven al modelo —**todos juntos**— y se pide de nuevo. Dos intentos.
+🔴 **El reintento es carga estructural, igual que `validarBorrador`.** El esquema fija la FORMA
+(que venga un `parrafo` y bullets con etiqueta de la lista cerrada) y —desde Gemini— **el conteo
+de bullets**, pero `maxLength` no está soportado: «hasta 220 caracteres» no se puede pedir ahí, y
+«no nombres los colores de ESTE producto» menos. Cuando el validador rechaza, los problemas
+vuelven al modelo —**todos juntos**— y se pide de nuevo. Dos intentos.
 
 🔑 **Las variantes viajan EN EL PROMPT, no sólo en el validador.** Si el modelo no sabe que «arena»
 es un color de este producto, lo escribe, se lo rechazan, y se paga un reintento por algo que se
@@ -99,36 +99,77 @@ compilador de Next y **no puede importar TypeScript** (es el motivo de `lib/perm
 las dos no se separen lo cuida un test, porque **media regla en cada lado no se ve mal de ningún
 lado**: una etiqueta agregada sólo en el `.js` la aceptaría el validador y la rechazaría el `<select>`.
 
-### El modelo se elige en la pantalla, y el costo se muestra
+### El proveedor es Gemini, y el motivo NO fue la plata (24-ago-2026)
 
-Arranca en **Haiku 4.5** por decisión de Bruno; se puede pasar a **Sonnet 5** desde el mismo
-desplegable y comparar los dos textos con el costo real de cada uno al lado. Eso es lo que decide,
-no una opinión sobre la prosa.
+La tanda 3 salió contra Anthropic y esta ficha decía «no se cambia de proveedor», con la cuenta
+hecha: el catálogo entero sale **US$1,14 una sola vez**. Esa cuenta sigue siendo cierta y sigue
+sin ser el argumento. **Lo que decidió es que Darío ya usa Gemini en n8n**: una sola cuenta, una
+sola clave para rotar y un solo lugar donde mirar cuánto se gastó. Con Gemini el catálogo sale del
+mismo orden —alrededor de un dólar— así que la plata no movió el fiel para ningún lado.
 
-- ⚠️ **Haiku 4.5 rechaza `output_config.effort` con un 400.** Va sólo donde el modelo lo acepta; si
-  no, la comparación sería entre dos configuraciones y no entre dos modelos.
-- ⚠️ **Sonnet 5 está con precio de intro hasta el 31-ago-2026** ($2/$10 en vez de $3/$15). Está
-  modelado con su fecha: cobrarle de más al comparar empujaría la decisión hacia Haiku por un
-  motivo que no es real.
-⛔ **Y no se cambia de proveedor.** Decidido el 19-ago-2026 con el prompt ya escrito y contado:
-el catálogo entero sale **US$1,14 una sola vez** con Haiku. Un modelo más barato de otra empresa
-ahorra centavos y suma una key, un SDK y un proveedor que mantener — y como rompe el formato más
-seguido, se lo come el reintento (dos llamadas en vez de una) más el rato de alguien releyendo
-borradores feos. **Dentro de Anthropic tampoco hay nada más abajo**: Haiku 3.5 está retirado y
-Haiku 3 se retiró en abril de 2026. La plata de esta tanda no está en la API: está en las horas de
-leer 370 borradores.
+⛔ **Lo que NO cambió es la parte que importa**: el núcleo recibe `llamar` por parámetro, así que
+el cambio entero fue el handler. Ni la pantalla, ni el validador, ni la tabla, ni publicar en la
+tienda se enteraron. Estaba escrito acá que iba a costar ~20 líneas y costó eso.
 
-📌 Si algún día igual se prueba otro proveedor, **no hay que rehacer nada**: el núcleo recibe la
-función de llamada por parámetro, así que es una `llamar` distinta en el handler (~20 líneas) y ni
-la pantalla, ni el validador, ni la tabla se enteran.
+🔑 **Y de paso se cerró la filtración que hacía falsa esa promesa.** `armarPedido` devolvía bloques
+con forma de Anthropic (`{type:'image', source:{...}}`) **adentro del núcleo**. Ahora devuelve
+`{system, texto, imagen}` y la forma de cable vive entera en el handler. Lo cuida un test que
+mira las claves del pedido: si vuelve a entrar forma de proveedor ahí, se cae.
 
-- ⚠️ **El CDN de TiendaNube no redimensiona a pedido.** Probado el 19-ago-2026 sobre una foto real:
-  `-480-480`, `-480-640`, `-480-600` y `-240-240` contestan **403**; sólo resuelve el archivo
-  guardado (hoy `-1024-1024`). Son ~1.400 tokens de imagen, o sea US$0,0014 con Haiku.
-- ⚠️ **La foto es el 77% del costo de entrada** (1.398 tokens de 1.824). Sacarla bajaría los 370 a
-  US$0,62 — el único ahorro real que hay acá, y son cincuenta centavos. ⛔ No se saca: es lo único
-  que el modelo tiene para describir la prenda, y **los 41 mudos no tienen ni insumo ni prosa
-  previa**, así que sin foto escribirían a partir del nombre y nada más.
+- **Sin SDK**: la API se habla con `fetch` contra `POST /v1beta/interactions`. `@anthropic-ai/sdk`
+  se desinstaló el mismo día: **en el Monitor hay una sola clave de IA y es `GEMINI_API_KEY`**.
+- ⚠️ **Nada de `additionalProperties` en el esquema**: Gemini lo rechaza con un 400 y no se redacta
+  nada. Hay un test que lo mira en todos los niveles del JSON, no sólo en la raíz.
+- ⚠️ **`store:false` en cada pedido.** El endpoint guarda la interacción del lado de Google por
+  default. Acá no hay conversación que continuar y la ficha de un producto nuestro no tiene por
+  qué quedar allá.
+
+### Tres modelos en la pantalla, y el costo se muestra
+
+Arranca en **Flash 3.7** y desde el mismo desplegable se puede bajar a **Flash Lite** o subir a
+**Pro 3.1**, comparando los textos con el costo real de cada uno al lado. Eso es lo que decide, no
+una opinión sobre la prosa. El `<select>` recorre `MODELOS`: agregar o sacar uno es una entrada.
+
+- ⚠️ **Los Gemini 3 están con precio promocional hasta el 31-dic-2026 y después se DUPLICAN**
+  (Flash 3.7: $0,75/$3,75 → $1,50/$7,50). Está modelado con su fecha, con test de los dos lados
+  del corte: el 1-ene-2027 la pantalla dice la verdad sin que nadie se acuerde de venir a tocarlo.
+- 🔴 **Los tokens de pensar se facturan como salida**, y la doc de Google **no dice** si
+  `total_output_tokens` ya los trae adentro o si van aparte. No se adivina: `usoDe` concilia
+  contra `total_tokens` y, cuando no se puede saber, **cobra de más**. El costo que miente para
+  abajo es el que empuja una decisión de 370 productos hacia el modelo equivocado.
+- 🔑 **Los tres piensan igual (`thinking_level: 'low'`)**, y hay un test que lo exige. Dejar uno en
+  el default y bajarle el nivel a otro compara dos configuraciones, no dos modelos — es el mismo
+  error que ya nos costó una vuelta con el `effort` de Anthropic.
+- ⚠️ **Lo cacheado no se suma aparte**: en Gemini viene adentro de la entrada. Sumarlo lo cobraría
+  dos veces. Se muestra igual, porque el día que aparezca explica por qué un producto salió más
+  barato que el de al lado.
+- ⚠️ **Pro 3.1 es `preview`.** El día que Google lo retire contesta 400 y la pantalla lo dice; el
+  arreglo es cambiar la entrada de `MODELOS`.
+
+### 🔴 La foto va con los bytes adentro, y eso NO se descubre leyendo la doc
+
+Medido el 24-ago-2026 contra la API real. La doc de Google dice que el endpoint acepta una imagen
+por URL pública, y es cierto — pero **con nuestra clave contesta `429 «Resource has been
+exhausted»`**. Y el mismo pedido, con los bytes de la misma foto adentro, contesta 200.
+
+🔑 **La trampa es el disfraz**: un 429 se lee como «se acabó la cuota» y manda derecho a mirar la
+facturación, que es donde no está el problema. Lo que se agotó no es la cuota de la cuenta: es que
+Google vaya a buscar la URL por nosotros. La bisección que lo separó está en tres líneas —esquema
+solo: 200 · esquema + `thinking_level`: 200 · foto por URL, sin nada más: **429**.
+
+Por eso `bajarFoto` la baja el handler y la manda en base64. Y está bien que así sea: la URL ya
+pasaba por una lista blanca del CDN de TiendaNube, así que el pedido de red sale a un lugar que
+elegimos nosotros y no a uno que eligió el navegador.
+
+⛔ **Si la foto no se puede bajar, no se redacta.** No hay respaldo silencioso a «escribí sin
+foto»: de los 41 mudos no hay ni insumo ni prosa previa, así que sin la foto el modelo escribiría
+a partir del nombre y nada más — que es justo lo que esta sección existe para no hacer.
+
+⚠️ El `content-type` del CDN manda sobre la extensión del archivo: `.jpg` que en realidad es webp
+pasa más seguido de lo que parece, y un `mime_type` equivocado lo rechaza Google.
+
+📌 La foto son **1.073 tokens de los 1.501 de entrada (71%)**. Sacarla sería el único ahorro real
+que hay acá, y son centavos: ver los tres costos medidos abajo.
 
 ## Publicar en la tienda (tanda 4, 19-ago-2026)
 
@@ -196,10 +237,45 @@ y `api/_desc-prosa.js`, y se ejercen con `node scripts/check-desc-talles.mjs` y
 copia que existe, pero restaurarlo desde la pantalla no está hecho: hoy se recupera leyendo la
 fila. Es la próxima tanda y es barata, justamente porque el respaldo ya está.
 
-🔴 ▶️ **Falta `ANTHROPIC_API_KEY` en Vercel.** Sin eso el botón «Redactar con IA» contesta un 500
-con ese texto y el resto de Redacción anda igual. **Es el único eslabón de la tanda que no se pudo
-ejercer**: todo lo demás está probado contra un modelo falso, pero que la llamada real funcione no
-lo prueba ningún test — el oráculo es apretar el botón una vez y ver el borrador.
+✅ **La llamada real está ejercida** (24-ago-2026). Era el único eslabón que ningún test podía
+tocar, y ya se apretó: `node scripts/probar-redactor.mjs [modelo]` hace una llamada de verdad
+sobre un producto vivo (JEAN LESKA, con su foto del CDN) y contesta las cuatro preguntas que la
+doc no contesta. **Los tres modelos pasaron en un solo intento y sin un problema del validador.**
+
+🔑 El probador **importa `llamador` de `api/_tn-desc-ia.js`**, el mismo que corre en producción.
+Un probador con su propia copia del pedido puede salir en verde mientras el botón falla — que es
+exactamente lo que un probador tiene que hacer imposible. Por eso `llamador` está exportado.
+
+Lo que quedó medido:
+
+| modelo | costo por producto | el catálogo (370) | tokens de pensar |
+|---|---|---|---|
+| Flash Lite | US$0,00083 | **US$0,31** | 134 |
+| **Flash 3.7** (default) | US$0,00314 | **US$1,16** | 369 |
+| Pro 3.1 | US$0,01697 | **US$6,28** | 984 |
+
+📌 El catálogo entero con el default sale **US$1,16** — dos centavos más que los US$1,14 que
+costaba con Haiku. La plata nunca movió el fiel, y ahora está medido en vez de estimado.
+
+🔴 **Y quedó contestada la pregunta que la doc de Google no contesta: los tokens de pensar van
+APARTE de `total_output_tokens`.** En Flash 3.7 son 369 contra 168 de salida visible: **pensar
+cuesta más del doble que el texto que se lee**. Si `usoDe` los hubiera dado por incluidos, la
+pantalla mostraría menos de la mitad del costo de salida. La conciliación contra `total_tokens`
+era necesaria, y acertó.
+
+⚠️ Bajar `thinking_level` a `minimal` es la única palanca de costo que queda y no se tocó: sobre
+US$1,16 el ahorro son centavos, y menos razonamiento son más reintentos. Si alguna vez importa,
+está medido de dónde sacarlo.
+
+✅ **Anthropic salió del proyecto entero** (24-ago-2026, decidido por Darío). `@anthropic-ai/sdk`
+se desinstaló, y el cron de los avances de `docs/secciones/memo.md` —que se apoyaba en esa
+dependencia y en `ANTHROPIC_API_KEY`— quedó anotado para escribirse con Gemini.
+
+📌 **`ANTHROPIC_API_KEY` nunca llegó a estar en Vercel**, verificado por Darío en el dashboard el
+24-ago-2026. O sea que el botón «Redactar con IA» **nunca funcionó** entre la tanda 3 y hoy, y
+`memo.md` la contaba entre las piezas listas para el cron de los avances sin que nadie la hubiera
+mirado. 🔑 Es exactamente el motivo por el que la ficha pedía «el oráculo es apretar el botón una
+vez»: un pendiente que dos docs dan por resuelto de maneras distintas no está resuelto en ninguno.
 
 ⛔ Tampoco hay corrida masiva: se redacta de a uno, desde la fila. Pasar los 370 de una es otro
 verbo (y otra tanda), porque nadie va a leer 370 borradores de corrido.

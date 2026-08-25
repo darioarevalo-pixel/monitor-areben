@@ -157,10 +157,25 @@ Lo que sí quedó medido, por si algún día se paga:
 ### ✅ El barato es el cron de los AVANCES, y las piezas ya están todas
 
 Sin código nuevo de infraestructura: **13 workflows de GitHub Actions** con cron, secretos y candados
-de concurrencia · `@anthropic-ai/sdk` ya es dependencia y `ANTHROPIC_API_KEY` ya está en Vercel (la
-usa Redacción, `api/_tn-desc-ia.js`) · los 10 repos están en GitHub · y el POST de `guardar-campo` ya
-está ejercido. Forma: los viernes, juntar los commits de la semana por repo con la API de GitHub,
-redactar los ocho con el modelo, y **dejarlos cargados para que los editen** — nunca cerrar.
+de concurrencia · los 10 repos están en GitHub · y el POST de `guardar-campo` ya está ejercido.
+
+Forma: los viernes, juntar los commits de la semana por repo con la API de GitHub, redactar los ocho
+con el modelo, y **dejarlos cargados para que los editen** — nunca cerrar.
+
+**El modelo es Gemini, y ya no hay que elegirlo** (decidido por Darío el 24-ago-2026). Antes esta
+sección contaba entre las piezas listas que `@anthropic-ai/sdk` era dependencia y que
+`ANTHROPIC_API_KEY` estaba en Vercel «porque la usa Redacción». Las dos cosas dejaron de ser
+ciertas el mismo día: Redacción pasó a Gemini (ver `docs/secciones/gen-desc.md`), **el paquete se
+desinstaló y la clave de Anthropic no la usa nadie**.
+
+🔑 Lo que hay que copiar está escrito y probado: `llamar` y `usoDe` en `api/_tn-desc-ia.js` —
+`fetch` contra `POST /v1beta/interactions`, sin SDK. Y la clave es la misma que ya usa Redacción,
+`GEMINI_API_KEY`, así que **este cron no agrega ningún secreto nuevo**: es la razón por la que
+seguía siendo el barato de los dos.
+
+⚠️ Lo que sí hay que mirar al escribirlo: los precios promocionales de los Gemini 3 vencen el
+**31-dic-2026** y después se duplican. `MODELOS` en `lib/tn-desc/redactor.core.js` ya lo modela con
+la fecha — conviene leer el costo de ahí y no escribir un número a mano acá.
 
 📌 **La decisión de cuándo pagarlo ya estaba escrita**: "si el ritual aguanta 3-4 semanas, se
 automatiza". Con el pendiente del viernes puesto, ahora **Cumplimiento tiene el dato** de cuántas
