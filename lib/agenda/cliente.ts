@@ -7,7 +7,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { DatosAgenda, FechaIso, ItemAgenda, Promo } from './tipos'
+import type { DatosAgenda, FechaIso, ItemAgenda, Promo, Puerta } from './tipos'
 
 const API = '/api/datos?recurso=agenda'
 
@@ -64,13 +64,16 @@ async function postearConRespuesta(body: Record<string, unknown>, siFalla: strin
 }
 
 /**
- * «Entró mercadería»: siembra la lista corta del ingreso clonando los moldes.
+ * «Entró mercadería»: siembra la lista corta del ingreso clonando los moldes de esa puerta.
+ *
+ * `puerta` es obligatoria: dos de los pasos cambian de dueña según por dónde entró el producto, así
+ * que sin ella el servidor contesta 400 en vez de sembrar con la dueña equivocada.
  *
  * Devuelve cuántos renglones creó, o `ya: true` si ese ingreso ya estaba sembrado — el mismo aviso
  * dos veces no puede dejar doce pendientes.
  */
-export async function sembrarIngreso(nombre: string, fecha: FechaIso): Promise<{ creados: number; ya: boolean }> {
-  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha }, 'No se pudo sembrar el ingreso.')
+export async function sembrarIngreso(nombre: string, fecha: FechaIso, puerta: Puerta): Promise<{ creados: number; ya: boolean }> {
+  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha, puerta }, 'No se pudo sembrar el ingreso.')
   return { creados: Number(d?.creados) || 0, ya: !!d?.ya }
 }
 

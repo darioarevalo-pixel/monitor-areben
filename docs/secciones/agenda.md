@@ -118,6 +118,43 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   - **La idempotencia es por `datos.ingreso` = `fecha·nombre`**, no por «ya corrió hoy»: un webhook
     que reintenta no puede dejar doce pendientes. ⛔ Y no se re-crea lo que alguien haya borrado a
     mano: borrar un renglón es una decisión.
+- 🆕 🔴 **POR DÓNDE ENTRÓ EL PRODUCTO: LA PUERTA** (25-ago-2026, `lib/agenda/puertas.core.js`).
+  Hasta acá el disparador clonaba **siempre los mismos moldes**, y eso sirve para **una sola de las
+  cuatro puertas**: el manual «El nombre y la descripción del producto» cierra esos dos pasos **por
+  puerta de entrada, no por sector**, y la dueña cambia con la puerta.
+
+  | entra por…            | el NOMBRE      | la DESCRIPCIÓN                          |
+  | --------------------- | -------------- | --------------------------------------- |
+  | Producción propia     | Stefi          | ya viene escrita — **no lleva renglón**  |
+  | Compra nacional       | Administración | el local (básica + medidas)              |
+  | Importación           | Marketing      | Marketing                                |
+  | Accesorios nacionales | Darío o Lorena | Administración                           |
+
+  - 🔑 **La puerta es un dato del molde, no un `if`**: `datos.puertas`, y **vacío quiere decir
+    todas** —la misma lectura que `marcas: []`—. Con eso los cuatro pasos que no cambian (precio,
+    foto, publicar, pantallas) se cargan **una sola vez** y no cuatro, y *«producción propia no
+    lleva renglón de descripción»* se dice **no cargando ese molde**: no hay ninguna rama en el
+    código que lo sepa.
+  - 🔴 **Sin puerta NO se siembra: 400.** Ni «sembrá todo», que dejaría once renglones con la dueña
+    equivocada — y un pendiente que ya tiene nombre puesto no lo revisa nadie. Mismo criterio que el
+    503 de la puerta sin secreto: **lo que falta cierra, no abre.** Por eso el `<Select>` del alta a
+    mano **arranca vacío**, sin default: la puerta más común contestada sola es la que sale mal en
+    las otras tres.
+  - 🔑 **La puerta la elige Administración en `ingreso2`, en la misma carga** (decisión de Bruno,
+    24-ago-2026): la sabe quien carga, en el momento en que la sabe, así que **viaja en el aviso** y
+    el Monitor no pregunta nada. ⛔ No hay una rutina nueva que alguien tenga que acordarse de
+    contestar.
+  - 📌 **El mapeo de los tipos de `ingreso2` a nuestras cuatro puertas vive ACÁ** (`TIPOS_INGRESO2`),
+    no en `ingreso2`: las cuatro puertas salen de nuestro manual y Gerardo no tiene por qué cambiar
+    su vocabulario. ⚠️ **Hoy el mapa sólo tiene las cuatro claves nuestras, y no es un olvido**: la
+    lista exacta de tipos que maneja `ingreso2` todavía no llegó. Hasta que llegue, un `tipo`
+    desconocido contesta **400 nombrándolo**, así que la primera prueba de Gerardo documenta sola lo
+    que falta y agregarlo es un renglón.
+  - ⛔ **La puerta NO entra en la clave de idempotencia**: el mismo ingreso es el mismo ingreso, la
+    puerta es una propiedad suya y no parte de su identidad. Sí queda en `datos.puerta` del clon,
+    que es el **único rastro** de por qué un ingreso sembró cinco renglones y no seis.
+  - ⚠️ **«hay moldes pero ninguno de esta puerta» se dice distinto que «no hay moldes»**: la acción es
+    otra —allá hay que cargarlos, acá hay que revisar en qué puertas corre cada paso.
 - 🆕 🔴 **LA PUERTA DE INGRESOS CORRE ANTES DE `exigirUsuario`, y sin `INGRESO_SECRETO` está
   CERRADA.** Del otro lado está `ingreso2.arebensrl.com`, que es de Gerardo y no tiene SSO, así que
   la llave es un secreto compartido por header (`x-ingreso-secreto`). Tres cosas que no se tocan:
@@ -130,8 +167,11 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   ```bash
   curl -X POST 'https://monitor.arebensrl.com/api/datos?recurso=agenda' \
     -H 'Content-Type: application/json' -H 'x-ingreso-secreto: <el secreto>' \
-    -d '{"action":"ingreso-externo","nombre":"IMP2","fecha":"2026-08-24"}'
+    -d '{"action":"ingreso-externo","nombre":"IMP2","fecha":"2026-08-24","tipo":"importacion"}'
   ```
+
+  🔴 **`tipo` es obligatorio** (o `puerta`, que es el mismo dato en nuestro vocabulario y sirve para
+  probar con `curl` sin esperar el mapa). Sin él, 400.
 - 🔑 **Es el tablero donde van las rutinas repetitivas de marketing** — decisión de proceso de Bruno
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen

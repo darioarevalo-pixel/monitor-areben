@@ -40,7 +40,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
-import { CLASES, hoyIso, type ClaseItem, type Destino, type ItemAgenda } from '@/lib/agenda'
+import { CLASES, hoyIso, PUERTAS, type ClaseItem, type Destino, type ItemAgenda, type Puerta } from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
@@ -91,6 +91,8 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
     arrastra: false,
     plantilla: null,
     offsetDias: null,
+    // Vacío = las cuatro puertas, que es el caso normal: cuatro de los seis pasos no cambian.
+    puertas: [],
     autor: null,
     creado: null,
     paraMi: true,
@@ -447,6 +449,34 @@ export function ModalItem({
                 </Field>
                 <div style={{ color: color.mut, fontSize: font.sm, paddingBottom: space[2] }}>
                   La regla de arriba no se usa en los moldes: el clon nace con la fecha del ingreso.
+                </div>
+              </div>
+            )}
+            {/*
+              Las puertas de entrada.
+
+              🔑 **Ninguna tildada = las cuatro**, igual que las marcas de arriba — y es el caso
+              normal: el precio, la foto, la publicación y las pantallas no cambian con la puerta, así
+              que se cargan una sola vez. Se tilda sólo en los dos pasos que sí cambian de dueña, el
+              nombre y la descripción, que van cargados **una vez por puerta**.
+
+              ⚠️ Y «producción propia no lleva renglón de descripción» no se dice acá: se dice **no
+              cargando ese molde**. Por eso no hay ningún «no corre en» que tildar.
+            */}
+            {it.plantilla === 'ingreso' && (
+              <div style={{ marginTop: space[3] }}>
+                <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
+                  Entra por <span style={{ fontWeight: weight.normal }}>(ninguna tildada = las cuatro)</span>
+                </div>
+                <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                  {PUERTAS.map((p) => (
+                    <Tilde
+                      key={p.key}
+                      puesto={(it.puertas ?? []).includes(p.key)}
+                      label={p.label}
+                      onToggle={() => set('puertas', toggleEnLista(it.puertas ?? [], p.key) as Puerta[])}
+                    />
+                  ))}
                 </div>
               </div>
             )}

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { CLAVES_PUERTA, PUERTAS, rotuloPuerta, type Puerta } from '@/lib/agenda'
 
 /**
  * **El disparador del ingreso** — la lista corta que hoy dispara una persona acordándose.
@@ -112,11 +113,13 @@ async function llamar(body: unknown, headers: Record<string, string> = {}) {
   return res
 }
 
+// La puerta va en el cuerpo por defecto porque **sin ella no se siembra**: dejarla afuera acá
+// convertiría cada test de las otras reglas en un test del 400 de la puerta.
 const desdeAfuera = (body: Record<string, unknown> = {}, secreto = 'el-secreto') =>
-  llamar({ action: 'ingreso-externo', nombre: 'IMP2', fecha: '2026-08-24', ...body }, { 'x-ingreso-secreto': secreto })
+  llamar({ action: 'ingreso-externo', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', ...body }, { 'x-ingreso-secreto': secreto })
 
 const desdeAdentro = (body: Record<string, unknown> = {}) =>
-  llamar({ action: 'ingreso', nombre: 'IMP2', fecha: '2026-08-24', ...body })
+  llamar({ action: 'ingreso', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', ...body })
 
 beforeEach(() => {
   vi.resetModules()
@@ -229,7 +232,7 @@ describe('sembrar: los renglones salen de los moldes, no del código', () => {
       mundo = nuevoMundo()
       // La puerta cae a hoy si la fecha no tiene forma, así que se prueba con el alta de adentro,
       // que la exige tal cual viene.
-      const res = await llamar({ action: 'ingreso', nombre: 'IMP2', fecha: mala })
+      const res = await llamar({ action: 'ingreso', nombre: 'IMP2', fecha: mala, puerta: 'importacion' })
       expect([200, 400]).toContain(res.code)
     }
   })
@@ -254,5 +257,186 @@ describe('el alta a mano', () => {
     const res = await desdeAdentro()
     expect(res.code).toBe(401)
     expect(mundo.insertados).toEqual([])
+  })
+})
+
+describe('la puerta de entrada: dos de los seis pasos cambian de dueña según por dónde entró', () => {
+  // El manual 06 cierra el nombre y la descripción **por puerta, no por sector**. Sembrar siempre los
+  // mismos moldes sirve para una sola de las cuatro y le pone la dueña equivocada a las otras tres.
+  const conPuertas = () => [
+    molde({ id: 'comun', titulo: 'Cargar el precio', datos: { plantilla: 'ingreso', offsetDias: 0 } }),
+    molde({ id: 'nom-imp', titulo: 'Nombre (Marketing)', datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['importacion'] } }),
+    molde({ id: 'nom-nac', titulo: 'Nombre (Administración)', datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['nacional'] } }),
+    molde({ id: 'desc-loc', titulo: 'Descripción (el local)', datos: { plantilla: 'ingreso', offsetDias: 1, puertas: ['nacional'] } }),
+  ]
+
+  it('🔴 sin puerta NO siembra: 400, ⛔ ni «sembrá todo»', async () => {
+    for (const sin of [undefined, '', null, 'depósito', 'IMPORTACION']) {
+      mundo = nuevoMundo()
+      const res = await desdeAfuera({ puerta: sin })
+      expect(res.code, String(sin)).toBe(400)
+      expect(mundo.insertados, String(sin)).toEqual([])
+    }
+  })
+
+  it('🔑 lista vacía = TODAS: el paso que no cambia se carga una vez y corre en las cuatro', async () => {
+    for (const puerta of ['produccion', 'nacional', 'importacion', 'accesorios']) {
+      mundo = nuevoMundo()
+      mundo.items = [molde({ id: 'comun', titulo: 'Cargar el precio', datos: { plantilla: 'ingreso', offsetDias: 0 } })]
+      const res = await desdeAfuera({ puerta })
+      expect(res.code, puerta).toBe(200)
+      expect(mundo.insertados.map((f) => f.titulo), puerta).toEqual(['IMP2 · Cargar el precio'])
+    }
+  })
+
+  it('clona sólo los moldes de esa puerta, y el de la otra no aparece', async () => {
+    mundo.items = conPuertas()
+    await desdeAfuera({ puerta: 'importacion' })
+    expect(mundo.insertados.map((f) => f.titulo))
+      .toEqual(['IMP2 · Cargar el precio', 'IMP2 · Nombre (Marketing)'])
+
+    mundo = nuevoMundo()
+    mundo.items = conPuertas()
+    await desdeAfuera({ puerta: 'nacional' })
+    expect(mundo.insertados.map((f) => f.titulo))
+      .toEqual(['IMP2 · Cargar el precio', 'IMP2 · Nombre (Administración)', 'IMP2 · Descripción (el local)'])
+  })
+
+  it('🔑 «producción propia no lleva renglón de descripción» se dice NO cargando el molde', async () => {
+    // No hay ningún `if` que sepa esto: producción propia recibe los comunes y nada más, porque
+    // ninguno de los dos moldes de nombre/descripción la incluye.
+    mundo.items = conPuertas()
+    await desdeAfuera({ puerta: 'produccion' })
+    expect(mundo.insertados.map((f) => f.titulo)).toEqual(['IMP2 · Cargar el precio'])
+  })
+
+  it('hay moldes pero ninguno de esta puerta: lo dice distinto que «no hay moldes»', async () => {
+    mundo.items = [molde({ id: 'nom-imp', datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['importacion'] } })]
+    const res = await desdeAfuera({ puerta: 'accesorios' })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('Accesorios')
+    expect(String(res.body?.error)).not.toContain('plantilla')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('⛔ la puerta NO entra en la clave: el mismo ingreso avisado con otra puerta no duplica', async () => {
+    mundo.items = conPuertas()
+    await desdeAfuera({ puerta: 'importacion' })
+    mundo.items = [...mundo.items, ...mundo.insertados]
+    mundo.insertados = []
+    const res = await desdeAfuera({ puerta: 'nacional' })
+    expect(res.body?.ya).toBe(true)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('el clon guarda por qué puerta entró: es el único rastro de por qué fueron 2 y no 3', async () => {
+    mundo.items = conPuertas()
+    await desdeAfuera({ puerta: 'importacion' })
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.puerta).toBe('importacion')
+    // ⛔ Y la clave sigue siendo `fecha·nombre`, sin la puerta adentro.
+    expect(datos.ingreso).toBe('2026-08-24·imp2')
+  })
+
+  it('🔴 un tipo de ingreso2 que no está en el mapa es 400 Y LO NOMBRA, ⛔ no una puerta por defecto', async () => {
+    const res = await desdeAfuera({ tipo: 'IMPO_CONTENEDOR', puerta: undefined })
+    expect(res.code).toBe(400)
+    // El error es a la vez el pedido: dice el texto exacto que hay que agregarle al mapa.
+    expect(String(res.body?.error)).toContain('IMPO_CONTENEDOR')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('el tipo de ingreso2 se traduce a nuestra puerta, y le gana a `puerta` si vienen los dos', async () => {
+    mundo.items = conPuertas()
+    // El vocabulario de Gerardo manda: `puerta` es sólo lo que se puede probar con un `curl`.
+    await desdeAfuera({ tipo: 'Nacional', puerta: 'importacion' })
+    expect(mundo.insertados.map((f) => f.titulo))
+      .toEqual(['IMP2 · Cargar el precio', 'IMP2 · Nombre (Administración)', 'IMP2 · Descripción (el local)'])
+  })
+})
+
+describe('puertas del ingreso: el catálogo', () => {
+  it('el core y el tipo `Puerta` dicen lo mismo', () => {
+    // 🔑 Fija las dos direcciones del desfasaje. Agregar una puerta **al tipo** y no al core no
+    // compila (falta la clave en este objeto); agregarla **al core** y no al tipo rompe el expect.
+    const cubiertas: Record<Puerta, true> = {
+      produccion: true,
+      nacional: true,
+      importacion: true,
+      accesorios: true,
+    }
+    expect([...CLAVES_PUERTA].sort()).toEqual(Object.keys(cubiertas).sort())
+  })
+
+  it('cada puerta tiene rótulo y ayuda: una lista de claves crudas no la lee nadie', () => {
+    for (const p of PUERTAS) {
+      expect(p.label.length, p.key).toBeGreaterThan(0)
+      expect(p.ayuda.length, p.key).toBeGreaterThan(0)
+      expect(rotuloPuerta(p.key)).toBe(p.label)
+    }
+  })
+})
+
+describe('cargar un molde: en qué puertas corre se guarda con el ítem', () => {
+  const guardar = (extra: Record<string, unknown> = {}) => llamar({
+    action: 'guardar-item',
+    item: {
+      id: 'm9',
+      clase: 'pendiente',
+      titulo: 'Cargar el nombre',
+      regla: { tipo: 'diaria' },
+      plantilla: 'ingreso',
+      offsetDias: 0,
+      ...extra,
+    },
+  })
+
+  it('las puertas tildadas se guardan en el ítem', async () => {
+    const res = await guardar({ puertas: ['importacion'] })
+    expect(res.code).toBe(200)
+    expect((mundo.insertados[0].datos as Record<string, unknown>).puertas).toEqual(['importacion'])
+  })
+
+  it('🔑 ninguna tildada NO se guarda: el campo ausente ya dice «las cuatro»', async () => {
+    // ⚠️ Guardar `[]` diría lo mismo con otra forma, y las dos formas conviviendo son dos lecturas
+    // que alguien va a tener que unificar. La ausencia es la única.
+    for (const vacio of [[], undefined]) {
+      mundo = nuevoMundo()
+      await guardar({ puertas: vacio })
+      expect((mundo.insertados[0].datos as Record<string, unknown>).puertas).toBeUndefined()
+    }
+  })
+
+  it('🔴 una puerta que no existe no se guarda: 400, ⛔ no se ignora en silencio', async () => {
+    for (const mala of [['deposito'], ['importacion', 'flores'], 'importacion', [1]]) {
+      mundo = nuevoMundo()
+      const res = await guardar({ puertas: mala })
+      expect(res.code, JSON.stringify(mala)).toBe(400)
+      expect(mundo.insertados, JSON.stringify(mala)).toEqual([])
+    }
+  })
+
+  it('las puertas de un molde guardado vuelven a salir por el GET', async () => {
+    mundo.items = [molde({ id: 'm1', datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['nacional'] } })]
+    const mod = await import('@/api/_agenda.js')
+    const res = resFalso()
+    await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
+      { method: 'GET', headers: {}, query: { recurso: 'agenda' }, body: null }, res,
+    )
+    expect(res.code).toBe(200)
+    const items = res.body?.items as Record<string, unknown>[]
+    expect(items[0].puertas).toEqual(['nacional'])
+  })
+
+  it('un molde sin puertas guardadas sale con la lista vacía, no con undefined', async () => {
+    // La pantalla hace `it.puertas.length`: un `undefined` que viaje la rompe en vez de leerse
+    // como «las cuatro».
+    const mod = await import('@/api/_agenda.js')
+    const res = resFalso()
+    await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
+      { method: 'GET', headers: {}, query: { recurso: 'agenda' }, body: null }, res,
+    )
+    const items = res.body?.items as Record<string, unknown>[]
+    expect(items[0].puertas).toEqual([])
   })
 })

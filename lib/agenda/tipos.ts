@@ -133,6 +133,16 @@ export type ItemAgenda = {
    * columna «cuándo» del manual, escrita en un número para que el disparador pueda ponerle fecha.
    */
   offsetDias?: number | null
+  /**
+   * En qué **puertas de entrada** corre este paso. Sólo para los moldes.
+   *
+   * 🔑 **Vacío es TODAS**, igual que `marcas` — y es lo que hace que los cuatro pasos que no cambian
+   * con la puerta (precio, foto, publicar, pantallas) se carguen una sola vez y no cuatro.
+   *
+   * Existe porque el nombre y la descripción **cambian de dueña según por dónde entró el producto**
+   * (manual 06). El catálogo y la regla viven en `puertas.core.js`.
+   */
+  puertas?: Puerta[]
   autor: string | null
   creado: string | null
   /**
@@ -146,6 +156,16 @@ export type ItemAgenda = {
 }
 
 export type ClaseItem = 'pendiente' | 'aviso'
+
+/**
+ * Por dónde entró el producto. Son cuatro y salen del manual 06.
+ *
+ * ⚠️ **El catálogo de verdad —con rótulos y ayuda— vive en `puertas.core.js`**, porque el handler lo
+ * necesita y no puede importar TypeScript. Esto es sólo la unión, para que el editor ayude. El test
+ * `puertas del ingreso` fija que las dos listas digan lo mismo: si alguien agrega una puerta en el
+ * core y se olvida de acá, el test lo dice.
+ */
+export type Puerta = 'produccion' | 'nacional' | 'importacion' | 'accesorios'
 
 /**
  * El tilde: este pendiente se hizo este día.

@@ -12,7 +12,13 @@
 
 import { diasDelMes, FECHAS_COMERCIALES, hoyIso, iso, resolverComercial, sumarDias } from '@/lib/calendario'
 import type { Marca } from '@/lib/nav.datos'
-import { DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Regla } from './tipos'
+import { DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Puerta, type Regla } from './tipos'
+import {
+  CLAVES_PUERTA as CLAVES_PUERTA_JS,
+  moldeCorreEn as moldeCorreEnJs,
+  PUERTAS as PUERTAS_JS,
+  rotuloPuerta as rotuloPuertaJs,
+} from './puertas.core.js'
 import {
   aplicaEn as aplicaEnJs,
   CLAVES_TIPO_REGLA as CLAVES_TIPO_REGLA_JS,
@@ -37,6 +43,13 @@ export const ocurrencias = ocurrenciasJs as (regla: Regla, desde: FechaIso, hast
 
 export * from './tipos'
 export { hoyIso }
+
+// Las cuatro puertas de entrada del ingreso. El motor está en JS por el mismo motivo que el de las
+// reglas: `api/_agenda.js` filtra los moldes antes de insertarlos y no puede importar TypeScript.
+export const PUERTAS = PUERTAS_JS as { key: Puerta; label: string; ayuda: string }[]
+export const CLAVES_PUERTA = CLAVES_PUERTA_JS as Puerta[]
+export const rotuloPuerta = rotuloPuertaJs as (key: string) => string
+export const moldeCorreEn = moldeCorreEnJs as (puertasDelMolde: Puerta[] | undefined, puerta: Puerta) => boolean
 
 /** 0 = domingo, como `getDay()`. Ver la advertencia de `aplicaEn` antes de tocar el orden. */
 const DIAS_LARGOS = ['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados']

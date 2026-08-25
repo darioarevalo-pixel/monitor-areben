@@ -37,6 +37,7 @@ import { aplicaEn, esFechaIso, motivoReglaInvalida } from '../lib/agenda/reglas.
 // Se importa de su carpeta en vez de mudarlo a `lib/`: mover el archivo tocaría cuatro archivos de
 // Novedades, que es código compartido, y la ruta rara cuesta menos que el conflicto.
 import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
+import { CLAVES_PUERTA, moldeCorreEn, puertaDeTipo, puertaValida, rotuloPuerta } from '../lib/agenda/puertas.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -161,12 +162,25 @@ function normalizarBeneficio(b) {
  * 🔑 **La idempotencia es por `clave`**, no por «ya corrió hoy»: el mismo ingreso avisado dos veces
  * —el reintento de un webhook, alguien que aprieta dos veces— no puede duplicar seis pendientes.
  *
+ * 🔑 **La puerta de entrada es obligatoria y no tiene default.** Dos de los pasos —el nombre y la
+ * descripción— cambian de dueña según por dónde entró el producto (ver `puertas.core.js`), así que
+ * sembrar «todo» dejaría renglones con la dueña equivocada, que es peor que no sembrar: nadie
+ * revisa un pendiente que ya tiene nombre puesto. Mismo criterio que el 503 de la puerta sin
+ * secreto: **lo que falta cierra, no abre.**
+ *
+ * ⛔ **La puerta NO entra en la clave de idempotencia.** El mismo ingreso es el mismo ingreso: la
+ * puerta es una propiedad suya, no parte de su identidad. Avisarlo dos veces con puertas distintas
+ * es un error de quien avisa, y duplicar los renglones no lo arreglaría.
+ *
  * Devuelve `{ creados, ya }`: `ya` cuenta el caso en que estaba sembrado y no se tocó nada.
  */
-async function sembrarIngreso(supabase, { nombre, fecha, autor }) {
+async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta }) {
   const limpio = String(nombre || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
   if (!limpio) return { error: 'Falta el nombre del ingreso.' };
   if (!esFechaIso(fecha)) return { error: 'La fecha del ingreso tiene que ser YYYY-MM-DD.' };
+  if (!puertaValida(puerta)) {
+    return { error: `Falta por qué puerta entró (usá ${CLAVES_PUERTA.join(', ')}).` };
+  }
 
   const clave = `${fecha}·${limpio.toLowerCase()}`;
 
@@ -183,10 +197,19 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor }) {
   const sembradosHoy = todos.filter((i) => i.datos && i.datos.ingreso && String(i.created_at || '').slice(0, 10) === hoy).length;
   if (sembradosHoy >= TOPE_SEMBRADO_DIARIO) return { error: 'Se llegó al tope de ingresos sembrados por hoy.' };
 
-  const moldes = todos
-    .filter((i) => i.datos && i.datos.plantilla === 'ingreso')
+  const deIngreso = todos.filter((i) => i.datos && i.datos.plantilla === 'ingreso');
+  if (!deIngreso.length) return { error: 'No hay ningún paso cargado como plantilla de ingreso.' };
+
+  // 🔑 El filtro por puerta va **acá y no en la carga**: el molde de «descripción» de producción
+  // propia no existe (ese paso no lleva renglón), y eso se dice no cargándolo. Lista vacía = todas.
+  const moldes = deIngreso
+    .filter((i) => moldeCorreEn(i.datos.puertas, puerta))
     .sort((a, b) => (Number(a.datos.offsetDias) || 0) - (Number(b.datos.offsetDias) || 0) || String(a.titulo).localeCompare(String(b.titulo), 'es'));
-  if (!moldes.length) return { error: 'No hay ningún paso cargado como plantilla de ingreso.' };
+  // Hay moldes, pero ninguno para esta puerta. ⚠️ Se dice distinto que «no hay moldes» porque la
+  // acción es otra: allá hay que cargarlos, acá hay que revisar en qué puertas corren los que hay.
+  if (!moldes.length) {
+    return { error: `Hay moldes cargados, pero ninguno corre para «${rotuloPuerta(puerta)}».` };
+  }
 
   const filas = moldes.map((m, n) => ({
     id: `it${Date.now()}_${n}_${Math.random().toString(36).slice(2, 8)}`,
@@ -204,7 +227,10 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor }) {
     // 🔑 El clon **arrastra**: es la razón de ser de esto. Un paso del lanzamiento que se evapora al
     // día siguiente es exactamente el que «se cae porque nadie lo mira». ⛔ Y NO es plantilla: si lo
     // fuera, el molde se clonaría a sí mismo en el próximo ingreso.
-    datos: { arrastra: true, ingreso: clave },
+    // 🔑 `puerta` queda en el clon aunque nada la lea todavía: es el ÚNICO rastro de por qué este
+    // ingreso sembró cinco renglones y no seis. Sin ella, «faltó el de la descripción» no se puede
+    // contestar sin adivinar. ⛔ No entra en `clave`.
+    datos: { arrastra: true, ingreso: clave, puerta },
     autor,
     updated_at: new Date().toISOString(),
   }));
@@ -241,10 +267,34 @@ export default async function handler(req, res) {
     if (!cfgP.url || !cfgP.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
     const sb = createClient(cfgP.url, cfgP.key);
     const b = req.body || {};
+
+    /*
+      🔑 **La puerta la elige Administración en `ingreso2`, en la misma carga** (decisión de Bruno,
+      24-ago-2026): la sabe quien carga, en el momento en que la sabe. Por eso viaja en el aviso y el
+      Monitor no pregunta nada — no hay una rutina nueva que alguien tenga que acordarse de contestar.
+
+      Se aceptan las dos formas y no es indulgencia: `tipo` es el vocabulario de Gerardo —el que va a
+      mandar `ingreso2`— y `puerta` es el nuestro, que es lo que se puede probar con un `curl` sin
+      esperar a que el mapa esté completo.
+
+      🔴 **Un tipo que no está en el mapa contesta 400 y lo nombra, ⛔ no elige una puerta por
+      defecto.** El error es a la vez el pedido: la primera prueba de Gerardo devuelve el texto exacto
+      que hay que agregarle a `TIPOS_INGRESO2`.
+    */
+    const puerta = b.tipo === undefined || b.tipo === null || b.tipo === ''
+      ? b.puerta
+      : puertaDeTipo(b.tipo);
+    if (b.tipo && !puerta) {
+      return res.status(400).json({
+        error: `No sé a qué puerta corresponde el tipo «${String(b.tipo).slice(0, 40)}». Las puertas son: ${CLAVES_PUERTA.join(', ')}.`,
+      });
+    }
+
     const r = await sembrarIngreso(sb, {
       nombre: b.nombre,
       fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
       autor: 'Ingresos',
+      puerta,
     });
     if (r.error) return res.status(400).json({ error: r.error });
     return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
@@ -317,6 +367,8 @@ export default async function handler(req, res) {
         // El molde del disparador del ingreso. Un molde no corre ningún día: lo filtra `vaEl`.
         plantilla: (i.datos && i.datos.plantilla) || null,
         offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
+        // En qué puertas corre este molde. **Vacío = todas**, igual que `marcas`.
+        puertas: (i.datos && Array.isArray(i.datos.puertas) ? i.datos.puertas : []),
         autor: i.autor,
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
@@ -521,6 +573,7 @@ export default async function handler(req, res) {
         nombre: b.nombre,
         fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
         autor: yo,
+        puerta: b.puerta,
       });
       if (r.error) return res.status(400).json({ error: r.error });
       return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
@@ -542,6 +595,10 @@ export default async function handler(req, res) {
       const marcas = listaDe(it.marcas, MARCAS);
       if (marcas === null) return res.status(400).json({ error: `Marca inválida (usá ${MARCAS.join(', ')}).` });
 
+      // Las puertas en las que corre el molde. Se leen como `marcas`: **vacío es todas**.
+      const puertas = listaDe(it.puertas, CLAVES_PUERTA);
+      if (puertas === null) return res.status(400).json({ error: `Puerta inválida (usá ${CLAVES_PUERTA.join(', ')}).` });
+
       const fila = {
         id,
         clase: String(it.clase),
@@ -560,6 +617,9 @@ export default async function handler(req, res) {
           arrastra: String(it.clase) === 'pendiente' && !!it.arrastra,
           ...(PLANTILLAS.includes(String(it.plantilla)) ? { plantilla: String(it.plantilla) } : {}),
           ...(Number.isFinite(Number(it.offsetDias)) ? { offsetDias: Math.max(0, Math.min(90, Math.trunc(Number(it.offsetDias)))) } : {}),
+          // ⚠️ Sólo se guarda si hay alguna: la lista vacía **es** el caso normal (el paso corre en las
+          // cuatro puertas) y escribirla sería guardar un `[]` que dice lo mismo que no estar.
+          ...(puertas.length ? { puertas } : {}),
         },
         autor: yo,
         updated_at: new Date().toISOString(),

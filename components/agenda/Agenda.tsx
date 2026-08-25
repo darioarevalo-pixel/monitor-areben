@@ -28,12 +28,13 @@ import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  Button, Card, EmptyState, Esqueleto, Field, Input, Modal, Notice, StatusPill, Tabs,
+  Button, Card, EmptyState, Esqueleto, Field, Input, Modal, Notice, Select, StatusPill, Tabs,
   color, font, space, weight, useConfirmar, useToast, type TabItem,
 } from '@/components/ui'
 import {
-  avisosDe, contarSinTildar, corre, hoyIso, pendientesDe, promosDe, rotuloBeneficio, rotuloRegla, vaEl,
-  type ItemAgenda, type Promo,
+  avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, pendientesDe, promosDe, PUERTAS,
+  rotuloBeneficio, rotuloPuerta, rotuloRegla, vaEl,
+  type ItemAgenda, type Promo, type Puerta,
 } from '@/lib/agenda'
 import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } from '@/lib/agenda/cliente'
 import { tituloLimpio } from '@/lib/nav'
@@ -178,7 +179,7 @@ export function Agenda() {
 
       {sembrando && (
         <ModalIngreso
-          moldes={items.filter((i) => i.plantilla === 'ingreso').length}
+          moldes={items.filter((i) => i.plantilla === 'ingreso')}
           onCerrar={() => setSembrando(false)}
           onListo={async () => { setSembrando(false); await cargar() }}
         />
@@ -401,7 +402,13 @@ function FilaItem({
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
             {i.plantilla === 'ingreso'
-              ? `a los ${i.offsetDias ?? 0} días del ingreso`
+              ? `a los ${i.offsetDias ?? 0} días del ingreso${
+                  // ⚠️ Se nombra sólo cuando corre en ALGUNAS. «las cuatro» es el caso normal y
+                  // escribirlo en cada renglón esconde justo los dos que sí cambian de dueña.
+                  i.puertas && i.puertas.length
+                    ? ` · sólo si entra por ${i.puertas.map(rotuloPuerta).join(' o ')}`
+                    : ''
+                }`
               : rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
             {/* La regla sola miente cuando el ítem arrastra: dice "los martes" y en la pantalla del
                 local aparece un jueves. Acá se lee de una, sin abrir el modal. */}
@@ -461,20 +468,28 @@ function EstadoPromo({ promo, hoy }: { promo: Promo; hoy: string }) {
  * no siembra nada — es preferible a crear seis pendientes de mentira que después nadie tilda.
  */
 function ModalIngreso({ moldes, onCerrar, onListo }: {
-  moldes: number
+  moldes: ItemAgenda[]
   onCerrar: () => void
   onListo: () => Promise<void>
 }) {
   const toast = useToast()
   const [nombre, setNombre] = useState('')
   const [fecha, setFecha] = useState(hoyIso())
+  // 🔴 **Arranca vacía y no en «importación»**, que es la puerta más común. Un default acá se
+  // contesta solo: el que carga aprieta sin mirar y los dos pasos que cambian de dueña quedan mal
+  // puestos, que es peor que no sembrar — un pendiente que ya tiene nombre no lo revisa nadie.
+  const [puerta, setPuerta] = useState<Puerta | ''>('')
   const [guardando, setGuardando] = useState(false)
 
+  // Cuántos renglones va a crear ESTA puerta. El total no sirve: los pasos que cambian de dueña
+  // están cargados uno por puerta, así que decir «se van a crear 11» sería mentir en las cuatro.
+  const paraEsta = puerta ? moldes.filter((m) => moldeCorreEn(m.puertas, puerta)) : []
+
   async function sembrar() {
-    if (!nombre.trim()) return
+    if (!nombre.trim() || !puerta) return
     setGuardando(true)
     try {
-      const r = await sembrarIngreso(nombre.trim(), fecha)
+      const r = await sembrarIngreso(nombre.trim(), fecha, puerta)
       if (r.ya) toast.ok('Ese ingreso ya estaba cargado: no se duplicó nada.')
       else toast.ok(`Listo: ${r.creados} ${r.creados === 1 ? 'pendiente' : 'pendientes'}.`)
       await onListo()
@@ -497,7 +512,7 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
             variant="solid"
             tone="brand"
             loading={guardando}
-            disabled={!nombre.trim() || moldes === 0}
+            disabled={!nombre.trim() || !puerta || paraEsta.length === 0}
             onClick={() => void sembrar()}
           >
             Cargar los pendientes
@@ -505,7 +520,7 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
         </>
       }
     >
-      {moldes === 0 ? (
+      {moldes.length === 0 ? (
         <Notice tone="warning">
           <b>Todavía no hay ningún paso cargado como molde.</b> Se cargan una sola vez desde «Nuevo
           pendiente», tildando «Es un paso de la lista de ingreso» y poniéndole la dueña y a los
@@ -524,9 +539,47 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
               <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
             </Field>
           </div>
+          {/*
+            🔑 **Por dónde entró.** El nombre y la descripción cambian de dueña según la puerta —lo
+            cierra el manual «El nombre y la descripción del producto»—, así que sin esto los dos
+            renglones que más se caen salen con la persona equivocada.
+
+            ⚠️ Va **sin opción vacía elegible**: el placeholder es un `disabled`, no un «cualquiera».
+          */}
+          <div style={{ marginTop: space[3] }}>
+            <Field
+              label="Por dónde entró"
+              hint="Decide quién pone el nombre y quién escribe la descripción. Los otros pasos no cambian."
+              width={280}
+            >
+              <Select value={puerta} onChange={(e) => setPuerta(e.target.value as Puerta | '')}>
+                <option value="" disabled>Elegí la puerta…</option>
+                {PUERTAS.map((p) => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </Select>
+            </Field>
+            {puerta && (
+              <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
+                {PUERTAS.find((p) => p.key === puerta)?.ayuda}
+              </div>
+            )}
+          </div>
           <div style={{ marginTop: space[3], color: color.mut, fontSize: font.sm }}>
-            Se van a crear <b>{moldes}</b> {moldes === 1 ? 'pendiente' : 'pendientes'}, cada uno con
-            su dueña. El mismo ingreso cargado dos veces no los duplica.
+            {!puerta ? (
+              <>Elegí la puerta para ver cuántos pendientes se van a crear.</>
+            ) : paraEsta.length === 0 ? (
+              <>
+                <b>Ninguno de los {moldes.length} moldes cargados corre para «{rotuloPuerta(puerta)}».</b>{' '}
+                Revisá en «Cargar» en qué puertas corre cada paso.
+              </>
+            ) : (
+              <>
+                Se van a crear <b>{paraEsta.length}</b>{' '}
+                {paraEsta.length === 1 ? 'pendiente' : 'pendientes'}, cada uno con su dueña. El mismo
+                ingreso cargado dos veces no los duplica.
+              </>
+            )}
           </div>
         </>
       )}
