@@ -967,6 +967,7 @@ export const NAV_CATS: NavCat[] = [
         "keys": [],
         "items": [
           { "ruta": "/tncat/fotos", "label": "Fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
+          { "ruta": "/tncat/cola", "label": "La cola de fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
           { "ruta": "/tncat/categorias", "label": "Categorías", "icono": "tn-categorias", "key": "tncat", "sub": ["categorias", "asignar"] },
           { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "icono": "tn-visibilidad", "key": "tncat", "sub": "ocultar" },
           { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "icono": "talles", "key": "gen-talles" },

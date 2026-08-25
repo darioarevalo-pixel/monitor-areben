@@ -63,7 +63,7 @@ const conSelector = archivos.filter((a) => a.src.includes('<SelectorLinea') && !
 const llamanTn = archivos.filter((a) => argumentos(a.src).length > 0)
 
 describe('lo que corta por línea se pide por LÍNEA donde hay selector', () => {
-  it('las pantallas con selector existen y son las ocho conocidas', () => {
+  it('las pantallas con selector existen y son las diez conocidas', () => {
     // Si este número cambia sin que cambie la lista de abajo, alguien agregó un selector y no miró
     // qué más había que cortar. Es exactamente lo que pasó el 22-ago con las cinco de plata.
     // ⚠️ **En Norte el selector es PARCIAL y a propósito**: corta sólo el bloque de Metas —el
@@ -77,6 +77,7 @@ describe('lo que corta por línea se pide por LÍNEA donde hay selector', () => 
       '/components/productos/ProductosTable.tsx',
       '/components/resumen/Resumen.tsx',
       '/components/sesionfotos/SesionFotos.tsx',
+      '/components/tncat/ColaCard.tsx',
       '/components/tncat/ImagenesCard.tsx',
       '/components/variantes/VariantesTable.tsx',
     ])

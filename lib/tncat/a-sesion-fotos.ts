@@ -23,6 +23,8 @@ import type { ProductoFchk, VarianteFchk } from './tipos'
 
 /** Un producto que sí se puede pedir, con las variantes a tildar ya elegidas. */
 export type PedidoFoto = {
+  /** Id de producto en Tienda Nube: de dónde salió el pedido. Lo usa la cola para volver a atarlo. */
+  tnId: string
   /** Id de producto de Gestión Nube. */
   pid: string
   /** Nombre de Gestión Nube (el que va a ver quien arma la sesión). */
@@ -68,14 +70,20 @@ export const MOTIVO_EXCLUIDO_LABEL: Record<MotivoExcluido, string> = {
 
 const norm = (s: string | null | undefined): string => String(s ?? '').toLowerCase().trim()
 
-type Indice = { bySku: Map<string, Variante[]>; byBarcode: Map<string, Variante[]> }
+/**
+ * Índice de códigos de GN. Se exporta porque la **cola de fotos** (`lib/tncat/cola.ts`) mira las
+ * mismas variantes desde otro ángulo —renglón por variante en vez de producto por producto— y si
+ * cada pantalla armara el suyo, la lista y el botón que la manda a una sesión podrían contestarse
+ * distinto sobre la misma variante. Uno solo, y las dos proyecciones encima.
+ */
+export type Indice = { bySku: Map<string, Variante[]>; byBarcode: Map<string, Variante[]> }
 
 /**
  * Índice código → variantes de GN. Guarda **todas** las que comparten un código en vez de pisar:
  * dos variantes pueden compartirlo (pasa cuando se duplica un producto en GN) y quedarse con la
  * última elegiría un producto a ciegas. Con la lista entera, el caso se puede NOMBRAR.
  */
-function indexar(variantes: Variante[]): Indice {
+export function indexar(variantes: Variante[]): Indice {
   const bySku = new Map<string, Variante[]>()
   const byBarcode = new Map<string, Variante[]>()
   for (const v of variantes) {
@@ -93,7 +101,7 @@ function indexar(variantes: Variante[]): Indice {
  * `stockDeVariante`: si los dos criterios se contestaran distinto, el stock que muestra la cola y
  * el producto que abre el borrador serían de dos productos diferentes.
  */
-function variantesGnDe(v: VarianteFchk, idx: Indice): Variante[] {
+export function variantesGnDe(v: VarianteFchk, idx: Indice): Variante[] {
   // Sin guard del código vacío: el índice ya no tiene la clave `''` (lo filtra `indexar`), así que
   // buscarla devuelve undefined y cae al criterio siguiente. Repetir el guard acá lo volvía
   // INALCANZABLE — un mutante que lo sacaba del índice sobrevivía, tapado por esta copia.
@@ -162,7 +170,7 @@ export function cruzarParaSesion(
       continue
     }
 
-    pedir.push({ pid: pids[0], nombre: encontradas[0].name || nombreTn, nombreTn, vids })
+    pedir.push({ tnId, pid: pids[0], nombre: encontradas[0].name || nombreTn, nombreTn, vids })
   }
 
   return { pedir, excluidos }

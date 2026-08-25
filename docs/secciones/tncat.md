@@ -11,13 +11,13 @@ el cliente, en el momento.** Y del otro lado no hay historial: lo que se pisa, s
 
 | | |
 |---|---|
-| panel | `components/tncat/` (11 archivos; los caros: `FotosCard.tsx` **816** · `FichaProducto.tsx` 492 · `ImagenesCard.tsx` 443 · `AsignarCard.tsx` 310) |
-| lógica | `lib/tncat/` (16 archivos; `auditoria.ts` **451** · `prioridad.ts` **371** · `cliente.ts` 204) |
+| panel | `components/tncat/` (12 archivos; los caros: `FotosCard.tsx` **816** · `FichaProducto.tsx` 492 · `ImagenesCard.tsx` 443 · `AsignarCard.tsx` 310 · `ColaCard.tsx` 300) |
+| lógica | `lib/tncat/` (17 archivos; `auditoria.ts` **451** · `prioridad.ts` **371** · `cola.ts` 290 · `cliente.ts` 204) |
 | caché del catálogo | `lib/tn-audit.ts` — **no es de esta sección**, lo comparten cinco más |
 | servidor que escribe | **ninguno del monitor**: `tn-categorias`, `tn-subir-imagen` y `tiendanube-audit` son de **`bdi-catalogo`** (otro repo, otro proyecto de Vercel) — los tres conocen `?store=bdi\|zattia\|stunned` |
 | puertas propias | `api/_tn-ignorados.js` y `api/_tn-fotos-verificadas.js`, las dos por `api/datos.js?recurso=ignorados\|fotos-verificadas` |
 | base | `tn_ignorados` y `tn_fotos_verificadas`, **una por marca** (`sql/migrate-tn-*.sql`) |
-| tests | 9 archivos `tests/tncat*.test.ts`, ~1.330 líneas |
+| tests | 10 archivos `tests/tncat*.test.ts`, ~1.600 líneas |
 
 🔑 **La Carga de imágenes lleva selector de línea** (22-ago-2026): escribe en **una** Tienda Nube, y
 Stunned tiene la suya (store 7516263, token propio, `stunned.com.ar`) aunque comparta la base de
@@ -28,10 +28,18 @@ por dónde subir, porque `bdi-catalogo/api/tn-subir-imagen.js` sólo conocía do
 líneas. Dárselo sin eso mostraría los ignorados de Zattia sobre el catálogo de Stunned.
 El eje entero está en `docs/lineas.md`.
 
-🔑 **No es una pantalla: son CUATRO subáreas**, cada una con su URL y su entrada de sidebar
-(`/tncat/fotos` · `/categorias` · `/visibilidad` · `/descripciones`). La subárea sale del **2º tramo
-de la URL**, no de una pestaña interna → `components/tncat/Tncat.tsx:24`. Y la cuarta **no es de
-tncat**: monta `components/gen-talles/GenTalles`, que es otra sección con su propio permiso.
+🔑 **No es una pantalla: son SEIS subáreas**, cada una con su URL y su entrada de sidebar
+(`/tncat/fotos` · `/cola` · `/categorias` · `/visibilidad` · `/descripciones` · `/redaccion`). La
+subárea sale del **2º tramo de la URL**, no de una pestaña interna → `components/tncat/Tncat.tsx`.
+Las dos últimas **no son de tncat**: montan `gen-talles` y `gen-desc`, que son secciones con su
+propio permiso.
+
+🔑 **`/tncat/cola` ⛔ NO estrena permiso**: cuelga del mismo `tncat`/`imagenes` que «Fotos», porque le
+habla exactamente a quien sube las fotos. Una sección nueva estrena un permiso, y **un permiso que
+nadie tilda es una pantalla que no ve nadie** — la lección que dejó «Día a día» de Ventas mensuales.
+⚠️ Lleva **selector de línea** (como Carga de imágenes) porque la foto termina en la tienda de esa
+línea y la solicitud de Stunned es una lista aparte; está en la lista blanca de
+`tests/lineas-cableado.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -147,6 +155,60 @@ buscar cada producto, a mano, en el buscador del borrador de Sesión de fotos. A
   `lib/solicitudes/disparador.ts`.
 - ▶️ **Nadie lo caminó todavía contra la tienda real**: el cruce se probó con fixtures y con el ETL
   bajado, no apretando el botón en prod.
+
+## La cola como PANTALLA — `/tncat/cola` (24-ago-2026)
+
+El botón resolvía «llevame todo a un borrador». Lo que faltaba era el lugar donde se mira **antes de
+decidir qué entra en la próxima sesión**. La regla vive en `lib/tncat/cola.ts` (puro); `ColaCard.tsx`
+sólo tiene el estado de la pantalla.
+
+- 🔴 **La cola aparente no es la cola real, y por eso la pantalla NO arranca por el total.** Medido
+  el 24-ago contra las dos tiendas:
+
+  | | BDI | Zattia |
+  |---|---|---|
+  | variantes sin foto | 173 | 441 |
+  | …que cruzan con GN | 107 | 346 |
+  | …**y con stock ⇒ fotografiables hoy** | **75** | **168** |
+  | unidades esperando una foto | **301** | **463** |
+  | ya salieron a una sesión y siguen sin foto | 21 | 31 |
+  | la que espera hace más | **647 d** (21 u) | 373 d |
+
+  Encabezarla con las 441 manda a buscar 273 cosas que no están, y el que vuelve con las manos
+  vacías deja de creerle a la lista. Lo trabado se cuenta aparte **con la acción de cada motivo**.
+- 🔑 **El estado del renglón lo decide `cruzarParaSesion`, no una regla nueva.** La cola la llama
+  adentro: si clasificara por su cuenta podría pintar de verde un renglón que el botón después
+  descarta, y nadie podría saber cuál de las dos pantallas tiene razón. **Hay un test del
+  invariante**: los renglones `lista` son exactamente los `vids` que el botón manda tildados.
+- 🔑 **Un renglón de un producto PEDIDO puede no estar listo.** `cruzarParaSesion` decide por
+  producto y deja afuera las variantes sin stock, así que el producto entra por el color que sí
+  tiene y el otro sale `sin-stock`.
+- 🔑 **La antigüedad es la de la VARIANTE.** El 94 % (BDI) y el 85 % (Zattia) de la cola son colores
+  que le faltan a productos que **ya tienen fotos**, así que la fecha del producto es una cota
+  superior. Se agregó `created_at` por variante al audit de `bdi-catalogo` (commit `0e87de2`,
+  verificado en prod: **1.797 de 1.797** variantes de Zattia lo traen). ⚠️ Medida la diferencia
+  resultó **chica** —mediana 0 d, y sólo 6 variantes de Zattia pasan de 90— porque los colores se
+  cargan casi siempre con el producto: el eje no estaba roto, pero ahora el número se puede afirmar.
+  ⛔ Una respuesta cacheada vieja no lo trae y la pantalla dice **«sin fecha»**, ⛔ no 0.
+- 🔑 **Lo único que la cola no puede saber mirando la tienda: que ya se intentó.** Sale del historial
+  de solicitudes, que Sesión de fotos ya carga. ⚠️ El motivo lo llena el «¿qué se fotografió?»,
+  estrenado el 24-ago ⇒ **0 de 31 solicitudes lo tienen todavía** y se va a llenar solo. Por eso la
+  pantalla distingue las tres respuestas —nadie contestó · dijeron que sí y la tienda sigue sin la
+  foto · no se pudo, con motivo— y ⛔ no las mezcla.
+- ⚠️ **No es una lista de tareas y no se tilda**: sale del estado de la tienda, así que lo que no se
+  fotografió vuelve solo mañana. Lo único que se le agrega es memoria.
+- 🔴 **Caminarlo encontró DOS defectos que 4.679 tests no vieron**:
+  1. con el catálogo caído decía **«Leyendo la tienda y el catálogo…» para siempre** — la frase que
+     promete que en un rato va a haber algo. Ahora cada fuente dice su nombre y su motivo (el 401 de
+     Zattia se lee entero) y el cartel de espera nombra **lo que falta**, no las tres cosas.
+  2. el contador de reincidentes daba **23 y eran 31**: los `vids` se buscaban sólo para los
+     productos pedidos, así que un producto entero sin stock perdía su historial. Que hoy no se
+     pueda volver a pedir no borra que salió y volvió sin la foto.
+- ▶️ **Falta caminarla con datos a la vista**: el 401 del ETL de Zattia en local
+  (`ZATTIA_SUPABASE_SERVICE_KEY` no está en el `.env`) y el puente de Chrome cortado dejaron sin
+  ejercer la tabla, los filtros, los dos órdenes y el botón «Pedir una sesión con estas N». Los
+  números sí se verificaron **por otro camino**: el núcleo corrido sobre el audit real + el
+  `inventario` + las `solicitudes` de las dos marcas da lo mismo que medirlo por `psql` aparte.
 
 ## Lo que ya se rompió acá
 

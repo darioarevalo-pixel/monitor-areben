@@ -7,6 +7,7 @@ import { esAdmin, puedeSub, puedeVer } from '@/lib/permisos'
 import { CategoriasCard } from './CategoriasCard'
 import { ImagenesCard } from './ImagenesCard'
 import { FotosCard } from './FotosCard'
+import { ColaCard } from './ColaCard'
 import { AsignarCard } from './AsignarCard'
 import { ExplorarCategoriaCard } from './ExplorarCategoriaCard'
 import { AgotadosCard } from './AgotadosCard'
@@ -44,7 +45,7 @@ const GenDesc = dynamic(() => import('@/components/gen-desc/GenDesc').then((m) =
  * Acá adentro no hay pestañas: la subárea sale de la URL y esta pantalla solo elige qué
  * mostrar. Si la dirección no trae ninguna, cae en la primera que la persona pueda ver.
  */
-type Sub = 'fotos' | 'categorias' | 'visibilidad' | 'descripciones' | 'redaccion'
+type Sub = 'fotos' | 'cola' | 'categorias' | 'visibilidad' | 'descripciones' | 'redaccion'
 
 export function Tncat() {
   const { marca, perfil } = useSesion()
@@ -60,6 +61,10 @@ export function Tncat() {
 
   const subs: { key: Sub; label: string; hint: string; ok: boolean }[] = [
     { key: 'fotos', label: 'Fotos', hint: 'Subir fotos y revisar que estén pegadas al color', ok: verImg },
+    // 🔑 Cuelga del mismo sub que «Fotos» y ⛔ no estrena permiso: la cola le habla a quien sube
+    // las fotos, que es exactamente quien ya lo tiene tildado. Un permiso nuevo es una pantalla
+    // que no ve nadie hasta que alguien se acuerde de tildarlo — la lección de «Día a día».
+    { key: 'cola', label: 'La cola', hint: 'Qué falta fotografiar, en qué orden, y qué ya se intentó', ok: verImg },
     { key: 'categorias', label: 'Categorías', hint: 'Asignar y quitar categorías de la tienda', ok: verCat || verAsig },
     { key: 'visibilidad', label: 'Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
     { key: 'descripciones', label: 'Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
@@ -91,6 +96,7 @@ export function Tncat() {
       </header>
 
       {activa === 'fotos' && <Fotos marca={marca} />}
+      {activa === 'cola' && <ColaCard />}
       {activa === 'categorias' && <Categorias marca={marca} verCat={verCat} verAsig={verAsig} />}
       {activa === 'visibilidad' && <Visibilidad marca={marca} />}
       {activa === 'descripciones' && <GenTalles />}

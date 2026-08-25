@@ -87,6 +87,17 @@ export type SubirResp = {
 
 // ── Revisar fotos por variante (card 3, fchk) ───────────────────────────────────
 export type VarianteFchk = {
+  /** Id de la variante en Tienda Nube. Lo manda el audit con `?variantes=1` desde siempre. */
+  id?: string | null
+  /**
+   * Alta de la VARIANTE en Tienda Nube. Es la única fecha con la que se puede ordenar la cola de
+   * fotos por antigüedad sin inventar el número: la del producto es una cota superior, porque el
+   * grueso de la cola son colores que le faltan a productos que ya tienen fotos.
+   *
+   * ⚠️ Lo agregó el audit de `bdi-catalogo` el 24-ago-2026 ⇒ una respuesta cacheada de antes no lo
+   * trae, y por eso es opcional. ⛔ No se rellena con la del producto: la pantalla dice «sin fecha».
+   */
+  created_at?: string | null
   color?: string | null
   image_url?: string | null
   /** SKU de la variante (cuando se pide `?variantes=1`): sirve para cruzar el stock con GN. */

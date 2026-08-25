@@ -39,7 +39,7 @@ describe('cruzarParaSesion — el cruce TN → GN', () => {
     const p = tnp('t1', 'Funda TN', [tnv({ color: 'NEGRO', sku: 'F-N' }), tnv({ color: 'AZUL', sku: 'F-A', foto: 'x.jpg' })])
     const r = cruzarParaSesion([p], [gn({ id: 'p1_1', pid: 'p1', sku: 'F-N', deposito: 3, name: 'Funda GN' })])
     expect(r.excluidos).toEqual([])
-    expect(r.pedir).toEqual([{ pid: 'p1', nombre: 'Funda GN', nombreTn: 'Funda TN', vids: ['p1_1'] }])
+    expect(r.pedir).toEqual([{ tnId: 't1', pid: 'p1', nombre: 'Funda GN', nombreTn: 'Funda TN', vids: ['p1_1'] }])
   })
 
   it('si no hay SKU, cruza por código de barras', () => {
