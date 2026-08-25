@@ -239,6 +239,11 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   (15-ago-2026). Por eso existe `tests/agents-mapa-secciones.test.ts`.
 - ⚠️ Un POST sin `Content-Type: application/json` da «falta id» en vez de un error de formato:
   Vercel no parsea el cuerpo.
+- 🆕 🔴 **`Number(null)` es `0`, no `NaN`** — y `guardar-item` escribe `datos` **entera**. Con el
+  `Number.isFinite(Number(x))` a secas, **cada guardado a mano le escribía `offsetDias: 0`** a un
+  ítem que no tiene ninguno (el formulario manda `null` en todo lo que no es molde). Se vio en
+  producción el 25-ago releyendo la pasada de Tienda Nube después de ponerle el tope. Lo tapa
+  `numeroDado()`, y es el mismo guard que impide que «sin tope» se guarde como «vence hoy».
 
 ## Pendiente
 

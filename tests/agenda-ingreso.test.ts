@@ -694,3 +694,43 @@ describe('GET: el acuse viejo viaja sólo de los ítems que arrastran', () => {
     expect(items.find((i) => i.id === 'r3')?.arrastraDias).toBe(0)
   })
 })
+
+/**
+ * `guardar-item`: lo que se guarda en `datos` es lo que se mandó, ⛔ ni un campo más.
+ *
+ * El upsert **escribe `datos` entera**, así que un campo de más no es cosmético: queda escrito y
+ * sobrevive a todos los guardados siguientes.
+ */
+describe('guardar-item: vacío es vacío, ⛔ no cero', () => {
+  const base = { id: 'x1', clase: 'pendiente', titulo: 'Una rutina', regla: { tipo: 'diaria' }, destino: { tipo: 'todos' } }
+  const guardar = (over: Record<string, unknown> = {}) =>
+    llamar({ action: 'guardar-item', item: { ...base, ...over } })
+
+  it('🔴 un pendiente que no es molde NO se lleva un `offsetDias: 0` de recuerdo', async () => {
+    // Es lo que devuelve el GET de todo lo que no es molde, y es lo que reenvía el formulario.
+    const res = await guardar({ offsetDias: null, arrastra: false, arrastraDias: null, puertas: [] })
+    expect(res.code).toBe(200)
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.offsetDias).toBeUndefined()
+    expect(datos.arrastraDias).toBeUndefined()
+    expect(datos.arrastra).toBe(false)
+  })
+
+  it('...pero un molde con `offsetDias: 0` SÍ lo guarda: ahí el cero quiere decir algo', async () => {
+    await guardar({ plantilla: 'ingreso', offsetDias: 0 })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).offsetDias).toBe(0)
+  })
+
+  it('el tope se guarda sólo si el ítem arrastra: sin arrastre no querría decir nada', async () => {
+    await guardar({ arrastra: false, arrastraDias: 5 })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBeUndefined()
+    mundo.insertados = []
+    await guardar({ arrastra: true, arrastraDias: 5 })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBe(5)
+  })
+
+  it('un tope más largo que la ventana se recorta: prometer más de lo que el GET manda es mentir', async () => {
+    await guardar({ arrastra: true, arrastraDias: 4000 })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBe(120)
+  })
+})

@@ -111,13 +111,20 @@ const DIAS_CUMPLIMIENTO = 30;
 const DIAS_ARRASTRE = 120;
 
 /**
- * ¿Esto es un tope de arrastre y no la ausencia de uno?
+ * ¿Vino un número, o vino la ausencia de uno?
  *
- * 🔴 ⛔ **`Number(null)` es `0`, no `NaN`**, así que el `Number.isFinite(Number(x))` que alcanza para
- * `offsetDias` acá mentiría: convertiría «sin tope» en «vence el mismo día», que es el renglón que
- * desaparece antes de que nadie lo vea. Por eso `null`, `undefined` y `''` se descartan a mano.
+ * 🔴 ⛔ **`Number(null)` es `0`, no `NaN`**, así que un `Number.isFinite(Number(x))` a secas
+ * convierte «vacío» en «cero». En `arrastraDias` eso sería «vence el mismo día» en vez de «sin
+ * tope»: el renglón que desaparece antes de que nadie lo vea. Por eso `null`, `undefined` y `''`
+ * se descartan a mano.
+ *
+ * ⚠️ Lo mismo valía para `offsetDias` y estaba vivo: el formulario devuelve `null` en todo lo que no
+ * es molde, así que **cada guardado a mano le escribía `offsetDias: 0` a un ítem que no lo tiene**.
+ * Se vio en producción el 25-ago, releyendo la pasada de Tienda Nube después de ponerle el tope. Es
+ * inerte —sólo lo miran los moldes, y ahí 0 es el default— pero es basura escrita en `datos` y es la
+ * misma trampa, así que se tapa en el mismo lugar.
  */
-function esTope(v) {
+function numeroDado(v) {
   if (v === null || v === undefined || v === '') return false;
   const n = Number(v);
   return Number.isFinite(n) && n >= 0;
@@ -292,7 +299,7 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
       // siembre — una pantalla que ofrece un campo que después no viaja igual afirma algo que no
       // es cierto. Sin tope en el molde, el clon queda hasta que lo tilden, que es el caso normal
       // del ingreso: lo que tarda no se puede decir de antemano.
-      ...(esTope(m.datos.arrastraDias) ? { arrastraDias: Math.trunc(Number(m.datos.arrastraDias)) } : {}),
+      ...(numeroDado(m.datos.arrastraDias) ? { arrastraDias: Math.trunc(Number(m.datos.arrastraDias)) } : {}),
     },
     autor,
     updated_at: new Date().toISOString(),
@@ -727,11 +734,11 @@ export default async function handler(req, res) {
           // queda hasta que lo tilden— y escribirlo sería guardar un campo que dice lo mismo que no
           // estar. Se acota a `DIAS_ARRASTRE` porque más allá el GET no manda el acuse: un tope de
           // 400 días prometería un arrastre que la pantalla no puede sostener.
-          ...(String(it.clase) === 'pendiente' && !!it.arrastra && esTope(it.arrastraDias)
+          ...(String(it.clase) === 'pendiente' && !!it.arrastra && numeroDado(it.arrastraDias)
             ? { arrastraDias: Math.min(DIAS_ARRASTRE, Math.trunc(Number(it.arrastraDias))) }
             : {}),
           ...(PLANTILLAS.includes(String(it.plantilla)) ? { plantilla: String(it.plantilla) } : {}),
-          ...(Number.isFinite(Number(it.offsetDias)) ? { offsetDias: Math.max(0, Math.min(90, Math.trunc(Number(it.offsetDias)))) } : {}),
+          ...(numeroDado(it.offsetDias) ? { offsetDias: Math.min(90, Math.trunc(Number(it.offsetDias))) } : {}),
           // ⚠️ Sólo se guarda si hay alguna: la lista vacía **es** el caso normal (el paso corre en las
           // cuatro puertas) y escribirla sería guardar un `[]` que dice lo mismo que no estar.
           ...(puertas.length ? { puertas } : {}),
