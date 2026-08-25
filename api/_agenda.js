@@ -738,7 +738,13 @@ export default async function handler(req, res) {
             ? { arrastraDias: Math.min(DIAS_ARRASTRE, Math.trunc(Number(it.arrastraDias))) }
             : {}),
           ...(PLANTILLAS.includes(String(it.plantilla)) ? { plantilla: String(it.plantilla) } : {}),
-          ...(numeroDado(it.offsetDias) ? { offsetDias: Math.min(90, Math.trunc(Number(it.offsetDias))) } : {}),
+          // 🔑 **`offsetDias` es del MOLDE**, igual que `arrastraDias` es de lo que arrastra: en un
+          // pendiente normal «a los cuántos días del ingreso» no quiere decir nada, y el formulario
+          // ni siquiera lo dibuja. Atarlo a `plantilla` es lo que hace que un ítem que ya se llevó
+          // el `0` fantasma se limpie solo la próxima vez que alguien lo guarde.
+          ...(PLANTILLAS.includes(String(it.plantilla)) && numeroDado(it.offsetDias)
+            ? { offsetDias: Math.min(90, Math.trunc(Number(it.offsetDias))) }
+            : {}),
           // ⚠️ Sólo se guarda si hay alguna: la lista vacía **es** el caso normal (el paso corre en las
           // cuatro puertas) y escribirla sería guardar un `[]` que dice lo mismo que no estar.
           ...(puertas.length ? { puertas } : {}),

@@ -721,6 +721,13 @@ describe('guardar-item: vacío es vacío, ⛔ no cero', () => {
     expect((mundo.insertados[0].datos as Record<string, unknown>).offsetDias).toBe(0)
   })
 
+  it('el que ya se llevó el 0 se limpia solo: sin molde, el número no se guarda aunque venga', async () => {
+    // Es el caso real: el ítem ya tiene `offsetDias: 0` en la base, así que el GET se lo devuelve
+    // al formulario y el formulario lo reenvía. Si el guard mirara sólo el valor, nunca se iría.
+    await guardar({ plantilla: null, offsetDias: 0 })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).offsetDias).toBeUndefined()
+  })
+
   it('el tope se guarda sólo si el ítem arrastra: sin arrastre no querría decir nada', async () => {
     await guardar({ arrastra: false, arrastraDias: 5 })
     expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBeUndefined()
