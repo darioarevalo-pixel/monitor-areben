@@ -25,7 +25,10 @@ import {
   escenariosDe as escenariosDeJs,
   esEscenarioDe as esEscenarioDeJs,
   esSoloSeguimiento as esSoloSeguimientoJs,
+  ofreceRetencion as ofreceRetencionJs,
   perfilDe as perfilDeJs,
+  registroDeRetencion as registroDeRetencionJs,
+  RESPUESTAS_RETENCION as RESPUESTAS_RETENCION_JS,
   pideReclamoAlTransportista as pideReclamoAlTransportistaJs,
   productoEnJuego as productoEnJuegoJs,
   reclasificaA as reclasificaAJs,
@@ -482,9 +485,32 @@ export function devuelveElEnvioDeIda(m: MotivoReclamo, escenario: string | null 
  * está fallado.
  */
 export function ofreceRetencion(m: MotivoReclamo, escenario: string | null | undefined): boolean {
-  // La retención sólo tiene sentido si el producto está en su poder: en una demora o en una
-  // cancelación no hay nada que quedarse.
-  return PERFIL_MOTIVO[m].retencion && productoEnJuego(m, escenario)
+  // La regla vive en `casos.core.js`: la lee también `api/_reclamos.js`, que es el que valida que
+  // una oferta registrada corresponda al caso. Acá quedó sólo la cara tipada.
+  return ofreceRetencionJs(m, escenario)
+}
+
+/** Qué contestó a la oferta de quedárselo. ⚠️ Ausente ⛔ no es "no se le ofreció": es sin registrar. */
+export type RespuestaRetencion = 'acepto' | 'rechazo'
+
+export const RESPUESTAS_RETENCION = RESPUESTAS_RETENCION_JS as Record<RespuestaRetencion, string>
+
+/**
+ * Lo que se guarda de la oferta de retención, ya validado: las dos mitades juntas o ninguna.
+ *
+ * Los cinco datos son **obligatorios** aunque tres puedan valer `null` — mismo motivo que el
+ * escenario: un llamador al que le falta uno no puede terminar guardando media oferta sin
+ * enterarse. Media oferta es lo que después hace que la cuenta de cuántas veces funciona mienta.
+ */
+export function registroDeRetencion(o: {
+  motivo: MotivoReclamo
+  escenario: string | null
+  respuesta: RespuestaRetencion | null
+  monto: number | null
+  retornoDecidido: boolean
+}): { error?: string; campos?: { retencion_respuesta?: RespuestaRetencion; retencion_monto?: number } } {
+  // `campos` vacío = no hay nada que registrar y ⛔ no se toca lo ya guardado.
+  return registroDeRetencionJs(o) as { error?: string; campos?: { retencion_respuesta?: RespuestaRetencion; retencion_monto?: number } }
 }
 
 /** ¿Decide el cliente en vez de nosotros? Hoy sólo en `sin_stock`, que es el caso raro. */
@@ -633,6 +659,14 @@ export function resumenDeLoDecidido(d: ReclamoRow): LineaResumen[] {
   l.push({ que: 'Qué recibe', valor: COMPENSACION_LABEL[d.compensacion] })
   if (d.monto_total != null) l.push({ que: 'Se le devuelve', valor: money(Number(d.monto_total)) })
   if (d.cupon_codigo) l.push({ que: 'Cupón', valor: d.cupon_codigo })
+  // La oferta de retención va acá, al lado de lo que recibe: es la resolución que se intentó antes
+  // de ésta. La rechazada es la que importa — es la única forma de saber cuántas veces funciona.
+  if (d.retencion_respuesta) {
+    l.push({
+      que: '¿Se le ofreció que se lo quede?',
+      valor: `Sí, por ${money(Number(d.retencion_monto ?? 0))} — ${d.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}`,
+    })
+  }
 
   if (d.destino_prenda) l.push({ que: 'El producto', valor: DESTINO_LABEL[d.destino_prenda] })
   // Se guarda lo que sugirió la cuenta además de lo que se hizo: sirve para ver cuándo se va en
@@ -1230,6 +1264,18 @@ export type ReclamoRow = {
   reintegro_por?: string | null
   reintegro_comprobante?: string | null
   cupon_codigo?: string | null
+  /**
+   * **La oferta de retención**: cuánto se le ofreció para que se lo quede y qué contestó.
+   *
+   * Las dos van juntas o no va ninguna. La oferta ACEPTADA se podía adivinar por la resolución
+   * (`plata_parcial` o `cupon`); la RECHAZADA no dejaba rastro, y sin ella no se sabe cuántas
+   * veces funciona la retención — que es lo único que dice si conviene seguir ofreciéndola.
+   *
+   * ⚠️ Nulas ⛔ NO significan "no se le ofreció": significan **sin registrar**. Los reclamos
+   * anteriores al 25-ago-2026 no contestaron nada.
+   */
+  retencion_respuesta?: RespuestaRetencion | null
+  retencion_monto?: number | null
   expectativa?: Expectativa | null
   /** El número de reclamo al transportista, cuando el pedido se perdió en el camino. */
   reclamo_correo?: string | null
@@ -1268,6 +1314,12 @@ export type ReclamoRow = {
    * reposición y el reenvío no había ni eso: el envío era un cartel en pantalla.
    */
   envio_nuevo_estado?: PendienteEstado | null
+  /**
+   * **El cupón todavía no existe en la tienda.** Se crea a mano y el código se tipea en
+   * `cupon_codigo`; hasta el 25-ago-2026 nada avisaba si nunca se creó, así que un reclamo se
+   * cerraba "con cupón" y el cliente se quedaba con la promesa de un código inexistente.
+   */
+  cupon_estado?: PendienteEstado | null
   /** La solicitud de etiqueta (EM####) del envío del cambio. Se guarda SIN el prefijo. */
   solicitud_envio?: string | null
   falla_ids?: number[]
@@ -1428,6 +1480,8 @@ export type EfectosResolucion = {
   reingreso: string
   cobro: string
   envioNuevo: string
+  /** ¿Hay que emitir un cupón en la tienda y anotar el código? Sólo la resolución `cupon`. */
+  cupon: string
   ayuda: string
 }
 
@@ -1439,6 +1493,7 @@ export type PendientesDerivados = {
   reingreso_estado: PendienteEstado
   cobro_estado: PendienteEstado
   envio_nuevo_estado: PendienteEstado
+  cupon_estado: PendienteEstado
 }
 
 /** Los pendientes que deja una decisión. Es lo que `decidir` guarda en la fila. */
@@ -1495,6 +1550,9 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   // Lo que sale hacia el cliente. Va acá y no adentro del `if (cambio)` porque las tres
   // resoluciones que mandan algo —cambio, reposición, reenvío— tienen el mismo pendiente.
   if (d.envio_nuevo_estado === 'pendiente') faltan.push('despachar lo que se le manda')
+  // El cupón es una promesa hasta que existe en la tienda: sin esto se cierra el reclamo y el
+  // cliente descubre en la próxima compra que el código no anda.
+  if (d.cupon_estado === 'pendiente') faltan.push('crear el cupón en la tienda y anotar el código')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
   if (d.destino_prenda === 'stock' && d.estado !== 'recibido' && d.estado !== 'cerrado') faltan.push('recibir el producto')

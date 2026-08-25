@@ -16,7 +16,7 @@ import { calcularCambio, etiquetaEM, laFallaDescuentaStock, numeroReclamo } from
 import type { RetornoRow } from './retornos'
 import type {
   Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, EnvioPaga, FotoReclamo, ItemReclamo,
-  Expectativa, FormaPago, MotivoReclamo, OrdenTN, ViaRetorno,
+  Expectativa, FormaPago, MotivoReclamo, OrdenTN, RespuestaRetencion, ViaRetorno,
 } from './tipos'
 
 const API = '/api/postventa?recurso=reclamos'
@@ -196,6 +196,13 @@ export type Decision = {
   costo_caso?: number | null
   cupon_codigo?: string | null
   /**
+   * **La oferta de retención**: cuánto se le ofreció para que se lo quede y qué contestó. Van las
+   * dos o ninguna — el servidor rechaza media oferta, que es la que después hace mentir la cuenta.
+   * Sin `retencion_respuesta` ⛔ no se borra la que ya estuviera registrada.
+   */
+  retencion_respuesta?: RespuestaRetencion | null
+  retencion_monto?: number | null
+  /**
    * Qué pidió el cliente. Se puede completar ACÁ y no sólo al abrir el reclamo: en la mayoría de
    * los casos se sabe recién después de escribirle, así que exigirlo en el alta era pedir que
    * alguien lo invente. `null` no pisa lo que ya estuviera cargado.
@@ -227,6 +234,28 @@ export async function decidir(payload: Decision): Promise<EstadoReclamo> {
  */
 export async function reclasificar(store: Marca, id: number, motivo: MotivoReclamo, nota?: string | null): Promise<void> {
   await postear({ action: 'reclasificar', store, id, motivo, nota })
+}
+
+/**
+ * Lo que se le manda al cliente ya salió del depósito.
+ *
+ * ⛔ No es de administración: despacha Depósito. El pendiente lo dejan las tres resoluciones que le
+ * mandan algo —cambio, reposición y reenvío— y hasta el 25-ago-2026 **no había con qué tildarlo**,
+ * así que ninguna de las tres se podía cerrar.
+ */
+export async function marcarDespachado(store: Marca, id: number): Promise<void> {
+  await postear({ action: 'despachado', store, id })
+}
+
+/**
+ * El cupón ya existe en la tienda, con su código.
+ *
+ * 🔑 **El código es obligatorio**: es lo único que prueba que el cupón se creó de verdad. Antes
+ * `cupon_codigo` se tipeaba suelto y nada avisaba si nunca se había emitido, así que el reclamo se
+ * cerraba "con cupón" y el cliente descubría en la próxima compra que el código no anda.
+ */
+export async function marcarCuponEmitido(store: Marca, id: number, cupon_codigo: string): Promise<void> {
+  await postear({ action: 'cupon-emitido', store, id, cupon_codigo })
 }
 
 /** Marca la plata como devuelta. Solo administración. */

@@ -24,6 +24,7 @@ import {
 import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
+  marcarDespachado, marcarCuponEmitido,
   ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, editarReclamo,
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
@@ -417,6 +418,24 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     }
   }
 
+  /**
+   * El código del cupón, cuando ya se creó en la tienda.
+   *
+   * 🔑 **Sin código no se tilda.** El cupón se emite a mano y lo único que prueba que existe es el
+   * código: tildar "ya está" sin él es cerrar el reclamo sobre una promesa, y el cliente se entera
+   * recién en la próxima compra.
+   */
+  const cargarCupon = async (d: ReclamoRow) => {
+    const codigo = await pedirTexto('Código del cupón', d.cupon_codigo || '', {
+      titulo: 'El cupón ya existe en la tienda',
+      ok: 'Guardar',
+      placeholder: 'El código que se le pasa al cliente',
+    })
+    if (codigo === null) return
+    if (!codigo.trim()) { toast.aviso('Sin el código no hay cómo saber que el cupón existe.'); return }
+    await accion(() => marcarCuponEmitido(marca, d.id, codigo.trim()), 'Cupón anotado.')
+  }
+
   /** El número de reclamo al transportista: es lo que después permite reclamar esa plata. */
   const cargarReclamoCorreo = async (d: ReclamoRow) => {
     const nro = await pedirTexto('Número de reclamo al transportista', d.reclamo_correo || '', {
@@ -776,6 +795,16 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       )}
                       {esAdmin && d.reintegro_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void reintegrar(d)}>Devolví la plata</Button>
+                      )}
+                      {/* Sin `esAdmin`: despacha Depósito. El pendiente lo dejan el cambio, la
+                          reposición y el reenvío, y hasta hoy no tenía con qué tildarse — o sea
+                          que ninguna de las tres se podía cerrar. */}
+                      {d.envio_nuevo_estado === 'pendiente' && (
+                        <Button size="sm" variant="outline" onClick={() => void accion(() => marcarDespachado(marca, d.id), 'Anotado: ya salió.')}>Despaché</Button>
+                      )}
+                      {/* El cupón es una promesa hasta que existe en la tienda. */}
+                      {esAdmin && d.cupon_estado === 'pendiente' && (
+                        <Button size="sm" variant="outline" tone="warning" onClick={() => void cargarCupon(d)}>Cargar el cupón</Button>
                       )}
                       {/* Plata recuperable: sin este pendiente, un pedido perdido se cierra y el
                           reclamo al correo no lo hace nadie. */}

@@ -14,6 +14,8 @@
 //   POST { store, action:'recibir', id }                        → el producto llegó (bandeja de retornos).
 //   POST { store, action:'reingreso', id }                       → el devuelto volvió al stock en GN.
 //   POST { store, action:'cobrado', id }                         → la diferencia del cambio entró.
+//   POST { store, action:'despachado', id }                       → salió lo que se le manda.
+//   POST { store, action:'cupon-emitido', id, cupon_codigo }      → el cupón existe en la tienda. ADMIN.
 //   POST { store, action:'reintegro', id, comprobante? }         → la plata devuelta. ADMIN.
 //   POST { store, action:'anulacion', id }                       → la venta anulada en GN. ADMIN.
 //   POST { store, action:'gn-baja', id }                         → la unidad fantasma dada de baja en GN.
@@ -49,7 +51,7 @@ import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } f
 import { pendientesDe } from '../lib/reclamos/efectos.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
-import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego } from '../lib/reclamos/casos.core.js';
+import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -92,6 +94,7 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
+  retencion_respuesta, retencion_monto, cupon_estado,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
   pagado, cobro_estado, envio_paga, reingreso_estado,
@@ -260,7 +263,7 @@ export default async function handler(req, res) {
     // `gn-baja` NO está acá a propósito: quien ve que el producto no está es Local.
     // `reclasificar` está acá porque **cambia el perfil del caso**: quién paga el envío de ida y si
     // hay producto en juego. No es una corrección de tipeo.
-    const DE_ADMIN = ['decidir', 'reclasificar', 'reintegro', 'anulacion', 'eliminar'];
+    const DE_ADMIN = ['decidir', 'reclasificar', 'reintegro', 'anulacion', 'eliminar', 'cupon-emitido'];
     if (DE_ADMIN.includes(action) && !esAdministracion(perfil)) {
       return res.status(403).json({ error: 'Esto lo hace Administración: pedile a alguien con ese permiso.' });
     }
@@ -310,6 +313,19 @@ export default async function handler(req, res) {
       if (!compensacion) return res.status(400).json({ error: 'falta la compensación' });
       if (hayProducto && !destino) return res.status(400).json({ error: 'falta el destino de el producto' });
 
+      // ── La oferta de retención ───────────────────────────────────────────────
+      // Qué se le ofreció para que se lo quede y qué contestó. Las dos mitades juntas o ninguna:
+      // la regla entera vive en `registroDeRetencion` (`casos.core.js`), porque es la misma que
+      // tiene que aplicar la pantalla. Sin respuesta ⛔ no se toca lo ya registrado.
+      const retencion = registroDeRetencion({
+        motivo: motivoActual,
+        escenario,
+        respuesta: texto(b.retencion_respuesta),
+        monto: num(b.retencion_monto),
+        retornoDecidido: b.retorno_decidido === true,
+      });
+      if (retencion.error) return res.status(400).json({ error: retencion.error });
+
       const total = num(b.monto_total);
       if (total != null && total < 0) return res.status(400).json({ error: 'el monto no puede ser negativo' });
       // Red de seguridad contra un monto disparatado: nunca más que lo que se pagó por la orden.
@@ -342,6 +358,7 @@ export default async function handler(req, res) {
         envio_ida_costo: num(b.envio_ida_costo),
         costo_caso: num(b.costo_caso),
         cupon_codigo: texto(b.cupon_codigo),
+        ...retencion.campos,
         // Se puede completar al decidir. Sólo pisa si viene algo: mandar null no borra lo cargado
         // en el alta.
         ...(EXPECTATIVAS.includes(b.expectativa) ? { expectativa: b.expectativa } : {}),
@@ -380,7 +397,12 @@ export default async function handler(req, res) {
         // listas: es agregar una fila.
         ...pendientesDe({ compensacion, diferencia }),
       };
-      await apilar(supabase, id, { estado: extra.estado, at: ahora(), usuario, nota: `decidido: ${destino} · ${compensacion}` }, extra);
+      // La oferta va en la nota porque es lo único del historial que cuenta lo que se INTENTÓ antes
+      // de esta resolución: leyendo sólo la resolución, una retención rechazada no existió nunca.
+      const notaRetencion = retencion.campos?.retencion_respuesta
+        ? ` · se le ofreció ${retencion.campos.retencion_monto} para que se lo quede: ${retencion.campos.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}`
+        : '';
+      await apilar(supabase, id, { estado: extra.estado, at: ahora(), usuario, nota: `decidido: ${destino} · ${compensacion}${notaRetencion}` }, extra);
       return res.status(200).json({ ok: true, estado: extra.estado });
     }
 
@@ -498,6 +520,31 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── Lo que sale HACIA el cliente ya salió ────────────────────────────────────
+    //
+    // El pendiente lo dejan las tres resoluciones que le mandan algo (cambio, reposición, reenvío)
+    // y **no tenía con qué tildarse**: se podía dejar el reclamo trabado para siempre, que es el
+    // mismo agujero que este módulo ya había tenido con los pendientes mal derivados.
+    // ⛔ No es de administración: despacha Depósito.
+    if (action === 'despachado') {
+      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'despachado lo que se le manda' }, { envio_nuevo_estado: 'hecho' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── El cupón existe en la tienda ─────────────────────────────────────────────
+    //
+    // 🔑 **Exige el código.** Sin él esto sería tildar "ya está" sobre una promesa: el cupón se crea
+    // a mano en la tienda y lo único que prueba que existe es el código que quedó anotado.
+    if (action === 'cupon-emitido') {
+      const codigo = texto(b.cupon_codigo);
+      if (!codigo) return res.status(400).json({ error: 'falta el código del cupón: sin eso no hay cómo saber que existe' });
+      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: `cupón emitido: ${codigo}` }, {
+        cupon_codigo: codigo,
+        cupon_estado: 'hecho',
+      });
+      return res.status(200).json({ ok: true });
+    }
+
     if (action === 'cobrado') {
       await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'diferencia cobrada' }, { cobro_estado: 'cobrado' });
       return res.status(200).json({ ok: true });
@@ -587,7 +634,7 @@ export default async function handler(req, res) {
       if (b.cobro_estado !== undefined && COBROS.includes(b.cobro_estado)) campos.cobro_estado = b.cobro_estado;
       if (b.reclamo_correo_estado !== undefined && PENDIENTES.includes(b.reclamo_correo_estado)) campos.reclamo_correo_estado = b.reclamo_correo_estado;
       // Los pendientes se pueden volver atrás a mano si alguien se apuró a tildarlos.
-      for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado', 'reingreso_estado', 'envio_nuevo_estado']) {
+      for (const k of ['stock_estado', 'reintegro_estado', 'tn_stock_estado', 'reingreso_estado', 'envio_nuevo_estado', 'cupon_estado']) {
         if (b[k] !== undefined && PENDIENTES.includes(b[k])) campos[k] = b[k];
       }
       if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });

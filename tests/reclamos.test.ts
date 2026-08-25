@@ -646,6 +646,21 @@ describe('el resumen de lo decidido', () => {
   }
   const texto = (d: ReclamoRow) => resumenDeLoDecidido(d).map((r) => `${r.que}: ${r.valor}`).join(' | ')
 
+  /**
+   * La oferta de retención RECHAZADA es la que no se ve en ningún otro lado: la aceptada se
+   * adivina por la resolución (termina en "le devolvemos una parte"), la rechazada no dejaba
+   * rastro y por eso no se sabía cuántas veces la retención funciona.
+   */
+  it('muestra la oferta de retención, y sin registro ⛔ no inventa que no se ofreció', () => {
+    const conOferta: ReclamoRow = {
+      ...base, compensacion: 'otro_producto', retencion_respuesta: 'rechazo', retencion_monto: 6000,
+    }
+    expect(texto(conOferta)).toContain('no aceptó')
+    expect(texto(conOferta)).toContain('6.000')
+    // Sin respuesta la línea no está: vacío es SIN REGISTRAR, no "no se le ofreció".
+    expect(texto({ ...base, compensacion: 'otro_producto' })).not.toContain('se lo quede')
+  })
+
   // Existe porque la fila era puro botón: para saber qué se había resuelto había que deducirlo de
   // qué botones quedaban.
   it('sin decisión, lo dice y no inventa', () => {
@@ -882,6 +897,28 @@ describe('faltantesParaCerrar', () => {
 
   it('sin pendientes, no falta nada', () => {
     expect(faltantesParaCerrar(base)).toEqual([])
+  })
+
+  /**
+   * El cupón es una **promesa** hasta que existe en la tienda: se emite a mano y el código se
+   * tipea. Hasta el 25-ago-2026 nada lo verificaba, así que un reclamo se cerraba "con cupón" y el
+   * cliente descubría en la próxima compra que el código no anda.
+   */
+  it('un cupón sin emitir traba el cierre', () => {
+    const f = faltantesParaCerrar({ ...base, compensacion: 'cupon', cupon_estado: 'pendiente' })
+    expect(f.join(' ')).toContain('crear el cupón en la tienda')
+    // Ya emitido, no traba nada.
+    expect(faltantesParaCerrar({ ...base, compensacion: 'cupon', cupon_estado: 'hecho', cupon_codigo: 'BDI-2026' })).toEqual([])
+  })
+
+  /**
+   * Lo que sale HACIA el cliente. El pendiente lo dejan el cambio, la reposición y el reenvío, y
+   * hasta el 25-ago-2026 **no tenía botón con qué tildarse**: cerraba el paso y no lo abría nadie.
+   */
+  it('lo que se le manda y todavía no salió traba el cierre', () => {
+    const f = faltantesParaCerrar({ ...base, compensacion: 'reenvio', envio_nuevo_estado: 'pendiente' })
+    expect(f.join(' ')).toContain('despachar lo que se le manda')
+    expect(faltantesParaCerrar({ ...base, compensacion: 'reenvio', envio_nuevo_estado: 'hecho' })).toEqual([])
   })
 
   it('enumera los tres pendientes en criollo', () => {
@@ -1281,10 +1318,10 @@ describe('la tabla de efectos', () => {
     expect(Object.keys(EFECTOS_RESOLUCION).sort()).toEqual([...TODAS].sort())
   })
 
-  it('cada fila contesta las seis preguntas', () => {
+  it('cada fila contesta TODAS las preguntas: agregar una resolución es agregar una fila entera', () => {
     for (const c of TODAS) {
       const f = EFECTOS_RESOLUCION[c]
-      for (const k of ['plata', 'anulaVenta', 'reingreso', 'cobro', 'envioNuevo', 'ayuda'] as const) {
+      for (const k of ['plata', 'anulaVenta', 'reingreso', 'cobro', 'envioNuevo', 'cupon', 'ayuda'] as const) {
         expect(f[k], `${c}.${k}`).toBeTruthy()
       }
     }
@@ -1313,19 +1350,33 @@ describe('la tabla de efectos', () => {
     expect(p.reintegro_estado).toBe('no_aplica')
   })
 
-  it('cupón y "sin compensación" no dejan NINGÚN pendiente', () => {
-    for (const c of ['cupon', 'ninguna'] as Compensacion[]) {
-      expect(Object.values(pendientesDe({ compensacion: c })), c).toEqual(
-        ['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'],
-      )
+  it('"sin compensación" no deja NINGÚN pendiente: no hay nada que mover', () => {
+    expect(Object.values(pendientesDe({ compensacion: 'ninguna' }))).toEqual(
+      ['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'],
+    )
+  })
+
+  /**
+   * El cupón no mueve plata hoy ni deshace la compra, pero **hay que emitirlo**. Hasta el
+   * 25-ago-2026 no dejaba ningún pendiente y `cupon_codigo` se tipeaba suelto: el reclamo se
+   * cerraba "con cupón" y nada verificaba que el cupón existiera en la tienda.
+   */
+  it('el cupón deja UN solo pendiente: crearlo en la tienda', () => {
+    const p = pendientesDe({ compensacion: 'cupon' })
+    expect(p.cupon_estado).toBe('pendiente')
+    expect([p.reintegro_estado, p.stock_estado, p.reingreso_estado, p.cobro_estado, p.envio_nuevo_estado])
+      .toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
+    // Y ninguna otra resolución lo enciende: el cupón se emite sólo cuando ES la resolución.
+    for (const c of ['plata_total', 'plata_parcial', 'otra_unidad', 'otro_producto', 'reenvio', 'ninguna'] as Compensacion[]) {
+      expect(pendientesDe({ compensacion: c }).cupon_estado, c).toBe('no_aplica')
     }
   })
 
   it('el reenvío deja UN solo pendiente: despachar lo que se le manda', () => {
     const p = pendientesDe({ compensacion: 'reenvio' })
     expect(p.envio_nuevo_estado).toBe('pendiente')
-    expect([p.reintegro_estado, p.stock_estado, p.reingreso_estado, p.cobro_estado])
-      .toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
+    expect([p.reintegro_estado, p.stock_estado, p.reingreso_estado, p.cobro_estado, p.cupon_estado])
+      .toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
   })
 
   // ── Lo que NO tenía que cambiar ───────────────────────────────────────────────
@@ -1343,7 +1394,7 @@ describe('la tabla de efectos', () => {
     const p = pendientesDe({ compensacion: 'otra_unidad' })
     expect(p).toEqual({
       reintegro_estado: 'no_aplica', stock_estado: 'no_aplica',
-      reingreso_estado: 'no_aplica', cobro_estado: 'no_aplica',
+      reingreso_estado: 'no_aplica', cobro_estado: 'no_aplica', cupon_estado: 'no_aplica',
       // Lo único que queda por hacer es mandársela.
       envio_nuevo_estado: 'pendiente',
     })
@@ -1382,7 +1433,7 @@ describe('la tabla de efectos', () => {
 
   it('una resolución que no está en la tabla no enciende ningún pendiente', () => {
     const p = pendientesDe({ compensacion: 'inventada' as Compensacion })
-    expect(Object.values(p)).toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
+    expect(Object.values(p)).toEqual(['no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica', 'no_aplica'])
   })
 
   it('sólo dejan un envío por despachar las tres que le mandan algo al cliente', () => {

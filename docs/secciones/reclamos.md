@@ -128,18 +128,34 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   **cliente RECLAMO propio** si está sano, para no ensuciar el ledger de Fallas. ⛔ No se puede
   construir hasta que **exista el cliente RECLAMO en Gestión Nube, uno por marca**. Mientras tanto
   el destino usa `'falla'`, que ahí significa "sale del stock", no "está fallado".
-- ▶️ **La oferta del cupón no deja rastro.** El cupón es una **oferta**: puede no aceptarla y el
-  caso sigue hacia el cambio o la devolución. Hoy `retencion` es un booleano del perfil y no se
-  registra **qué se ofreció ni qué contestó**, así que no se sabe cuántas veces la retención
-  funciona — y sin eso negociar un cupón se vuelve una forma de pagar menos sin que nadie se entere.
+- ✅ **La oferta de retención ya deja rastro** (25-ago-2026). Se guardan `retencion_monto` y
+  `retencion_respuesta` (`acepto` / `rechazo`), y la regla entera vive en `registroDeRetencion`
+  (`lib/reclamos/casos.core.js`), que la aplican la pantalla y el handler. **Las dos mitades van
+  juntas o no va ninguna**: media oferta —un monto sin respuesta, o una respuesta sin monto— es lo
+  que después hace mentir la cuenta. ⚠️ **Vacío ⛔ no es "no se le ofreció": es SIN REGISTRAR**, y
+  por eso el resumen no dibuja la línea cuando no hay respuesta. 🔑 Lo que faltaba era **la
+  rechazada**: la aceptada se adivinaba por la resolución (termina en `plata_parcial` o `cupon`),
+  así que sin registrar el "no" existía el numerador y no el denominador. 🔑 **Aceptar apaga el
+  pedido de retorno** —si se lo queda, no vuelve nada— y el handler rechaza la combinación: tenerla
+  prendida contaba el producto dos veces, esperándolo en la bandeja de retornos y en poder del
+  cliente.
 - ✅ **La bandeja de retornos ya existe**: es la sección `retornos` (Depósito y Local) →
   `docs/secciones/retornos.md`. Lo que se espera que vuelva **no se mira más desde acá**, y el
   botón "Volvió" de esta pantalla llama a la misma acción (`recibir`) que la bandeja.
-- ⚠️ **`no_esperaba` mezcla dos casos** y por eso su `errorPropio` está en `false`: adentro conviven
-  "no me gustó" (no es nuestro) y "la publicación está mal" (sí lo es). Cuando se separe en dos
-  motivos, el segundo va en `true` — hoy poner `true` regalaría el envío en cada "no me gustó".
-- ⚠️ **El cupón no es un pendiente**: `cupon_codigo` se tipea a mano y nada avisa si nunca se creó en
-  la tienda.
+- ✅ **`no_esperaba` ya está separado**: "la publicación está mal" salió a `no_como_publicado`
+  (25-ago-2026). Los dos arrancan en `errorPropio: false` y en el segundo **lo sube el escenario**,
+  cuando la diferencia es objetiva — afirmarlo por default regalaría el envío en cada caso que en
+  realidad era una expectativa.
+- ✅ **El cupón ya es un pendiente** (25-ago-2026). La resolución `cupon` deja `cupon_estado` en
+  `pendiente` —una pregunta más de `EFECTOS_RESOLUCION`, no un `if` suelto— y cerrar lo pide.
+  Se tilda con la acción `cupon-emitido`, que **exige el código**: es lo único que prueba que el
+  cupón existe en la tienda. Antes `cupon_codigo` se tipeaba suelto y nada avisaba si nunca se
+  había creado, así que el reclamo se cerraba "con cupón" y el cliente descubría en la próxima
+  compra que el código no anda.
+- ✅ **"Despachar lo que se le manda" ya se puede tildar** (25-ago-2026, acción `despachado`, ⛔ sin
+  `esAdmin`: despacha Depósito). El pendiente existía desde el 24-ago y **no tenía botón**: el
+  cambio, la reposición y el reenvío quedaban trabados sin poder cerrarse — el mismo agujero que
+  este módulo ya había tenido con los pendientes mal derivados, ahora al revés.
 - ⚠️ **Un solo `destino_prenda` para los DOS productos de `mal_armado`** — el que compró y el que
   salió por error pueden terminar distinto, y hoy se decide uno solo para los dos.
 

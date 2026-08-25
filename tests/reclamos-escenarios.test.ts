@@ -26,6 +26,7 @@ import {
   productoEnJuego,
   puedeVolverLaPrenda,
   reclasificaA,
+  registroDeRetencion,
   type MotivoReclamo,
 } from '@/lib/reclamos/tipos'
 
@@ -281,4 +282,54 @@ describe('el escenario no puede mover cualquier cosa', () => {
       }
     }
   })
+})
+
+/**
+ * **La oferta de retención: qué se ofreció y qué contestó.**
+ *
+ * El oráculo es Bruno, 24-ago-2026: *"la salida ideal es el cupón, pero capaz la persona puede no
+ * aceptarlo, y continúa el cambio o devolución"* ⇒ hay que registrar **las dos**. La aceptada se
+ * podía adivinar por la resolución; la rechazada no dejaba rastro en ningún lado, y sin ella el
+ * numerador existe y el denominador no: no se puede decir cuántas veces funciona.
+ */
+describe('el registro de la oferta de retención', () => {
+  const base = { motivo: 'talle' as MotivoReclamo, escenario: null, retornoDecidido: false }
+
+  it('sin respuesta no toca nada: mandar la decisión desde otra pantalla ⛔ no borra la oferta ya registrada', () => {
+    expect(registroDeRetencion({ ...base, respuesta: null, monto: null }).campos).toEqual({})
+    expect(registroDeRetencion({ ...base, respuesta: null, monto: null }).error).toBeUndefined()
+  })
+
+  it('media oferta se rechaza por las dos mitades: un monto sin respuesta y una respuesta sin monto', () => {
+    // Las dos formas de mentir después: "le ofrecí $6.000" sin saber qué dijo, y "no aceptó" qué.
+    expect(registroDeRetencion({ ...base, respuesta: null, monto: 6000 }).error).toBeTruthy()
+    expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: null }).error).toBeTruthy()
+    expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 0 }).error).toBeTruthy()
+  })
+
+  it('la respuesta sale de una lista cerrada', () => {
+    expect(registroDeRetencion({ ...base, respuesta: 'quizas' as never, monto: 6000 }).error).toBeTruthy()
+    expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 6000 }).campos)
+      .toEqual({ retencion_respuesta: 'rechazo', retencion_monto: 6000 })
+  })
+
+  it('⛔ no se puede registrar una oferta en un caso donde no hay nada que quedarse', () => {
+    // En una demora el pedido llegó, y en una cancelación nunca salió: no hay producto en juego,
+    // así que una oferta registrada ahí es una fila que después cuenta mal.
+    expect(registroDeRetencion({ motivo: 'demora', escenario: 'transporte', retornoDecidido: false, respuesta: 'rechazo', monto: 6000 }).error).toBeTruthy()
+    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'se_puede_frenar', retornoDecidido: false, respuesta: 'acepto', monto: 6000 }).error).toBeTruthy()
+    // El mismo caso con el pedido ya despachado sí admite la oferta: el cliente lo tiene.
+    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'ya_salio', retornoDecidido: false, respuesta: 'acepto', monto: 6000 }).campos)
+      .toEqual({ retencion_respuesta: 'acepto', retencion_monto: 6000 })
+  })
+
+  it('si acepta quedárselo, el producto ⛔ no puede estar pedido de vuelta a la vez', () => {
+    // Las dos cosas prendidas contaban el producto dos veces: esperándolo en la bandeja de retornos
+    // y en poder del cliente.
+    expect(registroDeRetencion({ ...base, respuesta: 'acepto', monto: 6000, retornoDecidido: true }).error).toBeTruthy()
+    // La RECHAZADA sí convive con el retorno: justamente por eso vuelve.
+    expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 6000, retornoDecidido: true }).campos)
+      .toEqual({ retencion_respuesta: 'rechazo', retencion_monto: 6000 })
+  })
+
 })

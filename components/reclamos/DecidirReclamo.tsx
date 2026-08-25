@@ -28,6 +28,7 @@ import {
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
+  type RespuestaRetencion,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type OrdenTN,
@@ -132,6 +133,15 @@ export function DecidirReclamo({
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
   const [pvpFeria, setPvpFeria] = useState<number | ''>('')
   const [cupon, setCupon] = useState('')
+  /**
+   * **La oferta de retención**: cuánto se le ofreció para que se lo quede y qué contestó.
+   *
+   * Arranca de la fila porque decidir se puede volver a abrir, y ⛔ lo ya registrado no se pisa.
+   * Nulo = **sin registrar**, que ⛔ no es lo mismo que "no se le ofreció": si el vacío contara
+   * como negativa, todos los reclamos anteriores a esta columna serían rechazos inventados.
+   */
+  const [retencion, setRetencion] = useState<RespuestaRetencion | null>(reclamo.retencion_respuesta ?? null)
+  const [retencionMonto, setRetencionMonto] = useState<number | ''>(reclamo.retencion_monto ?? '')
   /** Sólo en "pedido mal armado": lo que le llegó por error, cargado con las fotos delante. */
   const [recibidos, setRecibidos] = useState<ItemReclamo[]>(reclamo.items_correctos ?? [])
 
@@ -229,6 +239,9 @@ export function DecidirReclamo({
         envio_ida_costo: compensacion === 'otra_unidad' ? Number(envioIda) || null : null,
         costo_caso: costo,
         cupon_codigo: compensacion === 'cupon' ? cupon.trim() || null : null,
+        // Las dos mitades de la oferta viajan juntas: el servidor rechaza media.
+        retencion_respuesta: retencion,
+        retencion_monto: retencion ? montoOferta : null,
         expectativa: expectativa || null,
         items_correctos: reclamo.motivo === 'mal_armado' ? recibidos : undefined,
         // Techo de seguridad del servidor: nunca se devuelve más de lo que se pagó por la orden.
@@ -276,7 +289,32 @@ export function DecidirReclamo({
    * si nunca salió, no hay nada que quedarse.
    */
   const hayFotos = !!(reclamo.fotos || []).length
-  const mostrarRetencion = ofreceRetencion(reclamo.motivo, escenario) && hayFotos && compensacion !== 'plata_parcial'
+  const mostrarRetencion = ofreceRetencion(reclamo.motivo, escenario) && hayFotos
+
+  /**
+   * Lo que se le ofrece. Arranca en lo que sugiere la cuenta y se puede cambiar: lo que se negocia
+   * de verdad rara vez es el número redondo que sale de una fórmula.
+   */
+  const montoOferta = retencionMonto === '' ? descuento.sugerido : Number(retencionMonto) || 0
+
+  /**
+   * Registrar la respuesta. Volver a apretar la misma la borra: marcar por error ⛔ no puede ser
+   * irreversible (mismo criterio que el "¿qué se fotografió?" de Sesión de fotos).
+   *
+   * 🔑 **Aceptar apaga el pedido de retorno.** Si se lo queda, no vuelve nada — y dejar las dos
+   * cosas prendidas contaba el producto dos veces: esperándolo en la bandeja de retornos y en poder
+   * del cliente. El servidor rechaza esa combinación, así que acá se resuelve en el mismo gesto.
+   */
+  const contestoLaOferta = (r: RespuestaRetencion) => {
+    if (retencion === r) { setRetencion(null); return }
+    setRetencion(r)
+    setRetencionMonto(montoOferta)
+    if (r === 'acepto') {
+      setCompensacion('plata_parcial')
+      setMontoAcordado(montoOferta)
+      setPedirRetorno(false)
+    }
+  }
 
   return (
     <Modal abierto onCerrar={onClose} titulo={`Decidir ${numeroReclamo(reclamo.id)}`} ancho="ancho">
@@ -391,17 +429,40 @@ export function DecidirReclamo({
           Es plata que no sale de la caja y producto que no vuelve a costar logística, y hasta ahora
           era una opción más perdida en el desplegable de abajo. Acá es un paso: con las fotos a la
           vista, antes de aceptar la devolución. */}
-      {mostrarRetencion && !!descuento.techo && (
+      {mostrarRetencion && (
         <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: space[3], marginBottom: space[3], background: color.bg2 }}>
           <div style={{ fontWeight: weight.semibold, fontSize: font.sm, marginBottom: 4 }}>¿Intentamos que se lo quede?</div>
           <div style={{ fontSize: font.xs, color: color.mut, marginBottom: space[2] }}>{descuento.motivo}</div>
-          <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
-            <span>Hasta <b><MoneyText value={descuento.techo} /></b> sin perder plata.</span>
-            <span>Sugerido: <b><MoneyText value={descuento.sugerido} /></b></span>
+          {!!descuento.techo && (
+            <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm, marginBottom: space[2] }}>
+              <span>Hasta <b><MoneyText value={descuento.techo} /></b> sin perder plata.</span>
+              <span>Sugerido: <b><MoneyText value={descuento.sugerido} /></b></span>
+            </div>
+          )}
+          {/* Cuánto se ofreció, editable: lo que se negocia de verdad rara vez es el número que
+              sale de la fórmula, y el número que importa es el que se DIJO. */}
+          <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field label="Cuánto se le ofrece" hint="arranca en lo sugerido" style={{ marginBottom: 0 }}>
+              <NumberField value={montoOferta} onChange={(v) => setRetencionMonto(v)} prefix="$" style={{ width: 140 }} />
+            </Field>
             <Button
-              size="sm" variant="solid" tone="brand"
-              onClick={() => { setCompensacion('plata_parcial'); setMontoAcordado(descuento.sugerido) }}
-            >Ofrecer que se lo quede</Button>
+              size="sm" variant={retencion === 'acepto' ? 'solid' : 'outline'} tone="brand"
+              disabled={montoOferta <= 0}
+              onClick={() => contestoLaOferta('acepto')}
+            >Aceptó: se lo queda</Button>
+            <Button
+              size="sm" variant={retencion === 'rechazo' ? 'solid' : 'outline'} tone="neutral"
+              disabled={montoOferta <= 0}
+              onClick={() => contestoLaOferta('rechazo')}
+            >No aceptó</Button>
+          </div>
+          {/* 🔑 La rechazada es la que hay que registrar: la aceptada se adivina por la resolución
+              (termina en "le devolvemos una parte"), la rechazada no dejaba rastro en ningún lado y
+              por eso no se sabía cuántas veces la retención funciona. */}
+          <div style={{ fontSize: font.xs, color: retencion ? color.mut : color.warningInk, marginTop: space[2] }}>
+            {retencion === 'acepto' ? 'Queda registrado que aceptó. El producto no vuelve.'
+              : retencion === 'rechazo' ? 'Queda registrado que no aceptó: seguí con el cambio o la devolución.'
+                : 'Sin registrar. Si se lo ofreciste, anotá qué contestó — es lo único que después dice cuántas veces funciona.'}
           </div>
           {descuento.convieneRegalar && (
             <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>
