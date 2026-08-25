@@ -16,6 +16,7 @@ import { DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgen
 import {
   CLAVES_PUERTA as CLAVES_PUERTA_JS,
   moldeCorreEn as moldeCorreEnJs,
+  moldeCorreEnMarca as moldeCorreEnMarcaJs,
   PUERTAS as PUERTAS_JS,
   rotuloPuerta as rotuloPuertaJs,
 } from './puertas.core.js'
@@ -50,6 +51,9 @@ export const PUERTAS = PUERTAS_JS as { key: Puerta; label: string; ayuda: string
 export const CLAVES_PUERTA = CLAVES_PUERTA_JS as Puerta[]
 export const rotuloPuerta = rotuloPuertaJs as (key: string) => string
 export const moldeCorreEn = moldeCorreEnJs as (puertasDelMolde: Puerta[] | undefined, puerta: Puerta) => boolean
+// La marca del ingreso, que se lee igual: lista vacía = las dos. ⛔ No es `esDeMisMarcas`: acá el
+// ingreso tiene una sola marca, allá la persona puede tener las dos.
+export const moldeCorreEnMarca = moldeCorreEnMarcaJs as (marcasDelMolde: Marca[] | undefined, marca: Marca) => boolean
 
 /** 0 = domingo, como `getDay()`. Ver la advertencia de `aplicaEn` antes de tocar el orden. */
 const DIAS_LARGOS = ['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados']

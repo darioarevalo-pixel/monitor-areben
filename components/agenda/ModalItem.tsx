@@ -50,7 +50,8 @@ import { useSistema } from '@/store/useSistema'
 import type { Marca } from '@/lib/nav.datos'
 import { EditorRegla, Tilde, toggleEnLista } from './EditorRegla'
 
-const MARCAS: { key: Marca; label: string }[] = [
+/** Las dos marcas con su rótulo. Exportada porque el modal de siembra pregunta lo mismo. */
+export const MARCAS: { key: Marca; label: string }[] = [
   { key: 'bdi', label: 'BDI' },
   { key: 'zattia', label: 'Zattia' },
 ]

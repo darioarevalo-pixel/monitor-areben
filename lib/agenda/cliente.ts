@@ -7,6 +7,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
+import type { Marca } from '@/lib/nav.datos'
 import type { DatosAgenda, FechaIso, ItemAgenda, Promo, Puerta } from './tipos'
 
 const API = '/api/datos?recurso=agenda'
@@ -64,16 +65,18 @@ async function postearConRespuesta(body: Record<string, unknown>, siFalla: strin
 }
 
 /**
- * «Entró mercadería»: siembra la lista corta del ingreso clonando los moldes de esa puerta.
+ * «Entró mercadería»: siembra la lista corta del ingreso clonando los moldes de esa puerta y marca.
  *
- * `puerta` es obligatoria: dos de los pasos cambian de dueña según por dónde entró el producto, así
- * que sin ella el servidor contesta 400 en vez de sembrar con la dueña equivocada.
+ * `puerta` y `marca` son **las dos obligatorias**: la puerta porque el nombre y la descripción
+ * cambian de dueña según por dónde entró el producto, y la marca porque la descripción de una
+ * compra nacional la escribe el local en Zattia y Administración en BDI. Sin alguna, el servidor
+ * contesta 400 en vez de sembrar con la dueña equivocada.
  *
  * Devuelve cuántos renglones creó, o `ya: true` si ese ingreso ya estaba sembrado — el mismo aviso
- * dos veces no puede dejar doce pendientes.
+ * dos veces no puede dejar veinte pendientes.
  */
-export async function sembrarIngreso(nombre: string, fecha: FechaIso, puerta: Puerta): Promise<{ creados: number; ya: boolean }> {
-  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha, puerta }, 'No se pudo sembrar el ingreso.')
+export async function sembrarIngreso(nombre: string, fecha: FechaIso, puerta: Puerta, marca: Marca): Promise<{ creados: number; ya: boolean }> {
+  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha, puerta, marca }, 'No se pudo sembrar el ingreso.')
   return { creados: Number(d?.creados) || 0, ya: !!d?.ya }
 }
 

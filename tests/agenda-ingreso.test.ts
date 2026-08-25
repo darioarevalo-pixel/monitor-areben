@@ -113,13 +113,13 @@ async function llamar(body: unknown, headers: Record<string, string> = {}) {
   return res
 }
 
-// La puerta va en el cuerpo por defecto porque **sin ella no se siembra**: dejarla afuera acá
-// convertiría cada test de las otras reglas en un test del 400 de la puerta.
+// La puerta y la marca van en el cuerpo por defecto porque **sin ellas no se siembra**: dejarlas
+// afuera acá convertiría cada test de las otras reglas en un test de sus 400.
 const desdeAfuera = (body: Record<string, unknown> = {}, secreto = 'el-secreto') =>
-  llamar({ action: 'ingreso-externo', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', ...body }, { 'x-ingreso-secreto': secreto })
+  llamar({ action: 'ingreso-externo', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', marca: 'bdi', ...body }, { 'x-ingreso-secreto': secreto })
 
 const desdeAdentro = (body: Record<string, unknown> = {}) =>
-  llamar({ action: 'ingreso', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', ...body })
+  llamar({ action: 'ingreso', nombre: 'IMP2', fecha: '2026-08-24', puerta: 'importacion', marca: 'bdi', ...body })
 
 beforeEach(() => {
   vi.resetModules()
@@ -352,6 +352,110 @@ describe('la puerta de entrada: dos de los seis pasos cambian de dueña según p
     await desdeAfuera({ tipo: 'Nacional', puerta: 'importacion' })
     expect(mundo.insertados.map((f) => f.titulo))
       .toEqual(['IMP2 · Cargar el precio', 'IMP2 · Nombre (Administración)', 'IMP2 · Descripción (el local)'])
+  })
+})
+
+describe('la marca del ingreso: la descripción de una compra nacional no la escribe siempre el mismo', () => {
+  // Bruno, 25-ago-2026: *«si es zattia, y es ropa, se encarga local. Las fundas nunca se encarga
+  // local»*. Son **dos moldes de la misma puerta** que se separan por marca — y por eso la marca
+  // tiene que viajar con el ingreso: sin ella los dos caen en cada compra nacional, que es el
+  // renglón con la dueña equivocada que la puerta vino a sacar.
+  const nacional = () => [
+    molde({ id: 'comun', titulo: 'Cargar el precio', datos: { plantilla: 'ingreso', offsetDias: 0 } }),
+    molde({
+      id: 'desc-local', titulo: 'Descripción (el local)', marcas: ['zattia'],
+      destino: { tipo: 'roles', roles: ['local'] },
+      datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['nacional'] },
+    }),
+    molde({
+      id: 'desc-admin', titulo: 'Descripción (Administración)', marcas: ['bdi'],
+      destino: { tipo: 'personas', personas: ['Lorena Reyes'] },
+      datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['nacional'] },
+    }),
+  ]
+
+  it('🔴 sin marca NO siembra: 400, ⛔ ni «las dos»', async () => {
+    for (const sin of [undefined, '', null, 'BDI', 'stunned']) {
+      mundo = nuevoMundo()
+      const res = await desdeAfuera({ marca: sin })
+      expect(res.code, String(sin)).toBe(400)
+      expect(mundo.insertados, String(sin)).toEqual([])
+    }
+  })
+
+  it('una marca que no existe es 400 Y LA NOMBRA, igual que el tipo de ingreso2', async () => {
+    const res = await desdeAfuera({ marca: 'stunned' })
+    // Stunned no es una marca: es una línea de Zattia. El error tiene que decir cuál trajo, o el
+    // que lo lea va a buscar el problema en la carga de los moldes.
+    expect(String(res.body?.error)).toContain('stunned')
+    expect(String(res.body?.error)).toContain('zattia')
+  })
+
+  it('🔑 lista vacía = LAS DOS: el paso que no cambia se carga una vez, no dos', async () => {
+    for (const marca of ['bdi', 'zattia']) {
+      mundo = nuevoMundo()
+      mundo.items = [molde({ id: 'comun', titulo: 'Cargar el precio', marcas: [] })]
+      const res = await desdeAfuera({ marca })
+      expect(res.code, marca).toBe(200)
+      expect(mundo.insertados.map((f) => f.titulo), marca).toEqual(['IMP2 · Cargar el precio'])
+    }
+  })
+
+  it('🔴 en BDI la descripción es de Administración, y el renglón del local NO se siembra', async () => {
+    mundo.items = nacional()
+    await desdeAfuera({ puerta: 'nacional', marca: 'bdi' })
+    expect(mundo.insertados.map((f) => f.titulo))
+      .toEqual(['IMP2 · Cargar el precio', 'IMP2 · Descripción (Administración)'])
+  })
+
+  it('🔴 en Zattia es al revés: la escribe el local y la de Administración no aparece', async () => {
+    mundo.items = nacional()
+    await desdeAfuera({ puerta: 'nacional', marca: 'zattia' })
+    expect(mundo.insertados.map((f) => f.titulo))
+      .toEqual(['IMP2 · Cargar el precio', 'IMP2 · Descripción (el local)'])
+  })
+
+  it('🔑 el clon nace EN LA MARCA DEL INGRESO, ⛔ no con las del molde', async () => {
+    // El molde común corre en las dos; el renglón que salió de un ingreso de BDI es de BDI. Si
+    // heredara `marcas: []`, los pendientes de un ingreso de fundas le aparecerían a quien está
+    // parado en Zattia.
+    mundo.items = nacional()
+    await desdeAfuera({ puerta: 'nacional', marca: 'bdi' })
+    for (const f of mundo.insertados) expect(f.marcas, String(f.titulo)).toEqual(['bdi'])
+  })
+
+  it('el clon guarda de qué marca era el ingreso, al lado de la puerta', async () => {
+    mundo.items = nacional()
+    await desdeAfuera({ puerta: 'nacional', marca: 'zattia' })
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.marca).toBe('zattia')
+    expect(datos.puerta).toBe('nacional')
+  })
+
+  it('⛔ la marca NO entra en la clave: el mismo ingreso avisado con la otra marca no duplica', async () => {
+    mundo.items = nacional()
+    await desdeAfuera({ puerta: 'nacional', marca: 'bdi' })
+    mundo.items = [...mundo.items, ...mundo.insertados]
+    mundo.insertados = []
+    const res = await desdeAfuera({ puerta: 'nacional', marca: 'zattia' })
+    expect(res.body?.ya).toBe(true)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('hay moldes pero ninguno de esta marca: el error nombra LA PUERTA Y LA MARCA', async () => {
+    // Con una sola de las dos, quien lo lea revisa la mitad equivocada y concluye que está bien.
+    mundo.items = [molde({ id: 'desc-local', marcas: ['zattia'], datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['nacional'] } })]
+    const res = await desdeAfuera({ puerta: 'nacional', marca: 'bdi' })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('Compra nacional')
+    expect(String(res.body?.error)).toContain('bdi')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('el alta a mano pide la marca igual que la puerta', async () => {
+    const res = await desdeAdentro({ marca: undefined })
+    expect(res.code).toBe(400)
+    expect(mundo.insertados).toEqual([])
   })
 })
 

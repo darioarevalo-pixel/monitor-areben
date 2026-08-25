@@ -126,7 +126,7 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   | entra por…            | el NOMBRE      | la DESCRIPCIÓN                          |
   | --------------------- | -------------- | --------------------------------------- |
   | Producción propia     | Stefi          | ya viene escrita — **no lleva renglón**  |
-  | Compra nacional       | Administración | el local (básica + medidas)              |
+  | Compra nacional       | Administración | **Zattia**: el local (básica + medidas) · **BDI**: Administración |
   | Importación           | Marketing      | Marketing                                |
   | Accesorios nacionales | Darío o Lorena | Administración                           |
 
@@ -155,6 +155,26 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     que es el **único rastro** de por qué un ingreso sembró cinco renglones y no seis.
   - ⚠️ **«hay moldes pero ninguno de esta puerta» se dice distinto que «no hay moldes»**: la acción es
     otra —allá hay que cargarlos, acá hay que revisar en qué puertas corre cada paso.
+- 🆕 🔴 **Y DE QUÉ MARCA ES EL INGRESO** (25-ago-2026, `moldeCorreEnMarca`). Es una pregunta
+  **aparte de la puerta**: las cuatro puertas existen en los dos negocios. Lo que cambia con la
+  marca es el renglón de la descripción de una compra nacional — Bruno, 25-ago-2026: *«si es
+  zattia, y es ropa, se encarga local; las fundas nunca se encarga local»*. ⇒ Son **dos moldes de
+  la misma puerta** separados por marca, y sin este dato los dos caían en cada ingreso nacional.
+  - 🔑 **Se lee igual que las puertas: `marcas: []` quiere decir las dos.** Los ocho pasos que no
+    cambian se siguen cargando una sola vez.
+  - 🔴 **Sin marca NO se siembra: 400**, y una marca que no existe **la nombra** —igual que el
+    `tipo` de `ingreso2`—. Mismo criterio de siempre: lo que falta cierra, no abre. El `<Select>`
+    del alta a mano también **arranca vacío**, ⛔ y no en la marca del header: el que carga puede
+    estar mirando BDI y sembrando el ingreso de ropa.
+  - 🔑 **El clon nace en la marca del ingreso** (`marcas: [marca]`), ⛔ no con las del molde: un
+    molde sin marca corre en las dos, pero el renglón que salió de un ingreso de BDI es de BDI. Sin
+    esto, los pendientes de un ingreso de fundas le aparecerían a quien trabaja parado en Zattia.
+  - ⛔ **Tampoco entra en la clave de idempotencia**, por lo mismo que la puerta. Queda en
+    `datos.marca` del clon.
+  - ⚠️ **`moldeCorreEnMarca` NO es `esDeMisMarcas`** aunque la forma sea idéntica: allá la pregunta
+    es *«¿puedo ver esto?»* —una persona con las dos marcas ve las dos— y acá *«¿este paso es de
+    este ingreso?»*, donde el ingreso tiene **una sola**. Aplanarlas haría que tocar una regla
+    cambiara la otra sin querer.
 - 🆕 🔴 **LA PUERTA DE INGRESOS CORRE ANTES DE `exigirUsuario`, y sin `INGRESO_SECRETO` está
   CERRADA.** Del otro lado está `ingreso2.arebensrl.com`, que es de Gerardo y no tiene SSO, así que
   la llave es un secreto compartido por header (`x-ingreso-secreto`). Tres cosas que no se tocan:
@@ -167,11 +187,12 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   ```bash
   curl -X POST 'https://monitor.arebensrl.com/api/datos?recurso=agenda' \
     -H 'Content-Type: application/json' -H 'x-ingreso-secreto: <el secreto>' \
-    -d '{"action":"ingreso-externo","nombre":"IMP2","fecha":"2026-08-24","tipo":"importacion"}'
+    -d '{"action":"ingreso-externo","nombre":"IMP2","fecha":"2026-08-24","tipo":"importacion","marca":"bdi"}'
   ```
 
-  🔴 **`tipo` es obligatorio** (o `puerta`, que es el mismo dato en nuestro vocabulario y sirve para
-  probar con `curl` sin esperar el mapa). Sin él, 400.
+  🔴 **`tipo` y `marca` son los dos obligatorios.** `tipo` puede reemplazarse por `puerta`, que es el
+  mismo dato en nuestro vocabulario y sirve para probar con `curl` sin esperar el mapa; `marca` es
+  `bdi` o `zattia` y ⛔ no tiene mapa: son los dos negocios, no una traducción. Sin alguno, 400.
 - 🔑 **Es el tablero donde van las rutinas repetitivas de marketing** — decisión de proceso de Bruno
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen

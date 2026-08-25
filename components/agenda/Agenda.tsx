@@ -32,10 +32,11 @@ import {
   color, font, space, weight, useConfirmar, useToast, type TabItem,
 } from '@/components/ui'
 import {
-  avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, pendientesDe, promosDe, PUERTAS,
-  rotuloBeneficio, rotuloPuerta, rotuloRegla, vaEl,
+  avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, moldeCorreEnMarca, pendientesDe, promosDe,
+  PUERTAS, rotuloBeneficio, rotuloPuerta, rotuloRegla, vaEl,
   type ItemAgenda, type Promo, type Puerta,
 } from '@/lib/agenda'
+import type { Marca } from '@/lib/nav.datos'
 import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } from '@/lib/agenda/cliente'
 import { tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
@@ -43,7 +44,7 @@ import { useAgenda } from '@/store/useAgenda'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
 import { GrillaMes } from './GrillaMes'
-import { ModalItem, itemVacio } from './ModalItem'
+import { MARCAS, ModalItem, itemVacio } from './ModalItem'
 import { ModalPromo, promoVacia } from './ModalPromo'
 import { PendientesHoy } from './PendientesHoy'
 import { TarjetaPromo } from './TarjetaPromo'
@@ -479,17 +480,25 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
   // contesta solo: el que carga aprieta sin mirar y los dos pasos que cambian de dueña quedan mal
   // puestos, que es peor que no sembrar — un pendiente que ya tiene nombre no lo revisa nadie.
   const [puerta, setPuerta] = useState<Puerta | ''>('')
+  // 🔴 Y la marca arranca vacía por el mismo motivo, ⛔ no en la del header: el que carga puede
+  // estar mirando BDI y estar sembrando el ingreso de ropa. Un default que casi siempre acierta es
+  // el peor de todos — el día que se equivoca nadie lo mira, porque nadie eligió nada.
+  const [marcaIngreso, setMarcaIngreso] = useState<Marca | ''>('')
   const [guardando, setGuardando] = useState(false)
 
-  // Cuántos renglones va a crear ESTA puerta. El total no sirve: los pasos que cambian de dueña
-  // están cargados uno por puerta, así que decir «se van a crear 11» sería mentir en las cuatro.
-  const paraEsta = puerta ? moldes.filter((m) => moldeCorreEn(m.puertas, puerta)) : []
+  // Cuántos renglones va a crear ESTA combinación. El total no sirve: los pasos que cambian de
+  // dueña están cargados uno por puerta y por marca, así que decir «se van a crear 16» sería
+  // mentir en las ocho. Las dos preguntas son las mismas que hace el servidor al sembrar.
+  const listo = !!puerta && !!marcaIngreso
+  const paraEsta = listo
+    ? moldes.filter((m) => moldeCorreEn(m.puertas, puerta as Puerta) && moldeCorreEnMarca(m.marcas, marcaIngreso as Marca))
+    : []
 
   async function sembrar() {
-    if (!nombre.trim() || !puerta) return
+    if (!nombre.trim() || !listo) return
     setGuardando(true)
     try {
-      const r = await sembrarIngreso(nombre.trim(), fecha, puerta)
+      const r = await sembrarIngreso(nombre.trim(), fecha, puerta as Puerta, marcaIngreso as Marca)
       if (r.ya) toast.ok('Ese ingreso ya estaba cargado: no se duplicó nada.')
       else toast.ok(`Listo: ${r.creados} ${r.creados === 1 ? 'pendiente' : 'pendientes'}.`)
       await onListo()
@@ -512,7 +521,7 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
             variant="solid"
             tone="brand"
             loading={guardando}
-            disabled={!nombre.trim() || !puerta || paraEsta.length === 0}
+            disabled={!nombre.trim() || !listo || paraEsta.length === 0}
             onClick={() => void sembrar()}
           >
             Cargar los pendientes
@@ -565,13 +574,36 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
               </div>
             )}
           </div>
+          {/*
+            🔑 **De qué marca es el ingreso**, y es una pregunta aparte de la puerta: las cuatro
+            puertas existen en los dos negocios. Lo que cambia con la marca es quién escribe la
+            descripción de una compra nacional —el local si es ropa de Zattia, Administración si son
+            fundas de BDI—, así que sin esto ese renglón sale duplicado en cada ingreso nacional.
+          */}
+          <div style={{ marginTop: space[3] }}>
+            <Field
+              label="De qué marca"
+              hint="El renglón nace en esta marca, y algunos pasos son de una sola."
+              width={280}
+            >
+              <Select value={marcaIngreso} onChange={(e) => setMarcaIngreso(e.target.value as Marca | '')}>
+                <option value="" disabled>Elegí la marca…</option>
+                {MARCAS.map((m) => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
           <div style={{ marginTop: space[3], color: color.mut, fontSize: font.sm }}>
-            {!puerta ? (
-              <>Elegí la puerta para ver cuántos pendientes se van a crear.</>
+            {!listo ? (
+              <>Elegí la puerta y la marca para ver cuántos pendientes se van a crear.</>
             ) : paraEsta.length === 0 ? (
               <>
-                <b>Ninguno de los {moldes.length} moldes cargados corre para «{rotuloPuerta(puerta)}».</b>{' '}
-                Revisá en «Cargar» en qué puertas corre cada paso.
+                <b>
+                  Ninguno de los {moldes.length} moldes cargados corre para «{rotuloPuerta(puerta as Puerta)}»
+                  {' '}en {MARCAS.find((m) => m.key === marcaIngreso)?.label}.
+                </b>{' '}
+                Revisá en «Cargar» en qué puertas y en qué marcas corre cada paso.
               </>
             ) : (
               <>

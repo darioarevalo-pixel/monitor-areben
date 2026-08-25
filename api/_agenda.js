@@ -37,7 +37,7 @@ import { aplicaEn, esFechaIso, motivoReglaInvalida } from '../lib/agenda/reglas.
 // Se importa de su carpeta en vez de mudarlo a `lib/`: mover el archivo tocaría cuatro archivos de
 // Novedades, que es código compartido, y la ruta rara cuesta menos que el conflicto.
 import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
-import { CLAVES_PUERTA, moldeCorreEn, puertaDeTipo, puertaValida, rotuloPuerta } from '../lib/agenda/puertas.core.js';
+import { CLAVES_PUERTA, moldeCorreEn, moldeCorreEnMarca, puertaDeTipo, puertaValida, rotuloPuerta } from '../lib/agenda/puertas.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -168,18 +168,36 @@ function normalizarBeneficio(b) {
  * revisa un pendiente que ya tiene nombre puesto. Mismo criterio que el 503 de la puerta sin
  * secreto: **lo que falta cierra, no abre.**
  *
- * ⛔ **La puerta NO entra en la clave de idempotencia.** El mismo ingreso es el mismo ingreso: la
- * puerta es una propiedad suya, no parte de su identidad. Avisarlo dos veces con puertas distintas
- * es un error de quien avisa, y duplicar los renglones no lo arreglaría.
+ * 🔑 **La MARCA también es obligatoria, y por el mismo motivo que la puerta.** Un paso puede ser de
+ * una sola de las dos: la descripción de una compra nacional la escribe **el local si es ropa de
+ * Zattia y nunca si son fundas de BDI** (Bruno, 25-ago-2026). Sin saber la marca, esa regla no se
+ * puede decir con un molde —toda compra nacional sembraría los dos renglones de descripción—, así
+ * que faltando la marca **se cierra, no se abre**: 400. Se lee igual que las puertas: `marcas: []`
+ * en el molde quiere decir **las dos**, y por eso los pasos que no cambian se cargan una sola vez.
+ *
+ * ⛔ **Ni la puerta ni la marca entran en la clave de idempotencia.** El mismo ingreso es el mismo
+ * ingreso: las dos son propiedades suyas, no parte de su identidad. Avisarlo dos veces con puertas
+ * distintas es un error de quien avisa, y duplicar los renglones no lo arreglaría.
  *
  * Devuelve `{ creados, ya }`: `ya` cuenta el caso en que estaba sembrado y no se tocó nada.
  */
-async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta }) {
+async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca }) {
   const limpio = String(nombre || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
   if (!limpio) return { error: 'Falta el nombre del ingreso.' };
   if (!esFechaIso(fecha)) return { error: 'La fecha del ingreso tiene que ser YYYY-MM-DD.' };
   if (!puertaValida(puerta)) {
     return { error: `Falta por qué puerta entró (usá ${CLAVES_PUERTA.join(', ')}).` };
+  }
+  // 🔑 Nombra lo que trajo cuando trajo algo: el que llama desde afuera manda su vocabulario y el
+  // error es a la vez el pedido, igual que el 400 de `tipo`. ⛔ Y no hay un mapa de marcas como el
+  // de las puertas: `bdi` y `zattia` son los dos negocios y no son una traducción de nada.
+  if (!MARCAS.includes(String(marca))) {
+    const trajo = String(marca === undefined || marca === null ? '' : marca).trim();
+    return {
+      error: trajo
+        ? `No conozco la marca «${trajo.slice(0, 40)}». Las marcas son: ${MARCAS.join(', ')}.`
+        : `Falta de qué marca es el ingreso (usá ${MARCAS.join(', ')}).`,
+    };
   }
 
   const clave = `${fecha}·${limpio.toLowerCase()}`;
@@ -200,15 +218,22 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta }) {
   const deIngreso = todos.filter((i) => i.datos && i.datos.plantilla === 'ingreso');
   if (!deIngreso.length) return { error: 'No hay ningún paso cargado como plantilla de ingreso.' };
 
-  // 🔑 El filtro por puerta va **acá y no en la carga**: el molde de «descripción» de producción
-  // propia no existe (ese paso no lleva renglón), y eso se dice no cargándolo. Lista vacía = todas.
+  // 🔑 El filtro por puerta y por marca va **acá y no en la carga**: el molde de «descripción» de
+  // producción propia no existe (ese paso no lleva renglón), y el de compra nacional está cargado
+  // dos veces —el local para Zattia, Administración para BDI—. Las dos cosas se dicen cargando o no
+  // cargando un molde, y las dos listas vacías quieren decir «todas».
+  // ⚠️ La marca la contesta `moldeCorreEnMarca` y ⛔ no `esDeMisMarcas`, que es la de mirar: un
+  // ingreso tiene UNA marca y una persona puede tener las dos. Están al lado y dicen cosas
+  // distintas; el comentario de `puertas.core.js` explica por qué no son la misma función.
   const moldes = deIngreso
-    .filter((i) => moldeCorreEn(i.datos.puertas, puerta))
+    .filter((i) => moldeCorreEn(i.datos.puertas, puerta) && moldeCorreEnMarca(i.marcas, marca))
     .sort((a, b) => (Number(a.datos.offsetDias) || 0) - (Number(b.datos.offsetDias) || 0) || String(a.titulo).localeCompare(String(b.titulo), 'es'));
-  // Hay moldes, pero ninguno para esta puerta. ⚠️ Se dice distinto que «no hay moldes» porque la
-  // acción es otra: allá hay que cargarlos, acá hay que revisar en qué puertas corren los que hay.
+  // Hay moldes, pero ninguno para esta combinación. ⚠️ Se dice distinto que «no hay moldes» porque
+  // la acción es otra: allá hay que cargarlos, acá hay que revisar en qué puertas y en qué marcas
+  // corren los que hay. 🔑 Y nombra **las dos**: con una sola, quien lo lea revisa la mitad
+  // equivocada y concluye que la carga está bien.
   if (!moldes.length) {
-    return { error: `Hay moldes cargados, pero ninguno corre para «${rotuloPuerta(puerta)}».` };
+    return { error: `Hay moldes cargados, pero ninguno corre para «${rotuloPuerta(puerta)}» en ${marca}.` };
   }
 
   const filas = moldes.map((m, n) => ({
@@ -221,16 +246,20 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta }) {
     // Un día puntual: lo del ingreso pasa una vez. El molde dice a cuántos días de la llegada.
     regla: { tipo: 'unica', fecha: masDias(fecha, Math.max(0, Number(m.datos.offsetDias) || 0)) },
     destino: m.destino,
-    marcas: m.marcas || [],
+    // 🔑 El clon nace **en la marca del ingreso**, ⛔ no con las del molde: un molde sin marca corre
+    // en las dos, pero el renglón que salió de un ingreso de BDI es de BDI y de nadie más. Sin
+    // esto, los ocho pasos comunes caerían en las dos marcas y el que trabaja parado en Zattia
+    // vería los pendientes de un ingreso de fundas.
+    marcas: [marca],
     manual_id: m.manual_id || null,
     activo: true,
     // 🔑 El clon **arrastra**: es la razón de ser de esto. Un paso del lanzamiento que se evapora al
     // día siguiente es exactamente el que «se cae porque nadie lo mira». ⛔ Y NO es plantilla: si lo
     // fuera, el molde se clonaría a sí mismo en el próximo ingreso.
-    // 🔑 `puerta` queda en el clon aunque nada la lea todavía: es el ÚNICO rastro de por qué este
-    // ingreso sembró cinco renglones y no seis. Sin ella, «faltó el de la descripción» no se puede
-    // contestar sin adivinar. ⛔ No entra en `clave`.
-    datos: { arrastra: true, ingreso: clave, puerta },
+    // 🔑 `puerta` y `marca` quedan en el clon aunque nada las lea todavía: son el ÚNICO rastro de
+    // por qué este ingreso sembró nueve renglones y no diez. Sin ellas, «faltó el de la
+    // descripción» no se puede contestar sin adivinar. ⛔ Ninguna entra en `clave`.
+    datos: { arrastra: true, ingreso: clave, puerta, marca },
     autor,
     updated_at: new Date().toISOString(),
   }));
@@ -295,6 +324,10 @@ export default async function handler(req, res) {
       fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
       autor: 'Ingresos',
       puerta,
+      // 🔑 La marca viaja igual que la puerta y por el mismo motivo: la sabe quien carga el ingreso.
+      // ⛔ No se deduce de la puerta —las cuatro existen en los dos negocios— ni se cae a una por
+      // defecto: `sembrarIngreso` contesta 400 y la nombra.
+      marca: b.marca,
     });
     if (r.error) return res.status(400).json({ error: r.error });
     return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
@@ -574,6 +607,7 @@ export default async function handler(req, res) {
         fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
         autor: yo,
         puerta: b.puerta,
+        marca: b.marca,
       });
       if (r.error) return res.status(400).json({ error: r.error });
       return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
