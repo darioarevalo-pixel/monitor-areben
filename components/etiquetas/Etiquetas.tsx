@@ -645,7 +645,7 @@ function ModoPanel({
                       <td style={tdC}>
                         {v.name || '—'}
                         {v.sinProducto && (
-                          <span title="Tiene stock y código de barras, pero su producto todavía no está en el catálogo sincronizado: el precio aparece después del próximo sync.">
+                          <span title="Tiene stock y código de barras, pero su producto todavía no está en el catálogo sincronizado: el precio aparece después de la próxima sincronización.">
                             {' '}
                             <Badge tone="warning">✨ recién cargado</Badge>
                           </span>

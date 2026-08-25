@@ -221,7 +221,7 @@ export function Integraciones() {
       const { filas, sinMatch } = proponerMapeo(STORE, gn, tn, STORE)
       if (filas.length) await guardarMapeo(STORE, filas)
       setMsg(
-        `${gn.length} variantes STU en GN · ${tn.length} en TN → ${filas.length} matcheadas por talle` +
+        `${gn.length} variantes STU en GN · ${tn.length} en TN → ${filas.length} emparejadas por talle` +
           (sinMatch.length ? ` · ${sinMatch.length} sin par en TN (pendientes)` : '') +
           '. Los verdes (SKU/código de barras) son confiables.',
       )
@@ -253,7 +253,7 @@ export function Integraciones() {
       await validarSkus(STORE, verdes, true)
       const set = new Set(verdes)
       setRows((rs) => rs.map((r) => (set.has(r.sku) ? { ...r, validado: true } : r)))
-      setMsg(`${verdes.length} variantes validadas (match confiable).`)
+      setMsg(`${verdes.length} variantes validadas (emparejadas con seguridad).`)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -305,7 +305,7 @@ export function Integraciones() {
       setDryRows(dry)
       const cambian = dry.filter((x) => x.delta != null && x.delta !== 0).length
       setDryMsg(
-        `${dry.length} variantes validadas · ${cambian} con diferencia (el sync pondría TN = GN). ` +
+        `${dry.length} variantes validadas · ${cambian} con diferencia (la sincronización pondría TN = GN). ` +
           'Simulación: NO se escribió nada.',
       )
     } catch (e) {
@@ -325,7 +325,7 @@ export function Integraciones() {
       body: JSON.stringify({ accion: 'stock', updates: filas.map((r) => ({ product_id: r.tnProductId, variant_id: r.tnVariantId, stock: r.gn })) }),
     })
     const d = (await resp.json().catch(() => null)) as RespStock | null
-    if (!d?.ok) throw new Error(d?.error || `El endpoint contestó ${resp.status}.`)
+    if (!d?.ok) throw new Error(d?.error || `Tienda Nube contestó ${resp.status}.`)
     return d
   }, [])
 
@@ -386,7 +386,7 @@ export function Integraciones() {
           </p>
           <div style={{ marginTop: space[3] }}>
             <ConfirmDetalle label="Variantes a escribir" valor={candidatas.length} />
-            <ConfirmDetalle label="Tandas" valor={`${Math.ceil(candidatas.length / TANDA_STOCK)} de hasta ${TANDA_STOCK}`} />
+            <ConfirmDetalle label="Se escribe de a" valor={`${TANDA_STOCK} por vez, en ${Math.ceil(candidatas.length / TANDA_STOCK)} vueltas`} />
           </div>
         </>
       ),
@@ -429,7 +429,7 @@ export function Integraciones() {
     }
 
     const quedaron = candidatas.length - escritas - fallaron
-    setDryMsg(`${escritas} de ${candidatas.length} escritas en TN. Corré el dry-run de nuevo (lee TN de verdad) para confirmarlo.`)
+    setDryMsg(`${escritas} de ${candidatas.length} escritas en TN. Volvé a verificar (lee Tienda Nube de verdad) para confirmarlo.`)
     if (fallaron || quedaron) {
       setDryError(
         [
@@ -446,7 +446,7 @@ export function Integraciones() {
   // Junta las tres fuentes y se las da al motor puro (lib/sync-tn/core.ts), que decide todo.
   const correrDryRunVentas = useCallback(async () => {
     if (diasEntre(vDesde, vHasta) > RANGO_MAX_DIAS) {
-      setVError(`El rango no puede pasar de ${RANGO_MAX_DIAS} días: Tienda Nube es lenta y el endpoint corta.`)
+      setVError(`El rango no puede pasar de ${RANGO_MAX_DIAS} días: Tienda Nube es lenta y la lectura se corta.`)
       return
     }
     setVLoading(true)
@@ -485,7 +485,7 @@ export function Integraciones() {
       `Descuenta ${p.unidades} u. del Local.`,
       '',
       `Nota que queda en GN:\n${notaTnImport(p.numero, { cliente: p.cliente, fecha_tn: p.dia, total_tn: p.total_tn, pago: p.pago })}`,
-      dup ? `\n⚠ OJO: puede que ya esté cargada a mano en GN (venta ${dup.gn_number ?? dup.gn_venta_id} del ${dup.date_sale}). Gestión Nube NO permite anular por API.` : '',
+      dup ? `\n⚠ OJO: puede que ya esté cargada a mano en GN (venta ${dup.gn_number ?? dup.gn_venta_id} del ${dup.date_sale}). Gestión Nube no permite anular una venta desde acá.` : '',
     ]
       .filter(Boolean)
       .join('\n')
@@ -529,7 +529,7 @@ export function Integraciones() {
               </Button>
             )}
             <Button variant="solid" tone="brand" onClick={() => void correrDryRun()} loading={dryLoading} disabled={progreso != null}>
-              {dryLoading ? 'Comparando…' : 'Correr dry-run'}
+              {dryLoading ? 'Comparando…' : 'Verificar diferencias de stock (dry-run)'}
             </Button>
           </>
         ) : (
@@ -543,7 +543,7 @@ export function Integraciones() {
               <input className="mo-input" type="date" value={vHasta} onChange={(e) => setVHasta(e.target.value)} style={{ width: 150 }} />
             </label>
             <Button variant="solid" tone="brand" onClick={() => void correrDryRunVentas()} loading={vLoading}>
-              {vLoading ? 'Leyendo Tienda Nube…' : 'Correr dry-run'}
+              {vLoading ? 'Leyendo Tienda Nube…' : 'Verificar órdenes a importar (dry-run)'}
             </Button>
           </>
         )}
@@ -552,8 +552,8 @@ export function Integraciones() {
       <Tabs
         items={[
           { key: 'mapeo', label: 'Mapeo' },
-          { key: 'stock', label: 'Stock (dry-run)' },
-          { key: 'ventas', label: 'Ventas (dry-run)' },
+          { key: 'stock', label: 'Stock' },
+          { key: 'ventas', label: 'Ventas' },
         ]}
         value={tab}
         onChange={(k) => setTab(k as typeof tab)}
@@ -580,15 +580,15 @@ export function Integraciones() {
           {cargando ? (
             <Esqueleto forma="tabla" filas={8} />
           ) : rows.length === 0 ? (
-            <EmptyState icon="🔗" title="Todavía no hay mapeo" hint="Apretá “Proponer / actualizar mapeo” para poblarlo desde GN (STU) × TN (Stunned)." dashed />
+            <EmptyState icon="🔗" title="Todavía no hay mapeo" hint="Apretá “Proponer / actualizar mapeo” para traerlo de Gestión Nube y de la tienda de Stunned." dashed />
           ) : (
             <TableWrap maxHeight={620}>
               <THead>
                 <Tr>
                   <Th>SKU</Th>
-                  <Th>GN product_id</Th>
-                  <Th>TN product_id</Th>
-                  <Th>TN variante (por talle)</Th>
+                  <Th>ID en Gestión Nube</Th>
+                  <Th>ID en Tienda Nube</Th>
+                  <Th>Variante en Tienda Nube (talle)</Th>
                   <Th>Método</Th>
                   <Th align="center" width={90}>
                     Validado
@@ -626,7 +626,7 @@ export function Integraciones() {
         <>
           <Notice tone="neutral" icon="ℹ" style={{ marginBottom: space[3] }}>
             Simulación de <b>solo lectura</b>: compara GN contra TN y no escribe nada hasta que toques Aplicar —en una fila, o el botón de arriba para todas las que
-            tienen diferencia—. El stock de GN es la suma de todas las ubicaciones (Depósito + Local); el sync pondría TN = GN.
+            tienen diferencia—. El stock de GN es la suma de todas las ubicaciones (Depósito + Local); la sincronización pondría TN = GN.
           </Notice>
 
           {dryMsg && (
@@ -648,7 +648,7 @@ export function Integraciones() {
                   <Th>SKU (talle)</Th>
                   <Th align="right">Stock GN</Th>
                   <Th align="right">Stock TN</Th>
-                  <Th>Qué haría el sync</Th>
+                  <Th>Qué haría la sincronización</Th>
                 </Tr>
               </THead>
               <TBody>
@@ -709,7 +709,7 @@ export function Integraciones() {
             Muestra qué ventas crearía en Gestión Nube por las órdenes de la tienda de Stunned.{' '}
             {ESCRITURA_HABILITADA ? (
               <>
-                <b>Correr el dry-run no escribe nada</b>, pero cada fila tiene su botón <b>Importar</b>, y ese sí crea la venta en Gestión Nube. Se importa de a una y
+                <b>Verificar no escribe nada</b>, pero cada fila tiene su botón <b>Importar</b>, y ese sí crea la venta en Gestión Nube. Se importa de a una y
                 Gestión Nube <b>no permite anularla desde acá</b>: si queda duplicada, hay que borrarla a mano en la web de GN.
               </>
             ) : (
@@ -725,7 +725,7 @@ export function Integraciones() {
             ) : (
               <>
                 {' '}
-                <b>Falta acordar la fecha de corte</b> (desde cuándo se hace cargo el sync y quien las carga a mano deja de hacerlo): hasta entonces no se propone
+                <b>Falta acordar la fecha de corte</b> (desde cuándo se hace cargo la sincronización y quien las carga a mano deja de hacerlo): hasta entonces no se propone
                 importar nada.
               </>
             )}
@@ -745,7 +745,7 @@ export function Integraciones() {
           {vLoading ? (
             <Esqueleto forma="tabla" filas={6} />
           ) : !vPlan ? (
-            <EmptyState icon="🧾" title="Elegí el rango y tocá “Correr dry-run”" hint="Se leen las órdenes de stunned.com.ar y las ventas de Gestión Nube del mismo rango." dashed />
+            <EmptyState icon="🧾" title="Elegí el rango y tocá “Verificar órdenes a importar”" hint="Se leen las órdenes de stunned.com.ar y las ventas de Gestión Nube del mismo rango." dashed />
           ) : (
             <>
               <p style={{ fontSize: font.base, color: color.ink2, margin: `0 0 ${space[2]} 0` }}>
@@ -763,7 +763,7 @@ export function Integraciones() {
                       <Th>Ítems</Th>
                       <Th align="right">Total TN</Th>
                       <Th align="right">Descuento</Th>
-                      <Th>Qué haría el sync</Th>
+                      <Th>Qué haría la sincronización</Th>
                     </Tr>
                   </THead>
                   <TBody>

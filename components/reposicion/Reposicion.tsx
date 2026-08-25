@@ -224,7 +224,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
                   )}
                   <b style={{ fontSize: font.md, color: color.ink }}>{g.name}</b>
                   {g.sinProducto && (
-                    <span title="Tiene stock pero todavía no está en el catálogo sincronizado: la categoría (y con ella el mínimo) aparecen después del próximo sync.">
+                    <span title="Tiene stock pero todavía no está en el catálogo sincronizado: la categoría (y con ella el mínimo) aparecen después de la próxima sincronización.">
                       <Badge tone="warning">✨ recién cargado</Badge>
                     </span>
                   )}

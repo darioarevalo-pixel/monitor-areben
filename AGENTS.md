@@ -146,6 +146,11 @@ ya tienen ficha:
   ⛔ **Escribe en la TIENDA VIVA y en la contabilidad**, y la mitad que escribe la tienda está en
   otro repo (`bdi-catalogo`). ⛔ **Gestión Nube no anula ventas por API**: por eso stock tiene botón
   masivo y ventas no, y eso NO se empareja.
+- Novedades → **leer `docs/secciones/novedades.md`** ⛔ **antes de ESCRIBIR una novedad**, no sólo
+  antes de tocar `components/novedades/`, `lib/novedades/` o `scripts/novedad.mjs`. Ahí está **cómo
+  se escribe**: a quién le llega, los ~600 caracteres, y que se cuenta **qué se incorporó y cómo se
+  usa**, nunca cómo está hecho por detrás — el nombre en criollo primero y el término técnico entre
+  paréntesis. ⛔ **Lo que es para admin no lleva novedad.**
 - Manuales → **leer `docs/secciones/manuales.md`** antes de tocar `components/manuales/`,
   `lib/manuales/`, `lib/markdown/`, `components/ui/Markdown.tsx` o `components/ui/BarraFormato.tsx`. ⛔ **El parser NO es de Manuales**:
   lo comparten Novedades, la Guía y la Agenda —incluidos los pasos de la promo bancaria que se leen

@@ -95,5 +95,5 @@ export function aplicarResultadoTanda(rows: DryRow[], enviadas: DryRow[], resp: 
  */
 export function marcarSinConfirmar(rows: DryRow[], enviadas: DryRow[], motivo: string): DryRow[] {
   const mandadas = new Set(enviadas.map((r) => claveTn(r.tnProductId, r.tnVariantId)))
-  return rows.map((r) => (mandadas.has(claveTn(r.tnProductId, r.tnVariantId)) ? { ...r, err: `Sin confirmar: ${motivo}. Corré el dry-run para ver cómo quedó TN.` } : r))
+  return rows.map((r) => (mandadas.has(claveTn(r.tnProductId, r.tnVariantId)) ? { ...r, err: `Sin confirmar: ${motivo}. Volvé a verificar para ver cómo quedó Tienda Nube.` } : r))
 }

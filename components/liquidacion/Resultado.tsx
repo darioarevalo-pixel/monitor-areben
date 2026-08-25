@@ -429,7 +429,7 @@ export function Resultado({
           */}
           <Card style={{ marginTop: space[5], background: color.bg2 }}>
             <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.6 }}>
-              El sync relee los últimos 90 días y borra lo que Gestión Nube ya no tiene: una venta
+              La sincronización relee los últimos 90 días y borra lo que Gestión Nube ya no tiene: una venta
               anulada <b>desaparece</b> de estos números, así que una campaña reciente puede moverse
               de un día para el otro. Las ventas mayoristas y las técnicas del Monitor (Sesión de
               Fotos y Fallas) se cuentan aparte y no entran en el precio promedio.

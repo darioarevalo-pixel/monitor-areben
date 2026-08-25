@@ -53,9 +53,9 @@ export function Resumen() {
                     )}
                   </>
                 ) : sync.tipo === 'fallando' ? (
-                  <>El sync está fallando — no hay ninguna corrida exitosa reciente. Los números de abajo son viejos.</>
+                  <>La sincronización está fallando — no hay ninguna corrida exitosa reciente. Los números de abajo son viejos.</>
                 ) : (
-                  <>No pude leer el estado del sync, así que no sé qué tan actuales son estos números.</>
+                  <>No pude leer el estado de la sincronización, así que no sé qué tan actuales son estos números.</>
                 )}
               </Notice>
 
@@ -68,7 +68,7 @@ export function Resumen() {
               </div>
 
               <p style={{ fontSize: font.sm, color: color.mut2, marginTop: space[3] }}>
-                Los KPI salen del último sync, no de Gestión Nube en vivo.
+                Los KPI salen de la última sincronización, no de Gestión Nube en vivo.
               </p>
             </>
           )

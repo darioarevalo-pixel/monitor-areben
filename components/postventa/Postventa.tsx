@@ -310,7 +310,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
       ) : esAdmin && tab === 'cambios' ? (
         <ArmarCambio />
       ) : esAdmin && tab !== 'fallas' ? (
-        <Card padding={4}><EmptyState icon="🚧" title={`${TABS.find((t) => t.key === tab)?.label} llega en una próxima tanda`} hint="Post-venta suma esta pestaña más adelante." /></Card>
+        <Card padding={4}><EmptyState icon="🚧" title={`${TABS.find((t) => t.key === tab)?.label} llega más adelante`} hint="Post-venta suma esta pestaña más adelante." /></Card>
       ) : (
         <>
           {esAdmin && (

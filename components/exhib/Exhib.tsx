@@ -220,7 +220,7 @@ export function Exhib() {
             </Notice>
           ) : (
             <Notice tone="warning" icon="📅" style={{ marginBottom: space[4] }}>
-              <b>{ex.items.length}</b> variantes con stock en Local. Los datos son del último sync diario y pueden tener unas horas: conviene chequear en momentos de baja venta.
+              <b>{ex.items.length}</b> variantes con stock en Local. Los datos son de la última sincronización diaria y pueden tener unas horas: conviene chequear en momentos de baja venta.
             </Notice>
           )}
 

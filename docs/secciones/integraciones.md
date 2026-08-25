@@ -47,7 +47,7 @@ el token de ventas de GN.
   se resuelve sola** — la regla vive en `lib/sync-tn/stock.core.ts`, con tests.
 - 🔑 **Y si una tanda NO contesta, las filas quedan «sin confirmar», ni escritas ni falladas, y el
   bucle FRENA.** No se sabe si TN quedó escrito, y decir cualquiera de las dos cosas sería inventar.
-  El que contesta de verdad es volver a correr el dry-run.
+  El que contesta de verdad es volver a verificar.
 - 🔑 **`refresh=1` en el dry-run de stock no es una optimización al revés: es el oráculo.** El
   endpoint cachea una hora; sin eso, después de aplicar se releería el stock viejo y las diferencias
   darían cero **igual si no se escribió nada**.
@@ -78,6 +78,19 @@ el token de ventas de GN.
 - ⚠️ `tn-categorias` **lee la tienda del query param (`?store=`), no del body**: sin eso asume
   `'bdi'` — o sea, escribiría el stock de Stunned en la tienda de BDI.
 
+## Los nombres de los botones (25-ago-2026)
+
+⚠️ **La pantalla ya no dice «Correr dry-run».** Salió de una crítica del equipo: *«la explicación
+usa terminología técnica que no aporta a comunicar el mensaje principal»*. El criterio que quedó es
+**el nombre en criollo primero y el término técnico entre paréntesis** —
+`Verificar diferencias de stock (dry-run)` y `Verificar órdenes a importar (dry-run)` —, y las dos
+pestañas pasaron a llamarse **Stock** y **Ventas** a secas. 🔑 **El «(dry-run)» se conserva a
+propósito**: las dos novedades publicadas el 22-ago nombran el botón viejo al pie de la letra, y sin
+el término entre paréntesis esos textos dejarían de encontrarse en la pantalla. Con la misma vuelta
+salieron `matcheadas` → `emparejadas`, `El endpoint contestó` → `Tienda Nube contestó`, `Tandas` →
+`Se escribe de a`, `GN product_id` → `ID en Gestión Nube` y `el sync` → `la sincronización`. La regla
+entera vive en `docs/secciones/novedades.md`.
+
 ## Pendiente
 
 - ▶️ **El dry-run de ventas no tiene botón masivo y NO debe tenerlo** mientras GN no anule por API.
@@ -95,9 +108,9 @@ el token de ventas de GN.
 en prod, con la marca en **Zattia** (con BDI la sección no existe y `/integraciones` redirige a
 Inicio, callado):
 
-1. Stock → «Correr dry-run» (solo lectura, ~10 s).
+1. Stock → «Verificar diferencias de stock (dry-run)» (solo lectura, ~10 s).
 2. Aplicar —una fila o la tanda entera— y mirar qué dice cada fila.
-3. **Volver a correr el dry-run**: pide `refresh=1`, así que lee TN de verdad. Las diferencias tienen
+3. **Volver a verificar**: pide `refresh=1`, así que lee TN de verdad. Las diferencias tienen
    que dar **cero**. Ése es el oráculo por otro camino, y es el único que vale.
 
 Caminado así el 23-ago-2026: 112 validadas, 8 con diferencia → 8 de 8 escritas → 0 con diferencia.
