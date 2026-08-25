@@ -412,14 +412,6 @@ function PanelInterno({
    */
   const kv = useRef<{ seg: MapaSeguimiento; tel: MapaTelefonos; leads: MapaLeads }>({ seg: {}, tel: {}, leads: {} })
   const [kvListo, setKvListo] = useState(false)
-  /**
-   * Los ids de los clientes del CRM, para la búsqueda por nombre de "ya es cliente mío". Salen del
-   * KV, que ya está cargado: el servidor busca sólo entre ellos y no entre los 14.131 del padrón.
-   */
-  const idsCRM = useMemo(
-    () => (kvListo ? Object.keys(crmSeg).map(Number).filter((n) => Number.isFinite(n)) : []),
-    [crmSeg, kvListo],
-  )
 
   useEffect(() => {
     let activo = true
@@ -727,7 +719,6 @@ function PanelInterno({
         {solapas}
         <NumeroNuevo
           tel={telNorm}
-          idsCRM={idsCRM}
           onVinculado={async (cliente) => {
             // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
             // se rearma cada 6 h, así que buscar por teléfono todavía no lo encontraría.
@@ -1321,13 +1312,11 @@ function FichaLead({
  */
 function NumeroNuevo({
   tel,
-  idsCRM,
   onVinculado,
   onGuardado,
   onError,
 }: {
   tel: string
-  idsCRM: number[]
   onVinculado: (cliente: FilaCliente) => void
   onGuardado: (lead: Lead) => void
   onError: (t: string) => void
@@ -1336,7 +1325,7 @@ function NumeroNuevo({
 
   if (camino === 'lead') return <NuevoLead tel={tel} onGuardado={onGuardado} onError={onError} onVolver={() => setCamino('elegir')} />
   if (camino === 'cliente')
-    return <VincularCliente tel={tel} idsCRM={idsCRM} onVinculado={onVinculado} onError={onError} onVolver={() => setCamino('elegir')} />
+    return <VincularCliente tel={tel} onVinculado={onVinculado} onError={onError} onVolver={() => setCamino('elegir')} />
 
   return (
     <div style={{ padding: space[3] }}>
@@ -1362,13 +1351,11 @@ function NumeroNuevo({
  */
 function VincularCliente({
   tel,
-  idsCRM,
   onVinculado,
   onError,
   onVolver,
 }: {
   tel: string
-  idsCRM: number[]
   onVinculado: (cliente: FilaCliente) => void
   onError: (t: string) => void
   onVolver: () => void
@@ -1392,14 +1379,14 @@ function VincularCliente({
     if (corto) return
     let activo = true
     const t = window.setTimeout(async () => {
-      const filas = await buscarClientesPorNombre(texto, idsCRM)
+      const filas = await buscarClientesPorNombre(texto)
       if (activo) setResultados({ q: texto, filas })
     }, 300)
     return () => {
       activo = false
       window.clearTimeout(t)
     }
-  }, [texto, corto, idsCRM])
+  }, [texto, corto])
 
   const alDia = resultados && resultados.q === texto ? resultados.filas : null
 

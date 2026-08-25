@@ -429,6 +429,37 @@ async function listaDelPanel(supabase, body, res) {
 const TOPE_BUSQUEDA = 12;
 
 /**
+ * Cuántos nombres se miran ANTES de filtrar por "compró".
+ *
+ * ⚠️ **Este tope corta en silencio.** Los candidatos salen ordenados por nombre, así que si una
+ * búsqueda muy común (un "martin" pelado) trajera más que esto, un cliente que ordene después
+ * quedaría afuera sin que nada lo diga. Medido el 25-ago-2026: "martin" da 120 candidatos y sólo 6
+ * son clientes del CRM — el filtro saca al 95%, así que hay que mirar MUCHOS nombres para no
+ * perder a ninguno. 400 filas de `id,name,city,phone` no se sienten; un cliente que no aparece, sí.
+ */
+const TOPE_CANDIDATOS = 400;
+
+/** El canal Mayorista. Es el mismo `CANAL_MAYORISTA` de `lib/crm/datos.ts`, del otro lado. */
+const CANAL_MAYORISTA = 10;
+
+const ESCAPE = String.fromCharCode(92); // la barra invertida, sin pelearse con los escapes
+const RE_COMODINES = new RegExp('[' + ESCAPE + ESCAPE + '%_]', 'g');
+const RE_VOCALES = /[aeiouáéíóúAEIOUÁÉÍÓÚ]/g;
+
+/**
+ * El patrón `ILIKE` para buscar un nombre. Se exporta para poder probarlo: son dos reemplazos y
+ * los dos fallan en silencio —uno deja pasar comodines ajenos, el otro esconde a media agenda—.
+ *
+ * 1. **Los comodines que escribe la persona son texto.** Un `%` en el cuadro de búsqueda tiene que
+ *    buscar un `%`, no traer el padrón entero.
+ * 2. **Las vocales pasan a ser comodines.** `ilike` no ignora los acentos: sin esto, "martin" no
+ *    encuentra a "Martín" y el que busca concluye que el cliente no está.
+ */
+export function patronBusqueda(q) {
+  return '%' + String(q || '').replace(RE_COMODINES, (c) => ESCAPE + c).replace(RE_VOCALES, '_') + '%';
+}
+
+/**
  * Buscar un cliente por nombre, para engancharle el número desde el panel de WhatsApp.
  *
  * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -443,9 +474,22 @@ const TOPE_BUSQUEDA = 12;
  * Con esto se lo engancha en el acto, y **el número viejo sigue funcionando**: el nuevo se guarda
  * en `crm:tel` y el viejo sigue viniendo del padrón. Los dos abren la misma ficha.
  *
- * ⚠️ **Busca sólo entre los clientes del CRM** (`ids`), no entre los 14.131 del padrón. El padrón
- * tiene a cada consumidor final que pasó por el local; ofrecerlos todos para "es un cliente mío"
- * es ofrecer 14.000 personas que no lo son. Los ids salen del KV, que el panel ya tiene cargado.
+ * ⚠️ **No se busca en los 14.131 del padrón**: ahí está cada consumidor final que pasó por el
+ * local, y ofrecerlos para "es un cliente mío" es ofrecer 14.000 personas que no lo son.
+ *
+ * 🔴 **Pero tampoco alcanza con los ids del KV, y ése fue el bug.** La primera versión buscaba
+ * entre las claves de `crm:seg`, que NO son "los clientes del CRM" sino "los clientes que alguien
+ * ya tocó": el que compró por primera vez la semana pasada y todavía no tiene ni una nota no está
+ * ahí. Caso real (Candela Martin, #648111, 25-ago-2026): compró $146.022 el 16-ago, es clienta, y
+ * la búsqueda no la encontraba — justo el caso en que más se necesita engancharle el número.
+ *
+ * Ahora el filtro es el de verdad: **haber comprado por el canal mayorista**. Son dos consultas
+ * chicas —primero los nombres que coinciden, después cuáles de ésos tienen una venta— y la segunda
+ * corre sobre un puñado de ids, no sobre las 28.260 ventas.
+ *
+ * ⚠️ **Los acentos NO se ignoran en `ilike`**: "martin" no encuentra a "Martín". Por eso las
+ * vocales del texto buscado se reemplazan por `_` (un carácter cualquiera). Es la vuelta barata;
+ * la de verdad —`unaccent`— es una extensión de Postgres que hay que instalar.
  *
  * ⚠️ `ilike` con el patrón como PARÁMETRO de supabase-js, no concatenado: el texto lo escribe una
  * persona y termina en la query string de PostgREST. Los `%` y `_` que traiga se escapan.
@@ -454,23 +498,31 @@ async function buscarClientes(supabase, body, res) {
   const q = String(body.q || '').trim();
   if (q.length < 2) return res.status(200).json({ ok: true, clientes: [] });
 
-  const crudos = Array.isArray(body.ids) ? body.ids : [];
-  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
-  if (!ids.length) return res.status(200).json({ ok: true, clientes: [] });
+  // Los comodines de LIKE que venga escribiendo la persona son texto, no comodines; y las vocales
+  // pasan a ser comodines para que los acentos no escondan a nadie.
+  const patron = patronBusqueda(q);
 
-  // Los comodines de LIKE que venga escribiendo la persona son texto, no comodines.
-  const patron = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
-
-  const { data, error } = await supabase
+  // Los que coinciden por nombre. Se piden de más porque después se filtra por "compró".
+  const { data: candidatos, error } = await supabase
     .from('clientes')
     .select('id, name, city, phone')
-    .in('id', ids)
     .ilike('name', patron)
     .order('name')
-    .limit(TOPE_BUSQUEDA);
+    .limit(TOPE_CANDIDATOS);
   if (error) throw new Error(error.message);
+  if (!(candidatos || []).length) return res.status(200).json({ ok: true, clientes: [] });
 
-  return res.status(200).json({ ok: true, clientes: data || [] });
+  // ¿Cuáles de ésos compraron por el canal mayorista? Es lo que los hace clientes del CRM.
+  const ids = candidatos.map((c) => c.id);
+  const { data: ventas, error: e2 } = await supabase
+    .from('ventas')
+    .select('client_id')
+    .in('client_id', ids)
+    .eq('channel_id', CANAL_MAYORISTA);
+  if (e2) throw new Error(e2.message);
+
+  const compraron = new Set((ventas || []).map((v) => v.client_id));
+  return res.status(200).json({ ok: true, clientes: candidatos.filter((c) => compraron.has(c.id)).slice(0, TOPE_BUSQUEDA) });
 }
 
 export default async function handler(req, res) {

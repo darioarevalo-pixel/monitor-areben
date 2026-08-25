@@ -302,16 +302,18 @@ export async function guardarLeadsConRelectura(
  * Es la mitad de arriba de "ya es cliente mío": el cliente cambió de número, escribe del nuevo y
  * el panel no lo reconoce. Se lo busca por nombre y se lo engancha.
  *
- * ⚠️ **Se le pasan los ids del CRM**, que el panel ya tiene del KV. Sin eso el servidor buscaría en
- * los 14.131 del padrón —cada consumidor final que pasó por el local— y ofrecería 14.000 personas
- * que no son clientes mayoristas.
+ * 🔴 **Quién entra en la búsqueda lo decide el SERVIDOR, y antes lo decidía mal desde acá.** La
+ * primera versión le mandaba los ids del KV, que no son "los clientes del CRM" sino "los que
+ * alguien ya tocó": una clienta que compró por primera vez la semana pasada no está ahí y no se la
+ * podía encontrar — que es justo cuando más falta hace. Ahora el servidor filtra por haber comprado
+ * por el canal mayorista, que es la definición de verdad.
  */
-export async function buscarClientesPorNombre(q: string, ids: number[]): Promise<FilaCliente[]> {
+export async function buscarClientesPorNombre(q: string): Promise<FilaCliente[]> {
   try {
     const r = await apiFetch('/api/datos?recurso=crm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'buscar', q, ids }),
+      body: JSON.stringify({ action: 'buscar', q }),
     })
     const d = (await r.json().catch(() => ({}))) as { ok?: boolean; clientes?: FilaCliente[] }
     return r.ok && d.ok ? d.clientes || [] : []

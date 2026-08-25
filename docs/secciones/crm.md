@@ -610,3 +610,40 @@ grande esa sección. Y la fecha tiene que ser un día que no sea fin de semana."
 - **Lo ya guardado no se migró**: medido, **10 de los 744 clientes** tienen fecha de fin de semana
   (y 0 de los leads). Se acomodan solas la próxima vez que se las toque. Reescribir el KV entero
   para diez fechas no se paga.
+
+## 🔴 25-ago-2026 — "no me reconoce a Candela Martin" (dos causas, una era un bug mío)
+
+Bruno: *"no me reconoce a Candela Martin cuando abro el chat. Y si aprieto cambió de número, no la
+encuentra."* Dos síntomas distintos, y conviene no mezclarlos:
+
+**1. No la reconoce al abrir el chat → está escribiendo desde OTRO número.** No es un bug. En el
+padrón es `#648111 Candela Martin`, teléfono `1170157094`, que normaliza bien
+(`5491170157094`), es único —no lo comparte con nadie ni por los últimos 8 dígitos— y el índice del
+servidor cubre **los 13.696 clientes con teléfono**, no sólo los del CRM. Si estuviera escribiendo
+desde ése, lo encontraría. Es exactamente el caso para el que se hizo "cambió de número".
+
+**2. La búsqueda no la encontraba → ése SÍ era un bug, y estaba en el filtro.**
+`buscarClientes` buscaba entre las claves de `crm:seg`, que **no son "los clientes del CRM" sino
+"los clientes que alguien ya tocó"**. Candela compró **$146.022 el 16-ago** (canal 10) y nadie le
+había puesto todavía ni una nota, así que no tenía entrada y era invisible — **justo el caso en el
+que más falta hace**: el cliente nuevo, sin historia en el CRM, que cambia de número.
+
+Ahora el filtro es la definición de verdad: **tener una venta por el canal mayorista**. Dos
+consultas chicas — los nombres que coinciden, y cuáles de ésos compraron.
+
+### Y de paso, dos trampas que aparecieron mirando esto
+
+- 🔴 **`ilike` NO ignora los acentos**: `%martin%` no encuentra a "Martín". Se resuelve reemplazando
+  las **vocales del texto buscado por `_`** (`patronBusqueda`, exportada y con tests). Es la vuelta
+  barata; la de verdad, `unaccent`, es una extensión de Postgres que hay que instalar. Sin esto,
+  buscar "martinez" no encontraba a "Martínez Meli" y el que busca concluye que el cliente no está
+  — y termina cargándolo de nuevo.
+- ⚠️ **El tope de candidatos corta en silencio.** Estaba en 120 y el filtro por "compró" saca al
+  ~95%: `"martin"` daba **6** clientes del CRM con tope 120 y **12** con tope 400. Quedó en 400.
+
+### Cómo se diagnosticó (sirve para la próxima)
+
+Con el `SUPABASE_SERVICE_KEY` del `.env` y el dump del KV: buscar a la persona en `clientes`,
+mirar si su teléfono normaliza, si es único (exacto y por cola), si tiene entrada en `crm:seg` y si
+tiene ventas. ⚠️ **Ojo con concluir desde una consulta con `limit`**: la primera búsqueda de esta
+sesión usó `or=(...)` con `limit=40`, no la trajo, y llevó a decir que no existía. Existía.
