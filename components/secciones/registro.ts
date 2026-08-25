@@ -69,6 +69,7 @@ const PostventaLocal = dynamic(() => import('@/components/postventa/Postventa').
 const PostventaDeposito = dynamic(() => import('@/components/postventa/Postventa').then((m) => m.PostventaDeposito), { loading: Cargando })
 const CambiosLocal = dynamic(() => import('@/components/reclamos/ArmarCambio').then((m) => m.ArmarCambioLocal), { loading: Cargando })
 const ReclamosLocal = dynamic(() => import('@/components/reclamos/Reclamos').then((m) => m.ReclamosLocal), { loading: Cargando })
+const Retornos = dynamic(() => import('@/components/retornos/Retornos').then((m) => m.Retornos), { loading: Cargando })
 const Canjes = dynamic(() => import('@/components/canjes/Canjes').then((m) => m.Canjes), { loading: Cargando })
 const Calendario = dynamic(() => import('@/components/calendario/Calendario').then((m) => m.Calendario), { loading: Cargando })
 const Liquidacion = dynamic(() => import('@/components/liquidacion/Liquidacion').then((m) => m.Liquidacion), { loading: Cargando })
@@ -373,6 +374,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // Reclamos (inicio Local): abre el reclamo por cualquier motivo y copia el link para que el
   // cliente suba las fotos. Decidir y devolver la plata es de Administración (pestaña Reclamos).
   'reclamos-local': ReclamosLocal,
+  // Retornos (25-ago-2026, sección NUEVA): la bandeja de lo que estamos esperando que vuelva. Lee
+  // `devoluciones` por la puerta angosta `vista=retornos` (columnas mínimas) y sólo puede hacer los
+  // dos gestos físicos: recibir y reingresar. La ven Depósito y Local. ⛔ No confundir con Envíos,
+  // que es lo que SALE. Rollback: comentar esta línea y sacar la key del nav.
+  retornos: Retornos,
   // Canjes con influencers (Marketing). ⚠️ Es la única sección que lee y escribe SIEMPRE en la base
   // de BDI, para las tres marcas: el padrón de personas es único y compartido, porque "¿hace cuánto
   // no hacemos una acción con ella?" tiene que tener UNA respuesta. Ver `sql/migrate-canjes.sql`.

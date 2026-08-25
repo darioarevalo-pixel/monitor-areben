@@ -753,6 +753,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "retornos",
+    "area": "deposito",
+    "label": "Retornos",
+    "info": "Todo lo que estamos esperando que vuelva, en un solo lugar y ordenado por hace cuánto: lo que el cliente despachó de vuelta, lo que va a traer al local, y lo que ya llegó y todavía no se guardó. Desde acá se marca que llegó y que se reingresó en Gestión Nube. La ven Depósito y Local. ⛔ No es Envíos del día, que es lo que SALE (reparto y cadetería).",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "cambios-local",
     "area": "local",
     "label": "Cambios",
@@ -890,8 +900,12 @@ export const NAV_CATS: NavCat[] = [
       "postventa-local",
       "cambios-local",
       "reclamos-local",
+      "retornos",
       "etiquetas"
     ],
+    "labels": {
+      "retornos": "Lo que tiene que volver"
+    },
     "grupos": [
       {
         "id": "actividades",
@@ -913,6 +927,7 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "solicitudes",
       "conteo-deposito",
+      "retornos",
       "postventa-deposito",
       "ubicaciones"
     ],

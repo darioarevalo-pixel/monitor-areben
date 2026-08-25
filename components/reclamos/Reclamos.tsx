@@ -23,7 +23,7 @@ import {
 } from '@/components/ui'
 import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
-  marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, eliminarReclamo,
+  marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
   ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, editarReclamo,
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
@@ -769,7 +769,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         </Button>
                       )}
                       {esAdmin && d.estado === 'en_transito' && (
-                        <Button size="sm" variant="outline" onClick={() => void accion(() => cambiarEstado(marca, d.id, 'recibido'), 'Marcado como recibido.')}>Volvió</Button>
+                        <Button size="sm" variant="outline" onClick={() => void accion(() => marcarRecibido(marca, d.id), 'Marcado como recibido.')}>Volvió</Button>
                       )}
                       {esAdmin && d.stock_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void anular(d)}>Anulé en GN</Button>

@@ -132,10 +132,9 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   caso sigue hacia el cambio o la devolución. Hoy `retencion` es un booleano del perfil y no se
   registra **qué se ofreció ni qué contestó**, así que no se sabe cuántas veces la retención
   funciona — y sin eso negociar un cupón se vuelve una forma de pagar menos sin que nadie se entere.
-- ▶️ **Falta la bandeja de retornos** (ver abajo).
-- ▶️ **Falta la bandeja de retornos**: hoy `via_retorno`, `seguimiento_vuelta` y la alerta a los 15
-  días viven adentro de cada fila, así que para saber qué estamos esperando hay que abrirlos de a
-  uno. La ven Depósito **y** Local.
+- ✅ **La bandeja de retornos ya existe**: es la sección `retornos` (Depósito y Local) →
+  `docs/secciones/retornos.md`. Lo que se espera que vuelva **no se mira más desde acá**, y el
+  botón "Volvió" de esta pantalla llama a la misma acción (`recibir`) que la bandeja.
 - ⚠️ **`no_esperaba` mezcla dos casos** y por eso su `errorPropio` está en `false`: adentro conviven
   "no me gustó" (no es nuestro) y "la publicación está mal" (sí lo es). Cuando se separe en dos
   motivos, el segundo va en `true` — hoy poner `true` regalaría el envío en cada "no me gustó".

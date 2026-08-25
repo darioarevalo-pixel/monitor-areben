@@ -164,6 +164,9 @@ ya tienen ficha:
   plata**, y un error no rompe ninguna pantalla: se ve en la caja o en el stock. ⛔ Los pendientes de
   cada resolución salen SOLO de `lib/reclamos/efectos.core.js` — duplicar esa derivación es el bug
   que ya tuvo. ⛔ `/reclamo/<token>` es un portal ABIERTO.
+- Retornos (lo que estamos esperando que vuelva) → **leer `docs/secciones/retornos.md`** antes de
+  tocar `components/retornos/`, `lib/reclamos/retornos.ts` o la vista `retornos` de
+  `api/_reclamos.js`. ⛔ **No es Envíos**, que es lo que SALE.
 
 ## Mapa de secciones
 

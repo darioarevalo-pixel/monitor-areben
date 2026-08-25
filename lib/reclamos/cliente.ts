@@ -13,6 +13,7 @@ import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
 import { calcularCambio, etiquetaEM, laFallaDescuentaStock, numeroReclamo } from './tipos'
+import type { RetornoRow } from './retornos'
 import type {
   Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, EnvioPaga, FotoReclamo, ItemReclamo,
   Expectativa, FormaPago, MotivoReclamo, OrdenTN, ViaRetorno,
@@ -498,6 +499,28 @@ export async function procesarCambio(
     gn_venta_number: venta.number ? String(venta.number) : null,
   })
   return { id: venta.id, number: venta.number }
+}
+
+/**
+ * La bandeja de retornos: **columnas mínimas**, por la puerta angosta del handler.
+ *
+ * ⛔ No es `leerReclamos` con un filtro: la diferencia es de permiso, no de comodidad. Depósito
+ * entra a esta vista con el permiso `retornos` y no ve ni el relato del cliente, ni los montos, ni
+ * la llave del portal público.
+ */
+export async function leerRetornos(marca: Marca): Promise<RetornoRow[]> {
+  const r = await apiFetch(`${API}&store=${marca}&vista=retornos&nc=${Date.now()}`)
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer la bandeja de retornos.')
+  return (d.devoluciones || []) as RetornoRow[]
+}
+
+/**
+ * Llegó. Es el gesto de la bandeja, y por eso es una acción propia y no `cambiarEstado(...,
+ * 'recibido')`: con el permiso de la bandeja se puede hacer éste y ningún otro cambio de estado.
+ */
+export async function marcarRecibido(marca: Marca, id: number, nota?: string): Promise<void> {
+  await postear({ store: marca, action: 'recibir', id, nota: nota || null })
 }
 
 /** El producto devuelto ya volvió al stock a mano en GN. Traza de un paso manual, como `anulacion`. */

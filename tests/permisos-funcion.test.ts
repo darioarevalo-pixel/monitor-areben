@@ -194,9 +194,25 @@ describe('nav — la puerta del sector propio (Solicitudes)', () => {
     expect(sectorVisible(u, 'postventa', 'administracion')).toBe(true)
   })
 
-  it('solicitudes es la ÚNICA key que cruza categorías: si aparece otra, este cambio la alcanza', () => {
+  /**
+   * ⚠️ Esta lista es la que dice **a quién más le pasa lo mismo**. `sectorVisible` es genérica: en
+   * el momento en que una key cuelga de dos grupos, el menú se le recorta al sector de quien mira.
+   * Que crezca no es un problema — que crezca **sin que nadie lo sepa**, sí.
+   */
+  it('las keys que cruzan categorías son DOS, y las dos a propósito', () => {
     const cruzan = [...new Set(NAV_CATS.flatMap((c) => keysDeCat(c)))].filter((k) => categoriasDe(k).length > 1)
-    expect(cruzan).toEqual(['solicitudes'])
+    // `retornos` (25-ago-2026): la bandeja de lo que vuelve es UNA pantalla que miran los dos
+    // sectores que abren la caja — Depósito, y el Local, que está abierto muchas más horas.
+    expect(cruzan.sort()).toEqual(['retornos', 'solicitudes'])
+  })
+
+  it('la bandeja de retornos se recorta igual: cada sector la ve en SU grupo, no dos veces', () => {
+    const dondeLaVe = (u: Perfil | null) => ['local', 'deposito'].filter((c) => sectorVisible(u, 'retornos', c))
+    expect(dondeLaVe(perfil({ funcion: ['deposito'] }))).toEqual(['deposito'])
+    expect(dondeLaVe(perfil({ funcion: ['local'] }))).toEqual(['local'])
+    // Administración la tiene por `keys` y no por área: no es su sector, así que las ve las dos —
+    // es la misma rama de compatibilidad por la que Dirección ve las cuatro de Solicitudes.
+    expect(dondeLaVe(perfil({ funcion: ['administracion'] }))).toEqual(['local', 'deposito'])
   })
 })
 

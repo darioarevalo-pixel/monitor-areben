@@ -15,11 +15,15 @@
 import { color, font, space } from '@/components/ui'
 
 /** Dónde se carga cada cosa. La regla es de dónde VIENE el producto, no qué le pasó. */
-export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' | 'cambios' }) {
+export function DondeVa({ activa }: { activa: 'fallas' | 'reclamos' | 'cambios' | 'retornos' }) {
   const filas: { key: typeof activa; pregunta: string; donde: string }[] = [
     { key: 'fallas', pregunta: '¿El producto ya está acá, sin orden de por medio?', donde: 'Fallas' },
     { key: 'reclamos', pregunta: '¿Compró online y algo salió mal?', donde: 'Reclamos' },
     { key: 'cambios', pregunta: '¿Ya sabés que quiere cambiarlo por otro?', donde: 'Cambios' },
+    // La cuarta no es "dónde se carga" sino "dónde se espera": el paquete que vuelve no se carga en
+    // ningún lado, ya tiene reclamo. Va igual acá porque es exactamente donde lo buscan mal (en
+    // Envíos, que es lo que sale).
+    { key: 'retornos', pregunta: '¿Estás esperando que un producto vuelva?', donde: 'Retornos' },
   ]
   return (
     <details style={{ marginBottom: space[3], border: `1px solid ${color.line}`, background: color.bg2, borderRadius: 'var(--mo-r-lg)', padding: '10px 14px' }}>

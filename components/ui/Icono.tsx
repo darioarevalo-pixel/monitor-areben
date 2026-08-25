@@ -428,6 +428,15 @@ const TRAZOS = {
       <path d="M20.4 4.4v4.2h-4.2" />
     </>
   ),
+  /** Retornos — una caja con la flecha volviendo. Es lo que ENTRA de vuelta, al revés que Envíos. */
+  retornos: (
+    <>
+      <path d="M3.6 8.4 12 4.2l8.4 4.2v7.2L12 19.8l-8.4-4.2z" />
+      <path d="M3.6 8.4 12 12.6l8.4-4.2" />
+      <path d="M12 12.6v7.2" />
+      <path d="M9.6 9.9 6.9 8.55l2.7-1.35" />
+    </>
+  ),
   /** Productos caducados — reloj. */
   caducados: (
     <>

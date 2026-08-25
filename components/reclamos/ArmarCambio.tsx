@@ -36,7 +36,7 @@ import {
   Instructivo,
 } from '@/components/ui'
 import {
-  buscarOrden, cambiarEstado, crearReclamo, eliminarReclamo, enriquecerConGN, guardarCambio,
+  buscarOrden, cambiarEstado, crearReclamo, eliminarReclamo, enriquecerConGN, guardarCambio, marcarRecibido,
   leerReclamos, marcarCobrado, marcarReingreso, procesarCambio,
 } from '@/lib/reclamos/cliente'
 import {
@@ -824,7 +824,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                             <Button size="sm" variant="soft" tone="success" onClick={() => void cobrar(c)} disabled={ocup}>Cobré la diferencia</Button>
                           )}
                           {c.estado === 'en_transito' && (
-                            <Button size="sm" variant="outline" tone="action" onClick={() => void accion(c.id, () => cambiarEstado(marca, c.id, 'recibido'), 'Marcado como recibido.')} disabled={ocup}>Volvió</Button>
+                            <Button size="sm" variant="outline" tone="action" onClick={() => void accion(c.id, () => marcarRecibido(marca, c.id), 'Marcado como recibido.')} disabled={ocup}>Volvió</Button>
                           )}
                           {c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && (
                             <Button size="sm" variant="outline" tone="brand" onClick={() => void reingresar(c)} disabled={ocup}>Reingresado</Button>

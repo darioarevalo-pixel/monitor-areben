@@ -197,6 +197,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   ingresos: 'ingresos',
   proveedores: 'proveedores',
   disenos: 'disenos',
+  retornos: 'retornos',
   // Clientes / Config
   clientes: 'clientes',
   usuarios: 'usuarios',
@@ -380,6 +381,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'postventa-deposito': 'Cargá las fallas de la mercadería de depósito (descuenta del stock de depósito). El motor está en Administración.',
   'cambios-local': 'Armá un cambio de punta a punta: la diferencia, el cobro y la venta en GN. No hace falta que lo apruebe nadie.',
   'reclamos-local': 'Abrí un reclamo por cualquier motivo y pasale el link al cliente para que suba las fotos. La plata la devuelve Administración.',
+  retornos: 'Lo que estamos esperando que vuelva, ordenado por hace cuánto: marcás que llegó y que lo reingresaste. No es Envíos, que es lo que sale.',
 }
 
 export function descripcionDe(key: string): string | undefined {

@@ -6,10 +6,12 @@
 // simplemente `compensacion='otro_producto'`: comparte tabla, número (`R-0042`) y pendientes.
 //
 //   GET  ?store=bdi|zattia[&estado=][&pendientes=1][&limit=]     → lista.
+//   GET  ?store=…&vista=retornos                                → la bandeja: columnas mínimas.
 //   POST { store, action:'crear', orden_tn, items, motivo, ... } → crea el borrador + token.
 //   POST { store, action:'decidir', id, destino_prenda, compensacion, montos… } → ADMIN.
 //   POST { store, action:'cambio', id, items_nuevos, forma_pago, envio…, pagado? } → el POS.
 //   POST { store, action:'procesar', id, gn_venta_id, gn_venta_number } → registra la venta del cambio.
+//   POST { store, action:'recibir', id }                        → el producto llegó (bandeja de retornos).
 //   POST { store, action:'reingreso', id }                       → el devuelto volvió al stock en GN.
 //   POST { store, action:'cobrado', id }                         → la diferencia del cambio entró.
 //   POST { store, action:'reintegro', id, comprobante? }         → la plata devuelta. ADMIN.
@@ -43,7 +45,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
-import { esAdmin, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
+import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
 import { pendientesDe } from '../lib/reclamos/efectos.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
@@ -74,6 +76,15 @@ const COBROS = ['no_aplica', 'pendiente', 'cobrado'];
 const ENVIO_PAGA = ['cliente', 'nosotros'];
 // Cómo vuelve el producto. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
 const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
+// Los dos gestos que se hacen con el producto en la mano, y lo único que la bandeja de retornos
+// habilita por sí sola. Ninguno decide nada: uno dice que llegó y el otro que ya está guardado.
+const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso'];
+
+// Lo que la bandeja necesita ver, y nada más (ver `lib/reclamos/retornos.ts`). ⛔ Sin `relato_cliente`,
+// sin montos y sin `token`: Depósito abre una caja, no revisa un caso.
+const COLS_RETORNO = `id, orden_tn, cliente, motivo, escenario, estado, items, destino_prenda,
+  compensacion, via_retorno, seguimiento_vuelta, solicitud_envio, reingreso_estado, falla_ids,
+  historial, created_at, updated_at`.replace(/\s+/g, ' ');
 
 const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, motivo_detalle, relato_cliente, fotos,
   destino_prenda, compensacion, estado, items, monto_producto, monto_acordado, monto_envio_devuelto,
@@ -127,7 +138,19 @@ export default async function handler(req, res) {
   // Las pantallas que lo usan son las de Reclamos y Cambios del local, más la de Administración,
   // así que el permiso es «alguna» de las tres. Las acciones que mueven plata siguen pidiendo
   // función de administración más abajo, que es un escalón aparte y no lo reemplaza esto.
-  if (!puedeVerAlguna(perfil, store, SECCIONES_RECLAMOS)) {
+  //
+  // 🔑 La **bandeja de retornos** (`retornos`) entra por una puerta más angosta, no por ésta: la
+  // miran Depósito y Local, que sólo abren la caja y dicen si llegó. Con el permiso de la sección
+  // se puede leer `vista=retornos` —columnas mínimas, sin relato, sin montos y sin token— y hacer
+  // los dos gestos físicos: `recibir` y `reingreso`. ⛔ Nada más: el listado completo, el token del
+  // portal y todo lo que decide plata siguen pidiendo una de las tres secciones de Reclamos.
+  const verReclamos = puedeVerAlguna(perfil, store, SECCIONES_RECLAMOS);
+  const verRetornos = puedeVer(perfil, store, 'retornos');
+  const accionPedida = req.method === 'POST' ? ((req.body || {}).action || 'crear') : null;
+  const esDeLaBandeja = req.method === 'GET'
+    ? req.query.vista === 'retornos'
+    : ACCIONES_DE_LA_BANDEJA.includes(accionPedida);
+  if (!verReclamos && !(verRetornos && esDeLaBandeja)) {
     return res.status(403).json({ error: 'No tenés acceso a Reclamos en esta marca.' });
   }
 
@@ -150,6 +173,19 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message);
         if (!data) return res.status(404).json({ error: 'no existe ese reclamo' });
         return res.status(200).json({ ok: true, token: data.token || null, vence: data.token_vence || null });
+      }
+
+      // La bandeja de retornos: lo que estamos esperando que vuelva y lo que llegó y falta guardar.
+      // El filtro fino (los dos andenes, el orden por antigüedad) lo hace `bandejaDeRetornos` en el
+      // front — acá sólo se recortan las columnas y los estados, que es lo que hace la diferencia
+      // de permiso.
+      if (req.query.vista === 'retornos') {
+        const { data, error } = await supabase
+          .from('devoluciones').select(COLS_RETORNO).eq('store', store)
+          .in('estado', ['en_transito', 'recibido', 'resuelto'])
+          .order('updated_at', { ascending: true }).limit(300);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, devoluciones: data || [] });
       }
 
       const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
@@ -430,6 +466,28 @@ export default async function handler(req, res) {
         stock_estado: 'no_aplica',
       };
       await apilar(supabase, id, { estado: 'en_transito', at: ahora(), usuario, nota: `venta del cambio creada en GN${b.gn_venta_number ? ` (#${b.gn_venta_number})` : ''}` }, extra);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Llegó ────────────────────────────────────────────────────────────────────
+    //
+    // 🔑 Es una acción propia y no `estado: 'recibido'` porque **es el gesto que hace Depósito**, y
+    // con el permiso de la bandeja tiene que poder hacer ése y ningún otro: la acción `estado`
+    // genérica acepta los ocho, cerrar y anular incluidos.
+    //
+    // ⚠️ Sólo desde `en_transito`. Recibir algo que no estábamos esperando no es un error de tipeo:
+    // es que el reclamo no está donde el que lo recibe cree, y taparlo con un update deja la fila
+    // diciendo que volvió algo que nunca salió.
+    if (action === 'recibir') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select('estado').eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      if (fila.estado === 'recibido') return res.status(200).json({ ok: true, yaEstaba: true });
+      if (fila.estado !== 'en_transito') {
+        return res.status(400).json({ error: `este reclamo no está esperando nada (está en "${fila.estado}")` });
+      }
+      await apilar(supabase, id, { estado: 'recibido', at: ahora(), usuario, nota: texto(b.nota) || 'llegó' }, { estado: 'recibido' });
       return res.status(200).json({ ok: true });
     }
 

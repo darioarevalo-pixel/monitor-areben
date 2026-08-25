@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-54 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+55 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -36,7 +36,10 @@ en Envíos, que pregunta antes de dejar avanzar el paquete de esa orden) ·
 `ubicaciones` · `solicitudes` · `solicitudes-internas` · `postventa-local → components/postventa` ·
 `reclamos-local` y `cambios-local → components/reclamos + lib/reclamos`
 
-**Depósito** — `conteo-deposito` · `postventa-deposito → components/postventa`
+**Depósito** — `conteo-deposito` · `postventa-deposito → components/postventa` ·
+`retornos → components/retornos + lib/reclamos/retornos.ts` (la bandeja de lo que esperamos que
+vuelva; **también cuelga del menú de Local**, con rótulo propio, y lee la tabla de reclamos por la
+puerta angosta `vista=retornos`)
 
 **Marketing** — `mkt-ventas → components/mkt-ventas + lib/mkt-ventas` · `marketing` · `tncat` · `sesion-fotos → components/sesionfotos + lib/sesionfotos` · `canjes` ·
 `gen-talles` · `gen-desc → components/gen-desc + lib/tn-desc` · `calendario`

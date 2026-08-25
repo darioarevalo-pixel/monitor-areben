@@ -1306,10 +1306,34 @@ export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3 
 export type AlertaReclamo = { tono: Tono; texto: string; dias: number }
 type Tono = 'warning' | 'danger'
 
-const diasDesde = (iso?: string | null, ahora = Date.now()): number => {
+/** Cuántos días hace. **Nunca negativo**: un reloj corrido no puede mostrar "-2 días". */
+export const diasDesde = (iso?: string | null, ahora = Date.now()): number => {
   if (!iso) return 0
   const t = new Date(iso).getTime()
-  return isFinite(t) ? Math.floor((ahora - t) / 86400000) : 0
+  return isFinite(t) ? Math.max(0, Math.floor((ahora - t) / 86400000)) : 0
+}
+
+/**
+ * Desde cuándo la fila está en ese estado, según el **historial** y no según `updated_at`.
+ *
+ * 🔴 No es cosmético: `updated_at` lo pisa **cualquier** acción sobre el reclamo. Cargarle el
+ * código de seguimiento a un paquete que hace veinte días que no llega ponía el contador en cero
+ * y **la alerta desaparecía justo cuando alguien se estaba ocupando** — el toque más probable
+ * sobre un retorno que se demora es, precisamente, ir a ver por qué se demora.
+ *
+ * ⚠️ El `estado` de un evento del historial es de qué se trata el evento, y no siempre coincide
+ * con el estado en que quedó la fila: tildar la plata apila un evento `resuelto` sin mover la
+ * fila. Para `en_transito` los dos que lo escriben —`decidir` y `procesar`— sí mueven la fila. En
+ * `recibido` el evento lo apila también `reingreso`, que pasa minutos después de recibirlo: para
+ * contar días da lo mismo, y es el único uso.
+ */
+export function desdeQueEsta(d: Pick<ReclamoRow, 'historial' | 'updated_at' | 'created_at'>, estado: EstadoReclamo): string | null {
+  const eventos = Array.isArray(d.historial) ? d.historial : []
+  for (let i = eventos.length - 1; i >= 0; i--) {
+    if (eventos[i]?.estado === estado && eventos[i]?.at) return eventos[i].at
+  }
+  // Sin historial (filas viejas) queda el último toque: peor, pero nunca cero.
+  return d.updated_at || d.created_at || null
 }
 
 /**
@@ -1330,8 +1354,11 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
   if (d.estado === 'esperando_cliente' && desdeCreado >= DIAS_ALERTA.cliente) {
     alertas.push({ tono: 'warning', texto: `El cliente no responde hace ${desdeCreado} días`, dias: desdeCreado })
   }
-  if (d.estado === 'en_transito' && desdeToque >= DIAS_ALERTA.transito) {
-    alertas.push({ tono: 'warning', texto: `Hace ${desdeToque} días que no llega`, dias: desdeToque })
+  // ⚠️ Ésta NO cuenta desde el último toque sino desde que el producto salió de vuelta
+  // (`desdeQueEsta`): editar el reclamo mientras se espera no puede reiniciar la espera.
+  const enCamino = diasDesde(desdeQueEsta(d, 'en_transito'), ahora)
+  if (d.estado === 'en_transito' && enCamino >= DIAS_ALERTA.transito) {
+    alertas.push({ tono: 'warning', texto: `Hace ${enCamino} días que no llega`, dias: enCamino })
   }
   // Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.
   if (d.estado === 'en_revision' && desdeToque >= DIAS_ALERTA.sinDecidir) {
