@@ -19,8 +19,9 @@
  */
 
 import {
-  DIAS_ALERTA, MOTIVO_LABEL, desdeQueEsta, diasDesde, hayEnvio, numeroReclamo, pideSeguimiento,
-  type DestinoPrenda, type EstadoReclamo, type ReclamoRow,
+  DIAS_ALERTA, MOTIVO_LABEL, desdeQueEsta, diasDesde, hayEnvio, loQueFaltaLlegar, numeroReclamo,
+  pideSeguimiento, trabaParaRecibir, unidadesQueVuelven,
+  type DestinoPrenda, type EstadoReclamo, type ReclamoRow, type UnidadQueVuelve,
 } from './tipos'
 
 // ⛔ `desdeQueEsta` y `diasDesde` NO se reimplementan acá: viven en `tipos.ts` porque la alerta de
@@ -39,6 +40,11 @@ export { desdeQueEsta, diasDesde } from './tipos'
  */
 export type RetornoRow = Pick<ReclamoRow,
   | 'id' | 'orden_tn' | 'cliente' | 'motivo' | 'escenario' | 'estado' | 'items'
+  // 🔴 `items_correctos` y `retorno_decidido` NO son de más: en un `mal_armado` lo que vuelve es lo
+  // que se le mandó POR ERROR, que vive en `items_correctos`, y `retorno_decidido` es lo que
+  // distingue una falla que vuelve de una que se queda el cliente. Sin los dos, la bandeja le
+  // muestra a Depósito el producto equivocado.
+  | 'items_correctos' | 'retorno_decidido'
   | 'destino_prenda' | 'compensacion' | 'via_retorno' | 'seguimiento_vuelta' | 'solicitud_envio'
   | 'reingreso_estado' | 'falla_ids' | 'historial' | 'created_at' | 'updated_at'>
 
@@ -47,6 +53,8 @@ export type QueHacer = 'stock' | 'falla' | 'nada'
 
 export type FilaRetorno = {
   reclamo: RetornoRow
+  /** Las unidades que todavía no aparecieron. Es lo que hay que buscar adentro de la caja. */
+  faltan: UnidadQueVuelve[]
   /** `R-0042`. */
   numero: string
   /** Desde cuándo esperamos (ISO), o null si no se puede saber. */
@@ -107,7 +115,9 @@ export function trabaDeLaVuelta(d: RetornoRow): string | null {
   if (!d.via_retorno) return 'Falta decidir cómo vuelve'
   if (pideSeguimiento(d.via_retorno) && !d.seguimiento_vuelta) return 'Falta la etiqueta: sin código de seguimiento no salió'
   if (queHacerConEl(d.destino_prenda) === 'nada') return 'Falta decidir qué se hace con el producto'
-  return null
+  // 🔑 Y lo que faltaba nombrar: **qué vuelve**. En un `mal_armado` lo que vuelve es lo que se le
+  // mandó por error, y si nadie lo cargó al decidir, la caja no se puede contrastar con nada.
+  return trabaParaRecibir(d)
 }
 
 /** Lo que falta hacer una vez que llegó, en criollo. */
@@ -122,6 +132,7 @@ function fila(d: RetornoRow, estado: EstadoReclamo, ahora: number, llego: boolea
   const dias = diasDesde(desde, ahora)
   return {
     reclamo: d,
+    faltan: loQueFaltaLlegar(d),
     numero: numeroReclamo(d.id),
     desde,
     dias,
@@ -145,12 +156,21 @@ export function bandejaDeRetornos(filas: RetornoRow[], ahora = Date.now()): Band
   }
 }
 
-/** El texto de una unidad: "2× Buzo Girlhood · Talle M". Para leerlo contra lo que hay en la caja. */
+/**
+ * El texto de lo que VUELVE: "2× Buzo Girlhood · Talle M". Para leerlo contra lo que hay en la caja.
+ *
+ * 🔴 **Antes listaba `items`, que es lo que el cliente COMPRÓ.** En los diez casos coincide… salvo
+ * en `mal_armado`, que es justo donde no: ahí vuelve **lo que se le mandó por error**, y lo que
+ * compró es el único producto que nunca salió del depósito. Depósito abría la caja esperando otra
+ * cosa, y con el contenido equivocado a la vista nadie puede decir si llegó lo que esperábamos.
+ *
+ * Lo ya tildado se marca, para que se lea qué falta y no haya que acordarse.
+ */
 export function detalleDeLoQueVuelve(d: RetornoRow): string {
-  const items = Array.isArray(d.items) ? d.items : []
-  if (!items.length) return '—'
-  return items
-    .map((i) => `${Number(i.cantidad) > 1 ? `${i.cantidad}× ` : ''}${i.producto}${i.variante ? ` · ${i.variante}` : ''}`)
+  const { unidades } = unidadesQueVuelven(d)
+  if (!unidades.length) return '—'
+  return unidades
+    .map(({ item: i }) => `${Number(i.cantidad) > 1 ? `${i.cantidad}× ` : ''}${i.producto}${i.variante ? ` · ${i.variante}` : ''}${i.recibida_at ? ' ✓' : ''}`)
     .join(' · ')
 }
 

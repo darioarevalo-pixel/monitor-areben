@@ -166,6 +166,50 @@ describe('lo que se lee y se copia', () => {
     expect(detalleDeLoQueVuelve(con({ items: [] }))).toBe('—')
   })
 
+  /**
+   * 🔴 **El defecto que tenía la bandeja: en un pedido mal armado listaba lo que el cliente
+   * COMPRÓ.** Lo que vuelve es lo que se le mandó por error (`items_correctos`); lo que compró es
+   * justo el único producto que nunca salió del depósito. Depósito abría la caja esperando otra
+   * cosa, y con el contenido equivocado a la vista "llegó lo que esperábamos" no lo contesta nadie.
+   */
+  it('en un pedido mal armado, lo que vuelve es lo que se mandó POR ERROR', () => {
+    const malArmado = con({
+      motivo: 'mal_armado',
+      items: [{ producto: 'LO QUE COMPRÓ', cantidad: 1 }],
+      items_correctos: [{ producto: 'LO QUE LE LLEGÓ', cantidad: 1 }],
+    })
+    expect(detalleDeLoQueVuelve(malArmado)).toBe('LO QUE LE LLEGÓ')
+    expect(detalleDeLoQueVuelve(malArmado)).not.toContain('COMPRÓ')
+  })
+
+  it('sin saber qué le llegó por error, la vuelta está trabada y lo dice', () => {
+    // ⛔ No es una alerta por tiempo: es que falta un dato para poder recibir, y sin él el reclamo
+    // pasaría a "recibido" sin que nadie haya abierto una caja.
+    const sinCargar = con({ motivo: 'mal_armado', items_correctos: [] })
+    expect(trabaDeLaVuelta(sinCargar)).toContain('qué le llegó por error')
+  })
+
+  it('lo que ya se tildó se marca, para leer contra la caja qué falta', () => {
+    const dos = con({
+      items: [
+        { producto: 'Buzo', cantidad: 1, recibida_at: hace(1) },
+        { producto: 'Gorra', cantidad: 1 },
+      ],
+    })
+    expect(detalleDeLoQueVuelve(dos)).toBe('Buzo ✓ · Gorra')
+    expect(bandejaDeRetornos([dos], AHORA).esperando[0].faltan.map((u) => u.item.producto)).toEqual(['Gorra'])
+  })
+
+  it('la unidad que se queda el cliente ⛔ no se espera en la caja', () => {
+    const mixto = con({
+      items: [
+        { producto: 'Buzo', cantidad: 1 },
+        { producto: 'Gorra', cantidad: 1, destino: 'perdida' },
+      ],
+    })
+    expect(detalleDeLoQueVuelve(mixto)).toBe('Buzo')
+  })
+
   it('el renglón para el correo lleva el número, el seguimiento y hace cuánto que no aparece', () => {
     const f = bandejaDeRetornos([con({ historial: [{ estado: 'en_transito', at: hace(21) }] })], AHORA).esperando[0]
     const t = textoDeReclamoAlCorreo(f)

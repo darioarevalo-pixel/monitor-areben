@@ -1004,7 +1004,42 @@ describe('faltantesParaCerrar', () => {
   })
 
   it('si el producto tenía que volver y no llegó, lo dice', () => {
-    expect(faltantesParaCerrar({ ...base, destino_prenda: 'stock', estado: 'en_transito' })).toContain('recibir el producto')
+    const uno = [{ producto: 'Buzo', cantidad: 1 }]
+    expect(faltantesParaCerrar({ ...base, items: uno, destino_prenda: 'stock', estado: 'en_transito' }))
+      .toContain('recibir el producto')
+  })
+
+  /**
+   * 🔑 **Recibir es por PRODUCTO.** Antes esto miraba el estado de la FILA, así que un reclamo de
+   * dos productos se daba por recibido entero con uno solo en la mano — y en BDI **3 de cada 10 ya
+   * tienen dos**. Con uno tildado, lo que falta es el otro; con los dos, no falta nada.
+   */
+  it('con dos productos, cuenta los que faltan y ⛔ no se da por recibido con uno', () => {
+    const dos = [
+      { producto: 'Buzo', cantidad: 1 },
+      { producto: 'Gorra', cantidad: 1 },
+    ]
+    const enCamino: ReclamoRow = { ...base, items: dos, destino_prenda: 'stock', estado: 'en_transito' }
+    expect(faltantesParaCerrar(enCamino)).toContain('recibir los 2 productos que faltan')
+
+    const llegoUno = { ...enCamino, items: [{ ...dos[0], recibida_at: '2026-08-25T12:00:00Z' }, dos[1]] }
+    expect(faltantesParaCerrar(llegoUno)).toContain('recibir el producto')
+
+    const llegaronLosDos = { ...enCamino, items: dos.map((i) => ({ ...i, recibida_at: '2026-08-25T12:00:00Z' })) }
+    expect(faltantesParaCerrar(llegaronLosDos)).toEqual([])
+  })
+
+  /**
+   * El destino es de la UNIDAD y el del reclamo es su default: uno puede volver sano a stock y el
+   * otro quedárselo el cliente. Sólo se espera el que vuelve.
+   */
+  it('la unidad que se queda el cliente no se espera, aunque el reclamo diga "vuelve"', () => {
+    const dos: ItemReclamo[] = [
+      { producto: 'Buzo', cantidad: 1 },
+      { producto: 'Gorra', cantidad: 1, destino: 'perdida' },
+    ]
+    expect(faltantesParaCerrar({ ...base, items: dos, destino_prenda: 'stock', estado: 'en_transito' }))
+      .toContain('recibir el producto')
   })
 
   /**

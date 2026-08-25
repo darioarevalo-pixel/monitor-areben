@@ -11,7 +11,7 @@
 //   POST { store, action:'decidir', id, destino_prenda, compensacion, montos… } → ADMIN.
 //   POST { store, action:'cambio', id, items_nuevos, forma_pago, envio…, pagado? } → el POS.
 //   POST { store, action:'procesar', id, gn_venta_id, gn_venta_number } → registra la venta del cambio.
-//   POST { store, action:'recibir', id }                        → el producto llegó (bandeja de retornos).
+//   POST { store, action:'recibir', id[, unidades:[i]] }         → llegó (todo, o esas unidades).
 //   POST { store, action:'reingreso', id }                       → el devuelto volvió al stock en GN.
 //   POST { store, action:'cobrado', id }                         → la diferencia del cambio entró.
 //   POST { store, action:'despachado', id }                       → salió lo que se le manda.
@@ -52,6 +52,9 @@ import { pendientesDe } from '../lib/reclamos/efectos.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
 import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
+// La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
+// en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
+import { aplicarDestinos, DESTINOS, recibirUnidades, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -68,7 +71,6 @@ const MOTIVOS = [
   'no_era_lo_esperado', 'otro',
 ];
 const EXPECTATIVAS = ['plata', 'mismo_producto', 'otro_producto', 'completar'];
-const DESTINOS = ['stock', 'falla', 'no_salio', 'perdida'];
 const COMPENSACIONES = ['plata_total', 'plata_parcial', 'otra_unidad', 'otro_producto', 'reenvio', 'cupon', 'ninguna'];
 const FORMAS_PAGO = ['tarjeta', 'transferencia'];
 const ESTADOS = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido', 'cerrado', 'anulado'];
@@ -84,7 +86,8 @@ const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso'];
 
 // Lo que la bandeja necesita ver, y nada más (ver `lib/reclamos/retornos.ts`). ⛔ Sin `relato_cliente`,
 // sin montos y sin `token`: Depósito abre una caja, no revisa un caso.
-const COLS_RETORNO = `id, orden_tn, cliente, motivo, escenario, estado, items, destino_prenda,
+const COLS_RETORNO = `id, orden_tn, cliente, motivo, escenario, estado, items, items_correctos,
+  retorno_decidido, destino_prenda,
   compensacion, via_retorno, seguimiento_vuelta, solicitud_envio, reingreso_estado, falla_ids,
   historial, created_at, updated_at`.replace(/\s+/g, ' ');
 
@@ -295,7 +298,7 @@ export default async function handler(req, res) {
       // a la fila y después movería el perfil equivocado. Hay que releer el motivo de la base —
       // el cliente manda el escenario, no el caso.
       const { data: filaCaso, error: eCaso } = await supabase
-        .from('devoluciones').select('motivo, escenario, reclamo_correo_estado').eq('store', store).eq('id', id).maybeSingle();
+        .from('devoluciones').select('motivo, escenario, reclamo_correo_estado, items').eq('store', store).eq('id', id).maybeSingle();
       if (eCaso) throw new Error(eCaso.message);
       if (!filaCaso) return res.status(404).json({ error: 'no existe ese reclamo' });
       const motivoActual = filaCaso.motivo;
@@ -312,6 +315,17 @@ export default async function handler(req, res) {
       const hayProducto = productoEnJuego(motivoActual, escenario);
       if (!compensacion) return res.status(400).json({ error: 'falta la compensación' });
       if (hayProducto && !destino) return res.status(400).json({ error: 'falta el destino de el producto' });
+
+      // ── El destino de cada producto ──────────────────────────────────────────
+      //
+      // Un reclamo de dos productos puede terminar con uno volviendo a stock y el otro en poder del
+      // cliente: hasta el 25-ago-2026 había **un solo destino para los dos**. Viaja como un mapa
+      // índice → destino y ⛔ no reenviando los productos, que son de la orden.
+      if (b.destinos != null && !hayProducto) {
+        return res.status(400).json({ error: 'en este caso no hay producto en juego: no hay destino que decidir' });
+      }
+      const conDestinos = aplicarDestinos(filaCaso.items, b.destinos);
+      if (conDestinos.error) return res.status(400).json({ error: conDestinos.error });
 
       // ── La oferta de retención ───────────────────────────────────────────────
       // Qué se le ofreció para que se lo quede y qué contestó. Las dos mitades juntas o ninguna:
@@ -364,6 +378,9 @@ export default async function handler(req, res) {
         ...(EXPECTATIVAS.includes(b.expectativa) ? { expectativa: b.expectativa } : {}),
         // "Pedido mal armado": lo que recibió por error. Se carga al decidir, con las fotos.
         ...(Array.isArray(b.items_correctos) ? { items_correctos: b.items_correctos } : {}),
+        // Sólo si vino algo: mandar la decisión desde una pantalla que no conoce los destinos por
+        // producto ⛔ no puede borrarlos, igual que con el escenario y con la oferta de retención.
+        ...(b.destinos != null ? { items: conDestinos.lista } : {}),
         // El reclamo al transportista es plata recuperable NUESTRA y corre en paralelo: no espera
         // a ninguna resolución. Se encendía sólo al crear un `no_llego`; ahora una demora que fue
         // del transporte también lo enciende, y eso lo dice el ESCENARIO, no el caso.
@@ -502,15 +519,35 @@ export default async function handler(req, res) {
     // diciendo que volvió algo que nunca salió.
     if (action === 'recibir') {
       const { data: fila, error: eLee } = await supabase
-        .from('devoluciones').select('estado').eq('store', store).eq('id', id).maybeSingle();
+        .from('devoluciones')
+        .select('estado, motivo, items, items_correctos, destino_prenda, retorno_decidido')
+        .eq('store', store).eq('id', id).maybeSingle();
       if (eLee) throw new Error(eLee.message);
       if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
       if (fila.estado === 'recibido') return res.status(200).json({ ok: true, yaEstaba: true });
       if (fila.estado !== 'en_transito') {
         return res.status(400).json({ error: `este reclamo no está esperando nada (está en "${fila.estado}")` });
       }
-      await apilar(supabase, id, { estado: 'recibido', at: ahora(), usuario, nota: texto(b.nota) || 'llegó' }, { estado: 'recibido' });
-      return res.status(200).json({ ok: true });
+      // 🔑 **El cero afirma**: sin esto, un reclamo que no espera ninguna unidad —el caso probable es
+      // el `mal_armado` al que no se le cargó qué le llegó por error— contestaría "llegó todo" y
+      // pasaría a `recibido` sin que nadie haya abierto una caja.
+      const traba = trabaParaRecibir(fila);
+      if (traba) return res.status(400).json({ error: traba });
+
+      // Se puede recibir de a UNA. Sin `unidades` llegó todo, que es lo que significaba este verbo
+      // hasta el 25-ago-2026 y lo que siguen mandando el botón "Volvió" y el de la bandeja.
+      const pedidas = Array.isArray(b.unidades) ? b.unidades : null;
+      const r = recibirUnidades(fila, pedidas, ahora());
+      if (!r.recibidas) return res.status(400).json({ error: 'ninguno de esos productos está esperado en este reclamo' });
+
+      // ⚠️ Mientras falte una unidad el reclamo **sigue en tránsito**: darlo por recibido con una
+      // caja a medias es lo que hacía que la otra no la buscara nadie.
+      const estado = r.todoLlego ? 'recibido' : 'en_transito';
+      const nota = texto(b.nota) || (r.todoLlego
+        ? (r.recibidas > 1 ? `llegaron los ${r.recibidas} productos` : 'llegó')
+        : `llegó ${r.recibidas} de ${r.recibidas + r.faltan}: falta${r.faltan > 1 ? 'n' : ''} ${r.faltan}`);
+      await apilar(supabase, id, { estado, at: ahora(), usuario, nota }, { [r.campo]: r.lista, estado });
+      return res.status(200).json({ ok: true, todoLlego: r.todoLlego, faltan: r.faltan });
     }
 
     // El producto devuelto volvió al stock a mano en GN. Como `anulacion`, es una TRAZA de un paso

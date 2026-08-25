@@ -29,6 +29,7 @@ import {
 } from '@/lib/reclamos/retornos'
 import {
   DIAS_ALERTA, MOTIVO_LABEL, pideSeguimiento, trackingUrl, VIA_LABEL,
+  type UnidadQueVuelve,
 } from '@/lib/reclamos/tipos'
 
 /** "hace 3 días" / "hoy". El número es la columna por la que se ordena todo. */
@@ -93,15 +94,29 @@ export function Retornos() {
     }
   }
 
-  const recibir = async (f: FilaRetorno) => {
+  /**
+   * Llegó. **De a una unidad o todo junto**: un reclamo puede tener dos productos y la caja traer
+   * uno, y hasta el 25-ago-2026 esto era entero o nada — tildarlo con uno solo en la mano dejaba al
+   * otro sin que lo buscara nadie.
+   */
+  const recibir = async (f: FilaRetorno, unidad?: UnidadQueVuelve) => {
+    const que = unidad
+      ? `${unidad.item.producto}${unidad.item.variante ? ` · ${unidad.item.variante}` : ''}`
+      : detalleDeLoQueVuelve(f.reclamo)
+    const quedan = f.faltan.length - (unidad ? 1 : f.faltan.length)
     const si = await confirmar({
-      titulo: `¿Llegó ${f.numero}?`,
+      titulo: unidad ? `¿Llegó esto de ${f.numero}?` : `¿Llegó ${f.numero}?`,
       ok: 'Sí, lo tengo acá',
-      mensaje: `${detalleDeLoQueVuelve(f.reclamo)}. Cuando lo confirmes pasa al otro andén, para ${
-        f.queHacer === 'falla' ? 'darlo de alta en Fallas' : 'reingresarlo en Gestión Nube'
-      }.`,
+      mensaje: `${que}. ${quedan > 0
+        ? `Van a quedar ${quedan} producto${quedan > 1 ? 's' : ''} esperando, así que el reclamo sigue en camino.`
+        : `Cuando lo confirmes pasa al otro andén, para ${f.queHacer === 'falla' ? 'darlo de alta en Fallas' : 'reingresarlo en Gestión Nube'}.`}`,
     })
-    if (si) await accion(f.reclamo.id, () => marcarRecibido(marca, f.reclamo.id), 'Anotado: llegó.')
+    if (!si) return
+    await accion(
+      f.reclamo.id,
+      async () => { await marcarRecibido(marca, f.reclamo.id, unidad ? { unidades: [unidad.i] } : undefined) },
+      quedan > 0 ? 'Anotado. Falta el resto.' : 'Anotado: llegó.',
+    )
   }
 
   const reingresar = async (f: FilaRetorno) => {
@@ -229,7 +244,23 @@ export function Retornos() {
                   <Td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {anden === 'esperando' && (
-                        <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void recibir(f)}>Llegó</Button>
+                        f.faltan.length > 1 ? (
+                          // Con dos o más esperados, cada uno se tilda por su nombre: la caja
+                          // llega como llega, y "Llegó" a secas obliga a mentir en la mitad de los
+                          // casos. El "Llegaron los N" sigue estando para el caso normal.
+                          <>
+                            {f.faltan.map((u) => (
+                              <Button key={u.i} size="sm" variant="outline" tone="brand" disabled={ocup} onClick={() => void recibir(f, u)}>
+                                Llegó: {u.item.producto}
+                              </Button>
+                            ))}
+                            <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void recibir(f)}>
+                              Llegaron los {f.faltan.length}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void recibir(f)}>Llegó</Button>
+                        )
                       )}
                       {anden === 'guardar' && d.reingreso_estado === 'pendiente' && (
                         <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void reingresar(f)}>Reingresado</Button>

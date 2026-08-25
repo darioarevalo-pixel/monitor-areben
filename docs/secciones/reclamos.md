@@ -156,8 +156,13 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   `esAdmin`: despacha Depósito). El pendiente existía desde el 24-ago y **no tenía botón**: el
   cambio, la reposición y el reenvío quedaban trabados sin poder cerrarse — el mismo agujero que
   este módulo ya había tenido con los pendientes mal derivados, ahora al revés.
-- ⚠️ **Un solo `destino_prenda` para los DOS productos de `mal_armado`** — el que compró y el que
-  salió por error pueden terminar distinto, y hoy se decide uno solo para los dos.
+- ✅ **El destino ya es del PRODUCTO** (25-ago-2026, `lib/reclamos/unidades.core.js`). Cada ítem
+  puede llevar su `destino`; **ausente = el del reclamo**, que es el default explícito (mismo patrón
+  que el `disparador` de Solicitudes). La pantalla lo pregunta sólo cuando hay **dos o más**: con
+  uno, el destino del reclamo ya ES el del producto. Viaja como **mapa índice → destino** y ⛔ los
+  productos no se reenvían — salen de la orden de Tienda Nube. 🔴 Medido antes de construirlo:
+  **3 de los 10 reclamos de BDI tienen dos productos**, así que uno solo para los dos no era un
+  caso de borde.
 
 ## Cómo se prueba
 

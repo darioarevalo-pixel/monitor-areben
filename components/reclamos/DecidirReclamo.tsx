@@ -30,6 +30,7 @@ import {
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
   type RespuestaRetencion,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
+  DESTINO_LABEL, laUnidadVuelve,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
@@ -142,6 +143,17 @@ export function DecidirReclamo({
    */
   const [retencion, setRetencion] = useState<RespuestaRetencion | null>(reclamo.retencion_respuesta ?? null)
   const [retencionMonto, setRetencionMonto] = useState<number | ''>(reclamo.retencion_monto ?? '')
+  /**
+   * **El destino de cada producto**, cuando hay más de uno. Vacío en un índice = el del reclamo.
+   *
+   * Un reclamo de dos productos puede terminar con uno volviendo sano a stock y el otro en poder
+   * del cliente, y hasta hoy se decidía uno solo para los dos — en BDI son 3 de cada 10.
+   */
+  const [destinos, setDestinos] = useState<Record<number, DestinoPrenda | ''>>(() => {
+    const inicial: Record<number, DestinoPrenda | ''> = {}
+    ;(reclamo.items || []).forEach((it, i) => { inicial[i] = it.destino || '' })
+    return inicial
+  })
   /** Sólo en "pedido mal armado": lo que le llegó por error, cargado con las fotos delante. */
   const [recibidos, setRecibidos] = useState<ItemReclamo[]>(reclamo.items_correctos ?? [])
 
@@ -244,6 +256,11 @@ export function DecidirReclamo({
         retencion_monto: retencion ? montoOferta : null,
         expectativa: expectativa || null,
         items_correctos: reclamo.motivo === 'mal_armado' ? recibidos : undefined,
+        // Sólo cuando hay más de un producto: en el de uno solo, el destino del reclamo ES el del
+        // producto y escribirlo dos veces son dos lugares donde puede quedar distinto.
+        destinos: hayVariosProductos
+          ? Object.fromEntries(items.map((_, i) => [i, destinos[i] || null]))
+          : undefined,
         // Techo de seguridad del servidor: nunca se devuelve más de lo que se pagó por la orden.
         techo_orden: orden?.total != null ? Number(orden.total) : null,
       })
@@ -290,6 +307,12 @@ export function DecidirReclamo({
    */
   const hayFotos = !!(reclamo.fotos || []).length
   const mostrarRetencion = ofreceRetencion(reclamo.motivo, escenario) && hayFotos
+
+  /**
+   * El destino por producto sólo aparece con **dos o más**: con uno, el destino del reclamo ya ES
+   * el del producto, y preguntarlo dos veces son dos lugares donde puede quedar distinto.
+   */
+  const hayVariosProductos = items.length > 1 && !!destino
 
   /**
    * Lo que se le ofrece. Arranca en lo que sugiere la cuenta y se puede cambiar: lo que se negocia
@@ -492,6 +515,41 @@ export function DecidirReclamo({
             {gravedad && <span style={{ fontSize: font.xs, color: color.mut, alignSelf: 'center' }}>{GRAVEDAD_DEF[gravedad].ayuda}</span>}
           </div>
         </Field>
+      )}
+
+      {/* ── El destino de cada producto ──
+          Aparece sólo con dos o más. Vacío = el del reclamo, que es el default explícito: sin eso
+          habría que responderle a cada renglón para no cambiar nada. */}
+      {hayVariosProductos && (
+        <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: space[3], marginBottom: space[3] }}>
+          <div style={{ fontWeight: weight.semibold, fontSize: font.sm, marginBottom: 4 }}>¿Y cada producto?</div>
+          <div style={{ fontSize: font.xs, color: color.mut, marginBottom: space[2] }}>
+            Son {items.length}. Por defecto van todos a <b>{DESTINO_LABEL[destino]}</b>; acá se cambia el que termine distinto.
+          </div>
+          {items.map((it, i) => {
+            const elegido = (destinos[i] || destino) as DestinoPrenda
+            return (
+              <div key={i} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', padding: '3px 0', fontSize: font.sm }}>
+                <span style={{ fontWeight: weight.semibold, minWidth: 160 }}>{it.producto}</span>
+                {it.variante && <span style={{ color: color.mut2 }}>{it.variante}</span>}
+                <Select
+                  value={destinos[i] || ''}
+                  onChange={(e) => setDestinos((p) => ({ ...p, [i]: e.target.value as DestinoPrenda | '' }))}
+                  style={{ width: 260 }}
+                >
+                  <option value="">Lo del reclamo — {DESTINO_LABEL[destino]}</option>
+                  {(['stock', 'falla', 'perdida'] as DestinoPrenda[]).map((k) => (
+                    <option key={k} value={k}>{DESTINO_LABEL[k]}</option>
+                  ))}
+                </Select>
+                {/* Lo único que le importa a Depósito: si esta unidad hay que esperarla o no. */}
+                <span style={{ fontSize: font.xs, color: laUnidadVuelve(elegido, retorno) ? color.action : color.mut2 }}>
+                  {laUnidadVuelve(elegido, retorno) ? 'se espera de vuelta' : 'no vuelve'}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       )}
 
       {/* ── Pedido mal armado: qué recibió REALMENTE ──

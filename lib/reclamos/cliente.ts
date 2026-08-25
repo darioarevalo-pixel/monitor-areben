@@ -203,6 +203,12 @@ export type Decision = {
   retencion_respuesta?: RespuestaRetencion | null
   retencion_monto?: number | null
   /**
+   * **El destino de cada producto**, como mapa índice → destino. `null` en un índice lo devuelve al
+   * destino del reclamo. ⛔ Los productos no se reenvían: salen de la orden, y dejar que la decisión
+   * los reescriba abre la puerta a que una pantalla vieja los pise con menos datos.
+   */
+  destinos?: Record<number, DestinoPrenda | null> | null
+  /**
    * Qué pidió el cliente. Se puede completar ACÁ y no sólo al abrir el reclamo: en la mayoría de
    * los casos se sabe recién después de escribirle, así que exigirlo en el alta era pedir que
    * alguien lo invente. `null` no pisa lo que ya estuviera cargado.
@@ -548,8 +554,19 @@ export async function leerRetornos(marca: Marca): Promise<RetornoRow[]> {
  * Llegó. Es el gesto de la bandeja, y por eso es una acción propia y no `cambiarEstado(...,
  * 'recibido')`: con el permiso de la bandeja se puede hacer éste y ningún otro cambio de estado.
  */
-export async function marcarRecibido(marca: Marca, id: number, nota?: string): Promise<void> {
-  await postear({ store: marca, action: 'recibir', id, nota: nota || null })
+export async function marcarRecibido(
+  marca: Marca,
+  id: number,
+  opciones?: { nota?: string; unidades?: number[] },
+): Promise<{ todoLlego: boolean; faltan: number }> {
+  // `unidades` son los índices en la lista de lo que vuelve. Sin ellos llegó **todo**, que es lo
+  // que este verbo significaba antes de que se pudiera recibir de a una.
+  const d = await postear({
+    store: marca, action: 'recibir', id,
+    nota: opciones?.nota || null,
+    ...(opciones?.unidades ? { unidades: opciones.unidades } : {}),
+  })
+  return { todoLlego: d.todoLlego !== false, faltan: Number(d.faltan) || 0 }
 }
 
 /** El producto devuelto ya volvió al stock a mano en GN. Traza de un paso manual, como `anulacion`. */

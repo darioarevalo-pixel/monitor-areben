@@ -74,8 +74,18 @@ Tests: `tests/retornos.test.ts`.
   módulo estuvo frenado), y Zattia tiene 0. La bandeja nace vacía **a propósito**, no rota.
 - ▶️ **No muestra el envío de ida ni lo que se le mandó al cliente.** Si un reenvío o un cambio
   también tiene un paquete saliendo, eso se sigue en Reclamos.
-- ⚠️ **La unidad se recibe entera o nada**: un reclamo con dos productos no puede decir que llegó
-  uno. Es el mismo agujero que `mal_armado` tiene con `destino_prenda`.
+- ✅ **Se recibe de a UNA** (25-ago-2026). Cada unidad lleva su `recibida_at` y el reclamo **sigue en
+  tránsito mientras falte una**: darlo por recibido con la caja a medias era lo que dejaba a la otra
+  sin que la buscara nadie. Con dos o más esperadas, la bandeja muestra un botón por producto y uno
+  de "llegaron los N". La regla vive en `lib/reclamos/unidades.core.js`.
+- 🔴 ✅ **Y lo que la bandeja mostraba estaba MAL en un caso**: en `mal_armado` listaba `items` —lo
+  que el cliente **compró**— cuando lo que vuelve es lo que se le mandó **por error**
+  (`items_correctos`), que es el único producto que sí salió del depósito. Depósito abría la caja
+  esperando otra cosa. Por eso `COLS_RETORNO` ahora trae `items_correctos` y `retorno_decidido`:
+  ⛔ no son columnas de más, sin las dos la puerta angosta le muestra el producto equivocado.
+- ⚠️ **Si nadie cargó qué le llegó por error, la vuelta queda TRABADA y lo dice** — ⛔ no se puede
+  recibir: sin unidades esperadas, "llegó todo" sería verdad sobre una lista vacía y el reclamo
+  pasaría a `recibido` sin que nadie haya abierto una caja.
 
 ## Cómo se prueba
 

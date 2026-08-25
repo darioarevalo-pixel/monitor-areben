@@ -33,6 +33,16 @@ import {
   productoEnJuego as productoEnJuegoJs,
   reclasificaA as reclasificaAJs,
 } from './casos.core.js'
+import {
+  aplicarDestinos as aplicarDestinosJs,
+  deDondeVuelve as deDondeVuelveJs,
+  destinoDeUnidad as destinoDeUnidadJs,
+  laUnidadVuelve as laUnidadVuelveJs,
+  loQueFaltaLlegar as loQueFaltaLlegarJs,
+  recibirUnidades as recibirUnidadesJs,
+  trabaParaRecibir as trabaParaRecibirJs,
+  unidadesQueVuelven as unidadesQueVuelvenJs,
+} from './unidades.core.js'
 
 // ── Los ejes ────────────────────────────────────────────────────────────────────
 
@@ -611,6 +621,19 @@ export type ItemReclamo = {
    * productos es el que falta para devolver sólo ése y despachar el resto.
    */
   falto?: boolean
+  /**
+   * **El destino de ESTA unidad.** Ausente = el del reclamo (`destino_prenda`), que es el default
+   * explícito — mismo patrón que el `disparador` de Solicitudes.
+   *
+   * Existe porque el reclamo de dos productos no es raro: en BDI son **3 de 10**, y con un solo
+   * destino no se puede decir que uno vuelve sano a stock y el otro entra como falla.
+   */
+  destino?: DestinoPrenda | null
+  /**
+   * Cuándo se vio esta unidad. Ausente = **no llegó**. Antes la recepción era del reclamo entero
+   * (`estado='recibido'`), así que un reclamo de dos productos no podía decir que llegó uno.
+   */
+  recibida_at?: string | null
 }
 
 export const COMPENSACION_LABEL: Record<Compensacion, string> = {
@@ -1030,6 +1053,82 @@ export function destinoDe(motivo: MotivoReclamo, vuelve: boolean, escenario: str
   // / fallado → cliente FALLA está decidida pero **todavía no se puede construir**: falta que
   // exista el cliente RECLAMO en Gestión Nube, uno por marca.
   return vuelve ? 'stock' : 'falla'
+}
+
+// ── La unidad: el destino y la recepción, por PRODUCTO ──────────────────────────
+//
+// Las reglas viven en `lib/reclamos/unidades.core.js` porque las necesita también `api/_reclamos.js`
+// (`recibir` tiene que saber en qué lista escribir). Acá está la cara tipada.
+
+/** Una unidad que estamos esperando: su índice en la lista donde vive, el ítem y su destino. */
+export type UnidadQueVuelve = { i: number; item: ItemReclamo; destino: DestinoPrenda | null }
+
+/**
+ * Lo mínimo que hace falta para saber qué vuelve. Se pide **esto y no `ReclamoRow`** porque la
+ * bandeja de retornos trabaja con `RetornoRow`, que es un recorte deliberado: Depósito no ve el
+ * relato del cliente ni los montos.
+ */
+export type FilaConUnidades = Pick<ReclamoRow, 'motivo' | 'items'>
+  & Partial<Pick<ReclamoRow, 'items_correctos' | 'destino_prenda' | 'retorno_decidido'>>
+
+/** En qué lista viven las unidades que VUELVEN. En `mal_armado` es lo que llegó por error. */
+export function deDondeVuelve(motivo: MotivoReclamo): 'items' | 'items_correctos' {
+  return deDondeVuelveJs(motivo) as 'items' | 'items_correctos'
+}
+
+/** El destino de una unidad. **Ausente = el del reclamo.** */
+export function destinoDeUnidad(item: ItemReclamo, fila: FilaConUnidades): DestinoPrenda | null {
+  return destinoDeUnidadJs(item, fila) as DestinoPrenda | null
+}
+
+/** ¿Esta unidad vuelve al depósito? `'falla'` sólo vuelve si se pidió el retorno. */
+export function laUnidadVuelve(destino: DestinoPrenda | null | undefined, retornoDecidido: boolean): boolean {
+  return laUnidadVuelveJs(destino, retornoDecidido)
+}
+
+/** Las unidades que estamos esperando, con su índice. */
+export function unidadesQueVuelven(fila: FilaConUnidades): { campo: 'items' | 'items_correctos'; unidades: UnidadQueVuelve[] } {
+  return unidadesQueVuelvenJs(fila) as { campo: 'items' | 'items_correctos'; unidades: UnidadQueVuelve[] }
+}
+
+/** Las que todavía no aparecieron. Vacío = llegó todo lo que se esperaba. */
+export function loQueFaltaLlegar(fila: FilaConUnidades): UnidadQueVuelve[] {
+  return loQueFaltaLlegarJs(fila) as UnidadQueVuelve[]
+}
+
+/**
+ * Pisar el destino de algunas unidades, por índice. `null` devuelve la unidad al del reclamo.
+ *
+ * 🔑 Va como **mapa índice → destino** y ⛔ no reenviando los productos: salen de la orden de Tienda
+ * Nube, y dejar que la decisión los reescriba abre la puerta a pisarlos con menos datos.
+ */
+export function aplicarDestinos(
+  items: ItemReclamo[],
+  destinos: Record<number, DestinoPrenda | null> | null | undefined,
+): { error?: string; lista?: ItemReclamo[] } {
+  return aplicarDestinosJs(items, destinos) as { error?: string; lista?: ItemReclamo[] }
+}
+
+/** Lo que impide recibir, en criollo, o `null` si se puede. */
+export function trabaParaRecibir(fila: FilaConUnidades): string | null {
+  return trabaParaRecibirJs(fila)
+}
+
+/** Marca unidades como llegadas. `indices` en `null` = todas las esperadas. */
+export function recibirUnidades(fila: FilaConUnidades, indices: number[] | null, at: string): {
+  campo: 'items' | 'items_correctos'
+  lista: ItemReclamo[]
+  recibidas: number
+  faltan: number
+  todoLlego: boolean
+} {
+  return recibirUnidadesJs(fila, indices, at) as {
+    campo: 'items' | 'items_correctos'
+    lista: ItemReclamo[]
+    recibidas: number
+    faltan: number
+    todoLlego: boolean
+  }
 }
 
 /**
@@ -1555,7 +1654,15 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   if (d.cupon_estado === 'pendiente') faltan.push('crear el cupón en la tienda y anotar el código')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
-  if (d.destino_prenda === 'stock' && d.estado !== 'recibido' && d.estado !== 'cerrado') faltan.push('recibir el producto')
+  // 🔑 **Recibir es por PRODUCTO.** Antes esto miraba `destino_prenda === 'stock'` y el estado de la
+  // fila, así que un reclamo de dos productos se daba por recibido entero con uno solo en la mano —
+  // y en BDI 3 de cada 10 tienen dos. `estado === 'recibido'` sigue valiendo como "llegó todo": es
+  // lo que significaba antes de que las unidades se tildaran de a una.
+  if (d.estado !== 'recibido' && d.estado !== 'cerrado') {
+    const faltanUnidades = loQueFaltaLlegar(d).length
+    if (faltanUnidades === 1) faltan.push('recibir el producto')
+    else if (faltanUnidades > 1) faltan.push(`recibir los ${faltanUnidades} productos que faltan`)
+  }
   // Cuando el producto se le queda al cliente, la foto es la única prueba de que la falla existió.
   if (d.destino_prenda === 'falla' && !(d.fotos || []).length) faltan.push('al menos una foto del producto')
   return faltan
