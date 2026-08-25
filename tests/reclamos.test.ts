@@ -261,7 +261,7 @@ describe('pedido mal armado: las dos correcciones', () => {
 describe('qué salidas se ofrecen según lo que pasó', () => {
   // Ofrecer "le mandamos otra igual" en un arrepentimiento invita a resolver mal.
   it('arrepentimiento: plata o cupón, nunca reponer', () => {
-    const c = compensacionesDe('arrepentimiento')
+    const c = compensacionesDe('arrepentimiento', null)
     expect(c).toContain('plata_total')
     expect(c).toContain('plata_parcial')
     expect(c).not.toContain('otra_unidad')
@@ -269,15 +269,15 @@ describe('qué salidas se ofrecen según lo que pasó', () => {
   })
 
   it('falla: es la que más opciones tiene, incluida reponerla', () => {
-    expect(compensacionesDe('falla')).toContain('otra_unidad')
-    expect(compensacionesDe('falla')).toContain('plata_parcial')
+    expect(compensacionesDe('falla', null)).toContain('otra_unidad')
+    expect(compensacionesDe('falla', null)).toContain('plata_parcial')
   })
 
   // Si nunca salió no hay producto que negociar: no se le puede ofrecer que se lo quede con
   // descuento algo que nunca tuvo.
   it('faltante y sin stock: sin descuento parcial, porque el cliente no tiene nada', () => {
     for (const m of ['faltante', 'sin_stock'] as const) {
-      expect(compensacionesDe(m)).not.toContain('plata_parcial')
+      expect(compensacionesDe(m, null)).not.toContain('plata_parcial')
     }
   })
 
@@ -287,13 +287,13 @@ describe('qué salidas se ofrecen según lo que pasó', () => {
    * caja) y en `sin_stock` no existe.
    */
   it('faltante se reenvía; sin stock se cambia — mandarle lo que no tenemos es lo único imposible', () => {
-    expect(compensacionesDe('faltante')).toContain('reenvio')
-    expect(compensacionesDe('sin_stock')).not.toContain('reenvio')
-    expect(compensacionesDe('sin_stock')).toContain('otro_producto')
+    expect(compensacionesDe('faltante', null)).toContain('reenvio')
+    expect(compensacionesDe('sin_stock', null)).not.toContain('reenvio')
+    expect(compensacionesDe('sin_stock', null)).toContain('otro_producto')
   })
 
   it('no llegó nunca: solo reponer o devolver', () => {
-    expect(compensacionesDe('no_llego')).toEqual(['reenvio', 'plata_total'])
+    expect(compensacionesDe('no_llego', null)).toEqual(['reenvio', 'plata_total'])
   })
 })
 
@@ -321,8 +321,8 @@ describe('el perfil del motivo', () => {
     it('en faltante la unidad está; en sin stock no existe', () => {
       expect(NUNCA_SALIO).toContain('faltante')
       expect(NUNCA_SALIO).toContain('sin_stock')
-      expect(hayUnidadFisica('faltante')).toBe(true)
-      expect(hayUnidadFisica('sin_stock')).toBe(false)
+      expect(hayUnidadFisica('faltante', null)).toBe(true)
+      expect(hayUnidadFisica('sin_stock', null)).toBe(false)
     })
   })
 
@@ -337,33 +337,35 @@ describe('el perfil del motivo', () => {
   describe('devuelveElEnvioDeIda: si el error fue nuestro, o si no recibió nada', () => {
     it('si el error fue NUESTRO se devuelve el envío, aunque haya recibido el paquete', () => {
       for (const m of ['falla', 'faltante', 'mal_armado'] as MotivoReclamo[]) {
-        expect(devuelveElEnvioDeIda(m), m).toBe(true)
+        expect(devuelveElEnvioDeIda(m, null), m).toBe(true)
         // Y estos tres SÍ recibieron algo: es la parte que antes lo dejaba en false.
         expect(PERFIL_MOTIVO[m].recibioAlgo, m).toBe(true)
       }
     })
 
     it('si no recibió nada se devuelve entero: no hay servicio que cobrar', () => {
-      expect(devuelveElEnvioDeIda('no_llego')).toBe(true)
-      expect(devuelveElEnvioDeIda('sin_stock')).toBe(true)
+      expect(devuelveElEnvioDeIda('no_llego', null)).toBe(true)
+      expect(devuelveElEnvioDeIda('sin_stock', null)).toBe(true)
     })
 
     it('"no llegó" entra por no haber recibido nada, NO por ser culpa nuestra', () => {
       expect(PERFIL_MOTIVO.no_llego.errorPropio).toBe(false)
       expect(PERFIL_MOTIVO.no_llego.recibioAlgo).toBe(false)
       // Que sean dos preguntas es lo que deja reclamarle esa plata al transportista.
-      expect(devuelveElEnvioDeIda('no_llego')).toBe(true)
+      expect(devuelveElEnvioDeIda('no_llego', null)).toBe(true)
     })
 
     // El envío prestó su servicio: el paquete llegó y era lo que pidió. Devolverlo es regalar plata.
     it('si el error NO fue nuestro, la devolución es del producto únicamente', () => {
       for (const m of ['talle', 'arrepentimiento', 'no_esperaba'] as MotivoReclamo[]) {
-        expect(devuelveElEnvioDeIda(m), m).toBe(false)
+        expect(devuelveElEnvioDeIda(m, null), m).toBe(false)
       }
     })
 
     it('ERROR_PROPIO sale del perfil, no de una lista escrita a mano', () => {
-      expect([...ERROR_PROPIO].sort()).toEqual(['falla', 'faltante', 'mal_armado', 'sin_stock'])
+      // ⚠️ `excedente` entró el 25-ago-2026 y es error nuestro por definición: la unidad de más
+      // salió del depósito porque alguien la puso en la caja.
+      expect([...ERROR_PROPIO].sort()).toEqual(['excedente', 'falla', 'faltante', 'mal_armado', 'sin_stock'])
       for (const m of TODOS) {
         expect(ERROR_PROPIO.includes(m), m).toBe(PERFIL_MOTIVO[m].errorPropio)
       }
@@ -420,8 +422,22 @@ describe('el perfil del motivo', () => {
       }
     })
 
-    it('ninguna queda vacía: siempre hay algo que ofrecerle', () => {
-      for (const m of TODOS) expect(expectativasDe(m).length, m).toBeGreaterThan(0)
+    /**
+     * ⚠️ **La regla cambió el 25-ago-2026, y el cambio es el hallazgo.** Antes esto decía "ninguna
+     * queda vacía: siempre hay algo que ofrecerle", y era cierto porque los ocho casos los abría el
+     * cliente pidiendo algo. Los casos nuevos rompen esa premisa por dos motivos distintos:
+     *
+     *  - **`excedente` lo abrimos NOSOTROS.** El cliente no pidió nada: le llegó de más y muchas
+     *    veces ni se enteró. Ofrecerle una lista de salidas sería inventarle un reclamo.
+     *  - **`demora` no se compensa.** Lo que quiere es que llegue, y eso no está entre las cuatro
+     *    expectativas. Poner una para no dejar la lista vacía invita a ofrecer plata donde se
+     *    decidió que no va.
+     *
+     * O sea: la lista vacía **afirma** que no hay nada que ofrecer, no que falte cargarlo.
+     */
+    it('sólo quedan sin expectativas los casos donde no hay nada que ofrecer', () => {
+      const vacias = TODOS.filter((m) => expectativasDe(m).length === 0)
+      expect([...vacias].sort()).toEqual(['demora', 'excedente'])
     })
   })
 
@@ -446,10 +462,10 @@ describe('el perfil del motivo', () => {
     // Sólo tiene sentido si el producto está en su poder. Si nunca salió, no hay nada que quedarse.
     it('los cuatro casos donde el cliente tiene el producto', () => {
       for (const m of ['talle', 'arrepentimiento', 'no_esperaba', 'falla'] as const) {
-        expect(ofreceRetencion(m), m).toBe(true)
+        expect(ofreceRetencion(m, null), m).toBe(true)
       }
       for (const m of ['faltante', 'mal_armado', 'no_llego', 'sin_stock'] as const) {
-        expect(ofreceRetencion(m), m).toBe(false)
+        expect(ofreceRetencion(m, null), m).toBe(false)
       }
     })
   })
@@ -475,7 +491,7 @@ describe('el perfil del motivo', () => {
     it('si se puede prometer un cambio, tiene que poder resolverse como cambio', () => {
       for (const m of TODOS) {
         if (expectativasDe(m).includes('otro_producto')) {
-          expect(compensacionesDe(m), m).toContain('otro_producto')
+          expect(compensacionesDe(m, null), m).toContain('otro_producto')
         }
       }
     })
@@ -483,32 +499,32 @@ describe('el perfil del motivo', () => {
     it('si se puede prometer que le mandemos lo que falta, tiene que poder reenviarse', () => {
       for (const m of TODOS) {
         if (expectativasDe(m).includes('completar')) {
-          expect(compensacionesDe(m), m).toContain('reenvio')
+          expect(compensacionesDe(m, null), m).toContain('reenvio')
         }
       }
     })
 
     // No tenemos el producto: mandárselo es lo único imposible.
     it('sin stock NO puede ofrecer reenvío', () => {
-      expect(compensacionesDe('sin_stock')).not.toContain('reenvio')
-      expect(compensacionesDe('sin_stock')).toContain('otro_producto')
+      expect(compensacionesDe('sin_stock', null)).not.toContain('reenvio')
+      expect(compensacionesDe('sin_stock', null)).toContain('otro_producto')
     })
 
     // Acá sí existe: está en el depósito, sólo no se metió en la caja.
     it('faltante SÍ puede reenviar: el producto existe', () => {
-      expect(compensacionesDe('faltante')).toContain('reenvio')
-      expect(hayUnidadFisica('faltante')).toBe(true)
+      expect(compensacionesDe('faltante', null)).toContain('reenvio')
+      expect(hayUnidadFisica('faltante', null)).toBe(true)
     })
 
     // Sólo se puede reponer "otra igual" si la unidad existe en algún lado.
     it('nadie ofrece otra unidad igual de algo que no existe', () => {
       for (const m of TODOS) {
-        if (!hayUnidadFisica(m)) expect(compensacionesDe(m), m).not.toContain('otra_unidad')
+        if (!hayUnidadFisica(m, null)) expect(compensacionesDe(m, null), m).not.toContain('otra_unidad')
       }
     })
 
     it('ningún motivo se queda sin salidas', () => {
-      for (const m of TODOS) expect(compensacionesDe(m).length, m).toBeGreaterThan(0)
+      for (const m of TODOS) expect(compensacionesDe(m, null).length, m).toBeGreaterThan(0)
     })
   })
 
@@ -662,27 +678,27 @@ describe('el resumen de lo decidido', () => {
 
 describe('el destino de el producto sale del motivo', () => {
   it('faltante y sin stock: nunca salió', () => {
-    expect(destinoDe('faltante', false)).toBe('no_salio')
-    expect(destinoDe('sin_stock', false)).toBe('no_salio')
+    expect(destinoDe('faltante', false, null)).toBe('no_salio')
+    expect(destinoDe('sin_stock', false, null)).toBe('no_salio')
   })
 
   it('no llegó nunca: se perdió en el camino, ni vuelve ni está', () => {
-    expect(destinoDe('no_llego', false)).toBe('perdida')
+    expect(destinoDe('no_llego', false, null)).toBe('perdida')
   })
 
   it('falla: va al ledger de Fallas, vuelva o no', () => {
-    expect(destinoDe('falla', true)).toBe('falla')
-    expect(destinoDe('falla', false)).toBe('falla')
+    expect(destinoDe('falla', true, null)).toBe('falla')
+    expect(destinoDe('falla', false, null)).toBe('falla')
   })
 
   it('arrepentimiento: vuelve a stock si vuelve', () => {
-    expect(destinoDe('arrepentimiento', true)).toBe('stock')
+    expect(destinoDe('arrepentimiento', true, null)).toBe('stock')
   })
 
   it('sin producto que pueda volver, media pantalla sobra', () => {
-    expect(puedeVolverLaPrenda('faltante')).toBe(false)
-    expect(puedeVolverLaPrenda('no_llego')).toBe(false)
-    expect(puedeVolverLaPrenda('falla')).toBe(true)
+    expect(puedeVolverLaPrenda('faltante', null)).toBe(false)
+    expect(puedeVolverLaPrenda('no_llego', null)).toBe(false)
+    expect(puedeVolverLaPrenda('falla', null)).toBe(true)
   })
 })
 
@@ -901,6 +917,28 @@ describe('faltantesParaCerrar', () => {
 
     it('lo dice, y no inventa los de plata ni stock', () => {
       expect(faltantesParaCerrar(sinDecidir)).toEqual(['decidir qué se hace'])
+    })
+
+    /**
+     * 🔑 **Hay un escenario en que ni siquiera hay algo que decidir: el paquete sigue viajando.**
+     *
+     * En "no llegó", los tres primeros escenarios son seguimiento —en tránsito, demorado, sin
+     * movimientos— y el caso se abre recién cuando se da por extraviado. Decir "decidir qué se
+     * hace" ahí es pedirle a alguien que resuelva un caso que todavía no existe: hasta el
+     * 25-ago-2026 un `no_llego` se daba por perdido desde el minuto cero, y un pedido que aparecía
+     * no tenía salida.
+     */
+    it('si el escenario dice que todavía es seguimiento, no pide decidir', () => {
+      const viajando: ReclamoRow = { ...sinDecidir, motivo: 'no_llego', escenario: 'en_transito' }
+      expect(faltantesParaCerrar(viajando)[0]).toContain('seguir el envío')
+      expect(faltantesParaCerrar(viajando).join(' ')).not.toContain('decidir qué se hace')
+
+      // Extraviado SÍ es un caso: ahí se decide.
+      const perdido: ReclamoRow = { ...sinDecidir, motivo: 'no_llego', escenario: 'extraviado' }
+      expect(faltantesParaCerrar(perdido)).toContain('decidir qué se hace')
+      // Y sin escenario cargado se comporta como siempre: pide decidir.
+      const sinMirar: ReclamoRow = { ...sinDecidir, motivo: 'no_llego' }
+      expect(faltantesParaCerrar(sinMirar)).toContain('decidir qué se hace')
     })
 
     it('tampoco los inventa si la fila viniera con ellos en pendiente', () => {

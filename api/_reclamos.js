@@ -45,6 +45,9 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
 import { pendientesDe } from '../lib/reclamos/efectos.core.js';
+// El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
+// si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
+import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego } from '../lib/reclamos/casos.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -53,10 +56,11 @@ function cfgFor(store) {
   return { url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co', key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
 }
 
-// Los ocho vigentes, más los dos históricos que quedaron en filas viejas (si se sacaran, editar
+// Los ONCE vigentes, más los dos históricos que quedaron en filas viejas (si se sacaran, editar
 // un reclamo viejo lo rechazaría por "motivo inválido").
 const MOTIVOS = [
-  'arrepentimiento', 'no_esperaba', 'talle', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
+  'arrepentimiento', 'no_esperaba', 'no_como_publicado', 'talle', 'falla', 'faltante', 'mal_armado',
+  'excedente', 'demora', 'no_llego', 'sin_stock',
   'no_era_lo_esperado', 'otro',
 ];
 const EXPECTATIVAS = ['plata', 'mismo_producto', 'otro_producto', 'completar'];
@@ -71,7 +75,7 @@ const ENVIO_PAGA = ['cliente', 'nosotros'];
 // Cómo vuelve el producto. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
 const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
 
-const COLS = `id, store, orden_tn, cliente, token_vence, motivo, motivo_detalle, relato_cliente, fotos,
+const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, motivo_detalle, relato_cliente, fotos,
   destino_prenda, compensacion, estado, items, monto_producto, monto_acordado, monto_envio_devuelto,
   monto_total, pago_metodo, pago_gateway, devolver_envio, retorno_sugerido, retorno_decidido,
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
@@ -218,7 +222,9 @@ export default async function handler(req, res) {
 
     // ── Lo que mueve plata o toca stock: solo administración ──────────────────────
     // `gn-baja` NO está acá a propósito: quien ve que el producto no está es Local.
-    const DE_ADMIN = ['decidir', 'reintegro', 'anulacion', 'eliminar'];
+    // `reclasificar` está acá porque **cambia el perfil del caso**: quién paga el envío de ida y si
+    // hay producto en juego. No es una corrección de tipeo.
+    const DE_ADMIN = ['decidir', 'reclasificar', 'reintegro', 'anulacion', 'eliminar'];
     if (DE_ADMIN.includes(action) && !esAdministracion(perfil)) {
       return res.status(403).json({ error: 'Esto lo hace Administración: pedile a alguien con ese permiso.' });
     }
@@ -246,7 +252,27 @@ export default async function handler(req, res) {
       // lo que sugirió la cuenta, para poder ver después cuándo se fue en contra y si valió.
       const destino = DESTINOS.includes(b.destino_prenda) ? b.destino_prenda : null;
       const compensacion = COMPENSACIONES.includes(b.compensacion) ? b.compensacion : null;
-      if (!destino || !compensacion) return res.status(400).json({ error: 'falta el destino de el producto o la compensación' });
+      // El escenario tiene que ser de ESTE caso: la lista es cerrada, y uno de otro caso llegaría
+      // a la fila y después movería el perfil equivocado. Hay que releer el motivo de la base —
+      // el cliente manda el escenario, no el caso.
+      const { data: filaCaso, error: eCaso } = await supabase
+        .from('devoluciones').select('motivo, escenario, reclamo_correo_estado').eq('store', store).eq('id', id).maybeSingle();
+      if (eCaso) throw new Error(eCaso.message);
+      if (!filaCaso) return res.status(404).json({ error: 'no existe ese reclamo' });
+      const motivoActual = filaCaso.motivo;
+      // Si no viene en el body, vale el que ya tiene la fila: mandar la decisión desde una pantalla
+      // que no conoce el escenario ⛔ no puede BORRARLO — es el dato del que cuelga el perfil.
+      const escenario = b.escenario !== undefined ? texto(b.escenario) : (filaCaso.escenario || null);
+      if (escenario && !esEscenarioDe(motivoActual, escenario)) {
+        return res.status(400).json({ error: `"${escenario}" no es un escenario de ${motivoActual}` });
+      }
+      // 🔑 **El destino del producto se exige sólo si hay producto en juego.** En una demora y en
+      // una cancelación no lo hay: no vuelve nada, no se anula ninguna venta y no hay stock que
+      // corregir. Hasta el 25-ago-2026 se exigía siempre, así que una demora **no se podía cerrar
+      // nunca** — el final tiene que poder quedar vacío.
+      const hayProducto = productoEnJuego(motivoActual, escenario);
+      if (!compensacion) return res.status(400).json({ error: 'falta la compensación' });
+      if (hayProducto && !destino) return res.status(400).json({ error: 'falta el destino de el producto' });
 
       const total = num(b.monto_total);
       if (total != null && total < 0) return res.status(400).json({ error: 'el monto no puede ser negativo' });
@@ -263,7 +289,10 @@ export default async function handler(req, res) {
       const esCambio = compensacion === 'otro_producto';
       const diferencia = num(b.diferencia);
       const extra = {
-        destino_prenda: destino,
+        // Sin producto en juego el destino queda en null a propósito: inventarle uno ('no_salio')
+        // diría que nunca salió del depósito, y en una demora salió y llegó.
+        destino_prenda: hayProducto ? destino : null,
+        escenario,
         compensacion,
         monto_producto: num(b.monto_producto),
         monto_acordado: num(b.monto_acordado),
@@ -282,6 +311,17 @@ export default async function handler(req, res) {
         ...(EXPECTATIVAS.includes(b.expectativa) ? { expectativa: b.expectativa } : {}),
         // "Pedido mal armado": lo que recibió por error. Se carga al decidir, con las fotos.
         ...(Array.isArray(b.items_correctos) ? { items_correctos: b.items_correctos } : {}),
+        // El reclamo al transportista es plata recuperable NUESTRA y corre en paralelo: no espera
+        // a ninguna resolución. Se encendía sólo al crear un `no_llego`; ahora una demora que fue
+        // del transporte también lo enciende, y eso lo dice el ESCENARIO, no el caso.
+        //
+        // ⚠️ Se apaga si dejó de corresponder —corregir el escenario de "transporte" a "quedó en
+        // preparación" no puede dejar un pendiente que nadie va a poder tildar nunca— pero ⛔ **sólo
+        // si sigue en 'pendiente'**: un 'hecho' es el registro de que el reclamo se presentó de
+        // verdad, y eso no se borra desde acá.
+        ...(pideReclamoAlTransportista(motivoActual, escenario)
+          ? { reclamo_correo_estado: 'pendiente' }
+          : (filaCaso.reclamo_correo_estado === 'pendiente' ? { reclamo_correo_estado: 'no_aplica' } : {})),
         // El cambio por otro producto: lo que se lleva y cuánto queda de diferencia.
         items_nuevos: Array.isArray(b.items_nuevos) ? b.items_nuevos : [],
         forma_pago: FORMAS_PAGO.includes(b.forma_pago) ? b.forma_pago : null,
@@ -306,6 +346,27 @@ export default async function handler(req, res) {
       };
       await apilar(supabase, id, { estado: extra.estado, at: ahora(), usuario, nota: `decidido: ${destino} · ${compensacion}` }, extra);
       return res.status(200).json({ ok: true, estado: extra.estado });
+    }
+
+    // ── Mudar el reclamo a otro caso, conservando la historia ────────────────────
+    //
+    // Cinco de los once casos terminan en "si pasa X, en realidad es otro caso": una disconformidad
+    // que resulta ser una publicación mal hecha, un "no llegó" que finalmente llegó tarde, un talle
+    // que en realidad era otro producto. Sin esta acción hay que abrir un reclamo nuevo, y ahí se
+    // pierden el número, las fotos que cargó el cliente, el relato y el historial.
+    //
+    // ⚠️ **Borra el escenario**: es de la lista del caso viejo. El caso nuevo se vuelve a mirar.
+    if (action === 'reclasificar') {
+      const nuevo = MOTIVOS.includes(b.motivo) ? b.motivo : null;
+      if (!nuevo) return res.status(400).json({ error: 'falta el caso al que mudarlo' });
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select('motivo, estado').eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      if (fila.motivo === nuevo) return res.status(400).json({ error: 'ya es ese caso' });
+      const nota = `caso: ${fila.motivo} → ${nuevo}${texto(b.nota) ? ` (${texto(b.nota)})` : ''}`;
+      await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota }, { motivo: nuevo, escenario: null });
+      return res.status(200).json({ ok: true, motivo: nuevo });
     }
 
     // ── El cambio: se arma en dos tiempos y NO lo aprueba Administración ──────────
@@ -433,7 +494,16 @@ export default async function handler(req, res) {
       const campos = {};
       if (b.orden_tn !== undefined) campos.orden_tn = texto(b.orden_tn);
       if (b.cliente !== undefined) campos.cliente = texto(b.cliente);
-      if (b.motivo !== undefined && MOTIVOS.includes(b.motivo)) campos.motivo = b.motivo;
+      // ⚠️ Cambiar el caso **borra el escenario**: la lista es cerrada y el del caso anterior no
+      // significa nada acá — peor, podría mover el perfil equivocado. Para mudar un reclamo
+      // conservando la historia está la acción `reclasificar`, que es lo que usa la pantalla.
+      if (b.motivo !== undefined && MOTIVOS.includes(b.motivo)) { campos.motivo = b.motivo; campos.escenario = null; }
+      if (b.escenario !== undefined) {
+        const motivoDestino = campos.motivo || (await supabase.from('devoluciones').select('motivo').eq('store', store).eq('id', id).maybeSingle()).data?.motivo;
+        const esc = texto(b.escenario);
+        if (esc && !esEscenarioDe(motivoDestino, esc)) return res.status(400).json({ error: `"${esc}" no es un escenario de ${motivoDestino}` });
+        campos.escenario = esc;
+      }
       if (b.motivo_detalle !== undefined) campos.motivo_detalle = texto(b.motivo_detalle);
       if (b.relato_cliente !== undefined) campos.relato_cliente = texto(b.relato_cliente);
       if (b.items !== undefined && Array.isArray(b.items)) campos.items = b.items;

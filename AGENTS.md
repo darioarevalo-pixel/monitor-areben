@@ -228,10 +228,11 @@ varias veces su tamaño.
 
 ## Estado del trabajo
 
-- **Reclamos y Cambios: destrabado (24-ago-2026)** y en rediseño — los 8 motivos pasan a **11
-  casos** y el módulo se reorganiza como un chasis: inicio común, **el escenario** (el nivel que hoy
-  no existe), final común. 🔴 **`sql/migrate-reclamos-efectos.sql` está SIN CORRER y su bloque 2 va
-  ANTES de deployar.** El detalle, en la ficha.
+- **Reclamos y Cambios: los 11 casos y el ESCENARIO ya están (25-ago-2026).** El módulo es un
+  chasis de tres bandas: inicio común, **el escenario** (`lib/reclamos/casos.core.js`) y final
+  común. 🔴 **El escenario decide la plata en tres casos**, así que es parámetro **obligatorio** de
+  todo lo que deriva plata o stock. Las dos migraciones están **corridas en BDI y ZATTIA**
+  (verificado leyendo la columna, no el script). El detalle, en la ficha.
 - **Repo compartido con Darío.** Los refactors grandes se coordinan antes de empezar.
 
 ## Estilo

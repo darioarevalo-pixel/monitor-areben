@@ -32,7 +32,7 @@ import {
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido,
-  ayudaDeMotivo, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
+  ayudaDeMotivo, casoDe, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -619,14 +619,19 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               {/* Las opciones dependen del motivo: ofrecer "el mismo producto en buen estado" en un
                   arrepentimiento, o "que le manden lo que falta" en una falla, no significa nada.
                   Y es opcional: en la mayoría de los casos se sabe recién después de escribirle. */}
-              <Field label={tituloExpectativa(motivo)} hint="opcional — se puede completar al decidir">
-                <Select value={expectativaVal} onChange={(e) => setExpectativa(e.target.value as Expectativa | '')}>
-                  <option value="">Todavía no sé</option>
-                  {expectativasDe(motivo).map((x) => (
-                    <option key={x} value={x}>{expectativaLabel(x, motivo)}</option>
-                  ))}
-                </Select>
-              </Field>
+              {/* ⚠️ Los casos sin expectativas no muestran el campo: en "le llegó de más" el
+                  reclamo lo abrimos nosotros y el cliente no pidió nada, y una demora no se
+                  compensa. Un desplegable con una sola opción vacía pide que alguien invente. */}
+              {!!expectativasDe(motivo).length && (
+                <Field label={tituloExpectativa(motivo)} hint="opcional — se puede completar al decidir">
+                  <Select value={expectativaVal} onChange={(e) => setExpectativa(e.target.value as Expectativa | '')}>
+                    <option value="">Todavía no sé</option>
+                    {expectativasDe(motivo).map((x) => (
+                      <option key={x} value={x}>{expectativaLabel(x, motivo)}</option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                 <div style={{ fontSize: font.xs, color: color.mut }}>Pagó por lo tildado</div>
                 <div style={{ fontSize: font.lg, fontWeight: weight.bold }}><MoneyText value={monto.producto} /></div>
@@ -637,6 +642,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                 stock" —que se parecen y tienen consecuencias de stock opuestas— se elijan a dedo. */}
             <Notice tone="neutral" icon="ⓘ" style={{ marginTop: space[2] }}>
               <b>{MOTIVO_LABEL[motivo]}:</b> {ayudaDeMotivo(motivo)}
+              {/* La pregunta que decide se muestra acá pero **no se contesta acá**: se contesta al
+                  decidir, con las fotos y las fechas del envío delante. Mostrarla en el alta es lo
+                  que hace ver que el caso elegido lleva una segunda respuesta, y cuál. */}
+              {casoDe(motivo) && (
+                <div style={{ marginTop: 4, color: color.mut }}>
+                  Al decidir se pregunta: <b>{casoDe(motivo)!.pregunta}</b>
+                </div>
+              )}
             </Notice>
 
             <Button variant="solid" tone="brand" onClick={() => void crear()} disabled={guardando || !items.length} style={{ marginTop: space[2] }}>

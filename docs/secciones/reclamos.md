@@ -9,19 +9,58 @@ el talle, se arrepintió, o no teníamos el producto. Reemplazó a **Fallas-con-
 mostrador, pero escribe sobre la misma tabla: **un cambio no es un tipo de caso, es un caso con
 `compensacion='otro_producto'`**. Por eso no hay tabla `cambios`.
 
+## El chasis: inicio común · **el escenario** · final común
+
+El módulo está armado como tres bandas, y saber en cuál cae lo que se va a tocar ahorra la mitad
+del trabajo:
+
+- **El inicio** es igual en los once casos: qué venta, qué caso, sobre qué productos, qué pide.
+- **El centro** es lo único distinto en cada uno: **una** pregunta que decide y su **lista cerrada
+  de escenarios** (`lib/reclamos/casos.core.js`). Es el nivel que hasta el 25-ago-2026 no existía:
+  se iba del caso a la decisión de una, sin dejar registrado qué se había encontrado.
+- **El final** es igual en los once: resolución → movimientos (`efectos.core.js`) → cierre
+  (`faltantesParaCerrar`).
+
+🔴 **EL ESCENARIO NO ES UN DATO PARA EL INFORME: ES LO QUE DETERMINA LA PLATA.** Tres casos no se
+pueden resolver mirando el caso:
+
+| Caso | Lo decide el escenario |
+|---|---|
+| `no_como_publicado` | El error es nuestro **sólo si la diferencia es objetiva** ⇒ ahí va el envío de ida |
+| `demora` | Es nuestra **sólo si quedó parada en preparación** ⇒ ahí va un cupón; si fue del transporte va el **reclamo al transportista** |
+| `arrepentimiento` | Si el pedido todavía no salió es una **cancelación**: no salió, no recibió nada, y **no hay producto en juego** |
+
+⇒ Por eso **el escenario es un parámetro obligatorio** de todo lo que decide plata o stock
+(`perfilDe`, `devuelveElEnvioDeIda`, `compensacionesDe`, `destinoDe`, `puedeVolverLaPrenda`,
+`ofreceRetencion`). Aunque valga `null`: un llamador que no lo pase estaría contestando con el
+default seguro **sin enterarse de que le falta el dato**.
+
+🔑 **El final puede quedar VACÍO, y eso no es un caso a medio resolver.** Una demora no genera
+ningún movimiento: la tercera pregunta física del perfil (`productoEnJuego`) contesta que no hay
+producto, y `decidir` deja de exigir un destino. Hasta el 25-ago-2026 lo exigía siempre, así que
+una demora **no se podía cerrar nunca**.
+
+⚠️ **El escenario se contesta al DECIDIR, no en el alta**: la pregunta se contesta con la evidencia
+delante (las fotos, las fechas del envío) y en el alta todavía no hay ninguna. El alta muestra cuál
+va a ser la pregunta, nada más.
+
+⚠️ **En la falla el escenario ES la gravedad** (`util`/`inutil`, las mismas claves de
+`GRAVEDAD_DEF`): eran el mismo dato y la gravedad se moría al cerrar el modal.
+
 ## Dónde vive
 
 `components/reclamos/` (`Reclamos.tsx` 44k · `ArmarCambio.tsx` 50k · `DecidirReclamo.tsx` 31k ·
 `ReclamoPublico.tsx`) · `components/postventa/` (Fallas, otra cosa: el ledger) ·
-`lib/reclamos/tipos.ts` (**1.4k líneas, leer por rango**) · `lib/reclamos/efectos.core.js` ·
-`lib/reclamos/mensajes.ts` · `lib/reclamos/cliente.ts`.
+`lib/reclamos/tipos.ts` (**1.4k líneas, leer por rango**) · `lib/reclamos/casos.core.js` ·
+`lib/reclamos/efectos.core.js` · `lib/reclamos/mensajes.ts` · `lib/reclamos/cliente.ts`.
 
 Handler `api/_reclamos.js` (entra por `api/postventa.js`) y el portal público `api/_reclamo.js`.
 La venta en Gestión Nube la crea `api/crear-venta.js`, **que corre en PROD también desde localhost**
 (los tokens de ventas viven ahí).
 
-Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efectos.sql`). Tests:
-`tests/reclamos.test.ts` (1.2k líneas), `tests/reclamos-mensajes.test.ts`, `tests/reclamo-publico.test.ts`.
+Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efectos.sql`,
+`sql/migrate-reclamos-escenario.sql`). Tests: `tests/reclamos.test.ts` (1.2k líneas),
+`tests/reclamos-escenarios.test.ts`, `tests/reclamos-mensajes.test.ts`, `tests/reclamo-publico.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -84,13 +123,16 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 
 ## Pendiente
 
-- 🔴 **`sql/migrate-reclamos-efectos.sql` está SIN CORRER.** El bloque 2 (la columna
-  `envio_nuevo_estado`) **va antes de deployar**: el código la escribe al decidir y sin la columna
-  falla el `update` entero. Va en BDI **y** en ZATTIA.
-- ▶️ **El rediseño en curso: los 8 motivos pasan a 11 casos** y el módulo se reorganiza como un
-  chasis de tres bandas — inicio común, **el escenario** (el nivel que hoy no existe: se va del
-  motivo a la decisión de una), final común. Entran producto ≠ a lo informado, excedente y demora;
-  cancelación es un escenario de arrepentimiento, no un caso.
+- ▶️ **El excedente todavía no puede partir el descuento en dos.** Está decidido: lo que salió mal
+  se descuenta con una venta técnica **siempre**, y va al cliente de Fallas si está fallado o a un
+  **cliente RECLAMO propio** si está sano, para no ensuciar el ledger de Fallas. ⛔ No se puede
+  construir hasta que **exista el cliente RECLAMO en Gestión Nube, uno por marca**. Mientras tanto
+  el destino usa `'falla'`, que ahí significa "sale del stock", no "está fallado".
+- ▶️ **La oferta del cupón no deja rastro.** El cupón es una **oferta**: puede no aceptarla y el
+  caso sigue hacia el cambio o la devolución. Hoy `retencion` es un booleano del perfil y no se
+  registra **qué se ofreció ni qué contestó**, así que no se sabe cuántas veces la retención
+  funciona — y sin eso negociar un cupón se vuelve una forma de pagar menos sin que nadie se entere.
+- ▶️ **Falta la bandeja de retornos** (ver abajo).
 - ▶️ **Falta la bandeja de retornos**: hoy `via_retorno`, `seguimiento_vuelta` y la alerta a los 15
   días viven adentro de cada fila, así que para saber qué estamos esperando hay que abrirlos de a
   uno. La ven Depósito **y** Local.

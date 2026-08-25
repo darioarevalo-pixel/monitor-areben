@@ -21,15 +21,16 @@ import {
 } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
 import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
-import { decidir } from '@/lib/reclamos/cliente'
+import { decidir, reclasificar } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
   destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, pideSeguimiento, puedeVolverLaPrenda, VIA_LABEL,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
+  casoDe, escenarioDe, productoEnJuego, reclasificaA,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
-  type Compensacion, type DestinoPrenda, type ReclamoRow, type ItemReclamo, type OrdenTN,
+  type Compensacion, type DestinoPrenda, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
 } from '@/lib/reclamos/tipos'
 
@@ -57,15 +58,43 @@ export function DecidirReclamo({
   // Estable entre renders: de estos ítems cuelgan tres useMemo.
   const items = useMemo(() => reclamo.items || [], [reclamo.items])
   const esFalla = reclamo.motivo === 'falla'
-  const hayPrendaQueVuelva = puedeVolverLaPrenda(reclamo.motivo)
+
+  /**
+   * **El escenario**: cuál de las respuestas cerradas del caso se encontró.
+   *
+   * Se contesta ACÁ y no en el alta porque la pregunta que decide se contesta **con la evidencia
+   * delante** —las fotos, las fechas del envío—, y en el alta todavía no hay ninguna. Lo que se
+   * carga al abrir es qué dijo el cliente; lo que se decide acá es qué pasó.
+   *
+   * 🔑 Y no es un dato de color: en la publicación, en la demora y en la cancelación **el escenario
+   * cambia el perfil**, o sea quién paga el envío y si hay producto en juego.
+   */
+  const [escenario, setEscenario] = useState<string | null>(reclamo.escenario ?? null)
+  const caso = casoDe(reclamo.motivo)
+  /** En una falla el escenario ES la gravedad: mismas dos claves, un solo dato. */
+  const gravedad = (esFalla ? escenario : null) as GravedadFalla | null
+
+  const hayPrendaQueVuelva = puedeVolverLaPrenda(reclamo.motivo, escenario)
   const nuncaSalio = !hayPrendaQueVuelva
+  /** Demora y cancelación: no hay producto que mover, y el final puede quedar vacío. */
+  const hayProducto = productoEnJuego(reclamo.motivo, escenario)
+  /** El escenario dice que en realidad es otro caso: se ofrece mudarlo, con su historia. */
+  const mudarA = reclasificaA(reclamo.motivo, escenario)
 
   /** Solo las salidas que tienen sentido para lo que pasó. */
   const opciones = useMemo(() => {
-    const permitidas = compensacionesDe(reclamo.motivo)
+    const permitidas = compensacionesDe(reclamo.motivo, escenario)
     return SALIDAS.filter((s) => permitidas.includes(s.key))
-  }, [reclamo.motivo])
-  const [compensacion, setCompensacion] = useState<Compensacion>(() => compensacionesDe(reclamo.motivo)[0] || 'plata_total')
+  }, [reclamo.motivo, escenario])
+  const [compensacionElegida, setCompensacion] = useState<Compensacion>(() => compensacionesDe(reclamo.motivo, reclamo.escenario)[0] || 'plata_total')
+  /**
+   * La salida se **deriva**, no se sincroniza con un effect: cambiar el escenario puede sacar del
+   * repertorio la que estaba elegida (una demora del transporte ya no admite cupón), y un effect
+   * que la corrija deja un render mostrando una salida que ya no vale.
+   */
+  const compensacion: Compensacion = opciones.some((s) => s.key === compensacionElegida)
+    ? compensacionElegida
+    : (opciones[0]?.key || 'ninguna')
   // Arranca con lo que ya se haya cargado en el alta, si es que se cargó.
   const [expectativa, setExpectativa] = useState<Expectativa | ''>(reclamo.expectativa ?? '')
   const [montoAcordado, setMontoAcordado] = useState<number | ''>('')
@@ -74,7 +103,7 @@ export function DecidirReclamo({
    * NUESTRO, o cuando el cliente no recibió nada. Dejarlo a criterio hacía que el mismo caso se
    * resolviera distinto según quién lo tocara.
    */
-  const envioDelMotivo = devuelveElEnvioDeIda(reclamo.motivo)
+  const envioDelMotivo = devuelveElEnvioDeIda(reclamo.motivo, escenario)
 
   /**
    * Devolución parcial o total, y quién lo elige.
@@ -103,8 +132,6 @@ export function DecidirReclamo({
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
   const [pvpFeria, setPvpFeria] = useState<number | ''>('')
   const [cupon, setCupon] = useState('')
-  /** Qué tan rota está: da el PVP de feria de arranque, que es lo que mueve la cuenta. */
-  const [gravedad, setGravedad] = useState<GravedadFalla | null>(null)
   /** Sólo en "pedido mal armado": lo que le llegó por error, cargado con las fotos delante. */
   const [recibidos, setRecibidos] = useState<ItemReclamo[]>(reclamo.items_correctos ?? [])
 
@@ -164,8 +191,11 @@ export function DecidirReclamo({
     [retorno, compensacion],
   )
 
-  /** Dónde termina el producto: es lo que después decide si la falla descuenta stock o no. */
-  const destino: DestinoPrenda = destinoDe(reclamo.motivo, retorno)
+  /**
+   * Dónde termina el producto: es lo que después decide si la falla descuenta stock o no.
+   * **Null cuando no hay producto en juego** (demora, cancelación): ahí no hay nada que decidir.
+   */
+  const destino: DestinoPrenda | null = destinoDe(reclamo.motivo, retorno, escenario)
 
   const costo = useMemo(
     () => costoDelCaso({
@@ -173,7 +203,7 @@ export function DecidirReclamo({
       envioVuelta: retorno ? Number(envioVuelta) || 0 : 0,
       envioReemplazo: compensacion === 'otra_unidad' ? Number(envioIda) || 0 : 0,
       items,
-      destino: retorno ? destino : 'falla',
+      destino: retorno ? (destino ?? 'falla') : 'falla',
     }),
     [monto.total, retorno, envioVuelta, envioIda, compensacion, items, destino],
   )
@@ -185,6 +215,7 @@ export function DecidirReclamo({
         store: marca,
         id: reclamo.id,
         destino_prenda: destino,
+        escenario,
         compensacion,
         monto_producto: monto.producto,
         monto_acordado: compensacion === 'plata_parcial' ? Number(montoAcordado) || 0 : null,
@@ -214,6 +245,23 @@ export function DecidirReclamo({
     }
   }
 
+  /**
+   * Mudarlo al caso que corresponde. **Conserva número, fotos, relato e historial**: lo único que
+   * cambia es el caso y el escenario, que ya no vale porque es de otra lista.
+   */
+  async function mudar(a: MotivoReclamo) {
+    setGuardando(true)
+    try {
+      await reclasificar(marca, reclamo.id, a, `desde ${MOTIVO_LABEL[reclamo.motivo]} — ${escenarioDe(reclamo.motivo, escenario)?.label || ''}`)
+      toast.ok(`Movido a ${MOTIVO_LABEL[a]}. El reclamo conserva su número y sus fotos.`)
+      onListo()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   /** Hasta cuánto se puede descontar para que se lo quede, y cuánto conviene ofrecer primero. */
   const descuento = useMemo(
     () => cuentaDescuento({ items: itemsConFeria, fallada: esFalla, envioVuelta: Number(envioVuelta) || 0 }),
@@ -228,7 +276,7 @@ export function DecidirReclamo({
    * si nunca salió, no hay nada que quedarse.
    */
   const hayFotos = !!(reclamo.fotos || []).length
-  const mostrarRetencion = ofreceRetencion(reclamo.motivo) && hayFotos && compensacion !== 'plata_parcial'
+  const mostrarRetencion = ofreceRetencion(reclamo.motivo, escenario) && hayFotos && compensacion !== 'plata_parcial'
 
   return (
     <Modal abierto onCerrar={onClose} titulo={`Decidir ${numeroReclamo(reclamo.id)}`} ancho="ancho">
@@ -256,9 +304,51 @@ export function DecidirReclamo({
         </Notice>
       )}
 
+      {/* ── La pregunta que decide ──
+          El centro del caso. Es UNA pregunta con una lista cerrada, y va primero porque de la
+          respuesta cuelga todo lo de abajo: qué salidas se ofrecen, quién paga el envío, y si hay
+          producto que mover. En la falla la pregunta la hacen los botones de gravedad, más abajo. */}
+      {caso && !esFalla && (
+        <Field label={caso.pregunta} hint={caso.detalle} style={{ marginBottom: space[3] }}>
+          <Select
+            value={escenario ?? ''}
+            onChange={(e) => setEscenario(e.target.value || null)}
+          >
+            <option value="">Todavía no lo miré</option>
+            {caso.escenarios.map((e) => (
+              <option key={e.clave} value={e.clave}>{e.label}</option>
+            ))}
+          </Select>
+        </Field>
+      )}
+
+      {/* El escenario dice que en realidad es otro caso. ⛔ No es un consejo al costado: es un
+          botón, y el reclamo se muda conservando número, fotos, relato e historial. */}
+      {mudarA && (
+        <Notice tone="warning" style={{ marginBottom: space[3] }}>
+          Esto ya no es <b>{MOTIVO_LABEL[reclamo.motivo]}</b>: por lo que se encontró, corresponde{' '}
+          <b>{MOTIVO_LABEL[mudarA]}</b>.{' '}
+          <Button
+            size="sm" variant="outline" tone="brand" disabled={guardando}
+            onClick={() => void mudar(mudarA)}
+          >Mudarlo a {MOTIVO_LABEL[mudarA]}</Button>
+        </Notice>
+      )}
+
+      {/* La demora y la cancelación no tienen producto que mover, y eso NO es un caso a medio
+          resolver: es un final vacío, que es legítimo. Decirlo evita que alguien invente un
+          destino con tal de poder cerrar. */}
+      {!hayProducto && (
+        <Notice tone="neutral" style={{ marginBottom: space[3] }}>
+          Acá <b>no hay producto en juego</b>: no vuelve nada, no se anula ninguna venta y no hay
+          stock que corregir. Lo único que se decide es qué recibe el cliente.
+        </Notice>
+      )}
+
       {/* Qué quiere el cliente. Se puede completar ACÁ y no sólo al abrir el reclamo: en la
           mayoría de los casos se sabe recién después de escribirle, así que exigirlo en el alta
           era pedir que alguien invente el dato. Es lo que justifica la decisión de abajo. */}
+      {!!expectativasDe(reclamo.motivo).length && (
       <Field
         label={tituloExpectativa(reclamo.motivo)}
         hint="lo que pidió el cliente — sirve para ver cuántas veces resolvemos distinto"
@@ -271,6 +361,7 @@ export function DecidirReclamo({
           ))}
         </Select>
       </Field>
+      )}
 
       {/* ¿Hasta dónde llega la devolución? Sólo aparece si hay algo que partir: con un solo
           producto, o si falta todo, no hay parcial que valga.
@@ -322,7 +413,9 @@ export function DecidirReclamo({
       )}
 
       {/* La gravedad es lo que da el punto de partida del PVP de feria, que es lo único que se
-          recupera de un producto fallado — y hasta ahora se tipeaba sin ninguna referencia. */}
+          recupera de un producto fallado — y hasta ahora se tipeaba sin ninguna referencia.
+          🔑 **Es el escenario de la falla**: las dos claves son las mismas (`util`/`inutil`), así
+          que se guarda en la fila en vez de morirse cuando se cierra el modal. */}
       {esFalla && (
         <Field label="¿Qué tan rota está?" hint="da el PVP de feria de arranque; se puede ajustar" style={{ marginBottom: space[3] }}>
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
@@ -332,7 +425,7 @@ export function DecidirReclamo({
                 variant={gravedad === g ? 'solid' : 'outline'}
                 tone={g === 'inutil' ? 'danger' : 'brand'}
                 title={GRAVEDAD_DEF[g].ayuda}
-                onClick={() => { setGravedad(g); setPvpFeria(pvpFeriaSugerido(items, g)) }}
+                onClick={() => { setEscenario(g); setPvpFeria(pvpFeriaSugerido(items, g)) }}
               >{GRAVEDAD_DEF[g].label}</Button>
             ))}
             {gravedad && <span style={{ fontSize: font.xs, color: color.mut, alignSelf: 'center' }}>{GRAVEDAD_DEF[gravedad].ayuda}</span>}

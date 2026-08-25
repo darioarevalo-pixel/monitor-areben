@@ -17,6 +17,19 @@ import {
   pendientesDe as pendientesDeJs,
   saleUnEnvio as saleUnEnvioJs,
 } from './efectos.core.js'
+import {
+  CASOS as CASOS_JS,
+  PERFIL_MOTIVO as PERFIL_MOTIVO_JS,
+  casoDe as casoDeJs,
+  escenarioDe as escenarioDeJs,
+  escenariosDe as escenariosDeJs,
+  esEscenarioDe as esEscenarioDeJs,
+  esSoloSeguimiento as esSoloSeguimientoJs,
+  perfilDe as perfilDeJs,
+  pideReclamoAlTransportista as pideReclamoAlTransportistaJs,
+  productoEnJuego as productoEnJuegoJs,
+  reclasificaA as reclasificaAJs,
+} from './casos.core.js'
 
 // ── Los ejes ────────────────────────────────────────────────────────────────────
 
@@ -40,9 +53,22 @@ export type MotivoReclamo =
    * dentro de `no_esperaba`, ese dato no existe.
    */
   | 'talle'
+  /**
+   * Lo que recibió **no coincide con lo que publicamos**. Salió de adentro de `no_esperaba` el
+   * 25-ago-2026, y no es un matiz: son dos cosas distintas y una es culpa nuestra. Mezclados, el
+   * motivo no medía nada limpio — adentro convivían "no me gustó" y "la ficha está mal".
+   */
+  | 'no_como_publicado'
   | 'falla'
   | 'faltante'
   | 'mal_armado'
+  /** Le llegó algo **de más**. El único caso que toca DOS ventas. */
+  | 'excedente'
+  /**
+   * Llegó tarde. **No hay producto en juego**: no vuelve nada, no se mueve stock, y la única
+   * pregunta es de quién fue la demora — la contestan las fechas, no el cliente.
+   */
+  | 'demora'
   | 'no_llego'
   | 'sin_stock'
   | 'no_era_lo_esperado' // histórico: quedó en filas viejas, hoy es `no_esperaba`
@@ -153,9 +179,12 @@ export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
   arrepentimiento: 'Arrepentimiento',
   no_esperaba: 'No era lo que esperaba',
   talle: 'No le quedó el talle',
+  no_como_publicado: 'No es como en la publicación',
   falla: 'Falla',
   faltante: 'Faltante de producto',
   mal_armado: 'Pedido mal armado',
+  excedente: 'Le llegó de más',
+  demora: 'Demora en la entrega',
   no_llego: 'No le llegó nunca',
   sin_stock: 'No tenemos stock',
   no_era_lo_esperado: 'No era lo que esperaba', // histórico
@@ -164,9 +193,17 @@ export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
   otro: 'Sin motivo',
 }
 
-/** Los que se ofrecen al cargar, en el orden en que pasan de verdad. */
+/**
+ * Los que se ofrecen al cargar, en el orden en que pasan de verdad. **Once**, desde el 25-ago-2026.
+ *
+ * ⚠️ La cancelación NO está y no falta: es el escenario "todavía se puede frenar" de
+ * `arrepentimiento`. Lo único que la separa es el estado del pedido, y eso lo contesta el sistema
+ * — hacerla un motivo aparte obligaría a alguien a elegir entre dos casillas que significan lo
+ * mismo en dos momentos distintos.
+ */
 export const MOTIVOS_VIGENTES: MotivoReclamo[] = [
-  'talle', 'arrepentimiento', 'no_esperaba', 'falla', 'faltante', 'mal_armado', 'no_llego', 'sin_stock',
+  'talle', 'arrepentimiento', 'no_esperaba', 'no_como_publicado', 'falla', 'faltante',
+  'mal_armado', 'excedente', 'demora', 'no_llego', 'sin_stock',
 ]
 
 /**
@@ -195,6 +232,11 @@ export const MOTIVOS_CAMBIO: MotivoReclamo[] = ['talle', 'arrepentimiento', 'no_
  */
 export const NUNCA_SALIO: MotivoReclamo[] = ['faltante', 'sin_stock']
 
+/**
+ * ⚠️ **`NUNCA_SALIO` es la lista del CASO y no alcanza para decidir**: en la cancelación el pedido
+ * tampoco salió, y eso lo dice el escenario. Lo que manda es `perfilDe(motivo, escenario).salio`.
+ */
+
 // ── El perfil de cada motivo ────────────────────────────────────────────────────
 //
 // Todo lo que cambia de un caso a otro sale de acá, y sale de **dos preguntas físicas**: ¿el
@@ -220,6 +262,15 @@ export type PerfilMotivo = {
   salio: boolean
   /** ¿La unidad existe físicamente? Separa `faltante` (sí, reingresar) de `sin_stock` (no, dar de baja). */
   unidadExiste: boolean
+  /**
+   * ¿Hay un producto en juego?
+   *
+   * La tercera pregunta física, y la que deja que el final quede **vacío**: en una demora y en una
+   * cancelación no hay nada que devolver, reingresar ni dar de baja, así que no hay destino de
+   * producto que elegir. Hasta el 25-ago-2026 `decidir` exigía uno siempre y una demora no se
+   * podía cerrar nunca.
+   */
+  productoEnJuego: boolean
   /** ¿El cliente llegó a recibir algo? Junto con `errorPropio` decide si se le devuelve el envío. */
   recibioAlgo: boolean
   /**
@@ -241,71 +292,104 @@ export type PerfilMotivo = {
 }
 
 /**
- * ⚠️ `talle`, `arrepentimiento` y `no_esperaba` son **el mismo flujo con tres etiquetas**. Se
- * mantienen separados a propósito: cada uno mide algo distinto y es la única señal de por qué
- * vuelven las cosas — el talle mide la guía de talles, "no era lo que esperaba" mide la ficha de
- * producto, y el arrepentimiento no mide nada nuestro. Fusionarlos ahorraría una línea de código y
- * perdería el dato.
+ * El perfil de cada caso. **La tabla vive en `lib/reclamos/casos.core.js`**, en JS plano, porque la
+ * necesita `api/_reclamos.js` para saber si la decisión puede quedar vacía — y los handlers de
+ * `api/*.js` no pueden importar TypeScript. Mismo arreglo que `permisos.core.js` y
+ * `efectos.core.js`, y por la misma razón: cuando la regla se copia, las copias se despegan.
+ *
+ * ⛔ **No leerlo directo para decidir nada**: el perfil de un caso puede cambiar según el
+ * escenario, y eso lo resuelve `perfilDe(motivo, escenario)`. Esta constante es la fila base.
  */
-export const PERFIL_MOTIVO: Record<MotivoReclamo, PerfilMotivo> = {
-  talle: {
-    ayuda: 'Llegó lo que pidió, en buen estado, pero no le entra. Es lo que mide si la guía de talles está bien.',
-    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
-    fotos: 'si_quiere_plata', expectativas: ['otro_producto', 'plata'], retencion: true,
-  },
-  arrepentimiento: {
-    ayuda: 'Se arrepintió, sin más. Llegó bien y es lo que pidió: no mide nada nuestro.',
-    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
-    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
-  },
-  no_esperaba: {
-    ayuda: 'Llegó lo que pidió pero no era como se lo imaginaba. Es lo que mide si la ficha de producto (fotos, descripción, medidas) está engañando.',
-    // ⚠️ Hoy este motivo mezcla DOS casos: "no me gustó" (no es nuestro) y "la publicación está mal"
-    // (sí lo es). Va en `false` porque el grueso es el primero, y devolver el envío en cada "no me
-    // gustó" es regalar plata. Cuando se separe en dos motivos, el segundo va en `true`.
-    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
-    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
-  },
-  falla: {
-    ayuda: 'Llegó con un defecto: mancha, costura, rotura. Error nuestro o del proveedor. Las fotos son la prueba y las decidimos nosotros.',
-    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: true, ventaCompleta: false, decideCliente: false,
-    fotos: 'siempre', expectativas: ['mismo_producto', 'plata', 'otro_producto'], retencion: true,
-  },
-  faltante: {
-    ayuda: 'El paquete llegó pero faltaba un producto adentro. La unidad sigue en el depósito: no salió. Distinto de "pedido mal armado", donde llegó otra cosa en su lugar.',
-    salio: false, unidadExiste: true, recibioAlgo: true, errorPropio: true, ventaCompleta: false, decideCliente: false,
-    fotos: 'de_lo_recibido', expectativas: ['completar', 'plata'], retencion: false,
-  },
-  mal_armado: {
-    ayuda: 'Le llegó un producto distinto al que compró. Hay que corregir dos stocks: el que pidió no salió y el que se mandó por error salió sin descontarse.',
-    salio: false, unidadExiste: true, recibioAlgo: true, errorPropio: true, ventaCompleta: false, decideCliente: false,
-    fotos: 'siempre', expectativas: ['completar', 'plata'], retencion: false,
-  },
-  no_llego: {
-    ayuda: 'El pedido nunca llegó a destino: se perdió en el transporte. Va sobre la venta completa y en paralelo se le reclama al transportista, que es plata recuperable.',
-    // 🔑 El error es del TRANSPORTISTA, no nuestro — y aun así se le devuelve el envío, porque no
-    // recibió nada. Son dos razones distintas para el mismo resultado, y por eso son dos preguntas.
-    salio: true, unidadExiste: false, recibioAlgo: false, errorPropio: false, ventaCompleta: true, decideCliente: true,
-    fotos: 'nunca', expectativas: ['completar', 'plata'], retencion: false,
-  },
-  sin_stock: {
-    ayuda: 'Entró la venta pero el producto no existe. El cliente no recibió nada ni está enterado: se le avisa y ELIGE ÉL entre cambiarlo o que le devolvamos la plata.',
-    salio: false, unidadExiste: false, recibioAlgo: false, errorPropio: true, ventaCompleta: true, decideCliente: true,
-    fotos: 'nunca', expectativas: ['otro_producto', 'plata'], retencion: false,
-  },
-  // Históricos: quedan para que una fila vieja no reviente. Se comportan como su equivalente.
-  no_era_lo_esperado: {
-    ayuda: 'Motivo histórico. Usá "No era lo que esperaba".',
-    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: true,
-    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
-  },
-  otro: {
-    ayuda: 'Motivo histórico, sin flujo propio. Elegí el que corresponda.',
-    // Catch-all, y también lo que se guarda en un cambio sin motivo. No se puede afirmar que el
-    // error fue nuestro, así que no se regala el envío.
-    salio: true, unidadExiste: true, recibioAlgo: true, errorPropio: false, ventaCompleta: false, decideCliente: false,
-    fotos: 'si_quiere_plata', expectativas: ['plata', 'otro_producto'], retencion: true,
-  },
+export const PERFIL_MOTIVO = PERFIL_MOTIVO_JS as Record<MotivoReclamo, PerfilMotivo>
+
+// ── El escenario: el nivel del medio ────────────────────────────────────────────
+
+/** Quién contesta la pregunta que decide. `sistema` = las fechas y los estados del envío. */
+export type Contesta = 'nosotros' | 'cliente' | 'sistema'
+
+/**
+ * Un escenario del caso. La lista es **cerrada**: es lo que separa un dato de un campo libre.
+ *
+ * `perfil` es lo único que puede mover, y sólo las preguntas físicas — ahí está la plata.
+ */
+export type EscenarioCaso = {
+  clave: string
+  label: string
+  perfil?: Partial<Pick<PerfilMotivo, 'salio' | 'unidadExiste' | 'recibioAlgo' | 'errorPropio' | 'productoEnJuego'>>
+  /** El caso que corresponde de verdad. Se muda conservando número, fotos e historia. */
+  reclasificaA?: MotivoReclamo
+  /** Todavía no hay caso que decidir: hay algo que mirar. Sólo en `no_llego`. */
+  soloSeguimiento?: boolean
+}
+
+/** La ficha del centro de un caso: una pregunta, quién la contesta, y su lista cerrada. */
+export type CasoCentro = {
+  pregunta: string
+  contesta: Contesta
+  detalle: string
+  escenarios: EscenarioCaso[]
+}
+
+export const CASOS = CASOS_JS as Partial<Record<MotivoReclamo, CasoCentro>>
+
+/** La ficha del centro, o null si el caso no tiene escenarios (los históricos). */
+export function casoDe(motivo: MotivoReclamo): CasoCentro | null {
+  return casoDeJs(motivo) as CasoCentro | null
+}
+
+/** Los escenarios de un caso, en el orden en que se preguntan. */
+export function escenariosDe(motivo: MotivoReclamo): EscenarioCaso[] {
+  return escenariosDeJs(motivo) as EscenarioCaso[]
+}
+
+/** Un escenario concreto. Uno de OTRO caso no cuenta: la lista es cerrada. */
+export function escenarioDe(motivo: MotivoReclamo, escenario: string | null | undefined): EscenarioCaso | null {
+  return escenarioDeJs(motivo, escenario) as EscenarioCaso | null
+}
+
+/** ¿Este escenario pertenece a este caso? Es lo que valida el handler antes de guardar. */
+export function esEscenarioDe(motivo: MotivoReclamo, escenario: string | null | undefined): boolean {
+  return esEscenarioDeJs(motivo, escenario)
+}
+
+/**
+ * **El perfil con el escenario aplicado.** Todo lo que decide plata o stock sale de acá.
+ *
+ * El escenario es un parámetro **obligatorio aunque valga `null`**, y eso no es ceremonia: en
+ * `no_como_publicado`, en `demora` y en la cancelación el perfil lo fija el escenario, así que un
+ * llamador que no lo pase estaría contestando con el default seguro **sin enterarse de que le
+ * falta el dato**. Con el parámetro obligatorio, agregar una pantalla obliga a conseguirlo.
+ */
+export function perfilDe(motivo: MotivoReclamo, escenario: string | null | undefined): PerfilMotivo {
+  return perfilDeJs(motivo, escenario) as PerfilMotivo
+}
+
+/**
+ * ¿Hay un producto en juego? La **tercera pregunta física**, al lado de "¿salió?" y "¿existe?".
+ *
+ * En una demora y en una cancelación es que NO, y con eso el final puede quedar vacío sin ser un
+ * error: no hay destino de producto que elegir.
+ */
+export function productoEnJuego(motivo: MotivoReclamo, escenario: string | null | undefined): boolean {
+  return productoEnJuegoJs(motivo, escenario)
+}
+
+/** El caso al que hay que mudarlo, si el escenario dice que en realidad es otro. */
+export function reclasificaA(motivo: MotivoReclamo, escenario: string | null | undefined): MotivoReclamo | null {
+  return reclasificaAJs(motivo, escenario) as MotivoReclamo | null
+}
+
+/** ¿El escenario dice que todavía es seguimiento y no un caso? Sólo en `no_llego`. */
+export function esSoloSeguimiento(motivo: MotivoReclamo, escenario: string | null | undefined): boolean {
+  return esSoloSeguimientoJs(motivo, escenario)
+}
+
+/**
+ * ¿Hay que presentarle un reclamo al transportista? Es plata recuperable **nuestra** y corre en
+ * paralelo a todo lo demás: `no_llego` siempre, y `demora` sólo si fue del transporte.
+ */
+export function pideReclamoAlTransportista(motivo: MotivoReclamo, escenario: string | null | undefined): boolean {
+  return pideReclamoAlTransportistaJs(motivo, escenario)
 }
 
 /**
@@ -361,8 +445,8 @@ export function sobreLaVentaCompleta(m: MotivoReclamo): boolean {
  * depósito y si se devuelve la plata hay que **reingresarlo** en GN; en `sin_stock` no existe y
  * hay que **darlo de baja**. Los dos "nunca salieron" y el movimiento es opuesto.
  */
-export function hayUnidadFisica(m: MotivoReclamo): boolean {
-  return PERFIL_MOTIVO[m].unidadExiste
+export function hayUnidadFisica(m: MotivoReclamo, escenario: string | null | undefined): boolean {
+  return perfilDe(m, escenario).unidadExiste
 }
 
 /**
@@ -385,8 +469,8 @@ export function hayUnidadFisica(m: MotivoReclamo): boolean {
  * devolvían **sin** el envío. Antes de eso era un checkbox libre, y el mismo caso se resolvía
  * distinto según quién lo tocara.
  */
-export function devuelveElEnvioDeIda(m: MotivoReclamo): boolean {
-  const p = PERFIL_MOTIVO[m]
+export function devuelveElEnvioDeIda(m: MotivoReclamo, escenario: string | null | undefined): boolean {
+  const p = perfilDe(m, escenario)
   return p.errorPropio || !p.recibioAlgo
 }
 
@@ -397,8 +481,10 @@ export function devuelveElEnvioDeIda(m: MotivoReclamo): boolean {
  * es lo que perdemos porque vuelva — la logística si está sano, la depreciación más el envío si
  * está fallado.
  */
-export function ofreceRetencion(m: MotivoReclamo): boolean {
-  return PERFIL_MOTIVO[m].retencion
+export function ofreceRetencion(m: MotivoReclamo, escenario: string | null | undefined): boolean {
+  // La retención sólo tiene sentido si el producto está en su poder: en una demora o en una
+  // cancelación no hay nada que quedarse.
+  return PERFIL_MOTIVO[m].retencion && productoEnJuego(m, escenario)
 }
 
 /** ¿Decide el cliente en vez de nosotros? Hoy sólo en `sin_stock`, que es el caso raro. */
@@ -533,6 +619,10 @@ export function resumenDeLoDecidido(d: ReclamoRow): LineaResumen[] {
   const money = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
   l.push({ que: 'Motivo', valor: MOTIVO_LABEL[d.motivo] + (d.motivo_detalle ? ` — ${d.motivo_detalle}` : '') })
+  // El escenario va JUNTO al motivo y no al final: es la mitad de lo que se decidió, y es lo que
+  // explica por qué en dos reclamos del mismo caso salió plata distinta.
+  const esc = escenarioDe(d.motivo, d.escenario)
+  if (esc) l.push({ que: 'Qué se encontró', valor: esc.label })
   if (d.expectativa) l.push({ que: tituloExpectativa(d.motivo).replace(/[¿?]/g, ''), valor: expectativaLabel(d.expectativa, d.motivo) })
 
   if (!d.compensacion) {
@@ -822,13 +912,22 @@ export function esCambio(d: Pick<ReclamoRow, 'compensacion'>): boolean {
  * igual" en un arrepentimiento, o "le devolvemos una parte" en un pedido mal armado, invita a
  * resolver mal. Cada motivo tiene su repertorio.
  */
-export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
+export function compensacionesDe(motivo: MotivoReclamo, escenario: string | null | undefined): Compensacion[] {
+  // 🔑 La cancelación no es "un arrepentimiento más": el pedido no salió, así que no hay cambio
+  // que armar contra un producto que el cliente no tiene. Vuelve la plata (con el envío, que
+  // nunca prestó servicio) o no vuelve nada.
+  if (motivo === 'arrepentimiento' && !productoEnJuego(motivo, escenario)) {
+    return ['plata_total', 'cupon', 'ninguna']
+  }
   switch (motivo) {
     // Se arrepintió o no era lo que esperaba: el producto está bien, lo que se discute es la plata.
     // El descuento parcial existe para retenerlo; mandarle otra igual no tendría sentido.
     case 'arrepentimiento':
     case 'no_esperaba':
     case 'no_era_lo_esperado':
+    // La publicación mal: el producto está sano, lo que falló es lo que dijimos de él. Mismas
+    // salidas que la expectativa; lo que cambia es quién paga el envío, y eso lo dice el perfil.
+    case 'no_como_publicado':
       return ['otro_producto', 'plata_total', 'plata_parcial', 'cupon']
     // El talle: el producto está sana y casi siempre se lleva otra. Por eso el cambio va primero —
     // es la salida por defecto, no una más de la lista.
@@ -854,21 +953,48 @@ export function compensacionesDe(motivo: MotivoReclamo): Compensacion[] {
     // Se perdió en el camino: se repone o se devuelve. El producto no está en ningún lado.
     case 'no_llego':
       return ['reenvio', 'plata_total']
+    // Le llegó de más: **no hay nada que compensarle** —no pagó ese producto— y lo único que se
+    // decide es si la unidad vuelve. Por eso la única salida es 'ninguna': el final del excedente
+    // es de stock, no de plata.
+    case 'excedente':
+      return ['ninguna']
+    // Demora: no se compensa, salvo que haya sido nuestra — y ahí es un cupón a compra futura.
+    // El servicio de logística nacional no depende nuestro.
+    case 'demora':
+      return perfilDe(motivo, escenario).errorPropio ? ['cupon', 'ninguna'] : ['ninguna']
     default:
       return ['plata_total', 'plata_parcial', 'otra_unidad', 'reenvio', 'cupon', 'ninguna']
   }
 }
 
-/** ¿Hay un producto que pueda volver? En los tres casos donde no, media pantalla sobra. */
-export function puedeVolverLaPrenda(motivo: MotivoReclamo): boolean {
-  return !NUNCA_SALIO.includes(motivo) && motivo !== 'no_llego'
+/**
+ * ¿Hay un producto que pueda volver? En los casos donde no, media pantalla sobra.
+ *
+ * Sale del perfil **con el escenario aplicado**, no de una lista: en una cancelación el pedido no
+ * salió y en una demora no hay producto en juego, y las dos son escenarios, no motivos.
+ */
+export function puedeVolverLaPrenda(motivo: MotivoReclamo, escenario: string | null | undefined): boolean {
+  const p = perfilDe(motivo, escenario)
+  return p.salio && p.productoEnJuego && motivo !== 'no_llego'
 }
 
 /** El destino de el producto queda determinado por el motivo, salvo en la falla. */
-export function destinoDe(motivo: MotivoReclamo, vuelve: boolean): DestinoPrenda {
-  if (NUNCA_SALIO.includes(motivo)) return 'no_salio'
+export function destinoDe(motivo: MotivoReclamo, vuelve: boolean, escenario: string | null | undefined): DestinoPrenda | null {
+  // 🔑 Devuelve `null` cuando no hay producto en juego (demora), y eso NO es un caso sin resolver:
+  // es que no hay nada que decidir. El destino nulo es lo que deja cerrar una demora.
+  if (!productoEnJuego(motivo, escenario)) return null
+  // ⚠️ Sale del PERFIL y no de `NUNCA_SALIO` a propósito, aunque hoy las dos formas den lo mismo:
+  // el único escenario que mueve `salio` es la cancelación, y esa ya salió por el `return null` de
+  // arriba. O sea que **el mutante que lo vuelve a la lista de motivos sobrevive** — y se deja así
+  // igual, porque el día que un escenario mueva `salio` sin apagar el producto, la lista contesta
+  // mal y nadie lo va a ver.
+  if (!perfilDe(motivo, escenario).salio) return 'no_salio'
   if (motivo === 'no_llego') return 'perdida'
   if (motivo === 'falla') return 'falla'
+  // ⚠️ En el excedente `'falla'` NO significa que esté fallado: significa que la unidad sale del
+  // stock con una venta técnica porque el cliente se la queda. La partición sano → cliente RECLAMO
+  // / fallado → cliente FALLA está decidida pero **todavía no se puede construir**: falta que
+  // exista el cliente RECLAMO en Gestión Nube, uno por marca.
   return vuelve ? 'stock' : 'falla'
 }
 
@@ -1041,6 +1167,14 @@ export type ReclamoRow = {
   token?: string | null
   token_vence?: string | null
   motivo: MotivoReclamo
+  /**
+   * **El escenario**: cuál de las respuestas cerradas del caso se encontró. Es el nivel del medio
+   * del chasis, y en tres casos **determina la plata** (ver `lib/reclamos/casos.core.js`).
+   *
+   * Null en las filas anteriores al 25-ago-2026 y en las que todavía no se miró: el perfil cae
+   * entonces en el default del caso, que es siempre el que NO regala plata.
+   */
+  escenario?: string | null
   motivo_detalle?: string | null
   relato_cliente?: string | null
   fotos?: FotoReclamo[]
@@ -1307,7 +1441,12 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   // Gestión Nube · devolver la plata" desde el minuto cero: pendientes inventados, que es la forma
   // más rápida de que la gente aprenda a no mirar la columna.
   if (!estaDecidido(d) && d.estado !== 'anulado') {
-    faltan.push('decidir qué se hace')
+    // 🔑 Hay un escenario en que todavía NO hay nada que decidir: el pedido sigue viajando. Decir
+    // "decidir qué se hace" ahí es pedir que alguien resuelva un caso que todavía no existe —
+    // hasta el 25-ago-2026 un `no_llego` se daba por perdido desde el minuto cero.
+    faltan.push(esSoloSeguimiento(d.motivo, d.escenario)
+      ? 'seguir el envío: el caso se abre cuando se dé por extraviado'
+      : 'decidir qué se hace')
     // El reclamo al transportista corre en paralelo y no espera a nadie: es plata recuperable y si
     // el reclamo se cierra sin presentarlo, se perdió.
     if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')

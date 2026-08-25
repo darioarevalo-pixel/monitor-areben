@@ -166,7 +166,14 @@ export async function crearReclamo(payload: CrearReclamo): Promise<{ id: number;
 export type Decision = {
   store: Marca
   id: number
-  destino_prenda: DestinoPrenda
+  /**
+   * **Null cuando no hay producto en juego** (una demora, una cancelación). No es un dato que
+   * falta: es que no hay nada que decidir sobre un producto, y el servidor sólo lo exige cuando el
+   * caso y su escenario dicen que sí lo hay.
+   */
+  destino_prenda: DestinoPrenda | null
+  /** Cuál de las respuestas cerradas del caso se encontró. En tres casos decide la plata. */
+  escenario?: string | null
   compensacion: Compensacion
   monto_producto?: number | null
   monto_acordado?: number | null
@@ -207,6 +214,18 @@ export type Decision = {
 export async function decidir(payload: Decision): Promise<EstadoReclamo> {
   const d = await postear({ action: 'decidir', ...payload })
   return d.estado as EstadoReclamo
+}
+
+/**
+ * **Muda el reclamo a otro caso, conservando la historia.**
+ *
+ * Es la salida de escape del centro: cinco casos terminan en "si pasa X, en realidad es otro caso"
+ * —una disconformidad que resulta ser una publicación mal hecha, un "no llegó" que finalmente
+ * llegó tarde—. El `.docx` de casos lo decía como un consejo al costado, y así no lo hace nadie:
+ * el número, las fotos, el relato y el historial se pierden si hay que abrir otro reclamo.
+ */
+export async function reclasificar(store: Marca, id: number, motivo: MotivoReclamo, nota?: string | null): Promise<void> {
+  await postear({ action: 'reclasificar', store, id, motivo, nota })
 }
 
 /** Marca la plata como devuelta. Solo administración. */

@@ -29,6 +29,7 @@ const sql = [
   'sql/migrate-reclamos-4.sql',
   'sql/migrate-reclamos-5.sql',
   'sql/migrate-reclamos-efectos.sql',
+  'sql/migrate-reclamos-escenario.sql',
 ].map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
 // Parse robusto (la contraseña puede tener caracteres especiales sin encodear).
@@ -72,8 +73,8 @@ for (const [nombre, url] of targets) {
     // Las columnas que la última migración agregó: si falta una, el handler falla al decidir y el
     // error recién se ve con una persona intentando resolver un reclamo.
     const c = await client.query(`select column_name from information_schema.columns
-      where table_name = 'devoluciones' and column_name in ('envio_nuevo_estado')`)
-    const faltan = ['envio_nuevo_estado'].filter((k) => !c.rows.some((x) => x.column_name === k))
+      where table_name = 'devoluciones' and column_name in ('envio_nuevo_estado', 'escenario')`)
+    const faltan = ['envio_nuevo_estado', 'escenario'].filter((k) => !c.rows.some((x) => x.column_name === k))
     console.log(`✓ ${nombre} (${cfg.host}): devoluciones lista — ${r.rows[0].n} filas, ${i.rows[0].n} índices`
       + (faltan.length ? `  ⚠️ FALTAN COLUMNAS: ${faltan.join(', ')}` : '  · columnas nuevas OK'))
   } catch (e) {
