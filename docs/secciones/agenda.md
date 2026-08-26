@@ -257,6 +257,37 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen
   (`manualId`). ⇒ ⛔ eso no se construye: **se carga**.
+- 🆕 🔴 🔑 **EL MES CUENTA, LA SEMANA NOMBRA** (26-ago-2026, `components/agenda/GrillaAgenda.tsx`).
+  Bruno: *«la vista de calendario se ve muy cargada y monótona»*, y preguntado qué molesta:
+  **demasiadas filas por día**, **todo se ve igual** y *«serviría vista semanal también»*.
+  - **Son el mismo defecto.** Una rutina de todos los martes ocupaba cuatro cuadraditos repitiendo
+    el mismo título: no aporta información y encima se come los tres renglones de la celda,
+    tapando lo único que sí había que mirar.
+  - **`resumirDia()` parte el día** en lo que se nombra y lo que se cuenta. 🔴 **El corte no es «se
+    repite»: es cuántas veces habla en la vista** (`esRepetitiva`) — `diaria`, `semanal` y `rango`
+    caen cuatro veces o más; `mensual` cae **una sola** y colapsarla escondería el único día en que
+    existe.
+  - 🔴 **Las promos no colapsan nunca**, aunque sean lo más repetitivo que hay: la pestaña existe
+    para contestar *«¿cuándo cae la próxima del Nación?»*, y eso se contesta viendo los cuatro
+    martes pintados. Los avisos tampoco: son pocos, fechados y ya tienen su ámbar.
+  - 🔴 **El contador no puede inventar un rojo.** «3 rutinas · 1 sin hacer» en un martes **futuro**
+    es una alarma que nadie puede apagar. Los días que no pasaron dicen sólo cuántas son; ⛔ y
+    **nunca** en tono `danger`: el informe de deuda es Cumplimiento.
+  - ⚠️ **Colapsa desde dos**: con una sola, el contador esconde el título sin ahorrar un renglón.
+  - **La Semana no colapsa**: la celda es alta y entra todo. Sale de `entradasDeRango()`, **el
+    mismo camino que el Mes** —que quedó como envoltorio con los bordes puestos—, porque dos
+    caminos paralelos es exactamente cómo la grilla y lo que el local ve empiezan a discrepar.
+  - ⛔ **No se inventó un color por persona.** En el Mes todo lo que se ve es ya `paraMi`, así que
+    para quien no es admin el eje «responsable» tiene un solo valor; y para el admin es
+    sistemáticamente incompleto, porque `{tipo:'personas'}` es el destino que no recibe. El
+    responsable entra en el **detalle** del día, con `rotuloDestinoCorto`. Lo que distingue en la
+    grilla es el **peso visual** con los tokens que ya hay, y los días pasados **apagados**.
+  - **La vista vive en la URL** (`?vista=semana`) y el `offset` **no**: es relativo a hoy, así que
+    un link compartido significaría otro mes mañana. 🔴 Y el `offset` **cambia de unidad** al
+    cambiar de vista ⇒ se resetea a 0, o «tres meses adelante» se vuelve «tres semanas adelante» en
+    silencio.
+  - ⚠️ **No se llama `Calendario.tsx`** (ya existe el editorial de Marketing) y la pestaña se sigue
+    llamando **«Mes»**: si arrancara en semana, mentiría al llegar.
 
 ## Lo que ya se rompió acá
 
@@ -293,9 +324,10 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 
 ## Cómo se prueba
 
-`npx vitest run tests/agenda.test.ts` (el motor) y `tests/agenda-ingreso.test.ts` (el disparador y
+`npx vitest run tests/agenda.test.ts` (el motor), `tests/agenda-ingreso.test.ts` (el disparador y
 su puerta) — 🆕 **el segundo es el primero que prueba `api/_agenda.js`**, que hasta el 24-ago-2026
-no tenía ninguno.
+no tenía ninguno — y las dos de pantalla, con `renderToStaticMarkup` sobre las piezas puras:
+`tests/agenda-cumplimiento-pantalla.test.tsx` y 🆕 `tests/agenda-grilla.test.tsx`.
 
 Lo que el test **no** ejerce y hay que caminar a mano:
 
@@ -320,6 +352,14 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   las tiene.
 - 🆕 **Los filtros de «Cargar», después de un F5.** Filtrá por alguien, recargá, y tienen que volver
   **el filtro y la pestaña**. Y tipear en el buscador ⛔ no puede navegar (es `replaceState`).
+- 🆕 **El calendario, cuatro recorridos.** (1) Un mes **con muchas rutinas**: los días de rutina
+  tienen que verse tranquilos y el día con algo excepcional tiene que saltar; abrí ese día y el
+  detalle tiene que listar **todo** lo que la celda resumió. (2) Un **mes flaco**: que no se vea
+  roto ni vacío de más. (3) **Un ítem mensual**: tiene que salir **nombrado**, ⛔ no adentro del
+  contador. (4) **La semana**, y volver al mes: el `‹ ›` tiene que cambiar de unidad y **volver a
+  hoy**, y el día abierto tiene que cerrarse. En el celular, dos columnas.
+  ⚠️ Nada de esto lo alcanza un test: el selector es estado de React y `useFiltroUrl` no lee la URL
+  en vitest.
 - 🔴 **El destino por persona no se puede caminar con un admin**, que es el caso que se agregó para
   arreglar: entrá con un usuario `prueba-*` del padrón, mirá que la rutina dirigida a él **sale en
   «Hoy» y prende el badge**, y con otro que no sale ni prende. Y con el admin, que el tilde ajeno

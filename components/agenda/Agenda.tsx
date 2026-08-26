@@ -43,7 +43,7 @@ import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } fr
 import { useAgenda } from '@/store/useAgenda'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
-import { GrillaMes } from './GrillaMes'
+import { GrillaAgenda } from './GrillaAgenda'
 import { MARCAS, ModalItem, itemVacio } from './ModalItem'
 import { ModalPromo, promoVacia } from './ModalPromo'
 import { PendientesHoy } from './PendientesHoy'
@@ -169,7 +169,7 @@ export function Agenda() {
           cargado={cargado}
         />
       )}
-      {tab === 'mes' && <GrillaMes />}
+      {tab === 'mes' && <GrillaAgenda />}
       {tab === 'carga' && (
         <Carga
           promos={promos}
