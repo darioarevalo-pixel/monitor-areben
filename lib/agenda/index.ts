@@ -355,15 +355,21 @@ export type EntradaMes =
  * Los días vacíos no entran al mapa: la grilla pinta la celda igual, y una entrada por cada día del
  * mes obligaría a distinguir "no hay nada" de "no se calculó".
  */
-export function entradasDelMes(
+export function entradasDeRango(
   datos: { promos: Promo[]; items: ItemAgenda[]; hechos: Hecho[] },
-  anio: number,
-  mes: number,
+  desde: FechaIso,
+  hasta: FechaIso,
   opts: { marca?: Marca } = {},
 ): Map<FechaIso, EntradaMes[]> {
   const out = new Map<FechaIso, EntradaMes[]>()
-  for (let d = 1; d <= diasDelMes(anio, mes); d++) {
-    const fecha = iso(anio, mes, d)
+  if (!esFechaIso(desde) || !esFechaIso(hasta)) return out
+  const largo = diasEntre(desde, hasta)
+  // El mismo tope que `ocurrencias()`, y por el mismo motivo: existe sólo para que un desde/hasta
+  // mal armado no cuelgue la pantalla. ⛔ No una constante nueva.
+  if (largo < 0 || largo > MAX_VENTANA_DIAS) return out
+
+  for (let i = 0; i <= largo; i++) {
+    const fecha = sumarDias(desde, i)
     const delDia: EntradaMes[] = [
       ...promosDe(datos.promos, fecha, opts).map(
         (promo): EntradaMes => ({ key: `p-${promo.id}`, tipo: 'promo', promo }),
@@ -371,9 +377,10 @@ export function entradasDelMes(
       ...avisosDe(datos.items, fecha, opts).map(
         (item): EntradaMes => ({ key: `a-${item.id}`, tipo: 'aviso', item }),
       ),
-      // ⛔ **El Mes no arrastra**: muestra la ocurrencia programada, no la deuda. Es la pantalla con
-      // la que se planifica, y un pendiente que se pinta todos los días desde su origen la vuelve
-      // ilegible justo en el mes en que algo se atrasó. La deuda se ve en Hoy y en Cumplimiento.
+      // ⛔ **La grilla no arrastra**: muestra la ocurrencia programada, no la deuda. Es la pantalla
+      // con la que se planifica, y un pendiente que se pinta todos los días desde su origen la
+      // vuelve ilegible justo en el mes en que algo se atrasó. La deuda se ve en Hoy y en
+      // Cumplimiento. ⚠️ Vale igual para la semana: ahí se pintaría los siete días seguidos.
       ...pendientesDe(datos.items, datos.hechos, fecha, { ...opts, arrastre: false }).map(
         ({ item, hecho }): EntradaMes => ({ key: `i-${item.id}`, tipo: 'pendiente', item, hecho }),
       ),
@@ -381,6 +388,74 @@ export function entradasDelMes(
     if (delDia.length > 0) out.set(fecha, delDia)
   }
   return out
+}
+
+/**
+ * El mes entero. Es `entradasDeRango` con los bordes puestos, y sigue existiendo porque **el mes es
+ * un concepto de verdad**: si la pantalla tuviera que calcular el último día de febrero para pedirlo,
+ * estaría calculando una regla.
+ */
+export function entradasDelMes(
+  datos: { promos: Promo[]; items: ItemAgenda[]; hechos: Hecho[] },
+  anio: number,
+  mes: number,
+  opts: { marca?: Marca } = {},
+): Map<FechaIso, EntradaMes[]> {
+  return entradasDeRango(datos, iso(anio, mes, 1), iso(anio, mes, diasDelMes(anio, mes)), opts)
+}
+
+// ── Qué se NOMBRA y qué se CUENTA ────────────────────────────────────────────────
+//
+// El mes se leía cargado y monótono (Bruno, 26-ago-2026), y las dos cosas son el mismo defecto: una
+// rutina de todos los martes ocupa cuatro cuadraditos diciendo siempre lo mismo. Un chip que aparece
+// todos los días **no aporta información** — y encima se come los tres renglones que entran en la
+// celda, tapando lo único que sí había que mirar.
+
+/**
+ * ¿Esta regla **habla muchas veces** en un mes?
+ *
+ * 🔴 **El corte NO es "se repite": es cuántas veces se la ve en la grilla.** `diaria`, `semanal` y
+ * `rango` caen cuatro veces o más; `unica` y `mensual` caen **una sola**, y colapsar una mensual
+ * detrás de «1 rutina» esconde el único día en que existe — lo contrario exacto de lo que se
+ * buscaba. `mensual` se repite mes a mes, pero eso no se ve dentro de un mes.
+ *
+ * ⛔ **No vive en `reglas.core.js`**: el handler valida reglas, no decide cuáles son mobiliario.
+ */
+export function esRepetitiva(regla: Regla): boolean {
+  return regla.tipo === 'diaria' || regla.tipo === 'semanal' || regla.tipo === 'rango'
+}
+
+/** Un día ya resumido: lo que se nombra, lo que se cuenta, y cuántas de esas ya se tildaron. */
+export type ResumenDia = { chips: EntradaMes[]; rutinas: EntradaMes[]; hechas: number }
+
+/**
+ * Parte el día en «lo excepcional, que se nombra» y «lo de siempre, que se cuenta».
+ *
+ * 🔴 **Las promos NO colapsan nunca, aunque sean lo más repetitivo que hay.** La razón de ser de la
+ * pestaña es contestar *«¿cuándo cae la próxima del Nación?»*, y eso se contesta viendo los cuatro
+ * martes pintados. Los avisos tampoco: son pocos, son fechados, y ya se separan por su tono.
+ *
+ * 🔑 **Deriva del mismo mapa que ya se calculó**, ⛔ no de un segundo conteo por `ocurrencias()`. Un
+ * criterio paralelo al `aplicaEn` día por día es justo cómo la grilla y lo que el local ve empiezan
+ * a discrepar.
+ *
+ * ⚠️ **La vista de semana no lo usa**: ahí la celda es alta y entra todo. El mes cuenta, la semana
+ * nombra.
+ */
+export function resumirDia(entradas: EntradaMes[]): ResumenDia {
+  const chips: EntradaMes[] = []
+  const rutinas: EntradaMes[] = []
+  for (const e of entradas) {
+    if (e.tipo === 'pendiente' && esRepetitiva(e.item.regla)) rutinas.push(e)
+    else chips.push(e)
+  }
+  // Con una sola, el contador esconde el título sin ahorrar un renglón: se nombra.
+  if (rutinas.length === 1) {
+    chips.push(rutinas[0])
+    return { chips, rutinas: [], hechas: 0 }
+  }
+  const hechas = rutinas.filter((e) => e.tipo === 'pendiente' && !!e.hecho).length
+  return { chips, rutinas, hechas }
 }
 
 /** Una ocurrencia mirada desde gerencia: qué día tocaba, de qué ítem, y si alguien lo tildó. */

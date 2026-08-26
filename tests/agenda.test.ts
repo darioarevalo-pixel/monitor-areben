@@ -6,6 +6,9 @@ import {
   corre,
   cumplimiento,
   entradasDelMes,
+  entradasDeRango,
+  esRepetitiva,
+  resumirDia,
   esFechaIso,
   feriadoDe,
   hechoDe,
@@ -803,5 +806,118 @@ describe('porResponsable — quién debe cuántas', () => {
 
   it('sin filas no inventa responsables', () => {
     expect(porResponsable([])).toEqual([])
+  })
+})
+
+// ── La grilla: el rango, y qué se nombra vs qué se cuenta ────────────────────────
+
+describe('entradasDeRango — el mes es un caso suyo, no al revés', () => {
+  const datos = {
+    promos: [promo({ id: 'p1', regla: { tipo: 'semanal', dias: [2] } })],
+    items: [item({ id: 'i1', regla: { tipo: 'semanal', dias: [2] } })],
+    hechos: [],
+  }
+
+  it('🔴 `hasta` es INCLUSIVE: un rango de un solo día devuelve ese día', () => {
+    // 11-ago-2026 es martes.
+    const r = entradasDeRango(datos, '2026-08-11', '2026-08-11')
+    expect([...r.keys()]).toEqual(['2026-08-11'])
+  })
+
+  it('una semana trae sólo los días con algo', () => {
+    const r = entradasDeRango(datos, '2026-08-10', '2026-08-16')
+    expect([...r.keys()]).toEqual(['2026-08-11'])
+  })
+
+  it('da lo mismo que entradasDelMes sobre los bordes del mes', () => {
+    const rango = entradasDeRango(datos, '2026-08-01', '2026-08-31')
+    const mes = entradasDelMes(datos, 2026, 8)
+    expect([...rango.keys()]).toEqual([...mes.keys()])
+  })
+
+  it('un rango dado vuelta devuelve vacío y no cuelga', () => {
+    expect(entradasDeRango(datos, '2026-08-31', '2026-08-01').size).toBe(0)
+  })
+
+  it('🔴 respeta el tope de la ventana: no se recorre un rango de años', () => {
+    expect(entradasDeRango(datos, '2026-01-01', '2028-01-01').size).toBe(0)
+  })
+
+  it('una fecha mal formada no rompe: devuelve vacío', () => {
+    expect(entradasDeRango(datos, 'ayer', '2026-08-31').size).toBe(0)
+  })
+
+  it('⛔ la grilla no arrastra: una rutina sin tildar no se pinta los días que no cae', () => {
+    const r = entradasDeRango(
+      { ...datos, items: [item({ id: 'i1', regla: { tipo: 'semanal', dias: [2] }, arrastra: true })] },
+      '2026-08-10', '2026-08-16',
+    )
+    expect([...r.keys()]).toEqual(['2026-08-11'])
+  })
+})
+
+describe('esRepetitiva — cuántas veces HABLA en la grilla, no si se repite', () => {
+  it('las que caen muchas veces en un mes', () => {
+    expect(esRepetitiva({ tipo: 'diaria' })).toBe(true)
+    expect(esRepetitiva({ tipo: 'semanal', dias: [2] })).toBe(true)
+    expect(esRepetitiva({ tipo: 'rango', desde: '2026-08-01', hasta: '2026-08-10' })).toBe(true)
+  })
+
+  it('🔴 `mensual` NO: cae UNA vez en el mes y esconderla detrás de un contador la borra', () => {
+    expect(esRepetitiva({ tipo: 'mensual', dia: 15 })).toBe(false)
+    expect(esRepetitiva({ tipo: 'mensual', dia: 'ultimo' })).toBe(false)
+  })
+
+  it('`unica` tampoco', () => {
+    expect(esRepetitiva({ tipo: 'unica', fecha: '2026-08-11' })).toBe(false)
+  })
+})
+
+describe('resumirDia — lo excepcional se nombra, lo de siempre se cuenta', () => {
+  const rutina = (id: string, hecho: Hecho | null = null) =>
+    ({ key: id, tipo: 'pendiente', item: item({ id, regla: { tipo: 'semanal', dias: [2] } }), hecho }) as const
+  const mensual = (id: string) =>
+    ({ key: id, tipo: 'pendiente', item: item({ id, regla: { tipo: 'mensual', dia: 15 } }), hecho: null }) as const
+  const unaPromo = { key: 'p1', tipo: 'promo', promo: promo() } as const
+  const unAviso = { key: 'a1', tipo: 'aviso', item: item({ id: 'a1', clase: 'aviso' }) } as const
+
+  it('🔴 las promos NO colapsan, aunque sean lo más repetitivo que hay', () => {
+    // La pestaña existe para contestar "¿cuándo cae la próxima del Nación?".
+    const r = resumirDia([unaPromo, rutina('r1'), rutina('r2'), rutina('r3')])
+    expect(r.chips.map((e) => e.key)).toEqual(['p1'])
+    expect(r.rutinas).toHaveLength(3)
+  })
+
+  it('los avisos tampoco', () => {
+    const r = resumirDia([unAviso, rutina('r1'), rutina('r2')])
+    expect(r.chips.map((e) => e.key)).toEqual(['a1'])
+  })
+
+  it('🔴 un pendiente MENSUAL se nombra: es el único día en que existe', () => {
+    const r = resumirDia([mensual('m1'), rutina('r1'), rutina('r2')])
+    expect(r.chips.map((e) => e.key)).toContain('m1')
+    expect(r.rutinas.map((e) => e.key)).toEqual(['r1', 'r2'])
+  })
+
+  it('⚠️ con UNA sola rutina no se cuenta: se nombra', () => {
+    const r = resumirDia([rutina('r1')])
+    expect(r.rutinas).toEqual([])
+    expect(r.chips.map((e) => e.key)).toEqual(['r1'])
+  })
+
+  it('cuenta cuántas de las agrupadas ya se tildaron', () => {
+    const r = resumirDia([rutina('r1', hecho()), rutina('r2'), rutina('r3', hecho())])
+    expect(r.rutinas).toHaveLength(3)
+    expect(r.hechas).toBe(2)
+  })
+
+  it('🔑 no pierde ni inventa entradas', () => {
+    const entradas = [unaPromo, unAviso, mensual('m1'), rutina('r1'), rutina('r2')]
+    const r = resumirDia(entradas)
+    expect(r.chips.length + r.rutinas.length).toBe(entradas.length)
+  })
+
+  it('un día vacío no rompe', () => {
+    expect(resumirDia([])).toEqual({ chips: [], rutinas: [], hechas: 0 })
   })
 })
