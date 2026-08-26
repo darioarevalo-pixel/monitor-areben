@@ -175,9 +175,12 @@ porque las puertas son cuentas de compras. Medido con Poisson contra el techo de
 | 3× el techo | 78% | 21% | 1% | **0%** |
 
 🔑 **Un desastre de 3× el techo escala el 0% de las veces** — la regla vieja lo aprobaba el 39%.
-▶️ **Lo único abierto: mover el `1` de «muere» a «sigue».** Bajaría los falsos muertos del 26% al
-7%, y el costo es que una pieza de 2× el techo se lleve una 2ª tanda el 38% de las veces (otros
-$20.000, pero **no escala**). Propuesto, **⛔ no decidido**.
+✅ **El `1` MUERE — cerrado por Bruno el 26-ago**: *«si es 20mil de gasto y hizo 0 o 1 venta,
+muere»*. Se evaluó mover el `1` a «sigue» (bajaba los falsos muertos del 26% al 7%, a cambio de que
+una pieza de 2× el techo se llevara una 2ª tanda el 38% de las veces) y **se descartó**. ⇒ **la
+regla está COMPLETA: no queda nada abierto en las puertas.** El 26% de falsos muertos es el precio
+aceptado, y es el error barato: matar una pieza buena cuesta la oportunidad, escalar una mala quema
+plata todos los días.
 
 🔴 **El 1er día de una celda creada ESE MISMO día es PARCIAL y no cuenta.** `TEST IP AZUL BROAD` se
 creó el 25-ago y gastó $3.612 de sus $10.000 (36%): su primer día completo fue el 26. Leerlo como
