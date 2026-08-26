@@ -11,7 +11,7 @@ Es la sección más grande del monitor (~18.700 líneas con tests) y **cruza cin
 
 | | |
 |---|---|
-| panel | `components/canjes/` (25 archivos; los caros: `FichaCanje.tsx` 866 · `Vitrinas.tsx` 783) |
+| panel | `components/canjes/` (26 archivos; los caros: `FichaCanje.tsx` 866 · `Vitrinas.tsx` 783) |
 | lógica | `lib/canjes/` (16 archivos; `tipos.ts` **1.261** · `cliente.ts` 803 · `vitrina.ts` 462) |
 | reglas duras | `lib/canjes/reglas.core.js` — 📌 **se mudó de `api/_canjes-reglas.js`**, que ya no existe |
 | servidor | `api/_canjes.js` (**2.227**) y `api/_canje-portal.js`, por `api/postventa.js?recurso=canjes` y `?recurso=canje` |
@@ -20,7 +20,7 @@ Es la sección más grande del monitor (~18.700 líneas con tests) y **cruza cin
 | el archivo en Drive | `lib/drive/subir.ts` (el browser sube) · `lib/canjes/drive.ts` (los nombres) · acción `evidencia-archivada` |
 | mostrador | `components/cupones/CanjesLocal.tsx` — la pestaña del local, adentro de **Cupones** |
 | base | 8 tablas `canje_*` en la base de **BDI, para las tres marcas** (`sql/migrate-canjes.sql`) |
-| tests | 8 archivos `tests/canje*.test.ts`, ~3.300 líneas |
+| tests | 12 archivos `tests/canje*.test.ts` (🆕 `canje-extras` y `canje-notas`) |
 
 Portal público sin sesión: `/canje/<token>`, fuera del nav y resuelto antes del guard de permisos.
 
@@ -153,6 +153,53 @@ no re-preguntarlas.**
     migración (`resultado` es `text` sin CHECK). 🔑 **El handler valida con `resultadosDe`, la misma
     derivación que dibuja los botones** — escritas por separado, la pantalla ofrece un valor que el
     servidor contesta con 400.
+- 🆕 🔑 **LA NOTA DEL CANJE ES UNA PILA, ⛔ NO UN CAMPO** (26-ago-2026, pedido de Bruno: *«poder
+  sumar Nota libre dentro de los canjes para información adicional que se quiera sumar»*).
+  - 🔑 **`canjes.nota` ya existía y estaba MUERTA**: la columna, el tipo, `CANJE_COLS` y las dos
+    ramas del handler que la escriben (`canje-crear`, `canje-editar`) estaban desde el día uno, y
+    **ningún formulario la mandaba ni ninguna pantalla la mostraba**. Medido antes de decidir: **0
+    de 60 canjes** tenían algo adentro. Así que no había nada que rescatar, y tampoco alcanzaba con
+    dibujarle un input: la información de un canje **no aparece toda junta al crearlo**, va
+    llegando, y una columna que se pisa pierde lo anterior sin dejar rastro.
+  - **Es `canjes.notas jsonb`, la copia exacta de `canje_personas.notas`** (`[{id, texto, at,
+    usuario}]`), con `canje-nota` / `canje-nota-borrar` calcados de las de la persona y
+    `components/canjes/NotasCanje.tsx` calcado del bloque de `FichaPersona`. ⛔ No se inventó una
+    forma nueva. 🔴 **Se borra por `id`, nunca por índice** — la lista se dibuja invertida, así que
+    el índice del render no es el de la base; es el bug que ya tiene `lib/crm/leads.ts`.
+  - ⚠️ **Son DOS bitácoras y no se mezclan**: la de la **persona** es del vínculo («no contesta los
+    martes») y sirve para el próximo canje; la del **canje** muere con él.
+  - 🔑 **Se escribe en cualquier estado, terminales incluidos.** Es la segunda excepción del módulo
+    después de `resultado`, y por el mismo motivo: de un canje lo más útil suele saberse **después**
+    de cerrarlo. `canje-editar` sigue cerrándose en el acuerdo, porque eso sí es el trato.
+  - ⛔ **No viaja al portal** (`tests/canje-portal.test.ts` exige que el texto no esté en el JSON).
+  - 📌 De paso, `persona-nota` **ahora recorta**: `texto()` no lo hace y una nota de puros espacios
+    pasaba el `!t` y quedaba guardada como un renglón en blanco.
+- 🆕 🔑 **EL PRODUCTO A MANO Y EL «EXTRA»** (26-ago-2026, pedido de Bruno). La pregunta que lo abrió
+  fue *«luego de que la persona elige sus productos, ¿se puede sumar uno más para después hacer la
+  compra en Tienda Nube?»* — y la respuesta era **sí desde siempre**: el buscador de Gestión Nube se
+  dibuja mientras el canje no esté cerrado y lo que carga el equipo **no toca la vitrina**. Lo que
+  faltaba era otra cosa, y son dos:
+  - **Cargar algo que NO está en Gestión Nube** (un regalo, algo que pidió de afuera). El handler ya
+    lo aceptaba: `item-agregar` no exige `product_id`, y sin él deja `costo_unit: null` y el balance
+    lo estima con `factor_costo_estimado` — el mismo camino que ya recorre todo lo que sale de la
+    vitrina. Faltaba **sólo el formulario**. ⛔ Y va sin id inventado: uno falso cruzaría con el
+    costo de otro producto.
+  - 🔑 **Que ese regalo no lo frene el tope.** Un extra no es pasarse del acuerdo: es una decisión
+    aparte, tomada después, y el control duro la trataba como un error (409). `canje_items.extra`
+    lo saca de `controlDelTope` **y de nada más**.
+  - 🔴 **Sale del TOPE, ⛔ NO del BALANCE.** `itemsVivos` lo sigue devolviendo, así que el costo y el
+    nivel de firma lo cuentan igual: un regalo cuesta plata aunque esté fuera del acuerdo. Filtrarlo
+    en `itemsVivos` «para simplificar» es el atajo que hace que un canje esconda lo que regaló, y
+    **no rompe ninguna pantalla**: se ve en la plata, meses después. Los dos lados están juntos en
+    `tests/canje-extras.test.ts` justamente para que ese cambio no pase.
+  - 🔴 **El mostrador NO lo puede marcar.** `item-agregar` está en `ACCIONES_DEL_LOCAL`, la rendija
+    de `puedeAtenderRetiroLocal`: dejarle poner `extra` sería darle a la caja la llave para saltear
+    el único control duro del módulo desde la única acción de escritura que tiene. En esa rama el
+    campo se ignora (`soloLocal`) y la fila entra contando al tope.
+  - ⚠️ **El portal cuenta aparte y hay que acordarse**: `laVitrina` (`api/_canje-portal.js`) calcula
+    el saldo **a mano**, campo por campo, así que la regla está escrita dos veces. Sin excluir el
+    extra ahí, un regalo le achicaría a ella el tope que acordó. ⛔ Y el regalo **no** aparece en «lo
+    que elegiste»: es `origen:'equipo'`.
 - 🆕 🔑 **QUE ELLA SUBA YA SE VE SIN ENTRAR A LA FICHA** (24-ago-2026): séptimo aviso derivado
   (`canje-contenido`), agrupado, en la campanita y en Inicio, más el chip **«Contenido sin revisar»**
   y una chapita en la fila. Antes, subir seis videos **no movía un solo píxel**: el canje se queda en
@@ -317,6 +364,15 @@ nombre. Lo que no es obvio:
   frena una venta duplicada y **GN no permite anular por API**: dos toques seguidos serían dos ventas
   y dos veces el stock descontado. Hay test y se cazó **mutando la guarda** — si se toca esa zona,
   volver a mutarla.
+- 🆕 **`tests/canje-extras.test.ts` mantiene juntas las TRES cuentas del tope**, que es lo único que
+  impide que se despeguen: la del panel (`controlDelTope`), la del balance (`itemsVivos`) y la del
+  portal, que está escrita a mano en `api/_canje-portal.js`. **3 mutantes, 3 muertos** —sacar el
+  filtro del tope, colarlo en `itemsVivos`, y que el portal vuelva a contar los extras—.
+- 🆕 **`tests/canje-notas.test.ts` es del handler, no de una regla pura**: monta un supabase de
+  mentira y llama a `api/_canjes.js`. Lo que caza es el borrado por posición —el mutante fiel es el
+  que interpreta el parámetro como el índice del render, que va **invertido**— y el 404 del id que
+  ya no está. ⚠️ El primer mutante que se escribió (borrar el elemento *en la posición del id*)
+  **sobrevivió**, y con razón: era la misma función escrita distinto.
 - 🆕 **El «¿rindió?» de un UGC también vive en `tests/canje-drive.test.ts`**, y no es un descuido:
   ese archivo ya tiene el único arnés del módulo que llama a `api/_canjes.js` con la sesión mockeada,
   y lo que hay que probar es **comportamiento del handler** (que lea los entregables del canje antes
@@ -325,6 +381,10 @@ nombre. Lo que no es obvio:
   archivo del Blob. Fija el orden (anotar y después borrar), que la URL borrada salga de la fila y no
   del pedido, que sólo se toque la carpeta `canjes` y que la subcarpeta no se pise. **9 mutantes, 9
   muertos.** Lo que ningún test puede ejercer es Drive: eso se camina a mano con una carpeta real.
+- 🆕 **El extra se camina a mano en los dos lados**: cargá un producto a mano marcado como extra que
+  se pase del tope —tiene que entrar, y el cartel tiene que decir el tope y los extras por
+  separado— y después **abrí el link desde un celular**: el saldo que ve ella **no se puede haber
+  movido**. Y desde el mostrador, un producto que se pase del tope tiene que seguir dando 409.
 - 🆕 **El buzón con retiro local y el borrado se caminan a mano**: un canje de BDI con «lo retira» en
   `acuerdo` tiene que mostrar el buzón **antes** de que pase a buscarlo, y borrar una foto desde el
   link tiene que dejar la fila afuera de la base **y** la URL del Blob en 404. Que ella no pueda

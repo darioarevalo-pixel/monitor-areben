@@ -16,7 +16,8 @@ import { baseDeCostos, numeroCanje } from './tipos'
 import type {
   Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
   CanjeStore, CanjeVitrina, EstadoCanje, EstadoVitrina, IntentoEntrega, NivelAprobacion,
-  OpcionVitrina, ResultadoCanje, TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad, ViaEnvio,
+  NotaCanje, OpcionVitrina, ResultadoCanje, TallesPersona, TipoCanje, TipoEntregable, TopeTipo, TopeUnidad,
+  ViaEnvio,
 } from './tipos'
 
 const API = '/api/postventa?recurso=canjes'
@@ -523,6 +524,12 @@ export async function registrarRespuesta(
 
 export type NuevoItem = {
   sku?: string | null
+  /**
+   * ⚠️ **Puede no venir, y ése es un caso normal**: un item cargado a mano (un regalo, algo de
+   * afuera del catálogo) no tiene id de Gestión Nube. Sin él el servidor deja `costo_unit` en
+   * `null` y el balance lo estima con `factor_costo_estimado`, que es el mismo camino que ya
+   * recorre todo lo que elige ella desde la vitrina.
+   */
   product_id?: string | null
   size_id?: string | null
   nombre?: string | null
@@ -530,6 +537,8 @@ export type NuevoItem = {
   cantidad: number
   costo_unit?: number | null
   pvp_unit?: number | null
+  /** Va POR ENCIMA de lo acordado: no cuenta al tope, sí al balance. El mostrador no lo puede poner. */
+  extra?: boolean
 }
 
 /**
@@ -540,6 +549,24 @@ export type NuevoItem = {
 export async function agregarItem(store: CanjeStore, id: number, item: NuevoItem): Promise<CanjeItem> {
   const d = await postear({ store, action: 'item-agregar', id, ...item })
   return d.item as CanjeItem
+}
+
+/**
+ * Las notas del canje. Mismo contrato que `agregarNota`/`borrarNota` de la persona: devuelven la
+ * lista ya actualizada, así la ficha se re-pinta sin volver a leerla entera.
+ *
+ * ⚠️ La de la **persona** es del vínculo («no contesta los martes»); ésta es de **este canje**
+ * («pidió que llegue antes del viernes»). Se puede escribir en cualquier estado, cerrados incluidos.
+ */
+export async function agregarNotaCanje(store: CanjeStore, id: number, texto: string): Promise<NotaCanje[]> {
+  const d = await postear({ store, action: 'canje-nota', id, texto })
+  return (d.notas as NotaCanje[]) || []
+}
+
+/** ⚠️ Por `nota_id`, nunca por índice: ver el comentario en `api/_canjes.js`. */
+export async function borrarNotaCanje(store: CanjeStore, id: number, notaId: string): Promise<NotaCanje[]> {
+  const d = await postear({ store, action: 'canje-nota-borrar', id, nota_id: notaId })
+  return (d.notas as NotaCanje[]) || []
 }
 
 /** No borra: marca `quitado` o `sin_stock`. Que algo se haya caído es información. */

@@ -27,6 +27,10 @@ const CANJE = {
   entregado_at: null,
   // Nada de esto puede llegarle:
   monto_plata: 150000,
+  // La bitácora del canje. Es interna y se escribe con ella del otro lado del WhatsApp: la razón
+  // por la que se le sumó un regalo, o que se demoró por culpa nuestra, no es asunto suyo.
+  notas: [{ id: 'n1', texto: 'se le suma una funda porque se demoró el envío', at: '2026-08-26T00:00:00Z', usuario: 'Sofi' }],
+  nota: 'arreglado por teléfono con Cande',
   tope_pvp: 80000,
   aprobacion_nivel: 'aprobar-plata',
   aprobado_por: 'Bruno',
@@ -104,6 +108,15 @@ describe('lo que ve la creadora en el link público', () => {
     expect(json).not.toContain('la mejor conversión')
     expect(json).not.toContain('41200')
     expect(json).not.toContain('pidió plata de más')
+  })
+
+  it('ni las notas del CANJE, que son las que se escriben mientras se habla con ella', () => {
+    // Son dos bitácoras distintas y las dos son internas: la de arriba cuelga de la persona, ésta
+    // del canje. `paraLaPersona` se arma campo por campo, así que la única forma de que se escapen
+    // es que alguien agregue un `...canje` por comodidad — que es exactamente lo que esto frena.
+    expect(json).not.toContain('se le suma una funda')
+    expect(json).not.toContain('arreglado por teléfono')
+    expect(json).not.toContain('notas')
   })
 
   it('pide talles en Zattia y en Stunned, y el modelo del celular en BDI', () => {

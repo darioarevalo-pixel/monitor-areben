@@ -685,3 +685,49 @@ alter table canjes add column if not exists resultado      text;
 alter table canjes add column if not exists resultado_nota text;
 alter table canjes add column if not exists resultado_por  text;
 alter table canjes add column if not exists resultado_at   timestamptz;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 15. La nota del canje y el extra fuera del tope (26-ago-2026)
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- **`canjes.notas` — la bitácora del canje.**
+--
+-- Ya existía `canjes.nota text` desde la migración original y está MUERTA: ningún formulario la
+-- manda y ninguna pantalla la muestra, aunque el handler la escriba en `canje-crear` y en
+-- `canje-editar`. No se reusa, y no es capricho: lo que hacía falta era «ir sumando información a
+-- medida que aparece» —qué pidió, qué se le prometió por mensaje, por qué se le sumó un regalo— y
+-- una sola columna de texto que se pisa **pierde lo anterior sin dejar rastro**, que es exactamente
+-- el problema que venía a resolver.
+--
+-- 🔑 **Es el mismo `jsonb` que `canje_personas.notas`, campo por campo** (`[{id, texto, at,
+-- usuario}]`). No se inventó una forma nueva ni una tabla: el tipo (`NotaCanje`), las dos acciones
+-- del handler y el bloque de pantalla ya estaban escritos para la persona y se copiaron. La única
+-- razón de que sean dos columnas y no una tabla es la misma de allá: son pocas, se leen siempre
+-- enteras con su dueño y no se consultan por sí solas.
+--
+-- 🔴 **El `id` por nota es la razón de ser del formato, no un adorno**: se borra POR ID y nunca por
+-- índice. Borrar por posición ya se cobró una nota en el CRM (`lib/crm/leads.ts`) cuando la lista se
+-- reordenó entre el render y el click.
+--
+-- ⛔ **Es interna y no viaja al portal**: no entra en `CANJE_COLS_CIEGO` ni en el payload de
+-- `api/_canje-portal.js`. Hay un test que exige que su texto no aparezca en el JSON del portal.
+alter table canjes add column if not exists notas jsonb not null default '[]'::jsonb;
+
+-- **`canje_items.extra` — lo que se le suma POR ENCIMA de lo acordado.**
+--
+-- El tope es el único control DURO del módulo: el servidor rechaza con 409 lo que se pase de lo
+-- acordado, y esa dureza es lo que impide que un canje de $80.000 salga $200.000. Pero hay un caso
+-- real que ese control trataba como un error: **el regalo**. «Le mandamos también una funda» o «pidió
+-- algo de afuera de la vitrina» no es pasarse del acuerdo, es una decisión aparte que se toma después.
+--
+-- 🔑 **El extra sale del TOPE pero NO del BALANCE.** Es la mitad de la columna: `controlDelTope`
+-- (`lib/canjes/reglas.core.js`) no lo suma, así que no frena y no le mueve el saldo a ella en el
+-- portal; `itemsVivos` lo sigue devolviendo, así que el costo del canje lo cuenta igual. Un regalo
+-- cuesta plata aunque esté fuera del acuerdo, y un canje que esconde lo que regaló no se puede leer
+-- al mes siguiente.
+--
+-- 🔴 **El mostrador NO lo puede marcar.** `item-agregar` está en `ACCIONES_DEL_LOCAL`, la rendija de
+-- `puedeAtenderRetiroLocal` por la que alguien sin la sección Canjes toca un canje. Dejarle poner
+-- `extra` sería darle a la caja la llave para saltear el único control duro que hay. En esa rama el
+-- campo se ignora y la fila entra contando al tope.
+alter table canje_items add column if not exists extra boolean not null default false;

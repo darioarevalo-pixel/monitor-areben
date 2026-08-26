@@ -509,6 +509,13 @@ export type CanjeRow = {
   estado: EstadoCanje
   titulo?: string | null
   nota?: string | null
+  /**
+   * La bitácora del canje: lo que se le fue sumando por fuera de los campos.
+   *
+   * ⚠️ Es **interna**: no viaja al portal ni al modo ciego. Y es una lista y no la `nota` de arriba
+   * a propósito — una columna que se pisa pierde lo anterior, que es justo lo que hacía falta guardar.
+   */
+  notas?: NotaCanje[]
 
   tope_tipo: TopeTipo
   tope_pvp?: number | null
@@ -653,6 +660,14 @@ export type CanjeItem = {
   costo_unit?: number | null
   pvp_unit?: number | null
   origen: 'persona' | 'equipo'
+  /**
+   * Lo que se le suma **por encima** de lo acordado: un regalo, o algo que pidió fuera de la vitrina.
+   *
+   * 🔑 Sale del **tope** (`controlDelTope` no lo suma, así que no frena y no le mueve el saldo a ella
+   * en el portal) pero **no del balance** (`itemsVivos` lo sigue devolviendo: un regalo cuesta plata).
+   * 🔴 El mostrador no lo puede marcar — ver `ACCIONES_DEL_LOCAL` en `api/_canjes.js`.
+   */
+  extra?: boolean
   estado: EstadoItem
   motivo?: string | null
   usuario?: string | null
@@ -978,9 +993,15 @@ export type ControlTope = {
   ok: boolean
   /** En criollo, para mostrar al lado de la lista. */
   mensaje: string
-  /** Lo consumido y el techo, para la barra de progreso. */
+  /** Lo consumido y el techo, para la barra de progreso. **Sin los extras.** */
   usado: number
   tope: number | null
+  /**
+   * Lo que se le sumó **por encima** del acuerdo, en la misma unidad que `usado`. `0` si no hay.
+   * Va aparte y no adentro de `usado` porque no compite contra el tope, pero tampoco se puede
+   * esconder: un extra invisible es un agujero en la plata del canje.
+   */
+  extras: number
   /** `'$'` o `'u'`, según el modo. */
   unidad: '$' | 'u'
 }

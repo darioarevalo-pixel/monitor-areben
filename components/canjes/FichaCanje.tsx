@@ -31,6 +31,7 @@ import {
   type CanjeRow, type CanjeStore, type EstadoCanje, type TopeTipo, type TopeUnidad,
 } from '@/lib/canjes/tipos'
 import { BloqueSeleccion } from './BloqueSeleccion'
+import { NotasCanje } from './NotasCanje'
 import { SelectorModelo } from './SelectorModelo'
 import { BloqueEnvio } from './BloqueEnvio'
 import { BloqueEntregables } from './BloqueEntregables'
@@ -317,6 +318,16 @@ export function FichaCanje({
 
       {/* Historial de la persona a la vista al aprobar: es el dato que hoy no tiene quien firma. */}
       {canje.estado === 'propuesta' && persona && <HistorialCorto persona={persona} />}
+
+      {/* Va ARRIBA del trabajo y no al fondo: lo que alguien anotó ayer es lo primero que hay que
+          leer al abrir el canje, y una lista al final de una ficha larga no la ve nadie. Se dibuja
+          también en los terminales, porque de un canje lo más útil suele saberse después. */}
+      <NotasCanje
+        store={store}
+        canjeId={canje.id}
+        notas={canje.notas || []}
+        onCambio={(notas) => setD((prev) => (prev ? { ...prev, canje: { ...prev.canje, notas } } : prev))}
+      />
 
       <BloqueSeleccion
         store={store}

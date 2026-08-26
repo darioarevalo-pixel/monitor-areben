@@ -247,7 +247,13 @@ function laVitrina(canje, vitrina, items) {
 
   // El saldo cuenta TODOS los items vivos, no sólo los suyos: si el equipo ya le cargó algo, esa
   // unidad está gastada de verdad y decirle que le quedan tres sería mandarla contra el error.
-  const vivos = (items || []).filter((i) => i.estado === 'propuesto' || i.estado === 'confirmado');
+  //
+  // 🔴 **Menos los extras**, que son lo que el equipo le suma POR ENCIMA de lo acordado (un regalo,
+  // algo que pidió fuera de la vitrina). Contarlos acá le achicaría el tope que ella acordó por una
+  // decisión nuestra, y la mandaría contra un 409 que del otro lado no existe: `seVaDelTope`
+  // tampoco los suma. La cuenta es a mano y no con `controlDelTope` porque acá se arma campo por
+  // campo lo que sale al portal, pero **la regla es la misma y tiene que seguir siéndolo**.
+  const vivos = (items || []).filter((i) => (i.estado === 'propuesto' || i.estado === 'confirmado') && !i.extra);
   const tope = porMonto
     ? (canje.tope_pvp == null ? null : Number(canje.tope_pvp))
     : (canje.tope_unidades || []).reduce((a, u) => a + (Number(u.cantidad) || 0), 0) || null;
@@ -470,8 +476,10 @@ export default async function handler(req, res) {
       supabase.from('canje_config').select('tope_evidencias_por_canje').eq('store', canje.store).maybeSingle(),
       traerVitrina(supabase, canje.vitrina_id),
       // Todos los items del canje, no sólo los suyos: el saldo del tope los cuenta a todos.
+      // ⚠️ `extra` viaja aunque no se le muestre: sin él, un regalo que le sumó el equipo le comería
+      // el tope acá y en `seVaDelTope` de abajo, y ella vería un saldo que no es el que acordó.
       supabase.from('canje_items')
-        .select('nombre, variante, cantidad, pvp_unit, origen, estado').eq('canje_id', canje.id),
+        .select('nombre, variante, cantidad, pvp_unit, origen, estado, extra').eq('canje_id', canje.id),
       // Lo que ella misma subió. Se lee de la MISMA tabla que la prueba de publicación
       // (`canje_evidencias`), filtrada por quién la cargó: el modelo previó `subido_por` desde el
       // día uno y hasta hoy no había forma de que valiera `'persona'`.

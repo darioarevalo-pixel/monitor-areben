@@ -8,6 +8,17 @@
  * (`origen: 'persona'`). Los suyos entran en `propuesto` —que los haya elegido no quiere decir que
  * haya stock— y el equipo los confirma o los marca sin stock, que es el mismo flujo de siempre.
  *
+ * 🆕 **Y una tercera forma de cargar: A MANO** (26-ago-2026). El buscador sólo encuentra lo que está
+ * en Gestión Nube, y el caso que quedaba afuera es justamente el que aparece más tarde: un regalo,
+ * o algo que ella pidió de afuera del catálogo. Se tipea nombre, cantidad y precio; la fila queda
+ * **sin SKU**, que es exactamente lo que ya pasa con todo lo que sale de la vitrina, y el balance
+ * estima el costo con `factor_costo_estimado` hasta que alguien lo cargue.
+ *
+ * 🔑 **Y por eso existe el EXTRA.** Un regalo no es pasarse del acuerdo: es una decisión aparte,
+ * tomada después. Marcado como extra sale de la cuenta del tope —y del saldo que ve ella en el
+ * portal— pero **sigue contando en el balance**, porque cuesta plata igual. La regla vive una sola
+ * vez, en `controlDelTope` (`lib/canjes/reglas.core.js`).
+ *
  * El control del tope se muestra acá pero **lo hace el servidor** con la lista real, y ahora
  * también del lado de ella: la misma función corre en los dos handlers (`lib/canjes/reglas.core.js`).
  * El de esta pantalla es para que nadie llegue hasta el error.
@@ -16,7 +27,7 @@
 import { useState } from 'react'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import {
-  Badge, Button, EmptyState, Notice, SectionCard, Select, TableWrap, THead, TBody, Tr, Th, Td,
+  Badge, Button, EmptyState, Field, Input, Notice, SectionCard, Select, TableWrap, THead, TBody, Tr, Th, Td,
   color, font, space, weight, useConfirmar, useToast,
 } from '@/components/ui'
 import { agregarItem, colgarVitrina, confirmarItem, quitarItem, type VitrinaEnLista } from '@/lib/canjes/cliente'
@@ -41,6 +52,14 @@ export function BloqueSeleccion({
   const toast = useToast()
   const { pedirTexto } = useConfirmar()
   const [guardando, setGuardando] = useState(false)
+  // El formulario de carga a mano. Arranca cerrado: el camino normal sigue siendo el buscador, que
+  // es el que trae el costo y el SKU. Éste es la salida para lo que no está en Gestión Nube.
+  const [aMano, setAMano] = useState(false)
+  const [mNombre, setMNombre] = useState('')
+  const [mVariante, setMVariante] = useState('')
+  const [mCantidad, setMCantidad] = useState('1')
+  const [mPvp, setMPvp] = useState('')
+  const [mExtra, setMExtra] = useState(false)
 
   const control = controlDelTope(canje, items)
   const vivos = itemsVivos(items)
@@ -67,6 +86,40 @@ export function BloqueSeleccion({
       onCambio()
     } catch (e) {
       // El servidor devuelve el motivo en criollo cuando se pasa del tope: se muestra tal cual.
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  /**
+   * Cargar algo que no está en Gestión Nube: un regalo, o algo que pidió de afuera del catálogo.
+   *
+   * ⚠️ **Va sin `product_id`, y no es un olvido.** Ése es el dato con el que el servidor busca el
+   * costo; sin él la fila queda con `costo_unit: null` y el balance la estima con
+   * `factor_costo_estimado`, que es el mismo camino que ya recorre todo lo que sale de la vitrina.
+   * Mandar un id inventado sería peor: cruzaría con el costo de otro producto.
+   */
+  async function cargarAMano() {
+    const nombre = mNombre.trim()
+    if (!nombre) return
+    setGuardando(true)
+    try {
+      const cant = parseInt(mCantidad, 10)
+      const precio = Number(mPvp.replace(',', '.'))
+      await agregarItem(canje.store, canje.id, {
+        nombre,
+        variante: mVariante.trim() || null,
+        cantidad: Number.isFinite(cant) && cant > 0 ? cant : 1,
+        // Vacío es un caso normal: un regalo puede no tener precio de lista a mano. `null` deja que
+        // el balance lo estime, y un 0 mentiría diciendo que no costó nada.
+        pvp_unit: mPvp.trim() && Number.isFinite(precio) ? precio : null,
+        extra: mExtra,
+      })
+      setMNombre(''); setMVariante(''); setMCantidad('1'); setMPvp(''); setMExtra(false)
+      setAMano(false)
+      onCambio()
+    } catch (e) {
       toast.error(String((e as Error)?.message || e))
     } finally {
       setGuardando(false)
@@ -183,6 +236,53 @@ export function BloqueSeleccion({
       {editable && (
         <div style={{ marginBottom: space[3], opacity: guardando ? 0.6 : 1 }}>
           <BuscarArticuloGN marca={marcaGN} onSelect={(a) => void sumar(a)} />
+          {/* El buscador sigue siendo el camino normal —trae SKU y costo—; esto es la salida para lo
+              que no está en Gestión Nube. Por eso es un link discreto y no un segundo botón grande. */}
+          {!aMano ? (
+            <button
+              type="button"
+              onClick={() => setAMano(true)}
+              style={{
+                height: 'auto', marginTop: space[2], background: 'none', border: 'none', padding: 0,
+                color: color.mut, fontSize: font.sm, textDecoration: 'underline', cursor: 'pointer',
+              }}
+            >
+              ¿No está en Gestión Nube? Cargalo a mano
+            </button>
+          ) : (
+            <div style={{ marginTop: space[3], padding: space[3], border: `1px dashed ${color.line}`, borderRadius: 8 }}>
+              <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+                <Field label="Qué es" width={220}>
+                  <Input
+                    value={mNombre}
+                    placeholder="Funda + llavero"
+                    onChange={(e) => setMNombre(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void cargarAMano() }}
+                  />
+                </Field>
+                <Field label="Variante" width={140}>
+                  <Input value={mVariante} placeholder="Opcional" onChange={(e) => setMVariante(e.target.value)} />
+                </Field>
+                <Field label="Cantidad" width={100}>
+                  <Input type="number" min={1} value={mCantidad} onChange={(e) => setMCantidad(e.target.value)} />
+                </Field>
+                <Field label="Precio" hint="Se puede dejar vacío" width={140}>
+                  <Input value={mPvp} placeholder="12000" onChange={(e) => setMPvp(e.target.value)} />
+                </Field>
+              </div>
+              <label style={{ display: 'flex', gap: space[2], alignItems: 'center', marginTop: space[2] }}>
+                <input type="checkbox" checked={mExtra} onChange={(e) => setMExtra(e.target.checked)} />
+                <span style={{ fontSize: font.sm }}>
+                  Es un extra: va por encima de lo acordado y no cuenta al tope
+                  <span style={{ color: color.mut }}> (sí al costo del canje)</span>
+                </span>
+              </label>
+              <div style={{ display: 'flex', gap: space[2], marginTop: space[3] }}>
+                <Button size="sm" disabled={!mNombre.trim() || guardando} onClick={() => void cargarAMano()}>Agregar</Button>
+                <Button variant="ghost" size="sm" onClick={() => setAMano(false)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -214,6 +314,10 @@ export function BloqueSeleccion({
                 <Td strong>
                   {i.nombre || '—'}
                   {i.variante ? <span style={{ color: color.mut }}> ({i.variante})</span> : null}
+                  {/* Ésta sí se dibuja, al revés que la de "lo eligió ella" que se sacó abajo: el
+                      extra **cambia una cuenta** —sale del tope y no del balance—, así que una fila
+                      que no lo diga vuelve el total imposible de reconstruir mirando la tabla. */}
+                  {i.extra ? <Badge tone="neutral" subtle style={{ marginLeft: space[2] }}>extra</Badge> : null}
                   {/* ⛔ Acá había una chapita "Lo eligió ella — falta confirmar". Se sacó: el botón
                       Confirmar está en la misma fila y dice lo mismo sin ocupar media columna, y
                       el estado del item **no traba nada** —propuesto y confirmado cuentan igual

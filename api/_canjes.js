@@ -35,6 +35,8 @@
 //                                                                  que propone ya podía firmarlo;
 //                                                                  si no, en 'propuesta'.
 //   POST { action:'canje-editar', id, ...campos, entregables? }  → sólo antes del acuerdo.
+//   POST { action:'canje-nota', id, texto }                      → apila una nota del canje (con id propio).
+//   POST { action:'canje-nota-borrar', id, nota_id }             → borra POR ID, nunca por índice.
 //   POST { action:'canje-estado', id, estado, motivo? }          → transiciones validadas por TRANSICIONES.
 //   POST { action:'canje-borrar', id }                           → NO deja rastro. Después del
 //                                                                  acuerdo, sólo Administración.
@@ -130,7 +132,7 @@ const PERSONA_COLS = `id, instagram, instagram_raw, nombre, apellido, telefono, 
  * Las columnas de un canje que se pueden ver **de la propia marca**. El `token` NUNCA sale en
  * listados: es la llave del link público, se pide aparte y de a uno.
  */
-const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota,
+const CANJE_COLS = `id, persona_id, store, tipo, estado, titulo, nota, notas,
   tope_tipo, tope_pvp, tope_unidades, monto_plata, pago_estado, pago_at, pago_nota,
   aprobado_por, aprobado_at, aprobacion_nivel, rechazado_motivo, rechazado_por, rechazado_at, acordado_at,
   contacto_estado, contacto_at, respuesta_motivo, respuesta_nota, respuesta_at,
@@ -906,7 +908,9 @@ export default async function handler(req, res) {
 
     if (action === 'persona-nota') {
       if (!id) return res.status(400).json({ error: 'falta id' });
-      const t = texto(b.texto);
+      // `texto()` no recorta, y acá hace falta: una nota de puros espacios pasa el `!t` y queda
+      // guardada como un renglón en blanco que nadie puede interpretar ni distinguir de un error.
+      const t = (texto(b.texto) || '').trim();
       if (!t) return res.status(400).json({ error: 'la nota está vacía' });
       const { data: previo, error: eLee } = await supabase.from('canje_personas').select('notas').eq('id', id).single();
       if (eLee) throw new Error(eLee.message);
@@ -1422,6 +1426,49 @@ export default async function handler(req, res) {
     const canje = t.canje;
     const cfgCanje = await configDe(canje.store);
 
+    /**
+     * La bitácora del canje: lo que se le va sumando por fuera de los campos.
+     *
+     * 🔑 **Es el mismo formato que `persona-nota`, campo por campo** (`[{id, texto, at, usuario}]`),
+     * y las dos acciones son la copia de aquéllas. Lo que cambia es de quién cuelga: la de la
+     * persona es del vínculo («no contesta los martes»), ésta es de ESTE canje («pidió que llegue
+     * antes del viernes», «se le sumó una funda de regalo»).
+     *
+     * ⚠️ **Se puede escribir en cualquier estado, terminales incluidos**, y es a propósito: la nota
+     * no es el trato —para eso está `canje-editar`, que se cierra al acordar— sino lo que se fue
+     * sabiendo, y de un canje lo más útil suele saberse después de cerrarlo. Es el mismo motivo por
+     * el que `resultado` escribe sobre un canje terminal.
+     *
+     * ⛔ **No viaja al portal.** No entra en el payload de `api/_canje-portal.js` ni en
+     * `CANJE_COLS_CIEGO`, y hay un test que exige que su texto no aparezca en el JSON del portal.
+     */
+    if (action === 'canje-nota') {
+      // Se recorta igual que en `persona-nota`: una nota de puros espacios pasa el `!t` y queda
+      // guardada como un renglón en blanco.
+      const t = (texto(b.texto) || '').trim();
+      if (!t) return res.status(400).json({ error: 'la nota está vacía' });
+      const notas = Array.isArray(canje.notas) ? canje.notas : [];
+      // El id propio es la razón de ser de este formato. Ver `canje-nota-borrar`.
+      notas.push({ id: randomUUID(), texto: t, at: ahora(), usuario });
+      const { error } = await supabase.from('canjes').update({ notas, updated_at: ahora() }).eq('id', canjeId);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, notas });
+    }
+
+    if (action === 'canje-nota-borrar') {
+      const notaId = texto(b.nota_id);
+      if (!notaId) return res.status(400).json({ error: 'falta nota_id' });
+      const notas = Array.isArray(canje.notas) ? canje.notas : [];
+      // ⚠️ Se borra POR ID, nunca por índice — igual que en `persona-nota-borrar`. `lib/crm/leads.ts`
+      // borra por índice posicional y ya borró la nota equivocada cuando la lista se había
+      // reordenado entre el render y el click.
+      const quedan = notas.filter((n) => n && n.id !== notaId);
+      if (quedan.length === notas.length) return res.status(404).json({ error: 'esa nota ya no está' });
+      const { error } = await supabase.from('canjes').update({ notas: quedan, updated_at: ahora() }).eq('id', canjeId);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, notas: quedan });
+    }
+
     if (action === 'canje-editar') {
       // Se edita mientras la conversación esté abierta: eso incluye `enviada`, porque la
       // negociación pasa por las redes y lo que se acuerde ahí hay que poder asentarlo (es el
@@ -1711,6 +1758,17 @@ export default async function handler(req, res) {
         }
       }
 
+      // ── El extra: lo que se le suma POR ENCIMA de lo acordado ───────────────────────────────
+      //
+      // 🔴 **Por la rendija del mostrador NO se puede marcar.** `item-agregar` está en
+      // `ACCIONES_DEL_LOCAL`, y `soloLocal` es justamente "entró por la rendija y no tiene Canjes en
+      // esta marca por la puerta grande". El tope es el único control DURO del módulo: dejar que la
+      // caja marque un item como extra sería darle la llave para saltearlo desde la única acción de
+      // escritura que tiene. Acá el campo se ignora en silencio y la fila entra contando al tope,
+      // que es el comportamiento de siempre — no es un error del que carga, es que ese permiso no
+      // incluye esta decisión.
+      const extra = b.extra === true && !soloLocal;
+
       const nuevo = {
         canje_id: canjeId,
         sku: texto(b.sku),
@@ -1722,6 +1780,7 @@ export default async function handler(req, res) {
         costo_unit: costoUnit,
         pvp_unit: num(b.pvp_unit),
         origen: b.origen === 'persona' ? 'persona' : 'equipo',
+        extra,
         estado: 'confirmado',
         usuario,
       };
