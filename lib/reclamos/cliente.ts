@@ -54,6 +54,24 @@ export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo
 }
 
 /**
+ * Lo mínimo para derivar el aviso del sidebar: las columnas que mira `alertasDe` y nada más.
+ *
+ * ⛔ **No es `leerReclamos` con otro nombre.** Esto lo pide **cada admin cada 3 minutos**
+ * (`POLL_AVISOS_MS`), así que baja por `vista=avisos`, que recorta las columnas: medido sobre las
+ * 10 filas de BDI, **1.925 bytes por fila con el listado completo contra 344 con éstas** — y las
+ * que se van son el relato del cliente, sus datos y todos los montos, que un aviso no necesita.
+ *
+ * ⚠️ Devuelve **todo lo que baja, incluido lo cerrado**: quién sigue vivo lo contesta
+ * `ESTADOS_ABIERTOS` en el núcleo, y filtrarlo también acá sería la segunda copia de esa lista.
+ */
+export async function leerReclamosParaAviso(marca: Marca): Promise<ReclamoRow[]> {
+  const r = await apiFetch(`${API}&store=${marca}&vista=avisos&nc=${Date.now()}`)
+  const d = await r.json()
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer los reclamos.')
+  return (d.devoluciones || []) as ReclamoRow[]
+}
+
+/**
  * El link del cliente, a pedido y de a uno.
  *
  * El token **nunca** viaja en el listado (`COLS` de `_reclamos.js` no lo incluye): un listado se

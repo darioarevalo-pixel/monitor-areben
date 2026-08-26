@@ -13,6 +13,7 @@ import { faltantes, salio } from '@/lib/sesionfotos/core'
 import { veTodo, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { pendientesDeTrabajo } from '@/lib/inicio/core'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
+import { alertasDe, estaAbierto, MOTIVO_LABEL, numeroReclamo, type AlertaReclamo, type ReclamoRow } from '@/lib/reclamos/tipos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
@@ -117,6 +118,55 @@ export function avisosDeFallas(fallas: FallaRow[], marca: Marca, perfil: Perfil 
       tono: 'warning' as const,
     },
   ]
+}
+
+/**
+ * Reclamos que están durmiendo: la plata que no sale, el cliente que no responde, el paquete que
+ * no llega, la decisión que nadie toma.
+ *
+ * 🔴 **Es el aviso que le faltaba a todo el post-venta.** El módulo ya derivaba estas cuatro
+ * alertas —`alertasDe`, con sus plazos y sus relojes— pero se dibujaban **sólo adentro de la
+ * pantalla de Reclamos, que es de Administración**. O sea: para enterarse de que un reclamo está
+ * durmiendo había que entrar a mirarlo, que es exactamente lo que no pasa. Es la tercera vuelta
+ * del mismo agujero del módulo (el pendiente sin gesto, y el botón del lado equivocado de la
+ * puerta): **una regla que nadie ve se lee igual que una que nadie escribió.**
+ *
+ * ⛔ **No hay reglas nuevas acá.** Los plazos, los relojes y el orden salen enteros de `alertasDe`;
+ * esto es sólo el acarreo al sidebar. Un plazo se cambia en `DIAS_ALERTA` y se mueve en los dos
+ * lados de una.
+ *
+ * **Uno por reclamo, ⛔ no agrupados** —como las firmas de canje y a diferencia de las fallas—:
+ * cada uno es otro cliente esperando otra plata, y el montón escondería justo lo que hay que
+ * mirar. Y **una alerta por reclamo**: la primera, que es la que la pantalla muestra cuando hay
+ * lugar para una sola (`conAlerta` ya cuenta reclamos y no alertas).
+ *
+ * 🔑 El `ts` es **cuándo la alerta empezó a existir**, no cuándo se abrió el reclamo: ver
+ * `AlertaReclamo`. Sin eso el aviso de un reclamo viejo nace ya marcado como visto.
+ */
+export function avisosDeReclamo(filas: ReclamoRow[], marca: Marca, perfil: Perfil | null): Aviso[] {
+  // La pantalla de Reclamos es una pestaña de Post-venta (key `postventa`, Administración). Sin
+  // acceso a esa sección no hay aviso: mandar a alguien a una pantalla que no puede abrir es el
+  // defecto que este módulo ya tuvo con el botón de despachar.
+  if (!puedeVer(perfil, marca, 'postventa')) return []
+  return filas
+    // ⛔ Sólo los vivos: un `anulado` con un pendiente viejo sin tildar sigue cumpliendo la
+    // condición de la alerta de plata, y avisaría para siempre de algo que ya no existe.
+    .filter(estaAbierto)
+    .map((d) => ({ d, a: alertasDe(d)[0] }))
+    .filter((x): x is { d: ReclamoRow; a: AlertaReclamo } => !!x.a)
+    .map(({ d, a }) => ({
+      id: `reclamo:${marca}:${d.id}`,
+      tipo: 'reclamo' as const,
+      marca,
+      // Un reclamo es de la tienda, no de la línea: `store` son las dos marcas y nada más.
+      linea: marca,
+      titulo: `${numeroReclamo(d.id)} · ${MOTIVO_LABEL[d.motivo] ?? d.motivo}`,
+      detalle: a.texto,
+      // La pestaña va en la URL: `/postventa` solo abre en Fallas.
+      ruta: '/postventa?tab=reclamos',
+      ts: a.ts,
+      tono: a.tono,
+    }))
 }
 
 // ── Canjes ───────────────────────────────────────────────────────────────────────

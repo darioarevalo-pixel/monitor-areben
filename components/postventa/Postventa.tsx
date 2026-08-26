@@ -19,7 +19,7 @@ import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticul
 import {
   Button, SectionCard, Card, StatusPill, Field, Input, Select, NumberField, Toolbar, Tabs, EmptyState, KpiCard,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, Notice, color, font, weight, space, type Tone,
-  Instructivo,
+  Instructivo, useFiltroUrl,
 } from '@/components/ui'
 import { cambiarEstadoFalla, confirmarFalla, crearFalla, eliminarFalla, leerFallas, recibirFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow, type FallaUbicacion } from '@/lib/postventa/fallas/tipos'
@@ -49,6 +49,18 @@ const TABS: { key: Tab; label: string; listo: boolean }[] = [
   { key: 'canjes', label: 'Canjes', listo: false },
 ]
 
+/**
+ * Qué pestaña abre `/postventa?tab=…`.
+ *
+ * Vive suelta y exportada porque **lo que viene por la URL lo escribe cualquiera**: antes de que
+ * la pestaña viviera ahí no había nada que validar, y un `?tab=cualquiera` cae en la rama de
+ * "próximamente" y titula «undefined llega más adelante». ⚠️ `canjes` **sí** es una pestaña
+ * —todavía no lista— y sigue mostrando su cartel: la que no existe es la que vuelve a Fallas.
+ */
+export function tabDeLaUrl(v: string | null | undefined): Tab {
+  return TABS.some((t) => t.key === v) ? (v as Tab) : 'fallas'
+}
+
 const ESTADO_TONE: Record<FallaEstado, Tone> = {
   cargada: 'warning',
   recibida: 'action',
@@ -76,7 +88,15 @@ const FORM0 = { producto: '', sku: '', variante: '', cantidad: '1', motivo: '', 
 function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   const { marca, perfil } = useSesion()
   const usuario = perfil?.name || ''
-  const [tab, setTab] = useState<Tab>('fallas')
+  /**
+   * 🔴 **La pestaña va en la URL** (`/postventa?tab=reclamos`). Vivía en `useState`, así que
+   * `/postventa` abría siempre en Fallas y no había forma de mandar a nadie a Reclamos: el aviso
+   * del sidebar de un reclamo durmiendo dejaba a la persona parada en el ledger de fallas, que se
+   * lee igual que un aviso que no llevó a ningún lado. Es el mismo arreglo que ya se le hizo a
+   * Canjes, que además se llevaba puesto el filtro al recargar.
+   */
+  const [tabUrl, setTab] = useFiltroUrl<Tab>('tab', 'fallas')
+  const tab = tabDeLaUrl(tabUrl)
 
   const [fallas, setFallas] = useState<FallaRow[]>([])
   const [cargando, setCargando] = useState(true)

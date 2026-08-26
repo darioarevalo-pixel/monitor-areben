@@ -4,12 +4,14 @@ import {
   avisosDeContenidoSinRevisar,
   avisosDeFallas,
   avisosDeNoDevueltos,
+  avisosDeReclamo,
   avisosDeSolicitud,
   contarNuevos,
   ordenarAvisos,
 } from '@/lib/notificaciones/derivar'
 import type { ResumenSolicitud } from '@/lib/solicitudes/overview'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
+import type { ReclamoRow } from '@/lib/reclamos/tipos'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { Perfil } from '@/lib/permisos'
 
@@ -188,5 +190,100 @@ describe('avisos de contenido sin revisar', () => {
 
   it('sin nada sin revisar, ningún aviso', () => {
     expect(avisosDeContenidoSinRevisar([], conCanjes, 'bdi')).toEqual([])
+  })
+})
+
+/**
+ * 🔴 **El aviso que le faltaba a todo el post-venta.** Las cuatro alertas ya existían y se
+ * dibujaban **sólo adentro de la pantalla de Reclamos**, que es de Administración: para enterarse
+ * de que un reclamo dormía había que entrar a mirarlo. Lo que se ancla acá es que el acarreo al
+ * sidebar ⛔ **no inventa ninguna regla nueva** —los plazos y los relojes siguen en `alertasDe`— y
+ * que no avisa de lo que ya no existe.
+ */
+describe('avisos de reclamos durmiendo', () => {
+  const DIA = 86400000
+  // ⚠️ Relativo al reloj REAL y no a una fecha fija: `alertasDe` cuenta contra `Date.now()`, así
+  // que con un ancla del calendario estos plazos se corren un día por día que pasa.
+  const hace = (d: number) => new Date(Date.now() - d * DIA).toISOString()
+  const admin = perfil({ admin: true })
+  // Administración ve `postventa` por su función, sin ningún tilde a mano.
+  const administracion = perfil({ funcion: ['administracion'] })
+  const local = perfil({ funcion: ['local'] })
+
+  const reclamo = (over: Partial<ReclamoRow> = {}): ReclamoRow =>
+    ({
+      id: 42, store: 'bdi', motivo: 'falla', estado: 'esperando_cliente',
+      created_at: hace(30), updated_at: hace(30), historial: [],
+      ...over,
+    }) as ReclamoRow
+
+  it('un reclamo dormido llega al sidebar de Administración', () => {
+    const [a] = avisosDeReclamo([reclamo()], 'bdi', administracion)
+    expect(a.tipo).toBe('reclamo')
+    expect(a.titulo).toContain('R-0042')
+    expect(a.detalle).toContain('El cliente no responde')
+  })
+
+  it('lleva a la PESTAÑA de reclamos, no a Post-venta a secas: `/postventa` abre en Fallas', () => {
+    expect(avisosDeReclamo([reclamo()], 'bdi', admin)[0].ruta).toBe('/postventa?tab=reclamos')
+  })
+
+  it('⛔ no lo ve quien no puede abrir esa pantalla: el local abre reclamos, no los resuelve', () => {
+    expect(avisosDeReclamo([reclamo()], 'bdi', local)).toEqual([])
+    expect(avisosDeReclamo([reclamo()], 'bdi', null)).toEqual([])
+  })
+
+  it('un reclamo despierto no avisa: el plazo lo sigue poniendo `alertasDe`', () => {
+    expect(avisosDeReclamo([reclamo({ created_at: hace(2), updated_at: hace(2) })], 'bdi', admin)).toEqual([])
+  })
+
+  it('🔴 un ANULADO con un pendiente viejo NO avisa, y sin el filtro avisaría para siempre', () => {
+    const muerto = { estado: 'anulado' as const, reintegro_estado: 'pendiente' as const, compensacion: 'plata_total' as const }
+    // El control: la misma fila viva sí avisa ⇒ lo que la apaga es el estado, no que le falte un dato.
+    expect(avisosDeReclamo([reclamo({ ...muerto, estado: 'resuelto' })], 'bdi', admin)).toHaveLength(1)
+    expect(avisosDeReclamo([reclamo(muerto)], 'bdi', admin)).toEqual([])
+    expect(avisosDeReclamo([reclamo({ ...muerto, estado: 'cerrado' })], 'bdi', admin)).toEqual([])
+  })
+
+  it('UNO por reclamo: dos que duermen son dos clientes esperando, no un montón', () => {
+    expect(avisosDeReclamo([reclamo(), reclamo({ id: 43 })], 'bdi', admin)).toHaveLength(2)
+  })
+
+  it('una alerta por reclamo: la primera, la misma que muestra la pantalla', () => {
+    const dosAlertas = reclamo({ estado: 'en_revision', reintegro_estado: 'pendiente', compensacion: 'plata_total' })
+    const [a] = avisosDeReclamo([dosAlertas], 'bdi', admin)
+    expect(avisosDeReclamo([dosAlertas], 'bdi', admin)).toHaveLength(1)
+    // La plata va primero en `alertasDe` porque es la que el cliente reclama.
+    expect(a.detalle).toContain('la plata no sale')
+    expect(a.tono).toBe('danger')
+  })
+
+  it('🔑 el `ts` es cuándo la alerta EMPEZÓ, no cuándo se abrió el reclamo', () => {
+    // Abierto hace 30 días, el plazo del cliente son 10 ⇒ duerme desde hace 20, no desde hace 30.
+    const [a] = avisosDeReclamo([reclamo()], 'bdi', admin)
+    expect(Math.round((Date.now() - a.ts) / DIA)).toBe(20)
+  })
+
+  it('🔴 y con eso el badge se prende: un reclamo VIEJO que se durmió recién cuenta como nuevo', () => {
+    // Se abrió hace 11 días —antes de la última visita, hace 3— y recién ayer cruzó los 10.
+    const reciendormido = reclamo({ created_at: hace(11), updated_at: hace(11) })
+    const avisos = avisosDeReclamo([reciendormido], 'bdi', admin)
+    expect(contarNuevos(avisos, Date.now() - 3 * DIA)).toBe(1)
+    // El control: con la fecha de creación como `ts` habría nacido ya marcado como visto.
+    expect(Date.parse(reciendormido.created_at!)).toBeLessThan(Date.now() - 3 * DIA)
+  })
+
+  it('el id es estable entre refrescos: si cambiara, el aviso volvería a contarse como nuevo', () => {
+    expect(avisosDeReclamo([reclamo()], 'bdi', admin)[0].id).toBe('reclamo:bdi:42')
+  })
+
+  it('el aviso es de la marca que se le pasa: un reclamo es de la tienda, no de una línea', () => {
+    const [a] = avisosDeReclamo([reclamo({ store: 'zattia' })], 'zattia', admin)
+    expect(a.marca).toBe('zattia')
+    expect(a.linea).toBe('zattia')
+  })
+
+  it('sin reclamos no cuesta nada: la sección arranca vacía y así va a seguir un tiempo', () => {
+    expect(avisosDeReclamo([], 'bdi', admin)).toEqual([])
   })
 })

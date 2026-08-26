@@ -188,6 +188,21 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, token: data.token || null, vence: data.token_vence || null });
       }
 
+      // Lo único que necesita el aviso del sidebar para saber qué está durmiendo (`alertasDe`).
+      // 🔑 **Recorta COLUMNAS, ⛔ no estados**: quién sigue vivo lo contesta `ESTADOS_ABIERTOS` en
+      // el núcleo, y repetir esa lista acá —o su complemento— es la segunda copia de la regla, que
+      // es el modo de falla propio de este módulo. Medido sobre las 10 filas de BDI: **1.925 bytes
+      // por fila con `COLS` contra 344 con éstas**, 5,6× — y esto lo pide cada admin cada 3 minutos.
+      // ⛔ Sin `cliente` ni un solo monto: un aviso dice que algo duerme, no cuánto ni de quién.
+      const COLS_AVISO = 'id, motivo, estado, compensacion, reintegro_estado, historial, created_at, updated_at';
+      if (req.query.vista === 'avisos') {
+        const { data, error } = await supabase
+          .from('devoluciones').select(COLS_AVISO).eq('store', store)
+          .order('created_at', { ascending: false }).limit(200);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, devoluciones: data || [] });
+      }
+
       // La bandeja de retornos: lo que estamos esperando que vuelva y lo que llegó y falta guardar.
       // El filtro fino (los dos andenes, el orden por antigüedad) lo hace `bandejaDeRetornos` en el
       // front — acá sólo se recortan las columnas y los estados, que es lo que hace la diferencia

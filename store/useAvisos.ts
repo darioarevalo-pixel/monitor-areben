@@ -10,16 +10,18 @@
  * había dos: la feature nueva sale más liviana que lo que reemplaza.
  *
  * Los avisos se DERIVAN de lo que ya se baja (ver `lib/notificaciones/`), así que este store no
- * consulta nada nuevo salvo las fallas.
+ * consulta nada nuevo salvo las fallas y los reclamos.
  */
 
 import { create } from 'zustand'
 import { leerCajon } from '@/lib/solicitudes/cajon'
 import { leerFallas } from '@/lib/postventa/fallas/cliente'
+import { leerReclamosParaAviso } from '@/lib/reclamos/cliente'
+import { puedeVer } from '@/lib/permisos'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeNoDevueltos, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeNoDevueltos, avisosDeReclamo, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
 import { nombrePersona, type CanjeRow } from '@/lib/canjes/tipos'
 import { vistoHasta } from '@/lib/notificaciones/visto'
@@ -106,20 +108,27 @@ export const useAvisos = create<AvisosState>((set, get) => ({
           // fotos de Stunned existiría pero **no la vería nadie**: ésta es la lista de la que sale
           // el aviso y la pantalla `/solicitudes`, o sea por dónde el local se entera de que hay
           // algo para preparar. Una solicitud que no aparece acá no se prepara nunca.
-          const [porFoto, i, fallas] = await Promise.all([
+          const [porFoto, i, fallas, reclamos] = await Promise.all([
             Promise.all(
               lineasDeMarca(m).map(async (l) => ({ l, r: await leerCajon<Solicitud>('sesionfotos', l) })),
             ),
             leerCajon<SolicitudInterna>('solicitudesinternas', m),
             // Una falla que no se pudo leer no puede tumbar el resto de los avisos.
             leerFallas(m).catch(() => []),
+            // 🔑 **El permiso se pregunta ANTES de pedir, no después de recibir**: traerlos para
+            // tirarlos sería un 403 en cada refresco de cada persona del local.
+            // ⚠️ Esto ⛔ **no es la regla, es un atajo**: la regla vive en `avisosDeReclamo`, que
+            // vuelve a mirar el mismo permiso. Si algún día los dos discreparan, el que decide es
+            // el derivador ⇒ el peor caso es pedir de más, ⛔ nunca mostrarle un reclamo a quien no
+            // puede abrir la pantalla.
+            puedeVer(perfil, m, 'postventa') ? leerReclamosParaAviso(m).catch(() => []) : Promise.resolve([]),
           ])
           const solsFoto = porFoto.flatMap(({ r }) => (r.ok ? r.dato : []))
           const resumenes = [
             ...porFoto.flatMap(({ l, r }) => (r.ok ? r.dato.map((s) => resumenFoto(s, l)) : [])),
             ...(i.ok ? i.dato.map((s) => resumenInterna(s, m)) : []),
           ]
-          return { m, resumenes, solsFoto, fallas }
+          return { m, resumenes, solsFoto, fallas, reclamos }
         }),
       )
 
@@ -135,6 +144,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...avisosDeSolicitud(resumenes, perfil),
         ...porMarca.flatMap((p) => avisosDeNoDevueltos(p.solsFoto, p.m, perfil)),
         ...porMarca.flatMap((p) => avisosDeFallas(p.fallas, p.m, perfil)),
+        ...porMarca.flatMap((p) => avisosDeReclamo(p.reclamos, p.m, perfil)),
         ...canjes,
       ])
 

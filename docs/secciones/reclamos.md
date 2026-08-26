@@ -71,6 +71,9 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   valúa una falla acá mueve esa sección.
 - **`/reclamo/<token>` es un portal ABIERTO**, sin sesión, resuelto antes del guard de permisos. Es
   lo único de este módulo expuesto a internet.
+- 🆕 **`lib/notificaciones/derivar.ts` importa de acá** (`alertasDe`, `estaAbierto`, `MOTIVO_LABEL`,
+  `numeroReclamo`): es el aviso del sidebar. ⇒ **tocar `alertasDe` o `DIAS_ALERTA` mueve también el
+  contador de avisos de todo el equipo de Administración**, no sólo esta pantalla.
 
 ## Reglas que el código no dice
 
@@ -242,11 +245,53 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   **3 de los 10 reclamos de BDI tienen dos productos**, así que uno solo para los dos no era un
   caso de borde.
 
+## 🆕 El aviso del sidebar (26-ago-2026)
+
+🔴 **Era el aviso que le faltaba a todo el post-venta.** Las cuatro alertas de `alertasDe` —la plata
+que no sale, el cliente que no responde, el paquete que no llega, la decisión que nadie toma— ya
+existían con sus plazos y sus relojes, y se dibujaban **sólo adentro de esta pantalla, que es de
+Administración**. O sea: para enterarse de que un reclamo estaba durmiendo había que entrar a
+mirarlo. **Es la tercera vuelta del agujero propio de este módulo** (el pendiente sin gesto, y
+después el botón del lado equivocado de la puerta): *una regla que nadie ve se lee igual que una
+que nadie escribió.*
+
+- **`avisosDeReclamo` (`lib/notificaciones/derivar.ts`) ⛔ no inventa ninguna regla**: es el acarreo.
+  Los plazos siguen en `DIAS_ALERTA` y el orden en `alertasDe` ⇒ un plazo se cambia en un solo lado.
+- **Uno por reclamo, una alerta por reclamo** (la primera, la misma que muestra la fila). Agrupar
+  escondería que son clientes distintos esperando platas distintas.
+- 🔑 **`AlertaReclamo.ts` es cuándo la alerta EMPEZÓ a existir** (`referencia + plazo`), ⛔ no la
+  fecha del reclamo. `contarNuevos` compara contra el "visto hasta": con la fecha de creación, un
+  reclamo que se duerme hoy pero se abrió la semana pasada **nacería ya marcado como visto**, o sea
+  que el badge no se prendería nunca justo para el caso que la alerta existe para mostrar.
+- 🔴 **Sólo los abiertos** → `ESTADOS_ABIERTOS` / `estaAbierto`, que se mudaron de `Reclamos.tsx` al
+  núcleo: un `anulado` con un pendiente viejo sin tildar sigue cumpliendo la condición de la alerta
+  de plata y avisaría **para siempre** de algo que ya no existe. La lista es **una**: dos copias es
+  el modo de falla de esta sección.
+- **El aviso lleva a `/postventa?tab=reclamos`**, y para eso la pestaña de Post-venta se mudó de
+  `useState` a la URL (`useFiltroUrl`). 🔴 **Sin eso el aviso dejaba a la persona en el ledger de
+  Fallas**, que se lee igual que un aviso que nadie miró — es el mismo defecto que ya se le arregló
+  a Canjes. `tabDeLaUrl` valida lo que viene de afuera: un `?tab=cualquiera` titulaba
+  *«undefined llega más adelante»*.
+- 🔑 **Baja por una puerta angosta, `vista=avisos`**, que **recorta columnas y ⛔ no estados** (quién
+  sigue vivo lo contesta el núcleo). Medido sobre las 10 filas de BDI: **1.925 bytes por fila con
+  `COLS` contra 344 con éstas, 5,6×** — y esto lo pide cada admin cada 3 minutos. Sin `cliente` y
+  sin un solo monto: un aviso dice que algo duerme, no cuánto ni de quién.
+- **Lo ve quien puede abrir `postventa`.** El local abre reclamos pero no los resuelve; mandarlo a
+  una pantalla que no puede abrir es exactamente el defecto de la vuelta anterior.
+- ⚠️ **El acarreo en `store/useAvisos.ts` no lo mira ningún test** (como el de fallas y el de
+  canjes): lo que está fijado son las dos puntas —el derivador y la pantalla— y el invariante de que
+  la URL que pone el aviso es la que abre Reclamos.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests
 exhaustivos, porque **acá vive la plata** y un error no rompe ninguna pantalla: se ve recién en la
 caja o en el stock.
+
+`npx vitest run tests/notificaciones.test.ts tests/postventa-tab.test.ts tests/postventa-pantalla.test.tsx --reporter=dot`
+— el aviso del sidebar. ⚠️ `postventa-pantalla` es de los pocos `.tsx` del repo y **el único en
+`jsdom`**: `useFiltroUrl` lee `window.location.search`, y sin `window` devolvería siempre el inicial
+y el test no podría distinguir el arreglo del defecto.
 
 Lo que los tests **no** cubren y hay que ejercer a mano:
 

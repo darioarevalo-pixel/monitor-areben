@@ -1558,8 +1558,35 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
  */
 export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2 } as const
 
-export type AlertaReclamo = { tono: Tono; texto: string; dias: number }
+/**
+ * 🔑 **`ts` es cuándo la alerta EMPEZÓ A EXISTIR**, no cuándo se creó el reclamo ni cuándo se lo
+ * tocó por última vez: es el instante en que el reloj cruzó su plazo (`referencia + plazo`).
+ *
+ * Existe porque el aviso del sidebar lo usa para decidir si es **nuevo** (`contarNuevos` compara
+ * contra el "visto hasta"). Con la fecha de creación, un reclamo que se duerme HOY pero se abrió
+ * la semana pasada nacería ya marcado como visto — o sea que **el badge no se prendería nunca
+ * justo para el caso que la alerta existe para mostrar**. La pantalla de Reclamos no lo usa.
+ */
+export type AlertaReclamo = { tono: Tono; texto: string; dias: number; ts: number }
 type Tono = 'warning' | 'danger'
+
+/**
+ * Los estados en los que un reclamo **sigue vivo**. `cerrado` y `anulado` quedan afuera.
+ *
+ * 🔴 Vive acá y ⛔ no en la pantalla porque lo leen **dos lugares**: la lista de Reclamos y el
+ * aviso del sidebar. Una segunda copia es el modo de falla propio de este módulo —la regla
+ * repartida en dos listas—, y acá se pagaría caro: un reclamo `anulado` con un pendiente viejo
+ * sin tildar sigue cumpliendo la condición de la alerta de plata, así que la copia que se olvide
+ * de filtrarlo avisa **para siempre** de algo que ya no existe.
+ */
+export const ESTADOS_ABIERTOS: EstadoReclamo[] = [
+  'borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido',
+]
+
+/** ¿El reclamo sigue vivo? Ver `ESTADOS_ABIERTOS`. */
+export function estaAbierto(d: Pick<ReclamoRow, 'estado'>): boolean {
+  return ESTADOS_ABIERTOS.includes(d.estado)
+}
 
 /** Cuántos días hace. **Nunca negativo**: un reloj corrido no puede mostrar "-2 días". */
 export const diasDesde = (iso?: string | null, ahora = Date.now()): number => {
@@ -1622,21 +1649,28 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
   const desdeCreado = diasDesde(d.created_at, ahora)
   const desdeToque = diasDesde(d.updated_at || d.created_at, ahora)
 
+  /**
+   * El instante en que la alerta empezó a existir: la referencia desde la que se cuenta, más el
+   * plazo. ⚠️ Sale de la MISMA referencia que el `dias` de al lado —⛔ no de `ahora`— o el aviso
+   * del sidebar se "estrenaría" en cada refresco y el badge no se podría apagar nunca.
+   */
+  const cuando = (dias: number, plazo: number) => ahora - (dias - plazo) * 86400000
+
   if (d.reintegro_estado === 'pendiente' && d.compensacion && desdeToque >= DIAS_ALERTA.plata) {
-    alertas.push({ tono: 'danger', texto: `Hace ${desdeToque} días que la plata no sale`, dias: desdeToque })
+    alertas.push({ tono: 'danger', texto: `Hace ${desdeToque} días que la plata no sale`, dias: desdeToque, ts: cuando(desdeToque, DIAS_ALERTA.plata) })
   }
   if (d.estado === 'esperando_cliente' && desdeCreado >= DIAS_ALERTA.cliente) {
-    alertas.push({ tono: 'warning', texto: `El cliente no responde hace ${desdeCreado} días`, dias: desdeCreado })
+    alertas.push({ tono: 'warning', texto: `El cliente no responde hace ${desdeCreado} días`, dias: desdeCreado, ts: cuando(desdeCreado, DIAS_ALERTA.cliente) })
   }
   // ⚠️ Ésta NO cuenta desde el último toque sino desde que el producto salió de vuelta
   // (`desdeQueEsta`): editar el reclamo mientras se espera no puede reiniciar la espera.
   const enCamino = diasDesde(desdeQueEsta(d, 'en_transito'), ahora)
   if (d.estado === 'en_transito' && enCamino >= DIAS_ALERTA.transito) {
-    alertas.push({ tono: 'warning', texto: `Hace ${enCamino} días que no llega`, dias: enCamino })
+    alertas.push({ tono: 'warning', texto: `Hace ${enCamino} días que no llega`, dias: enCamino, ts: cuando(enCamino, DIAS_ALERTA.transito) })
   }
   // Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.
   if (d.estado === 'en_revision' && desdeToque >= DIAS_ALERTA.sinDecidir) {
-    alertas.push({ tono: 'danger', texto: `Esperando una decisión hace ${desdeToque} días`, dias: desdeToque })
+    alertas.push({ tono: 'danger', texto: `Esperando una decisión hace ${desdeToque} días`, dias: desdeToque, ts: cuando(desdeToque, DIAS_ALERTA.sinDecidir) })
   }
   return alertas
 }

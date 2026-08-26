@@ -32,7 +32,7 @@ import {
   calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
-  alertasDe, conAlerta, tokenVencido,
+  alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
   ayudaDeMotivo, casoDe, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
@@ -65,14 +65,14 @@ const ESTADO_TONE: Record<EstadoReclamo, Tone> = {
 // Los siete motivos vigentes salen de `MOTIVOS_VIGENTES`: una sola fuente, así no se
 // desincroniza con lo que acepta el servidor.
 
-/** Los estados que siguen pidiendo algo de alguien. */
-const ABIERTOS: EstadoReclamo[] = ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido']
+// Los estados que siguen pidiendo algo de alguien viven en el núcleo (`ESTADOS_ABIERTOS`): los
+// lee también el aviso del sidebar, y dos listas es el modo de falla propio de este módulo.
 
 /**
  * Los estados en los que el link del cliente todavía sirve.
  *
  * Tiene que ser **el mismo conjunto** que `ABIERTO` en `api/_reclamo.js`: el portal devuelve 404
- * fuera de esos tres. Antes acá se usaba `ABIERTOS` (seis estados) y la lista ofrecía copiar un
+ * fuera de esos tres. Antes acá se usaba `ESTADOS_ABIERTOS` (seis estados) y la lista ofrecía copiar un
  * link que el backend ya rechazaba. Una vez decidido el reclamo el link muere a propósito, y de
  * ahí en más se le avisa al cliente por WhatsApp con el mensaje de resolución.
  */
@@ -524,12 +524,12 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const visibles = useMemo(() => {
     if (filtro === 'todos') return filas
-    const abiertos = filas.filter((f) => ABIERTOS.includes(f.estado))
+    const abiertos = filas.filter((f) => ESTADOS_ABIERTOS.includes(f.estado))
     return filtro === 'dormidos' ? abiertos.filter((f) => alertasDe(f).length > 0) : abiertos
   }, [filas, filtro])
 
   const totales = useMemo(() => {
-    const abiertos = filas.filter((f) => ABIERTOS.includes(f.estado))
+    const abiertos = filas.filter((f) => ESTADOS_ABIERTOS.includes(f.estado))
     return {
       abiertos: abiertos.length,
       dormidos: conAlerta(abiertos),
@@ -894,7 +894,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {!!(d.falla_ids || []).length && (
                         <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>en Fallas</span>
                       )}
-                      {esAdmin && ABIERTOS.includes(d.estado) && !faltan.length && (
+                      {esAdmin && ESTADOS_ABIERTOS.includes(d.estado) && !faltan.length && (
                         <Button size="sm" variant="solid" tone="success" onClick={() => void cerrar(d)}>Cerrar</Button>
                       )}
                       {/* Lo decidido y la traza. Sin esto la fila es puro botón de acción: para
