@@ -13,6 +13,8 @@
 //   POST { store, action:'procesar', id, gn_venta_id, gn_venta_number } → registra la venta del cambio.
 //   POST { store, action:'recibir', id[, unidades:[i]] }         → llegó (todo, o esas unidades).
 //   POST { store, action:'reingreso', id }                       → el devuelto volvió al stock en GN.
+//   POST { store, action:'descontado', id[, unidades:[i]][, gn_venta_number] } → la unidad SANA que
+//                                                                  se queda el cliente salió de GN.
 //   POST { store, action:'cobrado', id }                         → la diferencia del cambio entró.
 //   POST { store, action:'despachado', id }                       → salió lo que se le manda.
 //   POST { store, action:'cupon-emitido', id, cupon_codigo }      → el cupón existe en la tienda. ADMIN.
@@ -54,7 +56,7 @@ import { pendientesDe } from '../lib/reclamos/efectos.core.js';
 import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
-import { aplicarDestinos, DESTINOS, recibirUnidades, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
+import { aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -349,7 +351,12 @@ export default async function handler(req, res) {
       }
 
       // Si el producto no vuelve, no hay nada que esperar ni venta que anular por el retorno.
-      const vuelve = destino === 'stock' || (destino === 'falla' && b.retorno_decidido === true);
+      // 🔑 Sale de `laUnidadVuelve` y ⛔ NO se vuelve a escribir acá. Esta línea era una COPIA de la
+      // regla (`destino === 'stock' || (destino === 'falla' && retorno_decidido)`), o sea el modo de
+      // falla característico de este módulo: la misma decisión en dos lugares. Sobrevivió a la
+      // mudanza del 25-ago-2026, y con el destino `regalada` del 26 habría quedado contestando bien
+      // por casualidad — hasta el día que la regla del núcleo cambie y ésta no.
+      const vuelve = laUnidadVuelve(destino, b.retorno_decidido === true);
       // Un cambio no se salda con los pendientes de una devolución, y confundirlos lo dejaba
       // trabado sin poder cerrarse nunca. Ver el bloque `esCambio` más abajo.
       const esCambio = compensacion === 'otro_producto';
@@ -548,6 +555,40 @@ export default async function handler(req, res) {
         : `llegó ${r.recibidas} de ${r.recibidas + r.faltan}: falta${r.faltan > 1 ? 'n' : ''} ${r.faltan}`);
       await apilar(supabase, id, { estado, at: ahora(), usuario, nota }, { [r.campo]: r.lista, estado });
       return res.status(200).json({ ok: true, todoLlego: r.todoLlego, faltan: r.faltan });
+    }
+
+    // ── La unidad SANA que se queda el cliente salió del stock ───────────────────
+    //
+    // 🔑 Es la mitad que faltaba del descuento. La otra —la unidad fallada— sale por el alta en
+    // Fallas, que la valúa y la manda a revender como falla; hacer pasar por ahí una unidad
+    // impecable ensuciaba el ledger con mercadería que está sana. Desde el 26-ago-2026 cada mitad
+    // tiene su cliente propio en Gestión Nube (`FALLA_CLIENT` / `RECLAMO_CLIENT`).
+    //
+    // ⚠️ **Es una traza, no un efecto**: la venta técnica la crea `api/crear-venta.js` desde la app
+    // —los tokens de ventas de GN sólo viven en producción— y acá se sella cuál unidad ya salió.
+    // ⛔ Por eso NO está en `DE_ADMIN`, igual que `falla`, `gn-baja` y `reingreso`: anotar un paso
+    // físico que ya ocurrió no es decidir plata. El botón que la dispara sí es de Administración,
+    // que es quien corre la venta.
+    if (action === 'descontado') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones')
+        .select('estado, motivo, items, items_correctos, destino_prenda')
+        .eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      // 🔑 **El cero afirma.** Sin esto, un reclamo donde nada se regala contestaría "descontado
+      // todo" sobre una lista vacía y quedaría sellado un paso que nadie hizo.
+      if (!loQueFaltaDescontar(fila).unidades.length) {
+        return res.status(400).json({ error: 'este reclamo no tiene ningún producto sano pendiente de descontar' });
+      }
+      const pedidas = Array.isArray(b.unidades) ? b.unidades : null;
+      const r = descontarUnidades(fila, pedidas, ahora(), texto(b.gn_venta_number) || null);
+      if (!r.descontadas) return res.status(400).json({ error: 'ninguno de esos productos está pendiente de descontar en este reclamo' });
+      const nota = texto(b.nota) || `salió${r.descontadas > 1 ? 'n' : ''} de GN ${r.descontadas} producto${r.descontadas > 1 ? 's' : ''} que se queda el cliente`
+        + (texto(b.gn_venta_number) ? ` (venta #${texto(b.gn_venta_number)})` : '')
+        + (r.faltan ? ` — falta${r.faltan > 1 ? 'n' : ''} ${r.faltan}` : '');
+      await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota }, { [r.campo]: r.lista });
+      return res.status(200).json({ ok: true, descontadas: r.descontadas, faltan: r.faltan, seDescontoTodo: r.seDescontoTodo });
     }
 
     // El producto devuelto volvió al stock a mano en GN. Como `anulacion`, es una TRAZA de un paso

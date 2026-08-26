@@ -10,10 +10,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  aplicarDestinos, deDondeVuelve, destinoDeUnidad, laUnidadVuelve, loQueFaltaLlegar,
+  aplicarDestinos, deDondeVuelve, descontarUnidades, DESTINO_LABEL, destinoDe, destinoDeUnidad,
+  laUnidadVuelve, loQueFaltaDescontar, loQueFaltaLlegar,
   recibirUnidades, trabaParaRecibir, unidadesQueVuelven,
   type FilaConUnidades, type ItemReclamo,
 } from '@/lib/reclamos/tipos'
+import { DESTINOS } from '@/lib/reclamos/unidades.core.js'
 
 const AHORA = '2026-08-25T12:00:00.000Z'
 const buzo: ItemReclamo = { producto: 'Buzo', cantidad: 1 }
@@ -147,5 +149,173 @@ describe('lo que falta llegar', () => {
     const conUna: FilaConUnidades = { ...dos, items: [{ ...buzo, recibida_at: AHORA }, gorra] }
     expect(loQueFaltaLlegar(conUna).map((u) => u.item.producto)).toEqual(['Gorra'])
     expect(loQueFaltaLlegar({ ...dos, items: dos.items.map((i) => ({ ...i, recibida_at: AHORA })) })).toEqual([])
+  })
+})
+
+/**
+ * ── La partición del descuento: `falla` vs `regalada` (26-ago-2026) ──────────────────────────────
+ *
+ * 🔴 **Se construyó en verde y ése es el punto de este bloque.** `destinoDe(motivo, false, …)` —o
+ * sea "no vuelve"— **no lo assertaba ningún test**: la línea contestaba `'falla'` para todo, y
+ * cambiarla a `'regalada'` no puso una sola prueba en rojo. El agujero no era del cambio, era de la
+ * cobertura: el caso "el cliente se lo queda" es justo el que decide a qué cliente de Gestión Nube
+ * va la venta técnica, y por lo tanto si el ledger de Fallas se ensucia con mercadería sana.
+ *
+ * El oráculo es el depósito: qué sale del stock, con qué papel, y cuál de las dos listas queda
+ * mintiendo si se elige mal.
+ */
+describe('el descuento se parte en dos: la fallada y la sana', () => {
+  it('la que NO vuelve y está sana es `regalada`, no una falla', () => {
+    // Los cuatro casos donde el producto está impecable y el cliente se lo queda.
+    for (const m of ['talle', 'arrepentimiento', 'no_esperaba', 'excedente'] as const) {
+      expect(destinoDe(m, false, null), m).toBe('regalada')
+    }
+  })
+
+  it('la FALLADA sigue yendo a `falla` aunque no vuelva — quedársela no la vuelve sana', () => {
+    expect(destinoDe('falla', false, 'inutil')).toBe('falla')
+    expect(destinoDe('falla', true, 'inutil')).toBe('falla')
+  })
+
+  it('y la que vuelve sana sigue yendo a stock', () => {
+    expect(destinoDe('talle', true, null)).toBe('stock')
+  })
+
+  /**
+   * 🔴 La lista blanca del handler. Si `regalada` no está acá, la pantalla ofrece un destino que el
+   * servidor rechaza — y el error aparece recién al guardar la decisión.
+   */
+  it('`regalada` es un destino válido para el servidor y tiene etiqueta', () => {
+    expect(DESTINOS).toContain('regalada')
+    expect(DESTINO_LABEL.regalada).toBeTruthy()
+    // El compilador exige que `DESTINO_LABEL` cubra el tipo; esto exige lo mismo al revés.
+    for (const d of DESTINOS) expect(DESTINO_LABEL[d as keyof typeof DESTINO_LABEL], d).toBeTruthy()
+  })
+
+  it('una regalada ⛔ no vuelve NUNCA, ni con el retorno pedido', () => {
+    expect(laUnidadVuelve('regalada', true)).toBe(false)
+    expect(laUnidadVuelve('regalada', false)).toBe(false)
+  })
+})
+
+describe('lo que falta descontar de Gestión Nube', () => {
+  const regalado: FilaConUnidades = { motivo: 'excedente', destino_prenda: 'regalada', items: [buzo] }
+
+  it('la regalada sin sellar es lo que falta sacar del stock', () => {
+    expect(loQueFaltaDescontar(regalado).map((u) => u.item.producto)).toEqual(['Buzo'])
+  })
+
+  it('sellada, ya no falta', () => {
+    expect(loQueFaltaDescontar({ ...regalado, items: [{ ...buzo, baja_at: AHORA }] })).toEqual([])
+  })
+
+  /**
+   * 🔑 La fallada la descuenta el alta en Fallas, que además la valúa. Contarla también acá la
+   * restaría **dos veces** del mismo stock.
+   */
+  it('la fallada ⛔ NO entra: ésa la descuenta el alta en Fallas', () => {
+    expect(loQueFaltaDescontar({ motivo: 'falla', destino_prenda: 'falla', items: [buzo] })).toEqual([])
+  })
+
+  it('y la que vuelve a stock tampoco: no salió para siempre', () => {
+    expect(loQueFaltaDescontar({ motivo: 'talle', destino_prenda: 'stock', items: [buzo] })).toEqual([])
+  })
+
+  /**
+   * 🔴 En un `mal_armado` lo que se le regala es **lo que se mandó por error**, que vive en
+   * `items_correctos`. Lo que compró nunca salió del depósito: descontarlo sacaría del stock una
+   * unidad que sigue en el estante. Es el mismo defecto que ya mordió en la bandeja de retornos.
+   */
+  it('en un `mal_armado` mira `items_correctos`, no lo que el cliente compró', () => {
+    const mal: FilaConUnidades = {
+      motivo: 'mal_armado', destino_prenda: 'regalada',
+      items: [buzo], items_correctos: [gorra],
+    }
+    expect(loQueFaltaDescontar(mal).map((u) => u.item.producto)).toEqual(['Gorra'])
+  })
+
+  it('el destino propio del ítem gana sobre el del reclamo, en los dos sentidos', () => {
+    const mixto: FilaConUnidades = {
+      motivo: 'talle', destino_prenda: 'stock',
+      items: [buzo, { ...gorra, destino: 'regalada' }],
+    }
+    expect(loQueFaltaDescontar(mixto).map((u) => u.item.producto)).toEqual(['Gorra'])
+    const alReves: FilaConUnidades = {
+      motivo: 'talle', destino_prenda: 'regalada',
+      items: [buzo, { ...gorra, destino: 'stock' }],
+    }
+    expect(loQueFaltaDescontar(alReves).map((u) => u.item.producto)).toEqual(['Buzo'])
+  })
+})
+
+describe('sellar lo que ya salió de Gestión Nube', () => {
+  const dosRegalados: FilaConUnidades = {
+    motivo: 'excedente', destino_prenda: 'regalada', items: [buzo, gorra],
+  }
+
+  it('sin índices sella todas y no queda nada pendiente', () => {
+    const r = descontarUnidades(dosRegalados, null, AHORA, '14231')
+    expect(r.descontadas).toBe(2)
+    expect(r.faltan).toBe(0)
+    expect(r.seDescontoTodo).toBe(true)
+    expect(r.lista.map((i) => i.baja_venta)).toEqual(['14231', '14231'])
+  })
+
+  it('con índices sella sólo ésa, y la otra sigue pendiente', () => {
+    const r = descontarUnidades(dosRegalados, [1], AHORA, '14231')
+    expect(r.descontadas).toBe(1)
+    expect(r.faltan).toBe(1)
+    expect(r.seDescontoTodo).toBe(false)
+    expect(r.lista[0].baja_at).toBeUndefined()
+    expect(r.lista[1].baja_at).toBe(AHORA)
+  })
+
+  /** Los índices llegan del JSON del POST: un "1" de texto tiene que sellar la unidad 1. */
+  it('acepta el índice como texto', () => {
+    expect(descontarUnidades(dosRegalados, ['1'] as unknown as number[], AHORA, null).descontadas).toBe(1)
+  })
+
+  /**
+   * ⚠️ Volver a sellar ⛔ no pisa la fecha ni el número: pisarlos borraría a qué venta técnica hay
+   * que ir a mirar si el stock no cierra. Mismo criterio que `recibirUnidades`.
+   */
+  it('volver a sellar una que ya estaba no le pisa la fecha ni la venta', () => {
+    const ya: FilaConUnidades = {
+      ...dosRegalados, items: [{ ...buzo, baja_at: '2026-01-01T00:00:00.000Z', baja_venta: '111' }, gorra],
+    }
+    const r = descontarUnidades(ya, null, AHORA, '999')
+    expect(r.descontadas).toBe(1)
+    expect(r.lista[0].baja_at).toBe('2026-01-01T00:00:00.000Z')
+    expect(r.lista[0].baja_venta).toBe('111')
+    expect(r.lista[1].baja_venta).toBe('999')
+  })
+
+  /**
+   * 🔴 **El mutante que sobrevivió a la primera pasada.** El test de arriba pasa `null` (todas las
+   * que faltan), y por ahí la ya sellada nunca entra. El caso que muerde es el índice EXPLÍCITO
+   * apuntando a una unidad ya sellada — que es exactamente lo que manda la pantalla si alguien
+   * aprieta dos veces con la lista vieja en la mano. Sin este filtro, el segundo click le pisa la
+   * fecha y el número de venta, y se pierde a qué venta técnica ir a mirar.
+   */
+  it('un índice explícito sobre una ya sellada ⛔ no la pisa', () => {
+    const ya: FilaConUnidades = {
+      ...dosRegalados, items: [{ ...buzo, baja_at: '2026-01-01T00:00:00.000Z', baja_venta: '111' }, gorra],
+    }
+    const r = descontarUnidades(ya, [0], AHORA, '999')
+    expect(r.descontadas).toBe(0)
+    expect(r.lista[0].baja_at).toBe('2026-01-01T00:00:00.000Z')
+    expect(r.lista[0].baja_venta).toBe('111')
+    // Y la que sí faltaba sigue sin sellarse: no se pidió.
+    expect(r.lista[1].baja_at).toBeUndefined()
+    expect(r.faltan).toBe(1)
+  })
+
+  it('sella en `items_correctos` cuando el caso es `mal_armado`', () => {
+    const mal: FilaConUnidades = {
+      motivo: 'mal_armado', destino_prenda: 'regalada', items: [buzo], items_correctos: [gorra],
+    }
+    const r = descontarUnidades(mal, null, AHORA, '14231')
+    expect(r.campo).toBe('items_correctos')
+    expect(r.lista[0].baja_at).toBe(AHORA)
   })
 })

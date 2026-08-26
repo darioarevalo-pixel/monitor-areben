@@ -75,7 +75,9 @@ export function mensajeResolucion(
 ): string {
   const items = d.items || []
   const monto = Number(d.monto_total) || 0
-  const seLaQueda = d.destino_prenda === 'falla' || d.destino_prenda === 'perdida'
+  // 🔑 `regalada` es el caso más literal de los tres: la unidad está sana y se la dejamos. Antes
+  // caía en `falla`, así que el mensaje salía igual — pero por el destino equivocado.
+  const seLaQueda = d.destino_prenda === 'falla' || d.destino_prenda === 'regalada' || d.destino_prenda === 'perdida'
 
   const cuerpo: string[] = []
   const pasos: string[] = []

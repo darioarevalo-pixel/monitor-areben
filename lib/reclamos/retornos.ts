@@ -48,8 +48,15 @@ export type RetornoRow = Pick<ReclamoRow,
   | 'destino_prenda' | 'compensacion' | 'via_retorno' | 'seguimiento_vuelta' | 'solicitud_envio'
   | 'reingreso_estado' | 'falla_ids' | 'historial' | 'created_at' | 'updated_at'>
 
-/** Qué hay que hacer con el producto cuando esté en la mano. Sale del destino ya decidido. */
-export type QueHacer = 'stock' | 'falla' | 'nada'
+/**
+ * Qué hay que hacer con el producto cuando esté en la mano. Sale del destino ya decidido.
+ *
+ * ⚠️ `no_vuelve` ⛔ **no es lo mismo que `nada`**: `nada` significa que nadie decidió todavía, y es
+ * lo que traba la vuelta; `no_vuelve` es una decisión tomada — se la queda el cliente. Mientras
+ * `regalada` no existía como destino, ese caso caía en `nada` y la bandeja pedía decidir algo que
+ * ya estaba decidido.
+ */
+export type QueHacer = 'stock' | 'falla' | 'no_vuelve' | 'nada'
 
 export type FilaRetorno = {
   reclamo: RetornoRow
@@ -95,12 +102,14 @@ export function faltaGuardarlo(d: RetornoRow): boolean {
 export function queHacerConEl(destino: DestinoPrenda | null | undefined): QueHacer {
   if (destino === 'stock') return 'stock'
   if (destino === 'falla') return 'falla'
+  if (destino === 'regalada' || destino === 'perdida') return 'no_vuelve'
   return 'nada'
 }
 
 export const QUE_HACER_LABEL: Record<QueHacer, string> = {
   stock: 'Vuelve a stock',
   falla: 'Va a Fallas',
+  no_vuelve: 'No vuelve',
   nada: 'Sin destino decidido',
 }
 

@@ -173,6 +173,23 @@ describe('convieneRetorno: el caso de la funda', () => {
 })
 
 describe('costoDelCaso', () => {
+  /**
+   * 🔴 **El defecto que destapó partir el destino en dos (26-ago-2026).** `destino` no aceptaba
+   * `null`, así que la pantalla tapaba el hueco mandando `'falla'` fijo cuando no se pedía el
+   * retorno — y en una **demora** eso contaba el costo entero de la mercadería como perdida, cuando
+   * el cliente la recibió, la pagó y es suya. `null` significa "no hay producto en juego" y vale
+   * cero: es lo que contestan la demora y la cancelación.
+   */
+  it('sin producto en juego (null) no se pierde ninguna unidad', () => {
+    const c = costoDelCaso({ montoDevuelto: 0, items: [item(12000, 1, { costo: 2000 })], destino: null })
+    expect(c).toBe(0)
+  })
+
+  it('la regalada SÍ se pierde: salió por la puerta', () => {
+    const c = costoDelCaso({ montoDevuelto: 0, items: [item(12000, 1, { costo: 2000 })], destino: 'regalada' })
+    expect(c).toBe(2000)
+  })
+
   it('si el producto vuelve a stock, la unidad no se perdió', () => {
     const c = costoDelCaso({ montoDevuelto: 8000, envioVuelta: 6000, items: [item(12000, 1, { costo: 2000 })], destino: 'stock' })
     expect(c).toBe(14000)
@@ -897,6 +914,30 @@ describe('faltantesParaCerrar', () => {
 
   it('sin pendientes, no falta nada', () => {
     expect(faltantesParaCerrar(base)).toEqual([])
+  })
+
+  /**
+   * 🔑 **El descuento de lo regalado es "siempre", no "si alguien se acuerda".** La unidad sana que
+   * se queda el cliente salió del depósito y Gestión Nube la sigue contando: si el reclamo se
+   * cierra sin sacarla, el stock queda de más hasta que la encuentre un conteo — el mismo agujero
+   * que del otro lado tapó `descontarReemplazo`.
+   */
+  it('una regalada sin descontar traba el cierre, y sellada lo destraba', () => {
+    const regalado: ReclamoRow = {
+      ...base, motivo: 'excedente', compensacion: 'ninguna', destino_prenda: 'regalada',
+      items: [item(12000)],
+    }
+    expect(faltantesParaCerrar(regalado).join(' ')).toContain('descontar de Gestión Nube')
+    const sellado = { ...regalado, items: [item(12000, 1, { baja_at: '2026-08-26T12:00:00.000Z' })] }
+    expect(faltantesParaCerrar(sellado)).toEqual([])
+  })
+
+  /** La fallada no entra por acá: la descuenta el alta en Fallas, que además la valúa. */
+  it('una falla que se queda el cliente ⛔ no pide este descuento', () => {
+    const fallado: ReclamoRow = {
+      ...base, destino_prenda: 'falla', items: [item(12000)], fotos: [{ url: 'x', at: '2026-08-26' }],
+    }
+    expect(faltantesParaCerrar(fallado).join(' ')).not.toContain('descontar de Gestión Nube')
   })
 
   /**

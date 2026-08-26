@@ -25,11 +25,11 @@ import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
   marcarDespachado, marcarCuponEmitido,
-  ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, editarReclamo,
+  ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, descontarRegaladas, editarReclamo,
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, MOTIVO_LABEL,
+  calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido,
@@ -411,6 +411,35 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     if (!pass) { toast.aviso('Sin la contraseña no se puede escribir la venta en GN.'); return }
     try {
       const v = await descontarReemplazo(marca, d, { user: perfil?.name || '', pass })
+      toast.ok(v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
+      void recargar()
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+
+  /**
+   * La unidad SANA que se queda el cliente sale del stock.
+   *
+   * 🔑 **Es el gesto que antes había que hacer pasando por Fallas.** Sacar del depósito un producto
+   * impecable obligaba a darlo de alta como falla —valuado a PVP de feria y en la lista de lo que
+   * se revende como falla—, así que el ledger de Post-venta terminaba lleno de mercadería sana.
+   * Ahora la falla va al cliente FALLA de Gestión Nube y esto al cliente RECLAMO.
+   */
+  const descontarLasQueSeQueda = async (d: ReclamoRow) => {
+    const faltan = loQueFaltaDescontar(d)
+    const si = await confirmar({
+      titulo: 'Descontar del stock lo que se queda el cliente',
+      tono: 'warning',
+      ok: 'Descontar en GN',
+      mensaje: `Se crea la venta técnica en Gestión Nube que saca del depósito ${faltan.map((u) => `${u.item.cantidad} × ${u.item.producto}`).join(', ')}. `
+        + 'Va al cliente «Reclamo», neto $0 y valuada a precio de lista. ⛔ No entra a Fallas: el producto está sano.',
+    })
+    if (!si) return
+    const pass = obtenerPass()
+    if (!pass) { toast.aviso('Sin la contraseña no se puede escribir la venta en GN.'); return }
+    try {
+      const v = await descontarRegaladas(marca, d, { user: perfil?.name || '', pass })
       toast.ok(v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
       void recargar()
     } catch (e) {
@@ -824,6 +853,12 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       )}
                       {esAdmin && d.destino_prenda === 'falla' && !(d.falla_ids || []).length && (d.estado === 'recibido' || d.estado === 'resuelto') && (
                         <Button size="sm" variant="outline" onClick={() => void aFallas(d)}>Pasar a Fallas</Button>
+                      )}
+                      {/* ⚠️ Sin gate de estado, y a propósito: la unidad regalada **no vuelve**, así
+                          que esperar a `recibido` —que es lo que pide "Pasar a Fallas"— la dejaría
+                          sin poder descontarse nunca. Desde que se decidió, ya salió del depósito. */}
+                      {esAdmin && !!loQueFaltaDescontar(d).length && (
+                        <Button size="sm" variant="solid" tone="warning" onClick={() => void descontarLasQueSeQueda(d)}>Descontar lo que se queda</Button>
                       )}
                       {!!(d.falla_ids || []).length && (
                         <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>en Fallas</span>

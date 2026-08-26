@@ -12,7 +12,7 @@ import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
-import { calcularCambio, etiquetaEM, laFallaDescuentaStock, numeroReclamo } from './tipos'
+import { calcularCambio, etiquetaEM, laFallaDescuentaStock, loQueFaltaDescontar, numeroReclamo } from './tipos'
 import type { RetornoRow } from './retornos'
 import type {
   Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, EnvioPaga, FotoReclamo, ItemReclamo,
@@ -434,6 +434,74 @@ export async function descontarReemplazo(
     gn_venta_reemplazo_number: venta.number ? String(venta.number) : null,
   })
   return { id: venta.id, number: venta.number }
+}
+
+/**
+ * Saca del stock las unidades **sanas** que se queda el cliente, con una venta técnica al cliente
+ * RECLAMO de Gestión Nube.
+ *
+ * 🔑 **Es la otra mitad de `pasarAFallas`, y existe para no tener que pasar por ahí.** Hasta el
+ * 26-ago-2026 el único camino para sacar del stock una unidad que se le regala al cliente era darla
+ * de alta en Fallas: eso la valúa a PVP de feria y la deja en la lista de lo que se revende como
+ * falla, dos afirmaciones falsas sobre un producto impecable. Ahora la falla va al cliente FALLA y
+ * lo sano al cliente RECLAMO, y el ledger de Fallas queda limpio.
+ *
+ * ⚠️ **Una venta por reclamo, con todas las unidades que falten** —no una por unidad—: es un solo
+ * movimiento de depósito y así queda un solo número de venta al que ir a mirar. El sello es igual
+ * por unidad, que es donde vive el dato.
+ *
+ * ⛔ Va contra el `crear-venta` de PRODUCCIÓN, también desde localhost: los tokens de ventas de GN
+ * viven sólo ahí.
+ */
+export async function descontarRegaladas(
+  marca: Marca,
+  d: ReclamoRow,
+  ctx: { user: string; pass: string },
+): Promise<{ id?: string; number?: string; descontadas: number }> {
+  const faltan = loQueFaltaDescontar(d)
+  if (!faltan.length) throw new Error('No hay ningún producto sano pendiente de descontar en este reclamo.')
+  const items = faltan
+    .filter((u) => u.item.product_id && u.item.size_id)
+    .map((u) => ({
+      product_id: u.item.product_id as string,
+      size_id: u.item.size_id as string,
+      quantity: Number(u.item.cantidad) || 1,
+      unit_price: Number(u.item.precio) || 0,
+    }))
+  // Mismo corte que `descontarReemplazo`: sin el artículo de GN no hay stock que mover, y fallar
+  // acá es mejor que dejar creer que se descontó.
+  if (!items.length) {
+    throw new Error('Estos productos no están linkeados a Gestión Nube, así que no se puede descontar el stock. Cargalo a mano en GN.')
+  }
+  const r = await fetch(CREAR_VENTA_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      store: marca,
+      origen: 'deposito',
+      items,
+      // Precio de lista + 100 % de descuento: sale del stock, no se cobra, y queda valuada real.
+      descuento: items.reduce((s, it) => s + it.unit_price * it.quantity, 0),
+      comments: `Se lo queda el cliente — reclamo ${d.numero || numeroReclamo(d.id)} · orden ${d.orden_tn || '?'} (Monitor)`.slice(0, 500),
+      solicitudId: `reclamo-${d.id}-regaladas`, // idempotencia: dos clicks no generan dos ventas
+      proposito: 'reclamo',
+      user: ctx.user,
+      pass: ctx.pass,
+    }),
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!j?.ok) throw new Error(`No se pudo descontar el stock en GN — ${j?.error || r.status}`)
+  const venta = j.venta || {}
+  // El sello va DESPUÉS de que la venta exista: al revés, un fallo de GN dejaría el reclamo
+  // diciendo que la unidad ya salió y nadie la volvería a buscar.
+  await postear({
+    action: 'descontado',
+    store: marca,
+    id: d.id,
+    unidades: faltan.map((u) => u.i),
+    gn_venta_number: venta.number ? String(venta.number) : null,
+  })
+  return { id: venta.id, number: venta.number, descontadas: faltan.length }
 }
 
 // ── El cambio por otro producto ─────────────────────────────────────────────────

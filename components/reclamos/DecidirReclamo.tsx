@@ -225,7 +225,11 @@ export function DecidirReclamo({
       envioVuelta: retorno ? Number(envioVuelta) || 0 : 0,
       envioReemplazo: compensacion === 'otra_unidad' ? Number(envioIda) || 0 : 0,
       items,
-      destino: retorno ? (destino ?? 'falla') : 'falla',
+      // 🔑 `destino` YA salió de `destinoDe(motivo, retorno, escenario)`, así que el retorno está
+      // adentro. Acá decía `retorno ? (destino ?? 'falla') : 'falla'`, y ese `'falla'` fijo hacía
+      // que **una demora contara el costo entero de la mercadería como perdida**, cuando el
+      // cliente la recibió y es suya. `null` (sin producto en juego) ahora vale cero.
+      destino,
     }),
     [monto.total, retorno, envioVuelta, envioIda, compensacion, items, destino],
   )
@@ -538,7 +542,9 @@ export function DecidirReclamo({
                   style={{ width: 260 }}
                 >
                   <option value="">Lo del reclamo — {DESTINO_LABEL[destino]}</option>
-                  {(['stock', 'falla', 'perdida'] as DestinoPrenda[]).map((k) => (
+                  {/* `regalada` entró el 26-ago-2026 y es la opción que faltaba: hasta entonces,
+                      para decir "esta sana se la queda el cliente" había que elegir `falla`. */}
+                  {(['stock', 'falla', 'regalada', 'perdida'] as DestinoPrenda[]).map((k) => (
                     <option key={k} value={k}>{DESTINO_LABEL[k]}</option>
                   ))}
                 </Select>

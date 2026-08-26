@@ -157,6 +157,19 @@ describe('el orden y lo que traba', () => {
     expect(queHacerConEl(null)).toBe('nada')
     expect(queHacerConEl('no_salio')).toBe('nada')
   })
+
+  /**
+   * 🔑 **`no_vuelve` ⛔ no es `nada`.** `nada` significa que nadie decidió todavía, y es lo que traba
+   * la vuelta; `no_vuelve` es una decisión tomada. Mientras `regalada` no existió como destino, ese
+   * caso caía en `nada` y la bandeja pedía **decidir algo que ya estaba decidido**.
+   */
+  it('la regalada y la perdida son una decisión, no un hueco', () => {
+    expect(queHacerConEl('regalada')).toBe('no_vuelve')
+    expect(queHacerConEl('perdida')).toBe('no_vuelve')
+    expect(trabaDeLaVuelta(con({ destino_prenda: 'regalada' }))).not.toContain('Falta decidir qué se hace')
+    // Y el que SÍ es un hueco sigue trabando.
+    expect(trabaDeLaVuelta(con({ destino_prenda: null }))).toContain('Falta decidir qué se hace')
+  })
 })
 
 describe('lo que se lee y se copia', () => {

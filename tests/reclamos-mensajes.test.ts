@@ -59,6 +59,17 @@ describe('mensaje de resolución', () => {
     expect(t).toContain('$ 5.000')
   })
 
+  /**
+   * 🔑 **`regalada` es el caso más literal de "quedátelo"**, y hasta el 26-ago-2026 llegaba acá
+   * disfrazado de `falla`. Si el destino nuevo no entra en la cuenta, al cliente que se queda con un
+   * producto sano **no se le dice nada**: se queda esperando una etiqueta de devolución que nunca
+   * va a llegar, y el reclamo parece trabado del lado de él.
+   */
+  it('la unidad SANA que se queda también lo dice explícitamente', () => {
+    const t = mensajeResolucion({ ...base, compensacion: 'ninguna', monto_total: 0, destino_prenda: 'regalada', via_retorno: null } as ReclamoRow, 'R-0025')
+    expect(t).toContain('No hace falta que nos devuelvas nada')
+  })
+
   it('reenvío del faltante: no promete plata', () => {
     const t = mensajeResolucion({ ...base, compensacion: 'reenvio', monto_total: 0, destino_prenda: 'no_salio' } as ReclamoRow, 'R-0025')
     expect(t).toContain('Te enviamos lo que falta')

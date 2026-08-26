@@ -123,11 +123,46 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 
 ## Pendiente
 
-- ▶️ **El excedente todavía no puede partir el descuento en dos.** Está decidido: lo que salió mal
-  se descuenta con una venta técnica **siempre**, y va al cliente de Fallas si está fallado o a un
-  **cliente RECLAMO propio** si está sano, para no ensuciar el ledger de Fallas. ⛔ No se puede
-  construir hasta que **exista el cliente RECLAMO en Gestión Nube, uno por marca**. Mientras tanto
-  el destino usa `'falla'`, que ahí significa "sale del stock", no "está fallado".
+- ✅ **El descuento ya está partido en dos** (26-ago-2026). Bruno creó los dos clientes de Gestión
+  Nube que faltaban —**«Reclamo BDI» `652720` (n°14231)** y **«Reclamo Zattia» `652718`**— y con eso
+  se pudo separar lo que era un solo destino sobrecargado:
+
+  | destino | qué significa | a dónde va la venta técnica |
+  |---|---|---|
+  | `falla` | la unidad **es** una falla | cliente FALLA + ledger de Post-venta, valuada a PVP feria |
+  | `regalada` 🆕 | la unidad está **sana** y se la queda el cliente | cliente RECLAMO, ⛔ **no entra a Fallas** |
+
+  🔑 **Lo que arregla:** para sacar del stock un producto impecable había que darlo de alta en
+  Fallas, o sea afirmar dos cosas falsas sobre él —que está fallado y que se revende como tal— y
+  ensuciar con eso el único ledger que dice cuánta plata se pierde en fallas. `destinoDe` contestaba
+  `'falla'` para **todos** los casos en que el producto no vuelve, no sólo el excedente.
+
+  🔴 **Y se construyó en verde: `destinoDe(motivo, false, …)` no lo assertaba ningún test.** Cambiar
+  la línea de `'falla'` a `'regalada'` no puso una sola prueba en rojo. El agujero era de cobertura,
+  y justo en la rama que decide a qué cliente de GN va la plata → `tests/reclamos-unidades.test.ts`,
+  bloque «el descuento se parte en dos».
+
+  - ⛔ **Sin migración**: el sello viaja en el jsonb (`ItemReclamo.baja_at` + `baja_venta`), y va por
+    **unidad** por lo mismo que `destino` y `recibida_at` — un reclamo donde uno vuelve a stock y el
+    otro se lo queda el cliente no lo puede decir una columna sola.
+  - 🔑 **Cerrar lo exige**: `faltantesParaCerrar` no deja cerrar mientras una regalada siga contada
+    en GN. Ése es el "siempre" de la decisión — antes el descuento dependía de que alguien apretara
+    «Pasar a Fallas».
+  - Handler: acción **`descontado`** (⛔ no está en `DE_ADMIN`: es una traza, igual que `falla`,
+    `gn-baja` y `reingreso`). La venta la crea `descontarRegaladas` contra `api/crear-venta.js` con
+    `proposito:'reclamo'`, **una por reclamo** con todas las unidades que falten.
+  - ⚠️ **El id de Zattia no se pudo verificar**: su token de lectura de GN está vencido (lo mismo que
+    ya anota `CAMBIO_CHANNEL`). El de BDI sí, contra `/clientes` de GN. ⇒ **la primera venta técnica
+    de un reclamo de Zattia hay que mirarla en GN.**
+- ✅ **Y salió un defecto de la misma línea: una DEMORA contaba el costo entero de la mercadería como
+  perdida.** `costoDelCaso` no aceptaba `destino: null`, así que la pantalla tapaba el hueco mandando
+  `'falla'` fijo cuando no se pedía el retorno — y en una demora el cliente recibió lo que compró, lo
+  pagó y es suyo. Ahora `null` ("no hay producto en juego") vale cero.
+- ✅ **El `vuelve` del handler era una COPIA de `laUnidadVuelve`**, sobreviviente de la mudanza del
+  25-ago. Con `regalada` contestaba bien de casualidad. Ya llama al núcleo.
+- ▶️ **Falta lo que la partición NO resuelve: la venta técnica de una unidad sana sale a nombre de
+  «Reclamo», no del cliente de Fallas — pero el excedente que salió de OTRA venta sigue sin abrirle
+  el faltante a esa otra venta.** Lo dice el escenario (`otra_venta`) y lo hace una persona.
 - ✅ **La oferta de retención ya deja rastro** (25-ago-2026). Se guardan `retencion_monto` y
   `retencion_respuesta` (`acepto` / `rechazo`), y la regla entera vive en `registroDeRetencion`
   (`lib/reclamos/casos.core.js`), que la aplican la pantalla y el handler. **Las dos mitades van

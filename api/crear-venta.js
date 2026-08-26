@@ -27,6 +27,17 @@ const SF_CFG = {
 const FALLA_CLIENT = { zattia: 424420, bdi: 159334 };
 // Ídem para las ventas de CAMBIOS (payload proposito:'cambio').
 const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
+// Ídem para las unidades SANAS que salen del stock porque el cliente se las queda (payload
+// proposito:'reclamo'). Clientes «Reclamo Zattia» y «Reclamo BDI», creados por Bruno el 26-ago-2026.
+// 🔑 **Existe para que el ledger de Fallas no se ensucie con mercadería sana.** Hasta hoy la única
+// forma de sacar del stock una unidad que se le regala al cliente era darla de alta en Fallas, que
+// la valúa a PVP de feria y la manda a la lista de lo que se revende como falla: dos cosas falsas
+// sobre un producto que está impecable. La partición es la del destino: `falla` → cliente FALLA,
+// `regalada` → cliente RECLAMO.
+// ⚠️ El de BDI está verificado contra GN (652720, n°14231, «Reclamo BDI»); el de ZATTIA **no se
+// pudo leer** —su token de lectura está vencido, igual que anota `CAMBIO_CHANNEL`— así que la
+// primera venta técnica de un reclamo de Zattia hay que mirarla en GN.
+const RECLAMO_CLIENT = { zattia: 652718, bdi: 652720 };
 // Ídem para las entregas de CANJES en el local (payload proposito:'canje'). Es el cliente
 // "PUBLICIDAD BDI" que ya existía en GN (id verificado contra la tabla `clientes` del espejo): un
 // canje con una influencer ES publicidad, así que no se creó uno nuevo. Sólo BDI: es la única marca
@@ -259,11 +270,18 @@ export default async function handler(req, res) {
   if (b.proposito === 'canje' && !CANJE_CLIENT[store]) {
     return res.status(400).json({ error: `No hay cliente de GN configurado para los canjes de ${store} (CANJE_CLIENT).` });
   }
+  // Mismo corte para el reclamo, y por el mismo motivo: sin cliente propio la venta caería en el de
+  // fotos y quedaría atribuida mal para siempre. Acá además el daño es el que este cliente vino a
+  // evitar — mercadería sana contada como falla.
+  if (b.proposito === 'reclamo' && !RECLAMO_CLIENT[store]) {
+    return res.status(400).json({ error: `No hay cliente de GN configurado para los reclamos de ${store} (RECLAMO_CLIENT).` });
+  }
   // Las ventas de fallas usan su propio cliente de GN; el resto (fotos) sigue con el de SF_CFG.
   const clientId =
     (b.proposito === 'falla' && FALLA_CLIENT[store]) ? FALLA_CLIENT[store] :
     (b.proposito === 'cambio' && CAMBIO_CLIENT[store]) ? CAMBIO_CLIENT[store] :
     (b.proposito === 'canje' && CANJE_CLIENT[store]) ? CANJE_CLIENT[store] :
+    (b.proposito === 'reclamo' && RECLAMO_CLIENT[store]) ? RECLAMO_CLIENT[store] :
     cfg.client_id;
   // Reingreso: el renglón lleva el PRECIO REAL (para que GN acepte la cantidad negativa), y un descuento a
   // nivel venta iguala el subtotal → total 0 (baja de plata nula, solo movimiento de stock).
@@ -271,9 +289,13 @@ export default async function handler(req, res) {
   // 100% de descuento → total $0, pero valuada con el precio real. Lo que se regaló tiene un costo y
   // a precio 0 el histórico de GN no dice cuánto.
   // Fotos: precio 0 y sin descuento, idéntico a antes.
+  // 🔑 El reclamo se valúa igual que la falla y el canje: **precio de lista + 100 % de descuento**.
+  // Lo que se le regala al cliente tiene un costo, y a precio 0 el histórico de GN no dice cuánto —
+  // que es exactamente el número que después pide `costoDelCaso`.
   const esFalla = b.proposito === 'falla';
   const esCanje = b.proposito === 'canje';
-  const valuadaCero = esFalla || esCanje;
+  const esReclamo = b.proposito === 'reclamo';
+  const valuadaCero = esFalla || esCanje || esReclamo;
   const lineItems = items.map(it => ({
     product_id: parseInt(it.product_id, 10),
     size_id: parseInt(it.size_id, 10),
@@ -285,7 +307,7 @@ export default async function handler(req, res) {
     client_id: clientId, channel_id: esCanje ? CANJE_CHANNEL[store] : cfg.channel_id, sale_type_id: cfg.sale_type_id, currency_id: cfg.currency_id,
     store_id, discount_inventory: true,
     comments: String(b.comments || '').slice(0, 500),
-    integration_source: esCanje ? 'monitor-canje' : 'monitor-sesion-fotos',
+    integration_source: esCanje ? 'monitor-canje' : esReclamo ? 'monitor-reclamo' : 'monitor-sesion-fotos',
     integration_id: `${b.solicitudId || 'sf'}-${b.origen}`,
     items: lineItems,
   };

@@ -36,8 +36,10 @@ import {
 import {
   aplicarDestinos as aplicarDestinosJs,
   deDondeVuelve as deDondeVuelveJs,
+  descontarUnidades as descontarUnidadesJs,
   destinoDeUnidad as destinoDeUnidadJs,
   laUnidadVuelve as laUnidadVuelveJs,
+  loQueFaltaDescontar as loQueFaltaDescontarJs,
   loQueFaltaLlegar as loQueFaltaLlegarJs,
   recibirUnidades as recibirUnidadesJs,
   trabaParaRecibir as trabaParaRecibirJs,
@@ -141,7 +143,21 @@ export function tituloExpectativa(m?: MotivoReclamo | null): string {
  *   - `no_salio` nunca se despachó (faltante, sin stock): no hay nada que esperar ni etiqueta.
  *   - `perdida`  se perdió en el camino: ni vuelve ni está. Hay reclamo al transportista.
  */
-export type DestinoPrenda = 'stock' | 'falla' | 'no_salio' | 'perdida'
+/**
+ * Dónde termina la unidad. 🔑 **`falla` y `regalada` son las dos mitades de un mismo destino que
+ * hasta el 26-ago-2026 era uno solo**, y separarlas es lo que deja que el descuento de stock vaya
+ * a dos clientes distintos de Gestión Nube:
+ *
+ *   - `falla`    → la unidad **es** una falla: ledger de Post-venta, valuada a PVP de feria, y su
+ *                  venta técnica va al cliente FALLA.
+ *   - `regalada` → la unidad está **sana** y se la queda el cliente: sale del stock con una venta
+ *                  técnica al cliente RECLAMO, y ⛔ **no entra a Fallas**.
+ *
+ * Mientras fueron una sola, sacar del stock una unidad sana obligaba a darla de alta en Fallas, o
+ * sea a afirmar dos cosas falsas sobre un producto impecable: que está fallado y que se va a
+ * revender como tal.
+ */
+export type DestinoPrenda = 'stock' | 'falla' | 'regalada' | 'no_salio' | 'perdida'
 
 export type Compensacion =
   | 'plata_total'
@@ -634,6 +650,17 @@ export type ItemReclamo = {
    * (`estado='recibido'`), así que un reclamo de dos productos no podía decir que llegó uno.
    */
   recibida_at?: string | null
+  /**
+   * **Cuándo salió del stock de Gestión Nube esta unidad regalada**, con el número de la venta
+   * técnica que la sacó. Ausente = todavía está contada en GN.
+   *
+   * 🔑 Va en el ítem y ⛔ no en una columna nueva **por el mismo motivo que `destino` y
+   * `recibida_at`**: el descuento es por unidad. Un reclamo de dos productos donde uno vuelve a
+   * stock y el otro se lo queda el cliente no lo puede decir una columna sola — y en BDI los de dos
+   * productos son 3 de 10. Viaja en el jsonb, así que ⛔ **no lleva migración**.
+   */
+  baja_at?: string | null
+  baja_venta?: string | null
 }
 
 export const COMPENSACION_LABEL: Record<Compensacion, string> = {
@@ -649,8 +676,12 @@ export const COMPENSACION_LABEL: Record<Compensacion, string> = {
 export const DESTINO_LABEL: Record<DestinoPrenda, string> = {
   stock: 'Vuelve y se revende',
   falla: 'Vuelve como falla (no se revende)',
+  regalada: 'Se la queda el cliente — sana, sale del stock',
   no_salio: 'Nunca salió del depósito',
-  perdida: 'Se perdió o se la queda el cliente',
+  // ⚠️ Decía "Se perdió o se la queda el cliente", y ese "o" era el parche de no tener `regalada`:
+  // el que quería anotar que el cliente se la quedaba elegía acá y el caso terminaba contado como
+  // una pérdida del transporte. Ahora `perdida` significa una sola cosa.
+  perdida: 'Se perdió en el transporte',
 }
 
 /** Una línea del resumen de lo decidido: qué se resolvió y por qué. */
@@ -1047,12 +1078,13 @@ export function destinoDe(motivo: MotivoReclamo, vuelve: boolean, escenario: str
   // mal y nadie lo va a ver.
   if (!perfilDe(motivo, escenario).salio) return 'no_salio'
   if (motivo === 'no_llego') return 'perdida'
+  // 🔑 La falla va a `falla` **aunque no vuelva**: si está fallada, está fallada — que el cliente se
+  // la quede no la vuelve sana. Por eso este `if` queda ARRIBA del reparto de abajo.
   if (motivo === 'falla') return 'falla'
-  // ⚠️ En el excedente `'falla'` NO significa que esté fallado: significa que la unidad sale del
-  // stock con una venta técnica porque el cliente se la queda. La partición sano → cliente RECLAMO
-  // / fallado → cliente FALLA está decidida pero **todavía no se puede construir**: falta que
-  // exista el cliente RECLAMO en Gestión Nube, uno por marca.
-  return vuelve ? 'stock' : 'falla'
+  // 🔑 Y acá está la partición que hasta el 26-ago-2026 no se podía hacer: en todos los demás casos
+  // la unidad está **sana**, así que si no vuelve no es una falla, es una unidad regalada. Antes
+  // esta línea contestaba `'falla'` y era el único camino que había para sacarla del stock.
+  return vuelve ? 'stock' : 'regalada'
 }
 
 // ── La unidad: el destino y la recepción, por PRODUCTO ──────────────────────────
@@ -1094,6 +1126,27 @@ export function unidadesQueVuelven(fila: FilaConUnidades): { campo: 'items' | 'i
 /** Las que todavía no aparecieron. Vacío = llegó todo lo que se esperaba. */
 export function loQueFaltaLlegar(fila: FilaConUnidades): UnidadQueVuelve[] {
   return loQueFaltaLlegarJs(fila) as UnidadQueVuelve[]
+}
+
+/** Las regaladas que todavía siguen contadas en Gestión Nube. Vacío = no falta descontar nada. */
+export function loQueFaltaDescontar(fila: FilaConUnidades): UnidadQueVuelve[] {
+  return (loQueFaltaDescontarJs(fila) as { unidades: UnidadQueVuelve[] }).unidades
+}
+
+/** Sella las regaladas que ya salieron de GN. `indices` en `null` = todas las que faltaban. */
+export function descontarUnidades(
+  fila: FilaConUnidades,
+  indices: number[] | null,
+  at: string,
+  venta: string | number | null,
+): { campo: 'items' | 'items_correctos'; lista: ItemReclamo[]; descontadas: number; faltan: number; seDescontoTodo: boolean } {
+  return descontarUnidadesJs(fila, indices, at, venta) as {
+    campo: 'items' | 'items_correctos'
+    lista: ItemReclamo[]
+    descontadas: number
+    faltan: number
+    seDescontoTodo: boolean
+  }
 }
 
 /**
@@ -1272,12 +1325,18 @@ export function costoDelCaso(opciones: {
   envioVuelta?: number | null
   envioReemplazo?: number | null
   items: ItemReclamo[]
-  destino: DestinoPrenda
+  /**
+   * 🔑 **`null` = no hay producto en juego** (una demora, una cancelación), y eso vale CERO. Antes
+   * este parámetro no aceptaba `null` y la pantalla tapaba el hueco mandando `'falla'`: una demora
+   * —donde el cliente recibió lo que compró y se lo queda porque es suyo— se contaba con el costo
+   * entero de la mercadería como si la hubiéramos perdido.
+   */
+  destino: DestinoPrenda | null
 }): number {
   const { montoDevuelto, items, destino } = opciones
   const envios = positivo(opciones.envioVuelta) + positivo(opciones.envioReemplazo)
   // Solo se pierde la unidad si el cliente se lo queda; si vuelve —sana o fallada— se recupera.
-  const unidadPerdida = destino === 'stock' || destino === 'no_salio'
+  const unidadPerdida = destino === null || destino === 'stock' || destino === 'no_salio'
     ? 0
     : items.reduce((s, it) => s + positivo(it.costo) * positivo(it.cantidad), 0)
   return redondear(positivo(montoDevuelto) + envios + unidadPerdida)
@@ -1665,6 +1724,13 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   }
   // Cuando el producto se le queda al cliente, la foto es la única prueba de que la falla existió.
   if (d.destino_prenda === 'falla' && !(d.fotos || []).length) faltan.push('al menos una foto del producto')
+  // 🔑 **El descuento de lo regalado es "siempre", no "si alguien se acuerda".** La unidad sana que
+  // se queda el cliente salió del depósito y Gestión Nube la sigue contando: si el reclamo se
+  // cierra sin sacarla, el stock queda de más hasta que la encuentre un conteo. Es la misma clase
+  // de agujero que tapó `descontarReemplazo`, del otro lado del mostrador.
+  const sinDescontar = loQueFaltaDescontar(d).length
+  if (sinDescontar === 1) faltan.push('descontar de Gestión Nube el producto que se queda el cliente')
+  else if (sinDescontar > 1) faltan.push(`descontar de Gestión Nube los ${sinDescontar} productos que se queda el cliente`)
   return faltan
 }
 
