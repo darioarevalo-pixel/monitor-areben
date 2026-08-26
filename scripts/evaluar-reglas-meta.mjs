@@ -326,8 +326,8 @@ async function mandarElParte() {
   if (!r.configurado) {
     // ⛔ Ausente ⛔ NO es roto: sin la key esto todavía no está prendido, y tumbar la corrida de las
     // reglas por eso sería romper lo que sí funciona. Se dice fuerte y se sigue en verde.
-    console.log(`\n⚠️  Mail SIN MANDAR: falta RESEND_API_KEY. Había para mandar: «${mail.asunto}».`)
-    console.log('    Se prende cargando el secret RESEND_API_KEY en el repo (Settings → Secrets → Actions).')
+    console.log(`\n⚠️  Mail SIN MANDAR: faltan las credenciales de SES. Había para mandar: «${mail.asunto}».`)
+    console.log('    Se prende con AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY en Secrets → Actions (las mismas de areben-mailer).')
     return
   }
   // Con la key puesta, un envío que falla SÍ tiñe el workflow: alguien pidió el mail y no llegó.

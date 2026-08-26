@@ -988,34 +988,74 @@ del sidebar, que la convierte en su `Tone`, y el mail, que ordena y arma el asun
 que se agregue una acción nueva se entera una sola — es el bug del mismo número con dos
 implementaciones.
 
+### 🔴 El proveedor: SES, porque la empresa YA lo usa
+
+⛔ **La primera versión de esto daba de alta Resend, y estaba mal.** Lo corrigió Bruno: *«uso ses,
+fijate que mailer usa ses»*. `areben-mailer` manda por **SESv2 en `us-east-1`** con
+`bdiaccesorios.com.ar` y `zattia.com.ar` **verificados como DOMINIO**, DKIM andando, cuenta fuera del
+sandbox y **50.000 mails por día de cuota** (229 usados el 26-ago) ⇒ un mail diario no se nota.
+🔑 **No hacía falta ni una cuenta, ni un servicio, ni verificar un dominio.** La lección no es sobre
+mail: **antes de proponer algo que pida un acceso o una cuenta, mirar qué ya está andando** — acá la
+respuesta estaba a un repo de distancia.
+
+- **Se firma a mano con SigV4** (`scripts/lib/ses.mjs`, 40 líneas con el `crypto` de Node) y ⛔ no con
+  `@aws-sdk/client-sesv2`: son ~10 MB que `npm ci` bajaría en **cada corrida de cada cron** de este
+  repo para usar un endpoint.
+- 🔴 **Sin `ConfigurationSetName`, y es a propósito.** El del mailer (`areben-mailer`) alimenta sus
+  eventos de SNS y sus métricas de entregabilidad; un mail interno de una sola persona metido ahí
+  adentro **le ensucia los números al producto** con un destinatario que no es un cliente.
+- 🔴 **Sale de `monitor@bdiaccesorios.com.ar` y ⛔ NO de `@arebensrl.com`**: de aquél SES tiene
+  verificado el DOMINIO —con DKIM, y calentado todos los días por el mailer—, y de éste sólo la
+  CASILLA, o sea que saldría sin DKIM propio y con la alineación de DMARC floja. A un buzón de
+  Workspace, eso es la carpeta de spam.
+
 ### 🔑 Las tres respuestas del envío son distintas, y confundirlas apaga un aviso en silencio
 
-`scripts/lib/mail.mjs` pega a la API de Resend por `fetch`, **sin dependencia nueva** (25 líneas, y
-`npm ci` corre en cada cron):
+`scripts/lib/mail.mjs`, **sin dependencia nueva**:
 
 | respuesta | qué es | qué hace el reloj |
 |---|---|---|
-| sin `RESEND_API_KEY` | ⛔ **no está configurado**, ⛔ no está roto | lo dice fuerte en el log y **sale VERDE**: el trabajo del reloj son los hallazgos, el mail es un rider |
-| con la key y falla | alguien pidió el mail y no llegó | `anotar()` ⇒ **el workflow sale ROJO** |
-| mandado | — | imprime el id |
+| sin credenciales de AWS | ⛔ **no está configurado**, ⛔ no está roto | lo dice fuerte en el log y **sale VERDE**: el trabajo del reloj son los hallazgos, el mail es un rider |
+| con credenciales y falla | alguien pidió el mail y no llegó | `anotar()` ⇒ **el workflow sale ROJO** |
+| mandado | — | imprime el `MessageId` |
 
-Es la misma distinción de `ventana.core.js`: **ausente ⛔ no es lo mismo que roto**. Las dos ramas se
-ejercieron contra la API real —sin key da `{configurado:false}`, con una key falsa devuelve el mensaje
-de Resend *«API key is invalid»*— y los exit codes salen 0 y 1.
+Es la misma distinción de `ventana.core.js`: **ausente ⛔ no es lo mismo que roto**, y las dos ramas
+se ejercieron de verdad (exit 0 y exit 1).
+🔑 **Y este contrato sobrevivió entero al cambio de proveedor**: se escribió para Resend y ⛔ no se
+tocó una línea al pasar a SES. Es la señal de que la decisión estaba del lado correcto de la
+frontera — lo que cambió fue el transporte, ⛔ no qué significa cada respuesta.
+
+### Cómo se verificó la firma
+
+🔴 **Una firma ⛔ no se revisa leyéndola**: sale bien, o sale un 403 que dice *«signature does not
+match»* y **no dice cuál de los diez pasos falló**. Tres oráculos, ninguno solo alcanza:
+
+1. **Un cálculo independiente**, escrito en el test desde la especificación de AWS. Si los dos
+   coinciden, o los dos están bien o los dos están mal del mismo modo — por eso no alcanza solo.
+2. **El SES real, primero leyendo**: `GET /v2/email/identities` contestó **200** con las cuatro
+   identidades. Una lectura ⛔ no manda nada y prueba la firma entera.
+3. **Un mail de verdad**, con los 4 hallazgos reales: salió con su `MessageId`.
+
+**8 mutantes, 8 muertos** — ⚠️ y el primer barrido dejó uno **vivo por casualidad**: borrar el
+`.sort()` de los headers no cambiaba nada, porque el literal ya estaba en orden alfabético. ⇒ los
+headers se declaran **a propósito desordenados**, así el `sort` es el que hace el trabajo y se puede
+probar. Es lo que va a importar el día que alguien sume un header, porque lo va a sumar al final.
 
 ### Cómo se prende, y qué falta
 
-▶️ 🔴 **Una sola mano: cargar `RESEND_API_KEY`** en Settings → Secrets → Actions del repo. La cuenta
-gratis de Resend alcanza de sobra (1 mail por día contra 3.000/mes) y **⛔ no hace falta verificar
-ningún dominio para empezar**: `onboarding@resend.dev` escribe a la casilla dueña de la cuenta, que
-es la única destinataria. El día que sean dos, se verifica `arebensrl.com` (tres registros en
-Cloudflare, donde Bruno es Super Admin) y se cambia `MAIL_DE`.
+▶️ 🔴 **Una sola mano: los tres secrets de AWS en el repo** (`AWS_REGION`, `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`), que son **los mismos que ya tiene `areben-mailer` en su `.env`**. ⚠️ **El
+clasificador de esta Mac corta `gh secret set`**, igual que el POST que prende una regla: lo corre
+Bruno con `!`.
+⚠️ **Lo limpio sería un usuario de IAM con permiso `ses:SendEmail` y nada más**, en vez de reusar la
+clave del mailer, que puede hacer bastante más. Es una tarea de consola de AWS y queda anotada: hoy
+la alternativa era que el aviso siguiera apagado.
 ⚠️ Mientras tanto **el reloj sale verde y lo dice en el log en cada corrida**, así que no se olvida
 en silencio. `MAIL_HALLAZGOS_A` es opcional: el default es la casilla de Bruno, porque ésta es la
 sección de una sola persona (`PENDIENTES.md` § 4) y una tabla de suscriptores sería mantener algo
 para un registro.
 
-**15 mutantes, 15 muertos.** El que más importaba: el que hace que todo diga «pausalo» — un mail que
+**15 mutantes, 15 muertos en el mensaje** (+8 en la firma). El que más importaba: el que hace que todo diga «pausalo» — un mail que
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 

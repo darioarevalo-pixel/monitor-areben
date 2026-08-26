@@ -69,10 +69,14 @@ jobs:
           ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
           ENTRADA_LINEA: ${{ inputs.linea }}
           ENTRADA_DIAS: ${{ inputs.dias }}
-          # El mail de la mañana. ⚠️ **Su ausencia NO rompe la corrida a propósito**: sin la key el
-          # script lo dice fuerte en el log y sale verde igual — el trabajo de este reloj son los
-          # hallazgos, y el mail es un rider. Con la key puesta, un envío que falla SÍ tiñe de rojo.
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # El mail de la mañana, por el MISMO SES que ya usa `areben-mailer` (us-east-1, dominio
+          # verificado con DKIM). ⚠️ **Su ausencia NO rompe la corrida a propósito**: sin las
+          # credenciales el script lo dice fuerte en el log y sale verde igual — el trabajo de este
+          # reloj son los hallazgos, y el mail es un rider. Con las credenciales puestas, un envío
+          # que falla SÍ tiñe de rojo.
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           MAIL_HALLAZGOS_A: ${{ vars.MAIL_HALLAZGOS_A }}
         run: |
           args=""

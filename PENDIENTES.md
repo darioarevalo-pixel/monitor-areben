@@ -224,9 +224,15 @@ los hallazgos. 🔑 **Lleva los ABIERTOS y ⛔ no los de hoy** —si no, un hall
 accionó desaparece del mail del martes—, y **con cero ⛔ no manda nada**, porque un mail diario que
 dice «no hay nada» enseña a no abrirlo. Detalle en `docs/secciones/meta-ads.md`.
 
-▶️ 🔴 **UNA MANO, y es lo único que falta: cargar `RESEND_API_KEY`** en Settings → Secrets → Actions.
-Gratis alcanza (1 mail/día contra 3.000/mes) y ⛔ no hace falta verificar dominio. Mientras tanto el
-reloj sale VERDE y lo dice en el log en cada corrida: ⛔ no se olvida en silencio.
+🔴 **Va por el MISMO SES que ya usa `areben-mailer`** —lo corrigió Bruno—: dominio verificado, DKIM,
+fuera del sandbox, 50.000/día de cuota. ⛔ No hizo falta cuenta nueva ni verificar nada. **El mail ya
+se mandó de verdad** con los 4 hallazgos reales.
+
+▶️ 🔴 **UNA MANO, y es lo único que falta: los 3 secrets de AWS en el repo** (los mismos del `.env`
+de `areben-mailer`). ⚠️ El clasificador de esta Mac corta `gh secret set`: lo corre Bruno con `!`.
+Mientras tanto el reloj sale VERDE y lo dice en el log en cada corrida: ⛔ no se olvida en silencio.
+⚠️ Lo limpio sería un usuario de IAM con `ses:SendEmail` y nada más, en vez de reusar la clave del
+mailer. Es consola de AWS y queda anotado.
 
 ### ▶️ P5 — Traducir el idioma
 
