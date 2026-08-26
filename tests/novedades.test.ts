@@ -7,7 +7,11 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { esEstado, ESTADOS, normalizarDestino, seMarcanAlEntrar, sinLeer, type Lectura, type Novedad } from '@/lib/novedades/tipos'
+import {
+  clavesDestino, esEstado, ESTADOS, normalizarDestino, rotuloDeClave, rotuloDestino,
+  rotuloDestinoCorto, seMarcanAlEntrar, sinLeer,
+  type Destino, type Lectura, type Novedad,
+} from '@/lib/novedades/tipos'
 import { esParaMi } from '@/lib/novedades/destino.core.js'
 
 const nov = (id: string, extra: Partial<Novedad> = {}): Novedad => ({
@@ -224,5 +228,70 @@ describe('qué se marca leído con sólo abrir la sección', () => {
 
   it('ni los borradores ni las archivadas', () => {
     expect(seMarcanAlEntrar([nov('a', { estado: 'borrador' }), nov('b', { estado: 'archivada' })])).toEqual([])
+  })
+})
+
+// ── Cómo se LEE un destino ───────────────────────────────────────────────────────
+//
+// Vivían privadas adentro de la pantalla de la Agenda. Ahora las miran tres, así que lo que se fija
+// acá es lo que se rompería en silencio si divergieran.
+
+describe('rotuloDestino — a quién le llega, en criollo', () => {
+  it('las cuatro formas', () => {
+    expect(rotuloDestino({ tipo: 'todos' })).toBe('a todo el equipo')
+    expect(rotuloDestino({ tipo: 'roles', roles: ['local', 'deposito'] })).toBe('a Local y Depósito')
+    expect(rotuloDestino({ tipo: 'personas', personas: ['sofi'] })).toBe('a sofi')
+    expect(rotuloDestino({ tipo: 'seccion', key: 'atencion' })).toContain('a quien usa ')
+  })
+
+  it('un rol que ya no existe se nombra por su clave y no desaparece', () => {
+    expect(rotuloDestino({ tipo: 'roles', roles: ['cadete'] })).toBe('a cadete')
+  })
+})
+
+describe('rotuloDestinoCorto — el mismo dato en un renglón apretado', () => {
+  it('🔑 «todos» es la cadena VACÍA: un rótulo que aparece siempre no distingue nada', () => {
+    expect(rotuloDestinoCorto({ tipo: 'todos' })).toBe('')
+  })
+
+  it('saca el «a» y el «quien usa»', () => {
+    expect(rotuloDestinoCorto({ tipo: 'personas', personas: ['sofi', 'cande'] })).toBe('sofi y cande')
+    expect(rotuloDestinoCorto({ tipo: 'roles', roles: ['marketing'] })).toBe('Marketing')
+    expect(rotuloDestinoCorto({ tipo: 'seccion', key: 'atencion' })).not.toContain('quien usa')
+  })
+})
+
+describe('clavesDestino — con qué se lo puede filtrar', () => {
+  it('🔴 un destino de DOS personas devuelve DOS claves', () => {
+    // Si devolviera una sola clave combinada, el ítem no saldría filtrando por ninguna de las dos —
+    // y las dos son responsables de eso.
+    expect(clavesDestino({ tipo: 'personas', personas: ['sofi', 'cande'] })).toEqual(['p:sofi', 'p:cande'])
+    expect(clavesDestino({ tipo: 'roles', roles: ['local', 'deposito'] })).toEqual(['r:local', 'r:deposito'])
+  })
+
+  it('las otras dos formas dan una sola', () => {
+    expect(clavesDestino({ tipo: 'todos' })).toEqual(['todos'])
+    expect(clavesDestino({ tipo: 'seccion', key: 'atencion' })).toEqual(['s:atencion'])
+  })
+
+  it('el prefijo separa los espacios de nombres: una persona no colisiona con un rol', () => {
+    const persona = clavesDestino({ tipo: 'personas', personas: ['local'] })
+    const rol = clavesDestino({ tipo: 'roles', roles: ['local'] })
+    expect(persona).not.toEqual(rol)
+  })
+
+  it('toda clave se puede volver a leer, y coincide con el rótulo corto', () => {
+    const casos: Destino[] = [
+      { tipo: 'todos' },
+      { tipo: 'roles', roles: ['marketing'] },
+      { tipo: 'personas', personas: ['sofi'] },
+      { tipo: 'seccion', key: 'atencion' },
+    ]
+    for (const d of casos) {
+      const claves = clavesDestino(d)
+      expect(claves.length).toBeGreaterThan(0)
+      const leidas = claves.map(rotuloDeClave).join(' y ')
+      expect(leidas).toBe(rotuloDestinoCorto(d) || 'Todo el equipo')
+    }
   })
 })

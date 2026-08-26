@@ -8,7 +8,9 @@ import {
 } from './estados.core.js'
 import { normalizarDestino as normalizarDestinoJs, TODOS as TODOS_JS } from './destino.core.js'
 import type { ManualIndice } from '@/lib/manuales/tipos'
+import { tituloLimpio } from '@/lib/nav'
 import type { Marca } from '@/lib/nav.datos'
+import { FUNCIONES } from '@/lib/permisos'
 
 export type EstadoNovedad = 'borrador' | 'publicada' | 'archivada'
 
@@ -82,4 +84,66 @@ export const NUEVA: Novedad = {
   cuerpo: '',
   version: 1,
   destino: { tipo: 'todos' },
+}
+
+// ── Cómo se LEE un destino ───────────────────────────────────────────────────────
+//
+// 📌 Vivían privadas adentro de `components/agenda/Agenda.tsx`, y estaba bien mientras las usara una
+// sola pantalla. Con tres —la lista de «Cargar», el informe de Cumplimiento y el detalle del día del
+// calendario— la copia sería el camino corto a que una diga «a Sofi» y otra «a sofi». Van acá y no
+// en `lib/agenda/` porque son del **destino**, que es de Novedades y lo comparte la Agenda.
+//
+// ⛔ **No van en `destino.core.js`**: los rótulos se quedan del lado TS, igual que en la Agenda. El
+// servidor decide a quién le llega un destino; leerlo en voz alta es cosa de la pantalla.
+
+/** «a todo el equipo» · «a Local y Depósito» · «a quien usa Atención al cliente» · «a Sofi». */
+export function rotuloDestino(d: Destino): string {
+  if (d.tipo === 'roles') {
+    const labels = d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r)
+    return `a ${labels.join(' y ')}`
+  }
+  // Sale el nombre de usuario y no el apodo a propósito: el apodo vive en el padrón, que es
+  // admin-only y no viaja con la agenda. Guardar el apodo al elegir lo dejaría viejo el día que
+  // alguien se cambie el nombre en pantalla, y esta lista se lee para saber a quién reclamarle.
+  if (d.tipo === 'personas') return `a ${d.personas.join(' y ')}`
+  if (d.tipo === 'seccion') return `a quien usa ${tituloLimpio(d.key)}`
+  return 'a todo el equipo'
+}
+
+/**
+ * Lo mismo, para un renglón apretado: «Sofi» · «Local y Depósito» · «Atención al cliente».
+ *
+ * 🔑 **`{tipo:'todos'}` devuelve la cadena vacía**, ⛔ no «todo el equipo». Ese es el caso más común
+ * y repetirlo en cada renglón es exactamente el ruido que estas pantallas están tratando de sacar:
+ * un rótulo que aparece siempre no distingue nada.
+ */
+export function rotuloDestinoCorto(d: Destino): string {
+  if (d.tipo === 'todos') return ''
+  return rotuloDestino(d).replace(/^a (quien usa )?/, '')
+}
+
+/**
+ * Con qué claves se lo puede filtrar. Una por responsable, ⛔ no una por destino.
+ *
+ * 🔴 **Un destino con dos personas devuelve DOS claves**, y es lo que hace que «mostrame lo de Sofi»
+ * traiga también lo que Sofi comparte con Cande: las dos son responsables de eso. Devolver una sola
+ * clave `p:sofi·cande` haría que el ítem no salga en ninguno de los dos filtros.
+ *
+ * El prefijo separa los espacios de nombres: una persona llamada como un rol no puede colisionar.
+ */
+export function clavesDestino(d: Destino): string[] {
+  if (d.tipo === 'roles') return d.roles.map((r) => `r:${r}`)
+  if (d.tipo === 'personas') return d.personas.map((p) => `p:${p}`)
+  if (d.tipo === 'seccion') return [`s:${d.key}`]
+  return ['todos']
+}
+
+/** El rótulo de una clave suelta, sin tener el destino entero delante. */
+export function rotuloDeClave(clave: string): string {
+  if (clave === 'todos') return 'Todo el equipo'
+  const [pref, ...resto] = clave.split(':')
+  const valor = resto.join(':')
+  if (pref === 'r') return FUNCIONES.find((f) => f.key === valor)?.label ?? valor
+  if (pref === 's') return tituloLimpio(valor)
+  return valor
 }

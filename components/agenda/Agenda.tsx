@@ -33,13 +33,11 @@ import {
 } from '@/components/ui'
 import {
   avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, moldeCorreEnMarca, pendientesDe, promosDe,
-  PUERTAS, rotuloBeneficio, rotuloPuerta, rotuloRegla, vaEl,
+  PUERTAS, rotuloBeneficio, rotuloDestino, rotuloPuerta, rotuloRegla, vaEl,
   type ItemAgenda, type Promo, type Puerta,
 } from '@/lib/agenda'
 import type { Marca } from '@/lib/nav.datos'
 import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } from '@/lib/agenda/cliente'
-import { tituloLimpio } from '@/lib/nav'
-import { FUNCIONES } from '@/lib/permisos'
 import { useAgenda } from '@/store/useAgenda'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
@@ -428,20 +426,6 @@ function FilaItem({
       </div>
     </Card>
   )
-}
-
-/** «a todo el equipo» · «a Local y Depósito» · «a quien usa Atención al cliente» · «a Sofi». */
-function rotuloDestino(d: ItemAgenda['destino']): string {
-  if (d.tipo === 'roles') {
-    const labels = d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r)
-    return `a ${labels.join(' y ')}`
-  }
-  // Sale el nombre de usuario y no el apodo a propósito: el apodo vive en el padrón, que es
-  // admin-only y no viaja con la agenda. Guardar el apodo al elegir lo dejaría viejo el día que
-  // alguien se cambie el nombre en pantalla, y esta lista se lee para saber a quién reclamarle.
-  if (d.tipo === 'personas') return `a ${d.personas.join(' y ')}`
-  if (d.tipo === 'seccion') return `a quien usa ${tituloLimpio(d.key)}`
-  return 'a todo el equipo'
 }
 
 /**

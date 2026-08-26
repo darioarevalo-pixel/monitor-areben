@@ -7,9 +7,14 @@
  */
 
 import type { Marca } from '@/lib/nav.datos'
-import type { Destino } from '@/lib/novedades/tipos'
+import {
+  clavesDestino, type Destino, rotuloDeClave, rotuloDestino, rotuloDestinoCorto,
+} from '@/lib/novedades/tipos'
 
 export type { Destino }
+// Cómo se lee un destino vive con el destino (`lib/novedades/tipos.ts`), no acá: lo comparten
+// Novedades y la Agenda. Se re-exporta para que las pantallas de la Agenda no tengan que saberlo.
+export { clavesDestino, rotuloDeClave, rotuloDestino, rotuloDestinoCorto }
 
 /** `YYYY-MM-DD`. El formato en que se guarda y se compara todo día del almanaque. */
 export type FechaIso = string
