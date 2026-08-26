@@ -303,6 +303,15 @@ describe('reglas — agrupar y las dos trampas del dato', () => {
     expect(c?.antes).toBe(3)
     expect(c?.despues).toBe(1)
     expect(c?.cae).toBe(true)
+    // La magnitud RELATIVA, que es lo único comparable entre avisos con CTR distinto.
+    expect(c?.caida).toBeCloseTo(2 / 3, 5)
+  })
+
+  /** Y sube: la caída va negativa en vez de `0`, o «no cayó» y «cayó nada» se leerían igual. */
+  it('la caída es negativa cuando el CTR SUBIÓ', () => {
+    const c = compararCtr(dias(4, (i) => ({ impresiones: 1000, clicks: [10, 10, 30, 30][i] })))
+    expect(c?.cae).toBe(false)
+    expect(c?.caida).toBeCloseTo(-2, 5)
   })
 
   it('con menos de cuatro días no se habla de tendencia', () => {
@@ -501,6 +510,66 @@ describe('reglas — cuándo NO detecta (que es lo que evita el ruido)', () => {
     expect(r.hallazgos[0].motivo).toContain('Está quemado')
     // No propone una escritura: renovar un creativo no es un POST.
     expect(r.hallazgos[0].sugerencia).toBeNull()
+  })
+
+  /**
+   * 🔴 **El caso REAL del 26-ago-2026, y es el que la regla decía mal.** `AD02 - GIRLHOOD
+   * COLLECTION` —el 52% del gasto de BDI— tenía frecuencia 1,42 sobre un dial de 1,3 y el CTR se
+   * movía de **3,90% a 3,83%**: un 2%, la misma semana en que otros avisos SUBÍAN 2% y 4%. La regla
+   * lo declaraba «quemado» porque `despues < antes` no mira la magnitud, y ése es exactamente el
+   * renglón que hace que se le deje de creer a la sección.
+   */
+  it('la fatiga NO grita por una caída del tamaño del ruido', () => {
+    const filas = dias(8, (i) => ({
+      objeto_id: 'a-ruido', spend: 1000, frecuencia: 4, impresiones: 10000, clicks: i < 4 ? 390 : 383,
+    }))
+    const r = evaluarRegla(regla('fatiga', { frecuencia_maxima: 3 }), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  /**
+   * 🔑 **La ventana de la fatiga es de TRES SEMANAS, y sin eso la regla no puede ver lo que mide.**
+   * El desgaste tarda semanas: en 7 días las dos mitades ya vienen gastadas. Medido sobre la cuenta
+   * real, la misma pieza da **−2% a 7 días y −31% a 21**.
+   */
+  it('la fatiga mira tres semanas, no una', () => {
+    expect(PRESETS.fatiga.ventana).toBe(21)
+    // Una caída que sólo se ve estirando la ventana: los primeros días son los buenos.
+    const filas = dias(20, (i) => ({
+      objeto_id: 'a-lento', spend: 1000, frecuencia: 4, impresiones: 10000, clicks: i < 10 ? 500 : 350,
+    }))
+    const largo = evaluarRegla(regla('fatiga', { frecuencia_maxima: 3 }), { filas, umbralLinea: null, hasta: HOY })
+    if (!largo.ok) throw new Error(largo.error)
+    expect(largo.hallazgos).toHaveLength(1)
+    expect(largo.hallazgos[0].motivo).toContain('el CTR cayó 30%')
+    // Y con la ventana vieja de una semana la misma serie no dice nada: los 7 últimos días son
+    // todos del tramo malo, así que las dos mitades empatan.
+    const corto = evaluarRegla(
+      { ...regla('fatiga', { frecuencia_maxima: 3 }), preset: 'fatiga' as ClavePreset },
+      { filas: filas.slice(-7), umbralLinea: null, hasta: HOY },
+    )
+    if (!corto.ok) throw new Error(corto.error)
+    expect(corto.hallazgos).toEqual([])
+  })
+
+  /**
+   * 🔑 **La frecuencia es de la última semana aunque la ventana sea de tres.** El desgaste es una
+   * tendencia; la sobreexposición es un estado. Un pico de hace tres semanas no dice que hoy se le
+   * esté repitiendo a nadie.
+   */
+  it('un pico de frecuencia viejo no enciende la fatiga de hoy', () => {
+    const filas = dias(20, (i) => ({
+      objeto_id: 'a-pico-viejo',
+      spend: 1000,
+      // El pico está al principio de la ventana; la última semana corre tranquila.
+      frecuencia: i < 5 ? 6 : 1,
+      impresiones: 10000,
+      clicks: i < 10 ? 500 : 350,
+    }))
+    const r = evaluarRegla(regla('fatiga', { frecuencia_maxima: 3 }), { filas, umbralLinea: null, hasta: HOY })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
   })
 
   it('gastos hormiga ignora lo que no vendió nada: de eso ya habla el freno', () => {

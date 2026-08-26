@@ -672,6 +672,44 @@ devuelve `null` y ⛔ nunca 0 cuando no hubo una fila que lo midiera.
 
 **4 mutantes, 4 muertos** (volver a `compras > 0`, bajar el piso a 2, subirlo a 6, cambiar `>=` por `>`).
 
+### 🆕🔴 La fatiga miraba UNA semana, y en una semana el desgaste no se ve
+
+Encontrado el 26-ago-2026 **corriendo el simulacro con las reglas ya prendidas** (`node
+scripts/evaluar-reglas-meta.mjs --simulacro`), ⛔ no con un test: el primer renglón que la regla
+produjo decía textual *«La misma gente lo vio hasta 1,4 veces en un día y el CTR cayó de 3,9% a 3,8%.
+**Está quemado**»* — un 2% de caída sosteniendo un veredicto.
+
+El detector confirmaba con `despues < antes`, o sea **la dirección sin la magnitud**. Medido sobre la
+cuenta entera con `scripts/medir-ctr-fatiga.mjs`:
+
+| ventana | mayor caída de la cuenta | `AD02 - GIRLHOOD COLLECTION` | avisos que caen >20% |
+|---|---|---|---|
+| **7 días** | −14% | **−2%** (3,90 → 3,83) | **0** |
+| **21 días** | −58% | **−31%** (5,87 → 4,05) | 7 |
+
+🔴 🔑 **La ventana de 7 días no puede ver lo que la regla dice medir.** El desgaste tarda semanas, así
+que comparar la primera mitad de una semana contra la segunda compara **dos mitades ya gastadas**. A
+7 días la pieza que este repo tiene identificada como el desgaste que traba todo se movía **menos que
+el ruido** —había avisos SUBIENDO 2% y 4% esa misma semana— y aun así se llevaba el cartel.
+
+⇒ `VENTANA_FATIGA = 21` (propia, como `VENTANA_COSTO = 5`) y `CAIDA_CTR_MINIMA = 0,20`. El 20% no es
+por gusto: a 21 días deja 7 avisos en la cuenta, y **cruzado con el dial de frecuencia deja uno solo**
+—el que hay que mirar—; a 10% entrarían 12 y vuelve a ser una lista que nadie abre.
+
+🔑 **Y la frecuencia sigue siendo de la ÚLTIMA SEMANA aunque la ventana sea de tres**: el desgaste es
+una **tendencia** y la sobreexposición es un **estado**. Un pico de hace tres semanas no dice que hoy
+se le esté repitiendo a nadie. Es la misma distinción que ya tomó la zona de Rendimiento —las
+métricas son de la ventana, la configuración es de hoy—, aplicada a dos métricas en vez de a una.
+
+🔑 **`compararCtr()` MIDE y ⛔ no decide**: devuelve `caida` (relativa, negativa si subió) y el corte
+lo aplica el detector. Medio punto de CTR es el 10% de un aviso al 5% y el 25% de uno al 2%: lo único
+comparable entre avisos es lo relativo.
+
+**Verificado contra prod, por otro camino que el arreglo**: el simulacro pasó de decir «cayó de 3,9%
+a 3,8%» a decir **«el CTR cayó 31%, de 5,9% a 4,1%, en 20 días»**, que es exactamente lo que había
+medido el script aparte. Y **se cayó un falso positivo de Zattia**: `AD 1 - SWEATERS & FITS SEMANA`
+(frecuencia 1,71 sobre un dial de 1,6) tenía el CTR **SUBIENDO 10%**. **5 mutantes, 5 muertos.**
+
 ⚠️ **Zattia corta contra un techo que hoy no aplica**: su ficha está cargada a precio de LISTA
 ($32.416) y la tienda está en liquidación. La regla hereda la ficha —que es como tiene que ser— así
 que **arreglar la ficha arregla la regla**, y hasta entonces `costo-alto` en Zattia va a gritar de

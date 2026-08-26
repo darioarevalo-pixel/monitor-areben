@@ -19,16 +19,17 @@ Contado contra la base de producción el **25-ago-2026**, módulo de Meta Ads:
 
 | tabla | filas | qué significa |
 |---|---|---|
-| `meta_ads_regla` | **0** | el motor de reglas nunca se cargó — 🆕 **y es lo único que falta**: el código ya encuentra (P2) |
-| `meta_ads_umbral` | **0** | ni sus cortes — 🆕 el que manda ya ⛔ no se carga acá: sale de la ficha de rentabilidad |
-| `meta_ads_hallazgo` | **0** | ⇒ el cron corre **todas las mañanas y no produce nada**, hasta que haya una regla prendida |
+| `meta_ads_regla` | ~~0~~ → **11** | 🏁 **prendidas el 26-ago** (P2). Los diales y el porqué, en el desplegable de P2 |
+| `meta_ads_umbral` | **0** | y está bien: de los dos cortes que corren, uno se deriva y el otro sale de la ficha de rentabilidad. Sólo se llena para pisar un derivado o para las marcas sin ventas |
+| `meta_ads_hallazgo` | **0** → los primeros el 27 | el cron de las 07:50 dejó de correr en vacío: el simulacro del 26 ya produce **4** |
 | `meta_ads_favorito` | **0** | el botón de favorito de la Biblioteca no se tocó nunca |
 | `meta_ads_informe` | 2 | y los dos **sin publicar** |
 | `meta_ads_plan` | 4 | 2 `duplicar` (8-ago) + 1 `piezas` (10-ago) + 1 del 25-ago |
 | `meta_ads_accion` | 37 | **todas de UNA persona**, del 6 al 25 de agosto |
 
-🔑 **Lo que esto dice: el módulo se usa para EJECUTAR, nunca para DECIDIR.** Las tres tablas que
-convertirían datos en «qué hago hoy» —reglas, umbrales, hallazgos— están las tres en cero.
+🔑 **Lo que esto decía el 25-ago: el módulo se usa para EJECUTAR, nunca para DECIDIR.** Las tres
+tablas que convertirían datos en «qué hago hoy» —reglas, umbrales, hallazgos— estaban las tres en
+cero. 🏁 **La primera dejó de estarlo el 26.**
 
 ✅ **Al 26-ago-2026 la zona de Rendimiento contesta esa pregunta** (P3, abajo). Las tres tablas de
 reglas siguen en cero: eso es P2, y resultó ser más que mover un dial.
@@ -105,9 +106,29 @@ Cómo hacerlo sin escribir 55 textos sueltos:
 ⚠️ **Esto es lo primero porque es lo que pidió el usuario**, y porque sin esto ninguna de las otras
 mejoras se descubre.
 
-### ▶️ P2 — Cargar el motor de reglas (el corazón muerto)
+### 🏁 P2 — HECHO (26-ago-2026): el motor de reglas está PRENDIDO
 
-🏁 **EL CÓDIGO YA ESTÁ (26-ago, 2ª tanda). Lo que queda es UNA MANO: prender las reglas.**
+**`meta_ads_regla` pasó de 0 a 11 filas.** Las prendió Bruno con el script, verificado por relectura.
+El cron de las 07:50 ya no corre en vacío: el simulacro del mismo día deja **4 hallazgos** —
+`GIRLHOOD FRIO - INTERESES 1` al 156% del techo, `AD01 - UNBOXING LOCAL` vendiendo dos días después
+de pausado, `AD02 - GIRLHOOD COLLECTION` con el CTR 31% abajo, y el radar de Zattia.
+
+🔴 **Y prenderlas destapó dos defectos que ningún test veía, los dos del mismo tipo: un número que
+existe pero no significa.** Están contados en `docs/secciones/meta-ads.md`:
+1. el **piso derivado de UNA sola compra** ($330.528 en Stunned) dejaba la regla **prendida y muda**;
+2. la **fatiga miraba una semana**, donde el desgaste no se ve, y confirmaba con la dirección sin la
+   magnitud ⇒ decía «Está quemado» sobre una caída del CTR del **2%**.
+
+🔑 **Los dos los encontró EJERCER —calibrar marca por marca y correr el simulacro—, ⛔ no la suite.**
+Es la tercera vez seguida en este módulo.
+
+▶️ **Lo que queda del motor** son los 3 cortes de la tabla de abajo que siguen en 🔴, y **los dos
+presets que quedaron afuera a propósito**: `gastos-hormiga` (pide `roas_objetivo`, la vara que este
+repo decidió no usar) y `ganador-escalar` (pide `techo_diario_crudo`, que es plata y la firma Bruno).
+
+<details><summary>Cómo se prendieron, y con qué diales</summary>
+
+**El detalle de la calibración (26-ago)**
 
 🔑 **El techo quedó enganchado**: sale de la ficha de rentabilidad de la marca (`desdeFicha`), así
 que `cpa_maximo` ya no es un dial huérfano y **el corte principal se prende sin que nadie elija un
@@ -119,49 +140,40 @@ verificación contra la pauta real y por qué la regla es más exigente que la p
 |---|---|
 | 3 días de gasto con **0 compras** → apagar | ✅ `freno-emergencia` (ventana 3 + `gasto_minimo`) |
 | CPA > techo × 1,5 en 5 días → apagar | 🆕✅ `costo-alto` — **el corte principal, ya corre** |
-| ≥95% del tope **y** CPA < 75% del techo → escalar +20% | 🆕✅ `ganador-escalar` ahora corta por COSTO si la marca tiene ficha (y por ROAS sólo si no) |
+| ≥95% del tope **y** CPA < 75% del techo → escalar +20% | ✅ existe (`ganador-escalar`, corta por COSTO si la marca tiene ficha) — ⛔ **sin prender**: pide `techo_diario_crudo`, que es plata |
 | celda de test (**$10.000 en UN día · 0 muere · 1 sigue · 2+ aprobado**) | 🔴 **no existe**, y antes hace falta poder **marcar una celda como test** — no hay dónde guardarlo |
 | CPM del núcleo +15% contra la semana previa | 🔴 **no existe**, y con esta forma no debería: es un tripwire **de la línea** y todos los detectores son por objeto |
 | pedidos de Tienda Nube/día contra la meta de Norte | 🔴 **no existe**: cruza fuera de la foto, y correr sólo sobre la foto es lo que hace que las reglas anden **sin token y sin cupo** |
 
-▶️ **La mano que falta, y es de dos minutos**: entrar a **Configurar → Automatizaciones** y prender
-las reglas de BDI y Zattia. Hoy `meta_ads_regla` tiene **0 filas** ⇒ el cron de las 07:00 sigue
-corriendo en vacío aunque los detectores ya encuentren.
-
-🆕 **Y ya no hay que elegir: los once renglones que van, calibrados contra la pauta real el 26-ago**
-(la columna que importa es **7 días**, que es el ruido que va a llegar por la mañana; los 90 son casi
-todos objetos que ya están apagados):
+**Los once renglones que se prendieron**, calibrados contra la pauta real antes de tocar nada. La
+columna que importa es **7 días**, que es el ruido que iba a llegar por la mañana; los 90 son casi
+todos objetos que ya están apagados:
 
 | línea | preset | dial | saltos 7d | 90d / objetos |
 |---|---|---|---|---|
 | bdi | `costo-alto` | — | **8** | 25 / 7 |
 | bdi | `freno-emergencia` | — | **10** | 59 / 8 |
 | bdi | `atribucion-tardia` | — | **10** | 12 / 3 |
-| bdi | `fatiga` | `frecuencia_maxima 1.3` | **5** | 15 / 1 |
+| bdi | `fatiga` | `frecuencia_maxima 1.3` | 5 ⚠️ | 15 / 1 |
 | bdi | `sin-avisos` | — | 0 | 0 |
 | zattia | `freno-emergencia` | — | **6** | 54 / 2 |
 | zattia | `atribucion-tardia` | — | **2** | 2 / 1 |
-| zattia | `fatiga` | `frecuencia_maxima 1.6` | **4** | 15 / 1 |
+| zattia | `fatiga` | `frecuencia_maxima 1.6` | 4 ⚠️ | 15 / 1 |
 | zattia | `costo-alto` | — | 0 | 6 / 2 |
 | zattia | `sin-avisos` | — | 0 | 62 / 1 |
 | stunned | `sin-avisos` | — | 0 | 8 / 1 |
 
 ⇒ **~5 hallazgos por mañana entre las tres marcas.** Es una lista que se lee, ⛔ no un tablero que se
-ignora.
+ignora. ⚠️ **Las dos filas de `fatiga` son de ANTES del arreglo de la ventana** —eran casi todas
+falsos positivos por caídas del tamaño del ruido— y hoy dan menos: en la corrida del 26-ago queda
+**una sola**, `AD02 - GIRLHOOD COLLECTION`, y la de Zattia se cayó sola porque su CTR venía SUBIENDO.
 
-🔑 **Los diales de `fatiga` no son un número elegido: son el CODO de la curva.** En BDI, `1,2` arrastra
-8 avisos y `1,3` deja **exactamente uno — `AD02 - GIRLHOOD COLLECTION`**, que es el 52% del gasto de la
-marca y la pieza que este repo tiene identificada como el desgaste que traba todo. En Zattia la curva
-es plana de `1,3` a `1,6` (siempre 15 saltos, siempre `AD 1 - SWEATERS & FITS SEMANA`) ⇒ va `1,6`, que
-es el más alto que no pierde nada.
+🔑 **Los diales de `fatiga` no son un número elegido: son el CODO de la curva de frecuencia.** En BDI,
+`1,2` arrastra 8 avisos y `1,3` deja **exactamente uno — `AD02 - GIRLHOOD COLLECTION`**, que es el 52%
+del gasto de la marca. En Zattia la curva es plana de `1,3` a `1,6` ⇒ va `1,6`, el más alto que no
+pierde nada.
 
-⛔ **Quedan AFUERA a propósito dos presets, y no es olvido**:
-- `gastos-hormiga` pide **`roas_objetivo`**, y este repo tiene escrito en tres lados que el ROAS ⛔ no
-  es la vara (se mueve ±12% con el mix de medios de pago). Prenderlo sería elegir el número que
-  decidimos no usar.
-- `ganador-escalar` pide **`techo_diario_crudo`**, que es plata y lo decide Bruno — y hoy la
-  aritmética de la línea dice que el pedido marginal de BDI ya compra ARRIBA del techo. Es el único
-  preset que propone gastar más: va último, y va cuando alguien firme ese número.
+</details>
 
 ▶️ Y una segunda, en la otra pantalla: **Zattia corta contra un techo que hoy no aplica** —su ficha
 está cargada a precio de LISTA y la tienda está en liquidación— ⇒ la regla hereda la ficha, que es

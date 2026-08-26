@@ -323,7 +323,9 @@ export const ventanaDe = ventanaDeJs as (hastaIso: string, dias: number) => stri
 export const agrupar = agruparJs as (filas: FilaRegla[], nivel: NivelRegla, fechas: string[]) => Grupo[]
 export const compararCtr = compararCtrJs as (
   filas: FilaRegla[],
-) => { antes: number; despues: number; cae: boolean } | null
+  // `caida` es la magnitud RELATIVA (0,31 = cayó 31%), negativa cuando subió. Es la que se compara
+  // entre avisos; `cae` sólo dice la dirección y ⛔ no alcanza para decidir. Ver `CAIDA_CTR_MINIMA`.
+) => { antes: number; despues: number; cae: boolean; caida: number } | null
 export const diasSeguidosPorEncima = diasSeguidosPorEncimaJs as (filas: FilaRegla[], objetivo: number) => number
 /**
  * La racha, contada una sola vez para los dos que la miran: el detector que PROPONE escalar y el
