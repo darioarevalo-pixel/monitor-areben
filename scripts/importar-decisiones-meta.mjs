@@ -195,6 +195,35 @@ async function main() {
     if (!motivoBase) { sinResolver.push({ f, por: 'no trae motivo, y el motivo es lo único que no se puede reponer' }); continue }
 
     /**
+     * 🔑 **Qué preset callaría esta fila se decide ANTES de resolver el nombre, y no después.**
+     *
+     * El guardarraíl de más abajo —«un aviso o un conjunto que no matchea no se degrada a nota»—
+     * existe para que un SILENCIO que no se pudo atar a un objeto no entre mudo. Esa razón vale
+     * sólo para las filas que callan algo. Las que no callan nada —un hallazgo, una medición, una
+     * corrección de la memoria: la mitad larga del CSV, cuyo «objeto» es prosa y no un objeto de
+     * Meta— no pueden enmudecer ninguna alarma, y hacer abortar el import entero por ellas deja
+     * afuera TAMBIÉN a las que sí se resolvieron. Medido el 26-ago-2026: 33 de 138 filas sin
+     * resolver bloqueaban las 105 buenas.
+     */
+    const presets = presetsDe(accion)
+    const puedeCallar = presets.length > 0
+    const comoNota = (objetoId, meta) => ({
+      quien: f.quien || 'bruno',
+      clase: 'nota',
+      fecha: f.fecha,
+      linea: (meta && meta.linea) || f.marca || 'bdi',
+      nivel,
+      objeto_id: objetoId,
+      objeto_nombre: (meta && meta.nombre) || f.objeto || null,
+      cuenta_id: (meta && meta.cuentaId) || null,
+      accion,
+      motivo,
+      preset: null,
+      vence: null,
+      origen: 'csv',
+    })
+
+    /**
      * 🔴 **Sólo el nivel `cuenta` puede no tener objeto.**
      *
      * Una decisión sobre la cuenta —«los 6 borradores quedaron limpiados»— no es un objeto de Meta y
@@ -203,21 +232,7 @@ async function main() {
      * igual pero no calla nada, y nadie se enteraría. Se reporta y se sale con código 1.
      */
     if (nivel === 'cuenta') {
-      notas.push({
-        quien: f.quien || 'bruno',
-        clase: 'nota',
-        fecha: f.fecha,
-        linea: f.marca || 'bdi',
-        nivel,
-        objeto_id: null,
-        objeto_nombre: f.objeto || null,
-        cuenta_id: null,
-        accion,
-        motivo,
-        preset: null,
-        vence: null,
-        origen: 'csv',
-      })
+      notas.push(comoNota(null, null))
       continue
     }
 
@@ -227,12 +242,31 @@ async function main() {
       candidatos = porNombreFlojo.get(`${aflojar(f.objeto)}|${nivel}`)
       flojo = !!candidatos
     }
+    /**
+     * 🔑 **El paréntesis final del CSV es una ACLARACIÓN del analista, no parte del nombre.**
+     *
+     * «TEST INTERESES 1 - ZATTIA 07/05 (venta)» distingue a mano el conjunto de venta del homónimo
+     * de tráfico, porque el CSV no tenía columna para el objetivo. En Meta el objeto se llama sin
+     * el paréntesis. Se prueba como TERCER intento —después del exacto y del flojo— y **sólo se
+     * acepta si deja un objeto único**, igual que el match flojo, y se dice en pantalla para que
+     * quien lo lea lo confirme a ojo. ⛔ No se toca el `objeto` del CSV: el archivo es el registro.
+     */
+    let sinParentesis = null
     if (!candidatos) {
+      const pelado = String(f.objeto || '').replace(/\s*\([^()]*\)\s*$/, '').trim()
+      if (pelado && pelado !== String(f.objeto || '').trim()) {
+        candidatos = porNombre.get(`${normalizar(pelado)}|${nivel}`) || porNombreFlojo.get(`${aflojar(pelado)}|${nivel}`)
+        if (candidatos) sinParentesis = pelado
+      }
+    }
+    if (!candidatos) {
+      if (!puedeCallar) { notas.push(comoNota(null, null)); continue }
       sinResolver.push({ f, por: `no hay ningún ${nivel} con ese nombre en la foto (¿gastó $0 y por eso Meta nunca lo devolvió?)` })
       continue
     }
 
     if (candidatos.ids.size > 1) {
+      if (!puedeCallar) { notas.push(comoNota(null, null)); continue }
       sinResolver.push({ f, por: `el nombre corresponde a ${candidatos.ids.size} objetos distintos` })
       continue
     }
@@ -241,24 +275,11 @@ async function main() {
     // Un match flojo se dice: el nombre del CSV y el de Meta no eran iguales, y quien lo lea tiene
     // que poder confirmar a ojo que es el mismo objeto.
     if (flojo) console.log(`  ≈ «${f.objeto}» se resolvió como «${meta.nombre}» (los nombres difieren en espacios o signos)`)
-    const presets = presetsDe(accion)
-    if (!presets.length) {
-      // Sin preset conocido no se inventa un silencio ancho: queda como nota, legible.
-      notas.push({
-        quien: f.quien || 'bruno',
-        clase: 'nota',
-        fecha: f.fecha,
-        linea: meta.linea || f.marca || 'bdi',
-        nivel,
-        objeto_id: objetoId,
-        objeto_nombre: meta.nombre,
-        cuenta_id: meta.cuentaId || null,
-        accion,
-        motivo,
-        preset: null,
-        vence: null,
-        origen: 'csv',
-      })
+    if (sinParentesis) console.log(`  ≈ «${f.objeto}» se resolvió como «${meta.nombre}» (se descartó la aclaración entre paréntesis)`)
+    if (!puedeCallar) {
+      // Sin preset conocido no se inventa un silencio ancho: queda como nota, legible —  y ahora
+      // CON su objeto resuelto, que es la diferencia con la nota de arriba.
+      notas.push(comoNota(objetoId, meta))
       continue
     }
 
