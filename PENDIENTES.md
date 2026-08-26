@@ -198,9 +198,29 @@ fuera un botón (cinco llamadas a Graph, el cupo es un porcentaje) y esto pedía
 token vencido—, y el parte quedó siendo el botón que trae el día EN CURSO, que es lo único que sólo
 existe en Graph.
 
-### ▶️ P4 — Que salga a buscar a la gente
+### 🏁 P4 — HECHO (26-ago-2026): los hallazgos salen a buscar a Bruno
 
-Los 3 hallazgos del día por mail o al buzón, a la mañana, después de la foto.
+**Los hallazgos entran al badge del sidebar y al bloque de Inicio**, como noveno aviso derivado
+(`avisosDeHallazgo`). ⛔ No hace falta acordarse de entrar a `/meta-ads`, y el clic lleva a la zona
+**con la línea puesta**.
+
+🔴 **El agujero estaba medido:** el motor escribió sus primeros cuatro hallazgos a las 07:50 —uno, un
+conjunto comprando al **156% del techo**— y a media tarde los cuatro seguían en `nuevo`. Nadie abrió
+la sección en todo el día. Es exactamente lo que dice el punto 4 de este archivo: con un solo
+operador, **lo que no le llega no existe**.
+
+🔑 **Y ⛔ no contradice el «no hay pantalla nueva de alertas» de la ficha: lo cumple.** No es un
+segundo lugar al que entrar — es el contador que ya está en todas las pantallas. Accionar sigue
+pasando en un solo lado.
+
+🔴 **Construirlo destapó el tercer «número que existe y no significa» del módulo en dos días:**
+`veces` decía «días seguidos» y contaba **filas**, así que un hueco en el medio se leía como racha. De
+arreglarlo sale `desde` —cuándo EMPEZÓ—, que es el `ts` del aviso: con la fecha del último renglón el
+aviso diría «apareció hoy» todas las mañanas y el «NUEVO» no se apagaría nunca. Detalle en
+`docs/secciones/meta-ads.md`. **16 mutantes, 16 muertos.**
+
+▶️ **Falta el mail.** El aviso llega al monitor, ⛔ no al teléfono: si el monitor no se abre en todo
+el día, el badge tampoco se ve. El mail es la segunda mitad y todavía no está.
 
 ### ▶️ P5 — Traducir el idioma
 
@@ -218,6 +238,7 @@ su comprensión:
 - **P2 (motor de reglas) y P3 (el parte como pantalla) SUBEN a lo primero.** «Qué hago hoy» es
   exactamente lo que le falta a alguien que ya sabe leer los números.
 - **P4 (que salga a buscarte) sube también**: si hay un solo operador, lo que no le llega no existe.
+  🏁 La mitad de adentro del monitor está hecha (arriba); ▶️ falta el mail.
 - **P1 se angosta**: de las dos mitades —«qué hace» y «qué ESCRIBE»— la que sigue valiendo es la
   segunda. No hace falta enseñarle qué es un conjunto; hace falta que antes de apretar sepa **qué
   se toca, dónde, y si se puede volver atrás**. Es lo que pidió textual.

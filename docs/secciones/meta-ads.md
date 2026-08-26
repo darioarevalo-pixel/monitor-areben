@@ -882,6 +882,69 @@ se cuentan aparte, en la cola de la frase.
 **9 mutantes, 9 muertos** (los que había que ver caer: el que confunde `activa` con apagada, el que
 lee una fecha basura como corrida, y los dos de las puntas).
 
+## 🆕🏁 26-ago-2026 (5ª tanda): LOS HALLAZGOS SALEN A BUSCAR A BRUNO
+
+🔴 **El agujero está medido, ⛔ no supuesto.** El motor escribió sus primeros cuatro hallazgos a las
+07:50 —uno de ellos un conjunto comprando al **156% del techo**— y a media tarde los cuatro seguían
+en `nuevo`: **nadie abrió la sección en todo el día**. Es el P4 del `PENDIENTES.md` y la conclusión
+del punto 4 de ese archivo: con un solo operador, **lo que no le llega no existe**.
+
+⇒ Los hallazgos entran como **el noveno aviso derivado** (`avisosDeHallazgo` en
+`lib/notificaciones/derivar.ts`), o sea al badge del sidebar y al bloque de Inicio.
+
+🔑 **Y esto ⛔ NO contradice el «no hay pantalla nueva de alertas» de más arriba: lo cumple.** Ese
+párrafo dice que un *segundo lugar al que hay que acordarse de entrar* es uno al que no se entra.
+Esto no es un lugar nuevo: es el contador que ya está arriba en **todas** las pantallas del monitor.
+El hallazgo se sigue viendo y accionando en un solo lado —`/meta-ads`—, y lo único que cambia es que
+**deja de hacer falta acordarse**. La ruta del aviso lleva la línea puesta (`/meta-ads?linea=bdi`),
+que `ContextoMeta` lee al montar: sin eso el renglón queda a dos filtros de distancia.
+
+- **Uno por hallazgo, ⛔ no agrupados** (como los reclamos y las firmas de canjes, y a diferencia de
+  los entregables vencidos): cada renglón es una plata distinta sobre un objeto distinto, y
+  «4 cosas para decidir» escondería que una de las cuatro está al 156% del techo. Son ~4 por mañana.
+- **El tono sale de lo que PROPONE, ⛔ no del preset**: pausar es `danger` —hay plata quemándose
+  ahora—, reactivar y subir presupuesto son `brand` —plata que se deja de ganar—, y sin sugerencia
+  es `warning`, que es el que más fácil se queda quieto porque nadie sabe qué apretar.
+- **El permiso lo contesta `lineasQueVe(perfil)`**, la MISMA función con la que el servidor devuelve
+  403 — ⛔ no una copia. Por eso se pregunta por LÍNEA y no por marca: `stunned` no es una `Marca`.
+- **Sale de la base**: `recurso=hallazgos` está arriba del guard del token, así que el aviso llega
+  igual el día que el token se venza — que es el día en que más importa saber qué quedó sin decidir.
+
+### 🔴🔑 Y al construirlo se cayó un número que existía y no significaba (el tercero de la familia)
+
+`veces` decía **«cuántos días seguidos lleva»** y contaba **filas**. Un conjunto que cruzó el techo
+el lunes, aflojó el martes y volvió a cruzarlo el miércoles tenía dos renglones en `nuevo` y la
+pantalla afirmaba una racha de dos días **que no existió**. Es la misma familia que el piso derivado
+de una sola compra y que la ventana de fatiga más corta que el fenómeno: un número que se puede
+imprimir y no quiere decir lo que dice.
+
+Y de la misma cuenta sale lo que este aviso necesitaba: **`desde`, cuándo EMPEZÓ**. Con la fecha del
+último renglón —que es la de hoy, todas las mañanas— el aviso se leería «apareció hoy» para siempre:
+el «NUEVO» del badge no se apagaría nunca y el «trabado hace N días» de Inicio no saldría jamás. Es
+la trampa de `updated_at` para medir una espera, la segunda vez en este módulo en dos días.
+
+⇒ `agruparHallazgos()` bajó de `api/_meta-reglas.js` —donde eran doce líneas sin test— a
+`reglas.core.js`: camina hacia atrás desde el día más reciente y **corta en el primer hueco**.
+⚠️ El precio: **una mañana sin cron parte la racha** y el hallazgo se lee más joven de lo que es. Es
+la dirección barata del error —subestimar hace que el aviso grite de menos, ⛔ nunca que grite por
+algo que no pasó— y se ve en `ultima_corrida` de la regla.
+
+### Cómo se verificó
+
+- **Ejercido contra las filas REALES de prod**, ⛔ no un fixture: se leyó `meta_ads_hallazgo` con la
+  service key y se le pasaron las 4 filas a `agruparHallazgos`, y la respuesta del endpoint de prod
+  a `avisosDeHallazgo`. Salen los 4 avisos con su frase y su tono: `GIRLHOOD FRIO` en `danger`, los
+  dos de atribución tardía en `brand`, `AD02 - GIRLHOOD COLLECTION` en `warning`.
+- ⚠️ **Lo que ese ejercicio NO pudo probar es justamente la racha**: el motor corrió una sola vez, así
+  que las 4 filas son del mismo día y las 4 dan `veces=1`. El primer caso real de `veces>1` lo trae
+  la corrida de mañana, y es lo que hay que mirar.
+- **16 mutantes, 16 muertos** (6 del agrupado, 10 del derivador). Los que había que ver caer: el que
+  borra el corte por hueco, el que pone `fecha` en vez de `desde` en el `ts`, el que le mete la fecha
+  al `id` —que prendería el badge de nuevo cada mañana por el mismo problema— y el que usa
+  `Date.parse(iso)`, medianoche UTC, que corre el día uno en Argentina.
+- ⚠️ **La pantalla sigue sin caminarse**: el login pide contraseña. Falta que Bruno abra el monitor y
+  vea el badge — que es, otra vez, la única mano que queda.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { indexar, type Decision } from '@/lib/meta-ads/decisiones'
 import {
   agrupar,
+  agruparHallazgos,
   calibrar,
   CLAVES_PRESET,
   compararCtr,
@@ -1088,5 +1089,88 @@ describe('por qué el bloque está vacío', () => {
   it('una fecha basura se trata como «nunca corrió», ⛔ no como una corrida', () => {
     const s = silencioDeReglas([r(true, 'ayer a la tarde')], AHORA)
     expect(s.clase).toBe('nunca-corrio')
+  })
+})
+
+/**
+ * 🔴 **`veces` decía «cuántos días SEGUIDOS lleva» y contaba FILAS.** Un conjunto que cruzó el techo
+ * el lunes, aflojó el martes y volvió a cruzarlo el miércoles tenía dos renglones en `nuevo` y la
+ * pantalla afirmaba una racha de dos días que no existió. Y de la misma cuenta sale `desde`, que es
+ * el `ts` del aviso del sidebar: con la fecha del último renglón, un problema de hace cinco días se
+ * lee «apareció hoy» todas las mañanas y el «NUEVO» no se apaga nunca.
+ */
+describe('hallazgos — la racha, y desde cuándo grita', () => {
+  const h = (regla: number, objeto: string, fecha: string, extra: { motivo?: string } = {}) =>
+    ({ regla_id: regla, objeto_id: objeto, fecha, motivo: undefined as string | undefined, ...extra })
+
+  it('uno por (regla, objeto), y se queda con el renglón más RECIENTE', () => {
+    const g = agruparHallazgos([
+      h(7, '1201', '2026-08-24', { motivo: 'viejo' }),
+      h(7, '1201', '2026-08-26', { motivo: 'de hoy' }),
+      h(7, '1201', '2026-08-25', { motivo: 'del medio' }),
+    ])
+    expect(g).toHaveLength(1)
+    expect(g[0].motivo).toBe('de hoy')
+  })
+
+  it('la misma regla sobre otro objeto es otro renglón; el mismo objeto en otra regla, también', () => {
+    const g = agruparHallazgos([h(7, '1201', '2026-08-26'), h(7, '1202', '2026-08-26'), h(9, '1201', '2026-08-26')])
+    expect(g).toHaveLength(3)
+  })
+
+  it('tres días seguidos son una racha de 3, y empezó el primero', () => {
+    const [g] = agruparHallazgos([h(7, '1201', '2026-08-24'), h(7, '1201', '2026-08-25'), h(7, '1201', '2026-08-26')])
+    expect(g.veces).toBe(3)
+    expect(g.desde).toBe('2026-08-24')
+  })
+
+  it('🔴 un HUECO corta la racha: contar filas afirmaba días seguidos que no existieron', () => {
+    // Lunes 24 y miércoles 26, sin el martes. Son dos filas y UN día seguido.
+    const [g] = agruparHallazgos([h(7, '1201', '2026-08-24'), h(7, '1201', '2026-08-26')])
+    expect(g.veces).toBe(1)
+    expect(g.desde).toBe('2026-08-26')
+  })
+
+  it('la racha cuenta desde el día MÁS RECIENTE hacia atrás, ⛔ no desde el más viejo', () => {
+    // Una racha vieja de 3 (10, 11, 12) y la de ahora de 2 (25, 26). Lo que hay que decidir es la de ahora.
+    const [g] = agruparHallazgos([
+      h(7, '1201', '2026-08-10'), h(7, '1201', '2026-08-11'), h(7, '1201', '2026-08-12'),
+      h(7, '1201', '2026-08-25'), h(7, '1201', '2026-08-26'),
+    ])
+    expect(g.veces).toBe(2)
+    expect(g.desde).toBe('2026-08-25')
+  })
+
+  it('un solo renglón es una racha de 1 que empezó ese día', () => {
+    const [g] = agruparHallazgos([h(7, '1201', '2026-08-26')])
+    expect(g.veces).toBe(1)
+    expect(g.desde).toBe('2026-08-26')
+  })
+
+  it('⛔ no se asume el orden en que vino la tabla', () => {
+    const desc = agruparHallazgos([h(7, '1201', '2026-08-26'), h(7, '1201', '2026-08-25')])[0]
+    const asc = agruparHallazgos([h(7, '1201', '2026-08-25'), h(7, '1201', '2026-08-26')])[0]
+    expect(asc).toEqual(desc)
+  })
+
+  it('dos filas del MISMO día ⛔ no suman un día, y tampoco cortan la racha', () => {
+    // El `unique(regla, fecha, objeto)` no debería dejarlas entrar; si entran, `veces` y `desde` no
+    // se pueden despegar — que es lo que pasaría deduciendo la fila más vieja a partir de `veces`.
+    const [g] = agruparHallazgos([
+      h(7, '1201', '2026-08-26'), h(7, '1201', '2026-08-26'), h(7, '1201', '2026-08-25'),
+    ])
+    expect(g.veces).toBe(2)
+    expect(g.desde).toBe('2026-08-25')
+  })
+
+  it('sin filas, ninguna: ⛔ no inventa un grupo vacío', () => {
+    expect(agruparHallazgos([])).toEqual([])
+    expect(agruparHallazgos(null)).toEqual([])
+  })
+
+  it('cruza el mes sin cortar: el 31 y el 1 son días seguidos', () => {
+    const [g] = agruparHallazgos([h(7, '1201', '2026-07-31'), h(7, '1201', '2026-08-01')])
+    expect(g.veces).toBe(2)
+    expect(g.desde).toBe('2026-07-31')
   })
 })

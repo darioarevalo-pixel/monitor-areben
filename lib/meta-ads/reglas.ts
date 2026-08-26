@@ -11,6 +11,7 @@ import type { Decision, Silenciado } from './decisiones'
 import type { LineaPauta } from './tipos'
 import {
   agrupar as agruparJs,
+  agruparHallazgos as agruparHallazgosJs,
   apagadoEn as apagadoEnJs,
   calibrar as calibrarJs,
   diasConEstado as diasConEstadoJs,
@@ -161,6 +162,13 @@ export type Hallazgo = {
   estado: EstadoHallazgo
   resueltoPor: string | null
   planId: number | null
+  /**
+   * Cuántos días SEGUIDOS lo viene diciendo, contando la racha hacia atrás desde `fecha`. ⛔ No es
+   * la cantidad de filas: un hueco corta. Ver `agruparHallazgos`.
+   */
+  veces: number
+  /** El primer día de esa racha: **cuándo empezó**, ⛔ no cuándo se lo tocó por última vez. */
+  desde: string
 }
 
 /** Una fila de `meta_ads_snapshot_dia`, en lo que le importa a una regla. */
@@ -336,6 +344,17 @@ export const silencioDeReglas = silencioDeReglasJs as (
 export const frecuenciaPico = frecuenciaPicoJs as (filas: Array<{ frecuencia?: number | null }>) => number
 export const ventanaDe = ventanaDeJs as (hastaIso: string, dias: number) => string[]
 export const agrupar = agruparJs as (filas: FilaRegla[], nivel: NivelRegla, fechas: string[]) => Grupo[]
+/**
+ * Los hallazgos crudos agrupados por (regla, objeto), con `veces` —los días SEGUIDOS de la racha— y
+ * `desde` —el día en que empezó—. Ver el docblock del `.core.js`: `veces` contaba filas y decía
+ * «días seguidos», que es una afirmación sobre una racha que podía no haber existido.
+ */
+export const agruparHallazgos = agruparHallazgosJs as <T extends { regla_id: number; objeto_id: string; fecha: string }>(
+  // `null` incluido a propósito: es lo que devuelve Supabase cuando no hay filas, y el guard existe
+  // en el runtime. Un tipo que lo niegue obliga a un `|| []` en cada llamada, o sea a confiar en que
+  // nadie se lo olvide.
+  filas: T[] | null | undefined,
+) => Array<T & { veces: number; desde: string }>
 export const compararCtr = compararCtrJs as (
   filas: FilaRegla[],
   // `caida` es la magnitud RELATIVA (0,31 = cayó 31%), negativa cuando subió. Es la que se compara

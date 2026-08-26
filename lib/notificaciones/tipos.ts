@@ -19,7 +19,7 @@ import type { Tone } from '@/components/ui/tokens'
 export type TipoAviso =
   | 'aprobacion' | 'solicitud' | 'no-devuelto' | 'falla-por-enviar'
   | 'canje-aprobacion' | 'canje-vencido' | 'canje-contenido'
-  | 'reclamo'
+  | 'reclamo' | 'hallazgo'
 
 export type Aviso = {
   /** Estable entre refrescos: es lo que permite comparar "esto ya lo vi". */
@@ -51,4 +51,5 @@ export const TIPO_LABEL: Record<TipoAviso, string> = {
   'canje-vencido': 'Canjes con contenido sin publicar',
   'canje-contenido': 'Contenido que subieron y nadie miró',
   reclamo: 'Reclamos durmiendo',
+  hallazgo: 'La pauta, para decidir hoy',
 }

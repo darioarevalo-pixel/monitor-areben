@@ -10,7 +10,7 @@
  * había dos: la feature nueva sale más liviana que lo que reemplaza.
  *
  * Los avisos se DERIVAN de lo que ya se baja (ver `lib/notificaciones/`), así que este store no
- * consulta nada nuevo salvo las fallas y los reclamos.
+ * consulta nada nuevo salvo las fallas, los reclamos y los hallazgos de la pauta.
  */
 
 import { create } from 'zustand'
@@ -21,8 +21,10 @@ import { puedeVer } from '@/lib/permisos'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeNoDevueltos, avisosDeReclamo, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
+import { lineasQueVe } from '@/lib/meta-ads/acciones'
+import { traerHallazgos } from '@/lib/meta-ads/cliente'
 import { nombrePersona, type CanjeRow } from '@/lib/canjes/tipos'
 import { vistoHasta } from '@/lib/notificaciones/visto'
 import type { Aviso } from '@/lib/notificaciones/tipos'
@@ -52,6 +54,30 @@ type AvisosState = {
   /** Recalcula `nuevos` sin volver a pedir nada (después de marcar visto). */
   recontar: (usuario: string | null | undefined) => void
   limpiar: () => void
+}
+
+/**
+ * Los hallazgos de la pauta, en UNA sola lectura para las tres líneas.
+ *
+ * Va fuera del `Promise.all` por marca por lo mismo que los canjes: el endpoint devuelve todas las
+ * líneas que el perfil puede ver —`stunned` incluida, que ni siquiera es una `Marca`—, así que
+ * adentro pediría lo mismo dos veces y duplicaría cada aviso.
+ *
+ * 🔑 **El permiso se pregunta ANTES de pedir**, como con los reclamos: sin Meta Ads en ninguna
+ * marca esto sería un 403 en cada refresco de cada persona del local, cada 3 minutos. ⚠️ Es un
+ * atajo y ⛔ no la regla: la regla la vuelve a mirar `avisosDeHallazgo`, y si algún día discreparan
+ * el que decide es el derivador.
+ *
+ * 🔑 **Sale de la base y ⛔ no de Graph**: `recurso=hallazgos` está arriba del guard del token en
+ * `api/meta-ads.js`, así que el aviso sigue llegando el día que el token se venza — que es
+ * justamente el día en que más importa saber qué quedó pendiente de decidir.
+ */
+async function avisosDePauta(perfil: Perfil): Promise<Aviso[]> {
+  if (!lineasQueVe(perfil).length) return []
+  const r = await traerHallazgos('nuevo')
+  // Un hallazgo que no se pudo leer ⛔ no puede tumbar el resto de los avisos: `traerHallazgos` ya
+  // devuelve `{ok:false}` en vez de tirar, así que acá alcanza con no afirmar nada.
+  return r.ok ? avisosDeHallazgo(r.dato.hallazgos, perfil) : []
 }
 
 /**
@@ -136,7 +162,10 @@ export const useAvisos = create<AvisosState>((set, get) => ({
       // va FUERA del `Promise.all` por marca: adentro pediría lo mismo dos veces y devolvería los
       // mismos canjes cada vez, duplicando cada aviso. Con `.catch(() => …)` porque un módulo que
       // todavía no tiene sus tablas no puede tumbar el resto de los avisos.
-      const canjes = await avisosDeCanjes(perfil, marca).catch(() => [] as Aviso[])
+      const [canjes, pauta] = await Promise.all([
+        avisosDeCanjes(perfil, marca).catch(() => [] as Aviso[]),
+        avisosDePauta(perfil).catch(() => [] as Aviso[]),
+      ])
 
       const resumenes = filtrarPorFuncion(porMarca.flatMap((p) => p.resumenes), perfil)
       const avisos = ordenarAvisos([
@@ -146,6 +175,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...porMarca.flatMap((p) => avisosDeFallas(p.fallas, p.m, perfil)),
         ...porMarca.flatMap((p) => avisosDeReclamo(p.reclamos, p.m, perfil)),
         ...canjes,
+        ...pauta,
       ])
 
       set({ avisos, resumenes, nuevos: contarNuevos(avisos, vistoHasta(perfil.name)), cargadoEn: Date.now(), cargando: false })

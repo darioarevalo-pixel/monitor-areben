@@ -3,6 +3,7 @@ import {
   avisosDeAprobacion,
   avisosDeContenidoSinRevisar,
   avisosDeFallas,
+  avisosDeHallazgo,
   avisosDeNoDevueltos,
   avisosDeReclamo,
   avisosDeSolicitud,
@@ -12,6 +13,7 @@ import {
 import type { ResumenSolicitud } from '@/lib/solicitudes/overview'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
 import type { ReclamoRow } from '@/lib/reclamos/tipos'
+import type { Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { Perfil } from '@/lib/permisos'
 
@@ -285,5 +287,89 @@ describe('avisos de reclamos durmiendo', () => {
 
   it('sin reclamos no cuesta nada: la sección arranca vacía y así va a seguir un tiempo', () => {
     expect(avisosDeReclamo([], 'bdi', admin)).toEqual([])
+  })
+})
+
+/**
+ * 🔴 **El agujero que este aviso cierra está MEDIDO.** El 26-ago-2026 el motor de reglas escribió
+ * sus primeros cuatro hallazgos a las 07:50 —uno, un conjunto comprando al 156% del techo— y a
+ * media tarde los cuatro seguían en `nuevo`: nadie abrió la sección. Con un solo operador, lo que
+ * no le llega no existe.
+ *
+ * Lo que se ancla acá es lo mismo que en los otros ocho: **a quién le corresponde** y **qué NO
+ * inventa**. Más dos cosas propias, que son las que se rompen solas:
+ *   - el `id` ⛔ no lleva la fecha, o el badge se prende de nuevo cada mañana por el mismo problema;
+ *   - el `ts` es `desde` y ⛔ no `fecha`, o «apareció hoy» todos los días.
+ */
+describe('avisos de la pauta (hallazgos)', () => {
+  const conPauta = perfil({ acceso: { bdi: { 'meta-ads': true } } } as Partial<Perfil>)
+  const conZattia = perfil({ acceso: { zattia: { 'meta-ads': true } } } as Partial<Perfil>)
+
+  const hallazgo = (over: Partial<Hallazgo> = {}): Hallazgo =>
+    ({
+      id: 1, reglaId: 7, preset: 'costo-alto', fecha: '2026-08-26', nivel: 'conjunto',
+      objetoId: '1201', objetoNombre: 'GIRLHOOD FRIO - INTERESES 1', linea: 'bdi',
+      cuentaId: '1145878766790149',
+      motivo: 'Compra a $ 10.426 contra un techo de $ 6.668 —el 156%— en 5 días.',
+      evidencia: {}, sugerencia: { accion: 'estado', objetoId: '1201', nivel: 'conjunto', status: 'PAUSED' },
+      estado: 'nuevo', resueltoPor: null, planId: null, veces: 1, desde: '2026-08-26',
+      ...over,
+    }) as Hallazgo
+
+  it('le llega a quien ve la pauta de esa marca, con la frase que ya venía redactada', () => {
+    const [a] = avisosDeHallazgo([hallazgo()], conPauta)
+    expect(a.tipo).toBe('hallazgo')
+    expect(a.titulo).toBe('GIRLHOOD FRIO - INTERESES 1')
+    // ⛔ No se reescribe el diagnóstico: es la misma frase que muestra la pantalla.
+    expect(a.detalle).toContain('156%')
+  })
+
+  it('⛔ no lo ve quien no puede abrir Meta Ads en esa marca', () => {
+    expect(avisosDeHallazgo([hallazgo()], conZattia)).toEqual([])
+    expect(avisosDeHallazgo([hallazgo()], perfil({ funcion: ['local'] }))).toEqual([])
+    expect(avisosDeHallazgo([hallazgo()], null)).toEqual([])
+  })
+
+  it('🔑 Stunned NO es una marca: el aviso salta a Zattia y el chip igual dice Stunned', () => {
+    const [a] = avisosDeHallazgo([hallazgo({ linea: 'stunned' })], conZattia)
+    expect(a.marca).toBe('zattia')
+    expect(a.linea).toBe('stunned')
+  })
+
+  it('lleva a la zona CON la línea puesta: `/meta-ads` a secas abre en «Todas»', () => {
+    expect(avisosDeHallazgo([hallazgo()], conPauta)[0].ruta).toBe('/meta-ads?linea=bdi')
+  })
+
+  it('🔑 el `id` ⛔ no lleva la fecha: si la llevara, el badge se prendería de nuevo cada mañana', () => {
+    const hoy = avisosDeHallazgo([hallazgo({ fecha: '2026-08-26', veces: 1, desde: '2026-08-26' })], conPauta)[0]
+    const manana = avisosDeHallazgo([hallazgo({ fecha: '2026-08-27', veces: 2, desde: '2026-08-26' })], conPauta)[0]
+    expect(manana.id).toBe(hoy.id)
+  })
+
+  it('🔴 el `ts` es DESDE CUÁNDO grita, ⛔ no la fecha del último renglón', () => {
+    const [a] = avisosDeHallazgo([hallazgo({ fecha: '2026-08-26', veces: 5, desde: '2026-08-22' })], conPauta)
+    expect(a.ts).toBe(new Date('2026-08-22T00:00:00').getTime())
+    // Y es medianoche LOCAL: con `Date.parse(iso)` —medianoche UTC— el día se corre uno en Argentina.
+    expect(new Date(a.ts).getDate()).toBe(22)
+  })
+
+  it('el tono sale de lo que PROPONE: pausar sangra, escalar espera, sin sugerencia hay que mirar', () => {
+    const tono = (s: Hallazgo['sugerencia']) => avisosDeHallazgo([hallazgo({ sugerencia: s })], conPauta)[0].tono
+    expect(tono({ accion: 'estado', objetoId: '1201', nivel: 'conjunto', status: 'PAUSED' })).toBe('danger')
+    expect(tono({ accion: 'estado', objetoId: '1201', nivel: 'conjunto', status: 'ACTIVE' })).toBe('brand')
+    expect(tono({ accion: 'presupuesto', objetoId: '1201', nivel: 'conjunto', daily_budget: '900000', desdeCrudo: 750000 })).toBe('brand')
+    expect(tono(null)).toBe('warning')
+  })
+
+  it('uno por hallazgo y ⛔ no agrupados: cada uno es una plata distinta', () => {
+    const a = avisosDeHallazgo([hallazgo(), hallazgo({ id: 2, reglaId: 9, objetoId: '1202' })], conPauta)
+    expect(a).toHaveLength(2)
+    expect(new Set(a.map((x) => x.id)).size).toBe(2)
+  })
+
+  it('una fecha ilegible ⛔ no tira el aviso: se pierde el orden, no el renglón', () => {
+    const [a] = avisosDeHallazgo([hallazgo({ desde: 'nunca' })], conPauta)
+    expect(a.ts).toBe(0)
+    expect(a.titulo).toBe('GIRLHOOD FRIO - INTERESES 1')
   })
 })

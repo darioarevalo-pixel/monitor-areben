@@ -1,5 +1,5 @@
 /**
- * Los cuatro derivadores de avisos. Cada uno es puro: recibe datos y el perfil, y devuelve los
+ * Los derivadores de avisos. Cada uno es puro: recibe datos y el perfil, y devuelve los
  * avisos que le corresponden a esa persona. Ver `tipos.ts` para por qué se derivan y no se
  * registran.
  *
@@ -14,6 +14,8 @@ import { veTodo, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { pendientesDeTrabajo } from '@/lib/inicio/core'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
 import { alertasDe, estaAbierto, MOTIVO_LABEL, numeroReclamo, type AlertaReclamo, type ReclamoRow } from '@/lib/reclamos/tipos'
+import { lineasQueVe } from '@/lib/meta-ads/acciones'
+import type { Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
@@ -167,6 +169,94 @@ export function avisosDeReclamo(filas: ReclamoRow[], marca: Marca, perfil: Perfi
       ts: a.ts,
       tono: a.tono,
     }))
+}
+
+/**
+ * Lo que las automatizaciones de la pauta detectaron y **nadie miró todavía**.
+ *
+ * # 🔴 Por qué esto es un aviso y no otra pantalla
+ *
+ * `docs/secciones/meta-ads.md` dice, y sigue valiendo: *«no hay pantalla nueva de alertas: un
+ * segundo lugar al que hay que acordarse de entrar es uno al que no se entra»*. Esto ⛔ no es esa
+ * pantalla — es el badge que ya está arriba a la izquierda en todas las pantallas del monitor. El
+ * hallazgo sigue viviendo y accionándose en un solo lado (`/meta-ads`), y lo único que cambia es
+ * que **deja de hacer falta acordarse de entrar**.
+ *
+ * 🔴 **Y es el agujero medido, ⛔ no una hipótesis.** El 26-ago-2026 el motor escribió sus primeros
+ * cuatro hallazgos a las 07:50 —uno de ellos, un conjunto comprando al 156% del techo— y a media
+ * tarde los cuatro seguían en `nuevo`: nadie abrió la sección. Es el P4 del `PENDIENTES.md`, y con
+ * un solo operador *lo que no le llega no existe*.
+ *
+ * # Uno por hallazgo, ⛔ no agrupados
+ *
+ * Como los reclamos y las firmas de canjes, y a diferencia de los entregables vencidos: cada
+ * renglón es una decisión distinta sobre un objeto distinto y una plata distinta. Agruparlos en
+ * «4 cosas para decidir» escondería justo lo que hace abrir la pantalla —que uno de los cuatro está
+ * quemando plata al 156% del techo—, y son ~4 por mañana entre las tres marcas: una lista que se
+ * lee.
+ *
+ * 🔑 **El `id` no lleva la fecha ni las veces.** Con la fecha adentro, el renglón que la regla
+ * vuelve a escribir mañana sería otro `id` y **el badge se prendería de nuevo cada mañana por el
+ * mismo problema** — que es exactamente la forma en que un contador enseña a ignorarlo (la misma
+ * razón por la que `canje-vencido` no lleva la cantidad).
+ *
+ * 🔑 **El `ts` es `desde`, el primer día de la racha, ⛔ no la fecha del último renglón.** Con el
+ * último, un conjunto que viene gritando hace cinco días se leería «apareció hoy» todas las
+ * mañanas: el «NUEVO» no se apagaría nunca y el «trabado hace N días» de Inicio no saldría jamás.
+ * Es la trampa de `updated_at` para medir una espera — se cuenta desde el EVENTO.
+ */
+export function avisosDeHallazgo(hallazgos: Hallazgo[], perfil: Perfil | null): Aviso[] {
+  // 🔑 La MISMA función con la que el servidor contesta 403, ⛔ no una copia de la regla. `stunned`
+  // no es una `Marca`: sus permisos cuelgan de Zattia y por eso esto se pregunta por LÍNEA.
+  const ve = new Set(lineasQueVe(perfil))
+  return hallazgos
+    .filter((h) => ve.has(h.linea))
+    .map((h) => ({
+      id: `hallazgo:${h.reglaId}:${h.objetoId}`,
+      tipo: 'hallazgo' as const,
+      marca: baseDeLinea(h.linea),
+      // El chip dice la línea —«Stunned»—, aunque la marca a la que salta sea Zattia, que es su base.
+      linea: h.linea,
+      titulo: h.objetoNombre || h.objetoId,
+      // La frase ya viene redactada con los números adentro, y se guardó armada justamente para que
+      // sobreviva a que cambien los umbrales. Reescribirla acá sería una segunda versión del mismo
+      // diagnóstico, que es como empiezan a discrepar dos pantallas.
+      detalle: h.motivo,
+      // La línea va en la URL: `/meta-ads` abre en «Todas» y el hallazgo puede quedar a dos filtros
+      // de distancia. `ContextoMeta` lee `?linea=` al montar.
+      ruta: `/meta-ads?linea=${h.linea}`,
+      ts: inicioDelDia(h.desde),
+      tono: tonoDeHallazgo(h),
+    }))
+}
+
+/**
+ * Cuánto grita un hallazgo. Sale de lo que PROPONE y ⛔ no del preset: dos reglas distintas pueden
+ * terminar las dos en «pausá esto», y lo que ordena la lectura es si hay plata quemándose o una
+ * oportunidad esperando.
+ */
+function tonoDeHallazgo(h: Hallazgo): Aviso['tono'] {
+  const s = h.sugerencia
+  // Pausar es la única que dice «esto está costando plata ahora».
+  if (s && s.accion === 'estado' && s.status === 'PAUSED') return 'danger'
+  // Reactivar y subir el presupuesto son plata que se está dejando de ganar: importan, no sangran.
+  if (s) return 'brand'
+  // Sin sugerencia hay algo que mirar y nadie sabe qué apretar: es lo que más fácil se queda quieto.
+  return 'warning'
+}
+
+/**
+ * Un día `YYYY-MM-DD` como medianoche **local**, que es la zona de quien mira.
+ *
+ * ⛔ No `Date.parse(iso)`, que la interpreta como medianoche UTC: en Argentina eso corre el aviso
+ * una jornada y el «trabado hace N días» de Inicio contaría un día de más. Es el mismo criterio de
+ * `lib/fechas/dia.core.js`.
+ */
+function inicioDelDia(iso: string): number {
+  const t = new Date(`${iso}T00:00:00`).getTime()
+  // Una fecha ilegible ⛔ no puede tirar el aviso: sin `ts` no se ordena arriba ni se marca nuevo,
+  // pero el renglón sigue existiendo, que es lo único que no se puede perder.
+  return Number.isFinite(t) ? t : 0
 }
 
 // ── Canjes ───────────────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ import {
   COLS_REGLA, leerDecisiones, leerSnapshot, leerTechos, leerUmbrales, techoDe, TABLA_DECISION, TABLA_UMBRAL,
 } from '../lib/meta-ads/leer-snapshot.core.js';
 import {
-  calibrar, CLAVES_PRESET, contextoUmbrales, permiteAccionarHallazgo, PRESETS, UMBRALES,
+  agruparHallazgos, calibrar, CLAVES_PRESET, contextoUmbrales, permiteAccionarHallazgo, PRESETS, UMBRALES,
 } from '../lib/meta-ads/reglas.core.js';
 import { clienteBdi } from './_meta-lineas.js';
 
@@ -171,19 +171,16 @@ async function hallazgos(res, sb, visibles, q) {
    * objeto) para que quede la historia, pero mientras algo siga pasando la regla lo detecta todos
    * los días — y el Panel mostraría el mismo renglón cinco veces. La lista completa está en el
    * historial de la regla; lo que hay que DECIDIR es una cosa por objeto.
+   *
+   * El agrupado vive en `reglas.core.js` y ⛔ no acá: de él salen `veces` y `desde`, que son dos
+   * números que la pantalla AFIRMA («lo viene diciendo hace 3 días»), y acá adentro no había forma
+   * de probarlos. Ver `agruparHallazgos`.
    */
-  const porObjeto = new Map();
-  for (const h of data || []) {
-    const k = `${h.regla_id}:${h.objeto_id}`;
-    const previo = porObjeto.get(k);
-    if (!previo) { porObjeto.set(k, { ...h, veces: 1 }); continue; }
-    previo.veces++;
-    // Vienen ordenados por fecha desc, así que el primero ya es el más reciente.
-  }
+  const grupos = agruparHallazgos(data || []);
 
   return res.status(200).json({
     ok: true,
-    hallazgos: [...porObjeto.values()].map((h) => ({ ...aVistaHallazgo(h, presetPorRegla), veces: h.veces })),
+    hallazgos: grupos.map((h) => ({ ...aVistaHallazgo(h, presetPorRegla), veces: h.veces, desde: h.desde })),
   });
 }
 
