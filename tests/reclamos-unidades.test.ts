@@ -10,10 +10,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  aplicarDestinos, deDondeVuelve, descontarUnidades, DESTINO_LABEL, destinoDe, destinoDeUnidad,
-  laUnidadVuelve, loQueFaltaDescontar, loQueFaltaLlegar,
-  recibirUnidades, trabaParaRecibir, unidadesQueVuelven,
-  type FilaConUnidades, type ItemReclamo,
+  anotarLaOtraVenta, aplicarDestinos, deDondeVuelve, descontarUnidades, DESTINO_LABEL, destinoDe,
+  destinoDeUnidad, faltantesParaCerrar, laUnidadVuelve, loQueFaltaDescontar, loQueFaltaLlegar,
+  recibirUnidades, sinLaOtraVenta, trabaParaRecibir, unidadesQueVuelven,
+  type FilaConUnidades, type ItemReclamo, type ReclamoRow,
 } from '@/lib/reclamos/tipos'
 import { DESTINOS } from '@/lib/reclamos/unidades.core.js'
 
@@ -317,5 +317,72 @@ describe('sellar lo que ya salió de Gestión Nube', () => {
     const r = descontarUnidades(mal, null, AHORA, '14231')
     expect(r.campo).toBe('items_correctos')
     expect(r.lista[0].baja_at).toBe(AHORA)
+  })
+})
+
+
+/**
+ * **El excedente toca DOS ventas**, y hasta el 26-ago-2026 la segunda no existía para el sistema.
+ *
+ * Al cliente de acá le llegó un producto que no compró; del otro lado hay una venta a la que le
+ * falta ese producto y **un cliente que todavía no reclamó**. La pantalla decía «se guarda cuál y
+ * se avisa» y ⛔ no se guardaba nada: el faltante de la otra venta dependía de que alguien se
+ * acordara, o de que el otro cliente llamara.
+ *
+ * El oráculo es el otro cliente: si el reclamo se cierra sin esto, el primero en enterarse es él.
+ */
+describe('el producto de más y la otra venta', () => {
+  const deMas: FilaConUnidades = { motivo: 'excedente', escenario: 'otra_venta', items: [buzo, gorra] }
+
+  it('mientras no diga de qué venta salió, el producto de más está pendiente', () => {
+    expect(sinLaOtraVenta(deMas).map((u) => u.item.producto)).toEqual(['Buzo', 'Gorra'])
+  })
+
+  it('⛔ sólo cuando el escenario dice que HAY otra venta identificada', () => {
+    // En `sin_identificar` no se puede saber cuál es —para eso está el escenario— y exigirlo sería
+    // el pendiente que nadie puede tildar nunca, que es el modo de falla propio de este módulo.
+    expect(sinLaOtraVenta({ ...deMas, escenario: 'sin_identificar' })).toEqual([])
+    expect(sinLaOtraVenta({ ...deMas, escenario: 'de_nadie' })).toEqual([])
+    expect(sinLaOtraVenta({ ...deMas, escenario: null })).toEqual([])
+    // Y ningún otro motivo toca dos ventas.
+    expect(sinLaOtraVenta({ motivo: 'falla', escenario: 'otra_venta', items: [buzo] })).toEqual([])
+  })
+
+  it('anotar el número saca esa unidad de la lista y deja la otra', () => {
+    const r = anotarLaOtraVenta(deMas, [0], '1188')
+    expect(r.anotadas).toBe(1)
+    expect(r.faltan).toBe(1)
+    expect(r.lista[0].otra_orden).toBe('1188')
+    expect(r.lista[1].otra_orden).toBeUndefined()
+  })
+
+  it('sin índices las anota todas: dos productos de más de la misma venta es un solo gesto', () => {
+    const r = anotarLaOtraVenta(deMas, null, '1188')
+    expect(r.anotadas).toBe(2)
+    expect(r.faltan).toBe(0)
+  })
+
+  it('⛔ un número vacío ⛔ no anota nada: sería tildar "ya está" sobre nada', () => {
+    expect(anotarLaOtraVenta(deMas, null, '   ').anotadas).toBe(0)
+    expect(sinLaOtraVenta({ ...deMas, items: [{ ...buzo, otra_orden: '  ' }] })).toHaveLength(1)
+  })
+
+  it('⛔ volver a anotar NO pisa el número que ya estaba: el primero es el dato', () => {
+    const ya: FilaConUnidades = { ...deMas, items: [{ ...buzo, otra_orden: '1188' }, gorra] }
+    const r = anotarLaOtraVenta(ya, null, '9999')
+    expect(r.lista[0].otra_orden).toBe('1188')
+    expect(r.lista[1].otra_orden).toBe('9999')
+  })
+
+  it('🔑 y cerrar lo EXIGE: si no, el que se entera del faltante es el otro cliente', () => {
+    const fila = {
+      ...deMas, id: 1, store: 'bdi', estado: 'recibido', compensacion: 'ninguna',
+      destino_prenda: 'regalada', stock_estado: 'no_aplica', reintegro_estado: 'no_aplica',
+      tn_stock_estado: 'no_aplica',
+      items: [{ ...buzo, destino: 'regalada', baja_at: AHORA }, { ...gorra, destino: 'regalada', baja_at: AHORA }],
+    } as unknown as ReclamoRow
+    expect(faltantesParaCerrar(fila)).toContain('anotar de qué otras ventas salieron los 2 productos de más, y abrirles el faltante')
+    const anotado = { ...fila, items: anotarLaOtraVenta(fila, null, '1188').lista } as ReclamoRow
+    expect(faltantesParaCerrar(anotado).filter((f) => f.includes('otra'))).toEqual([])
   })
 })

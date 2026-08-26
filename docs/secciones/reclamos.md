@@ -185,9 +185,27 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   pagó y es suyo. Ahora `null` ("no hay producto en juego") vale cero.
 - ✅ **El `vuelve` del handler era una COPIA de `laUnidadVuelve`**, sobreviviente de la mudanza del
   25-ago. Con `regalada` contestaba bien de casualidad. Ya llama al núcleo.
-- ▶️ **Falta lo que la partición NO resuelve: la venta técnica de una unidad sana sale a nombre de
-  «Reclamo», no del cliente de Fallas — pero el excedente que salió de OTRA venta sigue sin abrirle
-  el faltante a esa otra venta.** Lo dice el escenario (`otra_venta`) y lo hace una persona.
+- ✅ **El excedente que salió de OTRA venta ya deja rastro** (26-ago-2026). Era lo que la partición
+  del descuento no resolvía, y el agujero no era de stock sino **del otro cliente**.
+
+  🔑 **Es el único caso del módulo que toca DOS ventas.** Al cliente de acá le llegó un producto que
+  no compró; del otro lado hay una venta a la que le falta ese producto y **alguien que todavía no
+  reclamó**. El escenario `otra_venta` decía textual *«se guarda cuál y se avisa»* y ⛔ **no se
+  guardaba nada**: era una etiqueta. El faltante de la otra venta dependía de que alguien se
+  acordara — o de que el otro cliente llamara, que es el único camino por el que esto se
+  descubría.
+
+  - El número va **por unidad** en el jsonb (`ItemReclamo.otra_orden`), ⛔ **sin migración**, por lo
+    mismo que `destino` y `baja_at`: dos productos de más pueden venir de dos ventas distintas.
+  - 🔑 **Cerrar lo exige** (`faltantesParaCerrar`), que es lo que lo vuelve «siempre» y no «si
+    alguien se acuerda». El handler **exige el número** (`action: 'otra-venta'`, ⛔ fuera de
+    `DE_ADMIN`: es una traza) por la misma razón que el cupón exige el código — es lo único que
+    prueba que alguien fue a mirar la otra venta.
+  - ⚠️ **Sólo `otra_venta`.** En `sin_identificar` no se puede saber cuál es —para eso está ese
+    escenario— y exigirlo sería **el pendiente que nadie puede tildar nunca**, que es el modo de
+    falla propio de esta sección. En `de_nadie` no hay otra venta.
+  - ▶️ **Abrir el faltante de esa otra venta lo sigue haciendo una persona**, y ahora tiene el
+    número anotado y un pendiente que no la deja cerrar sin hacerlo.
 - ✅ **La oferta de retención ya deja rastro** (25-ago-2026). Se guardan `retencion_monto` y
   `retencion_respuesta` (`acepto` / `rechazo`), y la regla entera vive en `registroDeRetencion`
   (`lib/reclamos/casos.core.js`), que la aplican la pantalla y el handler. **Las dos mitades van

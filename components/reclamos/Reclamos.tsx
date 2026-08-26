@@ -24,13 +24,13 @@ import {
 import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
-  marcarDespachado, marcarCuponEmitido,
+  marcarDespachado, marcarCuponEmitido, anotarOtraVenta,
   ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, descontarRegaladas, editarReclamo,
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
-  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, VIA_LABEL, ESTADO_LABEL,
+  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido,
   ayudaDeMotivo, casoDe, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
@@ -480,6 +480,29 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     )
   }
 
+  /**
+   * De qué OTRA venta salió el producto de más.
+   *
+   * 🔑 Es el único caso que toca dos ventas: del otro lado hay un cliente al que le falta este
+   * producto y **todavía no reclamó**. Anotar cuál es lo que permite abrirle el faltante antes de
+   * que llame — hasta ahora la pantalla prometía «se guarda cuál y se avisa» y no guardaba nada.
+   */
+  const anotarLaOtra = async (d: ReclamoRow) => {
+    const faltan = sinLaOtraVenta(d)
+    const nro = await pedirTexto('¿De qué venta salió el producto de más?', '', {
+      titulo: `Producto de más — ${faltan.length > 1 ? `${faltan.length} pendientes` : 'la otra venta'}`,
+      ok: 'Anotar',
+      placeholder: 'Número de orden de Tienda Nube',
+    })
+    if (nro === null) return
+    const limpio = nro.trim()
+    if (!limpio) return
+    await accion(
+      () => anotarOtraVenta(marca, d.id, limpio),
+      'Anotado. Ahora abrile el faltante a esa venta.',
+    )
+  }
+
   /** Abre la decisión con la orden del reclamo, no con la del formulario de alta. */
   const abrirDecidir = async (d: ReclamoRow) => {
     setDecidiendo(d)
@@ -834,6 +857,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {/* El cupón es una promesa hasta que existe en la tienda. */}
                       {esAdmin && d.cupon_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" tone="warning" onClick={() => void cargarCupon(d)}>Cargar el cupón</Button>
+                      )}
+                      {/* El otro cliente: un excedente toca dos ventas y la segunda no la ve
+                          nadie hasta que llama. Sin `esAdmin` porque es una traza, igual que el
+                          descuento: el faltante lo abre una persona y acá se anota cuál es. */}
+                      {sinLaOtraVenta(d).length > 0 && (
+                        <Button size="sm" variant="outline" tone="warning" onClick={() => void anotarLaOtra(d)}>
+                          ¿De qué venta salió?
+                        </Button>
                       )}
                       {/* Plata recuperable: sin este pendiente, un pedido perdido se cierra y el
                           reclamo al correo no lo hace nadie. */}

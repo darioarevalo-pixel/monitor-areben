@@ -56,7 +56,7 @@ import { pendientesDe } from '../lib/reclamos/efectos.core.js';
 import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
-import { aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
+import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, sinLaOtraVenta, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -594,6 +594,39 @@ export default async function handler(req, res) {
         + (r.faltan ? ` — falta${r.faltan > 1 ? 'n' : ''} ${r.faltan}` : '');
       await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota }, { [r.campo]: r.lista });
       return res.status(200).json({ ok: true, descontadas: r.descontadas, faltan: r.faltan, seDescontoTodo: r.seDescontoTodo });
+    }
+
+    // ── De qué OTRA venta salió el producto de más ───────────────────────────────
+    //
+    // 🔑 El excedente es el único caso que toca **dos ventas**: al cliente de acá le llegó algo que
+    // no compró, y del otro lado hay una venta a la que le falta y un cliente que todavía no
+    // reclamó. La pantalla decía «se guarda cuál y se avisa» y ⛔ no se guardaba nada.
+    //
+    // ⚠️ **Es una traza, no un efecto**, igual que `descontado`: el faltante de la otra venta lo
+    // abre una persona y acá se anota cuál es. ⛔ Por eso no está en `DE_ADMIN`.
+    if (action === 'otra-venta') {
+      const orden = texto(b.otra_orden);
+      // 🔑 Exige el número por la misma razón que el cupón exige el código: es lo único que prueba
+      // que alguien fue a mirar la otra venta. Sin él esto sería tildar "ya está" sobre nada.
+      if (!orden) return res.status(400).json({ error: 'falta el número de la otra venta' });
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones')
+        .select('estado, motivo, escenario, items, items_correctos')
+        .eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      // El cero afirma: sin esto, un reclamo que no es un excedente contestaría "anotado" sobre una
+      // lista vacía y quedaría sellado un paso que nadie hizo.
+      if (!sinLaOtraVenta(fila).unidades.length) {
+        return res.status(400).json({ error: 'este reclamo no tiene ningún producto de más pendiente de anotar' });
+      }
+      const pedidas = Array.isArray(b.unidades) ? b.unidades : null;
+      const r = anotarLaOtraVenta(fila, pedidas, orden);
+      if (!r.anotadas) return res.status(400).json({ error: 'ninguno de esos productos está pendiente de anotar en este reclamo' });
+      const nota = `producto de más: salió de la venta #${orden}`
+        + (r.faltan ? ` — falta${r.faltan > 1 ? 'n' : ''} ${r.faltan}` : '');
+      await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota }, { [r.campo]: r.lista });
+      return res.status(200).json({ ok: true, anotadas: r.anotadas, faltan: r.faltan });
     }
 
     // El producto devuelto volvió al stock a mano en GN. Como `anulacion`, es una TRAZA de un paso

@@ -250,6 +250,22 @@ export async function reclasificar(store: Marca, id: number, motivo: MotivoRecla
  * mandan algo —cambio, reposición y reenvío— y hasta el 25-ago-2026 **no había con qué tildarlo**,
  * así que ninguna de las tres se podía cerrar.
  */
+/**
+ * Anota de qué OTRA venta salió el producto de más.
+ *
+ * 🔑 El excedente es el único caso que toca dos ventas, y hasta el 26-ago-2026 la segunda quedaba
+ * a cargo de que alguien se acordara: el escenario decía «se guarda cuál y se avisa» y no se
+ * guardaba nada. El número es obligatorio del lado del servidor por lo mismo que el cupón exige el
+ * código — es lo único que prueba que alguien fue a mirar la otra venta.
+ *
+ * @param unidades Índices en la lista, o `undefined` = todas las que faltaban.
+ */
+export async function anotarOtraVenta(
+  store: Marca, id: number, orden: string, unidades?: number[],
+): Promise<void> {
+  await postear({ action: 'otra-venta', store, id, otra_orden: orden, ...(unidades ? { unidades } : {}) })
+}
+
 export async function marcarDespachado(store: Marca, id: number): Promise<void> {
   await postear({ action: 'despachado', store, id })
 }

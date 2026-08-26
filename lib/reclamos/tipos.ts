@@ -34,6 +34,7 @@ import {
   reclasificaA as reclasificaAJs,
 } from './casos.core.js'
 import {
+  anotarLaOtraVenta as anotarLaOtraVentaJs,
   aplicarDestinos as aplicarDestinosJs,
   deDondeVuelve as deDondeVuelveJs,
   descontarUnidades as descontarUnidadesJs,
@@ -42,6 +43,7 @@ import {
   loQueFaltaDescontar as loQueFaltaDescontarJs,
   loQueFaltaLlegar as loQueFaltaLlegarJs,
   recibirUnidades as recibirUnidadesJs,
+  sinLaOtraVenta as sinLaOtraVentaJs,
   trabaParaRecibir as trabaParaRecibirJs,
   unidadesQueVuelven as unidadesQueVuelvenJs,
 } from './unidades.core.js'
@@ -651,6 +653,15 @@ export type ItemReclamo = {
    */
   recibida_at?: string | null
   /**
+   * **De qué OTRA venta salió este producto de más.** Sólo en `excedente` con escenario
+   * `otra_venta`: es el número de orden del cliente al que le falta esta unidad.
+   *
+   * 🔑 Es el único dato del módulo que apunta **afuera del reclamo**. Sin él, «se guarda cuál y se
+   * avisa» era una promesa de la pantalla: la otra venta quedaba sin faltante y su cliente se
+   * enteraba solo. Va por unidad porque dos productos de más pueden venir de dos ventas distintas.
+   */
+  otra_orden?: string | null
+  /**
    * **Cuándo salió del stock de Gestión Nube esta unidad regalada**, con el número de la venta
    * técnica que la sacó. Ausente = todavía está contada en GN.
    *
@@ -1101,7 +1112,7 @@ export type UnidadQueVuelve = { i: number; item: ItemReclamo; destino: DestinoPr
  * relato del cliente ni los montos.
  */
 export type FilaConUnidades = Pick<ReclamoRow, 'motivo' | 'items'>
-  & Partial<Pick<ReclamoRow, 'items_correctos' | 'destino_prenda' | 'retorno_decidido'>>
+  & Partial<Pick<ReclamoRow, 'items_correctos' | 'destino_prenda' | 'retorno_decidido' | 'escenario'>>
 
 /** En qué lista viven las unidades que VUELVEN. En `mal_armado` es lo que llegó por error. */
 export function deDondeVuelve(motivo: MotivoReclamo): 'items' | 'items_correctos' {
@@ -1131,6 +1142,28 @@ export function loQueFaltaLlegar(fila: FilaConUnidades): UnidadQueVuelve[] {
 /** Las regaladas que todavía siguen contadas en Gestión Nube. Vacío = no falta descontar nada. */
 export function loQueFaltaDescontar(fila: FilaConUnidades): UnidadQueVuelve[] {
   return (loQueFaltaDescontarJs(fila) as { unidades: UnidadQueVuelve[] }).unidades
+}
+
+/**
+ * **Los productos de más que todavía no dicen de qué otra venta salieron.** Vacío = no falta
+ * ninguno, o el escenario no es `otra_venta` (en `sin_identificar` no se puede saber cuál es).
+ */
+export function sinLaOtraVenta(fila: FilaConUnidades): UnidadSinOtraVenta[] {
+  return (sinLaOtraVentaJs(fila) as { unidades: UnidadSinOtraVenta[] }).unidades
+}
+
+/** Una unidad de más a la que le falta el número de la venta de la que salió. */
+export type UnidadSinOtraVenta = { i: number; item: ItemReclamo }
+
+/** Anota de qué otra venta salió. `indices` en `null` = todas las que faltaban. */
+export function anotarLaOtraVenta(
+  fila: FilaConUnidades,
+  indices: number[] | null,
+  orden: string,
+): { campo: 'items' | 'items_correctos'; lista: ItemReclamo[]; anotadas: number; faltan: number } {
+  return anotarLaOtraVentaJs(fila, indices, orden) as {
+    campo: 'items' | 'items_correctos'; lista: ItemReclamo[]; anotadas: number; faltan: number
+  }
 }
 
 /** Sella las regaladas que ya salieron de GN. `indices` en `null` = todas las que faltaban. */
@@ -1744,6 +1777,12 @@ export function faltantesParaCerrar(d: ReclamoRow): string[] {
   if (d.cupon_estado === 'pendiente') faltan.push('crear el cupón en la tienda y anotar el código')
   // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
   if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
+  // 🔑 **El otro cliente.** Un excedente toca dos ventas: al de acá le llegó algo de más, y del
+  // otro lado hay una venta a la que le falta y alguien que todavía no reclamó. Cerrar sin anotar
+  // cuál es deja ese faltante sin abrir, y el que se entera es el otro cliente.
+  const sinOtraVenta = sinLaOtraVenta(d).length
+  if (sinOtraVenta === 1) faltan.push('anotar de qué otra venta salió el producto de más, y abrirle el faltante')
+  else if (sinOtraVenta > 1) faltan.push(`anotar de qué otras ventas salieron los ${sinOtraVenta} productos de más, y abrirles el faltante`)
   // 🔑 **Recibir es por PRODUCTO.** Antes esto miraba `destino_prenda === 'stock'` y el estado de la
   // fila, así que un reclamo de dos productos se daba por recibido entero con uno solo en la mano —
   // y en BDI 3 de cada 10 tienen dos. `estado === 'recibido'` sigue valiendo como "llegó todo": es
