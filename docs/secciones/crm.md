@@ -647,3 +647,72 @@ Con el `SUPABASE_SERVICE_KEY` del `.env` y el dump del KV: buscar a la persona e
 mirar si su teléfono normaliza, si es único (exacto y por cola), si tiene entrada en `crm:seg` y si
 tiene ventas. ⚠️ **Ojo con concluir desde una consulta con `limit`**: la primera búsqueda de esta
 sesión usó `or=(...)` con `limit=40`, no la trajo, y llevó a decir que no existía. Existía.
+
+## ⏸️ PENDIENTE (medido, no construido) — "¿está en la comunidad mayorista?"
+
+Bruno preguntó el 25-ago-2026 si se puede saber solo, desde el panel, si el cliente con el que está
+hablando está en la comunidad. **Se midió: SE PUEDE.** Queda pendiente de construir, por decisión
+suya (*"¿lo podemos dejar como algo pendiente?"*).
+
+### Lo medido el 25-ago-2026 (no hace falta volver a medirlo)
+
+Comunidad `BDI Accesorios Mayorista`, **458 participantes**.
+
+| Qué | Resultado |
+|---|---|
+| Con teléfono directo (`@c.us`) | **0 de 458** — todos vienen con LID |
+| Traducidos con `ContactCollection.get(lid).phoneNumber` | **458 de 458 (100%)** |
+| Que dan algo **distinto** del LID (traducción real, no eco) | **458** |
+| Con forma argentina (empiezan con 54) | **456** |
+| Dígitos LID / teléfono | **14 / 13** — 13 es la forma `549…` que usa el CRM |
+
+🔑 El 100% se sostiene porque Bruno **tiene a todos agendados**; con otra cuenta sería otro número.
+
+⚠️ **La trampa del falso 100%**: la primera medición contó "teléfono válido" con `length >= 8`, y
+el LID tiene 15 dígitos — **habría dado 100% aunque no tradujera nada**. Hubo que medir aparte que
+el resultado fuera DISTINTO del LID. Vale para cualquier medición parecida.
+
+### Cómo se lee
+
+- `require('WAWebChatCollection').ChatCollection.getModelsArray()` → filtrar `@g.us`
+- `g.groupMetadata.participants.getModelsArray()`
+- `require('WAWebContactCollection').ContactCollection.get(<lid>).phoneNumber`
+- ⚠️ `groupMetadata` **está vacío hasta que la comunidad se abre una vez** en esa sesión.
+- ⚠️ Misma puerta interna que `getActive()`: cuando WhatsApp la cambie, se rompe con el resto.
+
+### El diseño acordado, en dos partes
+
+- **A. En el panel, por chat**: "✅ Está en la comunidad" / "○ No está". **No manda nada al
+  servidor** — la extensión ya tiene la lista en memoria y compara el teléfono del chat abierto.
+  Es por donde hay que empezar.
+- **B. En el CRM, quién falta**: cruzar los 458 contra los clientes exige que el monitor reciba la
+  lista una vez por día y marque `en_difusion` solo. ⚠️ **Pisa las 120 marcas manuales**, que es el
+  punto: la comunidad tiene 458 y el CRM sólo 120 marcados. Y **118 de las 383 notas** dicen "le
+  mandé para que entre" — esa nota registra la INVITACIÓN, no la membresía.
+
+⛔ **Límites que hay que decir antes de construirlo**: sólo anda con WhatsApp Web abierto; la
+comunidad tiene que haberse abierto una vez; y depende de la puerta interna de WhatsApp.
+
+## ✅ 26-ago-2026 — el Instagram, en el panel
+
+Lo pidió Bruno: *"quería ver si podíamos agregar para agendar el instagram dentro del panel, o si
+está ya cargado, que se pueda ver también"*.
+
+**Está en el encabezado de la ficha**, debajo de la ciudad, en las dos fichas — la del cliente
+(`crm:seg.pagina`) y la del prospecto (`Lead.instagram`):
+
+- **Cargado**: se ve como enlace y abre el perfil (`leadInstaHref` resuelve `@usuario` y también un
+  link completo). Al lado, un "cambiar".
+- **Vacío**: un chip apagado `+ Instagram`, del mismo tamaño que los de los tres campos de la nota.
+  Lo que falta se ofrece, no se reclama.
+
+🔑 **Se carga acá porque acá es donde uno se entera**: el dato aparece en la conversación —te lo
+pasa el cliente, o lo ves en su perfil—, y hasta ahora había que salir del chat, abrir el CRM y
+buscar la ficha. Por eso lo tenían **91 de 773** clientes y **12 de 43** leads (medido el
+26-ago-2026).
+
+⚠️ Guarda al salir del cuadro, como todo el panel: cada guardado reescribe el mapa entero del KV.
+Vaciar el cuadro borra el dato.
+
+▶️ **La gemela que quedó sin hacer: la ciudad.** Le falta a **626 de 744** y el encabezado ya dice
+"sin ciudad" en un renglón que no hace nada. Es el mismo componente con otro campo.

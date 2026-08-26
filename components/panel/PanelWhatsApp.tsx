@@ -23,6 +23,7 @@ import {
   hoyISO,
   NOTAS_RAPIDAS,
   setDespacho,
+  setPagina,
   setPendiente,
   setProximoManual,
   setTemperatura,
@@ -36,6 +37,7 @@ import {
   leadsPorTelefono,
   LEAD_ESTADO_LABEL,
   nuevoIdLead,
+  setCampo as setCampoLead,
   setEstado as setEstadoLead,
   setProximoManual as setProximoLead,
   leadEstadoSeg,
@@ -762,6 +764,16 @@ function PanelInterno({
               <div style={{ fontSize: font.xs, color: color.mut2 }}>
                 {c.city || 'sin ciudad'} · #{c.id}
               </div>
+              {/*
+                El Instagram, que hasta ahora sólo se podía ver y escribir desde la sección. Y es
+                acá donde uno se entera de cuál es: lo tenés en la conversación, no en el CRM.
+                Medido el 23-ago-2026: **91 de 771** lo tienen cargado.
+              */}
+              <Instagram
+                valor={seg.pagina || ''}
+                guardando={guardando}
+                onGuardar={(v) => mutar((m) => setPagina(m, c.id, v), v ? 'Instagram guardado' : 'Instagram borrado')}
+              />
             </div>
             <button
               onClick={() => mutar((m) => setTemperatura(m, c.id, siguienteTemperatura(c.temperatura)), 'Listo')}
@@ -890,6 +902,99 @@ function PanelInterno({
         </div>
       </div>
     </Envoltorio>
+  )
+}
+
+/**
+ * El Instagram del cliente: se ve si está, y si no está se carga de un toque.
+ *
+ * 🔑 **Se carga acá porque acá es donde uno se entera.** El dato aparece en la conversación —te lo
+ * pasa el cliente, o lo ves en su perfil— y hasta ahora había que salir del chat, abrir el CRM y
+ * buscar la ficha. Por eso lo tienen 91 de 771.
+ *
+ * Cargado se ve como enlace y abre su perfil. Vacío es un chip apagado, del mismo tamaño que los
+ * de los tres campos de abajo: lo que falta se ofrece, no se reclama.
+ *
+ * ⚠️ Guarda al salir del cuadro, como todo lo demás del panel: cada guardado reescribe el mapa
+ * entero del KV. Vaciarlo lo borra.
+ */
+function Instagram({
+  valor,
+  guardando,
+  onGuardar,
+}: {
+  valor: string
+  guardando: boolean
+  onGuardar: (v: string) => void
+}) {
+  const [editando, setEditando] = useState(false)
+  const href = leadInstaHref(valor)
+
+  if (editando)
+    return (
+      <input
+        autoFocus
+        className="mo-input"
+        defaultValue={valor}
+        placeholder="@usuario o link de su Instagram"
+        disabled={guardando}
+        onBlur={(e) => {
+          const txt = e.target.value.trim()
+          setEditando(false)
+          if (txt !== valor.trim()) onGuardar(txt)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
+        style={{ width: '100%', fontSize: font.xs, marginTop: 3, height: 24 }}
+      />
+    )
+
+  if (!valor)
+    return (
+      <button
+        type="button"
+        onClick={() => setEditando(true)}
+        disabled={guardando}
+        title="Cargar el Instagram de este cliente"
+        style={{
+          marginTop: 3,
+          fontSize: 11,
+          color: color.mut2,
+          background: 'transparent',
+          border: `1px dashed ${color.line2}`,
+          borderRadius: radius.pill,
+          padding: '2px 8px',
+          cursor: 'pointer',
+        }}
+      >
+        + Instagram
+      </button>
+    )
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        style={{ fontSize: font.xs, color: color.brand, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+      >
+        {valor} ↗
+      </a>
+      <button
+        type="button"
+        onClick={() => setEditando(true)}
+        disabled={guardando}
+        title="Cambiarlo"
+        style={{ background: 'none', border: 0, padding: 0, color: color.mut2, fontSize: 11, cursor: 'pointer' }}
+      >
+        cambiar
+      </button>
+    </div>
   )
 }
 
@@ -1199,7 +1304,6 @@ function FichaLead({
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
 }) {
   const seg = leadEstadoSeg(lead, today)
-  const insta = leadInstaHref(lead.instagram)
   const notas = Array.isArray(lead.notas) ? lead.notas : []
 
   return (
@@ -1210,17 +1314,14 @@ function FichaLead({
             <div style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, lineHeight: 1.2 }}>
               {lead.nombre || 'Sin nombre'}
             </div>
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>
-              {lead.ciudad || 'sin ciudad'}
-              {insta && (
-                <>
-                  {' · '}
-                  <a href={insta} target="_blank" rel="noreferrer" style={{ color: color.brand, textDecoration: 'none' }}>
-                    {lead.instagram}
-                  </a>
-                </>
-              )}
-            </div>
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>{lead.ciudad || 'sin ciudad'}</div>
+            {/* Editable también acá: en un prospecto el Instagram es la mitad de lo que se sabe
+                de él, y muchas veces llega después de haberlo cargado. */}
+            <Instagram
+              valor={lead.instagram || ''}
+              guardando={guardando}
+              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'instagram', v), v ? 'Instagram guardado' : 'Instagram borrado')}
+            />
           </div>
           <Chip tone={lead.estado === 'activo' ? 'neutro' : 'ok'}>{LEAD_ESTADO_LABEL[lead.estado]}</Chip>
         </div>
