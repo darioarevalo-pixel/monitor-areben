@@ -951,6 +951,74 @@ algo que no pasó— y se ve en `ultima_corrida` de la regla.
   cuatro del CI se corrieron a mano acá y las cuatro pasan. Y al pushear, Actions estaba con la cola
   trabada —dos corridas encoladas hacía 20 minutos—, así que la corrida de este commit ni arrancó.
 
+## 🆕🏁 26-ago-2026 (6ª tanda): EL MAIL DE LA MAÑANA — la otra mitad de P4
+
+El badge arregla la mitad del agujero: **sólo se ve si se abre el monitor**. Ahora el reloj de las
+07:50, después de escribir los hallazgos, manda un mail.
+
+### 🔑 LA DECISIÓN QUE ORDENA EL MAIL ENTERO: van los ABIERTOS, ⛔ no los de hoy
+
+Lo natural sería mandar lo que la corrida acaba de escribir. **Sería el mismo agujero con otra
+forma:** un hallazgo del lunes que nadie accionó desaparecería del mail del martes — y el que más
+importa es justamente el que lleva días sin que nadie lo toque. El mail lista **todo lo que está en
+`nuevo`** y dice de cada uno **hace cuánto** (de `desde`, la racha de la 5ª tanda). ⇒ **La lista se
+vacía accionando, ⛔ no dejando pasar un día.**
+
+✅ Y eso quedó **verificado ejerciendo, no razonando**: la segunda corrida del mismo día imprimió
+`0 hallazgos nuevos` y a la vez `Había para mandar: «Pauta · 4 cosas para decidir, 1 quemando
+plata»`. Con la otra decisión, esa corrida habría mandado un mail vacío.
+
+### 🔑 Con cero hallazgos ⛔ NO se manda nada
+
+Un mail diario que dice «no hay nada» enseña a no abrirlo, y el día que traiga algo llega a una
+bandeja donde ese remitente ya se saltea. El silencio del mail significa «no hay nada que decidir»
+**porque es la única razón por la que no llega**; el que quiera confirmarlo tiene el cartel de la
+pantalla, que sí separa las tres causas (`silencioDeReglas`).
+
+### El asunto se lee en la pantalla bloqueada
+
+`Pauta · 4 cosas para decidir, 1 quemando plata`. Las dos cosas que deciden si se abre ahora o
+después: **cuántas** y **si alguna está costando plata mientras se la mira**. El cuerpo va ordenado
+igual: primero lo que quema, después lo que no propone nada —que es lo que más fácil se queda
+quieto, porque nadie sabe qué apretar— y último la oportunidad; a igual gravedad, **el más viejo
+arriba**.
+
+🔑 **La gravedad bajó a `reglas.core.js` (`gravedadDeHallazgo`) porque ahora la leen DOS**: el badge
+del sidebar, que la convierte en su `Tone`, y el mail, que ordena y arma el asunto. Copiada, el día
+que se agregue una acción nueva se entera una sola — es el bug del mismo número con dos
+implementaciones.
+
+### 🔑 Las tres respuestas del envío son distintas, y confundirlas apaga un aviso en silencio
+
+`scripts/lib/mail.mjs` pega a la API de Resend por `fetch`, **sin dependencia nueva** (25 líneas, y
+`npm ci` corre en cada cron):
+
+| respuesta | qué es | qué hace el reloj |
+|---|---|---|
+| sin `RESEND_API_KEY` | ⛔ **no está configurado**, ⛔ no está roto | lo dice fuerte en el log y **sale VERDE**: el trabajo del reloj son los hallazgos, el mail es un rider |
+| con la key y falla | alguien pidió el mail y no llegó | `anotar()` ⇒ **el workflow sale ROJO** |
+| mandado | — | imprime el id |
+
+Es la misma distinción de `ventana.core.js`: **ausente ⛔ no es lo mismo que roto**. Las dos ramas se
+ejercieron contra la API real —sin key da `{configurado:false}`, con una key falsa devuelve el mensaje
+de Resend *«API key is invalid»*— y los exit codes salen 0 y 1.
+
+### Cómo se prende, y qué falta
+
+▶️ 🔴 **Una sola mano: cargar `RESEND_API_KEY`** en Settings → Secrets → Actions del repo. La cuenta
+gratis de Resend alcanza de sobra (1 mail por día contra 3.000/mes) y **⛔ no hace falta verificar
+ningún dominio para empezar**: `onboarding@resend.dev` escribe a la casilla dueña de la cuenta, que
+es la única destinataria. El día que sean dos, se verifica `arebensrl.com` (tres registros en
+Cloudflare, donde Bruno es Super Admin) y se cambia `MAIL_DE`.
+⚠️ Mientras tanto **el reloj sale verde y lo dice en el log en cada corrida**, así que no se olvida
+en silencio. `MAIL_HALLAZGOS_A` es opcional: el default es la casilla de Bruno, porque ésta es la
+sección de una sola persona (`PENDIENTES.md` § 4) y una tabla de suscriptores sería mantener algo
+para un registro.
+
+**15 mutantes, 15 muertos.** El que más importaba: el que hace que todo diga «pausalo» — un mail que
+manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
+cometer, y el primer barrido lo dejó **vivo**.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

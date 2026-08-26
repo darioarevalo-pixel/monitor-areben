@@ -12,6 +12,7 @@ import type { LineaPauta } from './tipos'
 import {
   agrupar as agruparJs,
   agruparHallazgos as agruparHallazgosJs,
+  gravedadDeHallazgo as gravedadDeHallazgoJs,
   apagadoEn as apagadoEnJs,
   calibrar as calibrarJs,
   diasConEstado as diasConEstadoJs,
@@ -355,6 +356,13 @@ export const agruparHallazgos = agruparHallazgosJs as <T extends { regla_id: num
   // nadie se lo olvide.
   filas: T[] | null | undefined,
 ) => Array<T & { veces: number; desde: string }>
+/**
+ * Cuánto grita un hallazgo, a partir de lo que PROPONE. La leen el badge del sidebar y el mail de
+ * la mañana: por eso vive en el núcleo y ⛔ no en ninguna de las dos.
+ */
+export const gravedadDeHallazgo = gravedadDeHallazgoJs as (
+  s: Sugerencia | null,
+) => 'quema' | 'oportunidad' | 'mirar'
 export const compararCtr = compararCtrJs as (
   filas: FilaRegla[],
   // `caida` es la magnitud RELATIVA (0,31 = cayó 31%), negativa cuando subió. Es la que se compara

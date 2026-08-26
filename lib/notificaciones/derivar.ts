@@ -15,7 +15,7 @@ import { pendientesDeTrabajo } from '@/lib/inicio/core'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
 import { alertasDe, estaAbierto, MOTIVO_LABEL, numeroReclamo, type AlertaReclamo, type ReclamoRow } from '@/lib/reclamos/tipos'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
-import type { Hallazgo } from '@/lib/meta-ads/reglas'
+import { gravedadDeHallazgo, type Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
@@ -226,23 +226,22 @@ export function avisosDeHallazgo(hallazgos: Hallazgo[], perfil: Perfil | null): 
       // de distancia. `ContextoMeta` lee `?linea=` al montar.
       ruta: `/meta-ads?linea=${h.linea}`,
       ts: inicioDelDia(h.desde),
-      tono: tonoDeHallazgo(h),
+      tono: TONO_POR_GRAVEDAD[gravedadDeHallazgo(h.sugerencia)] ?? 'warning',
     }))
 }
 
 /**
- * Cuánto grita un hallazgo. Sale de lo que PROPONE y ⛔ no del preset: dos reglas distintas pueden
- * terminar las dos en «pausá esto», y lo que ordena la lectura es si hay plata quemándose o una
- * oportunidad esperando.
+ * Cómo se pinta un hallazgo. La GRAVEDAD ⛔ no se decide acá: sale de `gravedadDeHallazgo()`, que
+ * también lee el mail de la mañana. Acá sólo se traduce a un tono de la paleta — si la regla
+ * viviera en los dos lados, agregar una acción nueva enteraría a uno solo.
  */
-function tonoDeHallazgo(h: Hallazgo): Aviso['tono'] {
-  const s = h.sugerencia
-  // Pausar es la única que dice «esto está costando plata ahora».
-  if (s && s.accion === 'estado' && s.status === 'PAUSED') return 'danger'
-  // Reactivar y subir el presupuesto son plata que se está dejando de ganar: importan, no sangran.
-  if (s) return 'brand'
-  // Sin sugerencia hay algo que mirar y nadie sabe qué apretar: es lo que más fácil se queda quieto.
-  return 'warning'
+const TONO_POR_GRAVEDAD: Record<string, Aviso['tono']> = {
+  // Plata saliendo ahora.
+  quema: 'danger',
+  // Plata que se deja de ganar: importa, no sangra.
+  oportunidad: 'brand',
+  // No propone nada: hay que mirarlo, y es lo que más fácil se queda quieto.
+  mirar: 'warning',
 }
 
 /**

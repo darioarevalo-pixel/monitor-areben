@@ -38,8 +38,10 @@ import { indexar, porQueCallado } from '../lib/meta-ads/decisiones.core.js'
 import { COLS_REGLA, leerDecisiones, leerSnapshot, leerTechos, leerUmbrales, techoDe } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
-  calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS,
+  agruparHallazgos, calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS,
 } from '../lib/meta-ads/reglas.core.js'
+import { armarMail } from '../lib/meta-ads/mail-hallazgos.core.js'
+import { mandarMail } from './lib/mail.mjs'
 
 const problemas = []
 const anotar = (que, detalle) => { problemas.push(`${que}: ${detalle}`); console.log(`  ⚠️  ${que}: ${detalle}`) }
@@ -276,6 +278,62 @@ async function modoDiario(filas, umbrales, decisiones, techos) {
   console.log(`\n${total} hallazgo${total === 1 ? '' : 's'} nuevo${total === 1 ? '' : 's'}.`)
 }
 
+// ── El mail de la mañana ─────────────────────────────────────────────────────
+
+/**
+ * A quién le llega. Es la sección de UNA persona (`PENDIENTES.md` § 4: *«todo para Bruno»*), así
+ * que el default es su casilla y no hay tabla de suscriptores que mantener. `MAIL_HALLAZGOS_A`
+ * lo pisa el día que sean dos.
+ */
+const MAIL_A = process.env.MAIL_HALLAZGOS_A || 'brunoarevalo@arebensrl.com'
+
+/**
+ * Manda el mail de la mañana, DESPUÉS de escribir los hallazgos del día.
+ *
+ * 🔑 **Lee todo lo que está en `nuevo`, ⛔ no lo que acaba de escribir esta corrida.** Es la
+ * decisión que ordena el mail entero y está contada en `mail-hallazgos.core.js`: mandando sólo lo
+ * nuevo, un hallazgo del lunes que nadie accionó desaparece del mail del martes — y el que más
+ * importa es justo el que lleva días sin que nadie lo toque. **La lista se vacía accionando.**
+ *
+ * ⚠️ Reusa `agruparHallazgos`, el mismo agrupado que sirve la pantalla, para que el «hace 3 días»
+ * del mail y el de la pantalla ⛔ no puedan discrepar.
+ */
+async function mandarElParte() {
+  const { data, error } = await supabase
+    .from('meta_ads_hallazgo')
+    .select('regla_id,objeto_id,objeto_nombre,linea,fecha,motivo,sugerencia')
+    .eq('estado', 'nuevo')
+    .order('fecha', { ascending: false })
+    .limit(200)
+  if (error) { anotar('leer los hallazgos abiertos para el mail', error.message); return }
+
+  const mail = armarMail(agruparHallazgos(data || []), HASTA)
+  if (!mail) {
+    // ⛔ No se manda un mail para decir que no hay nada: ver el 🔑 del core. El log sí lo dice,
+    // porque acá la pregunta «¿corrió y no encontró nada, o no corrió?» tiene que tener respuesta.
+    console.log('\nMail: no hay hallazgos abiertos, así que no se manda nada.')
+    return
+  }
+
+  if (SIMULACRO) {
+    console.log(`\nMail [SIMULACRO, no se manda] → ${MAIL_A}\n  ${mail.asunto}\n`)
+    console.log(mail.texto.split('\n').map((l) => `  | ${l}`).join('\n'))
+    return
+  }
+
+  const r = await mandarMail({ para: MAIL_A, asunto: mail.asunto, texto: mail.texto, html: mail.html })
+  if (r.ok) { console.log(`\nMail mandado a ${MAIL_A}: «${mail.asunto}» (${r.id})`); return }
+  if (!r.configurado) {
+    // ⛔ Ausente ⛔ NO es roto: sin la key esto todavía no está prendido, y tumbar la corrida de las
+    // reglas por eso sería romper lo que sí funciona. Se dice fuerte y se sigue en verde.
+    console.log(`\n⚠️  Mail SIN MANDAR: falta RESEND_API_KEY. Había para mandar: «${mail.asunto}».`)
+    console.log('    Se prende cargando el secret RESEND_API_KEY en el repo (Settings → Secrets → Actions).')
+    return
+  }
+  // Con la key puesta, un envío que falla SÍ tiñe el workflow: alguien pidió el mail y no llegó.
+  anotar('mandar el mail de la mañana', r.motivo)
+}
+
 // ── El trabajo ───────────────────────────────────────────────────────────────
 
 async function main() {
@@ -303,6 +361,9 @@ async function main() {
     await modoCalibrar(filas, umbrales, decisiones.indice, techos)
   } else {
     await modoDiario(filas, umbrales, decisiones.indice, techos)
+    // El mail va DESPUÉS de escribir, y lee la tabla: así lleva también lo que quedó abierto de días
+    // anteriores. ⛔ No se le pasan los hallazgos de esta corrida — ver `mandarElParte`.
+    await mandarElParte()
   }
 
   console.log(`\nListo en ${((Date.now() - t0) / 1000).toFixed(1)} s.`)

@@ -219,8 +219,14 @@ arreglarlo sale `desde` —cuándo EMPEZÓ—, que es el `ts` del aviso: con la 
 aviso diría «apareció hoy» todas las mañanas y el «NUEVO» no se apagaría nunca. Detalle en
 `docs/secciones/meta-ads.md`. **16 mutantes, 16 muertos.**
 
-▶️ **Falta el mail.** El aviso llega al monitor, ⛔ no al teléfono: si el monitor no se abre en todo
-el día, el badge tampoco se ve. El mail es la segunda mitad y todavía no está.
+🏁 **Y el mail también** (26-ago, 6ª tanda). El reloj de las 07:50 manda un mail después de escribir
+los hallazgos. 🔑 **Lleva los ABIERTOS y ⛔ no los de hoy** —si no, un hallazgo del lunes que nadie
+accionó desaparece del mail del martes—, y **con cero ⛔ no manda nada**, porque un mail diario que
+dice «no hay nada» enseña a no abrirlo. Detalle en `docs/secciones/meta-ads.md`.
+
+▶️ 🔴 **UNA MANO, y es lo único que falta: cargar `RESEND_API_KEY`** en Settings → Secrets → Actions.
+Gratis alcanza (1 mail/día contra 3.000/mes) y ⛔ no hace falta verificar dominio. Mientras tanto el
+reloj sale VERDE y lo dice en el log en cada corrida: ⛔ no se olvida en silencio.
 
 ### ▶️ P5 — Traducir el idioma
 
@@ -238,7 +244,7 @@ su comprensión:
 - **P2 (motor de reglas) y P3 (el parte como pantalla) SUBEN a lo primero.** «Qué hago hoy» es
   exactamente lo que le falta a alguien que ya sabe leer los números.
 - **P4 (que salga a buscarte) sube también**: si hay un solo operador, lo que no le llega no existe.
-  🏁 La mitad de adentro del monitor está hecha (arriba); ▶️ falta el mail.
+  🏁 **Hecho**: el badge del sidebar y el mail de las 07:50. ▶️ Falta la mano de la key.
 - **P1 se angosta**: de las dos mitades —«qué hace» y «qué ESCRIBE»— la que sigue valiendo es la
   segunda. No hace falta enseñarle qué es un conjunto; hace falta que antes de apretar sepa **qué
   se toca, dónde, y si se puede volver atrás**. Es lo que pidió textual.
