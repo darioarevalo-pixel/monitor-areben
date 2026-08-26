@@ -638,6 +638,40 @@ número que nadie eligió — el Panel ofreciendo y el motor frenando por una co
 - Stunned, que no tiene ficha, queda apagada diciendo *«Faltan definir «CPA máximo», que sale de la
   ficha de rentabilidad de la marca, y «Gasto mínimo para juzgar»»*.
 
+### 🆕🔴 El piso derivado de UNA SOLA COMPRA: la regla figuraba prendida y no podía saltar
+
+Encontrado el 26-ago-2026 calibrando marca por marca **antes** de prender nada.
+
+`gasto_minimo` —el piso de gasto que hace falta para que un resultado signifique algo— se **deriva**
+del CPA real de la línea: `gasto ÷ compras` sobre los 90 días. Es el único umbral que se autocompleta
+y está bien que lo haga: gastar lo que sale un cliente y no traer ninguno es un hecho, no una opinión.
+
+🔴 **Pero con UNA compra, «el CPA» de una línea es TODO SU GASTO.** Stunned llevaba 1 compra en 90
+días y $330.528 gastados ⇒ el piso derivado era **$330.528**: el freno de emergencia pedía quemar la
+cuenta entera sin vender para abrir la boca. Con un piso puesto a mano encuentra **2 avisos y 4
+saltos en la última semana** (`AD002 - BAJAMOS LOS PRECIOS VIDEO LOCAL`, `AD001 - BAJAMOS LOS PRECIOS
+30% - BROAD`).
+
+🔑 **Y el modo de fallar es el peor que hay: CALLADO.** Una regla a la que le falta un umbral se
+apaga **diciendo qué le falta**. Ésta no: el umbral existía, así que la regla figuraba **prendida** y
+contestaba «0 hallazgos» — que se lee «acá está todo bien» sobre la marca que más plata quema. Peor
+todavía, **fue la primera compra la que la rompió**: con 0 compras el piso daba `null` y la regla se
+apagaba con el motivo escrito, que era lo correcto. Una sola venta la pasó de *honestamente apagada*
+a *muda*.
+
+⇒ `COMPRAS_MINIMAS_CPA = 5`. Debajo de eso el CPA no significa y `derivarUmbrales()` devuelve `null`,
+o sea que la regla vuelve a apagarse **diciéndolo**, y el piso pasa a ser una decisión de dial en vez
+de una división. **Cinco y no dos**: una compra de más o de menos mueve el piso `1/n`, y recién en 5
+esa sacudida (20%) baja de la tolerancia con la que corta el propio módulo (`TOLERANCIA_COSTO`, 50%).
+⛔ No toca a BDI ni a Zattia, que llevan más de 200 compras cada una en la ventana.
+
+🔑 **La lección general, y no es sobre este umbral**: *un guard que mira si el número EXISTE no
+protege de un número que no SIGNIFICA*. La categoría `derivable: true` de la tabla de arriba tiene
+que declarar también **con cuántas observaciones** vale la derivación — igual que `sumarDias()`
+devuelve `null` y ⛔ nunca 0 cuando no hubo una fila que lo midiera.
+
+**4 mutantes, 4 muertos** (volver a `compras > 0`, bajar el piso a 2, subirlo a 6, cambiar `>=` por `>`).
+
 ⚠️ **Zattia corta contra un techo que hoy no aplica**: su ficha está cargada a precio de LISTA
 ($32.416) y la tienda está en liquidación. La regla hereda la ficha —que es como tiene que ser— así
 que **arreglar la ficha arregla la regla**, y hasta entonces `costo-alto` en Zattia va a gritar de
@@ -817,8 +851,9 @@ sí se puede desde el monitor.
 - ▶️ **El semáforo vivo** de rentabilidad (cruzar el techo con la foto): es lo que hace que la
   pantalla deje de ser calculadora y pase a ser alarma.
 - 🔴 **Stunned gastó $428.421 en 90 días sin una sola compra atribuida** y los tres píxeles están
-  vivos ⇒ no es «no hay píxel». Su freno de emergencia queda apagado solo, porque el piso se deduce
-  del CPA y su CPA es la cuenta entera sobre una compra. **Hay que mirar si es el píxel o es la pauta.**
+  vivos ⇒ no es «no hay píxel». **Hay que mirar si es el píxel o es la pauta.**
+  ⛔ **Corrige lo que decía este renglón** —«su freno de emergencia queda apagado solo»—: no quedaba
+  apagado, quedaba **prendido y mudo**. Ver «El piso derivado de una sola compra», más arriba.
 - ⚠️ Al navegar entre subsecciones la URL pierde `?linea=` y `?cuenta=` (el eje sobrevive en el
   provider, así que la pantalla está bien; el link deja de reproducirse).
 - ⛔ **Contar las tarjetas de un carrusel no se puede con este token** (`attachments` es un campo de

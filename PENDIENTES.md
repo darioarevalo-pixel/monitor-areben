@@ -126,9 +126,42 @@ verificación contra la pauta real y por qué la regla es más exigente que la p
 
 ▶️ **La mano que falta, y es de dos minutos**: entrar a **Configurar → Automatizaciones** y prender
 las reglas de BDI y Zattia. Hoy `meta_ads_regla` tiene **0 filas** ⇒ el cron de las 07:00 sigue
-corriendo en vacío aunque los detectores ya encuentren. Con el calibrador (el botón «¿cuántas veces
-habría saltado?») se ve antes de prender: al 26-ago, `costo-alto` da **9 saltos sobre 3 conjuntos en
-7 días** en BDI y **0 en Zattia**.
+corriendo en vacío aunque los detectores ya encuentren.
+
+🆕 **Y ya no hay que elegir: los once renglones que van, calibrados contra la pauta real el 26-ago**
+(la columna que importa es **7 días**, que es el ruido que va a llegar por la mañana; los 90 son casi
+todos objetos que ya están apagados):
+
+| línea | preset | dial | saltos 7d | 90d / objetos |
+|---|---|---|---|---|
+| bdi | `costo-alto` | — | **8** | 25 / 7 |
+| bdi | `freno-emergencia` | — | **10** | 59 / 8 |
+| bdi | `atribucion-tardia` | — | **10** | 12 / 3 |
+| bdi | `fatiga` | `frecuencia_maxima 1.3` | **5** | 15 / 1 |
+| bdi | `sin-avisos` | — | 0 | 0 |
+| zattia | `freno-emergencia` | — | **6** | 54 / 2 |
+| zattia | `atribucion-tardia` | — | **2** | 2 / 1 |
+| zattia | `fatiga` | `frecuencia_maxima 1.6` | **4** | 15 / 1 |
+| zattia | `costo-alto` | — | 0 | 6 / 2 |
+| zattia | `sin-avisos` | — | 0 | 62 / 1 |
+| stunned | `sin-avisos` | — | 0 | 8 / 1 |
+
+⇒ **~5 hallazgos por mañana entre las tres marcas.** Es una lista que se lee, ⛔ no un tablero que se
+ignora.
+
+🔑 **Los diales de `fatiga` no son un número elegido: son el CODO de la curva.** En BDI, `1,2` arrastra
+8 avisos y `1,3` deja **exactamente uno — `AD02 - GIRLHOOD COLLECTION`**, que es el 52% del gasto de la
+marca y la pieza que este repo tiene identificada como el desgaste que traba todo. En Zattia la curva
+es plana de `1,3` a `1,6` (siempre 15 saltos, siempre `AD 1 - SWEATERS & FITS SEMANA`) ⇒ va `1,6`, que
+es el más alto que no pierde nada.
+
+⛔ **Quedan AFUERA a propósito dos presets, y no es olvido**:
+- `gastos-hormiga` pide **`roas_objetivo`**, y este repo tiene escrito en tres lados que el ROAS ⛔ no
+  es la vara (se mueve ±12% con el mix de medios de pago). Prenderlo sería elegir el número que
+  decidimos no usar.
+- `ganador-escalar` pide **`techo_diario_crudo`**, que es plata y lo decide Bruno — y hoy la
+  aritmética de la línea dice que el pedido marginal de BDI ya compra ARRIBA del techo. Es el único
+  preset que propone gastar más: va último, y va cuando alguien firme ese número.
 
 ▶️ Y una segunda, en la otra pantalla: **Zattia corta contra un techo que hoy no aplica** —su ficha
 está cargada a precio de LISTA y la tienda está en liquidación— ⇒ la regla hereda la ficha, que es

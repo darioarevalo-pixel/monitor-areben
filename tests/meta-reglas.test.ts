@@ -160,20 +160,42 @@ describe('reglas — los umbrales', () => {
   })
 
   /**
+   * 🔴 **El caso real que lo destapó, y el modo de fallar es CALLADO.**
+   *
+   * `stunned` llevaba UNA compra en 90 días con $330.528 gastados (26-ago-2026). El piso derivado
+   * era el gasto entero de la marca ⇒ el freno de emergencia pedía quemar $330.528 sin vender para
+   * abrir la boca. La regla figuraba **prendida** y era imposible que saltara: decía «0 hallazgos»
+   * sobre la línea que más plata quema. Ahora se apaga **diciendo que le falta el piso**, que es lo
+   * único honesto que se puede decir con n=1.
+   */
+  it('con muy pocas compras el CPA no significa, y la regla se apaga en vez de quedarse muda', () => {
+    expect(derivarUmbrales(totalLinea(330528, 1)).gasto_minimo).toBeNull()
+    expect(derivarUmbrales(totalLinea(330528, 4)).gasto_minimo).toBeNull()
+    // Y en el borde vuelve a existir: cinco compras ya son un CPA.
+    expect(derivarUmbrales(totalLinea(50000, 5)).gasto_minimo).toBe(10000)
+    // Lo que importa no es el `null`, es que ese `null` APAGUE con el motivo escrito.
+    const u = umbralesEfectivos(null, null, derivarUmbrales(totalLinea(330528, 1)))
+    expect(faltanUmbrales('freno-emergencia', u)).toEqual(['gasto_minimo'])
+    expect(motivoApagada('freno-emergencia', ['gasto_minimo'])).toContain('Gasto mínimo para juzgar')
+  })
+
+  /**
    * 🔴 La misma plata está en los cuatro niveles de la tabla: el gasto de un aviso está también en
    * su conjunto y en su campaña. Sumar sin filtrar por nivel triplicaría `gastoTotal`, que es
    * justamente el número que se le muestra a una persona al lado del dial.
    */
   it('los totales de la línea salen de UN nivel: la misma plata está en los cuatro', () => {
     const filas = [
-      fila({ nivel: 'campania', objeto_id: 'c1', spend: 1000, compras: 2, revenue: 5000 }),
-      fila({ nivel: 'conjunto', objeto_id: 's1', spend: 1000, compras: 2, revenue: 5000 }),
-      fila({ nivel: 'aviso', objeto_id: 'a1', spend: 1000, compras: 2, revenue: 5000 }),
+      fila({ nivel: 'campania', objeto_id: 'c1', spend: 1000, compras: 10, revenue: 5000 }),
+      fila({ nivel: 'conjunto', objeto_id: 's1', spend: 1000, compras: 10, revenue: 5000 }),
+      fila({ nivel: 'aviso', objeto_id: 'a1', spend: 1000, compras: 10, revenue: 5000 }),
     ]
     const ctx = contextoUmbrales(filas)
     expect(ctx.gastoTotal).toBe(1000)
     expect(ctx.roasMedio).toBe(5)
-    expect(derivarUmbrales(filas).gasto_minimo).toBe(500)
+    // Diez compras y no dos: por debajo de `COMPRAS_MINIMAS_CPA` esto daría `null` por otro motivo
+    // y el test dejaría de probar lo que dice el título.
+    expect(derivarUmbrales(filas).gasto_minimo).toBe(100)
   })
 
   it('lo de la regla pisa lo de la línea, y un null no pisa nada', () => {
