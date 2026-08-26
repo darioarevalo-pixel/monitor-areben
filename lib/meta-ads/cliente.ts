@@ -10,7 +10,7 @@
 import { apiFetch } from '../api-fetch'
 import type { BandaHoy } from './parte'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
-import type { MarcaFavorito, RespuestaBiblioteca } from './biblioteca'
+import type { MarcaFavorito, PiezaAviso, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
 import type { Candidato, MotivoPoda } from './podado'
 import type { RangoUI } from './rango'
@@ -27,6 +27,9 @@ import type { RespuestaZona } from './rendimiento'
  * mostrar un `<pre>`. ⛔ No son dos consultas ni dos agregaciones: salen de las mismas cinco
  * llamadas a Graph y de las mismas funciones puras.
  */
+/** Las caras de una cuenta. `motivo` con `piezas` cargadas = están las fotos chicas pero no el copy. */
+export type RespuestaPiezas = { ok: true; piezas: Record<string, PiezaAviso>; motivo: string | null }
+
 export type RespuestaParte = {
   ok: true
   texto: string
@@ -586,6 +589,25 @@ export function resolverHallazgo(id: number, estado: 'accionado' | 'ignorado'): 
  */
 export function traerBiblioteca(rango: RangoUI): Promise<Lectura<RespuestaBiblioteca>> {
   return pedir<RespuestaBiblioteca>(new URLSearchParams({ recurso: 'biblioteca', rango }))
+}
+
+/**
+ * Sólo las CARAS de una cuenta, indexadas por id de aviso.
+ *
+ * La usa la zona de Rendimiento al abrir una celda: los avisos y sus números ya salieron de la foto
+ * —gratis—, y esto les pone la imagen, el formato y el estado VIVO, que es lo único que la foto ⛔ no
+ * puede tener.
+ *
+ * 🔑 **`{ok:true}` con `piezas: {}` y un `motivo` es la respuesta normal cuando Meta no contesta**,
+ * ⛔ no un error: los avisos igual se dibujan con sus números y la fila dice por qué no hay cara.
+ *
+ * @param avisos ids que tienen prioridad en el rescate de miniaturas (el tope de Meta son 50).
+ *   ⛔ No recorta lo que vuelve ni decide permisos.
+ */
+export function traerPiezas(cuenta: string, avisos?: string[]): Promise<Lectura<RespuestaPiezas>> {
+  const p = new URLSearchParams({ recurso: 'piezas', cuenta })
+  if (avisos && avisos.length) p.set('avisos', avisos.join(','))
+  return pedir<RespuestaPiezas>(p)
 }
 
 /**

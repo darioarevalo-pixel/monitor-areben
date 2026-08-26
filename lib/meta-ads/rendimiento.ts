@@ -10,6 +10,7 @@ import {
   armarZona as armarZonaJs,
   CAIDA_CTR as CAIDA_CTR_JS,
   celdasDeLaFoto as celdasDeLaFotoJs,
+  avisosPorCelda as avisosPorCeldaJs,
   concentracionDe as concentracionDeJs,
   configDeHoy as configDeHoyJs,
   CON_AIRE as CON_AIRE_JS,
@@ -27,6 +28,7 @@ import {
   VENTANA as VENTANA_JS,
   veredictoDeCelda as veredictoDeCeldaJs,
 } from './rendimiento.core.js'
+import type { AvisoBiblioteca } from './biblioteca'
 
 /** Una fila de la foto, tal como la trae `COLS_RENDIMIENTO`. Todo opcional: los tests siembran poco. */
 export type FilaZona = {
@@ -106,6 +108,16 @@ export type Veredicto = {
   pctDiario: number | null
 }
 
+/**
+ * Un aviso adentro de una celda: lo que sale de la FOTO y nada más.
+ *
+ * 🔑 **El tipo es el que sostiene la regla**: se le sacan a `AvisoBiblioteca` los cuatro campos que
+ * ⛔ NO puede contestar la foto de una ventana vieja. `estado` y `configurado` se escriben sólo en
+ * la fila del día en que se sacó la foto —en una ventana que no llegue hasta hoy dirían «pausado»
+ * para todo—, y `pieza`/`favorito` no viven en la foto: llegan de Graph o no llegan.
+ */
+export type AvisoDeCelda = Omit<AvisoBiblioteca, 'estado' | 'configurado' | 'pieza' | 'favorito'>
+
 export type Celda = {
   id: string
   nombre: string
@@ -137,6 +149,8 @@ export type Celda = {
   serie: DiaCelda[]
   desgaste: Desgaste
   aprendizaje: Aprendizaje
+  /** Los avisos que corrieron en ESTA caja, en la misma ventana que las métricas de arriba. */
+  avisos: AvisoDeCelda[]
   veredicto: Veredicto
 }
 
@@ -223,14 +237,18 @@ export const elegirVentana = elegirVentanaJs as (crudo: unknown) => { dias: numb
 export const ultimoDiaCerrado = ultimoDiaCerradoJs as (filas: FilaZona[]) => string | null
 export const enVentana = enVentanaJs as (filas: FilaZona[], desde: string | null, hasta: string | null) => FilaZona[]
 export const desdeDe = desdeDeJs as (hasta: string, dias: number) => string
-export const celdasDeLaFoto = celdasDeLaFotoJs as (filas: FilaZona[]) => Omit<Celda, 'desgaste' | 'aprendizaje' | 'veredicto'>[]
+/** ⚠️ Sin `avisos`: ésos los cuelga `armarZona`, que es la que sabe qué ventana se está mirando. */
+export const celdasDeLaFoto = celdasDeLaFotoJs as (filas: FilaZona[]) => Omit<Celda, 'desgaste' | 'aprendizaje' | 'veredicto' | 'avisos'>[]
 export const desgasteDe = desgasteDeJs as (serie: Partial<DiaCelda>[], ventana?: number) => Desgaste
 export const aprendizajeDe = aprendizajeDeJs as (celda: { serie: Partial<DiaCelda>[] }, ventana?: number) => Aprendizaje
+/** ⛔ No mira los `avisos`, y el tipo lo dice: el veredicto es de la CAJA — no se pausa una pieza. */
 export const veredictoDeCelda = veredictoDeCeldaJs as (
-  celda: Omit<Celda, 'desgaste' | 'aprendizaje' | 'veredicto'>,
+  celda: Omit<Celda, 'desgaste' | 'aprendizaje' | 'veredicto' | 'avisos'>,
   ctx?: { techo?: number; desgaste?: Partial<Desgaste> | null; aprendizaje?: Partial<Aprendizaje> | null },
 ) => Veredicto
 export const concentracionDe = concentracionDeJs as (filas: FilaZona[]) => Concentracion
+/** Indexado por el `adset_id`, que es el `id` de la celda. Ver el docblock del `.core.js`. */
+export const avisosPorCelda = avisosPorCeldaJs as (filas: FilaZona[]) => Map<string, AvisoDeCelda[]>
 /** 🔑 Las métricas son de la ventana; la configuración es de HOY. ⛔ Recibe TODAS las filas. */
 export const configDeHoy = configDeHoyJs as (filas: FilaZona[]) => Map<string, {
   fecha: string; nombre: string; estado: string | null; estadoReal: string | null; diario: number | null

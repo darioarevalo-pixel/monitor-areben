@@ -1,6 +1,7 @@
 // La Biblioteca de anuncios: todos los avisos de todas las cuentas que ve el perfil, juntos.
 //
 //   GET  /api/meta-ads?recurso=biblioteca[&rango=last_30d]
+//   GET  /api/meta-ads?recurso=piezas&cuenta=<id>[&avisos=id,id,…]
 //   POST /api/meta-ads?recurso=favorito  { objetoId, marcar }
 //
 // ⚠️ Archivo `_`: no es una ruta y no cuenta contra las 12 funciones del plan Hobby.
@@ -23,6 +24,7 @@
 // no hay ni un estado guardado. Leerlo de ahí daría «pausado» para todo. Viene de la misma llamada
 // que trae la pieza, que es donde está.
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
+import { leerAsignaciones } from './_meta-lineas.js';
 import { agruparAvisos, ventanaDe } from '../lib/meta-ads/biblioteca.core.js';
 import { piezasDeCuenta, rescatarMiniaturas } from '../lib/meta-ads/creativos.core.js';
 import { tokenMeta } from '../lib/meta-ads/graph.core.js';
@@ -144,6 +146,71 @@ async function traerPiezas(avisos) {
   if (fallaron.length) partes.push(`No se pudieron traer las piezas de ${fallaron.join(' · ')}`);
   if (sinCopy.length) partes.push(`Sin el texto ni la imagen grande de ${sinCopy.join(' · ')}`);
   return { piezas, sinPiezas: partes.length ? partes.join('. ') : null };
+}
+
+/**
+ * SÓLO LAS CARAS de una cuenta: `{ [adId]: { imagen, thumb, esVideo, permalink, estado, … } }`.
+ *
+ * # Por qué existe aparte de la Biblioteca
+ *
+ * Lo pidió la zona de Rendimiento: al abrir una celda se listan sus avisos —que salen de la FOTO y
+ * ⛔ no cuestan una llamada— y hace falta ponerles la cara. La Biblioteca entera contestaría lo
+ * mismo y de más: lee la foto de la cuenta completa para un rango que acá no se usa.
+ *
+ * 🔑 **Y son DOS llamadas a Graph por cuenta, ⛔ no tres por campaña.** `?recurso=creativos` pide
+ * por campaña y **no devuelve `adset_id`**, que es justo la llave con la que hay que colgarlas de
+ * cada caja. `piezasDeCuenta()` lo trae, trae el `effective_status` VIVO —el que la foto ⛔ no
+ * puede tener— y cubre la cuenta entera de una: con dos filas abiertas ya sale más barato.
+ *
+ * 🔴 **El corte por línea se hace contra `leerAsignaciones()`, ⛔ no contra lo que mande el
+ * cliente.** Graph no sabe de líneas y la cuenta publicitaria es UNA sola para las tres marcas:
+ * creerle a la pantalla sería una puerta lateral a las piezas de otra marca.
+ *
+ * ⚠️ `&avisos=` **sólo ordena el rescate de miniaturas** —su tope son 50 y hay que gastarlo en los
+ * que se llevan la plata, que es un dato que tiene la pantalla y no este handler—. ⛔ No decide
+ * permisos ni recorta lo que vuelve.
+ * ⚠️ **Degrada como la Biblioteca**: sin token o con Graph caído contesta 200 con `piezas: {}` y su
+ * `motivo`. Los avisos igual se ven con sus números y la fila dice por qué no hay cara. ⛔ Nunca 500.
+ */
+export async function piezasGet(res, perfil, q) {
+  const visibles = lineasQueVe(perfil);
+  if (!visibles.length) return res.status(403).json({ error: 'No tenés acceso a la pauta de ninguna marca.' });
+
+  const cuenta = String(q.cuenta || '').trim();
+  if (!/^\d+$/.test(cuenta)) return res.status(400).json({ error: 'Falta `cuenta` (el id de la cuenta publicitaria).' });
+
+  if (!tokenMeta()) {
+    return res.status(200).json({ ok: true, piezas: {}, motivo: 'Meta Ads no configurado: falta META_ADS_TOKEN en el servidor.' });
+  }
+
+  const [r, asign] = await Promise.all([piezasDeCuenta(cuenta), leerAsignaciones()]);
+  if (!r.ok) return res.status(200).json({ ok: true, piezas: {}, motivo: r.motivo });
+
+  const mapa = asign.mapa || new Map();
+  const puedeVerla = (p) => {
+    const asignada = mapa.get(String(p.campaignId || p.campaign_id || ''));
+    const linea = asignada ? asignada.linea : '';
+    return !linea || visibles.includes(linea);
+  };
+  const suyas = r.piezas.filter(puedeVerla);
+
+  // El rescate va acá y ⛔ no adentro de `piezasDeCuenta`: su tope son 50 ids y la pantalla es la
+  // que sabe cuáles importan. Nunca rompe nada — si Meta rechaza, quedan las miniaturas que había.
+  const prioridad = new Set(String(q.avisos || '').split(',').map((x) => x.trim()).filter(Boolean));
+  const orden = prioridad.size
+    ? [...suyas].sort((a, b) => Number(prioridad.has(b.id)) - Number(prioridad.has(a.id)))
+    : suyas;
+  await rescatarMiniaturas(orden, (p) => p.creativeId);
+
+  const piezas = {};
+  for (const p of suyas) piezas[p.id] = p;
+  return res.status(200).json({
+    ok: true,
+    piezas,
+    // El texto que la Biblioteca muestra cuando la llamada rica falló: la cara está pero sin la foto
+    // grande ni el copy. Es un cartel distinto de «no hay piezas».
+    motivo: r.sinRico || null,
+  });
 }
 
 // ── Escritura: marcar y desmarcar ─────────────────────────────────────────────────────────────

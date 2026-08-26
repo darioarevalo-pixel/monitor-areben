@@ -7,7 +7,9 @@
  *
  * Es donde vive el presupuesto, donde vive el aprendizaje y donde se ejerce la decisión. La pieza es
  * el otro eje —y el que explica el desgaste— pero no se puede pausar una pieza: se pausa la caja.
- * Abriendo la fila están sus avisos.
+ * **Abriendo la fila están sus avisos, con su cara y con qué parte de la caja se lleva cada uno.**
+ * ⚠️ Hasta el 26-ago-2026 esa frase era MENTIRA: el detalle mostraba el embudo y el día a día y ni
+ * un aviso. Se arregló haciendo cierto el comentario, ⛔ no borrándolo.
  *
  * # 🔑 Las dos columnas que nadie pide y son las que deciden
  *
@@ -29,6 +31,8 @@ import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
   Badge, StatusPill, TBody, TableWrap, Td, Th, THead, Tr, color, font, space, weight, type Tone,
 } from '@/components/ui'
+import { AvisosDeCelda } from '@/components/meta-ads/zona/AvisosDeCelda'
+import { usePiezas } from '@/components/meta-ads/zona/usePiezas'
 
 /** El tono de cada veredicto. `alto` y `rota` son los dos que cuestan plata todos los días. */
 const TONO: Record<ClaseVeredicto, Tone> = {
@@ -53,12 +57,17 @@ function Delta({ v, invertido = false }: { v: number | null; invertido?: boolean
   )
 }
 
-export function TablaCeldas({ celdas, moneda, acciones }: {
+export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
   celdas: Celda[]
   moneda: string | null
   acciones: Acciones
+  /** La cuenta publicitaria, para traerle las caras a los avisos. `null` ⇒ se listan sin foto. */
+  cuenta: string | null
 }) {
   const [abierta, setAbierta] = useState<string | null>(null)
+  // 🔑 `abierta !== null` es lo que enciende la llamada: mirar la tabla ⛔ no gasta cupo, y abrir
+  // una fila lo gasta UNA vez para toda la cuenta. Ver `usePiezas`.
+  const piezas = usePiezas(cuenta, abierta !== null)
   return (
     <TableWrap>
       <THead>
@@ -147,7 +156,7 @@ export function TablaCeldas({ celdas, moneda, acciones }: {
                   <ul style={{ margin: 0, paddingLeft: space[4], color: color.mut, fontSize: font.sm, lineHeight: 1.5 }}>
                     {v.porque.map((p) => <li key={p}>{p}</li>)}
                   </ul>
-                  {esta && <Detalle celda={c} />}
+                  {esta && <Detalle celda={c} piezas={piezas} />}
                 </Td>
               </Tr>
             </>
@@ -166,7 +175,7 @@ export function TablaCeldas({ celdas, moneda, acciones }: {
  * total sin decir sobre cuántos días se sumó deja comparar dos celdas medidas sobre ventanas
  * distintas.
  */
-function Detalle({ celda }: { celda: Celda }) {
+function Detalle({ celda, piezas }: { celda: Celda; piezas: ReturnType<typeof usePiezas> }) {
   const pasos: [string, number | null, number][] = [
     ['clics', celda.clicks, celda.clicks],
     ['visitas al sitio', celda.lpv, celda.lpv ?? 0],
@@ -175,7 +184,16 @@ function Detalle({ celda }: { celda: Celda }) {
     ['compras', celda.compras, celda.compras],
   ]
   return (
-    <div style={{ marginTop: space[2], display: 'flex', flexDirection: 'column', gap: space[2] }}>
+    <div style={{ marginTop: space[2], display: 'flex', flexDirection: 'column', gap: space[3] }}>
+      {/* Primero los avisos: la pregunta que trae a alguien a abrir una fila es «¿qué hay adentro y
+          quién se lleva la plata?», ⛔ no el embudo. */}
+      <AvisosDeCelda
+        avisos={celda.avisos}
+        piezaDe={piezas.piezaDe}
+        motivo={piezas.motivo}
+        cargando={piezas.cargando}
+        gastoDeLaCelda={celda.spend}
+      />
       <div>
         <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, marginBottom: 4 }}>
           DEL CLIC A LA COMPRA

@@ -763,8 +763,47 @@ la tensión que este mismo documento tenía declarada contra el pendiente P3 del
 ficha defendía que el parte fuera un botón *«son cinco llamadas a Graph y el cupo es un porcentaje»*
 y P3 pedía que el parte fuera la pantalla—. Las dos tenían razón: **la pantalla no es el parte, es la
 foto** (se pide sola al entrar, es barata, tiene 90 días y contesta con el token vencido) y **el
-parte queda siendo lo que siempre fue: el botón que trae el día EN CURSO**, que es lo único que sólo
-existe en Graph.
+parte trae el día EN CURSO**, que es lo único que sólo existe en Graph.
+⚠️ **Corregido el 26-ago (7ª tanda)**: el parte tampoco es ya un botón — se pide solo y se dibuja
+como banda arriba de la zona. El motivo por el que no podía —el cupo— se midió y era 1-3%. Ver «El
+parte del día».
+
+## 🆕🏁 26-ago-2026 (7ª tanda): LOS AVISOS ADENTRO DE LA CELDA
+
+Bruno: *«tampoco sé qué creativo está dentro»*, con tres usos: identificar cuál es cuál, mirar la
+pieza **antes de pausarla o escalarla**, y ver **qué se está gastando la guita**.
+
+- 🔴 **El docblock de `TablaCeldas` prometía textual «abriendo la fila están sus avisos» y el detalle
+  mostraba el embudo y el día a día, ni un aviso.** Se arregló **haciendo cierto el comentario, ⛔ no
+  borrándolo**. 🔑 Un comentario que promete lo que la pantalla no hace es la misma familia que el
+  cartel clavado de `silencioDeReglas`: se le deja de creer al archivo entero.
+- 🔑 **Los avisos no cuestan una sola llamada.** La foto guarda los CUATRO niveles y
+  `_meta-rendimiento.js` la lee sin filtrar por nivel: las filas de `aviso` con su `adset_id` ya
+  estaban en memoria y hasta hoy sólo las miraba `concentracionDe()`. `avisosPorCelda()` las cuelga
+  de su caja.
+- 🔴 🔑 **Y todo el cuidado de esa función es UNO: se parte por `adset_id` ANTES de agrupar.**
+  `agruparAvisos()` agrupa por `objeto_id` a secas —le alcanza, porque la Biblioteca es de la cuenta
+  entera—, así que un mismo aviso en tres cajas colapsaría en una fila con la suma de las tres. **Y
+  el caso no es hipotético: `AD02 - GIRLHOOD COLLECTION` corre en tres conjuntos y es el 52% del
+  gasto de BDI.** Sin partir primero, cada caja mostraría los números de las otras dos: **miente con
+  cara de dato**. Es el mutante que hay que ver caer.
+- ⛔ **El aviso NO trae `estado`, y el TIPO lo sostiene**: `AvisoDeCelda` es
+  `Omit<AvisoBiblioteca, 'estado' | 'configurado' | 'pieza' | 'favorito'>`. La configuración se
+  escribe sólo en la fila del día en que se sacó la foto ⇒ en una ventana vieja diría «pausado» para
+  todo. El estado que se muestra es el VIVO, el que llega con la pieza.
+- **Las caras**: `GET ?recurso=piezas&cuenta=<id>`, exportado desde `api/_meta-biblioteca.js` (⛔ sin
+  archivo nuevo en `api/`: no gasta una de las 12 funciones). Son **2 llamadas por CUENTA** más una
+  de rescate, contra 3-4 **por campaña** de `?recurso=creativos` — que además **no devuelve
+  `adset_id`**, que es justo la llave para colgarlas de cada caja. 🔑 **Se piden al ABRIR la primera
+  fila, ⛔ no al montar**: así sigue siendo cierto que mirar la tabla no gasta un peso de cupo, y
+  abrir cinco filas cuesta lo mismo que abrir una.
+- 🔴 **El TTL de las caras es corto (10 min) por una razón que no es de rendimiento**: las URLs de
+  `scontent`/`fbcdn` vienen firmadas y **caducan**. Una guardada de ayer ⛔ no es una foto vieja, es
+  una imagen rota. Por eso tampoco van a `sessionStorage`.
+- **El corte por línea se hace contra `leerAsignaciones()`**, ⛔ no contra lo que mande el cliente:
+  la cuenta publicitaria es UNA para las tres marcas y Graph no sabe de líneas.
+- ⚠️ **El video sigue sin reproducirse**: va el póster con la chapita `▶ video` y un link a la
+  publicación. El iframe de `/previews` lleva el access token del system user adentro del `src`.
 
 ### 🔴 Tres cosas que aparecieron al construirla y no estaban escritas en ningún lado
 

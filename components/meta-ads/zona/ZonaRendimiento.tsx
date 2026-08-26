@@ -259,7 +259,14 @@ function Contenido({ d, dias, acciones }: {
         {z.celdas.length === 0 ? (
           <EmptyState title="Ninguna celda entregó en la ventana" hint="Probá una ventana más larga." dashed />
         ) : (
-          <TablaCeldas celdas={z.celdas} moneda={z.celdas[0]?.moneda ?? null} acciones={acciones} />
+          <TablaCeldas
+            celdas={z.celdas}
+            moneda={z.celdas[0]?.moneda ?? null}
+            acciones={acciones}
+            // La cuenta sale de la FOTO y ⛔ no del selector de arriba: la que vale es la de los
+            // datos que se están mirando, no la que quedó elegida en el eje.
+            cuenta={z.celdas[0]?.cuentaId ?? null}
+          />
         )}
       </SectionCard>
 

@@ -31,6 +31,9 @@
 //                                               aprendizaje y el cruce con los pedidos reales.
 //                                               🔑 Sale de la FOTO, ⛔ no de Graph: por eso se
 //                                               pide sola al entrar. Ver `api/_meta-rendimiento.js`.
+//   GET /api/meta-ads?recurso=piezas&cuenta=<id>[&avisos=id,id]
+//                                             -> {piezas:{[adId]:pieza}} las CARAS de una cuenta,
+//                                                para los avisos que la zona saca de la foto.
 //   GET /api/meta-ads?recurso=parte&account=<id>[&linea=bdi]
 //                                             → EL PARTE DEL DÍA: hoy contra ayer por conjunto y
 //                                               por aviso, embudo, serie, y el cruce contra los
@@ -87,7 +90,7 @@ import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
 import planes, { planesGet } from './_meta-planes.js';
 import reglasPost, { reglasGet } from './_meta-reglas.js';
-import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
+import favoritoPost, { bibliotecaGet, piezasGet } from './_meta-biblioteca.js';
 import informesPost, { informesGet } from './_meta-informes.js';
 import tendenciaGet from './_meta-tendencia.js';
 import rendimientoGet from './_meta-rendimiento.js';
@@ -128,6 +131,10 @@ export default async function handler(req, res) {
   // sobrevive sola: sin token contesta igual, con la grilla completa y sin fotos, diciendo por qué.
   // Por eso entra acá arriba y el guard de abajo la mataría. Marcar un favorito tampoco toca Meta.
   if (req.method === 'GET' && recurso === 'biblioteca') return await bibliotecaGet(res, perfil, req.query || {});
+  // Sólo las CARAS de una cuenta, para ponérselas a los avisos que la zona ya sacó de la foto.
+  // Va acá arriba por lo mismo: sin token contesta 200 con `piezas: {}` y su motivo, ⛔ no un 500 —
+  // los avisos igual se ven con sus números, que es la mitad que sobrevive sola.
+  if (req.method === 'GET' && recurso === 'piezas') return await piezasGet(res, perfil, req.query || {});
   if (req.method === 'POST' && recurso === 'favorito') return await favoritoPost(req, res, perfil);
   // «Cómo viene» del Panel: sale entero de la foto diaria. Es lo único de esa pantalla que sabe de
   // historia, y por eso es lo que sigue contestando cuando Graph no contesta.

@@ -12,8 +12,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  CONV_APRENDIZAJE, aprendizajeDe, armarZona, celdasDeLaFoto, concentracionDe, desdeDe,
-  desgasteDe, enVentana, ultimoDiaCerrado, veredictoDeCelda,
+  CONV_APRENDIZAJE, aprendizajeDe, armarZona, avisosPorCelda, celdasDeLaFoto, concentracionDe,
+  desdeDe, desgasteDe, enVentana, ultimoDiaCerrado, veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
 import { sumarDias } from '@/lib/meta-ads/snapshot'
 
@@ -330,5 +330,88 @@ describe('el embudo sumado', () => {
     const t = sumarDias([{ spend: 100, carritos: 0 }])
     expect(t.carritos).toBe(0)
     expect(t.diasConEmbudo.carritos).toBe(1)
+  })
+})
+
+/**
+ * LOS AVISOS DE CADA CELDA — «no sé qué creativo está dentro».
+ *
+ * 🔴 **El mutante que hay que ver caer es uno solo y es caro**: `agruparAvisos()` agrupa por
+ * `objeto_id` a secas, así que un mismo aviso corriendo en varias cajas colapsa en una fila con la
+ * suma de todas. El caso está MEDIDO en este repo —`AD02 - GIRLHOOD COLLECTION` corre en tres
+ * conjuntos y es el 52% del gasto de BDI—, así que no partir por `adset_id` antes de agrupar hace
+ * que cada caja muestre los números de las otras dos, y eso miente con cara de dato.
+ */
+describe('avisosPorCelda — un aviso en varias cajas es varias filas, no una suma', () => {
+  /** El mismo aviso `ad1` corriendo en dos conjuntos, con gastos distintos. */
+  const enDosCajas = [
+    fila({ nivel: 'aviso', objeto_id: 'ad1', adset_id: 'a1', nombre: 'AD02 - GIRLHOOD', spend: 5000, compras: 1 }),
+    fila({ nivel: 'aviso', objeto_id: 'ad1', adset_id: 'a2', nombre: 'AD02 - GIRLHOOD', spend: 300, compras: 0 }),
+    fila({ nivel: 'aviso', objeto_id: 'ad2', adset_id: 'a1', nombre: 'AD01 - UNBOXING', spend: 900, compras: 2 }),
+  ]
+
+  it('🔴 cada caja ve SUS números del aviso compartido, ⛔ no la suma de las dos', () => {
+    const m = avisosPorCelda(enDosCajas)
+    const enA1 = m.get('a1')!.find((a) => a.id === 'ad1')!
+    const enA2 = m.get('a2')!.find((a) => a.id === 'ad1')!
+    expect(enA1.spend).toBe(5000)
+    expect(enA2.spend).toBe(300)
+    // Y la suma de las dos NO aparece en ningún lado: si apareciera, la caja chica se leería como
+    // la que se lleva la plata.
+    expect(enA1.spend + enA2.spend).toBe(5300)
+    expect(m.get('a1')!.some((a) => a.spend === 5300)).toBe(false)
+  })
+
+  it('cada caja lista sólo los avisos que corrieron en ella', () => {
+    const m = avisosPorCelda(enDosCajas)
+    expect(m.get('a1')!.map((a) => a.id).sort()).toEqual(['ad1', 'ad2'])
+    expect(m.get('a2')!.map((a) => a.id)).toEqual(['ad1'])
+  })
+
+  it('⛔ NO cuenta las filas de conjunto: la misma plata está en los cuatro niveles de la foto', () => {
+    // Si contara el nivel `conjunto`, el gasto de los avisos duplicaría al de su propia celda.
+    const m = avisosPorCelda([...enDosCajas, fila({ nivel: 'conjunto', objeto_id: 'a1', adset_id: 'a1', spend: 99999 })])
+    expect(m.get('a1')!.some((a) => a.spend === 99999)).toBe(false)
+    expect(m.get('a1')!.reduce((s, a) => s + a.spend, 0)).toBe(5900)
+  })
+
+  it('una fila de aviso sin `adset_id` no cuelga de ninguna caja en vez de colgar de la equivocada', () => {
+    const m = avisosPorCelda([fila({ nivel: 'aviso', objeto_id: 'ad9', adset_id: null, spend: 700 })])
+    expect(m.size).toBe(0)
+  })
+
+  it('⛔ el aviso NO trae `estado`: en una ventana vieja diría «pausado» para todo', () => {
+    // La configuración se escribe sólo en la fila del día en que se sacó la foto. Es la misma regla
+    // que obligó a `configDeHoy()` para las celdas.
+    const a = avisosPorCelda(enDosCajas).get('a1')![0]
+    expect('estado' in a).toBe(false)
+  })
+
+  it('sin compras el costo por compra va NULL, ⛔ no 0', () => {
+    const a = avisosPorCelda(enDosCajas).get('a2')![0]
+    expect(a.compras).toBe(0)
+    expect(a.cpa).toBe(null)
+  })
+
+  it('armarZona cuelga los avisos de SU celda, y son los de la ventana', () => {
+    const filas = [
+      fila({ fecha: '2026-08-20', nivel: 'conjunto', objeto_id: 'a1', adset_id: 'a1', spend: 1000 }),
+      fila({ fecha: '2026-08-20', nivel: 'aviso', objeto_id: 'ad1', adset_id: 'a1', nombre: 'AD01', spend: 1000 }),
+      // Fuera de la ventana de un día: ⛔ no tiene que sumar, o la fila diría «gastó $1.000» y
+      // adentro habría avisos por $9.000.
+      fila({ fecha: '2026-08-10', nivel: 'aviso', objeto_id: 'ad1', adset_id: 'a1', nombre: 'AD01', spend: 8000 }),
+    ]
+    const z = armarZona({ filas, techo: 5000, hasta: '2026-08-20', ventana: 7 })
+    const celda = z.celdas.find((c) => c.id === 'a1')!
+    expect(celda.avisos.map((a) => a.id)).toEqual(['ad1'])
+    expect(celda.avisos[0].spend).toBe(1000)
+  })
+
+  it('una celda sin filas de aviso trae la lista VACÍA, ⛔ no `undefined`', () => {
+    const z = armarZona({
+      filas: [fila({ fecha: '2026-08-20', nivel: 'conjunto', objeto_id: 'a1', adset_id: 'a1' })],
+      techo: 5000, hasta: '2026-08-20', ventana: 7,
+    })
+    expect(z.celdas[0].avisos).toEqual([])
   })
 })
