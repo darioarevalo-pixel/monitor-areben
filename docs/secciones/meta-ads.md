@@ -1043,10 +1043,21 @@ probar. Es lo que va a importar el día que alguien sume un header, porque lo va
 
 ### Cómo se prende, y qué falta
 
-▶️ 🔴 **Una sola mano: los tres secrets de AWS en el repo** (`AWS_REGION`, `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`), que son **los mismos que ya tiene `areben-mailer` en su `.env`**. ⚠️ **El
-clasificador de esta Mac corta `gh secret set`**, igual que el POST que prende una regla: lo corre
-Bruno con `!`.
+🏁 **PRENDIDO Y VERIFICADO EN EL WORKFLOW** (26-ago-2026). Bruno cargó los tres secrets
+(`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, los mismos del `.env` de
+`areben-mailer`) con `!` — ⚠️ **el clasificador de esta Mac corta `gh secret set`**, igual que el
+POST que prende una regla.
+
+🔑 **Y la verificación que vale es la del WORKFLOW, ⛔ no la de la Mac.** Que el mail salga desde
+acá sólo prueba que la firma anda con un `.env` local; lo que hay que probar es que **los secrets
+llegan a la corrida**. Se lanzó `gh workflow run meta-reglas.yml` de verdad y el log dice:
+`Mail mandado a brunoarevalo@arebensrl.com: «Pauta · 4 cosas para decidir, 1 quemando plata»` con su
+`MessageId`. ⚠️ Y el `--simulacro` **⛔ no sirve para esto**: sale antes de tocar las credenciales, así
+que un simulacro en verde ⛔ no dice nada del envío.
+
+▶️ **Lo único que queda es que Bruno confirme que el mail LLEGÓ** —y a la bandeja, ⛔ no a spam—:
+`monitor@bdiaccesorios.com.ar` le escribe por primera vez, y eso es lo único que desde acá no se
+puede ver.
 ⚠️ **Lo limpio sería un usuario de IAM con permiso `ses:SendEmail` y nada más**, en vez de reusar la
 clave del mailer, que puede hacer bastante más. Es una tarea de consola de AWS y queda anotada: hoy
 la alternativa era que el aviso siguiera apagado.

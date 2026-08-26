@@ -228,9 +228,11 @@ dice «no hay nada» enseña a no abrirlo. Detalle en `docs/secciones/meta-ads.m
 fuera del sandbox, 50.000/día de cuota. ⛔ No hizo falta cuenta nueva ni verificar nada. **El mail ya
 se mandó de verdad** con los 4 hallazgos reales.
 
-▶️ 🔴 **UNA MANO, y es lo único que falta: los 3 secrets de AWS en el repo** (los mismos del `.env`
-de `areben-mailer`). ⚠️ El clasificador de esta Mac corta `gh secret set`: lo corre Bruno con `!`.
-Mientras tanto el reloj sale VERDE y lo dice en el log en cada corrida: ⛔ no se olvida en silencio.
+🏁 **PRENDIDO.** Bruno cargó los 3 secrets y **se verificó CORRIENDO EL WORKFLOW**, ⛔ no la Mac: el
+log de la corrida dice `Mail mandado` con su `MessageId`. ⚠️ El `--simulacro` ⛔ no sirve para esto
+—sale antes de tocar las credenciales—, así que la prueba tenía que ser una corrida real.
+▶️ Falta que Bruno confirme que **llegó a la bandeja y ⛔ no a spam**: es lo único que desde acá no se
+puede ver.
 ⚠️ Lo limpio sería un usuario de IAM con `ses:SendEmail` y nada más, en vez de reusar la clave del
 mailer. Es consola de AWS y queda anotado.
 
