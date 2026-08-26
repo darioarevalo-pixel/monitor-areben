@@ -58,6 +58,15 @@ export async function registrarVentaGN(
   store: Marca,
   falla: Pick<FallaRow, 'id' | 'product_id' | 'size_id' | 'cantidad' | 'sku' | 'motivo' | 'barcode' | 'ubicacion' | 'precio_lista'>,
   ctx: { user: string; pass: string },
+  /**
+   * La nota de la venta, cuando quien la pide sabe más que el ledger de fallas.
+   *
+   * 🔑 **Existe para la falla que viene de un RECLAMO**: ahí el dato que hace falta en Gestión Nube
+   * es de qué caso y de qué orden salió esa unidad, y eso la fila de la falla no lo tiene. La
+   * arma `notaVentaTecnica` y llega hecha. Sin nota se usa la del ledger, que es la correcta para
+   * una falla cargada a mano desde Post-venta.
+   */
+  nota?: string,
 ): Promise<void> {
   if (!falla.product_id || !falla.size_id) {
     throw new Error('La falla no está linkeada a un artículo de GN: elegí el artículo para poder descontar el stock.')
@@ -68,7 +77,7 @@ export async function registrarVentaGN(
     store,
     origen,
     items: [{ product_id: falla.product_id, size_id: falla.size_id, quantity: falla.cantidad || 1, unit_price: Number(falla.precio_lista) || 0 }],
-    comments: `Falla ${falla.sku || ''} — ${falla.motivo || 'sin motivo'} — ${falla.barcode || ''} (Monitor)`.slice(0, 500),
+    comments: (nota || `Falla ${falla.sku || ''} — ${falla.motivo || 'sin motivo'} — ${falla.barcode || ''} (Monitor)`).slice(0, 500),
     solicitudId: `falla-${falla.id}`,
     user: ctx.user,
     pass: ctx.pass,

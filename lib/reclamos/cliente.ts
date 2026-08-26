@@ -12,7 +12,8 @@ import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
-import { calcularCambio, etiquetaEM, laFallaDescuentaStock, loQueFaltaDescontar, numeroReclamo } from './tipos'
+import { calcularCambio, laFallaDescuentaStock, loQueFaltaDescontar, numeroReclamo } from './tipos'
+import { notaVentaTecnica } from './nota'
 import type { RetornoRow } from './retornos'
 import type {
   Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, EnvioPaga, FotoReclamo, ItemReclamo,
@@ -380,6 +381,9 @@ export async function pasarAFallas(
           precio_lista: it.precio == null ? null : Number(it.precio),
         },
         { user: extra.usuario || '', pass: extra.pass },
+        // La nota la arma el RECLAMO, no el ledger: la fila de la falla no sabe de qué orden ni de
+        // qué cliente salió esa unidad, y en Gestión Nube eso es lo único que la explica.
+        notaVentaTecnica('falla', d, { usuario: extra.usuario, barcode }),
       )
     }
   }
@@ -419,7 +423,7 @@ export async function descontarReemplazo(
       items,
       // 100% de descuento: la unidad sale del stock pero no se cobra (ya la pagó en la compra original).
       descuento: items.reduce((s, it) => s + it.unit_price * it.quantity, 0),
-      comments: `Reemplazo por falla — reclamo ${numeroReclamo(d.id)} · orden ${d.orden_tn || '?'} (Monitor)`.slice(0, 500),
+      comments: notaVentaTecnica('reemplazo', d, { usuario: ctx.user }),
       solicitudId: `devolucion-${d.id}-reemplazo`, // idempotencia: dos clicks no generan dos ventas
       proposito: 'falla',
       user: ctx.user,
@@ -482,7 +486,7 @@ export async function descontarRegaladas(
       items,
       // Precio de lista + 100 % de descuento: sale del stock, no se cobra, y queda valuada real.
       descuento: items.reduce((s, it) => s + it.unit_price * it.quantity, 0),
-      comments: `Se lo queda el cliente — reclamo ${d.numero || numeroReclamo(d.id)} · orden ${d.orden_tn || '?'} (Monitor)`.slice(0, 500),
+      comments: notaVentaTecnica('regalada', d, { usuario: ctx.user }),
       solicitudId: `reclamo-${d.id}-regaladas`, // idempotencia: dos clicks no generan dos ventas
       proposito: 'reclamo',
       user: ctx.user,
@@ -586,8 +590,7 @@ export async function procesarCambio(
       // Red de seguridad: si el crear-venta desplegado no tuviera el bloque `cambio_real`, cae al
       // camino normal y `proposito:'cambio'` hace que igual use el cliente "Cambio" de GN.
       proposito: 'cambio',
-      comments: [`Cambio orden ${d.orden_tn || ''}`, etiquetaEM(d.solicitud_envio), d.cliente || '', '(Monitor)']
-        .filter(Boolean).join(' · ').slice(0, 500),
+      comments: notaVentaTecnica('cambio', d, { usuario: ctx.user }),
       solicitudId: `reclamo-${d.id}-cambio`, // idempotencia: dos clicks no generan dos ventas
       user: ctx.user,
       pass: ctx.pass,

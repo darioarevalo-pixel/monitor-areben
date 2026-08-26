@@ -123,6 +123,31 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 
 ## Pendiente
 
+- ✅ **La nota de la venta técnica ya lleva la lista entera** (26-ago-2026, `lib/reclamos/nota.ts`).
+  Era el *«la nota llevando TODA la información»* que Bruno había dejado dicho el 24-ago y que
+  faltaba volver una lista.
+
+  🔑 **Por qué importa acá y no en una venta común:** las cuatro ventas técnicas van al MISMO
+  cliente genérico de Gestión Nube —«Reclamo BDI», «Falla», «Cambio»—, así que `client_name` dice
+  siempre lo mismo y en GN una venta técnica es indistinguible de otra. **La nota es el único lugar
+  donde sobrevive el dato.** Es el mismo problema que ya había resuelto el sync de Tienda Nube, y
+  por eso `notaVentaTecnica` copia el mecanismo de `notaTnImport` (`lib/sync-tn/nota.core.js`) y
+  **reusa su `recorte`** ⛔ en vez de copiarlo — en este repo ya pasó que dos copias de un helper
+  dejaran los tests en verde mirando cada una la suya.
+
+  Los campos, en orden, porque **los topes son POR CAMPO y el primero es el último que se pierde**:
+  número de reclamo + qué salida es · orden de TN · el cliente de verdad · el motivo con su detalle ·
+  la EM cuando hay paquete saliendo · la etiqueta del depósito de fallas (sólo en la salida `falla`) ·
+  quién lo decidió · `(Monitor)`. ⛔ **Los productos no van**: son los renglones de la venta, y
+  repetirlos gastaría el lugar de lo que GN no puede mostrar de ninguna otra forma. La nota más
+  larga posible da ~270 caracteres contra el recorte a 500 de `api/crear-venta.js`, que es la red y
+  no el mecanismo.
+
+  🔴 **Y los tests van sobre la LLAMADA, no sólo sobre la función** (`tests/reclamos-venta-tecnica.test.ts`,
+  con `fetch` stubeado): es donde vivía el defecto de `destinoDe` que se pudo cambiar sin poner
+  nada en rojo. Se mira el cuerpo del pedido a `crear-venta` — a qué cliente de GN va y qué dice la
+  nota. **7 mutantes, 7 muertos**, entre ellos «la regalada vuelve al cliente FALLA» y «la regalada
+  dice fallada en la nota».
 - ✅ **El descuento ya está partido en dos** (26-ago-2026). Bruno creó los dos clientes de Gestión
   Nube que faltaban —**«Reclamo BDI» `652720` (n°14231)** y **«Reclamo Zattia» `652718`**— y con eso
   se pudo separar lo que era un solo destino sobrecargado:
