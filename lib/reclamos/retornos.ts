@@ -19,8 +19,8 @@
  */
 
 import {
-  DIAS_ALERTA, MOTIVO_LABEL, desdeQueEsta, diasDesde, hayEnvio, loQueFaltaLlegar, numeroReclamo,
-  pideSeguimiento, trabaParaRecibir, unidadesQueVuelven,
+  DIAS_ALERTA, MOTIVO_LABEL, desdeQueEsta, desdeQueSeDecidio, diasDesde, hayEnvio, loQueFaltaLlegar,
+  numeroReclamo, pideSeguimiento, saleUnEnvio, trabaParaRecibir, unidadesQueVuelven,
   type DestinoPrenda, type EstadoReclamo, type ReclamoRow, type UnidadQueVuelve,
 } from './tipos'
 
@@ -28,7 +28,7 @@ import {
 // "hace N días que no llega" cuenta exactamente lo mismo, y dos implementaciones del mismo número
 // son dos números. Copiarlas ya había pasado: la copia local se quedó sin el piso en cero y ningún
 // test lo vio, porque cada test miraba su propia copia.
-export { desdeQueEsta, diasDesde } from './tipos'
+export { desdeQueEsta, desdeQueSeDecidio, diasDesde } from './tipos'
 
 /**
  * Lo que la bandeja necesita de un reclamo, y **nada más**.
@@ -45,6 +45,12 @@ export type RetornoRow = Pick<ReclamoRow,
   // distingue una falla que vuelve de una que se queda el cliente. Sin los dos, la bandeja le
   // muestra a Depósito el producto equivocado.
   | 'items_correctos' | 'retorno_decidido'
+  // 🔑 **El paquete que SALE.** `items_nuevos` es lo que se lleva en un cambio, `seguimiento_ida`
+  // su código y `envio_nuevo_estado` si ya se despachó. Sin los tres la bandeja mostraba media
+  // operación: un cambio o un reenvío tienen un paquete yendo, lo despacha la misma persona que
+  // abre la caja, y para verlo había que entrar a Reclamos — que Depósito ⛔ no puede abrir.
+  // ⛔ `envio_ida_costo` ⛔ NO entra: es plata, y por esta puerta no pasan montos.
+  | 'items_nuevos' | 'seguimiento_ida' | 'envio_nuevo_estado'
   | 'destino_prenda' | 'compensacion' | 'via_retorno' | 'seguimiento_vuelta' | 'solicitud_envio'
   | 'reingreso_estado' | 'falla_ids' | 'historial' | 'created_at' | 'updated_at'>
 
@@ -76,9 +82,19 @@ export type FilaRetorno = {
    * cosa que falta hacer **acá**, y por eso va en la fila y no en un badge.
    */
   traba: string | null
+  /**
+   * **El paquete que sale**, si hay uno: qué se le manda al cliente. ⛔ No es lo mismo que lo que
+   * vuelve, y en un cambio ni siquiera es el mismo producto.
+   *
+   * Va en TODAS las filas, no sólo en el andén de despachar: quien abre la caja de un cambio tiene
+   * que saber que además hay algo que mandar, aunque todavía no le toque.
+   */
+  sale: string | null
+  /** El paquete que sale todavía no salió. Es lo que pone la fila en el tercer andén. */
+  faltaDespacharlo: boolean
 }
 
-export type Bandeja = { esperando: FilaRetorno[]; guardar: FilaRetorno[] }
+export type Bandeja = { esperando: FilaRetorno[]; guardar: FilaRetorno[]; despachar: FilaRetorno[] }
 
 
 /** Lo estamos esperando: salió del cliente (o lo va a traer) y todavía no está acá. */
@@ -96,6 +112,40 @@ export function faltaGuardarlo(d: RetornoRow): boolean {
   if (d.estado !== 'recibido' && d.estado !== 'resuelto') return false
   if (d.reingreso_estado === 'pendiente') return true
   return d.destino_prenda === 'falla' && !(d.falla_ids || []).length
+}
+
+/**
+ * **Le tenemos que mandar algo y todavía no salió.**
+ *
+ * 🔴 Existe porque el botón para tildarlo vivía sólo en **Reclamos**, que es de Administración —y
+ * despachar lo hace Depósito, que ⛔ no puede abrir esa pantalla. O sea: el pendiente tenía handler
+ * (`action: 'despachado'`, deliberadamente fuera de `DE_ADMIN`) y no tenía dónde apretarse. Es la
+ * segunda vuelta del mismo agujero: primero no había botón, después el botón quedó del lado
+ * equivocado de la puerta.
+ *
+ * ⚠️ El estado ⛔ no se mira: un cambio queda `en_transito` (la venta ya se creó) y un reenvío sin
+ * retorno queda `resuelto`. Lo único que dice que falta despachar es el pendiente.
+ */
+export function faltaDespachar(d: RetornoRow): boolean {
+  return d.envio_nuevo_estado === 'pendiente'
+}
+
+/**
+ * **Qué le sale al cliente**, en criollo, o `null` si esta resolución no manda nada.
+ *
+ * 🔑 De qué lista sale ⛔ no es obvio y es el mismo tipo de trampa que `deDondeVuelve`: en un
+ * **cambio** lo que se lleva es otro producto (`items_nuevos`), y en una **reposición** o un
+ * **reenvío** es lo que compró (`items`) — incluso en un `mal_armado`, donde lo que compró es
+ * justo el único que nunca salió del depósito.
+ */
+export function detalleDeLoQueSale(d: RetornoRow): string | null {
+  if (!d.compensacion || !saleUnEnvio(d.compensacion)) return null
+  const lista = d.compensacion === 'otro_producto' ? d.items_nuevos : d.items
+  const items = (lista || []).filter((i) => i && i.producto)
+  if (!items.length) return null
+  return items
+    .map((i) => `${Number(i.cantidad) > 1 ? `${i.cantidad}× ` : ''}${i.producto}${i.variante ? ` · ${i.variante}` : ''}`)
+    .join(' · ')
 }
 
 /** Qué se hace con la unidad cuando esté en la mano. */
@@ -136,18 +186,29 @@ export function trabaDeLoQueLlego(d: RetornoRow): string | null {
   return null
 }
 
-function fila(d: RetornoRow, estado: EstadoReclamo, ahora: number, llego: boolean): FilaRetorno {
-  const desde = desdeQueEsta(d, estado)
+/**
+ * @param anden De cuál de los tres andenes es la fila. Decide **desde cuándo se cuenta** y con qué
+ *   plazo, que ⛔ no son el mismo para las tres cosas: esperar un paquete del correo son quince
+ *   días, y despachar el que sale es del día siguiente.
+ */
+function fila(d: RetornoRow, anden: 'esperando' | 'guardar' | 'despachar', ahora: number): FilaRetorno {
+  const estado: EstadoReclamo = anden === 'esperando' ? 'en_transito' : 'recibido'
+  // El despacho ⛔ no se cuenta desde el estado: la fila puede estar en `resuelto` y haber recibido
+  // tres eventos `resuelto` más por otros pendientes del caso.
+  const desde = anden === 'despachar' ? desdeQueSeDecidio(d) : desdeQueEsta(d, estado)
   const dias = diasDesde(desde, ahora)
+  const plazo = anden === 'despachar' ? DIAS_ALERTA.despacho : DIAS_ALERTA.transito
   return {
     reclamo: d,
     faltan: loQueFaltaLlegar(d),
     numero: numeroReclamo(d.id),
     desde,
     dias,
-    tarde: !llego && dias >= DIAS_ALERTA.transito,
+    tarde: anden !== 'guardar' && dias >= plazo,
     queHacer: queHacerConEl(d.destino_prenda),
-    traba: llego ? trabaDeLoQueLlego(d) : trabaDeLaVuelta(d),
+    traba: anden === 'esperando' ? trabaDeLaVuelta(d) : trabaDeLoQueLlego(d),
+    sale: detalleDeLoQueSale(d),
+    faltaDespacharlo: faltaDespachar(d),
   }
 }
 
@@ -159,9 +220,15 @@ function fila(d: RetornoRow, estado: EstadoReclamo, ahora: number, llego: boolea
  */
 export function bandejaDeRetornos(filas: RetornoRow[], ahora = Date.now()): Bandeja {
   const viejoPrimero = (a: FilaRetorno, b: FilaRetorno) => b.dias - a.dias || a.reclamo.id - b.reclamo.id
+  const anden = (quien: (d: RetornoRow) => boolean, cual: 'esperando' | 'guardar' | 'despachar') =>
+    filas.filter(quien).map((d) => fila(d, cual, ahora)).sort(viejoPrimero)
   return {
-    esperando: filas.filter(estaEsperando).map((d) => fila(d, 'en_transito', ahora, false)).sort(viejoPrimero),
-    guardar: filas.filter(faltaGuardarlo).map((d) => fila(d, 'recibido', ahora, true)).sort(viejoPrimero),
+    esperando: anden(estaEsperando, 'esperando'),
+    guardar: anden(faltaGuardarlo, 'guardar'),
+    // ⚠️ Un mismo reclamo puede estar en DOS andenes a la vez, y ⛔ no es un error: en un cambio
+    // esperamos lo que devuelve *y* tenemos que mandarle lo que se lleva. Son dos trabajos físicos
+    // distintos y cada uno se tilda por su lado.
+    despachar: anden(faltaDespachar, 'despachar'),
   }
 }
 

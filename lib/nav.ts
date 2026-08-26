@@ -381,7 +381,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'postventa-deposito': 'Cargá las fallas de la mercadería de depósito (descuenta del stock de depósito). El motor está en Administración.',
   'cambios-local': 'Armá un cambio de punta a punta: la diferencia, el cobro y la venta en GN. No hace falta que lo apruebe nadie.',
   'reclamos-local': 'Abrí un reclamo por cualquier motivo y pasale el link al cliente para que suba las fotos. La plata la devuelve Administración.',
-  retornos: 'Lo que estamos esperando que vuelva, ordenado por hace cuánto: marcás que llegó y que lo reingresaste. No es Envíos, que es lo que sale.',
+  retornos: 'Lo que estamos esperando que vuelva y lo que hay que mandarle al cliente por el mismo caso, ordenado por hace cuánto: marcás que llegó, que lo reingresaste y que lo despachaste. No es Envíos, que es el reparto del día.',
 }
 
 export function descripcionDe(key: string): string | undefined {

@@ -10,10 +10,12 @@
  * `updated_at`, así que **ir a ver por qué un paquete no llega reiniciaba el contador de que no
  * llega**.
  */
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  bandejaDeRetornos, desdeQueEsta, detalleDeLoQueVuelve, diasDesde, estaEsperando, faltaGuardarlo,
-  queHacerConEl, textoDeReclamoAlCorreo, trabaDeLaVuelta, trabaDeLoQueLlego,
+  bandejaDeRetornos, desdeQueEsta, desdeQueSeDecidio, detalleDeLoQueSale, detalleDeLoQueVuelve,
+  diasDesde, estaEsperando, faltaDespachar, faltaGuardarlo, queHacerConEl, textoDeReclamoAlCorreo,
+  trabaDeLaVuelta, trabaDeLoQueLlego,
   type RetornoRow,
 } from '@/lib/reclamos/retornos'
 import { alertasDe, type ReclamoRow } from '@/lib/reclamos/tipos'
@@ -41,7 +43,7 @@ const base: RetornoRow = {
 }
 const con = (extra: Partial<RetornoRow>): RetornoRow => ({ ...base, ...extra })
 
-describe('los dos andenes', () => {
+describe('los tres andenes', () => {
   it('esperamos SOLO lo que está en tránsito: es el único estado que significa "todavía no está acá"', () => {
     expect(estaEsperando(base)).toBe(true)
     for (const estado of ['borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'recibido', 'cerrado', 'anulado'] as const) {
@@ -230,5 +232,111 @@ describe('lo que se lee y se copia', () => {
     expect(t).toContain('AR123')
     expect(t).toContain('21 días')
     expect(t).toContain('Buzo Girlhood')
+  })
+})
+
+
+/**
+ * **El paquete que SALE.** Es la otra mitad de la misma operación y no se veía en ninguna pantalla
+ * que Depósito pudiera abrir: el pendiente se tildaba sólo desde Reclamos, que es de
+ * Administración. O sea que quien pone el paquete en la calle no tenía dónde decir que salió.
+ */
+describe('el tercer andén: lo que hay que mandarle al cliente', () => {
+  const cambio = con({
+    estado: 'en_transito', compensacion: 'otro_producto', envio_nuevo_estado: 'pendiente',
+    items_nuevos: [{ producto: 'Campera Stunned', variante: 'L', cantidad: 1 }],
+    solicitud_envio: 'EM998877',
+    historial: [{ estado: 'borrador', at: hace(9) }, { estado: 'en_transito', at: hace(6) }],
+  })
+
+  it('falta despachar lo que tiene el pendiente abierto, ⛔ mire lo que mire el estado', () => {
+    expect(faltaDespachar(cambio)).toBe(true)
+    // Un reenvío sin retorno queda en `resuelto`, no en tránsito: si el andén mirara el estado,
+    // el caso más común de "hay que mandarle algo" no aparecería nunca.
+    expect(faltaDespachar(con({ estado: 'resuelto', compensacion: 'reenvio', envio_nuevo_estado: 'pendiente' }))).toBe(true)
+    expect(faltaDespachar(con({ envio_nuevo_estado: 'hecho' }))).toBe(false)
+    expect(faltaDespachar(base)).toBe(false)
+  })
+
+  it('🔑 en un CAMBIO sale otro producto, y en una reposición sale el que compró', () => {
+    expect(detalleDeLoQueSale(cambio)).toBe('Campera Stunned · L')
+    expect(detalleDeLoQueSale(con({ compensacion: 'otra_unidad' }))).toBe('Buzo Girlhood · M')
+    expect(detalleDeLoQueSale(con({ compensacion: 'reenvio' }))).toBe('Buzo Girlhood · M')
+  })
+
+  it('y en un mal armado sale lo que COMPRÓ, que es justo lo único que nunca salió del depósito', () => {
+    const malArmado = con({
+      motivo: 'mal_armado', compensacion: 'reenvio',
+      items_correctos: [{ producto: 'Gorra', cantidad: 1 }],
+    })
+    expect(detalleDeLoQueSale(malArmado)).toBe('Buzo Girlhood · M')
+    // Lo que vuelve es el otro: son dos listas y dos roles, no dos ítems de la misma.
+    expect(detalleDeLoQueVuelve(malArmado)).toBe('Gorra')
+  })
+
+  it('⛔ una devolución de plata no manda nada: no inventa un paquete que no existe', () => {
+    expect(detalleDeLoQueSale(base)).toBe(null)
+    expect(detalleDeLoQueSale(con({ compensacion: 'cupon' }))).toBe(null)
+    expect(detalleDeLoQueSale(con({ compensacion: 'plata_parcial' }))).toBe(null)
+  })
+
+  it('🔴 el reloj cuenta desde la DECISIÓN: ocuparse de otra cosa del caso no apaga la alarma', () => {
+    // Tres eventos `resuelto` más —la plata, el cupón, la anulación— son lo normal en un caso
+    // vivo. Contando desde el último, el que nunca despachó queda prolijo.
+    const conRuido = con({
+      ...cambio,
+      estado: 'resuelto', compensacion: 'reenvio', envio_nuevo_estado: 'pendiente',
+      historial: [
+        { estado: 'resuelto', at: hace(8) },
+        { estado: 'resuelto', at: hace(2) },
+        { estado: 'resuelto', at: hace(1) },
+      ],
+    })
+    expect(desdeQueSeDecidio(conRuido)).toBe(hace(8))
+    expect(bandejaDeRetornos([conRuido], AHORA).despachar[0].dias).toBe(8)
+  })
+
+  it('el cambio se cuenta desde que existió la venta, no desde el borrador', () => {
+    expect(desdeQueSeDecidio(cambio)).toBe(hace(6))
+  })
+
+  it('un cambio está en DOS andenes a la vez, y no es un error: son dos trabajos distintos', () => {
+    const b = bandejaDeRetornos([con({ ...cambio, reingreso_estado: 'no_aplica' })], AHORA)
+    expect(b.esperando).toHaveLength(1)
+    expect(b.despachar).toHaveLength(1)
+    // Y en el andén de esperar también se lee que hay algo saliendo: quien abre la caja se entera.
+    expect(b.esperando[0].sale).toBe('Campera Stunned · L')
+    expect(b.esperando[0].faltaDespacharlo).toBe(true)
+  })
+
+  it('despachar tiene su propio plazo: 2 días, ⛔ no los 15 de un tránsito del correo', () => {
+    const b = bandejaDeRetornos([con({ ...cambio, historial: [{ estado: 'en_transito', at: hace(3) }] })], AHORA)
+    expect(b.despachar[0].tarde).toBe(true)
+    const reciente = bandejaDeRetornos([con({ ...cambio, historial: [{ estado: 'en_transito', at: hace(1) }] })], AHORA)
+    expect(reciente.despachar[0].tarde).toBe(false)
+    // El mismo día de espera de una vuelta del correo todavía no es tarde.
+    expect(reciente.esperando[0].tarde).toBe(false)
+  })
+})
+
+/**
+ * **La puerta angosta y el tipo tienen que decir lo mismo.**
+ *
+ * `RetornoRow` es un `Pick` de TypeScript y `COLS_RETORNO` es un string que se le manda a
+ * PostgREST: no hay nada que los ate. Si el tipo pide una columna que el `select` no trae, el
+ * campo llega `undefined` y la pantalla dibuja un guión — ⛔ no falla, no avisa, y lo que se pierde
+ * es justo el dato por el que alguien iba a mirar. Ya pasó con `items_correctos`: Depósito abría
+ * la caja esperando el producto equivocado.
+ */
+describe('el tipo de la bandeja contra el SELECT del servidor', () => {
+  const fuente = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8')
+
+  it('toda columna que el tipo pide, el select la trae', () => {
+    const tipo = fuente('../lib/reclamos/retornos.ts').split('export type RetornoRow')[1].split('>')[0]
+    const pedidas = [...tipo.matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
+    const select = fuente('../api/_reclamos.js').split('const COLS_RETORNO = `')[1].split('`')[0]
+    const traidas = new Set(select.split(',').map((c) => c.trim()))
+    expect(pedidas.length).toBeGreaterThan(15) // que la extracción no se haya quedado vacía
+    expect(pedidas.filter((c) => !traidas.has(c))).toEqual([])
   })
 })

@@ -22,15 +22,17 @@ import {
   color, font, space, weight, useConfirmar, useToast,
   Instructivo,
 } from '@/components/ui'
-import { leerRetornos, marcarRecibido, marcarReingreso } from '@/lib/reclamos/cliente'
+import { leerRetornos, marcarDespachado, marcarRecibido, marcarReingreso } from '@/lib/reclamos/cliente'
 import {
   bandejaDeRetornos, detalleDeLoQueVuelve, textoDeReclamoAlCorreo, QUE_HACER_LABEL,
   type FilaRetorno, type RetornoRow,
 } from '@/lib/reclamos/retornos'
 import {
-  DIAS_ALERTA, MOTIVO_LABEL, pideSeguimiento, trackingUrl, VIA_LABEL,
+  DIAS_ALERTA, MOTIVO_LABEL, etiquetaEM, pideSeguimiento, trackingUrl, VIA_LABEL,
   type UnidadQueVuelve,
 } from '@/lib/reclamos/tipos'
+
+type Anden = 'esperando' | 'guardar' | 'despachar'
 
 /** "hace 3 días" / "hoy". El número es la columna por la que se ordena todo. */
 function haceCuanto(dias: number): string {
@@ -46,7 +48,7 @@ export function Retornos() {
   const [filas, setFilas] = useState<RetornoRow[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [anden, setAnden] = useState<'esperando' | 'guardar'>('esperando')
+  const [anden, setAnden] = useState<Anden>('esperando')
   const [ocupado, setOcupado] = useState<number | null>(null)
 
   const recargar = useCallback(async () => {
@@ -80,6 +82,7 @@ export function Retornos() {
 
   const bandeja = useMemo(() => bandejaDeRetornos(filas), [filas])
   const tarde = bandeja.esperando.filter((f) => f.tarde).length
+  const sinDespachar = bandeja.despachar.filter((f) => f.tarde).length
 
   const accion = async (id: number, fn: () => Promise<void>, ok: string) => {
     setOcupado(id)
@@ -128,7 +131,21 @@ export function Retornos() {
     if (si) await accion(f.reclamo.id, () => marcarReingreso(marca, f.reclamo.id), 'Anotado: quedó reingresado.')
   }
 
-  const lista = anden === 'esperando' ? bandeja.esperando : bandeja.guardar
+  /**
+   * Despaché. **Es el gesto que le faltaba a Depósito**: el pendiente lo dejan el cambio, la
+   * reposición y el reenvío, y hasta ahora sólo se podía tildar desde Reclamos —que es de
+   * Administración—, así que quien de verdad pone el paquete en la calle no tenía dónde decirlo.
+   */
+  const despachar = async (f: FilaRetorno) => {
+    const si = await confirmar({
+      titulo: `¿Ya salió lo de ${f.numero}?`,
+      ok: 'Sí, ya lo despaché',
+      mensaje: `${f.sale || 'Lo que se le manda al cliente'}. Tildalo cuando el paquete esté en la calle, no cuando esté armado.`,
+    })
+    if (si) await accion(f.reclamo.id, () => marcarDespachado(marca, f.reclamo.id), 'Anotado: ya salió.')
+  }
+
+  const lista = bandeja[anden]
 
   return (
     <div style={{ maxWidth: 1100 }}>
@@ -145,6 +162,14 @@ export function Retornos() {
           value={String(bandeja.guardar.length)}
           tone={bandeja.guardar.length ? 'warning' : 'neutral'}
         />
+        {/* El paquete que SALE. Iba en la misma operación y no se veía en ningún lado que
+            Depósito pudiera abrir. */}
+        <KpiCard
+          label="Falta despachar"
+          value={String(bandeja.despachar.length)}
+          sub={sinDespachar ? `${sinDespachar} hace ${DIAS_ALERTA.despacho}+ días` : 'lo que se le manda al cliente'}
+          tone={sinDespachar ? 'danger' : bandeja.despachar.length ? 'warning' : 'neutral'}
+        />
       </div>
 
       <Instructivo
@@ -154,20 +179,23 @@ export function Retornos() {
           <>Cuando el paquete llega, tocá <b>Llegó</b>. Con eso el reclamo deja de estar en la calle y pasa al otro andén.</>,
           <>En <b>Llegó, falta guardarlo</b> está lo que ya tenés en la mano y todavía no volvió al stock: tocá <b>Reingresado</b> cuando lo hayas cargado en Gestión Nube.</>,
           <>Si dice <b>Va a Fallas</b>, la unidad <b>no</b> vuelve a stock: se carga en Fallas y de ahí sigue Administración.</>,
+          <>En <b>Falta despachar</b> está lo que hay que <b>mandarle</b> al cliente: el cambio, la reposición y el reenvío. Tocá <b>Despaché</b> cuando el paquete esté en la calle, no cuando esté armado.</>,
         ]}
         ojo={<>Acá no se decide nada: qué se le devuelve al cliente y qué pasa con el producto ya se decidió en <b>Reclamos</b>. Si algo llegó y no está en esta lista, avisá — quiere decir que el reclamo quedó en otro estado.</>}
       />
 
       <Notice tone="neutral" style={{ marginBottom: space[3] }}>
-        Esto es lo que <b>entra</b>. Lo que sale —reparto y cadetería del día— está en <b>Envíos del día</b>.
+        Esto es lo que <b>entra</b>, y el paquete que sale <b>por el mismo caso</b>. El reparto y la
+        cadetería del día están en <b>Envíos del día</b>.
       </Notice>
 
       <Toolbar justify="between" style={{ marginBottom: space[3] }}>
         <Tabs
-          variant="underline" value={anden} onChange={(k) => setAnden(k as 'esperando' | 'guardar')}
+          variant="underline" value={anden} onChange={(k) => setAnden(k as Anden)}
           items={[
             { key: 'esperando', label: `Esperando (${bandeja.esperando.length})` },
             { key: 'guardar', label: `Llegó, falta guardarlo (${bandeja.guardar.length})` },
+            { key: 'despachar', label: `Falta despachar (${bandeja.despachar.length})` },
           ]}
         />
         <Button variant="outline" onClick={() => void recargar()} disabled={cargando}>Recargar</Button>
@@ -178,10 +206,16 @@ export function Retornos() {
       {!cargando && !lista.length ? (
         <Card padding={4}>
           <EmptyState
-            title={anden === 'esperando' ? 'No estamos esperando nada' : 'Nada pendiente de guardar'}
-            hint={anden === 'esperando'
-              ? 'Cuando Administración decida que un producto vuelve, aparece acá solo.'
-              : 'Lo que llega y se reingresa sale de esta lista.'}
+            title={{
+              esperando: 'No estamos esperando nada',
+              guardar: 'Nada pendiente de guardar',
+              despachar: 'No hay nada para mandar',
+            }[anden]}
+            hint={{
+              esperando: 'Cuando Administración decida que un producto vuelve, aparece acá solo.',
+              guardar: 'Lo que llega y se reingresa sale de esta lista.',
+              despachar: 'Acá caen los cambios, las reposiciones y los reenvíos: lo que se le manda al cliente.',
+            }[anden]}
           />
         </Card>
       ) : (
@@ -189,9 +223,9 @@ export function Retornos() {
           <THead>
             <Tr>
               <Th>Reclamo</Th>
-              <Th>Qué vuelve</Th>
-              <Th>{anden === 'esperando' ? 'Cómo vuelve' : 'Qué hacer con él'}</Th>
-              <Th>{anden === 'esperando' ? 'Esperando' : 'Llegó'}</Th>
+              <Th>{anden === 'despachar' ? 'Qué le mandamos' : 'Qué vuelve'}</Th>
+              <Th>{{ esperando: 'Cómo vuelve', guardar: 'Qué hacer con él', despachar: 'Con qué sale' }[anden]}</Th>
+              <Th>{{ esperando: 'Esperando', guardar: 'Llegó', despachar: 'Decidido' }[anden]}</Th>
               <Th></Th>
             </Tr>
           </THead>
@@ -209,16 +243,35 @@ export function Retornos() {
                     <div style={{ fontSize: font.xs, color: color.mut2 }}>{MOTIVO_LABEL[d.motivo] || d.motivo}</div>
                   </Td>
                   <Td>
-                    <div style={{ fontSize: font.sm }}>{detalleDeLoQueVuelve(d)}</div>
+                    <div style={{ fontSize: font.sm }}>
+                      {anden === 'despachar' ? (f.sale || '—') : detalleDeLoQueVuelve(d)}
+                    </div>
                     {/* Lo que traba: no es una alerta por tiempo, es algo que falta hacer ACÁ. */}
                     {f.traba && (
                       <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.warningInk, marginTop: 2 }}>
                         ⚠ {f.traba}
                       </div>
                     )}
+                    {/* El otro medio caso: si además le tenemos que mandar algo, se dice acá. Antes
+                        había que abrir Reclamos —que Depósito no puede— para enterarse. */}
+                    {anden !== 'despachar' && f.sale && (
+                      <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>
+                        ↗ Le mandamos: {f.sale}{f.faltaDespacharlo ? ' — todavía sin despachar' : ' ✓ despachado'}
+                      </div>
+                    )}
                   </Td>
                   <Td>
-                    {anden === 'esperando' ? (
+                    {anden === 'despachar' ? (
+                      <>
+                        {/* La solicitud de envío y el código de ida. ⛔ Sin link: el transportista
+                            de la IDA no se guarda (`via_retorno` es el de la vuelta), y un link al
+                            buscador equivocado es peor que ninguno. */}
+                        <div style={{ fontSize: font.sm }}>{d.solicitud_envio ? etiquetaEM(d.solicitud_envio) : 'Sin solicitud de envío'}</div>
+                        {d.seguimiento_ida && (
+                          <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2 }}>{d.seguimiento_ida}</div>
+                        )}
+                      </>
+                    ) : anden === 'esperando' ? (
                       <>
                         <div style={{ fontSize: font.sm }}>{d.via_retorno ? VIA_LABEL[d.via_retorno] : '—'}</div>
                         {d.seguimiento_vuelta && (
@@ -264,6 +317,9 @@ export function Retornos() {
                       )}
                       {anden === 'guardar' && d.reingreso_estado === 'pendiente' && (
                         <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void reingresar(f)}>Reingresado</Button>
+                      )}
+                      {anden === 'despachar' && (
+                        <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void despachar(f)}>Despaché</Button>
                       )}
                       {/* El paquete que no aparece: el renglón para preguntar en el correo, ya
                           armado. Sin esto hay que abrir el reclamo y copiar cuatro cosas a mano. */}

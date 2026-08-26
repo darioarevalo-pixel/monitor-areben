@@ -72,8 +72,40 @@ Tests: `tests/retornos.test.ts`.
 - ▶️ **Nunca se caminó con una fila real**: al 25-ago-2026 BDI tiene 10 reclamos y **ninguno llegó
   jamás a `en_transito`** (todos quedaron en borrador/esperando cliente desde el 28-jul, cuando el
   módulo estuvo frenado), y Zattia tiene 0. La bandeja nace vacía **a propósito**, no rota.
-- ▶️ **No muestra el envío de ida ni lo que se le mandó al cliente.** Si un reenvío o un cambio
-  también tiene un paquete saliendo, eso se sigue en Reclamos.
+- ✅ **El paquete que SALE ya está acá** (26-ago-2026). Era el *«no muestra el envío de ida ni lo
+  que se le mandó al cliente»*, y abajo había algo más grande que un dato faltante:
+
+  🔴 🔑 **El botón para tildar «Despaché» existía sólo en Reclamos, que es de Administración — y
+  despachar lo hace Depósito, que ⛔ no puede abrir esa pantalla.** El handler ya estaba bien
+  (`action: 'despachado'`, deliberadamente fuera de `DE_ADMIN`); lo que faltaba era **dónde
+  apretarlo**. Es la segunda vuelta del mismo agujero: el 24-ago el pendiente no tenía botón, y
+  desde el 25 el botón quedó del lado equivocado de la puerta. Un pendiente que la persona que lo
+  hace no puede tildar se lee igual que uno que nadie hizo.
+
+  - **Tercer andén, «Falta despachar»** (`faltaDespachar`): mira **el pendiente, ⛔ no el estado**.
+    Un cambio queda `en_transito` y un reenvío sin retorno queda `resuelto`; filtrando por estado,
+    el caso más común de «hay que mandarle algo» no aparecería nunca.
+  - **Qué sale** (`detalleDeLoQueSale`) es la misma trampa que `deDondeVuelve`, del otro lado: en
+    un **cambio** sale `items_nuevos`, y en una **reposición** o un **reenvío** sale `items` — lo
+    que compró, incluso en un `mal_armado`, donde es justo el único que nunca salió del depósito.
+  - ⚠️ **Un cambio está en DOS andenes a la vez y no es un error**: esperamos lo que devuelve *y*
+    le tenemos que mandar lo que se lleva. La fila de los otros dos andenes lo dice igual
+    (`↗ Le mandamos: …`), así que quien abre la caja se entera aunque no le toque a él.
+  - 🔴 **El reloj cuenta desde la DECISIÓN** (`desdeQueSeDecidio`), no desde el último evento del
+    estado: en un caso vivo se apilan varios `resuelto` —la plata, el cupón, la anulación— y
+    contando desde el último, **ocuparse de otra cosa del caso apagaría la alarma de que nadie
+    despachó**. Es el mismo defecto que ya tuvo `desdeQueEsta` con `updated_at`, una vuelta más
+    adentro.
+  - El plazo es **2 días** (`DIAS_ALERTA.despacho`), ⛔ no los 15 de un tránsito del correo:
+    despachar es trabajo del día siguiente. ⚠️ Es lo único de acá que salió de una propuesta y no
+    de la operación — se cambia en una línea de `tipos.ts`.
+  - ⛔ **`envio_ida_costo` NO entró al `select`**: es plata, y por esta puerta angosta Depósito ⛔ no
+    ve montos. Sí entraron `items_nuevos`, `seguimiento_ida` y `envio_nuevo_estado`, que **ya
+    existían en la tabla** ⇒ sin migración.
+  - 🔑 **Y quedó un guard nuevo**: `RetornoRow` es un `Pick` de TypeScript y `COLS_RETORNO` un
+    string para PostgREST, y **nada los ataba**. Una columna que el tipo pide y el `select` no trae
+    llega `undefined` y la pantalla dibuja un guión: ⛔ no falla, no avisa, y se pierde justo el
+    dato por el que alguien iba a mirar. El test lee los dos archivos y los compara.
 - ✅ **Se recibe de a UNA** (25-ago-2026). Cada unidad lleva su `recibida_at` y el reclamo **sigue en
   tránsito mientras falte una**: darlo por recibido con la caja a medias era lo que dejaba a la otra
   sin que la buscara nadie. Con dos o más esperadas, la bandeja muestra un botón por producto y uno

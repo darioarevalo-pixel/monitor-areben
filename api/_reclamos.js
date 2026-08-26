@@ -88,9 +88,14 @@ const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso'];
 
 // Lo que la bandeja necesita ver, y nada más (ver `lib/reclamos/retornos.ts`). ⛔ Sin `relato_cliente`,
 // sin montos y sin `token`: Depósito abre una caja, no revisa un caso.
+// 🔑 `items_nuevos`, `seguimiento_ida` y `envio_nuevo_estado` son **el paquete que SALE**. Sin
+// ellos la bandeja mostraba media operación: lo que vuelve sí, y lo que hay que mandarle al
+// cliente no — y eso lo despacha la misma persona que abre la caja.
+// ⛔ `envio_ida_costo` NO entra: es plata, y por esta puerta angosta Depósito ⛔ no ve montos.
 const COLS_RETORNO = `id, orden_tn, cliente, motivo, escenario, estado, items, items_correctos,
-  retorno_decidido, destino_prenda,
-  compensacion, via_retorno, seguimiento_vuelta, solicitud_envio, reingreso_estado, falla_ids,
+  items_nuevos, retorno_decidido, destino_prenda,
+  compensacion, via_retorno, seguimiento_vuelta, seguimiento_ida, solicitud_envio,
+  reingreso_estado, envio_nuevo_estado, falla_ids,
   historial, created_at, updated_at`.replace(/\s+/g, ' ');
 
 const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, motivo_detalle, relato_cliente, fotos,

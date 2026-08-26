@@ -1440,7 +1440,15 @@ export type ReclamoRow = {
   reclamo_correo_estado?: PendienteEstado
   /** Lo que se le mandó al cliente, con su texto y su fecha. */
   mensajes?: { tipo: string; at: string; por?: string | null; texto: string }[]
-  /** En "pedido mal armado": lo que se le TENDRÍA que haber mandado. */
+  /**
+   * En "pedido mal armado": **lo que le llegó POR ERROR**, o sea lo que sí salió del depósito.
+   *
+   * ⚠️ **El nombre miente** y se conserva porque la columna ya está en producción. Lo dice la
+   * pantalla que lo carga ("¿Qué recibió realmente?") y de ahí lo lee `deDondeVuelve`: en este
+   * caso lo que VUELVE es esta lista, ⛔ no `items`. Este comentario decía lo contrario ("lo que
+   * se le tendría que haber mandado") y era justo la confusión que hizo que la bandeja de
+   * retornos le mostrara a Depósito el producto equivocado.
+   */
   items_correctos?: ItemReclamo[]
   /** En un cambio por otro producto: lo que se lleva. De acá sale la diferencia de precio. */
   items_nuevos?: ItemReclamo[]
@@ -1511,7 +1519,11 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
  * Son distintos a propósito: que un cliente tarde en mandar fotos es normal, que la plata no
  * salga en cinco días no.
  */
-export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3 } as const
+/**
+ * ⚠️ `despacho: 2` es lo único de acá que ⛔ no salió de la operación sino de una propuesta:
+ * despachar es trabajo del día siguiente, no un tránsito de quince. Se cambia en esta línea.
+ */
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2 } as const
 
 export type AlertaReclamo = { tono: Tono; texto: string; dias: number }
 type Tono = 'warning' | 'danger'
@@ -1544,6 +1556,25 @@ export function desdeQueEsta(d: Pick<ReclamoRow, 'historial' | 'updated_at' | 'c
   }
   // Sin historial (filas viejas) queda el último toque: peor, pero nunca cero.
   return d.updated_at || d.created_at || null
+}
+
+/**
+ * **Desde cuándo se le debe el paquete que sale.**
+ *
+ * Es el PRIMER evento que sacó al reclamo del borrador —la decisión, o la venta del cambio—, ⛔ no
+ * el último de su estado actual. La diferencia es la de siempre en este módulo: tildar la plata o
+ * emitir el cupón apila más eventos `resuelto` sobre la misma fila, y contando desde el último
+ * **ocuparse de otra cosa del caso apagaría la alarma de que nadie despachó**. Es el mismo defecto
+ * que ya tuvo `desdeQueEsta` con `updated_at`, una vuelta más adentro.
+ *
+ * Sirve para los tres caminos: el reenvío sin retorno queda en `resuelto`, el que espera algo de
+ * vuelta en `en_transito`, y el cambio pasa por `borrador` antes de que exista la venta.
+ */
+export function desdeQueSeDecidio(d: Pick<ReclamoRow, 'historial' | 'updated_at' | 'created_at'>): string | null {
+  const eventos = Array.isArray(d.historial) ? d.historial : []
+  const enCurso = (e: { estado?: string }) => e?.estado === 'en_transito' || e?.estado === 'resuelto'
+  for (const e of eventos) if (enCurso(e) && e.at) return e.at
+  return d.created_at || d.updated_at || null
 }
 
 /**
