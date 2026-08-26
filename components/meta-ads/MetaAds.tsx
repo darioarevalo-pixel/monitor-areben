@@ -4,41 +4,33 @@
  * El router de la sección Meta. **Sólo despacha**: era un archivo de 811 líneas donde el router
  * convivía con toda la pantalla de Rendimiento.
  *
- * ⚠️ **Al sumar una vista hay que releer los textos que la CUENTAN.** El `info` de `PERM_CAT` y la
- * descripción de `lib/nav.ts` decían «en seis pantallas» y quedaron mintiendo en silencio al entrar
- * Automatizaciones — mismo defecto que ya mordió en la tanda 2 con los «arriba» y «abajo». Al entrar
- * Biblioteca volvieron a estar los dos, más este comentario. Al entrar Piezas, los tres otra vez.
- * Al entrar Informes, los tres otra vez. Al entrar Rentabilidad, los tres otra vez: son **ONCE**.
+ * ⚠️ **Al sumar o mover una vista hay que releer los textos que la CUENTAN.** El `info` de
+ * `PERM_CAT` y la descripción de `lib/nav.ts` decían «en seis pantallas» y quedaron mintiendo en
+ * silencio al entrar Automatizaciones — y volvió a pasar con Biblioteca, con Piezas, con Informes y
+ * con Rentabilidad: **cinco veces**. La sexta fue al revés y es ésta: el menú bajó de once entradas
+ * a cuatro y los dos textos hablaban de once pantallas.
  *
- * Las vistas se eligen por el 2º tramo de la URL (patrón de Tienda Nube):
+ * # 🔴 La reagrupación (26-ago-2026): el menú tiene CUATRO entradas
  *
- *   `/meta-ads`             → **Panel**: qué está al aire y qué hay que decidir. La entrada.
- *   `/meta-ads/campanias`   → **Campañas**: todas juntas, ordenadas por gasto, para accionar.
- *   `/meta-ads/biblioteca`  → **Biblioteca**: todos los avisos de todas las cuentas con la pieza a
- *                            la vista y sus números al lado. Los números salen de la foto diaria.
- *   `/meta-ads/piezas`      → **Piezas**: se arrastran los archivos y sale una tanda de conjuntos,
- *                            uno por pieza. Lo único que cambia entre uno y otro es el archivo.
- *   `/meta-ads/automatizaciones` → **Automatizaciones**: las reglas que miran la foto diaria y
- *                            proponen. ⛔ Ninguna ejecuta: dejan renglones en el Panel.
- *   `/meta-ads/embudo`      → **Embudo**: a quién le está hablando la plata, y dónde está el hueco.
- *   `/meta-ads/ideas`       → **Ideas**: el tablero de las piezas que hay que producir.
- *   `/meta-ads/rendimiento` → **Rendimiento**: los números de una cuenta publicitaria.
- *   `/meta-ads/registro`    → **Registro**: qué se accionó sobre la pauta, quién y cómo terminó.
- *   `/meta-ads/informes`    → **Informes**: el análisis en prosa de cada fecha. ⛔ La única que no
- *                            calcula nada: guarda el texto que explica lo que las otras miden.
- *   `/meta-ads/rentabilidad` → **Rentabilidad**: hasta cuánto se puede pagar por una compra. Es la
- *                            única que no mira la pauta: sale de la economía del producto y le da
- *                            el umbral a todas las demás.
+ * El pedido fue textual: *«esa sección no se usa de análisis»*. Once renglones en el sidebar para
+ * una sola sección obligan a saber de antemano a cuál ir, y ninguna contestaba una pregunta entera.
  *
- * ⚠️ **Los nombres viejos siguen andando** (`/meta-ads/etapas` y `/meta-ads/auditoria`): están en
- * bookmarks, en comentarios del repo y en las notas de trabajo. Son un alias de una línea, no un
- * redirect: un redirect obliga a un viaje más y le cambia la URL a alguien que la escribió bien.
+ *   `/meta-ads`             → **Rendimiento**: qué apago, qué escalo, qué testeo hoy. LA entrada.
+ *   `/meta-ads/producir`    → **Producir**: Piezas · Ideas · Biblioteca.
+ *   `/meta-ads/analizar`    → **Analizar**: Campañas · Embudo · La cuenta · Registro · Informes.
+ *   `/meta-ads/configurar`  → **Configurar**: Rentabilidad · Automatizaciones.
  *
- * 🔴 **`/meta-ads` cambió de contenido: antes era Rendimiento y ahora es el Panel.** Es el único
- * cambio de esta tanda que le mueve el piso a alguien con un bookmark, y se hizo a propósito
- * (ver `Panel.tsx`). Rendimiento no se perdió: tiene su propia entrada en el menú y su URL.
+ * ⚠️ **Las once rutas viejas siguen andando** (`/meta-ads/campanias`, `/meta-ads/rendimiento`, …).
+ * Siguen en `VISTAS`, están en bookmarks, en `<Link href>` del propio repo y en las notas de
+ * trabajo. Son una línea del mapa, ⛔ no un redirect: un redirect obliga a un viaje más y le cambia
+ * la URL a alguien que la escribió bien. `etapas` y `auditoria` ya funcionaban así.
+ *
+ * 🔴 **`/meta-ads` cambió de contenido por segunda vez**: era Rendimiento (los totales de la cuenta),
+ * pasó a ser el Panel, y ahora es la ZONA DE RENDIMIENTO. Es el único cambio que le mueve el piso a
+ * alguien con un bookmark, y se hizo a propósito (ver `zona/ZonaRendimiento.tsx`). Ninguna de las
+ * dos anteriores se perdió: el Panel vive en `/meta-ads/panel` y los totales de la cuenta, en
+ * Analizar → La cuenta.
  */
-
 import { useParams } from 'next/navigation'
 import { ProveedorMeta } from '@/components/meta-ads/ContextoMeta'
 import { SelectorMeta } from '@/components/meta-ads/SelectorMeta'
@@ -53,6 +45,8 @@ import { Biblioteca } from '@/components/meta-ads/biblioteca/Biblioteca'
 import { CargarPiezas } from '@/components/meta-ads/piezas/CargarPiezas'
 import { Informes } from '@/components/meta-ads/informes/Informes'
 import { Rentabilidad } from '@/components/meta-ads/rentabilidad/Rentabilidad'
+import { Analizar, Configurar, Producir } from '@/components/meta-ads/zona/Agrupadas'
+import { ZonaRendimiento } from '@/components/meta-ads/zona/ZonaRendimiento'
 
 /** Las rutas viejas, que siguen en bookmarks. Una línea cada una, sin redirect. */
 const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' }
@@ -64,9 +58,15 @@ const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' 
  * cambia un número. Dejarle el selector arriba promete un filtro que no existe —y encima, con el
  * token sin configurar, le pega su cartel rojo de error a una pantalla que no le pide nada a Meta.
  */
-const SIN_EJE = new Set(['rentabilidad'])
+const SIN_EJE = new Set(['rentabilidad', 'configurar'])
 
 const VISTAS: Record<string, () => React.ReactElement> = {
+  // Las cuatro del menú de hoy.
+  producir: Producir,
+  analizar: Analizar,
+  configurar: Configurar,
+  // Y las once de antes, que siguen en bookmarks y en `<Link>` del repo.
+  panel: Panel,
   campanias: Campanias,
   biblioteca: Biblioteca,
   piezas: CargarPiezas,
@@ -92,7 +92,7 @@ export function MetaAds() {
   const partes = params.seccion
   const crudo = Array.isArray(partes) ? partes[1] : null
   const vista = crudo ? ALIAS[crudo] ?? crudo : ''
-  const Vista = VISTAS[vista] ?? Panel
+  const Vista = VISTAS[vista] ?? ZonaRendimiento
   return (
     <ProveedorMeta>
       {!SIN_EJE.has(vista) && <SelectorMeta />}

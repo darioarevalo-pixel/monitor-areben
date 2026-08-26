@@ -25,6 +25,12 @@
 //                                             → TODOS los avisos de todas las cuentas que ve el
 //                                               perfil, con sus números de la foto diaria y su
 //                                               pieza. Ver `api/_meta-biblioteca.js`.
+//   GET /api/meta-ads?recurso=rendimiento&linea=<bdi|zattia|stunned>[&dias=7|14|30]
+//                                             → LA ZONA DE RENDIMIENTO: una fila por CELDA con su
+//                                               veredicto contra el techo, el desgaste, el
+//                                               aprendizaje y el cruce con los pedidos reales.
+//                                               🔑 Sale de la FOTO, ⛔ no de Graph: por eso se
+//                                               pide sola al entrar. Ver `api/_meta-rendimiento.js`.
 //   GET /api/meta-ads?recurso=parte&account=<id>[&linea=bdi]
 //                                             → EL PARTE DEL DÍA: hoy contra ayer por conjunto y
 //                                               por aviso, embudo, serie, y el cruce contra los
@@ -84,6 +90,7 @@ import reglasPost, { reglasGet } from './_meta-reglas.js';
 import favoritoPost, { bibliotecaGet } from './_meta-biblioteca.js';
 import informesPost, { informesGet } from './_meta-informes.js';
 import tendenciaGet from './_meta-tendencia.js';
+import rendimientoGet from './_meta-rendimiento.js';
 import parteGet from './_meta-parte.js';
 
 // La lista de períodos y las dos ventanas del censo viven en `lib/meta-ads/ventana.core.js`: eran
@@ -125,6 +132,10 @@ export default async function handler(req, res) {
   // «Cómo viene» del Panel: sale entero de la foto diaria. Es lo único de esa pantalla que sabe de
   // historia, y por eso es lo que sigue contestando cuando Graph no contesta.
   if (req.method === 'GET' && recurso === 'tendencia') return await tendenciaGet(res, perfil, req.query || {});
+  // La ZONA DE RENDIMIENTO va acá arriba por el mismo motivo, y en su caso el motivo es el diseño
+  // entero: se arma con la foto y no con Graph, así que se puede pedir SOLA al entrar sin gastar
+  // cupo. Es lo que la deja ser una pantalla en vez de un botón que copia texto para pegar afuera.
+  if (req.method === 'GET' && recurso === 'rendimiento') return await rendimientoGet(res, perfil, req.query || {});
   // Los informes del analista: prosa guardada en la base, cero llamadas a Meta. Es la lectura que
   // MÁS falta cuando Graph no contesta —el último informe es lo que explica qué estaba pasando—, así
   // que va arriba del guard por el mismo motivo que las reglas y el registro. El POST tampoco toca

@@ -80,6 +80,12 @@ export type TotalVentana = {
   seguidores: number
   alcance: null
   frecuencia: null
+  /** `null` = ninguna fila de la ventana lo medía. ⛔ No es cero. Ver `sumarDias()`. */
+  carritos: number | null
+  checkouts: number | null
+  lpv: number | null
+  /** Sobre cuántos días de la ventana hay embudo, paso por paso. */
+  diasConEmbudo: { carritos: number; checkouts: number; lpv: number }
   ctr: number
   cpc: number
   cpm: number

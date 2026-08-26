@@ -88,8 +88,13 @@ function filaDe(row, lineaDe) {
  * marca, así que filtrar por estado fabrica un derrumbe falso. Está escrito en
  * `scripts/medir-economia-bdi.mjs` y en `lib/crm/metricas.ts`.
  * ⛔ **PostgREST corta en 1000 filas sin avisar**: paginar no es opcional.
+ *
+ * 🔑 **Exportada porque la usa también la zona de Rendimiento** (`_meta-rendimiento.js`). Es el
+ * mismo oráculo contestando la misma pregunta: si cada pantalla contara los pedidos con su propio
+ * filtro, dos pantallas del mismo módulo dirían dos costos por pedido distintos y no habría forma
+ * de saber cuál mirar.
  */
-async function pedidosPorDia(sb, desde) {
+export async function pedidosPorDia(sb, desde) {
   const porDia = {};
   let ultimo = null;
   for (let pagina = 0; pagina < 20; pagina++) {
@@ -114,7 +119,7 @@ async function pedidosPorDia(sb, desde) {
 
 /** El techo por compra de cada línea, desde la fila guardada. Sin fila, la línea NO entra: el parte
  *  contesta `?` y no inventa un default, porque un techo inventado decide plata igual que uno medido. */
-async function techosPorLinea(sb) {
+export async function techosPorLinea(sb) {
   const { data, error } = await sb.from('meta_ads_rentabilidad').select('linea, supuestos');
   if (error) return { error: error.message };
   const techos = {};

@@ -30,6 +30,9 @@ Contado contra la base de producción el **25-ago-2026**, módulo de Meta Ads:
 🔑 **Lo que esto dice: el módulo se usa para EJECUTAR, nunca para DECIDIR.** Las tres tablas que
 convertirían datos en «qué hago hoy» —reglas, umbrales, hallazgos— están las tres en cero.
 
+✅ **Al 26-ago-2026 la zona de Rendimiento contesta esa pregunta** (P3, abajo). Las tres tablas de
+reglas siguen en cero: eso es P2, y resultó ser más que mover un dial.
+
 🔴 **Y la prueba más incómoda:** el 25-ago se hizo una sesión entera de análisis de la pauta
 —cruce con pedidos reales, elasticidad, techo re-medido, veredicto por conjunto— y **no se abrió
 el monitor ni una vez**. Se contestó con ~20 consultas directas a la base y a la API. *Si la
@@ -93,29 +96,50 @@ Cómo hacerlo sin escribir 55 textos sueltos:
   sólo lee). Un test que exija los dos, igual que hoy exige que la sección figure en el mapa.
 - Las acciones de Meta ya tienen la mitad hecha: `lib/meta-ads/acciones.core.js` tiene `rotulo`
   («pausar o activar», «cambiar el presupuesto diario») y `reintentable`. **Falta que eso se lea en
-  la pantalla ANTES de apretar**, no sólo en el modal de confirmación.
+  la pantalla ANTES de apretar**, no sólo en el modal de confirmación. ▶️ Sigue pendiente: la zona
+  monta los botones en la fila pero el rótulo y el «¿se puede volver atrás?» se siguen leyendo recién
+  adentro del modal. Y en el de presupuesto falta el aviso de si el paso **reinicia el aprendizaje**
+  —el dato ya lo calcula `aprendizajeDe()` y se muestra en el «por qué» de la celda, pero no en el
+  modal, que es donde se decide.
 
 ⚠️ **Esto es lo primero porque es lo que pidió el usuario**, y porque sin esto ninguna de las otras
 mejoras se descubre.
 
 ### ▶️ P2 — Cargar el motor de reglas (el corazón muerto)
 
-Las 6 reglas ya existen en código y ya saben proponer; les faltan los umbrales, y el techo por línea
-ya está cargado en `meta_ads_rentabilidad`. Los cortes que hoy se hacen a mano y deberían ser reglas:
+🔴 **CORREGIDO el 26-ago: NO es sólo «mover el dial».** Medido al construir la zona: `cpa_maximo`
+está declarado como umbral, tiene columna y tiene su dial en la pantalla, y **no lo consume ningún
+preset** — se puede cargar y no pasa nada, justo con el corte que manda. De los seis cortes de abajo,
+**dos se cargan con lo que hay y cuatro necesitan un preset nuevo**. Y antes que eso: **enganchar el
+techo**, que hoy vive en `meta_ads_rentabilidad` y no llega a las reglas. Los cortes:
 
-- 3 días de gasto con **0 compras** → apagar
-- CPA > techo × 1,5 en ventana de 5 días → apagar
-- ≥95% del tope de presupuesto **y** CPA < 75% del techo → escalar +20%
-- celda de test que cumplió 2 días → leer (**0-1 muere · 2-3 sigue · 4+ aprobado**)
-- CPM del núcleo +15% contra la semana previa → tripwire de superposición entre celdas
-- pedidos de Tienda Nube por día contra la meta de Norte → semáforo
+| corte | ¿hay preset? |
+|---|---|
+| 3 días de gasto con **0 compras** → apagar | ✅ `freno-emergencia` (ventana 3 + `gasto_minimo`) |
+| ≥95% del tope **y** CPA < 75% del techo → escalar +20% | ⚠️ `ganador-escalar` existe pero corta por ROAS, no por CPA |
+| CPA > techo × 1,5 en 5 días → apagar | 🔴 **no existe** — es el corte principal |
+| celda de test a 2 días (**0-1 muere · 2-3 sigue · 4+ aprobado**) | 🔴 **no existe**, y no hay cómo marcar una celda como test |
+| CPM del núcleo +15% contra la semana previa | 🔴 **no existe** (hay `compararCtr`, para fatiga) |
+| pedidos de Tienda Nube/día contra la meta de Norte | 🔴 **no existe** (cruza fuera de la foto de Meta) |
+
+⚠️ La zona ya dibuja el bloque «Qué hay que decidir» **vacío y diciendo que está vacío porque no hay
+reglas cargadas** — un bloque que sólo aparece con malas noticias deja sin saber si el silencio es
+«está todo bien» o «no se miró».
 
 Con esto el cron de la mañana deja de correr en vacío.
 
-### ▶️ P3 — Que el Parte del día sea LA pantalla, no un botón
+### 🏁 P3 — HECHO (26-ago-2026): la zona de Rendimiento
 
-Lo primero que se ve al entrar a `/meta-ads`: los hallazgos del día arriba, y el **veredicto** al
-lado de cada conjunto (apagar / escalar / midiendo), con la evidencia que lo sostiene.
+`/meta-ads` es la zona: veredicto por celda contra el techo, el desgaste, el aprendizaje, el cruce
+con los pedidos reales y los botones en la fila. El menú bajó de **once entradas a cuatro**
+(Rendimiento · Producir · Analizar · Configurar). Detalle y verificación en
+`docs/secciones/meta-ads.md`.
+
+🔑 **Y quedó resuelta la tensión que este archivo tenía con la ficha**: aquélla defendía que el parte
+fuera un botón (cinco llamadas a Graph, el cupo es un porcentaje) y esto pedía que fuera la pantalla.
+**La pantalla no es el parte: es la FOTO** —se pide sola, es barata, tiene 90 días y contesta con el
+token vencido—, y el parte quedó siendo el botón que trae el día EN CURSO, que es lo único que sólo
+existe en Graph.
 
 ### ▶️ P4 — Que salga a buscar a la gente
 

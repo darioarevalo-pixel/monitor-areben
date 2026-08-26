@@ -109,7 +109,12 @@ describe('meta-ads — el menú y el router nombran las mismas vistas', () => {
   ].sort()
 
   it('la extracción encuentra las dos listas (si alguna da cero, el test no puede fallar)', () => {
-    expect(delMenu.length).toBeGreaterThan(8)
+    // ⚠️ El del menú era `> 8` hasta el 26-ago-2026, cuando la sección pasó de once entradas a
+    // cuatro (Rendimiento · Producir · Analizar · Configurar) y `/meta-ads` pelado no tiene 2º
+    // tramo, así que la extracción ve tres. El guard no mide calidad: sólo que la expresión regular
+    // siga encontrando algo. El del router sigue alto porque las once vistas viejas **no se
+    // borraron**: siguen en `VISTAS` para los bookmarks y los `<Link>` del repo.
+    expect(delMenu.length).toBeGreaterThan(2)
     expect(delRouter.length).toBeGreaterThan(8)
   })
 

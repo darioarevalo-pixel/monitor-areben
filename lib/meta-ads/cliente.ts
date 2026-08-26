@@ -17,6 +17,7 @@ import type { DecisionVista, RespuestaDecisiones } from './decisiones'
 import type { Informe, InformeResumen, RespuestaInforme, RespuestaInformes } from './informes'
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type { RespuestaTendencia } from './tendencia'
+import type { RespuestaZona } from './rendimiento'
 
 /** Lo que contesta `?recurso=parte`: el texto listo para copiar y qué no se pudo leer. */
 export type RespuestaParte = { ok: true; texto: string; faltantes: string[] }
@@ -585,6 +586,24 @@ export function traerBiblioteca(rango: RangoUI): Promise<Lectura<RespuestaBiblio
  */
 export function traerTendencia(dias: number): Promise<Lectura<RespuestaTendencia>> {
   return pedir<RespuestaTendencia>(new URLSearchParams({ recurso: 'tendencia', dias: String(dias) }))
+}
+
+/**
+ * LA ZONA DE RENDIMIENTO de una línea: una fila por celda con su veredicto, más el cruce contra los
+ * pedidos reales de la tienda.
+ *
+ * 🔑 **Sale de la FOTO y no de Graph, y por eso ésta SÍ se puede pedir sola al entrar.** Es la
+ * diferencia con `traerParte()`, que son cinco llamadas a Meta y cupo gastado: aquél es un botón,
+ * esto es la pantalla. Lo que la foto no tiene es el día EN CURSO, y para eso sigue estando el
+ * parte.
+ *
+ * `dias` son los de `DIAS_ZONA` (7, 14 o 30). El servidor ⛔ no cree cualquier número: contesta 400
+ * nombrando los que acepta, en vez de caer a un default en silencio.
+ */
+export function traerZona(linea: string, dias?: number): Promise<Lectura<RespuestaZona>> {
+  const p = new URLSearchParams({ recurso: 'rendimiento', linea })
+  if (dias) p.set('dias', String(dias))
+  return pedir<RespuestaZona>(p)
 }
 
 /**

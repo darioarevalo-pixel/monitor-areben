@@ -67,7 +67,7 @@ export type NavCat = {
    * Entradas que apuntan a una SUBÁREA, al mismo nivel que las `keys` sueltas.
    *
    * Es lo mismo que `NavGrupo.items` pero un piso más arriba, y existe por Meta: es **una sola
-   * sección con nueve pantallas**, así que no tiene `keys` que listar —todas son `meta-ads`— y
+   * sección con cuatro zonas**, así que no tiene `keys` que listar —todas son `meta-ads`— y
    * meterla en un subgrupo la dejaba a dos clicks, que es justo lo que se venía a arreglar. Con
    * esto, una categoría puede ser un módulo con sus pantallas en vez de una bolsa de secciones.
    */
@@ -655,7 +655,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "meta-ads",
     "area": "meta",
     "label": "Meta",
-    "info": "La pauta de Meta (Facebook/Instagram), en once pantallas. Panel: qué está al aire y qué hay que decidir. Campañas: todas las de una marca ordenadas por gasto, con los botones para accionar —pausar, reactivar, cambiar el presupuesto diario, renombrar y duplicar ajustando la copia—, bajando hasta el conjunto y el aviso. Biblioteca: todos los avisos de todas las cuentas en una grilla, con la pieza a la vista y sus números al lado, para poder ordenar por gasto o por retorno y decidir qué creativo producir después. Automatizaciones: seis reglas que miran solas la foto diaria y avisan qué se quedó sin avisos, qué gastó sin vender, qué se está quemando y qué conviene escalar. Ninguna toca la pauta: dejan el aviso en el Panel y accionar sigue siendo apretar un botón. Piezas: se arrastran los videos y las fotos nuevas y sale una tanda donde cada pieza va a su propio conjunto, con la segmentación de un conjunto que ya entrega y el texto de un aviso que ya está al aire; todo nace pausado. Embudo: a quién le está hablando la plata (a quien no te conoce, a quien te está considerando, a quien está por comprar) y qué etapa está vacía. Ideas: el tablero de las piezas que hay que producir. Rendimiento: los números de una cuenta publicitaria (inversión, impresiones, clics, CTR, CPC, alcance, ROAS). Registro: qué se accionó, quién y cómo terminó, y las decisiones tomadas a mano en Ads Manager con su motivo — para que no se vuelva a discutir lo ya resuelto y las automatizaciones no propongan revertir algo que se hizo a propósito. Informes: el análisis en prosa de cada fecha —qué estaba pasando con la pauta y qué se decidió hacer—, uno por fecha y por marca, y el anterior no se toca. Es la única pantalla que no calcula nada: guarda el texto que explica lo que las otras miden. Rentabilidad: hasta cuánto se puede pagar por una compra sin perder plata, calculado con la economía real del producto —precio, descuentos, IVA, Ingresos Brutos, impuesto al cheque y comisiones—, con el ROAS de equilibrio al lado. Es la única que no mira la pauta, y es la que le pone el número al «rinde / no rinde» de todas las demás: el semáforo es el costo por compra y no el ROAS, porque el ROAS depende del mix de medios de pago y el techo casi no. Accionar tiene permisos aparte y deja registro.",
+    "info": "La pauta de Meta (Facebook/Instagram), en cuatro zonas. **Rendimiento** es la entrada y contesta qué apagar, qué escalar y qué testear hoy: una fila por celda —el conjunto, que es donde vive el presupuesto— con lo que cuesta cada compra ahí, cuánto es eso contra el techo que banca el producto, si el creativo se está gastando (el CTR cayendo con el CPM quieto es la pieza; con el CPM subiendo es la subasta), cuánto le falta para salir de aprendizaje, y los botones para pausar, cambiar el presupuesto o escalar sin salir de la fila. Abajo, los pedidos REALES de la tienda al lado de las compras que Meta se atribuye: si esa proporción sube mientras el costo por compra de Meta baja, la mejora es de atribución y no hay una sola venta nueva. Sale de la foto diaria y no de Meta, así que abre sola y sigue contestando aunque el token se caiga; lo único que no tiene es el día en curso, y para eso está el botón del parte. **Producir** es de dónde sale una pieza nueva: se arrastran los videos y sale una tanda donde cada pieza va a su propio conjunto, con la segmentación de uno que ya entrega y el texto de un aviso que ya está al aire, todo pausado; más el tablero de ideas y la biblioteca de avisos con la pieza a la vista. **Analizar** es lo que se consulta y no pide acción: el árbol completo de campañas —con la marca y la etapa de cada una—, el embudo, los totales de una cuenta publicitaria, el registro de qué se accionó y quién, y los informes en prosa. **Configurar** se toca una vez y le pone la vara a todo lo demás: la rentabilidad —hasta cuánto se puede pagar por una compra sin perder plata, con la economía real del producto— y las automatizaciones, seis reglas que miran solas la foto y avisan qué se quedó sin avisos, qué gastó sin vender, qué se está quemando y qué conviene escalar. Ninguna regla ejecuta: dejan el aviso y accionar sigue siendo apretar un botón. El semáforo es el costo por compra y no el ROAS, porque el ROAS depende del mix de medios de pago y el techo casi no. Accionar tiene permisos aparte y deja registro.",
     "brands": [
       "bdi",
       "zattia"
@@ -950,17 +950,10 @@ export const NAV_CATS: NavCat[] = [
     "label": "Meta",
     "keys": [],
     "items": [
-      { "ruta": "/meta-ads", "label": "Panel", "icono": "meta-ads", "key": "meta-ads" },
-      { "ruta": "/meta-ads/campanias", "label": "Campañas", "icono": "marketing", "key": "meta-ads" },
-      { "ruta": "/meta-ads/biblioteca", "label": "Biblioteca", "icono": "tn-fotos", "key": "meta-ads" },
-      { "ruta": "/meta-ads/piezas", "label": "Piezas", "icono": "disenos", "key": "meta-ads" },
-      { "ruta": "/meta-ads/automatizaciones", "label": "Automatizaciones", "icono": "integraciones", "key": "meta-ads" },
-      { "ruta": "/meta-ads/embudo", "label": "Embudo", "icono": "etapas", "key": "meta-ads" },
-      { "ruta": "/meta-ads/ideas", "label": "Ideas", "icono": "actividades", "key": "meta-ads" },
-      { "ruta": "/meta-ads/rendimiento", "label": "Rendimiento", "icono": "analisis", "key": "meta-ads" },
-      { "ruta": "/meta-ads/registro", "label": "Registro", "icono": "historial", "key": "meta-ads" },
-      { "ruta": "/meta-ads/informes", "label": "Informes", "icono": "manuales", "key": "meta-ads" },
-      { "ruta": "/meta-ads/rentabilidad", "label": "Rentabilidad", "icono": "margenes", "key": "meta-ads" }
+      { "ruta": "/meta-ads", "label": "Rendimiento", "icono": "analisis", "key": "meta-ads" },
+      { "ruta": "/meta-ads/producir", "label": "Producir", "icono": "disenos", "key": "meta-ads" },
+      { "ruta": "/meta-ads/analizar", "label": "Analizar", "icono": "historial", "key": "meta-ads" },
+      { "ruta": "/meta-ads/configurar", "label": "Configurar", "icono": "margenes", "key": "meta-ads" }
     ]
   },
   {

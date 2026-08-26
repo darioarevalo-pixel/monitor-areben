@@ -553,6 +553,88 @@ corrida reescribe los últimos 4 días). Con `-f backfill=N` para más atrás.
 🔑 **El scheduler de GitHub dispara 35-59 minutos TARDE** (medido sobre 8 corridas seguidas) ⇒ el
 cron pide 07:20 y 19:20 para aterrizar a las 8 y a las 20.
 
+## 🆕🏁 26-ago-2026: LA ZONA DE RENDIMIENTO, y el menú de once entradas a cuatro
+
+Pedido de Bruno, textual: *«tengo cambios estructurales tanto en función como en disposición, pq esa
+sección no se usa de análisis. Pensar en una zona de rendimientos, donde se pueda tener toda la
+información importante al alcance de la mano»*. `/meta-ads` deja de ser el Panel y pasa a ser la
+zona; el menú queda en **Rendimiento · Producir · Analizar · Configurar**, y las once rutas viejas
+siguen andando como alias (bookmarks y `<Link>` del propio repo).
+
+🔑 **La decisión que ordena todo lo demás: la zona sale de la FOTO, ⛔ no de Graph.** Esto resuelve
+la tensión que este mismo documento tenía declarada contra el pendiente P3 del `PENDIENTES.md` —la
+ficha defendía que el parte fuera un botón *«son cinco llamadas a Graph y el cupo es un porcentaje»*
+y P3 pedía que el parte fuera la pantalla—. Las dos tenían razón: **la pantalla no es el parte, es la
+foto** (se pide sola al entrar, es barata, tiene 90 días y contesta con el token vencido) y **el
+parte queda siendo lo que siempre fue: el botón que trae el día EN CURSO**, que es lo único que sólo
+existe en Graph.
+
+### 🔴 Tres cosas que aparecieron al construirla y no estaban escritas en ningún lado
+
+1. **`cpa_maximo` era un umbral que NO CONSUME NINGÚN PRESET.** Está en `UMBRALES`
+   (`reglas.core.js:66`), tiene columna en `meta_ads_umbral` y tiene su dial en la pantalla
+   (`Automatizaciones.tsx:315`) — y ninguno de los seis lo lee. **Se podía mover el dial y no pasaba
+   nada**, justo con el corte que manda. ⇒ **corrige lo que dice más abajo este documento** («prender
+   el motor no es código, es mover el dial»): prender los seis presets que existen, sí; cargar los
+   seis cortes que se usan a mano, no — cuatro de ellos **no tienen preset** (CPA contra el techo,
+   las tres puertas del test, el CPM del núcleo, y pedidos de TN contra Norte).
+2. **`sumarDias()` no sumaba el embudo.** `carritos`/`checkouts`/`lpv` existen en la tabla desde el
+   23-ago y la función que suma días las tiraba, así que cualquier ventana perdía el embudo en
+   silencio. Se sumaron **con contador propio**: si ninguna fila de la ventana lo medía vuelve
+   `null` y ⛔ nunca `0` —esas filas no pueden afirmar «no hubo ni un carrito»— y `diasConEmbudo`
+   dice sobre cuántos días se sumó cada paso.
+3. 🔴 **La concentración por pieza medida por NOMBRE se queda 20 puntos corta.** La foto no guarda
+   el `creative_id`, así que `concentracionDe()` agrupa por nombre de aviso: sobre la semana 18→24
+   da **«AD02 - GIRLHOOD COLLECTION - ADV+ -18/8» = 32% en 1 caja**, y lo real —el mismo video en
+   tres cajas con tres nombres— es **52% en 3**. ⇒ **es un PISO de la concentración, nunca un techo**,
+   y la pantalla lo dice. ▶️ El arreglo es sumarle `creative{id}` a la lectura de configuración de
+   `snapshot-meta.mjs` y una columna; es **hacia adelante** (el backfill no lo tiene), igual que el
+   historial de estado.
+
+### 🔑 El último día CERRADO se deriva del dato, ⛔ no de un `new Date()`
+
+El corte de las ~20:00 escribe la fila de HOY con medio día de gasto, y `DIAS_RELECTURA` la reescribe
+cuatro días seguidos ⇒ **la foto puede tener el día en curso a medias**, y leído como entero muestra
+la mitad del gasto contra la mitad de las compras: el costo sale plausible y lo que sale mal es todo
+lo que compara ventanas. Los días los corta Meta en la zona de la CUENTA y esto corre en UTC —
+calcular «ayer» del lado del servidor ya falló dos veces acá. La definición que sí se lee de la
+tabla: **un día cerró si alguna de sus filas fue capturada un día posterior**. Conservador a
+propósito: si el cron no corrió hoy devuelve anteayer, y un día de menos se ve.
+
+### 🔴 El techo se muestra CONTRASTADO contra el ticket real, y es una cicatriz
+
+El 25-ago el `parte` imprimía «Techos por compra: zattia 6046» con cara de certeza y esa fila estaba
+cargada a precio de **lista** con la tienda en liquidación. Se le creyó toda una tarde. 🔑 **Una regla
+no protege de una ficha mal cargada**, así que la cabecera compara el ticket de la ficha contra
+`revenue/compras` de la misma ventana y grita arriba del 15%. Medido el 26-ago: **zattia −36%**
+(ficha $48.196 · real $30.854) y **bdi +22%** (ficha $23.246 · real $28.327, o sea que el techo real
+es MÁS alto que el que muestra). ⚠️ Y el error ⛔ no es proporcional: el costo de la mercadería no
+baja con el precio, así que cada punto de descuento se lleva casi tres de techo.
+
+### Cómo se verificó, y por qué así
+
+⛔ Los tests no alcanzan y en esta sección está probado: cuatro de los defectos más caros pasaron las
+cuatro del CI. **El oráculo fue correr el núcleo sobre los datos REALES y cotejarlo contra números
+medidos el 25-ago por otro camino** (consultas sueltas y `psql`, sin abrir el monitor):
+`scripts/medir-rendimiento-celdas.mjs --linea bdi --dias 5 --hasta 2026-08-24` da **GIRLHOOD FRIO
+$50.304 / 4 compras = $12.576 = 189% del techo** contra los $50.301 / $12.575 anotados a mano, y con
+el mismo diagnóstico (CTR −16% con el CPM clavado ⇒ la pieza). `COPY B $21.734 / 3 = $7.245` y
+`TEST 3 LOOKS $10.487 / 3 = $3.496` coinciden exactos. ⚠️ Los pedidos de TN de la semana dan **96 y
+no 98**: es la misma regla que usa el parte (`channel = 'Tienda Nube'`, ⛔ sin filtro de estado), así
+que la diferencia es del dato y no de la cuenta. **31 mutantes, 31 muertos** entre el núcleo y el
+despacho; el que había que ver caer es **la firma del desgaste dada vuelta** — si sobrevive, la
+pantalla dice «está caro Meta» justo donde el problema es el creativo.
+
+⚠️ **Con `linea=zattia` desde local, `pedidos de la tienda: permission denied for table ventas`**: la
+`ZATTIA_SUPABASE_KEY` del `.env` no tiene permiso sobre `ventas` (ya conocido). El handler prefiere
+`ZATTIA_SUPABASE_SERVICE_KEY`, así que en Vercel puede andar — y si no, **la zona igual se dibuja con
+el motivo en `problemas[]`**: media zona con el motivo al lado sirve, una pantalla en blanco porque
+la tienda no contestó, no.
+
+🔴 ▶️ **La pantalla NO se caminó**: el login pide contraseña. Lo verificado es el servidor entero
+—permisos, ventana, techo, pedidos, meta de Norte y los tres 400— con un `res` de mentira contra la
+base real.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)
