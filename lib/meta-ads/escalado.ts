@@ -27,6 +27,13 @@ export const TOPE_ESCALONES = TOPE_ESCALONES_JS as number
 
 /** Lo que el guardarraíl vio para decidir. Es lo que se guarda en el paso y se muestra en pantalla. */
 export type EvidenciaEscalon = {
+  /** Contra qué se juzgó: el COSTO si la marca tiene ficha de rentabilidad, el ROAS si no. */
+  vara?: 'costo' | 'roas'
+  /** El costo por compra de la ventana, con la vara del costo. `null` si no compró nada. */
+  cpa?: number | null
+  cpa_maximo?: number | null
+  /** ¿Estaba debajo del 75% del techo? Es la mitad de la vara del costo que frena sin días caros. */
+  con_aire?: boolean | null
   roas?: number
   roas_objetivo?: number
   dias_seguidos?: number

@@ -130,9 +130,37 @@ describe('decidirEscalon — cuándo NO se sube', () => {
     const vacios = { ...U, roas_objetivo: null, techo_diario_crudo: null }
     const d = decidirEscalon(pedido({ umbrales: vacios }))
     expect(d.seguir).toBe(false)
-    expect(d.faltan).toEqual(['roas_objetivo', 'techo_diario_crudo'])
-    expect(d.motivo).toMatch(/ROAS objetivo/)
+    // Sin ninguna de las dos varas faltan las dos, y el cartel las junta con un «o».
+    expect(d.faltan?.sort()).toEqual(['cpa_maximo', 'roas_objetivo', 'techo_diario_crudo'])
+    expect(d.motivo).toMatch(/«CPA máximo» o «ROAS objetivo»/)
     expect(d.motivo).toMatch(/Techo del presupuesto/)
+  })
+
+  /**
+   * 🔴🔑 **La vara del guardarraíl y la del detector son la misma función, y este caso es el que lo
+   * amarra.** Si `decidirEscalon` cortara por ROAS mientras el Panel propone por costo, la marca que
+   * tiene ficha y no tiene ROAS objetivo vería la propuesta de subir y el motor la saltearía
+   * pidiendo un número que nadie eligió — el Panel ofreciendo y el motor frenando por una condición
+   * que no se ve. Ver `hayRacha()`.
+   */
+  it('con el techo de la ficha cargado, la vara pasa a ser el COSTO y no pide ROAS objetivo', () => {
+    const porCosto = { ...U, roas_objetivo: null, cpa_maximo: 4000 }
+    // Compra a $2.000 —el 50% del techo— cinco días seguidos: pasa.
+    const barata = dias(5, () => ({ spend: 2000, compras: 1, revenue: 8000 }))
+    const d = decidirEscalon(pedido({ umbrales: porCosto, filas: barata }))
+    expect(d.seguir).toBe(true)
+    expect(d.evidencia.vara).toBe('costo')
+    expect(d.motivo).toMatch(/techo/)
+  })
+
+  it('y frena por FALTA DE AIRE aunque no haya un solo día caro, diciendo cuál de las dos fue', () => {
+    const porCosto = { ...U, roas_objetivo: null, cpa_maximo: 4000 }
+    // 95% del techo todos los días: ningún día «caro», y aun así no se le sube.
+    const justa = dias(5, () => ({ spend: 3800, compras: 1, revenue: 8000 }))
+    const d = decidirEscalon(pedido({ umbrales: porCosto, filas: justa }))
+    expect(d.seguir).toBe(false)
+    expect(d.evidencia.con_aire).toBe(false)
+    expect(d.motivo).toMatch(/debajo del \d+% del techo/)
   })
 
   it('🔴 el techo se respeta contra el diario RELEÍDO, no contra el del plan', () => {
@@ -380,7 +408,7 @@ describe('la forma del tipo de paso y del tipo de plan', () => {
   })
 
   it('el guardarraíl pide exactamente los umbrales del preset que propone escalar', () => {
-    expect(faltanParaEscalar({})).toEqual(['roas_objetivo', 'techo_diario_crudo'])
+    expect(faltanParaEscalar({}).sort()).toEqual(['cpa_maximo', 'roas_objetivo', 'techo_diario_crudo'])
     expect(faltanParaEscalar(U)).toEqual([])
   })
 })

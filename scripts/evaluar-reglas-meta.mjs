@@ -35,7 +35,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { plata, roas as roasTxt } from '../lib/meta-ads/formato.core.js'
 import { indexar, porQueCallado } from '../lib/meta-ads/decisiones.core.js'
-import { COLS_REGLA, leerDecisiones, leerSnapshot, leerUmbrales } from '../lib/meta-ads/leer-snapshot.core.js'
+import { COLS_REGLA, leerDecisiones, leerSnapshot, leerTechos, leerUmbrales, techoDe } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS,
@@ -105,6 +105,20 @@ async function traerUmbrales() {
 }
 
 /**
+ * Los techos de costo por compra, de la ficha de rentabilidad de cada marca.
+ *
+ * 🔑 Sin esto, `cpa_maximo` queda en `null` y **el corte principal —el que apaga lo que compra muy
+ * arriba del techo— no corre**, sin que nadie lo note: la regla se imprime como «apagada» y una
+ * línea apagada entre siete se lee como una decisión, no como un cable suelto. Era exactamente el
+ * estado del módulo hasta el 26-ago-2026.
+ */
+async function traerTechos() {
+  const { mapa, error } = await leerTechos(supabase, LINEA_UNICA ? [LINEA_UNICA] : null)
+  if (error) anotar('leer las fichas de rentabilidad', error)
+  return mapa
+}
+
+/**
  * Las decisiones humanas vigentes, ya indexadas por objeto.
  *
  * ⚠️ Un error de lectura **no** frena la corrida: se anota y se sigue con el índice vacío, o sea
@@ -166,7 +180,7 @@ async function marcarCorrida(reglaId, detalle) {
  * No mira `meta_ads_regla`: la gracia es poder ver qué haría un preset **antes** de crear la regla.
  * Es el mismo camino que alimenta el dial de la pantalla.
  */
-async function modoCalibrar(filas, umbrales, decisiones) {
+async function modoCalibrar(filas, umbrales, decisiones, techos) {
   const lineas = LINEA_UNICA
     ? [LINEA_UNICA]
     : [...new Set(filas.map((f) => f.linea).filter(Boolean))].sort()
@@ -179,14 +193,18 @@ async function modoCalibrar(filas, umbrales, decisiones) {
   for (const linea of lineas) {
     const suyas = filas.filter((f) => f.linea === linea)
     const ctx = contextoUmbrales(suyas)
+    const techo = techoDe(techos, linea)
     console.log(`\n━━ ${linea.toUpperCase()} ━━ ${ctx.dias} días con gasto · ${ctx.campanias} campañas · ${plata(ctx.gastoTotal)}`)
     console.log(`   ROAS medio ${roasTxt(ctx.roasMedio)} · CPA medio ${ctx.cpaMedio ? plata(ctx.cpaMedio) : '—'} · frecuencia pico ${ctx.frecuenciaPico.toFixed(1)}`)
+    // El techo de la ficha va al lado del CPA medido a propósito: los dos juntos son el diagnóstico
+    // de la marca en un renglón. Un CPA medio arriba del techo es una pauta que pierde plata.
+    console.log(`   Techo de la ficha ${techo ? plata(techo) : '— (sin ficha de rentabilidad cargada)'}`)
 
     for (const preset of CLAVES_PRESET) {
       const def = PRESETS[preset]
       const r = calibrar(
         { preset, linea, parametros: {} },
-        { filas: suyas, umbralLinea: umbrales.get(linea) || null, hasta: HASTA, dias: DIAS, decisiones },
+        { filas: suyas, umbralLinea: umbrales.get(linea) || null, hasta: HASTA, dias: DIAS, decisiones, techo },
       )
       if (!r.ok) { anotar(`calibrar ${preset} de ${linea}`, r.error); continue }
       if (r.apagada) {
@@ -207,7 +225,7 @@ async function modoCalibrar(filas, umbrales, decisiones) {
 }
 
 /** La corrida diaria: las reglas activas, un día, y a la base. */
-async function modoDiario(filas, umbrales, decisiones) {
+async function modoDiario(filas, umbrales, decisiones, techos) {
   const reglas = await traerReglas()
   if (!reglas.length) {
     console.log('\nNo hay ninguna regla activa. Se prenden desde /meta-ads/automatizaciones.')
@@ -223,6 +241,7 @@ async function modoDiario(filas, umbrales, decisiones) {
       umbralLinea: umbrales.get(regla.linea) || null,
       hasta: HASTA,
       decisiones,
+      techo: techoDe(techos, regla.linea),
     })
     if (!r.ok) { anotar(nombre, r.error); continue }
     if (r.apagada) {
@@ -271,19 +290,19 @@ async function main() {
 
   console.log(`Reglas de Meta · ventana ${desde} → ${HASTA}${SIMULACRO ? '  [SIMULACRO: no escribe nada]' : ''}${CALIBRAR ? '  [CALIBRADOR]' : ''}`)
 
-  const [filas, umbrales, decisiones] = await Promise.all([
-    traerFilas(desde, HASTA), traerUmbrales(), traerDecisiones(),
+  const [filas, umbrales, decisiones, techos] = await Promise.all([
+    traerFilas(desde, HASTA), traerUmbrales(), traerDecisiones(), traerTechos(),
   ])
   // «decisión» pierde la tilde en plural: la palabra entera va en el ternario, no el sufijo.
   const dec = decisiones.cuantas === 1 ? '1 decisión vigente' : `${decisiones.cuantas} decisiones vigentes`
-  console.log(`${filas.length} filas de snapshot · ${umbrales.size} línea${umbrales.size === 1 ? '' : 's'} con umbrales cargados · ${dec}`)
+  console.log(`${filas.length} filas de snapshot · ${umbrales.size} línea${umbrales.size === 1 ? '' : 's'} con umbrales cargados · ${techos.size} con ficha de rentabilidad · ${dec}`)
   if (!filas.length) {
     anotar('snapshots', 'no hay ninguna fila en la ventana: ¿corrió `snapshot-meta.mjs`?')
   } else if (CALIBRAR) {
     // Las mismas decisiones en los dos modos: el dial tiene que decir lo que va a decir el Panel.
-    await modoCalibrar(filas, umbrales, decisiones.indice)
+    await modoCalibrar(filas, umbrales, decisiones.indice, techos)
   } else {
-    await modoDiario(filas, umbrales, decisiones.indice)
+    await modoDiario(filas, umbrales, decisiones.indice, techos)
   }
 
   console.log(`\nListo en ${((Date.now() - t0) / 1000).toFixed(1)} s.`)

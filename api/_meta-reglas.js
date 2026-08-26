@@ -27,7 +27,7 @@
 import { lineasQuePuede, lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { indexar } from '../lib/meta-ads/decisiones.core.js';
 import {
-  COLS_REGLA, leerDecisiones, leerSnapshot, leerUmbrales, TABLA_DECISION, TABLA_UMBRAL,
+  COLS_REGLA, leerDecisiones, leerSnapshot, leerTechos, leerUmbrales, techoDe, TABLA_DECISION, TABLA_UMBRAL,
 } from '../lib/meta-ads/leer-snapshot.core.js';
 import {
   calibrar, CLAVES_PRESET, contextoUmbrales, permiteAccionarHallazgo, PRESETS, UMBRALES,
@@ -110,20 +110,33 @@ export async function reglasGet(res, perfil, q) {
   if (q.recurso === 'hallazgos') return await hallazgos(res, sb, visibles, q);
   if (q.recurso === 'decisiones') return await decisiones(res, sb, perfil, visibles);
 
-  const [reglas, umbrales, snap] = await Promise.all([
+  const [reglas, umbrales, snap, techos] = await Promise.all([
     sb.from(TABLA).select('*').in('linea', visibles).order('id'),
     traerUmbrales(sb),
     traerSnapshots(sb, visibles),
+    leerTechos(sb, visibles),
   ]);
   if (reglas.error) return res.status(502).json({ error: 'No se pudieron leer las reglas.', detalle: reglas.error.message });
   if (umbrales.error) return res.status(502).json({ error: 'No se pudieron leer los umbrales.', detalle: umbrales.error });
   if (snap.error) return res.status(502).json({ error: 'No se pudo leer la foto diaria.', detalle: snap.error });
+  if (techos.error) return res.status(502).json({ error: 'No se pudieron leer las fichas de rentabilidad.', detalle: techos.error });
 
   // El contexto medido por línea: los números que se muestran al lado del dial para que el umbral
   // no se elija a ciegas. Se calculan acá y no en la pantalla porque salen de las mismas filas que
   // ya se leyeron — mandarlas todas al browser serían megabytes.
+  //
+  // 🔑 **El techo de la ficha va adentro del contexto**, no en una llave suelta: la pantalla lo
+  // necesita para el mismo trabajo que el resto —decir de dónde sale un número que no se elige a
+  // mano— y una llave paralela es una que un componente nuevo se olvida de mirar.
   const contexto = {};
-  for (const l of visibles) contexto[l] = contextoUmbrales(snap.filas.filter((f) => f.linea === l));
+  for (const l of visibles) {
+    const ficha = techos.mapa.get(l) || null;
+    contexto[l] = {
+      ...contextoUmbrales(snap.filas.filter((f) => f.linea === l)),
+      techo: ficha ? ficha.techo : null,
+      techoCargadoEl: ficha ? ficha.cargadaEl : null,
+    };
+  }
 
   return res.status(200).json({
     ok: true,
@@ -350,11 +363,12 @@ async function correrCalibrador(res, sb, perfil, body) {
   // 🎯 Las decisiones entran también acá. El dial de la pantalla y la corrida del cron tienen que
   // dar el mismo número: si el calibrador contara los gritos que hoy están callados, el umbral se
   // elegiría contra un ruido que ya no existe.
-  const [umbrales, snap, dec] = await Promise.all([
-    traerUmbrales(sb), traerSnapshots(sb, [linea]), leerDecisiones(sb, [linea]),
+  const [umbrales, snap, dec, techos] = await Promise.all([
+    traerUmbrales(sb), traerSnapshots(sb, [linea]), leerDecisiones(sb, [linea]), leerTechos(sb, [linea]),
   ]);
   if (umbrales.error) return res.status(502).json({ error: 'No se pudieron leer los umbrales.', detalle: umbrales.error });
   if (snap.error) return res.status(502).json({ error: 'No se pudo leer la foto diaria.', detalle: snap.error });
+  if (techos.error) return res.status(502).json({ error: 'No se pudo leer la ficha de rentabilidad.', detalle: techos.error });
 
   const r = calibrar(
     { preset, linea, cuentaId: body.cuentaId || null, parametros: limpiarParametros(body.parametros) },
@@ -366,6 +380,9 @@ async function correrCalibrador(res, sb, perfil, body) {
       // Un error leyendo decisiones no frena el dial: se calibra sin callar nada, o sea contando de
       // más. Es la dirección barata, la misma que toma el cron.
       decisiones: indexar(dec.filas),
+      // 🔑 El mismo techo que va a usar el cron. Un dial calibrado contra otro número que la corrida
+      // real es la clase de mentira que hace desconfiar de la herramienta entera.
+      techo: techoDe(techos.mapa, linea),
     },
   );
   if (!r.ok) return res.status(r.status || 400).json({ error: r.error });

@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Automatizaciones — las seis reglas que miran la foto diaria y proponen.
+ * Automatizaciones — las siete reglas que miran la foto diaria y proponen.
  *
  * # Lo que esta pantalla tiene que dejar claro, y por qué está armada así
  *
@@ -116,8 +116,26 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
   const [abierto, setAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
-  // Los umbrales que esta regla necesita y que NO se deducen: los que hay que elegir mirando.
-  const aElegir = preset.requiere.filter((u) => !definicion[u].derivable)
+  /**
+   * 🔑 **Tres motivos distintos por los que un umbral NO aparece como un dial**, y separarlos es lo
+   * que hace que la pantalla no le pida a nadie un número que ya tiene:
+   *
+   *  1. es **derivable** — sale de medir la pauta;
+   *  2. sale de la **ficha de rentabilidad** de la marca (el techo de costo por compra);
+   *  3. es la **segunda vara** de un `requiereUno` cuya primera ya está cubierta — pedir las dos
+   *     sería pedir dos números para una sola pregunta.
+   */
+  const tieneFicha = typeof ctx?.techo === 'number' && ctx.techo > 0
+  const deLaFicha = preset.requiere.filter((u) => !!definicion[u].desdeFicha)
+  const grupo = preset.requiereUno ?? []
+  const grupoCubierto = grupo.some((u) => (definicion[u].desdeFicha ? tieneFicha : umbralLinea[u] != null))
+  const aElegir = [
+    ...preset.requiere.filter((u) => !definicion[u].derivable && !definicion[u].desdeFicha),
+    ...(grupoCubierto ? [] : grupo.filter((u) => !definicion[u].desdeFicha)),
+  ]
+  // ⚠️ Que no haya diales NO quiere decir que la regla pueda correr: puede estar esperando la ficha.
+  // Confundir las dos cosas es la pantalla afirmando algo que no preguntó.
+  const esperandoFicha = deLaFicha.length > 0 && !tieneFicha
 
   const activa = !!regla?.activa
 
@@ -145,9 +163,11 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
             {activa
               ? <StatusPill tone="success" label="Prendida" />
               : <StatusPill tone="neutral" label="Apagada" />}
-            {aElegir.length === 0
-              ? <StatusPill tone="brand" label="No pide configurar nada" />
-              : null}
+            {esperandoFicha
+              ? <StatusPill tone="warning" label="Espera la ficha de rentabilidad" />
+              : aElegir.length === 0
+                ? <StatusPill tone="brand" label="No pide configurar nada" />
+                : null}
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[1], lineHeight: 1.45 }}>
             {preset.resumen}
@@ -182,6 +202,8 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
           umbralLinea={umbralLinea}
           definicion={definicion}
           aElegir={aElegir}
+          deLaFicha={deLaFicha}
+          tieneFicha={tieneFicha}
           ctx={ctx}
           puede={puede}
           dias={dias}
@@ -199,13 +221,16 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
  * decenas de miles de filas del lado del servidor, y un `onChange` que la lance por letra tipeada
  * pondría a la pantalla a pelear consigo misma.
  */
-function Detalle({ preset, linea, regla, umbralLinea, definicion, aElegir, ctx, puede, dias, recargar }: {
+function Detalle({ preset, linea, regla, umbralLinea, definicion, aElegir, deLaFicha, tieneFicha, ctx, puede, dias, recargar }: {
   preset: DefPreset & { clave: ClavePreset }
   linea: LineaPauta
   regla: Regla | null
   umbralLinea: Partial<Record<ClaveUmbral, number | null>>
   definicion: Record<ClaveUmbral, DefUmbral>
   aElegir: ClaveUmbral[]
+  /** Los umbrales de este preset que salen de la ficha de rentabilidad, no de un dial. */
+  deLaFicha: ClaveUmbral[]
+  tieneFicha: boolean
   ctx: ContextoLinea | undefined
   puede: boolean
   dias: number
@@ -258,6 +283,31 @@ function Detalle({ preset, linea, regla, umbralLinea, definicion, aElegir, ctx, 
       <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.5, marginBottom: space[3] }}>
         {preset.porQue}
       </div>
+
+      {/**
+        * El techo no se elige acá: se firma en la ficha de rentabilidad de la marca. Decirlo con el
+        * número puesto —y con la fecha en que se cargó— es lo que evita que alguien busque en esta
+        * pantalla un campo que no existe, y lo que hace visible que un techo viejo sigue cortando.
+        */}
+      {deLaFicha.length > 0 && (
+        <Notice tone={tieneFicha ? 'success' : 'warning'} style={{ marginBottom: space[3] }}>
+          {tieneFicha ? (
+            <>
+              Corta contra el <b>techo de costo por compra</b> de {ETIQUETA_LINEA[linea]}:{' '}
+              <b>{plata(ctx?.techo ?? 0)}</b>
+              {ctx?.techoCargadoEl ? ` (cargado el ${String(ctx.techoCargadoEl).slice(0, 10)})` : ''}. No se
+              elige acá: sale de la ficha de rentabilidad, y si lo cambiás ahí esta regla corta distinto
+              mañana.
+            </>
+          ) : (
+            <>
+              {ETIQUETA_LINEA[linea]} todavía <b>no tiene cargada su ficha de rentabilidad</b>, y de ahí
+              sale el techo de costo por compra contra el que corta esta regla. Hasta que esté, queda
+              apagada: un techo inventado se lee igual que uno medido y decide plata.
+            </>
+          )}
+        </Notice>
+      )}
 
       {aElegir.length === 0 ? (
         <Notice tone="success">

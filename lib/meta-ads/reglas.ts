@@ -42,6 +42,7 @@ export type ClavePreset =
   | 'freno-emergencia'
   | 'gastos-hormiga'
   | 'fatiga'
+  | 'costo-alto'
   | 'ganador-escalar'
 
 export type ClaveUmbral =
@@ -66,6 +67,12 @@ export type DefUmbral = {
    * hasta que alguien lo confirme. Ver el comentario largo en `reglas.core.js`.
    */
   derivable: boolean
+  /**
+   * 🆕 Una decisión de negocio **que ya está tomada en otra pantalla**, y de la que se lee. Hoy sólo
+   * el techo de costo por compra, que se firma en la ficha de rentabilidad. Sin ficha no hay número:
+   * ⛔ no es una tercera forma de inventarlo, es no pedir dos veces el mismo.
+   */
+  desdeFicha?: string
   ayuda: string
 }
 
@@ -77,6 +84,11 @@ export type DefPreset = {
   ventana: number
   /** Los umbrales sin los cuales el preset no corre. Vacío = se puede prender el día uno. */
   requiere: ClaveUmbral[]
+  /**
+   * Un grupo del que alcanza con **uno**: la vara con la que se juzga. Hoy sólo lo usa
+   * `ganador-escalar`, que corta por costo si la marca tiene ficha y por ROAS si no.
+   */
+  requiereUno?: ClaveUmbral[]
   /** El sub-permiso que hace falta para ACCIONAR el hallazgo. No es uno propio: es el de la acción. */
   sub: string
   proponeAccion: boolean
@@ -203,6 +215,12 @@ export type Contexto = {
    * propósito: quien no sabe de decisiones sigue obteniendo exactamente lo de antes.
    */
   decisiones?: Map<string, Decision[]> | null
+  /**
+   * El techo de costo por compra de la marca, de su ficha de rentabilidad. De acá sale
+   * `cpa_maximo`. `null` o ausente = la marca no tiene ficha ⇒ las reglas que lo piden quedan
+   * apagadas diciéndolo. ⛔ Nunca un default.
+   */
+  techo?: number | null
 }
 
 export type Evaluacion =
@@ -250,6 +268,9 @@ export type ContextoLinea = {
   roasMedio: number
   cpaMedio: number | null
   frecuenciaPico: number
+  /** El techo de la ficha de rentabilidad, o `null` si la marca no tiene ficha cargada. */
+  techo: number | null
+  techoCargadoEl: string | null
 }
 
 /** Lo que contesta `?recurso=reglas`. Trae el catálogo con la respuesta para que la pantalla no se quede con una copia vieja. */
@@ -278,7 +299,10 @@ export const permiteAccionarHallazgo = permiteAccionarHallazgoJs as (
   linea: string,
 ) => { ok: true } | { ok: false; status: number; error: string }
 
-export const derivarUmbrales = derivarUmbralesJs as (filas: FilaRegla[]) => Partial<Umbrales>
+export const derivarUmbrales = derivarUmbralesJs as (
+  filas: FilaRegla[],
+  opciones?: { techo?: number | null },
+) => Partial<Umbrales>
 export const contextoUmbrales = contextoUmbralesJs as (filas: FilaRegla[]) => {
   dias: number
   campanias: number
@@ -308,7 +332,18 @@ export const diasSeguidosPorEncima = diasSeguidosPorEncimaJs as (filas: FilaRegl
 export const hayRacha = hayRachaJs as (
   filas: FilaRegla[],
   u: Partial<Umbrales>,
-) => { seguidos: number; piden: number; ok: boolean }
+) => {
+  /** Contra qué se juzgó: el costo si la marca tiene techo, el ROAS si no. */
+  vara: 'costo' | 'roas'
+  objetivo: number
+  seguidos: number
+  piden: number
+  /** El costo por compra de la ventana entera. `null` con la vara del ROAS, o sin compras. */
+  cpa: number | null
+  /** ¿Está debajo del `CON_AIRE`% del techo? `null` con la vara del ROAS. */
+  conAire: boolean | null
+  ok: boolean
+}
 /** El diario que sigue, cortado contra el techo. `null` cuando ya no hay adónde subir. */
 export const proximoDiario = proximoDiarioJs as (actualCrudo: number, techoCrudo: number) => number | null
 /** El índice del primer día apagado tras el último activo, o `null` si nunca estuvo activo acá. */

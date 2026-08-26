@@ -19,9 +19,9 @@ Contado contra la base de producción el **25-ago-2026**, módulo de Meta Ads:
 
 | tabla | filas | qué significa |
 |---|---|---|
-| `meta_ads_regla` | **0** | el motor de reglas nunca se cargó |
-| `meta_ads_umbral` | **0** | ni sus cortes |
-| `meta_ads_hallazgo` | **0** | ⇒ el cron corre **todas las mañanas y no produce nada** |
+| `meta_ads_regla` | **0** | el motor de reglas nunca se cargó — 🆕 **y es lo único que falta**: el código ya encuentra (P2) |
+| `meta_ads_umbral` | **0** | ni sus cortes — 🆕 el que manda ya ⛔ no se carga acá: sale de la ficha de rentabilidad |
+| `meta_ads_hallazgo` | **0** | ⇒ el cron corre **todas las mañanas y no produce nada**, hasta que haya una regla prendida |
 | `meta_ads_favorito` | **0** | el botón de favorito de la Biblioteca no se tocó nunca |
 | `meta_ads_informe` | 2 | y los dos **sin publicar** |
 | `meta_ads_plan` | 4 | 2 `duplicar` (8-ago) + 1 `piezas` (10-ago) + 1 del 25-ago |
@@ -107,26 +107,36 @@ mejoras se descubre.
 
 ### ▶️ P2 — Cargar el motor de reglas (el corazón muerto)
 
-🔴 **CORREGIDO el 26-ago: NO es sólo «mover el dial».** Medido al construir la zona: `cpa_maximo`
-está declarado como umbral, tiene columna y tiene su dial en la pantalla, y **no lo consume ningún
-preset** — se puede cargar y no pasa nada, justo con el corte que manda. De los seis cortes de abajo,
-**dos se cargan con lo que hay y cuatro necesitan un preset nuevo**. Y antes que eso: **enganchar el
-techo**, que hoy vive en `meta_ads_rentabilidad` y no llega a las reglas. Los cortes:
+🏁 **EL CÓDIGO YA ESTÁ (26-ago, 2ª tanda). Lo que queda es UNA MANO: prender las reglas.**
+
+🔑 **El techo quedó enganchado**: sale de la ficha de rentabilidad de la marca (`desdeFicha`), así
+que `cpa_maximo` ya no es un dial huérfano y **el corte principal se prende sin que nadie elija un
+número**. Y `leerTechos()` es una sola lectura para los cuatro que la usan. El detalle, la
+verificación contra la pauta real y por qué la regla es más exigente que la pantalla:
+**`docs/secciones/meta-ads.md`**. Los cortes:
 
 | corte | ¿hay preset? |
 |---|---|
 | 3 días de gasto con **0 compras** → apagar | ✅ `freno-emergencia` (ventana 3 + `gasto_minimo`) |
-| ≥95% del tope **y** CPA < 75% del techo → escalar +20% | ⚠️ `ganador-escalar` existe pero corta por ROAS, no por CPA |
-| CPA > techo × 1,5 en 5 días → apagar | 🔴 **no existe** — es el corte principal |
-| celda de test a 2 días (**0-1 muere · 2-3 sigue · 4+ aprobado**) | 🔴 **no existe**, y no hay cómo marcar una celda como test |
-| CPM del núcleo +15% contra la semana previa | 🔴 **no existe** (hay `compararCtr`, para fatiga) |
-| pedidos de Tienda Nube/día contra la meta de Norte | 🔴 **no existe** (cruza fuera de la foto de Meta) |
+| CPA > techo × 1,5 en 5 días → apagar | 🆕✅ `costo-alto` — **el corte principal, ya corre** |
+| ≥95% del tope **y** CPA < 75% del techo → escalar +20% | 🆕✅ `ganador-escalar` ahora corta por COSTO si la marca tiene ficha (y por ROAS sólo si no) |
+| celda de test (**$10.000 en UN día · 0 muere · 1 sigue · 2+ aprobado**) | 🔴 **no existe**, y antes hace falta poder **marcar una celda como test** — no hay dónde guardarlo |
+| CPM del núcleo +15% contra la semana previa | 🔴 **no existe**, y con esta forma no debería: es un tripwire **de la línea** y todos los detectores son por objeto |
+| pedidos de Tienda Nube/día contra la meta de Norte | 🔴 **no existe**: cruza fuera de la foto, y correr sólo sobre la foto es lo que hace que las reglas anden **sin token y sin cupo** |
+
+▶️ **La mano que falta, y es de dos minutos**: entrar a **Configurar → Automatizaciones** y prender
+las reglas de BDI y Zattia. Hoy `meta_ads_regla` tiene **0 filas** ⇒ el cron de las 07:00 sigue
+corriendo en vacío aunque los detectores ya encuentren. Con el calibrador (el botón «¿cuántas veces
+habría saltado?») se ve antes de prender: al 26-ago, `costo-alto` da **9 saltos sobre 3 conjuntos en
+7 días** en BDI y **0 en Zattia**.
+
+▶️ Y una segunda, en la otra pantalla: **Zattia corta contra un techo que hoy no aplica** —su ficha
+está cargada a precio de LISTA y la tienda está en liquidación— ⇒ la regla hereda la ficha, que es
+como tiene que ser, y **arreglar la ficha arregla la regla**.
 
 ⚠️ La zona ya dibuja el bloque «Qué hay que decidir» **vacío y diciendo que está vacío porque no hay
 reglas cargadas** — un bloque que sólo aparece con malas noticias deja sin saber si el silencio es
 «está todo bien» o «no se miró».
-
-Con esto el cron de la mañana deja de correr en vacío.
 
 ### 🏁 P3 — HECHO (26-ago-2026): la zona de Rendimiento
 

@@ -30,10 +30,9 @@
 //    tienda y cada marca tiene la suya.
 import { createClient } from '@supabase/supabase-js';
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
-import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
+import { leerSnapshot, leerTechos } from '../lib/meta-ads/leer-snapshot.core.js';
 import { baseDeLinea, esLinea } from '../lib/meta-ads/lineas.core.js';
 import { armarZona, COLS_RENDIMIENTO, elegirVentana, ultimoDiaCerrado } from '../lib/meta-ads/rendimiento.core.js';
-import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { clienteBdi } from './_meta-lineas.js';
 import { pedidosPorDia } from './_meta-parte.js';
 
@@ -103,9 +102,9 @@ export default async function rendimientoGet(res, perfil, q) {
   const desdeCrudo = new Date(Date.parse(`${hoyish}T00:00:00Z`) - COLCHON(dias) * 86400000).toISOString().slice(0, 10);
 
   const sbLinea = clienteDeLinea(linea);
-  const [snap, rentRes] = await Promise.all([
+  const [snap, techos] = await Promise.all([
     leerSnapshot(sb, { cols: COLS_RENDIMIENTO, desde: desdeCrudo, lineas: [linea] }),
-    sb.from('meta_ads_rentabilidad').select('linea, supuestos, updated_at').eq('linea', linea).maybeSingle(),
+    leerTechos(sb, [linea]),
   ]);
   if (snap.error) return res.status(502).json({ error: 'No se pudo leer la foto diaria.', detalle: snap.error });
 
@@ -122,24 +121,24 @@ export default async function rendimientoGet(res, perfil, q) {
     });
   }
 
-  // El techo, de la fila guardada. ⛔ Sin fila NO hay techo y la zona lo dice: un techo inventado se
-  // lee igual que uno medido y decide plata.
-  let techo = 0;
-  let techoCaja = null;
-  let ficha = null;
-  const fila = rentRes && rentRes.data;
-  if (fila) {
-    try {
-      const r = calcularRentabilidad(normalizar(fila.supuestos || {}));
-      techo = r.costoMax;
-      techoCaja = r.costoMaxCaja !== r.costoMax ? r.costoMaxCaja : null;
-      ficha = { cargadaEl: fila.updated_at || null, ticket: r.ticket };
-    } catch {
-      /* una fila ilegible es una línea sin techo, no un 500 */
-    }
-  }
+  /**
+   * El techo, de la ficha guardada. ⛔ Sin ficha NO hay techo y la zona lo dice: un techo inventado
+   * se lee igual que uno medido y decide plata.
+   *
+   * 🔑 El cálculo vive en `leerTechos()` —**la misma lectura que usan las automatizaciones y el
+   * guardarraíl de los escalones**— desde el 26-ago-2026. Estaba escrito acá y era el cuarto lugar
+   * que iba a recalcular una economía unitaria: cuatro copias de un cálculo son cuatro techos que un
+   * día no coinciden, y el día que no coinciden la pantalla dice «rinde» y el cron propone apagarlo.
+   * Un error de lectura deja la línea sin techo, que es lo que la zona sabe decir.
+   */
+  const problemasDeFicha = [];
+  const fichaFila = techos.mapa.get(linea) || null;
+  const techo = fichaFila ? fichaFila.techo : 0;
+  const techoCaja = fichaFila ? fichaFila.techoCaja : null;
+  const ficha = fichaFila ? { cargadaEl: fichaFila.cargadaEl, ticket: fichaFila.ticket } : null;
+  if (techos.error) problemasDeFicha.push(`ficha de rentabilidad: ${techos.error}`);
 
-  const problemas = [];
+  const problemas = [...problemasDeFicha];
   let porDia = {};
   if (sbLinea) {
     const r = await pedidosPorDia(sbLinea, desdeCrudo);

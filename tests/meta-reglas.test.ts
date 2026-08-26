@@ -11,6 +11,8 @@ import {
   evaluarRegla,
   faltanUmbrales,
   frecuenciaPico,
+  hayRacha,
+  motivoApagada,
   PRESETS,
   UMBRALES,
   umbralesEfectivos,
@@ -83,7 +85,7 @@ describe('reglas — la forma de los presets', () => {
 
   /**
    * 🔑 Es la promesa que se le hizo a Bruno cuando dijo que no tenía los umbrales definidos: **tres
-   * de los seis se prenden el día uno.** Si alguien le suma a uno de esos tres un umbral que no se
+   * de los presets se prenden el día uno.** Si alguien le suma a uno de esos tres un umbral que no se
    * puede deducir, la promesa se rompe en silencio y la sección arranca entera apagada.
    *
    * ⚠️ «Se prende el día uno» NO es «no pide umbrales»: el freno de emergencia pide `gasto_minimo`
@@ -93,9 +95,36 @@ describe('reglas — la forma de los presets', () => {
   it('tres presets se prenden el día uno: todo lo que piden es deducible', () => {
     const solos = CLAVES_PRESET.filter((k) => PRESETS[k].requiere.every((u) => UMBRALES[u].derivable))
     expect(solos.sort()).toEqual(['atribucion-tardia', 'freno-emergencia', 'sin-avisos'])
-    // Y los otros tres piden al menos una decisión de negocio, que es lo que los deja apagados.
+    // Y los otros piden al menos una decisión de negocio, que es lo que los deja apagados.
     const conDial = CLAVES_PRESET.filter((k) => PRESETS[k].requiere.some((u) => !UMBRALES[u].derivable))
-    expect(conDial.sort()).toEqual(['fatiga', 'ganador-escalar', 'gastos-hormiga'])
+    expect(conDial.sort()).toEqual(['costo-alto', 'fatiga', 'ganador-escalar', 'gastos-hormiga'])
+  })
+
+  /**
+   * 🔑 **El corte principal no pide NINGÚN dial: pide la ficha.** Es la promesa nueva del 26-ago-2026
+   * y la que hay que amarrar, porque se rompe de la forma más silenciosa que hay — alguien le suma
+   * un umbral de dial «para afinarlo» y la regla que decide qué se apaga queda esperando a que
+   * alguien elija un número, en una pantalla que nadie abre.
+   */
+  it('el corte principal se prende con la ficha de rentabilidad y ningún dial', () => {
+    const p = PRESETS['costo-alto']
+    for (const u of p.requiere) {
+      expect(UMBRALES[u].derivable || !!UMBRALES[u].desdeFicha, `${u} pide un dial`).toBe(true)
+    }
+    expect(p.requiere).toContain('cpa_maximo')
+    expect(UMBRALES.cpa_maximo.desdeFicha).toBe('rentabilidad')
+    // Y propone apagar, ⛔ no mirar: el permiso que pide es el de la acción que ejecutaría.
+    expect(p.sub).toBe('pausar')
+    expect(p.proponeAccion).toBe(true)
+  })
+
+  /** Un `requiereUno` es un grupo del que alcanza con uno, y sus claves tienen que existir igual. */
+  it('la vara alternativa de un preset también son umbrales que existen', () => {
+    for (const k of CLAVES_PRESET) {
+      for (const u of PRESETS[k].requiereUno ?? []) {
+        expect(UMBRALES[u], `${k} ofrece la vara '${u}', que no existe`).toBeTruthy()
+      }
+    }
   })
 
   /**
@@ -163,7 +192,49 @@ describe('reglas — los umbrales', () => {
     const vacio = umbralesEfectivos(null, null, null)
     expect(faltanUmbrales('sin-avisos', vacio)).toEqual([])
     expect(faltanUmbrales('gastos-hormiga', vacio)).toEqual(['roas_objetivo'])
-    expect(faltanUmbrales('ganador-escalar', vacio).sort()).toEqual(['roas_objetivo', 'techo_diario_crudo'])
+    // Escalar pide su techo de presupuesto **y una vara**: sin ninguna de las dos, faltan las dos.
+    expect(faltanUmbrales('ganador-escalar', vacio).sort()).toEqual(['cpa_maximo', 'roas_objetivo', 'techo_diario_crudo'])
+  })
+
+  /**
+   * 🔑 **Con UNA de las dos varas alcanza**, y es lo que destraba la escalada en una marca que ya
+   * tiene firmado su techo de costo. Antes le pedía además un ROAS objetivo —justo el número que
+   * este módulo tiene escrito en tres lados que no hay que usar como vara— y la dejaba apagada.
+   */
+  it('con el techo de la ficha ya no hace falta elegir un ROAS objetivo', () => {
+    const conTecho = umbralesEfectivos(null, null, { cpa_maximo: 6668, techo_diario_crudo: 2000000 })
+    expect(faltanUmbrales('ganador-escalar', conTecho)).toEqual([])
+    const conRoas = umbralesEfectivos(null, null, { roas_objetivo: 3, techo_diario_crudo: 2000000 })
+    expect(faltanUmbrales('ganador-escalar', conRoas)).toEqual([])
+  })
+
+  /**
+   * Un umbral que sale de la ficha manda a la ficha, ⛔ no al dial. «Falta definir CPA máximo» sobre
+   * un número que nadie tiene que definir a mano manda a la persona a la pantalla equivocada.
+   */
+  it('la marca sin ficha se entera de que le falta la FICHA, no un dial', () => {
+    const vacio = umbralesEfectivos(null, null, null)
+    const detalle = motivoApagada('costo-alto', faltanUmbrales('costo-alto', vacio))
+    expect(detalle).toMatch(/ficha de rentabilidad/i)
+    // Y con el piso ya deducido —que es el caso real de toda marca que vendió alguna vez— lo único
+    // que falta es la ficha, y el cartel es entero sobre eso.
+    const soloFicha = umbralesEfectivos(null, null, { gasto_minimo: 6700 })
+    const corto = motivoApagada('costo-alto', faltanUmbrales('costo-alto', soloFicha))
+    expect(corto).toMatch(/ficha de rentabilidad/i)
+    expect(corto).not.toMatch(/Falta definir/)
+    // Y cuando la vara es un grupo, las dos opciones se juntan con un «o»: pedir las dos sería
+    // pedir dos números para una sola pregunta.
+    expect(motivoApagada('ganador-escalar', faltanUmbrales('ganador-escalar', vacio))).toMatch(/«CPA máximo» o «ROAS objetivo»/)
+  })
+
+  /** El techo entra por el escalón MÁS BAJO de la precedencia: lo escrito a mano lo sigue pisando. */
+  it('el techo de la ficha llena `cpa_maximo`, y el dial de la línea lo pisa', () => {
+    expect(derivarUmbrales(totalLinea(90000, 9), { techo: 6668.4 }).cpa_maximo).toBe(6668)
+    // Sin ficha ⛔ no se inventa nada.
+    expect(derivarUmbrales(totalLinea(90000, 9)).cpa_maximo).toBeNull()
+    expect(derivarUmbrales(totalLinea(90000, 9), { techo: 0 }).cpa_maximo).toBeNull()
+    const u = umbralesEfectivos(null, { cpa_maximo: 9000 }, derivarUmbrales(totalLinea(90000, 9), { techo: 6668 }))
+    expect(u.cpa_maximo).toBe(9000)
   })
 })
 
@@ -445,6 +516,134 @@ describe('reglas — cuándo NO detecta (que es lo que evita el ruido)', () => {
     const r = evaluarRegla(regla('ganador-escalar', { roas_objetivo: 3, techo_diario_crudo: 999999 }), { filas, umbralLinea: null, hasta: HOY })
     if (!r.ok) throw new Error(r.error)
     expect(r.hallazgos).toEqual([])
+  })
+})
+
+/**
+ * 🔴 **El corte principal**: lo que decide qué se apaga. Lo que se prueba acá es sobre todo la banda
+ * en la que NO grita, porque es donde la pantalla y la regla dicen cosas distintas a propósito: la
+ * zona de Rendimiento propone pausar apenas se pasa el techo, y esto —que corre solo todas las
+ * mañanas— espera a la mitad de más.
+ */
+describe('reglas — compra muy arriba del techo', () => {
+  const TECHO = 6668
+  // La línea entera: CPA medido $6.700, o sea que el piso para juzgar existe.
+  const linea = totalLinea(670000, 100, 2000000)
+  const celda = (over: Partial<FilaRegla>) => dias(5, () => ({ nivel: 'conjunto', objeto_id: 'cj1', ...over }))
+  const correr = (filas: FilaRegla[], techo: number | null = TECHO) =>
+    evaluarRegla(regla('costo-alto'), { filas, umbralLinea: null, hasta: HOY, techo })
+
+  it('grita cuando compra arriba de la tolerancia, con el número y el porcentaje adentro', () => {
+    // $50.304 / 4 compras = $12.576 = 189% del techo. Es `GIRLHOOD FRIO - INTERESES 1` del 25-ago.
+    const r = correr([...linea, ...celda({ spend: 50304 / 5, compras: 0.8 })])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.apagada).toBe(false)
+    expect(r.hallazgos).toHaveLength(1)
+    expect(r.hallazgos[0].motivo).toMatch(/189%/)
+    expect(Math.round(Number(r.hallazgos[0].evidencia.cpa))).toBe(12576)
+    expect(r.hallazgos[0].sugerencia).toEqual({ accion: 'estado', objetoId: 'cj1', nivel: 'conjunto', status: 'PAUSED' })
+  })
+
+  /**
+   * 🔑 La banda entre el techo y la tolerancia. Acá la pantalla YA dice «pausar» y la regla todavía
+   * no: es deliberado —ver `TOLERANCIA_COSTO`— y sin este caso, mover la tolerancia a 1× pasa en
+   * verde y la sección empieza a dejar un renglón por celda por día.
+   */
+  it('NO grita apenas pasa el techo: la regla espera la mitad de más que la pantalla', () => {
+    // 120% del techo: caro, y aun así callado.
+    const r = correr([...linea, ...celda({ spend: (TECHO * 1.2) / 5, compras: 0.2 })])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  it('no grita por algo que no compró NADA: de eso habla el freno de emergencia', () => {
+    // Sin este corte el costo por compra sería infinito y esto gritaría junto con el freno, dos
+    // renglones del mismo objeto diciendo lo mismo.
+    const r = correr([...linea, ...celda({ spend: 20000, compras: 0 })])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  it('no grita por algo que gastó menos que un cliente: un costo sobre media compra no es evidencia', () => {
+    const r = correr([...linea, ...celda({ spend: 200, compras: 0.01 })])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  it('no propone apagar algo que ya está apagado', () => {
+    const r = correr([...linea, ...celda({ spend: 4000, compras: 0.2, estado_efectivo: 'PAUSED' })])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.hallazgos).toEqual([])
+  })
+
+  /** Sin ficha ⛔ no hay techo, y la regla lo dice en vez de inventarlo o de callarse. */
+  it('la marca sin ficha de rentabilidad queda apagada, con el motivo escrito', () => {
+    const r = correr([...linea, ...celda({ spend: 20000, compras: 0.4 })], null)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.apagada).toBe(true)
+    expect(r.faltan).toEqual(['cpa_maximo'])
+    expect(r.detalle).toMatch(/ficha de rentabilidad/i)
+    expect(r.hallazgos).toEqual([])
+  })
+})
+
+/**
+ * La racha, que es lo único que mira el guardarraíl de los escalones antes de mandar más plata. Con
+ * la vara del costo son **dos** condiciones y las dos importan; ver `hayRacha()`.
+ */
+describe('reglas — la racha tiene dos varas, y la del costo manda', () => {
+  const U = (over: Record<string, number | null> = {}) => ({ roas_objetivo: 3, dias_seguidos: 3, ...over })
+  const serie = (n: number, over: (i: number) => Partial<FilaRegla>) => dias(n, over)
+
+  it('con techo cargado la vara es el COSTO, y sin techo el ROAS', () => {
+    const filas = serie(5, () => ({ spend: 1000, revenue: 5000, compras: 1 }))
+    expect(hayRacha(filas, U({ cpa_maximo: 4000 })).vara).toBe('costo')
+    expect(hayRacha(filas, U()).vara).toBe('roas')
+  })
+
+  /**
+   * 🔴 El caso que rompe la función si se escribe de la forma obvia: una celda que gotea plata y no
+   * vende nunca. Si un día `MIDIENDO` sumara a la racha, esto terminaría con una propuesta de
+   * SUBIRLE el presupuesto a algo que no vendió un solo peso en cinco días.
+   */
+  it('un día que gastó poco y no compró ni suma ni corta, y solo NO alcanza para escalar', () => {
+    const goteo = serie(5, () => ({ spend: 100, compras: 0 }))
+    const r = hayRacha(goteo, U({ cpa_maximo: 4000 }))
+    expect(r.seguidos).toBe(0)
+    expect(r.ok).toBe(false)
+    // Y en el medio de días buenos, no corta la racha.
+    const conHueco = [
+      ...serie(2, () => ({ spend: 2000, compras: 1 })).map((f, i) => ({ ...f, fecha: `2026-08-0${4 + i}` })),
+      { ...fila({ fecha: '2026-08-06' }), spend: 100, compras: 0 },
+      ...serie(2, () => ({ spend: 2000, compras: 1 })).map((f, i) => ({ ...f, fecha: `2026-08-0${7 + i}` })),
+    ]
+    expect(hayRacha(conHueco, U({ cpa_maximo: 4000 })).seguidos).toBe(4)
+  })
+
+  it('un día caro CORTA la racha aunque los anteriores fueran buenos', () => {
+    const filas = [
+      ...serie(4, () => ({ spend: 2000, compras: 1 })).map((f, i) => ({ ...f, fecha: `2026-08-0${3 + i}` })),
+      { ...fila({ fecha: '2026-08-07' }), spend: 9000, compras: 1 },
+      { ...fila({ fecha: '2026-08-08' }), spend: 2000, compras: 1 },
+    ]
+    expect(hayRacha(filas, U({ cpa_maximo: 4000 })).seguidos).toBe(1)
+  })
+
+  /**
+   * 🔑 La segunda condición: **estar debajo del techo no alcanza, hay que estar con aire.** Un
+   * escalón casi siempre encarece antes de asentarse, así que subirle plata a algo que compra al 98%
+   * del techo es comprarse el problema. Sin este caso, mover el corte a «≤ techo» pasa en verde.
+   */
+  it('comprar apenas por debajo del techo NO alcanza para subirle plata', () => {
+    // 95% del techo todos los días: cada día es «OK», la racha está entera, y aun así no.
+    const filas = serie(5, () => ({ spend: 3800, compras: 1 }))
+    const r = hayRacha(filas, U({ cpa_maximo: 4000 }))
+    expect(r.seguidos).toBe(5)
+    expect(r.conAire).toBe(false)
+    expect(r.ok).toBe(false)
+    // Con aire de sobra, sí.
+    const barata = serie(5, () => ({ spend: 2000, compras: 1 }))
+    expect(hayRacha(barata, U({ cpa_maximo: 4000 })).ok).toBe(true)
   })
 })
 

@@ -553,6 +553,106 @@ corrida reescribe los últimos 4 días). Con `-f backfill=N` para más atrás.
 🔑 **El scheduler de GitHub dispara 35-59 minutos TARDE** (medido sobre 8 corridas seguidas) ⇒ el
 cron pide 07:20 y 19:20 para aterrizar a las 8 y a las 20.
 
+## 🆕🏁 26-ago-2026 (2ª tanda): EL TECHO ENGANCHADO, y el corte que manda YA CORRE
+
+**El motor de reglas dejó de correr en vacío.** Lo que faltaba no era prender nada: era que el número
+contra el que se corta **llegara** hasta las reglas.
+
+🔑 **El techo de costo por compra ya no se pide dos veces.** Se firma en la ficha de rentabilidad de
+la marca (`meta_ads_rentabilidad`) y de ahí sale, solo, el umbral `cpa_maximo`. Es una tercera
+categoría de umbral y está declarada como tal en `UMBRALES` (`desdeFicha`), al lado de las dos que ya
+había:
+
+| categoría | de dónde sale | ejemplo |
+|---|---|---|
+| `derivable: true` | de medir los 90 días que ya están | `gasto_minimo`, el CPA real de la línea |
+| `desdeFicha` 🆕 | de una decisión **ya tomada en otra pantalla** | `cpa_maximo`, el techo de la ficha |
+| ninguna | hay que elegirlo en el dial | `roas_objetivo`, `frecuencia_maxima`, `techo_diario_crudo` |
+
+⛔ **No es una tercera forma de inventar un número**: sin ficha no hay techo, y la regla que lo pide
+queda apagada **mandando a la ficha, no al dial** — «Falta definir CPA máximo» sobre un número que
+nadie tiene que definir a mano manda a la persona a la pantalla equivocada.
+
+🔴 **Y `leerTechos()` es UNA lectura para los cuatro que la necesitan** (la zona de Rendimiento, las
+automatizaciones, el calibrador y el guardarraíl de los escalones). Estaba escrita adentro de
+`api/_meta-rendimiento.js` y era el cuarto lugar que iba a recalcular una economía unitaria: cuatro
+copias del cálculo son cuatro techos que un día no coinciden, y el día que no coinciden **la pantalla
+dice «rinde» y el cron propone apagarlo**. Devuelve el techo de **GANANCIA**, ⛔ nunca el de caja: ese
+incluye el recupero del saldo de IVA, que es plata real pero que la venta sólo LIBERA.
+
+🔴 **Una fila sin `precio` NO es una ficha: es la economía de BDI con otro nombre.** `normalizar()`
+arranca de `DEFAULTS` —las fundas de BDI— y le pisa encima lo que la fila traiga, así que unos
+supuestos vacíos devuelven el techo de BDI **para la línea que sea**. Para la pantalla eso está bien
+y está dicho; para una regla que APAGA es un techo inventado —y de otro negocio— decidiendo plata.
+
+### 🆕 El preset nuevo: «Compra muy arriba del techo» (`costo-alto`)
+
+El corte que manda, el que la lista de los seis cortes marcaba como **🔴 no existe**. Conjunto,
+ventana **5 días**, propone **pausar**.
+
+🔑 **Es a propósito MÁS EXIGENTE que la pantalla, y la diferencia es quién decide.** La zona de
+Rendimiento dice «pausar» apenas el costo pasa el techo (100%): ahí hay una persona mirando, con el
+desgaste y el aprendizaje al lado, y equivocarse cuesta una lectura. La regla corre sola todas las
+mañanas y deja un renglón que propone escribir en Meta ⇒ corta en **1,5× el techo**, que es la banda
+donde caía `GIRLHOOD FRIO - INTERESES 1` el 25-ago (185%, ~$10.000/día). Un hallazgo por cada celda
+que pasó el techo un día sería ruido diario, y **una regla que grita todos los días se deja de mirar,
+y ahí se pierde también la que tenía razón**.
+
+Y **no pide ningún dial**: `gasto_minimo` se deriva y `cpa_maximo` sale de la ficha ⇒ se prende el
+día uno en toda marca que tenga su ficha cargada.
+
+### 🔴 La escalada cortaba por ROAS, que es la vara equivocada
+
+`ganador-escalar` pedía `roas_objetivo` a secas. El ROAS que reporta Meta **se mueve ±12% con el mix
+de medios de pago** y el techo por compra ±0,7% ⇒ subir plata contra el ROAS es subirla contra un
+número que cambia cuando cambia cómo paga la gente. Ahora el preset declara `requiereUno:
+['cpa_maximo', 'roas_objetivo']` —**una vara u otra, ⛔ nunca las dos**— y `hayRacha()` corta por
+costo si la marca tiene ficha.
+
+Con la vara del costo se piden **dos cosas**, porque un escalón es la única acción del módulo que
+manda más plata sin que nadie mire:
+1. la **racha** de días confirmados comprando debajo del techo, y
+2. que el costo de la ventana entera esté debajo del **75% del techo** (`CON_AIRE`, el mismo número
+   que usa la zona, importado y ⛔ no copiado). Subir algo que compra al 98% del techo es comprarse
+   el problema: el escalón casi siempre encarece antes de asentarse.
+
+🔴 **Los tres estados de un día no son dos.** `OK` confirma y suma; `ALTO` corta; **`MIDIENDO` —gastó
+menos que un cliente y todavía no compró— ni suma ni corta**. Si sumara, una celda que gotea $500 por
+día y no vende nunca acumularía siete días de «racha» y terminaría con una propuesta de SUBIRLE
+plata. Es el defecto que este archivo tendría escrito de otra forma si no se hubiera probado.
+
+🔑 **Y el guardarraíl de los escalones hereda el cambio por compartir `hayRacha()`**, que es
+exactamente para lo que esa función existe: si `decidirEscalon()` cortara por ROAS mientras el Panel
+propone por costo, la marca con ficha vería la propuesta de subir y el motor la saltearía pidiendo un
+número que nadie eligió — el Panel ofreciendo y el motor frenando por una condición que no se ve.
+
+### Verificado
+
+- **10 mutantes, 10 muertos** sobre la lógica nueva (la tolerancia en 1×, el corte de 0 compras, el
+  piso de gasto, el `MIDIENDO` que suma, el `MIDIENDO` que corta, el aire, el techo en cero, la vara
+  alternativa que pide las dos).
+- 🎯 **Contra la pauta REAL, con el calibrador** (⛔ no con un fixture): el 26-ago, sobre 7 días,
+  `costo-alto` da **9 saltos sobre 3 objetos** en BDI y **0 en Zattia**, y el primero de la lista es
+  `GIRLHOOD FRIO - INTERESES 1 - 7/8` a **$12.576 = 189% del techo** sobre 5 días — **el mismo número
+  que se midió a mano el 25-ago por otro camino** ($50.301/4 = $12.575).
+- Stunned, que no tiene ficha, queda apagada diciendo *«Faltan definir «CPA máximo», que sale de la
+  ficha de rentabilidad de la marca, y «Gasto mínimo para juzgar»»*.
+
+⚠️ **Zattia corta contra un techo que hoy no aplica**: su ficha está cargada a precio de LISTA
+($32.416) y la tienda está en liquidación. La regla hereda la ficha —que es como tiene que ser— así
+que **arreglar la ficha arregla la regla**, y hasta entonces `costo-alto` en Zattia va a gritar de
+menos, ⛔ no de más.
+
+▶️ **Lo que sigue faltando del motor**, y por qué no entró en esta tanda:
+- **las tres puertas del test** (`$10.000 en un día · 0 muere · 1 sigue · 2+ aprobado`): necesita
+  poder **marcar una celda como test**, que hoy no existe en ninguna tabla. ⚠️ Y la lista de cortes
+  de más abajo tiene los números viejos (2 días, 0-1/2-3/4+): los buenos son los del 23-ago.
+- **el CPM del núcleo +15%**: es un tripwire **de la línea**, y todos los detectores son por objeto.
+  Meterlo con esta forma sería un hallazgo por celda diciendo lo que la zona ya muestra al lado de
+  cada una.
+- **pedidos de Tienda Nube contra la meta de Norte**: cruza fuera de la foto, y las reglas reciben
+  filas de `meta_ads_snapshot_dia` y nada más. Es lo que las hace correr sin token y sin cupo.
+
 ## 🆕🏁 26-ago-2026: LA ZONA DE RENDIMIENTO, y el menú de once entradas a cuatro
 
 Pedido de Bruno, textual: *«tengo cambios estructurales tanto en función como en disposición, pq esa
@@ -578,6 +678,9 @@ existe en Graph.
    el motor no es código, es mover el dial»): prender los seis presets que existen, sí; cargar los
    seis cortes que se usan a mano, no — cuatro de ellos **no tienen preset** (CPA contra el techo,
    las tres puertas del test, el CPM del núcleo, y pedidos de TN contra Norte).
+   ✅ **Cerrado ese mismo día, en la 2ª tanda (arriba)**: `cpa_maximo` ahora sale de la ficha de
+   rentabilidad y lo consumen dos presets. De los cuatro cortes sin preset quedan **dos**, y los dos
+   por un motivo de FORMA que está escrito arriba, ⛔ no por falta de tiempo.
 2. **`sumarDias()` no sumaba el embudo.** `carritos`/`checkouts`/`lpv` existen en la tabla desde el
    23-ago y la función que suma días las tiraba, así que cualquier ventana perdía el embudo en
    silencio. Se sumaron **con contador propio**: si ninguna fila de la ventana lo medía vuelve
