@@ -111,7 +111,13 @@ npx vitest run tests/recepciones-webhook.test.ts --reporter=dot   # firma, venta
 npx vitest run tests/oc-webhook-handler.test.ts --reporter=dot    # el handler entero: bytes → base
 npx vitest run tests/recepciones.test.ts --reporter=dot           # lo que deriva la pantalla
 node scripts/apply-recepciones.mjs                                # ejerce los candados de la base
+node scripts/caminar-oc-webhook.mjs                               # el handler contra la base REAL
 ```
+
+La última no es un test: **invoca el handler tal cual —firma, stream, cruce con el espejo— contra
+la base de BDI**, con un secreto de prueba propio, y el oráculo es la base leída por otro camino.
+Siembra la OC `bdi:999999901`, que no puede chocar con una real, y la borra al final verificando
+que los tres contadores vuelvan a donde estaban. Caminada el 26-ago-2026: **34 de 34**.
 
 **El oráculo de la firma en los tests es el emisor, no nosotros**: se firma con `node:crypto`
 siguiendo el estándar y se verifica con el núcleo. Si las dos puntas usaran la misma función, el
@@ -120,7 +126,10 @@ test no probaría nada.
 ## Pendiente
 
 - ▶️ **Un POST real firmado contra producción** — es lo único que ejerce que `@vercel/node` reponga
-  el cuerpo en el runtime de verdad (los tests imitan ese parche; no lo prueban).
+  el cuerpo en el runtime de verdad (los tests imitan ese parche; no lo prueban). ⚠️ **No se puede
+  hacer desde acá**: el secreto es el del emisor. Lo que sí quedó ejercido es todo lo demás —ver
+  `caminar-oc-webhook.mjs`— y, en producción, que el cuerpo crudo llega (3 MB → 400 por el techo).
+  El primer evento firmado del emisor es el que cierra esto.
 - ▶️ **La primera OC confirmada de verdad**, que es lo único que ejerce el contrato del emisor:
   hasta ahí, la forma del `data` sale de la documentación, no de un mensaje que llegó.
 - ▶️ **Reprocesar un evento en `error`**: hoy se ve en la pantalla y se arregla volviendo a
