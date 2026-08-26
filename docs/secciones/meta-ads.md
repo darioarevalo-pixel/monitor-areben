@@ -942,8 +942,14 @@ algo que no pasó— y se ve en `ultima_corrida` de la regla.
   borra el corte por hueco, el que pone `fecha` en vez de `desde` en el `ts`, el que le mete la fecha
   al `id` —que prendería el badge de nuevo cada mañana por el mismo problema— y el que usa
   `Date.parse(iso)`, medianoche UTC, que corre el día uno en Argentina.
+- 🏁 **El deploy quedó verificado ejerciendo prod, ⛔ no leyendo un `success` de GitHub**: el endpoint
+  de producción ya devuelve `desde` en los 4 hallazgos. Es el oráculo que importa en este repo,
+  donde un push a main puede no llegar a Vercel **callado**.
 - ⚠️ **La pantalla sigue sin caminarse**: el login pide contraseña. Falta que Bruno abra el monitor y
   vea el badge — que es, otra vez, la única mano que queda.
+- ⚠️ **El CI de main sigue en ROJO por `recepciones`** (`e454c26`, la otra sesión), ⛔ no por esto: las
+  cuatro del CI se corrieron a mano acá y las cuatro pasan. Y al pushear, Actions estaba con la cola
+  trabada —dos corridas encoladas hacía 20 minutos—, así que la corrida de este commit ni arrancó.
 
 ## Pendiente
 
