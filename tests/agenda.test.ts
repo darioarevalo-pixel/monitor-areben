@@ -17,6 +17,9 @@ import {
   rotuloBeneficio,
   rotuloRegla,
   vaEl,
+  filtrarItems,
+  opcionesDeQuien,
+  porResponsable,
   MAX_VENTANA_DIAS,
   DIAS_ARRASTRE,
 } from '@/lib/agenda'
@@ -689,5 +692,116 @@ describe('los moldes no corren: existen para clonarse', () => {
 
   it('y un aviso marcado como molde tampoco avisa', () => {
     expect(avisosDe([item({ ...molde, clase: 'aviso' })], '2026-08-11')).toEqual([])
+  })
+})
+
+// ── Administrar la lista: buscar y filtrar ───────────────────────────────────────
+
+describe('opcionesDeQuien — las opciones salen de los ÍTEMS, no del padrón', () => {
+  const items = [
+    item({ id: 'a', destino: { tipo: 'personas', personas: ['sofi'] } }),
+    item({ id: 'b', destino: { tipo: 'personas', personas: ['sofi', 'cande'] } }),
+    item({ id: 'c', destino: { tipo: 'roles', roles: ['local'] } }),
+    item({ id: 'd', destino: { tipo: 'todos' } }),
+  ]
+
+  it('🔴 no pierde los roles ni el «todos»: son responsables igual que una persona', () => {
+    const claves = opcionesDeQuien(items).map((o) => o.clave)
+    expect(claves).toContain('r:local')
+    expect(claves).toContain('todos')
+    expect(claves).toContain('p:sofi')
+    expect(claves).toContain('p:cande')
+  })
+
+  it('cuenta cada ítem en cada responsable que tiene', () => {
+    const por = new Map(opcionesDeQuien(items).map((o) => [o.clave, o.n]))
+    expect(por.get('p:sofi')).toBe(2)
+    expect(por.get('p:cande')).toBe(1)
+  })
+
+  it('primero el que más tiene', () => {
+    expect(opcionesDeQuien(items)[0].clave).toBe('p:sofi')
+  })
+
+  it('sin ítems no inventa opciones', () => {
+    expect(opcionesDeQuien([])).toEqual([])
+  })
+})
+
+describe('filtrarItems', () => {
+  const sofi = item({ id: 'a', titulo: 'Subir la diaria', destino: { tipo: 'personas', personas: ['sofi'] } })
+  const compartido = item({ id: 'b', titulo: 'Reunión de comunidad', destino: { tipo: 'personas', personas: ['sofi', 'cande'] } })
+  const avisoLocal = item({ id: 'c', clase: 'aviso', titulo: 'Cambió el horario', destino: { tipo: 'roles', roles: ['local'] } })
+  const apagado = item({ id: 'd', titulo: 'Vieja rutina', activo: false })
+  const molde = item({ id: 'e', titulo: 'IMP2 · Poner el precio', plantilla: 'ingreso', offsetDias: 2 })
+  const todos = [sofi, compartido, avisoLocal, apagado, molde]
+
+  const ids = (f: Parameters<typeof filtrarItems>[1]) => filtrarItems(todos, f).map((i) => i.id)
+
+  it('sin filtros no recorta nada', () => {
+    expect(filtrarItems(todos)).toHaveLength(5)
+    expect(ids({ q: '', quien: 'todos', clase: 'todos', estado: 'todos' })).toHaveLength(5)
+  })
+
+  it('🔴 lo compartido sale por LAS DOS personas', () => {
+    expect(ids({ quien: 'p:sofi' })).toEqual(['a', 'b'])
+    expect(ids({ quien: 'p:cande' })).toEqual(['b'])
+  })
+
+  it('🔴 una clave que no existe devuelve CERO, ⛔ no todo', () => {
+    expect(ids({ quien: 'p:nadie' })).toEqual([])
+  })
+
+  it('🔑 un molde no cuenta como pendiente: no corre ningún día', () => {
+    expect(ids({ clase: 'pendiente' })).toEqual(['a', 'b', 'd'])
+    expect(ids({ clase: 'molde' })).toEqual(['e'])
+    expect(ids({ clase: 'aviso' })).toEqual(['c'])
+  })
+
+  it('el estado separa lo prendido de lo apagado', () => {
+    expect(ids({ estado: 'apagados' })).toEqual(['d'])
+    expect(ids({ estado: 'activos' })).not.toContain('d')
+  })
+
+  it('el buscador no pide tildes ni mayúsculas, y las palabras van en cualquier orden', () => {
+    expect(ids({ q: 'reunion' })).toEqual(['b'])
+    expect(ids({ q: 'COMUNIDAD reunión' })).toEqual(['b'])
+  })
+
+  it('también busca en el cuerpo', () => {
+    const conCuerpo = [item({ id: 'x', titulo: 'Algo', cuerpo: 'hay que mirar el depósito' })]
+    expect(filtrarItems(conCuerpo, { q: 'deposito' })).toHaveLength(1)
+  })
+
+  it('los filtros se combinan, no se pisan', () => {
+    expect(ids({ quien: 'p:sofi', clase: 'pendiente', q: 'diaria' })).toEqual(['a'])
+    expect(ids({ quien: 'p:sofi', clase: 'aviso' })).toEqual([])
+  })
+})
+
+describe('porResponsable — quién debe cuántas', () => {
+  const filas = [
+    { fecha: '2026-08-11', item: item({ id: 'a', destino: { tipo: 'personas', personas: ['sofi'] } }), hecho: null },
+    { fecha: '2026-08-12', item: item({ id: 'a', destino: { tipo: 'personas', personas: ['sofi'] } }), hecho: hecho() },
+    { fecha: '2026-08-11', item: item({ id: 'b', destino: { tipo: 'personas', personas: ['sofi', 'cande'] } }), hecho: null },
+  ]
+
+  it('cuenta lo que falta y el total por responsable', () => {
+    const por = new Map(porResponsable(filas).map((r) => [r.clave, r]))
+    expect(por.get('p:sofi')).toMatchObject({ sin: 2, total: 3 })
+    expect(por.get('p:cande')).toMatchObject({ sin: 1, total: 1 })
+  })
+
+  it('⚠️ una fila con dos responsables suma en los DOS: el resumen puede dar más que el total', () => {
+    const suma = porResponsable(filas).reduce((a, r) => a + r.total, 0)
+    expect(suma).toBeGreaterThan(filas.length)
+  })
+
+  it('primero el que más debe', () => {
+    expect(porResponsable(filas)[0].clave).toBe('p:sofi')
+  })
+
+  it('sin filas no inventa responsables', () => {
+    expect(porResponsable([])).toEqual([])
   })
 })

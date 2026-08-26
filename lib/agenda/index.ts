@@ -12,6 +12,8 @@
 
 import { diasDelMes, diasEntre, FECHAS_COMERCIALES, hoyIso, iso, resolverComercial, sumarDias } from '@/lib/calendario'
 import type { Marca } from '@/lib/nav.datos'
+import { coincide } from '@/lib/texto'
+import { clavesDestino, rotuloDeClave } from '@/lib/novedades/tipos'
 import { DIAS_ARRASTRE, DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Puerta, type Regla } from './tipos'
 import {
   CLAVES_PUERTA as CLAVES_PUERTA_JS,
@@ -495,4 +497,110 @@ export function feriadoDe(fecha: FechaIso): string | null {
     if (resolverComercial(f.clave, anio)?.fecha === fecha) return f.titulo
   }
   return null
+}
+
+// ── Administrar la lista: buscar y filtrar ───────────────────────────────────────
+//
+// La pestaña «Cargar» listaba los ítems de corrido y sin un solo filtro. Con 32 pendientes vivos y
+// los moldes del ingreso encima, "¿qué le toca a Sofi?" se contestaba leyendo la lista entera —y
+// una lista que hay que leer entera no se revisa—. Pedido de Bruno, 26-ago-2026.
+//
+// 🔑 Va en el núcleo y no adentro de la pantalla para que se pueda fijar con vitest: son decisiones
+// sobre los datos (qué cuenta como molde, con qué claves se filtra), no sobre cómo se dibujan.
+
+/** Qué clase de ítem es, para el chip de «qué es». */
+export type FiltroClase = 'todos' | 'pendiente' | 'aviso' | 'molde'
+/** Prendido, apagado, o los dos. */
+export type FiltroEstado = 'todos' | 'activos' | 'apagados'
+
+export type FiltroItems = {
+  /** Texto libre: cada palabra tiene que aparecer, sin tildes ni mayúsculas (`lib/texto`). */
+  q?: string
+  /** Una clave de `clavesDestino`, o `'todos'` para no filtrar. ⚠️ `'todos'` acá es "no filtres". */
+  quien?: string
+  clase?: FiltroClase
+  estado?: FiltroEstado
+}
+
+/**
+ * 🔑 **Un molde NO cuenta como pendiente**, aunque su `clase` lo sea.
+ *
+ * Es la lectura que sirve: un molde no corre ningún día (lo filtra `vaEl`), así que quien filtra
+ * «pendientes» está buscando lo que efectivamente le toca a alguien alguna vez. Mezclarlos deja los
+ * moldes del ingreso arriba de la lista de rutinas todos los días.
+ */
+function claseDe(i: ItemAgenda): Exclude<FiltroClase, 'todos'> {
+  if (esPlantilla(i)) return 'molde'
+  return i.clase === 'aviso' ? 'aviso' : 'pendiente'
+}
+
+/**
+ * Las opciones del filtro «de quién», sacadas de **los ítems cargados** y no del padrón.
+ *
+ * 🔑 **Y eso es deliberado.** La lista del equipo vive en el KV de `bdi-catalogo` y es admin-only
+ * (`traerConfigAdmin`), por eso `ModalItem` la pide recién cuando alguien elige «a una persona»:
+ * colgar de esa llamada el `<Select>` de un filtro sería una ida a otro sistema para pintar una
+ * lista desplegable. Además, las opciones que salen de los ítems son **exactamente las que devuelven
+ * filas** — una opción que da cero es una promesa que la pantalla no puede cumplir.
+ *
+ * Ordenadas por cantidad y después alfabéticamente: la primera pregunta es «¿quién tiene más?».
+ */
+export function opcionesDeQuien(items: ItemAgenda[]): { clave: string; label: string; n: number }[] {
+  const cuenta = new Map<string, number>()
+  for (const i of items) {
+    for (const c of clavesDestino(i.destino)) cuenta.set(c, (cuenta.get(c) || 0) + 1)
+  }
+  return [...cuenta.entries()]
+    .map(([clave, n]) => ({ clave, label: rotuloDeClave(clave), n }))
+    .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'es'))
+}
+
+/**
+ * La lista de «Cargar», recortada.
+ *
+ * 🔴 **Una clave que no existe devuelve CERO filas, ⛔ no todas.** Caer a "mostrá todo" cuando el
+ * filtro no matchea es el modo de falla que hace que alguien crea que revisó lo de una persona
+ * mirando la lista completa.
+ */
+export function filtrarItems(items: ItemAgenda[], f: FiltroItems = {}): ItemAgenda[] {
+  const quien = f.quien && f.quien !== 'todos' ? f.quien : null
+  const clase = f.clase && f.clase !== 'todos' ? f.clase : null
+  const estado = f.estado && f.estado !== 'todos' ? f.estado : null
+
+  return items.filter((i) => {
+    if (clase && claseDe(i) !== clase) return false
+    if (estado && (estado === 'activos') !== !!i.activo) return false
+    if (quien && !clavesDestino(i.destino).includes(quien)) return false
+    if (f.q && !coincide(`${i.titulo} ${i.cuerpo || ''}`, f.q)) return false
+    return true
+  })
+}
+
+/**
+ * Cumplimiento agrupado por responsable: **quién debe cuántas**.
+ *
+ * Es lo que convierte la foto en algo que se puede conversar. Hasta acá el informe decía cuántas se
+ * tildaron y de qué rutina, y en el renglón que importa —el que no se hizo— no decía de quién era.
+ *
+ * ⚠️ **Una fila con dos responsables suma en los dos**, así que la suma de este resumen puede dar
+ * más que el total de arriba. Es correcto —las dos la deben— y la pantalla lo dice: repartir la
+ * mitad a cada una sería inventar una responsabilidad parcial que nadie acordó.
+ *
+ * Ordenado por lo que falta, que es lo que se está buscando.
+ */
+export function porResponsable(
+  filas: FilaCumplimiento[],
+): { clave: string; label: string; sin: number; total: number }[] {
+  const m = new Map<string, { sin: number; total: number }>()
+  for (const f of filas) {
+    for (const c of clavesDestino(f.item.destino)) {
+      const ya = m.get(c) || { sin: 0, total: 0 }
+      ya.total += 1
+      if (!f.hecho) ya.sin += 1
+      m.set(c, ya)
+    }
+  }
+  return [...m.entries()]
+    .map(([clave, v]) => ({ clave, label: rotuloDeClave(clave), ...v }))
+    .sort((a, b) => b.sin - a.sin || b.total - a.total || a.label.localeCompare(b.label, 'es'))
 }
