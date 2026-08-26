@@ -141,9 +141,57 @@ verificación contra la pauta real y por qué la regla es más exigente que la p
 | 3 días de gasto con **0 compras** → apagar | ✅ `freno-emergencia` (ventana 3 + `gasto_minimo`) |
 | CPA > techo × 1,5 en 5 días → apagar | 🆕✅ `costo-alto` — **el corte principal, ya corre** |
 | ≥95% del tope **y** CPA < 75% del techo → escalar +20% | ✅ existe (`ganador-escalar`, corta por COSTO si la marca tiene ficha) — ⛔ **sin prender**: pide `techo_diario_crudo`, que es plata |
-| celda de test (**$10.000 en UN día · 0 muere · 1 sigue · 2+ aprobado**) | 🔴 **no existe**, y antes hace falta poder **marcar una celda como test** — no hay dónde guardarlo |
+| celda de test — **ver «La regla del test» abajo**, corregida por Bruno el 26-ago | 🔴 **no existe**, y antes hace falta poder **marcar una celda como test** — no hay dónde guardarlo |
 | CPM del núcleo +15% contra la semana previa | 🔴 **no existe**, y con esta forma no debería: es un tripwire **de la línea** y todos los detectores son por objeto |
 | pedidos de Tienda Nube/día contra la meta de Norte | 🔴 **no existe**: cruza fuera de la foto, y correr sólo sobre la foto es lo que hace que las reglas anden **sin token y sin cupo** |
+
+### 🔑 La regla del test — LA VERSIÓN VIGENTE (26-ago-2026, la fijó Bruno)
+
+⛔ **Deroga a la de «$10.000 en UN día · 0 muere · 1 sigue · 2+ aprobado»**, que estuvo escrita en
+la memoria de las sesiones y en este archivo. Bruno: *«para mi son dos dias la puerta. 2/3 sigue
+4/5 aprobado / 6 escalar»*.
+
+**Plata: $10.000/día × 2 días = $20.000.** Se lee **el 2º día** — el 2º día es el que habla de la
+pauta. 🔴 **Manda el TOTAL, no el diario**: se puede bajar el diario estirando los días
+($5.000 × 4 días = los mismos $20.000, mismas puertas). ⛔ **Lo que no se puede es bajar el total**,
+porque las puertas son cuentas de compras. Medido con Poisson contra el techo de BDI ($7.641):
+
+| presupuesto | total | mata una pieza que está JUSTO en el techo |
+|---|---|---|
+| $2.000/día × 2 | $4.000 | **90%** — no es un test, es una lotería |
+| $5.000/día × 2 | $10.000 | 62% |
+| $7.500/día × 2 | $15.000 | 42% |
+| **$10.000/día × 2** | **$20.000** | **26%** ← el piso |
+
+**Las puertas, por compras acumuladas al 2º día: 0-1 muere · 2-3 sigue otra tanda · 4-5 aprobado ·
+6+ escalar.** Cómo se porta (Poisson, $20.000, techo $7.641):
+
+| lo que la pieza REALMENTE cuesta | muere | sigue | aprobado | escalar |
+|---|---|---|---|---|
+| $3.400 (44% del techo) | 2% | 14% | 30% | **54%** |
+| $5.000 (65%) | 9% | 34% | 35% | 21% |
+| **en el techo, $7.641** | **26%** | 47% | 22% | 5% |
+| 2× el techo | 62% | 33% | 4% | 0% |
+| 3× el techo | 78% | 21% | 1% | **0%** |
+
+🔑 **Un desastre de 3× el techo escala el 0% de las veces** — la regla vieja lo aprobaba el 39%.
+▶️ **Lo único abierto: mover el `1` de «muere» a «sigue».** Bajaría los falsos muertos del 26% al
+7%, y el costo es que una pieza de 2× el techo se lleve una 2ª tanda el 38% de las veces (otros
+$20.000, pero **no escala**). Propuesto, **⛔ no decidido**.
+
+🔴 **El 1er día de una celda creada ESE MISMO día es PARCIAL y no cuenta.** `TEST IP AZUL BROAD` se
+creó el 25-ago y gastó $3.612 de sus $10.000 (36%): su primer día completo fue el 26. Leerlo como
+«dos días, 0 compras ⇒ muere» es matarlo antes de que corra el test.
+
+🔑 **«6 compras» y «$2.000 por compra» NO son la misma puerta, y gana la de las compras.** A
+$20.000, 6 compras = $3.333 (44% del techo) y $2.000 = 10 compras (26%). Una pieza que de verdad
+cuesta $2.000 llega a 6+ el **93%** de las veces pero a 10+ sólo el **54%** ⇒ cortar por
+«$2.000 observado» se pierde la mitad de las piezas que hay que escalar. **El costo por compra del
+test no es una puerta: dice cuánto AIRE tiene la celda para escalar.** Con la elasticidad medida
+(0,54 ⇒ el costo sube con el gasto^0,46), una celda a $2.000 aguanta **18× su presupuesto** antes de
+tocar el techo — y el `TOPE_ESCALONES = 6` del código la frena en 3× ($3.308, 43% del techo).
+⚠️ Ese 18× es optimista: la elasticidad se midió sobre la cuenta entera, y **una celda sola satura
+su público más rápido**. ▶️ Vale revisar el tope para celdas que arrancan muy abajo.
 
 **Los once renglones que se prendieron**, calibrados contra la pauta real antes de tocar nada. La
 columna que importa es **7 días**, que es el ruido que iba a llegar por la mañana; los 90 son casi
