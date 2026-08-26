@@ -1026,7 +1026,10 @@ cometer, y el primer barrido lo dejó **vivo**.
 Se deciden en Ads Manager a mano: **la API no cambia creativos ni sube videos**, y apagar un conjunto
 sí se puede desde el monitor.
 
-1. ▶️ **Apagar los 3 conjuntos de `ZATTIA - TRAFICO - 21/-05` que entregan** — `TEST INTERESES 1
+1. 🏁 **HECHO — lo apagó Bruno el 26-ago-2026.** ⚠️ **La foto de hoy es de las 03:30, o sea de ANTES**:
+   lo confirma la de mañana, y `atribucion-tardia` va a proponer reactivarlos si alguno sigue
+   registrando compras — es dato, ⛔ no una orden. Lo que decía este renglón, para el registro:
+   ~~**Apagar los 3 conjuntos de `ZATTIA - TRAFICO - 21/-05` que entregan**~~ — `TEST INTERESES 1
    ZATTIA - 22/05` ($1.815/día), `(4) - 20/7` ($1.683), `(5) - 23/7` ($783). **Libera $4.281/día**,
    el 34% de lo que gasta Zattia.
    🔴 🔑 **El motivo NO es «los clicks no convierten», y esa lectura estaba mal**: lo corrigió Bruno
@@ -1079,8 +1082,11 @@ sí se puede desde el monitor.
 - ▶️ Publicar los 2 informes de BDI, que están en borrador.
 - ▶️ **El semáforo vivo** de rentabilidad (cruzar el techo con la foto): es lo que hace que la
   pantalla deje de ser calculadora y pase a ser alarma.
-- 🔴 **Stunned gastó $428.421 en 90 días sin una sola compra atribuida** y los tres píxeles están
-  vivos ⇒ no es «no hay píxel». **Hay que mirar si es el píxel o es la pauta.**
+- 🏁 **Stunned: lo apagó Bruno el 26-ago-2026.** ⚠️ Igual que Zattia, **la foto de hoy es anterior** y
+  lo confirma la de mañana. 🔑 **Y apagarlo ⛔ no contesta la pregunta, la archiva**: gastó $428.421
+  en 90 días sin una sola compra atribuida **con los tres píxeles vivos**, así que ⛔ no era «no hay
+  píxel». El día que se vuelva a prender, **eso sigue sin saberse** — si es la medición o es la
+  pauta— y es lo primero que hay que mirar.
   ⛔ **Corrige lo que decía este renglón** —«su freno de emergencia queda apagado solo»—: no quedaba
   apagado, quedaba **prendido y mudo**. Ver «El piso derivado de una sola compra», más arriba.
 - ⚠️ Al navegar entre subsecciones la URL pierde `?linea=` y `?cuenta=` (el eje sobrevive en el
