@@ -14,7 +14,7 @@
  * único lugar donde la conversión existe.
  */
 
-import { diaDeSemanaDe, diasDelMes, iso } from '@/lib/calendario'
+import { diaDeSemanaDe, diasDelMes, iso, sumarDias } from '@/lib/calendario'
 
 export const MESES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -69,4 +69,47 @@ export function celdasDelMes(anio: number, mes: number): (number | null)[] {
 export function mesCorrido(fecha: string, n: number): { anio: number; mes: number } {
   const d = new Date(Date.UTC(Number(fecha.slice(0, 4)), Number(fecha.slice(5, 7)) - 1 + n, 1))
   return { anio: d.getUTCFullYear(), mes: d.getUTCMonth() + 1 }
+}
+
+// ── La semana ────────────────────────────────────────────────────────────────────
+//
+// La grilla del mes contesta «¿cuándo cae la próxima del Nación?». La de la semana contesta la otra
+// mitad —«¿qué hay esta semana?»— con lugar para nombrar todo, sin el `+N` que recorta.
+//
+// 🔴 **Todo lo de acá se apoya en `columnaDe()` y ⛔ nunca en `getDay()` a secas.** Restar el día de
+// la semana "a mano" es exactamente el error que el encabezado de este archivo documenta: corre
+// todas las etiquetas un día sin que falle nada ni se rompa un test.
+
+/** El **lunes** de la semana que contiene a `fecha`. Un domingo pertenece a la semana que arrancó. */
+export function inicioDeSemana(fecha: string): string {
+  return sumarDias(fecha, -columnaDe(diaDeSemanaDe(fecha)))
+}
+
+/**
+ * La semana `n` corrimientos después (o antes) de la que contiene a `fecha`.
+ *
+ * Espeja a `mesCorrido()` en nombre y en forma para que **el mismo `offset` maneje las dos vistas**:
+ * la pantalla suma o resta uno y no tiene que saber si está mirando meses o semanas.
+ */
+export function semanaCorrida(fecha: string, n: number): { desde: string; hasta: string } {
+  const desde = sumarDias(inicioDeSemana(fecha), n * 7)
+  return { desde, hasta: sumarDias(desde, 6) }
+}
+
+/** Los siete días, de lunes a domingo. */
+export function diasDeSemana(desde: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => sumarDias(desde, i))
+}
+
+/**
+ * «31-ago al 6-sep» · «10 al 16 de agosto».
+ *
+ * Cuando los dos extremos caen en el mismo mes se nombra una sola vez: repetirlo es ruido en el
+ * único renglón que tiene que decir dónde está parado uno.
+ */
+export function rotuloSemana(desde: string, hasta: string): string {
+  const [, m1, d1] = desde.split('-').map(Number)
+  const [, m2, d2] = hasta.split('-').map(Number)
+  if (m1 === m2) return `${d1} al ${d2} de ${MESES[m1 - 1]}`
+  return `${d1}-${MESES[m1 - 1].slice(0, 3)} al ${d2}-${MESES[m2 - 1].slice(0, 3)}`
 }

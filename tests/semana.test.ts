@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { celdasDelMes, columnaDe, DIAS_CORTOS, DIAS_GRILLA, mesCorrido, rotuloFecha } from '@/lib/fechas/semana'
+import {
+  celdasDelMes, columnaDe, DIAS_CORTOS, DIAS_GRILLA, diasDeSemana, inicioDeSemana, mesCorrido,
+  rotuloFecha, rotuloSemana, semanaCorrida,
+} from '@/lib/fechas/semana'
 
 /**
  * Los nombres de los días y el armado de la grilla mensual.
@@ -75,5 +78,69 @@ describe('mesCorrido(): el borde del año es lo único que importa acá', () => 
 
   it('sin corrimiento devuelve el mes de la fecha', () => {
     expect(mesCorrido('2026-08-11', 0)).toEqual({ anio: 2026, mes: 8 })
+  })
+})
+
+// ── La semana ────────────────────────────────────────────────────────────────────
+
+describe('inicioDeSemana(): el lunes, y el domingo pertenece a la semana que arrancó', () => {
+  it('un martes vuelve a su lunes', () => {
+    // 11-ago-2026 es martes.
+    expect(inicioDeSemana('2026-08-11')).toBe('2026-08-10')
+  })
+
+  it('un lunes es su propio lunes', () => {
+    expect(inicioDeSemana('2026-08-10')).toBe('2026-08-10')
+  })
+
+  it('🔴 EL DOMINGO ES EL CASO QUE DELATA el getDay() a mano', () => {
+    // 16-ago-2026 es domingo. Con `getDay()` (0 = domingo) sin convertir, no se movería —o se iría
+    // al 17—: los dos serían el arranque de la semana SIGUIENTE. En Argentina el domingo cierra.
+    expect(inicioDeSemana('2026-08-16')).toBe('2026-08-10')
+    expect(inicioDeSemana('2026-08-16')).not.toBe('2026-08-16')
+    expect(inicioDeSemana('2026-08-16')).not.toBe('2026-08-17')
+  })
+
+  it('cruza el mes hacia atrás sin pensarlo', () => {
+    // 1-sep-2026 es martes: su lunes es el 31 de agosto.
+    expect(inicioDeSemana('2026-09-01')).toBe('2026-08-31')
+  })
+})
+
+describe('semanaCorrida(): siempre lunes→domingo, y el año no es un caso especial', () => {
+  it('el 0 es la semana en la que uno está', () => {
+    expect(semanaCorrida('2026-08-11', 0)).toEqual({ desde: '2026-08-10', hasta: '2026-08-16' })
+  })
+
+  it('⛔ NO son "los siete días desde hoy": arranca en lunes aunque se pida desde un jueves', () => {
+    // 13-ago-2026 es jueves.
+    expect(semanaCorrida('2026-08-13', 0).desde).toBe('2026-08-10')
+  })
+
+  it('adelante y atrás', () => {
+    expect(semanaCorrida('2026-08-11', 1)).toEqual({ desde: '2026-08-17', hasta: '2026-08-23' })
+    expect(semanaCorrida('2026-08-11', -1)).toEqual({ desde: '2026-08-03', hasta: '2026-08-09' })
+  })
+
+  it('cruza el año', () => {
+    // 30-dic-2026 es miércoles: su lunes es el 28, y la siguiente arranca el 4 de enero.
+    expect(semanaCorrida('2026-12-30', 1)).toEqual({ desde: '2027-01-04', hasta: '2027-01-10' })
+  })
+})
+
+describe('diasDeSemana() y rotuloSemana()', () => {
+  it('son siete, en orden, arrancando en el que se pide', () => {
+    const d = diasDeSemana('2026-08-10')
+    expect(d).toHaveLength(7)
+    expect(d[0]).toBe('2026-08-10')
+    expect(d[6]).toBe('2026-08-16')
+  })
+
+  it('el rótulo nombra el mes una sola vez cuando la semana no lo cruza', () => {
+    expect(rotuloSemana('2026-08-10', '2026-08-16')).toBe('10 al 16 de agosto')
+  })
+
+  it('y los dos cuando lo cruza', () => {
+    expect(rotuloSemana('2026-08-31', '2026-09-06')).toBe('31-ago al 6-sep')
   })
 })
