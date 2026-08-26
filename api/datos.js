@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -37,6 +37,8 @@ import norte from './_norte.js';
 import mktVentas from './_mkt-ventas.js';
 import ventasDiarias from './_ventas-diarias.js';
 import clavados from './_clavados.js';
+import recepciones from './_recepciones.js';
+import ocWebhook from './_oc-webhook.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -113,6 +115,18 @@ const RECURSOS = {
   // propio, como todo el resto (12 funciones de Hobby). Sí valida `store`: su tabla vive en la base
   // de CADA marca, porque lo que se decide con ella es qué compra cada una.
   'pedidos-clientes': pedidosClientes,
+  // "Lo que entró": las órdenes de compra que el sistema de Ingresos confirma como recibidas, con
+  // lo pedido contra lo contado. Entra por acá y no por un archivo de ruta propio, como todo el
+  // resto (12 funciones de Hobby). ⛔ Sólo LEE.
+  recepciones,
+  // 🔴 **Éste no pide sesión**: lo llama el sistema de Ingresos, que es otro servidor, y se
+  // autentica con la firma HMAC del estándar Standard Webhooks. Es el mismo par que
+  // `disenos-rondas`/`votacion`: dos recursos y no uno, para que el verbo abierto viva en su
+  // archivo y nadie le agregue al lado un verbo que se olvidó de pedir la sesión.
+  //
+  // ⚠️ La URL que tiene cargada el emisor es exactamente `/api/datos?recurso=oc-webhook`.
+  // Cambiarle el nombre al recurso apaga el envío sin que falle nada acá.
+  'oc-webhook': ocWebhook,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

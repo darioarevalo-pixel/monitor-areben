@@ -101,6 +101,10 @@ const PUERTAS = [
   // vive en la base de CADA marca, así que la `store` del request elige a qué base se pega — y acá
   // además el GET cruza contra `productos.unit_cost`, que es plata.
   { archivo: '_clavados', llave: 'productos', que: 'los clavados de la marca' },
+  // Nació con gate (26-ago-2026). Su tabla vive en UNA sola base para las dos marcas, así que el
+  // gate es lo único que separa las recepciones de una marca de las de la otra: sin él, `store` es
+  // un filtro que el que llama elige, no un candado.
+  { archivo: '_recepciones', llave: 'recepciones', que: 'las recepciones de la marca' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */

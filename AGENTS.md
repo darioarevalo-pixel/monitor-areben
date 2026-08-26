@@ -133,6 +133,11 @@ ya tienen ficha:
   ítem de la galería BORRA el archivo del Blob** — y `api/blob-upload.js` lo comparten Fundas,
   Diseños, las piezas de Meta y **el contenido que sube la creadora de un canje SIN SESIÓN**: esa
   rama va antes de `exigirUsuario`, así que un guard nuevo "arriba de todo" no tiene sesión detrás.
+- Lo que entró (las OC recibidas) → **leer `docs/secciones/recepciones.md`** antes de tocar
+  `components/recepciones/`, `lib/recepciones/`, `api/_oc-webhook.js`, `api/_recepciones.js` o
+  `sql/migrate-recepciones.sql`. ⛔ **`_oc-webhook.js` NO pide sesión** —lo llama otro servidor y se
+  defiende con la firma HMAC—, y ⛔ **el cuerpo se lee del STREAM, no de `req.body`**: la firma es
+  sobre los bytes y reparsear el JSON la rompe.
 - Clientes (CRM) y el panel de WhatsApp → **leer `docs/secciones/crm.md`** antes de tocar
   `components/crm/`, `components/panel/`, `lib/crm/` o la acción `panel` de `api/_crm.js`. ⛔ **La
   clave `crm:seg:bdi` no tiene backup**: 305 clientes y sus notas, reescritos enteros en cada

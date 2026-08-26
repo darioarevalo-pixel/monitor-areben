@@ -155,6 +155,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "recepciones",
+    "area": "compras",
+    "label": "Lo que entró",
+    "info": "Las órdenes de compra que el sistema de Ingresos confirma como recibidas: lo pedido contra lo contado, renglón por renglón, con las diferencias y el cumplimiento de cada proveedor. Llega sola por webhook cuando alguien confirma una OC del otro lado; acá no se carga nada a mano.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "proveedores",
     "area": "compras",
     "label": "Proveedores",
@@ -1018,6 +1028,7 @@ export const NAV_CATS: NavCat[] = [
       "pedidos-clientes",
       "fundas-modelo",
       "ingresos",
+      "recepciones",
       "proveedores",
       "disenos"
     ]
