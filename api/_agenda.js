@@ -30,7 +30,7 @@
 // sale de un permiso sino del **destino**, que se filtra acá y no en la pantalla: si filtrara sólo
 // la pantalla, un pendiente ajeno igual encendería el badge del menú.
 import { createClient } from '@supabase/supabase-js';
-import { exigirUsuario } from './_auth.js';
+import { equipoDelPadron, exigirUsuario } from './_auth.js';
 import { marcasConAcceso } from '../lib/permisos.core.js';
 import { aplicaEn, esFechaIso, motivoReglaInvalida } from '../lib/agenda/reglas.core.js';
 // El "¿a quién le llega?" ya estaba resuelto para las novedades y es exactamente la misma pregunta.
@@ -38,6 +38,9 @@ import { aplicaEn, esFechaIso, motivoReglaInvalida } from '../lib/agenda/reglas.
 // Novedades, que es código compartido, y la ruta rara cuesta menos que el conflicto.
 import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
 import { CLAVES_PUERTA, moldeCorreEn, moldeCorreEnMarca, puertaDeTipo, puertaValida, rotuloPuerta } from '../lib/agenda/puertas.core.js';
+// El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
+// filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
+import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -384,6 +387,22 @@ export default async function handler(req, res) {
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' });
   const supabase = createClient(cfg.url, cfg.key);
   const cargar = puedeCargar(perfil);
+  // ¿Está arriba del techo? El admin y Dirección ven y asignan todo; el resto, ni ve ni asigna nada
+  // dirigido a Dirección. Se calcula una sola vez, igual que `cargar`.
+  const veArriba = veLoDeArriba(perfil);
+  /**
+   * El padrón, sólo si hace falta y sólo una vez por request.
+   *
+   * ⚠️ **Sólo lo pide quien está DEBAJO del techo**, que es el único para el que la respuesta puede
+   * cambiar algo: para el admin y para Dirección el filtro no corre, así que ir a buscarlo sería una
+   * ida a `bdi-catalogo` por cada carga de agenda de Bruno para no usarla.
+   */
+  let equipoMemo = null;
+  const equipo = async () => {
+    if (veArriba) return [];
+    if (equipoMemo === null) equipoMemo = await equipoDelPadron(req);
+    return equipoMemo;
+  };
 
   try {
     if (req.method === 'GET') {
@@ -488,7 +507,17 @@ export default async function handler(req, res) {
       // igual a los dos: administrar lo de BDI parado en una cuenta clavada a Zattia no se puede
       // ni mirando, porque el header no cambia.
       const items = itemsTodos.filter((i) => esDeMisMarcas(i.marcas, mias));
-      const visibles = cargar ? items : items.filter((i) => i.paraMi);
+      // 🔴 **El techo.** Quien carga sin ser Dirección administra la agenda del equipo, ⛔ no la de
+      // arriba: la reunión de los socios y lo que se esté por decidir no le salen ni en «Cargar» ni
+      // en «Cumplimiento» ni en el Mes. Los tres cuelgan de esta misma lista, que es el punto de que
+      // el corte esté acá.
+      //
+      // ⚠️ Al que NO carga no le cambia nada: `paraMi` ya es más chico que esto —lo de Dirección no
+      // es suyo—, así que el filtro se aplica sólo en la rama de arriba y no se paga el padrón.
+      const delEquipo = cargar && !veArriba
+        ? await (async () => { const eq = await equipo(); return items.filter((i) => !esDeArriba(i.destino, eq)); })()
+        : items;
+      const visibles = cargar ? delEquipo : items.filter((i) => i.paraMi);
       const idsVisibles = new Set(visibles.map((i) => i.id));
 
       return res.status(200).json({
@@ -590,6 +619,38 @@ export default async function handler(req, res) {
     // ─── De acá para abajo, todo pide el sub ──────────────────────────────────────────────────
     if (!cargar) return res.status(403).json({ error: 'No tenés permiso para cargar en la agenda.' });
 
+    /**
+     * 🔴 **El techo, del lado que escribe.** Contesta el 403 si corresponde, o `null` para seguir.
+     *
+     * Hay que preguntarlo por DOS destinos y ninguno sobra:
+     *  - el que **llega** en el body, o asignar para arriba sería tipear un nombre;
+     *  - el que **ya tiene** la fila, porque `guardar-item` es un `upsert` por id y `borrar-item` un
+     *    delete por id: sin esto, alguien de abajo pisa o borra la reunión de los socios mandando su
+     *    id, que no ve pero puede haber visto antes de que se cerrara el techo.
+     *
+     * ⚠️ **Y si el padrón no se pudo leer, CIERRA.** En el listado la caída deja ver de más, que es
+     * un problema chico y transitorio; acá dejaría *escribir* de más, que no se deshace. Es el mismo
+     * criterio del 503 de la puerta del ingreso: lo que falta cierra, no abre.
+     */
+    async function techoBloquea(...destinos) {
+      if (veArriba) return null;
+      const necesitaPadron = destinos.some((d) => d && normalizarDestino(d).tipo === 'personas');
+      const eq = await equipo();
+      if (necesitaPadron && !eq.length) {
+        return res.status(503).json({ error: 'No se pudo leer el padrón para verificar a quién se le asigna. Probá de nuevo.' });
+      }
+      if (destinos.some((d) => d && esDeArriba(d, eq))) {
+        return res.status(403).json({ error: 'Eso es de Dirección: no lo podés ver ni asignar desde tu perfil.' });
+      }
+      return null;
+    }
+
+    /** El destino que la fila YA tiene, o `null` si no existe todavía (un alta). */
+    async function destinoGuardado(id) {
+      const { data } = await supabase.from('agenda_items').select('destino').eq('id', id).maybeSingle();
+      return data ? data.destino : null;
+    }
+
     if (action === 'borrar-promo') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'falta id' });
@@ -667,6 +728,8 @@ export default async function handler(req, res) {
     if (action === 'borrar-item') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'falta id' });
+      const noPuede = await techoBloquea(await destinoGuardado(id));
+      if (noPuede) return noPuede;
       // Los tildes se van con él (`on delete cascade`): un acuse sin la rutina que lo explica no le
       // sirve a nadie. Para dejar de verlo sin perder el historial está el interruptor de activo.
       const { error } = await supabase.from('agenda_items').delete().eq('id', id);
@@ -713,6 +776,10 @@ export default async function handler(req, res) {
       // Las puertas en las que corre el molde. Se leen como `marcas`: **vacío es todas**.
       const puertas = listaDe(it.puertas, CLAVES_PUERTA);
       if (puertas === null) return res.status(400).json({ error: `Puerta inválida (usá ${CLAVES_PUERTA.join(', ')}).` });
+
+      // El techo, sobre los dos destinos: el que se quiere poner y el que la fila ya tiene.
+      const noPuede = await techoBloquea(it.destino, await destinoGuardado(id));
+      if (noPuede) return noPuede;
 
       const fila = {
         id,

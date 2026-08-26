@@ -31,21 +31,33 @@
  *
  * # De dónde sale la lista del equipo
  *
- * Del padrón, que vive en el KV de `bdi-catalogo` y es **admin-only** (`traerConfigAdmin`). ⛔ No se
- * inventó un endpoint: en Hobby quedan cinco funciones y ésta es la misma puerta que ya usa la
- * pantalla de Usuarios. Se pide **recién cuando alguien elige "a una persona"**, no al abrir el
- * modal, y en las sesiones de Google no abre ningún prompt (el token alcanza). Hoy no recorta a
- * nadie: cargar rutinas es de admin (`agenda.cargar`, 0 de 16 lo tienen tildado a mano).
+ * Del padrón, que vive en el KV de `bdi-catalogo`. 🆕 **Ya no por `traerConfigAdmin`** (26-ago-2026):
+ * ése es el POST admin-only, y con él una Administración con `agenda.cargar` **no podía asignarle a
+ * nadie por nombre** — que es justamente para lo que se le da el permiso. Ahora entra por
+ * `traerEquipo` (`lib/usuarios/equipo.ts`), que usa el **GET** del mismo endpoint: contesta a
+ * cualquiera que tenga sesión en el Monitor y no pide contraseña de administrador. ⛔ No se inventó
+ * un endpoint: en Hobby quedan cinco funciones. Se pide **recién cuando alguien elige "a una
+ * persona"**, no al abrir el modal.
+ *
+ * # 🔴 El techo: Dirección no aparece si vos no sos Dirección
+ *
+ * Ni el rol ni la gente que lo tiene. La regla vive en `lib/agenda/jerarquia.core.js` y **el candado
+ * de verdad es el servidor** (`api/_agenda.js` contesta 403): esto es para que nadie llegue hasta el
+ * error, igual que el control del tope en Canjes. Por eso el filtro se aplica sobre la lista ya
+ * traída y no se le pide al padrón que recorte: quien recorta es quien sabe quién sos.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
-import { CLASES, DIAS_ARRASTRE, hoyIso, PUERTAS, type ClaseItem, type Destino, type ItemAgenda, type Puerta } from '@/lib/agenda'
+import {
+  CLASES, DIAS_ARRASTRE, FUNCION_TECHO, hoyIso, PUERTAS, veLoDeArriba,
+  type ClaseItem, type Destino, type ItemAgenda, type Puerta,
+} from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
 import { FUNCIONES } from '@/lib/permisos'
-import { credencialConPrompt, traerConfigAdmin } from '@/lib/sesion'
-import type { UsuarioConfig } from '@/lib/usuarios/tipos'
+import { traerEquipo } from '@/lib/usuarios/equipo'
+import { useSesion } from '@/components/SesionProvider'
 import { useSistema } from '@/store/useSistema'
 import type { Marca } from '@/lib/nav.datos'
 import { EditorRegla, Tilde, toggleEnLista } from './EditorRegla'
@@ -112,6 +124,10 @@ export function ModalItem({
   onCerrar: () => void
   onGuardar: (i: ItemAgenda) => Promise<void>
 }) {
+  const { perfil } = useSesion()
+  // ¿Estoy arriba del techo? Admin y Dirección eligen todo; el resto no ve a Dirección ni por rol ni
+  // por nombre. El candado es el servidor: esto evita llegar hasta el 403.
+  const veArriba = veLoDeArriba(perfil)
   const [it, setIt] = useState<ItemAgenda>(inicial)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -139,33 +155,38 @@ export function ModalItem({
   }
 
   /**
-   * El padrón, para poder elegir gente. Se pide **una sola vez y sólo si hace falta**, y el efecto
+   * El equipo, para poder elegir gente. Se pide **una sola vez y sólo si hace falta**, y el efecto
    * cubre los dos caminos: recién elegido "a una persona", o abierto para editar uno que ya estaba
    * dirigido.
    *
-   * ⚠️ Falla de la única forma que puede fallar: si quien carga no es admin, vuelve 403. No se cae
-   * a un campo de texto libre a propósito — un nombre mal tipeado es un pendiente que no le sale a
-   * nadie y que nadie reclama, que es el peor final posible para esta pantalla.
+   * 🔴 **El techo se aplica acá y no más abajo**: la gente de Dirección se saca de la lista apenas
+   * llega, así que ninguna parte de esta pantalla la puede dibujar por accidente.
+   *
+   * ⚠️ Si no se pudo leer, se avisa y ⛔ **no se cae a un campo de texto libre** — un nombre mal
+   * tipeado es un pendiente que no le sale a nadie y que nadie reclama, que es el peor final posible
+   * para esta pantalla.
    */
   useEffect(() => {
     if (it.destino.tipo !== 'personas' || pedida.current) return
     pedida.current = true
     let vivo = true
     ;(async () => {
-      const r = await traerConfigAdmin<UsuarioConfig>(await credencialConPrompt())
+      const lista = await traerEquipo()
       if (!vivo) return
-      if (r.ok) {
-        setGente(
-          r.users
-            .map((u) => ({ name: u.name, apodo: u.apodo || u.name }))
-            .sort((a, b) => a.apodo.localeCompare(b.apodo, 'es')),
-        )
-      } else setErrorGente(r.error)
+      if (!lista) {
+        setErrorGente('No se pudo leer la lista del equipo.')
+        return
+      }
+      setGente(
+        lista
+          .filter((u) => veArriba || !u.funcion.includes(FUNCION_TECHO))
+          .map((u) => ({ name: u.name, apodo: u.apodo })),
+      )
     })()
     return () => {
       vivo = false
     }
-  }, [it.destino.tipo])
+  }, [it.destino.tipo, veArriba])
 
   const togglePersona = (name: string) => {
     const actuales = it.destino.tipo === 'personas' ? it.destino.personas : []
@@ -325,7 +346,11 @@ export function ModalItem({
           {d.tipo === 'roles' && (
             <Field label="¿Qué roles?" hint="Ojo: a quien no tenga ningún rol asignado no le va a llegar.">
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-                {FUNCIONES.map((f) => (
+                {/* Dirección sólo la ofrece quien está arriba del techo. No se dibuja deshabilitada:
+                    una opción que se ve y no se puede usar invita a preguntar por qué, y la
+                    respuesta —«ésas son las rutinas de los socios»— es justamente lo que no se
+                    cuenta. */}
+                {FUNCIONES.filter((f) => veArriba || f.key !== FUNCION_TECHO).map((f) => (
                   <Tilde
                     key={f.key}
                     puesto={d.roles.includes(f.key)}
@@ -344,8 +369,8 @@ export function ModalItem({
             >
               {errorGente ? (
                 <Notice tone="warning">
-                  No se pudo leer la lista del equipo: {errorGente} Elegir por nombre necesita ser
-                  administrador; mientras tanto, se puede acotar por rol.
+                  {errorGente} Sin ella no se puede elegir por nombre —escribirlo a mano dejaría un
+                  pendiente que no le sale a nadie—; mientras tanto, se puede acotar por rol.
                 </Notice>
               ) : !gente ? (
                 <span style={{ fontSize: font.sm, color: color.mut2 }}>Buscando al equipo…</span>

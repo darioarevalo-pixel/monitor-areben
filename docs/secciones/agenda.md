@@ -16,6 +16,10 @@ piezas) · `lib/agenda/` · handler `api/_agenda.js` por `datos.js?recurso=agend
 `agenda_promos`, `agenda_items` y `agenda_hechos`, **siempre en la base de BDI** · test
 `tests/agenda.test.ts`.
 
+🆕 El techo de Dirección vive en **`lib/agenda/jerarquia.core.js`** (`esDeArriba`, `veLoDeArriba`) y
+el padrón que necesita entra por `equipoDelPadron` (`api/_auth.js`) del lado del servidor y por
+`traerEquipo` (`lib/usuarios/equipo.ts`) del lado de la pantalla. Test: `tests/agenda-jerarquia.test.ts`.
+
 🔑 **El motor está en `lib/agenda/reglas.core.js` y es `.js` a propósito** (el handler corre en Node
 sin pasar por el compilador de Next y no puede importar TypeScript); `lib/agenda/index.ts` es el
 re-export tipado. Los dos archivos lo explican en su encabezado y no se repite acá.
@@ -142,6 +146,57 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   - ⛔ **Sigue sin semáforo ni umbral**: el criterio de la pantalla no cambió.
   - 📌 **`rotuloDestino` ya no vive acá**: se mudó a `lib/novedades/tipos.ts` con
     `rotuloDestinoCorto` y `clavesDestino`, porque es del **destino** y ahora lo miran tres pantallas.
+- 🆕 🔴 🔑 **DIRECCIÓN ES EL TECHO: NI SE VE NI SE ASIGNA PARA ARRIBA** (26-ago-2026, pedido de
+  Bruno: *«que puedan asignar para abajo, o no poder asignar para arriba ni ver para arriba»*).
+  `agenda.cargar` es **todo o nada**: quien lo tiene recibe la agenta entera (`visibles = cargar ?
+  … : …`). Mientras el único que lo tuvo fue el admin eso no molestó a nadie; el día que lo tiene
+  **Administración** —que es para lo que se escribió el filtro de «de quién»— empieza a ver las
+  rutinas de los socios: la semanal de gerencia, y lo que aparezca mañana.
+  - **La regla entera es una línea**: un ítem es *de arriba* si su destino apunta a `direccion`
+    (`lib/agenda/jerarquia.core.js`). ⛔ **No hay escalera entre los otros cuatro roles** y no se va
+    a escribir una hasta que aparezca el segundo caso — mismo criterio que el agrupador del ingreso.
+  - 🔑 **Se DERIVA del padrón, ⛔ no se guarda una bandera en el ítem.** Estampar `datos.nivel` al
+    crear sale gratis y no necesita el padrón, pero **empieza a mentir** en cuanto alguien cambia de
+    función: la rutina del que deja de ser gerente sigue escondida y la del que asciende sigue a la
+    vista. Es el argumento por el que `esPedidoUgc` se derivó en Canjes.
+  - 🔴 **Alcanza con UNO.** «Marketing y Dirección» es de arriba: si bastara con que hubiera alguien
+    de abajo, escribir dos destinatarios sería la forma de saltear el techo.
+  - ⛔ **`{tipo:'todos'}` y `{tipo:'seccion'}` NUNCA son de arriba.** Si «todos» contara, esconder lo
+    de Dirección escondería justo lo que más se comparte.
+  - ⛔ **No hay excepción por tarea.** Se evaluó un tilde «igual la ve todo el equipo» y no entró:
+    una rutina dirigida a Dirección que en realidad hace otro **está mal asignada**, y el arreglo es
+    asignársela a quien la hace. Lo que es para todos se carga como para todos.
+  - **El corte está en el SERVIDOR** (`api/_agenda.js`), y con eso quedan afuera **Cargar,
+    Cumplimiento y el Mes** de una vez, porque los tres cuelgan de la misma lista. Filtrando al
+    dibujar, el ítem viaja igual en el JSON y sigue contando para el badge.
+  - 🔴 **El guard de escritura mira DOS destinos**: el que llega en el body —o asignar para arriba
+    sería tipear un nombre— **y el que la fila ya tiene**, porque `guardar-item` es un `upsert` por
+    id y `borrar-item` un delete por id. Sin el segundo, alguien de abajo pisa la reunión de los
+    socios mandando su id.
+  - 🔴 **En la escritura, lo que falta CIERRA: 503.** Si el padrón no se pudo leer y se está
+    asignando por nombre, no se guarda. En el **listado** pasa lo contrario a propósito: se ve de
+    más por un rato, que es un problema chico y transitorio, en vez de dejar al equipo sin agenda.
+    (Y el destino por **rol** no necesita padrón, así que la mitad de la regla nunca se cae.)
+  - ⛔ **La siembra del ingreso NO pasa por el techo**: si un paso del lanzamiento es de Dirección,
+    el clon se siembra igual. Bloquearlo rompería el ingreso, que es lo que la puerta viene a hacer.
+  - 🔴 **Para que esto sirva, quien lo use no puede ser `admin`** — el admin saltea todo
+    (`puedeVer`, paso 1). Es un tilde en Config: `agenda.cargar` sí, `admin` no.
+- 🆕 🔑 **Y EL SELECTOR DE PERSONAS DEJÓ DE SER ADMIN-ONLY** (26-ago-2026). Era el blocker del pedido
+  de arriba: `ModalItem` leía el padrón con `traerConfigAdmin`, o sea el **POST `action:'config'`**,
+  que pide contraseña de administrador ⇒ una Administración con `agenda.cargar` **no podía asignarle
+  a nadie por nombre**, que es justo para lo que se le da el permiso.
+  - 🔑 **Son dos puertas del mismo endpoint y no son la misma**: el POST es admin-only; el **GET**
+    contesta a cualquiera que tenga sesión en el Monitor y devuelve la config **sin contraseñas**.
+    Ya existía y ya estaba cerrado (antes lo bajaba cualquiera con un `curl`). Ahora se usa ése, por
+    `traerEquipo` (`lib/usuarios/equipo.ts`). ⛔ No se inventó un endpoint: en Hobby quedan cinco.
+  - ⚠️ **El achique se hace en la frontera**: de todo lo que devuelve el GET salen sólo
+    `{name, apodo, funcion}`. Lo que no se devuelve no se puede dibujar por accidente.
+  - Del lado del servidor lo mismo, con `equipoDelPadron` (`api/_auth.js`): reenvía la credencial
+    que el request ya trae, achica a `{name, funcion}` y cachea **60 s** —el GET de la agenda lo
+    dispara también el poll de avisos, o sea cada tres minutos por persona—. **Sólo lo pide quien
+    está debajo del techo**: para el admin y para Dirección el filtro no corre.
+  - ⛔ **Sigue sin haber campo de texto libre** para el nombre: si el padrón no se puede leer, la
+    opción avisa y no se puede usar. Un nombre mal tipeado es un pendiente que no le sale a nadie.
 - 🔑 **La pestaña «Hoy» tiene una regla de oro: que sea corta.** *Un aviso que se ignora doce veces
   enseña a ignorar el número trece.* Por eso lo vencido y lo que todavía no arrancó viven en
   «Cargar», que es de administración. Antes de sumar un bloque a «Hoy», la pregunta es si se
@@ -319,6 +374,8 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   no siembra nada.
 - 🆕 ▶️ **Cargar las 4 reuniones semanales** (comunidad, pauta, diseño y la mensual del sector), que
   es para lo que se escribió el arrastre. La quincenal de diseño necesita la decisión de arriba.
+- 🆕 ▶️ **Tildarle `agenda.cargar` a Lorena en Config, y dejarla SIN `admin`.** Es la mano que activa
+  todo el techo: hasta que exista alguien así, la regla está escrita y no la ejerce nadie.
 - ⚠️ **Las que ya estén cargadas por rol NO se migran solas.** Hay que abrirlas y reasignarlas: el
   destino viejo sigue siendo válido y el motor no adivina cuál de las tres es la dueña.
 
@@ -360,6 +417,13 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   hoy**, y el día abierto tiene que cerrarse. En el celular, dos columnas.
   ⚠️ Nada de esto lo alcanza un test: el selector es estado de React y `useFiltroUrl` no lee la URL
   en vitest.
+- 🆕 🔴 **El techo tampoco se puede caminar con un admin ni con Bruno**, que son los dos que lo
+  saltean: hace falta un usuario del padrón con `agenda.cargar` tildado, función `administracion` y
+  **sin** `admin`. Con ése, ninguna rutina de Dirección puede aparecer en «Cargar», ni en
+  «Cumplimiento», ni en el Mes; el selector de destino no puede ofrecer «Dirección» ni a Bruno o
+  Darío por nombre; y **«a una persona» tiene que abrir sin pedir contraseña de administrador**, que
+  es lo que hasta el 26-ago-2026 no andaba. Después entrá con Bruno: todo eso tiene que seguir
+  visible y editable.
 - 🔴 **El destino por persona no se puede caminar con un admin**, que es el caso que se agregó para
   arreglar: entrá con un usuario `prueba-*` del padrón, mirá que la rutina dirigida a él **sale en
   «Hoy» y prende el badge**, y con otro que no sale ni prende. Y con el admin, que el tilde ajeno

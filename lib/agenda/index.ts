@@ -12,6 +12,7 @@
 
 import { diasDelMes, diasEntre, FECHAS_COMERCIALES, hoyIso, iso, resolverComercial, sumarDias } from '@/lib/calendario'
 import type { Marca } from '@/lib/nav.datos'
+import type { Funcion, Perfil } from '@/lib/permisos'
 import { coincide } from '@/lib/texto'
 import { clavesDestino, rotuloDeClave } from '@/lib/novedades/tipos'
 import { DIAS_ARRASTRE, DIAS_CUMPLIMIENTO, type Canal, type FechaIso, type Hecho, type ItemAgenda, type Promo, type Puerta, type Regla } from './tipos'
@@ -33,6 +34,11 @@ import {
   reglaValida as reglaValidaJs,
   TIPOS_REGLA as TIPOS_REGLA_JS,
 } from './reglas.core.js'
+import {
+  esDeArriba as esDeArribaJs,
+  FUNCION_TECHO as FUNCION_TECHO_JS,
+  veLoDeArriba as veLoDeArribaJs,
+} from './jerarquia.core.js'
 
 export const TIPOS_REGLA = TIPOS_REGLA_JS as { key: Regla['tipo']; label: string }[]
 export const CLAVES_TIPO_REGLA = CLAVES_TIPO_REGLA_JS as string[]
@@ -56,6 +62,16 @@ export const moldeCorreEn = moldeCorreEnJs as (puertasDelMolde: Puerta[] | undef
 // La marca del ingreso, que se lee igual: lista vacía = las dos. ⛔ No es `esDeMisMarcas`: acá el
 // ingreso tiene una sola marca, allá la persona puede tener las dos.
 export const moldeCorreEnMarca = moldeCorreEnMarcaJs as (marcasDelMolde: Marca[] | undefined, marca: Marca) => boolean
+
+// El techo: Dirección arriba, el resto abajo y plano. En JS por lo de siempre — el corte que vale
+// es el del servidor, y `api/_agenda.js` no puede importar TypeScript.
+export const FUNCION_TECHO = FUNCION_TECHO_JS as Funcion
+/** `equipo` es `[{name, funcion}]` tal como sale del padrón. Sin él, un destino por nombre da `false`. */
+export const esDeArriba = esDeArribaJs as (
+  destino: unknown,
+  equipo: { name: string; funcion: Funcion[] }[],
+) => boolean
+export const veLoDeArriba = veLoDeArribaJs as (perfil: Perfil | null | undefined) => boolean
 
 /** 0 = domingo, como `getDay()`. Ver la advertencia de `aplicaEn` antes de tocar el orden. */
 const DIAS_LARGOS = ['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados']

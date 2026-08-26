@@ -112,6 +112,69 @@ export async function exigirUsuario(req, res) {
 }
 
 /**
+ * **Quién es quién**: el equipo con su función, y nada más.
+ *
+ * # Para qué
+ *
+ * La Agenda necesita saber si un pendiente está dirigido a Dirección (`lib/agenda/jerarquia.core.js`)
+ * y el destino puede venir **por nombre**, así que hay que poder traducir nombre → función. Ese dato
+ * vive en el padrón, que está en el KV de `bdi-catalogo`.
+ *
+ * # 🔑 Por qué NO es admin-only, si el padrón lo es
+ *
+ * Hay dos puertas y no son la misma. El POST `{action:'config'}` —el que usa `traerConfigAdmin`—
+ * pide credencial de administrador y devuelve la config para editarla. El **GET** contesta a
+ * cualquiera que esté logueado en el Monitor, con la misma credencial que ya viaja en cada request,
+ * y devuelve la config **sin contraseñas**. Es el que se usa acá.
+ *
+ * ⚠️ Y de todo eso **acá sale sólo `{name, funcion}`**. El achique se hace en este archivo y no en
+ * el llamador a propósito: lo que no se devuelve no se puede filtrar por accidente más adelante, y
+ * el resto de la config (los permisos de cada uno, quién es admin, los mails) no tiene por qué
+ * entrar a ningún handler que lo único que quiera saber sea de qué sector es alguien.
+ *
+ * # El caché, y por qué es corto
+ *
+ * El GET de la Agenda lo dispara también el poll de avisos, o sea cada tres minutos por persona.
+ * Sin caché serían dos idas a `bdi-catalogo` por request en vez de una. 60 segundos es el plazo en
+ * el que un cambio de función se propaga: nadie edita el padrón esperando que el efecto sea
+ * instantáneo, y el que lo edita es admin y ve todo igual.
+ *
+ * ⚠️ **No agrega un modo de falla nuevo**: `exigirUsuario` ya le pregunta a `bdi-catalogo` en cada
+ * request. Si se cae, esto devuelve `[]` y el llamador decide — la Agenda muestra de más en lectura
+ * y **cierra la escritura**, que es el lado correcto para cada uno.
+ */
+let equipoCache = { at: 0, lista: [] };
+const EQUIPO_TTL_MS = 60 * 1000;
+
+export async function equipoDelPadron(req, ahora = Date.now()) {
+  if (ahora - equipoCache.at < EQUIPO_TTL_MS) return equipoCache.lista;
+  // La credencial se reenvía tal cual: el sobre `x-monitor-auth` es el mismo de los dos lados. Si
+  // vino en el body (el contrato viejo de crear-venta), se rearma.
+  const raw = (req.headers || {})['x-monitor-auth'];
+  const { user, pass, token } = credenciales(req);
+  const sobre = raw
+    || Buffer.from(JSON.stringify(token ? { token } : { user, pass }), 'utf8').toString('base64');
+  try {
+    const r = await fetch(USU_API, { headers: { 'x-monitor-auth': sobre } });
+    const d = await r.json();
+    const users = (d && d.config && d.config.users) || [];
+    const lista = users
+      .filter((u) => u && u.name)
+      .map((u) => ({ name: u.name, funcion: Array.isArray(u.funcion) ? u.funcion : u.funcion ? [u.funcion] : [] }));
+    // Una lista vacía NO se cachea: sería congelar por un minuto el resultado de una caída.
+    if (lista.length) equipoCache = { at: ahora, lista };
+    return lista;
+  } catch {
+    return [];
+  }
+}
+
+/** Sólo para los tests: el caché es de módulo y vive entre casos. */
+export function _olvidarEquipo() {
+  equipoCache = { at: 0, lista: [] };
+}
+
+/**
  * Cabeceras de un endpoint que solo sirve al propio Monitor.
  *
  * NO pone Access-Control-Allow-Origin, y no es un olvido: index.html llama a
