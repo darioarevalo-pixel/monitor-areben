@@ -218,6 +218,44 @@ describe('el veredicto de una celda', () => {
   })
 })
 
+describe('🔴 la configuración es de HOY, las métricas son de la ventana', () => {
+  /**
+   * Defecto real visto en prod el 26-ago-2026: `TEST UNBOXING x SIMILAR` se pausó el 25, la ventana
+   * cerraba el 24, y la celda figuraba ACTIVE con el botón «Pausar» y el veredicto «apagala» encima
+   * de algo ya apagado. La foto guarda la configuración en la fila del día en que se sacó.
+   */
+  const conPausaPosterior = () => [
+    // La ventana: entregó caro los días 18 a 24.
+    ...serie(7, '2026-08-18', () => ({ spend: 2000, compras: 1, estado: 'ACTIVE', estado_real: 'entregando' })),
+    // Después de que la ventana cierra, alguien la pausó. Ese día NO entra en los totales.
+    fila({ fecha: '2026-08-25', capturado_at: '2026-08-26T10:00:00Z', spend: 500, compras: 0, estado: 'PAUSED', estado_real: 'pausado' }),
+  ]
+
+  it('el estado sale del día más nuevo de TODA la foto, no del último de la ventana', () => {
+    const z = armarZona({ filas: conPausaPosterior(), techo: 1000, hasta: '2026-08-24', ventana: 7 })
+    const c = z.celdas[0]
+    expect(c.estado).toBe('PAUSED')
+    expect(c.estadoReal).toBe('pausado')
+    // Pero el gasto sigue siendo el de la ventana: los 500 del día 25 no entran.
+    expect(c.spend).toBe(14000)
+  })
+
+  it('⛔ sobre algo apagado NO propone apagarlo, y cuenta qué hacía', () => {
+    const z = armarZona({ filas: conPausaPosterior(), techo: 1000, hasta: '2026-08-24', ventana: 7 })
+    const v = z.celdas[0].veredicto
+    expect(v.clase).toBe('apagada')
+    expect(v.accion).toBe(null)
+    expect(v.porque[0]).toContain('mientras entregó')
+  })
+
+  it('sin pausa posterior sigue diciendo lo que corresponde', () => {
+    const filas = serie(7, '2026-08-18', () => ({ spend: 2000, compras: 1 }))
+    const z = armarZona({ filas, techo: 1000, hasta: '2026-08-24', ventana: 7 })
+    expect(z.celdas[0].veredicto.clase).toBe('alto')
+    expect(z.celdas[0].veredicto.accion).toBe('pausar')
+  })
+})
+
 describe('la concentración por pieza', () => {
   it('suma la misma pieza a través de las cajas y cuenta en cuántas corre', () => {
     const filas = [

@@ -611,6 +611,24 @@ no protege de una ficha mal cargada**, así que la cabecera compara el ticket de
 es MÁS alto que el que muestra). ⚠️ Y el error ⛔ no es proporcional: el costo de la mercadería no
 baja con el precio, así que cada punto de descuento se lleva casi tres de techo.
 
+### 🔴 Las MÉTRICAS son de la ventana; la CONFIGURACIÓN es de HOY
+
+Defecto encontrado **ejerciendo el endpoint ya deployado contra prod**, ⛔ no por un test.
+`TEST UNBOXING x SIMILAR` se había pausado el 25, la ventana cerraba el 24, y la celda salía
+`ACTIVE` con el botón «Pausar» y el veredicto «apagala» encima de **algo que ya estaba apagado**.
+La causa está escrita más arriba en esta misma ficha y no la vi: *la foto se arma desde los
+`insights` y la configuración se escribe **sólo en la fila del día en que se sacó*** ⇒ el último día
+de la VENTANA la tiene congelada al día que la ventana termina.
+
+⇒ `configDeHoy()` toma estado, nombre y diario de la fila **más nueva de toda la foto**, ⛔ no de la
+ventana ni de la serie larga —las dos están cortadas en el cierre, y ése fue mi primer arreglo, que
+el test tumbó—. Y `veredictoDeCelda()` estrena la clase **`apagada`**, que va PRIMERO y ⛔ no propone
+nada: cuenta qué hacía mientras entregaba, que es lo que sirve para saber si la pausa fue buena.
+
+🔑 **Proponer una acción ya hecha es el ruido que hace que se le deje de creer a la pantalla** — y
+peor: el que la creyera la volvería a apretar. Medido en la semana 18→24, el arreglo saca **5 celdas
+de las 6 que la zona proponía apagar**: ya estaban apagadas.
+
 ### Cómo se verificó, y por qué así
 
 ⛔ Los tests no alcanzan y en esta sección está probado: cuatro de los defectos más caros pasaron las

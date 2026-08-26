@@ -32,6 +32,7 @@ import {
 
 /** El tono de cada veredicto. `alto` y `rota` son los dos que cuestan plata todos los días. */
 const TONO: Record<ClaseVeredicto, Tone> = {
+  apagada: 'neutral',
   rota: 'danger',
   alto: 'danger',
   escalar: 'brand',

@@ -11,6 +11,7 @@ import {
   CAIDA_CTR as CAIDA_CTR_JS,
   celdasDeLaFoto as celdasDeLaFotoJs,
   concentracionDe as concentracionDeJs,
+  configDeHoy as configDeHoyJs,
   CON_AIRE as CON_AIRE_JS,
   CONV_APRENDIZAJE as CONV_APRENDIZAJE_JS,
   COLS_RENDIMIENTO as COLS_RENDIMIENTO_JS,
@@ -92,7 +93,7 @@ export type Aprendizaje = {
   reiniciadoEl: string | null
 }
 
-export type ClaseVeredicto = 'rota' | 'quieta' | 'sin-techo' | 'midiendo' | 'alto' | 'escalar' | 'ok'
+export type ClaseVeredicto = 'apagada' | 'rota' | 'quieta' | 'sin-techo' | 'midiendo' | 'alto' | 'escalar' | 'ok'
 
 export type Veredicto = {
   clase: ClaseVeredicto
@@ -230,6 +231,10 @@ export const veredictoDeCelda = veredictoDeCeldaJs as (
   ctx?: { techo?: number; desgaste?: Partial<Desgaste> | null; aprendizaje?: Partial<Aprendizaje> | null },
 ) => Veredicto
 export const concentracionDe = concentracionDeJs as (filas: FilaZona[]) => Concentracion
+/** 🔑 Las métricas son de la ventana; la configuración es de HOY. ⛔ Recibe TODAS las filas. */
+export const configDeHoy = configDeHoyJs as (filas: FilaZona[]) => Map<string, {
+  fecha: string; nombre: string; estado: string | null; estadoReal: string | null; diario: number | null
+}>
 export const armarZona = armarZonaJs as (opts: {
   filas?: FilaZona[]
   techo?: number
