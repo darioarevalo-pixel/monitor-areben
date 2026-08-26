@@ -16,12 +16,22 @@
  */
 
 import { useMemo } from 'react'
-import { Card, EmptyState, Notice, color, font, space, weight } from '@/components/ui'
-import { cumplimiento, DIAS_CUMPLIMIENTO, hoyIso, rotuloRegla, type FilaCumplimiento, type Hecho, type ItemAgenda } from '@/lib/agenda'
+import { Card, Chips, EmptyState, Notice, color, font, space, weight, useFiltroUrl, type ChipOpt } from '@/components/ui'
+import {
+  clavesDestino, cumplimiento, DIAS_CUMPLIMIENTO, hoyIso, porResponsable, rotuloDestinoCorto,
+  rotuloRegla, type FilaCumplimiento, type Hecho, type ItemAgenda,
+} from '@/lib/agenda'
 
 export function Cumplimiento({ items, hechos }: { items: ItemAgenda[]; hechos: Hecho[] }) {
   const hoy = hoyIso()
-  const filas = useMemo(() => cumplimiento(items, hechos, hoy), [items, hechos, hoy])
+  const todas = useMemo(() => cumplimiento(items, hechos, hoy), [items, hechos, hoy])
+
+  const [quien, setQuien] = useFiltroUrl<string>('quien', 'todos')
+  const responsables = useMemo(() => porResponsable(todas), [todas])
+  const filas = useMemo(
+    () => (quien === 'todos' ? todas : todas.filter((f) => clavesDestino(f.item.destino).includes(quien))),
+    [todas, quien],
+  )
 
   const porDia = useMemo(() => {
     const m = new Map<string, FilaCumplimiento[]>()
@@ -33,7 +43,7 @@ export function Cumplimiento({ items, hechos }: { items: ItemAgenda[]; hechos: H
     return [...m.entries()]
   }, [filas])
 
-  if (filas.length === 0) {
+  if (todas.length === 0) {
     return (
       <EmptyState
         title="Todavía no hay ninguna ocurrencia para mostrar."
@@ -45,6 +55,16 @@ export function Cumplimiento({ items, hechos }: { items: ItemAgenda[]; hechos: H
 
   const tildados = filas.filter((f) => f.hecho).length
 
+  const chips: ChipOpt<string>[] = [
+    { key: 'todos', label: 'Todos', n: todas.filter((f) => !f.hecho).length },
+    ...responsables.map((r) => ({
+      key: r.clave,
+      label: r.label,
+      n: r.sin,
+      title: `${r.sin} sin tildar de ${r.total}`,
+    })),
+  ]
+
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
       <Notice tone="neutral">
@@ -52,6 +72,28 @@ export function Cumplimiento({ items, hechos }: { items: ItemAgenda[]; hechos: H
         renglón sin tildar puede ser que no se hizo, que se hizo y nadie lo marcó, o que la regla esté
         mal cargada — las tres se arreglan distinto, así que la pantalla no saca conclusiones.
       </Notice>
+
+      {responsables.length > 1 && (
+        <div style={{ display: 'grid', gap: space[1] }}>
+          <Chips opciones={chips} value={quien} onChange={setQuien} />
+          {/*
+            ⚠️ Los números pueden sumar más que el total, y decirlo cuesta un renglón: un pendiente
+            dirigido a dos personas queda debiéndose en las dos. Repartir la mitad a cada una sería
+            inventar una responsabilidad parcial que nadie acordó.
+          */}
+          <div style={{ fontSize: font.xs, color: color.mut2 }}>
+            Lo que quedó sin tildar, por responsable. Un pendiente de dos personas cuenta en las dos.
+          </div>
+        </div>
+      )}
+
+      {porDia.length === 0 && (
+        <EmptyState
+          title="Nada de esa persona cayó en estos días."
+          hint="Puede ser que no tenga rutinas cargadas, o que las suyas no corran en esta ventana."
+          dashed
+        />
+      )}
 
       {porDia.map(([fecha, delDia]) => (
         <Card key={fecha} padding={3}>
@@ -73,7 +115,9 @@ export function Cumplimiento({ items, hechos }: { items: ItemAgenda[]; hechos: H
           <div style={{ display: 'grid', gap: 4 }}>
             {delDia.map((f) => (
               <div
-                key={f.item.id}
+                // `item.id` es único DENTRO del día, no en la lista: con arrastre el mismo
+                // ítem aparece en dos fechas.
+                key={`${f.fecha}·${f.item.id}`}
                 style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', fontSize: font.sm }}
               >
                 <span style={{ color: f.hecho ? color.success : color.mut2, fontWeight: weight.semibold }}>
@@ -86,7 +130,11 @@ export function Cumplimiento({ items, hechos }: { items: ItemAgenda[]; hechos: H
                   {f.hecho
                     // "Lo marcó Local" y no "lo hizo Ana": `Local` es un puesto compartido.
                     ? `— lo marcó ${f.hecho.usuario}${f.hecho.nota ? ` · ${f.hecho.nota}` : ''}`
-                    : `— sin tildar · ${rotuloRegla(f.item.regla)}`}
+                    // 🔑 En el renglón que importa —el que no se hizo— va **de quién era**, y va
+                    // primero. Hasta acá el informe decía qué rutina y qué día, y para saber a quién
+                    // reclamarle había que ir a «Cargar» y buscarla. ⚠️ No es lo mismo que el
+                    // `usuario` de arriba: aquél es quien lo hizo, éste es quien lo debe.
+                    : `— ${rotuloDestinoCorto(f.item.destino) || 'todo el equipo'} · sin tildar · ${rotuloRegla(f.item.regla)}`}
                 </span>
                 {!f.item.activo && (
                   <span style={{ color: color.mut2, fontStyle: 'italic' }}>(apagado después)</span>

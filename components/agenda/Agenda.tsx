@@ -24,17 +24,19 @@
  * `marcas` de la promo, y por eso la pantalla igual filtra por la marca del header.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  Button, Card, EmptyState, Esqueleto, Field, Input, Modal, Notice, Select, StatusPill, Tabs,
-  color, font, space, weight, useConfirmar, useToast, type TabItem,
+  BuscarInput, Button, Card, Chips, ContadorFiltro, EmptyState, Esqueleto, Field, FilterBar, Input,
+  Modal, Notice, Select, StatusPill, Tabs,
+  color, font, space, weight, useConfirmar, useFiltroUrl, useToast, type ChipOpt, type TabItem,
 } from '@/components/ui'
 import {
   avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, moldeCorreEnMarca, pendientesDe, promosDe,
+  filtrarItems, opcionesDeQuien,
   PUERTAS, rotuloBeneficio, rotuloDestino, rotuloPuerta, rotuloRegla, vaEl,
-  type ItemAgenda, type Promo, type Puerta,
+  type FiltroClase, type FiltroEstado, type ItemAgenda, type Promo, type Puerta,
 } from '@/lib/agenda'
 import type { Marca } from '@/lib/nav.datos'
 import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } from '@/lib/agenda/cliente'
@@ -52,7 +54,12 @@ export function Agenda() {
   const { promos, items, hechos, puede, cargado, cargar } = useAgenda()
   const toast = useToast()
   const { confirmar } = useConfirmar()
-  const [tab, setTab] = useState<'hoy' | 'mes' | 'carga' | 'cumplimiento'>('hoy')
+  /**
+   * 🔑 **La pestaña vive en la URL.** Antes era `useState`, así que recargar con un filtro puesto
+   * devolvía a «Hoy» **con el filtro aplicado en una pestaña que ya no se estaba mirando** — el bug
+   * exacto que Canjes pagó y arregló en agosto (`docs/secciones/canjes.md`, «Dónde está parado uno»).
+   */
+  const [tab, setTab] = useFiltroUrl<'hoy' | 'mes' | 'carga' | 'cumplimiento'>('t', 'hoy')
   const [editando, setEditando] = useState<Promo | null>(null)
   const [editandoItem, setEditandoItem] = useState<ItemAgenda | null>(null)
   const [sembrando, setSembrando] = useState(false)
@@ -308,12 +315,88 @@ function Carga({
             dashed
           />
         ) : (
-          items.map((i) => (
-            <FilaItem key={i.id} i={i} hoy={hoy} onEditar={onEditarItem} onBorrar={onBorrarItem} />
-          ))
+          <ListaItems items={items} hoy={hoy} onEditar={onEditarItem} onBorrar={onBorrarItem} />
         )}
       </section>
     </div>
+  )
+}
+
+/**
+ * La lista de pendientes y avisos, con su barra de filtros.
+ *
+ * Existe como componente aparte —y no como cuatro `useState` adentro de `Carga`— porque los filtros
+ * viven en la URL: se remonta con la pestaña, que es lo que hace que `useFiltroUrl` los relea.
+ *
+ * 🔑 **El filtro «de quién» sale de los ítems cargados** (`opcionesDeQuien`), no del padrón del
+ * equipo: ése es admin-only y vive en otro sistema. El porqué, en `lib/agenda/index.ts`.
+ */
+function ListaItems({
+  items, hoy, onEditar, onBorrar,
+}: {
+  items: ItemAgenda[]
+  hoy: string
+  onEditar: (i: ItemAgenda) => void
+  onBorrar: (i: ItemAgenda) => void
+}) {
+  const [q, setQ] = useFiltroUrl<string>('q', '')
+  const [quien, setQuien] = useFiltroUrl<string>('quien', 'todos')
+  const [clase, setClase] = useFiltroUrl<FiltroClase>('f', 'todos')
+  const [estado, setEstado] = useFiltroUrl<FiltroEstado>('e', 'todos')
+
+  const gente = useMemo(() => opcionesDeQuien(items), [items])
+  const filtrados = useMemo(
+    () => filtrarItems(items, { q, quien, clase, estado }),
+    [items, q, quien, clase, estado],
+  )
+
+  // Los contadores van sobre lo que dejan pasar LOS OTROS filtros, no sobre la lista entera: un
+  // chip que dice 12 y devuelve 3 al apretarlo es peor que un chip sin número.
+  const salvo = (sin: 'clase' | 'estado') =>
+    filtrarItems(items, { q, quien, clase: sin === 'clase' ? 'todos' : clase, estado: sin === 'estado' ? 'todos' : estado })
+  const porClase = salvo('clase')
+  const porEstado = salvo('estado')
+
+  const clases: ChipOpt<FiltroClase>[] = [
+    { key: 'todos', label: 'Todo', n: porClase.length },
+    { key: 'pendiente', label: 'Pendientes', n: filtrarItems(porClase, { clase: 'pendiente' }).length },
+    { key: 'aviso', label: 'Avisos', n: filtrarItems(porClase, { clase: 'aviso' }).length },
+    // Se nombra aparte porque no corre ningún día: mezclado con las rutinas se lee como una rota.
+    { key: 'molde', label: 'Moldes', n: filtrarItems(porClase, { clase: 'molde' }).length, title: 'Los pasos que el ingreso clona. No corren solos.' },
+  ]
+  const estados: ChipOpt<FiltroEstado>[] = [
+    { key: 'todos', label: 'Prendidos y apagados', n: porEstado.length },
+    { key: 'activos', label: 'Prendidos', n: filtrarItems(porEstado, { estado: 'activos' }).length },
+    { key: 'apagados', label: 'Apagados', n: filtrarItems(porEstado, { estado: 'apagados' }).length },
+  ]
+
+  return (
+    <>
+      <FilterBar>
+        <BuscarInput value={q} onChange={setQ} placeholder="Buscar por título…" />
+        <Select value={quien} onChange={(e) => setQuien(e.target.value)} style={{ maxWidth: 240 }}>
+          <option value="todos">De quien sea</option>
+          {gente.map((o) => (
+            <option key={o.clave} value={o.clave}>{o.label} ({o.n})</option>
+          ))}
+        </Select>
+        <Chips opciones={clases} value={clase} onChange={setClase} />
+        <Chips opciones={estados} value={estado} onChange={setEstado} />
+        <ContadorFiltro n={filtrados.length} singular="renglón" plural="renglones" />
+      </FilterBar>
+
+      {filtrados.length === 0 ? (
+        <EmptyState
+          title="Ninguno de los cargados entra en ese filtro."
+          hint="El filtro no achica la lista: los otros siguen ahí. Sacá alguno para volver a verlos."
+          dashed
+        />
+      ) : (
+        filtrados.map((i) => (
+          <FilaItem key={i.id} i={i} hoy={hoy} onEditar={onEditar} onBorrar={onBorrar} />
+        ))
+      )}
+    </>
   )
 }
 

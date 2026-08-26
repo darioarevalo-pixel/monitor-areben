@@ -114,6 +114,34 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   ⛔ No hay campo de texto libre para escribir el nombre: un nombre mal tipeado sería un pendiente
   que no le sale a nadie y que nadie reclama. Si el padrón no se puede leer, la opción avisa y no
   se puede usar.
+- 🆕 🔑 **«CARGAR» TIENE FILTROS Y BUSCADOR, Y EL DE PERSONA NO SALE DEL PADRÓN** (26-ago-2026,
+  pedido de Bruno). La lista venía de corrido y sin un solo recorte: con 32 pendientes vivos más los
+  moldes del ingreso, *«¿qué le toca a Sofi?»* se contestaba leyéndola entera — y una lista que hay
+  que leer entera no la revisa nadie.
+  - 🔑 **Las opciones del filtro «de quién» salen de los ÍTEMS CARGADOS** (`opcionesDeQuien`), ⛔ no
+    de `traerConfigAdmin`. El padrón del equipo vive en el KV de `bdi-catalogo`, es **admin-only** y
+    puede pedir credencial —por eso `ModalItem` lo pide recién al elegir «a una persona»—: colgar de
+    esa llamada el `<Select>` de un filtro es una ida a otro sistema para pintar un desplegable. De
+    yapa, lo que sale de los ítems son **exactamente las opciones que devuelven filas**.
+  - 🔴 **Una clave que no matchea devuelve CERO filas, ⛔ nunca todas.** Caer a «mostrá todo» es lo
+    que hace creer que se revisó lo de una persona mirando la lista completa.
+  - 🔑 **Un molde NO cuenta como pendiente** aunque su `clase` lo sea: no corre ningún día, así que
+    mezclarlo con las rutinas lo deja arriba de la lista todos los días. Tiene su propio chip.
+  - 🔴 **La pestaña se mudó a la URL** (`useFiltroUrl('t','hoy')`). Era `useState`, así que recargar
+    con un filtro puesto devolvía a «Hoy» **con el filtro aplicado en una pestaña que ya no se
+    miraba** — el bug exacto que Canjes pagó y arregló (`docs/secciones/canjes.md`).
+- 🆕 🔑 **CUMPLIMIENTO DICE DE QUIÉN ERA LO QUE NO SE HIZO** (26-ago-2026, pedido de Bruno). El dato
+  ya viajaba (`FilaCumplimiento.item.destino`) y no se dibujaba: el renglón sin tildar decía qué
+  rutina y qué día, y para saber a quién reclamarle había que salir a «Cargar» y buscarla.
+  - 🔴 **`— lo marcó Local` y `— a Sofi` son DOS datos distintos y no se mezclan**: aquél es **quién
+    lo hizo** (y `Local` es un puesto compartido), éste es **quién lo debía**.
+  - **Resumen por responsable** arriba, que además filtra. ⚠️ **Un pendiente dirigido a dos personas
+    cuenta en las dos**, así que los números pueden sumar más que el total — la pantalla lo dice en
+    un renglón; repartir la mitad a cada una sería inventar una responsabilidad parcial que nadie
+    acordó. ⛔ Con **un solo** responsable no se dibuja: un filtro de una opción es ruido.
+  - ⛔ **Sigue sin semáforo ni umbral**: el criterio de la pantalla no cambió.
+  - 📌 **`rotuloDestino` ya no vive acá**: se mudó a `lib/novedades/tipos.ts` con
+    `rotuloDestinoCorto` y `clavesDestino`, porque es del **destino** y ahora lo miran tres pantallas.
 - 🔑 **La pestaña «Hoy» tiene una regla de oro: que sea corta.** *Un aviso que se ignora doce veces
   enseña a ignorar el número trece.* Por eso lo vencido y lo que todavía no arrancó viven en
   «Cargar», que es de administración. Antes de sumar un bloque a «Hoy», la pregunta es si se
@@ -285,6 +313,13 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   hasta 2 días después»*. Después dejalo pasar: al tercer día el renglón **y el badge** tienen que
   bajar solos, y en Cumplimiento esa ocurrencia tiene que seguir apareciendo sin hacer. ⚠️ El campo
   **sólo se dibuja si el ítem arrastra**: apagando el arrastre desaparece, que es lo correcto.
+- 🆕 **El filtro de Cumplimiento con una persona SIN ocurrencias en la ventana.** Es lo único que
+  ningún test alcanza: `useFiltroUrl` lee la URL y el entorno de vitest es `node`, así que en los
+  tests el filtro siempre vale «todos». Tiene que decir *«Nada de esa persona cayó en estos días»*,
+  ⛔ **no** *«todavía no hay ninguna ocurrencia»* — eso último sería mentira en una pantalla que sí
+  las tiene.
+- 🆕 **Los filtros de «Cargar», después de un F5.** Filtrá por alguien, recargá, y tienen que volver
+  **el filtro y la pestaña**. Y tipear en el buscador ⛔ no puede navegar (es `replaceState`).
 - 🔴 **El destino por persona no se puede caminar con un admin**, que es el caso que se agregó para
   arreglar: entrá con un usuario `prueba-*` del padrón, mirá que la rutina dirigida a él **sale en
   «Hoy» y prende el badge**, y con otro que no sale ni prende. Y con el admin, que el tilde ajeno
