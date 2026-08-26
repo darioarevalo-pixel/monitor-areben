@@ -828,6 +828,60 @@ la tienda no contestó, no.
 —permisos, ventana, techo, pedidos, meta de Norte y los tres 400— con un `res` de mentira contra la
 base real.
 
+## 🆕🏁 26-ago-2026 (4ª tanda): LA PRIMERA CORRIDA REAL, y el cartel que afirmaba lo que no había mirado
+
+🏁 **`meta_ads_hallazgo` pasó de 0 a 4. Es la primera vez que el motor escribe una fila.** Se corrió
+el reloj de verdad —`gh workflow run meta-reglas.yml`, no `--simulacro`— y quedó verificado leyendo
+prod por la puerta del API (`recurso=hallazgos&estado=nuevo`): los cuatro renglones existen con su
+motivo redactado y su `sugerencia` armada, y **las 11 reglas quedaron con `ultima_corrida`** (antes
+las 11 en `null`).
+
+| # | línea | preset | objeto | qué dice |
+|---|---|---|---|---|
+| 1 | bdi | `costo-alto` | `GIRLHOOD FRIO - INTERESES 1 - 7/8` | compra a $10.426 contra un techo de $6.668 —**156%**— en 5 días ⇒ propone **pausar** |
+| 2 | bdi | `atribucion-tardia` | `AD01 - UNBOXING LOCAL - 19/8` | pausado hace 2 días y **igual registró 2 compras por $49.948** |
+| 3 | bdi | `fatiga` | `AD02 - GIRLHOOD COLLECTION` | frecuencia 1,4 sobre un dial de 1,3 y **el CTR cayó 31%, de 5,9% a 4,1%, en 20 días** |
+| 4 | zattia | `atribucion-tardia` | `SWEATERS - REEL COLORES - 07/05 - Copia` | pausado hace 1 día y registró 1 compra por $84.478 |
+
+🔑 **Correrlo un día antes no adelanta nada ni duplica nada**: el `unique(regla_id, fecha, objeto_id)`
+con `ignoreDuplicates` hace que el cron de mañana a las 07:50 sea idempotente sobre el mismo día, y
+para el día siguiente los renglones son otros por fecha. Lo que sí cambia es que **el motor dejó de
+ser una promesa**: hasta hoy nada había ejercido el camino de escritura, y en este módulo es la
+cuarta vez que lo que la suite no ve lo encuentra ejercer.
+
+### 🔴 El cartel del bloque vacío AFIRMABA algo que nunca había preguntado
+
+`ZonaRendimiento` dibujaba el bloque «Qué hay que decidir» vacío **y con el motivo clavado en el
+texto**: *«no significa "está todo bien" — significa que **no hay reglas cargadas**»*, con un link a
+cargarlas. Era cierto la mañana en que se escribió y **dejó de serlo esa misma tarde**, cuando
+`meta_ads_regla` pasó a 11 filas: la pantalla siguió mandando a prender reglas a alguien que acababa
+de prender once.
+
+🔑 **Y el defecto no es el número desactualizado: es la forma.** Un cartel que explica un silencio
+tiene que **medir** ese silencio, porque el que va adonde lo manda y no encuentra qué tocar es el que
+deja de creerle a la sección. Es la misma familia que «una pantalla que no pregunta igual afirma».
+
+⇒ `silencioDeReglas(reglas, ahora)` en `reglas.core.js` —con `ahora` como parámetro obligatorio, ⛔
+sin `Date.now()` adentro, para que el texto se pueda probar— separa **las tres causas del silencio, y
+sólo una es buena noticia**:
+
+| clase | qué pasó | qué dice |
+|---|---|---|
+| `sin-reglas` | ninguna prendida | el silencio no dice nada de la pauta ⇒ **el link a prenderlas aparece SÓLO acá** |
+| `nunca-corrio` | prendidas y el reloj todavía no pasó | tampoco dice nada — es el estado exacto del día en que se prenden: se cargan a la tarde y el cron es a las 07:50 |
+| `todo-bien` | corrieron y no encontraron nada | **el único caso en que «vacío» significa que está todo bien**, y lleva la fecha |
+| `no-se-sabe` | todavía no se leyeron las reglas | ⛔ no se afirma nada |
+
+🔴 🔑 **Y en `todo-bien` se miran las DOS puntas, no la más reciente.** Con sólo el máximo, diez
+reglas que corrieron esta mañana tapan a la que quedó atrás hace cinco días y el cartel diría
+«corrieron hace 1 hora» sobre una que no corrió. Cuando las dos puntas no coinciden lo dice: *«la más
+reciente hace 1 hora, la más atrasada hace 5 días»*. Es la misma trampa que `updated_at` para medir
+una espera: **el número existe y no significa**. Las que nunca corrieron no se promedian con nada —
+se cuentan aparte, en la cola de la frase.
+
+**9 mutantes, 9 muertos** (los que había que ver caer: el que confunde `activa` con apagada, el que
+lee una fecha basura como corrida, y los dos de las puntas).
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

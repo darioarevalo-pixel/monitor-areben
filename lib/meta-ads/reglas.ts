@@ -25,6 +25,7 @@ import {
   frecuenciaPico as frecuenciaPicoJs,
   hayRacha as hayRachaJs,
   motivoApagada as motivoApagadaJs,
+  silencioDeReglas as silencioDeReglasJs,
   proximoDiario as proximoDiarioJs,
   NIVEL_TOTALES as NIVEL_TOTALES_JS,
   PASO_ESCALON as PASO_ESCALON_JS,
@@ -318,6 +319,20 @@ export const umbralesEfectivos = umbralesEfectivosJs as (
 ) => Umbrales
 export const faltanUmbrales = faltanUmbralesJs as (preset: string, efectivos: Umbrales) => ClaveUmbral[]
 export const motivoApagada = motivoApagadaJs as (preset: string, faltan: ClaveUmbral[]) => string
+
+/**
+ * Por qué el bloque «Qué hay que decidir» está vacío. `reglas: null` = todavía no se sabe, y ahí
+ * ⛔ no se afirma nada. Ver el `.core.js`: el silencio tiene tres causas y sólo una es buena noticia.
+ */
+export const silencioDeReglas = silencioDeReglasJs as (
+  reglas: Array<Pick<Regla, 'activa' | 'ultimaCorrida'>> | null,
+  ahora: Date | number,
+) => {
+  clase: 'no-se-sabe' | 'sin-reglas' | 'nunca-corrio' | 'todo-bien'
+  prendidas: number
+  ultima?: string
+  texto: string
+}
 export const frecuenciaPico = frecuenciaPicoJs as (filas: Array<{ frecuencia?: number | null }>) => number
 export const ventanaDe = ventanaDeJs as (hastaIso: string, dias: number) => string[]
 export const agrupar = agruparJs as (filas: FilaRegla[], nivel: NivelRegla, fechas: string[]) => Grupo[]

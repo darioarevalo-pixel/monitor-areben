@@ -21,7 +21,7 @@ Contado contra la base de producción el **25-ago-2026**, módulo de Meta Ads:
 |---|---|---|
 | `meta_ads_regla` | ~~0~~ → **11** | 🏁 **prendidas el 26-ago** (P2). Los diales y el porqué, en el desplegable de P2 |
 | `meta_ads_umbral` | **0** | y está bien: de los dos cortes que corren, uno se deriva y el otro sale de la ficha de rentabilidad. Sólo se llena para pisar un derivado o para las marcas sin ventas |
-| `meta_ads_hallazgo` | **0** → los primeros el 27 | el cron de las 07:50 dejó de correr en vacío: el simulacro del 26 ya produce **4** |
+| `meta_ads_hallazgo` | ~~0~~ → **4** | 🏁 **los primeros de la historia, el 26-ago**: se corrió el reloj de verdad (`gh workflow run meta-reglas.yml`) y las 11 reglas quedaron con `ultima_corrida` |
 | `meta_ads_favorito` | **0** | el botón de favorito de la Biblioteca no se tocó nunca |
 | `meta_ads_informe` | 2 | y los dos **sin publicar** |
 | `meta_ads_plan` | 4 | 2 `duplicar` (8-ago) + 1 `piezas` (10-ago) + 1 del 25-ago |
@@ -179,9 +179,11 @@ pierde nada.
 está cargada a precio de LISTA y la tienda está en liquidación— ⇒ la regla hereda la ficha, que es
 como tiene que ser, y **arreglar la ficha arregla la regla**.
 
-⚠️ La zona ya dibuja el bloque «Qué hay que decidir» **vacío y diciendo que está vacío porque no hay
-reglas cargadas** — un bloque que sólo aparece con malas noticias deja sin saber si el silencio es
-«está todo bien» o «no se miró».
+🏁 **Y el cartel del bloque vacío dejó de mentir** (26-ago, 4ª tanda): decía «no hay reglas cargadas»
+con el texto clavado y siguió diciéndolo la tarde en que se prendieron las once. Ahora el motivo se
+**mide** (`silencioDeReglas`): sin reglas · prendidas pero todavía sin correr · corrieron y no
+encontraron nada — **sólo la última significa «está todo bien»**, y lleva la fecha de las dos puntas.
+El detalle, en `docs/secciones/meta-ads.md`.
 
 ### 🏁 P3 — HECHO (26-ago-2026): la zona de Rendimiento
 

@@ -26,9 +26,14 @@
  *
  * # Lo que NO está acá, a propósito
  *
- * Un bloque de hallazgos vacío igual se dibuja **y dice que está vacío porque no hay reglas
- * cargadas**. Un bloque que sólo aparece con malas noticias deja sin saber si el silencio es «está
- * todo bien» o «no se miró» — que es exactamente el estado en que estaba el motor.
+ * Un bloque de hallazgos vacío igual se dibuja **y dice por qué está vacío**. Un bloque que sólo
+ * aparece con malas noticias deja sin saber si el silencio es «está todo bien» o «no se miró» — que
+ * es exactamente el estado en que estaba el motor.
+ *
+ * 🔴 Y el porqué **se pregunta, ⛔ no se afirma**: el primer texto decía «no hay reglas cargadas»
+ * clavado, y siguió diciéndolo la tarde del 26-ago en que se prendieron las once. Hoy sale de
+ * `silencioDeReglas()`, que separa las tres causas del silencio —sin reglas, prendidas pero todavía
+ * sin correr, y corrieron sin encontrar nada— porque **sólo la última significa «está todo bien»**.
  */
 
 import { useMemo, useState } from 'react'
@@ -44,6 +49,7 @@ import { TablaCeldas } from '@/components/meta-ads/zona/TablaCeldas'
 import { useZona } from '@/components/meta-ads/zona/useZona'
 import { entero, plata } from '@/lib/meta-ads/formato'
 import { DIAS_ZONA, type RespuestaZona } from '@/lib/meta-ads/rendimiento'
+import { silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
@@ -103,17 +109,11 @@ export function ZonaRendimiento() {
         subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste."
       >
         {r.hallazgos.length === 0 && poda.resumenes.length === 0 ? (
-          // 🔴 Se dice que está vacío Y POR QUÉ. Un bloque que sólo aparece con malas noticias deja
-          // sin saber si el silencio es «está todo bien» o «no se miró», y hoy es lo segundo: el
-          // motor de reglas está escrito y su tabla, en cero.
-          <div style={{ fontSize: font.base, color: color.mut, lineHeight: 1.5 }}>
-            Ninguna regla dejó un hallazgo. ⚠️ Ojo: hoy eso no significa «está todo bien» — significa
-            que <strong>no hay reglas cargadas</strong>. Los seis detectores existen y evalúan la foto
-            todas las mañanas, pero sin umbrales no producen nada.{' '}
-            <Link href="/meta-ads/automatizaciones" style={{ color: color.brandSolid, fontWeight: weight.semibold }}>
-              Cargarlas →
-            </Link>
-          </div>
+          // 🔴 Se dice que está vacío Y POR QUÉ, y el porqué **se pregunta**: hasta el 26-ago-2026
+          // esta frase afirmaba «no hay reglas cargadas» con el texto clavado, y siguió diciéndolo
+          // la tarde en que se prendieron las once. Un cartel que manda a cargar reglas al que ya
+          // las cargó es el que hace que se le deje de creer a la pantalla. Ver `silencioDeReglas`.
+          <Silencio reglas={r.estado.fase === 'ok' ? r.estado.data.reglas : null} cargando={r.estado.fase === 'cargando'} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
             <HallazgosPanel hallazgos={r.hallazgos} quitar={r.quitar} />
@@ -127,6 +127,38 @@ export function ZonaRendimiento() {
       <ParteDelDia cuenta={laCuenta ? laCuenta.id : null} linea={laLinea || undefined} />
 
       <SinLinea visibles={visibles} linea={linea} setLinea={setLinea} />
+    </div>
+  )
+}
+
+/**
+ * El reloj entra acá y no adentro del render: `react-hooks/purity` prohíbe `Date.now()` en el
+ * cuerpo de un componente, y con razón. El núcleo lo recibe como parámetro para poder probarlo.
+ */
+function leerSilencio(reglas: Regla[] | null) {
+  return silencioDeReglas(reglas, Date.now())
+}
+
+/**
+ * El cartel de cuando no hay nada que decidir. **Dice por qué está vacío, y el porqué lo mide.**
+ *
+ * 🔑 Sólo una de las tres causas es buena noticia, y la que manda a cargar reglas aparece **sólo si
+ * de verdad no hay ninguna prendida**. La decisión vive en `silencioDeReglas()` —con `ahora` como
+ * parámetro, para poder probarla— y acá queda nada más que a dónde lleva el link.
+ */
+function Silencio({ reglas, cargando }: { reglas: Regla[] | null; cargando: boolean }) {
+  const s = leerSilencio(reglas)
+  return (
+    <div style={{ fontSize: font.base, color: color.mut, lineHeight: 1.5 }}>
+      {cargando ? 'Buscando las automatizaciones…' : s.texto}
+      {s.clase === 'sin-reglas' && (
+        <>
+          {' '}
+          <Link href="/meta-ads/automatizaciones" style={{ color: color.brandSolid, fontWeight: weight.semibold }}>
+            Prenderlas →
+          </Link>
+        </>
+      )}
     </div>
   )
 }

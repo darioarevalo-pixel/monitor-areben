@@ -14,6 +14,7 @@ import {
   hayRacha,
   motivoApagada,
   PRESETS,
+  silencioDeReglas,
   UMBRALES,
   umbralesEfectivos,
   ventanaDe,
@@ -1021,5 +1022,71 @@ describe('reglas — las decisiones humanas', () => {
     if (!r.ok) throw new Error(r.error)
     expect(r.hallazgos.map((h) => h.objeto_id)).toEqual(['a1'])
     expect(r.silenciados).toEqual([])
+  })
+})
+
+/**
+ * El cartel de «no hay nada que decidir». Lo que se prueba es que **no afirme lo que no midió**:
+ * el texto viejo estaba clavado en «no hay reglas cargadas» y siguió diciéndolo la tarde en que se
+ * prendieron once. Un cartel que manda a cargar reglas al que ya las cargó es el que hace que se le
+ * deje de creer a la pantalla.
+ */
+describe('por qué el bloque está vacío', () => {
+  const AHORA = Date.parse('2026-08-27T12:00:00Z')
+  const r = (activa: boolean, ultimaCorrida: string | null) => ({ activa, ultimaCorrida })
+
+  it('🔴 con reglas prendidas NO dice «no hay reglas»', () => {
+    const s = silencioDeReglas([r(true, null), r(true, null)], AHORA)
+    expect(s.clase).toBe('nunca-corrio')
+    expect(s.prendidas).toBe(2)
+    expect(s.texto).not.toMatch(/no hay ninguna regla prendida/)
+    // Y sigue diciendo que el vacío no es una buena noticia, que es lo que hace falta saber.
+    expect(s.texto).toMatch(/tampoco significa/)
+  })
+
+  it('sin ninguna prendida sí manda a prenderlas', () => {
+    const s = silencioDeReglas([r(false, '2026-08-26T10:50:00Z')], AHORA)
+    expect(s.clase).toBe('sin-reglas')
+    expect(s.prendidas).toBe(0)
+  })
+
+  it('🔑 «corrieron y no encontraron nada» es el ÚNICO caso que significa que está todo bien, y lleva la fecha', () => {
+    const s = silencioDeReglas([r(true, '2026-08-27T10:50:00Z'), r(true, '2026-08-27T10:50:00Z')], AHORA)
+    expect(s.clase).toBe('todo-bien')
+    expect(s.texto).toMatch(/hace 1 hora/)
+    expect(s.texto).not.toMatch(/todavía no corrió/)
+  })
+
+  it('🔴 una regla que quedó atrás NO la tapan las que corrieron hoy', () => {
+    // Con sólo la corrida más reciente, el cartel diría «hace 1 hora» sobre una que hace cinco días
+    // que no mira nada.
+    const s = silencioDeReglas([r(true, '2026-08-27T10:50:00Z'), r(true, '2026-08-22T10:50:00Z')], AHORA)
+    expect(s.texto).toMatch(/más reciente hace 1 hora/)
+    expect(s.texto).toMatch(/más atrasada hace 5 días/)
+  })
+
+  it('una corrida vieja se lee como vieja: el silencio de hace días no es el de hoy', () => {
+    const s = silencioDeReglas([r(true, '2026-08-22T10:50:00Z')], AHORA)
+    expect(s.texto).toMatch(/hace 5 días/)
+  })
+
+  it('🔴 si algunas nunca corrieron se dice, aunque otras sí: media corrida no es una corrida', () => {
+    const s = silencioDeReglas([r(true, '2026-08-27T10:50:00Z'), r(true, null), r(false, null)], AHORA)
+    expect(s.clase).toBe('todo-bien')
+    expect(s.prendidas).toBe(2)
+    expect(s.texto).toMatch(/1 de ellas todavía no corrió nunca/)
+  })
+
+  it('🔴 mientras no se sepa, no se afirma nada', () => {
+    const s = silencioDeReglas(null, AHORA)
+    expect(s.clase).toBe('no-se-sabe')
+    // Ni «no hay reglas» ni «no encontraron nada»: las dos serían inventadas.
+    expect(s.texto).not.toMatch(/no hay ninguna regla prendida/)
+    expect(s.texto).not.toMatch(/no encontraron nada/)
+  })
+
+  it('una fecha basura se trata como «nunca corrió», ⛔ no como una corrida', () => {
+    const s = silencioDeReglas([r(true, 'ayer a la tarde')], AHORA)
+    expect(s.clase).toBe('nunca-corrio')
   })
 })
