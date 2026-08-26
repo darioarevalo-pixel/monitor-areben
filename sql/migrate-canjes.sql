@@ -667,6 +667,20 @@ alter table canjes add column if not exists drive_carpeta_id text;
 -- ⛔ NO entra al puntaje de la persona (`lib/canjes/puntaje.ts`). Ese archivo se escribió antes de
 -- tener datos y su propia advertencia es que el riesgo no es que el score se equivoque, sino que
 -- alguien decida a quién no llamar mirándolo. Cuatro valores tipeados a ojo no son un insumo de eso.
+-- 🆕 **SON DOS JUEGOS DE VALORES, NO UNO** (26-ago-2026). A un canje **UGC** —uno en el que todo lo
+-- que se pidió es material para nosotros, sin publicación— preguntarle qué vendió no tiene respuesta
+-- posible: no publicó nada. La pregunta ahí es si el material sirvió, y las respuestas son
+-- `uso_pauta` · `sirvio` · `no_sirvio` · `no_se`.
+--
+-- 🔴 **Ningún valor se pisa con los de venta, salvo `no_se`, y es a propósito**: si «sirvió» se
+-- guardara como `algo`, al leer la columna dentro de seis meses no habría forma de saber QUÉ
+-- pregunta se contestó — y las dos no son comparables entre sí.
+--
+-- 🔑 **Cuál de los dos juegos vale se DERIVA de los entregables** (`esPedidoUgc`/`resultadosDe`, en
+-- `lib/canjes/reglas.core.js`), ⛔ no de una columna `es_ugc`: el pedido se puede editar mientras la
+-- conversación siga abierta, y una bandera guardada al crear empieza a mentir en cuanto alguien le
+-- agrega una historia. Por eso la columna **sigue sin CHECK**: el gate es el `includes` del handler,
+-- que pregunta lo mismo que la pantalla.
 alter table canjes add column if not exists resultado      text;
 alter table canjes add column if not exists resultado_nota text;
 alter table canjes add column if not exists resultado_por  text;

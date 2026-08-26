@@ -23,6 +23,7 @@ import {
 // Lo que el handler re-exporta. `normalizarJS`/`numeroJS` no son espejos: son LA misma función que
 // importa la pantalla, y abajo se assertea con `toBe` que lo sigan siendo.
 import { normalizarInstagram as normalizarJS, numeroCanje as numeroJS, resumenCiego } from '../api/_canjes.js'
+import { COMBOS_ENTREGABLES, PEDIDO_VACIO, mismoPedido, totalPedido } from '@/components/canjes/GrillaEntregables'
 
 // ── El @ ─────────────────────────────────────────────────────────────────────────
 
@@ -606,5 +607,40 @@ describe('enTransito — la cola que la encargada revisa todos los días', () =>
 
   it('llegar es lo único que lo saca de la cola', () => {
     expect(enTransito({ envio_estado: 'hecho', entregado_at: '2026-08-01T00:00:00Z' })).toBe(false)
+  })
+})
+
+// ── Los combos del pedido ────────────────────────────────────────────────────────
+
+describe('COMBOS_ENTREGABLES — los presets de "qué le pedimos a cambio"', () => {
+  it('existe el botón UGC y pide sólo contenido', () => {
+    const ugc = COMBOS_ENTREGABLES.find((c) => c.nombre === 'UGC')
+    expect(ugc).toBeDefined()
+    expect(ugc!.pedido.contenido).toBeGreaterThan(0)
+    // Lo que lo hace UGC no es el nombre del botón: es que no pida nada que se publique.
+    expect(ugc!.pedido.historia_ig).toBe(0)
+    expect(ugc!.pedido.reel_ig).toBe(0)
+    expect(ugc!.pedido.post_ig).toBe(0)
+    expect(ugc!.pedido.video_tiktok).toBe(0)
+  })
+
+  it('⛔ no quedó el viejo «Sólo contenido» al lado: sería el mismo botón dos veces', () => {
+    expect(COMBOS_ENTREGABLES.map((c) => c.nombre)).not.toContain('Sólo contenido')
+  })
+
+  it('cada combo se arma sobre el vacío: elegirlo PISA lo cargado, no lo suma', () => {
+    for (const c of COMBOS_ENTREGABLES) {
+      expect(Object.keys(c.pedido).sort()).toEqual(Object.keys(PEDIDO_VACIO).sort())
+      expect(totalPedido(c.pedido)).toBeGreaterThan(0)
+      expect(mismoPedido(c.pedido, c.pedido)).toBe(true)
+    }
+  })
+
+  it('no hay dos combos que pidan exactamente lo mismo', () => {
+    for (let i = 0; i < COMBOS_ENTREGABLES.length; i++) {
+      for (let j = i + 1; j < COMBOS_ENTREGABLES.length; j++) {
+        expect(mismoPedido(COMBOS_ENTREGABLES[i].pedido, COMBOS_ENTREGABLES[j].pedido)).toBe(false)
+      }
+    }
   })
 })

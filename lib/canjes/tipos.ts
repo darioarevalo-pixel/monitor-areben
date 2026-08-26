@@ -19,6 +19,7 @@
 import {
   buzonAbierto as buzonAbiertoJS,
   controlDelTope as controlDelTopeJS,
+  esPedidoUgc as esPedidoUgcJS,
   esTerminal as esTerminalJS,
   ESTADOS as ESTADOS_JS,
   fechaISO as fechaISOJS,
@@ -29,6 +30,8 @@ import {
   numeroCanje as numeroCanjeJS,
   puedeIr as puedeIrJS,
   RESULTADOS as RESULTADOS_JS,
+  RESULTADOS_UGC as RESULTADOS_UGC_JS,
+  resultadosDe as resultadosDeJS,
   retiroLocalDisponible as retiroLocalDisponibleJS,
   TERMINALES as TERMINALES_JS,
   TRANSICIONES as TRANSICIONES_JS,
@@ -240,9 +243,26 @@ export function enTransito(c: Pick<CanjeRow, 'envio_estado' | 'entregado_at'>): 
  * El resultado comercial de un canje. Cuatro valores, y `no_se` es el que evita que «no sé» se
  * registre como «nada» — la diferencia entre las dos es lo que dice si la pregunta se está usando.
  */
-export type ResultadoCanje = 'vendio' | 'algo' | 'nada' | 'no_se'
+export type ResultadoCanje =
+  | 'vendio' | 'algo' | 'nada'
+  | 'uso_pauta' | 'sirvio' | 'no_sirvio'
+  | 'no_se'
 
 export const RESULTADOS = RESULTADOS_JS as ResultadoCanje[]
+
+/**
+ * El juego de un canje **UGC**: lo que se le pidió no se publica, así que preguntarle si vendió no
+ * tiene respuesta. 🔴 Ningún valor se pisa con los de venta —salvo `no_se`— para que la columna
+ * siga diciendo **qué pregunta** se contestó. El porqué, en `reglas.core.js`.
+ */
+export const RESULTADOS_UGC = RESULTADOS_UGC_JS as ResultadoCanje[]
+
+/** ¿Todo lo que se le pidió es material para nosotros, sin publicación? Deriva de los entregables. */
+export const esPedidoUgc: (entregables: { tipo: TipoEntregable }[]) => boolean = esPedidoUgcJS
+
+/** Qué juego de respuestas corresponde. La pantalla y el handler preguntan lo mismo. */
+export const resultadosDe: (entregables: { tipo: TipoEntregable }[]) => ResultadoCanje[] =
+  resultadosDeJS as (e: { tipo: TipoEntregable }[]) => ResultadoCanje[]
 
 /**
  * Lo que se lee en la pantalla. ⚠️ Ninguno afirma una medición: son las palabras con las que se
@@ -252,6 +272,11 @@ export const RESULTADO_LABEL: Record<ResultadoCanje, string> = {
   vendio: 'Sí, se notó en la venta',
   algo: 'Algo movió',
   nada: 'No se notó',
+  // Los tres de UGC. La pregunta no es qué vendió: es si el material sirvió, y «se usó en pauta» es
+  // la única de las cuatro que además dice dónde terminó.
+  uso_pauta: 'Se usó en pauta',
+  sirvio: 'Sirvió, todavía no se usó',
+  no_sirvio: 'No sirvió',
   no_se: 'No sabría decir',
 }
 

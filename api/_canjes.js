@@ -89,7 +89,7 @@ import { normalizarInstagram } from '../lib/canjes/instagram.core.js';
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
 // Las reglas duras, LA implementación. El grafo lo consulta `puedeIr` y por eso `TRANSICIONES` no
 // se importa: se importaba sólo para re-exportarlo al test de espejo, que ya no existe.
-import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, numeroCanje, puedeIr, RESULTADOS, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
+import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, numeroCanje, puedeIr, resultadosDe, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -2214,8 +2214,13 @@ export default async function handler(req, res) {
      */
     if (action === 'resultado') {
       const valor = texto(b.resultado);
-      if (!RESULTADOS.includes(valor)) {
-        return res.status(400).json({ error: `resultado inválido (usá ${RESULTADOS.join(', ')})` });
+      // 🔑 Los valores que valen dependen de lo que se le PIDIÓ: un canje de puro contenido (UGC) no
+      // publica nada, así que la pregunta no es qué vendió sino si el material sirvió. La derivación
+      // es la MISMA que la de la pantalla (`resultadosDe`, en reglas.core.js) — escritas por
+      // separado, la pantalla ofrece un botón que este handler contesta con 400.
+      const validos = resultadosDe(await entregablesDe(canjeId));
+      if (!validos.includes(valor)) {
+        return res.status(400).json({ error: `resultado inválido (usá ${validos.join(', ')})` });
       }
       if (canje.estado !== 'cerrado') {
         return res.status(409).json({ error: 'El «¿rindió?» se contesta después de cerrar el canje.' });

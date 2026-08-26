@@ -19,7 +19,7 @@ import {
 } from '@/components/ui'
 import { cerrarCanje, guardarResultado, marcarNoConservado, registrarPago } from '@/lib/canjes/cliente'
 import {
-  calcularBalance, faltantesParaCerrarCanje, RESULTADO_LABEL, RESULTADOS,
+  calcularBalance, esPedidoUgc, faltantesParaCerrarCanje, RESULTADO_LABEL, resultadosDe,
   type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow, type ResultadoCanje,
 } from '@/lib/canjes/tipos'
 
@@ -165,7 +165,7 @@ export function CierreBalance({
       )}
 
       {/* El «¿rindió?», que sólo existe una vez cerrado. Ver `Rindio`. */}
-      {yaCerrado && <Rindio canje={canje} onCambio={onCambio} />}
+      {yaCerrado && <Rindio canje={canje} entregables={entregables} onCambio={onCambio} />}
 
       {/* Devolvió o vendió lo que le mandamos. Un flag y nada más: sin flujo de reingreso ni
           enganche con Reclamos — pasa dos veces al año y cada caso es distinto. */}
@@ -213,8 +213,22 @@ export function CierreBalance({
  *
  * ⛔ No entra al puntaje de la persona: ver el encabezado de `lib/canjes/puntaje.ts`.
  */
-function Rindio({ canje, onCambio }: { canje: CanjeRow; onCambio: () => void }) {
+function Rindio({
+  canje, entregables, onCambio,
+}: {
+  canje: CanjeRow
+  /**
+   * 🔑 Los entregables entran acá porque **de ellos sale qué pregunta corresponde**. Un canje de puro
+   * contenido (UGC) no publicó nada: preguntarle qué vendió no tiene respuesta posible. La derivación
+   * es la misma que corre en el servidor (`resultadosDe`), o el botón ofrecería un valor que el
+   * handler contesta con 400.
+   */
+  entregables: CanjeEntregable[]
+  onCambio: () => void
+}) {
   const toast = useToast()
+  const ugc = esPedidoUgc(entregables)
+  const opciones = resultadosDe(entregables)
   const [nota, setNota] = useState(canje.resultado_nota ?? '')
   const [guardando, setGuardando] = useState<ResultadoCanje | null>(null)
 
@@ -232,14 +246,17 @@ function Rindio({ canje, onCambio }: { canje: CanjeRow; onCambio: () => void }) 
 
   return (
     <div style={{ marginTop: space[5], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-      <div style={{ fontWeight: weight.semibold }}>¿Rindió?</div>
+      <div style={{ fontWeight: weight.semibold }}>{ugc ? '¿Sirvió el material?' : '¿Rindió?'}</div>
       <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
-        A ojo, y a sabiendas: no hay forma de medir qué vendió una creadora. Lo que se registra es lo
-        que le pareció a quien lo siguió — y se puede cambiar cuando se sepa más.
+        {/* ⚠️ En un UGC la frase de la venta no aplica: no se le pidió que publicara nada, así que no
+            hay venta que atribuirle ni bien ni mal. Lo que sí sigue igual es que es una opinión. */}
+        {ugc
+          ? 'A ojo, y a sabiendas: acá no se pidió publicación, así que no hay venta que mirar. Lo que se registra es si el material sirvió — y se puede cambiar cuando se sepa más.'
+          : 'A ojo, y a sabiendas: no hay forma de medir qué vendió una creadora. Lo que se registra es lo que le pareció a quien lo siguió — y se puede cambiar cuando se sepa más.'}
       </div>
 
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
-        {RESULTADOS.map((r) => (
+        {opciones.map((r) => (
           <Button
             key={r}
             size="sm"
@@ -257,8 +274,10 @@ function Rindio({ canje, onCambio }: { canje: CanjeRow; onCambio: () => void }) 
           escribe y no tiene botón propio es un texto que se pierde al cambiar de pantalla. Volver a
           tocar la opción que ya está elegida vuelve a guardarla. */}
       <Field
-        label="Con qué se vio"
-        hint="Lo que el número no dice: si vino gente al local, si preguntaron por algo puntual. Se guarda al elegir una de las cuatro."
+        label={ugc ? 'Dónde terminó' : 'Con qué se vio'}
+        hint={ugc
+          ? 'En qué pauta o en qué pieza se usó, o por qué no se pudo usar. Se guarda al elegir una de las cuatro.'
+          : 'Lo que el número no dice: si vino gente al local, si preguntaron por algo puntual. Se guarda al elegir una de las cuatro.'}
       >
         <Input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Opcional" />
       </Field>

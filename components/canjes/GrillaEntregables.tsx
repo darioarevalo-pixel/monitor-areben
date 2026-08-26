@@ -72,7 +72,12 @@ export const COMBOS_ENTREGABLES: ComboEntregables[] = [
   { nombre: '2 historias + reel', pedido: combo({ historia_ig: 2, reel_ig: 1 }) },
   // El que pidió Bruno (4-ago-2026): es el acuerdo estándar cuando además se le pide material.
   { nombre: '2 historias + TikTok + contenido', pedido: combo({ historia_ig: 2, video_tiktok: 1, contenido: 1 }) },
-  { nombre: 'Sólo contenido', pedido: combo({ contenido: 1 }) },
+  // UGC (Bruno, 26-ago-2026): una creadora a la que se le pide material y NO que publique. Es el
+  // mismo botón que antes decía «Sólo contenido» —un canje de puro contenido ya era esto— con el
+  // nombre con el que se lo nombra y una cantidad de arranque más realista. ⛔ No es un tipo de
+  // canje ni una columna: `canjes.tipo` dice qué se le DA, y esto es qué se le PIDE. Que sea UGC se
+  // deriva de los entregables (`esPedidoUgc`), y por eso sigue valiendo si después se edita el pedido.
+  { nombre: 'UGC', pedido: combo({ contenido: 3 }) },
 ]
 
 export function mismoPedido(a: PedidoPorTipo, b: PedidoPorTipo): boolean {

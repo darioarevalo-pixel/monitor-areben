@@ -89,6 +89,8 @@ const DRIVE = 'https://drive.google.com/file/d/1Z-SQT1VOXDFFK_RNxpqM8-LmZkbX7wYm
 type Mundo = {
   canje: Record<string, unknown>
   evidencia: Record<string, unknown> | null
+  /** Lo que se le pidió. De esto sale QUÉ pregunta acepta el «¿rindió?». */
+  entregables: Record<string, unknown>[]
   /** Cada `update` en orden, con la tabla. El ORDEN contra el borrado es la mitad del test. */
   pasos: string[]
   updates: { tabla: string; campos: Record<string, unknown> }[]
@@ -103,6 +105,7 @@ function nuevoMundo(): Mundo {
   return {
     canje: { id: 12, store: 'bdi', estado: 'en_curso', retiro_local: false, drive_carpeta_id: null },
     evidencia: { id: 99, archivo_url: BLOB, drive_url: null },
+    entregables: [{ id: 1, canje_id: 12, tipo: 'historia_ig', cantidad_comprometida: 2 }],
     pasos: [],
     updates: [],
     borrados: [],
@@ -131,6 +134,7 @@ function fakeSupabase() {
       }
       if (ctx.tabla === 'canjes') return { data: mundo.canje, error: null }
       if (ctx.tabla === 'canje_evidencias') return { data: mundo.evidencia, error: null }
+      if (ctx.tabla === 'canje_entregables') return { data: mundo.entregables, error: null }
       if (ctx.tabla === 'canje_config') return { data: { tope_evidencias_por_canje: 30 }, error: null }
       return { data: null, error: null }
     }
@@ -186,6 +190,16 @@ function resFalso() {
     end() { return r },
   }
   return r
+}
+
+async function postear(body: Record<string, unknown>) {
+  const mod = await import('@/api/_canjes.js')
+  const res = resFalso()
+  await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
+    { method: 'POST', headers: {}, query: {}, body: { store: 'bdi', id: 12, ...body } },
+    res,
+  )
+  return res
 }
 
 async function archivar(body: Record<string, unknown>) {
@@ -409,5 +423,58 @@ describe('resultado — se contesta después de cerrar', () => {
       expect(res.code, String(malo)).toBe(400)
       expect(mundo.updates, String(malo)).toEqual([])
     }
+  })
+})
+
+// ── El «¿rindió?»: qué se le pidió decide qué se le puede contestar ──────────────
+
+/**
+ * 🔴 **La validación del handler NO puede ser una lista fija.** Un canje de puro contenido (UGC) no
+ * publicó nada, así que la pregunta es otra y las respuestas son otras — y las dos listas viven en
+ * `reglas.core.js`, que es de donde también salen los botones de la pantalla.
+ *
+ * Lo que se fija acá es que el servidor **lea los entregables del canje** para decidir: si se
+ * quedara con la lista de venta, el botón «Se usó en pauta» que la ficha dibuja para un UGC
+ * contestaría 400 — y al revés, un canje que publicó aceptaría una respuesta sobre una pauta que
+ * nunca existió.
+ */
+describe('resultado — el juego de respuestas sale de lo que se le pidió', () => {
+  const contestar = (resultado: string) => postear({ action: 'resultado', resultado })
+
+  beforeEach(() => { mundo.canje.estado = 'cerrado' })
+
+  it('un canje que PUBLICA acepta la respuesta de venta y rechaza la de UGC', async () => {
+    mundo.entregables = [{ tipo: 'historia_ig' }, { tipo: 'reel_ig' }]
+    expect((await contestar('vendio')).code).toBe(200)
+    const mal = await contestar('uso_pauta')
+    expect(mal.code).toBe(400)
+    expect(String(mal.body?.error)).toContain('vendio')
+  })
+
+  it('🔴 un canje UGC acepta la respuesta del material y rechaza la de venta', async () => {
+    mundo.entregables = [{ tipo: 'contenido' }]
+    expect((await contestar('uso_pauta')).code).toBe(200)
+    const mal = await contestar('vendio')
+    expect(mal.code).toBe(400)
+    expect(String(mal.body?.error)).toContain('uso_pauta')
+  })
+
+  it('un canje MIXTO publica ⇒ sigue siendo el de venta', async () => {
+    mundo.entregables = [{ tipo: 'historia_ig' }, { tipo: 'contenido' }]
+    expect((await contestar('vendio')).code).toBe(200)
+    expect((await contestar('sirvio')).code).toBe(400)
+  })
+
+  it('«no se» vale en los dos, que es el único valor compartido', async () => {
+    mundo.entregables = [{ tipo: 'contenido' }]
+    expect((await contestar('no_se')).code).toBe(200)
+    mundo.entregables = [{ tipo: 'historia_ig' }]
+    expect((await contestar('no_se')).code).toBe(200)
+  })
+
+  it('⛔ no se contesta antes de cerrar, sea UGC o no', async () => {
+    mundo.canje.estado = 'en_curso'
+    mundo.entregables = [{ tipo: 'contenido' }]
+    expect((await contestar('uso_pauta')).code).toBe(409)
   })
 })

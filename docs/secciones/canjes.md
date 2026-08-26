@@ -126,6 +126,33 @@ no re-preguntarlas.**
   - ⛔ **No entra al puntaje** (`lib/canjes/puntaje.ts`): ese archivo se escribió antes de tener
     datos y su propia advertencia es que el riesgo no es que el score se equivoque, sino que alguien
     decida a quién no llamar mirándolo.
+- 🆕 🔑 **UGC ES UN PEDIDO, ⛔ NO UN TIPO DE CANJE** (26-ago-2026, pedido de Bruno: *«un botón al
+  momento de crear el canje que diga UGC, y que tenga preparado Contenido UGC»*). Una creadora de
+  UGC entra por el mismo flujo que cualquier otra —eso lo confirmó él— y lo único que cambia es
+  **qué se le pide**.
+  - 🔑 **El botón es un COMBO, no una columna.** Vive en `COMBOS_ENTREGABLES`
+    (`components/canjes/GrillaEntregables.tsx`) y es **el mismo que antes decía «Sólo contenido»**:
+    un canje de puro contenido ya era esto. Se renombró en vez de agregarse porque dos botones que
+    piden lo mismo con distinto nombre son peores que ninguno.
+  - ⛔ **No se agregaron tipos de entregable.** Bruno eligió que alcanza `contenido` («Contenido para
+    nosotros»): la lista cerrada de cinco no se tocó, y no hubo migración.
+  - ⛔ **No se tocó `canjes.tipo`.** `producto | producto_plata` dice qué se le **da**; UGC es qué se
+    le **pide**. Meterlo ahí movía `pago_estado`, el nivel de firma y el cierre.
+  - 🔑 **Que un canje sea UGC se DERIVA, no se guarda** (`esPedidoUgc`, en `reglas.core.js`): es UGC
+    si tiene entregables y **ninguno se publica**. Una bandera guardada al crear empieza a mentir en
+    cuanto alguien le agrega una historia con `canje-editar`; la derivación no puede.
+    🔑 **Todos crudos, ⛔ no «alguno»**: un canje mixto publica, y a lo que publica le sigue aplicando
+    la pregunta de la venta. 🔴 **La lista vacía es `false`** — el cero afirma.
+  - ⛔ **No se renombró el rótulo «Contenido para nosotros» a «Contenido UGC»**: `entregableEnCriollo`
+    lo baja a minúsculas para armar **el mensaje de WhatsApp que se le manda a ella**, y quedaría
+    *«te pedimos 3 contenidos ugc (para nosotros)»*. El rótulo del grid y el texto del mensaje salen
+    del mismo `Record`.
+  - 🆕 **El «¿rindió?» de un UGC es OTRA pregunta**: `RESULTADOS_UGC = uso_pauta · sirvio ·
+    no_sirvio · no_se`, y la pantalla se titula «¿Sirvió el material?». 🔴 **Ningún valor se pisa con
+    los de venta salvo `no_se`**, o la columna dejaría de decir qué pregunta se contestó. Sin
+    migración (`resultado` es `text` sin CHECK). 🔑 **El handler valida con `resultadosDe`, la misma
+    derivación que dibuja los botones** — escritas por separado, la pantalla ofrece un valor que el
+    servidor contesta con 400.
 - 🆕 🔑 **QUE ELLA SUBA YA SE VE SIN ENTRAR A LA FICHA** (24-ago-2026): séptimo aviso derivado
   (`canje-contenido`), agrupado, en la campanita y en Inicio, más el chip **«Contenido sin revisar»**
   y una chapita en la fila. Antes, subir seis videos **no movía un solo píxel**: el canje se queda en
@@ -290,6 +317,10 @@ nombre. Lo que no es obvio:
   frena una venta duplicada y **GN no permite anular por API**: dos toques seguidos serían dos ventas
   y dos veces el stock descontado. Hay test y se cazó **mutando la guarda** — si se toca esa zona,
   volver a mutarla.
+- 🆕 **El «¿rindió?» de un UGC también vive en `tests/canje-drive.test.ts`**, y no es un descuido:
+  ese archivo ya tiene el único arnés del módulo que llama a `api/_canjes.js` con la sesión mockeada,
+  y lo que hay que probar es **comportamiento del handler** (que lea los entregables del canje antes
+  de validar), no una regla pura. **7 mutantes, 7 muertos** entre las reglas y el handler.
 - 🔴 **`tests/canje-drive.test.ts` cubre el único verbo del módulo que DESTRUYE**: archivar borra el
   archivo del Blob. Fija el orden (anotar y después borrar), que la URL borrada salga de la fila y no
   del pedido, que sólo se toque la carpeta `canjes` y que la subcarpeta no se pise. **9 mutantes, 9

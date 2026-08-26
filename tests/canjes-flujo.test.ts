@@ -14,7 +14,8 @@ import {
   CONFIG_DEFAULT,
   calcularBalance, controlDelTope, costoEstimado, cumplimiento,
   entregablesVencidos, faltantesParaCerrarCanje, fechaISO, itemsVivos, naceEn, pideSeguimiento,
-  puedeProponerCanje, quienApruebaCanje, vencimientoDe,
+  esPedidoUgc, puedeProponerCanje, quienApruebaCanje, resultadosDe, RESULTADOS, RESULTADOS_UGC,
+  vencimientoDe,
   type CanjeConfig, type CanjeEntregable, type CanjeEvidencia, type CanjeItem, type CanjeRow,
 } from '@/lib/canjes/tipos'
 import {
@@ -315,6 +316,53 @@ describe('entregablesDelBody — la grilla manda los cinco tipos siempre', () =>
   it('nada, o basura, devuelve lista vacía y no rompe', () => {
     expect(entregablesDelBody(undefined, cfg)).toEqual([])
     expect(entregablesDelBody([null, {}, { tipo: 'post_ig' }], cfg)).toEqual([])
+  })
+})
+
+// ── UGC: qué se le pidió decide qué se le pregunta al cerrar ─────────────────────
+
+describe('esPedidoUgc — se deriva de los entregables, no se guarda', () => {
+  const e = (tipo: string) => ({ tipo }) as unknown as CanjeEntregable
+
+  it('sólo contenido es UGC', () => {
+    expect(esPedidoUgc([e('contenido')])).toBe(true)
+    expect(esPedidoUgc([e('contenido'), e('contenido')])).toBe(true)
+  })
+
+  it('🔴 un canje MIXTO no es UGC: publica, y a lo que publica le aplica la pregunta de la venta', () => {
+    expect(esPedidoUgc([e('historia_ig'), e('contenido')])).toBe(false)
+    expect(esPedidoUgc([e('contenido'), e('video_tiktok')])).toBe(false)
+  })
+
+  it('sólo publicación no es UGC', () => {
+    expect(esPedidoUgc([e('historia_ig'), e('reel_ig')])).toBe(false)
+  })
+
+  it('🔴 la lista vacía es false: el cero afirma, y sin entregables no hay con qué decir que es UGC', () => {
+    expect(esPedidoUgc([])).toBe(false)
+    expect(esPedidoUgc(undefined as unknown as CanjeEntregable[])).toBe(false)
+  })
+})
+
+describe('resultadosDe — el juego de respuestas del «¿rindió?»', () => {
+  const e = (tipo: string) => ({ tipo }) as unknown as CanjeEntregable
+
+  it('un canje que publica contesta con los de venta', () => {
+    expect(resultadosDe([e('historia_ig')])).toEqual(RESULTADOS)
+    expect(resultadosDe([e('historia_ig'), e('contenido')])).toEqual(RESULTADOS)
+  })
+
+  it('un canje UGC contesta con los suyos', () => {
+    expect(resultadosDe([e('contenido')])).toEqual(RESULTADOS_UGC)
+  })
+
+  it('sin entregables cae en los de venta, que es el default de siempre', () => {
+    expect(resultadosDe([])).toEqual(RESULTADOS)
+  })
+
+  it('🔴 los dos juegos no se pisan salvo en `no_se`: si no, la columna no dice QUÉ se contestó', () => {
+    const compartidos = RESULTADOS.filter((r) => RESULTADOS_UGC.includes(r))
+    expect(compartidos).toEqual(['no_se'])
   })
 })
 
