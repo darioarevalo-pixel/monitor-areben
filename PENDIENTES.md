@@ -319,3 +319,11 @@ antes de rehacerlo.
   Manager a crear un aviso — que es exactamente la fricción que el usuario señala. ⇒ **Aceptar el
   copy en el pedido** (título, mensaje, descripción, destino, CTA) y dejar el aviso modelo sólo para
   la página y el Instagram.
+  📊 **Medido el 26-ago-2026 con `TANDA VIDEOS 26-8` (4 videos)**: la tanda salió con el copy del
+  modelo en las 4 y hubo que **editar las 4 a mano en Ads Manager**. Lo que más costó no fue el
+  texto: fue el **destino**, que viaja adentro del copy — las 4 nacieron apuntando a
+  `/fundas/girlhood-collection/` y dos de ellas iban a otra página (`/productos/stellar-case/` y
+  `/new-in/`). ⇒ **el campo que más se paga por no poder mandar es el `link`, no el `message`.**
+  🔴 Y las ediciones **quedaron en BORRADOR**: releyendo Graph, Meta seguía teniendo el copy del
+  modelo cuando ya se las daba por editadas. ⇒ si el plan aceptara el copy, no habría paso manual
+  que se pueda olvidar de publicar.
