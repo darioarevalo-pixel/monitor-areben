@@ -8,6 +8,7 @@
  */
 
 import { apiFetch } from '../api-fetch'
+import type { BandaHoy } from './parte'
 import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type { MarcaFavorito, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
@@ -20,7 +21,19 @@ import type { RespuestaTendencia } from './tendencia'
 import type { RespuestaZona } from './rendimiento'
 
 /** Lo que contesta `?recurso=parte`: el texto listo para copiar y qué no se pudo leer. */
-export type RespuestaParte = { ok: true; texto: string; faltantes: string[] }
+/**
+ * El parte, en sus dos formas y de una sola llamada: `texto` es el que se copia y se pega en una
+ * conversación; `banda` es **la misma verdad en objeto**, para que la pantalla la dibuje en vez de
+ * mostrar un `<pre>`. ⛔ No son dos consultas ni dos agregaciones: salen de las mismas cinco
+ * llamadas a Graph y de las mismas funciones puras.
+ */
+export type RespuestaParte = {
+  ok: true
+  texto: string
+  banda: BandaHoy
+  fechas: { hoy: string; ayer: string; leido: string }
+  faltantes: string[]
+}
 import type {
   DetalleCuenta, PresetMetaAds, RespuestaAuditoria, RespuestaConjuntos, RespuestaCreativos,
   RespuestaCuentas, RespuestaDiagnostico, RespuestaEtapas, RespuestaMejoras, RespuestaOverview,

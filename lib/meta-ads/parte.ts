@@ -70,6 +70,50 @@ export type Marginal = {
   motivo: string
 }
 
+/** Un balde de una hora, ya normalizado. `hora` es 0-23 en la zona de la CUENTA, la que resolvió Meta. */
+export type HoraDePauta = {
+  hora: number
+  linea?: string
+  gasto: number
+  compras: number
+  revenue?: number
+  impresiones?: number
+}
+
+/**
+ * La banda de HOY, lista para dibujar.
+ *
+ * 🔑 Los tres `| null` son el tipo entero, y ninguno es un default disfrazado:
+ * `costo` null = no hubo compras (⛔ no «salieron gratis»); `pctTecho` null = no hay ficha de
+ * rentabilidad cargada; `aEstaHora` null = Meta no dio el desglose horario, y entonces
+ * `motivoSinHora` dice cuál de los dos motivos fue.
+ */
+export type BandaHoy = {
+  linea: string
+  hoy: {
+    gasto: number
+    compras: number
+    costo: number | null
+    revenue: number
+    roas: number | null
+    carritos: number
+    checkouts: number
+    clics: number
+  }
+  techo: number
+  pctTecho: number | null
+  veredicto: string
+  /** Suma de los topes diarios de los conjuntos que entregan. Con `sinTope > 0` es un PISO. */
+  tope: number
+  /** Cuántos conjuntos que entregan no tienen tope propio (CBO). Con uno solo, el % no se dibuja. */
+  sinTope: number
+  conjuntos: number
+  hora: number | null
+  aEstaHora: { gasto: number; compras: number; costo: number | null } | null
+  motivoSinHora: string | null
+  ayerEntero: { gasto: number; compras: number; costo: number | null }
+}
+
 export type ArmarParte = {
   hoy?: FilaAviso[]
   ayer?: FilaAviso[]
@@ -105,3 +149,25 @@ export const marginalEntreVentanas = core.marginalEntreVentanas as (
   dias?: number,
 ) => Marginal
 export const renderParte = core.renderParte as (args: ArmarParte) => string
+/** La hora en curso **según el dato**: el balde más alto de HOY que tuvo entrega. `null` si ninguno. */
+export const horaEnCurso = core.horaEnCurso as (filasHoy: HoraDePauta[]) => number | null
+export const sumarHasta = core.sumarHasta as (
+  filas: HoraDePauta[],
+  corte: number | null,
+) => { gasto: number; compras: number; revenue: number; impresiones: number }
+export const topeQueEntrega = core.topeQueEntrega as (
+  filasHoy: FilaAviso[],
+  techosDiarios?: Record<string, number>,
+  estados?: Record<string, string>,
+  linea?: string,
+) => { tope: number; sinTope: number; conjuntos: number }
+export const bandaDeHoy = core.bandaDeHoy as (args: {
+  hoy?: FilaAviso[]
+  ayer?: FilaAviso[]
+  horasHoy?: HoraDePauta[]
+  horasAyer?: HoraDePauta[]
+  techos?: Record<string, number>
+  techosDiarios?: Record<string, number>
+  estados?: Record<string, string>
+  linea?: string
+}) => BandaHoy

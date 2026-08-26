@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FUNNEL, TIPO_FUNNEL } from '@/lib/meta-ads/metricas'
 import {
-  cruzarConLaCaja, limpiar, marginalEntreVentanas, porConjunto, renderParte, veredicto,
+  bandaDeHoy, cruzarConLaCaja, horaEnCurso, limpiar, marginalEntreVentanas, porConjunto,
+  renderParte, sumarHasta, topeQueEntrega, veredicto,
   type FilaAviso,
 } from '@/lib/meta-ads/parte'
 
@@ -278,4 +279,177 @@ describe('la proyección de api/ llena el embudo por aviso', () => {
       expect(fuente).not.toMatch(/'omni_initiated_checkout'/)
     })
   }
+})
+
+/**
+ * LA BANDA DE HOY — el día en curso, dibujado.
+ *
+ * 🔴 **Nace de un defecto medido, no de un pedido de pantalla.** El parte imprimía un `delta%` que
+ * compara el día EN CURSO contra el día de ayer ENTERO: a las 15:00 daba −56% en casi todas las
+ * filas y se leía como un derrumbe, cuando lo único que decía es que el día iba por la mitad.
+ * Dibujado en una banda grande eso es un número que existe y no significa — el mismo defecto que
+ * este módulo ya cazó tres veces en dos días (el piso derivado de una observación, la ventana más
+ * corta que el fenómeno, y `veces` contando filas).
+ */
+describe('horaEnCurso — la hora sale del DATO, no de un reloj', () => {
+  it('es el balde más alto que tuvo entrega, aunque venga desordenado', () => {
+    // Meta agrupa por campaña, así que las horas vienen intercaladas: confiar en el orden del
+    // array daría una hora distinta en cada llamada.
+    expect(horaEnCurso([
+      { hora: 9, gasto: 100, compras: 0, impresiones: 50 },
+      { hora: 14, gasto: 300, compras: 1, impresiones: 200 },
+      { hora: 2, gasto: 10, compras: 0, impresiones: 5 },
+    ])).toBe(14)
+  })
+
+  it('una hora con impresiones y $0 CUENTA: mostrar es entregar', () => {
+    expect(horaEnCurso([{ hora: 7, gasto: 0, compras: 0, impresiones: 40 }])).toBe(7)
+  })
+
+  it('una hora sin entrega NO cuenta: si no, un balde vacío que Meta manda igual adelantaría el reloj', () => {
+    expect(horaEnCurso([
+      { hora: 8, gasto: 500, compras: 0, impresiones: 300 },
+      { hora: 20, gasto: 0, compras: 0, impresiones: 0 },
+    ])).toBe(8)
+  })
+
+  it('sin ninguna hora con entrega devuelve null — ⛔ nunca 0, que es una hora real', () => {
+    expect(horaEnCurso([])).toBe(null)
+    expect(horaEnCurso([{ hora: 0, gasto: 0, compras: 0, impresiones: 0 }])).toBe(null)
+  })
+
+  it('la medianoche es una hora válida y no se confunde con «no hay»', () => {
+    expect(horaEnCurso([{ hora: 0, gasto: 120, compras: 0, impresiones: 90 }])).toBe(0)
+  })
+})
+
+describe('sumarHasta — el corte va por el NÚMERO de hora, no por el orden', () => {
+  const horas = [
+    { hora: 18, gasto: 900, compras: 2, impresiones: 500 },
+    { hora: 3, gasto: 100, compras: 0, impresiones: 60 },
+    { hora: 10, gasto: 400, compras: 1, impresiones: 250 },
+  ]
+
+  it('incluye la hora del corte', () => {
+    expect(sumarHasta(horas, 10)).toMatchObject({ gasto: 500, compras: 1 })
+  })
+
+  it('deja afuera lo posterior aunque venga primero en el array', () => {
+    expect(sumarHasta(horas, 3).gasto).toBe(100)
+  })
+
+  it('sin corte (null) suma cero: ⛔ no se cae a sumar el día entero, que es lo que se vino a evitar', () => {
+    // Con la medianoche adentro: sin el guard de `corte`, `0 > null` es falso y la hora 0 se colaría
+    // ⇒ la comparación diría «ayer a esta hora llevaba $70» sobre un corte que no existe.
+    expect(sumarHasta([...horas, { hora: 0, gasto: 70, compras: 0, impresiones: 40 }], null).gasto).toBe(0)
+  })
+})
+
+describe('topeQueEntrega — un porcentaje inflado no se muestra', () => {
+  const filas = [
+    aviso({ conjunto: 'A', linea: 'bdi' }),
+    aviso({ conjunto: 'A', linea: 'bdi', aviso: 'AD02' }),
+    aviso({ conjunto: 'B', linea: 'bdi' }),
+    aviso({ conjunto: 'Z', linea: 'zattia' }),
+  ]
+
+  it('cada conjunto suma UNA vez, aunque tenga varios avisos', () => {
+    const r = topeQueEntrega(filas, { A: 10000, B: 5000 }, { A: 'ACTIVE', B: 'ACTIVE' }, 'bdi')
+    expect(r).toMatchObject({ tope: 15000, sinTope: 0, conjuntos: 2 })
+  })
+
+  it('la otra línea no entra: el tope de BDI con la caja de Zattia adentro no es de nadie', () => {
+    expect(topeQueEntrega(filas, { A: 10000, B: 5000, Z: 9000 }, {}, 'bdi').tope).toBe(15000)
+  })
+
+  it('🔴 un conjunto de CBO (sin tope propio) se CUENTA como faltante, no se ignora', () => {
+    // Meta no devuelve `daily_budget` para los conjuntos de una campaña con presupuesto a nivel
+    // campaña. Sumar sólo los que tienen tope da un total más chico que el real ⇒ el porcentaje
+    // sale POR ENCIMA del verdadero, que es el peor error acá: exagera lo consumido justo en la
+    // pantalla con la que se decide soltar plata.
+    const r = topeQueEntrega(filas, { A: 10000 }, { A: 'ACTIVE', B: 'ACTIVE' }, 'bdi')
+    expect(r).toMatchObject({ tope: 10000, sinTope: 1 })
+  })
+
+  it('un conjunto PAUSADO a media tarde gastó hoy pero ya no puede gastar más: no suma tope', () => {
+    const r = topeQueEntrega(filas, { A: 10000, B: 5000 }, { A: 'ACTIVE', B: 'PAUSED' }, 'bdi')
+    expect(r).toMatchObject({ tope: 10000, sinTope: 0 })
+  })
+})
+
+describe('bandaDeHoy — lo que la pantalla afirma del día en curso', () => {
+  const base = {
+    hoy: [aviso({ conjunto: 'A', gasto: 40000, compras: 5, revenue: 200000 })],
+    ayer: [aviso({ conjunto: 'A', gasto: 80000, compras: 12, revenue: 400000 })],
+    horasHoy: [{ hora: 15, linea: 'bdi', gasto: 40000, compras: 5, impresiones: 9000 }],
+    horasAyer: [
+      { hora: 15, linea: 'bdi', gasto: 4000, compras: 1, impresiones: 900 },
+      { hora: 10, linea: 'bdi', gasto: 34000, compras: 4, impresiones: 8000 },
+      { hora: 22, linea: 'bdi', gasto: 42000, compras: 7, impresiones: 9000 },
+    ],
+    techos: { bdi: 6668 },
+    techosDiarios: { A: 60000 },
+    estados: { A: 'ACTIVE' },
+    linea: 'bdi',
+  }
+
+  it('🔴 compara contra ayer HASTA LA MISMA HORA, ⛔ no contra el día entero', () => {
+    const b = bandaDeHoy(base)
+    expect(b.hora).toBe(15)
+    // 4.000 + 34.000 de las horas 10 y 15. Las 22 son de después y NO entran: si entraran, hoy
+    // aparecería un 50% abajo a media tarde todos los días.
+    expect(b.aEstaHora).toMatchObject({ gasto: 38000, compras: 5 })
+    expect(b.motivoSinHora).toBe(null)
+  })
+
+  it('el día entero de ayer viaja aparte y rotulado, para saber dónde cerró', () => {
+    expect(bandaDeHoy(base).ayerEntero).toMatchObject({ gasto: 80000, compras: 12 })
+  })
+
+  it('sin desglose horario NO inventa una comparación: devuelve null y el motivo', () => {
+    const b = bandaDeHoy({ ...base, horasHoy: [], horasAyer: [] })
+    expect(b.aEstaHora).toBe(null)
+    expect(b.motivoSinHora).toMatch(/hora/i)
+  })
+
+  it('🔴 con las horas de AYER pero sin las de hoy, ⛔ NO se cae a comparar contra el día entero', () => {
+    // El caso peligroso, y el que hace existir a toda esta función: si sin hora en curso el corte
+    // se fuera a las 23, la banda diría «hoy $40.000 contra $80.000» a las 15:00 y eso es el −50%
+    // de todas las tardes con otra cara.
+    const b = bandaDeHoy({ ...base, horasHoy: [] })
+    expect(b.hora).toBe(null)
+    expect(b.aEstaHora).toBe(null)
+  })
+
+  it('con horas de hoy pero sin las de ayer, el motivo es el OTRO: los dos casos no se confunden', () => {
+    const b = bandaDeHoy({ ...base, horasAyer: [] })
+    expect(b.hora).toBe(15)
+    expect(b.aEstaHora).toBe(null)
+    expect(b.motivoSinHora).toMatch(/ayer/i)
+  })
+
+  it('sin compras el costo va NULL, ⛔ no 0: «no hay con qué dividir» ≠ «salieron gratis»', () => {
+    const b = bandaDeHoy({ ...base, hoy: [aviso({ conjunto: 'A', gasto: 12000, compras: 0 })] })
+    expect(b.hoy.costo).toBe(null)
+    expect(b.pctTecho).toBe(null)
+    // Pero el veredicto SÍ habla: $12.000 sin una compra ya pasó el techo, y eso es un ALTO probado.
+    expect(b.veredicto).toBe('ALTO')
+  })
+
+  it('sin techo guardado ⛔ no se inventa un porcentaje', () => {
+    const b = bandaDeHoy({ ...base, techos: {} })
+    expect(b.pctTecho).toBe(null)
+    expect(b.veredicto).toBe('?')
+  })
+
+  it('el % del techo sale del COSTO POR COMPRA, no del gasto', () => {
+    // 40.000 / 5 = 8.000 contra un techo de 6.668 ⇒ 120%. Si dividiera el gasto daría 600%.
+    expect(Math.round(bandaDeHoy(base).pctTecho!)).toBe(120)
+    expect(bandaDeHoy(base).veredicto).toBe('ALTO')
+  })
+
+  it('la otra línea no ensucia: el gasto de Zattia no entra en la banda de BDI', () => {
+    const b = bandaDeHoy({ ...base, hoy: [...base.hoy, aviso({ conjunto: 'Z', linea: 'zattia', gasto: 99999, compras: 0 })] })
+    expect(b.hoy.gasto).toBe(40000)
+  })
 })

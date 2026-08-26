@@ -35,7 +35,7 @@
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { graph, insightsTodas } from '../lib/meta-ads/graph.core.js';
 import { accion, COMPRA, TIPO_FUNNEL } from '../lib/meta-ads/metricas.core.js';
-import { cruzarConLaCaja, renderParte } from '../lib/meta-ads/parte.core.js';
+import { bandaDeHoy, cruzarConLaCaja, renderParte } from '../lib/meta-ads/parte.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
 
@@ -50,6 +50,45 @@ const CAMPOS_AD =
 /** La misma ventana de atribución que usa el resto de la sección: sin esto los números del parte no
  *  serían comparables con los de la pantalla de al lado. */
 const ATTR = 'action_attribution_windows=["7d_click","1d_view"]';
+
+/**
+ * El desglose por hora, para poder comparar **hoy contra ayer A ESTA MISMA HORA**.
+ *
+ * 🔴 **Arregla un número que existía y no significaba.** El bloque de CONJUNTOS imprime un `delta%`
+ * que compara el día EN CURSO contra el día de ayer ENTERO: a las 15:00 daba −56% en casi todas las
+ * filas y se leía como un derrumbe cuando lo único que decía es que el día iba por la mitad. En un
+ * texto ya era malo; dibujado en la banda de la pantalla sería el defecto de siempre con otra cara.
+ *
+ * 🔑 **Va a nivel CAMPAÑA y ⛔ no a nivel aviso.** Multiplicar los avisos por 24 baldes son miles de
+ * filas para contestar dos números; y la línea se resuelve igual, porque la asignación cuelga de la
+ * campaña. Es UNA llamada más sobre las cinco que ya se hacen.
+ *
+ * ⚠️ **El rango se pide generoso en UTC y se recorta después contra las fechas que devolvió Meta**,
+ * igual que `rangoSerie`: acá no se sabe qué día es en la zona de la cuenta, y ése es justamente el
+ * motivo por el que `date_preset` existe. Los baldes que no sean de hoy ni de ayer se descartan.
+ */
+const BREAKDOWN_HORA = 'hourly_stats_aggregated_by_advertiser_time_zone';
+
+/**
+ * El balde horario, normalizado a lo que `parte.core.js` sabe leer.
+ *
+ * La etiqueta que manda Meta es `"15:00:00 - 15:59:59"` ⇒ la hora son los dos primeros dígitos.
+ * Una etiqueta que no parsee devuelve `hora: null` y el núcleo la ignora: ⛔ no se cae a 0, que es
+ * la medianoche y sumaría al balde equivocado.
+ */
+function filaHora(row, lineaDe) {
+  const crudo = String(row[BREAKDOWN_HORA] || '');
+  const m = /^(\d{1,2}):/.exec(crudo);
+  return {
+    fecha: String(row.date_start || '').slice(0, 10),
+    hora: m ? Number(m[1]) : null,
+    linea: lineaDe(row.campaign_id) || 'sin-linea',
+    gasto: Number(row.spend) || 0,
+    impresiones: Number(row.impressions) || 0,
+    compras: accion(row.actions, COMPRA),
+    revenue: accion(row.action_values, COMPRA),
+  };
+}
 
 /** Una fila de insights de aviso, normalizada a lo que `parte.core.js` sabe leer. */
 function filaDe(row, lineaDe) {
@@ -155,7 +194,12 @@ export default async function parteGet(res, perfil, q) {
   const hastaSerie = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const rangoSerie = `time_range={"since":"${desdeSerie}","until":"${hastaSerie}"}`;
 
-  const [hoyRes, ayerRes, serieRes, campRes, adsetRes, asign, techoRes, ventasRes] = await Promise.all([
+  // Dos días de baldes horarios, con el mismo criterio generoso que la serie: el corte fino se hace
+  // abajo, contra las fechas que Meta devolvió.
+  const desdeHoras = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+  const rangoHoras = `time_range={"since":"${desdeHoras}","until":"${hastaSerie}"}`;
+
+  const [hoyRes, ayerRes, serieRes, campRes, adsetRes, asign, techoRes, ventasRes, horasRes] = await Promise.all([
     insightsTodas(`${act}/insights?level=ad&fields=${CAMPOS_AD}&date_preset=today&${ATTR}&limit=500`),
     insightsTodas(`${act}/insights?level=ad&fields=${CAMPOS_AD}&date_preset=yesterday&${ATTR}&limit=500`),
     // Por CAMPAÑA y no por cuenta: adentro de la misma cuenta publicitaria conviven BDI y Zattia, y
@@ -169,6 +213,11 @@ export default async function parteGet(res, perfil, q) {
     leerAsignaciones(),
     techosPorLinea(sb),
     pedidosPorDia(sb, desdeSerie),
+    // ⚠️ Va al final del `Promise.all` y su fallo NO corta el parte: la banda se dibuja sin la
+    // comparación y lo dice. Un desglose que Meta no dé no puede dejar sin parte a nadie.
+    insightsTodas(
+      `${act}/insights?level=campaign&fields=campaign_id,spend,impressions,actions,action_values&breakdowns=${BREAKDOWN_HORA}&time_increment=1&${rangoHoras}&${ATTR}&limit=500`,
+    ),
   ]);
 
   if (!hoyRes.ok) return res.status(502).json({ error: 'No se pudieron traer los avisos de hoy.', detalle: hoyRes.error });
@@ -237,8 +286,24 @@ export default async function parteGet(res, perfil, q) {
   //      que es justo la que se resta contra la anterior para sacar el marginal. Medido el 21-ago
   //      corriendo esto contra la pauta real: el día en curso entraba con 4 pedidos y $4.983.
   // ⛔ Cortar «donde la tienda tenga datos» sólo tapa el caso 1, y es el menos peligroso.
-  const ultimoCerrado = fechaDe(ayerRes.rows) || ventasRes.ultimo || '';
+  const fechaHoy = fechaDe(hoyRes.rows);
+  const fechaAyer = fechaDe(ayerRes.rows);
+  const ultimoCerrado = fechaAyer || ventasRes.ultimo || '';
   const caja = cruzarConLaCaja(orden(porFechaLinea), ventasRes.porDia || {}, ultimoCerrado);
+
+  // ── La banda de HOY ──────────────────────────────────────────────────────────────────────────
+  // 🔑 Los baldes se reparten contra las fechas que **Meta** dio para hoy y para ayer. Un balde de
+  // anteayer —el rango se pidió generoso a propósito— no cae en ninguno de los dos y se descarta.
+  const horas = (horasRes.rows || []).map((r) => filaHora(r, lineaDe)).filter(puedeVerla);
+  const horasHoy = fechaHoy ? horas.filter((f) => f.fecha === fechaHoy) : [];
+  const horasAyer = fechaAyer ? horas.filter((f) => f.fecha === fechaAyer) : [];
+  const banda = bandaDeHoy({
+    hoy, ayer, horasHoy, horasAyer,
+    techos: techoRes.techos || {},
+    techosDiarios,
+    estados: estadoConj,
+    linea: lineaCaja,
+  });
 
   const texto = renderParte({
     hoy,
@@ -252,8 +317,8 @@ export default async function parteGet(res, perfil, q) {
     meta: {
       cuenta: account,
       leido: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
-      hoy: fechaDe(hoyRes.rows),
-      ayer: fechaDe(ayerRes.rows),
+      hoy: fechaHoy,
+      ayer: fechaAyer,
       zona: 'la de la cuenta (los dias los resolvio Meta)',
     },
   });
@@ -261,6 +326,10 @@ export default async function parteGet(res, perfil, q) {
   return res.status(200).json({
     ok: true,
     texto,
+    // 🔑 La MISMA verdad que el texto, en objeto, para que la pantalla pueda dibujarla. Sale de las
+    // mismas cinco llamadas: lo único que cambia es que la respuesta deja de ser sólo prosa.
+    banda,
+    fechas: { hoy: fechaHoy, ayer: fechaAyer, leido: new Date().toISOString() },
     // Lo que no se pudo leer se DICE, no se omite: un bloque vacío por una falla se ve igual que un
     // bloque vacío porque no hubo nada.
     faltantes: [
@@ -270,6 +339,7 @@ export default async function parteGet(res, perfil, q) {
       asign.error ? `lineas de las campañas: ${asign.error}` : null,
       techoRes.error ? `techos por compra: ${techoRes.error}` : null,
       ventasRes.error ? `pedidos de la tienda: ${ventasRes.error}` : null,
+      horasRes.ok ? null : `desglose por hora (sin él no hay «ayer a esta hora»): ${horasRes.error || 'no se pudo leer'}`,
     ].filter(Boolean),
   });
 }

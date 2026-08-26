@@ -1,9 +1,9 @@
 'use client'
 
 /**
- * El PARTE DEL DÍA, en el Panel.
+ * El PARTE DEL DÍA: el texto plano para copiar y pegar.
  *
- * # Por qué es un botón del Panel y no una vista más
+ * # Por qué es un bloque de la zona y no una vista más
  *
  * 🔑 Sumar una vista a esta sección obliga a releer **los tres textos que las cuentan** —el
  * encabezado de `MetaAds.tsx`, la descripción de `lib/nav.ts` y el `info` de `PERM_CAT`— y eso ya
@@ -18,14 +18,18 @@
  * comparado contra ayer y juzgado contra el techo. El Excel queda como el verbo de al lado, para
  * mirarlo y archivarlo.
  *
- * # ⛔ No se pide solo
+ * # 🔴 Ya NO cuesta apretar el botón — y eso corrige lo que este archivo decía
  *
- * Cada parte son cinco llamadas a Graph y el cupo de la Marketing API es un porcentaje de la
- * cuenta. Se pide cuando alguien lo pide: un `useEffect` que lo trajera al abrir el Panel gastaría
- * cupo en cada visita, incluidas las que entran a mirar otra cosa.
+ * Hasta el 26-ago-2026 acá decía «⛔ no se pide solo: cada parte son cinco llamadas a Graph y el
+ * cupo es un porcentaje que se agota». 🔑 **Eso era una suposición de magnitud, nunca una
+ * medición**: medido el 26-ago contra prod, el `call_count` de la cuenta está en **1-3%**.
+ *
+ * ⇒ el parte ahora lo trae `useParte`, que **es el mismo que alimenta la banda de hoy**. Las cinco
+ * llamadas ocurren UNA vez por cada diez minutos y sirven a las dos cosas: apretar «Ver el texto»
+ * ya no pide nada, sólo revela lo que la banda de arriba ya trajo.
  */
-import { useCallback, useState } from 'react'
-import { traerParte } from '@/lib/meta-ads/cliente'
+import { useState } from 'react'
+import { useParte } from '@/components/meta-ads/parte/useParte'
 import { descargarXlsx, type Filas } from '@/lib/excel'
 import { Button, Card, CopyButton, Notice, SectionCard, color, font, radius, space, weight } from '@/components/ui'
 
@@ -35,24 +39,16 @@ function aFilas(texto: string): Filas {
 }
 
 export function ParteDelDia({ cuenta, linea }: { cuenta: string | null; linea?: string }) {
-  const [texto, setTexto] = useState<string | null>(null)
-  const [faltantes, setFaltantes] = useState<string[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [cargando, setCargando] = useState(false)
+  const { estado } = useParte(cuenta, linea)
+  // 🔑 El texto ya está: lo único que este estado guarda es si se está MIRANDO. Antes guardaba el
+  // texto, y por eso apretar el botón costaba cinco llamadas cada vez.
+  const [abierto, setAbierto] = useState(false)
 
-  const pedir = useCallback(async () => {
-    if (!cuenta) return
-    setCargando(true)
-    setError(null)
-    const r = await traerParte(cuenta, linea)
-    setCargando(false)
-    if (!r.ok) {
-      setError(r.motivo)
-      return
-    }
-    setTexto(r.dato.texto)
-    setFaltantes(r.dato.faltantes || [])
-  }, [cuenta, linea])
+  const cargando = estado.fase === 'cargando'
+  const texto = abierto && estado.fase === 'ok' ? estado.dato.texto : null
+  const faltantes = estado.fase === 'ok' ? estado.dato.faltantes || [] : []
+  const error = estado.fase === 'error' ? estado.motivo : null
+  const pedir = () => setAbierto((v) => !v)
 
   // 🔑 Con «Todas» no hay parte: el parte es de UNA cuenta publicitaria, y armar uno de varias
   // sumaría gastos de cuentas con monedas distintas. Se dice en vez de dibujar un botón muerto.
@@ -69,12 +65,12 @@ export function ParteDelDia({ cuenta, linea }: { cuenta: string | null; linea?: 
   return (
     <SectionCard
       title="Parte del día"
-      subtitle="Hoy contra ayer por conjunto y por aviso, el embudo, y el cruce contra los pedidos reales de la tienda."
+      subtitle="Lo mismo que la banda de arriba pero entero y en texto: por conjunto y por aviso, el embudo, y el cruce contra los pedidos reales de la tienda. Para copiar y pegar."
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center' }}>
           <Button onClick={pedir} disabled={cargando} variant="solid" tone="brand" size="sm" iconLeft="📋">
-            {cargando ? 'Armando el parte…' : texto ? 'Volver a armarlo' : 'Armar el parte'}
+            {cargando ? 'Armando el parte…' : texto ? 'Ocultar el texto' : 'Ver el texto para copiar'}
           </Button>
           {texto && (
             <>
@@ -132,10 +128,10 @@ export function ParteDelDia({ cuenta, linea }: { cuenta: string | null; linea?: 
           </Card>
         )}
 
-        {!texto && !error && (
+        {!texto && !error && !cargando && (
           <div style={{ color: color.mut2, fontSize: font.sm }}>
-            <strong style={{ fontWeight: weight.medium }}>No se pide solo.</strong> Cada parte son cinco llamadas a
-            Meta y el cupo de la API es un porcentaje de la cuenta.
+            <strong style={{ fontWeight: weight.medium }}>Ya está traído.</strong> Es el mismo parte que armó la
+            banda de arriba: el texto sirve para pegarlo en una conversación y decidir ahí.
           </div>
         )}
       </div>

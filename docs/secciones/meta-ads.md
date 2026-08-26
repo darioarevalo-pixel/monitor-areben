@@ -404,15 +404,40 @@ de Marketing (`~/Documents/quien-hace-que/definicion-marketing.md`) y en `norte`
 ## El parte del día (21-ago-2026)
 
 `GET /api/meta-ads?recurso=parte&account=<id>[&linea=bdi]` → un TEXTO PLANO con todo lo que hace
-falta para decidir presupuestos. Botón «Parte del día» en el **Panel** (⛔ no es una vista nueva: a
-propósito, para no volver a tocar los tres textos que las cuentan).
+falta para decidir presupuestos — **y desde el 26-ago-2026 también `banda`, la misma verdad en
+objeto**, que es lo que dibuja la BANDA DE HOY arriba de la zona. Vive en `/meta-ads` (⛔ no es una
+vista nueva: a propósito, para no volver a tocar los tres textos que las cuentan).
 
 - 🔑 **Existe porque analizar un día costaba ~12 llamadas al navegador** y cada vuelta traía el JSON
   entero de Meta. El armado es puro (`lib/meta-ads/parte.core.js` + `parte.ts`), la conversación
   vive en `api/_meta-parte.js`.
-- 🔑 **Cinco llamadas a Graph, no veintisiete.** Pedir el detalle de cuenta tres veces (hoy, ayer,
-  serie) son 9 cada vez. ⛔ **No se pide solo**: no hay `useEffect` que lo traiga al abrir el Panel,
-  porque el cupo de la Marketing API es un porcentaje de la cuenta.
+- 🔑 **Seis llamadas a Graph, no veintisiete.** Pedir el detalle de cuenta tres veces (hoy, ayer,
+  serie) son 9 cada vez.
+- 🔴 🔑 **26-ago-2026: AHORA SÍ SE PIDE SOLO, y eso corrige lo que decía este documento.** El motivo
+  escrito era *«el cupo de la Marketing API es un porcentaje que se agota»* — una **suposición de
+  magnitud, nunca una medición**. Medido contra prod (el header `X-Business-Use-Case-Usage` que
+  `usoDe()` ya guardaba en la auditoría): `call_count` de la cuenta en **1-3%**, tier
+  `development_access`. ⇒ **cuando la premisa se mide, la decisión se revisa.** Los candados que
+  hacen segura la decisión viven en `components/meta-ads/parte/useParte.ts`: caché de módulo con TTL
+  de 10 min, dedup por `enVuelo` (dos montajes comparten la MISMA promesa) y **la hora de lectura a
+  la vista** — 🔑 un número sin hora al lado se lee como vivo. El `<pre>` para copiar consume el
+  mismo hook, así que abrirlo ⛔ ya no pide nada.
+- 🔴 🔑 **LA BANDA DE HOY compara contra ayer A ESTA MISMA HORA, ⛔ nunca contra el día entero.** El
+  bloque de CONJUNTOS imprimía un `delta%` de hoy-parcial contra ayer-entero: a las 15:00 daba −56%
+  en casi todas las filas y se leía como un derrumbe cuando lo único que decía es que el día iba por
+  la mitad — **un número que existe y no significa**, el cuarto de la familia en tres días.
+  ⇒ una llamada más con `breakdowns=hourly_stats_aggregated_by_advertiser_time_zone` a nivel
+  **campaña** (⛔ no aviso: multiplicar los avisos por 24 baldes son miles de filas para contestar
+  dos números). 🔑 **Y la hora en curso se DERIVA del dato**, igual que `ultimoDiaCerrado()`: es el
+  balde más alto de HOY que tuvo entrega, porque acá ⛔ no se puede saber qué hora es en la zona de
+  la cuenta. Si Meta no da el desglose, **no se compara y se dice el motivo** (`motivoSinHora`);
+  ⛔ jamás se cae al día entero. `horaEnCurso` · `sumarHasta` · `bandaDeHoy` en `parte.core.js`.
+- 🔴 **El tope diario prendido puede ser un PISO, y por eso el porcentaje no siempre se dibuja.** Los
+  conjuntos de una campaña con presupuesto a nivel campaña (CBO) no tienen `daily_budget` propio:
+  sumar sólo los que lo tienen da un divisor más chico que el real ⇒ el porcentaje sale **por encima
+  del verdadero**, que es el peor error posible en la pantalla con la que se decide soltar plata.
+  `topeQueEntrega()` devuelve `sinTope`, y con `sinTope > 0` la banda muestra el tope como piso y
+  ⛔ no el `%`. ⚠️ Se indexa por NOMBRE de conjunto, con la misma limitación que `techosDiarios`.
 - 🔴 **Los días los resuelve META, no nosotros.** `date_preset=today` / `yesterday` se calculan en la
   zona de la CUENTA, y la fecha de la cabecera sale del `date_start` que Meta devuelve. Vercel corre
   en UTC y calcular «hoy» del lado del servidor ya falló dos veces acá (el sufijo de las copias).

@@ -40,7 +40,9 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ModalesDeAccion, useAccionMeta } from '@/components/meta-ads/acciones'
 import { useMeta } from '@/components/meta-ads/ContextoMeta'
+import { BandaDeHoy } from '@/components/meta-ads/parte/BandaDeHoy'
 import { ParteDelDia } from '@/components/meta-ads/parte/ParteDelDia'
+import { useParte } from '@/components/meta-ads/parte/useParte'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
 import { HallazgosPanel } from '@/components/meta-ads/reglas/HallazgosPanel'
 import { PodaPendiente, usePoda } from '@/components/meta-ads/reglas/PodaPendiente'
@@ -68,11 +70,29 @@ export function ZonaRendimiento() {
   const { estado, recargar } = useZona(laLinea, dias)
   const acciones = useAccionMeta(recargar)
   const r = useReglas()
+  // 🔴 **Se pide sola, y eso cambia una decisión que estaba escrita.** El motivo por el que el parte
+  // no se pedía solo era una SUPOSICIÓN sobre el cupo; medido el 26-ago contra prod, la cuenta está
+  // en 1-3%. Los candados que hacen segura la decisión —caché, dedup y la hora a la vista— viven en
+  // `useParte`, ⛔ no acá.
+  const parte = useParte(laCuenta ? laCuenta.id : null, laLinea || undefined)
   const lineasDeReglas = useMemo(() => (laLinea ? [laLinea] : []), [laLinea])
   const poda = usePoda(lineasDeReglas)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
+      {/* 🔑 Primero de todo: es la pantalla de arranque. Y no rompe la invariante de `PlanesEnCurso`
+          —«va antes que la zona porque no depende de la foto»— porque la banda TAMPOCO sale de la
+          foto: sale de Meta, que es lo único que tiene el día en curso. */}
+      {parte.estado.fase === 'ok' && (
+        <BandaDeHoy
+          b={parte.estado.dato.banda}
+          fecha={parte.estado.dato.fechas.hoy}
+          leidoA={parte.estado.leidoA}
+          actualizar={parte.actualizar}
+          error={parte.error}
+        />
+      )}
+
       {/* Va antes que todo y no depende de la zona: sale de la base, así que se ve aunque la foto
           esté vacía — que es justo cuando importa saber qué quedó a medias en Meta. */}
       <PlanesEnCurso />
@@ -122,8 +142,9 @@ export function ZonaRendimiento() {
         )}
       </SectionCard>
 
-      {/* 🔑 El Parte queda, y ahora es lo que siempre fue: el botón que trae el DÍA EN CURSO, que es
-          lo único que la foto no puede tener. ⛔ No se pide solo: son cinco llamadas a Graph. */}
+      {/* 🔑 El Parte queda como lo que ahora es: el MISMO día en curso de la banda de arriba, pero
+          entero y en texto para pegarlo en una conversación. Comparte `useParte`, así que abrirlo
+          ⛔ no pide nada — las cinco llamadas ya se hicieron una vez. */}
       <ParteDelDia cuenta={laCuenta ? laCuenta.id : null} linea={laLinea || undefined} />
 
       <SinLinea visibles={visibles} linea={linea} setLinea={setLinea} />
