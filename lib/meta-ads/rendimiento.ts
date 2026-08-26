@@ -18,7 +18,9 @@ import {
   COLS_RENDIMIENTO as COLS_RENDIMIENTO_JS,
   desdeDe as desdeDeJs,
   desgasteDe as desgasteDeJs,
+  DIAS_SERVIBLES as DIAS_SERVIBLES_JS,
   DIAS_ZONA as DIAS_ZONA_JS,
+  elegirCierre as elegirCierreJs,
   elegirVentana as elegirVentanaJs,
   enVentana as enVentanaJs,
   PASO_ESCALON as PASO_ESCALON_JS,
@@ -185,6 +187,14 @@ export type Concentracion = { total: number; piezas: Pieza[]; mayor: Pieza | nul
 export type Zona = {
   desde: string
   hasta: string
+  /**
+   * Sobre cuántos días se JUZGA, que puede ser más que los que se están mirando.
+   *
+   * 🔴 Con `dias` chico esto es 7, y la pantalla tiene que DECIRLO: el veredicto, el desgaste y el
+   * marginal son de esta ventana y no de la que está arriba. Callarlo dejaría leerlos como del día
+   * que se está mirando — y un veredicto de un día suelto manda a apagar cosas que rinden.
+   */
+  ventanaJuicio: number
   totales: {
     spend: number
     compras: number
@@ -233,7 +243,14 @@ export const USA_LA_CAJA = USA_LA_CAJA_JS as number
 export const CON_AIRE = CON_AIRE_JS as number
 export const DIAS_ZONA = DIAS_ZONA_JS as readonly number[]
 
+/** Lo que el servidor sabe contestar. Superconjunto de `DIAS_ZONA`: al `1` y al `3` se llega por la tira. */
+export const DIAS_SERVIBLES = DIAS_SERVIBLES_JS as readonly number[]
 export const elegirVentana = elegirVentanaJs as (crudo: unknown) => { dias: number; error?: undefined } | { error: string; dias?: undefined }
+/** ⛔ Un `hasta` fuera de rango devuelve `error`, ⛔ nunca un `hasta` recortado en silencio. */
+export const elegirCierre = elegirCierreJs as (
+  crudo: unknown,
+  ctx?: { cierreReal?: string; primeraLeida?: string },
+) => { hasta: string; error?: undefined } | { error: string; hasta?: undefined }
 export const ultimoDiaCerrado = ultimoDiaCerradoJs as (filas: FilaZona[]) => string | null
 export const enVentana = enVentanaJs as (filas: FilaZona[], desde: string | null, hasta: string | null) => FilaZona[]
 export const desdeDe = desdeDeJs as (hasta: string, dias: number) => string

@@ -24,20 +24,22 @@ export type EstadoZona =
   | { fase: 'error'; motivo: string }
   | { fase: 'ok'; data: RespuestaZona }
 
-export function useZona(linea: string | null, dias: number) {
+export function useZona(linea: string | null, dias: number, hasta?: string | null) {
   const [resp, setResp] = useState<{ key: string; r: EstadoZona } | null>(null)
   const [tic, setTic] = useState(0)
-  const key = linea ? `${linea}|${dias}` : ''
+  // El ancla entra en la clave por el mismo motivo que la línea y la ventana: al cambiar de día, la
+  // respuesta vieja deja de coincidir y la fase vuelve a «cargando» sola, sin un efecto que limpie.
+  const key = linea ? `${linea}|${dias}|${hasta || ''}` : ''
 
   useEffect(() => {
     if (!linea) return
     let vivo = true
-    traerZona(linea, dias).then((r) => {
+    traerZona(linea, dias, hasta || undefined).then((r) => {
       if (!vivo) return
-      setResp({ key: `${linea}|${dias}`, r: r.ok ? { fase: 'ok', data: r.dato } : { fase: 'error', motivo: r.motivo } })
+      setResp({ key: `${linea}|${dias}|${hasta || ''}`, r: r.ok ? { fase: 'ok', data: r.dato } : { fase: 'error', motivo: r.motivo } })
     })
     return () => { vivo = false }
-  }, [linea, dias, tic])
+  }, [linea, dias, hasta, tic])
 
   const recargar = useCallback(() => setTic((n) => n + 1), [])
   const estado: EstadoZona = !linea

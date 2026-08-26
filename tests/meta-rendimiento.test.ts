@@ -12,8 +12,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  CONV_APRENDIZAJE, aprendizajeDe, armarZona, avisosPorCelda, celdasDeLaFoto, concentracionDe,
-  desdeDe, desgasteDe, enVentana, ultimoDiaCerrado, veredictoDeCelda,
+  CONV_APRENDIZAJE, DIAS_SERVIBLES, DIAS_ZONA, aprendizajeDe, armarZona, avisosPorCelda,
+  celdasDeLaFoto, concentracionDe, desdeDe, desgasteDe, elegirCierre, elegirVentana, enVentana,
+  ultimoDiaCerrado, veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
 import { sumarDias } from '@/lib/meta-ads/snapshot'
 
@@ -413,5 +414,109 @@ describe('avisosPorCelda — un aviso en varias cajas es varias filas, no una su
       techo: 5000, hasta: '2026-08-20', ventana: 7,
     })
     expect(z.celdas[0].avisos).toEqual([])
+  })
+})
+
+/**
+ * MIRAR UN DÍA SUELTO — «hoy, ayer, y hace 3 días».
+ *
+ * 🔴 **El riesgo más caro de toda esta tanda está acá, y no es de formato.** `veredicto()` sobre un
+ * día suelto manda a PAUSAR una celda que ese día gastó más de lo que sale un cliente y no trajo
+ * ninguno. Las compras son grumosas y Meta reatribuye hacia atrás varios días ⇒ **una vista de un
+ * día que propone apagar es una vista que hace apagar cosas que rinden.**
+ *
+ * ⇒ la regla que ya tenía `armarZona` se extiende: las MÉTRICAS son de la ventana, la CONFIGURACIÓN
+ * es de HOY, y el VEREDICTO es de la ventana de JUICIO — nunca de un día suelto.
+ */
+describe('elegirVentana y elegirCierre — lo que el servidor sabe contestar', () => {
+  it('la barra ofrece un subconjunto de lo que el servidor sabe: si no, un botón daría 400', () => {
+    for (const d of DIAS_ZONA) expect(DIAS_SERVIBLES).toContain(d)
+  })
+
+  it('acepta el día suelto y los tres días, a los que se llega por la tira', () => {
+    expect(elegirVentana(1)).toEqual({ dias: 1 })
+    expect(elegirVentana(3)).toEqual({ dias: 3 })
+  })
+
+  it('lo que no está en la lista es 400 con el motivo, ⛔ no un default en silencio', () => {
+    expect(elegirVentana(2).error).toContain('1, 3, 7, 14, 30')
+    expect(elegirVentana('quince').error).toBeTruthy()
+  })
+
+  it('sin `hasta` el cierre es el último día cerrado', () => {
+    expect(elegirCierre('', { cierreReal: '2026-08-24' })).toEqual({ hasta: '2026-08-24' })
+    expect(elegirCierre(null, { cierreReal: '2026-08-24' })).toEqual({ hasta: '2026-08-24' })
+  })
+
+  it('🔴 un `hasta` POSTERIOR al último cerrado es un ERROR, ⛔ nunca un recorte silencioso', () => {
+    // Recortarlo «para ser amable» sería dibujar medio día como si fuera entero, que es el defecto
+    // original de toda esta sección.
+    const r = elegirCierre('2026-08-26', { cierreReal: '2026-08-24' })
+    expect(r.hasta).toBe(undefined)
+    expect(r.error).toContain('2026-08-24')
+  })
+
+  it('un `hasta` anterior a lo leído dice que falta FOTO, ⛔ no que ese día no gastó nadie', () => {
+    const r = elegirCierre('2026-01-01', { cierreReal: '2026-08-24', primeraLeida: '2026-07-15' })
+    expect(r.error).toContain('2026-07-15')
+  })
+
+  it('una fecha mal formada es 400, ⛔ no una comparación de strings que pase de casualidad', () => {
+    expect(elegirCierre('ayer', { cierreReal: '2026-08-24' }).error).toBeTruthy()
+    expect(elegirCierre('24/08/2026', { cierreReal: '2026-08-24' }).error).toBeTruthy()
+  })
+
+  it('🔴 y la caza aunque caiga JUSTO ENTRE las dos puntas, que es cuando los otros guards no la ven', () => {
+    // `'2026-08-1'` (un día truncado) es mayor que `2026-07-15` y menor que `2026-08-24` como
+    // string ⇒ los dos chequeos de rango la dejan pasar. Sin el guard del FORMATO se iría a
+    // `desdeDe()` y devolvería una ventana vacía **en silencio**, que se lee «ese día no gastó
+    // nadie». Los dos casos de arriba no prueban esto: los caza el rango, no el formato.
+    const ctx = { cierreReal: '2026-08-24', primeraLeida: '2026-07-15' }
+    expect(elegirCierre('2026-08-1', ctx).error).toBeTruthy()
+    expect(elegirCierre('2026-08-1x', ctx).error).toBeTruthy()
+  })
+})
+
+describe('la ventana de JUICIO — un día suelto no puede mandar a apagar', () => {
+  /** Una celda que el 24 gastó mucho sin comprar, pero que en la semana compra bien. */
+  const malUnDia = [
+    ...['2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23'].map((f) =>
+      fila({ fecha: f, spend: 2000, compras: 2 })),
+    fila({ fecha: '2026-08-24', spend: 9000, compras: 0 }),
+  ]
+
+  it('🔴 con ventana de 1 día, una celda que ese día no compró NO se manda a pausar', () => {
+    const z = armarZona({ filas: malUnDia, techo: 3000, hasta: '2026-08-24', ventana: 1 })
+    const c = z.celdas[0]
+    // Las MÉTRICAS son del día: es lo que se vino a poder mirar.
+    expect(c.spend).toBe(9000)
+    expect(c.compras).toBe(0)
+    // Pero el VEREDICTO es de la semana, donde compró 12 veces a $1.000.
+    expect(c.veredicto.accion).not.toBe('pausar')
+    expect(z.ventanaJuicio).toBe(7)
+  })
+
+  it('y con ventana de 7 la MISMA celda se juzga igual: el juicio no cambia con el zoom', () => {
+    const a = armarZona({ filas: malUnDia, techo: 3000, hasta: '2026-08-24', ventana: 1 })
+    const b = armarZona({ filas: malUnDia, techo: 3000, hasta: '2026-08-24', ventana: 7 })
+    expect(a.celdas[0].veredicto.clase).toBe(b.celdas[0].veredicto.clase)
+  })
+
+  it('con una ventana MÁS LARGA que 7 el juicio la sigue: ⛔ no se clava en una semana', () => {
+    const z = armarZona({ filas: malUnDia, techo: 3000, hasta: '2026-08-24', ventana: 30 })
+    expect(z.ventanaJuicio).toBe(30)
+  })
+
+  it('una celda que está mal de verdad SIGUE mandando a apagar: el guard no apaga el veredicto', () => {
+    const malSiempre = ['2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23', '2026-08-24']
+      .map((f) => fila({ fecha: f, spend: 9000, compras: 0 }))
+    const z = armarZona({ filas: malSiempre, techo: 3000, hasta: '2026-08-24', ventana: 1 })
+    expect(z.celdas[0].veredicto.accion).toBe('pausar')
+  })
+
+  it('el `hasta` ancla de verdad: pedir el 20 no trae lo del 24', () => {
+    const z = armarZona({ filas: malUnDia, techo: 3000, hasta: '2026-08-20', ventana: 1 })
+    expect(z.hasta).toBe('2026-08-20')
+    expect(z.celdas[0].spend).toBe(2000)
   })
 })

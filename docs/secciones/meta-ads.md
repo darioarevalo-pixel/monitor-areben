@@ -768,6 +768,49 @@ parte trae el día EN CURSO**, que es lo único que sólo existe en Graph.
 como banda arriba de la zona. El motivo por el que no podía —el cupo— se midió y era 1-3%. Ver «El
 parte del día».
 
+## 🆕🏁 26-ago-2026 (8ª tanda): ELEGIR UN DÍA, no sólo una ventana
+
+Bruno: *«perdí las vistas de hoy, ayer, y hace 3 días»*. ⚠️ **«Hace 3 días» ⛔ nunca existió** como
+preset en este repo — lo que pedía era el gesto: **comparar día contra día** y **chequear el efecto
+de un cambio hecho hace dos o tres**. Una barra de 7/14/30 promedia justo lo que se quiere separar.
+
+- **La tira (`TiraDeDias.tsx`) ⛔ no cuesta una llamada**: sale de `zona.caja`, que ya viajaba con
+  ~40 días de gasto, pedidos REALES y costo por pedido. Un clic ancla la tabla a ese día.
+- ⚠️ **La tira ⛔ nunca puede ofrecer HOY, y es estructural**: `caja` viene cortada en
+  `ultimoDiaCerrado()`. No hace falta un chequeo — el día en curso no está porque el servidor no lo
+  puso. Para hoy está la banda, que sale de Meta.
+- **Dos listas, ⛔ no una**: `DIAS_ZONA = [7,14,30]` es lo que ofrece la barra; `DIAS_SERVIBLES =
+  [1,3,7,14,30]` es lo que el servidor sabe contestar. Al `1` y al `3` ⛔ no se llega por un botón
+  —«1 día» al lado de «7 días» significaría otra cosa que sus vecinos— sino clickeando la tira. Un
+  test amarra `DIAS_ZONA ⊂ DIAS_SERVIBLES`: si no, un botón daría 400.
+- **`elegirCierre(hasta, {cierreReal, primeraLeida})`** valida el ancla. 🔴 **Un `hasta` posterior al
+  último cerrado es un ERROR, ⛔ nunca un recorte silencioso**: recortarlo «para ser amable» sería
+  dibujar medio día como entero, que es el defecto original de toda esta sección. Y un `hasta`
+  anterior a lo leído dice que falta FOTO, ⛔ no que ese día no gastó nadie.
+  ⚠️ **El guard del FORMATO es portante**, y costó un mutante verlo: `'2026-08-1'` (un día truncado)
+  cae **entre** las dos puntas como string, así que los dos chequeos de rango lo dejan pasar y se
+  iría a `desdeDe()` devolviendo una ventana vacía en silencio.
+- **El colchón se ancla al día PEDIDO**, ⛔ no a hoy: con `dias=30` y un `hasta` de hace veinte, un
+  colchón contado desde hoy no llega hasta atrás y el desgaste se apagaría solo.
+
+### 🔴🔑 LA VENTANA DE JUICIO — lo más importante de poder mirar un día suelto
+
+**Las MÉTRICAS son de la ventana, la CONFIGURACIÓN es de HOY, y el VEREDICTO es de la ventana de
+JUICIO — ⛔ nunca de un día suelto.** `juicio = max(VENTANA, ventana)`, y lo consumen el veredicto,
+`desgasteDe()` y `marginalEntreVentanas()`.
+
+**Por qué, y es el riesgo más caro de la tanda**: `veredicto()` sobre un día suelto manda a
+**pausar** una celda que ese día gastó más de lo que sale un cliente y no trajo ninguno. Las compras
+son grumosas y Meta reatribuye hacia atrás varios días ⇒ **una vista de un día que propone apagar es
+una vista que hace apagar cosas que rinden.** Lo mismo el desgaste (compara dos mitades: con
+`ventana=1` sería un día contra un día, y 3.000 impresiones mueven el CTR ±30% solas) y el marginal
+(resta dos promedios).
+
+⇒ `zona.ventanaJuicio` viaja en la respuesta y **la pantalla lo dice** cuando no coincide con lo que
+se está mirando. Callarlo dejaría leer el veredicto como del día de arriba.
+✅ Amarrado por tres tests, uno de ellos el inverso: **una celda que está mal DE VERDAD sigue
+mandando a apagar** — el guard ⛔ no apaga el veredicto, lo muda de ventana.
+
 ## 🆕🏁 26-ago-2026 (7ª tanda): LOS AVISOS ADENTRO DE LA CELDA
 
 Bruno: *«tampoco sé qué creativo está dentro»*, con tres usos: identificar cuál es cuál, mirar la
@@ -781,12 +824,20 @@ pieza **antes de pausarla o escalarla**, y ver **qué se está gastando la guita
   `_meta-rendimiento.js` la lee sin filtrar por nivel: las filas de `aviso` con su `adset_id` ya
   estaban en memoria y hasta hoy sólo las miraba `concentracionDe()`. `avisosPorCelda()` las cuelga
   de su caja.
-- 🔴 🔑 **Y todo el cuidado de esa función es UNO: se parte por `adset_id` ANTES de agrupar.**
-  `agruparAvisos()` agrupa por `objeto_id` a secas —le alcanza, porque la Biblioteca es de la cuenta
-  entera—, así que un mismo aviso en tres cajas colapsaría en una fila con la suma de las tres. **Y
-  el caso no es hipotético: `AD02 - GIRLHOOD COLLECTION` corre en tres conjuntos y es el 52% del
-  gasto de BDI.** Sin partir primero, cada caja mostraría los números de las otras dos: **miente con
-  cara de dato**. Es el mutante que hay que ver caer.
+- **Se parte por `adset_id` ANTES de agrupar**, porque `agruparAvisos()` agrupa por `objeto_id` a
+  secas (le alcanza: la Biblioteca es de la cuenta entera). Partir primero ⛔ no depende de que
+  `ultimoCon('adset_id')` elija bien, y por eso es la forma correcta.
+  ⚠️ **⛔ PERO no arregla ningún caso vivo, y decir lo contrario sería una inferencia disfrazada de
+  medición.** Medido el 26-ago contra la foto ENTERA (1.518 filas de aviso, 87 avisos distintos):
+  **CERO avisos aparecen bajo más de un `adset_id`** — en Meta un aviso pertenece a un solo conjunto,
+  y duplicar una caja crea avisos NUEVOS con ids nuevos. El guard es defensivo.
+  🔑 **Lo que sí está medido es otra cosa, y es la que importa**: la misma PIEZA corre en varias
+  cajas **con ids distintos y el mismo nombre** — verificado en prod el 26-ago:
+  `AD01 - FUNDA PINTEREST - SHINY - 13/8` en TRES cajas ($29.683 + $16.805 + $9) y
+  `AD02 - GIRLHOOD COLLECTION` en dos ($67.194 + $21.734). Eso ⛔ no lo arregla `avisosPorCelda` —
+  es el agujero del `creative_id` que la foto no guarda, y sigue abierto (ver abajo).
+- ✅ **Verificado ejerciendo prod**: en las 6 celdas de más gasto, la suma de sus avisos da **exacto**
+  el gasto de la celda. Es el oráculo que dice que la partición no duplica ni pierde plata.
 - ⛔ **El aviso NO trae `estado`, y el TIPO lo sostiene**: `AvisoDeCelda` es
   `Omit<AvisoBiblioteca, 'estado' | 'configurado' | 'pieza' | 'favorito'>`. La configuración se
   escribe sólo en la fila del día en que se sacó la foto ⇒ en una ventana vieja diría «pausado» para

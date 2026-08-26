@@ -41,6 +41,7 @@ import Link from 'next/link'
 import { ModalesDeAccion, useAccionMeta } from '@/components/meta-ads/acciones'
 import { useMeta } from '@/components/meta-ads/ContextoMeta'
 import { BandaDeHoy } from '@/components/meta-ads/parte/BandaDeHoy'
+import { TiraDeDias } from '@/components/meta-ads/zona/TiraDeDias'
 import { ParteDelDia } from '@/components/meta-ads/parte/ParteDelDia'
 import { useParte } from '@/components/meta-ads/parte/useParte'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
@@ -63,11 +64,14 @@ import {
 export function ZonaRendimiento() {
   const { linea, setLinea, visibles, laCuenta } = useMeta()
   const [dias, setDias] = useState<number>(7)
+  // 🔑 El ancla es un DÍA CERRADO elegido en la tira. Con ancla la ventana pasa a 1: lo que Bruno
+  // pidió es «ese día», ⛔ no «los siete que terminan ahí». Volver a la ventana entera la restaura.
+  const [anclado, setAnclado] = useState<string | null>(null)
   // 🔑 La zona es de UNA línea y no es una comodidad: adentro de la misma cuenta publicitaria
   // conviven BDI y Zattia, y dividir el gasto de las dos por los pedidos de una da un costo por
   // pedido que no existe. Con una sola línea visible se elige sola; con varias, se pide.
   const laLinea: LineaPauta | null = linea !== 'todas' ? linea : visibles.length === 1 ? visibles[0] : null
-  const { estado, recargar } = useZona(laLinea, dias)
+  const { estado, recargar } = useZona(laLinea, anclado ? 1 : dias, anclado)
   const acciones = useAccionMeta(recargar)
   const r = useReglas()
   // 🔴 **Se pide sola, y eso cambia una decisión que estaba escrita.** El motivo por el que el parte
@@ -105,7 +109,7 @@ export function ZonaRendimiento() {
         />
       ) : (
         <>
-          <BarraVentana dias={dias} setDias={setDias} />
+          <BarraVentana dias={dias} setDias={setDias} anclado={anclado} />
 
           {estado.fase === 'cargando' && <Card style={{ color: color.mut2 }}>Leyendo la foto de la pauta…</Card>}
 
@@ -118,7 +122,15 @@ export function ZonaRendimiento() {
             </Notice>
           )}
 
-          {estado.fase === 'ok' && <Contenido d={estado.data} dias={dias} acciones={acciones.acciones} />}
+          {estado.fase === 'ok' && (
+            <Contenido
+              d={estado.data}
+              dias={anclado ? 1 : dias}
+              acciones={acciones.acciones}
+              anclado={anclado}
+              onElegir={setAnclado}
+            />
+          )}
           {/* Los cinco modales de escritura, dibujados una vez para toda la pantalla. */}
           <ModalesDeAccion m={acciones.modales} />
         </>
@@ -185,23 +197,32 @@ function Silencio({ reglas, cargando }: { reglas: Regla[] | null; cargando: bool
 }
 
 /** El selector de ventana. Los tres valores son los que el servidor acepta; ⛔ no hay uno libre. */
-function BarraVentana({ dias, setDias }: { dias: number; setDias: (n: number) => void }) {
+function BarraVentana({ dias, setDias, anclado }: { dias: number; setDias: (n: number) => void; anclado: string | null }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
       <span style={{ fontSize: font.sm, color: color.mut }}>Mirando los últimos:</span>
       {DIAS_ZONA.map((n) => (
-        <Button key={n} size="sm" variant={n === dias ? 'solid' : 'ghost'} onClick={() => setDias(n)}>
+        // ⛔ Con un día anclado NINGUNO va en `solid`: la ventana no es la que dice el botón, y
+        // dejarlo marcado sería que la barra afirme una cosa y la tabla muestre otra.
+        <Button key={n} size="sm" variant={!anclado && n === dias ? 'solid' : 'ghost'} onClick={() => setDias(n)}>
           {n} días
         </Button>
       ))}
+      {anclado && (
+        <span style={{ fontSize: font.sm, color: color.brandSolid, fontWeight: weight.semibold }}>
+          — anclado al {anclado}
+        </span>
+      )}
     </div>
   )
 }
 
-function Contenido({ d, dias, acciones }: {
+function Contenido({ d, dias, acciones, anclado, onElegir }: {
   d: RespuestaZona
   dias: number
   acciones: Acciones
+  anclado: string | null
+  onElegir: (fecha: string | null) => void
 }) {
   if (!d.zona) {
     return <Notice tone="warning">{d.motivo || 'La foto no tiene ningún día cerrado todavía.'}</Notice>
@@ -252,10 +273,25 @@ function Contenido({ d, dias, acciones }: {
         )}
       </div>
 
+      {/* Va entre los KPIs y la tabla: es el puente entre «cómo viene la ventana» y «qué pasó ese
+          día». Sale de `z.caja`, que ya viaja: ⛔ cero llamadas. */}
+      <TiraDeDias caja={z.caja} techo={d.techo || 0} anclado={anclado} onElegir={onElegir} />
+
       <SectionCard
-        title={`Las celdas (${z.celdas.length})`}
-        subtitle="Una fila por conjunto, ordenadas por gasto. El «por qué» de cada veredicto son los números que lo sostienen, no una frase. Abrí una para ver su embudo y su día a día."
+        title={anclado ? `Las celdas del ${anclado} (${z.celdas.length})` : `Las celdas (${z.celdas.length})`}
+        subtitle="Una fila por conjunto, ordenadas por gasto. El «por qué» de cada veredicto son los números que lo sostienen, no una frase. Abrí una para ver qué creativo hay adentro, su embudo y su día a día."
       >
+        {/* 🔴 Con la ventana anclada a un día, los NÚMEROS son de ese día pero el VEREDICTO, el
+            desgaste y el marginal se siguen midiendo sobre `ventanaJuicio`. Se dice: callarlo
+            dejaría leerlos como del día que se está mirando, y un veredicto de un día suelto manda
+            a apagar cosas que rinden. */}
+        {z.ventanaJuicio !== dias && (
+          <Notice tone="neutral">
+            Los números son del {anclado || 'período'}, pero el <b>veredicto</b>, el desgaste y el
+            marginal se miden sobre <b>{z.ventanaJuicio} días</b>. Un día suelto tiene una o dos
+            compras: alcanza para mirarlo, ⛔ no para juzgarlo.
+          </Notice>
+        )}
         {z.celdas.length === 0 ? (
           <EmptyState title="Ninguna celda entregó en la ventana" hint="Probá una ventana más larga." dashed />
         ) : (

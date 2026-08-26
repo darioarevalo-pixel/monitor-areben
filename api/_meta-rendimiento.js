@@ -32,7 +32,7 @@ import { createClient } from '@supabase/supabase-js';
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { leerSnapshot, leerTechos } from '../lib/meta-ads/leer-snapshot.core.js';
 import { baseDeLinea, esLinea } from '../lib/meta-ads/lineas.core.js';
-import { armarZona, COLS_RENDIMIENTO, elegirVentana, ultimoDiaCerrado } from '../lib/meta-ads/rendimiento.core.js';
+import { armarZona, COLS_RENDIMIENTO, elegirCierre, elegirVentana, ultimoDiaCerrado } from '../lib/meta-ads/rendimiento.core.js';
 import { clienteBdi } from './_meta-lineas.js';
 import { pedidosPorDia } from './_meta-parte.js';
 
@@ -98,8 +98,13 @@ export default async function rendimientoGet(res, perfil, q) {
   if (v.error) return res.status(400).json({ error: v.error });
   const dias = v.dias;
 
+  // 🔴 El colchón se ancla al día PEDIDO, no a hoy: con `dias=30` y un `hasta` de hace veinte, un
+  // colchón contado desde hoy no llega hasta atrás y el desgaste se apagaría solo, en silencio.
+  // ⚠️ `hoyish` sigue siendo un límite inferior generoso en UTC, ⛔ no una fecha que se imprima: la
+  // validación fina la hace `elegirCierre()` abajo, contra lo que la foto realmente trajo.
   const hoyish = new Date().toISOString().slice(0, 10);
-  const desdeCrudo = new Date(Date.parse(`${hoyish}T00:00:00Z`) - COLCHON(dias) * 86400000).toISOString().slice(0, 10);
+  const ancla = /^\d{4}-\d{2}-\d{2}$/.test(String(q.hasta || '')) && String(q.hasta) < hoyish ? String(q.hasta) : hoyish;
+  const desdeCrudo = new Date(Date.parse(`${ancla}T00:00:00Z`) - COLCHON(dias) * 86400000).toISOString().slice(0, 10);
 
   const sbLinea = clienteDeLinea(linea);
   const [snap, techos] = await Promise.all([
@@ -149,8 +154,17 @@ export default async function rendimientoGet(res, perfil, q) {
   }
 
   const meta = await proximaMeta(sbLinea, cierre);
+  // El ancla se valida DESPUÉS de leer, contra lo que la foto realmente trajo: `cierreReal` es el
+  // último día cerrado y `primeraLeida` es lo más viejo que entró en el colchón. ⛔ Un `hasta`
+  // fuera de rango es un 400 con el motivo, ⛔ nunca un recorte silencioso.
+  const c = elegirCierre(q.hasta, {
+    cierreReal: cierre,
+    primeraLeida: filas.length ? filas.reduce((m, f) => (m && m < f.fecha ? m : f.fecha), '') : '',
+  });
+  if (c.error) return res.status(400).json({ error: c.error });
+
   const zona = armarZona({
-    filas, techo, techoCaja, pedidosPorDia: porDia, hasta: cierre,
+    filas, techo, techoCaja, pedidosPorDia: porDia, hasta: c.hasta,
     objetivoPedidos: meta ? Number(meta.objetivo) || 0 : 0, ventana: dias,
   });
 
@@ -158,6 +172,7 @@ export default async function rendimientoGet(res, perfil, q) {
     ok: true,
     linea,
     dias,
+    hasta: c.hasta,
     zona,
     techo: techo || null,
     techoCaja,

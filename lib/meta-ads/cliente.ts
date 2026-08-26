@@ -635,9 +635,15 @@ export function traerTendencia(dias: number): Promise<Lectura<RespuestaTendencia
  * `dias` son los de `DIAS_ZONA` (7, 14 o 30). El servidor ⛔ no cree cualquier número: contesta 400
  * nombrando los que acepta, en vez de caer a un default en silencio.
  */
-export function traerZona(linea: string, dias?: number): Promise<Lectura<RespuestaZona>> {
+/**
+ * @param hasta ancla la ventana a un día ya CERRADO (`AAAA-MM-DD`). Es a lo que se llega clickeando
+ *   un día en la tira. ⛔ Un `hasta` posterior al último cerrado devuelve 400 con el motivo, ⛔ no un
+ *   recorte silencioso: medio día dibujado como entero es el defecto original de esta sección.
+ */
+export function traerZona(linea: string, dias?: number, hasta?: string): Promise<Lectura<RespuestaZona>> {
   const p = new URLSearchParams({ recurso: 'rendimiento', linea })
   if (dias) p.set('dias', String(dias))
+  if (hasta) p.set('hasta', hasta)
   return pedir<RespuestaZona>(p)
 }
 
