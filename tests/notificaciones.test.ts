@@ -275,6 +275,21 @@ describe('avisos de reclamos durmiendo', () => {
     expect(Date.parse(reciendormido.created_at!)).toBeLessThan(Date.now() - 3 * DIA)
   })
 
+  /**
+   * 🔴 **El que más duele, y era el único estado abierto que no llegaba nunca.** `borrador` quiere
+   * decir *"ni lo miré"*: la fila pasa a `esperando_cliente` recién cuando alguien copia el mensaje
+   * para escribirle. Un reclamo cargado y nunca enviado era invisible en la pantalla **y** en el
+   * sidebar.
+   */
+  it('🔴 el reclamo abierto y nunca enviado también llega: `borrador` es un estado ABIERTO', () => {
+    const sinMandar = reclamo({ estado: 'borrador', compensacion: null, created_at: hace(4), updated_at: hace(4) })
+    const [a] = avisosDeReclamo([sinMandar], 'bdi', administracion)
+    expect(a.detalle).toContain('todavía no se le escribió')
+    expect(a.tono).toBe('danger')
+    // ⛔ No inventa reglas: el plazo sigue estando en `alertasDe`, y el de ayer no llega.
+    expect(avisosDeReclamo([reclamo({ estado: 'borrador', compensacion: null, created_at: hace(1), updated_at: hace(1) })], 'bdi', administracion)).toEqual([])
+  })
+
   it('el id es estable entre refrescos: si cambiara, el aviso volvería a contarse como nuevo', () => {
     expect(avisosDeReclamo([reclamo()], 'bdi', admin)[0].id).toBe('reclamo:bdi:42')
   })

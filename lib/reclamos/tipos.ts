@@ -1553,10 +1553,11 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
  * salga en cinco días no.
  */
 /**
- * ⚠️ `despacho: 2` es lo único de acá que ⛔ no salió de la operación sino de una propuesta:
- * despachar es trabajo del día siguiente, no un tránsito de quince. Se cambia en esta línea.
+ * ⚠️ `despacho: 2` y `sinMandar: 2` son lo único de acá que ⛔ no salió de la operación sino de una
+ * propuesta: despachar es trabajo del día siguiente, no un tránsito de quince, y contestarle a
+ * quien se quejó tampoco espera una semana. Se cambian en esta línea.
  */
-export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2 } as const
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2 } as const
 
 /**
  * 🔑 **`ts` es cuándo la alerta EMPEZÓ A EXISTIR**, no cuándo se creó el reclamo ni cuándo se lo
@@ -1671,6 +1672,27 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
   // Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.
   if (d.estado === 'en_revision' && desdeToque >= DIAS_ALERTA.sinDecidir) {
     alertas.push({ tono: 'danger', texto: `Esperando una decisión hace ${desdeToque} días`, dias: desdeToque, ts: cuando(desdeToque, DIAS_ALERTA.sinDecidir) })
+  }
+  /**
+   * 🔴 **El estado en el que el reclamo NACE, y el único abierto que no tenía reloj.** `borrador`
+   * quiere decir literalmente *"ni lo miré"*: la fila pasa a `esperando_cliente` recién cuando
+   * alguien copia el mensaje, que es el gesto de escribirle. Sin esta alerta, un reclamo abierto y
+   * nunca enviado **no aparece en ninguna parte nunca más** — y es el que más duele, porque del
+   * otro lado hay un cliente que ya se quejó y todavía no recibió una sola respuesta.
+   *
+   * 🔑 **Cuenta desde `created_at` y ⛔ no desde el último toque**, que acá es lo que más importa:
+   * `updated_at` lo pisa cualquier edición del borrador, y editarlo ⛔ no es escribirle. Es el
+   * mismo defecto que ya tuvo la alerta de tránsito, con la diferencia de que `created_at` no lo
+   * puede pisar nadie.
+   *
+   * ⚠️ **`!d.compensacion` ⛔ no es un detalle: `borrador` significa dos cosas distintas.** Un
+   * cambio decidido vuelve a `borrador` a esperar que el cliente pague (`decidir` lo deja ahí a
+   * propósito), y ése ⛔ no es un reclamo olvidado — es una espera legítima, con su propia pestaña
+   * en Armar cambio. Sin decisión no hay compensación, así que el guard separa las dos poblaciones
+   * por el dato que las distingue y no por una lista de motivos.
+   */
+  if (d.estado === 'borrador' && !d.compensacion && desdeCreado >= DIAS_ALERTA.sinMandar) {
+    alertas.push({ tono: 'danger', texto: `Abierto hace ${desdeCreado} días y todavía no se le escribió`, dias: desdeCreado, ts: cuando(desdeCreado, DIAS_ALERTA.sinMandar) })
   }
   return alertas
 }

@@ -282,6 +282,49 @@ que nadie escribió.*
   canjes): lo que está fijado son las dos puntas —el derivador y la pantalla— y el invariante de que
   la URL que pone el aviso es la que abre Reclamos.
 
+## 🆕 La quinta alerta: el reclamo abierto y nunca enviado (26-ago-2026)
+
+🔴 **`borrador` era el único estado ABIERTO sin ningún reloj** — y es el estado en el que el reclamo
+**nace**. Las cuatro alertas de arriba cubren `esperando_cliente`, `en_revision`, `en_transito` y la
+plata; un reclamo cargado y nunca mandado no aparecía **en ninguna parte nunca más**, ni en la fila
+ni en el sidebar. Y es el que más duele: del otro lado hay alguien que ya se quejó y no recibió una
+sola respuesta.
+
+**`borrador` quiere decir literalmente *«ni lo miré»***. La fila pasa a `esperando_cliente` recién
+cuando alguien **copia el mensaje** —copiarlo *es* escribirle, de ahí va derecho a WhatsApp—, y ese
+gesto ya existía justamente *«para poder perseguir los que están durmiendo»*. Lo que faltaba era el
+perseguidor.
+
+- 🔑 **Cuenta desde `created_at`, ⛔ no desde el último toque.** Acá es lo que más importa:
+  `updated_at` lo pisa **cualquier** edición del borrador, y editarlo ⛔ no es escribirle ⇒ abrirlo a
+  corregir una coma apagaría la alarma de que nadie le escribió. Es el defecto que este módulo ya
+  tuvo dos veces (`updated_at` en tránsito, y el último evento en el despacho), con la diferencia de
+  que **`created_at` no lo puede pisar nadie**.
+- ⚠️ 🔑 **`borrador` significa DOS cosas, y por eso el guard mira `compensacion`.** Un **cambio ya
+  decidido vuelve a `borrador`** a esperar que el cliente pague (`decidir` lo deja ahí a propósito, y
+  tiene su propia pestaña «Borradores» en Armar cambio): ése ⛔ no está olvidado, es una espera
+  legítima. Sin decisión no hay compensación ⇒ `!d.compensacion` **separa las dos poblaciones por el
+  dato que las distingue**, y no por una lista de motivos que después hay que mantener. Meterlas en
+  la misma alerta sería otro *número que existe y no significa*.
+- **`sinMandar: 2` días, tono `danger`.** ⚠️ Como `despacho: 2`, el número ⛔ no salió de la
+  operación sino de una propuesta —contestarle a quien se quejó no espera una semana— y se cambia en
+  `DIAS_ALERTA`, que sigue siendo el único lado. `danger` porque es **nuestro**: la regla del módulo
+  es que lo que depende de nosotros va en rojo y lo que depende del cliente en amarillo.
+- **Llega al sidebar sin tocar nada más**: `borrador` ya estaba en `ESTADOS_ABIERTOS` y
+  `compensacion` ya estaba en `COLS_AVISO` ⇒ la puerta angosta no se ensanchó.
+- ⚠️ **El orden dentro de `alertasDe` es inobservable acá**: un `borrador` sin compensación no puede
+  cumplir ninguna de las otras cuatro (la plata pide `compensacion`, las otras tres piden otro
+  estado). Mover este `push` de lugar es un **mutante equivalente**, y está anotado para que la
+  próxima tanda no lo persiga.
+
+**Se construyó recién ahora a propósito**: hasta hoy la base tenía **10 reclamos de prueba**, 7 en
+`borrador` desde el 28-jul, y la alerta habría nacido gritando sobre filas falsas. Las 10 se
+borraron el 26-ago (respaldo en `~/Documents/devoluciones-bdi-respaldo-26ago2026.json`) ⇒ **BDI y
+Zattia arrancan en cero**, y el primer aviso de éstos va a ser de un reclamo real.
+
+**9 mutantes, 9 muertos** (el estado, el guard de `compensacion`, `created_at`→`updated_at`, `>=`→`>`,
+el plazo 2→3 y 2→1, el tono, el `ts` desde `ahora`, y `dias` fijo).
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests

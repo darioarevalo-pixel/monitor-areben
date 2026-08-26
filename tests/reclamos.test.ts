@@ -3,7 +3,7 @@ import {
   alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
   correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
-  destinoDe, esCambio, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
+  destinoDe, esCambio, estaAbierto, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
@@ -1267,6 +1267,58 @@ describe('alertas por antigüedad', () => {
   it('sin compensación decidida, la plata todavía no puede alertar', () => {
     expect(alertasDe(fila({ estado: 'en_revision', reintegro_estado: 'pendiente', updated_at: hace(30), compensacion: null }), AHORA)
       .some((a) => a.texto.includes('plata'))).toBe(false)
+  })
+
+  /**
+   * 🔴 **El agujero que faltaba: `borrador` es el estado en el que el reclamo NACE y era el único
+   * abierto sin ningún reloj.** Un reclamo cargado y nunca enviado al cliente no aparecía en
+   * ninguna parte nunca más — y del otro lado hay alguien que ya se quejó.
+   */
+  describe('el reclamo abierto y nunca enviado', () => {
+    const borrador = (extra: Partial<ReclamoRow> = {}) =>
+      fila({ estado: 'borrador', compensacion: null, created_at: hace(3), updated_at: hace(3), ...extra })
+
+    it('a los 2 días de abierto avisa, y avisa fuerte: es nuestro, no del cliente', () => {
+      const a = alertasDe(borrador({ created_at: hace(2), updated_at: hace(2) }), AHORA)
+      expect(a[0].texto).toContain('todavía no se le escribió')
+      expect(a[0].tono).toBe('danger')
+    })
+
+    it('el de ayer no avisa: cargarlo y escribirle no tiene por qué pasar en el mismo minuto', () => {
+      expect(alertasDe(borrador({ created_at: hace(1), updated_at: hace(1) }), AHORA)).toEqual([])
+    })
+
+    /**
+     * 🔴 El defecto que este módulo ya tuvo dos veces, acá evitado por construcción: si contara
+     * desde `updated_at`, **abrir el borrador a corregirle una coma apagaría la alarma de que
+     * nadie le escribió** — y ése es justo el toque más probable sobre un reclamo que duerme.
+     */
+    it('🔴 editar el borrador ⛔ NO reinicia el reloj: cuenta desde que se abrió', () => {
+      const tocadoHoy = borrador({ created_at: hace(9), updated_at: hace(0) })
+      expect(alertasDe(tocadoHoy, AHORA)[0].dias).toBe(9)
+    })
+
+    /**
+     * ⚠️ `borrador` significa **dos cosas distintas**: un reclamo que nadie mandó, y un cambio ya
+     * decidido que vuelve a borrador a esperar que el cliente pague. El segundo ⛔ no está
+     * olvidado, y meterlos en la misma alerta sería un número que existe y no significa.
+     */
+    it('⚠️ un CAMBIO esperando el pago ⛔ no avisa: es una espera legítima, no un olvido', () => {
+      const cambio = borrador({ created_at: hace(30), updated_at: hace(30), compensacion: 'otro_producto' })
+      expect(alertasDe(cambio, AHORA)).toEqual([])
+      // El control: la misma fila sin decisión sí avisa ⇒ lo que la apaga es la compensación.
+      expect(alertasDe(borrador({ created_at: hace(30), updated_at: hace(30) }), AHORA)).toHaveLength(1)
+    })
+
+    it('🔑 el `ts` es cuándo cruzó el plazo, no cuándo se abrió: si no, el badge nace ya visto', () => {
+      const a = alertasDe(borrador({ created_at: hace(9), updated_at: hace(9) }), AHORA)
+      expect(Math.round((AHORA - a[0].ts) / 86400000)).toBe(7)
+    })
+
+    it('cerrado o anulado ⛔ no entra: lo apaga `ESTADOS_ABIERTOS`, no esta regla', () => {
+      expect(estaAbierto(borrador({ estado: 'cerrado' }))).toBe(false)
+      expect(estaAbierto(borrador())).toBe(true)
+    })
   })
 
   it('conAlerta cuenta reclamos, no alertas', () => {
