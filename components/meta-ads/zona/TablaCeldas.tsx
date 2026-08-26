@@ -98,7 +98,9 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
                     onClick={() => setAbierta(esta ? null : c.id)}
                     style={{
                       background: 'none', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left',
-                      font: 'inherit', color: 'inherit',
+                      // `height: auto`: es un botón-TEXTO y el bloque legacy le fija la altura de un
+                      // control a todo `<button>` crudo. Ver `tests/boton-crudo-altura.test.ts`.
+                      height: 'auto', font: 'inherit', color: 'inherit',
                     }}
                   >
                     {esta ? '▾ ' : '▸ '}{c.nombre}

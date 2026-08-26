@@ -23,6 +23,13 @@
  * `caja` viene cortada en `ultimoDiaCerrado()`. ⛔ No hace falta un chequeo acá: el día en curso no
  * está en la lista porque el servidor no lo puso. Para hoy está la banda de arriba, que sale de
  * Meta.
+ *
+ * # 🔴 Cada botón lleva `height: auto`, y no es cosmética
+ *
+ * `.shell-content button` del bloque legacy fija `height: var(--mo-ctl-h)` para TODOS los `<button>`
+ * crudos. Un botón de cuatro renglones —día, pedidos, la barrita, el costo— se desborda y los
+ * números salen **cortados por la mitad, afuera de su caja**. Ya pasó acá el 26-ago-2026, en la
+ * primera pasada. Está escrito como invariante en `AGENTS.md`.
  */
 
 import { entero, plata } from '@/lib/meta-ads/formato'
@@ -59,7 +66,8 @@ export function TiraDeDias({ caja, techo, anclado, onElegir }: {
             type="button"
             onClick={() => onElegir(null)}
             style={{
-              border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+              // `height: auto` ⇒ ver el docblock: el legacy le fija la altura a todo `<button>`.
+              border: 'none', background: 'none', padding: 0, height: 'auto', cursor: 'pointer',
               fontSize: font.xs, color: color.brandSolid, fontWeight: weight.semibold,
             }}
           >
@@ -84,6 +92,9 @@ export function TiraDeDias({ caja, techo, anclado, onElegir }: {
               title={`${d.fecha} · ${plata(d.gasto)} · ${entero(d.pedidos)} pedidos${d.pedidos ? ` · ${plata(d.costoPedidoReal)} c/u` : ''}`}
               style={{
                 flex: '0 0 auto', width: 62, cursor: 'pointer', textAlign: 'center',
+                // 🔴 `height: auto` obligatorio: sin esto el legacy lo deja de un renglón y los
+                // cuatro que lleva adentro se dibujan cortados. Ver el docblock.
+                height: 'auto', lineHeight: 1.2, fontWeight: weight.normal,
                 padding: `${space[1]} 0`, borderRadius: radius.md,
                 border: `1px solid ${esta ? color.brandSolid : color.line}`,
                 background: esta ? color.brandBg : color.surface,

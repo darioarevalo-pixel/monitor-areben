@@ -31,7 +31,10 @@ espejo rompe la suite.
 inline.** Turbopack lo exige en build ("options must be an object literal") aunque `next dev` lo
 perdone. Por eso `{ loading: Cargando }` se repite en cada línea en vez de salir de una variable.
 
-**`.shell-content button` fija altura.** Un botón de dos renglones se desborda.
+**`.shell-content button` fija altura.** Un botón de dos renglones se desborda — los números salen
+cortados afuera de su caja. Un `<button>` crudo lleva **`height` explícita** (`'auto'` para uno de
+texto o de varios renglones). Amarrado por `tests/boton-crudo-altura.test.ts`, porque esta línea sola
+ya no alcanzó: se pisó el 26-ago-2026 con la tira de días de Meta.
 
 **`index.html` no es código vivo.** El iframe legacy murió en julio de 2026 y sobrevive sólo como
 fuente de los tests de paridad (`tests/legacy-*.ts`): no se edita para cambiar la app.

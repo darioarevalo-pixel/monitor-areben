@@ -462,7 +462,9 @@ function SinLinea({ visibles, linea, setLinea }: {
           <button
             type="button"
             onClick={() => setLinea(l)}
-            style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', font: 'inherit', color: color.brandSolid, fontWeight: weight.semibold }}
+            // `height: auto`: botón-TEXTO, y el legacy le fija la altura de un control. Ver
+            // `tests/boton-crudo-altura.test.ts`.
+            style={{ background: 'none', border: 0, padding: 0, height: 'auto', cursor: 'pointer', font: 'inherit', color: color.brandSolid, fontWeight: weight.semibold }}
           >
             {ETIQUETA_LINEA[l]}
           </button>
