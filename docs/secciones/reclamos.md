@@ -53,6 +53,8 @@ va a ser la pregunta, nada más.
 `ReclamoPublico.tsx`) · `components/postventa/` (Fallas, otra cosa: el ledger) ·
 `lib/reclamos/tipos.ts` (**1.4k líneas, leer por rango**) · `lib/reclamos/casos.core.js` ·
 `lib/reclamos/efectos.core.js` · `lib/reclamos/mensajes.ts` · `lib/reclamos/cliente.ts`.
+⚠️ `DecidirReclamo.tsx` **está en tres pestañas desde el 27-ago-2026 y el orden es la regla** — ver
+«La pantalla de decidir» más abajo antes de mover un bloque de lugar.
 
 Handler `api/_reclamos.js` (entra por `api/postventa.js`) y el portal público `api/_reclamo.js`.
 La venta en Gestión Nube la crea `api/crear-venta.js`, **que corre en PROD también desde localhost**
@@ -60,7 +62,8 @@ La venta en Gestión Nube la crea `api/crear-venta.js`, **que corre en PROD tamb
 
 Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efectos.sql`,
 `sql/migrate-reclamos-escenario.sql`). Tests: `tests/reclamos.test.ts` (1.2k líneas),
-`tests/reclamos-escenarios.test.ts`, `tests/reclamos-mensajes.test.ts`, `tests/reclamo-publico.test.ts`.
+`tests/reclamos-escenarios.test.ts`, `tests/reclamos-mensajes.test.ts`, `tests/reclamo-publico.test.ts`,
+`tests/reclamos-decidir-pestanas.test.tsx` (jsdom, monta el modal).
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -383,11 +386,104 @@ Zattia arrancan en cero**, y el primer aviso de éstos va a ser de un reclamo re
 **9 mutantes, 9 muertos** (el estado, el guard de `compensacion`, `created_at`→`updated_at`, `>=`→`>`,
 el plazo 2→3 y 2→1, el tono, el `ts` desde `ahora`, y `dias` fijo).
 
+## 🆕 La pantalla de decidir: tres pestañas, y el orden ES la regla (27-ago-2026)
+
+Lo encontró Bruno decidiendo el **primer reclamo real de BDI**: *«esta sección no la entiendo»*. La
+caja «¿Intentamos que se lo quede?» mostraba **$0**, los dos botones apagados, y abajo un aviso en
+rojo pidiendo anotar qué contestó el cliente — retando por no registrar lo que no dejaba registrar.
+
+### 🔴 El defecto de fondo: el dato se pedía DESPUÉS de la cuenta que lo usa
+
+`DecidirReclamo` era una tira de 19 bloques, y **tres flechas iban de abajo hacia arriba**: el
+`Envío de vuelta` y el `PVP de feria` —que fijan el techo de la retención— se cargaban 150 líneas
+más abajo de esa caja, y el botón «Que vuelva» daba vuelta la etiqueta «se espera de vuelta» que
+estaba arriba. Con los campos vacíos el techo era **siempre 0**.
+
+⇒ **Las pestañas están ordenadas por el flujo del dato, ⛔ no por tema.** Antes de mover un bloque
+de pestaña, mirar de dónde salen sus insumos:
+
+| | qué contiene, en orden |
+|---|---|
+| **① Qué pasó** | fotos + `Lightbox` · relato · **la pregunta que decide** (en la falla, los botones de gravedad: *son* el escenario) · reclasificar · qué esperaba · alcance de la parcial · «¿qué recibió realmente?» de `mal_armado` |
+| **② El producto** | los tres números → veredicto del retorno → **la oferta de retención** → «que vuelva / se lo queda» + la vía → **el destino de cada producto** |
+| **③ El cliente** | la salida y sus ramas · «stock a corregir» de `mal_armado` · el aviso del envío de ida · el resumen |
+
+⚠️ **«Stock a corregir» vive en ③ y ⛔ no al lado del buscador de ②**: su último insumo es la
+`compensacion`, que se elige en ③. Donde estaba, mostraba una nota que todavía no podía ser cierta.
+
+### 🔑 La oferta de retención se contesta sola
+
+Adentro de esa caja hay **dos preguntas y sólo una es de la persona**:
+
+| pregunta | quién |
+|---|---|
+| ¿Conviene ofrecer, y hasta cuánto? | **el sistema** — tiene precio, PVP de feria, envío y motivo |
+| ¿Qué contestó el cliente? | **la persona** — es un hecho del mundo, no sale de ningún número |
+
+El título dejó de preguntar (`Ofrecele que se lo quede` / `No conviene ofrecerle que se lo quede`).
+⇒ **El veredicto vive en el núcleo**: `cuentaDescuento` devuelve `conviene` y `falta`, y la pantalla
+⛔ no lo infiere mirando si el techo es cero. `falta` separa las **dos causas** de un
+`conviene: false` —no hay nada que perder, o falta el PVP de feria—, porque sin eso «no conviene» se
+lee como veredicto cuando en realidad es «todavía no se sabe».
+
+Cuando no conviene, el campo y los botones **no están**, y con ellos se va el aviso en rojo. Queda
+un link **«Se lo ofrecí igual»** que los revela: ⛔ la oferta que no se anota rompe la cuenta de
+cuántas veces funciona la retención, que es para lo que existe la columna.
+
+### 🔴 El cero que afirma, en el bloque de arriba
+
+Mismo defecto, encontrado **mirando la pantalla renderizada** y no leyendo el código: con el envío
+sin cargar, `convieneRetorno` compara lo recuperable contra **0** y contesta *«Conviene pedirlo»*
+siempre. Ahora, con el campo vacío, no hay veredicto. ⚠️ **Un 0 TIPEADO sí es un dato** —es «la trae
+al local»—, así que se mira `''` y ⛔ no `<= 0`: el `NumberField` guarda esa diferencia a propósito.
+
+### La validación de cliente, y qué NO va en ella
+
+`guardar` no tenía **un solo `if`**: mandaba y dejaba que el servidor rechazara por toast, sin decir
+dónde. Ahora `faltantesDeLaDecision` (`tipos.ts`) contesta qué falta y **en qué pestaña**, y
+`Confirmar` te lleva ahí. ⛔ El botón **no** se deshabilita: un botón apagado sin decir por qué es
+el defecto que este módulo ya tuvo dos veces.
+
+🔴 **⛔ NO agregarle los obligatorios del servidor.** Medido leyendo los dos lados: los dos que exige
+`api/_reclamos.js:338-339` **son inalcanzables desde esta pantalla** — `compensacion` se deriva con
+fallback a `opciones[0]` y nunca queda vacía, y `destinoDe` devuelve `null` sólo cuando no hay
+producto en juego, que es justo el caso donde el servidor tampoco lo pide. Serían dos avisos que
+nadie puede ver nunca.
+
+Traban sólo dos cosas, las que dejan una fila incoherente: **media oferta de retención** (el texto
+sale de `registroDeRetencion`, ⛔ no se reescribe) y una **parcial de $0**. El resto avisa.
+
+### ⚠️ Una pestaña vacía ⛔ no es una pestaña incompleta
+
+En una demora o una cancelación no hay producto en juego: ② lleva chip `—` y **no** «falta», y
+**queda clickeable** — adentro está el porqué. Deshabilitarla escondería la única explicación de por
+qué faltan campos, y un `title=` no se ve en un teléfono. Marcarla en rojo empuja a inventar un
+destino con tal de cerrar, que es el defecto que este módulo ya tuvo: hasta el 25-ago-2026 **una
+demora no se podía cerrar nunca**.
+
+### Lo que quedó pendiente
+
+- ▶️ **`PISO_RETORNO` está en `null`** (`tipos.ts`), o sea que se comporta como antes. Es un número
+  de **política** —por debajo de cuánto no vale la pena traer un producto de vuelta— y lo tiene que
+  dar Bruno, por marca. ⛔ Ponerlo desde acá sería inventar política.
+- ▶️ **`cuentaDescuento` acepta `costoOperativo` y la pantalla nunca se lo pasa**, así que en todo
+  caso sano el techo depende sólo del envío de vuelta. Subirlo **agranda las ofertas posibles**: no
+  es un arreglo silencioso, se decide con Bruno.
+- ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
+  refactors grandes): las pestañas envuelven los bloques que ya estaban.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests
 exhaustivos, porque **acá vive la plata** y un error no rompe ninguna pantalla: se ve recién en la
 caja o en el stock.
+
+`npx vitest run tests/reclamos-decidir-pestanas.test.tsx` — la pantalla de decidir. **Monta el
+componente de verdad** (`createRoot` + `act`) y ⛔ no usa `renderToStaticMarkup`: `Modal` usa un
+portal y el renderer de servidor tira *«Portals are not currently supported by the server
+renderer»*. El oráculo de qué pestaña está abierta es `aria-selected="true"`. Fija, entre otras
+cosas, que **el envío de vuelta esté ARRIBA de la caja de la oferta** (`compareDocumentPosition`):
+si alguien invierte el orden otra vez, ese test es el que se pone rojo.
 
 `npx vitest run tests/notificaciones.test.ts tests/postventa-tab.test.ts tests/postventa-pantalla.test.tsx --reporter=dot`
 — el aviso del sidebar. ⚠️ `postventa-pantalla` es de los pocos `.tsx` del repo y **el único en
