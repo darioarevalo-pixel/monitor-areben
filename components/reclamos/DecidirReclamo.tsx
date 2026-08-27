@@ -115,10 +115,17 @@ export function DecidirReclamo({
    * reclamo en un CAMBIO. Y un cambio es una puerta de una sola dirección: queda fuera de
    * «Decidir» a propósito. Pasó dos veces el mismo día, con reclamos reales.
    *
-   * ⚠️ Si el reclamo ya se decidió, arranca con lo que se había elegido: rehacer una decisión ⛔ no
-   * puede empezar borrando la anterior de la pantalla.
+   * 🔴 **Y arranca vacía TAMBIÉN al rehacer**, que es la misma regla entrando por la otra puerta.
+   * Hasta el 27-ago-2026 acá se leía `reclamo.compensacion`, así que al abrir «Volver a decidir» la
+   * salida vieja venía puesta y el botón del pie **la volvía a confirmar igual**: apretar el botón
+   * que promete cambiar la decisión la dejaba donde estaba. Bruno lo dio tres veces seguidas con
+   * R-0022 — *«no puede tener una opción predeterminada cargada, porque sino ponemos confirmar y no
+   * se eligió»*.
+   *
+   * ⚠️ El dato ⛔ no se pierde: la salida actual se muestra **como texto** al lado del desplegable
+   * («Hoy es: …»). Mostrarla es informar; dejarla cargada en el control es elegir por la persona.
    */
-  const [compensacionElegida, setCompensacion] = useState<Compensacion | ''>(() => reclamo.compensacion ?? '')
+  const [compensacionElegida, setCompensacion] = useState<Compensacion | ''>('')
   /**
    * La salida se **deriva**, no se sincroniza con un effect: cambiar el escenario puede sacar del
    * repertorio la que estaba elegida (una demora del transporte ya no admite cupón), y un effect
@@ -173,7 +180,14 @@ export function DecidirReclamo({
    * política del negocio, no un dato de este caso, y como campo en blanco el corte no existía
    * salvo que alguien se acordara de tipearlo. Se puede pisar acá para un caso puntual.
    */
-  const [piso, setPiso] = useState<number | ''>(PISO_RETORNO[marca] ?? '')
+  /**
+   * ⚠️ **`PISO_RETORNO` ya no se edita en la pantalla, pero la regla sigue viva.** Está en `null`
+   * en BDI y en Zattia desde que existe, o sea que **nunca cambió una cuenta**; lo que sí hacía era
+   * ocupar un campo vacío que nadie sabía qué era («¿Qué es Piso?», Bruno, 27-ago-2026). Es
+   * política —por debajo de cuánto no vale la pena traer un producto— y la tiene que dar él, por
+   * marca; el día que la defina, la cuenta ya la toma.
+   */
+  const piso = PISO_RETORNO[marca] ?? 0
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
   // El PVP de feria vive por ítem, así que se recupera del primero que lo tenga.
   const [pvpFeria, setPvpFeria] = useState<number | ''>(
@@ -245,7 +259,7 @@ export function DecidirReclamo({
     () => convieneRetorno(itemsConFeria, {
       fallada: esFalla,
       envioVuelta: Number(envioVuelta) || 0,
-      piso: Number(piso) || 0,
+      piso,
     }),
     [itemsConFeria, esFalla, envioVuelta, piso],
   )
@@ -260,7 +274,19 @@ export function DecidirReclamo({
   const [pedirRetorno, setPedirRetorno] = useState<boolean | null>(
     reclamo.envio_costo != null ? (reclamo.retorno_decidido === true) : null,
   )
-  const retorno = nuncaSalio ? false : (pedirRetorno ?? cuenta.conviene)
+  /**
+   * 🔴 **Sin contestar, el producto NO vuelve.** Hasta el 27-ago-2026 el default era
+   * `cuenta.conviene`, y con el envío sin cargar esa cuenta compara lo recuperable contra **0**:
+   * contestaba «conviene pedirlo» siempre. O sea que la pantalla llegaba a la pregunta con la
+   * respuesta puesta, pedía la vía y el envío, y la pestaña quedaba en «falta» para siempre —
+   * *«no puedo salir del envío»*.
+   *
+   * 🔑 Y el default correcto es el otro, porque es la intención real del negocio: *«aunque el
+   * producto esté bien y pueda venderse, también es un quilombo de logística»*. La sugerencia de
+   * la cuenta se sigue mostrando (el pill «va contra la sugerencia») y se sigue guardando
+   * (`retorno_sugerido`), pero ⛔ ya no elige.
+   */
+  const retorno = nuncaSalio ? false : (pedirRetorno ?? false)
 
   const monto = useMemo(
     () => calcularMonto(itemsADevolver, orden, {
@@ -464,7 +490,21 @@ export function DecidirReclamo({
    */
   const rehaciendo = estaDecidido(reclamo)
 
-  const [paso, setPaso] = useState<PasoDecision>('que-paso')
+  /**
+   * 🔑 **Abre en el primer paso que todavía NO está guardado**, y ⛔ no siempre en ①.
+   *
+   * Pedido de Bruno el 27-ago-2026 —*«si un paso está confirmado, al momento de seguir decidiendo,
+   * que arranque en el 2do»*— después de recorrer tres veces una pestaña ya contestada para llegar
+   * a la que le faltaba.
+   *
+   * ⚠️ Si están los tres guardados abre en `'cliente'`, que es **el único que decide**: es donde
+   * quiere estar quien entró a rehacer. `ORDEN` se declara más abajo, así que la lista va escrita
+   * acá — son tres claves y el tipo las fija.
+   */
+  const [paso, setPaso] = useState<PasoDecision>(
+    () => (['que-paso', 'producto', 'cliente'] as PasoDecision[])
+      .find((p) => !pasoGuardado(reclamo, p, rehaciendo)) ?? 'cliente',
+  )
   /**
    * Lo que trabó el último intento de confirmar, para que quede escrito en la pestaña donde está.
    * ⚠️ El toast dura 9 s y resolver un reclamo tarda más: si el aviso vive sólo ahí, se pierde.
@@ -627,7 +667,11 @@ export function DecidirReclamo({
               primeros pasos el botón confirma ESE paso y avanza. */}
           {esUltimo ? (
             <Button variant="solid" tone="brand" onClick={() => void guardar()} disabled={guardando}>
-              {guardando ? 'Guardando…' : rehaciendo ? 'Volver a decidir' : 'Confirmar la decisión'}
+              {/* 🔴 Al rehacer ⛔ NO puede decir «Volver a decidir»: así se llama el botón de la
+                  FILA, el que abre esta pantalla. Con los dos iguales, apretás el de la lista, se
+                  abre el modal, y parece que ya lo hiciste. Fue una regresión del 27-ago-2026 al
+                  renombrarlo «para que se llamara como el gesto»: el gesto es abrir, éste guarda. */}
+              {guardando ? 'Guardando…' : rehaciendo ? 'Guardar la nueva decisión' : 'Confirmar la decisión'}
             </Button>
           ) : (
             <Button variant="solid" tone="brand" onClick={() => void confirmarPaso()} disabled={guardando}>
@@ -864,183 +908,38 @@ export function DecidirReclamo({
       )}
       {hayPrendaQueVuelva && (
         <section style={{ marginBottom: space[4] }}>
-          {/* Los tres números explicados en UN ⓘ y no en tres renglones de ayuda: son tres campos
-              de una línea cada uno y la prosa junta ocupaba más que los campos. */}
+          {/* ── ① LA PREGUNTA, PRIMERO ──
+              🔴 **Antes esto estaba al final, después de tres números y dos veredictos.** El orden
+              viejo obligaba a cargar el envío de vuelta para recién después decidir si el producto
+              volvía — y como con el campo vacío `convieneRetorno` compara contra 0 y contesta
+              siempre «conviene pedirlo», la pantalla llegaba a la pregunta **con la respuesta ya
+              puesta en «que vuelva»**. Bruno el 27-ago-2026: *«no puedo salir del envío»*.
+
+              🔑 Y el default es **«se lo queda»**, que es la intención real del negocio: *«aunque el
+              producto esté bien y pueda venderse, también es un quilombo de logística»*. La cuenta
+              sigue opinando —abajo, con el pill— pero ⛔ ya no elige. */}
           <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[2] }}>
-            <h4 style={{ fontSize: font.md, fontWeight: weight.bold, margin: 0 }}>¿Pedimos que vuelva el producto?</h4>
-            <InfoPopover titulo="De dónde salen estos tres números">
-              <p><b>Envío de vuelta</b>: el total de traerlo, que lo pagamos nosotros. Es el que decide
-              si conviene pedirlo, y también el techo de lo que se le puede ofrecer para que se lo quede.</p>
-              <p><b>PVP de feria</b>: lo único que se saca de un producto fallado, <b>por unidad</b> —
-              no vuelve a stock, así que no se mide contra el precio de lista.</p>
-              <p><b>Piso</b>: por debajo de ese monto no se pide el retorno aunque la cuenta dé, porque
-              recibirlo, revisarlo y reingresarlo tampoco es gratis.</p>
+            <h4 style={{ fontSize: font.md, fontWeight: weight.bold, margin: 0 }}>¿Qué pasa con el producto?</h4>
+            <InfoPopover titulo="Cuál conviene">
+              <p>Por defecto <b>se lo queda el cliente</b>: traerlo cuesta el envío, más recibirlo,
+              revisarlo y reingresarlo. Aunque el producto esté sano y se revenda entero, esa
+              logística rara vez se paga sola.</p>
+              <p>Pedirlo de vuelta conviene cuando lo que se recupera es bastante más que el envío
+              — la cuenta te lo dice acá abajo apenas cargues cuánto saldría traerlo.</p>
             </InfoPopover>
           </div>
 
-          <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[2] }}>
-            <Field label="Envío de vuelta ($)">
-              <NumberField value={envioVuelta} onChange={(v) => setEnvioVuelta(v)} style={{ width: 120 }} />
-            </Field>
-            {esFalla && (
-              <Field label="PVP de feria por unidad ($)" hint={unidades > 1 ? `× ${unidades} unidades` : undefined}>
-                <NumberField value={pvpFeria} onChange={(v) => setPvpFeria(v)} style={{ width: 120 }} />
-              </Field>
-            )}
-            <Field label="Piso ($)">
-              <NumberField value={piso} onChange={(v) => setPiso(v)} style={{ width: 110 }} />
-            </Field>
-          </div>
-
-          {/* Queda el veredicto; el desglose de la cuenta pasa al ⓘ.
-
-              🔴 **Con el envío sin cargar NO hay veredicto que dar.** La cuenta compara lo
-              recuperable contra el envío: con el campo vacío el envío vale 0, así que siempre
-              contesta "Conviene pedirlo" — un veredicto que sale de un número que existe y no
-              significa nada. Es el mismo defecto que el techo en $0 de la caja de acá abajo.
-              ⚠️ Un 0 TIPEADO sí vale: es el caso real de "la trae al local". Por eso se mira `''`
-              y ⛔ no `<= 0` — el `NumberField` guarda esa diferencia a propósito. */}
-          {envioVuelta === '' ? (
-            <Notice tone="warning">
-              <b>Todavía no se puede saber si conviene pedirlo.</b> Cargá cuánto sale el envío de
-              vuelta — si la trae al local, poné 0.
-            </Notice>
-          ) : (
-            <Notice tone={cuenta.conviene ? 'success' : 'warning'}>
-              <b>{cuenta.conviene ? 'Conviene pedirlo' : 'No conviene pedirlo'}.</b>{' '}
-              <InfoPopover titulo="Por qué">
-                <p>{cuenta.motivo}</p>
-                {esFalla && <p>Se mide contra el PVP de feria porque un producto fallado no vuelve a stock.</p>}
-              </InfoPopover>
-            </Notice>
-          )}
-
-          {/* ── La oferta de retención ──
-              Es plata que no sale de la caja y producto que no vuelve a costar logística.
-
-              🔑 **Acá adentro hay DOS preguntas y sólo una es de la persona.** «¿Conviene ofrecer,
-              y cuánto?» la contesta el sistema: tiene el precio, el PVP de feria y el envío. «¿Qué
-              contestó el cliente?» no la puede contestar ningún número. Hasta el 27-ago-2026 la
-              caja preguntaba las dos, con el campo en $0 y los botones apagados — o sea que era
-              una calculadora que además retaba por no registrar lo que no dejaba registrar.
-
-              Va DEBAJO de los números a propósito: su techo sale de `envioVuelta` y de `pvpFeria`,
-              que se cargan justo arriba. Cuando estaba encima, el techo era siempre 0. */}
-          {mostrarRetencion && (
-            <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: space[3], marginTop: space[3], background: color.bg2 }}>
-              <div style={{ fontWeight: weight.semibold, fontSize: font.sm, marginBottom: 4 }}>
-                {descuento.conviene ? 'Ofrecele que se lo quede' : 'No conviene ofrecerle que se lo quede'}
-              </div>
-
-              {/* El veredicto, con el mismo formato que la cuenta del retorno de acá arriba. */}
-              {descuento.conviene ? (
-                <Notice tone="success" style={{ marginBottom: space[2] }}>
-                  {descuento.convieneRegalar ? (
-                    <><b>Regaláselo</b>: pedirlo de vuelta sale más caro que el producto.</>
-                  ) : (
-                    <>Ofrecele <b><MoneyText value={descuento.sugerido} /></b> — hasta{' '}
-                    <b><MoneyText value={descuento.techo} /></b> no perdés plata.</>
-                  )}
-                  {' '}<InfoPopover titulo="Por qué ese techo">
-                    <p>{descuento.motivo}</p>
-                    <p>El techo es <b>lo que perdés porque vuelva</b>: si vuelve sano, la logística; si
-                    vuelve fallado, además la diferencia entre lo que vale nuevo y lo que se saca en
-                    feria. Ofrecer por debajo de eso siempre sale más barato que pedirlo de vuelta.</p>
-                    <p>El sugerido es la mitad, para dejar margen a negociar.</p>
-                  </InfoPopover>
-                </Notice>
-              ) : (
-                <Notice tone={descuento.falta ? 'warning' : 'neutral'} style={{ marginBottom: space[2] }}>
-                  {descuento.motivo}
-                  {descuento.falta === 'pvp_feria' && (
-                    <div style={{ fontSize: font.xs, marginTop: 4 }}>Cargalo acá arriba y la cuenta se contesta sola.</div>
-                  )}
-                </Notice>
-              )}
-
-              {/* Lo único que el sistema no puede saber: qué contestó el cliente.
-                  Con veredicto de NO ofrecer, el campo y los botones no están —no hay nada que
-                  registrar—, salvo que alguien haya ofrecido igual y lo diga. */}
-              {(descuento.conviene || ofreciIgual || retencion) ? (
-                <>
-                  <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                    {/* Editable: lo que se negocia de verdad rara vez es el número que sale de la
-                        fórmula, y el que importa es el que se DIJO. */}
-                    {/* 🔑 **En qué se le ofrece.** Las dos cuestan cosas distintas: la plata sale
-                        de la caja HOY, el cupón sale sólo si el cliente vuelve a comprar. Sin esta
-                        pregunta las dos ofertas quedaban indistinguibles en la base — el mismo
-                        agujero que `retencion_respuesta` vino a tapar: existía el numerador y no el
-                        denominador.
-                        ⚠️ Cambiar la forma con una respuesta ya marcada la BORRA: la respuesta era
-                        a la otra oferta, y dejarla puesta diría que aceptó algo que no se le
-                        ofreció. */}
-                    <Field label="¿En qué se le ofrece?" style={{ marginBottom: 0 }}>
-                      <Chips
-                        value={retencionForma}
-                        onChange={(v) => { setRetencionForma(v as FormaRetencion); if (retencion) setRetencion(null) }}
-                        opciones={(Object.keys(FORMAS_RETENCION) as FormaRetencion[]).map((k) => ({ key: k, label: FORMAS_RETENCION[k] }))}
-                      />
-                    </Field>
-                    <Field
-                      label="Cuánto se le ofrece"
-                      hint={retencionForma === 'cupon' ? '▶️ sin regla todavía: lo ponés vos' : 'arranca en lo sugerido'}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <NumberField value={montoOferta} onChange={(v) => setRetencionMonto(v)} prefix="$" style={{ width: 140 }} />
-                    </Field>
-                    <Button
-                      size="sm" variant={retencion === 'acepto' ? 'solid' : 'outline'} tone="brand"
-                      disabled={montoOferta <= 0}
-                      title={montoOferta <= 0 ? 'Poné cuánto le ofreciste' : undefined}
-                      onClick={() => contestoLaOferta('acepto')}
-                    >Aceptó: se lo queda</Button>
-                    <Button
-                      size="sm" variant={retencion === 'rechazo' ? 'solid' : 'outline'} tone="neutral"
-                      disabled={montoOferta <= 0}
-                      title={montoOferta <= 0 ? 'Poné cuánto le ofreciste' : undefined}
-                      onClick={() => contestoLaOferta('rechazo')}
-                    >No aceptó</Button>
-                    {retencion && !descuento.conviene && <StatusPill tone="warning" label="Va contra la sugerencia" />}
-                  </div>
-                  {/* 🔑 La rechazada es la que hay que registrar: la aceptada se adivina por la
-                      resolución (termina en "le devolvemos una parte"), la rechazada no dejaba
-                      rastro en ningún lado y por eso no se sabía cuántas veces funciona.
-                      ⚠️ El aviso sólo aparece cuando hay una oferta que registrar: retar cuando la
-                      pantalla no deja ofrecer nada era pedir lo imposible. */}
-                  <div style={{ fontSize: font.xs, color: retencion ? color.mut : color.warningInk, marginTop: space[2] }}>
-                    {retencion === 'acepto' ? (retencionForma === 'cupon'
-                      ? 'Queda registrado que aceptó el cupón. El producto no vuelve, y queda pendiente CREARLO en la tienda.'
-                      : 'Queda registrado que aceptó. El producto no vuelve.')
-                      : retencion === 'rechazo' ? 'Queda registrado que no aceptó: seguí con el cambio o la devolución.'
-                        : montoOferta > 0 ? 'Sin registrar. Si se lo ofreciste, anotá qué contestó — es lo único que después dice cuántas veces funciona.'
-                          : 'Poné cuánto le ofreciste para poder anotar qué contestó.'}
-                  </div>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setOfreciIgual(true)}
-                  style={{
-                    padding: 0, height: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: font.xs, color: color.action, textDecoration: 'underline',
-                  }}
-                >Se lo ofrecí igual</button>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: space[2], marginTop: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button variant={!retorno ? 'solid' : 'outline'} tone="brand" size="sm" onClick={() => setPedirRetorno(false)}>Se lo queda</Button>
             {/* Si aceptó quedárselo, el producto no vuelve: el servidor rechaza las dos cosas
-                juntas (`casos.core.js`). Con la oferta a diez líneas de acá, se puede impedir en la
-                pantalla en vez de que reviente al confirmar — y ⛔ sin borrarle la respuesta en
-                silencio: para pedirlo de vuelta primero se saca la oferta, arriba. */}
+                juntas (`casos.core.js`). Se impide en la pantalla en vez de que reviente al
+                confirmar — y ⛔ sin borrarle la respuesta en silencio. */}
             <Button
               variant={retorno ? 'solid' : 'outline'} tone="brand" size="sm"
               disabled={retencion === 'acepto'}
-              title={retencion === 'acepto' ? 'Aceptó quedárselo: el producto no vuelve. Si igual va a volver, sacá esa respuesta acá arriba.' : undefined}
+              title={retencion === 'acepto' ? 'Aceptó quedárselo: el producto no vuelve. Si igual va a volver, sacá esa respuesta en la calculadora.' : undefined}
               onClick={() => setPedirRetorno(true)}
             >Que vuelva</Button>
-            <Button variant={!retorno ? 'solid' : 'outline'} tone="brand" size="sm" onClick={() => setPedirRetorno(false)}>Que se lo quede</Button>
             {/* ⚠️ Sin el envío cargado no hay sugerencia contra la cual ir: el pill acusaría de
                 contradecir una cuenta que todavía no contestó nada. */}
             {envioVuelta !== '' && pedirRetorno !== null && pedirRetorno !== cuenta.conviene && (
@@ -1048,11 +947,145 @@ export function DecidirReclamo({
             )}
           </div>
 
-          {/* Cómo vuelve. Si la trae al local no hay envío que pagar ni código que seguir, así que
-              el costo de arriba deja de tener sentido y se avisa. */}
+          {/* ── ② SE LO QUEDA → la calculadora de retención ──
+              🔑 **El envío de vuelta vive ACÁ ADENTRO, y por eso la caja ya puede ir arriba.**
+              Hasta el 27-ago-2026 esta caja tenía que ir DEBAJO de los números sueltos porque su
+              techo sale de `envioVuelta` y de `pvpFeria`: puesta encima, el techo daba siempre 0 y
+              la pantalla contestaba «no conviene ofrecer nada» sobre un número que no significaba
+              nada. Metiendo el insumo adentro, ese defecto deja de ser posible por construcción.
+
+              Y el rótulo cambia con lo que se está preguntando: acá el envío ⛔ no es plata que se
+              va a gastar, es **lo que costaría traerlo** — o sea exactamente lo que justifica
+              cuánto se le puede ofrecer para que no vuelva. */}
+          {!retorno && (
+            <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: space[3], marginTop: space[3], background: color.bg2 }}>
+              <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[2] }}>
+                <div style={{ fontWeight: weight.semibold, fontSize: font.sm }}>Calculadora de retención</div>
+                <InfoPopover titulo="Para qué sirve">
+                  <p>Arma la propuesta para convencer al cliente de que <b>se quede</b> el producto:
+                  hasta cuánto se le puede ofrecer sin perder plata, y cuánto conviene ofrecer primero.</p>
+                  <p>El techo es <b>lo que perdés porque vuelva</b>: si vuelve sano, la logística; si
+                  vuelve fallado, además la diferencia entre lo que vale nuevo y lo que se saca en feria.</p>
+                </InfoPopover>
+              </div>
+
+              <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: space[2] }}>
+                <Field label="¿Cuánto nos saldría traerlo? ($)" hint="define hasta cuánto podés ofrecerle" style={{ marginBottom: 0 }}>
+                  <NumberField value={envioVuelta} onChange={(v) => setEnvioVuelta(v)} style={{ width: 150 }} />
+                </Field>
+                {esFalla && (
+                  <Field label="PVP de feria por unidad ($)" hint={unidades > 1 ? `× ${unidades} unidades` : undefined} style={{ marginBottom: 0 }}>
+                    <NumberField value={pvpFeria} onChange={(v) => setPvpFeria(v)} style={{ width: 120 }} />
+                  </Field>
+                )}
+              </div>
+
+              {/* 🔴 La caja de la oferta sólo aparece donde el caso la admite y con fotos: sin eso
+                  no hay nada que proponer. Se dice, ⛔ no se esconde en silencio. */}
+              {!mostrarRetencion ? (
+                <Notice tone="neutral">
+                  {ofreceRetencion(reclamo.motivo, escenario)
+                    ? 'Para armar una propuesta hacen falta las fotos del cliente.'
+                    : 'En este caso no se ofrece que se lo quede a cambio de plata.'}
+                </Notice>
+              ) : (
+                <>
+                  {/* El veredicto de la cuenta. */}
+                  {descuento.conviene ? (
+                    <Notice tone="success" style={{ marginBottom: space[2] }}>
+                      {descuento.convieneRegalar ? (
+                        <><b>Regaláselo</b>: pedirlo de vuelta sale más caro que el producto.</>
+                      ) : (
+                        <>Ofrecele <b><MoneyText value={descuento.sugerido} /></b> — hasta{' '}
+                        <b><MoneyText value={descuento.techo} /></b> no perdés plata.</>
+                      )}
+                      {' '}<InfoPopover titulo="Por qué ese techo">
+                        <p>{descuento.motivo}</p>
+                        <p>Ofrecer por debajo del techo siempre sale más barato que pedirlo de vuelta.</p>
+                        <p>El sugerido es la mitad, para dejar margen a negociar.</p>
+                      </InfoPopover>
+                    </Notice>
+                  ) : (
+                    <Notice tone={descuento.falta ? 'warning' : 'neutral'} style={{ marginBottom: space[2] }}>
+                      {descuento.motivo}
+                      {descuento.falta === 'pvp_feria' && (
+                        <div style={{ fontSize: font.xs, marginTop: 4 }}>Cargalo acá arriba y la cuenta se contesta sola.</div>
+                      )}
+                    </Notice>
+                  )}
+
+                  {/* Lo único que el sistema no puede saber: qué contestó el cliente. */}
+                  {(descuento.conviene || ofreciIgual || retencion) ? (
+                    <>
+                      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        {/* 🔑 **En qué se le ofrece.** Las dos cuestan cosas distintas: la plata sale
+                            de la caja HOY, el cupón sale sólo si el cliente vuelve a comprar. Sin esta
+                            pregunta las dos ofertas quedaban indistinguibles en la base.
+                            ⚠️ Cambiar la forma con una respuesta ya marcada la BORRA: la respuesta era
+                            a la otra oferta. */}
+                        <Field label="¿En qué se le ofrece?" style={{ marginBottom: 0 }}>
+                          <Chips
+                            value={retencionForma}
+                            onChange={(v) => { setRetencionForma(v as FormaRetencion); if (retencion) setRetencion(null) }}
+                            opciones={(Object.keys(FORMAS_RETENCION) as FormaRetencion[]).map((k) => ({ key: k, label: FORMAS_RETENCION[k] }))}
+                          />
+                        </Field>
+                        {/* Editable: lo que se negocia de verdad rara vez es el número que sale de la
+                            fórmula, y el que importa es el que se DIJO. */}
+                        <Field
+                          label="Cuánto se le ofrece"
+                          hint={retencionForma === 'cupon' ? '▶️ sin regla todavía: lo ponés vos' : 'arranca en lo sugerido'}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <NumberField value={montoOferta} onChange={(v) => setRetencionMonto(v)} prefix="$" style={{ width: 140 }} />
+                        </Field>
+                        <Button
+                          size="sm" variant={retencion === 'acepto' ? 'solid' : 'outline'} tone="brand"
+                          disabled={montoOferta <= 0}
+                          title={montoOferta <= 0 ? 'Poné cuánto le ofreciste' : undefined}
+                          onClick={() => contestoLaOferta('acepto')}
+                        >Aceptó: se lo queda</Button>
+                        <Button
+                          size="sm" variant={retencion === 'rechazo' ? 'solid' : 'outline'} tone="neutral"
+                          disabled={montoOferta <= 0}
+                          title={montoOferta <= 0 ? 'Poné cuánto le ofreciste' : undefined}
+                          onClick={() => contestoLaOferta('rechazo')}
+                        >No aceptó</Button>
+                        {retencion && !descuento.conviene && <StatusPill tone="warning" label="Va contra la sugerencia" />}
+                      </div>
+                      {/* 🔑 La rechazada es la que hay que registrar: la aceptada se adivina por la
+                          resolución, la rechazada no dejaba rastro en ningún lado y por eso no se
+                          sabía cuántas veces funciona. */}
+                      <div style={{ fontSize: font.xs, color: retencion ? color.mut : color.warningInk, marginTop: space[2] }}>
+                        {retencion === 'acepto' ? (retencionForma === 'cupon'
+                          ? 'Queda registrado que aceptó el cupón. El producto no vuelve, y queda pendiente CREARLO en la tienda.'
+                          : 'Queda registrado que aceptó. El producto no vuelve.')
+                          : retencion === 'rechazo' ? 'Queda registrado que no aceptó: seguí con el cambio o la devolución.'
+                            : montoOferta > 0 ? 'Sin registrar. Si se lo ofreciste, anotá qué contestó — es lo único que después dice cuántas veces funciona.'
+                              : 'Poné cuánto le ofreciste para poder anotar qué contestó.'}
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setOfreciIgual(true)}
+                      style={{
+                        padding: 0, height: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: font.xs, color: color.action, textDecoration: 'underline',
+                      }}
+                    >Se lo ofrecí igual</button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── ③ QUE VUELVA → cómo vuelve, y cuánto sale ──
+              El envío es el MISMO campo de la calculadora: lo que cambia es el rótulo, porque acá
+              ⛔ ya no es un techo hipotético, es plata que se va a gastar. */}
           {retorno && (
             <div style={{ marginTop: space[3] }}>
-              <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <Field label="¿Cómo vuelve?" style={{ marginBottom: 0 }}>
                   <Select value={via} onChange={(e) => setVia(e.target.value as ViaRetorno)}>
                     {/* ⚠️ Sale de `VIAS_VIGENTES` y ⛔ no de las claves de `VIA_LABEL`: el mapa
@@ -1063,23 +1096,50 @@ export function DecidirReclamo({
                     ))}
                     {/* ⚠️ Y la que ya tenía la fila, si dejó de ofrecerse. Sin esto un reclamo
                         viejo con `cadete` abre el desplegable en blanco y el primer toque en
-                        cualquier otro campo se lo pisa sin que nadie lo haya elegido. Hoy son 0
-                        filas —medido en las dos tiendas—, pero el que borra una opción ⛔ no puede
-                        dejar que borrar la opción borre el dato. */}
+                        cualquier otro campo se lo pisa sin que nadie lo haya elegido. */}
                     {reclamo.via_retorno && !VIAS_VIGENTES.includes(reclamo.via_retorno) && (
                       <option value={reclamo.via_retorno}>{VIA_LABEL[reclamo.via_retorno]} (ya no se ofrece)</option>
                     )}
                   </Select>
                 </Field>
+                <Field label="Envío de vuelta ($)" hint="lo pagamos nosotros" style={{ marginBottom: 0 }}>
+                  <NumberField value={envioVuelta} onChange={(v) => setEnvioVuelta(v)} style={{ width: 120 }} />
+                </Field>
+                {esFalla && (
+                  <Field label="PVP de feria por unidad ($)" hint={unidades > 1 ? `× ${unidades} unidades` : undefined} style={{ marginBottom: 0 }}>
+                    <NumberField value={pvpFeria} onChange={(v) => setPvpFeria(v)} style={{ width: 120 }} />
+                  </Field>
+                )}
                 {/* ⚠️ El ⓘ va AFUERA del `Field`: `Field` es un `<label>`, y un click adentro se lo
                     lleva el control aunque el popover corte la propagación. */}
                 <InfoPopover titulo="Qué cambia según la vía">
                   {/* ⚠️ «La trae al local» y «Cadete» dejaron de ofrecerse el 27-ago-2026 ⇒ el ⓘ
-                      ⛔ no las puede seguir explicando: un texto de ayuda que describe una opción
-                      que no está es la forma más rápida de que nadie lea el resto. */}
+                      ⛔ no las puede seguir explicando. */}
                   <p><b>Andreani o Correo</b>: el código de seguimiento se carga desde la lista, cuando
                   tengas la etiqueta.</p>
                 </InfoPopover>
+              </div>
+
+              {/* 🔴 **Con el envío sin cargar NO hay veredicto que dar.** La cuenta compara lo
+                  recuperable contra el envío: con el campo vacío el envío vale 0, así que siempre
+                  contestaría «conviene pedirlo» — un número que existe y no significa nada.
+                  ⚠️ Un 0 TIPEADO sí vale: es el caso real de «la trae al local». Por eso se mira
+                  `''` y ⛔ no `<= 0` — el `NumberField` guarda esa diferencia a propósito. */}
+              <div style={{ marginTop: space[2] }}>
+                {envioVuelta === '' ? (
+                  <Notice tone="warning">
+                    <b>Todavía no se puede saber si conviene traerlo.</b> Cargá cuánto sale el envío
+                    de vuelta — si lo trae al local, poné 0.
+                  </Notice>
+                ) : (
+                  <Notice tone={cuenta.conviene ? 'success' : 'warning'}>
+                    <b>{cuenta.conviene ? 'Conviene traerlo' : 'No conviene traerlo'}.</b>{' '}
+                    <InfoPopover titulo="Por qué">
+                      <p>{cuenta.motivo}</p>
+                      {esFalla && <p>Se mide contra el PVP de feria porque un producto fallado no vuelve a stock.</p>}
+                    </InfoPopover>
+                  </Notice>
+                )}
               </div>
             </div>
           )}
@@ -1156,11 +1216,24 @@ export function DecidirReclamo({
           <Select value={compensacion} onChange={(e) => setCompensacion(e.target.value as Compensacion | '')}>
             {/* La opción vacía es deliberada: sin ella, la primera de la lista queda elegida sin
                 que nadie la haya elegido — y en varios casos esa primera convierte el reclamo en
-                un cambio. */}
+                un cambio. ⚠️ Y se queda en la lista aunque ya haya una elegida: es la única forma
+                de volver a «sin elegir» sin cerrar la pantalla. */}
             <option value="">Elegí qué recibe…</option>
             {opciones.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </Select>
         </Field>
+
+        {/* 🔑 **La salida que hay hoy se MUESTRA, pero ⛔ no viene cargada en el desplegable.**
+            Cargada, el botón del pie la re-confirmaba sola y rehacer no cambiaba nada. Como texto,
+            el dato sigue a la vista y elegir sigue siendo un acto de alguien.
+            ⚠️ Se va apenas se elige algo: dejarlo puesto al lado de una salida nueva pondría dos
+            respuestas distintas a la misma pregunta, una al lado de la otra. */}
+        {rehaciendo && reclamo.compensacion && !compensacion && (
+          <div style={{ fontSize: font.xs, color: color.mut, marginTop: -space[2], marginBottom: space[2] }}>
+            Hoy es: <b>{COMPENSACION_LABEL[reclamo.compensacion]}</b>. Elegí de nuevo para reemplazarla
+            {' '}— aunque sea la misma.
+          </div>
+        )}
 
         {/* Qué stock hay que corregir en un pedido mal armado. Vive acá y ⛔ no al lado del
             buscador de «¿Qué recibió realmente?»: su último insumo es la salida que se elige en

@@ -717,8 +717,13 @@ export function faltantesDeLaDecision(o: {
   if (o.motivo === 'falla' && productoEnJuego(o.motivo, o.escenario) && !cargado(o.pvpFeria)) {
     faltas.push({ paso: 'producto', que: 'el PVP de feria', bloquea: false })
   }
+  // ⚠️ **Dice para qué es el número, ⛔ no cómo se llama la columna.** «El envío de vuelta» se lee
+  // como si hubiera un envío que organizar, y en el caso normal —el cliente se lo queda— no lo hay:
+  // lo que hace ese número es fijar **hasta cuánto se le puede ofrecer para que no vuelva**. Con el
+  // rótulo viejo, un chip naranja permanente en una pestaña que nunca trabó nada se leía como un
+  // impedimento (*«no puedo salir del envío»*, 27-ago-2026).
   if (vuelve && !cargado(o.envioVuelta)) {
-    faltas.push({ paso: 'producto', que: 'el envío de vuelta', bloquea: false })
+    faltas.push({ paso: 'producto', que: 'cuánto saldría traerlo (define hasta cuánto podés ofrecerle)', bloquea: false })
   }
   // Las dos mitades de la oferta van juntas o ninguna, y la aceptada apaga el retorno. La regla
   // entera es del núcleo: acá sólo se le pregunta, así que ⛔ no puede quedar desincronizada, y el

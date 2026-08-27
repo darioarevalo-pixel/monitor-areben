@@ -726,13 +726,90 @@ módulo pasaban: los dos payloads se arman **en el componente**, y ningún test 
 ahora ⛔ no compara la clave contra una lista escrita a mano — le pasa el payload a
 `registroDeRetencion`, **la misma función que corre en el servidor**.
 
+## 🆕 🔴 El paso ② se dio vuelta: la pregunta antes que la calculadora (27-ago-2026)
+
+Segunda tanda del mismo día, y las tres cosas que se arreglaron son **la misma**: *la pantalla
+elegía por la persona y después le pedía que confirmara lo que ella no eligió*.
+
+### «No puedo salir del envío»
+
+Con el envío de vuelta sin cargar, `convieneRetorno` compara lo recuperable contra **0** y contesta
+«conviene pedirlo» **siempre**. Y el default del retorno salía de ahí
+(`pedirRetorno ?? cuenta.conviene`) ⇒ la pantalla llegaba a la pregunta **con la respuesta ya
+puesta en «que vuelva»**, mostraba la vía, pedía el envío, y la pestaña quedaba en «falta» para
+siempre. No había forma de salir sin desarmar a mano un pedido de retorno que nadie pidió.
+
+🔑 **El default correcto es el otro, y es una regla del negocio, ⛔ no una cuenta**: *«aunque el
+producto esté bien y pueda venderse, también es un quilombo de logística»* (Bruno). La sugerencia de
+`convieneRetorno` se sigue mostrando —el pill «va contra la sugerencia»— y se sigue guardando en
+`retorno_sugerido`, que es el registro de cuándo se fue en contra. Lo que dejó de hacer es elegir.
+
+⚠️ **Efecto de borde:** `destino` sale de `destinoDe(motivo, retorno, escenario)`, así que el destino
+por defecto pasó de `stock` a `regalada`. Es lo correcto —decir «vuelve a stock» sobre algo que se
+queda el cliente cuenta la unidad dos veces— y está fijado en el caso de punta a punta.
+
+### El orden nuevo, y por qué el comentario viejo ya no aplica
+
+```
+¿Qué pasa con el producto?   [ Se lo queda ]  [ Que vuelva ]
+  ├─ Se lo queda → Calculadora de retención  (el envío se pregunta ACÁ ADENTRO,
+  │                como «¿cuánto nos saldría traerlo?»)
+  └─ Que vuelva  → ¿Cómo vuelve? + Envío de vuelta + el veredicto de la cuenta
+```
+
+🔑 **`envioVuelta` es el MISMO estado en las dos ramas**; lo que cambia es el rótulo, porque cambia
+para qué se pregunta: en una es **el techo de lo que se le puede ofrecer**, en la otra es **plata
+que se va a gastar**.
+
+Hasta hoy la caja de la oferta tenía que ir **debajo** de los números sueltos, y estaba comentado:
+puesta encima, su techo daba siempre 0. Meter el insumo adentro de la calculadora **vuelve ese
+defecto imposible por construcción** ⇒ el comentario se reescribió, ⛔ no se borró, y el test que
+fijaba «el envío ARRIBA de la caja» se reemplazó por la invariante nueva (**la pregunta arriba de la
+calculadora**).
+
+### La salida vieja ⛔ no viene cargada
+
+`compensacionElegida` arrancaba en `reclamo.compensacion`, así que al rehacer **el botón del pie la
+re-confirmaba sola**: apretar el botón que promete cambiar la decisión la dejaba donde estaba.
+Bruno: *«no puede tener una opción predeterminada cargada, porque sino ponemos confirmar y no se
+eligió»*.
+
+Es la **misma regla** que ya regía para las decisiones nuevas (la opción vacía deliberada), entrando
+por la otra puerta. El dato ⛔ no se pierde: la salida de hoy se muestra **como texto** al lado del
+desplegable. **Mostrarla es informar; dejarla cargada en el control es elegir por la persona.**
+
+### Dos más, chicas y del mismo día
+
+- **El modal abre en el primer paso que NO está guardado** (`pasoGuardado`), y en `'cliente'` si
+  están los tres — es donde quiere estar quien entró a rehacer.
+- 🔴 **El botón del pie dejó de llamarse «Volver a decidir»**, que es el nombre del botón de la
+  **fila**. Con los dos iguales, se apretaba el de la lista, se abría el modal y parecía hecho:
+  *«aprieto volver a decidir y sigue apareciendo volver a decidir»*. La regresión la había
+  introducido esta misma mañana el renombre *«para que se llame como el gesto»* — el gesto es
+  **abrir**; el del pie **guarda**. Ahora dice **«Guardar la nueva decisión»**.
+
+### «Piso» salió de la pantalla
+
+Estaba en `null` en BDI y en Zattia **desde que existe**, o sea que nunca cambió una cuenta; lo que
+sí hacía era ocupar un campo vacío que nadie sabía qué era (*«¿Qué es Piso?»*). La regla sigue viva
+en el núcleo (`PISO_RETORNO` + su rama en `convieneRetorno`, con sus tests): es política —por debajo
+de cuánto no vale la pena traer un producto— y la tiene que dar Bruno, por marca.
+
+⚠️ Y el «falta» del envío pasó a decir **para qué es** el número
+(*«cuánto saldría traerlo (define hasta cuánto podés ofrecerle)»*): sigue en `bloquea: false` —
+nunca trabó el guardado— pero con el rótulo viejo un chip naranja permanente se leía como un
+impedimento.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests
 exhaustivos, porque **acá vive la plata** y un error no rompe ninguna pantalla: se ve recién en la
 caja o en el stock.
 
-`npx vitest run tests/reclamos-redecidir.test.tsx` — **rehacer** una decisión. Monta la pantalla
+`npx vitest run tests/reclamos-redecidir.test.tsx` — **rehacer** una decisión. Incluye **el
+recorrido de R-0022 de punta a punta**, que es la única prueba que verifica que la pantalla, tal
+como abre, deje llegar a `decidir` con la resolución acordada: cada paso del test es un click real,
+en el mismo orden. Monta la pantalla
 dentro de un `ToastProvider` **de verdad**: fuera de él `useToast` es un no-op, así que un test del
 aviso sin proveedor pasaría verde contra una pantalla que no dice nada. El fixture es la **fila real
 de producción** (R-0022, copiada de la base): un inventado no habría tenido lo que arma el bucle

@@ -93,6 +93,8 @@ async function tipear(label: string, valor: string) {
   })
 }
 const tab = (n: string) => tabs().find((t) => (t.textContent || '').includes(n))!
+/** Qué pestaña está abierta. El oráculo es `aria-selected`, igual que en `postventa-pantalla`. */
+const abierta = () => tabs().find((t) => t.getAttribute('aria-selected') === 'true')?.textContent || ''
 /** El chip de una pestaña, que es lo que la persona lee para saber qué le falta. */
 const chip = (n: string) => (tab(n).textContent || '').replace(n, '').trim()
 
@@ -159,13 +161,106 @@ describe('Rehacer una decisión — el bucle de R-0022', () => {
     expect(puedeRehacerseLaDecision(R22)).toBe(true)
   })
 
-  it('el botón del final se llama como el gesto que hace', async () => {
+  /**
+   * 🔴 **El botón del pie ⛔ NO puede llamarse igual que el de la FILA.**
+   *
+   * El 27-ago-2026 se renombró a «Volver a decidir» *«para que se llamara como el gesto»* — y así
+   * quedaron dos botones con el mismo texto: uno abre esta pantalla y el otro guarda. Bruno apretó
+   * el de la lista, se abrió el modal, y dio por hecho que ya estaba: *«aprieto volver a decidir y
+   * sigue apareciendo volver a decidir»*. El gesto es abrir; éste guarda, y tiene que decirlo.
+   */
+  it('el botón del pie ⛔ no se llama igual que el de la fila', async () => {
     await abrir(R22)
     await act(async () => { tab('El cliente').click() })
-    expect(boton('Volver a decidir')).toBeTruthy()
+    expect(boton('Guardar la nueva decisión')).toBeTruthy()
+    expect(boton('Volver a decidir'), 'ése es el nombre del botón de la LISTA').toBeUndefined()
     await abrir(SIN_DECIDIR)
     await act(async () => { tab('El cliente').click() })
     expect(boton('Confirmar la decisión')).toBeTruthy()
+  })
+
+  /**
+   * 🔴 **La salida vieja ⛔ no viene cargada en el desplegable.** Cargada, el botón del pie la
+   * re-confirmaba sola: apretar el botón que promete cambiar la decisión la dejaba donde estaba.
+   * Bruno: *«no puede tener una opción predeterminada cargada, porque sino ponemos confirmar y no
+   * se eligió»*.
+   */
+  it('la Salida abre vacía al rehacer, y la de hoy queda a la vista como texto', async () => {
+    await abrir(R22)
+    await act(async () => { tab('El cliente').click() })
+    const select = [...document.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => o.value === 'otro_producto'))!
+    expect(select.value).toBe('')
+    // La otra mitad: el dato ⛔ no se pierde, se muestra.
+    expect(texto()).toContain('Hoy es:')
+    expect(texto()).toContain('Lo cambia por otro producto')
+  })
+
+  /**
+   * 🔑 **Abre en el primer paso sin guardar.** R-0022 tiene el escenario cargado y `envio_costo` en
+   * null ⇒ abre en «El producto». Pedido de Bruno: *«si un paso está confirmado, al momento de
+   * seguir decidiendo, que arranque en el 2do»*.
+   */
+  it('abre en el primer paso que NO está guardado', async () => {
+    await abrir(R22)
+    expect(abierta()).toContain('El producto')
+    // La contracara: sin nada guardado abre en el primero, como siempre.
+    await abrir({ ...SIN_DECIDIR, escenario: null } as unknown as ReclamoRow)
+    expect(abierta()).toContain('Qué pasó')
+  })
+
+  /**
+   * 🔴 **El producto NO vuelve por defecto.** Con el envío sin cargar, `convieneRetorno` compara
+   * contra 0 y contestaba «conviene pedirlo»: la pantalla llegaba a la pregunta con la respuesta
+   * puesta y pedía la vía y el envío — *«no puedo salir del envío»*.
+   */
+  it('abre en «Se lo queda» y ⛔ no arrastra el pedido de retorno de la decisión vieja', async () => {
+    await abrir(R22)
+    // ⚠️ R-0022 tiene `retorno_decidido: true` y `via_retorno: 'andreani'` de la decisión vieja,
+    // pero `envio_costo` en null ⇒ ese paso nunca se guardó, así que ⛔ no se restaura.
+    expect(texto()).not.toContain('¿Cómo vuelve?')
+    expect(texto()).toContain('Calculadora de retención')
+  })
+})
+
+/**
+ * 🔑 **El recorrido entero de R-0022, con la fila real de producción.**
+ *
+ * Es la verificación que ninguna otra prueba hace: que la pantalla, tal como abre, deje llegar a
+ * `decidir` con la resolución que se acordó con el cliente. Cada paso de acá es un click que Bruno
+ * va a dar en prod, en el mismo orden.
+ */
+describe('R-0022 de punta a punta: sacarlo de cambios', () => {
+  it('abre donde falta, se resuelve con la calculadora, y manda lo que corresponde', async () => {
+    await abrir(R22)
+    // ① Abre directo en «El producto», con «Se lo queda» ya elegido.
+    expect(abierta()).toContain('El producto')
+    // ② La calculadora: cuánto saldría traerlo. Sin esto el techo da 0 y dice «no conviene ofrecer».
+    await tipear('Cuánto nos saldría traerlo', '6500')
+    expect(texto()).toContain('Ofrecele')
+    // ③ La oferta que se acordó: $13.491 en plata, aceptada.
+    await tipear('Cuánto se le ofrece', '13491')
+    await act(async () => { boton('Aceptó: se lo queda')!.click() })
+    // ④ El paso que decide: la salida abre VACÍA y hay que elegirla.
+    await act(async () => { tab('El cliente').click() })
+    const select = [...document.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => o.value === 'otro_producto'))!
+    expect(select.value, 'aceptar la oferta ⛔ no elige la salida por vos').toBe('plata_parcial')
+    await act(async () => { boton('Guardar la nueva decisión')!.click() })
+
+    const d = llamadas.find((l) => l.que === 'decidir')?.args?.[0] as Record<string, unknown>
+    expect(d, 'tiene que llegar a decidir, no quedar trabado').toBeTruthy()
+    expect(d.compensacion, 'deja de ser un cambio ⇒ sale de la pestaña Cambios').toBe('plata_parcial')
+    expect(d.monto_acordado).toBe(13491)
+    expect(d.retorno_decidido, 'no vuelve nada: cero logística').toBe(false)
+    expect(d.via_retorno).toBeNull()
+    // 🔑 El destino por defecto pasó de `stock` a `regalada` al dar vuelta el default del retorno:
+    // decir «vuelve a stock» sobre algo que se queda el cliente es contar la unidad dos veces.
+    expect(d.destino_prenda).toBe('regalada')
+    // Y la oferta queda registrada: es el primer dato real de retención del módulo.
+    expect(d.retencion_respuesta).toBe('acepto')
+    expect(d.retencion_monto).toBe(13491)
+    expect(d.retencion_forma).toBe('plata')
   })
 })
 

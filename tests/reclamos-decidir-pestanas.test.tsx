@@ -83,25 +83,51 @@ describe('Decidir — las tres pestañas', () => {
     await act(async () => { tab('El producto').click() })
     expect(abierta()).toContain('El producto')
     // Sin esta mitad, una pestaña vacía pasaría el test igual.
-    expect(campo('Envío de vuelta')).toBeTruthy()
+    expect(campo('Cuánto nos saldría traerlo')).toBeTruthy()
   })
 
   /**
-   * 🔑 **EL test del defecto.** Lo que arregla el rediseño no es el aspecto: es que el número se
-   * pida antes de la caja que lo consume. Si alguien vuelve a poner la retención arriba, esto se
-   * pone rojo.
+   * 🔑 **EL test del defecto, en su segunda versión.**
+   *
+   * La primera fijaba que el envío de vuelta estuviera **arriba** de la caja de la oferta: el
+   * defecto original era que la caja consumía un número que se pedía más abajo, y quedaba en $0.
+   * El 27-ago-2026 el envío se **metió adentro** de la calculadora, así que esa relación dejó de
+   * existir — el defecto es imposible por construcción, ⛔ no por orden de lectura.
+   *
+   * Lo que queda por fijar es la invariante nueva, que es del pedido de Bruno: **la pregunta va
+   * antes que la calculadora.** Cargar el envío antes de decidir si el producto vuelve es lo que
+   * hacía que la pantalla llegara a la pregunta con la respuesta ya puesta.
    */
-  it('el envío de vuelta va ARRIBA de la caja de la oferta, no abajo', async () => {
+  it('la pregunta va ARRIBA de la calculadora, y el envío vive ADENTRO', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
-    // Se carga primero porque ése es el punto: hasta que no está, la caja de abajo no tiene con qué
-    // contestar. Antes del rediseño se podía tipear acá y la caja quedaba igual arriba, en $0.
-    await tipear('Envío de vuelta', '6000')
-    const envio = campo('Envío de vuelta')!
+    const pregunta = boton('Se lo queda')!
+    const envio = campo('Cuánto nos saldría traerlo')
     const oferta = campo('Cuánto se le ofrece')
-    expect(oferta).toBeTruthy()
-    // DOCUMENT_POSITION_FOLLOWING = la oferta viene después del envío en el documento.
-    expect(envio.compareDocumentPosition(oferta!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(envio, 'el envío se pregunta como el insumo de la calculadora').toBeTruthy()
+    // DOCUMENT_POSITION_FOLLOWING = viene después de la pregunta en el documento.
+    expect(pregunta.compareDocumentPosition(envio!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Y la oferta, después del número del que sale su techo.
+    await tipear('Cuánto nos saldría traerlo', '6000')
+    expect(campo('Cuánto nos saldría traerlo')!.compareDocumentPosition(campo('Cuánto se le ofrece')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(oferta ?? campo('Cuánto se le ofrece')).toBeTruthy()
+  })
+
+  /**
+   * 🔴 **El default es «se lo queda»**, y ⛔ no lo que sugiera la cuenta. Con el envío sin cargar,
+   * `convieneRetorno` compara contra 0 y contesta «conviene pedirlo» siempre: la pantalla llegaba
+   * a la pregunta con «que vuelva» puesto, pedía la vía y el envío, y no se salía más
+   * (*«no puedo salir del envío»*, Bruno, 27-ago-2026).
+   */
+  it('abre en «Se lo queda» y ⛔ no pide vía ni envío de vuelta', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El producto').click() })
+    expect(campo('Envío de vuelta'), 'no hay envío que organizar si no vuelve').toBeUndefined()
+    expect(textoDeLaPantalla()).not.toContain('¿Cómo vuelve?')
+    // La contracara: elegir «Que vuelva» sí los trae.
+    await act(async () => { boton('Que vuelva')!.click() })
+    expect(campo('Envío de vuelta')).toBeTruthy()
+    expect(textoDeLaPantalla()).toContain('¿Cómo vuelve?')
   })
 })
 
@@ -110,7 +136,9 @@ describe('Decidir — la oferta de retención se contesta sola', () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
     const t = textoDeLaPantalla()
-    expect(t).toContain('No conviene ofrecerle que se lo quede')
+    // ⚠️ El veredicto lo dice la cuenta, ⛔ no un título: desde el 27-ago-2026 la caja se llama
+    // siempre «Calculadora de retención» y lo que cambia es lo que contesta adentro.
+    expect(t).toContain('no perdés plata porque vuelva')
     // El aviso que pedía anotar la respuesta con los botones apagados: ⛔ no puede estar.
     expect(t).not.toContain('anotá qué contestó')
     // Y tampoco los botones: no hay nada que ofrecer, así que no hay nada que registrar.
@@ -128,7 +156,7 @@ describe('Decidir — la oferta de retención se contesta sola', () => {
   it('con el envío de vuelta cargado, dice cuánto ofrecer y habilita los dos botones', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
-    await tipear('Envío de vuelta', '6000')
+    await tipear('Cuánto nos saldría traerlo', '6000')
     expect(textoDeLaPantalla()).toContain('Ofrecele')
     expect(boton('Aceptó: se lo queda')?.disabled).toBe(false)
     expect(boton('No aceptó')?.disabled).toBe(false)
@@ -137,7 +165,7 @@ describe('Decidir — la oferta de retención se contesta sola', () => {
   it('si aceptó quedárselo, «Que vuelva» queda trabado: el servidor rechaza las dos juntas', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
-    await tipear('Envío de vuelta', '6000')
+    await tipear('Cuánto nos saldría traerlo', '6000')
     await act(async () => { boton('Aceptó: se lo queda')!.click() })
     expect(boton('Que vuelva')?.disabled).toBe(true)
   })
@@ -152,9 +180,12 @@ describe('Decidir — la cuenta del retorno no afirma sin datos', () => {
   it('con el envío sin cargar no da veredicto: dice que falta el dato', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
+    // ⚠️ El veredicto del retorno vive en la rama «Que vuelva»: es ahí donde el envío deja de ser
+    // un techo hipotético y pasa a ser plata que se va a gastar.
+    await act(async () => { boton('Que vuelva')!.click() })
     const t = textoDeLaPantalla()
-    expect(t).toContain('Todavía no se puede saber si conviene pedirlo')
-    expect(t).not.toContain('Conviene pedirlo.')
+    expect(t).toContain('Todavía no se puede saber si conviene traerlo')
+    expect(t).not.toContain('Conviene traerlo.')
   })
 
   // ⚠️ Un 0 TIPEADO sí es un dato: es "la trae al local". La diferencia entre vacío y cero es lo
@@ -162,8 +193,9 @@ describe('Decidir — la cuenta del retorno no afirma sin datos', () => {
   it('un cero tipeado SÍ es un dato y la cuenta contesta', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
+    await act(async () => { boton('Que vuelva')!.click() })
     await tipear('Envío de vuelta', '0')
-    expect(textoDeLaPantalla()).toContain('Conviene pedirlo')
+    expect(textoDeLaPantalla()).toContain('Conviene traerlo')
   })
 })
 
@@ -200,13 +232,24 @@ describe('Decidir — la salida no se elige sola', () => {
     vi.unstubAllGlobals()
   })
 
-  // Y un reclamo YA decidido tiene que abrir con lo suyo: rehacer ⛔ no empieza borrando.
-  it('un reclamo ya decidido abre con la salida que se le había elegido', async () => {
+  /**
+   * 🔴 **Esta invariante se dio VUELTA el 27-ago-2026, y a pedido.** Antes fijaba que un reclamo ya
+   * decidido abriera **con su salida puesta** («rehacer no empieza borrando»). En la práctica eso
+   * hacía que el botón del pie la **re-confirmara sola**: apretar el botón que promete cambiar la
+   * decisión la dejaba donde estaba. Bruno: *«no puede tener una opción predeterminada cargada,
+   * porque sino ponemos confirmar y no se eligió»*.
+   *
+   * 🔑 El dato ⛔ no se pierde — se muestra como texto. Mostrar es informar; dejarlo cargado en el
+   * control es elegir por la persona.
+   */
+  it('un reclamo ya decidido abre SIN elegir, y dice cuál es la salida de hoy', async () => {
     await abrir({ ...SANO, compensacion: 'plata_total' } as unknown as ReclamoRow)
     await act(async () => { tab('El cliente').click() })
     const select = [...document.querySelectorAll('select')]
       .find((x) => [...x.options].some((o) => o.value === 'otro_producto'))!
-    expect(select.value).toBe('plata_total')
+    expect(select.value).toBe('')
+    expect(textoDeLaPantalla()).toContain('Hoy es:')
+    expect(textoDeLaPantalla()).toContain('Se le devuelve todo')
   })
 })
 
@@ -290,7 +333,7 @@ describe('Decidir — confirmar', () => {
    * final vivía en el pie compartido y estaba a mano desde la pestaña 1. Ahora cada paso confirma
    * lo suyo y **sólo el último guarda**.
    */
-  it('desde el primer paso NO se puede guardar: el botón confirma ESE paso', async () => {
+  it('desde un paso que no es el último NO se puede guardar: el botón confirma ESE paso', async () => {
     await abrir(SANO)
     expect(boton('Confirmar la decisión')).toBeUndefined()
     expect(boton('Confirmar paso')).toBeTruthy()
@@ -309,6 +352,9 @@ describe('Decidir — confirmar', () => {
     })
     vi.stubGlobal('fetch', fetchSpy)
     await abrir(SANO)
+    // ⚠️ Desde el 27-ago-2026 el modal abre en el primer paso SIN guardar, y `SANO` ya trae el
+    // escenario ⇒ abre en ②. Se vuelve a ① a mano, que es lo que este test mide.
+    await act(async () => { tab('Qué pasó').click() })
     await act(async () => { boton('Confirmar paso')!.click() })
     // La aserción que vale: SALIÓ un guardado, y es `editar` — que ⛔ no decide.
     expect(enviados.length).toBeGreaterThan(0)
@@ -325,7 +371,9 @@ describe('Decidir — confirmar', () => {
     await abrir({ ...SANO, envio_costo: 6000, via_retorno: 'correo' } as unknown as ReclamoRow)
     expect(tab('El producto').textContent).toContain('✓')
     await act(async () => { tab('El producto').click() })
-    expect(campo('Envío de vuelta')?.value).toBe('6000')
+    // ⚠️ Con `retorno_decidido` sin contestar el producto NO vuelve, así que el número se pregunta
+    // como el insumo de la calculadora — es el mismo estado con otro rótulo.
+    expect(campo('Cuánto nos saldría traerlo')?.value).toBe('6000')
     // Y con el envío ya cargado la caja de la oferta contesta, en vez de mostrar $0.
     expect(textoDeLaPantalla()).toContain('Ofrecele')
   })
