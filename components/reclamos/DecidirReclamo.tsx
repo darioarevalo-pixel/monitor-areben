@@ -16,7 +16,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Button, Field, Input, Modal, NumberField, Notice, Select, MoneyText, StatusPill,
+  Button, Field, Input, Lightbox, Modal, NumberField, Notice, Select, MoneyText, StatusPill,
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
@@ -161,6 +161,15 @@ export function DecidirReclamo({
   // El envío del REEMPLAZO: solo existe cuando se le manda otra unidad, y también lo pagamos nosotros.
   const [envioIda, setEnvioIda] = useState<number | ''>('')
   const [guardando, setGuardando] = useState(false)
+  /**
+   * La foto que se está mirando a pantalla completa, o `null`.
+   *
+   * 🔑 **No es un adorno: es la evidencia con la que se contesta la pregunta que decide.** El
+   * escenario se elige mirando estas fotos —si la diferencia es objetiva, si la falla la deja
+   * inútil, qué le mandaron por error— y hasta el 27-ago-2026 lo único que había era un recorte
+   * cuadrado de 96 px. Una raspadura no se ve ahí.
+   */
+  const [ampliada, setAmpliada] = useState<string | null>(null)
 
   /** Cuántas unidades entran en el reclamo: lo que multiplica a los valores por unidad. */
   const unidades = useMemo(() => items.reduce((s, it) => s + (Number(it.cantidad) || 0), 0), [items])
@@ -350,15 +359,32 @@ export function DecidirReclamo({
         {reclamo.pago_metodo ? ` · pagó por ${reclamo.pago_metodo}` : ''}
       </div>
 
-      {/* La evidencia que cargó el cliente por el link. */}
+      {/* La evidencia que cargó el cliente por el link. Se toca para verla entera: el recorte de
+          96 px alcanza para saber que hay una foto, no para decidir con ella. */}
       {!!(reclamo.fotos || []).length && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[3] }}>
           {(reclamo.fotos || []).map((f, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={f.url} alt="" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 6, border: `1px solid ${color.line}` }} />
+            /* Un `<button>` y no un `<img onClick>`: se llega con el teclado y el lector de
+               pantalla lo anuncia como algo que se puede tocar. `height: 'auto'` es obligatorio en
+               un botón crudo (ver AGENTS.md: `.shell-content button` fija altura y lo desborda). */
+            <button
+              key={i}
+              type="button"
+              onClick={() => setAmpliada(f.url)}
+              title="Ver la foto entera"
+              aria-label={`Ampliar la foto ${i + 1} de ${(reclamo.fotos || []).length}`}
+              style={{
+                padding: 0, height: 'auto', lineHeight: 0, cursor: 'zoom-in',
+                border: `1px solid ${color.line}`, borderRadius: 6, background: 'none', overflow: 'hidden',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={f.url} alt="" style={{ width: 96, height: 96, objectFit: 'cover', display: 'block' }} />
+            </button>
           ))}
         </div>
       )}
+      <Lightbox src={ampliada} alt="Foto que cargó el cliente" onCerrar={() => setAmpliada(null)} />
       {reclamo.relato_cliente && (
         <Notice tone="neutral" style={{ marginBottom: space[3] }}>“{reclamo.relato_cliente}”</Notice>
       )}

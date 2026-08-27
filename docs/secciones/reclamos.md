@@ -121,6 +121,31 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 - ⚠️ **Los pendientes nacían en `pendiente` al crear el reclamo**, así que la fila decía "anular la
   venta · devolver la plata" desde el minuto cero, antes de que hubiera ninguna decisión. Hoy nacen
   en `no_aplica` y los deriva `decidir`.
+- 🔴 🔑 **«El link quedó copiado» se decía SIN haber copiado nada** (27-ago-2026). El alta hacía
+  `navigator.clipboard?.writeText(link).catch(() => {})` y cantaba el éxito abajo, pasara lo que
+  pasara. El portapapeles se rechaza más seguido de lo que parece —no hay contexto seguro, o el
+  navegador consideró que se perdió el gesto del usuario en un `await`— y las dos formas de fallar
+  son mudas: una promesa que no cumple, o un `undefined` que con el `?.` ni lo intenta. **Lo caro no
+  es que no copie: es lo que la persona hace después** — pega en WhatsApp **lo que hubiera antes en
+  el portapapeles**, que puede ser el link de OTRO cliente, y del lado del que lo recibe se ve
+  igual que «me mandaron un link que no anda». Ahora los dos que copian —el alta y el `CopyButton`
+  del kit— pasan por `lib/portapapeles.ts`, que **nunca deja a la persona sin el texto** (si no
+  copia, se lo muestra para copiarlo a mano) y **devuelve si lo hizo solo**, para que el cartel diga
+  lo que pasó. `tests/portapapeles.test.ts` lo prueba de comportamiento y además impide que vuelva a
+  aparecer un `navigator.clipboard` suelto en esos dos archivos.
+  ⚠️ **Ese test tuvo que sacar los comentarios antes de contar**: el comentario que explica el
+  defecto escribe `navigator.clipboard` textual y hacía fallar al test sobre su propia explicación.
+- 🔴 🔑 **La evidencia se miraba a 96 px recortados** (27-ago-2026). Las fotos que carga el cliente
+  se pintaban en `DecidirReclamo` como miniaturas de 96×96 con `object-fit: cover` y **no se podían
+  agrandar**, en la única pantalla donde hay que elegir el escenario —o sea donde se decide la
+  plata— mirando justamente eso. Una raspadura no se ve en un recorte cuadrado. Ahora cada foto es
+  un `<button>` que abre el `Lightbox` **que ya estaba en el kit** (`components/ui/Lightbox.tsx`,
+  `z-index` 3000, por encima del modal): cero componentes nuevos. Pedido de Bruno.
+  🔑 **Su test es el único de una pantalla del repo que MONTA el componente y aprieta el botón**, y
+  no por gusto: `Modal` usa un portal y `renderToStaticMarkup` —el oráculo del resto— tira
+  *«Portals are not currently supported by the server renderer»*. De paso fija lo que importa, que
+  no es que exista un `<Lightbox>` en el JSX sino que **el click abra la foto que se tocó** (el
+  error fácil acá es mostrar siempre `fotos[0]`). Ver `tests/reclamos-foto-ampliada.test.tsx`.
 - 🔴 🔑 **El portal del cliente forzaba la CÁMARA y escondía la galería** (27-ago-2026). El
   `<input type="file">` de `ReclamoPublico.tsx` llevaba `capture="environment"`. **`capture` no es
   una preferencia que el navegador pueda ignorar: es una orden de abrir la cámara y saltear el

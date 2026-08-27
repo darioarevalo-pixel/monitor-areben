@@ -38,6 +38,7 @@ import {
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { DecidirReclamo } from './DecidirReclamo'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
 
@@ -244,8 +245,18 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       } else if (!pideFotos(motivo, expectativaVal || null)) {
         toast.ok('Reclamo creado. Acá no hacen falta fotos: escribile con el mensaje de la lista.')
       } else {
-        await navigator.clipboard?.writeText(linkDelCliente(token)).catch(() => {})
-        toast.ok('Reclamo creado. El link para el cliente quedó copiado.')
+        /**
+         * 🔴 **El cartel dice lo que PASÓ, no lo que se intentó.** Hasta el 27-ago-2026 acá había
+         * un `navigator.clipboard?.writeText(...).catch(() => {})` con el «quedó copiado» abajo
+         * pase lo que pase: si el navegador no aceptaba, la persona pegaba en WhatsApp **lo que
+         * tuviera antes en el portapapeles** —el link de otro cliente— y no se enteraba nadie.
+         * `copiarAlPortapapeles` ya le muestra el link para copiarlo a mano cuando falla; lo único
+         * que falta acá es no cantar victoria.
+         */
+        const copiado = await copiarAlPortapapeles(linkDelCliente(token))
+        toast.ok(copiado
+          ? 'Reclamo creado. El link para el cliente quedó copiado.'
+          : 'Reclamo creado, pero el link NO se copió solo: copialo del cuadro, o sacalo de la lista con «Msj: pedir fotos».')
       }
       setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle('')
       void recargar()

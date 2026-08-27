@@ -6,6 +6,7 @@
  */
 import { useCallback, useRef, useState } from 'react'
 import { Button, type ButtonProps } from '@/components/ui/Button'
+import { copiarAlPortapapeles } from '@/lib/portapapeles'
 
 export type CopyButtonProps = {
   /**
@@ -49,12 +50,10 @@ export function CopyButton({ getText, label = 'Copiar', copiedLabel = '✓ Copia
     if (share && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try { await navigator.share({ text }); return } catch (e) { if ((e as Error)?.name === 'AbortError') return }
     }
-    try {
-      await navigator.clipboard.writeText(text)
-      flash()
-    } catch {
-      if (typeof window !== 'undefined') window.prompt('Copiá el detalle:', text)
-    }
+    // El «✓ Copiado» sólo se prende si el navegador aceptó de verdad. Si no, `copiarAlPortapapeles`
+    // ya le mostró el texto para copiar a mano y el botón se queda como estaba: un tilde sobre un
+    // portapapeles vacío es peor que no avisar nada.
+    if (await copiarAlPortapapeles(text)) flash()
   }, [getText, share, flash, onError])
 
   return (
