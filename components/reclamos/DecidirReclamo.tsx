@@ -108,15 +108,28 @@ export function DecidirReclamo({
     const permitidas = compensacionesDe(reclamo.motivo, escenario)
     return SALIDAS.filter((s) => permitidas.includes(s.key))
   }, [reclamo.motivo, escenario])
-  const [compensacionElegida, setCompensacion] = useState<Compensacion>(() => compensacionesDe(reclamo.motivo, reclamo.escenario)[0] || 'plata_total')
+  /**
+   * 🔴 **Arranca VACÍA, y ⛔ no en la primera del repertorio.** Hasta el 27-ago-2026 el default era
+   * `compensacionesDe(...)[0]`, que en «no era lo que esperaba» y en «talle» es
+   * **«lo cambia por otro producto»** — o sea que confirmar sin haber mirado este paso convertía el
+   * reclamo en un CAMBIO. Y un cambio es una puerta de una sola dirección: queda fuera de
+   * «Decidir» a propósito. Pasó dos veces el mismo día, con reclamos reales.
+   *
+   * ⚠️ Si el reclamo ya se decidió, arranca con lo que se había elegido: rehacer una decisión ⛔ no
+   * puede empezar borrando la anterior de la pantalla.
+   */
+  const [compensacionElegida, setCompensacion] = useState<Compensacion | ''>(() => reclamo.compensacion ?? '')
   /**
    * La salida se **deriva**, no se sincroniza con un effect: cambiar el escenario puede sacar del
    * repertorio la que estaba elegida (una demora del transporte ya no admite cupón), y un effect
    * que la corrija deja un render mostrando una salida que ya no vale.
+   *
+   * ⚠️ Cuando la elegida deja de valer se vuelve al vacío, ⛔ **no a la primera de la lista**: caer
+   * en otra salida sin que nadie la haya elegido es cómo empezó todo esto.
    */
-  const compensacion: Compensacion = opciones.some((s) => s.key === compensacionElegida)
+  const compensacion: Compensacion | '' = compensacionElegida && opciones.some((s) => s.key === compensacionElegida)
     ? compensacionElegida
-    : (opciones[0]?.key || 'ninguna')
+    : ''
   // Arranca con lo que ya se haya cargado en el alta, si es que se cargó.
   const [expectativa, setExpectativa] = useState<Expectativa | ''>(reclamo.expectativa ?? '')
   const [montoAcordado, setMontoAcordado] = useState<number | ''>('')
@@ -315,7 +328,8 @@ export function DecidirReclamo({
         id: reclamo.id,
         destino_prenda: destino,
         escenario,
-        compensacion,
+        // `loQueTraba` ya frenó el guardado si estaba vacía: acá no puede serlo.
+        compensacion: compensacion as Compensacion,
         monto_producto: monto.producto,
         monto_acordado: compensacion === 'plata_parcial' ? Number(montoAcordado) || 0 : null,
         monto_envio_devuelto: monto.envio,
@@ -422,6 +436,13 @@ export function DecidirReclamo({
    * ⚠️ El toast dura 9 s y resolver un reclamo tarda más: si el aviso vive sólo ahí, se pierde.
    */
   const [trabo, setTrabo] = useState<FaltaDecision | null>(null)
+  /**
+   * ⚠️ Si se guardó algún paso, cerrar tiene que **recargar la lista**. Sin esto la fila de atrás
+   * queda mostrando el estado anterior —los pendientes viejos, el destino viejo— y parece que no
+   * se hubiera guardado nada, que es exactamente lo que se reportó.
+   */
+  const [guardoAlgo, setGuardoAlgo] = useState(false)
+  const cerrar = () => (guardoAlgo ? onListo() : onClose())
 
   // Sin `useMemo` a propósito: es una función pura y barata, y el compilador de React la memoiza
   // solo. Envuelta a mano, el lint corta el build con "existing memoization could not be preserved".
@@ -509,6 +530,7 @@ export function DecidirReclamo({
     try {
       await editarReclamo(marca, reclamo.id, campos as Partial<ReclamoRow>)
       setRevisados((p) => new Set(p).add(paso))
+      setGuardoAlgo(true)
       toast.ok(`«${PASO_LABEL[paso]}» guardado. Podés salir y seguir después.`)
       if (siguiente) setPaso(siguiente)
     } catch (e) {
@@ -538,7 +560,7 @@ export function DecidirReclamo({
 
   return (
     <Modal
-      abierto onCerrar={onClose} ancho="ancho"
+      abierto onCerrar={cerrar} ancho="ancho"
       titulo={`Decidir ${numeroReclamo(reclamo.id)}`}
       /**
        * 🔑 **La botonera va al pie del Modal, que ⛔ NO scrollea.** Estaba al fondo del cuerpo:
@@ -552,7 +574,7 @@ export function DecidirReclamo({
             <span>Se le devuelve <b><MoneyText value={monto.total} /></b></span>
             <span style={{ fontSize: font.xs, color: color.mut }}>El caso cuesta <MoneyText value={costo} /></span>
           </div>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="ghost" onClick={cerrar}>{guardoAlgo ? 'Salir' : 'Cancelar'}</Button>
           {/* 🔴 **«Confirmar la decisión» existe SÓLO en el último paso.** Cuando vivía acá suelto,
               se podía guardar desde la pestaña 1 — y pasó el día que salió la pantalla. En los dos
               primeros pasos el botón confirma ESE paso y avanza. */}
@@ -1029,7 +1051,11 @@ export function DecidirReclamo({
           </InfoPopover>
         </div>
         <Field label="Salida">
-          <Select value={compensacion} onChange={(e) => setCompensacion(e.target.value as Compensacion)}>
+          <Select value={compensacion} onChange={(e) => setCompensacion(e.target.value as Compensacion | '')}>
+            {/* La opción vacía es deliberada: sin ella, la primera de la lista queda elegida sin
+                que nadie la haya elegido — y en varios casos esa primera convierte el reclamo en
+                un cambio. */}
+            <option value="">Elegí qué recibe…</option>
             {opciones.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </Select>
         </Field>

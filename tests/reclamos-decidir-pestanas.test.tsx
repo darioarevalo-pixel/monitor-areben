@@ -167,6 +167,49 @@ describe('Decidir — la cuenta del retorno no afirma sin datos', () => {
   })
 })
 
+describe('Decidir — la salida no se elige sola', () => {
+  /**
+   * 🔴 **La causa raíz de todo lo del 27-ago-2026.** La salida arrancaba en
+   * `compensacionesDe(...)[0]`, que en «no era lo que esperaba» y en «talle» es «lo cambia por
+   * otro producto». Confirmar sin haber mirado el último paso **convertía el reclamo en un
+   * CAMBIO** — y un cambio queda fuera de «Decidir» a propósito, o sea una puerta de una sola
+   * dirección. Pasó dos veces el mismo día, con reclamos reales.
+   */
+  it('arranca sin elegir, y ⛔ no en la primera del repertorio', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El cliente').click() })
+    const select = [...document.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => o.value === 'otro_producto'))!
+    expect(select.value).toBe('')
+    // La contracara: la opción sigue existiendo, sólo que hay que elegirla.
+    expect([...select.options].some((o) => o.value === 'otro_producto')).toBe(true)
+  })
+
+  it('sin salida elegida NO se puede guardar, y lo dice', async () => {
+    const enviados: string[] = []
+    const fetchSpy = vi.fn((_u: unknown, init?: { body?: string }) => {
+      if (init?.body) enviados.push(init.body)
+      return Promise.resolve(new Response('{"ok":true}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    await abrir(SANO)
+    await act(async () => { tab('El cliente').click() })
+    await act(async () => { boton('Confirmar la decisión')!.click() })
+    expect(enviados.filter((b) => JSON.parse(b).action === 'decidir')).toHaveLength(0)
+    expect(textoDeLaPantalla()).toContain('Para poder confirmar falta')
+    vi.unstubAllGlobals()
+  })
+
+  // Y un reclamo YA decidido tiene que abrir con lo suyo: rehacer ⛔ no empieza borrando.
+  it('un reclamo ya decidido abre con la salida que se le había elegido', async () => {
+    await abrir({ ...SANO, compensacion: 'plata_total' } as unknown as ReclamoRow)
+    await act(async () => { tab('El cliente').click() })
+    const select = [...document.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => o.value === 'otro_producto'))!
+    expect(select.value).toBe('plata_total')
+  })
+})
+
 describe('Decidir — el chip de cada pestaña', () => {
   /**
    * ⚠️ Una pestaña sin nada que contestar ⛔ no es una pestaña incompleta. Marcarla en rojo empuja
@@ -286,7 +329,7 @@ describe('Decidir — confirmar', () => {
    * 🔑 Hasta hoy `guardar` no tenía un solo `if`: mandaba, el servidor rechazaba, y volvía un toast
    * con el mensaje crudo del handler y sin ninguna pista de dónde arreglarlo.
    */
-  it('con algo que traba NO manda nada, y dice en qué pestaña está', async () => {
+  it('con una parcial de $0 NO manda nada, y dice en qué pestaña está', async () => {
     const fetchSpy = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })))
     vi.stubGlobal('fetch', fetchSpy)
     await abrir(SANO)

@@ -571,12 +571,14 @@ export type FaltaDecision = {
  * Vive acá y no en la pantalla por lo mismo que el resto del módulo: es una regla, y una regla
  * que vive en el JSX no se puede probar sin montar un modal con un portal adentro.
  *
- * 🔑 **⛔ NO es la lista de obligatorios del servidor, y no hay que "completarla" con ellos.**
- * Medido leyendo los dos lados: los dos que exige `api/_reclamos.js:338-339` —la compensación y el
- * destino— **son inalcanzables desde esta pantalla**. `compensacion` se deriva con fallback a
- * `opciones[0]` y nunca queda vacía; `destinoDe` devuelve `null` sólo cuando no hay producto en
- * juego, que es exactamente el caso donde el servidor tampoco lo pide. Agregarlos acá sería
- * escribir dos avisos que nadie puede ver nunca.
+ * 🔑 **⛔ NO es la lista de obligatorios del servidor.** De los dos que exige `api/_reclamos.js`
+ * —la compensación y el destino—, **el destino sigue siendo inalcanzable desde esta pantalla**:
+ * `destinoDe` devuelve `null` sólo cuando no hay producto en juego, que es exactamente el caso
+ * donde el servidor tampoco lo pide. Agregarlo acá sería un aviso que nadie puede ver nunca.
+ *
+ * ⚠️ La compensación **sí** se chequea, y es un cambio del 27-ago-2026: antes la pantalla caía en
+ * `opciones[0]` y nunca quedaba vacía. Esa caída silenciosa convirtió dos reclamos reales en
+ * cambios, así que ahora arranca sin elegir — y por eso hay que exigirla.
  *
  * Lo que sí puede faltar es otra cosa: **datos con los que las cuentas mienten**. Un PVP de feria
  * vacío deja a `cuentaDescuento` contestando techo 0 y a `convieneRetorno` contestando "no se sabe
@@ -590,7 +592,12 @@ export type FaltaDecision = {
 export function faltantesDeLaDecision(o: {
   motivo: MotivoReclamo
   escenario: string | null
-  compensacion: Compensacion
+  /**
+   * ⚠️ `''` = **sin elegir**, y desde el 27-ago-2026 es alcanzable: la pantalla dejó de
+   * preseleccionar la primera del repertorio porque en varios casos esa primera —«lo cambia por
+   * otro producto»— convertía el reclamo en un CAMBIO sin que nadie lo eligiera.
+   */
+  compensacion: Compensacion | ''
   /** ¿Se le pidió al cliente que lo devuelva? */
   retorno: boolean
   /**
@@ -638,7 +645,15 @@ export function faltantesDeLaDecision(o: {
   })
   if (oferta.error) faltas.push({ paso: 'producto', que: oferta.error, bloquea: true })
 
-  // ③ El cliente — una parcial de $0 no es una decisión, es un formulario a medio llenar.
+  // ③ El cliente
+  //
+  // 🔴 **Sin salida elegida no se puede guardar.** Esto era inalcanzable hasta el 27-ago-2026,
+  // porque la pantalla caía siempre en la primera del repertorio — y esa caída silenciosa fue
+  // justamente lo que convirtió dos reclamos reales en cambios sin que nadie lo pidiera.
+  if (!o.compensacion) {
+    faltas.push({ paso: 'cliente', que: 'elegir qué recibe el cliente', bloquea: true })
+  }
+  // Una parcial de $0 no es una decisión, es un formulario a medio llenar.
   if (o.compensacion === 'plata_parcial' && !cargado(o.montoAcordado)) {
     faltas.push({ paso: 'cliente', que: 'cuánto se le devuelve', bloquea: true })
   }
