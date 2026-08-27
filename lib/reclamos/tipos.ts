@@ -546,6 +546,121 @@ export function decideElCliente(m: MotivoReclamo): boolean {
   return PERFIL_MOTIVO[m].decideCliente
 }
 
+// ── Qué falta para poder decidir ────────────────────────────────────────────────
+
+/** Los tres momentos de la decisión, que son las tres pestañas de la pantalla. */
+export type PasoDecision = 'que-paso' | 'producto' | 'cliente'
+
+export const PASO_LABEL: Record<PasoDecision, string> = {
+  'que-paso': 'Qué pasó',
+  producto: 'El producto',
+  cliente: 'El cliente',
+}
+
+export type FaltaDecision = {
+  paso: PasoDecision
+  /** En criollo, para ponerlo en pantalla tal cual: "la salida", "el envío de vuelta". */
+  que: string
+  /** `true` = el servidor lo rechaza, así que no tiene sentido ni intentar guardar. */
+  bloquea: boolean
+}
+
+/**
+ * **Qué falta para poder decidir, y en qué paso está.**
+ *
+ * Vive acá y no en la pantalla por lo mismo que el resto del módulo: es una regla, y una regla
+ * que vive en el JSX no se puede probar sin montar un modal con un portal adentro.
+ *
+ * 🔑 **⛔ NO es la lista de obligatorios del servidor, y no hay que "completarla" con ellos.**
+ * Medido leyendo los dos lados: los dos que exige `api/_reclamos.js:338-339` —la compensación y el
+ * destino— **son inalcanzables desde esta pantalla**. `compensacion` se deriva con fallback a
+ * `opciones[0]` y nunca queda vacía; `destinoDe` devuelve `null` sólo cuando no hay producto en
+ * juego, que es exactamente el caso donde el servidor tampoco lo pide. Agregarlos acá sería
+ * escribir dos avisos que nadie puede ver nunca.
+ *
+ * Lo que sí puede faltar es otra cosa: **datos con los que las cuentas mienten**. Un PVP de feria
+ * vacío deja a `cuentaDescuento` contestando techo 0 y a `convieneRetorno` contestando "no se sabe
+ * cuánto se recupera" — dos veredictos con cara de veredicto que en realidad son "falta un dato".
+ *
+ * ⚠️ **Casi nada bloquea, a propósito.** Este módulo ya tuvo el defecto de exigir de más: hasta el
+ * 25-ago-2026 se pedía siempre el destino y **una demora no se podía cerrar nunca**. Traban sólo
+ * las dos cosas que dejan una fila incoherente: media oferta de retención y una devolución parcial
+ * de $0. El resto avisa.
+ */
+export function faltantesDeLaDecision(o: {
+  motivo: MotivoReclamo
+  escenario: string | null
+  compensacion: Compensacion
+  /** ¿Se le pidió al cliente que lo devuelva? */
+  retorno: boolean
+  /**
+   * Lo tipeado en "Envío de vuelta ($)": `''` = sin cargar, que ⛔ no es lo mismo que 0.
+   *
+   * ⚠️ Se pide en todo caso donde el producto **pueda** volver, no sólo cuando se pidió que
+   * vuelva: el techo de la oferta es *"cuánto perderías SI volviera"*, así que sin este número la
+   * caja de retención no puede contestar aunque al final el producto se lo quede el cliente.
+   */
+  envioVuelta: number | ''
+  pvpFeria: number | ''
+  montoAcordado: number | ''
+  envioIda: number | ''
+  retencionMonto: number | ''
+  retencionRespuesta: RespuestaRetencion | null
+}): FaltaDecision[] {
+  const faltas: FaltaDecision[] = []
+  const cargado = (n: number | '') => n !== '' && Number(n) > 0
+
+  // ① Qué pasó — el escenario no es obligatorio para el servidor, pero en tres de los once casos
+  // es LO QUE DECIDE LA PLATA (ver docs/secciones/reclamos.md). Se avisa, no se traba.
+  if (casoDe(o.motivo) && !o.escenario) {
+    faltas.push({ paso: 'que-paso', que: 'contestar la pregunta que decide', bloquea: false })
+  }
+
+  // ② El producto
+  const vuelve = puedeVolverLaPrenda(o.motivo, o.escenario)
+  // Sin el PVP de feria las DOS cuentas de esta pestaña contestan cualquier cosa: el techo da 0 y
+  // el "conviene pedirlo" da "no se sabe cuánto se recupera".
+  if (o.motivo === 'falla' && productoEnJuego(o.motivo, o.escenario) && !cargado(o.pvpFeria)) {
+    faltas.push({ paso: 'producto', que: 'el PVP de feria', bloquea: false })
+  }
+  if (vuelve && !cargado(o.envioVuelta)) {
+    faltas.push({ paso: 'producto', que: 'el envío de vuelta', bloquea: false })
+  }
+  // Las dos mitades de la oferta van juntas o ninguna, y la aceptada apaga el retorno. La regla
+  // entera es del núcleo: acá sólo se le pregunta, así que ⛔ no puede quedar desincronizada, y el
+  // texto que se muestra es el suyo.
+  const oferta = registroDeRetencion({
+    motivo: o.motivo,
+    escenario: o.escenario,
+    respuesta: o.retencionRespuesta,
+    monto: o.retencionMonto === '' ? null : Number(o.retencionMonto),
+    retornoDecidido: o.retorno,
+  })
+  if (oferta.error) faltas.push({ paso: 'producto', que: oferta.error, bloquea: true })
+
+  // ③ El cliente — una parcial de $0 no es una decisión, es un formulario a medio llenar.
+  if (o.compensacion === 'plata_parcial' && !cargado(o.montoAcordado)) {
+    faltas.push({ paso: 'cliente', que: 'cuánto se le devuelve', bloquea: true })
+  }
+  if (o.compensacion === 'otra_unidad' && !cargado(o.envioIda)) {
+    faltas.push({ paso: 'cliente', que: 'el envío del reemplazo', bloquea: false })
+  }
+
+  return faltas
+}
+
+/** Lo primero que traba de verdad, o `null` si se puede guardar. */
+export function loQueTraba(faltas: FaltaDecision[]): FaltaDecision | null {
+  return faltas.find((f) => f.bloquea) ?? null
+}
+
+/** Cómo se pinta el chip de una pestaña: `null` = no le falta nada. */
+export function estadoDelPaso(faltas: FaltaDecision[], paso: PasoDecision): 'traba' | 'falta' | null {
+  const suyas = faltas.filter((f) => f.paso === paso)
+  if (!suyas.length) return null
+  return suyas.some((f) => f.bloquea) ? 'traba' : 'falta'
+}
+
 export const ESTADO_LABEL: Record<EstadoReclamo, string> = {
   borrador: 'Borrador',
   esperando_cliente: 'Esperando al cliente',
@@ -1256,6 +1371,19 @@ export type CuentaDescuento = {
   seePierdeSiVuelve: number
   /** Cuando el techo supera el precio: regalarlo sale más barato que pedirlo. */
   convieneRegalar: boolean
+  /**
+   * 🔑 **El veredicto: ¿conviene ofrecerle que se lo quede?** Es lo que la cuenta ya sabía y no
+   * decía, y por no decirlo la pantalla quedaba preguntando algo que se contesta solo con los
+   * datos que tiene delante — o sea, una calculadora con un campo en cero.
+   *
+   * ⚠️ `false` tiene **dos causas distintas** y no se pueden mezclar: o no hay nada que perder
+   * porque vuelva (y entonces no hay descuento que convenga), o **falta un dato** para saberlo.
+   * Las separa `falta`: sin eso, "no conviene" se leería como veredicto cuando en realidad es
+   * "todavía no se sabe".
+   */
+  conviene: boolean
+  /** Qué dato falta para poder contestar, si es que falta alguno. `null` = la cuenta está completa. */
+  falta: 'pvp_feria' | null
   motivo: string
 }
 
@@ -1328,7 +1456,11 @@ export function cuentaDescuento(opciones: {
   const feria = redondear(items.reduce((s, it) => s + positivo(it.pvp_feria) * positivo(it.cantidad), 0))
 
   if (fallada && !feria) {
-    return { techo: 0, sugerido: 0, seePierdeSiVuelve: 0, convieneRegalar: false, motivo: 'Falta el PVP de feria: sin eso no se puede saber cuánto se pierde si vuelve.' }
+    return {
+      techo: 0, sugerido: 0, seePierdeSiVuelve: 0, convieneRegalar: false,
+      conviene: false, falta: 'pvp_feria',
+      motivo: 'Falta el PVP de feria: sin eso no se puede saber cuánto se pierde si vuelve.',
+    }
   }
 
   // Lo que se pierde si vuelve. En una fallada, la depreciación es la parte grande.
@@ -1337,13 +1469,23 @@ export function cuentaDescuento(opciones: {
   const techo = seePierdeSiVuelve
   const sugerido = redondear(Math.min(techo * FRACCION_SUGERIDA, precio))
   const convieneRegalar = techo >= precio && precio > 0
+  /**
+   * 🔑 **Conviene ofrecer exactamente cuando hay algo que perder porque vuelva.** Con techo 0 no
+   * es que la oferta sea chica: es que **no hay oferta que no sea regalar plata**, porque el
+   * producto vuelve sano, se revende entero y la vuelta no cuesta nada.
+   */
+  const conviene = techo > 0
 
   const motivo = fallada
     ? `Si vuelve perdés ${seePierdeSiVuelve} (se deprecia ${depreciacion} más ${envio} de envío).` +
       (convieneRegalar ? ' Es más que el precio: regalarlo sale más barato que pedirlo.' : '')
-    : `Vuelve sano y se revende a precio completo, así que lo único que perdés es ${seePierdeSiVuelve} de logística.`
+    // ⚠️ Con 0 la frase de siempre decía "lo único que perdés es 0 de logística": un número que
+    // existe y no significa nada, leído como si fuera una pérdida. Con 0 no se pierde NADA.
+    : conviene
+      ? `Vuelve sano y se revende a precio completo, así que lo único que perdés es ${seePierdeSiVuelve} de logística.`
+      : 'Vuelve sano y se revende entero, y la vuelta no te cuesta nada: no perdés plata porque vuelva.'
 
-  return { techo, sugerido, seePierdeSiVuelve, convieneRegalar, motivo }
+  return { techo, sugerido, seePierdeSiVuelve, convieneRegalar, conviene, falta: null, motivo }
 }
 
 /**
@@ -1558,6 +1700,21 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
  * quien se quejó tampoco espera una semana. Se cambian en esta línea.
  */
 export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2 } as const
+
+/**
+ * **El piso del retorno: por debajo de este monto no se pide que el producto vuelva**, aunque la
+ * cuenta de `convieneRetorno` dé positiva — recibirlo, revisarlo y reingresarlo tampoco es gratis.
+ *
+ * 🔑 **Es un número de POLÍTICA, no un dato del caso**, y por eso vive acá y no en la pantalla.
+ * Hasta el 27-ago-2026 el campo «Piso ($)» arrancaba vacío en cada reclamo, así que el corte
+ * existía sólo si alguien se acordaba de tipearlo — o sea, casi nunca. En pantalla se sigue
+ * pudiendo pisar para un caso puntual: lo que cambia es que ahora hay un default.
+ *
+ * ▶️ **`null` = todavía sin definir**, y con `null` la cuenta se comporta igual que antes (sin
+ * corte por monto). Los dos números los tiene que dar Bruno: por debajo de cuánto no vale la pena
+ * traer un producto de vuelta en cada marca. ⛔ Ponerlos yo sería inventar política.
+ */
+export const PISO_RETORNO: Record<Marca, number | null> = { bdi: null, zattia: null }
 
 /**
  * 🔑 **`ts` es cuándo la alerta EMPEZÓ A EXISTIR**, no cuándo se creó el reclamo ni cuándo se lo

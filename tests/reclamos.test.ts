@@ -11,6 +11,7 @@ import {
   hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa, ERROR_PROPIO,
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion,
   EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -841,6 +842,45 @@ describe('cuentaDescuento', () => {
     expect(c.motivo).toContain('PVP de feria')
   })
 
+  /**
+   * ── El veredicto ──
+   *
+   * La cuenta ya tenía todo para contestar «¿conviene ofrecer?» y no lo decía: la pantalla lo
+   * inferían mirando si el techo era cero, y por eso preguntaba con un campo en $0 lo que se
+   * contesta solo. Estos casos fijan que el veredicto salga de acá, y que "no conviene" ⛔ no se
+   * confunda con "falta un dato".
+   */
+  it('sana sin envío que pagar: NO conviene ofrecer nada, y no es que falte un dato', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0 })
+    expect(c.conviene).toBe(false)
+    expect(c.falta).toBe(null)
+    // El motivo viejo decía "lo único que perdés es 0 de logística": un número que existe y no
+    // significa nada, leído como si fuera una pérdida.
+    expect(c.motivo).not.toContain('0 de logística')
+    expect(c.motivo).toContain('no perdés plata')
+  })
+
+  it('sana con envío: conviene ofrecer, y el sugerido es lo que se dice', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 })
+    expect(c.conviene).toBe(true)
+    expect(c.sugerido).toBe(3000)
+  })
+
+  // ⚠️ El mismo `conviene: false` por dos causas distintas: acá SÍ falta un dato, y decirlo es lo
+  // que evita que se lea como veredicto.
+  it('fallada sin PVP de feria: no contesta, y dice qué le falta', () => {
+    const c = cuentaDescuento({ items: [item(12000)], fallada: true, envioVuelta: 6000 })
+    expect(c.conviene).toBe(false)
+    expect(c.falta).toBe('pvp_feria')
+  })
+
+  it('el costo operativo puede hacer que convenga ofrecer donde el envío solo no alcanzaba', () => {
+    const sin = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0 })
+    const con = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0, costoOperativo: 1500 })
+    expect(sin.conviene).toBe(false)
+    expect(con.conviene).toBe(true)
+  })
+
   it('un producto cara y fallada: el techo NO llega a regalarlo', () => {
     const cara = item(90000, 1, { pvp_feria: 45000 })
     const c = cuentaDescuento({ items: [cara], fallada: true, envioVuelta: 6000 })
@@ -1593,5 +1633,88 @@ describe('la tabla de efectos', () => {
   it('sólo anulan la venta las resoluciones que deshacen la compra', () => {
     const anulan = TODAS.filter((c) => pendientesDe({ compensacion: c }).stock_estado === 'pendiente')
     expect(anulan.sort()).toEqual(['plata_parcial', 'plata_total'])
+  })
+})
+
+/**
+ * ── Qué falta para poder decidir ──
+ *
+ * La pantalla quedó partida en tres pestañas, así que "algo falta" ya no alcanza: hay que decir
+ * **en cuál**. Y hay una tentación que estos casos existen para frenar: marcar como incompleta una
+ * pestaña que no tiene nada que contestar. Este módulo ya pagó ese error una vez —hasta el
+ * 25-ago-2026 se exigía siempre el destino y **una demora no se podía cerrar nunca**.
+ */
+describe('faltantesDeLaDecision', () => {
+  const base = {
+    motivo: 'falla' as MotivoReclamo,
+    escenario: null as string | null,
+    compensacion: 'plata_total' as Compensacion,
+    retorno: false,
+    envioVuelta: '' as number | '',
+    pvpFeria: '' as number | '',
+    montoAcordado: '' as number | '',
+    envioIda: '' as number | '',
+    retencionMonto: '' as number | '',
+    retencionRespuesta: null as 'acepto' | 'rechazo' | null,
+  }
+
+  it('una falla recién abierta pide contestar la pregunta que decide, y no traba', () => {
+    const f = faltantesDeLaDecision(base)
+    expect(estadoDelPaso(f, 'que-paso')).toBe('falta')
+    expect(loQueTraba(f)).toBe(null)
+  })
+
+  // 🔑 LA aserción: en una demora no hay producto en juego, así que la pestaña del producto no
+  // está incompleta — está vacía a propósito. Marcarla empuja a inventar un destino para cerrar.
+  it('una demora NO marca falta en el producto: no hay producto en juego', () => {
+    const f = faltantesDeLaDecision({ ...base, motivo: 'demora', escenario: 'transporte' })
+    expect(estadoDelPaso(f, 'producto')).toBe(null)
+  })
+
+  // La misma respuesta por otro camino: acá lo apaga el ESCENARIO, no el motivo. Sin este caso,
+  // una implementación que mire una lista de motivos pasa igual.
+  it('una cancelación tampoco: lo apaga el escenario, no el motivo', () => {
+    const f = faltantesDeLaDecision({ ...base, motivo: 'arrepentimiento', escenario: 'se_puede_frenar' })
+    expect(estadoDelPaso(f, 'producto')).toBe(null)
+  })
+
+  it('una falla sin PVP de feria lo pide: sin él las dos cuentas de esa pestaña mienten', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util' })
+    expect(f.some((x) => x.paso === 'producto' && x.que.includes('PVP de feria'))).toBe(true)
+  })
+
+  it('con todo cargado no falta nada', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000 })
+    expect(f).toEqual([])
+  })
+
+  // Las dos combinaciones que el servidor rechaza. El mensaje se compara contra el del núcleo y
+  // ⛔ no contra un string a mano: si `registroDeRetencion` cambia el texto, esto no queda mintiendo.
+  it('media oferta traba, con el mensaje del núcleo', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 4000 })
+    const traba = loQueTraba(f)
+    expect(traba?.paso).toBe('producto')
+    expect(traba?.que).toBe(registroDeRetencion({ motivo: 'falla', escenario: 'util', respuesta: null, monto: 4000, retornoDecidido: false }).error)
+  })
+
+  it('aceptó quedárselo Y que vuelva: traba antes de mandarlo al servidor', () => {
+    const f = faltantesDeLaDecision({
+      ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000,
+      retencionMonto: 4000, retencionRespuesta: 'acepto', retorno: true,
+    })
+    expect(loQueTraba(f)?.paso).toBe('producto')
+  })
+
+  it('una devolución parcial de $0 traba: es un formulario a medio llenar, no una decisión', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, compensacion: 'plata_parcial' })
+    const traba = loQueTraba(f)
+    expect(traba?.paso).toBe('cliente')
+    expect(estadoDelPaso(f, 'cliente')).toBe('traba')
+  })
+
+  // ⚠️ El campo de la oferta arranca con el sugerido: un número que nadie dijo ⛔ no es media oferta.
+  it('el sugerido sin respuesta no cuenta como oferta a medias', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: '' })
+    expect(loQueTraba(f)).toBe(null)
   })
 })
