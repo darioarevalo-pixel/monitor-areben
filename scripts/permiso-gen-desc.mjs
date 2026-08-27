@@ -4,13 +4,14 @@
  *   node scripts/permiso-gen-desc.mjs            → muestra qué haría, sin tocar nada
  *   node scripts/permiso-gen-desc.mjs --aplicar  → lo escribe
  *
- * 🔑 Con `gen-desc` ven la sección y **cargan la ficha de la prenda** (y el insumo). ⛔ NO pueden
- * escribir el párrafo, ni aprobarlo, ni publicar en la tienda: eso es el sub `gen-desc.publicar`,
- * que se tilda aparte y no lo toca este script.
+ * 🔑 Dos niveles, que son el reparto de trabajo que decidió Bruno el 27-ago-2026:
  *
- * Los tres los eligió Bruno el 27-ago-2026. ⛔ El puesto compartido `local` quedó afuera a
- * propósito: la ficha guarda **quién** cargó cada valor, y desde una cuenta compartida ese dato
- * diría «local» y no serviría para preguntarle a nadie.
+ *   - **el local CARGA los datos** (`gen-desc`): elige de una lista y nada más;
+ *   - **Administración REVISA, genera el texto y PUBLICA** (`gen-desc.publicar`).
+ *
+ * ⛔ El puesto compartido `local` quedó afuera a propósito: la ficha guarda **quién** cargó cada
+ * valor, y desde una cuenta compartida ese dato diría «local» y no serviría para preguntarle a
+ * nadie.
  *
  * 🔴 **Reescribe el padrón entero** (es como está hecho `api/usuarios` de `bdi-catalogo`: se manda
  * `config.users` completo). Por eso imprime el antes/después de cada usuario que toca y no aplica
@@ -22,7 +23,19 @@ import { readFileSync } from 'node:fs';
 const USU_API = 'https://bdi-catalogo.vercel.app/api/usuarios';
 const MARCA = 'zattia';
 const KEY = 'gen-desc';
+
+/** Cargan la ficha de la prenda: eligen de una lista y nada más. */
 const QUIENES = ['josefinabatter', 'camilaquintana', 'Lorena Reyes'];
+
+/**
+ * Y además revisan el texto y lo publican en la tienda (sub `gen-desc.publicar`).
+ *
+ * 🔴 **Es el permiso que GASTA PLATA y el que ESCRIBE EN LA TIENDA VIVA**, los dos únicos del
+ * módulo: el botón de la IA cuesta ~US$0,0008 por producto y publicar pisa la ficha de un
+ * producto real. Decisión de Bruno del 27-ago-2026: el local carga los datos y **Administración**
+ * revisa, genera y publica.
+ */
+const PUBLICAN = ['Lorena Reyes'];
 
 const aplicar = process.argv.includes('--aplicar');
 
@@ -57,6 +70,10 @@ if (!dLeer?.ok || !Array.isArray(dLeer.config?.users)) {
 
 const users = dLeer.config.users;
 const tocados = [];
+
+/** Los subs se guardan PLANOS (`gen-desc.publicar`), no anidados: `puedeSub` los busca así. */
+const clave = (nombre) => (PUBLICAN.includes(nombre) ? [KEY, `${KEY}.publicar`] : [KEY]);
+
 for (const nombre of QUIENES) {
   const u = users.find((x) => x.name === nombre);
   if (!u) {
@@ -65,18 +82,20 @@ for (const nombre of QUIENES) {
   }
   u.acceso = u.acceso || {};
   u.acceso[MARCA] = u.acceso[MARCA] || {};
-  const antes = !!u.acceso[MARCA][KEY];
-  // ⚠️ La excepción negativa gana sobre el permiso tildado (`lib/permisos.core.js`, paso 2), así
-  // que tildar sin sacarla dejaría el permiso puesto y la sección igual de invisible.
-  const excluido = !!u.acceso[MARCA][`-${KEY}`];
-  if (antes && !excluido) {
-    console.log(`= ${nombre}: ya lo tiene`);
-    continue;
+  for (const k of clave(nombre)) {
+    const antes = !!u.acceso[MARCA][k];
+    // ⚠️ La excepción negativa gana sobre el permiso tildado (`lib/permisos.core.js`, paso 2), así
+    // que tildar sin sacarla dejaría el permiso puesto y la sección igual de invisible.
+    const excluido = !!u.acceso[MARCA][`-${k}`];
+    if (antes && !excluido) {
+      console.log(`= ${nombre}: ya tiene ${k}`);
+      continue;
+    }
+    u.acceso[MARCA][k] = true;
+    if (excluido) delete u.acceso[MARCA][`-${k}`];
+    tocados.push(`${nombre} → ${k}${excluido ? ' (tenía la exclusión puesta, se saca)' : ''}`);
+    console.log(`+ ${nombre}: ${MARCA}.${k} = true`);
   }
-  u.acceso[MARCA][KEY] = true;
-  if (excluido) delete u.acceso[MARCA][`-${KEY}`];
-  tocados.push(`${nombre}${excluido ? ' (tenía la exclusión puesta, se saca)' : ''}`);
-  console.log(`+ ${nombre}: ${MARCA}.${KEY} = true`);
 }
 
 if (!tocados.length) {
@@ -107,7 +126,11 @@ const rVer = await fetch(USU_API, {
   body: JSON.stringify({ action: 'config', adminUser, adminPass }),
 });
 const dVer = await rVer.json().catch(() => null);
-const faltan = QUIENES.filter((n) => !(dVer?.config?.users || []).find((u) => u.name === n)?.acceso?.[MARCA]?.[KEY]);
+const faltan = QUIENES.flatMap((n) =>
+  clave(n)
+    .filter((k) => !(dVer?.config?.users || []).find((u) => u.name === n)?.acceso?.[MARCA]?.[k])
+    .map((k) => `${n}/${k}`),
+);
 if (faltan.length) {
   console.error(`✗ Se guardó pero al releer NO está el permiso en: ${faltan.join(', ')}`);
   process.exit(1);
