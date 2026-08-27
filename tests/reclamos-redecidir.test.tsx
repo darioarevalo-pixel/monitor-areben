@@ -224,6 +224,42 @@ describe('Rehacer una decisión — el bucle de R-0022', () => {
 })
 
 /**
+ * 🔴 **Confirmar un paso afirma lo que está en pantalla, incluido el default.**
+ *
+ * `confirmarPaso` sólo escribía `retorno_decidido` si alguien apretaba uno de los dos botones. Con
+ * el default en «se lo queda», aceptarlo sin tocarlo ⛔ no escribía nada ⇒ al reabrir ganaba el
+ * `retorno_decidido` de la **decisión vieja** y la pantalla volvía a «Que vuelva», sumando el envío
+ * al costo del caso. Bruno lo vio con R-0022: guardó el paso con el envío en 6.500 y al volver a
+ * entrar el caso costaba $27.182 en vez de $20.682.
+ */
+describe('lo que se guarda es lo que la pantalla muestra', () => {
+  it('confirmar el paso del producto escribe «se lo queda» aunque nadie lo haya tocado', async () => {
+    await abrir(R22)
+    await act(async () => { tab('El producto').click() })
+    await tipear('Cuánto nos saldría traerlo', '6500')
+    await act(async () => { boton('Confirmar paso')!.click() })
+    const campos = llamadas.find((l) => l.que === 'editar')?.args[2] as Record<string, unknown>
+    expect(campos.envio_costo).toBe(6500)
+    expect(campos.retorno_decidido, 'el default aceptado ES una respuesta').toBe(false)
+  })
+
+  /**
+   * La contracara, sin la cual guardar `false` a ciegas pasaría el test igual: si se elige «Que
+   * vuelva», se guarda `true` y la vía con él.
+   */
+  it('y escribe «que vuelva» cuando es lo que se eligió', async () => {
+    await abrir(R22)
+    await act(async () => { tab('El producto').click() })
+    await act(async () => { boton('Que vuelva')!.click() })
+    await tipear('Envío de vuelta', '6500')
+    await act(async () => { boton('Confirmar paso')!.click() })
+    const campos = llamadas.find((l) => l.que === 'editar')?.args[2] as Record<string, unknown>
+    expect(campos.retorno_decidido).toBe(true)
+    expect(campos.via_retorno).toBeTruthy()
+  })
+})
+
+/**
  * 🔑 **El recorrido entero de R-0022, con la fila real de producción.**
  *
  * Es la verificación que ninguna otra prueba hace: que la pantalla, tal como abre, deje llegar a

@@ -855,6 +855,29 @@ clavado en «2 de 3».
 ⚠️ Al abrir después de soltar, la pantalla recibe la fila **ya liberada** (`compensacion: null`), no
 la de antes: si no, mostraría *«este reclamo ya está decidido»* sobre algo que se acaba de soltar.
 
+## 🆕 🔴 Confirmar un paso afirma lo que la pantalla MUESTRA (27-ago-2026)
+
+`confirmarPaso` escribía `retorno_decidido` **sólo si alguien apretaba uno de los dos botones**
+(`if (pedirRetorno !== null)`). Mientras el default salía de la cuenta eso pasaba desapercibido; con
+el default en **«se lo queda»** tiene una consecuencia silenciosa y cara:
+
+1. La pantalla muestra «Se lo queda» y la persona lo acepta sin tocarlo.
+2. Guarda el paso ⇒ se escribe `envio_costo`, **⛔ no `retorno_decidido`**.
+3. Al reabrir, `pedirRetorno` se restaura de la fila —que ahora tiene `envio_costo` cargado— y ahí
+   gana el `retorno_decidido: true` de la **decisión vieja**.
+4. La pantalla vuelve a decir «Que vuelva», y el envío se suma al costo del caso.
+
+📊 Medido en R-0022: el caso pasó a costar **$27.182** (los $20.682 que pagó más $6.500 de envío)
+sobre una resolución donde el producto ⛔ no vuelve.
+
+🔑 **La regla: un default que nadie contradijo ES una respuesta.** Confirmar un paso es afirmar lo
+que está en pantalla; dejar sin escribir lo que no se tocó es exactamente lo que hace que la fila
+diga una cosa y la pantalla otra. Es el mismo modo de falla que el ✓ que salía de la decisión vieja
+y que la Salida que venía preseleccionada — **tres veces el mismo día, por tres puertas distintas**.
+
+⚠️ El test tiene las dos mitades: que el default aceptado se guarde como `false`, y que elegir «Que
+vuelva» guarde `true` con su vía. Sin la segunda, guardar `false` a ciegas pasaría igual.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests

@@ -580,7 +580,21 @@ export function DecidirReclamo({
     if (paso === 'producto') {
       if (envioVuelta !== '') campos.envio_costo = Number(envioVuelta)
       if (retorno) campos.via_retorno = via
-      if (pedirRetorno !== null) campos.retorno_decidido = pedirRetorno
+      /**
+       * 🔴 **Se guarda lo que la pantalla MUESTRA, ⛔ no sólo lo que se tocó a mano.**
+       *
+       * Acá decía `if (pedirRetorno !== null)`, o sea que aceptar el default sin apretar ninguno de
+       * los dos botones ⛔ no escribía nada. Con el default en «se lo queda» eso tiene una
+       * consecuencia fea y silenciosa: al reabrir, el `retorno_decidido` de la **decisión vieja**
+       * gana, y la pantalla vuelve a decir «Que vuelva» — con el envío sumándose al costo del caso.
+       * Le pasó a Bruno con R-0022 el 27-ago-2026: guardó el paso con el envío en 6.500 y al
+       * volver a entrar el caso costaba $27.182.
+       *
+       * 🔑 **Confirmar un paso es afirmar lo que está en pantalla.** Un default que nadie
+       * contradijo es una respuesta; dejarlo sin escribir es lo que hace que la fila diga una cosa
+       * y la pantalla otra.
+       */
+      campos.retorno_decidido = retorno
       if (destino) campos.destino_prenda = destino
       // Las TRES mitades de la oferta viajan juntas: `registroDeRetencion` rechaza el registro a
       // medias, así que dejar la forma afuera acá hacía que guardar el paso volviera un 400.
