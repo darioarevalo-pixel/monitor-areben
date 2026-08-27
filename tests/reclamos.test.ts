@@ -3,7 +3,7 @@ import {
   alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
   correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
-  destinoDe, esCambio, estaAbierto, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
+  destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
@@ -12,7 +12,7 @@ import {
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
-  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, type Compensacion,
+  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -1836,6 +1836,115 @@ describe('puedeRehacerseLaDecision', () => {
  * Lo que la decisión ya mandó a hacer y alguien HIZO. Es lo único que puede cerrar «Volver a
  * decidir», y lo mismo que el servidor usa para rechazar el POST con 409.
  */
+/**
+ * **Qué destinos tiene sentido ofrecer.** Hasta el 27-ago-2026 la pantalla ofrecía los cinco
+ * siempre: se podía marcar «Se perdió en el transporte» sobre un producto que el cliente tenía en
+ * la mano, o «Nunca salió del depósito» sobre uno que llegó.
+ */
+describe('destinosDe', () => {
+  /**
+   * 🔴 **EL invariante.** Lo que la pantalla sugiere por default (`destinoDe`) tiene que estar
+   * SIEMPRE entre lo que ofrece (`destinosDe`). Si no, el desplegable arranca en un destino que él
+   * mismo no lista — que es el defecto espejo del duplicado que se arregló esta mañana.
+   * Recorre **caso por caso y escenario por escenario**, incluido el "sin escenario".
+   */
+  it('lo que se sugiere está SIEMPRE entre lo que se ofrece', () => {
+    for (const m of MOTIVOS_VIGENTES) {
+      const escenarios: (string | null)[] = [null, ...escenariosDe(m).map((e) => e.clave)]
+      for (const esc of escenarios) {
+        const ofrecidos = destinosDe(m, esc)
+        for (const vuelve of [true, false]) {
+          const sugerido = destinoDe(m, vuelve, esc)
+          if (sugerido == null) {
+            // Sin producto en juego no hay destino: la lista tiene que estar vacía, ⛔ no traer uno.
+            expect(ofrecidos, `${m}/${esc}: sin destino sugerido pero se ofrecen ${ofrecidos.join()}`).toEqual([])
+          } else {
+            expect(ofrecidos, `${m}/${esc}/vuelve=${vuelve}: sugiere ${sugerido} y no lo ofrece`).toContain(sugerido)
+          }
+        }
+      }
+    }
+  })
+
+  it('si el producto nunca salió, lo único posible es que nunca haya salido', () => {
+    expect(destinosDe('faltante', null)).toEqual(['no_salio'])
+    expect(destinosDe('sin_stock', null)).toEqual(['no_salio'])
+  })
+
+  it('si salió y no llegó, sólo se pudo perder', () => {
+    expect(destinosDe('no_llego', null)).toEqual(['perdida'])
+  })
+
+  it('⛔ y si el cliente lo tiene, ⛔ no se pudo perder ni quedarse en el depósito', () => {
+    const d = destinosDe('falla', null)
+    expect(d).not.toContain('perdida')
+    expect(d).not.toContain('no_salio')
+    expect(d).toContain('stock')
+  })
+
+  /**
+   * 🔴 En los cuatro casos subjetivos el producto está SANO por definición. Ofrecer «Fallado» mete
+   * una unidad impecable en el ledger de Fallas, valuada a PVP de feria, y ensucia el único número
+   * que dice cuánta plata se pierde en fallas de verdad. Si además vino con un defecto, el camino
+   * es `reclasificar` — que conserva número, fotos e historial.
+   */
+  it('en un caso subjetivo ⛔ no se puede marcar el producto como fallado', () => {
+    for (const m of ['arrepentimiento', 'no_esperaba', 'talle'] as MotivoReclamo[]) {
+      expect(destinosDe(m, null), m).not.toContain('falla')
+      expect(destinosDe(m, null), m).toContain('stock')
+    }
+    // El control: en una falla sí está, o el caso de arriba pasaría con la lista siempre vacía.
+    expect(destinosDe('falla', null)).toContain('falla')
+  })
+
+  it('sin producto en juego el final queda vacío: una demora ⛔ no tiene destino', () => {
+    expect(destinosDe('demora', null)).toEqual([])
+  })
+})
+
+/**
+ * Qué viene tildado al abrir un reclamo, y las vías que se ofrecen. Los dos salieron de la revisión
+ * del 27-ago-2026 y los dos son **defaults**, que es donde este módulo ya se quemó: un default
+ * convierte «no lo miré» en una afirmación.
+ */
+describe('los defaults del alta', () => {
+  it('con UN producto viene tildado: no hay nada que elegir', () => {
+    expect(preseleccionDelAlta(1)).toEqual([0])
+  })
+
+  /**
+   * 🔴 Con dos o más NO. Hasta el 27-ago venía todo tildado siempre: el default convertía «no leí
+   * la lista» en «el cliente devuelve las dos cosas», y eso después se paga o se anula en GN.
+   */
+  it('con dos o más hay que elegir', () => {
+    expect(preseleccionDelAlta(2)).toEqual([])
+    expect(preseleccionDelAlta(5)).toEqual([])
+  })
+
+  it('una orden vacía ⛔ no inventa un tilde', () => {
+    expect(preseleccionDelAlta(0)).toEqual([])
+  })
+
+  /**
+   * 🔑 **`VIAS_VIGENTES` ⛔ no es lo mismo que `VIA_LABEL`**: el mapa tiene las cuatro para que una
+   * fila vieja se siga leyendo, y la lista es lo que se puede elegir hoy. Sacar una opción ⛔ no
+   * puede borrar el dato de las filas que ya la tienen.
+   */
+  it('sólo se ofrecen Correo y Andreani, y las viejas siguen teniendo rótulo', () => {
+    expect(VIAS_VIGENTES).toEqual(['correo', 'andreani'])
+    expect(VIA_LABEL.cadete).toBeTruthy()
+    expect(VIA_LABEL.presencial).toBeTruthy()
+  })
+
+  // ⚠️ Las dos que quedan tienen código de seguimiento ⇒ ya no hay retorno sin envío que rastrear.
+  it('las dos vigentes piden seguimiento y tienen envío', () => {
+    for (const v of VIAS_VIGENTES) {
+      expect(pideSeguimiento(v), v).toBe(true)
+      expect(hayEnvio(v), v).toBe(true)
+    }
+  })
+})
+
 describe('loEjecutado', () => {
   it('sin nada hecho, la lista está vacía', () => {
     expect(loEjecutado({ compensacion: 'plata_total', estado: 'resuelto' } as unknown as ReclamoRow)).toEqual([])

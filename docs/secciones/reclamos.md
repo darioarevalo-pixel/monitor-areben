@@ -472,6 +472,62 @@ demora no se podía cerrar nunca**.
 - ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
   refactors grandes): las pestañas envuelven los bloques que ya estaban.
 
+## 🆕 Los destinos que no aplican, la logística y la preselección (27-ago-2026)
+
+### `destinosDe`: la pantalla ofrecía los CINCO siempre
+
+Se podía marcar **«Se perdió en el transporte»** sobre un producto que el cliente tenía en la mano,
+o **«Nunca salió del depósito»** sobre uno que llegó. 🔑 La regla vive en `casos.core.js` con el
+escenario **obligatorio**, como todo lo que deriva plata o stock — ⛔ no en el JSX:
+
+```
+sin producto en juego      → []                          (demora, cancelación)
+la unidad nunca salió      → ['no_salio']                 (faltante, mal armado, sin stock)
+salió y no llegó           → ['perdida']                  (no llegó nunca)
+el cliente la tiene        → ['stock', 'falla', 'regalada']
+```
+
+🔴 **El invariante que lo ata a la realidad**: lo que sugiere `destinoDe` está **siempre** entre lo
+que ofrece `destinosDe`. Hay un caso que lo recorre **motivo por motivo y escenario por escenario**,
+con y sin retorno — si no, el desplegable arrancaría en un destino que él mismo no lista, que es el
+defecto espejo del duplicado que se arregló esta mañana.
+
+🔴 **`MOTIVOS_SIN_FALLA` es POLÍTICA, ⛔ no derivación**: ninguna bandera del perfil dice «acá no hay
+defecto». En `arrepentimiento`, `no_esperaba` y `talle` el producto está sano por definición, y
+ofrecer «Fallado» mete una unidad impecable en el ledger de Fallas valuada a PVP de feria — ensucia
+el único número que dice cuánta plata se pierde en fallas de verdad. ⚠️ Si además vino con un
+defecto, el camino es **`reclasificar`**, que conserva número, fotos e historial: esconder la opción
+es lo que empuja a usarlo.
+
+### La logística: quedan Correo y Andreani
+
+`VIAS_VIGENTES` ⛔ **no es lo mismo que `VIA_LABEL`**: el mapa conserva las cuatro para que una fila
+vieja se siga leyendo, y la lista es lo que se puede elegir hoy. 📊 **Medido antes de sacarlas: 0
+filas** usaban `cadete` o `presencial`, en BDI y en Zattia.
+
+⚠️ **Tiene una consecuencia y hay que saberla:** `presencial` era lo único que hacía que el reclamo
+dijera *«Esperando que lo traiga»* en vez de inventar un envío. Sin ella **todo retorno cuesta
+envío**, y el que quiere acercarse al local se resuelve como cambio de mostrador, fuera del circuito
+de retornos. El código de las dos vías sigue vivo: volver a ofrecerlas es agregarlas a la lista.
+
+⚠️ Y el desplegable **agrega la vía que ya tenía la fila** si dejó de ofrecerse, rotulada «(ya no se
+ofrece)»: sin eso un reclamo viejo abre en blanco y el primer toque en otro campo se lo pisa sin que
+nadie lo haya elegido. **Borrar una opción ⛔ no puede borrar el dato.**
+
+⚠️ El ⓘ dejó de explicar «La trae al local»: un texto de ayuda que describe una opción que no está
+es la forma más rápida de que nadie lea el resto.
+
+▶️ **`VIAS_CAMBIO` (`ArmarCambio.tsx`) quedó como estaba** —`andreani`, `correo`, `cadete`—: un
+cambio se arma en el mostrador y ahí el cadete existe. Falta que Bruno confirme si también sale.
+
+### La preselección del alta
+
+`preseleccionDelAlta(cuantos)`: con **uno** viene tildado, con **dos o más** hay que elegir. Venía
+todo tildado siempre con la regla «casi siempre se devuelve todo» — cierta con un producto, y apenas
+hay dos el default convierte **«no leí la lista» en «el cliente devuelve las dos cosas»**, que
+después se paga o se anula en Gestión Nube. ⛔ No toca los casos de venta completa, donde los tildes
+están bloqueados igual.
+
 ## 🆕 La vista del local: recorta, ⛔ no miente (27-ago-2026)
 
 Lo más pedido en la revisión. 🔑 **El patrón ya existía y ⛔ no hizo falta inventar nada**: un
@@ -608,3 +664,22 @@ Lo que los tests **no** cubren y hay que ejercer a mano:
   venza. Nada de eso pasa por la app logueada.
 - **Los pendientes en la pantalla.** Los tests fijan `pendientesDe()`; que la columna los muestre y
   que tildarlos escriba (acción `pendiente` del handler) se camina en Reclamos con una fila real.
+
+## 🔴 Cómo verificar un deploy de ESTA sección (27-ago-2026)
+
+**Los 18 chunks que trae `/postventa` ⛔ NO incluyen el de Reclamos.** `Devoluciones` entra por
+`dynamic()`, así que su chunk se pide recién al abrir la pestaña: buscar una cadena de
+`Reclamos.tsx` o de `DecidirReclamo.tsx` en la lista inicial da **«no está» siempre**, deployado o
+no. Pasó el 27-ago y casi manda a re-deployar algo que ya estaba.
+
+Lo que sirve, en tres pasos:
+
+1. Bajar los chunks que **sí** vienen en el HTML de `/postventa`.
+2. Sacar de adentro de ellos **todos los nombres de chunk** que referencian (`[0-9a-z_]{8,20}\.js`)
+   — son ~73 — y bajarlos también. Ahí está el de Reclamos.
+3. Buscar el oráculo **y una cadena de CONTROL que ya estaba en prod**, y verificar que la del
+   oráculo sea **única contra `<commit>^`** (`git grep -c -F "…" <commit>^`).
+
+⚠️ Un cambio que sólo toca `lib/reclamos/tipos.ts` **sí** cae en un chunk eager (ahí vive también
+`efectos.core.js`), pero sólo si agrega una **cadena**: los comentarios se minifican y no sirven de
+oráculo.

@@ -30,7 +30,7 @@ import {
 } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
-  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
+  MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, preseleccionDelAlta, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
   ayudaDeMotivo, casoDe, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
@@ -178,8 +178,9 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         toast.aviso('No se encontró esa orden. Ojo: solo se encuentran las recientes.')
       } else {
         setOrden(o)
-        // Casi siempre se devuelve todo: se arranca con todo tildado y se destilda lo que no.
-        setElegidos(new Set((o.products || []).map((_, i) => i)))
+        // Con UNO viene tildado; con dos o más hay que elegir. La regla vive en el núcleo
+        // (`preseleccionDelAlta`) porque decide qué se reclama, y eso después se paga.
+        setElegidos(new Set(preseleccionDelAlta((o.products || []).length)))
       }
     } catch (e) {
       toast.error((e as Error).message)

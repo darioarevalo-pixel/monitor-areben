@@ -23,6 +23,7 @@ import {
   PERFIL_MOTIVO as PERFIL_MOTIVO_JS,
   casoDe as casoDeJs,
   escenarioDe as escenarioDeJs,
+  destinosDe as destinosDeJs,
   escenariosDe as escenariosDeJs,
   esEscenarioDe as esEscenarioDeJs,
   esSoloSeguimiento as esSoloSeguimientoJs,
@@ -186,6 +187,21 @@ export const VIA_LABEL: Record<ViaRetorno, string> = {
   cadete: 'Cadete',
   presencial: 'La trae al local',
 }
+
+/**
+ * **Las que se ofrecen hoy.** ⛔ No es lo mismo que `VIA_LABEL`: el mapa tiene las cuatro para que
+ * una fila vieja siga leyéndose, y esto es lo que se puede elegir de acá en adelante.
+ *
+ * 🔴 La revisión del 27-ago-2026 sacó **`cadete` y `presencial`**. 📊 Medido antes de sacarlas:
+ * **0 filas** las usaban, en BDI y en Zattia, así que no hay nada viejo que se rompa.
+ *
+ * ⚠️ **Tiene una consecuencia y hay que saberla**: `presencial` era lo único que hacía que el
+ * reclamo dijera *«Esperando que lo traiga»* en vez de inventar un envío (`hayEnvio`). Sin ella,
+ * **todo retorno cuesta envío** y el que quiere acercarse al local se resuelve como cambio de
+ * mostrador, fuera del circuito de retornos. El código de las dos vías sigue vivo: volver a
+ * ofrecerlas es agregarlas a esta lista.
+ */
+export const VIAS_VIGENTES: ViaRetorno[] = ['correo', 'andreani']
 
 /** Las que tienen código de seguimiento. Cadete y presencial no: no hay nada que rastrear. */
 const VIA_CON_SEGUIMIENTO: ViaRetorno[] = ['andreani', 'correo']
@@ -488,6 +504,24 @@ export function pideFotos(m: MotivoReclamo, expectativa?: Expectativa | null): b
   if (modo === 'nunca') return false
   if (modo === 'si_quiere_plata') return expectativa !== 'otro_producto' && expectativa !== 'mismo_producto'
   return true
+}
+
+/**
+ * **Qué productos vienen tildados al abrir un reclamo.**
+ *
+ * 🔴 Hasta el 27-ago-2026 venía **todo tildado, siempre**, con la regla «casi siempre se devuelve
+ * todo». Es cierta cuando la orden tiene un producto y deja de serlo apenas tiene dos: ahí el
+ * default convierte **«no leí la lista» en «el cliente devuelve las dos cosas»**, y eso después se
+ * paga o se anula en Gestión Nube.
+ *
+ * ⚠️ Con **uno** viene tildado: no hay nada que elegir, y dejarlo vacío sería un paso obligatorio
+ * con una sola respuesta posible.
+ *
+ * ⚠️ ⛔ No aplica a los casos de venta completa (`sobreLaVentaCompleta`): ahí la selección los toma
+ * todos igual y los tildes están bloqueados.
+ */
+export function preseleccionDelAlta(cuantosProductos: number): number[] {
+  return cuantosProductos === 1 ? [0] : []
 }
 
 /** El reclamo es sobre la venta entera: no se pueden destildar productos. */
@@ -1307,6 +1341,18 @@ export function compensacionesDe(motivo: MotivoReclamo, escenario: string | null
 export function puedeVolverLaPrenda(motivo: MotivoReclamo, escenario: string | null | undefined): boolean {
   const p = perfilDe(motivo, escenario)
   return p.salio && p.productoEnJuego && motivo !== 'no_llego'
+}
+
+/**
+ * **Los destinos que tiene sentido ofrecer para este caso.** Vacío = no hay producto en juego.
+ *
+ * 🔴 Hasta el 27-ago-2026 la pantalla ofrecía **los cinco siempre**: se podía marcar «Se perdió en
+ * el transporte» sobre un producto que el cliente tenía en la mano, o «Nunca salió del depósito»
+ * sobre uno que llegó. La regla vive en `casos.core.js` con el escenario obligatorio, como todo lo
+ * que deriva plata o stock — ⛔ no en el JSX.
+ */
+export function destinosDe(motivo: MotivoReclamo, escenario: string | null | undefined): DestinoPrenda[] {
+  return destinosDeJs(motivo, escenario) as DestinoPrenda[]
 }
 
 /** El destino de el producto queda determinado por el motivo, salvo en la falla. */

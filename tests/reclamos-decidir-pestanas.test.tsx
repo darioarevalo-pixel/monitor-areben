@@ -266,9 +266,21 @@ describe('Decidir — los bugs que encontró la primera vuelta real', () => {
     const textos = [...select.options].map((o) => o.textContent || '')
     const delReclamo = textos[0].replace('Lo del reclamo — ', '')
     expect(textos.filter((t) => t === delReclamo)).toHaveLength(0)
-    // Y la contracara: la lista sigue teniendo todas las OTRAS opciones, incluida `no_salio`,
-    // que con la lista escrita a mano no aparecía nunca.
-    expect(textos.some((t) => t.includes('Nunca salió'))).toBe(true)
+    /**
+     * ⚠️ **Cambiado a propósito el 27-ago-2026.** Este caso pedía que apareciera «Nunca salió del
+     * depósito», que era la contracara correcta cuando la lista se derivaba de `DESTINO_LABEL`: el
+     * defecto de entonces era que `no_salio` ⛔ no se podía elegir NUNCA.
+     *
+     * Ahora la lista sale de `destinosDe`, que además filtra por el caso — y en un arrepentimiento
+     * que **ya salió** «Nunca salió del depósito» es literalmente falso. Pedirlo acá sería fijar el
+     * defecto que `destinosDe` vino a arreglar.
+     *
+     * La contracara que vale ahora: la lista **sigue teniendo las otras**, o sea que el filtro no
+     * la dejó vacía — que es cómo un filtro nuevo esconde un desplegable entero sin que nadie lo
+     * note.
+     */
+    expect(textos.some((t) => t.includes('Nunca salió'))).toBe(false)
+    expect(textos.length, 'el filtro dejó el desplegable sin opciones').toBeGreaterThan(1)
   })
 })
 

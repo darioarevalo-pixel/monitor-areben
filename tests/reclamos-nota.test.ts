@@ -27,11 +27,20 @@ describe('notaVentaTecnica', () => {
     expect(notaVentaTecnica('regalada', R12).startsWith('Reclamo R-0012 —')).toBe(true)
   })
 
+  /**
+   * 🔴 **Acá el candado es CORRECTO, al revés que en el resto.** Esta cadena ⛔ no se queda en la
+   * app: sale como `comments` de la venta técnica y **queda escrita en Gestión Nube**, o sea en el
+   * sistema contable, fuera de este repo. Fijarla literal es lo que obliga a que quien renombre un
+   * motivo **vea** que está cambiando lo que se escribe afuera.
+   *
+   * ⚠️ Se actualizó a mano el 27-ago-2026 (`Falla` → `Fallado`) al cambiar `MOTIVO_LABEL`. Las
+   * notas ya escritas conservan el rótulo viejo: renombrar ⛔ no reescribe el pasado.
+   */
   it('lleva la orden de TN, el cliente de verdad y el motivo: lo que GN no puede decir', () => {
     const nota = notaVentaTecnica('regalada', R12, { usuario: 'bruno' })
     expect(nota).toBe(
       'Reclamo R-0012 — se lo queda el cliente (producto sano) · Orden TN: 1187 · Cliente: Lautaro Mora'
-      + ' · Motivo: Falla — se descosió el ruedo · EM 12345678 · Decidió: bruno · (Monitor)',
+      + ' · Motivo: Fallado — se descosió el ruedo · EM 12345678 · Decidió: bruno · (Monitor)',
     )
   })
 

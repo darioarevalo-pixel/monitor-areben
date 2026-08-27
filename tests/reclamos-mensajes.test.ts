@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mensajeApertura, mensajeResolucion, mensajeSeguimiento, resumenCorto } from '@/lib/reclamos/mensajes'
-import type { ReclamoRow, ItemReclamo } from '@/lib/reclamos/tipos'
+import { MOTIVO_LABEL, type ReclamoRow, type ItemReclamo } from '@/lib/reclamos/tipos'
 
 /**
  * Los mensajes que salen al cliente.
@@ -116,7 +116,10 @@ describe('mensaje de seguimiento', () => {
 
 describe('resumenCorto', () => {
   it('arma la etiqueta del listado', () => {
+    // ⚠️ El motivo se DERIVA del mapa y ⛔ no se escribe: los rótulos cambiaron el 27-ago-2026 y
+    // fijar la cadena acá es un candado —se rompe cuando alguien mejora la redacción— en vez de un
+    // oráculo. Lo que se fija es la FORMA: número · motivo · primer nombre en capital.
     expect(resumenCorto({ motivo: 'mal_armado', cliente: 'carla ietta' } as ReclamoRow, 'R-0007'))
-      .toBe('R-0007 · Pedido mal armado · Carla')
+      .toBe(`R-0007 · ${MOTIVO_LABEL.mal_armado} · Carla`)
   })
 })

@@ -43,14 +43,14 @@ import { decidir, editarReclamo, reclasificar } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
   destinoDe, hayEnvio,
-  MOTIVO_LABEL, numeroReclamo, puedeVolverLaPrenda, VIA_LABEL,
+  MOTIVO_LABEL, numeroReclamo, puedeVolverLaPrenda, VIA_LABEL, VIAS_VIGENTES,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
   type RespuestaRetencion,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PISO_RETORNO,
   type PasoDecision, type FaltaDecision,
-  DESTINO_LABEL, laUnidadVuelve,
+  DESTINO_LABEL, destinosDe, laUnidadVuelve,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
@@ -969,16 +969,28 @@ export function DecidirReclamo({
               <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end' }}>
                 <Field label="¿Cómo vuelve?" style={{ marginBottom: 0 }}>
                   <Select value={via} onChange={(e) => setVia(e.target.value as ViaRetorno)}>
-                    {(Object.keys(VIA_LABEL) as ViaRetorno[]).map((v) => (
+                    {/* ⚠️ Sale de `VIAS_VIGENTES` y ⛔ no de las claves de `VIA_LABEL`: el mapa
+                        tiene las cuatro para que una fila vieja siga leyéndose, y esto es lo que se
+                        puede elegir hoy. */}
+                    {VIAS_VIGENTES.map((v) => (
                       <option key={v} value={v}>{VIA_LABEL[v]}</option>
                     ))}
+                    {/* ⚠️ Y la que ya tenía la fila, si dejó de ofrecerse. Sin esto un reclamo
+                        viejo con `cadete` abre el desplegable en blanco y el primer toque en
+                        cualquier otro campo se lo pisa sin que nadie lo haya elegido. Hoy son 0
+                        filas —medido en las dos tiendas—, pero el que borra una opción ⛔ no puede
+                        dejar que borrar la opción borre el dato. */}
+                    {reclamo.via_retorno && !VIAS_VIGENTES.includes(reclamo.via_retorno) && (
+                      <option value={reclamo.via_retorno}>{VIA_LABEL[reclamo.via_retorno]} (ya no se ofrece)</option>
+                    )}
                   </Select>
                 </Field>
                 {/* ⚠️ El ⓘ va AFUERA del `Field`: `Field` es un `<label>`, y un click adentro se lo
                     lleva el control aunque el popover corte la propagación. */}
                 <InfoPopover titulo="Qué cambia según la vía">
-                  <p><b>La trae al local</b>: sin envío, no hay etiqueta que pagar ni código que seguir,
-                  y el reclamo va a decir &quot;Esperando que lo traiga&quot;.</p>
+                  {/* ⚠️ «La trae al local» y «Cadete» dejaron de ofrecerse el 27-ago-2026 ⇒ el ⓘ
+                      ⛔ no las puede seguir explicando: un texto de ayuda que describe una opción
+                      que no está es la forma más rápida de que nadie lea el resto. */}
                   <p><b>Andreani o Correo</b>: el código de seguimiento se carga desde la lista, cuando
                   tengas la etiqueta.</p>
                 </InfoPopover>
@@ -1017,8 +1029,12 @@ export function DecidirReclamo({
                       no se podía elegir nunca.
                       ⚠️ Una lista escrita a mano acá ya se había desincronizado antes: `regalada`
                       entró el 26-ago-2026 y hubo que acordarse de sumarla. Derivarla cierra esa
-                      clase de bug de una vez. */}
-                  {(Object.keys(DESTINO_LABEL) as DestinoPrenda[])
+                      clase de bug de una vez.
+                      🔴 **Y desde el 27-ago sale de `destinosDe`, ⛔ no de las claves del mapa**:
+                      derivarla de `DESTINO_LABEL` arregló el duplicado pero seguía ofreciendo los
+                      cinco en todos los casos, o sea «Se perdió en el transporte» sobre algo que el
+                      cliente tenía en la mano. */}
+                  {destinosDe(reclamo.motivo, escenario)
                     .filter((k) => k !== destino)
                     .map((k) => (
                       <option key={k} value={k}>{DESTINO_LABEL[k]}</option>
