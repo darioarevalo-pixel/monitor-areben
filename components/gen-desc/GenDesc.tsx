@@ -8,88 +8,107 @@ import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
-import {
-  ETIQUETAS, MAX_BULLET, MAX_PARRAFO, MIN_BULLETS, MAX_BULLETS, generarHtml, validarBorrador,
-} from '@/lib/tn-desc/formato'
-import type { Borrador } from '@/lib/tn-desc/formato'
+import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
+import { atributosDe, bulletsDe, cargadosDe, type Atributo, type Cargados } from '@/lib/tn-desc/atributos'
 
 /**
- * Redacción: la cola de descripciones de producto.
+ * Redacción: la ficha de cada prenda y el párrafo que la vende.
  *
- * Medido contra Zattia el 19-ago-2026 (369 publicados): **41 sin una sola palabra** —casi
- * todos NEW IN, o sea los ingresos— y **237 con menos de 120 caracteres**, las «6 o 7
- * palabras» que escribe el local. Y no había ningún formato base: de 369, UNO tenía formato
- * rico y convivían tres dialectos.
+ * Medido contra Zattia el 27-ago-2026 (328 publicados): **44 sin una palabra** —casi todos de las
+ * dos últimas tandas, o sea los ingresos— y **194 con menos de 120 caracteres**.
  *
- * 🔴 Desde el 19-ago-2026 esta pantalla SÍ sale a la tienda, pero por un solo botón y de a un
- * producto: «Publicar en la tienda», y sólo sobre un borrador ya aprobado. El navegador no
- * compone ni escribe: el servidor lee fresco, respalda, escribe con compare-and-swap y relee.
+ * 🔑 **Desde el 27-ago-2026 esta pantalla tiene dos mitades y dos manos.** Arriba, la FICHA:
+ * seis desplegables con lista cerrada que carga el local, y de los que salen los bullets solos.
+ * Abajo, el PÁRRAFO: lo único que sigue escribiendo un modelo, y lo único que hay que validar.
+ * Antes los bullets también los escribía el modelo y los sostenía un validador — una etiqueta
+ * repetida o una tela inventada eran cosas que podían pasar. Ahora no pueden.
+ *
+ * 🔴 «Publicar en la tienda» sigue siendo el único botón que sale a la tienda en vivo, de a un
+ * producto y sólo sobre un borrador aprobado. El navegador no compone ni escribe: el servidor lee
+ * fresco, respalda, escribe con compare-and-swap y relee.
  */
 
-const BORRADOR_VACIO: Borrador = { parrafo: '', bullets: [{ etiqueta: 'Tela', texto: '' }, { etiqueta: 'Calce', texto: '' }, { etiqueta: 'Detalle', texto: '' }] }
-
-type Filtro = 'sin-desc' | 'corta' | 'con-insumo' | 'aprobados' | 'en-la-tienda' | 'todos'
+type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'corta' | 'aprobados' | 'en-la-tienda' | 'todos'
 
 const FILTROS: { v: Filtro; label: string }[] = [
+  { v: 'ultimas-tandas', label: 'Últimas 2 tandas' },
   { v: 'sin-desc', label: 'Sin descripción' },
+  { v: 'sin-ficha', label: 'Sin ficha cargada' },
   { v: 'corta', label: 'Descripción corta' },
-  { v: 'con-insumo', label: 'Con insumo cargado' },
   { v: 'aprobados', label: 'Aprobados' },
   { v: 'en-la-tienda', label: 'Publicados en la tienda' },
   { v: 'todos', label: 'Todos los publicados' },
 ]
 
+/**
+ * Las fechas de alta de las dos últimas tandas.
+ *
+ * 🔑 Se calcula por **fechas distintas de alta** y no por «los últimos 14 días»: la mercadería
+ * entra de golpe, no de a poco. Medido el 27-ago-2026: de dos semanas para acá no había entrado
+ * NINGUNO, y los 41 mudos recientes eran dos tandas, de hace 15 y 27 días. Un umbral en días
+ * habría mostrado una lista vacía justo el día que había 41 productos para cargar.
+ */
+function ultimasTandas(productos: ProductoTn[], cuantas = 2): Set<string> {
+  const fechas = [...new Set(productos.map((p) => p.created_at.slice(0, 10)).filter(Boolean))]
+  return new Set(fechas.sort().reverse().slice(0, cuantas))
+}
+
 export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, puedePublicar, error, refrescar, guardar, redactar, publicar } = useGenDesc(marca)
-  const [filtro, setFiltro] = useState<Filtro>('sin-desc')
+  const { cargando, productos, cola, atributos, puedePublicar, error, refrescar, guardar, guardarAtributo, redactar, publicar } = useGenDesc(marca)
+  const [filtro, setFiltro] = useState<Filtro>('ultimas-tandas')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
 
   const publicados = useMemo(() => productos.filter((p) => p.published), [productos])
+  const tandas = useMemo(() => ultimasTandas(publicados), [publicados])
+  const sinFicha = (p: ProductoTn) => !!p.familia && !Object.keys(atributos[p.id] || {}).length
 
   const stats = useMemo(
     () => ({
+      ultimas: publicados.filter((p) => tandas.has(p.created_at.slice(0, 10))).length,
       sinDesc: publicados.filter((p) => p.prosa.banda === 'nada').length,
-      corta: publicados.filter((p) => p.prosa.banda === 'corta').length,
-      conInsumo: publicados.filter((p) => (cola[p.id]?.insumo || '').trim()).length,
+      sinFicha: publicados.filter(sinFicha).length,
       aprobados: publicados.filter((p) => cola[p.id]?.estado === 'aprobado').length,
       enLaTienda: publicados.filter((p) => cola[p.id]?.estado === 'escrito').length,
     }),
-    [publicados, cola],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [publicados, cola, atributos, tandas],
   )
 
   const lista = useMemo(() => {
     const f = publicados.filter((p) => {
       const fila = cola[p.id]
+      if (filtro === 'ultimas-tandas') return tandas.has(p.created_at.slice(0, 10))
       if (filtro === 'sin-desc') return p.prosa.banda === 'nada'
+      if (filtro === 'sin-ficha') return sinFicha(p)
       if (filtro === 'corta') return p.prosa.banda === 'corta'
-      if (filtro === 'con-insumo') return !!(fila?.insumo || '').trim()
       if (filtro === 'aprobados') return fila?.estado === 'aprobado'
       if (filtro === 'en-la-tienda') return fila?.estado === 'escrito' || fila?.estado === 'falla'
       return true
     })
     // Primero los mudos: son los que hoy salen a la calle sin decir nada.
     return f.sort((a, b) => a.prosa.largo - b.prosa.largo || a.name.localeCompare(b.name))
-  }, [publicados, cola, filtro])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicados, cola, atributos, filtro, tandas])
 
   if (error) return <Notice tone="danger">{error}</Notice>
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Notice tone="neutral">
-        Acá se prepara el texto: se carga el <b>insumo</b> (3 o 4 palabras: la tela y el detalle que
-        la foto no dice) y se escribe el borrador con el formato base. Recién cuando el borrador
-        está <b>aprobado</b> aparece el botón de publicar, que escribe en la tienda de a un producto
-        y guarda el texto anterior antes de pisarlo.
+        Primero se carga la <b>ficha</b> de la prenda —tela, calce, escote, manga, largo— eligiendo
+        de una lista. De ahí salen solos los datos que se leen abajo de la descripción. Después se
+        escribe el <b>párrafo</b>, y recién cuando está aprobado aparece el botón de publicar, que
+        escribe en la tienda de a un producto y guarda el texto anterior antes de pisarlo.
       </Notice>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }}>
+        <KpiCard label="Últimas 2 tandas" value={stats.ultimas} tone="neutral" activo={filtro === 'ultimas-tandas'} onClick={() => setFiltro('ultimas-tandas')} />
         <KpiCard label="Sin descripción" value={stats.sinDesc} tone="danger" activo={filtro === 'sin-desc'} onClick={() => setFiltro('sin-desc')} />
-        <KpiCard label="Descripción corta" value={stats.corta} tone="warning" activo={filtro === 'corta'} onClick={() => setFiltro('corta')} />
-        <KpiCard label="Con insumo" value={stats.conInsumo} tone="neutral" activo={filtro === 'con-insumo'} onClick={() => setFiltro('con-insumo')} />
+        <KpiCard label="Sin ficha cargada" value={stats.sinFicha} tone="warning" activo={filtro === 'sin-ficha'} onClick={() => setFiltro('sin-ficha')} />
         <KpiCard label="Aprobados" value={stats.aprobados} tone="success" activo={filtro === 'aprobados'} onClick={() => setFiltro('aprobados')} />
         <KpiCard label="En la tienda" value={stats.enLaTienda} tone="success" activo={filtro === 'en-la-tienda'} onClick={() => setFiltro('en-la-tienda')} />
       </div>
@@ -105,7 +124,7 @@ export function GenDesc() {
         <Button variant="outline" onClick={() => void refrescar()} disabled={cargando}>
           {cargando ? 'Cargando…' : 'Traer de TiendaNube'}
         </Button>
-        {!puedePublicar && <Badge tone="neutral">Sólo podés cargar el insumo</Badge>}
+        {!puedePublicar && <Badge tone="neutral">Cargás la ficha; el texto lo escribe Marketing</Badge>}
       </Toolbar>
 
       {cargando && !productos.length && <Card>Cargando el catálogo…</Card>}
@@ -120,10 +139,17 @@ export function GenDesc() {
             key={p.id}
             p={p}
             fila={cola[p.id]}
+            ficha={atributos[p.id] || {}}
             abierto={abierto === p.id}
             onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
             puedePublicar={puedePublicar}
-            onRedactar={(modelo, insumo) =>
+            onAtributo={async (atributo, valor) => {
+              if (!p.familia) return 'Este producto no tiene categoría en TiendaNube.'
+              const err = await guardarAtributo(p.id, p.familia, atributo, valor, p.name)
+              if (err) toast.error(err)
+              return err
+            }}
+            onRedactar={(modelo, insumo, bullets) =>
               redactar({
                 tn_id: p.id,
                 nombre: p.name,
@@ -132,6 +158,7 @@ export function GenDesc() {
                 categorias: p.categories,
                 prosaActual: p.prosa.texto,
                 imagen: p.imagenes[0]?.src || null,
+                bullets,
                 modelo,
               })
             }
@@ -157,19 +184,21 @@ export function GenDesc() {
 }
 
 function FilaProducto({
-  p, fila, abierto, onAbrir, puedePublicar, onRedactar, onGuardar, onPublicar,
+  p, fila, ficha, abierto, onAbrir, puedePublicar, onAtributo, onRedactar, onGuardar, onPublicar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
+  ficha: Cargados
   abierto: boolean
   onAbrir: () => void
   puedePublicar: boolean
-  onRedactar: (modelo: string, insumo: string) => Promise<ResultadoIA>
+  onAtributo: (atributo: Atributo, valor: string) => Promise<string | null>
+  onRedactar: (modelo: string, insumo: string, bullets: { etiqueta: string; texto: string }[]) => Promise<ResultadoIA>
   onGuardar: (cuerpo: Record<string, unknown>) => Promise<string | null>
   onPublicar: (conservarResiduo: boolean) => Promise<string | null>
 }) {
   const [insumo, setInsumo] = useState(fila?.insumo || '')
-  const [borrador, setBorrador] = useState<Borrador>(fila?.borrador || BORRADOR_VACIO)
+  const [parrafo, setParrafo] = useState(fila?.borrador?.parrafo || '')
   const [guardando, setGuardando] = useState(false)
   const [modelo, setModelo] = useState<string>(MODELO_POR_DEFECTO)
   const [redactando, setRedactando] = useState(false)
@@ -186,26 +215,28 @@ function FilaProducto({
    */
   const partes = useMemo(() => partir(p.raw_desc), [p.raw_desc])
 
-  const problemas = useMemo(
-    () => validarBorrador(borrador, { variantes: p.variantes, insumo, nombre: p.name }),
-    [borrador, p.variantes, p.name, insumo],
-  )
-  const vacio = !borrador.parrafo.trim() && borrador.bullets.every((b) => !b.texto.trim())
+  /** 🔑 Los mismos bullets que va a componer el servidor al publicar: una sola implementación. */
+  const bullets = useMemo(() => bulletsDe(p.familia, ficha), [p.familia, ficha])
+  const campos = useMemo(() => atributosDe(p.familia), [p.familia])
+  const cuenta = useMemo(() => cargadosDe(p.familia, ficha), [p.familia, ficha])
 
-  const setBullet = (i: number, campo: 'etiqueta' | 'texto', v: string) =>
-    setBorrador((b) => ({ ...b, bullets: b.bullets.map((x, j) => (j === i ? { ...x, [campo]: v } : x)) }))
+  const problemas = useMemo(
+    () => validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }),
+    [parrafo, p.variantes, p.name, bullets],
+  )
+  const vacio = !parrafo.trim()
 
   /**
    * 🔑 El insumo que se le manda al modelo es el del CAMPO, no el guardado: si alguien acaba
    * de tipear «gasa» y todavía no apretó «Guardar el insumo», redactar sin eso pediría el
-   * texto sin el único dato que hace falta — y la regla de la tela lo dejaría sin bullet.
+   * texto sin el único dato que hace falta.
    */
   const pedirIa = async () => {
     setRedactando(true)
-    const r = await onRedactar(modelo, insumo)
+    const r = await onRedactar(modelo, insumo, bullets)
     setRedactando(false)
     setIa(r)
-    if (r.borrador) setBorrador(r.borrador)
+    if (r.borrador?.parrafo) setParrafo(r.borrador.parrafo)
   }
 
   const correr = async (cuerpo: Record<string, unknown>) => {
@@ -229,14 +260,16 @@ function FilaProducto({
           </div>
         </div>
         <span style={{ display: 'inline-flex', gap: 4 }}>
+          {/* La ficha primero: es lo que hay que cargar y lo que le falta a la mayoría. */}
+          {p.familia
+            ? <Badge tone={cuenta.con === 0 ? 'warning' : cuenta.con === cuenta.total ? 'success' : 'neutral'}>Ficha {cuenta.con}/{cuenta.total}</Badge>
+            : <Badge tone="danger">Sin categoría en TN</Badge>}
           {p.prosa.banda === 'nada' && <Badge tone="danger">Sin descripción</Badge>}
           {p.prosa.banda === 'corta' && <Badge tone="warning">Corta</Badge>}
           {fila?.estado === 'aprobado' && <Badge tone="success">Aprobado</Badge>}
           {fila?.estado === 'escrito' && <Badge tone={fila.verificado ? 'success' : 'warning'}>{fila.verificado ? 'En la tienda' : 'Escrito sin verificar'}</Badge>}
           {fila?.estado === 'escribiendo' && <Badge tone="warning">Quedó a medias</Badge>}
           {fila?.estado === 'falla' && <Badge tone="danger">No se pudo publicar</Badge>}
-          {fila?.estado === 'borrador' && <Badge tone="neutral">Borrador</Badge>}
-          {!!(fila?.insumo || '').trim() && fila?.estado !== 'aprobado' && <Badge tone="neutral">Con insumo</Badge>}
         </span>
       </div>
 
@@ -249,8 +282,38 @@ function FilaProducto({
             </div>
           </div>
 
-          <Field label="Insumo del local" hint="3 o 4 palabras: la tela y el detalle que la foto no dice. Ej: «gasa, botones nacarados».">
-            <Input value={insumo} onChange={(e) => setInsumo(e.target.value)} placeholder="gasa, botones nacarados" />
+          {/* ── La ficha: la carga el local y de acá salen los bullets ── */}
+          {!p.familia ? (
+            <Notice tone="danger">
+              Este producto no tiene categoría en TiendaNube (sólo «{p.categories.join(' / ') || 'ninguna'}»),
+              así que no se sabe qué prenda es ni qué preguntarle. <b>Ponele la categoría en la tienda</b> y
+              volvé a traer el catálogo.
+            </Notice>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>La ficha de la prenda</div>
+                <span style={{ fontSize: 12, color: '#666' }}>
+                  {cuenta.con} de {cuenta.total} · se guarda al elegir
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 10 }}>
+                {campos.map((a) => (
+                  <CampoAtributo
+                    key={a.key}
+                    label={a.label}
+                    libre={a.libre}
+                    valores={a.valores}
+                    valor={ficha[a.key] || ''}
+                    onElegir={(v) => onAtributo(a.key, v)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Field label="Insumo del local" hint="Lo que no entra en ningún campo y ayuda a escribir el párrafo. Ej: «llega esta semana, va con la campera Alpes».">
+            <Input value={insumo} onChange={(e) => setInsumo(e.target.value)} placeholder="opcional" />
           </Field>
           <div>
             <Button size="sm" disabled={guardando} onClick={() => void correr({ op: 'insumo', insumo })}>
@@ -271,7 +334,7 @@ function FilaProducto({
                   </Select>
                 </Field>
                 <Button size="sm" variant="outline" disabled={redactando} onClick={() => void pedirIa()}>
-                  {redactando ? 'Redactando…' : 'Redactar con IA'}
+                  {redactando ? 'Redactando…' : 'Escribir el párrafo con IA'}
                 </Button>
                 {ia && !ia.error && (
                   <span style={{ fontSize: 12, color: '#666' }}>
@@ -282,44 +345,19 @@ function FilaProducto({
               </Toolbar>
               {ia?.error && <Notice tone="danger">{ia.error}</Notice>}
 
-              <Field label={`Párrafo (máximo ${MAX_PARRAFO})`} hint="Una o dos frases. No nombres colores ni talles: los muestra el selector de variantes.">
-                <Input value={borrador.parrafo} onChange={(e) => setBorrador((b) => ({ ...b, parrafo: e.target.value }))} />
+              <Field
+                label={`Párrafo (${parrafo.trim().length} de ${MAX_PARRAFO})`}
+                hint="Arranca nombrando la prenda. No repitas lo que ya dicen los datos de la ficha."
+              >
+                <Input value={parrafo} onChange={(e) => setParrafo(e.target.value)} />
               </Field>
-
-              <div style={{ display: 'grid', gap: 6 }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>
-                  Bullets ({MIN_BULLETS} a {MAX_BULLETS}, máximo {MAX_BULLET} caracteres cada uno)
-                </div>
-                {borrador.bullets.map((b, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8 }}>
-                    <Select value={b.etiqueta} onChange={(e) => setBullet(i, 'etiqueta', e.target.value)} style={{ width: 130 }}>
-                      {ETIQUETAS.map((et) => (
-                        <option key={et} value={et}>{et}</option>
-                      ))}
-                    </Select>
-                    <Input value={b.texto} onChange={(e) => setBullet(i, 'texto', e.target.value)} placeholder="gasa liviana con caída" />
-                    <Button variant="ghost" size="sm" onClick={() => setBorrador((x) => ({ ...x, bullets: x.bullets.filter((_, j) => j !== i) }))}>
-                      ✕
-                    </Button>
-                  </div>
-                ))}
-                {borrador.bullets.length < MAX_BULLETS && (
-                  <div>
-                    <Button variant="ghost" size="sm" onClick={() => setBorrador((x) => ({ ...x, bullets: [...x.bullets, { etiqueta: 'Detalle', texto: '' }] }))}>
-                      + Agregar bullet
-                    </Button>
-                  </div>
-                )}
-              </div>
 
               {!vacio && problemas.length > 0 && (
                 <Notice tone="warning">
                   <b>Falta corregir:</b>
                   <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                     {problemas.map((x, i) => (
-                      <li key={i}>
-                        <b>{x.campo}</b>: {x.motivo}
-                      </li>
+                      <li key={i}>{x.motivo}</li>
                     ))}
                   </ul>
                 </Notice>
@@ -330,14 +368,14 @@ function FilaProducto({
                   <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Cómo va a quedar</div>
                   <div
                     style={{ border: '1px solid #eee', borderRadius: 6, padding: 10 }}
-                    dangerouslySetInnerHTML={{ __html: generarHtml(borrador) }}
+                    dangerouslySetInnerHTML={{ __html: generarHtml({ parrafo, bullets }) }}
                   />
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador })}>
-                  Guardar el borrador
+                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets } })}>
+                  Guardar el párrafo
                 </Button>
                 <Button
                   size="sm"
@@ -348,7 +386,7 @@ function FilaProducto({
                 </Button>
               </div>
               {!fila?.borrador && !vacio && (
-                <div style={{ fontSize: 12, color: '#666' }}>Para aprobar, primero guardá el borrador.</div>
+                <div style={{ fontSize: 12, color: '#666' }}>Para aprobar, primero guardá el párrafo.</div>
               )}
 
               {/* ── El único botón que sale a la tienda en vivo ── */}
@@ -420,5 +458,57 @@ function FilaProducto({
         </div>
       )}
     </Card>
+  )
+}
+
+/**
+ * Un campo de la ficha. Guarda **al elegir** y muestra el estado del guardado en el mismo lugar
+ * donde se eligió — no en un toast que tapa otra cosa y se va.
+ *
+ * ⚠️ El valor que se dibuja es el que confirmó el servidor (llega por prop), no el del `<select>`:
+ * si el guardado falla, el desplegable vuelve solo a lo que está guardado de verdad, en vez de
+ * quedar mostrando una elección que no existe en ningún lado.
+ */
+function CampoAtributo({
+  label, valores, valor, libre, onElegir,
+}: {
+  label: string
+  valores: string[]
+  valor: string
+  libre: boolean
+  onElegir: (v: string) => Promise<string | null>
+}) {
+  const [guardando, setGuardando] = useState(false)
+  const [texto, setTexto] = useState(valor)
+
+  const mandar = async (v: string) => {
+    setGuardando(true)
+    await onElegir(v)
+    setGuardando(false)
+  }
+
+  if (libre) {
+    return (
+      <Field label={label} hint="Texto libre. No entra en ningún conteo.">
+        <Input
+          value={texto}
+          disabled={guardando}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => { if (texto.trim() !== valor) void mandar(texto.trim()) }}
+          placeholder="argolla plateada en el medio"
+        />
+      </Field>
+    )
+  }
+
+  return (
+    <Field label={label}>
+      <Select value={valor} disabled={guardando} onChange={(e) => void mandar(e.target.value)}>
+        <option value="">— sin cargar —</option>
+        {valores.map((v) => (
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </Select>
+    </Field>
   )
 }

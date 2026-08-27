@@ -27,7 +27,7 @@ import {
   precioDe,
   redactar,
 } from '../lib/tn-desc/redactor.core.js'
-import { ETIQUETAS, MAX_PARRAFO } from '../lib/tn-desc/formato'
+import { MAX_PARRAFO, PRIMEROS } from '../lib/tn-desc/formato'
 import { bajarFoto, textoDeRespuesta, usoDe } from '../api/_tn-desc-ia.js'
 
 const CTX = {
@@ -38,15 +38,16 @@ const CTX = {
   categorias: ['NEW IN', 'Blusas'],
   prosaActual: '',
   imagen: 'https://acdn-us.mitiendanube.com/stores/004/445/369/products/mira-1024-1024.jpg',
+  // Los bullets ya compuestos por la ficha: el modelo NO los escribe, los recibe para no
+  // repetirlos. Los compone `lib/tn-desc/atributos.core.js`.
+  bullets: [
+    { etiqueta: 'Tela', texto: 'gasa' },
+    { etiqueta: 'Calce', texto: 'holgado' },
+  ],
 }
 
 const BUENO = {
-  parrafo: 'Una blusa liviana que cae sola y se pone con jean de día o con sastrero a la noche.',
-  bullets: [
-    { etiqueta: 'Tela', texto: 'gasa liviana con caída' },
-    { etiqueta: 'Calce', texto: 'holgado, sin marcar' },
-    { etiqueta: 'Detalle', texto: 'botones nacarados al frente' },
-  ],
+  parrafo: 'Blusa liviana que se pone con jean de día o con sastrero a la noche.',
 }
 
 type Pedido = { system: string; texto: string; imagen: string | null }
@@ -115,19 +116,19 @@ describe('el pedido que se arma', () => {
 })
 
 describe('el sistema dice las reglas que el esquema no puede', () => {
-  it('nombra los tres límites que el JSON Schema no soporta', () => {
+  it('nombra el largo, que el JSON Schema no soporta (`maxLength`)', () => {
     expect(SISTEMA).toContain(String(MAX_PARRAFO))
-    expect(SISTEMA).toContain('entre 3 y 4')
-    expect(SISTEMA).toContain('sin punto final')
   })
 
-  it('el esquema fija la lista cerrada de etiquetas, que sí puede', () => {
-    expect(ESQUEMA.properties.bullets.items.properties.etiqueta.enum).toEqual([...ETIQUETAS])
+  it('nombra las dos reglas nuevas: el arranque y la repetición', () => {
+    expect(SISTEMA).toContain(String(PRIMEROS))
+    expect(SISTEMA).toContain('«Este»')
+    expect(SISTEMA).toContain('No repitas')
   })
 
-  it('y fija el CONTEO de bullets, que es la única regla de formato que se cobra sin reintento', () => {
-    expect(ESQUEMA.properties.bullets.minItems).toBe(3)
-    expect(ESQUEMA.properties.bullets.maxItems).toBe(4)
+  it('🔑 el esquema es de UNA sola clave: los bullets ya no los escribe el modelo', () => {
+    expect(Object.keys(ESQUEMA.properties)).toEqual(['parrafo'])
+    expect(ESQUEMA.required).toEqual(['parrafo'])
   })
 
   it('sin `additionalProperties` en ningún nivel: Gemini devuelve 400 y no se redacta nada', () => {
@@ -179,15 +180,33 @@ describe('redactar', () => {
     expect(r.problemas.map((p: { campo: string }) => p.campo)).toContain('parrafo')
   })
 
-  it('una tela que no está en el insumo ni en el nombre se rechaza', async () => {
-    // Una foto de estudio no distingue gasa de voile, y la tela mal puesta es una devolución.
-    const inventada = {
-      ...BUENO,
-      bullets: [{ etiqueta: 'Tela', texto: 'voile de seda' }, ...BUENO.bullets.slice(1)],
-    }
-    const { llamar } = modeloFalso([inventada, inventada])
-    const r = await redactar({ ...CTX, insumo: '' }, llamar)
-    expect(r.problemas.map((p: { campo: string }) => p.campo)).toContain('bullet Tela')
+  it('🔑 la tela ya NO se puede inventar: no es una regla, es que el modelo no la escribe', async () => {
+    // Antes esto era el rechazo más caro del validador — una foto de estudio no distingue gasa
+    // de voile, y una tela mal puesta es una devolución. Hoy la tela sale de la ficha, elegida
+    // de una lista cerrada por alguien que tiene la prenda en la mano. No hay nada que rechazar.
+    const conTela = { parrafo: 'Blusa de voile de seda que cae sola y se pone con jean.' }
+    const { llamar } = modeloFalso([conTela, conTela])
+    const r = await redactar({ ...CTX, insumo: '', bullets: [{ etiqueta: 'Tela', texto: 'gasa' }] }, llamar)
+    // Lo que sí se rechaza es que el párrafo repita lo que el bullet ya dice.
+    expect(r.problemas.map((p: { motivo: string }) => p.motivo).join(' ')).not.toContain('tela')
+    expect(r.borrador).toEqual(conTela)
+  })
+
+  it('🆕 el párrafo que repite lo que dice un bullet se rechaza y se reintenta', async () => {
+    const repetido = { parrafo: 'Blusa de gasa liviana, se pone con jean de día.' }
+    const { llamar, pedidos } = modeloFalso([repetido, BUENO])
+    const r = await redactar(CTX, llamar)
+    expect(r.intentos).toBe(2)
+    expect(r.problemas).toEqual([])
+    // Y el reintento le dijo exactamente qué repitió.
+    expect(pedidos[1].texto).toContain('repite lo que ya dicen los bullets')
+  })
+
+  it('🆕 el párrafo que arranca con «Este» se rechaza', async () => {
+    const demostrativo = { parrafo: 'Esta blusa se pone con jean de día o con sastrero a la noche.' }
+    const { llamar } = modeloFalso([demostrativo, demostrativo])
+    const r = await redactar(CTX, llamar)
+    expect(r.problemas.map((p: { motivo: string }) => p.motivo).join(' ')).toContain('arranca con «esta»')
   })
 
   it('una respuesta que no es JSON sale con un error legible, no con un borrador vacío', async () => {
@@ -214,17 +233,17 @@ describe('redactar', () => {
 })
 
 describe('interpretar', () => {
-  it('rellena un bullet incompleto en vez de romper', () => {
+  it('lee el párrafo y nada más: los bullets que mande el modelo se ignoran', () => {
     const r = interpretar('{"parrafo":"hola","bullets":[{"etiqueta":"Tela"}]}')
-    expect(r.borrador?.bullets[0]).toEqual({ etiqueta: 'Tela', texto: '' })
+    expect(r.borrador).toEqual({ parrafo: 'hola' })
   })
 
   it('un array pelado no es un borrador', () => {
     expect(interpretar('[]')).toEqual({ error: 'el modelo no devolvió un objeto' })
   })
 
-  it('sin bullets es un error, no una lista vacía', () => {
-    expect(interpretar('{"parrafo":"hola"}')).toEqual({ error: 'la respuesta no trae una lista de bullets' })
+  it('sin párrafo es un error, no un texto vacío', () => {
+    expect(interpretar('{"bullets":[]}')).toEqual({ error: 'la respuesta no trae un párrafo' })
   })
 })
 
@@ -261,8 +280,10 @@ describe('el costo, que es el número con el que se elige el modelo', () => {
 })
 
 describe('el modelo se elige de la lista', () => {
-  it('el default es Flash 3.7: el que arranca la comparación', () => {
-    expect(MODELO_POR_DEFECTO).toBe('gemini-3.7-flash')
+  it('🔑 el default es el MÁS BARATO (decisión de Bruno, 27-ago-2026)', () => {
+    // El catálogo entero sale US$0,31 contra US$1,16 de Flash 3.7 — y es el único de los tres
+    // sin precio promocional, así que en enero la diferencia se agranda en vez de achicarse.
+    expect(MODELO_POR_DEFECTO).toBe('gemini-3.1-flash-lite')
     expect(MODELOS[MODELO_POR_DEFECTO]).toBeTruthy()
   })
 

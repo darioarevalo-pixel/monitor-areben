@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { apiFetch } from '@/lib/api-fetch'
 import { prosaDe, type Prosa } from '@/lib/tn-desc/prosa'
+import { familiaDe, type Atributo, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
 import type { Borrador } from '@/lib/tn-desc/formato'
 
 /**
@@ -32,6 +33,10 @@ export type ProductoTn = {
   imagenes: { id: string; src: string }[]
   /** Los valores de todas las variantes (colores y talles). De acá sale lo que NO se nombra. */
   variantes: string[]
+  /** Alta en TiendaNube. Es lo que separa «lo que entró esta tanda» de los 328 de siempre. */
+  created_at: string
+  /** La familia del diccionario. `null` = le falta la categoría en la tienda. */
+  familia: Familia | null
   prosa: Prosa
 }
 
@@ -69,6 +74,8 @@ function normalizar(p: any): ProductoTn {
     image_count: p?.image_count ?? 0,
     imagenes: (p?.imagenes || []).filter((i: any) => i?.src),
     variantes: [...new Set(valores)],
+    created_at: String(p?.created_at ?? ''),
+    familia: familiaDe(p?.categories || []),
     prosa: prosaDe(p?.raw_desc),
   }
 }
@@ -108,6 +115,8 @@ export type EstadoGenDesc = {
   cargando: boolean
   productos: ProductoTn[]
   cola: Record<string, FilaCola>
+  /** La ficha de cada producto: `{tn_id: {atributo: valor}}`. De acá salen los bullets. */
+  atributos: Record<string, Cargados>
   /** ¿El perfil puede aprobar y publicar, o sólo cargar el insumo? Lo dice el servidor. */
   puedePublicar: boolean
   error: string | null
@@ -117,6 +126,7 @@ export type EstadoGenDesc = {
 async function leerTodo(marca: Marca): Promise<EstadoGenDesc> {
   let error: string | null = null
   let cola: Record<string, FilaCola> = {}
+  let atributos: Record<string, Cargados> = {}
   let puedePublicar = false
   try {
     const [, r] = await Promise.all([bajarAudit(marca), apiFetch(`${COLA}&store=${marca}`)])
@@ -125,11 +135,12 @@ async function leerTodo(marca: Marca): Promise<EstadoGenDesc> {
     else {
       puedePublicar = !!d.puedePublicar
       cola = Object.fromEntries(((d.filas || []) as FilaCola[]).map((f) => [String(f.tn_id), f]))
+      atributos = (d.atributos || {}) as Record<string, Cargados>
     }
   } catch (e) {
     error = e instanceof Error ? e.message : 'No se pudo leer la cola.'
   }
-  return { cargando: false, productos: cacheProductos[marca] || [], cola, puedePublicar, error }
+  return { cargando: false, productos: cacheProductos[marca] || [], cola, atributos, puedePublicar, error }
 }
 
 export function useGenDesc(marca: Marca) {
@@ -137,6 +148,7 @@ export function useGenDesc(marca: Marca) {
     cargando: true,
     productos: [],
     cola: {},
+    atributos: {},
     puedePublicar: false,
     error: null,
   })
@@ -191,6 +203,42 @@ export function useGenDesc(marca: Marca) {
       }
     },
     [marca, cargar],
+  )
+
+  /**
+   * Guarda UN atributo de la ficha. Devuelve el error o `null`.
+   *
+   * 🔑 **Se guarda al elegir, sin botón.** Son 6 desplegables por producto: un botón «Guardar»
+   * que junta los seis es un botón que alguien no aprieta, y ahí se pierde la ficha entera. Es
+   * la misma lección que la nota que se perdió en MAKETA — la red va abajo del campo, no arriba.
+   *
+   * ⚠️ Y **no** recarga la cola después de escribir, a diferencia de `guardar`: recargar el
+   * catálogo entero seis veces seguidas mientras alguien completa una ficha haría que la
+   * pantalla parpadee en cada elección. El estado local se actualiza con lo que confirmó el
+   * servidor (`d.valor`), que es lo que quedó guardado — no lo que el `<select>` creía tener.
+   */
+  const guardarAtributo = useCallback(
+    async (tnId: string, familia: Familia, atributo: Atributo, valor: string, nombre?: string): Promise<string | null> => {
+      try {
+        const r = await apiFetch(COLA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'atributos', familia, atributo, valor, nombre }),
+        })
+        const d = await r.json()
+        if (!r.ok || !d?.ok) return d?.error || `Error ${r.status}`
+        setEstado((e) => {
+          const ficha = { ...(e.atributos[tnId] || {}) }
+          if (d.valor) ficha[atributo] = d.valor as string
+          else delete ficha[atributo]
+          return { ...e, atributos: { ...e.atributos, [tnId]: ficha } }
+        })
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : 'No se pudo guardar.'
+      }
+    },
+    [marca],
   )
 
   /**
@@ -252,5 +300,5 @@ export function useGenDesc(marca: Marca) {
     [marca, cargar],
   )
 
-  return { ...estado, cargar, refrescar, guardar, redactar, publicar }
+  return { ...estado, cargar, refrescar, guardar, guardarAtributo, redactar, publicar }
 }

@@ -15,22 +15,27 @@ const llamadas: string[] = []
 let escrito: Record<string, unknown> | null = null
 /** Cada `update` por separado: el orden de los pasos ES la regla en `publicar`. */
 const updates: Record<string, unknown>[] = []
+/** Cada `upsert` por separado. `op:'atributos'` escribe DOS: el atributo y la familia. */
+const upserts: Record<string, unknown>[] = []
 /** Lo que la base contesta al buscar la fila. `null` = la fila existe pero sin borrador. */
 let filaGuardada: Record<string, unknown> | null = { borrador: { parrafo: 'x', bullets: [] } }
 
-function tabla() {
+/** La ficha guardada del producto. De acá salen los bullets que se publican. */
+let atributosGuardados: { atributo: string; valor: string }[] = []
+
+function tabla(nombre?: string) {
   const q: Record<string, unknown> = {
     select: () => q, eq: () => q, order: () => q,
     maybeSingle: async () => ({ data: filaGuardada, error: null }),
-    upsert: async (fila: Record<string, unknown>) => { llamadas.push('upsert'); escrito = fila; return { error: null } },
+    upsert: async (fila: Record<string, unknown>) => { llamadas.push('upsert'); upserts.push(fila); escrito = fila; return { error: null } },
     update: (fila: Record<string, unknown>) => { llamadas.push('update'); updates.push(fila); escrito = fila; return q },
     delete: () => { llamadas.push('delete'); return q },
-    then: (r: (v: unknown) => void) => r({ data: [], error: null }),
+    then: (r: (v: unknown) => void) => r({ data: nombre === 'tn_atributos' ? atributosGuardados : [], error: null }),
   }
   return q
 }
 
-vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => tabla() }) }))
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => tabla(t) }) }))
 
 function resFalso() {
   const r = {
@@ -81,7 +86,9 @@ async function llamar(req: unknown) {
 beforeEach(() => {
   llamadas.length = 0
   updates.length = 0
+  upserts.length = 0
   escrito = null
+  atributosGuardados = []
   filaGuardada = { borrador: { parrafo: 'x', bullets: [] } }
   vi.resetModules()
   vi.stubEnv('ZATTIA_SUPABASE_URL', 'https://x.supabase.co')
@@ -105,6 +112,61 @@ describe('el local carga el insumo sin poder publicar', () => {
     }
     // ⛔ Y ninguna de las tres llegó a escribir: el 403 sale ANTES de tocar la base.
     expect(llamadas).toEqual([])
+  })
+})
+
+describe('🆕 la ficha de atributos: la carga el local, con lista cerrada', () => {
+  it('🔑 `atributos` NO pide el permiso de aprobar, igual que el insumo', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'tela', valor: 'morley' }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ atributo: 'tela', valor: 'morley', por: 'Local' })
+  })
+
+  it('🔴 un valor que no está en la lista de esa familia se rechaza EN EL SERVIDOR', async () => {
+    // El `<select>` es una comodidad del que carga. Lo único que separa una lista cerrada de un
+    // campo de texto —y con eso, un catálogo que se puede sumar de uno que no— es este chequeo.
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'calce', valor: 'wide leg' }))
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('no es un valor de calce para tops')
+    expect(llamadas).toEqual([])
+  })
+
+  it('una familia o un atributo inventados mueren en 400 sin tocar la base', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'atributos', familia: 'mueble', atributo: 'tela', valor: 'lino' }))).code).toBe(400)
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'vibra', valor: 'linda' }))).code).toBe(400)
+    expect(llamadas).toEqual([])
+  })
+
+  it('⛔ vacío BORRA la fila en vez de guardar un valor vacío', async () => {
+    // Un '' contaría como cargado en el «4/6» y saldría en cualquier group by como una
+    // categoría más. Destildar tiene que dejar la ficha como estaba antes de tocarla.
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'tela', valor: '' }))
+    expect(res.code).toBe(200)
+    expect(res.body?.valor).toBeNull()
+    expect(llamadas).toContain('delete')
+    expect(llamadas).not.toContain('upsert')
+  })
+
+  it('🔑 guarda la FAMILIA en la cola: sin eso, publicar no sabría qué lista mirar', async () => {
+    sesionDe(LOCAL)
+    await llamar(post({ op: 'atributos', familia: 'pantalon', atributo: 'tiro', valor: 'tiro alto', nombre: 'JEAN DUSK' }))
+    // Dos upserts: el atributo y la fila de la cola con su familia.
+    expect(upserts).toHaveLength(2)
+    expect(upserts[0]).toMatchObject({ atributo: 'tiro', valor: 'tiro alto' })
+    expect(upserts[1]).toMatchObject({ familia: 'pantalon', nombre: 'JEAN DUSK' })
+  })
+
+  it('el detalle es libre, pero tiene tope', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'detalle', valor: 'argolla plateada' }))).code).toBe(200)
+    sesionDe(LOCAL)
+    const largo = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'detalle', valor: 'x'.repeat(61) }))
+    expect(largo.code).toBe(400)
   })
 })
 
@@ -207,7 +269,13 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     )
   }
 
-  const APROBADA = { borrador: { parrafo: 'Camisa de gasa liviana.', bullets: [{ etiqueta: 'Tela', texto: 'gasa' }] }, estado: 'aprobado' }
+  // ⚠️ El borrador guardado trae bullets (los compuestos al aprobar), pero **no son los que se
+  // publican**: al publicar se recomponen desde `tn_atributos`. Ver el test de abajo.
+  const APROBADA = {
+    borrador: { parrafo: 'Camisa de gasa liviana.', bullets: [{ etiqueta: 'Tela', texto: 'VIEJO' }] },
+    estado: 'aprobado',
+    familia: 'tops',
+  }
 
   beforeEach(() => {
     filaGuardada = { ...APROBADA }
@@ -252,6 +320,23 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     expect(nuevo).toContain('<!--AREBEN-TALLES-INI--><table><tr><td>S</td></tr></table><!--AREBEN-TALLES-FIN-->')
     expect(nuevo).toContain('<h5>Top de red.</h5>') // el residuo se conserva por defecto
     expect(mandado.hashPrevio).toBe('HASH-1') // el compare-and-swap viaja
+  })
+
+  it('🔑 los bullets se componen desde la FICHA, no salen del borrador guardado', async () => {
+    // La ficha es el dato vivo: si alguien la corrigió después de aprobar el texto, lo que sale
+    // a la tienda tiene que ser la corrección. El párrafo sí sale del borrador aprobado.
+    atributosGuardados = [
+      { atributo: 'largo', valor: 'crop' },
+      { atributo: 'tela', valor: 'morley' },
+    ]
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar' }))
+    const nuevo = String(mandado.nuevo)
+    expect(nuevo).toContain('<b>Tela:</b> morley')
+    expect(nuevo).toContain('<b>Largo:</b> crop')
+    expect(nuevo).not.toContain('VIEJO')
+    // Y en el orden canónico, no en el de carga.
+    expect(nuevo.indexOf('Tela:')).toBeLessThan(nuevo.indexOf('Largo:'))
   })
 
   it('destildar «conservar» tira el residuo, pero NUNCA la tabla', async () => {

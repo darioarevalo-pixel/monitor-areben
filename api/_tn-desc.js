@@ -1,8 +1,9 @@
 // La cola de redacción de descripciones de producto — tabla tn_descripciones
 // (ver sql/migrate-tn-descripciones.sql).
 //
-//   GET  ?recurso=tn-desc&store=zattia                              → { ok, filas: [...] }
+//   GET  ?recurso=tn-desc&store=zattia                              → { ok, filas, atributos }
 //   POST { recurso:'tn-desc', store, tn_id, nombre?, op:'insumo',   insumo }
+//   POST { recurso:'tn-desc', store, tn_id, op:'atributos', familia, atributo, valor }
 //   POST { recurso:'tn-desc', store, tn_id, op:'borrador', borrador:{parrafo,bullets} }
 //   POST { recurso:'tn-desc', store, tn_id, op:'aprobar' }
 //   POST { recurso:'tn-desc', store, tn_id, op:'publicar', conservarResiduo? }
@@ -28,6 +29,10 @@ import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna, puedeSub, esAdmin } from '../lib/permisos.core.js';
 import { generarHtml } from '../lib/tn-desc/formato.core.js';
 import { componer, conservaLaTabla } from '../lib/tn-desc/bloques.core.js';
+import { ATRIBUTOS, FAMILIAS, bulletsDe, esValor } from '../lib/tn-desc/atributos.core.js';
+
+/** El único campo libre de la ficha. El tope es el mismo que tenía un bullet escrito a mano. */
+const MAX_DETALLE = 60;
 
 // El repo que tiene el token de TiendaNube. El monitor NUNCA habla con TiendaNube directo:
 // las credenciales de la tienda viven de aquel lado y de uno solo.
@@ -97,7 +102,22 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { data, error } = await supabase.from('tn_descripciones').select(COLUMNAS).eq('store', store);
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, filas: data || [], puedePublicar });
+
+      // Los atributos viajan en la MISMA respuesta y no en un endpoint aparte: la pantalla los
+      // necesita para dibujar cada fila (el contador «4/6») y para componer el bullet, así que
+      // dos llamadas serían dos estados que se pueden desincronizar por medio segundo.
+      const { data: attrs, error: eAttrs } = await supabase
+        .from('tn_atributos')
+        .select('tn_id, atributo, valor')
+        .eq('store', store);
+      if (eAttrs) throw new Error(eAttrs.message);
+      const atributos = {};
+      for (const a of attrs || []) {
+        const id = String(a.tn_id);
+        (atributos[id] || (atributos[id] = {}))[a.atributo] = a.valor;
+      }
+
+      return res.status(200).json({ ok: true, filas: data || [], atributos, puedePublicar });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no soportado' });
@@ -130,6 +150,60 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('tn_descripciones').upsert(fila, { onConflict: 'store,tn_id' });
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    // La ficha de atributos la carga el local, igual que el insumo: elegir de una lista es
+    // gratis y reversible, y es el dato del que sale el bullet. Tampoco pide `publicar`.
+    //
+    // Un atributo por llamada y no la ficha entera a propósito: son 6 desplegables y se guarda
+    // al elegir cada uno. Un botón «Guardar» que junta los seis es un botón que alguien no
+    // aprieta, y ahí se pierde la carga de un producto entero.
+    if (op === 'atributos') {
+      const familia = String(body.familia || '');
+      const atributo = String(body.atributo || '');
+      if (!FAMILIAS[familia]) return res.status(400).json({ error: `familia desconocida: ${familia}` });
+      if (!ATRIBUTOS[atributo]) return res.status(400).json({ error: `atributo desconocido: ${atributo}` });
+
+      const valor = String(body.valor == null ? '' : body.valor).trim();
+
+      // Vacío = lo destildaron. Se borra la fila en vez de guardar '' — un valor vacío contaría
+      // como cargado en el `4/6` y saldría en cualquier `group by` como una categoría más.
+      if (!valor) {
+        const { error } = await supabase
+          .from('tn_atributos')
+          .delete()
+          .eq('store', store)
+          .eq('tn_id', tnId)
+          .eq('atributo', atributo);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, valor: null });
+      }
+
+      // 🔴 La lista cerrada la chequea el SERVIDOR, no el `<select>`. Un desplegable es una
+      // comodidad del que carga; lo único que separa una lista cerrada de un campo de texto
+      // —y con eso, un catálogo que se puede sumar de uno que no— es este `if`.
+      if (!esValor(familia, atributo, valor)) {
+        return res.status(400).json({ error: `«${valor}» no es un valor de ${atributo} para ${familia}` });
+      }
+      if (atributo === 'detalle' && valor.length > MAX_DETALLE) {
+        return res.status(400).json({ error: `el detalle tiene ${valor.length} caracteres y el máximo es ${MAX_DETALLE}` });
+      }
+
+      const { error } = await supabase
+        .from('tn_atributos')
+        .upsert({ store, tn_id: tnId, atributo, valor, por: yo, at: ahora }, { onConflict: 'store,tn_id,atributo' });
+      if (error) throw new Error(error.message);
+
+      // 🔑 La familia se guarda en la cola en cada carga. El servidor no ve las categorías de
+      // TiendaNube —las tiene el navegador, que ya bajó el catálogo— y sin esto el paso que
+      // publica no sabría contra qué lista componer el bullet. `nombre` sólo si vino: pisarlo
+      // con null dejaría la cola sin nombre para el que la abra después.
+      const cola = { store, tn_id: tnId, familia, updated_at: ahora };
+      if (body.nombre != null) cola.nombre = String(body.nombre);
+      const { error: eCola } = await supabase.from('tn_descripciones').upsert(cola, { onConflict: 'store,tn_id' });
+      if (eCola) throw new Error(eCola.message);
+
+      return res.status(200).json({ ok: true, valor });
     }
 
     if (!puedePublicar) return res.status(403).json({ error: 'Esta acción pide el permiso de aprobar y publicar.' });
@@ -190,7 +264,7 @@ export default async function handler(req, res) {
       // guardado — no de lo que mande el navegador: lo que se aprobó es lo que se publica.
       const { data: fila, error: eFila } = await supabase
         .from('tn_descripciones')
-        .select('borrador, estado')
+        .select('borrador, estado, familia')
         .eq('store', store)
         .eq('tn_id', tnId)
         .maybeSingle();
@@ -199,6 +273,20 @@ export default async function handler(req, res) {
       if (fila.estado !== 'aprobado') {
         return res.status(400).json({ error: `sólo se publica un borrador aprobado (esta fila está en «${fila.estado}»)` });
       }
+
+      // 🔑 Los bullets se componen ACÁ, desde la ficha guardada — no vienen del borrador ni del
+      // navegador. Es la misma razón por la que el párrafo sale del borrador guardado: lo que se
+      // publica tiene que ser lo que está en la base, y no lo que la pantalla creía tener.
+      // La familia se guarda en la fila (`op:'atributos'`) porque el servidor no ve las
+      // categorías de TiendaNube y sin ella no sabría qué lista mirar.
+      const { data: attrs, error: eAttrs } = await supabase
+        .from('tn_atributos')
+        .select('atributo, valor')
+        .eq('store', store)
+        .eq('tn_id', tnId);
+      if (eAttrs) throw new Error(eAttrs.message);
+      const cargados = Object.fromEntries((attrs || []).map((a) => [a.atributo, a.valor]));
+      const bullets = bulletsDe(fila.familia, cargados);
 
       // 1. Leer la descripción FRESCA de TiendaNube. No sale del audit, que está cacheado: lo
       //    que se lee acá es lo que se va a respaldar y lo que se va a comparar antes de pisar.
@@ -212,7 +300,7 @@ export default async function handler(req, res) {
       const actual = typeof dLeer.html === 'string' ? dLeer.html : '';
 
       // 2. Componer. Una sola vez y en un lugar solo (`lib/tn-desc/bloques.core.js`).
-      const nuevo = componer(actual, generarHtml(fila.borrador), { conservarResiduo });
+      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets }), { conservarResiduo });
       if (!conservaLaTabla(actual, nuevo)) {
         return res.status(500).json({ error: 'La composición se come la tabla de talles. No se escribió nada.' });
       }

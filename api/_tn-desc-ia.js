@@ -1,8 +1,12 @@
 // El redactor: le pide a Gemini el borrador de UN producto y lo devuelve validado.
 //
 //   POST { recurso:'tn-desc-ia', store, tn_id, nombre, insumo?, variantes?, categorias?,
-//          prosaActual?, imagen?, modelo? }
+//          prosaActual?, imagen?, bullets?, modelo? }
 //     → { ok, borrador, problemas, intentos, modelo, uso, costo }
+//
+// 🔑 Desde el 27-ago-2026 devuelve SÓLO `{parrafo}`: los bullets se componen desde la ficha de
+// atributos y no los escribe nadie. `bullets` entra como CONTEXTO —los datos que ya están
+// escritos abajo— para que el párrafo no los repita.
 //
 // 🔴 **Es el único endpoint del monitor que gasta plata por apretar un botón.** Por eso pide
 // el sub `gen-desc.publicar` —el mismo que aprobar— y no alcanza con ver la sección: cargar
@@ -43,6 +47,21 @@ const URL_API = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
 /** Techo por respuesta. El borrador entero son ~200 palabras: 2.000 sobra y acota un desborde. */
 const MAX_TOKENS = 2000;
+
+/**
+ * Los bullets que ya tiene la ficha, limpios. Lo que manda el navegador no se usa crudo:
+ * entran al prompt, así que un objeto cualquiera acá sería texto arbitrario adentro del pedido.
+ */
+function bulletsDe(x) {
+  if (!Array.isArray(x)) return [];
+  return x
+    .map((b) => ({
+      etiqueta: String((b && b.etiqueta) || '').trim().slice(0, 30),
+      texto: String((b && b.texto) || '').trim().slice(0, 80),
+    }))
+    .filter((b) => b.etiqueta && b.texto)
+    .slice(0, 10);
+}
 
 /** Una lista de textos, limpia. Lo que manda el navegador no se usa crudo. */
 function textos(x, tope) {
@@ -265,6 +284,10 @@ export default async function handler(req, res) {
     categorias: textos(body.categorias, 10),
     prosaActual: String(body.prosaActual || '').trim().slice(0, 1200),
     imagen: imagenValida(body.imagen),
+    // Los bullets ya compuestos por `lib/tn-desc/atributos.core.js`. Vienen del navegador igual
+    // que las variantes y la prosa actual: no deciden nada que se guarde —este endpoint no
+    // guarda— y lo único que cambian es qué NO tiene que repetir el párrafo.
+    bullets: bulletsDe(body.bullets),
   };
 
   const llamar = llamador(modelo, clave);

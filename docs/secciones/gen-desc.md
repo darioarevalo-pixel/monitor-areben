@@ -6,14 +6,21 @@ pero **es una sección aparte con su propio permiso**, igual que la Tabla de tal
 
 ## Por qué existe, con los números que la justifican
 
-Medido contra la tienda viva el **19-ago-2026** (706 productos en TiendaNube, **369 publicados**):
+Medido contra la tienda viva el **27-ago-2026** (706 productos en TiendaNube, **328 publicados**):
 
 | | |
 |---|---|
-| publicados **sin una sola palabra de prosa** | **41** (40 con la descripción del todo vacía) |
-| publicados con menos de 120 caracteres | **237** (232 caen entre 30 y 120) |
-| publicados con 120 o más | 91 |
+| publicados **sin una sola palabra de prosa** | **44** |
+| publicados con menos de 120 caracteres | **194** |
+| publicados con 120 o más | 90 |
 | publicados **sin ninguna foto** | **0** — siempre hay imagen |
+| mudos creados hace **≤14 días** | **0** ⚠️ |
+| mudos de **las dos últimas tandas** (15 y 27 días) | **41 de los 44** |
+
+⚠️ **«Los últimos 14 días» no corta nada, y por eso el filtro de la pantalla va por TANDAS.** La
+mercadería entra de golpe, no de a poco: un umbral en días habría mostrado una lista vacía justo el
+día que había 41 productos para cargar. `ultimasTandas()` toma las dos **fechas de alta** más
+recientes.
 
 **La categoría dominante de los vacíos es NEW IN**: el problema pega en los ingresos. Un
 producto entra, se publica, y sale a la calle mudo.
@@ -22,23 +29,102 @@ Y el formato base **no existía**, también medido: de 369 publicados **uno solo
 VIENNA) tenía formato rico, cero decían la composición, y convivían tres dialectos —
 «Disponible en…» (58), «Colores disponibles:» (8), «Talle único» (3).
 
-## Las tres decisiones de Bruno, y dónde viven
+## Las decisiones de Bruno, y dónde viven
 
-Las tomó el 19-ago-2026. No se deducen del código, por eso están acá y con test.
+No se deducen del código, por eso están acá y con test.
 
-1. **El formato**: un párrafo que vende (≤220) + 3 o 4 bullets duros (≤60, sin punto final),
-   con etiqueta de una lista cerrada. → `lib/tn-desc/formato.ts`
+### 19-ago-2026 — el formato
+
+1. **Un párrafo que vende (≤220) + datos duros abajo.** → `lib/tn-desc/formato.core.js`
 2. **No se nombran colores ni talles.** Los muestra el selector de variantes, y el texto se
    desactualiza solo. 🔴 **No es teórico**: TOP EMBER promete «beige, negro y blanco» y las
    variantes son blanco y negro; FAJA CLEO promete «negro y marrón» y sólo existe marrón. Los
    dos son casos de `tests/tn-desc-formato.test.ts`.
-3. **La tela es dato, no adivinanza.** Para los 41 vacíos alguien del local tipea 3-4 palabras
-   («gasa, botones nacarados») y de ahí sale. Un bullet de `Tela` que no se apoye en el insumo
-   o en el nombre se rechaza: una foto de estudio no distingue gasa de voile, y una tela mal
-   puesta es un cambio o una devolución.
+3. **La tela es dato, no adivinanza.** Una foto de estudio no distingue gasa de voile, y una tela
+   mal puesta es un cambio o una devolución.
 
-📌 De los 237 cortos, **163 ya nombran una tela** («microfibra», «morley», «jersey 20/1»): ésos
-no necesitan que nadie tipee nada. El insumo a mano es sobre todo para los 41.
+### 🔴 27-ago-2026 — los bullets dejan de ser prosa
+
+**«Los bullets no son redacción, son atributos.»** Es la decisión que dio vuelta el módulo, y la
+tomó Bruno mirando la primera corrida real. Hasta ese día el modelo escribía `{parrafo, bullets}` y
+un validador los sostenía: etiqueta de una lista cerrada, 3 o 4, ≤60 caracteres, sin repetir, con
+la tela apoyada en el insumo. O sea, **una tabla escrita en prosa con un validador haciendo de
+esquema** — y un reintento pagado cada vez que el modelo se salía.
+
+Hoy los bullets se **componen** desde la ficha que carga el local, de una lista cerrada
+(`lib/tn-desc/atributos.core.js`). Una etiqueta inválida, repetida, fuera de orden o una tela
+inventada **dejaron de poder ocurrir**. 🔑 Es la diferencia entre una regla mejor escrita y un caso
+que se vuelve imposible.
+
+⛔ **Y el motivo de fondo es más grande que las descripciones**: con listas cerradas el catálogo se
+puede SUMAR («qué escote se vendió más», «cuánto del catálogo es denim rígido»), que es el dato que
+hoy no existe para decidir qué producir. Por eso el valor **no puede** ser texto libre: cinco
+maneras de escribir lo mismo son cinco filas distintas.
+
+Las otras cuatro de ese día, todas medidas contra la corrida real:
+
+4. **El párrafo arranca por el tipo de prenda**, nunca por «Este/Esta». Los tres productos de la
+   primera corrida arrancaron con «Este top», «Este sweater», «Esta prenda» — y el peor ni
+   nombraba la camisa. Los primeros **60 caracteres** son los que se ven en el feed.
+   ⚠️ Un artículo («Un jean de corte amplio…») **no** se rechaza: ya dice la prenda.
+5. **Cero repetición con los bullets.** TOP BLISS escribió «diseño asimétrico» y «manga ancha» en
+   el párrafo y los repitió en dos bullets. Son 220 caracteres.
+6. **El orden de los bullets es fijo**, por la lista canónica. Salieron en tres órdenes distintos
+   para tres productos. 🔑 Esta regla **no está en el validador**: la resuelve el render.
+7. **El modelo por defecto es el más barato** (Flash Lite): el catálogo entero sale **US$0,31**
+   contra US$1,16, y es el único de los tres sin precio promocional.
+
+## La ficha de atributos — el diccionario de prendas
+
+`lib/tn-desc/atributos.core.js` (`.js` plano: lo importan los dos handlers) y la tabla
+`tn_atributos` (`sql/migrate-tn-atributos.sql`, RLS prendido y sin políticas).
+
+**Seis familias**, que salen de la categoría de TiendaNube. Medido el 27-ago-2026: cubren **326 de
+los 328 publicados**.
+
+| familia | publicados | qué se le pide |
+|---|---|---|
+| Tops y bodies | 179 | Tela · Calce · Silueta · Escote/cuello · Manga · Largo |
+| Abrigo | 41 | ídem |
+| Short, mini y falda | 40 | Tela · Calce · Tiro · Largo |
+| Pantalón y jean | 36 | ídem |
+| Vestidos y monos | 19 | Tela · Calce · Silueta · Escote/cuello · Manga · Largo |
+| Accesorios | 11 | ⛔ fuera de alcance: no comparten un atributo con una prenda |
+
+🔴 **Las categorías de TiendaNube vienen SUCIAS** y por eso se normalizan en un solo lugar:
+conviven `SHORTS, MINIS y FALDAS` con `SHORTS, MINIS Y FALDAS`, `BLAZER` con `BLAZERS`, y `DENIM `
+trae **un espacio al final**. Sin `normalizarCategoria`, tres familias quedarían partidas en dos.
+
+⚠️ **Dos productos no tienen familia y no es un agujero del mapa**: `BERMUDA HAYDEN` y
+`BERMUDA TIDE` están cargados en TiendaNube **sólo como «NEW IN»**. `familiaDe` devuelve `null` y
+la pantalla lo dice — pedirle atributos a un producto del que no se sabe qué es sería inventar.
+
+**Lo que hay que saber para tocarlo:**
+
+- 🔑 **`Silueta` es un campo APARTE de `Calce`**, y lo dio vuelta Bruno: «entallado» y «oversize»
+  no son alternativas — un sweater puede ser las dos cosas. Metidos en una lista, esa prenda
+  tendría que elegir cuál de las dos es.
+- 🔑 **Escote y cuello son UN campo y dos etiquetas.** Se carga una vez —qué tiene arriba— y el
+  bullet sale «Cuello: polera» o «Escote: en V» según el valor (`etiquetaDeBullet`). Preguntar las
+  dos cosas obligaría a dejar una vacía siempre.
+- 🔑 **El valor guarda la palabra del local** («manga larga», «tiro alto») porque es la que se
+  elige y la que se va a agrupar. El bullet le saca la etiqueta repetida (`textoDeBullet`), así no
+  hay que elegir entre un desplegable claro y una ficha bien escrita.
+- ⛔ **`tela: 'no identifico'` se guarda y NO sale a la ficha.** «Alguien lo miró y no supo» es
+  distinto de «nadie lo cargó», y esa diferencia es la que dice si hay que volver a mirar la prenda.
+- ⛔ **`detalle` es el único campo libre y queda FUERA de todo análisis.** Es el escape para lo que
+  no entra en ninguna lista, y va último en el bullet por la misma razón: es lo menos comparable.
+- 🔴 **La lista cerrada la chequea el SERVIDOR** (`op:'atributos'`), no el `<select>`. Y el que
+  compone **vuelve a preguntar**: un valor que no es de la familia no se dibuja aunque esté
+  guardado. Un desplegable es una comodidad del que carga, no un candado.
+- 🔑 **Se guarda al elegir, sin botón.** Son seis desplegables: un «Guardar» que los junta es un
+  botón que alguien no aprieta, y ahí se pierde la ficha entera.
+- 🔑 **`tn_descripciones.familia` se escribe en cada carga** porque el servidor **no ve las
+  categorías de TiendaNube** — las tiene el navegador, que ya bajó el catálogo. Sin ese campo, el
+  paso que publica no sabría contra qué lista componer.
+- ⚠️ **Una fila por (producto, atributo)** y no una columna por atributo: agregar un atributo no es
+  una migración, el análisis es un `group by`, y queda registrado **quién cargó cada valor** (con
+  una columna por atributo, `por` diría sólo el último y taparía a los demás).
 
 ## Lo que muerde
 
@@ -81,15 +167,17 @@ pantalla, ni el validador, ni `bloques.ts`. Sólo cambió de dónde vienen `{par
   monitor que **gasta plata por apretar un botón**, así que pide el sub `gen-desc.publicar`, el
   mismo que aprobar. ⛔ No guarda: devuelve el borrador y se para.
 
-🔴 **El reintento es carga estructural, igual que `validarBorrador`.** El esquema fija la FORMA
-(que venga un `parrafo` y bullets con etiqueta de la lista cerrada) y —desde Gemini— **el conteo
-de bullets**, pero `maxLength` no está soportado: «hasta 220 caracteres» no se puede pedir ahí, y
-«no nombres los colores de ESTE producto» menos. Cuando el validador rechaza, los problemas
-vuelven al modelo —**todos juntos**— y se pide de nuevo. Dos intentos.
+🔴 **El reintento es carga estructural, igual que `validarParrafo`.** Desde el 27-ago-2026 el
+esquema es de **una sola clave** (`{parrafo}`) — los bullets ya no los escribe nadie— pero
+`maxLength` sigue sin estar soportado: «hasta 220 caracteres» no se puede pedir ahí, y «no nombres
+los colores de ESTE producto» ni «no repitas lo que dicen los bullets» menos. Cuando el validador
+rechaza, los problemas vuelven al modelo —**todos juntos**— y se pide de nuevo. Dos intentos.
 
 🔑 **Las variantes viajan EN EL PROMPT, no sólo en el validador.** Si el modelo no sabe que «arena»
 es un color de este producto, lo escribe, se lo rechazan, y se paga un reintento por algo que se
-podía decir de entrada.
+podía decir de entrada. 🔑 **Y desde el 27-ago-2026 viajan también los bullets ya compuestos**, por
+el mismo motivo: la regla «no repitas lo que dicen los datos» sólo la puede cumplir el que sabe qué
+dicen.
 
 🔑 **`formato.core.js`: por qué el validador bajó a JS plano.** El reintento necesita validar, y ese
 camino termina en `api/_tn-desc-ia.js` — un handler de `api/` corre en Node sin pasar por el
@@ -126,8 +214,9 @@ mira las claves del pedido: si vuelve a entrar forma de proveedor ahí, se cae.
 
 ### Tres modelos en la pantalla, y el costo se muestra
 
-Arranca en **Flash 3.7** y desde el mismo desplegable se puede bajar a **Flash Lite** o subir a
-**Pro 3.1**, comparando los textos con el costo real de cada uno al lado. Eso es lo que decide, no
+Arranca en **Flash Lite** —el más barato, decisión de Bruno del 27-ago-2026— y desde el mismo
+desplegable se puede subir a **Flash 3.7** o a **Pro 3.1** para un producto puntual, comparando los
+textos con el costo real de cada uno al lado. Eso es lo que decide, no
 una opinión sobre la prosa. El `<select>` recorre `MODELOS`: agregar o sacar uno es una entrada.
 
 - ⚠️ **Los Gemini 3 están con precio promocional hasta el 31-dic-2026 y después se DUPLICAN**
@@ -233,6 +322,12 @@ y `api/_desc-prosa.js`, y se ejercen con `node scripts/check-desc-talles.mjs` y
 
 ## Lo que TODAVÍA no hace
 
+🔴 **NADIE cargó todavía una ficha, y nadie publicó nunca una descripción.** Las dos mitades están
+construidas y probadas contra la base, pero el circuito de dos manos —el local carga, Marketing
+escribe y publica— no lo ejerció una persona ni una vez. Publicar es el único verbo que escribe en
+la tienda viva y **ningún test lo toca**: el oráculo es abrir un producto, cargarle la ficha,
+aprobar el párrafo, apretar el botón y **mirarlo en TiendaNube**.
+
 ⛔ **No hay verbo de vuelta todavía.** El respaldo (`html_previo`) está guardado y es la única
 copia que existe, pero restaurarlo desde la pantalla no está hecho: hoy se recupera leyendo la
 fila. Es la próxima tanda y es barata, justamente porque el respaldo ya está.
@@ -250,12 +345,14 @@ Lo que quedó medido:
 
 | modelo | costo por producto | el catálogo (370) | tokens de pensar |
 |---|---|---|---|
-| Flash Lite | US$0,00083 | **US$0,31** | 134 |
-| **Flash 3.7** (default) | US$0,00314 | **US$1,16** | 369 |
+| **Flash Lite** (default desde el 27-ago) | US$0,00083 | **US$0,31** | 134 |
+| Flash 3.7 | US$0,00314 | **US$1,16** | 369 |
 | Pro 3.1 | US$0,01697 | **US$6,28** | 984 |
 
-📌 El catálogo entero con el default sale **US$1,16** — dos centavos más que los US$1,14 que
-costaba con Haiku. La plata nunca movió el fiel, y ahora está medido en vez de estimado.
+📌 Medido con el esquema viejo, cuando el modelo escribía también los bullets: **son un techo**.
+Desde que escribe sólo el párrafo, la salida es menos de la mitad. 🔑 Y Flash Lite es el único de
+los tres **sin precio promocional**, así que el 1-ene-2027 la diferencia con Flash 3.7 pasa de
+3,8× a 5×: el default no hay que revisarlo esa fecha.
 
 🔴 **Y quedó contestada la pregunta que la doc de Google no contesta: los tokens de pensar van
 APARTE de `total_output_tokens`.** En Flash 3.7 son 369 contra 168 de salida visible: **pensar
@@ -264,7 +361,7 @@ pantalla mostraría menos de la mitad del costo de salida. La conciliación cont
 era necesaria, y acertó.
 
 ⚠️ Bajar `thinking_level` a `minimal` es la única palanca de costo que queda y no se tocó: sobre
-US$1,16 el ahorro son centavos, y menos razonamiento son más reintentos. Si alguna vez importa,
+US$0,31 el ahorro son centavos, y menos razonamiento son más reintentos. Si alguna vez importa,
 está medido de dónde sacarlo.
 
 ✅ **Anthropic salió del proyecto entero** (24-ago-2026, decidido por Darío). `@anthropic-ai/sdk`
