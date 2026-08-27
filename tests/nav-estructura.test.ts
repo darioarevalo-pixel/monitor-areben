@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { keysDeCat, itemsDeCat, iconoDe, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { keysDeCat, itemsDeCat, iconoDe, keyDeRuta, NAV_CATS, PERM_CAT, todasLasKeys, KEYS_SIN_PERMISO } from '@/lib/nav'
+import { puedeVer } from '@/lib/permisos'
 import { hayIcono } from '@/components/ui/Icono'
 
 /**
@@ -127,5 +128,55 @@ describe('estructura del nav', () => {
       }
     }
     expect(rotos).toEqual([])
+  })
+})
+
+/**
+ * 🔴 La puerta pintada: el sidebar dibuja la entrada con SU key, y el guard de la ruta decide con
+ * la key de la URL. Cuando las dos no coinciden, la persona ve el link, lo clickea y la mandan a
+ * Inicio sin decirle nada.
+ *
+ * Pasó dos veces con la misma forma. La primera con `solicitudes`; la segunda —medida el
+ * 27-ago-2026 contra el padrón— con las dos entradas de Tienda Nube que tienen permiso propio:
+ * `local`, `josefinabatter` y `camilaquintana` tenían `gen-talles` tildado desde el día uno y la
+ * Tabla de talles nunca les abrió.
+ */
+describe('🔴 el guard resuelve la ruta ENTERA, no el primer tramo', () => {
+  it('cada entrada del menú resuelve a su propia sección', () => {
+    for (const cat of NAV_CATS) {
+      for (const it of itemsDeCat(cat)) {
+        const tramos = it.ruta.replace(/^\/+/, '').split('/')
+        expect(keyDeRuta(tramos), `la ruta ${it.ruta}`).toBe(it.key)
+      }
+    }
+  })
+
+  it('🔑 las dos entradas donde el primer tramo NO es la sección', () => {
+    // Son las que rompían: viven adentro de la pantalla de Tienda Nube y tienen permiso propio.
+    expect(keyDeRuta(['tncat', 'redaccion'])).toBe('gen-desc')
+    expect(keyDeRuta(['tncat', 'descripciones'])).toBe('gen-talles')
+    expect(keyDeRuta(['tncat', 'redaccion'])).not.toBe('tncat')
+  })
+
+  it('lo que no es una entrada del menú devuelve null, y el llamador sigue con el primer tramo', () => {
+    expect(keyDeRuta(['reclamo', 'un-token-cualquiera'])).toBeNull()
+    expect(keyDeRuta(['inicio'])).toBeNull()
+    expect(keyDeRuta([])).toBeNull()
+    expect(keyDeRuta(undefined)).toBeNull()
+  })
+
+  it('🔴 alguien del local con `gen-desc` y SIN `tncat` entra a Redacción', () => {
+    const josefina = {
+      name: 'josefinabatter', admin: false, cuenta: 'zattia' as const,
+      acceso: { zattia: { 'gen-desc': true, 'gen-talles': true } },
+      funcion: ['local' as const],
+    }
+    // Lo que preguntaba el guard antes (el primer tramo): la rebotaba.
+    expect(puedeVer(josefina, 'zattia', 'tncat')).toBe(false)
+    // Lo que pregunta ahora: la deja pasar, que es lo que dice su permiso.
+    expect(puedeVer(josefina, 'zattia', keyDeRuta(['tncat', 'redaccion'])!)).toBe(true)
+    expect(puedeVer(josefina, 'zattia', keyDeRuta(['tncat', 'descripciones'])!)).toBe(true)
+    // Y las que de verdad piden `tncat` siguen cerradas para ella.
+    expect(puedeVer(josefina, 'zattia', keyDeRuta(['tncat', 'fotos'])!)).toBe(false)
   })
 })

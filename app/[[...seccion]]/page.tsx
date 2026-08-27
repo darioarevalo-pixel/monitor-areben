@@ -19,7 +19,7 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/Confirm'
 import { useSesion } from '@/components/SesionProvider'
 import { componenteDe } from '@/components/secciones/registro'
-import { esDeMarca, esKeyValida, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
+import { esDeMarca, esKeyValida, keyDeRuta, KEYS_CROSS_MARCA, tituloDesde } from '@/lib/nav'
 import { esAdmin, marcasConAcceso, puedeVer, puedeVerAlguna } from '@/lib/permisos'
 import { Cargando } from '@/components/secciones/Cargando'
 
@@ -114,16 +114,26 @@ export default function Seccion() {
   // la marca del sidebar no decide qué se ve (Meta Ads: una cuenta publicitaria trae dos marcas).
   // Preguntarles `puedeVer(…, marca, …)` rebotaba a Inicio a quien tiene la sección en la otra marca,
   // sin que adentro hubiera nada que dependiera de esa marca. El corte fino lo hace el servidor.
+  //
+  // 🔴 **El permiso se pregunta por la ruta ENTERA, no por el primer tramo.** Hay dos entradas del
+  // menú que viven adentro de la pantalla de Tienda Nube y tienen permiso propio:
+  // `/tncat/descripciones` es `gen-talles` y `/tncat/redaccion` es `gen-desc`. Preguntando por
+  // `partes[0]` el guard pedía `tncat` —que ninguna de las dos necesita— y rebotaba a Inicio a
+  // quien SÍ tenía el permiso de la entrada que estaba clickeando, sin decirle nada. Medido el
+  // 27-ago-2026: tres cuentas del local tenían `gen-talles` desde el día uno y la Tabla de talles
+  // nunca les abrió. `keyDeRuta` devuelve `null` para todo lo que no es una entrada del menú, así
+  // que el resto sigue resolviéndose por el primer tramo, como siempre.
+  const keyPermiso = keyDeRuta(partes) ?? key
   const permitida =
     !!perfil &&
-    esKeyValida(key) &&
-    esDeMarca(key, marca) &&
-    (key === 'usuarios'
+    esKeyValida(keyPermiso) &&
+    esDeMarca(keyPermiso, marca) &&
+    (keyPermiso === 'usuarios'
       ? esAdmin(perfil)
-      : key === 'inicio'
-        || (KEYS_CROSS_MARCA.has(key)
-          ? marcasConAcceso(perfil, key, ['bdi', 'zattia']).length > 0
-          : puedeVer(perfil, marca, key)))
+      : keyPermiso === 'inicio'
+        || (KEYS_CROSS_MARCA.has(keyPermiso)
+          ? marcasConAcceso(perfil, keyPermiso, ['bdi', 'zattia']).length > 0
+          : puedeVer(perfil, marca, keyPermiso)))
 
   useEffect(() => {
     if (esPortalCliente || esPanel) return

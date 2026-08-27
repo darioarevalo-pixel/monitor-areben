@@ -30,6 +30,34 @@ export function itemsDeCat(cat: NavCat): NavItem[] {
 }
 
 /**
+ * La sección a la que corresponde una RUTA del menú.
+ *
+ * 🔴 **Existe porque el guard de `app/[[...seccion]]/page.tsx` miraba sólo el primer tramo de la
+ * URL**, y hay dos entradas donde ese tramo NO es su sección: `/tncat/descripciones` es
+ * `gen-talles` y `/tncat/redaccion` es `gen-desc` — las dos viven adentro de la pantalla de Tienda
+ * Nube pero **tienen permiso propio**, que es justamente por qué se les dio uno.
+ *
+ * El resultado era una puerta pintada, la misma que ya había pasado con `solicitudes`: la entrada
+ * aparecía en el sidebar (que sí mira la key de la entrada), la persona la clickeaba, y el guard
+ * la rebotaba a Inicio **sin decir nada**. Medido el 27-ago-2026 contra el padrón: `local`,
+ * `josefinabatter` y `camilaquintana` tenían `gen-talles` tildado desde el día uno y **nunca
+ * pudieron abrir la Tabla de talles**; el mismo día se les dio `gen-desc` y les pasó igual.
+ *
+ * ⚠️ Devuelve `null` cuando la ruta no es una entrada del menú (`/inicio`, `/reclamo/<token>`,
+ * `/meta-ads` con su segundo tramo): ahí el primer tramo **sí** es la sección y el llamador se
+ * queda con lo que ya tenía. Esto agrega precisión donde falta, no una regla nueva para todos.
+ */
+const KEY_POR_RUTA: Map<string, string> = new Map(
+  NAV_CATS.flatMap((c) => itemsDeCat(c)).map((it) => [it.ruta.replace(/^\/+/, ''), it.key]),
+)
+
+export function keyDeRuta(partes: string[] | string | undefined | null): string | null {
+  const tramos = Array.isArray(partes) ? partes : partes ? [partes] : []
+  if (!tramos.length) return null
+  return KEY_POR_RUTA.get(tramos.join('/')) ?? null
+}
+
+/**
  * El interruptor del strangler NO vive acá: vive en components/secciones/registro.ts,
  * donde estar en el registro ES estar migrada.
  *
