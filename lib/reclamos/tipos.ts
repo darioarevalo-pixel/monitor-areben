@@ -871,14 +871,32 @@ export type LineaResumen = { que: string; valor: string }
  * `retorno_decidido` y `costo_caso` se guardaban y **no se leían en ninguna pantalla**. Sin esto,
  * para saber qué se había resuelto en un caso había que deducirlo de qué botones quedaban.
  */
-export function resumenDeLoDecidido(d: ReclamoRow): LineaResumen[] {
+/**
+ * 🔑 **Quién está mirando, y es OBLIGATORIO.** Es el mismo patrón que el `escenario` de `decidir`:
+ * un parámetro con default seguro deja que el llamador conteste sin enterarse de que le faltaba el
+ * dato, y acá el dato decide si en la pantalla del local aparece **cuánta plata perdimos con este
+ * caso**. Volverlo obligatorio hizo que el compilador listara solo los puntos donde había que
+ * elegir.
+ *
+ * ⚠️ **`'local'` recorta, ⛔ no miente.** Las líneas que se van son las tres de plata y el escenario;
+ * lo que queda —el caso, qué recibe el cliente, qué pasa con el producto, si se pidió que vuelva—
+ * es todo lo que quien atiende necesita para contestarle. Si en vez de sacarlas se pusieran en
+ * cero, el resumen afirmaría que no costó nada.
+ */
+export type QuienMira = 'admin' | 'local'
+
+export function resumenDeLoDecidido(d: ReclamoRow, quien: QuienMira): LineaResumen[] {
+  const conPlata = quien === 'admin'
   const l: LineaResumen[] = []
   const money = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
   l.push({ que: 'Motivo', valor: MOTIVO_LABEL[d.motivo] + (d.motivo_detalle ? ` — ${d.motivo_detalle}` : '') })
   // El escenario va JUNTO al motivo y no al final: es la mitad de lo que se decidió, y es lo que
   // explica por qué en dos reclamos del mismo caso salió plata distinta.
-  const esc = escenarioDe(d.motivo, d.escenario)
+  // ⛔ El escenario ⛔ NO va al local: es la mitad de lo que decide la plata («la publicación es
+  // culpa nuestra sólo si la diferencia es objetiva»), y el local ⛔ no decide. Verlo invita a
+  // discutir el veredicto con el cliente en el mostrador.
+  const esc = conPlata ? escenarioDe(d.motivo, d.escenario) : null
   if (esc) l.push({ que: 'Qué se encontró', valor: esc.label })
   if (d.expectativa) l.push({ que: tituloExpectativa(d.motivo).replace(/[¿?]/g, ''), valor: expectativaLabel(d.expectativa, d.motivo) })
 
@@ -888,11 +906,11 @@ export function resumenDeLoDecidido(d: ReclamoRow): LineaResumen[] {
   }
 
   l.push({ que: 'Qué recibe', valor: COMPENSACION_LABEL[d.compensacion] })
-  if (d.monto_total != null) l.push({ que: 'Se le devuelve', valor: money(Number(d.monto_total)) })
+  if (conPlata && d.monto_total != null) l.push({ que: 'Se le devuelve', valor: money(Number(d.monto_total)) })
   if (d.cupon_codigo) l.push({ que: 'Cupón', valor: d.cupon_codigo })
   // La oferta de retención va acá, al lado de lo que recibe: es la resolución que se intentó antes
   // de ésta. La rechazada es la que importa — es la única forma de saber cuántas veces funciona.
-  if (d.retencion_respuesta) {
+  if (conPlata && d.retencion_respuesta) {
     l.push({
       que: '¿Se le ofreció que se lo quede?',
       valor: `Sí, por ${money(Number(d.retencion_monto ?? 0))} — ${d.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}`,
@@ -911,7 +929,7 @@ export function resumenDeLoDecidido(d: ReclamoRow): LineaResumen[] {
         + (contra ? ' — en contra de lo que sugería la cuenta' : ''),
     })
   }
-  if (d.costo_caso != null) l.push({ que: 'Lo que nos costó', valor: money(Number(d.costo_caso)) })
+  if (conPlata && d.costo_caso != null) l.push({ que: 'Lo que nos costó', valor: money(Number(d.costo_caso)) })
   return l
 }
 

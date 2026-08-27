@@ -662,7 +662,8 @@ describe('el resumen de lo decidido', () => {
     id: 7, store: 'bdi', numero: 'R-0007', motivo: 'falla', estado: 'en_revision', items: [],
     stock_estado: 'no_aplica', reintegro_estado: 'no_aplica', tn_stock_estado: 'no_aplica',
   }
-  const texto = (d: ReclamoRow) => resumenDeLoDecidido(d).map((r) => `${r.que}: ${r.valor}`).join(' | ')
+  const texto = (d: ReclamoRow) => resumenDeLoDecidido(d, 'admin').map((r) => `${r.que}: ${r.valor}`).join(' | ')
+  const textoLocal = (d: ReclamoRow) => resumenDeLoDecidido(d, 'local').map((r) => `${r.que}: ${r.valor}`).join(' | ')
 
   /**
    * La oferta de retención RECHAZADA es la que no se ve en ningún otro lado: la aceptada se
@@ -695,6 +696,51 @@ describe('el resumen de lo decidido', () => {
     // con el producto, y eso es lo que se está fijando — no cómo está redactado hoy.
     expect(t).toContain('El producto: ' + DESTINO_LABEL.falla)
     expect(t).toContain('$12.000')
+  })
+
+  /**
+   * 🔑 **La vista del local recorta, ⛔ no miente.** Quien atiende no decide cuánta plata vuelve, y
+   * tener el número delante invita a prometerlo en el mostrador. Lo mismo con el escenario: es la
+   * mitad de lo que decide la plata («la publicación es culpa nuestra sólo si la diferencia es
+   * objetiva»), y verlo invita a discutir el veredicto con el cliente.
+   *
+   * ⚠️ Lo que queda tiene que **alcanzar para contestarle al cliente**: el caso, qué recibe, qué
+   * pasa con el producto. Si además se recortara eso, la pantalla dejaría de servir para lo único
+   * que el local hace con ella.
+   */
+  it('al local ⛔ no le muestra un solo número de plata', () => {
+    // ⚠️ El escenario tiene que ser DE ESTE motivo o la línea no existe y el caso queda verde por
+    // vacío — que es exactamente cómo este mismo caso pasó sin probar nada la primera vez.
+    const d: ReclamoRow = {
+      ...base, motivo: 'no_esperaba', escenario: 'info_confusa',
+      compensacion: 'plata_total', monto_total: 8000, costo_caso: 12000,
+      destino_prenda: 'falla', retencion_respuesta: 'rechazo', retencion_monto: 6000,
+    }
+    // El control de que el escenario EXISTE: mirado por Administración, la línea está.
+    expect(texto(d)).toContain('Qué se encontró')
+    const t = textoLocal(d)
+    expect(t).not.toContain('8.000')
+    expect(t).not.toContain('12.000')
+    expect(t).not.toContain('6.000')
+    expect(t).not.toContain('Qué se encontró')
+    // Y sigue sirviendo para contestarle al cliente:
+    expect(t).toContain('Se le devuelve todo')
+    expect(t).toContain('El producto: ' + DESTINO_LABEL.falla)
+  })
+
+  // ⚠️ El control: el mismo reclamo, mirado por Administración, SÍ tiene los tres números. Sin
+  // esto, un resumen roto que no muestre nada a nadie pasaría los dos casos.
+  it('y a Administración sí, que es quien decide', () => {
+    const d: ReclamoRow = {
+      ...base, motivo: 'no_esperaba', escenario: 'info_confusa',
+      compensacion: 'plata_total', monto_total: 8000, costo_caso: 12000,
+      retencion_respuesta: 'rechazo', retencion_monto: 6000,
+    }
+    const t = texto(d)
+    expect(t).toContain('Qué se encontró')
+    expect(t).toContain('8.000')
+    expect(t).toContain('12.000')
+    expect(t).toContain('6.000')
   })
 
   // Se guarda lo que sugirió la cuenta ADEMÁS de lo que se hizo: sirve para ver cuándo se va en

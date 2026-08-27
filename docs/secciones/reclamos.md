@@ -472,6 +472,43 @@ demora no se podía cerrar nunca**.
 - ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
   refactors grandes): las pestañas envuelven los bloques que ya estaban.
 
+## 🆕 La vista del local: recorta, ⛔ no miente (27-ago-2026)
+
+Lo más pedido en la revisión. 🔑 **El patrón ya existía y ⛔ no hizo falta inventar nada**: un
+componente motor con `modo` y exports finos que la key de sección elige (`Devoluciones` /
+`ReclamosLocal`). `DecidirReclamo` **ya era sólo de admin**, así que lo que había que recortar es el
+alta y la lista, ⛔ no el modal.
+
+**Qué deja de ver el local**
+
+| se va | por qué |
+|---|---|
+| la columna **A devolver** | no decide cuánto vuelve, y el número delante invita a prometerlo en el mostrador |
+| las tres líneas de plata del resumen | ídem: lo que se devuelve, la oferta de retención y lo que nos costó |
+| **Qué se encontró** (el escenario) | es la mitad de lo que decide la plata; verlo invita a discutir el veredicto con el cliente |
+
+⚠️ **Lo que queda alcanza para contestarle al cliente**: el caso, qué recibe, qué pasa con el
+producto, si se pidió que vuelva. Recortar eso también dejaría la pantalla sin servir para lo único
+que el local hace con ella.
+
+🔑 **`resumenDeLoDecidido(d, quien)` — el segundo parámetro es OBLIGATORIO**, igual que el escenario
+en `decidir`. Con default seguro el llamador contesta sin enterarse de que le faltaba el dato, y acá
+el dato decide si en la pantalla del local aparece cuánta plata perdimos. Volverlo obligatorio hizo
+que el compilador listara solo el punto que había que decidir.
+
+⚠️ **Recortar ⛔ no es poner en cero**: un `$0` afirmaría que el caso no costó nada. Las líneas no
+están.
+
+**«¿Qué esperaba?» pasa a botones.** `Chips` **ya estaba en el kit** — cero componentes nuevos, 5ª
+vez que el pedido ya estaba construido. ⚠️ Las opciones siguen saliendo de `expectativasDe(motivo)`
+y ⛔ **no** son una lista fija: ofrecer «el mismo producto en buen estado» en un arrepentimiento no
+significa nada, y eso ya se arregló una vez.
+
+🔴 **Un caso nació verde por vacío.** El primer intento del test del escenario usaba
+`motivo: 'falla'` con `escenario: 'coincide'`, que ⛔ no es escenario de ese caso ⇒ `escenarioDe`
+daba `null` y la línea nunca existía: el `not.toContain` pasaba sin probar nada. Lo cazó el mutante.
+Ahora el caso lleva **el control por el otro lado** (mirado por Administración, la línea SÍ está).
+
 ## 🆕 Rótulos y orden de pestañas (27-ago-2026, revisión con Administración)
 
 **Post-venta ahora abre en Reclamos.** El orden pasó a **Reclamos → Fallas → Cambios → Canjes**, y

@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import {
-  Button, Card, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
+  Button, Card, Chips, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, Toolbar, Tabs, KpiCard,
   color, font, space, weight, useConfirmar, useToast, type Tone,
   Instructivo,
@@ -724,14 +724,23 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               {/* ⚠️ Los casos sin expectativas no muestran el campo: en "le llegó de más" el
                   reclamo lo abrimos nosotros y el cliente no pidió nada, y una demora no se
                   compensa. Un desplegable con una sola opción vacía pide que alguien invente. */}
+              {/* 🔑 **Botones y ⛔ no un desplegable** (pedido de la revisión del 27-ago): se carga
+                  con el cliente en el teléfono, y abrir una lista para elegir entre dos o tres es
+                  un toque de más en el momento en que menos tiempo hay. `Chips` ya estaba en el
+                  kit — cero componentes nuevos.
+                  ⚠️ Las opciones siguen saliendo de `expectativasDe(motivo)` y ⛔ NO son una lista
+                  fija: ofrecer «el mismo producto en buen estado» en un arrepentimiento, o «que le
+                  manden lo que falta» en una falla, no significa nada. Eso ya se arregló una vez. */}
               {!!expectativasDe(motivo).length && (
                 <Field label={tituloExpectativa(motivo)} hint="opcional — se puede completar al decidir">
-                  <Select value={expectativaVal} onChange={(e) => setExpectativa(e.target.value as Expectativa | '')}>
-                    <option value="">Todavía no sé</option>
-                    {expectativasDe(motivo).map((x) => (
-                      <option key={x} value={x}>{expectativaLabel(x, motivo)}</option>
-                    ))}
-                  </Select>
+                  <Chips
+                    value={expectativaVal}
+                    onChange={(v) => setExpectativa(v as Expectativa | '')}
+                    opciones={[
+                      { key: '' as Expectativa | '', label: 'No informado' },
+                      ...expectativasDe(motivo).map((x) => ({ key: x as Expectativa | '', label: expectativaLabel(x, motivo) })),
+                    ]}
+                  />
                 </Field>
               )}
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
@@ -787,7 +796,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               <Th>Reclamo</Th>
               <Th>Motivo</Th>
               <Th>Estado</Th>
-              <Th align="right">A devolver</Th>
+              {/* ⛔ La plata ⛔ no va al local: quien atiende no decide cuánto vuelve, y el número
+                  delante invita a prometerlo en el mostrador. La devuelve Administración — el pie
+                  de la pantalla ya lo dice. */}
+              {esAdmin && <Th align="right">A devolver</Th>}
               <Th>Pendientes</Th>
               <Th></Th>
             </Tr>
@@ -823,7 +835,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                     )}
                   </Td>
                   <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={estadoEnCriollo(d)} /></Td>
-                  <Td align="right"><MoneyText value={d.monto_total ?? d.monto_producto ?? 0} /></Td>
+                  {esAdmin && <Td align="right"><MoneyText value={d.monto_total ?? d.monto_producto ?? 0} /></Td>}
                   {/* 🔑 `wrap` + `maxWidth`: sin eso el `<Td>` hereda `white-space: nowrap`
                       (`components/ui/Table.tsx`) y esta celda puede tener ~140 caracteres en una
                       sola línea indivisible ⇒ la tabla gana barra horizontal y las demás columnas
@@ -980,7 +992,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       <div style={{ display: 'flex', gap: space[5], flexWrap: 'wrap' }}>
                         <div style={{ minWidth: 280, flex: '1 1 280px' }}>
                           <div style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut, marginBottom: 4 }}>Lo decidido</div>
-                          {resumenDeLoDecidido(d).map((r, i) => (
+                          {resumenDeLoDecidido(d, modo === 'admin' ? 'admin' : 'local').map((r, i) => (
                             <div key={i} style={{ fontSize: font.xs, display: 'flex', gap: 8, padding: '1px 0' }}>
                               <span style={{ color: color.mut2, minWidth: 130 }}>{r.que}</span>
                               <span style={{ color: color.ink2 }}>{r.valor}</span>
