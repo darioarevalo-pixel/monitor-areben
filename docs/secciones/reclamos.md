@@ -135,6 +135,14 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   aparecer un `navigator.clipboard` suelto en esos dos archivos.
   ⚠️ **Ese test tuvo que sacar los comentarios antes de contar**: el comentario que explica el
   defecto escribe `navigator.clipboard` textual y hacía fallar al test sobre su propia explicación.
+- ⚠️ **Y en el portal las fotos ya subidas tampoco se podían mirar** (27-ago-2026, misma tanda):
+  recortes de 84 px, que alcanzan para contarlas y no para que la persona confirme que **se ve lo
+  que quiso mostrar** — lo único que puede revisar antes de mandar, porque después el link no vuelve
+  a abrir. Mismo `Lightbox` del kit. 🔑 **Es la única excepción al «estilos propios» del portal**, y
+  tiene razón: una foto a pantalla completa sobre fondo negro no se parece a un panel de
+  administración, que es de lo que huía esa regla. Se importa **derecho y no por el barrel**
+  (`@/components/ui`), que arrastraría el kit entero al chunk de una pantalla que se abre con datos
+  móviles; `.mo-lightbox` vive en `kit.css`, que carga el layout raíz, así que ahí también está.
 - 🔴 🔑 **La evidencia se miraba a 96 px recortados** (27-ago-2026). Las fotos que carga el cliente
   se pintaban en `DecidirReclamo` como miniaturas de 96×96 con `object-fit: cover` y **no se podían
   agrandar**, en la única pantalla donde hay que elegir el escenario —o sea donde se decide la
@@ -155,8 +163,9 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
   usó de verdad: *«no se podía adjuntar fotos desde otro celular, solo abre la cámara»*.
   Sacar el atributo **no quita la cámara: agrega la galería** (iOS ofrece «Fototeca / Sacar foto /
   Elegir archivo»; Android, el selector con la cámara adentro). Amarrado en
-  `tests/reclamo-publico-galeria.test.ts`, texto contra texto: el `<input>` recién existe después
-  del `useEffect`, así que `renderToStaticMarkup` —el oráculo del resto de las pantallas— no lo ve.
+  `tests/reclamo-publico-galeria.test.tsx`, que **monta el portal** y mira el atributo en el DOM
+  real. (Nació como texto contra texto porque el `<input>` recién existe después del `useEffect` y
+  `renderToStaticMarkup` no corre efectos; se pasó a montar el 27-ago, junto con el lightbox.)
   🔑 **La lección para todo el módulo: nada de lo que hace el portal se prueba desde acá.** Ni un
   test ni un `curl` ven lo que abre el sistema operativo del cliente. Este defecto no lo encontró la
   suite ni un review: **lo encontró una persona con un teléfono**, y estuvo en producción desde el

@@ -18,6 +18,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { imgAThumb } from '@/lib/imagenes'
+/**
+ * Del kit, y es la única excepción a «estilos propios» de esta pantalla: una foto a pantalla
+ * completa sobre fondo negro no se parece a un panel de administración, así que la razón de no usar
+ * el kit acá no aplica. Se importa **derecho y no por el barrel** (`@/components/ui`), que
+ * arrastraría el kit entero al chunk de una pantalla que se abre con datos móviles.
+ *
+ * `.mo-lightbox` vive en `components/ui/kit.css`, que carga el layout raíz ⇒ también está acá.
+ */
+import { Lightbox } from '@/components/ui/Lightbox'
 
 const API = '/api/postventa?recurso=reclamo'
 /** Suficiente para ver una falla, y liviano para subir con datos móviles. */
@@ -42,6 +51,8 @@ export function ReclamoPublico({ token }: { token: string | null }) {
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  /** La foto que se está mirando entera, o `null`. Ver la tira de miniaturas más abajo. */
+  const [ampliada, setAmpliada] = useState<string | null>(null)
 
   // El setState va dentro del await y no en el cuerpo del effect: el linter del repo rechaza el
   // setState síncrono ahí (dispara renders en cascada). Mismo patrón que el resto de las secciones.
@@ -163,14 +174,29 @@ export function ReclamoPublico({ token }: { token: string | null }) {
         Sacale una foto donde se vea el problema. Es lo que más nos ayuda a resolverlo rápido.
       </p>
 
+      {/* Las que ya subió. Se tocan para verlas enteras: el recorte de 84 px alcanza para contarlas,
+          no para que la persona confirme que se ve lo que quiso mostrar — que es lo único que puede
+          revisar antes de mandar, porque después el link no vuelve a abrir. */}
       {!!vista?.fotos.length && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {vista.fotos.map((u, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={u} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 8 }} />
+            <button
+              key={i}
+              type="button"
+              onClick={() => setAmpliada(u)}
+              aria-label={`Ver la foto ${i + 1} de ${vista.fotos.length} más grande`}
+              style={{
+                padding: 0, height: 'auto', lineHeight: 0, cursor: 'zoom-in',
+                border: 'none', borderRadius: 8, background: 'none', overflow: 'hidden',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="" style={{ width: 84, height: 84, objectFit: 'cover', display: 'block' }} />
+            </button>
           ))}
         </div>
       )}
+      <Lightbox src={ampliada} alt="La foto que subiste" onCerrar={() => setAmpliada(null)} />
 
       {/**
         * 🔴 **Sin `capture`, y no es un olvido.** `capture="environment"` no es una preferencia: es
