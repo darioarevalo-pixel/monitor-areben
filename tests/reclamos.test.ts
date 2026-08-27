@@ -11,7 +11,7 @@ import {
   hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa, ERROR_PROPIO,
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
-  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision,
   EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -1716,5 +1716,42 @@ describe('faltantesDeLaDecision', () => {
   it('el sugerido sin respuesta no cuenta como oferta a medias', () => {
     const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: '' })
     expect(loQueTraba(f)).toBe(null)
+  })
+})
+
+/**
+ * ── Rehacer una decisión ──
+ *
+ * 🔴 Nació de un caso real del 27-ago-2026: se confirmó un reclamo desde el primer paso de
+ * `Decidir` y, como la salida arranca en la primera del repertorio, quedó guardado «lo cambia por
+ * otro producto». Eso lo convirtió en un CAMBIO, y los cambios están excluidos de «Decidir» ⇒
+ * **el caso quedó sin ninguna puerta**. Estos casos fijan que las dos existan y no se pisen.
+ */
+describe('puedeRehacerseLaDecision', () => {
+  const r = (compensacion: Compensacion | null, estado: string) =>
+    ({ compensacion, estado } as unknown as ReclamoRow)
+
+  it('un reclamo recién abierto NO se rehace: todavía no se decidió, va por «Decidir»', () => {
+    expect(puedeRehacerseLaDecision(r(null, 'borrador'))).toBe(false)
+    expect(puedeRehacerseLaDecision(r(null, 'en_revision'))).toBe(false)
+  })
+
+  it('una devolución ya decidida sí, esté esperando el producto o no', () => {
+    expect(puedeRehacerseLaDecision(r('plata_total', 'resuelto'))).toBe(true)
+    expect(puedeRehacerseLaDecision(r('plata_total', 'en_transito'))).toBe(true)
+  })
+
+  // 🔑 EL caso: mismo estado `borrador` que un reclamo sin decidir, pero significa lo contrario.
+  it('un cambio en borrador SÍ se rehace: todavía no se armó nada', () => {
+    expect(puedeRehacerseLaDecision(r('otro_producto', 'borrador'))).toBe(true)
+  })
+
+  it('pero un cambio más avanzado no: ahí ya hay una venta y un cobro', () => {
+    expect(puedeRehacerseLaDecision(r('otro_producto', 'resuelto'))).toBe(false)
+    expect(puedeRehacerseLaDecision(r('otro_producto', 'cerrado'))).toBe(false)
+  })
+
+  it('un reclamo cerrado no se rehace', () => {
+    expect(puedeRehacerseLaDecision(r('plata_total', 'cerrado'))).toBe(false)
   })
 })

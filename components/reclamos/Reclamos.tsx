@@ -29,7 +29,7 @@ import {
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
+  calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -319,14 +319,17 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    * alcanza con volver a confirmarla bien.
    *
    * ⚠️ Se avisa por lo que ⛔ NO se conserva: `decidir` reescribe los pendientes desde
-   * `EFECTOS_RESOLUCION`, así que uno ya tildado vuelve a quedar pendiente. Lo que sí sobrevive es
-   * el `historial`, que es append-only, y el reclamo al transportista si ya se presentó.
+   * `EFECTOS_RESOLUCION`, así que uno ya tildado vuelve a quedar pendiente, y en un cambio borra
+   * lo que se haya empezado a armar (`items_nuevos` vuelve vacío). Lo que sí sobrevive es el
+   * `historial`, que es append-only, y el reclamo al transportista si ya se presentó.
    */
   const volverADecidir = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Rehacer la decisión',
       ok: 'Sí, volver a decidir',
-      mensaje: 'Se reemplaza lo que se decidió y vuelven a quedar pendientes las tareas de esta resolución, incluso las que ya hayas tildado. Queda registrado en el historial que se decidió dos veces.',
+      mensaje: esCambio(d)
+        ? 'Este reclamo quedó como cambio. Al rehacerlo se borra lo que se haya empezado a armar del cambio y vuelven a quedar pendientes las tareas de esta resolución. Queda registrado en el historial.'
+        : 'Se reemplaza lo que se decidió y vuelven a quedar pendientes las tareas de esta resolución, incluso las que ya hayas tildado. Queda registrado en el historial que se decidió dos veces.',
     })
     if (si) await abrirDecidir(d)
   }
@@ -869,7 +872,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           `decidir` (`api/_reclamos.js`) ⛔ no tiene guard de estado: pisa la fila
                           entera y el `historial` guarda las dos decisiones. Lo que sí se recalcula
                           son los pendientes, y por eso se avisa antes. */}
-                      {esAdmin && !esCambio(d) && (d.estado === 'resuelto' || d.estado === 'en_transito') && (
+                      {esAdmin && puedeRehacerseLaDecision(d) && (
                         <Button size="sm" variant="outline" tone="neutral" onClick={() => void volverADecidir(d)}>Volver a decidir</Button>
                       )}
                       {esAdmin && esCambio(d) && d.estado !== 'cerrado' && (

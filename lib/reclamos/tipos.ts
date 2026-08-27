@@ -1119,6 +1119,28 @@ export function esCambio(d: Pick<ReclamoRow, 'compensacion'>): boolean {
   return d.compensacion === 'otro_producto'
 }
 
+/**
+ * ¿Se puede rehacer la decisión de este reclamo?
+ *
+ * 🔴 **Existe por un caso real.** El 27-ago-2026 se confirmó un reclamo desde el primer paso de
+ * `Decidir`, y como la salida arranca en la primera del repertorio quedó guardado «lo cambia por
+ * otro producto» — o sea, convertido en un CAMBIO. Los cambios están excluidos de «Decidir» a
+ * propósito (ofrecerlo ahí invita a resolverlo dos veces), así que el caso quedó **sin ninguna
+ * puerta**: ni decidir ni rehacer. Arreglarlo pedía un script contra producción.
+ *
+ * ⚠️ **Un cambio en `borrador` todavía no existe como cambio**: le falta qué se lleva, la forma de
+ * pago y el cobro, que se arman en el POS. Ése sí se rehace. Uno más avanzado ⛔ no, porque ahí ya
+ * hay una venta y un cobro de por medio.
+ *
+ * ⚠️ Y en un reclamo que ⛔ no es cambio, `borrador` significa lo contrario —**todavía no se
+ * decidió**—, así que ése va por «Decidir», no por acá.
+ */
+export function puedeRehacerseLaDecision(d: Pick<ReclamoRow, 'compensacion' | 'estado'>): boolean {
+  return esCambio(d)
+    ? d.estado === 'borrador'
+    : (d.estado === 'resuelto' || d.estado === 'en_transito')
+}
+
 // ── Qué aplica a cada motivo ────────────────────────────────────────────────────
 
 /**
