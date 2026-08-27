@@ -86,6 +86,11 @@ create table if not exists recepcion_oc (
   oc_estado   text,
   fecha_compra  date,
   fecha_ingreso date,
+  -- Cuándo se confirmó la OC del otro lado. 🔑 Es la fecha por la que se ORDENA la lista, y no las
+  -- dos de arriba: ésas las carga una persona y el emisor las manda vacías en la mayoría (62 de las
+  -- 79 del historial). `confirmada_at` vino en las 79. Tampoco sirve `recibido_en`: cuando se
+  -- prendió el envío llegaron las 79 en el mismo minuto y ese orden es azar.
+  confirmada_at timestamptz,
   proveedor_id     integer,
   proveedor_nombre text,
 
@@ -133,9 +138,18 @@ do $$ begin
   alter table recepcion_oc add constraint recepcion_oc_store check (store in ('bdi', 'zattia'));
 exception when duplicate_object then null; end $$;
 
+-- La tabla ya existía cuando se sumó `confirmada_at` (27-ago-2026), así que el `create table if
+-- not exists` de arriba no la agrega: hace falta el alter. `if not exists` para que el archivo
+-- siga siendo idempotente. ⛔ Es un ADD, nunca un cambio de tipo: eso se escribe como DROP COLUMN
+-- y se lleva los datos puestos.
+alter table recepcion_oc add column if not exists confirmada_at timestamptz;
+
 -- Una OC no puede entrar dos veces con dos ids distintos: la clave de negocio es (marca, id de OC).
 create unique index if not exists idx_recepcion_oc_natural on recepcion_oc (store, oc_id);
 -- Los dos accesos reales: la lista por fecha, y "las que llegaron con diferencia".
+-- `nulls last` a propósito: una OC sin `confirmada_at` (un emisor que deje de mandarlo) va al
+-- final y no arriba de todo, que es donde la pondría el orden descendente por defecto.
+create index if not exists idx_recepcion_oc_confirmada on recepcion_oc (store, confirmada_at desc nulls last);
 create index if not exists idx_recepcion_oc_fecha on recepcion_oc (store, recibido_en desc);
 create index if not exists idx_recepcion_oc_proveedor on recepcion_oc (proveedor_id, recibido_en desc);
 

@@ -219,6 +219,31 @@ describe('normalizarEvento', () => {
     expect(r.oc.lineas).toBe(12)
   })
 
+  it('confirmada_at guarda el instante ENTERO, no la fecha recortada', () => {
+    // Es la razón de ser del campo: es por lo que se ordena la lista. Recortado a 10 caracteres,
+    // dos OC confirmadas el mismo día empatan y el orden vuelve a ser el azar del que ordena.
+    const con = { ...ev, data: { ...ev.data, orden_compra: { ...ev.data.orden_compra, confirmada_at: '2026-08-26T16:41:45.247542Z' } } }
+    expect(normalizado(con).oc.confirmada_at).toBe('2026-08-26T16:41:45.247542Z')
+  })
+
+  it('dos OC del mismo día NO empatan en confirmada_at', () => {
+    const uno = { ...ev, data: { ...ev.data, orden_compra: { ...ev.data.orden_compra, confirmada_at: '2026-08-26T09:00:00Z' } } }
+    const dos = { ...ev, data: { ...ev.data, orden_compra: { ...ev.data.orden_compra, confirmada_at: '2026-08-26T18:30:00Z' } } }
+    expect(normalizado(uno).oc.confirmada_at).not.toBe(normalizado(dos).oc.confirmada_at)
+  })
+
+  it('confirmada_at que no es una fecha se guarda como null', () => {
+    const raro = { ...ev, data: { ...ev.data, orden_compra: { ...ev.data.orden_compra, confirmada_at: 'recién' } } }
+    expect(normalizado(raro).oc.confirmada_at).toBeNull()
+  })
+
+  it('confirmada_at ausente es null y NO rompe el evento', () => {
+    const sin = { ...ev, data: { ...ev.data, orden_compra: { ...ev.data.orden_compra, confirmada_at: undefined } } }
+    const r = normalizado(sin)
+    expect(r.oc.confirmada_at).toBeNull()
+    expect(r.oc.id).toBe('zattia:42')
+  })
+
   it('una fecha que no es fecha se guarda como null, no como basura', () => {
     const raro = { ...ev, data: { ...ev.data, orden_compra: { ...ev.data.orden_compra, fecha_compra: 'ayer' } } }
     expect(normalizado(raro).oc.fecha_compra).toBeNull()

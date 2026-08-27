@@ -92,6 +92,16 @@ export default async function handler(req, res) {
       .select('*')
       .eq('store', store)
       .gte('recibido_en', desde)
+      // 🔑 Ordena por CUÁNDO SE CONFIRMÓ, desempata por cuándo la agarramos.
+      //
+      // ⛔ `recibido_en` solo no sirve de orden: el día que se prendió el envío entraron las 79 del
+      // historial **en el mismo minuto**, así que ordenar por eso dejaba una OC de junio arriba de
+      // una de agosto según el azar del backfill.
+      //
+      // ⚠️ Y el FILTRO sigue siendo por `recibido_en` a propósito: si filtrara por `confirmada_at`,
+      // una OC que llegara sin ese campo quedaría fuera de la lista —`gte` descarta los nulos— y
+      // desaparecer es peor que ordenarse mal. `nullsFirst: false` la manda al final, no arriba.
+      .order('confirmada_at', { ascending: false, nullsFirst: false })
       .order('recibido_en', { ascending: false })
       .limit(TOPE)
     if (error) throw new Error(error.message)
