@@ -161,6 +161,21 @@ describe('🆕 la ficha de atributos: la carga el local, con lista cerrada', () 
     expect(upserts[1]).toMatchObject({ familia: 'pantalon', nombre: 'JEAN DUSK' })
   })
 
+  it('🆕 cuando TiendaNube no dice qué prenda es, lo elige la persona (y NO pide publicar)', async () => {
+    // Son los dos productos cargados sólo como «NEW IN». Bloquearlos hasta que alguien arregle la
+    // categoría en la tienda es dejarlos mudos por algo que no depende de quien está cargando.
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'familia', familia: 'faldas', nombre: 'BERMUDA TIDE' }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ familia: 'faldas', nombre: 'BERMUDA TIDE' })
+  })
+
+  it('una familia inventada muere en 400 sin tocar la base', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'familia', familia: 'mueble' }))).code).toBe(400)
+    expect(llamadas).toEqual([])
+  })
+
   it('el detalle es libre, pero tiene tope', async () => {
     sesionDe(LOCAL)
     expect((await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'detalle', valor: 'argolla plateada' }))).code).toBe(200)

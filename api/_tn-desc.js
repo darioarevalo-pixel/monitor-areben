@@ -4,6 +4,7 @@
 //   GET  ?recurso=tn-desc&store=zattia                              → { ok, filas, atributos }
 //   POST { recurso:'tn-desc', store, tn_id, nombre?, op:'insumo',   insumo }
 //   POST { recurso:'tn-desc', store, tn_id, op:'atributos', familia, atributo, valor }
+//   POST { recurso:'tn-desc', store, tn_id, op:'familia', familia }
 //   POST { recurso:'tn-desc', store, tn_id, op:'borrador', borrador:{parrafo,bullets} }
 //   POST { recurso:'tn-desc', store, tn_id, op:'aprobar' }
 //   POST { recurso:'tn-desc', store, tn_id, op:'publicar', conservarResiduo? }
@@ -67,7 +68,7 @@ function cfgFor(store) {
 }
 
 const COLUMNAS =
-  'tn_id, nombre, insumo, insumo_por, insumo_at, borrador, html_previo, hash_previo, html_escrito, verificado, estado, aprobado_por, aprobado_at, escrito_at, error, updated_at';
+  'tn_id, nombre, familia, insumo, insumo_por, insumo_at, borrador, html_previo, hash_previo, html_escrito, verificado, estado, aprobado_por, aprobado_at, escrito_at, error, updated_at';
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -150,6 +151,25 @@ export default async function handler(req, res) {
       const { error } = await supabase.from('tn_descripciones').upsert(fila, { onConflict: 'store,tn_id' });
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
+    }
+
+    // Qué prenda es, cuando TiendaNube no lo dice.
+    //
+    // 🔴 Medido el 27-ago-2026: hay DOS productos publicados cargados sólo como «NEW IN», sin
+    // ninguna categoría de prenda. La pantalla no puede adivinarles la ficha — pero la persona que
+    // tiene la prenda en la mano sí sabe qué es, y bloquearla hasta que alguien arregle la
+    // categoría en la tienda es dejar el producto mudo por algo que no depende de ella.
+    //
+    // ⚠️ La categoría de TiendaNube le sigue GANANDO a esto en la pantalla: si mañana alguien se
+    // la pone, la familia sale de ahí y se corrige sola. Esto es el piso, no el techo.
+    if (op === 'familia') {
+      const familia = String(body.familia || '');
+      if (!FAMILIAS[familia]) return res.status(400).json({ error: `familia desconocida: ${familia}` });
+      const fila = { store, tn_id: tnId, familia, updated_at: ahora };
+      if (body.nombre != null) fila.nombre = String(body.nombre);
+      const { error } = await supabase.from('tn_descripciones').upsert(fila, { onConflict: 'store,tn_id' });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, familia });
     }
 
     // La ficha de atributos la carga el local, igual que el insumo: elegir de una lista es

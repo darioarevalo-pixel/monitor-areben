@@ -9,7 +9,7 @@ import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
-import { atributosDe, bulletsDe, cargadosDe, type Atributo, type Cargados } from '@/lib/tn-desc/atributos'
+import { FAMILIAS, atributosDe, bulletsDe, cargadosDe, type Atributo, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
 
 /**
  * Redacción: la ficha de cada prenda y el párrafo que la vende.
@@ -57,14 +57,20 @@ export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, atributos, puedePublicar, error, refrescar, guardar, guardarAtributo, redactar, publicar } = useGenDesc(marca)
+  const { cargando, productos, cola, atributos, puedePublicar, error, refrescar, guardar, guardarAtributo, guardarFamilia, redactar, publicar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('ultimas-tandas')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
 
   const publicados = useMemo(() => productos.filter((p) => p.published), [productos])
   const tandas = useMemo(() => ultimasTandas(publicados), [publicados])
-  const sinFicha = (p: ProductoTn) => !!p.familia && !Object.keys(atributos[p.id] || {}).length
+  /**
+   * 🔑 La categoría de TiendaNube GANA sobre la elegida a mano: si mañana alguien se la pone, la
+   * familia se corrige sola. Lo elegido a mano es el piso para los dos productos que no tienen
+   * ninguna, no una segunda fuente que compita con la tienda.
+   */
+  const familiaDeProducto = (p: ProductoTn): Familia | null => p.familia ?? cola[p.id]?.familia ?? null
+  const sinFicha = (p: ProductoTn) => !!familiaDeProducto(p) && !Object.keys(atributos[p.id] || {}).length
 
   const stats = useMemo(
     () => ({
@@ -143,9 +149,16 @@ export function GenDesc() {
             abierto={abierto === p.id}
             onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
             puedePublicar={puedePublicar}
+            familia={familiaDeProducto(p)}
+            onFamilia={async (familia) => {
+              const err = await guardarFamilia(p.id, familia, p.name)
+              if (err) toast.error(err)
+              return err
+            }}
             onAtributo={async (atributo, valor) => {
-              if (!p.familia) return 'Este producto no tiene categoría en TiendaNube.'
-              const err = await guardarAtributo(p.id, p.familia, atributo, valor, p.name)
+              const familia = familiaDeProducto(p)
+              if (!familia) return 'Elegí primero qué prenda es.'
+              const err = await guardarAtributo(p.id, familia, atributo, valor, p.name)
               if (err) toast.error(err)
               return err
             }}
@@ -184,14 +197,17 @@ export function GenDesc() {
 }
 
 function FilaProducto({
-  p, fila, ficha, abierto, onAbrir, puedePublicar, onAtributo, onRedactar, onGuardar, onPublicar,
+  p, fila, ficha, familia, abierto, onAbrir, puedePublicar, onFamilia, onAtributo, onRedactar, onGuardar, onPublicar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
   ficha: Cargados
+  /** La de TiendaNube, o la que eligió alguien a mano. `null` = todavía no se sabe qué prenda es. */
+  familia: Familia | null
   abierto: boolean
   onAbrir: () => void
   puedePublicar: boolean
+  onFamilia: (familia: Familia) => Promise<string | null>
   onAtributo: (atributo: Atributo, valor: string) => Promise<string | null>
   onRedactar: (modelo: string, insumo: string, bullets: { etiqueta: string; texto: string }[]) => Promise<ResultadoIA>
   onGuardar: (cuerpo: Record<string, unknown>) => Promise<string | null>
@@ -216,9 +232,9 @@ function FilaProducto({
   const partes = useMemo(() => partir(p.raw_desc), [p.raw_desc])
 
   /** 🔑 Los mismos bullets que va a componer el servidor al publicar: una sola implementación. */
-  const bullets = useMemo(() => bulletsDe(p.familia, ficha), [p.familia, ficha])
-  const campos = useMemo(() => atributosDe(p.familia), [p.familia])
-  const cuenta = useMemo(() => cargadosDe(p.familia, ficha), [p.familia, ficha])
+  const bullets = useMemo(() => bulletsDe(familia, ficha), [familia, ficha])
+  const campos = useMemo(() => atributosDe(familia), [familia])
+  const cuenta = useMemo(() => cargadosDe(familia, ficha), [familia, ficha])
 
   const problemas = useMemo(
     () => validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }),
@@ -261,9 +277,9 @@ function FilaProducto({
         </div>
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {/* La ficha primero: es lo que hay que cargar y lo que le falta a la mayoría. */}
-          {p.familia
+          {familia
             ? <Badge tone={cuenta.con === 0 ? 'warning' : cuenta.con === cuenta.total ? 'success' : 'neutral'}>Ficha {cuenta.con}/{cuenta.total}</Badge>
-            : <Badge tone="danger">Sin categoría en TN</Badge>}
+            : <Badge tone="warning">Falta decir qué prenda es</Badge>}
           {p.prosa.banda === 'nada' && <Badge tone="danger">Sin descripción</Badge>}
           {p.prosa.banda === 'corta' && <Badge tone="warning">Corta</Badge>}
           {fila?.estado === 'aprobado' && <Badge tone="success">Aprobado</Badge>}
@@ -283,12 +299,24 @@ function FilaProducto({
           </div>
 
           {/* ── La ficha: la carga el local y de acá salen los bullets ── */}
-          {!p.familia ? (
-            <Notice tone="danger">
-              Este producto no tiene categoría en TiendaNube (sólo «{p.categories.join(' / ') || 'ninguna'}»),
-              así que no se sabe qué prenda es ni qué preguntarle. <b>Ponele la categoría en la tienda</b> y
-              volvé a traer el catálogo.
-            </Notice>
+          {!familia ? (
+            <div>
+              <Notice tone="warning">
+                Este producto no tiene categoría en TiendaNube (sólo «{p.categories.join(' / ') || 'ninguna'}»),
+                así que la ficha no sabe qué preguntarle. <b>Decile qué prenda es</b> y aparecen los campos.
+                Conviene igual ponerle la categoría en la tienda.
+              </Notice>
+              <div style={{ marginTop: 10, maxWidth: 320 }}>
+                <Field label="¿Qué prenda es?">
+                  <Select value="" onChange={(ev) => { const v = ev.target.value as Familia; if (v) void onFamilia(v) }}>
+                    <option value="">— elegí —</option>
+                    {Object.entries(FAMILIAS).map(([k, f]) => (
+                      <option key={k} value={k}>{(f as { label: string }).label}</option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            </div>
           ) : (
             <div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>

@@ -43,6 +43,8 @@ export type ProductoTn = {
 export type FilaCola = {
   tn_id: string
   nombre: string | null
+  /** La prenda elegida a mano, para los productos que en TiendaNube no tienen categoría. */
+  familia: Familia | null
   insumo: string | null
   insumo_por: string | null
   borrador: Borrador | null
@@ -217,6 +219,33 @@ export function useGenDesc(marca: Marca) {
    * pantalla parpadee en cada elección. El estado local se actualiza con lo que confirmó el
    * servidor (`d.valor`), que es lo que quedó guardado — no lo que el `<select>` creía tener.
    */
+  /**
+   * Guarda qué prenda es, para los productos que en TiendaNube no tienen categoría.
+   *
+   * 🔴 Son dos de los 328 (medido el 27-ago-2026) y la lista los muestra ARRIBA, porque ordena
+   * los mudos primero: el local se choca con ellos antes que con ningún otro. Bloquearlos hasta
+   * que alguien arregle la categoría en la tienda es dejarlos mudos por algo que no depende de
+   * quien está cargando.
+   */
+  const guardarFamilia = useCallback(
+    async (tnId: string, familia: Familia, nombre?: string): Promise<string | null> => {
+      try {
+        const r = await apiFetch(COLA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'familia', familia, nombre }),
+        })
+        const d = await r.json()
+        if (!r.ok || !d?.ok) return d?.error || `Error ${r.status}`
+        await cargar()
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : 'No se pudo guardar.'
+      }
+    },
+    [marca, cargar],
+  )
+
   const guardarAtributo = useCallback(
     async (tnId: string, familia: Familia, atributo: Atributo, valor: string, nombre?: string): Promise<string | null> => {
       try {
@@ -300,5 +329,5 @@ export function useGenDesc(marca: Marca) {
     [marca, cargar],
   )
 
-  return { ...estado, cargar, refrescar, guardar, guardarAtributo, redactar, publicar }
+  return { ...estado, cargar, refrescar, guardar, guardarAtributo, guardarFamilia, redactar, publicar }
 }
