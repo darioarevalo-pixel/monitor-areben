@@ -17,7 +17,7 @@ import { notaVentaTecnica } from './nota'
 import type { RetornoRow } from './retornos'
 import type {
   Compensacion, DestinoPrenda, ReclamoRow, EstadoReclamo, EnvioPaga, FotoReclamo, ItemReclamo,
-  Expectativa, FormaPago, MotivoReclamo, OrdenTN, RespuestaRetencion, ViaRetorno,
+  Expectativa, FormaPago, FormaRetencion, MotivoReclamo, OrdenTN, RespuestaRetencion, ViaRetorno,
 } from './tipos'
 
 const API = '/api/postventa?recurso=reclamos'
@@ -221,6 +221,8 @@ export type Decision = {
    */
   retencion_respuesta?: RespuestaRetencion | null
   retencion_monto?: number | null
+  /** En qué se le ofreció: plata o cupón. Va junta con las otras dos, o ninguna. */
+  retencion_forma?: FormaRetencion | null
   /**
    * **El destino de cada producto**, como mapa índice → destino. `null` en un índice lo devuelve al
    * destino del reclamo. ⛔ Los productos no se reenvían: salen de la orden, y dejar que la decisión

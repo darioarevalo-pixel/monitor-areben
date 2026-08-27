@@ -26,7 +26,9 @@ import {
   productoEnJuego,
   puedeVolverLaPrenda,
   reclasificaA,
+  pendientesDe,
   registroDeRetencion,
+  salidaAlAceptarRetencion,
   type MotivoReclamo,
 } from '@/lib/reclamos/tipos'
 
@@ -293,7 +295,9 @@ describe('el escenario no puede mover cualquier cosa', () => {
  * numerador existe y el denominador no: no se puede decir cuántas veces funciona.
  */
 describe('el registro de la oferta de retención', () => {
-  const base = { motivo: 'talle' as MotivoReclamo, escenario: null, retornoDecidido: false }
+  // ⚠️ `forma` entró el 27-ago-2026 y es obligatoria: la base la trae para que cada caso hable de
+  // lo suyo. Los casos que la prueban a ella la pisan.
+  const base = { motivo: 'talle' as MotivoReclamo, escenario: null, retornoDecidido: false, forma: 'plata' as const }
 
   it('sin respuesta no toca nada: mandar la decisión desde otra pantalla ⛔ no borra la oferta ya registrada', () => {
     expect(registroDeRetencion({ ...base, respuesta: null, monto: null }).campos).toEqual({})
@@ -310,17 +314,17 @@ describe('el registro de la oferta de retención', () => {
   it('la respuesta sale de una lista cerrada', () => {
     expect(registroDeRetencion({ ...base, respuesta: 'quizas' as never, monto: 6000 }).error).toBeTruthy()
     expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 6000 }).campos)
-      .toEqual({ retencion_respuesta: 'rechazo', retencion_monto: 6000 })
+      .toEqual({ retencion_respuesta: 'rechazo', retencion_monto: 6000, retencion_forma: 'plata' })
   })
 
   it('⛔ no se puede registrar una oferta en un caso donde no hay nada que quedarse', () => {
     // En una demora el pedido llegó, y en una cancelación nunca salió: no hay producto en juego,
     // así que una oferta registrada ahí es una fila que después cuenta mal.
-    expect(registroDeRetencion({ motivo: 'demora', escenario: 'transporte', retornoDecidido: false, respuesta: 'rechazo', monto: 6000 }).error).toBeTruthy()
-    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'se_puede_frenar', retornoDecidido: false, respuesta: 'acepto', monto: 6000 }).error).toBeTruthy()
+    expect(registroDeRetencion({ motivo: 'demora', escenario: 'transporte', retornoDecidido: false, respuesta: 'rechazo', monto: 6000, forma: 'plata' }).error).toBeTruthy()
+    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'se_puede_frenar', retornoDecidido: false, respuesta: 'acepto', monto: 6000, forma: 'plata' }).error).toBeTruthy()
     // El mismo caso con el pedido ya despachado sí admite la oferta: el cliente lo tiene.
-    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'ya_salio', retornoDecidido: false, respuesta: 'acepto', monto: 6000 }).campos)
-      .toEqual({ retencion_respuesta: 'acepto', retencion_monto: 6000 })
+    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'ya_salio', retornoDecidido: false, respuesta: 'acepto', monto: 6000, forma: 'plata' }).campos)
+      .toEqual({ retencion_respuesta: 'acepto', retencion_monto: 6000, retencion_forma: 'plata' })
   })
 
   it('si acepta quedárselo, el producto ⛔ no puede estar pedido de vuelta a la vez', () => {
@@ -329,7 +333,50 @@ describe('el registro de la oferta de retención', () => {
     expect(registroDeRetencion({ ...base, respuesta: 'acepto', monto: 6000, retornoDecidido: true }).error).toBeTruthy()
     // La RECHAZADA sí convive con el retorno: justamente por eso vuelve.
     expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 6000, retornoDecidido: true }).campos)
-      .toEqual({ retencion_respuesta: 'rechazo', retencion_monto: 6000 })
+      .toEqual({ retencion_respuesta: 'rechazo', retencion_monto: 6000, retencion_forma: 'plata' })
+  })
+
+  /**
+   * 🆕 **La FORMA, 27-ago-2026.** Las dos ofertas cuestan cosas distintas —la plata sale de la caja
+   * hoy, el cupón sale sólo si el cliente vuelve a comprar— y sin registrar cuál fue, un `acepto`
+   * por $6.500 en efectivo y uno por $6.500 en cupón salen iguales de la base.
+   */
+  it('la forma es obligatoria: una oferta sin decir en qué queda indistinguible de la otra', () => {
+    expect(registroDeRetencion({ ...base, respuesta: 'acepto', monto: 6000, forma: null }).error).toBeTruthy()
+    expect(registroDeRetencion({ ...base, respuesta: 'acepto', monto: 6000, forma: 'tarjeta' as never }).error).toBeTruthy()
+  })
+
+  it('y las dos formas se guardan distintas', () => {
+    expect(registroDeRetencion({ ...base, respuesta: 'acepto', monto: 6000, forma: 'cupon' }).campos)
+      .toEqual({ retencion_respuesta: 'acepto', retencion_monto: 6000, retencion_forma: 'cupon' })
+    expect(registroDeRetencion({ ...base, respuesta: 'acepto', monto: 6000, forma: 'plata' }).campos)
+      .toEqual({ retencion_respuesta: 'acepto', retencion_monto: 6000, retencion_forma: 'plata' })
+  })
+
+  /**
+   * ⚠️ **Sin respuesta la forma ⛔ no alcanza para escribir nada.** El desplegable arranca en
+   * `'plata'` por default, así que si la forma sola bastara, cada reclamo que alguien abre y cierra
+   * sin ofrecer nada quedaría con una oferta registrada que nunca existió.
+   */
+  it('la forma sola ⛔ no registra una oferta', () => {
+    expect(registroDeRetencion({ ...base, respuesta: null, monto: null, forma: 'cupon' }).campos).toEqual({})
+  })
+
+  /**
+   * 🔴 **Aceptar un CUPÓN ⛔ no es lo mismo que aceptar plata**, y no por el rótulo: de la
+   * resolución cuelga `EFECTOS_RESOLUCION`, y `cupon` es la única que deja el pendiente de
+   * **crearlo en la tienda**. Con `plata_parcial` fijo, aceptar un cupón hacía dos cosas mal a la
+   * vez: sacaba de la caja una plata que nunca salió, y cerraba el reclamo sin que el cupón
+   * existiera — el cliente se entera en la próxima compra de que el código no anda.
+   */
+  it('aceptar un cupón termina en `cupon`, y eso es lo que deja el pendiente de crearlo', () => {
+    expect(salidaAlAceptarRetencion('cupon')).toBe('cupon')
+    expect(salidaAlAceptarRetencion('plata')).toBe('plata_parcial')
+    // La contracara, que es lo que hace que importe: sólo una de las dos pide emitir el cupón.
+    expect(pendientesDe({ compensacion: salidaAlAceptarRetencion('cupon') }).cupon_estado).toBe('pendiente')
+    expect(pendientesDe({ compensacion: salidaAlAceptarRetencion('plata') }).cupon_estado).toBe('no_aplica')
+    // Y sólo una de las dos saca plata de la caja.
+    expect(pendientesDe({ compensacion: salidaAlAceptarRetencion('plata') }).reintegro_estado).toBe('pendiente')
   })
 
 })

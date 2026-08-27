@@ -31,6 +31,7 @@ const sql = [
   'sql/migrate-reclamos-efectos.sql',
   'sql/migrate-reclamos-escenario.sql',
   'sql/migrate-reclamos-retencion.sql',
+  'sql/migrate-reclamos-retencion-forma.sql',
 ].map((f) => readFileSync(f, 'utf8')).join('\n;\n')
 
 // Parse robusto (la contraseña puede tener caracteres especiales sin encodear).

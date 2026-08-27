@@ -104,7 +104,7 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
-  retencion_respuesta, retencion_monto, cupon_estado,
+  retencion_respuesta, retencion_monto, retencion_forma, cupon_estado,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
   pagado, cobro_estado, envio_paga, reingreso_estado,
@@ -370,6 +370,7 @@ export default async function handler(req, res) {
         escenario,
         respuesta: texto(b.retencion_respuesta),
         monto: num(b.retencion_monto),
+        forma: texto(b.retencion_forma),
         retornoDecidido: b.retorno_decidido === true,
       });
       if (retencion.error) return res.status(400).json({ error: retencion.error });
@@ -790,6 +791,7 @@ export default async function handler(req, res) {
           escenario: campos.escenario !== undefined ? campos.escenario : (fila.escenario || null),
           respuesta: texto(b.retencion_respuesta),
           monto: num(b.retencion_monto),
+          forma: texto(b.retencion_forma),
           // El retorno que vale es el que se está guardando en este mismo gesto, si vino.
           retornoDecidido: campos.retorno_decidido !== undefined ? campos.retorno_decidido : fila.retorno_decidido === true,
         });

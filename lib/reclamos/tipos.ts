@@ -29,7 +29,9 @@ import {
   esSoloSeguimiento as esSoloSeguimientoJs,
   ofreceRetencion as ofreceRetencionJs,
   perfilDe as perfilDeJs,
+  FORMAS_RETENCION as FORMAS_RETENCION_JS,
   registroDeRetencion as registroDeRetencionJs,
+  salidaAlAceptarRetencion as salidaAlAceptarRetencionJs,
   RESPUESTAS_RETENCION as RESPUESTAS_RETENCION_JS,
   pideReclamoAlTransportista as pideReclamoAlTransportistaJs,
   productoEnJuego as productoEnJuegoJs,
@@ -584,6 +586,23 @@ export type RespuestaRetencion = 'acepto' | 'rechazo'
 export const RESPUESTAS_RETENCION = RESPUESTAS_RETENCION_JS as Record<RespuestaRetencion, string>
 
 /**
+ * **En qué se le ofrece que se lo quede.** Las dos cuestan cosas distintas: la plata sale de la
+ * caja **hoy**; el cupón sale **sólo si el cliente vuelve a comprar**. ⚠️ Ausente ⛔ no es «fue
+ * plata»: es **sin registrar**.
+ */
+export type FormaRetencion = 'plata' | 'cupon'
+
+export const FORMAS_RETENCION = FORMAS_RETENCION_JS as Record<FormaRetencion, string>
+
+/**
+ * En qué termina el reclamo cuando acepta quedárselo. 🔴 De la resolución cuelga
+ * `EFECTOS_RESOLUCION`, y `cupon` es la única que deja el pendiente de **crearlo en la tienda**.
+ */
+export function salidaAlAceptarRetencion(forma: FormaRetencion): Compensacion {
+  return salidaAlAceptarRetencionJs(forma) as Compensacion
+}
+
+/**
  * Lo que se guarda de la oferta de retención, ya validado: las dos mitades juntas o ninguna.
  *
  * Los cinco datos son **obligatorios** aunque tres puedan valer `null` — mismo motivo que el
@@ -595,10 +614,17 @@ export function registroDeRetencion(o: {
   escenario: string | null
   respuesta: RespuestaRetencion | null
   monto: number | null
+  forma: FormaRetencion | null
   retornoDecidido: boolean
-}): { error?: string; campos?: { retencion_respuesta?: RespuestaRetencion; retencion_monto?: number } } {
+}): { error?: string; campos?: CamposRetencion } {
   // `campos` vacío = no hay nada que registrar y ⛔ no se toca lo ya guardado.
-  return registroDeRetencionJs(o) as { error?: string; campos?: { retencion_respuesta?: RespuestaRetencion; retencion_monto?: number } }
+  return registroDeRetencionJs(o) as { error?: string; campos?: CamposRetencion }
+}
+
+type CamposRetencion = {
+  retencion_respuesta?: RespuestaRetencion
+  retencion_monto?: number
+  retencion_forma?: FormaRetencion
 }
 
 /** ¿Decide el cliente en vez de nosotros? Hoy sólo en `sin_stock`, que es el caso raro. */
@@ -673,6 +699,7 @@ export function faltantesDeLaDecision(o: {
   envioIda: number | ''
   retencionMonto: number | ''
   retencionRespuesta: RespuestaRetencion | null
+  retencionForma: FormaRetencion | null
 }): FaltaDecision[] {
   const faltas: FaltaDecision[] = []
   const cargado = (n: number | '') => n !== '' && Number(n) > 0
@@ -701,6 +728,7 @@ export function faltantesDeLaDecision(o: {
     escenario: o.escenario,
     respuesta: o.retencionRespuesta,
     monto: o.retencionMonto === '' ? null : Number(o.retencionMonto),
+    forma: o.retencionForma ?? null,
     retornoDecidido: o.retorno,
   })
   if (oferta.error) faltas.push({ paso: 'producto', que: oferta.error, bloquea: true })
@@ -945,9 +973,13 @@ export function resumenDeLoDecidido(d: ReclamoRow, quien: QuienMira): LineaResum
   // La oferta de retención va acá, al lado de lo que recibe: es la resolución que se intentó antes
   // de ésta. La rechazada es la que importa — es la única forma de saber cuántas veces funciona.
   if (conPlata && d.retencion_respuesta) {
+    // ⚠️ La forma se nombra siempre. Sin ella la línea dice un monto y calla en qué estaba
+    // expresado, que es justo lo que hace que dos ofertas de costo muy distinto se lean iguales.
+    // «sin registrar» es lo que corresponde a las filas anteriores a la columna: ⛔ no «plata».
+    const enQue = d.retencion_forma ? FORMAS_RETENCION[d.retencion_forma].toLowerCase() : 'sin registrar en qué'
     l.push({
       que: '¿Se le ofreció que se lo quede?',
-      valor: `Sí, por ${money(Number(d.retencion_monto ?? 0))} — ${d.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}`,
+      valor: `Sí, por ${money(Number(d.retencion_monto ?? 0))} (${enQue}) — ${d.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}`,
     })
   }
 
@@ -1259,14 +1291,32 @@ export function puedeRehacerseLaDecision(d: ReclamoRow): boolean {
  *
  * ⚠️ Por eso un paso que no tenía nada que guardar ⛔ no queda tildado: sería decir que se guardó
  * algo que no existe.
+ *
+ * 🔴 **`rehaciendo` es obligatorio, y es el arreglo de un bucle real.** El 27-ago-2026 Bruno abrió
+ * R-0022 con «Volver a decidir», confirmó el primer paso, salió, y la fila seguía ofreciéndole
+ * «Volver a decidir». La pantalla no estaba rota: le había marcado **«El cliente» con un ✓**,
+ * porque la compensación de la decisión VIEJA estaba en la base. O sea que el único paso que
+ * decide —el tercero, el que tiene «Confirmar la decisión»— se leía como **ya hecho**, y salir
+ * después de tildar el que decía «falta» era exactamente lo que la pantalla le estaba pidiendo.
+ *
+ * 🔑 La regla que lo cierra: **el ✓ sale de lo que ESTE recorrido escribió.** Los pasos ① y ② los
+ * escribe «Confirmar paso» —el valor de la base es el mismo que se está por reguardar—, así que su
+ * tilde sigue siendo cierto al rehacer. El ③ ⛔ **no lo escribe nadie más que «Confirmar la
+ * decisión»**: mientras no se apriete, la decisión nueva no está guardada, y decir que sí es la
+ * mentira que armó el bucle.
+ *
+ * ⛔ No tiene default a propósito: un llamador que no conteste si está rehaciendo volvería a caer
+ * en el caso de arriba sin enterarse — es el mismo motivo por el que `registroDeRetencion` pide
+ * todos sus campos.
  */
 export function pasoGuardado(
   d: Pick<ReclamoRow, 'escenario' | 'envio_costo' | 'compensacion'>,
   paso: PasoDecision,
+  rehaciendo: boolean,
 ): boolean {
   if (paso === 'que-paso') return d.escenario != null
   if (paso === 'producto') return d.envio_costo != null
-  return d.compensacion != null
+  return !rehaciendo && d.compensacion != null
 }
 
 
@@ -1772,6 +1822,7 @@ export type ReclamoRow = {
    */
   retencion_respuesta?: RespuestaRetencion | null
   retencion_monto?: number | null
+  retencion_forma?: FormaRetencion | null
   expectativa?: Expectativa | null
   /** El número de reclamo al transportista, cuando el pedido se perdió en el camino. */
   reclamo_correo?: string | null

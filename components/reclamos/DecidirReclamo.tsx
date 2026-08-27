@@ -31,7 +31,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Button, Field, Input, Lightbox, Modal, NumberField, Notice, Select, MoneyText, StatusPill, Tabs,
+  Button, Chips, Field, Input, Lightbox, Modal, NumberField, Notice, Select, MoneyText, StatusPill, Tabs,
   color, font, space, weight, useToast,
 } from '@/components/ui'
 import type { TabItem } from '@/components/ui/Tabs'
@@ -46,11 +46,11 @@ import {
   MOTIVO_LABEL, numeroReclamo, puedeVolverLaPrenda, VIA_LABEL, VIAS_VIGENTES,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
-  type RespuestaRetencion,
+  type RespuestaRetencion, FORMAS_RETENCION, salidaAlAceptarRetencion, type FormaRetencion,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PISO_RETORNO,
   type PasoDecision, type FaltaDecision,
-  DESTINO_LABEL, destinosDe, laUnidadVuelve,
+  DESTINO_LABEL, destinosDe, laUnidadVuelve, COMPENSACION_LABEL, estaDecidido,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
   type Compensacion, type DestinoPrenda, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type OrdenTN,
   type ViaRetorno,
@@ -189,6 +189,14 @@ export function DecidirReclamo({
    */
   const [retencion, setRetencion] = useState<RespuestaRetencion | null>(reclamo.retencion_respuesta ?? null)
   const [retencionMonto, setRetencionMonto] = useState<number | ''>(reclamo.retencion_monto ?? '')
+  /**
+   * 🔑 **En qué se le ofrece: plata o cupón.** Arranca en `'plata'`, que es lo único que existía
+   * hasta el 27-ago-2026 — y por eso el default acá ⛔ no inventa nada: es lo que la pantalla venía
+   * haciendo sin decirlo. ⚠️ Un reclamo YA decidido abre con la forma que tenía registrada; si es
+   * anterior a la columna abre en `'plata'`, y eso ⛔ no reescribe la fila: mientras nadie conteste
+   * la oferta, `registroDeRetencion` no toca nada.
+   */
+  const [retencionForma, setRetencionForma] = useState<FormaRetencion>(reclamo.retencion_forma ?? 'plata')
   /**
    * La escapatoria de la oferta: el sistema dijo que no convenía ofrecer nada y la persona la hizo
    * igual. ⛔ No se puede tapar el registro sólo porque el veredicto haya sido otro — la cuenta de
@@ -345,6 +353,7 @@ export function DecidirReclamo({
         // Las dos mitades de la oferta viajan juntas: el servidor rechaza media.
         retencion_respuesta: retencion,
         retencion_monto: retencion ? montoOferta : null,
+        retencion_forma: retencion ? retencionForma : null,
         expectativa: expectativa || null,
         items_correctos: reclamo.motivo === 'mal_armado' ? recibidos : undefined,
         // Sólo cuando hay más de un producto: en el de uno solo, el destino del reclamo ES el del
@@ -422,13 +431,38 @@ export function DecidirReclamo({
     setRetencion(r)
     setRetencionMonto(montoOferta)
     if (r === 'acepto') {
-      setCompensacion('plata_parcial')
-      setMontoAcordado(montoOferta)
+      /**
+       * 🔑 **La salida sale de la FORMA de la oferta.** Aceptar un descuento en plata es
+       * `plata_parcial`; aceptar un cupón es `cupon` — y la diferencia ⛔ no es cosmética:
+       * `EFECTOS_RESOLUCION` deriva de ahí que hay que **emitir el cupón en la tienda**
+       * (`cupon_estado: 'pendiente'`), y sin eso el reclamo se cierra «con cupón» y el cliente
+       * descubre en la próxima compra que el código no existe. Con `plata_parcial` fijo, un cupón
+       * aceptado además sacaba plata de la caja que nunca salió.
+       */
+      setCompensacion(salidaAlAceptarRetencion(retencionForma))
+      setMontoAcordado(retencionForma === 'cupon' ? '' : montoOferta)
       setPedirRetorno(false)
     }
   }
 
   // ── Las tres pestañas ─────────────────────────────────────────────────────────
+
+  /**
+   * 🔴 **¿Se está REHACIENDO una decisión ya tomada?**
+   *
+   * Sale de la fila y ⛔ no de un prop, porque es la fila la que dice si hay algo que reemplazar.
+   * Cambia tres cosas, y las tres salieron del bucle que Bruno reportó con R-0022 el 27-ago-2026
+   * («pongo volver a decidir, confirmo el primer paso, y cuando salgo sigue diciendo volver a
+   * decidir»):
+   *
+   * 1. **El ✓ de «El cliente» no puede salir de la decisión vieja** (`pasoGuardado`). Ése era el
+   *    motor del bucle: la pantalla marcaba como hecho el único paso que decide.
+   * 2. **Se dice en pantalla que la decisión que vale sigue siendo la de antes** hasta apretar el
+   *    botón del final. Una pantalla que no lo pregunta igual afirma, y acá afirmaba lo contrario.
+   * 3. **El botón del final se llama como el gesto**: «Volver a decidir», no «Confirmar la
+   *    decisión» — la persona vino a rehacerla, no a confirmarla.
+   */
+  const rehaciendo = estaDecidido(reclamo)
 
   const [paso, setPaso] = useState<PasoDecision>('que-paso')
   /**
@@ -453,6 +487,7 @@ export function DecidirReclamo({
     // sugerido, y un sugerido que nadie dijo ⛔ no es una oferta a medias.
     retencionMonto: retencion ? montoOferta : '',
     retencionRespuesta: retencion,
+    retencionForma,
   })
 
   /**
@@ -509,7 +544,13 @@ export function DecidirReclamo({
       if (retorno) campos.via_retorno = via
       if (pedirRetorno !== null) campos.retorno_decidido = pedirRetorno
       if (destino) campos.destino_prenda = destino
-      if (retencion) { campos.retencion_respuesta = retencion; campos.retencion_monto = montoOferta }
+      // Las TRES mitades de la oferta viajan juntas: `registroDeRetencion` rechaza el registro a
+      // medias, así que dejar la forma afuera acá hacía que guardar el paso volviera un 400.
+      if (retencion) {
+        campos.retencion_respuesta = retencion
+        campos.retencion_monto = montoOferta
+        campos.retencion_forma = retencionForma
+      }
       // El PVP de feria y el destino de cada unidad viven en `items`, no en columnas propias.
       const feria = Number(pvpFeria) || null
       campos.items = items.map((it, i) => ({
@@ -531,7 +572,13 @@ export function DecidirReclamo({
       await editarReclamo(marca, reclamo.id, campos as Partial<ReclamoRow>)
       setRevisados((p) => new Set(p).add(paso))
       setGuardoAlgo(true)
-      toast.ok(`«${PASO_LABEL[paso]}» guardado. Podés salir y seguir después.`)
+      // ⚠️ **Al rehacer, «guardado» ⛔ no puede leerse como «decidido».** El texto de siempre
+      // («podés salir y seguir después») es cierto en una decisión nueva —el reclamo todavía no
+      // está resuelto, no hay nada que perder— y es engañoso al rehacer: salir ahí deja la
+      // resolución vieja intacta, que es exactamente lo que se reportó.
+      toast.ok(rehaciendo
+        ? `«${PASO_LABEL[paso]}» guardado. ⚠️ Todavía NO rehiciste la decisión: falta «Volver a decidir» en «${PASO_LABEL.cliente}».`
+        : `«${PASO_LABEL[paso]}» guardado. Podés salir y seguir después.`)
       if (siguiente) setPaso(siguiente)
     } catch (e) {
       toast.error((e as Error).message)
@@ -545,7 +592,7 @@ export function DecidirReclamo({
     const e = estadoDelPaso(faltas, p)
     // El tilde dice **"esto ya está guardado"**, y por eso mira también la fila: así sobrevive a
     // cerrar el modal, que es todo el sentido de poder confirmar un paso y seguir después.
-    if (!e) return (revisados.has(p) || pasoGuardado(reclamo, p)) ? <StatusPill tone="success" label="✓" /> : null
+    if (!e) return (revisados.has(p) || pasoGuardado(reclamo, p, rehaciendo)) ? <StatusPill tone="success" label="✓" /> : null
     return <StatusPill tone={e === 'traba' ? 'danger' : 'warning'} label={e === 'traba' ? 'traba' : 'falta'} />
   }
 
@@ -561,7 +608,7 @@ export function DecidirReclamo({
   return (
     <Modal
       abierto onCerrar={cerrar} ancho="ancho"
-      titulo={`Decidir ${numeroReclamo(reclamo.id)}`}
+      titulo={`${rehaciendo ? 'Volver a decidir' : 'Decidir'} ${numeroReclamo(reclamo.id)}`}
       /**
        * 🔑 **La botonera va al pie del Modal, que ⛔ NO scrollea.** Estaba al fondo del cuerpo:
        * había que bajar 800 px para confirmar, y con la pantalla partida en tres eso pasaba de
@@ -580,7 +627,7 @@ export function DecidirReclamo({
               primeros pasos el botón confirma ESE paso y avanza. */}
           {esUltimo ? (
             <Button variant="solid" tone="brand" onClick={() => void guardar()} disabled={guardando}>
-              {guardando ? 'Guardando…' : 'Confirmar la decisión'}
+              {guardando ? 'Guardando…' : rehaciendo ? 'Volver a decidir' : 'Confirmar la decisión'}
             </Button>
           ) : (
             <Button variant="solid" tone="brand" onClick={() => void confirmarPaso()} disabled={guardando}>
@@ -594,6 +641,24 @@ export function DecidirReclamo({
         {MOTIVO_LABEL[reclamo.motivo]} · orden #{reclamo.orden_tn || '—'} · {reclamo.cliente || 'sin nombre'}
         {reclamo.pago_metodo ? ` · pagó por ${reclamo.pago_metodo}` : ''}
       </div>
+
+      {/* 🔴 **Rehacer una decisión tiene que DECIR que la vieja sigue en pie.**
+          Va arriba de las pestañas para que se lea en las tres, y ⛔ no adentro del paso final:
+          el defecto del 27-ago-2026 fue justamente que la persona no llegó al paso final.
+
+          Dice las dos cosas que no se pueden deducir de la pantalla:
+          - **cuál es la decisión que sigue valiendo** — la fila no se toca hasta el botón del
+            final, así que salir acá deja el reclamo exactamente como estaba;
+          - **que los pasos ① y ② SÍ escriben** (`editar`), o sea que lo cargado no se pierde,
+            pero tampoco alcanza. Sin esta mitad, «guardado» y «decidido» se leen igual. */}
+      {rehaciendo && reclamo.compensacion && (
+        <Notice tone="warning" icon="⚠" style={{ marginBottom: space[3] }}>
+          Este reclamo <b>ya está decidido</b>: {COMPENSACION_LABEL[reclamo.compensacion].toLowerCase()}.
+          {' '}Hasta que no aprietes <b>«Volver a decidir»</b> en la pestaña <b>«{PASO_LABEL.cliente}»</b>,
+          ésa sigue siendo la decisión que vale. Lo que confirmes en los dos primeros pasos queda
+          guardado, pero <b>⛔ no reemplaza la resolución</b>.
+        </Notice>
+      )}
 
       {/* Las tres pestañas son los tres momentos de la decisión, y el orden importa: cada una usa
           números que se cargaron en la anterior. Se puede saltar libremente —quien conoce el caso
@@ -901,7 +966,26 @@ export function DecidirReclamo({
                   <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
                     {/* Editable: lo que se negocia de verdad rara vez es el número que sale de la
                         fórmula, y el que importa es el que se DIJO. */}
-                    <Field label="Cuánto se le ofrece" hint="arranca en lo sugerido" style={{ marginBottom: 0 }}>
+                    {/* 🔑 **En qué se le ofrece.** Las dos cuestan cosas distintas: la plata sale
+                        de la caja HOY, el cupón sale sólo si el cliente vuelve a comprar. Sin esta
+                        pregunta las dos ofertas quedaban indistinguibles en la base — el mismo
+                        agujero que `retencion_respuesta` vino a tapar: existía el numerador y no el
+                        denominador.
+                        ⚠️ Cambiar la forma con una respuesta ya marcada la BORRA: la respuesta era
+                        a la otra oferta, y dejarla puesta diría que aceptó algo que no se le
+                        ofreció. */}
+                    <Field label="¿En qué se le ofrece?" style={{ marginBottom: 0 }}>
+                      <Chips
+                        value={retencionForma}
+                        onChange={(v) => { setRetencionForma(v as FormaRetencion); if (retencion) setRetencion(null) }}
+                        opciones={(Object.keys(FORMAS_RETENCION) as FormaRetencion[]).map((k) => ({ key: k, label: FORMAS_RETENCION[k] }))}
+                      />
+                    </Field>
+                    <Field
+                      label="Cuánto se le ofrece"
+                      hint={retencionForma === 'cupon' ? '▶️ sin regla todavía: lo ponés vos' : 'arranca en lo sugerido'}
+                      style={{ marginBottom: 0 }}
+                    >
                       <NumberField value={montoOferta} onChange={(v) => setRetencionMonto(v)} prefix="$" style={{ width: 140 }} />
                     </Field>
                     <Button
@@ -924,7 +1008,9 @@ export function DecidirReclamo({
                       ⚠️ El aviso sólo aparece cuando hay una oferta que registrar: retar cuando la
                       pantalla no deja ofrecer nada era pedir lo imposible. */}
                   <div style={{ fontSize: font.xs, color: retencion ? color.mut : color.warningInk, marginTop: space[2] }}>
-                    {retencion === 'acepto' ? 'Queda registrado que aceptó. El producto no vuelve.'
+                    {retencion === 'acepto' ? (retencionForma === 'cupon'
+                      ? 'Queda registrado que aceptó el cupón. El producto no vuelve, y queda pendiente CREARLO en la tienda.'
+                      : 'Queda registrado que aceptó. El producto no vuelve.')
                       : retencion === 'rechazo' ? 'Queda registrado que no aceptó: seguí con el cambio o la devolución.'
                         : montoOferta > 0 ? 'Sin registrar. Si se lo ofreciste, anotá qué contestó — es lo único que después dice cuántas veces funciona.'
                           : 'Poné cuánto le ofreciste para poder anotar qué contestó.'}

@@ -12,7 +12,7 @@ import {
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
-  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion,
+  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -1705,6 +1705,7 @@ describe('faltantesDeLaDecision', () => {
     envioIda: '' as number | '',
     retencionMonto: '' as number | '',
     retencionRespuesta: null as 'acepto' | 'rechazo' | null,
+    retencionForma: 'plata' as FormaRetencion | null,
   }
 
   it('una falla recién abierta pide contestar la pregunta que decide, y no traba', () => {
@@ -1743,7 +1744,7 @@ describe('faltantesDeLaDecision', () => {
     const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 4000 })
     const traba = loQueTraba(f)
     expect(traba?.paso).toBe('producto')
-    expect(traba?.que).toBe(registroDeRetencion({ motivo: 'falla', escenario: 'util', respuesta: null, monto: 4000, retornoDecidido: false }).error)
+    expect(traba?.que).toBe(registroDeRetencion({ motivo: 'falla', escenario: 'util', respuesta: null, monto: 4000, forma: 'plata', retornoDecidido: false }).error)
   })
 
   it('aceptó quedárselo Y que vuelva: traba antes de mandarlo al servidor', () => {
@@ -2001,23 +2002,50 @@ describe('pasoGuardado', () => {
 
   it('un reclamo recién abierto no tiene ningún paso guardado', () => {
     const nuevo = r({ escenario: null, envio_costo: null, compensacion: null })
-    expect(pasoGuardado(nuevo, 'que-paso')).toBe(false)
-    expect(pasoGuardado(nuevo, 'producto')).toBe(false)
-    expect(pasoGuardado(nuevo, 'cliente')).toBe(false)
+    expect(pasoGuardado(nuevo, 'que-paso', false)).toBe(false)
+    expect(pasoGuardado(nuevo, 'producto', false)).toBe(false)
+    expect(pasoGuardado(nuevo, 'cliente', false)).toBe(false)
   })
 
   it('contestada la pregunta que decide, el primer paso queda guardado y los otros no', () => {
     const x = r({ escenario: 'ya_salio', envio_costo: null, compensacion: null })
-    expect(pasoGuardado(x, 'que-paso')).toBe(true)
-    expect(pasoGuardado(x, 'producto')).toBe(false)
+    expect(pasoGuardado(x, 'que-paso', false)).toBe(true)
+    expect(pasoGuardado(x, 'producto', false)).toBe(false)
   })
 
   // ⚠️ Un envío de 0 es un dato real ("la trae al local"), no un campo vacío.
   it('un envío de vuelta de 0 cuenta como guardado', () => {
-    expect(pasoGuardado(r({ escenario: null, envio_costo: 0, compensacion: null }), 'producto')).toBe(true)
+    expect(pasoGuardado(r({ escenario: null, envio_costo: 0, compensacion: null }), 'producto', false)).toBe(true)
   })
 
   it('el último paso se da por guardado recién cuando hay una resolución', () => {
-    expect(pasoGuardado(r({ escenario: null, envio_costo: null, compensacion: 'plata_total' }), 'cliente')).toBe(true)
+    expect(pasoGuardado(r({ escenario: null, envio_costo: null, compensacion: 'plata_total' }), 'cliente', false)).toBe(true)
+  })
+
+  /**
+   * 🔴 **EL test del bucle de R-0022** (27-ago-2026). Bruno: *«pongo volver a decidir, confirmo el
+   * primer paso, y cuando salgo sigue diciendo volver a decidir»*.
+   *
+   * La fila real: decidida como cambio, `escenario` y `compensacion` cargados. Al REHACERLA la
+   * pantalla marcaba **«El cliente» con ✓** —porque la compensación vieja estaba en la base—, o
+   * sea que el único paso que decide se leía como ya hecho. Confirmar el paso que decía «falta» y
+   * salir era exactamente lo que la pantalla pedía, y no rehacía nada.
+   */
+  it('al REHACER, el paso que decide ⛔ no queda tildado por la decisión vieja', () => {
+    const r22 = r({ escenario: 'coincide', envio_costo: null, compensacion: 'otro_producto' })
+    expect(pasoGuardado(r22, 'cliente', true)).toBe(false)
+    // Y sin rehacer sigue diciendo lo de siempre: el ✓ existe para sobrevivir a cerrar el modal.
+    expect(pasoGuardado(r22, 'cliente', false)).toBe(true)
+  })
+
+  /**
+   * 🔑 Los dos primeros pasos SÍ conservan el tilde al rehacer, y ⛔ no es una excepción olvidada:
+   * a ésos los reescribe «Confirmar paso» por `editar`, así que el valor de la base es el mismo
+   * que se está por reguardar. El ③ ⛔ no lo escribe nadie más que «Confirmar la decisión».
+   */
+  it('al REHACER, los pasos que «Confirmar paso» sí escribe conservan su tilde', () => {
+    const r22 = r({ escenario: 'coincide', envio_costo: 1200, compensacion: 'otro_producto' })
+    expect(pasoGuardado(r22, 'que-paso', true)).toBe(true)
+    expect(pasoGuardado(r22, 'producto', true)).toBe(true)
   })
 })

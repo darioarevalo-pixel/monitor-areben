@@ -472,6 +472,56 @@ demora no se podía cerrar nunca**.
 - ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
   refactors grandes): las pestañas envuelven los bloques que ya estaban.
 
+## 🆕 La retención ahora puede ser plata **o** cupón (27-ago-2026)
+
+🔴 **VA CON MIGRACIÓN, y la migración va ANTES del deploy**:
+`sql/migrate-reclamos-retencion-forma.sql`, en el Supabase de **BDI y el de ZATTIA**. `decidir`
+escribe `retencion_forma` y sin la columna el `update` falla entero — o sea que no se podría decidir
+**ningún** reclamo.
+
+**Por qué hace falta la columna.** Hasta hoy la oferta era siempre plata, así que el monto alcanzaba.
+Con dos formas, **un `acepto` por $6.500 en efectivo y uno por $6.500 en cupón salen iguales de la
+base** y cuestan cosas distintas: la plata sale de la caja **hoy**, el cupón sale **sólo si el
+cliente vuelve a comprar**. 🔑 Es el mismo agujero que `retencion_respuesta` tapó el 25-ago —
+**existía el numerador y no el denominador**—, entrando por otra puerta.
+
+⚠️ **NULL ⛔ no es «fue plata»: es SIN REGISTRAR.** 📊 Medido antes: BDI tiene 2 reclamos y Zattia 0,
+y **ninguno** tiene retención registrada ⇒ no hay una sola oferta vieja ambigua.
+
+### 🔴 Lo que destapó construirlo: aceptar un cupón caía en `plata_parcial`
+
+`salidaAlAceptarRetencion(forma)` — en el núcleo, ⛔ no en la pantalla, porque de la resolución
+cuelga `EFECTOS_RESOLUCION`. Con `plata_parcial` fijo, aceptar un cupón hacía **dos cosas mal a la
+vez**:
+
+1. **sacaba de la caja una plata que nunca salió** (`reintegro_estado: 'pendiente'`), y
+2. **cerraba el reclamo sin que el cupón existiera** — `cupon` es la única resolución que deja
+   `cupon_estado: 'pendiente'`, o sea el pendiente de **crearlo en la tienda**. Sin eso el cliente
+   se entera en la próxima compra de que el código no anda.
+
+Es el agujero de la promesa del cupón que el módulo ya tuvo, por otra puerta. El caso lo fija por la
+**contracara**: sólo una de las dos formas pide emitir el cupón, y sólo la otra saca plata.
+
+### En la pantalla
+
+`Chips` para elegir la forma (el mismo control del alta). ⚠️ **Cambiar la forma con una respuesta ya
+marcada la BORRA**: la respuesta era a la *otra* oferta, y dejarla puesta diría que aceptó algo que
+no se le ofreció.
+
+⚠️ **El default es `'plata'` y eso ⛔ no inventa nada**: es lo que la pantalla venía haciendo sin
+decirlo. Y la forma **sola no registra**: sin respuesta, `registroDeRetencion` no escribe — si no,
+cada reclamo que alguien abre y cierra quedaría con una oferta que nunca existió.
+
+### ▶️ Lo que queda SIN definir, a propósito
+
+**Cuánto vale el cupón frente al reembolso.** El resumen de la reunión decía ×2 ($6.500 contra
+$13.000); Bruno lo dejó abierto — *«habría que definirlo según análisis económico»*. Hasta entonces
+el monto **lo tipea la persona** y ⛔ no lo deriva nadie.
+
+⚠️ **El costo de eso, dicho:** un número sin regla **no se puede medir**. Con el monto libre se puede
+decir cuántas veces se ofreció cada forma y cuántas funcionó, pero ⛔ **no si el monto era el
+correcto**. La columna es lo que va a permitir calcular la regla cuando se junten los casos.
+
 ## 🆕 Los destinos que no aplican, la logística y la preselección (27-ago-2026)
 
 ### `destinosDe`: la pantalla ofrecía los CINCO siempre
@@ -638,11 +688,55 @@ devolvió la plata»*. Un botón que desaparece callado es el defecto que este m
 🔴 **Y el freno está en el SERVIDOR, no sólo en la pantalla.** `decidir` responde **409** con la
 lista. Una pantalla que esconde un botón no es una regla: es una sugerencia.
 
+## 🆕 🔴 Rehacer una decisión: el bucle de R-0022 (27-ago-2026)
+
+Bruno, con el reclamo real ya decidido: *«pongo volver a decidir, confirmo el primer paso, y cuando
+salgo sigue diciendo volver a decidir»*.
+
+**La pantalla no estaba rota, y ése es el punto.** R-0022 quedó decidido como **cambio**, y un
+cambio decidido vuelve a `borrador` a propósito (lo termina el POS). Al reabrirlo, `pasoGuardado`
+miraba `compensacion != null` y marcaba **«El cliente» con un ✓**: el único paso que decide se leía
+como **ya hecho**. La única pestaña en rojo era «El producto». O sea que confirmar esa pestaña y
+salir era **literalmente lo que la pantalla estaba pidiendo** — y `Confirmar paso` escribe por
+`editar`, que ⛔ no decide. La fila salía igual que entró, con su botón intacto. Otra vuelta, y otra.
+
+🔑 **La regla que lo cierra: el ✓ sale de lo que ESTE recorrido escribió.** Los pasos ① y ② los
+reescribe «Confirmar paso», así que su tilde sigue siendo cierto al rehacer — el valor de la base es
+el mismo que se está por reguardar. El ③ ⛔ **no lo escribe nadie más que «Confirmar la decisión»**.
+Por eso `pasoGuardado` pide un tercer parámetro **obligatorio**, `rehaciendo`: sin default, un
+llamador que no lo conteste no puede volver a caer en el mismo agujero sin enterarse.
+
+| lo que cambió | por qué |
+|---|---|
+| el ✓ de «El cliente» ⛔ no sale de la decisión vieja | era el motor del bucle |
+| un aviso arriba de las TRES pestañas | el defecto fue que nunca llegó a la tercera |
+| el aviso **nombra** la resolución que sigue valiendo | «ya está decidido» solo ⛔ no dice cómo |
+| el toast de «Confirmar paso» al rehacer | decía *«podés salir y seguir después»*: cierto en una decisión nueva, engañoso al rehacer |
+| el botón final se llama «Volver a decidir» | la persona vino a rehacerla, ⛔ no a confirmarla |
+
+⚠️ **Lo que el aviso también dice, y hay que seguir diciendo:** los pasos ① y ② **sí escriben en la
+fila**. Salir a la mitad ⛔ no pierde lo cargado, pero tampoco reemplaza la resolución — y sin esa
+mitad, «guardado» y «decidido» se leen igual.
+
+🔴 **Y el mismo día, medio centímetro al lado: `retencion_forma` viajaba en el núcleo pero ⛔ en
+ninguno de los dos payloads.** `registroDeRetencion` la volvió obligatoria (la tercera mitad de la
+oferta) y ni `confirmarPaso` ni `guardar` la mandaban ⇒ **cualquier reclamo con una oferta
+registrada iba a volver 400** al confirmar el paso y al confirmar la decisión. Los 288 tests del
+módulo pasaban: los dos payloads se arman **en el componente**, y ningún test los miraba. El de
+ahora ⛔ no compara la clave contra una lista escrita a mano — le pasa el payload a
+`registroDeRetencion`, **la misma función que corre en el servidor**.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests
 exhaustivos, porque **acá vive la plata** y un error no rompe ninguna pantalla: se ve recién en la
 caja o en el stock.
+
+`npx vitest run tests/reclamos-redecidir.test.tsx` — **rehacer** una decisión. Monta la pantalla
+dentro de un `ToastProvider` **de verdad**: fuera de él `useToast` es un no-op, así que un test del
+aviso sin proveedor pasaría verde contra una pantalla que no dice nada. El fixture es la **fila real
+de producción** (R-0022, copiada de la base): un inventado no habría tenido lo que arma el bucle
+—`escenario` cargado, `envio_costo` en null y `compensacion` puesta—.
 
 `npx vitest run tests/reclamos-decidir-pestanas.test.tsx` — la pantalla de decidir. **Monta el
 componente de verdad** (`createRoot` + `act`) y ⛔ no usa `renderToStaticMarkup`: `Modal` usa un
