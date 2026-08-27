@@ -92,6 +92,16 @@ async function tipear(label: string, valor: string) {
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
+/** Elige la salida del paso ③. Arranca vacía a propósito: nadie la elige por la persona. */
+async function elegirSalida(valor: string) {
+  const l = [...document.querySelectorAll('label')].find((x) => (x.textContent || '').includes('Salida'))
+  const sel = l!.querySelector('select') as HTMLSelectElement
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(sel, valor)
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
 const tab = (n: string) => tabs().find((t) => (t.textContent || '').includes(n))!
 /** Qué pestaña está abierta. El oráculo es `aria-selected`, igual que en `postventa-pantalla`. */
 const abierta = () => tabs().find((t) => t.getAttribute('aria-selected') === 'true')?.textContent || ''
@@ -343,8 +353,83 @@ describe('la oferta de retención: lo que sale de la pantalla', () => {
       monto: d.retencion_monto as number,
       forma: d.retencion_forma as never,
       retornoDecidido: d.retorno_decidido === true,
+      retencionAt: null,
+      ahora: null,
     })
     expect(veredicto.error).toBeUndefined()
     expect(veredicto.campos?.retencion_forma).toBeTruthy()
+  })
+
+  /**
+   * 🔴 **La oferta que se mandó y todavía no contestaron** (27-ago-2026). Es el estado en el que el
+   * reclamo pasa la mayor parte del tiempo —Administración arma la propuesta, el local la manda, el
+   * cliente tarda un día— y hasta hoy ⛔ no se podía guardar en ningún lado: `registroDeRetencion`
+   * exigía monto, forma y respuesta las tres juntas, así que la decisión quedaba trabada esperando
+   * a alguien de afuera de la empresa.
+   */
+  describe('la oferta sin contestar', () => {
+    /** Lleva la pantalla hasta la caja de la oferta con un monto puesto. */
+    async function conOferta(monto: string) {
+      await abrir(SIN_DECIDIR)
+      await act(async () => { tab('El producto').click() })
+      await act(async () => { boton('Se lo ofrecí igual')!.click() })
+      await tipear('Cuánto se le ofrece', monto)
+    }
+
+    /**
+     * ⚠️ **La mitad que impide que esto pase por una pantalla que registra sola.** El monto arranca
+     * en lo que sugiere la cuenta, así que abrir la calculadora ya deja un número en pantalla:
+     * mandarlo como oferta sería registrar una propuesta que nadie hizo, y contarla después en el
+     * denominador de «cuántas veces funciona».
+     */
+    it('tener un monto en pantalla ⛔ no es haber hecho la oferta', async () => {
+      await conOferta('5000')
+      await act(async () => { tab('El cliente').click() })
+      await elegirSalida('plata_total')
+      await act(async () => { boton('Confirmar la decisión')!.click() })
+      const d = llamadas.find((l) => l.que === 'decidir')?.args[0] as Record<string, unknown>
+      expect(d, 'la pantalla tiene que llegar a decidir').toBeTruthy()
+      expect(d.retencion_monto).toBe(null)
+      expect(d.retencion_respuesta).toBe(null)
+    })
+
+    it('«Se la mandé» la registra sin respuesta, y la decisión se guarda igual', async () => {
+      await conOferta('13491')
+      await act(async () => { boton('Se la mandé')!.click() })
+      // Lo que la persona lee: que quedó registrada y que puede seguir.
+      expect(texto()).toContain('esperando respuesta')
+      await act(async () => { tab('El cliente').click() })
+      // 🔑 La salida que se guarda es la de **si NO acepta**: la propuesta ya está registrada, y si
+      // el cliente acepta, aceptar deriva la resolución (`salidaAlAceptarRetencion`).
+      await elegirSalida('plata_total')
+      await act(async () => { boton('Confirmar la decisión')!.click() })
+
+      const d = llamadas.find((l) => l.que === 'decidir')?.args[0] as Record<string, unknown>
+      expect(d, 'la oferta sin contestar ⛔ no puede trabar la decisión').toBeTruthy()
+      expect(d.retencion_monto).toBe(13491)
+      expect(d.retencion_forma).toBe('plata')
+      expect(d.retencion_respuesta).toBe(null)
+    })
+
+    /**
+     * 🔑 Al reabrir, el estado sale de la FILA: una oferta guardada sin respuesta es una oferta
+     * esperando, y la pantalla tiene que decirlo sin que nadie vuelva a tocar el botón.
+     */
+    it('reabrir un reclamo con la oferta esperando la muestra esperando', async () => {
+      await abrir({ ...SIN_DECIDIR, retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null } as unknown as ReclamoRow)
+      await act(async () => { tab('El producto').click() })
+      expect(texto()).toContain('esperando respuesta')
+    })
+
+    /** Confirmar el paso ② guarda la oferta por `editar`: salir a buscar la respuesta ⛔ no la pierde. */
+    it('«Confirmar paso» guarda la oferta sin contestar en vez de volver un 400', async () => {
+      await conOferta('13491')
+      await act(async () => { boton('Se la mandé')!.click() })
+      await act(async () => { boton('Confirmar paso')!.click() })
+      // `editarReclamo(marca, id, campos)`: los campos son el TERCER argumento.
+      const e = llamadas.find((l) => l.que === 'editar')?.args[2] as Record<string, unknown>
+      expect(e.retencion_monto).toBe(13491)
+      expect(e.retencion_respuesta).toBe(null)
+    })
   })
 })

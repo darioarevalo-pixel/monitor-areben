@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
+  diasEsperandoLaOferta,
   correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
   destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
@@ -1328,6 +1329,51 @@ describe('alertas por antigüedad', () => {
     created_at: hace(1), updated_at: hace(1), ...extra,
   })
 
+  /**
+   * 🔴 **El único reloj que corre sobre un reclamo que puede estar YA decidido.** Se le ofreció que
+   * se lo quede, se guardó la salida por si dice que no, y el caso queda quieto esperando una
+   * respuesta que capaz no llega nunca: `sinDecidir` y `plata` ⛔ no lo agarran, porque desde su
+   * punto de vista está todo hecho.
+   */
+  describe('la oferta que se mandó y nadie contestó', () => {
+    const esperando = (extra: Partial<ReclamoRow>) => fila({
+      estado: 'resuelto', compensacion: 'plata_total', retencion_monto: 13491, retencion_forma: 'plata',
+      retencion_respuesta: null, ...extra,
+    })
+
+    it('alerta a los 3 días de hecha la oferta', () => {
+      const a = alertasDe(esperando({ retencion_at: hace(4) }), AHORA)
+      expect(a[0].texto).toContain('no contestó')
+      expect(a[0].dias).toBe(4)
+    })
+
+    it('antes del plazo no alerta', () => {
+      expect(alertasDe(esperando({ retencion_at: hace(1) }), AHORA)).toEqual([])
+    })
+
+    it('contestada se apaga, aunque la fecha sea vieja', () => {
+      expect(alertasDe(esperando({ retencion_at: hace(30), retencion_respuesta: 'rechazo' }), AHORA)).toEqual([])
+    })
+
+    /**
+     * 🔴 La razón de ser de la columna: **cuenta desde el EVENTO**. Con `updated_at`, ir a ver por
+     * qué el cliente no contesta —el toque más probable sobre este caso— apagaría la alarma.
+     */
+    it('tocar el reclamo ⛔ no reinicia el reloj', () => {
+      const a = alertasDe(esperando({ retencion_at: hace(9), updated_at: hace(0) }), AHORA)
+      expect(a[0].dias).toBe(9)
+    })
+
+    /**
+     * ⚠️ Una oferta sin fecha (fila anterior a la columna) se ve, pero ⛔ no dispara el reloj.
+     * Contar desde `created_at` sería afirmar una espera que nadie midió.
+     */
+    it('una oferta vieja sin fecha ⛔ no inventa una espera', () => {
+      expect(diasEsperandoLaOferta(esperando({ retencion_at: null, created_at: hace(40) }), AHORA)).toBe(0)
+      expect(alertasDe(esperando({ retencion_at: null, created_at: hace(40) }), AHORA)).toEqual([])
+    })
+  })
+
   it('un reclamo recién abierto no alerta nada', () => {
     expect(alertasDe(fila({ estado: 'esperando_cliente', created_at: hace(2) }), AHORA)).toEqual([])
   })
@@ -1739,13 +1785,27 @@ describe('faltantesDeLaDecision', () => {
     expect(f).toEqual([])
   })
 
-  // Las dos combinaciones que el servidor rechaza. El mensaje se compara contra el del núcleo y
-  // ⛔ no contra un string a mano: si `registroDeRetencion` cambia el texto, esto no queda mintiendo.
-  it('media oferta traba, con el mensaje del núcleo', () => {
+  /**
+   * 🔴 **La decisión se puede guardar con la oferta esperando respuesta** (27-ago-2026). Antes esto
+   * trababa, y trabarlo significaba que Administración ⛔ no podía cerrar su parte hasta que el
+   * cliente contestara — una espera que a veces dura días y que no depende de nadie de acá.
+   *
+   * ⚠️ Éste es el que se revierte para ver el freno viejo: con la línea vieja del núcleo,
+   * `loQueTraba` deja de ser `null`.
+   */
+  it('una oferta mandada y sin contestar ⛔ ya no traba la decisión', () => {
     const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 4000 })
+    expect(loQueTraba(f)).toBe(null)
+  })
+
+  // La combinación que el servidor sí sigue rechazando. El mensaje se compara contra el del núcleo
+  // y ⛔ no contra un string a mano: si `registroDeRetencion` cambia el texto, esto no queda
+  // mintiendo.
+  it('una oferta sin decir en qué traba, con el mensaje del núcleo', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 4000, retencionForma: null })
     const traba = loQueTraba(f)
     expect(traba?.paso).toBe('producto')
-    expect(traba?.que).toBe(registroDeRetencion({ motivo: 'falla', escenario: 'util', respuesta: null, monto: 4000, forma: 'plata', retornoDecidido: false }).error)
+    expect(traba?.que).toBe(registroDeRetencion({ motivo: 'falla', escenario: 'util', respuesta: null, monto: 4000, forma: null, retornoDecidido: false, retencionAt: null, ahora: null }).error)
   })
 
   it('aceptó quedárselo Y que vuelva: traba antes de mandarlo al servidor', () => {

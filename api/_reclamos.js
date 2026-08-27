@@ -104,7 +104,7 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
-  retencion_respuesta, retencion_monto, retencion_forma, cupon_estado,
+  retencion_respuesta, retencion_monto, retencion_forma, retencion_at, cupon_estado,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
   pagado, cobro_estado, envio_paga, reingreso_estado,
@@ -366,7 +366,7 @@ export default async function handler(req, res) {
       const { data: filaCaso, error: eCaso } = await supabase
         .from('devoluciones').select(`motivo, escenario, reclamo_correo_estado, items, items_correctos,
           destino_prenda, retorno_decidido, reintegro_estado, stock_estado, reingreso_estado,
-          cobro_estado, envio_nuevo_estado, cupon_estado`.replace(/\s+/g, ' '))
+          cobro_estado, envio_nuevo_estado, cupon_estado, retencion_at`.replace(/\s+/g, ' '))
         .eq('store', store).eq('id', id).maybeSingle();
       if (eCaso) throw new Error(eCaso.message);
       if (!filaCaso) return res.status(404).json({ error: 'no existe ese reclamo' });
@@ -406,9 +406,13 @@ export default async function handler(req, res) {
       if (conDestinos.error) return res.status(400).json({ error: conDestinos.error });
 
       // ── La oferta de retención ───────────────────────────────────────────────
-      // Qué se le ofreció para que se lo quede y qué contestó. Las dos mitades juntas o ninguna:
-      // la regla entera vive en `registroDeRetencion` (`casos.core.js`), porque es la misma que
-      // tiene que aplicar la pantalla. Sin respuesta ⛔ no se toca lo ya registrado.
+      // Qué se le ofreció para que se lo quede y qué contestó. La regla entera vive en
+      // `registroDeRetencion` (`casos.core.js`), porque es la misma que tiene que aplicar la
+      // pantalla. Sin monto ni respuesta ⛔ no se toca lo ya registrado.
+      //
+      // 🔑 **`retencionAt` viaja desde la fila y ⛔ no se recalcula acá**: es lo que hace que
+      // volver a decidir ⛔ no reinicie el reloj de «hace tres días que no contesta». Es el mismo
+      // cuidado que `desdeQueEsta` con `updated_at`, una vuelta más adentro.
       const retencion = registroDeRetencion({
         motivo: motivoActual,
         escenario,
@@ -416,6 +420,8 @@ export default async function handler(req, res) {
         monto: num(b.retencion_monto),
         forma: texto(b.retencion_forma),
         retornoDecidido: b.retorno_decidido === true,
+        retencionAt: filaCaso.retencion_at || null,
+        ahora: ahora(),
       });
       if (retencion.error) return res.status(400).json({ error: retencion.error });
 
@@ -848,7 +854,7 @@ export default async function handler(req, res) {
         // La regla es la misma que aplica `decidir`, y vive en `casos.core.js`: las dos mitades
         // juntas o ninguna. ⛔ No se reescribe acá — es exactamente el modo de falla de esta
         // sección (la misma regla en dos listas).
-        const fila = (await supabase.from('devoluciones').select('motivo, escenario, retorno_decidido').eq('store', store).eq('id', id).maybeSingle()).data;
+        const fila = (await supabase.from('devoluciones').select('motivo, escenario, retorno_decidido, retencion_at').eq('store', store).eq('id', id).maybeSingle()).data;
         if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
         const retencion = registroDeRetencion({
           motivo: fila.motivo,
@@ -858,6 +864,9 @@ export default async function handler(req, res) {
           forma: texto(b.retencion_forma),
           // El retorno que vale es el que se está guardando en este mismo gesto, si vino.
           retornoDecidido: campos.retorno_decidido !== undefined ? campos.retorno_decidido : fila.retorno_decidido === true,
+          // La fecha de la oferta se sella una sola vez: guardar el paso de nuevo ⛔ no la mueve.
+          retencionAt: fila.retencion_at || null,
+          ahora: ahora(),
         });
         if (retencion.error) return res.status(400).json({ error: retencion.error });
         Object.assign(campos, retencion.campos);

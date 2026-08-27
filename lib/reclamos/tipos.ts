@@ -31,6 +31,7 @@ import {
   perfilDe as perfilDeJs,
   FORMAS_RETENCION as FORMAS_RETENCION_JS,
   registroDeRetencion as registroDeRetencionJs,
+  ofertaEsperandoRespuesta as ofertaEsperandoRespuestaJs,
   salidaAlAceptarRetencion as salidaAlAceptarRetencionJs,
   RESPUESTAS_RETENCION as RESPUESTAS_RETENCION_JS,
   pideReclamoAlTransportista as pideReclamoAlTransportistaJs,
@@ -603,11 +604,17 @@ export function salidaAlAceptarRetencion(forma: FormaRetencion): Compensacion {
 }
 
 /**
- * Lo que se guarda de la oferta de retención, ya validado: las dos mitades juntas o ninguna.
+ * Lo que se guarda de la oferta de retención, ya validado.
  *
- * Los cinco datos son **obligatorios** aunque tres puedan valer `null` — mismo motivo que el
+ * Los datos son **obligatorios** aunque varios puedan valer `null` — mismo motivo que el
  * escenario: un llamador al que le falta uno no puede terminar guardando media oferta sin
  * enterarse. Media oferta es lo que después hace que la cuenta de cuántas veces funciona mienta.
+ *
+ * 🔴 **Una oferta SIN respuesta ya no es un error**: es el estado «se la mandamos y no contestó».
+ * La regla entera —y por qué— está en `casos.core.js`.
+ *
+ * ⚠️ `ahora: null` = **sólo estoy validando** (es lo que manda la pantalla). Quien va a ESCRIBIR
+ * manda su fecha, y la de una oferta que ya estaba esperando ⛔ no se reescribe.
  */
 export function registroDeRetencion(o: {
   motivo: MotivoReclamo
@@ -616,15 +623,28 @@ export function registroDeRetencion(o: {
   monto: number | null
   forma: FormaRetencion | null
   retornoDecidido: boolean
+  /** La que ya tiene la fila, si la oferta se registró antes. */
+  retencionAt: string | null
+  /** ISO de ahora si se va a escribir; `null` si sólo se está validando. */
+  ahora: string | null
 }): { error?: string; campos?: CamposRetencion } {
   // `campos` vacío = no hay nada que registrar y ⛔ no se toca lo ya guardado.
   return registroDeRetencionJs(o) as { error?: string; campos?: CamposRetencion }
 }
 
+/** ¿Hay una oferta hecha esperando que el cliente conteste? La regla vive en el núcleo. */
+export function ofertaEsperandoRespuesta(
+  d: Pick<ReclamoRow, 'retencion_monto' | 'retencion_respuesta'>,
+): boolean {
+  return ofertaEsperandoRespuestaJs(d)
+}
+
 type CamposRetencion = {
-  retencion_respuesta?: RespuestaRetencion
+  /** `null` = la oferta está hecha y **esperando**. Ausente = no se toca lo que hubiera. */
+  retencion_respuesta?: RespuestaRetencion | null
   retencion_monto?: number
   retencion_forma?: FormaRetencion
+  retencion_at?: string
 }
 
 /** ¿Decide el cliente en vez de nosotros? Hoy sólo en `sin_stock`, que es el caso raro. */
@@ -735,9 +755,15 @@ export function faltantesDeLaDecision(o: {
   if (vuelve && !cargado(o.envioVuelta)) {
     faltas.push({ paso: 'producto', que: 'cuánto saldría traerlo (define hasta cuánto podés ofrecerle)', bloquea: false })
   }
-  // Las dos mitades de la oferta van juntas o ninguna, y la aceptada apaga el retorno. La regla
-  // entera es del núcleo: acá sólo se le pregunta, así que ⛔ no puede quedar desincronizada, y el
-  // texto que se muestra es el suyo.
+  // La oferta y su respuesta, con la regla del núcleo: acá sólo se le pregunta, así que ⛔ no
+  // puede quedar desincronizada, y el texto que se muestra es el suyo.
+  //
+  // ⚠️ **Una oferta sin contestar ⛔ ya no traba** (27-ago-2026): «le ofrecí $13.491 y todavía no
+  // sé qué dijo» es el estado más común del circuito y hasta hoy era un error de validación, así
+  // que la decisión no se podía guardar hasta que el cliente contestara.
+  //
+  // `ahora: null` porque acá **⛔ no se escribe nada**: sólo se le pide el veredicto. La fecha de
+  // la oferta la sella el handler.
   const oferta = registroDeRetencion({
     motivo: o.motivo,
     escenario: o.escenario,
@@ -745,6 +771,8 @@ export function faltantesDeLaDecision(o: {
     monto: o.retencionMonto === '' ? null : Number(o.retencionMonto),
     forma: o.retencionForma ?? null,
     retornoDecidido: o.retorno,
+    retencionAt: null,
+    ahora: null,
   })
   if (oferta.error) faltas.push({ paso: 'producto', que: oferta.error, bloquea: true })
 
@@ -977,7 +1005,33 @@ export function resumenDeLoDecidido(d: ReclamoRow, quien: QuienMira): LineaResum
   if (esc) l.push({ que: 'Qué se encontró', valor: esc.label })
   if (d.expectativa) l.push({ que: tituloExpectativa(d.motivo).replace(/[¿?]/g, ''), valor: expectativaLabel(d.expectativa, d.motivo) })
 
+  /**
+   * La oferta de retención, si hay alguna registrada. Se arma **una sola vez** y se coloca en dos
+   * lugares distintos según el caso: en un reclamo decidido va al lado de lo que recibe (es la
+   * resolución que se intentó antes de ésta), y en uno **sin decidir** es lo único que hay para
+   * contar — desde que la oferta se puede registrar sin respuesta, existe antes que la decisión.
+   *
+   * ⚠️ Un solo armado, dos ubicaciones: dos `push` con el mismo texto es exactamente el modo de
+   * falla de esta sección.
+   */
+  const oferta = conPlata && (d.retencion_respuesta || ofertaEsperandoRespuesta(d))
+    ? {
+        que: '¿Se le ofreció que se lo quede?',
+        // ⚠️ La forma se nombra siempre. Sin ella la línea dice un monto y calla en qué estaba
+        // expresado, que es justo lo que hace que dos ofertas de costo muy distinto se lean
+        // iguales. «sin registrar» es lo de las filas anteriores a la columna: ⛔ no «plata».
+        valor: `Sí, por ${money(Number(d.retencion_monto ?? 0))} (${
+          d.retencion_forma ? FORMAS_RETENCION[d.retencion_forma].toLowerCase() : 'sin registrar en qué'
+        }) — ${
+          d.retencion_respuesta === 'acepto' ? 'aceptó'
+            : d.retencion_respuesta === 'rechazo' ? 'no aceptó'
+            : `esperando respuesta${diasEsperandoLaOferta(d) ? ` hace ${diasEsperandoLaOferta(d)} días` : ''}`
+        }`,
+      }
+    : null
+
   if (!d.compensacion) {
+    if (oferta) l.push(oferta)
     l.push({ que: 'Decisión', valor: 'Todavía sin decidir' })
     return l
   }
@@ -985,18 +1039,9 @@ export function resumenDeLoDecidido(d: ReclamoRow, quien: QuienMira): LineaResum
   l.push({ que: 'Qué recibe', valor: COMPENSACION_LABEL[d.compensacion] })
   if (conPlata && d.monto_total != null) l.push({ que: 'Se le devuelve', valor: money(Number(d.monto_total)) })
   if (d.cupon_codigo) l.push({ que: 'Cupón', valor: d.cupon_codigo })
-  // La oferta de retención va acá, al lado de lo que recibe: es la resolución que se intentó antes
-  // de ésta. La rechazada es la que importa — es la única forma de saber cuántas veces funciona.
-  if (conPlata && d.retencion_respuesta) {
-    // ⚠️ La forma se nombra siempre. Sin ella la línea dice un monto y calla en qué estaba
-    // expresado, que es justo lo que hace que dos ofertas de costo muy distinto se lean iguales.
-    // «sin registrar» es lo que corresponde a las filas anteriores a la columna: ⛔ no «plata».
-    const enQue = d.retencion_forma ? FORMAS_RETENCION[d.retencion_forma].toLowerCase() : 'sin registrar en qué'
-    l.push({
-      que: '¿Se le ofreció que se lo quede?',
-      valor: `Sí, por ${money(Number(d.retencion_monto ?? 0))} (${enQue}) — ${d.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}`,
-    })
-  }
+  // La oferta va acá, al lado de lo que recibe: es la resolución que se intentó antes de ésta. La
+  // rechazada es la que importa — es la única forma de saber cuántas veces funciona.
+  if (oferta) l.push(oferta)
 
   if (d.destino_prenda) l.push({ que: 'El producto', valor: DESTINO_LABEL[d.destino_prenda] })
   // Se guarda lo que sugirió la cuenta además de lo que se hizo: sirve para ver cuándo se va en
@@ -1838,6 +1883,11 @@ export type ReclamoRow = {
   retencion_respuesta?: RespuestaRetencion | null
   retencion_monto?: number | null
   retencion_forma?: FormaRetencion | null
+  /**
+   * **Cuándo se le hizo la oferta**, que es desde cuándo se espera la respuesta. Se sella una sola
+   * vez: ⛔ no la mueve volver a guardar. Ver `registroDeRetencion` en `casos.core.js`.
+   */
+  retencion_at?: string | null
   expectativa?: Expectativa | null
   /** El número de reclamo al transportista, cuando el pedido se perdió en el camino. */
   reclamo_correo?: string | null
@@ -1928,7 +1978,13 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
  * propuesta: despachar es trabajo del día siguiente, no un tránsito de quince, y contestarle a
  * quien se quejó tampoco espera una semana. Se cambian en esta línea.
  */
-export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2 } as const
+/**
+ * ⚠️ `oferta: 3` es de la misma clase que los dos de arriba: **propuesta, ⛔ no medida**. Se eligió
+ * igual que `sinDecidir` porque es la misma espera vista del otro lado —nosotros ya contestamos y
+ * el que no responde es el cliente—, y porque el reclamo se queda quieto mientras tanto. ▶️ Lo
+ * confirma Bruno con los primeros casos reales: hoy ⛔ no hay ninguno cerrado del que sacarlo.
+ */
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3 } as const
 
 /**
  * **El piso del retorno: por debajo de este monto no se pide que el producto vuelva**, aunque la
@@ -2025,6 +2081,22 @@ export function desdeQueSeDecidio(d: Pick<ReclamoRow, 'historial' | 'updated_at'
 }
 
 /**
+ * **Hace cuántos días que se le hizo la oferta y no contestó.** `0` si no hay ninguna esperando.
+ *
+ * 🔴 Cuenta desde `retencion_at` —**el evento**— y ⛔ no desde `updated_at`, por lo mismo que
+ * `desdeQueEsta`: el toque más probable sobre una oferta que no vuelve es ir a ver por qué no
+ * vuelve, así que con el último toque **ocuparse del caso apagaría la alarma**.
+ *
+ * ⚠️ Una oferta registrada **sin fecha** (filas anteriores a la columna) da `0`: se ve en el
+ * resumen y en la fila, pero ⛔ no dispara el reloj. Inventarle una fecha —`created_at`, el último
+ * toque— sería afirmar una espera que nadie midió.
+ */
+export function diasEsperandoLaOferta(d: ReclamoRow, ahora = Date.now()): number {
+  if (!ofertaEsperandoRespuesta(d) || !d.retencion_at) return 0
+  return diasDesde(d.retencion_at, ahora)
+}
+
+/**
  * Qué está durmiendo en este reclamo. Se **deriva** de las fechas y los pendientes: no hay tabla
  * de alertas ni proceso que las genere, igual que los avisos del sidebar.
  *
@@ -2077,6 +2149,17 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
    * en Armar cambio. Sin decisión no hay compensación, así que el guard separa las dos poblaciones
    * por el dato que las distingue y no por una lista de motivos.
    */
+  /**
+   * 🔴 **La oferta que se mandó y nadie contestó.** Es el único reloj del módulo que corre sobre un
+   * reclamo que puede estar **ya decidido**: se le ofreció que se lo quede, se guardó la salida por
+   * si dice que no, y el caso queda quieto esperando una respuesta que capaz no llega nunca. Sin
+   * esto, la única forma de acordarse es que alguien abra el reclamo — y el resto de los relojes
+   * (`sinDecidir`, `plata`) ⛔ no lo agarran, porque desde su punto de vista está todo hecho.
+   */
+  const esperandoOferta = diasEsperandoLaOferta(d, ahora)
+  if (esperandoOferta >= DIAS_ALERTA.oferta) {
+    alertas.push({ tono: 'warning', texto: `Le ofrecimos que se lo quede hace ${esperandoOferta} días y no contestó`, dias: esperandoOferta, ts: cuando(esperandoOferta, DIAS_ALERTA.oferta) })
+  }
   if (d.estado === 'borrador' && !d.compensacion && desdeCreado >= DIAS_ALERTA.sinMandar) {
     alertas.push({ tono: 'danger', texto: `Abierto hace ${desdeCreado} días y todavía no se le escribió`, dias: desdeCreado, ts: cuando(desdeCreado, DIAS_ALERTA.sinMandar) })
   }

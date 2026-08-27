@@ -47,6 +47,7 @@ import {
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
   type RespuestaRetencion, FORMAS_RETENCION, salidaAlAceptarRetencion, type FormaRetencion,
+  ofertaEsperandoRespuesta,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PASOS_DECISION, PISO_RETORNO,
   type PasoDecision, type FaltaDecision,
@@ -218,6 +219,17 @@ export function DecidirReclamo({
    */
   const [ofreciIgual, setOfreciIgual] = useState(false)
   /**
+   * 🔴 **«Se la mandé y todavía no contestó» es un ESTADO y hay que AFIRMARLO**, ⛔ no se deduce de
+   * que haya un número en la caja: `montoOferta` arranca en lo que sugiere la cuenta, así que abrir
+   * la calculadora ya deja un monto en pantalla. Guardar eso como oferta hecha sería registrar una
+   * propuesta que nadie mandó — y después contarla en el denominador de «cuántas veces funciona».
+   *
+   * Al reabrir sale de la fila: si hay monto guardado sin respuesta, la oferta está esperando.
+   */
+  const [ofertaMandada, setOfertaMandada] = useState(
+    ofertaEsperandoRespuesta(reclamo) || reclamo.retencion_respuesta != null,
+  )
+  /**
    * **El destino de cada producto**, cuando hay más de uno. Vacío en un índice = el del reclamo.
    *
    * Un reclamo de dos productos puede terminar con uno volviendo sano a stock y el otro en poder
@@ -376,10 +388,12 @@ export function DecidirReclamo({
         envio_ida_costo: compensacion === 'otra_unidad' ? Number(envioIda) || null : null,
         costo_caso: costo,
         cupon_codigo: compensacion === 'cupon' ? cupon.trim() || null : null,
-        // Las dos mitades de la oferta viajan juntas: el servidor rechaza media.
+        // La oferta viaja completa **aunque no esté contestada**: `retencion_respuesta: null` con
+        // monto es «se la mandamos y todavía no sabemos qué dijo», y es un estado, ⛔ no media
+        // oferta. Lo que el servidor sigue rechazando es una respuesta SIN monto.
         retencion_respuesta: retencion,
-        retencion_monto: retencion ? montoOferta : null,
-        retencion_forma: retencion ? retencionForma : null,
+        retencion_monto: hayOferta ? montoOferta : null,
+        retencion_forma: hayOferta ? retencionForma : null,
         expectativa: expectativa || null,
         items_correctos: reclamo.motivo === 'mal_armado' ? recibidos : undefined,
         // Sólo cuando hay más de un producto: en el de uno solo, el destino del reclamo ES el del
@@ -445,6 +459,14 @@ export function DecidirReclamo({
   const montoOferta = retencionMonto === '' ? descuento.sugerido : Number(retencionMonto) || 0
 
   /**
+   * ¿Hay una oferta que registrar? Una contestada lo es por definición, y una mandada sin contestar
+   * también — ésa es la que hasta el 27-ago-2026 ⛔ no se podía guardar en ningún lado, así que el
+   * momento más común del circuito (Administración la arma, el local la manda, el cliente tarda un
+   * día) no existía para el sistema.
+   */
+  const hayOferta = retencion != null || ofertaMandada
+
+  /**
    * Registrar la respuesta. Volver a apretar la misma la borra: marcar por error ⛔ no puede ser
    * irreversible (mismo criterio que el "¿qué se fotografió?" de Sesión de fotos).
    *
@@ -453,8 +475,11 @@ export function DecidirReclamo({
    * del cliente. El servidor rechaza esa combinación, así que acá se resuelve en el mismo gesto.
    */
   const contestoLaOferta = (r: RespuestaRetencion) => {
-    if (retencion === r) { setRetencion(null); return }
+    // Destildar la respuesta ⛔ no borra que la oferta se hizo: vuelve a «esperando», que es donde
+    // estaba antes de contestar. Lo que se corrige es la respuesta, no el hecho de haberla mandado.
+    if (retencion === r) { setRetencion(null); setOfertaMandada(true); return }
     setRetencion(r)
+    setOfertaMandada(true)
     setRetencionMonto(montoOferta)
     if (r === 'acepto') {
       /**
@@ -523,7 +548,7 @@ export function DecidirReclamo({
     envioVuelta, pvpFeria, montoAcordado, envioIda,
     // El monto sólo cuenta como "oferta registrada" si hay una respuesta: el campo arranca con el
     // sugerido, y un sugerido que nadie dijo ⛔ no es una oferta a medias.
-    retencionMonto: retencion ? montoOferta : '',
+    retencionMonto: hayOferta ? montoOferta : '',
     retencionRespuesta: retencion,
     retencionForma,
   })
@@ -596,9 +621,11 @@ export function DecidirReclamo({
        */
       campos.retorno_decidido = retorno
       if (destino) campos.destino_prenda = destino
-      // Las TRES mitades de la oferta viajan juntas: `registroDeRetencion` rechaza el registro a
-      // medias, así que dejar la forma afuera acá hacía que guardar el paso volviera un 400.
-      if (retencion) {
+      // 🔑 **Confirmar el paso guarda la oferta aunque no esté contestada**, que es exactamente
+      // para lo que sirve: se arma la propuesta, se manda, y la respuesta llega después — capaz al
+      // día siguiente y capaz la trae otra persona. Hasta el 27-ago-2026 esto volvía un 400 y lo
+      // cargado se perdía. `retencion_monto` sin definir ⛔ no pisa lo que hubiera.
+      if (hayOferta) {
         campos.retencion_respuesta = retencion
         campos.retencion_monto = montoOferta
         campos.retencion_forma = retencionForma
@@ -1027,7 +1054,7 @@ export function DecidirReclamo({
                   )}
 
                   {/* Lo único que el sistema no puede saber: qué contestó el cliente. */}
-                  {(descuento.conviene || ofreciIgual || retencion) ? (
+                  {(descuento.conviene || ofreciIgual || hayOferta) ? (
                     <>
                       <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         {/* 🔑 **En qué se le ofrece.** Las dos cuestan cosas distintas: la plata sale
@@ -1051,6 +1078,19 @@ export function DecidirReclamo({
                         >
                           <NumberField value={montoOferta} onChange={(v) => setRetencionMonto(v)} prefix="$" style={{ width: 140 }} />
                         </Field>
+                        {/* 🔴 **El estado que faltaba, y es el que más dura.** Entre armar la
+                            propuesta y saber qué contestó el cliente pasa un día o tres, y hasta el
+                            27-ago-2026 ese rato ⛔ no se podía guardar: había que esperar la
+                            respuesta para poder registrar nada. Es un botón y ⛔ no un default
+                            porque la oferta hay que **afirmarla**: el monto de al lado lo prellena
+                            la cuenta, así que deducirla de que hay un número registraría propuestas
+                            que nadie mandó. */}
+                        <Button
+                          size="sm" variant={ofertaMandada && !retencion ? 'solid' : 'outline'} tone="warning"
+                          disabled={montoOferta <= 0}
+                          title={montoOferta <= 0 ? 'Poné cuánto le ofreciste' : undefined}
+                          onClick={() => { setRetencion(null); setOfertaMandada(!ofertaMandada || retencion != null); setRetencionMonto(montoOferta) }}
+                        >Se la mandé: esperando</Button>
                         <Button
                           size="sm" variant={retencion === 'acepto' ? 'solid' : 'outline'} tone="brand"
                           disabled={montoOferta <= 0}
@@ -1073,8 +1113,9 @@ export function DecidirReclamo({
                           ? 'Queda registrado que aceptó el cupón. El producto no vuelve, y queda pendiente CREARLO en la tienda.'
                           : 'Queda registrado que aceptó. El producto no vuelve.')
                           : retencion === 'rechazo' ? 'Queda registrado que no aceptó: seguí con el cambio o la devolución.'
-                            : montoOferta > 0 ? 'Sin registrar. Si se lo ofreciste, anotá qué contestó — es lo único que después dice cuántas veces funciona.'
-                              : 'Poné cuánto le ofreciste para poder anotar qué contestó.'}
+                            : ofertaMandada ? 'Queda registrada la oferta, esperando respuesta. Se puede guardar así: cuando el cliente conteste, se anota acá.'
+                              : montoOferta > 0 ? 'Sin registrar. Si ya se la mandaste, tocá «Se la mandé» — es lo único que después dice cuántas veces funciona.'
+                                : 'Poné cuánto le ofreciste para poder registrar la oferta.'}
                       </div>
                     </>
                   ) : (

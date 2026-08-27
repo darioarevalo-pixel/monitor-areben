@@ -297,18 +297,72 @@ describe('el escenario no puede mover cualquier cosa', () => {
 describe('el registro de la oferta de retención', () => {
   // ⚠️ `forma` entró el 27-ago-2026 y es obligatoria: la base la trae para que cada caso hable de
   // lo suyo. Los casos que la prueban a ella la pisan.
-  const base = { motivo: 'talle' as MotivoReclamo, escenario: null, retornoDecidido: false, forma: 'plata' as const }
+  const base = {
+    motivo: 'talle' as MotivoReclamo, escenario: null, retornoDecidido: false, forma: 'plata' as const,
+    // ⚠️ `retencionAt` y `ahora` entraron el 27-ago-2026 con la oferta esperando respuesta. Los
+    // casos que prueban el sello los pisan; `ahora: null` es lo que manda quien sólo valida.
+    retencionAt: null, ahora: null,
+  }
 
   it('sin respuesta no toca nada: mandar la decisión desde otra pantalla ⛔ no borra la oferta ya registrada', () => {
     expect(registroDeRetencion({ ...base, respuesta: null, monto: null }).campos).toEqual({})
     expect(registroDeRetencion({ ...base, respuesta: null, monto: null }).error).toBeUndefined()
   })
 
-  it('media oferta se rechaza por las dos mitades: un monto sin respuesta y una respuesta sin monto', () => {
-    // Las dos formas de mentir después: "le ofrecí $6.000" sin saber qué dijo, y "no aceptó" qué.
-    expect(registroDeRetencion({ ...base, respuesta: null, monto: 6000 }).error).toBeTruthy()
+  /**
+   * 🔴 **El caso que cambió de signo el 27-ago-2026.** Antes esto era `error` y era la mitad de la
+   * regla de «las tres juntas»; hoy es el estado en el que el reclamo pasa la mayor parte del
+   * tiempo. La regla confundía **«no sabemos si hubo oferta»** (nada registrado) con **«hubo
+   * oferta y todavía no contestó»** (registrada, esperando), y con eso el local ⛔ no tenía dónde
+   * anotar lo único que él sabe. El denominador de la métrica sale de la oferta HECHA.
+   *
+   * ⚠️ Este test es el que se revierte para ver que el freno viejo se fue: con la línea vieja del
+   * núcleo (`return hayMonto ? { error } : { campos: {} }`) queda rojo.
+   */
+  it('una oferta mandada y sin contestar SE GUARDA: es un estado, ⛔ no media oferta', () => {
+    const r = registroDeRetencion({ ...base, respuesta: null, monto: 6000, ahora: '2026-08-27T10:00:00.000Z' })
+    expect(r.error).toBeUndefined()
+    expect(r.campos).toEqual({
+      retencion_respuesta: null, retencion_monto: 6000, retencion_forma: 'plata',
+      retencion_at: '2026-08-27T10:00:00.000Z',
+    })
+  })
+
+  it('media oferta al revés sigue trabando: "no aceptó" ⛔ qué', () => {
+    // Sin el monto la cuenta ⛔ no se puede leer: es la forma de mentir que queda en pie.
     expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: null }).error).toBeTruthy()
     expect(registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 0 }).error).toBeTruthy()
+  })
+
+  it('una oferta sin decir en qué ⛔ no se guarda, aunque no esté contestada', () => {
+    // La forma es obligatoria desde el 27-ago: plata y cupón cuestan cosas distintas. Abrir el
+    // estado «esperando» ⛔ no puede ser la puerta por la que entre una oferta sin forma.
+    expect(registroDeRetencion({ ...base, forma: null, respuesta: null, monto: 6000, ahora: 'X' }).error).toBeTruthy()
+  })
+
+  /**
+   * 🔴 **La fecha se sella UNA vez.** Es la lección de `updated_at` en este módulo: si cada guardado
+   * la moviera, **ocuparse del caso apagaría el reloj de «hace tres días que no contesta»** — que es
+   * exactamente lo que el reloj existe para mostrar. Subir la oferta tampoco lo reinicia.
+   */
+  it('volver a guardar la oferta ⛔ no mueve la fecha, ni subiendo el monto', () => {
+    const primera = '2026-08-24T13:00:00.000Z'
+    const otraVez = registroDeRetencion({ ...base, respuesta: null, monto: 9000, retencionAt: primera, ahora: '2026-08-27T10:00:00.000Z' })
+    expect(otraVez.campos?.retencion_at).toBe(primera)
+    expect(otraVez.campos?.retencion_monto).toBe(9000)
+    // Y contestarla tampoco: la oferta se hizo cuando se hizo.
+    const contestada = registroDeRetencion({ ...base, respuesta: 'rechazo', monto: 9000, retencionAt: primera, ahora: '2026-08-27T10:00:00.000Z' })
+    expect(contestada.campos?.retencion_at).toBe(primera)
+  })
+
+  /**
+   * ⚠️ **`ahora: null` = sólo estoy validando**, y es lo que manda la pantalla desde
+   * `faltantesDeLaDecision`. La clave ⛔ no puede aparecer en `null`: un `update` con
+   * `retencion_at: null` **borraría** la fecha de una oferta que estaba esperando.
+   */
+  it('quien sólo valida no recibe la fecha, y la clave ⛔ no viaja en null', () => {
+    const campos = registroDeRetencion({ ...base, respuesta: null, monto: 6000 }).campos
+    expect(campos).not.toHaveProperty('retencion_at')
   })
 
   it('la respuesta sale de una lista cerrada', () => {
@@ -320,10 +374,12 @@ describe('el registro de la oferta de retención', () => {
   it('⛔ no se puede registrar una oferta en un caso donde no hay nada que quedarse', () => {
     // En una demora el pedido llegó, y en una cancelación nunca salió: no hay producto en juego,
     // así que una oferta registrada ahí es una fila que después cuenta mal.
-    expect(registroDeRetencion({ motivo: 'demora', escenario: 'transporte', retornoDecidido: false, respuesta: 'rechazo', monto: 6000, forma: 'plata' }).error).toBeTruthy()
-    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'se_puede_frenar', retornoDecidido: false, respuesta: 'acepto', monto: 6000, forma: 'plata' }).error).toBeTruthy()
+    expect(registroDeRetencion({ ...base, motivo: 'demora', escenario: 'transporte', respuesta: 'rechazo', monto: 6000 }).error).toBeTruthy()
+    expect(registroDeRetencion({ ...base, motivo: 'arrepentimiento', escenario: 'se_puede_frenar', respuesta: 'acepto', monto: 6000 }).error).toBeTruthy()
+    // Y tampoco por la puerta nueva: una oferta esperando respuesta donde no hay nada que quedarse.
+    expect(registroDeRetencion({ ...base, motivo: 'demora', escenario: 'transporte', respuesta: null, monto: 6000, ahora: 'X' }).error).toBeTruthy()
     // El mismo caso con el pedido ya despachado sí admite la oferta: el cliente lo tiene.
-    expect(registroDeRetencion({ motivo: 'arrepentimiento', escenario: 'ya_salio', retornoDecidido: false, respuesta: 'acepto', monto: 6000, forma: 'plata' }).campos)
+    expect(registroDeRetencion({ ...base, motivo: 'arrepentimiento', escenario: 'ya_salio', respuesta: 'acepto', monto: 6000 }).campos)
       .toEqual({ retencion_respuesta: 'acepto', retencion_monto: 6000, retencion_forma: 'plata' })
   })
 

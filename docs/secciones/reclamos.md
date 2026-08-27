@@ -1026,3 +1026,71 @@ El crawl que anduvo quedó en `scripts/verificar-deploy-reclamos.mjs`.
 ⚠️ Un cambio que sólo toca `lib/reclamos/tipos.ts` **sí** cae en un chunk eager (ahí vive también
 `efectos.core.js`), pero sólo si agrega una **cadena**: los comentarios se minifican y no sirven de
 oráculo.
+
+## 🆕 «Le ofrecí y todavía no contestó» pasó a ser un ESTADO (27-ago-2026)
+
+🔴 **VA CON MIGRACIÓN, y la migración va ANTES del deploy**:
+`sql/migrate-reclamos-retencion-at.sql` (`node scripts/apply-devoluciones.mjs`), en el Supabase de
+**BDI y el de ZATTIA**. `retencion_at` entró en `COLS`, o sea en el `select` que **lista** los
+reclamos: sin la columna PostgREST contesta 42703 y **la pantalla de Postventa queda vacía entera**.
+Es lo mismo que pasó con `retencion_forma` esta misma mañana.
+
+**El bloqueo que saca.** `registroDeRetencion` (`casos.core.js`) exigía monto, forma y respuesta
+**las tres juntas**, así que *«le ofrecí $13.491 y todavía no sé qué dijo»* era un **error de
+validación**: con la propuesta mandada, la decisión ⛔ no se podía guardar hasta que el cliente
+contestara. Y ése es el momento en el que el reclamo pasa la mayor parte del tiempo — Administración
+arma la propuesta, el local la manda, la respuesta llega al día siguiente y capaz la trae otra
+persona.
+
+🔑 **La regla vieja confundía dos cosas**, y por eso se rompía justo ahí:
+
+| | qué significa | qué se guarda |
+|---|---|---|
+| nada registrado | ⛔ no sabemos si hubo oferta | `{}` — ⛔ no se toca nada |
+| **oferta hecha, sin respuesta** | se la mandamos y esperamos | monto + forma + `retencion_at`, respuesta en `null` |
+| oferta contestada | `acepto` / `rechazo` | las tres, y la fecha de cuando se hizo |
+
+El denominador de «cuántas veces funciona» sale de la **oferta HECHA**, ⛔ no de la contestada:
+registrar la que todavía no volvió no ensucia la cuenta, la completa. Lo que **sigue** siendo error
+es la mitad de al lado: una respuesta **sin** monto («no aceptó» ⛔ qué).
+
+### La oferta hay que AFIRMARLA: es un botón, ⛔ no un default
+
+En la calculadora hay un tercer botón, **«Se la mandé: esperando»**, al lado de «Aceptó» y «No
+aceptó». ⛔ No se deduce de que haya un monto en la caja: `montoOferta` **arranca en lo que sugiere
+la cuenta**, así que abrir la calculadora ya deja un número en pantalla, y guardarlo como oferta
+hecha registraría propuestas que nadie mandó — que después se cuentan en el denominador. Es la misma
+clase de defecto que la salida preseleccionada de esta mañana: *una pantalla que no pregunta igual
+afirma*.
+
+### `retencion_at`: el reloj se cuenta desde el EVENTO
+
+Al poder existir una oferta esperando, aparece la pregunta que antes no existía: **hace cuánto**.
+
+- 🔴 **`updated_at` ⛔ no la contesta.** Lo pisa cualquier toque, y el toque más probable sobre una
+  oferta que no vuelve es ir a ver por qué no vuelve ⇒ **ocuparse del caso apagaría la alarma**. Es
+  el mismo defecto que ya tuvo la alerta de tránsito y que arregló `desdeQueEsta`.
+- 🔑 **Se sella UNA sola vez** (`retencionAt || ahora`): volver a guardar el paso, rehacer la
+  decisión o **subir el monto** ⛔ no reinician el reloj. Lo que se mide es hace cuánto que se
+  espera una respuesta, ⛔ no hace cuánto que se dijo el último número.
+- ⚠️ Una oferta **sin fecha** (fila anterior a la columna) se ve en el resumen y en la lista pero
+  ⛔ no dispara el reloj: `diasEsperandoLaOferta` devuelve 0. Inventarle `created_at` sería afirmar
+  una espera que nadie midió.
+- ⚠️ **`ahora: null` = sólo estoy validando**, y es lo que manda la pantalla desde
+  `faltantesDeLaDecision`. La clave ⛔ no viaja nunca en `null`: un `update` con
+  `retencion_at: null` **borraría** la fecha de la oferta que estaba esperando.
+
+**La alerta nueva** (`alertasDe`) es el único reloj del módulo que corre sobre un reclamo que puede
+estar **ya decidido**: se ofreció, se guardó la salida por si dice que no, y el caso queda quieto.
+`sinDecidir` y `plata` ⛔ no lo agarran, porque desde su punto de vista está todo hecho.
+▶️ **`DIAS_ALERTA.oferta = 3` es propuesta, ⛔ no medida** —lo mismo que `despacho` y `sinMandar`—:
+lo confirma Bruno con los primeros casos reales.
+
+### ▶️ Lo que esto habilita y todavía no está
+
+- **El mensaje de la propuesta** (`mensajePropuesta`): hoy hay cuatro mensajes y ninguno cubre el
+  momento en que se le propone algo al cliente — el de Victoria hubo que escribirlo a mano.
+- **Los botones «Aceptó» / «No aceptó» en la fila, para el local**: es el eslabón que falta del
+  circuito (*Administración decide · el local habla y ejecuta*). La acción va **fuera de
+  `DE_ADMIN`**, por el mismo criterio que `descontado` y `gn-baja`: **anotar un paso que ya ocurrió
+  en el mundo ⛔ no es decidir plata**.

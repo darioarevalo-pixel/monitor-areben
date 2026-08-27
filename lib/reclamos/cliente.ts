@@ -215,13 +215,19 @@ export type Decision = {
   costo_caso?: number | null
   cupon_codigo?: string | null
   /**
-   * **La oferta de retención**: cuánto se le ofreció para que se lo quede y qué contestó. Van las
-   * dos o ninguna — el servidor rechaza media oferta, que es la que después hace mentir la cuenta.
-   * Sin `retencion_respuesta` ⛔ no se borra la que ya estuviera registrada.
+   * **La oferta de retención**: cuánto se le ofreció para que se lo quede, en qué, y qué contestó.
+   *
+   * 🔑 **`retencion_respuesta: null` con monto ⛔ NO es media oferta: es «se la mandamos y todavía
+   * no contestó»**, que es el estado en el que el reclamo se queda mientras el local espera. Lo
+   * que el servidor sigue rechazando es lo otro — una respuesta **sin** monto ("no aceptó" ¿qué?).
+   *
+   * ⚠️ **Mandar el monto es tocar la oferta.** Quien no la está tocando manda `retencion_monto`
+   * sin definir y ⛔ no pisa nada; quien lo manda con `retencion_respuesta: null` está diciendo
+   * que la respuesta todavía no existe, y ahí sí se borra la que hubiera.
    */
   retencion_respuesta?: RespuestaRetencion | null
   retencion_monto?: number | null
-  /** En qué se le ofreció: plata o cupón. Va junta con las otras dos, o ninguna. */
+  /** En qué se le ofreció: plata o cupón. Va junta con el monto, o ninguna. */
   retencion_forma?: FormaRetencion | null
   /**
    * **El destino de cada producto**, como mapa índice → destino. `null` en un índice lo devuelve al
