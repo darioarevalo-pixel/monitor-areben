@@ -172,8 +172,20 @@ export function ReclamoPublico({ token }: { token: string | null }) {
         </div>
       )}
 
+      {/**
+        * 🔴 **Sin `capture`, y no es un olvido.** `capture="environment"` no es una preferencia: es
+        * una orden al sistema operativo de abrir la CÁMARA y saltear el selector. En Android eso
+        * deja a la persona sin galería, y la foto de la falla casi nunca se saca en el momento en
+        * que abre el link — ya la tenía sacada, o se la mandó otro por WhatsApp desde otro
+        * teléfono. Reportado el 27-ago-2026: *«no se podía adjuntar fotos desde otro celular, solo
+        * abre la cámara»*.
+        *
+        * Sin el atributo, los dos caminos siguen ahí: iOS ofrece «Fototeca / Sacar foto / Elegir
+        * archivo» y Android el selector con la cámara adentro. Sacarlo no quita la cámara: agrega
+        * la galería.
+        */}
       <input
-        ref={fileRef} type="file" accept="image/*" multiple capture="environment"
+        ref={fileRef} type="file" accept="image/*" multiple
         style={{ display: 'none' }} onChange={(e) => { subir(e.target.files); e.target.value = '' }}
       />
       <button

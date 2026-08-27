@@ -12,9 +12,21 @@ import { apiFetch } from './api-fetch'
 export function imgAThumb(file: File | null | undefined, cb: (url: string) => void, max = 256, onError?: (msg: string) => void): void {
   if (!file) return
   const reader = new FileReader()
+  /**
+   * 🔴 **Sin esto, un archivo que no se puede leer no falla: CUELGA la pantalla.** El que llama
+   * prende su contador antes (`setSubiendo(n => n + 1)`) y lo apaga en el `cb` o en el `onError`;
+   * si el FileReader muere y no avisa, no pasa ninguna de las dos cosas y el botón queda en
+   * «Subiendo 1…» para siempre, sin cartel y sin forma de reintentar.
+   *
+   * Se volvió alcanzable el 27-ago-2026, cuando el portal del cliente dejó de forzar la cámara: de
+   * la galería sale cualquier cosa —un HEIC, un archivo en la nube que no bajó, uno sin permiso—,
+   * y ahí es una persona de afuera la que se queda mirando el botón.
+   */
+  reader.onerror = () => onError?.('No se pudo leer la imagen.')
   reader.onload = (e) => {
     const src = e.target?.result
-    if (typeof src !== 'string') return
+    // Mismo motivo que el `onerror`: salir en silencio deja el contador prendido.
+    if (typeof src !== 'string') { onError?.('No se pudo leer la imagen.'); return }
     const img = new Image()
     img.onload = () => {
       const k = Math.min(1, max / Math.max(img.width, img.height))

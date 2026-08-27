@@ -121,6 +121,30 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 - ⚠️ **Los pendientes nacían en `pendiente` al crear el reclamo**, así que la fila decía "anular la
   venta · devolver la plata" desde el minuto cero, antes de que hubiera ninguna decisión. Hoy nacen
   en `no_aplica` y los deriva `decidir`.
+- 🔴 🔑 **El portal del cliente forzaba la CÁMARA y escondía la galería** (27-ago-2026). El
+  `<input type="file">` de `ReclamoPublico.tsx` llevaba `capture="environment"`. **`capture` no es
+  una preferencia que el navegador pueda ignorar: es una orden de abrir la cámara y saltear el
+  selector**, así que en Android no había forma de adjuntar una foto que ya estuviera sacada — y la
+  foto de una falla casi nunca se saca en el momento en que se abre el link: ya la tenía sacada, o
+  se la mandó otra persona desde otro teléfono. Reportado por la primera persona del equipo que lo
+  usó de verdad: *«no se podía adjuntar fotos desde otro celular, solo abre la cámara»*.
+  Sacar el atributo **no quita la cámara: agrega la galería** (iOS ofrece «Fototeca / Sacar foto /
+  Elegir archivo»; Android, el selector con la cámara adentro). Amarrado en
+  `tests/reclamo-publico-galeria.test.ts`, texto contra texto: el `<input>` recién existe después
+  del `useEffect`, así que `renderToStaticMarkup` —el oráculo del resto de las pantallas— no lo ve.
+  🔑 **La lección para todo el módulo: nada de lo que hace el portal se prueba desde acá.** Ni un
+  test ni un `curl` ven lo que abre el sistema operativo del cliente. Este defecto no lo encontró la
+  suite ni un review: **lo encontró una persona con un teléfono**, y estuvo en producción desde el
+  día uno del módulo — la clienta de `R-0022` subió su foto igual porque la sacó en el momento.
+- 🔴 **`imgAThumb` no avisaba cuando no podía LEER el archivo, y colgaba la pantalla**
+  (`lib/imagenes.ts`, arreglado el 27-ago-2026 junto con lo de arriba). Tenía `img.onerror` —el
+  archivo que no se puede decodificar— pero no `reader.onerror` —el que no se puede leer—. El que
+  llama prende su contador antes de leer y lo apaga en el callback o en el `onError`: si el
+  `FileReader` moría en silencio no pasaba ninguna de las dos cosas y el botón quedaba en
+  «Subiendo 1…» **para siempre**, sin cartel y sin forma de reintentar. Era casi inalcanzable
+  mientras el portal forzara la cámara; **abrir la galería lo vuelve alcanzable**, porque de ahí
+  sale cualquier cosa (un HEIC, un archivo de la nube que no bajó, uno sin permiso). Del lado del
+  cliente eso se ve exactamente igual que «el link no anda».
 - ⚠️ **En GN el descuento a nivel venta es `discount_amount`, NO `discount`** — `discount` se ignora
   en el POST aunque al leer aparezca poblado. Verificado con probes en prod.
 
