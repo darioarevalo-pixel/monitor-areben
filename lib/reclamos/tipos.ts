@@ -207,23 +207,48 @@ export type PendienteEstado = 'pendiente' | 'hecho' | 'no_aplica'
 /** El cobro de la diferencia de un cambio. Solo aplica cuando queda plata a cobrar. */
 export type CobroEstado = 'no_aplica' | 'pendiente' | 'cobrado'
 
+/**
+ * 🔴 **Éste ⛔ NO es sólo presentación, al revés que `DESTINO_LABEL`.** Dos cadenas se escriben
+ * literales y quedan fuera de este repo:
+ *
+ *   1. **Viaja a Gestión Nube** — `nota.ts` arma `Motivo: …` y sale como `comments` de la venta
+ *      técnica ⇒ queda en el sistema contable.
+ *   2. **Queda en el `historial`** de la fila, al reclasificar.
+ *
+ * ⇒ Renombrar ⛔ no toca lo ya escrito: las notas viejas conservan el rótulo viejo, y eso es
+ * aceptable pero hay que saberlo. Los de hoy salieron de la revisión del 27-ago-2026: se acortaron
+ * para que la columna de la tabla se lea de un vistazo («Demoras», «Faltante», «Talle») y ⛔ no para
+ * cambiar lo que significan.
+ */
 export const MOTIVO_LABEL: Record<MotivoReclamo, string> = {
   arrepentimiento: 'Arrepentimiento',
   no_esperaba: 'No era lo que esperaba',
-  talle: 'No le quedó el talle',
+  talle: 'Talle',
   no_como_publicado: 'No es como en la publicación',
-  falla: 'Falla',
-  faltante: 'Faltante de producto',
-  mal_armado: 'Pedido mal armado',
-  excedente: 'Le llegó de más',
-  demora: 'Demora en la entrega',
-  no_llego: 'No le llegó nunca',
-  sin_stock: 'No tenemos stock',
+  falla: 'Fallado',
+  faltante: 'Faltante',
+  mal_armado: 'Mal armado',
+  excedente: 'Excedente en el pedido',
+  demora: 'Demoras',
+  no_llego: 'No recibido',
+  sin_stock: 'Sin stock',
   no_era_lo_esperado: 'No era lo que esperaba', // histórico
   // Catch-all histórico, y hoy también lo que se guarda cuando un cambio va SIN motivo:
   // cambiar es un derecho del comprador y no hace falta justificarlo.
   otro: 'Sin motivo',
 }
+
+/**
+ * Los casos que se pintan en ROJO en la lista.
+ *
+ * 🔑 **Uno solo, y no es cosmético**: `sin_stock` es el único caso del repertorio que ⛔ no lo trae
+ * el cliente ni el transporte — **le vendimos algo que no teníamos**. Los otros diez son cosas que
+ * pasan; éste es un error nuestro, evitable, y la lista lo enterraba entre los demás.
+ *
+ * ⚠️ Va acá y ⛔ no en el JSX para que la pantalla no tenga que saber cuál es el caso feo, que es
+ * como dos pantallas del mismo módulo terminan pintando cosas distintas.
+ */
+export const MOTIVOS_EN_ROJO: MotivoReclamo[] = ['sin_stock']
 
 /**
  * Los que se ofrecen al cargar, en el orden en que pasan de verdad. **Once**, desde el 25-ago-2026.
@@ -815,10 +840,20 @@ export const COMPENSACION_LABEL: Record<Compensacion, string> = {
   ninguna: 'Sin compensación',
 }
 
+/**
+ * ⚠️ **Sólo presentación**: lo que se persiste es la CLAVE, así que renombrar acá ⛔ no toca ni una
+ * fila. Los de hoy salieron de la revisión del 27-ago-2026 con Administración: los viejos
+ * describían el circuito («Vuelve y se revende») y lo que la persona necesita leer es **en qué
+ * estado queda el producto**.
+ *
+ * 🔴 **Sin género ni sujeto.** «Se **la** queda el cliente» y la clave `regalada` son femeninos por
+ * «prenda», y en BDI son fundas: el rótulo se leía mal en media empresa. «Sale de stock» lo dice
+ * igual y no supone ni el producto ni quién es el cliente.
+ */
 export const DESTINO_LABEL: Record<DestinoPrenda, string> = {
-  stock: 'Vuelve y se revende',
-  falla: 'Vuelve como falla (no se revende)',
-  regalada: 'Se la queda el cliente — sana, sale del stock',
+  stock: 'Disponible para venta',
+  falla: 'Fallado',
+  regalada: 'Sale de stock',
   no_salio: 'Nunca salió del depósito',
   // ⚠️ Decía "Se perdió o se la queda el cliente", y ese "o" era el parche de no tener `regalada`:
   // el que quería anotar que el cliente se la quedaba elegía acá y el caso terminaba contado como

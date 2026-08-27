@@ -29,7 +29,7 @@ import {
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
+  calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -812,7 +812,9 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                     ))}
                   </Td>
                   <Td>
-                    {MOTIVO_LABEL[d.motivo] || d.motivo}
+                    <span style={MOTIVOS_EN_ROJO.includes(d.motivo) ? { color: color.dangerInk, fontWeight: weight.semibold } : undefined}>
+                      {MOTIVO_LABEL[d.motivo] || d.motivo}
+                    </span>
                     {/* La lista es una sola —Administración les hace el seguimiento a todos—, así
                         que el cambio tiene que distinguirse sin abrirlo: se resuelve en otra
                         pantalla y sus pendientes son otros. */}

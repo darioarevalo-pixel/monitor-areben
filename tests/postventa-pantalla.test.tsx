@@ -34,8 +34,15 @@ const elegida = (html: string) =>
   [...html.matchAll(/aria-selected="(true|false)"[^>]*>([^<]+)</g)].find((m) => m[1] === 'true')?.[2] ?? null
 
 describe('Post-venta abre en la pestaña que dice la URL', () => {
-  it('sin `?tab=` abre en Fallas, como abrió siempre', () => {
-    expect(elegida(pintar('/postventa'))).toBe('Fallas')
+  // ⚠️ Cambiado a propósito el 27-ago-2026: la revisión con Administración pidió Reclamos primero,
+  // y el aterrizaje sigue al orden. Antes de ese día abría en Fallas.
+  it('sin `?tab=` abre en Reclamos, que es la primera pestaña', () => {
+    expect(elegida(pintar('/postventa'))).toBe('Reclamos')
+  })
+
+  // 🔑 Fallas dejó de ser el default, ⛔ no dejó de existir: el link guardado tiene que seguir yendo.
+  it('`?tab=fallas` sigue abriendo en Fallas', () => {
+    expect(elegida(pintar('/postventa?tab=fallas'))).toBe('Fallas')
   })
 
   it('🔴 `?tab=reclamos` abre en Reclamos: antes la pestaña vivía en `useState` y esto era imposible', () => {
@@ -46,9 +53,9 @@ describe('Post-venta abre en la pestaña que dice la URL', () => {
     expect(elegida(pintar('/postventa?tab=cambios'))).toBe('Cambios')
   })
 
-  it('⚠️ una pestaña inventada abre en Fallas, ⛔ no en «undefined llega más adelante»', () => {
+  it('⚠️ una pestaña inventada cae en la primera, ⛔ no en «undefined llega más adelante»', () => {
     const html = pintar('/postventa?tab=cualquiera')
-    expect(elegida(html)).toBe('Fallas')
+    expect(elegida(html)).toBe('Reclamos')
     expect(html).not.toContain('undefined')
   })
 

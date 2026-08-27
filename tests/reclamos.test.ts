@@ -12,7 +12,7 @@ import {
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
-  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, type Compensacion,
+  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -690,7 +690,10 @@ describe('el resumen de lo decidido', () => {
     const t = texto({ ...base, compensacion: 'plata_total', monto_total: 8000, destino_prenda: 'falla', costo_caso: 12000 })
     expect(t).toContain('Se le devuelve todo')
     expect(t).toContain('$8.000')
-    expect(t).toContain('no se revende')
+    // ⚠️ El rótulo cambió el 27-ago-2026 («Vuelve como falla (no se revende)» → «Fallado»). Se
+    // mira la LÍNEA entera y ⛔ no una frase suelta del rótulo: el resumen tiene que decir qué pasó
+    // con el producto, y eso es lo que se está fijando — no cómo está redactado hoy.
+    expect(t).toContain('El producto: ' + DESTINO_LABEL.falla)
     expect(t).toContain('$12.000')
   })
 

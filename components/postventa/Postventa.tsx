@@ -42,12 +42,22 @@ import { DondeVa } from './GuiaPostventa'
  * valuaba lo devuelto a precio de lista en vez de a lo que la persona pagó.
  */
 type Tab = 'fallas' | 'reclamos' | 'cambios' | 'canjes'
+/**
+ * ⚠️ **El orden es un pedido, y el PRIMERO es el que abre.** Hasta el 27-ago-2026 iban
+ * Fallas → Reclamos → Cambios y `/postventa` caía en Fallas. La revisión con Administración pidió
+ * Reclamos primero: es el circuito en el que hay alguien esperando del otro lado, y el único con
+ * relojes que se prenden solos. Fallas es un ledger — se mira cuando se lo va a mirar.
+ *
+ * 🔑 **`ABRE_POR_DEFECTO` sale de acá y ⛔ no está escrito aparte**: tenerlo suelto era cómo el
+ * orden y el aterrizaje podían quedar diciendo cosas distintas.
+ */
 const TABS: { key: Tab; label: string; listo: boolean }[] = [
-  { key: 'fallas', label: 'Fallas', listo: true },
   { key: 'reclamos', label: 'Reclamos', listo: true },
+  { key: 'fallas', label: 'Fallas', listo: true },
   { key: 'cambios', label: 'Cambios', listo: true },
   { key: 'canjes', label: 'Canjes', listo: false },
 ]
+const ABRE_POR_DEFECTO: Tab = TABS[0].key
 
 /**
  * Qué pestaña abre `/postventa?tab=…`.
@@ -58,7 +68,7 @@ const TABS: { key: Tab; label: string; listo: boolean }[] = [
  * —todavía no lista— y sigue mostrando su cartel: la que no existe es la que vuelve a Fallas.
  */
 export function tabDeLaUrl(v: string | null | undefined): Tab {
-  return TABS.some((t) => t.key === v) ? (v as Tab) : 'fallas'
+  return TABS.some((t) => t.key === v) ? (v as Tab) : ABRE_POR_DEFECTO
 }
 
 const ESTADO_TONE: Record<FallaEstado, Tone> = {
@@ -95,7 +105,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
    * lee igual que un aviso que no llevó a ningún lado. Es el mismo arreglo que ya se le hizo a
    * Canjes, que además se llevaba puesto el filtro al recargar.
    */
-  const [tabUrl, setTab] = useFiltroUrl<Tab>('tab', 'fallas')
+  const [tabUrl, setTab] = useFiltroUrl<Tab>('tab', ABRE_POR_DEFECTO)
   const tab = tabDeLaUrl(tabUrl)
 
   const [fallas, setFallas] = useState<FallaRow[]>([])

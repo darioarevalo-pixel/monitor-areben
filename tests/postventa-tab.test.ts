@@ -23,14 +23,27 @@ describe('la pestaña de Post-venta viene de la URL', () => {
     expect(tabDeLaUrl(new URL(ruta, 'https://x').searchParams.get('tab'))).toBe('reclamos')
   })
 
-  it('sin `?tab=` abre en Fallas, que es donde abría siempre', () => {
-    expect(tabDeLaUrl(null)).toBe('fallas')
-    expect(tabDeLaUrl(undefined)).toBe('fallas')
-    expect(tabDeLaUrl('')).toBe('fallas')
+  /**
+   * ⚠️ **Cambió a propósito el 27-ago-2026**, y por eso este caso se toca a mano y ⛔ no de rebote:
+   * hasta ese día `/postventa` abría en **Fallas**. La revisión con Administración pidió Reclamos
+   * primero, y el aterrizaje sigue al orden — un primer tab que no es el que abre es media regla.
+   */
+  it('sin `?tab=` abre en Reclamos, que es la primera pestaña', () => {
+    expect(tabDeLaUrl(null)).toBe('reclamos')
+    expect(tabDeLaUrl(undefined)).toBe('reclamos')
+    expect(tabDeLaUrl('')).toBe('reclamos')
   })
 
-  it('⚠️ una pestaña inventada vuelve a Fallas: antes titulaba «undefined llega más adelante»', () => {
-    expect(tabDeLaUrl('cualquiera')).toBe('fallas')
+  it('⚠️ una pestaña inventada cae en la primera: antes titulaba «undefined llega más adelante»', () => {
+    expect(tabDeLaUrl('cualquiera')).toBe('reclamos')
+  })
+
+  /**
+   * 🔑 **Fallas sigue siendo pedible por la URL.** Dejó de ser el default, ⛔ no dejó de existir:
+   * si alguien tiene el link guardado tiene que seguir cayendo donde caía.
+   */
+  it('fallas se pide por la URL como cualquier otra', () => {
+    expect(tabDeLaUrl('fallas')).toBe('fallas')
   })
 
   it('`canjes` SÍ es una pestaña —todavía no lista— y sigue mostrando su cartel', () => {

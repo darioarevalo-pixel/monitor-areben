@@ -472,6 +472,44 @@ demora no se podía cerrar nunca**.
 - ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
   refactors grandes): las pestañas envuelven los bloques que ya estaban.
 
+## 🆕 Rótulos y orden de pestañas (27-ago-2026, revisión con Administración)
+
+**Post-venta ahora abre en Reclamos.** El orden pasó a **Reclamos → Fallas → Cambios → Canjes**, y
+🔑 **el aterrizaje sale del orden** (`ABRE_POR_DEFECTO = TABS[0].key`): tenerlo escrito aparte era
+cómo el primer tab y el que abre podían quedar diciendo cosas distintas. ⚠️ `?tab=fallas` sigue
+funcionando — dejó de ser el default, ⛔ no dejó de existir. Los cuatro casos de
+`tests/postventa-tab.test.ts` y `tests/postventa-pantalla.test.tsx` se tocaron **a propósito**.
+🔴 El invariante que ⛔ no se rompe: la URL que arma el aviso del sidebar (`?tab=reclamos`) es la que
+la pantalla abre.
+
+**Los rótulos.** Los viejos describían el circuito; los nuevos dicen **en qué estado queda**:
+
+| clave | antes | ahora |
+|---|---|---|
+| `stock` | Vuelve y se revende | **Disponible para venta** |
+| `falla` | Vuelve como falla (no se revende) | **Fallado** |
+| `regalada` | Se la queda el cliente — sana, sale del stock | **Sale de stock** |
+
+🔴 **Sin género ni sujeto**: «Se **la** queda el cliente» y la clave `regalada` son femeninos por
+«prenda», y en BDI son fundas.
+
+Y en los casos: `Sin stock` · `No recibido` · `Demoras` · `Excedente en el pedido` · `Mal armado` ·
+`Faltante` · `Fallado` · `Talle`.
+
+🔴 **`DESTINO_LABEL` es sólo presentación; `MOTIVO_LABEL` NO.** El motivo se escribe literal en dos
+lugares que quedan fuera de este repo: la nota que viaja a Gestión Nube como `comments` de la venta
+técnica (`nota.ts`), y el `historial` de la fila al reclasificar. ⇒ Renombrar ⛔ no toca lo ya
+escrito: las notas viejas conservan el rótulo viejo.
+
+🔑 **`sin_stock` va en ROJO en la lista** (`MOTIVOS_EN_ROJO`, en `tipos.ts` y ⛔ no en el JSX). Es el
+único caso del repertorio que ⛔ no lo trae el cliente ni el transporte: **le vendimos algo que no
+teníamos**. Los otros diez son cosas que pasan; éste es un error nuestro y evitable.
+
+⚠️ **Ningún test fija el TEXTO de los rótulos, a propósito.** Un test que compara la cadena es un
+candado, no un oráculo: se pone rojo cuando alguien mejora la redacción y no dice nada cuando el
+rótulo deja de significar lo que dice. El caso del resumen mira **la línea entera**
+(`'El producto: ' + DESTINO_LABEL.falla`), o sea que el resumen cuente qué pasó con el producto.
+
 ## 🆕 «Volver a decidir» se cierra con el primer pendiente ejecutado (27-ago-2026)
 
 El 27-ago salió «Volver a decidir» para destrabar una decisión apurada, y salió **sin ningún
