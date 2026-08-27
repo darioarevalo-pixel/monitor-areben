@@ -460,6 +460,21 @@ const TRAZOS = {
       <path d="M12 13.6V3.4" />
     </>
   ),
+  /**
+   * Ingresos (lo que entró) — la caja cerrada.
+   *
+   * ⛔ No reusa `ingresos` —la bandeja de descarga— aunque la sección se llame igual: esa es de
+   * «Ingresos proyectados», que está tres renglones más abajo en el mismo menú de Compras. Dos
+   * entradas con el mismo trazo y nombres parecidos es exactamente donde se hace clic en la que no
+   * era.
+   */
+  recepciones: (
+    <>
+      <path d="M3.6 7.6 12 3.4l8.4 4.2v8.8L12 20.6l-8.4-4.2z" />
+      <path d="M3.6 7.6 12 11.8l8.4-4.2" />
+      <path d="M12 11.8v8.8" />
+    </>
+  ),
   /** Proveedores — camión. */
   proveedores: (
     <>

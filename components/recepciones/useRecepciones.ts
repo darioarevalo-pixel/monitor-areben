@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * El estado de "Lo que entró". Molde de `usePedidosClientes`: una lista, un contador de recargas y
+ * El estado de "Ingresos" (ex "Lo que entró"). Molde de `usePedidosClientes`: una lista, un contador de recargas y
  * la carga adentro de una IIFE con bandera `vivo` —el patrón del repo—, porque llamar a `setState`
  * derecho en el cuerpo de un efecto encadena renders y el lint lo rechaza.
  *

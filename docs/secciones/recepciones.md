@@ -1,4 +1,4 @@
-# Lo que entró — ficha de sección
+# Ingresos (lo que entró) — ficha de sección
 
 Sección `recepciones`, área `compras`. **Las órdenes de compra que el sistema de Ingresos confirma
 como recibidas**: proveedor, artículos, unidades pedidas contra contadas, las diferencias renglón

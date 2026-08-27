@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-55 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+56 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -20,6 +20,9 @@ suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 (con `lib/` propio)
 
 **Compras** — `fundas-modelo → components/fundas + lib/fundas` · `proveedores` · `ingresos` ·
+`recepciones → components/recepciones + lib/recepciones` (**Ingresos**: las OC que el sistema de
+Ingresos confirma como recibidas. La escribe un webhook —`api/_oc-webhook.js`—, la pantalla sólo
+lee. ⛔ No es `ingresos`, que es la importación que VIENE) ·
 `disenos` · `pedidos-clientes → components/pedidos-clientes + lib/pedidos-clientes` (Faltantes: lo
 que los clientes piden y no tenemos. **Se anota desde `atencion`**, que es la pantalla abierta
 mientras se atiende; acá se lee el ranking)

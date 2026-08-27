@@ -1,7 +1,9 @@
 'use client'
 
 /**
- * "Lo que entró" (key `recepciones`, área Compras).
+ * "Ingresos" (key `recepciones`, área Compras). ⛔ No confundir con `ingresos` («Ingresos
+ * proyectados»), que es lo que VIENE: ésta es lo que LLEGÓ. Se llamó "Lo que entró" hasta el
+ * 27-ago-2026, cuando Bruno la renombró al nombre con que el equipo llama al sistema de Gerardo.
  *
  * # Qué hueco tapa
  *
