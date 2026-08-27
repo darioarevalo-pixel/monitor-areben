@@ -38,6 +38,7 @@ import {
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { mensajesDeLaFila } from '@/lib/reclamos/botones'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { DecidirReclamo } from './DecidirReclamo'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
@@ -68,16 +69,6 @@ const ESTADO_TONE: Record<EstadoReclamo, Tone> = {
 
 // Los estados que siguen pidiendo algo de alguien viven en el núcleo (`ESTADOS_ABIERTOS`): los
 // lee también el aviso del sidebar, y dos listas es el modo de falla propio de este módulo.
-
-/**
- * Los estados en los que el link del cliente todavía sirve.
- *
- * Tiene que ser **el mismo conjunto** que `ABIERTO` en `api/_reclamo.js`: el portal devuelve 404
- * fuera de esos tres. Antes acá se usaba `ESTADOS_ABIERTOS` (seis estados) y la lista ofrecía copiar un
- * link que el backend ya rechazaba. Una vez decidido el reclamo el link muere a propósito, y de
- * ahí en más se le avisa al cliente por WhatsApp con el mensaje de resolución.
- */
-const CON_LINK: EstadoReclamo[] = ['borrador', 'esperando_cliente', 'en_revision']
 
 function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   const { marca, perfil } = useSesion()
@@ -824,6 +815,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
           <TBody>
             {visibles.map((d) => {
               const faltan = faltantesParaCerrar(d)
+              const mensajes = mensajesDeLaFila(d)
               return (
                 <React.Fragment key={d.id}>
                 <Tr>
@@ -865,28 +857,33 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                   </Td>
                   <Td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {/* El link se puede volver a copiar mientras el portal siga sirviendo (CON_LINK,
-                          los mismos tres estados que acepta `api/_reclamo.js`). */}
+                      {/* 🔑 **Qué mensajes van acá lo decide `mensajesDeLaFila`, ⛔ no cuatro
+                          condiciones sueltas en el JSX.** El criterio es por MOMENTO y la mitad que
+                          importa es la negativa: en `en_revision` —donde el cliente ya mandó las
+                          fotos— el único botón que había era «Msj: pedir fotos». La regla, sus tres
+                          preguntas y el caso de R-0022 están en `lib/reclamos/botones.ts`.
+                          «Pedir más fotos» no se perdió: vive en el detalle de la fila, que es
+                          adonde va quien mira las que hay y concluye que no alcanzan. */}
                       {/* El mensaje entero, no el link pelado: si solo se copia el link, alguien
                           tiene que escribir el texto alrededor y ahí cada uno promete algo distinto. */}
-                      {CON_LINK.includes(d.estado) && (
+                      {mensajes.includes('pedir_fotos') && (
                         <CopyButton
                           getText={() => textoApertura(d)}
                           onError={(e) => toast.error(e.message)}
                           label="Msj: pedir fotos"
                         />
                       )}
-                      {d.compensacion && (
+                      {mensajes.includes('resolucion') && (
                         <CopyButton
                           getText={() => mensajeResolucion(d, numeroReclamo(d.id))}
                           label="Msj: resolución"
                           tone="brand"
                         />
                       )}
-                      {d.seguimiento_vuelta && (
+                      {mensajes.includes('etiqueta') && (
                         <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />
                       )}
-                      {d.reintegro_estado === 'hecho' && (
+                      {mensajes.includes('plata_enviada') && (
                         <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
                       )}
                       {/* Un cambio ya está decidido por definición: lo que falta es armarlo, y eso
@@ -1047,6 +1044,26 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                             : <div style={{ fontSize: font.xs, color: color.mut2 }}>Sin movimientos.</div>}
                         </div>
                       </div>
+                      {/* 🔑 **La escapatoria de «pedir fotos», y por qué está ACÁ.** El botón de la
+                          columna se va apenas llega la primera foto —pedirle de nuevo lo que ya
+                          mandó es lo que hacía pensar al local—, pero a veces las fotos no alcanzan.
+                          Quien se da cuenta de eso es el que está mirando el caso, y para eso abre
+                          el detalle: el pedido de más fotos vive donde se toma esa decisión, ⛔ no
+                          en la columna de «qué toca ahora». Es el mismo link y el mismo mensaje;
+                          si venció, `textoApertura` lo reemite. */}
+                      {mensajes.includes('mas_fotos') && (
+                        <div style={{ marginTop: space[3], display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <CopyButton
+                            getText={() => textoApertura(d)}
+                            onError={(e) => toast.error(e.message)}
+                            label="Msj: pedir más fotos"
+                            tone="neutral"
+                          />
+                          <span style={{ fontSize: font.xs, color: color.mut2 }}>
+                            Ya cargó {(d.fotos || []).length} foto{(d.fotos || []).length === 1 ? '' : 's'}: esto le vuelve a mandar el mismo link.
+                          </span>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}

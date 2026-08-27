@@ -948,6 +948,53 @@ Lo que los tests **no** cubren y hay que ejercer a mano:
 - **Los pendientes en la pantalla.** Los tests fijan `pendientesDe()`; que la columna los muestre y
   que tildarlos escriba (acción `pendiente` del handler) se camina en Reclamos con una fila real.
 
+## 🆕 Los mensajes de la fila salen de una regla, ⛔ no de condiciones sueltas (27-ago-2026)
+
+Bruno, con el módulo ya en uso: *«tiene que haber un mensaje para cada estado, y tienen que dejar de
+estar botones que no sirven en cada estado»*, y el motivo es más grande que el orden de la pantalla:
+*«para que pueda ejecutar la comunicación el local sin pensar o preguntar»*.
+
+**El caso concreto**: en `en_revision` —que significa literalmente *«el cliente ya cargó las
+fotos»*— el único botón que le aparecía al local era **«Msj: pedir fotos»**, sobre alguien que ya
+las había mandado. *«Si ya cargó fotos, y estamos en la parte de decisión, no hay más fotos que
+cargar»*.
+
+**Dónde vive ahora**: `lib/reclamos/botones.ts` → `mensajesDeLaFila(d)`, que devuelve la **lista
+cerrada** de qué mensajes corresponden en ese momento (`pedir_fotos · mas_fotos · resolucion ·
+etiqueta · plata_enviada`). `Reclamos.tsx` sólo dibuja lo que esa lista dice. Ahí se mudó también
+`ESTADOS_CON_LINK`, que era una const local de la pantalla.
+
+🔑 **El criterio de aceptación ⛔ no es «que exista el mensaje»**: es que en cada momento estén
+**exactamente los que corresponden, ni uno de más**. Un botón que no aplica cuesta lo mismo que uno
+que falta — los dos obligan a decidir a alguien que no tendría que estar decidiendo nada. Por eso
+los tests se escriben **por momento** y afirman las dos mitades, qué hay y qué ⛔ no
+(`tests/reclamos-mensajes-por-momento.test.ts`, comparando la lista entera y no con `toContain`).
+
+**Las tres preguntas de `pedir_fotos`**, y las tres hacían falta:
+
+1. **El link vivo Y el reclamo sin decidir.** ⛔ No son lo mismo: fuera de los tres estados abiertos
+   el portal contesta 404, pero **un cambio decidido vuelve a `borrador` a propósito** (lo termina
+   el POS) ⇒ mirando sólo el estado, el caso ya resuelto **volvía a ofrecer el link del cliente**.
+2. **Que el caso pida fotos** (`pideFotos`: motivo **y** expectativa). El alta ya avisaba *«acá no
+   hacen falta fotos»* en `no_llego`, `demora` y `sin_stock`, y la lista lo contradecía ofreciendo
+   el mensaje igual.
+3. **Que no haya llegado ninguna.** Con fotos adentro, el pedido ya se cumplió.
+
+🔑 **La escapatoria se resolvió, ⛔ no se ignoró**: a veces sí hacen falta más fotos. Eso es
+`mas_fotos`, y vive **en el detalle de la fila** —el mismo link y el mismo mensaje—, que es adonde
+va quien está mirando las que hay y concluye que no alcanzan. La columna de acciones es la de «qué
+toca ahora»; el pedido de más fotos es una decisión, y va donde se toma.
+
+⚠️ **Dos tests, y el segundo es el que este módulo ya perdió dos veces**:
+`reclamos-mensajes-por-momento` fija la regla (4 mutantes probados, 4 muertos) y
+**`tests/reclamos-lista-mensajes.test.tsx` fija el CABLE**: monta la lista con filas mockeadas y
+mira los rótulos **dibujados**. Sin él, alguien puede volver a escribir la condición a mano en el
+JSX con la regla y sus tests en verde — que es exactamente de donde salió el defecto.
+
+▶️ **El enchufe para el mensaje de la propuesta** (el que hoy no existe y es el que más se va a
+usar): agregar `'propuesta'` al union y su condición en `mensajesDeLaFila`. El botón en la pantalla
+es una línea.
+
 ## 🔴 Cómo verificar un deploy de ESTA sección (27-ago-2026)
 
 **Los 18 chunks que trae `/postventa` ⛔ NO incluyen el de Reclamos.** `Devoluciones` entra por
