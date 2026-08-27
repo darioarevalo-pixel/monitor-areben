@@ -12,6 +12,7 @@ import {
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
+  botonDecidir, estaDecidido, PASOS_DECISION, PASO_LABEL,
   EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -1997,6 +1998,103 @@ describe('loEjecutado', () => {
  * es lo único que se puede afirmar leyendo la fila, y es lo que hace que sobreviva a cerrar el
  * modal — que es todo el sentido de poder confirmar un paso y seguir después.
  */
+/**
+ * 🔴 **El botón de la fila tiene que decir dónde está el trabajo, ⛔ no qué pantalla abre.**
+ *
+ * Decía «Decidir» desde el minuto cero hasta el final. Una decisión que se hace en tres pasos se
+ * deja por la mitad todo el tiempo —*«puede ser que termine el primer paso, pero después sigo más
+ * tarde»*, Bruno, 27-ago-2026— y el único dato que dice si hay que abrirla, **si ya empezó**, no
+ * estaba en ningún lado de la lista.
+ */
+/**
+ * 🔴 **La invariante de la que cuelga «soltar la decisión»** (`liberar-decision`, `_reclamos.js`).
+ *
+ * Soltar una decisión tiene que dejar la fila **como si nunca se hubiera decidido**: sin resolución
+ * y sin ninguno de los seis pendientes que cuelgan de ella. El handler ⛔ no los apaga a mano —los
+ * pide con `pendientesDe({ compensacion: null })`, la misma función que los prende— justamente para
+ * que agregar un pendiente nuevo no deje uno encendido colgando de una resolución borrada.
+ *
+ * ⚠️ Si alguien le pone un default a `compensacion` o hace que la tabla conteste algo para `null`,
+ * esto se pone rojo, y con razón: sería soltar la decisión dejando tareas prendidas que nadie va a
+ * poder tildar nunca.
+ */
+describe('soltar la decisión: los pendientes se apagan TODOS', () => {
+  it('sin resolución, los seis quedan en no_aplica', () => {
+    const p = pendientesDe({ compensacion: null as unknown as Compensacion })
+    expect(Object.values(p)).toEqual(Array(6).fill('no_aplica'))
+  })
+
+  // La contracara: si la tabla no contestara nada para NINGUNA resolución, el test de arriba
+  // pasaría igual y no significaría nada.
+  it('y con una resolución de verdad, alguno se prende', () => {
+    expect(Object.values(pendientesDe({ compensacion: 'plata_total' }))).toContain('pendiente')
+  })
+
+  /**
+   * 🔑 **Cubre las mismas seis claves que `loEjecutado` mira para frenar.** Si `pendientesDe`
+   * empezara a devolver una séptima, soltar la decisión la dejaría prendida — es el mismo modo de
+   * falla que las dos listas escritas a mano que `EFECTOS_RESOLUCION` vino a reemplazar.
+   */
+  it('son exactamente las claves que la decisión escribe', () => {
+    expect(Object.keys(pendientesDe({ compensacion: null as unknown as Compensacion })).sort())
+      .toEqual(Object.keys(pendientesDe({ compensacion: 'otro_producto' })).sort())
+  })
+})
+
+describe('botonDecidir', () => {
+  const r = (x: Record<string, unknown>) => x as unknown as ReclamoRow
+
+  it('sin nada cargado dice «Decidir»', () => {
+    expect(botonDecidir(r({ escenario: null, envio_costo: null, compensacion: null })).label).toBe('Decidir')
+  })
+
+  it('con el primer paso guardado dice cuántos van', () => {
+    const b = botonDecidir(r({ escenario: 'coincide', envio_costo: null, compensacion: null }))
+    expect(b.hechos).toBe(1)
+    expect(b.label).toBe('Continuar — 1 de 3')
+  })
+
+  it('con dos guardados, cuenta dos', () => {
+    expect(botonDecidir(r({ escenario: 'coincide', envio_costo: 6500, compensacion: null })).hechos).toBe(2)
+  })
+
+  /**
+   * 🔑 Cuenta pasos **guardados**, ⛔ no revisados: es lo único que se puede afirmar mirando la
+   * fila. Y pasa `rehaciendo: false` porque un reclamo sin decidir ⛔ no está rehaciendo nada — si
+   * pasara `true`, el paso que decide nunca contaría y el botón diría «2 de 3» para siempre.
+   */
+  it('un reclamo ya decidido cuenta los tres', () => {
+    expect(botonDecidir(r({ escenario: 'coincide', envio_costo: 6500, compensacion: 'plata_total' })).hechos).toBe(3)
+  })
+
+  /**
+   * 🔴 **El caso que cierra el bucle de R-0022.** Soltar la decisión deja `compensacion` en null
+   * pero conserva el análisis ⇒ la fila tiene que ofrecer **«Continuar»**, ⛔ no «Decidir» (que
+   * diría que no hay nada hecho) ni «Volver a decidir» (que es lo que Bruno veía volver una y otra
+   * vez sin que nada cambiara).
+   */
+  it('después de soltar la decisión ofrece continuar, ⛔ no empezar de cero', () => {
+    const soltado = r({ escenario: 'coincide', envio_costo: 6500, compensacion: null })
+    expect(estaDecidido(soltado)).toBe(false)
+    expect(botonDecidir(soltado).label).toBe('Continuar — 2 de 3')
+  })
+})
+
+/**
+ * 🔑 **`PASOS_DECISION` es la fuente única del orden.** Lo leen la pantalla (las pestañas y dónde
+ * abrir) y `botonDecidir` (para contar). Escrito dos veces sería el modo de falla propio de este
+ * módulo: la misma decisión en dos lados, y un día uno cambia y el otro no.
+ */
+describe('PASOS_DECISION', () => {
+  it('tiene los tres pasos, en el orden en que se calculan los datos', () => {
+    expect(PASOS_DECISION).toEqual(['que-paso', 'producto', 'cliente'])
+  })
+
+  it('cubre todas las claves de PASO_LABEL, ni una de menos', () => {
+    expect([...PASOS_DECISION].sort()).toEqual(Object.keys(PASO_LABEL).sort())
+  })
+})
+
 describe('pasoGuardado', () => {
   const r = (x: Record<string, unknown>) => x as unknown as ReclamoRow
 

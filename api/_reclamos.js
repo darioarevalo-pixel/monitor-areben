@@ -288,7 +288,7 @@ export default async function handler(req, res) {
     // `gn-baja` NO está acá a propósito: quien ve que el producto no está es Local.
     // `reclasificar` está acá porque **cambia el perfil del caso**: quién paga el envío de ida y si
     // hay producto en juego. No es una corrección de tipeo.
-    const DE_ADMIN = ['decidir', 'reclasificar', 'reintegro', 'anulacion', 'eliminar', 'cupon-emitido'];
+    const DE_ADMIN = ['decidir', 'liberar-decision', 'reclasificar', 'reintegro', 'anulacion', 'eliminar', 'cupon-emitido'];
     if (DE_ADMIN.includes(action) && !esAdministracion(perfil)) {
       return res.status(403).json({ error: 'Esto lo hace Administración: pedile a alguien con ese permiso.' });
     }
@@ -309,6 +309,50 @@ export default async function handler(req, res) {
       const vence = new Date(Date.now() + DIAS_TOKEN * 86400000).toISOString();
       await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota: 'link del cliente regenerado' }, { token, token_vence: vence });
       return res.status(200).json({ ok: true, token, vence });
+    }
+
+    /**
+     * **Liberar la decisión: el reclamo vuelve a estar SIN decidir.**
+     *
+     * 🔴 Existe porque «Volver a decidir» no significaba nada en la fila. Abría la pantalla y ya;
+     * la resolución vieja seguía puesta, el reclamo seguía en Cambios, y el botón seguía diciendo
+     * «Volver a decidir» — así que apretarlo dos veces se veía exactamente igual que no apretarlo
+     * nunca. Bruno, 27-ago-2026: *«si volvés a decidir, que quede libre la decisión»*.
+     *
+     * 🔑 **Lo que borra es la RESOLUCIÓN, ⛔ no el análisis.** Se van `compensacion` y los seis
+     * pendientes que cuelgan de ella; se quedan el escenario, el costo de traerlo, los destinos por
+     * producto, los montos y la oferta de retención. Eso es exactamente lo que hace que se pueda
+     * *«terminar el primer paso y seguir más tarde»*: el trabajo hecho sobrevive, lo que se suelta
+     * es la conclusión.
+     *
+     * 🔴 **Y el mismo freno que `decidir`**: si ya se ejecutó algo, no se libera. Soltar una
+     * decisión cuya plata ya salió dejaría el reintegro hecho colgando de una resolución que ya no
+     * existe. `loEjecutado` es la única lista, acá y allá.
+     *
+     * ⚠️ Vuelve a `en_revision` y ⛔ no a `borrador`: la evidencia ya está: lo que falta es
+     * decidir. Y ése es el estado que enciende el reloj de «esperando una decisión» a los 3 días,
+     * que es justo lo que corresponde para una decisión soltada y no terminada.
+     */
+    if (action === 'liberar-decision') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select(`motivo, compensacion, items, items_correctos, destino_prenda,
+          retorno_decidido, reintegro_estado, stock_estado, reingreso_estado, cobro_estado,
+          envio_nuevo_estado, cupon_estado`.replace(/\s+/g, ' '))
+        .eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      if (!fila.compensacion) return res.status(400).json({ error: 'este reclamo todavía no está decidido' });
+      const yaHecho = loEjecutado(fila);
+      if (yaHecho.length) {
+        return res.status(409).json({ error: `Esta decisión ya se está ejecutando (${yaHecho.join(' · ')}): no se puede soltar.` });
+      }
+      const era = fila.compensacion;
+      await apilar(
+        supabase, id,
+        { estado: 'en_revision', at: ahora(), usuario, nota: `se soltó la decisión para rehacerla (era: ${era})` },
+        { compensacion: null, estado: 'en_revision', ...pendientesDe({ compensacion: null }) },
+      );
+      return res.status(200).json({ ok: true, estado: 'en_revision', era });
     }
 
     if (action === 'decidir') {

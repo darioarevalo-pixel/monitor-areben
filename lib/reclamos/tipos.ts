@@ -643,6 +643,16 @@ export const PASO_LABEL: Record<PasoDecision, string> = {
   cliente: 'El cliente',
 }
 
+/**
+ * **El orden de los tres pasos**, que ⛔ no es alfabético ni casual: cada uno usa números que se
+ * cargaron en el anterior.
+ *
+ * 🔑 Vive acá porque lo leen **dos lugares** —la pantalla, para las pestañas y para saber dónde
+ * abrir, y `botonDecidir`, para contar cuántos hay hechos—. Escrito dos veces sería el modo de
+ * falla propio de este módulo: la misma decisión en dos lados, y un día uno cambia y el otro no.
+ */
+export const PASOS_DECISION: PasoDecision[] = ['que-paso', 'producto', 'cliente']
+
 export type FaltaDecision = {
   paso: PasoDecision
   /** En criollo, para ponerlo en pantalla tal cual: "la salida", "el envío de vuelta". */
@@ -2173,6 +2183,26 @@ export function saleUnEnvio(compensacion: Compensacion): boolean {
 
 export function estaDecidido(d: ReclamoRow): boolean {
   return !!d.compensacion
+}
+
+/**
+ * **Cómo se llama el botón que abre «Decidir», según dónde está el trabajo.**
+ *
+ * 🔴 Hasta el 27-ago-2026 el botón decía **qué pantalla abre**, ⛔ no dónde está el trabajo: era
+ * «Decidir» desde el minuto cero hasta el final. Con una decisión que se hace en tres pasos y que
+ * se puede dejar por la mitad —*«puede ser que termine el primer paso, pero después sigo más
+ * tarde»*, Bruno— eso deja fuera de la fila el único dato que la persona necesita para saber si
+ * tiene que abrirlo: **si ya empezó**.
+ *
+ * ⚠️ Cuenta pasos **guardados**, ⛔ no revisados: es lo único que se puede afirmar mirando la fila.
+ * Y con `rehaciendo: false`, porque un reclamo sin decidir ⛔ no está rehaciendo nada.
+ */
+export function botonDecidir(d: ReclamoRow): { label: string; hechos: number } {
+  const hechos = PASOS_DECISION.filter((p) => pasoGuardado(d, p, false)).length
+  return {
+    label: hechos ? `Continuar — ${hechos} de ${PASOS_DECISION.length}` : 'Decidir',
+    hechos,
+  }
 }
 
 export function faltantesParaCerrar(d: ReclamoRow): string[] {

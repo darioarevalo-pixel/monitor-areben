@@ -344,6 +344,17 @@ export async function editarReclamo(store: Marca, id: number, campos: Partial<Re
   await postear({ action: 'editar', store, id, ...campos })
 }
 
+/**
+ * **Soltar la decisión: el reclamo vuelve a estar sin decidir.**
+ *
+ * Borra la resolución y los seis pendientes que cuelgan de ella; ⛔ no toca el análisis (escenario,
+ * costo de traerlo, destinos, montos, la oferta de retención). El servidor rechaza soltarla si ya
+ * se ejecutó algo — la regla vive allá, no acá.
+ */
+export async function liberarDecision(store: Marca, id: number): Promise<void> {
+  await postear({ action: 'liberar-decision', store, id })
+}
+
 export async function eliminarReclamo(store: Marca, id: number): Promise<void> {
   await postear({ action: 'eliminar', store, id })
 }

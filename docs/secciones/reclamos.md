@@ -800,6 +800,61 @@ de cuánto no vale la pena traer un producto— y la tiene que dar Bruno, por ma
 nunca trabó el guardado— pero con el rótulo viejo un chip naranja permanente se leía como un
 impedimento.
 
+## 🆕 🔴 «Volver a decidir» ahora SUELTA la decisión (27-ago-2026)
+
+Tercera tanda del mismo día, y la que cierra el bucle de verdad.
+
+**El problema no era el botón: faltaba un estado.** «Volver a decidir» sólo abría la pantalla. La
+resolución vieja seguía en la fila, el reclamo seguía en Cambios, y el botón seguía diciendo
+«Volver a decidir» ⇒ **apretarlo se veía exactamente igual que no apretarlo nunca**. Bruno lo dio
+tres veces con R-0022 y concluyó, con razón, que no funcionaba: *«si volvés a decidir, que quede
+libre la decisión»*.
+
+Y al lado, el segundo pedido, que es la otra mitad de lo mismo: *«a veces el análisis puede ser
+parcial, puede ser que termine el primer paso, pero después sigo más tarde»*. **Una decisión a
+medio hacer es un estado real del negocio y el sistema no lo representaba en ningún lado.**
+
+### `liberar-decision` (`api/_reclamos.js`)
+
+🔑 **Suelta la RESOLUCIÓN, ⛔ no el análisis.** Se van `compensacion` y los seis pendientes que
+cuelgan de ella; se quedan el escenario, el costo de traerlo, los destinos por producto, los montos
+y la oferta de retención. Eso es exactamente lo que permite soltar hoy y seguir mañana.
+
+🔴 **Los pendientes se apagan con `pendientesDe({ compensacion: null })`, ⛔ no a mano.** Es la
+misma función que los prende. Apagarlos a mano sería la segunda lista escrita a mano que
+`EFECTOS_RESOLUCION` vino a eliminar: el día que se agregue un pendiente nuevo, soltar la decisión
+lo dejaría encendido colgando de una resolución borrada, y nadie podría tildarlo nunca. Hay un test
+que se pone rojo si las claves de las dos llamadas dejan de coincidir.
+
+🔴 **Y el mismo freno que `decidir`**: si `loEjecutado` no está vacía, responde **409**. Soltar una
+decisión cuya plata ya salió dejaría el reintegro hecho colgando de algo que ya no existe.
+
+⚠️ **Vuelve a `en_revision`, ⛔ no a `borrador`.** La evidencia ya está; lo que falta es decidir. Y
+es el estado que enciende el reloj de «esperando una decisión» a los 3 días — que es justo lo que
+corresponde para una decisión soltada y no terminada.
+
+### El botón de la fila dice DÓNDE ESTÁ EL TRABAJO
+
+| situación | botón |
+|---|---|
+| sin decidir, nada cargado | **Decidir** |
+| sin decidir, con pasos guardados | **Continuar — 2 de 3** |
+| decidido | **Volver a decidir** (suelta y abre) |
+
+`botonDecidir` (`tipos.ts`) cuenta pasos **guardados** con `pasoGuardado`, que es lo único que se
+puede afirmar mirando la fila. ⚠️ Pasa `rehaciendo: false` a propósito: un reclamo sin decidir ⛔ no
+está rehaciendo nada, y con `true` el paso que decide no contaría nunca y el botón se quedaría
+clavado en «2 de 3».
+
+⇒ Apretar «Volver a decidir» ahora **cambia la fila a la vista**: sale de Cambios y el botón pasa a
+«Continuar». Que era, literalmente, lo único que Bruno pedía para saber que había pasado algo.
+
+🔑 **`PASOS_DECISION` es la fuente única del orden**, porque ahora lo leen dos lugares: la pantalla
+(las pestañas y dónde abrir) y `botonDecidir` (para contar). Estaba escrito dos veces.
+
+⚠️ Al abrir después de soltar, la pantalla recibe la fila **ya liberada** (`compensacion: null`), no
+la de antes: si no, mostraría *«este reclamo ya está decidido»* sobre algo que se acaba de soltar.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests

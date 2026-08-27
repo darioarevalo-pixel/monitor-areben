@@ -26,10 +26,10 @@ import {
   marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
   marcarDespachado, marcarCuponEmitido, anotarOtraVenta,
   ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, descontarRegaladas, editarReclamo,
-  leerToken, reemitirToken,
+  leerToken, reemitirToken, liberarDecision,
 } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
+  botonDecidir, calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, preseleccionDelAlta, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -316,23 +316,39 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /**
-   * Rehacer una decisión ya tomada. Abre el mismo modal: `decidir` pisa la fila entera, así que
-   * alcanza con volver a confirmarla bien.
+   * **Soltar la decisión y volver a decidirla.**
    *
-   * ⚠️ Se avisa por lo que ⛔ NO se conserva: `decidir` reescribe los pendientes desde
-   * `EFECTOS_RESOLUCION`, así que uno ya tildado vuelve a quedar pendiente, y en un cambio borra
-   * lo que se haya empezado a armar (`items_nuevos` vuelve vacío). Lo que sí sobrevive es el
-   * `historial`, que es append-only, y el reclamo al transportista si ya se presentó.
+   * 🔴 Hasta el 27-ago-2026 esto **sólo abría el modal**: la resolución vieja seguía en la fila, el
+   * reclamo seguía en Cambios, y el botón seguía diciendo «Volver a decidir» ⇒ apretarlo se veía
+   * exactamente igual que no apretarlo. Bruno lo dio tres veces seguidas con R-0022 y concluyó,
+   * con razón, que no funcionaba: *«si volvés a decidir, que quede libre la decisión»*.
+   *
+   * 🔑 Ahora **libera primero y abre después**. La fila queda sin decidir: sale de Cambios, el
+   * botón pasa a «Continuar — N de 3», y el reloj de «esperando una decisión» vuelve a correr, que
+   * es lo que corresponde para una decisión soltada y no terminada.
+   *
+   * ⚠️ Lo que se suelta es la **resolución**, ⛔ no el análisis: el escenario, el costo de traerlo,
+   * los destinos y la oferta de retención quedan. Por eso se puede soltar hoy y seguir mañana.
    */
   const volverADecidir = async (d: ReclamoRow) => {
     const si = await confirmar({
-      titulo: 'Rehacer la decisión',
-      ok: 'Sí, volver a decidir',
+      titulo: 'Soltar la decisión',
+      ok: 'Sí, soltarla',
       mensaje: esCambio(d)
-        ? 'Este reclamo quedó como cambio. Al rehacerlo se borra lo que se haya empezado a armar del cambio y vuelven a quedar pendientes las tareas de esta resolución. Queda registrado en el historial.'
-        : 'Se reemplaza lo que se decidió y vuelven a quedar pendientes las tareas de esta resolución, incluso las que ya hayas tildado. Queda registrado en el historial que se decidió dos veces.',
+        ? 'El reclamo vuelve a quedar SIN DECIDIR y sale de Cambios: se borra lo que se haya empezado a armar del cambio. Lo que cargaste al analizarlo queda. Si salís a la mitad, queda pendiente de decisión. Todo queda registrado en el historial.'
+        : 'El reclamo vuelve a quedar SIN DECIDIR y se destildan las tareas de esta resolución. Lo que cargaste al analizarlo queda. Si salís a la mitad, queda pendiente de decisión. Todo queda registrado en el historial.',
     })
-    if (si) await abrirDecidir(d)
+    if (!si) return
+    try {
+      await liberarDecision(marca, d.id)
+    } catch (e) {
+      toast.error((e as Error).message)
+      return
+    }
+    // ⚠️ Se abre con la fila YA liberada —`compensacion` en null—, no con la de antes: si no, la
+    // pantalla mostraría «este reclamo ya está decidido» sobre algo que se acaba de soltar.
+    await abrirDecidir({ ...d, compensacion: null, estado: 'en_revision' })
+    void recargar()
   }
 
   const reintegrar = async (d: ReclamoRow) => {
@@ -876,8 +892,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {/* Un cambio ya está decidido por definición: lo que falta es armarlo, y eso
                           vive en la pestaña Cambios. Ofrecer "Decidir" acá invita a resolverlo dos
                           veces. */}
+                      {/* 🔑 **Dice DÓNDE ESTÁ EL TRABAJO, ⛔ no qué pantalla abre.** Decía
+                          «Decidir» desde el minuto cero hasta el final, y una decisión que se hace
+                          en tres pasos se deja por la mitad todo el tiempo: *«puede ser que termine
+                          el primer paso, pero después sigo más tarde»* (Bruno, 27-ago-2026). Sin
+                          esto, el único dato que decide si hay que abrirlo —si ya empezó— no estaba
+                          en la fila. La cuenta sale de `botonDecidir`, que mira pasos GUARDADOS. */}
                       {esAdmin && !esCambio(d) && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
-                        <Button size="sm" variant="solid" tone="brand" onClick={() => void abrirDecidir(d)}>Decidir</Button>
+                        <Button size="sm" variant="solid" tone="brand" onClick={() => void abrirDecidir(d)}>{botonDecidir(d).label}</Button>
                       )}
                       {/* 🔴 **Una decisión apurada tiene que poder rehacerse desde acá.** El
                           27-ago-2026 se decidió un reclamo real habiendo pasado por un solo paso, y

@@ -48,7 +48,7 @@ import {
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
   type RespuestaRetencion, FORMAS_RETENCION, salidaAlAceptarRetencion, type FormaRetencion,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
-  faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PISO_RETORNO,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PASOS_DECISION, PISO_RETORNO,
   type PasoDecision, type FaltaDecision,
   DESTINO_LABEL, destinosDe, laUnidadVuelve, COMPENSACION_LABEL, estaDecidido,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
@@ -498,12 +498,10 @@ export function DecidirReclamo({
    * a la que le faltaba.
    *
    * ⚠️ Si están los tres guardados abre en `'cliente'`, que es **el único que decide**: es donde
-   * quiere estar quien entró a rehacer. `ORDEN` se declara más abajo, así que la lista va escrita
-   * acá — son tres claves y el tipo las fija.
+   * quiere estar quien entró a rehacer.
    */
   const [paso, setPaso] = useState<PasoDecision>(
-    () => (['que-paso', 'producto', 'cliente'] as PasoDecision[])
-      .find((p) => !pasoGuardado(reclamo, p, rehaciendo)) ?? 'cliente',
+    () => PASOS_DECISION.find((p) => !pasoGuardado(reclamo, p, rehaciendo)) ?? 'cliente',
   )
   /**
    * Lo que trabó el último intento de confirmar, para que quede escrito en la pestaña donde está.
@@ -557,7 +555,7 @@ export function DecidirReclamo({
    * caso puede saltar. Lo que se saca es la posibilidad de guardar sin haber llegado al final.
    */
   const [revisados, setRevisados] = useState<Set<PasoDecision>>(new Set())
-  const ORDEN: PasoDecision[] = ['que-paso', 'producto', 'cliente']
+  const ORDEN = PASOS_DECISION
   const esUltimo = paso === 'cliente'
 
   /**
