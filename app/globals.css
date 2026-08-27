@@ -1047,7 +1047,18 @@ a.apps-item:hover {
 .info-dot:hover,
 .info-dot.open { color: var(--mo-brand); background: var(--mo-brand-bg); }
 .info-pop {
-  z-index: 100;
+  /* 🔴 **2500 y no 100: el panel quedaba DEBAJO del fondo del modal.**
+     `.info-pop` y `.mo-backdrop` (kit.css, z-index 200) son los dos hijos directos de <body> —los
+     dos son portales—, así que compiten en el mismo contexto de apilado raíz y ganaba el backdrop.
+     El ⓘ "no andaba": el panel se abría tapado por el fondo borroso.
+     🔴 Y era peor que eso: el backdrop cubre `inset: 0`, así que el click donde DEBERÍA estar el
+     panel le pegaba al fondo y `cerrarConFondo` cerraba el modal entero, perdiendo lo cargado.
+     Se vio recién el 27-ago-2026: de los 32 usos de `InfoPopover`, `DecidirReclamo` fue el primero
+     dentro de un `<Modal>` del kit. ⚠️ De paso arregla `solicitudes/NuevaSolicitud.tsx`, que tiene
+     un overlay propio con `zIndex: 2000` y estaba roto desde antes sin que nadie lo reportara.
+     Vecinos ocupados: `.mo-backdrop` 200 · `.mo-toasts` 300 · `.lightbox-overlay` 2000 ·
+     `.mo-lightbox` 3000, que es el único que tiene que seguir tapándolo. */
+  z-index: 2500;
   max-width: 92vw;
   background: var(--mo-surface);
   border: 1px solid var(--mo-line);

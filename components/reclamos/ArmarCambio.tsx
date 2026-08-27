@@ -836,8 +836,11 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                           <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados">⋯</Button>
                           {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}
                         </div>
+                        {/* `whiteSpace: normal`: la celda hereda `nowrap` del `<Td>` y esta cadena
+                            puede pasar los 100 caracteres. La columna de al lado (`resumenItems`)
+                            ya lo tenía; ésta se pasó por alto. */}
                         {!!faltanCerrar.length && c.estado !== 'borrador' && (
-                          <div style={{ fontSize: font.xs, color: color.warning, marginTop: 2 }}>Falta {faltanCerrar.join(' · ')}</div>
+                          <div style={{ fontSize: font.xs, color: color.warning, marginTop: 2, whiteSpace: 'normal', maxWidth: 260 }}>Falta {faltanCerrar.join(' · ')}</div>
                         )}
                       </Td>
                     </Tr>

@@ -433,14 +433,36 @@ export function DecidirReclamo({
     cliente: null,
   }
 
+  /**
+   * 🔴 **Los pasos que se dieron por revisados, y por qué existen.**
+   *
+   * El 27-ago-2026, el día que salió la pantalla: Bruno apretó «Confirmar la decisión» **habiendo
+   * pasado sólo por la primera pestaña**, y el reclamo quedó decidido. El botón final vivía en el
+   * pie compartido, así que estaba a mano desde el paso 1 y guardaba TODO.
+   *
+   * ⇒ **Cada paso confirma lo suyo.** En ① y ② el botón es «Confirmar paso», que sólo marca el
+   * tilde y avanza; **la única que guarda es ③**. ⛔ Y las pestañas siguen libres: quien conoce el
+   * caso puede saltar. Lo que se saca es la posibilidad de guardar sin haber llegado al final.
+   */
+  const [revisados, setRevisados] = useState<Set<PasoDecision>>(new Set())
+  const ORDEN: PasoDecision[] = ['que-paso', 'producto', 'cliente']
+  const esUltimo = paso === 'cliente'
+
+  const confirmarPaso = () => {
+    setRevisados((p) => new Set(p).add(paso))
+    const siguiente = ORDEN[ORDEN.indexOf(paso) + 1]
+    if (siguiente) setPaso(siguiente)
+  }
+
   const chip = (p: PasoDecision) => {
     if (pasoVacio[p]) return <StatusPill tone="neutral" label="—" />
     const e = estadoDelPaso(faltas, p)
-    if (!e) return null
+    // El tilde es de quien lo miró: dice "por acá ya pasé", que es distinto de "no le falta nada".
+    if (!e) return revisados.has(p) ? <StatusPill tone="success" label="✓" /> : null
     return <StatusPill tone={e === 'traba' ? 'danger' : 'warning'} label={e === 'traba' ? 'traba' : 'falta'} />
   }
 
-  const tabs: TabItem[] = (['que-paso', 'producto', 'cliente'] as PasoDecision[]).map((p) => ({
+  const tabs: TabItem[] = ORDEN.map((p) => ({
     key: p,
     label: PASO_LABEL[p],
     badge: chip(p),
@@ -466,9 +488,16 @@ export function DecidirReclamo({
             <span style={{ fontSize: font.xs, color: color.mut }}>El caso cuesta <MoneyText value={costo} /></span>
           </div>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="solid" tone="brand" onClick={() => void guardar()} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Confirmar la decisión'}
-          </Button>
+          {/* 🔴 **«Confirmar la decisión» existe SÓLO en el último paso.** Cuando vivía acá suelto,
+              se podía guardar desde la pestaña 1 — y pasó el día que salió la pantalla. En los dos
+              primeros pasos el botón confirma ESE paso y avanza. */}
+          {esUltimo ? (
+            <Button variant="solid" tone="brand" onClick={() => void guardar()} disabled={guardando}>
+              {guardando ? 'Guardando…' : 'Confirmar la decisión'}
+            </Button>
+          ) : (
+            <Button variant="solid" tone="brand" onClick={confirmarPaso}>Confirmar paso →</Button>
+          )}
         </>
       )}
     >
@@ -891,11 +920,20 @@ export function DecidirReclamo({
                   style={{ width: 260 }}
                 >
                   <option value="">Lo del reclamo — {DESTINO_LABEL[destino]}</option>
-                  {/* `regalada` entró el 26-ago-2026 y es la opción que faltaba: hasta entonces,
-                      para decir "esta sana se la queda el cliente" había que elegir `falla`. */}
-                  {(['stock', 'falla', 'regalada', 'perdida'] as DestinoPrenda[]).map((k) => (
-                    <option key={k} value={k}>{DESTINO_LABEL[k]}</option>
-                  ))}
+                  {/* 🔑 **La lista se DERIVA de `DESTINO_LABEL` y se le saca el destino del
+                      reclamo.** Estaba escrita a mano como `['stock','falla','regalada','perdida']`
+                      y eso daba dos defectos a la vez: el destino del reclamo aparecía DOS VECES
+                      —una en la opción vacía y otra en la lista, que es lo que se veía como
+                      «Vuelve y se revende» duplicado— y `no_salio`, que sí está en `DESTINO_LABEL`,
+                      no se podía elegir nunca.
+                      ⚠️ Una lista escrita a mano acá ya se había desincronizado antes: `regalada`
+                      entró el 26-ago-2026 y hubo que acordarse de sumarla. Derivarla cierra esa
+                      clase de bug de una vez. */}
+                  {(Object.keys(DESTINO_LABEL) as DestinoPrenda[])
+                    .filter((k) => k !== destino)
+                    .map((k) => (
+                      <option key={k} value={k}>{DESTINO_LABEL[k]}</option>
+                    ))}
                 </Select>
                 {/* Lo único que le importa a Depósito: si esta unidad hay que esperarla o no. */}
                 <span style={{ fontSize: font.xs, color: laUnidadVuelve(elegido, retorno) ? color.action : color.mut2 }}>

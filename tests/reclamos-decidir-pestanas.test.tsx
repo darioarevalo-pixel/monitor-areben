@@ -186,11 +186,73 @@ describe('Decidir — el chip de cada pestaña', () => {
   })
 })
 
+describe('Decidir — los bugs que encontró la primera vuelta real', () => {
+  /**
+   * 🔴 El ⓘ "no andaba": `.info-pop` tenía `z-index: 100` y el fondo del modal `200`, y los dos son
+   * portales hermanos de `document.body`. El panel se abría TAPADO. Y peor: el click donde debería
+   * estar el panel le pegaba al fondo, que cierra el modal ⇒ **leer la ayuda perdía lo cargado**.
+   *
+   * ⚠️ jsdom ⛔ no calcula apilamiento, así que el z-index no se puede probar acá: eso se mira en
+   * el navegador. Lo que SÍ se puede fijar —y es el defecto grave— es que tocar el ⓘ **no cierre
+   * el modal** y que el panel llegue al DOM.
+   */
+  const infoDot = () => document.querySelector('.info-dot') as HTMLElement | null
+
+  it('tocar el ⓘ abre el panel Y NO cierra el modal', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El producto').click() })
+    expect(infoDot()).toBeTruthy()
+    await act(async () => { infoDot()!.click() })
+    expect(document.querySelector('.info-pop')).toBeTruthy()
+    // La aserción que vale: el modal sigue en pie. Es lo que se perdía.
+    expect(document.querySelector('.mo-modal')).toBeTruthy()
+  })
+
+  /**
+   * 🔴 El destino del reclamo salía DOS VECES: una en la opción vacía («Lo del reclamo — X») y otra
+   * en la lista, que estaba escrita a mano. De paso `no_salio` no se podía elegir nunca.
+   */
+  it('el destino del reclamo no se repite en el desplegable de cada producto', async () => {
+    await abrir({ ...SANO, items: [
+      { producto: 'A', cantidad: 1, precio: 1000 },
+      { producto: 'B', cantidad: 1, precio: 2000 },
+    ] } as unknown as ReclamoRow)
+    await act(async () => { tab('El producto').click() })
+    const select = [...document.querySelectorAll('select')]
+      .find((s) => [...s.options].some((o) => o.textContent?.startsWith('Lo del reclamo')))!
+    const textos = [...select.options].map((o) => o.textContent || '')
+    const delReclamo = textos[0].replace('Lo del reclamo — ', '')
+    expect(textos.filter((t) => t === delReclamo)).toHaveLength(0)
+    // Y la contracara: la lista sigue teniendo todas las OTRAS opciones, incluida `no_salio`,
+    // que con la lista escrita a mano no aparecía nunca.
+    expect(textos.some((t) => t.includes('Nunca salió'))).toBe(true)
+  })
+})
+
 describe('Decidir — confirmar', () => {
-  it('está disponible desde cualquier pestaña, no al fondo del scroll', async () => {
+  /**
+   * 🔴 **El 27-ago-2026 se decidió un reclamo real habiendo pasado por un solo paso.** El botón
+   * final vivía en el pie compartido y estaba a mano desde la pestaña 1. Ahora cada paso confirma
+   * lo suyo y **sólo el último guarda**.
+   */
+  it('desde el primer paso NO se puede guardar: el botón confirma ESE paso', async () => {
+    await abrir(SANO)
+    expect(boton('Confirmar la decisión')).toBeUndefined()
+    expect(boton('Confirmar paso')).toBeTruthy()
+  })
+
+  it('confirmar un paso lo deja tildado y pasa al siguiente', async () => {
+    await abrir(SANO)
+    await act(async () => { boton('Confirmar paso')!.click() })
+    expect(abierta()).toContain('El producto')
+    expect(tab('Qué pasó').textContent).toContain('✓')
+  })
+
+  it('en el último paso sí aparece «Confirmar la decisión»', async () => {
     await abrir(SANO)
     await act(async () => { tab('El cliente').click() })
     expect(boton('Confirmar la decisión')?.disabled).toBe(false)
+    expect(boton('Confirmar paso')).toBeUndefined()
   })
 
   /**

@@ -242,7 +242,11 @@ export function Retornos() {
                     </div>
                     <div style={{ fontSize: font.xs, color: color.mut2 }}>{MOTIVO_LABEL[d.motivo] || d.motivo}</div>
                   </Td>
-                  <Td>
+                  {/* `wrap` + `maxWidth`: el `<Td>` hereda `white-space: nowrap` y acá abajo van
+                      dos textos libres largos —lo que traba y lo que le mandamos—, que estirarían
+                      la tabla a lo ancho. Mismo defecto que tenía la columna de pendientes de
+                      Reclamos. */}
+                  <Td wrap style={{ maxWidth: 300 }}>
                     <div style={{ fontSize: font.sm }}>
                       {anden === 'despachar' ? (f.sale || '—') : detalleDeLoQueVuelve(d)}
                     </div>

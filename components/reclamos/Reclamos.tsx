@@ -314,6 +314,23 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     if (si) await accion(() => marcarAnulacion(marca, d.id), 'Anotado: la venta quedó anulada.')
   }
 
+  /**
+   * Rehacer una decisión ya tomada. Abre el mismo modal: `decidir` pisa la fila entera, así que
+   * alcanza con volver a confirmarla bien.
+   *
+   * ⚠️ Se avisa por lo que ⛔ NO se conserva: `decidir` reescribe los pendientes desde
+   * `EFECTOS_RESOLUCION`, así que uno ya tildado vuelve a quedar pendiente. Lo que sí sobrevive es
+   * el `historial`, que es append-only, y el reclamo al transportista si ya se presentó.
+   */
+  const volverADecidir = async (d: ReclamoRow) => {
+    const si = await confirmar({
+      titulo: 'Rehacer la decisión',
+      ok: 'Sí, volver a decidir',
+      mensaje: 'Se reemplaza lo que se decidió y vuelven a quedar pendientes las tareas de esta resolución, incluso las que ya hayas tildado. Queda registrado en el historial que se decidió dos veces.',
+    })
+    if (si) await abrirDecidir(d)
+  }
+
   const reintegrar = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Plata devuelta',
@@ -802,7 +819,12 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                   </Td>
                   <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={estadoEnCriollo(d)} /></Td>
                   <Td align="right"><MoneyText value={d.monto_total ?? d.monto_producto ?? 0} /></Td>
-                  <Td>
+                  {/* 🔑 `wrap` + `maxWidth`: sin eso el `<Td>` hereda `white-space: nowrap`
+                      (`components/ui/Table.tsx`) y esta celda puede tener ~140 caracteres en una
+                      sola línea indivisible ⇒ la tabla gana barra horizontal y las demás columnas
+                      quedan fuera de vista. Mismo patrón que `ArmarCambio.tsx` en la columna de al
+                      lado. */}
+                  <Td wrap style={{ maxWidth: 260 }}>
                     <div style={{ fontSize: font.xs, color: faltan.length ? color.warning : color.mut2 }}>
                       {faltan.length ? faltan.join(' · ') : 'nada'}
                     </div>
@@ -838,6 +860,17 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           veces. */}
                       {esAdmin && !esCambio(d) && (d.estado === 'en_revision' || d.estado === 'borrador' || d.estado === 'esperando_cliente') && (
                         <Button size="sm" variant="solid" tone="brand" onClick={() => void abrirDecidir(d)}>Decidir</Button>
+                      )}
+                      {/* 🔴 **Una decisión apurada tiene que poder rehacerse desde acá.** El
+                          27-ago-2026 se decidió un reclamo real habiendo pasado por un solo paso, y
+                          la puerta quedaba cerrada: con la fila en `resuelto` o `en_transito` no
+                          había ningún botón, y arreglarlo pedía que alguien corriera un script
+                          contra producción.
+                          `decidir` (`api/_reclamos.js`) ⛔ no tiene guard de estado: pisa la fila
+                          entera y el `historial` guarda las dos decisiones. Lo que sí se recalcula
+                          son los pendientes, y por eso se avisa antes. */}
+                      {esAdmin && !esCambio(d) && (d.estado === 'resuelto' || d.estado === 'en_transito') && (
+                        <Button size="sm" variant="outline" tone="neutral" onClick={() => void volverADecidir(d)}>Volver a decidir</Button>
                       )}
                       {esAdmin && esCambio(d) && d.estado !== 'cerrado' && (
                         <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>se sigue en Cambios</span>
