@@ -11,7 +11,7 @@ import {
   hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa, ERROR_PROPIO,
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
-  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado,
   EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -1753,5 +1753,36 @@ describe('puedeRehacerseLaDecision', () => {
 
   it('un reclamo cerrado no se rehace', () => {
     expect(puedeRehacerseLaDecision(r('plata_total', 'cerrado'))).toBe(false)
+  })
+})
+
+/**
+ * El tilde de cada paso de `Decidir`. Dice **"esto ya está guardado"** y ⛔ no "alguien lo miró":
+ * es lo único que se puede afirmar leyendo la fila, y es lo que hace que sobreviva a cerrar el
+ * modal — que es todo el sentido de poder confirmar un paso y seguir después.
+ */
+describe('pasoGuardado', () => {
+  const r = (x: Record<string, unknown>) => x as unknown as ReclamoRow
+
+  it('un reclamo recién abierto no tiene ningún paso guardado', () => {
+    const nuevo = r({ escenario: null, envio_costo: null, compensacion: null })
+    expect(pasoGuardado(nuevo, 'que-paso')).toBe(false)
+    expect(pasoGuardado(nuevo, 'producto')).toBe(false)
+    expect(pasoGuardado(nuevo, 'cliente')).toBe(false)
+  })
+
+  it('contestada la pregunta que decide, el primer paso queda guardado y los otros no', () => {
+    const x = r({ escenario: 'ya_salio', envio_costo: null, compensacion: null })
+    expect(pasoGuardado(x, 'que-paso')).toBe(true)
+    expect(pasoGuardado(x, 'producto')).toBe(false)
+  })
+
+  // ⚠️ Un envío de 0 es un dato real ("la trae al local"), no un campo vacío.
+  it('un envío de vuelta de 0 cuenta como guardado', () => {
+    expect(pasoGuardado(r({ escenario: null, envio_costo: 0, compensacion: null }), 'producto')).toBe(true)
+  })
+
+  it('el último paso se da por guardado recién cuando hay una resolución', () => {
+    expect(pasoGuardado(r({ escenario: null, envio_costo: null, compensacion: 'plata_total' }), 'cliente')).toBe(true)
   })
 })

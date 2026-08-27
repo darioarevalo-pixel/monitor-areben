@@ -755,6 +755,35 @@ export default async function handler(req, res) {
       if (b.cupon_codigo !== undefined) campos.cupon_codigo = texto(b.cupon_codigo);
       if (b.expectativa !== undefined && EXPECTATIVAS.includes(b.expectativa)) campos.expectativa = b.expectativa;
       if (b.reclamo_correo !== undefined) campos.reclamo_correo = texto(b.reclamo_correo);
+      // ── El avance de `Decidir`, paso por paso ────────────────────────────────
+      //
+      // 🔑 **Se puede guardar lo de un paso sin resolver el reclamo.** Hasta el 27-ago-2026 la
+      // pantalla era todo o nada: o se confirmaba la decisión entera o no quedaba nada, así que
+      // salir a buscar un dato —cuánto salió el envío, qué contestó la clienta— perdía lo cargado.
+      //
+      // ⚠️ **Esto ⛔ NO decide**: no toca `estado`, ni `compensacion`, ni los pendientes. Y eso es
+      // lo que lo hace seguro: la bandeja de Depósito filtra por `estado`
+      // (`in ('en_transito','recibido','resuelto')`), así que un `retorno_decidido` guardado a
+      // medio camino ⛔ no le aparece a nadie como algo que hay que esperar.
+      if (b.destino_prenda !== undefined && DESTINOS.includes(b.destino_prenda)) campos.destino_prenda = b.destino_prenda;
+      if (b.retorno_decidido !== undefined) campos.retorno_decidido = b.retorno_decidido === true;
+      if (b.retencion_respuesta !== undefined || b.retencion_monto !== undefined) {
+        // La regla es la misma que aplica `decidir`, y vive en `casos.core.js`: las dos mitades
+        // juntas o ninguna. ⛔ No se reescribe acá — es exactamente el modo de falla de esta
+        // sección (la misma regla en dos listas).
+        const fila = (await supabase.from('devoluciones').select('motivo, escenario, retorno_decidido').eq('store', store).eq('id', id).maybeSingle()).data;
+        if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+        const retencion = registroDeRetencion({
+          motivo: fila.motivo,
+          escenario: campos.escenario !== undefined ? campos.escenario : (fila.escenario || null),
+          respuesta: texto(b.retencion_respuesta),
+          monto: num(b.retencion_monto),
+          // El retorno que vale es el que se está guardando en este mismo gesto, si vino.
+          retornoDecidido: campos.retorno_decidido !== undefined ? campos.retorno_decidido : fila.retorno_decidido === true,
+        });
+        if (retencion.error) return res.status(400).json({ error: retencion.error });
+        Object.assign(campos, retencion.campos);
+      }
       if (b.items_correctos !== undefined && Array.isArray(b.items_correctos)) campos.items_correctos = b.items_correctos;
       if (b.items_nuevos !== undefined && Array.isArray(b.items_nuevos)) campos.items_nuevos = b.items_nuevos;
       if (b.forma_pago !== undefined && FORMAS_PAGO.includes(b.forma_pago)) campos.forma_pago = b.forma_pago;

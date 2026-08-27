@@ -39,7 +39,7 @@ import type { Marca } from '@/lib/nav'
 import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 // ⚠️ No está en el barril de `@/components/ui`: se importa directo.
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { decidir, reclasificar } from '@/lib/reclamos/cliente'
+import { decidir, editarReclamo, reclasificar } from '@/lib/reclamos/cliente'
 import {
   calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
   destinoDe, hayEnvio,
@@ -48,7 +48,7 @@ import {
   GRAVEDAD_DEF, ofreceRetencion, pvpFeriaSugerido, correccionesMalArmado, type GravedadFalla,
   type RespuestaRetencion,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
-  faltantesDeLaDecision, loQueTraba, estadoDelPaso, PASO_LABEL, PISO_RETORNO,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PISO_RETORNO,
   type PasoDecision, type FaltaDecision,
   DESTINO_LABEL, laUnidadVuelve,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
@@ -149,7 +149,12 @@ export function DecidirReclamo({
    * pedido sí se despacha, así que el envío se prestó: devolverlo sería regalar plata.
    */
   const devuelveElEnvio = envioDelMotivo && !(hayParcial && alcance === 'faltante')
-  const [envioVuelta, setEnvioVuelta] = useState<number | ''>('')
+  /**
+   * 🔑 **Arranca con lo que ya está guardado, ⛔ no en blanco.** Desde el 27-ago-2026 se puede
+   * confirmar un paso sin resolver el reclamo, así que reabrir `Decidir` tiene que devolver lo que
+   * se cargó la vez anterior — si no, "guardar el paso" no serviría de nada.
+   */
+  const [envioVuelta, setEnvioVuelta] = useState<number | ''>(reclamo.envio_costo ?? '')
   /**
    * El corte por monto. Arranca en el piso de la marca (`PISO_RETORNO`) y ⛔ ya no vacío: es una
    * política del negocio, no un dato de este caso, y como campo en blanco el corte no existía
@@ -157,7 +162,10 @@ export function DecidirReclamo({
    */
   const [piso, setPiso] = useState<number | ''>(PISO_RETORNO[marca] ?? '')
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
-  const [pvpFeria, setPvpFeria] = useState<number | ''>('')
+  // El PVP de feria vive por ítem, así que se recupera del primero que lo tenga.
+  const [pvpFeria, setPvpFeria] = useState<number | ''>(
+    () => (reclamo.items || []).find((it) => it.pvp_feria != null)?.pvp_feria ?? '',
+  )
   const [cupon, setCupon] = useState('')
   /**
    * **La oferta de retención**: cuánto se le ofreció para que se lo quede y qué contestó.
@@ -188,7 +196,7 @@ export function DecidirReclamo({
   /** Sólo en "pedido mal armado": lo que le llegó por error, cargado con las fotos delante. */
   const [recibidos, setRecibidos] = useState<ItemReclamo[]>(reclamo.items_correctos ?? [])
 
-  const [via, setVia] = useState<ViaRetorno>('andreani')
+  const [via, setVia] = useState<ViaRetorno>(reclamo.via_retorno ?? 'andreani')
   // El envío del REEMPLAZO: solo existe cuando se le manda otra unidad, y también lo pagamos nosotros.
   const [envioIda, setEnvioIda] = useState<number | ''>('')
   const [guardando, setGuardando] = useState(false)
@@ -222,7 +230,15 @@ export function DecidirReclamo({
   )
 
   // Arranca en lo que sugiere la cuenta; se puede cambiar a mano.
-  const [pedirRetorno, setPedirRetorno] = useState<boolean | null>(null)
+  /**
+   * ⚠️ Sólo se restaura **si ya se guardó el paso del producto** (`envio_costo` cargado). La columna
+   * `retorno_decidido` es un booleano que vale `false` también cuando nadie contestó todavía, así
+   * que leerla siempre haría que un reclamo nuevo arrancara en "que se lo quede" pisando la
+   * sugerencia de la cuenta — un `false` que no significa "no", significa "sin contestar".
+   */
+  const [pedirRetorno, setPedirRetorno] = useState<boolean | null>(
+    reclamo.envio_costo != null ? (reclamo.retorno_decidido === true) : null,
+  )
   const retorno = nuncaSalio ? false : (pedirRetorno ?? cuenta.conviene)
 
   const monto = useMemo(
@@ -448,17 +464,66 @@ export function DecidirReclamo({
   const ORDEN: PasoDecision[] = ['que-paso', 'producto', 'cliente']
   const esUltimo = paso === 'cliente'
 
-  const confirmarPaso = () => {
-    setRevisados((p) => new Set(p).add(paso))
+  /**
+   * **Guardar lo de ESTE paso y pasar al siguiente.**
+   *
+   * 🔴 Hasta el 27-ago-2026 «Confirmar paso» sólo marcaba el tilde: no guardaba nada, así que
+   * salir del modal a buscar un dato —cuánto salió el envío, qué contestó la clienta— perdía todo
+   * lo cargado y había que empezar de nuevo. Ahora escribe por `editar`, que ⛔ **no decide**: no
+   * toca el estado, ni la compensación, ni los pendientes. Decidir sigue siendo del último paso.
+   *
+   * ⚠️ El PVP de feria y los destinos viajan **dentro de `items`**, que es donde viven por unidad.
+   */
+  const confirmarPaso = async () => {
     const siguiente = ORDEN[ORDEN.indexOf(paso) + 1]
-    if (siguiente) setPaso(siguiente)
+    const campos: Record<string, unknown> = {}
+
+    if (paso === 'que-paso') {
+      if (escenario) campos.escenario = escenario
+      if (expectativa) campos.expectativa = expectativa
+      if (reclamo.motivo === 'mal_armado') campos.items_correctos = recibidos
+    }
+    if (paso === 'producto') {
+      if (envioVuelta !== '') campos.envio_costo = Number(envioVuelta)
+      if (retorno) campos.via_retorno = via
+      if (pedirRetorno !== null) campos.retorno_decidido = pedirRetorno
+      if (destino) campos.destino_prenda = destino
+      if (retencion) { campos.retencion_respuesta = retencion; campos.retencion_monto = montoOferta }
+      // El PVP de feria y el destino de cada unidad viven en `items`, no en columnas propias.
+      const feria = Number(pvpFeria) || null
+      campos.items = items.map((it, i) => ({
+        ...it,
+        ...(feria ? { pvp_feria: feria } : {}),
+        ...(destinos[i] ? { destino: destinos[i] } : {}),
+      }))
+    }
+
+    if (!Object.keys(campos).length) {
+      // Nada que guardar ⛔ no es un error: hay pasos que en algunos casos no tienen ningún campo.
+      setRevisados((p) => new Set(p).add(paso))
+      if (siguiente) setPaso(siguiente)
+      return
+    }
+
+    setGuardando(true)
+    try {
+      await editarReclamo(marca, reclamo.id, campos as Partial<ReclamoRow>)
+      setRevisados((p) => new Set(p).add(paso))
+      toast.ok(`«${PASO_LABEL[paso]}» guardado. Podés salir y seguir después.`)
+      if (siguiente) setPaso(siguiente)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
   }
 
   const chip = (p: PasoDecision) => {
     if (pasoVacio[p]) return <StatusPill tone="neutral" label="—" />
     const e = estadoDelPaso(faltas, p)
-    // El tilde es de quien lo miró: dice "por acá ya pasé", que es distinto de "no le falta nada".
-    if (!e) return revisados.has(p) ? <StatusPill tone="success" label="✓" /> : null
+    // El tilde dice **"esto ya está guardado"**, y por eso mira también la fila: así sobrevive a
+    // cerrar el modal, que es todo el sentido de poder confirmar un paso y seguir después.
+    if (!e) return (revisados.has(p) || pasoGuardado(reclamo, p)) ? <StatusPill tone="success" label="✓" /> : null
     return <StatusPill tone={e === 'traba' ? 'danger' : 'warning'} label={e === 'traba' ? 'traba' : 'falta'} />
   }
 
@@ -496,7 +561,9 @@ export function DecidirReclamo({
               {guardando ? 'Guardando…' : 'Confirmar la decisión'}
             </Button>
           ) : (
-            <Button variant="solid" tone="brand" onClick={confirmarPaso}>Confirmar paso →</Button>
+            <Button variant="solid" tone="brand" onClick={() => void confirmarPaso()} disabled={guardando}>
+              {guardando ? 'Guardando…' : 'Confirmar paso →'}
+            </Button>
           )}
         </>
       )}

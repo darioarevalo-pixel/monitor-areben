@@ -1135,6 +1135,25 @@ export function esCambio(d: Pick<ReclamoRow, 'compensacion'>): boolean {
  * ⚠️ Y en un reclamo que ⛔ no es cambio, `borrador` significa lo contrario —**todavía no se
  * decidió**—, así que ése va por «Decidir», no por acá.
  */
+/**
+ * ¿Este paso de `Decidir` ya tiene algo guardado?
+ *
+ * 🔑 Es lo que hace que el tilde **sobreviva a cerrar el modal**. ⛔ No dice "alguien lo revisó":
+ * dice **"esto ya está en la base"**, que es lo único que se puede afirmar mirando la fila — y es
+ * exactamente lo que la persona necesita saber al volver a entrar.
+ *
+ * ⚠️ Por eso un paso que no tenía nada que guardar ⛔ no queda tildado: sería decir que se guardó
+ * algo que no existe.
+ */
+export function pasoGuardado(
+  d: Pick<ReclamoRow, 'escenario' | 'envio_costo' | 'compensacion'>,
+  paso: PasoDecision,
+): boolean {
+  if (paso === 'que-paso') return d.escenario != null
+  if (paso === 'producto') return d.envio_costo != null
+  return d.compensacion != null
+}
+
 export function puedeRehacerseLaDecision(d: Pick<ReclamoRow, 'compensacion' | 'estado'>): boolean {
   return esCambio(d)
     ? d.estado === 'borrador'

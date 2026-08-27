@@ -241,11 +241,38 @@ describe('Decidir — confirmar', () => {
     expect(boton('Confirmar paso')).toBeTruthy()
   })
 
-  it('confirmar un paso lo deja tildado y pasa al siguiente', async () => {
+  /**
+   * 🔴 **Confirmar un paso GUARDA.** Hasta el 27-ago-2026 sólo marcaba el tilde en memoria: salir
+   * del modal a buscar un dato perdía todo lo cargado. El pedido de Bruno fue literal: *«decidir el
+   * paso 1, salir, volver a entrar y continuar»*.
+   */
+  it('confirmar un paso lo guarda, lo deja tildado y pasa al siguiente', async () => {
+    const enviados: string[] = []
+    const fetchSpy = vi.fn((_u: unknown, init?: { body?: string }) => {
+      if (init?.body) enviados.push(init.body)
+      return Promise.resolve(new Response('{"ok":true}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchSpy)
     await abrir(SANO)
     await act(async () => { boton('Confirmar paso')!.click() })
+    // La aserción que vale: SALIÓ un guardado, y es `editar` — que ⛔ no decide.
+    expect(enviados.length).toBeGreaterThan(0)
+    const body = JSON.parse(enviados[0])
+    expect(body.action).toBe('editar')
+    expect(body.escenario).toBe('ya_salio')
     expect(abierta()).toContain('El producto')
     expect(tab('Qué pasó').textContent).toContain('✓')
+    vi.unstubAllGlobals()
+  })
+
+  // La contracara: al reabrir, lo guardado vuelve solo. Sin esto, "guardar el paso" no sirve.
+  it('al reabrir, los datos guardados vuelven cargados y el paso queda tildado', async () => {
+    await abrir({ ...SANO, envio_costo: 6000, via_retorno: 'correo' } as unknown as ReclamoRow)
+    expect(tab('El producto').textContent).toContain('✓')
+    await act(async () => { tab('El producto').click() })
+    expect(campo('Envío de vuelta')?.value).toBe('6000')
+    // Y con el envío ya cargado la caja de la oferta contesta, en vez de mostrar $0.
+    expect(textoDeLaPantalla()).toContain('Ofrecele')
   })
 
   it('en el último paso sí aparece «Confirmar la decisión»', async () => {
