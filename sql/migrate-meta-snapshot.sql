@@ -108,6 +108,20 @@ alter table meta_ads_snapshot_dia add column if not exists carritos      numeric
 alter table meta_ads_snapshot_dia add column if not exists checkouts     numeric;
 alter table meta_ads_snapshot_dia add column if not exists lpv           numeric;
 
+-- El escalón que faltaba del embudo, agregado el 27-ago-2026: los clicks QUE VAN A LA WEB.
+-- 🔴 Por qué no alcanzaba con `clicks`: el campo `clicks` de Meta son TODOS los clicks — el que
+-- entra a la tienda, pero también el "me gusta", el comentario, el compartir, el que agranda la
+-- foto, el que aprieta "ver más" y el que entra al perfil. Restarle `lpv` a `clicks` para medir
+-- "cuántos se cayeron antes de cargar la página" da un número enorme y falso, porque el numerador
+-- cuenta gente que nunca quiso entrar. El 27-ago se leyó así y dio "se pierde la mitad": era
+-- comparar dos cosas distintas. El campo que cuenta sólo los que van a la web es
+-- `inline_link_clicks`, y hasta hoy no se pedía.
+-- ⇒ Con esta columna, `lpv / link_clicks` sí mide el escalón click→landing, y `ctr` se puede
+-- comparar contra `link_clicks / impresiones` (el CTR de link) en vez del CTR de todo.
+-- 🔴 Nace NULL y las filas viejas se quedan NULL A PROPÓSITO, por el mismo motivo que las tres de
+-- arriba: un 0 diría "nadie hizo click al link", y estas filas no pueden afirmar eso.
+alter table meta_ads_snapshot_dia add column if not exists link_clicks   numeric;
+
 -- Las tres consultas reales:
 --   1. la serie de UN objeto (el gráfico de tendencia, y el "viene cayendo" del escalado)
 --   2. todo lo de una línea en un rango (el Panel y los candidatos a escalar/podar)

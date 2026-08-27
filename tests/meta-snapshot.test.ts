@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { estadoRealDe, filaSnapshot, isoDia, sumarDias, tramosDe } from '@/lib/meta-ads/snapshot'
-import { accion, metricasDe } from '@/lib/meta-ads/metricas'
+import { accion, metricasDe, CAMPOS_INSIGHTS } from '@/lib/meta-ads/metricas'
 
 describe('cómo se parte el rango del backfill', () => {
   it('90 días salen en tres tramos de 30, sin huecos ni superposición', () => {
@@ -121,6 +121,37 @@ describe('de fila de insights a fila de la tabla', () => {
     expect(f.lpv).toBe(640)
     // Y el embudo tiene que cerrar hacia abajo: no puede haber más compras que checkouts.
     expect(f.compras).toBeLessThanOrEqual(f.checkouts!)
+  })
+
+  it('🔑 `link_clicks` sale de inline_link_clicks y ⛔ NO de `clicks`', () => {
+    // El caso real que lo hizo nacer (27-ago-2026): se leyó `clicks - lpv` como "gente que hizo
+    // click y no llegó a cargar la tienda" y dio "se pierde la mitad". Era falso: `clicks` cuenta
+    // me gusta, comentarios, compartir y agrandar la foto, gente que nunca quiso entrar.
+    const conLink = { ...row, clicks: '431', inline_link_clicks: '230' }
+    const f = filaSnapshot(conLink, 'conjunto', '1145878766790149')!
+    expect(f.clicks).toBe(431)
+    expect(f.link_clicks).toBe(230)
+    // El invariante que hace que valga la pena: los clicks al link son un SUBCONJUNTO de todos.
+    expect(f.link_clicks!).toBeLessThanOrEqual(f.clicks)
+  })
+
+  it('🔴 el campo se le PIDE a Meta: sin esto la columna se llenaría de ceros en silencio', () => {
+    // `num(undefined)` da 0, así que olvidarse de pedirlo no rompe nada — escribe "nadie hizo
+    // click al link" todos los días. Es exactamente el bug que este archivo ya documenta para
+    // `actions`, y por eso el pedido se fija acá y no sólo la lectura.
+    expect(CAMPOS_INSIGHTS.split(',')).toContain('inline_link_clicks')
+  })
+
+  it('🔴 con el escalón bien medido, el que se caía era casi nadie', () => {
+    // Los números de BDI del 27-ago: 431 clicks, 230 al link, 208 landing page views.
+    const f = filaSnapshot(
+      { ...row, clicks: '431', inline_link_clicks: '230',
+        actions: [...row.actions, { action_type: 'landing_page_view', value: '208' }] },
+      'conjunto', '1145878766790149',
+    )!
+    // La lectura vieja: 52% "perdido". La buena: 10%. El denominador era todo el error.
+    expect(Math.round((1 - f.lpv! / f.clicks) * 100)).toBe(52)
+    expect(Math.round((1 - f.lpv! / f.link_clicks!) * 100)).toBe(10)
   })
 
   it('🔴 sin el action_type los tres dan 0, que NO es lo mismo que el null de las filas viejas', () => {

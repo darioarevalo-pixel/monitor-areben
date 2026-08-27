@@ -31,7 +31,11 @@ export type Metricas = {
   impressions: number
   reach: number
   frequency: number
+  /** 🔴 TODOS los clicks, no sólo los que van a la web. Ver `linkClicks`. */
   clicks: number
+  /** Sólo los clicks que van a la web (`inline_link_clicks`). El único denominador válido para el
+   *  escalón click→landing: `clicks` incluye me gusta, comentarios, compartir y agrandar la foto. */
+  linkClicks: number
   ctr: number
   cpc: number
   cpm: number

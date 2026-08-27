@@ -52,7 +52,11 @@ export type FilaSnapshot = {
   alcance: number
   /** 🔴 Ídem. */
   frecuencia: number
+  /** 🔴 TODOS los clicks, no sólo los que van a la web. Ver `link_clicks`. */
   clicks: number
+  /** Sólo los clicks a la web. 🔴 `null` en toda fila anterior al 27-ago-2026 — nació cuatro días
+   *  después que los tres del embudo, así que hay filas con `lpv` y sin esto. */
+  link_clicks: number | null
   ctr: number
   cpc: number
   cpm: number
@@ -84,8 +88,11 @@ export type TotalVentana = {
   carritos: number | null
   checkouts: number | null
   lpv: number | null
-  /** Sobre cuántos días de la ventana hay embudo, paso por paso. */
-  diasConEmbudo: { carritos: number; checkouts: number; lpv: number }
+  link_clicks: number | null
+  /** Sobre cuántos días de la ventana hay embudo, paso por paso.
+   *  ⚠️ `link_clicks` arrancó el 27-ago y los otros tres el 23-ago: en una ventana que cruce esa
+   *  frontera estos contadores NO coinciden, y la tasa click→landing va sobre el menor. */
+  diasConEmbudo: { carritos: number; checkouts: number; lpv: number; link_clicks: number }
   ctr: number
   cpc: number
   cpm: number

@@ -332,6 +332,33 @@ describe('el embudo sumado', () => {
     expect(t.carritos).toBe(0)
     expect(t.diasConEmbudo.carritos).toBe(1)
   })
+
+  it('🔴 `link_clicks` se suma con la misma regla: sin ninguna fila que lo midiera vuelve `null`', () => {
+    const t = sumarDias([
+      { spend: 100, clicks: 50, link_clicks: null },
+      { spend: 100, clicks: 50, link_clicks: null },
+    ])
+    // ⛔ Si cayera en el grupo de `clicks` —que suma con `Number(null) || 0`— acá diría 0, y 0
+    // afirma "nadie hizo click al link". Estas filas no pueden afirmar eso.
+    expect(t.link_clicks).toBe(null)
+    expect(t.clicks).toBe(100)
+  })
+
+  it('🔴 `link_clicks` arrancó DESPUÉS que el resto del embudo: los contadores no coinciden', () => {
+    // La frontera real: `lpv` nació el 23-ago-2026 y `link_clicks` el 27. Una ventana de 7 días
+    // que cruce las dos fechas tiene días con lpv y sin link_clicks. Calcular la tasa
+    // click→landing sobre los días de la ventana entera la subestimaría, porque el numerador
+    // tendría días que el denominador no.
+    const t = sumarDias([
+      { spend: 100, lpv: 40, link_clicks: null },
+      { spend: 100, lpv: 40, link_clicks: null },
+      { spend: 100, lpv: 40, link_clicks: 80 },
+    ])
+    expect(t.diasConEmbudo.lpv).toBe(3)
+    expect(t.diasConEmbudo.link_clicks).toBe(1)
+    // 120/80 = 150%, un imposible. El guard es comparar los contadores ANTES de dividir.
+    expect(t.lpv! / t.link_clicks!).toBeGreaterThan(1)
+  })
 })
 
 /**
