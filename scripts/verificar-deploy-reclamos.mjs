@@ -1,0 +1,33 @@
+/**
+ * ¿Llegó a prod un cambio de la sección Reclamos?
+ *
+ * 🔴 El chunk de Reclamos ⛔ NO está entre los 18 que trae el HTML de /postventa: `Devoluciones`
+ * entra por `dynamic()`. Hay que sacar de adentro de esos 18 las rutas de chunk que referencian
+ * —son ~95— y bajarlas también.
+ * 🔴 Y siempre con una cadena de CONTROL que YA estaba en prod: sin ella, un 0 del oráculo no
+ * distingue «no se deployó» de «el crawl no llegó». Pasó dos veces hoy.
+ */
+const BASE = 'https://monitorareben.vercel.app'
+const ORACULO = 'Hasta que no aprietes'   // nuevo: 0 apariciones en 3a2fdb6^
+const CONTROL = 'Msj: pedir fotos'        // ya estaba en prod
+
+const RUTA = /static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g
+const bajar = async (u) => { const r = await fetch(`${BASE}/_next/${u}`); return r.ok ? await r.text() : '' }
+
+const html = await (await fetch(`${BASE}/postventa`)).text()
+const cola = [...new Set(html.match(RUTA) || [])]
+console.log(`chunks en el HTML: ${cola.length}`)
+
+const vistos = new Set(cola)
+const cuerpos = []
+for (let i = 0; i < cola.length; i++) {
+  const cuerpo = await bajar(cola[i])
+  cuerpos.push([cola[i], cuerpo])
+  for (const r of cuerpo.match(RUTA) || []) if (!vistos.has(r)) { vistos.add(r); cola.push(r) }
+}
+
+const con = (s) => cuerpos.filter(([, c]) => c.includes(s)).map(([u]) => u.split('/').pop())
+const c = con(CONTROL), o = con(ORACULO)
+console.log(`chunks bajados: ${cuerpos.length}`)
+console.log(`CONTROL «${CONTROL}» → ${c.length} ${c.length ? `✓ el crawl SÍ llega al chunk de Reclamos (${c.join(', ')})` : '❌ el crawl NO llega: el negativo no significa nada'}`)
+console.log(`ORACULO «${ORACULO}» → ${o.length} ${o.length ? `✓ DEPLOYADO (${o.join(', ')})` : '✗ todavía NO está en prod'}`)

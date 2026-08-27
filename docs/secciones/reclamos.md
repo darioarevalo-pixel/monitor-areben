@@ -768,11 +768,24 @@ no. Pasó el 27-ago y casi manda a re-deployar algo que ya estaba.
 
 Lo que sirve, en tres pasos:
 
-1. Bajar los chunks que **sí** vienen en el HTML de `/postventa`.
-2. Sacar de adentro de ellos **todos los nombres de chunk** que referencian (`[0-9a-z_]{8,20}\.js`)
-   — son ~73 — y bajarlos también. Ahí está el de Reclamos.
+1. Bajar los 18 chunks que **sí** vienen en el HTML de `/postventa`.
+2. Sacar de adentro de ellos las **rutas** de chunk que referencian y bajarlas también, en cascada
+   hasta que no aparezcan nuevas: son **118** en total, y ahí está el de Reclamos.
 3. Buscar el oráculo **y una cadena de CONTROL que ya estaba en prod**, y verificar que la del
    oráculo sea **única contra `<commit>^`** (`git grep -c -F "…" <commit>^`).
+
+🔴 **Dos detalles del paso 2 que costaron dos corridas en falso el 27-ago**, las dos con el mismo
+síntoma —«0 chunks, no está deployado»— sobre un deploy que **ya estaba**:
+
+- La carpeta es **`/_next/static/immutable/chunks/`**, ⛔ no `/_next/static/chunks/`.
+- Las referencias son **rutas** (`static/immutable/chunks/xxx.js`), ⛔ no nombres sueltos
+  entrecomillados, y los nombres llevan `-` y `.`. La regex que sirve:
+  `/static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g`.
+
+🔑 **Y por eso el CONTROL ⛔ no es opcional**: las dos veces el oráculo dio 0, y las dos veces la que
+avisó de que el crawl no había llegado a ningún lado fue la cadena de control, que también daba 0.
+Sin ella se re-deploya algo que ya está, o peor: se da por bueno un negativo que no significa nada.
+El crawl que anduvo quedó en `scripts/verificar-deploy-reclamos.mjs`.
 
 ⚠️ Un cambio que sólo toca `lib/reclamos/tipos.ts` **sí** cae en un chunk eager (ahí vive también
 `efectos.core.js`), pero sólo si agrega una **cadena**: los comentarios se minifican y no sirven de
