@@ -11,7 +11,7 @@ import {
   hayUnidadFisica, ofreceRetencion, pideFotos, sobreLaVentaCompleta, tituloExpectativa, ERROR_PROPIO,
   type MotivoReclamo,
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
-  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
   EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, type Compensacion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
@@ -1753,6 +1753,83 @@ describe('puedeRehacerseLaDecision', () => {
 
   it('un reclamo cerrado no se rehace', () => {
     expect(puedeRehacerseLaDecision(r('plata_total', 'cerrado'))).toBe(false)
+  })
+
+  /**
+   * 🔴 **La puerta se cierra con el primer pendiente ejecutado.** Rehacer vuelve a pasar por
+   * `pendientesDe`, así que un pendiente tildado vuelve a `pendiente`: la plata ya devuelta
+   * aparecería otra vez como si no se hubiera devuelto. Hasta el 27-ago-2026 «Volver a decidir»
+   * salió sin ningún freno y se podía pisar una decisión en curso.
+   */
+  it('una decisión que YA se está ejecutando no se rehace', () => {
+    expect(puedeRehacerseLaDecision({ ...r('plata_total', 'resuelto'), reintegro_estado: 'hecho' } as unknown as ReclamoRow)).toBe(false)
+    expect(puedeRehacerseLaDecision({ ...r('otro_producto', 'borrador'), envio_nuevo_estado: 'hecho' } as unknown as ReclamoRow)).toBe(false)
+  })
+
+  it('un pendiente todavía SIN tildar no cierra nada', () => {
+    expect(puedeRehacerseLaDecision({ ...r('plata_total', 'resuelto'), reintegro_estado: 'pendiente', stock_estado: 'no_aplica' } as unknown as ReclamoRow)).toBe(true)
+  })
+
+  /**
+   * ⚠️ Las dos columnas que rehacer ⛔ NO pisa. `tn_stock_estado` se decide en el alta y
+   * `reclamo_correo_estado` corre en paralelo (`decidir` respeta su `'hecho'` a propósito) ⇒
+   * ninguna se pierde al rehacer, así que ninguna puede cerrar la puerta. Si alguna entrara en
+   * `loEjecutado`, este caso se pone rojo.
+   */
+  it('el reclamo al transportista y la baja del alta ⛔ no congelan la decisión', () => {
+    const d = { ...r('plata_total', 'resuelto'), reclamo_correo_estado: 'hecho', tn_stock_estado: 'hecho' } as unknown as ReclamoRow
+    expect(loEjecutado(d)).toEqual([])
+    expect(puedeRehacerseLaDecision(d)).toBe(true)
+  })
+})
+
+/**
+ * Lo que la decisión ya mandó a hacer y alguien HIZO. Es lo único que puede cerrar «Volver a
+ * decidir», y lo mismo que el servidor usa para rechazar el POST con 409.
+ */
+describe('loEjecutado', () => {
+  it('sin nada hecho, la lista está vacía', () => {
+    expect(loEjecutado({ compensacion: 'plata_total', estado: 'resuelto' } as unknown as ReclamoRow)).toEqual([])
+  })
+
+  it('nombra CADA pendiente tildado, no sólo dice que hay uno', () => {
+    const d = { reintegro_estado: 'hecho', stock_estado: 'hecho' } as unknown as ReclamoRow
+    expect(loEjecutado(d)).toEqual(['ya se le devolvió la plata', 'ya se anuló la venta original en Gestión Nube'])
+  })
+
+  /**
+   * 🔑 **Los dos gestos que pasaron en el mundo y ⛔ no son una columna.** El producto que ya
+   * volvió al depósito y el que ya se descontó de Gestión Nube: rehacer la decisión no los
+   * deshace, pero cambiarle el destino a una unidad que ya está en la mano deja la fila mintiendo.
+   */
+  it('cuenta el producto que ya volvió', () => {
+    const d = {
+      motivo: 'falla', destino_prenda: 'stock', retorno_decidido: true,
+      items: [{ recibida_at: '2026-08-27T10:00:00Z' }, {}],
+    } as unknown as ReclamoRow
+    expect(loEjecutado(d)).toEqual(['ya volvió el producto'])
+  })
+
+  it('cuenta el que ya se descontó, y en plural cuando son varios', () => {
+    const d = {
+      motivo: 'falla',
+      items: [{ baja_at: '2026-08-27T10:00:00Z' }, { baja_at: '2026-08-27T10:01:00Z' }],
+    } as unknown as ReclamoRow
+    expect(loEjecutado(d)).toEqual(['ya se descontaron de Gestión Nube 2 productos'])
+  })
+
+  /**
+   * 🔴 **El invariante que no se puede romper.** `loEjecutado` mira exactamente las columnas que
+   * `pendientesDe` pisa. Si mañana se agrega una columna a `pendientesDe` y no acá, se puede
+   * volver a pisar un pendiente ya hecho — el mismo modo de falla que tuvieron las dos listas
+   * escritas a mano que `EFECTOS_RESOLUCION` vino a reemplazar.
+   */
+  it('cubre TODAS las columnas que rehacer pisa, ni una de más', () => {
+    const columnas = Object.keys(pendientesDe({ compensacion: 'otro_producto', diferencia: -1 }))
+    for (const col of columnas) {
+      const d = { [col]: 'hecho' } as unknown as ReclamoRow
+      expect(loEjecutado(d), `${col} no cierra la puerta`).toHaveLength(1)
+    }
   })
 })
 

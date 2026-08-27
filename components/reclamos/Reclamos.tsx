@@ -29,7 +29,7 @@ import {
   leerToken, reemitirToken,
 } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, esCambio, estadoEnCriollo, faltantesParaCerrar, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
+  calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -874,6 +874,15 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           son los pendientes, y por eso se avisa antes. */}
                       {esAdmin && puedeRehacerseLaDecision(d) && (
                         <Button size="sm" variant="outline" tone="neutral" onClick={() => void volverADecidir(d)}>Volver a decidir</Button>
+                      )}
+                      {/* 🔑 **El botón se va, pero DICE por qué.** Desde que se ejecutó el primer
+                          pendiente la decisión se congela —rehacerla destildaría lo ya hecho— y un
+                          botón que desaparece sin explicación es el defecto que este módulo ya tuvo
+                          dos veces. La lista sale de `loEjecutado`, la misma que frena el POST. */}
+                      {esAdmin && estaDecidido(d) && !puedeRehacerseLaDecision(d) && loEjecutado(d).length > 0 && (
+                        <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>
+                          ya no se puede rehacer: {loEjecutado(d).join(' · ')}
+                        </span>
                       )}
                       {esAdmin && esCambio(d) && d.estado !== 'cerrado' && (
                         <span style={{ fontSize: font.xs, color: color.mut2, alignSelf: 'center' }}>se sigue en Cambios</span>

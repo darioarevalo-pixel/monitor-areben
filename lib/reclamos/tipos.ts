@@ -14,6 +14,7 @@
 import type { Marca } from '@/lib/nav.datos'
 import {
   EFECTOS_RESOLUCION as EFECTOS_RESOLUCION_JS,
+  loEjecutado as loEjecutadoJs,
   pendientesDe as pendientesDeJs,
   saleUnEnvio as saleUnEnvioJs,
 } from './efectos.core.js'
@@ -1149,7 +1150,19 @@ export function esCambio(d: Pick<ReclamoRow, 'compensacion'>): boolean {
  *
  * ⚠️ Y en un reclamo que ⛔ no es cambio, `borrador` significa lo contrario —**todavía no se
  * decidió**—, así que ése va por «Decidir», no por acá.
+ *
+ * 🔴 **Y se cierra cuando ya se ejecutó algo.** Rehacer vuelve a pasar por `pendientesDe`, o sea
+ * que un pendiente tildado **vuelve a `pendiente`**: la plata devuelta aparecería otra vez como si
+ * no se hubiera devuelto. La lista de lo que ya se hizo la da `loEjecutado`, y ⛔ la pantalla no la
+ * infiere por su cuenta — el mismo servidor la usa para frenar el POST.
  */
+export function puedeRehacerseLaDecision(d: ReclamoRow): boolean {
+  const decidido = esCambio(d)
+    ? d.estado === 'borrador'
+    : (d.estado === 'resuelto' || d.estado === 'en_transito')
+  return decidido && loEjecutado(d).length === 0
+}
+
 /**
  * ¿Este paso de `Decidir` ya tiene algo guardado?
  *
@@ -1169,11 +1182,6 @@ export function pasoGuardado(
   return d.compensacion != null
 }
 
-export function puedeRehacerseLaDecision(d: Pick<ReclamoRow, 'compensacion' | 'estado'>): boolean {
-  return esCambio(d)
-    ? d.estado === 'borrador'
-    : (d.estado === 'resuelto' || d.estado === 'en_transito')
-}
 
 // ── Qué aplica a cada motivo ────────────────────────────────────────────────────
 
@@ -1993,6 +2001,14 @@ export function pendientesDe(opciones: {
   diferencia?: number | null
 }): PendientesDerivados {
   return pendientesDeJs(opciones) as PendientesDerivados
+}
+
+/**
+ * Lo que la decisión ya mandó a hacer y alguien HIZO, en criollo. Vacío = todavía no se ejecutó
+ * nada y la decisión se puede rehacer entera. Ver `puedeRehacerseLaDecision`.
+ */
+export function loEjecutado(d: ReclamoRow): string[] {
+  return loEjecutadoJs(d) as string[]
 }
 
 /** ¿Esta resolución manda algo al cliente? Son el cambio, la reposición y el reenvío. */

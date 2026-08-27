@@ -472,6 +472,41 @@ demora no se podía cerrar nunca**.
 - ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
   refactors grandes): las pestañas envuelven los bloques que ya estaban.
 
+## 🆕 «Volver a decidir» se cierra con el primer pendiente ejecutado (27-ago-2026)
+
+El 27-ago salió «Volver a decidir» para destrabar una decisión apurada, y salió **sin ningún
+freno**: `puedeRehacerseLaDecision` decía que sí para *cualquier* reclamo ya decidido, y `decidir`
+(`api/_reclamos.js`) ⛔ no tenía guard de estado. O sea que una decisión **en curso** se podía pisar.
+
+🔴 **Por qué importa:** rehacer vuelve a pasar por `pendientesDe`, así que **un pendiente tildado
+vuelve a `pendiente`**. La plata que ya se devolvió aparece otra vez como si no se hubiera devuelto,
+y la venta que ya se anuló en Gestión Nube vuelve a pedir que la anulen. Nadie se entera: son
+columnas, no plata que se mueve.
+
+**La regla, y dónde vive.** `loEjecutado` (`lib/reclamos/efectos.core.js`) devuelve **en criollo** lo
+que la decisión ya mandó a hacer y alguien hizo. Vacío ⇒ se puede rehacer.
+
+| qué mira | por qué |
+|---|---|
+| las **seis** columnas que `pendientesDe` pisa | son exactamente las que rehacer destildaría |
+| el producto que **ya volvió** (`recibida_at`) | pasó en el mundo, no en la fila |
+| el que **ya se descontó** de GN (`baja_at`) | idem |
+
+⛔ **`tn_stock_estado` y `reclamo_correo_estado` NO entran.** La primera se decide en el alta; la
+segunda corre en paralelo y `decidir` ya respeta su `'hecho'` a propósito ⇒ **rehacer no las pierde**,
+así que ninguna de las dos puede cerrar la puerta. Meterlas sería congelar decisiones por algo que
+rehacerlas no rompe. Hay un caso de test que se pone rojo si alguna se cuela.
+
+🔑 **El invariante que se testea**: `loEjecutado` cubre **todas** las claves que devuelve
+`pendientesDe`, ni una de menos. Agregar una columna allá y olvidarla acá reabre el agujero — es el
+mismo modo de falla de las dos listas escritas a mano que `EFECTOS_RESOLUCION` vino a reemplazar.
+
+🔑 **El botón se va, pero DICE por qué.** En su lugar queda *«ya no se puede rehacer: ya se le
+devolvió la plata»*. Un botón que desaparece callado es el defecto que este módulo ya tuvo dos veces.
+
+🔴 **Y el freno está en el SERVIDOR, no sólo en la pantalla.** `decidir` responde **409** con la
+lista. Una pantalla que esconde un botón no es una regla: es una sugerencia.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests

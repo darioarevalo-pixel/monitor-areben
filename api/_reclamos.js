@@ -50,7 +50,7 @@ import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
-import { pendientesDe } from '../lib/reclamos/efectos.core.js';
+import { loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
 import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
@@ -320,9 +320,21 @@ export default async function handler(req, res) {
       // a la fila y después movería el perfil equivocado. Hay que releer el motivo de la base —
       // el cliente manda el escenario, no el caso.
       const { data: filaCaso, error: eCaso } = await supabase
-        .from('devoluciones').select('motivo, escenario, reclamo_correo_estado, items').eq('store', store).eq('id', id).maybeSingle();
+        .from('devoluciones').select(`motivo, escenario, reclamo_correo_estado, items, items_correctos,
+          destino_prenda, retorno_decidido, reintegro_estado, stock_estado, reingreso_estado,
+          cobro_estado, envio_nuevo_estado, cupon_estado`.replace(/\s+/g, ' '))
+        .eq('store', store).eq('id', id).maybeSingle();
       if (eCaso) throw new Error(eCaso.message);
       if (!filaCaso) return res.status(404).json({ error: 'no existe ese reclamo' });
+      // 🔴 **Una decisión ya ejecutada ⛔ no se pisa.** Rehacerla vuelve a pasar por `pendientesDe`,
+      // así que un pendiente tildado vuelve a `pendiente`: la plata devuelta aparecería otra vez
+      // como si no se hubiera devuelto. La pantalla ya esconde el botón, pero el freno vive acá —
+      // la regla es del reclamo, no de la pantalla, y hasta hoy `decidir` no tenía ningún guard.
+      // ⚠️ En la PRIMERA decisión la lista está vacía por definición, así que esto ⛔ no la estorba.
+      const yaHecho = loEjecutado(filaCaso);
+      if (yaHecho.length) {
+        return res.status(409).json({ error: `Esta decisión ya se está ejecutando (${yaHecho.join(' · ')}): no se puede rehacer.` });
+      }
       const motivoActual = filaCaso.motivo;
       // Si no viene en el body, vale el que ya tiene la fila: mandar la decisión desde una pantalla
       // que no conoce el escenario ⛔ no puede BORRARLO — es el dato del que cuelga el perfil.
