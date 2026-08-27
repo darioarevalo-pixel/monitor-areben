@@ -408,6 +408,10 @@ Los tres números los eligió el que escribió esto, no el que vende: **25 en la
 orden (calientes arriba, y dentro de cada grupo el más atrasado primero) y **qué se ve de cada
 uno** (nombre · hace cuánto vence · última nota). Se revisan después de un día de uso real.
 
+⚠️ **El orden se dio vuelta el 27-ago-2026** — ver el bloque del final. Era el más atrasado
+primero; ahora es el de hoy primero. Este párrafo queda como estaba porque describe la decisión
+original, y lo que la cambió fue exactamente "el uso real" que acá se anticipaba.
+
 ---
 
 # ✅ 24-ago-2026 — las notas en cuatro lugares + el repaso visual del panel
@@ -716,3 +720,71 @@ Vaciar el cuadro borra el dato.
 
 ▶️ **La gemela que quedó sin hacer: la ciudad.** Le falta a **626 de 744** y el encabezado ya dice
 "sin ciudad" en un renglón que no hace nada. Es el mismo componente con otro campo.
+
+
+---
+
+# 🔴 27-ago-2026 — el orden de la lista del día, dado vuelta
+
+Bruno: *"hay un tema de recontactos que no funciona bien, en realidad no lo estoy usando bien, y
+eso me genera problemas de a quién hablarle"*.
+
+**No lo estaba usando mal.** Lo usaba bien y la lista no le devolvía nada.
+
+## El bug, que no es un bug sino un orden
+
+La lista ordenaba **del más atrasado al menos**: `(a.dias ?? 1) - (b.dias ?? 1)`, con los días
+negativos para lo vencido. Suena a sentido común —"primero el que hace más que espera"— y hace
+justo lo contrario de lo que hace falta:
+
+- el que se agendó **para hoy** lleva 0 días de espera → **último**;
+- el que quedó colgado hace dos semanas lleva 13 → **primero**.
+
+O sea que **cuanto mejor se usa el CRM, menos aparece la gente**. Se agenda a un cliente para el
+lunes, llega el lunes, y esa persona no está en la lista. La fecha que se le promete al cliente
+**no se cumple nunca**, y quien la usa deja de confiar en la lista.
+
+## Medido contra producción ese día
+
+- 226 en la lista, **25 lugares** en el panel.
+- Los **5 agendados para hoy** caían en los puestos **222, 223, 224, 225 y 226**. Ninguno entraba.
+- Los 25 que se veían eran todos del **13 y 14 de agosto**.
+
+⚠️ **Y la pila no era basura**: los 25 habían comprado todos hace menos de un año, y arriba estaban
+Manuel Sosa ($5,8M, hace 35 días), Agustín Gramajo ($4M) y Agustina Córdoba ($2,9M). El problema
+nunca fue **quién** entra en la lista sino **en qué orden**.
+
+## El arreglo: `urgenciaFecha` en `lib/crm/core.ts`
+
+```ts
+export function urgenciaFecha(dias: number | null | undefined): number {
+  return dias == null ? 999 : Math.abs(dias)
+}
+```
+
+🔑 **El valor absoluto es todo el arreglo.** Los grupos ya vienen separados por `seg_estado`, así
+que esto sólo desempata adentro de uno, y con la misma expresión sirve para los dos casos:
+
+- **vencidos** (días ≤ 0) → 0, 1, 2…: hoy primero, el atraso más viejo último. **Dado vuelta.**
+- **"esta semana"** (días 1 a 7) → 1, 2, 3…: mañana primero. **Igual que antes.**
+
+`null` es el `pendiente` heredado: sin fecha contra la cual medir el atraso, va al final.
+
+⚠️ **Se cambió en los DOS lados a propósito**: `listaDelDia` (el panel) y `filtrarOrdenar` (la
+sección). Es la misma regla de siempre —si divergen, el panel dice que un cliente está atrasado y
+la sección que está al día, sobre el mismo dato.
+
+## El resultado, sobre los mismos datos reales
+
+| | Antes | Ahora |
+|---|---|---|
+| Los 5 agendados para hoy | puestos 222 a 226 | puestos **2 a 6** |
+| Fechas de los 25 visibles | 13 y 14 de agosto | 25, 26 y **27** de agosto |
+
+## Tests
+
+- `crm-lista-dia.test.ts`: el orden dado vuelta, y **"el de hoy le gana al colgado aunque el tope
+  corte"** — 60 atrasados y uno de hoy, el de hoy sale primero. Ése es el caso real.
+- `crm-prioridad.test.ts`: el mismo vuelco en la sección, más el test de que **los futuros NO se
+  dan vuelta** (mañana sigue antes que dentro de 7 días), que es lo que el valor absoluto podría
+  haber roto sin que nadie lo note.

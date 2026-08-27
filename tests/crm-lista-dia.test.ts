@@ -61,13 +61,24 @@ describe('listaDelDia · el orden', () => {
     expect(listaDelDia(mapa, HOY).map((f) => f.id)).toEqual([2, 1])
   })
 
-  it('dentro de la misma temperatura, primero el más atrasado', () => {
+  it('dentro de la misma temperatura, primero el de HOY y el colgado al final', () => {
+    // Dado vuelta el 27-ago-2026. Antes salía [2, 1, 3]: el colgado del 1-ago arriba y el
+    // agendado para hoy último. Con 226 en la lista y 25 lugares, el de hoy no aparecía.
     const mapa: MapaSeguimiento = {
       1: seg({ proximo_manual: '2026-08-22' }),
       2: seg({ proximo_manual: '2026-08-01' }),
       3: seg({ proximo_manual: '2026-08-23' }),
     }
-    expect(listaDelDia(mapa, HOY).map((f) => f.id)).toEqual([2, 1, 3])
+    expect(listaDelDia(mapa, HOY).map((f) => f.id)).toEqual([3, 1, 2])
+  })
+
+  it('el de hoy le gana al colgado aunque el tope corte', () => {
+    // El caso real: una pila de atrasados y un puñado agendado para hoy. Lo que NO puede
+    // pasar es que la pila se coma los 25 lugares y el de hoy quede afuera.
+    const mapa: MapaSeguimiento = {}
+    for (let i = 1; i <= 60; i++) mapa[i] = seg({ proximo_manual: '2026-08-01' })
+    mapa[99] = seg({ proximo_manual: '2026-08-23' })
+    expect(listaDelDia(mapa, HOY)[0].id).toBe(99)
   })
 
   it('el que sólo tiene la cadencia vieja no está: en la lista van los que tienen fecha', () => {

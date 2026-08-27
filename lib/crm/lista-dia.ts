@@ -21,7 +21,7 @@
  * sus totales se piden al servidor junto con los nombres.
  */
 
-import { diasHasta } from './core'
+import { diasHasta, urgenciaFecha } from './core'
 import type { EstadoSeg, MapaSeguimiento, Nota, Temperatura } from './tipos'
 import { TEMPERATURA_DEFAULT } from './core'
 
@@ -93,7 +93,12 @@ function filas(crmSeg: MapaSeguimiento, today: Date): FilaListaDia[] {
 const ORDEN_TEMP: Record<Temperatura, number> = { caliente: 0, templado: 1, frio: 2 }
 
 /**
- * La primera etapa: tibios y calientes que ya vencen, del más atrasado al menos.
+ * La primera etapa: tibios y calientes que ya vencen, **empezando por los de hoy**.
+ *
+ * 🔴 **El orden por fecha va al revés de lo que parece.** Primero los agendados para hoy, después
+ * los de ayer, y los colgados de hace dos semanas al final — es `urgenciaFecha`, y ahí está
+ * medido por qué. En una lista de 25 sobre 226, ordenar por "el que más esperó" hace que la fecha
+ * que se le promete a un cliente al agendarlo **no se cumpla nunca**.
  *
  * El `pendiente` —que ya no se produce, ver `yaVence`— va al final de su temperatura: no tiene
  * fecha contra la cual medir el atraso, y quien sí la tiene es más urgente.
@@ -104,7 +109,7 @@ export function listaDelDia(crmSeg: MapaSeguimiento, today: Date, tope: number =
     .sort(
       (a, b) =>
         ORDEN_TEMP[a.temperatura] - ORDEN_TEMP[b.temperatura] ||
-        (a.dias ?? 1) - (b.dias ?? 1) ||
+        urgenciaFecha(a.dias) - urgenciaFecha(b.dias) ||
         a.id - b.id,
     )
     .slice(0, tope)

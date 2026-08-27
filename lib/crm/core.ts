@@ -324,6 +324,31 @@ export function prioridadContacto(c: ClienteCRM, esCuentaClave: boolean): 1 | 2 
   return esCuentaClave ? 2 : 1
 }
 
+/**
+ * Qué tan urgente es la fecha de un cliente dentro de su grupo. Más chico = más arriba.
+ *
+ * 🔴 **Es `Math.abs`, y ese valor absoluto ES el arreglo.** Hasta el 27-ago-2026 el desempate
+ * era `dias_proximo` a secas, o sea "primero el que hace más tiempo que espera". Suena sensato
+ * y hace lo contrario de lo que hace falta: el que se agendó **para hoy** espera 0 días y se va
+ * al fondo, detrás de todos los colgados. Medido ese día contra producción: de 226 en la lista,
+ * los 5 agendados para hoy quedaban en los puestos **222 a 226** — y el panel muestra 25. O sea
+ * que **la fecha que se promete al agendar no se cumplía nunca**, y cuanto mejor se usaba el
+ * CRM, menos aparecía la gente. De ahí salía "no sé a quién hablarle".
+ *
+ * Con el valor absoluto el orden pasa a ser: hoy (0), ayer (1), anteayer (2)… y los colgados de
+ * hace dos semanas al final. Los grupos ya vienen separados por `seg_estado`, así que esto sólo
+ * desempata adentro de uno:
+ *
+ *   · vencidos (días ≤ 0) → 0, 1, 2… : hoy primero, el atraso más viejo último.
+ *   · "esta semana" (días 1 a 7) → 1, 2, 3… : mañana primero. Igual que antes.
+ *
+ * `null` es el `pendiente` heredado (sin fecha contra la cual medir el atraso): va al final,
+ * porque el que tiene fecha es más urgente que el que no tiene ninguna.
+ */
+export function urgenciaFecha(dias: number | null | undefined): number {
+  return dias == null ? 999 : Math.abs(dias)
+}
+
 // ── Agregado (RFM) ───────────────────────────────────────────────────────────
 
 export type EntradaAgregado = {
@@ -502,12 +527,14 @@ export function filtrarOrdenar(lista: ClienteCRM[], { q, seg, sort, hoy, manana 
     // Primero la prioridad comercial (temperatura + tamaño), y recién adentro de cada
     // grupo la urgencia de la fecha. Ese es el cambio: antes mandaba solo la fecha, y los
     // clientes grandes fríos con cadencia semanal vivían arriba de todo.
+    // ⚠️ Y adentro del grupo el desempate va por `urgenciaFecha`, NO por días crudos: el
+    // agendado para hoy va primero y el colgado de hace dos semanas al final. Ver ahí el porqué.
     const ord: Record<string, number> = { vencido: 0, pendiente: 1, semana: 2, aldia: 3, none: 4 }
     out.sort(
       (a, b) =>
         prioridadContacto(a, top.has(a.id)) - prioridadContacto(b, top.has(b.id)) ||
         (ord[a.seg_estado] ?? 9) - (ord[b.seg_estado] ?? 9) ||
-        (a.dias_proximo ?? 0) - (b.dias_proximo ?? 0),
+        urgenciaFecha(a.dias_proximo) - urgenciaFecha(b.dias_proximo),
     )
   } else if (seg !== 'todos') {
     out = out.filter((c) => segmentoCliente(c) === seg)

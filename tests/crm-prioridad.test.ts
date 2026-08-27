@@ -135,11 +135,24 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
     expect(orden.map((c) => c.id)).toEqual([vencido.id, pendiente.id, semana.id])
   })
 
-  it('entre dos vencidos del mismo grupo, primero el más atrasado', () => {
+  it('entre dos vencidos del mismo grupo, primero el de HOY y el colgado al final', () => {
+    // El arreglo del 27-ago-2026. Antes iba al revés —primero el más atrasado— y con eso
+    // el agendado para hoy caía al fondo de una lista de 226 con 25 lugares: la fecha que
+    // se le prometía al cliente no se cumplía nunca. Ver `urgenciaFecha`.
+    const deHoy = enLista('caliente', 'vencido', 0)
     const pocoAtraso = enLista('caliente', 'vencido', -2)
     const muchoAtraso = enLista('caliente', 'vencido', -90)
-    const orden = filtrarOrdenar([pocoAtraso, muchoAtraso], { q: '', seg: 'semana', sort: SORT })
-    expect(orden.map((c) => c.id)).toEqual([muchoAtraso.id, pocoAtraso.id])
+    const orden = filtrarOrdenar([muchoAtraso, pocoAtraso, deHoy], { q: '', seg: 'semana', sort: SORT })
+    expect(orden.map((c) => c.id)).toEqual([deHoy.id, pocoAtraso.id, muchoAtraso.id])
+  })
+
+  it('entre los de "esta semana" sigue yendo primero mañana, no el más lejano', () => {
+    // El mismo desempate corre para los futuros, y ahí NO se da vuelta nada: `urgenciaFecha`
+    // es un valor absoluto y los días ya son positivos.
+    const manana = enLista('caliente', 'semana', 1)
+    const enSieteDias = enLista('caliente', 'semana', 7)
+    const orden = filtrarOrdenar([enSieteDias, manana], { q: '', seg: 'semana', sort: SORT })
+    expect(orden.map((c) => c.id)).toEqual([manana.id, enSieteDias.id])
   })
 
   it('el que está al día no entra en la lista', () => {
@@ -161,17 +174,19 @@ describe('la lista del día ordena por prioridad y recién después por fecha', 
   })
 })
 
-describe('el día 1: con todos en el default, la lista sale como salía antes', () => {
+describe('el día 1: con todos en el default, manda la urgencia sola', () => {
   it('ordena por urgencia pura cuando nadie fue marcado todavía', () => {
     // Ninguno tiene temperatura marcada: todos caen en el mismo grupo (3) y desempata
-    // la fecha, que es exactamente lo que hacía el orden anterior a este cambio.
+    // la fecha. Los estados siguen mandando sobre los días —vencido antes que pendiente,
+    // y pendiente antes que "esta semana"—; lo que cambió el 27-ago-2026 es qué vencido va
+    // primero: el de ayer, no el de hace 45 días. Ver `urgenciaFecha`.
     const semana = enLista(TEMPERATURA_DEFAULT, 'semana', 4, 5_000_000)
     const pendiente = enLista(TEMPERATURA_DEFAULT, 'pendiente', 0, 1_000)
     const vencidoLeve = enLista(TEMPERATURA_DEFAULT, 'vencido', -1, 800_000)
     const vencidoGrave = enLista(TEMPERATURA_DEFAULT, 'vencido', -45, 2_000)
 
     const orden = filtrarOrdenar([semana, pendiente, vencidoLeve, vencidoGrave], { q: '', seg: 'semana', sort: SORT })
-    expect(orden.map((c) => c.id)).toEqual([vencidoGrave.id, vencidoLeve.id, pendiente.id, semana.id])
+    expect(orden.map((c) => c.id)).toEqual([vencidoLeve.id, vencidoGrave.id, pendiente.id, semana.id])
   })
 
   it('el default es templado', () => {
