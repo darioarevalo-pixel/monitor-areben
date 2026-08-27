@@ -980,8 +980,19 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       )}
                       {/* ⚠️ Sin gate de estado, y a propósito: la unidad regalada **no vuelve**, así
                           que esperar a `recibido` —que es lo que pide "Pasar a Fallas"— la dejaría
-                          sin poder descontarse nunca. Desde que se decidió, ya salió del depósito. */}
-                      {esAdmin && !!loQueFaltaDescontar(d).length && (
+                          sin poder descontarse nunca.
+
+                          🔴 **Pero SÍ con gate de resolución**, desde el 27-ago-2026. El comentario
+                          viejo decía «desde que se decidió, ya salió del depósito», y esa premisa se
+                          cayó ese mismo día: «Confirmar paso» empezó a guardar `destino_prenda` por
+                          `editar` para poder analizar un reclamo en varias sentadas, así que el
+                          campo existe **antes** que la decisión. Sin esto, el botón que crea la
+                          venta técnica en GN aparece sobre un reclamo sin resolver — y si después se
+                          decide que el producto vuelve, la unidad quedó descontada de más.
+                          📊 Medido con la fila de R-0022: `loQueFaltaDescontar` devolvía los dos
+                          productos con `compensacion: null`. El freno de verdad está en el servidor
+                          (409); esto es para que el botón no esté a mano. */}
+                      {esAdmin && estaDecidido(d) && !!loQueFaltaDescontar(d).length && (
                         <Button size="sm" variant="solid" tone="warning" onClick={() => void descontarLasQueSeQueda(d)}>Descontar lo que se queda</Button>
                       )}
                       {!!(d.falla_ids || []).length && (

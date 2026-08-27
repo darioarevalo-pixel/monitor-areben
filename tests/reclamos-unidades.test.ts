@@ -210,6 +210,31 @@ describe('lo que falta descontar de Gestión Nube', () => {
   })
 
   /**
+   * 🔴 **Es una pregunta de INVENTARIO y ⛔ no sabe de resoluciones — a propósito, y hay que
+   * mantenerlo así.**
+   *
+   * Contesta *«qué unidades quedaron en poder del cliente y todavía no se descontaron»*, y eso no
+   * depende de si el reclamo está resuelto. La leen cuatro lugares con sentidos distintos: el botón
+   * de la lista, `faltantesParaCerrar`, el sellado de las bajas y el guard del servidor.
+   *
+   * ⚠️ **El freno de «sin resolución no sale mercadería» vive en la ACCIÓN** (`descontado`, en
+   * `api/_reclamos.js`, 409), ⛔ no acá. Hasta el 27-ago-2026 no hacía falta: `destino_prenda` lo
+   * escribía **sólo `decidir`**, así que tener el destino y estar decidido eran lo mismo. Ese día
+   * «Confirmar paso» empezó a guardarlo por `editar` —para poder analizar un reclamo en varias
+   * sentadas— y el campo pasó a existir antes que la decisión.
+   *
+   * 🔑 Este test existe para que el arreglo ⛔ no se meta acá: hacerla mirar `compensacion` cambiaría
+   * en silencio el significado de los otros tres llamadores, y `faltantesParaCerrar` empezaría a
+   * decir que no falta descontar nada.
+   */
+  it('⛔ NO mira la resolución: eso lo frena la acción, no esta cuenta', () => {
+    const sinDecidir = { ...regalado, compensacion: null } as FilaConUnidades
+    const decidido = { ...regalado, compensacion: 'plata_parcial' } as FilaConUnidades
+    expect(loQueFaltaDescontar(sinDecidir).map((u) => u.item.producto)).toEqual(['Buzo'])
+    expect(loQueFaltaDescontar(decidido).map((u) => u.item.producto)).toEqual(['Buzo'])
+  })
+
+  /**
    * 🔑 La fallada la descuenta el alta en Fallas, que además la valúa. Contarla también acá la
    * restaría **dos veces** del mismo stock.
    */

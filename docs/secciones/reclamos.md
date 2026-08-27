@@ -878,6 +878,40 @@ y que la Salida que venía preseleccionada — **tres veces el mismo día, por t
 ⚠️ El test tiene las dos mitades: que el default aceptado se guarde como `false`, y que elegir «Que
 vuelva» guarde `true` con su vía. Sin la segunda, guardar `false` a ciegas pasaría igual.
 
+## 🆕 🔴 Sin resolución no sale mercadería del depósito (27-ago-2026)
+
+«Descontar lo que se queda» —el botón que **crea la venta técnica en GN y saca el producto del
+depósito**— aparecía sobre reclamos **todavía sin decidir**.
+
+📊 **Medido** contra `unidades.core.js` con la fila real de R-0022:
+
+```
+compensacion: null            → ["TEMPLADO","CHELSEA"]   ← el botón aparecía
+compensacion: 'plata_parcial' → ["TEMPLADO","CHELSEA"]
+```
+
+🔑 **Por qué se rompió justo ese día, y por qué el gate viejo no era un descuido.** La condición
+miraba `loQueFaltaDescontar`, que necesita `destino_prenda: 'regalada'` — y ese campo lo escribía
+**sólo `decidir`**. O sea que *«tener el destino»* y *«estar decidido»* eran lo mismo, y pedir las
+dos cosas habría sido redundante. Ese día «Confirmar paso» empezó a guardar el destino por `editar`,
+para poder analizar un reclamo en varias sentadas ⇒ **el campo pasó a existir antes que la
+decisión**, y el botón se adelantó.
+
+⇒ **La regla que queda escrita:** *un botón que mueve algo del mundo real —stock, plata, un envío—
+se gatea por la RESOLUCIÓN, ⛔ nunca por un campo que la decisión todavía no confirmó.* Es la misma
+familia que el ✓ que salía de la decisión vieja y la Salida preseleccionada: **un dato que existe
+⛔ no es una decisión tomada.**
+
+### Dónde vive cada mitad, y por qué ⛔ no en el mismo lugar
+
+- **El freno** está en `descontado` (`api/_reclamos.js`): **409** si no hay `compensacion`. Una
+  pantalla que esconde un botón es una sugerencia, no una regla.
+- **`loQueFaltaDescontar` ⛔ NO se tocó**, y hay un test que lo fija. Es una pregunta de
+  **inventario** —qué quedó en poder del cliente sin descontar— y la leen cuatro lugares con
+  sentidos distintos: el botón, `faltantesParaCerrar`, el sellado de las bajas y el propio guard.
+  Meterle la resolución adentro cambiaría en silencio el significado de los otros tres, y
+  `faltantesParaCerrar` pasaría a decir que no falta descontar nada.
+
 ## Cómo se prueba
 
 `npx vitest run tests/reclamos.test.ts --reporter=dot` — es el único lugar del módulo con tests

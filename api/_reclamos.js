@@ -649,10 +649,30 @@ export default async function handler(req, res) {
     if (action === 'descontado') {
       const { data: fila, error: eLee } = await supabase
         .from('devoluciones')
-        .select('estado, motivo, items, items_correctos, destino_prenda')
+        .select('estado, motivo, compensacion, items, items_correctos, destino_prenda')
         .eq('store', store).eq('id', id).maybeSingle();
       if (eLee) throw new Error(eLee.message);
       if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      /**
+       * 🔴 **Sin resolución ⛔ no sale mercadería del depósito.**
+       *
+       * `loQueFaltaDescontar` es una pregunta de **inventario** —qué unidades quedaron en poder del
+       * cliente y todavía no se descontaron— y hace bien en no saber nada de resoluciones. Pero
+       * hasta el 27-ago-2026 alcanzaba con `destino_prenda: 'regalada'` para disparar la baja, y
+       * ese campo lo escribía **sólo `decidir`** ⇒ «tener el destino» y «estar decidido» eran lo
+       * mismo, y el guard sobraba.
+       *
+       * Ese día «Confirmar paso» empezó a guardar el destino por `editar`, para poder analizar un
+       * reclamo en varias sentadas. Desde entonces **el campo existe antes que la decisión**, y sin
+       * este freno se puede sacar stock de un reclamo que todavía nadie resolvió: si después se
+       * decide que el producto vuelve, la unidad quedó descontada dos veces y no lo dice nadie.
+       *
+       * ⚠️ Va **acá y no sólo en la pantalla**: una pantalla que esconde un botón es una sugerencia,
+       * no una regla. Y el mensaje nombra lo que falta, ⛔ no dice «no se puede».
+       */
+      if (!fila.compensacion) {
+        return res.status(409).json({ error: 'Este reclamo todavía no está decidido: primero resolvelo y después descontá el stock.' });
+      }
       // 🔑 **El cero afirma.** Sin esto, un reclamo donde nada se regala contestaría "descontado
       // todo" sobre una lista vacía y quedaría sellado un paso que nadie hizo.
       if (!loQueFaltaDescontar(fila).unidades.length) {
