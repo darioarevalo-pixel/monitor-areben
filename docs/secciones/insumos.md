@@ -118,7 +118,19 @@ el recuento deja de cortar · las dos patas del traslado con el mismo signo · `
 mínimo · el `ts` del aviso pasa a ser hoy · el ritmo cuenta el día en curso · el precio promedia
 unitarios en vez de ponderar.
 
-🔴 **Lo que la suite ⛔ no puede probar y hay que caminar** contra producción: cargar un insumo →
-una compra → un recuento → un consumo que lo deje en el anteúltimo → **ver aparecer el badge en el
-sidebar** y que el clic caiga en `/insumos` con el filtro puesto. El oráculo se lee **por otro
-camino** (la fila por PostgREST), ⛔ no la misma pantalla que la escribió.
+✅ **CAMINADA EN LA PANTALLA REAL, en prod, el 28-ago-2026** — que es lo que la suite ⛔ no puede
+probar. Alta desde el formulario → compra de 10 a $5.000 → traslado de 3 al Local BDI → consumo de
+3 en el local → **el aviso apareció en Inicio** («Insumos que faltan en un local», con NUEVO) y el
+clic cayó en `/insumos?ver=subir&ubicacion=local-bdi` **con los dos filtros puestos**. Después se
+borró el insumo de prueba y **la base volvió a 16 insumos y 0 movimientos**, releída por otro
+camino. Lo que se vio y no se podía ver en un test:
+- **«sin contar» y «0 unidades» conviven en la misma fila** y se distinguen: Local Zattia decía
+  «sin contar» mientras Local BDI decía «0 unidades». Eso es toda la regla del `null` ≠ 0, en la
+  pantalla.
+- **El precio con una sola compra sale rotulado «últ.»** ($ 500 = 5.000/10), ⛔ no «prom.».
+- **El aviso eligió SUBIR y no comprar** con 7 unidades en el depósito: la distinción que separa un
+  viaje al depósito de una compra que tarda días.
+- El diálogo de borrar **dice cuántos movimientos se lleva** (4), que es lo único que deja medir lo
+  que se pierde antes de apretar.
+⚠️ Sin errores en la consola. ⛔ Lo que sigue sin ejercerse en pantalla: el corte por **días**
+(pide `dias_reposicion`, que está vacío) y el ritmo **atado a las ventas**.
