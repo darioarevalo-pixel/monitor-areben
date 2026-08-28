@@ -221,6 +221,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   // Administración / Compras
   reposicion: 'reposicion',
   caducados: 'caducados',
+  insumos: 'insumos',
   'fundas-modelo': 'fundas-modelo',
   ingresos: 'ingresos',
   recepciones: 'recepciones',
@@ -394,6 +395,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   recepciones: 'Lo que entró de cada orden de compra: lo pedido contra lo contado, renglón por renglón, con lo que faltó y lo que sobró por separado, el cumplimiento de cada proveedor y los artículos que llegaron sin ficha en Gestión Nube. Llega sola cuando el sistema de Ingresos confirma una OC; acá no se carga nada a mano.',
   ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
   reposicion: 'Reposición diaria del local: variantes bajo mínimo con stock en depósito.',
+  insumos: 'Lo que se consume y no se vende: bolsas, rollos, papel. Qué hay en cada lugar, cuánto sale y cuánto dura.',
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
   conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',

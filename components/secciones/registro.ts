@@ -49,6 +49,7 @@ const Envios = dynamic(() => import('@/components/envios/Envios').then((m) => m.
 const Buzon = dynamic(() => import('@/components/buzon/Buzon').then((m) => m.Buzon), { loading: Cargando })
 const PedidosClientes = dynamic(() => import('@/components/pedidos-clientes/PedidosClientes').then((m) => m.PedidosClientes), { loading: Cargando })
 const Recepciones = dynamic(() => import('@/components/recepciones/Recepciones').then((m) => m.Recepciones), { loading: Cargando })
+const Insumos = dynamic(() => import('@/components/insumos/Insumos').then((m) => m.Insumos), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
 const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), { loading: Cargando })
@@ -303,6 +304,10 @@ export const SECCIONES: Record<string, ComponentType> = {
   // que es la importación que VIENE (proyectada, sólo BDI, en el KV de bdi-catalogo). Ésta es la
   // que LLEGÓ, para las dos marcas, y la escribe un webhook — la pantalla sólo lee.
   recepciones: Recepciones,
+  // Insumos: lo que la empresa consume y no vende —bolsas, rollos, yerba—, con su stock por lugar y
+  // el aviso del anteúltimo. ⛔ No es stock de mercadería: un insumo no existe en Gestión Nube, así
+  // que ni el espejo ni el motor de conteos (que exige `inventory_id`) sirven acá.
+  insumos: Insumos,
   // El flip de Comisiones (18-jul-2026): `/comisiones` lo sirve el shell. Margen neto
   // real por forma de pago × canal (comisiones/financiación/IIBB/DREI/Ganancias/IVA) +
   // simulador por producto + break-even + piso + lista de precios de sale (XLSX/PDF).

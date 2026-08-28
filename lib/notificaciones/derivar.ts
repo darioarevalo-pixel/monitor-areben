@@ -19,6 +19,7 @@ import { gravedadDeHallazgo, type Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
+import { paraComprar, paraSubir, rotuloUbicacion, type VistaInsumo } from '@/lib/insumos/core'
 import type { Aviso } from './tipos'
 
 /** ¿Puede aprobar consumos internos en alguna de las dos marcas? */
@@ -408,4 +409,76 @@ export function ordenarAvisos(avisos: Aviso[]): Aviso[] {
 /** Cuántos de estos avisos aparecieron después de la última vez que la persona miró. */
 export function contarNuevos(avisos: Aviso[], vistoHasta: number): number {
   return avisos.filter((a) => (a.ts || 0) > vistoHasta).length
+}
+
+/**
+ * Los insumos que hay que pedir, y los que están en cero en un local teniendo en el depósito.
+ *
+ * # Por qué son DOS avisos y no uno por insumo
+ *
+ * Armar el pedido de insumos es **un** acto: se llama al proveedor una vez y se piden los que
+ * falten. Un aviso por insumo llenaría el contador con seis renglones que se resuelven juntos, y
+ * *«un aviso que se ignora doce veces enseña a ignorar el número trece»* (`docs/secciones/agenda.md`).
+ * Subir del depósito al local es **otro** acto —y otro día, y a veces otra persona—, así que va
+ * aparte y agrupado **por lugar**, que es lo que define el viaje.
+ *
+ * # Por qué el `ts` NO es «hoy»
+ *
+ * Es la fecha del movimiento que dejó el stock debajo del mínimo, calculada caminando el libro
+ * (`desdeCuandoCruzo`). Con la fecha de hoy, el aviso diría «apareció hoy» todas las mañanas, el
+ * «NUEVO» no se apagaría nunca y el «trabado hace N días» de Inicio no saldría jamás. Es la misma
+ * trampa de `updated_at` para medir una espera.
+ *
+ * # Marca
+ *
+ * ⛔ **No se filtra por marca ni se duplica por marca.** El catálogo es de la empresa —el depósito
+ * es uno solo y la compra se hace una vez— así que el aviso sale una sola vez, sobre la marca que
+ * la persona tiene puesta. Duplicarlo por marca haría que el mismo pedido se cuente dos veces.
+ */
+export function avisosDeInsumo(vistas: VistaInsumo[], perfil: Perfil | null, marcaActiva: Marca): Aviso[] {
+  // La misma regla de visibilidad que el resto: nadie ve un aviso de algo que no vería entrando.
+  if (!puedeVer(perfil, marcaActiva, 'insumos')) return []
+
+  const avisos: Aviso[] = []
+
+  const comprar = paraComprar(vistas)
+  if (comprar.length) {
+    const desde = comprar[0].reposicion.comprar?.desde
+    avisos.push({
+      id: 'insumo-comprar',
+      tipo: 'insumo-comprar' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: comprar.length === 1 ? '1 insumo para pedir' : `${comprar.length} insumos para pedir`,
+      detalle: nombrarInsumos(comprar),
+      ruta: '/insumos?ver=comprar',
+      ts: desde ? inicioDelDia(desde) : 0,
+      tono: 'warning' as const,
+    })
+  }
+
+  for (const g of paraSubir(vistas)) {
+    avisos.push({
+      id: `insumo-subir:${g.ubicacion}`,
+      tipo: 'insumo-subir' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: `Falta en ${rotuloUbicacion(g.ubicacion)}`,
+      // 🔑 Dice que HAY en otro lado: sin eso se lee como «hay que comprar», que es la acción
+      // equivocada y la que tarda días.
+      detalle: `${nombrarInsumos(g.vistas)} · hay en otro lugar, sólo hay que subirlo`,
+      ruta: `/insumos?ver=subir&ubicacion=${g.ubicacion}`,
+      ts: inicioDelDia(g.desde),
+      tono: 'warning' as const,
+    })
+  }
+
+  return avisos
+}
+
+/** Los primeros nombres y «y N más». Un aviso con quince nombres adentro no se lee. */
+function nombrarInsumos(vistas: VistaInsumo[], tope = 3): string {
+  const nombres = vistas.map((v) => v.insumo.nombre)
+  if (nombres.length <= tope) return nombres.join(', ')
+  return `${nombres.slice(0, tope).join(', ')} y ${nombres.length - tope} más`
 }

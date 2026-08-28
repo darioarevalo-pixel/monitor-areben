@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-56 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+57 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -50,7 +50,10 @@ puerta angosta `vista=retornos`)
 **Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, once vistas por el 2º
 tramo de la URL; el perfil de Marketing la ve porque tiene las dos áreas
 
-**Administración** — `caducados` · `postventa` · `reposicion`
+**Administración** — `caducados` · `postventa` · `reposicion` ·
+`insumos → components/insumos + lib/insumos` (lo que se consume y no se vende: bolsas, rollos,
+papel. Stock **por lugar** —depósito y los dos locales— porque el que se queda sin bolsas es el
+local mientras el depósito tiene. ⛔ No es stock de mercadería: un insumo no existe en GN)
 
 **Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) ·
 `norte → components/norte + lib/norte` (cruza el ETL con el KV de `ingresos`, por `?recurso=norte`) ·

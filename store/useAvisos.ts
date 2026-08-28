@@ -21,12 +21,14 @@ import { puedeVer } from '@/lib/permisos'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeInsumo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
 import { traerHallazgos } from '@/lib/meta-ads/cliente'
 import { nombrePersona, type CanjeRow } from '@/lib/canjes/tipos'
 import { vistoHasta } from '@/lib/notificaciones/visto'
+import { leerInsumos } from '@/lib/insumos/cliente'
+import { mirarTodos } from '@/lib/insumos/core'
 import type { Aviso } from '@/lib/notificaciones/tipos'
 import type { Perfil } from '@/lib/permisos'
 import type { Marca } from '@/lib/nav'
@@ -113,6 +115,27 @@ async function avisosDeCanjes(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
   ]
 }
 
+/**
+ * Los insumos que hay que reponer, en UNA sola lectura.
+ *
+ * Va fuera del `Promise.all` por marca porque **el catálogo es de la empresa**: el depósito es uno
+ * solo y la compra se hace una vez. Adentro pediría lo mismo dos veces y contaría el mismo pedido
+ * dos veces.
+ *
+ * 🔑 **El permiso se pregunta ANTES de pedir**, como con la pauta y los reclamos: sin Insumos, esto
+ * sería un 403 en cada refresco de cada persona del local, cada 3 minutos. ⚠️ Es un atajo y ⛔ no la
+ * regla — la vuelve a mirar `avisosDeInsumo`.
+ *
+ * ⚠️ Y **la regla de «hay que reponer» no se escribe acá**: sale de `mirarTodos`, el mismo núcleo
+ * que mira la pantalla. Dos lugares que la contestaran es donde el badge y la tabla empiezan a
+ * decir cosas distintas.
+ */
+async function avisosDeInsumos(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
+  if (!puedeVer(perfil, marca, 'insumos')) return []
+  const d = await leerInsumos(marca)
+  return avisosDeInsumo(mirarTodos(d.insumos, d.movimientos, d.comprasPorMarca), perfil, marca)
+}
+
 export const useAvisos = create<AvisosState>((set, get) => ({
   avisos: [],
   resumenes: [],
@@ -162,9 +185,10 @@ export const useAvisos = create<AvisosState>((set, get) => ({
       // va FUERA del `Promise.all` por marca: adentro pediría lo mismo dos veces y devolvería los
       // mismos canjes cada vez, duplicando cada aviso. Con `.catch(() => …)` porque un módulo que
       // todavía no tiene sus tablas no puede tumbar el resto de los avisos.
-      const [canjes, pauta] = await Promise.all([
+      const [canjes, pauta, insumos] = await Promise.all([
         avisosDeCanjes(perfil, marca).catch(() => [] as Aviso[]),
         avisosDePauta(perfil).catch(() => [] as Aviso[]),
+        avisosDeInsumos(perfil, marca).catch(() => [] as Aviso[]),
       ])
 
       const resumenes = filtrarPorFuncion(porMarca.flatMap((p) => p.resumenes), perfil)
@@ -176,6 +200,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...porMarca.flatMap((p) => avisosDeReclamo(p.reclamos, p.m, perfil)),
         ...canjes,
         ...pauta,
+        ...insumos,
       ])
 
       set({ avisos, resumenes, nuevos: contarNuevos(avisos, vistoHasta(perfil.name)), cargadoEn: Date.now(), cargando: false })

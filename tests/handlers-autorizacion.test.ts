@@ -105,6 +105,10 @@ const PUERTAS = [
   // gate es lo único que separa las recepciones de una marca de las de la otra: sin él, `store` es
   // un filtro que el que llama elige, no un candado.
   { archivo: '_recepciones', llave: 'recepciones', que: 'las recepciones de la marca' },
+  // Nació con gate (28-ago-2026). Entra igual porque ESCRIBE, y porque su tabla vive en UNA sola
+  // base para las dos marcas: sin el gate, `store` sería un filtro que el que llama elige, no un
+  // candado. Y además lee `ventas` de la otra base para medir el ritmo.
+  { archivo: '_insumos', llave: 'insumos', que: 'el catálogo de insumos y su libro' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */

@@ -163,6 +163,9 @@ ya tienen ficha:
   `lib/manuales/`, `lib/markdown/`, `components/ui/Markdown.tsx` o `components/ui/BarraFormato.tsx`. ⛔ **El parser NO es de Manuales**:
   lo comparten Novedades, la Guía y la Agenda —incluidos los pasos de la promo bancaria que se leen
   con el cliente delante—, así que un cambio ahí se camina en cinco pantallas.
+- Insumos → **leer `docs/secciones/insumos.md`** antes de tocar `components/insumos/`,
+  `lib/insumos/` o `api/_insumos.js`. ⛔ **El stock no es una columna: se suma del libro**, y de ahí
+  sale el «desde cuándo falta» que es el `ts` del aviso. ⛔ Un traslado son DOS filas.
 - Agenda operativa → **leer `docs/secciones/agenda.md`** antes de tocar `components/agenda/`,
   `lib/agenda/` o `api/_agenda.js`. ⛔ **La ve todo el equipo** (`KEYS_PARA_TODOS`) y **tildar no
   pide permiso**: no hay nada que destrabar. ⛔ Las promos y los pendientes son **un solo motor**

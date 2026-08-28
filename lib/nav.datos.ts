@@ -487,6 +487,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "insumos",
+    "area": "administracion",
+    "label": "Insumos",
+    "info": "Lo que la empresa consume y no vende: bolsas, rollos de etiquetas, ribbon, cajas, papel, yerba. Qué hay en cada lugar (depósito y los dos locales), cuánto se paga por unidad, a qué ritmo se gasta y cuántos días dura. Avisa cuando queda el anteúltimo, que es la regla del puesto: con el último ya es tarde. Quien ve la sección también carga: no hay un permiso aparte para escribir.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "reposicion",
     "area": "administracion",
     "label": "Reposición",
@@ -1014,7 +1024,8 @@ export const NAV_CATS: NavCat[] = [
       "solicitudes",
       "postventa",
       "reposicion",
-      "caducados"
+      "caducados",
+      "insumos"
     ],
     "labels": {
       "solicitudes": "Solicitudes (todas las marcas)"

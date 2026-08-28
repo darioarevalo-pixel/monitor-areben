@@ -4,6 +4,7 @@ import {
   avisosDeContenidoSinRevisar,
   avisosDeFallas,
   avisosDeHallazgo,
+  avisosDeInsumo,
   avisosDeNoDevueltos,
   avisosDeReclamo,
   avisosDeSolicitud,
@@ -16,6 +17,8 @@ import type { ReclamoRow } from '@/lib/reclamos/tipos'
 import type { Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import type { Perfil } from '@/lib/permisos'
+import { mirarInsumo } from '@/lib/insumos/core'
+import type { Insumo, Movimiento } from '@/lib/insumos/tipos'
 
 /**
  * Los avisos se DERIVAN de datos que ya existen, no se registran: por eso todo esto se testea
@@ -386,5 +389,77 @@ describe('avisos de la pauta (hallazgos)', () => {
     const [a] = avisosDeHallazgo([hallazgo({ desde: 'nunca' })], conPauta)
     expect(a.ts).toBe(0)
     expect(a.titulo).toBe('GIRLHOOD FRIO - INTERESES 1')
+  })
+})
+
+describe('avisosDeInsumo', () => {
+  const conInsumos = { name: 'Lorena', admin: false, cuenta: null, acceso: { bdi: { insumos: true } }, funcion: [] } as unknown as Perfil
+  const sinNada = { name: 'Depósito', admin: false, cuenta: null, acceso: {}, funcion: [] } as unknown as Perfil
+
+  const insumo = (p: Partial<Insumo> = {}): Insumo => ({
+    id: 'in1', nombre: 'Bolsas chicas', tipo: 'comercial', unidad: 'unidad', bulto: null, porBulto: null,
+    marcas: [], minimo: 2, diasReposicion: null, consumo: {}, activo: true, nota: null, autor: null,
+    creado: '2026-08-01T00:00:00Z', actualizado: '2026-08-01T00:00:00Z', ...p,
+  })
+
+  let n = 0
+  const mov = (p: Partial<Movimiento> = {}): Movimiento => {
+    n += 1
+    return {
+      id: `mv${n}`, insumoId: 'in1', tipo: 'compra', ubicacion: 'deposito', cantidad: 10,
+      fecha: '2026-08-01', precioTotal: null, proveedor: null, comprobante: null, grupo: null,
+      pata: null, usuario: null, nota: null, creado: `2026-08-01T00:00:0${n % 10}Z`, ...p,
+    }
+  }
+
+  /** Un insumo al que le queda el anteúltimo desde el 9. */
+  const enElAnteultimo = () =>
+    mirarInsumo(insumo(), [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })], {}, '2026-08-28')
+
+  it('no le llega a quien no puede abrir la sección', () => {
+    expect(avisosDeInsumo([enElAnteultimo()], sinNada, 'bdi')).toEqual([])
+  })
+
+  it('los que hay que pedir van en UN aviso: armar el pedido es un solo acto', () => {
+    const dos = [
+      enElAnteultimo(),
+      mirarInsumo(insumo({ id: 'in2', nombre: 'Ribbon' }), [mov({ insumoId: 'in2', cantidad: 1 })], {}, '2026-08-28'),
+    ]
+    const a = avisosDeInsumo(dos, conInsumos, 'bdi')
+    expect(a.filter((x) => x.tipo === 'insumo-comprar')).toHaveLength(1)
+    expect(a[0].titulo).toBe('2 insumos para pedir')
+    expect(a[0].detalle).toContain('Bolsas chicas')
+  })
+
+  it('🔴 el ts es la fecha en que cruzó el umbral, ⛔ no hoy', () => {
+    const [a] = avisosDeInsumo([enElAnteultimo()], conInsumos, 'bdi')
+    expect(a.ts).toBe(new Date('2026-08-09T00:00:00').getTime())
+  })
+
+  it('lo que falta en un local va aparte y por LUGAR: se sube, no se compra', () => {
+    const v = mirarInsumo(
+      insumo(),
+      [
+        mov({ ubicacion: 'deposito', cantidad: 500 }),
+        mov({ ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-02' }),
+        mov({ tipo: 'consumo', ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-12' }),
+      ],
+      {},
+      '2026-08-28',
+    )
+    const a = avisosDeInsumo([v], conInsumos, 'bdi')
+    expect(a).toHaveLength(1)
+    expect(a[0].id).toBe('insumo-subir:local-bdi')
+    expect(a[0].detalle).toContain('sólo hay que subirlo')
+    expect(a[0].ts).toBe(new Date('2026-08-12T00:00:00').getTime())
+  })
+
+  it('sin nada contado no avisa: nadie miró', () => {
+    expect(avisosDeInsumo([mirarInsumo(insumo(), [], {}, '2026-08-28')], conInsumos, 'bdi')).toEqual([])
+  })
+
+  it('el id no lleva fecha ni cantidad: el badge no se prende de nuevo cada mañana', () => {
+    const hoy = avisosDeInsumo([enElAnteultimo()], conInsumos, 'bdi')[0]
+    expect(hoy.id).toBe('insumo-comprar')
   })
 })

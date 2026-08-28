@@ -38,6 +38,7 @@ import mktVentas from './_mkt-ventas.js';
 import ventasDiarias from './_ventas-diarias.js';
 import clavados from './_clavados.js';
 import recepciones from './_recepciones.js';
+import insumos from './_insumos.js';
 import ocWebhook from './_oc-webhook.js';
 import { soloMismoOrigen } from './_auth.js';
 
@@ -107,6 +108,11 @@ const RECURSOS = {
   // El Friday memo de Dirección. Tampoco tiene `store` —el memo es de la empresa y adentro tiene
   // las tres líneas—, y por eso su handler no valida marca. Mismo caso que `sistema`.
   memo,
+  // Insumos: lo que la empresa consume y no vende (bolsas, rollos, yerba). Entra por acá y no por
+  // un archivo de ruta propio, como todo el resto (12 funciones de Hobby). Sus tablas viven sólo en
+  // la base de BDI —una caja de bolsas no es de una marca— pero la puerta SÍ valida `store`, porque
+  // el permiso de la sección es por marca.
+  insumos,
   // Mensajes de clientes. Entra por acá y no por un archivo de ruta propio como todo el resto: el
   // plan Hobby admite 12 funciones y cada ruta cuenta una. Tampoco valida `store` en la puerta —la
   // bandeja es una sola, como la de Envíos— pero adentro recorta a las marcas del perfil.

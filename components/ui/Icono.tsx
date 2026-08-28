@@ -475,6 +475,20 @@ const TRAZOS = {
       <path d="M12 11.8v8.8" />
     </>
   ),
+  /**
+   * Insumos — el estante con los bultos.
+   *
+   * ⛔ No reusa `recepciones` (la caja) ni `deposito`: lo que distingue a Insumos no es que sea una
+   * caja, es que **hay varios y se cuentan por lugar**. El estante lo dice de un vistazo.
+   */
+  insumos: (
+    <>
+      <rect x="3.4" y="4.4" width="17.2" height="15.2" rx="1.6" />
+      <path d="M3.4 12h17.2" />
+      <path d="M9 4.4v7.6" />
+      <path d="M15 12v7.6" />
+    </>
+  ),
   /** Proveedores — camión. */
   proveedores: (
     <>
