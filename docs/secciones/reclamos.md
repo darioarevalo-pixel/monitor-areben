@@ -11,7 +11,8 @@ mostrador, pero escribe sobre la misma tabla: **un cambio no es un tipo de caso,
 
 📄 **Auditoría de punta a punta del 28-ago-2026: `docs/postventa-auditoria-2026-08-28.md`.**
 La matriz **estado × rol** (qué ve, qué aprieta y qué mensaje tiene cada uno en cada momento) y **18
-cosas que no cierran**, ordenadas por lo que cuesta plata o deja a un cliente sin respuesta. ⛔ No es
+cosas que no cierran**, ordenadas por lo que cuesta plata o deja a un cliente sin respuesta
+(**una arreglada** el 28-ago: el 403 de Depósito, contado en `docs/secciones/retornos.md`). ⛔ No es
 una ficha: es una foto con fecha, y lo que se arregle se tacha allá y se cuenta acá.
 
 ## El chasis: inicio común · **el escenario** · final común

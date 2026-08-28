@@ -340,3 +340,45 @@ describe('el tipo de la bandeja contra el SELECT del servidor', () => {
     expect(pedidas.filter((c) => !traidas.has(c))).toEqual([])
   })
 })
+
+/**
+ * 🔴 **El segundo guard de esta pantalla, y nació de un 403.**
+ *
+ * `ACCIONES_DE_LA_BANDEJA` (`api/_reclamos.js`) es una lista escrita a mano que decide qué puede
+ * hacer un perfil cuya ÚNICA puerta es `retornos` —o sea Depósito—, y los botones viven acá al lado,
+ * en `Retornos.tsx`. **Nada los ataba.** El tercer andén se construyó el 26-ago-2026 exactamente
+ * porque Depósito ⛔ no puede abrir Reclamos y el botón «Despaché» estaba del lado equivocado de la
+ * puerta; el botón se mudó y la lista se quedó igual ⇒ **Depósito apretaba y recibía un 403**.
+ *
+ * 🔑 Que sea una lista y no una derivación es lo correcto —es un permiso, y un permiso se escribe—;
+ * lo que faltaba es que **agregar un botón sin agregar su acción se ponga rojo**. Es el mismo cable
+ * que el de acá arriba entre `RetornoRow` y `COLS_RETORNO`, del otro lado de la misma pantalla.
+ *
+ * ⚠️ No se vio antes porque la bandeja **está vacía** y el Local sí pasa (tiene `reclamos-local`):
+ * un test que mira las dos puntas ⛔ no necesita una fila para encontrarlo.
+ */
+describe('los botones de la bandeja contra el permiso del servidor', () => {
+  const fuente = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8')
+
+  it('toda acción que la pantalla puede disparar, la bandeja la tiene permitida', () => {
+    // Lo que la pantalla importa del cliente es exactamente lo que puede llamar.
+    const pantalla = fuente('../components/retornos/Retornos.tsx')
+    const importados = (pantalla.split("from '@/lib/reclamos/cliente'")[0].split('import {').pop() || '')
+      .split(',').map((s) => s.trim().replace('}', '').trim()).filter((s) => /^[a-zA-Z]+$/.test(s))
+
+    // De cada una, qué `action` le manda al handler. Las de sólo lectura ⛔ no mandan ninguna.
+    const cliente = fuente('../lib/reclamos/cliente.ts')
+    const accionDe = (fn: string): string | null => {
+      const cuerpo = (cliente.split(`export async function ${fn}(`)[1] || '').split('\nexport ')[0]
+      return (cuerpo.match(/action: '([a-z-]+)'/) || [])[1] || null
+    }
+    const acciones = importados.map(accionDe).filter((a): a is string => !!a)
+
+    const lista = fuente('../api/_reclamos.js').split('const ACCIONES_DE_LA_BANDEJA = [')[1].split(']')[0]
+    const permitidas = new Set([...lista.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]))
+
+    // Que la extracción no se haya quedado vacía: los tres gestos físicos tienen que aparecer.
+    expect(acciones.sort()).toEqual(['despachado', 'recibir', 'reingreso'])
+    expect(acciones.filter((a) => !permitidas.has(a))).toEqual([])
+  })
+})

@@ -82,9 +82,20 @@ const COBROS = ['no_aplica', 'pendiente', 'cobrado'];
 const ENVIO_PAGA = ['cliente', 'nosotros'];
 // Cómo vuelve el producto. 'presencial' = la trae al local: sin envío, sin etiqueta, sin seguimiento.
 const VIAS = ['correo', 'andreani', 'cadete', 'presencial'];
-// Los dos gestos que se hacen con el producto en la mano, y lo único que la bandeja de retornos
-// habilita por sí sola. Ninguno decide nada: uno dice que llegó y el otro que ya está guardado.
-const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso'];
+// Los TRES gestos que se hacen con el paquete en la mano, y lo único que la bandeja de retornos
+// habilita por sí sola. Ninguno decide nada: dicen que lo que vuelve llegó, que ya está guardado, y
+// que lo que sale ya salió.
+//
+// 🔴 **`despachado` entró el 28-ago-2026, y su falta era la CUARTA vuelta del agujero propio del
+// módulo.** El tercer andén de Retornos se construyó el 26-ago **exactamente porque Depósito ⛔ no
+// puede abrir Reclamos**: el botón estaba del lado equivocado de la puerta. El botón se mudó y esta
+// lista se quedó igual ⇒ **Depósito apretaba «Despaché» y recibía un 403.** No se vio antes porque
+// la bandeja está vacía y el Local sí pasa, por `reclamos-local`.
+//
+// 🔑 **Lo que lo cierra ⛔ no es esta línea: es el test que la ata a los botones de la pantalla**
+// (`tests/retornos.test.ts`). Una lista escrita a mano al lado de una pantalla que crece es
+// exactamente la forma que este módulo ya perdió tres veces.
+const ACCIONES_DE_LA_BANDEJA = ['recibir', 'reingreso', 'despachado'];
 
 // Lo que la bandeja necesita ver, y nada más (ver `lib/reclamos/retornos.ts`). ⛔ Sin `relato_cliente`,
 // sin montos y sin `token`: Depósito abre una caja, no revisa un caso.
@@ -797,7 +808,23 @@ export default async function handler(req, res) {
     // y **no tenía con qué tildarse**: se podía dejar el reclamo trabado para siempre, que es el
     // mismo agujero que este módulo ya había tenido con los pendientes mal derivados.
     // ⛔ No es de administración: despacha Depósito.
+    //
+    // 🔑 **Y desde el 28-ago-2026 mira el pendiente antes de sellarlo.** Este verbo lo puede llamar
+    // ahora un perfil cuya ÚNICA puerta es la bandeja (`retornos`), que es angosta a propósito: sin
+    // esto, tildarlo sobre un reclamo que no tiene nada para mandar sellaría un paso que nadie hizo
+    // — el mismo «el cero afirma» que ya frenan `recibir`, `descontado` y `otra-venta`. La pantalla
+    // sólo muestra el botón en el andén que filtra por este pendiente; el freno vive acá porque una
+    // pantalla que esconde un botón es una sugerencia, ⛔ no una regla.
     if (action === 'despachado') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select('estado, envio_nuevo_estado').eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      // Idempotente, igual que `recibir`: dos personas mirando la misma caja no se pisan.
+      if (fila.envio_nuevo_estado === 'hecho') return res.status(200).json({ ok: true, yaEstaba: true });
+      if (fila.envio_nuevo_estado !== 'pendiente') {
+        return res.status(409).json({ error: 'este reclamo no tiene ningún paquete pendiente de despachar' });
+      }
       await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'despachado lo que se le manda' }, { envio_nuevo_estado: 'hecho' });
       return res.status(200).json({ ok: true });
     }

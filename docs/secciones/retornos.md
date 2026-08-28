@@ -12,9 +12,9 @@ Es la **capa de la vuelta** del chasis de Postventa (resolución → movimientos
 un reintegro se hace y se termina, una vuelta **dura**.
 
 📄 **Auditoría de punta a punta del 28-ago-2026: `docs/postventa-auditoria-2026-08-28.md`.**
-🔴 De ahí sale que **el botón «Despaché» de esta pantalla le contesta 403 a Depósito**: `despachado`
-⛔ no está en `ACCIONES_DE_LA_BANDEJA` (`api/_reclamos.js:87`), así que el gesto que se trajo acá
-justamente porque Depósito no puede abrir Reclamos ⛔ no pasa la puerta.
+✅ De ahí salió el único arreglado hasta ahora: **el botón «Despaché» le contestaba 403 a Depósito**
+—`despachado` ⛔ no estaba en `ACCIONES_DE_LA_BANDEJA`, y el andén se había construido justamente
+porque Depósito ⛔ no puede abrir Reclamos—. El relato, en «Lo que ya se rompió acá».
 
 ## Dónde vive
 
@@ -56,8 +56,9 @@ Tests: `tests/retornos.test.ts`.
   aparece.
 - 🔑 **Se ve el nombre del cliente y NO el relato, los montos ni el token.** La lectura entra por
   `vista=retornos`, una puerta con columnas propias: Depósito abre una caja, no revisa un caso. Con
-  el permiso de la sección se puede hacer eso y **dos** acciones (`recibir`, `reingreso`), nada más
-  — la acción `estado` genérica acepta los ocho estados, cerrar y anular incluidos.
+  el permiso de la sección se puede hacer eso y **los tres gestos físicos** (`recibir`, `reingreso`,
+  `despachado`), nada más — la acción `estado` genérica acepta los ocho estados, cerrar y anular
+  incluidos, y por eso ⛔ no entra.
 - ⚠️ **`recibir` sólo acepta filas en `en_transito`.** Recibir algo que no estábamos esperando no es
   un error de tipeo: es que el reclamo no está donde el que lo recibe cree, y taparlo con un update
   deja la fila diciendo que volvió algo que nunca salió.
@@ -65,6 +66,23 @@ Tests: `tests/retornos.test.ts`.
   anular. El botón es una **traza**, no una escritura.
 
 ## Lo que ya se rompió acá
+
+- 🔴 ✅ **El botón «Despaché» le contestaba 403 a la persona que despacha** (arreglado el
+  28-ago-2026). `ACCIONES_DE_LA_BANDEJA` (`api/_reclamos.js`) es lo único que un perfil de
+  **Depósito** puede hacer acá, y decía `['recibir', 'reingreso']`. El tercer andén se construyó el
+  26-ago **exactamente porque Depósito ⛔ no puede abrir Reclamos** —el botón estaba del lado
+  equivocado de la puerta—; el botón se mudó y la lista se quedó en dos. **Cuarta vuelta del agujero
+  propio del módulo**, y ⛔ no lo vio ningún test porque **los dos lados estaban bien**: el agujero
+  vivía en la pregunta del medio.
+  🔑 **Lo que lo cierra ⛔ no es la línea de la lista, son los dos cables**: `tests/retornos.test.ts`
+  ata las acciones que la pantalla puede disparar a la lista del servidor, y
+  `tests/handlers-autorizacion.test.ts` **corre el handler de verdad** con un perfil de Depósito y
+  fija las dos mitades — que los tres gestos pasen, y que `decidir`, `estado`, `eliminar` y compañía
+  ⛔ no.
+  ⚠️ Y como el verbo pasó a ser alcanzable por la puerta angosta, se le agregó el guard que le
+  faltaba: **sólo sella si el pendiente está** (409 si no) y es idempotente. Mismo «el cero afirma»
+  que ya frenaban `recibir` y `descontado`. Caminado en vivo contra BDI, **11 de 11**
+  (`scripts/caminar-despacho-deposito.mjs`: una fila sembrada y borrada, las 2 reales intactas).
 
 - 🔴 **La alerta "hace N días que no llega" se reiniciaba sola** — ver arriba. Estaba desde que
   existe `alertasDe`; se arregló el 25-ago-2026 junto con esta sección, y el mutante que la cuida

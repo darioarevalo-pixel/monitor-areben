@@ -330,3 +330,64 @@ describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
     expect(res.code).toBe(403)
   })
 })
+
+/**
+ * 🔴 **La puerta ANGOSTA de la bandeja de retornos, y por qué necesita su propio bloque.**
+ *
+ * Depósito ⛔ **no tiene ninguna de las tres secciones de Reclamos** (`SECCIONES_RECLAMOS`): abre
+ * `retornos` y nada más. Por eso `_reclamos.js` tiene un segundo gate al lado del de arriba — con el
+ * permiso de la bandeja se puede leer `vista=retornos` (columnas mínimas, sin relato, sin montos y
+ * sin el token del portal) y hacer **los gestos físicos**, que son los que enumera
+ * `ACCIONES_DE_LA_BANDEJA`. Es una lista escrita a mano, y el bloque de arriba ⛔ no la mira: los
+ * `PUERTAS` prueban «tiene la sección / no la tiene», no «tiene ESTA otra sección».
+ *
+ * 🔴 **Y ahí se coló un 403 durante dos días.** El tercer andén («Falta despachar») se construyó el
+ * 26-ago-2026 **exactamente porque Depósito no puede abrir Reclamos**: el botón «Despaché» vivía del
+ * lado equivocado de la puerta. El botón se mudó a `Retornos.tsx` y la lista se quedó en dos ⇒ la
+ * persona que pone el paquete en la calle apretaba y recibía un 403. **Cuarta vuelta del agujero
+ * propio del módulo**, y ⛔ no lo vio ningún test porque los dos lados estaban bien: el agujero
+ * estaba en la pregunta del medio.
+ *
+ * ⚠️ La mitad negativa pesa igual que la positiva, y por eso están las dos: `estado` acepta los ocho
+ * estados —**cerrar y anular incluidos**— y `decidir` mueve plata. Que Depósito ⛔ no llegue a
+ * ninguno de los dos es lo que hace que «angosta» signifique algo.
+ */
+describe('la puerta angosta de Retornos: Depósito hace los tres gestos y nada más', () => {
+  /** Depósito de verdad: la función le da `retornos` por área, y ⛔ ninguna sección de Reclamos. */
+  const DEPOSITO = { name: 'Depósito', admin: false, cuenta: null, acceso: {}, funcion: ['deposito'] }
+
+  /** Pasó el gate = llegó a la base (el `createClient` mockeado tira) o contestó algo que no es 403. */
+  async function paso(req: unknown) {
+    try { return (await llamar('_reclamos', req)).code !== 403 } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+      return true
+    }
+  }
+
+  const postDe = (action: string) => conSesion({ method: 'POST', body: { store: 'bdi', action, id: 1 } })
+
+  for (const action of ['recibir', 'reingreso', 'despachado']) {
+    it(`deja hacer «${action}», que es un gesto con el paquete en la mano`, async () => {
+      sesionDe(DEPOSITO)
+      expect(await paso(postDe(action))).toBe(true)
+    })
+  }
+
+  for (const action of ['decidir', 'liberar-decision', 'estado', 'eliminar', 'cupon-emitido', 'reintegro']) {
+    it(`⛔ NO deja hacer «${action}»`, async () => {
+      sesionDe(DEPOSITO)
+      expect((await llamar('_reclamos', postDe(action))).code).toBe(403)
+    })
+  }
+
+  it('deja leer la bandeja', async () => {
+    sesionDe(DEPOSITO)
+    expect(await paso(conSesion({ query: { store: 'bdi', vista: 'retornos' } }))).toBe(true)
+  })
+
+  it('⛔ pero NO el listado completo ni el token del portal público', async () => {
+    sesionDe(DEPOSITO)
+    expect((await llamar('_reclamos', conSesion())).code).toBe(403)
+    expect((await llamar('_reclamos', conSesion({ query: { store: 'bdi', vista: 'token', id: '1' } }))).code).toBe(403)
+  })
+})

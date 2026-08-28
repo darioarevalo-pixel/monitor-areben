@@ -108,7 +108,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 - **Costo**: bajo. `costoDelCaso` (`lib/reclamos/tipos.ts:1865`) ya es puro: se muda a `.core.js`
   —igual que `destinoDe` el 28-ago— y lo llama el handler.
 
-### 🔴 D3 · «Despaché» de Retornos le contesta 403 a Depósito
+### ✅ D3 · «Despaché» de Retornos le contestaba 403 a Depósito — ARREGLADO el 28-ago
 
 **Cuarta vuelta del agujero propio del módulo: el botón quedó del lado equivocado de la puerta.**
 
@@ -129,8 +129,19 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   justamente por esto.
 - ⚠️ **Medido leyendo los dos lados, ⛔ NO ejercido con un usuario de Depósito** (no hay ninguna fila
   en un estado que aparezca en la bandeja).
-- **Costo: una línea** (`'despachado'` a la lista) **+ un test que ate las acciones de la bandeja a
-  los botones de `Retornos.tsx`** — el mismo guard que ya existe entre `RetornoRow` y `COLS_RETORNO`.
+- ✅ **Arreglado el 28-ago-2026**, y ⛔ no con la línea sola:
+  - `'despachado'` entró en `ACCIONES_DE_LA_BANDEJA`;
+  - **dos cables, porque una línea no frena a la próxima pantalla**: `tests/retornos.test.ts` ata las
+    acciones que `Retornos.tsx` puede disparar a la lista del servidor, y
+    `tests/handlers-autorizacion.test.ts` **corre el handler de verdad** con un perfil de Depósito y
+    fija **las dos mitades** — los tres gestos pasan, y `decidir`, `liberar-decision`, `estado`,
+    `eliminar`, `cupon-emitido` y `reintegro` ⛔ no. **3 mutantes probados, 3 muertos**, incluido el
+    de la mitad negativa (meter `estado` en la lista pone el test en rojo).
+  - ⚠️ **Y un guard que antes no hacía falta**: el verbo pasó a ser alcanzable por la puerta angosta,
+    así que ahora **sólo sella si el pendiente está** (409 si no) y es idempotente — el mismo «el
+    cero afirma» que ya frenaban `recibir` y `descontado`. **Caminado en vivo contra BDI, 11 de 11**
+    (`scripts/caminar-despacho-deposito.mjs`, con el handler **en proceso** y ⛔ no contra prod, que
+    todavía corre el código viejo; una fila sembrada y borrada, las 2 reales contadas antes y después).
 
 ### 🔴 D4 · «No aceptó» sobre un reclamo sin decidir deja la columna MUDA
 
@@ -299,8 +310,9 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 ## Lo que ⛔ NO se caminó, y se dice como no caminado
 
-- 🔴 **D3 ⛔ no se ejerció con un usuario de Depósito**: está medido leyendo el gate del servidor
-  contra el botón, que es determinístico, pero ⛔ no se mandó el POST.
+- ✅ **D3 ya ⛔ no está en esta lista**: se arregló el mismo día, y el perfil de Depósito se ejerce
+  ahora contra el handler de verdad en `tests/handlers-autorizacion.test.ts`. Lo que sigue sin
+  ejercerse es **la persona**: nadie de Depósito abrió la pantalla todavía.
 - 🔴 **Retornos está vacía**: sus tres andenes, y los gestos `Llegó`, `Reingresado` y `Despaché`,
   ⛔ **no se caminaron nunca con una fila real** — ni ahora ni desde que existe la sección.
 - 🔴 **Zattia tiene 0 reclamos**: todo lo de acá está medido contra BDI.
