@@ -8,8 +8,8 @@
  * distingue «no se deployó» de «el crawl no llegó». Pasó dos veces hoy.
  */
 const BASE = 'https://monitorareben.vercel.app'
-const ORACULO = 'Msj: la propuesta'       // sin tildes (el minificador las escapa); 0 apariciones en el commit anterior
-const CONTROL = 'Msj: pedir fotos'        // ya estaba en prod
+const ORACULO = 'la etiqueta va en camino' // sin tildes (el minificador las escapa); 0 apariciones en el commit anterior
+const CONTROL = 'Msj: la propuesta'       // ya estaba en prod (se deployo hoy mas temprano)
 
 const RUTA = /static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g
 const bajar = async (u) => { const r = await fetch(`${BASE}/_next/${u}`); return r.ok ? await r.text() : '' }

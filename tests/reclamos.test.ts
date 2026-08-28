@@ -4,7 +4,7 @@ import {
   diasEsperandoLaOferta,
   correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
-  destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
+  destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltaMandarLaEtiqueta, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
@@ -842,11 +842,34 @@ describe('cómo vuelve el producto', () => {
     expect(hayEnvio(null)).toBe(false)
   })
 
-  // "En camino de vuelta" es mentira cuando no hay nada viajando: hay alguien que no vino todavía.
-  it('el estado se lee distinto si la trae al local', () => {
+  /**
+   * "En camino de vuelta" es mentira cuando **no hay nada viajando**, y eso pasa por DOS motivos
+   * distintos: hay alguien que no vino todavía, o **le falta la etiqueta para poder despachar**.
+   *
+   * 🔴 **La segunda mitad la corrigió Bruno el 28-ago-2026** y este test afirmaba la premisa vieja:
+   * `andreani` sin `seguimiento_vuelta` daba "En camino de vuelta" sobre un paquete que el cliente
+   * ⛔ todavía no puede despachar. Es la misma mentira que ya se había corregido para el
+   * `presencial`, entrando por la otra puerta.
+   */
+  it('el estado se lee distinto si la trae al local, o si falta la etiqueta', () => {
     expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'presencial' })).toBe('Esperando que lo traiga')
-    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'andreani' })).toBe('En camino de vuelta')
+    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'andreani' })).toBe('Falta mandarle la etiqueta')
+    expect(estadoEnCriollo({ estado: 'en_transito', via_retorno: 'andreani', seguimiento_vuelta: 'AR1' })).toBe('En camino de vuelta')
     expect(estadoEnCriollo({ estado: 'recibido', via_retorno: 'presencial' })).toBe('Recibido')
+  })
+
+  /**
+   * ⚠️ **Sólo las vías CON seguimiento**: el cadete y el «lo trae al local» ⛔ no tienen etiqueta
+   * que mandar, y el segundo ya tiene su propia lectura. Y ⛔ sólo en `en_transito`: un reclamo
+   * recibido o cerrado ya no espera nada.
+   */
+  it('faltaMandarLaEtiqueta: sólo donde hay etiqueta que mandar y todavía no está', () => {
+    expect(faltaMandarLaEtiqueta({ estado: 'en_transito', via_retorno: 'correo' })).toBe(true)
+    expect(faltaMandarLaEtiqueta({ estado: 'en_transito', via_retorno: 'correo', seguimiento_vuelta: 'AR1' })).toBe(false)
+    expect(faltaMandarLaEtiqueta({ estado: 'en_transito', via_retorno: 'cadete' })).toBe(false)
+    expect(faltaMandarLaEtiqueta({ estado: 'en_transito', via_retorno: 'presencial' })).toBe(false)
+    expect(faltaMandarLaEtiqueta({ estado: 'en_transito', via_retorno: null })).toBe(false)
+    expect(faltaMandarLaEtiqueta({ estado: 'recibido', via_retorno: 'correo' })).toBe(false)
   })
 })
 

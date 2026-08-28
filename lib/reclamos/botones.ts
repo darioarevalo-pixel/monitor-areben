@@ -1,4 +1,7 @@
-import { estaDecidido, ofertaEsperandoRespuesta, pideFotos, type EstadoReclamo, type ReclamoRow } from './tipos'
+import {
+  estaDecidido, faltaMandarLaEtiqueta, ofertaEsperandoRespuesta, pideFotos,
+  type EstadoReclamo, type ReclamoRow,
+} from './tipos'
 
 /**
  * **Qué mensajes se le ofrecen a quien atiende, en cada momento del reclamo.**
@@ -37,6 +40,8 @@ export type MensajeDeLaFila =
   | 'propuesta'
   /** Qué se resolvió. Existe desde que hay resolución, ⛔ no desde que hay campos cargados. */
   | 'resolucion'
+  /** La etiqueta todavía ⛔ no existe: se le avisa que no tiene que hacer nada. */
+  | 'etiqueta_en_camino'
   /** El seguimiento del retorno, cuando ya hay etiqueta. */
   | 'etiqueta'
   /** La plata ya salió. */
@@ -86,6 +91,13 @@ export function linkVivo(d: ReclamoRow): boolean {
  * la evidencia que necesitaba. ⚠️ `mas_fotos` **sí** sigue —vive en el detalle, ⛔ no en la
  * columna—: es de quien está mirando el caso, no de quien habla con el cliente.
  *
+ * 🔴 🔑 **`etiqueta_en_camino` y `etiqueta` son EXCLUYENTES, y el que los separa es el DATO.** El
+ * mismo `seguimiento_vuelta` que enciende el segundo apaga el primero: mientras no existe, lo único
+ * que se le puede decir al cliente es *«te la mandamos apenas la tengamos y hasta entonces no hacés
+ * nada»*; cuando existe, se le manda. ⛔ Sin el primero, el reclamo que el cliente **no** acepta
+ * quedaba mudo justo en el rato en que él cree que la pelota es suya — y el reloj de «hace N días
+ * que no llega» arrancaba sobre una espera que nunca fue de él.
+ *
  * ⚠️ **`etiqueta` y `plata_enviada` ⛔ no se callan**, y la diferencia es la que separa este archivo
  * de una lista de condiciones: los otros tres son **promesas** y ésos dos son **hechos que ya
  * ocurrieron** en el mundo. Un hecho ⛔ no se contradice con una propuesta.
@@ -105,6 +117,7 @@ export function mensajesDeLaFila(d: ReclamoRow): MensajeDeLaFila[] {
   if (pide && !!fotos) ms.push('mas_fotos')
   if (esperando) ms.push('propuesta')
   if (estaDecidido(d) && !esperando) ms.push('resolucion')
+  if (faltaMandarLaEtiqueta(d)) ms.push('etiqueta_en_camino')
   if (d.seguimiento_vuelta) ms.push('etiqueta')
   if (d.reintegro_estado === 'hecho') ms.push('plata_enviada')
   return ms

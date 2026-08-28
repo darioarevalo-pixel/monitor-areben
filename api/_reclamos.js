@@ -53,7 +53,7 @@ import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } f
 import { loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
-import { esEscenarioDe, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
+import { camposAlContestarLaOferta, esEscenarioDe, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
 import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, sinLaOtraVenta, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
@@ -638,6 +638,63 @@ export default async function handler(req, res) {
         : `llegó ${r.recibidas} de ${r.recibidas + r.faltan}: falta${r.faltan > 1 ? 'n' : ''} ${r.faltan}`);
       await apilar(supabase, id, { estado, at: ahora(), usuario, nota }, { [r.campo]: r.lista, estado });
       return res.status(200).json({ ok: true, todoLlego: r.todoLlego, faltan: r.faltan });
+    }
+
+    // ── Qué contestó el cliente a la oferta de que se lo quede ──────────────────
+    //
+    // 🔴 **El eslabón que faltaba del circuito** *(Administración decide · el local habla y
+    // ejecuta)*. Hasta el 28-ago-2026 la respuesta sólo se podía anotar reabriendo **Decidir**, que
+    // es de Administración: el que escucha al cliente ⛔ no la podía registrar, y entre medio el
+    // reclamo se quedaba quieto con una oferta esperando.
+    //
+    // ⛔ **Por eso NO está en `DE_ADMIN`**, igual que `descontado`, `falla` y `gn-baja`: cuando la
+    // oferta salió, Administración ya decidió **las dos ramas** —el monto, la forma, y la salida
+    // «por si dice que no», que es la resolución guardada—. Lo único que agrega el local es **cuál
+    // de las dos pasó**: anotar un paso que ya ocurrió en el mundo ⛔ no es decidir plata.
+    //
+    // 🔑 **Lo que se escribe sale entero de `camposAlContestarLaOferta`** (`casos.core.js`), que a
+    // su vez deriva de `salidaAlAceptarRetencion`, `destinoDe` y `pendientesDe`. ⛔ Acá no se vuelve
+    // a escribir ninguna de las tres: duplicar esa derivación es el bug que este módulo ya tuvo.
+    if (action === 'retencion-respuesta') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones')
+        .select('estado, motivo, escenario, retencion_monto, retencion_forma, retencion_respuesta, diferencia')
+        .eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      /**
+       * 🔴 **El freno vive acá, ⛔ no sólo en la pantalla**, y frena las DOS mitades:
+       *
+       *  - sin oferta registrada no hay nada que contestar — una respuesta suelta es la media
+       *    oferta que después hace mentir la cuenta de cuántas veces funciona la retención;
+       *  - **ya contestada tampoco**: aceptar dos veces reescribiría la resolución y **destildaría
+       *    los pendientes que ya se ejecutaron** (la plata que salió, el cupón emitido), que es
+       *    exactamente lo que `loEjecutado` frena en `decidir`. El mensaje nombra lo que pasó, ⛔ no
+       *    dice «no se puede».
+       */
+      if (fila.retencion_respuesta) {
+        return res.status(409).json({ error: `Esta oferta ya está contestada (${fila.retencion_respuesta === 'acepto' ? 'aceptó' : 'no aceptó'}). Para cambiarla, Administración tiene que volver a decidir el reclamo.` });
+      }
+      if (!ofertaEsperandoRespuesta(fila)) {
+        return res.status(409).json({ error: 'Este reclamo no tiene ninguna oferta esperando respuesta.' });
+      }
+      const r = camposAlContestarLaOferta({
+        respuesta: texto(b.respuesta),
+        motivo: fila.motivo,
+        escenario: fila.escenario || null,
+        monto: num(fila.retencion_monto),
+        forma: texto(fila.retencion_forma),
+        diferencia: num(fila.diferencia),
+      });
+      if (r.error) return res.status(400).json({ error: r.error });
+      const acepto = r.campos.retencion_respuesta === 'acepto';
+      const nota = acepto
+        ? `el cliente ACEPTÓ quedárselo por ${fila.retencion_monto} (${fila.retencion_forma === 'cupon' ? 'cupón' : 'plata'})`
+        : 'el cliente NO aceptó quedárselo: sigue lo que estaba decidido';
+      // ⚠️ El estado del evento es el que queda: aceptar lo mueve a `resuelto`, rechazar ⛔ no lo
+      // toca. Poner `fila.estado` fijo dejaría el historial contando otra cosa que la fila.
+      await apilar(supabase, id, { estado: r.campos.estado || fila.estado, at: ahora(), usuario, nota }, r.campos);
+      return res.status(200).json({ ok: true, acepto, estado: r.campos.estado || fila.estado });
     }
 
     // ── La unidad SANA que se queda el cliente salió del stock ───────────────────

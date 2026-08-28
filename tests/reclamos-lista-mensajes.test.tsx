@@ -103,6 +103,39 @@ describe('la lista dibuja los mensajes del momento', () => {
     expect(bs.join(' ')).not.toContain('resolución')
   })
 
+  /**
+   * 🔴 **El eslabón que faltaba del circuito** *(Administración decide · el local habla y ejecuta)*:
+   * hasta el 28-ago-2026 la respuesta del cliente sólo se podía anotar reabriendo Decidir. Los dos
+   * botones se dibujan **en el mismo momento que el mensaje de la propuesta** — que es el momento en
+   * que la pregunta está hecha y falta la respuesta.
+   */
+  it('🔴 con la oferta esperando: aparecen «Aceptó» y «No aceptó»', async () => {
+    const esperando = {
+      ...base, estado: 'resuelto', compensacion: 'plata_total',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
+    } as unknown as ReclamoRow
+    const bs = (await botones([esperando])).map((b) => b.trim())
+    expect(bs).toContain('Aceptó')
+    expect(bs).toContain('No aceptó')
+  })
+
+  /** ⛔ Y sin oferta esperando ⛔ no hay nada que contestar: los dos botones ⛔ no existen. */
+  it('sin oferta esperando ⛔ no aparece ninguno de los dos', async () => {
+    const decidido = { ...base, estado: 'en_revision', compensacion: 'plata_total' } as unknown as ReclamoRow
+    const bs = (await botones([decidido])).map((b) => b.trim())
+    expect(bs).not.toContain('Aceptó')
+    expect(bs).not.toContain('No aceptó')
+  })
+
+  /**
+   * 🔴 **El otro momento que no tenía mensaje**: en tránsito por correo y sin etiqueta todavía, el
+   * cliente ⛔ no puede despachar nada y no lo sabe.
+   */
+  it('🔴 en tránsito sin etiqueta: ofrece avisarle que va en camino', async () => {
+    const sinEtiqueta = { ...base, estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani' } as unknown as ReclamoRow
+    expect(conMensaje(await botones([sinEtiqueta]))).toEqual(['Msj: resolución', 'Msj: la etiqueta va en camino'])
+  })
+
   /** Contestada, no hay nada que preguntar: vuelve el de resolución. */
   it('contestada: se va la propuesta y vuelve la resolución', async () => {
     const contestada = {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mensajeApertura, mensajePropuesta, mensajeResolucion, mensajeSeguimiento, resumenCorto } from '@/lib/reclamos/mensajes'
+import { mensajeApertura, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeSeguimiento, resumenCorto } from '@/lib/reclamos/mensajes'
 import { MOTIVO_LABEL, type ReclamoRow, type ItemReclamo } from '@/lib/reclamos/tipos'
 
 /**
@@ -210,6 +210,46 @@ describe('mensaje de la propuesta', () => {
     const txt = mensajePropuesta(oferta, 'R-0022')
     expect(txt).not.toContain('descuento')
     expect(txt).not.toContain('%')
+  })
+})
+
+/**
+ * **La etiqueta todavía no existe, y el cliente ⛔ no lo sabe.**
+ *
+ * Pedido de Bruno, 28-ago-2026: *«le mandamos que apenas tengamos la etiqueta se la estamos
+ * enviando para que pueda despachar el paquete»*. Es el hueco del circuito cuando el cliente **no
+ * acepta** la oferta: la resolución ya se le contó, la etiqueta tarda, y del otro lado hay alguien
+ * esperando sin saber si tiene que hacer algo.
+ */
+describe('mensaje de que la etiqueta va en camino', () => {
+  const d = { ...base, via_retorno: 'andreani' } as ReclamoRow
+
+  it('nombra la vía y dice quién paga el envío', () => {
+    const txt = mensajeEtiquetaEnCamino(d, 'R-0022')
+    expect(txt).toContain('R-0022')
+    expect(txt).toContain('Andreani')
+    expect(txt).toContain('El envío lo pagamos nosotros')
+  })
+
+  /**
+   * 🔑 **Lo que este mensaje existe para decir**: que ⛔ no tiene que hacer nada todavía. Sin eso
+   * el cliente vuelve a escribir para preguntar, o peor: el paquete no sale y el reloj de «hace N
+   * días que no llega» empieza a correr sobre una espera que nunca fue de él.
+   */
+  it('le dice explícitamente que por ahora ⛔ no tiene que hacer nada', () => {
+    expect(mensajeEtiquetaEnCamino(d, 'R-0022')).toContain('no tenés que hacer nada')
+  })
+
+  /** ⚠️ La etiqueta la emite el transporte: prometer una fecha es lo que este archivo evita. */
+  it('⛔ no promete un plazo', () => {
+    const txt = mensajeEtiquetaEnCamino(d, 'R-0022')
+    expect(txt).not.toMatch(/mañana|24 h|48 h|hoy mismo/i)
+  })
+
+  it('sin vía cargada no inventa un transporte', () => {
+    const txt = mensajeEtiquetaEnCamino({ ...base, via_retorno: null } as ReclamoRow, 'R-0022')
+    expect(txt).toContain('Estamos generando la etiqueta para que')
+    expect(txt).not.toContain('undefined')
   })
 })
 

@@ -190,6 +190,38 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
     expect(mensajesDeLaFila(d)).toEqual(['propuesta', 'etiqueta'])
   })
 
+  /**
+   * 🔴 **El rato en que el cliente cree que la pelota es suya y no lo es** (28-ago-2026). Decidido
+   * con retorno, la fila pasa a `en_transito` — pero por correo o Andreani el cliente ⛔ todavía no
+   * puede despachar nada: le falta la etiqueta. Es el momento en que cae el que **NO acepta** la
+   * oferta y se sigue con la devolución, y hasta hoy el reclamo quedaba mudo justo ahí.
+   */
+  it('en tránsito y sin etiqueta todavía: se le avisa que va en camino', () => {
+    const d = fila({ estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani' })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'etiqueta_en_camino'])
+  })
+
+  /**
+   * 🔑 **Los dos de la etiqueta son EXCLUYENTES, y el que los separa es el DATO.** El mismo
+   * `seguimiento_vuelta` que enciende el segundo apaga el primero: los dos juntos serían decirle
+   * «te la mandamos apenas la tengamos» y «acá está», en la misma columna.
+   */
+  it('con el código cargado: se va el «va en camino» y entra el de la etiqueta', () => {
+    const d = fila({ estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani', seguimiento_vuelta: 'AR123' })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'etiqueta'])
+  })
+
+  /**
+   * ⚠️ **Sólo donde hay etiqueta que mandar.** Si lo trae al local o lo pasa a buscar un cadete no
+   * hay nada que emitir, y ofrecer el mensaje sería prometerle algo que no existe.
+   */
+  it('sin etiqueta que mandar ⛔ no se ofrece el mensaje', () => {
+    const base2 = { estado: 'en_transito' as const, compensacion: 'plata_total' as const }
+    expect(mensajesDeLaFila(fila({ ...base2, via_retorno: 'presencial' }))).toEqual(['resolucion'])
+    expect(mensajesDeLaFila(fila({ ...base2, via_retorno: 'cadete' }))).toEqual(['resolucion'])
+    expect(mensajesDeLaFila(fila({ ...base2, via_retorno: null }))).toEqual(['resolucion'])
+  })
+
   it('la etiqueta y la plata se ofrecen cuando el hecho ya ocurrió', () => {
     const d = fila({
       estado: 'en_transito', compensacion: 'plata_total',

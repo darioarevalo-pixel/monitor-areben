@@ -16,6 +16,7 @@ import {
   type Compensacion, type Expectativa, type ReclamoRow, type ItemReclamo, type ViaRetorno,
 } from './tipos'
 
+
 /**
  * `$ 15.283`.
  *
@@ -207,6 +208,40 @@ export function mensajeResolucion(
     ...(pasos.length ? ['', ...pasos] : []),
     '',
     'Cualquier duda escribinos por acá. ¡Gracias por la paciencia!',
+  ].join('\n')
+}
+
+/**
+ * 5) **La etiqueta todavía no existe, y el cliente ⛔ no lo sabe.**
+ *
+ * Pedido de Bruno, 28-ago-2026: *«le mandamos que apenas tengamos la etiqueta se la estamos
+ * enviando para que pueda despachar el paquete»*. Es el hueco que dejaba el circuito cuando el
+ * cliente **no acepta** la oferta y se sigue con la devolución: la resolución ya se le contó, la
+ * etiqueta tarda, y del otro lado hay alguien esperando sin saber si tiene que hacer algo.
+ *
+ * 🔑 **Dice explícitamente que ⛔ no tiene que hacer nada todavía.** Sin eso el cliente vuelve a
+ * escribir para preguntar, que es el costo que este mensaje ahorra — y el que se paga cuando no
+ * existe es peor: el paquete no sale, y el reloj de «hace N días que no llega» empieza a correr
+ * sobre una espera que ⛔ nunca fue del cliente.
+ *
+ * ⚠️ **⛔ No promete una fecha.** La etiqueta la emite el transporte y prometer «mañana» es la
+ * clase de promesa que este archivo existe para no dejar improvisar.
+ */
+export function mensajeEtiquetaEnCamino(
+  d: Pick<ReclamoRow, 'cliente' | 'via_retorno'>,
+  numero: string,
+): string {
+  const via = d.via_retorno ? VIA_LABEL[d.via_retorno as ViaRetorno] : null
+  return [
+    saludo(d.cliente),
+    '',
+    `Ya está todo listo con el reclamo ${numero}.`,
+    '',
+    `Estamos generando la etiqueta${via ? ` de ${via}` : ''} para que nos devuelvas el producto y te la mandamos por acá apenas la tengamos. **El envío lo pagamos nosotros.**`,
+    '',
+    'Hasta entonces no tenés que hacer nada: cuando te llegue, la imprimís o la mostrás en la sucursal y despachás el paquete.',
+    '',
+    '¡Gracias por la paciencia!',
   ].join('\n')
 }
 

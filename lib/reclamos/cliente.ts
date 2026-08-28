@@ -297,6 +297,18 @@ export async function marcarDespachado(store: Marca, id: number): Promise<void> 
 }
 
 /**
+ * **Qué contestó el cliente a la oferta de que se lo quede.**
+ *
+ * 🔑 **Sólo viaja la respuesta.** El monto y la forma ya están en la fila —los decidió
+ * Administración al armar la oferta— y mandarlos de nuevo desde la pantalla sería dejar que el
+ * local los pise sin querer. La rama que se aplica al aceptar la deriva el servidor con
+ * `camposAlContestarLaOferta`.
+ */
+export async function contestarLaOferta(store: Marca, id: number, respuesta: RespuestaRetencion): Promise<void> {
+  await postear({ action: 'retencion-respuesta', store, id, respuesta })
+}
+
+/**
  * El cupón ya existe en la tienda, con su código.
  *
  * 🔑 **El código es obligatorio**: es lo único que prueba que el cupón se creó de verdad. Antes

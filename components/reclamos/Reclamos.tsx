@@ -24,7 +24,7 @@ import {
 import {
   buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
   marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
-  marcarDespachado, marcarCuponEmitido, anotarOtraVenta,
+  marcarDespachado, marcarCuponEmitido, anotarOtraVenta, contestarLaOferta,
   ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, descontarRegaladas, editarReclamo,
   leerToken, reemitirToken, liberarDecision,
 } from '@/lib/reclamos/cliente'
@@ -34,10 +34,11 @@ import {
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
   ayudaDeMotivo, casoDe, expectativaLabel, expectativasDe, pideFotos, sobreLaVentaCompleta, tituloExpectativa,
+  COMPENSACION_LABEL, type RespuestaRetencion,
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
-import { mensajeApertura, mensajePropuesta, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { mensajeApertura, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
 import { mensajesDeLaFila } from '@/lib/reclamos/botones'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { DecidirReclamo } from './DecidirReclamo'
@@ -301,6 +302,32 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   // ── Acciones de la lista ──
   const accion = async (fn: () => Promise<void>, ok: string) => {
     try { await fn(); toast.ok(ok); void recargar() } catch (e) { toast.error((e as Error).message) }
+  }
+
+  /**
+   * **Lo que contestó el cliente a la oferta de que se lo quede.**
+   *
+   * 🔑 **Se pregunta antes, y las dos preguntas ⛔ no son la misma.** «No aceptó» ⛔ no cambia nada
+   * de lo decidido —la resolución guardada ya era la salida «si dice que no»—, así que la
+   * confirmación sólo dice qué sigue. «Aceptó» **cierra la rama**: cambia la resolución, el monto,
+   * apaga el pedido de retorno y recalcula los pendientes. Un gesto que mueve todo eso ⛔ no puede
+   * salir de un click al lado de un mensaje.
+   *
+   * ⚠️ El texto nombra lo que va a pasar con **el número y la forma de esta fila**, ⛔ no en
+   * genérico: es lo único que deja darse cuenta de que se apretó en la fila equivocada.
+   */
+  const contesto = async (d: ReclamoRow, respuesta: RespuestaRetencion) => {
+    const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
+    const monto = Number(d.retencion_monto) || 0
+    const esCupon = d.retencion_forma === 'cupon'
+    const si = await confirmar({
+      titulo: respuesta === 'acepto' ? 'El cliente aceptó quedárselo' : 'El cliente no aceptó',
+      ok: respuesta === 'acepto' ? 'Sí, aceptó' : 'Sí, no aceptó',
+      mensaje: respuesta === 'acepto'
+        ? `${numeroReclamo(d.id)}: se cierra con ${esCupon ? `un cupón de ${pesos(monto)}` : `${pesos(monto)} de devolución`} y el producto se lo queda. El pedido de retorno se apaga.`
+        : `${numeroReclamo(d.id)}: sigue lo que ya estaba decidido${d.compensacion ? ` (${COMPENSACION_LABEL[d.compensacion] || d.compensacion})` : ''}. Queda registrado que la oferta no funcionó.`,
+    })
+    if (si) await accion(() => contestarLaOferta(marca, d.id, respuesta), respuesta === 'acepto' ? 'Anotado: se lo queda.' : 'Anotado: no aceptó.')
   }
 
   const anular = async (d: ReclamoRow) => {
@@ -894,12 +921,36 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           tone="warning"
                         />
                       )}
+                      {/* 🔴 **El eslabón que faltaba del circuito** *(Administración decide · el
+                          local habla y ejecuta)*: hasta hoy la respuesta del cliente sólo se podía
+                          anotar reabriendo Decidir, que es de Administración.
+                          ⛔ **Sin `esAdmin` a propósito** —igual que «Despaché» y «Anulé en GN»—:
+                          cuando la oferta salió, Administración ya decidió las dos ramas (el monto,
+                          la forma, y la salida «por si dice que no», que es la resolución
+                          guardada). El local sólo dice **cuál de las dos pasó**.
+                          🔑 Y aceptar ⛔ no es un tilde más: cierra la rama —resolución, monto,
+                          destino, el retorno apagado y los pendientes—, así que se pregunta antes.
+                          Lo que se escribe lo deriva el servidor con `camposAlContestarLaOferta`. */}
+                      {mensajes.includes('propuesta') && (
+                        <>
+                          <Button size="sm" variant="outline" tone="brand" onClick={() => void contesto(d, 'acepto')}>Aceptó</Button>
+                          <Button size="sm" variant="outline" tone="neutral" onClick={() => void contesto(d, 'rechazo')}>No aceptó</Button>
+                        </>
+                      )}
                       {mensajes.includes('resolucion') && (
                         <CopyButton
                           getText={() => mensajeResolucion(d, numeroReclamo(d.id))}
                           label="Msj: resolución"
                           tone="brand"
                         />
+                      )}
+                      {/* 🔴 **El rato en que el cliente cree que la pelota es suya y no lo es.**
+                          Decidido con retorno, la fila dice `en_transito` — pero por correo o
+                          Andreani todavía ⛔ no puede despachar nada: le falta la etiqueta. Sin
+                          este mensaje el reclamo queda mudo justo ahí, y el reloj de «hace N días
+                          que no llega» arranca sobre una espera que nunca fue de él. */}
+                      {mensajes.includes('etiqueta_en_camino') && (
+                        <CopyButton getText={() => mensajeEtiquetaEnCamino(d, numeroReclamo(d.id))} label="Msj: la etiqueta va en camino" tone="neutral" />
                       )}
                       {mensajes.includes('etiqueta') && (
                         <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />

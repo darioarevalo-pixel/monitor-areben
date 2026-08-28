@@ -23,6 +23,7 @@ import {
   PERFIL_MOTIVO as PERFIL_MOTIVO_JS,
   casoDe as casoDeJs,
   escenarioDe as escenarioDeJs,
+  destinoDe as destinoDeJs,
   destinosDe as destinosDeJs,
   escenariosDe as escenariosDeJs,
   esEscenarioDe as esEscenarioDeJs,
@@ -33,6 +34,7 @@ import {
   registroDeRetencion as registroDeRetencionJs,
   ofertaEsperandoRespuesta as ofertaEsperandoRespuestaJs,
   salidaAlAceptarRetencion as salidaAlAceptarRetencionJs,
+  camposAlContestarLaOferta as camposAlContestarLaOfertaJs,
   RESPUESTAS_RETENCION as RESPUESTAS_RETENCION_JS,
   pideReclamoAlTransportista as pideReclamoAlTransportistaJs,
   productoEnJuego as productoEnJuegoJs,
@@ -858,12 +860,40 @@ export const ESTADO_LABEL: Record<EstadoReclamo, string> = {
 }
 
 /**
- * El estado como lo lee alguien del local. Cambia solo en un caso, pero importa: si el cliente
- * lo trae en mano, "En camino de vuelta" es mentira — no hay nada viajando, hay alguien que
- * todavía no vino.
+ * 🔴 **El paso que existía en la realidad y ⛔ no en la pantalla: la etiqueta todavía no salió.**
+ *
+ * Pedido de Bruno, 28-ago-2026: *«si no acepta, y se procede a la devolución, le mandamos que
+ * apenas tengamos la etiqueta se la estamos enviando para que pueda despachar el paquete… y el
+ * estado cambia en administración a pendiente etiqueta devolución o algo así»*.
+ *
+ * Al decidir con retorno, la fila pasa a `en_transito` — pero **por correo o Andreani el cliente
+ * todavía ⛔ no puede despachar nada**: le falta la etiqueta, que se carga después, cuando existe.
+ * O sea que «En camino de vuelta» afirmaba un paquete viajando **antes de que nadie lo despachara**.
+ * Es exactamente la mentira que ya se había corregido para el `presencial`, entrando por la otra
+ * puerta: [[feedback_areben_premisa_escrita_nunca_medida]].
+ *
+ * 🔑 **Sin columna nueva: el dato ya estaba.** Que la etiqueta exista lo dice `seguimiento_vuelta`,
+ * que es justo lo que carga «Cargar seguimiento». ⛔ No hay estado nuevo en la máquina de estados
+ * —`en_transito` sigue siendo uno solo, y la bandeja de Depósito filtra por ahí—: lo que cambia es
+ * **cómo se lee**, que es donde estaba el error.
+ *
+ * ⚠️ Sólo para las vías **con** seguimiento: el cadete y el «lo trae al local» ⛔ no tienen etiqueta
+ * que mandar, y ese último ya tiene su propia lectura.
  */
-export function estadoEnCriollo(d: Pick<ReclamoRow, 'estado' | 'via_retorno'>): string {
+export function faltaMandarLaEtiqueta(
+  d: Pick<ReclamoRow, 'estado' | 'via_retorno' | 'seguimiento_vuelta'>,
+): boolean {
+  return d.estado === 'en_transito' && pideSeguimiento(d.via_retorno) && !d.seguimiento_vuelta
+}
+
+/**
+ * El estado como lo lee alguien del local. Cambia en dos casos, y los dos son la misma mentira:
+ * "En camino de vuelta" sobre algo que **nadie despachó todavía** — porque el cliente lo trae en
+ * mano y no vino, o porque le falta la etiqueta para poder despacharlo.
+ */
+export function estadoEnCriollo(d: Pick<ReclamoRow, 'estado' | 'via_retorno' | 'seguimiento_vuelta'>): string {
   if (d.estado === 'en_transito' && d.via_retorno === 'presencial') return 'Esperando que lo traiga'
+  if (faltaMandarLaEtiqueta(d)) return 'Falta mandarle la etiqueta'
   return ESTADO_LABEL[d.estado] ?? d.estado
 }
 
@@ -1504,25 +1534,30 @@ export function destinosDe(motivo: MotivoReclamo, escenario: string | null | und
   return destinosDeJs(motivo, escenario) as DestinoPrenda[]
 }
 
-/** El destino de el producto queda determinado por el motivo, salvo en la falla. */
+/**
+ * El destino de el producto queda determinado por el motivo, salvo en la falla.
+ *
+ * 🔑 **El cuerpo se mudó a `casos.core.js` el 28-ago-2026** —acá quedó la cara tipada— porque ahora
+ * lo necesita también `api/_reclamos.js`, que ⛔ no puede importar TypeScript. Mismo arreglo que
+ * `perfilDe` y que `permisos.core.js`.
+ */
 export function destinoDe(motivo: MotivoReclamo, vuelve: boolean, escenario: string | null | undefined): DestinoPrenda | null {
-  // 🔑 Devuelve `null` cuando no hay producto en juego (demora), y eso NO es un caso sin resolver:
-  // es que no hay nada que decidir. El destino nulo es lo que deja cerrar una demora.
-  if (!productoEnJuego(motivo, escenario)) return null
-  // ⚠️ Sale del PERFIL y no de `NUNCA_SALIO` a propósito, aunque hoy las dos formas den lo mismo:
-  // el único escenario que mueve `salio` es la cancelación, y esa ya salió por el `return null` de
-  // arriba. O sea que **el mutante que lo vuelve a la lista de motivos sobrevive** — y se deja así
-  // igual, porque el día que un escenario mueva `salio` sin apagar el producto, la lista contesta
-  // mal y nadie lo va a ver.
-  if (!perfilDe(motivo, escenario).salio) return 'no_salio'
-  if (motivo === 'no_llego') return 'perdida'
-  // 🔑 La falla va a `falla` **aunque no vuelva**: si está fallada, está fallada — que el cliente se
-  // la quede no la vuelve sana. Por eso este `if` queda ARRIBA del reparto de abajo.
-  if (motivo === 'falla') return 'falla'
-  // 🔑 Y acá está la partición que hasta el 26-ago-2026 no se podía hacer: en todos los demás casos
-  // la unidad está **sana**, así que si no vuelve no es una falla, es una unidad regalada. Antes
-  // esta línea contestaba `'falla'` y era el único camino que había para sacarla del stock.
-  return vuelve ? 'stock' : 'regalada'
+  return destinoDeJs(motivo, vuelve, escenario) as DestinoPrenda | null
+}
+
+/**
+ * Lo que hay que escribir cuando el cliente contesta la oferta. La regla —y por qué las dos
+ * respuestas ⛔ no son simétricas— vive en `casos.core.js`.
+ */
+export function camposAlContestarLaOferta(o: {
+  respuesta: RespuestaRetencion
+  motivo: MotivoReclamo
+  escenario: string | null
+  monto: number | null
+  forma: FormaRetencion | null
+  diferencia: number | null
+}): { error?: string; campos?: Partial<ReclamoRow> } {
+  return camposAlContestarLaOfertaJs(o) as { error?: string; campos?: Partial<ReclamoRow> }
 }
 
 // ── La unidad: el destino y la recepción, por PRODUCTO ──────────────────────────

@@ -1106,10 +1106,7 @@ lo confirma Bruno con los primeros casos reales.
 ### ▶️ Lo que esto habilita y todavía no está
 
 - ~~**El mensaje de la propuesta**~~ 🏁 **hecho el 28-ago-2026** — su sección está abajo.
-- **Los botones «Aceptó» / «No aceptó» en la fila, para el local**: es el eslabón que falta del
-  circuito (*Administración decide · el local habla y ejecuta*). La acción va **fuera de
-  `DE_ADMIN`**, por el mismo criterio que `descontado` y `gn-baja`: **anotar un paso que ya ocurrió
-  en el mundo ⛔ no es decidir plata**.
+- ~~**Los botones «Aceptó» / «No aceptó» en la fila**~~ 🏁 **hechos el 28-ago-2026** — abajo.
 
 ## 🆕 El mensaje de la propuesta: el quinto momento (28-ago-2026)
 
@@ -1169,6 +1166,89 @@ veces — *los dos lados bien y el bug en la pregunta del medio*.
 ⚠️ **El fixture del test de texto tiene la expectativa DISTINTA de la resolución a propósito**: con
 las dos iguales, invertir la precedencia de la alternativa no rompe nada y la regla queda sin fijar.
 
-▶️ **Lo que sigue faltando del circuito: los botones «Aceptó» / «No aceptó» en la fila.** Hoy la
-respuesta del cliente sólo se puede anotar reabriendo **Decidir**, que es de Administración — así
-que el eslabón *«el local habla y ejecuta»* sigue cortado por la mitad.
+## 🆕 La respuesta del cliente cierra la rama, y mueve el caso al momento siguiente (28-ago-2026)
+
+Pedido de Bruno: *«el local toca "Aceptó" y el sistema cierra la rama»* y, la mitad más grande,
+*«si está definido lo de acepto, que cada caso tenga el mensaje correspondiente… o que cambie el
+estado, y por ende que cambie el mensaje: ej, si no acepta y se procede a la devolución, le mandamos
+que apenas tengamos la etiqueta se la estamos enviando para que pueda despachar el paquete»*.
+
+### 1. `camposAlContestarLaOferta` — y por qué esto ⛔ NO es «el local decidiendo plata»
+
+Acción **`retencion-respuesta`** de `api/_reclamos.js`, **fuera de `DE_ADMIN`**, con los botones
+**«Aceptó» / «No aceptó»** en la fila, en el mismo momento en que se ofrece el mensaje de la
+propuesta.
+
+🔑 **Cuando la oferta salió, Administración ya decidió LAS DOS RAMAS**: el monto, la forma —que es
+la que determina en qué termina el reclamo— y la salida *«por si dice que no»*, que es la resolución
+que **ya está guardada en la fila**. Lo único que agrega el cliente es **cuál de las dos pasó** ⇒ el
+gesto del local es el mismo que `descontado` o `gn-baja`: **anotar un paso que ya ocurrió en el
+mundo**. Por eso el body lleva **sólo la respuesta**: el monto y la forma se leen de la fila, y
+mandarlos desde la pantalla dejaría que el local los pise sin querer.
+
+🔴 **Las dos respuestas ⛔ no son simétricas**, y ahí está el defecto que se evitó:
+
+| | qué se escribe |
+|---|---|
+| `rechazo` | **sólo la respuesta.** Lo decidido ya era la salida «si dice que no»: pisarlo sería rehacer una decisión que nadie rehizo, y volvería a poner en `pendiente` plata que capaz ya salió |
+| `acepto` | la respuesta **y la rama**: resolución, `monto_total`, destino, el retorno apagado, `estado` y los pendientes |
+
+🔑 **Las tres derivaciones salen del núcleo** —`salidaAlAceptarRetencion`, `destinoDe`,
+`pendientesDe`—: acá ⛔ no se reescribe ninguna. Duplicar esa derivación es el bug que este módulo ya
+tuvo dos veces. Y **aceptar APAGA el pedido de retorno**: tenerlo prendido contaba el producto dos
+veces, en la bandeja de Depósito y en poder del cliente.
+
+🔴 🔑 **`destinoDe` se mudó de `tipos.ts` a `casos.core.js`** — mismo arreglo que `perfilDe` y que
+`permisos.core.js`. Mientras vivía en TypeScript el único que podía derivar el destino era la
+pantalla, y **un handler que ⛔ no puede aplicar la regla termina recibiéndola por el body**, o sea
+confiando en que la pantalla la aplicó bien. `tipos.ts` conserva la cara tipada.
+
+⚠️ **El freno de «ya está contestada» vive en el servidor** (409): aceptar dos veces reescribiría la
+resolución y **destildaría los pendientes ya ejecutados**, que es exactamente lo que `loEjecutado`
+frena en `decidir`.
+
+### 2. «Falta mandarle la etiqueta»: el paso que existía en la realidad y ⛔ no en la pantalla
+
+Al decidir con retorno la fila pasa a `en_transito` — pero **por correo o Andreani el cliente ⛔
+todavía no puede despachar nada**: le falta la etiqueta, que se carga después. O sea que «En camino
+de vuelta» afirmaba un paquete viajando **antes de que nadie lo despachara**. 🔴 Es exactamente la
+mentira que ya se había corregido para el `presencial`, entrando por la otra puerta — y el test
+**afirmaba la premisa vieja** (`andreani` → «En camino de vuelta»), otra vez
+[[feedback_areben_premisa_escrita_nunca_medida]].
+
+🔑 **Sin columna nueva y sin estado nuevo: el dato ya estaba.** Que la etiqueta exista lo dice
+`seguimiento_vuelta`. `en_transito` sigue siendo **un solo estado** —la bandeja de Depósito filtra
+por ahí y ⛔ no se tocó—: lo que cambia es **cómo se lee** (`faltaMandarLaEtiqueta`, usado por
+`estadoEnCriollo` **y** por `mensajesDeLaFila`, ⛔ una sola vez).
+
+Y su mensaje, `mensajeEtiquetaEnCamino`: *«la estamos generando y te la mandamos apenas la tengamos;
+hasta entonces no tenés que hacer nada»*. 🔑 **Decir que ⛔ no tiene que hacer nada es para lo que el
+mensaje existe**: sin eso el cliente vuelve a escribir, o peor —el paquete no sale y el reloj de
+«hace N días que no llega» arranca sobre una espera que **nunca fue de él**. ⚠️ ⛔ No promete fecha:
+la etiqueta la emite el transporte.
+
+🔑 **`etiqueta_en_camino` y `etiqueta` son EXCLUYENTES, y el que los separa es el DATO**: el mismo
+`seguimiento_vuelta` que enciende el segundo apaga el primero.
+
+### La cadena completa, que es lo que pidió Bruno
+
+| lo que pasa | estado que ve Administración | mensaje que ofrece la fila |
+|---|---|---|
+| oferta mandada, sin respuesta | el de siempre + ⏱ «no contestó hace N días» | **la propuesta** (⛔ ni resolución ni fotos) |
+| **aceptó** | `resuelto` | **la resolución** — ya dice «quedátelo», y con cupón queda el pendiente de crearlo |
+| **no aceptó**, con retorno por correo | **«Falta mandarle la etiqueta»** | la resolución + **«la etiqueta va en camino»** |
+| se cargó el seguimiento | «En camino de vuelta» | la resolución + **«Msj: etiqueta»** |
+
+✅ **12 mutantes, 12 muertos** en esta tanda —los seis de la regla nueva (rechazar pisando la
+resolución, aceptar sin apagar el retorno, el destino derivado como si volviera, el cupón acordando
+plata, contestar una oferta que no existe, ofrecerla en un caso que no corresponde), dos de
+`faltaMandarLaEtiqueta`, el del momento, el del texto y **los dos del CABLE**— y **21 en el día**.
+
+⚠️ **Un mutante puede pegarle a la función equivocada**: `if (!ofreceRetencion(motivo, escenario))`
+existe **dos veces** en `casos.core.js` (acá y en `registroDeRetencion`), y el primer reemplazo cayó
+en la otra. Salió verde y parecía un test que faltaba. **El ancla de un mutante se verifica única**
+(`s.count(v) == 1`), igual que la cadena de un oráculo de deploy.
+
+▶️ **Lo que queda abierto acá**: `DIAS_ALERTA` ⛔ no tiene reloj para «hace N días que la etiqueta no
+sale» — hoy el único que corre sobre `en_transito` es `transito` (15 días), que cuenta una espera que
+todavía ⛔ no es del transporte.
