@@ -69,44 +69,101 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 ## 2. Lo que no cierra — ordenado por lo que cuesta
 
-### 🔴 D1 · Aceptar la oferta manda a ANULAR la venta, y a la vez a descontar el producto
+### ✅ D1 · Aceptar la oferta mandaba a ANULAR la venta y a la vez a descontar — ⚠️ **ES A PROPÓSITO**, y lo que faltaba era el ORDEN. ARREGLADO el 28-ago
 
-**Plata, y está pendiente en producción.**
+**Plata. La pregunta la contestó Bruno; el defecto estaba al lado.**
 
 - **Evidencia** (pantalla, 28/8 13:37): los pendientes de R-0022 dicen *«anular la venta original en
   Gestión Nube · devolver la plata · **descontar de Gestión Nube los 2 productos que se queda el
   cliente**»*, y el KPI marca *Ventas sin anular en GN: 1*.
-- **Causa**: `EFECTOS_RESOLUCION.plata_parcial.anulaVenta = SIEMPRE`
-  (`lib/reclamos/efectos.core.js:67-70`), con un comentario que razona **sobre la falla** («la unidad
-  vuelve al stock y la falla la vuelve a sacar»). Desde el 27-ago `plata_parcial` es **también** la
-  salida de aceptar la retención sobre un producto **sano** (`salidaAlAceptarRetencion`,
-  `lib/reclamos/casos.core.js:508-510`), y ahí ese razonamiento ⛔ no aplica.
-- **Lo que es defecto seguro**: se piden **dos movimientos manuales en GN que se cancelan** — anular
-  devuelve +2 al stock, la venta técnica saca −2. Cualquiera de los dos alcanza.
-- **Lo que es decisión** → **B2**: anular la venta deja a Gestión Nube diciendo que **no vendimos
-  nada**, cuando la clienta se quedó con los dos productos y puso $7.191 netos.
-- **Costo**: una fila más en `EFECTOS_RESOLUCION` (partir `plata_parcial`) o una condición por
-  destino. ⚠️ Toca la tabla de la que cuelga todo el final del chasis: va con mutantes.
+- ✅ **B2, contestado el 28-ago**: *«sería como hoy, pero la venta técnica sale de nosotros: la
+  escribimos desde el Monitor, y sólo Admin tendría que ir a cancelarla»*. ⇒ `plata_parcial`
+  **sigue anulando**, y `EFECTOS_RESOLUCION` ⛔ no se toca.
+- 🔑 **Y los dos movimientos ⛔ no se cancelan: se necesitan los dos, en ESE orden.** Anular
+  devuelve +2 al stock de GN y la venta técnica los vuelve a sacar. La que se equivocaba era la
+  auditoría, ⛔ no el código: hacer uno solo deja el stock mal por dos unidades.
+- 🔴 **Lo que sí era defecto, y estaba en el botón de al lado**: *«si la venta técnica sale ANTES de
+  que la anulación esté hecha, descuenta una unidad que todavía no volvió»* estaba escrito, con su
+  freno, **sólo en el camino de Fallas** (`aFallas`, `Reclamos.tsx`, 26-ago). El de la unidad sana
+  —`descontarLasQueSeQueda` / `descontarRegaladas`, que es **el que está apretado hoy en R-0022**,
+  con `stock_estado: 'pendiente'` y dos productos por descontar— ⛔ **no lo tenía**. Dos lados
+  decidiendo sobre lo mismo, con la regla escrita en uno.
+- ✅ **Arreglado el 28-ago-2026**, y ⛔ no con el `if` solo:
+  - la regla vive en **`faltaAnularAntesDeDescontar` (`efectos.core.js`)**, con el texto adentro:
+    las dos puertas dicen lo mismo porque es el mismo string;
+  - **el freno va ANTES de escribir en GN** (`pasarAFallas` y `descontarRegaladas`, en `cliente.ts`),
+    ⛔ no en el toast ni sólo en el handler: `descontarRegaladas` crea la venta en GN y **después**
+    sella la baja, así que un 409 del servidor llegaría tarde — dejaría la venta hecha y el reclamo
+    sin sellar. El 409 del handler quedó igual, **de respaldo**, para el que entre por otra puerta;
+  - **3 cables**: los dos casos de la regla, y un test que lee `cliente.ts` y exige que las dos
+    funciones que escriben en GN la llamen **arriba del primer `fetch`**. **5 mutantes, 5 muertos.**
+  - ✅ **Caminado en vivo contra BDI** (`scripts/caminar-costo-caso.mjs`, pasos 5 y 6): con la
+    anulación pendiente contesta **409 y ⛔ no sella ninguna baja**; tildada, sella.
 
-### 🔴 D2 · `costo_caso` no se recalcula cuando el cliente acepta
+### ✅ D1b · `laFallaDescuentaStock` contestaba distinto que la tabla en CUATRO filas — ARREGLADO el 28-ago
 
-**El único número que dice cuánto cuestan los errores propios queda mintiendo.**
+**Encontrado tirando del hilo de D1. Stock corto por una unidad, sin ningún error.**
+
+- **Evidencia**: `laFallaDescuentaStock` (`tipos.ts`) razona —lo dice su propio docstring— *«la venta
+  original se anula, y al anularla la unidad vuelve al stock»*, y lo escribía como
+  `compensacion !== 'otra_unidad'`. Era una **copia fiel de `EFECTOS_RESOLUCION` del día en que se
+  escribió**, cuando anulaban las cinco menos el cambio. El **27-ago** `reenvio`, `cupon` y `ninguna`
+  dejaron de anular y la copia se quedó igual:
+
+  | | `anulaVenta` | `laFallaDescuentaStock` (antes) |
+  |---|---|---|
+  | `otro_producto` · `reenvio` · `cupon` · `ninguna` | **nunca** | **true** ← las cuatro |
+
+- **Por qué duele**: el alta en Fallas descontaba de GN una unidad que la venta original ya había
+  descontado. **Stock uno abajo del real, sin error, hasta el próximo conteo** — que es exactamente
+  el daño que esa función dice arriba que viene a evitar. Es *la regla más delicada del módulo*,
+  dicha por ella misma.
+- ✅ **Arreglado**: sale de `seAnulaLaVenta(compensacion)` (`efectos.core.js`), que lee la tabla. Con
+  un cable que las compara **fila por fila**, así que la próxima resolución ⛔ no se puede olvidar.
+  **4 mutantes, 4 muertos.**
+
+### ✅ D2 · `costo_caso` no se recalculaba cuando el cliente acepta — ARREGLADO el 28-ago
+
+**El único número que dice cuánto cuestan los errores propios quedaba mintiendo.**
 
 - **Evidencia** (pantalla, en la misma caja del detalle de R-0022): *«Se le devuelve **$13.491**»*
   junto a *«Lo que nos costó **$20.682**»*. En la base: `monto_total: 13491`, `costo_caso: 20682` —
   el de la decisión vieja, que incluía $6.500 de envío que ya no existe.
-- **Causa**: `camposAlContestarLaOferta` (`lib/reclamos/casos.core.js:691-722`) escribe
-  `monto_total`, `monto_acordado`, `destino_prenda`, `estado` y los pendientes, y **⛔ no
-  `costo_caso`**. El único que lo calcula es la pantalla (`components/reclamos/DecidirReclamo.tsx:337-350`),
-  y esta rama ⛔ no pasa por ahí.
-- **Por qué duele**: la retención existe para **abaratar** el caso. Si funciona y el costo no baja,
-  el número que la justifica ⛔ no se puede leer nunca — y como el error va siempre para arriba, la
-  retención va a parecer más cara de lo que es.
-- **De la misma línea**: `retorno_sugerido` queda en el `true` viejo ⇒ el resumen dice *«¿Se pidió
-  que vuelva? **No — en contra de lo que sugería la cuenta**»* sobre algo que el sistema apagó solo
-  (`casos.core.js:717`).
-- **Costo**: bajo. `costoDelCaso` (`lib/reclamos/tipos.ts:1865`) ya es puro: se muda a `.core.js`
-  —igual que `destinoDe` el 28-ago— y lo llama el handler.
+- **Causa**: `camposAlContestarLaOferta` escribía `monto_total`, `monto_acordado`, `destino_prenda`,
+  `estado` y los pendientes, y **⛔ no `costo_caso`**. El único que lo calculaba era la pantalla, y
+  esta rama ⛔ no pasa por ahí.
+- 🔴 **Y la causa de la causa, que era más grande: la cuenta no era de nadie.** `costoDelCaso` vivía
+  en `tipos.ts` pero **las tres condiciones que deciden cuánto entra de cada envío estaban sueltas
+  adentro de `DecidirReclamo.tsx`**. Por eso el número se quedaba viejo apenas algo lo tocaba fuera
+  de esa pantalla — y `editar` puede tocar **seis de sus siete entradas** (los dos envíos, los items,
+  el destino, el retorno) sin que nadie lo moviera.
+- ✅ **Arreglado el 28-ago-2026**:
+  - `costoDelCaso` y la nueva **`costoDeLaFila`** viven en **`lib/reclamos/plata.core.js`** —igual
+    que `destinoDe` el mismo día— y las llaman **los tres**: la pantalla, aceptar la oferta y
+    `editar`. `DecidirReclamo.tsx` ⛔ ya no tiene la cuenta;
+  - **`editar` recalcula sólo si el reclamo YA está decidido**: antes, `costo_caso` es `null` a
+    propósito y quien lo escribe al final es `decidir` — calcularlo sería afirmar un costo sobre una
+    decisión que nadie tomó;
+  - **la lista de entradas es una sola** (`ENTRADAS_DEL_COSTO`): de ahí salen el `select` del handler
+    **y** la pregunta *«¿este gesto cambió el costo?»*, con un cable que la compara contra lo que la
+    función realmente lee. Dos listas a mano era el defecto entrando por la otra punta;
+  - **11 mutantes, 11 muertos**, incluido el cable de que el `select` traiga `items` —sin ellos la
+    unidad vale 0 y el costo sale **más barato**, callado y siempre para el mismo lado.
+  - ✅ **Caminado en vivo contra BDI** (`scripts/caminar-costo-caso.mjs`, **19 de 19**): aceptar deja
+    $16.491 en vez de $20.682; cargar el costo del producto lo mueve; cargar un envío de vuelta sobre
+    algo que no vuelve ⛔ no lo mueve; renombrar al cliente tampoco.
+- ✅ **De la misma línea, arreglado**: el resumen decía *«¿Se pidió que vuelva? **No — en contra de
+  lo que sugería la cuenta**»* sobre un retorno que **apagó el sistema solo** al aceptar. «En contra»
+  es alguien que decidió distinto que la cuenta: **acusaba a Administración de una decisión que tomó
+  el cliente.** Ahora dice *«No — el cliente aceptó quedárselo»*, y la señal de «en contra» sigue
+  viva para el rechazo.
+- ✅ **La fila real, corregida en producción el 28-ago**: R-0022 pasó de `costo_caso` **20.682 a
+  13.491** (`scripts/corregir-costo-caso-r0022.mjs`, con el número **derivado por `costoDeLaFila`**,
+  ⛔ no tipeado, y releído de la base después de escribir). Queda la nota en el `historial`.
+- ⚠️ **Lo que el número sigue sin contar, y ⛔ no es de esta cuenta**: las dos filas reales tienen
+  `costo: null` en todos sus items, así que la unidad que el cliente se queda **vale cero** y «Lo que
+  nos costó» es hoy sólo la plata. Es un dato que falta, ⛔ no un defecto — el número se mueve solo
+  el día que se cargue, y eso está caminado (paso 2).
 
 ### ✅ D3 · «Despaché» de Retornos le contestaba 403 a Depósito — ARREGLADO el 28-ago
 
@@ -260,7 +317,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 | | la pregunta | por qué no la contesta el código |
 |---|---|---|
 | **B1** | ¿Se puede registrar una oferta sobre un reclamo **sin decidir**? Hoy sí, y así quedó R-0022 | de la respuesta sale si el freno va en `registroDeRetencion` o si hace falta un mensaje nuevo (D4) |
-| **B2** | ¿La venta original **se anula** cuando el cliente se queda el producto y se le devuelve una parte? | hoy sí (D1): GN queda diciendo que no vendimos nada, con $7.191 netos cobrados |
+| ~~**B2**~~ | ✅ **Contestado el 28-ago**: *«sería como hoy, pero la venta técnica sale de nosotros: la escribimos desde el Monitor, y sólo Admin tendría que ir a cancelarla»* ⇒ `plata_parcial` sigue anulando, y los dos movimientos van **en ese orden** (D1) | — |
 | **B3** | ¿«Volver a decidir» tiene que borrar también los **montos**? | hoy deja `monto_total`, `costo_caso`, `retorno_sugerido`, `destino_prenda` y `via_retorno` |
 | **B4** | **`PISO_RETORNO`**, por marca: por debajo de cuánto ⛔ no vale la pena traer un producto | `tipos.ts:2096`, en `null` en las dos **desde que existe** ⇒ nunca cambió una cuenta |
 | **B5** | ¿El techo de la oferta suma el **costo operativo** de recibir, revisar y reingresar? | `cuentaDescuento` lo acepta (`tipos.ts:1816`) y la pantalla ⛔ nunca se lo pasa (`DecidirReclamo.tsx:437`). Subirlo **agranda las ofertas posibles** |
@@ -310,9 +367,14 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 ## Lo que ⛔ NO se caminó, y se dice como no caminado
 
-- ✅ **D3 ya ⛔ no está en esta lista**: se arregló el mismo día, y el perfil de Depósito se ejerce
-  ahora contra el handler de verdad en `tests/handlers-autorizacion.test.ts`. Lo que sigue sin
-  ejercerse es **la persona**: nadie de Depósito abrió la pantalla todavía.
+- ✅ **D3, D2, D1 y D1b ya ⛔ no están en esta lista**: se arreglaron el mismo día. Lo que sigue sin
+  ejercerse en D3 es **la persona**: nadie de Depósito abrió la pantalla todavía.
+- ⚠️ **De D1 y D2, lo caminado en vivo es el SERVIDOR, ⛔ no la pantalla**
+  (`scripts/caminar-costo-caso.mjs`, 19 de 19, con el handler en proceso). Lo que ⛔ no se ejerció es
+  **el botón**: nadie apretó todavía «Descontar en GN» sobre R-0022 para ver el aviso del orden, ni
+  volvió a abrir el detalle para leer los $13.491 corregidos.
+- ⚠️ **Y prod todavía corre el código viejo**: nada de D1, D1b, D2 ni D3 está deployado. La
+  corrección de la fila de R-0022 **sí** está escrita en la base.
 - 🔴 **Retornos está vacía**: sus tres andenes, y los gestos `Llegó`, `Reingresado` y `Despaché`,
   ⛔ **no se caminaron nunca con una fila real** — ni ahora ni desde que existe la sección.
 - 🔴 **Zattia tiene 0 reclamos**: todo lo de acá está medido contra BDI.

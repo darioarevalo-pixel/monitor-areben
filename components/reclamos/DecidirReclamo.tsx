@@ -41,7 +41,7 @@ import { BuscarArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { decidir, editarReclamo, reclasificar } from '@/lib/reclamos/cliente'
 import {
-  calcularMonto, compensacionesDe, convieneRetorno, costoDelCaso, cuentaDescuento,
+  calcularMonto, compensacionesDe, convieneRetorno, costoDeLaFila, cuentaDescuento,
   destinoDe, hayEnvio,
   MOTIVO_LABEL, numeroReclamo, puedeVolverLaPrenda, VIA_LABEL, VIAS_VIGENTES,
   admiteDevolucionParcial, devuelveElEnvioDeIda, expectativaLabel, expectativasDe,
@@ -334,17 +334,25 @@ export function DecidirReclamo({
    */
   const destino: DestinoPrenda | null = destinoDe(reclamo.motivo, retorno, escenario)
 
+  /**
+   * 🔑 **Las tres condiciones de los envíos se mudaron a `costoDeLaFila`** (`plata.core.js`,
+   * 28-ago-2026): vivían sueltas acá, así que el número se quedaba viejo apenas algo lo tocaba
+   * fuera de esta pantalla — que es exactamente lo que le pasó a R-0022 al aceptar la oferta.
+   *
+   * 🔑 `destino` YA salió de `destinoDe(motivo, retorno, escenario)`, así que el retorno está
+   * adentro. Acá decía `retorno ? (destino ?? 'falla') : 'falla'`, y ese `'falla'` fijo hacía que
+   * **una demora contara el costo entero de la mercadería como perdida**, cuando el cliente la
+   * recibió y es suya. `null` (sin producto en juego) vale cero.
+   */
   const costo = useMemo(
-    () => costoDelCaso({
-      montoDevuelto: monto.total,
-      envioVuelta: retorno ? Number(envioVuelta) || 0 : 0,
-      envioReemplazo: compensacion === 'otra_unidad' ? Number(envioIda) || 0 : 0,
+    () => costoDeLaFila({
+      compensacion: compensacion || null,
+      monto_total: monto.total,
+      retorno_decidido: retorno,
+      envio_costo: Number(envioVuelta) || 0,
+      envio_ida_costo: Number(envioIda) || 0,
       items,
-      // 🔑 `destino` YA salió de `destinoDe(motivo, retorno, escenario)`, así que el retorno está
-      // adentro. Acá decía `retorno ? (destino ?? 'falla') : 'falla'`, y ese `'falla'` fijo hacía
-      // que **una demora contara el costo entero de la mercadería como perdida**, cuando el
-      // cliente la recibió y es suya. `null` (sin producto en juego) ahora vale cero.
-      destino,
+      destino_prenda: destino,
     }),
     [monto.total, retorno, envioVuelta, envioIda, compensacion, items, destino],
   )

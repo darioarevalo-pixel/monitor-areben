@@ -58,7 +58,8 @@ va a ser la pregunta, nada más.
 `components/reclamos/` (`Reclamos.tsx` 44k · `ArmarCambio.tsx` 50k · `DecidirReclamo.tsx` 31k ·
 `ReclamoPublico.tsx`) · `components/postventa/` (Fallas, otra cosa: el ledger) ·
 `lib/reclamos/tipos.ts` (**1.4k líneas, leer por rango**) · `lib/reclamos/casos.core.js` ·
-`lib/reclamos/efectos.core.js` · `lib/reclamos/mensajes.ts` · `lib/reclamos/cliente.ts`.
+`lib/reclamos/efectos.core.js` · `lib/reclamos/plata.core.js` · `lib/reclamos/mensajes.ts` ·
+`lib/reclamos/cliente.ts`.
 ⚠️ `DecidirReclamo.tsx` **está en tres pestañas desde el 27-ago-2026 y el orden es la regla** — ver
 «La pantalla de decidir» más abajo antes de mover un bloque de lugar.
 
@@ -1299,3 +1300,112 @@ partir, el tono, y el mensaje sin callarse) — **26 en el día**.
 
 ⚠️ **`DIAS_ALERTA.etiqueta = 2` es propuesta, ⛔ no medida**, lo mismo que `oferta`, `despacho` y
 `sinMandar`: lo confirma Bruno con los primeros casos reales.
+
+---
+
+## 🆕 🔴 La cuenta de lo que costó el caso pasó a ser de TODOS (28-ago-2026)
+
+**Salió de la auditoría, D2.** R-0022 mostraba *«Se le devuelve $13.491»* al lado de *«Lo que nos
+costó $20.682»*: el número llevaba adentro $6.500 de un envío de vuelta que aceptar la oferta acababa
+de apagar.
+
+### El defecto de fondo: la cuenta no era de nadie
+
+`costoDelCaso` vivía en `tipos.ts`, pero **las tres condiciones que deciden cuánto entra de cada
+envío estaban sueltas adentro de `DecidirReclamo.tsx`**. O sea: la función era pública y **la regla
+no**. Por eso el número se quedaba viejo apenas algo lo tocaba fuera de esa pantalla, y hay dos
+puertas que lo tocan:
+
+- **aceptar la oferta** (`camposAlContestarLaOferta`), que resuelve el reclamo sin pasar por Decidir;
+- **`editar`**, que puede mover **seis de las siete entradas** del costo —los dos envíos, los items,
+  el destino, el retorno— y ⛔ no lo movía.
+
+### Dónde vive ahora
+
+**`lib/reclamos/plata.core.js`** — en `.js` plano porque lo necesita `api/_reclamos.js`, que ⛔ no
+puede importar TypeScript. Mismo arreglo que `destinoDe` y `permisos.core.js`.
+
+| | qué contesta |
+|---|---|
+| `costoDelCaso(o)` | la suma: plata + envíos + la unidad perdida, valuada **a costo** |
+| `costoDeLaFila(fila)` | **la regla**: qué entra de cada cosa, mirando la fila |
+| `ENTRADAS_DEL_COSTO` | las siete columnas que lee — **su contrato, escrito una sola vez** |
+
+Las tres condiciones de `costoDeLaFila`, y por qué:
+
+- **el envío de vuelta entra sólo si el producto vuelve** (`retorno_decidido`): si no vuelve, esa
+  etiqueta ⛔ no se paga nunca;
+- **el envío de ida entra sólo en la reposición** (`otra_unidad`);
+- **con cupón ⛔ no sale plata de la caja hoy**, igual que `monto_acordado` queda en `null`. Cuánto
+  vale un cupón frente al reembolso sigue **sin definir a propósito** (ver más arriba).
+
+🔑 **`ENTRADAS_DEL_COSTO` es una sola lista y se usa para dos cosas**: el `select` que trae las
+columnas y la pregunta *«¿este gesto cambió el costo?»*. Con dos listas escritas a mano, agregar una
+entrada y olvidarse de una de las dos deja el número viejo **sin decir nada** — el mismo defecto
+entrando por la otra punta. Hay un test que compara la lista contra lo que la función realmente lee.
+
+⚠️ **`editar` recalcula SÓLO si el reclamo ya está decidido.** Antes de la decisión `costo_caso` es
+`null` a propósito y quien lo escribe al final es `decidir`: calcularlo antes sería afirmar un costo
+sobre una decisión que nadie tomó — el mismo *un dato que existe ⛔ no es una decisión tomada* de la
+columna «A devolver».
+
+⚠️ **La unidad se valúa a `costo`, y si el ítem ⛔ no lo tiene cargado vale CERO.** Las dos filas
+reales de BDI lo tienen en `null`, así que hoy «Lo que nos costó» cuenta **sólo la plata**. ⛔ No es
+un defecto de la cuenta: es un dato que falta, y el número se mueve solo el día que se cargue.
+
+### Y el resumen ⛔ ya no acusa a nadie
+
+`resumenDeLoDecidido` decía *«¿Se pidió que vuelva? **No — en contra de lo que sugería la cuenta**»*
+sobre un retorno que **apagó el sistema solo** al aceptar la oferta (tenerlo prendido contaría el
+producto dos veces, en la bandeja de Depósito y en poder del cliente). «En contra» es alguien que
+decidió distinto que la cuenta: **acusaba a Administración de una decisión que tomó el cliente.**
+Ahora dice *«No — el cliente aceptó quedárselo»*, y la señal de «en contra» sigue viva para el
+rechazo.
+
+---
+
+## 🆕 🔴 El orden entre anular la venta y la venta técnica (28-ago-2026)
+
+**Salió de la auditoría, D1.** Bruno contestó la pregunta de fondo: *«sería como hoy, pero la venta
+técnica sale de nosotros: la escribimos desde el Monitor, y sólo Admin tendría que ir a cancelarla»*
+⇒ `plata_parcial` **sigue anulando la venta**, y `EFECTOS_RESOLUCION` ⛔ no se tocó.
+
+🔑 **Los dos movimientos ⛔ no se cancelan: se necesitan los dos, y en ese orden.** Anular la venta en
+GN **devuelve la unidad al stock**, y la venta técnica es la que la vuelve a sacar. Al revés,
+descuenta una unidad que todavía no volvió y **el stock queda uno abajo del real**, sin ningún error
+y hasta el próximo conteo.
+
+🔴 **Eso estaba escrito, con su freno, en UNA sola de las dos puertas**: el camino de Fallas
+(`aFallas`). El de la unidad **sana** —`descontarRegaladas`, que es el que está apretado hoy en
+R-0022— ⛔ no lo tenía. Dos lados decidiendo sobre lo mismo, con la regla escrita en uno ⇒
+[[feedback_areben_dos_lados_bien_y_la_pregunta_del_medio]].
+
+- la regla vive en **`faltaAnularAntesDeDescontar`** (`efectos.core.js`) y **devuelve el texto**: las
+  dos puertas dicen lo mismo porque es el mismo string;
+- **el freno va ANTES de escribir en GN** (`pasarAFallas` y `descontarRegaladas`, en `cliente.ts`).
+  ⚠️ `descontarRegaladas` crea la venta en GN y **después** sella la baja, así que un 409 del handler
+  llegaría tarde: dejaría la venta hecha en GN y el reclamo sin sellar. El 409 del handler quedó
+  igual, **de respaldo**, para el que entre por otra puerta;
+- **sólo muerde cuando la venta se anula**: si queda en pie, la unidad nunca vuelve al stock y ⛔ no
+  hay orden que respetar.
+
+### `laFallaDescuentaStock` sale de la tabla, ⛔ ya no de una copia
+
+Tirando de ese hilo apareció otro: la función razona —lo dice su propio docstring— *«la venta original
+se anula, y al anularla la unidad vuelve al stock»*, y lo escribía como `compensacion !== 'otra_unidad'`.
+Era una **copia fiel de `EFECTOS_RESOLUCION` del día en que se escribió**; el 27-ago `reenvio`, `cupon`
+y `ninguna` dejaron de anular y la copia se quedó igual ⇒ **cuatro filas contestando distinto sobre el
+mismo stock** (con `otro_producto`, que ya estaba mal desde antes).
+
+Ahora sale de **`seAnulaLaVenta(compensacion)`**, con un cable que las compara **fila por fila**: la
+próxima resolución ⛔ no se puede olvidar.
+
+### Cómo se probó
+
+**20 mutantes, 20 muertos**, y ⛔ no sólo tests: `scripts/caminar-costo-caso.mjs` corre **el handler
+en proceso contra BDI de producción** —siembra su fila, la borra, y cuenta las reales antes y
+después— y ejerce los tres verbos que ESCRIBEN: `retencion-respuesta`, `editar` y `descontado`.
+**19 de 19.**
+
+⚠️ **Lo caminado es el servidor, ⛔ no el botón**: nadie apretó todavía «Descontar en GN» sobre
+R-0022 para ver el aviso del orden en pantalla.

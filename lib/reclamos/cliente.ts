@@ -13,6 +13,7 @@ import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
 import { calcularCambio, laFallaDescuentaStock, loQueFaltaDescontar, numeroReclamo } from './tipos'
+import { faltaAnularAntesDeDescontar } from './efectos.core.js'
 import { notaVentaTecnica } from './nota'
 import type { RetornoRow } from './retornos'
 import type {
@@ -396,6 +397,14 @@ export async function pasarAFallas(
   extra?: { pvpFeria?: number | null; usuario?: string; pass?: string },
 ): Promise<number[]> {
   const descuenta = laFallaDescuentaStock(d.compensacion)
+  /**
+   * 🔴 **El orden, frenado ANTES de escribir nada.** Estaba sólo en el toast de `Reclamos.tsx`, y
+   * un aviso en una pantalla es una sugerencia: cualquier otro llamador —o el mismo botón el día
+   * que se mueva— descontaba una unidad que todavía no había vuelto del anular, y el stock quedaba
+   * uno abajo sin decirlo. La regla vive en `efectos.core.js` y la ejercen las dos puertas.
+   */
+  const traba = faltaAnularAntesDeDescontar(d)
+  if (traba) throw new Error(traba)
   const ids: number[] = []
   for (const it of d.items || []) {
     const { id, barcode } = await crearFalla(
@@ -421,12 +430,12 @@ export async function pasarAFallas(
      * La venta $0 que saca la unidad de Gestión Nube. **Sólo cuando corresponde**, y el matiz es lo
      * que hace que esto no descuente de más:
      *
-     *  - Si se le mandó **otra unidad**, la venta original NO se anula: el cliente conserva lo que
-     *    pagó. La unidad fallada que volvió **ya salió de GN** con esa venta, así que no hay nada
-     *    que descontar. El reemplazo se descuenta aparte, con `descontarReemplazo`.
-     *  - Si se le devolvió la **plata**, la venta original SÍ se anula y al anularla GN devuelve
-     *    +1. Esa unidad no es vendible, así que hay que volver a sacarla — y de eso se encarga
-     *    esta venta técnica.
+     *  - Si la venta original **queda en pie** —otra unidad, un cambio, un reenvío, un cupón— el
+     *    cliente conserva lo que pagó. La unidad fallada **ya salió de GN** con esa venta, así que
+     *    no hay nada que descontar. El reemplazo se descuenta aparte, con `descontarReemplazo`.
+     *  - Si la venta **se anula** —se le devolvió la plata, entera o en parte— al anularla GN
+     *    devuelve +1. Esa unidad no es vendible, así que hay que volver a sacarla — y de eso se
+     *    encarga esta venta técnica.
      *
      * Es lo que dice `laFallaDescuentaStock`, que estaba escrita y nunca se conectaba a GN: la
      * falla se creaba en el Monitor y el stock quedaba contado de más.
@@ -529,6 +538,14 @@ export async function descontarRegaladas(
 ): Promise<{ id?: string; number?: string; descontadas: number }> {
   const faltan = loQueFaltaDescontar(d)
   if (!faltan.length) throw new Error('No hay ningún producto sano pendiente de descontar en este reclamo.')
+  /**
+   * 🔴 **La puerta que ⛔ no tenía el freno del orden**, y es la que está apretada hoy: R-0022 tiene
+   * la anulación pendiente y dos productos por descontar. Anular devuelve +2 al stock y esta venta
+   * los vuelve a sacar; al revés, saca dos unidades que todavía no volvieron. Es el mismo aviso que
+   * el camino de Fallas tenía desde el 26-ago, en el botón de al lado.
+   */
+  const traba = faltaAnularAntesDeDescontar(d)
+  if (traba) throw new Error(traba)
   const items = faltan
     .filter((u) => u.item.product_id && u.item.size_id)
     .map((u) => ({

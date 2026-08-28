@@ -30,6 +30,7 @@ import {
 } from '@/lib/reclamos/cliente'
 import {
   botonDecidir, calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
+  faltaAnularAntesDeDescontar,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, preseleccionDelAlta, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -386,24 +387,20 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   /**
    * Manda el producto al ledger de Fallas. El aviso dice si va a descontar stock o no, porque es
-   * la diferencia que después no se ve: si se le mandó otra unidad al cliente, ese producto ya
-   * salió del stock con la venta original y descontarla de nuevo restaría dos veces.
+   * la diferencia que después no se ve: **si la venta original queda en pie** —el cambio, la
+   * reposición, el reenvío, el cupón— ese producto ya salió del stock con la venta, y descontarlo
+   * de nuevo restaría dos veces. Lo decide `laFallaDescuentaStock`, que lo saca de `anulaVenta`.
    */
   const aFallas = async (d: ReclamoRow) => {
     const descuenta = laFallaDescuentaStock(d.compensacion)
 
     /**
-     * ⚠️ **El orden importa y descuidarlo descuenta dos veces.**
-     *
-     * Cuando la salida fue devolver la plata, la venta original se anula a mano en GN y al anularla
-     * GN **devuelve +1**. Esa unidad no es vendible, así que la venta técnica de la falla la vuelve
-     * a sacar. Pero si sale ANTES de que la anulación esté hecha, descuenta una unidad que todavía
-     * no volvió: el stock queda uno abajo del real.
+     * ⚠️ **El orden importa y descuidarlo descuenta dos veces.** La regla —y el texto— viven en
+     * `efectos.core.js`: acá estaba escrita a mano y **el botón de al lado ⛔ no la tenía**. El
+     * freno de verdad está antes de escribir en GN (`pasarAFallas`); esto es para avisar temprano.
      */
-    if (descuenta && d.stock_estado === 'pendiente') {
-      toast.aviso('Primero anulá la venta en GN y tildá "Anulé en GN". Recién ahí la unidad vuelve, y es la que se saca como falla.')
-      return
-    }
+    const traba = faltaAnularAntesDeDescontar(d)
+    if (traba) { toast.aviso(traba); return }
 
     const si = await confirmar({
       titulo: 'Pasar al depósito de fallas',
@@ -499,6 +496,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    * Ahora la falla va al cliente FALLA de Gestión Nube y esto al cliente RECLAMO.
    */
   const descontarLasQueSeQueda = async (d: ReclamoRow) => {
+    // 🔴 El mismo orden que cuida el camino de Fallas, en el botón que ⛔ no lo tenía: anular
+    // devuelve las unidades al stock, y esta venta es la que las vuelve a sacar.
+    const traba = faltaAnularAntesDeDescontar(d)
+    if (traba) { toast.aviso(traba); return }
     const faltan = loQueFaltaDescontar(d)
     const si = await confirmar({
       titulo: 'Descontar del stock lo que se queda el cliente',

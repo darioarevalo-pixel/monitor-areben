@@ -17,6 +17,8 @@ import {
   loEjecutado as loEjecutadoJs,
   pendientesDe as pendientesDeJs,
   saleUnEnvio as saleUnEnvioJs,
+  seAnulaLaVenta as seAnulaLaVentaJs,
+  faltaAnularAntesDeDescontar as faltaAnularAntesDeDescontarJs,
 } from './efectos.core.js'
 import {
   CASOS as CASOS_JS,
@@ -40,6 +42,13 @@ import {
   productoEnJuego as productoEnJuegoJs,
   reclasificaA as reclasificaAJs,
 } from './casos.core.js'
+import {
+  costoDelCaso as costoDelCasoJs,
+  costoDeLaFila as costoDeLaFilaJs,
+  ENTRADAS_DEL_COSTO as ENTRADAS_DEL_COSTO_JS,
+  positivo,
+  redondear,
+} from './plata.core.js'
 import {
   anotarLaOtraVenta as anotarLaOtraVentaJs,
   aplicarDestinos as aplicarDestinosJs,
@@ -1133,14 +1142,26 @@ export function resumenDeLoDecidido(d: ReclamoRow, quien: QuienMira): LineaResum
   if (oferta) l.push(oferta)
 
   if (d.destino_prenda) l.push({ que: 'El producto', valor: DESTINO_LABEL[d.destino_prenda] })
-  // Se guarda lo que sugirió la cuenta además de lo que se hizo: sirve para ver cuándo se va en
-  // contra y si valió la pena.
+  /**
+   * Se guarda lo que sugirió la cuenta además de lo que se hizo: sirve para ver cuándo se va en
+   * contra y si valió la pena.
+   *
+   * 🔴 **«En contra» es alguien que decidió distinto que la cuenta, ⛔ no el sistema apagando el
+   * retorno solo.** Cuando el cliente ACEPTA quedárselo, `camposAlContestarLaOferta` pone
+   * `retorno_decidido: false` —tenerlo prendido contaría el producto dos veces, en la bandeja de
+   * Depósito y en poder del cliente—, y `retorno_sugerido` se queda con el `true` de la decisión
+   * vieja. R-0022 leía *«No — en contra de lo que sugería la cuenta»* sobre algo que nadie
+   * decidió: **acusaba a Administración de una decisión que tomó el cliente.** Es el mismo *un dato
+   * que existe ⛔ no es una decisión tomada* de la columna «A devolver».
+   */
   if (d.retorno_decidido != null) {
-    const contra = d.retorno_sugerido != null && d.retorno_sugerido !== d.retorno_decidido
+    const loApagoElCliente = d.retencion_respuesta === 'acepto' && d.retorno_decidido === false
+    const contra = !loApagoElCliente && d.retorno_sugerido != null && d.retorno_sugerido !== d.retorno_decidido
     l.push({
       que: '¿Se pidió que vuelva?',
       valor: (d.retorno_decidido ? 'Sí' : 'No')
         + (d.via_retorno ? `, por ${VIA_LABEL[d.via_retorno]}` : '')
+        + (loApagoElCliente ? ' — el cliente aceptó quedárselo' : '')
         + (contra ? ' — en contra de lo que sugería la cuenta' : ''),
     })
   }
@@ -1160,18 +1181,10 @@ export function admiteDevolucionParcial(items: ItemReclamo[]): boolean {
 }
 
 // ── La plata ────────────────────────────────────────────────────────────────────
-
-const redondear = (n: number) => Math.round(n * 100) / 100
-
-/**
- * Número positivo, o 0. **Acepta strings a propósito**: Tienda Nube manda los precios y las
- * cantidades como texto (`price: "8990.00"`, `quantity: "1"`), así que exigir `number` acá hacía
- * que toda orden real calculara 0. Se descubrió probando contra una orden de verdad.
- */
-const positivo = (n: unknown): number => {
-  const v = typeof n === 'string' ? Number(n) : n
-  return typeof v === 'number' && isFinite(v) && v > 0 ? v : 0
-}
+//
+// 🔑 `redondear`, `positivo` y `costoDelCaso` viven en `lib/reclamos/plata.core.js`: los necesita
+// también `casos.core.js` —y por ahí `api/_reclamos.js`, que ⛔ no puede importar TypeScript—.
+// Acá quedan la cara tipada y el resto de la matemática, que sólo usa la app.
 
 /**
  * Lo que la persona **efectivamente pagó** por una línea: el precio de lista menos la parte
@@ -1576,6 +1589,8 @@ export function camposAlContestarLaOferta(o: {
   monto: number | null
   forma: FormaRetencion | null
   diferencia: number | null
+  /** Los del reclamo: es de donde sale la unidad perdida de `costo_caso`. Sin ellos vale 0. */
+  items?: ItemReclamo[]
 }): { error?: string; campos?: Partial<ReclamoRow> } {
   return camposAlContestarLaOfertaJs(o) as { error?: string; campos?: Partial<ReclamoRow> }
 }
@@ -1861,7 +1876,30 @@ export function cuentaDescuento(opciones: {
  *
  * La unidad perdida se valúa **a costo**: es lo que se fue por la puerta cuando el producto se le
  * regala al cliente. Si vuelve (a stock o a fallas) no se perdió, se recuperó.
+ *
+ * 🔑 **El cuerpo se mudó a `plata.core.js` el 28-ago-2026** —acá quedó la cara tipada— porque ahora
+ * lo necesita también `camposAlContestarLaOferta`, que corre en `api/_reclamos.js`. Mismo arreglo
+ * que `destinoDe`. Antes lo calculaba **sólo la pantalla**, y la rama que resuelve el reclamo sin
+ * pasar por ella dejaba `costo_caso` en el de la decisión vieja.
  */
+/**
+ * Las columnas que lee `costoDeLaFila`: su contrato, escrito una sola vez en `plata.core.js`.
+ * De ahí salen el `select` del handler y la pregunta «¿este gesto cambió el costo?».
+ */
+export const ENTRADAS_DEL_COSTO: readonly string[] = ENTRADAS_DEL_COSTO_JS
+
+/**
+ * **Lo que costó el caso, derivado de la FILA.** La regla —las tres condiciones que deciden cuánto
+ * entra de cada envío, y que vivían sueltas adentro de `DecidirReclamo.tsx`— vive en
+ * `plata.core.js`, porque la necesita también `casos.core.js` y `api/_reclamos.js`.
+ */
+export function costoDeLaFila(
+  fila: Partial<Pick<ReclamoRow,
+    'compensacion' | 'monto_total' | 'retorno_decidido' | 'envio_costo' | 'envio_ida_costo' | 'items' | 'destino_prenda'>>,
+): number {
+  return costoDeLaFilaJs(fila)
+}
+
 export function costoDelCaso(opciones: {
   montoDevuelto: number
   envioVuelta?: number | null
@@ -1875,13 +1913,7 @@ export function costoDelCaso(opciones: {
    */
   destino: DestinoPrenda | null
 }): number {
-  const { montoDevuelto, items, destino } = opciones
-  const envios = positivo(opciones.envioVuelta) + positivo(opciones.envioReemplazo)
-  // Solo se pierde la unidad si el cliente se lo queda; si vuelve —sana o fallada— se recupera.
-  const unidadPerdida = destino === null || destino === 'stock' || destino === 'no_salio'
-    ? 0
-    : items.reduce((s, it) => s + positivo(it.costo) * positivo(it.cantidad), 0)
-  return redondear(positivo(montoDevuelto) + envios + unidadPerdida)
+  return costoDelCasoJs(opciones)
 }
 
 // ── La fila ─────────────────────────────────────────────────────────────────────
@@ -2050,14 +2082,30 @@ export type ReclamoRow = {
  * Es la regla más delicada del módulo, porque equivocarla no rompe nada visible: deja el stock
  * mal por una unidad hasta el próximo conteo.
  *
- *   - **Se le devolvió la plata** → la venta original se anula, y al anularla la unidad vuelve al
- *     stock. Está fallada y no se puede vender: hay que volver a sacarla. **Descuenta.**
- *   - **Se le mandó otra unidad igual** → la venta original NO se anula (el cliente se queda con
- *     lo que compró) y esa unidad ya salió del stock. Descontarla otra vez restaría dos veces por
- *     una sola producto. **No descuenta.**
+ *   - **La venta original se anula** → al anularla la unidad vuelve al stock. Está fallada y no se
+ *     puede vender: hay que volver a sacarla. **Descuenta.**
+ *   - **La venta original queda en pie** (el cambio, la reposición, el reenvío, el cupón) → esa
+ *     unidad ya salió del stock con la venta. Descontarla otra vez restaría **dos veces** por un
+ *     solo producto. **No descuenta.**
+ *
+ * 🔴 **La pregunta es `anulaVenta`, y hasta el 28-ago-2026 estaba escrita a mano acá como
+ * `compensacion !== 'otra_unidad'`.** Era una copia fiel de la tabla del día en que se escribió
+ * —anulaban las cinco menos el cambio—, y el 27-ago `reenvio`, `cupon` y `ninguna` dejaron de
+ * anular sin que esta línea se enterara: cuatro filas donde los dos lados contestaban distinto
+ * sobre el mismo stock. Ahora sale de `EFECTOS_RESOLUCION`, que es donde vive.
  */
 export function laFallaDescuentaStock(compensacion: Compensacion | null | undefined): boolean {
-  return compensacion !== 'otra_unidad'
+  return seAnulaLaVentaJs(compensacion)
+}
+
+/**
+ * **La venta técnica ⛔ no puede salir antes que la anulación.** El aviso, o `null` si se puede.
+ * La regla —y por qué el freno de verdad va antes de escribir en GN— vive en `efectos.core.js`.
+ */
+export function faltaAnularAntesDeDescontar(
+  fila: Pick<ReclamoRow, 'compensacion' | 'stock_estado'>,
+): string | null {
+  return faltaAnularAntesDeDescontarJs(fila)
 }
 
 // ── Alertas por antigüedad ──────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import {
   alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
@@ -14,7 +15,7 @@ import {
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
   botonDecidir, estaDecidido, PASOS_DECISION, PASO_LABEL,
-  EFECTOS_RESOLUCION, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
+  EFECTOS_RESOLUCION, ENTRADAS_DEL_COSTO, costoDeLaFila, faltaAnularAntesDeDescontar, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -222,13 +223,49 @@ describe('laFallaDescuentaStock', () => {
   it('si se le devolvió la plata, la falla descuenta: la venta se anuló y la unidad volvió al stock', () => {
     expect(laFallaDescuentaStock('plata_total')).toBe(true)
     expect(laFallaDescuentaStock('plata_parcial')).toBe(true)
-    expect(laFallaDescuentaStock('cupon')).toBe(true)
-    expect(laFallaDescuentaStock('ninguna')).toBe(true)
   })
 
-  // El único caso en que NO descuenta, y es el que se presta a error.
+  /**
+   * 🔴 **Las cuatro filas donde los dos lados contestaban distinto** (28-ago-2026).
+   *
+   * La pregunta siempre fue `anulaVenta` —lo dice el docstring de la función: *«la venta original
+   * se anula, y al anularla la unidad vuelve al stock»*—, pero estaba escrita a mano como
+   * `compensacion !== 'otra_unidad'`. Era una copia fiel de la tabla del día en que se escribió; el
+   * **27-ago-2026** `reenvio`, `cupon` y `ninguna` dejaron de anular la venta —encendían pendientes
+   * que nadie podía tildar— y la copia se quedó como estaba.
+   *
+   * ⚠️ **Lo que costaba: el alta en Fallas descontaba una unidad que la venta original ya había
+   * descontado.** Stock corto por uno, sin ningún error, hasta el próximo conteo — que es
+   * exactamente el daño que esta función dice arriba que viene a evitar.
+   *
+   * 🔑 `otro_producto` es el mismo caso y **ya estaba mal desde antes**: en un cambio la venta ⛔ no
+   * se anula nunca —el cliente se queda con la compra—, así que la unidad que devolvió sigue
+   * descontada; si en vez de reingresarla se pasa a Fallas, descontarla es restarla dos veces.
+   */
+  it('si la venta queda EN PIE, la falla ⛔ NO descuenta: esa unidad ya salió con la venta', () => {
+    expect(laFallaDescuentaStock('cupon')).toBe(false)
+    expect(laFallaDescuentaStock('ninguna')).toBe(false)
+    expect(laFallaDescuentaStock('reenvio')).toBe(false)
+    expect(laFallaDescuentaStock('otro_producto')).toBe(false)
+  })
+
+  // El caso que se presta a error, y el que ya estaba bien.
   it('si se le mandó otra unidad igual, NO descuenta: ese producto ya salió con la venta original', () => {
     expect(laFallaDescuentaStock('otra_unidad')).toBe(false)
+  })
+
+  /**
+   * 🔑 **El cable, para que ⛔ no vuelva a haber dos respuestas.** Agregar una resolución a
+   * `EFECTOS_RESOLUCION` y olvidarse de esta función era, literalmente, el defecto: acá se ponen de
+   * acuerdo fila por fila, así que la próxima ⛔ no se puede olvidar.
+   */
+  it('fila por fila, contesta lo mismo que la tabla de efectos', () => {
+    const filas = Object.entries(EFECTOS_RESOLUCION)
+    expect(filas.length).toBe(7) // que la extracción no se haya quedado vacía
+    for (const [compensacion, efectos] of filas) {
+      expect([compensacion, laFallaDescuentaStock(compensacion as Compensacion)])
+        .toEqual([compensacion, efectos.anulaVenta === 'siempre'])
+    }
   })
 
   it('sin decidir todavía, se asume que descuenta (el caso más común)', () => {
@@ -758,6 +795,28 @@ describe('el resumen de lo decidido', () => {
     expect(t).toContain('en contra de lo que sugería la cuenta')
     const ok = texto({ ...base, compensacion: 'plata_total', retorno_sugerido: true, retorno_decidido: true })
     expect(ok).not.toContain('en contra')
+  })
+
+  /**
+   * 🔴 **«En contra» es alguien que decidió distinto que la cuenta, ⛔ no el sistema apagando el
+   * retorno solo** (28-ago-2026). Cuando el cliente ACEPTA quedárselo, el retorno se apaga —tenerlo
+   * prendido contaría el producto dos veces— y `retorno_sugerido` se queda con el `true` viejo.
+   * R-0022 leía *«No — en contra de lo que sugería la cuenta»* sobre algo que nadie decidió:
+   * **acusaba a Administración de una decisión que tomó el cliente.**
+   */
+  it('aceptar la oferta apaga el retorno, y eso ⛔ NO es ir en contra de la cuenta', () => {
+    const acepto: ReclamoRow = {
+      ...base, compensacion: 'plata_parcial', monto_total: 13491,
+      retorno_sugerido: true, retorno_decidido: false,
+      retencion_respuesta: 'acepto', retencion_monto: 13491, retencion_forma: 'plata',
+    }
+    const t = texto(acepto)
+    expect(t).not.toContain('en contra')
+    // ⚠️ Y ⛔ no se calla: dice QUIÉN lo apagó. Borrar la línea sería el mismo hueco por la otra punta.
+    expect(t).toContain('el cliente aceptó quedárselo')
+    // El control: rechazar ⛔ no apaga nada, así que la señal de «en contra» sigue viva.
+    const rechazo = texto({ ...acepto, retencion_respuesta: 'rechazo', retorno_decidido: false })
+    expect(rechazo).toContain('en contra de lo que sugería la cuenta')
   })
 
   it('la expectativa se lee con la etiqueta del caso', () => {
@@ -2320,5 +2379,133 @@ describe('pasoGuardado', () => {
     const r22 = r({ escenario: 'coincide', envio_costo: 1200, compensacion: 'otro_producto' })
     expect(pasoGuardado(r22, 'que-paso', true)).toBe(true)
     expect(pasoGuardado(r22, 'producto', true)).toBe(true)
+  })
+})
+
+/**
+ * 🔴 **El orden entre anular la venta y sacar la unidad con la venta técnica** (28-ago-2026).
+ *
+ * Anular la venta original en Gestión Nube **devuelve la unidad al stock**, y la venta técnica es la
+ * que la vuelve a sacar. Si sale al revés, descuenta una unidad que todavía no volvió: **el stock
+ * queda uno abajo del real**, sin ningún error y hasta el próximo conteo.
+ *
+ * ⚠️ **El aviso existía desde el 26-ago, escrito a mano y en UNA sola de las dos puertas**: el
+ * camino de Fallas (`aFallas`). El de la unidad sana —`descontarRegaladas`, que es el que está
+ * apretado hoy en R-0022, con la anulación pendiente y dos productos por descontar— ⛔ no lo tenía.
+ * Es *dos lados que deciden sobre lo mismo*, con la regla escrita en uno.
+ */
+describe('la venta técnica ⛔ no sale antes que la anulación', () => {
+  it('con la anulación pendiente, traba y dice qué hacer primero', () => {
+    const t = faltaAnularAntesDeDescontar({ compensacion: 'plata_parcial', stock_estado: 'pendiente' })
+    expect(t).toMatch(/Anulé en GN/)
+  })
+
+  it('anulada, deja pasar', () => {
+    expect(faltaAnularAntesDeDescontar({ compensacion: 'plata_parcial', stock_estado: 'hecho' })).toBeNull()
+  })
+
+  /**
+   * 🔑 **Sólo muerde cuando la venta se anula.** Si queda en pie —un cupón, un cambio, un reenvío—
+   * la unidad nunca vuelve al stock: ⛔ no hay orden que respetar. Y ahí `stock_estado` es
+   * `no_aplica`, ⛔ no `pendiente`, así que el guard tampoco lo vería.
+   */
+  it('si la venta queda en pie, ⛔ no hay nada que esperar', () => {
+    expect(faltaAnularAntesDeDescontar({ compensacion: 'cupon', stock_estado: 'no_aplica' })).toBeNull()
+    expect(faltaAnularAntesDeDescontar({ compensacion: 'cupon', stock_estado: 'pendiente' })).toBeNull()
+    expect(faltaAnularAntesDeDescontar({ compensacion: 'otra_unidad', stock_estado: 'pendiente' })).toBeNull()
+  })
+
+  /**
+   * 🔴 **El cable: las DOS puertas que escriben en GN tienen que ejercerlo, y ANTES de escribir.**
+   * `descontarRegaladas` crea la venta en GN y **después** sella la baja, así que un 409 del
+   * handler llega tarde: dejaría la venta hecha en GN y el reclamo sin sellar. Por eso el freno
+   * vive en el cliente, arriba del `fetch`, y en las dos funciones — no en una.
+   */
+  it('las dos funciones que escriben en GN lo frenan antes del fetch', () => {
+    const fuente = readFileSync(new URL('../lib/reclamos/cliente.ts', import.meta.url), 'utf8')
+    for (const fn of ['pasarAFallas', 'descontarRegaladas']) {
+      const cuerpo = fuente.split(`export async function ${fn}(`)[1].split('\nexport ')[0]
+      expect([fn, cuerpo.includes('faltaAnularAntesDeDescontar')]).toEqual([fn, true])
+      // Y antes de tocar GN: el guard tiene que estar arriba de la primera escritura.
+      const primerFetch = Math.min(
+        ...[cuerpo.indexOf('await fetch('), cuerpo.indexOf('await crearFalla(')].filter((i) => i >= 0),
+      )
+      expect([fn, cuerpo.indexOf('faltaAnularAntesDeDescontar') < primerFetch]).toEqual([fn, true])
+    }
+  })
+})
+
+/**
+ * 🔴 **`costo_caso` tiene que seguir a sus entradas** (28-ago-2026).
+ *
+ * Es el único número que dice cuánto cuestan los errores propios, y lo escribía **sólo `decidir`**.
+ * `editar` puede tocar seis de sus siete entradas —los dos envíos, los items, el destino, el
+ * retorno— y las dejaba cambiar sin mover el costo. La cuenta vivía suelta adentro de
+ * `DecidirReclamo.tsx`, así que **no era de nadie más**: por eso se quedaba vieja apenas algo la
+ * tocaba fuera de esa pantalla, que es lo que le pasó a R-0022 al aceptar la oferta.
+ */
+describe('costoDeLaFila: la cuenta que ahora es de todos', () => {
+  const fila = {
+    compensacion: 'plata_parcial' as const,
+    monto_total: 13491,
+    retorno_decidido: false,
+    envio_costo: 6500,
+    envio_ida_costo: 0,
+    items: [{ producto: 'Case', cantidad: 1, costo: 3000 }],
+    destino_prenda: 'regalada' as const,
+  }
+
+  /**
+   * 🔑 **El envío de vuelta entra sólo si el producto vuelve.** Era el $6.500 que R-0022 seguía
+   * arrastrando de una decisión que aceptar la oferta ya había apagado: el número quedaba
+   * afirmando una etiqueta que nunca se iba a pagar.
+   */
+  it('el envío de vuelta ⛔ no entra si el producto no vuelve, aunque el costo esté cargado', () => {
+    expect(costoDeLaFila(fila)).toBe(13491 + 3000)
+    expect(costoDeLaFila({ ...fila, retorno_decidido: true, destino_prenda: 'stock' })).toBe(13491 + 6500)
+  })
+
+  /** El envío de ida entra sólo en la reposición: es la única que manda un paquete a cuenta nuestra. */
+  it('el envío de ida entra sólo en la reposición', () => {
+    expect(costoDeLaFila({ ...fila, envio_ida_costo: 4000 })).toBe(13491 + 3000)
+    expect(costoDeLaFila({ ...fila, compensacion: 'otra_unidad', envio_ida_costo: 4000 })).toBe(13491 + 4000 + 3000)
+  })
+
+  /** Con cupón hoy ⛔ no sale plata de la caja: lo único que costó es la unidad. Ver **B6**. */
+  it('con cupón cuesta sólo la unidad', () => {
+    expect(costoDeLaFila({ ...fila, compensacion: 'cupon' })).toBe(3000)
+  })
+
+  /**
+   * ⚠️ **Con el `costo` del ítem sin cargar, la unidad vale CERO** — y las dos filas reales de BDI
+   * lo tienen en `null`. ⛔ No es un defecto de la cuenta: es un dato que falta, y el número se
+   * mueve solo el día que se cargue. Este test existe para que eso esté dicho y no sorprenda.
+   */
+  it('sin el costo del ítem cargado, cuenta sólo la plata', () => {
+    expect(costoDeLaFila({ ...fila, items: [{ producto: 'Case', cantidad: 1, costo: null }] })).toBe(13491)
+  })
+
+  /**
+   * 🔴 **El cable: la lista de entradas es la de la función, ⛔ no una copia.** El handler la usa
+   * para dos cosas —traer las columnas y preguntar si el gesto cambió el costo—; con dos listas
+   * escritas a mano, agregar una entrada y olvidarse de una de las dos deja el número viejo **sin
+   * decir nada**, que es el defecto que esto vino a cerrar.
+   */
+  it('toda entrada de la cuenta está en ENTRADAS_DEL_COSTO', () => {
+    const fuente = readFileSync(new URL('../lib/reclamos/plata.core.js', import.meta.url), 'utf8')
+    const cuerpo = fuente.split('export function costoDeLaFila(fila) {')[1].split('\n}')[0]
+    const leidas = [...new Set([...cuerpo.matchAll(/\bf\.([a-z_]+)/g)].map((m) => m[1]))]
+    expect(leidas.length).toBeGreaterThan(5) // que la extracción no se haya quedado vacía
+    expect(leidas.filter((k) => !ENTRADAS_DEL_COSTO.includes(k))).toEqual([])
+  })
+
+  /** Y que el handler use ESA lista para las dos cosas, ⛔ no una escrita al lado. */
+  it('el handler trae y escucha con la misma lista', () => {
+    const fuente = readFileSync(new URL('../api/_reclamos.js', import.meta.url), 'utf8')
+    const editar = fuente.split("if (action === 'editar')")[1].split("if (action === 'eliminar')")[0]
+    expect(editar).toContain('ENTRADAS_DEL_COSTO.some(')
+    expect(editar).toContain('ENTRADAS_DEL_COSTO.join(')
+    // ⚠️ Y sólo sobre un reclamo YA decidido: antes de la decisión el costo es `null` a propósito.
+    expect(editar).toMatch(/previa\.compensacion/)
   })
 })

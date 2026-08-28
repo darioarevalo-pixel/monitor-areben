@@ -50,7 +50,8 @@ import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
-import { loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
+import { faltaAnularAntesDeDescontar, loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
+import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
 import { camposAlContestarLaOferta, esEscenarioDe, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
@@ -669,7 +670,9 @@ export default async function handler(req, res) {
     if (action === 'retencion-respuesta') {
       const { data: fila, error: eLee } = await supabase
         .from('devoluciones')
-        .select('estado, motivo, escenario, retencion_monto, retencion_forma, retencion_respuesta, diferencia')
+        // ⚠️ `items` entra por `costo_caso`: la unidad que el cliente se queda se valúa **a costo**,
+        // y sin la lista el número saldría contando sólo la plata. Es la mitad grande del costo.
+        .select('estado, motivo, escenario, retencion_monto, retencion_forma, retencion_respuesta, diferencia, items')
         .eq('store', store).eq('id', id).maybeSingle();
       if (eLee) throw new Error(eLee.message);
       if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
@@ -696,6 +699,7 @@ export default async function handler(req, res) {
         monto: num(fila.retencion_monto),
         forma: texto(fila.retencion_forma),
         diferencia: num(fila.diferencia),
+        items: Array.isArray(fila.items) ? fila.items : [],
       });
       if (r.error) return res.status(400).json({ error: r.error });
       const acepto = r.campos.retencion_respuesta === 'acepto';
@@ -723,7 +727,7 @@ export default async function handler(req, res) {
     if (action === 'descontado') {
       const { data: fila, error: eLee } = await supabase
         .from('devoluciones')
-        .select('estado, motivo, compensacion, items, items_correctos, destino_prenda')
+        .select('estado, motivo, compensacion, items, items_correctos, destino_prenda, stock_estado')
         .eq('store', store).eq('id', id).maybeSingle();
       if (eLee) throw new Error(eLee.message);
       if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
@@ -747,6 +751,20 @@ export default async function handler(req, res) {
       if (!fila.compensacion) {
         return res.status(409).json({ error: 'Este reclamo todavía no está decidido: primero resolvelo y después descontá el stock.' });
       }
+      /**
+       * 🔴 **Y el ORDEN, que es de lo que cuelga que el stock quede bien.** Anular la venta devuelve
+       * la unidad a GN, y esta venta técnica es la que la vuelve a sacar; al revés saca una que
+       * todavía no volvió y **el stock queda uno abajo del real**, sin error y hasta el próximo
+       * conteo. El aviso vivía sólo en el toast de la pantalla, y sólo en el camino de Fallas.
+       *
+       * ⚠️ **El freno que sirve está antes de escribir en GN** (`descontarRegaladas`, que corre en
+       * la app porque los tokens de ventas viven en producción): acá el sello llega **después** de
+       * que la venta exista. Éste es el respaldo para el que entre por otra puerta — la misma
+       * repartija que `despachado`, y la misma razón: una pantalla que esconde un botón es una
+       * sugerencia, no una regla.
+       */
+      const trabaOrden = faltaAnularAntesDeDescontar(fila);
+      if (trabaOrden) return res.status(409).json({ error: trabaOrden });
       // 🔑 **El cero afirma.** Sin esto, un reclamo donde nada se regala contestaría "descontado
       // todo" sobre una lista vacía y quedaría sellado un paso que nadie hizo.
       if (!loQueFaltaDescontar(fila).unidades.length) {
@@ -969,6 +987,35 @@ export default async function handler(req, res) {
         if (b[k] !== undefined && PENDIENTES.includes(b[k])) campos[k] = b[k];
       }
       if (!Object.keys(campos).length) return res.status(400).json({ error: 'nada para editar' });
+      /**
+       * 🔴 **`costo_caso` sigue a sus entradas, y hasta el 28-ago-2026 ⛔ no las seguía.**
+       *
+       * Es el único número que dice cuánto cuestan los errores propios, y **lo escribía sólo
+       * `decidir`**. Pero `editar` puede tocar **seis de sus siete entradas** —los dos envíos, los
+       * items (que es de donde sale la unidad, valuada a costo), el destino, el retorno y, por la
+       * retención, el monto— y las dejaba cambiar sin mover el costo: el número quedaba afirmando
+       * lo de una decisión que ya no era. Es lo mismo que le pasó a la rama de la oferta, por otra
+       * puerta.
+       *
+       * ⚠️ **Sólo si el reclamo YA está decidido.** Mientras no lo esté, `editar` es «Confirmar
+       * paso» guardando avance a medio camino, `costo_caso` todavía es `null` y quien lo escribe al
+       * final es `decidir`: calcularlo antes sería afirmar un costo sobre una decisión que nadie
+       * tomó — el mismo *un dato que existe ⛔ no es una decisión tomada* de la columna «A devolver».
+       *
+       * 🔑 **La cuenta ⛔ no se reescribe acá**: sale de `costoDeLaFila`, la misma que usa la
+       * pantalla y la misma que usa aceptar la oferta. Se lee la fila entera y se le aplican encima
+       * los campos de este gesto, porque el costo depende de **cómo queda**, no de qué se tocó.
+       *
+       * ⚠️ Y **la lista de entradas es la de la función** (`ENTRADAS_DEL_COSTO`), ⛔ no una copia:
+       * el `select` y la pregunta salen de la misma, así que agregar una entrada al costo ⛔ no
+       * puede dejar afuera ni al que la trae ni al que la escucha.
+       */
+      if (ENTRADAS_DEL_COSTO.some((k) => campos[k] !== undefined)) {
+        const previa = (await supabase.from('devoluciones')
+          .select(ENTRADAS_DEL_COSTO.join(', ') + ', compensacion')
+          .eq('store', store).eq('id', id).maybeSingle()).data;
+        if (previa && previa.compensacion) campos.costo_caso = costoDeLaFila({ ...previa, ...campos });
+      }
       const { error } = await supabase.from('devoluciones').update({ ...campos, updated_at: ahora() }).eq('id', id);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true });
