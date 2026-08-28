@@ -967,9 +967,10 @@ las había mandado. *«Si ya cargó fotos, y estamos en la parte de decisión, n
 cargar»*.
 
 **Dónde vive ahora**: `lib/reclamos/botones.ts` → `mensajesDeLaFila(d)`, que devuelve la **lista
-cerrada** de qué mensajes corresponden en ese momento (`pedir_fotos · mas_fotos · resolucion ·
-etiqueta · plata_enviada`). `Reclamos.tsx` sólo dibuja lo que esa lista dice. Ahí se mudó también
-`ESTADOS_CON_LINK`, que era una const local de la pantalla.
+cerrada** de qué mensajes corresponden en ese momento (`pedir_fotos · mas_fotos · propuesta ·
+resolucion · etiqueta_en_camino · etiqueta · despacho_hecho · plata_enviada`). `Reclamos.tsx` sólo
+dibuja lo que esa lista dice. Ahí se mudó también `ESTADOS_CON_LINK`, que era una const local de la
+pantalla.
 
 🔑 **El criterio de aceptación ⛔ no es «que exista el mensaje»**: es que en cada momento estén
 **exactamente los que corresponden, ni uno de más**. Un botón que no aplica cuesta lo mismo que uno
@@ -1135,9 +1136,9 @@ el mismo reclamo**: *«te devolvemos todo»* y *«quedátelo por una parte»*. L
 que el cliente va a reclamar después. Por el mismo motivo se calla `pedir_fotos`: quien ya armó una
 propuesta tiene la evidencia que necesitaba.
 
-⚠️ **Los HECHOS ⛔ no se callan**, y ahí está la línea: `etiqueta` y `plata_enviada` avisan algo que
-**ya ocurrió en el mundo**; los otros tres son **promesas**. Un hecho ⛔ no se contradice con una
-propuesta, y esconderlo dejaría al cliente sin el seguimiento.
+⚠️ **Los HECHOS ⛔ no se callan**, y ahí está la línea: `etiqueta`, `despacho_hecho` y
+`plata_enviada` avisan algo que **ya ocurrió en el mundo**; los otros son **promesas**. Un hecho ⛔ no
+se contradice con una propuesta, y esconderlo dejaría al cliente sin el seguimiento.
 
 | momento | qué ofrece la columna |
 |---|---|
@@ -1146,6 +1147,7 @@ propuesta, y esconderlo dejaría al cliente sin el seguimiento.
 | **oferta mandada, sin respuesta** | **`propuesta`** — ⛔ ni `resolucion` ni `pedir_fotos` |
 | contestada (acepte o no) | `resolucion` |
 | con etiqueta / con la plata afuera | + `etiqueta` / `plata_enviada` |
+| **con el paquete nuestro ya en la calle** | + **`despacho_hecho`** (28-ago) |
 
 **Tres decisiones del texto, y las tres son de plata:**
 
@@ -1172,6 +1174,41 @@ veces — *los dos lados bien y el bug en la pregunta del medio*.
 
 ⚠️ **El fixture del test de texto tiene la expectativa DISTINTA de la resolución a propósito**: con
 las dos iguales, invertir la precedencia de la alternativa no rompe nada y la regla queda sin fijar.
+
+## 🆕 El despacho, y las tres ramas que salían mudas o mintiendo (28-ago-2026)
+
+Salió de la auditoría de punta a punta (`docs/postventa-auditoria-2026-08-28.md`, D5 a D8). Los
+cuatro son **texto que salía a un cliente todos los días**, ⛔ no detalles de redacción.
+
+- 🔴 **`despacho_hecho`, el hecho que ocurría y ⛔ no se contaba.** `mensajeSeguimiento(…, 'reenvio')`
+  existía y estaba probado desde el 27, y **su único llamador era el test**: en las tres
+  resoluciones que mandan algo —el cambio, la reposición y el reenvío— el paquete salía y el cliente
+  ⛔ no se enteraba por el sistema. Es la forma de [[feedback_areben_pendiente_derivado_sin_gesto]],
+  la misma del botón «Despaché». 🔑 **Se lee del pendiente que tilda Depósito**
+  (`envio_nuevo_estado === 'hecho'`), ⛔ no de un campo nuevo: el hecho lo cuenta quien lo hizo.
+  Y tirando del hilo, el texto también estaba mal —las tres decían *«tu reposición»*, que sobre un
+  **cambio** es otra cosa que la que hay en la caja—: ahora lo nombra `QUE_SE_DESPACHO`.
+- 🔴 **El cupón ⛔ ya no se promete sin existir.** Sin `cupon_codigo` el mensaje salía igual —*«te
+  dejamos un cupón»*—, que es el mismo agujero que `cupon-emitido` tapó el 25-ago **entrando por la
+  puerta del texto**. Ahora dice lo que sí es verdad, con la forma de la etiqueta que todavía no
+  existe: *«te pasamos el código apenas lo tengamos»*.
+- 🔴 **El cambio y «sin compensación» compartían el default**, *«Ya lo revisamos y te contamos cómo
+  seguimos»* — que promete una novedad que ⛔ no viene, justo en el caso donde hay que decir que no.
+  ⚠️ **`ninguna` ⛔ no afirma la culpa**: el motivo lo contesta el **escenario**, y decir *«fue del
+  transporte»* sobre un `plazo_mal_informado` es explicarle al cliente algo que no pasó.
+- 🔴 **Los asteriscos.** WhatsApp pone negrita con **uno**; salían dos (`**…**`) en el renglón que
+  más importa —quién paga el envío—, así que el cliente veía los cuatro. La convención ya estaba
+  bien escrita en `detalleCambioTexto`. El test ⛔ no mira la constante: mira que **ningún mensaje
+  armado** contenga `**`.
+
+✅ **16 mutantes, 16 muertos.** Los dos que sobrevivieron a la primera tanda eran reales y los dos
+eran del **cable**: el orden de los hechos en la lista, y —el que importa— **un botón bien rotulado
+que copiaba el texto de otro momento**. Ese se mata apretándolo con el portapapeles stubbeado
+(`copiadoAlApretar`, en `tests/reclamos-lista-mensajes.test.tsx`): el rótulo dice cuál se ofrece, el
+texto es lo único que llega al cliente.
+
+⚠️ **Lo que ⛔ NO se ejerció es la pantalla**: los textos se leyeron **renderizados** (que es como se
+prueban) y el botón se aprieta en el test, pero nadie abrió Reclamos en prod con un despacho hecho.
 
 ## 🆕 La respuesta del cliente cierra la rama, y mueve el caso al momento siguiente (28-ago-2026)
 

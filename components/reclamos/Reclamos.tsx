@@ -360,7 +360,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       titulo: 'Soltar la decisión',
       ok: 'Sí, soltarla',
       mensaje: esCambio(d)
-        ? 'El reclamo vuelve a quedar SIN DECIDIR y sale de Cambios: se borra lo que se haya empezado a armar del cambio. Lo que cargaste al analizarlo queda. Si salís a la mitad, queda pendiente de decisión. Todo queda registrado en el historial.'
+        ? 'El reclamo vuelve a quedar SIN DECIDIR y sale de Cambios: se elimina lo que se haya empezado a armar del cambio. Lo que cargaste al analizarlo queda. Si salís a la mitad, queda pendiente de decisión. Todo queda registrado en el historial.'
         : 'El reclamo vuelve a quedar SIN DECIDIR y se destildan las tareas de esta resolución. Lo que cargaste al analizarlo queda. Si salís a la mitad, queda pendiente de decisión. Todo queda registrado en el historial.',
     })
     if (!si) return
@@ -956,6 +956,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {mensajes.includes('etiqueta') && (
                         <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />
                       )}
+                      {/* 🔴 **El único hecho del circuito que no se le contaba al cliente.** El
+                          texto existía y estaba probado desde el 27-ago; su único llamador era el
+                          test ⇒ le mandábamos el cambio, la otra unidad o lo que faltaba, y del
+                          otro lado no llegaba nada. Sale del pendiente que tilda Depósito, igual
+                          que «plata enviada» sale del que tilda Administración. */}
+                      {mensajes.includes('despacho_hecho') && (
+                        <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'reenvio')} label="Msj: ya lo despachamos" tone="neutral" />
+                      )}
                       {mensajes.includes('plata_enviada') && (
                         <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
                       )}
@@ -1082,10 +1090,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         <Button
                           size="sm" variant="ghost"
                           onClick={async () => {
-                            const si = await confirmar({ titulo: 'Borrar el reclamo', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra el registro. No anula nada de lo que ya se haya hecho en GN.' })
-                            if (si) await accion(() => eliminarReclamo(marca, d.id), 'Reclamo borrado.')
+                            const si = await confirmar({ titulo: 'Eliminar el reclamo', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina el registro. No anula nada de lo que ya se haya hecho en GN.' })
+                            if (si) await accion(() => eliminarReclamo(marca, d.id), 'Reclamo eliminado.')
                           }}
-                        >Borrar</Button>
+                        >Eliminar</Button>
                       )}
                     </div>
                   </Td>

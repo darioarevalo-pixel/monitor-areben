@@ -44,6 +44,8 @@ export type MensajeDeLaFila =
   | 'etiqueta_en_camino'
   /** El seguimiento del retorno, cuando ya hay etiqueta. */
   | 'etiqueta'
+  /** Ya salió lo que se le manda: el cambio, la otra unidad o lo que faltaba. */
+  | 'despacho_hecho'
   /** La plata ya salió. */
   | 'plata_enviada'
 
@@ -105,9 +107,18 @@ export function linkVivo(d: ReclamoRow): boolean {
  * [[feedback_areben_invariante_escrito_no_frena]]. Por eso mira `laEtiquetaEstaDebida` y ⛔ no
  * `faltaMandarLaEtiqueta`: **que falte es un hecho de la fila; que sea nuestro turno, ⛔ no.**
  *
- * ⚠️ **`etiqueta` y `plata_enviada` ⛔ no se callan**, y la diferencia es la que separa este archivo
- * de una lista de condiciones: los otros tres son **promesas** y ésos dos son **hechos que ya
- * ocurrieron** en el mundo. Un hecho ⛔ no se contradice con una propuesta.
+ * ⚠️ **`etiqueta`, `despacho_hecho` y `plata_enviada` ⛔ no se callan**, y la diferencia es la que
+ * separa este archivo de una lista de condiciones: los otros tres son **promesas** y ésos son
+ * **hechos que ya ocurrieron** en el mundo. Un hecho ⛔ no se contradice con una propuesta.
+ *
+ * 🔴 🔑 **`despacho_hecho` es el que faltaba, y el agujero era del CABLE, ⛔ no de la regla**
+ * (28-ago-2026): `mensajeSeguimiento(…, 'reenvio')` existía, estaba probado, y su único llamador
+ * era el test — o sea que **cuando le mandábamos algo al cliente, el cliente no se enteraba por el
+ * sistema**, en las tres resoluciones que mandan algo (el cambio, la reposición y el reenvío) ⇒
+ * [[feedback_areben_pendiente_derivado_sin_gesto]], la misma forma que el botón «Despaché» del
+ * 25-ago. Se lee de `envio_nuevo_estado === 'hecho'` —el pendiente que deja `saleUnEnvio` y que
+ * tilda Depósito—, exactamente como `plata_enviada` se lee de `reintegro_estado`: **el hecho lo
+ * cuenta quien lo hizo**, ⛔ no un campo de texto aparte.
  *
  * 🔑 `resolucion` se gatea por `estaDecidido`, ⛔ no por «hay campos cargados»: desde que
  * «Confirmar paso» guarda por `editar`, el reclamo tiene datos mucho antes de tener decisión, y
@@ -126,6 +137,7 @@ export function mensajesDeLaFila(d: ReclamoRow): MensajeDeLaFila[] {
   if (estaDecidido(d) && !esperando) ms.push('resolucion')
   if (laEtiquetaEstaDebida(d)) ms.push('etiqueta_en_camino')
   if (d.seguimiento_vuelta) ms.push('etiqueta')
+  if (d.envio_nuevo_estado === 'hecho') ms.push('despacho_hecho')
   if (d.reintegro_estado === 'hecho') ms.push('plata_enviada')
   return ms
 }

@@ -251,11 +251,47 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
       seguimiento_vuelta: 'AR123', reintegro_estado: 'hecho',
     })
     expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'etiqueta', 'plata_enviada'])
+    // 🔑 Los tres hechos, en el orden en que ocurren en el mundo: primero sale el paquete de
+    // vuelta, después el nuestro, y al final la plata. La lista **es** ese orden.
+    expect(mensajesDeLaFila(fila({ ...d, compensacion: 'otro_producto', envio_nuevo_estado: 'hecho' })))
+      .toEqual(['resolucion', 'etiqueta', 'despacho_hecho', 'plata_enviada'])
     // Sin la etiqueta cargada no hay seguimiento que mandar.
     expect(mensajesDeLaFila(fila({ estado: 'en_transito', compensacion: 'plata_total' })))
       .toEqual(['resolucion'])
     // Y con el reintegro pendiente ⛔ no se le avisa que la plata salió.
     expect(mensajesDeLaFila(fila({ estado: 'resuelto', compensacion: 'plata_total', reintegro_estado: 'pendiente' })))
       .toEqual(['resolucion'])
+  })
+
+  /**
+   * 🔴 **El hecho que ocurría y ⛔ no se contaba** (28-ago-2026, D5 de la auditoría): el texto
+   * de *«ya lo despachamos»* existía y estaba probado desde el 27, y su **único llamador era el
+   * test**. En las tres resoluciones que mandan algo —el cambio, la reposición y el reenvío— el
+   * paquete salía y el cliente no se enteraba por el sistema.
+   *
+   * 🔑 Se lee del **pendiente que tilda Depósito**, ⛔ no de un campo de texto: el hecho lo cuenta
+   * quien lo hizo, igual que `plata_enviada` sale de `reintegro_estado`.
+   */
+  it('🔴 despachado lo que se le manda: se le avisa', () => {
+    const d = fila({ estado: 'resuelto', compensacion: 'otro_producto', envio_nuevo_estado: 'hecho' })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'despacho_hecho'])
+  })
+
+  it('mientras el paquete ⛔ no salió, no se le avisa nada', () => {
+    expect(mensajesDeLaFila(fila({ estado: 'resuelto', compensacion: 'otro_producto', envio_nuevo_estado: 'pendiente' })))
+      .toEqual(['resolucion'])
+  })
+
+  /**
+   * 🔑 **Es un HECHO, así que convive con la propuesta.** La oferta esperando calla las promesas
+   * —la resolución, la etiqueta que va en camino— porque son otra cosa que la que se está
+   * negociando; un paquete que ya está en la calle ⛔ no se contradice con nada.
+   */
+  it('con la oferta esperando, el despacho ya hecho se sigue contando', () => {
+    const d = fila({
+      estado: 'resuelto', compensacion: 'otro_producto', envio_nuevo_estado: 'hecho',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['propuesta', 'despacho_hecho'])
   })
 })

@@ -52,6 +52,35 @@ const botones = async (filas: ReclamoRow[]): Promise<string[]> => {
 }
 
 /**
+ * **Aprieta el botón y devuelve lo que quedó en el portapapeles.**
+ *
+ * 🔑 El `label` dice cuál mensaje se ofrece; **esto dice cuál se copia**, que es lo único que llega
+ * al cliente. Sin esta mitad, un botón bien rotulado que manda el texto de otro momento pasa
+ * entero: los dos lados en verde y el bug en la pregunta del medio.
+ */
+const copiadoAlApretar = async (filas: ReclamoRow[], rotulo: string): Promise<string> => {
+  let copiado = ''
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async (t: string) => { copiado = t } },
+  })
+  FILAS.length = 0
+  FILAS.push(...filas)
+  const div = document.createElement('div')
+  document.body.appendChild(div)
+  const root = createRoot(div)
+  await act(async () => {
+    root.render(<SesionProvider><ToastProvider><Devoluciones /></ToastProvider></SesionProvider>)
+  })
+  const b = [...div.querySelectorAll('button')].find((x) => (x.textContent || '').includes(rotulo))
+  if (!b) throw new Error(`no está el botón «${rotulo}»`)
+  await act(async () => { b.click() })
+  await act(async () => { root.unmount() })
+  div.remove()
+  return copiado
+}
+
+/**
  * ⚠️ El texto del botón viene con el ícono pegado adelante (`📋Msj: pedir fotos`), así que se
  * busca por `includes` y se devuelve el rótulo limpio: comparar contra el string entero ataría el
  * test al ícono del kit, que ⛔ no es lo que se está probando.
@@ -143,5 +172,34 @@ describe('la lista dibuja los mensajes del momento', () => {
       retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: 'rechazo',
     } as unknown as ReclamoRow
     expect(conMensaje(await botones([contestada]))).toEqual(['Msj: resolución'])
+  })
+
+  /**
+   * 🔴 **El cable del mensaje que no tenía botón** (28-ago-2026): la regla nueva no vale nada si el
+   * JSX no la dibuja — que es exactamente la forma del defecto que se está arreglando (el texto
+   * existía, probado, y nadie lo llamaba).
+   */
+  it('🔴 despachado lo que se le manda: la fila ofrece avisarle', async () => {
+    const despachado = {
+      ...base, estado: 'resuelto', compensacion: 'otro_producto',
+      envio_nuevo_estado: 'hecho', seguimiento_ida: 'IDA9',
+    } as unknown as ReclamoRow
+    expect(conMensaje(await botones([despachado]))).toEqual(['Msj: resolución', 'Msj: ya lo despachamos'])
+  })
+
+  /**
+   * 🔴 **Y que copie ESE mensaje.** El rótulo y el texto son dos cosas: `mensajeSeguimiento` toma
+   * cuál de los tres momentos armar como un parámetro suelto, así que un botón bien rotulado que
+   * pide *«plata»* dice que le devolvimos la plata a alguien a quien le mandamos un paquete.
+   */
+  it('🔴 y el botón copia el texto del despacho, ⛔ no el de otro momento', async () => {
+    const despachado = {
+      ...base, estado: 'resuelto', compensacion: 'otro_producto',
+      envio_nuevo_estado: 'hecho', seguimiento_ida: 'IDA9', monto_total: 15283,
+    } as unknown as ReclamoRow
+    const txt = await copiadoAlApretar([despachado], 'Msj: ya lo despachamos')
+    expect(txt).toContain('el producto de tu cambio')
+    expect(txt).toContain('IDA9')
+    expect(txt).not.toContain('devolución')
   })
 })

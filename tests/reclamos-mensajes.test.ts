@@ -95,6 +95,57 @@ describe('mensaje de resolución', () => {
   })
 })
 
+/**
+ * **Los tres textos que se descubrieron mudos, o mintiendo, en la auditoría del 28-ago-2026**
+ * (`docs/postventa-auditoria-2026-08-28.md`, D6/D7/D8). Los tres salían a un cliente todos los
+ * días: no son detalles de redacción, son promesas.
+ */
+describe('lo que la resolución ⛔ no puede prometer', () => {
+  // 🔴 D7. WhatsApp pone negrita con UN asterisco: con dos, el cliente ve los cuatro. Se fija sobre
+  // los mensajes que la usan, ⛔ no sobre la constante: lo que sale es el texto armado.
+  it('🔴 ningún mensaje sale con los asteriscos de Markdown', () => {
+    const conEtiqueta = mensajeResolucion({ ...base, compensacion: 'plata_total', monto_total: 1000, via_retorno: 'andreani' } as ReclamoRow, 'R-0025')
+    const enCamino = mensajeEtiquetaEnCamino({ ...base, via_retorno: 'correo' } as ReclamoRow, 'R-0025')
+    for (const t of [conEtiqueta, enCamino]) {
+      expect(t).not.toContain('**')
+      expect(t).toContain('*El envío lo pagamos nosotros.*')
+    }
+  })
+
+  // 🔴 D6. El cupón es una promesa hasta que existe en la tienda, y el pendiente `cupon_estado` lo
+  // dice. Sin código, el mensaje ⛔ no puede salir como si el cliente ya lo tuviera.
+  it('🔴 un cupón sin código dice que el código va aparte, ⛔ no lo da por dado', () => {
+    const sinCodigo = mensajeResolucion({ ...base, compensacion: 'cupon', cupon_codigo: null } as ReclamoRow, 'R-0025')
+    expect(sinCodigo).toContain('apenas lo tengamos')
+    // ⚠️ Nombrar el código está bien —es lo que falta—: lo que ⛔ no puede es DARLO, que es la
+    // forma en que este mensaje se lee como si el cupón ya existiera en la tienda.
+    expect(sinCodigo).not.toContain('(código')
+  })
+
+  it('con el código cargado, lo dice y ⛔ no promete nada más', () => {
+    const conCodigo = mensajeResolucion({ ...base, compensacion: 'cupon', cupon_codigo: 'BDI15' } as ReclamoRow, 'R-0025')
+    expect(conCodigo).toContain('código BDI15')
+    expect(conCodigo).not.toContain('apenas lo tengamos')
+  })
+
+  // 🔴 D8. Los dos caían en el default —«Ya lo revisamos y te contamos cómo seguimos»—, que promete
+  // una novedad que ⛔ no viene. Y `ninguna` es justo el caso donde hay que decir por qué.
+  it('🔴 el cambio y «sin compensación» ⛔ ya no dicen lo mismo', () => {
+    const cambio = mensajeResolucion({ ...base, compensacion: 'otro_producto' } as ReclamoRow, 'R-0025')
+    const ninguna = mensajeResolucion({ ...base, compensacion: 'ninguna' } as ReclamoRow, 'R-0025')
+    expect(cambio).toContain('Hacemos el cambio')
+    expect(ninguna).toContain('no corresponde')
+    for (const t of [cambio, ninguna]) expect(t).not.toContain('te contamos cómo seguimos')
+  })
+
+  // ⚠️ El motivo concreto lo contesta el ESCENARIO, y el mensaje ⛔ no lo tiene: afirmar «fue del
+  // transporte» sobre un plazo mal informado es explicarle al cliente algo que no pasó.
+  it('«sin compensación» ⛔ no inventa la culpa', () => {
+    const t = mensajeResolucion({ ...base, compensacion: 'ninguna' } as ReclamoRow, 'R-0025')
+    expect(t.toLowerCase()).not.toMatch(/transport|correo argentino|andreani/)
+  })
+})
+
 describe('mensaje de seguimiento', () => {
   it('etiqueta: incluye el código y aclara quién paga', () => {
     const t = mensajeSeguimiento({ ...base, seguimiento_vuelta: 'AR123' } as ReclamoRow, 'R-0025', 'etiqueta')
@@ -106,6 +157,27 @@ describe('mensaje de seguimiento', () => {
     const t = mensajeSeguimiento({ ...base, seguimiento_ida: 'IDA9', seguimiento_vuelta: 'VUELTA1' } as ReclamoRow, 'R-0025', 'reenvio')
     expect(t).toContain('IDA9')
     expect(t).not.toContain('VUELTA1')
+  })
+
+  /**
+   * 🔴 **Las tres resoluciones que mandan algo compartían el texto de la reposición**, así que a
+   * quien esperaba un **cambio** se le avisaba que salió *«tu reposición»* — otra cosa que la que
+   * hay en la caja. La lista es cerrada y tiene salida genérica: nombrar mal lo que sale es la
+   * misma clase de error que nombrar mal la alternativa de la propuesta.
+   */
+  it('🔴 nombra lo que salió según la resolución, ⛔ no siempre «tu reposición»', () => {
+    const desp = (compensacion: string) =>
+      mensajeSeguimiento({ ...base, seguimiento_ida: 'IDA9', compensacion } as unknown as ReclamoRow, 'R-0025', 'reenvio')
+    expect(desp('otro_producto')).toContain('el producto de tu cambio')
+    expect(desp('otra_unidad')).toContain('la otra unidad')
+    expect(desp('reenvio')).toContain('lo que faltaba')
+    expect(desp('otro_producto')).not.toContain('reposición')
+  })
+
+  it('sin resolución cargada, avisa igual y ⛔ no dice «undefined»', () => {
+    const t = mensajeSeguimiento({ ...base, seguimiento_ida: 'IDA9' } as ReclamoRow, 'R-0025', 'reenvio')
+    expect(t).toContain('Ya despachamos lo tuyo')
+    expect(t.toLowerCase()).not.toContain('undefined')
   })
 
   it('plata: dice el monto', () => {

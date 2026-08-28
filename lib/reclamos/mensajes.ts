@@ -28,6 +28,15 @@ import {
 const money = (n: number) =>
   n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).replace(/ /g, ' ')
 
+/**
+ * La única frase del sistema que se pone en negrita, y **WhatsApp la marca con UN asterisco**.
+ *
+ * 🔴 Salió con dos (`**…**`, la sintaxis de Markdown) desde que existe, así que el cliente veía los
+ * cuatro asteriscos en el renglón que más importa del mensaje: quién paga el envío. El repo ya
+ * tenía la convención bien escrita en `detalleCambioTexto` (`*CAMBIO R-0025*`) — esto es la misma.
+ */
+const ENVIO_LO_PAGAMOS = '*El envío lo pagamos nosotros.*'
+
 /** "2× Remera negra (M)" — cómo se nombra un producto de cara al cliente. */
 function linea(i: ItemReclamo): string {
   const cant = Number(i.cantidad) || 1
@@ -177,8 +186,31 @@ export function mensajeResolucion(
     case 'reenvio':
       cuerpo.push('Te enviamos lo que falta, sin costo.')
       break
+    // 🔴 **Sin código, el cupón ⛔ no se promete como si existiera.** El pendiente `cupon_estado`
+    // dice que todavía hay que crearlo en la tienda, y hasta el 28-ago-2026 el mensaje salía igual:
+    // *«te dejamos un cupón»*, sin código y sin decir que falta — el mismo agujero que
+    // `cupon-emitido` vino a tapar el 25-ago, entrando por la puerta del texto. Se dice **lo que sí
+    // es verdad**, con la forma que este módulo ya usa para la etiqueta que todavía no existe:
+    // va en camino, y mientras tanto el cliente no tiene que hacer nada.
     case 'cupon':
-      cuerpo.push(`Te dejamos un cupón de descuento${d.cupon_codigo ? ` (código ${d.cupon_codigo})` : ''} para tu próxima compra.`)
+      cuerpo.push(d.cupon_codigo
+        ? `Te dejamos un cupón de descuento (código ${d.cupon_codigo}) para tu próxima compra.`
+        : 'Te dejamos un cupón de descuento para tu próxima compra: te pasamos el código por acá apenas lo tengamos.')
+      break
+    // 🔴 **El cambio tenía el mismo texto que «sin compensación»**, y los dos caían en el default:
+    // *«Ya lo revisamos y te contamos cómo seguimos»* — que promete una novedad que ⛔ no viene.
+    // El detalle del cambio (lo que devuelve, lo que se lleva y la diferencia) sale aparte, del
+    // ticket que arma `detalleCambioTexto`: acá ⛔ no se repite ni se adelanta el número.
+    case 'otro_producto':
+      cuerpo.push('Hacemos el cambio por el producto que elegiste. El detalle te lo pasamos por acá.')
+      break
+    // 🔴 **Es justo el caso donde hay que decir POR QUÉ**, y era el más mudo de todos: se revisó y
+    // no corresponde compensación. ⚠️ El motivo concreto ⛔ no se afirma acá —lo contesta el
+    // escenario, y afirmar «fue del transporte» sobre un `plazo_mal_informado` es prometer una
+    // explicación falsa—: se dice que se revisó, que ésta es la respuesta, y que la conversación
+    // sigue abierta (el cierre del mensaje invita a escribir).
+    case 'ninguna':
+      cuerpo.push('Revisamos el caso con lo que nos mandaste y esta vez no corresponde una devolución ni un cambio.')
       break
     default:
       cuerpo.push('Ya lo revisamos y te contamos cómo seguimos.')
@@ -189,7 +221,7 @@ export function mensajeResolucion(
   if (d.via_retorno === 'presencial') {
     pasos.push('Acercate al local con el producto cuando puedas y lo resolvemos ahí mismo.')
   } else if (d.via_retorno) {
-    pasos.push(`Te mandamos la etiqueta de ${VIA_LABEL[d.via_retorno as ViaRetorno]} para que nos lo envíes. **El envío lo pagamos nosotros.**`)
+    pasos.push(`Te mandamos la etiqueta de ${VIA_LABEL[d.via_retorno as ViaRetorno]} para que nos lo envíes. ${ENVIO_LO_PAGAMOS}`)
   } else if (seLaQueda) {
     pasos.push('No hace falta que nos devuelvas nada: quedátelo.')
   }
@@ -237,7 +269,7 @@ export function mensajeEtiquetaEnCamino(
     '',
     `Ya está todo listo con el reclamo ${numero}.`,
     '',
-    `Estamos generando la etiqueta${via ? ` de ${via}` : ''} para que nos devuelvas el producto y te la mandamos por acá apenas la tengamos. **El envío lo pagamos nosotros.**`,
+    `Estamos generando la etiqueta${via ? ` de ${via}` : ''} para que nos devuelvas el producto y te la mandamos por acá apenas la tengamos. ${ENVIO_LO_PAGAMOS}`,
     '',
     'Hasta entonces no tenés que hacer nada: cuando te llegue, la imprimís o la mostrás en la sucursal y despachás el paquete.',
     '',
@@ -245,9 +277,22 @@ export function mensajeEtiquetaEnCamino(
   ].join('\n')
 }
 
+/**
+ * **Qué es lo que sale, dicho por su nombre.**
+ *
+ * Son las tres resoluciones que mandan algo (`saleUnEnvio`), y las tres dejaban el mismo texto:
+ * *«tu reposición»* — que sobre un **cambio** es directamente otra cosa que la que va en la caja.
+ * Lista cerrada y con salida genérica, igual que `ALTERNATIVA_POR_RESOLUCION`.
+ */
+const QUE_SE_DESPACHO: Partial<Record<Compensacion, string>> = {
+  otro_producto: 'Ya despachamos el producto de tu cambio',
+  otra_unidad: 'Ya despachamos la otra unidad',
+  reenvio: 'Ya despachamos lo que faltaba',
+}
+
 /** 3) El seguimiento: la etiqueta despachada, o la plata acreditada. */
 export function mensajeSeguimiento(
-  d: Pick<ReclamoRow, 'cliente' | 'via_retorno' | 'seguimiento_vuelta' | 'seguimiento_ida' | 'monto_total'>,
+  d: Pick<ReclamoRow, 'cliente' | 'via_retorno' | 'seguimiento_vuelta' | 'seguimiento_ida' | 'monto_total' | 'compensacion'>,
   numero: string,
   que: 'etiqueta' | 'reenvio' | 'plata',
 ): string {
@@ -258,7 +303,7 @@ export function mensajeSeguimiento(
     if (d.seguimiento_vuelta) partes.push(`Código de seguimiento: ${d.seguimiento_vuelta}`)
     partes.push('Acercalo a la sucursal cuando puedas. El envío corre por nuestra cuenta.')
   } else if (que === 'reenvio') {
-    partes.push(`Ya despachamos tu reposición del reclamo ${numero}.`)
+    partes.push(`${QUE_SE_DESPACHO[d.compensacion as Compensacion] || 'Ya despachamos lo tuyo'} del reclamo ${numero}.`)
     if (d.seguimiento_ida) partes.push(`Código de seguimiento: ${d.seguimiento_ida}`)
   } else {
     partes.push(`Ya hicimos la devolución del reclamo ${numero}${d.monto_total ? ` por ${money(Number(d.monto_total))}` : ''}.`)

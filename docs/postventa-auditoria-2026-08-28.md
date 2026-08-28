@@ -219,7 +219,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 - **Costo**: bajo si se elige frenar la oferta sin resolución; medio si se elige devolver el reclamo
   a «hay que decidir» con un mensaje propio.
 
-### 🔴 D5 · El mensaje del reenvío existe, está probado, y no tiene botón
+### ✅ D5 · El mensaje del reenvío existe, está probado, y no tiene botón — ARREGLADO el 28-ago
 
 **Cuando le mandamos algo, el cliente ⛔ no se entera por el sistema.**
 
@@ -230,8 +230,19 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   `envio_nuevo_estado: 'hecho'` y `seguimiento_ida` existen y Retornos ya los muestra.
 - **Afecta a las TRES resoluciones que mandan algo**: cambio, reposición y reenvío.
 - **Costo**: bajo — un momento más en `botones.ts`, su botón, y los dos tests (la regla **y** el cable).
+- ✅ **Arreglado el 28-ago-2026**: momento **`despacho_hecho`** en `botones.ts`, leído de
+  `envio_nuevo_estado === 'hecho'` —**el pendiente que tilda Depósito**, ⛔ no un campo nuevo—,
+  exactamente como `plata_enviada` se lee de `reintegro_estado`: el hecho lo cuenta quien lo hizo. Es
+  un **hecho**, así que ⛔ no lo calla una oferta esperando respuesta.
+  - 🔴 **Y tirando del hilo salió que el texto también estaba mal**: las tres resoluciones
+    compartían *«Ya despachamos tu reposición»*, así que a quien esperaba un **cambio** se le
+    anunciaba otra cosa que la que hay en la caja. Ahora `QUE_SE_DESPACHO` —lista cerrada con salida
+    genérica, igual que `ALTERNATIVA_POR_RESOLUCION`— nombra lo que sale.
+  - ✅ **Los dos cables**: `reclamos-mensajes-por-momento` (la regla) y `reclamos-lista-mensajes`
+    (que la fila lo dibuja **y que el botón copia ESE texto**, apretándolo con el portapapeles
+    stubbeado: el rótulo y el texto son dos cosas distintas).
 
-### 🔴 D6 · El cupón se puede prometer sin que exista
+### ✅ D6 · El cupón se puede prometer sin que exista — ARREGLADO el 28-ago
 
 - **Evidencia**: `mensajesDeLaFila` ofrece `resolucion` con sólo `estaDecidido` (`botones.ts:126`), y
   `mensajeResolucion` con `compensacion: 'cupon'` y `cupon_codigo` nulo sale *«Te dejamos un cupón de
@@ -239,22 +250,35 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   `cupon_estado` ⛔ no frena el mensaje.
 - Es el mismo agujero que `cupon-emitido` vino a tapar el 25-ago, **entrando por la puerta del texto**.
 - **Costo**: bajo — o el mensaje espera al código, o dice que va aparte.
+- ✅ **Arreglado el 28-ago-2026**: **dice que va aparte**, con la forma que el módulo ya usa para la
+  etiqueta que todavía no existe — *«te pasamos el código por acá apenas lo tengamos»*. ⛔ No se
+  eligió esconder el botón: dejar el momento mudo es el defecto que este módulo ya tuvo dos veces.
 
-### 🔴 D7 · Los asteriscos SE VEN en WhatsApp
+### ✅ D7 · Los asteriscos SE VEN en WhatsApp — ARREGLADO el 28-ago
 
 - **Evidencia**: `mensajes.ts:192` y `mensajes.ts:240` mandan `**El envío lo pagamos nosotros.**`.
   WhatsApp pone negrita con **uno solo** ⇒ el cliente ve los cuatro asteriscos. Es la única frase del
   sistema que intenta ponerse en negrita.
 - Anotado el 26-ago y **sigue igual** (releído el 28).
 - **Costo: dos caracteres por línea.**
+- ✅ **Arreglado el 28-ago-2026**: la frase salió a una constante (`ENVIO_LO_PAGAMOS`) con **un**
+  asterisco, que es la convención que el repo ya tenía bien escrita en `detalleCambioTexto`
+  (`*CAMBIO R-0025*`). El test ⛔ no mira la constante: mira que **ningún mensaje armado** contenga
+  `**`.
 
-### 🔴 D8 · Dos resoluciones caen en el default y no dicen nada
+### ✅ D8 · Dos resoluciones caen en el default y no dicen nada — ARREGLADO el 28-ago
 
 - **Evidencia**: `mensajes.ts:183-184` — `otro_producto` (el cambio) y `ninguna` comparten *«Ya lo
   revisamos y te contamos cómo seguimos»*, que promete una novedad que ⛔ no viene. Y `ninguna` es
   justo el caso donde hay que explicar **por qué no se compensa** (la demora fue del transporte, el
   pedido ya llegó).
 - **Costo**: bajo, texto puro con tests.
+- ✅ **Arreglado el 28-ago-2026**: cada una tiene su rama. El **cambio** dice que se hace y que el
+  detalle va aparte (⛔ no lo repite: ese ticket lo arma `detalleCambioTexto`); **`ninguna`** dice
+  que se revisó y que no corresponde.
+- ⚠️ **Y lo que `ninguna` ⛔ NO dice es la culpa**, aunque el defecto pedía explicar por qué: el
+  motivo lo contesta el **escenario**, y afirmar *«fue del transporte»* sobre un
+  `plazo_mal_informado` es explicarle al cliente algo que no pasó. Queda fijado con un test.
 
 ### 🔴 D9 · La columna `mensajes` está en el `select` y no la escribe nadie
 
