@@ -37,7 +37,7 @@ import {
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
-import { mensajeApertura, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { mensajeApertura, mensajePropuesta, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
 import { mensajesDeLaFila } from '@/lib/reclamos/botones'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { DecidirReclamo } from './DecidirReclamo'
@@ -877,6 +877,21 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           getText={() => textoApertura(d)}
                           onError={(e) => toast.error(e.message)}
                           label="Msj: pedir fotos"
+                        />
+                      )}
+                      {/* 🔴 **El mensaje que más se va a usar, y era el único de los cuatro que no
+                          existía**: entre que Administración arma la propuesta y que el cliente
+                          contesta pasan uno o tres días, y ése es el rato en el que el reclamo pasa
+                          la mayor parte de su vida. El de la clienta de R-0022 hubo que escribirlo
+                          a mano — o sea, cada uno prometiendo lo suyo, que es exactamente lo que
+                          `lib/reclamos/mensajes.ts` existe para evitar.
+                          🔑 **Reemplaza al de resolución mientras la oferta espera**, ⛔ no se le
+                          suma: los dos juntos son dos promesas distintas sobre el mismo reclamo. */}
+                      {mensajes.includes('propuesta') && (
+                        <CopyButton
+                          getText={() => mensajePropuesta(d, numeroReclamo(d.id))}
+                          label="Msj: la propuesta"
+                          tone="warning"
                         />
                       )}
                       {mensajes.includes('resolucion') && (

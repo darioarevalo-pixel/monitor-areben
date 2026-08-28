@@ -114,6 +114,82 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
     expect(mensajesDeLaFila(fila({ estado: 'cerrado' }))).toEqual([])
   })
 
+  /**
+   * 🔴 **El momento que no tenía mensaje, y es el que más dura.** Entre que Administración arma la
+   * propuesta y que el cliente contesta pasan uno o tres días: es donde el reclamo pasa la mayor
+   * parte de su vida. `ofertaEsperandoRespuesta` = hay monto y ⛔ todavía no hay respuesta.
+   */
+  it('con una oferta esperando respuesta: se ofrece la propuesta', () => {
+    const d = fila({
+      estado: 'en_revision', motivo: 'no_esperaba', expectativa: 'plata',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
+      fotos: [{ url: 'https://blob/1.jpg' }] as never,
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['mas_fotos', 'propuesta'])
+  })
+
+  /**
+   * 🔴 🔑 **La propuesta REEMPLAZA a la resolución, ⛔ no se le suma.** Mientras el cliente no
+   * conteste, la resolución guardada es la salida *«por si dice que no»*: los dos botones juntos le
+   * ofrecen a quien atiende prometer **dos cosas distintas sobre el mismo reclamo** —«te devolvemos
+   * todo» y «quedátelo por una parte»—, y la que salga primero es la que el cliente va a reclamar
+   * después. Es exactamente el defecto que este archivo existe para no repetir, por la otra punta.
+   */
+  it('decidido y con la oferta esperando: la propuesta, y ⛔ NO la resolución', () => {
+    const d = fila({
+      estado: 'resuelto', compensacion: 'plata_total',
+      retencion_monto: 6000, retencion_forma: 'cupon', retencion_respuesta: null,
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['propuesta'])
+  })
+
+  /**
+   * 🔑 **Contestada, la propuesta se va.** Ya no hay nada que preguntar: lo que corresponde es
+   * contarle en qué terminó. Vale para las dos respuestas — un `rechazo` deja la resolución
+   * guardada tal cual, y un `acepto` la cambia, pero en los dos casos el mensaje es el de
+   * resolución.
+   */
+  it('contestada —acepte o no— vuelve la resolución y ⛔ se va la propuesta', () => {
+    const conRespuesta = { retencion_monto: 6000, retencion_forma: 'plata' as const, compensacion: 'plata_total' as const }
+    expect(mensajesDeLaFila(fila({ ...conRespuesta, estado: 'resuelto', retencion_respuesta: 'rechazo' })))
+      .toEqual(['resolucion'])
+    expect(mensajesDeLaFila(fila({ ...conRespuesta, estado: 'resuelto', retencion_respuesta: 'acepto' })))
+      .toEqual(['resolucion'])
+  })
+
+  /**
+   * ⚠️ **Vacío ⛔ no es «se le ofreció por nada»**: sin monto no hay oferta registrada, y la
+   * propuesta no tiene número que decir. Es el mismo cuidado que `registroDeRetencion`.
+   */
+  it('sin monto registrado ⛔ no hay propuesta que mandar', () => {
+    const d = fila({ estado: 'resuelto', compensacion: 'plata_total', retencion_monto: null })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion'])
+  })
+
+  /**
+   * 🔑 **Con la propuesta armada, tampoco se le pide el link de fotos en la columna**: quien llegó
+   * a ofrecer un monto ya tiene la evidencia que necesitaba. `mas_fotos` es otra cosa y sigue —vive
+   * en el detalle de la fila, no en la columna de «qué toca ahora».
+   */
+  it('con una oferta esperando ⛔ no se le vuelve a pedir el link en la columna', () => {
+    const d = fila({
+      estado: 'en_revision', motivo: 'falla', retencion_monto: 5000, retencion_forma: 'plata',
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['propuesta'])
+  })
+
+  /**
+   * ⚠️ **Los HECHOS ⛔ no se callan.** La etiqueta y la plata que salió ya ocurrieron en el mundo:
+   * una propuesta ⛔ no los contradice, y esconderlos dejaría al cliente sin el seguimiento.
+   */
+  it('la etiqueta y la plata ya ocurrieron: conviven con la propuesta', () => {
+    const d = fila({
+      estado: 'en_transito', compensacion: 'plata_total', seguimiento_vuelta: 'AR123',
+      retencion_monto: 4000, retencion_forma: 'plata', retencion_respuesta: null,
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['propuesta', 'etiqueta'])
+  })
+
   it('la etiqueta y la plata se ofrecen cuando el hecho ya ocurrió', () => {
     const d = fila({
       estado: 'en_transito', compensacion: 'plata_total',

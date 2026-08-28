@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mensajeApertura, mensajeResolucion, mensajeSeguimiento, resumenCorto } from '@/lib/reclamos/mensajes'
+import { mensajeApertura, mensajePropuesta, mensajeResolucion, mensajeSeguimiento, resumenCorto } from '@/lib/reclamos/mensajes'
 import { MOTIVO_LABEL, type ReclamoRow, type ItemReclamo } from '@/lib/reclamos/tipos'
 
 /**
@@ -111,6 +111,105 @@ describe('mensaje de seguimiento', () => {
   it('plata: dice el monto', () => {
     const t = mensajeSeguimiento({ ...base, monto_total: 15283 } as ReclamoRow, 'R-0025', 'plata')
     expect(t).toContain('$ 15.283')
+  })
+})
+
+/**
+ * **La propuesta de que se lo quede.**
+ *
+ * 🔴 Es el mensaje que más se va a usar —Administración arma la oferta, el local la manda, la
+ * respuesta llega uno o tres días después— y era el único de los cuatro momentos **sin texto**: el
+ * de la clienta de R-0022 se escribió a mano. Por eso las dos mitades que se fijan acá son **qué
+ * promete** (la forma: plata o cupón, que después decide en qué termina el reclamo) y **qué pasa si
+ * dice que no**, que es lo que hace que la oferta sea una oferta y no un aviso.
+ */
+describe('mensaje de la propuesta', () => {
+  // ⚠️ La expectativa dice OTRA cosa que la resolución a propósito: es lo que hace que el test
+  // distinga de cuál de las dos sale la alternativa. Con las dos iguales, invertir la precedencia
+  // no rompería nada y la regla quedaría sin fijar.
+  const oferta = {
+    ...base, retencion_monto: 13491, retencion_forma: 'plata',
+    compensacion: 'plata_total', expectativa: 'otro_producto',
+  } as ReclamoRow
+
+  it('saluda, dice el reclamo, el pedido y los productos', () => {
+    const txt = mensajePropuesta(oferta, 'R-0022')
+    expect(txt).toContain('¡Hola Carla!')
+    expect(txt).toContain('R-0022')
+    expect(txt).toContain('#20700')
+    expect(txt).toContain('1× WEAVE CASE CHERRY (iPhone 11)')
+  })
+
+  it('en plata: dice cuánto se le devuelve y que se queda con los productos', () => {
+    const txt = mensajePropuesta(oferta, 'R-0022')
+    expect(txt).toContain('$ 13.491')
+    expect(txt).toContain('te devolvemos')
+    expect(txt).toContain('te quedás con los productos')
+    expect(txt).not.toContain('cupón')
+  })
+
+  /**
+   * 🔴 **La forma ⛔ no es cosmética.** Aceptar un cupón termina en `compensacion: 'cupon'` y deja
+   * pendiente crearlo en la tienda; aceptar plata saca plata de la caja. Prometer una y ejecutar la
+   * otra se descubre en la caja o en la próxima compra del cliente, ⛔ nunca en una pantalla.
+   */
+  it('en cupón: promete un cupón para la próxima compra, ⛔ no una devolución', () => {
+    const txt = mensajePropuesta({ ...oferta, retencion_forma: 'cupon' } as ReclamoRow, 'R-0022')
+    expect(txt).toContain('un cupón de $ 13.491 para tu próxima compra')
+    expect(txt).not.toContain('te devolvemos')
+  })
+
+  /**
+   * ⚠️ **La forma vacía cae en plata**, con la MISMA regla que `salidaAlAceptarRetencion`
+   * (`cupon` o, cualquier otra cosa, plata). Las filas anteriores a la columna `retencion_forma`
+   * no dicen nada, y el texto tiene que prometer lo mismo que después se va a ejecutar.
+   */
+  it('sin forma registrada promete plata, igual que lo que se va a ejecutar', () => {
+    const txt = mensajePropuesta({ ...oferta, retencion_forma: null } as ReclamoRow, 'R-0022')
+    expect(txt).toContain('te devolvemos $ 13.491')
+    expect(txt).not.toContain('cupón')
+  })
+
+  /**
+   * 🔑 **La alternativa sale de lo GUARDADO.** Con el reclamo ya decidido, la resolución de la fila
+   * es la salida «por si dice que no» — nombrar otra cosa es prometerle algo distinto de lo que va
+   * a pasar cuando conteste.
+   */
+  it('decidido: la alternativa es la resolución que ya está guardada', () => {
+    expect(mensajePropuesta(oferta, 'R-0022')).toContain('seguimos con la devolución como estaba')
+    expect(mensajePropuesta({ ...oferta, compensacion: 'otro_producto' } as ReclamoRow, 'R-0022'))
+      .toContain('seguimos con el cambio como estaba')
+  })
+
+  it('sin decidir todavía: la alternativa es lo que el cliente PIDIÓ', () => {
+    const sinDecidir = { ...oferta, compensacion: null, expectativa: 'otro_producto' } as ReclamoRow
+    expect(mensajePropuesta(sinDecidir, 'R-0022')).toContain('seguimos con el cambio como estaba')
+  })
+
+  /**
+   * ⚠️ **Sin ninguno de los dos ⛔ no se inventa una salida**: se nombran las dos. Un texto que
+   * afirma «seguimos con la devolución» sobre un reclamo donde nadie decidió nada es una promesa
+   * salida de la nada.
+   */
+  it('sin resolución ni expectativa: nombra las dos y ⛔ no elige una', () => {
+    const pelado = { ...oferta, compensacion: null, expectativa: null } as ReclamoRow
+    expect(mensajePropuesta(pelado, 'R-0022')).toContain('seguimos con el cambio o la devolución')
+  })
+
+  /**
+   * 🔑 **Es el único de los cuatro que PREGUNTA.** Los otros tres avisan algo ya decidido; éste
+   * espera una respuesta, y sin pedirla explícitamente el cliente contesta cualquier cosa y quien
+   * atiende no sabe si eso fue un sí.
+   */
+  it('termina preguntando', () => {
+    expect(mensajePropuesta(oferta, 'R-0022')).toContain('¿Cómo preferís que lo resolvamos?')
+  })
+
+  /** ⚠️ Se dice el número, ⛔ no de dónde sale: explicar la cuenta invita a discutirla. */
+  it('⛔ no muestra la cuenta de la que salió el monto', () => {
+    const txt = mensajePropuesta(oferta, 'R-0022')
+    expect(txt).not.toContain('descuento')
+    expect(txt).not.toContain('%')
   })
 })
 

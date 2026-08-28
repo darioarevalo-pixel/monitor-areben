@@ -1,4 +1,4 @@
-import { estaDecidido, pideFotos, type EstadoReclamo, type ReclamoRow } from './tipos'
+import { estaDecidido, ofertaEsperandoRespuesta, pideFotos, type EstadoReclamo, type ReclamoRow } from './tipos'
 
 /**
  * **Qué mensajes se le ofrecen a quien atiende, en cada momento del reclamo.**
@@ -33,6 +33,8 @@ export type MensajeDeLaFila =
   | 'pedir_fotos'
   /** El mismo link, cuando ya cargó fotos y no alcanzan. Va en el detalle, ⛔ no en la columna. */
   | 'mas_fotos'
+  /** La oferta de que se lo quede, mientras espera respuesta. El único que hace una PREGUNTA. */
+  | 'propuesta'
   /** Qué se resolvió. Existe desde que hay resolución, ⛔ no desde que hay campos cargados. */
   | 'resolucion'
   /** El seguimiento del retorno, cuando ya hay etiqueta. */
@@ -75,6 +77,19 @@ export function linkVivo(d: ReclamoRow): boolean {
  * las necesita —«no le llegó nunca»— alguien del equipo igual puede haber subido una, y ofrecer
  * «pedir más» ahí es el mismo ruido que se está sacando, por la otra punta.
  *
+ * 🔴 🔑 **Con una oferta esperando respuesta, el momento es ÉSE — y ⛔ desplaza a los otros dos.**
+ * `propuesta` ⛔ no se suma a la columna: la **reemplaza**. Mientras el cliente no conteste, la
+ * resolución guardada es la salida *«por si dice que no»*, así que ofrecer los dos mensajes a la
+ * vez es ofrecerle a quien atiende **prometer dos cosas distintas sobre el mismo reclamo** —«te
+ * devolvemos todo» y «quedátelo por una parte»—, y la que salga primero es la que el cliente va a
+ * reclamar después. Por el mismo motivo se calla `pedir_fotos`: quien ya armó una propuesta tiene
+ * la evidencia que necesitaba. ⚠️ `mas_fotos` **sí** sigue —vive en el detalle, ⛔ no en la
+ * columna—: es de quien está mirando el caso, no de quien habla con el cliente.
+ *
+ * ⚠️ **`etiqueta` y `plata_enviada` ⛔ no se callan**, y la diferencia es la que separa este archivo
+ * de una lista de condiciones: los otros tres son **promesas** y ésos dos son **hechos que ya
+ * ocurrieron** en el mundo. Un hecho ⛔ no se contradice con una propuesta.
+ *
  * 🔑 `resolucion` se gatea por `estaDecidido`, ⛔ no por «hay campos cargados»: desde que
  * «Confirmar paso» guarda por `editar`, el reclamo tiene datos mucho antes de tener decisión, y
  * un mensaje de resolución es una **promesa al cliente** — es la clase de botón que ⛔ no puede
@@ -84,10 +99,12 @@ export function linkVivo(d: ReclamoRow): boolean {
 export function mensajesDeLaFila(d: ReclamoRow): MensajeDeLaFila[] {
   const fotos = (d.fotos || []).length
   const ms: MensajeDeLaFila[] = []
+  const esperando = ofertaEsperandoRespuesta(d)
   const pide = linkVivo(d) && !estaDecidido(d) && pideFotos(d.motivo, d.expectativa)
-  if (pide && !fotos) ms.push('pedir_fotos')
+  if (pide && !fotos && !esperando) ms.push('pedir_fotos')
   if (pide && !!fotos) ms.push('mas_fotos')
-  if (estaDecidido(d)) ms.push('resolucion')
+  if (esperando) ms.push('propuesta')
+  if (estaDecidido(d) && !esperando) ms.push('resolucion')
   if (d.seguimiento_vuelta) ms.push('etiqueta')
   if (d.reintegro_estado === 'hecho') ms.push('plata_enviada')
   return ms

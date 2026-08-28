@@ -83,4 +83,32 @@ describe('la lista dibuja los mensajes del momento', () => {
     const decidido = { ...base, estado: 'en_revision', compensacion: 'plata_total' } as unknown as ReclamoRow
     expect(conMensaje(await botones([decidido]))).toEqual(['Msj: resolución'])
   })
+
+  /**
+   * 🔴 **El botón que no existía**, y el momento en el que el reclamo pasa la mayor parte de su
+   * vida: la oferta mandada, esperando que el cliente conteste.
+   *
+   * 🔑 Y las dos mitades: aparece el de la propuesta **y ⛔ NO el de resolución**. Mientras la
+   * oferta espera, la resolución guardada es la salida *«por si dice que no»* — los dos botones
+   * juntos son dos promesas distintas sobre el mismo reclamo, y la que salga primero es la que el
+   * cliente va a reclamar después.
+   */
+  it('🔴 con la oferta esperando: aparece la propuesta y ⛔ NO la resolución', async () => {
+    const esperando = {
+      ...base, estado: 'resuelto', compensacion: 'plata_total',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
+    } as unknown as ReclamoRow
+    const bs = await botones([esperando])
+    expect(conMensaje(bs)).toEqual(['Msj: la propuesta'])
+    expect(bs.join(' ')).not.toContain('resolución')
+  })
+
+  /** Contestada, no hay nada que preguntar: vuelve el de resolución. */
+  it('contestada: se va la propuesta y vuelve la resolución', async () => {
+    const contestada = {
+      ...base, estado: 'resuelto', compensacion: 'plata_total',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: 'rechazo',
+    } as unknown as ReclamoRow
+    expect(conMensaje(await botones([contestada]))).toEqual(['Msj: resolución'])
+  })
 })

@@ -1010,9 +1010,7 @@ visto.**
   *«talle y arrepentimiento: sólo si quiere la plata»*). Una premisa escrita y nunca medida se
   defiende sola hasta que alguien que usa la app la contradice.
 
-▶️ **El enchufe para el mensaje de la propuesta** (el que hoy no existe y es el que más se va a
-usar): agregar `'propuesta'` al union y su condición en `mensajesDeLaFila`. El botón en la pantalla
-es una línea.
+🏁 **El mensaje de la propuesta ya existe** (28-ago-2026) — abajo, en su propia sección.
 
 ## 🔴 Cómo verificar un deploy de ESTA sección (27-ago-2026)
 
@@ -1107,9 +1105,70 @@ lo confirma Bruno con los primeros casos reales.
 
 ### ▶️ Lo que esto habilita y todavía no está
 
-- **El mensaje de la propuesta** (`mensajePropuesta`): hoy hay cuatro mensajes y ninguno cubre el
-  momento en que se le propone algo al cliente — el de Victoria hubo que escribirlo a mano.
+- ~~**El mensaje de la propuesta**~~ 🏁 **hecho el 28-ago-2026** — su sección está abajo.
 - **Los botones «Aceptó» / «No aceptó» en la fila, para el local**: es el eslabón que falta del
   circuito (*Administración decide · el local habla y ejecuta*). La acción va **fuera de
   `DE_ADMIN`**, por el mismo criterio que `descontado` y `gn-baja`: **anotar un paso que ya ocurrió
   en el mundo ⛔ no es decidir plata**.
+
+## 🆕 El mensaje de la propuesta: el quinto momento (28-ago-2026)
+
+`mensajePropuesta` (`lib/reclamos/mensajes.ts`) + `'propuesta'` en `mensajesDeLaFila`
+(`lib/reclamos/botones.ts`) + el botón **«Msj: la propuesta»** en la fila.
+
+**Por qué era el que faltaba.** De los cinco momentos de la conversación había texto para cuatro, y
+el que no lo tenía es **el que más dura**: Administración arma la oferta de que se lo quede, el
+local la manda, la respuesta llega uno o tres días después. El de la clienta de `R-0022` hubo que
+escribirlo a mano — o sea, exactamente lo que `mensajes.ts` existe para evitar: *cada versión
+distinta del mismo mensaje es una promesa distinta, y después el cliente reclama sobre lo que le
+dijeron.*
+
+🔴 🔑 **La propuesta REEMPLAZA a la resolución mientras la oferta espera, ⛔ no se le suma.** Es la
+mitad del cambio que ⛔ no es "agregar un botón". Un reclamo con una oferta esperando **ya tiene una
+resolución guardada** —la salida *«por si dice que no»*, que se decide antes de mandar la oferta— así
+que sin esta regla la columna ofrece los dos mensajes juntos, y son **dos promesas distintas sobre
+el mismo reclamo**: *«te devolvemos todo»* y *«quedátelo por una parte»*. La que salga primero es la
+que el cliente va a reclamar después. Por el mismo motivo se calla `pedir_fotos`: quien ya armó una
+propuesta tiene la evidencia que necesitaba.
+
+⚠️ **Los HECHOS ⛔ no se callan**, y ahí está la línea: `etiqueta` y `plata_enviada` avisan algo que
+**ya ocurrió en el mundo**; los otros tres son **promesas**. Un hecho ⛔ no se contradice con una
+propuesta, y esconderlo dejaría al cliente sin el seguimiento.
+
+| momento | qué ofrece la columna |
+|---|---|
+| abierto, sin fotos | `pedir_fotos` |
+| con fotos, sin decidir | `mas_fotos` (en el detalle) |
+| **oferta mandada, sin respuesta** | **`propuesta`** — ⛔ ni `resolucion` ni `pedir_fotos` |
+| contestada (acepte o no) | `resolucion` |
+| con etiqueta / con la plata afuera | + `etiqueta` / `plata_enviada` |
+
+**Tres decisiones del texto, y las tres son de plata:**
+
+- 🔑 **La forma se lee con la MISMA regla que `salidaAlAceptarRetencion`** —`cupon` o, cualquier
+  otra cosa, plata—, ⛔ no con una condición propia. Es la regla que decide en qué **termina** el
+  reclamo si acepta: prometer un cupón y ejecutar plata (o al revés) se descubre en la caja o en la
+  próxima compra del cliente, ⛔ nunca en una pantalla. Por eso una fila **sin** `retencion_forma`
+  (las anteriores a esa columna) promete plata: es lo que se va a ejecutar.
+- 🔑 **La alternativa ⛔ no se inventa: sale de lo GUARDADO.** Con el reclamo decidido, la
+  resolución de la fila **es** la salida «si dice que no»; recién si no se decidió todavía se cae en
+  lo que el cliente PIDIÓ (`expectativa`). Y sin ninguno de los dos se nombran **las dos** («el
+  cambio o la devolución»): elegir una sería una promesa salida de la nada. Las dos son listas
+  cerradas (`ALTERNATIVA_POR_RESOLUCION` / `ALTERNATIVA_POR_EXPECTATIVA`).
+- 🔑 **Es el único de los cinco que PREGUNTA.** Los otros avisan algo ya decidido. Sin pedir la
+  respuesta explícitamente, el cliente contesta cualquier cosa y quien atiende no sabe si eso fue un
+  sí. ⚠️ Y dice el **monto**, ⛔ no la cuenta de la que sale: explicar la cuenta invita a discutirla.
+
+✅ **9 mutantes, 9 muertos** — los tres de la regla (que la propuesta no aparezca; que la resolución
+⛔ no se calle; que `pedir_fotos` ⛔ no se calle), cinco del texto (la forma vacía cayendo en cupón,
+la precedencia de la alternativa invertida, la salida genérica eligiendo una, la pregunta borrada,
+el monto leído de `monto_total` en vez de la oferta) y **el del CABLE**: sacar el botón del JSX pone
+en rojo `tests/reclamos-lista-mensajes.test.tsx`. Ese último es el que este módulo ya perdió dos
+veces — *los dos lados bien y el bug en la pregunta del medio*.
+
+⚠️ **El fixture del test de texto tiene la expectativa DISTINTA de la resolución a propósito**: con
+las dos iguales, invertir la precedencia de la alternativa no rompe nada y la regla queda sin fijar.
+
+▶️ **Lo que sigue faltando del circuito: los botones «Aceptó» / «No aceptó» en la fila.** Hoy la
+respuesta del cliente sólo se puede anotar reabriendo **Decidir**, que es de Administración — así
+que el eslabón *«el local habla y ejecuta»* sigue cortado por la mitad.

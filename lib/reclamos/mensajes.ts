@@ -13,7 +13,7 @@
 
 import {
   MOTIVO_LABEL, VIA_LABEL,
-  type Compensacion, type ReclamoRow, type ItemReclamo, type ViaRetorno,
+  type Compensacion, type Expectativa, type ReclamoRow, type ItemReclamo, type ViaRetorno,
 } from './tipos'
 
 /**
@@ -65,6 +65,87 @@ export function mensajeApertura(d: Pick<ReclamoRow, 'cliente' | 'orden_tn' | 'mo
     link,
     '',
     'Apenas las veamos te confirmamos cómo seguimos. ¡Gracias!',
+  ].join('\n')
+}
+
+/**
+ * **Qué pasa si NO acepta la propuesta**, dicho en criollo.
+ *
+ * 🔑 **La alternativa ⛔ no se inventa: es lo que ya está guardado.** Cuando el reclamo está
+ * decidido, la resolución que hay en la fila **es** la salida "por si dice que no" —se decide antes
+ * de mandar la oferta, y por eso la oferta puede quedar esperando sin trabar nada—. Recién si
+ * todavía no se decidió se cae en lo que el cliente PIDIÓ, que es el único otro dato registrado.
+ *
+ * ⚠️ Las dos son listas cerradas y las dos tienen salida genérica: nombrar mal la alternativa en un
+ * texto que sale a un cliente es prometerle algo distinto de lo que va a pasar.
+ */
+const ALTERNATIVA_POR_RESOLUCION: Partial<Record<Compensacion, string>> = {
+  plata_total: 'la devolución',
+  otro_producto: 'el cambio',
+  otra_unidad: 'el envío de otra unidad',
+  reenvio: 'el envío de lo que falta',
+}
+
+const ALTERNATIVA_POR_EXPECTATIVA: Partial<Record<Expectativa, string>> = {
+  plata: 'la devolución',
+  otro_producto: 'el cambio',
+  mismo_producto: 'el envío de otra unidad',
+  completar: 'el envío de lo que falta',
+}
+
+function laAlternativa(d: Pick<ReclamoRow, 'compensacion' | 'expectativa'>): string {
+  return (
+    (d.compensacion ? ALTERNATIVA_POR_RESOLUCION[d.compensacion as Compensacion] : null) ||
+    (d.expectativa ? ALTERNATIVA_POR_EXPECTATIVA[d.expectativa as Expectativa] : null) ||
+    'el cambio o la devolución'
+  )
+}
+
+/**
+ * 4) **La propuesta: que se lo quede a cambio de una parte de la plata o de un cupón.**
+ *
+ * Es el momento en el que el reclamo pasa la mayor parte del tiempo —Administración arma la
+ * propuesta, el local la manda, la respuesta llega al día siguiente— y hasta hoy era el único de
+ * los cuatro **sin mensaje**: el de la clienta de `R-0022` hubo que escribirlo a mano. Eso es
+ * exactamente lo que este archivo existe para evitar: cada versión escrita a mano de la misma
+ * oferta es una promesa distinta, y el cliente después reclama sobre la que le dijeron.
+ *
+ * 🔑 **La forma se lee con la MISMA regla que `salidaAlAceptarRetencion`** —`cupon` o, cualquier
+ * otra cosa, plata—, ⛔ no con una condición propia. Es la regla que decide en qué termina el
+ * reclamo si acepta, y el texto tiene que prometer eso mismo: un cupón que se cobra como plata, o
+ * al revés, es la clase de diferencia que se descubre en la caja.
+ *
+ * ⚠️ **Dice el monto y ⛔ no la cuenta de la que sale.** Lo que se negocia es el número, y explicar
+ * de dónde salió invita a discutirlo.
+ *
+ * 🔑 **Termina en una PREGUNTA**, y es el único de los cuatro que lo hace: los otros tres avisan
+ * algo ya decidido. Sin la pregunta explícita, el cliente contesta cualquier cosa y el local no
+ * sabe si eso fue un sí.
+ */
+export function mensajePropuesta(
+  d: Pick<ReclamoRow, 'cliente' | 'orden_tn' | 'items' | 'retencion_monto' | 'retencion_forma' | 'compensacion' | 'expectativa'>,
+  numero: string,
+): string {
+  const items = d.items || []
+  const monto = Number(d.retencion_monto) || 0
+  const esCupon = d.retencion_forma === 'cupon'
+  const queEs = items.length === 1 ? 'el producto' : 'los productos'
+
+  const oferta = esCupon
+    ? `te damos un cupón de ${money(monto)} para tu próxima compra y te quedás con ${queEs}.`
+    : `te devolvemos ${money(monto)} y te quedás con ${queEs}.`
+
+  return [
+    saludo(d.cliente),
+    '',
+    `Sobre el reclamo ${numero}${d.orden_tn ? ` (pedido #${d.orden_tn})` : ''}:`,
+    lista(items),
+    '',
+    `Te proponemos algo: ${oferta}`,
+    '',
+    `Si preferís, seguimos con ${laAlternativa(d)} como estaba.`,
+    '',
+    '¿Cómo preferís que lo resolvamos? Con tu respuesta lo dejamos listo. ¡Gracias!',
   ].join('\n')
 }
 
@@ -154,7 +235,7 @@ export function mensajeSeguimiento(
 }
 
 /** Para el historial: qué mensaje se le mandó y cuándo. */
-export type MensajeEnviado = { tipo: 'apertura' | 'resolucion' | 'seguimiento'; at: string; por?: string | null; texto: string }
+export type MensajeEnviado = { tipo: 'apertura' | 'propuesta' | 'resolucion' | 'seguimiento'; at: string; por?: string | null; texto: string }
 
 /** Etiqueta corta de un reclamo para listados y avisos: "R-0007 · Falla · Carla". */
 export function resumenCorto(d: Pick<ReclamoRow, 'motivo' | 'cliente'>, numero: string): string {
