@@ -91,6 +91,9 @@ tests `tests/insumos.test.ts`, `tests/insumos-handler.test.ts`, el bloque de `av
   insumos que no están atados a las ventas nunca van a tener días de vida — sólo el corte por
   unidades, que es la regla del manual y alcanza.
 
+- ▶️ **La novedad está cargada como BORRADOR** (`n1787922095235_h4tx2x`, destino `seccion:insumos`):
+  la publica Bruno de un click.
+
 ## Cómo se prueba
 
 ```bash
@@ -99,7 +102,16 @@ npx vitest run tests/insumos-handler.test.ts --reporter=dot  # el handler: qué 
 npx vitest run tests/notificaciones.test.ts --reporter=dot   # el aviso
 node scripts/apply-insumos.mjs                               # corre la migración y la verifica
 node scripts/sembrar-insumos.mjs --simulacro                 # qué sembraría, sin escribir
+node scripts/caminar-insumos.mjs                             # el handler contra la base REAL
+node scripts/verificar-deploy-insumos.mjs                    # ¿llegó a prod? con cadena de control
 ```
+
+`caminar-insumos.mjs` ⛔ no es un test: **invoca el handler contra la base de BDI**, siembra un
+insumo `ZZ CAMINATA`, le hace una compra, un traslado y un consumo, y el oráculo es la base leída
+por otro camino. Borra lo que sembró y verifica que los contadores vuelvan. Caminada el
+28-ago-2026: **14 de 14**. ⛔ Lo derivado no se comprueba ahí —`core.ts` es TypeScript y no lo puede
+importar un script de Node, y reimplementarlo sería una segunda versión de la regla—: eso lo cubren
+los mutantes.
 
 **Los siete mutantes que tienen que morir** (corridos el 28-ago-2026, 7 de 7): stock `null`→`0` ·
 el recuento deja de cortar · las dos patas del traslado con el mismo signo · `<=` por `<` en el
