@@ -4,7 +4,7 @@ import {
   diasEsperandoLaOferta,
   correccionesMalArmado,
   costoDelCaso, cuentaDescuento,
-  destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltaMandarLaEtiqueta, faltantesParaCerrar, faltantesParaProcesar,
+  destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltaMandarLaEtiqueta, laEtiquetaEstaDebida, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
   PERFIL_MOTIVO, MOTIVOS_VIGENTES, MOTIVOS_CAMBIO, NUNCA_SALIO, EXPECTATIVA_LABEL,
@@ -1427,6 +1427,69 @@ describe('alertas por antigüedad', () => {
 
   it('un paquete que no llega hace 15 días alerta', () => {
     expect(alertasDe(fila({ estado: 'en_transito', updated_at: hace(16) }), AHORA)[0].texto).toContain('no llega')
+  })
+
+  /**
+   * 🔴 **La demora NUESTRA y la AJENA eran el mismo reloj** (partido el 28-ago-2026).
+   *
+   * Por correo o Andreani, `en_transito` empieza **antes** de que exista la etiqueta: el cliente ⛔
+   * no tiene con qué despachar. El reloj único acusaba a los 15 días a un transporte que **nunca
+   * recibió el paquete** — y a quién hay que ir a buscar es justo lo que un aviso tiene que decir.
+   */
+  describe('la etiqueta que no sale', () => {
+    const enCamino = (extra = {}) => fila({ estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani', ...extra })
+
+    it('a los 2 días avisa, y es NUESTRA: danger', () => {
+      const a = alertasDe(enCamino({ updated_at: hace(3) }), AHORA)
+      expect(a[0].texto).toContain('no le mandamos la etiqueta')
+      expect(a[0].tono).toBe('danger')
+    })
+
+    it('antes del plazo ⛔ no avisa', () => {
+      expect(alertasDe(enCamino({ updated_at: hace(1) }), AHORA)).toEqual([])
+    })
+
+    /** 🔑 Con el código cargado el reloj es del transporte, y el otro se apaga. */
+    it('con la etiqueta ya mandada vuelve a ser «no llega», y ⛔ sólo a los 15', () => {
+      const conCodigo = enCamino({ seguimiento_vuelta: 'AR123', updated_at: hace(3) })
+      expect(alertasDe(conCodigo, AHORA)).toEqual([])
+      const vieja = enCamino({ seguimiento_vuelta: 'AR123', updated_at: hace(16) })
+      expect(alertasDe(vieja, AHORA)[0].texto).toContain('no llega')
+    })
+
+    /**
+     * 🔴 **Y a los 15 días sin etiqueta ⛔ NO se le echa la culpa al transporte**: sigue siendo
+     * nuestra. Es la mitad de la partición que ⛔ no se ve si sólo se prueba el caso corto.
+     */
+    it('a los 15 días sin etiqueta sigue siendo NUESTRA, ⛔ no del transporte', () => {
+      const a = alertasDe(enCamino({ updated_at: hace(16) }), AHORA)
+      expect(a.map((x) => x.texto).join(' ')).toContain('no le mandamos la etiqueta')
+      expect(a.some((x) => x.texto.includes('no llega'))).toBe(false)
+    })
+
+    /**
+     * 🔴 🔑 **Mientras la oferta espera, la espera es DEL CLIENTE.** Se le propuso que se lo quede:
+     * mandarle la etiqueta antes de que conteste es dar por hecho que dijo que no, y arrancar un
+     * reloj contra nosotros por una espera que ⛔ no es nuestra. Misma lección que `desdeQueEsta`,
+     * una vuelta más arriba.
+     */
+    it('con una oferta esperando respuesta, la etiqueta ⛔ todavía no es nuestro turno', () => {
+      const conOferta = enCamino({ updated_at: hace(20), retencion_monto: 8000, retencion_forma: 'plata' })
+      expect(laEtiquetaEstaDebida(conOferta)).toBe(false)
+      expect(alertasDe(conOferta, AHORA).some((x) => x.texto.includes('etiqueta'))).toBe(false)
+      // Y cuando contesta que no, el turno pasa a ser nuestro.
+      const contestada = { ...conOferta, retencion_respuesta: 'rechazo' as const }
+      expect(laEtiquetaEstaDebida(contestada)).toBe(true)
+      expect(alertasDe(contestada, AHORA)[0].texto).toContain('no le mandamos la etiqueta')
+    })
+
+    /** ⚠️ El `presencial` y el cadete ⛔ no tienen etiqueta: ahí «no llega» es lo que pasa. */
+    it('sin etiqueta que mandar, sigue corriendo el reloj del transporte', () => {
+      for (const via of ['presencial', 'cadete'] as const) {
+        expect(alertasDe(enCamino({ via_retorno: via, updated_at: hace(3) }), AHORA)).toEqual([])
+        expect(alertasDe(enCamino({ via_retorno: via, updated_at: hace(16) }), AHORA)[0].texto).toContain('no llega')
+      }
+    })
   })
 
   it('sin compensación decidida, la plata todavía no puede alertar', () => {

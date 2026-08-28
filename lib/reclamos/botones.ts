@@ -1,5 +1,5 @@
 import {
-  estaDecidido, faltaMandarLaEtiqueta, ofertaEsperandoRespuesta, pideFotos,
+  estaDecidido, laEtiquetaEstaDebida, ofertaEsperandoRespuesta, pideFotos,
   type EstadoReclamo, type ReclamoRow,
 } from './tipos'
 
@@ -98,6 +98,13 @@ export function linkVivo(d: ReclamoRow): boolean {
  * quedaba mudo justo en el rato en que él cree que la pelota es suya — y el reloj de «hace N días
  * que no llega» arrancaba sobre una espera que nunca fue de él.
  *
+ * 🔴 **Y `etiqueta_en_camino` cae del lado de las PROMESAS, ⛔ no de los hechos** — se corrigió el
+ * 28-ago-2026, el día después de escribirlo: con una oferta esperando salían **los dos**, o sea
+ * *«¿te lo querés quedar por $13.491?»* y *«te mando la etiqueta para que lo devuelvas»* en la
+ * misma columna. La regla estaba escrita acá arriba y el código no la cumplía ⇒
+ * [[feedback_areben_invariante_escrito_no_frena]]. Por eso mira `laEtiquetaEstaDebida` y ⛔ no
+ * `faltaMandarLaEtiqueta`: **que falte es un hecho de la fila; que sea nuestro turno, ⛔ no.**
+ *
  * ⚠️ **`etiqueta` y `plata_enviada` ⛔ no se callan**, y la diferencia es la que separa este archivo
  * de una lista de condiciones: los otros tres son **promesas** y ésos dos son **hechos que ya
  * ocurrieron** en el mundo. Un hecho ⛔ no se contradice con una propuesta.
@@ -117,7 +124,7 @@ export function mensajesDeLaFila(d: ReclamoRow): MensajeDeLaFila[] {
   if (pide && !!fotos) ms.push('mas_fotos')
   if (esperando) ms.push('propuesta')
   if (estaDecidido(d) && !esperando) ms.push('resolucion')
-  if (faltaMandarLaEtiqueta(d)) ms.push('etiqueta_en_camino')
+  if (laEtiquetaEstaDebida(d)) ms.push('etiqueta_en_camino')
   if (d.seguimiento_vuelta) ms.push('etiqueta')
   if (d.reintegro_estado === 'hecho') ms.push('plata_enviada')
   return ms

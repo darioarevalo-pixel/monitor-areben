@@ -887,6 +887,26 @@ export function faltaMandarLaEtiqueta(
 }
 
 /**
+ * **¿La etiqueta es NUESTRO turno?** — que ⛔ no es lo mismo que que falte.
+ *
+ * 🔴 🔑 **Falta ⛔ no significa debida.** Con una oferta esperando respuesta, la etiqueta ⛔ todavía
+ * no corresponde: se le propuso que se lo quede, y mandarle la etiqueta antes de que conteste es
+ * dar por hecho que dijo que no. La espera, ahí, **es del cliente** — y esa distinción es la misma
+ * de `desdeQueEsta`, una vuelta más arriba: **⛔ no se arranca un reloj contra nosotros por una
+ * espera que es de otro.**
+ *
+ * ⇒ De acá cuelgan **las dos cosas que sí son nuestro turno**: el mensaje de que la etiqueta va en
+ * camino (que es una **promesa**, y por eso se calla mientras hay otra promesa en el aire) y el
+ * reloj de `alertasDe`. ⛔ El rótulo del estado ⛔ NO cuelga de acá: que la etiqueta **falte** es un
+ * hecho de la fila, lo diga quien lo diga.
+ */
+export function laEtiquetaEstaDebida(
+  d: Pick<ReclamoRow, 'estado' | 'via_retorno' | 'seguimiento_vuelta' | 'retencion_monto' | 'retencion_respuesta'>,
+): boolean {
+  return faltaMandarLaEtiqueta(d) && !ofertaEsperandoRespuesta(d)
+}
+
+/**
  * El estado como lo lee alguien del local. Cambia en dos casos, y los dos son la misma mentira:
  * "En camino de vuelta" sobre algo que **nadie despachó todavía** — porque el cliente lo trae en
  * mano y no vino, o porque le falta la etiqueta para poder despacharlo.
@@ -2058,7 +2078,7 @@ export function laFallaDescuentaStock(compensacion: Compensacion | null | undefi
  * el que no responde es el cliente—, y porque el reclamo se queda quieto mientras tanto. ▶️ Lo
  * confirma Bruno con los primeros casos reales: hoy ⛔ no hay ninguno cerrado del que sacarlo.
  */
-export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3 } as const
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3, etiqueta: 2 } as const
 
 /**
  * **El piso del retorno: por debajo de este monto no se pide que el producto vuelva**, aunque la
@@ -2198,7 +2218,24 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
   // ⚠️ Ésta NO cuenta desde el último toque sino desde que el producto salió de vuelta
   // (`desdeQueEsta`): editar el reclamo mientras se espera no puede reiniciar la espera.
   const enCamino = diasDesde(desdeQueEsta(d, 'en_transito'), ahora)
-  if (d.estado === 'en_transito' && enCamino >= DIAS_ALERTA.transito) {
+  /**
+   * 🔴 **«Hace N días que no llega» ⛔ no se le puede cobrar al transporte si la etiqueta ⛔ nunca
+   * salió.** Hasta el 28-ago-2026 este reloj era **uno solo** sobre `en_transito`, y por correo o
+   * Andreani corría desde el minuto en que se decidió — o sea que a los 15 días acusaba a un
+   * transporte que ⛔ nunca recibió el paquete, porque el cliente no tenía con qué despacharlo.
+   *
+   * 🔑 **La partición ⛔ no es cosmética: separa una demora NUESTRA de una AJENA**, que es lo único
+   * que decide a quién hay que ir a buscar. Y por eso los dos plazos y los dos tonos son distintos:
+   * la que depende de nosotros es `danger` a los 2 días; la del transporte, `warning` a los 15.
+   *
+   * ⚠️ El `presencial` y el cadete siguen entrando por abajo: ahí no hay etiqueta que mandar, y
+   * «no llega» es lo que efectivamente pasa.
+   */
+  const sinEtiqueta = diasDesde(desdeQueEsta(d, 'en_transito'), ahora)
+  if (laEtiquetaEstaDebida(d) && sinEtiqueta >= DIAS_ALERTA.etiqueta) {
+    alertas.push({ tono: 'danger', texto: `Hace ${sinEtiqueta} días que no le mandamos la etiqueta`, dias: sinEtiqueta, ts: cuando(sinEtiqueta, DIAS_ALERTA.etiqueta) })
+  }
+  if (d.estado === 'en_transito' && !faltaMandarLaEtiqueta(d) && enCamino >= DIAS_ALERTA.transito) {
     alertas.push({ tono: 'warning', texto: `Hace ${enCamino} días que no llega`, dias: enCamino, ts: cuando(enCamino, DIAS_ALERTA.transito) })
   }
   // Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.

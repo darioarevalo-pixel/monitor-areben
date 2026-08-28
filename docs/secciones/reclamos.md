@@ -1257,6 +1257,39 @@ donde este módulo ya se rompió dos veces con la regla en verde. Lo que quedó 
 rechazo que ⛔ no pisa nada, el 409 de contestar dos veces, las dos ramas de aceptar (plata y cupón,
 con sus pendientes distintos) y el 409 de una fila sin oferta.
 
-▶️ **Lo que queda abierto acá**: `DIAS_ALERTA` ⛔ no tiene reloj para «hace N días que la etiqueta no
-sale» — hoy el único que corre sobre `en_transito` es `transito` (15 días), que cuenta una espera que
-todavía ⛔ no es del transporte.
+### 3. El reloj de la etiqueta, y por qué «falta» ⛔ no es «debida»
+
+🔴 **La demora NUESTRA y la AJENA eran el mismo reloj.** `transito` (15 días, «hace N días que no
+llega») corría sobre `en_transito` **desde que se decidió**, o sea desde antes de que la etiqueta
+existiera ⇒ a los 15 días acusaba a un transporte que **nunca recibió el paquete**, porque el
+cliente ⛔ no tenía con qué despacharlo. Y **a quién hay que ir a buscar es justo lo que un aviso
+tiene que decir**: por eso los dos plazos y los dos tonos son distintos —lo nuestro es `danger` a
+los **2** días (`DIAS_ALERTA.etiqueta`), lo del transporte `warning` a los 15— y `transito` ahora
+exige que la etiqueta **exista**.
+
+🔴 🔑 **Y apareció la distinción que le faltaba al módulo: «falta» ⛔ no es «debida».**
+
+| | qué pregunta | de qué cuelga |
+|---|---|---|
+| `faltaMandarLaEtiqueta` | ¿la etiqueta **falta**? — un hecho de la fila | **el rótulo del estado** |
+| `laEtiquetaEstaDebida` | ¿es **nuestro turno**? = falta **y** ⛔ no hay oferta esperando | **el mensaje y el reloj** |
+
+Con una oferta esperando respuesta, la etiqueta ⛔ **todavía no corresponde**: se le propuso que se
+lo quede, y mandársela antes de que conteste es **dar por hecho que dijo que no**. La espera, ahí,
+es **del cliente** ⇒ ⛔ no se arranca un reloj contra nosotros por una espera que es de otro. Es la
+misma lección que `desdeQueEsta`, una vuelta más arriba.
+
+⚠️ **El `presencial` y el cadete siguen entrando por `transito`**: ahí ⛔ no hay etiqueta que mandar
+y «no llega» es lo que efectivamente pasa.
+
+🔴 **Y esto destapó un defecto de ayer mismo**: `etiqueta_en_camino` es una **promesa**, así que cae
+del lado de los que se callan — con una oferta esperando salían **los dos**, *«¿te lo querés quedar
+por $13.491?»* y *«te mando la etiqueta para que lo devuelvas»*, en la misma columna. **La regla
+estaba escrita en el docblock de `mensajesDeLaFila` y el código no la cumplía** ⇒
+[[feedback_areben_invariante_escrito_no_frena]], por tercera vez en este módulo.
+
+✅ **5 mutantes, 5 muertos** (la oferta que no frena el reloj, el reloj apagado, `transito` sin
+partir, el tono, y el mensaje sin callarse) — **26 en el día**.
+
+⚠️ **`DIAS_ALERTA.etiqueta = 2` es propuesta, ⛔ no medida**, lo mismo que `oferta`, `despacho` y
+`sinMandar`: lo confirma Bruno con los primeros casos reales.

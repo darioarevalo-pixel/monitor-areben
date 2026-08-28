@@ -212,6 +212,29 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
   })
 
   /**
+   * 🔴 **`etiqueta_en_camino` es una PROMESA, ⛔ no un hecho** — corregido el 28-ago-2026, el día
+   * después de escribirlo. Con una oferta esperando salían **los dos**: *«¿te lo querés quedar por
+   * $13.491?»* y *«te mando la etiqueta para que lo devuelvas»*, en la misma columna. La regla de
+   * este archivo ya lo decía y el código no la cumplía.
+   */
+  it('🔴 con la oferta esperando ⛔ no se le promete también la etiqueta', () => {
+    const d = fila({
+      estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['propuesta'])
+  })
+
+  /** Y cuando contesta que no, el turno vuelve a ser nuestro y el mensaje aparece. */
+  it('contestado el rechazo, sí se le avisa que la etiqueta va en camino', () => {
+    const d = fila({
+      estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani',
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: 'rechazo',
+    })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'etiqueta_en_camino'])
+  })
+
+  /**
    * ⚠️ **Sólo donde hay etiqueta que mandar.** Si lo trae al local o lo pasa a buscar un cadete no
    * hay nada que emitir, y ofrecer el mensaje sería prometerle algo que no existe.
    */
