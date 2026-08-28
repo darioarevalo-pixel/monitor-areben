@@ -1759,6 +1759,7 @@ describe('faltantesDeLaDecision', () => {
     retencionMonto: '' as number | '',
     retencionRespuesta: null as 'acepto' | 'rechazo' | null,
     retencionForma: 'plata' as FormaRetencion | null,
+    ofertaMandada: false,
   }
 
   it('una falla recién abierta pide contestar la pregunta que decide, y no traba', () => {
@@ -1800,7 +1801,29 @@ describe('faltantesDeLaDecision', () => {
    * `loQueTraba` deja de ser `null`.
    */
   it('una oferta mandada y sin contestar ⛔ ya no traba la decisión', () => {
-    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 4000 })
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 4000, ofertaMandada: true })
+    expect(loQueTraba(f)).toBe(null)
+  })
+
+  /**
+   * 🔴 **Lo que se perdía en silencio** (27-ago-2026, de noche): un monto tipeado a mano sin decir
+   * si se mandó o qué contestaron ⛔ no viaja en el payload. Trabar es la única forma de que no se
+   * descarte callado, y se satisface con un click de tres.
+   */
+  it('un monto tipeado sin afirmar nada TRABA, y lo dice', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: 13491 })
+    const traba = loQueTraba(f)
+    expect(traba?.paso).toBe('producto')
+    expect(traba?.que).toContain('no se guarda')
+  })
+
+  /**
+   * ⚠️ **La mitad que impide que la traba de arriba se convierta en «contestá por una oferta que
+   * nadie hizo»**: el campo se dibuja prellenado con lo que sugiere la cuenta, y eso ⛔ no es una
+   * oferta. El discriminador es `''` —nadie lo tocó—, ⛔ no el valor.
+   */
+  it('el sugerido que nadie tipeó ⛔ no traba', () => {
+    const f = faltantesDeLaDecision({ ...base, escenario: 'util', pvpFeria: 3500, envioVuelta: 6000, retencionMonto: '' })
     expect(loQueTraba(f)).toBe(null)
   })
 

@@ -8,7 +8,7 @@
  * distingue «no se deployó» de «el crawl no llegó». Pasó dos veces hoy.
  */
 const BASE = 'https://monitorareben.vercel.app'
-const ORACULO = 'Calculadora de retenci'  // sin tildes (el minificador las escapa); 0 apariciones en el commit anterior
+const ORACULO = 'oferta ya se la mandaste'  // sin tildes (el minificador las escapa); 0 apariciones en el commit anterior
 const CONTROL = 'Msj: pedir fotos'        // ya estaba en prod
 
 const RUTA = /static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g

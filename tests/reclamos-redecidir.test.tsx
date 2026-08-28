@@ -382,13 +382,16 @@ describe('la oferta de retención: lo que sale de la pantalla', () => {
      * mandarlo como oferta sería registrar una propuesta que nadie hizo, y contarla después en el
      * denominador de «cuántas veces funciona».
      */
-    it('tener un monto en pantalla ⛔ no es haber hecho la oferta', async () => {
-      await conOferta('5000')
+    it('el sugerido que dibuja la calculadora ⛔ no es una oferta', async () => {
+      // Se abre la caja y ⛔ NO se tipea nada: el campo muestra el número de la cuenta.
+      await abrir(SIN_DECIDIR)
+      await act(async () => { tab('El producto').click() })
+      await act(async () => { boton('Se lo ofrecí igual')!.click() })
       await act(async () => { tab('El cliente').click() })
       await elegirSalida('plata_total')
       await act(async () => { boton('Confirmar la decisión')!.click() })
       const d = llamadas.find((l) => l.que === 'decidir')?.args[0] as Record<string, unknown>
-      expect(d, 'la pantalla tiene que llegar a decidir').toBeTruthy()
+      expect(d, 'abrir la calculadora ⛔ no puede trabar la decisión').toBeTruthy()
       expect(d.retencion_monto).toBe(null)
       expect(d.retencion_respuesta).toBe(null)
     })
@@ -419,6 +422,32 @@ describe('la oferta de retención: lo que sale de la pantalla', () => {
       await abrir({ ...SIN_DECIDIR, retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null } as unknown as ReclamoRow)
       await act(async () => { tab('El producto').click() })
       expect(texto()).toContain('esperando respuesta')
+    })
+
+    /**
+     * 🔴 **EL defecto de la noche del 27-ago.** Bruno tipeó los **$13.491** de la propuesta de
+     * Victoria y apretó «Confirmar paso» sin tocar ninguno de los tres botones. El paso se guardó
+     * —`updated_at` movido— y **el monto se perdió**: sin un botón apretado la oferta ⛔ no viaja,
+     * y lo único que lo decía era una línea en letra chica debajo del campo.
+     *
+     * 🔑 Las dos mitades: que ⛔ **no se guarde nada** (perder el número callado es peor que
+     * frenar) y que la pantalla **diga por qué**. Un freno mudo es el mismo defecto con otra cara.
+     */
+    it('tipear un monto y no decir nada FRENA, en vez de tirar el número', async () => {
+      await conOferta('13491')
+      await act(async () => { boton('Confirmar paso')!.click() })
+      expect(llamadas.filter((l) => l.que === 'editar'), '⛔ no puede guardar tirando el monto').toHaveLength(0)
+      expect(texto()).toContain('el monto ⛔ no se guarda')
+    })
+
+    /** Y el freno se levanta con un click: es una traba de un paso, ⛔ no un formulario nuevo. */
+    it('el freno se levanta apretando uno de los tres', async () => {
+      await conOferta('13491')
+      await act(async () => { boton('Confirmar paso')!.click() })
+      await act(async () => { boton('Se la mandé')!.click() })
+      await act(async () => { boton('Confirmar paso')!.click() })
+      const e = llamadas.find((l) => l.que === 'editar')?.args[2] as Record<string, unknown>
+      expect(e.retencion_monto).toBe(13491)
     })
 
     /** Confirmar el paso ② guarda la oferta por `editar`: salir a buscar la respuesta ⛔ no la pierde. */

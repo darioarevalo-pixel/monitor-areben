@@ -548,7 +548,11 @@ export function DecidirReclamo({
     envioVuelta, pvpFeria, montoAcordado, envioIda,
     // El monto sólo cuenta como "oferta registrada" si hay una respuesta: el campo arranca con el
     // sugerido, y un sugerido que nadie dijo ⛔ no es una oferta a medias.
-    retencionMonto: hayOferta ? montoOferta : '',
+    // ⚠️ **Va lo TIPEADO, ⛔ no `montoOferta`.** `montoOferta` cae en el sugerido cuando nadie
+    // escribió nada, y con eso `faltantesDeLaDecision` ⛔ no podría distinguir una oferta de una
+    // cuenta abierta en pantalla: pediría contestar por una propuesta que nadie hizo.
+    retencionMonto: retencionMonto,
+    ofertaMandada,
     retencionRespuesta: retencion,
     retencionForma,
   })
@@ -595,6 +599,26 @@ export function DecidirReclamo({
    */
   const confirmarPaso = async () => {
     const siguiente = ORDEN[ORDEN.indexOf(paso) + 1]
+
+    /**
+     * 🔴 **Confirmar un paso también se frena con lo que trabe a ESE paso** (27-ago-2026, de
+     * noche). Hasta acá el freno vivía sólo en el botón final, así que «Confirmar paso» guardaba
+     * lo que hubiera en pantalla **y descartaba lo que no supiera mandar, en silencio**: Bruno
+     * tipeó los $13.491 de R-0022 sin apretar ninguno de los tres botones de la oferta, el paso se
+     * guardó con el resto, y el monto se perdió con el `updated_at` movido — o sea con toda la
+     * cara de haber quedado guardado.
+     *
+     * ⚠️ Mira **sólo las de este paso**: las de los otros no tienen nada que ver con lo que se está
+     * por escribir, y frenar por ellas volvería a hacer que no se pueda guardar a medias, que es
+     * justamente para lo que existe este botón.
+     */
+    const trabaAca = faltas.find((f) => f.paso === paso && f.bloquea)
+    if (trabaAca) {
+      setTrabo(trabaAca)
+      toast.error(`Falta algo acá: ${trabaAca.que}.`)
+      return
+    }
+
     const campos: Record<string, unknown> = {}
 
     if (paso === 'que-paso') {

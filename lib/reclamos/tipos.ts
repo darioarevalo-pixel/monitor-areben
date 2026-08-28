@@ -736,9 +736,15 @@ export function faltantesDeLaDecision(o: {
   pvpFeria: number | ''
   montoAcordado: number | ''
   envioIda: number | ''
+  /**
+   * Lo tipeado en «Cuánto se le ofrece». `''` = **nadie lo tocó**, y ⛔ no es lo mismo que el número
+   * que la calculadora muestra prellenado: ésa es toda la diferencia entre una oferta y una cuenta.
+   */
   retencionMonto: number | ''
   retencionRespuesta: RespuestaRetencion | null
   retencionForma: FormaRetencion | null
+  /** ¿Se afirmó que la oferta ya se le mandó al cliente, aunque todavía no haya contestado? */
+  ofertaMandada: boolean
 }): FaltaDecision[] {
   const faltas: FaltaDecision[] = []
   const cargado = (n: number | '') => n !== '' && Number(n) > 0
@@ -784,6 +790,30 @@ export function faltantesDeLaDecision(o: {
     ahora: null,
   })
   if (oferta.error) faltas.push({ paso: 'producto', que: oferta.error, bloquea: true })
+  /**
+   * 🔴 **Un monto tipeado que nadie afirmó se PERDÍA en silencio** (27-ago-2026, la noche del mismo
+   * día). Bruno cargó los $13.491 de R-0022, apretó «Confirmar paso» y la pantalla guardó todo lo
+   * demás y **tiró el número**: sin un botón apretado la oferta ⛔ no viaja, y lo único que lo decía
+   * era una línea en letra chica debajo del campo. La fila quedó con `retencion_monto` en null y el
+   * `updated_at` movido — o sea, con toda la cara de haber guardado.
+   *
+   * 🔑 **El discriminador es `''`, ⛔ no el valor.** El campo se dibuja prellenado con lo que sugiere
+   * la cuenta, así que «hay un número» ⛔ no significa «alguien ofreció algo»; lo que significa eso
+   * es que **lo tipeó una persona**. Sin esa distinción, trabar acá le pediría contestar por una
+   * oferta que nadie hizo cada vez que se abre la calculadora.
+   *
+   * ⚠️ **Traba, y es una de las poquísimas que traba**, contra la regla general de este módulo de
+   * avisar y no exigir. Se gana el lugar porque la alternativa ⛔ no es una fila incoherente: es
+   * **descartar en silencio lo que la persona escribió**, y eso ya pasó una vez. Se satisface con
+   * un click de tres.
+   */
+  if (o.retencionMonto !== '' && !o.retencionRespuesta && !o.ofertaMandada) {
+    faltas.push({
+      paso: 'producto',
+      que: 'decir si la oferta ya se la mandaste o qué contestó (si no, el monto ⛔ no se guarda)',
+      bloquea: true,
+    })
+  }
 
   // ③ El cliente
   //
