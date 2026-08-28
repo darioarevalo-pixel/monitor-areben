@@ -9,6 +9,11 @@ el talle, se arrepintió, o no teníamos el producto. Reemplazó a **Fallas-con-
 mostrador, pero escribe sobre la misma tabla: **un cambio no es un tipo de caso, es un caso con
 `compensacion='otro_producto'`**. Por eso no hay tabla `cambios`.
 
+📄 **Auditoría de punta a punta del 28-ago-2026: `docs/postventa-auditoria-2026-08-28.md`.**
+La matriz **estado × rol** (qué ve, qué aprieta y qué mensaje tiene cada uno en cada momento) y **18
+cosas que no cierran**, ordenadas por lo que cuesta plata o deja a un cliente sin respuesta. ⛔ No es
+una ficha: es una foto con fecha, y lo que se arregle se tacha allá y se cuenta acá.
+
 ## El chasis: inicio común · **el escenario** · final común
 
 El módulo está armado como tres bandas, y saber en cuál cae lo que se va a tocar ahorra la mitad

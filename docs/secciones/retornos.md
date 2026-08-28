@@ -11,6 +11,11 @@ de la fila de cada reclamo**, así que para saber qué estábamos esperando hab�
 Es la **capa de la vuelta** del chasis de Postventa (resolución → movimientos → *la vuelta* → cierre):
 un reintegro se hace y se termina, una vuelta **dura**.
 
+📄 **Auditoría de punta a punta del 28-ago-2026: `docs/postventa-auditoria-2026-08-28.md`.**
+🔴 De ahí sale que **el botón «Despaché» de esta pantalla le contesta 403 a Depósito**: `despachado`
+⛔ no está en `ACCIONES_DE_LA_BANDEJA` (`api/_reclamos.js:87`), así que el gesto que se trajo acá
+justamente porque Depósito no puede abrir Reclamos ⛔ no pasa la puerta.
+
 ## Dónde vive
 
 `components/retornos/Retornos.tsx` (la pantalla, sólo lectura + dos botones) ·
