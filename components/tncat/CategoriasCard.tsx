@@ -57,7 +57,7 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
       titulo: 'Aplicar los cambios en TiendaNube',
       tono: 'warning',
       ok: 'Aplicar en la tienda',
-      mensaje: `Se agregan ${data.total_agregados} categorías y se quitan ${data.total_quitados}, en ${data.total_con_cambios} productos. Modifica tu tienda EN VIVO.`,
+      mensaje: `Se agregan ${data.total_agregados} categorías y se sacan ${data.total_quitados}, en ${data.total_con_cambios} productos. Modifica tu tienda EN VIVO.`,
     })
     if (!ok) return
     setAplicando(true)

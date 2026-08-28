@@ -710,7 +710,7 @@ export function Integraciones() {
             {ESCRITURA_HABILITADA ? (
               <>
                 <b>Verificar no escribe nada</b>, pero cada fila tiene su botón <b>Importar</b>, y ese sí crea la venta en Gestión Nube. Se importa de a una y
-                Gestión Nube <b>no permite anularla desde acá</b>: si queda duplicada, hay que borrarla a mano en la web de GN.
+                Gestión Nube <b>no permite anularla desde acá</b>: si queda duplicada, hay que eliminarla a mano en la web de GN.
               </>
             ) : (
               <>

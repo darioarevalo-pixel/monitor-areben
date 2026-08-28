@@ -98,7 +98,7 @@ export function Caducados() {
           </p>
 
           <Notice tone="warning" icon="⚠" style={{ marginBottom: space[3] }}>
-            Verificá físicamente que no quede ninguna unidad antes de eliminar. La baja se hace a mano en <b>TiendaNube</b> y en <b>Gestión Nube</b> (GN no permite borrar por API).
+            Verificá físicamente que no quede ninguna unidad antes de eliminar. La baja se hace a mano en <b>TiendaNube</b> y en <b>Gestión Nube</b> (GN no permite eliminar por API).
           </Notice>
 
           <TableWrap maxHeight={620}>

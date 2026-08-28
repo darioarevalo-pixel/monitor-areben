@@ -73,7 +73,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
       setLeads(r.ok ? r.dato : {})
       setCargado(r.ok)
       setCargando(false)
-      if (!r.ok) setError('No se pudo leer los leads del KV: los guardados están bloqueados para no borrar los que hay.')
+      if (!r.ok) setError('No se pudo leer los leads del KV: los guardados están bloqueados para no eliminar los que hay.')
     })()
     return () => {
       vivo = false
@@ -244,7 +244,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${color.bg2}` }}>
                   <span style={{ color: color.mut2, fontSize: 11, minWidth: 64 }}>{fmtFecha(n.fecha)}</span>
                   <span style={{ flex: 1 }}>{n.texto}</span>
-                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Borrar la nota', tono: 'danger', ok: 'Borrar', mensaje: 'Se borra esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}></Button>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar la nota', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}></Button>
                 </div>
               ))}
               {!l.notas.length && <div style={{ fontSize: 12, color: color.mut2 }}>Sin notas.</div>}
@@ -267,7 +267,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
  titulo: 'Eliminar el lead',
  tono: 'danger',
  ok: 'Eliminar para siempre',
- mensaje: `Se borra ${l.nombre || 'este lead'} con sus notas y su seguimiento. No hay papelera: no se puede deshacer.`,
+ mensaje: `Se elimina ${l.nombre || 'este lead'} con sus notas y su seguimiento. No hay papelera: no se puede deshacer.`,
  })
  if (ok) {
  persistir(eliminar(leads, l.id))

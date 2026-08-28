@@ -254,6 +254,12 @@ varias veces su tamaño.
 Acento **índigo**; el kit vive en CSS real (`app/tokens.css`) y en `components/ui/`. Íconos por
 `components/ui/Icono.tsx`. Reusar los componentes del kit antes de escribir uno nuevo.
 
+🔴 **El estilo también son las PALABRAS: ⛔ antes de escribir un botón, un título o un cartel de
+vacío, leer `VOCABULARIO.md`** — el glosario compartido con MAKETA (`areben-marketing`), **el mismo
+archivo en los dos repos**, clavado por `tests/vocabulario.test.ts`. **Eliminar / Sacar / Archivar /
+Descartar** según *¿sigue existiendo después?* (⛔ nunca «borrar» ni «quitar»), **Pendientes** (⛔ no
+«lo que falta»), botones en **infinitivo** y voseo sólo en las ayudas.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

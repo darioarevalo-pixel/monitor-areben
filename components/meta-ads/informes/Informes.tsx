@@ -125,9 +125,9 @@ export function Informes() {
 
   const eliminar = useCallback(async (inf: InformeResumen) => {
     const ok = await confirmar({
-      titulo: `¿Borrar el informe del ${inf.fecha}?`,
-      mensaje: 'Se borra el texto entero y no queda copia. Si lo que querés es dejar de compartirlo, alcanza con devolverlo a borrador.',
-      ok: 'Borrar',
+      titulo: `¿Eliminar el informe del ${inf.fecha}?`,
+      mensaje: 'Se elimina el texto entero y no queda copia. Si lo que querés es dejar de compartirlo, alcanza con devolverlo a borrador.',
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
@@ -136,7 +136,7 @@ export function Informes() {
     setOcupada(null)
     if (!r.ok) { toast.error(r.motivo); return }
     if (abiertoId === inf.id) setElegido(null)
-    toast.ok('Borrado.')
+    toast.ok('Eliminado.')
     recargar()
   }, [confirmar, toast, recargar, abiertoId])
 
@@ -278,7 +278,7 @@ function FilaInforme({
           <Button variant="ghost" size="sm" disabled={ocupada} onClick={onEstado}>
             {ocupada ? 'Un segundo…' : inf.publicado ? 'Volver a borrador' : 'Publicar'}
           </Button>
-          <Button variant="ghost" size="sm" disabled={ocupada} onClick={onBorrar}>Borrar</Button>
+          <Button variant="ghost" size="sm" disabled={ocupada} onClick={onBorrar}>Eliminar</Button>
         </div>
       )}
     </div>

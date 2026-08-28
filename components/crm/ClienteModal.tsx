@@ -321,7 +321,7 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: `1px solid ${color.bg2}` }}>
                     <div style={{ fontSize: 11, color: color.mut2, whiteSpace: 'nowrap', minWidth: 64 }}>{fmtFecha(n.fecha)}</div>
                     <div style={{ fontSize: 13, flex: 1 }}>{n.texto}</div>
-                    <Button size="sm" variant="ghost" tone="danger" title="Borrar nota" onClick={() => mutar((s) => borrarNota(s, c.id, i))}>✕</Button>
+                    <Button size="sm" variant="ghost" tone="danger" title="Eliminar nota" onClick={() => mutar((s) => borrarNota(s, c.id, i))}>✕</Button>
                   </div>
                 ))
               ) : (

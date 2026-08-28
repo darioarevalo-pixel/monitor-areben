@@ -246,15 +246,15 @@ export async function borrarDeBlob(url: string): Promise<boolean> {
     const r = await apiFetch('/api/blob-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'borrar', url }),
+      body: JSON.stringify({ accion: 'eliminar', url }),
     })
     if (!r.ok) {
-      console.warn('[blob] no se pudo borrar:', r.status)
+      console.warn('[blob] no se pudo eliminar:', r.status)
       return false
     }
     return true
   } catch (e) {
-    console.warn('[blob] no se pudo borrar:', e instanceof Error ? e.message : e)
+    console.warn('[blob] no se pudo eliminar:', e instanceof Error ? e.message : e)
     return false
   }
 }

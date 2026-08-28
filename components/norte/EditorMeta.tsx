@@ -85,7 +85,7 @@ export function EditorMeta({
       await borrarMeta(linea, meta.key)
       onListo()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo borrar.')
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar.')
       setGuardando(false)
     }
   }
@@ -150,7 +150,7 @@ export function EditorMeta({
           </Button>
           {meta && (
             <Button size="sm" variant="outline" tone="danger" onClick={borrar} disabled={guardando}>
-              Borrar
+              Eliminar
             </Button>
           )}
           <span style={{ fontSize: font.sm, color: color.mut }}>

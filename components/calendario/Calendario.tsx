@@ -225,10 +225,10 @@ export function Calendario() {
     try {
       await borrarHito(m, id)
       setEditando(null)
-      toast.ok('Hito borrado.')
+      toast.ok('Hito eliminado.')
       recargar()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
   }
 
@@ -967,7 +967,7 @@ function ModalHito({ hito, marca, marcas, onMarca, onCerrar, onGuardar, onBorrar
       titulo={hito.id ? 'Editar' : 'Cargar algo nuestro'}
       pie={
         <>
-          {puedeBorrar && onBorrar && <Button variant="ghost" tone="danger" onClick={onBorrar}>Borrar</Button>}
+          {puedeBorrar && onBorrar && <Button variant="ghost" tone="danger" onClick={onBorrar}>Eliminar</Button>}
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
           <Button variant="solid" disabled={!listo} onClick={() => onGuardar(f)}>Guardar</Button>
         </>

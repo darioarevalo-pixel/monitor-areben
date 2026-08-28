@@ -717,7 +717,7 @@ export function publicarInforme(id: number, publicado: boolean): Promise<Lectura
 
 /** Borra un informe. Es para el que se subió por error: uno viejo se despublica, no se borra. */
 export function borrarInforme(id: number): Promise<Lectura<{ borrado: number }>> {
-  return postInforme<{ borrado: number }>({ accion: 'borrar', id })
+  return postInforme<{ borrado: number }>({ accion: 'eliminar', id })
 }
 
 /**

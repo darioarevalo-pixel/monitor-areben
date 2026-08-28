@@ -234,7 +234,7 @@ function Datos() {
       <H>Qué no se puede eliminar, y por qué</H>
       <P>
         El <b>registro de auditoría</b> de los cambios hechos sobre la publicidad se conserva: existe
-        justamente para poder reconstruir qué se modificó en las campañas y quién lo hizo, y borrarlo
+        justamente para poder reconstruir qué se modificó en las campañas y quién lo hizo, y eliminarlo
         anularía su única función. A pedido, <b>anonimizamos el nombre de la persona</b> en esas
         filas, de modo que quede el hecho pero no quién lo hizo.
       </P>
@@ -242,7 +242,7 @@ function Datos() {
       <H>Datos de Meta</H>
       <P>
         Los datos que el Monitor obtiene de Meta corresponden a las cuentas publicitarias de la
-        empresa. Para revocar el acceso de la aplicación a esas cuentas, se quita el permiso
+        empresa. Para revocar el acceso de la aplicación a esas cuentas, se saca el permiso
         desde el Administrador Comercial de Meta; a partir de ese momento el Monitor deja de poder
         leerlas. Los identificadores de campañas guardados localmente se eliminan a pedido por la vía
         indicada arriba.

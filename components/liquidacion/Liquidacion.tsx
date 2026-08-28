@@ -222,11 +222,11 @@ export function Liquidacion() {
 
   async function borrar(c: Campania) {
     const ok = await confirmar({
-      titulo: 'Borrar la campaña',
+      titulo: 'Eliminar la campaña',
       mensaje: c.conteo.total
-        ? `"${c.nombre}" tiene ${c.conteo.total} ${c.conteo.total === 1 ? 'producto' : 'productos'}${c.conteo.definidos + c.conteo.confirmados ? `, ${c.conteo.definidos + c.conteo.confirmados} con precio decidido` : ''}. Se borra todo.`
-        : `Se borra "${c.nombre}".`,
-      ok: 'Borrar',
+        ? `"${c.nombre}" tiene ${c.conteo.total} ${c.conteo.total === 1 ? 'producto' : 'productos'}${c.conteo.definidos + c.conteo.confirmados ? `, ${c.conteo.definidos + c.conteo.confirmados} con precio decidido` : ''}. Se elimina todo.`
+        : `Se elimina "${c.nombre}".`,
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
@@ -234,9 +234,9 @@ export function Liquidacion() {
       await borrarCampania(marca, c.id)
       if (abierta === c.id) setAbierta('')
       await cargar()
-      toast.ok('Campaña borrada.')
+      toast.ok('Campaña eliminada.')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
   }
 
@@ -304,7 +304,7 @@ const MOTIVO_COLGADA: Record<MotivoColgada, { label: string; tono: Tone; ayuda: 
   'fuera-de-alcance': {
     label: 'Fuera de alcance',
     tono: 'danger',
-    ayuda: 'El producto ya no está como aplicado en ninguna campaña (se lo quitó, o la campaña se borró). El botón «sacar» de la campaña no lo alcanza: hay que sacarle la oferta a mano en Gestión Nube.',
+    ayuda: 'El producto ya no está como aplicado en ninguna campaña (se lo sacó, o la campaña se eliminó). El botón «sacar» de la campaña no lo alcanza: hay que sacarle la oferta a mano en Gestión Nube.',
   },
   'campania-cerrada': {
     label: 'Campaña cerrada',
@@ -430,7 +430,7 @@ function ListaCampanias({
     return (
       <EmptyState
         title="Todavía no hay ninguna campaña"
-        hint="Una campaña de sale junta los productos que se van a liquidar, con su precio y su fecha. Los productos entran desde Análisis → Por producto, con «Mandar a liquidación»."
+        hint="Una campaña de sale junta los productos que se van a liquidar, con su precio y su fecha. Los productos entran desde Análisis → Por producto, con «Enviar a liquidación»."
         action={<Button variant="solid" tone="brand" onClick={onNueva}>Nueva campaña</Button>}
       />
     )
@@ -474,7 +474,7 @@ function ListaCampanias({
                   propagación va en un span nativo: sin esto, borrar una campaña la abre primero.
                 */}
                 <span onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" tone="danger" size="sm" onClick={() => onBorrar(c)}>Borrar</Button>
+                  <Button variant="ghost" tone="danger" size="sm" onClick={() => onBorrar(c)}>Eliminar</Button>
                 </span>
               </Td>
             </Tr>
@@ -643,7 +643,7 @@ function DetalleCampania({
       await guardarItem(marca, campania.id, item)
       await cargar()
       onCambio()
-      if (!seguir) return void toast.ok(item.decision.precioSale ? 'Precio guardado.' : 'Precio borrado.')
+      if (!seguir) return void toast.ok(item.decision.precioSale ? 'Precio guardado.' : 'Precio eliminado.')
       const ultimo = !definiendo || definiendo.i >= definiendo.orden.length - 1
       if (ultimo) {
         setDefiniendo(null)
@@ -669,7 +669,7 @@ function DetalleCampania({
       await cargar()
       onCambio()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo quitar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo sacar.')
     }
   }
 
@@ -1114,7 +1114,7 @@ function DetalleCampania({
               hint={
                 items.length
                   ? 'Probá con otro estado o limpiá la búsqueda.'
-                  : 'Los productos entran desde Análisis → Por producto: tildalos y usá «Mandar a liquidación».'
+                  : 'Los productos entran desde Análisis → Por producto: tildalos y usá «Enviar a liquidación».'
               }
             />
           ) : (

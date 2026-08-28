@@ -219,7 +219,7 @@ function Contenido({
   const { confirmar, avisar } = useConfirmar()
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
-  const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'quitar-item')
+  const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'sacar-item')
   const puedeEditarDesc = admin || puedeSub(perfil, marca, preset.seccionKey, 'editar-desc')
   const puedeRetiroDep = puedeRetirar(perfil, 'deposito')
   const puedeRetiroLoc = puedeRetirar(perfil, 'local')
@@ -248,14 +248,14 @@ function Contenido({
   const onBorrar = async (s: Solicitud) => {
     const bloqueo = bloqueoBorrado(s, admin)
     if (bloqueo) {
-      await avisar({ titulo: 'No se puede borrar', mensaje: bloqueo })
+      await avisar({ titulo: 'No se puede eliminar', mensaje: bloqueo })
       return
     }
     const ok = await confirmar({
       titulo: 'Eliminar del historial',
       tono: 'danger',
       ok: 'Eliminar',
-      mensaje: `Se borra la solicitud "${s.descripcion || s.id}" del historial compartido. No hay papelera.`,
+      mensaje: `Se elimina la solicitud "${s.descripcion || s.id}" del historial compartido. No hay papelera.`,
     })
     if (!ok) return
     persistir((l) => sinSolicitud(l, s.id))
@@ -774,7 +774,7 @@ function Detalle({
   const conMotivo = (titulo: string, fn: (motivo: string) => void) => setPedirMotivo({ titulo, onOk: (m) => { setPedirMotivo(null); fn(m) } })
 
   const onQuitarItem = (it: ItemSolicitud) =>
-    conMotivo(`Quitar "${it.nombre} · ${it.variante}"`, (motivo) =>
+    conMotivo(`Sacar "${it.nombre} · ${it.variante}"`, (motivo) =>
       setWork((w) => sinItemSol(w, it.vid, { por: usuario, motivo, fecha: new Date().toISOString().slice(0, 10), ts: Date.now() })),
     )
   const onCambiarQty = (it: ItemSolicitud, nueva: number) => {
@@ -902,7 +902,7 @@ function Detalle({
                       </button>
                     ) : null}
                     {editable ? (
-                      <button onClick={() => onQuitarItem(i)} title="Quitar de la solicitud" style={{ border: 'none', background: 'none', color: color.danger, fontSize: 14, cursor: 'pointer' }}>
+                      <button onClick={() => onQuitarItem(i)} title="Sacar de la solicitud" style={{ border: 'none', background: 'none', color: color.danger, fontSize: 14, cursor: 'pointer' }}>
                         <Icono nombre="cruz" size={13} />
                       </button>
                     ) : null}
@@ -958,7 +958,7 @@ function Detalle({
           size="sm"
           variant="outline"
           onClick={() => correrSalida(() => compartirTexto('Solicitud nueva', textoAvisoSolicitud(s), () => toast.ok('Aviso copiado: pegalo en WhatsApp.')), toast.error)}
-          title="Mandar el detalle por WhatsApp a quien la tiene que preparar"
+          title="Enviar el detalle por WhatsApp a quien la tiene que preparar"
         >
           Avisar
         </Button>
@@ -1746,7 +1746,7 @@ function Draft({
             <div key={p.pid} style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '9px 11px', marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
-                <button onClick={() => setDraft((d) => quitarProd(d, p.pid))} title="Quitar producto" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
+                <button onClick={() => setDraft((d) => quitarProd(d, p.pid))} title="Sacar producto" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
                   ×
                 </button>
               </div>
@@ -1791,7 +1791,7 @@ function Draft({
                     {pn.barcode} <MarcaOrigen o={pn.origenManual} soloIcono size={11} />
                   </span>
                   <span style={{ color: color.warningInk, fontWeight: 600 }}>x{pn.qty}</span>
-                  <button onClick={() => setDraft((d) => quitarPendiente(d, pn.barcode))} title="Quitar (mal escaneo)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
+                  <button onClick={() => setDraft((d) => quitarPendiente(d, pn.barcode))} title="Sacar (mal escaneo)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
                     ×
                   </button>
                 </div>
@@ -1816,7 +1816,7 @@ function Draft({
                     title="Cantidad"
                     style={{ width: 56, textAlign: 'center', border: `1px solid ${color.brandBorder}`, borderRadius: 6, padding: '3px 4px', flex: '0 0 auto' }}
                   />
-                  <button onClick={() => setDraft((d) => quitarManual(d, m.mid))} title="Quitar" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
+                  <button onClick={() => setDraft((d) => quitarManual(d, m.mid))} title="Sacar" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>
                     ×
                   </button>
                 </div>

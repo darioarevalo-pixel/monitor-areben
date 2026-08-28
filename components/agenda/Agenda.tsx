@@ -90,18 +90,18 @@ export function Agenda() {
 
   const onBorrar = async (p: Promo) => {
     const ok = await confirmar({
-      titulo: 'Borrar la promoción',
+      titulo: 'Eliminar la promoción',
       mensaje: `${p.banco} · ${rotuloBeneficio(p.beneficio)}`,
-      ok: 'Borrar la promoción',
+      ok: 'Eliminar la promoción',
       tono: 'danger',
     })
     if (!ok) return
     try {
       await borrarPromo(p.id)
       await cargar()
-      toast.ok('Promoción borrada.')
+      toast.ok('Promoción eliminada.')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
   }
 
@@ -114,23 +114,23 @@ export function Agenda() {
   const onBorrarItem = async (i: ItemAgenda) => {
     const esAviso = i.clase === 'aviso'
     const ok = await confirmar({
-      titulo: esAviso ? 'Borrar el aviso' : 'Borrar el pendiente',
+      titulo: esAviso ? 'Eliminar el aviso' : 'Eliminar el pendiente',
       // Que los tildes se van con él va escrito acá y no en un tooltip: es lo que no se puede
       // deshacer, y el interruptor de «apagado» existe justamente para no tener que borrar. Un
       // aviso no tiene tildes que perder, así que no se le advierte de algo que no le pasa.
       mensaje: esAviso
         ? `${i.titulo} — si sólo querés dejar de verlo, apagalo.`
-        : `${i.titulo} — se borran también los tildes que ya tenga. Si sólo querés dejar de verlo, apagalo.`,
-      ok: esAviso ? 'Borrar el aviso' : 'Borrar el pendiente',
+        : `${i.titulo} — se eliminan también los tildes que ya tenga. Si sólo querés dejar de verlo, apagalo.`,
+      ok: esAviso ? 'Eliminar el aviso' : 'Eliminar el pendiente',
       tono: 'danger',
     })
     if (!ok) return
     try {
       await borrarItem(i.id)
       await cargar()
-      toast.ok(esAviso ? 'Aviso borrado.' : 'Pendiente borrado.')
+      toast.ok(esAviso ? 'Aviso eliminado.' : 'Pendiente eliminado.')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
   }
 
@@ -431,7 +431,7 @@ function FilaPromo({
         </div>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-start' }}>
           <Button variant="ghost" size="sm" onClick={() => onEditar(p)}>Editar</Button>
-          <Button variant="ghost" size="sm" onClick={() => onBorrar(p)}>Borrar</Button>
+          <Button variant="ghost" size="sm" onClick={() => onBorrar(p)}>Eliminar</Button>
         </div>
       </div>
     </Card>
@@ -504,7 +504,7 @@ function FilaItem({
         </div>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-start' }}>
           <Button variant="ghost" size="sm" onClick={() => onEditar(i)}>Editar</Button>
-          <Button variant="ghost" size="sm" onClick={() => onBorrar(i)}>Borrar</Button>
+          <Button variant="ghost" size="sm" onClick={() => onBorrar(i)}>Eliminar</Button>
         </div>
       </div>
     </Card>

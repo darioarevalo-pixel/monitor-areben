@@ -143,10 +143,10 @@ export function VotacionPanel({
 
   const borrar = async (r: Ronda) => {
     const ok = await confirmar({
-      titulo: 'Borrar la ronda',
+      titulo: 'Eliminar la ronda',
       tono: 'danger',
-      ok: `Borrar y perder ${r.votantes} ${r.votantes === 1 ? 'voto' : 'votos'}`,
-      mensaje: `Se borra la ronda "${r.titulo || 'sin título'}" y ${r.votantes === 0 ? 'no hay votos que perder' : `los votos de ${r.votantes} ${r.votantes === 1 ? 'persona' : 'personas'}`}. No se puede deshacer. Los diseños del tablero no se tocan.`,
+      ok: `Eliminar y perder ${r.votantes} ${r.votantes === 1 ? 'voto' : 'votos'}`,
+      mensaje: `Se elimina la ronda "${r.titulo || 'sin título'}" y ${r.votantes === 0 ? 'no hay votos que perder' : `los votos de ${r.votantes} ${r.votantes === 1 ? 'persona' : 'personas'}`}. No se puede deshacer. Los diseños del tablero no se tocan.`,
     })
     if (!ok) return
     try {
@@ -266,7 +266,7 @@ function Fila({ r, marca, expandida, onExpandir, onResultados, onCerrar, onBorra
           ) : (
             <div style={{ fontSize: 12, color: color.mut }}>El link ya no abre. Los votos quedan y se ven en Resultados.</div>
           )}
-          <Button size="sm" variant="ghost" tone="danger" onClick={onBorrar} style={{ marginLeft: 'auto' }}>Borrar la ronda</Button>
+          <Button size="sm" variant="ghost" tone="danger" onClick={onBorrar} style={{ marginLeft: 'auto' }}>Eliminar la ronda</Button>
         </div>
       )}
     </div>

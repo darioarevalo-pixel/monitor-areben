@@ -108,7 +108,7 @@ export function GenTalles() {
       titulo: 'Cargar la tabla en Tienda Nube',
       tono: 'brand',
       ok: 'Cargar en TN',
-      mensaje: `Se escribe en la descripción de "${elegido.name}". No se borra el resto de la descripción; si ya tenía una tabla nuestra, se reemplaza.`,
+      mensaje: `Se escribe en la descripción de "${elegido.name}". No se elimina el resto de la descripción; si ya tenía una tabla nuestra, se reemplaza.`,
     })
     if (!ok) return
     setCargandoTN(true)

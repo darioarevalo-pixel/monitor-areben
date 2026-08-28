@@ -153,9 +153,9 @@ export function BloqueSeleccion({
       'Queda registrado por qué se cayó: al mes siguiente es lo que explica por qué el canje salió distinto de lo acordado.',
       '',
       {
-        titulo: `Quitar ${item.nombre || item.sku || 'este producto'}`,
+        titulo: `Sacar ${item.nombre || item.sku || 'este producto'}`,
         placeholder: MOTIVOS_QUITAR_ITEM.join(' · '),
-        ok: 'Quitar',
+        ok: 'Sacar',
       },
     )
     if (!motivo) return
@@ -186,7 +186,7 @@ export function BloqueSeleccion({
       title="Qué se le manda"
       subtitle={
         vitrina
-          ? 'Lo elige ella desde el link, de la vitrina que tenga colgada. Vos podés sumar o quitar lo que haga falta.'
+          ? 'Lo elige ella desde el link, de la vitrina que tenga colgada. Vos podés sumar o sacar lo que haga falta.'
           : 'Los pasa por mensaje y los cargás vos: qué se le puede ofrecer depende de si ya está lanzado en la tienda.'
       }
     >
@@ -335,7 +335,7 @@ export function BloqueSeleccion({
                       {i.estado === 'propuesto' && (
                         <Button variant="outline" size="sm" onClick={() => void confirmar(i)}>Confirmar</Button>
                       )}
-                      <Button variant="ghost" tone="danger" size="sm" onClick={() => void quitar(i)}>Quitar</Button>
+                      <Button variant="ghost" tone="danger" size="sm" onClick={() => void quitar(i)}>Sacar</Button>
                     </div>
                   </Td>
                 )}
@@ -353,7 +353,7 @@ export function BloqueSeleccion({
           </div>
           {quitados.map((i) => (
             <div key={i.id} style={{ color: color.mut2, fontSize: font.sm }}>
-              {i.nombre || i.sku} — {i.estado === 'sin_stock' ? 'sin stock' : 'quitado'}
+              {i.nombre || i.sku} — {i.estado === 'sin_stock' ? 'sin stock' : 'sacado'}
               {i.motivo ? `: ${i.motivo}` : ''}
             </div>
           ))}

@@ -194,7 +194,7 @@ function Formulario({ marca, textoInicial = '', articuloInicial, onCerrar, onAno
                 </div>
               </div>
               <Button size="sm" variant="ghost" onClick={() => setArticulo(null)}>
-                Quitar
+                Sacar
               </Button>
             </div>
           ) : !marca ? (

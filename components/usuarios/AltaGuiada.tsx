@@ -191,7 +191,7 @@ export function AltaGuiada({
             elegida={molde === 'admin'}
             onElegir={() => setMolde('admin')}
             titulo="Administrador"
-            ayuda="Ve todas las secciones de las dos marcas, puede hacer todas las acciones y gestiona usuarios. No se le pueden quitar cosas de a una."
+            ayuda="Ve todas las secciones de las dos marcas, puede hacer todas las acciones y gestiona usuarios. No se le pueden sacar cosas de a una."
           />
         </>
       )}

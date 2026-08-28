@@ -62,7 +62,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
    * si la categoría entra o sale de la lista del producto.
    *
    * Hace falta para las subcategorías temporales de un sale (`SALE · TOPS Y BODIES`…): cuando la
-   * campaña termina hay que sacárselas a 260 productos, y borrar la categoría en Tienda Nube no es
+   * campaña termina hay que sacárselas a 260 productos, y eliminar la categoría en Tienda Nube no es
    * lo mismo ni se puede hacer de a uno.
    */
   const [sacar, setSacar] = useState(false)
@@ -227,7 +227,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
       <div style={{ fontSize: 12, color: paleta.mut2, margin: '2px 0 12px', maxWidth: 680 }}>
         Elegí una categoría y subí un Excel con los <b>nombres de producto</b> en una columna (A1 = encabezado, de A2 para abajo los nombres). Te muestro la previsualización y, al confirmar, {sacar
           ? <>se le <b>saca</b> esa categoría a los que la tengan — las demás no se tocan.</>
-          : <>se le <b>agrega</b> esa categoría a los que matcheen — sin borrar las que ya tengan.</>}
+          : <>se le <b>agrega</b> esa categoría a los que matcheen — sin eliminar las que ya tengan.</>}
       </div>
       {/*
         El switch va arriba de todo y cambia el título de la card: es lo que decide si se agrega o
@@ -241,7 +241,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
           onChange={(e) => { setSacar(e.target.checked); setResultado(null); void previsualizar(catId, nombres, e.target.checked) }}
         />
         Sacar la categoría en vez de agregarla
-        <span style={{ color: paleta.mut2 }}>— para cuando termina un sale y hay que quitar sus subcategorías</span>
+        <span style={{ color: paleta.mut2 }}>— para cuando termina un sale y hay que sacar sus subcategorías</span>
       </label>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         <select value={catId} onChange={(e) => onCat(e.target.value)} style={{ padding: '7px 10px', border: `1px solid ${paleta.line2}`, borderRadius: 8, fontSize: 13, minWidth: 220 }}>

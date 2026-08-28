@@ -272,7 +272,7 @@ export function FotosCard({ marca }: { marca: Marca }) {
         try {
           const j = await desvincularColor(marca, prodId, color)
           if (!j.ok || !(j.variantesObjetivo ?? 0) || (j.variantesDesasignadas ?? 0) < (j.variantesObjetivo ?? 0)) {
-            return j.error || `Se quitaron ${j.variantesDesasignadas ?? 0} de ${j.variantesObjetivo ?? 0}. ${detalle(j.linkErrores)}`
+            return j.error || `Se sacaron ${j.variantesDesasignadas ?? 0} de ${j.variantesObjetivo ?? 0}. ${detalle(j.linkErrores)}`
           }
           aplicarLocal(prodId, color, null)
           return null

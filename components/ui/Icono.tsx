@@ -550,7 +550,7 @@ const TRAZOS = {
       <path d="M14.6 5.7l3.1 3.1" />
     </>
   ),
-  /** Quitar / cerrar — cruz. */
+  /** Sacar / cerrar — cruz. */
   cruz: (
     <>
       <path d="M6 6l12 12M18 6L6 18" />

@@ -86,13 +86,13 @@ export function ListaCupones() {
   }
   const onBorrar = async (id: string) => {
     if (!admin) {
-      await avisar('Solo un administrador puede borrar cupones.')
+      await avisar('Solo un administrador puede eliminar cupones.')
       return
     }
     const okBorrar = await confirmar({
-      titulo: 'Borrar de la lista',
+      titulo: 'Eliminar de la lista',
       tono: 'danger',
-      ok: 'Borrar',
+      ok: 'Eliminar',
       mensaje: 'Se saca de la lista del monitor. Si el cupón sigue activo en la tienda, esto NO lo anula.',
     })
     if (!okBorrar) return
@@ -195,7 +195,7 @@ export function ListaCupones() {
                             ? <button onClick={() => onReactivar(c.id)} title="Reactivar" style={btnGris}>Reactivar</button>
                             : <button onClick={() => onAnular(c.id)} title="Anular" style={{ border: 'none', background: 'none', color: color.danger, cursor: 'pointer', fontSize: 13 }}>✕</button>)}
                           {admin && (
-                            <button onClick={() => onBorrar(c.id)} title="Borrar (solo admin)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 14 }}>🗑</button>
+                            <button onClick={() => onBorrar(c.id)} title="Eliminar (solo admin)" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 14 }}>🗑</button>
                           )}
                         </span>
                       </Td>

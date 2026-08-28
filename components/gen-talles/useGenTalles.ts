@@ -97,7 +97,7 @@ export function useGenTalles(marca: Marca): EstadoGenTalles {
   const guardarVinculado = useCallback(
     async (id: string, tabla: TablaGuardada): Promise<boolean> => {
       if (!cargado) {
-        toast.error('No se pudo leer las tablas guardadas, así que no se guarda nada (guardar ahora las borraría). Recargá y probá de nuevo.')
+        toast.error('No se pudo leer las tablas guardadas, así que no se guarda nada (guardar ahora las eliminaría). Recargá y probá de nuevo.')
         return false
       }
       // Merge por-clave: re-leer fresco y setear sólo este producto.

@@ -71,7 +71,7 @@ export function VerifVentas() {
     else delete next[tnOrder]
     setResueltas(next)
     if (!cargado) {
-      toast.error('No se pudo leer el checklist, así que el tilde no se guarda (guardar ahora lo borraría). Verificá de nuevo.')
+      toast.error('No se pudo leer el checklist, así que el tilde no se guarda (guardar ahora lo eliminaría). Verificá de nuevo.')
       return
     }
     const r = await guardarResueltas({ store: marca, resueltas: next, cargado: true })

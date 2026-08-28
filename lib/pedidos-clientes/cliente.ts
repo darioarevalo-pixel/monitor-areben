@@ -57,5 +57,5 @@ export function cambiarEstado(store: string, id: string, estado: EstadoPedido): 
 }
 
 export function borrarPedido(store: string, id: string): Promise<void> {
-  return postear(store, { action: 'borrar', id }, 'No se pudo borrar.')
+  return postear(store, { action: 'eliminar', id }, 'No se pudo eliminar.')
 }

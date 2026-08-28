@@ -156,9 +156,9 @@ export function Manuales() {
       ? ` Y ${rutinas.length === 1 ? '1 rutina de la Agenda se queda' : `${rutinas.length} rutinas de la Agenda se quedan`} sin el «Cómo se hace»: ${rutinas.map((r) => `«${r.titulo}»`).join(', ')}.`
       : ''
     return void confirmar({
-      titulo: `Borrar «${m.titulo}»`,
+      titulo: `Eliminar «${m.titulo}»`,
       tono: 'danger',
-      ok: 'Borrar',
+      ok: 'Eliminar',
       mensaje: (m.seccion
         ? 'Se va para todos, y esa pantalla deja de mostrar el botón «Cómo se usa».'
         : 'Se va para todos.') + cuelgan,
@@ -168,9 +168,9 @@ export function Manuales() {
         await borrarManual(m.id)
         cerrar()
         await cargar()
-        toast.ok('Borrado.')
+        toast.ok('Eliminado.')
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+        toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
       }
     })
   }
@@ -240,7 +240,7 @@ export function Manuales() {
             {puede.editarManuales && (
               <>
                 <Button variant="soft" size="sm" iconLeft="✏️" onClick={() => setEditando(abierto)}>Editar</Button>
-                <Button variant="ghost" size="sm" tone="danger" iconLeft="🗑" onClick={() => onBorrar(abierto)}>Borrar</Button>
+                <Button variant="ghost" size="sm" tone="danger" iconLeft="🗑" onClick={() => onBorrar(abierto)}>Eliminar</Button>
               </>
             )}
           </div>

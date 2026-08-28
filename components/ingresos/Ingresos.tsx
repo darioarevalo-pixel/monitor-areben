@@ -402,7 +402,7 @@ function Galeria({ g, editable, guardar, onMedia }: { g: Ingreso; editable: bool
             {editable && (
               <button
                 onClick={() => onQuitar(it)}
-                title="Quitar"
+                title="Eliminar la imagen"
                 style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)', cursor: 'pointer', fontSize: 12, color: paleta.danger, lineHeight: 1 }}
               >
                 ×
@@ -556,7 +556,7 @@ function BloqueEditar({
           style={{ flex: 1, minWidth: 150, fontSize: 13, fontWeight: 600, border: 'none', borderBottom: `1px solid ${paleta.line}`, padding: '3px 0' }}
         />
         <span style={{ fontSize: 12, color: paleta.ink2 }}>Subtotal: <b>{grand.toLocaleString('es-AR')}</b> u.</span>
-        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el bloque', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra el bloque con todas sus cantidades e imágenes.' })) guardar((l) => quitarBloque(l, g.id, b.id)) })()} title="Quitar bloque" style={{ border: `1px solid ${paleta.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, padding: '3px 7px' }}>
+        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el bloque', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina el bloque con todas sus cantidades e imágenes.' })) guardar((l) => quitarBloque(l, g.id, b.id)) })()} title="Eliminar el bloque" style={{ border: `1px solid ${paleta.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, padding: '3px 7px' }}>
           🗑 bloque
         </button>
       </div>
@@ -601,7 +601,7 @@ function BloqueEditar({
                           📷 subir
                           <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { onImg(d.id, e.target.files); e.currentTarget.value = '' }} />
                         </label>
-                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el diseño', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la columna y las cantidades cargadas en ella.' })) guardar((l) => quitarDiseno(l, g.id, b.id, d.id)) })()} title="Quitar diseño" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 11 }}>
+                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el diseño', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina la columna y las cantidades cargadas en ella.' })) guardar((l) => quitarDiseno(l, g.id, b.id, d.id)) })()} title="Eliminar el diseño" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 11 }}>
                           ✕
                         </button>
                       </div>
@@ -629,7 +629,7 @@ function BloqueEditar({
                         <button onClick={() => igualarFila(m.id)} title="Copiar la 1ª cantidad cargada a todos los diseños de esta fila" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 13 }}>
                           ⎘
                         </button>
-                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Quitar el modelo', tono: 'danger', ok: 'Quitar', mensaje: 'Se borra la fila y las cantidades cargadas en ella.' })) guardar((l) => quitarModelo(l, g.id, b.id, m.id)) })()} title="Quitar modelo" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 15 }}>
+                        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el modelo', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina la fila y las cantidades cargadas en ella.' })) guardar((l) => quitarModelo(l, g.id, b.id, m.id)) })()} title="Eliminar el modelo" style={{ border: 'none', background: 'none', color: paleta.mut2, cursor: 'pointer', fontSize: 15 }}>
                           ×
                         </button>
                       </div>
@@ -861,7 +861,7 @@ function IngresoEditar({
             <option key={s.k} value={s.k}>{s.lbl}</option>
           ))}
         </select>
-        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el ingreso', tono: 'danger', ok: 'Eliminar', mensaje: `Se borra "${g.desc || 'este ingreso'}" con todos sus bloques, cantidades e imágenes.` })) guardar((l) => quitarIngreso(l, g.id)) })()} title="Eliminar ingreso" style={{ padding: '5px 9px', border: `1px solid ${paleta.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
+        <button onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar el ingreso', tono: 'danger', ok: 'Eliminar', mensaje: `Se elimina "${g.desc || 'este ingreso'}" con todos sus bloques, cantidades e imágenes.` })) guardar((l) => quitarIngreso(l, g.id)) })()} title="Eliminar ingreso" style={{ padding: '5px 9px', border: `1px solid ${paleta.line}`, background: '#fff', borderRadius: 6, cursor: 'pointer' }}>
           🗑
         </button>
       </div>

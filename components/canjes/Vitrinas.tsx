@@ -469,14 +469,14 @@ function ArmarVitrina({
               size="sm"
               onClick={async () => {
                 if (!(await confirmar({
-                  titulo: `Borrar “${vitrina.nombre}”`,
+                  titulo: `Eliminar “${vitrina.nombre}”`,
                   mensaje: 'No tiene productos cargados, así que no se pierde nada.',
-                  ok: 'Borrar',
+                  ok: 'Eliminar',
                 }))) return
                 try { await borrarVitrina(store, vitrina.id); onVolver() } catch (e) { toast.error(String((e as Error)?.message || e)) }
               }}
             >
-              Borrar
+              Eliminar
             </Button>
           )}
         </div>

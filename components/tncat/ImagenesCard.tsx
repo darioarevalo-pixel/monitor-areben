@@ -420,7 +420,7 @@ export function ImagenesCard() {
                   </span>
                 ) : null}
                 {tieneColores ? <span style={{ fontSize: 11, color: color.mut2 }}>↓ elegí el color de cada foto</span> : null}
-                <button onClick={() => quitarGrupo(g.id)} title="Quitar este producto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 18 }}>×</button>
+                <button onClick={() => quitarGrupo(g.id)} title="Sacar este producto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 18 }}>×</button>
               </div>
               <div
                 onClick={() => setActivo(g.id)}

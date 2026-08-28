@@ -61,8 +61,8 @@ export async function desmarcarVerificado(store: Marca, tnId: string | number): 
   const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ store, tn_id: String(tnId), action: 'quitar' }),
+    body: JSON.stringify({ store, tn_id: String(tnId), action: 'sacar' }),
   })
   const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo quitar la revisión.')
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo sacar la revisión.')
 }

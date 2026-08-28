@@ -118,7 +118,7 @@ function motivoSiEncoge(clave: string, cantidad: number): string | null {
 }
 
 export const MOTIVO_NO_LEIDO =
-  'No se pudo leer el KV, así que no se guarda nada: guardar ahora borraría lo que hay.'
+  'No se pudo leer el KV, así que no se guarda nada: guardar ahora eliminaría lo que hay.'
 
 async function pedir(url: string, init?: RequestInit): Promise<Lectura<Record<string, unknown>>> {
   try {

@@ -231,7 +231,7 @@ export async function editarPersona(store: CanjeStore, id: number, campos: Campo
  * "no la llamemos más" está el veto, que deja el porqué escrito.
  */
 export async function borrarPersona(store: CanjeStore, id: number): Promise<void> {
-  await postear({ store, action: 'persona-borrar', id })
+  await postear({ store, action: 'persona-eliminar', id })
 }
 
 /** Devuelve las notas ya actualizadas: la lista se re-pinta sin volver a leer la ficha entera. */
@@ -242,7 +242,7 @@ export async function agregarNota(store: CanjeStore, id: number, texto: string):
 
 /** ⚠️ Por `nota_id`, nunca por índice: ver el comentario en `api/_canjes.js`. */
 export async function borrarNota(store: CanjeStore, id: number, notaId: string): Promise<CanjePersona['notas']> {
-  const d = await postear({ store, action: 'persona-nota-borrar', id, nota_id: notaId })
+  const d = await postear({ store, action: 'persona-nota-eliminar', id, nota_id: notaId })
   return (d.notas as CanjePersona['notas']) || []
 }
 
@@ -254,7 +254,7 @@ export async function agregarArchivo(
 }
 
 export async function borrarArchivo(store: CanjeStore, id: number, url: string): Promise<CanjePersona['archivos']> {
-  const d = await postear({ store, action: 'persona-archivo-borrar', id, url })
+  const d = await postear({ store, action: 'persona-archivo-eliminar', id, url })
   return (d.archivos as CanjePersona['archivos']) || []
 }
 
@@ -374,7 +374,7 @@ export async function sacarDeVitrina(
 }
 
 export async function borrarVitrina(store: CanjeStore, vitrinaId: number): Promise<void> {
-  await postear({ store, action: 'vitrina-borrar', vitrina_id: vitrinaId })
+  await postear({ store, action: 'vitrina-eliminar', vitrina_id: vitrinaId })
 }
 
 /** De qué vitrina elige este canje. `null` la saca y el link vuelve a pedir sólo los datos. */
@@ -478,13 +478,13 @@ export async function editarCanje(store: CanjeStore, id: number, campos: Partial
  * servidor salvo Administración. Pedí antes `queSeLlevaElCanje` para poder decir cuánto se va.
  */
 export async function borrarCanje(store: CanjeStore, id: number): Promise<void> {
-  await postear({ store, action: 'canje-borrar', id })
+  await postear({ store, action: 'canje-eliminar', id })
 }
 
 export type LoQueSeLleva = { items: number; entregables: number; evidencias: number }
 
 export async function queSeLlevaElCanje(store: CanjeStore, id: number): Promise<LoQueSeLleva> {
-  const d = await postear({ store, action: 'canje-borrar-que-se-lleva', id })
+  const d = await postear({ store, action: 'canje-eliminar-que-se-lleva', id })
   return { items: d.items as number, entregables: d.entregables as number, evidencias: d.evidencias as number }
 }
 
@@ -565,7 +565,7 @@ export async function agregarNotaCanje(store: CanjeStore, id: number, texto: str
 
 /** ⚠️ Por `nota_id`, nunca por índice: ver el comentario en `api/_canjes.js`. */
 export async function borrarNotaCanje(store: CanjeStore, id: number, notaId: string): Promise<NotaCanje[]> {
-  const d = await postear({ store, action: 'canje-nota-borrar', id, nota_id: notaId })
+  const d = await postear({ store, action: 'canje-nota-eliminar', id, nota_id: notaId })
   return (d.notas as NotaCanje[]) || []
 }
 
@@ -585,7 +585,7 @@ export async function confirmarItem(
 export async function quitarItem(
   store: CanjeStore, id: number, itemId: number, motivo: string, sinStock = false,
 ): Promise<void> {
-  await postear({ store, action: 'item-quitar', id, item_id: itemId, motivo, sin_stock: sinStock })
+  await postear({ store, action: 'item-sacar', id, item_id: itemId, motivo, sin_stock: sinStock })
 }
 
 // ── Compra y envío ──────────────────────────────────────────────────────────────
@@ -726,7 +726,7 @@ export async function agregarEntregable(
 }
 
 export async function quitarEntregable(store: CanjeStore, id: number, entregableId: number): Promise<void> {
-  await postear({ store, action: 'entregable-quitar', id, entregable_id: entregableId })
+  await postear({ store, action: 'entregable-sacar', id, entregable_id: entregableId })
 }
 
 export type NuevaEvidencia = {
@@ -751,7 +751,7 @@ export async function verificarEvidencia(
 }
 
 export async function borrarEvidencia(store: CanjeStore, id: number, evidenciaId: number): Promise<void> {
-  await postear({ store, action: 'evidencia-borrar', id, evidencia_id: evidenciaId })
+  await postear({ store, action: 'evidencia-eliminar', id, evidencia_id: evidenciaId })
 }
 
 /**

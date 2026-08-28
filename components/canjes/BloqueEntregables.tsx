@@ -176,7 +176,7 @@ export function BloqueEntregables({
                   <div style={{ marginTop: space[2], display: 'flex', flexDirection: 'column', gap: space[1] }}>
                     {suyas.map((ev) => (
                       <Evidencia key={ev.id} ev={ev} editable={editable} onVerificar={verificar} onBorrar={async () => {
-                        const ok = await confirmar({ mensaje: 'Borrar esta evidencia.', ok: 'Borrar', tono: 'danger' })
+                        const ok = await confirmar({ mensaje: 'Eliminar esta evidencia.', ok: 'Eliminar', tono: 'danger' })
                         if (!ok) return
                         try {
                           await borrarEvidencia(canje.store, canje.id, ev.id)
@@ -258,7 +258,7 @@ function Evidencia({
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           {!ev.verificada && <Button variant="ghost" size="sm" onClick={() => void onVerificar(ev, true)}>Verificar</Button>}
           {!ev.rechazada_motivo && <Button variant="ghost" size="sm" onClick={() => void onVerificar(ev, false)}>Rechazar</Button>}
-          <Button variant="ghost" tone="danger" size="sm" onClick={() => void onBorrar()}>Borrar</Button>
+          <Button variant="ghost" tone="danger" size="sm" onClick={() => void onBorrar()}>Eliminar</Button>
         </span>
       )}
     </div>

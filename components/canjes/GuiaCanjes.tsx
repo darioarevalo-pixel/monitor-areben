@@ -70,7 +70,7 @@ export function GuiaCanjes({ cfg }: { cfg: CanjeConfig | null }) {
           <Quien>marketing</Quien>
         </>,
         <>
-          <b>Mandale el link.</b> Ella carga su dirección y su talle o modelo de celular desde el
+          <b>Enviarle el link.</b> Ella carga su dirección y su talle o modelo de celular desde el
           celular, en un formulario corto. Si ya trabajó con nosotros, le aparece todo prellenado y
           sólo confirma.
           <Quien>ella</Quien>

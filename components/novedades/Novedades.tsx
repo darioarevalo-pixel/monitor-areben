@@ -189,12 +189,12 @@ export function Novedades() {
 
   const onBorrar = (n: Novedad) =>
     void confirmar({
-      titulo: `Borrar «${n.titulo}»`,
+      titulo: `Eliminar «${n.titulo}»`,
       tono: 'danger',
-      ok: 'Borrar',
+      ok: 'Eliminar',
       mensaje: 'Se va para todos, junto con el registro de quiénes la habían leído. Si sólo querés sacarla de la lista, archivala.',
     }).then(async (ok) => {
-      if (ok) await accion(() => borrarNovedad(n.id), 'Borrada.')
+      if (ok) await accion(() => borrarNovedad(n.id), 'Eliminada.')
     })
 
   if (!cargado) return <Esqueleto />
@@ -266,7 +266,7 @@ export function Novedades() {
                   </Button>
                 )}
                 <Button size="sm" variant="ghost" iconLeft="✏️" onClick={() => setEditando(n)}>Editar</Button>
-                <Button size="sm" variant="ghost" tone="danger" iconLeft="🗑" onClick={() => onBorrar(n)}>Borrar</Button>
+                <Button size="sm" variant="ghost" tone="danger" iconLeft="🗑" onClick={() => onBorrar(n)}>Eliminar</Button>
               </div>
             )}
           </>

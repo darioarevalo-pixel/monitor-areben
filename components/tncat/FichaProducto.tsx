@@ -101,11 +101,11 @@ export function FichaProducto({
 
   const quitar = async (color: string) => {
     const ok = await confirmar({
-      titulo: `Quitar la foto de ${color}`,
+      titulo: `Sacar la foto de ${color}`,
       mensaje:
         'La variante queda sin foto propia y la tienda pasa a mostrar la foto principal del producto, ' +
         'que en los productos con varios colores muestra la gama completa. Es mejor eso que un color equivocado.',
-      ok: 'Quitar foto',
+      ok: 'Sacar foto',
       tono: 'danger',
     })
     if (!ok) return
@@ -415,7 +415,7 @@ function RenglonColor({
             </Button>
             {c.foto && (
               <Button size="sm" variant="ghost" tone="danger" disabled={deshabilitado} onClick={onQuitar}>
-                Quitar foto
+                Sacar foto
               </Button>
             )}
           </div>

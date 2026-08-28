@@ -327,7 +327,7 @@ export function DefinirPrecio({
               )}
               {guardado.precioSale != null && (
                 <Button variant="ghost" tone="danger" onClick={() => void despejar()} loading={guardando}>
-                  Borrar el precio
+                  Eliminar el precio
                 </Button>
               )}
               <Button variant="soft" tone="brand" onClick={() => void guardar(false)} loading={guardando} disabled={!propuesta}>

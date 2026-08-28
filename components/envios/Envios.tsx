@@ -241,7 +241,7 @@ export function Envios() {
       await borrarEnvio(e.id)
       await recargar()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo borrar.')
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar.')
     }
   }
 
@@ -1137,7 +1137,7 @@ function AccionesDeFila({
         iconLeft={<Icono nombre="calendario" />}
         onClick={() => onAgendar(envio)}
         data-guia="envios.agendar"
-        {...dice(ok ? 'Mandar a un día de reparto' : motivo || 'No puede salir todavía')}
+        {...dice(ok ? 'Enviar a un día de reparto' : motivo || 'No puede salir todavía')}
       />
       <Button size="sm" variant="ghost" iconLeft={<Icono nombre="lapiz" />} onClick={() => onEditar(envio)} {...dice('Editar el envío')} />
       <Button
@@ -1459,14 +1459,14 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
       await agendar(envio.id, fecha, turno)
       await onGuardado()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo mandar a ese día.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo enviar a ese día.')
     } finally {
       setGuardando(false)
     }
   }
 
   return (
-    <Modal abierto onCerrar={onCerrar} titulo={`Mandar a un día · ${envio.cliente || 'Sin nombre'}`}>
+    <Modal abierto onCerrar={onCerrar} titulo={`Enviar a un día · ${envio.cliente || 'Sin nombre'}`}>
       <div style={{ display: 'grid', gap: space[4] }}>
         {/* 🔑 **La misma grilla que la hoja del día, y no un calendario pelado.** Acá se contesta
             «¿cuándo sale?», que casi siempre es «el próximo que salga» o «el de después»: con las
@@ -1496,7 +1496,7 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
                   variant={turno === t ? 'solid' : 'outline'}
                   tone={turno === t ? 'brand' : undefined}
                   onClick={() => setTurno(t)}
-                  {...dice(deEseDia ? `Mandarlo al turno ${t}` : `Ese día el cadete no sale a la ${t}, pero se puede forzar`)}
+                  {...dice(deEseDia ? `Enviarlo al turno ${t}` : `Ese día el cadete no sale a la ${t}, pero se puede forzar`)}
                 >
                   {t === 'mañana' ? 'Mañana' : 'Tarde'}
                   {deEseDia ? '' : ' ·  fuera de grilla'}
@@ -1524,7 +1524,7 @@ function MandarAUnDia({ envio, onCerrar, onGuardado }: { envio: Envio; onCerrar:
             Cancelar
           </Button>
           <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando || !rotuloDeDia(fecha) || !precio.ok}>
-            {guardando ? 'Mandando…' : 'Mandar a ese día'}
+            {guardando ? 'Mandando…' : 'Enviar a ese día'}
           </Button>
         </div>
       </div>

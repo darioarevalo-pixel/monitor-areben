@@ -48,7 +48,7 @@ export function reabrirMensaje(id: string): Promise<void> {
 }
 
 export function borrarMensaje(id: string): Promise<void> {
-  return postear({ action: 'borrar', id }, 'No se pudo borrar.')
+  return postear({ action: 'eliminar', id }, 'No se pudo eliminar.')
 }
 
 /** Atar un mensaje suelto a una orden: es el verbo que enciende el freno en Envíos. */

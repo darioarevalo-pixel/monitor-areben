@@ -149,7 +149,7 @@ export async function cerrarRonda(store: Marca, id: string): Promise<void> {
 
 /** Borra la ronda **y sus votos** (`on delete cascade`). Es el único verbo que pierde votos. */
 export async function borrarRonda(store: Marca, id: string): Promise<void> {
-  await pedir(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, action: 'borrar', id }) })
+  await pedir(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store, action: 'eliminar', id }) })
 }
 
 // ── El portal, sin sesión ──────────────────────────────────────────────────────────────────────

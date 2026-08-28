@@ -119,8 +119,8 @@ export function ConteoDeposito() {
     const ok = await confirmar({
       titulo: 'Reiniciar el conteo',
       tono: 'danger',
-      ok: 'Borrar todo',
-      mensaje: 'Se borra todo lo cargado. Los ajustes ya aplicados quedan en el Historial.',
+      ok: 'Eliminar todo',
+      mensaje: 'Se elimina todo lo cargado. Los ajustes ya aplicados quedan en el Historial.',
     })
     if (!ok) return
     cd.reset()

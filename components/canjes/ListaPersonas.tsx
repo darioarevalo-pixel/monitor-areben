@@ -271,10 +271,10 @@ export function ListaPersonas({
                     variant="ghost"
                     tone="danger"
                     size="sm"
-                    title="Borrar del padrón"
+                    title="Eliminar del padrón"
                     onClick={(e) => { e.stopPropagation(); void pedirBorrar({ id: p.id, nombre: p._nombre }, onBorrada) }}
                   >
-                    Borrar
+                    Eliminar
                   </Button>
                 </Td>
               </Tr>

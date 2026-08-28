@@ -184,13 +184,13 @@ export function TableroIdeas({
    */
   async function borrar(idea: Idea) {
     const ok = await confirmar({
-      titulo: 'Borrar la idea',
+      titulo: 'Eliminar la idea',
       tono: 'danger',
-      ok: 'Borrarla',
+      ok: 'Eliminarla',
       mensaje: (
         <>
           <div>
-            Se borra <b>«{idea.titulo}»</b> con todo su historial. No se puede deshacer.
+            Se elimina <b>«{idea.titulo}»</b> con todo su historial. No se puede deshacer.
           </div>
           <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm, lineHeight: 1.5 }}>
             Si la idea no va, conviene <b>descartarla</b>: queda guardada con el motivo, quien la
@@ -202,10 +202,10 @@ export function TableroIdeas({
     if (!ok) return
     try {
       await borrarIdea(marca, idea.id)
-      toast.ok('Idea borrada.')
+      toast.ok('Idea eliminada.')
       recargar()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar la idea.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar la idea.')
     }
   }
 
@@ -303,7 +303,7 @@ export function TableroIdeas({
             {verDescartadas ? '▾' : '▸'} {descartadas.length} descartada{descartadas.length === 1 ? '' : 's'}
           </button>
           <div style={{ fontSize: font.xs, color: color.mut2, marginTop: space[1], lineHeight: 1.4 }}>
-            No se borran: quien la anotó tiene que poder ver por qué no fue. Se pueden reabrir.
+            No se eliminan: quien la anotó tiene que poder ver por qué no fue. Se pueden reabrir.
           </div>
           {verDescartadas && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: space[2], marginTop: space[3] }}>
@@ -502,7 +502,7 @@ function TarjetaIdea({ idea, puede, quien, fechas, campañas, onTransicion, onEd
                 pegado a «Editar». El `auto` lo empuja al borde de la columna, así que dejan de ser
                 dos botones grises consecutivos y hay que apuntarle. */}
             <span style={{ marginLeft: 'auto' }}>
-              <Button size="sm" variant="ghost" onClick={() => onBorrar(idea)}>Borrar</Button>
+              <Button size="sm" variant="ghost" onClick={() => onBorrar(idea)}>Eliminar</Button>
             </span>
           </>
         )}
@@ -623,7 +623,7 @@ function ModalIdea({ idea, fechas, onCerrar, onGuardar }: {
         {!idea.id && (
           <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
             Entra como <b>propuesta</b>. La aprueba quien tenga el permiso para pautear, y hasta
-            entonces la podés editar o borrar vos.
+            entonces la podés editar o eliminar vos.
           </div>
         )}
       </div>
@@ -664,7 +664,7 @@ function ModalDescartar({ idea, onCerrar, onDescartar }: {
           <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} autoFocus />
         </Field>
         <div style={{ fontSize: font.xs, color: color.mut2, lineHeight: 1.45 }}>
-          No se borra: queda al pie del tablero y se puede reabrir.
+          No se elimina: queda al pie del tablero y se puede reabrir.
         </div>
       </div>
     </Modal>

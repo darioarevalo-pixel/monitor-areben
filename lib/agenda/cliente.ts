@@ -85,7 +85,7 @@ export function guardarPromo(promo: Promo): Promise<void> {
 }
 
 export function borrarPromo(id: string): Promise<void> {
-  return postear({ action: 'borrar-promo', id }, 'No se pudo borrar la promoción.')
+  return postear({ action: 'eliminar-promo', id }, 'No se pudo eliminar la promoción.')
 }
 
 export function guardarItem(item: ItemAgenda): Promise<void> {
@@ -93,7 +93,7 @@ export function guardarItem(item: ItemAgenda): Promise<void> {
 }
 
 export function borrarItem(id: string): Promise<void> {
-  return postear({ action: 'borrar-item', id }, 'No se pudo borrar el pendiente.')
+  return postear({ action: 'eliminar-item', id }, 'No se pudo eliminar el pendiente.')
 }
 
 /**

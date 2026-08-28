@@ -162,7 +162,7 @@ export function FichaPersona({
   const quitarNota = useCallback(
     async (notaId: string) => {
       if (!persona) return
-      const ok = await confirmar({ titulo: 'Borrar esta nota', mensaje: 'No se puede deshacer.', ok: 'Borrar', tono: 'danger' })
+      const ok = await confirmar({ titulo: 'Eliminar esta nota', mensaje: 'No se puede deshacer.', ok: 'Eliminar', tono: 'danger' })
       if (!ok) return
       try {
         const notas = await borrarNota(store, persona.id, notaId)
@@ -204,7 +204,7 @@ export function FichaPersona({
           <Button variant="outline" onClick={() => setEditando(true)}>Editar ficha</Button>
           {/* Borrar es para el @ mal tipeado y la ficha duplicada. Si ya hizo canjes, el servidor
               lo frena y manda a vetarla: eso es historial, no basura. */}
-          <Button variant="ghost" tone="danger" onClick={() => void borrar()}>Borrar del padrón</Button>
+          <Button variant="ghost" tone="danger" onClick={() => void borrar()}>Eliminar del padrón</Button>
           {/* Si está vetada no se le propone nada: el veto es una decisión que alguien tomó a
               mano. El bloqueo por vencidos (§2 bis) lo aplica el servidor, que ve los canjes de
               TODAS las marcas — desde acá no se puede saber. */}
@@ -385,7 +385,7 @@ export function FichaPersona({
                 </div>
                 {/* ⚠️ Se borra por `n.id`, nunca por índice: la lista está invertida acá y el
                     índice del render no es el de la base. Es el bug que ya tiene lib/crm/leads.ts. */}
-                <Button variant="ghost" tone="danger" size="sm" onClick={() => void quitarNota(n.id)}>Borrar</Button>
+                <Button variant="ghost" tone="danger" size="sm" onClick={() => void quitarNota(n.id)}>Eliminar</Button>
               </div>
             ))}
           </div>

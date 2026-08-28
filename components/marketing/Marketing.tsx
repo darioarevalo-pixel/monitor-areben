@@ -205,7 +205,7 @@ export function Marketing() {
   }
   const mandarSel = () => {
     if (!sel.size) {
-      void avisar('Tildá al menos un producto para mandar a Sesión de fotos.')
+      void avisar('Tildá al menos un producto para enviar a Sesión de fotos.')
       return
     }
     // Marketing manda el producto entero y sin tildar: acá se elige QUÉ producto, no qué talle.
@@ -259,7 +259,7 @@ export function Marketing() {
             tone="brand"
             onClick={() => void entrarSel()}
             disabled={refrescando}
-            title="Elegí productos para mandarlos a Sesión de fotos"
+            title="Elegí productos para enviarlos a Sesión de fotos"
           >
             Productos para sesión de fotos
           </Button>
@@ -275,7 +275,7 @@ export function Marketing() {
           value={stats.sinFoto}
           tone="danger"
           activo={calidadUnica('sin-foto')}
-          accionActiva="Quitar filtro ✕"
+          accionActiva="Sacar filtro ✕"
           onClick={() => toggleCalidadUnica('sin-foto')}
         />
         <KpiCard
@@ -283,7 +283,7 @@ export function Marketing() {
           value={stats.sinDesc}
           tone="warning"
           activo={calidadUnica('sin-desc')}
-          accionActiva="Quitar filtro ✕"
+          accionActiva="Sacar filtro ✕"
           onClick={() => toggleCalidadUnica('sin-desc')}
         />
         <KpiCard
@@ -291,7 +291,7 @@ export function Marketing() {
           value={stats.prosaCorta}
           tone="warning"
           activo={calidadUnica('prosa-corta')}
-          accionActiva="Quitar filtro ✕"
+          accionActiva="Sacar filtro ✕"
           onClick={() => toggleCalidadUnica('prosa-corta')}
         />
         {talles && (
@@ -300,7 +300,7 @@ export function Marketing() {
             value={stats.sinTabla}
             tone="warning"
             activo={calidadUnica('sin-tabla')}
-            accionActiva="Quitar filtro ✕"
+            accionActiva="Sacar filtro ✕"
             onClick={() => toggleCalidadUnica('sin-tabla')}
           />
         )}
@@ -309,7 +309,7 @@ export function Marketing() {
           value={stats.sinAmbos}
           tone="danger"
           activo={calidadUnica('sin-foto-desc')}
-          accionActiva="Quitar filtro ✕"
+          accionActiva="Sacar filtro ✕"
           onClick={() => toggleCalidadUnica('sin-foto-desc')}
         />
         <KpiCard
@@ -317,7 +317,7 @@ export function Marketing() {
           value={stats.topLow}
           tone="danger"
           activo={calidadUnica('top-low-stock')}
-          accionActiva="Quitar filtro ✕"
+          accionActiva="Sacar filtro ✕"
           onClick={() => toggleCalidadUnica('top-low-stock')}
         />
       </div>

@@ -52,7 +52,7 @@ function tituloDeOrigen(u: UsuarioConfig, brand: Marca, clave: string, origen: O
   if (origen === 'todos') {
     return 'La ve todo el equipo: no hace falta tildarla. Destildala para hacerle una excepción a esta persona.'
   }
-  if (origen === 'excluido') return `Su función se lo daría, pero se lo quitaron para ${brand === 'bdi' ? 'BDI' : 'Zattia'}.`
+  if (origen === 'excluido') return `Su función se lo daría, pero se lo sacaron para ${brand === 'bdi' ? 'BDI' : 'Zattia'}.`
   if (origen === 'explicito') return 'Se lo tildaste vos para esta marca.'
   return undefined
 }
@@ -124,7 +124,7 @@ export function Leyenda() {
     { origen: 'explicito', marcada: true, texto: 'Se lo tildaste vos' },
     { origen: 'funcion', marcada: true, texto: 'Lo trae su función' },
     { origen: 'todos', marcada: true, texto: 'La ve todo el equipo' },
-    { origen: 'excluido', marcada: false, texto: 'Se lo quitaste (excepción)' },
+    { origen: 'excluido', marcada: false, texto: 'Se lo sacaste (excepción)' },
     { origen: 'no', marcada: false, texto: 'No lo tiene' },
   ]
   return (

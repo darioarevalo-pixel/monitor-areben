@@ -235,10 +235,10 @@ export function CanjePortal({ token }: { token: string | null }) {
     const r = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, accion: 'contenido-borrar', evidencia_id: id }),
+      body: JSON.stringify({ token, accion: 'contenido-eliminar', evidencia_id: id }),
     })
     const d = await r.json().catch(() => null)
-    if (!r.ok || !d?.ok) throw new Error(d?.error || 'No se pudo borrar ese archivo.')
+    if (!r.ok || !d?.ok) throw new Error(d?.error || 'No se pudo eliminar ese archivo.')
     setVista((v) => (v ? { ...v, contenido: v.contenido.filter((a) => a.id !== id) } : v))
   }, [token])
 

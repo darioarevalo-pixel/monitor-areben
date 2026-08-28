@@ -86,7 +86,7 @@ export default function Seccion() {
   /**
    * `/cadete/<token>` es el tercero, y el único que abre alguien que trabaja con nosotros: la hoja
    * del día en el celular, para marcar entregado y cobrado desde la puerta. No es la pantalla
-   * interna de Envíos —ésa tiene la cuenta corriente y deja borrar— y por eso no puede ser la misma
+   * interna de Envíos —ésa tiene la cuenta corriente y deja eliminar— y por eso no puede ser la misma
    * ruta. Se defiende con token + PIN. Ver `api/_cadete.js`.
    */
   /**

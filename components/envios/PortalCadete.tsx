@@ -603,7 +603,7 @@ function ComoSeUsa() {
       <ol style={{ margin: '10px 0 2px', paddingLeft: 20, fontSize: 14, color: 'var(--mo-ink2)', lineHeight: 1.7 }}>
         <li>Arriba está el día. Sólo podés tocar el de hoy y el de al lado.</li>
         <li>Cada tarjeta es una entrega: dirección, teléfono y cuánto cobrar. «WhatsApp» abre el chat con el mensaje ya escrito.</li>
-        <li>«Marcar entregado» le pone la hora sola. Si te equivocaste, «No entregado» la borra.</li>
+        <li>«Marcar entregado» le pone la hora sola. Si te equivocaste, «No entregado» la elimina.</li>
         <li>Si te pagaron por transferencia al local, «No cobré».</li>
         <li>«Mi cuenta» es tu saldo y lo que rendiste. Es de sólo lectura.</li>
       </ol>

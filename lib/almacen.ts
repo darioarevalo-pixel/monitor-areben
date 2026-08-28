@@ -83,7 +83,7 @@ export function almacenIDB(): Almacen {
         const tx = db.transaction(STORE, 'readwrite')
         tx.oncomplete = () => resolve()
         tx.onabort = () => reject(tx.error ?? new Error('transacción abortada'))
-        tx.onerror = () => reject(tx.error ?? new Error('borrado fallido'))
+        tx.onerror = () => reject(tx.error ?? new Error('eliminado fallido'))
         tx.objectStore(STORE).delete(clave)
       })
     },

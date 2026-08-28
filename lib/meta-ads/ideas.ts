@@ -151,7 +151,7 @@ export async function moverIdea(store: Marca, id: string, a: EstadoIdea, opts: {
 }
 
 export async function borrarIdea(store: Marca, id: string): Promise<void> {
-  await postear({ store, id, action: 'borrar' }, 'No se pudo borrar la idea.')
+  await postear({ store, id, action: 'eliminar' }, 'No se pudo eliminar la idea.')
 }
 
 /** Corrige a mano la etapa de una campaña. `objetivo`/`nombre` viajan para poder detectar después

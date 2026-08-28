@@ -184,10 +184,10 @@ export function Etiquetas() {
   const limpiar = async (slot: Slot) => {
     if (!Object.keys(cant[slot]).length) return
     const ok = await confirmar({
-      titulo: 'Borrar las cantidades',
+      titulo: 'Eliminar las cantidades',
       tono: 'danger',
-      ok: 'Borrar',
-      mensaje: 'Se borran todas las cantidades cargadas en esta pestaña. No afecta a las otras.',
+      ok: 'Eliminar',
+      mensaje: 'Se eliminan todas las cantidades cargadas en esta pestaña. No afecta a las otras.',
     })
     if (!ok) return
     setCant((prev) => {
@@ -261,9 +261,9 @@ export function Etiquetas() {
           autoClear ||
           (await confirmar({
             titulo: 'Etiquetas enviadas a imprimir',
-            ok: 'Borrar cantidades',
+            ok: 'Eliminar cantidades',
             cancelar: 'Dejarlas',
-            mensaje: '¿Borro las cantidades cargadas? Si la impresión salió mal, dejalas para reintentar.',
+            mensaje: '¿Elimino las cantidades cargadas? Si la impresión salió mal, dejalas para reintentar.',
           }))
         if (hacer) {
           setCant((prev) => {
@@ -604,7 +604,7 @@ function ModoPanel({
           )}
           <Button variant="ghost" tone="danger" onClick={limpiar}>Limpiar cantidades</Button>
           <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={autoClear} onChange={(e) => setAutoClear(e.target.checked)} /> Borrar cantidades al imprimir
+            <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={autoClear} onChange={(e) => setAutoClear(e.target.checked)} /> Eliminar cantidades al imprimir
           </label>
           <span style={{ fontSize: 12, color: color.mut }}>{total ? `${total} etiquetas en ${Object.keys(cant).length} variantes` : 'Cargá cantidades para imprimir'}</span>
         </div>
@@ -758,7 +758,7 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
           <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 3 }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
           </label>
-          <button onClick={() => del(i)} title="Quitar" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+          <button onClick={() => del(i)} title="Eliminar la línea" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>
@@ -834,7 +834,7 @@ function LibreEditor() {
           <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 3 }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={l.bold} onChange={(e) => setLinea(i, 'bold', e.target.checked)} /> Negrita
           </label>
-          <button onClick={() => del(i)} title="Quitar línea" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+          <button onClick={() => del(i)} title="Eliminar la línea" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={add} style={{ marginTop: 4 }}>+ Agregar línea</Button>

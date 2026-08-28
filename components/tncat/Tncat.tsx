@@ -65,7 +65,7 @@ export function Tncat() {
     // las fotos, que es exactamente quien ya lo tiene tildado. Un permiso nuevo es una pantalla
     // que no ve nadie hasta que alguien se acuerde de tildarlo — la lección de «Día a día».
     { key: 'cola', label: 'La cola', hint: 'Qué falta fotografiar, en qué orden, y qué ya se intentó', ok: verImg },
-    { key: 'categorias', label: 'Categorías', hint: 'Asignar y quitar categorías de la tienda', ok: verCat || verAsig },
+    { key: 'categorias', label: 'Categorías', hint: 'Asignar y sacar categorías de la tienda', ok: verCat || verAsig },
     { key: 'visibilidad', label: 'Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
     { key: 'descripciones', label: 'Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
     { key: 'redaccion', label: 'Redacción', hint: 'La cola de descripciones: el insumo del local y el borrador que se aprueba', ok: verRedaccion },

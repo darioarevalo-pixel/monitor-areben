@@ -93,7 +93,7 @@ export function ProveedorMeta({ children }: { children: React.ReactNode }) {
   const [rangoCrudo, setRangoCrudo] = useFiltroUrl<RangoUI>('rango', RANGO_DEFAULT)
 
   // `pedido` es lo que hace recargable a la lista: pedir de nuevo tiene que ser un cambio de
-  // DEPENDENCIA del efecto, no un borrado del resultado. Vaciar el estado pinta «cargando» sin que
+  // DEPENDENCIA del efecto, no un eliminado del resultado. Vaciar el estado pinta «cargando» sin que
   // salga ningún fetch — eso es lo que dejaba el panel de Etapas colgado para siempre.
   const [pedido, setPedido] = useState(0)
   const [r, setR] = useState<{ key: number; e: CargableCuentas } | null>(null)

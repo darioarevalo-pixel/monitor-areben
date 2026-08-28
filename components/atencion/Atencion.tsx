@@ -142,10 +142,10 @@ export function Atencion() {
 
   const onBorrar = async (i: ItemAtencion) => {
     const ok = await confirmar({
-      titulo: `Borrar «${i.titulo}»`,
+      titulo: `Eliminar «${i.titulo}»`,
       tono: 'danger',
-      ok: 'Borrar',
-      mensaje: 'Se va de la lista para todo el equipo. Si es un link que usan seguido, conviene editarlo en vez de borrarlo.',
+      ok: 'Eliminar',
+      mensaje: 'Se va de la lista para todo el equipo. Si es un link que usan seguido, conviene editarlo en vez de eliminarlo.',
     })
     if (!ok) return
     const err = await at.borrar(i.id)
@@ -338,7 +338,7 @@ export function Atencion() {
                       {at.puedeEditar && (
                         <>
                           <Button variant="ghost" size="sm" iconLeft="✏️" aria-label="Editar" onClick={() => setForm({ ...NUEVO, ...i })} />
-                          <Button variant="ghost" size="sm" tone="danger" iconLeft="🗑" aria-label="Borrar" onClick={() => void onBorrar(i)} />
+                          <Button variant="ghost" size="sm" tone="danger" iconLeft="🗑" aria-label="Eliminar" onClick={() => void onBorrar(i)} />
                         </>
                       )}
                     </div>

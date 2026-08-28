@@ -56,7 +56,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
   const [imgMsg, setImgMsg] = useState('')
   // Fotos en curso de subida a Blob (clave 'pedido' o `var-<i>`): mientras suben se
   // ve el preview base64 con opacidad reducida. La subida es en segundo plano; si
-  // falla, imgAThumbYSubir cae al base64 y la quita del set igual.
+  // falla, imgAThumbYSubir cae al base64 y la saca del set igual.
   const [subiendo, setSubiendo] = useState<Set<string>>(new Set())
   const marcarSubiendo = (k: string, on: boolean) =>
     setSubiendo((s) => { const n = new Set(s); if (on) n.add(k); else n.delete(k); return n })
@@ -210,7 +210,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
           <span style={{ fontSize: 12, color: color.mut }}>Foto del pedido <span style={{ color: color.mut2 }}>(opcional)</span></span>
           <span style={{ fontSize: 11, color: color.mut2 }}>Aparece arriba en la imagen y el PDF. Ideal si todo el pedido es del mismo diseño.</span>
         </div>
-        {img && <button onClick={() => set({ img: null })} style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11 }}>quitar</button>}
+        {img && <button onClick={() => set({ img: null })} style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11 }}>sacar</button>}
       </div>
 
       {/* Variantes */}
@@ -233,7 +233,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
                       <span style={{ display: 'flex', width: 38, height: 38, alignItems: 'center', justifyContent: 'center', border: `1px dashed ${color.mut2}`, borderRadius: 6, color: color.mut2, fontSize: 18 }}>+</span>
                     )}
                   </label>
-                  {v.img && <button onClick={() => setVarCampo(i, { img: null })} title="Quitar foto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11, padding: 0 }}>quitar</button>}
+                  {v.img && <button onClick={() => setVarCampo(i, { img: null })} title="Sacar foto" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 11, padding: 0 }}>sacar</button>}
                   <input value={v.name} placeholder={`Variante ${i + 1} (ej: Negro, Serpiente...)`} onChange={(e) => setVarCampo(i, { name: e.target.value })} style={{ flex: 1, maxWidth: 240, padding: '5px 8px', fontSize: 13 }} />
                   <input type="number" min={0} max={100} step={0.1} value={v.pct} onChange={(e) => setVarCampo(i, { pct: parseFloat(e.target.value) || 0 })} style={{ width: 70, textAlign: 'center', padding: '5px 6px', fontSize: 13 }} />
                   <span style={{ fontSize: 12, color: color.mut2 }}>%</span>
@@ -314,7 +314,7 @@ export function SimulacionCard({ editor, setEditor, onGuardar, onNuevo, onVaciar
           <Button size="sm" variant="outline" onClick={onNuevo} title="Vacía el editor para armar otro pedido">
             Nuevo
           </Button>
-          <Button size="sm" variant="outline" tone="danger" onClick={onVaciar} title="Borra todo y empieza de cero">
+          <Button size="sm" variant="outline" tone="danger" onClick={onVaciar} title="Elimina todo y empieza de cero">
             Vaciar
           </Button>
           <Button size="sm" variant="outline" onClick={() => copiarTabla('ambos')} title="Copia modelo y cantidad separados por tabulación">

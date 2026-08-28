@@ -247,7 +247,7 @@ export function Ubicaciones() {
       titulo: 'Descartar lo tipeado',
       tono: 'danger',
       ok: `Descartar ${nPend}`,
-      mensaje: `Se borran ${nPend} ${nPend === 1 ? 'ubicación cargada' : 'ubicaciones cargadas'} que todavía no se ${nPend === 1 ? 'guardó' : 'guardaron'} en GN. Lo ya guardado no se toca.`,
+      mensaje: `Se eliminan ${nPend} ${nPend === 1 ? 'ubicación cargada' : 'ubicaciones cargadas'} que todavía no se ${nPend === 1 ? 'guardó' : 'guardaron'} en GN. Lo ya guardado no se toca.`,
     })
     if (!ok) return
     setCambios({})

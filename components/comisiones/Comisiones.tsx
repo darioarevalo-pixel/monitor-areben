@@ -104,10 +104,10 @@ export function Comisiones() {
   }
   const removeForma = async (forma: string) => {
     const ok = await confirmar({
-      titulo: 'Quitar la forma de pago',
+      titulo: 'Eliminar la forma de pago',
       tono: 'danger',
-      ok: 'Quitar',
-      mensaje: `Se borra "${forma}" y sus comisiones cargadas en todos los canales.`,
+      ok: 'Eliminar',
+      mensaje: `Se elimina "${forma}" y sus comisiones cargadas en todos los canales.`,
     })
     if (!ok) return
     const matriz = { ...cfg.matriz }
@@ -189,7 +189,7 @@ export function Comisiones() {
                     <td style={{ textAlign: 'center' }}>{cellInp('descuento', m.descuento || 0)}</td>
                     <td style={{ textAlign: 'center' }}><input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={m.aplicaImp} onChange={(e) => setCelda(f, 'aplicaImp', e.target.checked)} title="Aplica IVA / IIBB / DREI" /></td>
                     <td style={{ textAlign: 'center' }}>{cellInp('dias', m.dias)}</td>
-                    <td style={{ textAlign: 'center' }}><button onClick={() => void removeForma(f)} title="Quitar" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>×</button></td>
+                    <td style={{ textAlign: 'center' }}><button onClick={() => void removeForma(f)} title="Eliminar la forma de pago" style={{ background: 'none', border: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>×</button></td>
                   </tr>
                 )
               })}
@@ -430,7 +430,7 @@ function ListaSale({ saleList, onQuitar }: { saleList: import('@/lib/comisiones/
             <td style={{ textAlign: 'center' }}>{x.desc}%</td>
             <td style={{ textAlign: 'center' }}>{x.markup != null ? Math.round(x.markup) + '%' : '—'}</td>
             <td style={{ textAlign: 'center', color: x.margin != null && x.margin < 0 ? color.danger : color.success, fontWeight: 600 }}>{x.margin != null ? Math.round(x.margin) + '%' : '—'}</td>
-            <td style={{ textAlign: 'right' }}><button onClick={() => onQuitar(String(x.pid))} title="Quitar" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>×</button></td>
+            <td style={{ textAlign: 'right' }}><button onClick={() => onQuitar(String(x.pid))} title="Sacar del sale" style={{ border: 'none', background: 'none', color: color.mut2, cursor: 'pointer', fontSize: 15 }}>×</button></td>
           </tr>
         ))}
       </tbody>

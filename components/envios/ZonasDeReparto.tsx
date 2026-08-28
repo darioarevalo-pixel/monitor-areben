@@ -267,11 +267,11 @@ function FichaDeZona({
 
   async function borrar() {
     const ok = await confirmar({
-      titulo: `¿Borrar «${zona.nombre}»?`,
+      titulo: `¿Eliminar «${zona.nombre}»?`,
       // 🔴 Lo que pasa al borrar no es «desaparece de la lista»: las direcciones de ese pedazo de
       // ciudad dejan de tener precio, y eso se descubre recién cuando alguien no puede agendar.
       mensaje: 'Las direcciones que caían en esta zona quedan sin precio propuesto y se van a tener que tipear a mano.',
-      ok: 'Borrar',
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
@@ -279,7 +279,7 @@ function FichaDeZona({
       await borrarZona(zona.id)
       await onGuardado()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar la zona.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar la zona.')
     }
   }
 
@@ -292,7 +292,7 @@ function FichaDeZona({
       pie={
         <>
           <Button variant="ghost" tone="danger" onClick={() => void borrar()}>
-            Borrar
+            Eliminar
           </Button>
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
@@ -444,7 +444,7 @@ function ImportarElMapa({ onCerrar, onImportado }: { onCerrar: () => void; onImp
         <Notice tone="brand">
           El <strong>dibujo</strong> de cada zona se actualiza con lo que traiga el archivo. El <strong>precio</strong> no:
           el que está cargado acá se respeta, y del archivo sólo se toma el de las zonas nuevas. Una zona que esté acá y
-          no venga en el archivo <strong>no se borra</strong>.
+          no venga en el archivo <strong>no se elimina</strong>.
         </Notice>
 
         <Field label="El archivo" hint="El que sale del botón «Exportar JSON» del mapa.">

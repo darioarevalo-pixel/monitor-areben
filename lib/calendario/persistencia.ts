@@ -94,7 +94,7 @@ export async function guardarHito(store: Marca, hito: Partial<Hito> & { id: stri
 }
 
 export async function borrarHito(store: Marca, id: string): Promise<void> {
-  await postear({ store, id, action: 'borrar' }, 'No se pudo borrar el hito.')
+  await postear({ store, id, action: 'eliminar' }, 'No se pudo eliminar el hito.')
 }
 
 /**

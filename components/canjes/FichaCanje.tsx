@@ -174,15 +174,15 @@ export function FichaCanje({
     } catch { /* si no se puede contar, igual se pregunta */ }
 
     const ok = await confirmar({
-      titulo: `Borrar ${canje.numero}`,
+      titulo: `Eliminar ${canje.numero}`,
       mensaje: `No queda rastro de que existió.${detalle} Si el canje no salió, mejor cancelalo: así queda el motivo escrito.`,
-      ok: 'Borrar',
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
     try {
       await borrarCanje(store, canje.id)
-      toast.ok(`${canje.numero} borrado.`)
+      toast.ok(`${canje.numero} eliminado.`)
       onVolver()
     } catch (e) {
       toast.error(String((e as Error)?.message || e))
@@ -235,7 +235,7 @@ export function FichaCanje({
           {(canje.estado === 'acuerdo'
             || (canje.retiro_local && (canje.estado === 'preparando' || canje.estado === 'en_curso'))) && (
             <Button variant="solid" tone="brand" onClick={() => setMostrandoLink(true)}>
-              Mandarle el link
+              Enviarle el link
             </Button>
           )}
           {editable && (
@@ -243,7 +243,7 @@ export function FichaCanje({
           )}
           {/* Borrar es lo que cancelar no es: no deja rastro. Para la prueba y el error de carga.
               Lo que se cayó de verdad se cancela, así queda el motivo. */}
-          <Button variant="ghost" tone="danger" onClick={() => void borrar()}>Borrar</Button>
+          <Button variant="ghost" tone="danger" onClick={() => void borrar()}>Eliminar</Button>
         </div>
       </div>
 
@@ -566,7 +566,7 @@ function EditarTrato({
               />
               {unidades.length > 1 && (
                 <Button variant="ghost" tone="danger" size="sm" onClick={() => setUnidades((p) => p.filter((_, j) => j !== i))}>
-                  Quitar
+                  Sacar
                 </Button>
               )}
             </div>
@@ -826,7 +826,7 @@ function MandarLink({
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo="Mandarle el link"
+      titulo="Enviarle el link"
       ancho="ancho"
       pie={
         <>

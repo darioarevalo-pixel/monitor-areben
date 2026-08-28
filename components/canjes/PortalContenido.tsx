@@ -69,7 +69,7 @@ export function PortalContenido({
       await onBorrar(id)
       setPreguntando(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo borrar ese archivo.')
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar ese archivo.')
     } finally {
       setBorrando(null)
     }
@@ -130,7 +130,7 @@ export function PortalContenido({
               ) : (
                 <button
                   type="button"
-                  aria-label="Borrar este archivo"
+                  aria-label="Eliminar este archivo"
                   onClick={() => { setError(null); setPreguntando(a.id) }}
                   style={{
                     position: 'absolute', top: 6, right: 6, width: 28, height: 28, borderRadius: 14,

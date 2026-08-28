@@ -116,7 +116,7 @@ export function FundasModelo() {
 
   const vaciarSim = () => {
     if (editor.rows.length === 0 && editor.vars.length === 0) return
-    pedirConfirm('¿Vaciar la simulación? Se borran todos los modelos y variantes cargados.', () =>
+    pedirConfirm('¿Vaciar la simulación? Se eliminan todos los modelos y variantes cargados.', () =>
       setEditor((e) => ({ ...e, rows: [], vars: [], varOn: false, img: null })),
     )
   }

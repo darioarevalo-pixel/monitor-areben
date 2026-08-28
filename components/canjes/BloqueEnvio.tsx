@@ -58,7 +58,7 @@ function DatosDeElla({ canje, persona }: { canje: CanjeRow; persona: CanjePerson
       Falta {falta.length === 1 ? falta[0] : `${falta.slice(0, -1).join(', ')} y ${falta[falta.length - 1]}`}
       {confirmado
         ? `. Ella abrió el link el ${confirmado.slice(0, 10)} pero eso quedó vacío: pedíselo por WhatsApp.`
-        : '. Mandale el link con «Mandarle el link» y lo carga ella.'}
+        : '. Mandale el link con «Enviarle el link» y lo carga ella.'}
     </Notice>
   ) : (
     <Notice tone={confirmado ? 'success' : 'neutral'}>

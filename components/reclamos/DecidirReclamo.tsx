@@ -947,7 +947,7 @@ export function DecidirReclamo({
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: font.sm, padding: '2px 0' }}>
                   <span style={{ fontWeight: weight.semibold }}>{r.producto}</span>
                   <span style={{ color: color.mut2, fontFamily: 'monospace' }}>{r.sku}</span>
-                  <Button size="sm" variant="ghost" tone="danger" onClick={() => setRecibidos((p) => p.filter((_, j) => j !== i))}>Quitar</Button>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => setRecibidos((p) => p.filter((_, j) => j !== i))}>Sacar</Button>
                 </div>
               ))}
             </div>

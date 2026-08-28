@@ -249,7 +249,7 @@ export function conDescripcion(lista: Solicitud[], id: string, descripcion: stri
  */
 export function bloqueoBorrado(s: Solicitud, admin: boolean): string | null {
   if (!admin && salio(s) && !['devuelta', 'cerrada'].includes(s.estado)) {
-    return 'Esta solicitud ya salió y todavía tiene devoluciones pendientes. Cerrá la devolución primero, o pedile a un administrador que la borre.'
+    return 'Esta solicitud ya salió y todavía tiene devoluciones pendientes. Cerrá la devolución primero, o pedile a un administrador que la elimine.'
   }
   return null
 }
@@ -261,7 +261,7 @@ export function sinSolicitud(lista: Solicitud[], id: string): Solicitud[] {
 
 /** ¿Se puede quitar un ítem? Bloqueado si ya hay ventas creadas. Port de la guarda de sfEliminarItem. */
 export function bloqueoQuitarItem(s: Solicitud): string | null {
-  return s.ventas ? 'Ya se crearon las ventas de esta solicitud; no se puede quitar.' : null
+  return s.ventas ? 'Ya se crearon las ventas de esta solicitud; no se puede sacar.' : null
 }
 
 /** ¿Se puede EDITAR la solicitud? Solo bloqueada si está cerrada (edición = solo monitor, no toca GN). */
@@ -378,5 +378,5 @@ export function sinItemSol(s: Solicitud, vid: string, datos: DatosEliminacion): 
     delete devuelto[vid]
     ns.devuelto = devuelto
   }
-  return registrarCambio(ns, { ts: datos.ts, por: datos.por, accion: 'quitó', detalle: `${it.nombre} · ${it.variante} (${it.qty})`, motivo: datos.motivo })
+  return registrarCambio(ns, { ts: datos.ts, por: datos.por, accion: 'sacó', detalle: `${it.nombre} · ${it.variante} (${it.qty})`, motivo: datos.motivo })
 }

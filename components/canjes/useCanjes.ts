@@ -179,9 +179,9 @@ export function useBorrarPersona(store: CanjeStore) {
   return useCallback(
     async (persona: { id: number; nombre: string }, alBorrar: () => void | Promise<void>) => {
       const ok = await confirmar({
-        titulo: `Borrar a ${persona.nombre} del padrón`,
+        titulo: `Eliminar a ${persona.nombre} del padrón`,
         mensaje: 'Se va la ficha entera con sus notas y sus archivos. No se puede deshacer.',
-        ok: 'Borrar',
+        ok: 'Eliminar',
         tono: 'danger',
       })
       if (!ok) return false

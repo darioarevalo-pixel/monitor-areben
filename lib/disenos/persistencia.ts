@@ -65,10 +65,10 @@ export async function borrarDiseno(store: Marca, id: string): Promise<void> {
   const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ store, id, action: 'borrar' }),
+    body: JSON.stringify({ store, id, action: 'eliminar' }),
   })
   const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo borrar el diseño.')
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo eliminar el diseño.')
 }
 
 /** Cuántos diseños quedaron guardados en ESTE navegador, del tablero viejo. */

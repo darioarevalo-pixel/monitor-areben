@@ -13,6 +13,75 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 0. La corrida de VOCABULARIO — 28-ago-2026 (pedido de Bruno)
+
+> «no me están gustando los títulos y los términos de los mensajes: lo que falta tendría que ser
+> pendiente, sacar tiene que ser eliminar»
+
+📌 **La regla vive en [`VOCABULARIO.md`](./VOCABULARIO.md)** —el MISMO archivo en este repo y en
+`areben-marketing`, versión `2026-08-29`— y la clava `tests/vocabulario.test.ts`. ⛔ Antes de escribir
+un botón, un título o un cartel de vacío, se lee. El nombre del trabajo, para pedirlo afuera: es
+**UX writing**; lo que se pide es un **glosario de producto con vocabulario controlado** más una
+**guía de estilo de contenido**, y después la **auditoría de contenido** que los aplica.
+
+### 🏁 Hecho
+
+- **Los rótulos del menú.** 15 nombres en `lib/nav.datos.ts`: `Objetivo de ventas` · `Fotos y
+  descripciones` · `Importaciones` · `Conteo de depósito` · `Posventa` · `Fallas del local` ·
+  `Fallas de depósito` · `Productos` · `Variantes` · `Clientes` · `Iniciar un reclamo` ·
+  `Retornos a depósito` · `Solicitudes de todas las marcas` · `Cola de fotos`.
+  🔑 **Las nueve palabras que significaban dos cosas las cerró Bruno**: `Faltantes` se la queda
+  Compras · `Importaciones`/`Ingresos` · `Conteo de depósito` · `Solicitudes` queda (es la misma
+  pantalla vista desde cuatro lugares) · `Canjes` y `Talles` ⛔ **no se tocan, decisión suya** ·
+  Posventa es **una cadena** (local → depósito → el motor), ⛔ no tres nombres de lo mismo.
+- 🔴 **Una descripción que MENTÍA.** El `info` de `marketing` en `PERM_CAT` decía «Armado de
+  publicaciones para redes y TiendaNube» — esa pantalla no existe: es una auditoría de fichas de TN.
+  Y ese texto sale como **tooltip en la matriz de permisos** (`components/usuarios/MatrizPermisos.tsx`),
+  así que quien repartía permisos leía la descripción de otra cosa. ⚠️ Había **dos** descripciones por
+  sección (`PERM_CAT.info` y `DESCRIPCIONES` de `lib/nav.ts`) y sólo una estaba bien.
+- 🔑 **El rename destrabó un eyebrow.** `categoriaDe('marketing')` daba `null` **porque la sección se
+  llamaba igual que su grupo**: era el síntoma, no una decisión. Era la única pantalla que no decía
+  de qué grupo venía.
+- **Familia *eliminar*: 330 textos.** `borrar` → **Eliminar**, `quitar` → **Sacar**, decidiendo cada
+  uno con *¿la cosa sigue existiendo después?*.
+- **Familia *publicar*: 25 gestos** a `Enviar`. Se terminó el caso de las dos puntas del mismo flujo
+  diciéndose distinto («Mandar a sesión de fotos» / «Enviar a Marketing»).
+- **`tests/vocabulario.test.ts`**, con el mecanismo de MAKETA (saca comentarios, junta identificadores,
+  allowlist de 94 símbolos) más las **34 pantallas destructivas que TIENEN que decir la palabra** —sin
+  eso el test se cumple perfecto en una app sin ningún botón—. **Mutado tres veces y murió las tres.**
+
+### 🔴 Lo que ya mordió y no hay que repetir
+
+- **Tres claves de datos se rompieron con la barrida**: `'quitado'` (estado de un ítem de canje),
+  `'quitar'` (union de acción de Tienda Nube) y la firma de `lib/tncat/categorias.ts`. ⛔ **Un string
+  que es CLAVE no es texto**: la regla es del texto que lee una persona. Lo cazó el `typecheck`, que
+  es el oráculo barato para esto.
+- ⚠️ **Y una era las dos cosas**: en Sesión de fotos el historial **guarda el verbo y lo dibuja tal
+  cual** (`{c.por} {c.accion} {c.detalle}`). Ahí `quitó` → `sacó` es correcto, y **las filas viejas
+  siguen diciendo `quitó`**: van a convivir un tiempo. Decidido con el costo delante.
+- 🔴 **La regla de `Mandar` estaba MAL ESCRITA y hubo que corregirla.** Prohibía la palabra; medido,
+  de **99 apariciones sólo 17 nombraban un gesto**. Las otras son prosa al cliente («Te mandamos la
+  etiqueta», que en castellano está bien) y **otro verbo que se escribe igual**: «el corte que manda»,
+  «Gestión Nube es quien manda sobre el precio» son *gobernar*. ⇒ la regla ahora dice **sólo como
+  nombre del gesto**.
+
+### ▶️ Lo que falta
+
+- **Las otras cuatro familias en este repo**: *pendiente* (81 «falta», y los títulos que son frase),
+  *agregar* (siete verbos sin regla), *guardar* (`Aplicar`) y *editar* (`Cambiar`).
+  ⚠️ Ojo con `Aplicar ajuste` de los Conteos: **aplicar un ajuste a GN no es guardar**, es ejecutar.
+- **Los dos homónimos que quedan adentro de las pantallas**: `Faltantes` (la pestaña de Exhib → `Sin
+  escanear`; el campo de Recepciones → `Diferencias`) y **`clavado`**, que es a la vez un producto sin
+  rotación (`components/memo/`) y un usuario atado a una marca (`components/novedades/EditorNovedad.tsx`).
+  ▶️ **Falta que Bruno bautice el segundo sentido de `clavado`.**
+- **Anunciar los renombres en Novedades** el día que se publiquen: esta app **ya la usa gente**, y un
+  rótulo que cambia de nombre confunde a quien ya lo aprendió.
+- ⚠️ **`tests/crm-paridad.test.ts` tiene 13 tests en rojo, y ⛔ no son de esta corrida**: se midió
+  guardando los cambios aparte y dieron los mismos 13. Estaban rotos de antes. Una suite que vive en
+  rojo deja de avisar.
+
+---
+
 ## 1. La evidencia, medida — no es impresión
 
 Contado contra la base de producción el **25-ago-2026**, módulo de Meta Ads:
@@ -195,6 +264,91 @@ test no es una puerta: dice cuánto AIRE tiene la celda para escalar.** Con la e
 tocar el techo — y el `TOPE_ESCALONES = 6` del código la frena en 3× ($3.308, 43% del techo).
 ⚠️ Ese 18× es optimista: la elasticidad se midió sobre la cuenta entera, y **una celda sola satura
 su público más rápido**. ▶️ Vale revisar el tope para celdas que arrancan muy abajo.
+### 🔑 La FORMA del test — cuántos avisos por conjunto (28-ago-2026)
+
+La sección de arriba dice **cuánta plata y qué puertas**. Ésta dice **cómo se agrupan los avisos**.
+⛔ **No deroga nada de arriba**: el total de $20.000 y las puertas por compras siguen mandando.
+
+**De dónde salió.** El 28-ago la consultoría que paga Bruno propuso **testear 3 avisos dentro de un
+mismo conjunto** y, si uno se lleva todo el presupuesto, **aislar a los otros dos**. La primera
+respuesta de la sesión fue que eso no servía, apoyándose en el *«Meta no reparte: la pieza #1 se
+lleva el 80%»* del 26-ago. **Bruno lo objetó: *«esos testeos los hicimos luego de tener aprendizaje
+en el CDA, no los arrancamos al mismo momento»*. Tenía razón y la medición vieja estaba
+contaminada** — mezclaba dos casos que se portan al revés. Es, además, la misma regla que traía la
+consultoría: *«los testeos son siempre en paralelo, nunca meter en uno que ya tenga aprendizaje»*.
+
+🔑 **Re-medido el 28-ago** sobre `meta_ads_snapshot_dia`, nivel aviso, 11-may→28-ago. De 23
+conjuntos con 2+ avisos se descartan **8 censurados** (arrancaron en el 1er día de la foto o antes:
+no se sabe cuándo empezaron de verdad). Quedan 15, partidos por **cuándo arrancó cada aviso**, y
+mirando **los 2 primeros días**, que es la ventana del test:
+
+| | conjuntos | cuota de la #1 (mediana) | #1 ≥90% | la #2 con ≥2.000 impresiones |
+|---|---|---|---|---|
+| **escalonado** — el aviso se sumó a un conjunto que ya gastaba | 10 | **100%** | **10/10** | **0/10** |
+| **arrancaron juntos** — misma cohorte inicial | 5 | **79%** (min 62%) | 1/5 | 1/5 |
+
+🔴🔴 **El caso escalonado es total: en los 10 conjuntos el incumbente se lleva el 100% de los dos
+primeros días.** Poner una pieza nueva al lado de una que ya corre ⛔ **no la testea: no sale al
+aire**, y después se concluye «no funcionó» cuando nunca corrió. Casos: la segunda pieza recibió
+**$0** en 8 de 10, y **$47** en otro. Precedente: *«el duelo del 15-ago NO OCURRIÓ»*.
+
+✅ **Arrancando juntos es otra cosa: la #1 se lleva 79% y la #2 se queda con ~20%.** ⚠️ Y la
+concentración **se agrava con los días**: a 7 días la mediana sube de 79% a 83%. ⇒ **la ventana
+corta del test juega a favor.**
+
+⚠️ **Las impresiones bajas de las #2 observadas NO son prueba de que el reparto las ahogue: esos
+conjuntos gastaron mucho menos que $20.000 en dos días** ($2.187, $3.861, $7.466 en tres de los
+cinco). Al presupuesto de la regla el reparto da otra cosa — derivado, ⛔ no medido: al **CPM ~$1.780**,
+$20.000 en 2 días con reparto 79/21 dejan a la #2 con **~$4.200 ≈ 2.400 impresiones**, que alcanza
+para una lectura **gruesa** de CTR. La #3 del único conjunto de tres se llevó **6%** ⇒ ~$1.200
+≈ 700 impresiones, que ⛔ no alcanza para nada.
+
+**⇒ Lo que queda decidido:**
+
+1. ⛔ **NUNCA sumar un aviso a un conjunto que ya gasta.** Medido: 100% al incumbente, 10 de 10. Esto
+   vale para cualquier prueba, no sólo para las formales.
+2. ✅ **Se puede testear con DOS piezas en un conjunto nuevo, arrancadas el mismo día**, a los
+   $20.000 / 2 días de siempre. ⛔ **Tres no**: la #3 no junta impresiones para nada.
+3. 🔴 **Eso da un veredicto de CTR, ⛔ nunca de compras.** La #2 se lleva ~$4.200: está un orden de
+   magnitud por debajo de la puerta. **Sirve para matar, no para aprobar.** La que sobrevive va a
+   celda aislada con sus $20.000 y recién ahí corren las puertas de compras.
+4. ⚠️ **Y a veces no da nada:** en 1 de los 5 casos la #1 se llevó el 98% igual. ⇒ **antes de leer,
+   chequear las impresiones de la #2.** Si no llegó, ⛔ no tiene veredicto — no murió: va a aislada.
+5. ⚠️ **n = 5.** Es lo que hay. Vale para decidir, ⛔ no para dar por cerrado; se re-mide cuando haya
+   más conjuntos arrancados a la par.
+
+**El rescate de los que no gastaron** (la maniobra de la consultoría, aceptada):
+
+- El **ganador se queda donde está** y ⛔ **sin subirle el presupuesto** — subirlo le resetea el
+  aprendizaje.
+- El que no gastó **sale a conjunto propio**. ⛔ Si son dos, **NO van juntos al mismo conjunto
+  nuevo**: se repite el reparto y uno vuelve a quedar mudo. **Uno por conjunto.**
+- 🔴🔑 **El aislado ⛔ NO se pauta «con el mínimo».** La consultoría dice mínimo y eso **choca con la
+  puerta**: a $3.000/día junta $6.000 en 2 días, saca 0-1 compras y «muere» — **muerto por falta de
+  plata, no por malo**, que es el defecto que se está reparando. O va a **$20.000 totales** y le
+  corre la puerta, o **se acepta que no tiene veredicto**. Las dos cosas juntas, no. (Mismo
+  invariante de arriba: **manda el TOTAL**.)
+- 🔴 **Duplicar el conjunto le prende el CATÁLOGO solo** ⇒ chequearlo **antes** de contar el
+  resultado, o el aislado no mide la pieza, mide otra cosa.
+- 🔴 Vale igual **el 1er día parcial**: el día en que se crea la celda no cuenta.
+
+▶️ **Abierto: el piso de impresiones para leer el CTR.** Acá se usó **2.000** como umbral de
+trabajo, derivado del CPM y ⛔ **sin validar**. Falta escribirlo con la brecha de CTR que se quiere
+detectar, y el precio: cortar por CTR sube los falsos muertos por encima del 26% ya aceptado.
+
+⚠️ **Lo que la forma ⛔ no arregla: «no me define el ganador».** Eso ⛔ no lo causa el agrupamiento,
+lo causa el **TAMAÑO DE MUESTRA** — $20.000 compran 0-4 compras y la diferencia entre 1 y 3 es
+ruido. Repartir esa muestra entre dos avisos la empeora. Sin más plata por celda no hay forma que lo
+arregle; lo que sí baja la exposición es **estirar el diario** ($5.000 × 4 días, mismos $20.000).
+
+🔴 **Y para el escalado (CBO con los ganadores):** CBO reparte entre conjuntos, pero **adentro de
+cada uno sigue valiendo el 79/21**. Además reparte hacia el que ya gana, y hoy **una sola pieza
+(`AD02 GIRLHOOD`) es el 52% del gasto de BDI** ⇒ acelera el desgaste de la única pieza que sostiene
+la cuenta. Si se va a CBO: 5-6 avisos y **al menos 3 piezas nuevas adentro**.
+
+🔑 **El marco: la forma del test no fabrica piezas.** El cuello medido son las PIEZAS —CTR −42% con
+CPM clavado, ninguna pieza virgen, ~$38.000/día libres y ninguna celda nueva esperando—. Ninguna
+grilla reemplaza tener **4-6 piezas nuevas con ángulos distintos**.
 
 **Los once renglones que se prendieron**, calibrados contra la pauta real antes de tocar nada. La
 columna que importa es **7 días**, que es el ruido que iba a llegar por la mañana; los 90 son casi

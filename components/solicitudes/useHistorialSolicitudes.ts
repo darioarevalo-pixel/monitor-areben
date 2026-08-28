@@ -93,7 +93,7 @@ export type OpcionesHistorial<T> = {
 export function useHistorialSolicitudes<T extends SolBase>(linea: Linea, opts: OpcionesHistorial<T>): HistorialSolicitudes<T> {
   const toast = useToast()
   const { kind, etiqueta, estadoTrasVenta, crearVentas, idsParaCerrar } = opts
-  const noLeido = `No se pudo leer el historial de ${etiqueta}, así que no se guarda nada: guardar ahora borraría lo que hay. Recargá y probá de nuevo.`
+  const noLeido = `No se pudo leer el historial de ${etiqueta}, así que no se guarda nada: guardar ahora eliminaría lo que hay. Recargá y probá de nuevo.`
 
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)

@@ -67,7 +67,7 @@ export function MarcaClavado({
           }}
           title={
             marcado
-              ? 'Sale de la lista activa. NO se borra: lo que ya recuperó sigue contando en el memo de las semanas en que facturó.'
+              ? 'Sale de la lista activa. NO se elimina: lo que ya recuperó sigue contando en el memo de las semanas en que facturó.'
               : 'Marcar como clavado: ya se le bajó el precio y lo que se mide de acá en adelante es cuánta plata vuelve.'
           }
         >

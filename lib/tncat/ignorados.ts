@@ -35,10 +35,10 @@ export async function dejarDeIgnorar(store: Marca, tnId: string | number): Promi
   const r = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ store, tn_id: String(tnId), action: 'quitar' }),
+    body: JSON.stringify({ store, tn_id: String(tnId), action: 'sacar' }),
   })
   const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo quitar el producto de la lista de ignorados.')
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo sacar el producto de la lista de ignorados.')
 }
 
 /** Motivos ofrecidos al ignorar. Libres, pero acotados para que el listado sea legible. */

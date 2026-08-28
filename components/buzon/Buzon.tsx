@@ -134,9 +134,9 @@ export function Buzon() {
 
   async function borrar(m: MensajeBuzon) {
     const ok = await confirmar({
-      titulo: '¿Borrar este mensaje?',
+      titulo: '¿Eliminar este mensaje?',
       mensaje: `${m.remitente || 'Sin remitente'} · ${m.asunto || m.cuerpo.slice(0, 80)}`,
-      ok: 'Borrarlo',
+      ok: 'Eliminarlo',
       tono: 'danger',
     })
     if (!ok) return
@@ -144,7 +144,7 @@ export function Buzon() {
       await borrarMensaje(m.id)
       await recargar()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
   }
 
@@ -355,7 +355,7 @@ function Tarjeta({
           </Button>
         )}
         <Button size="sm" variant="ghost" tone="danger" onClick={onBorrar}>
-          Borrar
+          Eliminar
         </Button>
       </div>
     </Card>

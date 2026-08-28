@@ -70,7 +70,7 @@ export function LeadsDelDia({
       const previo = await leerMapa<Lead>('crmleads', 'bdi')
       if (!previo.ok) {
         setOcupado(null)
-        toast.error('No se pudo leer los leads, así que no se guarda: guardar ahora borraría los que hay.')
+        toast.error('No se pudo leer los leads, así que no se guarda: guardar ahora eliminaría los que hay.')
         return
       }
       // 🔑 Marcar el contacto tiene que AGENDAR algo, si no el lead vuelve a quedar sin fecha y

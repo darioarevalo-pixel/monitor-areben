@@ -51,7 +51,7 @@ export function NotasCanje({
   }
 
   async function quitar(notaId: string) {
-    const ok = await confirmar({ titulo: 'Borrar esta nota', mensaje: 'No se puede deshacer.', ok: 'Borrar', tono: 'danger' })
+    const ok = await confirmar({ titulo: 'Eliminar esta nota', mensaje: 'No se puede deshacer.', ok: 'Eliminar', tono: 'danger' })
     if (!ok) return
     try {
       onCambio(await borrarNotaCanje(store, canjeId, notaId))
@@ -90,7 +90,7 @@ export function NotasCanje({
               </div>
               {/* ⚠️ Se borra por `n.id`, nunca por índice: la lista está invertida acá y el índice
                   del render no es el de la base. Es el bug que ya tiene `lib/crm/leads.ts`. */}
-              <Button variant="ghost" tone="danger" size="sm" onClick={() => void quitar(n.id)}>Borrar</Button>
+              <Button variant="ghost" tone="danger" size="sm" onClick={() => void quitar(n.id)}>Eliminar</Button>
             </div>
           ))}
         </div>

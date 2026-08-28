@@ -157,18 +157,18 @@ export function BancoMensajes({ onCerrar }: { onCerrar: () => void }) {
   }
 
   const pedirBorrarMensaje = async (gi: number, mi: number) => {
-    const ok = await confirmar({ titulo: 'Borrar el mensaje', mensaje: '¿Lo saco de la lista? No se puede deshacer.' })
+    const ok = await confirmar({ titulo: 'Eliminar el mensaje', mensaje: '¿Lo saco de la lista? No se puede deshacer.' })
     if (ok) await aplicar((b) => borrarMensaje(b, gi, mi))
   }
 
   const pedirBorrarGrupo = async (gi: number) => {
     const g = banco[gi]
     const ok = await confirmar({
-      titulo: `Borrar "${g.grupo}"`,
+      titulo: `Eliminar "${g.grupo}"`,
       mensaje:
         g.mensajes.length > 0
-          ? `Se borra el grupo con sus ${g.mensajes.length} mensajes. No se puede deshacer.`
-          : 'Se borra el grupo. No se puede deshacer.',
+          ? `Se elimina el grupo con sus ${g.mensajes.length} mensajes. No se puede deshacer.`
+          : 'Se elimina el grupo. No se puede deshacer.',
     })
     if (ok) await aplicar((b) => borrarGrupo(b, gi))
   }
@@ -273,7 +273,7 @@ export function BancoMensajes({ onCerrar }: { onCerrar: () => void }) {
                       </Mini>
                       <Mini title="Subir el grupo" onClick={() => aplicar((b) => moverGrupo(b, gi, -1))}>↑</Mini>
                       <Mini title="Bajar el grupo" onClick={() => aplicar((b) => moverGrupo(b, gi, 1))}>↓</Mini>
-                      <Mini title="Borrar el grupo" peligro onClick={() => pedirBorrarGrupo(gi)}>🗑️</Mini>
+                      <Mini title="Eliminar el grupo" peligro onClick={() => pedirBorrarGrupo(gi)}>🗑️</Mini>
                     </>
                   )}
                 </div>
@@ -306,7 +306,7 @@ export function BancoMensajes({ onCerrar }: { onCerrar: () => void }) {
                         <Mini title="Editar el mensaje" onClick={() => abrirEdicion(gi, mi)}>✏️</Mini>
                         <Mini title="Subir el mensaje" onClick={() => aplicar((b) => moverMensaje(b, gi, mi, -1))}>↑</Mini>
                         <Mini title="Bajar el mensaje" onClick={() => aplicar((b) => moverMensaje(b, gi, mi, 1))}>↓</Mini>
-                        <Mini title="Borrar el mensaje" peligro onClick={() => pedirBorrarMensaje(gi, mi)}>🗑️</Mini>
+                        <Mini title="Eliminar el mensaje" peligro onClick={() => pedirBorrarMensaje(gi, mi)}>🗑️</Mini>
                       </div>
                     ),
                   )}

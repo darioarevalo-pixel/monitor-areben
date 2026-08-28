@@ -772,7 +772,7 @@ function PanelInterno({
               <Instagram
                 valor={seg.pagina || ''}
                 guardando={guardando}
-                onGuardar={(v) => mutar((m) => setPagina(m, c.id, v), v ? 'Instagram guardado' : 'Instagram borrado')}
+                onGuardar={(v) => mutar((m) => setPagina(m, c.id, v), v ? 'Instagram guardado' : 'Instagram eliminado')}
               />
             </div>
             <button
@@ -1320,7 +1320,7 @@ function FichaLead({
             <Instagram
               valor={lead.instagram || ''}
               guardando={guardando}
-              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'instagram', v), v ? 'Instagram guardado' : 'Instagram borrado')}
+              onGuardar={(v) => onMutar((m) => setCampoLead(m, lead.id, 'instagram', v), v ? 'Instagram guardado' : 'Instagram eliminado')}
             />
           </div>
           <Chip tone={lead.estado === 'activo' ? 'neutro' : 'ok'}>{LEAD_ESTADO_LABEL[lead.estado]}</Chip>
@@ -1583,7 +1583,7 @@ function NuevoLead({
     const previo = await leerMapa<Lead>('crmleads', 'bdi')
     if (!previo.ok) {
       setGuardando(false)
-      onError('No se pudo leer los leads, así que no se guarda: guardar ahora borraría los que hay.')
+      onError('No se pudo leer los leads, así que no se guarda: guardar ahora eliminaría los que hay.')
       return
     }
     const id = nuevoIdLead(Date.now(), Math.random())

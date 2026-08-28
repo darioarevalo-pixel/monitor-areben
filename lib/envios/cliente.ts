@@ -59,7 +59,7 @@ export async function leerPendientes(): Promise<Envio[]> {
  * que vayan juntos sin depender de que el cliente haya mandado el resto de la fila igual que estaba.
  */
 export async function agendar(id: string, fecha: string, turno: Turno): Promise<void> {
-  await postear({ action: 'agendar', id, fecha, turno }, 'No se pudo mandar el envío a ese día.')
+  await postear({ action: 'agendar', id, fecha, turno }, 'No se pudo enviar el envío a ese día.')
 }
 
 /** Sacarlo del día y devolverlo a la bandeja: el cliente pospuso. */
@@ -104,7 +104,7 @@ export async function cambiarEstado(id: string, estado: string, cadete?: string 
 }
 
 export async function borrarEnvio(id: string): Promise<void> {
-  await postear({ action: 'borrar', id }, 'No se pudo borrar el envío.')
+  await postear({ action: 'eliminar', id }, 'No se pudo eliminar el envío.')
 }
 
 
@@ -241,7 +241,7 @@ export async function guardarZona(zona: Partial<ZonaDeReparto>): Promise<void> {
 }
 
 export async function borrarZona(id: string): Promise<void> {
-  await postear({ action: 'zona-borrar', id }, 'No se pudo borrar la zona.')
+  await postear({ action: 'zona-eliminar', id }, 'No se pudo eliminar la zona.')
 }
 
 /**

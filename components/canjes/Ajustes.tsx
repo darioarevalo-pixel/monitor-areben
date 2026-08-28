@@ -211,11 +211,11 @@ export function Ajustes({
 
       <SectionCard
         title="Dónde se archiva el contenido"
-        subtitle="Una carpeta por marca. Adentro, el botón «Mandar a Drive» de cada canje crea una subcarpeta por canje."
+        subtitle="Una carpeta por marca. Adentro, el botón «Enviar a Drive» de cada canje crea una subcarpeta por canje."
       >
         <Field
           label="Carpeta de Drive"
-          hint="Pegá el link de la carpeta. Es el archivo final: lo que se manda ahí se borra del buzón"
+          hint="Pegá el link de la carpeta. Es el archivo final: lo que se manda ahí se saca del buzón"
           width={420}
         >
           <Input value={drive} onChange={(e) => setDrive(e.target.value)} disabled={off} placeholder="https://drive.google.com/drive/folders/…" />

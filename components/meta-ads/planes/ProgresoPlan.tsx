@@ -29,8 +29,8 @@ import { Button, Card, Notice, StatusPill, color, font, radius, space, weight } 
 
 /** Cómo se lee cada estado de paso. El tono es la mitad del mensaje. */
 const PINTA: Record<EstadoPaso, { label: string; tone: 'success' | 'warning' | 'danger' | 'brand' | 'neutral' }> = {
-  pendiente: { label: 'Falta', tone: 'neutral' },
-  'en-curso': { label: 'Mandado', tone: 'brand' },
+  pendiente: { label: 'Pendiente', tone: 'neutral' },
+  'en-curso': { label: 'Enviado', tone: 'brand' },
   hecho: { label: 'Hecho', tone: 'success' },
   // Ámbar y no rojo: ver el comentario de arriba.
   dudoso: { label: 'Esperando a Meta', tone: 'warning' },
@@ -96,7 +96,7 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
         <div style={{ display: 'flex', gap: space[2] }}>
           {!terminado && atascado && trabado?.puedeReintentar && (
             <Button size="sm" variant="solid" tone="brand" onClick={() => onReintentar(trabado.orden)} disabled={avanzando}>
-              {avanzando ? 'Mandando de nuevo…' : `Reintentar el paso ${trabado.orden}`}
+              {avanzando ? 'Enviando de nuevo…' : `Reintentar el paso ${trabado.orden}`}
             </Button>
           )}
           {!terminado && !atascado && !espera && (

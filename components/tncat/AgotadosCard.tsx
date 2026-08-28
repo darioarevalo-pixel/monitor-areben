@@ -109,7 +109,7 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
         <div style={{ fontSize: 15, fontWeight: 700 }}>Ocultar agotados</div>
         <InfoPopover titulo="Ocultar agotados">
           Productos sin stock (según Gestión Nube) que siguen visibles en la tienda. Ocultarlos los
-          despublica (no los borra): si algún día reingresan, se vuelven a mostrar con “Deshacer” o
+          despublica (no los elimina): si algún día reingresan, se vuelven a mostrar con “Deshacer” o
           desde la carga de imágenes. El match tienda↔sistema es aproximado: verificá el nombre antes.
         </InfoPopover>
       </div>

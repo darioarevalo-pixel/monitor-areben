@@ -130,9 +130,9 @@ export function Tablero({
   }
   const quitarElegidos = async () => {
     const ok = await confirmar({
-      titulo: sel.size === 1 ? 'Quitar el diseño' : `Quitar ${sel.size} diseños`,
+      titulo: sel.size === 1 ? 'Sacar el diseño' : `Sacar ${sel.size} diseños`,
       tono: 'danger',
-      ok: `Quitar ${sel.size === 1 ? 'el elegido' : 'los ' + sel.size}`,
+      ok: `Sacar ${sel.size === 1 ? 'el elegido' : 'los ' + sel.size}`,
       mensaje: `Se sacan del tablero compartido, para todo el equipo. Los votos que ya recibieron en una ronda quedan.`,
     })
     if (!ok) return

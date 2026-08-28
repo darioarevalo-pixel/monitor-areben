@@ -193,7 +193,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
 
   const eliminar = useCallback(async (f: FallaRow) => {
     const aviso = f.gn_venta_id
-      ? `Eliminar la falla de "${f.producto}" borra el registro del Monitor pero NO anula la venta ya hecha en GN (eso se anula a mano en GN si corresponde). ¿Eliminar?`
+      ? `Eliminar la falla de "${f.producto}" elimina el registro del Monitor pero NO anula la venta ya hecha en GN (eso se anula a mano en GN si corresponde). ¿Eliminar?`
       : `Eliminar la falla de "${f.producto}"? Esta acción no se puede deshacer.`
     if (typeof window !== 'undefined' && !window.confirm(aviso)) return
     setOcupada(f.id); setError(null)

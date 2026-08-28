@@ -107,7 +107,7 @@ export function MandarALiquidacion({
           : `${r.sumados} ${r.sumados === 1 ? 'producto' : 'productos'} en la campaña.`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudieron mandar los productos.')
+      setError(e instanceof Error ? e.message : 'No se pudieron enviar los productos.')
     } finally {
       setMandando(false)
     }
@@ -115,7 +115,7 @@ export function MandarALiquidacion({
 
   const esNueva = elegida === 'nueva'
   const sinCosto = seleccion.filter((p) => p.sinCosto).length
-  const rotuloBoton = liqFijada ? `Mandar a ${liqFijada.nombre}` : 'Mandar a liquidación'
+  const rotuloBoton = liqFijada ? `Enviar a ${liqFijada.nombre}` : 'Enviar a liquidación'
 
   return (
     <>
@@ -126,7 +126,7 @@ export function MandarALiquidacion({
       <Modal
         abierto={abierto}
         onCerrar={() => setAbierto(false)}
-        titulo={`Mandar ${seleccion.length} ${seleccion.length === 1 ? 'producto' : 'productos'} a ${liqFijada ? liqFijada.nombre : 'liquidación'}`}
+        titulo={`Enviar ${seleccion.length} ${seleccion.length === 1 ? 'producto' : 'productos'} a ${liqFijada ? liqFijada.nombre : 'liquidación'}`}
         pie={
           <>
             <Button variant="ghost" onClick={() => setAbierto(false)}>Cancelar</Button>

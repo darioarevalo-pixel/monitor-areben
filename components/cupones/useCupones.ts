@@ -15,7 +15,7 @@ import type { Cupon } from '@/lib/cupones/tipos'
  */
 
 const NO_LEIDO =
-  'No se pudo leer los cupones, así que no se guarda nada: guardar ahora borraría los que hay. Recargá y probá de nuevo.'
+  'No se pudo leer los cupones, así que no se guarda nada: guardar ahora eliminaría los que hay. Recargá y probá de nuevo.'
 
 export type EstadoCupones = {
   cargando: boolean

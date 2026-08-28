@@ -50,5 +50,5 @@ export function guardarManual(manual: Manual): Promise<void> {
 }
 
 export function borrarManual(id: string): Promise<void> {
-  return postear({ action: 'manual-borrar', id }, 'No se pudo borrar el manual.')
+  return postear({ action: 'manual-eliminar', id }, 'No se pudo eliminar el manual.')
 }

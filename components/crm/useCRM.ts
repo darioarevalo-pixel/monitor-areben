@@ -109,7 +109,7 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
 
         if (!okKv) {
           setError(
-            'No se pudo leer el seguimiento del CRM desde el KV. La lista puede verse incompleta y los guardados están bloqueados para no borrar lo que hay.',
+            'No se pudo leer el seguimiento del CRM desde el KV. La lista puede verse incompleta y los guardados están bloqueados para no eliminar lo que hay.',
           )
         }
       } catch (e) {

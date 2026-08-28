@@ -57,5 +57,5 @@ export function guardarItems(store: Marca, items: ItemAtencion[]): Promise<void>
 }
 
 export function borrarItem(store: Marca, id: string): Promise<void> {
-  return postear({ recurso: 'atencion', store, id, action: 'borrar' }, 'No se pudo borrar.')
+  return postear({ recurso: 'atencion', store, id, action: 'eliminar' }, 'No se pudo eliminar.')
 }

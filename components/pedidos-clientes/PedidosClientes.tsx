@@ -118,9 +118,9 @@ export function PedidosClientes() {
   async function borrar(p: PedidoCliente) {
     if (!marca) return
     const ok = await confirmar({
-      titulo: '¿Borrar este faltante?',
-      mensaje: `«${p.texto}» — borrar es para el error de carga. Si lo miraste y no lo vas a traer, va «Descartar»: así sigue contando que te lo pidieron.`,
-      ok: 'Borrarlo',
+      titulo: '¿Eliminar este faltante?',
+      mensaje: `«${p.texto}» — eliminar es para el error de carga. Si lo miraste y no lo vas a traer, va «Descartar»: así sigue contando que te lo pidieron.`,
+      ok: 'Eliminarlo',
       tono: 'danger',
     })
     if (!ok) return
@@ -128,7 +128,7 @@ export function PedidosClientes() {
       await borrarPedido(marca, p.id)
       await recargar()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar.')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar.')
     }
   }
 
@@ -313,7 +313,7 @@ export function PedidosClientes() {
                               </Button>
                             ))}
                           <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(p)}>
-                            Borrar
+                            Eliminar
                           </Button>
                         </div>
                       </Td>

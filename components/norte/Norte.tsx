@@ -628,7 +628,7 @@ export function Norte() {
               : no se guarda en ningún lado. ⚠️ Las metas de contribución necesitan el dashboard conectado — sin él dicen
               por qué no se pudieron medir, en vez de mostrar cero.
               {apagadas.length > 0 &&
-                ` Las apagadas van al final, en gris y sin medir: se editan igual, y ahí se vuelven a prender o se borran.`}
+                ` Las apagadas van al final, en gris y sin medir: se editan igual, y ahí se vuelven a prender o se eliminan.`}
                 </>
               )}
             </div>

@@ -125,7 +125,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
         <InfoPopover titulo="Explorar una categoría">
           Elegí una categoría y vas a ver <b>qué productos tiene hoy</b>, para sacar los que ya no van, y un
           buscador para <b>sumar</b> los que faltan. Sirve sobre todo para las categorías que cambian seguido
-          (Best sellers, Ofertas). Escribe en la tienda online al confirmar; TiendaNube no tiene un “quitar”:
+          (Best sellers, Ofertas). Escribe en la tienda online al confirmar; TiendaNube no tiene un “sacar”:
           se manda la lista completa de categorías del producto, y de eso se encarga el sistema.
         </InfoPopover>
       </div>

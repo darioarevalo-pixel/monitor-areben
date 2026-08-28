@@ -226,7 +226,7 @@ export function EditorCondiciones({
                   tone="danger"
                   onClick={() => setCuotas((p) => p.filter((_, j) => j !== i))}
                 >
-                  Quitar
+                  Sacar
                 </Button>
               </div>
             ))}

@@ -175,8 +175,8 @@ export function Disenos() {
     const ok = await confirmar({
       titulo: 'Vaciar el tablero',
       tono: 'danger',
-      ok: `Borrar los ${disenos.length}`,
-      mensaje: `Se borran los ${disenos.length} diseños del tablero, para todo el equipo. No se puede deshacer. Los votos de las rondas quedan.`,
+      ok: `Eliminar los ${disenos.length}`,
+      mensaje: `Se eliminan los ${disenos.length} diseños del tablero, para todo el equipo. No se puede deshacer. Los votos de las rondas quedan.`,
     })
     if (!ok) return
     setDisenos([])
@@ -184,10 +184,10 @@ export function Disenos() {
 
   const borrarLocales = async () => {
     const ok = await confirmar({
-      titulo: 'Borrar el tablero viejo de esta computadora',
+      titulo: 'Eliminar el tablero viejo de esta computadora',
       tono: 'danger',
-      ok: `Borrar ${locales === 1 ? 'el diseño' : 'los ' + locales}`,
-      mensaje: `Se borran ${locales} ${locales === 1 ? 'diseño guardado' : 'diseños guardados'} en ESTE navegador. No están en el tablero compartido y no se pueden recuperar. No se toca nada del equipo ni de ninguna marca.`,
+      ok: `Eliminar ${locales === 1 ? 'el diseño' : 'los ' + locales}`,
+      mensaje: `Se eliminan ${locales} ${locales === 1 ? 'diseño guardado' : 'diseños guardados'} en ESTE navegador. No están en el tablero compartido y no se pueden recuperar. No se toca nada del equipo ni de ninguna marca.`,
     })
     if (!ok) return
     const n = olvidarLocales()

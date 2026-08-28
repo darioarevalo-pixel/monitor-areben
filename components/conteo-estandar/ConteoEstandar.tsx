@@ -204,8 +204,8 @@ export function ConteoEstandar() {
     const ok = await confirmar({
       titulo: 'Reiniciar el conteo del Local',
       tono: 'danger',
-      ok: 'Borrar todo',
-      mensaje: 'Se borra todo lo cargado, de Zattia y de Stunned. Los ajustes ya aplicados quedan en el Historial.',
+      ok: 'Eliminar todo',
+      mensaje: 'Se elimina todo lo cargado, de Zattia y de Stunned. Los ajustes ya aplicados quedan en el Historial.',
     })
     if (!ok) return
     ce.reset()

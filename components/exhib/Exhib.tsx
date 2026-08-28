@@ -125,8 +125,8 @@ export function Exhib() {
       const ok = await confirmar({
         titulo: 'Reiniciar el chequeo',
         tono: 'danger',
-        ok: 'Borrar y empezar',
-        mensaje: `Se borra el chequeo en curso (${enCurso} ${enCurso === 1 ? 'ítem marcado' : 'ítems marcados'}) y se empieza de cero.`,
+        ok: 'Eliminar y empezar',
+        mensaje: `Se elimina el chequeo en curso (${enCurso} ${enCurso === 1 ? 'ítem marcado' : 'ítems marcados'}) y se empieza de cero.`,
       })
       if (!ok) return
     }
@@ -385,7 +385,7 @@ export function Exhib() {
                         </a>
                       )}
                       <Button size="sm" variant="ghost" onClick={() => ex.quitarError(pid)}>
-                        quitar
+                        sacar
                       </Button>
                     </div>
                   </div>

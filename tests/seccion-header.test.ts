@@ -9,7 +9,7 @@ describe('encabezado de sección — metadata', () => {
   })
 
   it('tituloLimpio da el título de la sección', () => {
-    expect(tituloLimpio('productos')).toBe('Por producto')
+    expect(tituloLimpio('productos')).toBe('Productos')
     expect(tituloLimpio('resumen')).toBe('Resumen / KPIs')
     expect(tituloLimpio('inicio')).toBe('Inicio') // key de LABELS_EXTRA
     expect(tituloLimpio('tncat')).toBe('Tienda Nube')
@@ -56,6 +56,10 @@ describe('encabezado de sección — metadata', () => {
     expect(categoriaDe('ingresos')).toBe('COMPRAS')
     expect(categoriaDe('resumen')).toBeNull() // no está en ningún grupo del nav
     expect(categoriaDe('inicio')).toBeNull() // el grupo "Inicio" duplicaría el título
-    expect(categoriaDe('marketing')).toBeNull() // sección y grupo se llaman igual → sin eyebrow
+    // 🔑 **Hasta el 28-ago esto daba `null`, y ⛔ no era una decisión: era el SÍNTOMA.** La sección
+    // `marketing` se llamaba «Marketing», igual que su grupo, así que la regla de la línea de arriba
+    // —no repetir el título en el eyebrow— le comía la categoría. Renombrada a «Fotos y
+    // descripciones» (`VOCABULARIO.md`), el eyebrow vuelve a decir de qué grupo viene.
+    expect(categoriaDe('marketing')).toBe('MARKETING')
   })
 })

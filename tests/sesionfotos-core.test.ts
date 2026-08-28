@@ -399,11 +399,16 @@ describe('sesionfotos/core — edición (Fase C)', () => {
     expect(cambiarCantidadSol(base, 'a', 5, { por: 'ana', motivo: 'x', ts: 1 })).toBe(base)
   })
 
-  it('sinItemSol también registra el cambio "quitó"', () => {
+  it('sinItemSol también registra el cambio "sacó"', () => {
     const base = sol({ items: [item({ vid: 'a' }), item({ vid: 'b' })] })
     const s1 = sinItemSol(base, 'a', { por: 'ana', motivo: 'Producto defectuoso', fecha: '2026-07-21', ts: 100 })
     expect(s1.items.map((i) => i.vid)).toEqual(['b'])
-    expect(s1.cambios![0]).toMatchObject({ accion: 'quitó', motivo: 'Producto defectuoso' })
+    // 🔴 **Era «quitó» hasta el 28-ago.** El valor guardado ES la palabra que se dibuja
+    // (`{c.por} {c.accion} {c.detalle}` en `SesionFotos.tsx`), así que cae bajo `VOCABULARIO.md`:
+    // el producto **sigue existiendo** después de salir de la solicitud ⇒ es **sacar**, ⛔ no eliminar.
+    // ⚠️ Las filas YA guardadas siguen diciendo «quitó» y ⛔ no se reescriben: las dos palabras van a
+    // convivir un tiempo en el historial. Decidido con el costo delante.
+    expect(s1.cambios![0]).toMatchObject({ accion: 'sacó', motivo: 'Producto defectuoso' })
     expect(s1.eliminados).toHaveLength(1)
   })
 

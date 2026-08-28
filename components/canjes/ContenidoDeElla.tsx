@@ -19,7 +19,7 @@
  * # 🔴 El buzón no es el archivo: mandar a Drive BORRA la copia del Blob
  *
  * Vercel Blob es donde ella deja el material, y la cuota es la del Vercel de Darío: con videos de
- * creadoras deja de ser teórica rápido. Por eso «Mandar a Drive» no es una copia de respaldo — es
+ * creadoras deja de ser teórica rápido. Por eso «Enviar a Drive» no es una copia de respaldo — es
  * **una mudanza**: apenas Drive confirma cada archivo, el servidor lo borra del buzón y la ficha
  * pasa a mostrar el link de Drive en vez de la miniatura. Eso es lo único que le pone techo al
  * espacio, y lo decidió Bruno el 21-ago-2026 sabiendo que se pierden las miniaturas.
@@ -83,10 +83,10 @@ export function ContenidoDeElla({
    */
   async function borrar(e: CanjeEvidencia) {
     const ok = await confirmar({
-      titulo: '¿Borrar este archivo?',
-      mensaje: 'Se borra del buzón y no se puede recuperar: todavía no está en Drive. '
-        + 'Si lo que querés es archivarlo, usá «Mandar a Drive».',
-      ok: 'Borrar',
+      titulo: '¿Eliminar este archivo?',
+      mensaje: 'Se elimina del buzón y no se puede recuperar: todavía no está en Drive. '
+        + 'Si lo que querés es archivarlo, usá «Enviar a Drive».',
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
@@ -95,7 +95,7 @@ export function ContenidoDeElla({
       await borrarEvidencia(store, canje.id, e.id)
       onCambio()
     } catch (err) {
-      setMotivo((err as Error)?.message || 'No se pudo borrar ese archivo.')
+      setMotivo((err as Error)?.message || 'No se pudo eliminar ese archivo.')
     }
   }
 
@@ -125,7 +125,7 @@ export function ContenidoDeElla({
         await archivadaEnDrive(store, canje.id, e.id, r.link, carpeta.id)
       }
     } catch (err) {
-      setMotivo((err as Error)?.message || 'No se pudo mandar a Drive.')
+      setMotivo((err as Error)?.message || 'No se pudo enviar a Drive.')
     } finally {
       setEnCurso(null)
       setMandando(false)
@@ -266,13 +266,13 @@ function Archivo({
             <button
               type="button"
               onClick={onBorrar}
-              title="Borrar este archivo del buzón"
+              title="Eliminar este archivo del buzón"
               style={{
                 border: 'none', background: 'none', padding: 0, cursor: 'pointer',
                 color: color.danger, fontFamily: 'inherit', fontSize: font.sm, fontWeight: weight.medium,
               }}
             >
-              Borrar
+              Eliminar
             </button>
           )}
         </div>

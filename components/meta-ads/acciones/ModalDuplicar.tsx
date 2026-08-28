@@ -410,7 +410,7 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
         )}
 
         <div style={{ fontSize: font.xs, color: color.mut }}>
-          Esto no se deshace desde el monitor: para sacar la copia hay que borrarla en Ads Manager.
+          Esto no se deshace desde el monitor: para sacar la copia hay que eliminarla en Ads Manager.
         </div>
       </div>
     </Modal>

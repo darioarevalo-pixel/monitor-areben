@@ -104,7 +104,7 @@ async function borrarSolicitud(store: Linea, id: string): Promise<{ ok: boolean;
     const r = await apiFetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store, action: 'borrar', id }),
+      body: JSON.stringify({ store, action: 'eliminar', id }),
     })
     const d = await r.json().catch(() => null)
     if (!r.ok || !d?.ok) return { ok: false, motivo: (d && d.error) || `HTTP ${r.status}` }

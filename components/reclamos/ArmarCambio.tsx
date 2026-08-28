@@ -466,10 +466,10 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const borrar = async (c: ReclamoRow) => {
     const si = await confirmar({
-      titulo: `Borrar ${numeroReclamo(c.id)}`, tono: 'danger', ok: 'Borrar',
-      mensaje: 'Se borra el registro. No anula la venta que ya se haya creado en Gestión Nube.',
+      titulo: `Eliminar ${numeroReclamo(c.id)}`, tono: 'danger', ok: 'Eliminar',
+      mensaje: 'Se elimina el registro. No anula la venta que ya se haya creado en Gestión Nube.',
     })
-    if (si) await accion(c.id, () => eliminarReclamo(marca, c.id), 'Cambio borrado.')
+    if (si) await accion(c.id, () => eliminarReclamo(marca, c.id), 'Cambio eliminado.')
   }
 
   // La ventana de cambio: 30 días desde la compra.

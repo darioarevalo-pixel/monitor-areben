@@ -99,7 +99,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "productos",
     "area": "analisis",
-    "label": "Por producto",
+    "label": "Productos",
     "info": "Análisis por producto: ventas, vida útil, stock, estado y selección de outlet/sale.",
     "brands": [
       "bdi",
@@ -109,7 +109,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "variantes",
     "area": "analisis",
-    "label": "Por variante",
+    "label": "Variantes",
     "info": "Ventas y stock por variante (talle / modelo / color).",
     "brands": [
       "bdi",
@@ -138,7 +138,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "clientes",
     "area": "clientes",
-    "label": "Clientes (CRM)",
+    "label": "Clientes",
     "info": "Clientes mayoristas: segmentos, contacto, historial de compras.",
     "brands": [
       "bdi"
@@ -194,7 +194,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "mkt-ventas",
     "area": "marketing",
-    "label": "Ventas",
+    "label": "Objetivo de ventas",
     "info": "El objetivo de venta del sector con su barra de avance, y el contador diario de ventas online — con las flechas para ver los días anteriores. Los objetivos se cargan en Norte (Dirección): acá sólo se miran.",
     "brands": [
       "bdi",
@@ -204,8 +204,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "marketing",
     "area": "marketing",
-    "label": "Marketing",
-    "info": "Armado de publicaciones (fotos + textos) para redes y TiendaNube. En Zattia tiene dos pestañas, Zattia y Stunned, porque cada una tiene su propia tienda online.",
+    "label": "Fotos y descripciones",
+    "info": "Auditoría de las fichas de la tienda cruzada con stock y ventas: qué producto está sin foto, sin descripción, con descripción corta o sin tabla de talles. Desde acá se lo envía a sesión de fotos o se abre su ficha en el admin de TiendaNube.",
     "brands": [
       "bdi",
       "zattia"
@@ -259,9 +259,9 @@ export const PERM_CAT: PermCat[] = [
     ],
     "subs": [
       {
-        "key": "quitar-item",
-        "label": "Puede quitar ítems de una solicitud",
-        "info": "Puede quitar variantes de una solicitud (queda registrado quién y por qué). Los admins pueden siempre. Sin este permiso, solo ve la solicitud."
+        "key": "sacar-item",
+        "label": "Puede sacar ítems de una solicitud",
+        "info": "Puede sacar variantes de una solicitud (queda registrado quién y por qué). Los admins pueden siempre. Sin este permiso, solo ve la solicitud."
       },
       {
         "key": "editar-desc",
@@ -271,7 +271,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "editar",
         "label": "Puede editar la solicitud",
-        "info": "Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
+        "info": "Puede agregar productos, sacar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
       }
     ]
   },
@@ -279,7 +279,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "liquidacion",
     "area": "analisis",
     "label": "Liquidación",
-    "info": "Campañas de sale: los productos se mandan desde Por producto, se les define el precio uno por uno con el simulador de margen al lado, y la campaña queda guardada y compartida — no en el navegador de una persona.",
+    "info": "Campañas de sale: los productos se mandan desde Productos, se les define el precio uno por uno con el simulador de margen al lado, y la campaña queda guardada y compartida — no en el navegador de una persona.",
     "brands": [
       "bdi",
       "zattia"
@@ -468,7 +468,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "ingresos",
     "area": "compras",
-    "label": "Ingresos proyectados",
+    "label": "Importaciones",
     "info": "Importaciones de fundas por llegar: diseños con foto, modelos, cantidades, proveedor, fecha de arribo y estado. Con galería de fotos y videos del pedido.",
     "brands": [
       "bdi"
@@ -525,7 +525,7 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "conteo-deposito",
     "area": "deposito",
-    "label": "Conteo",
+    "label": "Conteo de depósito",
     "info": "Conteo físico del depósito por producto (cargando cantidades a mano, no por escaneo). Buscás el producto, contás sus variantes y lo terminás. El ajuste a GN se calcula con stock vivo + diferencia, así las ventas durante el conteo no lo ensucian. Guarda historial de cada conteo aplicado.",
     "brands": [
       "bdi",
@@ -583,8 +583,8 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "editar",
-        "label": "Puede cargar y borrar links",
-        "info": "Puede AGREGAR, editar y borrar links y mensajes, y cambiar el texto con el que se arma el mensaje de las fundas. Sin este permiso solo se copia y se pega — que es lo que necesita quien está atendiendo."
+        "label": "Puede cargar y eliminar links",
+        "info": "Puede AGREGAR, editar y eliminar links y mensajes, y cambiar el texto con el que se arma el mensaje de las fundas. Sin este permiso solo se copia y se pega — que es lo que necesita quien está atendiendo."
       }
     ]
   },
@@ -628,7 +628,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "editar",
         "label": "Puede editar la solicitud",
-        "info": "Puede agregar productos, quitar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
+        "info": "Puede agregar productos, sacar y cambiar cantidades de una solicitud (aun con la venta creada), con motivo; queda en el historial de cambios. Los admins pueden siempre."
       }
     ]
   },
@@ -694,7 +694,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "crear",
         "label": "Puede duplicar y crear campañas",
-        "info": "Duplica una campaña o un conjunto que ya existe, con sus conjuntos y avisos, y le pone a la copia el nombre y el presupuesto diario que se le digan. La copia nace SIEMPRE pausada y con la marca del original, así que no gasta hasta que alguien la prenda a mano. Habilita además renombrar cualquier campaña, conjunto o aviso, que es la otra mitad de la misma operación. Va aparte de pausar y de presupuesto porque crea objetos nuevos en la cuenta: lo que hace no se deshace apretando otra vez, hay que ir a borrarlos. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+        "info": "Duplica una campaña o un conjunto que ya existe, con sus conjuntos y avisos, y le pone a la copia el nombre y el presupuesto diario que se le digan. La copia nace SIEMPRE pausada y con la marca del original, así que no gasta hasta que alguien la prenda a mano. Habilita además renombrar cualquier campaña, conjunto o aviso, que es la otra mitad de la misma operación. Va aparte de pausar y de presupuesto porque crea objetos nuevos en la cuenta: lo que hace no se deshace apretando otra vez, hay que ir a eliminarlos. Los admins pueden siempre. ⚠️ NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
       },
       {
         "key": "pautar",
@@ -745,8 +745,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa",
     "area": "administracion",
-    "label": "Post-venta",
-    "info": "Post-venta unificado (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
+    "label": "Posventa",
+    "info": "Posventa unificada (Administración, MOTOR): recibe las fallas que carga el local, las confirma (genera la venta en Gestión Nube que descuenta la unidad), mueve la ubicación y las etiqueta con código de barras. Muestra cuánto tenemos en fallas a costo y a PVP de feria. Cambios / Devoluciones / Canjes llegan después.",
     "brands": [
       "bdi",
       "zattia"
@@ -755,8 +755,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa-local",
     "area": "local",
-    "label": "Fallas (carga)",
-    "info": "Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Post-venta.",
+    "label": "Fallas del local",
+    "info": "Carga de fallas para el LOCAL: cuando recibís una prenda con falla del cliente, la cargás acá (elegís el artículo de Gestión Nube y ponés el motivo). Es solo vista/carga; el motor (recibir, confirmar, descontar stock) vive en Administración → Posventa.",
     "brands": [
       "bdi",
       "zattia"
@@ -765,8 +765,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "postventa-deposito",
     "area": "deposito",
-    "label": "Fallas (depósito)",
-    "info": "Carga de fallas desde DEPÓSITO: igual que la carga del local, pero descuenta el stock de depósito. El motor (recibir, confirmar) vive en Administración → Post-venta.",
+    "label": "Fallas de depósito",
+    "info": "Carga de fallas desde DEPÓSITO: igual que la carga del local, pero descuenta el stock de depósito. El motor (recibir, confirmar) vive en Administración → Posventa.",
     "brands": [
       "bdi",
       "zattia"
@@ -795,8 +795,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "reclamos-local",
     "area": "local",
-    "label": "Reclamos (iniciar)",
-    "info": "Abrir un reclamo desde el LOCAL, por cualquier motivo: se arrepintió, vino fallado, le faltó un producto, le llegó otro, no le llegó nunca. Buscás la orden de Tienda Nube, marcás qué pasó, y le pasás al cliente un link para que suba las fotos. Acá ves en qué anda cada uno. Decidir qué se hace y devolver la plata es de Administración → Post-venta → Reclamos.",
+    "label": "Iniciar un reclamo",
+    "info": "Abrir un reclamo desde el LOCAL, por cualquier motivo: se arrepintió, vino fallado, le faltó un producto, le llegó otro, no le llegó nunca. Buscás la orden de Tienda Nube, marcás qué pasó, y le pasás al cliente un link para que suba las fotos. Acá ves en qué anda cada uno. Decidir qué se hace y devolver la plata es de Administración → Posventa → Reclamos.",
     "brands": [
       "bdi",
       "zattia"
@@ -815,7 +815,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "publicar",
         "label": "Puede publicar novedades",
-        "info": "Puede escribir, editar, publicar, archivar y borrar. Sin esto sólo se leen — que es lo que necesita el resto del equipo. Como una novedad no tiene marca, alcanza con tenerlo tildado en cualquiera de las dos."
+        "info": "Puede escribir, editar, publicar, archivar y eliminar. Sin esto sólo se leen — que es lo que necesita el resto del equipo. Como una novedad no tiene marca, alcanza con tenerlo tildado en cualquiera de las dos."
       }
     ]
   },
@@ -832,7 +832,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "editar",
         "label": "Puede escribir manuales",
-        "info": "Puede crear, editar, publicar y borrar manuales. Sin esto sólo se leen. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque un manual no tiene marca."
+        "info": "Puede crear, editar, publicar y eliminar manuales. Sin esto sólo se leen. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque un manual no tiene marca."
       }
     ]
   },
@@ -849,7 +849,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "cargar",
         "label": "Puede cargar en la agenda",
-        "info": "Puede dar de alta, editar, apagar y borrar las promociones bancarias. Sin esto sólo se leen — que es lo que necesita el mostrador. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque una promo la define el banco y no tiene marca. ⚠️ Un sub NO se hereda de la función: si no se lo tildás a alguien a mano, nadie puede cargar nada."
+        "info": "Puede dar de alta, editar, apagar y eliminar las promociones bancarias. Sin esto sólo se leen — que es lo que necesita el mostrador. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque una promo la define el banco y no tiene marca. ⚠️ Un sub NO se hereda de la función: si no se lo tildás a alguien a mano, nadie puede cargar nada."
       }
     ]
   }
@@ -924,7 +924,7 @@ export const NAV_CATS: NavCat[] = [
       "etiquetas"
     ],
     "labels": {
-      "retornos": "Lo que tiene que volver"
+      "retornos": "Retornos a depósito"
     },
     "grupos": [
       {
@@ -995,7 +995,7 @@ export const NAV_CATS: NavCat[] = [
         "keys": [],
         "items": [
           { "ruta": "/tncat/fotos", "label": "Fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
-          { "ruta": "/tncat/cola", "label": "La cola de fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
+          { "ruta": "/tncat/cola", "label": "Cola de fotos", "icono": "tn-fotos", "key": "tncat", "sub": "imagenes" },
           { "ruta": "/tncat/categorias", "label": "Categorías", "icono": "tn-categorias", "key": "tncat", "sub": ["categorias", "asignar"] },
           { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "icono": "tn-visibilidad", "key": "tncat", "sub": "ocultar" },
           { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "icono": "talles", "key": "gen-talles" },
@@ -1028,7 +1028,7 @@ export const NAV_CATS: NavCat[] = [
       "insumos"
     ],
     "labels": {
-      "solicitudes": "Solicitudes (todas las marcas)"
+      "solicitudes": "Solicitudes de todas las marcas"
     }
   },
   {

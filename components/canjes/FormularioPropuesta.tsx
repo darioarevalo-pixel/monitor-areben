@@ -207,7 +207,7 @@ export function FormularioPropuesta({
               />
               {lineas.length > 1 && (
                 <Button variant="ghost" tone="danger" size="sm" onClick={() => setUnidades((p) => p.filter((_, j) => j !== i))}>
-                  Quitar
+                  Sacar
                 </Button>
               )}
             </div>
