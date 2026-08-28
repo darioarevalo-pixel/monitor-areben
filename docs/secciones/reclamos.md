@@ -1249,6 +1249,14 @@ existe **dos veces** en `casos.core.js` (acá y en `registroDeRetencion`), y el 
 en la otra. Salió verde y parecía un test que faltaba. **El ancla de un mutante se verifica única**
 (`s.count(v) == 1`), igual que la cadena de un oráculo de deploy.
 
+✅ **Caminado EN VIVO contra BDI de producción, 25 de 25** (`scripts/caminar-contestar-oferta.mjs`),
+con **4 filas sembradas y borradas** y las reales intactas. 🔑 **El oráculo viene por otro camino que
+el hecho**: se escribe por la API de prod y se lee la fila cruda por PostgREST con la service key —
+los tests fijan la regla pura, y esto ejerce el camino entero (handler, permisos, PostgREST), que es
+donde este módulo ya se rompió dos veces con la regla en verde. Lo que quedó ejercido a mano: el
+rechazo que ⛔ no pisa nada, el 409 de contestar dos veces, las dos ramas de aceptar (plata y cupón,
+con sus pendientes distintos) y el 409 de una fila sin oferta.
+
 ▶️ **Lo que queda abierto acá**: `DIAS_ALERTA` ⛔ no tiene reloj para «hace N días que la etiqueta no
 sale» — hoy el único que corre sobre `en_transito` es `transito` (15 días), que cuenta una espera que
 todavía ⛔ no es del transporte.
