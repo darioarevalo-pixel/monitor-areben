@@ -232,10 +232,16 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
        *
        * De todos modos se puede volver a sacar desde la lista mientras el reclamo siga sin decidir.
        */
-      if (expectativaVal === 'otro_producto') {
-        toast.ok('Reclamo creado. Armá el cambio desde la pestaña Cambios.')
-      } else if (!pideFotos(motivo, expectativaVal || null)) {
-        toast.ok('Reclamo creado. Acá no hacen falta fotos: escribile con el mensaje de la lista.')
+      /**
+       * 🔴 **Querer un cambio ⛔ ya no apaga el pedido de fotos** (27-ago-2026, corrección de
+       * Bruno: *«la de que quiere cambiar la prenda, si es con envío, sí necesitamos fotos para ver
+       * el estado de la prenda»*). Acá el cartel mandaba a Cambios **en vez** de copiar el link, y
+       * ése era el único camino por el que la prenda volvía sin que nadie la hubiera visto. Ahora
+       * el link se copia igual y lo de Cambios se dice además, ⛔ no en lugar de.
+       */
+      const irACambios = expectativaVal === 'otro_producto' ? ' El cambio se arma desde la pestaña Cambios.' : ''
+      if (!pideFotos(motivo, expectativaVal || null)) {
+        toast.ok(`Reclamo creado. Acá no hacen falta fotos: escribile con el mensaje de la lista.${irACambios}`)
       } else {
         /**
          * 🔴 **El cartel dice lo que PASÓ, no lo que se intentó.** Hasta el 27-ago-2026 acá había
@@ -247,8 +253,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
          */
         const copiado = await copiarAlPortapapeles(linkDelCliente(token))
         toast.ok(copiado
-          ? 'Reclamo creado. El link para el cliente quedó copiado.'
-          : 'Reclamo creado, pero el link NO se copió solo: copialo del cuadro, o sacalo de la lista con «Msj: pedir fotos».')
+          ? `Reclamo creado. El link para el cliente quedó copiado.${irACambios}`
+          : `Reclamo creado, pero el link NO se copió solo: copialo del cuadro, o sacalo de la lista con «Msj: pedir fotos».${irACambios}`)
       }
       setOrden(null); setNumero(''); setElegidos(new Set()); setDetalle('')
       void recargar()

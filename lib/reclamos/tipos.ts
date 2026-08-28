@@ -498,15 +498,24 @@ export function expectativasDe(m: MotivoReclamo): Expectativa[] {
 /**
  * ¿Hay que pedirle fotos, y de qué?
  *
- * **Depende del motivo Y de qué quiere el cliente**, no sólo del motivo: la foto sirve para ver en
- * qué estado vuelve el producto, así que sólo hace falta cuando el producto vuelve. Si lo quiere
- * cambiar, lo trae al mostrador y se ve ahí.
+ * La foto sirve para **ver en qué estado vuelve el producto**, así que hace falta siempre que el
+ * producto vuelva — y sólo el motivo dice si vuelve algo o no hay nada que fotografiar.
+ *
+ * 🔴 **Corregido el 27-ago-2026 por Bruno**: *«la de que quiere cambiar la prenda, si es con envío,
+ * sí necesitamos fotos para ver el estado de la prenda»*. Hasta ese día, querer un cambio
+ * (`otro_producto` / `mismo_producto`) **apagaba** el pedido de fotos, con la premisa escrita
+ * *«si lo quiere cambiar, lo trae al mostrador y se ve ahí»*. La premisa es falsa acá: **por esta
+ * lista entran órdenes ONLINE**, o sea que la prenda viaja igual, y el cambio de mostrador —donde
+ * sí se ve en persona— se arma en la pestaña Cambios y ⛔ nunca pasa por esta función. Con la
+ * premisa puesta, el único caso en que la prenda vuelve **sin que nadie la haya visto** era
+ * justamente el cambio.
+ *
+ * ⚠️ Por eso `si_quiere_plata` quedó **equivalente a `siempre`** y se deja como estaba a propósito:
+ * la distinción vuelve a tener sentido el día que exista *«la trae al local»*, y ese día se decide
+ * **por la VÍA del retorno, ⛔ no por la expectativa** — que es el dato que no dice si viaja.
  */
-export function pideFotos(m: MotivoReclamo, expectativa?: Expectativa | null): boolean {
-  const modo = PERFIL_MOTIVO[m].fotos
-  if (modo === 'nunca') return false
-  if (modo === 'si_quiere_plata') return expectativa !== 'otro_producto' && expectativa !== 'mismo_producto'
-  return true
+export function pideFotos(m: MotivoReclamo, _expectativa?: Expectativa | null): boolean {
+  return PERFIL_MOTIVO[m].fotos !== 'nunca'
 }
 
 /**

@@ -71,9 +71,19 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
     expect(mensajesDeLaFila(fila({ motivo: 'no_llego', fotos: [{ url: 'u' }] as never }))).toEqual([])
   })
 
-  it('el que quiere cambiar la prenda la trae al mostrador: no hay foto que pedir', () => {
-    expect(mensajesDeLaFila(fila({ motivo: 'talle', expectativa: 'otro_producto' }))).toEqual([])
+  /**
+   * 🔴 **Lo corrigió Bruno el 27-ago-2026**, y este test afirmaba la premisa vieja: *«la de que
+   * quiere cambiar la prenda, si es con envío, sí necesitamos fotos para ver el estado de la
+   * prenda»*. Por esta lista entran órdenes ONLINE ⇒ la prenda viaja igual, y el cambio de
+   * mostrador se arma en la pestaña Cambios. Era el único caso en que volvía sin que nadie la
+   * hubiera visto.
+   */
+  it('el que quiere cambiarla: también se le piden, porque la prenda viaja', () => {
+    expect(mensajesDeLaFila(fila({ motivo: 'talle', expectativa: 'otro_producto' }))).toEqual(['pedir_fotos'])
+    expect(mensajesDeLaFila(fila({ motivo: 'talle', expectativa: 'mismo_producto' }))).toEqual(['pedir_fotos'])
     expect(mensajesDeLaFila(fila({ motivo: 'talle', expectativa: 'plata' }))).toEqual(['pedir_fotos'])
+    // ⛔ Y lo que NO cambia: donde no hay nada que fotografiar, se sigue sin pedir.
+    expect(mensajesDeLaFila(fila({ motivo: 'no_llego', expectativa: 'otro_producto' }))).toEqual([])
   })
 
   /**

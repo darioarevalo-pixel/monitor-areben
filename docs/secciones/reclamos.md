@@ -975,9 +975,8 @@ los tests se escriben **por momento** y afirman las dos mitades, qué hay y qué
 1. **El link vivo Y el reclamo sin decidir.** ⛔ No son lo mismo: fuera de los tres estados abiertos
    el portal contesta 404, pero **un cambio decidido vuelve a `borrador` a propósito** (lo termina
    el POS) ⇒ mirando sólo el estado, el caso ya resuelto **volvía a ofrecer el link del cliente**.
-2. **Que el caso pida fotos** (`pideFotos`: motivo **y** expectativa). El alta ya avisaba *«acá no
-   hacen falta fotos»* en `no_llego`, `demora` y `sin_stock`, y la lista lo contradecía ofreciendo
-   el mensaje igual.
+2. **Que el caso pida fotos** (`pideFotos`). El alta ya avisaba *«acá no hacen falta fotos»* en
+   `no_llego`, `demora` y `sin_stock`, y la lista lo contradecía ofreciendo el mensaje igual.
 3. **Que no haya llegado ninguna.** Con fotos adentro, el pedido ya se cumplió.
 
 🔑 **La escapatoria se resolvió, ⛔ no se ignoró**: a veces sí hacen falta más fotos. Eso es
@@ -990,6 +989,26 @@ toca ahora»; el pedido de más fotos es una decisión, y va donde se toma.
 **`tests/reclamos-lista-mensajes.test.tsx` fija el CABLE**: monta la lista con filas mockeadas y
 mira los rótulos **dibujados**. Sin él, alguien puede volver a escribir la condición a mano en el
 JSX con la regla y sus tests en verde — que es exactamente de donde salió el defecto.
+
+### 🔴 Querer un cambio ⛔ ya no apaga el pedido de fotos (corrección de Bruno, mismo día)
+
+*«La de que quiere cambiar la prenda, si es con envío, sí necesitamos fotos para ver el estado de la
+prenda»*. `pideFotos` tenía escrita la premisa contraria —*«si lo quiere cambiar, lo trae al
+mostrador y se ve ahí»*— y es **falsa para esta lista**: por Reclamos entran **órdenes online**, o
+sea que la prenda **viaja** igual; el cambio de mostrador se arma en la pestaña Cambios y ⛔ nunca
+llama a esta función. 🔴 **Era el único camino por el que una prenda volvía sin que nadie la hubiera
+visto.**
+
+- `pideFotos` pasa a mirar **sólo el motivo**: `PERFIL_MOTIVO[m].fotos !== 'nunca'`.
+- ⚠️ Con eso **`si_quiere_plata` quedó equivalente a `siempre`**, y se deja en los perfiles a
+  propósito: la distinción vuelve a tener sentido el día que exista *«la trae al local»*, y ese día
+  se decide **por la VÍA del retorno, ⛔ no por la expectativa** — la expectativa nunca dijo si la
+  prenda viaja.
+- **El alta también cambió**: con `otro_producto` el cartel mandaba a Cambios **en vez** de copiar
+  el link. Ahora copia el link igual y lo de Cambios lo dice **además**, ⛔ no en lugar de.
+- ⚠️ **El test viejo afirmaba la premisa vieja** (`tests/reclamos.test.ts`, bloque `pideFotos`:
+  *«talle y arrepentimiento: sólo si quiere la plata»*). Una premisa escrita y nunca medida se
+  defiende sola hasta que alguien que usa la app la contradice.
 
 ▶️ **El enchufe para el mensaje de la propuesta** (el que hoy no existe y es el que más se va a
 usar): agregar `'propuesta'` al union y su condición en `mensajesDeLaFila`. El botón en la pantalla

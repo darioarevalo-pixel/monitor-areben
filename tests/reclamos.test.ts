@@ -400,12 +400,18 @@ describe('el perfil del motivo', () => {
       }
     })
 
-    // Si lo quiere cambiar lo trae al mostrador y se ve en persona: pedirle fotos es fricción
-    // por nada.
-    it('talle y arrepentimiento: sólo si quiere la plata', () => {
+    /**
+     * 🔴 **Dado vuelta el 27-ago-2026, por Bruno**: *«la de que quiere cambiar la prenda, si es con
+     * envío, sí necesitamos fotos para ver el estado de la prenda»*. Antes, querer un cambio
+     * apagaba el pedido —*«lo trae al mostrador y se ve ahí»*—, y por esta lista entran órdenes
+     * ONLINE: la prenda viaja igual. El cambio de mostrador se arma en la pestaña Cambios y ⛔ no
+     * pasa por acá.
+     */
+    it('talle y arrepentimiento: también si quiere cambiarla, porque la prenda viaja', () => {
       for (const m of ['talle', 'arrepentimiento', 'no_esperaba'] as const) {
         expect(pideFotos(m, 'plata'), m).toBe(true)
-        expect(pideFotos(m, 'otro_producto'), m).toBe(false)
+        expect(pideFotos(m, 'otro_producto'), m).toBe(true)
+        expect(pideFotos(m, 'mismo_producto'), m).toBe(true)
       }
     })
 

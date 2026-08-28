@@ -64,9 +64,11 @@ export function linkVivo(d: ReclamoRow): boolean {
  *    mismo: fuera de los tres estados abiertos el portal contesta 404, y un **cambio decidido
  *    vuelve a `borrador` a propósito** (lo termina el POS) ⇒ sin la segunda mitad, el caso ya
  *    resuelto volvía a ofrecer el link. Decidido, lo que corresponde es contar la resolución;
- * 2. que el caso **pida** fotos (`pideFotos`) — depende del motivo **y** de qué quiere el cliente:
- *    en «no le llegó nunca» no hay nada que fotografiar, y el que viene a cambiar la prenda la
- *    trae al mostrador. El alta ya decía *«acá no hacen falta fotos»* y la lista lo contradecía;
+ * 2. que el caso **pida** fotos (`pideFotos`): en «no le llegó nunca», «demora» y «sin stock» no
+ *    hay nada que fotografiar, y el alta ya decía *«acá no hacen falta fotos»* mientras la lista lo
+ *    contradecía. ⚠️ **El que quiere cambiar la prenda SÍ entra** — lo corrigió Bruno el
+ *    27-ago-2026: por esta lista entran órdenes online, así que la prenda **viaja**, y hay que ver
+ *    en qué estado vuelve. El cambio de mostrador se arma en la pestaña Cambios;
  * 3. que **no haya llegado ninguna**. Con fotos adentro, el pedido ya se cumplió.
  *
  * `mas_fotos` pide **las mismas menos la última**, ⛔ no sólo «hay fotos»: en un caso que no
