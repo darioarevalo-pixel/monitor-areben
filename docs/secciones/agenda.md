@@ -353,6 +353,35 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     error viaja en la respuesta (`sembrado`).
   - ⚠️ **Stunned es una LÍNEA de Zattia**: la marca del clon sale de `baseDeLinea(store)`, ⛔ no del
     store. La Agenda tiene dos marcas y `stunned` no es una.
+- 🆕 🔴 🔑 **EL 3º DISPARADOR: EL LANZAMIENTO — y la plantilla SIN EJE** (29-ago-2026). El manual 08
+  dice que la lista *«se abre al decidir el lanzamiento, no el día antes»*, y **el objeto que dice
+  eso ya existía**: un hito propio del calendario editorial de tipo `lanzamiento`, con su fecha
+  objetivo. ⛔ No hizo falta inventar un botón — el dato ya lo sabía el código y lo estaba tirando.
+  - 🔴 **El hecho es «quedó FIRME», ⛔ no «se creó».** `firme: false` es una fecha **proyectada, que
+    se puede mover**, y colgar once pendientes de una fecha que se mueve es sembrar once fechas
+    equivocadas. Y como el hecho es un **estado** y no un alta, el mismo código cubre los dos
+    caminos —nace firme, o alguien lo marca firme después— **sin preguntar si el hito existía**: la
+    idempotencia por clave hace las dos cosas. (La sesión de fotos sí tiene que preguntarlo, porque
+    allá el hecho es el alta.)
+  - 🔑 **La clave es el ID del hito**: la fecha objetivo **se mueve** hasta que queda firme.
+  - 🔑 **Una plantilla puede NO tener eje** (`eje: null`). El eje existe **porque hay un paso que
+    cambia de dueña**, y en el lanzamiento no lo hay: el guion es de Cami, el banner de Cande, la
+    pauta de Bruno, pase lo que pase. Inventarle uno sería obligar a contestar una pregunta que el
+    manual no hace, y **«lo que falta cierra» ⛔ no aplica donde no hay nada que decidir**. Un eje
+    que llega igual es **400 y lo nombra**: el que lo mandó cree que va a filtrar algo.
+  - **Son once de los diecisiete.** Los renglones 1-5 y el 14 son **los mismos moldes del ingreso**
+    (nombre, descripción, precio, la sesión de fotos, las fotos, las pantallas) y se quedan ahí,
+    porque *«lanzamiento siempre tiene algo nuevo»* (Bruno, 29-ago) ⇒ **todo lanzamiento trae un
+    ingreso adentro**. Cargarlos en los dos lados dejaría dos lugares donde la dueña puede decir
+    cosas distintas.
+  - 🔴 **Y ⛔ no siembra si la fecha objetivo YA PASÓ.** Salió de medir producción: hay un
+    «Lanzamiento Fundas BDI» del 7-ago, firme; editarle una coma le habría sembrado once pendientes
+    de hace tres semanas —la mitad **fuera de la ventana de arrastre**, o sea invisibles, y la otra
+    mitad vencidos para algo que ya salió—. El corte lleva **un día de margen** porque el reloj del
+    servidor es UTC y el de acá es Argentina. ⚠️ Y **cuando no siembra por vieja, se dice**: el
+    silencio se leería como que sí.
+  - **La pantalla lo dice**: el modal del hito avisa qué pasa al guardarlo firme —reparte trabajo a
+    cuatro sectores— y qué **no** pasa mientras siga proyectada.
 - 🔑 **Es el tablero donde van las rutinas repetitivas de marketing** — decisión de proceso de Bruno
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen
@@ -431,6 +460,14 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   29-ago). Iba a ir por rol —*«las tres = las de marketing»*, para que siguiera siendo correcto el
   día que cambie quién está en marketing— pero **el padrón dice que la función `marketing` la tienen
   CUATRO**: Sofi, Cande, Cami y **Stefania Scolari**, que es diseñadora y no va a las sesiones.
+- 🆕 🏁 **Los once moldes del lanzamiento, CARGADOS y ejercidos en vivo** (29-ago): un hito de
+  prueba **proyectado no sembró nada**, marcado **firme sembró los 11** con las fechas corridas
+  (−7 · −5 · −2 · −1 · 0), y **re-guardarlo con otra fecha contestó `ya`**. La prueba se borró
+  entera. Script: `~/Documents/quien-hace-que/scripts/moldes-lanzamiento.mjs` —arranca en
+  simulación, **saltea por título lo que ya está** y **reintenta**, porque `api/datos.js` viene
+  contestando 504 a intervalos—; el oráculo por otro camino, `verificar-siembra-lanzamiento.mjs`.
+  ⚠️ **Cuatro de los once días los elegí yo** y están marcados en el encabezado del script: la
+  tipografía (−7), los canjes (−7) y el guion (−5) — el manual ahí dice prosa, no un número.
 - 🆕 ▶️ 🔴 **Y de ahí sale un pendiente que no es de la Agenda: falta la función `diseno`.** Stefi
   usa `marketing` porque no hay otra, y ⛔ **sacársela no es gratis**: es su **ÚNICA** fuente de
   acceso —no tiene un solo permiso tildado a mano, sólo exclusiones—, así que quedaría sin nada,

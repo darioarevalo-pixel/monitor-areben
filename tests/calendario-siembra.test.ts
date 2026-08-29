@@ -140,6 +140,30 @@ describe('un lanzamiento firme siembra sus renglones', () => {
     }
   })
 
+  it('🔴 un lanzamiento cuya fecha YA PASÓ ⛔ no siembra, y lo dice', async () => {
+    // Medido en producción el 29-ago-2026: hay un «Lanzamiento Fundas BDI» del 7-ago, firme.
+    // Editarle una coma le habría sembrado once pendientes vencidos —la mitad ya fuera de la
+    // ventana de arrastre, o sea invisibles— para un lanzamiento que ya salió.
+    const res = await guardar(hito({ fecha: '2020-01-01' }))
+    expect(res.code).toBe(200)
+    expect(sembrados).toEqual([])
+    // ⛔ Y no se calla: quien guarda un lanzamiento firme espera que le caiga el trabajo.
+    expect(String((res.body?.sembrado as { error?: string })?.error)).toContain('ya pasó')
+  })
+
+  it('...pero el de AYER, el de hoy y el de mañana sí: el corte tiene un día de margen', async () => {
+    // 🔑 **El de ayer es el que fija el margen**, y el margen es por la zona horaria: el reloj del
+    // servidor es UTC y el de acá es Argentina, así que a las 21:00 «hoy» ya es mañana allá. Sin el
+    // día de más, un lanzamiento de HOY guardado a la noche no sembraría nada — y el que lo guardó
+    // no tendría cómo saber por qué. La contra, asumida: un lanzamiento de ayer siembra.
+    const dia = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+    for (const f of [dia(-1), dia(0), dia(1), dia(30)]) {
+      sembrados.length = 0
+      await guardar(hito({ fecha: f }))
+      expect(sembrados, f).toHaveLength(1)
+    }
+  })
+
   it('la marca sale del store del calendario, que son las dos de la Agenda', async () => {
     await guardar(hito(), 'zattia')
     expect(sembrados[0].marca).toBe('zattia')

@@ -31,6 +31,24 @@ import {
   CLAVES_COMERCIALES, CLAVES_PRIORIDAD, CLAVES_TIPO_HITO, normalizarHora, partirIdComercial,
 } from '../lib/calendario/fechas.core.js';
 
+/**
+ * ¿La fecha objetivo ya pasó?
+ *
+ * 🔴 **Existe porque hay un lanzamiento firme de agosto cargado en el calendario** (medido en
+ * producción el 29-ago-2026): editarle una coma le habría sembrado once pendientes con fechas de
+ * hace tres semanas — la mitad **fuera de la ventana de arrastre**, o sea invisibles, y la otra
+ * mitad vencidos para un lanzamiento que ya salió. Un contador que no baja se deja de mirar en una
+ * semana, y con él se dejan de mirar los que sí importan.
+ *
+ * ⚠️ **Con un día de margen, y ⛔ no `< hoy` pelado**: el reloj del servidor es UTC y el de la
+ * persona es Argentina, así que a las 21:00 «hoy» ya es mañana acá. El margen hace que el borde no
+ * dependa de la hora a la que alguien guarde.
+ */
+function yaPaso(fecha) {
+  const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return String(fecha) < ayer;
+}
+
 function cfgFor(store) {
   if (store === 'zattia') {
     return {
@@ -252,7 +270,7 @@ export default async function handler(req, res) {
       🔴 **Sembrar ⛔ no puede voltear el guardado.** El hito es el dato; los pendientes son la
       consecuencia. Si no hay moldes cargados, el hito igual quedó guardado y el error se cuenta.
     */
-    const sembrado = hito.tipo === 'lanzamiento' && hito.firme
+    const sembrado = hito.tipo === 'lanzamiento' && hito.firme && !yaPaso(hito.fecha)
       ? await sembrarEnMaestra({
         plantilla: 'lanzamiento',
         // El agrupador del título de cada clon: cómo llamó al lanzamiento quien lo cargó.
@@ -269,7 +287,14 @@ export default async function handler(req, res) {
       })
       : null;
 
-    return res.status(200).json({ ok: true, hito, ...(sembrado ? { sembrado } : {}) });
+    /*
+      ⚠️ **Y cuando NO sembró por vieja se dice, ⛔ no se calla.** Quien acaba de guardar un
+      lanzamiento firme espera que le caiga el trabajo; el silencio se lee como que cayó.
+    */
+    const porVieja = hito.tipo === 'lanzamiento' && hito.firme && yaPaso(hito.fecha)
+      ? { error: 'La fecha objetivo ya pasó: no se sembraron los renglones del lanzamiento.' }
+      : null;
+    return res.status(200).json({ ok: true, hito, ...(sembrado || porVieja ? { sembrado: sembrado || porVieja } : {}) });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
