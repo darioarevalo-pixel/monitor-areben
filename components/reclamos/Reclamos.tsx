@@ -17,7 +17,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import {
   Button, Card, Chips, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
-  TableWrap, THead, TBody, Tr, Th, Td, MoneyText, Toolbar, Tabs, KpiCard,
+  TableWrap, THead, TBody, Tr, Th, Td, MoneyText, formatMoney, Toolbar, Tabs, KpiCard,
   color, font, space, weight, useConfirmar, useToast, type Tone,
   Instructivo,
 } from '@/components/ui'
@@ -29,7 +29,7 @@ import {
   leerToken, reemitirToken, liberarDecision,
 } from '@/lib/reclamos/cliente'
 import {
-  botonDecidir, calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
+  botonDecidir, calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, montoADevolver, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
   faltaAnularAntesDeDescontar,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, preseleccionDelAlta, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
@@ -380,7 +380,9 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     const si = await confirmar({
       titulo: 'Plata devuelta',
       ok: 'Sí, ya se la devolví',
-      mensaje: `¿Ya le devolviste ${d.monto_total ?? d.monto_producto ?? 0} a ${d.cliente || 'el cliente'}${d.pago_metodo ? ` por ${d.pago_metodo}` : ''}?`,
+      // Mismo número que la columna, y por el mismo camino: preguntar por un monto que sale de
+      // otra cuenta es pedir que alguien confirme algo distinto de lo que se decidió.
+      mensaje: `¿Ya le devolviste ${formatMoney(montoADevolver(d))} a ${d.cliente || 'el cliente'}${d.pago_metodo ? ` por ${d.pago_metodo}` : ''}?`,
     })
     if (si) await accion(() => marcarReintegro(marca, d.id), 'Anotado: la plata quedó devuelta.')
   }
@@ -878,7 +880,11 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                     )}
                   </Td>
                   <Td><StatusPill tone={ESTADO_TONE[d.estado]} label={estadoEnCriollo(d)} /></Td>
-                  {esAdmin && <Td align="right"><MoneyText value={d.monto_total ?? d.monto_producto ?? 0} /></Td>}
+                  {/* 🔑 `montoADevolver` devuelve `null` mientras ⛔ no haya decisión, y acá eso se
+                      ve como «sin decidir»: hasta el 28-ago-2026 esta celda mostraba lo que el
+                      cliente pagó —un dato que está desde el minuto cero— en la columna que dice
+                      cuánta plata sale, o sea afirmando una decisión que nadie tomó. */}
+                  {esAdmin && <Td align="right"><MoneyText value={montoADevolver(d)} placeholder="sin decidir" /></Td>}
                   {/* 🔑 `wrap` + `maxWidth`: sin eso el `<Td>` hereda `white-space: nowrap`
                       (`components/ui/Table.tsx`) y esta celda puede tener ~140 caracteres en una
                       sola línea indivisible ⇒ la tabla gana barra horizontal y las demás columnas

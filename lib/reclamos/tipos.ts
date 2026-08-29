@@ -30,6 +30,7 @@ import {
   escenariosDe as escenariosDeJs,
   esEscenarioDe as esEscenarioDeJs,
   esSoloSeguimiento as esSoloSeguimientoJs,
+  faltantesParaCerrar as faltantesParaCerrarJs,
   ofreceRetencion as ofreceRetencionJs,
   perfilDe as perfilDeJs,
   FORMAS_RETENCION as FORMAS_RETENCION_JS,
@@ -45,6 +46,7 @@ import {
 import {
   costoDelCaso as costoDelCasoJs,
   costoDeLaFila as costoDeLaFilaJs,
+  montoADevolver as montoADevolverJs,
   ENTRADAS_DEL_COSTO as ENTRADAS_DEL_COSTO_JS,
   positivo,
   redondear,
@@ -1893,6 +1895,14 @@ export const ENTRADAS_DEL_COSTO: readonly string[] = ENTRADAS_DEL_COSTO_JS
  * entra de cada envío, y que vivían sueltas adentro de `DecidirReclamo.tsx`— vive en
  * `plata.core.js`, porque la necesita también `casos.core.js` y `api/_reclamos.js`.
  */
+/**
+ * Lo que se le devuelve al cliente, o `null` si todavía ⛔ no se decidió. La regla —y por qué ⛔ no
+ * puede ser 0— vive en `plata.core.js`.
+ */
+export function montoADevolver(d: Pick<ReclamoRow, 'compensacion' | 'monto_total' | 'monto_producto'>): number | null {
+  return montoADevolverJs(d) as number | null
+}
+
 export function costoDeLaFila(
   fila: Partial<Pick<ReclamoRow,
     'compensacion' | 'monto_total' | 'retorno_decidido' | 'envio_costo' | 'envio_ida_costo' | 'items' | 'destino_prenda'>>,
@@ -2447,73 +2457,16 @@ export function botonDecidir(d: ReclamoRow): { label: string; hechos: number } {
   }
 }
 
+/**
+ * Lo que falta para poder cerrar el reclamo. Vacío = se puede cerrar.
+ *
+ * 🔑 **El cuerpo se mudó a `casos.core.js` el 28-ago-2026** —acá quedó la cara tipada— porque el
+ * freno tiene que vivir también en `api/_reclamos.js`, que ⛔ no puede importar TypeScript: hasta
+ * ese día esta lista la miraba **sólo la pantalla** y el handler cerraba igual. Mismo arreglo que
+ * `destinoDe` y `perfilDe`.
+ */
 export function faltantesParaCerrar(d: ReclamoRow): string[] {
-  const faltan: string[] = []
-  const cambio = esCambio(d)
-
-  // Mientras no haya decisión, el único pendiente real es decidir. Los de plata y stock salen de
-  // la decisión, así que antes de tenerla no se sabe si van a existir — y en la mitad de los casos
-  // no existen. Antes nacían en 'pendiente' y la fila mostraba "anular la venta original en
-  // Gestión Nube · devolver la plata" desde el minuto cero: pendientes inventados, que es la forma
-  // más rápida de que la gente aprenda a no mirar la columna.
-  if (!estaDecidido(d) && d.estado !== 'anulado') {
-    // 🔑 Hay un escenario en que todavía NO hay nada que decidir: el pedido sigue viajando. Decir
-    // "decidir qué se hace" ahí es pedir que alguien resuelva un caso que todavía no existe —
-    // hasta el 25-ago-2026 un `no_llego` se daba por perdido desde el minuto cero.
-    faltan.push(esSoloSeguimiento(d.motivo, d.escenario)
-      ? 'seguir el envío: el caso se abre cuando se dé por extraviado'
-      : 'decidir qué se hace')
-    // El reclamo al transportista corre en paralelo y no espera a nadie: es plata recuperable y si
-    // el reclamo se cierra sin presentarlo, se perdió.
-    if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
-    if (d.tn_stock_estado === 'pendiente') faltan.push('dar de baja el producto en Gestión Nube')
-    return faltan
-  }
-
-  if (cambio) {
-    if (d.reingreso_estado === 'pendiente') faltan.push('reingresar en Gestión Nube el producto devuelto')
-    if (d.cobro_estado === 'pendiente') faltan.push('cobrar la diferencia')
-    // Solo cuando la cuenta quedó a favor del cliente sale plata de la caja.
-    if (d.reintegro_estado === 'pendiente' && (d.diferencia ?? 0) < 0) faltan.push('devolverle la diferencia')
-  } else {
-    if (d.stock_estado === 'pendiente') faltan.push('anular la venta original en Gestión Nube')
-    if (d.reintegro_estado === 'pendiente') faltan.push('devolver la plata')
-  }
-
-  if (d.tn_stock_estado === 'pendiente') faltan.push('dar de baja el producto en Gestión Nube')
-  // Lo que sale hacia el cliente. Va acá y no adentro del `if (cambio)` porque las tres
-  // resoluciones que mandan algo —cambio, reposición, reenvío— tienen el mismo pendiente.
-  if (d.envio_nuevo_estado === 'pendiente') faltan.push('despachar lo que se le manda')
-  // El cupón es una promesa hasta que existe en la tienda: sin esto se cierra el reclamo y el
-  // cliente descubre en la próxima compra que el código no anda.
-  if (d.cupon_estado === 'pendiente') faltan.push('crear el cupón en la tienda y anotar el código')
-  // Plata recuperable: si el reclamo se cierra sin esto, esa plata se perdió y nadie se entera.
-  if (d.reclamo_correo_estado === 'pendiente') faltan.push('presentar el reclamo al transportista')
-  // 🔑 **El otro cliente.** Un excedente toca dos ventas: al de acá le llegó algo de más, y del
-  // otro lado hay una venta a la que le falta y alguien que todavía no reclamó. Cerrar sin anotar
-  // cuál es deja ese faltante sin abrir, y el que se entera es el otro cliente.
-  const sinOtraVenta = sinLaOtraVenta(d).length
-  if (sinOtraVenta === 1) faltan.push('anotar de qué otra venta salió el producto de más, y abrirle el faltante')
-  else if (sinOtraVenta > 1) faltan.push(`anotar de qué otras ventas salieron los ${sinOtraVenta} productos de más, y abrirles el faltante`)
-  // 🔑 **Recibir es por PRODUCTO.** Antes esto miraba `destino_prenda === 'stock'` y el estado de la
-  // fila, así que un reclamo de dos productos se daba por recibido entero con uno solo en la mano —
-  // y en BDI 3 de cada 10 tienen dos. `estado === 'recibido'` sigue valiendo como "llegó todo": es
-  // lo que significaba antes de que las unidades se tildaran de a una.
-  if (d.estado !== 'recibido' && d.estado !== 'cerrado') {
-    const faltanUnidades = loQueFaltaLlegar(d).length
-    if (faltanUnidades === 1) faltan.push('recibir el producto')
-    else if (faltanUnidades > 1) faltan.push(`recibir los ${faltanUnidades} productos que faltan`)
-  }
-  // Cuando el producto se le queda al cliente, la foto es la única prueba de que la falla existió.
-  if (d.destino_prenda === 'falla' && !(d.fotos || []).length) faltan.push('al menos una foto del producto')
-  // 🔑 **El descuento de lo regalado es "siempre", no "si alguien se acuerda".** La unidad sana que
-  // se queda el cliente salió del depósito y Gestión Nube la sigue contando: si el reclamo se
-  // cierra sin sacarla, el stock queda de más hasta que la encuentre un conteo. Es la misma clase
-  // de agujero que tapó `descontarReemplazo`, del otro lado del mostrador.
-  const sinDescontar = loQueFaltaDescontar(d).length
-  if (sinDescontar === 1) faltan.push('descontar de Gestión Nube el producto que se queda el cliente')
-  else if (sinDescontar > 1) faltan.push(`descontar de Gestión Nube los ${sinDescontar} productos que se queda el cliente`)
-  return faltan
+  return faltantesParaCerrarJs(d) as string[]
 }
 
 // ── El POS del cambio ───────────────────────────────────────────────────────────

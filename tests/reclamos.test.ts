@@ -15,7 +15,7 @@ import {
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
   botonDecidir, estaDecidido, PASOS_DECISION, PASO_LABEL,
-  EFECTOS_RESOLUCION, ENTRADAS_DEL_COSTO, costoDeLaFila, faltaAnularAntesDeDescontar, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
+  EFECTOS_RESOLUCION, ENTRADAS_DEL_COSTO, costoDeLaFila, montoADevolver, faltaAnularAntesDeDescontar, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -2507,5 +2507,39 @@ describe('costoDeLaFila: la cuenta que ahora es de todos', () => {
     expect(editar).toContain('ENTRADAS_DEL_COSTO.join(')
     // ⚠️ Y sólo sobre un reclamo YA decidido: antes de la decisión el costo es `null` a propósito.
     expect(editar).toMatch(/previa\.compensacion/)
+  })
+})
+
+/**
+ * 🔴 **«A devolver» afirmaba un monto sobre reclamos sin decidir** (D10 de la auditoría del
+ * 28-ago-2026). La columna hacía `monto_total ?? monto_producto ?? 0` sin mirar si había decisión,
+ * y esa tarde la pantalla mostraba **$20.682** en la fila de R-0022 mientras el detalle del mismo
+ * reclamo decía *«Decisión: todavía sin decidir»*. Lo que se veía ⛔ no era una promesa: era lo que
+ * el cliente pagó, que está en la fila desde el minuto cero — leído en la columna de la plata que
+ * sale, afirma una decisión que nadie tomó.
+ *
+ * 🔑 **Y el vacío ⛔ no puede ser 0**: un `$0` afirma lo contrario, que ya se decidió y no sale nada.
+ */
+describe('montoADevolver', () => {
+  const fila = (extra: Partial<ReclamoRow>) => ({ ...extra } as ReclamoRow)
+
+  it('sin decisión devuelve null, aunque la fila tenga los dos montos', () => {
+    expect(montoADevolver(fila({ compensacion: null, monto_total: 20682, monto_producto: 23564 }))).toBeNull()
+  })
+
+  it('⛔ NO devuelve 0 sin decisión: sería afirmar que no sale nada', () => {
+    expect(montoADevolver(fila({ compensacion: null, monto_producto: 23564 }))).not.toBe(0)
+  })
+
+  it('decidido, es el total acordado', () => {
+    expect(montoADevolver(fila({ compensacion: 'plata_total', monto_total: 20682, monto_producto: 23564 }))).toBe(20682)
+  })
+
+  it('decidido sin total escrito, cae en lo que se pagó', () => {
+    expect(montoADevolver(fila({ compensacion: 'plata_total', monto_total: null, monto_producto: 23564 }))).toBe(23564)
+  })
+
+  it('decidido y sin ningún monto es 0 de verdad: ahí sí no sale plata', () => {
+    expect(montoADevolver(fila({ compensacion: 'ninguna', monto_total: null, monto_producto: null }))).toBe(0)
   })
 })

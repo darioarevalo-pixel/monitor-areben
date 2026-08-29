@@ -21,7 +21,8 @@
 //   POST { store, action:'reintegro', id, comprobante? }         → la plata devuelta. ADMIN.
 //   POST { store, action:'anulacion', id }                       → la venta anulada en GN. ADMIN.
 //   POST { store, action:'gn-baja', id }                         → la unidad fantasma dada de baja en GN.
-//   POST { store, action:'estado', id, estado, nota? }           → cambia estado.
+//   POST { store, action:'estado', id, estado, nota? }           → cambia estado. `cerrado` exige
+//                                                                  que no falte nada; `anulado`, ADMIN.
 //   POST { store, action:'fotos', id, fotos }                    → suma fotos cargadas por el equipo.
 //   POST { store, action:'falla', id, falla_ids }                → linkea las fallas creadas.
 //   POST { store, action:'editar', id, ...campos }               → edita.
@@ -54,7 +55,7 @@ import { faltaAnularAntesDeDescontar, loEjecutado, pendientesDe } from '../lib/r
 import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
-import { camposAlContestarLaOferta, esEscenarioDe, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
+import { camposAlContestarLaOferta, COLUMNAS_PARA_CERRAR, esEscenarioDe, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
 import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, sinLaOtraVenta, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
@@ -585,11 +586,16 @@ export default async function handler(req, res) {
         campos.diferencia = d;
       }
       // El cobro sigue a la diferencia salvo que ya se haya cobrado: no se pisa un cobro hecho.
-      const { data: previo } = await supabase.from('devoluciones').select('cobro_estado').eq('id', id).single();
+      const { data: previo } = await supabase.from('devoluciones').select('estado, cobro_estado').eq('id', id).single();
       if (campos.diferencia !== undefined && previo?.cobro_estado !== 'cobrado') {
         campos.cobro_estado = campos.diferencia > 0 ? 'pendiente' : 'no_aplica';
       }
-      await apilar(supabase, id, { estado: 'borrador', at: ahora(), usuario, nota: b.pagado === true ? 'cambio marcado como pagado' : 'borrador del cambio guardado' }, campos);
+      // 🔑 **El evento lleva el estado en el que la fila QUEDA, ⛔ no uno escrito a mano.** Hasta el
+      // 28-ago-2026 apilaba `'borrador'` fijo sin tocar la columna `estado`, así que armar un cambio
+      // sobre un reclamo `en_revision` dejaba en el historial un momento en el que la fila **nunca
+      // estuvo**: `desdeQueEsta(d, 'borrador')` devolvía esa fecha. El historial es lo que se lee
+      // después para saber qué pasó y desde cuándo — un evento que miente ahí es un reloj que miente.
+      await apilar(supabase, id, { estado: previo?.estado || 'borrador', at: ahora(), usuario, nota: b.pagado === true ? 'cambio marcado como pagado' : 'borrador del cambio guardado' }, campos);
       return res.status(200).json({ ok: true });
     }
 
@@ -883,12 +889,45 @@ export default async function handler(req, res) {
     }
 
     if (action === 'gn-baja') {
-      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'stock corregido en TN' }, { tn_stock_estado: 'hecho' });
+      // El rótulo dice **Gestión Nube** y no "TN": la columna se llama `tn_stock_estado` por su
+      // primera versión, pero la baja que se tilda acá es la de GN (ver `tipos.ts`, `TN_STOCK`).
+      // El historial es lo que se lee después, y ahí el nombre del sistema equivocado manda a
+      // buscar el movimiento a la tienda, donde no está.
+      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'baja del producto en Gestión Nube' }, { tn_stock_estado: 'hecho' });
       return res.status(200).json({ ok: true });
     }
 
+    // ── Cerrar y anular: los dos finales del reclamo ─────────────────────────────
+    //
+    // 🔑 **Desde el 28-ago-2026 el freno vive acá y ⛔ no sólo en la pantalla.** `faltantesParaCerrar`
+    // era la lista que pone gris el botón «Cerrar» en Reclamos y en Cambios, y el handler aceptaba
+    // `estado: 'cerrado'` igual: se podía cerrar un reclamo **con la plata sin devolver y la venta
+    // sin anular**. Es la regla que este archivo ya tiene escrita tres veces — *una pantalla que
+    // esconde un botón es una sugerencia, ⛔ no una regla*.
+    //
+    // ⚠️ **Cerrar ⛔ NO pide administración, y es a propósito.** La auditoría del 28-ago (D11) pedía
+    // las dos cosas juntas; pedir administración le sacaría el botón «Cerrar» al Local en
+    // `ArmarCambio.tsx`, que es exactamente lo que el encabezado de este archivo dice que el Local
+    // tiene que poder hacer de punta a punta. Lo que protege la plata ⛔ no es el rol: es que no
+    // queden pendientes. **Anular sí**: es el hermano de `eliminar` —el reclamo no debió existir—
+    // y hoy ⛔ ninguna pantalla lo pone.
     if (action === 'estado') {
       if (!ESTADOS.includes(b.estado)) return res.status(400).json({ error: 'estado inválido' });
+      if (b.estado === 'anulado' && !esAdministracion(perfil)) {
+        return res.status(403).json({ error: 'Anular un reclamo lo hace Administración: pedile a alguien con ese permiso.' });
+      }
+      if (b.estado === 'cerrado') {
+        const { data: fila, error: eLee } = await supabase
+          .from('devoluciones').select(COLUMNAS_PARA_CERRAR.join(', ')).eq('store', store).eq('id', id).maybeSingle();
+        if (eLee) throw new Error(eLee.message);
+        if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+        // Idempotente, igual que `recibir` y `despachado`: cerrar dos veces ⛔ no es un error.
+        if (fila.estado === 'cerrado') return res.status(200).json({ ok: true, yaEstaba: true });
+        const faltan = faltantesParaCerrar(fila);
+        if (faltan.length) {
+          return res.status(409).json({ error: `Todavía falta ${faltan.join(', ')}.`, faltan });
+        }
+      }
       await apilar(supabase, id, { estado: b.estado, at: ahora(), usuario, nota: texto(b.nota) }, { estado: b.estado });
       return res.status(200).json({ ok: true });
     }

@@ -290,7 +290,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   apertura, y **de rebote**: el historial anota el cambio de estado, no el texto.
 - **Costo**: medio. Los cinco `CopyButton` ya están centralizados; falta una acción que apile.
 
-### 🟠 D10 · «A devolver» afirma un monto sobre reclamos sin decidir
+### ✅ D10 · «A devolver» afirma un monto sobre reclamos sin decidir — ARREGLADO el 28-ago
 
 - **Evidencia** (pantalla, 13:30): R-0022 en «Para revisar», con el detalle diciendo *«Decisión:
   **Todavía sin decidir**»*, y la columna **A devolver: $20.682**. R-0023 en «Borrador», con
@@ -301,8 +301,16 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   `via_retorno` y `retorno_sugerido`.
 - Es *un dato que existe ⛔ no es una decisión tomada*, tercera vuelta en este módulo.
 - **Costo**: bajo para la columna. Lo de `liberar-decision` es **B3**.
+- ✅ **Arreglado el 28-ago-2026 — la columna**: la cuenta salió del JSX a `montoADevolver`
+  (`lib/reclamos/plata.core.js`), que devuelve **`null` mientras no haya decisión**, y la celda lo
+  dibuja como **«sin decidir»**. 🔑 **El vacío ⛔ no puede ser `0`**: un `$0` afirma lo contrario —que
+  ya se decidió y no sale nada—. El mismo número va ahora al aviso de «Plata devuelta», que lo
+  calculaba por su cuenta. Hay **dos** tests: la regla (`reclamos.test.ts`) y **el cable**
+  (`reclamos-columna-plata.test.tsx`, que monta la lista y lee la celda), porque el defecto vivía
+  justo en el medio.
+- ▶️ **Lo de `liberar-decision` sigue abierto: es B3**, y es de Bruno.
 
-### 🟠 D11 · Cerrar y anular no piden permiso ni miran los pendientes
+### ✅ D11 · Cerrar y anular no piden permiso ni miran los pendientes — ARREGLADO el 28-ago
 
 - **Evidencia**: `api/_reclamos.js:845-849` acepta los ocho estados; `DE_ADMIN` (`:291`) ⛔ no incluye
   `estado`; `faltantesParaCerrar` lo mira **sólo la pantalla** (`Reclamos.tsx:591-595`).
@@ -311,6 +319,23 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   en ese mismo archivo: *«una pantalla que esconde un botón es una sugerencia, no una regla»*.
 - **Costo**: bajo — `cerrado` y `anulado` piden administración y `faltantesParaCerrar` vacío, con 409
   y la lista, igual que ya hacen `decidir` y `descontado`.
+- ✅ **Arreglado el 28-ago-2026**, y **⛔ no como lo pedía esta línea**. El freno de verdad se mudó al
+  servidor: `faltantesParaCerrar` bajó de `tipos.ts` a `casos.core.js` —en `tipos.ts` quedó la cara
+  tipada, mismo arreglo que `destinoDe` y `perfilDe`— porque `api/*.js` ⛔ no puede importar
+  TypeScript, y ahora `estado: 'cerrado'` lee la fila y contesta **409 con la lista** si falta algo.
+  Es idempotente: cerrar uno ya cerrado ⛔ no es un error.
+- 🔴 🔑 **Lo que esta línea pedía de más: que cerrar fuera de administración.** Eso le sacaría el
+  botón «Cerrar» al **Local** en `ArmarCambio.tsx`, que es exactamente lo que el encabezado del
+  handler dice que el Local tiene que poder hacer de punta a punta *(«un cambio no es una decisión
+  que alguien tenga que autorizar»)*. **Lo que protege la plata ⛔ no es el rol: es que no queden
+  pendientes.** `anulado` sí quedó de administración —es el hermano de `eliminar`— y ⛔ ninguna
+  pantalla lo pone (D13). ⇒ Segunda vez en dos días que **un hallazgo escrito acá ⛔ no era un
+  oráculo** (la primera fue D1): se re-verifica contra el código antes de aplicarlo.
+- 🔑 **Y el modo de falla que el arreglo se trae puesto**: el handler lee con un `select`, así que un
+  pendiente nuevo en la función y no en la lista de columnas deja el freno mirando `undefined` — o
+  sea **dejando pasar** justo lo que vino a frenar. Por eso hay `COLUMNAS_PARA_CERRAR` (una sola
+  lista, como `ENTRADAS_DEL_COSTO`) **y un test que la ata a las dos puntas**: lo que la función lee
+  y lo que el handler pide.
 
 ### 🟠 D12 · El aviso del sidebar deja de ver los viejos a partir de 200
 
@@ -331,8 +356,8 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 | **D14** | **«Despaché» de un CAMBIO necesita dos pantallas** | todo cambio deja `envio_nuevo_estado: 'pendiente'` (`efectos.core.js:74-78`); `ArmarCambio.tsx:836` escribe *«Falta despachar lo que se le manda»* y ⛔ **no tiene el botón**: hay que ir a Reclamos o a Retornos |
 | **D15** | **Sin fotos ⛔ no se puede registrar una oferta hecha por teléfono** | `mostrarRetencion = ofreceRetencion(…) && hayFotos` (`DecidirReclamo.tsx:447`), y el link *«Se lo ofrecí igual»* vive **adentro** de esa rama (`:1146`) |
 | **D16** | **El link del cliente sigue vivo en un cambio ya decidido** | `ABIERTO` (`api/_reclamo.js:26`) incluye `borrador`, y un cambio decidido vuelve a `borrador` a propósito. La lista ya ⛔ no lo ofrece (`linkVivo && !estaDecidido`), pero **un link mandado antes sigue abriendo y aceptando fotos**. Es el único portal del módulo expuesto a internet |
-| **D17** | **La acción `cambio` apila un evento «borrador» sin mover la fila** | `api/_reclamos.js:580` apila `{estado:'borrador'}` y `campos` ⛔ no lleva `estado` ⇒ `desdeQueEsta(d,'borrador')` devuelve un instante en el que la fila nunca estuvo ahí |
-| **D18** | **`gn-baja` deja en el historial «stock corregido en TN»** | `api/_reclamos.js:841`, cuando la columna hace rato que es la baja en **GN** (`tipos.ts:1950-1960`). El historial es lo que se lee después |
+| ~~**D17**~~ ✅ | **La acción `cambio` apila un evento «borrador» sin mover la fila** | ✅ **28-ago**: el evento lleva ahora **el estado en el que la fila queda** (`previo?.estado`), ⛔ no uno escrito a mano. El historial es lo que se lee después para saber qué pasó y **desde cuándo** |
+| ~~**D18**~~ ✅ | **`gn-baja` deja en el historial «stock corregido en TN»** | ✅ **28-ago**: dice **«baja del producto en Gestión Nube»**. El nombre del sistema equivocado manda a buscar el movimiento a la tienda, donde no está |
 
 ---
 

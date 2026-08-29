@@ -1446,3 +1446,71 @@ después— y ejerce los tres verbos que ESCRIBEN: `retencion-respuesta`, `edita
 
 ⚠️ **Lo caminado es el servidor, ⛔ no el botón**: nadie apretó todavía «Descontar en GN» sobre
 R-0022 para ver el aviso del orden en pantalla.
+
+---
+
+## 🆕 🔴 Cerrar un reclamo ahora lo frena el SERVIDOR (28-ago-2026)
+
+D10, D11, D17 y D18 de `docs/postventa-auditoria-2026-08-28.md`. Las cuatro son la misma clase de
+cosa: **algo que afirmaba de más** —un número, un permiso, un rótulo— y que nadie podía desmentir
+desde afuera de la pantalla.
+
+### `faltantesParaCerrar` bajó al núcleo
+
+Era la lista que pone gris el botón «Cerrar» en Reclamos y en Cambios, y vivía en `tipos.ts`. El
+handler aceptaba `estado: 'cerrado'` viniera de donde viniera, así que **se podía cerrar un reclamo
+con la plata sin devolver y la venta sin anular** — bastaba un POST. Es la regla que este módulo
+tiene escrita tres veces en el mismo archivo: *una pantalla que esconde un botón es una sugerencia,
+⛔ no una regla*.
+
+El cuerpo se mudó a `lib/reclamos/casos.core.js` y en `tipos.ts` quedó **la cara tipada**, mismo
+arreglo que `destinoDe`, `perfilDe` y `permisos.core.js`: `api/*.js` corre en Node sin el compilador
+de Next y ⛔ no puede importar TypeScript. Ahora `action: 'estado'` con `'cerrado'` lee la fila y
+contesta **409 con la lista de lo que falta**. Es **idempotente**: cerrar uno ya cerrado ⛔ no es un
+error, igual que `recibir` y `despachado`.
+
+🔴 🔑 **Cerrar ⛔ NO pide administración, y la auditoría pedía que sí.** Pedirlo le sacaría el botón
+«Cerrar» al **Local** en `ArmarCambio.tsx`, que es justo lo que el encabezado del handler dice que el
+Local tiene que poder hacer de punta a punta. **Lo que protege la plata ⛔ no es el rol: es que no
+queden pendientes.** `anulado` sí quedó de administración: es el hermano de `eliminar` —decir que el
+caso no debió existir— y hoy ⛔ ninguna pantalla lo pone.
+
+🔑 **El modo de falla que el arreglo se trae puesto, y cómo queda tapado.** El handler lee la fila con
+un `select`: un pendiente nuevo en la función y no en el select deja el freno mirando `undefined`, o
+sea **dejando pasar** justo el caso que vino a frenar, callado y con todo en verde. Por eso hay
+**una sola lista** —`COLUMNAS_PARA_CERRAR`, como `ENTRADAS_DEL_COSTO`— y un test que la ata a las
+dos puntas: lo que la función lee (`d.x` en su cuerpo) y lo que el handler pide (que use la lista, y
+que **recortar la fila al select ⛔ no cambie la respuesta**, que es lo único que cubre también lo
+que leen los helpers de unidades).
+
+### «A devolver» ⛔ ya no afirma una decisión que nadie tomó
+
+La celda hacía `monto_total ?? monto_producto ?? 0` sin mirar si había decisión: el 28-ago mostraba
+**$20.682** en la fila de R-0022 mientras el detalle del mismo reclamo decía *«todavía sin decidir»*.
+Ese número ⛔ no es una promesa — es lo que el cliente pagó, y está en la fila desde el minuto cero.
+
+La cuenta salió a **`montoADevolver`** (`lib/reclamos/plata.core.js`), que devuelve **`null` sin
+decisión**, y la celda lo dibuja como **«sin decidir»**. 🔑 **El vacío ⛔ no puede ser `0`**: un `$0`
+afirma lo contrario, que ya se decidió y no sale nada. El aviso de «Plata devuelta» pregunta ahora
+por **ese mismo número** —antes lo calculaba por su cuenta— y encima formateado.
+
+### Dos rótulos del historial que mandaban a buscar donde no estaba
+
+- **Armar un cambio** apilaba un evento `'borrador'` **sin tocar la columna `estado`**: sobre un
+  reclamo `en_revision` dejaba en el historial un momento en el que la fila **nunca estuvo**
+  (`desdeQueEsta(d, 'borrador')` devolvía esa fecha). Ahora el evento lleva **el estado en el que la
+  fila queda**.
+- **`gn-baja`** anotaba *«stock corregido en TN»* cuando el movimiento es de **Gestión Nube** — la
+  columna se llama `tn_stock_estado` por su primera versión. El historial es lo que se lee después:
+  el nombre del sistema equivocado manda a buscar el movimiento a la tienda, donde no está.
+
+### Cómo se probó
+
+**12 mutantes, 12 muertos.** El freno, los dos rótulos y `montoADevolver` con el handler **corriendo
+de verdad** (`tests/reclamos-servidor.test.ts`: perfil de Administración y perfil del Local, supabase
+falso, y lo que se mira es **qué se escribió**), y **el cable de la celda** montando la lista
+(`tests/reclamos-columna-plata.test.tsx`) — porque el defecto de D10 vivía justo en el medio: la
+regla bien de un lado, el JSX con su propia cuenta del otro.
+
+⚠️ **Lo caminado es el servidor, ⛔ no la pantalla**: nadie apretó todavía «Cerrar» sobre un reclamo
+real con pendientes para ver el 409 dibujado.
