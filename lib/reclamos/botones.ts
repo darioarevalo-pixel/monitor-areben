@@ -2,6 +2,7 @@ import {
   estaDecidido, laEtiquetaEstaDebida, ofertaEsperandoRespuesta, pideFotos,
   type EstadoReclamo, type ReclamoRow,
 } from './tipos'
+import { ESTADOS_CON_LINK as ESTADOS_CON_LINK_JS, elLinkSigueVivo } from './portal.core.js'
 
 /**
  * **Qué mensajes se le ofrecen a quien atiende, en cada momento del reclamo.**
@@ -52,16 +53,21 @@ export type MensajeDeLaFila =
 /**
  * Los estados en los que el link del cliente todavía sirve.
  *
- * Tiene que ser **el mismo conjunto** que `ABIERTO` en `api/_reclamo.js`: el portal devuelve 404
- * fuera de esos tres. Antes se usaba `ESTADOS_ABIERTOS` (seis estados) y la lista ofrecía copiar un
- * link que el backend ya rechazaba. Una vez decidido el reclamo el link muere a propósito, y de
- * ahí en más se le avisa al cliente por WhatsApp con el mensaje de resolución.
+ * 🔴 **Hasta el 29-ago-2026 esta lista estaba escrita DOS veces**, y este comentario lo decía:
+ * *«tiene que ser el mismo conjunto que `ABIERTO` en `api/_reclamo.js`»*. Ya habían dejado de
+ * coincidir (D16). Ahora sale del núcleo, que es el que leen los dos lados.
  */
-export const ESTADOS_CON_LINK: EstadoReclamo[] = ['borrador', 'esperando_cliente', 'en_revision']
+export const ESTADOS_CON_LINK = ESTADOS_CON_LINK_JS as EstadoReclamo[]
 
-/** ¿El portal del cliente todavía contesta para esta fila? */
+/**
+ * ¿El portal del cliente todavía contesta para esta fila?
+ *
+ * ⚠️ Mira **el estado y la decisión**, ⛔ no sólo el estado: `borrador` significa también «cambio
+ * decidido esperando el pago». La regla entera —y por qué es la misma del servidor— está en
+ * `portal.core.js`.
+ */
 export function linkVivo(d: ReclamoRow): boolean {
-  return ESTADOS_CON_LINK.includes(d.estado)
+  return elLinkSigueVivo(d)
 }
 
 /**
@@ -69,10 +75,12 @@ export function linkVivo(d: ReclamoRow): boolean {
  *
  * ⚠️ `pedir_fotos` mira **tres** cosas, y las tres hacen falta:
  *
- * 1. que el link siga vivo **y el reclamo no esté decidido**. Los dos hacen falta y ⛔ no son el
- *    mismo: fuera de los tres estados abiertos el portal contesta 404, y un **cambio decidido
- *    vuelve a `borrador` a propósito** (lo termina el POS) ⇒ sin la segunda mitad, el caso ya
- *    resuelto volvía a ofrecer el link. Decidido, lo que corresponde es contar la resolución;
+ * 1. que el link siga vivo (`linkVivo`), que ya son **dos** preguntas y ⛔ no son la misma: fuera
+ *    de los tres estados abiertos el portal contesta 404, y un **cambio decidido vuelve a
+ *    `borrador` a propósito** (lo termina el POS) ⇒ sin la segunda mitad, el caso ya resuelto
+ *    volvía a ofrecer el link. Decidido, lo que corresponde es contar la resolución. ⚠️ **Las dos
+ *    viven juntas en `portal.core.js` desde el 29-ago-2026**, porque el servidor tenía sólo la
+ *    primera y ésa era la mitad que dejaba el portal abierto (D16);
  * 2. que el caso **pida** fotos (`pideFotos`): en «no le llegó nunca», «demora» y «sin stock» no
  *    hay nada que fotografiar, y el alta ya decía *«acá no hacen falta fotos»* mientras la lista lo
  *    contradecía. ⚠️ **El que quiere cambiar la prenda SÍ entra** — lo corrigió Bruno el
@@ -130,7 +138,7 @@ export function mensajesDeLaFila(d: ReclamoRow): MensajeDeLaFila[] {
   const fotos = (d.fotos || []).length
   const ms: MensajeDeLaFila[] = []
   const esperando = ofertaEsperandoRespuesta(d)
-  const pide = linkVivo(d) && !estaDecidido(d) && pideFotos(d.motivo, d.expectativa)
+  const pide = linkVivo(d) && pideFotos(d.motivo, d.expectativa)
   if (pide && !fotos && !esperando) ms.push('pedir_fotos')
   if (pide && !!fotos) ms.push('mas_fotos')
   if (esperando) ms.push('propuesta')

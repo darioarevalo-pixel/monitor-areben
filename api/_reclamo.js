@@ -19,11 +19,14 @@
 // dos consultas por índice; el token es único e inadivinable, así que no abre nada.
 import { createClient } from '@supabase/supabase-js';
 import { subirDataUrl } from './_blob.js';
+// 🔴 Cuándo contesta el portal es UNA regla y vive en un solo lugar. Acá había una lista escrita a
+// mano (`ABIERTO`) y en `botones.ts` había otra, con el comentario «tiene que ser el mismo
+// conjunto» — y **ya habían dejado de coincidir**: la lista dejó de ofrecer el link de un cambio
+// decidido y este archivo se quedó mirando sólo el estado (D16).
+import { COLUMNAS_DEL_PORTAL, elLinkSigueVivo } from '../lib/reclamos/portal.core.js';
 
 const STORES = ['bdi', 'zattia'];
 const MAX_FOTOS = 6;
-/** Estados en los que el link todavía sirve. Después, el reclamo ya se decidió. */
-const ABIERTO = ['borrador', 'esperando_cliente', 'en_revision'];
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -32,8 +35,17 @@ function cfgFor(store) {
   return { url: process.env.SUPABASE_URL || 'https://srqzzffmiiescffabtlc.supabase.co', key: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY };
 }
 
-/** Las únicas columnas que se leen. Lo que no está acá no puede filtrarse por error. */
-const VISIBLE_AL_CLIENTE = 'id, store, orden_tn, estado, motivo, items, fotos, relato_cliente, token_vence';
+/**
+ * Las únicas columnas que se leen. Lo que no está acá no puede filtrarse por error.
+ *
+ * ⚠️ **⛔ No todo lo que se lee se muestra.** `COLUMNAS_DEL_PORTAL` trae lo que la regla del link
+ * necesita —hoy `compensacion`—, y eso ⛔ **no viaja**: la respuesta la arma `paraElCliente` campo
+ * por campo. Se lee **por la lista de la regla** y ⛔ no a mano, porque un `select` que se olvide
+ * de una columna deja el freno mirando `undefined` — o sea dejando pasar justo lo que vino a
+ * frenar. `tests/reclamo-publico.test.ts` ata las dos puntas.
+ */
+const VISIBLE_AL_CLIENTE = ['id', 'store', 'orden_tn', 'motivo', 'items', 'fotos', 'relato_cliente', 'token_vence']
+  .concat(COLUMNAS_DEL_PORTAL).join(', ');
 
 /** Busca el reclamo del token en las dos bases. Devuelve null si no existe, venció o ya cerró. */
 async function buscarPorToken(token) {
@@ -48,7 +60,10 @@ async function buscarPorToken(token) {
     if (error) console.error(`[reclamo] ${store}: ${error.message}`);
     if (!data) continue;
     if (data.token_vence && new Date(data.token_vence).getTime() < Date.now()) return null;
-    if (!ABIERTO.includes(data.estado)) return null;
+    // 🔴 Las DOS mitades, y la segunda faltaba: `borrador` significa también «cambio decidido
+    // esperando el pago», así que mirar sólo el estado dejaba abierto a internet un reclamo ya
+    // resuelto — y `accion: 'enviar'` lo devolvía a `en_revision` desde afuera.
+    if (!elLinkSigueVivo(data)) return null;
     return { fila: data, supabase, store };
   }
   return null;

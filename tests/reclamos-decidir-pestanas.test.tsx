@@ -162,6 +162,58 @@ describe('Decidir — la oferta de retención se contesta sola', () => {
     expect(boton('No aceptó')?.disabled).toBe(false)
   })
 
+  /**
+   * 🔴 **D15 de la auditoría del 28-ago-2026: la oferta hecha POR TELÉFONO no se podía registrar.**
+   *
+   * Las fotos gatean **armar** la propuesta —hasta ver el producto no se sabe qué se ofrece—, pero
+   * una oferta que ya se hizo **es un hecho que pasó**: esconder la caja no lo deshace, sólo lo
+   * deja sin registrar, y después la rechazada no aparece en ninguna cuenta. La escapatoria ya
+   * existía y vivía **adentro** de la rama que necesitaba las fotos para llegar.
+   */
+  describe('🔴 sin fotos', () => {
+    const SIN_FOTOS = { ...SANO, fotos: [] } as unknown as ReclamoRow
+
+    it('dice que faltan las fotos, ⛔ y no esconde la caja en silencio', async () => {
+      await abrir(SIN_FOTOS)
+      await act(async () => { tab('El producto').click() })
+      expect(textoDeLaPantalla()).toContain('hacen falta las fotos del cliente')
+      expect(boton('Aceptó: se lo queda')).toBeUndefined()
+    })
+
+    it('🔴 pero ofrece la escapatoria, y desde ahí SÍ se registra', async () => {
+      await abrir(SIN_FOTOS)
+      await act(async () => { tab('El producto').click() })
+      const link = boton('Se lo ofrecí igual')
+      expect(link).toBeTruthy()
+      await act(async () => { link!.click() })
+      expect(boton('Aceptó: se lo queda')).toBeTruthy()
+      expect(boton('Se la mandé: esperando')).toBeTruthy()
+    })
+
+    /**
+     * 🔴 **Lo que tapaba algo peor**: `retencion_monto` y `retencion_forma` se guardan mirando
+     * `hayOferta`, ⛔ no `mostrarRetencion`. Un reclamo con la oferta ya registrada y sin fotos
+     * **la seguía guardando con la caja escondida** — el dato vivo y la pantalla muda.
+     */
+    it('🔴 con una oferta YA registrada, la caja aparece sola', async () => {
+      const conOferta = {
+        ...SIN_FOTOS, retencion_monto: 5000, retencion_forma: 'plata', retencion_at: '2026-08-28T01:41:00Z',
+      } as unknown as ReclamoRow
+      await abrir(conOferta)
+      await act(async () => { tab('El producto').click() })
+      expect(textoDeLaPantalla()).not.toContain('hacen falta las fotos del cliente')
+      expect(boton('Aceptó: se lo queda')).toBeTruthy()
+    })
+
+    /** Y donde el caso ⛔ no admite la oferta, ⛔ no hay escapatoria: no hay nada que ofrecer. */
+    it('en un caso que ⛔ no admite retención, ⛔ no aparece el link', async () => {
+      const sinRetencion = { ...DEMORA, fotos: [] } as unknown as ReclamoRow
+      await abrir(sinRetencion)
+      await act(async () => { tab('El producto').click() })
+      expect(boton('Se lo ofrecí igual')).toBeUndefined()
+    })
+  })
+
   it('si aceptó quedárselo, «Que vuelva» queda trabado: el servidor rechaza las dos juntas', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })

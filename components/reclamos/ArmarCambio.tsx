@@ -38,7 +38,7 @@ import {
 } from '@/components/ui'
 import {
   buscarOrden, cambiarEstado, crearReclamo, eliminarReclamo, enriquecerConGN, guardarCambio, marcarRecibido,
-  leerReclamos, marcarCobrado, marcarReingreso, procesarCambio,
+  leerReclamos, marcarCobrado, marcarDespachado, marcarReingreso, procesarCambio,
 } from '@/lib/reclamos/cliente'
 import {
   DIAS_CAMBIO, ESTADO_LABEL, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL,
@@ -433,6 +433,22 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
       mensaje: `¿Ya cargaste a mano en Gestión Nube el reingreso de ${(c.items || []).map((i) => i.producto).join(', ')}? El sistema no puede hacerlo: GN no acepta una venta negativa por API. Esto solo deja la traza.`,
     })
     if (si) await accion(c.id, () => marcarReingreso(marca, c.id), 'Anotado: el devuelto volvió al stock.')
+  }
+
+  /**
+   * **Ya salió lo que se le manda al cliente.**
+   *
+   * ⚠️ Pregunta antes, como `reingresar` y `cobrar`: es un hecho del mundo físico que el sistema
+   * ⛔ no puede ver, y tildarlo de más deja al cliente esperando una caja que nadie despachó
+   * mientras el reclamo se puede cerrar.
+   */
+  const despachar = async (c: ReclamoRow) => {
+    const si = await confirmar({
+      titulo: 'Despachar lo que se le manda',
+      ok: 'Sí, ya salió',
+      mensaje: `¿Ya salió el paquete de ${numeroReclamo(c.id)} para ${c.cliente || 'el cliente'}?`,
+    })
+    if (si) await accion(c.id, () => marcarDespachado(marca, c.id), 'Anotado: el paquete salió.')
   }
 
   const cobrar = async (c: ReclamoRow) => {
@@ -833,6 +849,20 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                           )}
                           {c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && (
                             <Button size="sm" variant="outline" tone="brand" onClick={() => void reingresar(c)} disabled={ocup}>Reingresado</Button>
+                          )}
+                          {/* 🔴 **El pendiente que esta pantalla NOMBRABA y ⛔ no podía tildar**
+                              (D14 de la auditoría del 28-ago-2026). Todo cambio nace con
+                              `envio_nuevo_estado: 'pendiente'` (`EFECTOS_RESOLUCION`), la columna
+                              de al lado escribe *«Falta despachar lo que se le manda»* y para
+                              tildarlo había que irse a Reclamos o a Retornos — con el cambio
+                              abierto acá adelante. Es la misma forma que ya tuvieron el botón de
+                              «Despaché» del 25-ago y el permiso de Depósito del 28:
+                              [[feedback_areben_pendiente_derivado_sin_gesto]], tercera vuelta.
+                              🔑 Es el MISMO verbo (`despachado`), ⛔ no uno nuevo: el freno que
+                              sella sólo si el pendiente está vive en el handler, así que esta
+                              pantalla ⛔ no puede afirmar de más aunque el botón se muestre mal. */}
+                          {c.envio_nuevo_estado === 'pendiente' && (
+                            <Button size="sm" variant="outline" tone="action" onClick={() => void despachar(c)} disabled={ocup}>Despaché</Button>
                           )}
                           {esAdmin && c.estado !== 'cerrado' && !faltanCerrar.length && (
                             <Button size="sm" variant="solid" tone="success" onClick={() => void accion(c.id, () => cambiarEstado(marca, c.id, 'cerrado'), 'Cambio cerrado.')} disabled={ocup}>Cerrar</Button>

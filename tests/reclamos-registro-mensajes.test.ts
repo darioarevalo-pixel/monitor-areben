@@ -152,11 +152,18 @@ describe('el cable con las pantallas', () => {
     }
   })
 
-  /** Los ocho momentos de la fila (`MensajeDeLaFila`) tienen que estar entre los nueve del núcleo. */
+  /**
+   * Los momentos de la fila (`MensajeDeLaFila`) tienen que estar todos entre los del núcleo.
+   *
+   * ⚠️ **Lleva un PISO y ⛔ no un número exacto**, por las dos razones: la lista crece —cada momento
+   * mudo que se tapa suma uno— y sin piso el barrido podría dejar de matchear y el test daría verde
+   * mirando **cero**, que es exactamente lo que contesta una regla rota. Mismo criterio que
+   * `tests/contrato-verbos.test.ts`.
+   */
   it('los momentos de `botones.ts` son un subconjunto de los del núcleo', () => {
     const union = fuente('../lib/reclamos/botones.ts').split('export type MensajeDeLaFila =')[1].split('export const')[0]
     const deLaFila = [...union.matchAll(/\|\s*'([a-z_]+)'/g)].map((m) => m[1])
-    expect(deLaFila).toHaveLength(8)
+    expect(deLaFila.length).toBeGreaterThanOrEqual(8)
     expect(deLaFila.filter((t) => !MOMENTOS_DEL_MENSAJE.includes(t))).toEqual([])
   })
 })

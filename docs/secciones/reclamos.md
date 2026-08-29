@@ -1639,3 +1639,95 @@ el número es arbitrario y está **elegido**, ⛔ no medido.
   saltos de línea y sus acentos, ⛔ **no mueve `updated_at`**, el doble click ⛔ no duplica, los tres
   rechazos son 400, `vista=mensajes` los trae y **el listado ⛔ no**. Una fila sembrada y borrada; las
   **2 reales, intactas**.
+
+---
+
+## 🆕 🔴 Los cuatro chicos de la auditoría (29-ago-2026 — D13 a D16)
+
+Los cuatro son la misma familia: **el estado existe, el pendiente se dibuja, y el gesto que lo
+cierra ⛔ no está en ninguna pantalla** ⇒ [[feedback_areben_pendiente_derivado_sin_gesto]], tercera y
+cuarta vuelta en este módulo.
+
+### D16 · El portal del cliente seguía abriendo un cambio ya decidido
+
+**Es lo único de todo el módulo abierto a internet, y la regla de cuándo contesta estaba escrita
+DOS veces.** El código lo decía: `ESTADOS_CON_LINK` (`botones.ts`) llevaba de comentario *«tiene que
+ser el mismo conjunto que `ABIERTO` en `api/_reclamo.js`»*.
+
+🔴 **Y ya habían dejado de coincidir.** La lista dejó de ofrecer el link de un cambio decidido
+—`linkVivo(d) && !estaDecidido(d)`— y el servidor se quedó mirando **sólo el estado**. Y `borrador`
+significa dos cosas: un **cambio decidido vuelve a `borrador` a propósito**, a esperar el pago ⇒ un
+link mandado antes seguía abriendo.
+
+🔴 🔑 **Y era peor que «abre»**: `accion: 'enviar'` escribe `estado: 'en_revision'`. Sobre un cambio
+decidido eso lo **saca de la pestaña donde lo está esperando el Local y lo devuelve a la cola de los
+que hay que decidir** — movido **desde afuera, sin sesión, por quien tenga el link viejo**.
+
+⇒ La regla vive ahora sola en **`lib/reclamos/portal.core.js`** (`ESTADOS_CON_LINK`,
+`COLUMNAS_DEL_PORTAL`, `elLinkSigueVivo`) y la leen los dos lados. `linkVivo` de `botones.ts` la
+delega, y el `&& !estaDecidido(d)` que estaba suelto en `mensajesDeLaFila` ⛔ ya no hace falta:
+estaba compensando a mano la mitad que le faltaba al servidor.
+
+⚠️ **`compensacion` entró al `select` del portal y ⛔ no viaja**: la respuesta la arma
+`paraElCliente` campo por campo, y el test le pasa una fila con `compensacion` adentro y verifica
+que no salga. Entra **por `COLUMNAS_DEL_PORTAL`** y ⛔ no a mano — un `select` que se olvide de una
+columna que la regla mira deja el freno viendo `undefined`, o sea **dejando pasar justo lo que vino
+a frenar**. El oráculo que lo cubre es el mismo de `COLUMNAS_PARA_CERRAR`: *recortar la fila al
+`select` ⛔ no cambia la respuesta*.
+
+### D13 · `anulado` no lo podía poner ninguna pantalla
+
+El estado estaba en la lista, en los colores y en `faltantesParaCerrar` desde el día uno, y en
+post-venta **sólo había lecturas**.
+
+🔑 **La auditoría preguntaba si sobraba el estado (§4, «ocho estados → siete»); lo que sobraba era el
+hueco.** Sin él, la única forma de sacar de la lista un reclamo abierto por error, o duplicado, era
+**eliminarlo** — y con él se iban el número, el historial y las fotos. Anular es la alternativa **no
+destructiva**: la fila queda, deja de contar como abierta (`ESTADOS_ABIERTOS` ⛔ no lo incluye) y el
+`⋯` sigue contando qué pasó.
+
+⚠️ **⛔ No pide que no falte nada**, a diferencia de cerrar: decir que el caso no debió existir es
+decir que sus pendientes tampoco. El freno de administración lo pone **el servidor** (`DE_ADMIN` no,
+pero `estado: 'anulado'` sí, desde D11), ⛔ no el `esAdmin` de la pantalla.
+
+⚠️ **Y de paso: `anular` eran DOS cosas con el mismo nombre en el mismo archivo** — la venta en
+Gestión Nube y el reclamo—, con los dos botones en la misma fila. Ahora son `anularLaVentaEnGN`
+(«Anulé en GN») y `anularElReclamo` («Anular el reclamo»).
+
+### D14 · «Despaché» de un cambio necesitaba dos pantallas
+
+Todo cambio nace con `envio_nuevo_estado: 'pendiente'` (`EFECTOS_RESOLUCION`), la columna de
+pendientes de Cambios escribe *«Falta despachar lo que se le manda»*… y para tildarlo había que irse
+a Reclamos o a Retornos, **con el cambio abierto adelante**.
+
+🔑 **Es el MISMO verbo (`despachado`), ⛔ no uno nuevo.** El freno que sella sólo si el pendiente
+está vive en el handler desde D3, así que esta pantalla ⛔ no puede afirmar de más aunque el botón se
+muestre mal. Y pregunta antes, como `Reingresado` y `Cobré la diferencia`: es un hecho del mundo
+físico que el sistema ⛔ no puede ver.
+
+### D15 · Sin fotos no se podía registrar una oferta hecha por teléfono
+
+🔑 **Las fotos gatean ARMAR la propuesta, ⛔ no REGISTRAR una que ya se hizo.** Una oferta por
+teléfono, antes de que el cliente mandara nada, **es un hecho que pasó**: esconder la caja no lo
+deshace, sólo lo deja sin registrar — y después la rechazada ⛔ no aparece en ninguna cuenta, que es
+exactamente el agujero que `retencion_respuesta` vino a tapar. La escapatoria ya existía
+(**«Se lo ofrecí igual»**) y vivía **adentro** de la rama que necesitaba las fotos para llegar.
+
+🔴 **Y tapaba algo peor**: `retencion_monto` y `retencion_forma` se guardan mirando `hayOferta`,
+⛔ no `mostrarRetencion` ⇒ un reclamo con la oferta **ya registrada** y sin fotos **la seguía
+guardando con la caja escondida** — el dato vivo y la pantalla muda. Por eso `mostrarRetencion` es
+ahora `puedeOfrecerse && (hayFotos || ofreciIgual || hayOferta)`.
+
+### Cómo se probó
+
+- **14 mutantes, 14 muertos** (anclas verificadas únicas). ⚠️ **Tres sobrevivieron a la primera
+  tanda y los tres eran reales**, y dos de ellos por la misma razón: **el test negativo era vacío**.
+  La lista abre en «Abiertos», que ⛔ no dibuja lo cerrado ni lo anulado ⇒ *«el botón no está»* se
+  cumplía **porque la fila no estaba**. Ahora cada negativo comprueba primero que la fila SE VE. El
+  tercero fue el `select`: el Supabase falso devuelve la fila entera, así que sacar una columna de
+  `COLUMNAS_DEL_PORTAL` ⛔ no ponía nada en rojo — lo mata el oráculo *recortar la fila al select
+  ⛔ no cambia la respuesta*.
+- **12 de 12 caminando contra la base real de BDI** (`scripts/caminar-portal-cliente.mjs`, con el
+  handler **en proceso**): el link abre sobre un reclamo vivo, ⛔ **no** sobre un cambio decidido,
+  `enviar` contesta 404 y **la fila ⛔ no se mueve**, y `compensacion` ⛔ no sale en la respuesta.
+  Cuatro filas sembradas y borradas; las **2 reales, intactas**.

@@ -26,6 +26,9 @@ const FILA = {
   costo_caso: 9000,
   gn_venta_id: '998877',
   pago_metodo: 'wire_transfer',
+  // 🔑 Entró al `select` el 29-ago-2026 porque la regla del link la necesita (D16), y ⛔ **no puede
+  // viajar**: qué se resolvió es una decisión interna, y el cliente se entera por WhatsApp.
+  compensacion: 'plata_parcial',
   items: [
     {
       producto: 'WEAVE CASE CHERRY (iPhone 11)', variante: 'iPhone 11', cantidad: '1',
@@ -62,6 +65,7 @@ describe('lo que ve el cliente en el link público', () => {
     ['los ids de la variante', '294663910'],
     ['el SKU', 'F-0026-11-CH'],
     ['el propio token', 'aaaaaaaa'],
+    ['🔴 qué se resolvió (entró al select por la regla del link)', 'plata_parcial'],
   ])('no filtra %s', (_que, valor) => {
     expect(json).not.toContain(valor)
   })

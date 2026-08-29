@@ -450,9 +450,21 @@ export function DecidirReclamo({
    * La oferta de retención sólo tiene sentido con las fotos delante: hasta ver en qué estado está
    * el producto no se sabe qué se está ofreciendo. Y sólo en los casos donde el cliente LO TIENE:
    * si nunca salió, no hay nada que quedarse.
+   *
+   * 🔴 **Pero las fotos gatean ARMAR la propuesta, ⛔ no REGISTRAR una que ya se hizo** (D15 de la
+   * auditoría del 28-ago-2026). Una oferta hecha por teléfono, antes de que el cliente mandara
+   * nada, **es un hecho que pasó**: esconder la caja no lo deshace, sólo lo deja sin registrar — y
+   * después la rechazada no aparece en ninguna cuenta, que es justo el agujero que
+   * `retencion_respuesta` vino a tapar. La escapatoria ya existía (**«Se lo ofrecí igual»**) y
+   * vivía **adentro** de esta misma rama, o sea que sin fotos ⛔ no se podía ni pedir.
+   *
+   * 🔴 **Y `hayOferta` acá tapa algo peor**: `retencion_monto` y `retencion_forma` se guardan
+   * mirando `hayOferta` (ver el `guardar`), ⛔ no `mostrarRetencion`. Sin esta mitad, un reclamo
+   * con oferta registrada y sin fotos **la sigue guardando con la caja escondida** — el dato vivo y
+   * la pantalla muda.
    */
   const hayFotos = !!(reclamo.fotos || []).length
-  const mostrarRetencion = ofreceRetencion(reclamo.motivo, escenario) && hayFotos
+  const puedeOfrecerse = ofreceRetencion(reclamo.motivo, escenario)
 
   /**
    * El destino por producto sólo aparece con **dos o más**: con uno, el destino del reclamo ya ES
@@ -473,6 +485,27 @@ export function DecidirReclamo({
    * día) no existía para el sistema.
    */
   const hayOferta = retencion != null || ofertaMandada
+
+  /** Ver el comentario largo de `puedeOfrecerse`, más arriba: las fotos gatean ARMAR, ⛔ no REGISTRAR. */
+  const mostrarRetencion = puedeOfrecerse && (hayFotos || ofreciIgual || hayOferta)
+
+  /**
+   * **La escapatoria, en un solo lugar.**
+   *
+   * Abre la caja de la oferta cuando el sistema la escondió: porque la cuenta dice que no conviene,
+   * o porque todavía ⛔ no hay fotos. Las dos son la misma frase —*«ya se lo ofrecí igual»*— y
+   * estaba escrita en una sola de las dos ramas, la que necesitaba las fotos para llegar (D15).
+   */
+  const linkOfreciIgual = (
+    <button
+      type="button"
+      onClick={() => setOfreciIgual(true)}
+      style={{
+        padding: 0, height: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+        fontSize: font.xs, color: color.action, textDecoration: 'underline',
+      }}
+    >Se lo ofrecí igual</button>
+  )
 
   /**
    * Registrar la respuesta. Volver a apretar la misma la borra: marcar por error ⛔ no puede ser
@@ -1052,12 +1085,15 @@ export function DecidirReclamo({
               </div>
 
               {/* 🔴 La caja de la oferta sólo aparece donde el caso la admite y con fotos: sin eso
-                  no hay nada que proponer. Se dice, ⛔ no se esconde en silencio. */}
+                  no hay nada que proponer. Se dice, ⛔ no se esconde en silencio.
+                  🔑 **Y la escapatoria se resuelve, ⛔ no se ignora**: una oferta hecha por teléfono
+                  ya pasó, y el mismo link que saca de «la cuenta dice que no conviene» saca de
+                  «todavía no hay fotos» (D15). Es el mismo criterio que `mas_fotos` en la lista. */}
               {!mostrarRetencion ? (
                 <Notice tone="neutral">
-                  {ofreceRetencion(reclamo.motivo, escenario)
-                    ? 'Para armar una propuesta hacen falta las fotos del cliente.'
-                    : 'En este caso no se ofrece que se lo quede a cambio de plata.'}
+                  {puedeOfrecerse ? (
+                    <>Para armar una propuesta hacen falta las fotos del cliente.{' '}{linkOfreciIgual}</>
+                  ) : 'En este caso no se ofrece que se lo quede a cambio de plata.'}
                 </Notice>
               ) : (
                 <>
@@ -1150,16 +1186,7 @@ export function DecidirReclamo({
                                 : 'Poné cuánto le ofreciste para poder registrar la oferta.'}
                       </div>
                     </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setOfreciIgual(true)}
-                      style={{
-                        padding: 0, height: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: font.xs, color: color.action, textDecoration: 'underline',
-                      }}
-                    >Se lo ofrecí igual</button>
-                  )}
+                  ) : linkOfreciIgual}
                 </>
               )}
             </div>

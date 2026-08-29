@@ -344,7 +344,12 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     if (si) await accion(() => contestarLaOferta(marca, d.id, respuesta), respuesta === 'acepto' ? 'Anotado: se lo queda.' : 'Anotado: no aceptó.')
   }
 
-  const anular = async (d: ReclamoRow) => {
+  /**
+   * ⚠️ **Anular la VENTA en Gestión Nube, ⛔ no el reclamo.** Se llamaba `anular` a secas y desde
+   * que existe `anularElReclamo` (D13) eso eran dos cosas distintas con el mismo nombre, en el
+   * mismo archivo y con el botón en la misma fila.
+   */
+  const anularLaVentaEnGN = async (d: ReclamoRow) => {
     const si = await confirmar({
       titulo: 'Venta anulada en Gestión Nube',
       ok: 'Sí, ya la anulé',
@@ -608,6 +613,32 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     const faltan = faltantesParaCerrar(d)
     if (faltan.length) { toast.aviso(`Falta ${faltan.join(', ')}.`); return }
     await accion(() => cambiarEstado(marca, d.id, 'cerrado'), 'Reclamo cerrado.')
+  }
+
+  /**
+   * **Anular: el reclamo ⛔ no debió existir.**
+   *
+   * 🔴 El estado estaba en la lista, en los colores y en `faltantesParaCerrar` desde el día uno, y
+   * ⛔ **ninguna pantalla lo podía poner** (D13 de la auditoría del 28-ago-2026) — sólo lecturas.
+   * ⇒ la única forma de sacar de la lista un reclamo abierto por error, o duplicado, era
+   * **eliminarlo**, y con él se iban el número, el historial y las fotos.
+   *
+   * 🔑 **La auditoría preguntaba si sobraba el estado; lo que sobraba era el hueco.** Anular es la
+   * alternativa **no destructiva** de eliminar: la fila queda, deja de contar como abierta
+   * (`ESTADOS_ABIERTOS` ⛔ no lo incluye) y el `⋯` sigue contando qué pasó.
+   *
+   * ⚠️ **⛔ No pide que no falte nada, y es a propósito** —a diferencia de cerrar—: decir que el
+   * caso no debió existir es justamente decir que sus pendientes tampoco. El freno de administración
+   * lo pone el servidor, ⛔ no este `esAdmin`.
+   */
+  const anularElReclamo = async (d: ReclamoRow) => {
+    const si = await confirmar({
+      titulo: `Anular ${numeroReclamo(d.id)}`,
+      tono: 'danger',
+      ok: 'Anular',
+      mensaje: 'El reclamo queda registrado pero deja de contar: se usa cuando no debió existir (se abrió por error, o está duplicado). ⛔ No anula nada de lo que ya se haya hecho en Gestión Nube. Para eso está «Volver a decidir».',
+    })
+    if (si) await accion(() => cambiarEstado(marca, d.id, 'anulado', 'el reclamo no debió existir'), 'Reclamo anulado.')
   }
 
   const visibles = useMemo(() => {
@@ -1039,7 +1070,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         <Button size="sm" variant="outline" onClick={() => void accion(async () => { await marcarRecibido(marca, d.id) }, 'Marcado como recibido.')}>Volvió</Button>
                       )}
                       {esAdmin && d.stock_estado === 'pendiente' && (
-                        <Button size="sm" variant="outline" onClick={() => void anular(d)}>Anulé en GN</Button>
+                        <Button size="sm" variant="outline" onClick={() => void anularLaVentaEnGN(d)}>Anulé en GN</Button>
                       )}
                       {esAdmin && d.reintegro_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void reintegrar(d)}>Devolví la plata</Button>
@@ -1111,11 +1142,18 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         title="Qué se decidió y qué pasó"
                         onClick={() => setExpandido(expandido === d.id ? null : d.id)}
                       >⋯</Button>
+                      {/* 🔴 **El estado que ninguna pantalla podía poner** (D13). Va ANTES de
+                          «Eliminar» porque es lo que casi siempre corresponde: los dos dicen «este
+                          caso no debió existir», y éste ⛔ no se lleva puesto el número, el
+                          historial ni las fotos. */}
+                      {esAdmin && ESTADOS_ABIERTOS.includes(d.estado) && (
+                        <Button size="sm" variant="ghost" tone="warning" onClick={() => void anularElReclamo(d)}>Anular el reclamo</Button>
+                      )}
                       {esAdmin && (
                         <Button
                           size="sm" variant="ghost"
                           onClick={async () => {
-                            const si = await confirmar({ titulo: 'Eliminar el reclamo', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina el registro. No anula nada de lo que ya se haya hecho en GN.' })
+                            const si = await confirmar({ titulo: 'Eliminar el reclamo', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina el registro y ⛔ no queda rastro. Si el reclamo no debió existir, lo que corresponde es «Anular»: la fila queda con su número y su historial. ⛔ No anula nada de lo que ya se haya hecho en Gestión Nube.' })
                             if (si) await accion(() => eliminarReclamo(marca, d.id), 'Reclamo eliminado.')
                           }}
                         >Eliminar</Button>

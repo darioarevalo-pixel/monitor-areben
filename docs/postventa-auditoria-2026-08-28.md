@@ -369,14 +369,14 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 - **Costo**: medio. ⚠️ El comentario de `vista=avisos` dice **a propósito** que ⛔ no filtra estados
   para no duplicar la lista: se resuelve **importando `ESTADOS_ABIERTOS` del núcleo**, ⛔ no copiándola.
 
-### 🟡 Los seis chicos
+### 🟡 Los seis chicos — ✅ los seis cerrados (D13-D16 el 29-ago, D17-D18 el 28)
 
 | | qué | evidencia |
 |---|---|---|
-| **D13** | **`anulado` ⛔ no lo puede poner ninguna pantalla** | `grep -rn anulado components lib` → en post-venta sólo lecturas: `ArmarCambio.tsx:485,493`, `ESTADO_TONE`, `faltantesParaCerrar` (`tipos.ts:2411`), `lib/notificaciones/derivar.ts:155` |
-| **D14** | **«Despaché» de un CAMBIO necesita dos pantallas** | todo cambio deja `envio_nuevo_estado: 'pendiente'` (`efectos.core.js:74-78`); `ArmarCambio.tsx:836` escribe *«Falta despachar lo que se le manda»* y ⛔ **no tiene el botón**: hay que ir a Reclamos o a Retornos |
-| **D15** | **Sin fotos ⛔ no se puede registrar una oferta hecha por teléfono** | `mostrarRetencion = ofreceRetencion(…) && hayFotos` (`DecidirReclamo.tsx:447`), y el link *«Se lo ofrecí igual»* vive **adentro** de esa rama (`:1146`) |
-| **D16** | **El link del cliente sigue vivo en un cambio ya decidido** | `ABIERTO` (`api/_reclamo.js:26`) incluye `borrador`, y un cambio decidido vuelve a `borrador` a propósito. La lista ya ⛔ no lo ofrece (`linkVivo && !estaDecidido`), pero **un link mandado antes sigue abriendo y aceptando fotos**. Es el único portal del módulo expuesto a internet |
+| ~~**D13**~~ ✅ | **`anulado` ⛔ no lo puede poner ninguna pantalla** | ✅ **29-ago**: botón **«Anular el reclamo»** en la lista, de Administración y sólo sobre abiertos. 🔑 **La pregunta de §4 era al revés: lo que sobraba era el hueco, ⛔ no el estado** — sin él, la única forma de sacar un reclamo abierto por error era **eliminarlo**, y con él se iban el número, el historial y las fotos. ⛔ **No pide que no falte nada** (a diferencia de cerrar): decir que el caso no debió existir es decir que sus pendientes tampoco. ⚠️ De paso, el `anular` de ese archivo **eran dos cosas con el mismo nombre** —la venta en GN y el reclamo—: ahora son `anularLaVentaEnGN` y `anularElReclamo` |
+| ~~**D14**~~ ✅ | **«Despaché» de un CAMBIO necesita dos pantallas** | ✅ **29-ago**: el botón está en Cambios, sobre `envio_nuevo_estado === 'pendiente'`, con la misma pregunta que `Reingresado` y `Cobré la diferencia`. 🔑 **Es el MISMO verbo (`despachado`)**, ⛔ no uno nuevo: el freno que sella sólo si el pendiente está ya vive en el handler desde D3, así que la pantalla ⛔ no puede afirmar de más. Tercera vuelta de [[feedback_areben_pendiente_derivado_sin_gesto]] |
+| ~~**D15**~~ ✅ | **Sin fotos ⛔ no se puede registrar una oferta hecha por teléfono** | ✅ **29-ago**: 🔑 **las fotos gatean ARMAR la propuesta, ⛔ no REGISTRAR una que ya se hizo** — una oferta por teléfono **es un hecho que pasó**, y esconder la caja no lo deshace: lo deja sin registrar, que es el agujero que `retencion_respuesta` vino a tapar. El link *«Se lo ofrecí igual»* salió a una constante y ahora sale **también** en el aviso de «faltan las fotos». 🔴 **Y tapaba algo peor**: `retencion_monto`/`retencion_forma` se guardan mirando `hayOferta`, ⛔ no `mostrarRetencion` ⇒ un reclamo con oferta registrada y sin fotos **la seguía guardando con la caja escondida** |
+| ~~**D16**~~ ✅ | **El link del cliente sigue vivo en un cambio ya decidido** | ✅ **29-ago**: 🔴 la regla estaba escrita **dos veces** y el código lo decía —`ESTADOS_CON_LINK` llevaba *«tiene que ser el mismo conjunto que `ABIERTO`»*— y **ya habían dejado de coincidir**. Ahora vive sola en `lib/reclamos/portal.core.js` y la leen los dos lados. 🔴 **Y era peor que «abre»**: `accion: 'enviar'` escribe `estado: 'en_revision'` ⇒ **el cliente podía mover para atrás una fila ya resuelta, desde afuera y sin sesión**. `compensacion` entró al `select` por `COLUMNAS_DEL_PORTAL` y ⛔ **no viaja**: la respuesta la arma `paraElCliente` campo por campo |
 | ~~**D17**~~ ✅ | **La acción `cambio` apila un evento «borrador» sin mover la fila** | ✅ **28-ago**: el evento lleva ahora **el estado en el que la fila queda** (`previo?.estado`), ⛔ no uno escrito a mano. El historial es lo que se lee después para saber qué pasó y **desde cuándo** |
 | ~~**D18**~~ ✅ | **`gn-baja` deja en el historial «stock corregido en TN»** | ✅ **28-ago**: dice **«baja del producto en Gestión Nube»**. El nombre del sistema equivocado manda a buscar el movimiento a la tienda, donde no está |
 
@@ -399,7 +399,9 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 ## 4. Simplicidad: qué sacaría, y qué ⛔ no
 
-- **Ocho estados → siete.** `anulado` ⛔ no lo pone nadie (D13).
+- ~~**Ocho estados → siete.**~~ ⚠️ **Contestado el 29-ago, y al revés**: `anulado` se queda. Lo que
+  faltaba era el **gesto**, ⛔ no sacar el estado — sin él, un reclamo abierto por error sólo se
+  podía **eliminar**, perdiendo el número, el historial y las fotos (D13).
 - **`borrador` significa DOS cosas** —«ni lo miré» y «cambio decidido esperando el pago»— y eso se
   parchea **tres veces por separado**: `!d.compensacion` en `alertasDe` (`tipos.ts:2274`),
   `!estaDecidido` en `mensajesDeLaFila` (`botones.ts:122`) y `rehaciendo` en `pasoGuardado`
@@ -416,7 +418,8 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 - **Seis pendientes: ninguno sobra.** `stock_estado` y `reingreso_estado` parecen el mismo movimiento
   manual en GN pero van **en direcciones opuestas**, y revisando `EFECTOS_RESOLUCION` fila por fila
   ⛔ nunca se encienden juntos.
-- **Cinco mensajes → seis:** falta el del reenvío (D5). Ninguno de los cinco sobra.
+- ~~**Cinco mensajes → seis:**~~ ✅ hecho el 28-ago (D5). Ninguno de los cinco sobraba, y desde el
+  29-ago **queda registrado cuál se mandó y con qué texto** (D9).
 
 ## 5. Escalabilidad: qué se rompe con 200 reclamos por mes en vez de 2
 
