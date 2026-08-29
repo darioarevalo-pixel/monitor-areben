@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-08-29d
+Versión: 2026-08-29e
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -178,6 +178,21 @@ decidida en la §1**.
 | **Título de sección = sustantivo, ⛔ no frase** | `Pendientes` · `Retornos` · `Novedades` | `Qué falta ahora` · `Lo que tiene que volver` · `Lo que se viene` · `Lo que se escribe a mano` |
 | **Mayúscula sólo en la primera palabra** | `Nuevo pendiente` | `Nuevo Pendiente` |
 | **Sin jerga interna en pantalla** | la palabra del negocio | `sembrar` · `corrida` · `padrón` · `bitácora` · `copy` · `moodboard` |
+
+🔴 **La jerga no se traduce a otra palabra: se dice QUÉ PASA.** 29-ago, y el oráculo fue Bruno
+leyendo el pendiente: *«no sé lo que es corrida de un reloj»*. Buscarle un sinónimo —«pasada»,
+«vuelta»— deja la misma frase sin información. ⇒ *«se publica en la próxima corrida»* pasó a **«se
+publica dentro de los próximos 5 minutos»**, *«se salteó al menos una corrida»* a **«se salteó al
+menos un día»**, y *«lo renueva la corrida diaria de las 05:30»* a **«se renueva solo todos los días
+a las 05:30»**. 🔑 **La frase de reemplazo dice más que la que tenía el nombre correcto.**
+⚠️ **Y `padrón` → Equipo, `bitácora` → Actividad, `copy` → Texto salen del MENÚ**: si el menú ya le
+puso nombre a la sección, la pantalla ⛔ no puede llamarla de otra manera adentro.
+
+⛔ **Lo que imprime un SCRIPT no es una pantalla.** `lib/relojes/*` escribe en el log del job y en el
+JSON que contesta el cron: lo lee quien va a arreglar el reloj, no quien usa la app — la misma
+categoría que un comentario. Ahí `corrida` se queda. ⚠️ Y es **una carpeta y no un total**: el día
+que un reloj le escriba a una persona, ese texto va a otro lado. Cada repo lo clava con un test que
+además exige que **la excepción siga excusando algo**, o se saca.
 
 ### 3.1 · Las cuatro voces, y cuándo va cada una
 

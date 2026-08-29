@@ -53,7 +53,7 @@ export function Resumen() {
                     )}
                   </>
                 ) : sync.tipo === 'fallando' ? (
-                  <>La sincronización está fallando — no hay ninguna corrida exitosa reciente. Los números de abajo son viejos.</>
+                  <>La sincronización está fallando — hace rato que no termina bien. Los números de abajo son viejos.</>
                 ) : (
                   <>No pude leer el estado de la sincronización, así que no sé qué tan actuales son estos números.</>
                 )}

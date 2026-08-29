@@ -178,6 +178,7 @@ const QUE_ELIMINAN = [
   'components/meta-ads/informes/Informes.tsx',
   'components/novedades/Novedades.tsx',
   'components/pedidos-clientes/PedidosClientes.tsx',
+  'components/postventa/Postventa.tsx',
   'components/reclamos/ArmarCambio.tsx',
   'components/reclamos/Reclamos.tsx',
   'components/sesionfotos/SesionFotos.tsx',
@@ -316,11 +317,6 @@ function rotulos(src: string): string[] {
   return salida
 }
 
-/** Los rótulos de un archivo, sin comentarios. */
-function rotulosDe(p: string): string[] {
-  return rotulos(sinComentarios(readFileSync(p, 'utf8')))
-}
-
 describe('las seis familias, en el nombre de cada gesto — VOCABULARIO.md', () => {
   /**
    * 🔴 **Un rótulo es UN TEXTO CORTO, y ésa es toda la definición.** La primera versión de esto
@@ -419,24 +415,6 @@ describe('las seis familias, en el nombre de cada gesto — VOCABULARIO.md', () 
   })
 })
 
-/**
- * 🔴 **§3: «Botón = verbo en infinitivo», y hasta el 29-ago-2026 ⛔ NADA lo miraba.** La regla estaba
- * escrita en el glosario desde que existe, y post-venta tenía **trece rótulos** en pasado o en
- * tercera persona —«Despaché», «Anulé en GN», «Devolví la plata», «Cobré la diferencia», «Aceptó»,
- * «Volvió», «Llegó», «Reingresado», «Vendida»—, además de **cinco tests que los clavaban**, así que
- * renombrarlos ponía la suite en rojo y nadie se enteraba de que estaban mal.
- * 📌 [[feedback_areben_invariante_escrito_no_frena]], cuarta vez en este módulo.
- *
- * 🔑 **La CUARTA VOZ del glosario (§3.1) es legítima y por eso está exceptuada, ⛔ no ignorada.**
- * *«Sí, ya lo despaché»* confirma un hecho que pasó **afuera** de la app y es exactamente lo que
- * §3.1 permite — pero **sólo en el OK del diálogo**, ⛔ no en el botón de la fila que lo abre. Ésa
- * es la distinción que el módulo no tenía: el botón pide la acción, el OK confirma el hecho.
- *
- * ⚠️ **Alcance: las pantallas de post-venta, ⛔ no el repo entero.** Es una lista de archivos y no
- * un total, por lo mismo que `QUE_ELIMINAN`. Canjes tiene la misma forma («Aceptó» / «No aceptó» en
- * `FichaCanje.tsx`) y ⛔ **no** se arregló en esta pasada: la sección se camina con su dueño antes
- * de tocarle los rótulos, y meterla acá sin caminarla dejaría el test en rojo o la lista mintiendo.
- */
 describe('§3 · los botones de post-venta están en infinitivo — VOCABULARIO.md', () => {
   const PANTALLAS = [
     'components/reclamos/Reclamos.tsx',
@@ -459,7 +437,10 @@ describe('§3 · los botones de post-venta están en infinitivo — VOCABULARIO.
    * expresión ⛔ no se ve — por eso abajo va el piso.
    */
   const TEXTO_DE_BOTON = />([^<>{}]+)<\/Button>/g
-  const LABEL_DE_BOTON = /<(?:BotonMensaje|CopyButton)[^>]*?\blabel="([^"]+)"/g
+  // ⚠️ **⛔ No se corta en el primer `>`**: adentro de un `<CopyButton getText={() => …}` hay uno, y
+  // con `[^>]*?` el `label` de al lado desaparecía — el mismo punto ciego que ya dejó vivo a un
+  // mutante en el extractor de arriba. Se busca dentro de una ventana acotada y listo.
+  const LABEL_DE_BOTON = /<(?:BotonMensaje|CopyButton)\b[\s\S]{0,400}?\blabel="([^"]+)"/g
 
   function botonesDe(p: string): string[] {
     const src = sinComentarios(readFileSync(p, 'utf8'))
@@ -473,23 +454,52 @@ describe('§3 · los botones de post-venta están en infinitivo — VOCABULARIO.
   }
 
   /**
-   * Palabras que terminan como un pretérito y ⛔ no lo son. Es corta a propósito: si hay que
-   * agregarle diez, la regla está mirando lo que no debe.
+   * 🔑 **La regla es del PRIMER verbo, ⛔ no de que no haya ningún pasado en el rótulo.** §3 dice
+   * *«Botón = verbo en infinitivo»*: lo que tiene que estar en infinitivo es **el gesto**. Por eso
+   * «Registrar que aceptó» está bien —el gesto es *registrar*, y lo que el cliente hizo se nombra
+   * como lo que es—, y «Aceptó» a secas ⛔ no: ahí el botón dice un hecho en vez de pedir una acción.
    */
-  const NO_SON_VERBOS = new Set(['qué', 'aquí', 'ahí', 'así', 'sí', 'acá', 'allá', 'día', 'días', 'más', 'él', 'café', 'está', 'están'])
+  const empiezaEnInfinitivo = (t: string) => {
+    const primera = t.trim().split(/[\s,.!?¿¡«»"'—·:]+/).filter(Boolean)[0] || ''
+    // Un botón de puro ícono (`⋯`, `↩`) ⛔ no tiene verbo que mirar: su palabra vive en el `aria-label`.
+    if (!/[a-záéíóúñ]/i.test(primera)) return true
+    return /^[a-záéíóúñ]+(ar|er|ir)$/i.test(primera)
+  }
 
-  /** ¿Alguna palabra del rótulo es un verbo en pasado? Primera o tercera persona. */
-  const enPasado = (t: string) =>
-    t.split(/[\s,.!?¿¡«»"'—·:]+/).filter(Boolean).some((w) => {
-      const l = w.toLowerCase()
-      if (NO_SON_VERBOS.has(l)) return false
-      return /^[a-zñáéíóú]{3,}[éíó]$/.test(l) || /^[a-zñáéíóú]{4,}(aron|ieron)$/.test(l)
-    })
+  /**
+   * 🔴 **Botones que ⛔ NO son un gesto: son una opción de un grupo excluyente.** Contestan una
+   * pregunta que está arriba —*«¿qué contestó?»*, *«¿qué se hace con el producto?»*— y la respuesta
+   * ⛔ no es un verbo: es un hecho. Pedirles infinitivo empeora la pantalla.
+   *
+   * ⚠️ **Están dibujados con `Button` sólo porque el kit ⛔ no tiene un segmentado con `disabled` y
+   * `title` por opción** (`Chips`, en `FilterBar.tsx`, ⛔ no los acepta) — y acá los dos hacen falta:
+   * sin monto cargado ⛔ no se puede contestar, y «aceptó quedárselo» apaga «que vuelva». El día que
+   * `Chips` los acepte, éstos se mudan y **esta lista se vacía sola**, que es la condición para que
+   * una excepción defienda algo.
+   */
+  const SELECTORES = new Set([
+    'Se la mandé: esperando',
+    'Aceptó: se lo queda',
+    'No aceptó: sigue el reclamo',
+    'Se lo queda',
+    'Que vuelva',
+  ])
 
-  it('🔴 ningún BOTÓN de post-venta pide la acción en pasado', () => {
+  it('🔴 todo BOTÓN de post-venta empieza con un verbo en infinitivo', () => {
     const intrusos: string[] = []
-    for (const p of PANTALLAS) for (const t of botonesDe(p)) if (enPasado(t)) intrusos.push(`${p} → «${t}»`)
+    for (const p of PANTALLAS) {
+      for (const t of botonesDe(p)) {
+        if (SELECTORES.has(t) || empiezaEnInfinitivo(t)) continue
+        intrusos.push(`${p} → «${t}»`)
+      }
+    }
     expect([...new Set(intrusos)]).toEqual([])
+  })
+
+  /** 🔑 Y la excusa se vacía sola: un selector que ya no existe se lee mañana como permiso. */
+  it('y la lista de selectores ⛔ no tiene rótulos de más', () => {
+    const vivos = new Set(PANTALLAS.flatMap(botonesDe))
+    expect([...SELECTORES].filter((t) => !vivos.has(t))).toEqual([])
   })
 
   /**
@@ -535,5 +545,66 @@ describe('el glosario es el MISMO archivo en los dos repos', () => {
     // regla que ya no está escrita en ningún lado — o al revés, la escribe y nadie la clava.
     const doc = readFileSync('VOCABULARIO.md', 'utf8')
     for (const x of ['1.1 ·', '1.2 ·', '1.3 ·', '1.4 ·', '1.5 ·', '1.6 ·']) expect(doc).toContain(x)
+  })
+})
+
+/**
+ * 🔴 **La jerga de §3: palabras de adentro que la pantalla usa como si el que lee las supiera.**
+ * Estaba escrita en el glosario desde el 28-ago y ⛔ no la frenaba nada.
+ *
+ * 🔑 **El oráculo de que una palabra es jerga es que alguien no la entienda**, y el 29-ago pasó:
+ * Bruno leyendo el `PENDIENTES` — *«no sé lo que es corrida de un reloj»*. ⇒ ⛔ no se le busca un
+ * sinónimo («pasada», «vuelta» dejan la frase sin información): **se dice qué pasa**. «No hay
+ * ninguna corrida exitosa reciente» pasó a **«hace rato que no termina bien»**.
+ *
+ * ⚠️ **Acá sólo van las palabras que YA tienen reemplazo decidido en este repo.** `padrón`,
+ * `bitácora` y `sembrar` siguen vivas en pantalla y ⛔ **no entran todavía**, porque las tres son
+ * decisión de Bruno y no mías: el `padrón` de Canjes es de las secciones que él dejó afuera de la
+ * corrida, `Bitácora` es un título de Liquidación y `Sembrar` es el nombre de un gesto que alguien
+ * de Administración aprieta. 📌 Están anotadas en `PENDIENTES.md`. **Una lista corta que dice la
+ * verdad defiende más que una larga con tres excepciones adentro.**
+ */
+describe('la jerga de §3 no entra en pantalla — VOCABULARIO.md', () => {
+  const JERGA = /\b(corrida|corridas|copy|moodboard|moodboards)\b/i
+
+  /**
+   * ⛔ **Lo que imprime un SCRIPT no es una pantalla**, y en este repo eso son las rutas de cron y
+   * los scripts: escriben en el log del job, y lo lee quien va a arreglar el reloj. Misma categoría
+   * que un comentario.
+   */
+  const NO_ES_PANTALLA = ['scripts/', 'app/api/']
+
+  const PROSA = /(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g
+  const TEXTO_JSX = /(?<=>)([^<>{}]*[A-Za-zÁÉÍÓÚÑáéíóúñ][^<>{}]*)(?=<)/g
+
+  function loQueSeLee(linea: string): string[] {
+    const salida: string[] = []
+    for (const m of linea.matchAll(PROSA)) {
+      const t = m[2].replace(/\$\{[^}]*\}/g, ' ')
+      const esProsa =
+        /[A-Za-zÁÉÍÓÚÑáéíóúñ]\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(t) || /[áéíóúñ¿¡«»]/i.test(t)
+      const esCodigo = /[(){}=]|:\/\/|^\s*[/.]/.test(t)
+      if (esProsa && !esCodigo) salida.push(t)
+    }
+    for (const m of linea.matchAll(TEXTO_JSX)) salida.push(m[1])
+    return salida
+  }
+
+  it('ninguna aparece en el texto que lee una persona', () => {
+    const intrusos: string[] = []
+    for (const raiz of DONDE) {
+      for (const p of archivos(raiz)) {
+        if (NO_ES_PANTALLA.some((x) => p.startsWith(x))) continue
+        sinComentarios(readFileSync(p, 'utf8'))
+          .split('\n')
+          .forEach((linea, k) => {
+            for (const t of loQueSeLee(linea)) {
+              const m = t.match(JERGA)
+              if (m) intrusos.push(`${p}:${k + 1} → ${m[0]} — «${t.slice(0, 60)}»`)
+            }
+          })
+      }
+    }
+    expect(intrusos).toEqual([])
   })
 })

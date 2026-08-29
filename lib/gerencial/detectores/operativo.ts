@@ -77,7 +77,7 @@ export function detectarOperativo(
         detalle:
           s.tipo === 'ok'
             ? `Última actualización ${s.hace}.${s.nota}`
-            : 'La última corrida del sync falló y no hay una lectura reciente.',
+            : 'La última vez que corrió el sync falló, y no hay una lectura reciente.',
         recomendacion: 'Revisar el workflow de sincronización antes de tomar decisiones con estos números.',
         valor: 1,
         acciones: [{ tipo: 'link', seccion: 'resumen', label: 'Ver estado' }],

@@ -113,8 +113,22 @@ un botón, un título o un cartel de vacío, se lee. El nombre del trabajo, para
   Recepciones ya decía «Unidades que faltaron» y ⛔ no hubo nada que tocar. `clavado` queda para el
   **producto sin rotación**, y la cuenta atada a una marca pasó a **«el que tiene una sola marca»**.
   🔑 **Los cuatro homónimos de los dos repos se cerraron SIN bautizar una palabra nueva.**
+- 🏁 **La jerga de §3 tiene test** (`corrida` · `copy` · `moodboard`), y salió de los 8 textos que lee
+  una persona. 🔑 **El oráculo de que una palabra es jerga es que alguien no la entienda**, y pasó:
+  Bruno leyendo el pendiente de MAKETA — *«no sé lo que es corrida de un reloj»*. ⇒ ⛔ no se le busca
+  un sinónimo, **se dice qué pasa**: «no hay ninguna corrida exitosa reciente» → **«hace rato que no
+  termina bien»**.
+- ▶️ **Tres palabras de §3 quedaron AFUERA del test a propósito, porque son decisión tuya y no mía**:
+  - **`padrón`** — son 13 textos y todos de **Canjes**, que es una de las secciones que dejaste
+    afuera de la corrida. ⛔ No se tocó ni uno.
+  - **`Bitácora`** — es el **título** de un bloque de Liquidación (`components/liquidacion/`).
+  - **`Sembrar`** — es el nombre de un gesto que aprieta alguien de Administración
+    (`components/agenda/`). ▶️ Es el mismo pendiente que «quién de Administración aprieta Sembrar».
+  🔑 **Una lista corta que dice la verdad defiende más que una larga con tres excepciones adentro**,
+  y por eso están escritas en el test y no metidas en una allowlist.
 - **Anunciar los renombres en Novedades** el día que se publiquen: esta app **ya la usa gente**, y un
-  rótulo que cambia de nombre confunde a quien ya lo aprendió. Son ~40 rótulos.
+  rótulo que cambia de nombre confunde a quien ya lo aprendió. Son ~50 rótulos entre los dos repos.
+  ⚠️ **Bruno pidió hacerla al final, cuando esté TODO**, ⛔ no de a pedazos.
 - ⚠️ **`tests/crm-paridad.test.ts` sigue con 13 tests en rojo, y ⛔ no son de esta corrida**: se midió
   guardando los cambios aparte y dieron los mismos 13. Estaban rotos de antes.
 
