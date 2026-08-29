@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
-import { TEMP_UI } from '@/components/crm/temperatura'
+import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
 import { plazoEnPalabras, ritmoDeCompra } from '@/lib/crm/ritmo'
 import {
@@ -353,6 +353,15 @@ function PanelInterno({
 }) {
   const [estado, setEstado] = useState<Estado>({ t: 'cargando' })
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
+  /**
+   * Los leads, en estado y no sólo en el `ref`.
+   *
+   * 🔑 **El `ref` es para el cruce por teléfono, que corre en un efecto; esto es para dibujar.**
+   * La solapa "Hoy" ahora también muestra los prospectos, y un `ref` leído durante el render no
+   * vuelve a dibujar cuando cambia — el lead que se acaba de agendar seguiría en la lista.
+   * (`react-hooks/refs` lo prohíbe, y con razón: es el mismo error del 29-ago-2026 con el mapa.)
+   */
+  const [crmLeads, setCrmLeads] = useState<MapaLeads>({})
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [today] = useState(() => new Date())
@@ -428,6 +437,7 @@ function PanelInterno({
       if (!activo) return
       kv.current = { seg: seg.ok ? seg.dato : {}, tel: telKv.ok ? telKv.dato : {}, leads: leadsKv.ok ? leadsKv.dato : {} }
       setCrmSeg(kv.current.seg)
+      setCrmLeads(kv.current.leads)
       setKvListo(true)
     })()
     return () => {
@@ -451,9 +461,20 @@ function PanelInterno({
       // servidor, cuando `mutar` ya la recalcula sola con el mapa nuevo.
       const mapaSeg = kv.current.seg
 
-      // Con id no hace falta cruzar por teléfono: se pide derecho. Es el camino de la lista del
-      // día, y el que permite mostrar la ficha sin esperar a que WhatsApp termine de abrir el chat.
-      const r = await buscarFicha(pedido ? { clienteId: pedido.id } : { tel: telNorm }, mapaSeg, today)
+      /**
+       * Con id no hace falta cruzar por teléfono: se pide derecho. Es el camino de la lista del
+       * día, y el que permite mostrar la ficha sin esperar a que WhatsApp termine de abrir el chat.
+       *
+       * 🔴 **`id: 0` significa "no es un cliente, cruzalo por teléfono"**, y es lo que manda el
+       * bloque de prospectos de la lista (29-ago-2026): un lead no tiene id numérico. Sin esto
+       * caía en `clienteId: 0`, que no existe, y el panel terminaba ofreciendo **cargarlo como
+       * lead de nuevo** — el duplicado que ya se pagó el 24-ago.
+       *
+       * ⚠️ Y el teléfono a cruzar es el del PEDIDO, no `telNorm`: cuando se toca un nombre de la
+       * lista, WhatsApp todavía no navegó y `telNorm` sigue siendo el del chat anterior.
+       */
+      const telBuscar = pedido && !pedido.id ? normalizeArgPhone(pedido.tel) : telNorm
+      const r = await buscarFicha(pedido?.id ? { clienteId: pedido.id } : { tel: telBuscar }, mapaSeg, today)
       if (!activo) return
 
       if (r.estado === 'encontrado') {
@@ -477,7 +498,7 @@ function PanelInterno({
       // duplicarlos.
       const mapaTel: MapaTelefonos = kv.current.tel
       const idx = indexarTelefonos(Object.entries(mapaTel).map(([id, phone]) => ({ id, phone })))
-      const { ids } = buscarPorTelefono(idx, telNorm)
+      const { ids } = buscarPorTelefono(idx, telBuscar)
       if (ids.length === 1) {
         const r2 = await buscarFicha({ clienteId: ids[0] }, mapaSeg, today)
         if (!activo) return
@@ -496,7 +517,7 @@ function PanelInterno({
        * Va al final a propósito: si la persona ya compró, la ficha de cliente dice más que la de
        * prospecto.
        */
-      const enc = leadsPorTelefono(kv.current.leads, telNorm)
+      const enc = leadsPorTelefono(kv.current.leads, telBuscar)
       if (enc.leads.length === 1) {
         setEstado({ t: 'lead', lead: enc.leads[0] })
         return
@@ -562,6 +583,7 @@ function PanelInterno({
         return false
       }
       kv.current = { ...kv.current, leads: r.mapa }
+      setCrmLeads(r.mapa)
       const actualizado = r.mapa[id]
       if (actualizado) setEstado({ t: 'lead', lead: actualizado })
       decir(exito)
@@ -624,7 +646,7 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         {kvListo ? (
-          <AgendaDelDia crmSeg={crmSeg} today={today} onAbrirChat={abrirChat} puedeAbrirChat={enExtension} />
+          <AgendaDelDia crmSeg={crmSeg} crmLeads={crmLeads} today={today} onAbrirChat={abrirChat} puedeAbrirChat={enExtension} />
         ) : (
           <Cargando />
         )}
@@ -735,6 +757,7 @@ function PanelInterno({
             // Cargar el lead y agendarlo son el mismo momento de la conversación; mandarlo a otra
             // pantalla para la fecha es exactamente lo que hacía que los leads no se agendaran.
             kv.current = { ...kv.current, leads: { ...kv.current.leads, [lead.id]: lead } }
+            setCrmLeads(kv.current.leads)
             setEstado({ t: 'lead', lead })
             decir('Guardado como lead')
           }}
@@ -746,7 +769,7 @@ function PanelInterno({
   // ── La ficha ───────────────────────────────────────────────────────────────
   const { cliente: c, compras, segmento, via } = estado.ficha
   const seg = crmSeg[String(c.id)] || {}
-  const t = TEMP_UI[c.temperatura]
+  const t = TEMP_UI[vistaTemp(c)]
   const notas = c.notas || []
   // Las ventas ya están en la ficha: la sugerencia no le pide nada más al servidor.
   const ritmo = ritmoDeCompra(c.ventas || [], today)
@@ -1574,15 +1597,35 @@ function NuevoLead({
   const [nombre, setNombre] = useState('')
   const [ciudad, setCiudad] = useState('')
   const [instagram, setInstagram] = useState('')
+  const [dias, setDias] = useState<number | null>(null)
   const [guardando, setGuardando] = useState(false)
 
   const guardar = async () => {
-    if (!nombre.trim() || guardando) return
+    if (!nombre.trim() || dias === null || guardando) return
     setGuardando(true)
     const id = nuevoIdLead(Date.now(), Math.random())
-    // Sin fecha: se elige en la ficha, que es donde cae al guardar. "Eso lo elijo yo al momento
-    // de ver si está frío o caliente" — y en el alta todavía no se sabe.
-    const lead: Lead = { ...leadNuevo(id), nombre: nombre.trim(), telefono: tel, ciudad: ciudad.trim(), instagram: instagram.trim() }
+    /**
+     * 🔴 **La fecha se elige ACÁ, y es obligatoria** (decisión de Bruno, 29-ago-2026).
+     *
+     * Antes el alta guardaba sin fecha —"eso lo elijo yo al momento de ver si está frío o
+     * caliente"— y el resultado medido fue que **no se elegía nunca**: 29 de 37 prospectos
+     * activos sin ninguna fecha. Un prospecto sin fecha no entra en ninguna cola de trabajo, así
+     * que se carga y ahí queda. Elegir "en cuántos días" es un toque y pasa en la misma
+     * conversación, que es cuando se sabe.
+     *
+     * ⚠️ **No se calcula, se pregunta.** La cadencia automática salió del CRM el 24-ago y no
+     * vuelve por acá: el plazo lo pone quien acaba de hablar. Lo único que cambió es que ahora
+     * no se puede salir sin ponerlo.
+     */
+    const lead: Lead = {
+      ...leadNuevo(id),
+      nombre: nombre.trim(),
+      telefono: tel,
+      ciudad: ciudad.trim(),
+      instagram: instagram.trim(),
+      // `diaHabil` corre el fin de semana al lunes, igual que en toda fecha del CRM.
+      proximo_manual: diaHabil(addDiasISO(hoyISO(), dias)),
+    }
     // La relectura la hace `guardarLeadsConRelectura`, igual que el resto de las escrituras del
     // panel: acá estaba escrita a mano.
     const r = await guardarLeadsConRelectura((m) => ({ ...m, [id]: lead }))
@@ -1608,8 +1651,42 @@ function NuevoLead({
 
       <input className="mo-input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre o local" style={{ width: '100%', marginBottom: 6 }} />
       <input className="mo-input" value={ciudad} onChange={(e) => setCiudad(e.target.value)} placeholder="Ciudad" style={{ width: '100%', marginBottom: 6 }} />
-      <input className="mo-input" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@instagram" style={{ width: '100%', marginBottom: 6 }} />
-      <Button size="sm" disabled={!nombre.trim() || guardando} onClick={guardar}>
+      <input className="mo-input" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@instagram" style={{ width: '100%', marginBottom: 8 }} />
+
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>¿En cuántos días le volvés a escribir?</div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+        {PLAZOS_DIAS.map((d) => {
+          const elegido = dias === d
+          return (
+            <button
+              key={d}
+              type="button"
+              disabled={guardando}
+              onClick={() => setDias(d)}
+              title={`${d === 1 ? 'Mañana' : `En ${d} días`} · ${diaYFecha(diaHabil(addDiasISO(hoyISO(), d)))}`}
+              style={{
+                minWidth: 34,
+                height: 'auto',
+                padding: '4px 8px',
+                fontSize: font.sm,
+                fontWeight: 600,
+                color: elegido ? color.brand : color.ink2,
+                background: elegido ? color.brandBg : color.surface,
+                border: `1px solid ${elegido ? color.brandSolid : color.line2}`,
+                borderRadius: radius.md,
+                cursor: guardando ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {d}
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 8 }}>
+        {dias === null ? 'Elegí cuándo, así aparece solo en la lista ese día.' : `Te lo recuerdo el ${diaYFecha(diaHabil(addDiasISO(hoyISO(), dias)))}.`}
+      </div>
+
+      <Button size="sm" disabled={!nombre.trim() || dias === null || guardando} onClick={guardar}>
         {guardando ? 'Guardando…' : 'Guardar como lead'}
       </Button>
     </div>

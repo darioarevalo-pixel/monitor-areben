@@ -6,7 +6,7 @@
 //   POST { recurso:'crm', action:'detalles', ids:[…] }     → { ok, detalles:[{sale_id,…,unit_price,total}] }
 //   POST { recurso:'crm', action:'ventas', modo, flagged } → { ok, ventas:[{id,date_sale,total_price,…}] }
 //   POST { recurso:'crm', action:'panel', tel|clienteId }   → { ok, encontrado, cliente, ventas, detalles }
-//   POST { recurso:'crm', action:'lista', ids:[…] }         → { ok, clientes:[{id,name,phone,total_amount}] }
+//   POST { recurso:'crm', action:'lista', ids:[…], totales? } → { ok, clientes:[{id,name,phone,total_amount}] }
 //   POST { recurso:'crm', action:'buscar', q, ids:[…] }     → { ok, clientes:[{id,name,city,phone}] }
 //
 // Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
@@ -108,10 +108,17 @@ const PAGINA = 1000;
 // lado se ve como un JSON.parse roto. Mejor decirlo.
 const TOPE_RESPUESTA = 4 * 1024 * 1024;
 
-// Cuántos ids acepta `action:'lista'`. Con la lista en 25 y los fríos vencidos en ~67, hoy se
-// piden ~90; el techo está para que un llamador roto no convierta la consulta acotada en el
-// padrón entero, que es justo lo que este endpoint existe para evitar.
-const TOPE_IDS_LISTA = 300;
+// Cuántos ids acepta `action:'lista'`. El techo está para que un llamador roto no convierta la
+// consulta acotada en el padrón entero, que es justo lo que este endpoint existe para evitar.
+//
+// 🔴 **Antes esto CORTABA en silencio** (`.slice(0, TOPE_IDS_LISTA)`), y el docblock decía "hoy se
+// piden ~90". Medido el 29-ago-2026: se piden **236**, a 64 de un techo que no avisa. El que se
+// pasara no iba a ver un error — iba a ver una lista del día a la que le faltan clientes, sin
+// forma de notarlo. Y el número sube solo: cada cliente que se marca 🧊 suma un id al pedido.
+//
+// Ahora se rechaza con un error que se lee. El que corta es el llamador, que sabe qué está
+// pidiendo: `traerAgenda` pide de a `LOTE_IDS` y une (ver `lib/crm/panel.ts`).
+export const TOPE_IDS_LISTA = 300;
 
 /**
  * Trae una página de `ventas` detrás de otra hasta que se acaben, con el filtro que le pasen.
@@ -397,11 +404,26 @@ async function panelPorTelefono(supabase, body, res) {
 async function listaDelPanel(supabase, body, res) {
   const crudos = Array.isArray(body.ids) ? body.ids : [];
   // Mismo saneo que el resto del archivo: estos ids se concatenan en el `in.(…)` de PostgREST.
-  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, TOPE_IDS_LISTA);
+  const ids = [...new Set(crudos.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
   if (!ids.length) return res.status(200).json({ ok: true, clientes: [] });
+  // 🔴 Se rechaza, no se recorta. Ver `TOPE_IDS_LISTA`.
+  if (ids.length > TOPE_IDS_LISTA) {
+    return res.status(400).json({
+      ok: false,
+      error: `La lista pidió ${ids.length} clientes de un saque y el techo es ${TOPE_IDS_LISTA}. Hay que pedirlos por tanda.`,
+    });
+  }
 
   const { data: clientes, error } = await supabase.from('clientes').select('id, name, phone').in('id', ids);
   if (error) throw new Error(error.message);
+
+  // 🔑 **El total es la parte cara y no siempre hace falta.** Sumarlo obliga a recorrer las ventas
+  // de cada uno de los ids; con la lista del día (~90) no se nota, pero el filtro 🔥 del panel pide
+  // un grupo entero y sólo lo ordena por fecha. Los únicos que lo necesitan son los 🧊 —que salen
+  // por lo que compraron, igual que en la sección— y la lista del día, que los tiene adentro.
+  if (body.totales === false) {
+    return res.status(200).json({ ok: true, clientes: (clientes || []).map((c) => ({ ...c, total_amount: 0 })) });
+  }
 
   // El total comprado, para que la tanda de fríos salga en el mismo orden que en la sección.
   const totales = new Map();

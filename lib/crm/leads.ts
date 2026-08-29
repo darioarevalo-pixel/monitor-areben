@@ -244,9 +244,24 @@ export function eliminar(leads: MapaLeads, id: string): MapaLeads {
   return out
 }
 
-/** leadsAgregar (14067). */
+/** Con cuántos días de plazo nace un prospecto cargado desde la pestaña Leads. */
+export const PLAZO_LEAD_NUEVO = 7
+
+/**
+ * leadsAgregar (14067). **Nace agendado**, no en blanco.
+ *
+ * 🔴 **Un prospecto sin fecha no entra en ninguna cola de trabajo**, así que se carga y ahí queda:
+ * medido el 29-ago-2026, **29 de 37 activos** no tenían ninguna. La pestaña no tiene formulario de
+ * alta —crea el lead y abre su ficha—, así que acá la fecha no se puede preguntar: se pone, queda
+ * a la vista en la ficha que se abre y se corre de un toque. En el panel de WhatsApp, que sí tiene
+ * formulario, **se pregunta** (ver `NuevoLead`).
+ *
+ * ⚠️ Esto no reintroduce la cadencia automática, que salió el 24-ago-2026: no calcula un ritmo a
+ * partir de nada, pone un plazo por defecto que se cambia en el acto.
+ */
 export function agregar(leads: MapaLeads, id: string, hoy: Date = new Date()): MapaLeads {
-  return { ...leads, [id]: leadNuevo(id, hoy) }
+  // `setProximoManual` ya corre el fin de semana al lunes.
+  return setProximoManual({ ...leads, [id]: leadNuevo(id, hoy) }, id, addDiasISO(hoyISO(hoy), PLAZO_LEAD_NUEVO))
 }
 
 // ── Encontrar el lead del chat abierto ───────────────────────────────────────
@@ -301,4 +316,25 @@ export function leadsPorTelefono(leads: MapaLeads, tel: string): { leads: Lead[]
 export function escribiHoyLead(leads: MapaLeads, id: string, dias: number, hoy: Date = new Date()): MapaLeads {
   // `setProximoManual` ya corre el fin de semana al lunes.
   return setProximoManual(hableHoy(leads, id, hoy), id, addDiasISO(hoyISO(hoy), dias))
+}
+
+/**
+ * Los prospectos que hay que contactar, para el panel de WhatsApp (29-ago-2026).
+ *
+ * 🔴 **Existe porque en el panel los leads no aparecían: ni uno.** La solapa "Hoy" se armaba sólo
+ * con `crm:seg` —clientes— y el bloque "Leads para contactar" vive en la sección Clientes del
+ * monitor, que es justo la pantalla que no se mira mientras se atiende WhatsApp. Un prospecto que
+ * no aparece donde se trabaja no se contacta nunca, que es el mismo problema que `leadsDelDia`
+ * vino a resolver del otro lado.
+ *
+ * El corte es el del panel, no el de la sección: **lo que ya vence** (incluido HOY, que
+ * `atrasados` deja afuera) **más los que no tienen fecha**. Esos últimos son la mitad del padrón
+ * —29 de 37 activos el 29-ago-2026— y van al final: sin fecha no hay atraso que medir.
+ *
+ * ⚠️ **Los leads no tienen temperatura**, así que los botones 🔥/🟡/⚪/🧊 no los tocan: es un
+ * bloque aparte, abajo, y por eso esta función no recibe filtro.
+ */
+export function leadsDelPanel(leads: MapaLeads, today: Date): LeadConSeg[] {
+  const sinAgendar = (l: LeadConSeg) => l._seg.estado === 'none' || l._seg.estado === 'pendiente'
+  return filtrarLeads(leads, { q: '', verArchivados: false, today }).filter((l) => l._seg.estado === 'vencido' || sinAgendar(l))
 }

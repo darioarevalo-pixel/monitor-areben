@@ -20,7 +20,7 @@ const nada = () => {}
 describe('AgendaDelDia · antes de tener los datos', () => {
   it('dice que está cargando, NO que no hay nadie', () => {
     const html = renderToStaticMarkup(
-      <AgendaDelDia crmSeg={{}} today={HOY} onAbrirChat={nada} puedeAbrirChat />,
+      <AgendaDelDia crmSeg={{}} crmLeads={{}} today={HOY} onAbrirChat={nada} puedeAbrirChat />,
     )
     expect(html).toContain('Cargando')
     expect(html).not.toContain('No hay nadie')
@@ -30,7 +30,7 @@ describe('AgendaDelDia · antes de tener los datos', () => {
     // Un mapa vacío puede ser "no hay nadie" o "no se pudo leer": desde acá no se distingue, y por
     // eso el panel espera a tener el KV antes de montar este componente (`kvListo`).
     const html = renderToStaticMarkup(
-      <AgendaDelDia crmSeg={{}} today={HOY} onAbrirChat={nada} puedeAbrirChat />,
+      <AgendaDelDia crmSeg={{}} crmLeads={{}} today={HOY} onAbrirChat={nada} puedeAbrirChat />,
     )
     expect(html).not.toContain('Para contactar')
   })
@@ -39,7 +39,7 @@ describe('AgendaDelDia · antes de tener los datos', () => {
 describe('AgendaDelDia · el aviso de estar fuera de la extensión', () => {
   it('no molesta con el cartel mientras está cargando', () => {
     const html = renderToStaticMarkup(
-      <AgendaDelDia crmSeg={{}} today={HOY} onAbrirChat={nada} puedeAbrirChat={false} />,
+      <AgendaDelDia crmSeg={{}} crmLeads={{}} today={HOY} onAbrirChat={nada} puedeAbrirChat={false} />,
     )
     expect(html).not.toContain('fuera de WhatsApp')
   })

@@ -867,3 +867,119 @@ el panel): un cliente frío con fecha a mano sigue apareciendo sólo en 🧊 Rec
 Darío es **no tocarle la temperatura a nadie al escribirle** —que le hables no lo vuelve activo, y
 el dato dejaría de significar lo que dice— sino **poner filtros por tipo en el panel**
 (frío/tibio/caliente/todos). Eso está sin hacer.
+
+
+---
+
+# ✅ 29-ago-2026 — los cinco botones del panel, y el techo que cortaba sin avisar
+
+Darío: *"quiero agregarle filtros de contacto al panel: 🔥 calientes / templados / 🧊 fríos / todos.
+Poder ir a buscar a quien quiera desde el panel, **sin que el sistema me cambie la temperatura del
+cliente**. Que le mande un mensaje a un frío no lo vuelve tibio — la temperatura describe al
+cliente, no la cola de trabajo"*.
+
+Es la deuda que había dejado escrita el arreglo de las 327 marcas, tres bloques más arriba.
+
+## 🔴 Lo que apareció mirándolo: `action:'lista'` se comía clientes en silencio
+
+El handler aceptaba 300 ids y hacía **`.slice(0, TOPE_IDS_LISTA)`**. Al que se pasara no le llegaba
+un error: le llegaba **una lista del día con gente faltante**, sin nada que mirar y sin forma de
+notarlo. Su propio docblock decía *"hoy se piden ~90"*.
+
+**Medido ese día: se pedían 236.** A 64 del techo. Y el número **sube solo** —cada cliente que se
+marca 🧊 suma un id al pedido—, así que las 327 temperaturas todavía sin recargar lo estaban
+tapando: al volver a marcarlas, se pasaba.
+
+| | antes | ahora |
+|---|---|---|
+| pedido de más | recorta a 300, sin aviso | **400 con el motivo escrito** |
+| quién corta | el servidor, a ciegas | el llamador, que sabe qué pide |
+| cómo pide el panel | todo de un saque | de a `LOTE_IDS` = 250 y une |
+
+`tests/crm-lista-tope.test.ts` amarra las dos mitades, incluida la única relación entre los dos
+archivos que **el compilador no ve**: `LOTE_IDS ≤ TOPE_IDS_LISTA`.
+
+## 🔑 «Templado» y «nunca lo marcaste» eran el mismo valor — y son 4 contra 340
+
+`temperatura` del KV es **opcional** (nació en ago-2026, aditivo), pero los dos lectores la leían
+con `|| TEMPERATURA_DEFAULT`. O sea que la diferencia **estaba guardada** y se perdía al leer.
+
+Medido el 29-ago sobre los 730 activos: **8 calientes · 4 templados · 378 fríos · 340 sin marca.**
+Un botón "🟡 templados" habría devuelto **344**: el más grande de los cinco y el más inútil.
+
+Se separó **la etiqueta, no la cola**:
+
+- `FilaListaDia.marcada` y `ClienteCRM.temperatura_marcada` dicen si la puso alguien;
+- `temperatura` **sigue cayendo al default**, así que los 340 ordenan, filtran y entran en la lista
+  del día exactamente como antes;
+- `TEMP_UI` gana `sin_marcar` (⚪) y lo usan **la tabla y el panel**, que es para lo que ese archivo
+  existe — el badge no puede decir 🟡 de un lado y ⚪ del otro sobre el mismo cliente.
+
+⚠️ **`sin_marcar` no se guarda nunca.** Es la falta de las otras tres. Marcar sigue escribiendo
+`caliente`/`templado`/`frio`, y el primer clic del badge sigue yendo a 🧊 como siempre.
+
+`tests/crm-filtros-panel.test.ts` prueba lo segundo antes que lo primero: **que la lista del día no
+se mueva**. Si separar la etiqueta hubiera sacado a esos 340 de la cola, el cambio le habría
+vaciado media lista a quien la usa todos los días.
+
+## Las tres preguntas que Darío puso antes de que se escribiera nada
+
+**1 · ¿El filtro muestra sólo los vencidos, o todos los de ese tipo?** → **todos**, vencidos
+arriba. Con el corte de la cola, de 8 calientes se verían 2, y el que fue a buscar a alguien
+agendado para el mes que viene no lo encontraría. Sin tocar nada, el panel sigue mostrando lo que
+vence: **ése es el default y no cambió**.
+
+**2 · ¿Qué pasa con el tope de 25 y la tanda de 10?** El tope de 25 era el paliativo del orden roto
+del 27-ago; ahora es "mostrar 25 + **ver más**", un corte que se ve. La tanda de 10 es la que
+**tapaba** a los fríos: de 192 vencidos se mostraban 10 y **se tiraban 182**. Sigue siendo la dosis
+diaria de la vista "Hoy", y deja de aplicar en cuanto se toca 🧊.
+
+**3 · ¿Hace falta un buscador?** Sí, y rinde más que los botones. `buscarClientesPorNombre` ya
+existía **escondido adentro de "ya es cliente mío, cambió de número"**: sólo hubo que sacarlo
+arriba. 🔑 **Es lo único que alcanza a quien no está en el KV** — los botones sólo pueden mostrar a
+los 730 que alguien tocó alguna vez; el buscador pregunta por los 12.485 del padrón. Por eso
+conviven: no son dos caminos al mismo lugar.
+
+## Los prospectos: el problema no era filtrar
+
+**En el panel no aparecía ninguno.** `AgendaDelDia` recibía sólo `crmSeg`; el bloque "Leads para
+contactar" vive en la sección Clientes del monitor — justo la pantalla que no se mira mientras se
+atiende WhatsApp. Y los 29 activos sin fecha **sí** salen en la sección: `leadsDelDia` los incluye
+a propósito desde el 23-ago.
+
+- `leadsDelPanel` (`lib/crm/leads.ts`): vencidos + **los de HOY** + los que no tienen fecha. Lo de
+  hoy es lo que `atrasados` deja afuera, y repetir ese corte acá sería el defecto del 27-ago otra
+  vez, con prospectos.
+- Van **abajo y aparte**, decisión de Bruno: un lead no tiene temperatura, así que no cabe adentro
+  de 🔥/🟡/⚪/🧊 sin inventarle una, y mezclarlo diría que un lead y un cliente son la misma cosa.
+
+🔴 **Y un prospecto nuevo ya nace agendado**, que era el problema de fondo — 29 de 37 sin ninguna
+fecha, o sea fuera de toda cola de trabajo:
+
+| dónde | antes | ahora |
+|---|---|---|
+| panel (`NuevoLead`) | guardaba sin fecha | **pide "¿en cuántos días?"**, y sin eso no guarda |
+| pestaña Leads (`agregar`) | lo creaba en blanco | nace a `PLAZO_LEAD_NUEVO` = 7 días hábiles |
+
+⚠️ **Esto NO reintroduce la cadencia**, que salió el 24-ago. No calcula un ritmo a partir de nada:
+en el panel **se pregunta**, y en la pestaña —que no tiene formulario de alta, crea y abre la
+ficha— se pone un plazo por defecto que queda a la vista y se corre de un toque.
+
+## Dos bugs que aparecieron de paso
+
+- 🔴 **`id: 0` = "cruzalo por teléfono".** Tocar un prospecto de la lista mandaba `clienteId: 0`,
+  que no existe, y el panel terminaba **ofreciendo cargarlo como lead de nuevo** — el duplicado que
+  ya se pagó el 24-ago. Y el teléfono que se cruza es el **del pedido**, no `telNorm`: cuando se
+  toca un nombre, WhatsApp todavía no navegó y `telNorm` es el del chat anterior.
+- La ficha del cliente **sin ventas** salía clavada en `templado` y `en_difusion: false` aunque el
+  KV dijera otra cosa. Ese fallback es para el cliente sin ventas, no para el cliente sin
+  seguimiento: uno marcado 🔥 que todavía no compró existe, y es de los que más importan.
+
+## Lo que este trabajo NO hace
+
+- **No recupera las 327 temperaturas.** Siguen habiendo que volver a aplicarlas. Con el filtro ⚪
+  ahora al menos se ve el tamaño del agujero.
+- **No cambia quién entra en la lista de trabajo.** Ni la etiqueta ⚪, ni los filtros, ni el
+  buscador tocan la temperatura de nadie: escribirle a un frío lo deja frío, que es lo pedido.
+- **No se probó en el navegador**: los cinco botones, el buscador, el "ver más" y el formulario de
+  alta con la fecha están sin mirar por Bruno.

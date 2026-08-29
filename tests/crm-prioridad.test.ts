@@ -54,6 +54,7 @@ function cli(over: Partial<ClienteCRM> = {}): ClienteCRM {
     notas: [],
     en_difusion: false,
     temperatura: TEMPERATURA_DEFAULT,
+    temperatura_marcada: true,
     ...over,
   }
 }

@@ -35,7 +35,22 @@ export type FilaListaDia = {
   /** Días hasta el próximo contacto: negativo = atrasado. null cuando no hay fecha. */
   dias: number | null
   estado: EstadoSeg
+  /** La temperatura EFECTIVA: la marcada, o `templado` si no hay marca. Es la que ordena. */
   temperatura: Temperatura
+  /**
+   * Si la temperatura la puso alguien a mano.
+   *
+   * 🔑 **`templado` y "nunca lo marcaste" eran indistinguibles, y son 4 contra 340.** El campo
+   * `temperatura` del KV es opcional (nació en ago-2026, aditivo), así que la diferencia SÍ está
+   * guardada — se perdía recién acá, al leer con `|| TEMPERATURA_DEFAULT`. Medido el 29-ago-2026:
+   * 8 calientes, 4 templados, 378 fríos y **340 sin marca**. Un filtro "🟡 templados" que
+   * devolviera 344 sería el más grande y el más inútil de los cinco.
+   *
+   * ⚠️ **Separa la ETIQUETA, no a quién hay que llamar.** Los sin marcar siguen entrando en la
+   * lista del día como templados —`temperatura` arriba sigue cayendo al default— porque cambiar
+   * eso movería media lista de trabajo de un día para el otro, que no es lo que se pidió.
+   */
+  marcada: boolean
   /** La última nota, que es lo que se lee antes de decidir si se le entra ahora. */
   nota: Nota | null
 }
@@ -68,14 +83,20 @@ function estadoDe(s: MapaSeguimiento[string], today: Date): { proximo: string | 
  */
 const yaVence = (e: EstadoSeg) => e === 'vencido' || e === 'pendiente'
 
-function filas(crmSeg: MapaSeguimiento, today: Date): FilaListaDia[] {
+/**
+ * Las filas del KV. `soloVencidos` es la diferencia entre las dos cosas que hace esta pantalla:
+ * la **lista de trabajo** (lo que vence hoy, que es el default del panel) y la **búsqueda por
+ * tipo** (todos los 🔥, vengan cuando vengan), que es lo que pidió Darío el 29-ago-2026:
+ * *"poder ir a buscar a quien quiera desde el panel"*.
+ */
+function filas(crmSeg: MapaSeguimiento, today: Date, soloVencidos = true): FilaListaDia[] {
   const out: FilaListaDia[] = []
   for (const [k, s] of Object.entries(crmSeg || {})) {
     if (!s || s.descartado) continue
     const id = Number(k)
     if (!Number.isFinite(id)) continue
     const { proximo, dias, estado } = estadoDe(s, today)
-    if (!yaVence(estado)) continue
+    if (soloVencidos && !yaVence(estado)) continue
     const notas = Array.isArray(s.notas) ? s.notas : []
     out.push({
       id,
@@ -83,6 +104,7 @@ function filas(crmSeg: MapaSeguimiento, today: Date): FilaListaDia[] {
       dias,
       estado,
       temperatura: s.temperatura || TEMPERATURA_DEFAULT,
+      marcada: !!s.temperatura,
       nota: notas[0] || null,
     })
   }
@@ -122,4 +144,73 @@ export function listaDelDia(crmSeg: MapaSeguimiento, today: Date, tope: number =
  */
 export function friosDelDia(crmSeg: MapaSeguimiento, today: Date): FilaListaDia[] {
   return filas(crmSeg, today).filter((f) => f.temperatura === 'frio')
+}
+
+// ── Los filtros por tipo del panel (29-ago-2026) ─────────────────────────────
+
+/**
+ * Los cinco botones del panel. Es `Temperatura` más el que faltaba: **"sin marcar"**.
+ *
+ * 🔑 **No es un valor nuevo del KV, es uno que ya existía y no se veía.** `temperatura` es
+ * opcional; la ausencia significa "nadie lo clasificó" y se estaba leyendo como `templado`. Acá
+ * se la nombra para poder filtrarla, pero **nada se escribe con este valor**: marcar un cliente
+ * sigue guardando `caliente`/`templado`/`frio`, y "sin marcar" es la falta de esos tres.
+ */
+export type VistaTemp = Temperatura | 'sin_marcar'
+
+/** El tipo con el que se muestra la fila, ya separando lo que no tiene marca. */
+export const vistaDe = (f: Pick<FilaListaDia, 'temperatura' | 'marcada'>): VistaTemp =>
+  f.marcada ? f.temperatura : 'sin_marcar'
+
+/** Qué muestra el panel: la lista de trabajo, un tipo, o todo el CRM que se tocó alguna vez. */
+export type FiltroPanel = 'trabajo' | VistaTemp | 'todos'
+
+/**
+ * En qué escalón de urgencia cae una fila. **Vencido primero, sin agendar último.**
+ *
+ * Es el mismo criterio de la sección (`FILTROS_POR_DIA`), traído acá porque los filtros por tipo
+ * muestran gente que NO vence —ése es todo el punto— y sin un escalón previo el `urgenciaFecha`
+ * mezclaría "vence en 3 días" con "venció hace 3".
+ */
+export function grupoUrgencia(e: EstadoSeg): number {
+  if (e === 'vencido' || e === 'pendiente') return 0
+  if (e === 'semana') return 1
+  if (e === 'aldia') return 2
+  return 3 // `none`: sin fecha, no hay nada que esperar
+}
+
+/**
+ * Los clientes de un tipo, **vengan cuando vengan**: la búsqueda por botón del panel.
+ *
+ * 🔴 **Al revés que `listaDelDia`, acá NO se corta por vencimiento y no se corta por tope.** Es a
+ * propósito y es lo que se pidió: *"la temperatura describe al cliente, no la cola de trabajo"*.
+ * Si el botón 🔥 mostrara sólo lo vencido, de 8 calientes te devolvería 2 y el panel te seguiría
+ * escondiendo justo a la persona que fuiste a buscar. El corte de a 25 lo hace la pantalla, con
+ * un "ver más" — que es un corte que se ve.
+ *
+ * ⚠️ **`todos` son los del KV, no los 12.485 del padrón.** Un cliente que nunca se tocó no tiene
+ * entrada acá y no puede aparecer: para ése está el buscador, que pregunta al servidor.
+ *
+ * Los 🧊 salen igual que en la sección —primero el que más compró—, pero ese dato no está en el
+ * KV: el orden final se lo da `traerPorFiltro` cuando llegan los totales. Acá salen por fecha.
+ */
+export function porTemperatura(crmSeg: MapaSeguimiento, today: Date, filtro: VistaTemp | 'todos'): FilaListaDia[] {
+  return filas(crmSeg, today, false)
+    .filter((f) => filtro === 'todos' || vistaDe(f) === filtro)
+    .sort(
+      (a, b) =>
+        grupoUrgencia(a.estado) - grupoUrgencia(b.estado) ||
+        urgenciaFecha(a.dias) - urgenciaFecha(b.dias) ||
+        a.id - b.id,
+    )
+}
+
+/** Cuántos hay de cada tipo, para los números de los botones. Sale del KV: no pide nada. */
+export function contarPorTipo(crmSeg: MapaSeguimiento, today: Date): Record<VistaTemp | 'todos', number> {
+  const out: Record<VistaTemp | 'todos', number> = { caliente: 0, templado: 0, sin_marcar: 0, frio: 0, todos: 0 }
+  for (const f of filas(crmSeg, today, false)) {
+    out[vistaDe(f)]++
+    out.todos++
+  }
+  return out
 }

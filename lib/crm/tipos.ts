@@ -194,6 +194,18 @@ export type ClienteCRM = {
    * nadie tenga que acordarse del default — mismo trato que `en_difusion`.
    */
   temperatura: Temperatura
+  /**
+   * Si esa temperatura la puso alguien, o es el default.
+   *
+   * 🔑 **Resolver el default hacía indistinguible `templado` de "nadie lo miró nunca"**, y son 4
+   * contra 340 (medido el 29-ago-2026). El dato estaba guardado —`temperatura` del KV es
+   * opcional—; se perdía acá. Ahora el default se sigue resolviendo, pero se dice que es default.
+   *
+   * ⚠️ **Es sólo la etiqueta.** `temperatura` sigue cayendo a `TEMPERATURA_DEFAULT`, así que los
+   * sin marcar siguen ordenando, filtrando y entrando en las listas de trabajo exactamente como
+   * antes. Ver `marcada` en `lib/crm/lista-dia.ts`.
+   */
+  temperatura_marcada: boolean
 }
 
 /**

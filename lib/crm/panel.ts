@@ -20,10 +20,11 @@
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
-import { TANDA_FRIOS, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
-import { friosDelDia, listaDelDia, type FilaListaDia } from './lista-dia'
+import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
+import { friosDelDia, grupoUrgencia, listaDelDia, porTemperatura, type FilaListaDia, type VistaTemp } from './lista-dia'
 import type {
   ClienteCRM,
+  EstadoSeg,
   FilaCliente,
   FilaDetalle,
   FilaVenta,
@@ -160,8 +161,12 @@ export function armarFicha(d: RespuestaPanel, crmSeg: MapaSeguimiento, today: Da
       seg_estado: 'none',
       dias_proximo: null,
       notas: [],
-      en_difusion: false,
-      temperatura: 'templado',
+      en_difusion: !!crmSeg[String(cliente.id)]?.en_difusion,
+      // ⚠️ Salían clavados en `templado`/`false` aunque el KV dijera otra cosa: este fallback es
+      // para el cliente SIN VENTAS, no para el cliente sin seguimiento. Uno marcado 🔥 que todavía
+      // no compró existe, y es de los que más importan.
+      temperatura: crmSeg[String(cliente.id)]?.temperatura || TEMPERATURA_DEFAULT,
+      temperatura_marcada: !!crmSeg[String(cliente.id)]?.temperatura,
     }
 
   return {
@@ -181,7 +186,11 @@ export type FilaAgenda = {
   telefono: string
   /** Negativo = atrasado; 0 = vence hoy; null = tiene cadencia y nunca se lo contactó. */
   dias: number | null
+  /** La temperatura efectiva (con el default). Ver `marcada`. */
   temperatura: Temperatura
+  /** Si alguien la puso a mano. `false` = "sin marcar", que es su propio botón en el panel. */
+  marcada: boolean
+  estado: EstadoSeg
   nota: string
   total: number
 }
@@ -191,6 +200,71 @@ type RespuestaLista = { ok?: boolean; clientes?: Array<{ id: number; name: strin
 export type ResultadoAgenda =
   | { ok: true; lista: FilaAgenda[]; frios: FilaAgenda[] }
   | { ok: false; motivo: string }
+
+/**
+ * Cuántos ids entran en un pedido. El servidor acepta `TOPE_IDS_LISTA` = 300 y **antes recortaba
+ * en silencio**: el que se pasaba no veía un error, veía una lista del día con gente faltante.
+ *
+ * 🔴 **Y estábamos a 64 de ese techo.** Medido el 29-ago-2026: la lista pide **236** ids (44 tibios
+ * vencidos + 192 fríos vencidos), y el número **sube solo** —cada cliente que se marca 🧊 suma uno—.
+ * Las 327 temperaturas que se perdieron el 27-ago lo estaban tapando: al recargarlas, se pasaba.
+ *
+ * Con los filtros por tipo ya no hay discusión: 🧊 son 378 y "todos" 773. Se pide de a tandas.
+ */
+export const LOTE_IDS = 250
+
+type Datos = Map<number, { id: number; name: string; phone: string; total_amount: number }>
+
+/**
+ * Nombre, teléfono y total de un montón de ids, **de a tandas**.
+ *
+ * Las tandas van **de a una y no en paralelo**: son consultas pesadas del lado de Supabase (el
+ * total se suma recorriendo las ventas de cada cliente) y este panel corre adentro de WhatsApp,
+ * donde lo último que conviene es abrir cuatro consultas grandes de un saque.
+ */
+async function pedirDatos(ids: number[], totales = true): Promise<{ ok: true; datos: Datos } | { ok: false; motivo: string }> {
+  const datos: Datos = new Map()
+  for (let i = 0; i < ids.length; i += LOTE_IDS) {
+    const lote = ids.slice(i, i + LOTE_IDS)
+    let d: RespuestaLista
+    try {
+      const r = await apiFetch('/api/datos?recurso=crm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lista', ids: lote, totales }),
+      })
+      d = (await r.json().catch(() => ({}))) as RespuestaLista
+      if (!r.ok || !d.ok) return { ok: false, motivo: d.error || `Error ${r.status} trayendo la lista.` }
+    } catch (e) {
+      return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
+    }
+    for (const c of d.clientes || []) datos.set(c.id, c)
+  }
+  return { ok: true, datos }
+}
+
+/**
+ * Pegarle el nombre y el teléfono a una fila del KV.
+ *
+ * ⚠️ **Un id sin cliente se cae de la lista, en silencio y a propósito.** El KV puede tener
+ * entradas de clientes que ya no están en Supabase (borrados en Gestión Nube); mostrarlos como
+ * "(sin nombre)" sería ofrecer contactar a alguien que no existe.
+ */
+function armarFila(f: FilaListaDia, datos: Datos): FilaAgenda | null {
+  const c = datos.get(f.id)
+  if (!c) return null
+  return {
+    id: f.id,
+    nombre: c.name || '(sin nombre)',
+    telefono: normalizeArgPhone(c.phone) || '',
+    dias: f.dias,
+    temperatura: f.temperatura,
+    marcada: f.marcada,
+    estado: f.estado,
+    nota: f.nota ? f.nota.texto : '',
+    total: c.total_amount || 0,
+  }
+}
 
 /**
  * La lista del día del panel: quiénes hay que contactar, en orden, con nombre y teléfono.
@@ -210,44 +284,51 @@ export async function traerAgenda(crmSeg: MapaSeguimiento, today: Date): Promise
   const ids = [...tibios, ...friosCrudos].map((f) => f.id)
   if (!ids.length) return { ok: true, lista: [], frios: [] }
 
-  let d: RespuestaLista
-  try {
-    const r = await apiFetch('/api/datos?recurso=crm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'lista', ids }),
-    })
-    d = (await r.json().catch(() => ({}))) as RespuestaLista
-    if (!r.ok || !d.ok) return { ok: false, motivo: d.error || `Error ${r.status} trayendo la lista.` }
-  } catch (e) {
-    return { ok: false, motivo: e instanceof Error ? e.message : String(e) }
-  }
+  const r = await pedirDatos(ids)
+  if (!r.ok) return r
 
-  const porId = new Map((d.clientes || []).map((c) => [c.id, c]))
-  const armar = (f: FilaListaDia): FilaAgenda | null => {
-    const c = porId.get(f.id)
-    if (!c) return null
-    return {
-      id: f.id,
-      nombre: c.name || '(sin nombre)',
-      telefono: normalizeArgPhone(c.phone) || '',
-      dias: f.dias,
-      temperatura: f.temperatura,
-      nota: f.nota ? f.nota.texto : '',
-      total: c.total_amount || 0,
-    }
-  }
-
-  const lista = tibios.map(armar).filter((f): f is FilaAgenda => !!f)
+  const lista = tibios.map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
   // Los fríos SÍ salen por lo que compraron, igual que en la sección, y recién acá se cortan:
   // el total lo trajo el servidor, no estaba en el KV.
   const frios = friosCrudos
-    .map(armar)
+    .map((f) => armarFila(f, r.datos))
     .filter((f): f is FilaAgenda => !!f)
     .sort((a, b) => b.total - a.total)
     .slice(0, TANDA_FRIOS)
 
   return { ok: true, lista, frios }
+}
+
+/**
+ * Los clientes de UN tipo, para los botones del panel (29-ago-2026).
+ *
+ * 🔑 **Es la otra mitad de `traerAgenda`, y muestra a propósito lo que aquélla esconde.** La lista
+ * del día es la cola de trabajo: sólo lo que vence, tibios y calientes primero, los fríos de a 10.
+ * Esto es ir a buscar: **todos** los de ese tipo, vencidos o no, sin tope. Lo pedido por Darío:
+ * *"que le mande un mensaje a un frío no lo vuelve tibio — la temperatura describe al cliente, no
+ * la cola de trabajo"*.
+ *
+ * ⚠️ **El total se pide sólo para los 🧊**, que son los únicos que se ordenan por eso. Para el
+ * resto es plata que el servidor suma recorriendo ventas y que la pantalla no muestra.
+ */
+export async function traerPorFiltro(
+  crmSeg: MapaSeguimiento,
+  today: Date,
+  filtro: VistaTemp | 'todos',
+): Promise<{ ok: true; filas: FilaAgenda[] } | { ok: false; motivo: string }> {
+  const crudas = porTemperatura(crmSeg, today, filtro)
+  if (!crudas.length) return { ok: true, filas: [] }
+
+  const porTotal = filtro === 'frio'
+  const r = await pedirDatos(crudas.map((f) => f.id), porTotal)
+  if (!r.ok) return r
+
+  const filas = crudas.map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
+  // Los 🧊 salen por lo que compraron, pero **sin mezclar los escalones**: el que vence sigue
+  // arriba del que está al día. Sin eso, un frío agendado para dentro de un mes le pasaría por
+  // encima a uno vencido sólo por haber comprado más.
+  if (porTotal) filas.sort((a, b) => grupoUrgencia(a.estado) - grupoUrgencia(b.estado) || b.total - a.total)
+  return { ok: true, filas }
 }
 
 // ── Enganchar un número a un cliente que ya existe ───────────────────────────

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useCRM } from './useCRM'
-import { TEMP_UI } from './temperatura'
+import { TEMP_UI, vistaTemp } from './temperatura'
 import { Leads } from './Leads'
 import { LeadsDelDia } from './LeadsDelDia'
 import { Metricas } from './Metricas'
@@ -161,7 +161,7 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
       </Td>
       <Td align="center">
         {(() => {
-          const t = TEMP_UI[c.temperatura]
+          const t = TEMP_UI[vistaTemp(c)]
           return (
             <button
               // Mismo trato que el botón de Difusión: el stopPropagation va adentro del

@@ -411,6 +411,7 @@ export function calcularAgregado({ ventas, clientes, crmSeg, crmTelOverride, tod
       notas: seg.notas,
       en_difusion: !!(crmSeg[String(e.id)] && crmSeg[String(e.id)].en_difusion),
       temperatura: (crmSeg[String(e.id)] && crmSeg[String(e.id)].temperatura) || TEMPERATURA_DEFAULT,
+      temperatura_marcada: !!(crmSeg[String(e.id)] && crmSeg[String(e.id)].temperatura),
     })
   }
 
