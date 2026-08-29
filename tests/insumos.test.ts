@@ -5,10 +5,15 @@
 // «se contó y no hay ninguna» o «no se gasta nunca».
 import { describe, it, expect } from 'vitest'
 import {
+  compraQueCierra,
+  demoraMedida,
   desdeCuandoCruzo,
   diasDeVida,
   mirarInsumo,
+  paraComprar,
   paraReponer,
+  pedidoAbiertoDe,
+  pedidosDemorados,
   paraSubir,
   patasDeTraslado,
   precioReferencia,
@@ -17,9 +22,9 @@ import {
   stockPor,
   stockTotal,
 } from '../lib/insumos/core'
-import { motivoInsumoInvalido, motivoMovimientoInvalido } from '../lib/insumos/core.core.js'
+import { motivoInsumoInvalido, motivoMovimientoInvalido, motivoPedidoInvalido } from '../lib/insumos/core.core.js'
 import { comprasPorDia } from '../lib/insumos/consumo.core.js'
-import type { DiaCompras, Insumo, Movimiento } from '../lib/insumos/tipos'
+import type { DiaCompras, Insumo, Movimiento, Pedido } from '../lib/insumos/tipos'
 
 const insumo = (p: Partial<Insumo> = {}): Insumo => ({
   id: 'in1', nombre: 'Bolsas chicas', tipo: 'comercial', unidad: 'unidad', bulto: 'caja',
@@ -250,12 +255,12 @@ describe('hay que reponer', () => {
         mov({ insumoId: 'a', ubicacion: 'deposito', cantidad: 500 }),
         mov({ insumoId: 'a', ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-02' }),
         mov({ insumoId: 'a', tipo: 'consumo', ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-06' }),
-      ], {}, '2026-08-28'),
+      ], [], {}, '2026-08-28'),
       mirarInsumo(insumo({ id: 'b' }), [
         mov({ insumoId: 'b', ubicacion: 'deposito', cantidad: 500 }),
         mov({ insumoId: 'b', ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-02' }),
         mov({ insumoId: 'b', tipo: 'consumo', ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-09' }),
-      ], {}, '2026-08-28'),
+      ], [], {}, '2026-08-28'),
     ]
     const g = paraSubir(vistas)
     expect(g).toHaveLength(1)
@@ -312,5 +317,171 @@ describe('las compras por día', () => {
   it('un día sin ninguna venta NO sale en la lista: no es un día de cero bolsas', () => {
     const v = [{ date_sale: '2026-08-03', channel: 'Mi Local' }]
     expect(comprasPorDia(v, '2026-08-01', '2026-08-05')).toHaveLength(1)
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// EL PEDIDO — la promesa, que es lo que separa «falta» de «es nuestro turno»
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+let np = 0
+const pedido = (p: Partial<Pedido> = {}): Pedido => {
+  np += 1
+  return {
+    id: `pd${np}`, insumoId: 'in1', cantidad: 1000, pedidoAt: '2026-08-10', proveedor: 'CDE',
+    promesaAt: null, canceladoAt: null, usuario: 'Lorena', nota: null,
+    creado: '2026-08-10T00:00:00Z', ...p,
+  }
+}
+
+describe('el pedido se cierra con la compra, por `grupo`', () => {
+  it('un pedido sin compra que lo nombre sigue abierto', () => {
+    const p = pedido()
+    expect(compraQueCierra(p.id, [mov({ grupo: null })])).toBeNull()
+    expect(pedidoAbiertoDe(insumo(), [p], [], '2026-08-20')?.pedido.id).toBe(p.id)
+  })
+
+  it('🔴 la compra con el `grupo` del pedido lo CIERRA — sin columna de estado', () => {
+    const p = pedido()
+    const compra = mov({ tipo: 'compra', grupo: p.id, fecha: '2026-08-15' })
+    expect(compraQueCierra(p.id, [compra])?.id).toBe(compra.id)
+    expect(pedidoAbiertoDe(insumo(), [p], [compra], '2026-08-20')).toBeNull()
+  })
+
+  it('un consumo con el mismo grupo ⛔ NO cierra: sólo cierra lo que ENTRÓ', () => {
+    const p = pedido()
+    const noEsCompra = mov({ tipo: 'consumo', grupo: p.id, fecha: '2026-08-15' })
+    expect(pedidoAbiertoDe(insumo(), [p], [noEsCompra], '2026-08-20')?.pedido.id).toBe(p.id)
+  })
+
+  it('el cancelado no está abierto, y el aviso de pedir vuelve a sonar', () => {
+    const p = pedido({ canceladoAt: '2026-08-12T00:00:00Z' })
+    expect(pedidoAbiertoDe(insumo(), [p], [], '2026-08-20')).toBeNull()
+  })
+
+  it('con dos abiertos toma el MÁS VIEJO: es el que hace más que espera', () => {
+    const viejo = pedido({ id: 'pdA', pedidoAt: '2026-08-05' })
+    const nuevo = pedido({ id: 'pdB', pedidoAt: '2026-08-14' })
+    expect(pedidoAbiertoDe(insumo(), [nuevo, viejo], [], '2026-08-20')?.pedido.id).toBe('pdA')
+  })
+
+  it('el pedido de OTRO insumo no cuenta', () => {
+    expect(pedidoAbiertoDe(insumo({ id: 'in1' }), [pedido({ insumoId: 'in9' })], [], '2026-08-20')).toBeNull()
+  })
+})
+
+describe('cuándo se lo espera, y cuándo está demorado', () => {
+  it('la promesa del proveedor manda sobre «tarda en llegar»', () => {
+    const a = pedidoAbiertoDe(insumo({ diasReposicion: 30 }), [pedido({ promesaAt: '2026-08-12' })], [], '2026-08-20')
+    expect(a?.esperadoEl).toBe('2026-08-12')
+    expect(a?.demorado).toBe(true)
+  })
+
+  it('sin promesa, se calcula con «tarda en llegar»', () => {
+    const a = pedidoAbiertoDe(insumo({ diasReposicion: 15 }), [pedido()], [], '2026-08-20')
+    expect(a?.esperadoEl).toBe('2026-08-25')
+    expect(a?.demorado).toBe(false)
+  })
+
+  it('🔴 sin promesa NI «tarda en llegar» ⛔ NUNCA se marca demorado: no se sabe cuánto tendría que tardar', () => {
+    const a = pedidoAbiertoDe(insumo({ diasReposicion: null }), [pedido({ pedidoAt: '2026-01-01' })], [], '2026-08-20')
+    expect(a?.esperadoEl).toBeNull()
+    expect(a?.demorado).toBe(false)
+    // Y aun así se ve hace cuánto que espera: el hecho existe, lo que falta es contra qué medirlo.
+    expect(a?.diasEsperando).toBe(231)
+  })
+
+  it('el día que se lo espera todavía NO está demorado: se vence al día siguiente', () => {
+    const a = pedidoAbiertoDe(insumo(), [pedido({ promesaAt: '2026-08-20' })], [], '2026-08-20')
+    expect(a?.demorado).toBe(false)
+  })
+})
+
+describe('🔴 el pedido calla el aviso SIN borrar el hecho', () => {
+  const bajoElMinimo = [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })]
+
+  it('`paraReponer` sigue diciendo que falta aunque esté pedido: eso es un hecho de la fila', () => {
+    const r = paraReponer(insumo(), bajoElMinimo, null)
+    expect(r.comprar).not.toBeNull()
+  })
+
+  it('`paraComprar` lo saca de la cola de PEDIR: la pelota es del proveedor', () => {
+    const conPedido = mirarInsumo(insumo(), bajoElMinimo, [pedido()], {}, '2026-08-20')
+    const sinPedido = mirarInsumo(insumo(), bajoElMinimo, [], {}, '2026-08-20')
+    expect(paraComprar([sinPedido])).toHaveLength(1)
+    expect(paraComprar([conPedido])).toHaveLength(0)
+    // 🔑 Y el hecho sigue a la vista en la fila: la pantalla ⛔ no puede afirmar que ya no falta.
+    expect(conPedido.reposicion.comprar).not.toBeNull()
+  })
+
+  it('cuando el pedido se vence pasa a demorados, ⛔ no vuelve a «para pedir»', () => {
+    const v = mirarInsumo(insumo(), bajoElMinimo, [pedido({ promesaAt: '2026-08-12' })], {}, '2026-08-20')
+    expect(paraComprar([v])).toHaveLength(0)
+    expect(pedidosDemorados([v])).toHaveLength(1)
+  })
+
+  it('un pedido en fecha ⛔ no entra en demorados', () => {
+    const v = mirarInsumo(insumo({ diasReposicion: 15 }), bajoElMinimo, [pedido()], {}, '2026-08-20')
+    expect(pedidosDemorados([v])).toHaveLength(0)
+  })
+
+  it('cancelado el pedido, vuelve a «para pedir»', () => {
+    const v = mirarInsumo(insumo(), bajoElMinimo, [pedido({ canceladoAt: '2026-08-12T00:00:00Z' })], {}, '2026-08-20')
+    expect(paraComprar([v])).toHaveLength(1)
+  })
+})
+
+describe('la demora medida va con su denominador, como el precio', () => {
+  it('con UN pedido cerrado dice «ultima» y ⛔ no promedio', () => {
+    const p = pedido({ pedidoAt: '2026-08-01' })
+    const d = demoraMedida('in1', [p], [mov({ tipo: 'compra', grupo: p.id, fecha: '2026-08-06' })])
+    expect(d).toMatchObject({ dias: 5, clase: 'ultima', pedidos: 1 })
+  })
+
+  it('con dos, promedia y lo dice', () => {
+    const a = pedido({ id: 'pdA', pedidoAt: '2026-07-01' })
+    const b = pedido({ id: 'pdB', pedidoAt: '2026-08-01' })
+    const d = demoraMedida('in1', [a, b], [
+      mov({ tipo: 'compra', grupo: 'pdA', fecha: '2026-07-05' }),
+      mov({ tipo: 'compra', grupo: 'pdB', fecha: '2026-08-07' }),
+    ])
+    expect(d).toMatchObject({ dias: 5, clase: 'promedio', pedidos: 2, desde: '2026-07-01', hasta: '2026-08-07' })
+  })
+
+  it('los cancelados ⛔ no cuentan: no midieron nada', () => {
+    const p = pedido({ canceladoAt: '2026-08-03T00:00:00Z' })
+    expect(demoraMedida('in1', [p], [mov({ tipo: 'compra', grupo: p.id, fecha: '2026-08-15' })])).toBeNull()
+  })
+
+  it('una llegada ANTERIOR al pedido se saltea: es un tipeo, y promediarlo tira la demora abajo', () => {
+    const a = pedido({ id: 'pdA', pedidoAt: '2026-08-10' })
+    const b = pedido({ id: 'pdB', pedidoAt: '2026-08-01' })
+    const d = demoraMedida('in1', [a, b], [
+      mov({ tipo: 'compra', grupo: 'pdA', fecha: '2026-08-01' }), // llegó antes de pedirse
+      mov({ tipo: 'compra', grupo: 'pdB', fecha: '2026-08-05' }),
+    ])
+    expect(d).toMatchObject({ dias: 4, pedidos: 1, clase: 'ultima' })
+  })
+
+  it('sin ningún pedido cerrado es `null`, ⛔ no 0: 0 diría «llega el mismo día»', () => {
+    expect(demoraMedida('in1', [pedido()], [])).toBeNull()
+  })
+})
+
+describe('qué frena un pedido antes de guardarse', () => {
+  it('acepta cantidad vacía: «lo pedí sin saber cuánto viene» es información igual', () => {
+    expect(motivoPedidoInvalido({ insumoId: 'in1', pedidoAt: '2026-08-10', cantidad: null })).toBeNull()
+  })
+
+  it('🔴 pero ⛔ NO acepta 0: eso afirmaría que se pidió nada', () => {
+    expect(motivoPedidoInvalido({ insumoId: 'in1', pedidoAt: '2026-08-10', cantidad: 0 })).toMatch(/mayor a 0/)
+  })
+
+  it('una promesa anterior al pedido se frena: nacería demorado el día que se carga', () => {
+    expect(motivoPedidoInvalido({ insumoId: 'in1', pedidoAt: '2026-08-10', promesaAt: '2026-08-01' })).toMatch(/anterior/)
+  })
+
+  it('una fecha que no existe se frena', () => {
+    expect(motivoPedidoInvalido({ insumoId: 'in1', pedidoAt: '2026-02-31' })).toMatch(/día real/)
   })
 })

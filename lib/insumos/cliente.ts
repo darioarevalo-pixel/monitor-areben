@@ -7,13 +7,15 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { DiaCompras, Insumo, Movimiento, Ubicacion } from './tipos'
+import type { DiaCompras, Insumo, Movimiento, Pedido, Ubicacion } from './tipos'
 
 const API = '/api/datos?recurso=insumos'
 
 export type DatosInsumos = {
   insumos: Insumo[]
   movimientos: Movimiento[]
+  /** Los pedidos al proveedor, cancelados incluidos: la ficha muestra el historial. */
+  pedidos: Pedido[]
   /** Las compras por día de cada marca que hizo falta medir. */
   comprasPorMarca: Record<string, DiaCompras[]>
   /** Las marcas cuyo ritmo NO se pudo medir. Va a la pantalla: callarse también miente. */
@@ -27,6 +29,7 @@ export async function leerInsumos(store: string): Promise<DatosInsumos> {
   return {
     insumos: (d.insumos || []) as Insumo[],
     movimientos: (d.movimientos || []) as Movimiento[],
+    pedidos: (d.pedidos || []) as Pedido[],
     comprasPorMarca: (d.comprasPorMarca || {}) as Record<string, DiaCompras[]>,
     sinRitmo: (d.sinRitmo || []) as string[],
   }
@@ -46,12 +49,20 @@ async function escribir(store: string, cuerpo: Record<string, unknown>): Promise
 export const guardarInsumo = (store: string, insumo: Partial<Insumo>) =>
   escribir(store, { action: 'guardar-insumo', insumo })
 
-export const borrarInsumo = (store: string, id: string) => escribir(store, { action: 'borrar-insumo', id })
+export const borrarInsumo = (store: string, id: string) => escribir(store, { action: 'eliminar-insumo', id })
+
+export const guardarPedido = (store: string, pedido: Partial<Pedido>) =>
+  escribir(store, { action: 'guardar-pedido', pedido })
+
+/** 🔑 Cancelar ⛔ no es borrar: el cancelado se queda y por eso la demora medida sobrevive. */
+export const cancelarPedido = (store: string, id: string) => escribir(store, { action: 'cancelar-pedido', id })
+
+export const borrarPedido = (store: string, id: string) => escribir(store, { action: 'eliminar-pedido', id })
 
 export const guardarMovimiento = (store: string, movimiento: Partial<Movimiento>) =>
   escribir(store, { action: 'guardar-movimiento', movimiento })
 
-export const borrarMovimiento = (store: string, id: string) => escribir(store, { action: 'borrar-movimiento', id })
+export const borrarMovimiento = (store: string, id: string) => escribir(store, { action: 'eliminar-movimiento', id })
 
 /**
  * 🔑 Un traslado es UN gesto acá y DOS filas allá. La pantalla no arma las dos patas: si lo

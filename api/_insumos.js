@@ -2,10 +2,18 @@
 //
 //   GET  ?recurso=insumos&store=bdi|zattia
 //   POST { recurso:'insumos', action:'guardar-insumo', insumo }
-//   POST { recurso:'insumos', action:'borrar-insumo', id }
+//   POST { recurso:'insumos', action:'eliminar-insumo', id }
 //   POST { recurso:'insumos', action:'guardar-movimiento', movimiento }
 //   POST { recurso:'insumos', action:'trasladar', insumoId, origen, destino, cantidad, fecha, nota }
-//   POST { recurso:'insumos', action:'borrar-movimiento', id }
+//   POST { recurso:'insumos', action:'eliminar-movimiento', id }
+//   POST { recurso:'insumos', action:'guardar-pedido', pedido }
+//   POST { recurso:'insumos', action:'cancelar-pedido', id }
+//   POST { recurso:'insumos', action:'eliminar-pedido', id }
+//
+// ⚠️ Los tres `eliminar-*` aceptan además el nombre viejo (`borrar-*`). **No es indecisión: es que
+// una pestaña abierta sigue mandando el nombre del bundle que bajó.** Renombrar un verbo de un solo
+// lado deja a esa persona con «acción inválida» hasta que recargue, y ⛔ sin un solo error visible
+// de este lado — es el mismo cuidado que la ficha de `recepciones` pide para el `?recurso=`.
 //
 // ## Siempre la base de BDI, tenga la sesión la marca que tenga
 //
@@ -30,7 +38,7 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
-import { motivoInsumoInvalido, motivoMovimientoInvalido, patasDeTraslado, CLAVES_UBICACION } from '../lib/insumos/core.core.js';
+import { motivoInsumoInvalido, motivoMovimientoInvalido, motivoPedidoInvalido, patasDeTraslado, CLAVES_UBICACION } from '../lib/insumos/core.core.js';
 import { comprasPorDia } from '../lib/insumos/consumo.core.js';
 import { sumarDias } from '../lib/fechas/dia.core.js';
 import { diaArgentino } from '../lib/envios/portal.core.js';
@@ -61,6 +69,7 @@ const nuevoId = (p) => `${p}${Date.now()}_${Math.random().toString(36).slice(2, 
 
 const COLS_INSUMO = 'id, nombre, tipo, unidad, bulto, por_bulto, marcas, minimo, dias_reposicion, consumo, activo, nota, autor, created_at, updated_at';
 const COLS_MOV = 'id, insumo_id, tipo, ubicacion, cantidad, fecha, precio_total, proveedor, comprobante, grupo, usuario, nota, datos, created_at';
+const COLS_PEDIDO = 'id, insumo_id, cantidad, pedido_at, proveedor, promesa_at, cancelado_at, usuario, nota, created_at';
 
 const salidaInsumo = (f) => ({
   id: f.id,
@@ -93,6 +102,20 @@ const salidaMov = (f) => ({
   comprobante: f.comprobante ?? null,
   grupo: f.grupo ?? null,
   pata: (f.datos && f.datos.pata) || null,
+  usuario: f.usuario ?? null,
+  nota: f.nota ?? null,
+  creado: f.created_at,
+});
+
+const salidaPedido = (f) => ({
+  id: f.id,
+  insumoId: f.insumo_id,
+  // 🔑 `null` es «lo pedí sin saber cuánto viene», ⛔ no 0: un 0 diría que se pidió nada.
+  cantidad: f.cantidad == null ? null : Number(f.cantidad),
+  pedidoAt: f.pedido_at,
+  proveedor: f.proveedor ?? null,
+  promesaAt: f.promesa_at ?? null,
+  canceladoAt: f.cancelado_at ?? null,
   usuario: f.usuario ?? null,
   nota: f.nota ?? null,
   creado: f.created_at,
@@ -138,6 +161,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const insumos = (await leerTodo(sb, 'insumo', (q) => q.select(COLS_INSUMO).order('nombre'))).map(salidaInsumo);
       const movimientos = (await leerTodo(sb, 'insumo_movimiento', (q) => q.select(COLS_MOV).order('fecha'))).map(salidaMov);
+      // 🔑 Los pedidos viajan ENTEROS, cancelados incluidos: `demoraMedida` sólo mira los cerrados,
+      // pero la ficha muestra el historial y un pedido que se canceló es parte de lo que pasó.
+      const pedidos = (await leerTodo(sb, 'insumo_pedido', (q) => q.select(COLS_PEDIDO).order('pedido_at'))).map(salidaPedido);
 
       // Sólo se van a buscar las ventas de las marcas que algún insumo prendido necesita: si nadie
       // ató un insumo a las ventas, no hay ninguna consulta que hacer.
@@ -172,7 +198,7 @@ export default async function handler(req, res) {
         }
       }
 
-      return res.status(200).json({ ok: true, insumos, movimientos, comprasPorMarca, sinRitmo, desde, hasta });
+      return res.status(200).json({ ok: true, insumos, movimientos, pedidos, comprasPorMarca, sinRitmo, desde, hasta });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
@@ -206,7 +232,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, id });
     }
 
-    if (action === 'borrar-insumo') {
+    if (action === 'eliminar-insumo' || action === 'borrar-insumo') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'falta id' });
       // El libro se va con él (`on delete cascade`): un movimiento sin insumo no se puede leer, y
@@ -284,7 +310,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, grupo: patas[0].grupo });
     }
 
-    if (action === 'borrar-movimiento') {
+    if (action === 'eliminar-movimiento' || action === 'borrar-movimiento') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'falta id' });
       const { data, error: e1 } = await sb.from('insumo_movimiento').select('id, tipo, grupo').eq('id', id).maybeSingle();
@@ -296,6 +322,80 @@ export default async function handler(req, res) {
         ? sb.from('insumo_movimiento').delete().eq('grupo', data.grupo)
         : sb.from('insumo_movimiento').delete().eq('id', id);
       const { error } = await q;
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'guardar-pedido') {
+      const pd = b.pedido || {};
+      const limpio = { ...pd, cantidad: numeroOpcional(pd.cantidad), promesaAt: textoOpcional(pd.promesaAt) };
+      const motivo = motivoPedidoInvalido(limpio);
+      if (motivo) return res.status(400).json({ error: motivo });
+
+      // 🔴 **Un insumo no puede tener DOS pedidos abiertos.** Con dos, «hace cuánto que espera»
+      // tendría dos respuestas y el aviso elegiría una sin decir cuál. El que ya está se cancela o
+      // se recibe; ⛔ no se apila. Y el freno vive acá, en el servidor: la pantalla también lo
+      // esconde, pero el que llama derecho al handler la saltea.
+      const id = String(pd.id || '') || nuevoId('pd');
+      const { data: abiertos, error: e1 } = await sb
+        .from('insumo_pedido')
+        .select('id, pedido_at')
+        .eq('insumo_id', limpio.insumoId)
+        .is('cancelado_at', null);
+      if (e1) return res.status(400).json({ error: e1.message });
+      const otros = (abiertos || []).filter((x) => x.id !== id);
+      if (otros.length) {
+        // Sólo traba si además NO llegó: un pedido viejo ya recibido no tiene por qué frenar al
+        // siguiente. Lo dice el libro, que es el que sabe.
+        const { data: cierres, error: e2 } = await sb
+          .from('insumo_movimiento')
+          .select('grupo')
+          .eq('tipo', 'compra')
+          .in('grupo', otros.map((x) => x.id));
+        if (e2) return res.status(400).json({ error: e2.message });
+        const cerrados = new Set((cierres || []).map((c) => c.grupo));
+        const sigueAbierto = otros.find((x) => !cerrados.has(x.id));
+        if (sigueAbierto) {
+          return res.status(409).json({
+            error: `Ya hay un pedido abierto de este insumo, del ${sigueAbierto.pedido_at}. Recibilo o cancelalo antes de cargar otro.`,
+          });
+        }
+      }
+
+      const { error } = await sb.from('insumo_pedido').upsert({
+        id,
+        insumo_id: limpio.insumoId,
+        cantidad: limpio.cantidad,
+        pedido_at: limpio.pedidoAt,
+        proveedor: textoOpcional(pd.proveedor),
+        promesa_at: limpio.promesaAt,
+        usuario: yo,
+        nota: textoOpcional(pd.nota),
+        updated_at: new Date().toISOString(),
+      });
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ ok: true, id });
+    }
+
+    if (action === 'cancelar-pedido') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'falta id' });
+      // 🔑 **Se cancela, ⛔ no se borra**: borrarlo se llevaría puesta la demora medida de ese
+      // proveedor, que es lo único con lo que se puede cargar `dias_reposicion` sin inventarlo.
+      const { error } = await sb
+        .from('insumo_pedido')
+        .update({ cancelado_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) return res.status(400).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (action === 'eliminar-pedido' || action === 'borrar-pedido') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'falta id' });
+      // ⚠️ Para el que se cargó mal, ⛔ no para el que no llegó (ése se cancela). Y **la compra que
+      // lo cerró se queda**: es un hecho, entró mercadería. Lo único que se pierde es el vínculo.
+      const { error } = await sb.from('insumo_pedido').delete().eq('id', id);
       if (error) return res.status(400).json({ error: error.message });
       return res.status(200).json({ ok: true });
     }

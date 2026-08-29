@@ -33,10 +33,19 @@ import {
   useConfirmar,
   useToast,
 } from '@/components/ui'
-import { borrarInsumo, borrarMovimiento, guardarInsumo, guardarMovimiento, trasladar } from '@/lib/insumos/cliente'
+import {
+  borrarInsumo,
+  borrarMovimiento,
+  borrarPedido,
+  cancelarPedido,
+  guardarInsumo,
+  guardarMovimiento,
+  guardarPedido,
+  trasladar,
+} from '@/lib/insumos/cliente'
 import { TIPOS, TIPOS_MOVIMIENTO, UBICACIONES, UNIDADES, rotuloUbicacion, type VistaInsumo } from '@/lib/insumos/core'
 import { hoyIso } from '@/lib/fechas/dia'
-import type { Insumo, TipoInsumo, TipoMovimiento, Ubicacion, Unidad } from '@/lib/insumos/tipos'
+import type { Insumo, Pedido, TipoInsumo, TipoMovimiento, Ubicacion, Unidad } from '@/lib/insumos/tipos'
 
 type Props = {
   marca: string | null
@@ -81,21 +90,21 @@ export function FichaInsumo({ marca, vista, onCerrar, onCambio }: Props) {
   async function borrar() {
     if (!marca || !vista) return
     const ok = await confirmar({
-      titulo: 'Borrar el insumo',
+      titulo: 'Eliminar el insumo',
       // El diálogo dice el número: borrar el insumo se lleva su libro entero, y cuántos
       // movimientos son es la única forma de saber cuánto se pierde antes de apretar.
-      mensaje: `Se va a borrar «${vista.insumo.nombre}» y sus ${vista.movimientos.length} movimientos. Si sólo querés dejar de reponerlo, destildá «Se sigue usando».`,
-      ok: 'Borrar',
+      mensaje: `Se va a eliminar «${vista.insumo.nombre}» y sus ${vista.movimientos.length} movimientos. Si sólo querés dejar de reponerlo, destildá «Se sigue usando».`,
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
     try {
       await borrarInsumo(marca, vista.insumo.id)
-      toast.ok('Insumo borrado')
+      toast.ok('Insumo eliminado')
       onCambio()
       onCerrar()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar')
     }
   }
 
@@ -107,7 +116,7 @@ export function FichaInsumo({ marca, vista, onCerrar, onCambio }: Props) {
       ancho="ancho"
       pie={
         <>
-          {vista && <Button variant="ghost" tone="danger" onClick={borrar}>Borrar</Button>}
+          {vista && <Button variant="ghost" tone="danger" onClick={borrar}>Eliminar</Button>}
           <Button variant="ghost" onClick={onCerrar}>Cerrar</Button>
           <Button variant="solid" tone="brand" loading={guardando} onClick={guardar}>Guardar</Button>
         </>
@@ -210,12 +219,197 @@ export function FichaInsumo({ marca, vista, onCerrar, onCambio }: Props) {
         </label>
       </div>
 
+      {vista && <Pedidos marca={marca} vista={vista} onCambio={onCambio} />}
       {vista && <Libro marca={marca} vista={vista} onCambio={onCambio} />}
     </Modal>
   )
 }
 
 /** El libro del insumo: lo que ya pasó y el alta de un movimiento nuevo. */
+/**
+ * Los pedidos al proveedor.
+ *
+ * 🔴 **Existe porque «hay que comprar» y «ya lo pedí» son dos cosas distintas**, y hasta que no lo
+ * fueron el aviso seguía gritando después de que alguien llamó al proveedor. Acá se anota la
+ * promesa; el hecho —que llegó— sigue siendo la compra del libro, y es la que lo cierra.
+ */
+function Pedidos({ marca, vista, onCambio }: { marca: string | null; vista: VistaInsumo; onCambio: () => void }) {
+  const toast = useToast()
+  const { confirmar } = useConfirmar()
+  const [cantidad, setCantidad] = useState<number | ''>('')
+  const [pedidoAt, setPedidoAt] = useState(hoyIso())
+  const [promesaAt, setPromesaAt] = useState('')
+  const [proveedor, setProveedor] = useState('')
+  const [guardando, setGuardando] = useState(false)
+
+  const i = vista.insumo
+  const abierto = vista.pedido
+
+  const historial = useMemo(
+    () => [...vista.pedidosDelInsumo].sort((a, b) => b.pedidoAt.localeCompare(a.pedidoAt)),
+    [vista.pedidosDelInsumo],
+  )
+
+  async function anotar() {
+    if (!marca) return
+    setGuardando(true)
+    try {
+      await guardarPedido(marca, {
+        insumoId: i.id,
+        // ⛔ Vacío llega como `null`, ⛔ nunca como 0: «lo pedí sin saber cuánto viene» es válido y
+        // un 0 diría que se pidió nada.
+        cantidad: cantidad === '' ? null : cantidad,
+        pedidoAt,
+        promesaAt: promesaAt || null,
+        proveedor: proveedor || null,
+      })
+      toast.ok('Pedido anotado — el aviso de pedir se calla hasta que llegue')
+      setCantidad('')
+      setPromesaAt('')
+      onCambio()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anotar el pedido')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  // 🔑 **Descartar y Eliminar son dos cosas distintas y VOCABULARIO.md las separa**: descartar deja
+  // la fila con quién y cuándo —el pedido existió y no llegó, y eso es lo que mide al proveedor—;
+  // eliminar la hace desaparecer, y es sólo para el que se cargó mal.
+  // ⚠️ Los símbolos del código (`cancelar-pedido`, `cancelado_at`) ⛔ no se tocan: la regla es del
+  // texto que lee una persona.
+  async function descartar(pd: Pedido) {
+    if (!marca) return
+    const ok = await confirmar({
+      titulo: `¿Descartar el pedido del ${pd.pedidoAt}?`,
+      mensaje: 'Queda anotado que se pidió y no llegó, y el aviso de pedir vuelve a sonar. Se puede volver a cargar.',
+      ok: 'Descartar',
+      tono: 'danger',
+    })
+    if (!ok) return
+    try {
+      await cancelarPedido(marca, pd.id)
+      onCambio()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo descartar')
+    }
+  }
+
+  async function eliminar(pd: Pedido) {
+    if (!marca) return
+    const ok = await confirmar({
+      // 🔴 La confirmación NOMBRA lo que va a dejar de existir, ⛔ nunca un pronombre.
+      titulo: `¿Eliminar el pedido del ${pd.pedidoAt}?`,
+      mensaje: 'Es para el que se cargó mal. Si el pedido existió y no va a llegar, descartalo: eliminarlo se lleva puesto cuánto tardó ese proveedor.',
+      ok: 'Eliminar',
+      tono: 'danger',
+    })
+    if (!ok) return
+    try {
+      await borrarPedido(marca, pd.id)
+      onCambio()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar')
+    }
+  }
+
+  return (
+    <div style={{ marginTop: space[4], display: 'flex', flexDirection: 'column', gap: space[3] }}>
+      <h4 style={{ margin: 0, fontSize: 14 }}>Los pedidos</h4>
+
+      {/*
+        🔑 La demora medida va con su denominador, igual que el precio: con UN pedido cerrado dice
+        «la última vez», ⛔ no «promedio». Y se ofrece para cargar «tarda en llegar» a mano — ⛔ no
+        se escribe sola: un número derivado de una observación manejando un aviso es lo que ya dejó
+        una regla prendida y muda en este repo.
+      */}
+      <Notice tone="neutral">
+        {vista.demora
+          ? `${vista.demora.clase === 'promedio' ? `Tardó en llegar ${Math.round(vista.demora.dias * 10) / 10} días en promedio` : `La última vez tardó ${vista.demora.dias} días`} — ${vista.demora.pedidos} pedido${vista.demora.pedidos > 1 ? 's' : ''} cerrado${vista.demora.pedidos > 1 ? 's' : ''}, hasta el ${vista.demora.hasta}.`
+          : 'Todavía no cerró ningún pedido, así que no se sabe cuánto tarda este proveedor.'}
+        {i.diasReposicion == null
+          ? ' «Tarda en llegar» está vacío: hasta que se cargue, el aviso por días no corre.'
+          : ` Hoy está cargado en ${i.diasReposicion} días.`}
+      </Notice>
+
+      {abierto ? (
+        <Notice tone={abierto.demorado ? 'danger' : 'success'}>
+          <strong>Hay un pedido abierto</strong> del {abierto.pedido.pedidoAt}
+          {abierto.pedido.proveedor ? ` a ${abierto.pedido.proveedor}` : ''} — hace {abierto.diasEsperando} días.
+          {abierto.esperadoEl
+            ? abierto.demorado
+              ? ` Se esperaba el ${abierto.esperadoEl}: está demorado.`
+              : ` Se lo espera el ${abierto.esperadoEl}.`
+            : ' No se sabe cuándo tendría que llegar: sin fecha prometida ni «tarda en llegar», no se puede decir que esté demorado.'}
+          {' '}Para cerrarlo, anotá la compra en el libro.
+        </Notice>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: space[3], alignItems: 'flex-end' }}>
+          <Field label={`Cuántos (${i.unidad})`} width={140} hint="Vacío si no sabés cuánto viene">
+            <NumberField value={cantidad} onChange={setCantidad} min={0} />
+          </Field>
+          <Field label="Cuándo se pidió" width={150}>
+            <Input type="date" value={pedidoAt} onChange={(e) => setPedidoAt(e.target.value)} />
+          </Field>
+          <Field label="Para cuándo lo prometieron" width={190} hint="Vacío: se calcula con «tarda en llegar»">
+            <Input type="date" value={promesaAt} onChange={(e) => setPromesaAt(e.target.value)} />
+          </Field>
+          <Field label="A quién" width={170}>
+            <Input value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="CDE Insumos" />
+          </Field>
+          <Button variant="solid" tone="brand" loading={guardando} onClick={anotar}>
+            Anotar el pedido
+          </Button>
+        </div>
+      )}
+
+      {historial.length > 0 && (
+        <TableWrap maxHeight={200}>
+          <THead>
+            <Tr>
+              <Th>Se pidió</Th>
+              <Th align="right">Cuántos</Th>
+              <Th>A quién</Th>
+              <Th>Prometido</Th>
+              <Th>Cómo terminó</Th>
+              <Th>Quién</Th>
+              <Th />
+            </Tr>
+          </THead>
+          <TBody>
+            {historial.map((pd) => {
+              const cierre = vista.movimientos.find((m) => m.tipo === 'compra' && m.grupo === pd.id)
+              return (
+                <Tr key={pd.id}>
+                  <Td mono>{pd.pedidoAt}</Td>
+                  <Td align="right">{pd.cantidad ?? <span style={{ color: color.mut2 }}>—</span>}</Td>
+                  <Td>{pd.proveedor ?? '—'}</Td>
+                  <Td mono>{pd.promesaAt ?? <span style={{ color: color.mut2 }}>—</span>}</Td>
+                  <Td>
+                    {cierre ? `llegó el ${cierre.fecha}` : pd.canceladoAt ? 'descartado' : 'esperando'}
+                  </Td>
+                  <Td>{pd.usuario ?? '—'}</Td>
+                  <Td>
+                    {!cierre && !pd.canceladoAt && (
+                      <Button variant="ghost" size="sm" tone="danger" onClick={() => descartar(pd)}>
+                        Descartar
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" tone="danger" onClick={() => eliminar(pd)}>
+                      Eliminar
+                    </Button>
+                  </Td>
+                </Tr>
+              )
+            })}
+          </TBody>
+        </TableWrap>
+      )}
+    </div>
+  )
+}
+
 function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaInsumo; onCambio: () => void }) {
   const toast = useToast()
   const { confirmar } = useConfirmar()
@@ -259,6 +453,10 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
           fecha,
           precioTotal: tipo === 'compra' && precio !== '' ? precio : null,
           proveedor: proveedor || null,
+          // 🔑 **Recibir no es un verbo aparte: es la compra, con el `grupo` del pedido.** Ese
+          // vínculo es lo único que cierra el pedido (`compraQueCierra`) y lo único con lo que
+          // después se puede medir cuánto tardó el proveedor de verdad.
+          grupo: tipo === 'compra' && vista.pedido ? vista.pedido.pedido.id : null,
         })
       }
       toast.ok('Anotado')
@@ -276,11 +474,11 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
   async function quitar(id: string, esTraslado: boolean) {
     if (!marca) return
     const ok = await confirmar({
-      titulo: 'Borrar el movimiento',
+      titulo: 'Eliminar el movimiento',
       mensaje: esTraslado
-        ? 'Es un traslado: se borran las dos mitades, la que salió y la que entró. Borrar una sola dejaría la mercadería duplicada.'
+        ? 'Es un traslado: se eliminan las dos mitades, la que salió y la que entró. Eliminar una sola dejaría la mercadería duplicada.'
         : 'El stock se recalcula sin este movimiento.',
-      ok: 'Borrar',
+      ok: 'Eliminar',
       tono: 'danger',
     })
     if (!ok) return
@@ -288,7 +486,7 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
       await borrarMovimiento(marca, id)
       onCambio()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar')
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar')
     }
   }
 
@@ -338,6 +536,13 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
         <Field label="Cuándo" width={150}>
           <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
         </Field>
+        {tipo === 'compra' && vista.pedido && (
+          <Notice tone="success">
+            <strong>Esta compra cierra el pedido del {vista.pedido.pedido.pedidoAt}</strong>
+            {vista.pedido.pedido.proveedor ? ` a ${vista.pedido.pedido.proveedor}` : ''} — con eso queda medido cuánto tardó en
+            llegar, que es lo que después llena «tarda en llegar» sin inventar el número.
+          </Notice>
+        )}
         {tipo === 'compra' && (
           <>
             <Field label="Cuánto salió (total)" width={160} hint="Vacío si no lo sabés">
@@ -380,7 +585,7 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
                 <Td>{m.usuario ?? '—'}</Td>
                 <Td>
                   <Button variant="ghost" size="sm" tone="danger" onClick={() => quitar(m.id, m.tipo === 'traslado')}>
-                    Borrar
+                    Eliminar
                   </Button>
                 </Td>
               </Tr>

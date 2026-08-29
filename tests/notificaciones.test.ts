@@ -414,7 +414,7 @@ describe('avisosDeInsumo', () => {
 
   /** Un insumo al que le queda el anteúltimo desde el 9. */
   const enElAnteultimo = () =>
-    mirarInsumo(insumo(), [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })], {}, '2026-08-28')
+    mirarInsumo(insumo(), [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })], [], {}, '2026-08-28')
 
   it('no le llega a quien no puede abrir la sección', () => {
     expect(avisosDeInsumo([enElAnteultimo()], sinNada, 'bdi')).toEqual([])
@@ -423,7 +423,7 @@ describe('avisosDeInsumo', () => {
   it('los que hay que pedir van en UN aviso: armar el pedido es un solo acto', () => {
     const dos = [
       enElAnteultimo(),
-      mirarInsumo(insumo({ id: 'in2', nombre: 'Ribbon' }), [mov({ insumoId: 'in2', cantidad: 1 })], {}, '2026-08-28'),
+      mirarInsumo(insumo({ id: 'in2', nombre: 'Ribbon' }), [mov({ insumoId: 'in2', cantidad: 1 })], [], {}, '2026-08-28'),
     ]
     const a = avisosDeInsumo(dos, conInsumos, 'bdi')
     expect(a.filter((x) => x.tipo === 'insumo-comprar')).toHaveLength(1)
@@ -444,6 +444,7 @@ describe('avisosDeInsumo', () => {
         mov({ ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-02' }),
         mov({ tipo: 'consumo', ubicacion: 'local-bdi', cantidad: 10, fecha: '2026-08-12' }),
       ],
+      [],
       {},
       '2026-08-28',
     )
@@ -455,7 +456,55 @@ describe('avisosDeInsumo', () => {
   })
 
   it('sin nada contado no avisa: nadie miró', () => {
-    expect(avisosDeInsumo([mirarInsumo(insumo(), [], {}, '2026-08-28')], conInsumos, 'bdi')).toEqual([])
+    expect(avisosDeInsumo([mirarInsumo(insumo(), [], [], {}, '2026-08-28')], conInsumos, 'bdi')).toEqual([])
+  })
+
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+  // El pedido: qué se calla y qué pasa a ser aviso del PROVEEDOR
+  // ───────────────────────────────────────────────────────────────────────────────────────────
+
+  const pedidoDe = (p: Record<string, unknown> = {}) => ({
+    id: 'pd1', insumoId: 'in1', cantidad: 1000, pedidoAt: '2026-08-10', proveedor: 'CDE',
+    promesaAt: null, canceladoAt: null, usuario: 'Lorena', nota: null,
+    creado: '2026-08-10T00:00:00Z', ...p,
+  }) as never
+
+  it('🔴 con el pedido anotado el aviso de PEDIR se calla: la pelota es del proveedor', () => {
+    const v = mirarInsumo(
+      insumo(),
+      [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })],
+      [pedidoDe({ promesaAt: '2026-09-30' })],
+      {},
+      '2026-08-28',
+    )
+    expect(avisosDeInsumo([v], conInsumos, 'bdi').filter((a) => a.tipo === 'insumo-comprar')).toEqual([])
+  })
+
+  it('🔴 el pedido vencido es OTRO aviso, y su ts es CUÁNDO SE LO ESPERABA', () => {
+    const v = mirarInsumo(
+      insumo(),
+      [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })],
+      [pedidoDe({ promesaAt: '2026-08-20' })],
+      {},
+      '2026-08-28',
+    )
+    const a = avisosDeInsumo([v], conInsumos, 'bdi').find((x) => x.tipo === 'insumo-demorado')
+    expect(a).toBeTruthy()
+    expect(a?.titulo).toBe('1 pedido demorado')
+    // ⛔ Ni la fecha del pedido ni hoy: la espera empieza el día que se pasó de fecha.
+    expect(a?.ts).toBe(new Date('2026-08-20T00:00:00').getTime())
+    expect(a?.ruta).toBe('/insumos?ver=demorados')
+  })
+
+  it('un pedido sin fecha esperada ⛔ no genera aviso de demorado: acusaría a quien puede estar en fecha', () => {
+    const v = mirarInsumo(
+      insumo({ diasReposicion: null }),
+      [mov({ cantidad: 5 }), mov({ tipo: 'consumo', cantidad: 3, fecha: '2026-08-09' })],
+      [pedidoDe({ pedidoAt: '2026-01-01' })],
+      {},
+      '2026-08-28',
+    )
+    expect(avisosDeInsumo([v], conInsumos, 'bdi').filter((a) => a.tipo === 'insumo-demorado')).toEqual([])
   })
 
   it('el id no lleva fecha ni cantidad: el badge no se prende de nuevo cada mañana', () => {

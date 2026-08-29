@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { leerInsumos, type DatosInsumos } from '@/lib/insumos/cliente'
 
-const VACIO: DatosInsumos = { insumos: [], movimientos: [], comprasPorMarca: {}, sinRitmo: [] }
+const VACIO: DatosInsumos = { insumos: [], movimientos: [], pedidos: [], comprasPorMarca: {}, sinRitmo: [] }
 
 export function useInsumos(marca: string | null) {
   const [datos, setDatos] = useState<DatosInsumos>(VACIO)

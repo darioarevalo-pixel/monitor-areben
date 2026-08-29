@@ -106,3 +106,64 @@ export type FaltaComprar = {
 export type FaltaSubir = { ubicacion: Ubicacion; hay: number; desde: string }
 
 export type Reposicion = { comprar: FaltaComprar | null; subir: FaltaSubir[] }
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// El pedido — la promesa. El libro guarda hechos; esto guarda que alguien llamó al proveedor.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Un pedido al proveedor.
+ *
+ * 🔴 **No vive en el libro y no es un quinto tipo de movimiento**: no mueve una sola unidad. Que
+ * `insumo_movimiento` tenga sólo hechos que suman o restan es lo que deja que `stockPor()` sea una
+ * suma pelada — ver el encabezado de `sql/migrate-insumo-pedido.sql`.
+ *
+ * 🔑 **No tiene columna `estado`.** Que esté abierto se deriva: no cancelado y sin ninguna compra
+ * que lo nombre por `grupo`. Un estado guardado es un segundo lugar donde puede decir otra cosa
+ * que el libro, y el libro es el que manda.
+ */
+export type Pedido = {
+  id: string
+  insumoId: string
+  /** En la unidad del insumo. `null` = se pidió sin saber cuánto viene, y sigue siendo útil. */
+  cantidad: number | null
+  /** 🔑 El reloj del pedido. ⛔ Nunca `creado`: se anota tarde y contaría de menos. */
+  pedidoAt: string
+  proveedor: string | null
+  /** Cuándo lo prometieron. `null` = no dijeron; ⛔ no es «hoy» ni «nunca». */
+  promesaAt: string | null
+  canceladoAt: string | null
+  usuario: string | null
+  nota: string | null
+  creado: string
+}
+
+/** Un pedido que todavía no llegó, con el reloj ya resuelto. */
+export type PedidoAbierto = {
+  pedido: Pedido
+  /** Días desde que se pidió, hasta hoy. */
+  diasEsperando: number
+  /**
+   * Cuándo se lo espera. Sale de la promesa del proveedor si la hay; si no, de `diasReposicion`.
+   * `null` = ⛔ no se sabe, y entonces el pedido **nunca** se marca demorado.
+   */
+  esperadoEl: string | null
+  /** Pasó la fecha esperada. Con `esperadoEl` en `null` es siempre `false`. */
+  demorado: boolean
+}
+
+/**
+ * Cuánto tardó de verdad en llegar, medido. Va **con su denominador**, igual que el precio: con una
+ * sola observación se rotula `'ultima'` y ⛔ no «promedio».
+ *
+ * 🔴 **Esto NO alimenta la regla.** Es una sugerencia para que alguien cargue `diasReposicion`
+ * mirando un número real en vez de inventarlo. Un derivado de una observación manejando un aviso
+ * es lo que ya dejó una regla de Meta prendida y muda.
+ */
+export type DemoraMedida = {
+  dias: number
+  clase: 'promedio' | 'ultima'
+  pedidos: number
+  desde: string
+  hasta: string
+}

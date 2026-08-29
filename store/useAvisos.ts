@@ -133,7 +133,7 @@ async function avisosDeCanjes(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
 async function avisosDeInsumos(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
   if (!puedeVer(perfil, marca, 'insumos')) return []
   const d = await leerInsumos(marca)
-  return avisosDeInsumo(mirarTodos(d.insumos, d.movimientos, d.comprasPorMarca), perfil, marca)
+  return avisosDeInsumo(mirarTodos(d.insumos, d.movimientos, d.pedidos, d.comprasPorMarca), perfil, marca)
 }
 
 export const useAvisos = create<AvisosState>((set, get) => ({

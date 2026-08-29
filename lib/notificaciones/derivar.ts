@@ -19,7 +19,8 @@ import { gravedadDeHallazgo, type Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
-import { paraComprar, paraSubir, rotuloUbicacion, type VistaInsumo } from '@/lib/insumos/core'
+import { paraComprar, paraSubir, pedidosDemorados, rotuloUbicacion, type VistaInsumo } from '@/lib/insumos/core'
+import type { PedidoAbierto } from '@/lib/insumos/tipos'
 import type { Aviso } from './tipos'
 
 /** ¿Puede aprobar consumos internos en alguna de las dos marcas? */
@@ -453,6 +454,28 @@ export function avisosDeInsumo(vistas: VistaInsumo[], perfil: Perfil | null, mar
       detalle: nombrarInsumos(comprar),
       ruta: '/insumos?ver=comprar',
       ts: desde ? inicioDelDia(desde) : 0,
+      tono: 'warning' as const,
+    })
+  }
+
+  // 🔴 **Los pedidos demorados son OTRO aviso, y a propósito.** «Falta» lo resolvemos nosotros
+  // comprando; «el pedido no llegó» lo resuelve el proveedor y la acción es reclamar. Meterlos en
+  // el mismo aviso le echaría la culpa a quien no puede hacer nada — es el mismo reloj sin dueño
+  // que ya hubo que partir en Postventa.
+  const demorados = pedidosDemorados(vistas)
+  if (demorados.length) {
+    const primero = demorados[0].pedido as PedidoAbierto
+    avisos.push({
+      id: 'insumo-demorado',
+      tipo: 'insumo-demorado' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: demorados.length === 1 ? '1 pedido demorado' : `${demorados.length} pedidos demorados`,
+      detalle: `${nombrarInsumos(demorados)} · se esperaba el ${primero.esperadoEl}`,
+      ruta: '/insumos?ver=demorados',
+      // 🔑 El `ts` es **cuándo se lo esperaba**, ⛔ no cuándo se pidió ni hoy: la espera empieza a
+      // contar el día que se pasó de fecha, y es lo que hace que el «NUEVO» se apague.
+      ts: inicioDelDia(primero.esperadoEl as string),
       tono: 'warning' as const,
     })
   }

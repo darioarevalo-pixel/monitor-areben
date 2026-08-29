@@ -21,6 +21,7 @@ import {
   motivoConsumoInvalido as motivoConsumoInvalidoJs,
   motivoInsumoInvalido as motivoInsumoInvalidoJs,
   motivoMovimientoInvalido as motivoMovimientoInvalidoJs,
+  motivoPedidoInvalido as motivoPedidoInvalidoJs,
   patasDeTraslado as patasDeTrasladoJs,
   signoDe as signoDeJs,
   TIPOS as TIPOS_JS,
@@ -29,11 +30,14 @@ import {
   UNIDADES as UNIDADES_JS,
 } from './core.core.js'
 import type {
+  DemoraMedida,
   DiaCompras,
   FaltaComprar,
   FaltaSubir,
   Insumo,
   Movimiento,
+  Pedido,
+  PedidoAbierto,
   PrecioReferencia,
   Reposicion,
   Ritmo,
@@ -60,6 +64,7 @@ export const signoDe = signoDeJs as (m: { tipo: TipoMovimiento; pata?: string | 
 export const motivoInsumoInvalido = motivoInsumoInvalidoJs as (i: unknown) => string | null
 export const motivoConsumoInvalido = motivoConsumoInvalidoJs as (c: unknown) => string | null
 export const motivoMovimientoInvalido = motivoMovimientoInvalidoJs as (m: unknown) => string | null
+export const motivoPedidoInvalido = motivoPedidoInvalidoJs as (p: unknown) => string | null
 export const patasDeTraslado = patasDeTrasladoJs as (x: {
   insumoId: string
   origen: Ubicacion
@@ -263,6 +268,94 @@ export function diasDeVida(stock: number | null, ritmo: Ritmo | null): number | 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
+// El pedido — la promesa que separa «falta» de «es nuestro turno»
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ¿Este pedido ya lo cerró una compra?
+ *
+ * 🔑 **La compra que cierra lleva `grupo = <id del pedido>`**, en la columna que el esquema del
+ * libro había reservado desde el día uno («las dos patas de un traslado, **o un pedido**»). Por eso
+ * el pedido no necesita un `estado` propio: preguntarle al libro es preguntarle a los hechos, y un
+ * estado guardado sería un segundo lugar donde puede decir otra cosa.
+ */
+export function compraQueCierra(pedidoId: string, movs: Movimiento[]): Movimiento | null {
+  const cierres = movs
+    .filter((m) => m.tipo === 'compra' && m.grupo === pedidoId)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+  return cierres[0] ?? null
+}
+
+/**
+ * El pedido que sigue esperando, o `null`.
+ *
+ * 🔴 **Esto es lo que separa «falta» de «es nuestro turno»**, que es la distinción que ya se pagó
+ * cara en Postventa: que un insumo esté bajo el mínimo es un **hecho** y no deja de serlo porque
+ * alguien haya llamado al proveedor; lo que cambia es **de quién es la pelota**. Por eso
+ * `paraReponer()` ⛔ no mira los pedidos —el hecho es el hecho— y el que los mira es el aviso.
+ *
+ * ⚠️ **`esperadoEl` puede ser `null`, y entonces el pedido NUNCA se marca demorado.** Sale de la
+ * promesa del proveedor, o de `diasReposicion` si no prometieron nada. Sin ninguno de los dos no se
+ * sabe cuánto tendría que tardar, y un demorado inventado acusa a un proveedor que puede estar en
+ * fecha — el mismo reloj sin dueño que ya hubo que partir en Postventa.
+ */
+export function pedidoAbiertoDe(
+  insumo: Insumo,
+  pedidos: Pedido[],
+  movs: Movimiento[],
+  hoy = hoyIso(),
+): PedidoAbierto | null {
+  const abiertos = pedidos
+    .filter((p) => p.insumoId === insumo.id && !p.canceladoAt && !compraQueCierra(p.id, movs))
+    .sort((a, b) => a.pedidoAt.localeCompare(b.pedidoAt))
+  // El más VIEJO: es el que hace más que espera, y el que hay que ir a reclamar.
+  const pedido = abiertos[0]
+  if (!pedido) return null
+
+  const esperadoEl =
+    pedido.promesaAt ?? (insumo.diasReposicion != null ? sumarDias(pedido.pedidoAt, insumo.diasReposicion) : null)
+  return {
+    pedido,
+    diasEsperando: diasEntre(pedido.pedidoAt, hoy),
+    esperadoEl,
+    demorado: esperadoEl != null && hoy > esperadoEl,
+  }
+}
+
+/**
+ * Cuánto tardó de verdad en llegar, medido sobre los pedidos que ya cerraron.
+ *
+ * 🔴 **No alimenta ninguna regla**: es la sugerencia para que alguien cargue `diasReposicion`
+ * mirando un número real en vez de inventarlo. Un derivado de una sola observación manejando un
+ * aviso es lo que ya dejó una regla de Meta prendida y muda — por eso viaja con `clase` y con
+ * `pedidos`, igual que el precio de referencia.
+ *
+ * ⛔ Los cancelados no cuentan: no midieron nada.
+ */
+export function demoraMedida(insumoId: string, pedidos: Pedido[], movs: Movimiento[]): DemoraMedida | null {
+  const cerrados: { dias: number; pedido: string; llegada: string }[] = []
+  for (const p of pedidos) {
+    if (p.insumoId !== insumoId || p.canceladoAt) continue
+    const compra = compraQueCierra(p.id, movs)
+    if (!compra) continue
+    // ⚠️ Una llegada anterior al pedido es un dato imposible (se anotó mal una de las dos fechas) y
+    // promediarlo tiraría la demora abajo sin que nadie lo vea. Se saltea.
+    const dias = diasEntre(p.pedidoAt, compra.fecha)
+    if (dias < 0) continue
+    cerrados.push({ dias, pedido: p.pedidoAt, llegada: compra.fecha })
+  }
+  if (!cerrados.length) return null
+  cerrados.sort((a, b) => a.llegada.localeCompare(b.llegada))
+  return {
+    dias: cerrados.reduce((a, c) => a + c.dias, 0) / cerrados.length,
+    clase: cerrados.length > 1 ? 'promedio' : 'ultima',
+    pedidos: cerrados.length,
+    desde: cerrados[0].pedido,
+    hasta: cerrados[cerrados.length - 1].llegada,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
 // La regla: qué hay que hacer con este insumo
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -341,6 +434,15 @@ export type VistaInsumo = {
   dias: number | null
   precio: PrecioReferencia | null
   reposicion: Reposicion
+  /**
+   * El pedido que sigue esperando, o `null`. 🔑 Va en la vista y ⛔ no adentro de `reposicion`:
+   * `reposicion` dice **qué le pasa al insumo** (un hecho) y esto dice **de quién es la pelota**.
+   */
+  pedido: PedidoAbierto | null
+  /** Todos los pedidos de este insumo, cancelados incluidos: la ficha muestra el historial. */
+  pedidosDelInsumo: Pedido[]
+  /** Cuánto tardó de verdad la última vez. Sugerencia para cargar `diasReposicion`, ⛔ no una regla. */
+  demora: DemoraMedida | null
 }
 
 /**
@@ -351,6 +453,7 @@ export type VistaInsumo = {
 export function mirarInsumo(
   insumo: Insumo,
   movimientos: Movimiento[],
+  pedidos: Pedido[],
   comprasPorMarca: Record<string, DiaCompras[]>,
   hoy = hoyIso(),
 ): VistaInsumo {
@@ -367,6 +470,12 @@ export function mirarInsumo(
     dias: diasDeVida(total, ritmo),
     precio: precioReferencia(movimientos, hoy),
     reposicion: paraReponer(insumo, movimientos, ritmo),
+    pedido: pedidoAbiertoDe(insumo, pedidos, movimientos, hoy),
+    // ⚠️ Se filtra acá y no en el llamador: `mirarInsumo` recibe la lista completa cuando lo llama
+    // una pantalla suelta, y la ya agrupada cuando lo llama `mirarTodos`. Filtrar de más es barato;
+    // no filtrar mostraría los pedidos de otro insumo en la ficha.
+    pedidosDelInsumo: pedidos.filter((p) => p.insumoId === insumo.id),
+    demora: demoraMedida(insumo.id, pedidos, movimientos),
   }
 }
 
@@ -374,6 +483,7 @@ export function mirarInsumo(
 export function mirarTodos(
   insumos: Insumo[],
   movimientos: Movimiento[],
+  pedidos: Pedido[],
   comprasPorMarca: Record<string, DiaCompras[]>,
   hoy = hoyIso(),
 ): VistaInsumo[] {
@@ -383,14 +493,47 @@ export function mirarTodos(
     if (lista) lista.push(m)
     else porInsumo.set(m.insumoId, [m])
   }
-  return insumos.map((i) => mirarInsumo(i, porInsumo.get(i.id) ?? [], comprasPorMarca, hoy))
+  // 🔑 Los pedidos se agrupan igual que el libro: si cada `mirarInsumo` filtrara la lista entera,
+  // la pasada sería cuadrática con el catálogo.
+  const pedidosDe = new Map<string, Pedido[]>()
+  for (const p of pedidos) {
+    const lista = pedidosDe.get(p.insumoId)
+    if (lista) lista.push(p)
+    else pedidosDe.set(p.insumoId, [p])
+  }
+  return insumos.map((i) => mirarInsumo(i, porInsumo.get(i.id) ?? [], pedidosDe.get(i.id) ?? [], comprasPorMarca, hoy))
 }
 
-/** Lo que hay que comprar, primero lo que hace más que está así. */
+/**
+ * Lo que hay que **pedir**: está bajo el mínimo y **nadie lo pidió todavía**.
+ *
+ * 🔴 **Acá es donde el pedido calla el aviso, y ⛔ no en `paraReponer()`.** Que el insumo falte
+ * sigue siendo cierto —eso es un hecho de la fila y se ve en la pantalla igual—; lo que deja de ser
+ * cierto es que sea **nuestro turno**. Sin esta línea, el aviso sigue gritando después de que
+ * alguien llamó al proveedor, y un aviso que se ignora doce veces enseña a ignorar el trece.
+ *
+ * ⚠️ El que ya se pidió no desaparece: pasa a `pedidosDemorados()` el día que se pasa de fecha.
+ */
 export function paraComprar(vistas: VistaInsumo[]): VistaInsumo[] {
   return vistas
-    .filter((v) => v.insumo.activo && v.reposicion.comprar)
+    .filter((v) => v.insumo.activo && v.reposicion.comprar && !v.pedido)
     .sort((a, b) => (a.reposicion.comprar as FaltaComprar).desde.localeCompare((b.reposicion.comprar as FaltaComprar).desde))
+}
+
+/**
+ * Los pedidos que se pasaron de la fecha en que se los esperaba.
+ *
+ * 🔴 **Es OTRO aviso y no el mismo con otro texto**, por lo mismo que en Postventa hubo que partir
+ * el reloj: «falta» es un hecho del insumo y lo resolvemos nosotros comprando; «el pedido está
+ * demorado» es del **proveedor**, y la acción es reclamar, no volver a pedir. Mezclarlos hace que
+ * el aviso le eche la culpa a quien no puede hacer nada.
+ *
+ * ⚠️ Un pedido sin `esperadoEl` ⛔ nunca entra: no se sabe cuánto tendría que tardar.
+ */
+export function pedidosDemorados(vistas: VistaInsumo[]): VistaInsumo[] {
+  return vistas
+    .filter((v) => v.insumo.activo && v.pedido?.demorado)
+    .sort((a, b) => (a.pedido as PedidoAbierto).pedido.pedidoAt.localeCompare((b.pedido as PedidoAbierto).pedido.pedidoAt))
 }
 
 /** Lo que hay que subir, agrupado por el lugar donde falta: es UN viaje, no N. */

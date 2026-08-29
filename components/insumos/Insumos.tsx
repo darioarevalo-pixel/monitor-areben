@@ -55,6 +55,7 @@ import {
   mirarTodos,
   paraComprar,
   paraSubir,
+  pedidosDemorados,
   rotuloTipo,
   rotuloUbicacion,
   rotuloUnidad,
@@ -64,11 +65,13 @@ import type { Ubicacion } from '@/lib/insumos/tipos'
 import { useInsumos } from './useInsumos'
 import { FichaInsumo } from './FichaInsumo'
 
-type Ver = 'todos' | 'comprar' | 'subir' | 'sin-contar'
+type Ver = 'todos' | 'comprar' | 'subir' | 'sin-contar' | 'pedidos' | 'demorados'
 
 const VISTAS: ChipOpt<Ver>[] = [
   { key: 'todos', label: 'Todos' },
   { key: 'comprar', label: 'Para pedir' },
+  { key: 'pedidos', label: 'Ya pedidos' },
+  { key: 'demorados', label: 'Demorados' },
   { key: 'subir', label: 'Falta en un local' },
   { key: 'sin-contar', label: 'Sin contar' },
 ]
@@ -87,7 +90,7 @@ function haceDias(iso: string): number {
 
 export function Insumos() {
   const { marca } = useSesion()
-  const { insumos, movimientos, comprasPorMarca, sinRitmo, cargando, error, recargar } = useInsumos(marca)
+  const { insumos, movimientos, pedidos, comprasPorMarca, sinRitmo, cargando, error, recargar } = useInsumos(marca)
   const [ver, setVer] = useFiltroUrl<Ver>('ver', 'todos')
   const [lugar, setLugar] = useFiltroUrl<Ubicacion | 'todas'>('ubicacion', 'todas')
   const [busca, setBusca] = useState('')
@@ -95,11 +98,15 @@ export function Insumos() {
   const [alta, setAlta] = useState(false)
 
   const vistas = useMemo(
-    () => mirarTodos(insumos, movimientos, comprasPorMarca),
-    [insumos, movimientos, comprasPorMarca],
+    () => mirarTodos(insumos, movimientos, pedidos, comprasPorMarca),
+    [insumos, movimientos, pedidos, comprasPorMarca],
   )
 
   const comprar = useMemo(() => paraComprar(vistas), [vistas])
+  // 🔑 «Ya pedidos» y «para pedir» son listas DISTINTAS y ninguna es subconjunto de la otra: lo que
+  // se pidió sale de la cola de pedir (ver `paraComprar`) pero sigue estando bajo el mínimo.
+  const enCamino = useMemo(() => vistas.filter((v) => v.insumo.activo && v.pedido), [vistas])
+  const demorados = useMemo(() => pedidosDemorados(vistas), [vistas])
   const subir = useMemo(() => paraSubir(vistas), [vistas])
   const sinContar = useMemo(() => vistas.filter((v) => v.insumo.activo && v.total == null), [vistas])
 
@@ -108,12 +115,14 @@ export function Insumos() {
     if (ver === 'comprar') lista = comprar
     else if (ver === 'subir') lista = subir.filter((g) => lugar === 'todas' || g.ubicacion === lugar).flatMap((g) => g.vistas)
     else if (ver === 'sin-contar') lista = sinContar
+    else if (ver === 'pedidos') lista = enCamino
+    else if (ver === 'demorados') lista = demorados
     const q = busca.trim().toLowerCase()
     if (q) lista = lista.filter((v) => v.insumo.nombre.toLowerCase().includes(q) || rotuloTipo(v.insumo.tipo).toLowerCase().includes(q))
     // Sin filtro, los apagados no se muestran: un insumo apagado es uno que se decidió no reponer.
     if (ver === 'todos' && !q) lista = lista.filter((v) => v.insumo.activo)
     return [...new Set(lista)]
-  }, [vistas, comprar, subir, sinContar, ver, lugar, busca])
+  }, [vistas, comprar, subir, sinContar, enCamino, demorados, ver, lugar, busca])
 
   const elegida = abierto ? vistas.find((v) => v.insumo.id === abierto) ?? null : null
 
@@ -147,6 +156,18 @@ export function Insumos() {
           tone={comprar.length ? 'warning' : 'neutral'}
           onClick={() => setVer(ver === 'comprar' ? 'todos' : 'comprar')}
           activo={ver === 'comprar'}
+        />
+        <KpiCard
+          label="Ya pedidos"
+          value={String(enCamino.length)}
+          /*
+            🔑 El sub dice lo DEMORADO y no el total: un pedido en fecha no necesita a nadie, y el
+            número que hace falta mirar es el que se pasó. Sin esta línea el KPI cuenta tranquilidad.
+          */
+          sub={demorados.length ? `${demorados.length} demorado${demorados.length > 1 ? 's' : ''}` : enCamino.length ? 'todos en fecha' : 'ninguno en camino'}
+          tone={demorados.length ? 'danger' : enCamino.length ? 'brand' : 'neutral'}
+          onClick={() => setVer(ver === 'pedidos' ? 'todos' : 'pedidos')}
+          activo={ver === 'pedidos' || ver === 'demorados'}
         />
         <KpiCard
           label="Falta en un local"
@@ -231,7 +252,7 @@ export function Insumos() {
 }
 
 function Fila({ v, onAbrir }: { v: VistaInsumo; onAbrir: () => void }) {
-  const { insumo: i, precio, dias, reposicion } = v
+  const { insumo: i, precio, dias, reposicion, pedido } = v
   return (
     <Tr onClick={onAbrir}>
       <Td>
@@ -264,6 +285,23 @@ function Fila({ v, onAbrir }: { v: VistaInsumo; onAbrir: () => void }) {
         {dias == null ? <span style={{ color: color.mut2 }}>sin ritmo</span> : `${Math.floor(dias)} días`}
       </Td>
       <Td>
+        {/*
+          🔴 **El pedido se muestra AL LADO de que falta, ⛔ no en vez de.** Que el insumo esté bajo
+          el mínimo sigue siendo cierto: lo único que cambió es que la pelota está del lado del
+          proveedor. Taparlo sería la pantalla afirmando que ya no falta.
+        */}
+        {pedido && (
+          <div style={{ marginBottom: 4 }}>
+            <StatusPill
+              tone={pedido.demorado ? 'danger' : 'success'}
+              label={
+                pedido.demorado
+                  ? `Pedido hace ${pedido.diasEsperando} días — se esperaba el ${pedido.esperadoEl}`
+                  : `Pedido hace ${pedido.diasEsperando} días`
+              }
+            />
+          </div>
+        )}
         {reposicion.comprar ? (
           <StatusPill
             tone="warning"

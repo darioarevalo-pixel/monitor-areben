@@ -12,12 +12,37 @@ const base = {
   escrituras: [] as { tabla: string; verbo: string; filas?: Fila[]; filtro?: [string, unknown] }[],
 }
 
+/**
+ * La base falsa **aplica los filtros**, ⛔ no devuelve la tabla entera.
+ *
+ * 🔴 Sin esto, un test del tipo «el handler no deja cargar dos pedidos abiertos» pasaría igual el
+ * día que alguien le saque el `.is('cancelado_at', null)`: la consulta traería todo y la cuenta
+ * daría lo mismo. El oráculo de un filtro es que el filtro FILTRE.
+ */
 function consulta(tabla: string) {
   const q: Record<string, unknown> = {}
-  const encadenable = ['select', 'order', 'gte', 'lte', 'eq'] as const
-  for (const m of encadenable) q[m] = () => q
-  q.range = async () => ({ data: base.tablas[tabla] ?? [], error: null })
-  q.maybeSingle = async () => ({ data: (base.tablas[tabla] ?? [])[0] ?? null, error: null })
+  const filtros: ((f: Fila) => boolean)[] = []
+  const filas = () => (base.tablas[tabla] ?? []).filter((f) => filtros.every((p) => p(f)))
+
+  // Los que no acotan (o que acotan por fecha sobre datos ya acotados en el fixture) siguen siendo
+  // pasamanos: lo que importa fijar es la identidad y la nulidad.
+  for (const m of ['select', 'order', 'gte', 'lte'] as const) q[m] = () => q
+  q.eq = (col: string, val: unknown) => {
+    filtros.push((f) => f[col] === val)
+    return q
+  }
+  q.is = (col: string, val: unknown) => {
+    filtros.push((f) => (val === null ? f[col] == null : f[col] === val))
+    return q
+  }
+  q.in = (col: string, vals: unknown[]) => {
+    filtros.push((f) => vals.includes(f[col] as never))
+    return q
+  }
+  // Awaitear el builder es una consulta terminada, igual que en PostgREST.
+  q.then = (resolve: (v: { data: Fila[]; error: null }) => unknown) => resolve({ data: filas(), error: null })
+  q.range = async () => ({ data: filas(), error: null })
+  q.maybeSingle = async () => ({ data: filas()[0] ?? null, error: null })
   q.upsert = async (filas: Fila | Fila[]) => {
     base.escrituras.push({ tabla, verbo: 'upsert', filas: Array.isArray(filas) ? filas : [filas] })
     return { error: null }
@@ -26,6 +51,12 @@ function consulta(tabla: string) {
     base.escrituras.push({ tabla, verbo: 'insert', filas: Array.isArray(filas) ? filas : [filas] })
     return { error: null }
   }
+  q.update = (patch: Fila) => ({
+    eq: async (col: string, val: unknown) => {
+      base.escrituras.push({ tabla, verbo: 'update', filas: [patch], filtro: [col, val] })
+      return { error: null }
+    },
+  })
   q.delete = () => ({
     eq: async (col: string, val: unknown) => {
       base.escrituras.push({ tabla, verbo: 'delete', filtro: [col, val] })
@@ -193,5 +224,76 @@ describe('lo que el POST frena', () => {
     expect(res.code).toBe(400)
     expect(String(res.body?.error)).toMatch(/nombre/)
     expect(base.escrituras).toHaveLength(0)
+  })
+})
+
+describe('el pedido: qué frena el servidor', () => {
+  const cuerpo = (extra: Record<string, unknown> = {}) => ({
+    action: 'guardar-pedido',
+    pedido: { insumoId: 'in1', pedidoAt: '2026-08-20', cantidad: 1000, ...extra },
+  })
+
+  it('un pedido nuevo, sin ninguno abierto, se guarda', async () => {
+    base.tablas.insumo_pedido = []
+    const res = await correr(pedir({ method: 'POST', body: cuerpo() }))
+    expect(res.code).toBe(200)
+    expect(base.escrituras[0].tabla).toBe('insumo_pedido')
+    expect(base.escrituras[0].filas?.[0]).toMatchObject({ insumo_id: 'in1', pedido_at: '2026-08-20', cantidad: 1000 })
+  })
+
+  it('🔴 con OTRO pedido abierto del mismo insumo contesta 409 y NO escribe', async () => {
+    base.tablas.insumo_pedido = [{ id: 'pdViejo', insumo_id: 'in1', pedido_at: '2026-08-01', cancelado_at: null }]
+    base.tablas.insumo_movimiento = []
+    const res = await correr(pedir({ method: 'POST', body: cuerpo() }))
+    expect(res.code).toBe(409)
+    expect(String(res.body?.error)).toContain('2026-08-01')
+    expect(base.escrituras).toHaveLength(0)
+  })
+
+  it('un pedido abierto de OTRO insumo no traba: el filtro por insumo tiene que filtrar', async () => {
+    base.tablas.insumo_pedido = [{ id: 'pdOtro', insumo_id: 'in9', pedido_at: '2026-08-01', cancelado_at: null }]
+    const res = await correr(pedir({ method: 'POST', body: cuerpo() }))
+    expect(res.code).toBe(200)
+  })
+
+  it('un pedido CANCELADO no traba: el `.is(cancelado_at, null)` tiene que filtrar', async () => {
+    base.tablas.insumo_pedido = [{ id: 'pdCanc', insumo_id: 'in1', pedido_at: '2026-08-01', cancelado_at: '2026-08-02T00:00:00Z' }]
+    const res = await correr(pedir({ method: 'POST', body: cuerpo() }))
+    expect(res.code).toBe(200)
+  })
+
+  it('🔑 un pedido viejo que YA LLEGÓ no traba: lo dice el libro, no una columna de estado', async () => {
+    base.tablas.insumo_pedido = [{ id: 'pdViejo', insumo_id: 'in1', pedido_at: '2026-08-01', cancelado_at: null }]
+    base.tablas.insumo_movimiento = [{ id: 'mv1', tipo: 'compra', grupo: 'pdViejo' }]
+    const res = await correr(pedir({ method: 'POST', body: cuerpo() }))
+    expect(res.code).toBe(200)
+  })
+
+  it('editar el pedido abierto no choca CONSIGO MISMO', async () => {
+    base.tablas.insumo_pedido = [{ id: 'pd1', insumo_id: 'in1', pedido_at: '2026-08-01', cancelado_at: null }]
+    const res = await correr(pedir({ method: 'POST', body: cuerpo({ id: 'pd1' }) }))
+    expect(res.code).toBe(200)
+  })
+
+  it('una cantidad en 0 se frena antes de tocar la base', async () => {
+    const res = await correr(pedir({ method: 'POST', body: cuerpo({ cantidad: 0 }) }))
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toMatch(/mayor a 0/)
+    expect(base.escrituras).toHaveLength(0)
+  })
+
+  it('la cantidad vacía llega como null, ⛔ no como 0', async () => {
+    const res = await correr(pedir({ method: 'POST', body: cuerpo({ cantidad: '' }) }))
+    expect(res.code).toBe(200)
+    expect(base.escrituras[0].filas?.[0]).toMatchObject({ cantidad: null })
+  })
+
+  it('🔑 cancelar ⛔ NO borra: escribe cancelado_at y la fila se queda', async () => {
+    const res = await correr(pedir({ method: 'POST', body: { action: 'cancelar-pedido', id: 'pd1' } }))
+    expect(res.code).toBe(200)
+    expect(base.escrituras.some((e) => e.verbo === 'delete')).toBe(false)
+    expect(base.escrituras[0].verbo).toBe('update')
+    expect(base.escrituras[0].filtro).toEqual(['id', 'pd1'])
+    expect(base.escrituras[0].filas?.[0]).toHaveProperty('cancelado_at')
   })
 })
