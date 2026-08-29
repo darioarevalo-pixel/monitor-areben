@@ -43,7 +43,7 @@ function archivos(dir: string, ext: string[]): string[] {
  * `JSON.stringify(…)`, que son las dos formas en que este repo arma un pedido.
  */
 const ENVIOS = /(?:postear|JSON\.stringify)\s*\(\s*\{/g
-const VERBO = /\b(?:action|accion|recurso)\s*:\s*'([a-z0-9-]+)'/g
+const VERBO = /\b(action|accion|recurso)\s*:\s*'([a-z0-9-]+)'/g
 
 /** El `{…}` balanceado que arranca en `desde`, para no cortar en la primera llave que cierre. */
 function objeto(src: string, desde: number): string {
@@ -58,8 +58,8 @@ function objeto(src: string, desde: number): string {
   return src.slice(desde)
 }
 
-function verbosQueManda(): { verbo: string; donde: string }[] {
-  const salida: { verbo: string; donde: string }[] = []
+function verbosQueManda(): { verbo: string; donde: string; handlers: string[]; campo: string }[] {
+  const salida: { verbo: string; donde: string; handlers: string[]; campo: string }[] = []
   for (const raiz of CLIENTE) {
     for (const p of archivos(raiz, ['.ts', '.tsx', '.js'])) {
       const src = readFileSync(p, 'utf8')
@@ -68,10 +68,11 @@ function verbosQueManda(): { verbo: string; donde: string }[] {
       // repo de Darío: sus verbos viven allá y buscarlos en `api/` daría un rojo permanente, que
       // es la forma más rápida de que nadie mire este test.
       if (/=\s*'https:\/\//.test(src)) continue
+      const handlers = handlersDe(src)
       for (const m of src.matchAll(ENVIOS)) {
         const cuerpo = objeto(src, m.index + m[0].length - 1)
         const linea = src.slice(0, m.index).split('\n').length
-        for (const v of cuerpo.matchAll(VERBO)) salida.push({ verbo: v[1], donde: `${p}:${linea}` })
+        for (const v of cuerpo.matchAll(VERBO)) salida.push({ verbo: v[2], donde: `${p}:${linea}`, handlers, campo: v[1] })
       }
     }
   }
@@ -79,12 +80,50 @@ function verbosQueManda(): { verbo: string; donde: string }[] {
 }
 
 /** Todo string en minúscula-con-guiones que aparece en un handler: contra eso se compara. */
+function verbosDe(p: string): Set<string> {
+  const salida = new Set<string>()
+  for (const m of readFileSync(p, 'utf8').matchAll(/'([a-z0-9-]+)'/g)) salida.add(m[1])
+  return salida
+}
+
+/** Todo `api/` junto: el piso, para el cliente cuyo handler no se puede resolver. */
 function verbosQueContesta(): Set<string> {
   const salida = new Set<string>()
-  for (const p of archivos(SERVIDOR, ['.js', '.ts'])) {
-    for (const m of readFileSync(p, 'utf8').matchAll(/'([a-z0-9-]+)'/g)) salida.add(m[1])
-  }
+  for (const p of archivos(SERVIDOR, ['.js', '.ts'])) for (const v of verbosDe(p)) salida.add(v)
   return salida
+}
+
+/**
+ * 🔴 **A QUÉ handler le habla este cliente — y por qué mirar «todo api/» junto no alcanza.**
+ *
+ * 29-ago-2026: con el contrato de arriba en verde, **ocho verbos `eliminar` seguían rotos en
+ * producción** —Atención, Buzón, Calendario, Diseños, Votación, Liquidación, Ideas de Meta y
+ * Solicitudes—. La barrida de vocabulario del 28-ago los renombró en `lib/**`, los handlers se
+ * quedaron con `borrar`, y **el test no lo vio porque la palabra `'eliminar'` existe en OTRO
+ * archivo de `api/`**: el conjunto global la tenía, así que ninguno quedaba huérfano. Se cazó
+ * borrando a mano una solicitud de prueba en producción: `400 kind inválido`.
+ *
+ * 🔑 **El contrato no es «el verbo existe en algún lado»: es «lo conoce EL handler al que le
+ * hablás».** El cliente declara su endpoint (`const API = '/api/postventa?recurso=solicitudes'`) y
+ * el recurso nombra el archivo (`api/_solicitudes.js`), así que el par se puede resolver leyendo.
+ * Donde no se puede, se cae al conjunto global — que es lo de antes, ⛔ no menos.
+ */
+const ENDPOINT = /=\s*'\/api\/[a-z-]+\?recurso=([a-z0-9-]+)'/g
+
+/**
+ * ⚠️ **Los endpoints del archivo, en plural.** Un cliente puede tener dos —`lib/disenos/votacion.ts`
+ * tiene el privado y el público del votante— y quedarse con el primero acusaría al archivo de
+ * mandarle a uno un verbo que le manda al otro. Con la unión el test es **menos fino y sigue siendo
+ * correcto**: lo que caza es el verbo que no conoce NINGUNO de los handlers a los que le habla, que
+ * es exactamente el defecto de los ocho `eliminar`.
+ */
+function handlersDe(src: string): string[] {
+  const salida: string[] = []
+  for (const m of src.matchAll(ENDPOINT)) {
+    const p = join(SERVIDOR, `_${m[1]}.js`)
+    try { statSync(p); salida.push(p) } catch { /* el recurso no tiene archivo propio */ }
+  }
+  return [...new Set(salida)]
 }
 
 describe('el verbo que manda el cliente lo conoce el handler', () => {
@@ -95,6 +134,34 @@ describe('el verbo que manda el cliente lo conoce el handler', () => {
       // El mensaje nombra el renglón: quien lo rompa lo arregla sin leer este archivo.
       .map((x) => `${x.donde} → manda '${x.verbo}' y ningún handler de api/ lo conoce`)
     expect(huerfanos).toEqual([])
+  })
+
+  it('🔴 y lo conoce SU handler, ⛔ no «alguno»: es lo que dejó ocho `eliminar` rotos en prod', () => {
+    const cache = new Map<string, Set<string>>()
+    const conoce = (h: string, v: string) => {
+      if (!cache.has(h)) cache.set(h, verbosDe(h))
+      return cache.get(h)!.has(v)
+    }
+    const huerfanos = verbosQueManda()
+      .filter((x) => x.handlers.length)
+      // ⛔ **`recurso` no entra acá**: no es un verbo del handler sino la llave con la que
+      // `api/datos.js` ELIGE handler, y su lista vive allá. Además el archivo no siempre se llama
+      // como el recurso (`votacion` lo atiende `_disenos-votacion.js`), así que pedirle a un
+      // handler que «conozca» su propio nombre de ruta es preguntarle lo que no le toca. El
+      // contrato de arriba —contra todo `api/`— sí lo mira.
+      .filter((x) => x.campo !== 'recurso')
+      .filter((x) => !x.handlers.some((h) => conoce(h, x.verbo)))
+      .map((x) => `${x.donde} → manda '${x.verbo}' y ${x.handlers.join(' / ')} no lo conoce`)
+    expect(huerfanos).toEqual([])
+  })
+
+  it('🔑 y el par cliente→handler se resuelve de verdad, o el de arriba mira una lista vacía', () => {
+    // 🔴 **El cero afirma.** Si cambia la forma del endpoint —otra convención de nombre, el recurso
+    // en una variable— `handlerDe` devuelve `null` para todos y el test de arriba pasa sin mirar
+    // nada. Este piso dice cuántos pares se están mirando de verdad.
+    const conHandler = verbosQueManda().filter((x) => x.handlers.length && x.campo !== 'recurso')
+    expect(new Set(conHandler.flatMap((x) => x.handlers)).size).toBeGreaterThan(8)
+    expect(conHandler.length).toBeGreaterThan(20)
   })
 
   it('🔑 y el barrido encuentra verbos de verdad, o el test de arriba se cumple vacío', () => {

@@ -220,7 +220,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    if (action === 'borrar') {
+    // ⚠️ El verbo acepta además el nombre viejo (`borrar`). **No es indecisión: es que una pestaña
+    // abierta manda el verbo del bundle que bajó**, y el día del deploy los dos conviven.
+    if (action === 'eliminar' || action === 'borrar') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'falta id' });
       // `on delete cascade` se lleva las boletas. Es el único verbo que pierde votos.

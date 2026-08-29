@@ -1189,7 +1189,9 @@ export default async function handler(req, res) {
     // ⛔ **`liquidacion_bitacora` NO se borra acá, y no es un olvido.** Que alguien borre la campaña
     // no deshace los precios que estuvieron puestos en la tienda de verdad. Por eso el evento lleva
     // copiados el nombre de la campaña y el del producto: se lee solo, sin nadie a quien apuntar.
-    if (b.action === 'borrar') {
+    // ⚠️ El verbo acepta además el nombre viejo (`borrar`). **No es indecisión: es que una pestaña
+    // abierta manda el verbo del bundle que bajó**, y el día del deploy los dos conviven.
+    if (b.action === 'eliminar' || b.action === 'borrar') {
       const { data: previo, error: e0 } = await supabase.from('liquidaciones')
         .select('estado, datos').eq('store', store).eq('id', id).maybeSingle();
       if (e0) throw new Error(e0.message);

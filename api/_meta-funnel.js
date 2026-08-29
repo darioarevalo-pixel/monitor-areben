@@ -241,7 +241,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, idea: actualizada });
     }
 
-    if (b.action === 'borrar') {
+    // ⚠️ El verbo acepta además el nombre viejo (`borrar`). **No es indecisión: es que una pestaña
+    // abierta manda el verbo del bundle que bajó**, y el día del deploy los dos conviven.
+    if (b.action === 'eliminar' || b.action === 'borrar') {
       const id = String(b.id || '');
       if (!id) return res.status(400).json({ error: 'falta id' });
       const idea = await leerIdea(id);

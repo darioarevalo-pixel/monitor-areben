@@ -131,7 +131,9 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      if (b.action === 'borrar') {
+      // ⚠️ El verbo acepta además el nombre viejo (`borrar`). **No es indecisión: es que una pestaña
+      // abierta manda el verbo del bundle que bajó**, y el día del deploy los dos conviven.
+      if (b.action === 'eliminar' || b.action === 'borrar') {
         const { error } = await db().from(TABLA).delete().eq('id', id);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true });
