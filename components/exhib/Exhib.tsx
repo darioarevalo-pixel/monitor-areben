@@ -154,10 +154,10 @@ export function Exhib() {
     const grupos = agruparPDF(lista, ex.estados)
     if (grupos['sin-marcar'].length) {
       const ok = await confirmar({
-        titulo: 'Hay faltantes sin estado',
+        titulo: 'Hay productos sin escanear y sin estado',
         tono: 'warning',
         ok: 'Generar igual',
-        mensaje: `Tenés ${grupos['sin-marcar'].length} ${grupos['sin-marcar'].length === 1 ? 'faltante' : 'faltantes'} sin cargar estado. Lo ideal es marcar cada uno (Solucionado / Una sola unidad / No se encuentra) antes de terminar.`,
+        mensaje: `Tenés ${grupos['sin-marcar'].length} ${grupos['sin-marcar'].length === 1 ? 'producto sin escanear' : 'productos sin escanear'} y sin estado cargado. Lo ideal es marcar cada uno (Solucionado / Una sola unidad / No se encuentra) antes de terminar.`,
       })
       if (!ok) return
     }
@@ -341,10 +341,10 @@ export function Exhib() {
         </Card>
       )}
 
-      {/* ── Faltantes ── */}
+      {/* ── Sin escanear ── */}
       {fase === 'triage' && (
         <Card>
-          <Subtitulo>Faltantes: marcá qué pasó con cada uno</Subtitulo>
+          <Subtitulo>Sin escanear: marcá qué pasó con cada uno</Subtitulo>
 
           {/*
             La derivación de la cola de reetiquetado. Va ARRIBA de la lista y no como una columna:
@@ -398,17 +398,17 @@ export function Exhib() {
             {faltas.length ? (
               faltas.map((it) => <Fila key={exhibId(it)} it={it} triage estado={ex.estados[exhibId(it)]} onEstado={ex.setEstado} onPreview={setPreview} />)
             ) : (
-              <div style={{ color: color.successInk, padding: 14, textAlign: 'center', fontWeight: 600 }}>No quedaron faltantes: todo escaneado ✅</div>
+              <div style={{ color: color.successInk, padding: 14, textAlign: 'center', fontWeight: 600 }}>No quedó ninguno sin escanear: todo escaneado ✅</div>
             )}
           </div>
 
           {sinMarcar ? (
             <Notice tone="warning" icon="⚠">
-              Te faltan marcar <b>{sinMarcar}</b> de {faltas.length} faltantes antes de generar el reporte.
+              Te faltan marcar <b>{sinMarcar}</b> de {faltas.length} sin escanear antes de generar el reporte.
             </Notice>
           ) : faltas.length ? (
             <Notice tone="success" icon="✓">
-              Todos los faltantes tienen estado. Listo para el reporte.
+              Todos los que quedaron sin escanear tienen estado. Listo para el reporte.
             </Notice>
           ) : null}
         </Card>
@@ -429,7 +429,7 @@ function Pasos({ fase, hechos, total, faltantes }: { fase: Fase; hechos: number;
   const pasos: { id: Fase; label: string; detalle?: string }[] = [
     { id: 'config', label: 'Configurar', detalle: total ? `${total} variantes` : undefined },
     { id: 'scan', label: 'Recorrer', detalle: fase !== 'config' ? `${hechos}/${total}` : undefined },
-    { id: 'triage', label: 'Faltantes', detalle: fase === 'triage' ? String(faltantes) : undefined },
+    { id: 'triage', label: 'Sin escanear', detalle: fase === 'triage' ? String(faltantes) : undefined },
   ]
   const idx = pasos.findIndex((p) => p.id === fase)
   return (

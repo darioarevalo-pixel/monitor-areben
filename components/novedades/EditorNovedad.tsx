@@ -172,11 +172,15 @@ export function EditorNovedad({
 
         {/* La marca es un filtro aparte y se combina con lo de arriba: "Local + Zattia" es la que
             faltaba, porque el rol `local` solo no distingue de qué local se habla. Queda afuera
-            sólo quien está clavado a la otra marca — a quien ve las dos le llega igual, porque
-            trabaja en las dos. */}
+            sólo quien tiene una sola marca, si es la otra — a quien ve las dos le llega igual,
+            porque trabaja en las dos.
+            ⚠️ **Decía «clavado a la otra marca»**, y `clavado` significaba DOS cosas: acá una cuenta
+            atada a una marca, y en `components/memo/` **un producto sin rotación** — que es el
+            sentido que se queda con la palabra (decisión de Bruno, 29-ago). Éste ⛔ no necesitó
+            bautismo: «tiene una sola marca» es lo que la pantalla quería decir. */}
         <Field
           label="¿De qué marca?"
-          hint="Se suma a lo de arriba. A quien trabaja en las dos marcas le llega igual: sólo queda afuera el que está clavado a la otra."
+          hint="Se suma a lo de arriba. A quien trabaja en las dos marcas le llega igual: sólo queda afuera el que tiene una sola marca, si es la otra."
         >
           <Select
             value={destino.marca ?? ''}

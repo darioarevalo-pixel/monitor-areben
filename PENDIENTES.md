@@ -108,10 +108,11 @@ un botón, un título o un cartel de vacío, se lee. El nombre del trabajo, para
   editar** —le sacó el import de `vistaTemp` y está tocando `components/crm/temperatura.ts`—, así que
   commitearlo publicaría su trabajo por la mitad. 📌 [[feedback_areben_checkout_compartido_no_hay_merge]].
   ▶️ **Entra en el próximo commit que toque CRM**, o se vuelve a aplicar si se pierde.
-- **Los dos homónimos que quedan**: `Faltantes` (la pestaña de Exhib → `Sin escanear`; el campo de
-  Recepciones → `Diferencias`) y **`clavado`**. ▶️ **Falta que Bruno bautice el segundo sentido de
-  `clavado`.** 🔑 Y antes de mandar a bautizar: en MAKETA los dos homónimos se cerraron **sin
-  bautizar nada**, porque una de las dos acepciones **ya estaba prohibida por otra regla**.
+- 🏁 **Los dos homónimos se cerraron** (29-ago, decisión de Bruno: la palabra se la queda el sentido
+  que ya la tenía). `Faltantes` queda en Compras y en **Exhib** pasó a **«Sin escanear»**; en
+  Recepciones ya decía «Unidades que faltaron» y ⛔ no hubo nada que tocar. `clavado` queda para el
+  **producto sin rotación**, y la cuenta atada a una marca pasó a **«el que tiene una sola marca»**.
+  🔑 **Los cuatro homónimos de los dos repos se cerraron SIN bautizar una palabra nueva.**
 - **Anunciar los renombres en Novedades** el día que se publiquen: esta app **ya la usa gente**, y un
   rótulo que cambia de nombre confunde a quien ya lo aprendió. Son ~40 rótulos.
 - ⚠️ **`tests/crm-paridad.test.ts` sigue con 13 tests en rojo, y ⛔ no son de esta corrida**: se midió

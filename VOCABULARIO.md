@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-08-29c
+Versión: 2026-08-29d
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -144,9 +144,19 @@ sentido**, y hasta entonces ⛔ no se toca el título.
 
 | palabra | los dos (o tres) sentidos | dónde |
 |---|---|---|
-| **Faltantes** | lo que el cliente pide y no tenemos · lo que no se escaneó · lo que faltó al recibir | monitor: sección `pedidos-clientes` · pestaña de Exhib · campo de Recepciones |
 | **Ingresos** | la importación que **viene** (`ingresos`) · lo que **ya entró** (`recepciones`) | monitor: dos filas contiguas en Compras |
-| **clavado** | producto sin rotación · usuario atado a una sola marca | monitor: `components/memo/Memo.tsx` · `components/novedades/EditorNovedad.tsx` |
+
+🏁 **`Faltantes` y `clavado` se cerraron el 29-ago, y los dos igual que en MAKETA: sin bautizar nada.**
+La palabra **se la queda el sentido que ya la tenía en el menú**, y el otro se dice con las palabras
+que la pantalla ya usaba:
+- **Faltantes** queda para *lo que el cliente pide y no tenemos* (sección `pedidos-clientes`, decisión
+  de Bruno). En **Exhib** era *lo que no se escaneó* ⇒ **«Sin escanear»**, que es lo que dice la
+  pantalla dos renglones más abajo («todo escaneado ✅»). En **Recepciones** ya decía **«Unidades que
+  faltaron»**, así que ⛔ no había nada que tocar.
+- **clavado** queda para *el producto sin rotación* (`components/memo/`, decisión de Bruno). La
+  *cuenta atada a una sola marca* pasó a decirse **«el que tiene una sola marca»**, que es lo que la
+  ayuda quería decir. ⚠️ En `lib/permisos.core.js` la palabra sigue viva **en comentarios**, y ahí
+  ⛔ no se toca: la regla es del texto que lee una persona.
 
 🏁 **Los dos de MAKETA se cerraron el 29-ago, y ⛔ ninguno de los dos hizo falta bautizarlo**: los dos
 tenían **un sentido que ya estaba prohibido por otra regla**, así que la palabra no era ambigua, era
