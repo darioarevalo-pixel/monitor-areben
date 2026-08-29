@@ -76,7 +76,7 @@ export function Bitacora({ liqId, marca, items }: { liqId: string; marca: Marca;
         const e = await leerBitacora(marca, liqId)
         if (vivo) setEventos(e)
       } catch (err) {
-        if (vivo) setError(err instanceof Error ? err.message : 'No se pudo leer la bitácora.')
+        if (vivo) setError(err instanceof Error ? err.message : 'No se pudo leer la actividad.')
       }
     })()
     return () => { vivo = false }

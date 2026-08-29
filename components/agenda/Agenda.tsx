@@ -583,7 +583,7 @@ function ModalIngreso({ moldes, onCerrar, onListo }: {
       else toast.ok(`Listo: ${r.creados} ${r.creados === 1 ? 'pendiente' : 'pendientes'}.`)
       await onListo()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo sembrar el ingreso.')
+      toast.error(e instanceof Error ? e.message : 'No se pudieron cargar los pendientes.')
     } finally {
       setGuardando(false)
     }

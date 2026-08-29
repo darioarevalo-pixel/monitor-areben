@@ -94,7 +94,7 @@ export async function leerPidsCampania(store: Marca, liqId: string): Promise<Pid
 export async function leerBitacora(store: Marca, liqId: string): Promise<EventoBitacora[]> {
   const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&bitacora=1&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
-  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la bitácora de la campaña.')
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la actividad de la campaña.')
   return (d.eventos || []) as EventoBitacora[]
 }
 

@@ -557,15 +557,25 @@ describe('el glosario es el MISMO archivo en los dos repos', () => {
  * sinónimo («pasada», «vuelta» dejan la frase sin información): **se dice qué pasa**. «No hay
  * ninguna corrida exitosa reciente» pasó a **«hace rato que no termina bien»**.
  *
- * ⚠️ **Acá sólo van las palabras que YA tienen reemplazo decidido en este repo.** `padrón`,
- * `bitácora` y `sembrar` siguen vivas en pantalla y ⛔ **no entran todavía**, porque las tres son
- * decisión de Bruno y no mías: el `padrón` de Canjes es de las secciones que él dejó afuera de la
- * corrida, `Bitácora` es un título de Liquidación y `Sembrar` es el nombre de un gesto que alguien
- * de Administración aprieta. 📌 Están anotadas en `PENDIENTES.md`. **Una lista corta que dice la
- * verdad defiende más que una larga con tres excepciones adentro.**
+ * 🔑 **De las tres que quedaban para preguntarle a Bruno, dos NO eran una decisión: eran un resto.**
+ * `Sembrar` ya no era el nombre de ningún botón —el de la Agenda dice **«Cargar los pendientes»**—
+ * y sólo sobrevivía en el mensaje de error, que decía otra cosa que el botón. Y `Bitácora`, el
+ * rótulo de una pestaña de Liquidación, es la MISMA palabra que el menú de MAKETA ya había resuelto
+ * como **Actividad**. ⇒ **antes de mandar a decidir, mirar si el gesto ya se llama de otra manera en
+ * su propio botón.**
+ *
+ * ⚠️ **`padrón` ⛔ NO entra, y no es un olvido**: sus 13 apariciones son todas de **Canjes**, que
+ * Bruno dejó afuera de la corrida. Es una decisión suya ya tomada, ⛔ no una pendiente.
  */
 describe('la jerga de §3 no entra en pantalla — VOCABULARIO.md', () => {
-  const JERGA = /\b(corrida|corridas|copy|moodboard|moodboards)\b/i
+  const JERGA = /\b(corrida|corridas|copy|moodboard|moodboards|bitácora|bitácoras|sembrar|sembrá)\b/i
+
+  /**
+   * ⛔ **Canjes queda afuera por decisión de Bruno**, ⛔ no porque la regla no aplique. Se escribe
+   * como una lista de archivos y no como una palabra excusada, para que el día que se levante la
+   * decisión se vea exactamente qué entra.
+   */
+  const AFUERA_POR_DECISION = 'components/canjes/'
 
   /**
    * ⛔ **Lo que imprime un SCRIPT no es una pantalla**, y en este repo eso son las rutas de cron y
@@ -595,6 +605,7 @@ describe('la jerga de §3 no entra en pantalla — VOCABULARIO.md', () => {
     for (const raiz of DONDE) {
       for (const p of archivos(raiz)) {
         if (NO_ES_PANTALLA.some((x) => p.startsWith(x))) continue
+        if (p.startsWith(AFUERA_POR_DECISION)) continue
         sinComentarios(readFileSync(p, 'utf8'))
           .split('\n')
           .forEach((linea, k) => {
@@ -606,5 +617,14 @@ describe('la jerga de §3 no entra en pantalla — VOCABULARIO.md', () => {
       }
     }
     expect(intrusos).toEqual([])
+  })
+
+  it('🔴 y Canjes sigue teniendo la palabra: la excepción excusa algo o se saca', () => {
+    // 🔑 Misma regla que la allowlist de símbolos. El día que Canjes no diga `padrón` en ningún
+    // lado, esta línea deja de excusar nada y queda como permiso para escribir jerga ahí.
+    const conJerga = archivos('components').filter(
+      (p) => p.startsWith(AFUERA_POR_DECISION) && /\bpadrón\b/i.test(sinComentarios(readFileSync(p, 'utf8'))),
+    )
+    expect(conJerga.length).toBeGreaterThan(0)
   })
 })

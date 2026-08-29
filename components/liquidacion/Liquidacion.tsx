@@ -1042,7 +1042,7 @@ function DetalleCampania({
             },
             {
               key: 'bitacora',
-              label: 'Bitácora',
+              label: 'Actividad',
               // ⛔ **Sin badge, a propósito.** Los otros dos cuentan pendientes —algo que hacer—; acá
               // el número sólo crecería, y un contador que nunca baja se deja de mirar a la semana.
               hint: 'Qué precio se escribió en Gestión Nube y cuál se sacó, con quién y cuándo',

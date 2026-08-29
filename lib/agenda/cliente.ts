@@ -76,7 +76,7 @@ async function postearConRespuesta(body: Record<string, unknown>, siFalla: strin
  * dos veces no puede dejar veinte pendientes.
  */
 export async function sembrarIngreso(nombre: string, fecha: FechaIso, puerta: Puerta, marca: Marca): Promise<{ creados: number; ya: boolean }> {
-  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha, puerta, marca }, 'No se pudo sembrar el ingreso.')
+  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha, puerta, marca }, 'No se pudieron cargar los pendientes.')
   return { creados: Number(d?.creados) || 0, ya: !!d?.ya }
 }
 
