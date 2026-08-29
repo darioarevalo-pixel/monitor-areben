@@ -7,6 +7,8 @@
 //   POST { recurso:'agenda', action:'borrar-item', id }
 //   POST { recurso:'agenda', action:'marcar', id, fecha, nota }
 //   POST { recurso:'agenda', action:'desmarcar', id, fecha }
+//   POST { recurso:'agenda', action:'ingreso', nombre, fecha, puerta, marca }      → siembra
+//   POST { recurso:'agenda', action:'condicion', nombre, fecha, cambio, marca }    → siembra
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=agenda`. El plan Hobby de
 // Vercel admite 12 funciones y hay 9 usadas. Si alguien crea `api/agenda.js` "por prolijidad",
@@ -42,7 +44,7 @@ import { CLAVES_PUERTA, moldeCorreEnMarca, puertaDeTipo } from '../lib/agenda/pu
 // la sesión de fotos— y este handler no sabe decir «ingreso»: lee cuál es la plantilla, cuál es su
 // eje y qué rango de días admite. La lista blanca vive en `plantillas.core.js` porque la pantalla
 // la necesita tipada y el handler la necesita en `.js`. Ver su encabezado.
-import { CLAVES_PLANTILLA, esClavePlantilla, moldeCorreEnEje, offsetDeMolde, plantillaDe } from '../lib/agenda/plantillas.core.js';
+import { CLAVES_PLANTILLA, esClavePlantilla, hechoYaPaso, moldeCorreEnEje, offsetDeMolde, PLANTILLAS, plantillaDe } from '../lib/agenda/plantillas.core.js';
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
@@ -228,6 +230,22 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
   const limpio = String(nombre || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
   if (!limpio) return { error: `Falta el nombre ${p.delHecho}.` };
   if (!esFechaIso(fecha)) return { error: `La fecha ${p.delHecho} tiene que ser YYYY-MM-DD.` };
+  /*
+    🔴 **El hecho vencido ⛔ no siembra, y lo DICE.** Lo piden las dos plantillas que cuelgan de una
+    fecha que alguien tipeó y que se puede editar después: un lanzamiento firme de agosto y una
+    promo bancaria de junio están los dos cargados en producción, y a los dos les alcanza con que
+    alguien les corrija una coma para sembrar hoy una lista de pendientes con fechas viejas — la
+    mitad fuera de la ventana de arrastre, o sea invisibles, y la otra mitad vencidos.
+
+    ⚠️ **El silencio se leería como que sembró**, así que devuelve `{ error }` y ⛔ no `{ creados: 0 }`.
+    Va ANTES de tocar la base, como el resto de las validaciones.
+
+    ⛔ **El ingreso ⛔ NO lo lleva, y es una decisión**: la mercadería llega y a veces se avisa dos
+    días después. Ahí el pendiente atrasado es exactamente lo que hay que ver.
+  */
+  if (p.noSiembraSiPaso && hechoYaPaso(fecha)) {
+    return { error: `La fecha ${p.delHecho} ya pasó: no se sembró nada.` };
+  }
   /*
     🔑 **El eje es obligatorio en la plantilla que TIENE eje, y ⛔ no existe en la que no.** El
     lanzamiento no tiene: sus once renglones tienen la misma dueña pase lo que pase. Y un eje que
@@ -560,13 +578,19 @@ export default async function handler(req, res) {
         // día: lo filtra `vaEl`.
         plantilla: (i.datos && i.datos.plantilla) || null,
         offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
-        // En qué valores del eje corre el molde. **Vacío = todos**, igual que `marcas`. Son dos
-        // campos y no uno «eje» genérico porque cada plantilla tiene el suyo y se guardan así en
+        // En qué valores del eje corre el molde. **Vacío = todos**, igual que `marcas`. Es un campo
+        // por eje y no uno «eje» genérico porque cada plantilla tiene el suyo y se guardan así en
         // `datos`: aplanarlos acá obligaría a saber de qué plantilla es para poder leerlos.
         // ⚠️ Al guardar se escribe **sólo el de su plantilla**: cambiarle la plantilla a un molde le
         // borra la lista del otro eje, que es lo correcto —un molde de sesión no corre en puertas—.
-        puertas: (i.datos && Array.isArray(i.datos.puertas) ? i.datos.puertas : []),
-        disparadores: (i.datos && Array.isArray(i.datos.disparadores) ? i.datos.disparadores : []),
+        // 🔴 🔑 **Sale de PLANTILLAS y ⛔ no de una lista escrita acá.** Estuvo escrita, con dos
+        // nombres, hasta el 29-ago-2026: el eje de la tercera plantilla habría viajado siempre
+        // vacío, la pantalla habría mostrado los tildes apagados —afirmando que corre en todos— y
+        // el próximo guardado los habría borrado de verdad. Nada falla, y el molde queda mal.
+        ...Object.fromEntries(PLANTILLAS.filter((p) => p.eje).map((p) => [
+          p.eje.campo,
+          i.datos && Array.isArray(i.datos[p.eje.campo]) ? i.datos[p.eje.campo] : [],
+        ])),
         autor: i.autor,
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
@@ -790,7 +814,53 @@ export default async function handler(req, res) {
       };
       const { error } = await supabase.from('agenda_promos').upsert([fila], { onConflict: 'id' });
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, id });
+
+      /*
+        🔑 **EL 4º DISPARADOR, la mitad automática: una promo bancaria PRENDIDA siembra los pasos
+        de comunicarla.**
+
+        El manual «Las chiquitas» dice que un cambio de condición comercial *«no es un posteo: es
+        destacadas + barra de anuncios + bio + el local avisado + el mail»*, y ⛔ hoy no lo dispara
+        nada. El objeto que dice «cambió una condición comercial» **ya existía**: esta promo, que
+        alguien carga con su banco, su beneficio y su fecha.
+
+        🔴 **El hecho es que esté PRENDIDA, ⛔ no que se haya creado** —igual que el lanzamiento es
+        «quedó firme» y ⛔ no «se creó»—. Una promo cargada apagada todavía no cambió nada afuera;
+        el día que la prendan, este mismo `upsert` la siembra, sin preguntar si la promo existía:
+        eso lo resuelve la clave.
+
+        🔴 **Una por MARCA, y la marca SÍ entra en la clave.** Es la única de las cuatro plantillas
+        donde el hecho no tiene una marca: la promo la define el banco y `marcas: []` quiere decir
+        **las dos tiendas**. Cambiar el banner de Zattia y el de BDI son dos trabajos, de dos
+        personas, en dos tiendas ⇒ son dos hechos, y con una sola clave el segundo se leería como
+        «ya estaba sembrado». ⚠️ En las otras tres la marca ⛔ no entra: allá el hecho ya tiene una.
+
+        🔴 **Sembrar ⛔ no puede voltear el guardado**, como en el calendario: la promo es el dato y
+        los pendientes son la consecuencia. Si no hay moldes cargados, la promo igual quedó
+        guardada y el error viaja en la respuesta — ⛔ no se calla, o quien la cargó da por hecho
+        que el trabajo salió.
+      */
+      const deLaPromo = marcas.length ? marcas : MARCAS;
+      const sembrado = fila.activa
+        ? await Promise.all(deLaPromo.map(async (m) => ({
+          marca: m,
+          ...(await sembrar(supabase, {
+            plantilla: 'condicion',
+            // El agrupador del título de cada clon. El banco es lo que la nombra en la pantalla de
+            // promos, así que es lo que hace reconocible el pendiente.
+            nombre: `Promo ${banco}`,
+            // 🔑 **`desde`, ⛔ no hoy**: una promo se carga con anticipación y los pasos cuelgan del
+            // día en que la promo EMPIEZA a regir. Es el mismo reloj que la fecha objetivo del
+            // lanzamiento, y por eso los offsets del molde pueden ser negativos.
+            fecha: fila.desde,
+            autor: yo,
+            eje: 'promo',
+            marca: m,
+            clave: `promo·${id}·${m}`,
+          })),
+        })))
+        : null;
+      return res.status(200).json({ ok: true, id, ...(sembrado ? { sembrado } : {}) });
     }
 
     if (action === 'borrar-item') {
@@ -820,6 +890,31 @@ export default async function handler(req, res) {
         fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
         autor: yo,
         eje: b.puerta,
+        marca: b.marca,
+      });
+      if (r.error) return res.status(400).json({ error: r.error });
+      return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
+    }
+
+    /**
+     * El alta a mano del 4º disparador: «cambió una condición comercial».
+     *
+     * 🔑 **Existe aunque la promo bancaria ya siembre sola, y ⛔ no es un duplicado**: de las tres
+     * cosas que el manual nombra —una promo, una forma de pago, un cambio de envío— **una sola
+     * tiene objeto en el Monitor**. Un cambio de envío o una billetera nueva no los carga nadie en
+     * ninguna pantalla, y son exactamente los que hoy se comunican de a pedazos.
+     *
+     * ⚠️ Pide `agenda.cargar` por el guard de arriba, como todo lo que escribe en la Agenda.
+     */
+    if (action === 'condicion') {
+      const r = await sembrar(supabase, {
+        plantilla: 'condicion',
+        nombre: b.nombre,
+        // ⛔ Sin default a hoy, a diferencia del ingreso: acá la fecha es **desde cuándo rige**, que
+        // es un dato que la persona tiene y que casi nunca es hoy. Un default la contestaría sola.
+        fecha: b.fecha,
+        autor: yo,
+        eje: b.cambio,
         marca: b.marca,
       });
       if (r.error) return res.status(400).json({ error: r.error });

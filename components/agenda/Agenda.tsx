@@ -28,24 +28,23 @@ import { useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  BuscarInput, Button, Card, Chips, ContadorFiltro, EmptyState, Esqueleto, Field, FilterBar, Input,
-  Modal, Notice, Select, StatusPill, Tabs,
+  BuscarInput, Button, Card, Chips, ContadorFiltro, EmptyState, Esqueleto, FilterBar,
+  Notice, Select, StatusPill, Tabs,
   color, font, space, weight, useConfirmar, useFiltroUrl, useToast, type ChipOpt, type TabItem,
 } from '@/components/ui'
 import {
-  avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, moldeCorreEnMarca, pendientesDe, promosDe,
-  filtrarItems, opcionesDeQuien,
-  plantillaDe, PUERTAS, rotuloBeneficio, rotuloDestino, rotuloPuerta, rotuloRegla, vaEl,
-  type FiltroClase, type FiltroEstado, type ItemAgenda, type Promo, type Puerta,
+  avisosDe, contarSinTildar, corre, hoyIso, pendientesDe, promosDe, filtrarItems, opcionesDeQuien,
+  plantillaDe, PLANTILLAS, rotuloBeneficio, rotuloDestino, rotuloRegla, vaEl,
+  type FiltroClase, type FiltroEstado, type ItemAgenda, type Plantilla, type Promo,
 } from '@/lib/agenda'
-import type { Marca } from '@/lib/nav.datos'
-import { borrarItem, borrarPromo, guardarItem, guardarPromo, sembrarIngreso } from '@/lib/agenda/cliente'
+import { borrarItem, borrarPromo, guardarItem, guardarPromo } from '@/lib/agenda/cliente'
 import { useAgenda } from '@/store/useAgenda'
 import { AvisosHoy } from './AvisosHoy'
 import { Cumplimiento } from './Cumplimiento'
 import { GrillaAgenda } from './GrillaAgenda'
-import { MARCAS, ModalItem, itemVacio } from './ModalItem'
+import { ModalItem, itemVacio } from './ModalItem'
 import { ModalPromo, promoVacia } from './ModalPromo'
+import { ModalSembrar } from './ModalSembrar'
 import { PendientesHoy } from './PendientesHoy'
 import { TarjetaPromo } from './TarjetaPromo'
 
@@ -62,7 +61,11 @@ export function Agenda() {
   const [tab, setTab] = useFiltroUrl<'hoy' | 'mes' | 'carga' | 'cumplimiento'>('t', 'hoy')
   const [editando, setEditando] = useState<Promo | null>(null)
   const [editandoItem, setEditandoItem] = useState<ItemAgenda | null>(null)
-  const [sembrando, setSembrando] = useState(false)
+  /**
+   * Qué hecho se está sembrando, ⛔ no un booleano: los botones que siembran salen del catálogo y
+   * son dos —el ingreso y el cambio de condición comercial—, así que el modal necesita saber cuál.
+   */
+  const [sembrando, setSembrando] = useState<Plantilla | null>(null)
 
   const hoy = hoyIso()
   const deHoy = promosDe(promos, hoy, { marca })
@@ -82,10 +85,20 @@ export function Agenda() {
       : []),
   ]
 
+  /**
+   * 🔑 **Guardar una promo prendida ahora SIEMBRA los pasos de comunicarla** (4º disparador), y eso
+   * se cuenta en el toast: una lista nueva que nadie ve es una lista que nadie hace. ⚠️ Se cuenta
+   * también lo que ⛔ no sembró —no hay moldes, la fecha ya pasó— porque el silencio se leería como
+   * que el trabajo salió.
+   */
   const onGuardar = async (p: Promo) => {
-    await guardarPromo(p)
+    const { sembrado } = await guardarPromo(p)
     await cargar()
-    toast.ok('Promoción guardada.')
+    const creados = sembrado.reduce((n, s) => n + (s.creados || 0), 0)
+    const fallo = sembrado.find((s) => s.error)
+    if (fallo) toast.ok(`Promoción guardada. Los pasos para comunicarla no se cargaron: ${fallo.error}`)
+    else if (creados > 0) toast.ok(`Promoción guardada, y ${creados} ${creados === 1 ? 'pendiente' : 'pendientes'} para comunicarla.`)
+    else toast.ok('Promoción guardada.')
   }
 
   const onBorrar = async (p: Promo) => {
@@ -147,11 +160,16 @@ export function Agenda() {
           */}
           <Button variant="outline" onClick={() => setEditandoItem(itemVacio('aviso'))}>Nuevo aviso</Button>
           {/*
-            🔑 **Es el disparador del ingreso, y existe porque hoy no existe ninguno**: dos manuales
-            se apoyan en «el aviso de ingreso de Administración» y ese aviso era una persona
-            acordándose. Siembra los pasos que estén cargados como molde, con la fecha del ingreso.
+            🔑 **Los disparadores salen del CATÁLOGO, ⛔ no están escritos acá**: uno por plantilla
+            que se aprieta a mano (`pantalla`). Existen porque hoy el disparador es una persona
+            acordándose — dos manuales se apoyan en «el aviso de ingreso de Administración», que era
+            eso, y el cambio de condición comercial no lo prende nada. Siembran los pasos que estén
+            cargados como molde. ⚠️ El lanzamiento y la sesión de fotos ⛔ NO tienen botón: los
+            dispara su propia pantalla, y un segundo lugar para decirlo sembraría dos veces.
           */}
-          <Button variant="outline" onClick={() => setSembrando(true)}>Ingresó mercadería</Button>
+          {PLANTILLAS.filter((p) => p.pantalla).map((p) => (
+            <Button key={p.key} variant="outline" onClick={() => setSembrando(p)}>{p.pantalla!.boton}</Button>
+          ))}
         </HeaderAcciones>
       )}
 
@@ -184,10 +202,11 @@ export function Agenda() {
       {tab === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
 
       {sembrando && (
-        <ModalIngreso
-          moldes={items.filter((i) => i.plantilla === 'ingreso')}
-          onCerrar={() => setSembrando(false)}
-          onListo={async () => { setSembrando(false); await cargar() }}
+        <ModalSembrar
+          plantilla={sembrando}
+          moldes={items.filter((i) => i.plantilla === sembrando.key)}
+          onCerrar={() => setSembrando(null)}
+          onListo={async () => { setSembrando(null); await cargar() }}
         />
       )}
 
@@ -535,166 +554,4 @@ function EstadoPromo({ promo, hoy }: { promo: Promo; hoy: string }) {
   return corre(promo, hoy)
     ? <StatusPill tone="success" label="corre hoy" />
     : <StatusPill tone="neutral" label="hoy no toca" />
-}
-
-/**
- * «Ingresó mercadería» — el disparador de la lista corta.
- *
- * 🔴 **Existe porque hoy el disparador es una persona acordándose.** Dos manuales («Sesiones de
- * fotos» y «Cómo se lanza un producto») se apoyan en un aviso de ingreso automático que nunca
- * existió, y el flujo que dispara —nombre → descripción → precio → foto → publicación → pantallas—
- * es, según el manual, **el que más se cae**: al no haber fecha grande, nadie lo mira.
- *
- * 🔑 **No inventa los renglones**: clona los ítems marcados como molde. Si no hay ninguno lo dice y
- * no siembra nada — es preferible a crear seis pendientes de mentira que después nadie tilda.
- */
-function ModalIngreso({ moldes, onCerrar, onListo }: {
-  moldes: ItemAgenda[]
-  onCerrar: () => void
-  onListo: () => Promise<void>
-}) {
-  const toast = useToast()
-  const [nombre, setNombre] = useState('')
-  const [fecha, setFecha] = useState(hoyIso())
-  // 🔴 **Arranca vacía y no en «importación»**, que es la puerta más común. Un default acá se
-  // contesta solo: el que carga aprieta sin mirar y los dos pasos que cambian de dueña quedan mal
-  // puestos, que es peor que no sembrar — un pendiente que ya tiene nombre no lo revisa nadie.
-  const [puerta, setPuerta] = useState<Puerta | ''>('')
-  // 🔴 Y la marca arranca vacía por el mismo motivo, ⛔ no en la del header: el que carga puede
-  // estar mirando BDI y estar sembrando el ingreso de ropa. Un default que casi siempre acierta es
-  // el peor de todos — el día que se equivoca nadie lo mira, porque nadie eligió nada.
-  const [marcaIngreso, setMarcaIngreso] = useState<Marca | ''>('')
-  const [guardando, setGuardando] = useState(false)
-
-  // Cuántos renglones va a crear ESTA combinación. El total no sirve: los pasos que cambian de
-  // dueña están cargados uno por puerta y por marca, así que decir «se van a crear 16» sería
-  // mentir en las ocho. Las dos preguntas son las mismas que hace el servidor al sembrar.
-  const listo = !!puerta && !!marcaIngreso
-  const paraEsta = listo
-    ? moldes.filter((m) => moldeCorreEn(m.puertas, puerta as Puerta) && moldeCorreEnMarca(m.marcas, marcaIngreso as Marca))
-    : []
-
-  async function sembrar() {
-    if (!nombre.trim() || !listo) return
-    setGuardando(true)
-    try {
-      const r = await sembrarIngreso(nombre.trim(), fecha, puerta as Puerta, marcaIngreso as Marca)
-      if (r.ya) toast.ok('Ese ingreso ya estaba cargado: no se duplicó nada.')
-      else toast.ok(`Listo: ${r.creados} ${r.creados === 1 ? 'pendiente' : 'pendientes'}.`)
-      await onListo()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudieron cargar los pendientes.')
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  return (
-    <Modal
-      abierto
-      onCerrar={onCerrar}
-      titulo="Ingresó mercadería"
-      pie={
-        <>
-          <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
-          <Button
-            variant="solid"
-            tone="brand"
-            loading={guardando}
-            disabled={!nombre.trim() || !listo || paraEsta.length === 0}
-            onClick={() => void sembrar()}
-          >
-            Cargar los pendientes
-          </Button>
-        </>
-      }
-    >
-      {moldes.length === 0 ? (
-        <Notice tone="warning">
-          <b>Todavía no hay ningún paso cargado como molde.</b> Se cargan una sola vez desde «Nuevo
-          pendiente», tildando «Es un paso de la lista de ingreso» y poniéndole la dueña y a los
-          cuántos días va. Después, cada ingreso los clona solo.
-        </Notice>
-      ) : (
-        <>
-          <Field
-            label="Qué entró"
-            hint="Va adelante del título de cada pendiente, así se agrupan de un vistazo. Ej: «IMP2», «Camperas invierno»."
-          >
-            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="IMP2" />
-          </Field>
-          <div style={{ marginTop: space[3] }}>
-            <Field label="Cuándo entró" hint="Desde acá se cuentan los días de cada paso." width={200}>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-            </Field>
-          </div>
-          {/*
-            🔑 **Por dónde entró.** El nombre y la descripción cambian de dueña según la puerta —lo
-            cierra el manual «El nombre y la descripción del producto»—, así que sin esto los dos
-            renglones que más se caen salen con la persona equivocada.
-
-            ⚠️ Va **sin opción vacía elegible**: el placeholder es un `disabled`, no un «cualquiera».
-          */}
-          <div style={{ marginTop: space[3] }}>
-            <Field
-              label="Por dónde entró"
-              hint="Decide quién pone el nombre y quién escribe la descripción. Los otros pasos no cambian."
-              width={280}
-            >
-              <Select value={puerta} onChange={(e) => setPuerta(e.target.value as Puerta | '')}>
-                <option value="" disabled>Elegí la puerta…</option>
-                {PUERTAS.map((p) => (
-                  <option key={p.key} value={p.key}>{p.label}</option>
-                ))}
-              </Select>
-            </Field>
-            {puerta && (
-              <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>
-                {PUERTAS.find((p) => p.key === puerta)?.ayuda}
-              </div>
-            )}
-          </div>
-          {/*
-            🔑 **De qué marca es el ingreso**, y es una pregunta aparte de la puerta: las cuatro
-            puertas existen en los dos negocios. Lo que cambia con la marca es quién escribe la
-            descripción de una compra nacional —el local si es ropa de Zattia, Administración si son
-            fundas de BDI—, así que sin esto ese renglón sale duplicado en cada ingreso nacional.
-          */}
-          <div style={{ marginTop: space[3] }}>
-            <Field
-              label="De qué marca"
-              hint="El renglón nace en esta marca, y algunos pasos son de una sola."
-              width={280}
-            >
-              <Select value={marcaIngreso} onChange={(e) => setMarcaIngreso(e.target.value as Marca | '')}>
-                <option value="" disabled>Elegí la marca…</option>
-                {MARCAS.map((m) => (
-                  <option key={m.key} value={m.key}>{m.label}</option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <div style={{ marginTop: space[3], color: color.mut, fontSize: font.sm }}>
-            {!listo ? (
-              <>Elegí la puerta y la marca para ver cuántos pendientes se van a crear.</>
-            ) : paraEsta.length === 0 ? (
-              <>
-                <b>
-                  Ninguno de los {moldes.length} moldes cargados corre para «{rotuloPuerta(puerta as Puerta)}»
-                  {' '}en {MARCAS.find((m) => m.key === marcaIngreso)?.label}.
-                </b>{' '}
-                Revisá en «Cargar» en qué puertas y en qué marcas corre cada paso.
-              </>
-            ) : (
-              <>
-                Se van a crear <b>{paraEsta.length}</b>{' '}
-                {paraEsta.length === 1 ? 'pendiente' : 'pendientes'}, cada uno con su dueña. El mismo
-                ingreso cargado dos veces no los duplica.
-              </>
-            )}
-          </div>
-        </>
-      )}
-    </Modal>
-  )
 }

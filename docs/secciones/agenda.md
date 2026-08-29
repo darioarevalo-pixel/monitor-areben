@@ -382,6 +382,53 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     silencio se leería como que sí.
   - **La pantalla lo dice**: el modal del hito avisa qué pasa al guardarlo firme —reparte trabajo a
     cuatro sectores— y qué **no** pasa mientras siga proyectada.
+- 🆕 🔴 🔑 **EL 4º DISPARADOR: EL CAMBIO DE CONDICIÓN COMERCIAL — y el hecho que se aprieta de DOS
+  lados** (29-ago-2026). Sale de una frase del manual «Las chiquitas de marketing», que es la que lo
+  define: *«un cambio de condición comercial —una promo, una forma de pago, un cambio de envío— **no
+  es un posteo**: es destacadas + barra de anuncios + bio + el local avisado + el mail»*. La
+  auditoría lo midió cuarto (23 días distintos de 2026, 6 con dos sectores o más) y lo único que le
+  faltaba era **qué lo aprieta**. Son dos cosas y ⛔ no una, y ésa es la novedad de éste:
+  - 🔑 **El alta de una promo bancaria lo siembra sola** (`guardar-promo`). Como en el lanzamiento,
+    **el objeto ya existía**: alguien carga la promo con su banco, su beneficio y su fecha. 🔴 **El
+    hecho es que quede PRENDIDA, ⛔ no que se haya creado** —una promo cargada apagada todavía no
+    cambió nada afuera— y como es un estado, el mismo código cubre los dos caminos.
+  - 🔑 **Y hay un botón**, porque de los tres cambios **sólo uno tiene objeto en el Monitor**: una
+    forma de pago nueva o un cambio de envío no los carga nadie en ninguna pantalla, y son
+    exactamente los que hoy se comunican de a pedazos. ⇒ `action: 'condicion'`.
+  - 🔴 **La MARCA entra en la clave, y es la única de las cuatro plantillas donde eso pasa.** La
+    promo la define el banco: `marcas: []` quiere decir **las dos tiendas**, y cambiar el banner de
+    Zattia y el de BDI son dos trabajos, de dos personas, en dos tiendas ⇒ **son dos hechos**. Con
+    una sola clave, el segundo se leería como «ya estaba sembrado» y nadie tocaría el de Zattia. En
+    las otras tres la marca ⛔ no entra: allá el hecho ya tiene una.
+  - 🔑 **La fecha es `desde`, ⛔ no hoy**: los pasos cuelgan del día en que la promo **empieza a
+    regir**, que es cuando tiene que estar comunicada. Por eso los offsets admiten hasta **−7**.
+  - 🔴 **El freno del hecho vencido se MUDÓ al núcleo** (`hechoYaPaso`, en `plantillas.core.js`).
+    Estaba escrito en `api/_calendario.js` para el lanzamiento; este disparador necesita la misma
+    pregunta desde otro handler —en la base hay promos de junio, y a todas les alcanza con que
+    alguien les corrija una coma para sembrar hoy los pasos de un cambio de hace tres meses— y
+    copiarla habría dejado **dos versiones de la misma regla**. Ahora es un campo de la plantilla
+    (`noSiembraSiPaso`) que `sembrar` mira **antes de tocar la base**, y el calendario ⛔ ya no
+    decide: le pasa el hito y lee el error. ⛔ **El ingreso NO lo lleva, y es una decisión**: la
+    mercadería llega y a veces se avisa dos días después.
+  - 🔑 **El eje es QUÉ CAMBIÓ** (`datos.cambios`: promo · forma-de-pago · envío, en
+    `lib/agenda/condicion.core.js`) y acá decide **qué renglones corren** más que de quién es cada
+    uno: los videos de las pantallas son *«a cada cambio de promo»* y las destacadas *«cada vez que
+    cambia una condición comercial»* — dos frases del mismo manual que ⛔ no dicen lo mismo.
+  - 🔑 **Y el MODAL dejó de ser el del ingreso: ahora la copia sale del catálogo** (`pantalla`), así
+    que el 5º disparador con botón es **una fila**, ⛔ no un segundo modal copiado del primero.
+    ⚠️ El lanzamiento y la sesión de fotos tienen `pantalla: null` **a propósito**: los dispara su
+    propia pantalla, y un botón aparte sería un segundo lugar donde decir lo mismo.
+  - 🔴 **Lo que se rompió al agregar la tercera columna del eje**: el GET tenía escritos a mano
+    `puertas` y `disparadores`. `cambios` habría viajado **siempre vacío** —la pantalla mostrando
+    los tildes apagados, o sea afirmando «corre en los tres»— y el próximo guardado los habría
+    borrado de verdad. Nada falla y el molde queda mal. Ahora sale de `PLANTILLAS`, igual que el
+    limpiado de los ejes al cambiar de plantilla en el modal del molde.
+  - **Los ocho renglones y su dueña salen de los manuales** «Las chiquitas» y «Las rutinas», ⛔ no
+    del código: se cargan con `~/Documents/quien-hace-que/scripts/moldes-condicion.mjs` (arranca en
+    simulación) y se verifican por otro camino con `verificar-siembra-condicion.mjs`.
+    🔴 **⛔ No se cargan antes del deploy**: con la plantilla desconocida, `guardar-item` los guarda
+    como **rutinas normales con la fecha de hoy** y le aparecen a cuatro personas como pendientes de
+    verdad. El verificador lo detecta y lo dice.
 - 🔑 **Es el tablero donde van las rutinas repetitivas de marketing** — decisión de proceso de Bruno
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen
@@ -480,7 +527,8 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 
 ## Cómo se prueba
 
-`npx vitest run tests/agenda.test.ts` (el motor), `tests/agenda-disparadores.test.ts` (los disparadores y
+`npx vitest run tests/agenda.test.ts` (el motor), `tests/agenda-modal-sembrar.test.tsx` (el modal que
+siembra, montado y apretado), `tests/agenda-disparadores.test.ts` (los disparadores y
 su puerta) — 🆕 **el segundo es el primero que prueba `api/_agenda.js`**, que hasta el 24-ago-2026
 no tenía ninguno — y las dos de pantalla, con `renderToStaticMarkup` sobre las piezas puras:
 `tests/agenda-cumplimiento-pantalla.test.tsx` y 🆕 `tests/agenda-grilla.test.tsx`. 🆕 El disparo de

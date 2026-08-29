@@ -182,6 +182,16 @@ export type ItemAgenda = {
    * en `lib/solicitudes/disparador.core.js`, que es el mismo que el historial de Solicitudes.
    */
   disparadores?: Disparador[]
+  /**
+   * **Qué cambió**. Es el eje de la plantilla `condicion`, y se lee igual que las otras dos:
+   * **vacío es LOS TRES**.
+   *
+   * Existe porque los renglones que prende un cambio de condición comercial ⛔ no son siempre los
+   * mismos: los videos de las pantallas de los locales son *«a cada cambio de promo»* y las
+   * destacadas de formas de pago son *«cada vez que cambia una condición comercial»* (manual «Las
+   * chiquitas»). El catálogo vive en `condicion.core.js`.
+   */
+  cambios?: Cambio[]
   autor: string | null
   creado: string | null
   /**
@@ -205,6 +215,16 @@ export type ClaseItem = 'pendiente' | 'aviso'
  * core y se olvida de acá, el test lo dice.
  */
 export type Puerta = 'produccion' | 'nacional' | 'importacion' | 'accesorios'
+
+/**
+ * Qué cambió, cuando cambia una condición comercial. Son tres y salen de una sola frase del manual
+ * «Las chiquitas»: *«una promo, una forma de pago, un cambio de envío»*.
+ *
+ * ⚠️ Mismo reparto que `Puerta`: el catálogo con rótulos y ayuda vive en `condicion.core.js` porque
+ * el handler lo necesita en `.js`; esto es la unión para que el editor ayude, y hay un test que fija
+ * que las dos listas digan lo mismo.
+ */
+export type Cambio = 'promo' | 'forma-de-pago' | 'envio'
 
 /**
  * El tilde: este pendiente se hizo este día.

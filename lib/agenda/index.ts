@@ -37,11 +37,17 @@ import {
 import {
   CLAVES_PLANTILLA as CLAVES_PLANTILLA_JS,
   esClavePlantilla as esClavePlantillaJs,
+  hechoYaPaso as hechoYaPasoJs,
   moldeCorreEnEje as moldeCorreEnEjeJs,
   offsetDeMolde as offsetDeMoldeJs,
   PLANTILLAS as PLANTILLAS_JS,
   plantillaDe as plantillaDeJs,
 } from './plantillas.core.js'
+import {
+  CAMBIOS as CAMBIOS_JS,
+  CLAVES_CAMBIO as CLAVES_CAMBIO_JS,
+  rotuloCambio as rotuloCambioJs,
+} from './condicion.core.js'
 import {
   esDeArriba as esDeArribaJs,
   FUNCION_TECHO as FUNCION_TECHO_JS,
@@ -80,15 +86,41 @@ export const moldeCorreEnMarca = moldeCorreEnMarcaJs as (marcasDelMolde: Marca[]
  * un solo formulario que sirve para las dos.
  */
 export type EjeDePlantilla = {
-  /** El campo del ítem que lleva la lista: `puertas` o `disparadores`. */
-  campo: 'puertas' | 'disparadores'
-  /** Cómo se llama el valor —uno solo— en el clon: `datos.puerta` / `datos.disparador`. */
-  campoClon: 'puerta' | 'disparador'
+  /** El campo del ítem que lleva la lista: `puertas`, `disparadores` o `cambios`. */
+  campo: 'puertas' | 'disparadores' | 'cambios'
+  /** Cómo se llama el valor —uno solo— en el clon: `datos.puerta` / `datos.disparador` / `datos.cambio`. */
+  campoClon: 'puerta' | 'disparador' | 'cambio'
   titulo: string
   claves: string[]
   rotulo: (key: string) => string
+  /**
+   * La ayuda de cada valor, para el modal que lo pregunta. Sólo la traen los ejes de las plantillas
+   * que se aprietan a mano: la sesión de fotos no tiene botón y no la necesita.
+   */
+  ayudaDe?: (key: string) => string
   pide: string
   invalido: string
+}
+
+/**
+ * La copia del botón que siembra este hecho a mano, o `null` si ⛔ no se aprieta.
+ *
+ * 🔑 **Vive en el catálogo y ⛔ no en el modal**, que es lo que hace que el 5º disparador con botón
+ * sea una fila más y no un segundo modal copiado del primero.
+ */
+export type PantallaDePlantilla = {
+  /** La `action` del handler. Un nombre propio por hecho: ver el comentario en el catálogo. */
+  action: string
+  boton: string
+  titulo: string
+  queLabel: string
+  queHint: string
+  quePlaceholder: string
+  cuandoLabel: string
+  cuandoHint: string
+  /** `true` = el campo de fecha nace en hoy. `false` = nace vacío, porque hoy contestaría la pregunta. */
+  cuandoArrancaEnHoy: boolean
+  vacio: string
 }
 export type Plantilla = {
   key: string
@@ -100,6 +132,12 @@ export type Plantilla = {
   ayuda: string
   /** `null` = la plantilla no tiene eje (el lanzamiento): no hay paso que cambie de dueña. */
   eje: EjeDePlantilla | null
+  /** `true` = un hecho con fecha vencida ⛔ no siembra y lo dice. Ver `hechoYaPaso`. */
+  noSiembraSiPaso?: boolean
+  /** `null` = este hecho ⛔ no se aprieta a mano: lo dispara otra pantalla. */
+  pantalla: PantallaDePlantilla | null
+  /** La ayuda del campo «a los cuántos días». Los ejemplos son de cada manual, ⛔ no genéricos. */
+  ayudaOffset: string
   offsetMin: number
   offsetMax: number
 }
@@ -112,6 +150,20 @@ export const plantillaDe = plantillaDeJs as (key: unknown) => Plantilla | null
 export const moldeCorreEnEje = moldeCorreEnEjeJs as (listaDelMolde: string[] | undefined, valor: string) => boolean
 /** El `offsetDias` que acepta la plantilla, o `null` si no viene número o cae fuera de rango. */
 export const offsetDeMolde = offsetDeMoldeJs as (plantilla: string, v: unknown) => number | null
+/**
+ * ¿La fecha del hecho ya pasó? **Con un día de margen**, porque el servidor es UTC y nosotros no.
+ * La usan `sembrar` y la pantalla, que avisa antes de dejar apretar.
+ */
+export const hechoYaPaso = hechoYaPasoJs as (fecha: FechaIso, ahora?: number) => boolean
+
+/**
+ * **Qué cambió**: los tres cambios de condición comercial del 4º disparador — una promo, una forma
+ * de pago, un cambio de envío. Salen del manual «Las chiquitas», que es donde está escrito que eso
+ * ⛔ no es un posteo.
+ */
+export const CAMBIOS = CAMBIOS_JS as { key: string; label: string; ayuda: string }[]
+export const CLAVES_CAMBIO = CLAVES_CAMBIO_JS as string[]
+export const rotuloCambio = rotuloCambioJs as (key: string) => string
 
 // El techo: Dirección arriba, el resto abajo y plano. En JS por lo de siempre — el corte que vale
 // es el del servidor, y `api/_agenda.js` no puede importar TypeScript.

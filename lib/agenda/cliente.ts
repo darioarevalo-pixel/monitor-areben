@@ -8,7 +8,8 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
-import type { DatosAgenda, FechaIso, ItemAgenda, Promo, Puerta } from './tipos'
+import type { Plantilla } from './index'
+import type { DatosAgenda, FechaIso, ItemAgenda, Promo } from './tipos'
 
 const API = '/api/datos?recurso=agenda'
 
@@ -65,23 +66,42 @@ async function postearConRespuesta(body: Record<string, unknown>, siFalla: strin
 }
 
 /**
- * «Entró mercadería»: siembra la lista corta del ingreso clonando los moldes de esa puerta y marca.
+ * Sembrar a mano **la plantilla que tenga botón**, sea cual sea.
  *
- * `puerta` y `marca` son **las dos obligatorias**: la puerta porque el nombre y la descripción
- * cambian de dueña según por dónde entró el producto, y la marca porque la descripción de una
- * compra nacional la escribe el local en Zattia y Administración en BDI. Sin alguna, el servidor
- * contesta 400 en vez de sembrar con la dueña equivocada.
+ * 🔑 **El modal es uno solo y ⛔ no sabe de puertas ni de promos**: la acción, el nombre del campo
+ * del eje y toda la copia salen del catálogo (`plantillas.core.js`). El día que entre el 5º
+ * disparador con botón, acá ⛔ no se toca nada.
  *
- * Devuelve cuántos renglones creó, o `ya: true` si ese ingreso ya estaba sembrado — el mismo aviso
- * dos veces no puede dejar veinte pendientes.
+ * ⚠️ `valorDelEje` viaja con el nombre que dice la plantilla —`puerta`, `cambio`— porque cada
+ * handler pide el suyo: el 400 que contesta cuando falta es el que nombra la pregunta.
  */
-export async function sembrarIngreso(nombre: string, fecha: FechaIso, puerta: Puerta, marca: Marca): Promise<{ creados: number; ya: boolean }> {
-  const d = await postearConRespuesta({ action: 'ingreso', nombre, fecha, puerta, marca }, 'No se pudieron cargar los pendientes.')
+export async function sembrarAMano(
+  plantilla: Plantilla,
+  { nombre, fecha, eje, marca }: { nombre: string; fecha: FechaIso; eje: string; marca: Marca },
+): Promise<{ creados: number; ya: boolean }> {
+  if (!plantilla.pantalla) throw new Error(`«${plantilla.evento}» no se siembra a mano.`)
+  const cuerpo: Record<string, unknown> = { action: plantilla.pantalla.action, nombre, fecha, marca }
+  if (plantilla.eje) cuerpo[plantilla.eje.campoClon] = eje
+  const d = await postearConRespuesta(cuerpo, 'No se pudieron cargar los pendientes.')
   return { creados: Number(d?.creados) || 0, ya: !!d?.ya }
 }
 
-export function guardarPromo(promo: Promo): Promise<void> {
-  return postear({ action: 'guardar-promo', promo }, 'No se pudo guardar la promoción.')
+/**
+ * Lo que una promo sembró al guardarse, **una entrada por marca**: la promo la define el banco y
+ * `marcas: []` quiere decir las dos tiendas, que son dos trabajos distintos.
+ */
+export type SiembraDeLaPromo = { marca: Marca; creados?: number; ya?: boolean; error?: string }
+
+/**
+ * Guardar una promo bancaria — y, si queda **prendida**, sembrar los pasos de comunicarla.
+ *
+ * 🔑 **Devuelve lo que sembró y ⛔ no `void`**: si los pendientes cayeran callados, quien cargó la
+ * promo no tendría cómo saber que el trabajo salió, y una lista nueva que nadie ve es una lista que
+ * nadie hace. La pantalla lo cuenta en el toast.
+ */
+export async function guardarPromo(promo: Promo): Promise<{ sembrado: SiembraDeLaPromo[] }> {
+  const d = await postearConRespuesta({ action: 'guardar-promo', promo }, 'No se pudo guardar la promoción.')
+  return { sembrado: Array.isArray(d?.sembrado) ? (d.sembrado as SiembraDeLaPromo[]) : [] }
 }
 
 export function borrarPromo(id: string): Promise<void> {

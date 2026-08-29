@@ -140,28 +140,23 @@ describe('un lanzamiento firme siembra sus renglones', () => {
     }
   })
 
-  it('🔴 un lanzamiento cuya fecha YA PASÓ ⛔ no siembra, y lo dice', async () => {
-    // Medido en producción el 29-ago-2026: hay un «Lanzamiento Fundas BDI» del 7-ago, firme.
-    // Editarle una coma le habría sembrado once pendientes vencidos —la mitad ya fuera de la
-    // ventana de arrastre, o sea invisibles— para un lanzamiento que ya salió.
+  it('⛔ el handler ya NO decide si la fecha pasó: se lo pasa al núcleo, que es el único que la sabe', async () => {
+    /*
+      🔑 **La regla se mudó a `plantillas.core.js` el 29-ago-2026, y esto fija que ⛔ no vuelva.**
+      La pregunta «¿ya pasó?» estaba escrita acá —había un «Lanzamiento Fundas BDI» del 7-ago firme
+      en producción, y editarle una coma le habría sembrado once pendientes vencidos—. Cuando entró
+      el 4º disparador, que necesita la misma pregunta desde OTRO handler, copiarla habría dejado
+      dos versiones de la misma regla. Acá se prueba lo que este archivo puede probar: que el hito
+      se le pasa igual, sin filtrar. Que el que ya pasó ⛔ no siembra lo prueba
+      `tests/agenda-disparadores.test.ts` contra el `sembrar` de verdad.
+    */
+    respuestaSiembra = { error: 'La fecha del lanzamiento ya pasó: no se sembró nada.' }
     const res = await guardar(hito({ fecha: '2020-01-01' }))
     expect(res.code).toBe(200)
-    expect(sembrados).toEqual([])
+    expect(sembrados).toHaveLength(1)
+    expect(sembrados[0].fecha).toBe('2020-01-01')
     // ⛔ Y no se calla: quien guarda un lanzamiento firme espera que le caiga el trabajo.
     expect(String((res.body?.sembrado as { error?: string })?.error)).toContain('ya pasó')
-  })
-
-  it('...pero el de AYER, el de hoy y el de mañana sí: el corte tiene un día de margen', async () => {
-    // 🔑 **El de ayer es el que fija el margen**, y el margen es por la zona horaria: el reloj del
-    // servidor es UTC y el de acá es Argentina, así que a las 21:00 «hoy» ya es mañana allá. Sin el
-    // día de más, un lanzamiento de HOY guardado a la noche no sembraría nada — y el que lo guardó
-    // no tendría cómo saber por qué. La contra, asumida: un lanzamiento de ayer siembra.
-    const dia = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
-    for (const f of [dia(-1), dia(0), dia(1), dia(30)]) {
-      sembrados.length = 0
-      await guardar(hito({ fecha: f }))
-      expect(sembrados, f).toHaveLength(1)
-    }
   })
 
   it('la marca sale del store del calendario, que son las dos de la Agenda', async () => {

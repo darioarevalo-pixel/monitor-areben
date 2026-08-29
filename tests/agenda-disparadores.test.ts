@@ -31,6 +31,8 @@ type Mundo = {
   /** Todos los tildes que hay en la base, sin ventana: la ventana la tiene que poner el handler. */
   hechos: Fila[]
   insertados: Fila[]
+  /** Lo mismo, pero sabiendo en qué tabla: `guardar-promo` escribe la promo Y siembra los clones. */
+  escrituras: { tabla: string; filas: Fila[] }[]
   tocoLaBase: boolean
   hayPerfil: boolean
   puedeCargar: boolean
@@ -55,7 +57,7 @@ const molde = (over: Partial<Fila> = {}): Fila => ({
 })
 
 function nuevoMundo(): Mundo {
-  return { items: [molde()], hechos: [], insertados: [], tocoLaBase: false, hayPerfil: true, puedeCargar: true, consultasHechos: [] }
+  return { items: [molde()], hechos: [], insertados: [], escrituras: [], tocoLaBase: false, hayPerfil: true, puedeCargar: true, consultasHechos: [] }
 }
 
 function fakeSupabase() {
@@ -68,6 +70,7 @@ function fakeSupabase() {
       mundo.tocoLaBase = true
       if (ctx.insert) {
         mundo.insertados.push(...ctx.insert)
+        mundo.escrituras.push({ tabla: ctx.tabla, filas: ctx.insert })
         return { data: null, error: null }
       }
       if (ctx.tabla === 'agenda_items') return { data: mundo.items, error: null }
@@ -1058,5 +1061,398 @@ describe('el lanzamiento: el 3º disparador, y la plantilla sin eje', () => {
     expect(datos.plantilla).toBe('lanzamiento')
     expect(datos.puertas).toBeUndefined()
     expect(datos.disparadores).toBeUndefined()
+  })
+})
+
+/**
+ * **El 4º disparador: el CAMBIO DE CONDICIÓN COMERCIAL.**
+ *
+ * Sale de una frase del manual «Las chiquitas», que es la que lo define:
+ *
+ * > Un cambio de condición comercial —una promo, una forma de pago, un cambio de envío— **no es un
+ * > posteo**: es destacadas + barra de anuncios + bio + el local avisado + el mail.
+ *
+ * La auditoría del 28-ago-2026 lo midió cuarto (23 días distintos de 2026, 6 con dos sectores o
+ * más) y lo único que le faltaba era **qué lo aprieta**. Son dos cosas, y ⛔ no una:
+ *
+ *  1. **el alta de una promo bancaria**, que es el único de los tres que tiene objeto en el Monitor;
+ *  2. **un botón**, para los otros dos —una forma de pago o un envío no los carga nadie en ninguna
+ *     pantalla, y son justo los que hoy se comunican de a pedazos.
+ *
+ * Lo que esta plantilla trajo de nuevo al motor y se prueba acá: **el freno del hecho vencido**
+ * (que además se mudó del calendario, donde estaba escrito para el lanzamiento) y **la marca dentro
+ * de la clave**, que es la única de las cuatro donde el hecho no tiene una sola.
+ */
+describe('el freno del hecho vencido: la regla vive UNA vez, en el núcleo', () => {
+  const dia = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+
+  const moldeCond = (over: Partial<Fila> = {}): Fila => ({
+    ...molde(),
+    id: 'c1',
+    titulo: 'Actualizar la barra de anuncios',
+    destino: { tipo: 'personas', personas: ['Cande'] },
+    datos: { plantilla: 'condicion', offsetDias: 0 },
+    ...over,
+  })
+
+  const sembrarCond = async (over: Record<string, unknown> = {}) => {
+    const mod = await import('@/api/_agenda.js')
+    return (mod.sembrar as unknown as (sb: unknown, o: Record<string, unknown>) => Promise<Record<string, unknown>>)(
+      fakeSupabase(),
+      { plantilla: 'condicion', nombre: '3 cuotas', fecha: dia(0), autor: 'Bruno Arevalo', eje: 'promo', marca: 'bdi', ...over },
+    )
+  }
+
+  it('🔑 `hechoYaPaso` corta AYER y no hoy: el margen es la zona horaria, no una tolerancia', async () => {
+    const { hechoYaPaso } = await import('@/lib/agenda/plantillas.core.js')
+    // 🔑 El caso que distingue el margen del `< hoy` pelado es **el de AYER**: el servidor corre en
+    // UTC y a las 21:00 de Argentina allá ya es mañana, así que un hecho de hoy guardado a la noche
+    // se leería como vencido. Con `ahora` fijo, esto ⛔ no depende del día en que se corra.
+    const ahora = Date.parse('2026-08-29T12:00:00.000Z')
+    expect(hechoYaPaso('2026-08-27', ahora)).toBe(true)
+    expect(hechoYaPaso('2026-08-28', ahora)).toBe(false)
+    expect(hechoYaPaso('2026-08-29', ahora)).toBe(false)
+    expect(hechoYaPaso('2026-08-30', ahora)).toBe(false)
+  })
+
+  it('🔴 un cambio cuya fecha ya pasó ⛔ no siembra, lo dice, y ⛔ NO toca la base', async () => {
+    mundo.items = [moldeCond()]
+    const r = await sembrarCond({ fecha: dia(-30) })
+    expect(String(r.error)).toContain('ya pasó')
+    expect(String(r.error)).toContain('del cambio')
+    // Va antes de leer nada: un hecho vencido no tiene por qué costar una consulta.
+    expect(mundo.tocoLaBase).toBe(false)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('...pero el de AYER siembra: es el mismo margen, ejercido por el motor y no sólo por la función', async () => {
+    mundo.items = [moldeCond()]
+    const r = await sembrarCond({ fecha: dia(-1) })
+    expect(r.creados).toBe(1)
+  })
+
+  it('🔑 el mismo freno vale para el LANZAMIENTO, que es de donde se mudó la regla', async () => {
+    // Hasta el 29-ago-2026 esto lo decidía `api/_calendario.js`. Se mudó al núcleo cuando el 4º
+    // disparador necesitó la misma pregunta desde otro handler: dos copias de una regla es la forma
+    // más barata de que mañana digan cosas distintas.
+    mundo.items = [moldeCond({ datos: { plantilla: 'lanzamiento', offsetDias: 0 } })]
+    const mod = await import('@/api/_agenda.js')
+    const r = await (mod.sembrar as unknown as (sb: unknown, o: Record<string, unknown>) => Promise<Record<string, unknown>>)(
+      fakeSupabase(),
+      { plantilla: 'lanzamiento', nombre: 'Cápsula', fecha: dia(-10), autor: 'Bruno', marca: 'bdi', clave: 'lanzamiento·h1' },
+    )
+    expect(String(r.error)).toContain('ya pasó')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('⛔ y el INGRESO ⛔ NO lo lleva: la mercadería llega y a veces se avisa dos días después', async () => {
+    // No es un olvido: ahí el pendiente atrasado es exactamente lo que hay que ver. Si alguien le
+    // pone `noSiembraSiPaso` al ingreso, esto se pone en rojo.
+    const res = await desdeAdentro({ fecha: dia(-20) })
+    expect(res.code).toBe(200)
+    expect(res.body?.creados).toBe(1)
+  })
+})
+
+describe('qué cambió: el eje del 4º disparador', () => {
+  const dia = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+  const moldeCond = (over: Partial<Fila> = {}): Fila => ({
+    ...molde(),
+    id: 'c1',
+    titulo: 'Actualizar la barra de anuncios',
+    destino: { tipo: 'personas', personas: ['Cande'] },
+    datos: { plantilla: 'condicion', offsetDias: 0 },
+    ...over,
+  })
+  const sembrarCond = async (over: Record<string, unknown> = {}) => {
+    const mod = await import('@/api/_agenda.js')
+    return (mod.sembrar as unknown as (sb: unknown, o: Record<string, unknown>) => Promise<Record<string, unknown>>)(
+      fakeSupabase(),
+      { plantilla: 'condicion', nombre: '3 cuotas', fecha: dia(0), autor: 'Bruno Arevalo', eje: 'promo', marca: 'bdi', ...over },
+    )
+  }
+
+  it('el clon guarda QUÉ cambió: es el único rastro de por qué sembró cinco y no seis', async () => {
+    mundo.items = [moldeCond()]
+    const r = await sembrarCond({ eje: 'envio' })
+    expect(r.creados).toBe(1)
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.de).toBe('condicion')
+    expect(datos.cambio).toBe('envio')
+    // ⛔ Ni puerta ni origen: cada plantilla guarda el suyo.
+    expect(datos.puerta).toBeUndefined()
+    expect(datos.disparador).toBeUndefined()
+  })
+
+  it('🔑 el molde con `cambios` corre SÓLO en ésos, y el vacío corre en los tres', async () => {
+    // «Los videos de las pantallas son a cada cambio de PROMO» y «las destacadas, cada vez que
+    // cambia una condición comercial» son dos frases del manual que ⛔ no dicen lo mismo.
+    mundo.items = [
+      moldeCond({ id: 'v1', titulo: 'Los videos de las pantallas', datos: { plantilla: 'condicion', offsetDias: 0, cambios: ['promo'] } }),
+      moldeCond({ id: 'd1', titulo: 'Las destacadas' }),
+    ]
+    const soloPromo = await sembrarCond({ eje: 'envio' })
+    expect(soloPromo.creados).toBe(1)
+    expect(mundo.insertados.map((f) => f.titulo)).toEqual(['3 cuotas · Las destacadas'])
+
+    mundo.insertados = []
+    mundo.items = mundo.items.slice(0, 2)
+    const conPromo = await sembrarCond({ eje: 'promo', nombre: 'Otra' })
+    expect(conPromo.creados).toBe(2)
+  })
+
+  it('🔴 sin decir qué cambió ⛔ no siembra: es 400 y nombra la pregunta', async () => {
+    mundo.items = [moldeCond()]
+    for (const nada of [undefined, null, '', 'otra-cosa']) {
+      mundo.insertados = []
+      const r = await sembrarCond({ eje: nada })
+      expect(String(r.error), String(nada)).toContain('qué cambió')
+      // Y ofrece las tres, que es lo que hace que el error sea a la vez el pedido.
+      expect(String(r.error), String(nada)).toContain('forma-de-pago')
+      expect(mundo.insertados, String(nada)).toEqual([])
+    }
+  })
+
+  it('el catálogo del núcleo y la unión de tipos dicen lo mismo', async () => {
+    const { CLAVES_CAMBIO, CAMBIOS, rotuloCambio } = await import('@/lib/agenda/condicion.core.js')
+    expect(CLAVES_CAMBIO).toEqual(['promo', 'forma-de-pago', 'envio'])
+    // Cada uno con su ayuda: el modal la muestra al elegir, y una vacía se lee como que no hay nada
+    // que aclarar justo donde hay que elegir bien.
+    expect(CAMBIOS.every((c: { ayuda: string }) => c.ayuda.length > 20)).toBe(true)
+    // ⛔ Lo desconocido vuelve tal cual y no cae en el primero: un default acá esconde el dato malo.
+    expect(rotuloCambio('inventado')).toBe('inventado')
+  })
+})
+
+describe('la promo bancaria: la mitad automática del 4º disparador', () => {
+  const dia = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+  const moldeCond = (over: Partial<Fila> = {}): Fila => ({
+    ...molde(),
+    id: 'c1',
+    titulo: 'Actualizar la barra de anuncios',
+    destino: { tipo: 'personas', personas: ['Cande'] },
+    datos: { plantilla: 'condicion', offsetDias: 0 },
+    ...over,
+  })
+
+  const promo = (over: Record<string, unknown> = {}) => ({
+    id: 'p1',
+    banco: 'Galicia',
+    medio: 'credito',
+    beneficio: { tipo: 'cuotas', n: 3, sinInteres: true },
+    regla: { tipo: 'diaria' },
+    desde: dia(0),
+    hasta: null,
+    condiciones: [],
+    pasos: null,
+    canales: ['mostrador'],
+    marcas: ['bdi'],
+    activa: true,
+    ...over,
+  })
+
+  const guardarPromo = (over: Record<string, unknown> = {}) => llamar({ action: 'guardar-promo', promo: promo(over) })
+  const clones = () => mundo.escrituras.filter((e) => e.tabla === 'agenda_items').flatMap((e) => e.filas)
+
+  beforeEach(() => { mundo.items = [moldeCond()] })
+
+  it('🔑 una promo PRENDIDA siembra los pasos de comunicarla, con la fecha en que EMPIEZA', async () => {
+    const res = await guardarPromo({ desde: dia(5) })
+    expect(res.code).toBe(200)
+    expect(clones()).toHaveLength(1)
+    expect(clones()[0].titulo).toBe('Promo Galicia · Actualizar la barra de anuncios')
+    // ⛔ No la fecha de hoy: una promo se carga con anticipación y los pasos cuelgan del día en que
+    // la promo empieza a regir. Si esto se cambiara por `hoy`, el banner saldría cinco días antes.
+    expect((clones()[0].regla as { fecha: string }).fecha).toBe(dia(5))
+    const datos = clones()[0].datos as Record<string, unknown>
+    expect(datos.cambio).toBe('promo')
+    expect(datos.condicion).toBe('promo·p1·bdi')
+  })
+
+  it('🔴 APAGADA ⛔ no siembra: todavía no cambió nada afuera', async () => {
+    const res = await guardarPromo({ activa: false })
+    expect(res.code).toBe(200)
+    // La promo sí se guardó: lo que no salió es el trabajo.
+    expect(mundo.escrituras.filter((e) => e.tabla === 'agenda_promos')).toHaveLength(1)
+    expect(clones()).toEqual([])
+  })
+
+  it('...y el día que la prenden, siembra: el hecho es el ESTADO, ⛔ no el alta', async () => {
+    await guardarPromo({ activa: false })
+    mundo.escrituras = []
+    const res = await guardarPromo({ activa: true })
+    expect(res.code).toBe(200)
+    expect(clones()).toHaveLength(1)
+  })
+
+  it('🔴 `marcas: []` son las DOS tiendas: dos siembras, con dos claves', async () => {
+    // Cambiar el banner de Zattia y el de BDI son dos trabajos, de dos personas, en dos tiendas.
+    // Con una sola clave el segundo se leería como «ya estaba sembrado» y nadie tocaría el de
+    // Zattia. ⚠️ Es la única de las cuatro plantillas donde la marca entra en la clave.
+    const res = await guardarPromo({ marcas: [] })
+    expect(res.code).toBe(200)
+    expect(clones()).toHaveLength(2)
+    expect(clones().map((f) => (f.datos as Record<string, unknown>).condicion))
+      .toEqual(['promo·p1·bdi', 'promo·p1·zattia'])
+    expect(clones().map((f) => f.marcas)).toEqual([['bdi'], ['zattia']])
+    expect((res.body?.sembrado as { marca: string }[]).map((x) => x.marca)).toEqual(['bdi', 'zattia'])
+  })
+
+  it('🔑 editar la promo ⛔ no vuelve a sembrar: la clave es su id', async () => {
+    await guardarPromo()
+    mundo.items = [...mundo.items, ...clones()]
+    mundo.escrituras = []
+    const res = await guardarPromo({ banco: 'Galicia S.A.' })
+    expect(res.code).toBe(200)
+    expect(clones()).toEqual([])
+    expect((res.body?.sembrado as { ya: boolean }[])[0].ya).toBe(true)
+  })
+
+  it('🔴 una promo VIEJA ⛔ no siembra —y la promo igual se guarda—', async () => {
+    // Es el caso que obligó a poner el freno: en la base hay promos cargadas de antes, y a todas
+    // les alcanza con que alguien les corrija una coma. Sin esto, editar una de junio sembraría hoy
+    // los pasos de comunicar un cambio de hace tres meses.
+    const res = await guardarPromo({ desde: dia(-60) })
+    expect(res.code).toBe(200)
+    expect(mundo.escrituras.filter((e) => e.tabla === 'agenda_promos')).toHaveLength(1)
+    expect(clones()).toEqual([])
+    expect(String((res.body?.sembrado as { error: string }[])[0].error)).toContain('ya pasó')
+  })
+
+  it('🔴 si no hay moldes, la promo NO se pierde y el error viaja: ⛔ no se calla', async () => {
+    mundo.items = []
+    const res = await guardarPromo()
+    expect(res.code).toBe(200)
+    expect(mundo.escrituras.filter((e) => e.tabla === 'agenda_promos')).toHaveLength(1)
+    expect(String((res.body?.sembrado as { error: string }[])[0].error)).toContain('condición comercial')
+  })
+})
+
+describe('el botón «cambió una condición comercial»', () => {
+  const dia = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+  const moldeCond = (over: Partial<Fila> = {}): Fila => ({
+    ...molde(),
+    id: 'c1',
+    titulo: 'Avisar a los dos locales',
+    destino: { tipo: 'roles', roles: ['local'] },
+    datos: { plantilla: 'condicion', offsetDias: 0 },
+    ...over,
+  })
+  const aMano = (body: Record<string, unknown> = {}) =>
+    llamar({ action: 'condicion', nombre: 'Envío gratis +$80.000', fecha: dia(1), cambio: 'envio', marca: 'zattia', ...body })
+
+  beforeEach(() => { mundo.items = [moldeCond()] })
+
+  it('existe porque dos de los tres cambios ⛔ NO tienen objeto en el Monitor', async () => {
+    // Una forma de pago nueva y un cambio de envío no los carga nadie en ninguna pantalla: sin el
+    // botón, esos dos siguen dependiendo de que alguien se acuerde.
+    const res = await aMano()
+    expect(res.code).toBe(200)
+    expect(res.body?.creados).toBe(1)
+    expect(mundo.insertados[0].titulo).toBe('Envío gratis +$80.000 · Avisar a los dos locales')
+    expect((mundo.insertados[0].datos as Record<string, unknown>).cambio).toBe('envio')
+  })
+
+  it('pide permiso de carga, como todo lo que escribe en la Agenda', async () => {
+    mundo.puedeCargar = false
+    const res = await aMano()
+    expect(res.code).toBe(403)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('sin sesión no entra, aunque sepa el nombre de la acción', async () => {
+    mundo.hayPerfil = false
+    const res = await aMano()
+    expect(res.code).toBe(401)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('🔴 la fecha ⛔ NO tiene default a hoy, al revés que el ingreso', async () => {
+    // Acá la fecha es «desde cuándo rige», que es un dato que la persona tiene y casi nunca es hoy.
+    // Un default la contestaría sola, y el banner saldría el día equivocado sin que nadie eligiera.
+    const res = await aMano({ fecha: undefined })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('YYYY-MM-DD')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('la fecha vencida se rechaza acá también, y ⛔ no sólo en la pantalla', async () => {
+    const res = await aMano({ fecha: dia(-5) })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('ya pasó')
+  })
+
+  it('⛔ no puede sembrar OTRA plantilla: el nombre de la acción es propio de este hecho', async () => {
+    // Una acción `sembrar` genérica dejaría clonar a mano los once del lanzamiento sin el hito que
+    // les da fecha, o los de una sesión que no existe. Por eso hay una acción por hecho.
+    mundo.items = [moldeCond({ datos: { plantilla: 'lanzamiento', offsetDias: 0 } })]
+    const res = await aMano({ plantilla: 'lanzamiento' })
+    // El 400 habla de la condición comercial y ⛔ no del lanzamiento: el `plantilla` del cuerpo ni
+    // se mira, así que lo que faltó fue el molde de ESTE hecho.
+    expect(String(res.body?.error)).toContain('condición comercial')
+    expect(mundo.insertados).toEqual([])
+  })
+})
+
+describe('cargar un molde de condición comercial', () => {
+  it('guarda en qué cambios corre, y el vacío ⛔ no se guarda: es «los tres»', async () => {
+    const res = await llamar({
+      action: 'guardar-item',
+      item: {
+        id: 'c9', clase: 'pendiente', titulo: 'Los videos de las pantallas', regla: { tipo: 'diaria' },
+        plantilla: 'condicion', offsetDias: 0, cambios: ['promo'],
+      },
+    })
+    expect(res.code).toBe(200)
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.plantilla).toBe('condicion')
+    expect(datos.cambios).toEqual(['promo'])
+
+    mundo = nuevoMundo()
+    await llamar({
+      action: 'guardar-item',
+      item: { id: 'c9', clase: 'pendiente', titulo: 'Las destacadas', regla: { tipo: 'diaria' }, plantilla: 'condicion', offsetDias: 0 },
+    })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).cambios).toBeUndefined()
+  })
+
+  it('una semana hacia atrás entra, y ⛔ más no', async () => {
+    const guardar = (offsetDias: number) => llamar({
+      action: 'guardar-item',
+      item: { id: 'c9', clase: 'pendiente', titulo: 'El mail', regla: { tipo: 'diaria' }, plantilla: 'condicion', offsetDias },
+    })
+    const ok = await guardar(-7)
+    expect(ok.code).toBe(200)
+    expect((mundo.insertados[0].datos as Record<string, unknown>).offsetDias).toBe(-7)
+    mundo = nuevoMundo()
+    const mal = await guardar(-8)
+    expect(mal.code).toBe(400)
+    expect(String(mal.body?.error)).toContain('condición comercial')
+  })
+
+  it('🔴 un cambio inválido es 400, ⛔ no una lista recortada en silencio', async () => {
+    const res = await llamar({
+      action: 'guardar-item',
+      item: {
+        id: 'c9', clase: 'pendiente', titulo: 'El mail', regla: { tipo: 'diaria' },
+        plantilla: 'condicion', offsetDias: 0, cambios: ['promo', 'inventado'],
+      },
+    })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('Cambio inválido')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('🔴 el GET devuelve `cambios`: sin eso los tildes salían apagados y el próximo guardado los borraba', async () => {
+    // El mapeo del GET tenía escritos los dos ejes que existían. El tercero habría viajado siempre
+    // vacío —la pantalla afirmando «corre en los tres»— y al re-guardar se borraba de verdad.
+    mundo.items = [{
+      ...molde(),
+      datos: { plantilla: 'condicion', offsetDias: 0, cambios: ['envio'] },
+    }]
+    const res = await leerAgenda()
+    expect(res.code).toBe(200)
+    const items = res.body?.items as Record<string, unknown>[]
+    expect(items[0].cambios).toEqual(['envio'])
   })
 })

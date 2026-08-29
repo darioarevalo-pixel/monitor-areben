@@ -501,10 +501,15 @@ export function ModalItem({
                 value={it.plantilla ?? ''}
                 onChange={(e) => {
                   const key = e.target.value || null
-                  // ⚠️ Al cambiar de plantilla se limpian **los dos** ejes: son catálogos distintos
-                  // (puertas / orígenes) y el handler guarda sólo el de la plantilla elegida. Dejar
-                  // tildado lo del otro sería la pantalla afirmando algo que no se va a guardar.
-                  setIt((x) => ({ ...x, plantilla: key, puertas: [], disparadores: [] }))
+                  // ⚠️ Al cambiar de plantilla se limpian **todos** los ejes: son catálogos
+                  // distintos (puertas / orígenes / qué cambió) y el handler guarda sólo el de la
+                  // plantilla elegida. Dejar tildado lo del otro sería la pantalla afirmando algo
+                  // que no se va a guardar. 🔑 Sale de PLANTILLAS y ⛔ no de una lista escrita acá:
+                  // con la lista, el 4º eje se quedó sin limpiar y nadie se entera hasta que guarda.
+                  const vacios = Object.fromEntries(
+                    PLANTILLAS.filter((pl) => pl.eje).map((pl) => [pl.eje!.campo, []]),
+                  )
+                  setIt((x) => ({ ...x, ...vacios, plantilla: key }))
                 }}
               >
                 <option value="">Es una rutina normal (corre sola)</option>
@@ -519,9 +524,10 @@ export function ModalItem({
                 <div style={{ marginTop: space[2], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <Field
                     label="A los cuántos días"
-                    hint={plant.offsetMin < 0
-                      ? `0 = el día de la sesión. Los pasos previos van en negativo: la modelo −2, las referencias −1. Va de ${plant.offsetMin} a ${plant.offsetMax}.`
-                      : `0 = el día que entra la mercadería. El nombre y el precio traban todo lo demás; la publicación puede ir a los dos. Va de ${plant.offsetMin} a ${plant.offsetMax}.`}
+                    // 🔑 La ayuda sale del catálogo: los ejemplos son del manual de cada hecho, y
+                    // un `if` sobre el signo del rango le contaba la sesión de fotos a cualquier
+                    // plantilla que aceptara días negativos.
+                    hint={`${plant.ayudaOffset} Va de ${plant.offsetMin} a ${plant.offsetMax}.`}
                     width={260}
                   >
                     <Input
@@ -537,7 +543,8 @@ export function ModalItem({
                   </div>
                 </div>
                 {/*
-                  El EJE: las puertas de entrada del ingreso, o el origen de la sesión de fotos.
+                  El EJE: las puertas del ingreso, el origen de la sesión de fotos, qué cambió en
+                  una condición comercial.
 
                   🔑 **Ninguno tildado = todos**, igual que las marcas de arriba — y es el caso
                   normal: el precio, la foto, la publicación y las pantallas no cambian con la
