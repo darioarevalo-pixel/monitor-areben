@@ -358,7 +358,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   lista, como `ENTRADAS_DEL_COSTO`) **y un test que la ata a las dos puntas**: lo que la función lee
   y lo que el handler pide.
 
-### 🟠 D12 · El aviso del sidebar deja de ver los viejos a partir de 200
+### ✅ D12 · El aviso del sidebar deja de ver los viejos a partir de 200 — ARREGLADO el 29-ago
 
 - **Evidencia**: `vista=avisos` baja `.order('created_at', desc).limit(200)`
   (`api/_reclamos.js:198-204`); `leerReclamos` ⛔ no manda `estado` ni `limit`
@@ -368,6 +368,25 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   es exactamente para lo que la alerta existe.
 - **Costo**: medio. ⚠️ El comentario de `vista=avisos` dice **a propósito** que ⛔ no filtra estados
   para no duplicar la lista: se resuelve **importando `ESTADOS_ABIERTOS` del núcleo**, ⛔ no copiándola.
+- ✅ **Arreglado el 29-ago-2026** (el relato entero en `docs/secciones/reclamos.md`), y con **dos
+  cosas más que ⛔ no estaban en esta línea**:
+  - 🔴 🔑 **El ORDEN estaba al revés de para qué sirve el aviso.** Con `created_at` descendente, el
+    corte se lleva **los más viejos** — justo los que pueden estar durmiendo. Ascendente, lo que
+    queda afuera son los recién abiertos, que ⛔ todavía no pueden tener alerta y entran solos a la
+    ventana al envejecer. El filtro por estado sin el orden habría dejado el defecto vivo, más
+    chico.
+  - 🔴 🔑 **Un tope que se pasa tiene que DECIRLO.** Los dos endpoints piden ahora **uno más que el
+    tope** —contar `length === tope` ⛔ no separa «entraron justos» de «se cortó»— y devuelven
+    `hayMas`: la lista lo dibuja en un cartel, y el sidebar **suma un aviso propio** *«hay más
+    reclamos abiertos de los que este aviso puede mirar»*. Sin eso, el módulo cuyo valor entero es
+    avisar **se calla justo cuando más trabajo hay**. ⚠️ Su `ts` sale de la fila más vieja que sí
+    bajó y ⛔ no de `ahora`, o el badge de nuevos ⛔ no se podría apagar nunca.
+  - `ESTADOS_ABIERTOS` y `estaAbierto` **bajaron de `tipos.ts` a `casos.core.js`** (`api/*.js` ⛔ no
+    puede importar TypeScript); en `tipos.ts` quedó la cara tipada.
+  - ✅ **13 mutantes, 13 muertos** · **12 de 12 caminando contra BDI**
+    (`scripts/caminar-tope-avisos.mjs`): con una fila cerrada y una abierta sembradas, el aviso trae
+    la abierta y ⛔ **no** la cerrada, y el listado **sí** la trae. 🔑 **Eso ⛔ no lo puede decir
+    ningún test**: el Supabase de mentira ignora el `.in`.
 
 ### 🟡 Los seis chicos — ✅ los seis cerrados (D13-D16 el 29-ago, D17-D18 el 28)
 
@@ -423,7 +442,9 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 ## 5. Escalabilidad: qué se rompe con 200 reclamos por mes en vez de 2
 
-1. **Los dos `limit` de 200** (D12): el badge deja de ver los viejos y la lista se corta **callada**.
+1. ~~**Los dos `limit` de 200**~~ ✅ **29-ago** (D12): el aviso recorta por `ESTADOS_ABIERTOS` y
+   ordena del más viejo al más nuevo, y **los dos topes avisan cuando se pasan**. Lo que queda es un
+   tope, ⛔ no una mentira.
 2. **`apilar()` es read-modify-write sobre `historial` sin transacción** (`api/_reclamos.js:130-136`),
    documentado como *«no pasa en la práctica»*. Con 200/mes y tres personas trabajando a la vez, dos
    gestos sobre el mismo reclamo **pierden un evento en silencio**.

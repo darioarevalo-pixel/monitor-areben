@@ -164,14 +164,14 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
-    try { setFilas(await leerReclamos(marca)) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
+    try { const d = await leerReclamos(marca); setFilas(d.filas) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
   }, [marca])
 
   // El setState va DENTRO del await: el linter del repo rechaza el setState síncrono en un effect.
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      try { const d = await leerReclamos(marca); if (vivo) setFilas(d) } catch (e) { if (vivo) setError((e as Error).message) } finally { if (vivo) setCargando(false) }
+      try { const d = await leerReclamos(marca); if (vivo) setFilas(d.filas) } catch (e) { if (vivo) setError((e as Error).message) } finally { if (vivo) setCargando(false) }
     })()
     return () => { vivo = false }
   }, [marca])

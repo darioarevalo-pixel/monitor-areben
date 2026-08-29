@@ -57,7 +57,7 @@ import { faltaAnularAntesDeDescontar, loEjecutado, pendientesDe } from '../lib/r
 import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
-import { camposAlContestarLaOferta, COLUMNAS_PARA_CERRAR, esEscenarioDe, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
+import { camposAlContestarLaOferta, COLUMNAS_PARA_CERRAR, esEscenarioDe, ESTADOS_ABIERTOS, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
 import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, sinLaOtraVenta, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
@@ -139,6 +139,20 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
 
 /** El día que el link deja de servir. Un reclamo no debería tardar más que esto. */
 const DIAS_TOKEN = 15;
+
+/**
+ * Cuántos reclamos ABIERTOS mira el aviso del sidebar como mucho.
+ *
+ * ⚠️ **Un tope que se pasa tiene que DECIRLO.** Éste es el aviso que cuenta lo que está durmiendo:
+ * un corte callado lo deja avisando de menos, y quien lo lee entiende «no hay más», que es el mismo
+ * «el cero afirma» que este módulo viene tapando. Por eso el handler pide `TOPE_AVISOS + 1` y
+ * devuelve `hayMas`.
+ *
+ * 📊 El número: 344 bytes por fila ⇒ 500 abiertos son ~172 KB cada 3 minutos por admin, y **500
+ * reclamos abiertos a la vez ⛔ no es una carga de trabajo, es un incendio**. El tope existe para
+ * que una consulta rota no baje la tabla entera, ⛔ no para recortar el trabajo real.
+ */
+export const TOPE_AVISOS = 500;
 
 /** ¿Puede mover plata? Admin o función de administración. */
 function esAdministracion(perfil) {
@@ -235,18 +249,34 @@ export default async function handler(req, res) {
       }
 
       // Lo único que necesita el aviso del sidebar para saber qué está durmiendo (`alertasDe`).
-      // 🔑 **Recorta COLUMNAS, ⛔ no estados**: quién sigue vivo lo contesta `ESTADOS_ABIERTOS` en
-      // el núcleo, y repetir esa lista acá —o su complemento— es la segunda copia de la regla, que
-      // es el modo de falla propio de este módulo. Medido sobre las 10 filas de BDI: **1.925 bytes
-      // por fila con `COLS` contra 344 con éstas**, 5,6× — y esto lo pide cada admin cada 3 minutos.
-      // ⛔ Sin `cliente` ni un solo monto: un aviso dice que algo duerme, no cuánto ni de quién.
+      // 🔑 **Recorta COLUMNAS**: medido sobre las 10 filas de BDI, **1.925 bytes por fila con `COLS`
+      // contra 344 con éstas**, 5,6× — y esto lo pide cada admin cada 3 minutos. ⛔ Sin `cliente` ni
+      // un solo monto: un aviso dice que algo duerme, no cuánto ni de quién.
+      //
+      // 🔴 🔑 **Y desde el 29-ago-2026 recorta ESTADOS también** (D12 de la auditoría del 28-ago).
+      // Antes bajaba las 200 más nuevas **de todas**, cerradas incluidas, y el front las filtraba
+      // con `estaAbierto`. Lo cerrado crece para siempre y lo abierto no ⇒ con 200 reclamos por mes,
+      // **al segundo mes el corte se come reclamos abiertos** y el que duerme deja de contar en el
+      // badge, que es exactamente para lo que la alerta existe. La lista sale del núcleo
+      // (`ESTADOS_ABIERTOS`), ⛔ no se copia acá: es la misma que filtra el front y la que decide
+      // qué es un reclamo vivo.
+      //
+      // 🔴 🔑 **Y el ORDEN estaba al revés de para qué sirve esto.** Con `created_at` descendente el
+      // corte se lleva **los más viejos** — que son justo los que pueden estar durmiendo. Ascendente,
+      // lo que queda afuera son los recién abiertos, que ⛔ todavía no pueden tener alerta y entran
+      // solos a la ventana al envejecer.
       const COLS_AVISO = 'id, motivo, estado, compensacion, reintegro_estado, historial, created_at, updated_at';
       if (req.query.vista === 'avisos') {
+        // Se pide UNO MÁS que el tope: si vuelve, es que hay más y el aviso lo dice. Contar
+        // `data.length === TOPE` ⛔ no distingue «entraron justos» de «se cortó».
         const { data, error } = await supabase
           .from('devoluciones').select(COLS_AVISO).eq('store', store)
-          .order('created_at', { ascending: false }).limit(200);
+          .in('estado', ESTADOS_ABIERTOS)
+          .order('created_at', { ascending: true }).limit(TOPE_AVISOS + 1);
         if (error) throw new Error(error.message);
-        return res.status(200).json({ ok: true, devoluciones: data || [] });
+        const filas = data || [];
+        const hayMas = filas.length > TOPE_AVISOS;
+        return res.status(200).json({ ok: true, devoluciones: filas.slice(0, TOPE_AVISOS), hayMas });
       }
 
       // La bandeja de retornos: lo que estamos esperando que vuelva y lo que llegó y falta guardar.
@@ -262,14 +292,20 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, devoluciones: data || [] });
       }
 
+      // 🔴 **El listado también se cortaba callado** (D12). Las tres pestañas —Abiertos, Durmiendo,
+      // Todos— filtran **en el cliente**, sobre lo que bajó: con 200 reclamos por mes, al segundo
+      // mes «Abiertos» deja de mostrar los viejos **sin decir una palabra**. El tope se queda —una
+      // pantalla ⛔ no puede bajar la tabla entera— pero **avisa cuando se pasó**, y ahí sí hay algo
+      // que hacer: filtrar por estado o pedir más.
       const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
-      let q = supabase.from('devoluciones').select(COLS).eq('store', store).order('created_at', { ascending: false }).limit(limit);
+      let q = supabase.from('devoluciones').select(COLS).eq('store', store).order('created_at', { ascending: false }).limit(limit + 1);
       if (ESTADOS.includes(req.query.estado)) q = q.eq('estado', req.query.estado);
       // Lo que le falta algo: sirve para el aviso de "hay N reclamos con plata sin devolver".
       if (req.query.pendientes === '1') q = q.or('reintegro_estado.eq.pendiente,stock_estado.eq.pendiente,tn_stock_estado.eq.pendiente');
       const { data, error } = await q;
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, devoluciones: data || [] });
+      const filas = data || [];
+      return res.status(200).json({ ok: true, devoluciones: filas.slice(0, limit), hayMas: filas.length > limit });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });

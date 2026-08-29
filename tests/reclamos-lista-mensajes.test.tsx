@@ -20,7 +20,7 @@ const FILAS: ReclamoRow[] = []
 
 vi.mock('@/lib/reclamos/cliente', async (orig) => {
   const real = await orig<typeof import('@/lib/reclamos/cliente')>()
-  return { ...real, leerReclamos: vi.fn(async () => FILAS) }
+  return { ...real, leerReclamos: vi.fn(async () => ({ filas: FILAS, hayMas: false })) }
 })
 
 const { Devoluciones } = await import('@/components/reclamos/Reclamos')

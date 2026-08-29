@@ -30,6 +30,8 @@ import {
   escenariosDe as escenariosDeJs,
   esEscenarioDe as esEscenarioDeJs,
   esSoloSeguimiento as esSoloSeguimientoJs,
+  ESTADOS_ABIERTOS as ESTADOS_ABIERTOS_JS,
+  estaAbierto as estaAbiertoJs,
   faltantesParaCerrar as faltantesParaCerrarJs,
   ofreceRetencion as ofreceRetencionJs,
   perfilDe as perfilDeJs,
@@ -2214,19 +2216,14 @@ type Tono = 'warning' | 'danger'
 /**
  * Los estados en los que un reclamo **sigue vivo**. `cerrado` y `anulado` quedan afuera.
  *
- * 🔴 Vive acá y ⛔ no en la pantalla porque lo leen **dos lugares**: la lista de Reclamos y el
- * aviso del sidebar. Una segunda copia es el modo de falla propio de este módulo —la regla
- * repartida en dos listas—, y acá se pagaría caro: un reclamo `anulado` con un pendiente viejo
- * sin tildar sigue cumpliendo la condición de la alerta de plata, así que la copia que se olvide
- * de filtrarlo avisa **para siempre** de algo que ya no existe.
+ * La lista y el porqué viven en `casos.core.js`: la lee también `api/_reclamos.js`, que ⛔ no puede
+ * importar TypeScript. Acá queda la cara tipada.
  */
-export const ESTADOS_ABIERTOS: EstadoReclamo[] = [
-  'borrador', 'esperando_cliente', 'en_revision', 'resuelto', 'en_transito', 'recibido',
-]
+export const ESTADOS_ABIERTOS = ESTADOS_ABIERTOS_JS as EstadoReclamo[]
 
 /** ¿El reclamo sigue vivo? Ver `ESTADOS_ABIERTOS`. */
 export function estaAbierto(d: Pick<ReclamoRow, 'estado'>): boolean {
-  return ESTADOS_ABIERTOS.includes(d.estado)
+  return estaAbiertoJs(d)
 }
 
 /** Cuántos días hace. **Nunca negativo**: un reloj corrido no puede mostrar "-2 días". */

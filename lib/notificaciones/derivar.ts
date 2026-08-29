@@ -147,12 +147,36 @@ export function avisosDeFallas(fallas: FallaRow[], marca: Marca, perfil: Perfil 
  * 🔑 El `ts` es **cuándo la alerta empezó a existir**, no cuándo se abrió el reclamo: ver
  * `AlertaReclamo`. Sin eso el aviso de un reclamo viejo nace ya marcado como visto.
  */
-export function avisosDeReclamo(filas: ReclamoRow[], marca: Marca, perfil: Perfil | null): Aviso[] {
+export function avisosDeReclamo(filas: ReclamoRow[], marca: Marca, perfil: Perfil | null, cortado = false): Aviso[] {
   // La pantalla de Reclamos es una pestaña de Post-venta (key `postventa`, Administración). Sin
   // acceso a esa sección no hay aviso: mandar a alguien a una pantalla que no puede abrir es el
   // defecto que este módulo ya tuvo con el botón de despachar.
   if (!puedeVer(perfil, marca, 'postventa')) return []
-  return filas
+  /**
+   * 🔴 🔑 **El aviso que dice que este aviso está mirando de menos** (D12 de la auditoría del
+   * 28-ago-2026). El servidor trae hasta `TOPE_AVISOS` reclamos abiertos; si tuvo que cortar, todo
+   * lo de abajo se calcula sobre una lista incompleta y el badge cuenta **menos de lo que hay**
+   * — o sea que el módulo cuyo valor entero es avisar **se calla justo cuando más trabajo hay**.
+   * Un tope que se pasa se dice; si no, es una mentira.
+   *
+   * ⚠️ El `ts` sale de **la fila más vieja que sí bajó**, ⛔ no de `ahora`: con `ahora` el aviso se
+   * «estrenaría» en cada refresco y el badge de nuevos ⛔ no se podría apagar nunca. Es la misma
+   * lección que `cuando()` en `alertasDe`.
+   */
+  const tope: Aviso[] = cortado
+    ? [{
+      id: `reclamo:${marca}:tope`,
+      tipo: 'reclamo' as const,
+      marca,
+      linea: marca,
+      titulo: 'Hay más reclamos abiertos de los que este aviso puede mirar',
+      detalle: `Se están mirando ${filas.length}. Puede haber trabajo durmiendo que no aparece acá.`,
+      ruta: '/postventa?tab=reclamos',
+      ts: Date.parse(filas[0]?.created_at || '') || 0,
+      tono: 'danger' as const,
+    }]
+    : []
+  return tope.concat(filas
     // ⛔ Sólo los vivos: un `anulado` con un pendiente viejo sin tildar sigue cumpliendo la
     // condición de la alerta de plata, y avisaría para siempre de algo que ya no existe.
     .filter(estaAbierto)
@@ -170,7 +194,7 @@ export function avisosDeReclamo(filas: ReclamoRow[], marca: Marca, perfil: Perfi
       ruta: '/postventa?tab=reclamos',
       ts: a.ts,
       tono: a.tono,
-    }))
+    })))
 }
 
 /**

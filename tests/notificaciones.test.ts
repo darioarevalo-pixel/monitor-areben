@@ -242,6 +242,44 @@ describe('avisos de reclamos durmiendo', () => {
     expect(avisosDeReclamo([reclamo({ created_at: hace(2), updated_at: hace(2) })], 'bdi', admin)).toEqual([])
   })
 
+  /**
+   * 🔴 🔑 **El aviso que dice que este aviso está mirando de menos** (D12 de la auditoría del
+   * 28-ago-2026). El servidor trae hasta un tope de reclamos abiertos; si tuvo que cortar, todo lo
+   * demás se calcula sobre una lista incompleta y el badge cuenta **menos de lo que hay** — o sea
+   * que el módulo cuyo valor entero es avisar **se calla justo cuando más trabajo hay**.
+   */
+  it('🔴 si el servidor cortó la lista, lo DICE, y va primero', () => {
+    const avisos = avisosDeReclamo([reclamo()], 'bdi', admin, true)
+    expect(avisos).toHaveLength(2)
+    expect(avisos[0].titulo).toContain('más reclamos abiertos')
+    expect(avisos[0].tono).toBe('danger')
+    expect(avisos[0].ruta).toBe('/postventa?tab=reclamos')
+  })
+
+  it('⛔ y sin corte ⛔ no lo inventa', () => {
+    expect(avisosDeReclamo([reclamo()], 'bdi', admin, false)).toHaveLength(1)
+    // El default es «no cortó»: un llamador viejo ⛔ no puede empezar a gritar solo.
+    expect(avisosDeReclamo([reclamo()], 'bdi', admin)).toHaveLength(1)
+  })
+
+  /**
+   * ⚠️ **El `ts` sale de una fila, ⛔ no de `ahora`.** Con `ahora`, el aviso se «estrenaría» en
+   * cada refresco y el contador de nuevos ⛔ no se podría apagar nunca — la misma lección que
+   * `cuando()` en `alertasDe`.
+   */
+  it('🔴 su fecha ⛔ no se mueve entre dos lecturas seguidas', () => {
+    const filas = [reclamo()]
+    const a = avisosDeReclamo(filas, 'bdi', admin, true)[0]
+    const b = avisosDeReclamo(filas, 'bdi', admin, true)[0]
+    expect(a.ts).toBe(b.ts)
+    expect(a.ts).toBe(Date.parse(filas[0].created_at as string))
+  })
+
+  /** Y el corte ⛔ no le abre la puerta a quien no puede entrar a la pantalla. */
+  it('⛔ el aviso del corte tampoco lo ve el local', () => {
+    expect(avisosDeReclamo([reclamo()], 'bdi', local, true)).toEqual([])
+  })
+
   it('🔴 un ANULADO con un pendiente viejo NO avisa, y sin el filtro avisaría para siempre', () => {
     const muerto = { estado: 'anulado' as const, reintegro_estado: 'pendiente' as const, compensacion: 'plata_total' as const }
     // El control: la misma fila viva sí avisa ⇒ lo que la apaga es el estado, no que le falte un dato.

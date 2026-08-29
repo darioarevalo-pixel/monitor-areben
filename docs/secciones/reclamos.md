@@ -1731,3 +1731,64 @@ ahora `puedeOfrecerse && (hayFotos || ofreciIgual || hayOferta)`.
   handler **en proceso**): el link abre sobre un reclamo vivo, ⛔ **no** sobre un cambio decidido,
   `enviar` contesta 404 y **la fila ⛔ no se mueve**, y `compensacion` ⛔ no sale en la respuesta.
   Cuatro filas sembradas y borradas; las **2 reales, intactas**.
+
+
+---
+
+## 🆕 🔴 Los dos topes que se cortaban callados (29-ago-2026 — D12)
+
+**El aviso del sidebar bajaba las 200 filas más nuevas *de todas*, cerradas incluidas**, y el front
+las filtraba con `estaAbierto`. 🔑 **Lo cerrado crece para siempre y lo abierto no**: con 200
+reclamos por mes, al segundo mes esas 200 filas son casi todas cerradas ⇒ **el reclamo que duerme
+deja de contar en el badge**, que es exactamente para lo que la alerta existe. El listado hacía lo
+mismo, con las tres pestañas —Abiertos, Durmiendo, Todos— filtrando **en el cliente** sobre lo que
+bajó.
+
+### El filtro sale del núcleo
+
+`ESTADOS_ABIERTOS` y `estaAbierto` **bajaron de `tipos.ts` a `casos.core.js`**, porque ahora los lee
+también `api/_reclamos.js` y `api/*.js` ⛔ no puede importar TypeScript. Mismo arreglo que
+`faltantesParaCerrar`, `destinoDe` y `perfilDe`; en `tipos.ts` quedó la cara tipada. ⛔ **No se copia
+la lista en el handler**: es la misma que filtra el front, y una segunda copia acá se pagaría con un
+`anulado` de pendiente viejo avisando para siempre de algo que ya no existe.
+
+### 🔴 Y el orden estaba al revés de para qué sirve el aviso
+
+Con `created_at` **descendente** el corte se lleva **los más viejos** — que son justo los que pueden
+estar durmiendo. **Ascendente**, lo que queda afuera son los recién abiertos, que ⛔ todavía no
+pueden tener alerta y **entran solos a la ventana al envejecer**. Con el filtro por estado y sin
+esto, el defecto seguía vivo, sólo que más chico.
+
+### 🔴 Un tope que se pasa tiene que DECIRLO
+
+Los dos endpoints piden ahora **uno más que el tope** y devuelven `hayMas`. 🔑 Contar
+`data.length === tope` ⛔ **no distingue** «entraron justos» de «se cortó», y ese empate es
+exactamente el caso en que el aviso se callaría de más.
+
+- **La lista** dibuja un cartel: *«hay más reclamos de los que entran en esta lista… los tres filtros
+  trabajan sobre lo que bajó»*. Lo importante es la segunda mitad: sin ella alguien lee «Abiertos» y
+  entiende que ésos son todos.
+- **El sidebar suma un aviso propio**: *«hay más reclamos abiertos de los que este aviso puede
+  mirar»*, en `danger`. Sin él, **el módulo cuyo valor entero es avisar se calla justo cuando más
+  trabajo hay**. ⚠️ Su `ts` sale de **la fila más vieja que sí bajó** y ⛔ no de `ahora`: con `ahora`
+  se «estrenaría» en cada refresco y el badge de nuevos ⛔ no se podría apagar nunca — la misma
+  lección que `cuando()` en `alertasDe`.
+
+📊 El tope del aviso quedó en **500** (`TOPE_AVISOS`): 344 bytes por fila ⇒ ~172 KB cada 3 minutos
+por admin, y **500 reclamos abiertos a la vez ⛔ no es una carga de trabajo, es un incendio**. El
+tope existe para que una consulta rota no baje la tabla entera, ⛔ no para recortar el trabajo real.
+
+⚠️ **El listado sí sigue bajando lo cerrado**, y es a propósito: la pestaña «Todos» existe. El
+recorte por estado es del aviso, ⛔ no de la lista.
+
+### Cómo se probó
+
+- **13 mutantes, 13 muertos**: el filtro que desaparece, el filtro **copiado a mano** en vez de salir
+  del núcleo, el orden que vuelve a descendente, el `limit` sin el `+1` (que deja de distinguir el
+  corte), el `hayMas` clavado en `false` de los dos lados, el derivador que ignora el corte, el `ts`
+  con `ahora`, el aviso del corte saltándose el permiso, y **los tres del cable**: la pantalla que se
+  traga el `hayMas`, la que lo grita siempre y la que ⛔ no lo lee.
+- **12 de 12 caminando contra la base real de BDI** (`scripts/caminar-tope-avisos.mjs`, handler en
+  proceso, dos filas sembradas y borradas, las 2 reales intactas). 🔑 **Esto ⛔ no lo puede decir
+  ningún test**: el Supabase de mentira **ignora el `.in`** y devuelve la fila entera pida lo que
+  pida el handler, así que un filtro mal escrito sale **verde**.

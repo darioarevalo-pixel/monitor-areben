@@ -88,6 +88,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   /** Qué fila tiene abierto el resumen de lo decidido y la traza. */
   const [expandido, setExpandido] = useState<number | null>(null)
   /**
+   * 🔴 **El servidor tuvo que cortar la lista** (D12 de la auditoría del 28-ago-2026). Las tres
+   * pestañas filtran **en el cliente**, sobre lo que bajó: con 200 reclamos por mes, al segundo mes
+   * «Abiertos» mostraba menos de los que hay **sin decir una palabra**. El tope se queda —una
+   * pantalla ⛔ no puede bajar la tabla entera— pero se DICE, que es la diferencia entre un límite y
+   * una mentira.
+   */
+  const [cortado, setCortado] = useState(false)
+  /**
    * La orden DEL RECLAMO que se está decidiendo.
    *
    * ⚠️ Antes acá se pasaba `orden`, que es el estado del **formulario de alta** — y ese se resetea
@@ -143,7 +151,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
 
   const recargar = useCallback(async () => {
     setCargando(true); setError(null)
-    try { setFilas(await leerReclamos(marca)) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
+    try { const d = await leerReclamos(marca); setFilas(d.filas); setCortado(d.hayMas) } catch (e) { setError((e as Error).message) } finally { setCargando(false) }
   }, [marca])
 
   // El setState va DENTRO del await, no en el cuerpo del effect: el linter del repo rechaza el
@@ -153,7 +161,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     ;(async () => {
       try {
         const d = await leerReclamos(marca)
-        if (vivo) setFilas(d)
+        if (vivo) { setFilas(d.filas); setCortado(d.hayMas) }
       } catch (e) {
         if (vivo) setError((e as Error).message)
       } finally {
@@ -872,6 +880,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       </Toolbar>
 
       {error && <Notice tone="danger">{error}</Notice>}
+
+      {cortado && (
+        <Notice tone="warning" style={{ marginBottom: space[3] }}>
+          Hay <b>más reclamos de los que entran en esta lista</b>: se están mostrando los más nuevos.
+          Los tres filtros de arriba trabajan sobre lo que bajó, así que puede faltar alguno de los
+          viejos. Cerrá los que ya estén resueltos, o pedí subir el tope.
+        </Notice>
+      )}
 
       {!cargando && !visibles.length ? (
         <Card padding={4}>

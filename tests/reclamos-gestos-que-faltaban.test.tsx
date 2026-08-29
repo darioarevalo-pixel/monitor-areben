@@ -22,7 +22,7 @@ const FILAS: ReclamoRow[] = []
 
 vi.mock('@/lib/reclamos/cliente', async (orig) => {
   const real = await orig<typeof import('@/lib/reclamos/cliente')>()
-  return { ...real, leerReclamos: vi.fn(async () => FILAS) }
+  return { ...real, leerReclamos: vi.fn(async () => ({ filas: FILAS, hayMas: false })) }
 })
 
 const { Devoluciones } = await import('@/components/reclamos/Reclamos')
@@ -88,13 +88,16 @@ describe('🔴 D13 · anular un reclamo que no debió existir', () => {
    * 🔑 **El rótulo dice cuál de los dos «anular» es.** En la misma fila puede estar «Anulé en GN»,
    * que es la VENTA en Gestión Nube y ⛔ no el reclamo: dos cosas distintas con el mismo verbo.
    */
-  it('y ⛔ no se confunde con «Anulé en GN», que es la venta', async () => {
+  it('y ⛔ no se confunde con el de la VENTA en Gestión Nube', async () => {
     const resuelto = {
       ...base, estado: 'resuelto', compensacion: 'plata_total', stock_estado: 'pendiente',
       gn_venta_number: '14231',
     } as unknown as ReclamoRow
     const { botones } = await enReclamos([resuelto])
-    expect(botones.some((b) => b.includes('Anulé en GN'))).toBe(true)
+    // ⚠️ El rótulo del de la venta se busca por FORMA (`…en GN`) y ⛔ no letra por letra: es texto
+    // que la corrida de vocabulario puede reescribir («Anulé» → «Anular»), y lo que este test fija
+    // es que **son dos botones distintos**, ⛔ no cómo se llama cada uno.
+    expect(botones.some((b) => /Anul.* en GN/.test(b))).toBe(true)
     expect(botones.some((b) => b.includes('Anular el reclamo'))).toBe(true)
   })
 
@@ -163,7 +166,10 @@ describe('🔴 D14 · despachar un cambio, sin cambiar de pantalla', () => {
   it('🔴 con el paquete pendiente, el botón está en Cambios', async () => {
     const conPendiente = { ...CAMBIO, envio_nuevo_estado: 'pendiente' } as unknown as ReclamoRow
     const { botones } = await enCambios([conPendiente])
-    expect(botones.some((b) => b.includes('Despaché'))).toBe(true)
+    // ⚠️ Por FORMA y ⛔ no letra por letra: «Despaché» / «Despachar» es exactamente lo que la
+    // corrida de vocabulario reescribe, y lo que se fija acá es que el gesto ESTÉ, ⛔ no su tiempo
+    // verbal.
+    expect(botones.some((b) => /Despach/.test(b))).toBe(true)
   })
 
   /**
@@ -175,13 +181,13 @@ describe('🔴 D14 · despachar un cambio, sin cambiar de pantalla', () => {
     const hecho = { ...CAMBIO, envio_nuevo_estado: 'hecho' } as unknown as ReclamoRow
     const { botones, texto } = await enCambios([hecho])
     expect(texto).toContain('R-0001')
-    expect(botones.some((b) => b.includes('Despaché'))).toBe(false)
+    expect(botones.some((b) => /Despach/.test(b))).toBe(false)
   })
 
   it('⛔ ni cuando el cambio ⛔ no manda nada', async () => {
     const nada = { ...CAMBIO, envio_nuevo_estado: 'no_aplica' } as unknown as ReclamoRow
     const { botones, texto } = await enCambios([nada])
     expect(texto).toContain('R-0001')
-    expect(botones.some((b) => b.includes('Despaché'))).toBe(false)
+    expect(botones.some((b) => /Despach/.test(b))).toBe(false)
   })
 })

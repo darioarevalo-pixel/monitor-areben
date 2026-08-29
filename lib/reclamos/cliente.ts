@@ -42,7 +42,17 @@ async function postear(body: Record<string, unknown>): Promise<Record<string, un
   return d
 }
 
-export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo; soloPendientes?: boolean }): Promise<ReclamoRow[]> {
+/**
+ * Lo que bajó, **y si el servidor tuvo que cortar**.
+ *
+ * 🔑 `hayMas` ⛔ no es un detalle de paginado: las pestañas de la lista filtran en el cliente, sobre
+ * esto. Un corte callado hace que «Abiertos» muestre menos de los que hay **sin decir una palabra**,
+ * que es el mismo «el cero afirma» de siempre — con la diferencia de que acá lo que desaparece es
+ * trabajo pendiente.
+ */
+export type Listado = { filas: ReclamoRow[]; hayMas: boolean }
+
+export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo; soloPendientes?: boolean }): Promise<Listado> {
   const qs = [
     `store=${marca}`,
     opts?.estado ? `estado=${opts.estado}` : '',
@@ -52,7 +62,7 @@ export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo
   const r = await apiFetch(`${API}&${qs}`)
   const d = await r.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer las devoluciones.')
-  return (d.devoluciones || []) as ReclamoRow[]
+  return { filas: (d.devoluciones || []) as ReclamoRow[], hayMas: !!d.hayMas }
 }
 
 /**
@@ -63,14 +73,19 @@ export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo
  * 10 filas de BDI, **1.925 bytes por fila con el listado completo contra 344 con éstas** — y las
  * que se van son el relato del cliente, sus datos y todos los montos, que un aviso no necesita.
  *
- * ⚠️ Devuelve **todo lo que baja, incluido lo cerrado**: quién sigue vivo lo contesta
- * `ESTADOS_ABIERTOS` en el núcleo, y filtrarlo también acá sería la segunda copia de esa lista.
+ * 🔴 **Desde el 29-ago-2026 el servidor filtra por `ESTADOS_ABIERTOS`** (D12), y ⛔ no porque
+ * sobrara el filtro del front: **lo cerrado crece para siempre y lo abierto no** ⇒ con 200 reclamos
+ * por mes, al segundo mes las 200 filas que bajaban eran casi todas cerradas y el reclamo que duerme
+ * **dejaba de contar en el badge**. La lista sale del núcleo, ⛔ no se copia en el handler.
+ *
+ * ⚠️ Devuelve también **`hayMas`**: si el servidor tuvo que cortar, el aviso está mirando de menos
+ * y lo dice en vez de callarse.
  */
-export async function leerReclamosParaAviso(marca: Marca): Promise<ReclamoRow[]> {
+export async function leerReclamosParaAviso(marca: Marca): Promise<Listado> {
   const r = await apiFetch(`${API}&store=${marca}&vista=avisos&nc=${Date.now()}`)
   const d = await r.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudieron leer los reclamos.')
-  return (d.devoluciones || []) as ReclamoRow[]
+  return { filas: (d.devoluciones || []) as ReclamoRow[], hayMas: !!d.hayMas }
 }
 
 /**

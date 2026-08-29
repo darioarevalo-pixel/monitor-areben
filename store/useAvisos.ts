@@ -170,7 +170,9 @@ export const useAvisos = create<AvisosState>((set, get) => ({
             // vuelve a mirar el mismo permiso. Si algún día los dos discreparan, el que decide es
             // el derivador ⇒ el peor caso es pedir de más, ⛔ nunca mostrarle un reclamo a quien no
             // puede abrir la pantalla.
-            puedeVer(perfil, m, 'postventa') ? leerReclamosParaAviso(m).catch(() => []) : Promise.resolve([]),
+            puedeVer(perfil, m, 'postventa')
+              ? leerReclamosParaAviso(m).catch(() => ({ filas: [], hayMas: false }))
+              : Promise.resolve({ filas: [], hayMas: false }),
           ])
           const solsFoto = porFoto.flatMap(({ r }) => (r.ok ? r.dato : []))
           const resumenes = [
@@ -197,7 +199,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...avisosDeSolicitud(resumenes, perfil),
         ...porMarca.flatMap((p) => avisosDeNoDevueltos(p.solsFoto, p.m, perfil)),
         ...porMarca.flatMap((p) => avisosDeFallas(p.fallas, p.m, perfil)),
-        ...porMarca.flatMap((p) => avisosDeReclamo(p.reclamos, p.m, perfil)),
+        ...porMarca.flatMap((p) => avisosDeReclamo(p.reclamos.filas, p.m, perfil, p.reclamos.hayMas)),
         ...canjes,
         ...pauta,
         ...insumos,
