@@ -421,15 +421,23 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   es para lo que se escribió el arrastre. La quincenal de diseño necesita la decisión de arriba.
 - 🆕 ▶️ **Tildarle `agenda.cargar` a Lorena en Config, y dejarla SIN `admin`.** Es la mano que activa
   todo el techo: hasta que exista alguien así, la regla está escrita y no la ejerce nadie.
-- 🆕 ▶️ **Cargar los moldes de la sesión de fotos.** El motor está; los renglones no. Script listo
-  en `~/Documents/quien-hace-que/scripts/moldes-sesion-fotos.mjs` (arranca en simulación) y el
-  oráculo por otro camino en `verificar-siembra-fotos.mjs`. Hasta que estén, crear una sesión
-  contesta «no hay ningún paso cargado como plantilla de sesión de fotos» y ⛔ no siembra nada.
-- 🆕 ▶️ 🔴 **Decidir el destino de «Reetiquetar lo que se desetiquetó».** Bruno dijo *«las tres = las
-  de marketing»* ⇒ por rol, para que siga siendo correcto cuando cambie quién está en marketing.
-  Pero **el padrón dice que la función `marketing` la tienen CUATRO**: Sofi, Cande, Cami y
-  **Stefania Scolari**, que no va a las sesiones ⇒ el pendiente le cae igual. Es una decisión suya,
-  no una adivinanza: el script lo carga por rol y con `--reetiquetar=tres` las nombra.
+- 🆕 🏁 **Los moldes de la sesión de fotos, CARGADOS y ejercidos en vivo** (29-ago): **9 moldes** —
+  siete pasos, con «Drive» y «web» partidos, y el último cargado dos veces por origen— y una sesión
+  de prueba con fecha de diciembre sembró sus **8 renglones** con las fechas corridas, sin dejar
+  restos. Script: `~/Documents/quien-hace-que/scripts/moldes-sesion-fotos.mjs` (arranca en
+  simulación y **se planta si ya hay moldes**: crea, ⛔ no actualiza); el oráculo por otro camino,
+  `verificar-siembra-fotos.mjs`.
+- 🆕 ✅ **«Reetiquetar lo que se desetiquetó» quedó con LAS TRES POR NOMBRE** (decisión de Bruno,
+  29-ago). Iba a ir por rol —*«las tres = las de marketing»*, para que siguiera siendo correcto el
+  día que cambie quién está en marketing— pero **el padrón dice que la función `marketing` la tienen
+  CUATRO**: Sofi, Cande, Cami y **Stefania Scolari**, que es diseñadora y no va a las sesiones.
+- 🆕 ▶️ 🔴 **Y de ahí sale un pendiente que no es de la Agenda: falta la función `diseno`.** Stefi
+  usa `marketing` porque no hay otra, y ⛔ **sacársela no es gratis**: es su **ÚNICA** fuente de
+  acceso —no tiene un solo permiso tildado a mano, sólo exclusiones—, así que quedaría sin nada,
+  incluidas Solicitudes y Sesión de fotos, que es lo que usa para pedir productos y diseñar. ⇒ La
+  función nueva es código (`FUNCIONES` + `ACCESO_POR_FUNCION`, con su test de espejo) y **una
+  decisión de Bruno: qué ve una diseñadora**. Hasta entonces, todo destino `roles:['marketing']`
+  le llega también a ella — hoy hay **una** rutina así en la Agenda.
 - ⚠️ **Las que ya estén cargadas por rol NO se migran solas.** Hay que abrirlas y reasignarlas: el
   destino viejo sigue siendo válido y el motor no adivina cuál de las tres es la dueña.
 
