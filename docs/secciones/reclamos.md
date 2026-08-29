@@ -1052,6 +1052,26 @@ El crawl que anduvo quedó en `scripts/verificar-deploy-reclamos.mjs`.
 `efectos.core.js`), pero sólo si agrega una **cadena**: los comentarios se minifican y no sirven de
 oráculo.
 
+### 🆕 🔴 El control tiene que salir del **mismo archivo** que el cambio (28-ago-2026)
+
+Cuarta vez que este verificador miente, y esta vez **de la otra punta**: dijo *«todavía NO está»*
+sobre un cambio que **ya estaba en prod**. El control era `no le mandamos la etiqueta` (de
+`tipos.ts`) y el cambio, de `Reclamos.tsx` — **caen en chunks distintos**
+(`21wbfynss81od` vs `1-8c9igy0lljf`), así que intersecar «el oráculo en el chunk del control» daba
+**0** con todo deployado.
+
+⇒ **La cadena de control se elige del MISMO archivo que se tocó**, ⛔ no del módulo. Y conviene que
+el script **imprima en qué chunk cae cada marcador** en vez de contar: con eso la respuesta se lee
+sola.
+
+⚠️ **Y el oráculo ingenuo habría dado verde igual**: se buscaba `sin decidir`, y `tipos.ts:1135` ya
+tenía *«Todavía sin decidir»* **en prod desde antes**. El que distingue es **`"sin decidir"` con las
+comillas** —sólo puede salir del `placeholder` nuevo—, y se confirmó leyendo el chunk servido:
+
+    value:(0,S.montoADevolver)(n),placeholder:"sin decidir"
+
+🔑 Un oráculo se elige **contra lo que YA está en prod**, ⛔ no contra lo que uno escribió hoy.
+
 ## 🆕 «Le ofrecí y todavía no contestó» pasó a ser un ESTADO (27-ago-2026)
 
 🔴 **VA CON MIGRACIÓN, y la migración va ANTES del deploy**:
@@ -1512,5 +1532,10 @@ falso, y lo que se mira es **qué se escribió**), y **el cable de la celda** mo
 (`tests/reclamos-columna-plata.test.tsx`) — porque el defecto de D10 vivía justo en el medio: la
 regla bien de un lado, el JSX con su propia cuenta del otro.
 
-⚠️ **Lo caminado es el servidor, ⛔ no la pantalla**: nadie apretó todavía «Cerrar» sobre un reclamo
-real con pendientes para ver el 409 dibujado.
+✅ **En prod** (`2539984`, 28-ago de noche): verificado por **el chunk servido**, con el control
+sacado del mismo archivo (ver arriba, «El control tiene que salir del mismo archivo que el cambio»).
+
+⚠️ **Lo verificado en prod es la CELDA**: el freno de cerrar vive en la función de `api/`, que viaja
+en el mismo deploy pero ⛔ no se puede leer desde afuera. **Nadie apretó todavía «Cerrar» sobre un
+reclamo real con pendientes para ver el 409 dibujado** — es la misma pantalla que sigue sin
+caminarse desde la tanda de los textos.
