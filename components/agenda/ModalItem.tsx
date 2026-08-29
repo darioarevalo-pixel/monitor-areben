@@ -548,22 +548,27 @@ export function ModalItem({
                   ⚠️ Y «producción propia no lleva renglón de descripción» no se dice acá: se dice
                   **no cargando ese molde**. Por eso no hay ningún «no corre en» que tildar.
                 */}
-                <div style={{ marginTop: space[3] }}>
-                  <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
-                    {plant.eje.titulo}{' '}
-                    <span style={{ fontWeight: weight.normal }}>(ninguno tildado = todos)</span>
+                {/* ⚠️ Sin eje —el lanzamiento— acá no se dibuja nada: sus once renglones tienen la
+                    misma dueña pase lo que pase, y un control que ofrece elegir algo que no cambia
+                    nada le hace creer a quien carga que la elección importa. */}
+                {plant.eje && (
+                  <div style={{ marginTop: space[3] }}>
+                    <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
+                      {plant.eje.titulo}{' '}
+                      <span style={{ fontWeight: weight.normal }}>(ninguno tildado = todos)</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                      {plant.eje.claves.map((k) => (
+                        <Tilde
+                          key={k}
+                          puesto={(it[plant.eje!.campo] ?? []).includes(k as never)}
+                          label={plant.eje!.rotulo(k)}
+                          onToggle={() => set(plant.eje!.campo, toggleEnLista((it[plant.eje!.campo] ?? []) as string[], k) as never)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-                    {plant.eje.claves.map((k) => (
-                      <Tilde
-                        key={k}
-                        puesto={(it[plant.eje.campo] ?? []).includes(k as never)}
-                        label={plant.eje.rotulo(k)}
-                        onToggle={() => set(plant.eje.campo, toggleEnLista((it[plant.eje.campo] ?? []) as string[], k) as never)}
-                      />
-                    ))}
-                  </div>
-                </div>
+                )}
               </>
             )}
           </div>

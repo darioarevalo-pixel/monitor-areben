@@ -3,6 +3,7 @@
 //
 //   GET  ?recurso=calendario&store=bdi|zattia
 //   POST { recurso:'calendario', store, hito:{...} }                       → alta / edición
+//        🔑 y un hito `lanzamiento` que queda FIRME siembra sus once pendientes en la Agenda
 //   POST { recurso:'calendario', store, id, action:'borrar' }
 //   POST { recurso:'calendario', store, action:'fijar', clave, anio, fecha }
 //   POST { recurso:'calendario', store, action:'desfijar', clave, anio }
@@ -22,6 +23,9 @@
 // funciones por deploy y cada archivo de ruta cuenta una.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
+// El 3º disparador de la Agenda. Decidir un lanzamiento prende trabajo en cuatro sectores, y sus
+// renglones están escritos con dueña en el manual 08: acá es donde el lanzamiento tiene fecha.
+import { sembrarEnMaestra } from './_agenda.js';
 import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js';
 import {
   CLAVES_COMERCIALES, CLAVES_PRIORIDAD, CLAVES_TIPO_HITO, normalizarHora, partirIdComercial,
@@ -230,7 +234,42 @@ export default async function handler(req, res) {
       updated_at: ahora,
     }], { onConflict: 'store,id' });
     if (error) throw new Error(error.message);
-    return res.status(200).json({ ok: true, hito });
+
+    /*
+      🔑 **EL 3º DISPARADOR: un lanzamiento que queda FIRME siembra sus once renglones.**
+
+      El manual 08 dice que la lista *«se abre al decidir el lanzamiento, no el día antes»*, y el
+      objeto que dice eso ya existía: un **hito propio de tipo `lanzamiento`**, con su fecha
+      objetivo. ⛔ No hizo falta inventar un botón — el dato ya lo sabía el código y lo estaba
+      tirando.
+
+      🔴 **El hecho es «quedó FIRME», ⛔ no «se creó», y ésa es la diferencia que importa acá.**
+      `firme: false` es una fecha **proyectada, que se puede mover**: colgar once pendientes de una
+      fecha que todavía se mueve es sembrar once fechas equivocadas. Y como el hecho es un ESTADO y
+      no un alta, esto anda igual en los dos caminos —nace firme, o alguien lo marca firme después—
+      sin preguntar si el hito existía: **la idempotencia por clave hace las dos cosas**.
+
+      🔴 **Sembrar ⛔ no puede voltear el guardado.** El hito es el dato; los pendientes son la
+      consecuencia. Si no hay moldes cargados, el hito igual quedó guardado y el error se cuenta.
+    */
+    const sembrado = hito.tipo === 'lanzamiento' && hito.firme
+      ? await sembrarEnMaestra({
+        plantilla: 'lanzamiento',
+        // El agrupador del título de cada clon: cómo llamó al lanzamiento quien lo cargó.
+        nombre: hito.titulo,
+        // 🔑 La fecha OBJETIVO, que es de lo que cuelgan los once. El reloj del ingreso es otro —la
+        // fecha en que llegó el camión— y por eso son dos disparadores y no uno.
+        fecha: hito.fecha,
+        autor: yo,
+        // El calendario sólo acepta las dos marcas de la Agenda: acá ⛔ no hay línea que traducir.
+        marca: store,
+        // 🔑 La clave es el ID del hito: la fecha objetivo **se mueve** hasta que queda firme, y con
+        // la fecha adentro un lanzamiento movido sembraría los once otra vez.
+        clave: `lanzamiento·${hito.id}`,
+      })
+      : null;
+
+    return res.status(200).json({ ok: true, hito, ...(sembrado ? { sembrado } : {}) });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }

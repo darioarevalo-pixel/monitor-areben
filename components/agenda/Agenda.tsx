@@ -495,9 +495,11 @@ function FilaItem({
                       ? `a los ${dias} ${dias === 1 ? 'día' : 'días'} ${p.delHecho}`
                       : `${-dias} ${dias === -1 ? 'día' : 'días'} antes ${p.delHecho}`
                   // ⚠️ El eje se nombra sólo cuando corre en ALGUNOS. «todos» es el caso normal y
-                  // escribirlo en cada renglón esconde justo los que sí cambian de dueña.
-                  const enEje = (i[p.eje.campo] ?? []) as string[]
-                  return `${cuando}${enEje.length ? ` · sólo ${enEje.map(p.eje.rotulo).join(' o ')}` : ''}`
+                  // escribirlo en cada renglón esconde justo los que sí cambian de dueña. Y la
+                  // plantilla sin eje —el lanzamiento— no nombra nada: no hay nada que elegir.
+                  const eje = p.eje
+                  const enEje = eje ? ((i[eje.campo] ?? []) as string[]) : []
+                  return `${cuando}${eje && enEje.length ? ` · sólo ${enEje.map(eje.rotulo).join(' o ')}` : ''}`
                 })()
               : rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
             {/* La regla sola miente cuando el ítem arrastra: dice "los martes" y en la pantalla del

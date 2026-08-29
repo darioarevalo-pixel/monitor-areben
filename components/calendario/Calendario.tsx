@@ -1025,6 +1025,19 @@ function ModalHito({ hito, marca, marcas, onMarca, onCerrar, onGuardar, onBorrar
             <option value="si">Firme — es ese día</option>
           </Select>
         </Field>
+        {/*
+          🔑 **Marcar firme un lanzamiento no es sólo cambiar un chip: SIEMBRA once pendientes** con
+          dueña y con fecha en la Agenda (manual «Cómo se lanza un producto»). Callarlo sería que
+          alguien cierre una fecha sin saber que le acaba de repartir trabajo a cuatro sectores — y
+          que el que la deja proyectada crea que ya avisó. Ver `docs/secciones/agenda.md`.
+        */}
+        {f.tipo === 'lanzamiento' && (
+          <div style={{ fontSize: font.xs, color: f.firme ? color.mut : color.warningInk, lineHeight: 1.5 }}>
+            {f.firme
+              ? 'Al guardarlo firme, los renglones del lanzamiento caen en la Agenda de cada una, con su fecha.'
+              : 'Mientras esté proyectada ⛔ no se reparte nada: los renglones del lanzamiento caen recién cuando la fecha queda firme.'}
+          </div>
+        )}
         <Field label="Nota" hint="Opcional. Lo que el resto necesita saber para producir a tiempo.">
           <Input value={String(f.nota || '')} onChange={(e) => setF({ ...f, nota: e.target.value })} />
         </Field>

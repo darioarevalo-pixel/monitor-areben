@@ -98,7 +98,8 @@ export type Plantilla = {
   campoClave: string
   label: string
   ayuda: string
-  eje: EjeDePlantilla
+  /** `null` = la plantilla no tiene eje (el lanzamiento): no hay paso que cambie de dueña. */
+  eje: EjeDePlantilla | null
   offsetMin: number
   offsetMax: number
 }

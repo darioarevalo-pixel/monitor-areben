@@ -939,3 +939,124 @@ describe('cargar un molde de sesión de fotos: el eje y el rango son de la plant
     expect(it.disparadores).toEqual(['faltante'])
   })
 })
+
+/**
+ * **El 3º disparador: el LANZAMIENTO.**
+ *
+ * El manual 08 tiene diecisiete renglones y **siete son los mismos moldes del ingreso** (el nombre,
+ * la descripción, el precio, la sesión de fotos, las fotos al Drive y a la web, las pantallas).
+ * Bruno cerró la duda el 29-ago: *«lanzamiento siempre tiene algo nuevo»* ⇒ **todo lanzamiento trae
+ * un ingreso adentro**, así que los siete compartidos **se quedan en el ingreso** y el lanzamiento
+ * siembra **sólo sus once**. Cargarlos en los dos lados dejaría dos lugares donde la dueña puede
+ * decir cosas distintas.
+ *
+ * 🔑 **Y siguen siendo DOS disparadores aunque uno implique al otro, porque son DOS RELOJES**: el
+ * lanzamiento se abre al decidirlo y cuelga de la **fecha objetivo**; el ingreso cuelga de **la
+ * fecha en que llegó**, que la mueve el camión. Una sola lista tendría que colgar de una sola fecha
+ * y la mitad quedaría mal.
+ *
+ * Lo que se prueba acá es lo que esta plantilla trajo de nuevo al motor: **una plantilla SIN EJE**.
+ */
+describe('el lanzamiento: el 3º disparador, y la plantilla sin eje', () => {
+  const moldeLanz = (over: Partial<Fila> = {}): Fila => ({
+    ...molde(),
+    id: 'l1',
+    titulo: '07) Calentar la audiencia',
+    destino: { tipo: 'personas', personas: ['Sofia Facello'] },
+    manual_id: 'man-lanz',
+    datos: { plantilla: 'lanzamiento', offsetDias: -2 },
+    ...over,
+  })
+
+  const sembrarLanz = async (over: Record<string, unknown> = {}) => {
+    const mod = await import('@/api/_agenda.js')
+    return (mod.sembrar as unknown as (sb: unknown, o: Record<string, unknown>) => Promise<Record<string, unknown>>)(
+      fakeSupabase(),
+      { plantilla: 'lanzamiento', nombre: 'Cápsula primavera', fecha: '2026-10-01', autor: 'Bruno Arevalo', marca: 'bdi', clave: 'lanzamiento·h9', ...over },
+    )
+  }
+
+  it('🔑 siembra SIN pedir eje: los once tienen la misma dueña pase lo que pase', async () => {
+    mundo.items = [moldeLanz()]
+    const r = await sembrarLanz()
+    expect(r.creados).toBe(1)
+    expect(mundo.insertados[0].titulo).toBe('Cápsula primavera · 07) Calentar la audiencia')
+    expect((mundo.insertados[0].regla as { fecha: string }).fecha).toBe('2026-09-29')
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.de).toBe('lanzamiento')
+    expect(datos.lanzamiento).toBe('lanzamiento·h9')
+    // ⛔ Ni `puerta` ni `disparador`: esta plantilla no tiene eje, así que el clon no lleva ninguno.
+    expect(datos.puerta).toBeUndefined()
+    expect(datos.disparador).toBeUndefined()
+  })
+
+  it('🔴 un eje que llega igual es 400 y lo nombra, ⛔ no un dato descartado callado', async () => {
+    mundo.items = [moldeLanz()]
+    const r = await sembrarLanz({ eje: 'importacion' })
+    expect(String(r.error)).toContain('importacion')
+    expect(String(r.error)).toContain('lanzamiento')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('...pero el eje VACÍO no molesta: es lo que manda quien no sabe que no hay eje', async () => {
+    for (const vacio of [undefined, null, '']) {
+      mundo = nuevoMundo()
+      mundo.items = [moldeLanz()]
+      const r = await sembrarLanz({ eje: vacio })
+      expect(r.creados, String(vacio)).toBe(1)
+    }
+  })
+
+  it('el error de «ninguno corre» ⛔ no nombra un eje que no existe', async () => {
+    mundo.items = [moldeLanz({ marcas: ['zattia'] })]
+    const r = await sembrarLanz({ marca: 'bdi' })
+    expect(String(r.error)).toContain('bdi')
+    expect(String(r.error)).not.toContain('undefined')
+    expect(String(r.error)).not.toContain('null')
+  })
+
+  it('⛔ NO se mezcla con las otras dos plantillas', async () => {
+    mundo.items = [molde(), moldeLanz()]
+    await sembrarLanz()
+    expect(mundo.insertados.map((f) => f.titulo)).toEqual(['Cápsula primavera · 07) Calentar la audiencia'])
+  })
+
+  it('🔑 la clave es el ID del hito: mover la fecha objetivo ⛔ no vuelve a sembrar', async () => {
+    mundo.items = [moldeLanz()]
+    await sembrarLanz()
+    mundo.items = [...mundo.items, ...mundo.insertados]
+    mundo.insertados = []
+    const r = await sembrarLanz({ fecha: '2026-10-15' })
+    expect(r.ya).toBe(true)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('un mes hacia atrás entra, y ⛔ más no: el clon nacería fuera de la ventana de arrastre', async () => {
+    const guardar = (offsetDias: number) => llamar({
+      action: 'guardar-item',
+      item: { id: 'l9', clase: 'pendiente', titulo: 'Los canjes', regla: { tipo: 'diaria' }, plantilla: 'lanzamiento', offsetDias },
+    })
+    const ok = await guardar(-30)
+    expect(ok.code).toBe(200)
+    expect((mundo.insertados[0].datos as Record<string, unknown>).offsetDias).toBe(-30)
+    mundo = nuevoMundo()
+    const mal = await guardar(-31)
+    expect(mal.code).toBe(400)
+    expect(String(mal.body?.error)).toContain('lanzamiento')
+  })
+
+  it('un molde de lanzamiento ⛔ no guarda puertas ni orígenes aunque el formulario los mande', async () => {
+    const res = await llamar({
+      action: 'guardar-item',
+      item: {
+        id: 'l9', clase: 'pendiente', titulo: 'El banner', regla: { tipo: 'diaria' },
+        plantilla: 'lanzamiento', offsetDias: -1, puertas: ['importacion'], disparadores: ['campania'],
+      },
+    })
+    expect(res.code).toBe(200)
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.plantilla).toBe('lanzamiento')
+    expect(datos.puertas).toBeUndefined()
+    expect(datos.disparadores).toBeUndefined()
+  })
+})

@@ -228,7 +228,16 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
   const limpio = String(nombre || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
   if (!limpio) return { error: `Falta el nombre ${p.delHecho}.` };
   if (!esFechaIso(fecha)) return { error: `La fecha ${p.delHecho} tiene que ser YYYY-MM-DD.` };
-  if (!p.eje.claves.includes(String(eje))) {
+  /*
+    🔑 **El eje es obligatorio en la plantilla que TIENE eje, y ⛔ no existe en la que no.** El
+    lanzamiento no tiene: sus once renglones tienen la misma dueña pase lo que pase. Y un eje que
+    llega igual es un 400 que lo nombra, ⛔ no un dato que se descarta callado: el que lo mandó cree
+    que va a filtrar algo.
+  */
+  if (!p.eje && eje !== undefined && eje !== null && eje !== '') {
+    return { error: `${p.evento} no tiene eje: sacá «${String(eje).slice(0, 40)}».` };
+  }
+  if (p.eje && !p.eje.claves.includes(String(eje))) {
     return { error: `${p.eje.pide} (usá ${p.eje.claves.join(', ')}).` };
   }
   // 🔑 Nombra lo que trajo cuando trajo algo: el que llama desde afuera manda su vocabulario y el
@@ -279,14 +288,18 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
   // ingreso tiene UNA marca y una persona puede tener las dos. Están al lado y dicen cosas
   // distintas; el comentario de `puertas.core.js` explica por qué no son la misma función.
   const moldes = deLaPlantilla
-    .filter((i) => moldeCorreEnEje(i.datos[p.eje.campo], eje) && moldeCorreEnMarca(i.marcas, marca))
+    .filter((i) => (!p.eje || moldeCorreEnEje(i.datos[p.eje.campo], eje)) && moldeCorreEnMarca(i.marcas, marca))
     .sort((a, b) => (Number(a.datos.offsetDias) || 0) - (Number(b.datos.offsetDias) || 0) || String(a.titulo).localeCompare(String(b.titulo), 'es'));
   // Hay moldes, pero ninguno para esta combinación. ⚠️ Se dice distinto que «no hay moldes» porque
   // la acción es otra: allá hay que cargarlos, acá hay que revisar en qué puertas y en qué marcas
   // corren los que hay. 🔑 Y nombra **las dos**: con una sola, quien lo lea revisa la mitad
   // equivocada y concluye que la carga está bien.
   if (!moldes.length) {
-    return { error: `Hay moldes cargados, pero ninguno corre para «${p.eje.rotulo(eje)}» en ${marca}.` };
+    return {
+      error: p.eje
+        ? `Hay moldes cargados, pero ninguno corre para «${p.eje.rotulo(eje)}» en ${marca}.`
+        : `Hay moldes cargados, pero ninguno corre en ${marca}.`,
+    };
   }
 
   const filas = moldes.map((m, n) => ({
@@ -320,7 +333,7 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
       // clave, y lo que va a leer el día que la pantalla quiera agrupar por hecho.
       de: p.key,
       [p.campoClave]: clave,
-      [p.eje.campoClon]: eje,
+      ...(p.eje ? { [p.eje.campoClon]: eje } : {}),
       marca,
       // 🔑 El tope lo pone el MOLDE, no el disparador: el formulario del molde es el mismo que el
       // de una rutina, así que si alguien le carga «hasta N días» ahí, tiene que valer para lo que
@@ -838,7 +851,8 @@ export default async function handler(req, res) {
         tercera plantilla sería tocar el motor en vez de agregar una fila al catálogo.
       */
       const plant = esClavePlantilla(it.plantilla) ? plantillaDe(String(it.plantilla)) : null;
-      const eje = plant ? listaDe(it[plant.eje.campo], plant.eje.claves) : [];
+      // ⚠️ Sin eje —el lanzamiento— la lista es vacía y no se guarda nada: no hay pregunta que hacer.
+      const eje = plant && plant.eje ? listaDe(it[plant.eje.campo], plant.eje.claves) : [];
       if (eje === null) {
         return res.status(400).json({ error: `${plant.eje.invalido} (usá ${plant.eje.claves.join(', ')}).` });
       }
