@@ -282,10 +282,10 @@ conjuntos con 2+ avisos se descartan **8 censurados** (arrancaron en el 1er día
 no se sabe cuándo empezaron de verdad). Quedan 15, partidos por **cuándo arrancó cada aviso**, y
 mirando **los 2 primeros días**, que es la ventana del test:
 
-| | conjuntos | cuota de la #1 (mediana) | #1 ≥90% | la #2 con ≥2.000 impresiones |
+| | conjuntos | cuota de la #1 (mediana) | #1 ≥90% | la #2 se quedó con |
 |---|---|---|---|---|
-| **escalonado** — el aviso se sumó a un conjunto que ya gastaba | 10 | **100%** | **10/10** | **0/10** |
-| **arrancaron juntos** — misma cohorte inicial | 5 | **79%** (min 62%) | 1/5 | 1/5 |
+| **escalonado** — el aviso se sumó a un conjunto que ya gastaba | 10 | **100%** | **10/10** | **$0 en 8 de 10** |
+| **arrancaron juntos** — misma cohorte inicial | 5 | **79%** (min 62%) | 1/5 | ~20% del gasto |
 
 🔴🔴 **El caso escalonado es total: en los 10 conjuntos el incumbente se lleva el 100% de los dos
 primeros días.** Poner una pieza nueva al lado de una que ya corre ⛔ **no la testea: no sale al
@@ -296,33 +296,51 @@ aire**, y después se concluye «no funcionó» cuando nunca corrió. Casos: la 
 concentración **se agrava con los días**: a 7 días la mediana sube de 79% a 83%. ⇒ **la ventana
 corta del test juega a favor.**
 
-⚠️ **Las impresiones bajas de las #2 observadas NO son prueba de que el reparto las ahogue: esos
-conjuntos gastaron mucho menos que $20.000 en dos días** ($2.187, $3.861, $7.466 en tres de los
-cinco). Al presupuesto de la regla el reparto da otra cosa — derivado, ⛔ no medido: al **CPM ~$1.780**,
-$20.000 en 2 días con reparto 79/21 dejan a la #2 con **~$4.200 ≈ 2.400 impresiones**, que alcanza
-para una lectura **gruesa** de CTR. La #3 del único conjunto de tres se llevó **6%** ⇒ ~$1.200
-≈ 700 impresiones, que ⛔ no alcanza para nada.
+🔑🔑 **PARA QUÉ SIRVE EL CONJUNTO COMPARTIDO — lo fijó Bruno el 28-ago, y es lo que ordena todo lo
+de arriba:** *«testear de a 2 o 3 sólo sirve para encontrar al ganador, y aislarlo. El resto va a
+tener su oportunidad más adelante cuando se cree otro CDA, porque poco presupuesto gastado no quiere
+decir que va a morir ahí»*.
+
+⇒ **Es un BUSCADOR, ⛔ no un juez.** La sesión venía tratándolo como un descarte —«¿alcanzan las
+impresiones de la #2 para leerle el CTR?»— y esa pregunta **no hay que hacérsela**: a la #2 no se la
+lee. La concentración de Meta **es** la selección: se queda con la que puede entregar mejor, esa se
+aísla, y las otras vuelven al banco sin veredicto.
 
 **⇒ Lo que queda decidido:**
 
 1. ⛔ **NUNCA sumar un aviso a un conjunto que ya gasta.** Medido: 100% al incumbente, 10 de 10. Esto
-   vale para cualquier prueba, no sólo para las formales.
-2. ✅ **Se puede testear con DOS piezas en un conjunto nuevo, arrancadas el mismo día**, a los
-   $20.000 / 2 días de siempre. ⛔ **Tres no**: la #3 no junta impresiones para nada.
-3. 🔴 **Eso da un veredicto de CTR, ⛔ nunca de compras.** La #2 se lleva ~$4.200: está un orden de
-   magnitud por debajo de la puerta. **Sirve para matar, no para aprobar.** La que sobrevive va a
-   celda aislada con sus $20.000 y recién ahí corren las puertas de compras.
-4. ⚠️ **Y a veces no da nada:** en 1 de los 5 casos la #1 se llevó el 98% igual. ⇒ **antes de leer,
-   chequear las impresiones de la #2.** Si no llegó, ⛔ no tiene veredicto — no murió: va a aislada.
+   vale para cualquier prueba, no sólo para las formales. Lo que se prueba se arranca **a la par**.
+2. ✅ **2 o 3 piezas en un conjunto nuevo, arrancadas el mismo día**, a los $20.000 / 2 días de
+   siempre. Con 3 hay más chances de que asome la buena, y ⛔ **no importa** que la #3 se lleve el
+   6%: no se la va a leer.
+3. 🔑 **El ganador sale con su lectura HECHA.** Se lleva el 79-100% ⇒ **$16.000-20.000 de los
+   $20.000**: es prácticamente la celda entera. ⇒ **el buscador no cuesta una celda extra, ES la
+   celda** — y a la salida ya tiene compras acumuladas contra las puertas. Después se aísla, y ⛔
+   **sin subirle el presupuesto**.
+4. 🔴🔑 **Las que no gastaron ⛔ NO MUEREN Y NO SE ANOTAN COMO PROBADAS.** Gastar poco ⛔ no es un
+   resultado: vuelven al banco de piezas y les toca **su propio conjunto** más adelante. ⚠️ El
+   riesgo operativo es que queden registradas como «testeadas y no funcionó» —ya pasó: *«el duelo
+   del 15-ago NO OCURRIÓ»*— ⇒ **al cerrar la tanda hay que dejar escrito que no tuvieron veredicto**,
+   no dejar que el silencio se lea como fracaso.
 5. ⚠️ **n = 5.** Es lo que hay. Vale para decidir, ⛔ no para dar por cerrado; se re-mide cuando haya
    más conjuntos arrancados a la par.
 
-**El rescate de los que no gastaron** (la maniobra de la consultoría, aceptada):
+▶️ **Lo que queda ABIERTO y es la pregunta de fondo del método: ¿la que Meta elige temprano es la
+que más vende?** La concentración se decide en las primeras horas con señal de **clicks**, ⛔ no de
+compras. Que eso sea un buen proxy es **plausible acá** —el desgaste medido en esta cuenta aparece
+como CTR cayendo con el CPM clavado— pero ⛔ **no está medido**. Se puede medir hacia adelante:
+anotar a quién eligió Meta en cada tanda y comparar con el costo por compra que esa pieza saca
+después, ya aislada.
+
+**El rescate** — para el que quiera darle su turno a una pieza que no gastó, ya sea en la tanda de
+arriba o en un conjunto viejo que quedó con varios avisos adentro:
 
 - El **ganador se queda donde está** y ⛔ **sin subirle el presupuesto** — subirlo le resetea el
   aprendizaje.
 - El que no gastó **sale a conjunto propio**. ⛔ Si son dos, **NO van juntos al mismo conjunto
   nuevo**: se repite el reparto y uno vuelve a quedar mudo. **Uno por conjunto.**
+- ⚠️ Y esto ⛔ no es urgente: la pieza que no gastó **no perdió nada**, sigue entera en el banco. El
+  turno se le da cuando haya presupuesto libre, no para «cerrarle el caso».
 - 🔴🔑 **El aislado ⛔ NO se pauta «con el mínimo».** La consultoría dice mínimo y eso **choca con la
   puerta**: a $3.000/día junta $6.000 en 2 días, saca 0-1 compras y «muere» — **muerto por falta de
   plata, no por malo**, que es el defecto que se está reparando. O va a **$20.000 totales** y le
@@ -332,14 +350,11 @@ para una lectura **gruesa** de CTR. La #3 del único conjunto de tres se llevó 
   resultado, o el aislado no mide la pieza, mide otra cosa.
 - 🔴 Vale igual **el 1er día parcial**: el día en que se crea la celda no cuenta.
 
-▶️ **Abierto: el piso de impresiones para leer el CTR.** Acá se usó **2.000** como umbral de
-trabajo, derivado del CPM y ⛔ **sin validar**. Falta escribirlo con la brecha de CTR que se quiere
-detectar, y el precio: cortar por CTR sube los falsos muertos por encima del 26% ya aceptado.
-
-⚠️ **Lo que la forma ⛔ no arregla: «no me define el ganador».** Eso ⛔ no lo causa el agrupamiento,
-lo causa el **TAMAÑO DE MUESTRA** — $20.000 compran 0-4 compras y la diferencia entre 1 y 3 es
-ruido. Repartir esa muestra entre dos avisos la empeora. Sin más plata por celda no hay forma que lo
-arregle; lo que sí baja la exposición es **estirar el diario** ($5.000 × 4 días, mismos $20.000).
+⚠️ **Lo que la forma ⛔ no arregla: cuánto se le puede creer al ganador.** Sale del conjunto con
+$16.000-20.000 encima, así que **sí** tiene lectura contra las puertas — pero $20.000 compran 0-4
+compras y la diferencia entre 1 y 3 sigue siendo ruido. Eso ⛔ no lo causa el agrupamiento, lo causa
+el **TAMAÑO DE MUESTRA**, y sin más plata por celda no hay forma que lo arregle. Lo que sí baja la
+exposición diaria es **estirar el diario** ($5.000 × 4 días, mismos $20.000).
 
 🔴 **Y para el escalado (CBO con los ganadores):** CBO reparte entre conjuntos, pero **adentro de
 cada uno sigue valiendo el 79/21**. Además reparte hacia el que ya gana, y hoy **una sola pieza
