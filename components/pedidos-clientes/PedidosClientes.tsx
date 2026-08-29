@@ -136,7 +136,7 @@ export function PedidosClientes() {
     <div style={{ display: 'grid', gap: space[5] }}>
       <HeaderAcciones>
         <Button variant="solid" tone="brand" iconLeft="＋" onClick={() => setAnotando(true)}>
-          Anotar un faltante
+          Agregar un faltante
         </Button>
       </HeaderAcciones>
 

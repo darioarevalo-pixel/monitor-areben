@@ -634,7 +634,7 @@ function Fila({ fila, varias, sinIdeas, onAnotar, onConfirmar, onPrioridad, onCa
                 {b.clase === 'comercial' && (
                   <Decision e={e} urgente={urgenteDe(e)} onPrioridad={(x, p) => onPrioridad(m, x, p)} onCambiar={(x) => onCambiar(m, x)} />
                 )}
-                {!apagadaM && <Button size="sm" variant="soft" onClick={() => onAnotar(m, e)}>Anotar idea</Button>}
+                {!apagadaM && <Button size="sm" variant="soft" onClick={() => onAnotar(m, e)}>Crear idea</Button>}
               </div>
 
               {/* El renglón de etapas se dibuja sólo cuando la fecha pide producción de verdad. Una
@@ -1061,12 +1061,12 @@ function ModalIdea({ entrada, marca, varias, onCerrar, onAnotar }: {
       abierto
       onCerrar={onCerrar}
       cerrarConFondo={false}
-      titulo={`Anotar una idea para ${entrada.titulo}`}
+      titulo={`Crear una idea para ${entrada.titulo}`}
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
           <Button variant="solid" disabled={!titulo.trim()} onClick={() => onAnotar(entrada, { etapa, titulo, formato, gancho })}>
-            Anotar
+            Crear
           </Button>
         </>
       }

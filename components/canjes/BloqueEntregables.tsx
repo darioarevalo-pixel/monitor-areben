@@ -95,7 +95,7 @@ export function BloqueEntregables({
             tone={cump.completo ? 'success' : cump.vencidos.length ? 'warning' : 'action'}
             label={`${cump.cumplidas} de ${cump.comprometidas}`}
           />
-          {editable && <Button variant="outline" size="sm" onClick={() => setSumando(true)}>Sumar</Button>}
+          {editable && <Button variant="outline" size="sm" onClick={() => setSumando(true)}>Agregar</Button>}
         </div>
       }
     >
@@ -283,7 +283,7 @@ function SumarEntregable({
     <Modal
       abierto
       onCerrar={onCerrar}
-      titulo="Sumar al acuerdo"
+      titulo="Agregar al acuerdo"
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
@@ -308,7 +308,7 @@ function SumarEntregable({
               }
             }}
           >
-            Sumar
+            Agregar
           </Button>
         </>
       }

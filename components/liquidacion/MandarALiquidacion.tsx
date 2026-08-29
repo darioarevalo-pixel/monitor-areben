@@ -137,7 +137,7 @@ export function MandarALiquidacion({
               loading={mandando}
               disabled={campanias === null || (esNueva && !nombreNueva.trim())}
             >
-              Mandar
+              Enviar
             </Button>
           </>
         }

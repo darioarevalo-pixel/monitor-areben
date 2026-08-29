@@ -421,7 +421,7 @@ function ConfigModal({ abierto, inv, cfg, esBdi, shareStatus, guardarCfg, onClos
         <div style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: 8, padding: '9px 11px', marginBottom: 12, fontSize: 12, color: color.brand }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>🛡️ <b>Prioridad venta online:</b> reservar siempre <input type="number" min={0} defaultValue={cfg.reservaDeposito ?? 1} onChange={(e) => setReserva(e.target.value)} style={{ width: 56, padding: '4px 6px', border: `1px solid ${color.brandBorder}`, borderRadius: 6, textAlign: 'center' }} /> u. en depósito.</div>
           <div style={{ color: color.mut2, marginTop: 4 }}>Nunca se mueve a Local lo que dejaría el depósito por debajo de esta reserva.</div>
-          {esBdi && <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, color: color.ink2, cursor: 'pointer', fontWeight: 600 }}><input type="checkbox" checked={cfg.reservaTodos} onChange={(e) => setReservaTodos(e.target.checked)} /> Aplicar a <u>todos los productos</u> (no solo fundas)</label>}
+          {esBdi && <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, color: color.ink2, cursor: 'pointer', fontWeight: 600 }}><input type="checkbox" checked={cfg.reservaTodos} onChange={(e) => setReservaTodos(e.target.checked)} /> Incluir <u>todos los productos</u> (no solo fundas)</label>}
         </div>
 
         {minKeys.cats.length > 0 && <>

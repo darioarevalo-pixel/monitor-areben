@@ -453,7 +453,7 @@ export function Marketing() {
               className="mo-chip"
               aria-pressed={pendientesPuesto}
               onClick={filtroTablasPendientes}
-              title="Filtra: con stock + le falta la tabla de talles. Después podés sumar Categoría (ej. Jeans) o Mes."
+              title="Filtra: con stock + le falta la tabla de talles. Después podés agregar Categoría (ej. Jeans) o Mes."
             >
               Pendientes de tabla (con stock)
               <span className="mo-chip-n">{stats.sinTabla}</span>
@@ -561,7 +561,7 @@ export function Marketing() {
             Cancelar
           </Button>
           <Button variant="solid" tone="brand" onClick={mandarSel} disabled={!sel.size}>
-            Mandar a sesión de fotos
+            Enviar a sesión de fotos
           </Button>
         </div>
       )}

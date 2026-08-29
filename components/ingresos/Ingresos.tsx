@@ -537,7 +537,7 @@ function BloqueEditar({
     }
     const raw = await pedirTexto('Misma cantidad para TODO el bloque: todos los modelos y todos los diseños.', '', {
       titulo: 'Igualar el bloque',
-      ok: 'Aplicar a todo',
+      ok: 'Igualar todo',
       placeholder: 'ej. 12',
     })
     if (raw === null) return

@@ -586,7 +586,7 @@ function ArmarVitrina({
               loading={guardando}
               disabled={!elegidos.size}
             >
-              {elegidos.size ? `Sumar ${elegidos.size}` : 'Sumar'}
+              {elegidos.size ? `Agregar ${elegidos.size}` : 'Agregar'}
             </Button>
           </div>
 

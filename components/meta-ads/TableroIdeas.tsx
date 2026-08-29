@@ -239,7 +239,7 @@ export function TableroIdeas({
             variant="solid"
             onClick={() => setEditando({ etapa: (filtro === 'todas' ? sugerida || 'mofu' : filtro) as Etapa, formato: 'reel' })}
           >
-            Anotar una idea
+            Crear una idea
           </Button>
         </div>
       </div>
@@ -557,12 +557,12 @@ function ModalIdea({ idea, fechas, onCerrar, onGuardar }: {
       abierto
       onCerrar={onCerrar}
       cerrarConFondo={false}
-      titulo={idea.id ? 'Editar la idea' : 'Anotar una idea'}
+      titulo={idea.id ? 'Editar la idea' : 'Crear una idea'}
       pie={
         <>
           <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
           <Button variant="solid" disabled={!listo} onClick={() => onGuardar(f)}>
-            {idea.id ? 'Guardar' : 'Anotar'}
+            {idea.id ? 'Guardar' : 'Crear'}
           </Button>
         </>
       }

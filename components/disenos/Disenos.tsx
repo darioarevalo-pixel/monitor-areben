@@ -263,7 +263,7 @@ export function Disenos() {
               En esta computadora quedaron <b>{locales} {locales === 1 ? 'diseño' : 'diseños'}</b> del tablero viejo, de cuando cada navegador tenía el suyo. El tablero compartido ya no los usa.
             </span>
             <Button size="sm" variant="outline" tone="danger" style={{ marginLeft: 'auto' }} onClick={() => void borrarLocales()}>
-              Borrar {locales === 1 ? 'el diseño' : 'los ' + locales} de esta computadora
+              Eliminar {locales === 1 ? 'el diseño' : 'los ' + locales} de esta computadora
             </Button>
             <Button size="sm" variant="ghost" onClick={() => { ocultarAvisoLocal(); setLocales(0) }}>
               Ocultar este aviso

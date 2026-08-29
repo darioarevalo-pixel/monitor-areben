@@ -268,7 +268,7 @@ function Pedidos({ marca, vista, onCambio }: { marca: string | null; vista: Vist
       setPromesaAt('')
       onCambio()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo anotar el pedido')
+      toast.error(e instanceof Error ? e.message : 'No se pudo agregar el pedido')
     } finally {
       setGuardando(false)
     }
@@ -359,7 +359,7 @@ function Pedidos({ marca, vista, onCambio }: { marca: string | null; vista: Vist
             <Input value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="CDE Insumos" />
           </Field>
           <Button variant="solid" tone="brand" loading={guardando} onClick={anotar}>
-            Anotar el pedido
+            Agregar el pedido
           </Button>
         </div>
       )}
@@ -465,7 +465,7 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
       setPrecio('')
       onCambio()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo anotar')
+      toast.error(e instanceof Error ? e.message : 'No se pudo agregar')
     } finally {
       setGuardando(false)
     }
@@ -554,7 +554,7 @@ function Libro({ marca, vista, onCambio }: { marca: string | null; vista: VistaI
           </>
         )}
         <Button variant="solid" tone="brand" loading={guardando} disabled={cantidadFinal == null} onClick={agregar}>
-          Anotar
+          Agregar
         </Button>
       </div>
 

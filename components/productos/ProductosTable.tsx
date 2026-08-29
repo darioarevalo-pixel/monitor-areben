@@ -392,7 +392,7 @@ export function ProductosTable() {
                   aria-label="Ya está en la campaña"
                 >
                   <option value="">Todos ({filtradaBase.length})</option>
-                  <option value="faltan">Sin mandar ({porFaltar.length})</option>
+                  <option value="faltan">Sin enviar ({porFaltar.length})</option>
                   <option value="estan">Ya en la campaña ({filtradaBase.length - porFaltar.length})</option>
                 </Select>
               )}

@@ -236,7 +236,7 @@ export function AltaMasiva({
           size="sm"
           onClick={() => setFilas((p) => [...p, ...Array.from({ length: FILAS_INICIALES }, () => ({ ...FILA_VACIA }))])}
         >
-          Sumar {FILAS_INICIALES} filas
+          Agregar {FILAS_INICIALES} filas
         </Button>
         <span style={{ color: color.mut, fontSize: font.sm }}>
           {[

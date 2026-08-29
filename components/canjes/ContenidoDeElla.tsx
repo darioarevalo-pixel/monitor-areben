@@ -144,7 +144,7 @@ export function ContenidoDeElla({
           <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
             {pendientes.length > 0 && carpetaMarca && (
               <Button variant="solid" tone="brand" size="sm" onClick={() => void mandar()} loading={mandando}>
-                Mandar a Drive ({pendientes.length})
+                Enviar a Drive ({pendientes.length})
               </Button>
             )}
             {pendientes.length > 0 && <BajarTodo archivos={pendientes} />}

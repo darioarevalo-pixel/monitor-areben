@@ -572,7 +572,7 @@ function EditarTrato({
             </div>
           ))}
           <Button variant="ghost" size="sm" onClick={() => setUnidades((p) => [...p, { cantidad: 1, descripcion: '' }])}>
-            Sumar otra línea
+            Agregar otra línea
           </Button>
         </div>
       )}

@@ -454,9 +454,9 @@ function Lista({
         <Notice tone="success" icon="✔" style={{ marginBottom: space[3] }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
             <span>
-              Tenés <b>{term}</b> {term === 1 ? 'producto terminado' : 'productos terminados'}. Aplicar relee el stock vivo de GN y genera el Excel de ajuste.
+              Tenés <b>{term}</b> {term === 1 ? 'producto terminado' : 'productos terminados'}. Generar el ajuste relee el stock vivo de GN y arma el Excel.
             </span>
-            <Button size="sm" variant="solid" tone="success" onClick={onAplicar} loading={aplicando}>{aplicando ? 'Leyendo stock vivo…' : 'Aplicar ajuste'}</Button>
+            <Button size="sm" variant="solid" tone="success" onClick={onAplicar} loading={aplicando}>{aplicando ? 'Leyendo stock vivo…' : 'Generar el ajuste'}</Button>
           </div>
         </Notice>
       )}

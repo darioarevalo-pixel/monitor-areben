@@ -65,7 +65,7 @@ export function InstructivoConteo({ pasoCarga, queAplica }: { pasoCarga: React.R
         <>Hacé todo el conteo en <b>la misma compu y la misma pestaña</b>, de principio a fin.</>,
         pasoCarga,
         <>Apretá <b>Terminar producto</b> en cada uno. <b>Si no lo terminás, ese producto no se guarda ni recibe fecha.</b></>,
-        <>Cuando terminaste todos, apretá <b>Aplicar ajuste</b> ({queAplica}).</>,
+        <>Cuando terminaste todos, apretá <b>Generar el ajuste</b> ({queAplica}).</>,
         <>En la revisión, <b>Generar Excel y guardar</b> (o <b>Guardar el conteo igual</b> si no hubo diferencias). <b>Si salís con Volver, no se guarda nada.</b></>,
       ]}
     />

@@ -466,7 +466,7 @@ export function BloqueEnvio({
             onClick={() => setAnotandoIntento((v) => !v)}
             disabled={canje.envio_estado !== 'hecho' || !!canje.entregado_at || cerrado}
           >
-            Anotar un intento de entrega
+            Agregar un intento de entrega
           </Button>
           {canje.entregado_at && (
             <span style={{ color: color.mut, fontSize: font.sm }}>
@@ -492,7 +492,7 @@ export function BloqueEnvio({
                 />
               </Field>
               <Button variant="outline" onClick={() => void guardarIntento()} loading={guardando}>
-                Anotarlo
+                Agregarlo
               </Button>
               {/* Sirve para las dos puntas: para avisarle antes de que se entere, y para contestarle
                   cuando la que escribe es ella preguntando por qué no le llegó. */}

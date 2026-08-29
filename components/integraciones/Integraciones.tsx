@@ -683,7 +683,7 @@ export function Integraciones() {
                                 loading={aplicando === r.sku}
                                 disabled={aplicando != null || progreso != null}
                               >
-                                {aplicando === r.sku ? 'Escribiendo…' : 'Aplicar'}
+                                {aplicando === r.sku ? 'Escribiendo…' : 'Aplicar en TN'}
                               </Button>
                             )}
                           </span>

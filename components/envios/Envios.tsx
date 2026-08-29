@@ -1671,7 +1671,7 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
       <div style={{ display: 'grid', gap: space[4] }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button variant="outline" onClick={() => setAnotando(true)} data-guia="envios.anotar">
-            Anotar un movimiento
+            Agregar un movimiento
           </Button>
         </div>
         <EmptyState
@@ -1707,7 +1707,7 @@ function CuentaDelCadete({ activa }: { activa: boolean }) {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button variant="outline" onClick={() => setAnotando(true)} data-guia="envios.anotar">
-          Anotar un movimiento
+          Agregar un movimiento
         </Button>
       </div>
 
@@ -1971,7 +1971,7 @@ function AnotarMovimiento({
   }
 
   return (
-    <Modal abierto onCerrar={onCerrar} titulo="Anotar un movimiento">
+    <Modal abierto onCerrar={onCerrar} titulo="Agregar un movimiento">
       <div style={{ display: 'grid', gap: space[4] }}>
         <Field label="Día" hint="El día en que se movió la plata, que no tiene por qué ser un día de reparto.">
           <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -2022,7 +2022,7 @@ function AnotarMovimiento({
             Cancelar
           </Button>
           <Button variant="solid" tone="brand" onClick={guardar} disabled={guardando || !puede}>
-            {guardando ? 'Guardando…' : 'Anotar'}
+            {guardando ? 'Guardando…' : 'Agregar'}
           </Button>
         </div>
       </div>

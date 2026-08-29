@@ -65,20 +65,57 @@ un botón, un título o un cartel de vacío, se lee. El nombre del trabajo, para
   «Gestión Nube es quien manda sobre el precio» son *gobernar*. ⇒ la regla ahora dice **sólo como
   nombre del gesto**.
 
+### 🏁 Hecho el 29-ago — las otras cuatro familias
+
+- **Las seis familias, clavadas, y `tests/vocabulario.test.ts` pasó de 3 tests a 12.** Una prueba por
+  familia sobre **el nombre del gesto**, más un piso de cuántos rótulos vio el extractor y la lista de
+  pantallas que tienen que aportar alguno. 🔑 **Es el MISMO bloque que `areben-marketing`**, byte a
+  byte salvo los números medidos.
+- 🔴 **Y ese test nació con un PUNTO CIEGO que dejó vivo a un mutante.** La primera versión parseaba
+  las etiquetas contando llaves para saltarse el `>` de `onClick={() => x()}`, y llegaba **hasta tres
+  niveles**: un `<Button>` con `onClick={async () => { try { … } catch { … } }}` ⛔ no matcheaba, así
+  que su rótulo era invisible — y ésos son justo los botones que escriben. Medido: devolver un
+  «Sumar» a `components/canjes/BloqueEntregables.tsx` **no puso nada en rojo**.
+  ⇒ **el extractor ya no parsea nada**: toma todo el texto JSX y los atributos de texto, y se queda
+  con **lo que puede ser un rótulo** (hasta cinco palabras, sin `(`, `:`, `;` ni `=`). 🔑 **El tope de
+  palabras es lo que separa el rótulo de la PROSA**, que es la lección de `Mandar` resuelta con una
+  medida en vez de una lista de excepciones. Con el cambio aparecieron **cuatro rótulos más** que
+  ninguna versión anterior veía.
+- **Familia *agregar*: 30 rótulos.** `Anotar`/`Sumar` repartidos con la pregunta de §1.3 — **Crear**
+  lo que nace al escribirlo (una idea, una decisión) y **Agregar** lo que ya pasó afuera y acá queda
+  registrado (un faltante, un movimiento, un intento de entrega, un pedido de insumos).
+- **Familia *guardar*.** ⚠️ Y confirmó lo que este archivo ya avisaba: **«Aplicar ajuste» no era
+  guardar**… pero tampoco era aplicar. Relee el stock y **arma un Excel** ⇒ quedó **«Generar el
+  ajuste»** (los dos conteos y el instructivo). Lo que sí escribe afuera se queda con `Aplicar` **y
+  ahora nombra dónde**: «Aplicar en Tienda Nube», «Aplicar en TN».
+- **Familia *publicar*.** `Mandar a Drive` · `Mandar a sesión de fotos` · `Mandar` · `Sin mandar` →
+  **Enviar**.
+- **Familia *editar*: ⛔ no había ni uno.** `Modificar` y `Retocar` no aparecen en ningún rótulo.
+- 🏁 **Se cerró la deuda de `Borrar` y `Quitar` a secas en la allowlist**, que estaba escrita acá como
+  debilidad conocida: los dos últimos usos vivos eran **texto** —«Borrar … de esta computadora» y
+  «Quitar el elegido», cuyo propio diálogo ya decía «Sacar»— y con ésos arreglados la lista quedó
+  **sólo con nombres que ninguna pantalla podría decir**. 🔑 **Lo cazó el test de al lado**, el que
+  exige que la lista se vacíe sola.
+- **El glosario subió a `2026-08-29c`** y está byte a byte en los dos repos. Entraron dos carve-outs
+  medidos, los dos con la misma forma: la palabra se queda **cuando el gesto escribe en OTRO sistema y
+  el rótulo nombra cuál** (`Aplicar en …`, `Dar de baja en GN` — es la palabra del sistema de
+  destino, y traducirla manda a buscar un botón que allá no existe).
+
 ### ▶️ Lo que falta
 
-- **Las otras cuatro familias en este repo**: *pendiente* (81 «falta», y los títulos que son frase),
-  *agregar* (siete verbos sin regla), *guardar* (`Aplicar`) y *editar* (`Cambiar`).
-  ⚠️ Ojo con `Aplicar ajuste` de los Conteos: **aplicar un ajuste a GN no es guardar**, es ejecutar.
-- **Los dos homónimos que quedan adentro de las pantallas**: `Faltantes` (la pestaña de Exhib → `Sin
-  escanear`; el campo de Recepciones → `Diferencias`) y **`clavado`**, que es a la vez un producto sin
-  rotación (`components/memo/`) y un usuario atado a una marca (`components/novedades/EditorNovedad.tsx`).
-  ▶️ **Falta que Bruno bautice el segundo sentido de `clavado`.**
+- 🔴 **`components/crm/CRM.tsx` quedó SIN COMMITEAR a propósito.** El cambio de vocabulario está
+  hecho en el archivo (`+ Sumar` → `+ Agregar`), pero **la otra sesión tiene ese archivo a medio
+  editar** —le sacó el import de `vistaTemp` y está tocando `components/crm/temperatura.ts`—, así que
+  commitearlo publicaría su trabajo por la mitad. 📌 [[feedback_areben_checkout_compartido_no_hay_merge]].
+  ▶️ **Entra en el próximo commit que toque CRM**, o se vuelve a aplicar si se pierde.
+- **Los dos homónimos que quedan**: `Faltantes` (la pestaña de Exhib → `Sin escanear`; el campo de
+  Recepciones → `Diferencias`) y **`clavado`**. ▶️ **Falta que Bruno bautice el segundo sentido de
+  `clavado`.** 🔑 Y antes de mandar a bautizar: en MAKETA los dos homónimos se cerraron **sin
+  bautizar nada**, porque una de las dos acepciones **ya estaba prohibida por otra regla**.
 - **Anunciar los renombres en Novedades** el día que se publiquen: esta app **ya la usa gente**, y un
-  rótulo que cambia de nombre confunde a quien ya lo aprendió.
-- ⚠️ **`tests/crm-paridad.test.ts` tiene 13 tests en rojo, y ⛔ no son de esta corrida**: se midió
-  guardando los cambios aparte y dieron los mismos 13. Estaban rotos de antes. Una suite que vive en
-  rojo deja de avisar.
+  rótulo que cambia de nombre confunde a quien ya lo aprendió. Son ~40 rótulos.
+- ⚠️ **`tests/crm-paridad.test.ts` sigue con 13 tests en rojo, y ⛔ no son de esta corrida**: se midió
+  guardando los cambios aparte y dieron los mismos 13. Estaban rotos de antes.
 
 ---
 

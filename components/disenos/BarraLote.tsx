@@ -56,7 +56,10 @@ export function BarraLote({ n, onEstado, onQuitar, onLimpiar }: { n: number; onE
         </Button>
       ))}
       <Button size="sm" variant="ghost" tone="danger" onClick={onQuitar}>
-        Quitar {n === 1 ? 'el elegido' : 'los ' + n}
+        {/* ⚠️ Decía «Quitar», y el diálogo que abre ya decía «Sacar» en el título, en el botón y
+            en el mensaje: el disparador y la confirmación nombraban el mismo gesto distinto.
+            `VOCABULARIO.md` §1.1 → **Sacar**, porque el diseño sigue existiendo y sus votos quedan. */}
+        Sacar {n === 1 ? 'el elegido' : 'los ' + n}
       </Button>
       <Button size="sm" variant="ghost" onClick={onLimpiar} style={{ marginLeft: 'auto' }}>
         Deseleccionar

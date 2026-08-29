@@ -1,10 +1,13 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-08-29
+Versión: 2026-08-29c
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
 un test que lee esa línea, así que una copia que queda vieja **se cae sola**.
+⚠️ **Si cambia DOS VECES en el mismo día, la versión lleva una letra** (`2026-08-29b`): una fecha
+sola no distingue la copia de la mañana de la de la tarde, que es justo el día en que las dos se
+creen la fuente de verdad.
 
 ⛔ **Es una REGLA y no una lista de botones.** Un `grep` a mano encuentra el renglón de hoy; lo que
 hace falta es que el renglón de dentro de tres semanas —escrito por alguien que no leyó esto— caiga
@@ -41,7 +44,13 @@ de la fila, es *eliminar*. ⛔ Estas cuatro palabras **no son sinónimos que se 
 | **Archivar** | **sale del tablero y queda en la historia.** Se puede deshacer |
 | **Descartar** | «decidimos que no». Queda la fila, con **quién y cuándo** adentro, y se puede volver |
 
-⛔ **No se escribe: `borrar` · `quitar` · `remover` · `dar de baja`.**
+⛔ **No se escribe: `borrar` · `quitar` · `remover` · `dar de baja`** —y como todas las de acá,
+**la prohibición es del NOMBRE DEL GESTO**: botón, título, rótulo, `aria-label`, `placeholder`.
+⚠️ *«dar de baja un servicio contratado»* —Metricool, una suscripción— ⛔ no es esto: no saca nada
+de una lista de la app, y es la palabra que usa el que factura.
+⚠️ **Y la misma excepción que §1.4: `Dar de baja EN <el sistema>`** —«Dar de baja en GN»— se queda,
+porque **es la palabra del sistema de destino**: traducirla manda a buscar un botón que allá no
+existe. ⛔ `Dar de baja` a secas, sobre algo de esta app, no pasa.
 
 🔴 **Y la confirmación NOMBRA lo que va a dejar de existir, ⛔ nunca un pronombre.** «¿Sacarla?» no
 dice **qué** ni **cuánto**: se lee igual arriba de una foto que arriba de una campaña con doce
@@ -65,7 +74,17 @@ Lo que no puede es ser el **nombre** de una sección ni el **título** de un blo
 | **Crear** | **nace ahora**, no existía antes (una campaña, una pieza, una tarea) |
 | **Cargar** | **viene de afuera**: un archivo, una foto, un escaneo, una planilla |
 
-⛔ **No se escribe: `Sumar` · `Poner` · `Anotar` · `Añadir` · `Darlo de alta`.**
+⛔ **No se escribe: `Sumar` · `Anotar` · `Añadir` · `Darlo de alta`.**
+
+🔴 **`Poner` se sacó de esa lista el 29-ago, y ⛔ no es una excepción tibia: la regla estaba MAL
+ESCRITA.** Esta familia es *lo que ENTRA A UNA LISTA*, y `poner` casi nunca es eso: *«Ponele un
+título»*, *«Poné el nombre del editor»*, *«Poner»* al lado de un campo de fecha son **pedirle un
+valor a un campo**, que no es meter nada en ninguna lista. ⇒ `Poner` ⛔ no se escribe **cuando la
+cosa entra a una lista** —ahí va `Agregar`, y por eso el botón de las etiquetas dejó de decirlo—, y
+**se queda** cuando lo que se pone es el valor de un campo.
+📌 Es la segunda vez que pasa lo mismo: `Mandar` (§1.6) también prohibía la palabra en vez del
+gesto, y de 99 apariciones sólo 17 lo eran. **Una regla que nombra una palabra y no un gesto rompe
+frases que estaban bien**, y el que la aplica no tiene cómo saberlo hasta que las lee todas.
 
 ### 1.4 · Lo que GUARDA
 
@@ -75,6 +94,14 @@ Lo que no puede es ser el **nombre** de una sección ni el **título** de un blo
 | **Confirmar** | se cierra una **decisión** (una idea pasa a pieza, se aprueban los 12 diseños) |
 
 ⛔ **No se escribe: `Grabar` · `Aplicar`** (los dos son **Guardar**).
+
+🔴 **La excepción, y es una sola: `Aplicar EN <el sistema>`.** Un gesto que **escribe afuera** —el
+ajuste que va a Gestión Nube, la categoría que va a Tienda Nube— ⛔ no es guardar, y llamarlo
+«Guardar» promete que queda acá. Ahí `Aplicar` se queda **con una condición: el rótulo NOMBRA DÓNDE**
+—«Aplicar en Tienda Nube», «Aplicar en TN»—, porque es la mitad de la pregunta que el usuario hace
+antes de apretar un botón que toca otro sistema. ⛔ `Aplicar` a secas no pasa.
+⚠️ **Y antes de escribirlo, mirar qué hace de verdad**: el «Aplicar ajuste» de los Conteos ⛔ no
+aplicaba nada —relee el stock y **arma un Excel**—, así que quedó **«Generar el ajuste»**.
 
 ### 1.5 · Lo que CAMBIA algo escrito
 
@@ -120,8 +147,16 @@ sentido**, y hasta entonces ⛔ no se toca el título.
 | **Faltantes** | lo que el cliente pide y no tenemos · lo que no se escaneó · lo que faltó al recibir | monitor: sección `pedidos-clientes` · pestaña de Exhib · campo de Recepciones |
 | **Ingresos** | la importación que **viene** (`ingresos`) · lo que **ya entró** (`recepciones`) | monitor: dos filas contiguas en Compras |
 | **clavado** | producto sin rotación · usuario atado a una sola marca | monitor: `components/memo/Memo.tsx` · `components/novedades/EditorNovedad.tsx` |
-| **a mano** | manualmente · el texto que **escribe una persona** | MAKETA: `app/ajustes/page.tsx` · `app/piezas/[id]/page.tsx` |
-| **Subir** | cargar un archivo · mover hacia arriba en una lista | MAKETA: `components/fondo/ElegirFondo.tsx` · `components/ajustes/Recetas.tsx` |
+
+🏁 **Los dos de MAKETA se cerraron el 29-ago, y ⛔ ninguno de los dos hizo falta bautizarlo**: los dos
+tenían **un sentido que ya estaba prohibido por otra regla**, así que la palabra no era ambigua, era
+incorrecta. ⇒ **antes de mandar a bautizar un homónimo, mirar si una de las dos acepciones ya está
+decidida en la §1**.
+- **a mano** — el segundo sentido vivía en un TÍTULO («Lo que se escribe a mano»), y §3 ⛔ no deja que
+  un título sea una frase. Con el título en **«Título, enlaces y texto»**, «a mano» quedó queriendo
+  decir *manualmente* y nada más.
+- **Subir** — el segundo sentido eran los `aria-label` de dos flechas de orden, y §1.6 ya reservaba
+  `Subir` para **cargar un archivo**. Quedaron **«Mover … arriba»** y **«Mover … abajo»**.
 
 ---
 

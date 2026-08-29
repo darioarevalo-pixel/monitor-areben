@@ -36,19 +36,20 @@ const RAICES = ['borr', 'quit', 'remov']
  * ⚠️ Si agregás uno, agregalo acá; si lo que agregaste es una palabra de pantalla, la palabra es
  * **Eliminar** (deja de existir) o **Sacar** (sigue existiendo en otro lado).
  *
- * 🔴 **`Borrar` y `Quitar` a secas están acá y eso es una DEBILIDAD conocida**: son a la vez un
- * símbolo posible y una palabra de pantalla, así que un `<button>Borrar</button>` nuevo pasaría.
- * Lo tapa el segundo bloque, que exige la palabra correcta en cada pantalla que hace desaparecer
- * algo. 📌 En MAKETA esto se resolvió renombrando el componente (`Borrar` → `EliminarLaCampania`);
- * acá todavía no, y por eso queda escrito como deuda y no como que está cubierto.
+ * 🏁 **29-ago: `Borrar` y `Quitar` a secas SALIERON de esta lista, y era la deuda escrita acá.**
+ * Eran a la vez un símbolo posible y una palabra de pantalla, así que un `<button>Borrar</button>`
+ * nuevo pasaba de largo. Se cerró sin renombrar nada: los dos últimos usos vivos eran **texto** —
+ * «Borrar … de esta computadora» y «Quitar el elegido» de Diseños—, y con ellos arreglados la
+ * lista quedó **sólo con nombres que ninguna pantalla podría decir**, que es la condición para que
+ * defienda algo.
+ * 🔑 **Y lo cazó el test de al lado, no una revisión**: una lista de excepciones sólo defiende si se
+ * vacía sola cuando lo que excusaba se fue.
  */
 const SIMBOLOS = new Set([
   'Borrador',
   'Borradores',
-  'Borrar',
   'MOTIVOS_QUITAR_ITEM',
   'Quitados',
-  'Quitar',
   'alBorrar',
   'bloqueoBorrado',
   'bloqueoQuitarItem',
@@ -257,13 +258,282 @@ describe('«Borrar» y «Quitar» no vuelven solas a la pantalla — VOCABULARIO
   })
 })
 
+/**
+ * 🔴 **Las SEIS familias de `VOCABULARIO.md`, y no sólo la de eliminar.** Hasta el 29-ago acá se
+ * miraban las tres raíces de §1.1 y nada más; las otras cinco familias estaban escritas en el
+ * glosario y ⛔ nada las frenaba. 📌 [[feedback_areben_invariante_escrito_no_frena]].
+ * 🔑 **Es el MISMO bloque que `areben-marketing`, byte a byte salvo los números medidos.** Se puede
+ * porque ⛔ no parsea etiquetas: acá los botones son `<Button>` y las cabeceras `<Th>`, allá
+ * `<Boton>` y `<th>`, y al extractor le da igual. Lo único distinto es el piso y la lista de
+ * pantallas que tienen que aportar rótulos.
+ *
+ * 🔑 **Lo que se mira es el NOMBRE DEL GESTO, ⛔ no toda la prosa, y ésa es la lección cara del
+ * monitor**: allá la regla de `Mandar` prohibía la palabra y hubo que corregirla porque de 99
+ * apariciones **sólo 17 nombraban un gesto** —«Te mandamos la etiqueta» es castellano, y «el corte
+ * que manda» es *gobernar*—. Lo mismo pasa acá con `poner` («Ponele un título», que es pedirle un
+ * valor a un campo y ⛔ no meter algo en una lista) y con `sumar` («el alcance no se puede sumar»,
+ * que es aritmética). ⇒ se leen **los envoltorios donde vive un rótulo** (`<button>`, `<Boton>`,
+ * `<summary>`, `<label>`, `<option>`, `<th>`, los títulos) y **los atributos que son texto**
+ * (`aria-label`, `title`, `placeholder`, `titulo`, `etiqueta`, `rotulo`). Ahí una palabra ⛔ no
+ * tiene otro sentido posible.
+ *
+ * ⚠️ **Lo que esto NO puede ver**: que la palabra elegida sea la CORRECTA. `Crear` y `Agregar` se
+ * deciden con *¿de dónde viene la cosa?*, y eso se lee en la acción, no en el rótulo.
+ */
+/**
+ * 🔑 **El extractor de rótulos vive acá arriba porque lo usan DOS bloques** —las seis familias y
+ * el infinitivo de §3—, y dos copias de un helper es exactamente el defecto que este repo ya pagó:
+ * cada test mirando la suya, los dos en verde.
+ */
+const TEXTO_JSX = />([^<>{}]*[A-Za-zÁÉÍÓÚÑáéíóúñ][^<>{}]*)</g
+const ATRIBUTOS =
+  /\b(aria-label|title|placeholder|titulo|etiqueta|rotulo|ok|label)\s*=\s*(?:(["'])((?:\\.|(?!\2)[^\\])*?)\2|\{`([^`]*)`\})/g
+
+/** Hasta cinco palabras: «Agregar un intento de entrega» son cinco, y es el rótulo más largo que hay. */
+const TOPE_PALABRAS = 5
+
+function esRotulo(t: string): boolean {
+  return (
+    t !== '' &&
+    /[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(t) &&
+    t.split(' ').length <= TOPE_PALABRAS &&
+    // ⛔ Y lo que huele a código no es un rótulo: `borrar(clave: string): Promise` vive entre un
+    // `>` y un `<` porque el `<` es el de `Promise<…>`.
+    !/[():;=]/.test(t)
+  )
+}
+
+function rotulos(src: string): string[] {
+  const salida: string[] = []
+  for (const m of src.matchAll(TEXTO_JSX)) {
+    const t = m[1].replace(/\s+/g, ' ').trim()
+    if (esRotulo(t)) salida.push(t)
+  }
+  for (const m of src.matchAll(ATRIBUTOS)) {
+    const t = (m[3] ?? m[4] ?? '').replace(/\$\{[^}]*\}/g, ' ').replace(/\s+/g, ' ').trim()
+    if (esRotulo(t)) salida.push(t)
+  }
+  return salida
+}
+
+/** Los rótulos de un archivo, sin comentarios. */
+function rotulosDe(p: string): string[] {
+  return rotulos(sinComentarios(readFileSync(p, 'utf8')))
+}
+
+describe('las seis familias, en el nombre de cada gesto — VOCABULARIO.md', () => {
+  /**
+   * 🔴 **Un rótulo es UN TEXTO CORTO, y ésa es toda la definición.** La primera versión de esto
+   * parseaba las etiquetas —`<button>`, `<Button>`, `<label>`…— contando llaves a mano para saltarse
+   * el `>` que vive adentro de `onClick={() => x()}`, y **tenía un punto ciego que dejó vivo a un
+   * mutante**: un `<Button>` con `onClick={async () => { try { … } catch { … } }}` pasa de tres
+   * niveles de llaves y el regex ⛔ no lo matchea, así que su rótulo desaparecía. 📌 Medido el 29-ago
+   * en el monitor: devolver un «Sumar» a `components/canjes/BloqueEntregables.tsx` **no puso nada en
+   * rojo** — y ésos son justo los botones que escriben.
+   *
+   * ⇒ **No se parsea nada.** Se toma **todo el texto JSX** (lo que hay entre un `>` y un `<`, sin
+   * llaves ni ángulos adentro) más **los atributos que son texto**, y de ahí se queda **sólo lo que
+   * puede ser un rótulo**: hasta cinco palabras y sin `(`, `:`, `;` ni `=`.
+   *
+   * 🔑 **El tope de palabras es lo que separa el ROTULO de la PROSA, y por eso la regla puede ser de
+   * la palabra.** Es la lección de `Mandar` —de 99 apariciones sólo 17 nombraban un gesto— resuelta
+   * con una medida en vez de una lista de excepciones: *«el alcance no se puede sumar entre piezas»*
+   * y *«Te mandamos la etiqueta»* son prosa y ⛔ no entran; «Agregar otra línea» y «Enviar a Drive»
+   * sí. ⚠️ **Una frase corta de prosa se va a colar de vez en cuando**: se arregla escribiéndola
+   * mejor, que es lo que pasó las cuatro veces que apareció.
+   */
+  /** Las palabras que ⛔ no nombran un gesto, familia por familia. Cada una con su reemplazo. */
+  const FAMILIAS: readonly { familia: string; prohibidas: RegExp; enSuLugar: string }[] = [
+    {
+      familia: '§1.3 lo que entra a una lista',
+      prohibidas: /\b(sumar|sumá|sumal[oa]|sumarl[oa]|añadir|añadí|anotar|anotá|dar de alta|darl[oa] de alta)\b/i,
+      enSuLugar: 'Agregar (ya existía) · Crear (nace ahora) · Cargar (viene de afuera)',
+    },
+    {
+      familia: '§1.4 lo que guarda',
+      // ⚠️ `aplicar EN <sistema>` se queda: es un gesto que ESCRIBE AFUERA, ⛔ no que guarda acá, y
+      // ahí el rótulo tiene que nombrar dónde. El lookahead es la regla: `Aplicar` a secas ⛔ no pasa.
+      prohibidas: /\b(grabar|grabá|aplicá|aplicar(?! en ))\b/i,
+      enSuLugar: 'Guardar · Confirmar (o «Aplicar en <el sistema>», si escribe afuera)',
+    },
+    { familia: '§1.5 lo que cambia', prohibidas: /\b(modificar|modificá|retocar|retocá)\b/i, enSuLugar: 'Editar · Cambiar' },
+    { familia: '§1.6 lo que sale', prohibidas: /\b(postear|posteá|mandar|mandá|mandale)\b/i, enSuLugar: 'Publicar (al público) · Enviar (a una persona)' },
+    {
+      familia: '§1.1 lo que saca algo',
+      // ⚠️ Mismo carve-out: «Dar de baja en GN» es la palabra del sistema de destino, y traducirla
+      // manda a buscar un botón que allá no existe.
+      prohibidas: /\b(borrar|borrá|quitar|quitá|remover|dar de baja(?! en ))\b/i,
+      enSuLugar: 'Eliminar · Sacar · Archivar · Descartar',
+    },
+    {
+      familia: '§1.2 lo que está por hacerse',
+      // ⚠️ **La lista es la del glosario, palabra por palabra, y `qué falta` a secas ⛔ NO está.**
+      // §1.2 deja `falta` como verbo adentro de una ayuda, y un encabezado como «Por qué falta»
+      // es exactamente eso. Prohibir el pedazo prohíbe la frase que la regla permite.
+      prohibidas: /(qué falta ahora|lo que falta|todo lo que falta|sin terminar|sin hacer)/i,
+      enSuLugar: 'Pendiente / Pendientes',
+    },
+  ]
+
+  function todosLosRotulos(): { texto: string; donde: string }[] {
+    const salida: { texto: string; donde: string }[] = []
+    for (const raiz of DONDE) {
+      for (const p of archivos(raiz)) {
+        const limpio = sinComentarios(readFileSync(p, 'utf8'))
+        for (const t of rotulos(limpio)) salida.push({ texto: t, donde: p })
+      }
+    }
+    return salida
+  }
+
+  for (const { familia, prohibidas, enSuLugar } of FAMILIAS) {
+    it(`${familia} → ${enSuLugar}`, () => {
+      const intrusos = todosLosRotulos()
+        .filter((r) => prohibidas.test(r.texto))
+        .map((r) => `${r.donde} → «${r.texto.slice(0, 70)}»`)
+      expect([...new Set(intrusos)]).toEqual([])
+    })
+  }
+
+  /**
+   * 🔴 🔑 **El cero afirma, y acá el cero es del EXTRACTOR, no del vocabulario.** Los seis tests de
+   * arriba se cumplen perfecto si `rotulos()` deja de encontrar nada —una etiqueta nueva que el
+   * regex no matchea, un refactor a otro componente de botón— y ⛔ nada chillaría.
+   * ⚠️ Por eso van las dos cosas: un piso de cuántos vio en total **y una lista de archivos**, que
+   * es lo que impide que una pantalla entera se quede afuera sin que falle nada.
+   */
+  it('el extractor sigue viendo rótulos, y en las pantallas donde los hay', () => {
+    const todos = todosLosRotulos()
+    // Medido el 29-ago: 3.781. El piso es holgado a propósito: lo que caza es el derrumbe.
+    expect(todos.length).toBeGreaterThan(3000)
+    const CON_ROTULOS = [
+      'components/canjes/FichaCanje.tsx',
+      'components/disenos/Tablero.tsx',
+      'components/envios/Envios.tsx',
+      'components/insumos/FichaInsumo.tsx',
+      'components/meta-ads/TableroIdeas.tsx',
+      'components/pedidos-clientes/PedidosClientes.tsx',
+    ]
+    const mudas = CON_ROTULOS.filter((p) => rotulos(sinComentarios(readFileSync(p, 'utf8'))).length === 0)
+    expect(mudas).toEqual([])
+  })
+})
+
+/**
+ * 🔴 **§3: «Botón = verbo en infinitivo», y hasta el 29-ago-2026 ⛔ NADA lo miraba.** La regla estaba
+ * escrita en el glosario desde que existe, y post-venta tenía **trece rótulos** en pasado o en
+ * tercera persona —«Despaché», «Anulé en GN», «Devolví la plata», «Cobré la diferencia», «Aceptó»,
+ * «Volvió», «Llegó», «Reingresado», «Vendida»—, además de **cinco tests que los clavaban**, así que
+ * renombrarlos ponía la suite en rojo y nadie se enteraba de que estaban mal.
+ * 📌 [[feedback_areben_invariante_escrito_no_frena]], cuarta vez en este módulo.
+ *
+ * 🔑 **La CUARTA VOZ del glosario (§3.1) es legítima y por eso está exceptuada, ⛔ no ignorada.**
+ * *«Sí, ya lo despaché»* confirma un hecho que pasó **afuera** de la app y es exactamente lo que
+ * §3.1 permite — pero **sólo en el OK del diálogo**, ⛔ no en el botón de la fila que lo abre. Ésa
+ * es la distinción que el módulo no tenía: el botón pide la acción, el OK confirma el hecho.
+ *
+ * ⚠️ **Alcance: las pantallas de post-venta, ⛔ no el repo entero.** Es una lista de archivos y no
+ * un total, por lo mismo que `QUE_ELIMINAN`. Canjes tiene la misma forma («Aceptó» / «No aceptó» en
+ * `FichaCanje.tsx`) y ⛔ **no** se arregló en esta pasada: la sección se camina con su dueño antes
+ * de tocarle los rótulos, y meterla acá sin caminarla dejaría el test en rojo o la lista mintiendo.
+ */
+describe('§3 · los botones de post-venta están en infinitivo — VOCABULARIO.md', () => {
+  const PANTALLAS = [
+    'components/reclamos/Reclamos.tsx',
+    'components/reclamos/ArmarCambio.tsx',
+    'components/reclamos/DecidirReclamo.tsx',
+    'components/retornos/Retornos.tsx',
+    'components/postventa/Postventa.tsx',
+  ]
+
+  /**
+   * 🔑 **Acá SÍ hay que mirar la etiqueta, y ⛔ no alcanza el extractor de rótulos de arriba.** La
+   * diferencia con las seis familias es que aquellas prohíben **palabras** —`sumar`, `grabar`,
+   * `postear`—, que casi nunca significan otra cosa; ésta prohíbe un **tiempo verbal**, y el pasado
+   * es medio castellano: «lo que pagó», «¿Qué recibió realmente?» o «el envío que pagó» son prosa
+   * perfecta. 📌 Medido el 29-ago: sobre todos los rótulos daba **diez** intrusos y **uno solo era
+   * un botón**. ⇒ se leen los botones y nada más.
+   *
+   * ⚠️ Es un barrido y ⛔ no un parser: se toma el texto pelado que está pegado al `</Button>` y el
+   * `label` de los dos botones que lo llevan por prop. Un botón cuyo rótulo se arma con una
+   * expresión ⛔ no se ve — por eso abajo va el piso.
+   */
+  const TEXTO_DE_BOTON = />([^<>{}]+)<\/Button>/g
+  const LABEL_DE_BOTON = /<(?:BotonMensaje|CopyButton)[^>]*?\blabel="([^"]+)"/g
+
+  function botonesDe(p: string): string[] {
+    const src = sinComentarios(readFileSync(p, 'utf8'))
+    const salida: string[] = []
+    for (const m of src.matchAll(TEXTO_DE_BOTON)) {
+      const t = m[1].replace(/\s+/g, ' ').trim()
+      if (t) salida.push(t)
+    }
+    for (const m of src.matchAll(LABEL_DE_BOTON)) salida.push(m[1].trim())
+    return salida
+  }
+
+  /**
+   * Palabras que terminan como un pretérito y ⛔ no lo son. Es corta a propósito: si hay que
+   * agregarle diez, la regla está mirando lo que no debe.
+   */
+  const NO_SON_VERBOS = new Set(['qué', 'aquí', 'ahí', 'así', 'sí', 'acá', 'allá', 'día', 'días', 'más', 'él', 'café', 'está', 'están'])
+
+  /** ¿Alguna palabra del rótulo es un verbo en pasado? Primera o tercera persona. */
+  const enPasado = (t: string) =>
+    t.split(/[\s,.!?¿¡«»"'—·:]+/).filter(Boolean).some((w) => {
+      const l = w.toLowerCase()
+      if (NO_SON_VERBOS.has(l)) return false
+      return /^[a-zñáéíóú]{3,}[éíó]$/.test(l) || /^[a-zñáéíóú]{4,}(aron|ieron)$/.test(l)
+    })
+
+  it('🔴 ningún BOTÓN de post-venta pide la acción en pasado', () => {
+    const intrusos: string[] = []
+    for (const p of PANTALLAS) for (const t of botonesDe(p)) if (enPasado(t)) intrusos.push(`${p} → «${t}»`)
+    expect([...new Set(intrusos)]).toEqual([])
+  })
+
+  /**
+   * 🔴 🔑 **El cero afirma, y acá el cero es del extractor.** El test de arriba se cumple perfecto
+   * si `botonesDe` deja de encontrar nada —un refactor a otro componente, un rótulo armado con una
+   * expresión— y ⛔ nada chillaría. Va un piso **por pantalla**, ⛔ no un total: un total deja que
+   * una se quede sin botones sin que falle nada.
+   */
+  it('el extractor sigue viendo botones en las cinco', () => {
+    // Medidos el 29-ago-2026: 20 · 14 · 12 · 8 · 8.
+    const flacas = PANTALLAS.filter((p) => botonesDe(p).length < 5)
+    expect(flacas).toEqual([])
+  })
+
+  /**
+   * 🔴 🔑 **La mitad positiva, y es la que se pierde primero.** §3.1 tiene una **cuarta voz**
+   * legítima —primera persona en pasado— para el **OK de un diálogo** que confirma un hecho que
+   * pasó **afuera** de la app: *«Sí, ya lo despaché»*. Si alguien la "corrige" a infinitivo, el
+   * cartel pasa a prometer que la app va a despachar el pedido.
+   *
+   * ⇒ La distinción que el módulo ⛔ no tenía escrita: **el botón pide la acción, el OK confirma el
+   * hecho.** Por eso los dos tests van juntos y ninguno vale solo.
+   */
+  it('🔑 y la cuarta voz sigue viva en los OK de los diálogos', () => {
+    const oks = PANTALLAS.flatMap((p) => [...sinComentarios(readFileSync(p, 'utf8')).matchAll(/\bok:\s*'([^']+)'/g)].map((m) => m[1]))
+    // Medidos el 29-ago-2026: ocho «Sí, ya …» entre las cinco pantallas.
+    expect(oks.filter((t) => /^sí,/i.test(t)).length).toBeGreaterThanOrEqual(6)
+  })
+})
+
 describe('el glosario es el MISMO archivo en los dos repos', () => {
   it('VOCABULARIO.md existe y declara su versión', () => {
     // 🔴 Es una COPIA de la de `areben-marketing`: si allá cambia y acá no, las dos se creen la
     // fuente de verdad. La línea de versión es lo que hace visible que quedó vieja.
     const doc = readFileSync('VOCABULARIO.md', 'utf8')
-    expect(doc).toMatch(/^Versión: \d{4}-\d{2}-\d{2}$/m)
+    expect(doc).toMatch(/^Versión: \d{4}-\d{2}-\d{2}[a-z]?$/m)
     // Las cuatro palabras de la familia, para que nadie vacíe el archivo y lo deje pasar.
     for (const p of ['Eliminar', 'Sacar', 'Archivar', 'Descartar']) expect(doc).toContain(`**${p}**`)
+  })
+
+  it('🔑 y las seis familias siguen estando: el bloque de arriba se lee del documento', () => {
+    // Sin esto, alguien que borra una familia entera del glosario deja seis tests vigilando una
+    // regla que ya no está escrita en ningún lado — o al revés, la escribe y nadie la clava.
+    const doc = readFileSync('VOCABULARIO.md', 'utf8')
+    for (const x of ['1.1 ·', '1.2 ·', '1.3 ·', '1.4 ·', '1.5 ·', '1.6 ·']) expect(doc).toContain(x)
   })
 })

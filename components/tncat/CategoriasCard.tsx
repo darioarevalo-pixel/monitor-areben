@@ -99,7 +99,7 @@ export function CategoriasCard({ marca }: { marca: Marca }) {
             Recalcular
           </Button>
           <Button variant="solid" tone="brand" onClick={aplicar} loading={aplicando}>
-            Aplicar cambios ahora
+            Aplicar en Tienda Nube
           </Button>
         </div>
       </div>

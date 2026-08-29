@@ -98,7 +98,7 @@ export function Decisiones() {
   return (
     <SectionCard
       title="Decisiones tomadas"
-      actions={puede ? <Button variant="ghost" size="sm" onClick={() => setAbierto(true)}>Anotar una</Button> : undefined}
+      actions={puede ? <Button variant="ghost" size="sm" onClick={() => setAbierto(true)}>Crear una</Button> : undefined}
     >
       <p style={{ margin: `0 0 ${space[3]}px`, color: color.mut, fontSize: font.sm, maxWidth: 640 }}>
         Lo que se decidió sobre la pauta <b>y por qué</b>, incluido lo que se hizo a mano en Ads

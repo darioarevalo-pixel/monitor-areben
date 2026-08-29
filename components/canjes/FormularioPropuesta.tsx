@@ -218,7 +218,7 @@ export function FormularioPropuesta({
             {[unidadPorDefecto, ...sugeridas].map((u) => <option key={u} value={u} />)}
           </datalist>
           <Button variant="ghost" size="sm" onClick={() => setUnidades((p) => [...p, { cantidad: 1, descripcion: '' }])}>
-            Sumar otra línea
+            Agregar otra línea
           </Button>
         </div>
       )}

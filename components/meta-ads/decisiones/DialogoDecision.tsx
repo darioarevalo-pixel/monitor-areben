@@ -130,7 +130,7 @@ export function DialogoDecision({
     <Modal
       abierto={abierto}
       onCerrar={onCerrar}
-      titulo="Anotar una decisión"
+      titulo="Crear una decisión"
       // El fondo no cierra: acá se tipea un motivo largo y perderlo por un clic al costado sería la
       // forma más rápida de que nadie vuelva a escribir uno.
       cerrarConFondo={false}
@@ -138,7 +138,7 @@ export function DialogoDecision({
         <>
           <Button variant="ghost" onClick={onCerrar} disabled={guardando}>Cancelar</Button>
           <Button variant="solid" onClick={() => void guardar()} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Anotar'}
+            {guardando ? 'Guardando…' : 'Crear'}
           </Button>
         </>
       }

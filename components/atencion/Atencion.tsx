@@ -175,7 +175,7 @@ export function Atencion() {
         {/* Sin `puedeEditar`: anotar un faltante lo hace cualquiera que esté atendiendo. El permiso
             que gatea esto es el de esta pantalla, no el de Faltantes — ver `api/_pedidos-clientes.js`. */}
         <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando({ texto: busqueda.trim() })}>
-          Anotar un faltante
+          Agregar un faltante
         </Button>
       </HeaderAcciones>
 
@@ -271,7 +271,7 @@ export function Atencion() {
             hint="Probá con una palabra sola, o con el SKU. Si no lo tenemos, anotalo: es lo que después decide qué se compra."
             action={
               <Button variant="soft" iconLeft="🗒️" onClick={() => setAnotando({ texto: busqueda.trim() })}>
-                Anotar «{busqueda.trim()}» como faltante
+                Agregar «{busqueda.trim()}» como faltante
               </Button>
             }
           />
@@ -501,7 +501,7 @@ function FilaProducto({
         ) : (
           <Badge tone="neutral" subtle>sin link</Badge>
         )}
-        <Button size="sm" variant="ghost" iconLeft="🗒️" onClick={onSinStock} title="Anotarlo como faltante: lo vendemos y se acabó.">
+        <Button size="sm" variant="ghost" iconLeft="🗒️" onClick={onSinStock} title="Agregarlo como faltante: lo vendemos y se acabó.">
           Sin stock
         </Button>
       </div>

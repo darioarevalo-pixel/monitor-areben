@@ -144,7 +144,7 @@ function Formulario({ marca, textoInicial = '', articuloInicial, onCerrar, onAno
   }
 
   return (
-    <Modal abierto titulo="Anotar un faltante" onCerrar={onCerrar} cerrarConFondo={false}>
+    <Modal abierto titulo="Agregar un faltante" onCerrar={onCerrar} cerrarConFondo={false}>
       <div style={{ display: 'grid', gap: space[4] }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut }}>
           Marca: <MarcaChip marca={marca || 'bdi'} /> — sale del encabezado.
@@ -283,7 +283,7 @@ function Formulario({ marca, textoInicial = '', articuloInicial, onCerrar, onAno
             {recien.length ? 'Listo' : 'Cancelar'}
           </Button>
           <Button variant="solid" tone="brand" disabled={guardando} onClick={() => void anotar()}>
-            {guardando ? 'Anotando…' : 'Anotar'}
+            {guardando ? 'Agregando…' : 'Agregar'}
           </Button>
         </div>
       </div>

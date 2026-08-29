@@ -47,7 +47,7 @@ function Diferencia({ n }: { n: number }) {
  */
 function EnGN({ v }: { v: boolean | null }) {
   if (v === null) return <Badge tone="neutral">no se pudo ver</Badge>
-  return v ? <Badge tone="success">en GN</Badge> : <Badge tone="warning">falta darlo de alta</Badge>
+  return v ? <Badge tone="success">en GN</Badge> : <Badge tone="warning">falta crearlo en GN</Badge>
 }
 
 export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; onCerrar: () => void }) {
