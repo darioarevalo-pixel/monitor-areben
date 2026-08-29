@@ -35,6 +35,14 @@ import {
   TIPOS_REGLA as TIPOS_REGLA_JS,
 } from './reglas.core.js'
 import {
+  CLAVES_PLANTILLA as CLAVES_PLANTILLA_JS,
+  esClavePlantilla as esClavePlantillaJs,
+  moldeCorreEnEje as moldeCorreEnEjeJs,
+  offsetDeMolde as offsetDeMoldeJs,
+  PLANTILLAS as PLANTILLAS_JS,
+  plantillaDe as plantillaDeJs,
+} from './plantillas.core.js'
+import {
   esDeArriba as esDeArribaJs,
   FUNCION_TECHO as FUNCION_TECHO_JS,
   veLoDeArriba as veLoDeArribaJs,
@@ -62,6 +70,47 @@ export const moldeCorreEn = moldeCorreEnJs as (puertasDelMolde: Puerta[] | undef
 // La marca del ingreso, que se lee igual: lista vacía = las dos. ⛔ No es `esDeMisMarcas`: acá el
 // ingreso tiene una sola marca, allá la persona puede tener las dos.
 export const moldeCorreEnMarca = moldeCorreEnMarcaJs as (marcasDelMolde: Marca[] | undefined, marca: Marca) => boolean
+
+/**
+ * **Las plantillas de siembra**: qué hechos clonan una lista de moldes. Hoy dos —el ingreso y la
+ * sesión de fotos— y cada una con su EJE, que es la columna que decide de quién es el renglón.
+ *
+ * Igual que las puertas: el catálogo vive en `.js` porque `api/_agenda.js` valida antes de guardar
+ * y no puede importar TypeScript. Esto es la cara tipada, que es lo que usa el modal para dibujar
+ * un solo formulario que sirve para las dos.
+ */
+export type EjeDePlantilla = {
+  /** El campo del ítem que lleva la lista: `puertas` o `disparadores`. */
+  campo: 'puertas' | 'disparadores'
+  /** Cómo se llama el valor —uno solo— en el clon: `datos.puerta` / `datos.disparador`. */
+  campoClon: 'puerta' | 'disparador'
+  titulo: string
+  claves: string[]
+  rotulo: (key: string) => string
+  pide: string
+  invalido: string
+}
+export type Plantilla = {
+  key: string
+  evento: string
+  elHecho: string
+  delHecho: string
+  campoClave: string
+  label: string
+  ayuda: string
+  eje: EjeDePlantilla
+  offsetMin: number
+  offsetMax: number
+}
+export const PLANTILLAS = PLANTILLAS_JS as Plantilla[]
+export const CLAVES_PLANTILLA = CLAVES_PLANTILLA_JS as string[]
+/** ⚠️ ¿Es una CLAVE de plantilla? La de abajo, `esPlantilla`, pregunta si un ítem es molde. */
+export const esClavePlantilla = esClavePlantillaJs as (key: unknown) => boolean
+export const plantillaDe = plantillaDeJs as (key: unknown) => Plantilla | null
+/** ¿Corre este molde para este valor del eje? **Lista vacía = todos.** */
+export const moldeCorreEnEje = moldeCorreEnEjeJs as (listaDelMolde: string[] | undefined, valor: string) => boolean
+/** El `offsetDias` que acepta la plantilla, o `null` si no viene número o cae fuera de rango. */
+export const offsetDeMolde = offsetDeMoldeJs as (plantilla: string, v: unknown) => number | null
 
 // El techo: Dirección arriba, el resto abajo y plano. En JS por lo de siempre — el corte que vale
 // es el del servidor, y `api/_agenda.js` no puede importar TypeScript.

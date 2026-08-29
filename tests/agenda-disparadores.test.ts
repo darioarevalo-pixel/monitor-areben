@@ -741,3 +741,201 @@ describe('guardar-item: vacío es vacío, ⛔ no cero', () => {
     expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBe(120)
   })
 })
+
+/**
+ * **El 2º disparador: la sesión de fotos.**
+ *
+ * Sale de la auditoría del 28-ago-2026: de los ocho hechos que se midieron sobre tres años de
+ * chats, la sesión de fotos aparece en 27 días distintos de 2026 y en **16** toca dos sectores o
+ * más — el doble que el siguiente. Sus nueve renglones ya estaban escritos, con dueña y con
+ * momento, en el manual «Sesiones de fotos»; lo que faltaba era el motor.
+ *
+ * Lo que se prueba acá es **que el motor dejó de saber decir «ingreso»**: la plantilla, su eje y su
+ * rango de días son datos de `plantillas.core.js`, y lo único que el handler hace es leerlos. Por
+ * eso los tests de abajo llaman a `sembrar` directo: la puerta de este disparador no es un secreto
+ * ni un botón, es `api/_solicitudes.js` cuando alguien crea la sesión.
+ */
+describe('la sesión de fotos: el 2º disparador', () => {
+  const moldeFotos = (over: Partial<Fila> = {}): Fila => ({
+    ...molde(),
+    id: 'f1',
+    titulo: 'Buscar y contactar la modelo',
+    destino: { tipo: 'personas', personas: ['Sofia Facello'] },
+    manual_id: 'man-05',
+    datos: { plantilla: 'sesion-fotos', offsetDias: -2 },
+    ...over,
+  })
+
+  const sembrarFotos = async (over: Record<string, unknown> = {}) => {
+    const mod = await import('@/api/_agenda.js')
+    return (mod.sembrar as unknown as (sb: unknown, o: Record<string, unknown>) => Promise<Record<string, unknown>>)(
+      fakeSupabase(),
+      { plantilla: 'sesion-fotos', nombre: 'Cápsula primavera', fecha: '2026-09-10', autor: 'Sofia Facello', eje: 'campania', marca: 'bdi', clave: 'sesion-fotos·s99', ...over },
+    )
+  }
+
+  it('🔑 un paso PREVIO cae antes de la sesión: la modelo se busca 48 h antes', async () => {
+    mundo.items = [moldeFotos()]
+    const r = await sembrarFotos()
+    expect(r.creados).toBe(1)
+    expect(mundo.insertados[0].titulo).toBe('Cápsula primavera · Buscar y contactar la modelo')
+    // 🔴 El día −2 es el que el motor del ingreso NO podía decir: recortaba a 0 con un `Math.max`.
+    expect((mundo.insertados[0].regla as { fecha: string }).fecha).toBe('2026-09-08')
+  })
+
+  it('los nueve del manual caen en el orden del manual, del más temprano al último', async () => {
+    mundo.items = [
+      moldeFotos({ id: 'f8', titulo: 'Subir las fotos a la web', datos: { plantilla: 'sesion-fotos', offsetDias: 2 } }),
+      moldeFotos({ id: 'f1', titulo: 'Buscar la modelo', datos: { plantilla: 'sesion-fotos', offsetDias: -2 } }),
+      moldeFotos({ id: 'f4', titulo: 'Sacar las fotos', datos: { plantilla: 'sesion-fotos', offsetDias: 0 } }),
+      moldeFotos({ id: 'f3', titulo: 'Referencias y outfits', datos: { plantilla: 'sesion-fotos', offsetDias: -1 } }),
+    ]
+    await sembrarFotos()
+    expect(mundo.insertados.map((f) => (f.regla as { fecha: string }).fecha))
+      .toEqual(['2026-09-08', '2026-09-09', '2026-09-10', '2026-09-12'])
+  })
+
+  it('⛔ NO clona los moldes del ingreso, ni el ingreso los suyos', async () => {
+    mundo.items = [molde(), moldeFotos()]
+    await sembrarFotos()
+    expect(mundo.insertados.map((f) => f.titulo)).toEqual(['Cápsula primavera · Buscar y contactar la modelo'])
+
+    mundo.insertados = []
+    const res = await desdeAfuera()
+    expect(res.code).toBe(200)
+    expect(mundo.insertados.map((f) => f.titulo)).toEqual(['IMP2 · Cargar el nombre'])
+  })
+
+  it('🔑 el ORIGEN es el eje: el paso de una dueña sólo cae en su origen', async () => {
+    // El 1º y el 9º cambian de dueña: un faltante lo arma Cande, una campaña y un ingreso, Sofi.
+    mundo.items = [
+      moldeFotos({ id: 'comun', titulo: 'Devolver la ropa contada', datos: { plantilla: 'sesion-fotos', offsetDias: 0 } }),
+      moldeFotos({ id: 'due-fal', titulo: 'Armar el pedido (Cande)', datos: { plantilla: 'sesion-fotos', offsetDias: 0, disparadores: ['faltante'] } }),
+      moldeFotos({ id: 'due-sofi', titulo: 'Armar el pedido (Sofi)', datos: { plantilla: 'sesion-fotos', offsetDias: 0, disparadores: ['campania', 'ingreso'] } }),
+    ]
+    await sembrarFotos({ eje: 'faltante' })
+    expect(mundo.insertados.map((f) => f.titulo).sort())
+      .toEqual(['Cápsula primavera · Armar el pedido (Cande)', 'Cápsula primavera · Devolver la ropa contada'])
+  })
+
+  it('🔴 sin origen no siembra: sembrar «igual» le pone la dueña equivocada a nueve renglones', async () => {
+    mundo.items = [moldeFotos()]
+    for (const malo of [undefined, null, '', 'campaña', 'Campania', 'faltante de foto']) {
+      mundo.insertados = []
+      const r = await sembrarFotos({ eje: malo })
+      expect(String(r.error), String(malo)).toContain('origen')
+      expect(mundo.insertados, String(malo)).toEqual([])
+    }
+  })
+
+  it('el error de «hay moldes pero ninguno corre» nombra el origen en castellano', async () => {
+    mundo.items = [moldeFotos({ datos: { plantilla: 'sesion-fotos', offsetDias: 0, disparadores: ['faltante'] } })]
+    const r = await sembrarFotos({ eje: 'campania' })
+    // ⛔ `campania` sin ñ es la clave que viaja al KV, no lo que lee una persona.
+    expect(String(r.error)).toContain('Campaña')
+    expect(String(r.error)).toContain('bdi')
+  })
+
+  it('🔑 la clave es el ID de la sesión: moverle la fecha ⛔ NO la vuelve a sembrar', async () => {
+    mundo.items = [moldeFotos()]
+    await sembrarFotos()
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.sesion).toBe('sesion-fotos·s99')
+    expect(datos.de).toBe('sesion-fotos')
+    expect(datos.disparador).toBe('campania')
+    // La misma sesión, otro día: con `fecha·nombre` sembraría los nueve de nuevo.
+    mundo.items = [...mundo.items, ...mundo.insertados]
+    mundo.insertados = []
+    const r = await sembrarFotos({ fecha: '2026-09-17' })
+    expect(r.ya).toBe(true)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('el clon nace en la marca de la sesión, no en las del molde', async () => {
+    mundo.items = [moldeFotos({ marcas: [] })]
+    await sembrarFotos({ marca: 'zattia' })
+    expect(mundo.insertados[0].marcas).toEqual(['zattia'])
+  })
+
+  it('una plantilla que no existe ⛔ no cae en la primera: lo dice y no siembra', async () => {
+    mundo.items = [molde(), moldeFotos()]
+    for (const mala of ['sesion', 'SESION-FOTOS', '', undefined]) {
+      mundo.insertados = []
+      const r = await sembrarFotos({ plantilla: mala })
+      expect(String(r.error), String(mala)).toContain('plantilla')
+      expect(mundo.insertados, String(mala)).toEqual([])
+    }
+  })
+})
+
+describe('cargar un molde de sesión de fotos: el eje y el rango son de la plantilla', () => {
+  const guardar = (extra: Record<string, unknown> = {}) => llamar({
+    action: 'guardar-item',
+    item: {
+      id: 'f9',
+      clase: 'pendiente',
+      titulo: 'Buscar la modelo',
+      regla: { tipo: 'diaria' },
+      plantilla: 'sesion-fotos',
+      offsetDias: -2,
+      ...extra,
+    },
+  })
+
+  it('los días negativos se guardan tal cual: es lo que dice el manual', async () => {
+    const res = await guardar()
+    expect(res.code).toBe(200)
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.offsetDias).toBe(-2)
+    expect(datos.plantilla).toBe('sesion-fotos')
+  })
+
+  it('🔴 el MISMO −2 en un molde de ingreso es 400, ⛔ no un 0 callado', async () => {
+    // El ingreso se entera cuando la mercadería ya llegó: un paso «dos días antes» nace vencido.
+    const res = await guardar({ plantilla: 'ingreso', offsetDias: -2 })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('ingreso')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('🔴 fuera de rango por arriba también es 400: recortar a 90 sería guardar otra cosa', async () => {
+    for (const malo of [120, -60]) {
+      mundo = nuevoMundo()
+      const res = await guardar({ offsetDias: malo })
+      expect(res.code, String(malo)).toBe(400)
+      expect(mundo.insertados, String(malo)).toEqual([])
+    }
+  })
+
+  it('los orígenes tildados se guardan en `disparadores`, ⛔ no en `puertas`', async () => {
+    const res = await guardar({ disparadores: ['faltante'], puertas: ['importacion'] })
+    expect(res.code).toBe(200)
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    expect(datos.disparadores).toEqual(['faltante'])
+    // Las puertas son el eje de la OTRA plantilla: en un molde de sesión no quieren decir nada.
+    expect(datos.puertas).toBeUndefined()
+  })
+
+  it('un origen que no existe es 400: la lista es cerrada como la de las puertas', async () => {
+    for (const malo of [['campaña'], ['faltante', 'otro'], 'faltante']) {
+      mundo = nuevoMundo()
+      const res = await guardar({ disparadores: malo })
+      expect(res.code, JSON.stringify(malo)).toBe(400)
+      expect(String(res.body?.error), JSON.stringify(malo)).toContain('Origen')
+    }
+  })
+
+  it('ninguno tildado no se guarda: la ausencia ya dice «los tres»', async () => {
+    await guardar({ disparadores: [] })
+    expect((mundo.insertados[0].datos as Record<string, unknown>).disparadores).toBeUndefined()
+  })
+
+  it('y el GET los devuelve para que el modal los pueda volver a dibujar', async () => {
+    mundo.items = [molde({ id: 'f1', datos: { plantilla: 'sesion-fotos', offsetDias: -2, disparadores: ['faltante'] } })]
+    const res = await leerAgenda()
+    const it = (res.body?.items as Record<string, unknown>[])[0]
+    expect(it.plantilla).toBe('sesion-fotos')
+    expect(it.offsetDias).toBe(-2)
+    expect(it.disparadores).toEqual(['faltante'])
+  })
+})

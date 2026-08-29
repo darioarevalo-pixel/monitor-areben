@@ -22,6 +22,10 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
 import { baseDeLinea } from '../lib/lineas.core.js';
+// El 2º disparador de la Agenda. Armar una sesión de fotos es un hecho que prende trabajo en tres
+// sectores, y sus nueve pasos están escritos con dueña en el manual 05: acá es donde ocurre el hecho.
+import { sembrarEnMaestra } from './_agenda.js';
+import { esDisparador } from '../lib/solicitudes/disparador.core.js';
 
 function cfgFor(store) {
   // Stunned comparte la base de Zattia: la traducción la hace el núcleo, no un `||` acá.
@@ -58,6 +62,22 @@ function filaDe(store, kind, s) {
     datos: s,
     updated_at: new Date().toISOString(),
   };
+}
+
+/**
+ * De las que vienen a guardar, cuáles **todavía no existen**. Una sola consulta.
+ *
+ * ⚠️ Ante un error de lectura devuelve el conjunto **vacío**, ⛔ no todas: no poder saber si la
+ * sesión ya existía no puede significar «entonces es nueva». Sembrar de más le pone pendientes
+ * repetidos a tres personas; sembrar de menos deja el caso que ya cubre el próximo guardado.
+ */
+async function idsNuevos(supabase, store, solicitudes) {
+  const ids = solicitudes.map((s) => String(s.id));
+  if (!ids.length) return new Set();
+  const { data, error } = await supabase.from('solicitudes').select('id').eq('store', store).in('id', ids);
+  if (error) return new Set();
+  const existen = new Set((data || []).map((r) => String(r.id)));
+  return new Set(ids.filter((id) => !existen.has(id)));
 }
 
 export default async function handler(req, res) {
@@ -113,11 +133,59 @@ export default async function handler(req, res) {
       const validas = entrada.filter((s) => s && s.id);
       if (!validas.length) return res.status(400).json({ error: 'falta la solicitud (o no tiene id)' });
 
+      /*
+        🔑 **Qué sesiones son NUEVAS se pregunta ANTES de escribir**, porque después de la upsert ya
+        no se puede: la tabla no distingue «se creó» de «se guardó otra vez». Y el hecho que dispara
+        los nueve pasos es **crear** la sesión, no editarla — sembrar en cada guardado le tiraría los
+        pendientes encima a alguien que sólo agregó una prenda.
+
+        ⚠️ Una sola consulta para todas, y sólo cuando puede haber algo que sembrar.
+      */
+      // 🔴 **Sólo el guardado de a UNA siembra.** El lote es la migración del KV, y ahí «no existe
+      // todavía en la tabla» es verdad de TODAS las sesiones históricas: sembraría los nueve pasos
+      // de cada sesión de dos años atrás, todos arrastrando, encima de tres personas.
+      const unaSola = kind === 'sesionfotos' && !Array.isArray(b.solicitudes) && validas.length === 1;
+      const nuevas = unaSola ? await idsNuevos(supabase, store, validas) : new Set();
+
       const { error } = await supabase
         .from('solicitudes')
         .upsert(validas.map((s) => filaDe(store, kind, s)), { onConflict: 'store,id' });
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, guardadas: validas.length });
+
+      /*
+        🔴 **Va DESPUÉS del guardado y no puede voltearlo.** La sesión es el dato; los pendientes son
+        una consecuencia. Si sembrar falla —no hay moldes cargados, la base no contesta—, la sesión
+        ya está guardada y lo que se pierde es el aviso, que se cuenta en la respuesta.
+
+        ⛔ **Sin origen no se siembra**, y es la misma regla que la puerta del ingreso: de quién es la
+        sesión lo decide de dónde viene (faltante → Cande, campaña e ingreso → Sofi), así que sembrar
+        «igual» dejaría nueve renglones con la dueña equivocada. El borrador **pregunta** el origen y
+        puede quedar vacío a propósito (el botón de Marketing sirve para las dos cosas): cuando queda
+        vacío, esto no inventa una dueña.
+      */
+      const sembrado = [];
+      for (const s of validas) {
+        if (!nuevas.has(String(s.id))) continue;
+        if (!esDisparador(s.disparador)) continue;
+        const r = await sembrarEnMaestra({
+          plantilla: 'sesion-fotos',
+          // El agrupador del título de cada clon. La descripción es lo que la persona escribió para
+          // reconocer la sesión; sin ella, la fecha alcanza para no confundir dos del mismo mes.
+          nombre: String(s.descripcion || '').trim() || `Sesión ${s.fecha || ''}`.trim(),
+          fecha: s.fecha,
+          autor: perfil.name || 'Sesión de fotos',
+          eje: s.disparador,
+          // 🔴 **Stunned no es una marca: es una línea de Zattia**, y la Agenda tiene dos marcas. La
+          // traducción la hace el núcleo, igual que para elegir la base — ⛔ no un `||` acá.
+          marca: baseDeLinea(store),
+          // 🔑 La clave es el **id de la sesión**, ⛔ no `fecha·nombre`: la fecha de una sesión se
+          // edita, y con la fecha adentro moverla un día sembraría los nueve otra vez.
+          clave: `sesion-fotos·${s.id}`,
+        });
+        sembrado.push({ id: String(s.id), ...r });
+      }
+
+      return res.status(200).json({ ok: true, guardadas: validas.length, ...(sembrado.length ? { sembrado } : {}) });
     }
 
     return res.status(405).json({ error: 'método no permitido' });

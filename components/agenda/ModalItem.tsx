@@ -50,8 +50,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
 import {
-  CLASES, DIAS_ARRASTRE, FUNCION_TECHO, hoyIso, PUERTAS, veLoDeArriba,
-  type ClaseItem, type Destino, type ItemAgenda, type Puerta,
+  CLASES, DIAS_ARRASTRE, FUNCION_TECHO, hoyIso, PLANTILLAS, plantillaDe, veLoDeArriba,
+  type ClaseItem, type Destino, type ItemAgenda,
 } from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
@@ -109,6 +109,9 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
     offsetDias: null,
     // Vacío = las cuatro puertas, que es el caso normal: cuatro de los seis pasos no cambian.
     puertas: [],
+    // Y vacío = los tres orígenes de una sesión de fotos: siete de los nueve pasos son los mismos
+    // venga de un ingreso, de una campaña o de un faltante.
+    disparadores: [],
     autor: null,
     creado: null,
     paraMi: true,
@@ -138,6 +141,8 @@ export function ModalItem({
   const pedida = useRef(false)
 
   const set = <K extends keyof ItemAgenda>(k: K, v: ItemAgenda[K]) => setIt((x) => ({ ...x, [k]: v }))
+  // La plantilla del ítem, si es molde. `null` = es una rutina normal y corre sola.
+  const plant = plantillaDe(it.plantilla)
 
   // Por nombre y no por el orden del menú: acá se busca una pantalla, no se navega por sectores.
   const secciones = useMemo(
@@ -477,69 +482,89 @@ export function ModalItem({
         )}
 
         {/*
-          El molde del ingreso. Un ítem marcado así **no corre ningún día**: existe para que el
-          disparador lo clone con la fecha del ingreso, y por eso al prenderlo la regla deja de
-          importar (el clon nace como «un día puntual»).
+          El molde de un disparador. Un ítem marcado así **no corre ningún día**: existe para que el
+          hecho lo clone con su fecha, y por eso al prenderlo la regla deja de importar (el clon
+          nace como «un día puntual»).
 
           🔑 Está acá y no en una pantalla propia porque es exactamente el mismo formulario: el
           molde lleva título, dueña, marca y manual, que es todo lo que un paso necesita.
+
+          🔑 **Es un desplegable y ⛔ ya no un tilde** (29-ago-2026): las plantillas son dos —el
+          ingreso y la sesión de fotos— y un booleano no sabe de cuál es. El catálogo sale de
+          `plantillas.core.js`, el mismo que valida el handler: agregar la tercera es una fila allá,
+          no un `if` acá.
         */}
         {it.clase === 'pendiente' && (
           <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-            <Tilde
-              puesto={it.plantilla === 'ingreso'}
-              label={it.plantilla === 'ingreso'
-                ? 'Es un paso de la lista de ingreso (no corre solo)'
-                : 'Es una rutina normal'}
-              onToggle={() => set('plantilla', it.plantilla === 'ingreso' ? null : 'ingreso')}
-            />
-            {it.plantilla === 'ingreso' && (
-              <div style={{ marginTop: space[2], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <Field
-                  label="A los cuántos días"
-                  hint="0 = el día que entra la mercadería. El nombre y el precio traban todo lo demás; la publicación puede ir a los dos."
-                  width={200}
-                >
-                  <Input
-                    type="number"
-                    min={0}
-                    max={90}
-                    value={it.offsetDias == null ? '' : String(it.offsetDias)}
-                    onChange={(e) => set('offsetDias', e.target.value === '' ? null : Number(e.target.value))}
-                  />
-                </Field>
-                <div style={{ color: color.mut, fontSize: font.sm, paddingBottom: space[2] }}>
-                  La regla de arriba no se usa en los moldes: el clon nace con la fecha del ingreso.
-                </div>
-              </div>
-            )}
-            {/*
-              Las puertas de entrada.
-
-              🔑 **Ninguna tildada = las cuatro**, igual que las marcas de arriba — y es el caso
-              normal: el precio, la foto, la publicación y las pantallas no cambian con la puerta, así
-              que se cargan una sola vez. Se tilda sólo en los dos pasos que sí cambian de dueña, el
-              nombre y la descripción, que van cargados **una vez por puerta**.
-
-              ⚠️ Y «producción propia no lleva renglón de descripción» no se dice acá: se dice **no
-              cargando ese molde**. Por eso no hay ningún «no corre en» que tildar.
-            */}
-            {it.plantilla === 'ingreso' && (
-              <div style={{ marginTop: space[3] }}>
-                <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
-                  Entra por <span style={{ fontWeight: weight.normal }}>(ninguna tildada = las cuatro)</span>
-                </div>
-                <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-                  {PUERTAS.map((p) => (
-                    <Tilde
-                      key={p.key}
-                      puesto={(it.puertas ?? []).includes(p.key)}
-                      label={p.label}
-                      onToggle={() => set('puertas', toggleEnLista(it.puertas ?? [], p.key) as Puerta[])}
+            <Field label="Qué es este renglón" width={340}>
+              <Select
+                value={it.plantilla ?? ''}
+                onChange={(e) => {
+                  const key = e.target.value || null
+                  // ⚠️ Al cambiar de plantilla se limpian **los dos** ejes: son catálogos distintos
+                  // (puertas / orígenes) y el handler guarda sólo el de la plantilla elegida. Dejar
+                  // tildado lo del otro sería la pantalla afirmando algo que no se va a guardar.
+                  setIt((x) => ({ ...x, plantilla: key, puertas: [], disparadores: [] }))
+                }}
+              >
+                <option value="">Es una rutina normal (corre sola)</option>
+                {PLANTILLAS.map((p) => (
+                  <option key={p.key} value={p.key}>{p.label} (no corre solo)</option>
+                ))}
+              </Select>
+            </Field>
+            {plant && (
+              <>
+                <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>{plant.ayuda}</div>
+                <div style={{ marginTop: space[2], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <Field
+                    label="A los cuántos días"
+                    hint={plant.offsetMin < 0
+                      ? `0 = el día de la sesión. Los pasos previos van en negativo: la modelo −2, las referencias −1. Va de ${plant.offsetMin} a ${plant.offsetMax}.`
+                      : `0 = el día que entra la mercadería. El nombre y el precio traban todo lo demás; la publicación puede ir a los dos. Va de ${plant.offsetMin} a ${plant.offsetMax}.`}
+                    width={260}
+                  >
+                    <Input
+                      type="number"
+                      min={plant.offsetMin}
+                      max={plant.offsetMax}
+                      value={it.offsetDias == null ? '' : String(it.offsetDias)}
+                      onChange={(e) => set('offsetDias', e.target.value === '' ? null : Number(e.target.value))}
                     />
-                  ))}
+                  </Field>
+                  <div style={{ color: color.mut, fontSize: font.sm, paddingBottom: space[2] }}>
+                    La regla de arriba no se usa en los moldes: el clon nace con la fecha {plant.delHecho}.
+                  </div>
                 </div>
-              </div>
+                {/*
+                  El EJE: las puertas de entrada del ingreso, o el origen de la sesión de fotos.
+
+                  🔑 **Ninguno tildado = todos**, igual que las marcas de arriba — y es el caso
+                  normal: el precio, la foto, la publicación y las pantallas no cambian con la
+                  puerta, así que se cargan una sola vez. Se tilda sólo en los pasos que sí cambian
+                  de dueña —el nombre y la descripción en el ingreso, la dueña de la sesión en las
+                  fotos—, que van cargados **una vez por valor**.
+
+                  ⚠️ Y «producción propia no lleva renglón de descripción» no se dice acá: se dice
+                  **no cargando ese molde**. Por eso no hay ningún «no corre en» que tildar.
+                */}
+                <div style={{ marginTop: space[3] }}>
+                  <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
+                    {plant.eje.titulo}{' '}
+                    <span style={{ fontWeight: weight.normal }}>(ninguno tildado = todos)</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                    {plant.eje.claves.map((k) => (
+                      <Tilde
+                        key={k}
+                        puesto={(it[plant.eje.campo] ?? []).includes(k as never)}
+                        label={plant.eje.rotulo(k)}
+                        onToggle={() => set(plant.eje.campo, toggleEnLista((it[plant.eje.campo] ?? []) as string[], k) as never)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}

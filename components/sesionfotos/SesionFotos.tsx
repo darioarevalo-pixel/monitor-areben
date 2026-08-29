@@ -1598,6 +1598,19 @@ function Draft({
             ) : null}
           </label>
         ) : null}
+        {/*
+          🔑 **Lo que el origen decide dejó de ser sólo el filtro del historial** (29-ago-2026): al
+          crear la sesión, sus pasos del manual se siembran en la Agenda de cada una, y de quién es
+          el primero lo decide de dónde viene. Sin origen ⛔ no se siembra ninguno — y callarse eso
+          sería que el que lo deja vacío crea que igual le van a caer.
+        */}
+        {pideDisparador ? (
+          <span style={{ fontSize: 12, color: draft.disparador ? color.mut : color.warningInk, maxWidth: 340 }}>
+            {draft.disparador
+              ? 'Al crear la sesión, sus pasos caen en la Agenda de cada una.'
+              : 'Sin esto la sesión se guarda igual, pero sus pasos ⛔ no caen en la Agenda: de quién es cada uno lo decide el origen.'}
+          </span>
+        ) : null}
         <span style={{ fontSize: 13, color: color.ink2 }}>Destino:</span>
         {(['retornable', 'consumo'] as TipoSol[]).map((t) => (
           <span key={t} style={{ display: 'inline-flex', alignItems: 'center' }}>

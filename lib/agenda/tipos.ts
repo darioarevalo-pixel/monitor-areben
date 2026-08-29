@@ -7,6 +7,9 @@
  */
 
 import type { Marca } from '@/lib/nav.datos'
+// El origen de una sesión de fotos es el MISMO eje que ya usa el historial de Solicitudes: se
+// importa, ⛔ no se reescribe. Ver `lib/solicitudes/disparador.ts`.
+import type { Disparador } from '@/lib/solicitudes/disparador'
 import {
   clavesDestino, type Destino, rotuloDeClave, rotuloDestino, rotuloDestinoCorto,
 } from '@/lib/novedades/tipos'
@@ -138,7 +141,7 @@ export type ItemAgenda = {
    */
   arrastraDias?: number | null
   /**
-   * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` es el único hoy.
+   * Si este ítem no es una rutina sino **el molde de una**: `'ingreso'` o `'sesion-fotos'`.
    *
    * 🔑 **Un molde no corre.** No sale en Hoy, no enciende el badge, no entra en el Mes ni en
    * Cumplimiento: existe para que el disparador lo clone con la fecha del ingreso. Vive en la
@@ -150,10 +153,14 @@ export type ItemAgenda = {
    */
   plantilla?: string | null
   /**
-   * A cuántos días del ingreso cae este paso. Sólo para los moldes.
+   * A cuántos días del hecho cae este paso. Sólo para los moldes.
    *
    * El nombre y el precio van el día 0 —traban todo lo demás—, la publicación a los dos días. Es la
    * columna «cuándo» del manual, escrita en un número para que el disparador pueda ponerle fecha.
+   *
+   * 🔑 **Puede ser NEGATIVO en la sesión de fotos**: el manual busca la modelo 48 h antes y las
+   * referencias el día anterior. En el ingreso ⛔ no, y el rango de cada plantilla lo fija
+   * `plantillas.core.js` — fuera de rango el handler contesta 400, ⛔ no recorta.
    */
   offsetDias?: number | null
   /**
@@ -166,6 +173,15 @@ export type ItemAgenda = {
    * (manual 06). El catálogo y la regla viven en `puertas.core.js`.
    */
   puertas?: Puerta[]
+  /**
+   * De qué **origen** sale la sesión. Es el eje de la plantilla `sesion-fotos`, y se lee igual que
+   * `puertas`: **vacío es TODOS**.
+   *
+   * Existe porque de quién es la sesión —el primer renglón y el último— cambia con el origen:
+   * un faltante de catálogo lo arma Cande, una campaña y un ingreso los arma Sofi. El catálogo vive
+   * en `lib/solicitudes/disparador.core.js`, que es el mismo que el historial de Solicitudes.
+   */
+  disparadores?: Disparador[]
   autor: string | null
   creado: string | null
   /**

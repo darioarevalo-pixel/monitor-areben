@@ -308,6 +308,51 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   🔴 **`tipo` y `marca` son los dos obligatorios.** `tipo` puede reemplazarse por `puerta`, que es el
   mismo dato en nuestro vocabulario y sirve para probar con `curl` sin esperar el mapa; `marca` es
   `bdi` o `zattia` y ⛔ no tiene mapa: son los dos negocios, no una traducción. Sin alguno, 400.
+- 🆕 🔴 🔑 **EL 2º DISPARADOR: LA SESIÓN DE FOTOS** (29-ago-2026, `lib/agenda/plantillas.core.js`).
+  Sale de la auditoría de disparadores (`~/Documents/quien-hace-que/disparadores-2026-08-28.md`),
+  que midió ocho hechos sobre tres años de chats: la sesión de fotos aparece en **27 días distintos
+  de 2026** y en **16 toca dos sectores o más** — el doble que el siguiente. Sus renglones ya
+  estaban escritos, con dueña y con momento, en el manual «Sesiones de fotos»; lo que faltaba era
+  el motor.
+  - 🔑 **El motor dejó de saber decir «ingreso».** Las plantillas son un catálogo
+    (`plantillas.core.js`) y cada una trae **su eje**, su rango de días y cómo se llama su hecho.
+    El handler los lee: agregar la tercera es una fila allá, ⛔ no un `if` acá. `PLANTILLAS` ya era
+    una lista blanca y no un booleano esperando justamente esto.
+  - **El eje de la sesión es el ORIGEN** (`datos.disparadores`: ingreso · campaña · faltante), que
+    es el mismo campo que ya usaba el historial de Solicitudes — se importa de
+    `lib/solicitudes/disparador.core.js`, ⛔ no se reescribe. Se lee igual que las puertas: **vacío
+    es los tres**. Sólo cambia de dueña el último renglón («equipo completo y en su lugar»: un
+    faltante lo arma Cande, una campaña y un ingreso, Sofi), y por eso va cargado dos veces.
+  - 🔴 **`offsetDias` puede ser NEGATIVO, y sólo en esta plantilla.** El manual busca la modelo
+    **48 h antes** y las referencias **el día anterior**: son los dos pasos que más se caen. El
+    ingreso ⛔ no lo admite —se entera cuando la mercadería ya llegó, así que un paso «dos días
+    antes» nacería vencido— y el rango es un dato de cada plantilla (`offsetMin`/`offsetMax`).
+  - 🔴 🔑 **Y fuera de rango es 400, ⛔ no un recorte callado.** Hasta acá la carga hacía
+    `Math.min(90, …)` y la siembra `Math.max(0, …)`: un `-2` se guardaba como `0` y la pantalla
+    seguía mostrando lo que la persona había escrito. Es el mismo defecto que el monto descartado
+    sin avisar — **el que exige un dato no puede tirarlo en silencio**.
+  - 🔴 **El disparo NO es una puerta: es crear la sesión** (`api/_solicitudes.js`). El del ingreso
+    lo avisa un sistema de afuera; éste ocurre adentro del Monitor, así que el hecho es el guardado
+    de una solicitud de `sesionfotos` que **todavía no existía**. Las tres reglas que lo sostienen:
+    **editar no es crear** (la pantalla guarda entera la solicitud en cada cambio: sembrar siempre
+    le tiraría nueve pendientes encima a tres personas cada vez que alguien agrega una prenda), **el
+    lote no siembra** (es la migración del KV, donde «todavía no existe» es verdad de todas las
+    sesiones de dos años atrás) y **no poder leer qué existe ⛔ no es «entonces es nueva»**.
+  - 🔑 **La clave de idempotencia es el ID de la sesión**, ⛔ no `fecha·nombre` como en el ingreso.
+    La diferencia no es de gusto: **la fecha de una sesión se edita**, y con la fecha adentro
+    moverla un día sembraría los nueve renglones otra vez. El ingreso no tiene id propio —el aviso
+    de Gerardo trae lo que trae—, así que cada plantilla dice en qué campo guarda su clave
+    (`datos.ingreso`, `datos.sesion`): un campo compartido habría dejado sin llave a lo ya escrito.
+  - ⛔ **Sin origen no siembra, y la pantalla lo dice.** El borrador puede quedar sin origen a
+    propósito (el botón de Marketing sirve igual para una campaña que para un faltante), y sembrar
+    «igual» pondría la dueña equivocada — que es peor que no sembrar, porque nadie revisa un
+    pendiente que ya tiene nombre puesto. Mismo criterio que el 503 de la puerta: **lo que falta
+    cierra, no abre**. El renglón de al lado del selector avisa qué se pierde si queda vacío.
+  - 🔴 **Sembrar no puede voltear el guardado.** La sesión es el dato; los pendientes son la
+    consecuencia. Si no hay moldes cargados o la base no contesta, la sesión igual se guarda y el
+    error viaja en la respuesta (`sembrado`).
+  - ⚠️ **Stunned es una LÍNEA de Zattia**: la marca del clon sale de `baseDeLinea(store)`, ⛔ no del
+    store. La Agenda tiene dos marcas y `stunned` no es una.
 - 🔑 **Es el tablero donde van las rutinas repetitivas de marketing** — decisión de proceso de Bruno
   el 23-ago-2026 (*«maketa es más marketing, monitor es operativo»*). Dejan de vivir en un documento
   y le salen solas a cada una el día que tocan, colgadas del manual que explica cómo se hacen
@@ -376,15 +421,26 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   es para lo que se escribió el arrastre. La quincenal de diseño necesita la decisión de arriba.
 - 🆕 ▶️ **Tildarle `agenda.cargar` a Lorena en Config, y dejarla SIN `admin`.** Es la mano que activa
   todo el techo: hasta que exista alguien así, la regla está escrita y no la ejerce nadie.
+- 🆕 ▶️ **Cargar los moldes de la sesión de fotos.** El motor está; los renglones no. Script listo
+  en `~/Documents/quien-hace-que/scripts/moldes-sesion-fotos.mjs` (arranca en simulación) y el
+  oráculo por otro camino en `verificar-siembra-fotos.mjs`. Hasta que estén, crear una sesión
+  contesta «no hay ningún paso cargado como plantilla de sesión de fotos» y ⛔ no siembra nada.
+- 🆕 ▶️ 🔴 **Decidir el destino de «Reetiquetar lo que se desetiquetó».** Bruno dijo *«las tres = las
+  de marketing»* ⇒ por rol, para que siga siendo correcto cuando cambie quién está en marketing.
+  Pero **el padrón dice que la función `marketing` la tienen CUATRO**: Sofi, Cande, Cami y
+  **Stefania Scolari**, que no va a las sesiones ⇒ el pendiente le cae igual. Es una decisión suya,
+  no una adivinanza: el script lo carga por rol y con `--reetiquetar=tres` las nombra.
 - ⚠️ **Las que ya estén cargadas por rol NO se migran solas.** Hay que abrirlas y reasignarlas: el
   destino viejo sigue siendo válido y el motor no adivina cuál de las tres es la dueña.
 
 ## Cómo se prueba
 
-`npx vitest run tests/agenda.test.ts` (el motor), `tests/agenda-ingreso.test.ts` (el disparador y
+`npx vitest run tests/agenda.test.ts` (el motor), `tests/agenda-disparadores.test.ts` (los disparadores y
 su puerta) — 🆕 **el segundo es el primero que prueba `api/_agenda.js`**, que hasta el 24-ago-2026
 no tenía ninguno — y las dos de pantalla, con `renderToStaticMarkup` sobre las piezas puras:
-`tests/agenda-cumplimiento-pantalla.test.tsx` y 🆕 `tests/agenda-grilla.test.tsx`.
+`tests/agenda-cumplimiento-pantalla.test.tsx` y 🆕 `tests/agenda-grilla.test.tsx`. 🆕 El disparo de
+la sesión de fotos —cuándo siembra y, sobre todo, **cuándo NO**— vive en
+`tests/solicitudes-siembra.test.ts`, porque su puerta es `api/_solicitudes.js` y no la Agenda.
 
 Lo que el test **no** ejerce y hay que caminar a mano:
 

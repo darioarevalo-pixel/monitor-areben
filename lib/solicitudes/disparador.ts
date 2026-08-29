@@ -20,19 +20,36 @@
  * lo único nuevo acá es ANOTARLO.
  */
 
-export const DISPARADORES = ['ingreso', 'campania', 'faltante'] as const
+import {
+  DISPARADORES as DISPARADORES_JS,
+  DISPARADOR_LABEL as DISPARADOR_LABEL_JS,
+  esDisparador as esDisparadorJs,
+  rotuloDisparador as rotuloDisparadorJs,
+} from './disparador.core.js'
 
-export type Disparador = (typeof DISPARADORES)[number]
+/**
+ * 🔑 **La lista vive en `disparador.core.js`, no acá.** Bajó el 29-ago-2026 porque
+ * `api/_agenda.js` la necesita para filtrar los moldes de la sesión de fotos, y un handler de
+ * `api/` no puede importar TypeScript. Este archivo es el re-export tipado, el mismo molde que
+ * `lib/permisos.ts` sobre `lib/permisos.core.js`.
+ *
+ * ⚠️ El tipo se escribe a mano porque un `.js` no lleva tipos literales. Lo que impide que las dos
+ * puntas se separen ⛔ no es el compilador: es que `DISPARADOR_AYUDA` está tipado `Record<Disparador,
+ * string>` y el test los recorre — un cuarto disparador agregado sólo en el `.js` se queda sin ayuda
+ * y el test se pone rojo.
+ */
+export type Disparador = 'ingreso' | 'campania' | 'faltante'
+
+export const DISPARADORES: readonly Disparador[] = DISPARADORES_JS as readonly Disparador[]
 
 /**
  * El rótulo en la palabra del negocio. `campania` se escribe sin ñ en el código (es una
  * clave que viaja al KV y vuelve) y con ñ en la pantalla.
  */
-export const DISPARADOR_LABEL: Record<Disparador, string> = {
-  ingreso: 'Ingreso de mercadería',
-  campania: 'Campaña',
-  faltante: 'Faltante de catálogo',
-}
+export const DISPARADOR_LABEL: Record<Disparador, string> = DISPARADOR_LABEL_JS as Record<Disparador, string>
+
+/** El rótulo, o la clave cruda si alguien guardó algo que ya no existe. */
+export const rotuloDisparador: (key: string) => string = rotuloDisparadorJs
 
 /**
  * Qué significa cada uno, y —sobre todo— de qué proceso viene. No es un rótulo largo: es
@@ -49,7 +66,7 @@ export const DISPARADOR_AYUDA: Record<Disparador, string> = {
 
 /** ¿Es una de las tres? Se usa al leer del KV, donde puede haber cualquier cosa. */
 export function esDisparador(v: unknown): v is Disparador {
-  return typeof v === 'string' && (DISPARADORES as readonly string[]).includes(v)
+  return esDisparadorJs(v)
 }
 
 /**

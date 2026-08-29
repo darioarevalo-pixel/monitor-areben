@@ -37,7 +37,12 @@ import { aplicaEn, esFechaIso, motivoReglaInvalida } from '../lib/agenda/reglas.
 // Se importa de su carpeta en vez de mudarlo a `lib/`: mover el archivo tocaría cuatro archivos de
 // Novedades, que es código compartido, y la ruta rara cuesta menos que el conflicto.
 import { esParaMi, normalizarDestino } from '../lib/novedades/destino.core.js';
-import { CLAVES_PUERTA, moldeCorreEn, moldeCorreEnMarca, puertaDeTipo, puertaValida, rotuloPuerta } from '../lib/agenda/puertas.core.js';
+import { CLAVES_PUERTA, moldeCorreEnMarca, puertaDeTipo } from '../lib/agenda/puertas.core.js';
+// Las plantillas de siembra y su EJE. Desde el 29-ago-2026 son **dos** —el ingreso de mercadería y
+// la sesión de fotos— y este handler no sabe decir «ingreso»: lee cuál es la plantilla, cuál es su
+// eje y qué rango de días admite. La lista blanca vive en `plantillas.core.js` porque la pantalla
+// la necesita tipada y el handler la necesita en `.js`. Ver su encabezado.
+import { CLAVES_PLANTILLA, esClavePlantilla, moldeCorreEnEje, offsetDeMolde, plantillaDe } from '../lib/agenda/plantillas.core.js';
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
@@ -77,14 +82,6 @@ const MEDIOS = ['credito', 'debito', 'app', 'qr', 'transferencia'];
 const CANALES = ['mostrador', 'web'];
 const MARCAS = ['bdi', 'zattia'];
 const CLASES = ['pendiente', 'aviso'];
-
-/**
- * Los moldes que existen. Hoy uno solo: el ingreso de mercadería.
- *
- * Es una lista blanca y no un booleano porque el segundo disparador ya está a la vista (el cambio
- * de condición comercial, en el manual 08), y un `esPlantilla: true` no sabría de cuál es.
- */
-const PLANTILLAS = ['ingreso'];
 
 /** Cuántos ítems puede sembrar la puerta en un día. Es un techo de cordura, no una regla de uso. */
 const TOPE_SEMBRADO_DIARIO = 60;
@@ -185,41 +182,54 @@ function normalizarBeneficio(b) {
 }
 
 /**
- * Sembrar la lista corta de un ingreso: **clona los moldes** con la fecha del ingreso.
+ * Sembrar la lista corta de un hecho: **clona los moldes de una plantilla** con su fecha.
+ *
+ * Las plantillas son dos —el ingreso de mercadería y la sesión de fotos— y este motor no sabe cuál
+ * es cuál: lee de `plantillas.core.js` cuál es su eje, cómo se llama el hecho y qué días admite.
  *
  * 🔑 **Los renglones no están escritos acá y eso es el diseño.** Salen de los ítems marcados como
- * molde (`datos.plantilla === 'ingreso'`), que se cargan una vez con el mismo formulario de
- * siempre: así la dueña de cada paso —que cambia cuando cambia la gente— se edita en una pantalla
- * y no en un deploy. Sin moldes cargados no hace nada y lo dice, en vez de fingir que sembró.
+ * molde (`datos.plantilla`), que se cargan una vez con el mismo formulario de siempre: así la dueña
+ * de cada paso —que cambia cuando cambia la gente— se edita en una pantalla y no en un deploy. Sin
+ * moldes cargados no hace nada y lo dice, en vez de fingir que sembró.
  *
- * 🔑 **La idempotencia es por `clave`**, no por «ya corrió hoy»: el mismo ingreso avisado dos veces
- * —el reintento de un webhook, alguien que aprieta dos veces— no puede duplicar seis pendientes.
+ * 🔑 **La idempotencia es por `clave`**, no por «ya corrió hoy»: el mismo hecho avisado dos veces
+ * —el reintento de un webhook, alguien que aprieta dos veces— no puede duplicar los pendientes. La
+ * clave se guarda en el campo que dice la plantilla (`datos.ingreso`, `datos.sesion`), y ⛔ no en
+ * uno solo compartido: `datos.ingreso` ya está escrito en la base desde el 24-ago.
  *
- * 🔑 **La puerta de entrada es obligatoria y no tiene default.** Dos de los pasos —el nombre y la
- * descripción— cambian de dueña según por dónde entró el producto (ver `puertas.core.js`), así que
- * sembrar «todo» dejaría renglones con la dueña equivocada, que es peor que no sembrar: nadie
- * revisa un pendiente que ya tiene nombre puesto. Mismo criterio que el 503 de la puerta sin
+ * 🔑 **El eje es obligatorio y no tiene default.** En el ingreso es la PUERTA: dos de los pasos —el
+ * nombre y la descripción— cambian de dueña según por dónde entró el producto. En la sesión de
+ * fotos es el ORIGEN: de quién es la sesión lo decide si vino de un ingreso, de una campaña o de un
+ * faltante. Sembrar «todo» dejaría renglones con la dueña equivocada, que es peor que no sembrar:
+ * nadie revisa un pendiente que ya tiene nombre puesto. Mismo criterio que el 503 de la puerta sin
  * secreto: **lo que falta cierra, no abre.**
  *
- * 🔑 **La MARCA también es obligatoria, y por el mismo motivo que la puerta.** Un paso puede ser de
- * una sola de las dos: la descripción de una compra nacional la escribe **el local si es ropa de
- * Zattia y nunca si son fundas de BDI** (Bruno, 25-ago-2026). Sin saber la marca, esa regla no se
- * puede decir con un molde —toda compra nacional sembraría los dos renglones de descripción—, así
- * que faltando la marca **se cierra, no se abre**: 400. Se lee igual que las puertas: `marcas: []`
- * en el molde quiere decir **las dos**, y por eso los pasos que no cambian se cargan una sola vez.
+ * 🔑 **La MARCA también es obligatoria, y por el mismo motivo.** Un paso puede ser de una sola de
+ * las dos: la descripción de una compra nacional la escribe **el local si es ropa de Zattia y nunca
+ * si son fundas de BDI** (Bruno, 25-ago-2026). Sin saber la marca, esa regla no se puede decir con
+ * un molde, así que faltando la marca **se cierra, no se abre**: 400. Se lee igual que el eje:
+ * `marcas: []` en el molde quiere decir **las dos**, y por eso los pasos que no cambian se cargan
+ * una sola vez.
  *
- * ⛔ **Ni la puerta ni la marca entran en la clave de idempotencia.** El mismo ingreso es el mismo
+ * ⛔ **Ni el eje ni la marca entran en la clave de idempotencia.** El mismo ingreso es el mismo
  * ingreso: las dos son propiedades suyas, no parte de su identidad. Avisarlo dos veces con puertas
  * distintas es un error de quien avisa, y duplicar los renglones no lo arreglaría.
  *
  * Devuelve `{ creados, ya }`: `ya` cuenta el caso en que estaba sembrado y no se tocó nada.
  */
-async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca }) {
+export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, marca, clave: claveDada }) {
+  const p = plantillaDe(plantilla);
+  // ⛔ Nunca la primera por descarte: una plantilla desconocida sembraría la lista de otro hecho.
+  if (!p) {
+    const trajo = String(plantilla === undefined || plantilla === null ? '' : plantilla).trim();
+    return { error: `No sé qué es la plantilla «${trajo.slice(0, 40)}». Las plantillas son: ${CLAVES_PLANTILLA.join(', ')}.` };
+  }
+
   const limpio = String(nombre || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80);
-  if (!limpio) return { error: 'Falta el nombre del ingreso.' };
-  if (!esFechaIso(fecha)) return { error: 'La fecha del ingreso tiene que ser YYYY-MM-DD.' };
-  if (!puertaValida(puerta)) {
-    return { error: `Falta por qué puerta entró (usá ${CLAVES_PUERTA.join(', ')}).` };
+  if (!limpio) return { error: `Falta el nombre ${p.delHecho}.` };
+  if (!esFechaIso(fecha)) return { error: `La fecha ${p.delHecho} tiene que ser YYYY-MM-DD.` };
+  if (!p.eje.claves.includes(String(eje))) {
+    return { error: `${p.eje.pide} (usá ${p.eje.claves.join(', ')}).` };
   }
   // 🔑 Nombra lo que trajo cuando trajo algo: el que llama desde afuera manda su vocabulario y el
   // error es a la vez el pedido, igual que el 400 de `tipo`. ⛔ Y no hay un mapa de marcas como el
@@ -229,11 +239,18 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
     return {
       error: trajo
         ? `No conozco la marca «${trajo.slice(0, 40)}». Las marcas son: ${MARCAS.join(', ')}.`
-        : `Falta de qué marca es el ingreso (usá ${MARCAS.join(', ')}).`,
+        : `Falta de qué marca es ${p.elHecho} (usá ${MARCAS.join(', ')}).`,
     };
   }
 
-  const clave = `${fecha}·${limpio.toLowerCase()}`;
+  /*
+    🔑 **La clave la puede dar el que llama, y cuando puede darla es MEJOR que la nuestra.** La del
+    ingreso es `fecha·nombre` porque del otro lado no hay un identificador: el aviso de Gerardo trae
+    lo que trae. La sesión de fotos SÍ tiene id propio y estable, y ésa es la diferencia que importa:
+    **la fecha de una sesión se edita**, y con `fecha·nombre` mover la sesión un día sembraría los
+    nueve renglones otra vez.
+  */
+  const clave = String(claveDada || '').trim() || `${fecha}·${limpio.toLowerCase()}`;
 
   const { data: existentes, error: eLeer } = await supabase.from('agenda_items')
     .select('id, clase, titulo, cuerpo, regla, destino, marcas, manual_id, datos, created_at');
@@ -242,31 +259,34 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
 
   // Ya sembrado: no se toca nada. ⛔ Ni siquiera se re-crea lo que alguien haya borrado a mano —
   // borrar un renglón es una decisión, y volver a ponerlo sería discutírsela.
-  if (todos.some((i) => i.datos && i.datos.ingreso === clave)) return { creados: 0, ya: true };
+  if (todos.some((i) => i.datos && i.datos[p.campoClave] === clave)) return { creados: 0, ya: true };
 
+  // 🔑 El tope cuenta los clones de **las dos** plantillas: es un techo de cordura sobre lo que la
+  // Agenda puede recibir en un día, y partirlo por plantilla lo duplicaría sin querer.
   const hoy = hoyUtc();
-  const sembradosHoy = todos.filter((i) => i.datos && i.datos.ingreso && String(i.created_at || '').slice(0, 10) === hoy).length;
-  if (sembradosHoy >= TOPE_SEMBRADO_DIARIO) return { error: 'Se llegó al tope de ingresos sembrados por hoy.' };
+  const esClon = (i) => !!(i.datos && (i.datos.de || CLAVES_PLANTILLA.some((k) => i.datos[plantillaDe(k).campoClave])));
+  const sembradosHoy = todos.filter((i) => esClon(i) && String(i.created_at || '').slice(0, 10) === hoy).length;
+  if (sembradosHoy >= TOPE_SEMBRADO_DIARIO) return { error: 'Se llegó al tope de listas sembradas por hoy.' };
 
-  const deIngreso = todos.filter((i) => i.datos && i.datos.plantilla === 'ingreso');
-  if (!deIngreso.length) return { error: 'No hay ningún paso cargado como plantilla de ingreso.' };
+  const deLaPlantilla = todos.filter((i) => i.datos && i.datos.plantilla === p.key);
+  if (!deLaPlantilla.length) return { error: `No hay ningún paso cargado como plantilla de ${p.evento}.` };
 
-  // 🔑 El filtro por puerta y por marca va **acá y no en la carga**: el molde de «descripción» de
+  // 🔑 El filtro por eje y por marca va **acá y no en la carga**: el molde de «descripción» de
   // producción propia no existe (ese paso no lleva renglón), y el de compra nacional está cargado
   // dos veces —el local para Zattia, Administración para BDI—. Las dos cosas se dicen cargando o no
   // cargando un molde, y las dos listas vacías quieren decir «todas».
   // ⚠️ La marca la contesta `moldeCorreEnMarca` y ⛔ no `esDeMisMarcas`, que es la de mirar: un
   // ingreso tiene UNA marca y una persona puede tener las dos. Están al lado y dicen cosas
   // distintas; el comentario de `puertas.core.js` explica por qué no son la misma función.
-  const moldes = deIngreso
-    .filter((i) => moldeCorreEn(i.datos.puertas, puerta) && moldeCorreEnMarca(i.marcas, marca))
+  const moldes = deLaPlantilla
+    .filter((i) => moldeCorreEnEje(i.datos[p.eje.campo], eje) && moldeCorreEnMarca(i.marcas, marca))
     .sort((a, b) => (Number(a.datos.offsetDias) || 0) - (Number(b.datos.offsetDias) || 0) || String(a.titulo).localeCompare(String(b.titulo), 'es'));
   // Hay moldes, pero ninguno para esta combinación. ⚠️ Se dice distinto que «no hay moldes» porque
   // la acción es otra: allá hay que cargarlos, acá hay que revisar en qué puertas y en qué marcas
   // corren los que hay. 🔑 Y nombra **las dos**: con una sola, quien lo lea revisa la mitad
   // equivocada y concluye que la carga está bien.
   if (!moldes.length) {
-    return { error: `Hay moldes cargados, pero ninguno corre para «${rotuloPuerta(puerta)}» en ${marca}.` };
+    return { error: `Hay moldes cargados, pero ninguno corre para «${p.eje.rotulo(eje)}» en ${marca}.` };
   }
 
   const filas = moldes.map((m, n) => ({
@@ -276,10 +296,12 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
     // agrupación hasta haberlo usado dos veces (decisión de Bruno, 24-ago-2026).
     titulo: `${limpio} · ${m.titulo}`,
     cuerpo: m.cuerpo,
-    // Un día puntual: lo del ingreso pasa una vez. El molde dice a cuántos días de la llegada.
-    regla: { tipo: 'unica', fecha: masDias(fecha, Math.max(0, Number(m.datos.offsetDias) || 0)) },
+    // Un día puntual: lo del ingreso pasa una vez. El molde dice a cuántos días del hecho, y en la
+    // sesión de fotos ese número puede ser NEGATIVO: la modelo se busca 48 h antes. El rango lo
+    // validó la carga (`offsetDeMolde`), así que acá se usa tal como está guardado.
+    regla: { tipo: 'unica', fecha: masDias(fecha, Math.trunc(Number(m.datos.offsetDias) || 0)) },
     destino: m.destino,
-    // 🔑 El clon nace **en la marca del ingreso**, ⛔ no con las del molde: un molde sin marca corre
+    // 🔑 El clon nace **en la marca del hecho**, ⛔ no con las del molde: un molde sin marca corre
     // en las dos, pero el renglón que salió de un ingreso de BDI es de BDI y de nadie más. Sin
     // esto, los ocho pasos comunes caerían en las dos marcas y el que trabaja parado en Zattia
     // vería los pendientes de un ingreso de fundas.
@@ -289,13 +311,16 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
     // 🔑 El clon **arrastra**: es la razón de ser de esto. Un paso del lanzamiento que se evapora al
     // día siguiente es exactamente el que «se cae porque nadie lo mira». ⛔ Y NO es plantilla: si lo
     // fuera, el molde se clonaría a sí mismo en el próximo ingreso.
-    // 🔑 `puerta` y `marca` quedan en el clon aunque nada las lea todavía: son el ÚNICO rastro de
+    // 🔑 El eje y la marca quedan en el clon aunque nada las lea todavía: son el ÚNICO rastro de
     // por qué este ingreso sembró nueve renglones y no diez. Sin ellas, «faltó el de la
     // descripción» no se puede contestar sin adivinar. ⛔ Ninguna entra en `clave`.
     datos: {
       arrastra: true,
-      ingreso: clave,
-      puerta,
+      // De qué plantilla salió. Es lo que deja contar los clones sin adivinar por el campo de la
+      // clave, y lo que va a leer el día que la pantalla quiera agrupar por hecho.
+      de: p.key,
+      [p.campoClave]: clave,
+      [p.eje.campoClon]: eje,
       marca,
       // 🔑 El tope lo pone el MOLDE, no el disparador: el formulario del molde es el mismo que el
       // de una rutina, así que si alguien le carga «hasta N días» ahí, tiene que valer para lo que
@@ -311,6 +336,29 @@ async function sembrarIngreso(supabase, { nombre, fecha, autor, puerta, marca })
   const { error } = await supabase.from('agenda_items').insert(filas);
   if (error) throw new Error(error.message);
   return { creados: filas.length, ya: false };
+}
+
+/**
+ * Sembrar desde OTRO handler, con la base maestra.
+ *
+ * 🔑 **Existe porque el 2º disparador no entra por una puerta: entra por una pantalla nuestra.** El
+ * del ingreso lo avisa un sistema de afuera; la sesión de fotos se arma acá adentro, y el hecho que
+ * la dispara es que alguien la haya creado. Así que quien tiene que llamar es `api/_solicitudes.js`,
+ * que escribe en la base de su marca —y las de Zattia son otra base— mientras la Agenda vive siempre
+ * en la maestra. Por eso el cliente lo abre esta función y ⛔ no viaja el del que llama.
+ *
+ * 🔴 **Nunca tira.** Sembrar es una consecuencia del guardado, no una condición: una sesión que no
+ * se pudo guardar es un problema, una sesión guardada cuyos pasos no se sembraron es un aviso. El
+ * que llama recibe `{ error }` y decide qué contar, ⛔ pero no pierde lo que la persona cargó.
+ */
+export async function sembrarEnMaestra(opts) {
+  try {
+    const cfg = cfgMaestra();
+    if (!cfg.url || !cfg.key) return { error: 'Faltan credenciales de Supabase.' };
+    return await sembrar(createClient(cfg.url, cfg.key), opts);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export default async function handler(req, res) {
@@ -363,14 +411,15 @@ export default async function handler(req, res) {
       });
     }
 
-    const r = await sembrarIngreso(sb, {
+    const r = await sembrar(sb, {
+      plantilla: 'ingreso',
       nombre: b.nombre,
       fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
       autor: 'Ingresos',
-      puerta,
+      eje: puerta,
       // 🔑 La marca viaja igual que la puerta y por el mismo motivo: la sabe quien carga el ingreso.
       // ⛔ No se deduce de la puerta —las cuatro existen en los dos negocios— ni se cae a una por
-      // defecto: `sembrarIngreso` contesta 400 y la nombra.
+      // defecto: `sembrar` contesta 400 y la nombra.
       marca: b.marca,
     });
     if (r.error) return res.status(400).json({ error: r.error });
@@ -494,11 +543,17 @@ export default async function handler(req, res) {
         // Cuántos días se debe, si arrastra. **`null` = sin tope**, que es lo que tienen las
         // reuniones y los clones del ingreso. Lo resuelve `ocurrenciaAbierta()`; acá viaja el número.
         arrastraDias: i.datos && Number.isFinite(i.datos.arrastraDias) ? i.datos.arrastraDias : null,
-        // El molde del disparador del ingreso. Un molde no corre ningún día: lo filtra `vaEl`.
+        // De qué plantilla es molde este ítem (ingreso · sesión de fotos). Un molde no corre ningún
+        // día: lo filtra `vaEl`.
         plantilla: (i.datos && i.datos.plantilla) || null,
         offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
-        // En qué puertas corre este molde. **Vacío = todas**, igual que `marcas`.
+        // En qué valores del eje corre el molde. **Vacío = todos**, igual que `marcas`. Son dos
+        // campos y no uno «eje» genérico porque cada plantilla tiene el suyo y se guardan así en
+        // `datos`: aplanarlos acá obligaría a saber de qué plantilla es para poder leerlos.
+        // ⚠️ Al guardar se escribe **sólo el de su plantilla**: cambiarle la plantilla a un molde le
+        // borra la lista del otro eje, que es lo correcto —un molde de sesión no corre en puertas—.
         puertas: (i.datos && Array.isArray(i.datos.puertas) ? i.datos.puertas : []),
+        disparadores: (i.datos && Array.isArray(i.datos.disparadores) ? i.datos.disparadores : []),
         autor: i.autor,
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
@@ -746,11 +801,12 @@ export default async function handler(req, res) {
     if (action === 'ingreso') {
       // El permiso ya lo pidió el guard de arriba («de acá para abajo, todo pide el sub»): repetirlo
       // acá sería la segunda implementación de la misma regla, que es justo lo que este repo no hace.
-      const r = await sembrarIngreso(supabase, {
+      const r = await sembrar(supabase, {
+        plantilla: 'ingreso',
         nombre: b.nombre,
         fecha: esFechaIso(b.fecha) ? b.fecha : hoyUtc(),
         autor: yo,
-        puerta: b.puerta,
+        eje: b.puerta,
         marca: b.marca,
       });
       if (r.error) return res.status(400).json({ error: r.error });
@@ -773,9 +829,37 @@ export default async function handler(req, res) {
       const marcas = listaDe(it.marcas, MARCAS);
       if (marcas === null) return res.status(400).json({ error: `Marca inválida (usá ${MARCAS.join(', ')}).` });
 
-      // Las puertas en las que corre el molde. Se leen como `marcas`: **vacío es todas**.
-      const puertas = listaDe(it.puertas, CLAVES_PUERTA);
-      if (puertas === null) return res.status(400).json({ error: `Puerta inválida (usá ${CLAVES_PUERTA.join(', ')}).` });
+      /*
+        El EJE del molde: las puertas del ingreso, o el origen de la sesión de fotos. Se lee como
+        `marcas` —**vacío es todos**— y **sólo existe si el ítem es molde**: en un pendiente normal
+        «¿para qué puerta?» no quiere decir nada, y guardarlo sería basura en `datos`.
+
+        🔑 Cuál es el eje lo dice la plantilla, ⛔ no este handler: si lo supiera acá, agregar la
+        tercera plantilla sería tocar el motor en vez de agregar una fila al catálogo.
+      */
+      const plant = esClavePlantilla(it.plantilla) ? plantillaDe(String(it.plantilla)) : null;
+      const eje = plant ? listaDe(it[plant.eje.campo], plant.eje.claves) : [];
+      if (eje === null) {
+        return res.status(400).json({ error: `${plant.eje.invalido} (usá ${plant.eje.claves.join(', ')}).` });
+      }
+
+      /*
+        🔑 **`offsetDias` es del MOLDE**, igual que `arrastraDias` es de lo que arrastra, y **el
+        rango lo pone la plantilla**: el ingreso se entera cuando la mercadería ya llegó, así que un
+        paso «dos días antes» nacería vencido; la sesión de fotos se arma con fecha y el manual pone
+        la modelo 48 h ANTES.
+
+        🔴 Fuera de rango es **400 y lo nombra**, ⛔ no un recorte callado: hasta el 29-ago-2026 un
+        `-2` se guardaba como `0` y un `120` como `90` —la pantalla decía una cosa y la base
+        guardaba otra—, que es la misma trampa que el monto descartado sin avisar.
+      */
+      const dioOffset = plant && it.offsetDias !== null && it.offsetDias !== undefined && it.offsetDias !== '';
+      const offset = plant ? offsetDeMolde(plant.key, it.offsetDias) : null;
+      if (dioOffset && offset === null) {
+        return res.status(400).json({
+          error: `«A los cuántos días» va entre ${plant.offsetMin} y ${plant.offsetMax} para ${plant.evento}.`,
+        });
+      }
 
       // El techo, sobre los dos destinos: el que se quiere poner y el que la fila ya tiene.
       const noPuede = await techoBloquea(it.destino, await destinoGuardado(id));
@@ -804,17 +888,14 @@ export default async function handler(req, res) {
           ...(String(it.clase) === 'pendiente' && !!it.arrastra && numeroDado(it.arrastraDias)
             ? { arrastraDias: Math.min(DIAS_ARRASTRE, Math.trunc(Number(it.arrastraDias))) }
             : {}),
-          ...(PLANTILLAS.includes(String(it.plantilla)) ? { plantilla: String(it.plantilla) } : {}),
-          // 🔑 **`offsetDias` es del MOLDE**, igual que `arrastraDias` es de lo que arrastra: en un
-          // pendiente normal «a los cuántos días del ingreso» no quiere decir nada, y el formulario
-          // ni siquiera lo dibuja. Atarlo a `plantilla` es lo que hace que un ítem que ya se llevó
-          // el `0` fantasma se limpie solo la próxima vez que alguien lo guarde.
-          ...(PLANTILLAS.includes(String(it.plantilla)) && numeroDado(it.offsetDias)
-            ? { offsetDias: Math.min(90, Math.trunc(Number(it.offsetDias))) }
-            : {}),
-          // ⚠️ Sólo se guarda si hay alguna: la lista vacía **es** el caso normal (el paso corre en las
-          // cuatro puertas) y escribirla sería guardar un `[]` que dice lo mismo que no estar.
-          ...(puertas.length ? { puertas } : {}),
+          ...(plant ? { plantilla: plant.key } : {}),
+          // Atarlo a `plantilla` es lo que hace que un ítem que ya se llevó el `0` fantasma se
+          // limpie solo la próxima vez que alguien lo guarde.
+          ...(offset === null ? {} : { offsetDias: offset }),
+          // ⚠️ Sólo se guarda si hay alguno: la lista vacía **es** el caso normal (el paso corre en
+          // las cuatro puertas, o en los tres orígenes) y escribirla sería guardar un `[]` que dice
+          // lo mismo que no estar.
+          ...(eje.length ? { [plant.eje.campo]: eje } : {}),
         },
         autor: yo,
         updated_at: new Date().toISOString(),

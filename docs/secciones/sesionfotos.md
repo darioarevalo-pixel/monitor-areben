@@ -163,7 +163,7 @@ mismo borrador anónimo. El campo `disparador` (`lib/solicitudes/disparador.ts`)
 |---|---|---|---|
 | `motivo` | para qué sale | quien pide | 🔴 **el CAJÓN** (`presetPorMotivo`) y con él el cliente de GN |
 | `tipo` (destino) | si vuelve | quien pide | la aprobación (`necesitaAprobacion`) |
-| `disparador` | **de dónde viene** | **la puerta** | nada — es dato, no comportamiento |
+| `disparador` | **de dónde viene** | **la puerta** | 🆕 **de quién es cada paso** de la sesión en la Agenda (29-ago-2026) |
 
 Los tres valores: `ingreso` (llegó mercadería y hay que publicarla) · `campania` (Marketing arma
 una producción) · `faltante` (un producto ya a la venta no tiene foto).
@@ -194,6 +194,24 @@ una producción) · `faltante` (un producto ya a la venta no tiene foto).
   quien arma la sesión.
 - ⚠️ **La dueña de cada disparador (Cande / Sofi) NO está en el código, a propósito**: la gente
   cambia y eso se carga como molde en la Agenda, igual que los pasos del ingreso.
+- 🆕 🔴 🔑 **Y desde el 29-ago-2026 el origen dejó de ser sólo un dato: CREAR LA SESIÓN SIEMBRA SUS
+  PASOS EN LA AGENDA**, y el origen es el que decide de quién es cada uno. Es el 2º disparador de la
+  Agenda (el 1º es el ingreso) y el relato entero está en `docs/secciones/agenda.md`. Lo que hay que
+  saber parado acá:
+  - **El hecho es el guardado de una solicitud de `sesionfotos` que todavía no existía**, en
+    `api/_solicitudes.js`. ⛔ **Editar no siembra**: la pantalla guarda la solicitud entera en cada
+    cambio, y sembrar siempre le tiraría los nueve pendientes encima a tres personas cada vez que
+    alguien agrega una prenda. Y **el lote tampoco**: ése es el camino de la migración del KV.
+  - ⛔ **Sin origen no siembra** —y la pantalla lo dice al lado del selector—, porque de quién es el
+    primer renglón lo decide de dónde viene: sembrar «igual» pondría la dueña equivocada.
+  - 🔑 **La clave de idempotencia es el ID de la solicitud**, así que **moverle la fecha a la sesión
+    ⛔ no la vuelve a sembrar** (y tampoco mueve los pendientes ya sembrados: eso es una mano).
+  - 🔴 **Sembrar ⛔ no puede voltear el guardado**: si no hay moldes cargados o la base no contesta,
+    la sesión se guarda igual y el error viaja en la respuesta (`sembrado`).
+  - ⚠️ **De los nueve renglones del manual se cargan siete (+2 por origen)**: «armar el pedido» ⛔ no
+    va —es el hecho que dispara esto— y «devolver la ropa contada» tampoco: **el cierre de la
+    sección ya lo controla punta a punta**, y dos lugares que dicen lo mismo terminan diciendo cosas
+    distintas.
 
 ## Qué se fotografió: el resultado, que no se registraba (24-ago-2026)
 

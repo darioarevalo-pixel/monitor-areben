@@ -35,7 +35,7 @@ import {
 import {
   avisosDe, contarSinTildar, corre, hoyIso, moldeCorreEn, moldeCorreEnMarca, pendientesDe, promosDe,
   filtrarItems, opcionesDeQuien,
-  PUERTAS, rotuloBeneficio, rotuloDestino, rotuloPuerta, rotuloRegla, vaEl,
+  plantillaDe, PUERTAS, rotuloBeneficio, rotuloDestino, rotuloPuerta, rotuloRegla, vaEl,
   type FiltroClase, type FiltroEstado, type ItemAgenda, type Promo, type Puerta,
 } from '@/lib/agenda'
 import type { Marca } from '@/lib/nav.datos'
@@ -472,8 +472,8 @@ function FilaItem({
             {i.clase === 'aviso' && <StatusPill tone="warning" label="sólo avisa" />}
             {/* Un molde no corre ningún día: sin esta chapita se lee «hoy no toca» y parece una
                 rutina rota. Acá es donde se lo edita, así que acá es donde tiene que decirlo. */}
-            {i.plantilla === 'ingreso' ? (
-              <StatusPill tone="action" label="molde · lista de ingreso" />
+            {plantillaDe(i.plantilla) ? (
+              <StatusPill tone="action" label={`molde · ${plantillaDe(i.plantilla)!.evento}`} />
             ) : !i.activo ? (
               <StatusPill tone="neutral" label="apagado" />
             ) : vaEl(i, hoy) ? (
@@ -483,14 +483,22 @@ function FilaItem({
             )}
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>
-            {i.plantilla === 'ingreso'
-              ? `a los ${i.offsetDias ?? 0} días del ingreso${
-                  // ⚠️ Se nombra sólo cuando corre en ALGUNAS. «las cuatro» es el caso normal y
-                  // escribirlo en cada renglón esconde justo los dos que sí cambian de dueña.
-                  i.puertas && i.puertas.length
-                    ? ` · sólo si entra por ${i.puertas.map(rotuloPuerta).join(' o ')}`
-                    : ''
-                }`
+            {plantillaDe(i.plantilla)
+              ? (() => {
+                  const p = plantillaDe(i.plantilla)!
+                  const dias = i.offsetDias ?? 0
+                  // ⚠️ Un molde puede caer ANTES del hecho (la modelo, dos días antes de la sesión):
+                  // «a los -2 días» se lee como un error de carga, así que se dice en castellano.
+                  const cuando = dias === 0
+                    ? `el día ${p.delHecho}`
+                    : dias > 0
+                      ? `a los ${dias} ${dias === 1 ? 'día' : 'días'} ${p.delHecho}`
+                      : `${-dias} ${dias === -1 ? 'día' : 'días'} antes ${p.delHecho}`
+                  // ⚠️ El eje se nombra sólo cuando corre en ALGUNOS. «todos» es el caso normal y
+                  // escribirlo en cada renglón esconde justo los que sí cambian de dueña.
+                  const enEje = (i[p.eje.campo] ?? []) as string[]
+                  return `${cuando}${enEje.length ? ` · sólo ${enEje.map(p.eje.rotulo).join(' o ')}` : ''}`
+                })()
               : rotuloRegla(i.regla)} · {rotuloDestino(i.destino)}
             {/* La regla sola miente cuando el ítem arrastra: dice "los martes" y en la pantalla del
                 local aparece un jueves. Acá se lee de una, sin abrir el modal — y el tope va en el
