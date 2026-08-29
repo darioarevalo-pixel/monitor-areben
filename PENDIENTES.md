@@ -277,7 +277,8 @@ en el CDA, no los arrancamos al mismo momento»*. Tenía razón y la medición v
 contaminada** — mezclaba dos casos que se portan al revés. Es, además, la misma regla que traía la
 consultoría: *«los testeos son siempre en paralelo, nunca meter en uno que ya tenga aprendizaje»*.
 
-🔑 **Re-medido el 28-ago** sobre `meta_ads_snapshot_dia`, nivel aviso, 11-may→28-ago. De 23
+🔑 **Re-medido el 28-ago con `scripts/medir-reparto-conjunto.mjs`** —queda para volver a correrlo,
+es la partición y no el promedio— sobre `meta_ads_snapshot_dia`, nivel aviso, 11-may→28-ago. De 23
 conjuntos con 2+ avisos se descartan **8 censurados** (arrancaron en el 1er día de la foto o antes:
 no se sabe cuándo empezaron de verdad). Quedan 15, partidos por **cuándo arrancó cada aviso**, y
 mirando **los 2 primeros días**, que es la ventana del test:
