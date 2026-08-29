@@ -1539,3 +1539,103 @@ sacado del mismo archivo (ver arriba, «El control tiene que salir del mismo arc
 en el mismo deploy pero ⛔ no se puede leer desde afuera. **Nadie apretó todavía «Cerrar» sobre un
 reclamo real con pendientes para ver el 409 dibujado** — es la misma pantalla que sigue sin
 caminarse desde la tanda de los textos.
+
+---
+
+## 🆕 🔴 Qué se le dijo al cliente, y cuándo (29-ago-2026 — D9)
+
+**La columna `mensajes` existía desde el día uno, estaba en el `select` del handler, y ⛔ no la
+escribía nadie.** Aparecía **una sola vez en todo el módulo** (`COLS`), y R-0022 —el primer reclamo
+real de BDI— la traía `[]` después de que se le mandaron el link, la propuesta y la resolución.
+El docstring de `lib/reclamos/mensajes.ts` promete desde su primer párrafo que *«queda registrado
+qué se le dijo y cuándo»*: **la segunda mitad de esa frase era falsa**.
+
+🔑 **Y lo que se perdía ⛔ no era un log: era la promesa.** De los cinco momentos el que más importa
+es el de resolución —ahí se le dice al cliente cuánta plata se le devuelve y cómo— y de ése ⛔ no
+quedaba absolutamente nada. Cuando el cliente vuelve a escribir *«me dijeron otra cosa»*, lo único
+que había para contestarle era la memoria de quien atendió. Del único momento que quedaba rastro era
+la apertura, y **de rebote**: el historial anota el cambio de estado, ⛔ no el texto.
+
+### Copiar cuenta como decirlo, y el registro sale del copiado que FUNCIONÓ
+
+⚠️ Lo que el sistema observa es el **copiado**, ⛔ no el envío: el mensaje se pega en WhatsApp, que
+está afuera. Tratar las dos cosas como la misma **ya era la decisión de este módulo** y está escrita
+en `Reclamos.tsx`, en el mensaje de apertura: *«Copiar el mensaje ES escribirle: de acá va derecho a
+WhatsApp»* — es el gesto que mueve el reclamo a `esperando_cliente`. Esto sigue esa línea y ⛔ no
+inventa una segunda semántica para el mismo gesto.
+
+🔑 **El registro se apila cuando el portapapeles ACEPTÓ, ⛔ no cuando se apretó** (`onCopiado`, nuevo
+en `CopyButton`). Es *«el cartel dice lo que PASÓ, no lo que se intentó»* del 27-ago: el portapapeles
+falla seguido y falla callado, y anotar «se le mandó la resolución» sobre un `writeText` rechazado
+escribe un hecho que no pasó **en el único lugar que existe para contestar qué se le prometió**.
+⚠️ El costo elegido es que la lista puede quedar **corta** — y por eso el vacío lo explica la
+pantalla en vez de dejar que se lea como «no se le dijo nada».
+
+### Las tres reglas que ⛔ no son obvias
+
+1. 🔴 **⛔ No toca `updated_at`.** `apilar()` lo mueve, y de ahí cuentan dos alertas: *«hace N días
+   que la plata no sale»* y *«esperando una decisión hace N días»*. Copiar el mensaje de resolución
+   habría **reiniciado el reloj de que la plata no salió** justo cuando se le está prometiendo al
+   cliente que va a salir ⇒ el handler escribe la columna a mano.
+   [[feedback_areben_updated_at_no_mide_la_espera]], que este módulo ya pagó con el reloj de «hace N
+   días que no llega».
+2. 🔴 **⛔ Tampoco apila en `historial`.** Ahí va el **estado** en el que la fila queda (D17) y se lee
+   para saber qué pasó y desde cuándo; cinco mensajes por reclamo lo llenarían de eventos que no
+   mueven nada. Los mensajes son su propia lista, al lado — «Qué pasó» cuenta los estados, «Qué se le
+   dijo» cuenta las palabras.
+3. 🔑 **⛔ No es de administración.** El que le habla al cliente es el Local, y los cinco botones de
+   mensaje son suyos: gatearlo con `DE_ADMIN` dejaría el registro vacío justo en los reclamos que sí
+   se atendieron.
+
+### Dónde vive cada mitad
+
+- **La regla**: `lib/reclamos/mensajes.core.js` — `MOMENTOS_DEL_MENSAJE` (lista cerrada de nueve:
+  los ocho de `MensajeDeLaFila` más el ticket del cambio), `LARGO_MAXIMO_MENSAJE` y `apilarMensaje`.
+  Es `.core.js` y ⛔ no `.ts` porque **lo valida el handler**, y `api/*.js` ⛔ no puede importar
+  TypeScript: mismo arreglo que `permisos.core.js`, `faltantesParaCerrar` y `destinoDe`. La cara
+  tipada (`MomentoDelMensaje`, `MensajeRegistrado`, `MOMENTO_MENSAJE_LABEL`) queda en `tipos.ts`.
+- **El botón**: `components/reclamos/BotonMensaje.tsx`. 🔑 **Es un componente y ⛔ no una línea en
+  cada botón**, porque el modo de falla del arreglo obvio es el que este módulo ya pagó cuatro
+  veces: pegarle un `onCopiado` a mano a los ocho `CopyButton` deja el noveno afuera, callado y en
+  verde. Acá el registro viaja **con el botón**.
+- **La lectura**: `components/reclamos/QueSeLeDijo.tsx`, en el detalle de la fila.
+- **El servidor**: `action: 'mensaje'` y `vista=mensajes` en `api/_reclamos.js`.
+
+### `mensajes` salió de `COLS`, y ⛔ no es cosmético
+
+📊 Medido sobre los 31 mensajes que arma hoy el módulo: **283 bytes de promedio, 436 el más largo**
+⇒ un reclamo con sus cinco momentos son ~1,4 KB, contra los **1,925 KB que pesa hoy la fila entera**.
+Meterlo en el listado lo **duplica**, y el listado baja 200 filas para dibujar una columna que ⛔ no
+lo usa. Se pide de a uno por `vista=mensajes`, **mismo molde que el token**.
+
+### 🔴 Lo que dice cuando está VACÍO, que es la mitad que importa
+
+El registro empezó el **29-ago-2026**: todos los reclamos anteriores tienen la lista vacía, los tres
+mensajes de R-0022 incluidos. Una lista vacía leída como *«no se le dijo nada»* es exactamente el
+**«el cero afirma»** que este módulo viene tapando en `retencion_respuesta`, en la columna «A
+devolver» y en el destino de las unidades — con la diferencia de que acá el que se equivoca es
+alguien contestándole a un cliente que dice que le prometieron otra cosa. ⇒ **lo dice la pantalla**,
+y ⛔ no se deduce. Y si el registro falla, **se avisa**: ⛔ no queda en un `catch {}` vacío.
+
+### El doble click
+
+Copiar el mismo texto dos veces con cinco minutos de diferencia **es contarle dos veces** y tiene que
+quedar; copiarlo dos veces en el mismo segundo es la mano temblando sobre el botón, y dejar las dos
+entradas escribe una historia falsa. `SEGUNDOS_DEL_REPETIDO = 60`, mirando **sólo el último** —
+el número es arbitrario y está **elegido**, ⛔ no medido.
+
+### Cómo se probó
+
+- **18 mutantes, 18 muertos** (anclas verificadas únicas), incluidos los tres que importan: el botón
+  que registra **el rótulo en vez del texto que salió**, el que registra **un momento fijo**, y el
+  `onCopiado` disparado **antes** de que el portapapeles conteste.
+- **Los dos cables**: `tests/reclamos-registro-mensajes.test.ts` lee las pantallas y exige que cada
+  `tipo` esté en la lista del servidor **y que ⛔ ningún mensaje al cliente salga por un `CopyButton`
+  pelado** (la mitad negativa: el defecto no vuelve por un `tipo` mal escrito, vuelve por un botón
+  nuevo que copia perfecto y ⛔ no registra); `tests/reclamos-lista-mensajes.test.tsx` aprieta el
+  botón y compara **lo copiado contra lo registrado**.
+- **26 de 26 caminando contra la base real de BDI** (`scripts/caminar-registro-mensajes.mjs`, con el
+  handler **en proceso** y el oráculo por PostgREST): la columna nace vacía, acepta el texto con sus
+  saltos de línea y sus acentos, ⛔ **no mueve `updated_at`**, el doble click ⛔ no duplica, los tres
+  rechazos son 400, `vista=mensajes` los trae y **el listado ⛔ no**. Una fila sembrada y borrada; las
+  **2 reales, intactas**.

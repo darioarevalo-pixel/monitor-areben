@@ -29,6 +29,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
+import { BotonMensaje } from './BotonMensaje'
 import {
   Button, SectionCard, Card, StatusPill, Field, Input, NumberField, Select, Toolbar, Tabs, EmptyState,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, formatMoney, Notice, CopyButton,
@@ -533,6 +534,10 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
       </div>
 
       {/* ── El form ──────────────────────────────────────────────────────── */}
+      {/* ⚠️ El «Copiar detalle» de acá ⛔ NO registra el mensaje, y es a propósito: el cambio del
+          form puede no estar guardado todavía (`editandoId` es `null` en uno nuevo), así que ⛔ no
+          hay fila contra la cual anotarlo. El de la fila de abajo —el mismo texto, sobre un cambio
+          que ya existe— sí. Queda dicho para que no se lea como un olvido. */}
       <SectionCard
         title={editandoId != null ? `Editando ${numeroReclamo(editandoId)}` : 'Nuevo cambio'}
         // El método de pago de la COMPRA ORIGINAL: es lo que dice por dónde vuelve la plata si la
@@ -832,7 +837,15 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                           {esAdmin && c.estado !== 'cerrado' && !faltanCerrar.length && (
                             <Button size="sm" variant="solid" tone="success" onClick={() => void accion(c.id, () => cambiarEstado(marca, c.id, 'cerrado'), 'Cambio cerrado.')} disabled={ocup}>Cerrar</Button>
                           )}
-                          <CopyButton getText={() => detalleCambioTexto({ ...c, items: c.items, items_nuevos: c.items_nuevos })} label="Copiar" tone="neutral" variant="ghost" />
+                          {/* 🔑 El ticket del cambio es texto que va al CLIENTE —qué se le lleva,
+                              qué se le entrega y cuánto paga—, así que queda registrado igual que
+                              los cinco mensajes de Reclamos. Ver `BotonMensaje`. */}
+                          <BotonMensaje
+                            marca={marca} id={c.id} tipo="detalle_cambio"
+                            onSinRegistrar={(e) => toast.error(`El detalle se copió, pero ⛔ no quedó registrado: ${e.message}`)}
+                            getText={() => detalleCambioTexto({ ...c, items: c.items, items_nuevos: c.items_nuevos })}
+                            label="Copiar" tone="neutral" variant="ghost"
+                          />
                           <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados">⋯</Button>
                           {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}
                         </div>

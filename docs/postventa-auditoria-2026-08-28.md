@@ -280,7 +280,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   motivo lo contesta el **escenario**, y afirmar *«fue del transporte»* sobre un
   `plazo_mal_informado` es explicarle al cliente algo que no pasó. Queda fijado con un test.
 
-### 🔴 D9 · La columna `mensajes` está en el `select` y no la escribe nadie
+### ✅ D9 · La columna `mensajes` está en el `select` y no la escribe nadie — ARREGLADO el 29-ago
 
 - **Evidencia**: aparece **una sola vez** en todo el módulo, en `COLS` (`api/_reclamos.js:108`).
   R-0022 la trae `[]` después de que se le mandaron el link, la propuesta y la resolución. El
@@ -289,6 +289,27 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 - **De la resolución —donde se promete la plata— ⛔ no queda rastro.** Del único que queda es de la
   apertura, y **de rebote**: el historial anota el cambio de estado, no el texto.
 - **Costo**: medio. Los cinco `CopyButton` ya están centralizados; falta una acción que apile.
+- ✅ **Arreglado el 29-ago-2026** (el relato entero en `docs/secciones/reclamos.md`). Lo que la
+  línea de arriba ⛔ no decía, y salió de construirlo:
+  - 🔑 **El registro sale del copiado que FUNCIONÓ, ⛔ no del click** (`onCopiado`, nuevo en
+    `CopyButton`): el portapapeles falla seguido y falla callado, y anotar «se le mandó la
+    resolución» sobre un `writeText` rechazado escribe un hecho que no pasó justo en el único lugar
+    que existe para contestar qué se le prometió;
+  - 🔴 **⛔ No toca `updated_at`**, y ésa es la regla que más cuesta ver: de ahí cuentan *«hace N
+    días que la plata no sale»* y *«esperando una decisión hace N días»* ⇒ contarle al cliente que
+    la plata va a salir **reiniciaría el reloj de que la plata no salió**. ⛔ Tampoco apila en
+    `historial`: ahí va el estado, ⛔ no las palabras;
+  - 🔑 **El botón es un componente** (`BotonMensaje`), ⛔ no un `onCopiado` pegado a mano en cada
+    uno: así el registro viaja **con el botón** y el noveno no queda afuera, callado y en verde;
+  - 🔑 **`mensajes` salió de `COLS`** —📊 283 bytes por mensaje contra 1,925 KB la fila entera: en el
+    listado lo **duplica**— y se pide por `vista=mensajes`, mismo molde que el token;
+  - 🔴 **Lo que más importa es lo que la pantalla dice cuando está VACÍA**: el registro empieza hoy,
+    así que todo lo anterior está vacío y leerlo como *«no se le dijo nada»* es el mismo «el cero
+    afirma» de `retencion_respuesta`.
+  - ✅ **18 mutantes, 18 muertos** · **26 de 26 caminando contra BDI**
+    (`scripts/caminar-registro-mensajes.mjs`, handler en proceso, una fila sembrada y borrada, las 2
+    reales intactas) · ⚠️ **la PANTALLA ⛔ no se caminó**: falta que alguien apriete un mensaje real
+    y abra el detalle.
 
 ### ✅ D10 · «A devolver» afirma un monto sobre reclamos sin decidir — ARREGLADO el 28-ago
 

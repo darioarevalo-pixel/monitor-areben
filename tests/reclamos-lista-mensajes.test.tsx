@@ -59,11 +59,39 @@ const botones = async (filas: ReclamoRow[]): Promise<string[]> => {
  * entero: los dos lados en verde y el bug en la pregunta del medio.
  */
 const copiadoAlApretar = async (filas: ReclamoRow[], rotulo: string): Promise<string> => {
+  return (await apretar(filas, rotulo)).copiado
+}
+
+/**
+ * **Aprieta el botón y devuelve las DOS cosas que salen de ahí**: lo que quedó en el portapapeles y
+ * lo que se le mandó al servidor para registrarlo.
+ *
+ * 🔑 Tienen que ser **el mismo texto**. Entre los dos hay un `getText` que puede pedirle algo al
+ * servidor, así que rearmar el mensaje del lado del registro sería registrar *algo parecido* a lo
+ * que el cliente recibió — y este registro existe justamente para poder contestar «esto fue lo que
+ * te dijimos».
+ */
+const apretar = async (
+  filas: ReclamoRow[], rotulo: string, portapapeles: 'acepta' | 'rechaza' = 'acepta',
+): Promise<{ copiado: string; registrado: Record<string, unknown> | null }> => {
   let copiado = ''
+  let registrado: Record<string, unknown> | null = null
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
-    value: { writeText: async (t: string) => { copiado = t } },
+    value: {
+      writeText: async (t: string) => {
+        if (portapapeles === 'rechaza') throw new Error('el navegador no lo dejó')
+        copiado = t
+      },
+    },
   })
+  // Cuando el portapapeles rechaza, `copiarAlPortapapeles` cae a un `window.prompt` con el texto.
+  vi.spyOn(window, 'prompt').mockReturnValue(null)
+  vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: { body?: string }) => {
+    const cuerpo = init?.body ? JSON.parse(init.body) as Record<string, unknown> : null
+    if (cuerpo?.action === 'mensaje') registrado = cuerpo
+    return { ok: true, status: 200, json: async () => ({ ok: true }) }
+  }))
   FILAS.length = 0
   FILAS.push(...filas)
   const div = document.createElement('div')
@@ -77,7 +105,8 @@ const copiadoAlApretar = async (filas: ReclamoRow[], rotulo: string): Promise<st
   await act(async () => { b.click() })
   await act(async () => { root.unmount() })
   div.remove()
-  return copiado
+  vi.unstubAllGlobals()
+  return { copiado, registrado }
 }
 
 /**
@@ -192,6 +221,50 @@ describe('la lista dibuja los mensajes del momento', () => {
    * cuál de los tres momentos armar como un parámetro suelto, así que un botón bien rotulado que
    * pide *«plata»* dice que le devolvimos la plata a alguien a quien le mandamos un paquete.
    */
+  /**
+   * 🔴 **El CABLE del registro** (D9, 29-ago-2026): la columna `mensajes` estaba en el `select` del
+   * handler y ⛔ **no la escribía nadie**, así que de la resolución —donde se promete la plata— ⛔ no
+   * quedaba rastro. Lo que se fija acá es **que apretar el botón mande el registro, y con el MISMO
+   * texto que se copió**: son dos caminos distintos (uno arma el mensaje, el otro lo postea) y el
+   * defecto vive justo en el medio.
+   */
+  it('🔴 apretar un mensaje lo REGISTRA, con el mismo texto que copió', async () => {
+    const decidido = { ...base, id: 22, estado: 'en_revision', compensacion: 'plata_total', monto_total: 13491 } as unknown as ReclamoRow
+    const { copiado, registrado } = await apretar([decidido], 'Msj: resolución')
+    expect(copiado).not.toBe('')
+    expect(registrado).toMatchObject({ action: 'mensaje', tipo: 'resolucion', id: 22 })
+    expect(registrado?.texto).toBe(copiado)
+  })
+
+  /**
+   * ⚠️ Y el `tipo` es **el del momento que se apretó**, ⛔ no uno fijo: si todos registraran
+   * `resolucion` la lista diría que se le mandó tres veces la resolución a alguien a quien se le
+   * mandaron tres mensajes distintos.
+   */
+  it('🔴 cada botón registra SU momento', async () => {
+    const despachado = {
+      ...base, id: 23, estado: 'resuelto', compensacion: 'otro_producto',
+      envio_nuevo_estado: 'hecho', seguimiento_ida: 'IDA9',
+    } as unknown as ReclamoRow
+    const { registrado } = await apretar([despachado], 'Msj: ya lo despachamos')
+    expect(registrado?.tipo).toBe('despacho_hecho')
+  })
+
+  /**
+   * 🔴 🔑 **«El cartel dice lo que PASÓ, ⛔ no lo que se intentó»**, aplicado al registro. El
+   * portapapeles falla seguido y falla callado (ver `lib/portapapeles.ts`); anotar *«se le mandó la
+   * resolución»* sobre un `writeText` rechazado escribe en el único lugar que existe para poder
+   * contestar qué se le prometió al cliente **un hecho que no pasó**.
+   *
+   * ⚠️ El costo elegido está dicho en `QueSeLeDijo`: la lista puede quedar **corta**, y por eso el
+   * vacío lo explica la pantalla en vez de dejar que se lea como «no se le dijo nada».
+   */
+  it('🔴 si el portapapeles RECHAZA, ⛔ no se registra nada', async () => {
+    const decidido = { ...base, id: 22, estado: 'en_revision', compensacion: 'plata_total' } as unknown as ReclamoRow
+    const { registrado } = await apretar([decidido], 'Msj: resolución', 'rechaza')
+    expect(registrado).toBeNull()
+  })
+
   it('🔴 y el botón copia el texto del despacho, ⛔ no el de otro momento', async () => {
     const despachado = {
       ...base, estado: 'resuelto', compensacion: 'otro_producto',

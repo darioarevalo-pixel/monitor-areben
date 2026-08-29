@@ -65,6 +65,47 @@ import {
   trabaParaRecibir as trabaParaRecibirJs,
   unidadesQueVuelven as unidadesQueVuelvenJs,
 } from './unidades.core.js'
+import { MOMENTOS_DEL_MENSAJE as MOMENTOS_DEL_MENSAJE_JS } from './mensajes.core.js'
+
+/**
+ * **Los momentos que se le pueden contar al cliente**, en runtime y tipados.
+ *
+ * La lista vive en `mensajes.core.js` porque la valida el handler, y `api/*.js` ⛔ no puede importar
+ * TypeScript. Acá queda la cara tipada, igual que `EFECTOS_RESOLUCION` y `faltantesParaCerrar`.
+ */
+export type MomentoDelMensaje =
+  | 'pedir_fotos' | 'mas_fotos' | 'propuesta' | 'resolucion'
+  | 'etiqueta_en_camino' | 'etiqueta' | 'despacho_hecho' | 'plata_enviada'
+  | 'detalle_cambio'
+
+export const MOMENTOS_DEL_MENSAJE = MOMENTOS_DEL_MENSAJE_JS as MomentoDelMensaje[]
+
+/**
+ * Cómo se llama cada momento **de cara a quien lee el reclamo**, ⛔ no la clave que se guarda.
+ *
+ * ⚠️ Dice *«se le copió»* y ⛔ no *«se le mandó»*: lo que el sistema vio fue el copiado. Que de ahí
+ * vaya derecho a WhatsApp es la decisión que este módulo ya tomó (`Reclamos.tsx`, el mensaje de
+ * apertura), pero el registro cuenta lo que efectivamente ocurrió de este lado.
+ */
+export const MOMENTO_MENSAJE_LABEL: Record<MomentoDelMensaje, string> = {
+  pedir_fotos: 'Apertura: el link para las fotos',
+  mas_fotos: 'Le pedimos más fotos',
+  propuesta: 'La propuesta de que se lo quede',
+  resolucion: 'La resolución',
+  etiqueta_en_camino: 'La etiqueta va en camino',
+  etiqueta: 'La etiqueta, con su seguimiento',
+  despacho_hecho: 'Ya le despachamos lo suyo',
+  plata_enviada: 'La plata ya salió',
+  detalle_cambio: 'El detalle del cambio',
+}
+
+/** Un mensaje que ya se le mandó al cliente: cuál, cuándo, quién y **con qué texto**. */
+export type MensajeRegistrado = {
+  tipo: MomentoDelMensaje
+  at: string
+  por?: string | null
+  texto: string
+}
 
 // ── Los ejes ────────────────────────────────────────────────────────────────────
 
@@ -2028,8 +2069,13 @@ export type ReclamoRow = {
   /** El número de reclamo al transportista, cuando el pedido se perdió en el camino. */
   reclamo_correo?: string | null
   reclamo_correo_estado?: PendienteEstado
-  /** Lo que se le mandó al cliente, con su texto y su fecha. */
-  mensajes?: { tipo: string; at: string; por?: string | null; texto: string }[]
+  /**
+   * Lo que se le mandó al cliente, con su texto y su fecha.
+   *
+   * ⚠️ **⛔ No viene en el listado**: pesa (283 bytes por mensaje, medido) y lo lee una sola
+   * pantalla. Se pide aparte con `leerMensajes`, como el token. Ver `mensajes.core.js`.
+   */
+  mensajes?: MensajeRegistrado[]
   /**
    * En "pedido mal armado": **lo que le llegó POR ERROR**, o sea lo que sí salió del depósito.
    *

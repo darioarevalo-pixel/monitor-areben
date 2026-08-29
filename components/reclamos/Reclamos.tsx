@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
 import {
-  Button, Card, Chips, CopyButton, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
+  Button, Card, Chips, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, formatMoney, Toolbar, Tabs, KpiCard,
   color, font, space, weight, useConfirmar, useToast, type Tone,
   Instructivo,
@@ -41,6 +41,8 @@ import {
 } from '@/lib/reclamos/tipos'
 import { mensajeApertura, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
 import { mensajesDeLaFila } from '@/lib/reclamos/botones'
+import { BotonMensaje } from './BotonMensaje'
+import { QueSeLeDijo } from './QueSeLeDijo'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { DecidirReclamo } from './DecidirReclamo'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
@@ -266,6 +268,17 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       setGuardando(false)
     }
   }
+
+  /**
+   * **El mensaje salió, pero ⛔ no quedó registrado.**
+   *
+   * 🔑 Se dice, ⛔ no se traga: una lista de «qué se le dijo» incompleta que nadie sabe que está
+   * incompleta se lee después como *«no se le dijo nada»* — el mismo «el cero afirma» que este
+   * módulo viene tapando. Y dice **las dos cosas**, porque copiarse ya se copió: quien lo apretó
+   * tiene el texto en el portapapeles y lo va a pegar igual.
+   */
+  const sinRegistrar = (e: Error) =>
+    toast.error(`El mensaje se copió, pero ⛔ no quedó registrado en el reclamo: ${e.message}`)
 
   /**
    * El mensaje de apertura, con el link del cliente resuelto.
@@ -907,9 +920,11 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                       {/* El mensaje entero, no el link pelado: si solo se copia el link, alguien
                           tiene que escribir el texto alrededor y ahí cada uno promete algo distinto. */}
                       {mensajes.includes('pedir_fotos') && (
-                        <CopyButton
+                        <BotonMensaje
+                          marca={marca} id={d.id} tipo="pedir_fotos"
                           getText={() => textoApertura(d)}
                           onError={(e) => toast.error(e.message)}
+                          onSinRegistrar={sinRegistrar}
                           label="Msj: pedir fotos"
                         />
                       )}
@@ -922,8 +937,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           🔑 **Reemplaza al de resolución mientras la oferta espera**, ⛔ no se le
                           suma: los dos juntos son dos promesas distintas sobre el mismo reclamo. */}
                       {mensajes.includes('propuesta') && (
-                        <CopyButton
+                        <BotonMensaje
+                          marca={marca} id={d.id} tipo="propuesta"
                           getText={() => mensajePropuesta(d, numeroReclamo(d.id))}
+                          onSinRegistrar={sinRegistrar}
                           label="Msj: la propuesta"
                           tone="warning"
                         />
@@ -945,8 +962,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         </>
                       )}
                       {mensajes.includes('resolucion') && (
-                        <CopyButton
+                        <BotonMensaje
+                          marca={marca} id={d.id} tipo="resolucion"
                           getText={() => mensajeResolucion(d, numeroReclamo(d.id))}
+                          onSinRegistrar={sinRegistrar}
                           label="Msj: resolución"
                           tone="brand"
                         />
@@ -957,10 +976,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           este mensaje el reclamo queda mudo justo ahí, y el reloj de «hace N días
                           que no llega» arranca sobre una espera que nunca fue de él. */}
                       {mensajes.includes('etiqueta_en_camino') && (
-                        <CopyButton getText={() => mensajeEtiquetaEnCamino(d, numeroReclamo(d.id))} label="Msj: la etiqueta va en camino" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="etiqueta_en_camino" onSinRegistrar={sinRegistrar} getText={() => mensajeEtiquetaEnCamino(d, numeroReclamo(d.id))} label="Msj: la etiqueta va en camino" tone="neutral" />
                       )}
                       {mensajes.includes('etiqueta') && (
-                        <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="etiqueta" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />
                       )}
                       {/* 🔴 **El único hecho del circuito que no se le contaba al cliente.** El
                           texto existía y estaba probado desde el 27-ago; su único llamador era el
@@ -968,10 +987,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           otro lado no llegaba nada. Sale del pendiente que tilda Depósito, igual
                           que «plata enviada» sale del que tilda Administración. */}
                       {mensajes.includes('despacho_hecho') && (
-                        <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'reenvio')} label="Msj: ya lo despachamos" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="despacho_hecho" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'reenvio')} label="Msj: ya lo despachamos" tone="neutral" />
                       )}
                       {mensajes.includes('plata_enviada') && (
-                        <CopyButton getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="plata_enviada" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
                       )}
                       {/* Un cambio ya está decidido por definición: lo que falta es armarlo, y eso
                           vive en la pestaña Cambios. Ofrecer "Decidir" acá invita a resolverlo dos
@@ -1130,6 +1149,12 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                             ))
                             : <div style={{ fontSize: font.xs, color: color.mut2 }}>Sin movimientos.</div>}
                         </div>
+                        {/* 🔴 **Lo que se le prometió al cliente, que hasta el 29-ago-2026 ⛔ no
+                            quedaba en ninguna parte** (D9). «Qué pasó» de al lado cuenta los
+                            estados; esto cuenta las palabras — y cuando el cliente vuelve diciendo
+                            *«me dijeron otra cosa»*, lo único que había para contestarle era la
+                            memoria de quien atendió. Se pide aparte porque pesa: ver `QueSeLeDijo`. */}
+                        <QueSeLeDijo marca={marca} id={d.id} />
                       </div>
                       {/* 🔑 **La escapatoria de «pedir fotos», y por qué está ACÁ.** El botón de la
                           columna se va apenas llega la primera foto —pedirle de nuevo lo que ya
@@ -1140,9 +1165,11 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           si venció, `textoApertura` lo reemite. */}
                       {mensajes.includes('mas_fotos') && (
                         <div style={{ marginTop: space[3], display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <CopyButton
+                          <BotonMensaje
+                            marca={marca} id={d.id} tipo="mas_fotos"
                             getText={() => textoApertura(d)}
                             onError={(e) => toast.error(e.message)}
+                            onSinRegistrar={sinRegistrar}
                             label="Msj: pedir más fotos"
                             tone="neutral"
                           />

@@ -26,6 +26,8 @@
 //   POST { store, action:'fotos', id, fotos }                    → suma fotos cargadas por el equipo.
 //   POST { store, action:'falla', id, falla_ids }                → linkea las fallas creadas.
 //   POST { store, action:'editar', id, ...campos }               → edita.
+//   GET  ?store=…&vista=mensajes&id=N                            → qué se le dijo al cliente.
+//   POST { store, action:'mensaje', id, tipo, texto }             → apila lo que se le acaba de decir.
 //   POST { store, action:'eliminar', id }                        → borra. ADMIN.
 //
 // ⚠️ **`cambio` y `procesar` NO son de administración, a propósito.** Un cambio no es una decisión
@@ -59,6 +61,9 @@ import { camposAlContestarLaOferta, COLUMNAS_PARA_CERRAR, esEscenarioDe, faltant
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
 import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, sinLaOtraVenta, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
+// Qué se le dijo al cliente y cuándo. ⛔ No se copia acá: la lista de momentos es cerrada, y un
+// `tipo` libre convierte esta columna en un campo de texto.
+import { apilarMensaje } from '../lib/reclamos/mensajes.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -118,11 +123,19 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
   tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
   retencion_respuesta, retencion_monto, retencion_forma, retencion_at, cupon_estado,
-  costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, mensajes, items_correctos,
+  costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
   pagado, cobro_estado, envio_paga, reingreso_estado,
   usuario, historial, created_at, updated_at`.replace(/\s+/g, ' ');
 // El `token` NUNCA sale en los listados: es la llave del link público. Se pide aparte, de a uno.
+//
+// 🔑 **`mensajes` tampoco, y por el otro motivo: PESA.** Es la lista entera de lo que se le dijo al
+// cliente, con el texto adentro. 📊 Medido sobre los 31 mensajes que arma hoy el módulo: **283
+// bytes de promedio, 436 el más largo** ⇒ un reclamo con sus cinco momentos son ~1,4 KB, contra los
+// 1,925 KB que pesa hoy la fila entera — o sea que meterlo acá **duplica el listado**, y el listado
+// baja 200 filas para dibujar una columna que ⛔ no lo usa. Se pide de a uno por `vista=mensajes`,
+// desde el detalle, que es el único lugar donde alguien lee lo que se le dijo. Mismo molde que
+// `vista=token`.
 
 /** El día que el link deja de servir. Un reclamo no debería tardar más que esto. */
 const DIAS_TOKEN = 15;
@@ -199,6 +212,26 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message);
         if (!data) return res.status(404).json({ error: 'no existe ese reclamo' });
         return res.status(200).json({ ok: true, token: data.token || null, vence: data.token_vence || null });
+      }
+
+      // ── Qué se le dijo al cliente, de a uno y a pedido ─────────────────────────
+      //
+      // Sale por su propia vista y ⛔ no en `COLS` porque **pesa** (ver el comentario de `COLS`), y
+      // porque lo lee una sola pantalla: el detalle de la fila, cuando alguien la abre a
+      // preguntarse qué se le prometió.
+      //
+      // ⚠️ **Una lista vacía ⛔ NO quiere decir que no se le dijo nada**: quiere decir que ⛔ no
+      // quedó registrado. La columna la empezó a escribir el 29-ago-2026 y todo lo anterior —los
+      // tres mensajes de R-0022 incluidos— ⛔ no está. Es el mismo «vacío ⛔ no es que no pasó, es
+      // SIN REGISTRAR» de `retencion_respuesta`, y quien lo dice es la pantalla.
+      if (req.query.vista === 'mensajes') {
+        const idMsj = parseInt(req.query.id, 10);
+        if (!idMsj) return res.status(400).json({ error: 'falta id' });
+        const { data, error } = await supabase
+          .from('devoluciones').select('mensajes').eq('store', store).eq('id', idMsj).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) return res.status(404).json({ error: 'no existe ese reclamo' });
+        return res.status(200).json({ ok: true, mensajes: Array.isArray(data.mensajes) ? data.mensajes : [] });
       }
 
       // Lo único que necesita el aviso del sidebar para saber qué está durmiendo (`alertasDe`).
@@ -930,6 +963,38 @@ export default async function handler(req, res) {
       }
       await apilar(supabase, id, { estado: b.estado, at: ahora(), usuario, nota: texto(b.nota) }, { estado: b.estado });
       return res.status(200).json({ ok: true });
+    }
+
+    // ── Lo que se le acaba de decir al cliente ───────────────────────────────────
+    //
+    // 🔴 **La columna `mensajes` existía desde el día uno, estaba en el `select`, y ⛔ no la
+    // escribía nadie** (D9 de la auditoría del 28-ago-2026): R-0022 la traía `[]` después de que se
+    // le mandaron el link, la propuesta y la resolución. De la resolución —donde se promete la
+    // plata— ⛔ no quedaba rastro.
+    //
+    // ⛔ **No pasa por `apilar()`, y ⛔ no es un descuido.** `apilar` mueve `updated_at`, y de ahí
+    // cuentan dos alertas: *«hace N días que la plata no sale»* y *«esperando una decisión hace N
+    // días»*. Copiar el mensaje de resolución **reiniciaría el reloj de que la plata no salió**
+    // justo cuando se le está prometiendo al cliente que va a salir. Es la misma lección que ya
+    // pagó el reloj de «hace N días que no llega». ⛔ Tampoco apila en `historial`: ahí va el
+    // ESTADO en el que la fila queda, y cinco mensajes por reclamo lo llenarían de eventos que no
+    // mueven nada.
+    //
+    // ⛔ **No es de administración**: el que le habla al cliente es el Local, y los cinco botones de
+    // mensaje son suyos. Alcanza con la puerta de Reclamos, que ya se chequeó arriba.
+    if (action === 'mensaje') {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select('mensajes').eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      const r = apilarMensaje(fila.mensajes, { tipo: b.tipo, texto: b.texto, usuario, at: ahora() });
+      if (r.error) return res.status(400).json({ error: r.error });
+      // El mismo texto del mismo momento, pegado al anterior: es un doble click, ⛔ no una segunda
+      // vez que se le contó. Para el que apretó se copió igual, así que esto ⛔ no es un error.
+      if (r.repetido) return res.status(200).json({ ok: true, repetido: true });
+      const { error } = await supabase.from('devoluciones').update({ mensajes: r.mensajes }).eq('store', store).eq('id', id);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, mensajes: r.mensajes.length });
     }
 
     if (action === 'fotos') {

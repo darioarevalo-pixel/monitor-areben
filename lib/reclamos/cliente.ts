@@ -14,6 +14,7 @@ import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
 import { calcularCambio, laFallaDescuentaStock, loQueFaltaDescontar, numeroReclamo } from './tipos'
 import { faltaAnularAntesDeDescontar } from './efectos.core.js'
+import type { MensajeRegistrado, MomentoDelMensaje } from './tipos'
 import { notaVentaTecnica } from './nota'
 import type { RetornoRow } from './retornos'
 import type {
@@ -348,6 +349,44 @@ export async function marcarBajaGN(store: Marca, id: number): Promise<void> {
 
 export async function cambiarEstado(store: Marca, id: number, estado: EstadoReclamo, nota?: string | null): Promise<void> {
   await postear({ action: 'estado', store, id, estado, nota })
+}
+
+/**
+ * **Deja registrado lo que se le acaba de decir al cliente.**
+ *
+ * 🔴 El docstring de `mensajes.ts` promete desde el día uno que *«queda registrado qué se le dijo y
+ * cuándo»*, y la columna ⛔ no la escribía nadie (D9 de la auditoría del 28-ago-2026).
+ *
+ * 🔑 **Se llama cuando el portapapeles ACEPTÓ, ⛔ no cuando se apretó el botón** — de eso se ocupa
+ * el `onCopiado` de `CopyButton`, que es el único punto del kit que sabe la diferencia. Un registro
+ * que dice «se le mandó la resolución» sobre un `writeText` que falló afirma de más justo donde más
+ * duele.
+ *
+ * ⚠️ **El `texto` es el que se copió**, ⛔ no uno rearmado acá: el rótulo del botón y el texto que
+ * sale son dos cosas distintas —ya hubo un botón bien rotulado copiando el mensaje de otro
+ * momento— y lo que hay que guardar es lo que efectivamente se pegó en WhatsApp.
+ */
+export async function registrarMensaje(
+  store: Marca, id: number, tipo: MomentoDelMensaje, texto: string,
+): Promise<void> {
+  await postear({ action: 'mensaje', store, id, tipo, texto })
+}
+
+/**
+ * Qué se le dijo a este cliente, en orden.
+ *
+ * Se pide de a uno y a pedido, como el token: la lista entera con los textos adentro **duplica** el
+ * peso del listado (283 bytes por mensaje, medido sobre los 31 que arma el módulo) y la lee una
+ * sola pantalla, el detalle de la fila.
+ *
+ * ⚠️ **Vacío ⛔ NO es «no se le dijo nada»: es SIN REGISTRAR.** La columna se empezó a escribir el
+ * 29-ago-2026 y todo lo anterior no está. Quien lo tiene que decir es la pantalla.
+ */
+export async function leerMensajes(marca: Marca, id: number): Promise<MensajeRegistrado[]> {
+  const r = await apiFetch(`${API}&vista=mensajes&store=${marca}&id=${id}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => ({}))
+  if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer lo que se le dijo al cliente.')
+  return (d.mensajes || []) as MensajeRegistrado[]
 }
 
 export async function sumarFotos(store: Marca, id: number, fotos: FotoReclamo[]): Promise<void> {

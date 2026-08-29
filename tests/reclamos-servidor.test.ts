@@ -259,3 +259,80 @@ describe('COLUMNAS_PARA_CERRAR contra lo que faltantesParaCerrar lee', () => {
     expect(handler).toContain('COLUMNAS_PARA_CERRAR.join(')
   })
 })
+
+/**
+ * **El registro de lo que se le dijo al cliente, del lado del servidor** (D9 de la auditoría del
+ * 28-ago-2026).
+ *
+ * 🔑 Lo que se fija acá y ⛔ no en el núcleo son las dos decisiones del handler: **quién** puede
+ * (el Local, que es el que le habla al cliente) y **qué NO toca** (`updated_at`, del que cuelgan
+ * dos relojes de alerta).
+ */
+describe('registrar un mensaje', () => {
+  const conMensajes = (mensajes: unknown) => { mundo.fila = { ...LISTO, mensajes } }
+
+  it('lo apila con su momento, su texto y quién lo mandó', async () => {
+    conMensajes([])
+    const res = await postear(LOCAL, { action: 'mensaje', tipo: 'resolucion', texto: 'Te devolvemos $13.491.' })
+    expect(res.code).toBe(200)
+    const m = (mundo.escrito?.mensajes || []) as Array<Record<string, string>>
+    expect(m).toHaveLength(1)
+    expect(m[0].tipo).toBe('resolucion')
+    expect(m[0].texto).toBe('Te devolvemos $13.491.')
+    expect(m[0].por).toBe('bdilocal')
+  })
+
+  /**
+   * 🔴 🔑 **La regla que más cuesta ver, y la que ya se pagó una vez.** `apilar()` mueve
+   * `updated_at`, y de ahí cuentan *«hace N días que la plata no sale»* y *«esperando una decisión
+   * hace N días»* (`alertasDe`). Si copiar el mensaje de resolución moviera la fila, **contarle al
+   * cliente que la plata va a salir reiniciaría el reloj de que la plata no salió**.
+   * ⇒ [[feedback_areben_updated_at_no_mide_la_espera]]
+   */
+  it('🔴 ⛔ NO toca `updated_at`: contarle al cliente ⛔ no reinicia el reloj de lo que falta hacer', async () => {
+    conMensajes([])
+    await postear(LOCAL, { action: 'mensaje', tipo: 'resolucion', texto: 'Te devolvemos todo.' })
+    expect(Object.keys(mundo.escrito || {})).toEqual(['mensajes'])
+  })
+
+  /** ⛔ Tampoco en el historial: ahí va el ESTADO en el que la fila queda, ⛔ no las palabras. */
+  it('⛔ no apila un evento en el historial', async () => {
+    conMensajes([])
+    await postear(LOCAL, { action: 'mensaje', tipo: 'etiqueta', texto: 'Ahí va la etiqueta.' })
+    expect(mundo.escrito?.historial).toBeUndefined()
+  })
+
+  it('un momento que ⛔ no existe es 400, y ⛔ no escribe nada', async () => {
+    conMensajes([])
+    const res = await postear(LOCAL, { action: 'mensaje', tipo: 'lo_que_sea', texto: 'hola' })
+    expect(res.code).toBe(400)
+    expect(mundo.escrito).toBeNull()
+  })
+
+  it('sin texto es 400: un registro sin texto no contesta lo único que vino a contestar', async () => {
+    conMensajes([])
+    const res = await postear(LOCAL, { action: 'mensaje', tipo: 'resolucion', texto: '  ' })
+    expect(res.code).toBe(400)
+    expect(mundo.escrito).toBeNull()
+  })
+
+  /** El doble click: se contesta 200 —el mensaje se copió— y ⛔ no se escribe la entrada repetida. */
+  it('el mismo mensaje pegado al anterior contesta 200 y ⛔ no lo duplica', async () => {
+    conMensajes([{ tipo: 'resolucion', at: new Date().toISOString(), por: 'bdilocal', texto: 'Te devolvemos todo.' }])
+    const res = await postear(LOCAL, { action: 'mensaje', tipo: 'resolucion', texto: 'Te devolvemos todo.' })
+    expect(res.code).toBe(200)
+    expect(res.body?.repetido).toBe(true)
+    expect(mundo.escrito).toBeNull()
+  })
+
+  /**
+   * 🔑 **⛔ No es de administración, y es la mitad negativa de la regla**: el que le habla al
+   * cliente es el Local, y los cinco botones de mensaje son suyos. Gatearlo con `DE_ADMIN` dejaría
+   * el registro vacío justo en los reclamos que sí se atendieron.
+   */
+  it('🔴 lo puede hacer el LOCAL, ⛔ no sólo Administración', async () => {
+    conMensajes([])
+    const res = await postear(LOCAL, { action: 'mensaje', tipo: 'pedir_fotos', texto: 'Mandanos fotos.' })
+    expect(res.code).toBe(200)
+  })
+})

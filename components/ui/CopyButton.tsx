@@ -20,11 +20,23 @@ export type CopyButtonProps = {
   share?: boolean
   /** Qué hacer si `getText` falla. Sin esto el error se traga y el botón no copia nada, en silencio. */
   onError?: (e: Error) => void
+  /**
+   * **Qué hacer cuando el texto SALIÓ de verdad**, con el texto que salió.
+   *
+   * 🔑 Se llama sólo si el portapapeles aceptó (o si la hoja de compartir se completó), ⛔ no
+   * cuando se apretó el botón: es la misma línea que *«el cartel dice lo que PASÓ, no lo que se
+   * intentó»*. Existe porque copiar un mensaje a un cliente ⛔ no es un gesto sin consecuencias —
+   * de acá va derecho a WhatsApp, y de eso tiene que quedar registro (`registrarMensaje`).
+   *
+   * ⚠️ Lo que recibe es **el texto que se copió**, ⛔ no el que el llamador cree que armó: entre
+   * los dos hay un `getText` que puede depender del servidor.
+   */
+  onCopiado?: (texto: string) => void
   // Se omite el `onError` nativo del <button> (evento de carga de recursos): acá significa
   // "no se pudo armar el texto", que es lo único que le importa a quien usa este botón.
 } & Omit<ButtonProps, 'onClick' | 'children' | 'onError'>
 
-export function CopyButton({ getText, label = 'Copiar', copiedLabel = '✓ Copiado', share, onError, variant = 'soft', tone = 'success', size = 'sm', iconLeft = '📋', ...rest }: CopyButtonProps) {
+export function CopyButton({ getText, label = 'Copiar', copiedLabel = '✓ Copiado', share, onError, onCopiado, variant = 'soft', tone = 'success', size = 'sm', iconLeft = '📋', ...rest }: CopyButtonProps) {
   const [done, setDone] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -48,13 +60,13 @@ export function CopyButton({ getText, label = 'Copiar', copiedLabel = '✓ Copia
     }
     // Mobile: hoja de compartir (WhatsApp/mail). Cancelar (AbortError) no es error.
     if (share && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try { await navigator.share({ text }); return } catch (e) { if ((e as Error)?.name === 'AbortError') return }
+      try { await navigator.share({ text }); onCopiado?.(text); return } catch (e) { if ((e as Error)?.name === 'AbortError') return }
     }
     // El «✓ Copiado» sólo se prende si el navegador aceptó de verdad. Si no, `copiarAlPortapapeles`
     // ya le mostró el texto para copiar a mano y el botón se queda como estaba: un tilde sobre un
     // portapapeles vacío es peor que no avisar nada.
-    if (await copiarAlPortapapeles(text)) flash()
-  }, [getText, share, flash, onError])
+    if (await copiarAlPortapapeles(text)) { flash(); onCopiado?.(text) }
+  }, [getText, share, flash, onError, onCopiado])
 
   return (
     <Button variant={variant} tone={done ? 'success' : tone} size={size} iconLeft={done ? '✓' : iconLeft} onClick={() => void onClick()} {...rest} disabled={ocupado || rest.disabled}>
