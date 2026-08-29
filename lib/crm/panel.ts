@@ -11,17 +11,15 @@
  * cuenta, tarde o temprano las dos pantallas dirían números distintos sobre el mismo cliente y no
  * habría forma de saber cuál miente.
  *
- * ⚠️ **El guardado relee el KV justo antes de escribir, y eso es a propósito.**
- * `crm:seg:bdi` se guarda entero en cada POST (ver `lib/kv/cliente.ts`). El panel está pensado para
- * quedarse abierto toda la mañana al costado de WhatsApp, o sea que su copia del mapa envejece
- * horas — y mientras tanto la sección Clientes, en otra pestaña, escribe sobre la misma clave. Con
- * la copia vieja, guardar un contacto acá borraría todo lo que se hizo allá desde que el panel se
- * abrió. Releer cuesta ~100 ms y cierra esa ventana.
+ * ⚠️ **El guardado relee el KV justo antes de escribir, y eso es a propósito.** Vive en
+ * `lib/crm/persistencia.ts` desde el 29-ago-2026 —lo usan las dos pantallas, no sólo ésta— y ahí
+ * está el episodio que lo justifica. En corto: `crm:seg:bdi` se guarda entero en cada POST, el
+ * panel queda abierto toda la mañana al costado de WhatsApp y su copia del mapa envejece horas
+ * mientras la sección Clientes escribe sobre la misma clave. Releer cuesta ~100 ms.
  */
 
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
-import type { MapaLeads } from './leads'
 import { TANDA_FRIOS, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
 import { friosDelDia, listaDelDia, type FilaListaDia } from './lista-dia'
 import type {
@@ -250,48 +248,6 @@ export async function traerAgenda(crmSeg: MapaSeguimiento, today: Date): Promise
     .slice(0, TANDA_FRIOS)
 
   return { ok: true, lista, frios }
-}
-
-export type GuardadoSeg =
-  | { ok: true; mapa: MapaSeguimiento }
-  | { ok: false; motivo: string }
-
-/**
- * Guarda un cambio de seguimiento releyendo el mapa primero.
- *
- * `patch` recibe el mapa **recién leído** y devuelve el mapa nuevo. Se pasa como función y no como
- * objeto ya armado por la misma razón por la que se relee: si el llamador armara el mapa nuevo con
- * su copia vieja, releer no serviría de nada.
- *
- * Si la lectura falla no se escribe: es la regla de `lib/kv/cliente.ts`, y acá pesa más que en
- * ningún lado —el panel es la pantalla que más veces por día toca esta clave—.
- */
-export async function guardarConRelectura(
-  patch: (mapa: MapaSeguimiento) => MapaSeguimiento,
-): Promise<GuardadoSeg> {
-  const previo = await leerMapa<MapaSeguimiento[string]>('crmseg', 'bdi')
-  if (!previo.ok) return { ok: false, motivo: previo.motivo }
-  const mapa = patch(previo.dato)
-  const r = await guardarMapa({ kind: 'crmseg', store: 'bdi', mapa, cargado: true })
-  return r.ok ? { ok: true, mapa } : { ok: false, motivo: r.motivo }
-}
-
-export type GuardadoLeads = { ok: true; mapa: MapaLeads } | { ok: false; motivo: string }
-
-/**
- * Lo mismo para los leads, y por el mismo motivo: `crm:leads:bdi` también se reescribe entera.
- *
- * El panel queda abierto horas mientras la pestaña de Leads, en el CRM, toca la misma clave. Sin
- * la relectura, poner una fecha desde WhatsApp a la tarde pisaría todo lo que se cargó a la mañana.
- */
-export async function guardarLeadsConRelectura(
-  patch: (mapa: MapaLeads) => MapaLeads,
-): Promise<GuardadoLeads> {
-  const previo = await leerMapa<MapaLeads[string]>('crmleads', 'bdi')
-  if (!previo.ok) return { ok: false, motivo: previo.motivo }
-  const mapa = patch(previo.dato)
-  const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa, cargado: true })
-  return r.ok ? { ok: true, mapa } : { ok: false, motivo: r.motivo }
 }
 
 // ── Enganchar un número a un cliente que ya existe ───────────────────────────

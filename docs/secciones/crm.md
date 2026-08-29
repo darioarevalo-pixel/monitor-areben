@@ -187,6 +187,8 @@ mostrada de a un cliente adentro de un iframe al costado del chat.
 - 🔴 **El bloque de leads relee el mapa antes de escribir.** La pestaña Leads tiene su propia
   copia en memoria y guarda el mapa entero: sin la relectura, un clic en el bloque pisaría lo que
   se acabara de hacer allá. Misma disciplina que el panel de WhatsApp.
+  ⚠️ **Y la pestaña Leads NO la tenía** hasta el 29-ago-2026 — el agujero era al revés del que este
+  párrafo cuidaba. Ver el bloque del final.
 - 🔑 **El banco de mensajes se edita desde una VENTANA, no una pestaña** (botón "Mensajes", al
   lado de "Guía de trabajo"). Se retoca cada tanto, no todos los días. **Los grupos los arma el
   que vende**: la división de fábrica (dormido / objeciones / canal) no es la de nadie. Se carga
@@ -788,3 +790,80 @@ la sección que está al día, sobre el mismo dato.
 - `crm-prioridad.test.ts`: el mismo vuelco en la sección, más el test de que **los futuros NO se
   dan vuelta** (mañana sigue antes que dentro de 7 días), que es lo que el valor absoluto podría
   haber roto sin que nadie lo note.
+
+
+---
+
+# 🔴 29-ago-2026 — cuatro guardados correctos borraron 327 marcas
+
+Darío, usando el panel: *"marqué una fecha de recontacto en el panel que luego en el CRM amplio no
+se cargaba"*. Investigándolo apareció algo peor que el síntoma.
+
+## Lo que pasó, reconstruido con ocho dumps consecutivos
+
+El 27-ago se marcaron **327 clientes como 🧊 fríos a las 14:50**. **A las 16:30 no quedaba
+ninguno.** En esa ventana alguien atendió **3 o 4 clientes** desde la pestaña del CRM —notas
+nuevas, fechas de recontacto, un Instagram: trabajo legítimo, guardado bien—. Pero esa pestaña
+estaba abierta desde antes de las 14:50, y **cada guardado posteó el mapa entero de 773 fichas con
+su foto vieja**.
+
+🔑 **Se pudo saber qué pantalla fue**: esa foto ya tenía los 43 descartados (escritos ~13:50) y
+todavía no las temperaturas (14:50), así que se cargó entre esas dos horas y siguió abierta. El
+panel no podía ser: relee milisegundos antes de escribir.
+
+⚠️ **Ningún error, ningún aviso, y el `cargado` no lo cubre**: la lectura inicial fue exitosa. Lo
+que envejeció fue la copia, no el permiso para escribir.
+
+## La asimetría que lo causaba
+
+`guardarConRelectura` existía desde el 23-ago y el docblock decía por qué: *"el panel queda abierto
+horas mientras la sección Clientes escribe sobre la misma clave"*. **Se pensó el problema en una
+sola dirección.** El panel no pisaba a la sección; la sección sí al panel — y la pestaña de Leads
+también.
+
+| Pantalla | Antes | Ahora |
+|---|---|---|
+| Panel de WhatsApp (`crm:seg`) | relee ✅ | relee ✅ |
+| Panel: alta de lead | relee, a mano | `guardarLeadsConRelectura` |
+| `LeadsDelDia` | relee, a mano | `guardarLeadsConRelectura` |
+| **Sección Clientes (`useCRM.guardarSeg`)** | 🔴 **posteaba su copia** | `guardarConRelectura` |
+| **Pestaña Leads (`Leads.persistir`)** | 🔴 **posteaba su copia** | `guardarLeadsConRelectura` |
+
+## El arreglo
+
+**`lib/crm/persistencia.ts`** (nuevo): `guardarConRelectura` y `guardarLeadsConRelectura`, mudadas
+desde `panel.ts`. El nombre importaba: mientras vivieran ahí, que la sección las usara se leía como
+un error, y por eso nadie lo hizo.
+
+🔑 **La firma ES el arreglo.** `guardarSeg` y `persistir` ahora reciben el **patch**, no el mapa ya
+armado. Una firma que aceptara el mapa hecho volvería a abrir el agujero **y se vería igual de
+bien** — que es exactamente lo que pasó: `mutar` en `CRM.tsx` ya escribía patches puros, pero los
+aplicaba contra su copia antes de mandarlos.
+
+- El optimista se aplica sobre la copia local (la tabla responde ya); lo que se **guarda** se arma
+  sobre el mapa recién leído. Son dos mapas distintos a propósito.
+- Al volver el POST el estado se reemplaza por el del servidor, así que **la sección se entera de
+  lo que escribió el panel** sin recargar.
+- ⚠️ Si falla, se revierte a la copia previa. Antes no se revertía: la tabla mostraba un cambio que
+  no se había guardado.
+- ⚠️ **No usar un `ref` para leer la copia local durante el render**: `react-hooks/refs` lo prohíbe
+  con razón. Va como dependencia del `useCallback`.
+
+## Tests — `tests/crm-persistencia.test.ts`
+
+El caso del 27 reproducido: la pantalla guarda sobre el cliente 1 mientras el 2 se marcó frío en el
+servidor, y el POST tiene que salir con **el cambio propio y la marca ajena**.
+
+🔑 **Y uno de arquitectura**: recorre `components/crm/` y `components/panel/` y falla si alguna
+pantalla vuelve a llamar `guardarMapa` con `kind: 'crmseg'` o `'crmleads'`. **Encontró los tres
+casos que quedaban** —`Leads.tsx` con el bug, y `LeadsDelDia`/`PanelWhatsApp` con el patrón copiado
+a mano—, que la revisión a ojo no había visto.
+
+## ⚠️ Lo que este arreglo NO hace
+
+**No recupera las 327 temperaturas**: hay que volver a aplicarlas. Y **no cambia que los fríos
+queden fuera de las listas de trabajo por día** (`sinFrios` en `filtrarOrdenar`, y `listaDelDia` en
+el panel): un cliente frío con fecha a mano sigue apareciendo sólo en 🧊 Recuperar. Lo acordado con
+Darío es **no tocarle la temperatura a nadie al escribirle** —que le hables no lo vuelve activo, y
+el dato dejaría de significar lo que dice— sino **poner filtros por tipo en el panel**
+(frío/tibio/caliente/todos). Eso está sin hacer.

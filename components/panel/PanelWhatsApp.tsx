@@ -9,12 +9,11 @@ import { plazoEnPalabras, ritmoDeCompra } from '@/lib/crm/ritmo'
 import {
   buscarClientesPorNombre,
   buscarFicha,
-  guardarConRelectura,
-  guardarLeadsConRelectura,
   vincularTelefono,
   type FichaPanel,
   type RespuestaPanel,
 } from '@/lib/crm/panel'
+import { guardarConRelectura, guardarLeadsConRelectura } from '@/lib/crm/persistencia'
 import { armarFicha } from '@/lib/crm/panel'
 import {
   agregarNota,
@@ -47,7 +46,7 @@ import {
 } from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
-import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
+import { leerMapa } from '@/lib/kv/cliente'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
 
 /**
@@ -1580,18 +1579,13 @@ function NuevoLead({
   const guardar = async () => {
     if (!nombre.trim() || guardando) return
     setGuardando(true)
-    const previo = await leerMapa<Lead>('crmleads', 'bdi')
-    if (!previo.ok) {
-      setGuardando(false)
-      onError('No se pudo leer los leads, así que no se guarda: guardar ahora eliminaría los que hay.')
-      return
-    }
     const id = nuevoIdLead(Date.now(), Math.random())
     // Sin fecha: se elige en la ficha, que es donde cae al guardar. "Eso lo elijo yo al momento
     // de ver si está frío o caliente" — y en el alta todavía no se sabe.
     const lead: Lead = { ...leadNuevo(id), nombre: nombre.trim(), telefono: tel, ciudad: ciudad.trim(), instagram: instagram.trim() }
-    const mapa: MapaLeads = { ...previo.dato, [id]: lead }
-    const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa, cargado: true })
+    // La relectura la hace `guardarLeadsConRelectura`, igual que el resto de las escrituras del
+    // panel: acá estaba escrita a mano.
+    const r = await guardarLeadsConRelectura((m) => ({ ...m, [id]: lead }))
     setGuardando(false)
     if (!r.ok) {
       onError('No se pudo guardar el lead: ' + r.motivo)

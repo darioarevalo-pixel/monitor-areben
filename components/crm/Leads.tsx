@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
+import { leerMapa } from '@/lib/kv/cliente'
+import { guardarLeadsConRelectura } from '@/lib/crm/persistencia'
 import {
   agregar,
   agregarNota,
@@ -25,10 +26,16 @@ import { Button, Notice, StatusPill, Toolbar, color, useConfirmar } from '@/comp
 /**
  * Vista de Leads. Port de index.html:13936-14247.
  *
- * **Escribe en `crm:leads:bdi`**, que hoy tiene 11 prospectos cargados a mano y
+ * **Escribe en `crm:leads:bdi`**, que hoy tiene 45 prospectos cargados a mano y
  * sin otra copia. Es la segunda escritura que se habilita, después del banco
- * (que no tenía nada que perder). El guardado pasa por `guardarMapa`, que exige
- * el flag `cargado`: sin lectura previa exitosa, el POST no sale.
+ * (que no tenía nada que perder).
+ *
+ * 🔴 **El guardado pasa por `guardarLeadsConRelectura` desde el 29-ago-2026, y antes no.**
+ * `persistir` recibía el mapa YA ARMADO sobre `leads`, que esta pantalla lee una sola vez al
+ * montar: con la pestaña abierta un rato, cada guardado reescribía los 45 prospectos con una foto
+ * vieja y borraba lo que el panel de WhatsApp hubiera cargado mientras tanto. Es el mismo agujero
+ * que se le encontró a la sección Clientes ese día, después de perder 327 marcas por él. Ahora
+ * recibe el PATCH y lo aplica sobre el mapa recién leído — ver `lib/crm/persistencia.ts`.
  *
  * ⚠️ Las notas se borran **por índice posicional** y no tienen id (14216). Por eso
  * acá se muestran **en el orden en que están guardadas**, sin reordenar: si la
@@ -80,11 +87,21 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
     }
   }, [])
 
-  async function persistir(nuevo: MapaLeads) {
-    setLeads(nuevo)
-    const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa: nuevo, cargado })
-    if (!r.ok) setError('No se pudo guardar: ' + r.motivo)
-    else setError(null)
+  /**
+   * ⚠️ Recibe el PATCH, no el mapa. Aplicarlo acá contra `leads` y mandar el resultado sería
+   * volver a abrir el agujero, y se vería exactamente igual de bien.
+   */
+  async function persistir(patch: (m: MapaLeads) => MapaLeads) {
+    const previo = leads
+    setLeads(patch(previo)) // optimista: la lista responde ya
+    const r = await guardarLeadsConRelectura(patch)
+    if (!r.ok) {
+      setLeads(previo)
+      setError('No se pudo guardar: ' + r.motivo)
+      return
+    }
+    setLeads(r.mapa) // el del servidor: trae también lo que cargó el panel
+    setError(null)
   }
 
   const lista = useMemo(
@@ -113,7 +130,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
           title={cargado ? '' : 'El KV no se pudo leer'}
           onClick={() => {
             const id = nuevoIdLead(Date.now(), Math.random())
-            persistir(agregar(leads, id))
+            persistir((m) => agregar(m, id))
             setAbierto(id)
           }}
         >
@@ -218,7 +235,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
                     type="text"
                     value={l[campo]}
                     onChange={(e) => setLeads(setCampo(leads, l.id, campo, e.target.value))}
-                    onBlur={() => persistir(leads)}
+                    onBlur={() => persistir((m) => setCampo(m, l.id, campo, l[campo]))}
                     style={{ width: '100%', marginTop: 2 }}
                   />
                 </label>
@@ -229,22 +246,22 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
               {/* La cadencia salió el 24-ago-2026 (ver `leadEstadoSeg`): cuándo volver lo elige la
                   persona que acaba de hablar, no una regla. "Hablé hoy" agenda a una semana, que
                   es el default de siempre y se corre en el calendario de al lado. */}
-              <Button size="sm" variant="outline" onClick={() => persistir(escribiHoyLead(leads, l.id, 7))}>Hablé hoy</Button>
+              <Button size="sm" variant="outline" onClick={() => persistir((m) => escribiHoyLead(m, l.id, 7))}>Hablé hoy</Button>
               <label style={{ fontSize: 12, color: color.mut }}>Próximo:</label>
-              <input type="date" value={l.proximo_manual || ''} onChange={(e) => persistir(setProximoManual(leads, l.id, e.target.value))} />
+              <input type="date" value={l.proximo_manual || ''} onChange={(e) => { const fecha = e.target.value; void persistir((m) => setProximoManual(m, l.id, fecha)) }} />
             </div>
 
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Notas</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                 <input type="text" placeholder="Agregar nota…" value={nota} onChange={(e) => setNota(e.target.value)} style={{ flex: 1 }} />
-                <Button size="sm" variant="outline" onClick={() => { persistir(agregarNota(leads, l.id, nota)); setNota('') }}>Agregar</Button>
+                <Button size="sm" variant="outline" onClick={() => { persistir((m) => agregarNota(m, l.id, nota)); setNota('') }}>Agregar</Button>
               </div>
               {l.notas.map((n, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${color.bg2}` }}>
                   <span style={{ color: color.mut2, fontSize: 11, minWidth: 64 }}>{fmtFecha(n.fecha)}</span>
                   <span style={{ flex: 1 }}>{n.texto}</span>
-                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar la nota', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina esta nota del lead.' })) persistir(borrarNota(leads, l.id, i)) })()}></Button>
+                  <Button size="sm" variant="ghost" tone="danger" onClick={() => void (async () => { if (await confirmar({ titulo: 'Eliminar la nota', tono: 'danger', ok: 'Eliminar', mensaje: 'Se elimina esta nota del lead.' })) persistir((m) => borrarNota(m, l.id, i)) })()}></Button>
                 </div>
               ))}
               {!l.notas.length && <div style={{ fontSize: 12, color: color.mut2 }}>Sin notas.</div>}
@@ -252,7 +269,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: 12 }}>
               {(['activo', 'comprado', 'descartado'] as EstadoLead[]).map((e) => (
-                <Button key={e} size="sm" variant={l.estado === e ? 'solid' : 'outline'} tone="neutral" onClick={() => persistir(setEstado(leads, l.id, e))}>
+                <Button key={e} size="sm" variant={l.estado === e ? 'solid' : 'outline'} tone="neutral" onClick={() => persistir((m) => setEstado(m, l.id, e))}>
                   {LEAD_ESTADO_LABEL[e]}
                 </Button>
               ))}
@@ -270,7 +287,7 @@ export function Leads({ abrirId }: { abrirId?: string | null } = {}) {
  mensaje: `Se elimina ${l.nombre || 'este lead'} con sus notas y su seguimiento. No hay papelera: no se puede deshacer.`,
  })
  if (ok) {
- persistir(eliminar(leads, l.id))
+ persistir((m) => eliminar(m, l.id))
  setAbierto(null)
  }
  })()

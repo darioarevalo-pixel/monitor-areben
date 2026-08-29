@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
+import { leerMapa } from '@/lib/kv/cliente'
+import { guardarLeadsConRelectura } from '@/lib/crm/persistencia'
 import { Button, color, font, space, useToast } from '@/components/ui'
 import { escribiHoyLead, leadsDelDia, type Lead, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 
@@ -66,26 +67,22 @@ export function LeadsDelDia({
     async (id: string) => {
       if (!cargado || ocupado) return
       setOcupado(id)
-      // 🔴 La relectura, antes de cualquier cosa. Ver el docblock.
-      const previo = await leerMapa<Lead>('crmleads', 'bdi')
-      if (!previo.ok) {
-        setOcupado(null)
-        toast.error('No se pudo leer los leads, así que no se guarda: guardar ahora eliminaría los que hay.')
-        return
-      }
+      // 🔴 La relectura, antes de cualquier cosa. Ver el docblock. La hace
+      // `guardarLeadsConRelectura`, que es la MISMA que usa el panel: acá estaba escrita a mano y
+      // era una copia más del patrón que hay que sostener en todas las pantallas a la vez.
+      //
       // 🔑 Marcar el contacto tiene que AGENDAR algo, si no el lead vuelve a quedar sin fecha y
       // reaparece mañana igual, para siempre (los 25 leads viejos estaban así). Antes esto se
       // resolvía poniéndole una cadencia semanal por atrás; desde que la cadencia salió
       // (24-ago-2026) se agenda derecho a una semana, que era lo que esa cadencia terminaba
       // haciendo. La fecha se corre desde la ficha.
-      const nuevo = escribiHoyLead(previo.dato, id, 7)
-      const r = await guardarMapa({ kind: 'crmleads', store: 'bdi', mapa: nuevo, cargado: true })
+      const r = await guardarLeadsConRelectura((m) => escribiHoyLead(m, id, 7))
       setOcupado(null)
       if (!r.ok) {
         toast.error('No se pudo guardar: ' + r.motivo)
         return
       }
-      setLeads(nuevo)
+      setLeads(r.mapa)
     },
     [cargado, ocupado, toast],
   )

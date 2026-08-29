@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { guardarMapa, leerMapa } from '@/lib/kv/cliente'
+import { leerMapa } from '@/lib/kv/cliente'
+import { guardarConRelectura } from '@/lib/crm/persistencia'
 import { useToast } from '@/components/ui'
 import { traerClientes, traerVentas, type ModoCanal } from '@/lib/crm/datos'
 import { calcularAgregado } from '@/lib/crm/core'
@@ -50,8 +51,15 @@ export type EstadoCRM = {
   /** ¿Se pudo leer el KV? Sin esto en true, ningún guardado puede salir. */
   cargado: boolean
   recargar: () => void
-  /** Persiste un mapa de seguimiento nuevo (optimista + POST del mapa entero). */
-  guardarSeg: (nuevo: MapaSeguimiento) => Promise<boolean>
+  /**
+   * Persiste un cambio de seguimiento.
+   *
+   * 🔴 **Recibe el PATCH, no el mapa ya armado, y esa firma es el arreglo del 29-ago-2026.**
+   * Antes recibía `MapaSeguimiento` y lo posteaba tal cual: el llamador lo armaba sobre `crmSeg`,
+   * que esta pantalla baja UNA vez y no vuelve a leer. Con la pestaña abierta un rato, cada
+   * guardado reescribía las 773 fichas con una foto vieja. Ver `lib/crm/persistencia.ts`.
+   */
+  guardarSeg: (patch: (mapa: MapaSeguimiento) => MapaSeguimiento) => Promise<boolean>
   /** Persiste un mapa de teléfonos nuevo. */
 }
 
@@ -73,6 +81,7 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
   const [today] = useState(() => new Date())
 
   const enCurso = useRef(false)
+
   const recargar = useCallback(() => setTick((t) => t + 1), [])
 
   useEffect(() => {
@@ -149,14 +158,33 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
     [ventas, clientes, crmSeg, crmTelOverride, today],
   )
 
+  /**
+   * 🔑 **El optimista se aplica sobre la copia local; lo que se GUARDA se arma sobre el mapa
+   * recién leído.** Son dos mapas distintos a propósito: el primero es para que la tabla responda
+   * ya, el segundo es el único que puede escribirse sin pisar a nadie. Al volver el POST, el
+   * estado se reemplaza por el del servidor —que trae, además del cambio, todo lo que el panel de
+   * WhatsApp escribió mientras esta pestaña estaba abierta.
+   *
+   * ⚠️ Si falla se revierte a la copia previa. Antes no se revertía: la tabla quedaba mostrando un
+   * cambio que no se había guardado, y el toast de error pasa.
+   *
+   * `cargado` ya no se consulta acá: `guardarConRelectura` no escribe si la relectura falla, que
+   * es la misma garantía y además al día. Sigue viajando hacia afuera para el resto del hook.
+   */
   const guardarSeg = useCallback(
-    async (nuevo: MapaSeguimiento): Promise<boolean> => {
-      setCrmSeg(nuevo) // optimista, como el legacy (renderCRM antes del POST)
-      const r = await guardarMapa({ kind: 'crmseg', store: 'bdi', mapa: nuevo, cargado })
-      if (!r.ok) toast.error('No se pudo guardar el seguimiento: ' + r.motivo)
-      return r.ok
+    async (patch: (mapa: MapaSeguimiento) => MapaSeguimiento): Promise<boolean> => {
+      const previo = crmSeg
+      setCrmSeg(patch(previo)) // optimista, como el legacy (renderCRM antes del POST)
+      const r = await guardarConRelectura(patch)
+      if (!r.ok) {
+        setCrmSeg(previo)
+        toast.error('No se pudo guardar el seguimiento: ' + r.motivo)
+        return false
+      }
+      setCrmSeg(r.mapa)
+      return true
     },
-    [cargado, toast],
+    [crmSeg, toast],
   )
 
   const hoy =

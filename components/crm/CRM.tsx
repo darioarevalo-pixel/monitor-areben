@@ -260,8 +260,10 @@ export function CRM() {
     }
   }
 
-  // Cada edición: transformación pura → persiste el mapa entero (gateado por cargado).
-  const mutar = (fn: (s: MapaSeguimiento) => MapaSeguimiento) => guardarSeg(fn(crmSeg))
+  // Cada edición: transformación pura → `guardarSeg` la aplica sobre el mapa RECIÉN LEÍDO.
+  // ⚠️ No aplicarla acá contra `crmSeg`: esa copia se bajó al abrir la pantalla y postearla
+  // borra lo que el panel de WhatsApp escribió mientras tanto. Ver `lib/crm/persistencia.ts`.
+  const mutar = (fn: (s: MapaSeguimiento) => MapaSeguimiento) => guardarSeg(fn)
   const onDifusion = (id: number, val: boolean) => mutar((s) => setDifusion(s, id, val))
   const onDescartado = (id: number, val: boolean) => mutar((s) => setDescartado(s, id, val))
   const onPagina = (id: number, val: string) => mutar((s) => setPagina(s, id, val))
