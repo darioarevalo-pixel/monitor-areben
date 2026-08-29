@@ -130,9 +130,14 @@ un botón, un título o un cartel de vacío, se lee. El nombre del trabajo, para
   que Bruno dejó afuera de la corrida. Es una decisión suya **ya tomada**, ⛔ no una pendiente. Está
   escrita en el test como **lista de archivos** —y con un segundo test que exige que la excepción
   siga excusando algo— para que el día que se levante se vea exactamente qué entra.
-- **Anunciar los renombres en Novedades** el día que se publiquen: esta app **ya la usa gente**, y un
-  rótulo que cambia de nombre confunde a quien ya lo aprendió. Son ~50 rótulos entre los dos repos.
-  ⚠️ **Bruno pidió hacerla al final, cuando esté TODO**, ⛔ no de a pedazos.
+- 🏁 **La novedad está cargada, y queda de BORRADOR: `n1788020491323_anup1v`.** ▶️ **La publica Bruno
+  de un click**, en `/novedades` → «Sin publicar». Le llega a **todos**, y ⛔ **no va como importante**:
+  📌 medido, las 17 publicadas están las 17 en importante, así que un cartel bloqueante más no
+  distingue nada — y un renombre ⛔ no frena el trabajo de nadie hoy.
+- 🔑 **Lo que la disparó no fue la lista de renombres, sino una novedad YA PUBLICADA**: *«Lo que te
+  piden y no tenemos: **anotalo** desde Atención»* nombra un botón que hoy dice **«Agregar un
+  faltante»**. 📌 Es la regla de la ficha leída al revés, y por eso esa línea es la segunda de la
+  novedad: quien siga la vieja va a buscar una palabra que ya no está.
 - ⚠️ **`tests/crm-paridad.test.ts` sigue con 13 tests en rojo, y ⛔ no son de esta corrida**: se midió
   guardando los cambios aparte y dieron los mismos 13. Estaban rotos de antes.
 
