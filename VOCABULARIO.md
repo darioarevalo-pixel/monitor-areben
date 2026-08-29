@@ -14,6 +14,17 @@ solo. Por eso cada familia dice **la pregunta que decide**, no los casos.
 `'no-salio'`: la regla es del **texto que lee una persona**. Renombrar símbolos es otra pasada, y
 mezclarla acá hace un diff donde no se puede ver qué se le cambió a la gente.
 
+🔴 **Y el caso que YA COSTÓ CARO, porque no se ve: un VERBO DE PROTOCOLO se escribe igual que una
+palabra.** `action: 'borrar-promo'`, `accion: 'contenido-borrar'`, `?recurso=…` son **nombres**, ⛔ no
+texto — y una barrida de vocabulario se los lleva puestos **sin que nada chille**: el typecheck no los
+mira (son strings sueltos a los dos lados), el lint tampoco, y el CI sale verde.
+📌 **28-ago-2026, medido: 19 verbos rotos en el monitor, commiteados y pusheados a main.** El cliente
+mandaba `'eliminar-promo'` y el handler seguía esperando `'borrar-promo'`; la pantalla contestaba
+«acción inválida» y no había un solo rojo.
+⇒ **Lo que lo frena es un test de contrato**, ⛔ no acordarse: *los verbos que manda el cliente ⊆ los
+que conoce el handler* (`tests/contrato-verbos.test.ts`). Y ese test tiene que llevar **un piso de
+cuántos verbos encontró**, o el día que el barrido deje de matchear da verde mirando cero.
+
 ---
 
 ## 1 · Las seis familias

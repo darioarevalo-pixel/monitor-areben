@@ -95,7 +95,7 @@ export function guardarCondiciones(store: Marca, condiciones: Condiciones): Prom
 }
 
 export function borrarCondiciones(store: Marca, ingresoId: string): Promise<void> {
-  return postear({ store, action: 'eliminar-condiciones', ingresoId }, 'No se pudo eliminar.')
+  return postear({ store, action: 'borrar-condiciones', ingresoId }, 'No se pudo eliminar.')
 }
 
 export function guardarMeta(store: Linea, meta: MetaGuardada): Promise<void> {
@@ -103,5 +103,5 @@ export function guardarMeta(store: Linea, meta: MetaGuardada): Promise<void> {
 }
 
 export function borrarMeta(store: Linea, key: string): Promise<void> {
-  return postear({ store, action: 'eliminar-meta', key }, 'No se pudo eliminar la meta.')
+  return postear({ store, action: 'borrar-meta', key }, 'No se pudo eliminar la meta.')
 }

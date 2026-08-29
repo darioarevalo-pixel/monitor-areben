@@ -241,7 +241,7 @@ export async function guardarZona(zona: Partial<ZonaDeReparto>): Promise<void> {
 }
 
 export async function borrarZona(id: string): Promise<void> {
-  await postear({ action: 'zona-eliminar', id }, 'No se pudo eliminar la zona.')
+  await postear({ action: 'zona-borrar', id }, 'No se pudo eliminar la zona.')
 }
 
 /**

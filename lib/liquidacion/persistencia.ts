@@ -159,7 +159,7 @@ export async function estadoItem(store: Marca, liqId: string, pid: string, estad
 
 /** Saca el producto de la campaña. ⚠️ Distinto de descartarlo: descartar deja la huella. */
 export async function quitarItem(store: Marca, liqId: string, pid: string): Promise<void> {
-  await postear({ store, action: 'sacar-item', id: liqId, pid }, 'No se pudo sacar el producto.')
+  await postear({ store, action: 'quitar-item', id: liqId, pid }, 'No se pudo sacar el producto.')
 }
 
 /**

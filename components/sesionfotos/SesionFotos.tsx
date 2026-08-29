@@ -219,7 +219,7 @@ function Contenido({
   const { confirmar, avisar } = useConfirmar()
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
-  const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'sacar-item')
+  const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'quitar-item')
   const puedeEditarDesc = admin || puedeSub(perfil, marca, preset.seccionKey, 'editar-desc')
   const puedeRetiroDep = puedeRetirar(perfil, 'deposito')
   const puedeRetiroLoc = puedeRetirar(perfil, 'local')
