@@ -43,6 +43,7 @@ const Atencion = dynamic(() => import('@/components/atencion/Atencion').then((m)
 const Agenda = dynamic(() => import('@/components/agenda/Agenda').then((m) => m.Agenda), { loading: Cargando })
 const Novedades = dynamic(() => import('@/components/novedades/Novedades').then((m) => m.Novedades), { loading: Cargando })
 const Manuales = dynamic(() => import('@/components/manuales/Manuales').then((m) => m.Manuales), { loading: Cargando })
+const Organizacion = dynamic(() => import('@/components/organizacion/Organizacion').then((m) => m.Organizacion), { loading: Cargando })
 const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), { loading: Cargando })
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
 const Envios = dynamic(() => import('@/components/envios/Envios').then((m) => m.Envios), { loading: Cargando })
@@ -280,6 +281,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   novedades: Novedades,
   // Los manuales. Mismo endpoint que las novedades (`?recurso=sistema`), misma base, sin marca.
   manuales: Manuales,
+  // "Organización": de quién es cada cosa, sin fecha. Misma forma que Manuales y la Agenda —sin
+  // marca, base de BDI, la ve todo el equipo, `editar` es un sub-permiso— pero por su propia
+  // puerta, `?recurso=organizacion`. Es la contracara de la Agenda: aquélla contesta "¿qué me toca
+  // hoy?" y ésta "¿de quién es esto?".
+  organizacion: Organizacion,
   // La agenda operativa: qué corre HOY. Misma forma que las dos de arriba —la ve todo el equipo,
   // cargar es un sub-permiso, sin marca, base de BDI— pero por su propia puerta, `?recurso=agenda`.
   agenda: Agenda,

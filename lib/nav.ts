@@ -172,6 +172,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   agenda: 'agenda',
   novedades: 'novedades',
   manuales: 'manuales',
+  organizacion: 'organizacion',
   gerencial: 'gerencial',
   // El memo lleva `historial` y no un ícono propio a propósito: lo que lo distingue de Gerencial
   // es justamente que tiene pasado. Gerencial es hoy; el memo es la serie de semanas.

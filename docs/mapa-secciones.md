@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-57 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+58 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -62,13 +62,17 @@ local mientras el depósito tiene. ⛔ No es stock de mercadería: un insumo no 
 **Sistema** — `novedades` y `manuales → components/… + lib/…`, los dos por `?recurso=sistema` en
 la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde
 `scripts/novedad.mjs` y se publican a mano; el manual de una sección lo muestra `SeccionHeader`.
+Y `organizacion → components/organizacion + lib/organizacion`, por `?recurso=organizacion`, misma
+base y también sin `store`: quién responde de qué es la misma persona en las dos marcas.
+⚠️ **Es la contracara de la Agenda**: aquélla contesta «¿qué me toca hoy?» y ésta «¿de quién es
+esto?». Tablas `organizacion_nodos` y `organizacion_resp`; el sub-permiso es `organizacion.editar`.
 
 **Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`).
 ⚠️ **Una sección con SEIS entradas de menú** (como Meta): `/agenda` · `/agenda/semana` ·
 `/agenda/mes` · `/agenda/eventos` · `/agenda/rutinas` · `/agenda/cumplimiento`. Las tres últimas
 piden el sub-permiso `agenda.cargar`; la subárea sale del 2º tramo de la URL.
 
-**Sin permiso (las ve todo el equipo)** — `inicio` · `novedades` · `manuales` · `agenda`
+**Sin permiso (las ve todo el equipo)** — `inicio` · `novedades` · `manuales` · `agenda` · `organizacion`
 
 Son las de `KEYS_PARA_TODOS` (`lib/permisos.core.js`), que es lo que consulta `puedeVer`.
 ⚠️ **`usuarios` NO entra**, aunque esté en `KEYS_SIN_PERMISO` de `lib/nav.ts`: es de **admin**. Esta

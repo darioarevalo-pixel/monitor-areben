@@ -166,6 +166,10 @@ ya tienen ficha:
 - Insumos → **leer `docs/secciones/insumos.md`** antes de tocar `components/insumos/`,
   `lib/insumos/` o `api/_insumos.js`. ⛔ **El stock no es una columna: se suma del libro**, y de ahí
   sale el «desde cuándo falta» que es el `ts` del aviso. ⛔ Un traslado son DOS filas.
+- Organización (de quién es cada cosa, sin fecha) → **leer `docs/secciones/organizacion.md`** antes
+  de tocar `components/organizacion/`, `lib/organizacion/` o `api/_organizacion.js`. ⛔ **`persona =
+  null` es una fila válida** —es el gris, y es lo que justifica la sección—, y ⛔ **las rutinas no se
+  copian acá**: se leen de la Agenda.
 - Agenda operativa → **leer `docs/secciones/agenda.md`** antes de tocar `components/agenda/`,
   `lib/agenda/` o `api/_agenda.js`. ⛔ **La ve todo el equipo** (`KEYS_PARA_TODOS`) y **tildar no
   pide permiso**: no hay nada que destrabar. ⛔ Las promos y los pendientes son **un solo motor**

@@ -837,6 +837,23 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "organizacion",
+    "area": "sistema",
+    "label": "Organización",
+    "info": "De quién es cada cosa, sin fecha: el organigrama, de qué responde cada persona, qué decide sola, qué publica y qué NO es suyo — y las que hoy no tiene nadie. Es la contracara de la Agenda: aquélla contesta «¿qué me toca hoy?» y ésta «¿de quién es esto?». LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_PARA_TODOS (lib/permisos.core.js), así que tildar o destildar esta fila NO cambia nada — un reparto que sólo ve quien lo escribió no reparte nada. Lo único que se da acá es el permiso de editar.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "editar",
+        "label": "Puede editar la organización",
+        "info": "Puede cambiar de quién es una responsabilidad, agregar una sin dueña y mover el organigrama. Sin esto sólo se lee — que es lo que necesita el resto del equipo. Alcanza con tenerlo tildado en cualquiera de las dos marcas, porque el reparto no tiene marca. ⚠️ Un sub NO se hereda de la función: si no se lo tildás a alguien a mano, sólo un administrador puede editar."
+      }
+    ]
+  },
+  {
     "key": "agenda",
     "area": "agenda",
     "label": "Agenda",
@@ -888,7 +905,8 @@ export const NAV_CATS: NavCat[] = [
     "label": "Sistema",
     "keys": [
       "novedades",
-      "manuales"
+      "manuales",
+      "organizacion"
     ]
   },
   {

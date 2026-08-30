@@ -506,6 +506,21 @@ const TRAZOS = {
       <path d="m3.8 16.6 4.8-4.4 4 3.6 3.2-2.8 4.4 4" />
     </>
   ),
+  /**
+   * Organización — el organigrama: una caja arriba y dos abajo, unidas.
+   *
+   * A propósito NO es una persona (ése es `usuarios`, que es el padrón y es de admin) ni un
+   * almanaque (ése es `agenda`). Lo que esta sección contesta es de quién es cada cosa, y lo que
+   * la distingue de las dos es justamente la RELACIÓN entre las cajas.
+   */
+  organizacion: (
+    <>
+      <rect x="9" y="3.2" width="6" height="4.4" rx="1.2" />
+      <rect x="2.8" y="16.4" width="6" height="4.4" rx="1.2" />
+      <rect x="15.2" y="16.4" width="6" height="4.4" rx="1.2" />
+      <path d="M12 7.6v4M5.8 16.4v-4.8h12.4v4.8" />
+    </>
+  ),
   /** Usuarios — persona con su ficha. */
   usuarios: (
     <>

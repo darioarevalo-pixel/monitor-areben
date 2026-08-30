@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -23,6 +23,7 @@ import calendario from './_calendario.js';
 import liquidacion from './_liquidacion.js';
 import atencion from './_atencion.js';
 import sistema from './_sistema.js';
+import organizacion from './_organizacion.js';
 import agenda from './_agenda.js';
 import syncTn from './_sync-tn.js';
 import metaRentabilidad from './_meta-rentabilidad.js';
@@ -86,6 +87,11 @@ const RECURSOS = {
   // bancarias no son de BDI ni de Zattia, y por eso sus handlers no validan `store`. En la agenda,
   // que una promo valga sólo para una marca se dice con su columna `marcas`, que es una lista.
   sistema,
+  // "Organización": de quién es cada cosa, sin fecha. Tampoco tiene marca —la misma persona
+  // responde en las dos— y entra por acá y no por un archivo de ruta propio, como todo el resto
+  // (12 funciones de Hobby, hay 7). Es la contracara de `agenda`: aquélla contesta "¿qué me toca
+  // hoy?" y ésta "¿de quién es esto?".
+  organizacion,
   agenda,
   // Ledger del sync de ventas TN→GN (Stunned). Entra por acá y no por un archivo propio en `api/`
   // porque el repo está a 3 funciones del límite del plan Hobby.
