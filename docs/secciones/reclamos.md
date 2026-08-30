@@ -573,8 +573,13 @@ nadie lo haya elegido. **Borrar una opción ⛔ no puede borrar el dato.**
 ⚠️ El ⓘ dejó de explicar «La trae al local»: un texto de ayuda que describe una opción que no está
 es la forma más rápida de que nadie lea el resto.
 
-▶️ **`VIAS_CAMBIO` (`ArmarCambio.tsx`) quedó como estaba** —`andreani`, `correo`, `cadete`—: un
-cambio se arma en el mostrador y ahí el cadete existe. Falta que Bruno confirme si también sale.
+✅ **`VIAS_CAMBIO` se queda con el cadete, y lo confirmó Bruno el 30-ago-2026** (B8): un cambio se
+arma en el mostrador y ahí el cadete existe. 🔑 **La lista se mudó a `tipos.ts`, al lado de
+`VIAS_VIGENTES`**: escritas en dos archivos distintos la diferencia se leía como un descuido, y el
+próximo que la viera la iba a «emparejar». Ahora están juntas, con el porqué, **y fijadas por test**.
+📊 ⚠️ **El dato ⛔ NO podía contestar B8**: medido el mismo día, hay **0 cambios en toda la historia
+de las dos bases** (BDI 2 reclamos y ninguno es cambio, Zattia 0 filas) ⇒ el cero acá ⛔ no significa
+«no se usa», significa **«no hay nada medido»**. La contestó Bruno con lo que sabe del mostrador.
 
 ### La preselección del alta
 

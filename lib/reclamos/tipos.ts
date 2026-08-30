@@ -272,6 +272,26 @@ export const VIA_LABEL: Record<ViaRetorno, string> = {
  */
 export const VIAS_VIGENTES: ViaRetorno[] = ['correo', 'andreani']
 
+/**
+ * **Las vías de un CAMBIO, y son OTRAS a propósito** (B8, decisión de Bruno del 30-ago-2026).
+ *
+ * 🔴 🔑 **La diferencia con `VIAS_VIGENTES` ⛔ no es un olvido, y por eso vive acá y ⛔ no adentro de
+ * `ArmarCambio.tsx`**: un cambio se arma **en el mostrador**, y ahí el cadete existe como forma de
+ * traer el producto de vuelta; un reclamo entra por el circuito de envíos, donde el 27-ago-2026 se
+ * sacó porque **0 filas lo usaban**. Escritas en dos archivos distintos, la diferencia se lee como
+ * un descuido y el próximo que la vea la va a «emparejar» — que es lo que este comentario y su test
+ * están para impedir.
+ *
+ * 📊 **Y el dato ⛔ NO pudo contestar B8**: medido el 30-ago-2026, hay **0 cambios en toda la
+ * historia de las dos bases** (BDI 2 reclamos y ninguno es cambio, Zattia 0 filas) ⇒ el cero acá
+ * ⛔ no significa «no se usa», significa **«no hay nada medido»**. La contestó Bruno con lo que sabe
+ * del mostrador, ⛔ no la tabla.
+ *
+ * ⚠️ **`presencial` ⛔ no está en ninguna de las dos**, y es la que más falta: era lo único que
+ * hacía que el reclamo dijera *«Esperando que lo traiga»* en vez de inventar un envío.
+ */
+export const VIAS_CAMBIO: ViaRetorno[] = ['andreani', 'correo', 'cadete']
+
 /** Las que tienen código de seguimiento. Cadete y presencial no: no hay nada que rastrear. */
 const VIA_CON_SEGUIMIENTO: ViaRetorno[] = ['andreani', 'correo']
 export const pideSeguimiento = (via?: ViaRetorno | null): boolean => !!via && VIA_CON_SEGUIMIENTO.includes(via)

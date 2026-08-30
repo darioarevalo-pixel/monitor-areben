@@ -41,7 +41,7 @@ import {
   leerReclamos, marcarCobrado, marcarDespachado, marcarReingreso, procesarCambio,
 } from '@/lib/reclamos/cliente'
 import {
-  DIAS_CAMBIO, ESTADO_LABEL, estadoEnCriollo, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL,
+  DIAS_CAMBIO, ESTADO_LABEL, estadoEnCriollo, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL, VIAS_CAMBIO,
   calcularCambio, detalleCambioTexto, esCambio, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   numeroEM, numeroReclamo, pagadoPorItem, pideSeguimiento, trackingPortalUrl, trackingUrl,
   type EnvioPaga, type EstadoReclamo, type FormaPago, type ItemReclamo, type MotivoReclamo,
@@ -110,9 +110,6 @@ function Seg<T extends string>({ value, onChange, options }: { value: T; onChang
     </div>
   )
 }
-
-/** Las vías que ofrece el POS. El mostrador (`presencial`) es alcance de Reclamos, no de acá. */
-const VIAS_CAMBIO: ViaRetorno[] = ['andreani', 'correo', 'cadete']
 
 const FILTROS: { key: string; label: string; match: (e: EstadoReclamo) => boolean }[] = [
   { key: 'todos', label: 'Todos', match: () => true },

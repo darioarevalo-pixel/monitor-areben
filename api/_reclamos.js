@@ -66,7 +66,7 @@ import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js
 import { leerCostos } from './_costos.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
-import { camposAlContestarLaOferta, COLUMNAS_PARA_CERRAR, esEscenarioDe, ESTADOS_ABIERTOS, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
+import { camposAlContestarLaOferta, camposAlSoltarLaDecision, COLUMNAS_PARA_CERRAR, esEscenarioDe, ESTADOS_ABIERTOS, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
 // La unidad: qué se espera de cada producto y en qué lista vive lo que vuelve. ⛔ No se copia acá:
 // en un `mal_armado` lo que vuelve es `items_correctos`, y equivocarse escribe en la lista que no es.
 import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnidadVuelve, loQueFaltaDescontar, recibirUnidades, sinLaOtraVenta, trabaParaRecibir } from '../lib/reclamos/unidades.core.js';
@@ -555,10 +555,14 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: `Esta decisión ya se está ejecutando (${yaHecho.join(' · ')}): no se puede soltar.` });
       }
       const era = fila.compensacion;
+      // 🔑 **Qué se borra vive en el NÚCLEO** (`camposAlSoltarLaDecision`), ⛔ no en esta línea:
+      // hasta el 30-ago-2026 acá se soltaba sólo `compensacion` y los pendientes, y los montos, el
+      // destino y la vía quedaban en la fila — la decisión vieja seguía escrita en las columnas
+      // que la contaban (B3). La regla es del reclamo, ⛔ no de este handler.
       await apilar(
         supabase, id,
         { estado: 'en_revision', at: ahora(), usuario, nota: `se soltó la decisión para rehacerla (era: ${era})` },
-        { compensacion: null, estado: 'en_revision', ...pendientesDe({ compensacion: null }) },
+        camposAlSoltarLaDecision(fila),
       );
       return res.status(200).json({ ok: true, estado: 'en_revision', era });
     }

@@ -857,3 +857,29 @@ antes de rehacerlo.
   🔴 ▶️ **NO deployado**: el commit está sin pushear y la pantalla ⛔ no se caminó en el navegador
   —el login pide contraseña—; los tres números que cambian se ven en **Reclamos → Decidir → El
   producto**.
+
+- ✅ 🏁 **B3 y B8: las dos últimas decisiones de post-venta, contestadas ⇒ NO QUEDA NINGUNA**
+  (30-ago-2026). El relato en `docs/secciones/reclamos.md` y en la § 3 de
+  `docs/postventa-auditoria-2026-08-28.md`, que **queda cerrada entera: las ocho**.
+  **B3 · «Volver a decidir» ahora borra la decisión ENTERA.** La línea es **qué se DECIDIÓ contra
+  qué se MIDIÓ**: se van los cuatro montos, `costo_caso`, `retorno_sugerido`, `devolver_envio`,
+  `destino_prenda`, `via_retorno`, `cupon_codigo` y los dos booleanos del retorno; **se quedan** el
+  flete, el PVP de feria, `items_correctos`, el escenario **y la oferta de retención** (eso ya lo
+  decidió B1: *«contestarla siempre se puede»*).
+  🔴 🔑 **Y se borra el destino POR UNIDAD del jsonb junto con la columna**: `destinoDeUnidad` es
+  `item.destino || fila.destino_prenda`, así que borrar sólo la columna dejaba a las unidades con
+  destino propio contestando por una decisión que ya nadie sostiene ⇒ **media decisión borrada**.
+  📊 **Lo que hizo barata la respuesta**: `DecidirReclamo` ⛔ **no prefila ninguno** de los campos que
+  se borran (los ocho `useState` que leen la fila son otros) ⇒ limpiarlos ⛔ no le saca nada a nadie.
+  ⚠️ **Hoy ninguno se leía con la decisión soltada** —los cuatro caminos vivos están gateados por
+  `compensacion`, por los pendientes o por `estado`— y eso ⛔ **no era razón para dejarlos**: una
+  columna que dice «lo que costó el caso» sobre un reclamo sin decisión **afirma**. La invariante
+  quedó **fijada por test** (`tests/reclamos-soltar-decision.test.ts`).
+  **B8 · un CAMBIO sí sale por cadete** y la diferencia con Reclamos es **a propósito** ⇒ la lista
+  se mudó de `ArmarCambio.tsx` a `tipos.ts`, **al lado de `VIAS_VIGENTES`**, con el porqué y fijada
+  por test: escritas en dos archivos distintos, el próximo que viera la diferencia la iba a
+  «emparejar». 📊 ⚠️ **El dato ⛔ NO pudo contestarla**: **0 cambios en toda la historia de las dos
+  bases** ⇒ el cero acá significa «no hay nada medido», ⛔ no «no se usa».
+  ⛔ **Sin migración** · **12 mutantes, 12 muertos + 2 controles vivos** (uno tenía el **ancla
+  repetida** —estaba en las dos funciones del archivo— y hubo que re-apuntarlo antes de leerlo).
+  ▶️ **De post-venta queda SÓLO que se use**: 2 reclamos en BDI, 0 en Zattia.

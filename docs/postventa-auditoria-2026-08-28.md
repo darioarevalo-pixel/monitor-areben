@@ -419,18 +419,22 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 ---
 
-## 3. Decisiones de Bruno que faltan (⛔ no son defectos)
+## 3. Decisiones de Bruno ~~que faltan~~ (⛔ no son defectos)
+
+✅ 🏁 **LAS OCHO CONTESTADAS.** B1 y B2 el 28/30-ago; **B4, B5, B6, B7, B3 y B8 el 30-ago**. ⇒ de
+post-venta ⛔ no queda ninguna decisión abierta: lo que falta es **que el módulo se use** (BDI tiene
+2 reclamos y Zattia 0).
 
 | | la pregunta | por qué no la contesta el código |
 |---|---|---|
 | ~~**B1**~~ | ✅ **Contestada el 30-ago**: *«se parte en dos — armar la oferta exige la decisión, contestarla siempre se puede»* ⇒ ⛔ no hizo falta ningún freno nuevo (`decidir` ya pide `compensacion`); lo que se arregló fue que el rechazo sin decisión **deje de dejar la fila muda** (D4) | — |
 | ~~**B2**~~ | ✅ **Contestado el 28-ago**: *«sería como hoy, pero la venta técnica sale de nosotros: la escribimos desde el Monitor, y sólo Admin tendría que ir a cancelarla»* ⇒ `plata_parcial` sigue anulando, y los dos movimientos van **en ese orden** (D1) | — |
-| **B3** | ¿«Volver a decidir» tiene que borrar también los **montos**? | hoy deja `monto_total`, `costo_caso`, `retorno_sugerido`, `destino_prenda` y `via_retorno` |
+| ~~**B3**~~ | ✅ **Contestado el 30-ago: sí, y la decisión ENTERA.** La línea es «qué se decidió» contra «qué se midió»: se van los montos, el costo, el destino —**y el destino por unidad del jsonb**, porque borrar sólo la columna deja media decisión—, la vía y el cupón; se quedan el flete, el PVP de feria y **la oferta de retención** (eso es B1). 📊 Salió barato porque `DecidirReclamo` ⛔ no prefila ninguno de los que se borran. Vive en `camposAlSoltarLaDecision` (`casos.core.js`) | — |
 | ~~**B4**~~ | ✅ **Contestado el 30-ago**: el piso pasa a ser un **MÚLTIPLO de lo que sale traerlo** (`MULTIPLO_PISO_RETORNO = 2`) y ⛔ no un monto por marca — el monto fijo vivió en `null` en las dos desde que existió, y un corte en pesos al lado del flete envejece solo. 🔴 **Da vuelta el caso testigo de BDI**: $12.000 recuperables contra $7.500 de costo pasan de «conviene» a «apenas empata». Relato en `docs/secciones/reclamos.md` § «Las cuatro decisiones» | — |
 | ~~**B5**~~ | ✅ **Contestado el 30-ago: $1.500 por unidad**, igual en las dos marcas (`COSTO_OPERATIVO_RETORNO`). El parámetro pasó a ser **obligatorio y por unidad**. 🔴 **Prenderlo destapó que el envío SIN CARGAR valía cero**: la pantalla lo aplastaba con `Number(x) \|\| 0` y con el costo en 0 el error se leía como veredicto prudente ⇒ `falta: 'envio'` | — |
 | ~~**B6**~~ | ✅ **Contestado el 30-ago: ×2** (`MULTIPLO_CUPON`, `ofertaSegunForma`). Convierte **el techo Y el sugerido**, y avisa —⛔ no traba— cuando el monto se pasa del techo | — |
 | ~~**B7**~~ | ✅ **Confirmados el 30-ago tal como estaban.** ⚠️ **Confirmado ⛔ no es medido**: se confirmaron sin un solo caso cerrado del que sacarlos (BDI tenía 2 reclamos, Zattia 0), y eso quedó escrito en `DIAS_ALERTA` | — |
-| **B8** | ¿Un **cambio** sale por cadete? | `VIAS_CAMBIO` (`ArmarCambio.tsx`) lo sigue ofreciendo; Reclamos lo sacó el 27-ago (`VIAS_VIGENTES`) |
+| ~~**B8**~~ | ✅ **Contestado el 30-ago: sí, en un cambio el cadete existe** — se arma en el mostrador. La diferencia con Reclamos es **a propósito**, así que `VIAS_CAMBIO` se mudó a `tipos.ts` al lado de `VIAS_VIGENTES`, con el porqué y **fijada por test** para que nadie las «empareje». 📊 ⚠️ El dato ⛔ no podía contestarla: **0 cambios en la historia de las dos bases** | — |
 
 ---
 

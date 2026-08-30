@@ -15,7 +15,7 @@ import {
   admiteDevolucionParcial, itemsQueFaltaron, pvpFeriaSugerido, resumenDeLoDecidido,
   faltantesDeLaDecision, loQueTraba, estadoDelPaso, registroDeRetencion, puedeRehacerseLaDecision, pasoGuardado, loEjecutado,
   botonDecidir, estaDecidido, PASOS_DECISION, PASO_LABEL,
-  EFECTOS_RESOLUCION, ENTRADAS_DEL_COSTO, costoDeLaFila, montoADevolver, faltaAnularAntesDeDescontar, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIA_LABEL, type Compensacion, type FormaRetencion,
+  EFECTOS_RESOLUCION, ENTRADAS_DEL_COSTO, costoDeLaFila, montoADevolver, faltaAnularAntesDeDescontar, pendientesDe, saleUnEnvio, DESTINO_LABEL, destinosDe, preseleccionDelAlta, VIAS_VIGENTES, VIAS_CAMBIO, VIA_LABEL, type Compensacion, type FormaRetencion,
   type ReclamoRow, type ItemReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
 
@@ -2461,6 +2461,24 @@ describe('los defaults del alta', () => {
     expect(VIAS_VIGENTES).toEqual(['correo', 'andreani'])
     expect(VIA_LABEL.cadete).toBeTruthy()
     expect(VIA_LABEL.presencial).toBeTruthy()
+  })
+
+  /**
+   * 🔴 🔑 **B8 (Bruno, 30-ago-2026): un CAMBIO sí sale por cadete, y la diferencia es A PROPÓSITO.**
+   * Un cambio se arma en el mostrador y ahí el cadete existe; un reclamo entra por el circuito de
+   * envíos, donde se sacó porque 0 filas lo usaban. Escritas en dos archivos distintos, la
+   * diferencia se leía como un descuido — este caso está para que el próximo que la vea ⛔ no la
+   * «empareje». 📊 El dato ⛔ no podía contestarlo: 0 cambios en la historia de las dos bases.
+   */
+  it('un cambio ofrece cadete y un reclamo ⛔ no: la diferencia es deliberada', () => {
+    expect(VIAS_CAMBIO).toContain('cadete')
+    expect(VIAS_VIGENTES).not.toContain('cadete')
+    // ⚠️ Y ⛔ ninguna de las dos ofrece «la trae al local», que es la que más falta.
+    expect(VIAS_CAMBIO).not.toContain('presencial')
+  })
+
+  it('toda vía ofrecida, en cualquiera de las dos listas, tiene rótulo', () => {
+    for (const v of [...VIAS_VIGENTES, ...VIAS_CAMBIO]) expect(VIA_LABEL[v], v).toBeTruthy()
   })
 
   // ⚠️ Las dos que quedan tienen código de seguimiento ⇒ ya no hay retorno sin envío que rastrear.
