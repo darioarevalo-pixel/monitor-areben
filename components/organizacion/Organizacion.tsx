@@ -108,7 +108,20 @@ export function Organizacion() {
   const arbolNodos = useMemo(() => arbol(nodos), [nodos])
   const losGrises = useMemo(() => grises(resp), [resp])
 
-  const apodoDe = useCallback((name: string) => equipo?.find((c) => c.name === name)?.apodo || name, [equipo])
+  /**
+   * Cómo le decimos.
+   *
+   * 🔑 **El label del organigrama es el segundo mejor nombre, antes que el `name` crudo.** Las
+   * cuentas de PUESTO no tienen apodo en el padrón, así que sin esto la matriz sacaba columnas que
+   * decían «local» y «bdilocal» — que es la clave del sistema, no cómo le dice nadie. Con el label
+   * dicen «Local Zattia» y «Local BDI», que es lo que se lee en la pared.
+   * ⚠️ El orden importa: el apodo del padrón manda, porque es el que la persona eligió.
+   */
+  const apodoDe = useCallback((name: string) => (
+    equipo?.find((c) => c.name === name)?.apodo
+    || nodos.find((n) => n.persona === name)?.label
+    || name
+  ), [equipo, nodos])
   const cuantasDe = useCallback((persona: string) => deLaPersona(resp, persona).length, [resp])
   /**
    * El oficio de la persona, que en el organigrama es la nota del nodo.
@@ -257,6 +270,7 @@ export function Organizacion() {
                     filas={deLaPersona(resp, quien)}
                     manuales={manuales}
                     rutinas={rutinas}
+                    haceHorasExtras={!!equipo?.find((c) => c.name === quien)?.horasExtras}
                     puedeEditar={puede.editar}
                     onEditar={setEditando}
                     onEliminar={eliminar}
