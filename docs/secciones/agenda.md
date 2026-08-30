@@ -11,10 +11,80 @@ fechas comerciales. La Agenda es operativa.
 
 ## Dónde vive
 
-`components/agenda/` (~1.900 líneas, `Agenda.tsx` es la que orquesta y las otras nueve son las
-piezas) · `lib/agenda/` · handler `api/_agenda.js` por `datos.js?recurso=agenda` · tablas
-`agenda_promos`, `agenda_items` y `agenda_hechos`, **siempre en la base de BDI** · test
-`tests/agenda.test.ts`.
+`components/agenda/` (`Agenda.tsx` **sólo elige qué pantalla montar**; las otras son las piezas) ·
+`lib/agenda/` · handler `api/_agenda.js` por `datos.js?recurso=agenda` · tablas `agenda_promos`,
+`agenda_items` y `agenda_hechos`, **siempre en la base de BDI** · test `tests/agenda.test.ts`.
+
+## 🆕 SEIS pantallas, ⛔ ninguna pestaña (29-ago-2026)
+
+La sección dejó de ser una entrada con cuatro pestañas y pasó a ser **una categoría-módulo del
+menú**, como Meta y Tienda Nube: `keys: []` + `items` en `lib/nav.datos.ts`, la subárea sale del **2º
+tramo de la URL** y `Agenda.tsx` sólo monta la que corresponda (mismo patrón que `Tncat.tsx`).
+
+| entrada | ruta | pantalla | quién la ve |
+|---|---|---|---|
+| Hoy | `/agenda` | `Agenda.tsx` (`Hoy`) | todo el equipo |
+| Semana | `/agenda/semana` | `GrillaAgenda vista="semana"` | todo el equipo |
+| Mes | `/agenda/mes` | `GrillaAgenda vista="mes"` | todo el equipo |
+| Eventos | `/agenda/eventos` | `Eventos.tsx` | `agenda.cargar` |
+| Rutinas | `/agenda/rutinas` | `Rutinas.tsx` | `agenda.cargar` |
+| Cumplimiento | `/agenda/cumplimiento` | `Cumplimiento.tsx` | `agenda.cargar` |
+
+**Qué lo motivó** (Bruno caminó la sección): *«Hoy y Mes están bastante claras. Al ir a Cargar
+aparece el quilombo: las actividades repetidas son un quilombo de buscar, la vista plana es muy
+larga, no le veo escalabilidad. Y cada vez que sumamos una función aparece un botón arriba a la
+derecha que no sé si es un disparador»*.
+
+Lo medido detrás de eso:
+
+- 🔴 **«Cargar» era una lista plana alfabética** (`.order('titulo')`) con **tres poblaciones**: 33
+  rutinas y avisos, **44 actividades** de los cuatro eventos, y todo lo que los eventos van copiando.
+- 🔴 **Lo copiado ⛔ no se borra nunca**: no hay purga en el handler —los únicos `delete` son por id,
+  a mano— así que esa lista **sólo crecía**: 6 renglones por ingreso, 11 por lanzamiento, 8 por
+  sesión, 5 por cambio de condición. A los 120 días el renglón deja de arrastrar, pero **se queda en
+  la lista**.
+- 🔴 **La barra de arriba a la derecha crecía sola y mostraba la mitad**: un botón por evento *con
+  botón* (dos de los cuatro), mezclados con los tres de crear. Los otros dos eventos no aparecían en
+  ningún lado, porque los prende su propia pantalla.
+
+🔑 **Las tres poblaciones se cortan en el núcleo y ⛔ no en la pantalla** (`rutinasYAvisos`,
+`actividadesDe`, `porHecho` en `lib/agenda/index.ts`): una pantalla que se olvida de un filtro ⛔ no
+falla, **se llena**, y para cuando se nota ya nadie la mira. Fijado en `tests/agenda.test.ts`.
+
+### Evento y actividad: las palabras (decisión de Bruno, 29-ago-2026)
+
+**Evento** es el hecho que deja trabajo; **actividad** es cada renglón que ese evento copia. Antes se
+llamaban *disparador* y *molde*. ⚠️ **Cambió sólo lo que se lee en pantalla**: en el código y en
+`datos` siguen siendo `plantilla`, `PLANTILLAS`, `campoClave` y `esPlantilla` — renombrarlos obligaría
+a migrar las 44 filas cargadas, y la clave de idempotencia ⛔ no se toca.
+
+### Lo que hacía falta para agrupar lo copiado
+
+El clon ya guardaba `datos.de` y la clave *«para el día que la pantalla quiera agrupar por hecho»*,
+pero **eso no llegaba al navegador**. Ahora el clon guarda además `datos.hecho = { nombre, fecha }`
+—al lado de la clave, ⛔ nunca adentro— y el GET lo expone como `item.sembrado`. Los clones viejos no
+lo traen: `hechoDelClon()` los lee de la clave (`fecha·nombre`), y si ni eso, cae al nombre crudo.
+🔑 **Un grupo con nombre feo se arregla mirando; un renglón que no entra en ningún grupo desaparece
+de la pantalla**, y ése es el modo de falla que no se puede tener.
+
+### ⚠️ Cómo leer lo que sigue de esta ficha
+
+Todo lo anterior al 29-ago-2026 nombra la pantalla vieja. La traducción, de una vez:
+
+| decía | es |
+|---|---|
+| la pestaña «Cargar» | las pantallas **Rutinas** (lo que corre solo) y **Eventos** (lo demás) |
+| «Nuevo pendiente» | **+ Rutina**, en Rutinas; **+ Actividad**, en la tarjeta del evento |
+| molde / plantilla (en pantalla) | **actividad** de un **evento** |
+| el chip «Moldes» | ⛔ ya no existe: esa población está en Eventos |
+| la pestaña «Mes» con su chip de vista | las entradas **Mes** y **Semana** |
+
+### La inconsistencia que se cerró sola
+
+🔴 El tilde **«Queda hasta que se tilde / Se vence con el día»** de una actividad ⛔ **no viajaba**
+—el clon nace siempre con `arrastra: true`— pero era **la puerta del campo de al lado**, el tope, que
+sí viaja. O sea: para ponerle tope a lo copiado había que prender un interruptor que se ignora. En el
+formulario de actividad ese tilde ya no está y el tope se pide solo.
 
 🆕 **La pregunta de la puerta** vive en `lib/agenda/pregunta-ingreso.core.js` y la abre
 `api/_oc-webhook.js`; la contesta `action: 'ingreso-puerta'` y la dibuja `PendientesHoy.tsx`.
@@ -133,11 +203,13 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     yapa, lo que sale de los ítems son **exactamente las opciones que devuelven filas**.
   - 🔴 **Una clave que no matchea devuelve CERO filas, ⛔ nunca todas.** Caer a «mostrá todo» es lo
     que hace creer que se revisó lo de una persona mirando la lista completa.
-  - 🔑 **Un molde NO cuenta como pendiente** aunque su `clase` lo sea: no corre ningún día, así que
-    mezclarlo con las rutinas lo deja arriba de la lista todos los días. Tiene su propio chip.
-  - 🔴 **La pestaña se mudó a la URL** (`useFiltroUrl('t','hoy')`). Era `useState`, así que recargar
-    con un filtro puesto devolvía a «Hoy» **con el filtro aplicado en una pestaña que ya no se
-    miraba** — el bug exacto que Canjes pagó y arregló (`docs/secciones/canjes.md`).
+  - 🔑 **Un molde NO cuenta como pendiente** aunque su `clase` lo sea: no corre ningún día. 🆕 Desde
+    el 29-ago **ni siquiera llega a esa lista** (`rutinasYAvisos`) y el chip que lo separaba se fue
+    con él.
+  - 🔴 **La pestaña se mudó a la URL** (`useFiltroUrl('t','hoy')`), porque recargar con un filtro
+    puesto devolvía a «Hoy» con el filtro aplicado en una pestaña que ya no se miraba — el bug
+    exacto que Canjes pagó y arregló (`docs/secciones/canjes.md`). 🆕 Hoy **no hay pestañas**: cada
+    pantalla es una entrada del menú con su dirección, que resuelve lo mismo por otro camino.
 - 🆕 🔑 **CUMPLIMIENTO DICE DE QUIÉN ERA LO QUE NO SE HIZO** (26-ago-2026, pedido de Bruno). El dato
   ya viajaba (`FilaCumplimiento.item.destino`) y no se dibujaba: el renglón sin tildar decía qué
   rutina y qué día, y para saber a quién reclamarle había que salir a «Cargar» y buscarla.
@@ -227,8 +299,8 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     dueña de cada uno cambia cuando cambia la gente, y así cambiarla es editar un ítem en vez de
     hacer un deploy.
   - 🔴 **Un molde NO corre**: lo filtra `vaEl()`, así que no sale en Hoy, no enciende el badge, no
-    entra en el Mes ni en Cumplimiento. Se lo ve —con su chapita— sólo en «Cargar», que es donde se
-    lo edita.
+    entra en el Mes ni en Cumplimiento. 🆕 Se lo ve y se lo edita en **la tarjeta de su evento**
+    (`/agenda/eventos`), que es su único lugar.
   - **El clon nace `unica` con la fecha del ingreso + los días del molde, y ARRASTRA**: un paso del
     lanzamiento que se evapora al día siguiente es justo el que «se cae porque nadie lo mira». ⛔ Y
     no queda marcado como molde, o se clonaría a sí mismo en el próximo ingreso.
@@ -466,8 +538,10 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     un link compartido significaría otro mes mañana. 🔴 Y el `offset` **cambia de unidad** al
     cambiar de vista ⇒ se resetea a 0, o «tres meses adelante» se vuelve «tres semanas adelante» en
     silencio.
-  - ⚠️ **No se llama `Calendario.tsx`** (ya existe el editorial de Marketing) y la pestaña se sigue
-    llamando **«Mes»**: si arrancara en semana, mentiría al llegar.
+  - ⚠️ **No se llama `Calendario.tsx`** (ya existe el editorial de Marketing). 🆕 Y desde el 29-ago
+    **Mes y Semana son dos entradas del menú**: la vista entra por parámetro y el chip que la
+    cambiaba se fue — mirando la semana, la pestaña seguía diciendo «Mes». 🔴 El `offset` sigue
+    volviendo a 0 al cambiar, pero ahora porque `Agenda.tsx` **remonta** la grilla con un `key`.
 
 ## 🆕 La PREGUNTA DE LA PUERTA: el disparador del ingreso, prendido por el webhook de OC
 
@@ -659,7 +733,8 @@ así que puede que esto no se prenda hasta que Gerardo mande el primer evento en
 siembra, montado y apretado), `tests/agenda-disparadores.test.ts` (los disparadores y
 su puerta) — 🆕 **el segundo es el primero que prueba `api/_agenda.js`**, que hasta el 24-ago-2026
 no tenía ninguno — y las dos de pantalla, con `renderToStaticMarkup` sobre las piezas puras:
-`tests/agenda-cumplimiento-pantalla.test.tsx` y 🆕 `tests/agenda-grilla.test.tsx`. 🆕 El disparo de
+`tests/agenda-cumplimiento-pantalla.test.tsx`, `tests/agenda-grilla.test.tsx` y 🆕
+`tests/agenda-eventos.test.tsx` (la fila de una actividad y el grupo de lo copiado). 🆕 El disparo de
 la sesión de fotos —cuándo siembra y, sobre todo, **cuándo NO**— vive en
 `tests/solicitudes-siembra.test.ts`, porque su puerta es `api/_solicitudes.js` y no la Agenda.
 
@@ -671,7 +746,7 @@ mitades: el núcleo puro y la acción que la contesta. El cable con el webhook e
 Lo que el test **no** ejerce y hay que caminar a mano:
 
 - Un día **con** promo y un día **sin** promo son dos pantallas distintas, y la de «sin» es la que
-  se rompe callada: cargá una promo de prueba en «Cargar» y mirá «Hoy» en los dos estados.
+  se rompe callada: cargá una promo de prueba en **Rutinas** y mirá «Hoy» en los dos estados.
 - **El tilde con un perfil que NO es admin**, que es quien la va a usar todos los días. Con el admin
   todo anda porque saltea el sub.
 - El `destino`: un pendiente ajeno **no** tiene que encender el badge del menú.
@@ -680,7 +755,7 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   el badge del menú cuente lo mismo, y que **un solo tilde lo apague**. Después mirá Cumplimiento:
   tiene que haber **una** fila, no una por semana.
 - 🆕 **El tope del arrastre**: al mismo pendiente ponele «Hasta cuántos días después» en **2** y mirá
-  que en el listado de «Cargar» el renglón deje de decir *«queda hasta que se tilde»* y diga *«queda
+  que en el listado de **Rutinas** el renglón deje de decir *«queda hasta que se tilde»* y diga *«queda
   hasta 2 días después»*. Después dejalo pasar: al tercer día el renglón **y el badge** tienen que
   bajar solos, y en Cumplimiento esa ocurrencia tiene que seguir apareciendo sin hacer. ⚠️ El campo
   **sólo se dibuja si el ítem arrastra**: apagando el arrastre desaparece, que es lo correcto.
@@ -689,8 +764,15 @@ Lo que el test **no** ejerce y hay que caminar a mano:
   tests el filtro siempre vale «todos». Tiene que decir *«Nada de esa persona cayó en estos días»*,
   ⛔ **no** *«todavía no hay ninguna ocurrencia»* — eso último sería mentira en una pantalla que sí
   las tiene.
-- 🆕 **Los filtros de «Cargar», después de un F5.** Filtrá por alguien, recargá, y tienen que volver
-  **el filtro y la pestaña**. Y tipear en el buscador ⛔ no puede navegar (es `replaceState`).
+- 🆕 **Los filtros de «Rutinas», después de un F5.** Filtrá por alguien, recargá, y tiene que volver
+  **el filtro**. Y tipear en el buscador ⛔ no puede navegar (es `replaceState`).
+- 🆕 **Las seis entradas del menú, con los DOS perfiles.** Con `agenda.cargar` se ven las seis; sin
+  él, **tres** — y entrando a `/agenda/eventos` a mano tiene que caer en «Hoy», ⛔ no en blanco.
+- 🆕 **El modal de una actividad, que es lo único del rediseño que ningún test monta** (necesita la
+  sesión): abierto desde la tarjeta de un evento ⛔ no puede dibujar los días de la semana ni el
+  tilde de arrastre, y sí «Cuándo va» y el eje. Abierto desde «+ Rutina», al revés.
+- 🆕 **Semana y Mes, el `offset`.** Movete tres meses en Mes, pasá a Semana: tiene que arrancar en la
+  semana de hoy, ⛔ no tres semanas adelante.
 - 🆕 **El calendario, cuatro recorridos.** (1) Un mes **con muchas rutinas**: los días de rutina
   tienen que verse tranquilos y el día con algo excepcional tiene que saltar; abrí ese día y el
   detalle tiene que listar **todo** lo que la celda resumió. (2) Un **mes flaco**: que no se vea

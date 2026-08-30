@@ -149,7 +149,10 @@ const SIMBOLOS = new Set([
  * una pantalla entera se quede sin la palabra sin que nada falle.
  */
 const QUE_ELIMINAN = [
-  'components/agenda/Agenda.tsx',
+  // ⚠️ La Agenda se partió en seis pantallas el 29-ago-2026: el gesto de eliminar se fue de
+  // `Agenda.tsx` —que hoy sólo elige cuál montar— a las dos que administran algo.
+  'components/agenda/Eventos.tsx',
+  'components/agenda/Rutinas.tsx',
   'components/atencion/Atencion.tsx',
   'components/buzon/Buzon.tsx',
   'components/canjes/BloqueEntregables.tsx',

@@ -125,6 +125,13 @@ export type PantallaDePlantilla = {
 export type Plantilla = {
   key: string
   evento: string
+  /**
+   * El título de la tarjeta en Eventos. ⚠️ ⛔ No es `evento`: ése va **adentro de una frase** («no
+   * hay ningún paso cargado de ingreso») y como título pelado no dice de qué.
+   */
+  nombre: string
+  /** Qué prende este evento, en una línea. Hasta el 29-ago-2026 vivía sólo en los comentarios. */
+  comoSePrende: string
   elHecho: string
   delHecho: string
   campoClave: string
@@ -257,12 +264,132 @@ export function promosDe(
  * se apaga. Lo que corre entre dos fechas se dice con `{tipo:'rango'}`, que es la regla.
  */
 /**
- * ¿Es un molde y no una rutina? Un molde existe para que el disparador del ingreso lo clone: no
- * corre ningún día, no enciende el badge y no entra en Cumplimiento. Se lo ve y se lo edita en
- * «Cargar», que es su único lugar.
+ * ¿Es una **actividad de un evento** y no una rutina? Existe para que el evento la copie con su
+ * fecha: ⛔ no corre ningún día, no enciende el badge y no entra en Cumplimiento. Se la ve y se la
+ * edita en la tarjeta de su evento, que es su único lugar.
+ *
+ * ⚠️ **Se sigue llamando `esPlantilla` y el campo sigue siendo `item.plantilla`**: la palabra que
+ * cambió es la de la pantalla, ⛔ no la clave que ya está escrita en 44 filas de la base.
  */
 export function esPlantilla(item: ItemAgenda): boolean {
   return !!item.plantilla
+}
+
+/**
+ * ¿Este pendiente lo **copió un evento**? (`datos.hecho` del clon, ver `api/_agenda.js`.)
+ *
+ * 🔑 Es la tercera población de `agenda_items`, y hasta el 29-ago-2026 no se distinguía de una
+ * rutina en ningún lado: los clones caían en la misma lista plana de «Cargar» y ⛔ **nadie los borra
+ * nunca**, así que esa lista sólo crecía —6 por ingreso, 11 por lanzamiento, 8 por sesión—. Acá se
+ * separan una vez y se miran por evento, que es la pregunta real: *«¿qué quedó abierto del IMP2?»*.
+ */
+export function esSembrado(item: ItemAgenda): boolean {
+  return !!item.sembrado
+}
+
+/**
+ * Lo que se carga y se edita a mano en **Rutinas**: ⛔ ni las actividades de un evento ni lo que un
+ * evento ya copió.
+ *
+ * 🔴 **El corte va acá y ⛔ no adentro de la pantalla** por lo mismo que los filtros: es una
+ * decisión sobre los datos —qué población se administra en cuál pantalla— y se fija con vitest. Una
+ * pantalla que se olvida de uno de los dos cortes no falla: se llena.
+ */
+export function rutinasYAvisos(items: ItemAgenda[]): ItemAgenda[] {
+  return items.filter((i) => !esPlantilla(i) && !esSembrado(i))
+}
+
+/**
+ * Las actividades cargadas en un evento, **en el orden en que se van a copiar**.
+ *
+ * 🔑 Es el mismo orden que usa el servidor al sembrar (`api/_agenda.js`): por `offsetDias` y, a
+ * igual día, por título. Que la tarjeta las muestre en otro orden que el que después sale sembrado
+ * sería la pantalla contando otra historia que la base.
+ */
+export function actividadesDe(items: ItemAgenda[], plantilla: string): ItemAgenda[] {
+  return items
+    .filter((i) => i.plantilla === plantilla)
+    .sort((a, b) => (a.offsetDias ?? 0) - (b.offsetDias ?? 0) || a.titulo.localeCompare(b.titulo, 'es'))
+}
+
+/** Un hecho que ya copió sus actividades: el ingreso «IMP2» del 26-ago y los renglones que dejó. */
+export type GrupoSembrado = {
+  /** La clave de idempotencia del clon. Es la identidad del grupo. */
+  clave: string
+  /** Cómo se llamó el hecho al cargarlo («IMP2»). */
+  nombre: string
+  /** La fecha del hecho, ⛔ no la del renglón: los renglones caen con su offset alrededor de ésta. */
+  fecha: FechaIso
+  items: ItemAgenda[]
+  /**
+   * Cuántos de esos renglones siguen sin tildar. 🔴 **`null` ⛔ no es cero**: quiere decir que este
+   * hecho es más viejo que la ventana de tildes que baja el servidor (`DIAS_ARRASTRE`), así que
+   * desde acá ⛔ **no se puede afirmar nada** — y un cero dibujado ahí diría «está todo hecho», que
+   * es la afirmación más cara de esta pantalla. Lo viejo se mira en Cumplimiento.
+   */
+  sinTildar: number | null
+}
+
+/**
+ * Lo que un evento ya copió, **agrupado por hecho** y lo más nuevo primero.
+ *
+ * 🔑 El dato para agrupar ya lo escribía el clon desde el 24-ago-2026 (`datos.de` + la clave)
+ * *«para el día que la pantalla quiera agrupar por hecho»*; lo que faltaba era que llegara al
+ * navegador. Los renglones de adentro van por fecha, que es el orden en que se hacen.
+ */
+export function porHecho(
+  items: ItemAgenda[],
+  hechos: Hecho[],
+  hoy: FechaIso,
+  plantilla?: string,
+): GrupoSembrado[] {
+  const m = new Map<string, Omit<GrupoSembrado, 'sinTildar'>>()
+  for (const i of items) {
+    const s = i.sembrado
+    if (!s || (plantilla && s.evento !== plantilla)) continue
+    const ya = m.get(s.clave)
+    if (ya) ya.items.push(i)
+    else m.set(s.clave, { clave: s.clave, nombre: s.nombre, fecha: s.fecha, items: [i] })
+  }
+  // Desde dónde los tildes VIAJAN: más atrás que esto el servidor no los baja, así que un renglón
+  // sin tilde ahí no quiere decir que esté sin hacer. Es la misma ventana que usa el arrastre.
+  const desde = sumarDias(hoy, -VENTANA_ARRASTRE)
+  return [...m.values()]
+    .map((g) => {
+      const items = g.items.sort((a, b) => fechaDe(a).localeCompare(fechaDe(b)))
+      return {
+        ...g,
+        items,
+        sinTildar: g.fecha < desde ? null : items.filter((i) => !hechoDe(hechos, i.id, fechaDe(i))).length,
+      }
+    })
+    .sort((a, b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+/**
+ * La fecha de un renglón copiado. Nace siempre como `{tipo:'unica'}` (lo fija `api/_agenda.js`), y
+ * el vacío ordena al final en vez de romper: un renglón sin fecha es un dato roto, ⛔ no un crash.
+ */
+function fechaDe(i: ItemAgenda): string {
+  return i.regla.tipo === 'unica' ? i.regla.fecha : '9999-12-31'
+}
+
+/**
+ * A los cuántos días del hecho corre una actividad, **en castellano**.
+ *
+ * ⚠️ Vive acá y ⛔ no adentro de la fila porque lo dibujan dos pantallas —la tarjeta del evento y el
+ * modal— y porque un `-2` se lee como un error de carga: «2 días antes del ingreso» se lee solo. El
+ * artículo sale del catálogo (`delHecho`) y ⛔ no se compone, que es lo que ya decidió el catálogo.
+ */
+export function rotuloOffset(plantilla: Plantilla, dias: number | null | undefined): string {
+  const d = dias ?? 0
+  if (d === 0) return `el día ${plantilla.delHecho}`
+  // ⚠️ El 1 va escrito y ⛔ no sale del plural: «a los 1 día del ingreso» es lo que salía de
+  // componerlo, y se lee como un texto sin terminar.
+  if (d === 1) return `al día siguiente ${plantilla.delHecho}`
+  if (d > 1) return `a los ${d} días ${plantilla.delHecho}`
+  if (d === -1) return `el día antes ${plantilla.delHecho}`
+  return `${-d} días antes ${plantilla.delHecho}`
 }
 
 export function vaEl(item: ItemAgenda, fecha: FechaIso): boolean {
@@ -701,8 +828,15 @@ export function feriadoDe(fecha: FechaIso): string | null {
 // 🔑 Va en el núcleo y no adentro de la pantalla para que se pueda fijar con vitest: son decisiones
 // sobre los datos (qué cuenta como molde, con qué claves se filtra), no sobre cómo se dibujan.
 
-/** Qué clase de ítem es, para el chip de «qué es». */
-export type FiltroClase = 'todos' | 'pendiente' | 'aviso' | 'molde'
+/**
+ * Qué clase de ítem es, para el chip de «qué es».
+ *
+ * ⚠️ **Ya no existe `'molde'`** (29-ago-2026): las actividades de un evento se administran en su
+ * tarjeta y lo que un evento copió se mira por hecho, así que esta lista es sólo rutinas y avisos
+ * —lo filtra `rutinasYAvisos()` antes de llegar acá—. Un chip para una población que no está en la
+ * lista devuelve cero y se lee como que se perdió algo.
+ */
+export type FiltroClase = 'todos' | 'pendiente' | 'aviso'
 /** Prendido, apagado, o los dos. */
 export type FiltroEstado = 'todos' | 'activos' | 'apagados'
 
@@ -715,15 +849,8 @@ export type FiltroItems = {
   estado?: FiltroEstado
 }
 
-/**
- * 🔑 **Un molde NO cuenta como pendiente**, aunque su `clase` lo sea.
- *
- * Es la lectura que sirve: un molde no corre ningún día (lo filtra `vaEl`), así que quien filtra
- * «pendientes» está buscando lo que efectivamente le toca a alguien alguna vez. Mezclarlos deja los
- * moldes del ingreso arriba de la lista de rutinas todos los días.
- */
+/** Pendiente o aviso. Las otras dos poblaciones ya no llegan acá: ver `rutinasYAvisos()`. */
 function claseDe(i: ItemAgenda): Exclude<FiltroClase, 'todos'> {
-  if (esPlantilla(i)) return 'molde'
   return i.clase === 'aviso' ? 'aviso' : 'pendiente'
 }
 

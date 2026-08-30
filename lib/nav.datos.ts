@@ -868,8 +868,18 @@ export const NAV_CATS: NavCat[] = [
     "id": "agenda",
       "icono": "agenda",
     "label": "Agenda",
-    "keys": [
-      "agenda"
+    // 🔑 **Una categoría-módulo**, como Meta: `keys` va vacío y las seis pantallas cuelgan de
+    // `items`, todas de la sección `agenda`. Antes era una entrada sola con cuatro pestañas adentro,
+    // y «Cargar» había juntado tres poblaciones distintas en una lista plana que sólo crecía. Las
+    // tres de administración piden el sub-permiso `cargar`, que ya existía: el mostrador ve tres.
+    "keys": [],
+    "items": [
+      { "ruta": "/agenda", "label": "Hoy", "icono": "agenda", "key": "agenda" },
+      { "ruta": "/agenda/semana", "label": "Semana", "icono": "calendario", "key": "agenda" },
+      { "ruta": "/agenda/mes", "label": "Mes", "icono": "calendario", "key": "agenda" },
+      { "ruta": "/agenda/eventos", "label": "Eventos", "icono": "etapas", "key": "agenda", "sub": "cargar" },
+      { "ruta": "/agenda/rutinas", "label": "Rutinas", "icono": "check", "key": "agenda", "sub": "cargar" },
+      { "ruta": "/agenda/cumplimiento", "label": "Cumplimiento", "icono": "historial", "key": "agenda", "sub": "cargar" }
     ]
   },
   {

@@ -235,6 +235,16 @@ describe('sembrar: los renglones salen de los moldes, no del código', () => {
     expect(datos.ingreso).toBe('2026-08-24·imp2')
   })
 
+  it('🔑 el clon guarda de QUÉ HECHO salió, que es con lo que la pantalla los agrupa', async () => {
+    await desdeAfuera()
+    const datos = mundo.insertados[0].datos as Record<string, unknown>
+    // ⚠️ Al lado de la clave y ⛔ no adentro: `datos.ingreso` es la llave de idempotencia y no se
+    // toca. El nombre va aparte porque la clave de la sesión de fotos es un id opaco, y partir
+    // `fecha·nombre` con una regex sería adivinarle la forma a una llave que existe para comparar.
+    expect(datos.de).toBe('ingreso')
+    expect(datos.hecho).toEqual({ nombre: 'IMP2', fecha: '2026-08-24' })
+  })
+
   it('el clon arrastra SIN TOPE: lo que tarda un ingreso no se puede decir de antemano', async () => {
     await desdeAfuera()
     expect((mundo.insertados[0].datos as Record<string, unknown>).arrastraDias).toBeUndefined()

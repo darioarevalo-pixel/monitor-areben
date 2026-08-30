@@ -108,7 +108,7 @@ describe('el modal del hecho: la copia y los campos salen del catálogo', () => 
 
   it('sin moldes cargados lo dice y ⛔ no ofrece sembrar nada', async () => {
     await abrir('condicion', [])
-    expect(texto()).toContain('Todavía no hay ningún paso cargado como molde')
+    expect(texto()).toContain('Todavía no hay ninguna actividad cargada en este evento')
     expect(selects()).toHaveLength(0)
   })
 

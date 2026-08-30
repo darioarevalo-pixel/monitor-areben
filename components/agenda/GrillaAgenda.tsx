@@ -24,13 +24,24 @@
  * pueda saltar; en la semana la celda es alta, entra todo y **no se colapsa nada**.
  *
  * ⚠️ **No se llama `Calendario.tsx`**: ya existe `components/calendario/Calendario.tsx`, que es el
- * editorial de Marketing, por marca y de fechas comerciales. La pestaña sigue llamándose «Mes» y la
- * vista por defecto es el mes: si arrancara en semana, la pestaña mentiría al llegar.
+ * editorial de Marketing, por marca y de fechas comerciales.
+ *
+ * # La vista entra por parámetro (29-ago-2026)
+ *
+ * Antes vivía en un chip adentro de esta pantalla, y la pantalla era la pestaña **«Mes»**: o sea que
+ * mirando la semana la pestaña seguía diciendo «Mes», que fue exactamente la queja —*«capaz que
+ * agregaría una pestaña que sea semanal, en vez de que en la vista Mes pueda cambiarse a semanal
+ * pero igual sea pestaña Mes»* (Bruno)—. Ahora son **dos entradas del sidebar** con su dirección
+ * (`/agenda/semana`, `/agenda/mes`) y esto sólo dibuja la que le pidan.
+ *
+ * 🔴 **El `offset` sigue siendo local y sigue arrancando en 0 al cambiar de vista**, porque cambia
+ * de unidad (meses ↔ semanas): lo garantiza el `key` con el que `Agenda.tsx` monta este componente
+ * —cambiar de entrada lo remonta—, ⛔ no un `if` acá adentro.
  */
 
 import { useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, Card, Chips, color, font, radius, space, useFiltroUrl, weight } from '@/components/ui'
+import { Button, Card, color, font, radius, space, weight } from '@/components/ui'
 import {
   entradasDelMes,
   entradasDeRango,
@@ -59,22 +70,11 @@ const TOPE_CELDA = 3
 
 export type Vista = 'mes' | 'semana'
 
-const VISTAS = [
-  { key: 'mes' as const, label: 'Mes', title: 'Todo el mes, con las rutinas contadas' },
-  { key: 'semana' as const, label: 'Semana', title: 'Los siete días, con todo nombrado' },
-]
-
-export function GrillaAgenda() {
+export function GrillaAgenda({ vista }: { vista: Vista }) {
   const { marca } = useSesion()
   const { promos, items, hechos } = useAgenda()
-  // 🔴 Sólo la vista va a la URL. El `offset` **no**: (1) `useFiltroUrl` está tipado `T extends
-  // string`, así que un `?off=abc` entraría como `NaN` y blanquearía la grilla; (2) es relativo a
-  // hoy, así que un link compartido significa otro mes mañana — una URL que dice algo distinto cada
-  // día miente; (3) es navegación, no filtro.
-  const [vistaUrl, setVistaUrl] = useFiltroUrl<Vista>('vista', 'mes')
-  // Cualquier cosa que no sea «semana» es el mes: la URL la escribe cualquiera y un valor inventado
-  // tiene que caer en la vista por defecto, ⛔ no en una grilla vacía.
-  const vista: Vista = vistaUrl === 'semana' ? 'semana' : 'mes'
+  // 🔴 El `offset` ⛔ no va a la URL: (1) es relativo a hoy, así que un link compartido significaría
+  // otro mes mañana — una URL que dice algo distinto cada día miente; (2) es navegación, no filtro.
   const [offset, setOffset] = useState(0)
   /** El día abierto abajo de la grilla. En el celular la celda no alcanza para leer nada. */
   const [abierto, setAbierto] = useState<string | null>(null)
@@ -82,21 +82,14 @@ export function GrillaAgenda() {
   const hoy = hoyIso()
 
   /**
-   * Moverse, y cambiar de vista.
+   * Moverse un mes o una semana.
    *
-   * 🔴 **El `offset` cambia de unidad al cambiar de vista** (meses ↔ semanas) ⇒ al cambiar se
-   * resetea a 0. Si no, «tres meses adelante» se vuelve «tres semanas adelante» en silencio. Es el
-   * mismo motivo por el que cambiar de mes cierra el día abierto: sin eso, el detalle del 12 de
-   * agosto se queda abajo mientras la grilla muestra septiembre, y la tarjeta gana porque es la que
-   * tiene texto — el mismo renglón que existe para desambiguar, mintiendo.
+   * ⚠️ **Cierra el día abierto**: sin eso, el detalle del 12 de agosto se queda abajo mientras la
+   * grilla muestra septiembre, y la tarjeta gana porque es la que tiene texto — el mismo renglón
+   * que existe para desambiguar, mintiendo.
    */
-  const irA = (v: Vista, n: number) => {
-    if (v !== vista) {
-      setVistaUrl(v)
-      setOffset(0)
-    } else {
-      setOffset(n)
-    }
+  const irA = (n: number) => {
+    setOffset(n)
     setAbierto(null)
   }
 
@@ -118,15 +111,12 @@ export function GrillaAgenda() {
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-        <Button size="sm" variant="ghost" onClick={() => irA(vista, offset - 1)}>‹</Button>
+        <Button size="sm" variant="ghost" onClick={() => irA(offset - 1)}>‹</Button>
         <div style={{ fontSize: font.md, fontWeight: weight.bold, minWidth: 170, textAlign: 'center' }}>
           {vista === 'mes' ? `${MESES[mes - 1]} ${anio}` : rotuloSemana(desde, hasta)}
         </div>
-        <Button size="sm" variant="ghost" onClick={() => irA(vista, offset + 1)}>›</Button>
-        {offset !== 0 && <Button size="sm" variant="ghost" onClick={() => irA(vista, 0)}>Hoy</Button>}
-        <div style={{ marginLeft: 'auto' }}>
-          <Chips opciones={VISTAS} value={vista} onChange={(v) => irA(v, 0)} />
-        </div>
+        <Button size="sm" variant="ghost" onClick={() => irA(offset + 1)}>›</Button>
+        {offset !== 0 && <Button size="sm" variant="ghost" onClick={() => irA(0)}>Hoy</Button>}
       </div>
 
       {vista === 'mes' ? (

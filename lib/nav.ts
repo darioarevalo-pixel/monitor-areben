@@ -358,7 +358,7 @@ export function tituloDesde(key: string, grupoId?: string | null): string {
  */
 export const DESCRIPCIONES: Record<string, string> = {
   inicio: 'Novedades del día: solicitudes de fotos pendientes de armar.',
-  agenda: 'Qué corre hoy: las promociones bancarias vigentes, con sus condiciones y cómo se cobran.',
+  agenda: 'Qué corre hoy y qué hay que hacer: las promociones bancarias, las rutinas del día y el trabajo que deja cada evento.',
   novedades: 'Qué cambió en los sistemas, de lo más nuevo a lo más viejo.',
   manuales: 'Cómo se hace cada cosa: los procedimientos de trabajo, escritos.',
   usuarios: 'Usuarios del equipo y qué ve cada uno, por marca y por sección.',

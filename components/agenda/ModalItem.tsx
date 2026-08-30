@@ -1,7 +1,21 @@
 'use client'
 
 /**
- * El alta de un pendiente rutinario **o de un aviso fechado**.
+ * El alta de una **rutina**, de un **aviso fechado** o de una **actividad de un evento**.
+ *
+ * # Las dos caras, y por qué la actividad ya ⛔ no se elige al final (29-ago-2026)
+ *
+ * Hasta acá era un solo formulario con un desplegable **abajo de todo** —«Qué es este renglón»—:
+ * se contestaban los días, el destino, el arrastre y su tope, y recién ahí se decía que en realidad
+ * lo que se estaba cargando ⛔ no corre ningún día. Los días quedaban dibujados con un cartelito al
+ * lado avisando que no se usan, y el arrastre **se pedía y no viajaba** (el renglón copiado nace
+ * siempre arrastrando, `api/_agenda.js`): había que prender un interruptor que se ignora para poder
+ * cargar el tope, que sí viaja.
+ *
+ * Ahora **el evento entra por parámetro** —lo pone la tarjeta desde la que se abrió— y el
+ * formulario se arma sabiendo qué es: sin `plantilla` es la rutina de siempre; con `plantilla` ⛔ no
+ * se dibujan ni los días ni el arrastre, y sí el «a los cuántos días» y el eje, que antes vivían al
+ * fondo.
  *
  * 🔑 **La regla de carga es que la rutina obvia no se carga.** Abrir la caja no va acá: entra sólo lo
  * que se olvida. Si la lista de "Hoy" tuviera quince renglones todos los días, en dos semanas nadie
@@ -50,8 +64,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Field, Input, Modal, Notice, Select, color, font, space, weight } from '@/components/ui'
 import {
-  CLASES, DIAS_ARRASTRE, FUNCION_TECHO, hoyIso, PLANTILLAS, plantillaDe, veLoDeArriba,
-  type ClaseItem, type Destino, type ItemAgenda,
+  CLASES, DIAS_ARRASTRE, FUNCION_TECHO, hoyIso, plantillaDe, veLoDeArriba,
+  type ClaseItem, type Destino, type ItemAgenda, type Plantilla,
 } from '@/lib/agenda'
 import { nuevoIdItem } from '@/lib/agenda/cliente'
 import { todasLasKeys, tituloLimpio } from '@/lib/nav'
@@ -118,12 +132,38 @@ export function itemVacio(clase: ClaseItem = 'pendiente'): ItemAgenda {
   }
 }
 
+/**
+ * Una actividad nueva de un evento: es un pendiente que ⛔ **no corre ningún día**.
+ *
+ * 🔑 Nace con la plantilla puesta y con la regla que le va a servir al renglón copiado —un día
+ * puntual—, ⛔ no con la semanal sin días de una rutina: esa regla nunca se usa en una actividad
+ * (el clon nace con la fecha del hecho) pero **el validador del handler la mira igual**, y una
+ * semanal sin ningún día tildado se rechaza.
+ */
+export function actividadVacia(plantilla: Plantilla): ItemAgenda {
+  return {
+    ...itemVacio('pendiente'),
+    plantilla: plantilla.key,
+    regla: { tipo: 'unica', fecha: hoyIso() },
+    // El día 0 es el caso normal —el paso va el día del hecho— y acá sí es un default honesto: el
+    // campo se dibuja siempre, así que nadie lo contesta sin verlo.
+    offsetDias: 0,
+  }
+}
+
 export function ModalItem({
   inicial,
+  plantilla,
   onCerrar,
   onGuardar,
 }: {
   inicial: ItemAgenda
+  /**
+   * El evento del que es actividad este renglón, cuando se abrió desde su tarjeta. `undefined` = es
+   * una rutina o un aviso. ⚠️ Lo manda la pantalla y ⛔ no se elige adentro: quién abre el modal
+   * sabe qué se está cargando, y preguntarlo al final era el desorden que esto vino a arreglar.
+   */
+  plantilla?: Plantilla
   onCerrar: () => void
   onGuardar: (i: ItemAgenda) => Promise<void>
 }) {
@@ -141,8 +181,13 @@ export function ModalItem({
   const pedida = useRef(false)
 
   const set = <K extends keyof ItemAgenda>(k: K, v: ItemAgenda[K]) => setIt((x) => ({ ...x, [k]: v }))
-  // La plantilla del ítem, si es molde. `null` = es una rutina normal y corre sola.
-  const plant = plantillaDe(it.plantilla)
+  /**
+   * El evento del que es actividad. ⚠️ Sale del **parámetro** y ⛔ ya no de `it.plantilla`: es el
+   * dato que decide la forma del formulario, así que no puede cambiar mientras se escribe. Se cae a
+   * lo que traiga el ítem para poder abrir una actividad vieja desde cualquier lado.
+   */
+  const plant = plantilla ?? plantillaDe(it.plantilla)
+  const esActividad = !!plant
 
   // Por nombre y no por el orden del menú: acá se busca una pantalla, no se navega por sectores.
   const secciones = useMemo(
@@ -217,6 +262,9 @@ export function ModalItem({
         ...it,
         titulo: it.titulo.trim(),
         cuerpo: it.cuerpo && it.cuerpo.trim() ? it.cuerpo : null,
+        // 🔑 El evento lo pone quien abrió el modal, ⛔ no el ítem: así una actividad no puede
+        // guardarse como rutina por haber llegado con el campo vacío.
+        ...(plant ? { plantilla: plant.key } : {}),
       })
       onCerrar()
     } catch (e) {
@@ -234,9 +282,11 @@ export function ModalItem({
       abierto
       onCerrar={onCerrar}
       titulo={
-        inicial.creado
-          ? esAviso ? 'Editar el aviso' : 'Editar el pendiente'
-          : esAviso ? 'Nuevo aviso fechado' : 'Nuevo pendiente rutinario'
+        esActividad
+          ? inicial.creado ? 'Editar la actividad' : `Nueva actividad de ${plant.elHecho}`
+          : inicial.creado
+            ? esAviso ? 'Editar el aviso' : 'Editar la rutina'
+            : esAviso ? 'Nuevo aviso fechado' : 'Nueva rutina'
       }
       ancho="ancho"
       cerrarConFondo={false}
@@ -250,37 +300,48 @@ export function ModalItem({
       <div style={{ display: 'grid', gap: space[4] }}>
         {error && <Notice tone="danger">{error}</Notice>}
 
-        <Notice tone="neutral">
-          Entra <b>lo que se olvida</b>. Lo que se hace siempre igual —abrir la caja, prender las
-          luces— no se carga acá: una lista larga todos los días es una lista que se deja de mirar.
-        </Notice>
+        {esActividad ? (
+          <Notice tone="neutral">
+            {plant.ayuda}
+          </Notice>
+        ) : (
+          <Notice tone="neutral">
+            Entra <b>lo que se olvida</b>. Lo que se hace siempre igual —abrir la caja, prender las
+            luces— no se carga acá: una lista larga todos los días es una lista que se deja de mirar.
+          </Notice>
+        )}
 
         {/*
           La clase va PRIMERO porque cambia lo que significan los campos de abajo, y va como los dos
           renglones enteros y no como un tilde suelto: "pide que lo tilden" y "sólo avisa" hay que
           poder compararlos leyéndolos, no deducir el segundo de que el primero esté apagado.
+
+          ⚠️ En una actividad ⛔ no se ofrece: lo que un evento copia es trabajo que alguien tilda, y
+          un aviso que se copia con fecha no lo pidió nadie todavía.
         */}
-        <Field
-          label="Qué es"
-          hint={
-            esAviso
-              ? 'Un aviso se lee y listo: no tiene cuadradito, no cuenta para el número del menú y no entra en Cumplimiento.'
-              : 'Un pendiente pide que alguien lo tilde ese día, y por eso enciende el número del menú hasta que se tilda.'
-          }
-        >
-          <Select
-            value={it.clase}
-            onChange={(e) => {
-              const clase = e.target.value as ClaseItem
-              // Pasar a aviso se lleva el manual puesto: si no, quedaría guardado sin dibujarse en
-              // ningún lado y volvería a aparecer solo si alguien lo devuelve a pendiente meses
-              // después. La regla, en cambio, no se toca: está a la vista acá abajo.
-              setIt((x) => ({ ...x, clase, manualId: clase === 'aviso' ? null : x.manualId }))
-            }}
+        {!esActividad && (
+          <Field
+            label="Qué es"
+            hint={
+              esAviso
+                ? 'Un aviso se lee y listo: no tiene cuadradito, no cuenta para el número del menú y no entra en Cumplimiento.'
+                : 'Una rutina pide que alguien la tilde ese día, y por eso enciende el número del menú hasta que se tilda.'
+            }
           >
-            {CLASES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-          </Select>
-        </Field>
+            <Select
+              value={it.clase}
+              onChange={(e) => {
+                const clase = e.target.value as ClaseItem
+                // Pasar a aviso se lleva el manual puesto: si no, quedaría guardado sin dibujarse en
+                // ningún lado y volvería a aparecer solo si alguien lo devuelve a pendiente meses
+                // después. La regla, en cambio, no se toca: está a la vista acá abajo.
+                setIt((x) => ({ ...x, clase, manualId: clase === 'aviso' ? null : x.manualId }))
+              }}
+            >
+              {CLASES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </Select>
+          </Field>
+        )}
 
         <Field
           label={esAviso ? 'Qué hay que saber' : 'Qué hay que hacer'}
@@ -307,11 +368,33 @@ export function ModalItem({
           />
         </Field>
 
-        <EditorRegla
-          regla={it.regla}
-          onChange={(r) => set('regla', r)}
-          titulo={esAviso ? 'Qué días se avisa' : 'Qué días toca'}
-        />
+        {esActividad ? (
+          /*
+            🔑 **El «cuándo» de una actividad es un OFFSET, no unos días de la semana.** Antes este
+            campo vivía al fondo del formulario y arriba quedaba dibujado el editor de días con un
+            cartelito al lado avisando que no se usa: dos controles para el mismo «cuándo», y el que
+            manda escondido debajo del que no hace nada.
+          */
+          <Field
+            label="Cuándo va"
+            hint={`${plant.ayudaOffset} Va de ${plant.offsetMin} a ${plant.offsetMax}.`}
+            width={260}
+          >
+            <Input
+              type="number"
+              min={plant.offsetMin}
+              max={plant.offsetMax}
+              value={it.offsetDias == null ? '' : String(it.offsetDias)}
+              onChange={(e) => set('offsetDias', e.target.value === '' ? null : Number(e.target.value))}
+            />
+          </Field>
+        ) : (
+          <EditorRegla
+            regla={it.regla}
+            onChange={(r) => set('regla', r)}
+            titulo={esAviso ? 'Qué días se avisa' : 'Qué días toca'}
+          />
+        )}
 
         <div>
           <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
@@ -439,8 +522,13 @@ export function ModalItem({
           {/*
             Sólo para los pendientes: un aviso no se tilda, así que no hay nada que quede pendiente
             de tildar. Ofrecerlo ahí sería prometer un comportamiento que no existe.
+
+            🔴 **Y ⛔ tampoco en una actividad**: el renglón copiado nace **siempre** arrastrando
+            (`api/_agenda.js`), así que este tilde ⛔ no viajaba — pero era la puerta del campo de
+            abajo, el tope, que sí viaja. O sea que para ponerle tope a lo copiado había que prender
+            un interruptor que se ignora. Acá el tope se pide solo.
           */}
-          {it.clase === 'pendiente' && (
+          {it.clase === 'pendiente' && !esActividad && (
             <Tilde
               puesto={it.arrastra}
               label={it.arrastra ? 'Queda hasta que se tilde' : 'Se vence con el día'}
@@ -462,11 +550,13 @@ export function ModalItem({
           ⛔ No se le pone un default: elegir un número acá por la persona sería decidir, para todas
           las rutinas que ya están cargadas, que dejan de deberse en una fecha que nadie eligió.
         */}
-        {it.clase === 'pendiente' && it.arrastra && (
+        {it.clase === 'pendiente' && (it.arrastra || esActividad) && (
           <div style={{ marginTop: space[3], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <Field
               label="Hasta cuántos días después"
-              hint="Vacío = queda hasta que lo tilden, sin fecha de vencimiento. Un número lo baja solo pasados esos días desde el día en que caía."
+              hint={esActividad
+                ? 'Vacío = el renglón copiado queda hasta que lo tilden, que es el caso normal: lo que tarda un ingreso no se puede decir de antemano. Un número lo baja solo pasados esos días.'
+                : 'Vacío = queda hasta que lo tilden, sin fecha de vencimiento. Un número lo baja solo pasados esos días desde el día en que caía.'}
               width={220}
             >
               <Input
@@ -482,102 +572,42 @@ export function ModalItem({
         )}
 
         {/*
-          El molde de un disparador. Un ítem marcado así **no corre ningún día**: existe para que el
-          hecho lo clone con su fecha, y por eso al prenderlo la regla deja de importar (el clon
-          nace como «un día puntual»).
+          **El EJE**: las puertas del ingreso, el origen de la sesión de fotos, qué cambió en una
+          condición comercial. Es la columna que decide de quién es el renglón y cuáles corren.
 
-          🔑 Está acá y no en una pantalla propia porque es exactamente el mismo formulario: el
-          molde lleva título, dueña, marca y manual, que es todo lo que un paso necesita.
+          🔑 **Ninguno tildado = todos**, igual que las marcas de arriba — y es el caso normal: el
+          precio, la foto, la publicación y las pantallas no cambian con la puerta, así que se
+          cargan una sola vez. Se tilda sólo en los pasos que sí cambian de dueña —el nombre y la
+          descripción en el ingreso, la dueña de la sesión en las fotos—, que van cargados **una vez
+          por valor**.
 
-          🔑 **Es un desplegable y ⛔ ya no un tilde** (29-ago-2026): las plantillas son dos —el
-          ingreso y la sesión de fotos— y un booleano no sabe de cuál es. El catálogo sale de
-          `plantillas.core.js`, el mismo que valida el handler: agregar la tercera es una fila allá,
-          no un `if` acá.
+          ⚠️ Y «producción propia no lleva renglón de descripción» ⛔ no se dice acá: se dice **no
+          cargando esa actividad**. Por eso no hay ningún «no corre en» que tildar.
+
+          ⚠️ Sin eje —el lanzamiento— acá ⛔ no se dibuja nada: sus once renglones tienen la misma
+          dueña pase lo que pase, y un control que ofrece elegir algo que no cambia nada le hace
+          creer a quien carga que la elección importa.
+
+          🔑 **Ya ⛔ no hay un desplegable de «qué es este renglón»**: el evento lo pone la tarjeta
+          desde la que se abrió el modal. Con él se fue también la limpieza de los otros ejes, que
+          existía sólo porque acá se podía cambiar de evento a mitad de la carga.
         */}
-        {it.clase === 'pendiente' && (
+        {esActividad && plant.eje && (
           <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-            <Field label="Qué es este renglón" width={340}>
-              <Select
-                value={it.plantilla ?? ''}
-                onChange={(e) => {
-                  const key = e.target.value || null
-                  // ⚠️ Al cambiar de plantilla se limpian **todos** los ejes: son catálogos
-                  // distintos (puertas / orígenes / qué cambió) y el handler guarda sólo el de la
-                  // plantilla elegida. Dejar tildado lo del otro sería la pantalla afirmando algo
-                  // que no se va a guardar. 🔑 Sale de PLANTILLAS y ⛔ no de una lista escrita acá:
-                  // con la lista, el 4º eje se quedó sin limpiar y nadie se entera hasta que guarda.
-                  const vacios = Object.fromEntries(
-                    PLANTILLAS.filter((pl) => pl.eje).map((pl) => [pl.eje!.campo, []]),
-                  )
-                  setIt((x) => ({ ...x, ...vacios, plantilla: key }))
-                }}
-              >
-                <option value="">Es una rutina normal (corre sola)</option>
-                {PLANTILLAS.map((p) => (
-                  <option key={p.key} value={p.key}>{p.label} (no corre solo)</option>
-                ))}
-              </Select>
-            </Field>
-            {plant && (
-              <>
-                <div style={{ marginTop: space[2], color: color.mut, fontSize: font.sm }}>{plant.ayuda}</div>
-                <div style={{ marginTop: space[2], display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <Field
-                    label="A los cuántos días"
-                    // 🔑 La ayuda sale del catálogo: los ejemplos son del manual de cada hecho, y
-                    // un `if` sobre el signo del rango le contaba la sesión de fotos a cualquier
-                    // plantilla que aceptara días negativos.
-                    hint={`${plant.ayudaOffset} Va de ${plant.offsetMin} a ${plant.offsetMax}.`}
-                    width={260}
-                  >
-                    <Input
-                      type="number"
-                      min={plant.offsetMin}
-                      max={plant.offsetMax}
-                      value={it.offsetDias == null ? '' : String(it.offsetDias)}
-                      onChange={(e) => set('offsetDias', e.target.value === '' ? null : Number(e.target.value))}
-                    />
-                  </Field>
-                  <div style={{ color: color.mut, fontSize: font.sm, paddingBottom: space[2] }}>
-                    La regla de arriba no se usa en los moldes: el clon nace con la fecha {plant.delHecho}.
-                  </div>
-                </div>
-                {/*
-                  El EJE: las puertas del ingreso, el origen de la sesión de fotos, qué cambió en
-                  una condición comercial.
-
-                  🔑 **Ninguno tildado = todos**, igual que las marcas de arriba — y es el caso
-                  normal: el precio, la foto, la publicación y las pantallas no cambian con la
-                  puerta, así que se cargan una sola vez. Se tilda sólo en los pasos que sí cambian
-                  de dueña —el nombre y la descripción en el ingreso, la dueña de la sesión en las
-                  fotos—, que van cargados **una vez por valor**.
-
-                  ⚠️ Y «producción propia no lleva renglón de descripción» no se dice acá: se dice
-                  **no cargando ese molde**. Por eso no hay ningún «no corre en» que tildar.
-                */}
-                {/* ⚠️ Sin eje —el lanzamiento— acá no se dibuja nada: sus once renglones tienen la
-                    misma dueña pase lo que pase, y un control que ofrece elegir algo que no cambia
-                    nada le hace creer a quien carga que la elección importa. */}
-                {plant.eje && (
-                  <div style={{ marginTop: space[3] }}>
-                    <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
-                      {plant.eje.titulo}{' '}
-                      <span style={{ fontWeight: weight.normal }}>(ninguno tildado = todos)</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-                      {plant.eje.claves.map((k) => (
-                        <Tilde
-                          key={k}
-                          puesto={(it[plant.eje!.campo] ?? []).includes(k as never)}
-                          label={plant.eje!.rotulo(k)}
-                          onToggle={() => set(plant.eje!.campo, toggleEnLista((it[plant.eje!.campo] ?? []) as string[], k) as never)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+            <div style={{ fontSize: font.xs, color: color.mut, fontWeight: weight.medium, marginBottom: 4 }}>
+              {plant.eje.titulo}{' '}
+              <span style={{ fontWeight: weight.normal }}>(ninguno tildado = todos)</span>
+            </div>
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+              {plant.eje.claves.map((k) => (
+                <Tilde
+                  key={k}
+                  puesto={(it[plant.eje!.campo] ?? []).includes(k as never)}
+                  label={plant.eje!.rotulo(k)}
+                  onToggle={() => set(plant.eje!.campo, toggleEnLista((it[plant.eje!.campo] ?? []) as string[], k) as never)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

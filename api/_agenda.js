@@ -134,6 +134,35 @@ function numeroDado(v) {
 }
 
 /**
+ * De qué **hecho** salió un renglón copiado por un evento, o `null` si se cargó a mano.
+ *
+ * 🔑 El dato para agrupar ya se escribía —`datos.de` y la clave de idempotencia— desde el
+ * 24-ago-2026, *«para el día que la pantalla quiera agrupar por hecho»*. Lo que faltaba era que
+ * llegara al navegador, y desde el 29-ago se escribe además `datos.hecho` con el nombre y la fecha.
+ *
+ * ⚠️ **Los clones anteriores a esa fecha no lo traen**, así que se lee de la clave: en tres de las
+ * cuatro plantillas es `fecha·nombre`. Cuando ni eso —la sesión de fotos usa el id de la sesión, que
+ * es opaco— se cae al nombre crudo y a la fecha del propio renglón. 🔑 Un grupo con nombre feo se
+ * arregla mirando; un renglón que no entra en ningún grupo **desaparece de la pantalla**, y ése es
+ * el modo de falla que no se puede tener.
+ */
+function hechoDelClon(datos, regla) {
+  if (!datos || !datos.de) return null;
+  const p = plantillaDe(datos.de);
+  if (!p) return null;
+  const clave = String(datos[p.campoClave] || '');
+  const guardado = datos.hecho && typeof datos.hecho === 'object' ? datos.hecho : null;
+  const partida = /^(\d{4}-\d{2}-\d{2})·(.+)$/.exec(clave);
+  const suya = regla && regla.tipo === 'unica' ? regla.fecha : null;
+  return {
+    evento: p.key,
+    clave,
+    nombre: (guardado && guardado.nombre) || (partida ? partida[2] : clave),
+    fecha: (guardado && guardado.fecha) || (partida ? partida[1] : suya) || null,
+  };
+}
+
+/**
  * El día de hoy en UTC, que es el reloj del servidor.
  *
  * 🔴 **No es el día de la persona**, y por eso acá se usa sólo para poner topes holgados —la ventana
@@ -352,6 +381,12 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
       // clave, y lo que va a leer el día que la pantalla quiera agrupar por hecho.
       de: p.key,
       [p.campoClave]: clave,
+      // 🔑 **El nombre y la fecha del HECHO, para poder agruparlos después.** La clave sola no
+      // alcanza: en la sesión de fotos es un id opaco, y en las otras tres es `fecha·nombre`, que
+      // habría que partir con una regex para mostrarlo — o sea, adivinarle la forma a una llave que
+      // existe para ser comparada, ⛔ no para ser leída. ⚠️ Va **al lado** de la clave y no adentro:
+      // `datos[campoClave]` es la llave de idempotencia y ⛔ no se toca.
+      hecho: { nombre: limpio, fecha },
       ...(p.eje ? { [p.eje.campoClon]: eje } : {}),
       marca,
       // 🔑 El tope lo pone el MOLDE, no el disparador: el formulario del molde es el mismo que el
@@ -575,9 +610,12 @@ export default async function handler(req, res) {
         // Cuántos días se debe, si arrastra. **`null` = sin tope**, que es lo que tienen las
         // reuniones y los clones del ingreso. Lo resuelve `ocurrenciaAbierta()`; acá viaja el número.
         arrastraDias: i.datos && Number.isFinite(i.datos.arrastraDias) ? i.datos.arrastraDias : null,
-        // De qué plantilla es molde este ítem (ingreso · sesión de fotos). Un molde no corre ningún
-        // día: lo filtra `vaEl`.
+        // De qué evento es actividad este ítem. Una actividad no corre ningún día: lo filtra `vaEl`.
+        // ⚠️ La clave sigue siendo `datos.plantilla`: lo que cambió el 29-ago-2026 es la palabra de
+        // la pantalla, ⛔ no lo que hay escrito en las 44 filas cargadas.
         plantilla: (i.datos && i.datos.plantilla) || null,
+        // De qué HECHO salió, si lo copió un evento. `null` = se cargó a mano.
+        sembrado: hechoDelClon(i.datos, i.regla),
         offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
         // En qué valores del eje corre el molde. **Vacío = todos**, igual que `marcas`. Es un campo
         // por eje y no uno «eje» genérico porque cada plantilla tiene el suyo y se guardan así en

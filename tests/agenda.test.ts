@@ -21,6 +21,11 @@ import {
   rotuloRegla,
   vaEl,
   filtrarItems,
+  rutinasYAvisos,
+  actividadesDe,
+  porHecho,
+  plantillaDe,
+  rotuloOffset,
   opcionesDeQuien,
   porResponsable,
   MAX_VENTANA_DIAS,
@@ -755,10 +760,12 @@ describe('filtrarItems', () => {
     expect(ids({ quien: 'p:nadie' })).toEqual([])
   })
 
-  it('🔑 un molde no cuenta como pendiente: no corre ningún día', () => {
-    expect(ids({ clase: 'pendiente' })).toEqual(['a', 'b', 'd'])
-    expect(ids({ clase: 'molde' })).toEqual(['e'])
+  it('🔑 la clase separa rutinas de avisos, y la actividad de un evento no es ninguna de las dos', () => {
+    // ⚠️ La actividad ('e') ⛔ ya no llega a esta lista: la filtra `rutinasYAvisos` antes, porque se
+    // administra en la tarjeta de su evento. Acá se fija que **no se cuele como rutina** si llegara.
+    expect(ids({ clase: 'pendiente' })).toEqual(['a', 'b', 'd', 'e'])
     expect(ids({ clase: 'aviso' })).toEqual(['c'])
+    expect(rutinasYAvisos(todos).map((i) => i.id)).toEqual(['a', 'b', 'c', 'd'])
   })
 
   it('el estado separa lo prendido de lo apagado', () => {
@@ -919,5 +926,113 @@ describe('resumirDia — lo excepcional se nombra, lo de siempre se cuenta', () 
 
   it('un día vacío no rompe', () => {
     expect(resumirDia([])).toEqual({ chips: [], rutinas: [], hechas: 0 })
+  })
+})
+
+/**
+ * **Las tres poblaciones de `agenda_items`**, que hasta el 29-ago-2026 vivían mezcladas en una sola
+ * lista plana: las rutinas que corren solas, las actividades que un evento copia, y lo copiado.
+ *
+ * 🔴 Lo que se fija acá es **el corte**: una pantalla que se olvida de uno de los dos filtros ⛔ no
+ * falla, se llena — y para cuando se nota, ya nadie la mira. Es exactamente lo que le pasó a
+ * «Cargar»: 44 actividades y 33 rutinas en la misma lista, ordenadas alfabéticamente entre sí.
+ */
+describe('las tres poblaciones: rutinas, actividades de un evento, y lo copiado', () => {
+  const rutina = item({ id: 'r', titulo: 'Reponer la vidriera' })
+  const aviso = item({ id: 'v', clase: 'aviso', titulo: 'Viene el flete' })
+  const actNombre = item({ id: 'a1', titulo: 'Cargar el nombre', plantilla: 'ingreso', offsetDias: 0 })
+  const actPublicar = item({ id: 'a2', titulo: 'Publicar en la tienda', plantilla: 'ingreso', offsetDias: 2 })
+  const actModelo = item({ id: 'a3', titulo: 'Buscar la modelo', plantilla: 'sesion-fotos', offsetDias: -2 })
+  const clon = (id: string, fecha: string, s: Partial<NonNullable<ItemAgenda['sembrado']>> = {}) =>
+    item({
+      id,
+      titulo: `IMP2 · ${id}`,
+      regla: { tipo: 'unica', fecha },
+      arrastra: true,
+      sembrado: { evento: 'ingreso', clave: '2026-08-26·imp2', nombre: 'IMP2', fecha: '2026-08-26', ...s },
+    })
+
+  const todos = [rutina, aviso, actNombre, actPublicar, actModelo, clon('c1', '2026-08-26'), clon('c2', '2026-08-28')]
+
+  it('🔴 en Rutinas ⛔ no entra ni una actividad ni un renglón copiado', () => {
+    expect(rutinasYAvisos(todos).map((i) => i.id)).toEqual(['r', 'v'])
+  })
+
+  it('las actividades salen por evento y **en el orden en que se van a copiar**', () => {
+    // Por `offsetDias`: es el mismo orden con el que las siembra `api/_agenda.js`. Que la tarjeta
+    // las muestre en otro orden que el que después sale sembrado sería contar otra historia.
+    expect(actividadesDe(todos, 'ingreso').map((i) => i.id)).toEqual(['a1', 'a2'])
+    expect(actividadesDe(todos, 'sesion-fotos').map((i) => i.id)).toEqual(['a3'])
+    expect(actividadesDe(todos, 'lanzamiento')).toEqual([])
+  })
+
+  it('un evento sin actividades ⛔ no se cae a las de otro', () => {
+    expect(actividadesDe([actModelo], 'ingreso')).toEqual([])
+  })
+
+  describe('porHecho: lo copiado, agrupado por el hecho que lo copió', () => {
+    it('agrupa por la clave y ⛔ no por el título, que se puede editar', () => {
+      const g = porHecho(todos, [], '2026-08-28')
+      expect(g).toHaveLength(1)
+      expect(g[0].nombre).toBe('IMP2')
+      expect(g[0].fecha).toBe('2026-08-26')
+      expect(g[0].items.map((i) => i.id)).toEqual(['c1', 'c2'])
+    })
+
+    it('filtra por evento cuando se le pide, para la tarjeta de cada uno', () => {
+      const otro = clon('x1', '2026-08-20', { evento: 'lanzamiento', clave: '2026-08-20·remera', nombre: 'Remera', fecha: '2026-08-20' })
+      expect(porHecho([...todos, otro], [], '2026-08-28', 'ingreso').map((g) => g.nombre)).toEqual(['IMP2'])
+      expect(porHecho([...todos, otro], [], '2026-08-28', 'lanzamiento').map((g) => g.nombre)).toEqual(['Remera'])
+    })
+
+    it('lo más nuevo primero: es lo que se está mirando', () => {
+      const viejo = clon('v1', '2026-08-02', { clave: '2026-08-01·imp1', nombre: 'IMP1', fecha: '2026-08-01' })
+      expect(porHecho([...todos, viejo], [], '2026-08-28').map((g) => g.nombre)).toEqual(['IMP2', 'IMP1'])
+    })
+
+    it('cuenta lo que falta contra los tildes que llegaron', () => {
+      const g = porHecho(todos, [hecho({ itemId: 'c1', fecha: '2026-08-26' })], '2026-08-28')
+      expect(g[0].sinTildar).toBe(1)
+    })
+
+    it('🔴 más viejo que la ventana de tildes contesta `null`, ⛔ NO cero', () => {
+      // Un cero ahí diría «está todo hecho» sin tener con qué: los tildes de esa fecha ya no viajan.
+      // Más de 120 días atrás: `DIAS_ARRASTRE`, que es hasta dónde el servidor baja los tildes de
+      // lo que arrastra — y todo lo copiado arrastra. A los 88 días **sí** se puede contar.
+      const viejo = clon('v1', '2026-01-12', { clave: '2026-01-10·imp1', nombre: 'IMP1', fecha: '2026-01-10' })
+      const g = porHecho([viejo], [], '2026-08-28')
+      expect(g[0].sinTildar).toBeNull()
+    })
+
+    it('lo que se cargó a mano ⛔ no entra en ningún grupo', () => {
+      expect(porHecho([rutina, actNombre], [], '2026-08-28')).toEqual([])
+    })
+  })
+})
+
+/**
+ * `rotuloOffset`: a los cuántos días del hecho cae una actividad, **en castellano**.
+ *
+ * ⚠️ El caso que lo justifica es el negativo: un `-2` se lee como un error de carga, y es el caso
+ * normal de la sesión de fotos —la modelo, 48 h antes—.
+ */
+describe('rotuloOffset', () => {
+  const ingreso = plantillaDe('ingreso')!
+  const sesion = plantillaDe('sesion-fotos')!
+
+  it('el día del hecho', () => {
+    expect(rotuloOffset(ingreso, 0)).toBe('el día del ingreso')
+    // Sin número cargado es el día del hecho, ⛔ no una fila muda.
+    expect(rotuloOffset(ingreso, null)).toBe('el día del ingreso')
+  })
+
+  it('🔑 el 1 va escrito: «a los 1 día» se lee como un texto sin terminar', () => {
+    expect(rotuloOffset(ingreso, 1)).toBe('al día siguiente del ingreso')
+    expect(rotuloOffset(ingreso, 2)).toBe('a los 2 días del ingreso')
+  })
+
+  it('🔑 antes se dice en castellano y ⛔ no con un signo menos', () => {
+    expect(rotuloOffset(sesion, -2)).toBe('2 días antes de la sesión')
+    expect(rotuloOffset(sesion, -1)).toBe('el día antes de la sesión')
   })
 })

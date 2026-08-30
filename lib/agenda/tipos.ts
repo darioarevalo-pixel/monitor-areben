@@ -185,6 +185,26 @@ export type ItemAgenda = {
     proveedor: string | null
   } | null
   /**
+   * De qué **hecho salió este renglón**, cuando lo copió un evento. `null`/ausente = se cargó a mano.
+   *
+   * 🔑 **El dato ya se escribía en `datos` desde el 24-ago-2026** —la plantilla que lo sembró y la
+   * clave de idempotencia— *«para el día que la pantalla quiera agrupar por hecho»*; lo que no hacía
+   * era llegar al navegador. Sin esto, los renglones de un ingreso son indistinguibles de una rutina
+   * cargada a mano y ⛔ no hay forma de contestar *«¿qué quedó abierto del IMP2?»*.
+   *
+   * ⚠️ `clave` es la **llave de idempotencia** (`fecha·nombre`, o el id de la sesión, que es estable
+   * cuando lo hay): ⛔ no se toca ni se compone para mostrar. Lo que se muestra es `nombre`.
+   */
+  sembrado?: {
+    /** La clave de la plantilla que lo copió: `ingreso` · `sesion-fotos` · `lanzamiento` · `condicion`. */
+    evento: string
+    clave: string
+    /** El agrupador del título, tal como se cargó el hecho («IMP2»). */
+    nombre: string
+    /** La fecha DEL HECHO, ⛔ no la del renglón: los renglones caen alrededor con su offset. */
+    fecha: FechaIso
+  } | null
+  /**
    * En qué **puertas de entrada** corre este paso. Sólo para los moldes.
    *
    * 🔑 **Vacío es TODAS**, igual que `marcas` — y es lo que hace que los cuatro pasos que no cambian

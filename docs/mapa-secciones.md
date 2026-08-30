@@ -63,7 +63,10 @@ local mientras el depósito tiene. ⛔ No es stock de mercadería: un insumo no 
 la base de BDI y **sin `store`**: no son de una marca. Las novedades se cargan como borrador desde
 `scripts/novedad.mjs` y se publican a mano; el manual de una sección lo muestra `SeccionHeader`.
 
-**Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`)
+**Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`).
+⚠️ **Una sección con SEIS entradas de menú** (como Meta): `/agenda` · `/agenda/semana` ·
+`/agenda/mes` · `/agenda/eventos` · `/agenda/rutinas` · `/agenda/cumplimiento`. Las tres últimas
+piden el sub-permiso `agenda.cargar`; la subárea sale del 2º tramo de la URL.
 
 **Sin permiso (las ve todo el equipo)** — `inicio` · `novedades` · `manuales` · `agenda`
 
