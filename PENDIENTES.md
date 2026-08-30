@@ -576,3 +576,15 @@ antes de rehacerlo.
   título de una semana con el estado de otra. ⇒ el dato viaja sellado con su semana (`deLaSemana`)
   y el encabezado acepta `estado: null` = "no lo sé", que dice «Leyendo la semana…» y ⛔ no ofrece
   cerrar. 3 mutantes, 3 muertos. El relato está en `docs/secciones/memo.md`.
+
+- ✅ 🔴 **El post-venta ⛔ no tenía UN SOLO NÚMERO que dijera si está midiendo bien** (30-ago-2026).
+  Salió el medidor: **reclamos registrados por cada 100 ventas online**, seis meses, por marca, en
+  Reclamos (Administración). El relato entero está en `docs/secciones/reclamos.md` § «El medidor».
+  📊 **Lo que se ve al prenderlo, medido contra las dos bases**: BDI tiene **2 reclamos sobre 283
+  ventas online de agosto** y **Zattia ⛔ NUNCA registró ni uno** (167 ventas online en agosto, 0
+  reclamos, y ninguno en toda la tabla). ⚠️ Eso ⛔ **no es una tasa baja: es que el reclamo que se
+  resuelve en un chat ⛔ no deja fila** — y por eso el número sale con los meses de atrás diciendo
+  *«todavía no se registraban reclamos»* en vez de un cero, que afirmaría lo contrario.
+  ▶️ **Lo que sigue estando trabado por falta de datos**: los cuatro diales de la válvula (§5 del
+  plan) y las tres decisiones de Bruno (§6) — el piso del retorno, cuánto vale un cupón y el costo
+  operativo. Se destraban con un mes de volumen del alta pública, que es la mitad de Darío.
