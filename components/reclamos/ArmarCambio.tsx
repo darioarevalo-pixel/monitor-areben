@@ -41,7 +41,7 @@ import {
   leerReclamos, marcarCobrado, marcarDespachado, marcarReingreso, procesarCambio,
 } from '@/lib/reclamos/cliente'
 import {
-  DIAS_CAMBIO, ESTADO_LABEL, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL,
+  DIAS_CAMBIO, ESTADO_LABEL, estadoEnCriollo, MOTIVO_LABEL, MOTIVOS_CAMBIO, VIA_LABEL,
   calcularCambio, detalleCambioTexto, esCambio, etiquetaEM, faltantesParaCerrar, faltantesParaProcesar,
   numeroEM, numeroReclamo, pagadoPorItem, pideSeguimiento, trackingPortalUrl, trackingUrl,
   type EnvioPaga, type EstadoReclamo, type FormaPago, type ItemReclamo, type MotivoReclamo,
@@ -827,7 +827,11 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                         ) : <span style={{ color: color.mut2 }}>—</span>}
                       </Td>
                       <Td>
-                        <StatusPill tone={c.estado === 'cerrado' ? 'success' : esBorrador ? 'warning' : 'action'} label={ESTADO_LABEL[c.estado]} />
+                        {/* 🔑 `estadoEnCriollo` y ⛔ no `ESTADO_LABEL` a secas: en ESTA pantalla un
+                            `borrador` es casi siempre **un cambio decidido esperando el pago**, ⛔ no
+                            un reclamo que nadie miró — y son las dos cosas que `borrador` significa.
+                            Con el rótulo crudo, la pantalla de los cambios era la que peor lo decía. */}
+                        <StatusPill tone={c.estado === 'cerrado' ? 'success' : esBorrador ? 'warning' : 'action'} label={estadoEnCriollo(c)} />
                         {c.gn_venta_number && <div style={{ fontSize: 10, color: color.mut }}>venta GN #{c.gn_venta_number}</div>}
                       </Td>
                       <Td>

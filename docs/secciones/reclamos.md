@@ -2794,3 +2794,55 @@ cartel, se pone rojo solo. Una regla escrita en un comentario ⛔ no frena nada
 de pendientes es corta, así que el mutante que le sacaba el `wrap` **sobrevivía**. Hizo falta una
 **segunda fila** —resuelta y con todos los pendientes prendidos— para que la celda que dice cubrir
 esté efectivamente llena. **3 mutantes, 3 muertos · 1 control vivo.**
+
+
+---
+
+## 🆕 BKL-01 · «Borrador» era un mal nombre, y encima tapaba DOS estados (30-ago-2026)
+
+El informe pedía *«renombrar el estado inicial Borrador por un término más adecuado, como
+Pendiente»*. **Tenía razón en la mitad**: para quien atiende, «borrador» es un documento a medio
+escribir, y esto es **un reclamo abierto al que todavía ⛔ no se le escribió al cliente**.
+
+### Las dos palabras que ⛔ no se podían usar
+
+- ⛔ **«Pendiente»**, que es la que pedía el informe: en **la misma fila**, la columna de al lado
+  dice *«Pendientes: anular la venta · devolver la plata»*. La palabra ya está tomada por otra cosa,
+  a un centímetro de distancia.
+- ⛔ **«Sin revisar»**, que fue la primera propuesta: `en_revision` es **«Para revisar»**. Serían dos
+  carteles casi idénticos para los dos estados que **más importa distinguir** — el que espera que
+  *le escribamos* y el que espera que *decidamos*.
+
+⇒ **«Sin escribirle»**, que es **el mismo verbo que el reloj de esa fila** (*«Abierto hace N días y
+todavía no se le escribió»*): la pastilla y la alerta cuentan lo mismo.
+
+### 🔴 Y abajo estaba lo que el informe ⛔ no vio: significaba dos cosas
+
+Ya estaba escrito en § 4 de la auditoría del 28-ago: **un cambio decidido vuelve a `borrador` a
+propósito**, a esperar que el cliente pague la diferencia. Ése ⛔ no es un reclamo olvidado — es una
+espera legítima, con su propia pestaña. **Las dos poblaciones mostraban exactamente el mismo
+cartel**, así que renombrarlo plano habría dejado el defecto intacto con otro nombre.
+
+🔑 **El discriminador ya existía y ⛔ no hubo que inventarlo: `compensacion`.** Es el mismo que
+`alertasDe` usa para ⛔ no acusar de olvidado a un cambio que espera el pago — o sea que **la regla
+ya estaba aplicada de un lado y ⛔ no del otro** ⇒
+[[feedback_areben_dos_lados_bien_y_la_pregunta_del_medio]].
+
+| `borrador` con… | dice |
+|---|---|
+| ⛔ sin decisión | **«Sin escribirle»** |
+| decisión guardada (el cambio esperando el pago) | **«Esperando que pague»** |
+
+⛔ **La base ⛔ no cambia**: los dos siguen siendo `borrador`, con todo lo que cuelga de
+`ESTADOS_ABIERTOS` y de los frenos intacto. Lo que cambia es **lo que lee la persona**, que es donde
+estaba el problema.
+
+⚠️ **Y la pantalla que peor lo decía era Armar cambio**, donde un `borrador` es casi siempre el
+cambio esperando el pago: usaba `ESTADO_LABEL` crudo. Ahora usa `estadoEnCriollo`, como la lista.
+
+### Cómo se probó
+
+**5 mutantes, 5 muertos** (las dos poblaciones vuelven a decir lo mismo · el discriminador invertido
+· vuelve a llamarse «Pendiente» · choca con «Para revisar» · el guard mira otro estado) **+ 1
+control vivo**. Las dos palabras prohibidas están **fijadas por test**, ⛔ no explicadas en un
+comentario ([[feedback_areben_invariante_escrito_no_frena]]).

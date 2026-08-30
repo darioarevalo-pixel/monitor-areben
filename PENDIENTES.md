@@ -697,6 +697,18 @@ antes de rehacerlo.
   ✅ **Caminado en el navegador el mismo día**: `/postventa?tab=reclamos`, orden 21033, aparece con
   sus 2 productos. Nada que hacer acá.
 
+- ✅ **BKL-01: «Borrador» era un mal nombre y encima tapaba DOS estados** (30-ago-2026). El informe
+  pedía llamarlo «Pendiente» ⛔ **y esa palabra ⛔ no se podía usar**: en la misma fila, la columna de
+  al lado dice *«Pendientes: anular la venta · devolver la plata»*. Y «Sin revisar» tampoco, porque
+  `en_revision` es «Para revisar».
+  🔴 🔑 **Y abajo estaba lo que el informe ⛔ no vio**: un **cambio decidido vuelve a `borrador` a
+  propósito**, esperando que el cliente pague — las dos poblaciones mostraban el mismo cartel, así
+  que renombrarlo plano dejaba el defecto intacto con otro nombre. El discriminador **ya existía**
+  (`compensacion`, el mismo que usa `alertasDe`). ⇒ «Sin escribirle» / «Esperando que pague», ⛔ sin
+  tocar la base. **5 mutantes, 5 muertos + 1 control vivo.** Relato en
+  `docs/secciones/reclamos.md` § «BKL-01».
+  ⇒ 🏁 **con esto el informe de post-venta del 30-ago queda CERRADO ENTERO: los 10 BKL contestados.**
+
 - ✅ 🔴 **BKL-05, lo último que quedaba del informe de post-venta: el texto largo rompía la tabla**
   (30-ago-2026). El informe señalaba la columna de **pendientes** —que ya estaba arreglada— y el
   desborde real estaba en la **primera columna**, y ⛔ no lo produce el nombre del cliente: **es la

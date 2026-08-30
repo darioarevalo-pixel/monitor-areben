@@ -915,7 +915,21 @@ export function estadoDelPaso(faltas: FaltaDecision[], paso: PasoDecision): 'tra
 }
 
 export const ESTADO_LABEL: Record<EstadoReclamo, string> = {
-  borrador: 'Borrador',
+  /**
+   * 🔴 **Era «Borrador», y era BKL-01 del informe del 30-ago-2026** — *«renombrar el estado inicial
+   * por un término más adecuado»*. Tenía razón: para quien atiende, «borrador» es un documento a
+   * medio escribir, y esto es **un reclamo abierto al que todavía ⛔ no se le escribió al cliente**.
+   *
+   * ⚠️ **⛔ NO se llama «Pendiente», que es lo que pedía el informe**, y ⛔ no es un capricho: en
+   * esta misma fila la columna de al lado dice *«Pendientes: anular la venta · devolver la plata»*.
+   * La palabra ya está tomada por otra cosa, a un centímetro de distancia.
+   *
+   * ⚠️ **Ni «Sin revisar»**, porque `en_revision` es **«Para revisar»**: dos carteles casi idénticos
+   * para los dos estados que más importa distinguir —el que espera que le escribamos y el que
+   * espera que decidamos—. Dice **el mismo verbo que el reloj de esa fila** («Abierto hace N días y
+   * todavía no se le escribió»), así que la pastilla y la alerta cuentan lo mismo.
+   */
+  borrador: 'Sin escribirle',
   esperando_cliente: 'Esperando al cliente',
   en_revision: 'Para revisar',
   resuelto: 'Resuelto, en curso',
@@ -977,9 +991,24 @@ export function laEtiquetaEstaDebida(
  * "En camino de vuelta" sobre algo que **nadie despachó todavía** — porque el cliente lo trae en
  * mano y no vino, o porque le falta la etiqueta para poder despacharlo.
  */
-export function estadoEnCriollo(d: Pick<ReclamoRow, 'estado' | 'via_retorno' | 'seguimiento_vuelta'>): string {
+export function estadoEnCriollo(d: Pick<ReclamoRow, 'estado' | 'via_retorno' | 'seguimiento_vuelta' | 'compensacion'>): string {
   if (d.estado === 'en_transito' && d.via_retorno === 'presencial') return 'Esperando que lo traiga'
   if (faltaMandarLaEtiqueta(d)) return 'Falta mandarle la etiqueta'
+  /**
+   * 🔴 🔑 **`borrador` significa DOS COSAS, y hasta el 30-ago-2026 las dos decían lo mismo**
+   * (§ 4 de la auditoría del 28-ago). Un **cambio decidido vuelve a `borrador` a propósito**, a
+   * esperar que el cliente pague la diferencia — ése ⛔ no es un reclamo olvidado, es una espera
+   * legítima con su propia pestaña. Mostrarle el mismo cartel que a uno que nadie tocó es pedirle
+   * a quien mira la lista que adivine cuál es cuál.
+   *
+   * 🔑 **El discriminador ya existía y ⛔ no hubo que inventarlo**: `compensacion`. Es el mismo
+   * que usa `alertasDe` para ⛔ no acusar de olvidado a un cambio que está esperando el pago
+   * —o sea, la regla ya estaba aplicada de un lado y ⛔ no del otro—.
+   *
+   * ⛔ **La base ⛔ no cambia**: los dos siguen siendo `borrador`. Lo que cambia es lo que LEE la
+   * persona, que es donde estaba el problema.
+   */
+  if (d.estado === 'borrador' && d.compensacion) return 'Esperando que pague'
   return ESTADO_LABEL[d.estado] ?? d.estado
 }
 
