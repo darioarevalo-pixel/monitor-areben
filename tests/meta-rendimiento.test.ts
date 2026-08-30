@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CONV_APRENDIZAJE, DIAS_SERVIBLES, DIAS_ZONA, aprendizajeDe, armarZona, avisosPorCelda,
   celdasDeLaFoto, concentracionDe, desdeDe, desgasteDe, elegirCierre, elegirVentana, enVentana,
-  fusionarVivo, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona, veredictoDeCelda,
+  fusionarVivo, ordenarCeldas, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona, veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
 import type { Celda, CeldaViva } from '@/lib/meta-ads/rendimiento'
 import { sumarDias } from '@/lib/meta-ads/snapshot'
@@ -674,5 +674,49 @@ describe('VENTANAS_ZONA — la barra dice de dónde sale cada número', () => {
     // que miente, y un parámetro que la propia UI no puede pedir mal es el que nadie prueba.
     expect(ventanaZona('99')).toBeNull()
     expect(ventanaZona('')).toBeNull()
+  })
+})
+
+/**
+ * 🔴 **Lo apagado al fondo** — *«estaría bueno que las pautas apagadas se ordenen abajo de todo»*.
+ *
+ * Antes ordenaba sólo por gasto, así que una celda apagada ayer después de gastar $50.000 se quedaba
+ * **primera**, arriba de las que están corriendo hoy — y es la única fila donde ⛔ no hay nada que
+ * decidir: `apagada` es la clase que ⛔ no propone nada.
+ */
+describe('ordenarCeldas — lo apagado abajo, y adentro por gasto', () => {
+  const c = (id: string, spend: number, clase: string) =>
+    ({ id, spend, veredicto: { clase } }) as unknown as Celda
+
+  it('las apagadas van al fondo aunque hayan gastado más que nadie', () => {
+    const r = ordenarCeldas([
+      c('apagada-cara', 50000, 'apagada'),
+      c('viva-chica', 100, 'ok'),
+      c('viva-grande', 900, 'alto'),
+    ])
+    expect(r.map((x) => x.id)).toEqual(['viva-grande', 'viva-chica', 'apagada-cara'])
+  })
+
+  it('adentro de cada grupo sigue mandando el gasto', () => {
+    // Sin el desempate, el orden de adentro queda a merced de cómo vino la consulta — la clase de
+    // cosa que cambia sola entre dos lecturas.
+    const r = ordenarCeldas([c('a', 10, 'apagada'), c('b', 900, 'apagada'), c('c', 5, 'ok')])
+    expect(r.map((x) => x.id)).toEqual(['c', 'b', 'a'])
+  })
+
+  it('⛔ no muta el arreglo que recibe', () => {
+    // `armarZona` y `fusionarVivo` la llaman sobre listas que después se siguen usando.
+    const entrada = [c('a', 1, 'apagada'), c('b', 2, 'ok')]
+    ordenarCeldas(entrada)
+    expect(entrada.map((x) => x.id)).toEqual(['a', 'b'])
+  })
+
+  it('mira `veredicto.clase` y ⛔ NO `estado`', () => {
+    // 🔑 La clase ya resolvió que la CONFIGURACIÓN es de hoy (`configDeHoy`); `estado` en una
+    // ventana vieja está congelado en el último día de la foto. Mirar `estado` acá volvería a traer
+    // el defecto que esa función existe para curar: una celda pausada ayer figura ACTIVE.
+    const congelada = { id: 'x', spend: 1, estado: 'ACTIVE', veredicto: { clase: 'apagada' } } as unknown as Celda
+    const viva = { id: 'y', spend: 0, estado: 'PAUSED', veredicto: { clase: 'ok' } } as unknown as Celda
+    expect(ordenarCeldas([congelada, viva]).map((x) => x.id)).toEqual(['y', 'x'])
   })
 })

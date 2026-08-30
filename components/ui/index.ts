@@ -35,6 +35,7 @@ export { DatosGate, Esqueleto, ProgressInline, type DatosGateProps } from '@/com
 export { FilterBar, BuscarInput, Chips, ContadorFiltro, useFiltroUrl, type ChipOpt } from '@/components/ui/FilterBar'
 export { Paginacion, MiniBar, Barra } from '@/components/ui/Paginacion'
 export { MenuMulti, type OpcionMulti } from '@/components/ui/MenuMulti'
+export { MenuAcciones, type AccionMenu } from '@/components/ui/MenuAcciones'
 export { FaseBadge, toneDeFase } from '@/components/ui/FaseBadge'
 export { MarcaChip } from '@/components/ui/MarcaChip'
 export { Icono, hayIcono, type NombreIcono } from '@/components/ui/Icono'

@@ -11,6 +11,16 @@
  * ⚠️ Hasta el 26-ago-2026 esa frase era MENTIRA: el detalle mostraba el embudo y el día a día y ni
  * un aviso. Se arregló haciendo cierto el comentario, ⛔ no borrándolo.
  *
+ * # 🔴 La cara va en la FILA, no adentro del plegable (30-ago-2026)
+ *
+ * *«¿Dónde están los anuncios con sus miniaturas? Sería esencial verlo para saber qué anuncio está
+ * activo sin hacer movimientos de más.»* Estaban — adentro de la fila abierta, que es exactamente
+ * donde ⛔ no sirven: la pregunta «¿cuál es cuál?» se hace **mientras se recorre la tabla**, y un
+ * nombre como `AD02 - GIRLHOOD COLLECTION` ⛔ no la contesta.
+ *
+ * 🔑 Va la del aviso que **más gastó** de la caja, con un `+N` si hay más. ⛔ No las N: una fila con
+ * cuatro miniaturas vuelve a ser el problema que se acaba de arreglar con los botones.
+ *
  * # 🔑 Las dos columnas que nadie pide y son las que deciden
  *
  *  - **`%diario`** al lado del gasto. Separa las dos cosas que se confunden todo el tiempo: una
@@ -25,13 +35,15 @@
 import { useState } from 'react'
 import { BotonesAccion } from '@/components/meta-ads/acciones'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
-import type { Celda, ClaseVeredicto } from '@/lib/meta-ads/rendimiento'
+import type { AvisoDeCelda, Celda, ClaseVeredicto } from '@/lib/meta-ads/rendimiento'
+import type { PiezaAviso } from '@/lib/meta-ads/biblioteca'
 import { entero, plata } from '@/lib/meta-ads/formato'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
   Badge, StatusPill, TBody, TableWrap, Td, Th, THead, Tr, color, font, space, weight, type Tone,
 } from '@/components/ui'
 import { AvisosDeCelda } from '@/components/meta-ads/zona/AvisosDeCelda'
+import { Cara } from '@/components/meta-ads/zona/Cara'
 import { usePiezas } from '@/components/meta-ads/zona/usePiezas'
 
 /** El tono de cada veredicto. `alto` y `rota` son los dos que cuestan plata todos los días. */
@@ -65,13 +77,15 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
   cuenta: string | null
 }) {
   const [abierta, setAbierta] = useState<string | null>(null)
-  // 🔑 `abierta !== null` es lo que enciende la llamada: mirar la tabla ⛔ no gasta cupo, y abrir
-  // una fila lo gasta UNA vez para toda la cuenta. Ver `usePiezas`.
-  const piezas = usePiezas(cuenta, abierta !== null)
+  // 🔴 Se enciende AL MONTAR y ⛔ no al abrir una fila: la cara de cada celda vive en la fila. El
+  // porqué —y el cupo medido, `call_count` en 2 sobre 100— está en el docblock de `usePiezas`.
+  const piezas = usePiezas(cuenta, true)
   return (
     <TableWrap>
       <THead>
         <Tr>
+          {/* Sin rótulo: la columna es la cara, y «Pieza» arriba de una imagen es ruido. */}
+          <Th> </Th>
           <Th>Celda</Th>
           <Th align="right">Gasto</Th>
           <Th align="right">Compras</Th>
@@ -92,6 +106,9 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
           return (
             <>
               <Tr key={c.id}>
+                <Td>
+                  <CaraDeCelda celda={c} piezaDe={piezas.piezaDe} cargando={piezas.cargando} />
+                </Td>
                 <Td strong>
                   <button
                     type="button"
@@ -127,6 +144,13 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
                 <Td align="right"><Delta v={d.cpmDelta} invertido /></Td>
                 <Td wrap>
                   <StatusPill tone={TONO[v.clase]} label={v.titulo} />
+                  {/* 🔑 La razón que lleva el NÚMERO, no la prosa entera. Un veredicto sin el número
+                      contra el que se lo comparó es un renglón que nadie aprieta. */}
+                  {v.porque[0] && (
+                    <div style={{ marginTop: 2, fontSize: font.xs, color: color.mut, lineHeight: 1.4, maxWidth: 320 }}>
+                      {v.porque[0]}
+                    </div>
+                  )}
                   {d.firma === 'pieza' && (
                     <div style={{ marginTop: 4 }}><Badge tone="warning">se gasta la pieza</Badge></div>
                   )}
@@ -151,16 +175,33 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
                   />
                 </Td>
               </Tr>
-              {/* 🔑 El «por qué» va SIEMPRE visible, no dentro del plegable: un renglón que dice
-                  «apagar» sin decir contra qué se lo comparó es un renglón que nadie aprieta. */}
-              <Tr key={`${c.id}-por`}>
-                <Td colSpan={10} style={{ paddingTop: 0 }}>
-                  <ul style={{ margin: 0, paddingLeft: space[4], color: color.mut, fontSize: font.sm, lineHeight: 1.5 }}>
-                    {v.porque.map((p) => <li key={p}>{p}</li>)}
-                  </ul>
-                  {esta && <Detalle celda={c} piezas={piezas} />}
-                </Td>
-              </Tr>
+              {/* 🔴 **El «por qué» se COMPACTA, ⛔ no se esconde.** Seguía siendo una fila entera con
+                  una lista de frases debajo de cada celda: es lo que hacía que cada renglón midiera
+                  dos o tres alturas —*«texto lineal que realmente no tiene mucha explicación»*—.
+                  🔑 Pero un veredicto sin el número que lo sostiene es un renglón que nadie aprieta,
+                  así que la PRIMERA razón —la que lleva el número— se queda a la vista, al pie del
+                  pill. Las demás bajan al detalle, y sólo se avisa cuántas son. */}
+              {(v.porque.length > 1 || esta) && (
+                <Tr key={`${c.id}-por`}>
+                  <Td colSpan={11} style={{ paddingTop: 0 }}>
+                    {v.porque.length > 1 && !esta && (
+                      <div style={{ color: color.mut2, fontSize: font.xs, paddingLeft: space[2] }}>
+                        y {v.porque.length - 1} {v.porque.length === 2 ? 'razón más' : 'razones más'} — abrí la fila
+                      </div>
+                    )}
+                    {esta && (
+                      <>
+                        {v.porque.length > 1 && (
+                          <ul style={{ margin: 0, paddingLeft: space[4], color: color.mut, fontSize: font.sm, lineHeight: 1.5 }}>
+                            {v.porque.slice(1).map((p) => <li key={p}>{p}</li>)}
+                          </ul>
+                        )}
+                        <Detalle celda={c} piezas={piezas} />
+                      </>
+                    )}
+                  </Td>
+                </Tr>
+              )}
             </>
           )
         })}
@@ -228,6 +269,43 @@ function Detalle({ celda, piezas }: { celda: Celda; piezas: ReturnType<typeof us
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * La cara de la celda en la fila: **la del aviso que más gastó**, con un `+N` si hay más.
+ *
+ * 🔑 **La del que más gasta y ⛔ no la primera.** Una caja con tres avisos casi siempre tiene uno que
+ * se lleva el 80%: ésa es la pieza de la que se está hablando cuando se mira la fila. Poner la
+ * primera del arreglo sería mostrar la que quedó adelante en la consulta.
+ *
+ * ⚠️ En la ventana viva una celda que arrancó hoy ⛔ no tiene avisos —la foto no la vio— y el marco
+ * queda vacío. Es correcto: no hay pieza que mostrar, y un marco vacío ⛔ no afirma nada.
+ */
+function CaraDeCelda({ celda, piezaDe, cargando }: {
+  celda: Celda
+  piezaDe: (adId: string) => PiezaAviso | null
+  cargando: boolean
+}) {
+  const mayor = celda.avisos.reduce<AvisoDeCelda | null>((a, x) => (!a || x.spend > a.spend ? x : a), null)
+  const otros = Math.max(0, celda.avisos.length - 1)
+  return (
+    <div style={{ position: 'relative', width: 44 }}>
+      <Cara p={mayor ? piezaDe(mayor.id) : null} lado={44} cargando={cargando} />
+      {otros > 0 && (
+        <span
+          // Cuántas piezas más hay en la caja. Es la mitad de la respuesta a «¿de qué es esta fila?»:
+          // una celda con cuatro avisos ⛔ no se explica con una sola cara.
+          title={`${celda.avisos.length} avisos en esta celda`}
+          style={{
+            position: 'absolute', top: -4, right: -6, fontSize: 10, lineHeight: 1, padding: '2px 4px',
+            borderRadius: 999, background: color.bg2, border: `1px solid ${color.line}`, color: color.mut,
+          }}
+        >
+          +{otros}
+        </span>
+      )}
     </div>
   )
 }

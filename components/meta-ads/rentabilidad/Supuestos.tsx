@@ -240,6 +240,9 @@ function Conmutador({ si, onChange, soloLectura }: { si: boolean; onChange: (v: 
           style={{
             border: 'none',
             padding: '4px 14px',
+            // El bloque legacy le fija a todo `<button>` crudo la altura de un control; acá el par
+            // sí/no vive adentro de una píldora chica. Ver `tests/boton-crudo-altura.test.ts`.
+            height: 28,
             fontSize: font.sm,
             cursor: soloLectura ? 'default' : 'pointer',
             background: si === v ? color.brandSolid : 'transparent',

@@ -3,11 +3,25 @@
 /**
  * LAS CARAS de los avisos de una cuenta, para ponérselas a lo que la zona ya sacó de la foto.
  *
- * # 🔑 Se piden al ABRIR la primera fila, ⛔ no al montar la pantalla
+ * # 🔴 Se piden AL MONTAR — y eso cambió el 30-ago-2026
  *
- * Eso mantiene cierta la promesa que hace toda la zona: **mirar la tabla ⛔ no gasta un peso de
- * cupo**. Quien abre `/meta-ads` a leer los veredictos no pide nada a Meta; quien quiere ver la
- * pieza, sí, y una sola vez para toda la cuenta.
+ * Esto se pedía **al abrir la primera fila**, para mantener la promesa de que *«mirar la tabla ⛔ no
+ * gasta un peso de cupo»*. Dos cosas la tumbaron, y las dos son medidas y ⛔ no de opinión:
+ *
+ *  1. 🔑 **La promesa ya era falsa.** El parte se pide solo al entrar a la zona desde el 26-ago, y
+ *     son **cinco** llamadas a Graph. Un candado que cuida dos llamadas al lado de una puerta que
+ *     hace cinco ⛔ no protege nada: sólo esconde las caras.
+ *  2. 📊 **El cupo, releído contra prod el 30-ago**: `call_count` de la cuenta `1145878766790149` en
+ *     **2** sobre 100 (`X-Business-Use-Case-Usage`, lo que guarda el registro de acciones). Esto son
+ *     2-3 llamadas más, cacheadas 10 minutos por cuenta.
+ *
+ * Y del otro lado hay un pedido concreto: *«sería esencial ver qué anuncio está activo sin estar
+ * haciendo movimientos de más»*. Una miniatura que aparece sólo si abrís la fila ⛔ no contesta
+ * «cuál es cuál» mientras mirás la tabla, que es cuando se decide.
+ *
+ * ⚠️ `activo` **se queda igual**: es lo que deja apagarlo desde afuera —sin cuenta elegida, o si un
+ * día hay que volver atrás— y sacarlo obligaría a que el llamador ponga un `if`, que es justo donde
+ * la decisión se vuelve invisible.
  *
  * # Una llamada, no una por fila
  *
@@ -53,8 +67,8 @@ function pedirUnaVez(cuenta: string): Promise<Guardado> {
 }
 
 /**
- * @param activo `false` mientras no haya ninguna fila abierta. Es lo que hace que mirar la tabla no
- * gaste cupo, y por eso es un parámetro y no un `if` del que llama.
+ * @param activo el interruptor de afuera. Hoy la tabla lo prende al montar; queda como parámetro
+ * —y ⛔ no como un `if` del que llama— para poder apagarlo sin tocar este archivo.
  */
 export function usePiezas(cuenta: string | null, activo: boolean) {
   const [resp, setResp] = useState<{ key: string; g: Guardado } | null>(null)

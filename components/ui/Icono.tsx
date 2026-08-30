@@ -565,6 +565,59 @@ const TRAZOS = {
       <path d="M14.6 5.7l3.1 3.1" />
     </>
   ),
+  /**
+   * Pausar — las dos barras.
+   *
+   * 🔑 Va **con la forma del gesto y no con la de la cosa**: es el mismo símbolo que Ads Manager y
+   * que cualquier reproductor, así que se lee sin leerlo. Lo que lo hace legible en una tabla es el
+   * COLOR —ámbar— y eso lo pone quien lo usa, porque el trazo hereda `currentColor`.
+   */
+  pausa: (
+    <>
+      <path d="M9.2 5.2v13.6M14.8 5.2v13.6" />
+    </>
+  ),
+  /** Reactivar — el triángulo. El par de `pausa`, y nunca los dos a la vez en la misma fila. */
+  play: (
+    <>
+      <path d="M7.5 4.8 19 12 7.5 19.2z" />
+    </>
+  ),
+  /** Duplicar — dos hojas, una atrás de la otra. */
+  duplicar: (
+    <>
+      <rect x="8.6" y="8.6" width="11.4" height="11.4" rx="2" />
+      <path d="M15.4 5.4H6a2 2 0 0 0-2 2v9.4" />
+    </>
+  ),
+  /** Presupuesto — un billete. ⛔ No un signo de moneda: la moneda cambia por cuenta. */
+  presupuesto: (
+    <>
+      <rect x="3.2" y="6.6" width="17.6" height="10.8" rx="2" />
+      <circle cx="12" cy="12" r="2.4" />
+      <path d="M6.6 10.2v3.6M17.4 10.2v3.6" />
+    </>
+  ),
+  /** Escalar — la escalera para arriba. Son N escalones en el tiempo, ⛔ no una flecha. */
+  escalar: (
+    <>
+      <path d="M3.8 19.4h4.4V15h4.4v-4.4h4.4V6.2h3.2" />
+    </>
+  ),
+  /** Más acciones — los tres puntos. Lo que no entra en la fila entra acá. */
+  puntos: (
+    <>
+      <circle cx="5.4" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="18.6" cy="12" r="1.5" />
+    </>
+  ),
+  /** Crear — el más. */
+  mas: (
+    <>
+      <path d="M12 5.2v13.6M5.2 12h13.6" />
+    </>
+  ),
   /** Sacar / cerrar — cruz. */
   cruz: (
     <>

@@ -1185,6 +1185,94 @@ para un registro.
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 
+## 🆕🏁 30-ago-2026: LA FILA — un ícono afuera, el resto adentro, y la cara a la vista
+
+Bruno, caminando la tabla: *«una celda tiene el tamaño de la cantidad de botones que tenga la acción,
+es una locura»* · *«¿dónde están los anuncios con sus miniaturas? Sería esencial verlo para saber qué
+anuncio está activo sin hacer movimientos de más»* · *«hay mucho texto lineal debajo de las celdas
+que realmente no tiene mucha explicación»* · *«las pautas apagadas que se ordenen abajo de todo»*.
+
+### 1. 🔑 El problema de los seis botones NO era el ancho: era la falta de jerarquía
+
+`BotonesAccion` dibujaba hasta **seis** botones `ghost` idénticos por fila —Pausar · Presupuesto ·
+Escalar · Duplicar · Nueva campaña · Renombrar—, mismo tamaño y mismo color. La fila crecía con la
+cantidad, sí, pero lo caro es otra cosa: **seis botones iguales obligan a leer los seis cada vez**,
+incluso para el gesto que se hace todos los días.
+
+⇒ **Pausar / Reactivar** queda afuera, con **ícono y color** (ámbar frena, verde prende) — es el
+único que se aprieta a diario y el único donde el color dice qué va a pasar. El resto entra a
+`MenuAcciones` (`components/ui/`, nuevo en el kit), **con el nombre escrito**.
+⛔ **Adentro del menú ⛔ NO van sólo con ícono**: la regla del ícono solo (`VOCABULARIO.md` §3.3) es
+para el gesto que se repite *una vez por fila*, ⛔ no para una lista de cinco — cinco íconos sin texto
+son cinco adivinanzas.
+🔑 **El `aria-label` NOMBRA la cosa**: «Pausar «GIRLHOOD FRIO»», «Más acciones de «GIRLHOOD FRIO»».
+Diez «Pausar» apilados son diez botones idénticos para quien ⛔ no ve la pantalla.
+✅ **Arregla Campañas de una**: monta el mismo componente en cada fila del árbol, que es donde más
+pesa (cientos de filas).
+
+### 2. 🔴 El test de la altura tenía DOS agujeros, y el segundo es la lección
+
+`tests/boton-crudo-altura.test.ts` existía justamente para esto y **no habría cazado nada**:
+
+1. Barría **dos carpetas** (`zona` y `parte`) cuando el invariante es de todo lo que se dibuja adentro
+   de `.shell-content`. Los botones nuevos quedaban afuera.
+2. 🔑 **Contaba `height: '…'` con comilla** — o sea, alturas de TEXTO. Un `height: 28`, que es lo
+   natural para un botón de ícono, ⛔ no lo veía. **Un barrido que describe la SINTAXIS en vez de la
+   FORMA se queda ciego justo donde el código es más denso.** Es la misma lección de
+   [[feedback_areben_parser_ciego_donde_importa]], en el test que existía para prevenirla.
+
+⇒ Ahora barre `components/meta-ads` entero + `components/ui/MenuAcciones.tsx`, y cuenta cualquier
+`height:` seguido de algo. 📊 Al ensanchar apareció **un** caso real viejo (`rentabilidad/Supuestos.tsx`,
+el par sí/no) y los otros tres «faltantes» eran el detector ciego: ya tenían altura numérica.
+⚠️ **`components/ui` entero queda AFUERA a propósito**: medido, nueve archivos del kit tienen
+`<button>` crudo sin altura y varios ⛔ no viven adentro de `.shell-content`. Meterlos de una haría un
+rojo que alguien apaga. Entra **archivo por archivo**.
+
+### 3. El «por qué» se COMPACTA, ⛔ no se esconde
+
+Cada celda eran **dos** `<Tr>`: la fila y otra con `colSpan` y una lista de frases. Eso es lo que
+hacía que cada renglón midiera dos o tres alturas.
+🔑 **Pero un veredicto sin el número que lo sostiene es un renglón que nadie aprieta** —está escrito
+en el propio archivo desde el 26-ago— así que la **primera** razón, la que lleva el número, se queda
+a la vista al pie del pill. Las demás bajan al detalle y la fila sólo dice **cuántas son**.
+
+### 4. La cara en la FILA, ⛔ no adentro del plegable
+
+Las miniaturas existían… adentro de la fila abierta, que es donde ⛔ no sirven: la pregunta *«¿cuál es
+cuál?»* se hace **recorriendo la tabla**, y `AD02 - GIRLHOOD COLLECTION` ⛔ no la contesta.
+Va la del aviso que **más gastó** de la caja —una caja con tres avisos casi siempre tiene uno que se
+lleva el 80%— con un `+N` si hay más. ⛔ No las N: cuatro miniaturas por fila vuelve a ser el problema
+que se acaba de arreglar con los botones.
+🔑 `Cara` salió a **archivo propio** (`zona/Cara.tsx`): una segunda implementación habría sido dos
+lugares donde decidir `contain` vs `cover`, que es justo la decisión que ⛔ no puede estar dos veces.
+
+**`usePiezas` pasa a pedir AL MONTAR**, y eso cambia una decisión escrita:
+- 🔑 **La promesa que la cuidaba —*«mirar la tabla ⛔ no gasta un peso de cupo»*— ya era falsa**: el
+  parte se pide solo al entrar desde el 26-ago, y son **cinco** llamadas. Un candado que cuida dos al
+  lado de una puerta que hace cinco ⛔ no protege nada: sólo escondía las caras.
+- 📊 **El cupo, releído contra prod hoy**: `call_count` de `1145878766790149` en **2** sobre 100
+  (`X-Business-Use-Case-Usage`, lo que guarda el registro de acciones). Esto son 2-3 llamadas más,
+  cacheadas 10 min por cuenta. ⚠️ La llamada tarda **~5,6 s** con 257 piezas: las caras aparecen
+  después de la tabla, y el marco dice «…» mientras vienen.
+
+### 5. Lo apagado, al fondo
+
+`ordenarCeldas()`: `apagada` primero al final, y **adentro de cada grupo sigue mandando el gasto** —
+sin el desempate, el orden de adentro queda a merced de cómo vino la consulta.
+⚠️ Ordena por **`veredicto.clase`** y ⛔ no por `estado`: la clase ya resolvió que la configuración es
+de HOY (`configDeHoy`), mientras que `estado` en una ventana vieja está congelado en el último día de
+la foto. Mirar `estado` acá volvería a traer el defecto que esa función existe para curar.
+
+### Verificado
+
+- **4 mutantes sobre el orden, 4 muertos** (dado vuelta · sin desempate · mutando la entrada · mirando
+  `estado`) · **1 mutante sobre el test ensanchado**: sacarle la altura al botón de pausa lo pone
+  rojo, que es lo que prueba que el ensanche sirve.
+- **El cupo, medido antes de encender las caras** — ⛔ no estimado.
+- ▶️ **Falta caminar la pantalla**: que la fila mida **un** renglón, que el «⋯» abra y cierre con
+  Escape y clickeando afuera, que la cara aparezca (tarda ~6 s la primera vez) y que las apagadas
+  estén al fondo.
+
 ## 🆕🏁 30-ago-2026: EL DÍA EN CURSO ADENTRO DE LA TABLA, y el eje al lado de su ventana
 
 Bruno caminó la zona y dijo tres cosas seguidas: *«si la zona de rendimiento es de una sola marca ya

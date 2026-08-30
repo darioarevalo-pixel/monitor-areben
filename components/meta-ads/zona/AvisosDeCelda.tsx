@@ -25,46 +25,14 @@
  *
  * Se muestra el póster y un link a la publicación, ⛔ no un reproductor. El iframe de previsualización
  * de Meta lleva el access token del system user adentro del `src` (`api/meta-ads.js`), y ésa es una
- * decisión que ⛔ no se revierte por comodidad.
+ * decisión que ⛔ no se revierte por comodidad. El marco vive en `Cara.tsx`, compartido con la fila.
  */
 
 import { entero, plata } from '@/lib/meta-ads/formato'
 import type { AvisoDeCelda } from '@/lib/meta-ads/rendimiento'
 import type { PiezaAviso } from '@/lib/meta-ads/biblioteca'
-import { Notice, color, font, radius, space, weight } from '@/components/ui'
-
-const LADO = 96
-
-function Cara({ p }: { p: PiezaAviso | null }) {
-  // ⛔ `contain` y no `cover`: recortar al cuadrado le corta la cabeza a una pieza vertical, que son
-  // casi todas. Es la misma decisión que ya está tomada en `Avisos.tsx`.
-  const marco: React.CSSProperties = {
-    width: LADO, height: LADO, flexShrink: 0, borderRadius: radius.md,
-    background: color.bg2, border: `1px solid ${color.line}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
-  }
-  const src = p && (p.imagen || p.thumb)
-  if (!src) {
-    return <div style={{ ...marco, color: color.mut2, fontSize: font.xs }}>{p ? 'sin foto' : '—'}</div>
-  }
-  return (
-    <div style={marco}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- la URL es del CDN de Meta, firmada y
-          efímera: `next/image` la optimizaría contra un host que no está en la lista y caduca. */}
-      <img src={src} alt={p?.nombre || 'pieza'} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-      {p?.esVideo && (
-        <span
-          style={{
-            position: 'absolute', bottom: 3, right: 3, fontSize: 10, lineHeight: 1,
-            padding: '2px 4px', borderRadius: radius.sm, background: 'rgba(0,0,0,.62)', color: '#fff',
-          }}
-        >
-          ▶ video
-        </span>
-      )}
-    </div>
-  )
-}
+import { Cara } from '@/components/meta-ads/zona/Cara'
+import { Notice, color, font, space, weight } from '@/components/ui'
 
 export function AvisosDeCelda({ avisos, piezaDe, motivo, cargando, gastoDeLaCelda }: {
   avisos: AvisoDeCelda[]
