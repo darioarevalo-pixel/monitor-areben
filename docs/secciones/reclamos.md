@@ -2572,3 +2572,99 @@ línea en la lista. Está escrito en `TIENDAS_DEL_ALTA` y atado por test.
     oráculo es la captura, ⛔ no el «Clicked at (x,y)» — y `get_page_text` ⛔ **no muestra el valor de
     un input**, así que ahí tampoco se ve. Lo que sí anduvo siempre: `form_input` por `ref` y el
     click por `ref`.
+
+---
+
+## 🆕 🔴 D4 · «No aceptó» sobre un reclamo SIN decidir (30-ago-2026 — el último de la auditoría)
+
+Con esto **la auditoría del 28-ago queda cerrada: 19 de 19**. Era el único defecto que faltaba, y
+estaba trabado esperando una decisión de Bruno (**B1**), que la contestó el 30-ago.
+
+### El caso, y por qué existe
+
+`liberar-decision` borra `compensacion` **y deja la oferta de retención en pie a propósito** —para
+poder rehacer la decisión con el número a la vista—. O sea que la fila con **una oferta viva y
+ninguna rama guardada** no es un estado imposible: es el estado en que quedó **R-0022** el 27-ago a
+las 20:35.
+
+Ahí, apretar **«Registrar que no aceptó»** apagaba las tres formas que el caso tenía de aparecer:
+
+| lo que el rechazo escribía | qué apagaba |
+|---|---|
+| `retencion_respuesta: 'rechazo'` | `ofertaEsperandoRespuesta` pasa a `false` ⇒ muere el aviso *«le ofrecimos hace N días y no contestó»* |
+| — | `estaDecidido` sigue en `false` ⇒ `mensajesDeLaFila` ⛔ no da `propuesta` **ni** `resolucion`, y `pedir_fotos` tampoco porque ya hay fotos ⇒ **la columna queda muda** |
+| el `update` mismo | el único reloj que quedaba, `sinDecidir`, contaba desde `updated_at` ⇒ **el propio gesto de anotar el «no» lo ponía en cero** |
+
+🔴 🔑 **El gesto de registrar que el cliente contestó era lo que hacía desaparecer el caso**, justo
+cuando dejaba de depender de él. Y las tres puntas afirmaban la misma premisa falsa, escrita en
+tres lugares: el JSDoc del núcleo, la nota del historial (*«sigue lo que estaba decidido»*) y **el
+confirm de la pantalla**, con el nombre de la compensación en un ternario **adentro del paréntesis**
+— así que sin decisión el texto se leía igual de afirmativo, sólo que sin nombrar nada.
+⇒ quinta vuelta de [[feedback_areben_dos_lados_bien_y_la_pregunta_del_medio]].
+
+### 🔑 B1, contestada: se parte en dos
+
+> **ARMAR** una oferta exige que la decisión esté · **CONTESTARLA** siempre se puede.
+
+- **Armar ya lo exige `decidir`**, que devuelve `400 falta la compensación` antes de llegar a
+  `registroDeRetencion`. ⇒ ⛔ no se agregó ningún freno nuevo: el que hacía falta ya estaba.
+- **Contestar ⛔ no se frena**, y esa es la mitad que importa: un «no aceptó» es **un hecho que ya
+  pasó en el mundo**, y frenarlo ⛔ no lo deshace — lo deja sin registrar, que es justo el agujero
+  que `retencion_respuesta` vino a tapar ⇒ [[feedback_areben_freno_sin_valvula]]. Es la misma
+  partición que **D15** hizo con las fotos: gatean **armar** la propuesta, ⛔ no **registrar** una
+  que ya se hizo.
+
+### Lo que se escribe ahora
+
+`camposAlContestarLaOferta` recibe **`compensacionGuardada`, obligatoria aunque valga `null`** —el
+mismo trato que el escenario: si fuera opcional, el llamador que ⛔ no la lee recibiría el default
+seguro *sin enterarse de que le falta el dato*, que es exactamente cómo la nota venía afirmando de
+más. El compilador listó solo los llamadores.
+
+| | rechazo **con** decisión | rechazo **sin** decisión |
+|---|---|---|
+| campos | `retencion_respuesta` | `retencion_respuesta` **+ `estado: 'en_revision'`** |
+| nota | *«sigue lo que estaba decidido»* | *«…y el reclamo no tiene decisión guardada: hay que decidir»* |
+
+🔑 **`estado: 'en_revision'` ⛔ no es un cambio de estado —ya estaba ahí— es el SELLO del instante.**
+El handler apila el evento con ese estado, y `desdeQueEsta(fila, 'en_revision')` es lo que después
+hace arrancar el reloj **en el rechazo**. ⛔ **Sin migración**: la fecha vive en el `historial`.
+
+⚠️ **Aceptar ⛔ no cambió en nada**, y ⛔ no es un olvido: la rama que se acepta **trae su propia
+resolución** (`salidaAlAceptarRetencion`), así que ahí no hay ninguna premisa que se caiga.
+
+### El reloj, arreglado de paso
+
+`sinDecidir` contaba desde `updated_at`, así que **cualquier** edición lo ponía en cero — y la
+edición más probable sobre un caso sin decidir es ir a mirarlo. Ahora sale de
+`desdeQueEsta(d, 'en_revision')` ⇒ cuarta vuelta de
+[[feedback_areben_updated_at_no_mide_la_espera]] en este mismo archivo.
+
+Y el aviso nuevo, **`rechazoSinDecidir: 0`**: por lo mismo que `plataSinProducto`, ⛔ no es una
+demora que se tolera unos días, es **un estado que ⛔ no debería existir**. Los dos son
+**excluyentes** —son el mismo pendiente visto desde dos momentos—.
+
+### Cómo se probó
+
+- **18 mutantes, 18 muertos** sobre las tres capas (el núcleo, el reloj, el cable del handler y el
+  texto de la pantalla) · **2 mutantes de control INOCUOS que sobrevivieron**, que es lo único que
+  prueba que el arnés ⛔ no mata todo por igual.
+- 🔴 🔑 **Uno de los tres que sobrevivió en la primera tanda era un test TAPADO por otro guard**: el
+  de *«con decisión guardada ⛔ no avisa»* estaba escrito con `estado: 'resuelto'`, y el aviso lo
+  apagaba **el guard del estado** ⇒ el guard que el test venía a probar ⛔ nunca se ejercía. Se
+  reescribió en `en_revision`. Es el mismo modo de falla que el `costo == null` del 30-ago.
+- **La pantalla se MONTA y se lee lo dibujado** (`tests/reclamos-rechazo-sin-decision.test.tsx`),
+  ⛔ no el código. ⚠️ Y sin el `ConfirmProvider` el test es **vacío**: `useConfirmar` cae al diálogo
+  nativo, que en jsdom ⛔ no dibuja nada, así que las dos mitades pasarían igual.
+- ✅ **18 de 18 caminando contra la base REAL de BDI** (`scripts/caminar-rechazo-sin-decision.mjs`),
+  con el handler **en proceso** —prod todavía corre el código viejo, así que pegarle a la API
+  mediría el deploy anterior— y el oráculo por PostgREST con la service key. **3 filas sembradas y
+  borradas, las 2 reales intactas.**
+
+### ▶️ Lo que queda
+
+- **Nadie lo apretó todavía sobre una fila real**: el gesto lo hace el local, y la única fila que
+  llegó a este estado (R-0022) ya se resolvió.
+- 🔴 **La columna de mensajes sigue sin ofrecer nada** en ese rato, **y es correcto**: hasta que
+  Administración decida ⛔ no hay nada honesto que prometerle al cliente. Lo que faltaba ⛔ no era
+  un mensaje: era que **el caso apareciera**, y eso ahora lo dice el aviso.

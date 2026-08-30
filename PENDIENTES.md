@@ -629,7 +629,24 @@ antes de rehacerlo.
   ✅ **Caminado en el navegador el mismo día**: `/postventa?tab=reclamos`, orden 21033, aparece con
   sus 2 productos. Nada que hacer acá.
 
-- 🔴 **El alta pública, paso 2: la puerta que CREA — hecha, pero SIN PANTALLA** (30-ago-2026). El
+- ✅ 🔴 **La auditoría de post-venta quedó CERRADA: 19 de 19** (30-ago-2026). El último era **D4**,
+  y estaba trabado en **B1**, que Bruno contestó ese día: *«se parte en dos — armar la oferta exige
+  la decisión, contestarla siempre se puede»*. El relato entero en `docs/secciones/reclamos.md`
+  § «D4».
+  🔴 **Lo que estaba vivo**: `liberar-decision` borra la resolución y **deja la oferta en pie a
+  propósito**, así que existe la fila con oferta viva y ninguna rama guardada (así quedó R-0022).
+  Ahí apretar «Registrar que no aceptó» **apagaba las tres formas que el caso tenía de aparecer** —
+  el aviso de la oferta, la columna de mensajes, y el reloj de «hay que decidir», que contaba desde
+  `updated_at` y **el propio gesto de anotar el «no» lo ponía en cero**.
+  🔑 **Y la premisa falsa estaba escrita en tres lugares**: el núcleo, la nota del historial y **el
+  confirm de la pantalla**. ⛔ Sin migración · **18 mutantes, 18 muertos** (2 controles inocuos
+  vivos) · **18 de 18 caminado contra la base real de BDI**, 3 filas sembradas y borradas y las 2
+  reales intactas.
+  ▶️ **Lo que queda de post-venta ⛔ no es código**: son las **decisiones de Bruno** (`PISO_RETORNO`,
+  cuánto vale un cupón, el costo operativo, y los cuatro plazos), y **que alguien lo apriete**: el
+  módulo tiene **2 filas en BDI y 0 en Zattia**, así que casi nada de esto lo tocó una persona.
+
+- ✅ 🔴 **El alta pública, paso 2 y paso 3: la puerta que CREA, y LA PANTALLA** (30-ago-2026). El
   núcleo (`lib/reclamos/alta-publica.core.js`) y el servidor (`api/_reclamo.js`, acción `alta`) están
   y probados; el relato entero en `docs/secciones/reclamos.md` § «El alta pública, paso 2».
   🔑 **Lo que hay que saber**: la verificación del mail corre **en el servidor, adentro del mismo
@@ -642,6 +659,12 @@ antes de rehacerlo.
   ⛔ Sin migración · **31 mutantes, 31 muertos** (2 controles inocuos vivos) · ✅ **caminado contra
   PRODUCCIÓN, 16 de 16** (`node scripts/caminar-alta-publica.mjs`), con una fila sembrada y borrada y
   **las 2 reales intactas**.
-  ▶️ **Lo único que falta para que alguien lo use es LA PANTALLA**: los cuatro toques en
-  `ReclamoPublico.tsx` y la ruta pública por donde se entra.
-  ▶️ **De Bruno**: por dónde le llega el link al cliente (¿el mail de la compra? ¿el pie de la web?).
+  ✅ **Y la pantalla salió el mismo día** (`10fc671` + `a468879`): la puerta es **`/reclamo?m=bdi`**
+  (o `m=zattia`), **caminada en el navegador contra producción** con la orden real 21148, 1 fila
+  sembrada y borrada. 🔑 Fue **la primera pantalla de postventa que se pudo caminar sin Bruno**, y
+  ⛔ no por suerte: **el portal ⛔ no pide login**.
+  ⚠️ **STUNNED ⛔ no tiene puerta pública, y ⛔ no es un olvido**: sus reclamos vivirían en la base de
+  Zattia, donde el freno «un reclamo abierto por orden» compara `(store, orden_tn)` ⇒ dos órdenes
+  con el mismo número le contestarían a una persona **el token del reclamo de otra**.
+  ▶️ 🔴 **Lo ÚNICO que falta para que lo use un cliente, y es de Bruno: por dónde le llega el link**
+  (¿el mail de la compra? ¿el pie de la web? ¿el WhatsApp de siempre?).

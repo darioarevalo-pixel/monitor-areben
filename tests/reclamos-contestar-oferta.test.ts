@@ -17,9 +17,15 @@ import { camposAlContestarLaOferta } from '@/lib/reclamos/casos.core.js'
  * `rechazo` ⛔ no toque nada más, y eso sólo se afirma comparando la lista completa.
  */
 
+/**
+ * ⚠️ **La fixture lleva `compensacionGuardada` puesta**, y ⛔ no es relleno: es el caso normal —la
+ * oferta salió **después** de que Administración decidiera las dos ramas—. El caso sin decisión
+ * (D4) es el de abajo, y tiene su propio bloque.
+ */
 const oferta = {
   motivo: 'no_esperaba', escenario: null,
   monto: 13491, forma: 'plata', diferencia: null,
+  compensacionGuardada: 'plata_total',
 }
 
 describe('camposAlContestarLaOferta', () => {
@@ -28,10 +34,24 @@ describe('camposAlContestarLaOferta', () => {
    * pisarlo al rechazar sería rehacer una decisión que nadie rehizo, y volvería a poner en
    * `pendiente` la plata que capaz ya salió.
    */
-  it('rechazo: escribe SÓLO la respuesta y ⛔ nada más', () => {
+  it('rechazo con decisión guardada: escribe SÓLO la respuesta y ⛔ nada más', () => {
     const r = camposAlContestarLaOferta({ ...oferta, respuesta: 'rechazo' })
     expect(r.error).toBeUndefined()
     expect(r.campos).toEqual({ retencion_respuesta: 'rechazo' })
+    // La nota sale del núcleo: el handler ⛔ no la vuelve a escribir.
+    expect(r.nota).toBe('el cliente NO aceptó quedárselo: sigue lo que estaba decidido')
+  })
+
+  /**
+   * ⚠️ **La nota de aceptar también sale del núcleo, y dice la FORMA.** Es lo único que queda
+   * escrito de si lo que se le dio fue plata o un cupón — y son dos cosas distintas: una sale de
+   * la caja y la otra ⛔ no. Sin este test, un mutante que las intercambia sobrevive.
+   */
+  it('acepto: la nota dice el monto y la forma', () => {
+    expect(camposAlContestarLaOferta({ ...oferta, respuesta: 'acepto' }).nota)
+      .toBe('el cliente ACEPTÓ quedárselo por 13491 (plata)')
+    expect(camposAlContestarLaOferta({ ...oferta, forma: 'cupon', respuesta: 'acepto' }).nota)
+      .toBe('el cliente ACEPTÓ quedárselo por 13491 (cupón)')
   })
 
   /**
@@ -138,6 +158,80 @@ describe('camposAlContestarLaOferta', () => {
     })
   })
 
+  /**
+   * 🔴 **D4 · «No aceptó» sobre un reclamo SIN decidir** (30-ago-2026).
+   *
+   * `liberar-decision` borra `compensacion` y **deja la oferta en pie a propósito**, así que la
+   * fila con una oferta viva y ⛔ ninguna rama guardada existe: así quedó R-0022 el 27-ago. La
+   * premisa que este archivo tenía escrita —*«lo decidido ya era la salida si dice que no»*— es
+   * falsa justo ahí, y el rechazo dejaba la fila **muda**: apagaba el aviso de la oferta y ⛔ no
+   * encendía nada.
+   *
+   * 🔑 **B1, contestada por Bruno el 30-ago: se parte en dos** — armar la oferta exige la decisión
+   * (lo exige `decidir`, que pide `compensacion` antes de llegar acá), **contestarla siempre se
+   * puede**, porque un «no aceptó» es un hecho que ya pasó en el mundo.
+   */
+  describe('D4 · el rechazo sobre un reclamo sin decisión', () => {
+    const sinDecidir = { ...oferta, compensacionGuardada: null }
+
+    /**
+     * 🔑 **Contestar ⛔ NO se frena.** Frenarlo ⛔ no deshace lo que el cliente dijo: lo deja sin
+     * registrar, que es el agujero que `retencion_respuesta` vino a tapar
+     * ⇒ [[feedback_areben_freno_sin_valvula]].
+     */
+    it('la respuesta se registra igual: ⛔ no hay freno', () => {
+      const r = camposAlContestarLaOferta({ ...sinDecidir, respuesta: 'rechazo' })
+      expect(r.error).toBeUndefined()
+      expect(r.campos?.retencion_respuesta).toBe('rechazo')
+    })
+
+    /**
+     * 🔑 **`estado: 'en_revision'` ⛔ no es un cambio de estado —ya estaba ahí— es el SELLO del
+     * instante**: el handler apila el evento con ese estado, y `desdeQueEsta(fila, 'en_revision')`
+     * es lo que después hace arrancar el reloj **en el rechazo** y ⛔ no en el último toque.
+     * ⛔ Sin migración: la fecha vive en el `historial`.
+     */
+    it('sella el momento en el historial volviendo a escribir en_revision', () => {
+      const r = camposAlContestarLaOferta({ ...sinDecidir, respuesta: 'rechazo' })
+      expect(r.campos).toEqual({ retencion_respuesta: 'rechazo', estado: 'en_revision' })
+    })
+
+    /**
+     * 🔴 **La nota del historial era la premisa falsa, palabra por palabra.** Es lo único que
+     * queda escrito de lo que pasó, así que afirmar «sigue lo que estaba decidido» sobre una fila
+     * sin decisión es lo que mantuvo el caso mudo.
+     */
+    it('la nota ⛔ no afirma que siga nada decidido', () => {
+      const r = camposAlContestarLaOferta({ ...sinDecidir, respuesta: 'rechazo' })
+      expect(r.nota).not.toMatch(/estaba decidido/)
+      expect(r.nota).toMatch(/hay que decidir/)
+    })
+
+    /**
+     * ⚠️ **Aceptar ⛔ no necesita decisión previa y por eso ⛔ no cambia**: la rama que se acepta
+     * **trae su propia resolución** (`salidaAlAceptarRetencion`), así que ahí no hay premisa que
+     * se caiga. Sin este test, el arreglo podría haber tocado las dos ramas por igual.
+     */
+    it('aceptar sin decisión previa sigue cerrando la rama entera', () => {
+      const r = camposAlContestarLaOferta({ ...sinDecidir, respuesta: 'acepto' })
+      expect(r.campos?.compensacion).toBe('plata_parcial')
+      expect(r.campos?.estado).toBe('resuelto')
+    })
+
+    /**
+     * 🔴 🔑 **El parámetro es OBLIGATORIO aunque valga `null`**, igual que el escenario: un
+     * llamador que ⛔ no lee `compensacion` tiene que **enterarse de que le falta el dato**, ⛔ no
+     * recibir el default seguro. `null` es una respuesta —«no hay decisión»—; `undefined` es que
+     * nadie preguntó.
+     */
+    it('sin el dato ⛔ no contesta: el llamador se entera', () => {
+      const { compensacionGuardada: _, ...sinElDato } = oferta
+      const r = camposAlContestarLaOferta({ ...sinElDato, respuesta: 'rechazo' } as never)
+      expect(r.campos).toBeUndefined()
+      expect(r.error).toMatch(/decisión guardada/)
+    })
+  })
+
   /** 🔑 En la falla el destino es `falla` aunque se la quede: quedársela ⛔ no la vuelve sana. */
   it('en una falla, la unidad que se queda sigue siendo una falla', () => {
     const r = camposAlContestarLaOferta({ ...oferta, motivo: 'falla', escenario: 'util', respuesta: 'acepto' })
@@ -217,5 +311,31 @@ describe('lo que el handler le pasa al núcleo contra lo que trajo de la base', 
   it('y los items viajan en la llamada al núcleo', () => {
     const llamada = rama.split('camposAlContestarLaOferta({')[1].split('});')[0]
     expect(llamada).toMatch(/items:\s*Array\.isArray\(fila\.items\)/)
+  })
+
+  /**
+   * 🔴 **D4, la misma mitad para `compensacion`.** El parámetro es obligatorio, así que el núcleo
+   * ⛔ no puede contestar mal en silencio — pero **el handler es JS y ⛔ no lo compila nadie**: si
+   * alguien saca la línea, el error sale recién en producción, sobre una fila real. Acá se ata que
+   * el dato **viaje** y que salga de la fila, ⛔ no del body: si viniera de la pantalla, la
+   * pregunta «¿hay una decisión guardada?» la contestaría el navegador.
+   */
+  it('y la decisión guardada viaja, leída de la FILA', () => {
+    const llamada = rama.split('camposAlContestarLaOferta({')[1].split('});')[0]
+    expect(llamada).toMatch(/compensacionGuardada:\s*fila\.compensacion/)
+    expect(llamada).not.toMatch(/compensacionGuardada:\s*b\./)
+  })
+
+  /**
+   * 🔴 **La nota del historial sale del núcleo.** Era la premisa falsa escrita a mano en este
+   * archivo —«sigue lo que estaba decidido»— sobre una fila que ⛔ no tenía ninguna decisión.
+   * Que vuelva a armarse acá es exactamente cómo el caso se mantuvo mudo.
+   */
+  it('la nota ⛔ no se vuelve a escribir en el handler', () => {
+    // ⚠️ **Sin comentarios**, o el test se choca con el que EXPLICA el arreglo: la frase vieja
+    // sigue escrita ahí a propósito, para que se entienda qué afirmaba de más.
+    const codigo = rama.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    expect(codigo).toMatch(/const nota = r\.nota/)
+    expect(codigo).not.toMatch(/sigue lo que estaba decidido/)
   })
 })

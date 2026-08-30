@@ -1651,10 +1651,16 @@ export function camposAlContestarLaOferta(o: {
   monto: number | null
   forma: FormaRetencion | null
   diferencia: number | null
+  /**
+   * **La que ya tiene la fila** — `null` = todavía no se decidió nada. **Obligatoria aunque valga
+   * `null`** (D4): sin ella el rechazo afirma que «sigue lo que estaba decidido» sobre un reclamo
+   * que ⛔ no tiene ninguna decisión. La regla está en `casos.core.js`.
+   */
+  compensacionGuardada: Compensacion | null
   /** Los del reclamo: es de donde sale la unidad perdida de `costo_caso`. Sin ellos vale 0. */
   items?: ItemReclamo[]
-}): { error?: string; campos?: Partial<ReclamoRow> } {
-  return camposAlContestarLaOfertaJs(o) as { error?: string; campos?: Partial<ReclamoRow> }
+}): { error?: string; campos?: Partial<ReclamoRow>; nota?: string } {
+  return camposAlContestarLaOfertaJs(o) as { error?: string; campos?: Partial<ReclamoRow>; nota?: string }
 }
 
 // ── La unidad: el destino y la recepción, por PRODUCTO ──────────────────────────
@@ -2233,7 +2239,7 @@ export function leerVencimiento(
  * el que no responde es el cliente—, y porque el reclamo se queda quieto mientras tanto. ▶️ Lo
  * confirma Bruno con los primeros casos reales: hoy ⛔ no hay ninguno cerrado del que sacarlo.
  */
-export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3, etiqueta: 2, plataSinProducto: 0 } as const
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3, etiqueta: 2, plataSinProducto: 0, rechazoSinDecidir: 0 } as const
 
 /**
  * **El piso del retorno: por debajo de este monto no se pide que el producto vuelva**, aunque la
@@ -2418,9 +2424,38 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
   if (d.estado === 'en_transito' && !faltaMandarLaEtiqueta(d) && enCamino >= DIAS_ALERTA.transito) {
     alertas.push({ tono: 'warning', texto: `Hace ${enCamino} días que no llega`, dias: enCamino, ts: cuando(enCamino, DIAS_ALERTA.transito) })
   }
-  // Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.
-  if (d.estado === 'en_revision' && desdeToque >= DIAS_ALERTA.sinDecidir) {
-    alertas.push({ tono: 'danger', texto: `Esperando una decisión hace ${desdeToque} días`, dias: desdeToque, ts: cuando(desdeToque, DIAS_ALERTA.sinDecidir) })
+  /**
+   * Ya cargó las fotos y nadie decidió: es el único que depende de nosotros y no del cliente.
+   *
+   * 🔴 **Contaba desde `updated_at` y por eso ⛔ no medía la espera** (30-ago-2026, D4): cualquier
+   * edición del reclamo lo ponía en cero, y la edición más probable sobre un caso sin decidir es
+   * justamente ir a mirarlo. Ahora sale de `desdeQueEsta(d, 'en_revision')` —**el evento**—, que
+   * es la cuarta vez que este archivo aplica la misma lección: `desdeQueEsta`, `desdeQueSeDecidio`
+   * y `diasEsperandoLaOferta` ya la aplicaban ⇒ [[feedback_areben_updated_at_no_mide_la_espera]].
+   *
+   * 🔴 🔑 **Y el caso que lo destapó: el cliente que dice que NO sobre un reclamo sin decisión.**
+   * `liberar-decision` borra `compensacion` y deja la oferta en pie a propósito, así que existe
+   * la fila con una oferta viva y ⛔ ninguna rama guardada (R-0022). Registrar el rechazo apaga
+   * el aviso de la oferta y ⛔ no enciende nada: la fila **se quedaba muda** justo cuando el
+   * cliente ya contestó y está esperando. **Plazo 0**, por lo mismo que `plataSinProducto`: ⛔ no
+   * es una demora que se tolera unos días, es un estado que ⛔ no debería existir.
+   *
+   * ⚠️ Los dos son **excluyentes**: son el mismo pendiente —hay que decidir— visto desde dos
+   * momentos, y apilarlos diría dos veces lo mismo con dos números distintos.
+   */
+  const sinDecidir = diasDesde(desdeQueEsta(d, 'en_revision'), ahora)
+  const rechazoSinDecision = d.retencion_respuesta === 'rechazo' && !d.compensacion
+  if (d.estado === 'en_revision' && rechazoSinDecision && sinDecidir >= DIAS_ALERTA.rechazoSinDecidir) {
+    alertas.push({
+      tono: 'danger',
+      texto: sinDecidir >= 1
+        ? `El cliente no aceptó la oferta hace ${sinDecidir} días y el reclamo sigue sin decisión`
+        : 'El cliente no aceptó la oferta y el reclamo no tiene decisión',
+      dias: sinDecidir,
+      ts: cuando(sinDecidir, DIAS_ALERTA.rechazoSinDecidir),
+    })
+  } else if (d.estado === 'en_revision' && sinDecidir >= DIAS_ALERTA.sinDecidir) {
+    alertas.push({ tono: 'danger', texto: `Esperando una decisión hace ${sinDecidir} días`, dias: sinDecidir, ts: cuando(sinDecidir, DIAS_ALERTA.sinDecidir) })
   }
   /**
    * 🔴 **El estado en el que el reclamo NACE, y el único abierto que no tenía reloj.** `borrador`

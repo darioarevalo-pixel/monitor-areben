@@ -369,16 +369,28 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    * ⚠️ El texto nombra lo que va a pasar con **el número y la forma de esta fila**, ⛔ no en
    * genérico: es lo único que deja darse cuenta de que se apretó en la fila equivocada.
    */
+  /**
+   * 🔴 **D4: el confirm afirmaba «sigue lo que ya estaba decidido» SIN mirar si había decisión.**
+   * `liberar-decision` borra `compensacion` y deja la oferta en pie a propósito, así que la fila
+   * con oferta viva y ninguna rama guardada existe (R-0022) — y ahí lo que el sistema le decía a
+   * quien estaba por apretar era falso, con el ternario de la compensación **dentro del paréntesis
+   * y ⛔ no en la frase**: sin decisión, el texto se leía igual de afirmativo, sólo que sin
+   * nombrarla. Es la misma forma que ya rompió este módulo cinco veces: la regla en un lado, la
+   * pantalla afirmando de más en el otro ⇒ [[feedback_areben_dos_lados_bien_y_la_pregunta_del_medio]].
+   */
   const contesto = async (d: ReclamoRow, respuesta: RespuestaRetencion) => {
     const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
     const monto = Number(d.retencion_monto) || 0
     const esCupon = d.retencion_forma === 'cupon'
+    const noAcepto = d.compensacion
+      ? `${numeroReclamo(d.id)}: sigue lo que ya estaba decidido (${COMPENSACION_LABEL[d.compensacion] || d.compensacion}). Queda registrado que la oferta no funcionó.`
+      : `${numeroReclamo(d.id)}: este reclamo ⛔ no tiene ninguna decisión guardada, así que vuelve a quedar pendiente de decidir. Queda registrado que la oferta no funcionó.`
     const si = await confirmar({
       titulo: respuesta === 'acepto' ? 'El cliente aceptó quedárselo' : 'El cliente no aceptó',
       ok: respuesta === 'acepto' ? 'Sí, aceptó' : 'Sí, no aceptó',
       mensaje: respuesta === 'acepto'
         ? `${numeroReclamo(d.id)}: se cierra con ${esCupon ? `un cupón de ${pesos(monto)}` : `${pesos(monto)} de devolución`} y el producto se lo queda. El pedido de retorno se apaga.`
-        : `${numeroReclamo(d.id)}: sigue lo que ya estaba decidido${d.compensacion ? ` (${COMPENSACION_LABEL[d.compensacion] || d.compensacion})` : ''}. Queda registrado que la oferta no funcionó.`,
+        : noAcepto,
     })
     if (si) await accion(() => contestarLaOferta(marca, d.id, respuesta), respuesta === 'acepto' ? 'Anotado: se lo queda.' : 'Anotado: no aceptó.')
   }

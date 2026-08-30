@@ -7,6 +7,12 @@ empezó a tener casos reales adentro.
 `docs/secciones/retornos.md`) cuentan **cómo está hecho** y se mantienen. Esto es una foto con fecha
 de **qué no cierra**, y envejece: lo que se vaya arreglando se tacha acá y se cuenta allá.
 
+✅ 🏁 **CERRADA EL 30-AGO-2026: los 19 defectos están arreglados** (el último fue **D4**, que estaba
+trabado esperando **B1**). ⛔ Lo que queda abierto de este documento **⛔ no son defectos**: son las
+**decisiones de Bruno** del § 3 —B3 a B8—, y varias se destraban solas con un mes de volumen del
+alta pública. ⚠️ Y una advertencia que ⛔ no envejece: **la mayoría de estos arreglos ⛔ no los
+apretó todavía una persona sobre una fila real** — el módulo tiene 2 filas en BDI y 0 en Zattia.
+
 ## Cómo se caminó, y qué dio cada pierna
 
 | pierna | qué se ejerció | resultado |
@@ -200,7 +206,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
     (`scripts/caminar-despacho-deposito.mjs`, con el handler **en proceso** y ⛔ no contra prod, que
     todavía corre el código viejo; una fila sembrada y borrada, las 2 reales contadas antes y después).
 
-### 🔴 D4 · «No aceptó» sobre un reclamo sin decidir deja la columna MUDA
+### ✅ D4 · «No aceptó» sobre un reclamo sin decidir deja la columna MUDA — ARREGLADO el 30-ago
 
 **Cliente sin respuesta, y la premisa escrita es falsa en el único caso real que hubo.**
 
@@ -215,9 +221,21 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
   (`casos.core.js:660-663`, y `docs/secciones/reclamos.md` § *La respuesta del cliente cierra la
   rama*). R-0022 tenía la oferta **y la decisión soltada**: el `liberar-decision` del 27/8 20:35
   borró `compensacion` y dejó la oferta en pie.
-- **Decisión detrás** → **B1**.
-- **Costo**: bajo si se elige frenar la oferta sin resolución; medio si se elige devolver el reclamo
-  a «hay que decidir» con un mensaje propio.
+- **Decisión detrás** → **B1**, contestada por Bruno el 30-ago: **se parte en dos** — armar una
+  oferta exige que la decisión esté (**ya lo exige `decidir`**, que pide `compensacion` antes), y
+  **contestarla siempre se puede**, porque un «no aceptó» es un hecho que ya pasó en el mundo.
+- ✅ **30-ago**: el rechazo **sin** decisión escribe además `estado: 'en_revision'` —⛔ no es un
+  cambio de estado, es **el sello del instante** en el `historial`, de donde
+  `desdeQueEsta(fila,'en_revision')` saca la fecha— y la nota deja de afirmar *«sigue lo que estaba
+  decidido»*. 🔴 **Y de paso el reloj**: `sinDecidir` contaba desde `updated_at`, así que **el
+  propio gesto de anotar el «no» lo ponía en cero** ⇒ ahora cuenta desde el evento, más un aviso
+  propio con **plazo 0** (`rechazoSinDecidir`), por lo mismo que `plataSinProducto`.
+  🔴 **La tercera copia de la premisa falsa estaba en la PANTALLA**: el confirm decía *«sigue lo que
+  ya estaba decidido»* con el nombre de la compensación en un ternario **adentro del paréntesis**,
+  así que sin decisión se leía igual de afirmativo. **18 mutantes, 18 muertos** (2 controles
+  inocuos vivos) · **18 de 18 caminado contra la base real de BDI**, handler en proceso, 3 filas
+  sembradas y borradas y las 2 reales intactas. El relato entero en `docs/secciones/reclamos.md`.
+- ⚠️ **Aceptar ⛔ no cambió**: la rama que se acepta trae su propia resolución.
 
 ### ✅ D5 · El mensaje del reenvío existe, está probado, y no tiene botón — ARREGLADO el 28-ago
 
@@ -405,7 +423,7 @@ las dos. Que lo lea está bien —le sirve para contestarle al cliente—; lo qu
 
 | | la pregunta | por qué no la contesta el código |
 |---|---|---|
-| **B1** | ¿Se puede registrar una oferta sobre un reclamo **sin decidir**? Hoy sí, y así quedó R-0022 | de la respuesta sale si el freno va en `registroDeRetencion` o si hace falta un mensaje nuevo (D4) |
+| ~~**B1**~~ | ✅ **Contestada el 30-ago**: *«se parte en dos — armar la oferta exige la decisión, contestarla siempre se puede»* ⇒ ⛔ no hizo falta ningún freno nuevo (`decidir` ya pide `compensacion`); lo que se arregló fue que el rechazo sin decisión **deje de dejar la fila muda** (D4) | — |
 | ~~**B2**~~ | ✅ **Contestado el 28-ago**: *«sería como hoy, pero la venta técnica sale de nosotros: la escribimos desde el Monitor, y sólo Admin tendría que ir a cancelarla»* ⇒ `plata_parcial` sigue anulando, y los dos movimientos van **en ese orden** (D1) | — |
 | **B3** | ¿«Volver a decidir» tiene que borrar también los **montos**? | hoy deja `monto_total`, `costo_caso`, `retorno_sugerido`, `destino_prenda` y `via_retorno` |
 | **B4** | **`PISO_RETORNO`**, por marca: por debajo de cuánto ⛔ no vale la pena traer un producto | `tipos.ts:2096`, en `null` en las dos **desde que existe** ⇒ nunca cambió una cuenta |

@@ -1484,6 +1484,97 @@ describe('alertas por antigüedad', () => {
     expect(a[0].tono).toBe('danger')
   })
 
+  /**
+   * 🔴 **D4 · el reclamo que se queda MUDO cuando el cliente dice que no** (30-ago-2026).
+   *
+   * `liberar-decision` borra `compensacion` y deja la oferta en pie a propósito ⇒ existe la fila
+   * con una oferta viva y ⛔ ninguna rama guardada (R-0022). Registrar el rechazo **apagaba** el
+   * aviso de la oferta —`ofertaEsperandoRespuesta` pasa a `false`— y ⛔ no encendía nada, porque
+   * el único reloj que quedaba contaba desde `updated_at`, **que ese mismo write acababa de
+   * mover**. O sea: anotar que el cliente contestó apagaba las tres formas que el caso tenía de
+   * aparecer, justo cuando ya no dependía de él.
+   */
+  describe('D4 · el cliente dijo que no y ⛔ no hay decisión', () => {
+    const rechazado = (extra: Partial<ReclamoRow>) => fila({
+      estado: 'en_revision', compensacion: null,
+      retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: 'rechazo', ...extra,
+    })
+
+    /**
+     * 🔑 **Plazo 0, por lo mismo que `plataSinProducto`**: ⛔ no es una demora que se tolera unos
+     * días, es un estado que ⛔ no debería existir. El cliente ya contestó y está esperando.
+     */
+    it('avisa desde el día uno, sin inventar una espera', () => {
+      const a = alertasDe(rechazado({ historial: [{ estado: 'en_revision', at: hace(0) }] }), AHORA)
+      expect(a[0].texto).toBe('El cliente no aceptó la oferta y el reclamo no tiene decisión')
+      expect(a[0].tono).toBe('danger')
+      expect(a[0].dias).toBe(0)
+    })
+
+    /**
+     * 🔴 **El reloj arranca en el RECHAZO y ⛔ no en el último toque.** El sello es el evento
+     * `en_revision` que apila el handler al registrar la respuesta: sin él —contando desde
+     * `updated_at`— el propio gesto de anotar el «no» ponía el contador en cero
+     * ⇒ [[feedback_areben_updated_at_no_mide_la_espera]], cuarta vuelta en este archivo.
+     */
+    it('cuenta desde el rechazo, y tocar el reclamo ⛔ no lo reinicia', () => {
+      const a = alertasDe(rechazado({
+        historial: [{ estado: 'en_revision', at: hace(6) }],
+        updated_at: hace(0),
+      }), AHORA)
+      expect(a[0].dias).toBe(6)
+      expect(a[0].texto).toContain('hace 6 días')
+    })
+
+    /**
+     * ⚠️ **Son EXCLUYENTES**: los dos son el mismo pendiente —hay que decidir— visto desde dos
+     * momentos, y apilarlos diría dos veces lo mismo con dos números distintos.
+     */
+    it('⛔ no se apila con «Esperando una decisión»', () => {
+      const a = alertasDe(rechazado({ historial: [{ estado: 'en_revision', at: hace(9) }] }), AHORA)
+      expect(a.filter((x) => x.texto.includes('decisión')).length).toBe(1)
+      expect(a.some((x) => x.texto.includes('Esperando una decisión'))).toBe(false)
+    })
+
+    /**
+     * 🔑 **Con decisión guardada ⛔ no avisa nada**: ahí la premisa vieja es verdadera —el rechazo
+     * cae sobre la salida «si dice que no», que ya está en la fila— y el caso sigue su curso.
+     * Sin esta mitad, el aviso nuevo se prendería sobre todos los rechazos.
+     */
+    it('con decisión guardada, el rechazo ⛔ no avisa', () => {
+      // ⚠️ **En `en_revision` a propósito.** Con `estado: 'resuelto'` el mutante que borra
+      // `!d.compensacion` SOBREVIVE: lo apagaba el guard del estado, así que el test no ejercía
+      // el que vino a probar. Es el caso tapado de siempre en este módulo.
+      const a = alertasDe(rechazado({
+        compensacion: 'plata_total',
+        historial: [{ estado: 'en_revision', at: hace(9) }],
+      }), AHORA)
+      expect(a.some((x) => x.texto.includes('no aceptó'))).toBe(false)
+    })
+
+    /**
+     * 🔑 **Pregunta por el RECHAZO y ⛔ no por «hay una respuesta»**: el aviso dice *«no aceptó»*,
+     * así que prenderlo sobre un `acepto` sería afirmarle a quien lo lee lo contrario de lo que
+     * pasó. La otra mitad de la misma condición.
+     */
+    it('un «aceptó» ⛔ no enciende el aviso del rechazo', () => {
+      const a = alertasDe(rechazado({
+        retencion_respuesta: 'acepto',
+        historial: [{ estado: 'en_revision', at: hace(9) }],
+      }), AHORA)
+      expect(a.some((x) => x.texto.includes('no aceptó'))).toBe(false)
+    })
+
+    /**
+     * ⚠️ **Una fila vieja sin `historial` ⛔ no se rompe ni inventa**: `desdeQueEsta` cae en
+     * `updated_at`, que es exactamente lo que había antes.
+     */
+    it('una fila sin historial avisa igual, con el último toque', () => {
+      const a = alertasDe(rechazado({ updated_at: hace(2) }), AHORA)
+      expect(a[0].texto).toContain('hace 2 días')
+    })
+  })
+
   it('un paquete que no llega hace 15 días alerta', () => {
     expect(alertasDe(fila({ estado: 'en_transito', updated_at: hace(16) }), AHORA)[0].texto).toContain('no llega')
   })

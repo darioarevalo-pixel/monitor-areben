@@ -897,7 +897,9 @@ export default async function handler(req, res) {
         .from('devoluciones')
         // ⚠️ `items` entra por `costo_caso`: la unidad que el cliente se queda se valúa **a costo**,
         // y sin la lista el número saldría contando sólo la plata. Es la mitad grande del costo.
-        .select('estado, motivo, escenario, retencion_monto, retencion_forma, retencion_respuesta, diferencia, items')
+        // ⚠️ `compensacion` entra por **D4**: sin ella el rechazo no puede saber si hay una rama
+        // «si dice que no» guardada, y la nota del historial lo afirmaba sin mirar.
+        .select('estado, motivo, escenario, compensacion, retencion_monto, retencion_forma, retencion_respuesta, diferencia, items')
         .eq('store', store).eq('id', id).maybeSingle();
       if (eLee) throw new Error(eLee.message);
       if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
@@ -924,15 +926,22 @@ export default async function handler(req, res) {
         monto: num(fila.retencion_monto),
         forma: texto(fila.retencion_forma),
         diferencia: num(fila.diferencia),
+        // 🔑 **Obligatoria aunque valga `null`** (D4): decide si el rechazo puede decir «sigue lo
+        // que estaba decidido» o si el reclamo vuelve a «hay que decidir». `|| null` y ⛔ no
+        // `?? null` a propósito: un `''` guardado ⛔ no es una decisión.
+        compensacionGuardada: fila.compensacion || null,
         items: Array.isArray(fila.items) ? fila.items : [],
       });
       if (r.error) return res.status(400).json({ error: r.error });
       const acepto = r.campos.retencion_respuesta === 'acepto';
-      const nota = acepto
-        ? `el cliente ACEPTÓ quedárselo por ${fila.retencion_monto} (${fila.retencion_forma === 'cupon' ? 'cupón' : 'plata'})`
-        : 'el cliente NO aceptó quedárselo: sigue lo que estaba decidido';
-      // ⚠️ El estado del evento es el que queda: aceptar lo mueve a `resuelto`, rechazar ⛔ no lo
-      // toca. Poner `fila.estado` fijo dejaría el historial contando otra cosa que la fila.
+      // 🔴 **La nota sale del núcleo y ⛔ no se arma acá.** La que estaba escrita en este archivo
+      // era la premisa falsa palabra por palabra: afirmaba «sigue lo que estaba decidido» sin
+      // haber leído `compensacion`, sobre la única fila real que hubo (R-0022).
+      const nota = r.nota;
+      // ⚠️ El estado del evento es el que queda: aceptar lo mueve a `resuelto`, y rechazar lo
+      // vuelve a sellar en `en_revision` cuando ⛔ no hay decisión —que es lo que hace arrancar el
+      // reloj de «hay que decidir» en el rechazo—. Poner `fila.estado` fijo dejaría el historial
+      // contando otra cosa que la fila.
       await apilar(supabase, id, { estado: r.campos.estado || fila.estado, at: ahora(), usuario, nota }, r.campos);
       return res.status(200).json({ ok: true, acepto, estado: r.campos.estado || fila.estado });
     }
