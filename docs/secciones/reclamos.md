@@ -2308,3 +2308,148 @@ de BDI: **`tiene_mail: true` en las dos**.
 - 🔑 **El cruce lo tiene que hacer quien ESCRIBE.** Este endpoint es la primitiva; el handler que
   cree la fila tiene que llamarlo **servidor a servidor** y ⛔ no confiar en que el navegador ya
   verificó.
+
+## 🆕 🔴 El alta pública, paso 2: la puerta que CREA (30-ago-2026 — §2, paso 2)
+
+El paso 1 fue la llave —orden + mail, en `bdi-catalogo`—. Esto es la puerta: el endpoint que **crea
+el reclamo**, y las cinco opciones en criollo entre las que el cliente elige.
+
+⚠️ **Falta la pantalla.** Lo que hay es el núcleo y el servidor, con sus dos tests corriendo el
+handler de verdad. `components/reclamos/ReclamoPublico.tsx` —que hoy es el portal de un reclamo que
+ya existe— todavía ⛔ no tiene la vista del alta.
+
+### 🔴 🔑 Lo primero, porque es donde esto se rompe si se lo escribe cómodo
+
+**La verificación corre en el SERVIDOR, adentro del mismo pedido que crea la fila.**
+
+Lo natural es que el formulario llame a la verificación, muestre los productos, y después postee
+*«creá el reclamo con estos productos»*. Escrito así **la llave ⛔ no sirve para nada**: el segundo
+POST lo escribe cualquiera con `curl`, sin haber pasado nunca por el primero. La llave tiene que
+volver a girar del lado de adentro.
+
+⇒ `api/_reclamo.js` le pega él mismo a `bdi-catalogo` con el mail en el **body**, y de la orden que
+vuelve —⛔ no del body— salen **los productos y el nombre del cliente**. El cliente manda
+**índices**, ⛔ no productos: un índice sólo puede señalar algo que ya está en la orden verificada.
+
+📌 Y por eso el alta está escrita **antes** del guard del token, que es la única acción que puede
+hacerlo: todavía ⛔ no hay token que mostrar — crearlo es lo que viene a hacer.
+
+### Las cinco opciones ⛔ no son motivos: son FAMILIAS
+
+Adentro hay once motivos y el cliente ⛔ no puede elegir entre ellos, porque **la diferencia entre
+los de una familia ⛔ no la sabe él**: si la publicación está objetivamente mal o si era una
+expectativa suya lo decidimos nosotros con la ficha delante; si el paquete se perdió o sólo está
+demorado lo dice el seguimiento.
+
+| lo que ve el cliente | entra por | y puede terminar en |
+|---|---|---|
+| Me llegó fallado | `falla` | — |
+| No es lo que esperaba | `no_esperaba` | `no_como_publicado` |
+| Me quedó mal el talle | `talle` | `arrepentimiento` |
+| Me falta algo, o me llegó otra cosa | `faltante` | `mal_armado` · `excedente` |
+| Todavía no me llegó | `demora` | `no_llego` |
+
+Las familias salen de `MOTIVOS_VIGENTES` y ⛔ no de una lista escrita al lado. El **cable**: todo
+motivo vigente tiene puerta **o está nombrado en `SIN_PUERTA_PUBLICA` con el motivo** —hoy sólo
+`sin_stock`, porque el cliente ⛔ no se enteró de que le vendimos algo que no teníamos—. Un motivo
+nuevo sin puerta pone el test en rojo en vez de quedarse afuera callado.
+
+### 🔴 Con cuál de la familia ENTRA, y por qué ⛔ no da lo mismo
+
+**Un toque del cliente ⛔ no puede afirmar lo que él no sabe ni encender trabajo que nadie decidió.**
+
+- 🔴 **La entrada ⛔ nunca nace con un pendiente prendido.** `crear` enciende `reclamo_correo_estado`
+  en `no_llego` —el reclamo al transportista— y `tn_stock_estado` en `sin_stock`. Entrar por ahí
+  sería que **apretar un botón le ponga a alguien una tarea en la lista** sobre un hecho que todavía
+  no se miró. Por eso «todavía no me llegó» entra por `demora`: ⛔ no afirma que se perdió nada, y
+  `no_llego` lo pone una persona cuando el seguimiento lo dice. **Está atado por test contra el
+  texto de `api/_reclamos.js`**, así que si `crear` cambia de forma, avisa.
+- 🔴 **La entrada ⛔ nunca es un caso en que el cliente no sea el perjudicado.** `excedente` es que le
+  llegó algo **de más**: ⛔ no le falta nada, ⛔ no hay expectativa que cumplirle, y toca una
+  **segunda venta** que abre una persona.
+- **Entre dos de la misma familia entra la que ⛔ no afirma culpa nuestra**, porque afirmarla ya es
+  plata: `no_como_publicado` con su escenario objetivo regala el envío, y el propio perfil dice que
+  **la decidimos nosotros** (`decideCliente: false`).
+
+⚠️ El camino de vuelta ya existe: `reclasificar` muda el caso conservando número, fotos e historial.
+Entrar por el motivo más callado ⛔ no pierde nada.
+
+🔑 **El ESCENARIO ⛔ no lo toca el cliente**, y ⛔ no hay una sola opción que lo escriba.
+
+### Las fotos salen del perfil que ya existe
+
+`fotosEnElAlta` deriva de `PERFIL_MOTIVO[entra].fotos`: `'nunca'` → ⛔ no se piden (pedirle una foto
+a quien ⛔ no recibió el paquete es pedirle una foto de la nada), `'siempre'` → se exigen, el resto
+→ se ofrecen.
+
+⚠️ **«Exige» es de la PANTALLA, ⛔ no del servidor.** El alta crea la fila **sin fotos** a propósito:
+entran después por `accion: 'foto'` del portal, que ya existe, tiene tope de 6 y sube al Blob.
+Trabar la creación por una foto es perder el reclamo entero en el momento en que la cámara falla — y
+el caso queda **afuera del sistema**, que es lo que este módulo vino a evitar.
+
+### Los tres frenos
+
+1. **Un reclamo abierto por orden.** Si ya hay uno, se devuelve **el token del que ya existe**. Es
+   seguro —quien pregunta ya probó el mail de esa orden— y es lo único que ⛔ no deja al cliente
+   golpeando una puerta cerrada, que es como termina abriendo el segundo reclamo por WhatsApp, o sea
+   **afuera del sistema**.
+2. **Un fusible por hora y por marca** (`TOPE_ALTAS_POR_HORA = 20`). ⚠️ ⛔ No es un antiflood por
+   persona —de eso ya se encargan la llave y el freno 1—: es para el día que algo se rompa de un modo
+   que nadie previó, y **deja rastro en el log** o es un freno que nadie va a mirar. 📊 El número sale
+   de lo medido: BDI hizo **283 ventas online en agosto**, ~9 por día.
+3. **Sin cruce, nada.** Y los dos frenos corren **después** del cruce: al revés, un «ya tenés uno
+   abierto» le contestaría a cualquiera que tipee números, y ese 200 sería el oráculo de que la orden
+   existe.
+
+⛔ **Ninguna tabla nueva**: los dos leen `devoluciones`, que ya tiene el dato. Una tabla de intentos
+sería un lugar más donde guardar mails de gente.
+
+### La fila que nace
+
+`borrador`, con `usuario: 'cliente'` —que es lo que separa el alta pública de las internas **sin una
+columna nueva**— y con **los cuatro pendientes en `'no_aplica'` planos**, ⛔ no derivados como en
+`crear`: los dos motivos que nacen con algo prendido ⛔ no pueden ser motivo de entrada, y eso está
+atado por test. ⛔ **Ni un monto, ni escenario, ni compensación.**
+
+### 🔴 Lo que destapó construirlo: la CUARTA copia de la regla del portal
+
+`reemitir-token` decidía con **los tres estados escritos a mano** en un `includes`, al lado de un
+`select('estado')` que ⛔ no traía `compensacion`. Pero un cambio decidido **vuelve a `borrador` a
+propósito**, a esperar que el cliente pague ⇒ el verbo acuñaba un token nuevo, contestaba «listo», y
+**el portal después le daba 404 al cliente**: el link regenerado ⛔ no servía y ⛔ nada lo decía. El
+que se enteraba era el cliente, del otro lado de WhatsApp.
+
+Es D16 otra vez —dos listas, una en cada lado de la puerta— con el agregado de que acá el `select` a
+mano dejaba **el freno mirando `undefined`**. Ahora la pregunta (`elLinkSigueVivo`) y las columnas
+(`COLUMNAS_DEL_PORTAL`) salen las dos de `portal.core.js`.
+
+🔑 **Y el token se acuñaba a mano en dos lugares** (`crear` y `reemitir-token`), y el alta iba a ser
+el tercero. `nuevoToken` y `venceElLink` bajaron a `portal.core.js`, que es donde vive la regla del
+link. ⚠️ Con `globalThis.crypto` y ⛔ **no** `node:crypto`: ese archivo lo importa `botones.ts`, o sea
+que **entra al bundle del navegador**.
+
+### Cómo se probó
+
+- **31 mutantes, 31 muertos**, con **dos controles inocuos vivos** (cambiar un texto de ayuda,
+  cambiar un comentario). Los dos que escaparon en la primera vuelta eran de verdad:
+  - 🔴 **el test del vencimiento leía la misma constante que estaba fijando** (`DIAS_DEL_LINK` contra
+    `DIAS_DEL_LINK`) ⇒ bajarla a un día lo dejaba **verde**. El número va escrito en el test.
+  - **el guard del código HTTP ⛔ no se ejercía**: el arnés hacía que un «no ok» viniera siempre con
+    un cuerpo vacío, así que sacar `if (!r.ok)` ⛔ no rompía nada. El caso que lo mata es **un cuerpo
+    que parece bueno con un código que no lo es**.
+- **La regla y el cable, los dos**: `tests/reclamos-alta-publica.test.ts` (las opciones y las dos
+  reglas duras) y `tests/reclamos-alta-publica-servidor.test.ts` (el handler corriendo: qué le pide a
+  Tienda Nube, qué inserta, y que lo del body se ignore). Y `tests/reclamos-link-regenerado.test.ts`,
+  que ⛔ **no existía**: `reemitir-token` ⛔ no tenía un solo test.
+- ⚠️ **⛔ Sin migración**: ninguna columna nueva.
+
+### ▶️ Lo que queda
+
+- 🔴 **La pantalla**: la vista del alta en `ReclamoPublico.tsx` (los cuatro toques) y la ruta pública
+  por donde se entra. Hasta que exista, **esto ⛔ no lo puede usar nadie**.
+- 🔴 **⛔ No se caminó contra prod**, y este es de los que se caminan: escribe filas y habla con el
+  otro repo. Falta el paso con una orden real —21033— sembrando y borrando.
+- **El link, ⛔ no está decidido dónde vive**: qué URL se le manda al cliente y desde dónde
+  (¿el mail de la compra? ¿el pie de la web?). Es de Bruno.
+- ⚠️ El alta ⛔ no toma relato: el cliente lo escribe **después**, en el portal, con `accion: 'enviar'`
+  —que es el que ya existe—. Son cuatro toques y una foto, sin un solo campo de texto obligatorio.

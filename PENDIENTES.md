@@ -601,3 +601,18 @@ antes de rehacerlo.
   dos llamadores). Caminado en prod: sin credencial 403, con credencial 200 como siempre.
   ✅ **Caminado en el navegador el mismo día**: `/postventa?tab=reclamos`, orden 21033, aparece con
   sus 2 productos. Nada que hacer acá.
+
+- 🔴 **El alta pública, paso 2: la puerta que CREA — hecha, pero SIN PANTALLA** (30-ago-2026). El
+  núcleo (`lib/reclamos/alta-publica.core.js`) y el servidor (`api/_reclamo.js`, acción `alta`) están
+  y probados; el relato entero en `docs/secciones/reclamos.md` § «El alta pública, paso 2».
+  🔑 **Lo que hay que saber**: la verificación del mail corre **en el servidor, adentro del mismo
+  pedido que crea la fila** —hacerla en el navegador es no hacerla— y los productos salen de la orden
+  verificada, ⛔ nunca del body: el cliente manda **índices**. Las cinco opciones son **familias** de
+  motivos y entran por el que ⛔ no afirma lo que el cliente no sabe ni enciende un pendiente (por eso
+  «todavía no me llegó» entra por `demora` y ⛔ no por `no_llego`).
+  🔴 **Y destapó una CUARTA copia de la regla del portal**: `reemitir-token` acuñaba un link nuevo
+  para un cambio ya decidido y contestaba «listo», y el portal después le daba **404 al cliente**.
+  ⛔ Sin migración · **31 mutantes, 31 muertos** (2 controles inocuos vivos).
+  ▶️ **Lo que falta para que alguien lo use**: **la pantalla** (los cuatro toques en
+  `ReclamoPublico.tsx` + la ruta pública), **caminarlo contra prod** con la orden 21033 sembrando y
+  borrando, y **decidir por dónde le llega el link al cliente** (eso es de Bruno).

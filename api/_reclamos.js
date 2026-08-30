@@ -50,7 +50,6 @@
 // Las acciones que mueven plata exigen función de administración TAMBIÉN en el servidor: el gate
 // de la UI es comodidad, no seguridad.
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
@@ -58,6 +57,9 @@ import { COLUMNAS_PARA_DEVOLVER, faltaAnularAntesDeDescontar, faltaRecibirAntesD
 // Hasta cuándo vale el cupón. ⛔ No se valida sólo en la pantalla: una pantalla que valida es una
 // sugerencia, y este módulo ya lo pagó cuatro veces.
 import { leerVencimiento } from '../lib/reclamos/cupon.core.js';
+// 🔑 El token del portal se acuña en TRES lugares (acá dos, y el alta pública en `_reclamo.js`).
+// La regla del link —largo y vencimiento— vive con el link, en `portal.core.js`.
+import { COLUMNAS_DEL_PORTAL, elLinkSigueVivo, nuevoToken, venceElLink } from '../lib/reclamos/portal.core.js';
 import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
 // El costo de un producto, con la clave de servicio. **Una sola implementación** (ver `_costos.js`):
 // la usan también `_fallas.js` y `_canjes.js`, que tampoco lo muestran — lo GUARDAN.
@@ -152,8 +154,9 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
 // desde el detalle, que es el único lugar donde alguien lee lo que se le dijo. Mismo molde que
 // `vista=token`.
 
-/** El día que el link deja de servir. Un reclamo no debería tardar más que esto. */
-const DIAS_TOKEN = 15;
+// El día que el link deja de servir vive en `portal.core.js` (`DIAS_DEL_LINK`), junto con el
+// acuñado del token: eran dos números y dos expresiones escritas a mano en los dos verbos que
+// emiten link, y el alta pública iba a ser la tercera copia.
 
 /**
  * Cuántos reclamos ABIERTOS mira el aviso del sidebar como mucho.
@@ -431,12 +434,12 @@ export default async function handler(req, res) {
       // El reclamo por falta de stock es el único que nace sabiendo qué pasa con el producto: nada,
       // porque nunca salió. Y es el único que arranca con el pendiente de corregir TN.
       const sinStock = motivo === 'sin_stock';
-      const vence = new Date(Date.now() + DIAS_TOKEN * 86400000).toISOString();
+      const vence = venceElLink();
       const row = {
         store,
         orden_tn: texto(b.orden_tn),
         cliente: texto(b.cliente),
-        token: randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, ''), // 64 hex: no se adivina
+        token: nuevoToken(), // 64 hex: no se adivina
         token_vence: vence,
         motivo,
         motivo_detalle: texto(b.motivo_detalle),
@@ -491,20 +494,27 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Esto lo hace Administración: pedile a alguien con ese permiso.' });
     }
 
-    // Regenerar el link del cliente. Hace falta porque el token vence a los DIAS_TOKEN y hasta
+    // Regenerar el link del cliente. Hace falta porque el token vence a los DIAS_DEL_LINK y hasta
     // ahora no había forma de emitir uno nuevo: el reclamo quedaba sin link para siempre.
     // Solo mientras el portal siga sirviendo — una vez decidido el reclamo el link muere a
-    // propósito y de ahí en más se le avisa por WhatsApp (ver `_reclamo.js`, ABIERTO).
+    // propósito y de ahí en más se le avisa por WhatsApp.
+    //
+    // 🔴 **Acá había una CUARTA copia de la regla del link**, escrita a mano —los tres estados
+    // sueltos en un `includes`— al lado de un `select('estado')` que ⛔ no traía `compensacion`.
+    // O sea: un cambio ya decidido vuelve a `borrador` a propósito, así que esto **acuñaba un
+    // token nuevo y contestaba «listo»**, y el portal después le daba 404 al cliente. El link
+    // regenerado ⛔ no servía y ⛔ nada lo decía. Ahora la pregunta y las columnas salen las dos de
+    // `portal.core.js`, que es donde vive la regla que el portal aplica del otro lado.
     if (action === 'reemitir-token') {
       const { data: fila, error: eLee } = await supabase
-        .from('devoluciones').select('estado').eq('store', store).eq('id', id).maybeSingle();
+        .from('devoluciones').select(COLUMNAS_DEL_PORTAL.join(', ')).eq('store', store).eq('id', id).maybeSingle();
       if (eLee) throw new Error(eLee.message);
       if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
-      if (!['borrador', 'esperando_cliente', 'en_revision'].includes(fila.estado)) {
+      if (!elLinkSigueVivo(fila)) {
         return res.status(400).json({ error: 'El reclamo ya está decidido: el link del cliente no va más. Avisale por WhatsApp.' });
       }
-      const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
-      const vence = new Date(Date.now() + DIAS_TOKEN * 86400000).toISOString();
+      const token = nuevoToken();
+      const vence = venceElLink();
       await apilar(supabase, id, { estado: fila.estado, at: ahora(), usuario, nota: 'link del cliente regenerado' }, { token, token_vence: vence });
       return res.status(200).json({ ok: true, token, vence });
     }
