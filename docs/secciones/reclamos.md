@@ -2748,3 +2748,49 @@ cada botón, ⛔ no cómo se llama.
   mismo número le contestarían a una persona **el token del reclamo de otra**. Se abre con **una
   columna**.
 - ▶️ **El canal en el mail de la venta o el de post-venta**, cuando Bruno lo decida.
+
+
+---
+
+## 🆕 🔴 BKL-05 · el texto largo que rompía la tabla, y lo empeoró un arreglo del mismo día
+
+Era **la mitad que quedaba viva del informe del 30-ago-2026**. El informe señalaba **la columna de
+pendientes** —que ya estaba arreglada desde antes (`wrap` + `maxWidth`)— y el desborde real estaba
+en la **primera columna**, la de «Reclamo».
+
+🔑 **Y lo que lo produce ⛔ no es el nombre del cliente: es LA ALERTA.** `<Td>` hereda
+`white-space: nowrap` (`components/ui/Table.tsx`), así que un texto largo sale en **una sola línea
+indivisible** y empuja la tabla entera: aparece la barra horizontal y las columnas de la derecha
+quedan fuera de vista, que es exactamente lo que el informe describe.
+
+### 🔴 Lo medido, y por qué importa que sea de hoy
+
+| aviso | largo |
+|---|---|
+| **«El cliente no aceptó la oferta hace N días y el reclamo sigue sin decisión»** (D4, **de hoy**) | **77** |
+| «La plata salió hace N días y el producto todavía no volvió» | 61 |
+| «Le ofrecimos que se lo quede hace N días y no contestó» | 57 |
+| «Abierto hace N días y todavía no se le escribió» | 50 |
+
+⇒ **arreglar D4 alargó en 20 caracteres el texto que rompía la maquetación, y ⛔ nada lo dijo.** Los
+dos cambios pasaron el mismo día, cada uno verde por su lado.
+
+### ⚠️ La barra de acciones ⛔ NO desbordaba, y el test lo decía mal
+
+El plan la marcaba junto con «Reclamo». Mirándola: su div interno es un flex con
+`flexWrap: 'wrap'`, y **quien corta ahí es flexbox, ⛔ no `white-space`** —que sobre los botones
+hace justo lo que se quiere: que ninguno parta su propio rótulo—. La primera versión del test la
+daba por rota (60 caracteres de rótulos). ⇒ **el test mide el texto que ⛔ no se puede cortar y
+resta los botones**: un test que grita donde no hay nada es un test que se termina apagando.
+
+### Cómo se probó
+
+`tests/reclamos-tabla-desborde.test.tsx` monta las dos pantallas y comprueba, sobre **toda celda**,
+que ninguna con texto largo quede en `nowrap` ⇒ el día que alguien agregue una columna o alargue un
+cartel, se pone rojo solo. Una regla escrita en un comentario ⛔ no frena nada
+([[feedback_areben_invariante_escrito_no_frena]]).
+
+🔴 🔑 **Y el arnés encontró que el test cubría UNA celda, ⛔ no todas**: con una sola fila la columna
+de pendientes es corta, así que el mutante que le sacaba el `wrap` **sobrevivía**. Hizo falta una
+**segunda fila** —resuelta y con todos los pendientes prendidos— para que la celda que dice cubrir
+esté efectivamente llena. **3 mutantes, 3 muertos · 1 control vivo.**

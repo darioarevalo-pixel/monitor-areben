@@ -1057,7 +1057,18 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
               return (
                 <React.Fragment key={d.id}>
                 <Tr>
-                  <Td>
+                  {/* 🔑 `wrap` + `maxWidth`, igual que la columna de Pendientes — **y acá el texto
+                      largo ⛔ no es el nombre del cliente: es LA ALERTA.** `<Td>` hereda
+                      `white-space: nowrap` (`components/ui/Table.tsx`), así que una alerta de 77
+                      caracteres —medido: *«El cliente no aceptó la oferta hace N días y el reclamo
+                      sigue sin decisión»*, la más larga del módulo, agregada el 30-ago-2026— sale
+                      en **una sola línea indivisible** y empuja la tabla entera: la barra
+                      horizontal aparece y las columnas de la derecha quedan fuera de vista.
+                      🔴 Es la mitad de **BKL-05** que quedaba viva: el informe señalaba la columna
+                      de pendientes —que ya estaba arreglada— y el desborde real estaba **acá**. Y
+                      lo empeoró el propio arreglo de D4, que hizo el texto 20 caracteres más
+                      largo. Lo cuida `tests/reclamos-tabla-desborde.test.tsx`, sobre TODA celda. */}
+                  <Td wrap style={{ maxWidth: 260 }}>
                     <div style={{ fontWeight: weight.semibold }}>{numeroReclamo(d.id)}</div>
                     <div style={{ fontSize: font.xs, color: color.mut2 }}>
                       {d.orden_tn ? `#${d.orden_tn}` : '—'} · {d.cliente || 'sin nombre'}

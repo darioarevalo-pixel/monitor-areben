@@ -697,6 +697,19 @@ antes de rehacerlo.
   ✅ **Caminado en el navegador el mismo día**: `/postventa?tab=reclamos`, orden 21033, aparece con
   sus 2 productos. Nada que hacer acá.
 
+- ✅ 🔴 **BKL-05, lo último que quedaba del informe de post-venta: el texto largo rompía la tabla**
+  (30-ago-2026). El informe señalaba la columna de **pendientes** —que ya estaba arreglada— y el
+  desborde real estaba en la **primera columna**, y ⛔ no lo produce el nombre del cliente: **es la
+  alerta**. `<Td>` hereda `white-space: nowrap`, así que sale en una línea indivisible y empuja la
+  tabla entera.
+  🔴 🔑 **Y lo empeoró un arreglo del MISMO DÍA**: el aviso de D4 pasó a ser el texto más largo del
+  módulo —**77 caracteres medidos**, 20 más que el anterior— ⇒ arreglar una cosa alargó el texto
+  que rompía otra, y los dos salieron verdes por separado.
+  ⚠️ **La barra de acciones ⛔ NO desbordaba**: su div es un flex con `flexWrap` y ahí corta
+  flexbox, ⛔ no `white-space` — la primera versión del test la daba por rota.
+  ✅ `tests/reclamos-tabla-desborde.test.tsx` lo cuida sobre **toda celda** · **3 mutantes, 3
+  muertos + 1 control vivo** · el relato en `docs/secciones/reclamos.md` § «BKL-05».
+
 - ✅ 🔴 **La auditoría de post-venta quedó CERRADA: 19 de 19** (30-ago-2026). El último era **D4**,
   y estaba trabado en **B1**, que Bruno contestó ese día: *«se parte en dos — armar la oferta exige
   la decisión, contestarla siempre se puede»*. El relato entero en `docs/secciones/reclamos.md`
