@@ -593,6 +593,12 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
 1. Que la marca **venga preseleccionada** con la del sidebar, y que si elegís «Todas» a mano **se
    quede** (es el caso que el default en `'todas'` hacía imposible).
 2. Que `Hoy •` cambie los **números** y ⛔ no el **veredicto**, y que el cartel de arriba lo diga.
+   🏁 **Arreglado el 30-ago (tarde), y era un defecto real que Bruno cazó acá**: *«cambio la fecha
+   en rendimiento con hoy, ayer o hace 3 días pero no cambian los resultados»*. La fila de KPIs
+   salía **siempre de la foto** —`fusionarVivo` pisaba las celdas y ⛔ no los totales— y además
+   «Hoy», «Hoy y ayer» y «7 días» le piden a la foto **la misma ventana**, así que las tres hacían
+   el mismo pedido. Relato en la ficha. ▶️ **Falta mirarlo**: que «Hoy» mueva el **Gasto** de arriba
+   y ⛔ no sólo la tabla, y que diga «Compras · Meta» en vez de «Pedidos reales».
 3. Que la fila mida **un renglón**, que el «⋯» cierre con Escape y clickeando afuera, y que la cara
    del anuncio aparezca (**tarda ~6 s la primera vez**: son 257 piezas).
 4. Que el hallazgo de `AD01 - UNBOXING LOCAL` —que es de nivel **aviso**— aparezca **adentro de la

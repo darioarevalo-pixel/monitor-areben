@@ -1849,6 +1849,59 @@ una rama alcanzable. Ve que la pantalla lo **usa**, ⛔ no que se **dibuje**.
   **sin commitear** — `main` estaba verde antes de tocar.
 - ⛔ **NO se caminó la pantalla**: el login es de Bruno.
 
+## 🆕🏁 30-ago-2026 (tarde): «CAMBIO LA FECHA Y NO CAMBIAN LOS RESULTADOS» — era cierto
+
+Lo cazó Bruno caminando la sección: *«cambio la fecha en rendimiento con hoy, ayer o hace 3 días
+pero no cambian los resultados»*. **Eran dos cosas apiladas**, y la de arriba tapaba a la de abajo.
+
+### 1. 🔴 `fusionarVivo` pisaba las CELDAS y ⛔ no los totales
+
+La fila de KPIs —Gasto, Pedidos reales, Costo por pedido, Marginal, Pieza más grande— es lo primero
+que se lee, y **salía siempre de `zona.totales`**, que es la foto de la ventana de juicio. Con «Hoy»
+elegido, el modo vivo cambiaba las filas de la tabla y **las cinco tarjetas de arriba se quedaban
+quietas**. `fusionarVivo` devolvía `{ celdas, sinEntrega }`: los totales de lo vivo ⛔ no existían.
+
+### 2. 🔴🔑 «Hoy», «Hoy y ayer» y «7 días» le piden a la foto LO MISMO
+
+`diasFoto = anclado ? 1 : (v.vivo ? 7 : v.dias)` ⇒ las tres claves dan **7**, así que las tres hacen
+**el mismo pedido** y `useZona` ni siquiera lo repite (es la misma clave). 🔑 **Eso ⛔ no es un bug**:
+es la regla que impide juzgar sobre medio día. Lo que faltaba es que **tuviera nombre**: vivía como
+una expresión suelta adentro del JSX, y por eso su consecuencia —con el parte caído, las tres
+ventanas dibujan la pantalla idéntica— ⛔ no la afirmaba ningún test. Ahora es `diasDeLaFoto()` en el
+núcleo, con test. 📌 Una regla vive en el núcleo, ⛔ no en la pantalla que la usa.
+
+### 🔴🔑 Lo que ⛔ NO se puede mostrar en vivo, y por eso se dice
+
+**Los pedidos reales de hoy ⛔ no existen**: salen de la caja de Tienda Nube, que sólo tiene días
+cerrados. Y el **costo por pedido real** es la vara de todo el módulo. Dividir el gasto de hoy por
+los pedidos de la semana daría un número que ⛔ no es de nadie ⇒ en modo vivo las dos tarjetas
+**cambian de rótulo a la fuente que sí tiene hoy** (`Compras · Meta`, `Costo por compra · Meta`) y un
+renglón abajo dice que los pedidos reales ⛔ no están, con el último día cerrado. 📌 Es el mismo
+cuidado que la ficha con Stunned: se muestra la mitad medida y **se calla la otra, diciendo por qué**.
+
+⚠️ **El marginal y la concentración ⛔ no tienen versión viva y ⛔ no se disfrazan de una**: se miden
+entre ventanas cerradas. En vivo su `sub` dice *«· 7 días cerrados»*, que es lo que evita que se lean
+como de hoy al lado de las tres de arriba.
+
+### Verificado
+
+- **13 tests nuevos** — 7 en `tests/meta-rendimiento.test.ts` (el núcleo) y **6 renderizados** en
+  `tests/meta-zona-kpis.test.tsx`. 🔑 **Los renderizados hacen falta**: el defecto vivía en qué objeto
+  lee cada tarjeta, que es cableado de pantalla — el núcleo ⛔ no podía verlo. Es la misma lección que
+  dejó el respaldo del Embudo esta mañana. Para eso `FilaDeKpis` salió de `Contenido` y se exporta.
+- **10 mutantes muertos.** Del núcleo: el ancla pierde contra la ventana viva, pedirle a la foto la
+  ventana viva, el `%` que dice 0 sin compras, y los totales «vivos» sacados de la foto. De la
+  pantalla: el gasto siempre de la foto (**el bug original**), la vara de la foto con el número de hoy
+  al lado, «Pedidos reales» arriba de un número de Meta, callar que hoy no tiene pedidos reales, y el
+  marginal y la concentración disfrazados de hoy.
+- 🔴 **Un mutante SOBREVIVIÓ primero y no era que faltara un test: la aserción ⛔ no era única.**
+  «7 días cerrados» lo escriben **las dos** tarjetas, así que buscar la frase suelta la daba por
+  puesta en las dos teniendo sólo una. Cada una se afirma ahora en su propio renglón completo.
+- Suite entera: **6.509 verdes**. Los 13 rojos son `crm-paridad`, de otra sesión y sin commitear.
+- ⛔ **NO se caminó**: el login es de Bruno. ▶️ Qué mirar — que «Hoy» mueva el **Gasto** de arriba y
+  ⛔ no sólo la tabla, que diga «Compras · Meta» en vez de «Pedidos reales», y que «3 días» y un día
+  de la tira den números distintos entre sí.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

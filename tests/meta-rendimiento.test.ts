@@ -14,7 +14,8 @@ import { describe, expect, it } from 'vitest'
 import {
   CONV_APRENDIZAJE, DIAS_SERVIBLES, aprendizajeDe, armarZona, avisosPorCelda,
   celdasDeLaFoto, concentracionDe, desdeDe, desgasteDe, elegirCierre, elegirVentana, enVentana,
-  fusionarVivo, ordenarCeldas, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona, veredictoDeCelda,
+  diasDeLaFoto, fusionarVivo, ordenarCeldas, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona,
+  veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
 import type { Celda, CeldaViva } from '@/lib/meta-ads/rendimiento'
 import { sumarDias } from '@/lib/meta-ads/snapshot'
@@ -733,5 +734,85 @@ describe('ordenarCeldas — lo apagado abajo, y adentro por gasto', () => {
     const congelada = { id: 'x', spend: 1, estado: 'ACTIVE', veredicto: { clase: 'apagada' } } as unknown as Celda
     const viva = { id: 'y', spend: 0, estado: 'PAUSED', veredicto: { clase: 'ok' } } as unknown as Celda
     expect(ordenarCeldas([congelada, viva]).map((x) => x.id)).toEqual(['y', 'x'])
+  })
+})
+
+/**
+ * **Que la pantalla cambie cuando se cambia la ventana.**
+ *
+ * 🔴 Bruno, caminando `/meta-ads` el 30-ago-2026: *«cambio la fecha en rendimiento con hoy, ayer o
+ * hace 3 días pero no cambian los resultados»*. Era cierto para la fila de KPIs —lo primero que se
+ * lee— y por **dos** motivos que se apilaban, cada uno con su test acá abajo:
+ *
+ * 1. `fusionarVivo` devolvía **sólo las celdas**, así que las tarjetas seguían mostrando
+ *    `zona.totales`, que es la foto de la ventana de juicio.
+ * 2. A la foto se le pide **la misma ventana** para «Hoy», «Hoy y ayer» y «7 días» ⇒ las tres hacen
+ *    el mismo pedido. Con el parte caído, las tres dibujaban la pantalla **idéntica**.
+ *
+ * 🔑 La segunda ⛔ no era un bug: es la regla que impide juzgar sobre medio día. Lo que faltaba era
+ * que **tuviera nombre**, para que su consecuencia se pueda ver y afirmar en vez de vivir escondida
+ * en una expresión adentro del JSX.
+ */
+describe('la ventana elegida tiene que MOVER los números', () => {
+  const celdaViva = (o: Record<string, unknown> = {}) => ({
+    id: '1', nombre: 'A', linea: 'bdi', campania: 'C', estado: 'ACTIVE', diario: 10000,
+    spend: 5000, impresiones: 10000, clicks: 200, compras: 2, revenue: 12000, ctr: 2, cpm: 500,
+    carritos: 4, checkouts: 2, lpv: 90, costo: 2500, ...o,
+  }) as CeldaViva
+
+  it('🔴 fusionarVivo devuelve TOTALES, y son los de hoy: sin esto la fila de KPIs no se mueve', () => {
+    const r = fusionarVivo([], [celdaViva(), celdaViva({ id: '2', spend: 3000, compras: 1, revenue: 4000 })], {
+      linea: 'bdi', techo: 6668,
+    })
+    expect(r.totales.spend).toBe(8000)
+    expect(r.totales.compras).toBe(3)
+    expect(r.totales.revenue).toBe(16000)
+    // 8000 / 3 = 2.666,67 — el costo por compra SEGÚN META, que es la única fuente que tiene hoy.
+    expect(Math.round(r.totales.costoMeta)).toBe(2667)
+    expect(Math.round(r.totales.pctTecho!)).toBe(40)
+    expect(r.totales.roas).toBe(2)
+  })
+
+  it('🔴🔑 los totales vivos NO traen pedidos reales: la caja de la tienda sólo cierra días', () => {
+    const r = fusionarVivo([], [celdaViva()], { linea: 'bdi', techo: 6668 })
+    // El tipo ya lo impide; esto defiende el objeto en runtime, que es lo que la pantalla lee.
+    // Un `pedidos: 0` acá se dibujaría como «hoy no vendiste nada», que ⛔ no es lo que se sabe.
+    for (const prohibido of ['pedidos', 'pedidosDia', 'costoPedidoReal']) {
+      expect(r.totales).not.toHaveProperty(prohibido)
+    }
+  })
+
+  it('sin compras el costo vivo es 0 y el % del techo es null: «no se puede juzgar» ⛔ no es «va bien»', () => {
+    const r = fusionarVivo([], [celdaViva({ compras: 0, revenue: 0 })], { linea: 'bdi', techo: 6668 })
+    expect(r.totales.compras).toBe(0)
+    expect(r.totales.pctTecho).toBeNull()
+  })
+
+  it('sin techo cargado tampoco hay % — ⛔ nunca 0', () => {
+    expect(fusionarVivo([], [celdaViva()], { linea: 'bdi', techo: 0 }).totales.pctTecho).toBeNull()
+  })
+
+  it('🔴 «Hoy», «Hoy y ayer» y «7 días» le piden a la foto LO MISMO — por eso hay que decirlo', () => {
+    const dias = ['hoy', 'hoy_ayer', '7'].map((k) => diasDeLaFoto(ventanaZona(k), null))
+    expect(dias).toEqual([7, 7, 7])
+  })
+
+  it('las ventanas de la foto sí piden lo que dice el botón', () => {
+    expect(diasDeLaFoto(ventanaZona('3'), null)).toBe(3)
+    expect(diasDeLaFoto(ventanaZona('14'), null)).toBe(14)
+    expect(diasDeLaFoto(ventanaZona('30'), null)).toBe(30)
+  })
+
+  it('🔑 con un día anclado en la tira se pide UN día, y le gana a la ventana de la barra', () => {
+    for (const k of ['hoy', 'hoy_ayer', '3', '30']) {
+      expect(diasDeLaFoto(ventanaZona(k), '2026-08-26')).toBe(1)
+    }
+  })
+
+  it('lo que le pide a la foto siempre es algo que el servidor sabe contestar', () => {
+    for (const v of VENTANAS_ZONA) {
+      expect(DIAS_SERVIBLES).toContain(diasDeLaFoto(v, null))
+    }
+    expect(DIAS_SERVIBLES).toContain(diasDeLaFoto(null, null))
   })
 })

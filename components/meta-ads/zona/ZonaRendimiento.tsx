@@ -52,7 +52,7 @@ import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { TablaCeldas } from '@/components/meta-ads/zona/TablaCeldas'
 import { useZona } from '@/components/meta-ads/zona/useZona'
 import { entero, plata } from '@/lib/meta-ads/formato'
-import { fusionarVivo, VENTANAS_ZONA, ventanaZona, type Celda, type CeldaViva, type RespuestaZona, type VentanaZona } from '@/lib/meta-ads/rendimiento'
+import { diasDeLaFoto, fusionarVivo, VENTANAS_ZONA, ventanaZona, type Celda, type CeldaViva, type RespuestaZona, type TotalesVivos, type VentanaZona } from '@/lib/meta-ads/rendimiento'
 import { sumarVivas } from '@/lib/meta-ads/parte'
 import { contarParaDecidir, repartirHallazgos, silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
@@ -78,7 +78,9 @@ export function ZonaRendimiento() {
   const v: VentanaZona = ventanaZona(ventanaK) || VENTANAS_ZONA[3]
   // 🔴 A la foto se le pide la VENTANA DE JUICIO aunque se esté mirando hoy: las celdas, el
   // veredicto, el desgaste y el aprendizaje salen de ahí. Lo vivo sólo pisa las mediciones.
-  const diasFoto = anclado ? 1 : (v.vivo ? 7 : v.dias)
+  // 🔑 La regla vive en el núcleo (`diasDeLaFoto`) y ⛔ no acá: era una expresión suelta en el JSX, y
+  // su consecuencia grande —que `hoy`, `hoy_ayer` y `7` piden LO MISMO— ⛔ no la veía ningún test.
+  const diasFoto = diasDeLaFoto(v, anclado)
   const { estado, recargar } = useZona(laLinea, diasFoto, anclado)
   const acciones = useAccionMeta(recargar)
   const r = useReglas()
@@ -259,8 +261,6 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
     return <Notice tone="warning">{d.motivo || 'La foto no tiene ningún día cerrado todavía.'}</Notice>
   }
   const z = d.zona
-  const t = z.totales
-  const conc = z.concentracion.mayor
   // 🔑 El modo vivo se decide con LAS DOS cosas: que la ventana lo pida **y** que el parte haya
   // contestado. Si Meta no contestó, la tabla vuelve a la foto y se dice arriba — ⛔ no se dibuja
   // vacía, que es lo que haría creer que hoy no gastó nada.
@@ -273,6 +273,8 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
       )
     : null
   const celdas: Celda[] = vivo ? vivo.celdas : z.celdas
+  // `null` fuera del modo vivo: las tarjetas de arriba caen a `z.totales`, que es la foto.
+  const tv = vivo ? vivo.totales : null
   // 🔴 El hallazgo que tiene fila **va en su fila**; el que no, arriba de la tabla. Ver
   // `repartirHallazgos`: medido, 21 hallazgos y ninguno accionado en cuatro días, y una de las tres
   // causas era que la mano estaba partida en dos lugares para el mismo objeto.
@@ -292,34 +294,7 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
 
       <Cabecera d={d} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[2] }}>
-        <KpiCard label="Gasto" value={plata(t.spend)} sub={`${z.desde} → ${z.hasta}`} />
-        <KpiCard
-          label="Pedidos reales"
-          value={entero(t.pedidos)}
-          sub={`${t.pedidosDia.toFixed(1)}/día${z.objetivoPedidos ? ` · meta ${z.objetivoPedidos}` : ''}`}
-        />
-        <KpiCard
-          label="Costo por pedido"
-          value={t.pedidos ? plata(t.costoPedidoReal) : '—'}
-          sub={t.pctTecho == null ? 'sin techo cargado' : `${Math.round(t.pctTecho)}% del techo`}
-          tone={t.pctTecho != null && t.pctTecho > 100 ? 'danger' : t.pctTecho != null ? 'success' : 'warning'}
-        />
-        <KpiCard
-          label="Marginal"
-          value={z.marginal.marginal ? plata(z.marginal.marginal) : '—'}
-          sub={z.marginal.marginal ? 'el pedido que se sumó' : z.marginal.motivo}
-          tone={z.marginal.marginal && d.techo && z.marginal.marginal > d.techo ? 'danger' : 'neutral'}
-        />
-        {conc && (
-          <KpiCard
-            label="Pieza más grande"
-            value={`${Math.round(conc.pct)}%`}
-            sub={`«${conc.pieza}» en ${conc.cajas} caja${conc.cajas === 1 ? '' : 's'}`}
-            tone={conc.pct >= 40 ? 'warning' : 'neutral'}
-          />
-        )}
-      </div>
+      <FilaDeKpis z={z} tv={tv} techo={d.techo} ventana={enVivo ? ventana : null} />
 
       {/* Va entre los KPIs y la tabla: es el puente entre «cómo viene la ventana» y «qué pasó ese
           día». Sale de `z.caja`, que ya viaja: ⛔ cero llamadas. */}
@@ -571,5 +546,94 @@ function Oraculo({ d, dias }: { d: RespuestaZona; dias: number }) {
         </TableWrap>
       </Plegable>
     </SectionCard>
+  )
+}
+
+
+/**
+ * **La fila de KPIs: cinco números y, en cada uno, de dónde sale.**
+ *
+ * 🔴 **Existe como componente propio por el defecto que Bruno vio el 30-ago-2026**: *«cambio la
+ * fecha en rendimiento con hoy, ayer o hace 3 días pero no cambian los resultados»*. Era cierto acá
+ * y ⛔ no en el núcleo: `fusionarVivo` pisaba las CELDAS y ⛔ no los totales, así que con «Hoy»
+ * estas tarjetas seguían mostrando la foto de la ventana de juicio. Y como a la foto se le pide la
+ * misma ventana para las dos vivas **y** para «7 días» (`diasDeLaFoto`), las tres hacían el MISMO
+ * pedido ⇒ el número era idéntico y la pantalla se veía congelada.
+ *
+ * 🔑 **Sale del `Contenido` para que se pueda RENDERIZAR en un test.** El núcleo ya estaba probado
+ * y ⛔ no alcanzaba: el defecto vivía en qué tarjeta lee qué objeto, que es cableado de pantalla.
+ *
+ * 🔴 **`tv` (los totales vivos) manda sólo sobre las TRES primeras.** El marginal se mide ENTRE
+ * ventanas cerradas y la concentración sale de la foto: en vivo ⛔ no se disfrazan de hoy, lo dicen
+ * en su `sub`. Y los **pedidos reales** ⛔ no tienen versión viva —la caja de Tienda Nube sólo
+ * cierra días—, así que en vivo la tarjeta cambia de rótulo a la fuente que sí existe, **Meta**, y
+ * lo que falta se dice abajo en vez de rellenarse. 📌
+ * [[feedback_areben_supuesto_tipeado_al_lado_de_un_medible]]: medir una mitad del cociente y dejar
+ * la otra prestada da un número que ⛔ no es de nadie.
+ */
+export function FilaDeKpis({ z, tv, techo, ventana }: {
+  z: RespuestaZona['zona']
+  /** `null` fuera del modo vivo: ahí las tarjetas caen a `z.totales`, que es la foto. */
+  tv: TotalesVivos | null
+  techo: number | null
+  /** La ventana viva, sólo para rotular. `null` cuando los números salen de la foto. */
+  ventana: VentanaZona | null
+}) {
+  if (!z) return null
+  const t = z.totales
+  const conc = z.concentracion.mayor
+  // 🔑 La vara es UNA sola —el techo por compra— pero el numerador cambia de fuente con la ventana.
+  // Se elige acá y ⛔ no en cada tarjeta, para que el número y su color ⛔ no puedan salir de dos
+  // cuentas distintas.
+  const pctVara = tv ? tv.pctTecho : t.pctTecho
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[2] }}>
+        <KpiCard
+          label="Gasto"
+          value={plata(tv ? tv.spend : t.spend)}
+          sub={tv ? `${(ventana ? ventana.label : 'hoy').toLowerCase()} · en vivo de Meta` : `${z.desde} → ${z.hasta}`}
+        />
+        <KpiCard
+          label={tv ? 'Compras · Meta' : 'Pedidos reales'}
+          value={entero(tv ? tv.compras : t.pedidos)}
+          sub={tv
+            ? 'atribuidas por Meta, ⛔ no la caja de la tienda'
+            : `${t.pedidosDia.toFixed(1)}/día${z.objetivoPedidos ? ` · meta ${z.objetivoPedidos}` : ''}`}
+        />
+        <KpiCard
+          label={tv ? 'Costo por compra · Meta' : 'Costo por pedido'}
+          value={tv ? (tv.compras ? plata(tv.costoMeta) : '—') : (t.pedidos ? plata(t.costoPedidoReal) : '—')}
+          sub={pctVara == null ? 'sin techo cargado' : `${Math.round(pctVara)}% del techo`}
+          tone={pctVara != null && pctVara > 100 ? 'danger' : pctVara != null ? 'success' : 'warning'}
+        />
+        <KpiCard
+          label="Marginal"
+          value={z.marginal.marginal ? plata(z.marginal.marginal) : '—'}
+          sub={z.marginal.marginal
+            ? (tv ? `el pedido que se sumó · ${z.ventanaJuicio} días cerrados` : 'el pedido que se sumó')
+            : z.marginal.motivo}
+          tone={z.marginal.marginal && techo && z.marginal.marginal > techo ? 'danger' : 'neutral'}
+        />
+        {conc && (
+          <KpiCard
+            label="Pieza más grande"
+            value={`${Math.round(conc.pct)}%`}
+            sub={`«${conc.pieza}» en ${conc.cajas} caja${conc.cajas === 1 ? '' : 's'}${tv ? ` · ${z.ventanaJuicio} días cerrados` : ''}`}
+            tone={conc.pct >= 40 ? 'warning' : 'neutral'}
+          />
+        )}
+      </div>
+
+      {/* 🔴 **Lo que falta se dice, ⛔ no se rellena.** El costo por PEDIDO REAL es la vara de todo
+          el módulo y sale de la caja de Tienda Nube, que sólo tiene días cerrados. */}
+      {tv && (
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>
+          Los <b>pedidos reales de la tienda</b> ⛔ no están para hoy: la caja cierra el día. El
+          último cerrado es el <b>{z.hasta}</b> — mirá «7 días» o tocá un día en la tira para el
+          costo por pedido real.
+        </div>
+      )}
+    </>
   )
 }

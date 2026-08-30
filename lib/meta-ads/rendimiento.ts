@@ -20,6 +20,8 @@ import {
   desgasteDe as desgasteDeJs,
   DIAS_SERVIBLES as DIAS_SERVIBLES_JS,
   fusionarVivo as fusionarVivoJs,
+  diasDeLaFoto as diasDeLaFotoJs,
+  totalesVivos as totalesVivosJs,
   ordenarCeldas as ordenarCeldasJs,
   VENTANAS_ZONA as VENTANAS_ZONA_JS,
   ventanaZona as ventanaZonaJs,
@@ -298,7 +300,34 @@ export const fusionarVivo = fusionarVivoJs as (
   celdas: Celda[],
   vivas: CeldaViva[],
   opciones?: { linea?: string; techo?: number },
-) => { celdas: Celda[]; sinEntrega: string[] }
+) => { celdas: Celda[]; sinEntrega: string[]; totales: TotalesVivos }
+
+/**
+ * Los totales del día en curso. **Sin `pedidos`, `pedidosDia` ni `costoPedidoReal`, y el tipo es
+ * el que sostiene la regla**: la caja de Tienda Nube sólo tiene días cerrados, así que «los pedidos
+ * reales de hoy» ⛔ no existen. Un objeto que no los transporta ⛔ no los puede dibujar por
+ * accidente al lado de los de la ventana. Ver el docblock del núcleo.
+ */
+export type TotalesVivos = {
+  spend: number
+  compras: number
+  revenue: number
+  clicks: number
+  impresiones: number
+  carritos: number | null
+  checkouts: number | null
+  lpv: number | null
+  costoMeta: number
+  pctTecho: number | null
+  roas: number
+}
+export const totalesVivos = totalesVivosJs as (celdas: Celda[], techo?: number) => TotalesVivos
+
+/** Qué ventana se le pide a la FOTO, que ⛔ no es la que dice el botón. Ver el núcleo. */
+export const diasDeLaFoto = diasDeLaFotoJs as (
+  ventana: VentanaZona | null | undefined,
+  anclado: string | null,
+) => number
 
 /** Lo que el servidor sabe contestar. Superconjunto de `DIAS_ZONA`: al `1` y al `3` se llega por la tira. */
 export const DIAS_SERVIBLES = DIAS_SERVIBLES_JS as readonly number[]
