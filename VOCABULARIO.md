@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-08-29e
+Versión: 2026-08-29f
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -145,6 +145,17 @@ sentido**, y hasta entonces ⛔ no se toca el título.
 | palabra | los dos (o tres) sentidos | dónde |
 |---|---|---|
 | **Ingresos** | la importación que **viene** (`ingresos`) · lo que **ya entró** (`recepciones`) | monitor: dos filas contiguas en Compras |
+| **Actividad** | la **bitácora**: lo que ya pasó (MAKETA) · cada **paso de un evento** de la Agenda, con su dueña y su día (monitor) | una en cada app, ⛔ nunca en la misma pantalla |
+
+🏁 **«Actividad» se queda con LAS DOS acepciones — decisión de Bruno, 29-ago-2026.** Es el primer
+homónimo que ⛔ **no** se cierra renombrando a uno de los dos, y el motivo es que **viven en apps
+distintas y no se leen juntas nunca**: en MAKETA es el **nombre propio de una pantalla del menú**, en
+el monitor un **sustantivo común adentro de la tarjeta de un evento** (`+ Actividad`). La alternativa
+era **«Paso»** —es lo que dicen los manuales: *«los nueve pasos de la sesión de fotos»*— y se
+descartó porque una actividad de la Agenda **tiene dueña y se tilda**: es trabajo asignado, ⛔ no el
+renglón de un instructivo.
+⚠️ **Está anotada acá justamente para que nadie la "arregle" sola.** Quien la encuentre y la lea como
+un descuido, que lea esta línea antes de renombrar nada.
 
 🏁 **`Faltantes` y `clavado` se cerraron el 29-ago, y los dos igual que en MAKETA: sin bautizar nada.**
 La palabra **se la queda el sentido que ya la tenía en el menú**, y el otro se dice con las palabras

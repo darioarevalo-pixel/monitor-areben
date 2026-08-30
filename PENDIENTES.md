@@ -221,15 +221,9 @@ vuelve sola cuando el número se arregla.
 La sección se partió en seis entradas de menú y las tres poblaciones de `agenda_items` se separaron
 (ficha: `docs/secciones/agenda.md` § «SEIS pantallas»). Lo que queda es **de Bruno**:
 
-- ▶️ **El `git push`**, que acá lo bloquea el clasificador:
-  `! git -C ~/Projects/monitor-areben push origin HEAD:main`.
 - ▶️ **Publicar la novedad**, que quedó cargada como borrador: *«La Agenda, ahora por partes»*
-  (`n1788054663959_yw2xuq`), en `/novedades` → «Sin publicar». ⚠️ Después del deploy, ⛔ no antes.
-- ▶️ 🔴 **Decidir el homónimo de «Actividad».** En el monitor pasó a ser *cada paso de un evento*
-  (decisión de Bruno, 29-ago), pero en **MAKETA «Actividad» ya es una sección del menú** —la
-  bitácora— y el `VOCABULARIO.md` es el mismo archivo en los dos repos. Es un caso de §2, y §2 dice
-  que **el que bautiza es Bruno**. Hasta que lo decida, la fila ⛔ no se escribió en el glosario y
-  los dos archivos siguen idénticos.
+  (`n1788054663959_yw2xuq`), en `/novedades` → «Sin publicar». El deploy **ya está en la calle**
+  (verificado el 29-ago con la cadena nueva adentro del chunk del nav).
 - ▶️ **Caminar a mano lo que ningún test alcanza**, listado al final de la ficha: las seis entradas
   con los dos perfiles, el modal de una actividad, y el `offset` al pasar de Mes a Semana.
 
