@@ -23,6 +23,7 @@ import {
   ETAPA_POR_OBJETIVO as ETAPA_POR_OBJETIVO_JS,
   ETIQUETA_ETAPA as ETIQUETA_ETAPA_JS,
   SIGLA_ETAPA as SIGLA_ETAPA_JS,
+  censoDeLaFoto as censoDeLaFotoJs,
   etapaDeObjetivo as etapaDeObjetivoJs,
   estaAlAire as estaAlAireJs,
   UMBRALES_ETAPA as UMBRALES_ETAPA_JS,
@@ -131,6 +132,20 @@ export function rotuloObjetivo(objetivo: string | null): string {
  * nada— y taparía las cinco que se llevan la plata.
  */
 export const estaAlAire = estaAlAireJs as (c: CampañaEtapa) => boolean
+
+/** El censo de respaldo, armado desde la foto. Ver el docblock del core: es respaldo, no reemplazo. */
+export type CensoDeFoto = {
+  campanias: CampañaEtapa[]
+  cuentas: { id: string; nombre: string; moneda: string }[]
+  /**
+   * 🔴 Las que la foto tiene SIN objetivo, y por eso ⛔ no entran al censo: la columna se empezó a
+   * guardar el 8-ago-2026. Meterlas como `sin-clasificar` afirmaría que nadie les puso etapa.
+   */
+  sinObjetivo: Omit<CampañaEtapa, 'etapaAuto'>[]
+  /** Siempre `false`: la foto ⛔ no tiene las campañas que nunca entregaron. Va a la pantalla. */
+  completo: boolean
+}
+export const censoDeLaFoto = censoDeLaFotoJs as (filas: unknown[]) => CensoDeFoto
 
 function etapaEfectiva(c: CampañaEtapa, overrides: Record<string, Etapa>): EtapaOSin {
   return overrides[c.id] || c.etapaAuto

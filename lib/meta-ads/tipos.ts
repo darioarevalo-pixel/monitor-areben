@@ -335,6 +335,26 @@ export type RespuestaEtapas = {
    * que poder asignarlas.
    */
   sinAsignar: CampañaSinLinea[]
+  /**
+   * 🔴 **De dónde salió este censo**, y la pantalla lo dice en voz alta.
+   *
+   * `'meta'` es el censo entero, de Graph. `'foto'` es el **respaldo** de `meta_ads_snapshot_dia`,
+   * que contesta cuando el token falta o venció — antes eso era un 500 y el Embudo directamente no
+   * abría—. ⚠️ El respaldo ⛔ **no es equivalente**: le faltan las campañas que nunca entregaron
+   * (no tienen fila en la foto) y las anteriores al 8-ago-2026, cuando `objetivo` empezó a
+   * guardarse. Servirlo callado, con cara de censo entero, sería peor que el 500 que reemplaza.
+   */
+  fuente?: 'meta' | 'foto'
+  /** `false` con el respaldo: faltan las campañas sin entrega. Ver `censoDeLaFoto()`. */
+  completo?: boolean
+  /** Por qué se cayó al respaldo. Sólo con `fuente: 'foto'`. */
+  motivo?: string
+  /** Primer día de la ventana del respaldo. */
+  desde?: string
+  /** Último día CERRADO. ⚠️ Se deriva de las filas de CONJUNTO: ver el docblock de `ultimoDiaCerrado`. */
+  hasta?: string
+  /** Cuántas campañas quedaron afuera del respaldo por no tener `objetivo` en la foto. */
+  sinObjetivo?: number
 }
 
 /** El detalle completo de una cuenta. */

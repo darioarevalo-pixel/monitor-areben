@@ -618,7 +618,14 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
   ⛔ no un agujero. 🔑 **El cero afirma, y acá afirmaba lo contrario de lo que se le leyó**: el
   tripwire —«que esa tabla se mueva»— sigue en pie, pero mide **cuándo el objetivo miente**, ⛔ no si
   el Embudo tiene datos.
-  ⚠️ Verificado leyendo el código y contando las filas; ⛔ **no** caminando la pantalla.
+  🏁 **Y al medirlo aparecieron DOS cosas que sí eran trabajo, hechas el 30-ago** (relato en la
+  ficha): la **premisa del módulo estaba al revés** —decía que toda la pauta es de la primera etapa
+  y el 84% del gasto es de la de compra; el agujero real es **MOFU, en cero**— y el Embudo **se
+  moría con el token vencido**, cuando el dato ya estaba en la foto. Ahora tiene respaldo y la
+  pantalla dice de dónde salió.
+  ▶️ **Lo que queda es una mano**: ejercitar el respaldo **con el token caído de verdad** (se probó
+  el núcleo contra la foto real, ⛔ no el handler) — y que el cartel «Esto sale de la foto diaria»
+  aparezca en el Embudo **y** en Campañas.
 - **Informes**: 2 filas, las dos **sin publicar**. Se quedó como pestaña y ⛔ no subió al menú. Si en
   un mes sigue en dos, se elimina.
 - **«Hoy + ayer + anteayer» como una suma sola** ⛔ no se ofrece: pediría cruzar Graph con la foto por

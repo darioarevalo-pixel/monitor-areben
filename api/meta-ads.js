@@ -85,7 +85,12 @@ import { piezaDe, rescatarMiniaturas, TOPE_IDS_GRAPH } from '../lib/meta-ads/cre
 // (`scripts/snapshot-meta.mjs`) necesitó leerlas igual desde un script: dos lecturas distintas de
 // `omni_purchase` no fallan ruidosamente, devuelven dos cifras de ventas parecidas y distintas.
 import { accion, accionRe, ATTR, COMPRA, FUNNEL, metricasDe, num, RE_PERFIL, RE_SEGUIDOR, sumaAcciones, TIPO_FUNNEL } from '../lib/meta-ads/metricas.core.js';
-import { leerAsignaciones } from './_meta-lineas.js';
+import { leerAsignaciones, clienteBdi } from './_meta-lineas.js';
+// El censo de respaldo del Embudo sale de la foto diaria, igual que la zona de Rendimiento: es lo
+// que lo deja contestar con el token vencido. Ver `censoDeLaFoto()` y sus tres límites declarados.
+import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
+import { censoDeLaFoto } from '../lib/meta-ads/etapas.core.js';
+import { ultimoDiaCerrado, desdeDe } from '../lib/meta-ads/rendimiento.core.js';
 import accionar from './_meta-acciones.js';
 import auditoria from './_meta-auditoria.js';
 import planes, { planesGet } from './_meta-planes.js';
@@ -143,6 +148,11 @@ export default async function handler(req, res) {
   // entero: se arma con la foto y no con Graph, así que se puede pedir SOLA al entrar sin gastar
   // cupo. Es lo que la deja ser una pantalla en vez de un botón que copia texto para pegar afuera.
   if (req.method === 'GET' && recurso === 'rendimiento') return await rendimientoGet(res, perfil, req.query || {});
+  // 🔴 **El EMBUDO también, desde el 30-ago-2026.** Estaba abajo del guard y se moría con un 500 el
+  // día que el token se venciera — y la pregunta que contesta, «¿a quién le estoy hablando?», ⛔ no
+  // depende de que Graph conteste hoy. Con token vivo sigue yendo a Graph; sin él (o si Graph falla)
+  // arma el censo desde la foto y **lo dice**: ver `censoDeLaFoto()` y sus tres límites.
+  if (req.method === 'GET' && recurso === 'etapas') return await etapas(res, perfil, (req.query || {}).dias);
   // Los informes del analista: prosa guardada en la base, cero llamadas a Meta. Es la lectura que
   // MÁS falta cuando Graph no contesta —el último informe es lo que explica qué estaba pasando—, así
   // que va arriba del guard por el mismo motivo que las reglas y el registro. El POST tampoco toca
@@ -168,7 +178,8 @@ export default async function handler(req, res) {
   // ⚠️ El `dias` viaja CRUDO: parsearlo acá borra la diferencia entre «no pidió nada» y «pidió una
   // ventana que no existe», que es justo la que decide entre el defecto y un 400. Ver
   // `lib/meta-ads/ventana.core.js`.
-  if (q.recurso === 'etapas') return await etapas(res, perfil, q.dias);
+  // ⚠️ `etapas` ya se despachó ARRIBA del guard del token: acá abajo sería inalcanzable, y un
+  // despacho muerto es exactamente lo que hizo que `poda` llegara a producción sin que nadie lo viera.
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), q.dias);
   if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), q.dias);
   if (q.recurso === 'mejoras') return await mejoras(res, perfil, String(q.campania || ''));
@@ -303,21 +314,31 @@ async function etapas(res, perfil, diasPedidos) {
   const rango = `date_preset=last_${dias}d`;
   const attr = `action_attribution_windows=${ATTR}`;
 
+  // 🔑 **El reparto se lee ANTES de hablar con Graph**, y ⛔ no es un detalle de orden: lo necesitan
+  // los dos caminos, y leerlo después dejaría al respaldo teniendo que repetir la consulta.
+  const asignadas = await leerAsignaciones();
+  if (asignadas.error) {
+    return res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
+  }
+
+  // 🔴 **Sin token ⛔ NO se corta: se cae a la foto.** Es toda la razón por la que este recurso subió
+  // arriba del guard. La pregunta que contesta el Embudo ⛔ no depende de que Graph conteste hoy.
+  if (!tokenMeta()) {
+    return await etapasDeLaFoto(res, dias, visibles, asignadas, 'Meta Ads no está configurado (falta o venció el token).');
+  }
+
   // `currency` va acá y no en una llamada aparte porque ya lo pide `overview` con esta misma lista
   // de campos y está probado en prod. Lo necesita la palanca de presupuesto: Meta maneja los montos
   // en la unidad MENOR de la moneda, así que sin saber cuál es no se puede ni mostrar ni escribir.
   const cuentasRes = await graph('me/adaccounts?fields=account_id,name,currency&limit=100');
-  if (!cuentasRes.ok) return res.status(502).json({ error: 'No se pudieron listar las cuentas de Meta', detalle: mensajeError(cuentasRes) });
+  if (!cuentasRes.ok) {
+    return await etapasDeLaFoto(res, dias, visibles, asignadas, `No se pudieron listar las cuentas de Meta: ${mensajeError(cuentasRes)}`);
+  }
 
   // Ya no hay cuentas "de una marca": las tres líneas se pautean desde la MISMA cuenta publicitaria,
   // así que se consultan todas las del token y el corte se hace campaña por campaña, más abajo.
   const cuentas = ((cuentasRes.data && cuentasRes.data.data) || [])
     .map((c) => ({ id: String(c.account_id), nombre: nombreCuenta(c), moneda: c.currency || '' }));
-
-  const asignadas = await leerAsignaciones();
-  if (asignadas.error) {
-    return res.status(502).json({ error: 'No se pudo leer de qué marca es cada campaña', detalle: asignadas.error });
-  }
 
   const porCuenta = await Promise.all(cuentas.map(async (cuenta) => {
     const act = `act_${cuenta.id}`;
@@ -366,14 +387,27 @@ async function etapas(res, perfil, diasPedidos) {
 
   const fallo = porCuenta.find((r) => r.error);
   if (fallo && porCuenta.every((r) => r.error)) {
-    return res.status(502).json({ error: 'No se pudieron traer las campañas de Meta', detalle: fallo.error });
+    // ⚠️ Sólo cuando fallaron TODAS. Con una cuenta caída y otra viva, mezclar el censo de Graph con
+    // el de la foto daría una campaña contada dos veces con dos números distintos.
+    return await etapasDeLaFoto(res, dias, visibles, asignadas, `No se pudieron traer las campañas de Meta: ${fallo.error}`);
   }
 
   const campañas = porCuenta.flatMap((r) => r.campañas || []).sort((a, b) => b.spend - a.spend);
 
-  // El reparto. Una campaña sin fila NO cae en ninguna línea: su plata no se la queda nadie por
-  // descarte, que es exactamente el bug que este cambio vino a matar. Queda en `sinAsignar`, con lo
-  // que el nombre SUGIERE, y una persona confirma.
+  const { lineas, sinAsignar } = repartir(campañas, visibles, asignadas);
+  return res.status(200).json({ ok: true, dias, fuente: 'meta', completo: true, cuentas, lineas, sinAsignar });
+}
+
+/**
+ * El reparto campaña → línea. **Una sola implementación**, porque la usan el camino de Graph y el
+ * de la foto: repartir distinto en los dos haría que el Embudo cambiara de forma según qué contestó
+ * hoy, que es la clase de diferencia que hace dudar de la pantalla entera.
+ *
+ * Una campaña sin fila **⛔ NO cae en ninguna línea**: su plata ⛔ no se la queda nadie por descarte,
+ * que es exactamente el bug que esto vino a matar. Queda en `sinAsignar`, con lo que el nombre
+ * SUGIERE, y una persona confirma.
+ */
+function repartir(campañas, visibles, asignadas) {
   const lineas = {};
   for (const l of visibles) lineas[l] = [];
   const sinAsignar = [];
@@ -395,8 +429,78 @@ async function etapas(res, perfil, diasPedidos) {
     // y si una empieza a gastar vuelve sola al cartel.
     sinAsignar.push({ ...c, sugerida: sugerirLinea(c.nombre), tuvoActividad: estaAlAire(c) });
   }
+  return { lineas, sinAsignar };
+}
 
-  return res.status(200).json({ ok: true, dias, cuentas, lineas, sinAsignar });
+/**
+ * **El Embudo cuando Graph ⛔ no contesta**: el mismo censo, armado desde la foto diaria.
+ *
+ * 🔑 **Devuelve la MISMA forma que el camino de Graph, más `fuente`, `completo` y `motivo`.** Que la
+ * pantalla tenga que preguntar de dónde salió el dato es el punto: un respaldo servido callado, con
+ * cara de censo entero, sería peor que el 500 que reemplaza. Los tres límites —el `objetivo` que
+ * empezó a guardarse el 8-ago, las campañas que nunca entregaron y no tienen fila, y que sólo hay
+ * días cerrados— están en el docblock de `censoDeLaFoto()`.
+ */
+async function etapasDeLaFoto(res, dias, visibles, asignadas, motivo) {
+  const sb = clienteBdi();
+  if (!sb) return res.status(502).json({ error: motivo, detalle: 'Y tampoco hay credenciales de Supabase para el respaldo.' });
+
+  // Un colchón sobre la ventana pedida: `ultimoDiaCerrado()` se deriva de las filas, así que hay que
+  // traer de más para poder recortar después. ⛔ No se calcula «hoy» con `new Date()`: los días los
+  // corta Meta en la zona de la cuenta y esto puede correr en UTC.
+  const desdeCrudo = desdeDe(new Date().toISOString().slice(0, 10), dias + 7);
+  const [snap, relectura] = await Promise.all([
+    leerSnapshot(sb, {
+      cols: 'fecha,nivel,objeto_id,cuenta_id,nombre,linea,objetivo,estado,estado_efectivo,diario_crudo,moneda,spend,impresiones,clicks,compras,revenue',
+      desde: desdeCrudo, nivel: 'campania',
+    }),
+    /**
+     * 🔴🔑 **El cierre se deriva de las filas de CONJUNTO, ⛔ no de las de campaña, y esto ⛔ no es
+     * una preferencia.**
+     *
+     * `ultimoDiaCerrado()` mide *«¿alguna fila de este día fue recapturada al día siguiente?»*, que
+     * es un buen proxy de «el día cerró» **sólo donde la relectura ocurre**. 📊 Medido el
+     * 30-ago-2026 sobre los 13 días del 18 al 30: a nivel **conjunto** y **aviso**, 8 de 13 días
+     * tienen una segunda captura; a nivel **campaña**, **UNO solo** (el 23, capturado el 24).
+     * ⇒ preguntándoselo a las filas de campaña, el cierre daba **23-ago** —seis días atrás— y el
+     * Embudo de respaldo habría mostrado una ventana vieja **con cara de actual**, mientras la zona
+     * de Rendimiento, al lado, decía 29.
+     *
+     * 🔑 **El día cerró o ⛔ no cerró: es una propiedad del DÍA, ⛔ no del nivel al que se lo
+     * preguntes.** Se le pregunta al nivel donde el instrumento funciona, y así las dos pantallas
+     * contestan la misma fecha. Son dos columnas: la consulta es barata.
+     */
+    leerSnapshot(sb, { cols: 'fecha,capturado_at', desde: desdeCrudo, nivel: 'conjunto' }),
+  ]);
+  if (snap.error) return res.status(502).json({ error: motivo, detalle: `Y la foto tampoco se pudo leer: ${snap.error}` });
+
+  const cierre = ultimoDiaCerrado(relectura.filas) || '';
+  if (!cierre) {
+    return res.status(502).json({ error: motivo, detalle: 'Y la foto todavía ⛔ no tiene ningún día cerrado con el que armarlo.' });
+  }
+  const desde = desdeDe(cierre, dias);
+  const deLaVentana = snap.filas.filter((f) => {
+    const d = String(f.fecha || '').slice(0, 10);
+    return d >= desde && d <= cierre;
+  });
+
+  const censo = censoDeLaFoto(deLaVentana);
+  const { lineas, sinAsignar } = repartir(censo.campanias, visibles, asignadas);
+  return res.status(200).json({
+    ok: true,
+    dias,
+    // 🔴 Lo que la pantalla tiene que decir en voz alta. Sin esto, «MOFU en cero» se lee igual
+    // viniendo de un censo completo que de uno al que le faltan las campañas que no entregaron.
+    fuente: 'foto',
+    completo: false,
+    motivo,
+    desde,
+    hasta: cierre,
+    sinObjetivo: censo.sinObjetivo.length,
+    cuentas: censo.cuentas,
+    lineas,
+    sinAsignar,
+  });
 }
 
 // `leerAsignaciones` (campaña → línea, desde la base de BDI) se mudó a `api/_meta-lineas.js`: la

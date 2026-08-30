@@ -1713,6 +1713,85 @@ son cuatro días atrás.
   (`scripts/medir-rendimiento-celdas.mjs`), que ⛔ no pasa por la pantalla.
 - ⛔ **NO se caminó la pantalla en producción**: el login pide contraseña. Es la mano que falta.
 
+## 🆕🏁 30-ago-2026: EL EMBUDO — la premisa estaba al revés, y se moría con el token
+
+### 1. 🔴 La premisa que justificaba el módulo era FALSA, y mandaba a mirar donde SÍ hay pauta
+
+`etapas.core.js` decía textual, en el docblock que explica **por qué existe la sección**:
+*«Toda la pauta de BDI y Zattia es de la primera etapa (tráfico y reconocimiento). Nadie arma pauta
+de las otras dos»*. 📊 Medido sobre la foto de agosto (10 campañas, 1→29):
+
+| etapa | campañas AL AIRE | gasto |
+|---|---|---|
+| **BOFU** «que compren» | **5** | **$1.472.073 — el 84%** |
+| **TOFU** «que te conozcan» | 3 | $284.509 |
+| **MOFU** «que te consideren» | **0** | **$0** |
+
+⇒ **el agujero ⛔ no está arriba del embudo: está en el MEDIO, y está en cero.**
+
+🔑 **Y la conducta ya estaba bien**: `veredictoDe()` prioriza la segunda etapa vacía sobre todo lo
+demás, así que la pantalla venía señalando MOFU aunque el comentario dijera otra cosa. **Por eso es
+exactamente el caso de por qué una premisa se vuelve test**: la frase envejeció tres meses sin que
+nada se pusiera rojo, y quien la leyera antes de tocar la prioridad la habría "arreglado" para que
+apuntara a TOFU. Ahora hay un test —«la forma real de la cuenta»— que se cae el día que aparezca una
+campaña de MOFU, **y ese rojo es la noticia buena**.
+
+### 2. 🔴 El Embudo se moría con el token, y el dato ya estaba en la foto
+
+`?recurso=etapas` estaba **debajo** del guard de `META_ADS_TOKEN` en `api/meta-ads.js`, mientras la
+zona de Rendimiento, las automatizaciones, la Biblioteca y los informes están **arriba a propósito**.
+⇒ con el token vencido el Embudo contestaba 500 y ⛔ no abría, aunque la pregunta que contesta —*«¿a
+quién le estoy hablando?»*— ⛔ no depende de que Graph conteste hoy. Y `meta_ads_snapshot_dia` ya
+guarda `objetivo` a nivel campaña.
+
+**Ahora**: con token vivo va a Graph igual que siempre (`fuente: 'meta'`). Sin token, o si Graph
+falla en **todas** las cuentas, arma el censo desde la foto (`censoDeLaFoto()`, `fuente: 'foto'`) y
+**la pantalla lo dice arriba de todo** (`DeDondeSale`, compartido por el Embudo y Campañas: las dos
+leen el mismo censo, y una que lo dijera y la otra no dejaría a media sección afirmando de más).
+⚠️ Con una cuenta caída y otra viva ⛔ **no** se mezcla: sería una campaña contada dos veces con dos
+números distintos.
+
+### 🔴 Los tres límites del respaldo, y por qué VIAJAN en la respuesta
+
+1. **`objetivo` empezó a guardarse el 8-ago-2026.** 📊 De las 552 filas de campaña de toda la foto,
+   **423 (77%) ⛔ no lo tienen**. ⇒ una campaña sin objetivo en ninguna de sus filas **⛔ no entra al
+   censo**: contarla como `sin-clasificar` afirmaría «nadie le puso etapa» cuando lo que pasa es que
+   la foto ⛔ no lo guardaba. Sale aparte y se cuenta en el cartel.
+2. **La foto sólo tiene lo que apareció en insights** ⇒ una campaña `ACTIVE` que nunca entregó ⛔ no
+   tiene fila, y «activas sin entrega» —el renglón que destapa un conjunto roto— sale incompleto.
+   `completo: false` **siempre**, y con test.
+3. **Sólo días cerrados**, con la ventana escrita en el cartel.
+
+### 🔴🔑 3. Y el hallazgo del día: `ultimoDiaCerrado()` MIENTE a nivel campaña
+
+Lo que esa función mide de verdad es *«¿alguna de estas filas fue recapturada al día siguiente?»*, y
+eso ⛔ no pasa igual en todos los niveles. 📊 Medido sobre los 13 días del 18 al 30 de agosto:
+
+| nivel | días con segunda captura | `ultimoDiaCerrado` |
+|---|---|---|
+| conjunto | 8 de 13 | **2026-08-29** |
+| aviso | 8 de 13 | **2026-08-29** |
+| **campaña** | **1 de 13** (sólo el 23) | **2026-08-23** ❌ |
+
+⇒ el respaldo, preguntándoselo a sus propias filas, habría mostrado una ventana **de seis días
+atrás con cara de actual**, mientras la zona de Rendimiento al lado decía 29.
+🔑 **El día cerró o ⛔ no cerró: es una propiedad del DÍA, ⛔ no del nivel al que se lo preguntes.**
+Se le pregunta al nivel donde la relectura ocurre —conjunto, dos columnas, consulta barata— y el
+resultado se usa para todos. Queda advertido en el docblock de `ultimoDiaCerrado()`, porque el
+próximo que la llame sobre otro nivel se come lo mismo.
+
+### Verificado
+
+- **40 tests** en `tests/meta-ads-etapas.test.ts` (eran 33), con **cuatro mutantes muertos**: apagar
+  la rama de MOFU vacía, meter la campaña sin objetivo como `sin-clasificar`, tomar el objetivo del
+  último día en vez del último que lo tenga, y declarar `completo: true`.
+- **El instrumento nuevo se estrenó reproduciendo la medición vieja**: `censoDeLaFoto()` corrido
+  contra la foto real da **5 BOFU (83%) / 3 TOFU / 0 MOFU** sobre la ventana 31-jul→29-ago, que es la
+  misma forma que la medición a mano de agosto.
+- Suite entera: **6.406 verdes**. Los 13 rojos son `crm-paridad`, de otra sesión y de antes.
+- ⛔ **NO se caminó la pantalla en producción** (el login pide contraseña), y ⛔ **no se ejercitó el
+  respaldo con el token caído de verdad**: se probó el núcleo con la foto real, ⛔ no el handler.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

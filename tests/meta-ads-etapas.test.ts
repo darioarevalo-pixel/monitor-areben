@@ -8,7 +8,7 @@ import {
   RESUMEN_ETAPA,
   UMBRALES_ETAPA,
 } from '@/lib/meta-ads/etapas'
-import { estaAlAire, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA } from '@/lib/meta-ads/etapas.core.js'
+import { censoDeLaFoto, estaAlAire, OBJETIVOS_TRAFICO, OBJETIVOS_VENTA } from '@/lib/meta-ads/etapas.core.js'
 import type { CampañaEtapa, Etapa } from '@/lib/meta-ads/tipos'
 
 /**
@@ -320,5 +320,125 @@ describe('los umbrales', () => {
     expect(UMBRALES_ETAPA.pisoGastoRelevante).toBeGreaterThan(0)
     expect(UMBRALES_ETAPA.pisoGastoRelevante).toBeLessThan(1)
     expect(UMBRALES_ETAPA.dominanciaOtraEtapa).toBeGreaterThan(1)
+  })
+})
+
+/**
+ * **La forma REAL de la cuenta, y por qué este bloque existe.**
+ *
+ * 🔴 Hasta el 30-ago-2026 el docblock del núcleo afirmaba *«toda la pauta de BDI y Zattia es de la
+ * primera etapa… nadie arma pauta de las otras dos»*, y era **al revés**. 📊 Medido sobre la foto de
+ * agosto (10 campañas, 1→29): **5 BOFU al aire con el 84% del gasto**, 3 TOFU, y **MOFU en CERO**.
+ *
+ * 🔑 **La conducta ya estaba bien y por eso nada se puso rojo en tres meses.** Ese es todo el punto:
+ * una premisa escrita ⛔ no frena nada, y quien la leyera antes de tocar `veredictoDe()` habría
+ * "arreglado" la prioridad para que apuntara a la primera etapa. Esto la vuelve test — 📌
+ * [[feedback_areben_invariante_escrito_no_frena]].
+ *
+ * ⚠️ Las cifras van redondeadas y ⛔ no clavadas al peso: lo que se fija es **la FORMA** (dónde está
+ * el hueco), ⛔ no la foto de un día. Si mañana hay una campaña de MOFU, este test tiene que caerse
+ * — y ese rojo es la noticia buena.
+ */
+describe('la forma real de la cuenta (agosto 2026)', () => {
+  const comoEnAgosto = [
+    ...alAire('bofu', 5, 294_000), // ~$1.472.073 entre las cinco
+    ...alAire('tofu', 3, 94_800), //  ~$284.509 entre las tres
+    // MOFU: ninguna. Es el agujero.
+  ]
+  const d = diagnosticar(comoEnAgosto, { marca: 'BDI' })
+
+  it('🔴 el hueco está en el MEDIO, ⛔ no arriba del embudo', () => {
+    const por = (e: Etapa) => d.etapas.find((x) => x.etapa === e)
+    expect(por('mofu')?.alAire).toHaveLength(0)
+    expect(por('mofu')?.estado).toBe('vacia')
+    expect(por('bofu')?.alAire).toHaveLength(5)
+    expect(por('tofu')?.alAire).toHaveLength(3)
+  })
+
+  it('la etapa de COMPRA se lleva la mayoría de la plata — al revés de lo que decía la premisa', () => {
+    const bofu = d.etapas.find((x) => x.etapa === 'bofu')
+    expect(bofu!.parte).toBeGreaterThan(0.8)
+  })
+
+  it('🔑 y el veredicto apunta a MOFU, ⛔ no a la primera etapa', () => {
+    expect(d.veredicto.etapa).toBe('mofu')
+    expect(d.veredicto.clase).not.toBe('sin-base')
+  })
+})
+
+/**
+ * **El censo de respaldo, armado desde la foto** — lo que contesta el Embudo con el token vencido.
+ *
+ * 🔴 Existe porque `?recurso=etapas` estaba **debajo** del guard de `META_ADS_TOKEN` y el Embudo se
+ * moría con un 500, mientras Rendimiento, las reglas y los informes seguían contestando: están
+ * arriba a propósito. El dato ya estaba en `meta_ads_snapshot_dia`.
+ *
+ * Los mutantes que este bloque tiene que matar son los tres modos de **afirmar de más**:
+ *  1. Meter una campaña sin objetivo como `sin-clasificar` — diría «nadie le puso etapa» cuando lo
+ *     que pasa es que la foto ⛔ no lo guardaba (📊 el 77% de las filas históricas).
+ *  2. Tomar el objetivo del ÚLTIMO día en vez del último que lo tenga — una campaña que dejó de
+ *     entregar vuelve a escribir `null` y se caería del censo teniendo el dato dos filas atrás.
+ *  3. Devolver `completo: true` — la foto ⛔ no tiene las campañas que nunca entregaron.
+ */
+describe('el censo de respaldo, desde la foto', () => {
+  const fila = (o: Record<string, unknown> = {}) => ({
+    nivel: 'campania', objeto_id: 'c1', cuenta_id: '999', nombre: 'CAMPAÑA', linea: 'bdi',
+    fecha: '2026-08-20', objetivo: 'OUTCOME_SALES', estado: 'ACTIVE', estado_efectivo: 'ACTIVE',
+    diario_crudo: 1_000_000, moneda: 'ARS', spend: 100, impresiones: 10, clicks: 5, compras: 1, revenue: 300,
+    ...o,
+  })
+
+  it('suma la ventana y clasifica por el objetivo', () => {
+    const c = censoDeLaFoto([fila({ fecha: '2026-08-20' }), fila({ fecha: '2026-08-21' })])
+    expect(c.campanias).toHaveLength(1)
+    expect(c.campanias[0].spend).toBe(200)
+    expect(c.campanias[0].revenue).toBe(600)
+    expect(c.campanias[0].etapaAuto).toBe('bofu')
+  })
+
+  it('🔴 una campaña SIN objetivo en ninguna fila ⛔ no entra al censo: sale aparte', () => {
+    const c = censoDeLaFoto([fila({ objetivo: null }), fila({ objeto_id: 'c2' })])
+    expect(c.campanias.map((x) => x.id)).toEqual(['c2'])
+    expect(c.sinObjetivo.map((x) => x.id)).toEqual(['c1'])
+    // ⛔ Y en particular NO aparece como «sin-clasificar», que es una afirmación distinta.
+    expect(c.campanias.some((x) => x.etapaAuto === 'sin-clasificar')).toBe(false)
+  })
+
+  it('🔴 el objetivo sale del último día que LO TENGA, ⛔ no del último día', () => {
+    // El caso medido: la campaña de Stunned volvió a escribir `objetivo: null` el día que dejó de
+    // gastar. Con el último día mandando, se caía del censo teniendo el dato el día anterior.
+    const c = censoDeLaFoto([
+      fila({ fecha: '2026-08-20', objetivo: 'OUTCOME_TRAFFIC' }),
+      fila({ fecha: '2026-08-21', objetivo: null, spend: 0 }),
+    ])
+    expect(c.sinObjetivo).toHaveLength(0)
+    expect(c.campanias[0].etapaAuto).toBe('tofu')
+  })
+
+  it('el nombre, el estado y el presupuesto salen del día MÁS NUEVO', () => {
+    const c = censoDeLaFoto([
+      fila({ fecha: '2026-08-20', nombre: 'EL VIEJO', estado_efectivo: 'ACTIVE', diario_crudo: 1_000_000 }),
+      fila({ fecha: '2026-08-21', nombre: 'EL NUEVO', estado_efectivo: 'PAUSED', diario_crudo: 2_000_000 }),
+    ])
+    expect(c.campanias[0].nombre).toBe('EL NUEVO')
+    expect(c.campanias[0].estado).toBe('PAUSED')
+    expect(c.campanias[0].diarioCrudo).toBe(2_000_000)
+  })
+
+  it('`estado_efectivo` le gana a `estado`: es el que dice si entrega de verdad', () => {
+    const c = censoDeLaFoto([fila({ estado: 'ACTIVE', estado_efectivo: 'CAMPAIGN_PAUSED' })])
+    expect(c.campanias[0].estado).toBe('CAMPAIGN_PAUSED')
+    expect(estaAlAire(c.campanias[0])).toBe(false)
+  })
+
+  it('🔴 NUNCA se declara completo: la foto ⛔ no tiene las que nunca entregaron', () => {
+    expect(censoDeLaFoto([fila()]).completo).toBe(false)
+    expect(censoDeLaFoto([]).completo).toBe(false)
+  })
+
+  it('ignora los otros niveles de la foto y aguanta filas rotas', () => {
+    const c = censoDeLaFoto([fila({ nivel: 'conjunto' }), fila({ nivel: 'aviso' }), null, {}, fila({ objeto_id: null })])
+    expect(c.campanias).toHaveLength(0)
+    expect(c.sinObjetivo).toHaveLength(0)
   })
 })

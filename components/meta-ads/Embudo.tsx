@@ -32,6 +32,7 @@ import { VentanaEtapas } from '@/components/meta-ads/VentanaEtapas'
 import { ModalesDeAccion } from '@/components/meta-ads/acciones'
 import { TablaCampanias } from '@/components/meta-ads/campanias/TablaCampanias'
 import { BotonesDeLinea } from '@/components/meta-ads/campanias/celdas'
+import { DeDondeSale } from '@/components/meta-ads/campanias/DeDondeSale'
 import { useCampanias, type Campanias, type Correccion } from '@/components/meta-ads/useCampanias'
 import { useFechas } from '@/components/meta-ads/useFechas'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -65,10 +66,13 @@ export function Embudo() {
         <Notice tone="danger">
           No se pudieron traer las campañas: {m.estado.motivo}
           <div style={{ fontSize: font.sm, marginTop: space[1] }}>
-            Si dice «Meta Ads no configurado», falta <code>META_ADS_TOKEN</code> en el servidor.
+            ⚠️ Desde el 30-ago un token vencido ya ⛔ no llega acá: cae a la foto diaria y lo dice
+            arriba. Si igual estás viendo esto, tampoco se pudo leer la foto.
           </div>
         </Notice>
       )}
+
+      {m.estado.fase === 'ok' && <DeDondeSale d={m.estado.data} />}
 
       {m.estado.fase === 'ok' && <Contenido m={m} sinLinea={m.estado.data.sinAsignar} fecha={fecha} />}
 
