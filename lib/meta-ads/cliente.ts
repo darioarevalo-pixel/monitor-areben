@@ -20,6 +20,7 @@ import type { Informe, InformeResumen, RespuestaInforme, RespuestaInformes } fro
 import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaReglas } from './reglas'
 import type { RespuestaTendencia } from './tendencia'
 import type { RespuestaZona } from './rendimiento'
+import type { RespuestaPublicos } from './publicos'
 
 /** Lo que contesta `?recurso=parte`: el texto listo para copiar y qué no se pudo leer. */
 /**
@@ -647,6 +648,19 @@ export function traerTendencia(dias: number): Promise<Lectura<RespuestaTendencia
  *   un día en la tira. ⛔ Un `hasta` posterior al último cerrado devuelve 400 con el motivo, ⛔ no un
  *   recorte silencioso: medio día dibujado como entero es el defecto original de esta sección.
  */
+/**
+ * **Fría vs remarketing**: cuánta de la plata de una línea le compra a gente que ya nos conocía.
+ *
+ * ⚠️ Es el único recurso de LECTURA que necesita el token: el público vive en el `targeting` de cada
+ * conjunto y la foto ⛔ no lo guarda. Con Graph caído contesta igual, con `clasificado: false`, el
+ * gasto de la ventana y el motivo — así que quien la llama ⛔ no tiene que tratarlo como un error.
+ */
+export function traerPublicos(linea: string, dias?: number): Promise<Lectura<RespuestaPublicos>> {
+  const p = new URLSearchParams({ recurso: 'publicos', linea })
+  if (dias) p.set('dias', String(dias))
+  return pedir<RespuestaPublicos>(p)
+}
+
 export function traerZona(linea: string, dias?: number, hasta?: string): Promise<Lectura<RespuestaZona>> {
   const p = new URLSearchParams({ recurso: 'rendimiento', linea })
   if (dias) p.set('dias', String(dias))

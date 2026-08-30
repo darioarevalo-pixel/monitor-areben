@@ -58,6 +58,7 @@ import { CargarPiezas } from '@/components/meta-ads/piezas/CargarPiezas'
 import { Informes } from '@/components/meta-ads/informes/Informes'
 import { Rentabilidad } from '@/components/meta-ads/rentabilidad/Rentabilidad'
 import { Analizar, Configurar, Producir } from '@/components/meta-ads/zona/Agrupadas'
+import { Publicos } from '@/components/meta-ads/publicos/Publicos'
 import { ZonaRendimiento } from '@/components/meta-ads/zona/ZonaRendimiento'
 
 /** Las rutas viejas, que siguen en bookmarks. Una línea cada una, sin redirect. */
@@ -95,6 +96,7 @@ const VISTAS: Record<string, () => React.ReactElement> = {
   piezas: CargarPiezas,
   automatizaciones: Automatizaciones,
   embudo: Embudo,
+  publicos: Publicos,
   ideas: Ideas,
   rendimiento: Rendimiento,
   registro: Auditoria,

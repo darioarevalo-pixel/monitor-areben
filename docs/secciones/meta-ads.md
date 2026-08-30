@@ -1902,6 +1902,88 @@ como de hoy al lado de las tres de arriba.
   ⛔ no sólo la tabla, que diga «Compras · Meta» en vez de «Pedidos reales», y que «3 días» y un día
   de la tira den números distintos entre sí.
 
+## 🆕🏁 30-ago-2026 (tarde): FRÍA vs REMARKETING — la pregunta que sí tiene una mano del otro lado
+
+Lo pidió Bruno, y nació de una objeción suya al Embudo de esta misma mañana: *«contesta qué etapa
+está vacía, y esa pregunta ⛔ no tiene una acción del otro lado»* — llenar la etapa de arriba es
+producir piezas, que pasa en MAKETA y tarda semanas, así que una pantalla cuya respuesta ⛔ no cabe
+en un gesto se abre una vez. La de al lado sí decide algo la misma tarde: **¿cuánta de la plata de
+esta marca le está comprando a gente que YA nos conocía?** ⇒ dónde van los pesos que se liberan.
+
+**Dónde vive**: `lib/meta-ads/publicos.core.js` (+ su `.ts`) · `api/_meta-publicos.js` ·
+`?recurso=publicos&linea=…[&dias=]` · `components/meta-ads/publicos/Publicos.tsx`, pestaña **«Fría vs
+remarketing»** de **Analizar**, al lado del Embudo — son la pareja.
+
+### 🔴 Por qué el Embudo ⛔ NO podía contestarla, y lo dice su propio núcleo
+
+*«La etapa es una propiedad del PÚBLICO, ⛔ no del objetivo de la campaña.»* En el Embudo la etapa
+sale del `objective`, así que una `OUTCOME_SALES` apuntada a gente que nunca nos vio se cuenta como
+BOFU. El remarketing de verdad **sólo se ve en `targeting{custom_audiences}` a nivel conjunto**, que
+es la llamada que este módulo agrega (una por cuenta, paginada).
+
+### 🔴🔑 Son TRES públicos, y el tercero es el hallazgo
+
+| público | qué es | qué ⛔ no es |
+|---|---|---|
+| **remarketing** | el conjunto INCLUYE una lista nuestra | — |
+| **fría** | EXCLUYE nuestras listas ⇒ por construcción ⛔ no le habla a un conocido | — |
+| **abierta** | ⛔ no dice nada de listas: **elige Meta y le habla a los dos** | ⛔ **NO es «gente nueva»** |
+
+🔑 **Si la mayor parte de la plata está en «abierta», la respuesta honesta es «⛔ no se sabe, y así
+está armada la cuenta»** — y eso ⛔ no es un módulo que nace mudo, porque tiene una mano concreta al
+lado: **excluir a los compradores en esos conjuntos**. Es un cambio de público, ⛔ no de creativo ni
+de plata, y convierte `abierta` en `fria`: recién ahí el número quiere decir algo.
+🔴 **Incluir gana sobre excluir**: un conjunto que incluye «visitantes» y excluye «compradores» es
+el remarketing más fino que hay, y leerlo como frío por la exclusión lo contaría como adquisición.
+🔴 **Un `targeting` ilegible es `null`, ⛔ nunca «abierta» por descarte**: «⛔ no se pudo leer»
+cayendo en un balde con plata adentro es plata contada en el único que ⛔ no se puede contradecir.
+
+### 🔴 La trampa grande: la atribución le REGALA la compra al remarketing
+
+Le muestra el aviso a alguien que ya venía decidido y Meta le imputa esa venta ⇒ **siempre va a
+salir más barato, y eso ⛔ no prueba que sea mejor plata**. Es la familia del hallazgo del 26-ago (la
+elasticidad de Meta, 0,78, contra la medida sobre pedidos reales, 0,54): la atribución mejora justo
+donde más se la mira. ⇒ **lo que este módulo mide bien es el REPARTO DEL GASTO**, que es un hecho; el
+costo de cada público va declarado como **de Meta**, y `sesgoDeAtribucion()` arma el cartel con el
+número puesto («sale 5,0× más barato») **arriba de la tabla y ⛔ no al pie**, para que la columna ⛔
+no se lea como un ranking. ⚠️ Y ⛔ no aparece cuando ⛔ no corresponde: un cartel de más enseña a
+ignorar los carteles.
+
+### 🔴 Lo que gastó un conjunto que Meta ya ⛔ no lista
+
+Va a **«sin clasificar»**, ⛔ nunca repartido entre los otros tres: repartirlo por descarte infla
+justo el número que se vino a mirar (es el mismo error que el reparto por línea del censo vino a
+matar). La `cobertura` viaja en la respuesta y la pantalla la dibuja: **un reparto que ⛔ no dice su
+cobertura afirma más de lo que midió**.
+
+### 🔴 Y el defecto que cazó su propio test de handler: nació DEBAJO del guard del token
+
+Es el único recurso de lectura que **necesita** Graph, así que parecía natural ponerlo abajo. Abajo,
+el guard contesta «Meta Ads no configurado» **antes** de que el handler pueda hablar, y se pierde lo
+que sí se sabe: **cuánta plata se gastó en la ventana**, que sale de la foto. ⇒ subió al lado del
+Embudo, y con el token caído contesta `clasificado: false`, el total y el motivo. 📌 Es **el mismo
+defecto que el Embudo tuvo hasta esta mañana**, en un módulo escrito el mismo día por quien lo
+acababa de arreglar — la lección ⛔ no se hereda: la agarró el test.
+
+### Verificado
+
+- **34 tests**: 22 del núcleo (`tests/meta-publicos.test.ts`) y 12 del handler
+  (`tests/meta-publicos-handler.test.ts`).
+- **5 mutantes muertos**: excluir ganando sobre incluir, un `targeting` ilegible cayendo en
+  «abierta», lo que Meta ya no lista repartido como «abierto», el «abierto» dejando de ganar el
+  veredicto, y el guard del cartel de sesgo.
+- 🔑 **Un sexto mutante SOBREVIVIÓ y ⛔ no faltaba un test: era EQUIVALENTE.** `sesgoDeAtribucion()`
+  tenía **dos** guards para la misma condición y el segundo ya devolvía `null` en los tres casos
+  —se verificó caso por caso antes de concluir—. Se sacó el redundante: dos guards para lo mismo son
+  el que alguien afloja creyendo que el otro lo cubre. Mutar el que quedó mata 2 tests.
+- Lint y typecheck **verdes**. Suite entera: **6.482 verdes**; los 13 rojos son `crm-paridad`, de
+  otra sesión y sin commitear (`reclamos-foto-ampliada` falla sólo bajo carga y pasa sola).
+- 🔴 ⛔ **NO se corrió contra Meta**: `META_ADS_TOKEN` ⛔ no está en el entorno local, así que el
+  reparto real ⛔ **no se midió** — los tests ejercen el cruce con un censo sembrado.
+  ▶️ **La primera apertura ES la medición**, y la hipótesis a confirmar o tumbar es que casi toda la
+  plata de BDI esté en «abierta» (las campañas del banco y las tandas son `BROAD`). Si sale así, el
+  veredicto ya trae la mano.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

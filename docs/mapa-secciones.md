@@ -7,25 +7,34 @@ cuando hay que ubicar algo, no siempre. `AGENTS.md` dejó la orden de leer este 
 No está generado a propósito. `tests/agents-mapa-secciones.test.ts` ya lo amarra al código en las dos
 direcciones (toda sección del registro figura acá, y todo lo que se nombra acá existe), que es lo
 único que compraría generarlo; y lo que un generador no puede escribir —el portal del cadete, las
-once vistas de Meta por el 2º tramo de la URL, las tres secciones sin `store`— es justo la parte que
+doce vistas de Meta por el 2º tramo de la URL, las tres secciones sin `store`— es justo la parte que
 el código no dice solo.
 
 ## El mapa
 
-58 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+60 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
 `colores` (cada una en `components/<key>/`) · `comisiones` · `verif-ventas` · `liquidacion`
 (con `lib/` propio)
 
-**Compras** — `fundas-modelo → components/fundas + lib/fundas` · `proveedores` · `ingresos` ·
+**Compras** — `fundas-modelo → components/fundas + lib/fundas` · `ingresos` ·
 `recepciones → components/recepciones + lib/recepciones` (**Ingresos**: las OC que el sistema de
 Ingresos confirma como recibidas. La escribe un webhook —`api/_oc-webhook.js`—, la pantalla sólo
 lee. ⛔ No es `ingresos`, que es la importación que VIENE) ·
 `disenos` · `pedidos-clientes → components/pedidos-clientes + lib/pedidos-clientes` (Faltantes: lo
 que los clientes piden y no tenemos. **Se anota desde `atencion`**, que es la pantalla abierta
-mientras se atiende; acá se lee el ranking)
+mientras se atiende; acá se lee el ranking) ·
+`recorridas → components/recorridas + lib/prm` (los locales de proveedores que hay que visitar y el
+viaje a verlos. Es el HACER; ⛔ el dominio es `lib/prm/`, compartido con la sección `prm`)
+
+**Proveedores** — un grupo propio desde el 30-ago-2026, al mismo nivel que Clientes, porque
+*«no es lo mismo comprar o querer comprar que analizar al partner»* (Bruno) —
+`prm → components/prm + lib/prm` (la ficha de la relación: la historia, los compromisos abiertos, si
+entrega lo que le pedimos y cómo vendió. Es el SABER) ·
+`proveedores` (analítica de ventas y stock por proveedor sobre el ETL, **sólo Zattia**. Estaba en
+Compras y se mudó acá: ⛔ no se le tocó una línea de código)
 
 **Clientes** — `clientes → components/crm + lib/crm` (+ panel `/panel/<telefono>` →
 `components/panel`, el iframe que la extensión de Chrome pega al costado de WhatsApp Web)
@@ -47,8 +56,9 @@ puerta angosta `vista=retornos`)
 **Marketing** — `mkt-ventas → components/mkt-ventas + lib/mkt-ventas` · `marketing` · `tncat` · `sesion-fotos → components/sesionfotos + lib/sesionfotos` · `canjes` ·
 `gen-talles` · `gen-desc → components/gen-desc + lib/tn-desc` · `calendario`
 
-**Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, once vistas por el 2º
-tramo de la URL; el perfil de Marketing la ve porque tiene las dos áreas
+**Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, doce vistas por el 2º
+tramo de la URL (la doceava es `publicos`, fría vs remarketing, 30-ago-2026); el perfil de Marketing
+la ve porque tiene las dos áreas
 
 **Administración** — `caducados` · `postventa` · `reposicion` ·
 `insumos → components/insumos + lib/insumos` (lo que se consume y no se vende: bolsas, rollos,

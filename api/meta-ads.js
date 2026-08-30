@@ -25,6 +25,10 @@
 //                                             → TODOS los avisos de todas las cuentas que ve el
 //                                               perfil, con sus números de la foto diaria y su
 //                                               pieza. Ver `api/_meta-biblioteca.js`.
+//   GET /api/meta-ads?recurso=publicos&linea=<bdi|zattia|stunned>[&dias=7|14|30]
+//                                             → FRÍA vs REMARKETING: cuánta plata le compra a gente
+//                                               que YA nos conocía. Cruza el `targeting` de Graph con
+//                                               la foto. ⛔ El único que NECESITA el token.
 //   GET /api/meta-ads?recurso=rendimiento&linea=<bdi|zattia|stunned>[&dias=7|14|30]
 //                                             → LA ZONA DE RENDIMIENTO: una fila por CELDA con su
 //                                               veredicto contra el techo, el desgaste, el
@@ -99,6 +103,7 @@ import favoritoPost, { bibliotecaGet, piezasGet } from './_meta-biblioteca.js';
 import informesPost, { informesGet } from './_meta-informes.js';
 import tendenciaGet from './_meta-tendencia.js';
 import rendimientoGet from './_meta-rendimiento.js';
+import publicosGet from './_meta-publicos.js';
 import parteGet from './_meta-parte.js';
 
 // La lista de períodos y las dos ventanas del censo viven en `lib/meta-ads/ventana.core.js`: eran
@@ -153,6 +158,14 @@ export default async function handler(req, res) {
   // depende de que Graph conteste hoy. Con token vivo sigue yendo a Graph; sin él (o si Graph falla)
   // arma el censo desde la foto y **lo dice**: ver `censoDeLaFoto()` y sus tres límites.
   if (req.method === 'GET' && recurso === 'etapas') return await etapas(res, perfil, (req.query || {}).dias);
+  // 🔴 **Y FRÍA vs REMARKETING arriba también, por el mismo motivo y con la misma trampa.**
+  // Este recurso SÍ necesita Graph —el público vive en el `targeting` de cada conjunto y la foto ⛔
+  // no lo guarda— y aun así ⛔ no puede vivir abajo: abajo, el guard contesta «Meta Ads no
+  // configurado» **antes** de que su handler pueda hablar, y se pierde lo que sí se sabe —cuánta
+  // plata se gastó en la ventana, que sale de la foto— más el motivo de por qué ⛔ no se pudo
+  // partir. Nació abajo y lo cazó su propio test de handler: es exactamente el defecto que el
+  // Embudo tuvo hasta esta mañana.
+  if (req.method === 'GET' && recurso === 'publicos') return await publicosGet(res, perfil, req.query || {});
   // Los informes del analista: prosa guardada en la base, cero llamadas a Meta. Es la lectura que
   // MÁS falta cuando Graph no contesta —el último informe es lo que explica qué estaba pasando—, así
   // que va arriba del guard por el mismo motivo que las reglas y el registro. El POST tampoco toca
@@ -178,8 +191,9 @@ export default async function handler(req, res) {
   // ⚠️ El `dias` viaja CRUDO: parsearlo acá borra la diferencia entre «no pidió nada» y «pidió una
   // ventana que no existe», que es justo la que decide entre el defecto y un 400. Ver
   // `lib/meta-ads/ventana.core.js`.
-  // ⚠️ `etapas` ya se despachó ARRIBA del guard del token: acá abajo sería inalcanzable, y un
-  // despacho muerto es exactamente lo que hizo que `poda` llegara a producción sin que nadie lo viera.
+  // ⚠️ `etapas` y `publicos` ya se despacharon ARRIBA del guard del token: acá abajo serían
+  // inalcanzables, y un despacho muerto es exactamente lo que hizo que `poda` llegara a producción
+  // sin que nadie lo viera.
   if (q.recurso === 'creativos') return await creativos(res, perfil, String(q.campania || ''), q.dias);
   if (q.recurso === 'conjuntos') return await conjuntos(res, perfil, String(q.campania || ''), q.dias);
   if (q.recurso === 'mejoras') return await mejoras(res, perfil, String(q.campania || ''));

@@ -620,6 +620,16 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
   está bien**, y ése es el que alguien apaga.
 - **El puente MAKETA → «Anuncio nuevo»**: una pieza terminada allá ⛔ no llega sola acá. Hoy el camino
   es Drive → arrastrar. ⛔ No lo cubre ninguna de las dos apps.
+- 🏁 **«¿Cuánta plata le compra a gente que YA nos conocía?» — HECHA el 30-ago (tarde).** Era el
+  único renglón de código que dejó abierto la caminata de Bruno: su objeción al Embudo —*«contesta
+  qué etapa está vacía y esa pregunta ⛔ no tiene una acción del otro lado»*—. Nueva pestaña **«Fría
+  vs remarketing»** en Analizar, al lado del Embudo: cruza el `targeting` de cada conjunto con la
+  plata de la foto. 🔴 **Son TRES públicos y el tercero es el hallazgo**: «abierto» ⛔ **no es «gente
+  nueva»** —Meta elige y le habla a los dos—, y si se lleva la mayoría de la plata el veredicto es
+  que la pregunta ⛔ no se puede contestar, **con la mano al lado** (excluir compradores en esos
+  conjuntos). Relato en la ficha.
+  ▶️ 🔴 **La primera apertura ES la medición**: ⛔ no hay token en el entorno local, así que el
+  reparto real de BDI ⛔ **no se midió**. La hipótesis a tumbar es que casi todo esté en «abierto».
 - ⛔ **El Embudo NO estaba pendiente, y este renglón estaba mal leído** (corregido el 30-ago-2026).
   Decía *«📊 `meta_ads_etapa` en 0 filas»* como si fuera un módulo que nace mudo. 📌 **Esa tabla es
   el OVERRIDE MANUAL**, y lo dice su propio núcleo (`lib/meta-ads/etapas.core.js`): la clasificación
