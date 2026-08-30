@@ -627,9 +627,17 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
   y el 84% del gasto es de la de compra; el agujero real es **MOFU, en cero**— y el Embudo **se
   moría con el token vencido**, cuando el dato ya estaba en la foto. Ahora tiene respaldo y la
   pantalla dice de dónde salió.
-  ▶️ **Lo que queda es una mano**: ejercitar el respaldo **con el token caído de verdad** (se probó
-  el núcleo contra la foto real, ⛔ no el handler) — y que el cartel «Esto sale de la foto diaria»
-  aparezca en el Embudo **y** en Campañas.
+  🏁 **HECHO el 30-ago (tarde): el respaldo está EJERCITADO con el token caído de verdad**, y el
+  cartel ya estaba en las dos pantallas —el renglón pedía algo que el código tenía—. 15 tests
+  nuevos (`tests/meta-etapas-handler.test.ts`, `tests/meta-de-donde-sale.test.tsx`), **8 mutantes
+  muertos**. Lo que ⛔ no veía el test del núcleo son las tres decisiones que **sólo toma el
+  handler**: cuándo cae a la foto (sin token, y con Graph caído en **todas** las cuentas — con UNA
+  sola caída ⛔ **no**, mezclar los dos censos cuenta una campaña dos veces), qué ventana mira (el
+  cierre sale de las filas de **conjunto**) y que lo **diga** (`fuente`/`completo`/`motivo`). El
+  token vencido se ejerce como lo manda Meta de verdad: **Graph contestando código 190**, ⛔ no una
+  variable de entorno vacía.
+  ▶️ **La mano que queda es de Bruno**: abrir el Embudo con el token vencido y ver el cartel
+  dibujado. El test ve que la pantalla lo **usa**, ⛔ no que se dibuje.
 - **Informes**: 2 filas, las dos **sin publicar**. Se quedó como pestaña y ⛔ no subió al menú. Si en
   un mes sigue en dos, se elimina.
 - **«Hoy + ayer + anteayer» como una suma sola** ⛔ no se ofrece: pediría cruzar Graph con la foto por

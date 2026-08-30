@@ -14,7 +14,7 @@ renombrarla obliga a migrar el tilde de permiso de todo el equipo.
 URL, y su encabezado las lista) · `lib/meta-ads/` (52 archivos, en pares `x.core.js` + `x.ts`: el
 `.js` es el que pueden importar `api/*.js` y `scripts/*.mjs`) · `api/meta-ads.js` **es una de las 7
 funciones de Vercel** y su encabezado es el índice de los `?recurso=` · los handlers `api/_meta-*.js`
-(9) · 26 archivos de test (`tests/meta-*.test.ts`).
+(9) · 34 archivos de test (`tests/meta-*.test.ts[x]`).
 
 Tablas, **todas en la base de BDI y cross-marca** salvo dos: `meta_ads_snapshot_dia` (la foto diaria)
 · `meta_ads_campania_linea` (de qué marca es cada campaña) · `meta_ads_accion` (el registro de cada
@@ -1789,8 +1789,65 @@ próximo que la llame sobre otro nivel se come lo mismo.
   contra la foto real da **5 BOFU (83%) / 3 TOFU / 0 MOFU** sobre la ventana 31-jul→29-ago, que es la
   misma forma que la medición a mano de agosto.
 - Suite entera: **6.406 verdes**. Los 13 rojos son `crm-paridad`, de otra sesión y de antes.
-- ⛔ **NO se caminó la pantalla en producción** (el login pide contraseña), y ⛔ **no se ejercitó el
-  respaldo con el token caído de verdad**: se probó el núcleo con la foto real, ⛔ no el handler.
+- ⛔ **NO se caminó la pantalla en producción** (el login pide contraseña).
+
+## 🆕🏁 30-ago-2026 (tarde): EL RESPALDO DEL EMBUDO, EJERCITADO CON EL TOKEN CAÍDO
+
+La mitad que faltaba de la tanda de arriba. El respaldo se había probado pasándole filas a
+`censoDeLaFoto()`, y **el núcleo ⛔ no sabe nada de las tres decisiones que sólo toma el handler** —
+que son justo las que lo dejan inútil sin hacer ruido.
+
+### El token vencido se ejerce como lo manda Meta, ⛔ no como una variable vacía
+
+🔴 **«Sin token» y «token vencido» ⛔ NO son el mismo camino del código.** Sin token corta
+`tokenMeta()` y ⛔ no se sale a la red; **vencido** significa la variable puesta y **Graph
+contestando código 190**, que entra por la rama de `me/adaccounts` y arma otro `motivo`. Probar sólo
+el primero deja el caso real —el que de verdad pasa, porque el token del system user se vence—
+sin ejercer. Los dos están, y el 190 además ⛔ no reintenta (⛔ no está en la lista de transitorios),
+así que el test no paga los seis segundos de espera que costaría simular un 500.
+
+### Las tres decisiones que sólo toma el handler
+
+1. 🔴 **Cuándo cae a la foto**: sin token, y con Graph caído en **TODAS** las cuentas. Con **una
+   sola** caída ⛔ **no cae** — mezclar el censo de Graph con el de la foto cuenta una campaña dos
+   veces con dos números distintos. Ese caso tiene test propio, y es el que un `if (fallo)` pelado
+   rompería sin que nada más se ponga rojo.
+2. 🔴 **Qué ventana mira**: el cierre se le pregunta a las filas de **conjunto**. El test arma una
+   foto donde el nivel campaña cerraría **seis días antes**, y afirma que la campaña que sólo existe
+   ayer **entra igual**: preguntándoselo al nivel equivocado, el Embudo mostraría un hueco que ⛔ no
+   existe, con cara de dato de hoy.
+3. 🔴 **Que lo diga**: `fuente`, `completo` y `motivo` viajan en la respuesta, y el cartel
+   `DeDondeSale` los dibuja. Un respaldo servido callado, con cara de censo entero, es **peor que el
+   500 que reemplaza**.
+
+### 🔑 El control que evita el falso verde
+
+Un respaldo roto que devuelve **todo vacío** pasa los tres asserts de forma —`fuente: 'foto'`,
+`completo: false`, hay `motivo`— y se ve **igual que «no hay pauta»**. Por eso cada caso de respaldo
+afirma además que el censo **trajo las campañas repartidas por su línea**. Y las fechas se arman
+relativas a hoy: un archivo con agosto tipeado adentro empieza a probar «la foto está vacía» sin que
+nadie lo note.
+
+### El cartel ya estaba en las dos pantallas — y el invariante estaba sólo ESCRITO
+
+El renglón del `PENDIENTES.md` pedía que «Esto sale de la foto diaria» apareciera en el Embudo **y**
+en Campañas: ya estaba en las dos. Lo que ⛔ no había era **test**, y el invariante vivía sólo en el
+docblock del cartel (*«una que lo dijera y la otra no dejaría a la mitad de la sección afirmando de
+más»*). Ahora es test. ⚠️ **Lo que ese test ⛔ no ve, y está dicho adentro**: que el cartel esté en
+una rama alcanzable. Ve que la pantalla lo **usa**, ⛔ no que se **dibuje**.
+
+### Verificado
+
+- **15 tests nuevos**: `tests/meta-etapas-handler.test.ts` (8) y `tests/meta-de-donde-sale.test.tsx`
+  (7). Los dos archivos pasaron **a la primera**, así que se ejercieron con mutantes antes de
+  creerles.
+- **8 mutantes muertos.** Del handler: preguntarle el cierre al nivel **campaña** (mata 5), caer a la
+  foto con **una** cuenta caída, cortar con 500 cuando falta el token, y declarar `fuente: 'meta'` en
+  el respaldo. Del cartel: invertir la condición, dejarlo siempre puesto, sacarle la ventana, y
+  contar «0 campañas quedaron afuera».
+- Suite entera: **6.449 verdes**. Los 26 rojos son `reclamos` y `crm-paridad`, de otra sesión y
+  **sin commitear** — `main` estaba verde antes de tocar.
+- ⛔ **NO se caminó la pantalla**: el login es de Bruno.
 
 ## Pendiente
 
