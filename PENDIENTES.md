@@ -595,7 +595,9 @@ antes de rehacerlo.
   del comprador y `mapOrdenTN` lo tiraba una línea después. ✅ Confirmado en las dos órdenes reales
   de BDI (`?mail_diag=1` → `tiene_mail: true`) y caminado en prod: el mail correcto abre, una letra
   cambiada da 404.
-  ▶️ **Queda una decisión tuya**: `GET ?orden=N` sigue abierto sin auth y devuelve el nombre del
-  cliente por un número correlativo — ya era así, pero apoyar el formulario al lado lo vuelve la
-  puerta principal. Cerrarlo son dos líneas, una de ellas en `lib/reclamos/cliente.ts`, que el plan
-  del 30-ago fencea.
+  ✅ **Y se cerró el `GET ?orden=N`**, que estaba abierto a internet: devolvía nombre del comprador,
+  lo que pagó, forma de pago, envío, seguimiento y cada producto, por un número **correlativo**, con
+  el repo público en GitHub. No era una decisión sino un olvido de una migración ya hecha (quedaban
+  dos llamadores). Caminado en prod: sin credencial 403, con credencial 200 como siempre.
+  ▶️ **Una mano tuya**: abrir **Reclamos o Cambios en el navegador** y buscar una orden. El servidor
+  acepta la credencial y un test fija que el front la manda, pero nadie apretó el botón todavía.

@@ -2282,11 +2282,25 @@ de BDI: **`tiene_mail: true` en las dos**.
 
 ### ▶️ Lo que sigue
 
-- 🔴 **`GET ?orden=N` sigue abierto a internet sin auth** y devuelve el **nombre** del cliente y los
-  montos por un número correlativo. ⚠️ Eso **ya era así** y ⛔ no lo agregó este cambio, pero apoyar
-  un formulario público al lado lo vuelve la puerta principal. Cerrarlo son dos líneas
-  —`exigirUsuario` en esa rama y `apiFetch` en `buscarOrden` (`lib/reclamos/cliente.ts`)— y ⛔ no se
-  hizo acá: el plan del 30-ago fencea ese archivo. **Es una decisión de Bruno.**
+- ✅ 🔴 **`GET ?orden=N` SE CERRÓ el 30-ago-2026** (decisión de Bruno, en el momento). Estuvo abierto
+  a internet y devolvía **nombre del comprador, lo que pagó, forma de pago, cupón usado, lo que nos
+  cuesta el envío, el número de seguimiento** y cada producto con SKU y precio — por un número
+  **correlativo** (van por el 21.100) y con el repo **público en GitHub**.
+  🔑 **No era una decisión, era un olvido**: la migración a `apiFetch` ya se había hecho y el
+  encabezado de `lib/tn-audit.ts` la daba por terminada —*«el único que quedaba así»*—. Quedaban
+  **dos**: `buscarOrden` (Reclamos y Cambios) y `verificarOrden` (Canjes). Y el `MODO_AVISO` de
+  `_auth.js` de `bdi-catalogo`, que existe justo para esa transición, hacía que una llamada sin
+  credencial **avisara y pasara** ⇒ ⛔ nada se ponía rojo de ningún lado.
+  ⚠️ **El orden importó**: primero los dos llamadores mandando la credencial y **verificado el
+  deploy en prod**, después el guard del servidor. Al revés rompe Reclamos, Cambios y Canjes.
+  🔑 **El `POST` verificado ⛔ NO pide padrón, a propósito**: su llave es el mail del comprador, que
+  es de quien reclama. Dos puertas con dos llaves distintas, y el test lo fija por las dos puntas —
+  un guard que rechaza a todo el mundo también pasa el test de «rechaza».
+  ✅ Caminado en prod: sin credencial **403**, con credencial del padrón **200 como siempre**, y el
+  POST del cliente sigue contestando 404 sin pedir nada.
+  ▶️ **Lo que ⛔ no está caminado y necesita a Bruno**: abrir Reclamos o Cambios **en el navegador**
+  y buscar una orden. El servidor acepta la credencial y hay un test que fija que el front la manda,
+  pero **nadie apretó el botón** — es [[feedback_areben_deploy_llego_pero_la_puerta_no_se_aprieta]].
 - **El tope por rato** desde el mismo origen (freno 2 de los tres del §2) ⛔ no existe todavía: hoy
   el mail se puede probar sin límite.
 - 🔑 **El cruce lo tiene que hacer quien ESCRIBE.** Este endpoint es la primitiva; el handler que
