@@ -253,8 +253,12 @@ sus perfiles de `/usuarios`, y la rutina `it178752572363714_6wxkmp` pasó de los
 - **El control de dos lados en la ficha de Organización**: a **Cami Budek** (tildada) la rutina le
   aparece; a **Sofi** (sin tildar) ⛔ no —con una rutina suya visible en el mismo barrido, que es lo
   que prueba que la lista no estaba ciega—.
-- ▶️ **Lo único que queda: decidir si va una NOVEDAD.** El botón «⏱ Cargar mis horas» le va a
-  aparecer mañana a cuatro personas que nadie avisó.
+- ✅ **La novedad ya está escrita y cargada como BORRADOR**: `n1788116275709_u56o8j`, «Tus horas
+  extras las cargás vos», destino `horas-extras` (⇒ le llega **sólo a las cuatro**, y la lista se
+  ajusta sola) y **sin `importante`** —las 15 publicadas están las 15 en importante, y si todas
+  frenan, ninguna frena—. ▶️ **Queda el click de Bruno en Publicar.**
+- ✅ **Y el botón se renombró a «Cargar horas extras»** (era «Cargar mis horas») y pasó a ser un
+  botón de verdad: ver el 🔴 de `ButtonLink` en la ficha de la Agenda.
 
 ### 🆕 🔴 ▶️ El modal de la Agenda dice «— sin manual —» en 75 de 75 rutinas (30-ago-2026)
 
