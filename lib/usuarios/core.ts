@@ -166,6 +166,45 @@ export function copiarDeUsuario(destino: UsuarioConfig, origen: UsuarioConfig): 
   }
 }
 
+/** Dónde vive el formulario de carga de horas extras. Es otra app: el dashboard de finanzas. */
+export const BASE_HORAS = 'https://dashboard.arebensrl.com/horas/'
+
+/**
+ * El link personal de carga de horas, normalizado — o `null` si lo pegado no sirve.
+ *
+ * 🔑 **Se pega a mano y por eso hay que validarlo acá.** El monitor y el dashboard son dos bases
+ * distintas y los empleados no tienen usuario allá, así que el token no se puede traer solo: se
+ * genera en el dashboard (RR.HH. → Horas extras → «Links») y se copia. Un link mal pegado **no
+ * falla al guardar**: falla el último día del mes, en el teléfono de otra persona, con un 404.
+ *
+ * Acepta las dos formas en que llega de verdad: el link entero que copia el dashboard, y el token
+ * pelado de quien copió de más o de menos. Devuelve **siempre** la forma canónica.
+ *
+ * ⛔ Rechaza otro dominio aunque termine en `/horas/<algo>`: el token es una credencial sin sesión
+ * —quien tiene el link carga horas— y mandarlo a un host cualquiera es regalarlo.
+ */
+export function normalizarLinkHoras(txt: string): string | null {
+  const t = (txt || '').trim()
+  if (!t) return null
+  // El token lo genera `randomBytes(16).toString('base64url')`: 22 caracteres de ese alfabeto.
+  const soloToken = /^[A-Za-z0-9_-]{16,64}$/
+  if (soloToken.test(t)) return BASE_HORAS + t
+  if (!t.startsWith(BASE_HORAS)) return null
+  const token = t.slice(BASE_HORAS.length).split(/[?#/]/)[0]
+  return soloToken.test(token) ? BASE_HORAS + token : null
+}
+
+/**
+ * ¿Está tildada como que hace horas extras y todavía no tiene el link?
+ *
+ * Es el hueco que el sistema **no puede cerrar solo** —el link lo genera una persona en otra app—,
+ * así que lo único que se puede hacer es que se vea. Lo miran la ficha (un aviso) y el resumen de
+ * la pantalla (un contador), porque un aviso adentro de una ficha plegada no lo lee nadie.
+ */
+export function sinLinkDeHoras(u: UsuarioConfig): boolean {
+  return u.horasExtras === true && !u.horasLink
+}
+
 /** Un sub-permiso sacado de su sección, con todo lo que hace falta para mostrarlo suelto. */
 export type SubPlano = {
   /** La clave tal como se guarda en `acceso`: `canjes.aprobar`. */

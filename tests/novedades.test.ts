@@ -124,6 +124,35 @@ describe('destino: a quién le llega', () => {
     expect(esParaMi({ tipo: 'todos' }, null)).toBe(false)
   })
 
+  /**
+   * La quinta forma (30-ago-2026). Es el destino que **no lleva lista adentro**: la contesta el
+   * tilde de cada perfil, que es lo que hace que no haya una segunda verdad para mantener.
+   */
+  it('por horas extras: le llega a quien lo tiene tildado, y a nadie más', () => {
+    const d = { tipo: 'horas-extras' }
+    expect(esParaMi(d, perfil({ name: 'sofi', horasExtras: true }))).toBe(true)
+    expect(esParaMi(d, perfil({ name: 'cami' }))).toBe(false)
+    expect(esParaMi(d, perfil({ name: 'cami', horasExtras: false }))).toBe(false)
+  })
+
+  /**
+   * 🔴 Mismo motivo que el destino por nombre, y la línea que el atajo del admin rompería si el
+   * chequeo estuviera abajo: el «Hoy» de Bruno tendría todos los fines de mes un pendiente que no
+   * es suyo, y —peor— podría tildarlo, dando por cargadas las horas de otra.
+   */
+  it('las horas extras NO se las lleva el admin por ser admin', () => {
+    expect(esParaMi({ tipo: 'horas-extras' }, perfil({ name: 'bruno', admin: true }))).toBe(false)
+    // Y si las hace, le llegan: la respuesta la da el tilde, no el rol.
+    expect(esParaMi({ tipo: 'horas-extras' }, perfil({ name: 'bruno', admin: true, horasExtras: true }))).toBe(true)
+  })
+
+  it('el destino de horas extras sobrevive a `normalizarDestino` y no se cae a «todos»', () => {
+    expect(normalizarDestino({ tipo: 'horas-extras' })).toEqual({ tipo: 'horas-extras' })
+    expect(normalizarDestino({ tipo: 'horas-extras', marca: 'bdi' })).toEqual({ tipo: 'horas-extras', marca: 'bdi' })
+    // Basura de más se descarta: no lleva lista, así que no hay nada que conservar.
+    expect(normalizarDestino({ tipo: 'horas-extras', personas: ['sofi'] })).toEqual({ tipo: 'horas-extras' })
+  })
+
   it('una lista de roles vacía se cae a «todos», no a «a nadie»', () => {
     expect(normalizarDestino({ tipo: 'roles', roles: [] })).toEqual({ tipo: 'todos' })
     expect(normalizarDestino({ tipo: 'seccion' })).toEqual({ tipo: 'todos' })
@@ -242,6 +271,7 @@ describe('rotuloDestino — a quién le llega, en criollo', () => {
     expect(rotuloDestino({ tipo: 'roles', roles: ['local', 'deposito'] })).toBe('a Local y Depósito')
     expect(rotuloDestino({ tipo: 'personas', personas: ['sofi'] })).toBe('a sofi')
     expect(rotuloDestino({ tipo: 'seccion', key: 'atencion' })).toContain('a quien usa ')
+    expect(rotuloDestino({ tipo: 'horas-extras' })).toBe('a quien hace horas extras')
   })
 
   it('un rol que ya no existe se nombra por su clave y no desaparece', () => {
@@ -274,6 +304,13 @@ describe('clavesDestino — con qué se lo puede filtrar', () => {
     expect(clavesDestino({ tipo: 'seccion', key: 'atencion' })).toEqual(['s:atencion'])
   })
 
+  it('🔴 el destino por horas extras tiene clave PROPIA, no cae en «todos»', () => {
+    // Sin su `if`, el `return ['todos']` del final se lo comería: la rutina de fin de mes saldría
+    // en el filtro «Todo el equipo» de Cumplimiento y en la ficha de las once personas.
+    expect(clavesDestino({ tipo: 'horas-extras' })).toEqual(['hx'])
+    expect(clavesDestino({ tipo: 'horas-extras' })).not.toEqual(['todos'])
+  })
+
   it('el prefijo separa los espacios de nombres: una persona no colisiona con un rol', () => {
     const persona = clavesDestino({ tipo: 'personas', personas: ['local'] })
     const rol = clavesDestino({ tipo: 'roles', roles: ['local'] })
@@ -286,6 +323,7 @@ describe('clavesDestino — con qué se lo puede filtrar', () => {
       { tipo: 'roles', roles: ['marketing'] },
       { tipo: 'personas', personas: ['sofi'] },
       { tipo: 'seccion', key: 'atencion' },
+      { tipo: 'horas-extras' },
     ]
     for (const d of casos) {
       const claves = clavesDestino(d)

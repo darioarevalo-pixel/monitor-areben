@@ -45,17 +45,20 @@ import {
 function aQuien(d?: Destino): string | null {
   if (!d) return null
   const marca = d.marca ? CUENTAS[d.marca].nombre : null
-  const quien =
-    d.tipo === 'todos'
-      ? null
-      : d.tipo === 'seccion'
-        ? `A quien usa ${tituloLimpio(d.key)}`
-        : // El editor de Novedades no ofrece «a una persona» —la usa sólo la Agenda—, pero el tipo
-          // es uno solo para las dos, así que la tarjeta lo sabe leer igual: una novedad cargada a
-          // mano o por un editor futuro no puede quedar sin decir a quién le llegó.
-          d.tipo === 'personas'
-          ? `A ${d.personas.join(', ')}`
-          : `A ${d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r).join(', ')}`
+  // El editor de Novedades no ofrece «a una persona» ni «a quien hace horas extras» —las usa sólo
+  // la Agenda—, pero el tipo es uno solo para las dos, así que la tarjeta las sabe leer igual: una
+  // novedad cargada a mano o por un editor futuro no puede quedar sin decir a quién le llegó.
+  // ⚠️ Es un `switch` y no una escalera de ternarios porque son cinco formas: con la quinta, el
+  // `else` final dejó de ser «entonces son roles» y pasó a ser el lugar donde se cuela la que
+  // falte. Acá el compilador avisa.
+  let quien: string | null = null
+  switch (d.tipo) {
+    case 'todos': quien = null; break
+    case 'seccion': quien = `A quien usa ${tituloLimpio(d.key)}`; break
+    case 'personas': quien = `A ${d.personas.join(', ')}`; break
+    case 'horas-extras': quien = 'A quien hace horas extras'; break
+    case 'roles': quien = `A ${d.roles.map((r) => FUNCIONES.find((f) => f.key === r)?.label ?? r).join(', ')}`; break
+  }
   if (!quien) return marca ? `A todo el equipo de ${marca}` : null
   return marca ? `${quien} · ${marca}` : quien
 }

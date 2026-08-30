@@ -27,7 +27,7 @@ import { Badge, Button, EmptyState, Markdown, color, font, space, weight } from 
 const IZQUIERDA: ClaseResp[] = ['responde', 'entrega']
 const DERECHA: ClaseResp[] = ['decide', 'publica', 'no_es_suyo']
 
-export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, puedeEditar, onEditar, onEliminar }: {
+export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, haceHorasExtras, puedeEditar, onEditar, onEliminar }: {
   persona: string
   apodo: string
   /** La nota del organigrama («producción audiovisual»), si la tiene. */
@@ -35,14 +35,27 @@ export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, pu
   filas: Responsabilidad[]
   manuales: { id: string; titulo: string; publicado: boolean }[]
   rutinas: ItemAgenda[] | null
+  /** Del padrón. Hay rutinas cuyo destino es esa condición y no un nombre: ver `misClaves`. */
+  haceHorasExtras?: boolean
   puedeEditar: boolean
   onEditar: (r: Responsabilidad) => void
   onEliminar: (r: Responsabilidad) => void
 }) {
   const [verRutinas, setVerRutinas] = useState(false)
+  // 🔑 **Las claves con las que una rutina puede ser suya son más de una.** La mayoría la nombra
+  // (`p:<name>`), pero el destino también puede describir una CONDICIÓN de la persona —«a quien
+  // hace horas extras»— y ésa no lleva nombre adentro. Filtrar sólo por `p:` dejaba la rutina
+  // mensual de las horas extras afuera de las fichas de las tres que las hacen, o sea afirmando
+  // que no responden por algo que sí hacen. ⛔ No se agregan acá las claves de rol ni de sección:
+  // ésas no son responsabilidades de una persona, son de un sector o de quien abra una pantalla.
+  const misClaves = useMemo(() => {
+    const cs = [`p:${persona}`]
+    if (haceHorasExtras) cs.push('hx')
+    return cs
+  }, [persona, haceHorasExtras])
   const suyas = useMemo(() => (
-    (rutinas || []).filter((i) => i.activo !== false && !i.plantilla && clavesDestino(i.destino).includes(`p:${persona}`))
-  ), [rutinas, persona])
+    (rutinas || []).filter((i) => i.activo !== false && !i.plantilla && clavesDestino(i.destino).some((c) => misClaves.includes(c)))
+  ), [rutinas, misClaves])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>

@@ -12,10 +12,10 @@
 import { useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { FUNCIONES, type Funcion } from '@/lib/permisos'
-import { resumenUsuario } from '@/lib/usuarios/core'
+import { normalizarLinkHoras, resumenUsuario, sinLinkDeHoras } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { Button, color, Field, font, Input, Plegable, Select, space } from '@/components/ui'
+import { Button, color, Field, font, Input, Notice, Plegable, Select, space } from '@/components/ui'
 import { Extras } from './Extras'
 import { MatrizPermisos } from './MatrizPermisos'
 import { Resumen } from './Resumen'
@@ -28,6 +28,7 @@ export function UsuarioCard({
   onToggleOpen,
   onCampo,
   onAdmin,
+  onHorasExtras,
   onCuenta,
   onPerm,
   onPermArea,
@@ -41,8 +42,9 @@ export function UsuarioCard({
   /** El alta guiada puede pedir abrir directo en el ajuste fino ("Crear y ajustar a mano"). */
   ajusteAbierto?: boolean
   onToggleOpen: () => void
-  onCampo: (campo: 'name' | 'pass' | 'email' | 'apodo' | 'cumple', val: string) => void
+  onCampo: (campo: 'name' | 'pass' | 'email' | 'apodo' | 'cumple' | 'horasLink', val: string) => void
   onAdmin: (val: boolean) => void
+  onHorasExtras: (val: boolean) => void
   onCuenta: (val: string) => void
   onPerm: (brand: Marca, clave: string, val: boolean) => void
   onPermArea: (brand: Marca, claves: string[], val: boolean) => void
@@ -163,6 +165,12 @@ export function UsuarioCard({
             </div>
           </div>
 
+          {/* Horas extras. Va acá arriba, del lado de la función y no de los permisos, porque no
+              es un permiso: es una condición laboral de la persona. Y va ANTES del corte por
+              `u.admin` a propósito — un administrador también puede hacer horas extras, y si
+              quedara del lado de los permisos no se le podría tildar. */}
+          <HorasExtras u={u} onCampo={onCampo} onHorasExtras={onHorasExtras} />
+
           {u.admin ? (
             <div style={{ fontSize: font.sm, color: color.mut, padding: '8px 0' }}>
               Es administrador: ve todas las secciones de las dos marcas, puede hacer todas las acciones y gestionar
@@ -199,6 +207,92 @@ export function UsuarioCard({
               Eliminar usuario
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * El interruptor de las horas extras: un tilde y su link de carga.
+ *
+ * 🔑 **El tilde es lo único que decide a quién le llega la rutina mensual** «Cargar las horas
+ * extras» (destino `{tipo:'horas-extras'}`). Antes era una lista de tres nombres escrita adentro
+ * de la rutina, o sea dos verdades sobre lo mismo: acá hay una sola.
+ *
+ * ⚠️ **El link se escribe en un borrador y se normaliza al SALIR del campo, no en cada tecla.**
+ * Normalizar mientras se tipea deja el campo peleando contra los dedos; y guardar crudo lo que se
+ * pegó deja pasar un link de otro lado, que no falla hasta el último día del mes.
+ */
+function HorasExtras({
+  u,
+  onCampo,
+  onHorasExtras,
+}: {
+  u: UsuarioConfig
+  onCampo: (campo: 'horasLink', val: string) => void
+  onHorasExtras: (val: boolean) => void
+}) {
+  const [borrador, setBorrador] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const salir = () => {
+    if (borrador === null) return
+    const crudo = borrador.trim()
+    setBorrador(null)
+    if (!crudo) {
+      setError(null)
+      onCampo('horasLink', '')
+      return
+    }
+    const link = normalizarLinkHoras(crudo)
+    if (!link) {
+      // Se conserva lo escrito en el estado guardado, no: se descarta y se explica. Guardar algo
+      // que no es un link haría que la ficha diga que tiene link y el botón lleve a la nada.
+      setError('Eso no es un link de carga de horas. Copialo del dashboard, en RR.HH. → Horas extras → Links.')
+      return
+    }
+    setError(null)
+    onCampo('horasLink', link)
+  }
+
+  return (
+    <div style={{ margin: '0 0 14px' }}>
+      <label style={{ fontSize: font.base, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <input
+          type="checkbox"
+          checked={u.horasExtras === true}
+          onChange={(e) => onHorasExtras(e.target.checked)}
+          style={{ accentColor: color.brandSolid }}
+        />{' '}
+        Hace horas extras
+      </label>
+      <InfoPopover titulo="Horas extras">
+        Con esto tildado, el último día de cada mes le aparece el pendiente «Cargar las horas extras» y el botón para
+        cargarlas. Destildado, no le llega: es lo que evita que las cargue quien no las hace. El link es personal y sale
+        del dashboard, en <b>RR.HH. → Horas extras → Links</b>.
+      </InfoPopover>
+
+      {u.horasExtras && (
+        <div style={{ marginTop: 8, maxWidth: 460 }}>
+          <Field
+            label="Link de carga"
+            hint="Copiado del dashboard, en RR.HH. → Horas extras → Links. Es el link de ella sola."
+            error={error || undefined}
+          >
+            <Input
+              placeholder="https://dashboard.arebensrl.com/horas/…"
+              value={borrador ?? u.horasLink ?? ''}
+              onChange={(e) => setBorrador(e.target.value)}
+              onBlur={salir}
+            />
+          </Field>
+          {sinLinkDeHoras(u) && !borrador && (
+            <Notice tone="warning" icon="⚠️" style={{ marginTop: 8 }}>
+              Le va a llegar el pendiente de fin de mes y no va a tener con qué cargarlas. Generale el link en el
+              dashboard y pegalo acá.
+            </Notice>
+          )}
         </div>
       )}
     </div>

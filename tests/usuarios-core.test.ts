@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
+  BASE_HORAS,
   copiarDeUsuario,
   copiarPermisos,
   normalizar,
+  normalizarLinkHoras,
   nuevoUsuario,
   origenPermiso,
   resumenUsuario,
+  sinLinkDeHoras,
   SUBS_PLANOS,
   tienePermiso,
   toggleFuncion,
@@ -310,5 +313,60 @@ describe('usuarios/core — las secciones que ve todo el equipo', () => {
     expect(u.acceso.bdi?.[marcaExcluir('agenda')]).toBeUndefined()
     expect(u.acceso.bdi?.agenda).toBeUndefined()
     expect(origenPermiso(u, 'bdi', 'agenda')).toBe('todos')
+  })
+})
+
+/**
+ * El link de carga de horas extras.
+ *
+ * 🔑 **Se pega a mano y por eso hay que validarlo**: el dashboard es otra base y el token no se
+ * puede traer solo. Un link mal pegado no falla al guardar — falla el último día del mes, en el
+ * teléfono de otra persona.
+ */
+describe('normalizarLinkHoras', () => {
+  const TOKEN = 'x7KqZm3nP1aQwErTyU'
+
+  it('el link entero que copia el dashboard queda tal cual', () => {
+    expect(normalizarLinkHoras(BASE_HORAS + TOKEN)).toBe(BASE_HORAS + TOKEN)
+  })
+
+  it('el token pelado también sirve: es lo que pasa cuando se copia de menos', () => {
+    expect(normalizarLinkHoras(TOKEN)).toBe(BASE_HORAS + TOKEN)
+    expect(normalizarLinkHoras(`  ${TOKEN}  `)).toBe(BASE_HORAS + TOKEN)
+  })
+
+  it('la basura que se pega de más se recorta y el link sale canónico', () => {
+    expect(normalizarLinkHoras(`${BASE_HORAS}${TOKEN}?utm=wsp`)).toBe(BASE_HORAS + TOKEN)
+    expect(normalizarLinkHoras(`${BASE_HORAS}${TOKEN}/`)).toBe(BASE_HORAS + TOKEN)
+  })
+
+  it('🔴 otro dominio se RECHAZA aunque tenga la misma forma', () => {
+    // El token es una credencial sin sesión: quien tiene el link carga horas a nombre de otra.
+    expect(normalizarLinkHoras(`https://dashboard.arebensrI.com/horas/${TOKEN}`)).toBeNull()
+    expect(normalizarLinkHoras(`http://dashboard.arebensrl.com/horas/${TOKEN}`)).toBeNull()
+    expect(normalizarLinkHoras(`https://otra.com/horas/${TOKEN}`)).toBeNull()
+  })
+
+  it('lo que no es un link ni un token da null, y el vacío también', () => {
+    expect(normalizarLinkHoras('')).toBeNull()
+    expect(normalizarLinkHoras('   ')).toBeNull()
+    expect(normalizarLinkHoras('pedile el link a Bruno')).toBeNull()
+    expect(normalizarLinkHoras(BASE_HORAS)).toBeNull()
+    expect(normalizarLinkHoras(`${BASE_HORAS}corto`)).toBeNull()
+  })
+})
+
+describe('sinLinkDeHoras — el hueco que el sistema no puede cerrar solo', () => {
+  it('sólo es hueco si está tildada Y le falta el link', () => {
+    expect(sinLinkDeHoras(base({ horasExtras: true }))).toBe(true)
+    expect(sinLinkDeHoras(base({ horasExtras: true, horasLink: null }))).toBe(true)
+    expect(sinLinkDeHoras(base({ horasExtras: true, horasLink: 'https://x' }))).toBe(false)
+    expect(sinLinkDeHoras(base())).toBe(false)
+  })
+
+  it('un link guardado sin el tilde NO es un hueco: destildar no borra el link', () => {
+    // Quien destilda hoy suele volver a tildar el mes que viene. El tilde es lo único que decide,
+    // así que el link guardado no le llega a nadie ni se dibuja en ningún lado.
+    expect(sinLinkDeHoras(base({ horasExtras: false, horasLink: 'https://x' }))).toBe(false)
   })
 })

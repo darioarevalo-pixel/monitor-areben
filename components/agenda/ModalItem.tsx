@@ -410,15 +410,28 @@ export function ModalItem({
                   : t === 'roles' ? { tipo: 'roles', roles: ['local'] }
                   // Arranca vacío y no con alguien pre-tildado: el default de los roles ("local")
                   // es el caso normal, y acá no hay ninguna persona que sea el caso normal.
-                  : t === 'personas' ? { tipo: 'personas', personas: [] } : { tipo: 'todos' })
+                  : t === 'personas' ? { tipo: 'personas', personas: [] }
+                  // No lleva nada que elegir después: la lista la contesta el tilde de cada
+                  // perfil en Usuarios, y por eso no hay un segundo control abajo.
+                  : t === 'horas-extras' ? { tipo: 'horas-extras' } : { tipo: 'todos' })
               }}
             >
               <option value="todos">A todo el equipo</option>
               <option value="seccion">A quien usa una pantalla</option>
               <option value="roles">A ciertos roles</option>
               <option value="personas">A una persona en particular</option>
+              <option value="horas-extras">A quien hace horas extras</option>
             </Select>
           </Field>
+
+          {/* La única forma de destino que no pide un segundo control: acá lo que hay que decir es
+              dónde se cambia la lista, porque no se cambia en esta pantalla. */}
+          {d.tipo === 'horas-extras' && (
+            <div style={{ fontSize: font.sm, color: color.mut, marginTop: 6 }}>
+              Le llega a quien tenga tildado «Hace horas extras» en Usuarios. La lista se mantiene sola: no hace falta
+              volver acá cuando alguien empieza o deja de hacerlas.
+            </div>
+          )}
 
           {d.tipo === 'seccion' && (
             <Field

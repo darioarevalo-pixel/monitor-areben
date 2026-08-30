@@ -145,6 +145,7 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
           )}
         </div>
 
+        {p.item.destino?.tipo === 'horas-extras' && <MisHoras />}
         {p.item.manualId && <BotonComoSeHace manualId={p.item.manualId} />}
       </div>
     </Card>
@@ -214,6 +215,49 @@ function hora(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * **«Cargar mis horas»**: el link personal de carga, en el renglón donde se pide.
+ *
+ * 🔑 **No hay ningún campo nuevo en el ítem, y no hace falta**: se dibuja cuando el destino del
+ * pendiente es `{tipo:'horas-extras'}`, o sea cuando el propio destino ya dijo de qué se trata.
+ * (Y no se podría haber hecho de otra forma barata: el `datos` de `guardar-item` es una lista
+ * blanca cerrada y una clave extra se descarta en silencio.)
+ *
+ * ⚠️ **El link es de cada una y sale de SU perfil**, nunca del ítem: el ítem es uno solo y las
+ * personas son varias. Por eso nadie puede ver el link de otra.
+ *
+ * ⛔ **Sin link no se dibuja un botón**, se dibuja el motivo. Es la misma regla que el «Cómo se
+ * hace» de un manual sin publicar: un botón que promete y abre un 404 enseña a no apretarlo, y acá
+ * además haría pensar que las horas se cargaron.
+ */
+function MisHoras() {
+  const perfil = useSesion().perfil
+  if (!perfil?.horasExtras) return null
+
+  if (!perfil.horasLink) {
+    return (
+      <span style={{ fontSize: font.sm, color: color.mut2, alignSelf: 'center' }}>
+        Te falta el link de carga: pedíselo a Bruno.
+      </span>
+    )
+  }
+
+  // Un `<a>` con la clase del kit y no un `<Button onClick={window.open}>`: es un link de verdad
+  // —se copia, se abre en otra pestaña, se manda por WhatsApp— y ésa es justo la forma en que se
+  // usa. Mismo patrón que el «Abrir ↗» del modal de un cliente en el CRM.
+  return (
+    <a
+      href={perfil.horasLink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mo-btn mo-btn--sm"
+      style={{ whiteSpace: 'nowrap', alignSelf: 'flex-start' }}
+    >
+      ⏱ Cargar mis horas
+    </a>
+  )
 }
 
 /**

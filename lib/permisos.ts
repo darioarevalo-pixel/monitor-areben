@@ -86,6 +86,28 @@ export type Perfil = {
   apodo?: string | null
   /** Cumpleaños como `MM-DD`, sin año: para saludar, no para saber la edad. */
   cumple?: string | null
+  /**
+   * ¿Hace horas extras? Es el interruptor, y no hay otro: decide a quién le llega la rutina
+   * mensual «Cargar las horas extras» (destino `{tipo:'horas-extras'}`, ver
+   * `lib/novedades/destino.core.js`) y quién ve el acceso al formulario de carga.
+   *
+   * 🔑 **Antes esto era una lista de tres nombres escrita a mano adentro de la rutina.** Una lista
+   * y un tilde serían dos verdades sobre lo mismo, y la que nadie mire miente: por eso el destino
+   * se DERIVA de acá, igual que `{tipo:'seccion'}` se deriva de los permisos.
+   */
+  horasExtras?: boolean
+  /**
+   * Su link personal de carga en el dashboard (`https://dashboard.arebensrl.com/horas/<token>`).
+   *
+   * ⚠️ **Se pega a mano, una vez por persona**: el dashboard es otro proyecto Supabase y los
+   * empleados no tienen usuario allá, así que el token (`empleados.token_horas`) no se puede
+   * traer solo. Se genera y se copia en RR.HH. → Horas extras → pestaña «Links».
+   *
+   * 🔴 **Puede estar vacío con `horasExtras` en true**, y eso NO se arregla solo: la rutina le
+   * llega igual (que es lo correcto: la que falta es la mano del admin, no su obligación) y la
+   * pantalla dice que le falta el link en vez de dibujar un botón muerto.
+   */
+  horasLink?: string | null
 }
 
 /**

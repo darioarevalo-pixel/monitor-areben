@@ -227,6 +227,33 @@ La sección se partió en seis entradas de menú y las tres poblaciones de `agen
 - ▶️ **Caminar a mano lo que ningún test alcanza**, listado al final de la ficha: las seis entradas
   con los dos perfiles, el modal de una actividad, y el `offset` al pasar de Mes a Semana.
 
+### 🆕 ▶️ P0b — Horas extras: el interruptor está construido, faltan las MANOS (30-ago-2026)
+
+Pedido de Bruno: *«en agenda de monitor, que esté el link de dashboard para que puedan cargar sus
+horas extras; y la alerta de cargar horas extras a fin de mes, que sea sólo para las personas que
+tienen autorizadas las horas extras»*.
+
+🔴 **Lo que se midió al abrirlo, y es el agujero real: `0 de 11` empleados activos tiene el link
+generado en el dashboard.** La rutina «Cargar las horas extras» (`it178752572363714_6wxkmp`,
+mensual, último día) le cae a tres personas desde el 23-ago y **no hay ningún link que abrir**.
+
+Del lado del código está todo (ficha: `docs/secciones/agenda.md` § «la quinta forma de destino»):
+un tilde **«Hace horas extras»** y su link en cada perfil de Usuarios, el destino
+`{tipo:'horas-extras'}` que se deriva solo de ese tilde, el botón «⏱ Cargar mis horas» en el
+pendiente y en Inicio, y el cartel de Usuarios que nombra a quien esté tildada sin link.
+
+Lo que queda es **de Bruno, y en este orden**:
+
+1. 🔴 **Deployar `bdi-catalogo` ANTES o junto con el monitor.** `perfilDe` es una lista blanca
+   cerrada: sin ese deploy los dos campos se guardan y **nunca llegan**, sin error visible.
+2. ▶️ **Generar los links** en el dashboard, `/rrhh/horas-extras` → pestaña **Links** → «Copiar».
+   Hoy no lo tiene ninguna de las 11.
+3. ▶️ **Tildar y pegar** en `/usuarios`. Las que hoy están en la rutina son **Sofia Facello, Camila
+   Budek y Candela Luis** — ▶️ **confirmar si son ésas y sólo ésas**.
+4. ▶️ **Recién ahí**, en `/agenda/rutinas`, cambiar el destino de «Cargar las horas extras» de los
+   tres nombres a **«A quien hace horas extras»**. ⛔ Antes del paso 3 la deja dirigida a nadie.
+5. ▶️ **Decidir si va una novedad**: el botón le va a aparecer a tres personas que nadie avisó.
+
 ### ▶️ P1 — Cada sección declara, EN LA PANTALLA, qué hace y qué ejecuta
 
 Lo mínimo, en el encabezado de cada sección: **una línea de qué resuelve** y, si tiene botones que

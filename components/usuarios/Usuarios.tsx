@@ -5,7 +5,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, type Funcion } from '@/lib/permisos'
 import { credencialConPrompt, guardarAdminPass, guardarConfigAdmin, traerConfigAdmin } from '@/lib/sesion'
 import type { Marca } from '@/lib/nav'
-import { copiarPermisos, normalizar, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
+import { copiarPermisos, normalizar, sinLinkDeHoras, toggleFuncion, togglePerm, validar } from '@/lib/usuarios/core'
 import type { UsuarioConfig } from '@/lib/usuarios/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, color, font, Notice, useConfirmar } from '@/components/ui'
@@ -59,8 +59,14 @@ export function Usuarios() {
   if (!admin) return <div style={{ padding: 16, color: color.mut2 }}>Solo un administrador puede gestionar usuarios.</div>
 
   const mut = (i: number, fn: (u: UsuarioConfig) => UsuarioConfig) => setUsers((prev) => (prev ? prev.map((u, j) => (j === i ? fn(u) : u)) : prev))
-  const onCampo = (i: number, campo: 'name' | 'pass' | 'email' | 'apodo' | 'cumple', val: string) => mut(i, (u) => ({ ...u, [campo]: val }))
+  const onCampo = (i: number, campo: 'name' | 'pass' | 'email' | 'apodo' | 'cumple' | 'horasLink', val: string) => mut(i, (u) => ({ ...u, [campo]: val }))
   const onAdmin = (i: number, val: boolean) => mut(i, (u) => ({ ...u, admin: val }))
+  // ⚠️ Destildar NO borra el link: quien destilda hoy suele volver a tildar el mes que viene, y
+  // borrarlo obligaría a ir a buscarlo de nuevo al dashboard. El tilde es lo único que decide, así
+  // que un link guardado sin el tilde no le llega a nadie ni se dibuja en ningún lado.
+  const onHorasExtras = (i: number, val: boolean) => mut(i, (u) => ({ ...u, horasExtras: val }))
+  /** Tildadas y sin link: el hueco que el sistema no puede cerrar solo. Ver el cartel de abajo. */
+  const faltanLink = (users || []).filter(sinLinkDeHoras)
   const onCuenta = (i: number, val: string) => mut(i, (u) => ({ ...u, cuenta: (val || null) as Marca | null }))
   const onPerm = (i: number, brand: Marca, key: string, val: boolean) => mut(i, (u) => togglePerm(u, brand, key, val))
   const onPermArea = (i: number, brand: Marca, keys: string[], val: boolean) =>
@@ -135,6 +141,27 @@ export function Usuarios() {
         usuarios. Lo que se define por marca son los permisos de cada uno (las columnas BDI y Zattia).
       </Notice>
 
+      {/* El tripwire de las horas extras. Es lo único que hace visible el hueco sin abrir las
+          dieciséis fichas: el link lo genera una persona en OTRA app, así que «tildada y sin link»
+          es un estado que el sistema no puede cerrar solo y que si no se ve, no lo cierra nadie.
+          ⛔ No se dibuja cuando no falta ninguno: un contador en cero todos los días entrena a
+          saltear la zona donde el día que falte uno va a aparecer el aviso. */}
+      {faltanLink.length > 0 && (
+        <Notice tone="warning" icon="⚠️" style={{ marginBottom: 12 }}>
+          {faltanLink.length === 1 ? (
+            <>
+              <b>{faltanLink[0].name}</b> hace horas extras y todavía no tiene el link de carga.
+            </>
+          ) : (
+            <>
+              {faltanLink.length} personas hacen horas extras y todavía no tienen el link de carga:{' '}
+              <b>{faltanLink.map((u) => u.name).join(', ')}</b>.
+            </>
+          )}{' '}
+          El pendiente de fin de mes les llega igual. Generá el link en el dashboard, en RR.HH. → Horas extras → Links.
+        </Notice>
+      )}
+
       {alta && users && <AltaGuiada usuarios={users} onCerrar={() => setAlta(false)} onCrear={crear} />}
 
       {!users ? (
@@ -156,6 +183,7 @@ export function Usuarios() {
               onToggleOpen={() => setAbierto((a) => (a === i ? null : i))}
               onCampo={(campo, val) => onCampo(i, campo, val)}
               onAdmin={(val) => onAdmin(i, val)}
+              onHorasExtras={(val) => onHorasExtras(i, val)}
               onCuenta={(val) => onCuenta(i, val)}
               onPerm={(brand, clave, val) => onPerm(i, brand, clave, val)}
               onPermArea={(brand, claves, val) => onPermArea(i, brand, claves, val)}

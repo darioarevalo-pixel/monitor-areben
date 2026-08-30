@@ -126,7 +126,14 @@ export function Inicio() {
 
   // Las acciones del día, por permiso. El orden es el de uso real: primero lo que se hace
   // con el cliente delante (falla, cambio), después lo de la trastienda.
-  const acciones: { label: string; ruta: string; destacado?: boolean }[] = [
+  //
+  // 🔑 **`ruta` es de acá adentro; `href` sale de la app.** Las horas extras se cargan en el
+  // dashboard, que es otro sistema, y por eso son el primer botón de esta fila que no navega. Va
+  // último a propósito: es lo único que no se hace todos los días — se carga cuando se hicieron.
+  // ⚠️ Y va acá y no en una sección propia: una sección con título ocuparía lugar fijo todo el mes
+  // para un gesto mensual, y esta fila ya desaparece sola cuando no hay nada.
+  type Accion = { label: string; ruta?: string; href?: string; destacado?: boolean }
+  const acciones: Accion[] = ([
     ve('postventa-local') && { label: 'Cargar falla', ruta: '/postventa-local', destacado: true },
     ve('cambios-local') && { label: 'Cargar cambio', ruta: '/cambios-local', destacado: true },
     ve('postventa-deposito') && { label: 'Falla (depósito)', ruta: '/postventa-deposito' },
@@ -134,7 +141,10 @@ export function Inicio() {
     ve('postventa') && { label: '🧾 Post-venta', ruta: '/postventa' },
     ve('solicitudes') && { label: '📋 Solicitudes', ruta: '/solicitudes' },
     modoInicio(perfil) === 'gerencial' && { label: '📊 Panel gerencial', ruta: '/gerencial' },
-  ].filter((a): a is { label: string; ruta: string; destacado?: boolean } => !!a)
+    // Sin el link no va nada: quien lo tiene tildado y no lo tiene cargado ya se entera el día del
+    // pendiente, con el motivo. Un botón muerto acá lo repetiría todos los días y sin explicarlo.
+    perfil?.horasExtras && perfil.horasLink ? { label: '⏱ Cargar mis horas', href: perfil.horasLink } : null,
+  ] as (Accion | false | null)[]).filter((a): a is Accion => !!a)
 
   // La promo bancaria la ve quien cobra. `cupones` es el permiso de la pantalla del mostrador,
   // que es donde ya vive esta misma banda.
@@ -167,16 +177,31 @@ export function Inicio() {
       {acciones.length > 0 && (
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[6] }}>
           {acciones.map((a) => (
-            <Button
-              key={a.ruta}
-              size={a.destacado ? 'lg' : 'md'}
-              variant={a.destacado ? 'solid' : 'outline'}
-              tone={a.destacado ? 'brand' : 'neutral'}
-              iconLeft={a.destacado ? '+' : undefined}
-              onClick={() => router.push(a.ruta)}
-            >
-              {a.label}
-            </Button>
+            a.href ? (
+              // Sale de la app: un `<a>` de verdad con la clase del kit, para que se pueda abrir en
+              // otra pestaña o copiar el link. Mismo patrón que el «Abrir ↗» del CRM.
+              <a
+                key={a.href}
+                href={a.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mo-btn mo-btn--md"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {a.label}
+              </a>
+            ) : (
+              <Button
+                key={a.ruta}
+                size={a.destacado ? 'lg' : 'md'}
+                variant={a.destacado ? 'solid' : 'outline'}
+                tone={a.destacado ? 'brand' : 'neutral'}
+                iconLeft={a.destacado ? '+' : undefined}
+                onClick={() => a.ruta && router.push(a.ruta)}
+              >
+                {a.label}
+              </Button>
+            )
           ))}
         </div>
       )}

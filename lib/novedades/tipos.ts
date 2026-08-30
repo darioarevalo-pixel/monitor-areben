@@ -29,6 +29,11 @@ export type Destino =
   | { tipo: 'roles'; roles: string[]; marca?: Marca }
   /** Por nombre de usuario (`perfil.name`), no por mail: los puestos compartidos no tienen. */
   | { tipo: 'personas'; personas: string[]; marca?: Marca }
+  /**
+   * A quien tenga el tilde «hace horas extras» en su perfil. No lleva lista: la lista se deriva
+   * del padrón en `esParaMi`, para que el interruptor sea uno solo. Ver `destino.core.js`.
+   */
+  | { tipo: 'horas-extras'; marca?: Marca }
 
 export type Novedad = {
   id: string
@@ -107,6 +112,9 @@ export function rotuloDestino(d: Destino): string {
   // alguien se cambie el nombre en pantalla, y esta lista se lee para saber a quién reclamarle.
   if (d.tipo === 'personas') return `a ${d.personas.join(' y ')}`
   if (d.tipo === 'seccion') return `a quien usa ${tituloLimpio(d.key)}`
+  // ⛔ No dice cuántas ni quiénes, a propósito: son las que están tildadas en Usuarios, que es
+  // admin-only. Un rótulo con nombres acá sería una segunda lista envejeciendo al lado de la real.
+  if (d.tipo === 'horas-extras') return 'a quien hace horas extras'
   return 'a todo el equipo'
 }
 
@@ -119,6 +127,11 @@ export function rotuloDestino(d: Destino): string {
  */
 export function rotuloDestinoCorto(d: Destino): string {
   if (d.tipo === 'todos') return ''
+  // Caso propio y no el `replace` de abajo, que dejaría la «q» en minúscula. ⚠️ Y dice «Quien
+  // hace…» y no «Horas extras» a secas: es una columna de a QUIÉN le llega, al lado de «Sofi» y
+  // «Marketing», y ahí «Horas extras» se leería como el nombre de la tarea. ⛔ Tiene que dar
+  // exactamente lo mismo que `rotuloDeClave('hx')` — hay un test de ida y vuelta que lo amarra.
+  if (d.tipo === 'horas-extras') return 'Quien hace horas extras'
   return rotuloDestino(d).replace(/^a (quien usa )?/, '')
 }
 
@@ -135,12 +148,17 @@ export function clavesDestino(d: Destino): string[] {
   if (d.tipo === 'roles') return d.roles.map((r) => `r:${r}`)
   if (d.tipo === 'personas') return d.personas.map((p) => `p:${p}`)
   if (d.tipo === 'seccion') return [`s:${d.key}`]
+  // 🔴 Caso propio, ⛔ NO el `['todos']` de abajo. Sin esta línea la rutina de las horas extras se
+  // filtraría como si fuera para todo el equipo: aparecería en el filtro «Todo el equipo» de
+  // Cumplimiento y en la ficha de las once personas, que es exactamente lo contrario de lo que es.
+  if (d.tipo === 'horas-extras') return ['hx']
   return ['todos']
 }
 
 /** El rótulo de una clave suelta, sin tener el destino entero delante. */
 export function rotuloDeClave(clave: string): string {
   if (clave === 'todos') return 'Todo el equipo'
+  if (clave === 'hx') return 'Quien hace horas extras'
   const [pref, ...resto] = clave.split(':')
   const valor = resto.join(':')
   if (pref === 'r') return FUNCIONES.find((f) => f.key === valor)?.label ?? valor

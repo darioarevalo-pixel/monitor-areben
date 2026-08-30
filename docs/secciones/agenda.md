@@ -187,6 +187,36 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 - 🔑 **Se guarda `perfil.name`, no el mail.** Es la única clave que existe para todos: los puestos
   compartidos (`Local`, `Depósito`, `bdilocal`) tienen `email: null`. De yapa, entonces, una rutina
   se le puede asignar a un **puesto**. Es la misma clave de `agenda_items.autor` y `agenda_hechos.usuario`.
+- 🆕 🔑 **LA QUINTA FORMA DE DESTINO: `{tipo:'horas-extras'}`, y no lleva lista adentro** (30-ago-2026).
+  Le llega a quien tenga tildado **«Hace horas extras»** en su perfil de Usuarios. Salió de que la
+  rutina mensual «Cargar las horas extras» estaba cargada con los tres nombres escritos a mano:
+  funcionaba, y por eso escondía el problema —**son dos verdades sobre lo mismo**—. El día que
+  alguien empieza o deja de hacer horas hay que acordarse de volver a editar la rutina, y el día que
+  no se acuerden la alerta le pide horas a quien no las hace. ⇒ el dato es del **perfil** y el
+  destino se **DERIVA**, igual que `{tipo:'seccion'}` se deriva de los permisos.
+  - 🔑 **Por qué no fue un rol ni un sub-permiso**, que eran las dos formas que ya existían: un rol
+    (`Funcion`) es un **sector** y arrastra acceso a pantallas (`ACCESO_POR_FUNCION`); un sub
+    (`canjes.aprobar`) es una acción sobre una pantalla, y tildarlo **le daría también la sección**.
+    Hacer horas extras no es ninguna de las dos: es una **condición laboral** de la persona.
+  - 🔴 **Va ARRIBA del atajo del admin**, como `{tipo:'personas'}` y por el mismo motivo: si no, el
+    «Hoy» de Bruno tendría todos los fines de mes un pendiente ajeno y —peor— **podría tildarlo**,
+    dando por cargadas las horas de otra. El admin lo recibe si y sólo si se tilda a sí mismo.
+  - 🔴 **Los tres `return` finales que se lo comían.** `clavesDestino` caía en `['todos']` (⇒ la
+    rutina saldría en el filtro «Todo el equipo» de Cumplimiento y en la ficha de las once
+    personas), y `rotuloDestino`/`rotuloDestinoCorto` en «a todo el equipo». Cada uno tiene ahora su
+    caso, y el rótulo corto (`'Quien hace horas extras'`) tiene que dar **exactamente** lo mismo que
+    `rotuloDeClave('hx')`: hay un test de ida y vuelta que lo amarra.
+  - 🔴 **Depende de un deploy de OTRO repo.** `perfil.horasExtras` y `perfil.horasLink` viajan por
+    `perfilDe` de `bdi-catalogo/api/usuarios.js`, que es una **lista blanca cerrada**: un campo que
+    no esté ahí se guarda en el KV y **nunca llega al monitor**. ⇒ ⛔ no cambiar el destino de la
+    rutina antes de que ese deploy esté vivo: quedaría dirigida a **nadie**, sin error.
+  - **El link no es del ítem, es de la persona.** El botón «⏱ Cargar mis horas» de `PendientesHoy`
+    se dibuja cuando el destino es `horas-extras` y saca la URL de `perfil.horasLink`. No hizo falta
+    ningún campo nuevo en `agenda_items` —y no habría entrado: el `datos` de `guardar-item` es una
+    lista blanca cerrada—. ⛔ **Sin link no se dibuja un botón, se dibuja el motivo**: misma regla
+    que el «Cómo se hace» de un manual sin publicar.
+  - ⚠️ **`esDeArriba` le da `false`** y cae en el `return` final de `jerarquia.core.js`, a propósito:
+    quién hace horas extras es una condición laboral, no un lugar en el organigrama.
 - ⚠️ **La lista del equipo la trae `traerConfigAdmin` y es admin-only** (`ModalItem.tsx`): se pide
   recién cuando alguien elige «a una persona», y en las sesiones de Google no abre ningún prompt.
   ⛔ No hay campo de texto libre para escribir el nombre: un nombre mal tipeado sería un pendiente

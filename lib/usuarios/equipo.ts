@@ -20,9 +20,10 @@
  * El GET ya existía y ya estaba cerrado a quien tiene sesión en el Monitor (antes contestaba a
  * cualquiera con un `curl`, y se cerró). Acá se usa ése.
  *
- * ⚠️ **Y de todo lo que devuelve sale sólo `{name, apodo, funcion}`.** El achique se hace acá, en la
- * frontera, y no en cada pantalla: lo que no se devuelve no se puede dibujar por accidente. Los
- * permisos de cada uno, los mails y quién es admin siguen siendo asunto de la pantalla de Usuarios.
+ * ⚠️ **Y de todo lo que devuelve sale sólo `{name, apodo, funcion, horasExtras}`.** El achique se
+ * hace acá, en la frontera, y no en cada pantalla: lo que no se devuelve no se puede dibujar por
+ * accidente. Los permisos de cada uno, los mails, quién es admin y **el link de carga de horas**
+ * siguen siendo asunto de la pantalla de Usuarios — el link, además, porque es una credencial.
  *
  * 🔑 **La clave es `name`, no el mail** — es la única que existe para todos: los puestos compartidos
  * (`Local`, `Depósito`, `bdilocal`) tienen `email: null`. Es la misma con la que se guardan
@@ -40,9 +41,19 @@ export type Companero = {
   /** Cómo le decimos. Sin apodo cae al `name`, que en los puestos es `bdilocal` o `deposito`. */
   apodo: string
   funcion: Funcion[]
+  /**
+   * ¿Hace horas extras? Entra al recorte porque hay una rutina cuyo destino es exactamente esto
+   * (`{tipo:'horas-extras'}`), y sin este dato la ficha de Organización dejaría de mostrársela a
+   * las personas que la tienen — que es el agujero que esa sección vino a cerrar.
+   *
+   * ⛔ **El LINK no entra, y no es un olvido.** El link es una credencial sin sesión: quien lo
+   * tiene carga horas a nombre de otra. Viaja sólo en el perfil de su dueña. Acá va el booleano,
+   * que es lo único que hace falta para saber de quién es una rutina.
+   */
+  horasExtras: boolean
 }
 
-type UsuarioDelGet = { name?: string; apodo?: string | null; funcion?: Funcion[] | Funcion | null }
+type UsuarioDelGet = { name?: string; apodo?: string | null; funcion?: Funcion[] | Funcion | null; horasExtras?: boolean }
 
 /**
  * El equipo, ordenado por cómo le decimos a cada uno.
@@ -65,6 +76,7 @@ export async function traerEquipo(): Promise<Companero[] | null> {
         name: u.name,
         apodo: u.apodo || u.name,
         funcion: Array.isArray(u.funcion) ? u.funcion : u.funcion ? [u.funcion] : [],
+        horasExtras: u.horasExtras === true,
       }))
       .sort((a, b) => a.apodo.localeCompare(b.apodo, 'es'))
   } catch {
