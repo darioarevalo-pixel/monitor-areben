@@ -2030,3 +2030,67 @@ rompe ninguna promesa vieja. ⚠️ **NULL ⛔ no significa «no vence»: signif
 - ✅ **16 mutantes, 16 muertos** — uno sobrevivió por **ancla repetida** (la misma línea existe para
   el seguimiento) y otro pedía un test que mirara **el cartel** y ⛔ no lo mandado.
 - 🔴 ▶️ **Lo que ⛔ no se caminó**: ⛔ no hay ningún cupón real todavía, en ninguna de las dos marcas.
+
+---
+
+## 🆕 🔴 «Lo que nos costó» contaba la mercadería en CERO (30-ago-2026)
+
+Es §1.3 del plan. `unit_cost` salió del navegador en la **Fase S** —10 personas mandaban un costo
+que ⛔ no veían— y `enriquecerConGN` dejó de resolverlo. De los **tres** handlers que *guardan* el
+costo (`_fallas.js`, `_canjes.js` y éste), `api/_reclamos.js` era **el único que ⛔ no lo pedía** ⇒
+el techo de la oferta y `costoDelCaso` calculados contra precio de lista, **con la unidad valiendo
+nada**.
+
+### Se reusa lo que ya existe
+
+`leerCostos` de **`api/_costos.js`** —cuyo `SECCIONES_CON_COSTO` ya nombraba a `postventa`—, con el
+mismo molde que `_fallas.js`: **una sola implementación**, ⛔ no una consulta nueva.
+
+- El costo se resuelve **al crear y al decidir**, por `product_id`.
+- 🔑 **Sólo si el campo está vacío**: un `0` tipeado por una persona **quiere decir cero**, y eso ⛔
+  no es lo mismo que `null`.
+- También en **`items_correctos`**: en un `mal_armado` lo que vuelve es esa lista, y sin completarla
+  media cuenta seguía en cero.
+- ⚠️ **Si Gestión Nube falla, el reclamo se crea igual.** Hay un cliente enojado del otro lado y el
+  costo se completa después; ⛔ no poder abrir el reclamo es peor.
+
+### 🔑 Y al decidir, el número de la pantalla queda viejo POR DEFINICIÓN
+
+Si el servidor completó algún costo, el `costo_caso` que mandó la pantalla se calculó **con la
+unidad en cero** ⇒ se recalcula con **`costoDeLaFila`**, la *misma* función que usa la pantalla, ⛔
+no una copia. Y **si ⛔ no completó nada, se respeta lo que vino**: el servidor ⛔ no le discute un
+número a la pantalla sin motivo.
+
+### 🔴 Prender el costo destapó que la cuenta miraba la CABECERA
+
+Con los costos en cero esto ⛔ **no cambiaba ningún número**, así que el defecto era invisible. Con
+costos de verdad decide plata en **3 de cada 10 reclamos de BDI** —los de dos productos—: con un
+solo destino, o se contaban **las dos** unidades como perdidas o **ninguna**. El destino por unidad
+existe desde el 25-ago; **la cuenta ⛔ no se había enterado.**
+
+🔑 Ahora `costoDelCaso` pregunta **por unidad** (`seLaQueda`), con la cabecera como **default** de la
+que ⛔ no trae el suyo — el mismo patrón que el resto del módulo. Y sale de **`laUnidadVuelve`**, ⛔
+no de una lista escrita al lado.
+
+🔴 **Y de paso arregló algo que el propio docstring ya prometía**: *«si vuelve —sana o fallada— se
+recuperó»*. La condición vieja contaba `'falla'` como perdida **aunque se hubiera pedido el
+retorno**, y esa unidad vuelve y **se valúa en el ledger de Fallas** ⇒ **se contaba dos veces**, en
+los dos únicos lugares que dicen cuánta plata se pierde.
+
+### Cómo se probó
+
+- La cuenta por unidad: dos productos con destinos distintos · la fallada que vuelve (⛔ no se
+  cuenta) contra la que el cliente se queda (sí) · la unidad sin destino propio heredando el del
+  reclamo · sin producto en juego, cero · y que `costoDeLaFila` **pase el retorno** en vez de
+  perderlo en el camino.
+- El handler de verdad, con `leerCostos` mockeado: completa al crear · ⛔ no pisa un `0` cargado a
+  mano **ni cuando la consulta sí se hace** por otro producto · completa `items_correctos` · un
+  producto que ⛔ no está en GN queda como vino · **si GN falla, el reclamo se crea igual**.
+- Al decidir: completa un reclamo viejo y **recalcula** el `costo_caso`; y si ⛔ no completó nada
+  respeta el de la pantalla **aunque ⛔ no coincida** (el número de prueba es uno que la cuenta ⛔ no
+  daría, para que el test ⛔ no sea vacío).
+- ✅ **13 mutantes, 13 muertos.** Dos sobrevivieron a la primera vuelta y **los dos eran huecos
+  reales**: el filtro de afuera **tapaba** al guard de adentro (el `0` a mano), y el test del «no
+  recalcules» usaba un número que **coincidía** con la cuenta.
+- 🔴 ▶️ **Lo que ⛔ no se caminó**: ⛔ no se verificó contra GN qué costo tiene un producto real, y
+  las dos filas de BDI siguen con los ítems sin `product_id` cargado desde antes.

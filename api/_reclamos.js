@@ -58,6 +58,9 @@ import { COLUMNAS_PARA_DEVOLVER, faltaAnularAntesDeDescontar, faltaRecibirAntesD
 // sugerencia, y este módulo ya lo pagó cuatro veces.
 import { leerVencimiento } from '../lib/reclamos/cupon.core.js';
 import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
+// El costo de un producto, con la clave de servicio. **Una sola implementación** (ver `_costos.js`):
+// la usan también `_fallas.js` y `_canjes.js`, que tampoco lo muestran — lo GUARDAN.
+import { leerCostos } from './_costos.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
 import { camposAlContestarLaOferta, COLUMNAS_PARA_CERRAR, esEscenarioDe, ESTADOS_ABIERTOS, faltantesParaCerrar, ofertaEsperandoRespuesta, pideReclamoAlTransportista, productoEnJuego, registroDeRetencion } from '../lib/reclamos/casos.core.js';
@@ -183,6 +186,42 @@ export const COLS_AVISO = `id, motivo, estado, compensacion, reintegro_estado, r
 /** ¿Puede mover plata? Admin o función de administración. */
 function esAdministracion(perfil) {
   return esAdmin(perfil) || tieneFuncion(perfil, 'administracion');
+}
+
+/**
+ * **Le completa a cada producto su costo de Gestión Nube.** Devuelve la lista nueva y **cuántos**
+ * completó, que es lo que después decide si el `costo_caso` que mandó la pantalla quedó viejo.
+ *
+ * 🔴 **Por qué hacía falta**: *«lo que nos costó»* contaba la mercadería **en CERO**. `unit_cost`
+ * salió del navegador en la Fase S —10 personas mandaban un costo que ⛔ no veían— y
+ * `enriquecerConGN` dejó de resolverlo; del lado del servidor, `api/_reclamos.js` era el único de
+ * los tres que **guardan** el costo que ⛔ no lo pedía. Resultado: el techo de la oferta y
+ * `costoDelCaso` calculados contra precio de lista, con la unidad valiendo nada.
+ *
+ * 🔑 **Se completa SÓLO si el campo está vacío**, igual que en `_fallas.js`: un `0` tipeado por una
+ * persona quiere decir cero, y eso ⛔ no es lo mismo que `null`.
+ *
+ * ⚠️ **Si no se puede leer el costo, el reclamo se crea igual.** Un costo que falta se completa
+ * después; ⛔ no poder abrir el reclamo deja al local con un cliente enojado y sin nada que hacer.
+ */
+async function conCosto(store, items) {
+  const lista = Array.isArray(items) ? items : [];
+  const faltan = lista.filter((it) => it && it.costo == null && it.product_id);
+  if (!faltan.length) return { lista, completados: 0 };
+  try {
+    const mapa = await leerCostos(store, faltan.map((it) => it.product_id));
+    let completados = 0;
+    const nueva = lista.map((it) => {
+      if (!it || it.costo != null || !it.product_id) return it;
+      const c = mapa[String(it.product_id)];
+      if (c == null) return it;
+      completados++;
+      return { ...it, costo: c };
+    });
+    return { lista: nueva, completados };
+  } catch {
+    return { lista, completados: 0 };
+  }
 }
 
 const num = (v) => (v == null || v === '' ? null : Number(v));
@@ -355,14 +394,19 @@ export default async function handler(req, res) {
         motivo,
         motivo_detalle: texto(b.motivo_detalle),
         expectativa: EXPECTATIVAS.includes(b.expectativa) ? b.expectativa : null,
-        items_correctos: Array.isArray(b.items_correctos) ? b.items_correctos : [],
+        // En un `mal_armado` lo que vuelve es esta lista, y son unidades como las otras: si el
+        // costo ⛔ no se completa acá, la mitad del caso se sigue valuando en cero.
+        items_correctos: (await conCosto(store, Array.isArray(b.items_correctos) ? b.items_correctos : [])).lista,
         // El pedido que se perdió en el camino arranca con el reclamo al transportista pendiente:
         // es plata recuperable y sin este pendiente no la persigue nadie.
         reclamo_correo_estado: motivo === 'no_llego' ? 'pendiente' : 'no_aplica',
         fotos: Array.isArray(b.fotos) ? b.fotos : [],
         destino_prenda: sinStock ? 'no_salio' : (DESTINOS.includes(b.destino_prenda) ? b.destino_prenda : null),
         estado: 'borrador',
-        items,
+        // 🔑 **El costo se resuelve acá, ⛔ no en el navegador**: `unit_cost` salió del cliente en
+        // la Fase S y `enriquecerConGN` dejó de pedirlo, así que hasta el 30-ago-2026 la
+        // mercadería valía CERO en «lo que nos costó». Ver `conCosto`.
+        items: (await conCosto(store, items)).lista,
         monto_producto: num(b.monto_producto),
         pago_metodo: texto(b.pago_metodo),
         pago_gateway: texto(b.pago_gateway),
@@ -611,6 +655,25 @@ export default async function handler(req, res) {
         // listas: es agregar una fila.
         ...pendientesDe({ compensacion, diferencia }),
       };
+
+      // ── El costo de la mercadería, que hasta hoy valía CERO ──────────────────
+      //
+      // 🔴 Los reclamos abiertos **antes** del 30-ago-2026 tienen los ítems sin costo, y los que se
+      // abren hoy pueden tenerlo si el producto ⛔ no estaba en GN al crearlos. Decidir es el otro
+      // momento en que el número importa, así que se vuelve a intentar acá.
+      //
+      // 🔑 **Y si acá se completó alguno, el `costo_caso` que mandó la pantalla quedó viejo por
+      // definición**: lo calculó con la unidad en cero. Se recalcula del lado del servidor con
+      // `costoDeLaFila` —la MISMA función que usa la pantalla, ⛔ no una copia— sobre la fila que
+      // está por quedar guardada. Si ⛔ no se completó nada, se respeta lo que vino: el servidor
+      // ⛔ no le discute un número a la pantalla sin motivo.
+      const itemsDecididos = b.destinos != null ? conDestinos.lista : filaCaso.items;
+      const relleno = await conCosto(store, itemsDecididos);
+      if (relleno.completados) {
+        extra.items = relleno.lista;
+        extra.costo_caso = costoDeLaFila({ ...filaCaso, ...extra });
+      }
+
       // La oferta va en la nota porque es lo único del historial que cuenta lo que se INTENTÓ antes
       // de esta resolución: leyendo sólo la resolución, una retención rechazada no existió nunca.
       const notaRetencion = retencion.campos?.retencion_respuesta
