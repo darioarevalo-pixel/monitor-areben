@@ -62,6 +62,8 @@ function resFalso() {
 /** Lo que había en la base antes del POST, y todo lo que el handler escribió. */
 let previo: { estado: string } | null = null
 let escrituras: { tabla: string; op: string; datos: unknown }[] = []
+/** Para probar que la Agenda caída ⛔ no voltea el evento: la OC no se puede perder. */
+let agendaRota = false
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
@@ -69,12 +71,17 @@ vi.mock('@supabase/supabase-js', () => ({
       const q = {
         select: () => q,
         eq: () => q,
+        // `not` lo usa la pregunta de la puerta para pedirle a la BASE las que ya están abiertas.
+        not: () => q,
         in: () => q,
         order: () => q,
         limit: () => q,
         maybeSingle: async () => ({ data: tabla === 'recepcion_evento' ? previo : null, error: null }),
         upsert: async (fila: unknown) => { escrituras.push({ tabla, op: 'upsert', datos: fila }); return { error: null } },
-        insert: async (filas: unknown) => { escrituras.push({ tabla, op: 'insert', datos: filas }); return { error: null } },
+        insert: async (filas: unknown) => {
+          if (tabla === 'agenda_items' && agendaRota) return { error: { message: 'la agenda no contesta' } }
+          escrituras.push({ tabla, op: 'insert', datos: filas }); return { error: null }
+        },
         delete: () => ({ eq: async () => { escrituras.push({ tabla, op: 'delete', datos: null }); return { error: null } } }),
         // Para el cruce con el espejo, que hace `await sb.from(...).select(...).in(...)`.
         then: (ok: (v: unknown) => void) => ok({ data: [], error: null }),
@@ -95,6 +102,7 @@ beforeEach(() => {
   vi.resetModules()
   previo = null
   escrituras = []
+  agendaRota = false
   vi.stubEnv('INGRESO_WEBHOOK_SECRET', SECRETO)
   vi.stubEnv('SUPABASE_URL', 'https://ejemplo.supabase.co')
   vi.stubEnv('SUPABASE_SERVICE_KEY', 'k')
@@ -227,5 +235,74 @@ describe('lo que no es para nosotros', () => {
     expect(res.code).toBe(200)
     expect(res.body).toMatchObject({ ignorado: 'store' })
     expect(escrituras.map((e) => e.tabla)).toEqual(['recepcion_evento'])
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// La pregunta de la puerta: el hecho llega, pero sin decir por dónde entró
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔑 **Esto es «la pregunta del medio»**: el núcleo decide bien y el handler guarda bien, y lo que
+ * se rompe callado es el cable entre los dos. Sin estos tests, `abrirPreguntaDePuerta` podía tirar
+ * en cada evento —su `try/catch` se lo traga a propósito, para no voltear la OC— y **el webhook
+ * seguía contestando 200 con la OC guardada**: verde por todos lados y ni una pregunta abierta.
+ */
+describe('la pregunta de la puerta', () => {
+  const enAgenda = () => escrituras.filter((e) => e.tabla === 'agenda_items')
+
+  /** El mismo evento, con la hora de confirmación puesta: es de ahí que cuelga la pregunta. */
+  const conConfirmada = (iso: string) => {
+    const ev = { ...EVENTO, data: { ...EVENTO.data, orden_compra: { ...EVENTO.data.orden_compra, confirmada_at: iso } } }
+    const cuerpo = JSON.stringify(ev, null, 1)
+    const { firma, ts } = firmar(cuerpo, 'msg_conf')
+    return reqDe(cuerpo, { 'webhook-id': 'msg_conf', 'webhook-timestamp': ts, 'webhook-signature': firma })
+  }
+
+  it('abre UN pendiente en la Agenda cuando la OC se acaba de confirmar', async () => {
+    const res = await llamar(conConfirmada(new Date().toISOString()))
+    expect(res.code).toBe(200)
+    const filas = enAgenda()
+    expect(filas).toHaveLength(1)
+    const fila = (filas[0].datos as Record<string, unknown>[])[0]
+    expect(String(fila.titulo)).toContain('¿Por qué puerta entró OC-0042')
+    expect(fila.autor).toBe('Ingresos')
+    expect(fila.marcas).toEqual(['bdi'])
+  })
+
+  it('🔴 va DESPUÉS de guardar la OC: una pregunta sobre un ingreso que no está no le sirve a nadie', async () => {
+    await llamar(conConfirmada(new Date().toISOString()))
+    const orden = escrituras.map((e) => e.tabla)
+    expect(orden.indexOf('agenda_items')).toBeGreaterThan(orden.indexOf('recepcion_oc'))
+  })
+
+  it('🔴 el evento del BACKFILL ⛔ no abre nada, y el webhook DICE por qué', async () => {
+    const res = await llamar(conConfirmada('2026-06-17T10:00:00.000Z'))
+    expect(res.code).toBe(200)
+    expect(enAgenda()).toEqual([])
+    expect(String(res.body?.agenda)).toContain('no se pregunta por lo viejo')
+  })
+
+  it('🔴 sin `confirmada_at` ⛔ no adivina una fecha, y lo dice', async () => {
+    const res = await llamar(conFirma())
+    expect(res.code).toBe(200)
+    expect(enAgenda()).toEqual([])
+    expect(String(res.body?.agenda)).toContain('confirmada_at')
+  })
+
+  it('🔴 la Agenda caída ⛔ NO voltea el evento: la OC se guarda y el emisor recibe 200', async () => {
+    // Perder el evento es definitivo —no hay quién lo vuelva a mandar—; perder la pregunta no: el
+    // botón «Ingresó mercadería» sigue estando y la próxima confirmación la vuelve a abrir.
+    agendaRota = true
+    const res = await llamar(conConfirmada(new Date().toISOString()))
+    expect(res.code).toBe(200)
+    expect(escrituras.some((e) => e.tabla === 'recepcion_oc')).toBe(true)
+    expect(String(res.body?.agenda)).toContain('no se pudo abrir')
+  })
+
+  it('🔑 lo que pasó con la pregunta viaja SIEMPRE en la respuesta, aunque no haya pasado nada', async () => {
+    const res = await llamar(conFirma())
+    expect(typeof res.body?.agenda).toBe('string')
+    expect(String(res.body?.agenda).length).toBeGreaterThan(3)
   })
 })

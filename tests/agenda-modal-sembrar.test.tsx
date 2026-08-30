@@ -95,7 +95,14 @@ describe('el modal del hecho: la copia y los campos salen del catálogo', () => 
     await abrir('condicion', [molde()])
     expect(campos()[1].value).toBe('')
     await abrir('ingreso', [molde({ plantilla: 'ingreso' })])
-    expect(campos()[1].value).toBe(new Date().toISOString().slice(0, 10))
+    /*
+      🔴 **El día LOCAL, y ⛔ no `toISOString()`.** Con el UTC este test salía rojo **todas las
+      noches después de las 21:00 de acá** —el modal usa `hoyIso()`, que es local, y allá ya es
+      mañana— y verde de día: una corrida que depende de la hora enseña a no mirar los rojos.
+      ⚠️ Y el oráculo ⛔ NO es `hoyIso()`: si las dos puntas usaran la misma función, esto no
+      probaría nada. `en-CA` da `YYYY-MM-DD` por otro camino.
+    */
+    expect(campos()[1].value).toBe(new Date().toLocaleDateString('en-CA'))
     expect(texto()).toContain('Qué entró')
   })
 

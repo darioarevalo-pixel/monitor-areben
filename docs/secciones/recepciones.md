@@ -141,11 +141,22 @@ test no probaría nada.
   o sea que ⛔ **ninguna OC llegó todavía el día que se confirmó**.
   📌 **El tripwire es `eventos.ultimo`**, que la propia sección devuelve en el GET: hoy está clavado
   en `2026-08-27T14:13`. La próxima OC que confirme Gerardo lo mueve, o no, y eso lo contesta.
-- ▶️ **El evento ⛔ no trae el TIPO DE INGRESO**, y eso es lo único que separa a este webhook de
-  prender solo el disparador de la Agenda (`docs/secciones/agenda.md`): el hecho «llegó mercadería»
-  **ya está entrando acá**, firmado, mientras el disparador espera por una segunda puerta con un
-  segundo secreto (`INGRESO_SECRETO`) que nadie cargó. Lo que falta es la **puerta**, no el secreto.
-  El payload manda proveedor (con `proveedor_id` estable), líneas, pedidas y contadas — nada más.
+- ✅ 🏁 **ESTE WEBHOOK YA PRENDE EL DISPARADOR DEL INGRESO** (30-ago-2026). El hecho «llegó
+  mercadería» entraba acá firmado mientras el disparador de la Agenda esperaba por una segunda
+  puerta con un segundo secreto (`INGRESO_SECRETO`) que nadie cargó, y sembraba **cero**.
+  🔴 **El evento ⛔ no trae el TIPO DE INGRESO** —manda proveedor, líneas, pedidas y contadas y nada
+  más— y sin él el disparador contesta 400 a propósito: dos de sus seis renglones cambian de dueña
+  con la puerta. ⇒ en vez de adivinarla (30 proveedores distintos en las 79 OCs), **cada OC
+  confirmada deja UN pendiente que arrastra y la pregunta**, y contestarlo siembra los seis.
+  El relato entero está en `docs/secciones/agenda.md` § «La pregunta de la puerta»; acá sólo lo que
+  toca a este archivo:
+  - `abrirPreguntaDePuerta` corre **después** de guardar la OC —una pregunta sobre un ingreso que no
+    está no le sirve a nadie— y es **mejor esfuerzo**: si la Agenda no contesta, la OC se guarda
+    igual y el emisor recibe 200. Perder el evento es definitivo; perder la pregunta no.
+  - ⚠️ **Pero lo que pasó viaja en la respuesta**, en el campo `agenda`: «no se abrió ninguna
+    pregunta» sin motivo se lee como que el disparador está roto.
+  - 🔴 **Cuelga de `confirmada_at` y ⛔ no de `recibido_en`**: un backfill pone `recibido_en` en hoy
+    para todo el historial, así que con él las 79 habrían abierto 79 preguntas viejas de una vez.
 - ▶️ **Reprocesar un evento en `error`**: hoy se ve en la pantalla y se arregla volviendo a
   confirmar la OC del otro lado. El botón que lo re-corre desde `recepcion_evento.payload` no está
   hecho — la tabla ya guarda todo lo que hace falta.

@@ -19,7 +19,8 @@
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
-import { feriadoDe, pendientesDe, type PendienteHoy } from '@/lib/agenda'
+import { feriadoDe, pendientesDe, PUERTAS, type PendienteHoy } from '@/lib/agenda'
+import { contestarPuerta } from '@/lib/agenda/cliente'
 import { rotuloFecha } from '@/lib/fechas/semana'
 import { leerManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
@@ -125,6 +126,13 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
             <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>{p.item.cuerpo}</div>
           )}
 
+          {/*
+            La pregunta de la puerta se contesta ACÁ y no en un modal aparte: es un click y la lista
+            de Hoy es donde la persona ya está parada. Sólo mientras está sin tildar — contestada,
+            el renglón vuelve a ser un pendiente hecho como cualquier otro.
+          */}
+          {!hecho && p.item.preguntaIngreso && <ElegirPuerta id={p.item.id} />}
+
           {hecho && (
             <div style={{ fontSize: font.sm, color: color.mut2, marginTop: 2 }}>
               Lo marcó <b>{hecho.usuario}</b>
@@ -140,6 +148,64 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
         {p.item.manualId && <BotonComoSeHace manualId={p.item.manualId} />}
       </div>
     </Card>
+  )
+}
+
+/**
+ * **Los cuatro botones de la puerta.** Contestar siembra los seis pasos del ingreso y tilda la
+ * pregunta, en un solo POST.
+ *
+ * 🔑 **Cuatro botones y ⛔ no un `select` + «Confirmar»**: son cuatro opciones fijas y la gracia de
+ * todo esto era que fuera **un click**. Un desplegable con botón de confirmar son tres.
+ *
+ * 🔴 **El que aprieta necesita `agenda.cargar`** —sembrar seis pendientes con dueña es cargar, no
+ * tildar— y la pregunta llega por rol a Administración, que no es el mismo conjunto. Por eso, si el
+ * servidor contesta que no, **se muestra el 403 tal cual en vez de tragarlo**: «no pasó nada» al
+ * apretar es lo que hace que alguien lo intente tres veces y después no lo intente más.
+ */
+function ElegirPuerta({ id }: { id: string }) {
+  const recargar = useAgenda((s) => s.cargar)
+  const [mandando, setMandando] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
+
+  const elegir = async (puerta: string) => {
+    setError(null)
+    setOk(null)
+    setMandando(puerta)
+    try {
+      const r = await contestarPuerta(id, puerta)
+      // 🔑 Se dice CUÁNTOS se sembraron, y `ya` se dice distinto: «no pasó nada» y «ya estaban» son
+      // la misma pantalla para el que mira y dos cosas distintas para el que tiene que actuar.
+      setOk(r.ya ? 'Esos pasos ya estaban cargados.' : `Se cargaron ${r.creados} pasos del ingreso.`)
+      if (r.aviso) setError(r.aviso)
+      await recargar()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cargar.')
+    } finally {
+      setMandando(null)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: space[2] }}>
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+        {PUERTAS.map((puerta) => (
+          <Button
+            key={puerta.key}
+            size="sm"
+            variant="outline"
+            disabled={!!mandando}
+            title={puerta.ayuda}
+            onClick={() => elegir(puerta.key)}
+          >
+            {mandando === puerta.key ? 'Cargando…' : puerta.label}
+          </Button>
+        ))}
+      </div>
+      {ok && <Notice tone="success" style={{ marginTop: space[2] }}>{ok}</Notice>}
+      {error && <Notice tone="danger" style={{ marginTop: space[2] }}>{error}</Notice>}
+    </div>
   )
 }
 

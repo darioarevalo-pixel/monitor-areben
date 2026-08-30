@@ -164,6 +164,27 @@ export type ItemAgenda = {
    */
   offsetDias?: number | null
   /**
+   * Si este pendiente es **la pregunta de la puerta** de una OC confirmada, lo que hay que sembrar
+   * al contestarla. `null` en todos los demás.
+   *
+   * 🔑 **Existe porque el hecho llega sin la puerta.** El webhook de Ingresos avisa que se confirmó
+   * una orden de compra —con el proveedor y las unidades contadas— y ⛔ no dice por dónde entró el
+   * producto, que es lo que decide de quién son el nombre y la descripción. En vez de adivinar
+   * —30 proveedores distintos en las 79 OCs de 2026— se pregunta, y contestar es un click.
+   *
+   * ⚠️ Viaja **entera** y no como un booleano: la pantalla dice qué va a sembrar ANTES de que
+   * alguien apriete. El título ⛔ no sirve para eso porque se puede editar como el de cualquier ítem.
+   */
+  preguntaIngreso?: {
+    /** `store:oc_id`, la clave estable con la que el webhook evita repreguntar. */
+    oc: string
+    /** El agrupador del título de los seis clones. Es el label de la OC. */
+    nombre: string
+    fecha: FechaIso
+    marca: Marca
+    proveedor: string | null
+  } | null
+  /**
    * En qué **puertas de entrada** corre este paso. Sólo para los moldes.
    *
    * 🔑 **Vacío es TODAS**, igual que `marcas` — y es lo que hace que los cuatro pasos que no cambian

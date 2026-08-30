@@ -48,6 +48,7 @@ import { CLAVES_PLANTILLA, esClavePlantilla, hechoYaPaso, moldeCorreEnEje, offse
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
+import { CAMPO as CAMPO_PREGUNTA, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -591,6 +592,13 @@ export default async function handler(req, res) {
           p.eje.campo,
           i.datos && Array.isArray(i.datos[p.eje.campo]) ? i.datos[p.eje.campo] : [],
         ])),
+        // 🔑 **La pregunta de la puerta**, si este ítem es una. Viaja entera y ⛔ no como un
+        // booleano: la pantalla necesita el nombre y la fecha para poder decir qué va a sembrar
+        // ANTES de que alguien apriete, y un `true` pelado obligaría a leerlo del título — que se
+        // puede editar. Sale del núcleo (`pregunta-ingreso.core.js`), que es el que valida la forma:
+        // una pregunta a medio escribir viaja como `null` y la fila se dibuja como un pendiente
+        // normal, ⛔ no como un botón que siembra cualquier cosa.
+        [CAMPO_PREGUNTA]: (i.datos && preguntaDeItem(i.datos)) || null,
         autor: i.autor,
         creado: i.created_at,
         paraMi: esParaMi(i.destino, perfil),
@@ -919,6 +927,67 @@ export default async function handler(req, res) {
       });
       if (r.error) return res.status(400).json({ error: r.error });
       return res.status(200).json({ ok: true, creados: r.creados, ya: r.ya });
+    }
+
+    /**
+     * **Contestar la pregunta de la puerta**: un click siembra los seis pasos del ingreso.
+     *
+     * 🔑 **Existe porque el hecho llega sin la puerta.** El webhook `oc.confirmada` de Ingresos trae
+     * proveedor, líneas y unidades contadas, y ⛔ ningún tipo de ingreso — y sin puerta `sembrar`
+     * contesta 400 a propósito, porque dos de los seis renglones cambian de dueña con ella. En vez
+     * de adivinarla, cada OC confirmada deja UN pendiente que arrastra y esto es lo que lo cierra.
+     *
+     * 🔑 **El nombre, la fecha y la marca salen de `datos` y ⛔ NO del body.** Lo único que el que
+     * aprieta elige es la puerta: si el resto viajara desde la pantalla, este endpoint sería un
+     * segundo «sembrá lo que quieras» con otro nombre, y el techo de `agenda.cargar` estaría
+     * protegiendo una sola de las dos puertas.
+     */
+    if (action === 'ingreso-puerta') {
+      const id = String(b.id || '');
+      if (!id) return res.status(400).json({ error: 'falta id' });
+
+      const { data: fila, error: eLeer } = await supabase
+        .from('agenda_items').select('id, datos, regla').eq('id', id).maybeSingle();
+      if (eLeer) throw new Error(eLeer.message);
+      // ⚠️ «No existe» y «existe pero no es una pregunta» se dicen distinto: la primera pasa cuando
+      // otro ya la contestó y la borró, y la segunda es que alguien está mandando un id cualquiera.
+      if (!fila) return res.status(404).json({ error: 'Esa pregunta ya no está.' });
+      const p = preguntaDeItem(fila.datos);
+      if (!p) return res.status(400).json({ error: 'Ese pendiente no es una pregunta de puerta.' });
+
+      const r = await sembrar(supabase, {
+        plantilla: 'ingreso',
+        nombre: p.nombre,
+        fecha: p.fecha,
+        autor: yo,
+        eje: b.puerta,
+        marca: p.marca,
+      });
+      if (r.error) return res.status(400).json({ error: r.error });
+
+      /*
+        🔑 **La pregunta se TILDA, ⛔ no se borra.** Borrarla dejaría la Agenda sin rastro de que
+        alguien contestó, y Cumplimiento contaría una ocurrencia que desapareció — que es peor que
+        no contarla. Tildada sale de Hoy (corta el arrastre) y queda en el historial con quién fue.
+
+        ⚠️ El tilde va a `regla.fecha`, que es la fecha del hecho y ⛔ no hoy: es la única que el
+        propio handler de `marcar` acepta, y es la que corta el arrastre entero.
+
+        ⛔ **Y si el tilde falla, esto NO se deshace**: los seis ya están sembrados y volver a
+        apretar contesta `ya` sin duplicar. Lo que se hace es decirlo, para que el que ve la pregunta
+        todavía abierta sepa que el trabajo ya salió.
+      */
+      const fechaTilde = (fila.regla && fila.regla.fecha) || p.fecha;
+      const { error: eTilde } = await supabase.from('agenda_hechos').upsert(
+        [{ item_id: id, fecha: fechaTilde, usuario: yo, nota: null }],
+        { onConflict: 'item_id,fecha', ignoreDuplicates: true },
+      );
+      return res.status(200).json({
+        ok: true,
+        creados: r.creados,
+        ya: r.ya,
+        ...(eTilde ? { aviso: 'Se sembraron los pasos, pero la pregunta quedó sin tildar.' } : {}),
+      });
     }
 
     if (action === 'guardar-item') {

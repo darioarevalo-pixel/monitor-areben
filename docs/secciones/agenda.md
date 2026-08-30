@@ -16,6 +16,10 @@ piezas) · `lib/agenda/` · handler `api/_agenda.js` por `datos.js?recurso=agend
 `agenda_promos`, `agenda_items` y `agenda_hechos`, **siempre en la base de BDI** · test
 `tests/agenda.test.ts`.
 
+🆕 **La pregunta de la puerta** vive en `lib/agenda/pregunta-ingreso.core.js` y la abre
+`api/_oc-webhook.js`; la contesta `action: 'ingreso-puerta'` y la dibuja `PendientesHoy.tsx`.
+Tests: `tests/agenda-pregunta-puerta.test.ts`. Caminata: `scripts/caminar-pregunta-puerta.mjs`.
+
 🆕 El techo de Dirección vive en **`lib/agenda/jerarquia.core.js`** (`esDeArriba`, `veLoDeArriba`) y
 el padrón que necesita entra por `equipoDelPadron` (`api/_auth.js`) del lado del servidor y por
 `traerEquipo` (`lib/usuarios/equipo.ts`) del lado de la pantalla. Test: `tests/agenda-jerarquia.test.ts`.
@@ -465,6 +469,95 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   - ⚠️ **No se llama `Calendario.tsx`** (ya existe el editorial de Marketing) y la pestaña se sigue
     llamando **«Mes»**: si arrancara en semana, mentiría al llegar.
 
+## 🆕 La PREGUNTA DE LA PUERTA: el disparador del ingreso, prendido por el webhook de OC
+
+**30-ago-2026.** El disparador del ingreso llevaba seis días en producción con 16 moldes cargados y
+había sembrado **cero**. La ficha decía que lo trababa `INGRESO_SECRETO`, y se remidió: **es falso.**
+
+🔴 🔑 **El hecho ya entraba al Monitor, y por otra puerta.** El webhook `oc.confirmada` del sistema
+de Ingresos (`?recurso=oc-webhook`, secreto `INGRESO_WEBHOOK_SECRET`, **cargado**) trajo **79
+órdenes firmadas el 27-ago**, 0 eventos rotos, `confirmada_at` en **79 de 79** — y confirmar una OC
+**es** el hecho: el evento trae las unidades **contadas**, o sea que alguien recibió la mercadería.
+`INGRESO_SECRETO` era **una segunda entrada, con un segundo secreto, para lo que ya entraba por la
+primera**. ⇒ [el dato ya lo sabía el código y lo estaba tirando](../../lib/agenda/plantillas.core.js).
+
+🔴 **Lo que de verdad faltaba es LA PUERTA DE ENTRADA**, que ese payload ⛔ no manda: trae proveedor
+(con `proveedor_id` estable), líneas, pedidas y contadas, y ningún tipo de ingreso. Y sin puerta
+`sembrar` contesta 400 **a propósito**, porque dos de los seis renglones cambian de dueña con ella.
+
+### Lo que se construyó: preguntar, ⛔ no adivinar
+
+Cada OC confirmada deja **UN** pendiente para Administración —*«¿Por qué puerta entró OC-0412
+(RHOVE)?»*— que **arrastra**, y contestarlo con un click siembra los seis. Mientras no se contesta,
+⛔ **el ingreso no se pierde**: para eso arrastra.
+
+🔑 **Adivinar por el proveedor ⛔ no era una opción**: son **30 proveedores** en las 79 OCs; `CHINA`
+se lee sola, pero `RHOVE`, `ASKDENIM` o `BOUCLE LOCAL` no. Una puerta mal puesta es **peor que no
+sembrar**, porque un pendiente que ya tiene nombre no lo revisa nadie.
+
+- La regla vive en **`lib/agenda/pregunta-ingreso.core.js`** (puro, `.js` porque lo importan los dos
+  handlers). El webhook la abre; `action: 'ingreso-puerta'` de `api/_agenda.js` la contesta.
+- **La pantalla son cuatro botones en el renglón de Hoy** (`PendientesHoy.tsx`), ⛔ no un modal ni un
+  `select` + «Confirmar»: la gracia era que fuera **un** click, y un desplegable con confirmar son tres.
+
+### 🔴 El freno del BACKFILL vive en la ENTRADA, ⛔ no en la plantilla
+
+Las 79 OCs entraron en **una tanda de trece minutos**. Sin freno, conectar esto abría 79 preguntas
+viejas de golpe, y una bandeja que nace con 79 renglones de junio no la mira nadie.
+
+🔑 **Y por qué acá y no como `noSiembraSiPaso` de la plantilla `ingreso`** —la única de las cuatro
+que ⛔ no lo lleva—: eso fue una decisión y **sigue siendo correcta**. El botón a mano acepta una
+fecha vieja porque *la mercadería llega y a veces se avisa dos días después*, y ahí el pendiente
+atrasado es justo lo que hay que ver. **El webhook es otra entrada**: no puede traer un hecho viejo
+salvo que sea un backfill. **El mismo hecho, dos puertas, dos frenos.** Se reusa `hechoYaPaso`
+—`fecha < ayer`— y ⛔ no un número nuevo: el margen ya cubre las 17 horas de reintentos del emisor.
+
+### De qué fecha cuelga, y por qué las otras dos no sirven
+
+| campo | vino en | por qué ⛔ no |
+|---|---|---|
+| `fecha_ingreso` | **17 de 79** | la carga una persona: colgar de ella deja mudas a 3 de cada 4 |
+| `recibido_en` | 79 de 79 | es cuándo lo recibimos NOSOTROS — un backfill lo pone en hoy y **desarma el freno de arriba** |
+| **`confirmada_at`** | **79 de 79** | el instante en que el hecho pasó del otro lado ✅ |
+
+### Lo demás que se decidió, y por qué
+
+- 🔑 **La pregunta va a Administración por ROL** y ⛔ no a una persona nombrada, como «las tres» de
+  la sesión de fotos. ⚠️ **Medido contra el padrón antes de escribirlo** (16 personas): la función
+  `administracion` la tiene **una sola** —Lorena Reyes— y es **la única sin `admin` con
+  `agenda.cargar`**, que es el permiso que hace falta para contestar. ⇒ hoy le llega a quien puede.
+  🔴 **El día que entre alguien a Administración SIN `agenda.cargar` va a ver la pregunta y no va a
+  poder contestarla**: por eso la pantalla muestra el 403 tal cual en vez de tragárselo — «no pasó
+  nada» al apretar es lo que hace que alguien lo intente tres veces y después no lo intente más.
+- 🔑 **El nombre, la fecha y la marca salen de la FILA y ⛔ nunca del body.** Lo único que el que
+  aprieta elige es la puerta: si el resto viajara desde la pantalla, esto sería un segundo «sembrá
+  lo que quieras» con otro nombre, y el techo de `agenda.cargar` estaría cuidando una sola de las dos.
+- 🔑 **La pregunta se TILDA, ⛔ no se borra.** Borrarla dejaría a Cumplimiento contando una
+  ocurrencia que desapareció. El tilde va a la fecha del hecho, que es la única que corta el arrastre.
+- 🔑 **Abrir la pregunta es MEJOR ESFUERZO y ⛔ no puede voltear el evento**, igual que el cruce con
+  el espejo: si la Agenda no contesta, la OC se guarda lo mismo. Perder el evento es definitivo —no
+  hay quién lo vuelva a mandar—; perder la pregunta no. ⚠️ **Pero lo que pasó se DICE** y viaja en la
+  respuesta del webhook: «no se abrió ninguna pregunta» sin motivo se lee como que esto está roto, y
+  es exactamente lo que lo mantuvo mudo seis días.
+- **El tope es 20 preguntas por día**, y sale de una medición: en 2026 se confirmaron OCs en 29 días
+  distintos, promedio **2,7** y máximo **15** (17-jun). Deja aire sobre el máximo observado, y
+  **cuando se llega se dice**.
+
+### Cómo se probó
+
+✅ **22 mutantes, 22 muertos** —19 sobre el núcleo y la acción, 3 sobre el cable del webhook— y **un
+mutante inocuo de control que SOBREVIVIÓ**, que es lo que prueba que el arnés no mata todo por
+igual. Tests: `tests/agenda-pregunta-puerta.test.ts` (25) y los 6 nuevos de
+`tests/oc-webhook-handler.test.ts`.
+🏁 **28 de 28 caminando contra PRODUCCIÓN** con los dos handlers **en proceso**
+(`scripts/caminar-pregunta-puerta.mjs`): la pregunta nació, no se repreguntó, la de junio no abrió
+nada, contestarla sembró **10 clones** de importación con la puerta y la marca puestas, la pregunta
+quedó **tildada y no borrada**, contestar dos veces contestó `ya`, y **se borró todo: 77 ítems antes,
+77 después**. 🔑 **El `.not('datos->…','is',null)` sólo lo verifica la base**: contra un Supabase de
+mentira un filtro mal escrito sale verde.
+
+▶️ **Falta caminar LA PANTALLA**: los cuatro botones piden login, así que es mano de Bruno.
+
 ## Lo que ya se rompió acá
 
 - 🔴 **Crear `api/agenda.js` «por prolijidad» frena TODOS los deploys sin error visible**: Hobby
@@ -558,6 +651,11 @@ no tenía ninguno — y las dos de pantalla, con `renderToStaticMarkup` sobre la
 `tests/agenda-cumplimiento-pantalla.test.tsx` y 🆕 `tests/agenda-grilla.test.tsx`. 🆕 El disparo de
 la sesión de fotos —cuándo siembra y, sobre todo, **cuándo NO**— vive en
 `tests/solicitudes-siembra.test.ts`, porque su puerta es `api/_solicitudes.js` y no la Agenda.
+
+🆕 `npx vitest run tests/agenda-pregunta-puerta.test.ts` — **la pregunta de la puerta**, las dos
+mitades: el núcleo puro y la acción que la contesta. El cable con el webhook está en
+`tests/oc-webhook-handler.test.ts`, y el camino entero contra la base real en
+`node scripts/caminar-pregunta-puerta.mjs` (siembra contra producción y borra).
 
 Lo que el test **no** ejerce y hay que caminar a mano:
 

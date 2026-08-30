@@ -87,6 +87,18 @@ export async function sembrarAMano(
 }
 
 /**
+ * **Contestar la pregunta de la puerta**: elegir por dónde entró la OC y sembrar los seis pasos.
+ *
+ * ⚠️ Manda **el id de la pregunta y la puerta, y nada más**. El nombre, la fecha y la marca los
+ * saca el servidor de la fila: si viajaran desde acá, esto sería un segundo «sembrá lo que quieras»
+ * con otro nombre.
+ */
+export async function contestarPuerta(id: string, puerta: string): Promise<{ creados: number; ya: boolean; aviso?: string }> {
+  const d = await postearConRespuesta({ action: 'ingreso-puerta', id, puerta }, 'No se pudieron cargar los pasos del ingreso.')
+  return { creados: Number(d?.creados) || 0, ya: !!d?.ya, aviso: typeof d?.aviso === 'string' ? d.aviso : undefined }
+}
+
+/**
  * Lo que una promo sembró al guardarse, **una entrada por marca**: la promo la define el banco y
  * `marcas: []` quiere decir las dos tiendas, que son dos trabajos distintos.
  */

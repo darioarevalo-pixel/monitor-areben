@@ -35,6 +35,7 @@
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 import { verificarFirma, normalizarEvento } from '../lib/recepciones/webhook.core.js'
+import { CAMPO, preguntaDeOc } from '../lib/agenda/pregunta-ingreso.core.js'
 import { cfgDelMonitor, cfgDeMarca, LIMITE_CRUDO } from './_recepciones-base.js'
 
 /** Lee el cuerpo tal como llegó. Corta si se pasa del techo: nadie manda una OC de 5 MB. */
@@ -99,6 +100,60 @@ async function cruzarConElEspejo(store, lineas) {
     return { porSku, porBarra }
   } catch {
     return null
+  }
+}
+
+/**
+ * **Abre la pregunta de la puerta en la Agenda.** Devuelve un texto de lo que pasó, siempre.
+ *
+ * 🔑 **Es MEJOR ESFUERZO y ⛔ no puede voltear el evento**, igual que el cruce con el espejo: si la
+ * Agenda no contesta, la OC se guarda lo mismo. Perder el evento sería definitivo —no hay quién lo
+ * vuelva a mandar—; perder la pregunta no: el botón «Ingresó mercadería» sigue estando y la próxima
+ * confirmación de esa misma OC la vuelve a abrir.
+ *
+ * ⚠️ **Pero lo que pasó se DICE** —viaja en la respuesta del webhook— y ⛔ no se calla: «no se abrió
+ * ninguna pregunta» sin motivo se lee como que el disparador está roto, y es lo que mantiene mudo
+ * seis días a un módulo que anda.
+ */
+async function abrirPreguntaDePuerta(sb, oc) {
+  try {
+    // Lo que ya se preguntó y cuántas van hoy, de una sola lectura. ⚠️ El filtro `not.is null` sobre
+    // la clave de `datos` lo tiene que resolver LA BASE: un `select *` y un filtro acá traería la
+    // tabla entera todos los días.
+    const { data, error } = await sb
+      .from('agenda_items')
+      .select('datos, created_at')
+      .not(`datos->${CAMPO}`, 'is', null)
+    if (error) throw new Error(error.message)
+    const filas = data || []
+    const hoy = new Date().toISOString().slice(0, 10)
+    const yaPreguntadas = filas.map((f) => (f.datos && f.datos[CAMPO] && f.datos[CAMPO].oc) || '').filter(Boolean)
+    const abiertasHoy = filas.filter((f) => String(f.created_at || '').slice(0, 10) === hoy).length
+
+    const r = preguntaDeOc(oc, { yaPreguntadas, abiertasHoy })
+    if (r.no) return `sin pregunta: ${r.no}`
+
+    const { fila } = r
+    const { error: eIns } = await sb.from('agenda_items').insert([{
+      id: `it${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      clase: fila.clase,
+      titulo: fila.titulo,
+      cuerpo: fila.cuerpo,
+      regla: fila.regla,
+      destino: fila.destino,
+      marcas: fila.marcas,
+      manual_id: null,
+      activo: true,
+      // ⚠️ `autor` es quién lo cargó, y acá no hay persona: lo cargó el aviso de Ingresos. El mismo
+      // nombre que usa la puerta externa, para que en la pantalla se lea igual.
+      autor: 'Ingresos',
+      datos: { arrastra: fila.arrastra, [CAMPO]: fila[CAMPO] },
+    }])
+    if (eIns) throw new Error(eIns.message)
+    return `pregunta abierta para ${oc.id}`
+  } catch (e) {
+    // ⛔ No relanza: la OC ya está guardada y el evento no se puede perder por esto.
+    return `la pregunta no se pudo abrir: ${e.message}`
   }
 }
 
@@ -206,7 +261,11 @@ export default async function handler(req, res) {
       if (eLineas) throw new Error(eLineas.message)
     }
 
-    return res.status(200).json({ ok: true, oc: oc.id, lineas: lineas.length })
+    // 5 · La pregunta de la puerta. Va DESPUÉS de que la OC esté guardada: si fuera antes, un
+    // fallo al escribir la OC dejaría una pregunta sobre un ingreso que no está en ningún lado.
+    const agenda = await abrirPreguntaDePuerta(sb, oc)
+
+    return res.status(200).json({ ok: true, oc: oc.id, lineas: lineas.length, agenda })
   } catch (e) {
     // Queda anotado para poder reprocesarlo, y se contesta 5xx **a propósito**: es el código que
     // hace que el emisor reintente, y sus reintentos cubren casi 17 horas.
