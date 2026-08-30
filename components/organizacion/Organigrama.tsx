@@ -39,8 +39,9 @@ export function Organigrama({ nodos, cuantasDe, onPersona }: {
   )
 }
 
-function Rama({ nodo, nivel, ultimo, cuantasDe, onPersona }: {
+function Rama({ nodo, padre, nivel, ultimo, cuantasDe, onPersona }: {
   nodo: NodoConHijos
+  padre?: NodoConHijos
   nivel: number
   ultimo: boolean
   cuantasDe: (persona: string) => number
@@ -60,12 +61,12 @@ function Rama({ nodo, nivel, ultimo, cuantasDe, onPersona }: {
         </>
       )}
 
-      <Caja nodo={nodo} cuantasDe={cuantasDe} onPersona={onPersona} />
+      <Caja nodo={nodo} padre={padre} cuantasDe={cuantasDe} onPersona={onPersona} />
 
       {nodo.hijos.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[2], marginTop: space[2] }}>
           {nodo.hijos.map((h, i) => (
-            <Rama key={h.id} nodo={h} nivel={nivel + 1} ultimo={i === nodo.hijos.length - 1} cuantasDe={cuantasDe} onPersona={onPersona} />
+            <Rama key={h.id} nodo={h} padre={nodo} nivel={nivel + 1} ultimo={i === nodo.hijos.length - 1} cuantasDe={cuantasDe} onPersona={onPersona} />
           ))}
         </div>
       )}
@@ -73,14 +74,22 @@ function Rama({ nodo, nivel, ultimo, cuantasDe, onPersona }: {
   )
 }
 
-function Caja({ nodo, cuantasDe, onPersona }: {
+function Caja({ nodo, padre, cuantasDe, onPersona }: {
   nodo: NodoConHijos
+  padre?: NodoConHijos
   cuantasDe: (persona: string) => number
   onPersona?: (persona: string) => void
 }) {
   const esSector = nodo.tipo === 'sector'
   const cuantas = nodo.persona ? cuantasDe(nodo.persona) : 0
   const clickable = !!nodo.persona && !!onPersona
+  /**
+   * 🔴 **El que CUBRE un puesto ⛔ no lleva el cero en ámbar.** Karen no responde por «lo de
+   * Karen»: cubre el turno mañana de Local BDI y responde por lo del puesto, que está escrito una
+   * sola vez contra la cuenta del puesto. Un 0 ámbar ahí sería una acusación falsa — diría «está
+   * en el organigrama y no tiene nada escrito», que es exactamente lo contrario de lo que pasa.
+   */
+  const cubrePuesto = !!padre && padre.tipo === 'puesto' && !!padre.persona && padre.persona !== nodo.persona
 
   const caja: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'baseline', gap: space[2], flexWrap: 'wrap',
@@ -117,7 +126,16 @@ function Caja({ nodo, cuantasDe, onPersona }: {
           cero acá es «esta persona está en el organigrama y no tiene ni una responsabilidad
           escrita», que es exactamente lo que hay que ver. En el que no tiene cuenta no va nada,
           porque ahí el cero no afirmaría eso — afirmaría que no lo podemos saber. */}
-      {nodo.persona && (
+      {nodo.persona && cubrePuesto && (
+        <span
+          title={`Responde por lo de ${padre?.label}`}
+          style={{ fontSize: font.xs, color: color.mut2, border: `1px solid ${color.line}`, borderRadius: 999, padding: '1px 7px' }}
+        >
+          lo del puesto
+        </span>
+      )}
+
+      {nodo.persona && !cubrePuesto && (
         <span
           title={cuantas === 0 ? 'No tiene ninguna responsabilidad escrita' : `${cuantas} responsabilidades`}
           style={{

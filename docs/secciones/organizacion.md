@@ -56,6 +56,15 @@ archivo de ruta propio** (12 funciones en Hobby, hay 7) · tablas `organizacion_
   ciertas; la clave del árbol es `id` y la identidad sigue siendo el `name`, así que su ficha es una
   sola. ⚠️ Donde el eje es la persona —`personasDe`, las columnas de la matriz— hay que deduplicar,
   o sale con dos columnas idénticas y la matriz cuenta doble.
+- 🔴🔑 **El trabajo del LOCAL va a la cuenta de PUESTO, ⛔ no a las cuatro personas** (`local` es
+  Zattia, `bdilocal` es BDI — verificado por el campo `cuenta` del padrón). El motivo tiene número:
+  en BDI el puesto tapa a la persona **4,8×** y el mismo humano escribe desde dos identidades.
+  Escribirlo por persona serían cuatro copias que hay que reescribir cada vez que cambia alguien.
+  ⇒ **Las personas cuelgan del puesto y HEREDAN su ficha** (`puestoDe`): en la ficha sale un cartel
+  que lo dice, y en el organigrama llevan «lo del puesto» en vez del cero en ámbar — un 0 ahí sería
+  una acusación falsa. ⚠️ **Sólo hereda quien NO tiene renglones propios**: mezclarlas borraría la
+  frontera que la sección viene a marcar. Y ⛔ colgar de una PERSONA no es cubrir un puesto
+  (Marisol cuelga de Tufi y no responde por lo de Tufi).
 - 🔑 **`interno` esconde una rama de conducción, y ARRASTRA a los hijos.** Pedido de Bruno
   (30-ago-2026): *«que la gente no vea cosas paralelas que no sirvan, de los gerentes»*. Esconder
   «Operativo» y dejar colgando «Venta mayorista» sería peor que no esconder nada: `arbol()` lo sube

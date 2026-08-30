@@ -49,7 +49,7 @@ import { leerAgenda } from '@/lib/agenda/cliente'
 import type { ItemAgenda } from '@/lib/agenda/tipos'
 import { borrarResp, leerOrganizacion, nuevoIdResp } from '@/lib/organizacion/cliente'
 import {
-  NUEVA, arbol, deLaPersona, delSector, grises,
+  NUEVA, arbol, deLaPersona, delSector, grises, puestoDe,
   type Nodo, type NodoConHijos, type Responsabilidad,
 } from '@/lib/organizacion/tipos'
 import { FUNCIONES, type Funcion } from '@/lib/permisos'
@@ -163,12 +163,18 @@ export function Organizacion() {
     return [...todas.filter(esDelSector), ...todas.filter((p) => !esDelSector(p))]
   }, [arbolNodos, resp, equipo])
 
-  /** Las personas con ficha, para los botones de «Por persona». */
+  /**
+   * Las personas con ficha, para los botones de «Por persona».
+   *
+   * ⚠️ **Entran también las que cubren un puesto y no tienen renglones propios.** Sin esto, Karen
+   * no tenía botón: el organigrama la muestra, la apretás, y la lista de fichas no la incluye.
+   */
   const conFicha = useMemo(() => {
     const vistas = new Set<string>()
     for (const s of FUNCIONES) for (const p of personasDe(s.key)) vistas.add(p)
+    for (const n of nodos) if (n.persona && n.activo !== false && puestoDe(nodos, n.persona)) vistas.add(n.persona)
     return [...vistas]
-  }, [personasDe])
+  }, [personasDe, nodos])
 
   const sectoresConAlgo = useMemo(() => FUNCIONES.filter((f) => resp.some((r) => r.sector === f.key)), [resp])
 
@@ -190,6 +196,20 @@ export function Organizacion() {
   }
 
   const abrirFicha = (p: string) => { setQuien(p); setPestana('persona') }
+
+  /**
+   * El puesto que cubre `quien`, con sus renglones — o `null`.
+   *
+   * ⚠️ **Sólo se hereda si la persona NO tiene renglones propios.** Alguien que cubre un turno y
+   * además responde por cosas suyas tiene que ver las suyas: mezclarlas borraría la frontera, que
+   * es justo lo que esta sección viene a marcar.
+   */
+  const puestoDeQuien = useMemo(() => {
+    if (!quien || deLaPersona(resp, quien).length) return null
+    const cuenta = puestoDe(nodos, quien)
+    if (!cuenta) return null
+    return { label: apodoDe(cuenta), filas: deLaPersona(resp, cuenta) }
+  }, [quien, resp, nodos, apodoDe])
 
   const items = [
     { key: 'organigrama', label: 'Organigrama' },
@@ -259,7 +279,7 @@ export function Organizacion() {
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
                 {conFicha.map((p) => (
                   <Button key={p} size="sm" variant={p === quien ? 'soft' : 'ghost'} onClick={() => setQuien(p === quien ? '' : p)}>
-                    {apodoDe(p)} <span style={{ opacity: 0.7 }}>· {cuantasDe(p)}</span>
+                    {apodoDe(p)} <span style={{ opacity: 0.7 }}>· {cuantasDe(p) || cuantasDe(puestoDe(nodos, p) || '')}</span>
                   </Button>
                 ))}
               </div>
@@ -272,6 +292,7 @@ export function Organizacion() {
                     apodo={apodoDe(quien)}
                     rol={rolDe(quien)}
                     filas={deLaPersona(resp, quien)}
+                    puesto={puestoDeQuien}
                     manuales={manuales}
                     rutinas={rutinas}
                     haceHorasExtras={!!equipo?.find((c) => c.name === quien)?.horasExtras}

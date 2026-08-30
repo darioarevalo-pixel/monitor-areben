@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   CLASE_DEL_GRIS, KEYS_CLASE, arbol, deLaPersona, delSector, filaValida, grises, sinDueno,
-  visiblesPara, type Nodo, type Responsabilidad,
+  puestoDe, visiblesPara, type Nodo, type Responsabilidad,
 } from '@/lib/organizacion/tipos'
 import { FUNCIONES } from '@/lib/permisos'
 
@@ -148,5 +148,42 @@ describe('una persona en DOS ramas', () => {
       nodo({ id: 'cande-dis', label: 'Cande', padre_id: 'dis', persona: 'Candela Luis' }),
     ])
     expect(raiz.flatMap((s) => s.hijos).map((n) => n.persona)).toEqual(['Candela Luis', 'Candela Luis'])
+  })
+})
+
+describe('quien CUBRE un puesto responde por lo del puesto', () => {
+  // 🔑 El reparto del local se escribe una vez, contra la cuenta del puesto: el mismo humano
+  // escribe desde dos identidades y en BDI el puesto lo tapa 4,8×. Karen cubre el turno mañana;
+  // sin esto su ficha salía VACÍA, que se lee como «no responde por nada».
+  const local: Nodo[] = [
+    nodo({ id: 'p-bdi', label: 'Local BDI', tipo: 'puesto', persona: 'bdilocal' }),
+    nodo({ id: 'karen', label: 'Karen', padre_id: 'p-bdi', persona: 'karenf' }),
+    nodo({ id: 'sofi', label: 'Sofi', persona: 'Sofia Facello' }),
+  ]
+
+  it('devuelve la CUENTA del puesto, que es con la que están guardadas las filas', () => {
+    expect(puestoDe(local, 'karenf')).toBe('bdilocal')
+  })
+
+  it('el puesto no se cubre a sí mismo', () => {
+    expect(puestoDe(local, 'bdilocal')).toBeNull()
+  })
+
+  it('quien no cuelga de un puesto no hereda nada', () => {
+    expect(puestoDe(local, 'Sofia Facello')).toBeNull()
+  })
+
+  it('un nodo apagado no hereda: la persona ya no está en ese turno', () => {
+    const apagada = local.map((n) => (n.id === 'karen' ? { ...n, activo: false } : n))
+    expect(puestoDe(apagada, 'karenf')).toBeNull()
+  })
+
+  it('⛔ colgar de una PERSONA no es cubrir un puesto', () => {
+    // Marisol cuelga de Tufi, y eso ⛔ no la hace responder por lo de Tufi.
+    const taller: Nodo[] = [
+      nodo({ id: 'tufi', label: 'Tufi', persona: 'Stefania Scolari' }),
+      nodo({ id: 'marisol', label: 'Marisol', padre_id: 'tufi', persona: 'X' }),
+    ]
+    expect(puestoDe(taller, 'X')).toBeNull()
   })
 })

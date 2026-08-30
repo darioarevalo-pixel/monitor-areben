@@ -81,6 +81,7 @@ import {
   filaValida as filaValidaJs,
   grises as grisesJs,
   labelDeClase as labelDeClaseJs,
+  puestoDe as puestoDeJs,
   sinDueno as sinDuenoJs,
   visiblesPara as visiblesParaJs,
 } from './core.js'
@@ -97,3 +98,4 @@ export const deLaPersona = deLaPersonaJs as (filas: Responsabilidad[], persona: 
 export const grises = grisesJs as (filas: Responsabilidad[]) => Responsabilidad[]
 export const arbol = arbolJs as (nodos: Nodo[]) => NodoConHijos[]
 export const visiblesPara = visiblesParaJs as (nodos: Nodo[], esAdmin: boolean) => Nodo[]
+export const puestoDe = puestoDeJs as (nodos: Nodo[], persona: string) => string | null

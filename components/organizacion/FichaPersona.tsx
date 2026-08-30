@@ -22,17 +22,26 @@ import { useMemo, useState } from 'react'
 import type { ItemAgenda } from '@/lib/agenda/tipos'
 import { clavesDestino } from '@/lib/novedades/tipos'
 import { CLASES, sinDueno, type ClaseResp, type Responsabilidad } from '@/lib/organizacion/tipos'
-import { Badge, Button, EmptyState, Markdown, color, font, space, weight } from '@/components/ui'
+import { Badge, Button, EmptyState, Markdown, Notice, color, font, space, weight } from '@/components/ui'
 
 const IZQUIERDA: ClaseResp[] = ['responde', 'entrega']
 const DERECHA: ClaseResp[] = ['decide', 'publica', 'no_es_suyo']
 
-export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, haceHorasExtras, puedeEditar, onEditar, onEliminar }: {
+export function FichaPersona({ persona, apodo, rol, filas, puesto, manuales, rutinas, haceHorasExtras, puedeEditar, onEditar, onEliminar }: {
   persona: string
   apodo: string
   /** La nota del organigrama («producción audiovisual»), si la tiene. */
   rol?: string | null
   filas: Responsabilidad[]
+  /**
+   * El puesto que cubre, si cubre uno: `{ label, filas }`.
+   *
+   * 🔑 **Karen no responde por «lo de Karen»: responde por lo del Local BDI.** El reparto del local
+   * se escribe UNA vez, contra la cuenta del puesto — el mismo humano escribe desde dos identidades
+   * y en BDI el puesto lo tapa 4,8×. Sin esto su ficha salía VACÍA, que se lee como «no responde
+   * por nada»: la afirmación más cara que puede hacer esta pantalla.
+   */
+  puesto?: { label: string; filas: Responsabilidad[] } | null
   manuales: { id: string; titulo: string; publicado: boolean }[]
   rutinas: ItemAgenda[] | null
   /** Del padrón. Hay rutinas cuyo destino es esa condición y no un nombre: ver `misClaves`. */
@@ -107,8 +116,21 @@ export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, ha
         )}
       </div>
 
-      {filas.length === 0 ? (
+      {puesto && (
+        <Notice tone="brand">
+          Cubre un turno de <b>{puesto.label}</b>, y responde por lo del puesto. El reparto del local
+          se escribe una sola vez, contra el puesto y no contra cada persona: el turno cambia, el
+          reparto no.
+        </Notice>
+      )}
+
+      {filas.length === 0 && !puesto ? (
         <EmptyState title="Todavía no tiene ninguna responsabilidad escrita." />
+      ) : filas.length === 0 && puesto ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: space[6] }}>
+          <Columna claves={IZQUIERDA} filas={puesto.filas} manuales={manuales} puedeEditar={puedeEditar} onEditar={onEditar} onEliminar={onEliminar} />
+          <Columna claves={DERECHA} filas={puesto.filas} manuales={manuales} puedeEditar={puedeEditar} onEditar={onEditar} onEliminar={onEliminar} />
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: space[6] }}>
           <Columna claves={IZQUIERDA} filas={filas} manuales={manuales} puedeEditar={puedeEditar} onEditar={onEditar} onEliminar={onEliminar} />
