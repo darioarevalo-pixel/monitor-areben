@@ -569,3 +569,10 @@ antes de rehacerlo.
   🔴 Y las ediciones **quedaron en BORRADOR**: releyendo Graph, Meta seguía teniendo el copy del
   modelo cuando ya se las daba por editadas. ⇒ si el plan aceptara el copy, no habría paso manual
   que se pueda olvidar de publicar.
+
+- ✅ **El memo mostraba el estado de la semana ANTERIOR al cambiar de semana** (reportado por Bruno
+  el 29-ago-2026, arreglado el mismo día). El chip, la firma del cierre y el botón «Cerrar la
+  semana» viven fuera del esqueleto de carga, así que durante los segundos de la lectura quedaba el
+  título de una semana con el estado de otra. ⇒ el dato viaja sellado con su semana (`deLaSemana`)
+  y el encabezado acepta `estado: null` = "no lo sé", que dice «Leyendo la semana…» y ⛔ no ofrece
+  cerrar. 3 mutantes, 3 muertos. El relato está en `docs/secciones/memo.md`.

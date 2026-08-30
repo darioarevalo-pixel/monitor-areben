@@ -11,7 +11,7 @@ mitad.
 
 ## Dónde vive
 
-`components/memo/` (`Memo.tsx`, `useMemoSemanal.ts`) · `lib/memo/semana.core.js` (la semana en hora
+`components/memo/` (`Memo.tsx`, `EncabezadoSemana.tsx`, `useMemoSemanal.ts`) · `lib/memo/semana.core.js` (la semana en hora
 de Buenos Aires, sobre fechas peladas) + `foto.core.js` + `tipos.ts` (el re-export tipado) ·
 `api/_memo.js`, que **entra por `api/datos.js?recurso=memo`** y no es una ruta (ver la invariante de
 las 12 funciones en `AGENTS.md`) · tablas `memo_semana` y `memo_campo`, creadas por
@@ -101,6 +101,16 @@ el motivo duro está escrito arriba del `create table`.
 - 🔴 **Cambiar de semana mientras la foto se calculaba** dejaba los números de la anterior bajo el
   encabezado de la nueva — a `useMemoSemanal` le faltaba número de pedido (`8668264`). Salió de
   LEER el hook: desde el navegador no se pudo forzar.
+- 🔴 🔑 **Y el número de pedido NO alcanzaba: el ESTADO de la semana anterior seguía en pantalla**
+  (29-ago-2026, dicho por Bruno: *"el estado queda del anterior por unos segundos, y luego
+  actualiza"*). Son dos agujeros distintos con el mismo síntoma: el contador evita que la respuesta
+  vieja **pise** a la nueva, pero no que la pantalla **siga mostrando** lo viejo mientras la nueva
+  viaja. La tarjeta del encabezado vive **fuera del esqueleto de carga** —el título tiene que
+  responder al instante— así que dibujaba el título de una semana con el chip, la firma del cierre y
+  el botón de **otra**. ⇒ ahora el dato viaja **sellado con su semana** (`deLaSemana`, en el hook) y
+  el encabezado toma `estado: 'abierto' | 'cerrado' | null`, donde **`null` no es "abierto"**: dice
+  "Leyendo la semana…" y ⛔ **no dibuja el botón de cerrar**, que es lo que de verdad muerde.
+  Defendido por `tests/memo-encabezado-semana.test.tsx` (render, no interacción).
 - 🔴 **Una excepción por NOMBRE DE LÍNEA tapó un número real** (`6b767ba`, 18-ago): el costo por
   compra de Stunned decía "sin píxel" porque su píxel nunca había registrado una compra — y cuando
   registró 1, la excepción siguió callando. El motivo está comentado en `foto.core.js:semaforoPauta`.

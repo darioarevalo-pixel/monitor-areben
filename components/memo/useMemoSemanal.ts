@@ -13,10 +13,29 @@ import type { Accionable } from '@/lib/gerencial/tipos'
  *     memo de agosto mostraría la venta que la base tenga hoy, y el histórico dejaría de serlo.
  *   - **abierto** → se calcula en vivo y la pantalla la marca como parcial.
  */
+/**
+ * Una caja de datos SELLADA con la semana de la que salieron.
+ *
+ * 🔴 **El número de pedido evita que la respuesta vieja PISE a la nueva, pero no evita que la
+ * pantalla siga mostrando lo viejo mientras la nueva viaja.** Son dos agujeros distintos y el
+ * segundo también se ve razonable: el 29-ago-2026 Bruno reportó que al cambiar de semana "el estado
+ * queda del anterior por unos segundos". El estado, la firma del cierre y el botón de cerrar viven
+ * FUERA del esqueleto de carga —el título tiene que responder al instante—, así que lo que se
+ * dibujaba era el título de una semana con el estado de otra.
+ *
+ * ⇒ El dato viaja con su `id`, y el hook **no devuelve lo que no es de la semana que se pide**.
+ * Nadie tiene que acordarse de limpiar nada al cambiar de semana: no se puede leer lo ajeno.
+ */
+type Caja<T> = { id: string; dato: T }
+
+/** Lo guardado, **sólo si es de la semana que se está mirando**. Si no, `null` = "todavía no sé". */
+export function deLaSemana<T>(caja: Caja<T> | null, id: string): T | null {
+  return caja && caja.id === id ? caja.dato : null
+}
+
 export function useMemoSemanal(id: string) {
-  const [memo, setMemo] = useState<MemoSemana | null>(null)
-  const [campos, setCampos] = useState<Campo[]>([])
-  const [foto, setFoto] = useState<Foto | null>(null)
+  const [caja, setCaja] = useState<Caja<{ memo: MemoSemana; campos: Campo[] }> | null>(null)
+  const [cajaFoto, setCajaFoto] = useState<Caja<Foto> | null>(null)
   const [puedeEscribir, setPuedeEscribir] = useState(false)
   const [cargando, setCargando] = useState(true)
   const [calculando, setCalculando] = useState(false)
@@ -50,19 +69,17 @@ export function useMemoSemanal(id: string) {
     try {
       const d = await leerMemo(id)
       if (!vigente()) return
-      setMemo(d.memo)
-      setCampos(d.campos)
+      setCaja({ id, dato: { memo: d.memo, campos: d.campos } })
       setPuedeEscribir(d.puede.escribir)
 
       if (d.memo.estado === 'cerrado' && d.memo.foto) {
-        setFoto(d.memo.foto)
+        setCajaFoto({ id, dato: d.memo.foto })
       } else {
         // La foto viva es la consulta cara del módulo (dos semanas de `venta_detalles` en las dos
         // bases). Va aparte para que el memo se pueda leer y escribir aunque los números tarden.
-        setFoto(null)
         setCalculando(true)
         leerFotoViva(id)
-          .then((f) => { if (vigente()) setFoto(f) })
+          .then((f) => { if (vigente()) setCajaFoto({ id, dato: f }) })
           .catch((e) => { if (vigente()) setError(e.message) })
           .finally(() => { if (vigente()) setCalculando(false) })
       }
@@ -85,9 +102,16 @@ export function useMemoSemanal(id: string) {
   const guardar = useCallback(
     async (bloque: Bloque, clave: string, texto: string) => {
       const r = await guardarCampo(id, bloque, clave, texto)
-      setCampos((prev) => {
-        const otros = prev.filter((c) => !(c.bloque === bloque && c.clave === clave && c.autor === r.autor))
-        return [...otros, { bloque, clave, autor: r.autor, texto, updated_at: r.updated_at }]
+      // ⚠️ Si mientras se guardaba se cambió de semana, la caja ya es de otra: se deja como está.
+      // El texto se guardó en la semana correcta (el POST lleva su `id`), y la pantalla que está a
+      // la vista no tiene por qué mostrarlo.
+      setCaja((prev) => {
+        if (!prev || prev.id !== id) return prev
+        const otros = prev.dato.campos.filter(
+          (c) => !(c.bloque === bloque && c.clave === clave && c.autor === r.autor),
+        )
+        const campos = [...otros, { bloque, clave, autor: r.autor, texto, updated_at: r.updated_at }]
+        return { id, dato: { memo: prev.dato.memo, campos } }
       })
     },
     [id],
@@ -103,11 +127,27 @@ export function useMemoSemanal(id: string) {
 
   const cerrar = useCallback(async () => {
     const r = await cerrarMemo(id)
-    setFoto(r.foto)
+    setCajaFoto({ id, dato: r.foto })
     await cargar()
   }, [id, cargar])
 
-  return { memo, campos, foto, puedeEscribir, cargando, calculando, error, recargar: cargar, guardar, sellar, cerrar }
+  const guardado = deLaSemana(caja, id)
+
+  return {
+    memo: guardado?.memo ?? null,
+    campos: guardado?.campos ?? [],
+    foto: deLaSemana(cajaFoto, id),
+    puedeEscribir,
+    // 🔴 Mientras no haya datos DE ESTA semana la pantalla sigue cargando, aunque la lectura
+    // anterior haya terminado: sin esto el cuerpo se dibuja vacío bajo el título nuevo.
+    cargando: cargando || (guardado === null && error === null),
+    calculando,
+    error,
+    recargar: cargar,
+    guardar,
+    sellar,
+    cerrar,
+  }
 }
 
 /**

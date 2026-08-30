@@ -18,6 +18,7 @@ import {
 } from '@/lib/memo/tipos'
 import { ETIQUETA_CANAL, type Canal } from '@/lib/liquidacion/resultado'
 import { resumirClavados as resumirClav } from '@/lib/clavados/tipos'
+import { EncabezadoSemana } from './EncabezadoSemana'
 import { resumirSenales, semanaHoy, useAutoguardado, useMemoSemanal } from './useMemoSemanal'
 
 /**
@@ -74,27 +75,17 @@ export function Memo() {
         {semana.id !== hoy.id && <Button variant="outline" onClick={() => setSemana(hoy)}>Esta semana</Button>}
       </HeaderAcciones>
 
-      <Card padding={4} style={{ marginBottom: space[4] }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
-          <div style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{etiquetaSemana(semana)}</div>
-          {estaCerrado ? (
-            <Badge tone="success">Cerrado</Badge>
-          ) : semanaTerminada ? (
-            <Badge tone="warning">Terminada, sin cerrar</Badge>
-          ) : (
-            <Badge tone="neutral">En curso</Badge>
-          )}
-          <div style={{ flex: 1 }} />
-          {puedeEscribir && !estaCerrado && semanaTerminada && (
-            <Button variant="solid" onClick={onCerrar}>Cerrar la semana y congelar los números</Button>
-          )}
-        </div>
-        {estaCerrado && memo?.cerrado_por && (
-          <div style={{ fontSize: font.sm, color: color.mut2, marginTop: space[2] }}>
-            Cerrado por {memo.cerrado_por}{memo.cerrado_at ? ` · ${new Date(memo.cerrado_at).toLocaleDateString('es-AR')}` : ''}
-          </div>
-        )}
-      </Card>
+      <EncabezadoSemana
+        etiqueta={etiquetaSemana(semana)}
+        // 🔴 `null` mientras se lee: el estado de la semana ANTERIOR no puede quedar bajo el título
+        // de ésta. Ver `EncabezadoSemana`.
+        estado={memo ? (memo.estado === 'cerrado' ? 'cerrado' : 'abierto') : null}
+        semanaTerminada={semanaTerminada}
+        puedeEscribir={puedeEscribir}
+        cerradoPor={memo?.cerrado_por}
+        cerradoAt={memo?.cerrado_at}
+        onCerrar={onCerrar}
+      />
 
       {error && <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>{error}</Notice>}
       {!puedeEscribir && (
