@@ -132,17 +132,50 @@ describe('Decidir — las tres pestañas', () => {
 })
 
 describe('Decidir — la oferta de retención se contesta sola', () => {
-  it('sin nada que perder si vuelve, dice que NO conviene y no reta por no registrar', async () => {
+  /**
+   * 🔴 **El envío sin cargar es un FALTANTE, ⛔ no un veredicto** (30-ago-2026).
+   *
+   * Hasta hoy la pantalla aplastaba el campo vacío con `Number(envioVuelta) || 0` antes de pasarlo
+   * a la cuenta, así que «sin cargar» y «traerlo es gratis» eran **el mismo número**. El error
+   * ⛔ no se veía porque el costo operativo valía 0 y la respuesta salía «no perdés nada porque
+   * vuelva», que suena a veredicto prudente; con el costo prendido la misma pantalla pasó a decir
+   * **«Ofrecele $750»** — plata sugerida sobre un dato que nadie cargó. Lo destapó prender el cero.
+   *
+   * ⚠️ Lo que este caso cuida ⛔ no es el texto: es que **sin el dato no se empuje una oferta ni se
+   * rete por no registrarla**.
+   */
+  it('el envío sin cargar es un faltante: ⛔ no sugiere plata ni reta por no registrar', async () => {
     await abrir(SANO)
     await act(async () => { tab('El producto').click() })
     const t = textoDeLaPantalla()
     // ⚠️ El veredicto lo dice la cuenta, ⛔ no un título: desde el 27-ago-2026 la caja se llama
     // siempre «Calculadora de retención» y lo que cambia es lo que contesta adentro.
-    expect(t).toContain('no perdés plata porque vuelva')
+    expect(t).toContain('Falta cuánto sale traerlo')
+    expect(t).not.toContain('Ofrecele')
     // El aviso que pedía anotar la respuesta con los botones apagados: ⛔ no puede estar.
     expect(t).not.toContain('anotá qué contestó')
-    // Y tampoco los botones: no hay nada que ofrecer, así que no hay nada que registrar.
+    // Y tampoco los botones: sin el dato no hay nada que ofrecer, así que nada que registrar.
     expect(boton('Aceptó: se lo queda')).toBeUndefined()
+  })
+
+  /**
+   * 🔑 **La contracara, y es la que hace que el caso de arriba signifique algo**: cargar un CERO
+   * ⛔ no es lo mismo que dejarlo vacío. Cero es «lo trae al local, el flete no existe» —una
+   * afirmación— y ahí sí queda algo que ofrecer, porque **recibirlo y reingresarlo cuesta igual**
+   * (`COSTO_OPERATIVO_RETORNO`). Sin este caso, «no sugiere plata» se cumpliría también con una
+   * pantalla que ⛔ no sugiere nada nunca.
+   */
+  it('el envío en CERO ⛔ no es lo mismo que vacío: queda el trabajo de recibirlo', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El producto').click() })
+    await tipear('Cuánto nos saldría traerlo', '0')
+    const t = textoDeLaPantalla()
+    expect(t).not.toContain('Falta cuánto sale traerlo')
+    expect(t).toContain('Ofrecele')
+    // El techo es exactamente el trabajo de recibirlo: sin flete, es lo único que se ahorra.
+    // ⚠️ `MoneyText` separa con espacio duro: comparar contra un espacio común no matchea.
+    expect(t.replace(/\s/g, ' ')).toContain('hasta $ 1.500 no perdés plata')
+    expect(campo('Cuánto se le ofrece')!.value).toBe('750')
   })
 
   it('pero deja registrar la oferta que se hizo igual', async () => {
@@ -160,6 +193,54 @@ describe('Decidir — la oferta de retención se contesta sola', () => {
     expect(textoDeLaPantalla()).toContain('Ofrecele')
     expect(boton('Aceptó: se lo queda')?.disabled).toBe(false)
     expect(boton('No aceptó')?.disabled).toBe(false)
+  })
+
+  /**
+   * 🔴 **El cupón vale ×2, y el que tiene que hacer la cuenta ⛔ no es la persona** (B6, Bruno,
+   * 30-ago-2026). Hasta hoy el campo decía *«sin regla todavía: lo ponés vos»* y el monto se
+   * tipeaba libre, así que después ⛔ no había forma de auditar si una compensación estuvo bien
+   * dada. Cambiar la forma tiene que mover **el sugerido Y el techo**.
+   */
+  it('elegir cupón dobla lo sugerido, ⛔ no lo deja en el número de la plata', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El producto').click() })
+    await tipear('Cuánto nos saldría traerlo', '6000')
+    // 6000 de envío + 1500 de recibirlo = 7500 de techo; el sugerido es la mitad.
+    expect(campo('Cuánto se le ofrece')!.value).toBe('3750')
+    await act(async () => { boton('Le damos un cupón')!.click() })
+    expect(campo('Cuánto se le ofrece')!.value).toBe('7500')
+    expect(textoDeLaPantalla().replace(/\s/g, ' ')).toContain('hasta $ 15.000 no perdés plata')
+  })
+
+  /**
+   * 🔴 **El aviso que hace auditable la oferta.** ⛔ No traba —una oferta ya hecha por teléfono hay
+   * que poder registrarla aunque se haya pasado, si no el caso que más importa contar es justo el
+   * que ⛔ no se anota— pero lo dice en el momento, que es cuando sirve.
+   */
+  it('pasarse del techo avisa, y ⛔ no impide registrar', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El producto').click() })
+    await tipear('Cuánto nos saldría traerlo', '6000')
+    expect(textoDeLaPantalla()).not.toContain('Se pasa del techo')
+    await tipear('Cuánto se le ofrece', '9000')
+    expect(textoDeLaPantalla()).toContain('Se pasa del techo')
+    expect(boton('Aceptó: se lo queda')?.disabled).toBe(false)
+  })
+
+  /**
+   * 🔴 **El veredicto de si conviene traerlo tiene que mirar el MISMO costo que el techo de la
+   * oferta.** Son la misma pregunta vista de los dos lados, y con dos costos distintos a un
+   * centímetro la pantalla se contradice sola. Con el trabajo de recibirlo contado, el caso
+   * testigo de BDI —$12.000 que vuelven sanos, $6.000 de flete— pasa a ⛔ no convenir.
+   */
+  it('«conviene traerlo» cuenta el trabajo de recibirlo, ⛔ no sólo el flete', async () => {
+    await abrir(SANO)
+    await act(async () => { tab('El producto').click() })
+    // ⚠️ El envío se tipea ANTES de elegir «Que vuelva»: es el mismo campo, y al elegirlo cambia
+    // de rótulo a «Envío de vuelta» —ahí ⛔ ya no es un techo hipotético, es plata que se gasta—.
+    await tipear('Cuánto nos saldría traerlo', '6000')
+    await act(async () => { boton('Que vuelva')!.click() })
+    expect(textoDeLaPantalla()).toContain('No conviene traerlo')
   })
 
   /**

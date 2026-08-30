@@ -4,7 +4,7 @@ import {
   alertasDe, calcularCambio, calcularMonto, compensacionesDe, conAlerta, convieneRetorno,
   diasEsperandoLaOferta,
   correccionesMalArmado,
-  costoDelCaso, cuentaDescuento,
+  costoDelCaso, cuentaDescuento, ofertaSegunForma, MULTIPLO_CUPON,
   destinoDe, esCambio, escenariosDe, estaAbierto, estadoEnCriollo, etiquetaEM, faltaMandarLaEtiqueta, laEtiquetaEstaDebida, faltantesParaCerrar, faltantesParaProcesar,
   hayEnvio, laFallaDescuentaStock, numeroEM, numeroReclamo,
   pagadoPorItem, pideSeguimiento, puedeVolverLaPrenda, repartirSeguimiento, tokenVencido,
@@ -139,40 +139,111 @@ describe('calcularMonto: cuánto se le devuelve', () => {
 describe('convieneRetorno: el caso de la funda', () => {
   // El ejemplo real: una funda barata que en feria se vende por menos que el envío de vuelta.
   it('fallada y barata: NO conviene pedirlo', () => {
-    const r = convieneRetorno([item(12000, 1, { costo: 2000, pvp_feria: 3500 })], { fallada: true, envioVuelta: 6000 })
+    const r = convieneRetorno([item(12000, 1, { costo: 2000, pvp_feria: 3500 })], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(r.conviene).toBe(false)
     expect(r.recuperable).toBe(3500) // el PVP de feria, NO el precio de lista
   })
 
   it('fallada pero cara: conviene, aunque el envío no sea gratis', () => {
-    const r = convieneRetorno([item(90000, 1, { costo: 30000, pvp_feria: 45000 })], { fallada: true, envioVuelta: 6000 })
+    const r = convieneRetorno([item(90000, 1, { costo: 30000, pvp_feria: 45000 })], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(r.conviene).toBe(true)
   })
 
   // Un producto sano vuelve a stock y se revende a precio completo: casi siempre conviene.
   it('sana: se mide contra el precio de venta, no contra el PVP de feria', () => {
-    const r = convieneRetorno([item(12000, 1, { costo: 2000, pvp_feria: 3500 })], { fallada: false, envioVuelta: 6000 })
+    const r = convieneRetorno([item(90000, 1, { costo: 2000, pvp_feria: 3500 })], { fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(r.conviene).toBe(true)
-    expect(r.recuperable).toBe(12000)
-  })
-
-  it('el piso duro gana aunque la cuenta dé', () => {
-    const r = convieneRetorno([item(9000, 1, { pvp_feria: 8000 })], { fallada: true, envioVuelta: 1000, piso: 10000 })
-    expect(r.conviene).toBe(false)
-    expect(r.motivo).toContain('piso')
+    expect(r.recuperable).toBe(90000)
   })
 
   it('dos unidades del mismo producto suman y pueden dar vuelta la decisión', () => {
-    const uno = convieneRetorno([item(12000, 1, { pvp_feria: 3500 })], { fallada: true, envioVuelta: 6000 })
-    const dos = convieneRetorno([item(12000, 2, { pvp_feria: 3500 })], { fallada: true, envioVuelta: 6000 })
-    expect(uno.conviene).toBe(false)
-    expect(dos.conviene).toBe(true) // 7000 recuperables contra 6000 de envío
+    const uno = convieneRetorno([item(12000, 1, { pvp_feria: 7000 })], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
+    const dos = convieneRetorno([item(12000, 2, { pvp_feria: 7000 })], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
+    expect(uno.conviene).toBe(false) // 7000 contra un piso de 12000: apenas empata
+    expect(dos.conviene).toBe(true) // 14000 recuperables, el mismo envío
   })
 
   it('sin PVP de feria cargado, avisa en vez de sugerir cualquier cosa', () => {
-    const r = convieneRetorno([item(12000, 1, {})], { fallada: true, envioVuelta: 6000 })
+    const r = convieneRetorno([item(12000, 1, {})], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(r.conviene).toBe(false)
     expect(r.motivo).toContain('falta')
+  })
+
+  /**
+   * ── El piso, desde el 30-ago-2026 ──
+   *
+   * 🔴 **Era un monto fijo por marca y ⛔ nunca cambió una cuenta**: vivió en `null` en BDI y en
+   * Zattia desde que existió. Ahora es un MÚLTIPLO de lo que sale traerlo, así que se mueve solo
+   * cuando sube el flete o el costo del trabajo. Estos casos fijan las dos mitades de la regla —el
+   * múltiplo Y que el costo incluya el trabajo, ⛔ no sólo el envío—, que es justo lo que un test
+   * atado al `piso` viejo dejaría de vigilar sin ponerse rojo.
+   */
+  it('el piso es un MÚLTIPLO del costo: recuperar apenas más de lo que se gasta ⛔ no alcanza', () => {
+    // 6000 recuperables contra 4000 de envío: la cuenta vieja decía "conviene" por 2000 netos.
+    const r = convieneRetorno([item(20000, 1, { pvp_feria: 6000 })], { fallada: true, envioVuelta: 4000, costoOperativoPorUnidad: 0 })
+    expect(r.conviene).toBe(false)
+    expect(r.motivo).toContain('Apenas empata')
+    expect(r.motivo).toContain('8000') // 2× los 4000 que sale traerlo
+  })
+
+  /**
+   * 🔴 El borde exacto: **justo EN el piso conviene**, y un peso menos ⛔ no. Sin fijarlo, cambiar
+   * el `<` por `<=` ⛔ no pone nada en rojo — y ese peso es un caso real que deja de pedirse.
+   */
+  it('el borde del piso: justo en el múltiplo conviene, un peso menos ⛔ no', () => {
+    const justo = convieneRetorno([item(20000, 1, { pvp_feria: 8000 })], { fallada: true, envioVuelta: 4000, costoOperativoPorUnidad: 0 })
+    const unoMenos = convieneRetorno([item(20000, 1, { pvp_feria: 7999 })], { fallada: true, envioVuelta: 4000, costoOperativoPorUnidad: 0 })
+    expect(justo.conviene).toBe(true) // 8000 = 2 × 4000
+    expect(unoMenos.conviene).toBe(false)
+  })
+
+  it('el piso se mueve con el envío: el mismo producto conviene si traerlo sale menos', () => {
+    const caro = convieneRetorno([item(20000, 1, { pvp_feria: 6000 })], { fallada: true, envioVuelta: 4000, costoOperativoPorUnidad: 0 })
+    const barato = convieneRetorno([item(20000, 1, { pvp_feria: 6000 })], { fallada: true, envioVuelta: 2000, costoOperativoPorUnidad: 0 })
+    expect(caro.conviene).toBe(false) // 6000 contra un piso de 8000
+    expect(barato.conviene).toBe(true) // los mismos 6000 contra un piso de 4000
+  })
+
+  it('el trabajo de recibirlo entra en el costo, ⛔ no sólo el envío', () => {
+    const sin = convieneRetorno([item(20000, 1, { pvp_feria: 8000 })], { fallada: true, envioVuelta: 2000, costoOperativoPorUnidad: 0 })
+    const con = convieneRetorno([item(20000, 1, { pvp_feria: 8000 })], { fallada: true, envioVuelta: 2000, costoOperativoPorUnidad: 2500 })
+    expect(sin.costoDeTraerlo).toBe(2000)
+    expect(con.costoDeTraerlo).toBe(4500) // 2000 de envío + 2500 de recibirlo
+    expect(sin.conviene).toBe(true) // 8000 contra un piso de 4000
+    expect(con.conviene).toBe(false) // los mismos 8000 contra un piso de 9000
+  })
+
+  // El trabajo se paga por unidad, igual que el PVP de feria: un costo plano haría viajar gratis
+  // al segundo producto.
+  it('el costo del trabajo se multiplica por las unidades', () => {
+    const r = convieneRetorno([item(20000, 2, { pvp_feria: 9000 })], { fallada: true, envioVuelta: 2000, costoOperativoPorUnidad: 2500 })
+    expect(r.costoDeTraerlo).toBe(7000) // 2000 de envío + 2 × 2500
+  })
+
+  /**
+   * 🔑 Las dos negativas ⛔ no dicen lo mismo, y quien decide necesita saber cuál es: una es
+   * "perdés plata", la otra es "ganás tan poco que no vale el trabajo". Un solo cartel para las dos
+   * dejaría el caso al borde indistinguible del caso perdido.
+   */
+  it('«perdés plata» y «apenas empata» son carteles distintos', () => {
+    const pierde = convieneRetorno([item(20000, 1, { pvp_feria: 3000 })], { fallada: true, envioVuelta: 4000, costoOperativoPorUnidad: 0 })
+    const empata = convieneRetorno([item(20000, 1, { pvp_feria: 6000 })], { fallada: true, envioVuelta: 4000, costoOperativoPorUnidad: 0 })
+    expect(pierde.conviene).toBe(false)
+    expect(empata.conviene).toBe(false)
+    expect(pierde.motivo).toContain('No conviene')
+    expect(empata.motivo).toContain('Apenas empata')
+    expect(pierde.motivo).not.toContain('Apenas empata')
+  })
+
+  // ⚠️ El cartel nombra los dos sumandos SÓLO cuando los dos existen: "y 0 de recibirlo" es un
+  // número que existe y no significa nada.
+  it('el desglose del costo nombra el trabajo sólo si lo hay, y suma', () => {
+    const con = convieneRetorno([item(90000, 1, { pvp_feria: 45000 })], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 1500 })
+    expect(con.motivo).toContain('7500')
+    expect(con.motivo).toContain('6000 de envío')
+    expect(con.motivo).toContain('1500 de recibirlo')
+    const sin = convieneRetorno([item(90000, 1, { pvp_feria: 45000 })], { fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
+    expect(sin.motivo).not.toContain('de recibirlo')
   })
 })
 
@@ -696,6 +767,7 @@ describe('la gravedad da el PVP de feria de arranque', () => {
         items: [{ ...funda, pvp_feria: pvpFeriaSugerido([funda], g) }],
         fallada: true,
         envioVuelta: 2000,
+        costoOperativoPorUnidad: 0,
       }).techo
     // Cuanto menos se recupera, más se pierde si vuelve, y más se puede ofrecer para que se quede.
     expect(conFeria('inutil')).toBeGreaterThan(conFeria('util'))
@@ -941,42 +1013,42 @@ describe('cuentaDescuento', () => {
   const funda = item(12000, 1, { costo: 2000, pvp_feria: 3500 })
 
   it('fallada: el techo incluye la depreciación, no solo el envío', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000 })
-    expect(c.techo).toBe(14500) // 8500 que se deprecia + 6000 de envío
+    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
+    expect(c.techo).toBe(14500) // 8500 de depreciación + 6000 de envío
     expect(c.seePierdeSiVuelve).toBe(14500)
   })
 
   // Lo contraintuitivo: el techo supera el precio, así que regalarlo sale más barato que pedirlo.
   it('fallada barata: avisa que conviene regalarlo', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000 })
+    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(c.convieneRegalar).toBe(true)
     expect(c.motivo).toContain('regalarlo')
   })
 
   // Un producto sano vuelve a stock y se revende: lo único que se pierde es la logística.
   it('sana: el techo es solo lo que se ahorra en logística', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 })
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(c.techo).toBe(6000)
     expect(c.convieneRegalar).toBe(false)
   })
 
   it('el sugerido es la mitad del techo: el techo es el límite, no la oferta', () => {
-    expect(cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 }).sugerido).toBe(3000)
+    expect(cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 0 }).sugerido).toBe(3000)
   })
 
   it('el sugerido nunca supera el precio del producto', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 20000 })
+    const c = cuentaDescuento({ items: [funda], fallada: true, envioVuelta: 20000, costoOperativoPorUnidad: 0 })
     expect(c.sugerido).toBeLessThanOrEqual(12000)
   })
 
   it('el costo operativo también se ahorra y sube el techo', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativo: 1500 })
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 1500 })
     expect(c.techo).toBe(7500)
   })
 
   // Sin el PVP de feria no se puede saber cuánto se deprecia: mejor decirlo que inventar un número.
   it('fallada sin PVP de feria: avisa en vez de calcular cualquier cosa', () => {
-    const c = cuentaDescuento({ items: [item(12000)], fallada: true, envioVuelta: 6000 })
+    const c = cuentaDescuento({ items: [item(12000)], fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(c.techo).toBe(0)
     expect(c.motivo).toContain('PVP de feria')
   })
@@ -990,7 +1062,7 @@ describe('cuentaDescuento', () => {
    * confunda con "falta un dato".
    */
   it('sana sin envío que pagar: NO conviene ofrecer nada, y no es que falte un dato', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0 })
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0, costoOperativoPorUnidad: 0 })
     expect(c.conviene).toBe(false)
     expect(c.falta).toBe(null)
     // El motivo viejo decía "lo único que perdés es 0 de logística": un número que existe y no
@@ -1000,7 +1072,7 @@ describe('cuentaDescuento', () => {
   })
 
   it('sana con envío: conviene ofrecer, y el sugerido es lo que se dice', () => {
-    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000 })
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(c.conviene).toBe(true)
     expect(c.sugerido).toBe(3000)
   })
@@ -1008,23 +1080,110 @@ describe('cuentaDescuento', () => {
   // ⚠️ El mismo `conviene: false` por dos causas distintas: acá SÍ falta un dato, y decirlo es lo
   // que evita que se lea como veredicto.
   it('fallada sin PVP de feria: no contesta, y dice qué le falta', () => {
-    const c = cuentaDescuento({ items: [item(12000)], fallada: true, envioVuelta: 6000 })
+    const c = cuentaDescuento({ items: [item(12000)], fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(c.conviene).toBe(false)
     expect(c.falta).toBe('pvp_feria')
   })
 
   it('el costo operativo puede hacer que convenga ofrecer donde el envío solo no alcanzaba', () => {
-    const sin = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0 })
-    const con = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0, costoOperativo: 1500 })
+    const sin = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0, costoOperativoPorUnidad: 0 })
+    const con = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0, costoOperativoPorUnidad: 1500 })
     expect(sin.conviene).toBe(false)
     expect(con.conviene).toBe(true)
   })
 
   it('un producto cara y fallada: el techo NO llega a regalarlo', () => {
     const cara = item(90000, 1, { pvp_feria: 45000 })
-    const c = cuentaDescuento({ items: [cara], fallada: true, envioVuelta: 6000 })
+    const c = cuentaDescuento({ items: [cara], fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
     expect(c.techo).toBe(51000)
     expect(c.convieneRegalar).toBe(false)
+  })
+
+  /**
+   * ── El costo operativo, desde el 30-ago-2026 ──
+   *
+   * 🔴 Era opcional y **la pantalla nunca se lo pasaba**, así que toda la vida del módulo el techo
+   * se calculó con un sumando en 0 que nadie había decidido (B5). Ahora es obligatorio, y **por
+   * unidad**: un reclamo de dos prendas se recibe, se revisa y se reingresa dos veces.
+   */
+  it('el costo del trabajo se multiplica por las unidades', () => {
+    const dos = item(12000, 2, { pvp_feria: 3500 })
+    const con = cuentaDescuento({ items: [dos], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 1500 })
+    const sin = cuentaDescuento({ items: [dos], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
+    expect(sin.techo).toBe(6000)
+    expect(con.techo).toBe(9000) // 6000 de envío + 2 × 1500, ⛔ no 7500
+  })
+
+  /**
+   * 🔴 🔑 **El cartel tiene que SUMAR.** El desglose viejo nombraba dos sumandos fijos («se
+   * deprecia X más Y de envío») y el tercero se sumaba callado: prender el costo operativo habría
+   * dejado un texto donde las partes ⛔ no dan el total, con los dos números correctos por separado.
+   */
+  it('el desglose del motivo suma exactamente el total', () => {
+    const c = cuentaDescuento({ items: [item(90000, 1, { pvp_feria: 45000 })], fallada: true, envioVuelta: 6000, costoOperativoPorUnidad: 1500 })
+    expect(c.seePierdeSiVuelve).toBe(52500)
+    expect(c.motivo).toContain('52500')
+    const partes = [...c.motivo.matchAll(/(\d+) de (depreciación|envío|recibirlo)/g)].map((m) => Number(m[1]))
+    expect(partes).toHaveLength(3)
+    expect(partes.reduce((a, b) => a + b, 0)).toBe(52500)
+  })
+
+  // ⚠️ Con 0 el sumando ⛔ no se nombra: "y 0 de recibirlo" es un número que existe y no significa
+  // nada, leído como si fuera una pérdida.
+  it('el desglose ⛔ no nombra los sumandos que valen cero', () => {
+    const c = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 0 })
+    expect(c.motivo).toContain('6000 de envío')
+    expect(c.motivo).not.toContain('de recibirlo')
+    expect(c.motivo).not.toContain('de depreciación')
+  })
+})
+
+/**
+ * ── Cuánto vale un cupón frente a la plata (B6, Bruno, 30-ago-2026) ──
+ *
+ * Venía de la reunión —×2— y ⛔ no estaba escrito en ningún lado: el monto se tipeaba libre, así
+ * que ⛔ no se podía auditar si una compensación estuvo bien dada.
+ */
+describe('ofertaSegunForma: el cupón vale ×2', () => {
+  const funda = item(12000, 1, { costo: 2000, pvp_feria: 3500 })
+  const cuenta = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 6000, costoOperativoPorUnidad: 1500 })
+
+  it('en plata devuelve la cuenta tal cual: ⛔ no la toca', () => {
+    const o = ofertaSegunForma(cuenta, 'plata')
+    expect(o.techo).toBe(cuenta.techo)
+    expect(o.sugerido).toBe(cuenta.sugerido)
+  })
+
+  /**
+   * 🔴 **Los números van a mano, ⛔ no `× MULTIPLO_CUPON`.** Escrito contra la propia constante el
+   * caso es tautológico: bajarla a 1 lo dejaba VERDE, o sea que el test que existe para fijar el
+   * ×2 era justo el que ⛔ no lo miraba. Lo delató el mutante.
+   */
+  it('en cupón el techo Y el sugerido van ×2', () => {
+    expect(cuenta.techo).toBe(7500) // 6000 de envío + 1500 de recibirlo
+    expect(cuenta.sugerido).toBe(3750)
+    const o = ofertaSegunForma(cuenta, 'cupon')
+    expect(o.techo).toBe(15000)
+    expect(o.sugerido).toBe(7500)
+    expect(MULTIPLO_CUPON).toBe(2)
+  })
+
+  /**
+   * 🔑 **Los dos números tienen que moverse juntos.** Duplicar el sugerido y dejar el techo en
+   * plata haría que la sugerencia del sistema naciera pasada de su propio techo: el aviso saltaría
+   * sobre el número que él mismo puso.
+   */
+  it('el sugerido en cupón ⛔ no se pasa de su propio techo', () => {
+    const o = ofertaSegunForma(cuenta, 'cupon')
+    expect(o.sugerido).toBeLessThanOrEqual(o.techo)
+  })
+
+  // Con techo 0 ⛔ no hay nada que duplicar: el ×2 de cero sigue siendo cero, y "no conviene
+  // ofrecer" ⛔ no puede volverse "ofrecele algo" por elegir cupón.
+  it('sin nada que perder, el cupón tampoco abre una oferta', () => {
+    const nada = cuentaDescuento({ items: [funda], fallada: false, envioVuelta: 0, costoOperativoPorUnidad: 0 })
+    expect(nada.conviene).toBe(false)
+    expect(ofertaSegunForma(nada, 'cupon').techo).toBe(0)
   })
 })
 

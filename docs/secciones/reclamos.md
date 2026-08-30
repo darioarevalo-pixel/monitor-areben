@@ -472,12 +472,9 @@ demora no se podía cerrar nunca**.
 
 ### Lo que quedó pendiente
 
-- ▶️ **`PISO_RETORNO` está en `null`** (`tipos.ts`), o sea que se comporta como antes. Es un número
-  de **política** —por debajo de cuánto no vale la pena traer un producto de vuelta— y lo tiene que
-  dar Bruno, por marca. ⛔ Ponerlo desde acá sería inventar política.
-- ▶️ **`cuentaDescuento` acepta `costoOperativo` y la pantalla nunca se lo pasa**, así que en todo
-  caso sano el techo depende sólo del envío de vuelta. Subirlo **agranda las ofertas posibles**: no
-  es un arreglo silencioso, se decide con Bruno.
+- ✅ ~~`PISO_RETORNO` está en `null`~~ y ~~`cuentaDescuento` acepta `costoOperativo` y la pantalla
+  nunca se lo pasa~~: **los dos los contestó Bruno el 30-ago-2026** (B4 y B5). El relato entero está
+  más abajo, en **«Las cuatro decisiones de la auditoría»**.
 - ⛔ **El archivo NO se partió en sub-componentes** (repo compartido, `AGENTS.md` pide coordinar los
   refactors grandes): las pestañas envuelven los bloques que ya estaban.
 
@@ -801,8 +798,12 @@ desplegable. **Mostrarla es informar; dejarla cargada en el control es elegir po
 
 Estaba en `null` en BDI y en Zattia **desde que existe**, o sea que nunca cambió una cuenta; lo que
 sí hacía era ocupar un campo vacío que nadie sabía qué era (*«¿Qué es Piso?»*). La regla sigue viva
-en el núcleo (`PISO_RETORNO` + su rama en `convieneRetorno`, con sus tests): es política —por debajo
-de cuánto no vale la pena traer un producto— y la tiene que dar Bruno, por marca.
+en el núcleo (su rama en `convieneRetorno`, con sus tests): es política —por debajo de cuánto no
+vale la pena traer un producto— y la tiene que dar Bruno, por marca.
+
+⚠️ **Actualizado el 30-ago-2026**: `PISO_RETORNO` ⛔ ya no existe. El corte pasó a ser un **múltiplo
+de lo que sale traerlo** (`MULTIPLO_PISO_RETORNO`), justamente porque el monto fijo por marca vivió
+en `null` los ocho días que existió. Ver **«Las cuatro decisiones de la auditoría»**.
 
 ⚠️ Y el «falta» del envío pasó a decir **para qué es** el número
 (*«cuánto saldría traerlo (define hasta cuánto podés ofrecerle)»*): sigue en `bloquea: false` —
@@ -2846,3 +2847,94 @@ cambio esperando el pago: usaba `ESTADO_LABEL` crudo. Ahora usa `estadoEnCriollo
 · vuelve a llamarse «Pendiente» · choca con «Para revisar» · el guard mira otro estado) **+ 1
 control vivo**. Las dos palabras prohibidas están **fijadas por test**, ⛔ no explicadas en un
 comentario ([[feedback_areben_invariante_escrito_no_frena]]).
+
+## 🆕 🔴 Las cuatro decisiones de la auditoría (30-ago-2026)
+
+Bruno contestó **B4, B5, B6 y B7** de `docs/postventa-auditoria-2026-08-28.md`. Las cuatro eran
+política —⛔ ninguna era un defecto— y las cuatro estaban esperando un número que sólo él podía dar.
+Lo que sigue ⛔ no es el changelog: es **qué cambia de comportamiento y qué destapó ponerlas**.
+
+### B4 · El piso del retorno pasó de ser un MONTO a ser un MÚLTIPLO
+
+`PISO_RETORNO` era `Record<Marca, number | null>` y vivió en `null` **en las dos marcas desde que
+existió** ⇒ **nunca cambió una cuenta**. Y estaba condenado a eso: un corte en pesos escrito al lado
+del flete **envejece solo y en silencio** —sube el envío, suben los precios, y el corte se queda
+quieto—. Ahora es `MULTIPLO_PISO_RETORNO = 2`: **no se pide el retorno si lo recuperable ⛔ no llega
+al doble de lo que sale traerlo**.
+
+🔴 **`2` ⛔ no es neutro: da vuelta el caso testigo de BDI.** Funda de $12.000 que vuelve sana, $6.000
+de flete y $1.500 de trabajo ⇒ traerlo sale $7.500, el piso da $15.000, y los $12.000 que se
+recuperan pasan de *«Conviene pedirlo»* a *«Apenas empata»* — aunque el neto sea +$4.500. Es la
+política y ⛔ no un accidente: **se cambia en esa línea**.
+
+🔑 **Y el costo que mira el piso es el MISMO que el del techo de la oferta**, ⛔ no sólo el flete:
+`convieneRetorno` y `cuentaDescuento` son la misma pregunta vista de los dos lados, y dos costos
+distintos a un centímetro son **dos carteles que se contradicen en la misma pantalla**.
+
+🔑 **Las dos negativas son DOS ramas y ⛔ no una**: *«No conviene»* (perdés plata) y *«Apenas
+empata»* (ganás tan poco que no vale el trabajo). Un solo cartel dejaría el caso al borde
+indistinguible del caso perdido, que es justo lo que quien decide necesita saber.
+
+### B5 · El costo operativo: $1.500 por unidad, y es **por unidad**
+
+`cuentaDescuento` aceptaba `costoOperativo?` y **la pantalla nunca se lo pasaba**, así que durante
+toda la vida del módulo el techo se calculó con un sumando en 0 que ⛔ nadie había decidido. Ahora:
+
+- La constante es `COSTO_OPERATIVO_RETORNO` (`{ bdi: 1500, zattia: 1500 }`), **política**, ⛔ no un
+  campo de la pantalla.
+- El parámetro es **obligatorio aunque valga 0** —mismo arreglo que `escenario` el 25-ago— y se
+  llama **`costoOperativoPorUnidad`**: el nombre dice lo que el número anterior ⛔ no decía, y un
+  costo plano haría que **el segundo producto de un reclamo viajara gratis**.
+- Subirlo **agranda las ofertas**: el techo de un sano de BDI pasó de $6.000 a $7.500.
+
+⚠️ **Es un valor tipeado al lado de algo que algún día se va a poder medir** (el tiempo real de
+recepción). Mientras no se mida, envejece solo: revisarlo cuando cambie la operación de depósito.
+
+### 🔴 🔑 Lo que destapó prenderlo: el envío **sin cargar** valía cero
+
+Es el hallazgo del día, y ⛔ no estaba en el informe. La pantalla mandaba
+`envioVuelta: Number(envioVuelta) || 0`, así que **«sin cargar» y «traerlo es gratis» llegaban al
+núcleo como el mismo número**. Con el costo operativo en 0 el error ⛔ **no se veía**: la respuesta
+salía *«no perdés plata porque vuelva»*, que suena a **veredicto prudente**. Con el costo prendido,
+la misma pantalla pasó a decir **«Ofrecele $750»** — o sea **plata sugerida sobre un dato que nadie
+cargó**. El cero no estaba escondiendo un número: estaba escondiendo **la cuenta que lo usaba mal**.
+
+⇒ `cuentaDescuento` recibe `envioVuelta: number | ''` y contesta `falta: 'envio'`, exactamente como
+ya hacía con `falta: 'pvp_feria'`. **El llamador ⛔ no debe aplastarlo**: el dato se moría en la
+pantalla, así que el núcleo ⛔ no tenía cómo avisar que le faltaba.
+
+⚠️ **Un 0 TIPEADO sigue siendo un dato** —«lo trae al local»— y ahí **sí** queda algo que ofrecer,
+porque recibirlo y reingresarlo cuesta igual. Los dos casos están fijados por test, y el segundo es
+el que hace que el primero signifique algo: *«no sugiere plata»* se cumpliría también con una
+pantalla que ⛔ no sugiere nada nunca.
+
+### B6 · El cupón vale ×2, y la cuenta ⛔ no la hace la persona
+
+Venía de la reunión y ⛔ **no estaba escrito en ningún lado**: el campo decía *«▶️ sin regla todavía:
+lo ponés vos»* y el monto se tipeaba libre ⇒ ⛔ **no se podía auditar si una compensación estuvo bien
+dada**. `MULTIPLO_CUPON = 2` y `ofertaSegunForma(cuenta, forma)` convierten **el techo Y el
+sugerido** — los dos, porque doblar sólo el sugerido haría que la sugerencia del sistema naciera
+pasada de su propio techo y **el aviso saltara sobre el número que él mismo puso**.
+
+🔑 ⛔ **No es generosidad: las dos cosas nos cuestan distinto.** La plata sale de la caja HOY y sale
+entera; el cupón sale **sólo si el cliente vuelve a comprar**, y ahí lo que se resigna es el margen
+de esa venta, ⛔ no su valor de cara.
+
+⚠️ **Sugiere y avisa, ⛔ no traba** (*«Se pasa del techo»*). Un freno acá expulsaría del sistema la
+oferta que ya se hizo por teléfono, que es **justo la que hay que anotar**.
+
+### B7 · Los cuatro plazos, confirmados
+
+`oferta: 3` · `etiqueta: 2` · `despacho: 2` · `sinMandar: 2`, confirmados tal como estaban.
+⚠️ **Confirmado ⛔ no es medido**, y eso queda escrito en `DIAS_ALERTA`: se confirmaron **sin un solo
+caso cerrado del que sacarlos** (BDI tenía 2 reclamos ese día, Zattia 0). Son la política vigente,
+⛔ no un número que la operación haya validado.
+
+### Lo que se probó
+
+**17 mutantes, 17 muertos + 2 controles vivos.** 🔴 **Cinco sobrevivieron a la primera tanda y los
+cinco eran reales**, entre ellos el que más importaba: los casos del cupón se medían **contra la
+propia constante** (`expect(o.techo).toBe(cuenta.techo * MULTIPLO_CUPON)`) ⇒ bajarla a 1 los dejaba
+**verdes**, o sea que el test que existía para fijar el ×2 era justo el que ⛔ no lo miraba. Los
+otros cuatro: el borde exacto del piso (`<` → `<=`), y **tres de pantalla** —el sugerido del cupón,
+el aviso del techo y el costo que le llega a `convieneRetorno`— que ⛔ ningún caso caminaba.

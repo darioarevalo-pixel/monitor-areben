@@ -49,7 +49,8 @@ import {
   type RespuestaRetencion, FORMAS_RETENCION, salidaAlAceptarRetencion, type FormaRetencion,
   ofertaEsperandoRespuesta,
   casoDe, escenarioDe, productoEnJuego, reclasificaA,
-  faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PASOS_DECISION, PISO_RETORNO,
+  faltantesDeLaDecision, loQueTraba, estadoDelPaso, pasoGuardado, PASO_LABEL, PASOS_DECISION,
+  COSTO_OPERATIVO_RETORNO, MULTIPLO_CUPON, ofertaSegunForma,
   type PasoDecision, type FaltaDecision,
   DESTINO_LABEL, destinosDe, laUnidadVuelve, COMPENSACION_LABEL, estaDecidido,
   itemsQueFaltaron, tituloExpectativa, type Expectativa,
@@ -177,18 +178,14 @@ export function DecidirReclamo({
    */
   const [envioVuelta, setEnvioVuelta] = useState<number | ''>(reclamo.envio_costo ?? '')
   /**
-   * El corte por monto. Arranca en el piso de la marca (`PISO_RETORNO`) y ⛔ ya no vacío: es una
-   * política del negocio, no un dato de este caso, y como campo en blanco el corte no existía
-   * salvo que alguien se acordara de tipearlo. Se puede pisar acá para un caso puntual.
+   * **Lo que sale recibir, revisar y reingresar una unidad.** Es política de la marca y ⛔ no un
+   * dato de este caso, así que ⛔ no se tipea acá: sale de `COSTO_OPERATIVO_RETORNO`.
+   *
+   * 🔴 Alimenta **las dos** cuentas de esta pantalla —el veredicto de si conviene traerlo y el
+   * techo de la oferta— y tiene que ser el mismo número en las dos: son la misma pregunta vista
+   * de los dos lados. Hasta el 30-ago-2026 valía 0 en las dos sin que nadie lo hubiera decidido.
    */
-  /**
-   * ⚠️ **`PISO_RETORNO` ya no se edita en la pantalla, pero la regla sigue viva.** Está en `null`
-   * en BDI y en Zattia desde que existe, o sea que **nunca cambió una cuenta**; lo que sí hacía era
-   * ocupar un campo vacío que nadie sabía qué era («¿Qué es Piso?», Bruno, 27-ago-2026). Es
-   * política —por debajo de cuánto no vale la pena traer un producto— y la tiene que dar él, por
-   * marca; el día que la defina, la cuenta ya la toma.
-   */
-  const piso = PISO_RETORNO[marca] ?? 0
+  const costoOperativoPorUnidad = COSTO_OPERATIVO_RETORNO[marca]
   // Solo hace falta para la cuenta cuando el producto está fallada: es lo único que se recupera.
   // El PVP de feria vive por ítem, así que se recupera del primero que lo tenga.
   const [pvpFeria, setPvpFeria] = useState<number | ''>(
@@ -271,9 +268,9 @@ export function DecidirReclamo({
     () => convieneRetorno(itemsConFeria, {
       fallada: esFalla,
       envioVuelta: Number(envioVuelta) || 0,
-      piso,
+      costoOperativoPorUnidad,
     }),
-    [itemsConFeria, esFalla, envioVuelta, piso],
+    [itemsConFeria, esFalla, envioVuelta, costoOperativoPorUnidad],
   )
 
   // Arranca en lo que sugiere la cuenta; se puede cambiar a mano.
@@ -442,8 +439,11 @@ export function DecidirReclamo({
 
   /** Hasta cuánto se puede descontar para que se lo quede, y cuánto conviene ofrecer primero. */
   const descuento = useMemo(
-    () => cuentaDescuento({ items: itemsConFeria, fallada: esFalla, envioVuelta: Number(envioVuelta) || 0 }),
-    [itemsConFeria, esFalla, envioVuelta],
+    // 🔴 **Va `envioVuelta` crudo, ⛔ no `Number(envioVuelta) || 0`.** El `|| 0` de acá era el que
+    // convertía «sin cargar» en «gratis» antes de que la cuenta pudiera notarlo: el dato se moría
+    // en el llamador, así que el núcleo ⛔ no tenía cómo avisar que le faltaba.
+    () => cuentaDescuento({ items: itemsConFeria, fallada: esFalla, envioVuelta, costoOperativoPorUnidad }),
+    [itemsConFeria, esFalla, envioVuelta, costoOperativoPorUnidad],
   )
 
   /**
@@ -473,10 +473,30 @@ export function DecidirReclamo({
   const hayVariosProductos = items.length > 1 && !!destino
 
   /**
+   * 🔑 **La misma cuenta, dicha en la moneda en que se va a ofrecer.** `cuentaDescuento` contesta
+   * en plata —lo que se pierde si el producto vuelve—; el cupón vale ×2 porque sale sólo si el
+   * cliente vuelve a comprar, y ahí lo que se resigna es el margen, ⛔ no el valor de cara.
+   * La conversión vive en el núcleo (`ofertaSegunForma`), ⛔ no acá.
+   */
+  const oferta = ofertaSegunForma(descuento, retencionForma)
+
+  /**
    * Lo que se le ofrece. Arranca en lo que sugiere la cuenta y se puede cambiar: lo que se negocia
    * de verdad rara vez es el número redondo que sale de una fórmula.
+   *
+   * ⚠️ **Cambiar la forma mueve el sugerido sólo mientras nadie haya tipeado nada** (`''`). Un
+   * monto puesto a mano ⛔ no se duplica solo al pasar a cupón: sería reescribir lo que la persona
+   * decidió, y encima callado.
    */
-  const montoOferta = retencionMonto === '' ? descuento.sugerido : Number(retencionMonto) || 0
+  const montoOferta = retencionMonto === '' ? oferta.sugerido : Number(retencionMonto) || 0
+
+  /**
+   * 🔴 **El aviso que hacía falta para poder auditar** (B6): sin regla escrita, el monto se tipeaba
+   * libre y después ⛔ no había forma de decir si una compensación estuvo bien dada. ⛔ **No traba**
+   * —una oferta ya hecha por teléfono hay que poder registrarla igual, aunque se haya pasado— pero
+   * lo dice en el momento, que es cuando sirve.
+   */
+  const seVaDelTecho = oferta.techo > 0 && montoOferta > oferta.techo
 
   /**
    * ¿Hay una oferta que registrar? Una contestada lo es por definición, y una mandada sin contestar
@@ -1103,19 +1123,28 @@ export function DecidirReclamo({
                       {descuento.convieneRegalar ? (
                         <><b>Regaláselo</b>: pedirlo de vuelta sale más caro que el producto.</>
                       ) : (
-                        <>Ofrecele <b><MoneyText value={descuento.sugerido} /></b> — hasta{' '}
-                        <b><MoneyText value={descuento.techo} /></b> no perdés plata.</>
+                        <>Ofrecele <b><MoneyText value={oferta.sugerido} /></b>{retencionForma === 'cupon' ? ' en cupón' : ''} — hasta{' '}
+                        <b><MoneyText value={oferta.techo} /></b> no perdés plata.</>
                       )}
                       {' '}<InfoPopover titulo="Por qué ese techo">
                         <p>{descuento.motivo}</p>
                         <p>Ofrecer por debajo del techo siempre sale más barato que pedirlo de vuelta.</p>
                         <p>El sugerido es la mitad, para dejar margen a negociar.</p>
+                        {retencionForma === 'cupon' && (
+                          <p>
+                            En cupón los dos números van <b>×{MULTIPLO_CUPON}</b>: la plata sale de la caja hoy y sale
+                            entera, el cupón sale sólo si el cliente vuelve a comprar — y ahí lo que se resigna es el
+                            margen de esa venta, no su valor de cara.
+                          </p>
+                        )}
                       </InfoPopover>
                     </Notice>
                   ) : (
                     <Notice tone={descuento.falta ? 'warning' : 'neutral'} style={{ marginBottom: space[2] }}>
                       {descuento.motivo}
-                      {descuento.falta === 'pvp_feria' && (
+                      {/* ⚠️ Son DOS faltantes distintos y los dos se cargan arriba: el que falta lo
+                          nombra el motivo, así que el pie alcanza con decir dónde. */}
+                      {descuento.falta && (
                         <div style={{ fontSize: font.xs, marginTop: 4 }}>Cargalo acá arriba y la cuenta se contesta sola.</div>
                       )}
                     </Notice>
@@ -1141,10 +1170,20 @@ export function DecidirReclamo({
                             fórmula, y el que importa es el que se DIJO. */}
                         <Field
                           label="Cuánto se le ofrece"
-                          hint={retencionForma === 'cupon' ? '▶️ sin regla todavía: lo ponés vos' : 'arranca en lo sugerido'}
+                          hint={retencionForma === 'cupon'
+                            ? `arranca en lo sugerido, ×${MULTIPLO_CUPON} por ser cupón`
+                            : 'arranca en lo sugerido'}
                           style={{ marginBottom: 0 }}
                         >
                           <NumberField value={montoOferta} onChange={(v) => setRetencionMonto(v)} prefix="$" style={{ width: 140 }} />
+                          {/* ⚠️ Avisa, ⛔ no traba: la oferta que ya se hizo por teléfono hay que poder
+                              registrarla aunque se haya pasado — si no, el caso que más importa
+                              contar es justo el que no se anota. */}
+                          {seVaDelTecho && (
+                            <div style={{ fontSize: font.xs, color: color.warning, marginTop: 4 }}>
+                              Se pasa del techo (<MoneyText value={oferta.techo} />): a partir de ahí sale más caro que pedirlo de vuelta.
+                            </div>
+                          )}
                         </Field>
                         {/* 🔴 **El estado que faltaba, y es el que más dura.** Entre armar la
                             propuesta y saber qué contestó el cliente pasa un día o tres, y hasta el

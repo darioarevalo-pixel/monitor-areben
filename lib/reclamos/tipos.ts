@@ -1336,6 +1336,13 @@ export type CuentaRetorno = {
   /** Lo que se recupera si vuelve. */
   recuperable: number
   envioVuelta: number
+  /**
+   * 🔑 **Lo que sale traerlo de verdad: el envío MÁS el trabajo de recibirlo.** Hasta el
+   * 30-ago-2026 acá sólo estaba el envío, y por eso el veredicto miraba medio costo: el envío es
+   * lo único que sale factura, pero recibir el paquete, revisar la prenda y reingresarla en GN
+   * tampoco es gratis y lo paga el mismo bolsillo.
+   */
+  costoDeTraerlo: number
   conviene: boolean
   /** Por qué, en criollo, para mostrarlo al lado de la sugerencia. */
   motivo: string
@@ -1351,14 +1358,21 @@ export type CuentaRetorno = {
  *     unidad es venderla en feria, así que lo recuperable es el **PVP de feria**, que suele ser
  *     una fracción del precio de lista.
  *
- * `piso` es el corte duro configurable: por debajo de eso no se pide el retorno aunque la
- * cuenta dé, porque el trabajo de recibirlo y procesarlo tampoco es gratis.
+ * 🔑 **El piso ⛔ ya no es un número tipeado: es un MÚLTIPLO de lo que sale traerlo**
+ * (`MULTIPLO_PISO_RETORNO`, decisión de Bruno del 30-ago-2026). El número fijo por marca vivió
+ * ocho días en `null` en las dos, o sea que **nunca cambió una cuenta**, y estaba condenado a eso:
+ * un monto de corte tipeado al lado del flete envejece solo —sube el envío, sube el precio, y el
+ * corte se queda quieto sin que nadie se entere—. Un múltiplo del costo se mueve con él.
+ *
+ * ⚠️ **`costoOperativoPorUnidad` es OBLIGATORIO aunque valga 0.** Como opcional, el llamador que
+ * no lo pasaba obtenía un veredicto con cara de veredicto que en realidad estaba hecho con medio
+ * costo — que es exactamente lo que pasó ocho días con `piso`.
  */
 export function convieneRetorno(
   items: ItemReclamo[],
-  opciones: { fallada: boolean; envioVuelta: number; piso?: number },
+  opciones: { fallada: boolean; envioVuelta: number; costoOperativoPorUnidad: number },
 ): CuentaRetorno {
-  const { fallada, piso = 0 } = opciones
+  const { fallada } = opciones
   const envioVuelta = redondear(positivo(opciones.envioVuelta))
   const recuperable = redondear(
     items.reduce(
@@ -1373,16 +1387,28 @@ export function convieneRetorno(
   const unidades = items.reduce((s, it) => s + positivo(it.cantidad), 0)
   const detalle = unidades > 1 ? ` (${unidades} unidades × ${redondear(recuperable / unidades)} c/u)` : ''
 
+  // El trabajo se paga POR UNIDAD, igual que el PVP de feria: dos prendas se reciben, se revisan y
+  // se reingresan dos veces. Un costo plano haría que el segundo producto viajara gratis.
+  const operativo = redondear(positivo(opciones.costoOperativoPorUnidad) * unidades)
+  const costoDeTraerlo = redondear(envioVuelta + operativo)
+  const piso = redondear(costoDeTraerlo * MULTIPLO_PISO_RETORNO)
+  const gasto = operativo > 0
+    ? `traerlo sale ${costoDeTraerlo} (${envioVuelta} de envío y ${operativo} de recibirlo y reingresarlo)`
+    : `traerlo sale ${costoDeTraerlo} de envío`
+
   if (!recuperable) {
-    return { recuperable, envioVuelta, conviene: false, motivo: 'No se sabe cuánto se recupera: falta el precio o el PVP de feria.' }
+    return { recuperable, envioVuelta, costoDeTraerlo, conviene: false, motivo: 'No se sabe cuánto se recupera: falta el precio o el PVP de feria.' }
+  }
+  // 🔑 Las dos negativas ⛔ no dicen lo mismo, y por eso son dos ramas: una es "perdés plata" y la
+  // otra es "ganás tan poco que no vale el trabajo". Juntarlas en un solo cartel dejaría a quien
+  // decide sin saber si el caso está al borde o del otro lado.
+  if (costoDeTraerlo > 0 && recuperable <= costoDeTraerlo) {
+    return { recuperable, envioVuelta, costoDeTraerlo, conviene: false, motivo: `No conviene: recuperás ${recuperable}${detalle} y ${gasto}.` }
   }
   if (piso > 0 && recuperable < piso) {
-    return { recuperable, envioVuelta, conviene: false, motivo: `Está por debajo del piso de ${piso}: no se pide el retorno.` }
+    return { recuperable, envioVuelta, costoDeTraerlo, conviene: false, motivo: `Apenas empata: recuperás ${recuperable}${detalle} y ${gasto}. Por debajo de ${piso} —${MULTIPLO_PISO_RETORNO}× lo que sale traerlo— no se pide el retorno.` }
   }
-  if (envioVuelta > 0 && recuperable <= envioVuelta) {
-    return { recuperable, envioVuelta, conviene: false, motivo: `No conviene: recuperás ${recuperable}${detalle} y gastás ${envioVuelta} de envío.` }
-  }
-  return { recuperable, envioVuelta, conviene: true, motivo: `Conviene: recuperás ${recuperable}${detalle} y el envío sale ${envioVuelta}.` }
+  return { recuperable, envioVuelta, costoDeTraerlo, conviene: true, motivo: `Conviene: recuperás ${recuperable}${detalle} y ${gasto}.` }
 }
 
 // ── El cambio por otro producto ─────────────────────────────────────────────────
@@ -1861,8 +1887,17 @@ export type CuentaDescuento = {
    * "todavía no se sabe".
    */
   conviene: boolean
-  /** Qué dato falta para poder contestar, si es que falta alguno. `null` = la cuenta está completa. */
-  falta: 'pvp_feria' | null
+  /**
+   * Qué dato falta para poder contestar, si es que falta alguno. `null` = la cuenta está completa.
+   *
+   * 🔴 **`'envio'` apareció el 30-ago-2026, y lo destapó prender el costo operativo.** El envío
+   * llegaba acá ya aplastado a 0 por la pantalla (`Number(envioVuelta) || 0`), así que **sin
+   * cargar** y **gratis** eran el mismo número — el clásico cero que AFIRMA. Con el costo en 0 el
+   * error no se veía: la respuesta era «no perdés nada porque vuelva», que suena a veredicto
+   * prudente. Con el costo prendido pasó a ser *«Ofrecele $750»*, o sea **una sugerencia de plata
+   * construida sobre un dato que nadie cargó**.
+   */
+  falta: 'pvp_feria' | 'envio' | null
   motivo: string
 }
 
@@ -1924,16 +1959,43 @@ export function pvpFeriaSugerido(items: ItemReclamo[], gravedad: GravedadFalla):
 export function cuentaDescuento(opciones: {
   items: ItemReclamo[]
   fallada: boolean
-  envioVuelta: number
-  /** Lo que cuesta recibir, revisar y reingresar. Se suma al techo: también te lo ahorrás. */
-  costoOperativo?: number
+  /**
+   * ⚠️ **`''` = sin cargar, y ⛔ NO es lo mismo que 0.** 0 es «traerlo es gratis» —una afirmación—;
+   * `''` es que todavía nadie lo contestó. El llamador ⛔ no debe convertirlo: aplastarlo con
+   * `Number(x) || 0` es exactamente lo que hacía la pantalla, y es lo que dejaba a la cuenta
+   * contestando con cara de veredicto sobre un dato que no existe.
+   */
+  envioVuelta: number | ''
+  /**
+   * Lo que cuesta recibir, revisar y reingresar **UNA unidad**. Se multiplica por las unidades del
+   * reclamo y se suma al techo: si el cliente se lo queda, ese trabajo tampoco se hace.
+   *
+   * 🔴 **Era opcional y la pantalla nunca se lo pasaba** (B5 de la auditoría del 28-ago-2026), así
+   * que durante toda la vida del módulo el techo se calculó con un costo de más que valía 0 sin
+   * que nadie lo hubiera decidido. Es obligatorio desde el 30-ago-2026 **aunque valga 0**: el
+   * default seguro escondía la pregunta en vez de hacerla.
+   *
+   * ⚠️ **Es POR UNIDAD, ⛔ no total** —y el nombre lo dice porque el número anterior no lo decía—:
+   * en un reclamo de dos prendas se recibe, se revisa y se reingresa dos veces.
+   */
+  costoOperativoPorUnidad: number
 }): CuentaDescuento {
   const { items, fallada } = opciones
   const envio = positivo(opciones.envioVuelta)
-  const operativo = positivo(opciones.costoOperativo)
+  const unidades = items.reduce((s, it) => s + positivo(it.cantidad), 0)
+  const operativo = redondear(positivo(opciones.costoOperativoPorUnidad) * unidades)
   const precio = redondear(items.reduce((s, it) => s + positivo(it.precio) * positivo(it.cantidad), 0))
   const feria = redondear(items.reduce((s, it) => s + positivo(it.pvp_feria) * positivo(it.cantidad), 0))
 
+  // 🔑 Va PRIMERO porque es el único que falta en todos los casos, fallada o no, y es el primero
+  // que pide la pantalla. Con los dos sin cargar, se nombra el de arriba.
+  if (opciones.envioVuelta === '') {
+    return {
+      techo: 0, sugerido: 0, seePierdeSiVuelve: 0, convieneRegalar: false,
+      conviene: false, falta: 'envio',
+      motivo: 'Falta cuánto sale traerlo: sin eso no se puede saber cuánto se pierde si vuelve.',
+    }
+  }
   if (fallada && !feria) {
     return {
       techo: 0, sugerido: 0, seePierdeSiVuelve: 0, convieneRegalar: false,
@@ -1955,16 +2017,61 @@ export function cuentaDescuento(opciones: {
    */
   const conviene = techo > 0
 
-  const motivo = fallada
-    ? `Si vuelve perdés ${seePierdeSiVuelve} (se deprecia ${depreciacion} más ${envio} de envío).` +
-      (convieneRegalar ? ' Es más que el precio: regalarlo sale más barato que pedirlo.' : '')
+  /**
+   * 🔴 **El desglose se arma con lo que NO es cero.** Antes la frase nombraba dos sumandos fijos
+   * («se deprecia X más Y de envío») y el tercero se sumaba callado al total: prender el costo
+   * operativo habría dejado un cartel donde **las partes no dan el total** —el defecto más difícil
+   * de ver, porque los dos números son correctos por separado—.
+   */
+  const partes = [
+    fallada && depreciacion > 0 ? `${depreciacion} de depreciación` : null,
+    envio > 0 ? `${envio} de envío` : null,
+    operativo > 0 ? `${operativo} de recibirlo y reingresarlo` : null,
+  ].filter(Boolean)
+
+  // ⚠️ La rama la elige `conviene`, ⛔ no `fallada`: con techo 0 no hay sumandos que nombrar, y una
+  // fallada que no se deprecia y vuelve gratis caería en un desglose vacío.
+  const motivo = !conviene
     // ⚠️ Con 0 la frase de siempre decía "lo único que perdés es 0 de logística": un número que
     // existe y no significa nada, leído como si fuera una pérdida. Con 0 no se pierde NADA.
-    : conviene
-      ? `Vuelve sano y se revende a precio completo, así que lo único que perdés es ${seePierdeSiVuelve} de logística.`
-      : 'Vuelve sano y se revende entero, y la vuelta no te cuesta nada: no perdés plata porque vuelva.'
+    ? 'Vuelve sano y se revende entero, y la vuelta no te cuesta nada: no perdés plata porque vuelva.'
+    : fallada
+      ? `Si vuelve perdés ${seePierdeSiVuelve}: ${partes.join(' + ')}.` +
+        (convieneRegalar ? ' Es más que el precio: regalarlo sale más barato que pedirlo.' : '')
+      : `Vuelve sano y se revende a precio completo, así que lo único que perdés es ${seePierdeSiVuelve}: ${partes.join(' + ')}.`
 
   return { techo, sugerido, seePierdeSiVuelve, convieneRegalar, conviene, falta: null, motivo }
+}
+
+// ── Cuánto vale un cupón frente a la plata ──────────────────────────────────────
+
+/**
+ * **El cupón vale ×2 la plata** (decisión de Bruno, 30-ago-2026). Venía de la reunión y hasta hoy
+ * ⛔ no estaba escrita en ningún lado: el monto se tipeaba libre, así que ⛔ **no se podía auditar
+ * si una compensación estuvo bien dada** (B6 de la auditoría del 28-ago-2026).
+ *
+ * 🔑 **⛔ No es generosidad: es que las dos cosas nos cuestan distinto.** La plata sale de la caja
+ * HOY y sale entera; el cupón sale **sólo si el cliente vuelve a comprar**, y cuando vuelve lo que
+ * se resigna es el margen de esa venta, ⛔ no su valor de cara. Con el mismo costo para nosotros se
+ * le puede ofrecer el doble — y encima es el que retiene.
+ *
+ * ⚠️ **Sugiere y avisa, ⛔ no traba.** Lo que se negocia de verdad rara vez es el número redondo de
+ * la fórmula, y el que hay que registrar es el que se DIJO: un freno acá expulsaría del sistema la
+ * oferta que se hizo por teléfono, que es justo la que hay que anotar.
+ */
+export const MULTIPLO_CUPON = 2
+
+/**
+ * El techo y el sugerido **expresados en la forma en que se le va a ofrecer**.
+ *
+ * 🔑 La cuenta de `cuentaDescuento` está en plata —lo que se pierde si el producto vuelve— y esa
+ * es la unidad en que se comparan las dos formas. Convertirla acá, y ⛔ no en la pantalla, es lo
+ * que evita que el ×2 quede escrito en un `<Field>` y se pierda la próxima vez que alguien mueva
+ * la caja de sitio.
+ */
+export function ofertaSegunForma(cuenta: CuentaDescuento, forma: FormaRetencion): { techo: number; sugerido: number } {
+  const factor = forma === 'cupon' ? MULTIPLO_CUPON : 1
+  return { techo: redondear(cuenta.techo * factor), sugerido: redondear(cuenta.sugerido * factor) }
 }
 
 /**
@@ -2258,32 +2365,54 @@ export function leerVencimiento(
  * salga en cinco días no.
  */
 /**
- * ⚠️ `despacho: 2` y `sinMandar: 2` son lo único de acá que ⛔ no salió de la operación sino de una
- * propuesta: despachar es trabajo del día siguiente, no un tránsito de quince, y contestarle a
- * quien se quejó tampoco espera una semana. Se cambian en esta línea.
- */
-/**
- * ⚠️ `oferta: 3` es de la misma clase que los dos de arriba: **propuesta, ⛔ no medida**. Se eligió
- * igual que `sinDecidir` porque es la misma espera vista del otro lado —nosotros ya contestamos y
- * el que no responde es el cliente—, y porque el reclamo se queda quieto mientras tanto. ▶️ Lo
- * confirma Bruno con los primeros casos reales: hoy ⛔ no hay ninguno cerrado del que sacarlo.
+ * ✅ **`despacho: 2`, `sinMandar: 2`, `oferta: 3` y `etiqueta: 2` los CONFIRMÓ Bruno el
+ * 30-ago-2026** (B7 de la auditoría del 28-ago-2026). Nacieron como propuesta y ⛔ no como medida
+ * —despachar es trabajo del día siguiente, no un tránsito de quince; contestarle a quien se quejó
+ * tampoco espera una semana; y `oferta` se eligió igual que `sinDecidir` porque es la misma espera
+ * vista del otro lado, con el reclamo quieto mientras tanto—.
+ *
+ * ⚠️ **Confirmado ⛔ no es medido**, y eso hay que decirlo entero: se confirmaron **sin un solo
+ * caso cerrado del que sacarlos** (BDI tenía 2 reclamos ese día y Zattia 0). Son la política
+ * vigente, ⛔ no un número que la operación haya validado: el día que haya casos cerrados vale la
+ * pena volver a mirarlos contra lo que pasó de verdad.
  */
 export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3, etiqueta: 2, plataSinProducto: 0, rechazoSinDecidir: 0 } as const
 
 /**
- * **El piso del retorno: por debajo de este monto no se pide que el producto vuelva**, aunque la
- * cuenta de `convieneRetorno` dé positiva — recibirlo, revisarlo y reingresarlo tampoco es gratis.
+ * **Lo que cuesta recibir, revisar y reingresar UNA unidad que vuelve** (B5, decisión de Bruno del
+ * 30-ago-2026: $1.500, igual en las dos marcas).
  *
- * 🔑 **Es un número de POLÍTICA, no un dato del caso**, y por eso vive acá y no en la pantalla.
- * Hasta el 27-ago-2026 el campo «Piso ($)» arrancaba vacío en cada reclamo, así que el corte
- * existía sólo si alguien se acordaba de tipearlo — o sea, casi nunca. En pantalla se sigue
- * pudiendo pisar para un caso puntual: lo que cambia es que ahora hay un default.
+ * 🔑 **Es un número de POLÍTICA, ⛔ no un dato del caso**, y por eso vive acá y ⛔ no en la
+ * pantalla: nadie lo tipea reclamo por reclamo. Lo consumen las dos cuentas de al lado y tiene que
+ * ser **el mismo en las dos**, porque las dos preguntan lo mismo —qué sale traer el producto— y
+ * dos costos distintos a un centímetro es un cartel que contradice al de al lado:
+ *   - `cuentaDescuento` lo **suma al techo**: si el cliente se lo queda, ese trabajo no se hace
+ *     ⇒ el techo sube ⇒ **se le puede ofrecer más**.
+ *   - `convieneRetorno` lo suma al costo de traerlo ⇒ el veredicto y el piso se mueven con él.
  *
- * ▶️ **`null` = todavía sin definir**, y con `null` la cuenta se comporta igual que antes (sin
- * corte por monto). Los dos números los tiene que dar Bruno: por debajo de cuánto no vale la pena
- * traer un producto de vuelta en cada marca. ⛔ Ponerlos yo sería inventar política.
+ * ⚠️ **Es un valor tipeado al lado de algo que algún día se va a poder medir** (el tiempo real de
+ * recepción). Mientras no se mida, envejece solo y en silencio: si sube el costo de la hora, la
+ * cuenta sigue contestando con el de 2026. Revisarlo cuando cambie la operación de depósito.
  */
-export const PISO_RETORNO: Record<Marca, number | null> = { bdi: null, zattia: null }
+export const COSTO_OPERATIVO_RETORNO: Record<Marca, number> = { bdi: 1500, zattia: 1500 }
+
+/**
+ * **El piso del retorno: por debajo de este múltiplo de lo que sale traerlo no se pide que el
+ * producto vuelva**, aunque la cuenta de `convieneRetorno` dé positiva. Recuperar apenas un poco
+ * más de lo que se gasta ⛔ no compensa el rato que se le va a alguien en gestionarlo.
+ *
+ * 🔴 🔑 **Es un MÚLTIPLO y ⛔ no un monto, y esa es la decisión** (B4, Bruno, 30-ago-2026). El
+ * monto fijo por marca que había antes (`PISO_RETORNO`) vivió en `null` en las dos desde que
+ * existió: **nunca cambió una cuenta**, y estaba condenado a eso porque un corte en pesos escrito
+ * al lado del flete envejece solo — sube el envío, suben los precios, y el corte se queda quieto
+ * sin que nadie se entere. Un múltiplo se mueve con el costo que mide.
+ *
+ * ⚠️ **`2` ⛔ no es neutro: cambia casos reales.** Con el caso testigo de BDI —funda de $12.000 que
+ * vuelve sana, $6.000 de envío, $1.500 de trabajo— traerlo sale $7.500 y el piso da $15.000, así
+ * que **pasa de «conviene pedirlo» a «apenas empata»** aunque se recuperen $4.500 netos. Es la
+ * política, ⛔ no un accidente: se cambia en esta línea.
+ */
+export const MULTIPLO_PISO_RETORNO = 2
 
 /**
  * 🔑 **`ts` es cuándo la alerta EMPEZÓ A EXISTIR**, no cuándo se creó el reclamo ni cuándo se lo

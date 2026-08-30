@@ -792,3 +792,35 @@ antes de rehacerlo.
   § «Por dónde le llega el link».
   ▶️ **De Bruno, más adelante**: sumar el canal de reclamos **al mail de la venta o al de
   post-venta** — decidió dejarlo para después.
+
+- ✅ 🔴 **Las cuatro decisiones que trababan post-venta, contestadas — y prenderlas destapó un
+  defecto vivo** (30-ago-2026). B4, B5, B6 y B7 de `docs/postventa-auditoria-2026-08-28.md`. Eran
+  política, ⛔ no defectos, y el relato entero está en `docs/secciones/reclamos.md` § «Las cuatro
+  decisiones de la auditoría».
+  🔴 🔑 **Lo que hay que saber, porque cambia números que ya se muestran**:
+  **B4** el piso del retorno pasó de ser un **monto por marca** a un **múltiplo de lo que sale
+  traerlo** (`MULTIPLO_PISO_RETORNO = 2`) — el monto fijo vivió en `null` en las dos desde que
+  existió y **nunca cambió una cuenta**, porque un corte en pesos al lado del flete envejece solo.
+  ⚠️ **`2` da vuelta el caso testigo de BDI**: $12.000 recuperables contra $7.500 de costo pasan de
+  «conviene pedirlo» a «apenas empata». Se cambia en una línea.
+  **B5** el costo operativo es **$1.500 por unidad** en las dos marcas (`COSTO_OPERATIVO_RETORNO`),
+  el parámetro pasó a ser **obligatorio y por unidad**, y el techo de un sano de BDI subió de
+  $6.000 a $7.500 ⇒ **se le puede ofrecer más**.
+  **B6** el cupón vale **×2** (`MULTIPLO_CUPON`): mueve el techo Y el sugerido, y **avisa sin
+  trabar** cuando el monto se pasa. **B7** los cuatro plazos, confirmados como estaban.
+  🔴 🔑 **Y el hallazgo, que ⛔ no estaba en el informe: el envío SIN CARGAR valía cero.** La
+  pantalla lo aplastaba con `Number(envioVuelta) || 0`, así que «sin cargar» y «traerlo es gratis»
+  eran el mismo número. Con el costo operativo en 0 ⛔ **no se veía** —contestaba «no perdés plata
+  porque vuelva», que suena a veredicto prudente—; con el costo prendido la misma pantalla pasó a
+  decir **«Ofrecele $750»**, o sea **plata sugerida sobre un dato que nadie cargó**. Ahora
+  `cuentaDescuento` recibe `number | ''` y contesta `falta: 'envio'`, como ya hacía con el PVP de
+  feria. ⚠️ **Un 0 tipeado sigue siendo un dato** —«lo trae al local»— y ahí sí queda el trabajo de
+  recibirlo que ofrecer.
+  ⛔ **Sin migración** (⛔ no hay columnas nuevas) · **17 mutantes, 17 muertos + 2 controles vivos**;
+  🔴 **cinco sobrevivieron a la 1ª tanda y los cinco eran reales**, entre ellos el peor: los casos
+  del cupón se medían **contra la propia constante**, así que bajarla a 1 los dejaba verdes.
+  ▶️ **Quedan B3** (si «Volver a decidir» borra también los montos) **y B8** (si un cambio sale por
+  cadete: `VIAS_CAMBIO` lo sigue ofreciendo y Reclamos lo sacó el 27-ago).
+  🔴 ▶️ **NO deployado**: el commit está sin pushear y la pantalla ⛔ no se caminó en el navegador
+  —el login pide contraseña—; los tres números que cambian se ven en **Reclamos → Decidir → El
+  producto**.
