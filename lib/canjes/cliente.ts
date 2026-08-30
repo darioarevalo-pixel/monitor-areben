@@ -830,8 +830,12 @@ export async function marcarNoConservado(store: CanjeStore, id: number, motivo: 
 // ── La orden de Tienda Nube ─────────────────────────────────────────────────────
 
 /**
- * El mismo endpoint que usan Cambios y Reclamos para traer una orden. Sin auth: es lectura de TN,
- * y las credenciales viven en `bdi-catalogo`, no acá.
+ * El mismo endpoint que usan Cambios y Reclamos para traer una orden. Las credenciales de TN viven
+ * en `bdi-catalogo`, ⛔ no acá.
+ *
+ * 🔴 **Va con `apiFetch`, ⛔ no con `fetch` pelado** (30-ago-2026): ver el 🔴 gemelo en
+ * `lib/reclamos/cliente.ts`. Esta rama del audit pide usuario del padrón desde el mismo día, y
+ * ⛔ **no** es «lectura de TN» inocua: devuelve quién compró, cuánto pagó y el seguimiento.
  *
  * ⚠️ Stunned lee por **Zattia**: es una línea de esa tienda, no una tienda propia.
  */
@@ -854,7 +858,7 @@ export type VerificacionOrden = {
  */
 export async function verificarOrden(store: CanjeStore, numero: string): Promise<VerificacionOrden> {
   const marca = baseDeCostos(store)
-  const r = await fetch(`${ORDEN_API}?orden=${encodeURIComponent(numero)}&store=${marca}&nc=${Date.now()}`)
+  const r = await apiFetch(`${ORDEN_API}?orden=${encodeURIComponent(numero)}&store=${marca}&nc=${Date.now()}`)
   const d = (await r.json().catch(() => null)) as { orden?: { total?: number | string }; error?: string } | null
   if (!d) throw new Error('No se pudo consultar Tienda Nube.')
   if (d.error) throw new Error(String(d.error))

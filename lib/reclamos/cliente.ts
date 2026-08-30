@@ -23,7 +23,16 @@ import type {
 } from './tipos'
 
 const API = '/api/postventa?recurso=reclamos'
-/** El mismo endpoint que usa Cambios para traer una orden. Sin auth: es lectura de TN. */
+/**
+ * El mismo endpoint que usa Cambios para traer una orden.
+ *
+ * 🔴 **Va con `apiFetch`, ⛔ no con `fetch` pelado** (30-ago-2026). Era el último llamador del
+ * audit que iba sin credencial —`tn-audit.ts` ya decía «el único que quedaba así» y se equivocaba:
+ * quedaban éste y el de Canjes—. Del otro lado devuelve **nombre del comprador, lo que pagó, la
+ * forma de pago y el número de seguimiento** por un número de orden **correlativo**, con el repo
+ * público en GitHub: o sea, el historial de compras de la tienda a un `for` de distancia.
+ * `bdi-catalogo` exige usuario del padrón en esta rama desde el mismo día.
+ */
 const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 /**
  * Las ventas van SIEMPRE al crear-venta de producción, esté donde esté corriendo el Monitor: los
@@ -122,7 +131,7 @@ export async function reemitirToken(marca: Marca, id: number): Promise<string> {
  * lugar de calcularse — el módulo sigue funcionando, solo pierde el automatismo.
  */
 export async function buscarOrden(marca: Marca, numero: string | number): Promise<OrdenTN | null> {
-  const r = await fetch(`${ORDEN_API}?orden=${encodeURIComponent(String(numero))}&store=${marca}&nc=${Date.now()}`)
+  const r = await apiFetch(`${ORDEN_API}?orden=${encodeURIComponent(String(numero))}&store=${marca}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!d) throw new Error('No se pudo consultar Tienda Nube.')
   if (d.error) throw new Error(String(d.error))
