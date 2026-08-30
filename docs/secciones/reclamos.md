@@ -2668,3 +2668,83 @@ demora que se tolera unos días, es **un estado que ⛔ no debería existir**. L
 - 🔴 **La columna de mensajes sigue sin ofrecer nada** en ese rato, **y es correcto**: hasta que
   Administración decida ⛔ no hay nada honesto que prometerle al cliente. Lo que faltaba ⛔ no era
   un mensaje: era que **el caso apareciera**, y eso ahora lo dice el aviso.
+
+---
+
+## 🆕 Por dónde le llega el link al cliente (30-ago-2026 — la decisión de Bruno, y su cable)
+
+> **Bruno**: *«mandan la consulta a algún canal de comunicación, y lo hacemos, le enviamos el link.
+> Si te parece vemos luego de sumar más adelante un canal de reclamos en el mail de la venta o en el
+> de post-venta, pero por ahora sólo conseguir el link para la gente que reclame, que pueda cargar
+> el reclamo.»*
+
+⇒ **el link ⛔ no sale de ningún automatismo: lo pega una persona** contestando un WhatsApp, un
+Instagram o un mail. ▶️ Sumarlo al mail de la venta o al de post-venta queda para más adelante.
+
+### 🔴 Lo que faltaba, y ⛔ no era la puerta
+
+La puerta estaba **abierta desde el 30-ago** (`/reclamo?m=bdi`) y **⛔ no estaba en ninguna
+pantalla**: quien contesta el canal tenía que saberla de memoria, y ⛔ no había ningún mensaje para
+mandarla. Era el **único momento del circuito sin texto** — los doce mensajes del módulo reciben un
+`ReclamoRow`, porque todos hablan de un reclamo **que ya existe**; éste es el de **antes**.
+
+⇒ es [[feedback_areben_pendiente_derivado_sin_gesto]] otra vez: la regla existía, estaba probada, y
+**ninguna pantalla la ofrecía**.
+
+### Las tres piezas
+
+| pieza | dónde | por qué ahí |
+|---|---|---|
+| `linkDelAltaPublica(marca)` | `lib/reclamos/cliente.ts`, al lado de `linkDelCliente` | la **forma** del link vive en un solo lugar: es lo único que hay que tocar el día que el alta tenga dominio propio, y una copia en un `onClick` es la que ⛔ nadie encuentra |
+| `mensajeAltaPublica(link)` | `lib/reclamos/mensajes.ts` — **el mensaje 13** | es el único que ⛔ **no cuelga de una fila**. Sin él lo escribía cada uno a su manera, que es justo lo que ese archivo existe para evitar |
+| los dos botones | arriba de «Nuevo reclamo», en Reclamos **y** en la pantalla del local | es el mismo momento —alguien va a cargar un reclamo— y las dos formas tienen que estar juntas. **El local es quien atiende el canal** |
+
+🔑 **Son DOS links distintos y el que los separa es el token.** `linkDelCliente` acuña uno **por
+reclamo**, para uno que ya existe; el del alta es **fijo por marca**, para el que todavía no existe.
+Confundirlos manda al cliente a un 404.
+
+### 🔴 🔑 La mitad útil del mensaje: qué le va a pedir la puerta
+
+Verificado contra la puerta viva: el alta pide **el número de pedido Y el mail con el que compró**,
+y **sin las dos ⛔ no entra** —el número solo es correlativo—. Un mensaje que manda el link **sin
+decirlo** deja a la persona rebotando en el primer paso, **creyendo que el link no anda**. Por eso
+lo dice el mensaje **y** lo dice la pantalla, arriba del botón.
+
+⚠️ **⛔ No promete nada**: ni plazos, ni plata, ni que se resuelve. Y ⛔ no adelanta si hacen falta
+fotos — eso lo decide el caso y el portal lo pregunta solo.
+
+### Y el rótulo del local, que contaba el circuito viejo
+
+Decía *«Abrí un reclamo por cualquier motivo y pasale el link al cliente para que suba las fotos»*,
+en `lib/nav.ts` **y** dentro de la pantalla. Eso ahora es **la segunda opción**, para cuando el
+cliente ⛔ no lo puede cargar. Es el mismo caso que la descripción que mentía en `PENDIENTES.md` § 0:
+lo que la pantalla dice de sí misma envejece antes que el código.
+
+### 🔴 Lo que destapó: un test atado al TEXTO de los botones de al lado
+
+`tests/reclamos-lista-mensajes.test.tsx` juntaba **todos** los botones de la pantalla cuyo rótulo
+empezara con `Copiar `, así que sumar un «Copiar el mensaje con el link» —que ⛔ **no** es un mensaje
+de una fila— lo puso **rojo en ocho casos** sin que nada de lo suyo cambiara. Y el prefijo ya había
+cambiado una vez (`Msj:` → `Copiar `, corrida de vocabulario del 29-ago).
+
+⇒ `BotonMensaje` ahora marca lo que produce (`data-mensaje={tipo}`) y el test pregunta **qué es**
+cada botón, ⛔ no cómo se llama.
+
+### Cómo se probó
+
+- **9 mutantes, 9 muertos** (el link sin marca · la marca clavada en `bdi` · el link del alta
+  apuntando al del reclamo ya creado · el mensaje sin el mail · sin el link · prometiendo un plazo ·
+  la pantalla copiando el link pelado · sin decir qué pide la puerta · el botón sólo para
+  Administración) · **1 mutante de control, vivo**.
+- 🔴 🔑 **El que sobrevivió a la primera tanda era el que más importaba**: *la pantalla copia el link
+  pelado*. El test miraba que el botón **existiera**, ⛔ no **qué copia** — así que se agregó el que
+  aprieta y **lee el portapapeles**. Espiando `navigator.clipboard` y ⛔ no mockeando
+  `copiarAlPortapapeles`, que es justo el que decide qué mostrar cuando el navegador dice que no.
+
+### ▶️ Lo que queda
+
+- ⚠️ **Stunned sigue sin puerta**, y ⛔ no es un olvido: sus reclamos vivirían en la base de Zattia,
+  donde el freno «un reclamo abierto por orden» compara `(store, orden_tn)` ⇒ dos órdenes con el
+  mismo número le contestarían a una persona **el token del reclamo de otra**. Se abre con **una
+  columna**.
+- ▶️ **El canal en el mail de la venta o el de post-venta**, cuando Bruno lo decida.

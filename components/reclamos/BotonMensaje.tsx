@@ -49,6 +49,16 @@ export function BotonMensaje({ marca, id, tipo, onSinRegistrar, ...rest }: Boton
   return (
     <CopyButton
       {...rest}
+      /**
+       * 🔑 **El marcador que dice QUÉ ES este botón**, y ⛔ no cómo se llama. Lo lee
+       * `tests/reclamos-lista-mensajes.test.tsx`, que hasta el 30-ago-2026 juntaba **todos** los
+       * botones de la pantalla cuyo rótulo empezara con `Copiar ` — así que el día que la pantalla
+       * sumó un «Copiar el mensaje con el link» **que ⛔ no es un mensaje de una fila**, ese test
+       * se puso rojo en ocho casos sin que nada de lo suyo hubiera cambiado. Un oráculo atado al
+       * TEXTO se rompe cuando cambia el texto de al lado; el prefijo ya había cambiado una vez
+       * (`Msj:` → `Copiar `) por la corrida de vocabulario.
+       */
+      data-mensaje={tipo}
       onCopiado={(texto) => {
         void registrarMensaje(marca, id, tipo, texto).catch((e) => onSinRegistrar?.(e as Error))
       }}

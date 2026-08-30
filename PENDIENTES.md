@@ -704,5 +704,17 @@ antes de rehacerlo.
   ⚠️ **STUNNED ⛔ no tiene puerta pública, y ⛔ no es un olvido**: sus reclamos vivirían en la base de
   Zattia, donde el freno «un reclamo abierto por orden» compara `(store, orden_tn)` ⇒ dos órdenes
   con el mismo número le contestarían a una persona **el token del reclamo de otra**.
-  ▶️ 🔴 **Lo ÚNICO que falta para que lo use un cliente, y es de Bruno: por dónde le llega el link**
-  (¿el mail de la compra? ¿el pie de la web? ¿el WhatsApp de siempre?).
+  ✅ **Y por dónde le llega el link, contestado por Bruno el mismo día**: *«mandan la consulta a
+  algún canal de comunicación, y le enviamos el link»* ⇒ **lo pega una persona**, ⛔ no un
+  automatismo. La puerta estaba abierta y **⛔ no estaba en ninguna pantalla**: quien contesta el
+  canal tenía que saberla de memoria, y ⛔ no había mensaje para mandarla —era el único momento del
+  circuito sin texto, porque los doce mensajes **cuelgan de una fila** y acá todavía no hay
+  reclamo—. Ahora hay dos botones arriba de «Nuevo reclamo», en Reclamos **y en la pantalla del
+  local**, que es quien atiende el canal.
+  🔴 🔑 **La mitad útil del mensaje es decir qué le va a pedir la puerta**: el número de pedido **y
+  el mail con el que compró**. Sin las dos ⛔ no entra, y el link a secas deja a la persona
+  rebotando en el primer paso creyendo que no anda.
+  **9 mutantes, 9 muertos** + 1 control vivo. El relato entero en `docs/secciones/reclamos.md`
+  § «Por dónde le llega el link».
+  ▶️ **De Bruno, más adelante**: sumar el canal de reclamos **al mail de la venta o al de
+  post-venta** — decidió dejarlo para después.

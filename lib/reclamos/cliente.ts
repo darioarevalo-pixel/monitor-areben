@@ -817,6 +817,34 @@ export async function marcarCobrado(marca: Marca, id: number): Promise<void> {
 
 /** El link que se le pasa al cliente para que cargue fotos y cuente qué pasó. */
 export function linkDelCliente(token: string): string {
-  const base = typeof window !== 'undefined' ? window.location.origin : 'https://monitor.arebensrl.com'
-  return `${base}/reclamo/${token}`
+  return `${baseDelLink()}/reclamo/${token}`
+}
+
+/**
+ * **El link del ALTA PÚBLICA** — la puerta por la que el cliente abre el reclamo **él mismo**.
+ *
+ * 🔑 **⛔ No lleva token, y por eso es OTRO link**: `linkDelCliente` acuña uno por reclamo, para un
+ * reclamo que **ya existe**; éste es fijo por marca y sirve para el que todavía ⛔ no existe. Los
+ * dos apuntan a `/reclamo` y el que los separa es justamente el token: sin él, la ruta abre el
+ * alta (`app/[[...seccion]]/page.tsx`).
+ *
+ * ⚠️ **La forma del link vive acá y ⛔ no en la pantalla**, por lo mismo que `linkDelCliente`: es
+ * lo único que hay que cambiar el día que el alta tenga dominio propio, y una copia en un `onClick`
+ * es la que ⛔ nadie va a encontrar.
+ *
+ * 🔴 **Bruno, 30-ago-2026, sobre cómo le llega**: *«mandan la consulta a algún canal de
+ * comunicación, y le enviamos el link»* — o sea que el link ⛔ no sale de ningún automatismo: lo
+ * pega **una persona** contestando un mensaje. ▶️ Sumarlo al mail de la venta o al de post-venta
+ * queda para más adelante, decisión suya.
+ */
+export function linkDelAltaPublica(marca: Marca): string {
+  return `${baseDelLink()}/reclamo?m=${marca}`
+}
+
+/**
+ * De dónde cuelgan los dos links. ⚠️ El default ⛔ no es decorativo: estas funciones también se
+ * evalúan del lado del servidor, donde `window` ⛔ no existe.
+ */
+function baseDelLink(): string {
+  return typeof window !== 'undefined' ? window.location.origin : 'https://monitor.arebensrl.com'
 }

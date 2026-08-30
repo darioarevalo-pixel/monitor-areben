@@ -413,7 +413,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'postventa-local': 'Cargá las prendas con falla que recibís del cliente. El motor está en Administración.',
   'postventa-deposito': 'Cargá las fallas de la mercadería de depósito (descuenta del stock de depósito). El motor está en Administración.',
   'cambios-local': 'Armá un cambio de punta a punta: la diferencia, el cobro y la venta en GN. No hace falta que lo apruebe nadie.',
-  'reclamos-local': 'Abrí un reclamo por cualquier motivo y pasale el link al cliente para que suba las fotos. La plata la devuelve Administración.',
+  'reclamos-local': 'Pasale al cliente el link para que cargue el reclamo él mismo, o abrilo vos desde la orden si no puede. La plata la devuelve Administración.',
   retornos: 'Lo que estamos esperando que vuelva y lo que hay que mandarle al cliente por el mismo caso, ordenado por hace cuánto: marcás que llegó, que lo reingresaste y que lo despachaste. No es Envíos, que es el reparto del día.',
 }
 

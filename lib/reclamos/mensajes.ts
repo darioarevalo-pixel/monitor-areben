@@ -471,6 +471,44 @@ export function mensajeCuponListo(
   ].join('\n')
 }
 
+/**
+ * **El mensaje 13, y el único que ⛔ NO cuelga de una fila.**
+ *
+ * # Por qué faltaba
+ *
+ * 🔴 Los otros doce reciben un `ReclamoRow`, porque todos hablan de un reclamo que **ya existe**.
+ * Éste es el de **antes**: el cliente escribió a un canal —WhatsApp, Instagram, el mail— y todavía
+ * ⛔ no hay nada cargado. Era el único momento del circuito sin texto, así que lo escribía cada uno
+ * a su manera, que es exactamente lo que este archivo existe para evitar.
+ *
+ * 🔑 **Bruno, 30-ago-2026, eligiendo por dónde le llega el link**: *«mandan la consulta a algún
+ * canal de comunicación, y le enviamos el link»*. ▶️ Sumarlo al mail de la venta o al de post-venta
+ * queda para más adelante — por ahora **lo pega una persona**.
+ *
+ * # 🔴 Lo que ⛔ no se puede omitir: qué le va a pedir la puerta
+ *
+ * El alta pública pide **el número de pedido y el mail con el que compró** —verificado contra la
+ * puerta viva el 30-ago—, y **sin las dos cosas ⛔ no entra**: el número solo ⛔ no alcanza, es
+ * correlativo. Un mensaje que manda el link **sin decirlo** deja a la persona rebotando en el
+ * primer paso, con la sensación de que el link no anda. Es la mitad útil de este texto.
+ *
+ * ⚠️ **⛔ No promete nada**, como los otros once que ⛔ no son hechos: ⛔ no dice cuánto tarda, ⛔ no
+ * dice que se le va a devolver la plata, y ⛔ no adelanta si hacen falta fotos —eso lo decide el
+ * caso, y el portal lo pregunta solo—.
+ */
+export function mensajeAltaPublica(link: string): string {
+  return [
+    '¡Hola!',
+    '',
+    'Para que podamos verlo, cargá tu reclamo acá:',
+    link,
+    '',
+    'Te va a pedir el número de tu pedido y el mail con el que compraste. Después elegís el producto y contás qué pasó.',
+    '',
+    'Apenas lo cargues lo miramos y te contamos cómo seguimos. ¡Gracias!',
+  ].join('\n')
+}
+
 /** Para el historial: qué mensaje se le mandó y cuándo. */
 export type MensajeEnviado = { tipo: 'apertura' | 'propuesta' | 'resolucion' | 'seguimiento'; at: string; por?: string | null; texto: string }
 

@@ -22,7 +22,7 @@ import {
   Instructivo,
 } from '@/components/ui'
 import {
-  buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente,
+  buscarOrden, crearReclamo, enriquecerConGN, leerReclamos, linkDelCliente, linkDelAltaPublica,
   marcarAnulacion, marcarReintegro, marcarBajaGN, cambiarEstado, marcarRecibido, eliminarReclamo,
   marcarDespachado, marcarCuponEmitido, anotarOtraVenta, contestarLaOferta,
   ordenTraeDatosDePlata, pasarAFallas, descontarReemplazo, descontarRegaladas, editarReclamo,
@@ -39,7 +39,7 @@ import {
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
-import { mensajeAcuse, mensajeApertura, mensajeCuponListo, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeRetornoRecibido, mensajeRevisando, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { mensajeAltaPublica, mensajeAcuse, mensajeApertura, mensajeCuponListo, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeRetornoRecibido, mensajeRevisando, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
 import { NOTA_SE_LE_ESCRIBIO } from '@/lib/reclamos/mensajes.core.js'
 import { leerSeguimiento } from '@/lib/reclamos/seguimiento.core.js'
 import { mensajesDeLaFila } from '@/lib/reclamos/botones'
@@ -805,10 +805,54 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
 
       {!esAdmin && (
         <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
-          Abrí el reclamo desde la orden y pasale el link al cliente para que suba las fotos.
-          <b> Administración</b> decide qué se hace y devuelve la plata.
+          Pasale al cliente el link de acá abajo para que cargue el reclamo él mismo, o abrilo vos
+          desde la orden si no puede. <b>Administración</b> decide qué se hace y devuelve la plata.
         </div>
       )}
+
+      {/* ── El link del alta pública ──────────────────────────────────────────
+          🔴 **La puerta existía y ⛔ no estaba en ninguna pantalla.** `/reclamo?m=bdi` anda desde
+          el 30-ago, pero quien contesta el canal tenía que saberlo de memoria: ⛔ no había de
+          dónde copiarlo, y ⛔ ningún mensaje que mandarlo.
+          🔑 **Va ARRIBA de «Nuevo reclamo» a propósito**: es el mismo momento —alguien está por
+          cargar un reclamo— y las dos formas de hacerlo tienen que estar a la vista juntas. La de
+          arriba es la que Bruno eligió (*«mandan la consulta a algún canal y le enviamos el
+          link»*); la de abajo queda para cuando el cliente ⛔ no lo puede cargar él.
+          ⚠️ **El texto ⛔ no se arma acá**: sale de `mensajeAltaPublica`, con los otros doce. */}
+      <SectionCard title="El cliente lo carga solo" style={{ marginBottom: space[4] }}>
+        <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
+          Si te escribieron por WhatsApp, Instagram o mail, pasales este link y lo cargan ellos:
+          eligen el pedido, cuentan qué pasó y suben las fotos.
+          <b> Le va a pedir el número de pedido y el mail con el que compraron.</b>
+        </div>
+        <Toolbar>
+          <Button
+            variant="outline"
+            tone="brand"
+            onClick={() => void (async () => {
+              // El cartel dice lo que PASÓ, ⛔ no lo que se intentó — misma regla que el link del
+              // reclamo ya creado: cantar victoria hace que alguien pegue lo que tenía antes.
+              const copiado = await copiarAlPortapapeles(mensajeAltaPublica(linkDelAltaPublica(marca)))
+              toast.ok(copiado
+                ? 'Listo: el mensaje con el link quedó copiado, pegáselo al cliente.'
+                : `El mensaje NO se copió solo. El link es: ${linkDelAltaPublica(marca)}`)
+            })()}
+          >
+            Copiar el mensaje con el link
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => void (async () => {
+              const copiado = await copiarAlPortapapeles(linkDelAltaPublica(marca))
+              toast.ok(copiado
+                ? 'El link quedó copiado.'
+                : `El link NO se copió solo: ${linkDelAltaPublica(marca)}`)
+            })()}
+          >
+            Copiar sólo el link
+          </Button>
+        </Toolbar>
+      </SectionCard>
 
       {/* ── Alta ── */}
       <SectionCard title="Nuevo reclamo" style={{ marginBottom: space[4] }}>

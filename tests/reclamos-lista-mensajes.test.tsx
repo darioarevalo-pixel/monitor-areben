@@ -36,7 +36,7 @@ const base = {
 } as unknown as ReclamoRow
 
 /** Monta la lista con estas filas y devuelve el texto de los botones que quedaron dibujados. */
-const botones = async (filas: ReclamoRow[]): Promise<string[]> => {
+const botones = async (filas: ReclamoRow[]): Promise<string[] & { todos: string[] }> => {
   FILAS.length = 0
   FILAS.push(...filas)
   const div = document.createElement('div')
@@ -45,10 +45,16 @@ const botones = async (filas: ReclamoRow[]): Promise<string[]> => {
   await act(async () => {
     root.render(<SesionProvider><ToastProvider><Devoluciones /></ToastProvider></SesionProvider>)
   })
-  const txt = [...div.querySelectorAll('button')].map((b) => b.textContent || '')
+  // 🔑 **Los de MENSAJE se reconocen por `data-mensaje`** (lo pone `BotonMensaje`) y ⛔ no por el
+  // rótulo: la pantalla tiene otros «Copiar …» que ⛔ no son mensajes de una fila —el del link del
+  // alta pública, arriba de todo— y con el filtro por texto este test se ponía rojo en ocho casos
+  // sin que nada de lo suyo cambiara. ⚠️ Se devuelven **las dos listas**: hay tests que miran los
+  // gestos de al lado («Registrar que aceptó»), que ⛔ no son mensajes.
+  const txt = [...div.querySelectorAll('button[data-mensaje]')].map((b) => b.textContent || '')
+  const todos = [...div.querySelectorAll('button')].map((b) => b.textContent || '')
   await act(async () => { root.unmount() })
   div.remove()
-  return txt
+  return Object.assign(txt, { todos })
 }
 
 /**
@@ -191,7 +197,7 @@ describe('la lista dibuja los mensajes del momento', () => {
       ...base, estado: 'resuelto', compensacion: 'plata_total',
       retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
     } as unknown as ReclamoRow
-    const bs = (await botones([esperando])).map((b) => b.trim())
+    const bs = (await botones([esperando])).todos.map((b) => b.trim())
     expect(bs).toContain('Registrar que aceptó')
     expect(bs).toContain('Registrar que no aceptó')
   })
