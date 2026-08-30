@@ -19,11 +19,18 @@
  *    ROAS más del 10%. Como no sabemos el mix, el ROAS depende de un dato que no tenemos y el techo
  *    no. Corolario que ya confundió una vez y por eso está escrito en la pantalla: **si crece la
  *    transferencia, el ROAS de Ads Manager baja sin que la pauta empeore.**
- * 3. ⚠️ **Los supuestos son los de las fundas de BDI**, y el cartel lo dice. Esta tanda es
- *    estática: lo que se mueve vive en la pantalla y se pierde al salir. La tanda que sigue los
- *    persiste por marca (`api/datos.js?recurso=…`, ⛔ sin archivo nuevo en `api/`), y la tercera
- *    —la que de verdad la justifica— cruza el techo con `meta_ads_snapshot_dia` para que deje de
- *    ser una calculadora y pase a ser una alarma.
+ * 3. ⚠️ **Los supuestos son los de las fundas de BDI**, y el cartel lo dice. Se persisten por
+ *    marca desde la segunda tanda.
+ * 4. 🔴🔑 **El AIRE sale de la foto, ⛔ no de un número tipeado** (30-ago-2026, la tanda que la
+ *    convierte de calculadora en alarma). Es la única línea de la pantalla que habla del PRESENTE,
+ *    y hasta acá salía de `costoHoy`, un supuesto que se escribe a mano y que había envejecido en
+ *    las dos fichas **y para lados opuestos**: BDI decía 2,70× de aire y tenía 1,17×; Zattia decía
+ *    1,97× y tenía 6,62×. Ahora se lee la MISMA zona que dibuja Rendimiento (`useZona`) — ⛔ no una
+ *    consulta propia, que sería la quinta copia de la misma división— y lo tipeado queda de
+ *    respaldo para la línea que todavía no tiene un día cerrado con pedidos.
+ *    ⚠️ `?recurso=rendimiento` está ARRIBA del guard de `META_ADS_TOKEN` en `api/meta-ads.js`, así
+ *    que esta pantalla **sigue abriendo con el token vencido**, que es la razón por la que el resto
+ *    de la ficha ⛔ no entra por ese endpoint.
  *
  * La matemática está toda en `lib/meta-ads/rentabilidad.ts`, con su banco de pruebas. Acá no se
  * calcula nada: **dos implementaciones del mismo margen es cómo se termina discutiendo cuál está
@@ -34,12 +41,14 @@ import { useMemo } from 'react'
 import { useMeta } from '@/components/meta-ads/ContextoMeta'
 import { PanelesDeSupuestos } from '@/components/meta-ads/rentabilidad/Supuestos'
 import { useRentabilidad, type EstadoRentabilidad } from '@/components/meta-ads/rentabilidad/useRentabilidad'
-import { plata, roas as equis, decimal } from '@/lib/meta-ads/formato'
+import { useZona } from '@/components/meta-ads/zona/useZona'
+import { plata, roas as equis, decimal, diaCorto } from '@/lib/meta-ads/formato'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import {
-  calcularRentabilidad, escenariosDeFreno, proyeccionStock,
-  type Rentabilidad as Resultado, type Supuestos,
+  calcularRentabilidad, costoQueManda, escenariosDeFreno, proyeccionStock,
+  type CostoMedido, type CostoVigente, type Rentabilidad as Resultado, type Supuestos,
 } from '@/lib/meta-ads/rentabilidad'
+import { VENTANA } from '@/lib/meta-ads/rendimiento'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import {
@@ -88,7 +97,54 @@ export function DeUnaLinea({ laLinea, visibles, setLinea }: {
 }) {
   const m = useRentabilidad(laLinea)
   const s = m.supuestos
-  const r = useMemo(() => calcularRentabilidad(s), [s])
+
+  /**
+   * 🔑 **La foto de la línea, que es lo que convierte esta pantalla en una alarma.**
+   *
+   * Se pide la MISMA zona que dibuja Rendimiento (`useZona`), ⛔ no una consulta propia: el costo
+   * por compra contra el techo ya está calculado ahí, y una segunda cuenta acá sería la quinta copia
+   * de la misma división. El día que la zona cambie de criterio, esta pantalla cambia con ella.
+   */
+  const z = useZona(laLinea, VENTANA)
+
+  /**
+   * Lo que la foto contesta, o `null` mientras no contesta. ⚠️ **`undefined` y `null` NO son lo
+   * mismo acá**: `undefined` es «todavía no sé» (se está leyendo) y `null` es «ya sé, y no hay».
+   * De esa diferencia cuelga que el aire diga «midiéndose» en vez de un número que después salta.
+   */
+  const medido: CostoMedido | null | undefined = useMemo(() => {
+    if (z.estado.fase === 'cargando' || z.estado.fase === 'sin-linea') return undefined
+    if (z.estado.fase === 'error') return null
+    const zona = z.estado.data.zona
+    if (!zona) return null
+    return {
+      costo: zona.totales.costoPedidoReal,
+      pedidos: zona.totales.pedidos,
+      desde: zona.desde,
+      hasta: zona.hasta,
+    }
+  }, [z.estado])
+
+  const vigente: CostoVigente | null = useMemo(
+    () => (medido === undefined ? null : costoQueManda({ medido, tipeado: s.costoHoy })),
+    [medido, s.costoHoy],
+  )
+
+  /**
+   * 🔴 **La sustitución es UNA sola y acá.** `aire` y el renglón «el de hoy» de la proyección son
+   * los dos únicos que leen `costoHoy`; pisarlo en el objeto que entra al cálculo los corrige a los
+   * dos de una vez. Escribir la corrección en el JSX del KPI habría dejado la tabla de Stock
+   * proyectando contra el número viejo, y dos números del mismo hecho que no atan es peor que uno
+   * solo mal — 📌 [[feedback_areben_medido_no_reemplaza_calculado_en_un_solo_lugar]].
+   *
+   * ⚠️ Se sustituye para CALCULAR, ⛔ no en `m.supuestos`: lo que se guarda sigue siendo lo que la
+   * persona escribió, y `sucio` sigue midiendo lo que ella tocó.
+   */
+  const sCalculo = useMemo(
+    () => (vigente && vigente.fuente === 'foto' ? { ...s, costoHoy: vigente.costo } : s),
+    [s, vigente],
+  )
+  const r = useMemo(() => calcularRentabilidad(sCalculo), [sCalculo])
 
   const pestañas: TabItem[] = visibles.map((l) => ({ key: l, label: ETIQUETA_LINEA[l] }))
 
@@ -142,7 +198,7 @@ export function DeUnaLinea({ laLinea, visibles, setLinea }: {
           label="Techo por compra"
           value={plata(r.costoMax)}
           tone="brand"
-          sub={<>Hoy pagás {plata(s.costoHoy)} · <b>{decimal(r.aire)}× de aire</b></>}
+          sub={<AireDeHoy vigente={vigente} medido={medido} aire={r.aire} fichaPropia={m.origen.guardado} />}
           info={<InfoPopover titulo="Techo por compra">El semáforo. Es lo máximo que se puede pagar por una compra sin comerse más ganancia de la que se decidió entregarle a la pauta.</InfoPopover>}
         />
         {s.saldoIva && (
@@ -173,6 +229,15 @@ export function DeUnaLinea({ laLinea, visibles, setLinea }: {
         />
       </div>
 
+      <LaFichaContraLaFoto
+        vigente={vigente}
+        medido={medido}
+        tipeado={s.costoHoy}
+        fichaPropia={m.origen.guardado}
+        puedeEditar={m.puedeEditar}
+        adoptar={() => m.cambiar('costoHoy', Math.round(vigente?.costo ?? 0))}
+      />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 340px) 1fr', gap: space[4], alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
           <DeDondeSalen m={m} linea={laLinea} />
@@ -188,6 +253,126 @@ export function DeUnaLinea({ laLinea, visibles, setLinea }: {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * El aire, debajo del techo. **Es la única línea de esta pantalla que habla del PRESENTE.**
+ *
+ * 🔴 **Mientras la foto se lee ⛔ no se dibuja el número.** Pintar el aire del valor tipeado y
+ * después reemplazarlo por el medido es exactamente el defecto que Bruno cazó el 22-ago-2026 con el
+ * techo de $9.101: un número dibujado ⛔ no se lee como provisorio. Acá el salto sería peor, porque
+ * los dos son plausibles — 📌 medido el 30-ago, BDI saltaba de 2,70× a 1,17×.
+ *
+ * 🔑 **La ventana va escrita al lado.** Cierra en el último día CERRADO de esa línea, que ⛔ no es
+ * el mismo para todas: el 30-ago BDI cerraba el 29 y Zattia el 26. Sin la fecha, «pagás $913» se lee
+ * como «hoy» y son seis días atrás.
+ */
+export function AireDeHoy({ vigente, medido, aire, fichaPropia }: {
+  vigente: CostoVigente | null
+  medido: CostoMedido | null | undefined
+  aire: number
+  /** 🔴 Con `false` el techo de arriba es el PRESTADO de BDI. Ver el caso de Stunned, abajo. */
+  fichaPropia: boolean
+}) {
+  if (!vigente) return <>Leyendo la foto para saber cuánto estás pagando…</>
+  if (vigente.fuente === 'ninguno') return <>Sin con qué compararlo: {vigente.motivo}.</>
+
+  const ventana = medido?.desde ? `${diaCorto(medido.desde)}→${diaCorto(medido.hasta)}` : 'la foto'
+  const cuanto = plata(vigente.costo)
+
+  /**
+   * 🔴🔑 **Sin ficha propia se muestra el COSTO y ⛔ NO el aire, y ⛔ no es una sutileza.**
+   *
+   * El costo medido es de ESTA línea y es real; el techo de arriba, cuando la línea no cargó su
+   * economía, es el prestado de las fundas de BDI. Dividir uno por el otro da un número que ⛔ no es
+   * de nadie: ni el aire de BDI (el costo es de otra línea) ni el de esta línea (el techo es de
+   * otro producto). 📌 Es el caso de Stunned al 30-ago-2026 — $361 por pedido real y **cero ficha**.
+   * Antes ⛔ no pasaba, porque los dos lados salían del mismo default y el número era al menos
+   * internamente consistente. La medición mejora una mitad, y una mitad medida contra otra prestada
+   * es 📌 [[feedback_areben_ratio_con_dos_ventanas]] con otra ropa.
+   */
+  if (!fichaPropia) {
+    return (
+      <>
+        Pagás {cuanto} por pedido
+        <br />
+        <span style={{ color: color.mut2 }}>
+          {vigente.fuente === 'foto' ? `medido sobre ${ventana}` : 'según la ficha'} · ⛔ sin aire:
+          {' '}esta línea todavía ⛔ no cargó su economía y el techo de arriba es prestado
+        </span>
+      </>
+    )
+  }
+
+  if (vigente.fuente === 'ficha') {
+    return (
+      <>
+        Según la ficha pagás {cuanto} · <b>{decimal(aire)}× de aire</b>
+        <br />
+        <span style={{ color: color.mut2 }}>⛔ Sin medir: {vigente.motivo}.</span>
+      </>
+    )
+  }
+  return (
+    <>
+      Pagás {cuanto} · <b>{decimal(aire)}× de aire</b>
+      <br />
+      <span style={{ color: color.mut2 }}>
+        medido sobre {ventana}{medido?.pedidos ? `, ${medido.pedidos} pedidos` : ''}
+      </span>
+    </>
+  )
+}
+
+/**
+ * **Lo que la ficha dice que se paga contra lo que la foto midió.**
+ *
+ * 🔴 El renglón existe porque los dos se despegan solos y nada avisa. 📊 Medido el 30-ago-2026:
+ * BDI tenía $2.472 guardados contra $5.697 medidos (**−57%**) y Zattia $3.069 contra $913
+ * (**+236%**) — las dos viejas, y para lados opuestos.
+ *
+ * 🔑 **Manda la foto igual, así que esto ⛔ no es una pregunta bloqueante**: es el aviso de que el
+ * campo guardado quedó viejo, más la válvula para emparejarlo de un click. Sin la válvula, el número
+ * tipeado se queda viejo para siempre y vuelve a mandar el día que la foto no conteste.
+ */
+export function LaFichaContraLaFoto({ vigente, medido, tipeado, fichaPropia, puedeEditar, adoptar }: {
+  vigente: CostoVigente | null
+  medido: CostoMedido | null | undefined
+  tipeado: number
+  /** 🔴 Con `false` lo tipeado ⛔ no es «la ficha»: son los defaults de BDI. Nada que emparejar. */
+  fichaPropia: boolean
+  puedeEditar: boolean
+  adoptar: () => void
+}) {
+  // ⛔ Nada mientras se lee, y nada cuando no hay los dos números: un cartel que aparece y
+  // desaparece en cada carga es ruido, y sin las dos mitades no hay nada que comparar.
+  if (!vigente || vigente.discrepaPct == null || vigente.fuente !== 'foto') return null
+  /**
+   * 🔴 **Sin fila guardada esto ⛔ no se dibuja, y ⛔ no es un detalle.** Lo tipeado sería el
+   * `costoHoy` de los DEFAULTS —la economía de las fundas de BDI—, así que el cartel diría «la ficha
+   * de Stunned quedó vieja» sobre una ficha que ⛔ nunca existió, y el botón ofrecería emparejar un
+   * número prestado. Quien tiene que aparecer ahí es el cartel que ya está: «cargá tu economía».
+   */
+  if (!fichaPropia) return null
+  // Por debajo de esto son dos redondeos del mismo número, ⛔ no una ficha vieja.
+  if (Math.abs(vigente.discrepaPct) < 10) return null
+  const alto = vigente.discrepaPct > 0
+  return (
+    <Notice tone="warning" icon="📌">
+      <b>La ficha quedó vieja en «Lo que pagás hoy».</b> Dice {plata(tipeado)} y la foto de{' '}
+      {medido ? `${diaCorto(medido.desde)}→${diaCorto(medido.hasta)}` : 'la ventana'} mide{' '}
+      {plata(vigente.costo)} por pedido real: lo guardado está un{' '}
+      {Math.abs(Math.round(vigente.discrepaPct))}% {alto ? 'por encima' : 'por debajo'}. El aire y la
+      proyección de acá abajo ya salen de <b>la foto</b>; lo guardado sólo vuelve a mandar el día que
+      la foto no conteste.
+      {puedeEditar && (
+        <>
+          {' '}
+          <Button size="sm" variant="ghost" onClick={adoptar}>Emparejar la ficha</Button>
+        </>
+      )}
+    </Notice>
   )
 }
 

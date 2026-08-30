@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  calcularRentabilidad, DEFAULTS, escenariosDeFreno, normalizar, proyeccionStock, type Supuestos,
+  calcularRentabilidad, costoQueManda, DEFAULTS, escenariosDeFreno, normalizar, proyeccionStock,
+  type Supuestos,
 } from '@/lib/meta-ads/rentabilidad'
 
 /**
@@ -368,5 +369,81 @@ describe('DREI, envío y saldo de IVA', () => {
     expect(r.roasBE).toBeLessThan(4.8)
     expect(r.roasBECaja).toBeGreaterThan(2.3)
     expect(r.roasBECaja).toBeLessThan(2.7)
+  })
+})
+
+/**
+ * **Cuál de los dos costos por compra manda.**
+ *
+ * 🔴 Lo que se fija acá es lo que hizo falta cerrar el 30-ago-2026: la ficha tenía un `costoHoy`
+ * TIPEADO que había envejecido, y de él colgaban el aire y la proyección. Medido ese día, contra la
+ * foto de los últimos 7 días cerrados de cada línea:
+ *
+ *   BDI    $2.472 guardados vs **$5.697 medidos** ⇒ la pantalla afirmaba 2,70× de aire y hay 1,17×
+ *   Zattia $3.069 guardados vs **$913 medidos**   ⇒ afirmaba 1,97× y hay 6,62×
+ *
+ * Las dos viejas **y para lados opuestos**, así que ⛔ no era un sesgo corregible con una constante.
+ *
+ * Los tres mutantes que este bloque tiene que matar:
+ *  1. **Dejar mandar a la ficha cuando hay foto** — vuelve el defecto entero.
+ *  2. **Aceptar la foto con 0 pedidos** — el cociente da 0 y un 0 acá se lee «te sale gratis».
+ *  3. **Mover el techo al sustituir** — si `costoMax` dependiera de `costoHoy`, corregir el aire
+ *     movería en silencio la vara con la que juzgan las reglas, el guardarraíl y la zona.
+ */
+describe('qué costo por compra manda: el medido o el tipeado', () => {
+  const foto = { costo: 5697, pedidos: 109, desde: '2026-08-23', hasta: '2026-08-29' }
+
+  it('manda la FOTO cuando contestó, y lo dice', () => {
+    const v = costoQueManda({ medido: foto, tipeado: 2472 })
+    expect(v.fuente).toBe('foto')
+    expect(v.costo).toBe(5697)
+    expect(v.motivo).toBe('')
+  })
+
+  it('🔴 una ventana SIN PEDIDOS no gobierna: el 0 se leería como «gratis»', () => {
+    const v = costoQueManda({ medido: { ...foto, costo: 0, pedidos: 0 }, tipeado: 2472 })
+    expect(v.fuente).toBe('ficha')
+    expect(v.costo).toBe(2472)
+    expect(v.motivo).toContain('ningún pedido')
+  })
+
+  it('sin foto cae a la ficha DICIENDO por qué, ⛔ no en silencio', () => {
+    const v = costoQueManda({ medido: null, tipeado: 2472 })
+    expect(v.fuente).toBe('ficha')
+    expect(v.motivo).toContain('foto cerrada')
+  })
+
+  it('sin foto y sin ficha ⛔ no inventa un número', () => {
+    const v = costoQueManda({ medido: null, tipeado: 0 })
+    expect(v.fuente).toBe('ninguno')
+    expect(v.costo).toBe(0)
+  })
+
+  it('la discrepancia sale aunque mande la foto, y es lo que avisa que la ficha quedó vieja', () => {
+    // BDI el 30-ago: $2.472 tipeados sobre $5.697 medidos = 57% por debajo.
+    const bdi = costoQueManda({ medido: foto, tipeado: 2472 })
+    expect(Math.round(bdi.discrepaPct as number)).toBe(-57)
+    // Zattia, para el otro lado: $3.069 sobre $913 = 236% por encima.
+    const zattia = costoQueManda({
+      medido: { costo: 913, pedidos: 91, desde: '2026-08-20', hasta: '2026-08-26' },
+      tipeado: 3069,
+    })
+    expect(Math.round(zattia.discrepaPct as number)).toBe(236)
+  })
+
+  it('con una sola de las dos mitades la discrepancia es `null`, ⛔ no 0', () => {
+    // Un 0 se leería como «coinciden», que es la afirmación contraria a «no hay con qué comparar».
+    expect(costoQueManda({ medido: null, tipeado: 2472 }).discrepaPct).toBeNull()
+    expect(costoQueManda({ medido: foto, tipeado: 0 }).discrepaPct).toBeNull()
+  })
+
+  it('🔴 sustituir el costo medido ⛔ NO mueve el techo, que es lo que hace segura la sustitución', () => {
+    const conTipeado = calcularRentabilidad({ ...DEFAULTS, costoHoy: 2472 })
+    const conMedido = calcularRentabilidad({ ...DEFAULTS, costoHoy: 5697 })
+    expect(conMedido.costoMax).toBe(conTipeado.costoMax)
+    expect(conMedido.roasObj).toBe(conTipeado.roasObj)
+    // Lo que sí se mueve, y es todo lo que tenía que moverse: el aire y el renglón «el de hoy».
+    expect(conMedido.aire).toBeLessThan(conTipeado.aire)
+    expect(proyeccionStock({ ...DEFAULTS, costoHoy: 5697 }, conMedido)[0].costoPorCompra).toBe(5697)
   })
 })

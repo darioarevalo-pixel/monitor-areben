@@ -1642,6 +1642,77 @@ apretar «Seguir» reinicie la edad de un plan clavado hace tres semanas. Es el 
 - 📌 El script quedó en el scratchpad y ⛔ no en `scripts/`: es de un solo uso y **se niega a cancelar
   un plan con pasos hechos**, que era el único caso que podía dejar algo huérfano en Meta.
 
+## 🆕🏁 30-ago-2026: EL SEMÁFORO VIVO — el aire deja de ser un supuesto tipeado
+
+### El defecto tiene número, y son dos, para lados opuestos
+
+La ficha de Rentabilidad tiene un campo **«Lo que pagás hoy»** que se escribe a mano (`costoHoy`), y
+de él colgaban las dos únicas cosas de la pantalla que hablan del PRESENTE: el **aire** («2,70× de
+aire») y el renglón «el de hoy» de la proyección de stock. 🔴 **Un supuesto tipeado envejece y la
+pantalla ⛔ no se entera.**
+
+📊 Medido el 30-ago-2026, cruzando las dos fichas guardadas contra la foto de sus últimos 7 días
+cerrados (el oráculo es `scripts/medir-rendimiento-celdas.mjs`, que llama a `armarZona()` y ⛔ no
+pasa por la pantalla):
+
+| línea | ventana cerrada | lo que la ficha afirmaba | lo medido | |
+|---|---|---|---|---|
+| **BDI** | 23→29 ago | $2.472 ⇒ **2,70× de aire** | **$5.697** por pedido real (85% del techo) ⇒ **1,17×** | afirmaba **2,3× de más** |
+| **Zattia** | 20→26 ago | $3.069 ⇒ **1,97× de aire** | **$913** (15% del techo) ⇒ **6,62×** | afirmaba **3,4× de menos** |
+
+🔑 **Las dos mentían y para lados opuestos** ⇒ ⛔ no era un sesgo corregible con una constante: era
+un número que había dejado de ser cierto. Y la mentira cara es la de BDI: la pantalla que le pone la
+vara a todo el módulo decía que sobraba aire para escalar **justo la semana en que el pedido marginal
+salía $13.388 contra un techo de $6.668**.
+
+### Lo que se hizo
+
+- **Se lee la MISMA zona que dibuja Rendimiento** (`useZona(linea, 7)`), ⛔ no una consulta propia.
+  El costo por compra contra el techo ya está calculado ahí (`totales.costoPedidoReal`, el mismo del
+  que sale `pctTecho`): una segunda cuenta acá habría sido la quinta copia de la misma división, y
+  el día que la zona cambie de criterio esta pantalla cambia con ella.
+  ⚠️ **`?recurso=rendimiento` está ARRIBA del guard de `META_ADS_TOKEN`** en `api/meta-ads.js`, así
+  que la ficha **sigue abriendo con el token vencido** — que es la razón por la que el resto de ella
+  ⛔ no entra por ese endpoint.
+- **La regla de cuál manda vive en el núcleo** (`costoQueManda()` en `rentabilidad.core.js`), ⛔ no
+  en el JSX: manda la foto, y cuando ⛔ no contesta cae a lo tipeado **diciendo por qué**.
+- **La sustitución es UNA sola**: se pisa `costoHoy` en el objeto que entra a `calcularRentabilidad`.
+  Así el aire y la proyección se corrigen **juntos**. Escribirlo en el KPI habría dejado la tabla de
+  Stock proyectando contra el número viejo — 📌 la fórmula sigue corriendo en los otros lugares y
+  gana callada.
+- **El campo tipeado se queda, rotulado como respaldo**, y cuando discrepa más de un 10% la pantalla
+  lo dice con los dos números y ofrece **«Emparejar la ficha»** de un click. Sin esa válvula el
+  número guardado envejece para siempre y vuelve a mandar el día que la foto no conteste.
+
+### 🔴 Las tres que muerden
+
+1. **`pedidos > 0` es la condición, ⛔ no `costo > 0`.** Sin pedidos el cociente da 0, y un 0 acá se
+   lee como «te sale gratis»: es el mismo cero que afirma de `semaforoPauta`.
+2. **Mientras la foto se lee ⛔ no se dibuja NINGÚN número de aire.** Los dos son plausibles (2,70×
+   y 1,17×), así que el salto ⛔ no se nota — es el defecto de los $9.101 que Bruno cazó el 22-ago,
+   con otra ropa.
+3. 🔑 **Sin ficha propia se muestra el COSTO y ⛔ NO el aire.** El costo medido es de esa línea y es
+   real; el techo, cuando la línea ⛔ no cargó su economía, es el **prestado de las fundas de BDI**.
+   Dividir uno por el otro da un número **que ⛔ no es de nadie**. 📌 Es el caso de **Stunned**:
+   $361 por pedido real y cero ficha. ⚠️ Antes ⛔ no pasaba, porque los dos lados salían del mismo
+   default y el número era al menos internamente consistente — **la medición mejora una mitad, y una
+   mitad medida contra otra prestada es un cociente de dos ventanas con otra ropa.**
+
+### La ventana ⛔ no es la misma para todas, y va ESCRITA
+
+`ultimoDiaCerrado()` se deriva del dato (`capturado_at > fecha`), ⛔ no de un `new Date()`. Al
+30-ago **BDI cerraba el 29 y Zattia el 26**: sin la fecha al lado, «pagás $913» se lee como «hoy» y
+son cuatro días atrás.
+
+### Verificado
+
+- **56 tests** entre el núcleo y la pantalla, y **3 mutantes muertos**: dejar mandar a la ficha
+  (3 rojos), aceptar la foto con 0 pedidos (1 rojo), y hacer que el techo dependa de `costoHoy`
+  (6 rojos, uno de ellos el que fija que **sustituir ⛔ no mueve la vara**).
+- Los números de la tabla de arriba salen del **oráculo de la sección**
+  (`scripts/medir-rendimiento-celdas.mjs`), que ⛔ no pasa por la pantalla.
+- ⛔ **NO se caminó la pantalla en producción**: el login pide contraseña. Es la mano que falta.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)
@@ -1703,8 +1774,9 @@ sí se puede desde el monitor.
   hasta entonces están escritas, probadas y sin ejercer.
 - ▶️ Los 5 avisos que la poda propone apagar ($60.666 en 7 días, cero compras) — lo decide Bruno.
 - ▶️ Publicar los 2 informes de BDI, que están en borrador.
-- ▶️ **El semáforo vivo** de rentabilidad (cruzar el techo con la foto): es lo que hace que la
-  pantalla deje de ser calculadora y pase a ser alarma.
+- 🏁 **El semáforo vivo** (cruzar el techo con la foto) — hecho el 30-ago-2026, arriba. ▶️ Lo que
+  queda de él es **caminar la pantalla**: que el aire de BDI diga ~1,2× y ⛔ no 2,7×, que Zattia
+  muestre su ventana terminando el 26 y ⛔ no el 29, y que Stunned muestre el costo **sin** aire.
 - 🏁 **Stunned: lo apagó Bruno el 26-ago-2026.** ⚠️ Igual que Zattia, **la foto de hoy es anterior** y
   lo confirma la de mañana. 🔑 **Y apagarlo ⛔ no contesta la pregunta, la archiva**: gastó $428.421
   en 90 días sin una sola compra atribuida **con los tres píxeles vivos**, así que ⛔ no era «no hay

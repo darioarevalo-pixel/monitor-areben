@@ -576,6 +576,11 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
 4. Que el hallazgo de `AD01 - UNBOXING LOCAL` —que es de nivel **aviso**— aparezca **adentro de la
    fila de su conjunto**. Es el caso que prueba el reparto.
 5. Que Producir ya ⛔ no te explique Rendimiento.
+6. 🆕 **El aire de la ficha de Rentabilidad, que desde el 30-ago sale de la foto**: que BDI diga
+   **~1,2× de aire** y ⛔ no 2,7×, que Zattia muestre su ventana terminando el **26** y ⛔ no el 29
+   (cada línea tiene su último día cerrado), y que **Stunned muestre el costo SIN aire** —su techo
+   es el prestado de BDI—. Y que el aviso «la ficha quedó vieja» aparezca en las dos, con el botón
+   **«Emparejar la ficha»**.
 
 **▶️ Lo que queda escrito y ⛔ sin hacer:**
 - **`link` → `enlace`: 23 rótulos** en Atención, Canjes y Envíos. 📊 Medido. Está prohibido en
@@ -587,8 +592,15 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
   está bien**, y ése es el que alguien apaga.
 - **El puente MAKETA → «Anuncio nuevo»**: una pieza terminada allá ⛔ no llega sola acá. Hoy el camino
   es Drive → arrastrar. ⛔ No lo cubre ninguna de las dos apps.
-- **El Embudo**: 📊 `meta_ads_etapa` en **0 filas**. La pregunta que tendría que contestar está
-  escrita en la ficha (§ «la sigla del embudo»), y el tripwire es que esa tabla se mueva.
+- ⛔ **El Embudo NO estaba pendiente, y este renglón estaba mal leído** (corregido el 30-ago-2026).
+  Decía *«📊 `meta_ads_etapa` en 0 filas»* como si fuera un módulo que nace mudo. 📌 **Esa tabla es
+  el OVERRIDE MANUAL**, y lo dice su propio núcleo (`lib/meta-ads/etapas.core.js`): la clasificación
+  sale del `objective` de cada campaña vía `ETAPA_POR_OBJETIVO`, y la tabla sólo guarda **las
+  correcciones a mano**. ⇒ **0 filas = nadie corrigió ninguna clasificación**, que es lo esperable y
+  ⛔ no un agujero. 🔑 **El cero afirma, y acá afirmaba lo contrario de lo que se le leyó**: el
+  tripwire —«que esa tabla se mueva»— sigue en pie, pero mide **cuándo el objetivo miente**, ⛔ no si
+  el Embudo tiene datos.
+  ⚠️ Verificado leyendo el código y contando las filas; ⛔ **no** caminando la pantalla.
 - **Informes**: 2 filas, las dos **sin publicar**. Se quedó como pestaña y ⛔ no subió al menú. Si en
   un mes sigue en dos, se elimina.
 - **«Hoy + ayer + anteayer» como una suma sola** ⛔ no se ofrece: pediría cruzar Graph con la foto por

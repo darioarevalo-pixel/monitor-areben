@@ -18,6 +18,7 @@ import type { LineaPauta } from './tipos'
 import {
   DEFAULTS as DEFAULTS_JS,
   calcularRentabilidad as calcularJs,
+  costoQueManda as costoQueMandaJs,
   escenariosDeFreno as escenariosJs,
   normalizar as normalizarJs,
   proyeccionStock as proyeccionJs,
@@ -171,7 +172,33 @@ export type Proyeccion = {
   roas: number
 }
 
+/** Lo que la foto contesta sobre una línea. `null` cuando no contestó. */
+export type CostoMedido = {
+  /** Gasto de la ventana dividido los pedidos REALES de la tienda. Es el de `pctTecho` de la zona. */
+  costo: number
+  /** Cuántos pedidos lo respaldan. 🔴 Con 0 el cociente da 0 y ese 0 se lee como «gratis». */
+  pedidos: number
+  /** El primer día de la ventana, ya cerrado. */
+  desde: string
+  /** El último día CERRADO. ⚠️ Es propio de cada línea: el 30-ago BDI cerraba el 29 y Zattia el 26. */
+  hasta: string
+}
+
+/** Quién gobierna el aire de esta ficha, y por qué. */
+export type CostoVigente = {
+  /** El que se usa. `0` cuando no hay ninguno. */
+  costo: number
+  fuente: 'foto' | 'ficha' | 'ninguno'
+  /** Por qué no mandó la foto. Vacío cuando mandó ella. */
+  motivo: string
+  /** Cuánto se pasa lo tipeado sobre lo medido, en %. `null` si falta alguno de los dos. */
+  discrepaPct: number | null
+}
+
 export const DEFAULTS = DEFAULTS_JS as Supuestos
+export const costoQueManda = costoQueMandaJs as (
+  args: { medido?: CostoMedido | null; tipeado?: number },
+) => CostoVigente
 export const normalizar = normalizarJs as (crudo: unknown) => Supuestos
 export const calcularRentabilidad = calcularJs as (s: Supuestos) => Rentabilidad
 export const escenariosDeFreno = escenariosJs as (s: Supuestos, r: Rentabilidad) => Escenario[]

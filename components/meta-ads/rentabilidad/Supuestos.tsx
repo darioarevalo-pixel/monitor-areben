@@ -160,7 +160,20 @@ export function PanelesDeSupuestos({ s, cambiar, soloLectura = false }: {
         <Campo label="Envío que absorbe la tienda" pista="por pedido, con IVA">{num('envio', { step: 100, prefix: '$', width: 116 })}</Campo>
         <Campo label="Ventas por día" pista="el objetivo">{num('ventasDia', { step: 5, width: 116 })}</Campo>
         <Campo label="Stock" pista="unidades">{num('stock', { step: 100, width: 116 })}</Campo>
-        <Campo label="Lo que pagás hoy" pista="por compra">{num('costoHoy', { step: 50, prefix: '$', width: 116 })}</Campo>
+        <Campo label="Lo que pagás hoy" pista="por compra, de respaldo">{num('costoHoy', { step: 50, prefix: '$', width: 116 })}</Campo>
+        {/*
+          🔴 **Este campo dejó de gobernar el 30-ago-2026, y decirlo es la mitad del arreglo.**
+          Es el único supuesto del panel que tiene una MEDICIÓN al lado: la foto de la línea lo
+          contesta sola, y un número tipeado que le gana a una medición envejece sin que nadie se
+          entere —lo hizo, y para lados opuestos en las dos fichas—. Un campo que ya no manda y
+          sigue con el mismo rótulo es peor que uno que no está: se sigue tipeando creyendo que
+          mueve algo.
+        */}
+        <p style={{ fontSize: font.xs, color: color.mut2, margin: 0, lineHeight: 1.5 }}>
+          Mientras la foto de la línea conteste, el aire y la proyección salen <b>de ella</b>: esto
+          se usa sólo si esa línea todavía no tiene un día cerrado con pedidos. Si quedó viejo, el
+          aviso de arriba lo empareja de un click.
+        </p>
       </div>
 
       <div style={panel}>
