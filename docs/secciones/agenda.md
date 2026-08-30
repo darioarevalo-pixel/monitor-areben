@@ -210,6 +210,13 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     `perfilDe` de `bdi-catalogo/api/usuarios.js`, que es una **lista blanca cerrada**: un campo que
     no esté ahí se guarda en el KV y **nunca llega al monitor**. ⇒ ⛔ no cambiar el destino de la
     rutina antes de que ese deploy esté vivo: quedaría dirigida a **nadie**, sin error.
+  - 🔴 **Un `<a className="mo-btn">` pelado se dibuja SIN FONDO NI BORDE.** `.mo-btn` toma sus
+    colores de las custom properties `--_bg`/`--_fg`/`--_bd`, y quien las pone es `vars()`,
+    **inline**, adentro de `Button`. Con la clase sola el botón queda como un texto suelto al lado
+    de los de verdad — *«que sea un botón mejor, porque está raro»* (Bruno, 30-ago, mirando Inicio).
+    ⇒ el kit tiene ahora **`ButtonLink`**, que es el mismo botón pero `<a>`, y ⛔ no se vuelve a
+    escribir el `<a className="mo-btn">` a mano. Va `<a>` y no un `Button` con `window.open`
+    a propósito: el link se copia, se abre en otra pestaña y se manda por WhatsApp.
   - **El link no es del ítem, es de la persona.** El botón «⏱ Cargar mis horas» de `PendientesHoy`
     se dibuja cuando el destino es `horas-extras` y saca la URL de `perfil.horasLink`. No hizo falta
     ningún campo nuevo en `agenda_items` —y no habría entrado: el `datos` de `guardar-item` es una

@@ -18,7 +18,7 @@
 
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { Button, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
+import { Button, ButtonLink, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
 import { feriadoDe, pendientesDe, PUERTAS, type PendienteHoy } from '@/lib/agenda'
 import { contestarPuerta } from '@/lib/agenda/cliente'
 import { rotuloFecha } from '@/lib/fechas/semana'
@@ -145,7 +145,7 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
           )}
         </div>
 
-        {p.item.destino?.tipo === 'horas-extras' && <MisHoras />}
+        {p.item.destino?.tipo === 'horas-extras' && <BotonHorasExtras />}
         {p.item.manualId && <BotonComoSeHace manualId={p.item.manualId} />}
       </div>
     </Card>
@@ -218,7 +218,7 @@ function hora(iso: string | null): string {
 }
 
 /**
- * **«Cargar mis horas»**: el link personal de carga, en el renglón donde se pide.
+ * **«Cargar horas extras»**: el link personal de carga, en el renglón donde se pide.
  *
  * 🔑 **No hay ningún campo nuevo en el ítem, y no hace falta**: se dibuja cuando el destino del
  * pendiente es `{tipo:'horas-extras'}`, o sea cuando el propio destino ya dijo de qué se trata.
@@ -232,7 +232,7 @@ function hora(iso: string | null): string {
  * hace» de un manual sin publicar: un botón que promete y abre un 404 enseña a no apretarlo, y acá
  * además haría pensar que las horas se cargaron.
  */
-function MisHoras() {
+function BotonHorasExtras() {
   const perfil = useSesion().perfil
   if (!perfil?.horasExtras) return null
 
@@ -244,19 +244,19 @@ function MisHoras() {
     )
   }
 
-  // Un `<a>` con la clase del kit y no un `<Button onClick={window.open}>`: es un link de verdad
-  // —se copia, se abre en otra pestaña, se manda por WhatsApp— y ésa es justo la forma en que se
-  // usa. Mismo patrón que el «Abrir ↗» del modal de un cliente en el CRM.
+  // `ButtonLink` y ⛔ no un `<a className="mo-btn">` pelado: la clase sola se dibuja sin fondo ni
+  // borde, porque los colores salen de custom properties que pone `vars()` inline. Ver el kit.
   return (
-    <a
+    <ButtonLink
       href={perfil.horasLink}
       target="_blank"
       rel="noopener noreferrer"
-      className="mo-btn mo-btn--sm"
-      style={{ whiteSpace: 'nowrap', alignSelf: 'flex-start' }}
+      size="sm"
+      iconLeft="⏱"
+      style={{ alignSelf: 'flex-start' }}
     >
-      ⏱ Cargar mis horas
-    </a>
+      Cargar horas extras
+    </ButtonLink>
   )
 }
 

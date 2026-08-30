@@ -19,7 +19,7 @@ import { LoQueViene } from '@/components/inicio/LoQueViene'
 import { avisosDe, contarSinTildar, hoyIso } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Button, Card, EmptyState, Esqueleto, MarcaChip, color, font, space, toneTokens } from '@/components/ui'
+import { Button, ButtonLink, Card, EmptyState, Esqueleto, MarcaChip, color, font, space, toneTokens } from '@/components/ui'
 import type { Aviso } from '@/lib/notificaciones/tipos'
 
 /**
@@ -143,7 +143,7 @@ export function Inicio() {
     modoInicio(perfil) === 'gerencial' && { label: '📊 Panel gerencial', ruta: '/gerencial' },
     // Sin el link no va nada: quien lo tiene tildado y no lo tiene cargado ya se entera el día del
     // pendiente, con el motivo. Un botón muerto acá lo repetiría todos los días y sin explicarlo.
-    perfil?.horasExtras && perfil.horasLink ? { label: '⏱ Cargar mis horas', href: perfil.horasLink } : null,
+    perfil?.horasExtras && perfil.horasLink ? { label: 'Cargar horas extras', href: perfil.horasLink } : null,
   ] as (Accion | false | null)[]).filter((a): a is Accion => !!a)
 
   // La promo bancaria la ve quien cobra. `cupones` es el permiso de la pantalla del mostrador,
@@ -178,18 +178,19 @@ export function Inicio() {
         <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[6] }}>
           {acciones.map((a) => (
             a.href ? (
-              // Sale de la app: un `<a>` de verdad con la clase del kit, para que se pueda abrir en
-              // otra pestaña o copiar el link. Mismo patrón que el «Abrir ↗» del CRM.
-              <a
+              // Sale de la app ⇒ `<a>` de verdad, para poder abrirlo en otra pestaña o copiar el
+              // link. 🔴 Y por `ButtonLink`, ⛔ NO por `<a className="mo-btn">` pelado: la clase
+              // sola se dibuja sin fondo ni borde —los colores salen de custom properties que pone
+              // `vars()` inline— y al lado de estos botones quedaba como un texto suelto.
+              <ButtonLink
                 key={a.href}
                 href={a.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mo-btn mo-btn--md"
-                style={{ whiteSpace: 'nowrap' }}
+                iconLeft="⏱"
               >
                 {a.label}
-              </a>
+              </ButtonLink>
             ) : (
               <Button
                 key={a.ruta}

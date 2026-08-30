@@ -4,7 +4,7 @@
  * Los tokens son la fuente de verdad de color/espaciado: '@/components/ui/tokens'.
  */
 export * from '@/components/ui/tokens'
-export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from '@/components/ui/Button'
+export { Button, ButtonLink, type ButtonProps, type ButtonLinkProps, type ButtonVariant, type ButtonSize } from '@/components/ui/Button'
 export { Card, SectionCard, type CardProps, type SectionCardProps } from '@/components/ui/Card'
 export { Badge, StatusPill, type BadgeProps, type StatusPillProps } from '@/components/ui/Badge'
 // fieldControlStyle/fieldRowGap se retiraron: el escape hatch ahora es la clase

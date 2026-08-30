@@ -59,6 +59,43 @@ function vars(variant: ButtonVariant, tone: Tone): React.CSSProperties {
   } as React.CSSProperties
 }
 
+/**
+ * **El mismo botón, pero que NAVEGA AFUERA.** Un `<a>` de verdad, con la forma del kit.
+ *
+ * 🔴 **Existe porque la clase sola NO alcanza.** `.mo-btn` toma sus colores de las custom
+ * properties `--_bg` / `--_fg` / `--_bd`, y quien las pone es `vars()`, **inline**. Un `<a>` con
+ * `className="mo-btn"` y nada más se dibuja **sin fondo y sin borde**: al lado de los botones de
+ * verdad se lee como un texto suelto. Pasó con «Cargar horas extras» en Inicio, y lo cazó Bruno
+ * mirando la pantalla — *«que sea un botón mejor, porque está raro»* (30-ago-2026).
+ *
+ * ⚠️ **Y va un `<a>`, ⛔ no un `<Button onClick={window.open}>`**: es un link que se copia, se abre
+ * en otra pestaña y se manda por WhatsApp, que es exactamente cómo se usa el de horas extras.
+ */
+export type ButtonLinkProps = {
+  variant?: ButtonVariant
+  tone?: Tone
+  size?: ButtonSize
+  iconLeft?: React.ReactNode
+  fullWidth?: boolean
+} & React.AnchorHTMLAttributes<HTMLAnchorElement>
+
+export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(function ButtonLink(
+  { variant = 'outline', tone = 'neutral', size = 'md', iconLeft, fullWidth, className, style, children, ...rest },
+  ref,
+) {
+  return (
+    <a
+      ref={ref}
+      className={['mo-btn', `mo-btn--${size}`, fullWidth ? 'mo-btn--full' : '', className ?? ''].filter(Boolean).join(' ')}
+      style={{ ...vars(variant, tone), whiteSpace: 'nowrap', ...style }}
+      {...rest}
+    >
+      {iconLeft}
+      {children}
+    </a>
+  )
+})
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'outline', tone = 'neutral', size = 'md', loading, iconLeft, fullWidth, disabled, className, style, children, ...rest },
   ref,
