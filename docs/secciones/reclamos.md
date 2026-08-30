@@ -2550,3 +2550,25 @@ línea en la lista. Está escrito en `TIENDAS_DEL_ALTA` y atado por test.
 - ⚠️ **⛔ Sin migración**, ⛔ sin función serverless nueva (el build sigue con una sola ruta dinámica).
 - 📌 De paso: `npm run lint` estaba **en rojo en `main`** desde `890b1eb` por un ternario como
   sentencia en `scripts/caminar-alta-publica.mjs`. Arreglado acá.
+- ✅ **CAMINADA CONTRA PRODUCCIÓN, EN EL NAVEGADOR Y DE PUNTA A PUNTA** (30-ago-2026). 🔑 **Es la
+  primera pantalla de postventa que se pudo caminar sin Bruno**, y ⛔ no por suerte: el portal ⛔ no
+  pide login. Con una **orden real** (21148, y el mail cruzado contra `ventas.client_email`), una
+  fila **sembrada y borrada**, y las **2 reales intactas**:
+  - ① la llave gira: *«Hola Rocio, éste es tu pedido #21148»* con su producto · ② con uno solo viene
+    tildado · ③ las cinco opciones, y *«Te vamos a pedir una foto»* **sólo** en «Me llegó fallado».
+  - 🔴 **Se eligió «Todavía no me llegó», que es el caso que antes ⛔ no se podía enviar.** La fila
+    nació con **`motivo: demora`** —⛔ no `no_llego`—, `usuario: 'cliente'`, los cuatro pendientes en
+    `no_aplica`, los ítems de la orden verificada y **⛔ ni un monto** (la fila interna de al lado,
+    `id 23`, tiene `precio` y `pagado`). El oráculo vino **por otro camino que el hecho**: se escribió
+    por la pantalla y se leyó crudo por PostgREST con la service key.
+  - 🔴 **El botón de enviar estaba PRENDIDO con cero fotos**, con el cartel *«Para este caso no hace
+    falta»*, y la fila pasó a **`en_revision`**. Eso es exactamente lo que ⛔ no se podía hacer ayer.
+  - ⚠️ **La segunda alta sobre el mismo pedido contestó «Ya tenés un reclamo abierto»** y ⛔ no creó
+    una segunda fila.
+  - **La puerta cerrada, con el mail equivocado**: el cartel único, sin decir si la orden existe.
+  - Y las diez del script (`node scripts/caminar-alta-publica.mjs`, **10 de 10**) más `store=stunned`
+    ⇒ **400**.
+  - 📌 **Del entorno**: el puente de Chrome **contestó OK a tres clicks que ⛔ no llegaron**. El
+    oráculo es la captura, ⛔ no el «Clicked at (x,y)» — y `get_page_text` ⛔ **no muestra el valor de
+    un input**, así que ahí tampoco se ve. Lo que sí anduvo siempre: `form_input` por `ref` y el
+    click por `ref`.
