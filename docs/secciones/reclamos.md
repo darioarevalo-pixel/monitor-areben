@@ -2205,3 +2205,90 @@ lo dice la pantalla, al lado del número.
   error a la vista** y ⛔ no contesta un cero — está atado por test.
 - **Todavía ⛔ no hay línea de base.** El primer mes con formulario público ⛔ no se compara contra
   nada: el número que salga ⛔ no es «subió», es **el primero que se conoce**.
+
+## 🆕 🔴 La llave del alta pública: orden + mail (30-ago-2026 — §2, paso 1)
+
+⚠️ **El código de esto ⛔ NO está en este repo**: vive en `bdi-catalogo`
+(`api/_verificacion-orden.js` + la rama `?orden=` de `api/tiendanube-audit.js`), que es el único que
+habla con la API de Tienda Nube. Se anota acá porque **la sección que lo usa es ésta**.
+
+El alta pública deja que el cliente abra su propio reclamo sin login. El número de orden **solo ⛔ no
+alcanza**: es correlativo, así que tipear el de al lado es abrir el pedido de otra persona. La llave
+es **el mail con el que compró** — ya está en **280 de las 283** ventas online de agosto, o sea que
+⛔ no hay que pedirle un dato nuevo a nadie.
+
+### 🔑 El dato ya llegaba, y se tiraba una línea después
+
+La primera lectura del problema fue *«hay que traer el mail de algún lado»*, y salieron dos ideas
+malas: cruzar `ventas.client_email` (que existe, pero está indexado por el **número de Gestión
+Nube** —30599— y ⛔ no por el de Tienda Nube —21033—) o sincronizar una tabla nueva.
+
+Ninguna hacía falta. `tnFetchOrden` pide la orden **completa y sin `fields`** (con `fields` el GET
+por id da 404), así que **Tienda Nube ya mandaba el mail** y `mapOrdenTN` lo descartaba al quedarse
+con sus 25 campos. ⇒ la comparación va **antes de mapear**, y la orden cruda ⛔ no sale nunca de esa
+función: devolverla para que compare el llamador dejaría el mail a un `return` de la respuesta.
+
+### Los dos caminos, separados por el MÉTODO
+
+| | |
+|---|---|
+| `GET ?orden=N` | como siempre: la orden entera, para Cambios y Devoluciones del Monitor |
+| `POST ?orden=N` body `{ mail }` | el alta pública: contesta **sólo si coincide**, y **sin un solo monto** |
+
+Lo que sale por el camino público son **tres cosas**: `number`, `cliente` y los productos
+(`product_id`, `variant_id`, `name`, `sku`, `quantity`). ⛔ Ni total, ni precios, ni forma de pago,
+ni tracking, ni dirección. El alta necesita saber **qué compró**, ⛔ no cuánto pagó.
+
+### 🔴 Falla cerrado, y las tres puertas contestan IGUAL
+
+Deja pasar **sólo** cuando hay un mail pedido, la orden trae uno, y son el mismo. La que importa es
+la tercera: **una orden que ⛔ no trae mail ⛔ NO abre**. Escrito como `if (suyo && suyo !== pedido)`
+—que es como sale solo— dejaría entrar a cualquiera justo en el caso raro, que es donde nadie mira.
+
+Y el **mismo 404** para «no existe», «sin mail» y «no coincide»: distinguirlos convierte al endpoint
+en un oráculo de *«¿existe la orden N?»* sobre una numeración correlativa. Mismo criterio que el 404
+pelado de `api/_reclamo.js`.
+
+⚠️ **El mail entra SÓLO por el body, y `?mail=` en la URL se rechaza con 400.** Una query string
+queda escrita en el log de acceso, en el historial del navegador y en el `Referer` de lo que la
+página cargue después.
+
+### ⛔ Lo que la comparación no hace
+
+Normaliza espacios y mayúsculas, **nada más**. ⛔ No saca los puntos de Gmail ni el `+tag`: cada
+indulgencia **ensancha el conjunto de strings que abren la puerta**. Una llave que perdona ⛔ no es
+una llave.
+
+### Cómo se verificó
+
+- **11 mutantes, 11 muertos**, con **dos controles inocuos vivos**. Dos que escaparon en la primera
+  vuelta eran agujeros de verdad: un mail que es **pedazo** del verdadero (`vic@` está adentro de
+  `victoria@gmail.com` si la comparación fuera por substring) y **el empate de dos vacíos** — TN
+  manda `""` y ⛔ no `null` en lo que nadie llenó, así que sin el filtro de forma `"" === ""` abría.
+- 🔴 **El arnés medía el modo aviso, ⛔ no el guard.** `_auth.js` de `bdi-catalogo` arranca en
+  `MODO_AVISO`: sin credencial **avisa y deja pasar**. En producción está `AUTH_MODO_AVISO=0`. El
+  arnés lo fija ahora, y sin eso un `exigirUsuario` que faltara habría salido **verde**.
+- **Caminado contra producción con la orden real 21033**: el mail correcto abre y sale sin mail, sin
+  plata y sin dirección; **una letra cambiada da 404**; el `GET` de siempre sigue andando.
+- Los arneses (`node scripts/check-verificacion-orden.mjs` y `check-orden-verificada.mjs`) **corren
+  en CI** desde ahora — el repo ⛔ no tenía ninguno corriendo.
+
+### ✅ La duda que quedaba, contestada
+
+`?orden=N&mail_diag=1` **(con usuario del padrón)** contesta **sí o no, ⛔ nunca cuál**: existe
+porque toda la llave se apoya en que TN mande `contact_email`, y eso ⛔ no se podía saber leyendo el
+código — el mapper lo tiraba, así que nadie lo había mirado nunca. Medido en las dos órdenes reales
+de BDI: **`tiene_mail: true` en las dos**.
+
+### ▶️ Lo que sigue
+
+- 🔴 **`GET ?orden=N` sigue abierto a internet sin auth** y devuelve el **nombre** del cliente y los
+  montos por un número correlativo. ⚠️ Eso **ya era así** y ⛔ no lo agregó este cambio, pero apoyar
+  un formulario público al lado lo vuelve la puerta principal. Cerrarlo son dos líneas
+  —`exigirUsuario` en esa rama y `apiFetch` en `buscarOrden` (`lib/reclamos/cliente.ts`)— y ⛔ no se
+  hizo acá: el plan del 30-ago fencea ese archivo. **Es una decisión de Bruno.**
+- **El tope por rato** desde el mismo origen (freno 2 de los tres del §2) ⛔ no existe todavía: hoy
+  el mail se puede probar sin límite.
+- 🔑 **El cruce lo tiene que hacer quien ESCRIBE.** Este endpoint es la primitiva; el handler que
+  cree la fila tiene que llamarlo **servidor a servidor** y ⛔ no confiar en que el navegador ya
+  verificó.

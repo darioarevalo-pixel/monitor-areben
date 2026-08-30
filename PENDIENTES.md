@@ -588,3 +588,14 @@ antes de rehacerlo.
   ▶️ **Lo que sigue estando trabado por falta de datos**: los cuatro diales de la válvula (§5 del
   plan) y las tres decisiones de Bruno (§6) — el piso del retorno, cuánto vale un cupón y el costo
   operativo. Se destraban con un mes de volumen del alta pública, que es la mitad de Darío.
+
+- ✅ 🔴 **El paso 1 del alta pública: la llave orden + mail** (30-ago-2026). Está en `bdi-catalogo`
+  (`api/_verificacion-orden.js`), no acá; el relato entero en `docs/secciones/reclamos.md` § «La
+  llave del alta pública». 🔑 **No hubo que traer ningún dato nuevo**: Tienda Nube ya mandaba el mail
+  del comprador y `mapOrdenTN` lo tiraba una línea después. ✅ Confirmado en las dos órdenes reales
+  de BDI (`?mail_diag=1` → `tiene_mail: true`) y caminado en prod: el mail correcto abre, una letra
+  cambiada da 404.
+  ▶️ **Queda una decisión tuya**: `GET ?orden=N` sigue abierto sin auth y devuelve el nombre del
+  cliente por un número correlativo — ya era así, pero apoyar el formulario al lado lo vuelve la
+  puerta principal. Cerrarlo son dos líneas, una de ellas en `lib/reclamos/cliente.ts`, que el plan
+  del 30-ago fencea.
