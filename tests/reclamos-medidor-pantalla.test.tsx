@@ -101,6 +101,26 @@ describe('lo que queda escrito en la pantalla', () => {
   })
 
   /**
+   * 🔴 **Al cambiar de marca hay que volver a medir.** El monitor es marca-scoped y esta tabla ⛔ no
+   * lleva la marca escrita en ningún lado: si se quedara con lo que bajó la primera vez, mostraría
+   * los números de BDI **abajo del encabezado de Zattia**, y ⛔ nada avisaría. Lo cazó un mutante.
+   */
+  it('🔴 al cambiar de marca, vuelve a medir con la marca nueva', async () => {
+    const { leerMedidor } = await import('@/lib/reclamos/medidor')
+    vi.mocked(leerMedidor).mockClear()
+    MEDIDO.length = 0
+    MEDIDO.push(...COMO_HOY)
+    const div = document.createElement('div')
+    document.body.appendChild(div)
+    const root = createRoot(div)
+    await act(async () => { root.render(<Medidor marca="bdi" />) })
+    await act(async () => { root.render(<Medidor marca="zattia" />) })
+    await act(async () => { root.unmount() })
+    div.remove()
+    expect(vi.mocked(leerMedidor).mock.calls.map((c) => c[0])).toEqual(['bdi', 'zattia'])
+  })
+
+  /**
    * ⚠️ **Un medidor que ⛔ no pudo medir tiene que decirlo.** Quedarse en blanco se lee igual que un
    * cero, y este número existe justo para que nadie improvise cuando la válvula haya que moverla.
    */

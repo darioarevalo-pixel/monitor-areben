@@ -18,7 +18,7 @@
  * *sin registro* a la vista, lo que se lee ⛔ no es un aumento — es desde cuándo se mide.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, Notice, TableWrap, THead, TBody, Tr, Th, Td, color, font, space, weight } from '@/components/ui'
 import type { Marca } from '@/lib/nav.datos'
 import { leerMedidor, loQueDiceElMes, mesEnCriollo, type MesMedido } from '@/lib/reclamos/medidor'
@@ -27,18 +27,21 @@ export function Medidor({ marca }: { marca: Marca }) {
   const [meses, setMeses] = useState<MesMedido[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const cargar = useCallback(async () => {
-    try {
-      setError(null)
-      setMeses(await leerMedidor(marca))
-    } catch (e) {
-      // ⚠️ El medidor que ⛔ no pudo medir **lo dice**: quedarse en blanco se lee igual que un cero.
-      setError(e instanceof Error ? e.message : 'No se pudo medir.')
-      setMeses(null)
-    }
+  // El setState va DENTRO del await y ⛔ no en el cuerpo del effect: el linter del repo rechaza el
+  // setState síncrono en un effect (renders en cascada). Mismo patrón que Reclamos y Cambios.
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      try {
+        const filas = await leerMedidor(marca)
+        if (vivo) { setMeses(filas); setError(null) }
+      } catch (e) {
+        // ⚠️ El medidor que ⛔ no pudo medir **lo dice**: quedarse en blanco se lee igual que un cero.
+        if (vivo) { setError(e instanceof Error ? e.message : 'No se pudo medir.'); setMeses(null) }
+      }
+    })()
+    return () => { vivo = false }
   }, [marca])
-
-  useEffect(() => { void cargar() }, [cargar])
 
   return (
     <Card style={{ marginBottom: space[4] }}>

@@ -2181,10 +2181,18 @@ lo dice la pantalla, al lado del número.
 
 - **El instrumento se estrenó reproduciendo la medición vieja**: las ventas online de BDI de abril a
   agosto —**173 · 161 · 125 · 124 · 283**— corridas por la función de verdad contra la base real.
-- **21 mutantes, 21 muertos**, y **un mutante inocuo de control que SOBREVIVIÓ** — lo único que
-  prueba que el arnés ⛔ no mata todo por igual. Dos escaparon en la primera vuelta: uno por un
-  **ancla mal apuntada** (⛔ no por falta de test) y el otro, el del huso en el servidor, porque
-  **⛔ nadie miraba esa línea**; tiene su test desde entonces.
+- **22 mutantes, 22 muertos**, y **un mutante inocuo de control que SOBREVIVIÓ** — lo único que
+  prueba que el arnés ⛔ no mata todo por igual. Tres escaparon en la primera vuelta: uno por un
+  **ancla mal apuntada** (⛔ no por falta de test), el del huso en el servidor y **el de la marca**
+  —la tabla ⛔ no lleva la marca escrita, así que sin recargar mostraría los números de BDI abajo
+  del encabezado de Zattia—; los dos últimos ⛔ no los miraba nadie y tienen su test desde entonces.
+- 🔴 **Y una que el CI cazó y esta ficha ⛔ no puede omitir**: el primer push salió **rojo**.
+  `npx tsc` se había corrido **antes de escribir los tests**, y el `@param` de un parámetro
+  **desestructurado** escrito suelto (`@param {object[]} reclamos` en vez de `@param {object[]}
+  p.reclamos`) le dice a TypeScript que el objeto ENTERO es un `object[]` ⇒ nueve llamadores
+  tipados en rojo, con la función andando perfecto. El lint pedía además el `setState` **adentro
+  del `await`**, ⛔ no en el cuerpo del effect. ⇒ **las cuatro puertas del CI —typecheck, lint,
+  tests y build— se corren DESPUÉS del último archivo escrito, ⛔ no en el medio.**
 - **La regla y el cable, los dos**: `tests/reclamos-medidor.test.ts` (la función),
   `tests/reclamos-medidor-servidor.test.ts` (el handler de verdad: qué le pide a la base) y
   `tests/reclamos-medidor-pantalla.test.tsx` (lo dibujado, montando **Reclamos entera**).
