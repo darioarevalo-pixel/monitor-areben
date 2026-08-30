@@ -82,7 +82,15 @@ export function Agenda() {
   // persona no puede ver, o una inventada— cae en la primera, que es Hoy y la ve todo el mundo.
   const partes = params.seccion
   const pedida = (Array.isArray(partes) ? partes[1] : null) as Sub | null
-  const activa = visibles.find((s) => s.key === pedida) ?? visibles[0]
+  /**
+   * 🔴 **Mientras la agenda no cargó ⛔ no se puede decidir si alguien puede ver una pantalla de
+   * administración**: `puede.cargar` nace en `false` y lo contesta el servidor. Rebotar ahí mandaría
+   * a «Hoy» **a quien sí puede entrar**, y encima cambiándole el encabezado bajo el cursor. Así que
+   * hasta que cargue se dibuja **la que pidió**, con su esqueleto; el permiso se resuelve después.
+   */
+  const activa = cargado
+    ? (visibles.find((s) => s.key === pedida) ?? visibles[0])
+    : (SUBS.find((s) => s.key === pedida) ?? SUBS[0])
 
   const hoy = hoyIso()
 
@@ -95,27 +103,32 @@ export function Agenda() {
         <p style={{ fontSize: font.base, color: color.mut, marginTop: 2 }}>{activa.hint}</p>
       </header>
 
-      {activa.key === 'hoy' && (
-        <Hoy
-          promos={promosDe(promos, hoy, { marca })}
-          hoy={hoy}
-          sinTildar={contarSinTildar(items, hechos, hoy, { marca })}
-          hayPendientes={pendientesDe(items, hechos, hoy, { marca }).length > 0}
-          hayAvisos={avisosDe(items, hoy, { marca }).length > 0}
-          cargado={cargado}
-        />
+      {!cargado ? (
+        <Esqueleto />
+      ) : (
+        <>
+          {activa.key === 'hoy' && (
+            <Hoy
+              promos={promosDe(promos, hoy, { marca })}
+              hoy={hoy}
+              sinTildar={contarSinTildar(items, hechos, hoy, { marca })}
+              hayPendientes={pendientesDe(items, hechos, hoy, { marca }).length > 0}
+              hayAvisos={avisosDe(items, hoy, { marca }).length > 0}
+            />
+          )}
+          {/* Las dos vistas del calendario son la misma pantalla: lo que cambia es la unidad, y eso
+              ya lo sabe `GrillaAgenda`. ⛔ No se duplica el componente para que la URL diga otra cosa. */}
+          {(activa.key === 'semana' || activa.key === 'mes') && (
+            // 🔴 El `key` ⛔ no es decorativo: **remonta** la grilla al cambiar de entrada, y con eso
+            // el `offset` vuelve a 0. Sin él, «tres meses adelante» se volvería «tres semanas
+            // adelante» en silencio: React conserva el estado de un componente que no se mueve.
+            <GrillaAgenda key={activa.key} vista={activa.key} />
+          )}
+          {activa.key === 'eventos' && <Eventos />}
+          {activa.key === 'rutinas' && <Rutinas />}
+          {activa.key === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
+        </>
       )}
-      {/* Las dos vistas del calendario son la misma pantalla: lo que cambia es la unidad, y eso ya
-          lo sabe `GrillaAgenda`. ⛔ No se duplica el componente para que la URL diga otra cosa. */}
-      {(activa.key === 'semana' || activa.key === 'mes') && (
-        // 🔴 El `key` ⛔ no es decorativo: **remonta** la grilla al cambiar de entrada, y con eso el
-        // `offset` vuelve a 0. Sin él, «tres meses adelante» se volvería «tres semanas adelante» en
-        // silencio, porque React conserva el estado de un componente que no se mueve del árbol.
-        <GrillaAgenda key={activa.key} vista={activa.key} />
-      )}
-      {activa.key === 'eventos' && <Eventos />}
-      {activa.key === 'rutinas' && <Rutinas />}
-      {activa.key === 'cumplimiento' && <Cumplimiento items={items} hechos={hechos} />}
     </div>
   )
 }
@@ -135,17 +148,13 @@ function Hoy({
   sinTildar,
   hayPendientes,
   hayAvisos,
-  cargado,
 }: {
   promos: Promo[]
   hoy: string
   sinTildar: number
   hayPendientes: boolean
   hayAvisos: boolean
-  cargado: boolean
 }) {
-  if (!cargado) return <Esqueleto />
-
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
       <section style={{ display: 'grid', gap: space[3] }}>
