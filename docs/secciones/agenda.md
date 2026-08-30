@@ -488,8 +488,32 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
 - ▶️ **Cargar las 12 rutinas de marketing.** Las carga Bruno una vez, porque la rutina es la línea y
   la línea es de él. Desde el 23-ago-2026 van **con nombre** —`destino: {tipo:'personas'}`— y no con
   `roles:['marketing']`: si no, le salen a las tres.
-- 🆕 ▶️ **Poner `INGRESO_SECRETO` en Vercel** y pasarle a Gerardo el `curl` de arriba. Sin esa
-  variable la puerta contesta 503 a propósito; el alta a mano («Ingresó mercadería») anda igual.
+- 🆕 🔴 🔑 **`INGRESO_SECRETO` ⛔ YA NO ES LO QUE TRABA AL DISPARADOR DEL INGRESO** — remedido
+  contra producción el 30-ago-2026. **El hecho ya entra solo al Monitor, y por otra puerta**: el
+  webhook `oc.confirmada` de Ingresos (`?recurso=oc-webhook`, secreto `INGRESO_WEBHOOK_SECRET`, que
+  **sí** está cargado) trajo **79 órdenes de compra firmadas el 27-ago**, con 0 eventos rotos —ver
+  `docs/secciones/recepciones.md`—. Confirmar una OC **es** el hecho: el evento trae las unidades
+  **contadas**, o sea que alguien recibió la mercadería. ⇒ la puerta con `x-ingreso-secreto` es una
+  **segunda entrada, con un segundo secreto, para un hecho que ya está entrando por la primera**.
+  🔴 **Lo que de verdad falta es LA PUERTA DE ENTRADA**, que ese payload ⛔ no manda: trae proveedor
+  (con `proveedor_id` estable), líneas, pedidas y contadas, y ningún tipo de ingreso. Sin puerta el
+  disparador contesta 400 **a propósito** —sembrar «todo» le pone la dueña equivocada al nombre y a
+  la descripción, y un pendiente que ya tiene nombre no lo revisa nadie—.
+  ⚠️ **Y el freno que falta escribir antes de conectar cualquiera de los dos caminos: el BACKFILL.**
+  Las 79 llegaron en una sola tanda de trece minutos; sin freno, sembrarían **cientos** de
+  pendientes viejos de golpe. `ingreso` es la única plantilla **sin** `noSiembraSiPaso`, y eso fue
+  una decisión (la mercadería llega y a veces se avisa dos días después) ⇒ el freno tiene que ser
+  otro, y tiene que estar antes.
+  📌 Los tres caminos posibles y la decisión de Bruno están escritos en
+  `~/Documents/quien-hace-que/PENDIENTES.md` § 3. El `curl` de arriba sigue sirviendo si igual se
+  elige la puerta propia; el alta a mano («Ingresó mercadería») anda hoy y ⛔ **nadie tiene escrito
+  que la apriete**.
+- 🆕 🔴 **Y el parte del 30-ago: los cuatro disparadores sembraron CERO trabajo real.** 44 moldes
+  cargados (16 · 9 · 11 · 8), 77 ítems en la Agenda, **0 clones**. Tres de los cuatro tienen un día
+  de vida, así que eso ⛔ no prueba nada todavía; el del ingreso lleva seis días y la observación es
+  **n = 1** (una sola OC confirmada desde el 24-ago: `OC-0412`, el 26). 📌 Se remide con
+  `~/Documents/quien-hace-que/scripts/estado-disparadores.mjs`, que **cuenta el clon por su FORMA y
+  ⛔ no por `datos.de`** —el campo que el propio sembrador escribe—.
 - 🆕 ▶️ **Cargar los pasos del ingreso como moldes** (nombre · descripción · precio · foto ·
   publicación · pantallas, con su dueña y a los cuántos días). Hasta que estén, el botón lo avisa y
   no siembra nada.

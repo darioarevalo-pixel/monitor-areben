@@ -125,13 +125,27 @@ test no probaría nada.
 
 ## Pendiente
 
-- ▶️ **Un POST real firmado contra producción** — es lo único que ejerce que `@vercel/node` reponga
-  el cuerpo en el runtime de verdad (los tests imitan ese parche; no lo prueban). ⚠️ **No se puede
-  hacer desde acá**: el secreto es el del emisor. Lo que sí quedó ejercido es todo lo demás —ver
-  `caminar-oc-webhook.mjs`— y, en producción, que el cuerpo crudo llega (3 MB → 400 por el techo).
-  El primer evento firmado del emisor es el que cierra esto.
-- ▶️ **La primera OC confirmada de verdad**, que es lo único que ejerce el contrato del emisor:
-  hasta ahí, la forma del `data` sale de la documentación, no de un mensaje que llegó.
+- ✅ 🏁 **EL POST REAL FIRMADO YA LLEGÓ, Y ⛔ NADIE LO ANOTÓ** (medido contra producción el
+  30-ago-2026). Los dos pendientes de arriba —el evento firmado en el runtime de verdad y la
+  primera OC confirmada— **se cerraron el 27-ago a las 11:08 hora de acá**, y este archivo se
+  commiteó **37 minutos después** todavía diciendo que faltaban.
+  **Lo que hay en la base**: **79 órdenes de compra** (18 de BDI, 61 de Zattia), cada una con su
+  `evento_id` de Standard Webhooks (`msg_…`), **0 eventos rotos**, y `confirmada_at` en **79 de
+  79** — la única de las tres fechas que el emisor manda siempre. ⇒ el contrato del `data` ⛔ ya no
+  sale de la documentación: salió de 79 mensajes que llegaron.
+  🔑 **Y lo que lo cerró ⛔ no fue un test ni una caminata: fue mirar la base.** Un pendiente que
+  se cierra solo, del otro lado y sin avisar, sólo se entera el que lo va a buscar.
+- ▶️ 🔴 **Lo que sigue abierto es OTRA cosa: que el emisor mande EN VIVO.** Las 79 entraron en una
+  sola tanda de trece minutos (27-ago, 14:00–14:13 UTC) — un **backfill** del historial — y desde
+  entonces ⛔ no llegó ninguna. `OC-0412` se **confirmó el 26** y llegó igual en esa tanda del 27,
+  o sea que ⛔ **ninguna OC llegó todavía el día que se confirmó**.
+  📌 **El tripwire es `eventos.ultimo`**, que la propia sección devuelve en el GET: hoy está clavado
+  en `2026-08-27T14:13`. La próxima OC que confirme Gerardo lo mueve, o no, y eso lo contesta.
+- ▶️ **El evento ⛔ no trae el TIPO DE INGRESO**, y eso es lo único que separa a este webhook de
+  prender solo el disparador de la Agenda (`docs/secciones/agenda.md`): el hecho «llegó mercadería»
+  **ya está entrando acá**, firmado, mientras el disparador espera por una segunda puerta con un
+  segundo secreto (`INGRESO_SECRETO`) que nadie cargó. Lo que falta es la **puerta**, no el secreto.
+  El payload manda proveedor (con `proveedor_id` estable), líneas, pedidas y contadas — nada más.
 - ▶️ **Reprocesar un evento en `error`**: hoy se ve en la pantalla y se arregla volviendo a
   confirmar la OC del otro lado. El botón que lo re-corre desde `recepcion_evento.payload` no está
   hecho — la tabla ya guarda todo lo que hace falta.
