@@ -165,7 +165,12 @@ export function Organizacion() {
                 const filas = delSector(resp, f.key)
                 if (!filas.length && sector !== f.key) return null
                 return (
-                  <SectionCard key={f.key} title={f.label} subtitle={f.info}>
+                  // ⛔ El subtítulo NO lleva `f.info`: eso es la AYUDA DEL PERMISO («crea las
+                  // solicitudes y ve la solicitud completa»), que describe lo que la función puede
+                  // apretar, no lo que el sector es. Caminando la pantalla se leía como una
+                  // definición del sector, y afirmaba algo que no es. Una pantalla que no pregunta
+                  // igual afirma.
+                  <SectionCard key={f.key} title={f.label}>
                     <Lista
                       filas={filas}
                       manuales={manuales}
