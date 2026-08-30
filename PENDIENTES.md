@@ -227,32 +227,50 @@ La sección se partió en seis entradas de menú y las tres poblaciones de `agen
 - ▶️ **Caminar a mano lo que ningún test alcanza**, listado al final de la ficha: las seis entradas
   con los dos perfiles, el modal de una actividad, y el `offset` al pasar de Mes a Semana.
 
-### 🆕 ▶️ P0b — Horas extras: el interruptor está construido, faltan las MANOS (30-ago-2026)
+### 🆕 🏁 P0b — Horas extras: HECHO Y CAMINADO (30-ago-2026)
 
 Pedido de Bruno: *«en agenda de monitor, que esté el link de dashboard para que puedan cargar sus
-horas extras; y la alerta de cargar horas extras a fin de mes, que sea sólo para las personas que
-tienen autorizadas las horas extras»*.
+horas extras; y la alerta de fin de mes, que sea sólo para las personas que tienen autorizadas las
+horas extras»*. La ficha: `docs/secciones/agenda.md` § «la quinta forma de destino».
 
-🔴 **Lo que se midió al abrirlo, y es el agujero real: `0 de 11` empleados activos tiene el link
-generado en el dashboard.** La rutina «Cargar las horas extras» (`it178752572363714_6wxkmp`,
-mensual, último día) le cae a tres personas desde el 23-ago y **no hay ningún link que abrir**.
+🔴 **El agujero era de DATOS y estaba a la vista sólo si se medía: `0 de 11` empleados activos tenía
+el link generado.** La rutina les caía desde el 23-ago y **no había nada que abrir**.
 
-Del lado del código está todo (ficha: `docs/secciones/agenda.md` § «la quinta forma de destino»):
-un tilde **«Hace horas extras»** y su link en cada perfil de Usuarios, el destino
-`{tipo:'horas-extras'}` que se deriva solo de ese tilde, el botón «⏱ Cargar mis horas» en el
-pendiente y en Inicio, y el cartel de Usuarios que nombra a quien esté tildada sin link.
+✅ **Cerrado el 30-ago, con Bruno mirando**: se generaron los links de las **cuatro que él nombró**
+—**Camila Budek, Candela Luis, Josefina Batter y Camila Quintana**— en el dashboard, se pegaron en
+sus perfiles de `/usuarios`, y la rutina `it178752572363714_6wxkmp` pasó de los tres nombres a
+`destino: {tipo:'horas-extras'}`.
 
-Lo que queda es **de Bruno, y en este orden**:
+- ⚠️ **Sofi quedó AFUERA a propósito** (no estaba en la lista de Bruno). Hasta el 30-ago la rutina la
+  nombraba: era justo el caso que el pedido venía a arreglar.
+- ⛔ **Gerardo Tamayo no tiene cuenta en el monitor**: si algún día hace horas, el link se le pasa
+  por afuera, porque no hay perfil donde tildarlo.
+- **Los oráculos que se corrieron** (⛔ ninguno es «lo vi en la pantalla»): el padrón quedó en
+  **16 usuarios y 16 con contraseña**, igual que antes de guardar —es lo único que detecta el borrado
+  silencioso de contraseñas—; cada link se cruzó contra la fila de esa persona en la base del
+  dashboard; el `manual_id` de la rutina quedó **intacto**; y `/horas/<token>` se abrió **en el
+  navegador, sin sesión** (salió «Hola, Camila» con su carga vieja del 31/07).
+- **El control de dos lados en la ficha de Organización**: a **Cami Budek** (tildada) la rutina le
+  aparece; a **Sofi** (sin tildar) ⛔ no —con una rutina suya visible en el mismo barrido, que es lo
+  que prueba que la lista no estaba ciega—.
+- ▶️ **Lo único que queda: decidir si va una NOVEDAD.** El botón «⏱ Cargar mis horas» le va a
+  aparecer mañana a cuatro personas que nadie avisó.
 
-1. 🔴 **Deployar `bdi-catalogo` ANTES o junto con el monitor.** `perfilDe` es una lista blanca
-   cerrada: sin ese deploy los dos campos se guardan y **nunca llegan**, sin error visible.
-2. ▶️ **Generar los links** en el dashboard, `/rrhh/horas-extras` → pestaña **Links** → «Copiar».
-   Hoy no lo tiene ninguna de las 11.
-3. ▶️ **Tildar y pegar** en `/usuarios`. Las que hoy están en la rutina son **Sofia Facello, Camila
-   Budek y Candela Luis** — ▶️ **confirmar si son ésas y sólo ésas**.
-4. ▶️ **Recién ahí**, en `/agenda/rutinas`, cambiar el destino de «Cargar las horas extras» de los
-   tres nombres a **«A quien hace horas extras»**. ⛔ Antes del paso 3 la deja dirigida a nadie.
-5. ▶️ **Decidir si va una novedad**: el botón le va a aparecer a tres personas que nadie avisó.
+### 🆕 🔴 ▶️ El modal de la Agenda dice «— sin manual —» en 75 de 75 rutinas (30-ago-2026)
+
+Salió de caminar lo de arriba. El desplegable **«Cómo se hace»** de `ModalItem.tsx` sólo lista los
+manuales **publicados** (`publicados = manuales.filter((m) => m.publicado)`), y hay **1 publicado de
+12**. ⇒ **medido: las 75 rutinas activas que tienen manual abren el modal diciendo que no tienen.**
+
+- ✅ **No borra nada solo**, y se verificó: `manualId` vive en el estado y el `onChange` sólo dispara
+  si alguien toca el desplegable, así que guardar otro campo lo conserva. Se comprobó guardando el
+  destino de «Cargar las horas extras» y releyendo `manual_id` de la base: intacto.
+- 🔴 **Pero si lo tocás, no lo podés volver a poner**: el manual que la rutina tenía **no está entre
+  las opciones**. ⇒ ⛔ hasta que se publiquen los manuales, editar una rutina y **no tocar «Cómo se
+  hace»**.
+- ▶️ Se arregla solo el día que se **publiquen los 11 manuales** (ya estaba en la lista de manos de
+  Bruno). La alternativa, si eso tarda: que el desplegable incluya el manual que la fila ya tiene,
+  aunque esté en borrador, marcado como «sin publicar».
 
 ### ▶️ P1 — Cada sección declara, EN LA PANTALLA, qué hace y qué ejecuta
 
