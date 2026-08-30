@@ -18,35 +18,45 @@
  * inventarle un día. Y medido el 30-ago-2026, la Agenda tampoco DESCRIBE el reparto — **Camila
  * Budek tiene 0 rutinas propias** y trabaja igual, porque su trabajo dispara por hecho y vive en
  * los moldes. Quien lea la Agenda como «quién responde de qué» concluye que ella no responde por
- * nada, que es falso. Por eso «sus rutinas» acá es **una fila más de la ficha**, ⛔ no la ficha.
+ * nada, que es falso.
  *
- * # Los grises son una pestaña, no una omisión
+ * # Cuatro vistas, y cada una contesta OTRA pregunta
  *
- * 🔑 Una responsabilidad sin dueña se guarda igual, con su sector y con `persona: null`, y esta
- * pantalla **la cuenta en la propia pestaña**. Un gris escondido es el que se cobra: en este grupo
- * el mismo agujero —el último campo del producto sin dueño— apareció en tres fichas distintas antes
- * de que alguien lo nombrara.
+ * 🔑 Lo primero que salió mal fue esto: las cuatro mostraban la misma lista de tres maneras, todas
+ * agrupadas por clase, todas con el mismo peso visual. *«Todo muy plano, todo lineal»* (Bruno,
+ * 30-ago). Ahora cada una tiene su forma **porque tiene su pregunta**:
+ *
+ * | vista | contesta | forma |
+ * | --- | --- | --- |
+ * | Organigrama | ¿quién cuelga de quién? | árbol con codos, y el conteo de cada uno |
+ * | Por sector | ¿cómo se reparte? | **matriz**: personas en columnas, clases en filas |
+ * | Por persona | ¿de qué responde? | ficha a dos columnas, con sus rutinas arriba |
+ * | Sin dueño | ¿qué no es de nadie? | por sector, lo más viejo primero |
+ *
+ * ⛔ **Y `organizacion` NO está en `KEYS_PARA_TODOS`**: está en obra y hoy la ven sólo los admin
+ * (pedido de Bruno, 30-ago). Se abre al equipo con una línea en `lib/permisos.core.js`.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Organigrama } from './Organigrama'
+import { MatrizSector } from './MatrizSector'
+import { FichaPersona } from './FichaPersona'
+import { SinDueno } from './SinDueno'
 import { EditorResp } from './EditorResp'
 import { useSistema } from '@/store/useSistema'
 import { leerAgenda } from '@/lib/agenda/cliente'
 import type { ItemAgenda } from '@/lib/agenda/tipos'
-import { clavesDestino } from '@/lib/novedades/tipos'
 import { borrarResp, leerOrganizacion, nuevoIdResp } from '@/lib/organizacion/cliente'
 import {
-  CLASES, NUEVA, arbol, deLaPersona, delSector, grises, sinDueno,
-  type Nodo, type Responsabilidad,
+  NUEVA, arbol, deLaPersona, delSector, grises,
+  type Nodo, type NodoConHijos, type Responsabilidad,
 } from '@/lib/organizacion/tipos'
 import { FUNCIONES, type Funcion } from '@/lib/permisos'
 import { traerEquipo, type Companero } from '@/lib/usuarios/equipo'
 import {
-  Badge, Button, EmptyState, Esqueleto, Markdown, Notice, SectionCard, Tabs,
-  color, font, space, useConfirmar, useFiltroUrl, useToast, weight,
+  Badge, Button, EmptyState, Esqueleto, Notice, SectionCard, Tabs,
+  space, useConfirmar, useFiltroUrl, useToast,
 } from '@/components/ui'
 
 type Pestana = 'organigrama' | 'sector' | 'persona' | 'grises'
@@ -72,7 +82,7 @@ export function Organizacion() {
 
   const [pestana, setPestana] = useFiltroUrl<Pestana>('ver', 'organigrama')
   const [quien, setQuien] = useFiltroUrl<string>('quien', '')
-  const [sector, setSector] = useFiltroUrl<Funcion | ''>('sector', '')
+  const [sector, setSector] = useFiltroUrl<Funcion>('sector', 'marketing')
 
   // ⚠️ Todos los `setState` van adentro de un callback de la promesa, ninguno en el cuerpo: un
   // `setState` sincrónico dentro de un efecto encadena renders y lo corta el lint. Por eso
@@ -97,16 +107,31 @@ export function Organizacion() {
 
   const arbolNodos = useMemo(() => arbol(nodos), [nodos])
   const losGrises = useMemo(() => grises(resp), [resp])
-  /** Las personas que TIENEN alguna responsabilidad cargada, en el orden del organigrama. */
-  const conFicha = useMemo(() => {
+
+  const apodoDe = useCallback((name: string) => equipo?.find((c) => c.name === name)?.apodo || name, [equipo])
+  const cuantasDe = useCallback((persona: string) => deLaPersona(resp, persona).length, [resp])
+  /** La nota del organigrama es el oficio de la persona: «producción audiovisual». */
+  const rolDe = useCallback((persona: string) => nodos.find((n) => n.persona === persona)?.nota || null, [nodos])
+
+  /** Las personas de un sector, en el orden del organigrama y sin perder a las que no están en él. */
+  const personasDe = useCallback((s: Funcion) => {
     const enOrden: string[] = []
-    const caminar = (ns: typeof arbolNodos) => ns.forEach((n) => { if (n.persona) enOrden.push(n.persona); caminar(n.hijos) })
+    const caminar = (ns: NodoConHijos[]) => ns.forEach((n) => { if (n.persona) enOrden.push(n.persona); caminar(n.hijos) })
     caminar(arbolNodos)
-    const sueltas = resp.map((r) => r.persona).filter((p): p is string => !!p && !enOrden.includes(p))
-    return [...enOrden, ...Array.from(new Set(sueltas))].filter((p) => resp.some((r) => r.persona === p && r.activo !== false))
+    const conFilas = new Set(delSector(resp, s).map((f) => f.persona).filter((p): p is string => !!p))
+    // Primero las del organigrama en su orden; después las que tienen renglones y no están colgadas
+    // de ningún lado, que ⛔ no se pueden esconder: son trabajo con dueña que nadie ubicó.
+    return [...enOrden.filter((p) => conFilas.has(p)), ...[...conFilas].filter((p) => !enOrden.includes(p))]
   }, [arbolNodos, resp])
 
-  const apodoDe = (name: string) => equipo?.find((c) => c.name === name)?.apodo || name
+  /** Las personas con ficha, para los botones de «Por persona». */
+  const conFicha = useMemo(() => {
+    const vistas = new Set<string>()
+    for (const s of FUNCIONES) for (const p of personasDe(s.key)) vistas.add(p)
+    return [...vistas]
+  }, [personasDe])
+
+  const sectoresConAlgo = useMemo(() => FUNCIONES.filter((f) => resp.some((r) => r.sector === f.key)), [resp])
 
   async function eliminar(r: Responsabilidad) {
     const ok = await confirmar({
@@ -125,6 +150,8 @@ export function Organizacion() {
     }
   }
 
+  const abrirFicha = (p: string) => { setQuien(p); setPestana('persona') }
+
   const items = [
     { key: 'organigrama', label: 'Organigrama' },
     { key: 'sector', label: 'Por sector' },
@@ -136,7 +163,7 @@ export function Organizacion() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       {puede.editar && (
         <HeaderAcciones>
-          <Button size="sm" onClick={() => setEditando({ ...NUEVA, id: nuevoIdResp() })}>+ Responsabilidad</Button>
+          <Button size="sm" onClick={() => setEditando({ ...NUEVA, id: nuevoIdResp(), sector })}>+ Responsabilidad</Button>
         </HeaderAcciones>
       )}
 
@@ -147,43 +174,44 @@ export function Organizacion() {
       {cargando && !resp.length ? <Esqueleto filas={6} /> : (
         <>
           {pestana === 'organigrama' && (
-            <SectionCard title="Quién cuelga de quién">
+            <SectionCard title="Quién cuelga de quién" subtitle="El número es cuántas responsabilidades tiene escritas. Apretá un nombre para abrir su ficha.">
               {arbolNodos.length === 0 ? (
                 <EmptyState title="El organigrama todavía no está cargado." hint="Se carga con scripts/organizacion-marketing.mjs, desde organigrama.md." />
               ) : (
-                <Organigrama
-                  nodos={arbolNodos}
-                  onPersona={(p) => { setQuien(p); setPestana('persona') }}
-                />
+                <Organigrama nodos={arbolNodos} cuantasDe={cuantasDe} onPersona={abrirFicha} />
               )}
             </SectionCard>
           )}
 
           {pestana === 'sector' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-              {FUNCIONES.filter((f) => !sector || f.key === sector).map((f) => {
-                const filas = delSector(resp, f.key)
-                if (!filas.length && sector !== f.key) return null
-                return (
-                  // ⛔ El subtítulo NO lleva `f.info`: eso es la AYUDA DEL PERMISO («crea las
-                  // solicitudes y ve la solicitud completa»), que describe lo que la función puede
-                  // apretar, no lo que el sector es. Caminando la pantalla se leía como una
-                  // definición del sector, y afirmaba algo que no es. Una pantalla que no pregunta
-                  // igual afirma.
-                  <SectionCard key={f.key} title={f.label}>
-                    <Lista
-                      filas={filas}
-                      manuales={manuales}
-                      apodoDe={apodoDe}
-                      mostrarPersona
-                      puedeEditar={puede.editar}
-                      onEditar={setEditando}
-                      onEliminar={eliminar}
-                    />
-                  </SectionCard>
-                )
-              })}
-              {sector && <Button variant="ghost" size="sm" onClick={() => setSector('')}>Ver los cinco sectores</Button>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                {FUNCIONES.map((f) => {
+                  const cuantas = resp.filter((r) => r.sector === f.key && r.activo !== false).length
+                  return (
+                    <Button key={f.key} size="sm" variant={f.key === sector ? 'soft' : 'ghost'} onClick={() => setSector(f.key)}>
+                      {f.label} {cuantas > 0 && <span style={{ opacity: 0.7 }}>· {cuantas}</span>}
+                    </Button>
+                  )
+                })}
+              </div>
+
+              {!sectoresConAlgo.some((f) => f.key === sector) ? (
+                <EmptyState
+                  title="Este sector todavía no está escrito."
+                  hint="Marketing entró primero. Administración tiene su manual escrito y es la que sigue."
+                  action={puede.editar ? <Button size="sm" onClick={() => setEditando({ ...NUEVA, id: nuevoIdResp(), sector })}>Escribir la primera</Button> : undefined}
+                />
+              ) : (
+                <MatrizSector
+                  filas={delSector(resp, sector)}
+                  personas={personasDe(sector)}
+                  apodoDe={apodoDe}
+                  puedeEditar={puede.editar}
+                  onEditar={setEditando}
+                  onPersona={abrirFicha}
+                />
+              )}
             </div>
           )}
 
@@ -192,52 +220,39 @@ export function Organizacion() {
               <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
                 {conFicha.map((p) => (
                   <Button key={p} size="sm" variant={p === quien ? 'soft' : 'ghost'} onClick={() => setQuien(p === quien ? '' : p)}>
-                    {apodoDe(p)}
+                    {apodoDe(p)} <span style={{ opacity: 0.7 }}>· {cuantasDe(p)}</span>
                   </Button>
                 ))}
               </div>
               {!quien ? (
-                <EmptyState title="Elegí a alguien." hint="La ficha dice de qué responde, qué decide sola, qué publica y qué NO es suyo." />
+                <EmptyState title="Elegí a alguien." hint="La ficha dice de qué responde, qué entrega, qué decide sola, qué publica y qué NO es suyo." />
               ) : (
-                <Ficha
-                  persona={quien}
-                  apodo={apodoDe(quien)}
-                  filas={deLaPersona(resp, quien)}
-                  manuales={manuales}
-                  rutinas={rutinas}
-                  puedeEditar={puede.editar}
-                  onEditar={setEditando}
-                  onEliminar={eliminar}
-                />
+                <SectionCard>
+                  <FichaPersona
+                    persona={quien}
+                    apodo={apodoDe(quien)}
+                    rol={rolDe(quien)}
+                    filas={deLaPersona(resp, quien)}
+                    manuales={manuales}
+                    rutinas={rutinas}
+                    puedeEditar={puede.editar}
+                    onEditar={setEditando}
+                    onEliminar={eliminar}
+                  />
+                </SectionCard>
               )}
             </div>
           )}
 
           {pestana === 'grises' && (
-            <SectionCard
-              title={losGrises.length ? `${losGrises.length} sin dueño` : 'Sin dueño'}
-              subtitle="Cosas de las que el sector responde y ninguna persona reclamó. Se ven a propósito: un gris escondido es el que se cobra."
-            >
-              {/* 🔑 El vacío de acá NO es una felicitación. Que no haya grises cargados casi nunca
-                  significa que no haya grises: significa que nadie los escribió. El cartel lo dice,
-                  porque un «✅ todo cubierto» sería la afirmación más cara de la pantalla. */}
-              {losGrises.length === 0 ? (
-                <EmptyState
-                  title="No hay ninguno cargado."
-                  hint="⚠️ Que la lista esté vacía no dice que todo tenga dueño: dice que nadie anotó lo que no lo tiene. Un gris se carga como cualquier responsabilidad, dejando la persona en blanco."
-                />
-              ) : (
-                <Lista
-                  filas={losGrises}
-                  manuales={manuales}
-                  apodoDe={apodoDe}
-                  mostrarSector
-                  puedeEditar={puede.editar}
-                  onEditar={setEditando}
-                  onEliminar={eliminar}
-                />
-              )}
-            </SectionCard>
+            <SinDueno
+              filas={resp}
+              manuales={manuales}
+              puedeEditar={puede.editar}
+              onEditar={setEditando}
+              onEliminar={eliminar}
+              onNuevo={() => setEditando({ ...NUEVA, id: nuevoIdResp(), sector })}
+            />
           )}
         </>
       )}
@@ -252,147 +267,5 @@ export function Organizacion() {
         />
       )}
     </div>
-  )
-}
-
-/** Una lista de responsabilidades, agrupada por clase. */
-function Lista({ filas, manuales, apodoDe, mostrarPersona, mostrarSector, puedeEditar, onEditar, onEliminar }: {
-  filas: Responsabilidad[]
-  manuales: { id: string; titulo: string; publicado: boolean }[]
-  apodoDe: (n: string) => string
-  mostrarPersona?: boolean
-  mostrarSector?: boolean
-  puedeEditar: boolean
-  onEditar: (r: Responsabilidad) => void
-  onEliminar: (r: Responsabilidad) => void
-}) {
-  if (!filas.length) return <EmptyState title="Todavía no hay nada cargado acá." />
-  const porClase = CLASES.filter((c) => filas.some((f) => f.clase === c.key))
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {porClase.map((c) => (
-        <div key={c.key}>
-          <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2], textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            {c.label}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
-            {filas.filter((f) => f.clase === c.key).map((f) => (
-              <Renglon
-                key={f.id}
-                fila={f}
-                manuales={manuales}
-                apodoDe={apodoDe}
-                mostrarPersona={mostrarPersona}
-                mostrarSector={mostrarSector}
-                puedeEditar={puedeEditar}
-                onEditar={onEditar}
-                onEliminar={onEliminar}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function Renglon({ fila, manuales, apodoDe, mostrarPersona, mostrarSector, puedeEditar, onEditar, onEliminar }: {
-  fila: Responsabilidad
-  manuales: { id: string; titulo: string; publicado: boolean }[]
-  apodoDe: (n: string) => string
-  mostrarPersona?: boolean
-  mostrarSector?: boolean
-  puedeEditar: boolean
-  onEditar: (r: Responsabilidad) => void
-  onEliminar: (r: Responsabilidad) => void
-}) {
-  const manual = manuales.find((m) => m.id === fila.manual_id)
-  const huerfano = sinDueno(fila)
-  return (
-    <div style={{ border: `1px solid ${huerfano ? color.warningBorder : color.line}`, borderRadius: 8, padding: space[3], background: huerfano ? color.warningBg : undefined }}>
-      <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{fila.titulo}</span>
-        {mostrarPersona && (
-          huerfano
-            ? <Badge tone="warning">Sin dueño</Badge>
-            : <Badge tone="neutral">{apodoDe(fila.persona as string)}</Badge>
-        )}
-        {mostrarSector && <Badge tone="neutral">{FUNCIONES.find((f) => f.key === fila.sector)?.label || fila.sector}</Badge>}
-        {fila.activo === false && <Badge tone="neutral">Apagada</Badge>}
-        <span style={{ flex: 1 }} />
-        {puedeEditar && (
-          <>
-            <Button size="sm" variant="ghost" onClick={() => onEditar(fila)}>Editar</Button>
-            <Button size="sm" variant="ghost" onClick={() => onEliminar(fila)}>Eliminar</Button>
-          </>
-        )}
-      </div>
-      {fila.detalle && <div style={{ marginTop: space[2] }}><Markdown texto={fila.detalle} /></div>}
-      {/* El link al manual sólo se dibuja si está PUBLICADO: un botón que promete ayuda y abre
-          vacío enseña a no apretarlo. Es la misma regla del «📘 Cómo se hace» del pendiente. */}
-      {manual?.publicado && (
-        <div style={{ marginTop: space[2] }}>
-          <Link href={`/manuales?manual=${encodeURIComponent(manual.id)}`} style={{ fontSize: font.sm, color: color.brand, fontWeight: weight.semibold }}>
-            📘 {manual.titulo}
-          </Link>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** La ficha de una persona: sus responsabilidades por clase, y el renglón de sus rutinas. */
-function Ficha({ persona, apodo, filas, manuales, rutinas, puedeEditar, onEditar, onEliminar }: {
-  persona: string
-  apodo: string
-  filas: Responsabilidad[]
-  manuales: { id: string; titulo: string; publicado: boolean }[]
-  rutinas: ItemAgenda[] | null
-  puedeEditar: boolean
-  onEditar: (r: Responsabilidad) => void
-  onEliminar: (r: Responsabilidad) => void
-}) {
-  const suyas = useMemo(() => (
-    (rutinas || []).filter((i) => i.activo !== false && !i.plantilla && clavesDestino(i.destino).includes(`p:${persona}`))
-  ), [rutinas, persona])
-
-  return (
-    <SectionCard title={apodo} subtitle={apodo === persona ? undefined : persona}>
-      <Lista
-        filas={filas}
-        manuales={manuales}
-        apodoDe={() => apodo}
-        puedeEditar={puedeEditar}
-        onEditar={onEditar}
-        onEliminar={onEliminar}
-      />
-
-      <div style={{ marginTop: space[4], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-        <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: space[2] }}>
-          {rutinas === null ? 'Buscando sus rutinas en la Agenda…'
-            : suyas.length ? `Y en la Agenda le caen ${suyas.length === 1 ? 'esta rutina' : `estas ${suyas.length} rutinas`}:`
-            : 'En la Agenda no le cae ninguna rutina de calendario.'}
-        </div>
-        {/* 🔑 El cero de acá NO dice que no trabaje, y por eso lo dice la pantalla y no lo deduce el
-            que mira: la Agenda dispara por día del calendario, y el trabajo que dispara por un
-            HECHO —una sesión, una pieza, un ingreso— vive en los moldes, no acá. Medido el
-            30-ago-2026: Camila Budek tiene 0 rutinas propias y 4 pasos en los moldes. */}
-        {rutinas !== null && suyas.length === 0 && (
-          <div style={{ fontSize: font.sm, color: color.mut }}>
-            No es que no le toque nada: la Agenda dispara por día del calendario, y lo que dispara por
-            un hecho —una sesión, un ingreso, un lanzamiento— vive en los eventos de la Agenda.
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: space[1], flexWrap: 'wrap', alignItems: 'center' }}>
-          {suyas.map((r) => (
-            <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.ink2, border: `1px solid ${color.line}`, borderRadius: 999, padding: '3px 10px' }}>
-              <span aria-hidden>{r.clase === 'aviso' ? '📣' : '☑️'}</span>
-              {r.titulo}
-            </span>
-          ))}
-          <Link href="/agenda" style={{ fontSize: font.sm, color: color.brand, fontWeight: weight.semibold }}>Ver la Agenda →</Link>
-        </div>
-      </div>
-    </SectionCard>
   )
 }
