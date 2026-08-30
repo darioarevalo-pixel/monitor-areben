@@ -66,13 +66,16 @@ Y `organizacion → components/organizacion + lib/organizacion`, por `?recurso=o
 base y también sin `store`: quién responde de qué es la misma persona en las dos marcas.
 ⚠️ **Es la contracara de la Agenda**: aquélla contesta «¿qué me toca hoy?» y ésta «¿de quién es
 esto?». Tablas `organizacion_nodos` y `organizacion_resp`; el sub-permiso es `organizacion.editar`.
+🔴 **Y ⛔ NO está en `KEYS_PARA_TODOS`, a diferencia de sus dos hermanas de área**: está en obra
+(Bruno, 30-ago-2026) y hoy la ven **sólo los admin**, porque ninguna función hereda esa área.
+Se abre al equipo con una línea, cuando la vista esté.
 
 **Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`).
 ⚠️ **Una sección con SEIS entradas de menú** (como Meta): `/agenda` · `/agenda/semana` ·
 `/agenda/mes` · `/agenda/eventos` · `/agenda/rutinas` · `/agenda/cumplimiento`. Las tres últimas
 piden el sub-permiso `agenda.cargar`; la subárea sale del 2º tramo de la URL.
 
-**Sin permiso (las ve todo el equipo)** — `inicio` · `novedades` · `manuales` · `agenda` · `organizacion`
+**Sin permiso (las ve todo el equipo)** — `inicio` · `novedades` · `manuales` · `agenda`
 
 Son las de `KEYS_PARA_TODOS` (`lib/permisos.core.js`), que es lo que consulta `puedeVer`.
 ⚠️ **`usuarios` NO entra**, aunque esté en `KEYS_SIN_PERMISO` de `lib/nav.ts`: es de **admin**. Esta

@@ -840,7 +840,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "organizacion",
     "area": "sistema",
     "label": "Organización",
-    "info": "De quién es cada cosa, sin fecha: el organigrama, de qué responde cada persona, qué decide sola, qué publica y qué NO es suyo — y las que hoy no tiene nadie. Es la contracara de la Agenda: aquélla contesta «¿qué me toca hoy?» y ésta «¿de quién es esto?». LA VE TODO EL EQUIPO SIEMPRE: está en KEYS_PARA_TODOS (lib/permisos.core.js), así que tildar o destildar esta fila NO cambia nada — un reparto que sólo ve quien lo escribió no reparte nada. Lo único que se da acá es el permiso de editar.",
+    "info": "De quién es cada cosa, sin fecha: el organigrama, de qué responde cada persona, qué decide sola, qué publica y qué NO es suyo — y las que hoy no tiene nadie. Es la contracara de la Agenda: aquélla contesta «¿qué me toca hoy?» y ésta «¿de quién es esto?». 🔴 TODAVÍA NO SALIÓ AL EQUIPO: está en obra, así que por ahora la ven sólo los administradores. Tildar esta fila acá SÍ se la muestra a alguien — el día que salga se abre para todos de una, sacando el candado en lib/permisos.core.js.",
     "brands": [
       "bdi",
       "zattia"
