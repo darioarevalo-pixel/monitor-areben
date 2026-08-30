@@ -19,7 +19,6 @@ import {
   desdeDe as desdeDeJs,
   desgasteDe as desgasteDeJs,
   DIAS_SERVIBLES as DIAS_SERVIBLES_JS,
-  DIAS_ZONA as DIAS_ZONA_JS,
   fusionarVivo as fusionarVivoJs,
   ordenarCeldas as ordenarCeldasJs,
   VENTANAS_ZONA as VENTANAS_ZONA_JS,
@@ -273,8 +272,6 @@ export const CAIDA_CTR = CAIDA_CTR_JS as number
 export const SUBA_CPM = SUBA_CPM_JS as number
 export const USA_LA_CAJA = USA_LA_CAJA_JS as number
 export const CON_AIRE = CON_AIRE_JS as number
-export const DIAS_ZONA = DIAS_ZONA_JS as readonly number[]
-
 /**
  * Lo apagado al fondo, y arriba lo que más gasta. ⚠️ Ordena por `veredicto.clase` y ⛔ no por
  * `estado`: la clase ya resolvió que la configuración es de HOY, mientras que `estado` en una

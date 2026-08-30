@@ -779,10 +779,15 @@ de un cambio hecho hace dos o tres**. Una barra de 7/14/30 promedia justo lo que
 - ⚠️ **La tira ⛔ nunca puede ofrecer HOY, y es estructural**: `caja` viene cortada en
   `ultimoDiaCerrado()`. No hace falta un chequeo — el día en curso no está porque el servidor no lo
   puso. Para hoy está la banda, que sale de Meta.
-- **Dos listas, ⛔ no una**: `DIAS_ZONA = [7,14,30]` es lo que ofrece la barra; `DIAS_SERVIBLES =
-  [1,3,7,14,30]` es lo que el servidor sabe contestar. Al `1` y al `3` ⛔ no se llega por un botón
-  —«1 día» al lado de «7 días» significaría otra cosa que sus vecinos— sino clickeando la tira. Un
-  test amarra `DIAS_ZONA ⊂ DIAS_SERVIBLES`: si no, un botón daría 400.
+- **La barra y el servidor son dos listas, ⛔ no una**: `VENTANAS_ZONA` es lo que ofrece la barra
+  (`Hoy •` · `Hoy y ayer •` · 3 · 7 · 14 · 30) y `DIAS_SERVIBLES = [1,3,7,14,30]` lo que el servidor
+  sabe contestar. Al `1` se llega clickeando la tira. ⛔ **El `2` ⛔ no está a propósito**: «Hoy y
+  ayer» sale de Meta en vivo y a la foto se le pide la ventana de JUICIO.
+  🔴 **`DIAS_ZONA` se borró el 30-ago-2026**: al pasar la barra a ventanas con nombre dejó de ser «lo
+  que ofrece la barra» **y el test la siguió mirando, en verde** — un botón nuevo de 5 días habría
+  dado 400 sin que nada avisara. La invariante amarrada ahora es la de verdad: **`VENTANAS_ZONA` sin
+  las vivas ⊆ `DIAS_SERVIBLES`**. 🔑 *Un test que vigila la constante que ya ⛔ no manda es un test
+  apagado que se ve prendido.*
 - **`elegirCierre(hasta, {cierreReal, primeraLeida})`** valida el ancla. 🔴 **Un `hasta` posterior al
   último cerrado es un ERROR, ⛔ nunca un recorte silencioso**: recortarlo «para ser amable» sería
   dibujar medio día como entero, que es el defecto original de toda esta sección. Y un `hasta`

@@ -639,7 +639,7 @@ export function traerTendencia(dias: number): Promise<Lectura<RespuestaTendencia
  * esto es la pantalla. Lo que la foto no tiene es el día EN CURSO, y para eso sigue estando el
  * parte.
  *
- * `dias` son los de `DIAS_ZONA` (7, 14 o 30). El servidor ⛔ no cree cualquier número: contesta 400
+ * `dias` son los de `DIAS_SERVIBLES` (1, 3, 7, 14 o 30). El servidor ⛔ no cree cualquier número: 400
  * nombrando los que acepta, en vez de caer a un default en silencio.
  */
 /**

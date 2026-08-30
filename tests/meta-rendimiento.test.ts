@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  CONV_APRENDIZAJE, DIAS_SERVIBLES, DIAS_ZONA, aprendizajeDe, armarZona, avisosPorCelda,
+  CONV_APRENDIZAJE, DIAS_SERVIBLES, aprendizajeDe, armarZona, avisosPorCelda,
   celdasDeLaFoto, concentracionDe, desdeDe, desgasteDe, elegirCierre, elegirVentana, enVentana,
   fusionarVivo, ordenarCeldas, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona, veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
@@ -457,8 +457,23 @@ describe('avisosPorCelda — un aviso en varias cajas es varias filas, no una su
  * es de HOY, y el VEREDICTO es de la ventana de JUICIO — nunca de un día suelto.
  */
 describe('elegirVentana y elegirCierre — lo que el servidor sabe contestar', () => {
-  it('la barra ofrece un subconjunto de lo que el servidor sabe: si no, un botón daría 400', () => {
-    for (const d of DIAS_ZONA) expect(DIAS_SERVIBLES).toContain(d)
+  it('🔴 la BARRA ofrece un subconjunto de lo que el servidor sabe: si no, un botón daría 400', () => {
+    // ⚠️ Se mide sobre `VENTANAS_ZONA` y ⛔ ya no sobre `DIAS_ZONA`. Al pasar la barra a ventanas con
+    // nombre (`Hoy` · `Hoy y ayer` · 3 · 7 · 14 · 30) esa constante dejó de ser «lo que ofrece la
+    // barra» **y el test siguió verde mirándola**: un botón nuevo de 5 días habría dado 400 sin que
+    // nada avisara. Es la misma trampa de siempre — un test que vigila la constante que YA no manda.
+    const deLaFoto = VENTANAS_ZONA.filter((v) => !v.vivo)
+    expect(deLaFoto.length).toBeGreaterThan(0)
+    for (const v of deLaFoto) expect(DIAS_SERVIBLES).toContain(v.dias)
+  })
+
+  it('⚠️ y las VIVAS no le piden esa ventana al servidor: le piden la de juicio', () => {
+    // `Hoy` cubre 1 día y `Hoy y ayer` 2 — y **2 ⛔ no está en `DIAS_SERVIBLES`**, a propósito: esas
+    // dos salen de Meta en vivo y a la foto se le sigue pidiendo la ventana de juicio, porque el
+    // veredicto ⛔ no se calcula sobre un día parcial. Si algún día una viva le pidiera su propio
+    // `dias` a la zona, esto lo recuerda.
+    expect(VENTANAS_ZONA.filter((v) => v.vivo).map((v) => v.dias)).toEqual([1, 2])
+    expect(DIAS_SERVIBLES).not.toContain(2)
   })
 
   it('acepta el día suelto y los tres días, a los que se llega por la tira', () => {
