@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CONV_APRENDIZAJE, DIAS_SERVIBLES, aprendizajeDe, armarZona, avisosPorCelda,
-  celdasDeLaFoto, concentracionDe, desdeDe, desgasteDe, elegirCierre, elegirVentana, enVentana,
+  celdasDeLaFoto, concentracionDe, desdeDe, firmaDePieza, desgasteDe, elegirCierre, elegirVentana, enVentana,
   diasDeLaFoto, fusionarVivo, ordenarCeldas, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona,
   veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
@@ -259,6 +259,54 @@ describe('🔴 la configuración es de HOY, las métricas son de la ventana', ()
   })
 })
 
+describe('la firma de una pieza', () => {
+  it('recorta la fecha de lanzamiento, el «- Copia» y el gemelo de Advantage+', () => {
+    // 📊 Los cuatro nombres son de la foto de BDI, tal cual están escritos en Meta — el doble
+    // espacio de « -  ADV+ » incluido.
+    const base = 'ad01 - funda pinterest - shiny'
+    expect(firmaDePieza('AD01 - FUNDA PINTEREST - SHINY - 13/8')).toBe(base)
+    expect(firmaDePieza('AD01 - FUNDA PINTEREST - SHINY - 13/8 - Copia')).toBe(base)
+    expect(firmaDePieza('AD01 - FUNDA PINTEREST - SHINY -  ADV+ -18/8')).toBe(base)
+    expect(firmaDePieza('AD01 - FUNDA PINTEREST - SHINY')).toBe(base)
+  })
+
+  it('🔴 ⛔ NO come una segunda fecha cuando no hubo ADV+: el recorte es de a uno', () => {
+    // Un bucle que recorta fechas hasta que no quedan se lleva puesto el nombre entero. La segunda
+    // pasada existe SÓLO detrás del marcador de Advantage+, que trae su fecha pegada.
+    expect(firmaDePieza('AD - 1/2 - 3/4')).toBe('ad - 1/2')
+    expect(firmaDePieza('AD - 1/2 - ADV+ -18/8')).toBe('ad')
+  })
+
+  it('🔴 prefiere NO fusionar: un espacio distinto en el prefijo deja dos piezas', () => {
+    // 📊 Medido: en BDI conviven «AD 01- GIRLY CASES» y «AD01 - GIRLY CASES». Fusionarlos pediría
+    // adivinar, y el número que sale de acá es un piso — de más nunca.
+    expect(firmaDePieza('AD 01- GIRLY CASES')).not.toBe(firmaDePieza('AD01 - GIRLY CASES - 7/8'))
+  })
+
+  it('🔑 colapsa los espacios de adentro: Meta deja dobles al copiar un nombre', () => {
+    // El « -  ADV+ » de la foto ya trae uno; el que queda ADENTRO del nombre lo dejaría en dos
+    // piezas distintas que se ven idénticas en la pantalla.
+    expect(firmaDePieza('AD02  -  GIRLHOOD  COLLECTION')).toBe('ad02 - girlhood collection')
+  })
+
+  it('⛔ un nombre que es SÓLO una fecha ⛔ no se firma vacío: se queda como está', () => {
+    // Una firma vacía junta en un grupo solo a todos los que se recortan enteros, y ahí la pieza
+    // más grande sería una suma de cosas sin relación.
+    const filas = [
+      fila({ nivel: 'aviso', objeto_id: 'a1', adset_id: 'c1', nombre: '13/8', spend: 300 }),
+      fila({ nivel: 'aviso', objeto_id: 'a2', adset_id: 'c2', nombre: '19/8', spend: 200 }),
+    ]
+    const c = concentracionDe(filas, firmaDePieza)
+    expect(c.piezas).toHaveLength(2)
+    expect(c.mayor?.pieza).toBe('13/8')
+  })
+
+  it('⛔ no recorta un número que no es una fecha', () => {
+    expect(firmaDePieza('AD05- FUNDAS DESDE $5000 - GIRL - 11/8')).toBe('ad05- fundas desde $5000 - girl')
+    expect(firmaDePieza('AD01 - FUNDAS MENOS 15MIL - 19/8')).toBe('ad01 - fundas menos 15mil')
+  })
+})
+
 describe('la concentración por pieza', () => {
   it('suma la misma pieza a través de las cajas y cuenta en cuántas corre', () => {
     const filas = [
@@ -266,12 +314,60 @@ describe('la concentración por pieza', () => {
       fila({ nivel: 'aviso', objeto_id: 'ad2', adset_id: 'a2', nombre: 'AD02 GIRLHOOD', spend: 220 }),
       fila({ nivel: 'aviso', objeto_id: 'ad3', adset_id: 'a3', nombre: 'OTRA', spend: 480 }),
     ]
-    const c = concentracionDe(filas)
+    const c = concentracionDe(filas, firmaDePieza)
     expect(c.total).toBe(1000)
     expect(c.mayor?.pieza).toBe('AD02 GIRLHOOD')
     expect(c.mayor?.gasto).toBe(520)
     expect(c.mayor?.cajas).toBe(2)
+    expect(c.mayor?.nombres).toBe(1)
     expect(c.mayor?.pct).toBeCloseTo(52, 5)
+  })
+
+  it('🔴🔑 el caso REAL: el gemelo de Advantage+ lleva la pieza más grande de BDI de 32% a 52%', () => {
+    // 📊 La plata es la medida en la foto, semana del 18→24-ago-2026 en BDI: agrupando por nombre
+    // exacto el mayor daba 32% en 1 caja y la tarjeta se dibujaba NEUTRA, cuando el 52% real es la
+    // marca de riesgo más grande de la cuenta.
+    const filas = [
+      fila({ nivel: 'aviso', objeto_id: 'a1', adset_id: 'c1', nombre: 'AD02 - GIRLHOOD COLLECTION - ADV+ -18/8', spend: 144777 }),
+      fila({ nivel: 'aviso', objeto_id: 'a2', adset_id: 'c2', nombre: 'AD02 - GIRLHOOD COLLECTION', spend: 67194 }),
+      fila({ nivel: 'aviso', objeto_id: 'a3', adset_id: 'c3', nombre: 'AD02 - GIRLHOOD COLLECTION', spend: 21734 }),
+      fila({ nivel: 'aviso', objeto_id: 'a4', adset_id: 'c4', nombre: 'AD01 - FUNDA PINTEREST - SHINY - 13/8', spend: 46497 }),
+      fila({ nivel: 'aviso', objeto_id: 'a5', adset_id: 'c5', nombre: 'OTRAS', spend: 172541 }),
+    ]
+    const c = concentracionDe(filas, firmaDePieza)
+    expect(Math.round(c.mayor!.pct)).toBe(52)
+    expect(c.mayor?.cajas).toBe(3)
+    expect(c.mayor?.nombres).toBe(2)
+  })
+
+  it('🔑 el nombre que muestra es el de la variante que MÁS gastó, ⛔ no la firma recortada', () => {
+    // La firma va en minúsculas y sin fecha: en la pantalla no se podría buscar en Meta.
+    // 🔑 **La que más gastó va SEGUNDA a propósito.** Los nombres se recorren en el orden en que
+    // llegaron, así que con la ganadora primera el test pasa igual quedándose con la primera — y
+    // ése es justo el mutante que hay que matar.
+    const filas = [
+      // Una sola fila, más gorda que cada una de las de abajo pero menos que su suma.
+      fila({ fecha: '2026-08-18', nivel: 'aviso', objeto_id: 'a2', adset_id: 'c2', nombre: 'AD02 - X - Copia', spend: 150 }),
+      fila({ fecha: '2026-08-18', nivel: 'aviso', objeto_id: 'a1', adset_id: 'c1', nombre: 'AD02 - X - 13/8', spend: 100 }),
+      fila({ fecha: '2026-08-19', nivel: 'aviso', objeto_id: 'a1', adset_id: 'c1', nombre: 'AD02 - X - 13/8', spend: 100 }),
+    ]
+    const c = concentracionDe(filas, firmaDePieza)
+    expect(c.mayor?.pieza).toBe('AD02 - X - 13/8')
+    expect(c.mayor?.nombres).toBe(2)
+  })
+
+  it('🔴 una variante que en esta ventana gastó $0 ⛔ no suma ni caja ni nombre', () => {
+    // 📊 El caso es de la foto: «AD01 - UNBOXING LOCAL - 14/8» convive con el «- 19/8» y en la
+    // semana del 18→24 gastó $0. Contándolo, la tarjeta decía «+1 nombre en 2 cajas» de una pieza
+    // que corre en una sola. «Corre en N cajas» es una afirmación sobre DÓNDE ESTÁ LA PLATA.
+    const filas = [
+      fila({ nivel: 'aviso', objeto_id: 'a1', adset_id: 'c1', nombre: 'AD01 - UNBOXING LOCAL - 19/8', spend: 20528 }),
+      fila({ nivel: 'aviso', objeto_id: 'a2', adset_id: 'c2', nombre: 'AD01 - UNBOXING LOCAL - 14/8', spend: 0 }),
+    ]
+    const c = concentracionDe(filas, firmaDePieza)
+    expect(c.mayor?.cajas).toBe(1)
+    expect(c.mayor?.nombres).toBe(1)
+    expect(c.mayor?.pieza).toBe('AD01 - UNBOXING LOCAL - 19/8')
   })
 
   it('⛔ no cuenta las filas de conjunto: la misma plata está en los cuatro niveles', () => {
@@ -279,7 +375,12 @@ describe('la concentración por pieza', () => {
       fila({ nivel: 'aviso', objeto_id: 'ad1', nombre: 'P', spend: 100 }),
       fila({ nivel: 'conjunto', objeto_id: 'a1', nombre: 'P', spend: 100 }),
     ]
-    expect(concentracionDe(filas).total).toBe(100)
+    expect(concentracionDe(filas, firmaDePieza).total).toBe(100)
+  })
+
+  it('🔴 sin función de firma TIRA: el agrupamiento es una decisión, ⛔ no un default', () => {
+    // @ts-expect-error — el llamador tiene que elegir, y el typechecker ya lo señala.
+    expect(() => concentracionDe([], undefined)).toThrow(/firma/)
   })
 })
 

@@ -619,7 +619,12 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
           <KpiCard
             label="Pieza más grande"
             value={`${Math.round(conc.pct)}%`}
-            sub={`«${conc.pieza}» en ${conc.cajas} caja${conc.cajas === 1 ? '' : 's'}${tv ? ` · ${z.ventanaJuicio} días cerrados` : ''}`}
+            /* 🔴 **Los NOMBRES se dicen, ⛔ no se callan.** La misma pieza corre con la fecha de
+               lanzamiento cambiada, con `- Copia` y con el gemelo de Advantage+, y sumarlas es lo
+               que lleva a la más grande de BDI de 32% a 52%. Pero la firma sale del NOMBRE, así que
+               puede fusionar dos videos distintos que compartan la base: decir sobre cuántos está
+               sumando es lo que deja vetarlo de un vistazo. 📌 Ver `firmaDePieza` en el núcleo. */
+            sub={`«${conc.pieza}»${conc.nombres > 1 ? ` +${conc.nombres - 1} nombre${conc.nombres === 2 ? '' : 's'}` : ''} en ${conc.cajas} caja${conc.cajas === 1 ? '' : 's'}${tv ? ` · ${z.ventanaJuicio} días cerrados` : ''}`}
             tone={conc.pct >= 40 ? 'warning' : 'neutral'}
           />
         )}

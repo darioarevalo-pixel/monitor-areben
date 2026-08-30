@@ -882,9 +882,14 @@ pieza **antes de pausarla o escalarla**, y ver **qué se está gastando la guita
    el `creative_id`, así que `concentracionDe()` agrupa por nombre de aviso: sobre la semana 18→24
    da **«AD02 - GIRLHOOD COLLECTION - ADV+ -18/8» = 32% en 1 caja**, y lo real —el mismo video en
    tres cajas con tres nombres— es **52% en 3**. ⇒ **es un PISO de la concentración, nunca un techo**,
-   y la pantalla lo dice. ▶️ El arreglo es sumarle `creative{id}` a la lectura de configuración de
-   `snapshot-meta.mjs` y una columna; es **hacia adelante** (el backfill no lo tiene), igual que el
-   historial de estado.
+   y la pantalla lo dice.
+   ⛔ **CORREGIDO el 30-ago (noche), ver la tanda de la concentración más abajo**: el 32% de acá era
+   por **nombre EXACTO**, y agrupando por `firmaDePieza()` la misma ventana da **51,6% en 3 cajas**.
+   Y el arreglo que decía este renglón —*«sumarle `creative{id}`»*— ⛔ **no arreglaba el caso**:
+   duplicar un aviso le crea un creativo nuevo con id nuevo. ▶️ Lo que falta guardar en la foto es la
+   firma del CONTENIDO (`video_id` ‖ `image_hash` ‖ `effective_object_story_id`), que
+   `creativos.core.js` ya trae viva de Graph; es **hacia adelante** (el backfill no la tiene), igual
+   que el historial de estado.
 
 ### 🔑 El último día CERRADO se deriva del dato, ⛔ no de un `new Date()`
 
@@ -1983,6 +1988,65 @@ acababa de arreglar — la lección ⛔ no se hereda: la agarró el test.
   ▶️ **La primera apertura ES la medición**, y la hipótesis a confirmar o tumbar es que casi toda la
   plata de BDI esté en «abierta» (las campañas del banco y las tandas son `BROAD`). Si sale así, el
   veredicto ya trae la mano.
+
+## 🆕🏁 30-ago-2026 (noche): LA PIEZA MÁS GRANDE ERA EL 52%, y la pantalla decía 32% en neutro
+
+🔴🔑 **El defecto no era la imprecisión: era el COLOR.** `concentracionDe()` agrupaba los avisos por
+**nombre exacto** y daba *«pieza más grande: 32%, en 1 caja»* para BDI. La tarjeta se pinta de aviso
+a partir del **40%**, así que con el 32% **la marca de riesgo estructural más grande de la cuenta se
+dibujaba neutra** — y esa concentración es el renglón que sostiene *«el cuello son las PIEZAS»*.
+
+📊 **Medido, con el control adentro** (`scripts/medir-concentracion-pieza.mjs`, foto entera, 1.585
+filas de aviso). El script primero **reproduce la medición vieja** —32,0% en 1 caja, BDI 18→24-ago—
+y si no le da, para: un instrumento nuevo que no puede repetir el número viejo no está midiendo lo
+que dice. ⚠️ **Y el control ⛔ no es una segunda fuente**: sale de la misma foto, así que prueba que
+la ventana y la lectura son las mismas, ⛔ no que el 32% fuera cierto.
+
+**Con la firma, la misma ventana da 51,6% en 3 cajas** — el 52% que la ficha tenía anotado de haber
+mirado el video en prod el 26-ago. Y ⛔ no es un caso: en esa semana **5 grupos** de BDI fusionan más
+de un nombre (`FUNDAS DESDE $5000` 12,4%, `FUNDA PINTEREST - SHINY` 11,2%, `GIRLY CASES` 5,4%…).
+
+🔑 **La causa es una convención de nombres, ⛔ no un misterio.** El mismo video corre con tres
+marcas encima: la **fecha de lanzamiento** al final (`- 13/8`), el `- Copia` que pone Meta al
+duplicar, y el gemelo de **Advantage+**, que se llama `<base> -  ADV+ -18/8` (con la fecha pegada al
+marcador y doble espacio adelante). `firmaDePieza()` recorta esas tres, **cada una una sola vez y en
+un orden fijo**: un bucle que come fechas se lleva puesto `AD - 1/2 - 3/4` entero, y la segunda
+fecha se recorta **sólo** detrás de un `ADV+`.
+
+🔴 **Sigue siendo un PISO, y por dos motivos opuestos que la pantalla ⛔ no puede callar.** Uno:
+**no fusiona de más por miedo** — `AD 01- GIRLY CASES` y `AD01 - GIRLY CASES` quedan separados por
+un espacio en el prefijo, y quedan bien separados. Dos: dos videos distintos pueden compartir la
+base, y ahí fusiona de más. ⇒ **la tarjeta dice «+N nombres»** al lado de la pieza, para poder
+vetar la fusión de un vistazo, y el script imprime cada grupo con su plata desglosada por nombre.
+
+🔴 **Y una caja que gastó $0 en la ventana ⛔ ya no cuenta como caja ni como nombre.** *«Corre en 3
+cajas»* es una afirmación sobre **dónde está la plata**: `AD01 - UNBOXING LOCAL - 14/8` convive con
+el `- 19/8` y en esa semana gastó cero — contándolo, la tarjeta decía «+1 nombre en 2 cajas» de una
+pieza que corre en una sola.
+
+⛔ **CORRIGE el renglón pendiente que decía «el arreglo es sumarle `creative{id}` a
+`snapshot-meta.mjs`».** `creative{id}` a secas ⛔ **no arregla este caso**: duplicar un aviso en Meta
+le crea un creativo **nuevo con id nuevo**, así que los tres GIRLHOOD quedarían tan separados por el
+`creative.id` como los dejaba el nombre. Lo que identifica la pieza es el **contenido** del creativo
+—`video_id` para un video, `image_hash` para una imagen, `effective_object_story_id` para una
+publicación— y **`lib/meta-ads/creativos.core.js` ya lo trae vivo de Graph** para la Biblioteca
+(`object_story_spec.video_data.video_id`). ▶️ **Lo que falta es guardar esa firma en la foto**, y es
+hacia adelante: el backfill ⛔ no la tiene, así que el nombre va a seguir siendo el respaldo de todo
+lo anterior al día que se prenda.
+
+🔴 **`concentracionDe(filas, firma)` lleva la firma OBLIGATORIA.** Agrupar por nombre exacto y
+agrupar por firma son dos decisiones distintas y ninguna puede quedar de default escondido: el
+typechecker señaló a los dos llamadores. 📌 [[feedback_areben_media_regla_en_una_pantalla]].
+
+✅ **14 tests** (`tests/meta-rendimiento.test.ts`, `tests/meta-zona-kpis.test.tsx`), **11 mutantes
+muertos**. 🔑 **Tres sobrevivieron en la primera pasada y los tres eran tests que faltaban de
+verdad**, ⛔ no anclas mal puestas — salvo uno: *«el nombre mostrado es el primero, no el que más
+gastó»* sobrevivía porque en el test **la variante ganadora estaba primera en la lista**, así que
+quedarse con la primera pasaba igual. Se reordenó, y ahora el orden de las filas es parte del caso.
+
+▶️ **La mano que queda es de Bruno**: abrir Rendimiento en BDI y ver la tarjeta en **~52% con el
+color de aviso** y el «+1 nombre» al lado. El test ve el color y ve el renglón; que el 52% sea la
+verdad de ESE video ya se verificó mirando prod el 26-ago, pero las otras cuatro fusiones ⛔ no.
 
 ## Pendiente
 

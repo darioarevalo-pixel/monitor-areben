@@ -12,6 +12,7 @@ import {
   celdasDeLaFoto as celdasDeLaFotoJs,
   avisosPorCelda as avisosPorCeldaJs,
   concentracionDe as concentracionDeJs,
+  firmaDePieza as firmaDePiezaJs,
   configDeHoy as configDeHoyJs,
   CON_AIRE as CON_AIRE_JS,
   CONV_APRENDIZAJE as CONV_APRENDIZAJE_JS,
@@ -214,7 +215,8 @@ export type Ventana = {
 /** 🔴 `marginal` es `null` CON MOTIVO cuando no se puede calcular, y eso es la mitad de la función. */
 export type Marginal = { a: Ventana | null; b: Ventana | null; marginal: number | null; motivo: string }
 
-export type Pieza = { pieza: string; gasto: number; compras: number; cajas: number; pct: number }
+/** `nombres` es cuántas variantes del nombre se sumaron acá. Con 1, `pieza` es el nombre tal cual. */
+export type Pieza = { pieza: string; gasto: number; compras: number; cajas: number; nombres: number; pct: number }
 export type Concentracion = { total: number; piezas: Pieza[]; mayor: Pieza | null }
 
 export type Zona = {
@@ -349,7 +351,13 @@ export const veredictoDeCelda = veredictoDeCeldaJs as (
   celda: Omit<Celda, 'desgaste' | 'aprendizaje' | 'veredicto' | 'avisos'>,
   ctx?: { techo?: number; desgaste?: Partial<Desgaste> | null; aprendizaje?: Partial<Aprendizaje> | null },
 ) => Veredicto
-export const concentracionDe = concentracionDeJs as (filas: FilaZona[]) => Concentracion
+export const concentracionDe = concentracionDeJs as (
+  filas: FilaZona[],
+  /** 🔴 Obligatoria: agrupar por nombre exacto y agrupar por firma son dos decisiones distintas. */
+  firma: (nombre: string) => string,
+) => Concentracion
+/** El nombre sin la fecha de lanzamiento, el `- Copia` ni el gemelo de Advantage+. Ver el `.core.js`. */
+export const firmaDePieza = firmaDePiezaJs as (nombre: string | null | undefined) => string
 /** Indexado por el `adset_id`, que es el `id` de la celda. Ver el docblock del `.core.js`. */
 export const avisosPorCelda = avisosPorCeldaJs as (filas: FilaZona[]) => Map<string, AvisoDeCelda[]>
 /** 🔑 Las métricas son de la ventana; la configuración es de HOY. ⛔ Recibe TODAS las filas. */

@@ -618,6 +618,21 @@ hacer nadie más. Cinco cosas que sólo se ven abriéndola:
   frase?» ⛔ no lo decide un regex. El proxy barato —un `?` en el rótulo— da **46 casos y la mayoría
   son legítimos** (ayudas en voz de pregunta: «¿De qué marca?»). Un test así **nace rojo sobre lo que
   está bien**, y ése es el que alguien apaga.
+- 🏁 **«La pieza más grande es el 32%» era el 52%, y la tarjeta se dibujaba NEUTRA — HECHO el
+  30-ago (noche).** La concentración agrupaba los avisos por **nombre exacto**, y el mismo video
+  corre con la fecha de lanzamiento cambiada, con el `- Copia` de Meta y con el gemelo de
+  Advantage+ (`<base> -  ADV+ -18/8`). Como la tarjeta se pinta de aviso recién a partir del 40%,
+  **la marca de riesgo estructural más grande de la cuenta salía en neutro**. Ahora agrupa por
+  `firmaDePieza()` y dice **«+N nombres»**, para poder vetar una fusión de un vistazo. 📊 El
+  instrumento es `scripts/medir-concentracion-pieza.mjs` y **trae el control adentro**: reproduce
+  los 32,0% en 1 caja de BDI 18→24-ago antes de medir nada, y si no le da, para.
+  ⛔ **Corrige lo que decía este plan**: *«el arreglo es sumarle `creative{id}`»* ⛔ no arreglaba el
+  caso —duplicar un aviso crea un creativo nuevo con id nuevo—. ▶️ **Lo que queda es guardar en la
+  foto la firma del CONTENIDO** (`video_id` ‖ `image_hash` ‖ `effective_object_story_id`), que
+  `lib/meta-ads/creativos.core.js` ya trae viva de Graph para la Biblioteca. Es **hacia adelante**:
+  el nombre va a seguir siendo el respaldo de todo lo anterior al día que se prenda.
+  ▶️ **La mano de Bruno**: ver la tarjeta en ~52% con el color de aviso. Y las otras cuatro fusiones
+  de BDI ⛔ no están verificadas contra el video — la de GIRLHOOD sí, en prod el 26-ago.
 - **El puente MAKETA → «Anuncio nuevo»**: una pieza terminada allá ⛔ no llega sola acá. Hoy el camino
   es Drive → arrastrar. ⛔ No lo cubre ninguna de las dos apps.
 - 🏁 **«¿Cuánta plata le compra a gente que YA nos conocía?» — HECHA el 30-ago (tarde).** Era el

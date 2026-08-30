@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { FilaDeKpis } from '@/components/meta-ads/zona/ZonaRendimiento'
+import { toneTokens } from '@/components/ui/tokens'
 import { totalesVivos, ventanaZona, type RespuestaZona, type TotalesVivos } from '@/lib/meta-ads/rendimiento'
 
 /**
@@ -32,7 +33,7 @@ const zona = {
   celdas: [],
   caja: [],
   marginal: { marginal: 13388, motivo: '' },
-  concentracion: { mayor: { pieza: 'AD02 GIRLHOOD', pct: 52, cajas: 3 } },
+  concentracion: { mayor: { pieza: 'AD02 - GIRLHOOD COLLECTION', pct: 52, cajas: 3, nombres: 2 } },
 } as unknown as NonNullable<RespuestaZona['zona']>
 
 /** Hoy: gastó $80.000 y Meta le atribuye 20 compras ⇒ $4.000 c/u, el 60% del techo. */
@@ -101,5 +102,49 @@ describe('la fila de KPIs sigue a la ventana elegida', () => {
 
   it('sin techo cargado tampoco colorea nada, en las dos ventanas', () => {
     expect(pinta(totalesVivos([{ spend: 80000, compras: 20, revenue: 1 }] as never, 0))).toContain('sin techo cargado')
+  })
+})
+
+/**
+ * 🔴 **La tarjeta tiene que DECIR sobre cuántos nombres está sumando.**
+ *
+ * El 52% sale de fusionar «AD02 - GIRLHOOD COLLECTION» con su gemelo « -  ADV+ -18/8», y esa
+ * fusión sale del NOMBRE: puede juntar dos videos distintos que compartan la base. Callarla
+ * dibujaría un 52% que no se puede vetar. 📌 `firmaDePieza` en `rendimiento.core.js`.
+ */
+describe('la tarjeta de la pieza más grande declara la fusión', () => {
+  const conPieza = (mayor: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      <FilaDeKpis
+        z={{ ...zona, concentracion: { mayor } } as unknown as NonNullable<RespuestaZona['zona']>}
+        tv={null}
+        techo={6668}
+        ventana={null}
+      />,
+    )
+
+  it('con más de un nombre lo dice, y muestra el de la variante que más gastó', () => {
+    const html = conPieza({ pieza: 'AD02 - GIRLHOOD COLLECTION', pct: 52, cajas: 3, nombres: 2 })
+    expect(html).toContain('AD02 - GIRLHOOD COLLECTION')
+    expect(html).toContain('+1 nombre')
+    expect(html).toContain('en 3 cajas')
+  })
+
+  it('con tres nombres lo dice en plural', () => {
+    expect(conPieza({ pieza: 'AD01 - FUNDA PINTEREST - SHINY - 13/8', pct: 11, cajas: 5, nombres: 3 }))
+      .toContain('+2 nombres')
+  })
+
+  it('⛔ con un solo nombre ⛔ no inventa el renglón', () => {
+    expect(conPieza({ pieza: 'AD 04 - REEL TIKTOK FUNDAS VARIAS', pct: 18, cajas: 1, nombres: 1 }))
+      .not.toContain('nombre')
+  })
+
+  it('🔴 el 52% pinta la tarjeta de AVISO, y el 32% del nombre exacto ⛔ nunca llegaba', () => {
+    // 🔑 El oráculo es el COLOR, ⛔ no que los dos markup difieran: difieren igual por el «52%».
+    // `tone` sólo pinta con acento, así que se afirma contra el token de `warning` de verdad.
+    const advertencia = toneTokens.warning.fg
+    expect(conPieza({ pieza: 'P', pct: 52, cajas: 3, nombres: 2 })).toContain(advertencia)
+    expect(conPieza({ pieza: 'P', pct: 32, cajas: 1, nombres: 1 })).not.toContain(advertencia)
   })
 })
