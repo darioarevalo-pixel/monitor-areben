@@ -8,6 +8,7 @@ import {
   compararCtr,
   contarParaDecidir,
   contextoUmbrales,
+  cortesDe,
   derivarUmbrales,
   diasSeguidosPorEncima,
   evaluarRegla,
@@ -23,6 +24,8 @@ import {
   umbralesEfectivos,
   ventanaDe,
   type ClavePreset,
+  type ClaveUmbral,
+  type DefUmbral,
   type FilaRegla,
   type Hallazgo,
   type Umbrales,
@@ -1263,5 +1266,68 @@ describe('insistenciaDe — uno de cuatro días ⛔ no es uno de esta mañana', 
     expect(insistenciaDe({ veces: 4, desde: '2026-08-26' })).toEqual({
       dias: 4, texto: '4 días seguidos', desde: '2026-08-26',
     })
+  })
+})
+
+/**
+ * 🔴 **Con qué corta una regla, leído SIN abrirla.**
+ *
+ * Son once reglas por línea: mirarlas de a una para saber cómo están calibradas es lo que hace que
+ * no se miren. 📊 Y hay un número que lo empeora: **`meta_ads_umbral` tiene 0 filas** —nadie movió un
+ * dial nunca— así que las once cortan con el default **y la pantalla no lo decía en ninguna parte**.
+ *
+ * 🔑 Lo que este bloque fija son **las cuatro procedencias, y que ninguna se disfrace de otra**.
+ */
+describe('cortesDe — de dónde sale cada número, sin inventar ninguno', () => {
+  const DEF = {
+    cpa_maximo: { rotulo: 'Techo por compra', unidad: '$', derivable: false, desdeFicha: 'rentabilidad', ayuda: '' },
+    roas_objetivo: { rotulo: 'ROAS objetivo', unidad: 'x', derivable: false, ayuda: '' },
+    gasto_minimo: { rotulo: 'Gasto mínimo', unidad: '$', derivable: true, ayuda: '' },
+  } as unknown as Record<ClaveUmbral, DefUmbral>
+
+  const preset = (requiere: string[], requiereUno: string[] = []) =>
+    ({ requiere, requiereUno }) as unknown as Parameters<typeof cortesDe>[0]
+
+  it('el techo sale de la FICHA y se dice, ⛔ no se confunde con un dial', () => {
+    const r = cortesDe(preset(['cpa_maximo']), null, {}, DEF, 6668)
+    expect(r).toEqual([{ clave: 'cpa_maximo', rotulo: 'Techo por compra', valor: 6668, unidad: '$', fuente: 'ficha' }])
+  })
+
+  it('🔴 sin ficha es `falta`, ⛔ no `derivado`: la regla NO corta aunque figure prendida', () => {
+    // Es el defecto del freno de Stunned del 26-ago con otra ropa: figuraba prendido y estaba mudo.
+    expect(cortesDe(preset(['cpa_maximo']), null, {}, DEF, 0)[0].fuente).toBe('falta')
+    expect(cortesDe(preset(['cpa_maximo']), null, {}, DEF, null)[0].fuente).toBe('falta')
+  })
+
+  it('un derivable sin valor dice DE DÓNDE sale y ⛔ no cuál es', () => {
+    // 🔑 El número lo calcula el servidor sobre las filas de la foto; la pantalla ⛔ no lo tiene.
+    // Escribir uno aproximado al lado de uno exacto es peor que no escribir ninguno.
+    const r = cortesDe(preset(['gasto_minimo']), null, {}, DEF, null)
+    expect(r[0]).toMatchObject({ fuente: 'derivado', valor: null })
+  })
+
+  it('un NO derivable sin valor es `falta`: hay que decidirlo y nadie lo hizo', () => {
+    expect(cortesDe(preset(['roas_objetivo']), null, {}, DEF, null)[0].fuente).toBe('falta')
+  })
+
+  it('el parámetro de la REGLA le gana al umbral de la línea', () => {
+    const r = cortesDe(preset(['roas_objetivo']), { parametros: { roas_objetivo: 4 } } as never, { roas_objetivo: 2 }, DEF, null)
+    expect(r[0]).toMatchObject({ valor: 4, fuente: 'dial' })
+  })
+
+  it('cae al umbral de la LÍNEA cuando la regla no lo tiene propio', () => {
+    const r = cortesDe(preset(['roas_objetivo']), null, { roas_objetivo: 2 }, DEF, null)
+    expect(r[0]).toMatchObject({ valor: 2, fuente: 'dial' })
+  })
+
+  it('🔑 el `requiereUno` ENTRA: si su vara está sin cubrir, la regla no corta', () => {
+    // Dejarlo afuera escondería justo el caso en que la regla figura prendida y no puede saltar.
+    const r = cortesDe(preset([], ['cpa_maximo', 'roas_objetivo']), null, {}, DEF, null)
+    expect(r.map((x) => x.clave)).toEqual(['cpa_maximo', 'roas_objetivo'])
+  })
+
+  it('⛔ una clave repetida entre `requiere` y `requiereUno` sale UNA vez', () => {
+    const r = cortesDe(preset(['roas_objetivo'], ['roas_objetivo']), null, { roas_objetivo: 3 }, DEF, null)
+    expect(r).toHaveLength(1)
   })
 })

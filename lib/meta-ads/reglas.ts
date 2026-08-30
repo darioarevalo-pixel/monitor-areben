@@ -13,6 +13,7 @@ import {
   agrupar as agruparJs,
   agruparHallazgos as agruparHallazgosJs,
   contarParaDecidir as contarParaDecidirJs,
+  cortesDe as cortesDeJs,
   insistenciaDe as insistenciaDeJs,
   repartirHallazgos as repartirHallazgosJs,
   gravedadDeHallazgo as gravedadDeHallazgoJs,
@@ -381,6 +382,20 @@ export const repartirHallazgos = repartirHallazgosJs as (
 export const contarParaDecidir = contarParaDecidirJs as (
   hallazgos: Hallazgo[],
 ) => { total: number; quemando: number }
+
+/**
+ * Con qué números corta una regla HOY, para leerlo **sin abrirla**. Cuatro procedencias y ninguna se
+ * disfraza de otra: `dial` (alguien lo escribió) · `ficha` (el techo, firmado en Rentabilidad) ·
+ * `derivado` (lo calcula el servidor sobre la foto ⇒ 🔑 la pantalla dice **de dónde sale y ⛔ no cuál
+ * es**) · `falta` (hay que decidirlo y nadie lo hizo ⇒ la regla ⛔ no corta aunque figure prendida).
+ */
+export const cortesDe = cortesDeJs as (
+  preset: { requiere?: readonly ClaveUmbral[]; requiereUno?: readonly ClaveUmbral[] },
+  regla: Pick<Regla, 'parametros'> | null,
+  umbralLinea: Partial<Record<ClaveUmbral, number | null>> | null,
+  definicion: Record<ClaveUmbral, DefUmbral>,
+  techo: number | null | undefined,
+) => Array<{ clave: ClaveUmbral; rotulo: string; valor: number | null; unidad: string; fuente: 'dial' | 'ficha' | 'derivado' | 'falta' }>
 
 /**
  * Hace cuántos días seguidos viene diciendo lo mismo. `null` con uno solo: el de hoy es la noticia y

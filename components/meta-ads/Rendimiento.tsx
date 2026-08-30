@@ -386,6 +386,21 @@ function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nomb
         </Notice>
       )}
 
+      {/* 🔴 **Anuncios por campaña va PRIMERO, y ⛔ no octavo de nueve.** Estaba debajo de edad y
+          género, de la región y de la evolución diaria — y es la única de las nueve que Bruno dijo
+          usar: *«esa sección de anuncios por campaña era la que más usaba dentro de Meta, es el
+          sostén de la sección»*. 🔑 Lo que ordena esta pantalla ⛔ no es de lo general a lo
+          particular: es **qué se mira todos los días**. Los cortes demográficos se miran una vez por
+          campaña y se leen abajo. */}
+      <div className="card">
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Anuncios por campaña</div>
+        {d.campañas.length === 0 ? (
+          <div style={{ fontSize: 13, color: paleta.mut2 }}>No hay anuncios con gasto en este rango.</div>
+        ) : (
+          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} pausa={pausa} accionesVistas={d.accionesVistas} />)
+        )}
+      </div>
+
       {/* Del clic a la compra. Se llamaba "Embudo de compra" y se renombró cuando entró la pestaña
           de etapas: son dos embudos distintos y compartir la palabra los volvía indistinguibles.
           Este mide QUÉ PASA con quien ya hizo clic; aquel, A QUIÉN le habla la pauta. */}
@@ -446,16 +461,6 @@ function Detalle({ d, pausa, nombre }: { d: DetalleCuenta; pausa: CtxPausa; nomb
           </div>
         </div>
       )}
-
-      {/* Anuncios por campaña */}
-      <div className="card">
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#888', letterSpacing: 0, marginBottom: 10 }}>Anuncios por campaña</div>
-        {d.campañas.length === 0 ? (
-          <div style={{ fontSize: 13, color: paleta.mut2 }}>No hay anuncios con gasto en este rango.</div>
-        ) : (
-          d.campañas.map((c) => <CampañaBloque key={c.id} c={c} moneda={moneda} accountId={d.cuenta.id} pausa={pausa} accionesVistas={d.accionesVistas} />)
-        )}
-      </div>
 
       {/* Placements */}
       {d.placements.length > 0 && (

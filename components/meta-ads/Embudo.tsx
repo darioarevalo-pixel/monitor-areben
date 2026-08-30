@@ -37,7 +37,7 @@ import { useFechas } from '@/components/meta-ads/useFechas'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { laQueAprieta, type EntradaCalendario } from '@/lib/calendario'
 import { plata, pctUno } from '@/lib/meta-ads/formato'
-import { ETAPAS, ETIQUETA_ETAPA, RESUMEN_ETAPA, rotuloObjetivo } from '@/lib/meta-ads/etapas'
+import { ETAPAS, ETIQUETA_ETAPA, RESUMEN_ETAPA, rotuloObjetivo, SIGLA_ETAPA } from '@/lib/meta-ads/etapas'
 import { ETIQUETA_LINEA, LINEAS } from '@/lib/meta-ads/lineas'
 import type {
   CampañaSinLinea, Diagnostico, Etapa, LineaPauta, ResumenEtapa,
@@ -143,7 +143,14 @@ function GrillaLineas({ diagPorLinea, abierta, onAbrir }: {
         <THead>
           <Tr>
             <Th>Marca</Th>
-            {ETAPAS.map((e) => <Th key={e} align="right">{ETIQUETA_ETAPA[e]}</Th>)}
+            {/* 🔑 El nombre manda y la sigla va al lado, chiquita: sin ella la traducción la hacía
+                Bruno en la cabeza cada vez. Ver `SIGLA_ETAPA`. */}
+            {ETAPAS.map((e) => (
+              <Th key={e} align="right">
+                {ETIQUETA_ETAPA[e]}
+                {SIGLA_ETAPA[e] && <span style={{ color: color.mut2, fontWeight: weight.normal }}> · {SIGLA_ETAPA[e]}</span>}
+              </Th>
+            ))}
           </Tr>
         </THead>
         <TBody>
@@ -308,6 +315,9 @@ function TarjetaEtapa({ e, gastoTotal }: { e: ResumenEtapa; gastoTotal: number }
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: space[1.5], flexWrap: 'wrap' }}>
         <span style={{ fontSize: font.md, fontWeight: weight.bold, color: color.ink }}>{ETIQUETA_ETAPA[etapa]}</span>
+        {SIGLA_ETAPA[etapa] && (
+          <span style={{ fontSize: font.xs, color: color.mut2, fontWeight: weight.medium }}>{SIGLA_ETAPA[etapa]}</span>
+        )}
         <InfoPopover titulo={ETIQUETA_ETAPA[etapa]}>
           <p><b>A quién le habla:</b> {ayuda.aQuien}</p>
           <p><b>Qué creativo pide:</b> {ayuda.queCreativo}</p>

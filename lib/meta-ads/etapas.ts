@@ -22,6 +22,7 @@ import {
   ETAPAS as ETAPAS_JS,
   ETAPA_POR_OBJETIVO as ETAPA_POR_OBJETIVO_JS,
   ETIQUETA_ETAPA as ETIQUETA_ETAPA_JS,
+  SIGLA_ETAPA as SIGLA_ETAPA_JS,
   etapaDeObjetivo as etapaDeObjetivoJs,
   estaAlAire as estaAlAireJs,
   UMBRALES_ETAPA as UMBRALES_ETAPA_JS,
@@ -30,6 +31,11 @@ import {
 export const ETAPAS = ETAPAS_JS as readonly Etapa[]
 export const ETAPA_POR_OBJETIVO = ETAPA_POR_OBJETIVO_JS as Record<string, EtapaOSin>
 export const ETIQUETA_ETAPA = ETIQUETA_ETAPA_JS as Record<EtapaOSin, string>
+/**
+ * La sigla de la industria, **al lado** del nombre y ⛔ nunca en su lugar. `''` en `sin-clasificar`,
+ * que ⛔ no es una etapa del embudo sino el estado de una campaña sin clasificar.
+ */
+export const SIGLA_ETAPA = SIGLA_ETAPA_JS as Record<EtapaOSin, string>
 export const UMBRALES_ETAPA = UMBRALES_ETAPA_JS as {
   dias: number
   diasAmplio: number

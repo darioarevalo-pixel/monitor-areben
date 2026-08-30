@@ -1185,6 +1185,63 @@ para un registro.
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 
+## 🆕🏁 30-ago-2026: ANUNCIOS POR CAMPAÑA PRIMERO, LA SIGLA AL LADO Y LAS REGLAS LEGIBLES
+
+### 1. «Anuncios por campaña» va PRIMERO, y ⛔ no octavo de nueve
+
+Estaba debajo de edad y género, de la región y de la evolución diaria. Y es la única de las nueve que
+Bruno dijo usar: *«esa sección de anuncios por campaña era la que más usaba dentro de Meta; para mí
+es el sostén de la sección»*.
+🔑 **Lo que ordena una pantalla ⛔ no es «de lo general a lo particular»: es qué se mira todos los
+días.** Los cortes demográficos se miran una vez por campaña; los anuncios, cada mañana.
+📌 La vista se llama ahora **«Totales por cuenta»** —«La cuenta» ⛔ no dice de qué es— y con ese
+nombre entra al menú.
+
+### 2. La sigla del embudo, al lado y siempre visible
+
+El glosario decía que TOFU/MOFU/BOFU es jerga y la escondía en el popover. Bruno: *«que te conozcan
+es tofu, que te consideren es mofu y vender es bofu»* — o sea que **la traducción la estaba haciendo
+él, en la cabeza, cada vez**.
+🔑 **Esconder la sigla ⛔ no evita la jerga**: se la escucha igual en cualquier reunión de pauta y está
+en la documentación de Meta. Lo que evita es tener que abrir un popover para empatarla. ⇒ el criollo
+se queda como **nombre** y la sigla va al lado, chiquita (`SIGLA_ETAPA`). ⛔ No al revés: un
+encabezado que dice «TOFU» y nada más vuelve a pedir el popover.
+⛔ `sin-clasificar` ⛔ no tiene sigla, y ⛔ no es un olvido: ⛔ no es una etapa del embudo, es el estado
+de una campaña a la que nadie le puso una.
+
+⚠️ **Y lo que ⛔ NO se hizo, dicho derecho**: el Embudo ⛔ no se rediseñó. 📊 `meta_ads_etapa` tiene
+**0 filas** ⇒ nadie corrigió nunca una etapa. Su problema ⛔ no es la nomenclatura, y arreglar el
+rótulo ⛔ no lo va a hacer usar. ▶️ Queda escrito: **qué pregunta tendría que contestar para que dé
+ganas de entrar.**
+
+### 3. Las automatizaciones se leen SIN abrirlas
+
+📊 **`meta_ads_umbral`: 0 filas.** Nadie movió un dial nunca ⇒ las once reglas cortan con el default
+**y la pantalla ⛔ no lo decía en ninguna parte**. La fila colapsada decía nombre, Prendida/Apagada,
+el resumen del preset y «última corrida»: con eso ⛔ no se puede contestar *«¿esta regla está bien
+calibrada?»* sin expandir las once de a una.
+
+⇒ `cortesDe()` pone **con qué números corta hoy** en la fila, con **cuatro procedencias que ⛔ no se
+disfrazan entre sí**:
+- **`dial`** — alguien lo escribió. Es el único que se cambia acá.
+- **`ficha`** — el techo por compra, firmado en Rentabilidad. Se dice *(de la ficha)*.
+- **`derivado`** — 🔑 **la pantalla dice DE DÓNDE sale y ⛔ no cuál es**: el número lo calcula el
+  servidor sobre las filas de la foto, y escribir uno aproximado al lado de uno exacto es peor que
+  no escribir ninguno.
+- **`falta`** — hay que decidirlo y nadie lo hizo ⇒ **la regla ⛔ no corta aunque figure prendida**.
+  Es el defecto del freno de Stunned del 26-ago con otra ropa.
+
+⚠️ **Y al lado, los hallazgos suyos SIN accionar** —⛔ no «cuántas veces saltó»—: lo segundo pide una
+consulta que esta pantalla ⛔ no hace, y lo primero es lo que dice si la regla grita al pedo. Una que
+dejó ocho abiertos hace días ⛔ no está calibrada: está **ignorada**. Se cuenta por `reglaId` y ⛔ no
+por preset — la misma regla existe una vez por línea, y sumar las tres diría que la de BDI encontró
+lo de Zattia.
+
+### Verificado
+
+**5 mutantes, 5 muertos**: sin ficha cayendo a `derivado` · el dial de la línea ganándole al de la
+regla · `requiereUno` afuera · la clave repetida dos veces · un no-derivable diciendo `derivado`.
+
 ## 🆕🏁 30-ago-2026: EL MENÚ, EL ENCABEZADO POR ZONA Y LA PALABRA QUE FALTABA
 
 ### 1. 🔴 El encabezado era de la SECCIÓN, así que Producir explicaba Rendimiento

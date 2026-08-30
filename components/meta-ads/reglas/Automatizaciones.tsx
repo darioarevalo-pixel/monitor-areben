@@ -23,8 +23,10 @@ import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { calibrarRegla, guardarRegla, guardarUmbrales } from '@/lib/meta-ads/cliente'
 import { decimal, entero, plata, roas as roasTxt } from '@/lib/meta-ads/formato'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
+import { cortesDe } from '@/lib/meta-ads/reglas'
 import type {
-  Calibracion, ClavePreset, ClaveUmbral, ContextoLinea, DefPreset, DefUmbral, Regla, RespuestaReglas,
+  Calibracion, ClavePreset, ClaveUmbral, ContextoLinea, DefPreset, DefUmbral, Hallazgo, Regla,
+  RespuestaReglas,
 } from '@/lib/meta-ads/reglas'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
@@ -58,15 +60,28 @@ export function Automatizaciones() {
       </Notice>
 
       {lineas.map((l) => (
-        <BloqueLinea key={l} linea={l} d={d} recargar={r.recargar} />
+        <BloqueLinea key={l} linea={l} d={d} recargar={r.recargar} hallazgos={r.hallazgos} />
       ))}
     </div>
   )
 }
 
-function BloqueLinea({ linea, d, recargar }: { linea: LineaPauta; d: RespuestaReglas; recargar: () => void }) {
+function BloqueLinea({ linea, d, recargar, hallazgos }: {
+  linea: LineaPauta
+  d: RespuestaReglas
+  recargar: () => void
+  /** Los hallazgos abiertos, para poder decir en cada fila cuántos dejó ABIERTOS esa regla. */
+  hallazgos: Hallazgo[]
+}) {
   const ctx = d.contexto[linea]
   const puede = d.puedeEditar.includes(linea)
+  // 🔑 Se cuenta por `reglaId` y ⛔ no por preset: la misma regla existe una vez POR LÍNEA, y sumar
+  // las tres diría que la de BDI encontró lo de Zattia.
+  const abiertosPorRegla = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const h of hallazgos) m.set(h.reglaId, (m.get(h.reglaId) || 0) + 1)
+    return m
+  }, [hallazgos])
   const porPreset = useMemo(
     () => new Map(d.reglas.filter((x) => x.linea === linea).map((x) => [x.preset, x])),
     [d.reglas, linea],
@@ -94,6 +109,7 @@ function BloqueLinea({ linea, d, recargar }: { linea: LineaPauta; d: RespuestaRe
             puede={puede}
             dias={d.dias}
             recargar={recargar}
+            abiertos={abiertosPorRegla.get(porPreset.get(p.clave)?.id ?? -1) ?? 0}
           />
         ))}
       </div>
@@ -101,7 +117,7 @@ function BloqueLinea({ linea, d, recargar }: { linea: LineaPauta; d: RespuestaRe
   )
 }
 
-function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede, dias, recargar }: {
+function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede, dias, recargar, abiertos }: {
   preset: DefPreset & { clave: ClavePreset }
   linea: LineaPauta
   regla: Regla | null
@@ -111,6 +127,8 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
   puede: boolean
   dias: number
   recargar: () => void
+  /** Cuántos hallazgos suyos siguen SIN accionar. Es lo que dice si la regla está bien calibrada. */
+  abiertos: number
 }) {
   const toast = useToast()
   const [abierto, setAbierto] = useState(false)
@@ -136,6 +154,7 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
   // ⚠️ Que no haya diales NO quiere decir que la regla pueda correr: puede estar esperando la ficha.
   // Confundir las dos cosas es la pantalla afirmando algo que no preguntó.
   const esperandoFicha = deLaFicha.length > 0 && !tieneFicha
+  const cortes = cortesDe(preset, regla, umbralLinea, definicion, ctx?.techo ?? null)
 
   const activa = !!regla?.activa
 
@@ -172,9 +191,36 @@ function FilaPreset({ preset, linea, regla, umbralLinea, definicion, ctx, puede,
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[1], lineHeight: 1.45 }}>
             {preset.resumen}
           </div>
+          {/* 🔴 **Con qué corta HOY, sin tener que abrirla.** Son once reglas: mirarlas de a una
+              para saber cómo están calibradas es lo que hace que no se miren. 📊 Y hay un número que
+              lo empeora: `meta_ads_umbral` tiene 0 filas ⇒ las once cortan con el default y hasta
+              hoy la pantalla ⛔ no lo decía en ninguna parte. Ver `cortesDe`. */}
+          {cortes.length > 0 && (
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[1], fontSize: font.xs }}>
+              {cortes.map((c) => (
+                <span key={c.clave} style={{ color: c.fuente === 'falta' ? color.warningInk : color.mut }}>
+                  {c.rotulo}:{' '}
+                  <b style={{ color: c.fuente === 'falta' ? color.warningInk : color.ink2 }}>
+                    {c.valor != null
+                      ? `${c.unidad === '$' ? plata(c.valor) : `${c.valor}${c.unidad && c.unidad !== '$' ? ` ${c.unidad}` : ''}`}`
+                      : c.fuente === 'derivado' ? 'se mide de la pauta' : 'falta decidirlo'}
+                  </b>
+                  {c.fuente === 'ficha' && <span style={{ color: color.mut2 }}> (de la ficha)</span>}
+                </span>
+              ))}
+            </div>
+          )}
           {regla?.detalle && (
             <div style={{ fontSize: font.sm, color: color.mut2, marginTop: space[1] }}>
               Última corrida: {regla.detalle}
+            </div>
+          )}
+          {/* ⚠️ Los que quedaron SIN accionar, ⛔ no «cuántas veces saltó»: lo segundo pide una
+              consulta que esta pantalla ⛔ no hace, y lo primero es lo que dice si la regla grita al
+              pedo — una que dejó ocho abiertos hace días ⛔ no está calibrada, está ignorada. */}
+          {abiertos > 0 && (
+            <div style={{ fontSize: font.sm, color: color.warningInk, marginTop: space[1], fontWeight: weight.medium }}>
+              {abiertos === 1 ? '1 hallazgo suyo sin accionar' : `${abiertos} hallazgos suyos sin accionar`}
             </div>
           )}
         </div>
