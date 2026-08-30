@@ -1881,3 +1881,81 @@ va a despachar el pedido.
   acepte, se mudan y la lista se vacía sola.
 - ⚠️ **Canjes tiene la misma forma** («Aceptó» / «No aceptó» en `FichaCanje.tsx`) y ⛔ **no** se tocó:
   la sección se camina con su dueño antes de renombrarle los botones.
+
+---
+
+## 🆕 🔴 La plata ⛔ no sale hasta que el producto vuelva (30-ago-2026)
+
+Es §1.1 del plan de post-venta, y salió de caminar el módulo entero para el mapa operativo: de los
+seis verbos que mueven plata o stock, **`reintegro` era el único que escribía sin leer la fila**.
+O sea que se podía devolver la plata de un reclamo `en_transito`, con el producto en la calle, y
+nada preguntaba nada.
+
+🔴 **Y era peor que un descuido, porque el gesto se tapaba a sí mismo**: tildar el reintegro pone
+`reintegro_estado` en `'hecho'`, que es exactamente lo que **apaga** el aviso *«hace N días que la
+plata no sale»*. Con la plata afuera y el producto todavía afuera, **el reclamo quedaba mudo**: ni
+un reloj corriendo sobre lo único que faltaba.
+
+### 🔑 ⛔ No hizo falta ninguna columna nueva
+
+El dato **ya existía**. `laUnidadVuelve` + `retorno_decidido` contestan si algo tiene que volver, y
+`loQueFaltaLlegar` dice qué falta y de qué lista sale. Lo único que faltaba era **que el verbo lo
+leyera**. La regla es `faltaRecibirAntesDeDevolver` y vive en `lib/reclamos/efectos.core.js`, al
+lado de `faltaAnularAntesDeDescontar` — que hasta hoy era la única regla de **orden** del módulo.
+
+🔑 **Pregunta por UNIDAD y ⛔ no por estado.** Tres de los diez reclamos de BDI tienen dos productos:
+con uno recibido y el otro no, «llegó» es falso, y el estado del reclamo es uno solo. La regla mira
+`recibida_at` producto por producto, y el texto **nombra el que falta**.
+
+⚠️ **Y vacío ⛔ no es «falta todo»: es que ⛔ no se espera nada.** Una unidad regalada, o una fallada
+que el cliente se queda, ⛔ no vuelve nunca — esperar a que llegue dejaría esa plata trabada para
+siempre. El cero de `loQueFaltaLlegar` acá **afirma**, y afirma bien: sale de los destinos decididos,
+⛔ no de una lista vacía por falta de carga.
+
+### La salida explicada, que ⛔ no es un agujero
+
+`reintegro` acepta `motivo`, y **sólo con un motivo escrito** pasa con el producto sin llegar. Queda
+en el `historial` con quién y por qué (*«plata devuelta ANTES de que vuelva el producto: …»*).
+
+🔑 **Sin salida, el día que haya que pagar antes —una amenaza de reclamo formal, un monto chico que
+no vale la espera— la plata sale igual, por transferencia, y en el sistema ⛔ no queda nada.** Un
+freno sin válvula ⛔ no frena: manda el gesto afuera del sistema, donde no se puede medir.
+
+⚠️ **El botón ⛔ NO se esconde**, cuarta vez que se escribe en este módulo: *una pantalla que esconde
+un botón es una sugerencia, ⛔ no una regla*. El freno de verdad es el **409**; la pantalla pregunta,
+con el mismo string que contesta el servidor porque **es el mismo string**.
+
+### 🔴 El reloj nuevo, y por qué el aviso casi nace mudo
+
+Con la salida, devolver antes pasa **a propósito** — y una excepción sin reloj es una excepción que
+nadie vuelve a mirar. Se agregó a `alertasDe`: **«la plata salió hace N días y el producto todavía
+no volvió»**, en rojo, contando desde **`reintegro_at`** y ⛔ no desde `updated_at` (el toque más
+probable sobre un retorno que se demora es ir a ver por qué se demora).
+📌 **Plazo 0 a propósito**: ⛔ no es una demora que se tolera unos días, es un **estado que no
+debería existir**.
+
+🔴 🔑 **Y acá estuvo el defecto que casi se escribe**: el aviso del sidebar baja por `COLS_AVISO`, un
+`select` **escrito a mano en `api/_reclamos.js`** al lado de una regla que vive en `tipos.ts`. El
+reloj nuevo pregunta por `items`, que ⛔ no estaba en la lista ⇒ **el aviso habría nacido mudo**,
+callado y en verde. Ahora `COLS_AVISO` está exportado y lo ata un test con el mismo oráculo que
+`COLUMNAS_PARA_CERRAR`: **recortar la fila al select ⛔ no puede cambiar las alertas**.
+📌 Lo que cuesta, **medido sobre las filas reales de BDI** y ⛔ no estimado: **775 → 1.365 bytes por
+fila** (el listado completo son 2.725). Las caras son `items` (503) y el `historial` que ya viajaba
+(575). Se paga porque la alternativa es la regla escrita dos veces.
+
+### Cómo se probó
+
+- **La regla**, con las cinco formas que la rompen: el producto en la calle · ya recibido · nada que
+  esperar (`regalada` y la fallada que se queda) · dos productos con uno solo recibido · el
+  `mal_armado`, donde lo que vuelve es `items_correctos` y ⛔ no lo que compró.
+- **El cable del servidor**: `api/_reclamos.js` corriendo de verdad — 409 sin escribir nada, 200 con
+  el motivo y la nota que lo dice, 200 normal con el producto ya recibido, y 404 si no existe.
+- **Las dos listas de columnas**, con el oráculo que el Supabase de mentira ⛔ no puede dar (devuelve
+  la fila entera pase lo que pase): *recortar la fila al select ⛔ no cambia la respuesta*, una para
+  `COLUMNAS_PARA_DEVOLVER` y otra para `COLS_AVISO`.
+- **La pantalla montada**: el botón **está** aunque el producto no haya vuelto (y el positivo va
+  primero, o el negativo sería vacío), apretarlo **pregunta** y manda el motivo, un motivo en blanco
+  ⛔ no manda nada, y con el producto recibido vuelve a ser la confirmación del monto de siempre.
+- ✅ **16 mutantes, 16 muertos.**
+- 🔴 ▶️ **Lo que ⛔ no se caminó**: nadie apretó el botón sobre una fila real, y sigue sin caminarse
+  Retornos con un caso de verdad. La primera vez que esto frene en producción hay que mirarlo.

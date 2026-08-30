@@ -53,7 +53,7 @@ import { randomUUID } from 'node:crypto';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
-import { faltaAnularAntesDeDescontar, loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
+import { COLUMNAS_PARA_DEVOLVER, faltaAnularAntesDeDescontar, faltaRecibirAntesDeDevolver, loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
 import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
@@ -149,11 +149,33 @@ const DIAS_TOKEN = 15;
  * «el cero afirma» que este módulo viene tapando. Por eso el handler pide `TOPE_AVISOS + 1` y
  * devuelve `hayMas`.
  *
- * 📊 El número: 344 bytes por fila ⇒ 500 abiertos son ~172 KB cada 3 minutos por admin, y **500
- * reclamos abiertos a la vez ⛔ no es una carga de trabajo, es un incendio**. El tope existe para
+ * 📊 El número, **medido de nuevo el 30-ago-2026** sobre las 2 filas reales de BDI: **1.365 bytes
+ * por fila** contra 2.725 del listado completo ⇒ 500 abiertos son ~683 KB cada 3 minutos por admin.
+ * ⚠️ Eran 344 hasta que el reloj de «la plata salió y el producto todavía no volvió» obligó a
+ * llevarse `items` (503 bytes) — el precio de que la regla viva **en un solo lugar**. Y **500
+ * reclamos abiertos a la vez ⛔ no es una carga de trabajo, es un incendio**: el tope existe para
  * que una consulta rota no baje la tabla entera, ⛔ no para recortar el trabajo real.
  */
 export const TOPE_AVISOS = 500;
+
+/**
+ * **Las columnas que baja el aviso del sidebar: las que mira `alertasDe`, y nada más.**
+ *
+ * 🔴 🔑 **Es un `select` escrito a mano al lado de una regla que vive en otro archivo**: si
+ * `alertasDe` mira una columna que ⛔ no está acá, la ve `undefined` y **el aviso nace muerto**,
+ * callado y en verde — que es justo lo que iba a pasar con el reloj de «la plata salió y el
+ * producto todavía no volvió» (30-ago-2026). Lo ata ahora `tests/reclamos-plata-antes-del-producto.test.ts`
+ * con el mismo oráculo que `COLUMNAS_PARA_CERRAR`: **recortar la fila al select ⛔ no puede
+ * cambiar las alertas**.
+ *
+ * ⚠️ **Lo que cuesta, medido sobre las 2 filas reales de BDI** (⛔ no estimado): 775 → 1.365
+ * bytes por fila. Las caras son `items` (503) y el `historial` que ya viajaba (575); las otras
+ * cuatro suman 107. Se paga porque la alternativa es la regla escrita dos veces —una en el
+ * núcleo y otra acá adentro—, que es exactamente como este módulo ya se rompió cuatro veces.
+ */
+export const COLS_AVISO = `id, motivo, estado, compensacion, reintegro_estado, reintegro_at,
+  destino_prenda, retorno_decidido, items, items_correctos,
+  historial, created_at, updated_at`.replace(/\s+/g, ' ');
 
 /** ¿Puede mover plata? Admin o función de administración. */
 function esAdministracion(perfil) {
@@ -266,7 +288,6 @@ export default async function handler(req, res) {
       // corte se lleva **los más viejos** — que son justo los que pueden estar durmiendo. Ascendente,
       // lo que queda afuera son los recién abiertos, que ⛔ todavía no pueden tener alerta y entran
       // solos a la ventana al envejecer.
-      const COLS_AVISO = 'id, motivo, estado, compensacion, reintegro_estado, historial, created_at, updated_at';
       if (req.query.vista === 'avisos') {
         // Se pide UNO MÁS que el tope: si vuelve, es que hay más y el aviso lo dice. Contar
         // `data.length === TOPE` ⛔ no distingue «entraron justos» de «se cortó».
@@ -947,8 +968,31 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── La plata, que ⛔ no sale hasta que el producto vuelva ─────────────────────
+    //
+    // 🔴 **Hasta el 30-ago-2026 éste era el único verbo que mueve plata SIN LEER LA FILA**: escribía
+    // a ciegas, así que se podía devolver la plata de un reclamo `en_transito` con el producto en la
+    // calle. Y tildarlo **apaga** el aviso «hace N días que la plata no sale» ⇒ el caso quedaba mudo.
+    // La regla y su texto viven en `efectos.core.js`, al lado de la otra regla de ORDEN del módulo.
+    //
+    // 🔑 **La salida explicada ⛔ no es un agujero: es lo que evita que se haga por afuera.** A veces
+    // hay que pagar antes —un cliente que amenaza con el reclamo formal, un monto chico que no vale
+    // la espera—, y sin salida esa plata sale igual, por transferencia, y en el sistema ⛔ no queda
+    // nada. Con `motivo` sale, con quién y por qué, escrito en el `historial`.
     if (action === 'reintegro') {
-      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: 'plata devuelta' }, {
+      const { data: fila, error: eLee } = await supabase
+        .from('devoluciones').select(COLUMNAS_PARA_DEVOLVER.join(', ')).eq('store', store).eq('id', id).maybeSingle();
+      if (eLee) throw new Error(eLee.message);
+      if (!fila) return res.status(404).json({ error: 'no existe ese reclamo' });
+      const traba = faltaRecibirAntesDeDevolver(fila);
+      const motivo = texto(b.motivo);
+      if (traba && !motivo) return res.status(409).json({ error: traba, traba: 'falta-recibir' });
+      await apilar(supabase, id, {
+        estado: 'resuelto',
+        at: ahora(),
+        usuario,
+        nota: traba ? `plata devuelta ANTES de que vuelva el producto: ${motivo}` : 'plata devuelta',
+      }, {
         reintegro_estado: 'hecho',
         reintegro_at: ahora(),
         reintegro_por: usuario,

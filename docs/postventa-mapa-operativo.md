@@ -36,7 +36,8 @@ cuentan **cómo está hecho** y son las que se leen antes de tocar código.
                  Depósito, andén 2 → action:'reingreso'  (Gestión Nube se carga A MANO)
                  Depósito, andén 3 → action:'despachado' (lo que sale hacia el cliente)
                        ↓
-⑥ MOVIMIENTOS    seis verbos para los seis pendientes: reintegro · anulacion · reingreso ·
+⑥ MOVIMIENTOS    seis verbos para los seis pendientes: reintegro (⛔ no antes de que
+                 vuelva el producto) · anulacion · reingreso ·
                  cobrado · despachado · cupon-emitido   (+ gn-baja y el reclamo al transportista)
                        ↓
 ⑦ SALIDA         action:'estado' → 'cerrado'. El servidor contesta 409 con la lista si
@@ -151,6 +152,12 @@ reiniciaría el reloj de que la plata no salió.
 ⚠️ **La plata se devuelve por el mismo medio con el que pagó**, así que ⛔ **no se le pide CBU ni
 alias en ningún lado**. Lo único bancario del módulo es el comprobante que carga Administración al
 tildar el reintegro.
+
+🔴 **Y desde el 30-ago-2026 hay un ORDEN: la plata ⛔ no sale hasta que el producto vuelva.** El
+servidor contesta **409** y nombra el producto que falta; el botón **sigue estando** —el freno no es
+esconderlo— y si hay que pagar antes igual, se escribe **por qué** y queda en el historial. Mientras
+la plata esté afuera con el producto sin volver, corre un aviso propio en rojo: *«la plata salió hace
+N días y el producto todavía no volvió»*.
 
 ---
 

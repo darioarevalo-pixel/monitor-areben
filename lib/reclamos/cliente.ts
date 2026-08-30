@@ -69,9 +69,15 @@ export async function leerReclamos(marca: Marca, opts?: { estado?: EstadoReclamo
  * Lo mínimo para derivar el aviso del sidebar: las columnas que mira `alertasDe` y nada más.
  *
  * ⛔ **No es `leerReclamos` con otro nombre.** Esto lo pide **cada admin cada 3 minutos**
- * (`POLL_AVISOS_MS`), así que baja por `vista=avisos`, que recorta las columnas: medido sobre las
- * 10 filas de BDI, **1.925 bytes por fila con el listado completo contra 344 con éstas** — y las
- * que se van son el relato del cliente, sus datos y todos los montos, que un aviso no necesita.
+ * (`POLL_AVISOS_MS`), así que baja por `vista=avisos`, que recorta las columnas: **2.725 bytes por
+ * fila con el listado completo contra 1.365 con éstas** (medido el 30-ago-2026 sobre las filas
+ * reales de BDI) — lo que se va es el relato del cliente, sus datos y todos los montos, que un
+ * aviso ⛔ no necesita.
+ *
+ * ⚠️ **El recorte se achicó a la mitad el 30-ago-2026, y ⛔ no por descuido**: el reloj de «la plata
+ * salió y el producto todavía no volvió» pregunta por unidad, así que el aviso necesita `items`
+ * (503 bytes). La lista vive en `COLS_AVISO` y un test la ata a lo que `alertasDe` lee: si se
+ * recorta de más, **el aviso nace muerto** — callado, y en verde.
  *
  * 🔴 **Desde el 29-ago-2026 el servidor filtra por `ESTADOS_ABIERTOS`** (D12), y ⛔ no porque
  * sobrara el filtro del front: **lo cerrado crece para siempre y lo abierto no** ⇒ con 200 reclamos
@@ -336,9 +342,17 @@ export async function marcarCuponEmitido(store: Marca, id: number, cupon_codigo:
   await postear({ action: 'cupon-emitido', store, id, cupon_codigo })
 }
 
-/** Marca la plata como devuelta. Solo administración. */
-export async function marcarReintegro(store: Marca, id: number, comprobante?: string | null): Promise<void> {
-  await postear({ action: 'reintegro', store, id, comprobante })
+/**
+ * Marca la plata como devuelta. Solo administración.
+ *
+ * ⚠️ **`motivo` es la salida explicada del freno del 30-ago-2026**: el servidor ⛔ no deja devolver
+ * la plata mientras falte llegar un producto, y sólo pasa con un motivo escrito, que queda en el
+ * historial. Mandarlo siempre ⛔ no serviría de nada: el handler lo ignora si no hay traba.
+ */
+export async function marcarReintegro(
+  store: Marca, id: number, comprobante?: string | null, motivo?: string | null,
+): Promise<void> {
+  await postear({ action: 'reintegro', store, id, comprobante, motivo })
 }
 
 /**

@@ -19,6 +19,7 @@ import {
   saleUnEnvio as saleUnEnvioJs,
   seAnulaLaVenta as seAnulaLaVentaJs,
   faltaAnularAntesDeDescontar as faltaAnularAntesDeDescontarJs,
+  faltaRecibirAntesDeDevolver as faltaRecibirAntesDeDevolverJs,
 } from './efectos.core.js'
 import {
   CASOS as CASOS_JS,
@@ -2171,6 +2172,14 @@ export function faltaAnularAntesDeDescontar(
   return faltaAnularAntesDeDescontarJs(fila)
 }
 
+/**
+ * **La plata ⛔ no sale hasta que el producto vuelva.** El aviso, o `null` si se puede devolver.
+ * La regla —y por qué existe la salida explicada— vive en `efectos.core.js`.
+ */
+export function faltaRecibirAntesDeDevolver(fila: FilaConUnidades): string | null {
+  return faltaRecibirAntesDeDevolverJs(fila)
+}
+
 // ── Alertas por antigüedad ──────────────────────────────────────────────────────
 
 /**
@@ -2189,7 +2198,7 @@ export function faltaAnularAntesDeDescontar(
  * el que no responde es el cliente—, y porque el reclamo se queda quieto mientras tanto. ▶️ Lo
  * confirma Bruno con los primeros casos reales: hoy ⛔ no hay ninguno cerrado del que sacarlo.
  */
-export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3, etiqueta: 2 } as const
+export const DIAS_ALERTA = { cliente: 10, plata: 5, transito: 15, sinDecidir: 3, despacho: 2, sinMandar: 2, oferta: 3, etiqueta: 2, plataSinProducto: 0 } as const
 
 /**
  * **El piso del retorno: por debajo de este monto no se pide que el producto vuelva**, aunque la
@@ -2317,6 +2326,36 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
 
   if (d.reintegro_estado === 'pendiente' && d.compensacion && desdeToque >= DIAS_ALERTA.plata) {
     alertas.push({ tono: 'danger', texto: `Hace ${desdeToque} días que la plata no sale`, dias: desdeToque, ts: cuando(desdeToque, DIAS_ALERTA.plata) })
+  }
+  /**
+   * 🔴 **El reloj que faltaba, y el que el de arriba APAGABA.** Tildar el reintegro pone
+   * `reintegro_estado` en `'hecho'` ⇒ el aviso de que la plata no sale se calla. Hasta el
+   * 30-ago-2026 eso era todo lo que había: con la plata afuera y el producto todavía en la calle,
+   * el reclamo se quedaba **mudo** — ni un reloj corriendo sobre lo único que falta.
+   *
+   * 🔑 **A quién hay que ir a buscar es lo que un aviso tiene que decir.** Antes de la traba del
+   * `reintegro` esto pasaba por descuido; con la traba pasa **a propósito** —la salida explicada—,
+   * y justamente por eso hace falta el reloj: una excepción sin reloj es una excepción que nadie
+   * vuelve a mirar.
+   *
+   * ⚠️ **Cuenta desde `reintegro_at`, ⛔ no desde `updated_at`**: es el instante en que la plata
+   * salió, y ⛔ no lo pisa ninguna edición del reclamo. Es la misma lección que la alerta de
+   * tránsito, que contaba desde el último toque y se reiniciaba sola.
+   *
+   * ⚠️ **Plazo 0 a propósito**: ⛔ no es una demora que se tolera unos días, es un **estado** que
+   * ⛔ no debería existir ⇒ avisa desde el día uno. Las filas viejas sin `reintegro_at` avisan
+   * igual, sin número: `diasDesde(null)` da 0 y el texto ⛔ no inventa una espera.
+   */
+  const plataAfuera = diasDesde(d.reintegro_at, ahora)
+  if (d.reintegro_estado === 'hecho' && faltaRecibirAntesDeDevolver(d) && plataAfuera >= DIAS_ALERTA.plataSinProducto) {
+    alertas.push({
+      tono: 'danger',
+      texto: plataAfuera >= 1
+        ? `La plata salió hace ${plataAfuera} días y el producto todavía no volvió`
+        : 'La plata ya salió y el producto todavía no volvió',
+      dias: plataAfuera,
+      ts: cuando(plataAfuera, DIAS_ALERTA.plataSinProducto),
+    })
   }
   if (d.estado === 'esperando_cliente' && desdeCreado >= DIAS_ALERTA.cliente) {
     alertas.push({ tono: 'warning', texto: `El cliente no responde hace ${desdeCreado} días`, dias: desdeCreado, ts: cuando(desdeCreado, DIAS_ALERTA.cliente) })

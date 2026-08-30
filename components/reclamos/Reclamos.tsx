@@ -30,7 +30,7 @@ import {
 } from '@/lib/reclamos/cliente'
 import {
   botonDecidir, calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, montoADevolver, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
-  faltaAnularAntesDeDescontar,
+  faltaAnularAntesDeDescontar, faltaRecibirAntesDeDevolver,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, preseleccionDelAlta, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -432,7 +432,29 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     void recargar()
   }
 
+  /**
+   * 🔴 **La plata ⛔ no sale hasta que el producto vuelva** (30-ago-2026). El texto de la traba sale
+   * de `efectos.core.js`, el mismo string que contesta el 409 del handler.
+   *
+   * ⚠️ **El botón ⛔ NO se esconde, y es la regla escrita de este módulo**: una pantalla que esconde
+   * un botón es una sugerencia, ⛔ no una regla — el freno de verdad es el 409. Acá se pregunta,
+   * que es otra cosa: si hay que pagar antes igual, se escribe **por qué**, y eso queda en el
+   * historial con el nombre de quien lo hizo. Sin la salida, el día que haga falta la plata sale
+   * por transferencia y en el sistema ⛔ no queda nada.
+   */
   const reintegrar = async (d: ReclamoRow) => {
+    const traba = faltaRecibirAntesDeDevolver(d)
+    if (traba) {
+      const razon = await pedirTexto(`${traba} ¿Por qué sale igual?`, '', {
+        titulo: 'Todavía no volvió el producto',
+        ok: 'Devolver la plata igual',
+        placeholder: 'Queda en el historial, con tu nombre',
+      })
+      if (razon === null) return
+      if (!razon.trim()) { toast.aviso('Sin el motivo la plata ⛔ no sale antes que el producto.'); return }
+      await accion(() => marcarReintegro(marca, d.id, null, razon.trim()), 'Anotado: la plata salió antes que el producto.')
+      return
+    }
     const si = await confirmar({
       titulo: 'Plata devuelta',
       ok: 'Sí, ya se la devolví',
