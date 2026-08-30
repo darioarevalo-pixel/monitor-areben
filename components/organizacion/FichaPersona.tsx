@@ -18,7 +18,7 @@
  */
 
 import Link from 'next/link'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ItemAgenda } from '@/lib/agenda/tipos'
 import { clavesDestino } from '@/lib/novedades/tipos'
 import { CLASES, sinDueno, type ClaseResp, type Responsabilidad } from '@/lib/organizacion/tipos'
@@ -39,6 +39,7 @@ export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, pu
   onEditar: (r: Responsabilidad) => void
   onEliminar: (r: Responsabilidad) => void
 }) {
+  const [verRutinas, setVerRutinas] = useState(false)
   const suyas = useMemo(() => (
     (rutinas || []).filter((i) => i.activo !== false && !i.plantilla && clavesDestino(i.destino).includes(`p:${persona}`))
   ), [rutinas, persona])
@@ -53,24 +54,40 @@ export function FichaPersona({ persona, apodo, rol, filas, manuales, rutinas, pu
           {apodo !== persona && <span style={{ fontSize: font.xs, color: color.mut2 }}>{persona}</span>}
         </div>
 
-        <div style={{ marginTop: space[3], display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: font.xs, color: color.mut2, marginRight: space[1] }}>
-            {rutinas === null ? 'Buscando sus rutinas…' : suyas.length ? 'Hoy la Agenda le trae:' : 'En la Agenda no le cae ninguna rutina de calendario.'}
-          </span>
-          {suyas.map((r) => (
-            <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: font.sm, color: color.ink2, border: `1px solid ${color.line}`, borderRadius: 999, padding: '2px 10px' }}>
-              <span aria-hidden>{r.clase === 'aviso' ? '📣' : '☑️'}</span>{r.titulo}
-            </span>
-          ))}
-          {suyas.length > 0 && <Link href="/agenda" style={{ fontSize: font.sm, color: color.brand, fontWeight: weight.semibold }}>Ver la Agenda →</Link>}
-        </div>
+        {/* 🔴 Acá decía «Hoy la Agenda le trae» y listaba las 17 de Sofi: **afirmaba algo falso**.
+            Son TODAS sus rutinas de calendario, caigan hoy o no — la ficha describe lo permanente,
+            así que lo de hoy no es su pregunta. Cazado caminando la pantalla.
+            🔑 Y el número sube al encabezado mientras la tira arranca PLEGADA: el dato que muerde es
+            «17, y es part-time», no los diecisiete títulos tapando la ficha. */}
+        {suyas.length > 0 && (
+          <div style={{ marginTop: space[3] }}>
+            <button
+              type="button"
+              onClick={() => setVerRutinas((v) => !v)}
+              style={{ height: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: color.mut, fontSize: font.sm }}
+            >
+              <span aria-hidden style={{ marginRight: 4 }}>{verRutinas ? '▾' : '▸'}</span>
+              y <b style={{ color: color.ink2 }}>{suyas.length} rutinas</b> de calendario en la Agenda
+            </button>
+            {verRutinas && (
+              <div style={{ marginTop: space[2], display: 'flex', gap: space[1.5], flexWrap: 'wrap', alignItems: 'center' }}>
+                {suyas.map((r) => (
+                  <span key={r.id} style={{ fontSize: font.sm, color: color.ink2, border: `1px solid ${color.line}`, borderRadius: 999, padding: '2px 10px' }}>
+                    {r.titulo}{r.clase === 'aviso' && <span style={{ color: color.mut2 }}> · aviso</span>}
+                  </span>
+                ))}
+                <Link href="/agenda" style={{ fontSize: font.sm, color: color.brand, fontWeight: weight.semibold }}>Ver la Agenda →</Link>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 🔑 El cero de rutinas NO dice que no trabaje, y lo dice la pantalla en vez de dejar que
             el que mira lo deduzca: la Agenda dispara por día del calendario, y el trabajo que
             dispara por un HECHO vive en los eventos. Medido el 30-ago-2026: Camila Budek tiene 0
             rutinas propias y 14 responsabilidades. */}
         {rutinas !== null && suyas.length === 0 && (
-          <div style={{ marginTop: space[1], fontSize: font.sm, color: color.mut }}>
+          <div style={{ marginTop: space[3], fontSize: font.sm, color: color.mut }}>
             No es que no le toque nada: la Agenda dispara por día del calendario, y lo que dispara por
             un hecho —una sesión, un ingreso, un lanzamiento— vive en los <Link href="/agenda/eventos" style={{ color: color.brand }}>eventos</Link>.
           </div>

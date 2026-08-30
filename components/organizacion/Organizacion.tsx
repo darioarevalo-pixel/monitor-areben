@@ -113,16 +113,25 @@ export function Organizacion() {
   /** La nota del organigrama es el oficio de la persona: «producción audiovisual». */
   const rolDe = useCallback((persona: string) => nodos.find((n) => n.persona === persona)?.nota || null, [nodos])
 
-  /** Las personas de un sector, en el orden del organigrama y sin perder a las que no están en él. */
+  /**
+   * Las personas de un sector, para las columnas de la matriz.
+   *
+   * 🔑 **Primero las que TIENEN ese sector en su función del padrón, después el resto.** Sin esto,
+   * el recorrido del organigrama ponía a **Bruno primero en marketing** —cuelga más arriba— y las
+   * tres del sector quedaban corridas a la derecha. La matriz es del sector: las de afuera que
+   * igual tienen renglones ahí (dirección) van al final, ⛔ pero no se esconden.
+   * El orden adentro de cada grupo lo sigue dando el organigrama.
+   */
   const personasDe = useCallback((s: Funcion) => {
     const enOrden: string[] = []
     const caminar = (ns: NodoConHijos[]) => ns.forEach((n) => { if (n.persona) enOrden.push(n.persona); caminar(n.hijos) })
     caminar(arbolNodos)
     const conFilas = new Set(delSector(resp, s).map((f) => f.persona).filter((p): p is string => !!p))
-    // Primero las del organigrama en su orden; después las que tienen renglones y no están colgadas
-    // de ningún lado, que ⛔ no se pueden esconder: son trabajo con dueña que nadie ubicó.
-    return [...enOrden.filter((p) => conFilas.has(p)), ...[...conFilas].filter((p) => !enOrden.includes(p))]
-  }, [arbolNodos, resp])
+    // Las que el organigrama no ubicó tampoco se esconden: son trabajo con dueña que nadie colgó.
+    const todas = [...enOrden.filter((p) => conFilas.has(p)), ...[...conFilas].filter((p) => !enOrden.includes(p))]
+    const esDelSector = (p: string) => !!equipo?.find((c) => c.name === p)?.funcion.includes(s)
+    return [...todas.filter(esDelSector), ...todas.filter((p) => !esDelSector(p))]
+  }, [arbolNodos, resp, equipo])
 
   /** Las personas con ficha, para los botones de «Por persona». */
   const conFicha = useMemo(() => {
