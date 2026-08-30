@@ -23,7 +23,7 @@
  */
 
 import { useState } from 'react'
-import { avisosDe, type EstadoPaso, type PasoPlan, type Plan } from '@/lib/meta-ads/planes'
+import { atascadoDesde, avisosDe, diasDesde, type EstadoPaso, type PasoPlan, type Plan } from '@/lib/meta-ads/planes'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import { Button, Card, Notice, StatusPill, color, font, radius, space, weight } from '@/components/ui'
 
@@ -57,6 +57,23 @@ function esperaDe(plan: Plan): string | null {
   })
 }
 
+/**
+ * **Hace cuánto que está así**, en castellano. `null` si no se puede saber o es de hoy.
+ *
+ * 🔴 Existe porque un plan atascado no tenía edad en ninguna parte, y uno del 8-ago se leía igual
+ * que uno de esta mañana: los dos decían «Atascado» y nada más. Un aviso sin edad se mira una vez.
+ *
+ * ⚠️ Es una función de módulo y ⛔ no se llama en el cuerpo del componente con `Date.now()` adentro:
+ * `react-hooks/purity` lo prohíbe, igual que en `esperaDe()`. Lo que se prueba es la cuenta, que vive
+ * en el núcleo con `ahora` como parámetro (`atascadoDesde` + `diasDesde`).
+ */
+function edadDe(plan: Plan): string | null {
+  if (plan.estado !== 'atascado') return null
+  const d = diasDesde(atascadoDesde(plan), Date.now())
+  if (d == null || d < 1) return null
+  return d === 1 ? 'hace 1 día' : `hace ${d} días`
+}
+
 export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, onCancelar }: {
   plan: Plan
   avanzando: boolean
@@ -79,6 +96,7 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
   // 🔴 Mientras espera, «Seguir» no se dibuja: el servidor lo rechaza igual, y un botón que contesta
   // «todavía no» es peor que no tenerlo. Lo que va en su lugar es CUÁNDO vuelve.
   const espera = esperaDe(plan)
+  const edad = edadDe(plan)
 
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
@@ -91,6 +109,9 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
           </div>
           <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[1] }}>
             {ETIQUETA_LINEA[plan.linea] || plan.linea} · {hechos} de {plan.pasos.length} pasos · lo armó {plan.quien}
+            {/* 🔴 La edad va al lado del pill y ⛔ no adentro del cartel de abajo: es lo primero que
+                cambia qué hacer con un plan frenado, y el cartel se lee después del título. */}
+            {edad && <> · frenado <b style={{ color: color.dangerInk }}>{edad}</b></>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: space[2] }}>
@@ -160,7 +181,19 @@ export function ProgresoPlan({ plan, avanzando, motivo, onSeguir, onReintentar, 
               eso en Ads Manager y mandá el paso de nuevo: <b>lo que ya salió no se rehace</b>.
             </div>
           )}
-          {trabado && !trabado.puedeReintentar && (
+          {/* 🔴 Los dos motivos por los que no se puede reintentar dicen COSAS OPUESTAS, y por eso
+              son dos carteles y no uno. Con un paso retirado ⛔ no hay nada que mirar en Ads
+              Manager —Meta rechazó antes de crear nada— y ⛔ no hay nada que arreglar afuera: el
+              pedido que este plan guarda es el de un camino que el motor ya no usa, así que
+              mandarlo de nuevo manda exactamente lo mismo. Lo que corresponde es armarlo de nuevo. */}
+          {trabado?.retirado && (
+            <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.45 }}>
+              Este plan quedó de una versión anterior del motor: <b>volver a mandarlo manda el mismo
+              pedido que falló</b>. Lo que Meta pedía ya se corrige solo — armá el plan de nuevo y
+              cancelá éste.
+            </div>
+          )}
+          {trabado && !trabado.puedeReintentar && !trabado.retirado && (
             <div style={{ fontSize: font.sm, marginTop: space[1], lineHeight: 1.45 }}>
               Este no se puede volver a mandar desde acá: hay que mirar en Ads Manager cómo quedó
               antes de tocar nada.

@@ -31,9 +31,9 @@ import {
 } from '../lib/meta-ads/acciones.core.js';
 import {
   armarPlanCrear, armarPlanDuplicar, armarPlanEscalar, armarPlanMoverPlata, armarPlanPiezas,
-  armarPlanPodar, entraOtroPaso, ESPERA_PIEZA_MS, estadoDePlan, marcaDePaso, marcadorDe,
-  nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir, TIMEOUT_PASO_MS,
-  TIPOS_PASO, TIPOS_PLAN,
+  armarPlanPodar, entraOtroPaso, esPasoRetirado, ESPERA_PIEZA_MS, estadoDePlan, marcaDePaso,
+  marcadorDe, nombreConMarca, permitePlan, politicaReintento, siguientePaso, sustituir,
+  TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import {
   CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, puedeUsarLaPagina, validarPiezas,
@@ -183,13 +183,21 @@ const aPaso = (f) => ({
   orden: f.orden, tipo: f.tipo, rotulo: f.rotulo, estado: f.estado, intentos: f.intentos || 0,
   pedido: f.pedido || null, resultadoId: f.resultado_id || null, marca: f.marca || null,
   detalle: f.detalle || null, ultimoEn: f.ultimo_en || null,
-  puedeReintentar: !!f.puede_reintentar,
+  // 🔴 **Un tipo RETIRADO no se reintenta, aunque la fila diga que sí.** `puede_reintentar` se
+  // escribió el día del rechazo y contesta «Meta dijo que no antes de crear nada»; lo que no sabía
+  // es que el camino que ese paso usa se iba a retirar. Mandarlo de nuevo manda el MISMO pedido.
+  puedeReintentar: !!f.puede_reintentar && !esPasoRetirado(f.tipo),
+  /** Por qué no se puede volver a mandar desde acá, cuando el motivo es que el paso quedó viejo. */
+  retirado: esPasoRetirado(f.tipo),
 });
 
 const aVista = (p, pasos) => ({
   id: p.id, idem: p.idem, marcador: p.marcador, creado: p.creado, quien: p.quien, tipo: p.tipo,
   variante: p.variante, cuentaId: p.cuenta_id, linea: p.linea, entrada: p.entrada || {},
   contexto: p.contexto || {}, simulacro: !!p.simulacro, estado: p.estado, detalle: p.detalle || null,
+  // ⚠️ Viaja para que la pantalla pueda decir la edad de un plan que ⛔ no tiene paso fallado.
+  // ⛔ No es «hace cuánto está atascado»: eso lo contesta `atascadoDesde()`, que mira el paso.
+  actualizado: p.actualizado || null,
   // Sólo lo usan las escaladas: mientras esté en el futuro, el motor no avanza y la pantalla dice
   // cuándo vuelve. Va en la vista y no derivado en el cliente porque el reloj que manda es el del
   // servidor: el de la máquina de quien mira puede estar corrido.
@@ -1492,6 +1500,14 @@ async function reintentar(res, perfil, b) {
   const paso = leido.pasos.find((p) => p.orden === orden);
   if (!paso) return res.status(404).json({ error: 'Ese plan no tiene ese paso.' });
   if (paso.estado !== 'fallado') return res.status(409).json({ error: 'Ese paso no está fallado, así que no hay nada que reintentar.' });
+  // 🔴 Va ANTES del `puede_reintentar` y con su propio texto: los dos contestan 409, pero el motivo
+  // y lo que hay que hacer son opuestos. Con un paso retirado ⛔ no hay nada que mirar en Ads
+  // Manager —Meta rechazó antes de crear nada—: lo que hay que hacer es armar el plan de nuevo.
+  if (esPasoRetirado(paso.tipo)) {
+    return res.status(409).json({
+      error: 'Ese paso usa un camino que el motor ya no usa, así que mandarlo de nuevo manda el mismo pedido que falló. Cancelá este plan y armá uno nuevo: el camino de hoy corrige solo lo que Meta pedía.',
+    });
+  }
   if (!paso.puede_reintentar) {
     return res.status(409).json({
       error: 'Ese paso no se puede volver a mandar desde acá: hay que mirar en Ads Manager cómo quedó antes de tocar nada.',

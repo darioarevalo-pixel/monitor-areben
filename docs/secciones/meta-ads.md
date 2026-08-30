@@ -1185,6 +1185,65 @@ para un registro.
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 
+## 🆕🏁 30-ago-2026: LOS PLANES ZOMBI — un aviso que está siempre deja de ser un aviso
+
+Bruno abrió `/meta-ads` y lo primero que dijo fue *«hay dos planes atascados que no entiendo por qué
+están ahí, nunca los hice yo pero ensucian la vista»*.
+
+### Qué eran, medido
+
+`meta_ads_plan` **1** y **2**, del **8-ago-2026 20:54 y 21:15**, tipo `duplicar`, los dos con el mismo
+`detalle`: «Meta rechazó el paso 1: Para publicar anuncios en el inicio de la sección "Explorar" de
+Instagram, selecciona también la sección "Explorar" de Instagram». **0 pasos hechos, `resultado_id`
+en `null`** ⇒ ⛔ no había ningún objeto creado en Meta.
+
+🔴 🔑 **Eran basura de un bug que se arregló al día siguiente, y la pantalla ofrecía destrabarlos.**
+El arreglo salió el **9-ago** (`receta.core.js:105` agrega `explore` cuando hay `explore_home`) y vive
+en `crear-conjunto`. Los dos planes guardan un paso `copiar-conjunto`, que **manda `POST /copies`** —
+el endpoint que ⛔ **no recibe un targeting corregido**, que es literalmente por lo que se retiró—.
+Su fila decía `puede_reintentar: true` (se escribió el día del rechazo, y ese día era cierto), así que
+la pantalla dibujaba **«Reintentar el paso 1»** con el texto *«arreglá eso en Ads Manager y mandá el
+paso de nuevo»*. Las dos cosas eran mentira: no había nada que arreglar afuera, y el reintento manda
+el mismo pedido.
+
+⇒ 🔑 **`puede_reintentar` es una foto del día del rechazo; que el CAMINO siga existiendo es de hoy.**
+Un flag escrito en el pasado no puede contestar una pregunta sobre el presente. Ahora `puedeReintentar`
+sale de las dos cosas: `!!f.puede_reintentar && !esPasoRetirado(f.tipo)`.
+
+### Las tres decisiones
+
+1. **`retirado: true` en `TIPOS_PASO`**, y un test que **mide** que ningún armador lo genere: sin eso,
+   el flag es una opinión que envejece. El barrido lleva **piso de tipos encontrados**, o un `push(`
+   que cambie de forma deja el test verde mirando cero.
+2. **El servidor lo frena además de la pantalla**, con su propio 409 y su propio texto —«armá el plan
+   de nuevo»— porque los dos motivos de no-reintentable dicen cosas **opuestas**: uno manda a mirar
+   Ads Manager, el otro dice que no hay nada que mirar. Esconder el botón ⛔ no impide el `curl`.
+3. **Un atascado de más de `DIAS_PLAN_VIEJO` (7) sale de la portada**, plegado en una línea que dice
+   cuántos son y los abre de un click. ⛔ **No es un archivado: es un filtro de LECTURA**
+   (`partirPlanes`). Un GET que cambia el estado de una fila es una escritura que nadie pidió y de la
+   que no queda quién la hizo — y `?estado=todos` los tiene que seguir trayendo.
+
+### 🔴 La edad NO sale de `actualizado`
+
+`atascadoDesde()` la saca del `ultimoEn` del paso que falló. `actualizado` lo pisa **cualquier**
+`avanzar`, y avanzar un plan atascado ⛔ **no hace nada** —el paso está `fallado`, `politicaReintento`
+contesta `rendirse`— pero la fila sale con la fecha de hoy. Colgar el contador de ahí haría que
+apretar «Seguir» reinicie la edad de un plan clavado hace tres semanas. Es el mismo defecto que
+`updated_at` no midiendo una espera, con otra ropa.
+
+### Verificado
+
+- **7 mutantes, 7 muertos** (el borde `>=`, la prioridad de `atascadoDesde`, el flag, los dos gates del
+  handler, el filtro por estado, y el dial a 8) · **1 control inocuo VIVO** —el rótulo del paso— que es
+  lo único que prueba que el arnés ⛔ no mata todo por igual.
+- **El número del dial va ESCRITO en el test** (`expect(DIAS_PLAN_VIEJO).toBe(7)`): un test que compara
+  la constante contra sí misma sigue verde con el corte en 1 día o en 100.
+- **Los dos planes reales, cancelados contra PRODUCCIÓN por el endpoint** —⛔ no por la service key—,
+  así que pasaron por el permiso y quedó escrito quién: *«Cancelado por Bruno Arevalo antes de tocar
+  nada»*. Verificado releyendo: `?recurso=planes` contesta **vacío**.
+- 📌 El script quedó en el scratchpad y ⛔ no en `scripts/`: es de un solo uso y **se niega a cancelar
+  un plan con pasos hechos**, que era el único caso que podía dejar algo huérfano en Meta.
+
 ## Pendiente
 
 ### ▶️ ZATTIA — los cambios de conjuntos que quedaron decididos y SIN HACER (22-ago-2026)

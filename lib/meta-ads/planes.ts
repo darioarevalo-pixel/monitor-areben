@@ -14,7 +14,11 @@ import {
   armarPlanEscalar as armarPlanEscalarJs,
   armarPlanPodar as armarPlanPodarJs,
   armarPlanMoverPlata as armarPlanMoverPlataJs,
+  atascadoDesde as atascadoDesdeJs,
   CLAVES_PLAN as CLAVES_PLAN_JS,
+  diasDesde as diasDesdeJs,
+  DIAS_PLAN_VIEJO as DIAS_PLAN_VIEJO_JS,
+  esPasoRetirado as esPasoRetiradoJs,
   entraOtroPaso as entraOtroPasoJs,
   ESPERA_PIEZA_MS as ESPERA_PIEZA_MS_JS,
   ESPERA_SONDA_MS as ESPERA_SONDA_MS_JS,
@@ -25,6 +29,7 @@ import {
   MAX_INTENTOS as MAX_INTENTOS_JS,
   MAX_INTENTOS_DEMORA as MAX_INTENTOS_DEMORA_JS,
   nombreConMarca as nombreConMarcaJs,
+  partirPlanes as partirPlanesJs,
   politicaReintento as politicaReintentoJs,
   PRESUPUESTO_MS as PRESUPUESTO_MS_JS,
   repartir as repartirJs,
@@ -88,6 +93,13 @@ export type PasoPlan = {
    * `false` cuando el paso murió por ambigüedad, que es el único caso donde insistir empeora.
    */
   puedeReintentar: boolean
+  /**
+   * El motor ya no genera este tipo de paso ⇒ mandarlo de nuevo manda **el mismo pedido que falló**.
+   * Es la otra mitad de `puedeReintentar`: cuando esto es `true`, aquélla es `false` **por un motivo
+   * distinto** —no es que Meta dejó algo a medias, es que el camino cambió— y la pantalla tiene que
+   * decir otra cosa.
+   */
+  retirado: boolean
 }
 
 export type Plan = {
@@ -104,6 +116,11 @@ export type Plan = {
   contexto: Record<string, string>
   simulacro: boolean
   estado: EstadoPlan
+  /**
+   * La última vez que el motor tocó la fila. ⚠️ **⛔ No mide hace cuánto está atascado** —cualquier
+   * `avanzar` lo pisa aunque no haga nada—: para eso está `atascadoDesde()`.
+   */
+  actualizado: string | null
   detalle: string | null
   /**
    * Hasta cuándo no se toca. Sólo lo usan las escaladas: mientras esté en el futuro, el motor no
@@ -164,6 +181,20 @@ export const politicaReintento = politicaReintentoJs as (
 ) => Politica
 export const siguientePaso = siguientePasoJs as (pasos: PasoPlan[]) => PasoPlan | null
 export const estadoDePlan = estadoDePlanJs as (pasos: Array<{ estado: EstadoPaso }>, cancelado?: boolean) => EstadoPlan
+
+/** ⛔ Un tipo de paso que el motor ya no genera: reintentarlo manda el MISMO pedido que falló. */
+export const esPasoRetirado = esPasoRetiradoJs as (tipo: string) => boolean
+/** Días que un plan atascado se queda en la portada antes de pasar a la línea del pie. */
+export const DIAS_PLAN_VIEJO = DIAS_PLAN_VIEJO_JS as number
+/** Desde cuándo está como está. Sale del paso que falló, ⛔ no de `actualizado`. */
+export const atascadoDesde = atascadoDesdeJs as (plan: Pick<Plan, 'pasos' | 'actualizado' | 'creado'>) => string | null
+export const diasDesde = diasDesdeJs as (iso: string | null, ahora: Date | number) => number | null
+/** ⛔ Filtro de lectura, ⛔ no un archivado: no escribe nada y `?estado=todos` los sigue trayendo. */
+export const partirPlanes = partirPlanesJs as (
+  planes: Plan[],
+  ahora: Date | number,
+  dias?: number,
+) => { vivos: Plan[]; viejos: Plan[] }
 export const sustituir = sustituirJs as (
   pedido: Record<string, unknown> | null,
   contexto: Record<string, string>,

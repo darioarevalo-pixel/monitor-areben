@@ -1,11 +1,14 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  armarPlanDuplicar, armarPlanMoverPlata, armarPlanPiezas, entraOtroPaso, ESPERA_SONDA_MS,
-  estadoDePlan, marcaDePaso, marcadorDe, MAX_INTENTOS, MAX_INTENTOS_DEMORA, maxIntentosDe,
-  nombreConMarca, politicaReintento, PRESUPUESTO_MS, repartir, siguientePaso, sustituir,
-  TIMEOUT_PASO_MS, TIPOS_PASO, TOPE_COPIAS,
+  armarPlanDuplicar, armarPlanMoverPlata, armarPlanPiezas,
+  atascadoDesde, diasDesde, DIAS_PLAN_VIEJO, entraOtroPaso, esPasoRetirado,
+  ESPERA_SONDA_MS, estadoDePlan, marcaDePaso, marcadorDe, MAX_INTENTOS, MAX_INTENTOS_DEMORA,
+  maxIntentosDe, nombreConMarca, partirPlanes, politicaReintento, PRESUPUESTO_MS, repartir,
+  siguientePaso, sustituir, TIMEOUT_PASO_MS, TIPOS_PASO, TOPE_COPIAS,
 } from '@/lib/meta-ads/planes'
-import type { PasoPlan, TipoPaso } from '@/lib/meta-ads/planes'
+import type { PasoPlan, Plan, TipoPaso } from '@/lib/meta-ads/planes'
 import { LARGO_NOMBRE } from '@/lib/meta-ads/acciones'
 
 /**
@@ -397,5 +400,131 @@ describe('maxIntentosDe — un «todavía no» de Meta no es un error', () => {
   it('⛔ pero no es infinito: al techo se rinde y el plan queda atascado delante de alguien', () => {
     const agotado = paso({ tipo: 'esperar-pieza', estado: 'en-curso', intentos: MAX_INTENTOS_DEMORA })
     expect(politicaReintento(agotado, AHORA)).toBe('rendirse')
+  })
+})
+
+/**
+ * 🔴 **Los planes que quedaron de una versión anterior del motor.**
+ *
+ * Medido contra producción el 30-ago-2026: los planes 1 y 2 estaban `atascado` desde el **8-ago**
+ * —22 días— con el mismo rechazo de Meta («seleccioná también Explorar»), y la pantalla les ofrecía
+ * **«Reintentar el paso 1»** diciendo *«arreglá eso en Ads Manager y mandá el paso de nuevo»*. Los
+ * dos eran mentira: el arreglo salió el **9-ago** en `receta.core.js` y vive en `crear-conjunto`, así
+ * que el reintento mandaba **el mismo `POST /copies`** — el endpoint que no recibe un targeting
+ * corregido, que es exactamente por lo que se retiró.
+ *
+ * ⇒ Dos invariantes, y ninguna se cumple sola:
+ *  1. Un tipo marcado `retirado` ⛔ **no lo genera ningún armador** (si no, el flag miente).
+ *  2. El servidor lo frena **además** de la pantalla — la lección de los dos lados y la pregunta del
+ *     medio: esconder el botón ⛔ no impide el POST.
+ */
+describe('esPasoRetirado — un camino que el motor ya no usa', () => {
+  it('`copiar-conjunto` está retirado y su reemplazo NO', () => {
+    expect(esPasoRetirado('copiar-conjunto')).toBe(true)
+    expect(esPasoRetirado('crear-conjunto')).toBe(false)
+    // `copiar-campania` sigue viva: la copia de una CAMPAÑA no arrastra el targeting que Meta
+    // revalida, así que no tiene el defecto que retiró a la del conjunto.
+    expect(esPasoRetirado('copiar-campania')).toBe(false)
+    expect(esPasoRetirado('crear-aviso')).toBe(false)
+    // Un tipo que no existe no es «retirado»: es otra cosa, y confundirlos apagaría el reintento de
+    // cualquier paso con un typo en el tipo.
+    expect(esPasoRetirado('no-existe')).toBe(false)
+  })
+
+  it('🔴 NINGÚN armador genera un tipo retirado — si no, el flag miente', () => {
+    // Se mide sobre la fuente y no llamando a los seis armadores porque lo que hay que fijar es
+    // «este tipo no se escribe en ningún lado», y eso NO se puede probar con una entrada de ejemplo:
+    // un armador podría emitirlo sólo en una rama que el caso feliz no toca.
+    const fuente = readFileSync(join(__dirname, '..', 'lib/meta-ads/planes.core.js'), 'utf8')
+    const generados = new Set([...fuente.matchAll(/push\(\s*'([a-z-]+)'/g)].map((m) => m[1]))
+    // 🔑 El piso: sin esto, un `push(` que cambie de forma deja el barrido en cero y el test da
+    // verde mirando nada — que es el cero que más se parece a un hallazgo.
+    expect(generados.size).toBeGreaterThanOrEqual(6)
+    const retirados = [...generados].filter((t) => esPasoRetirado(t))
+    expect(retirados).toEqual([])
+  })
+
+  it('🔴 el SERVIDOR lo frena, no sólo la pantalla', () => {
+    // `api/_meta-planes.js` corre en Node sin pasar por el compilador y no se puede importar desde
+    // acá, así que es texto contra texto — misma técnica que `meta-ads-despacho.test.ts`, y por el
+    // mismo motivo: el defecto no está en la lógica, está en que las dos puntas no se hablen.
+    const handler = readFileSync(join(__dirname, '..', 'api/_meta-planes.js'), 'utf8')
+    // La vista que mira la pantalla.
+    expect(handler).toMatch(/puedeReintentar:\s*!!f\.puede_reintentar\s*&&\s*!esPasoRetirado\(f\.tipo\)/)
+    // Y el verbo, que es lo que de verdad escribe. Sin esto, un `curl` reintenta igual.
+    expect(handler).toMatch(/if \(esPasoRetirado\(paso\.tipo\)\) \{/)
+  })
+})
+
+/**
+ * 🔴 **La edad de un plan frenado, y por qué NO sale de `actualizado`.**
+ *
+ * Es la lección de siempre con otra ropa: la fecha de la última escritura ⛔ no mide una espera.
+ * `avanzar` sobre un plan atascado **no hace nada** —el paso está `fallado`, la política contesta
+ * `rendirse`— pero igual pisa `actualizado` con la hora de hoy. Si el contador colgara de ahí,
+ * apretar «Seguir» reiniciaría la edad de un plan que lleva 22 días clavado.
+ */
+describe('atascadoDesde y partirPlanes — la portada no es un depósito', () => {
+  const plan = (o: Partial<Plan>): Plan => ({
+    id: 1, idem: 'x', marcador: ' · #x', creado: '2026-08-01T10:00:00Z', quien: 'Bruno',
+    tipo: 'duplicar', variante: null, cuentaId: '1', linea: 'bdi', entrada: {}, contexto: {},
+    simulacro: false, estado: 'atascado', actualizado: '2026-08-08T21:13:00Z', detalle: null,
+    proximoEn: null, pasos: [], ...o,
+  } as Plan)
+  const fallado = (ultimoEn: string | null): PasoPlan => ({
+    orden: 1, tipo: 'copiar-conjunto', rotulo: 'Copiar', estado: 'fallado', intentos: 1,
+    pedido: null, resultadoId: null, marca: null, detalle: null, ultimoEn,
+    puedeReintentar: false, retirado: true,
+  } as PasoPlan)
+  const AHORA_30 = new Date('2026-08-30T12:00:00Z').getTime()
+
+  it('🔴 sale del paso que falló, y NO se mueve aunque `actualizado` sea de recién', () => {
+    const p = plan({ pasos: [fallado('2026-08-08T21:13:00Z')], actualizado: '2026-08-30T11:59:00Z' })
+    expect(atascadoDesde(p)).toBe('2026-08-08T21:13:00Z')
+    expect(diasDesde(atascadoDesde(p), AHORA_30)).toBe(21)
+  })
+
+  it('sin paso fallado cae a `actualizado`, y sin eso a `creado`', () => {
+    expect(atascadoDesde(plan({ pasos: [] }))).toBe('2026-08-08T21:13:00Z')
+    expect(atascadoDesde(plan({ pasos: [], actualizado: null }))).toBe('2026-08-01T10:00:00Z')
+  })
+
+  it('`diasDesde` contesta null y ⛔ nunca 0 cuando no puede leer la fecha', () => {
+    expect(diasDesde(null, AHORA_30)).toBeNull()
+    expect(diasDesde('no es una fecha', AHORA_30)).toBeNull()
+  })
+
+  it('sólo se retira un ATASCADO: un pendiente viejo sigue siendo una tarea', () => {
+    const viejoPendiente = plan({ id: 9, estado: 'pendiente', actualizado: '2026-07-01T10:00:00Z' })
+    // Una escalada en curso de hace un mes corre sola: sacarla de la vista sería esconder plata
+    // que se está moviendo.
+    const enCurso = plan({ id: 8, estado: 'en-curso', actualizado: '2026-07-01T10:00:00Z' })
+    const r = partirPlanes([viejoPendiente, enCurso], AHORA_30)
+    expect(r.viejos).toEqual([])
+    expect(r.vivos.map((x) => x.id)).toEqual([9, 8])
+  })
+
+  it('el corte es a los DIAS_PLAN_VIEJO exactos, y el de un día antes se queda', () => {
+    // ⚠️ El número va ESCRITO acá y ⛔ no sólo leído de la constante: un test que compara la
+    // constante contra sí misma sigue verde con el corte en 1 día o en 100. Siete es una semana —
+    // lo que un plan tarda en dejar de ser «lo de esta semana» — y bajarlo tapa un plan de ayer.
+    expect(DIAS_PLAN_VIEJO).toBe(7)
+    const dia = 86400000
+    const justo = plan({ id: 1, pasos: [fallado(new Date(AHORA_30 - DIAS_PLAN_VIEJO * dia).toISOString())] })
+    const uno_menos = plan({ id: 2, pasos: [fallado(new Date(AHORA_30 - (DIAS_PLAN_VIEJO - 1) * dia).toISOString())] })
+    const r = partirPlanes([justo, uno_menos], AHORA_30)
+    expect(r.viejos.map((x) => x.id)).toEqual([1])
+    expect(r.vivos.map((x) => x.id)).toEqual([2])
+  })
+
+  it('los dos planes REALES del 8-ago caen del lado viejo', () => {
+    // Los números son los de producción, no inventados: `meta_ads_plan` 1 y 2, `ultimo_en` del
+    // paso 1. Si algún día el corte se afloja tanto que estos dos vuelven a la portada, esto avisa.
+    const r = partirPlanes([
+      plan({ id: 1, pasos: [fallado('2026-08-08T21:13:33.015+00:00')] }),
+      plan({ id: 2, pasos: [fallado('2026-08-08T21:45:18.509+00:00')] }),
+    ], AHORA_30)
+    expect(r.viejos).toHaveLength(2)
+    expect(r.vivos).toEqual([])
   })
 })
