@@ -30,7 +30,12 @@ export type Responsabilidad = {
 
 export type TipoNodo = 'sector' | 'persona' | 'puesto'
 
-/** Un nodo del organigrama. `persona` es null en los que no tienen cuenta en el monitor. */
+/**
+ * Un nodo del organigrama. `persona` es null en los que no tienen cuenta en el monitor.
+ *
+ * ⚠️ **La misma persona puede tener DOS nodos**: Cande está en Marketing y en Diseño, y las dos son
+ * ciertas. La clave del árbol es `id`; la identidad de la persona sigue siendo su `name`.
+ */
 export type Nodo = {
   id: string
   label: string
@@ -40,6 +45,8 @@ export type Nodo = {
   nota?: string | null
   orden: number
   activo: boolean
+  /** Rama de conducción: no se le manda a quien no es admin. Arrastra a los hijos. */
+  interno?: boolean
 }
 
 /** Un nodo ya colgado de su padre. Lo arma `arbol()`. */
@@ -75,6 +82,7 @@ import {
   grises as grisesJs,
   labelDeClase as labelDeClaseJs,
   sinDueno as sinDuenoJs,
+  visiblesPara as visiblesParaJs,
 } from './core.js'
 
 export const CLASES = CLASES_JS as { key: ClaseResp; label: string; ayuda: string }[]
@@ -88,3 +96,4 @@ export const delSector = delSectorJs as (filas: Responsabilidad[], sector: Funci
 export const deLaPersona = deLaPersonaJs as (filas: Responsabilidad[], persona: string) => Responsabilidad[]
 export const grises = grisesJs as (filas: Responsabilidad[]) => Responsabilidad[]
 export const arbol = arbolJs as (nodos: Nodo[]) => NodoConHijos[]
+export const visiblesPara = visiblesParaJs as (nodos: Nodo[], esAdmin: boolean) => Nodo[]

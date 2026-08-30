@@ -52,6 +52,15 @@ archivo de ruta propio** (12 funciones en Hobby, hay 7) · tablas `organizacion_
 - ⚠️ **El conteo del organigrama va sólo en los nodos con cuenta del padrón, y el CERO se dibuja**
   (en ámbar): ahí un cero afirma *«está en el organigrama y no tiene nada escrito»*. En un nodo sin
   cuenta no va nada, porque ahí el cero afirmaría otra cosa — que no lo podemos saber.
+- 🔑 **La misma persona puede tener DOS nodos.** Cande está en Marketing y en Diseño y las dos son
+  ciertas; la clave del árbol es `id` y la identidad sigue siendo el `name`, así que su ficha es una
+  sola. ⚠️ Donde el eje es la persona —`personasDe`, las columnas de la matriz— hay que deduplicar,
+  o sale con dos columnas idénticas y la matriz cuenta doble.
+- 🔑 **`interno` esconde una rama de conducción, y ARRASTRA a los hijos.** Pedido de Bruno
+  (30-ago-2026): *«que la gente no vea cosas paralelas que no sirvan, de los gerentes»*. Esconder
+  «Operativo» y dejar colgando «Venta mayorista» sería peor que no esconder nada: `arbol()` lo sube
+  a la raíz, al lado de los dueños. El recorte lo hace **el handler** (`visiblesPara`), ⛔ no la
+  pantalla: lo que no viaja no se dibuja por accidente.
 - 🔴 **`organizacion` ⛔ NO está en `KEYS_PARA_TODOS`**, a diferencia de sus dos hermanas de área:
   está en obra y hoy la ven **sólo los admin** (pedido de Bruno, 30-ago). Ninguna función hereda esa
   área, así que sacarla de ese `Set` alcanzó. Se abre al equipo con una línea.

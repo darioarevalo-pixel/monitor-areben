@@ -25,8 +25,8 @@
 // 🔑 **`autor` sale de `perfil.name`, NUNCA del body**, como en `_sistema.js`.
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
-import { marcasConAcceso } from '../lib/permisos.core.js';
-import { filaValida } from '../lib/organizacion/core.js';
+import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
+import { filaValida, visiblesPara } from '../lib/organizacion/core.js';
 
 /** Los cinco sectores. Espejo de `Funcion` en `lib/permisos.ts:42`, que es TS y no se puede importar. */
 const SECTORES = ['direccion', 'marketing', 'local', 'deposito', 'administracion'];
@@ -46,7 +46,7 @@ function puedeEditar(perfil) {
 }
 
 const CAMPOS_RESP = 'id, sector, persona, clase, titulo, detalle, manual_id, orden, activo, autor, created_at, updated_at';
-const CAMPOS_NODO = 'id, label, tipo, padre_id, persona, nota, orden, activo';
+const CAMPOS_NODO = 'id, label, tipo, padre_id, persona, nota, orden, activo, interno';
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -74,7 +74,11 @@ export default async function handler(req, res) {
       ]);
       if (nod.error) throw new Error(nod.error.message);
       if (rsp.error) throw new Error(rsp.error.message);
-      return res.status(200).json({ ok: true, nodos: nod.data || [], resp: rsp.data || [], puede: { editar } });
+      // Las ramas `interno` —la conducción del negocio: compras, mayorista, finanzas— ⛔ no se le
+      // mandan a quien no es admin. Al lado de su sector son ruido, y esconderlas en la pantalla
+      // dejaría el dato viajando: lo que no viaja no se dibuja por accidente.
+      const nodos = visiblesPara(nod.data || [], esAdmin(perfil));
+      return res.status(200).json({ ok: true, nodos, resp: rsp.data || [], puede: { editar } });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
@@ -147,6 +151,7 @@ export default async function handler(req, res) {
         padre_id: padre,
         persona: n.persona ? String(n.persona) : null,
         nota: n.nota ? String(n.nota) : null,
+        interno: !!n.interno,
         orden: Number.isFinite(Number(n.orden)) ? Number(n.orden) : 0,
         activo: n.activo !== false,
         updated_at: new Date().toISOString(),

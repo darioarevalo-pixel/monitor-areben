@@ -110,8 +110,17 @@ export function Organizacion() {
 
   const apodoDe = useCallback((name: string) => equipo?.find((c) => c.name === name)?.apodo || name, [equipo])
   const cuantasDe = useCallback((persona: string) => deLaPersona(resp, persona).length, [resp])
-  /** La nota del organigrama es el oficio de la persona: «producción audiovisual». */
-  const rolDe = useCallback((persona: string) => nodos.find((n) => n.persona === persona)?.nota || null, [nodos])
+  /**
+   * El oficio de la persona, que en el organigrama es la nota del nodo.
+   *
+   * ⚠️ **Junta las de TODOS sus nodos**, sin repetir: quien está en dos ramas tiene dos oficios y
+   * quedarse con el primero elegiría uno por el orden de la tabla — que es una decisión que nadie
+   * tomó. Cande es «diseño gráfico y estampería» Y «diseño de producto».
+   */
+  const rolDe = useCallback((persona: string) => {
+    const notas = [...new Set(nodos.filter((n) => n.persona === persona && n.nota).map((n) => n.nota as string))]
+    return notas.length ? notas.join(' · ') : null
+  }, [nodos])
 
   /**
    * Las personas de un sector, para las columnas de la matriz.
@@ -127,8 +136,12 @@ export function Organizacion() {
     const caminar = (ns: NodoConHijos[]) => ns.forEach((n) => { if (n.persona) enOrden.push(n.persona); caminar(n.hijos) })
     caminar(arbolNodos)
     const conFilas = new Set(delSector(resp, s).map((f) => f.persona).filter((p): p is string => !!p))
+    // ⚠️ `enOrden` puede REPETIR a alguien: Cande tiene un nodo en Marketing y otro en Diseño, y las
+    // dos son ciertas. Acá el eje es la persona, así que va una sola vez — sin el Set, salía con dos
+    // columnas idénticas y la matriz contaba doble.
+    const unicas = [...new Set(enOrden)]
     // Las que el organigrama no ubicó tampoco se esconden: son trabajo con dueña que nadie colgó.
-    const todas = [...enOrden.filter((p) => conFilas.has(p)), ...[...conFilas].filter((p) => !enOrden.includes(p))]
+    const todas = [...unicas.filter((p) => conFilas.has(p)), ...[...conFilas].filter((p) => !unicas.includes(p))]
     const esDelSector = (p: string) => !!equipo?.find((c) => c.name === p)?.funcion.includes(s)
     return [...todas.filter(esDelSector), ...todas.filter((p) => !esDelSector(p))]
   }, [arbolNodos, resp, equipo])

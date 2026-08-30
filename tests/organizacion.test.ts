@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   CLASE_DEL_GRIS, KEYS_CLASE, arbol, deLaPersona, delSector, filaValida, grises, sinDueno,
-  type Nodo, type Responsabilidad,
+  visiblesPara, type Nodo, type Responsabilidad,
 } from '@/lib/organizacion/tipos'
 import { FUNCIONES } from '@/lib/permisos'
 
@@ -114,5 +114,39 @@ describe('el organigrama', () => {
 
   it('un nodo apagado no se dibuja', () => {
     expect(arbol([nodo({ id: 'x', activo: false })])).toHaveLength(0)
+  })
+})
+
+describe('las ramas internas: la conducción del negocio no se le manda al equipo', () => {
+  const arbolito: Nodo[] = [
+    nodo({ id: 'dario', label: 'Darío' }),
+    nodo({ id: 'operativo', label: 'Operativo', tipo: 'sector', padre_id: 'dario', interno: true }),
+    nodo({ id: 'mayorista', label: 'Venta mayorista', padre_id: 'operativo' }),
+    nodo({ id: 'admin', label: 'Administración', tipo: 'sector', padre_id: 'dario' }),
+  ]
+
+  it('el admin las ve todas', () => {
+    expect(visiblesPara(arbolito, true)).toHaveLength(4)
+  })
+
+  it('🔑 y el que no es admin tampoco ve a los HIJOS de una rama interna', () => {
+    // Esconder «Operativo» y dejar colgando «Venta mayorista» es peor que no esconder nada: la
+    // rama aparece igual, sin su título, y `arbol()` la sube a la raíz — al lado de los dueños.
+    const suyos = visiblesPara(arbolito, false)
+    expect(suyos.map((n) => n.id)).toEqual(['dario', 'admin'])
+    expect(arbol(suyos)[0].hijos.map((n) => n.id)).toEqual(['admin'])
+  })
+})
+
+describe('una persona en DOS ramas', () => {
+  it('sale dos veces en el árbol, porque las dos son ciertas', () => {
+    // Cande está en Marketing y en Diseño. La clave del árbol es `id`, no `persona`.
+    const raiz = arbol([
+      nodo({ id: 'mkt', label: 'Marketing', tipo: 'sector' }),
+      nodo({ id: 'dis', label: 'Diseño', tipo: 'sector' }),
+      nodo({ id: 'cande-mkt', label: 'Cande', padre_id: 'mkt', persona: 'Candela Luis' }),
+      nodo({ id: 'cande-dis', label: 'Cande', padre_id: 'dis', persona: 'Candela Luis' }),
+    ])
+    expect(raiz.flatMap((s) => s.hijos).map((n) => n.persona)).toEqual(['Candela Luis', 'Candela Luis'])
   })
 })

@@ -49,6 +49,17 @@ create table if not exists organizacion_nodos (
   updated_at timestamptz not null default now()
 );
 
+-- 🔑 **`interno` esconde una rama del equipo, ⛔ no la borra.** El organigrama tiene ramas que son
+-- la conducción del negocio —compras, mayorista, finanzas— y a quien trabaja en el local no le
+-- dicen nada: puestas al lado de su sector, son ruido que hace que deje de mirar el resto. Pero
+-- sacarlas del dato sería mentir sobre la empresa. Se marcan, y el HANDLER no se las manda a quien
+-- no es admin: lo que no viaja no se puede dibujar por accidente. **Arrastra a los hijos.**
+alter table organizacion_nodos add column if not exists interno boolean not null default false;
+
+-- ⚠️ La misma persona puede tener DOS nodos: Cande está en Marketing y en Diseño, y las dos son
+-- ciertas. La clave del árbol es `id`, no `persona`, así que eso ya entra sin cambiar nada — lo que
+-- sí hay que cuidar es no contarla dos veces donde el eje es la persona (ver `personasDe`).
+
 create index if not exists idx_org_nodos_padre on organizacion_nodos (padre_id, orden);
 
 -- Las responsabilidades. Una fila = una cosa de la que alguien (o nadie) responde.
