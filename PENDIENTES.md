@@ -770,9 +770,11 @@ antes de rehacerlo.
   confirm de la pantalla**. ⛔ Sin migración · **18 mutantes, 18 muertos** (2 controles inocuos
   vivos) · **18 de 18 caminado contra la base real de BDI**, 3 filas sembradas y borradas y las 2
   reales intactas.
-  ▶️ **Lo que queda de post-venta ⛔ no es código**: son las **decisiones de Bruno** (`PISO_RETORNO`,
-  cuánto vale un cupón, el costo operativo, y los cuatro plazos), y **que alguien lo apriete**: el
-  módulo tiene **2 filas en BDI y 0 en Zattia**, así que casi nada de esto lo tocó una persona.
+  ✅ ~~Lo que queda de post-venta no es código: son las decisiones de Bruno (`PISO_RETORNO`, cuánto
+  vale un cupón, el costo operativo, y los cuatro plazos)~~ — **las cuatro contestadas el 30-ago**
+  (B4/B5/B6/B7), en prod y verificadas; ver la entrada del final de este archivo.
+  ▶️ **Lo que sigue abierto es «que alguien lo apriete»**: el módulo tiene **2 filas en BDI y 0 en
+  Zattia**, así que casi nada de esto lo tocó una persona.
 
 - ✅ 🔴 **El alta pública, paso 2 y paso 3: la puerta que CREA, y LA PANTALLA** (30-ago-2026). El
   núcleo (`lib/reclamos/alta-publica.core.js`) y el servidor (`api/_reclamo.js`, acción `alta`) están
