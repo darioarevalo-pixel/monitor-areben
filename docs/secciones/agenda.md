@@ -556,7 +556,18 @@ quedó **tildada y no borrada**, contestar dos veces contestó `ya`, y **se borr
 77 después**. 🔑 **El `.not('datos->…','is',null)` sólo lo verifica la base**: contra un Supabase de
 mentira un filtro mal escrito sale verde.
 
+✅ **En PROD el 30-ago** (`fdac165`), verificado por **dos sondas que ⛔ no escriben nada**: el campo
+nuevo del GET (`preguntaIngreso`, viaja en los 77 ítems y **0 preguntas abiertas**) y un POST con un
+id inexistente, que contesta **404 «Esa pregunta ya no está»** ⇒ el verbo está en el bundle.
+🔑 **Un POST de verdad no servía como oráculo**: habría creado filas si el deploy ya había llegado.
+
 ▶️ **Falta caminar LA PANTALLA**: los cuatro botones piden login, así que es mano de Bruno.
+▶️ **Y decidir si va una NOVEDAD**: la próxima OC que confirme Gerardo le abre a Administración un
+pendiente que nadie le anunció.
+⚠️ **Lo que ⛔ NO está probado es que el emisor mande EN VIVO.** Las 79 OCs llegaron en una sola
+tanda el 27-ago y ninguna desde entonces —`OC-0412` se confirmó el 26 y llegó igual en la del 27—,
+así que puede que esto no se prenda hasta que Gerardo mande el primer evento en vivo. El tripwire es
+`eventos.ultimo` del GET de recepciones.
 
 ## Lo que ya se rompió acá
 
