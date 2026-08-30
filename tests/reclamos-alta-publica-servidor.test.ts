@@ -293,6 +293,18 @@ describe('la forma del pedido', () => {
     expect(llamadas).toHaveLength(0)
   })
 
+  it('🔴 STUNNED ⛔ no es una puerta del alta, aunque SÍ sea una tienda de Tienda Nube', async () => {
+    // Es la trampa de esta lista: `bdi-catalogo` la atiende (`store=stunned`), así que copiar de
+    // allá las tres tiendas parece prolijo. Pero los reclamos de Stunned vivirían en la base de
+    // **Zattia**, donde el freno de «un reclamo abierto por orden» compara `(store, orden_tn)`:
+    // dos órdenes distintas pueden tener el mismo número y el freno le contestaría a una persona
+    // **el token del reclamo de otra**. La tercera puerta se abre con una columna, ⛔ no con una
+    // línea en la lista.
+    const r = await pegar({ ...ALTA, store: 'stunned' })
+    expect(r.code).toBe(400)
+    expect(llamadas).toHaveLength(0)
+  })
+
   it('un pedido mal formado ⛔ no consulta Tienda Nube', async () => {
     // El orden importa: primero la forma, después la red. Si no, cualquiera hace que el servidor
     // pegue a TN tantas veces como quiera.

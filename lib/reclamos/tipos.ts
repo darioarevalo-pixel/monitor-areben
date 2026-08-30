@@ -42,6 +42,7 @@ import {
   salidaAlAceptarRetencion as salidaAlAceptarRetencionJs,
   camposAlContestarLaOferta as camposAlContestarLaOfertaJs,
   RESPUESTAS_RETENCION as RESPUESTAS_RETENCION_JS,
+  pideFotosAlCliente as pideFotosAlClienteJs,
   pideReclamoAlTransportista as pideReclamoAlTransportistaJs,
   productoEnJuego as productoEnJuegoJs,
   reclasificaA as reclasificaAJs,
@@ -580,7 +581,9 @@ export function expectativasDe(m: MotivoReclamo): Expectativa[] {
  * **por la VÍA del retorno, ⛔ no por la expectativa** — que es el dato que no dice si viaja.
  */
 export function pideFotos(m: MotivoReclamo, _expectativa?: Expectativa | null): boolean {
-  return PERFIL_MOTIVO[m].fotos !== 'nunca'
+  // 🔑 La regla vive en `casos.core.js` desde el 30-ago-2026: la lee también `api/_reclamo.js` —el
+  // portal del cliente—, que ⛔ no puede importar TypeScript. Acá queda la cara tipada.
+  return pideFotosAlClienteJs(m)
 }
 
 /**

@@ -27,6 +27,7 @@ import { imgAThumb } from '@/lib/imagenes'
  * `.mo-lightbox` vive en `components/ui/kit.css`, que carga el layout raíz ⇒ también está acá.
  */
 import { Lightbox } from '@/components/ui/Lightbox'
+import { AltaPublica } from './AltaPublica'
 
 const API = '/api/postventa?recurso=reclamo'
 /** Suficiente para ver una falla, y liviano para subir con datos móviles. */
@@ -40,9 +41,28 @@ type Vista = {
   fotos: string[]
   relato: string
   puedeSubir: boolean
+  /**
+   * 🔴 **Si este caso tiene una foto que pedir**, derivado del motivo por el servidor
+   * (`pideFotosAlCliente`). ⛔ No es el motivo: el cliente ⛔ no ve nuestra taxonomía.
+   *
+   * ⚠️ **Opcional a propósito.** Entre el deploy de la pantalla y el de la función serverless hay
+   * minutos en que el GET todavía ⛔ no lo manda, y `undefined` tiene que valer **exige** —lo que
+   * esta pantalla hizo siempre—: el default seguro es pedir la foto, ⛔ no dejar enviar sin nada.
+   */
+  pideFotos?: boolean
 }
 
-export function ReclamoPublico({ token }: { token: string | null }) {
+export function ReclamoPublico({ token, tienda = null }: { token: string | null; tienda?: string | null }) {
+  /**
+   * 🔑 **El token del reclamo que se acaba de crear desde el alta pública.** Sin link todavía: la
+   * fila nació hace un segundo del otro lado de esta misma pantalla.
+   *
+   * Va como estado y ⛔ no como una navegación a `/reclamo/<token>` porque el ④ del alta —subir la
+   * foto— es **el toque siguiente**: mandar a la persona a otra URL en el medio es el momento en
+   * que se pierde la mitad de la gente, y el link le llega igual por WhatsApp.
+   */
+  const [tokenNuevo, setTokenNuevo] = useState<string | null>(null)
+  const elToken = token || tokenNuevo
   const [vista, setVista] = useState<Vista | null>(null)
   const [cargando, setCargando] = useState(true)
   const [noExiste, setNoExiste] = useState(false)
@@ -59,9 +79,12 @@ export function ReclamoPublico({ token }: { token: string | null }) {
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      if (!token) { if (vivo) { setNoExiste(true); setCargando(false) } return }
+      // Sin token ⛔ no hay nada que pedir **y ⛔ no es un link roto**: es `/reclamo` pelado, o sea
+      // el alta pública, que se dibuja más abajo. Marcar `noExiste` acá era lo que hacía que la
+      // puerta nueva contestara «este link ya no está disponible».
+      if (!elToken) { if (vivo) setCargando(false); return }
       try {
-        const r = await fetch(`${API}&token=${encodeURIComponent(token)}&nc=${Date.now()}`)
+        const r = await fetch(`${API}&token=${encodeURIComponent(elToken)}&nc=${Date.now()}`)
         const d = r.ok ? await r.json().catch(() => null) : null
         if (!vivo) return
         if (!d?.ok) { setNoExiste(true); return }
@@ -74,7 +97,7 @@ export function ReclamoPublico({ token }: { token: string | null }) {
       }
     })()
     return () => { vivo = false }
-  }, [token])
+  }, [elToken])
 
   const subir = (files: FileList | null) => {
     const arr = [...(files || [])].filter((f) => /^image\//.test(f.type))
@@ -89,7 +112,7 @@ export function ReclamoPublico({ token }: { token: string | null }) {
             const r = await fetch(API, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token, accion: 'foto', dataUrl }),
+              body: JSON.stringify({ token: elToken, accion: 'foto', dataUrl }),
             })
             const d = await r.json().catch(() => ({}))
             if (!r.ok || !d.ok) throw new Error(d.error || 'No se pudo subir la foto.')
@@ -111,7 +134,7 @@ export function ReclamoPublico({ token }: { token: string | null }) {
       const r = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, accion: 'enviar', relato }),
+        body: JSON.stringify({ token: elToken, accion: 'enviar', relato }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok || !d.ok) throw new Error(d.error || 'No se pudo enviar.')
@@ -121,9 +144,31 @@ export function ReclamoPublico({ token }: { token: string | null }) {
     }
   }
 
+  /**
+   * 🔴 **¿Este caso tiene una foto que pedir?** Lo contesta el servidor desde el motivo, y hasta el
+   * 30-ago-2026 esta pantalla ⛔ no lo preguntaba: **exigía una foto siempre**. En «todavía no me
+   * llegó» y en una demora ⛔ no hay nada que fotografiar ⇒ el botón de enviar ⛔ nunca se prendía y
+   * el reclamo se quedaba en `borrador` para siempre. Con el alta pública eso dejó de ser
+   * hipotético: «Todavía no me llegó» es **una de las cinco opciones**.
+   *
+   * ⚠️ `undefined` vale **exige**: ver el ⚠️ de `Vista.pideFotos`.
+   */
+  const exigeFoto = vista?.pideFotos !== false
+  /** Lo que traba el envío: una foto subiéndose, o la foto que este caso sí necesita. */
+  const trabado = subiendo > 0 || (exigeFoto && !vista?.fotos.length)
+
   // Estilos propios y no el kit del Monitor: esto lo abre alguien de afuera, en un teléfono, y no
   // tiene que parecerse a un panel de administración.
   const caja: React.CSSProperties = { maxWidth: 520, margin: '0 auto', padding: 20, fontFamily: 'system-ui, -apple-system, sans-serif', color: '#1c1c1e' }
+
+  /**
+   * 🔴 **`/reclamo` pelado ⛔ no es un link roto: es la puerta de entrada.** Sale acá —después de
+   * todos los hooks, por la regla de React— y antes de cualquier pantalla del portal, porque hasta
+   * que la fila no existe ⛔ no hay reclamo que mostrar.
+   */
+  if (!elToken) {
+    return <AltaPublica tienda={tienda} onCreado={(t) => { setCargando(true); setTokenNuevo(t) }} />
+  }
 
   if (cargando) return <div style={caja}>Cargando…</div>
 
@@ -171,7 +216,9 @@ export function ReclamoPublico({ token }: { token: string | null }) {
 
       <h2 style={{ fontSize: 16, marginBottom: 6 }}>Fotos</h2>
       <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 10 }}>
-        Sacale una foto donde se vea el problema. Es lo que más nos ayuda a resolverlo rápido.
+        {exigeFoto
+          ? 'Sacale una foto donde se vea el problema. Es lo que más nos ayuda a resolverlo rápido.'
+          : 'Si tenés algo para mostrarnos, sumalo. Para este caso no hace falta.'}
       </p>
 
       {/* Las que ya subió. Se tocan para verlas enteras: el recorte de 84 px alcanza para contarlas,
@@ -238,16 +285,16 @@ export function ReclamoPublico({ token }: { token: string | null }) {
 
       <button
         onClick={() => void enviar()}
-        disabled={subiendo > 0 || !vista?.fotos.length}
+        disabled={trabado}
         style={{
           width: '100%', padding: '15px', fontSize: 16, fontWeight: 600, borderRadius: 10, marginTop: 20,
-          border: 'none', cursor: subiendo > 0 || !vista?.fotos.length ? 'not-allowed' : 'pointer',
-          background: subiendo > 0 || !vista?.fotos.length ? '#d1d5db' : '#4f46e5', color: '#fff',
+          border: 'none', cursor: trabado ? 'not-allowed' : 'pointer',
+          background: trabado ? '#d1d5db' : '#4f46e5', color: '#fff',
         }}
       >
         Enviar
       </button>
-      {!vista?.fotos.length && (
+      {exigeFoto && !vista?.fotos.length && (
         <p style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', marginTop: 8 }}>
           Subí al menos una foto para poder enviar.
         </p>

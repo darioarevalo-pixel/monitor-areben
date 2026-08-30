@@ -31,8 +31,8 @@ import { subirDataUrl } from './_blob.js';
 // conjunto» — y **ya habían dejado de coincidir**: la lista dejó de ofrecer el link de un cambio
 // decidido y este archivo se quedó mirando sólo el estado (D16).
 import { COLUMNAS_DEL_PORTAL, elLinkSigueVivo, nuevoToken, venceElLink } from '../lib/reclamos/portal.core.js';
-import { altaBienFormada, itemsDelAlta, motivoDeAlta, TOPE_ALTAS_POR_HORA } from '../lib/reclamos/alta-publica.core.js';
-import { ESTADOS_ABIERTOS } from '../lib/reclamos/casos.core.js';
+import { altaBienFormada, API_ORDEN_VERIFICADA, esTiendaDelAlta, itemsDelAlta, motivoDeAlta, TOPE_ALTAS_POR_HORA } from '../lib/reclamos/alta-publica.core.js';
+import { ESTADOS_ABIERTOS, pideFotosAlCliente } from '../lib/reclamos/casos.core.js';
 
 const STORES = ['bdi', 'zattia'];
 const MAX_FOTOS = 6;
@@ -102,14 +102,24 @@ export function paraElCliente(fila) {
     fotos: (Array.isArray(fila.fotos) ? fila.fotos : []).map((f) => f.url),
     relato: fila.relato_cliente || '',
     puedeSubir: (Array.isArray(fila.fotos) ? fila.fotos.length : 0) < MAX_FOTOS,
+    /**
+     * 🔴 **Si este caso tiene una foto que pedir.** ⛔ No es el motivo: el cliente ⛔ no tiene por
+     * qué ver nuestra taxonomía, y publicar `motivo` acá le diría *«esto entró como demora»* sobre
+     * una clasificación que todavía ⛔ no miró nadie.
+     *
+     * Va porque la pantalla lo necesita para **prender el botón de enviar**: hasta el 30-ago-2026
+     * exigía una foto siempre, así que el reclamo de quien ⛔ no recibió el paquete ⛔ no se podía
+     * enviar nunca. Ver `pideFotosAlCliente`.
+     */
+    pideFotos: pideFotosAlCliente(fila.motivo),
   };
 }
 
 // ── ALTA PÚBLICA ────────────────────────────────────────────────────────────────
 //
-// La URL de la orden de Tienda Nube. **Es el otro repo** (`bdi-catalogo`), que es el único que
-// habla con la API de TN. Mismo valor que `lib/reclamos/cliente.ts` y `lib/canjes/cliente.ts`.
-const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit';
+// La URL de la orden de Tienda Nube vive en el núcleo (`API_ORDEN_VERIFICADA`) porque la leen las
+// **dos puntas**: la pantalla del alta, para mostrarle el pedido a quien lo abre, y esto, que
+// vuelve a girar la llave. Mismo valor que `lib/reclamos/cliente.ts` y `lib/canjes/cliente.ts`.
 
 /**
  * Quién figura como autor de la fila. 🔑 Es lo que separa el alta pública de las internas **sin una
@@ -136,7 +146,7 @@ const USUARIO_DEL_ALTA = 'cliente';
  */
 async function ordenVerificada(store, orden, mail) {
   try {
-    const r = await fetch(`${ORDEN_API}?orden=${encodeURIComponent(orden)}&store=${encodeURIComponent(store)}`, {
+    const r = await fetch(`${API_ORDEN_VERIFICADA}?orden=${encodeURIComponent(orden)}&store=${encodeURIComponent(store)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mail }),
@@ -213,8 +223,11 @@ async function alta(req, res) {
     console.warn(`[alta] pedido mal formado: ${forma.motivo}`);
     return res.status(400).json({ error: 'Faltan datos para abrir el reclamo.' });
   }
+  // ⚠️ Las tiendas del alta ⛔ no son `STORES`: ésas son **las dos bases** donde se busca un token,
+  // y la lista de por dónde se puede ENTRAR es otra pregunta, con su propio motivo (ver
+  // `TIENDAS_DEL_ALTA`). Hoy coinciden; el día que no, la que manda acá es la de la puerta.
   const store = String(b.store || '').trim();
-  if (!STORES.includes(store)) return res.status(400).json({ error: 'Faltan datos para abrir el reclamo.' });
+  if (!esTiendaDelAlta(store)) return res.status(400).json({ error: 'Faltan datos para abrir el reclamo.' });
 
   const cfg = cfgFor(store);
   if (!cfg.url || !cfg.key) {

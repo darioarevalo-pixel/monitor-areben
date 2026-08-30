@@ -39,7 +39,7 @@ const alta = async (body) => {
 let ok = 0, mal = 0;
 const chequear = (nombre, cond, detalle = '') => {
   console.log(`${cond ? '✅' : '❌'} ${nombre}${detalle ? ` — ${detalle}` : ''}`);
-  cond ? ok++ : mal++;
+  if (cond) ok++; else mal++;
 };
 
 const BIEN = { store: 'bdi', orden: ORDEN, mail: 'nadie@ejemplo.com', opcion: 'talle', productos: [0] };

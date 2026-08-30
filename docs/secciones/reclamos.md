@@ -2457,9 +2457,96 @@ que **entra al bundle del navegador**.
 
 ### ▶️ Lo que queda
 
-- 🔴 **La pantalla**: la vista del alta en `ReclamoPublico.tsx` (los cuatro toques) y la ruta pública
-  por donde se entra. Hasta que exista, **esto ⛔ no lo puede usar nadie**.
+- ✅ **La pantalla salió el 30-ago-2026** — ver la sección de abajo.
 - **El link, ⛔ no está decidido dónde vive**: qué URL se le manda al cliente y desde dónde
   (¿el mail de la compra? ¿el pie de la web?). Es de Bruno.
 - ⚠️ El alta ⛔ no toma relato: el cliente lo escribe **después**, en el portal, con `accion: 'enviar'`
   —que es el que ya existe—. Son cuatro toques y una foto, sin un solo campo de texto obligatorio.
+
+---
+
+## 🆕 El alta pública, paso 3: LA PANTALLA (30-ago-2026 — §2, y con esto §2 está entero)
+
+**Por dónde se entra: `/reclamo?m=bdi`** (o `m=zattia`). Es la misma ruta del portal del cliente,
+**sin token** — ⛔ no una ruta nueva: cada ruta de Next es una función serverless y el proyecto está
+en el tope del plan Hobby, donde pasarse **frena todos los deploys en silencio**.
+
+🔴 **`/reclamo` pelado ⛔ no era «un link vencido»: era la puerta que faltaba.** Hasta hoy, sin token
+la pantalla contestaba *«este link ya no está disponible»*, que es exactamente lo que hay que
+contestarle a un token que ⛔ no sirve **y** lo contrario de lo que hay que contestarle a alguien que
+viene a abrir un reclamo. Las dos mitades viven en el mismo `if`, y por eso se prueban juntas.
+
+### Los cuatro toques, y quién decide qué
+
+| paso | qué ve | de dónde sale |
+|---|---|---|
+| ⓪ | ¿Dónde compraste? *(sólo si el link ⛔ no lo dice)* | `TIENDAS_DEL_ALTA` |
+| ① | pedido #____ + el mail con el que compraste | se cruza contra Tienda Nube, **en el otro repo** |
+| ② | «Hola Victoria, éste es tu pedido #21033» + los productos | **la orden verificada**, ⛔ no lo tipeado |
+| ③ | ¿qué pasó? — cinco opciones en criollo | `OPCIONES_PUBLICAS`; el motivo lo decide el servidor |
+| ④ | subí unas fotos | **el portal, que ya existía**: la misma pantalla sigue con el token nuevo |
+
+🔑 **El ④ ⛔ no se escribió de nuevo, y eso es la mitad del trabajo.** Apenas la fila existe, la
+pantalla se queda en el portal con el token que devolvió el alta —⛔ sin navegar a `/reclamo/<token>`
+en el medio, que es donde se pierde la mitad de la gente—. Una segunda pantalla de fotos sería una
+segunda regla de cuántas entran y de cuándo se puede enviar.
+
+### 🔴 Lo que la vuelve segura, dicho una vez
+
+- **Al alta viajan ÍNDICES, ⛔ no productos.** La pantalla muestra la orden, pero lo que postea es
+  `[0,1]` y el mail: **la llave vuelve a girar del lado del servidor**, en el mismo pedido que crea
+  la fila. Si viajaran los productos, verificar el mail ⛔ no serviría de nada.
+- **El mail va en el body en las dos puntas**, ⛔ nunca en la query string.
+- **Un «no» ⛔ no explica por qué**: el cartel es uno solo —el mismo que contesta el servidor— para
+  «no existe», «no trae mail», «no coincide» y «el otro repo se cayó».
+- 🔴 **Un cuerpo que parece bueno con un código que ⛔ no lo es, en las DOS llamadas.** Es el mutante
+  que sobrevivió en el servidor la vez pasada, y acá volvió a aparecer **en el alta**: un
+  `{ok:true, token}` con un 500 encima —un deploy a medio subir, un proxy en el medio— dejaría a la
+  persona en un portal con un token que ⛔ no existe, **creyendo que cargó el reclamo**.
+- ⚠️ **«Ya tenías uno abierto» ⛔ no se sigue de largo.** El servidor devuelve el token del que ya
+  existe; entrar derecho al portal le mostraría un reclamo **con otros productos y otro motivo** como
+  si fuera el que acaba de cargar. Se lo dice y le da el botón.
+- **Sin marca en el link se PREGUNTA.** Suponer BDI le contestaría «no encontramos ese pedido» a todo
+  Zattia, y ese «no» ⛔ no se distingue de la llave equivocada.
+
+### 🔴 Lo que destapó construirla: el portal exigía una foto SIEMPRE
+
+Y hay casos que ⛔ no tienen ninguna: en `no_llego`, `demora` y `sin_stock` el paquete no está, así
+que **el botón de enviar ⛔ no se prendía nunca** y el reclamo se quedaba en `borrador` para siempre.
+Del lado del cliente eso se ve igual que «el link no anda», y le pasa **al caso más caro de dejar sin
+atender**. Con el alta pública dejó de ser hipotético: *«Todavía no me llegó»* es **una de las cinco
+opciones** que puede tocar cualquiera.
+
+🔑 **La regla ya existía y ⛔ no llegaba hasta ahí.** `pideFotos` vivía sólo en `tipos.ts`, o sea en
+TypeScript, y `api/_reclamo.js` ⛔ no puede importar TS ⇒ bajó a `casos.core.js`
+(`pideFotosAlCliente`), `tipos.ts` se quedó con la cara tipada, y **`fotosEnElAlta` dejó de comparar
+el string por su cuenta**. Es la quinta vez que este módulo se rompe por la misma forma —la regla de
+un lado de la puerta y una copia del otro—, y ahora hay un test que las compara motivo por motivo.
+
+⚠️ **Lo que viaja al cliente es la RESPUESTA, ⛔ nunca el motivo**: publicar `motivo` le diría «esto
+entró como demora» sobre una clasificación que todavía ⛔ no miró nadie. Y **`undefined` vale
+exigir**: entre el deploy de la pantalla y el de la función serverless hay minutos en que el GET
+viejo sigue contestando, y ahí el default seguro es el que la pantalla hizo siempre.
+
+### ⚠️ STUNNED ⛔ no tiene puerta, y ⛔ no es un olvido
+
+`bdi-catalogo` **sí** atiende `store=stunned`, así que copiar de allá las tres tiendas parece
+prolijo. Pero los reclamos de Stunned vivirían en la base de **Zattia**, donde el freno de «un
+reclamo abierto por orden» compara `(store, orden_tn)`: dos órdenes distintas —una de Zattia y una
+de Stunned— pueden tener **el mismo número**, y ahí el freno le contestaría a una persona **el token
+del reclamo de otra**. ⇒ la tercera puerta se abre con **la columna que las separa**, ⛔ no con una
+línea en la lista. Está escrito en `TIENDAS_DEL_ALTA` y atado por test.
+
+### Cómo se probó
+
+- **19 mutantes, 19 muertos, 2 controles inocuos vivos** (un texto de ayuda, un comentario). El que
+  escapó en la primera vuelta era real: el guard del código HTTP **del alta** ⛔ no se ejercía, porque
+  el error que probaba el test venía sin `ok:true` adentro.
+- **Se MONTA la pantalla, ⛔ no se lee el fuente** (`tests/reclamos-alta-publica-pantalla.test.tsx`,
+  jsdom + `createRoot` + `act`): los pasos existen recién después de que la persona toca, y
+  `renderToStaticMarkup` ⛔ no corre efectos ni eventos.
+- **La regla y el cable**: `tests/reclamo-publico-fotos-del-caso.test.tsx` prueba la pantalla del
+  portal, `paraElCliente` corriendo, y **compara las dos caras de la regla motivo por motivo**.
+- ⚠️ **⛔ Sin migración**, ⛔ sin función serverless nueva (el build sigue con una sola ruta dinámica).
+- 📌 De paso: `npm run lint` estaba **en rojo en `main`** desde `890b1eb` por un ternario como
+  sentencia en `scripts/caminar-alta-publica.mjs`. Arreglado acá.

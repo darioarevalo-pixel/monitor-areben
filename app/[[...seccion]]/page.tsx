@@ -56,6 +56,15 @@ export default function Seccion() {
   // De qué sector se entró. Una sección puede colgar de varios (Solicitudes cuelga de
   // cuatro) y el encabezado tiene que decir el correcto, no el primero de la lista.
   const grupo = useSearchParams().get('g')
+  /**
+   * De qué tienda es el link del alta pública (`/reclamo?m=bdi`). **Lo lee la ruta y ⛔ no el
+   * componente** para que la pantalla se pueda montar en un test sin router de Next — el mismo
+   * motivo por el que el token viaja como prop.
+   *
+   * ⚠️ Si ⛔ no viene (o viene una que ⛔ no es del alta), la pantalla le pregunta a la persona en
+   * vez de suponer: suponer BDI le contestaría «no encontramos ese pedido» a todo Zattia.
+   */
+  const marcaDelLink = useSearchParams().get('m')
   const { perfil, marca, cargando } = useSesion()
   // Cajón del sidebar en móvil. Vive acá porque lo abren dos lugares (el botón de la
   // topbar y la tapa oscura) y lo cierra un tercero (navegar a una sección).
@@ -148,7 +157,9 @@ export default function Seccion() {
     if (key === 'legal') return <LegalPublico pagina={token} />
     if (key === 'cadete') return <PortalCadete token={token} />
     if (key === 'votacion') return <VotacionPortal token={token} />
-    return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} />
+    // ⚠️ `/reclamo` **sin token** ⛔ no es un link vencido: es el alta pública, que se abre adentro
+    // de `ReclamoPublico` (y sigue en la misma pantalla apenas la fila existe).
+    return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} tienda={marcaDelLink} />
   }
 
   if (cargando) return <div className="login-screen" />
