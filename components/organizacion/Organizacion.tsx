@@ -116,12 +116,16 @@ export function Organizacion() {
    * decían «local» y «bdilocal» — que es la clave del sistema, no cómo le dice nadie. Con el label
    * dicen «Local Zattia» y «Local BDI», que es lo que se lee en la pared.
    * ⚠️ El orden importa: el apodo del padrón manda, porque es el que la persona eligió.
+   * 🔴 **Y «tiene apodo» hay que preguntarlo comparando, ⛔ no con un `||`**: `traerEquipo` ya cae
+   * al `name` cuando no hay apodo (`apodo: u.apodo || u.name`), así que el campo NUNCA viene vacío
+   * y el `||` de acá no se disparaba nunca. Se vio en pantalla: las columnas seguían diciendo
+   * «LOCAL» y «BDILOCAL».
    */
-  const apodoDe = useCallback((name: string) => (
-    equipo?.find((c) => c.name === name)?.apodo
-    || nodos.find((n) => n.persona === name)?.label
-    || name
-  ), [equipo, nodos])
+  const apodoDe = useCallback((name: string) => {
+    const c = equipo?.find((x) => x.name === name)
+    const propio = c && c.apodo !== c.name ? c.apodo : null
+    return propio || nodos.find((n) => n.persona === name)?.label || name
+  }, [equipo, nodos])
   const cuantasDe = useCallback((persona: string) => deLaPersona(resp, persona).length, [resp])
   /**
    * El oficio de la persona, que en el organigrama es la nota del nodo.
