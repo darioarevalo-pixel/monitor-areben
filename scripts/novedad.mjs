@@ -24,6 +24,8 @@
 //   --destino=seccion:canjes        → a quien puede VER esa pantalla (los destinatarios salen de
 //                                     los permisos que ya existen, así que se ajusta solo).
 //   --destino=roles:local,deposito  → a quien tenga alguna de esas funciones.
+//   --destino=horas-extras          → a quien tenga tildado «Hace horas extras» en su perfil. No
+//                                     lleva lista: la contesta el padrón, así que se ajusta sola.
 //
 // # De qué marca (--marca)
 //
@@ -74,7 +76,7 @@ function marcaDeArgs() {
   process.exit(1)
 }
 
-/** `--destino=seccion:canjes` · `--destino=roles:local,marketing` · ausente = todos. */
+/** `--destino=seccion:canjes` · `roles:local,marketing` · `horas-extras` · ausente = todos. */
 function destinoDeArgs() {
   const marca = marcaDeArgs()
   const conMarca = (d) => (marca ? { ...d, marca } : d)
@@ -84,11 +86,14 @@ function destinoDeArgs() {
   const v = arg.slice('--destino='.length)
   const [tipo, resto = ''] = v.split(':')
   if (tipo === 'seccion' && resto) return conMarca({ tipo: 'seccion', key: resto })
+  // La única forma sin lista: los destinatarios salen del tilde de cada perfil, igual que los de
+  // `seccion` salen de los permisos. Por eso no lleva `:` ni nada después.
+  if (tipo === 'horas-extras') return conMarca({ tipo: 'horas-extras' })
   if (tipo === 'roles') {
     const roles = resto.split(',').map((r) => r.trim()).filter(Boolean)
     if (roles.length) return conMarca({ tipo: 'roles', roles })
   }
-  console.error(`✗ --destino inválido: "${v}". Usá seccion:<key> o roles:<a,b>.`)
+  console.error(`✗ --destino inválido: "${v}". Usá seccion:<key>, roles:<a,b> o horas-extras.`)
   process.exit(1)
 }
 const destino = destinoDeArgs()
@@ -178,6 +183,7 @@ if (!r.ok || !d?.ok) {
 // cargada — el peor momento para fallar: parece que no se hizo nada y en realidad está.
 const quienes = destino?.tipo === 'seccion' ? `los que ven "${destino.key}"`
   : destino?.tipo === 'roles' ? `los de ${destino.roles.join(', ')}`
+  : destino?.tipo === 'horas-extras' ? 'quien hace horas extras'
   : 'todos'
 const aQuien = destino?.marca ? `${quienes} de ${destino.marca.toUpperCase()}` : quienes
 console.log(`✓ Cargada como BORRADOR: ${novedad.id}  (le llega a ${aQuien})`)
