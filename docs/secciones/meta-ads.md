@@ -1185,6 +1185,60 @@ para un registro.
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 
+## 🆕🏁 30-ago-2026: «QUÉ HAY QUE DECIDIR» SE FUNDE CON LA TABLA
+
+Bruno: *«en el que hay que decidir me parece que está mal ejecutado… capaz se puede unificar en la
+misma sección de rendimiento, no lo sé, quiero que me digas qué opinás»*.
+
+### El defecto tiene número, y no es que falte la pantalla
+
+📊 Medido contra producción el 30-ago-2026: **21 hallazgos, 13 grupos después de agrupar, los 21 en
+`nuevo`. Ninguno accionado en cuatro días** —el más viejo del 26-ago, y `AD02 - GIRLHOOD COLLECTION`
+repitiéndose los cuatro—. El motor encuentra todas las mañanas y nadie contesta. Tres causas:
+
+1. **Estaba al final de una página larga.** El orden era: banda de hoy → planes → KPIs → tira de días
+   → **la tabla entera** → el oráculo → *recién ahí* «Qué hay que decidir».
+2. **Un hallazgo de cuatro días se veía igual que uno de esta mañana.** `veces` y `desde` los calcula
+   `agruparHallazgos` **desde el 26-ago** y la pantalla los tiraba: el pill decía «Detectado» y nada
+   más. 🔑 **Un número que se calcula y no se dibuja es lo mismo que no calcularlo**, con el costo de
+   parecer que está resuelto.
+3. 🔴 🔑 **La mano estaba partida en dos.** El hallazgo decía «pausá GIRLHOOD FRIO» en un bloque, y la
+   fila de GIRLHOOD FRIO con su botón de pausar estaba ochocientos píxeles más arriba. **Dos lugares
+   para el mismo gesto sobre el mismo objeto.**
+
+### Lo que se hizo
+
+- **El que tiene fila va EN SU FILA** (`repartirHallazgos`), con su motivo, su edad y su botón. Y 🔑
+  **un hallazgo de nivel AVISO también tiene celda**: se lo busca entre los `avisos` de cada una. Sin
+  eso, la mitad quedaría suelta arriba hablando de algo dibujado abajo.
+  ⚠️ La `sugerencia` ⛔ **no se toca**: sigue apuntando al objeto del hallazgo, así que un hallazgo de
+  aviso pegado a la fila de su caja **pausa el aviso**. Por eso el rótulo **nombra el objeto** cuando
+  ⛔ no es la celda — sin el nombre, el botón parecería apagar la caja entera.
+- **El que no tiene fila se queda en el bloque, pero ARRIBA de la tabla.** Y el bloque ⛔ no repite lo
+  que ya está abajo: dice **cuántos** y **dónde**. Repetirlo sería volver a partir la mano en dos.
+- **Un renglón contador**: «N cosas para decidir · 1 quemando plata». 🔑 Es **el mismo criterio que el
+  asunto del mail de las 07:50**, y sale de la misma función: si la pantalla y el mail contaran
+  distinto, quien abre los dos ⛔ no sabría a cuál creerle. «Quemando plata» se decide por lo que
+  **propone** (`accion: 'estado'` + `PAUSED`) y ⛔ no por el preset, así que un preset nuevo entra solo.
+- **La edad, a la vista** (`insistenciaDe`): ámbar a los 2 días, rojo a los 3. ⛔ **`null` con uno
+  solo**, y ⛔ no «1 día»: el de hoy es la noticia, y ponerle una edad le sacaría peso justo al único
+  que todavía no se ignoró.
+- 🔑 **`useAccionarHallazgo` salió a hook compartido** entre el bloque y la fila. El orden de las dos
+  llamadas —accionar de verdad primero, marcar después— **es una decisión**: escrita dos veces, la
+  segunda copia la invierte y deja dado por hecho algo que no se hizo.
+- ⛔ **`Silencio` y `silencioDeReglas()` ⛔ no se tocaron**: miden las tres causas del vacío y sólo una
+  es buena noticia. Eso ya estaba bien.
+
+### Verificado
+
+- **5 mutantes, 5 muertos**: no indexar los avisos · tirar el suelto · contar como «quemando» cualquier
+  cambio de estado · dar edad al de un día · pisar el segundo hallazgo de una celda.
+- 📊 **El diagnóstico salió de la BASE, ⛔ no de mirar la pantalla**: los 21 `nuevo` y las cuatro
+  fechas se leyeron de `meta_ads_hallazgo` antes de tocar una línea.
+- ▶️ **Falta caminar**: que el contador diga lo mismo que el mail de mañana, que el hallazgo de
+  `AD01 - UNBOXING LOCAL` (nivel aviso) aparezca **adentro de la fila de su conjunto**, y que
+  accionar desde la fila lo saque de las dos partes.
+
 ## 🆕🏁 30-ago-2026: LA FILA — un ícono afuera, el resto adentro, y la cara a la vista
 
 Bruno, caminando la tabla: *«una celda tiene el tamaño de la cantidad de botones que tenga la acción,

@@ -12,6 +12,9 @@ import type { LineaPauta } from './tipos'
 import {
   agrupar as agruparJs,
   agruparHallazgos as agruparHallazgosJs,
+  contarParaDecidir as contarParaDecidirJs,
+  insistenciaDe as insistenciaDeJs,
+  repartirHallazgos as repartirHallazgosJs,
   gravedadDeHallazgo as gravedadDeHallazgoJs,
   apagadoEn as apagadoEnJs,
   calibrar as calibrarJs,
@@ -356,6 +359,37 @@ export const agruparHallazgos = agruparHallazgosJs as <T extends { regla_id: num
   // nadie se lo olvide.
   filas: T[] | null | undefined,
 ) => Array<T & { veces: number; desde: string }>
+
+/**
+ * Reparte los hallazgos entre las filas de la tabla: el que tiene celda va **en su celda** —un
+ * hallazgo de AVISO también, buscándolo entre los avisos de cada una— y el que no, arriba.
+ *
+ * 🔴 Existe porque el hallazgo decía «pausá X» en un bloque y la fila de X con su botón de pausar
+ * estaba ochocientos píxeles más arriba: dos lugares para el mismo gesto sobre el mismo objeto.
+ * Medido el 30-ago-2026: 21 hallazgos, los 21 en `nuevo`, ninguno accionado en cuatro días.
+ */
+export const repartirHallazgos = repartirHallazgosJs as (
+  celdas: Array<{ id: string; avisos?: Array<{ id: string }> }>,
+  hallazgos: Hallazgo[],
+) => { porCelda: Map<string, Hallazgo[]>; sueltos: Hallazgo[] }
+
+/**
+ * Cuántas cosas hay que decidir y cuántas queman plata. 🔑 **Es el mismo criterio que el asunto del
+ * mail de las 07:50**: si la pantalla y el mail contaran distinto, quien abre los dos no sabría a
+ * cuál creerle.
+ */
+export const contarParaDecidir = contarParaDecidirJs as (
+  hallazgos: Hallazgo[],
+) => { total: number; quemando: number }
+
+/**
+ * Hace cuántos días seguidos viene diciendo lo mismo. `null` con uno solo: el de hoy es la noticia y
+ * marcarlo con una edad le sacaría peso al único que todavía no se ignoró.
+ */
+export const insistenciaDe = insistenciaDeJs as (
+  h: Pick<Hallazgo, 'veces' | 'desde'>,
+) => { dias: number; texto: string; desde: string | null } | null
+
 /**
  * Cuánto grita un hallazgo, a partir de lo que PROPONE. La leen el badge del sidebar y el mail de
  * la mañana: por eso vive en el núcleo y ⛔ no en ninguna de las dos.

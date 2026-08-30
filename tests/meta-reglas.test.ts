@@ -6,6 +6,7 @@ import {
   calibrar,
   CLAVES_PRESET,
   compararCtr,
+  contarParaDecidir,
   contextoUmbrales,
   derivarUmbrales,
   diasSeguidosPorEncima,
@@ -13,7 +14,9 @@ import {
   faltanUmbrales,
   frecuenciaPico,
   hayRacha,
+  insistenciaDe,
   motivoApagada,
+  repartirHallazgos,
   PRESETS,
   silencioDeReglas,
   UMBRALES,
@@ -21,6 +24,7 @@ import {
   ventanaDe,
   type ClavePreset,
   type FilaRegla,
+  type Hallazgo,
   type Umbrales,
 } from '@/lib/meta-ads/reglas'
 
@@ -1172,5 +1176,92 @@ describe('hallazgos — la racha, y desde cuándo grita', () => {
     const [g] = agruparHallazgos([h(7, '1201', '2026-07-31'), h(7, '1201', '2026-08-01')])
     expect(g.veces).toBe(2)
     expect(g.desde).toBe('2026-07-31')
+  })
+})
+
+/**
+ * 🔴 **Los hallazgos van a la fila de su celda, y ahí está el defecto que esto arregla.**
+ *
+ * Medido contra producción el 30-ago-2026: **21 hallazgos, 13 grupos, los 21 en `nuevo`, ninguno
+ * accionado en cuatro días**. El motor encuentra todas las mañanas y nadie contesta. Una de las tres
+ * causas era que **la mano estaba partida en dos**: el hallazgo decía «pausá GIRLHOOD FRIO» en un
+ * bloque y la fila de GIRLHOOD FRIO, con su botón de pausar, estaba ochocientos píxeles más arriba.
+ */
+describe('repartirHallazgos — el que tiene fila va en su fila', () => {
+  const h = (o: Partial<Hallazgo>): Hallazgo => ({
+    id: 1, reglaId: 1, preset: 'costo-alto' as ClavePreset, fecha: '2026-08-30', nivel: 'conjunto',
+    objetoId: 'c1', objetoNombre: 'GIRLHOOD FRIO', linea: 'bdi', cuentaId: '1', motivo: 'x',
+    evidencia: {}, sugerencia: null, estado: 'nuevo', resueltoPor: null, planId: null,
+    veces: 1, desde: '2026-08-30', ...o,
+  } as Hallazgo)
+  const celda = (id: string, avisos: string[] = []) => ({ id, avisos: avisos.map((a) => ({ id: a })) })
+
+  it('un hallazgo de CONJUNTO cae en su celda', () => {
+    const r = repartirHallazgos([celda('c1'), celda('c2')], [h({ id: 7, objetoId: 'c1' })])
+    expect(r.porCelda.get('c1')!.map((x) => x.id)).toEqual([7])
+    expect(r.sueltos).toEqual([])
+  })
+
+  it('🔑 un hallazgo de AVISO también: vive adentro de una celda', () => {
+    // Sin esto la mitad de los hallazgos quedaría suelta arriba hablando de algo que está dibujado
+    // abajo — `AD01 - UNBOXING LOCAL` vendiendo dos días después de pausado es de nivel aviso.
+    const r = repartirHallazgos(
+      [celda('c1', ['a1', 'a2'])],
+      [h({ id: 8, nivel: 'aviso', objetoId: 'a2' })],
+    )
+    expect(r.porCelda.get('c1')!.map((x) => x.id)).toEqual([8])
+    expect(r.sueltos).toEqual([])
+  })
+
+  it('el que NO tiene fila queda suelto y ⛔ no se pierde', () => {
+    // Un aviso pausado que sigue vendiendo puede no estar en ninguna celda de la ventana. Tirarlo
+    // sería exactamente el defecto que este reparto vino a arreglar, con otra forma.
+    const r = repartirHallazgos([celda('c1')], [h({ id: 9, objetoId: 'zzz' })])
+    expect(r.porCelda.size).toBe(0)
+    expect(r.sueltos.map((x) => x.id)).toEqual([9])
+  })
+
+  it('varios sobre la misma celda entran los dos', () => {
+    const r = repartirHallazgos(
+      [celda('c1', ['a1'])],
+      [h({ id: 1, objetoId: 'c1' }), h({ id: 2, nivel: 'aviso', objetoId: 'a1' })],
+    )
+    expect(r.porCelda.get('c1')!.map((x) => x.id)).toEqual([1, 2])
+  })
+})
+
+describe('contarParaDecidir — el mismo criterio que el asunto del mail', () => {
+  const h = (s: unknown): Hallazgo => ({ sugerencia: s } as Hallazgo)
+
+  it('«quemando plata» son las que proponen PAUSAR', () => {
+    // Es lo único de la lista donde cada día que pasa cuesta. 🔑 Se mira lo que PROPONE y ⛔ no el
+    // preset: un preset nuevo que proponga pausar tiene que entrar solo.
+    const r = contarParaDecidir([
+      h({ accion: 'estado', status: 'PAUSED' }),
+      h({ accion: 'estado', status: 'ACTIVE' }),
+      h({ accion: 'presupuesto', daily_budget: 1 }),
+      h(null),
+    ])
+    expect(r).toEqual({ total: 4, quemando: 1 })
+  })
+
+  it('sin hallazgos son dos ceros, ⛔ no un null', () => {
+    // El que llama dibuja el renglón sólo si `total > 0`: un `null` lo obligaría a un guard más.
+    expect(contarParaDecidir([])).toEqual({ total: 0, quemando: 0 })
+  })
+})
+
+describe('insistenciaDe — uno de cuatro días ⛔ no es uno de esta mañana', () => {
+  it('con un solo día contesta `null`', () => {
+    // 🔑 El de hoy es la noticia: marcarlo con una edad le sacaría peso al único que todavía no se
+    // ignoró. Lo que hay que ver es el que insiste.
+    expect(insistenciaDe({ veces: 1, desde: '2026-08-30' })).toBeNull()
+    expect(insistenciaDe({ veces: 0, desde: '2026-08-30' })).toBeNull()
+  })
+
+  it('con dos o más dice cuántos días seguidos', () => {
+    expect(insistenciaDe({ veces: 4, desde: '2026-08-26' })).toEqual({
+      dias: 4, texto: '4 días seguidos', desde: '2026-08-26',
+    })
   })
 })

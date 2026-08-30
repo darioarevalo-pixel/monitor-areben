@@ -34,13 +34,15 @@
 
 import { useState } from 'react'
 import { BotonesAccion } from '@/components/meta-ads/acciones'
+import { Insistencia, useAccionarHallazgo } from '@/components/meta-ads/reglas/HallazgosPanel'
+import type { Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
 import type { AvisoDeCelda, Celda, ClaseVeredicto } from '@/lib/meta-ads/rendimiento'
 import type { PiezaAviso } from '@/lib/meta-ads/biblioteca'
 import { entero, plata } from '@/lib/meta-ads/formato'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
-  Badge, StatusPill, TBody, TableWrap, Td, Th, THead, Tr, color, font, space, weight, type Tone,
+  Badge, Button, StatusPill, TBody, TableWrap, Td, Th, THead, Tr, color, font, space, weight, type Tone,
 } from '@/components/ui'
 import { AvisosDeCelda } from '@/components/meta-ads/zona/AvisosDeCelda'
 import { Cara } from '@/components/meta-ads/zona/Cara'
@@ -69,12 +71,15 @@ function Delta({ v, invertido = false }: { v: number | null; invertido?: boolean
   )
 }
 
-export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
+export function TablaCeldas({ celdas, moneda, acciones, cuenta, hallazgosDe, quitarHallazgo }: {
   celdas: Celda[]
   moneda: string | null
   acciones: Acciones
   /** La cuenta publicitaria, para traerle las caras a los avisos. `null` ⇒ se listan sin foto. */
   cuenta: string | null
+  /** Lo que las automatizaciones encontraron sobre ESTA celda —o sobre un aviso de adentro—. */
+  hallazgosDe: (celdaId: string) => Hallazgo[] | null
+  quitarHallazgo: (id: number) => void
 }) {
   const [abierta, setAbierta] = useState<string | null>(null)
   // 🔴 Se enciende AL MONTAR y ⛔ no al abrir una fila: la cara de cada celda vive en la fila. El
@@ -103,6 +108,7 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
           const v = c.veredicto
           const d = c.desgaste
           const esta = abierta === c.id
+          const suyos = hallazgosDe(c.id)
           return (
             <>
               <Tr key={c.id}>
@@ -157,6 +163,12 @@ export function TablaCeldas({ celdas, moneda, acciones, cuenta }: {
                   {d.firma === 'subasta' && (
                     <div style={{ marginTop: 4 }}><Badge tone="neutral">se encareció la subasta</Badge></div>
                   )}
+                  {/* 🔴 El hallazgo va ACÁ y ⛔ no en un bloque arriba: el motor decía «pausá
+                      GIRLHOOD FRIO» en un lugar y el botón de pausar GIRLHOOD FRIO estaba en otro.
+                      Medido el 30-ago-2026, 21 hallazgos y ninguno accionado en cuatro días. */}
+                  {suyos?.map((h) => (
+                    <MarcaDeHallazgo key={h.id} h={h} quitar={quitarHallazgo} />
+                  ))}
                 </Td>
                 <Td>
                   <BotonesAccion
@@ -305,6 +317,38 @@ function CaraDeCelda({ celda, piezaDe, cargando }: {
         >
           +{otros}
         </span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * **Lo que el motor encontró sobre esta celda, pegado a su fila y accionable ahí.**
+ *
+ * 🔑 Comparte `useAccionarHallazgo` con el bloque de arriba: el orden de las dos llamadas —accionar
+ * primero, marcar después— es una decisión, y escrita dos veces la segunda copia la invierte.
+ *
+ * ⚠️ **El rótulo nombra el OBJETO de la sugerencia**, que puede ⛔ no ser la celda: un hallazgo de
+ * aviso vive adentro de esta caja pero pausa el aviso. Sin el nombre, el botón parecería apagar la
+ * celda entera — que es la misma plata mal apagada, con un click.
+ *
+ * ⛔ **Sin sugerencia ⛔ no hay botón, y el motivo igual se lee.** Hay reglas que sólo avisan (el
+ * radar, la fatiga): un botón inventado ahí sería ofrecer una acción que nadie decidió.
+ */
+function MarcaDeHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void }) {
+  const { accionar, ocupado, rotulo } = useAccionarHallazgo(h, quitar)
+  const mismoObjeto = h.sugerencia && h.sugerencia.objetoId === h.objetoId && h.nivel === 'conjunto'
+  return (
+    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 320 }}>
+      <div style={{ display: 'flex', gap: space[1], alignItems: 'center', flexWrap: 'wrap' }}>
+        <Badge tone="warning">lo detectó una regla</Badge>
+        <Insistencia h={h} />
+      </div>
+      <div style={{ fontSize: font.xs, color: color.mut, lineHeight: 1.4 }}>{h.motivo}</div>
+      {rotulo && (
+        <Button size="sm" variant="solid" tone="brand" disabled={ocupado} onClick={() => void accionar()}>
+          {ocupado ? 'Un segundo…' : mismoObjeto ? rotulo : `${rotulo} «${h.objetoNombre || h.objetoId}»`}
+        </Button>
       )}
     </div>
   )

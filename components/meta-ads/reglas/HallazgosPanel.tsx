@@ -33,10 +33,10 @@ import { DialogoDecision } from '@/components/meta-ads/decisiones/DialogoDecisio
 import { accionarMeta, resolverHallazgo } from '@/lib/meta-ads/cliente'
 import { nuevoIdem } from '@/lib/meta-ads/acciones'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
-import type { Hallazgo } from '@/lib/meta-ads/reglas'
+import { insistenciaDe, type Hallazgo } from '@/lib/meta-ads/reglas'
 import type { NivelAccion } from '@/lib/meta-ads/acciones'
 import {
-  Button, StatusPill, color, font, radius, space, weight, useToast,
+  Badge, Button, StatusPill, color, font, radius, space, weight, useToast,
 } from '@/components/ui'
 
 /** Cómo se lee el botón según lo que propone el hallazgo. */
@@ -47,21 +47,17 @@ function rotuloAccion(h: Hallazgo): string | null {
   return 'Subir el presupuesto'
 }
 
-export function HallazgosPanel({ hallazgos, quitar }: { hallazgos: Hallazgo[]; quitar: (id: number) => void }) {
-  if (!hallazgos.length) return null
-  return (
-    <>
-      {hallazgos.map((h) => (
-        <FilaHallazgo key={h.id} h={h} quitar={quitar} />
-      ))}
-    </>
-  )
-}
-
-function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void }) {
+/**
+ * **El gesto de accionar un hallazgo, una sola implementación.**
+ *
+ * Lo usan el bloque de «Qué hay que decidir» y la marca que va pegada a la fila de su celda. 🔑 Sale
+ * a hook porque el orden de las dos llamadas —la acción de verdad primero, marcar después— **es una
+ * decisión**, y escrita dos veces la segunda copia la va a invertir: marcar primero deja dado por
+ * hecho algo que no se hizo, que es el error caro.
+ */
+export function useAccionarHallazgo(h: Hallazgo, quitar: (id: number) => void) {
   const toast = useToast()
   const [ocupado, setOcupado] = useState(false)
-  const [decidiendo, setDecidiendo] = useState(false)
 
   const accionar = useCallback(async () => {
     const s = h.sugerencia
@@ -95,7 +91,34 @@ function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void
     quitar(h.id)
   }, [h, toast, quitar])
 
-  const rotulo = rotuloAccion(h)
+  return { accionar, ocupado, rotulo: rotuloAccion(h) }
+}
+
+/**
+ * **La edad del hallazgo, a la vista.** ⛔ No es decoración: uno que viene hace cuatro días y nadie
+ * accionó ⛔ no es la misma noticia que uno de esta mañana, y hasta hoy los dos se dibujaban igual.
+ */
+export function Insistencia({ h }: { h: Hallazgo }) {
+  const i = insistenciaDe(h)
+  if (!i) return null
+  return <Badge tone={i.dias >= 3 ? 'danger' : 'warning'}>{i.texto}</Badge>
+}
+
+export function HallazgosPanel({ hallazgos, quitar }: { hallazgos: Hallazgo[]; quitar: (id: number) => void }) {
+  if (!hallazgos.length) return null
+  return (
+    <>
+      {hallazgos.map((h) => (
+        <FilaHallazgo key={h.id} h={h} quitar={quitar} />
+      ))}
+    </>
+  )
+}
+
+function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void }) {
+  const toast = useToast()
+  const [decidiendo, setDecidiendo] = useState(false)
+  const { accionar, ocupado, rotulo } = useAccionarHallazgo(h, quitar)
 
   return (
     <div
@@ -110,6 +133,7 @@ function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void
           <StatusPill tone="warning" label="Detectado" />
           <span style={{ fontSize: font.base, fontWeight: weight.semibold }}>{h.objetoNombre || h.objetoId}</span>
           <span style={{ fontSize: font.sm, color: color.mut2 }}>{ETIQUETA_LINEA[h.linea]}</span>
+          <Insistencia h={h} />
         </div>
         <div style={{ fontSize: font.sm, color: color.mut, marginTop: space[1], lineHeight: 1.45 }}>{h.motivo}</div>
       </div>

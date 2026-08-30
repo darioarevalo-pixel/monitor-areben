@@ -54,7 +54,7 @@ import { useZona } from '@/components/meta-ads/zona/useZona'
 import { entero, plata } from '@/lib/meta-ads/formato'
 import { fusionarVivo, VENTANAS_ZONA, ventanaZona, type Celda, type CeldaViva, type RespuestaZona, type VentanaZona } from '@/lib/meta-ads/rendimiento'
 import { sumarVivas } from '@/lib/meta-ads/parte'
-import { silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
+import { contarParaDecidir, repartirHallazgos, silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
@@ -154,30 +154,14 @@ export function ZonaRendimiento() {
               onElegir={setAnclado}
               vivas={parte.estado.fase === 'ok' ? parte.estado.dato.vivas : null}
               lineaViva={laLinea}
+              reglas={r}
+              poda={poda}
             />
           )}
           {/* Los cinco modales de escritura, dibujados una vez para toda la pantalla. */}
           <ModalesDeAccion m={acciones.modales} />
         </>
       )}
-
-      <SectionCard
-        title="Qué hay que decidir"
-        subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste."
-      >
-        {r.hallazgos.length === 0 && poda.resumenes.length === 0 ? (
-          // 🔴 Se dice que está vacío Y POR QUÉ, y el porqué **se pregunta**: hasta el 26-ago-2026
-          // esta frase afirmaba «no hay reglas cargadas» con el texto clavado, y siguió diciéndolo
-          // la tarde en que se prendieron las once. Un cartel que manda a cargar reglas al que ya
-          // las cargó es el que hace que se le deje de creer a la pantalla. Ver `silencioDeReglas`.
-          <Silencio reglas={r.estado.fase === 'ok' ? r.estado.data.reglas : null} cargando={r.estado.fase === 'cargando'} />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-            <HallazgosPanel hallazgos={r.hallazgos} quitar={r.quitar} />
-            <PodaPendiente resumenes={poda.resumenes} recargar={poda.recargar} />
-          </div>
-        )}
-      </SectionCard>
 
       {/* 🔑 El Parte queda como lo que ahora es: el MISMO día en curso de la banda de arriba, pero
           entero y en texto para pegarlo en una conversación. Comparte `useParte`, así que abrirlo
@@ -258,7 +242,7 @@ function BarraVentana({ ventana, setVentana, anclado, volverALaVentana }: {
   )
 }
 
-function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, lineaViva }: {
+function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, lineaViva, reglas, poda }: {
   d: RespuestaZona
   /** `null` con un día anclado: ahí la ventana la manda la tira, no la barra. */
   ventana: VentanaZona | null
@@ -268,6 +252,8 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
   onElegir: (fecha: string | null) => void
   vivas: { hoy: CeldaViva[]; ayer: CeldaViva[] } | null
   lineaViva: LineaPauta
+  reglas: ReturnType<typeof useReglas>
+  poda: ReturnType<typeof usePoda>
 }) {
   if (!d.zona) {
     return <Notice tone="warning">{d.motivo || 'La foto no tiene ningún día cerrado todavía.'}</Notice>
@@ -287,6 +273,11 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
       )
     : null
   const celdas: Celda[] = vivo ? vivo.celdas : z.celdas
+  // 🔴 El hallazgo que tiene fila **va en su fila**; el que no, arriba de la tabla. Ver
+  // `repartirHallazgos`: medido, 21 hallazgos y ninguno accionado en cuatro días, y una de las tres
+  // causas era que la mano estaba partida en dos lugares para el mismo objeto.
+  const reparto = repartirHallazgos(celdas, reglas.hallazgos)
+  const cuenta = contarParaDecidir(reglas.hallazgos)
 
   return (
     <>
@@ -333,6 +324,48 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
       {/* Va entre los KPIs y la tabla: es el puente entre «cómo viene la ventana» y «qué pasó ese
           día». Sale de `z.caja`, que ya viaja: ⛔ cero llamadas. */}
       <TiraDeDias caja={z.caja} techo={d.techo || 0} anclado={anclado} onElegir={onElegir} />
+
+      {/* 🔴 **Arriba de la tabla y ⛔ no al final de la página.** Estaba después de la banda, los
+          planes, los KPIs, la tira, la tabla ENTERA y el oráculo — y medido el 30-ago-2026 tenía 21
+          hallazgos, los 21 sin accionar en cuatro días. Lo que baja acá es lo que ⛔ no tiene fila;
+          el resto está marcado abajo, en la suya. */}
+      <SectionCard
+        title="Qué hay que decidir"
+        subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste."
+      >
+        {reglas.hallazgos.length === 0 && poda.resumenes.length === 0 ? (
+          // 🔴 Se dice que está vacío Y POR QUÉ, y el porqué **se pregunta**: hasta el 26-ago-2026
+          // esta frase afirmaba «no hay reglas cargadas» con el texto clavado, y siguió diciéndolo
+          // la tarde en que se prendieron las once. Un cartel que manda a cargar reglas al que ya
+          // las cargó es el que hace que se le deje de creer a la pantalla. Ver `silencioDeReglas`.
+          <Silencio reglas={reglas.estado.fase === 'ok' ? reglas.estado.data.reglas : null} cargando={reglas.estado.fase === 'cargando'} />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+            {/* 🔑 El mismo criterio que el asunto del mail de las 07:50 («4 cosas para decidir, 1
+                quemando plata»): si la pantalla y el mail contaran distinto, quien abre los dos ⛔ no
+                sabría a cuál creerle. */}
+            {cuenta.total > 0 && (
+              <div style={{ fontSize: font.base, fontWeight: weight.semibold }}>
+                {cuenta.total} {cuenta.total === 1 ? 'cosa' : 'cosas'} para decidir
+                {cuenta.quemando > 0 && (
+                  <span style={{ color: color.dangerInk }}> · {cuenta.quemando} quemando plata</span>
+                )}
+              </div>
+            )}
+            <HallazgosPanel hallazgos={reparto.sueltos} quitar={reglas.quitar} />
+            {/* Lo que sí tiene fila ⛔ no se repite acá: se dice DÓNDE está. Repetirlo sería volver a
+                partir la mano en dos, que es el defecto que esto vino a arreglar. */}
+            {reparto.porCelda.size > 0 && (
+              <div style={{ fontSize: font.sm, color: color.mut }}>
+                {reparto.porCelda.size === 1
+                  ? 'Y 1 está marcado en su celda, en la tabla de acá abajo — se acciona ahí.'
+                  : `Y ${reparto.porCelda.size} están marcados en sus celdas, en la tabla de acá abajo — se accionan ahí.`}
+              </div>
+            )}
+            <PodaPendiente resumenes={poda.resumenes} recargar={poda.recargar} />
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard
         title={anclado
@@ -390,6 +423,8 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
         ) : (
           <TablaCeldas
             celdas={celdas}
+            hallazgosDe={(id) => reparto.porCelda.get(id) || null}
+            quitarHallazgo={reglas.quitar}
             moneda={z.celdas[0]?.moneda ?? null}
             acciones={acciones}
             // La cuenta sale de la FOTO y ⛔ no del selector de arriba: la que vale es la de los
