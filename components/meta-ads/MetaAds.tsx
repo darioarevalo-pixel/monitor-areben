@@ -60,6 +60,17 @@ const ALIAS: Record<string, string> = { etapas: 'embudo', auditoria: 'registro' 
  */
 const SIN_EJE = new Set(['rentabilidad', 'configurar'])
 
+/**
+ * 🔑 **Las vistas que dibujan el selector ELLAS MISMAS, pegado a sus propios controles.**
+ *
+ * La zona de Rendimiento es de **una sola línea** y su otro control —la ventana de días— vive abajo
+ * de la banda de hoy y de los planes. Con el selector acá arriba quedaban a media pantalla uno del
+ * otro, y Bruno lo dijo caminando la sección: *«bajo y después vuelvo a subir para buscar la
+ * marca»*. Dos controles del mismo gesto van juntos; el resto de las vistas no tiene con qué
+ * juntarlo, así que lo siguen recibiendo del router.
+ */
+const EJE_PROPIO = new Set([''])
+
 const VISTAS: Record<string, () => React.ReactElement> = {
   // Las cuatro del menú de hoy.
   producir: Producir,
@@ -95,7 +106,7 @@ export function MetaAds() {
   const Vista = VISTAS[vista] ?? ZonaRendimiento
   return (
     <ProveedorMeta>
-      {!SIN_EJE.has(vista) && <SelectorMeta />}
+      {!SIN_EJE.has(vista) && !EJE_PROPIO.has(vista) && <SelectorMeta />}
       <Vista />
     </ProveedorMeta>
   )

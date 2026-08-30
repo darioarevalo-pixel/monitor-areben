@@ -20,6 +20,9 @@ import {
   desgasteDe as desgasteDeJs,
   DIAS_SERVIBLES as DIAS_SERVIBLES_JS,
   DIAS_ZONA as DIAS_ZONA_JS,
+  fusionarVivo as fusionarVivoJs,
+  VENTANAS_ZONA as VENTANAS_ZONA_JS,
+  ventanaZona as ventanaZonaJs,
   elegirCierre as elegirCierreJs,
   elegirVentana as elegirVentanaJs,
   enVentana as enVentanaJs,
@@ -156,6 +159,34 @@ export type Celda = {
   veredicto: Veredicto
 }
 
+/**
+ * Una celda tal como la ve **Graph en el día en curso**: sólo mediciones e identidad.
+ *
+ * 🔑 **No tiene veredicto, ni serie, ni desgaste, y el tipo es el que sostiene la regla.** Con medio
+ * día no se juzga nada, así que este objeto ⛔ no puede transportar un juicio ni por accidente:
+ * `fusionarVivo()` le pone encima el de la ventana de juicio, que sí se midió sobre días enteros.
+ */
+export type CeldaViva = {
+  id: string
+  nombre: string
+  linea: string
+  campania: string
+  estado: string | null
+  /** El diario del conjunto en la moneda de la cuenta, ya dividido por 100. `null` = sin dato. */
+  diario: number | null
+  spend: number
+  impresiones: number
+  clicks: number
+  compras: number
+  revenue: number
+  ctr: number
+  cpm: number
+  carritos: number
+  checkouts: number
+  lpv: number
+  costo: number
+}
+
 export type DiaCaja = {
   fecha: string
   pedidos: number
@@ -242,6 +273,27 @@ export const SUBA_CPM = SUBA_CPM_JS as number
 export const USA_LA_CAJA = USA_LA_CAJA_JS as number
 export const CON_AIRE = CON_AIRE_JS as number
 export const DIAS_ZONA = DIAS_ZONA_JS as readonly number[]
+
+export type VentanaZona = { k: string; label: string; vivo: boolean; dias: number }
+/** Lo que ofrece la barra. Las dos primeras salen de Meta en vivo; el resto, de la foto. */
+export const VENTANAS_ZONA = VENTANAS_ZONA_JS as readonly VentanaZona[]
+/** La ventana por su clave, o `null`: ⛔ nunca un default en silencio. */
+export const ventanaZona = ventanaZonaJs as (k: string) => VentanaZona | null
+
+/**
+ * Las celdas de la foto con los números del día en curso encima. **El veredicto ⛔ NO se recalcula**:
+ * medio día de gasto contra medio día de compras manda a apagar cosas que rinden. Sí se recalculan
+ * los dos porcentajes, que viven en las columnas al lado del costo de hoy.
+ *
+ * `sinEntrega` son los nombres de las celdas que la foto tiene ACTIVAS y hoy todavía no aparecieron:
+ * ⛔ no se dibujan con ceros —una tabla de ceros a las 9 esconde las tres que corren— pero tampoco
+ * desaparecen sin decirlo.
+ */
+export const fusionarVivo = fusionarVivoJs as (
+  celdas: Celda[],
+  vivas: CeldaViva[],
+  opciones?: { linea?: string; techo?: number },
+) => { celdas: Celda[]; sinEntrega: string[] }
 
 /** Lo que el servidor sabe contestar. Superconjunto de `DIAS_ZONA`: al `1` y al `3` se llega por la tira. */
 export const DIAS_SERVIBLES = DIAS_SERVIBLES_JS as readonly number[]

@@ -35,7 +35,7 @@
 import { lineasQueVe } from '../lib/meta-ads/acciones.core.js';
 import { graph, insightsTodas } from '../lib/meta-ads/graph.core.js';
 import { accion, COMPRA, TIPO_FUNNEL } from '../lib/meta-ads/metricas.core.js';
-import { bandaDeHoy, cruzarConLaCaja, renderParte } from '../lib/meta-ads/parte.core.js';
+import { aCeldaViva, bandaDeHoy, cruzarConLaCaja, porConjunto, renderParte } from '../lib/meta-ads/parte.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
 import { clienteBdi, leerAsignaciones } from './_meta-lineas.js';
 
@@ -95,6 +95,10 @@ function filaDe(row, lineaDe) {
   return {
     aviso: row.ad_name || '(sin nombre)',
     conjunto: row.adset_name || '(sin conjunto)',
+    // 🔑 El id y ⛔ no sólo el nombre: es con lo que la zona de Rendimiento **empalma** estas filas
+    // con sus celdas, y dos conjuntos de campañas distintas pueden llamarse igual. El nombre se
+    // sigue usando para la prosa del parte, que es lo que lee una persona.
+    conjuntoId: String(row.adset_id || ''),
     campania: row.campaign_name || '(sin campaña)',
     campaniaId: String(row.campaign_id || ''),
     linea: lineaDe(row.campaign_id) || 'sin-linea',
@@ -244,11 +248,14 @@ export default async function parteGet(res, perfil, q) {
   // objeto está prendido, sólo que entregó. Un conjunto apagado hace tres horas gastó igual hoy.
   const techosDiarios = {};
   const estadoConj = {};
+  const diarioPorId = {};
   for (const a of ((adsetRes.ok && adsetRes.data && adsetRes.data.data) || [])) {
     // `daily_budget` viene en la unidad MENOR de la moneda. El `/100` no se escribe a mano en
     // ningún lado del módulo: acá se hace una vez y se dice.
     if (a.daily_budget != null) techosDiarios[a.name] = Number(a.daily_budget) / 100;
     if (a.effective_status) estadoConj[a.name] = a.effective_status;
+    // El mismo diario, indexado por ID: la prosa del parte busca por nombre y la zona por id.
+    if (a.id != null && a.daily_budget != null) diarioPorId[String(a.id)] = Number(a.daily_budget) / 100;
   }
   for (const f of [...hoy, ...ayer]) f.estado = estadoConj[f.conjunto] || '';
 
@@ -329,6 +336,24 @@ export default async function parteGet(res, perfil, q) {
     // 🔑 La MISMA verdad que el texto, en objeto, para que la pantalla pueda dibujarla. Sale de las
     // mismas cinco llamadas: lo único que cambia es que la respuesta deja de ser sólo prosa.
     banda,
+    /**
+     * 🔑 **El día EN CURSO a nivel conjunto, que es lo único que la foto ⛔ no puede tener.**
+     *
+     * Sale de las MISMAS filas de aviso que ya se pidieron para la banda —`level=ad` trae
+     * `adset_id`—, así que ⛔ no cuesta ni una llamada más de Graph: lo único que cambia es que se
+     * agrupan por conjunto y viajan. Es lo que deja a la zona ofrecer «Hoy» y «Hoy y ayer» sin
+     * inventarse un segundo camino a Meta.
+     *
+     * ⚠️ Van SIN el arreglo `filas`: son los avisos uno por uno y multiplican el peso de la
+     * respuesta por diez para algo que la tabla de celdas ⛔ no dibuja.
+     */
+    vivas: {
+      hoy: porConjunto(hoy).map((g) => aCeldaViva(g, diarioPorId)),
+      ayer: porConjunto(ayer).map((g) => aCeldaViva(g, diarioPorId)),
+      // ⚠️ Las fechas van acá adentro y ⛔ no se deducen del `fechas` de afuera: si Meta no devolvió
+      // ni una fila de hoy, `fechaHoy` es `''` y una tabla rotulada «hoy» estaría afirmando un día
+      // que nadie midió.
+    },
     fechas: { hoy: fechaHoy, ayer: fechaAyer, leido: new Date().toISOString() },
     // Lo que no se pudo leer se DICE, no se omite: un bloque vacío por una falla se ve igual que un
     // bloque vacío porque no hubo nada.

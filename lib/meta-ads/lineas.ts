@@ -14,6 +14,7 @@ import {
   ETIQUETA_LINEA as ETIQUETA_LINEA_JS,
   baseDeLinea as baseDeLineaJs,
   esLinea as esLineaJs,
+  lineaDeEntrada as lineaDeEntradaJs,
   lineasDeMarca as lineasDeMarcaJs,
   sugerirLinea as sugerirLineaJs,
 } from './lineas.core.js'
@@ -25,3 +26,12 @@ export const esLinea = esLineaJs as (x: unknown) => boolean
 export const baseDeLinea = baseDeLineaJs as (linea: string) => Marca | null
 export const lineasDeMarca = lineasDeMarcaJs as (marca: Marca) => LineaPauta[]
 export const sugerirLinea = sugerirLineaJs as (nombre: string | null | undefined) => LineaPauta | null
+/**
+ * Con qué línea abre la sección. `''` es «no dijo nada» y `'todas'` es «dijo todas»: ⛔ no son lo
+ * mismo, y por eso el filtro de la URL arranca vacío en vez de en `'todas'`.
+ */
+export const lineaDeEntrada = lineaDeEntradaJs as (
+  crudo: string | null | undefined,
+  visibles: readonly LineaPauta[],
+  marca: Marca | null | undefined,
+) => 'todas' | LineaPauta

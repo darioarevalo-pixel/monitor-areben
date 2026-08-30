@@ -36,6 +36,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useSesion } from '@/components/SesionProvider'
 import { useFiltroUrl } from '@/components/ui'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
+import { lineaDeEntrada } from '@/lib/meta-ads/lineas'
 import { traerCuentas } from '@/lib/meta-ads/cliente'
 import {
   cuentasDeLinea, resolverCuenta, resolverLinea, type ElegidaCuenta, type ElegidaLinea,
@@ -84,12 +85,15 @@ export function useMeta(): ContextoMeta {
 }
 
 export function ProveedorMeta({ children }: { children: React.ReactNode }) {
-  const { perfil } = useSesion()
+  const { perfil, marca } = useSesion()
   const visibles = useMemo(() => lineasQueVe(perfil), [perfil])
 
   // Lo elegido vive en la URL: un link reproduce la pantalla exacta. Se guarda crudo.
   const [cuentaCruda, setCuentaCruda] = useFiltroUrl<ElegidaCuenta>('cuenta', 'todas')
-  const [lineaCruda, setLineaCruda] = useFiltroUrl<ElegidaLinea>('linea', 'todas')
+  // 🔑 **Arranca en `''` y ⛔ no en `'todas'`, y eso NO es un detalle.** `useFiltroUrl` borra el
+  // parámetro cuando el valor es el inicial, así que con `'todas'` de inicial «no dijo nada» y «dijo
+  // todas» se escriben igual — y la preselección por marca le pelearía a quien elige «Todas» a mano.
+  const [lineaCruda, setLineaCruda] = useFiltroUrl<ElegidaLinea | ''>('linea', '')
   const [rangoCrudo, setRangoCrudo] = useFiltroUrl<RangoUI>('rango', RANGO_DEFAULT)
 
   // `pedido` es lo que hace recargable a la lista: pedir de nuevo tiene que ser un cambio de
@@ -117,7 +121,10 @@ export function ProveedorMeta({ children }: { children: React.ReactNode }) {
   // Validación al renderizar, no en un efecto (ver la nota 2 de arriba). Mientras la lista no llegó
   // no se puede saber si la cuenta del link existe, así que se respeta: recortarla ahí sería tirar
   // lo que la persona pidió por no haber terminado de cargar.
-  const linea: ElegidaLinea = lineaCruda !== 'todas' && visibles.includes(lineaCruda) ? lineaCruda : 'todas'
+  // 🔴 Con «Todas» la zona de Rendimiento ⛔ no dibuja nada: es de UNA línea. O sea que abrir en
+  // «Todas» hacía que la entrada de la sección fuera una pantalla vacía con una instrucción. Ahora
+  // abre con la línea homónima de la marca del sidebar. Ver `lineaDeEntrada`.
+  const linea: ElegidaLinea = lineaDeEntrada(lineaCruda, visibles, marca)
   const cuenta: ElegidaCuenta = estado.fase === 'ok' ? resolverCuenta(cuentas, linea, cuentaCruda) : cuentaCruda
   const rango: RangoUI = esRango(rangoCrudo) ? rangoCrudo : RANGO_DEFAULT
 
@@ -130,8 +137,11 @@ export function ProveedorMeta({ children }: { children: React.ReactNode }) {
 
   const setCuenta = useCallback((c: ElegidaCuenta) => {
     setCuentaCruda(c)
-    if (resolverLinea(visibles, cuentas, c, lineaCruda) !== lineaCruda) setLineaCruda('todas')
-  }, [cuentas, lineaCruda, setCuentaCruda, setLineaCruda, visibles])
+    // ⚠️ Se compara contra la línea RESUELTA y ⛔ no contra la cruda: la cruda puede estar vacía
+    // («no dijo nada») y entonces la pregunta «¿la cuenta nueva tiene esta línea?» no se puede hacer.
+    // Y lo que hay que preservar es lo que la persona está VIENDO, que es la resuelta.
+    if (resolverLinea(visibles, cuentas, c, linea) !== linea) setLineaCruda('todas')
+  }, [cuentas, linea, setCuentaCruda, setLineaCruda, visibles])
 
   const valor = useMemo<ContextoMeta>(() => ({
     estado,

@@ -1185,6 +1185,106 @@ para un registro.
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 
+## 🆕🏁 30-ago-2026: EL DÍA EN CURSO ADENTRO DE LA TABLA, y el eje al lado de su ventana
+
+Bruno caminó la zona y dijo tres cosas seguidas: *«si la zona de rendimiento es de una sola marca ya
+es fricción, bajo y vuelvo a subir a buscarla… ¿por qué no viene preseleccionada con la del
+monitor?»* y *«necesito que en “mirando los últimos” aparezca hoy, hoy y ayer, y los últimos tres
+días — me sirve para ver si haber tocado el presupuesto cambió algún resultado»*.
+
+### 1. El eje bajó adentro de la zona
+
+`SelectorMeta` lo montaba el router arriba de TODAS las vistas, y la barra de ventana vivía abajo de
+la banda de hoy y de los planes: dos controles del mismo gesto a media pantalla uno del otro. Ahora
+la zona los dibuja **juntos y arriba de todo** (`EJE_PROPIO` en `MetaAds.tsx`); las otras tres vistas
+lo siguen recibiendo del router, porque no tienen con qué juntarlo.
+⇒ Se cayó `SinLinea`, el `Notice` del pie que repetía las pestañas: existía porque el selector estaba
+lejos.
+
+### 2. 🔴 `''` y `'todas'` NO son lo mismo, y ahí estaba todo
+
+La sección abría siempre en «Todas», y la zona con «Todas» ⛔ no dibuja nada: pide elegir. O sea que
+**la entrada de Meta era una pantalla vacía con una instrucción.**
+
+El arreglo obvio —«si no eligió nada, poné la marca del sidebar»— **no se puede escribir con el
+default en `'todas'`**: `useFiltroUrl` **borra el parámetro cuando el valor es el inicial**, así que
+«no dijo nada» y «dijo todas» se escriben igual en la URL. Elegir «Todas» a mano habría vuelto a
+saltar a BDI en el render siguiente, peleándole a la persona.
+⇒ El filtro arranca en **`''`** y `lineaDeEntrada(crudo, visibles, marca)` decide: explícito gana
+(«todas» incluido) · si no, **la línea homónima de la marca del sidebar** · si no, la única visible.
+
+⚠️ **Stunned ⛔ nunca se elige sola**, y no es un olvido: `baseDeLinea('stunned') === 'zattia'`, así
+que con el sidebar en Zattia comparten base — pero es OTRA plata, con otro techo.
+
+✅ Campañas y Embudo ⛔ **no se rompen**: `useCampanias` ya caía a `bdi` cuando el eje decía «todas»
+(`lineaAbierta`). Lo único que cambia es que ahora la pestaña queda **marcada**, en vez de decir
+«Todas» mientras adentro se miraba BDI.
+
+### 3. 🔴🔑 «Hoy» adentro de la tabla, sin que el veredicto se contagie
+
+La foto (`meta_ads_snapshot_dia`) sólo tiene días **cerrados**. Hoy sale de Graph — y lo trae el
+parte, que ya lo pide para la banda: `level=ad` devuelve `adset_id`, así que agrupar por conjunto
+⛔ **no cuesta una llamada más**. Viaja como `vivas: { hoy, ayer }`.
+
+🔴 **La regla que ordena todo: se reemplazan las MEDICIONES, ⛔ nunca el JUICIO.** Medio día de gasto
+contra medio día de compras da un costo por compra que no existe: a las 10 de la mañana casi toda
+celda «compra carísimo» y a las 22 casi ninguna. El veredicto, el desgaste y el aprendizaje siguen
+saliendo de la **ventana de juicio**, y la tabla lo dice arriba con todas las letras.
+
+🔑 **Los DOS porcentajes SÍ se recalculan**, y no es una excepción: viven en las columnas, al lado del
+costo de hoy. Un «% del techo» de la semana pasada pegado a un costo de esta mañana sería el cuarto
+«número que existe y no significa» del módulo. Y `pctDiario` **recién acá quiere decir lo que su
+nombre dice**: sobre 7 días es gasto contra `diario × 7`; sobre hoy es cuánto de la caja de hoy se usó.
+
+⚠️ **La barra dice de dónde sale cada número.** `Hoy •` y `Hoy y ayer •` son Meta en vivo; `3 · 7 · 14
+· 30` salen de la foto y **terminan AYER**. Sin la marca, «3 días» al lado de «Hoy y ayer» se leería
+como *hoy, ayer y anteayer* — que es otra cosa, y encima con un día de solape.
+▶️ **Lo que ⛔ NO quedó**: «hoy + ayer + anteayer» como una suma sola. Pediría cruzar dos fuentes
+(dos días de Graph y uno de la foto) por celda, y el gesto que Bruno describía —*«ver si el cambio de
+presupuesto movió algo»*— ya lo contesta la **tira de días**, que compara días sueltos.
+
+### Las tres decisiones chicas que muerden
+
+- **Lo que hoy ⛔ no entregó se CUENTA, no se dibuja con ceros.** Meta no devuelve fila para lo que no
+  gastó; una tabla de ceros a las 9 de la mañana esconde las tres celdas que sí corren. `sinEntrega`
+  son las que la foto tiene **ACTIVAS** y hoy todavía no aparecieron, y va en una línea.
+- **Una celda que arrancó HOY entra con clase `midiendo`** y ⛔ no propone nada: la foto no la vio
+  nunca. Dejarla afuera escondería la celda que alguien acaba de prender, que es cuando más se mira.
+  Su desgaste y su aprendizaje salen de **las mismas funciones con la serie vacía**, ⛔ no de un objeto
+  a mano: así contestan `sin-datos` **con su motivo** en vez de un `null` mudo.
+- **Si el parte no contestó, la tabla vuelve a la foto Y LO DICE.** Una tabla que dice «hoy» arriba y
+  muestra la semana es peor que una que no ofrece «hoy».
+
+### 🔴 Al agregar, una TASA no se suma ni se promedia
+
+`aCeldaViva` y `sumarVivas` **vuelven a derivar** el CTR y el CPM del total. Sumar los `ctr` de cinco
+avisos da un número que puede pasar el 100%; promediarlos le da el mismo peso al aviso de $200 que al
+de $20.000. Medido en el test: 100 impresiones con 10 clics + 100.000 con 100 dan **0,11%** derivado
+y **5,05%** promediado — un CTR que no le pasó a nadie.
+⚠️ Y el **`diario` ⛔ NO se suma**: es configuración, no medición. Sumarlo diría que el conjunto tiene
+el doble de caja de la que tiene, que es justo el número con el que se decide si subirle plata. Gana
+el día más nuevo.
+
+🔑 **`porConjunto()` pasó a agrupar por ID** (con el nombre de respaldo): dos conjuntos de campañas
+distintas se pueden llamar igual, y con el nombre de clave la prosa mostraba un gasto que no era de
+ninguno de los dos.
+
+### Verificado
+
+- **11 mutantes, 11 muertos** — el peor primero: *el veredicto se recalcula con los números de hoy*.
+  Los otros diez: `pctTecho` sin recalcular · `pctTecho` en 0 en vez de `null` · `sinEntrega`
+  ignorando el estado · el filtro comiéndose `sin-linea` · la celda nueva proponiendo pausar ·
+  `sumarVivas` sumando el diario · el CTR promediado · `porConjunto` por nombre · `aCeldaViva`
+  usando el `ctr` de la fila · `ventanaZona` cayendo a un default.
+- **1 control inocuo VIVO** (el texto del `porque`), que es lo único que prueba que el arnés ⛔ no mata
+  todo por igual.
+- **La premisa, medida contra PRODUCCIÓN antes de escribir la pantalla**: el parte de hoy
+  (30-ago 14:53) ya devuelve la tabla de conjuntos del día en curso con gasto, compras y `%techo`
+  — o sea que el dato existe y lo único que faltaba era que viajara en objeto.
+- ▶️ **Falta caminar la pantalla**: el login pide contraseña. Qué mirar — que la marca venga
+  preseleccionada con la del sidebar, que `Hoy •` cambie los números y ⛔ no el veredicto, que la
+  línea de «todavía no entregaron» aparezca a la mañana, y que elegir «Todas» a mano **se quede**.
+
 ## 🆕🏁 30-ago-2026: LOS PLANES ZOMBI — un aviso que está siempre deja de ser un aviso
 
 Bruno abrió `/meta-ads` y lo primero que dijo fue *«hay dos planes atascados que no entiendo por qué

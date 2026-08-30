@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { FUNNEL, TIPO_FUNNEL } from '@/lib/meta-ads/metricas'
 import {
   bandaDeHoy, cruzarConLaCaja, horaEnCurso, limpiar, marginalEntreVentanas, porConjunto,
-  renderParte, sumarHasta, topeQueEntrega, veredicto,
+  renderParte, sumarHasta, sumarVivas, topeQueEntrega, veredicto,
   type FilaAviso,
 } from '@/lib/meta-ads/parte'
+import { aCeldaViva } from '@/lib/meta-ads/parte.core.js'
+import type { CeldaViva } from '@/lib/meta-ads/rendimiento'
 
 /**
  * El PARTE DE PAUTA. Este archivo son sus PRIMEROS tests: el núcleo se escribió el 18-ago-2026 y
@@ -451,5 +453,95 @@ describe('bandaDeHoy — lo que la pantalla afirma del día en curso', () => {
   it('la otra línea no ensucia: el gasto de Zattia no entra en la banda de BDI', () => {
     const b = bandaDeHoy({ ...base, hoy: [...base.hoy, aviso({ conjunto: 'Z', linea: 'zattia', gasto: 99999, compras: 0 })] })
     expect(b.hoy.gasto).toBe(40000)
+  })
+})
+
+/**
+ * 🔴 **El día en curso a nivel CONJUNTO: lo único que la foto diaria ⛔ no puede tener.**
+ *
+ * Sale de las mismas filas de aviso que la banda —`level=ad` trae `adset_id`— así que ⛔ no cuesta
+ * una llamada más de Graph. Lo que hay que cuidar es lo de siempre al agregar: **una tasa ⛔ no se
+ * suma ni se promedia, se vuelve a derivar del total.**
+ */
+describe('aCeldaViva y sumarVivas — agregar sin inventar una tasa', () => {
+  const g = (o: Record<string, unknown> = {}) => ({
+    conjunto: 'BROAD X', conjuntoId: '120', linea: 'bdi', campania: 'C', estado: 'ACTIVE',
+    gasto: 1000, impresiones: 10000, clics: 100, compras: 2, revenue: 8000,
+    carritos: 5, checkouts: 3, lpv: 80, ...o,
+  })
+
+  it('🔴 el CTR y el CPM se DERIVAN del agregado, ⛔ no vienen de las filas', () => {
+    // Sumar los `ctr` de cinco avisos da un número que puede pasar el 100%; promediarlos le da el
+    // mismo peso al aviso de $200 que al de $20.000.
+    const c = aCeldaViva(g())
+    expect(c.ctr).toBe(1)            // 100 clics / 10.000 impresiones
+    expect(c.cpm).toBe(100)          // $1.000 / 10.000 × 1.000
+    expect(c.costo).toBe(500)        // $1.000 / 2 compras
+  })
+
+  it('⛔ sin impresiones no divide por cero, y sin compras el costo es 0', () => {
+    const c = aCeldaViva(g({ impresiones: 0, clics: 0, compras: 0 }))
+    expect(c.ctr).toBe(0)
+    expect(c.cpm).toBe(0)
+    expect(c.costo).toBe(0)
+  })
+
+  it('el diario sale del mapa por ID y es `null` cuando no está — ⛔ nunca 0', () => {
+    // Un `0` acá significaría «no tiene caja», y con eso `pctDiario` daría una división imposible
+    // en vez de decir que no se sabe.
+    expect(aCeldaViva(g(), { 120: 12345 }).diario).toBe(12345)
+    expect(aCeldaViva(g()).diario).toBeNull()
+  })
+
+  const v = (o: Partial<CeldaViva> = {}): CeldaViva => ({
+    id: '120', nombre: 'BROAD X', linea: 'bdi', campania: 'C', estado: 'ACTIVE', diario: 10000,
+    spend: 1000, impresiones: 10000, clicks: 100, compras: 2, revenue: 8000, ctr: 1, cpm: 100,
+    carritos: 5, checkouts: 3, lpv: 80, costo: 500, ...o,
+  })
+
+  it('🔴 al sumar dos días la tasa se vuelve a derivar, ⛔ no se promedia', () => {
+    // Ayer: 100 impresiones con 10 clics (10%). Hoy: 100.000 con 100 (0,1%). El promedio simple da
+    // 5,05% — un CTR que no le pasó a nadie. El derivado da 0,11%, que es el que existió.
+    const r = sumarVivas(
+      [v({ impresiones: 100, clicks: 10, ctr: 10 })],
+      [v({ impresiones: 100000, clicks: 100, ctr: 0.1 })],
+    )
+    expect(r).toHaveLength(1)
+    expect(r[0].ctr).toBeCloseTo(0.1099, 3)
+    expect(r[0].impresiones).toBe(100100)
+  })
+
+  it('🔴 el `diario` NO se suma: es configuración, no medición', () => {
+    // Sumarlo diría que el conjunto tiene el doble de caja de la que tiene — justo el número con el
+    // que se decide si subirle el presupuesto. Gana el día más nuevo, que es el último argumento.
+    const r = sumarVivas([v({ diario: 10000 })], [v({ diario: 12000 })])
+    expect(r[0].diario).toBe(12000)
+    expect(r[0].spend).toBe(2000)
+  })
+
+  it('una celda que sólo existe en uno de los dos días entra igual', () => {
+    const r = sumarVivas([v({ id: 'a' })], [v({ id: 'b', nombre: 'OTRA', spend: 5000 })])
+    expect(r.map((x) => x.id)).toEqual(['b', 'a'])
+  })
+})
+
+describe('porConjunto — la clave es el ID, el nombre es el respaldo', () => {
+  it('🔴 dos conjuntos que se llaman igual NO se suman en una fila', () => {
+    // Con el nombre de clave, la prosa mostraba un gasto que no es de ninguno de los dos y la zona
+    // de Rendimiento no podía empalmar la fila con su celda.
+    const f = (o: Partial<FilaAviso>): FilaAviso => ({
+      aviso: 'AD', conjunto: 'BROAD', campania: 'C', linea: 'bdi', estado: 'ACTIVE',
+      gasto: 100, impresiones: 10, clics: 1, compras: 0, revenue: 0, ctr: 0, cpm: 0,
+      lpv: 0, carritos: 0, checkouts: 0, ...o,
+    } as FilaAviso)
+    const r = porConjunto([
+      f({ conjuntoId: '1' } as Partial<FilaAviso>),
+      f({ conjuntoId: '2' } as Partial<FilaAviso>),
+    ])
+    expect(r).toHaveLength(2)
+  })
+
+  it('sin `conjuntoId` cae al nombre: una fila sin id ⛔ no se puede perder', () => {
+    expect(porConjunto([{ conjunto: 'X', gasto: 1 }, { conjunto: 'X', gasto: 2 }] as FilaAviso[])).toHaveLength(1)
   })
 })

@@ -13,6 +13,7 @@ import type { PedidoAccion, ResultadoAccion } from './acciones'
 import type { MarcaFavorito, PiezaAviso, RespuestaBiblioteca } from './biblioteca'
 import type { AvanceDePlan, Plan } from './planes'
 import type { Candidato, MotivoPoda } from './podado'
+import type { CeldaViva } from './rendimiento'
 import type { RangoUI } from './rango'
 import type { DecisionVista, RespuestaDecisiones } from './decisiones'
 import type { Informe, InformeResumen, RespuestaInforme, RespuestaInformes } from './informes'
@@ -34,6 +35,12 @@ export type RespuestaParte = {
   ok: true
   texto: string
   banda: BandaHoy
+  /**
+   * El día en curso y el anterior, **por conjunto**. Sale de las mismas filas de aviso que la banda
+   * —`level=ad` trae `adset_id`— así que ⛔ no cuesta una llamada más. Es lo único que la foto diaria
+   * ⛔ no puede tener, y lo que deja a la zona ofrecer «Hoy» y «Hoy y ayer».
+   */
+  vivas: { hoy: CeldaViva[]; ayer: CeldaViva[] }
   fechas: { hoy: string; ayer: string; leido: string }
   faltantes: string[]
 }

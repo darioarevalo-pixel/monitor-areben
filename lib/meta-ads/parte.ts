@@ -8,6 +8,7 @@
  * del servidor y del script que un día lo corra desde Actions.
  */
 import * as core from '@/lib/meta-ads/parte.core.js'
+import type { CeldaViva } from './rendimiento'
 
 /** Una fila de aviso ya normalizada: lo que Meta devolvió, con los nombres del parte. */
 export type FilaAviso = {
@@ -133,6 +134,12 @@ export const limpiar = core.limpiar as (s: unknown) => string
 export const veredicto = core.veredicto as (gasto: number, compras: number, techo: number | undefined) => string
 export const sumar = core.sumar as (filas: FilaAviso[]) => Record<string, number>
 export const porConjunto = core.porConjunto as (filas: FilaAviso[]) => (FilaAviso & { filas: FilaAviso[] })[]
+/**
+ * Dos días de celdas vivas en uno. El CTR y el CPM se derivan del total (⛔ no se promedian) y el
+ * `diario` se toma del día más nuevo: es configuración, no medición, y sumarlo diría que el conjunto
+ * tiene el doble de caja de la que tiene.
+ */
+export const sumarVivas = core.sumarVivas as (...dias: CeldaViva[][]) => CeldaViva[]
 /** `hasta` es el último día CERRADO. En la práctica no es opcional: sin él entra el día en curso
  *  con medio día de gasto contra medio día de pedidos, justo en la ventana que decide el marginal. */
 export const cruzarConLaCaja = core.cruzarConLaCaja as (

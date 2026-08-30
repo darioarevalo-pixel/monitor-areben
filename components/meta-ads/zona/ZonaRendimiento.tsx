@@ -40,6 +40,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ModalesDeAccion, useAccionMeta } from '@/components/meta-ads/acciones'
 import { useMeta } from '@/components/meta-ads/ContextoMeta'
+import { SelectorMeta } from '@/components/meta-ads/SelectorMeta'
 import { BandaDeHoy } from '@/components/meta-ads/parte/BandaDeHoy'
 import { TiraDeDias } from '@/components/meta-ads/zona/TiraDeDias'
 import { ParteDelDia } from '@/components/meta-ads/parte/ParteDelDia'
@@ -51,9 +52,9 @@ import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { TablaCeldas } from '@/components/meta-ads/zona/TablaCeldas'
 import { useZona } from '@/components/meta-ads/zona/useZona'
 import { entero, plata } from '@/lib/meta-ads/formato'
-import { DIAS_ZONA, type RespuestaZona } from '@/lib/meta-ads/rendimiento'
+import { fusionarVivo, VENTANAS_ZONA, ventanaZona, type Celda, type CeldaViva, type RespuestaZona, type VentanaZona } from '@/lib/meta-ads/rendimiento'
+import { sumarVivas } from '@/lib/meta-ads/parte'
 import { silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
-import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
@@ -62,8 +63,11 @@ import {
 } from '@/components/ui'
 
 export function ZonaRendimiento() {
-  const { linea, setLinea, visibles, laCuenta } = useMeta()
-  const [dias, setDias] = useState<number>(7)
+  const { linea, visibles, laCuenta } = useMeta()
+  // 🔑 La ventana es una CLAVE y ⛔ no un número de días, porque «Hoy» y «Hoy y ayer» ⛔ no son
+  // ventanas de la foto: son Meta en vivo. Un número solo no puede distinguir la fuente, y la fuente
+  // es justamente lo que cambia si el veredicto se puede calcular o no.
+  const [ventanaK, setVentanaK] = useState<string>('7')
   // 🔑 El ancla es un DÍA CERRADO elegido en la tira. Con ancla la ventana pasa a 1: lo que Bruno
   // pidió es «ese día», ⛔ no «los siete que terminan ahí». Volver a la ventana entera la restaura.
   const [anclado, setAnclado] = useState<string | null>(null)
@@ -71,7 +75,11 @@ export function ZonaRendimiento() {
   // conviven BDI y Zattia, y dividir el gasto de las dos por los pedidos de una da un costo por
   // pedido que no existe. Con una sola línea visible se elige sola; con varias, se pide.
   const laLinea: LineaPauta | null = linea !== 'todas' ? linea : visibles.length === 1 ? visibles[0] : null
-  const { estado, recargar } = useZona(laLinea, anclado ? 1 : dias, anclado)
+  const v: VentanaZona = ventanaZona(ventanaK) || VENTANAS_ZONA[3]
+  // 🔴 A la foto se le pide la VENTANA DE JUICIO aunque se esté mirando hoy: las celdas, el
+  // veredicto, el desgaste y el aprendizaje salen de ahí. Lo vivo sólo pisa las mediciones.
+  const diasFoto = anclado ? 1 : (v.vivo ? 7 : v.dias)
+  const { estado, recargar } = useZona(laLinea, diasFoto, anclado)
   const acciones = useAccionMeta(recargar)
   const r = useReglas()
   // 🔴 **Se pide sola, y eso cambia una decisión que estaba escrita.** El motivo por el que el parte
@@ -84,9 +92,25 @@ export function ZonaRendimiento() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      {/* 🔑 Primero de todo: es la pantalla de arranque. Y no rompe la invariante de `PlanesEnCurso`
-          —«va antes que la zona porque no depende de la foto»— porque la banda TAMPOCO sale de la
-          foto: sale de Meta, que es lo único que tiene el día en curso. */}
+      {/* 🔴 **Los dos controles de la zona van JUNTOS y arriba de todo.** El de la marca vivía en el
+          router, arriba de la sección, y el de la ventana acá abajo, después de la banda y de los
+          planes: para cambiar de marca y mirar otra ventana había que subir y volver a bajar. Es lo
+          primero que dijo Bruno al caminarla. Van los dos afuera del `laLinea`, porque con «Todas»
+          el selector es justamente lo único que hay que poder tocar. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+        <SelectorMeta />
+        <BarraVentana
+          ventana={v}
+          setVentana={(k) => { setVentanaK(k); setAnclado(null) }}
+          anclado={anclado}
+          volverALaVentana={() => setAnclado(null)}
+        />
+      </div>
+
+      {/* 🔑 Después de los controles y antes de todo lo demás: es la pantalla de arranque. Y no rompe
+          la invariante de `PlanesEnCurso` —«va antes que la zona porque no depende de la foto»—
+          porque la banda TAMPOCO sale de la foto: sale de Meta, que es lo único que tiene el día en
+          curso. */}
       {parte.estado.fase === 'ok' && (
         <BandaDeHoy
           b={parte.estado.dato.banda}
@@ -103,14 +127,12 @@ export function ZonaRendimiento() {
 
       {!laLinea ? (
         <EmptyState
-          title="Elegí una marca arriba"
-          hint="La zona de rendimiento es de una sola línea: el techo por compra, los pedidos reales y la meta son de una marca, y mezclarlas da un costo por pedido que no existe."
+          title="Elegí una marca"
+          hint="La zona de rendimiento es de una sola línea: el techo por compra, los pedidos reales y la meta son de una marca, y mezclarlas da un costo por pedido que no existe. El selector está acá arriba."
           dashed
         />
       ) : (
         <>
-          <BarraVentana dias={dias} setDias={setDias} anclado={anclado} />
-
           {estado.fase === 'cargando' && <Card style={{ color: color.mut2 }}>Leyendo la foto de la pauta…</Card>}
 
           {estado.fase === 'error' && (
@@ -125,10 +147,13 @@ export function ZonaRendimiento() {
           {estado.fase === 'ok' && (
             <Contenido
               d={estado.data}
-              dias={anclado ? 1 : dias}
+              ventana={anclado ? null : v}
+              dias={diasFoto}
               acciones={acciones.acciones}
               anclado={anclado}
               onElegir={setAnclado}
+              vivas={parte.estado.fase === 'ok' ? parte.estado.dato.vivas : null}
+              lineaViva={laLinea}
             />
           )}
           {/* Los cinco modales de escritura, dibujados una vez para toda la pantalla. */}
@@ -158,8 +183,6 @@ export function ZonaRendimiento() {
           entero y en texto para pegarlo en una conversación. Comparte `useParte`, así que abrirlo
           ⛔ no pide nada — las cinco llamadas ya se hicieron una vez. */}
       <ParteDelDia cuenta={laCuenta ? laCuenta.id : null} linea={laLinea || undefined} />
-
-      <SinLinea visibles={visibles} linea={linea} setLinea={setLinea} />
     </div>
   )
 }
@@ -196,33 +219,55 @@ function Silencio({ reglas, cargando }: { reglas: Regla[] | null; cargando: bool
   )
 }
 
-/** El selector de ventana. Los tres valores son los que el servidor acepta; ⛔ no hay uno libre. */
-function BarraVentana({ dias, setDias, anclado }: { dias: number; setDias: (n: number) => void; anclado: string | null }) {
+/**
+ * El selector de ventana.
+ *
+ * 🔑 **Las dos primeras llevan un punto: salen de Meta EN VIVO, las otras de la foto.** No es
+ * decoración — la foto sólo tiene días cerrados, así que «3 días» termina AYER. Sin la marca, «3
+ * días» al lado de «Hoy y ayer» se lee como «hoy, ayer y anteayer», que es otra cosa.
+ */
+function BarraVentana({ ventana, setVentana, anclado, volverALaVentana }: {
+  ventana: VentanaZona
+  setVentana: (k: string) => void
+  anclado: string | null
+  volverALaVentana: () => void
+}) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-      <span style={{ fontSize: font.sm, color: color.mut }}>Mirando los últimos:</span>
-      {DIAS_ZONA.map((n) => (
+      <span style={{ fontSize: font.sm, color: color.mut }}>Mirando:</span>
+      {VENTANAS_ZONA.map((x) => (
         // ⛔ Con un día anclado NINGUNO va en `solid`: la ventana no es la que dice el botón, y
         // dejarlo marcado sería que la barra afirme una cosa y la tabla muestre otra.
-        <Button key={n} size="sm" variant={!anclado && n === dias ? 'solid' : 'ghost'} onClick={() => setDias(n)}>
-          {n} días
+        <Button key={x.k} size="sm" variant={!anclado && x.k === ventana.k ? 'solid' : 'ghost'} onClick={() => setVentana(x.k)}>
+          {x.label}{x.vivo ? ' •' : ''}
         </Button>
       ))}
-      {anclado && (
-        <span style={{ fontSize: font.sm, color: color.brandSolid, fontWeight: weight.semibold }}>
-          — anclado al {anclado}
+      {anclado ? (
+        <>
+          <span style={{ fontSize: font.sm, color: color.brandSolid, fontWeight: weight.semibold }}>
+            — anclado al {anclado}
+          </span>
+          <Button size="sm" variant="ghost" onClick={volverALaVentana}>Volver a la ventana</Button>
+        </>
+      ) : (
+        <span style={{ fontSize: font.xs, color: color.mut2 }}>
+          • en vivo desde Meta, día en curso · el resto sale de la foto diaria y termina ayer
         </span>
       )}
     </div>
   )
 }
 
-function Contenido({ d, dias, acciones, anclado, onElegir }: {
+function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, lineaViva }: {
   d: RespuestaZona
+  /** `null` con un día anclado: ahí la ventana la manda la tira, no la barra. */
+  ventana: VentanaZona | null
   dias: number
   acciones: Acciones
   anclado: string | null
   onElegir: (fecha: string | null) => void
+  vivas: { hoy: CeldaViva[]; ayer: CeldaViva[] } | null
+  lineaViva: LineaPauta
 }) {
   if (!d.zona) {
     return <Notice tone="warning">{d.motivo || 'La foto no tiene ningún día cerrado todavía.'}</Notice>
@@ -230,6 +275,18 @@ function Contenido({ d, dias, acciones, anclado, onElegir }: {
   const z = d.zona
   const t = z.totales
   const conc = z.concentracion.mayor
+  // 🔑 El modo vivo se decide con LAS DOS cosas: que la ventana lo pida **y** que el parte haya
+  // contestado. Si Meta no contestó, la tabla vuelve a la foto y se dice arriba — ⛔ no se dibuja
+  // vacía, que es lo que haría creer que hoy no gastó nada.
+  const enVivo = !!ventana?.vivo && !!vivas
+  const vivo = enVivo
+    ? fusionarVivo(
+        z.celdas,
+        ventana!.dias === 1 ? vivas!.hoy : sumarVivas(vivas!.ayer, vivas!.hoy),
+        { linea: lineaViva, techo: d.techo || 0 },
+      )
+    : null
+  const celdas: Celda[] = vivo ? vivo.celdas : z.celdas
 
   return (
     <>
@@ -278,25 +335,61 @@ function Contenido({ d, dias, acciones, anclado, onElegir }: {
       <TiraDeDias caja={z.caja} techo={d.techo || 0} anclado={anclado} onElegir={onElegir} />
 
       <SectionCard
-        title={anclado ? `Las celdas del ${anclado} (${z.celdas.length})` : `Las celdas (${z.celdas.length})`}
+        title={anclado
+          ? `Las celdas del ${anclado} (${celdas.length})`
+          : enVivo
+            ? `Las celdas ${ventana!.label.toLowerCase()} (${celdas.length})`
+            : `Las celdas (${celdas.length})`}
         subtitle="Una fila por conjunto, ordenadas por gasto. El «por qué» de cada veredicto son los números que lo sostienen, no una frase. Abrí una para ver qué creativo hay adentro, su embudo y su día a día."
       >
+        {/* 🔴 El aviso más importante de la pantalla en modo vivo. Medio día de gasto contra medio
+            día de compras da un costo por compra que no existe: a las 10 de la mañana casi toda
+            celda «compra carísimo». Los NÚMEROS son de hoy; el VEREDICTO sigue saliendo de la
+            ventana de juicio, y callarlo sería mandar a apagar cosas que rinden. */}
+        {enVivo && (
+          <Notice tone="warning">
+            Los números son de <b>{ventana!.label.toLowerCase()}</b>, leídos de Meta hace un momento —
+            y <b>hoy va por la mitad</b>. El <b>veredicto</b>, el desgaste y el aprendizaje se siguen
+            midiendo sobre los <b>{z.ventanaJuicio} días</b> cerrados de la foto: con medio día no se
+            juzga nada.
+            {vivo!.sinEntrega.length > 0 && (
+              <div style={{ fontSize: font.sm, marginTop: space[1] }}>
+                {vivo!.sinEntrega.length === 1
+                  ? `Y 1 celda activa todavía no entregó: «${vivo!.sinEntrega[0]}».`
+                  : `Y ${vivo!.sinEntrega.length} celdas activas todavía no entregaron: ${vivo!.sinEntrega.slice(0, 4).map((n) => `«${n}»`).join(', ')}${vivo!.sinEntrega.length > 4 ? ' y otras' : ''}.`}
+              </div>
+            )}
+          </Notice>
+        )}
+        {/* Lo mismo al revés: la ventana la pidió viva y el parte no contestó. Se dice qué se está
+            mirando en su lugar, porque una tabla que dice «hoy» arriba y muestra la semana es peor
+            que una que no ofrece «hoy». */}
+        {ventana?.vivo && !vivas && (
+          <Notice tone="neutral">
+            Meta todavía no contestó el día en curso, así que abajo está la foto de los {z.ventanaJuicio} días
+            cerrados. No es que hoy no haya gastado.
+          </Notice>
+        )}
         {/* 🔴 Con la ventana anclada a un día, los NÚMEROS son de ese día pero el VEREDICTO, el
             desgaste y el marginal se siguen midiendo sobre `ventanaJuicio`. Se dice: callarlo
             dejaría leerlos como del día que se está mirando, y un veredicto de un día suelto manda
             a apagar cosas que rinden. */}
-        {z.ventanaJuicio !== dias && (
+        {!enVivo && z.ventanaJuicio !== dias && (
           <Notice tone="neutral">
             Los números son del {anclado || 'período'}, pero el <b>veredicto</b>, el desgaste y el
             marginal se miden sobre <b>{z.ventanaJuicio} días</b>. Un día suelto tiene una o dos
             compras: alcanza para mirarlo, ⛔ no para juzgarlo.
           </Notice>
         )}
-        {z.celdas.length === 0 ? (
-          <EmptyState title="Ninguna celda entregó en la ventana" hint="Probá una ventana más larga." dashed />
+        {celdas.length === 0 ? (
+          <EmptyState
+            title={enVivo ? `Ninguna celda entregó ${ventana!.label.toLowerCase()}` : 'Ninguna celda entregó en la ventana'}
+            hint={enVivo ? 'Puede ser temprano: Meta tarda en registrar las primeras impresiones del día.' : 'Probá una ventana más larga.'}
+            dashed
+          />
         ) : (
           <TablaCeldas
-            celdas={z.celdas}
+            celdas={celdas}
             moneda={z.celdas[0]?.moneda ?? null}
             acciones={acciones}
             // La cuenta sale de la FOTO y ⛔ no del selector de arriba: la que vale es la de los
@@ -443,33 +536,5 @@ function Oraculo({ d, dias }: { d: RespuestaZona; dias: number }) {
         </TableWrap>
       </Plegable>
     </SectionCard>
-  )
-}
-
-/** El recordatorio de que la zona es de una línea, cuando hay más de una para elegir. */
-function SinLinea({ visibles, linea, setLinea }: {
-  visibles: LineaPauta[]
-  linea: string
-  setLinea: (l: LineaPauta) => void
-}) {
-  if (linea !== 'todas' || visibles.length < 2) return null
-  return (
-    <Notice tone="brand">
-      Elegí una marca arriba para ver su rendimiento:{' '}
-      {visibles.map((l, i) => (
-        <span key={l}>
-          {i > 0 && ' · '}
-          <button
-            type="button"
-            onClick={() => setLinea(l)}
-            // `height: auto`: botón-TEXTO, y el legacy le fija la altura de un control. Ver
-            // `tests/boton-crudo-altura.test.ts`.
-            style={{ background: 'none', border: 0, padding: 0, height: 'auto', cursor: 'pointer', font: 'inherit', color: color.brandSolid, fontWeight: weight.semibold }}
-          >
-            {ETIQUETA_LINEA[l]}
-          </button>
-        </span>
-      ))}
-    </Notice>
   )
 }

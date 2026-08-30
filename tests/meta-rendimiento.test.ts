@@ -14,8 +14,9 @@ import { describe, expect, it } from 'vitest'
 import {
   CONV_APRENDIZAJE, DIAS_SERVIBLES, DIAS_ZONA, aprendizajeDe, armarZona, avisosPorCelda,
   celdasDeLaFoto, concentracionDe, desdeDe, desgasteDe, elegirCierre, elegirVentana, enVentana,
-  ultimoDiaCerrado, veredictoDeCelda,
+  fusionarVivo, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona, veredictoDeCelda,
 } from '@/lib/meta-ads/rendimiento'
+import type { Celda, CeldaViva } from '@/lib/meta-ads/rendimiento'
 import { sumarDias } from '@/lib/meta-ads/snapshot'
 
 /** Una fila de la foto, con lo mínimo. `capturado_at` un día después ⇒ el día está CERRADO. */
@@ -545,5 +546,133 @@ describe('la ventana de JUICIO — un día suelto no puede mandar a apagar', () 
     const z = armarZona({ filas: malUnDia, techo: 3000, hasta: '2026-08-20', ventana: 1 })
     expect(z.hasta).toBe('2026-08-20')
     expect(z.celdas[0].spend).toBe(2000)
+  })
+})
+
+/**
+ * 🔴 **El día EN CURSO adentro de la tabla, sin que el veredicto se contagie.**
+ *
+ * Bruno pidió mirar hoy y «hoy y ayer» en la zona (30-ago-2026). La foto sólo tiene días cerrados,
+ * así que esos dos salen de Meta en vivo — y ahí aparece el riesgo que ordena todo este bloque:
+ * **medio día de gasto contra medio día de compras da un costo por compra que no existe.** A las 10
+ * de la mañana casi toda celda «compra carísimo» y a las 22 casi ninguna. Un veredicto sacado de ahí
+ * manda a apagar cosas que rinden, que es el defecto original de esta sección.
+ *
+ * ⇒ La regla, y es la única que importa: **se reemplazan las MEDICIONES, ⛔ nunca el JUICIO.**
+ */
+describe('fusionarVivo — los números son de hoy, el veredicto es de la ventana', () => {
+  const celda = (o: Partial<Celda> = {}): Celda => ({
+    id: '1', nombre: 'GIRLHOOD FRIO', linea: 'bdi', campaignId: 'c1', cuentaId: 'a1', moneda: 'ARS',
+    estado: 'ACTIVE', estadoReal: 'ACTIVE', diario: 10000, spend: 50304, impresiones: 100000,
+    clicks: 2000, compras: 4, revenue: 40000, ctr: 2, cpc: 25, cpm: 503, roas: 0.8, carritos: 30,
+    checkouts: 12, lpv: 900, costo: 12576, costoCarrito: 1676, diasConGasto: 5, desde: '2026-08-20',
+    hasta: '2026-08-29', serie: [], desgaste: desgasteDe([]), aprendizaje: aprendizajeDe({ serie: [] }),
+    avisos: [],
+    veredicto: {
+      clase: 'alto', titulo: 'Compra muy arriba del techo', accion: 'pausar',
+      porque: ['Compra a $12.576 contra un techo de $6.668 —el 189%— en 5 días.'],
+      pctTecho: 189, pctDiario: 100,
+    },
+    ...o,
+  } as Celda)
+
+  const viva = (o: Partial<CeldaViva> = {}): CeldaViva => ({
+    id: '1', nombre: 'GIRLHOOD FRIO', linea: 'bdi', campania: 'C', estado: 'ACTIVE', diario: 10000,
+    spend: 5000, impresiones: 10000, clicks: 200, compras: 2, revenue: 12000, ctr: 2, cpm: 500,
+    carritos: 4, checkouts: 2, lpv: 90, costo: 2500, ...o,
+  })
+
+  it('🔴 el veredicto NO se recalcula, aunque hoy la celda esté regalada', () => {
+    // Hoy compra a $2.500 contra un techo de $6.668: sobre este día sola diría «escalá». La foto
+    // dice que en 5 días compra a $12.576. Gana la foto — y ésta es la aserción que sostiene todo.
+    const r = fusionarVivo([celda()], [viva()], { linea: 'bdi', techo: 6668 })
+    expect(r.celdas).toHaveLength(1)
+    expect(r.celdas[0].veredicto.clase).toBe('alto')
+    expect(r.celdas[0].veredicto.accion).toBe('pausar')
+    expect(r.celdas[0].veredicto.porque[0]).toContain('189%')
+  })
+
+  it('las MEDICIONES sí son las de hoy, y los DOS porcentajes se recalculan', () => {
+    const r = fusionarVivo([celda()], [viva()], { linea: 'bdi', techo: 6668 })
+    const c = r.celdas[0]
+    expect(c.spend).toBe(5000)
+    expect(c.compras).toBe(2)
+    expect(c.costo).toBe(2500)
+    // 🔑 Sin esto la columna «% techo» mostraría el 189% de la semana al lado de un costo de hoy de
+    // $2.500 — el tercer «número que existe y no significa» de este módulo.
+    expect(Math.round(c.veredicto.pctTecho!)).toBe(37)
+    // Y `pctDiario` recién acá quiere decir lo que su nombre dice: cuánto de la caja de HOY se usó.
+    expect(c.veredicto.pctDiario).toBe(50)
+    expect(c.diasConGasto).toBe(1)
+  })
+
+  it('⛔ sin techo cargado el % es `null` y ⛔ nunca 0: no juzgable ⛔ no es perfecto', () => {
+    const r = fusionarVivo([celda()], [viva()], { linea: 'bdi', techo: 0 })
+    expect(r.celdas[0].veredicto.pctTecho).toBeNull()
+  })
+
+  it('⛔ sin compras hoy el % del techo es `null`: no hay denominador', () => {
+    const r = fusionarVivo([celda()], [viva({ compras: 0 })], { linea: 'bdi', techo: 6668 })
+    expect(r.celdas[0].veredicto.pctTecho).toBeNull()
+    expect(r.celdas[0].costo).toBe(0)
+  })
+
+  it('una celda que arrancó HOY entra con `midiendo` y ⛔ no propone nada', () => {
+    // Dejarla afuera escondería justo la celda que alguien acaba de prender, que es cuando más se
+    // mira. Y `midiendo` es la clase que ni suma ni corta: no hay con qué juzgarla.
+    const r = fusionarVivo([], [viva({ id: '99', nombre: 'NUEVA' })], { linea: 'bdi', techo: 6668 })
+    expect(r.celdas[0].veredicto.clase).toBe('midiendo')
+    expect(r.celdas[0].veredicto.accion).toBeNull()
+    // Y su desgaste sale de la función de verdad con la serie vacía: dice POR QUÉ no hay dato.
+    expect(r.celdas[0].desgaste.firma).toBe('sin-datos')
+    expect(r.celdas[0].desgaste.motivo).toBeTruthy()
+  })
+
+  it('🔴 lo que hoy no entregó se CUENTA, ⛔ no se dibuja con ceros ni desaparece', () => {
+    // Una tabla de ceros a las 9 de la mañana esconde las tres celdas que sí están corriendo; y
+    // desaparecer sin decirlo hace creer que se apagaron.
+    const r = fusionarVivo(
+      [celda(), celda({ id: '2', nombre: 'DORMIDA', estado: 'ACTIVE' }), celda({ id: '3', nombre: 'APAGADA', estado: 'PAUSED' })],
+      [viva()],
+      { linea: 'bdi', techo: 6668 },
+    )
+    expect(r.celdas.map((c) => c.id)).toEqual(['1'])
+    // Sólo la ACTIVA que no apareció. La pausada no entregó porque está pausada: no es noticia.
+    expect(r.sinEntrega).toEqual(['DORMIDA'])
+  })
+
+  it('filtra por línea, pero `sin-linea` PASA: es el único lugar donde se arregla', () => {
+    const r = fusionarVivo([], [
+      viva({ id: 'a', linea: 'bdi' }),
+      viva({ id: 'b', linea: 'zattia' }),
+      viva({ id: 'c', linea: 'sin-linea' }),
+    ], { linea: 'bdi', techo: 6668 })
+    expect(r.celdas.map((c) => c.id)).toEqual(['a', 'c'])
+  })
+
+  it('ordena por gasto de HOY y ⛔ no por el de la ventana', () => {
+    const r = fusionarVivo(
+      [celda({ id: '1', spend: 90000 }), celda({ id: '2', spend: 10 })],
+      [viva({ id: '1', spend: 100 }), viva({ id: '2', nombre: 'B', spend: 9000 })],
+      { linea: 'bdi', techo: 6668 },
+    )
+    expect(r.celdas.map((c) => c.id)).toEqual(['2', '1'])
+  })
+})
+
+describe('VENTANAS_ZONA — la barra dice de dónde sale cada número', () => {
+  it('las dos primeras son en vivo y las demás de la foto', () => {
+    expect(VENTANAS_ZONA.filter((v) => v.vivo).map((v) => v.k)).toEqual(['hoy', 'hoy_ayer'])
+    // 🔑 «3 días» NO es vivo, y por eso termina ayer. Si algún día pasara a `vivo: true` sin traer
+    // anteayer de algún lado, la barra estaría mintiendo sobre qué días entran.
+    expect(ventanaZona('3')!.vivo).toBe(false)
+    expect(ventanaZona('hoy_ayer')!.dias).toBe(2)
+  })
+
+  it('⛔ una clave que no existe contesta `null`, ⛔ no un default en silencio', () => {
+    // Es la misma regla que `elegirVentana`: sustituir en silencio es la única de las tres opciones
+    // que miente, y un parámetro que la propia UI no puede pedir mal es el que nadie prueba.
+    expect(ventanaZona('99')).toBeNull()
+    expect(ventanaZona('')).toBeNull()
   })
 })
