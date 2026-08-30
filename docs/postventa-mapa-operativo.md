@@ -57,6 +57,9 @@ la oferta salió, las dos ramas ya estaban decididas y lo único que agrega el c
 
 **Dónde entra el cupón.** Dos puertas: como resolución, o como forma de una retención aceptada. Las
 dos dejan el pendiente. **El cupón lo crea una persona a mano en la tienda**, y `cupon-emitido`
+🆕 **exige el código Y hasta cuándo vale** (30-ago-2026): sin fecha ⛔ no se sella, y el mensaje al
+cliente dice el plazo. ▶️ Cuánto tiene que durar es decisión de Bruno.
+
 **exige el código** — es lo único que prueba que existe. Recién ahí aparece el mensaje que se lo pasa.
 
 ---

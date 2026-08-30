@@ -69,6 +69,9 @@ import {
   unidadesQueVuelven as unidadesQueVuelvenJs,
 } from './unidades.core.js'
 import { MOMENTOS_DEL_MENSAJE as MOMENTOS_DEL_MENSAJE_JS, yaSeLeEscribio } from './mensajes.core.js'
+// El vencimiento del cupón: la cara en criollo de una columna `date`. La REGLA (qué fecha se acepta)
+// vive en el mismo `.core.js` porque la aplica el servidor.
+import { leerVencimiento as leerVencimientoJs, vencimientoEnCriollo } from './cupon.core.js'
 
 /**
  * **Los momentos que se le pueden contar al cliente**, en runtime y tipados.
@@ -1187,7 +1190,12 @@ export function resumenDeLoDecidido(d: ReclamoRow, quien: QuienMira): LineaResum
 
   l.push({ que: 'Qué recibe', valor: COMPENSACION_LABEL[d.compensacion] })
   if (conPlata && d.monto_total != null) l.push({ que: 'Se le devuelve', valor: money(Number(d.monto_total)) })
-  if (d.cupon_codigo) l.push({ que: 'Cupón', valor: d.cupon_codigo })
+  // 🔑 **El código y la fecha van JUNTOS**: leer «Cupón ABC123» sin hasta cuándo es exactamente la
+  // pregunta que después se contesta en la caja, con el cliente adelante.
+  if (d.cupon_codigo) {
+    const hasta = vencimientoEnCriollo(d.cupon_vence || '')
+    l.push({ que: 'Cupón', valor: hasta ? `${d.cupon_codigo} · hasta el ${hasta}` : d.cupon_codigo })
+  }
   // La oferta va acá, al lado de lo que recibe: es la resolución que se intentó antes de ésta. La
   // rechazada es la que importa — es la única forma de saber cuántas veces funciona.
   if (oferta) l.push(oferta)
@@ -2130,6 +2138,17 @@ export type ReclamoRow = {
    * cerraba "con cupón" y el cliente se quedaba con la promesa de un código inexistente.
    */
   cupon_estado?: PendienteEstado | null
+  /**
+   * **Hasta cuándo vale el cupón** (`aaaa-mm-dd`). Obligatorio para tildar `cupon-emitido` desde el
+   * 30-ago-2026, por el mismo motivo por el que el código lo es: un cupón sin fecha ⛔ no es un
+   * cupón, es una discusión postergada — y **sin vencimiento ⛔ no hay breakage que medir**, que es
+   * el argumento entero para elegir el cupón sobre la plata.
+   *
+   * ⚠️ **NULL ⛔ no significa "no vence": significa SIN REGISTRAR.** Las filas anteriores al
+   * 30-ago-2026 lo tienen vacío; medido ese día, eran **cero** en las dos marcas.
+   * ▶️ Cuánto tiene que durar sigue siendo decisión de Bruno (B6): acá ⛔ no hay default.
+   */
+  cupon_vence?: string | null
   /** La solicitud de etiqueta (EM####) del envío del cambio. Se guarda SIN el prefijo. */
   solicitud_envio?: string | null
   falla_ids?: number[]
@@ -2178,6 +2197,19 @@ export function faltaAnularAntesDeDescontar(
  */
 export function faltaRecibirAntesDeDevolver(fila: FilaConUnidades): string | null {
   return faltaRecibirAntesDeDevolverJs(fila)
+}
+
+/** Re-exportada tipada: la cara en criollo de `cupon_vence` (`2026-09-30` → `30/09/2026`). */
+export { vencimientoEnCriollo }
+
+/**
+ * **Hasta cuándo vale el cupón**, normalizado a `aaaa-mm-dd`, o el motivo en criollo.
+ * La regla —y por qué la fecha ⛔ no puede faltar— vive en `cupon.core.js`.
+ */
+export function leerVencimiento(
+  entrada: string | null | undefined, hoy?: Date,
+): { ok: true; fecha: string } | { ok: false; error: string } {
+  return leerVencimientoJs(entrada, hoy) as { ok: true; fecha: string } | { ok: false; error: string }
 }
 
 // ── Alertas por antigüedad ──────────────────────────────────────────────────────

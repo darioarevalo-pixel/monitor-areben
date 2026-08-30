@@ -30,7 +30,7 @@ import {
 } from '@/lib/reclamos/cliente'
 import {
   botonDecidir, calcularMonto, esCambio, estaDecidido, estadoEnCriollo, faltantesParaCerrar, loEjecutado, montoADevolver, puedeRehacerseLaDecision, laFallaDescuentaStock, loQueFaltaDescontar, MOTIVO_LABEL, MOTIVOS_EN_ROJO,
-  faltaAnularAntesDeDescontar, faltaRecibirAntesDeDevolver,
+  faltaAnularAntesDeDescontar, faltaRecibirAntesDeDevolver, leerVencimiento, vencimientoEnCriollo,
   MOTIVOS_VIGENTES, numeroReclamo, pagadoPorItem, pideSeguimiento, preseleccionDelAlta, sinLaOtraVenta, VIA_LABEL, ESTADO_LABEL,
   resumenDeLoDecidido,
   alertasDe, conAlerta, tokenVencido, ESTADOS_ABIERTOS,
@@ -619,15 +619,28 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
    * código: tildar "ya está" sin él es cerrar el reclamo sobre una promesa, y el cliente se entera
    * recién en la próxima compra.
    */
+  /**
+   * 🔑 **Dos preguntas, y las dos obligatorias**: el código prueba que el cupón existe en la tienda,
+   * y la fecha es lo que el cliente necesita saber antes de guardarlo para «alguna vez». Las dos las
+   * vuelve a exigir el servidor (`cupon.core.js`): acá se pregunta, ⛔ no se valida sola la pantalla.
+   */
   const cargarCupon = async (d: ReclamoRow) => {
     const codigo = await pedirTexto('Código del cupón', d.cupon_codigo || '', {
       titulo: 'El cupón ya existe en la tienda',
-      ok: 'Guardar',
+      ok: 'Siguiente',
       placeholder: 'El código que se le pasa al cliente',
     })
     if (codigo === null) return
     if (!codigo.trim()) { toast.aviso('Sin el código no hay cómo saber que el cupón existe.'); return }
-    await accion(() => marcarCuponEmitido(marca, d.id, codigo.trim()), 'Cupón anotado.')
+    const hasta = await pedirTexto('¿Hasta cuándo lo puede usar?', vencimientoEnCriollo(d.cupon_vence || ''), {
+      titulo: 'El vencimiento del cupón',
+      ok: 'Guardar',
+      placeholder: 'dd/mm/aaaa',
+    })
+    if (hasta === null) return
+    const leido = leerVencimiento(hasta)
+    if (!leido.ok) { toast.error(leido.error); return }
+    await accion(() => marcarCuponEmitido(marca, d.id, codigo.trim(), leido.fecha), 'Cupón anotado.')
   }
 
   /** El número de reclamo al transportista: es lo que después permite reclamar esa plata. */

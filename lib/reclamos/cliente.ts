@@ -337,9 +337,14 @@ export async function contestarLaOferta(store: Marca, id: number, respuesta: Res
  * 🔑 **El código es obligatorio**: es lo único que prueba que el cupón se creó de verdad. Antes
  * `cupon_codigo` se tipeaba suelto y nada avisaba si nunca se había emitido, así que el reclamo se
  * cerraba "con cupón" y el cliente descubría en la próxima compra que el código no anda.
+ *
+ * 🔑 **Y el vencimiento también, desde el 30-ago-2026**: sin fecha, lo que el cliente descubre en la
+ * próxima compra es que el cupón venció. Lo valida el servidor (`cupon.core.js`), ⛔ no la pantalla.
  */
-export async function marcarCuponEmitido(store: Marca, id: number, cupon_codigo: string): Promise<void> {
-  await postear({ action: 'cupon-emitido', store, id, cupon_codigo })
+export async function marcarCuponEmitido(
+  store: Marca, id: number, cupon_codigo: string, cupon_vence: string,
+): Promise<void> {
+  await postear({ action: 'cupon-emitido', store, id, cupon_codigo, cupon_vence })
 }
 
 /**

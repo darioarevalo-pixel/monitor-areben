@@ -54,6 +54,9 @@ import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 // Los permisos se IMPORTAN, no se copian: la misma implementación que usa la app.
 import { esAdmin, puedeVer, puedeVerAlguna, SECCIONES_RECLAMOS, tieneFuncion } from '../lib/permisos.core.js';
 import { COLUMNAS_PARA_DEVOLVER, faltaAnularAntesDeDescontar, faltaRecibirAntesDeDevolver, loEjecutado, pendientesDe } from '../lib/reclamos/efectos.core.js';
+// Hasta cuándo vale el cupón. ⛔ No se valida sólo en la pantalla: una pantalla que valida es una
+// sugerencia, y este módulo ya lo pagó cuatro veces.
+import { leerVencimiento } from '../lib/reclamos/cupon.core.js';
 import { costoDeLaFila, ENTRADAS_DEL_COSTO } from '../lib/reclamos/plata.core.js';
 // El caso y su escenario: la lista cerrada de escenarios, si el perfil cambia con el escenario, y
 // si hay producto en juego. ⛔ No se copia acá — es la misma tabla que lee la app.
@@ -122,7 +125,7 @@ const COLS = `id, store, orden_tn, cliente, token_vence, motivo, escenario, moti
   monto_total, pago_metodo, pago_gateway, devolver_envio, retorno_sugerido, retorno_decidido,
   via_retorno, envio_costo, seguimiento_vuelta, envio_ida_costo, seguimiento_ida,
   gn_venta_id, gn_venta_number, gn_venta_reemplazo_id, gn_venta_reemplazo_number, stock_estado, reintegro_estado,
-  tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, falla_ids,
+  tn_stock_estado, envio_nuevo_estado, reintegro_at, reintegro_por, reintegro_comprobante, cupon_codigo, cupon_vence, falla_ids,
   retencion_respuesta, retencion_monto, retencion_forma, retencion_at, cupon_estado,
   costo_caso, expectativa, reclamo_correo, reclamo_correo_estado, items_correctos,
   items_nuevos, forma_pago, diferencia, descuento_manual, solicitud_envio,
@@ -956,8 +959,16 @@ export default async function handler(req, res) {
     if (action === 'cupon-emitido') {
       const codigo = texto(b.cupon_codigo);
       if (!codigo) return res.status(400).json({ error: 'falta el código del cupón: sin eso no hay cómo saber que existe' });
-      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: `cupón emitido: ${codigo}` }, {
+      // 🔑 **Y desde el 30-ago-2026 también la fecha**, por el mismo motivo por el que exige el
+      // código: un cupón sin vencimiento ⛔ no es un cupón, es una discusión postergada — el que se
+      // entera de que venció es el cliente, en la caja. Y sin fecha ⛔ no hay breakage que medir,
+      // que es el argumento entero para elegir el cupón sobre la plata. La regla vive en
+      // `cupon.core.js` y contesta en criollo qué se rompe.
+      const vence = leerVencimiento(b.cupon_vence);
+      if (!vence.ok) return res.status(400).json({ error: vence.error });
+      await apilar(supabase, id, { estado: 'resuelto', at: ahora(), usuario, nota: `cupón emitido: ${codigo} (vence ${vence.fecha})` }, {
         cupon_codigo: codigo,
+        cupon_vence: vence.fecha,
         cupon_estado: 'hecho',
       });
       return res.status(200).json({ ok: true });

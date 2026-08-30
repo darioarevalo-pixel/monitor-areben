@@ -12,7 +12,7 @@
  */
 
 import {
-  MOTIVO_LABEL, VIA_LABEL,
+  MOTIVO_LABEL, VIA_LABEL, vencimientoEnCriollo,
   type Compensacion, type Expectativa, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type ViaRetorno,
 } from './tipos'
 
@@ -447,17 +447,25 @@ export function mensajeRetornoRecibido(
  * 🔑 Se lee del pendiente que lo cuenta (`cupon_estado === 'hecho'` **y** el código), ⛔ no de un
  * campo nuevo. Y `cupon-emitido` **exige el código**, que es lo único que prueba que el cupón existe
  * en la tienda: por eso acá el código ⛔ no puede faltar.
+ *
+ * 🔴 **Y desde el 30-ago-2026 dice HASTA CUÁNDO.** Un cupón sin fecha en el mensaje es la promesa
+ * que después se discute en la caja: el cliente lo guarda para «alguna vez», y el día que lo usa se
+ * entera de que venció — por un mensaje nuestro que ⛔ nunca se lo dijo. `cupon-emitido` ahora exige
+ * la fecha, así que un cupón emitido de acá en más siempre la tiene; ⚠️ las filas viejas ⛔ no, y
+ * ahí el mensaje **calla en vez de inventar** un plazo.
  */
 export function mensajeCuponListo(
-  d: Pick<ReclamoRow, 'cliente' | 'cupon_codigo'>,
+  d: Pick<ReclamoRow, 'cliente' | 'cupon_codigo' | 'cupon_vence'>,
   numero: string,
 ): string {
+  const hasta = vencimientoEnCriollo(d.cupon_vence || '')
   return [
     saludo(d.cliente),
     '',
     `Ya está listo el cupón del reclamo ${numero}.`,
     '',
     `Código: ${d.cupon_codigo}`,
+    ...(hasta ? ['', `Lo podés usar hasta el ${hasta}.`] : []),
     '',
     'Lo cargás al pagar, en tu próxima compra. ¡Gracias!',
   ].join('\n')

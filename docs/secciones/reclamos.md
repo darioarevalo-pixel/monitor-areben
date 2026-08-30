@@ -1959,3 +1959,74 @@ fila** (el listado completo son 2.725). Las caras son `items` (503) y el `histor
 - ✅ **16 mutantes, 16 muertos.**
 - 🔴 ▶️ **Lo que ⛔ no se caminó**: nadie apretó el botón sobre una fila real, y sigue sin caminarse
   Retornos con un caso de verdad. La primera vez que esto frene en producción hay que mirarlo.
+
+---
+
+## 🆕 El cupón, con vencimiento (30-ago-2026)
+
+Es §1.2 del plan de post-venta. `cupon-emitido` exigía **el código** desde el 25-ago —lo único que
+prueba que el cupón se creó de verdad en la tienda— y ⛔ nada más. Así que el módulo prometía *«te
+dejamos un cupón»* **sin saber hasta cuándo**, y el que se enteraba de que había vencido era el
+cliente, en la caja, en su próxima compra.
+
+### 🔑 Y la razón grande ⛔ no es la cortesía: es que el breakage ⛔ no existe sin fecha
+
+El cupón se elige sobre la plata porque ⛔ **no hay salida de caja**, se gasta **a precio de lista**,
+y **una parte ⛔ no se usa nunca**. Esa última pata es el *breakage* — y **sin vencimiento ⛔ no se
+puede medir**: un cupón sin fecha y sin usar ⛔ no está perdido, está **pendiente para siempre**, y
+la cuenta ⛔ no cierra nunca. ⇒ el argumento con el que se decide entre cupón y plata ⛔ no era
+auditable.
+
+▶️ **Cuánto vale y cuánto tiene que durar sigue siendo de Bruno (B6).** El núcleo ⛔ **no propone
+ningún plazo** —y hay un test que lo fija—: lo que cambia es que la fecha ⛔ no pueda faltar, ⛔ no
+cuál es.
+
+### La regla, y dónde vive
+
+`leerVencimiento` en **`lib/reclamos/cupon.core.js`**, misma forma que `leerSeguimiento`: acepta
+`dd/mm/aaaa` y `aaaa-mm-dd`, devuelve la fecha normalizada o **el motivo en criollo**. La aplica **el
+servidor** —una pantalla que valida es una sugerencia— y `api/*.js` ⛔ no puede importar TypeScript.
+
+- 🔴 **Una fecha ya pasada se rechaza, y ⛔ no por formato**: emitir un cupón vencido es mandarle al
+  cliente un código que ⛔ no anda, con un mensaje que dice que sí. Es el defecto del código
+  inventado, un paso más adelante.
+- 🔑 **El día inexistente lo caza el round-trip**: `new Date('2027-02-31')` ⛔ no explota, se acomoda
+  sola al 3 de marzo ⇒ el oráculo es **volver a formatear y comparar con lo que se escribió**.
+- ⚠️ **El tope de 5 años ⛔ no es política: es un guard de TIPEO** (2062 por 2026 pasa todo lo demás
+  y le promete al cliente treinta y seis años).
+
+### Lo que cambió afuera del núcleo
+
+- **`cupon-emitido` exige las dos cosas** y guarda la fecha **normalizada**; el historial anota
+  *«cupón emitido: ABC123 (vence 2026-09-30)»*.
+- **El mensaje al cliente dice hasta cuándo.** ⚠️ Y si la fila ⛔ no tiene fecha —las anteriores a
+  hoy— **calla en vez de inventar** un plazo.
+- **El resumen de lo decidido muestra el código y la fecha juntos**: leer «Cupón ABC123» sin hasta
+  cuándo es exactamente la pregunta que después se contesta en la caja.
+- **La pantalla pregunta dos veces**, y **cancelar la segunda ⛔ no es un error**: es «me arrepentí»,
+  y por eso hay un `return` explícito en vez de dejar que el vacío caiga en la validación.
+- ⛔ **⛔ No se conecta con `components/cupones/`**, aunque tenga el modelo entero: aquél lo aplica una
+  persona **en el mostrador** al cobrar, y éste se usa **online**. Son dos instrumentos, y
+  confundirlos es prometerle al cliente un cupón que ⛔ no va a poder usar.
+
+### La migración
+
+`sql/migrate-reclamos-cupon-vence.sql` — `cupon_vence date`, idempotente, **corrida en las dos
+bases** y verificada **leyendo la columna** (⛔ no el script).
+📊 **Medido antes**: BDI tenía 2 reclamos y ZATTIA 0; con resolución `cupon` **0**, con código
+cargado **0**, con el pendiente prendido **0** ⇒ exigir la fecha ⛔ no traba ningún caso en curso ni
+rompe ninguna promesa vieja. ⚠️ **NULL ⛔ no significa «no vence»: significa SIN REGISTRAR.**
+
+### Cómo se probó
+
+- El núcleo, con las formas que lo rompen: vacío · ya vencida · el 31 de febrero · el mes 13 · texto
+  · el año mal tipeado · y que **⛔ no proponga ningún plazo**.
+- El handler de verdad: 400 sin fecha (aunque el código esté), 400 sin código, 400 con una fecha
+  pasada, 200 con las dos **guardando la fecha normalizada**, y `cupon_vence` en el `select` del
+  listado.
+- El mensaje al cliente con fecha y **sin** fecha, y el resumen de lo decidido igual.
+- La pantalla montada: pregunta las dos, cancelar la segunda ⛔ no manda **ni reta**, una fecha
+  pasada ⛔ no sale de la pantalla, y sin código ⛔ ni pregunta la fecha.
+- ✅ **16 mutantes, 16 muertos** — uno sobrevivió por **ancla repetida** (la misma línea existe para
+  el seguimiento) y otro pedía un test que mirara **el cartel** y ⛔ no lo mandado.
+- 🔴 ▶️ **Lo que ⛔ no se caminó**: ⛔ no hay ningún cupón real todavía, en ninguna de las dos marcas.

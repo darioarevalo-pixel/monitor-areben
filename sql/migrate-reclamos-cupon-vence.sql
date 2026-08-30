@@ -1,0 +1,31 @@
+-- Reclamos: HASTA CUÁNDO VALE EL CUPÓN.
+--
+-- # Qué guarda
+--
+--   cupon_vence   date   el último día en que el cupón se puede usar
+--
+-- `cupon-emitido` exigía el CÓDIGO desde el 25-ago-2026 —lo único que prueba que el cupón existe en
+-- la tienda— y nada más. O sea que el módulo prometía «te dejamos un cupón» sin saber hasta cuándo,
+-- y el que se enteraba de que había vencido era el cliente, en la caja, en su próxima compra.
+--
+-- 🔑 Y sin fecha no se puede medir el argumento con el que se elige el cupón sobre la plata: el
+-- cupón conviene porque no hay salida de caja, se gasta a precio de lista y una parte no se usa
+-- nunca (breakage). **El breakage no existe sin vencimiento**: un cupón sin fecha y sin usar no
+-- está perdido, está pendiente para siempre, y la cuenta no cierra nunca.
+--
+-- ▶️ Cuánto vale un cupón y cuánto tiene que durar sigue siendo decisión de Bruno (B6 de la
+-- auditoría del 28-ago). Acá NO hay ningún plazo por default, a propósito: lo que se agrega es que
+-- la fecha no pueda faltar, no cuál es.
+--
+-- # Qué pasa con las filas viejas
+--
+-- Queda en NULL, y NULL acá significa **sin registrar**, no «no vence».
+-- 📊 Medido antes de correr esto (30-ago-2026, las dos bases): **BDI tiene 2 reclamos y ZATTIA 0**;
+-- con resolución `cupon`: 0 · con código cargado: 0 · con el pendiente prendido: 0 ⇒ **no hay
+-- ninguna promesa vieja que rescatar**, y exigir la fecha no traba ningún caso en curso.
+--
+-- Idempotente. ⚠️ Correr en el Supabase de BDI **y** en el de ZATTIA.
+-- 🔴 **VA ANTES DE DEPLOYAR**: `cupon-emitido` escribe esta columna, y sin ella el update falla
+-- entero — o sea que no se podría tildar ningún cupón.
+
+alter table devoluciones add column if not exists cupon_vence date;
