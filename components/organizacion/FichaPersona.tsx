@@ -72,7 +72,14 @@ export function FichaPersona({ persona, apodo, rol, filas, puesto, manuales, rut
         <div style={{ display: 'flex', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap' }}>
           <span style={{ fontSize: font['2xl'], fontWeight: weight.bold, color: color.ink, letterSpacing: -0.2 }}>{apodo}</span>
           {rol && <span style={{ fontSize: font.sm, color: color.mut }}>{rol}</span>}
-          <Badge tone="neutral">{filas.filter((f) => f.activo !== false).length} responsabilidades</Badge>
+          {/* ⚠️ El que hereda tiene 0 propias, y ese 0 al lado del nombre CONTRADECÍA la lista de
+              abajo: decía «0 responsabilidades» arriba de las seis del puesto. El badge cuenta lo
+              que la ficha muestra, o miente. */}
+          <Badge tone="neutral">
+            {puesto
+              ? `${puesto.filas.filter((f) => f.activo !== false).length} del puesto`
+              : `${filas.filter((f) => f.activo !== false).length} responsabilidades`}
+          </Badge>
           {apodo !== persona && <span style={{ fontSize: font.xs, color: color.mut2 }}>{persona}</span>}
         </div>
 
