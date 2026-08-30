@@ -1666,7 +1666,7 @@ function Draft({
                         onClick={() => setDraft((d) => traerProducto(d, r.pid, variantes, productos))}
                         style={{ border: `1px solid ${color.line2}`, background: '#fff', borderRadius: 7, padding: '2px 8px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
-                        Traer producto
+                        Cargar producto
                       </button>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>

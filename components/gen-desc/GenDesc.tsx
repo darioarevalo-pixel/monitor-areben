@@ -128,7 +128,7 @@ export function GenDesc() {
           </Select>
         </Field>
         <Button variant="outline" onClick={() => void refrescar()} disabled={cargando}>
-          {cargando ? 'Cargando…' : 'Traer de TiendaNube'}
+          {cargando ? 'Cargando…' : 'Cargar de TiendaNube'}
         </Button>
         {!puedePublicar && <Badge tone="neutral">Cargás la ficha; el texto lo escribe Marketing</Badge>}
       </Toolbar>

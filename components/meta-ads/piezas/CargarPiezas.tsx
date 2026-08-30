@@ -199,10 +199,10 @@ export function CargarPiezas() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-      <SectionCard title="Probar piezas nuevas">
+      <SectionCard title="Anuncio nuevo">
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
           <div style={{ fontSize: font.base, color: color.ink2, lineHeight: 1.5 }}>
-            Cada archivo sale como <b>un conjunto propio con un aviso adentro</b>, con la segmentación
+            Cada archivo va a <b>su propio conjunto, con un aviso adentro</b>, con la segmentación
             de un conjunto que ya elegís y el texto de un aviso que ya está al aire.{' '}
             <b>Todo nace pausado</b>: no gasta hasta que alguien lo prenda, de a uno.
           </div>
@@ -217,7 +217,7 @@ export function CargarPiezas() {
 
           {falloCenso && <Notice tone="danger">No se pudieron leer las campañas: {falloCenso}</Notice>}
 
-          <Field label="¿En qué campaña van los conjuntos nuevos?">
+          <Field label="Campaña" hint="Adonde van los conjuntos nuevos.">
             <Select value={campaniaId} onChange={(e) => elegirCampania(e.target.value)}>
               <option value="">{campanias ? 'Elegí una campaña…' : 'Cargando…'}</option>
               {(campanias || []).map((c) => (
@@ -228,7 +228,7 @@ export function CargarPiezas() {
 
           {campaniaId && (
             <>
-              <Field label="La segmentación sale de este conjunto">
+              <Field label="Segmentación" hint="Se copia de este conjunto.">
                 <Select value={referenciaId} onChange={(e) => elegirReferencia(e.target.value)}>
                   <option value="">{conjuntos ? 'Elegí un conjunto…' : 'Cargando…'}</option>
                   {(conjuntos || []).map((c) => (
@@ -240,7 +240,7 @@ export function CargarPiezas() {
                 <Notice tone="warning">Esa campaña no tiene conjuntos legibles: elegí otra.</Notice>
               )}
 
-              <Field label="El texto sale de este aviso">
+              <Field label="Texto" hint="Se copia de este aviso.">
                 <Select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
                   <option value="">{avisos ? 'Elegí un aviso…' : 'Cargando…'}</option>
                   {(avisos || []).map((a) => (
@@ -258,9 +258,9 @@ export function CargarPiezas() {
         <ZonaDeArchivos subida={subida} />
       </SectionCard>
 
-      <SectionCard title="El nombre y la plata">
+      <SectionCard title="Nombre y presupuesto">
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-          <Field label="Cómo se va a llamar la tanda">
+          <Field label="Nombre de la tanda">
             <Input
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
@@ -386,7 +386,7 @@ function DesdeDrive({ subida }: { subida: ReturnType<typeof useSubirPiezas> }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
         <Button variant="outline" onClick={() => void abrir()} disabled={abriendo}>
-          {abriendo ? 'Abriendo Drive…' : 'Traer de Google Drive'}
+          {abriendo ? 'Abriendo Drive…' : 'Cargar desde Google Drive'}
         </Button>
         <span style={{ fontSize: font.sm, color: color.mut }}>
           Se ven <b>sólo los archivos que elijas</b>: el Monitor no mira el resto de tu Drive.

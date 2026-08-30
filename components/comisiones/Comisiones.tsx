@@ -357,7 +357,7 @@ function BuscadorProducto({
 
   return (
     <div style={{ background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: 9, padding: '10px 12px' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: color.brand, marginBottom: 8 }}>🔎 Traer un producto real (en vez de simular a mano)</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: color.brand, marginBottom: 8 }}>🔎 Cargar un producto real (en vez de simular a mano)</div>
       <label style={lbl}>Producto
         <input value={q} onChange={(e) => { setQ(e.target.value); setSel(null) }} autoComplete="off" placeholder="Buscá por nombre o SKU…" className="mo-input" style={{ display: 'block', width: 300, maxWidth: '100%', marginTop: 3 }} />
       </label>

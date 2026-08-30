@@ -113,7 +113,7 @@ export function MktVentas() {
           {refrescando ? 'Actualizando…' : 'Actualizar datos'}
         </Button>
         <Button onClick={traerHoy} loading={trayendo} title="Le pide a Gestión Nube las ventas de hoy, las guarda y vuelve a bajar los datos (tarda ~20 s)">
-          {trayendo ? 'Trayendo…' : 'Traer las ventas de hoy'}
+          {trayendo ? 'Cargando…' : 'Cargar las ventas de hoy'}
         </Button>
       </HeaderAcciones>
 

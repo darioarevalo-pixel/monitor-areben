@@ -257,7 +257,7 @@ export function Resultado({
             {res.enCurso && puedeSincronizar && (
               <>
                 <Button size="sm" onClick={() => void sincronizar()} loading={sincronizando}>
-                  Traer las ventas de hoy
+                  Cargar las ventas de hoy
                 </Button>
                 <span>
                   {ventasSync

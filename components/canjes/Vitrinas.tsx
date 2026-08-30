@@ -550,7 +550,7 @@ function ArmarVitrina({
 
       <div style={{ marginTop: space[5] }}>
         <SectionCard
-          title="Traer de la tienda"
+          title="Cargar de la tienda"
           subtitle="Se trae de a poco: elegí una categoría o buscá por nombre. Lo agotado no aparece."
         >
           {errorTienda && <Notice tone="danger">No se pudo leer la tienda: {errorTienda}</Notice>}

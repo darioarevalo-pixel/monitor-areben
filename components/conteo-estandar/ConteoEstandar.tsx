@@ -216,8 +216,8 @@ export function ConteoEstandar() {
     const hay = Object.values(state).some((s) => Object.keys(s.exhibido).length || Object.keys(s.deposito).length)
     if (hay) {
       const ok = await confirmar({
-        titulo: 'Traer el stock más nuevo del Local',
-        ok: 'Traer',
+        titulo: 'Cargar el stock más nuevo del Local',
+        ok: 'Cargar',
         mensaje: 'Lo que ya contaste se mantiene: la diferencia contra el sistema queda congelada con el stock de ahora.',
       })
       if (!ok) return
@@ -372,7 +372,7 @@ export function ConteoEstandar() {
               Historial
             </Button>
             <Button variant="outline" onClick={() => void onActualizarGN()} loading={ce.cargando}>
-              Traer stock de GN
+              Cargar stock de GN
             </Button>
           </>
         )}
@@ -586,7 +586,7 @@ function Lista({
   const lista = useMemo(() => dela.filter((p) => (!q || p.name.toLowerCase().includes(q)) && pasa(p)), [dela, q, filtro, state, lastCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!products.length) {
-    return <EmptyState icon="📦" title="Sin productos en el Local" hint='Tocá "Traer stock de GN" para bajar el stock del Local.' dashed />
+    return <EmptyState icon="📦" title="Sin productos en el Local" hint='Tocá "Cargar stock de GN" para bajar el stock del Local.' dashed />
   }
 
   return (
@@ -606,7 +606,7 @@ function Lista({
 
       {stockTime && (
         <Notice tone="warning" icon="📸" style={{ marginBottom: space[3] }}>
-          <b>Stock del Local traído: {stockLabel(stockTime)}</b> — arrancá con los pedidos al día. Si volvés a &quot;Traer stock de GN&quot;, esta hora se actualiza.
+          <b>Stock del Local traído: {stockLabel(stockTime)}</b> — arrancá con los pedidos al día. Si volvés a &quot;Cargar stock de GN&quot;, esta hora se actualiza.
         </Notice>
       )}
 

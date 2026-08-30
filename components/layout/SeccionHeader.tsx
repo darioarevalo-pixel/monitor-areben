@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback } from 'react'
-import { categoriaDesde, descripcionDe, tituloDesde } from '@/lib/nav'
+import { useParams } from 'next/navigation'
+import { categoriaDesde, descripcionDe, tituloDesde, zonaDe } from '@/lib/nav'
 import { useRegistrarSlot } from '@/components/layout/acciones'
 import { AyudaDeSeccion } from '@/components/layout/AyudaDeSeccion'
 
@@ -15,13 +16,22 @@ import { AyudaDeSeccion } from '@/components/layout/AyudaDeSeccion'
  * modo que en las ~40 pantallas el botón importante esté siempre en el mismo lugar.
  *
  * Los datos salen de `lib/nav` (título/categoría del nav + mapa curado de descripciones).
+ *
+ * 🔴 **Una sección puede ser VARIAS pantallas, y entonces el encabezado es de la ZONA** (30-ago-2026).
+ * Meta tiene cuatro entradas de menú con la misma `key` —comparten permiso— así que las cuatro
+ * imprimían el mismo título «Meta» y el mismo párrafo de doce renglones que cuenta la sección
+ * entera: Producir explicaba Rendimiento. Ver `ZONAS` en `lib/nav.ts`.
  */
 export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: string | null }) {
   // `grupo` viene de `?g=`: una sección que cuelga de varios sectores tiene que decir de
   // cuál se entró, con el nombre que le da ESE sector.
-  const eyebrow = categoriaDesde(seccion, grupo)
-  const titulo = tituloDesde(seccion, grupo)
-  const desc = descripcionDe(seccion)
+  // 🔑 La zona sale del 2º tramo de la RUTA y ⛔ no de un estado: es lo mismo que mira el router de
+  // Meta, así que un enlace reproduce el encabezado exacto.
+  const partes = useParams().seccion
+  const zona = zonaDe(seccion, Array.isArray(partes) ? partes[1] : null)
+  const eyebrow = zona ? tituloDesde(seccion, grupo) : categoriaDesde(seccion, grupo)
+  const titulo = zona ? zona.titulo : tituloDesde(seccion, grupo)
+  const desc = zona ? zona.desc : descripcionDe(seccion)
   const registrar = useRegistrarSlot()
 
   // Callback ref y no useEffect: publica el nodo en el mismo commit en que existe, y lo

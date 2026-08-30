@@ -89,7 +89,7 @@ export function PanelConjuntos({ estado, moneda, linea, acciones }: {
   acciones: Acciones
 }) {
   if (!estado || estado.fase === 'cargando') {
-    return <div style={{ color: color.mut2, fontSize: font.sm, padding: space[3] }}>Trayendo los conjuntos…</div>
+    return <div style={{ color: color.mut2, fontSize: font.sm, padding: space[3] }}>Cargando los conjuntos…</div>
   }
   if (estado.fase === 'error') {
     return <Notice tone="warning" style={{ margin: space[2] }}>No se pudieron traer los conjuntos: {estado.motivo}</Notice>

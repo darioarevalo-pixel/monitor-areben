@@ -170,7 +170,7 @@ export function Exhib() {
         {fase === 'config' && (
           <>
             <Button variant="outline" onClick={() => void traerGN()} loading={!!syncLabel} title="Trae lo más nuevo de GN (stock y productos recién llegados) y recarga la lista (~2-4 min)">
-              {syncLabel || 'Traer de GN'}
+              {syncLabel || 'Cargar de GN'}
             </Button>
             <Button variant="solid" tone="brand" onClick={iniciar} disabled={ex.cargando || !lista.length}>Iniciar recorrido</Button>
           </>

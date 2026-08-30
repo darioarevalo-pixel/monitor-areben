@@ -131,8 +131,8 @@ export function ConteoDeposito() {
     const hayContado = Object.values(state).some((s) => Object.keys(s.contado).length)
     if (hayContado) {
       const ok = await confirmar({
-        titulo: 'Traer el stock más nuevo de GN',
-        ok: 'Traer',
+        titulo: 'Cargar el stock más nuevo de GN',
+        ok: 'Cargar',
         mensaje: 'Lo que ya contaste se mantiene: la diferencia de cada producto queda congelada con el stock de ahora.',
       })
       if (!ok) return
@@ -290,7 +290,7 @@ export function ConteoDeposito() {
               Historial
             </Button>
             <Button variant="outline" onClick={() => void onActualizarGN()} loading={cd.cargando}>
-              Traer stock de GN
+              Cargar stock de GN
             </Button>
           </>
         )}
@@ -428,7 +428,7 @@ function Lista({
   }, [products, q, filtro, state, lastCount, ordenarStock]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!products.length) {
-    return <EmptyState icon="📦" title="Sin productos en el depósito" hint='Tocá "Traer stock de GN" para bajar el stock.' dashed />
+    return <EmptyState icon="📦" title="Sin productos en el depósito" hint='Tocá "Cargar stock de GN" para bajar el stock.' dashed />
   }
 
   return (
@@ -444,7 +444,7 @@ function Lista({
 
       {stockTime && (
         <Notice tone="warning" icon="📸" style={{ marginBottom: space[3] }}>
-          <b>Stock de GN traído: {stockLabel(stockTime)}</b> — <b>desde esa hora no despaches nada</b> hasta terminar el conteo. Si volvés a &quot;Traer stock de GN&quot;, esta hora se actualiza.
+          <b>Stock de GN traído: {stockLabel(stockTime)}</b> — <b>desde esa hora no despaches nada</b> hasta terminar el conteo. Si volvés a &quot;Cargar stock de GN&quot;, esta hora se actualiza.
         </Notice>
       )}
 

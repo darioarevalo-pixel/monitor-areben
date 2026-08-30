@@ -992,6 +992,21 @@ export const NAV_CATS: NavCat[] = [
   // `meta-ads`**, que es lo que está guardado como tilde por persona en la base: nadie tiene que
   // volver a tildar nada. Lo que sí hubo que sumar es `'meta'` a las áreas de la función
   // `marketing` — ver el comentario en `lib/permisos.core.js`.
+  //
+  // 🔴 **Las cuatro zonas se abrieron a lo que de verdad se usa (30-ago-2026).** El pedido, textual:
+  // *«la biblioteca me parece genial, pero no sirve para nada si está escondida dentro de
+  // meta-producir-pestaña biblioteca»* y *«no entiendo por qué la última actualización hizo más
+  // pestañas y menos desplegables: así parece que no existe hasta que abrís y ves»*.
+  //
+  // 🔑 **Lo que se hace todos los días sube a primer nivel; lo que se consulta baja a un
+  // desplegable.** Cada hoja apunta a su RUTA DIRECTA —que ya existía como alias— y ⛔ no a la zona
+  // con un `?tab=`: `rutaActiva()` compara la ruta exacta, así que con querystring la entrada ⛔ no se
+  // resaltaría nunca. `/meta-ads/producir`, `/meta-ads/analizar` y `/meta-ads/configurar` siguen
+  // andando para los bookmarks; lo que dejan de ser es entradas del menú.
+  //
+  // ⛔ **Ideas salió del menú y ⛔ no del código**: medido el 30-ago, `meta_ads_ideas` tiene **0
+  // filas** —nunca se usó— y el tablero lo reemplazó `/ideas` de MAKETA. La ruta se queda porque el
+  // Embudo sigue LEYENDO esa tabla para decir qué etapa tiene ideas anotadas.
   {
     "id": "meta",
       "icono": "meta-ads",
@@ -999,9 +1014,33 @@ export const NAV_CATS: NavCat[] = [
     "keys": [],
     "items": [
       { "ruta": "/meta-ads", "label": "Rendimiento", "icono": "analisis", "key": "meta-ads" },
-      { "ruta": "/meta-ads/producir", "label": "Producir", "icono": "disenos", "key": "meta-ads" },
-      { "ruta": "/meta-ads/analizar", "label": "Analizar", "icono": "historial", "key": "meta-ads" },
-      { "ruta": "/meta-ads/configurar", "label": "Configurar", "icono": "margenes", "key": "meta-ads" }
+      { "ruta": "/meta-ads/piezas", "label": "Anuncio nuevo", "icono": "disenos", "key": "meta-ads" },
+      { "ruta": "/meta-ads/biblioteca", "label": "Anuncios", "icono": "tn-fotos", "key": "meta-ads" }
+    ],
+    "grupos": [
+      {
+        "id": "meta-analizar",
+        "label": "Analizar",
+        "icono": "gerencial",
+        "keys": [],
+        "items": [
+          { "ruta": "/meta-ads/campanias", "label": "Campañas", "icono": "marketing", "key": "meta-ads" },
+          { "ruta": "/meta-ads/embudo", "label": "Embudo", "icono": "etapas", "key": "meta-ads" },
+          { "ruta": "/meta-ads/rendimiento", "label": "Totales por cuenta", "icono": "ventas-mensuales", "key": "meta-ads" },
+          { "ruta": "/meta-ads/registro", "label": "Registro", "icono": "historial", "key": "meta-ads" },
+          { "ruta": "/meta-ads/informes", "label": "Informes", "icono": "manuales", "key": "meta-ads" }
+        ]
+      },
+      {
+        "id": "meta-configurar",
+        "label": "Configurar",
+        "icono": "config",
+        "keys": [],
+        "items": [
+          { "ruta": "/meta-ads/rentabilidad", "label": "Rentabilidad", "icono": "margenes", "key": "meta-ads" },
+          { "ruta": "/meta-ads/automatizaciones", "label": "Automatizaciones", "icono": "sistema", "key": "meta-ads" }
+        ]
+      }
     ]
   },
   {

@@ -70,7 +70,7 @@ export function Auditoria() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
       <Encabezado onRecargar={recargar} cargando={estado.fase === 'cargando'} />
-      {estado.fase === 'cargando' && <div style={{ color: color.mut2, fontSize: font.sm }}>Trayendo el registro…</div>}
+      {estado.fase === 'cargando' && <div style={{ color: color.mut2, fontSize: font.sm }}>Cargando el registro…</div>}
       {estado.fase === 'error' && (
         <Notice tone="danger">No se pudo leer el registro de acciones: {estado.motivo}</Notice>
       )}
@@ -200,7 +200,7 @@ function Contenido({ d, admin, onMas }: { d: RespuestaAuditoria; admin: boolean;
       {d.hayMas && (
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2], fontSize: font.sm, color: color.mut }}>
           <span>Se muestran las últimas {d.limite}. Hay más.</span>
-          {d.limite < 500 && <Button size="sm" variant="ghost" onClick={onMas}>Traer las últimas 500</Button>}
+          {d.limite < 500 && <Button size="sm" variant="ghost" onClick={onMas}>Cargar las últimas 500</Button>}
         </div>
       )}
     </div>

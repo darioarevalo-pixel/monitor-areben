@@ -60,7 +60,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
   const [manual, setManual] = useState<Record<string, number>>({})
   const [verVentas, setVerVentas] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
-  const [syncLabel, setSyncLabel] = useState('🔄 Traer de Gestión Nube')
+  const [syncLabel, setSyncLabel] = useState('🔄 Cargar de Gestión Nube')
   const [syncing, setSyncing] = useState(false)
   const { recargar, cargando: recargando } = useRecargarDatos()
 
@@ -95,7 +95,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
       toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
       setSyncing(false)
-      setSyncLabel('🔄 Traer de Gestión Nube')
+      setSyncLabel('🔄 Cargar de Gestión Nube')
     }
   }
 
@@ -131,7 +131,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
           <b>No mueve stock.</b> Lo que sale de acá es la lista para ir a buscar al depósito: se exporta y el
           movimiento se hace en Gestión Nube.
           <br /><br />
-          «Recargar» vuelve a leer lo que ya está sincronizado (rápido); «Traer de Gestión Nube» va a buscar
+          «Recargar» vuelve a leer lo que ya está sincronizado (rápido); «Cargar de Gestión Nube» va a buscar
           el stock y el catálogo de verdad y tarda un par de minutos.
         </InfoPopover>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: font.sm, color: color.mut, cursor: 'pointer' }}>
@@ -150,7 +150,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
           Recargar
         </Button>
         <Button variant="outline" onClick={() => void onActualizar()} loading={syncing} title="Le pide el stock y el catálogo a Gestión Nube (~2 min)">
-          {syncing ? syncLabel : 'Traer de Gestión Nube'}
+          {syncing ? syncLabel : 'Cargar de Gestión Nube'}
         </Button>
         <Button variant="solid" tone="brand" onClick={() => void onPDF()} disabled={!report.length}>
           Exportar reposición
@@ -196,7 +196,7 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
                   con el mínimo por defecto.
                 </span>
                 <Button size="sm" variant="outline" onClick={() => void onActualizar()} loading={syncing}>
-                  Traer de Gestión Nube
+                  Cargar de Gestión Nube
                 </Button>
               </div>
             </Notice>

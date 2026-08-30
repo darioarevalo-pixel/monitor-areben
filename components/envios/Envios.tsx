@@ -249,7 +249,7 @@ export function Envios() {
     <div style={{ display: 'grid', gap: space[5] }}>
       <HeaderAcciones>
         <Button variant="outline" onClick={traer} disabled={trayendo} data-guia="envios.traer">
-          {trayendo ? 'Trayendo…' : 'Traer los de Tienda Nube'}
+          {trayendo ? 'Cargando…' : 'Cargar los de Tienda Nube'}
         </Button>
         {/* Un botón por marca presente, más el de todas. Sólo aparecen si el día tiene las dos:
             con una sola marca en la mochila, «Todos» y «BDI» imprimen exactamente lo mismo. */}

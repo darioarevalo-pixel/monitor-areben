@@ -16,9 +16,21 @@
  * una sola sección obligan a saber de antemano a cuál ir, y ninguna contestaba una pregunta entera.
  *
  *   `/meta-ads`             → **Rendimiento**: qué apago, qué escalo, qué testeo hoy. LA entrada.
- *   `/meta-ads/producir`    → **Producir**: Piezas · Ideas · Biblioteca.
- *   `/meta-ads/analizar`    → **Analizar**: Campañas · Embudo · La cuenta · Registro · Informes.
+ *   `/meta-ads/producir`    → **Producir**: Anuncio nuevo · Anuncios.
+ *   `/meta-ads/analizar`    → **Analizar**: Campañas · Embudo · Totales por cuenta · Registro · Informes.
  *   `/meta-ads/configurar`  → **Configurar**: Rentabilidad · Automatizaciones.
+ *
+ * # 🔴 30-ago-2026: el MENÚ dejó de ser las cuatro zonas
+ *
+ * *«La biblioteca me parece genial, pero no sirve para nada si está escondida dentro de
+ * meta-producir-pestaña biblioteca»* · *«la última actualización hizo más pestañas y menos
+ * desplegables: así parece que no existe hasta que abrís y ves»*. ⇒ en el sidebar quedan
+ * **Rendimiento · Anuncio nuevo · Anuncios** a primer nivel y **Analizar ▾ · Configurar ▾** como
+ * desplegables, cada hoja apuntando a **su ruta directa** —las que ya andaban como alias—.
+ *
+ * 🔑 **Las tres zonas agrupadas siguen existiendo y ⛔ no se tocan**: son bookmarks, y borrar una
+ * ruta que anda es lo único de esta lista que le rompe el día a alguien. Lo que cambió es de dónde
+ * se llega, ⛔ no adónde.
  *
  * ⚠️ **Las once rutas viejas siguen andando** (`/meta-ads/campanias`, `/meta-ads/rendimiento`, …).
  * Siguen en `VISTAS`, están en bookmarks, en `<Link href>` del propio repo y en las notas de

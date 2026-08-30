@@ -98,7 +98,7 @@ export function AvisosDeCelda({ avisos, piezaDe, motivo, cargando, gastoDeLaCeld
       })}
 
       {cargando && (
-        <div style={{ fontSize: font.xs, color: color.mut2 }}>Trayendo las piezas de Meta…</div>
+        <div style={{ fontSize: font.xs, color: color.mut2 }}>Cargando las piezas de Meta…</div>
       )}
     </div>
   )

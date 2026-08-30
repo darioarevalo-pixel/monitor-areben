@@ -79,7 +79,7 @@ export function Caducados() {
           <NumberField value={dias} onChange={(n) => setDias(n || 30)} min={1} width={80} />
         </label>
         <Button variant="outline" onClick={() => void traerStockGN()} loading={!!syncLabel} title="Trae el stock más nuevo de GN para verificar que estos productos están realmente en 0">
-          {syncLabel || 'Traer stock de GN'}
+          {syncLabel || 'Cargar stock de GN'}
         </Button>
         <Button variant="solid" tone="brand" onClick={() => void generarReporteCaducados(cands, marca, Math.max(1, dias), new Date())} disabled={!cands.length}>
           Exportar lista

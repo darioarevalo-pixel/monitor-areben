@@ -251,7 +251,7 @@ export function ConteoLocalBdi() {
               Historial
             </Button>
             <Button variant="outline" onClick={() => void cf.traerStock(true)} loading={cf.cargando}>
-              Traer stock de GN
+              Cargar stock de GN
             </Button>
           </>
         )}
@@ -354,7 +354,7 @@ function ListaModelos({
   const lista = useMemo(() => (q ? modelos.filter((m) => m.modelo.toLowerCase().includes(q)) : modelos), [modelos, q])
 
   if (!modelos.length) {
-    return <EmptyState icon="📱" title="No hay fundas en el Local" hint='Tocá "Traer stock de GN" para bajar el stock.' dashed />
+    return <EmptyState icon="📱" title="No hay fundas en el Local" hint='Tocá "Cargar stock de GN" para bajar el stock.' dashed />
   }
 
   return (
@@ -370,7 +370,7 @@ function ListaModelos({
 
       {stockTime && (
         <Notice tone="warning" icon="📸" style={{ marginBottom: space[3] }}>
-          <b>Stock del Local traído: {fmtDia(stockTime)} hs</b> — arrancá con los pedidos al día. Si volvés a &quot;Traer stock de GN&quot;, esta hora se actualiza.
+          <b>Stock del Local traído: {fmtDia(stockTime)} hs</b> — arrancá con los pedidos al día. Si volvés a &quot;Cargar stock de GN&quot;, esta hora se actualiza.
         </Notice>
       )}
 

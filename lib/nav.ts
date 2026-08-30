@@ -420,3 +420,52 @@ export const DESCRIPCIONES: Record<string, string> = {
 export function descripcionDe(key: string): string | undefined {
   return DESCRIPCIONES[key]
 }
+
+/**
+ * Las secciones que son **varias pantallas bajo una sola key**, con el título y la descripción de
+ * cada una.
+ *
+ * # 🔴 Por qué existe (30-ago-2026)
+ *
+ * Meta es **una** sección con cuatro zonas: las cuatro entradas del menú comparten `key: 'meta-ads'`
+ * porque comparten permiso. La consecuencia es que `SeccionHeader` imprimía el MISMO encabezado en
+ * las cuatro — título «Meta» y el párrafo de doce renglones que cuenta la sección entera. Bruno,
+ * caminando Producir: *«no entiendo por qué arriba de todo sigue explicando la sección de Meta
+ * cuando cada sección tiene que explicar SU uso»*. Tenía razón: doce renglones que hablan de otras
+ * tres pantallas, arriba de la que estás usando, son doce renglones que se saltean — y cuando se
+ * saltean, se saltea también el que sí te habla a vos.
+ *
+ * 🔑 **Se indexa por el segundo tramo de la RUTA y ⛔ no por una pestaña interna.** La zona vive en la
+ * URL (`/meta-ads/producir`), así que un enlace reproduce el encabezado exacto.
+ *
+ * ⚠️ **Las once rutas viejas ⛔ no están acá, a propósito.** Caen al encabezado de la sección, que es
+ * lo correcto: son bookmarks a una vista suelta, ⛔ no entradas del menú, y `MetaAds.tsx` ya
+ * documenta que siguen andando sin redirect.
+ */
+export const ZONAS: Record<string, Record<string, { titulo: string; desc: string }>> = {
+  'meta-ads': {
+    '': {
+      titulo: 'Rendimiento',
+      desc: 'Qué apagar, qué escalar y qué testear hoy: una fila por celda con lo que cuesta cada compra ahí, cuánto es eso contra el techo que banca el producto y si el creativo se está gastando.',
+    },
+    producir: {
+      titulo: 'Producir',
+      desc: 'De dónde sale una pieza nueva: se cargan los videos y sale una tanda donde cada uno va a su propio conjunto, todo pausado. Más la biblioteca de avisos con la pieza a la vista.',
+    },
+    analizar: {
+      titulo: 'Analizar',
+      desc: 'Lo que se consulta y no pide una acción: el árbol de campañas, el embudo, los totales de una cuenta, el registro de lo accionado y los informes en prosa.',
+    },
+    configurar: {
+      titulo: 'Configurar',
+      desc: 'Lo que se calibra una vez y le pone la vara a todo lo demás: hasta cuánto se puede pagar por una compra, y las reglas que miran solas la foto y avisan. Ninguna ejecuta.',
+    },
+  },
+}
+
+/** El encabezado de una zona, o `null` si esa sección ⛔ no tiene zonas (que son casi todas). */
+export function zonaDe(key: string, sub: string | null | undefined): { titulo: string; desc: string } | null {
+  const z = ZONAS[key]
+  if (!z) return null
+  return z[String(sub || '')] ?? null
+}

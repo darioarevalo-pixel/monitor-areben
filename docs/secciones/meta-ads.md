@@ -1185,6 +1185,84 @@ para un registro.
 manda a apagar un aviso que hay que **reactivar** es el error más caro que este archivo puede
 cometer, y el primer barrido lo dejó **vivo**.
 
+## 🆕🏁 30-ago-2026: EL MENÚ, EL ENCABEZADO POR ZONA Y LA PALABRA QUE FALTABA
+
+### 1. 🔴 El encabezado era de la SECCIÓN, así que Producir explicaba Rendimiento
+
+`SeccionHeader` imprime el título y la descripción de la **key**, y las cuatro entradas de Meta
+comparten `key: 'meta-ads'` porque comparten permiso. Resultado: las cuatro zonas encabezadas con
+«Meta» y **el mismo párrafo de doce renglones** que cuenta la sección entera. Bruno: *«no entiendo
+por qué arriba de todo sigue explicando la sección de Meta cuando cada sección tiene que explicar SU
+uso»*.
+⇒ `ZONAS` en `lib/nav.ts`: título y descripción **por zona**, indexados por el **2º tramo de la
+ruta** —así un enlace reproduce el encabezado exacto—. ⚠️ Las once rutas viejas ⛔ no están ahí a
+propósito: caen al encabezado de la sección, que es lo correcto para un bookmark a una vista suelta.
+
+### 2. El menú dejó de ser las cuatro zonas
+
+*«La biblioteca me parece genial, pero no sirve para nada si está escondida dentro de
+meta-producir-pestaña biblioteca»* · *«la última actualización hizo más pestañas y menos
+desplegables: parece que no existe hasta que abrís y ves»*.
+
+```
+Meta
+ ├ Rendimiento           /meta-ads
+ ├ Anuncio nuevo         /meta-ads/piezas
+ ├ Anuncios              /meta-ads/biblioteca
+ ├ Analizar    ▾   Campañas · Embudo · Totales por cuenta · Registro · Informes
+ └ Configurar  ▾   Rentabilidad · Automatizaciones
+```
+
+🔑 **Cada hoja apunta a su RUTA DIRECTA** —las que ya andaban como alias— y ⛔ no a la zona con un
+`?tab=`: `rutaActiva()` compara la ruta **exacta**, así que con querystring la entrada ⛔ no se
+resaltaría nunca. Las tres zonas agrupadas siguen existiendo para los bookmarks: **lo que cambió es
+de dónde se llega, ⛔ no adónde**.
+⚠️ El test de estructura del nav **exige un ícono por entrada** y cazó las siete nuevas sin ícono.
+
+### 3. ⛔ Ideas salió del MENÚ y ⛔ no del código
+
+📊 **`meta_ads_ideas`: 0 filas.** Nunca se usó, y del otro lado hay una pantalla que sí —`/ideas` de
+MAKETA, con marca, con origen (el atajo del celular, la extensión de Chrome) y con la confirmación
+que convierte una idea en pieza—. La frontera ya estaba escrita en los dos repos: *«Meta Ads ⛔ no se
+muda, esta app le pasa piezas»*.
+⛔ **El módulo ⛔ no se borra**, y el motivo ⛔ no es prudencia: **el Embudo LEE esa misma tabla**
+(`leerIdeas`) para decir qué etapa tiene ideas anotadas. La ruta se queda y **dice adónde mudarse**
+— un `/meta-ads/ideas` que cayera en silencio a otra pantalla es el fallback mudo que este módulo
+evita en todos lados.
+
+### 4. 🔴 Los rótulos que Bruno leyó — y por qué el test no los cazó
+
+| decía | regla | quedó |
+|---|---|---|
+| «Probar piezas nuevas» | §3: título = sustantivo | **«Anuncio nuevo»** |
+| «Cada archivo **sale** como…» | §1.6 | «Cada archivo **va a** su propio conjunto…» |
+| «La segmentación **sale** de este conjunto» | §1.6 | **«Segmentación»** + ayuda |
+| «¿En qué campaña van los conjuntos nuevos?» | §3 | **«Campaña»** + ayuda |
+| «Cómo se va a llamar la tanda» | §3 | **«Nombre de la tanda»** |
+| «El nombre y la plata» | §3 | **«Nombre y presupuesto»** |
+| «**Traer** de Google Drive» | §1.3: viene de afuera ⇒ **Cargar** | **«Cargar desde Google Drive»** |
+
+🔴 🔑 **El test no los cazó porque el que estaba incompleto era EL GLOSARIO, ⛔ no el test.** Medido
+antes de tocar nada:
+
+- **`Traer` ⛔ no estaba prohibida en ninguna parte.** §1.3 define la regla en positivo («Cargar =
+  viene de afuera») y su lista de ⛔ no la nombraba. 📊 **20 rótulos en 11 secciones del monitor + 1
+  en MAKETA, y los 21 son el MISMO gesto** ⇒ acá la palabra **sí** es el gesto: entra a la lista, sin
+  carve-out, y se barrieron los 21. Glosario a `2026-08-30`, byte a byte en los dos repos.
+- 🔴 **`sale` sí estaba prohibida, y la regla estaba MAL ESCRITA — por tercera vez.** 📊 De **32
+  rótulos** con `sale`/`salió`, casi ninguno es publicar: `sale` es el **sustantivo** de la campaña
+  de liquidación («Precio de sale»), `salir` es **despachar o venderse** («Cuándo sale»), y `sale de`
+  es **provenir** («Sale de la foto diaria»). Prohibir la palabra habría roto treinta frases que
+  estaban bien — el mismo defecto de `Mandar` (§1.6) y de `Poner` (§1.3).
+  ⇒ 🔑 **Antes de barrer una palabra del glosario, contar cuántas de sus apariciones son el gesto.
+  Si son pocas, la que está mal escrita es la regla.** Quedó en §1.6 y en la tabla de homónimos.
+- ⚠️ **§3 (título = sustantivo, ⛔ no frase) sigue SIN test, y ⛔ no es un olvido**: «¿esto es una
+  frase?» ⛔ no lo decide un regex. El proxy barato —un `?` en un rótulo— da **46 casos y la mayoría
+  son legítimos** (ayudas en voz de pregunta: «¿De qué marca?»). Un test así nace rojo sobre lo que
+  está bien.
+- 📌 **Deuda medida y ⛔ no barrida: `link` → `enlace`, 23 rótulos** en Atención, Canjes y Envíos.
+  Está prohibido en §1.6 y ⛔ no en el test. ⛔ No entra hoy: son tres secciones que ⛔ no se tocaron.
+
 ## 🆕🏁 30-ago-2026: «QUÉ HAY QUE DECIDIR» SE FUNDE CON LA TABLA
 
 Bruno: *«en el que hay que decidir me parece que está mal ejecutado… capaz se puede unificar en la

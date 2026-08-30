@@ -331,7 +331,7 @@ export function Ubicaciones() {
         {progreso && <ProgressInline hechos={progreso.hechos} total={progreso.total} label={reparando ? 'reparando' : reintento ? `reintento ${reintento}` : 'guardando'} />}
         {syncLabel && <span style={{ fontSize: font.sm, color: color.mut }}>{syncLabel}</span>}
         <Button variant="ghost" onClick={recargar} disabled={ocupado} title="Volver a leer la lista">↻</Button>
-          <Button variant="outline" onClick={traerGN} loading={sincronizando} disabled={ocupado} title="Trae productos y stock nuevos de GN, y recarga la lista">Traer de GN
+          <Button variant="outline" onClick={traerGN} loading={sincronizando} disabled={ocupado} title="Trae productos y stock nuevos de GN, y recarga la lista">Cargar de GN
         </Button>
         <Button
           variant="outline"

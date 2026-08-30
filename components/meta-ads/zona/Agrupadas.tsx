@@ -25,7 +25,6 @@ import { Auditoria } from '@/components/meta-ads/Auditoria'
 import { Biblioteca } from '@/components/meta-ads/biblioteca/Biblioteca'
 import { Campanias } from '@/components/meta-ads/campanias/Campanias'
 import { Embudo } from '@/components/meta-ads/Embudo'
-import { Ideas } from '@/components/meta-ads/Ideas'
 import { Informes } from '@/components/meta-ads/informes/Informes'
 import { CargarPiezas } from '@/components/meta-ads/piezas/CargarPiezas'
 import { Automatizaciones } from '@/components/meta-ads/reglas/Automatizaciones'
@@ -54,15 +53,24 @@ function Agrupada({ nombre, hojas }: { nombre: string; hojas: Hoja[] }) {
   )
 }
 
-/** Lo que hace falta para que entre una pieza nueva a la pauta. */
+/**
+ * Lo que hace falta para que entre una pieza nueva a la pauta.
+ *
+ * ⚠️ **Ya ⛔ no es una entrada del menú** (30-ago-2026): sus dos hojas subieron a primer nivel como
+ * «Anuncio nuevo» y «Anuncios», que es lo que se usa. Esto se queda para los bookmarks.
+ *
+ * ⛔ **Ideas salió de acá.** Medido: `meta_ads_ideas` tiene **0 filas** —nunca se usó— y el tablero
+ * lo reemplazó `/ideas` de MAKETA, que es donde vive la idea, el guion y la producción. La RUTA
+ * sigue andando (`/meta-ads/ideas`) y dice adónde mudarse; ⛔ no se borra el módulo porque **el
+ * Embudo sigue leyendo esa tabla** para decir qué etapa tiene ideas anotadas.
+ */
 export function Producir() {
   return (
     <Agrupada
       nombre="producir"
       hojas={[
-        { key: 'piezas', label: 'Piezas', hint: 'Subir videos y armar una tanda: un conjunto por pieza, todo pausado.', Vista: CargarPiezas },
-        { key: 'ideas', label: 'Ideas', hint: 'El tablero de lo que hay que producir.', Vista: Ideas },
-        { key: 'biblioteca', label: 'Biblioteca', hint: 'Todos los avisos con la pieza a la vista y sus números al lado.', Vista: Biblioteca },
+        { key: 'piezas', label: 'Anuncio nuevo', hint: 'Cargar videos y armar una tanda: un conjunto por pieza, todo pausado.', Vista: CargarPiezas },
+        { key: 'biblioteca', label: 'Anuncios', hint: 'Todos los avisos con la pieza a la vista y sus números al lado.', Vista: Biblioteca },
       ]}
     />
   )
@@ -76,7 +84,7 @@ export function Analizar() {
       hojas={[
         { key: 'campanias', label: 'Campañas', hint: 'El árbol completo: campaña, conjunto y aviso, con la marca y la etapa.', Vista: Campanias },
         { key: 'embudo', label: 'Embudo', hint: 'A quién le habla la plata y qué etapa está vacía.', Vista: Embudo },
-        { key: 'cuenta', label: 'La cuenta', hint: 'Los totales de una cuenta publicitaria: quién, dónde y en qué ubicación.', Vista: Rendimiento },
+        { key: 'cuenta', label: 'Totales por cuenta', hint: 'Los anuncios por campaña, quién compra, desde dónde y en qué ubicación.', Vista: Rendimiento },
         { key: 'registro', label: 'Registro', hint: 'Qué se accionó, quién y cómo terminó.', Vista: Auditoria },
         { key: 'informes', label: 'Informes', hint: 'El análisis en prosa de cada fecha. Lo escribe una persona.', Vista: Informes },
       ]}

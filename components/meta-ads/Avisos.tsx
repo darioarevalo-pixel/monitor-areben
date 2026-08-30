@@ -112,7 +112,7 @@ export function BotonAvisos({ nombre, abierta, onToggle }: {
 
 export function PanelAvisos({ estado }: { estado: Cargable<RespuestaCreativos> | null }) {
   if (!estado || estado.fase === 'cargando') {
-    return <div style={{ color: color.mut2, fontSize: font.sm, padding: space[3] }}>Trayendo los avisos…</div>
+    return <div style={{ color: color.mut2, fontSize: font.sm, padding: space[3] }}>Cargando los avisos…</div>
   }
   if (estado.fase === 'error') {
     return (

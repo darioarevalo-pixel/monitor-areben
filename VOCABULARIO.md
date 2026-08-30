@@ -1,6 +1,6 @@
 # VOCABULARIO — el glosario compartido de MAKETA y el monitor
 
-Versión: 2026-08-29f
+Versión: 2026-08-30
 
 🔑 **Este archivo es el MISMO en los dos repos** (`areben-marketing` y `monitor-areben`), byte a
 byte. Si cambia acá, se copia allá en el mismo día y sube la `Versión:` de arriba. Cada repo tiene
@@ -74,7 +74,14 @@ Lo que no puede es ser el **nombre** de una sección ni el **título** de un blo
 | **Crear** | **nace ahora**, no existía antes (una campaña, una pieza, una tarea) |
 | **Cargar** | **viene de afuera**: un archivo, una foto, un escaneo, una planilla |
 
-⛔ **No se escribe: `Sumar` · `Anotar` · `Añadir` · `Darlo de alta`.**
+⛔ **No se escribe: `Sumar` · `Anotar` · `Añadir` · `Darlo de alta` · `Traer`.**
+
+🔴 **`Traer` entró el 30-ago-2026, y lo abrió Bruno leyendo una pantalla: *«traer de Google Drive…
+¿traer?»*.** Es exactamente esta familia —algo que **viene de afuera**— así que la palabra es
+**Cargar**. 📊 Y acá la palabra SÍ es el gesto, medido antes de prohibirla: **20 rótulos en 11
+secciones y los 20 son lo mismo** (el stock de GN, las ventas de Tienda Nube, un producto, los
+archivos de Drive). ⇒ ⛔ no hace falta ningún carve-out, y por eso entra como palabra y no como
+gesto — que es lo contrario de lo que pasó con `Mandar` y con `Poner`.
 
 🔴 **`Poner` se sacó de esa lista el 29-ago, y ⛔ no es una excepción tibia: la regla estaba MAL
 ESCRITA.** Esta familia es *lo que ENTRA A UNA LISTA*, y `poner` casi nunca es eso: *«Ponele un
@@ -124,6 +131,17 @@ aplicaba nada —relee el stock y **arma un Excel**—, así que quedó **«Gene
 `que salga`** — el verbo de estas apps es **publicar**, y ya está en el nombre de la pantalla y del
 modelo. ⛔ **`link` tampoco**: es **enlace**.
 
+🔴 **Y `sale` está prohibida SÓLO como nombre del gesto de publicar. Es la tercera vez que esta
+regla nace nombrando una palabra en vez de un gesto** —ya pasó con `Mandar` (§1.6) y con `Poner`
+(§1.3)—, y esta vez se midió antes de barrer. 📊 30-ago-2026: **32 rótulos con `sale`/`salió`, y casi
+ninguno es publicar**:
+- **`sale` es un SUSTANTIVO del negocio**: la campaña de liquidación. «Precio de sale», «Sale
+  invierno ago-2026», «Sacar del sale». ⛔ Traducirlo rompe el nombre de una cosa que existe.
+- **`salir` es DESPACHAR o VENDERSE**: «Cuándo sale» (un envío), «Los que más salieron» (unidades).
+- **Y `sale de` es PROVENIR**: «Sale de la foto diaria, no de Meta». Nada que ver con publicar.
+⇒ 🔑 **Antes de barrer una palabra de este archivo, contar cuántas de sus apariciones son el gesto.**
+Si son pocas, la que está mal escrita es la regla.
+
 🔴 **`Mandar` está prohibido SÓLO como NOMBRE DEL GESTO** —botón, título, rótulo— y ahí va
 **Enviar**: «Enviar a liquidación», «Enviar a Drive», «Enviar el link». ⚠️ **En la prosa se queda**,
 y esto ⛔ no es una excepción tibia sino la regla bien dicha: *«Te mandamos la etiqueta»* en un
@@ -146,6 +164,7 @@ sentido**, y hasta entonces ⛔ no se toca el título.
 |---|---|---|
 | **Ingresos** | la importación que **viene** (`ingresos`) · lo que **ya entró** (`recepciones`) | monitor: dos filas contiguas en Compras |
 | **Actividad** | la **bitácora**: lo que ya pasó (MAKETA) · cada **paso de un evento** de la Agenda, con su dueña y su día (monitor) | una en cada app, ⛔ nunca en la misma pantalla |
+| **sale** | la **campaña de liquidación** (sustantivo, del negocio) · el verbo **salir**: despachar, venderse, provenir · y el gesto **publicar**, que es el único prohibido | Liquidación · Comisiones · Envíos · Meta |
 
 🏁 **«Actividad» se queda con LAS DOS acepciones — decisión de Bruno, 29-ago-2026.** Es el primer
 homónimo que ⛔ **no** se cierra renombrando a uno de los dos, y el motivo es que **viven en apps

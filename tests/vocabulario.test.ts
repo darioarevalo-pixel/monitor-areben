@@ -347,7 +347,11 @@ describe('las seis familias, en el nombre de cada gesto — VOCABULARIO.md', () 
   const FAMILIAS: readonly { familia: string; prohibidas: RegExp; enSuLugar: string }[] = [
     {
       familia: '§1.3 lo que entra a una lista',
-      prohibidas: /\b(sumar|sumá|sumal[oa]|sumarl[oa]|añadir|añadí|anotar|anotá|dar de alta|darl[oa] de alta)\b/i,
+      // 🔴 `traer` entró el 30-ago-2026, y con la medición delante: **20 rótulos en 11 secciones y
+      // los 20 eran el mismo gesto** —el stock de GN, las ventas de TN, un producto, los archivos
+      // de Drive—. Por eso entra como PALABRA y sin carve-out, que es lo contrario de lo que pasó
+      // con `Mandar` y con `Poner`, donde la regla nombraba una palabra que casi nunca era el gesto.
+      prohibidas: /\b(sumar|sumá|sumal[oa]|sumarl[oa]|añadir|añadí|anotar|anotá|traer|traé|traelo|traela|trayendo|dar de alta|darl[oa] de alta)\b/i,
       enSuLugar: 'Agregar (ya existía) · Crear (nace ahora) · Cargar (viene de afuera)',
     },
     {
