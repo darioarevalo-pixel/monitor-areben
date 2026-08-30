@@ -561,6 +561,44 @@ mailer. Es consola de AWS y queda anotado.
 Glosario mínimo y consistente en pantalla: conjunto → «celda/público», `estado_real` → «¿está
 entregando?», etc. Barato y se nota enseguida.
 
+### 🆕 ▶️ P6 — Lo que queda de las seis tandas de Meta (30-ago-2026)
+
+Bruno caminó `/meta-ads` entero y salieron seis tandas, **todas en prod y verificadas** (el relato
+completo, en `docs/secciones/meta-ads.md`; acá sólo lo que **falta**).
+
+**🔴 Manos de Bruno — caminar la pantalla.** El login pide contraseña, así que esto ⛔ no lo puede
+hacer nadie más. Cinco cosas que sólo se ven abriéndola:
+1. Que la marca **venga preseleccionada** con la del sidebar, y que si elegís «Todas» a mano **se
+   quede** (es el caso que el default en `'todas'` hacía imposible).
+2. Que `Hoy •` cambie los **números** y ⛔ no el **veredicto**, y que el cartel de arriba lo diga.
+3. Que la fila mida **un renglón**, que el «⋯» cierre con Escape y clickeando afuera, y que la cara
+   del anuncio aparezca (**tarda ~6 s la primera vez**: son 257 piezas).
+4. Que el hallazgo de `AD01 - UNBOXING LOCAL` —que es de nivel **aviso**— aparezca **adentro de la
+   fila de su conjunto**. Es el caso que prueba el reparto.
+5. Que Producir ya ⛔ no te explique Rendimiento.
+
+**▶️ Lo que queda escrito y ⛔ sin hacer:**
+- **`link` → `enlace`: 23 rótulos** en Atención, Canjes y Envíos. 📊 Medido. Está prohibido en
+  `VOCABULARIO.md` §1.6 y ⛔ **no** en el test — son tres secciones que esta tanda ⛔ no tocó, y
+  barrerlas a medias es peor que no barrerlas.
+- **§3 (título = sustantivo, ⛔ no frase) sigue SIN test**, y ⛔ no es un olvido: «¿esto es una
+  frase?» ⛔ no lo decide un regex. El proxy barato —un `?` en el rótulo— da **46 casos y la mayoría
+  son legítimos** (ayudas en voz de pregunta: «¿De qué marca?»). Un test así **nace rojo sobre lo que
+  está bien**, y ése es el que alguien apaga.
+- **El puente MAKETA → «Anuncio nuevo»**: una pieza terminada allá ⛔ no llega sola acá. Hoy el camino
+  es Drive → arrastrar. ⛔ No lo cubre ninguna de las dos apps.
+- **El Embudo**: 📊 `meta_ads_etapa` en **0 filas**. La pregunta que tendría que contestar está
+  escrita en la ficha (§ «la sigla del embudo»), y el tripwire es que esa tabla se mueva.
+- **Informes**: 2 filas, las dos **sin publicar**. Se quedó como pestaña y ⛔ no subió al menú. Si en
+  un mes sigue en dos, se elimina.
+- **«Hoy + ayer + anteayer» como una suma sola** ⛔ no se ofrece: pediría cruzar Graph con la foto por
+  celda, y ese gesto ya lo contesta la **tira de días**.
+
+⚠️ **Y un rojo que ⛔ NO es de esta tanda**: `tests/seccion-header.test.ts` falla porque
+`organizacion` se registró en `SECCIONES` sin entrada en `DESCRIPCIONES` (commit `e0f4eff`).
+Verificado: ya fallaba en `HEAD` antes de tocar nada. ⛔ No se arregló desde acá para ⛔ no pisarle el
+texto a la sesión que la está escribiendo — **es una línea en `lib/nav.ts`**.
+
 ## 4. ✅ CONTESTADO: se construye PARA BRUNO
 
 **Lo contestó Bruno el 25-ago-2026: «todo para Bruno».** El módulo se construye para que **una sola

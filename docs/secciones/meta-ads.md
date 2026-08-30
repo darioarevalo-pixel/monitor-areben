@@ -1216,8 +1216,24 @@ de una campaña a la que nadie le puso una.
 
 ⚠️ **Y lo que ⛔ NO se hizo, dicho derecho**: el Embudo ⛔ no se rediseñó. 📊 `meta_ads_etapa` tiene
 **0 filas** ⇒ nadie corrigió nunca una etapa. Su problema ⛔ no es la nomenclatura, y arreglar el
-rótulo ⛔ no lo va a hacer usar. ▶️ Queda escrito: **qué pregunta tendría que contestar para que dé
-ganas de entrar.**
+rótulo ⛔ no lo va a hacer usar.
+
+▶️ **La pregunta que tendría que contestar, escrita — y ⛔ no «queda escrito»**, que es la promesa
+vacía que este mismo módulo ya cometió una vez con «abriendo la fila están sus avisos»:
+
+🔑 **El Embudo hoy contesta «qué etapa está vacía», y esa pregunta ⛔ NO tiene una acción del otro
+lado.** Se mira, se confirma que TOFU está flaco, y ⛔ no hay nada que apretar: llenar TOFU es
+producir piezas, que pasa en MAKETA y tarda semanas. Una pantalla cuya respuesta ⛔ no cabe en un
+gesto se abre una vez.
+
+⇒ **la pregunta con acción es la de al lado: «¿cuánta de la plata de esta marca está comprando gente
+que YA nos conocía?»** — o sea qué parte del costo por compra lo paga el remarketing y qué parte la
+adquisición fría. Eso **sí** decide algo la misma tarde (dónde poner los $38.000/día libres) y **⛔ no
+está contestado en ninguna pantalla**: la zona mide por celda y ⛔ no por etapa.
+
+📌 **El tripwire, y es barato**: `meta_ads_etapa` sigue en **0**. Mientras siga ahí, la clasificación
+automática por objetivo ⛔ no se está disputando — o está bien, o nadie la mira; y las dos se ven
+igual. **Antes de rediseñar nada, mirar si esa tabla se movió.**
 
 ### 3. Las automatizaciones se leen SIN abrirlas
 
