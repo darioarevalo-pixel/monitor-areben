@@ -47,6 +47,7 @@ import { BotonMensaje } from './BotonMensaje'
 import { QueSeLeDijo } from './QueSeLeDijo'
 import { copiarAlPortapapeles } from '@/lib/portapapeles'
 import { DecidirReclamo } from './DecidirReclamo'
+import { Medidor } from './Medidor'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
 
 /** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
@@ -760,6 +761,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
           <KpiCard label="Durmiendo" value={String(totales.dormidos)} sub="sin moverse hace días" tone={totales.dormidos ? 'danger' : 'neutral'} />
         </div>
       )}
+
+      {/*
+        El medidor va **debajo de los cuatro KPI y ⛔ no adentro de ellos**: los cuatro de arriba son
+        trabajo pendiente —cuántos hay, cuánta plata falta— y éste es un diagnóstico que ⛔ no se
+        acciona hoy. Y sobre todo, ⛔ no entra en un `KpiCard`: un número solo, sin los meses de
+        atrás al lado, se lee como una tasa. Ver el 🔴 del encabezado de `Medidor`.
+      */}
+      {esAdmin && <Medidor marca={marca} />}
 
       <DondeVa activa="reclamos" />
       <Instructivo

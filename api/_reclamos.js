@@ -26,6 +26,7 @@
 //   POST { store, action:'fotos', id, fotos }                    → suma fotos cargadas por el equipo.
 //   POST { store, action:'falla', id, falla_ids }                → linkea las fallas creadas.
 //   POST { store, action:'editar', id, ...campos }               → edita.
+//   GET  ?store=…&vista=medidor                              → reclamos por cada 100 ventas online.
 //   GET  ?store=…&vista=mensajes&id=N                            → qué se le dijo al cliente.
 //   POST { store, action:'mensaje', id, tipo, texto }             → apila lo que se le acaba de decir.
 //   POST { store, action:'eliminar', id }                        → borra. ADMIN.
@@ -71,6 +72,13 @@ import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnid
 // `tipo` libre convierte esta columna en un campo de texto.
 import { apilarMensaje } from '../lib/reclamos/mensajes.core.js';
 import { leerSeguimiento } from '../lib/reclamos/seguimiento.core.js';
+// El medidor: cuántos reclamos se registraron por cada 100 ventas online, mes a mes. La regla de
+// qué cuenta —y de qué mes es cada fila— vive en el núcleo, ⛔ no en el `select`.
+import { desdeDeLosMeses, medirPorMes, mesDelReclamo, mesesHasta, MESES_DEL_MEDIDOR } from '../lib/reclamos/medidor.core.js';
+// 🔴 PostgREST corta en 1.000 filas y ⛔ NO avisa. Seis meses de ventas de BDI son ~4.700.
+import { leerTodo } from '../lib/supabase/paginar.core.js';
+// El mes en curso, en hora de Argentina: esto corre en Vercel, o sea en UTC.
+import { diaArgentino } from '../lib/envios/portal.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -354,6 +362,45 @@ export default async function handler(req, res) {
           .order('updated_at', { ascending: true }).limit(300);
         if (error) throw new Error(error.message);
         return res.status(200).json({ ok: true, devoluciones: data || [] });
+      }
+
+      // ── El medidor: reclamos registrados por cada 100 ventas online, mes a mes ──
+      //
+      // 🔑 **El manómetro de la válvula.** El día que el alta pública multiplique los casos hay
+      // cuatro diales para mover, y hasta hoy ⛔ no había contra qué mirarlos: BDI tenía **2
+      // reclamos contra 283 ventas online de agosto**. ⚠️ Ese cociente ⛔ **no es la tasa de
+      // reclamos, es lo que se registró** — el que se resuelve en un chat ⛔ no deja fila. Lo dice
+      // el núcleo, lo dice la pantalla, y por eso salen **seis meses juntos** y ⛔ no un número solo.
+      //
+      // 🔴 **Las dos consultas van por `leerTodo` y ordenadas por `id`.** Medido el 30-ago-2026
+      // sobre las ventas de BDI: paginar **sin `order`** devolvió 4.694 filas con **3.554 ids
+      // únicos** —repitió unas y se comió otras— y agosto pasó de 283 ventas online a 89. Un
+      // denominador chico infla el cociente, o sea que el modo de falla de este número es
+      // **exagerar el problema en silencio**. `date_sale` ⛔ no alcanza como orden: se repite.
+      //
+      // 🔑 **Y la tercera consulta, la que decide si un cero habla**: el PRIMER reclamo que
+      // registró la base, mirando la tabla entera y ⛔ no la ventana. Sin eso, los meses de antes
+      // de que el módulo existiera valen «0 cada 100» y el primer mes con formulario se lee como
+      // un aumento. Ver el 🔴 de `medirPorMes`.
+      if (req.query.vista === 'medidor') {
+        const meses = mesesHasta(diaArgentino(Date.now()).slice(0, 7), MESES_DEL_MEDIDOR);
+        const desde = desdeDeLosMeses(meses);
+        const [reclamos, ventas, primero] = await Promise.all([
+          leerTodo(supabase, 'devoluciones', (q) => q
+            .select('estado, created_at').eq('store', store).gte('created_at', `${desde}T00:00:00Z`).order('id')),
+          // ⚠️ `channel_id` ⛔ no se pide: la tabla de Zattia ⛔ no tiene esa columna y PostgREST
+          // rechaza el `select` ENTERO por una que no existe. Mismo recaudo que `_norte.js` y
+          // `_insumos.js`. Con `channel` alcanza: `canalDe` clasifica por texto.
+          leerTodo(supabase, 'ventas', (q) => q
+            .select('date_sale, channel').gte('date_sale', desde).order('id')),
+          supabase.from('devoluciones').select('created_at').eq('store', store)
+            .order('created_at', { ascending: true }).limit(1).maybeSingle(),
+        ]);
+        if (primero.error) throw new Error(primero.error.message);
+        return res.status(200).json({
+          ok: true,
+          meses: medirPorMes({ reclamos, ventas, meses, desdeQueSeRegistra: mesDelReclamo(primero.data?.created_at) }),
+        });
       }
 
       // 🔴 **El listado también se cortaba callado** (D12). Las tres pestañas —Abiertos, Durmiendo,

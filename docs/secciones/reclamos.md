@@ -60,6 +60,8 @@ va a ser la pregunta, nada más.
 `lib/reclamos/tipos.ts` (**1.4k líneas, leer por rango**) · `lib/reclamos/casos.core.js` ·
 `lib/reclamos/efectos.core.js` · `lib/reclamos/plata.core.js` · `lib/reclamos/mensajes.ts` ·
 `lib/reclamos/cliente.ts`.
+`lib/reclamos/medidor.core.js` + `lib/reclamos/medidor.ts` + `components/reclamos/Medidor.tsx`
+(el medidor de reclamos por venta online — ver el final de la ficha).
 ⚠️ `DecidirReclamo.tsx` **está en tres pestañas desde el 27-ago-2026 y el orden es la regla** — ver
 «La pantalla de decidir» más abajo antes de mover un bloque de lugar.
 
@@ -2102,3 +2104,96 @@ los dos únicos lugares que dicen cuánta plata se pierde.
 - 🔴 ▶️ **Lo que sigue sin caminarse**: las dos filas reales de BDI tienen los ítems **sin
   `product_id`** desde antes ⇒ su costo ⛔ no se completa solo, ni al decidir. Se llena el día que
   esos ítems se re-enriquezcan, o a mano.
+
+## 🆕 🔴 El medidor: reclamos registrados por cada 100 ventas online (30-ago-2026 — §5)
+
+**Antes de esto la sección ⛔ no tenía un solo número que dijera si el módulo está midiendo bien.**
+El plan lo pone como lo **primero** del §5, antes que cualquiera de los cuatro diales de la válvula:
+el día que el alta pública multiplique los casos hay que decidir cuál se mueve, y esa decisión sin
+manómetro se toma de memoria.
+
+Vive en `lib/reclamos/medidor.core.js` (la regla, importada por el handler),
+`api/_reclamos.js` § `vista=medidor` (las tres consultas), `lib/reclamos/medidor.ts` (lo que baja el
+navegador y cómo se escribe) y `components/reclamos/Medidor.tsx` (la tabla). Sale **sólo en el modo
+de Administración**, debajo de los cuatro KPI.
+
+⚠️ **Está en `medidor.ts` y ⛔ no en `cliente.ts` a propósito**: ese archivo lo estaba tocando otra
+sesión (D12) y en este checkout ⛔ no hay merge.
+
+### 🔴 El número ⛔ no es la tasa de reclamos: es lo que se REGISTRÓ
+
+BDI tenía, al construirlo, **2 reclamos registrados contra 283 ventas online de agosto**. Esa
+distancia ⛔ no es una tasa baja: **el reclamo que se resuelve en un chat de WhatsApp ⛔ no deja
+fila**. El cociente mide dos cosas a la vez —cuánta gente reclama y cuánto se anota— y el formulario
+público va a mover **las dos juntas**, sin que se puedan separar.
+
+Por eso salen **seis meses juntos y ⛔ nunca un número solo**, y por eso ⛔ no entra en un `KpiCard`:
+un número pelado, sin los meses de atrás al lado, **se lee como una tasa**. Es
+`feedback_areben_el_espejo_mide_hoy_no_la_espera` por la otra punta — leer como «subió» el primer
+mes que se conoce.
+
+### 🔴 El cero que iba a afirmar, y cómo se lo hace callar
+
+Marzo a julio de 2026 dan `0 / 173`, `0 / 161`, `0 / 125`, `0 / 124`. Dibujar ahí «0,0 cada 100»
+**afirma que nadie reclamó** en meses en los que lo que pasaba es que **nadie registraba**: el
+módulo entró en agosto. Con esos ceros puestos, el primer mes con formulario se lee como un
+aumento — que es exactamente lo que el §5 pide ⛔ no dejar pasar.
+
+⇒ La tercera consulta del handler pregunta por **el primer reclamo que registró la base, mirando la
+tabla entera y ⛔ no la ventana de seis meses**. Los meses anteriores salen con
+`sinNumero: 'sin-registro'` y `cada100: null`, y la pantalla escribe *«todavía no se registraban
+reclamos»*. **El instrumento dice desde cuándo mide.** Preguntado adentro de la ventana, el mes más
+viejo siempre parecería el primero con registro.
+
+Lo mismo con el denominador: un mes **sin ventas online** da `null` y ⛔ nunca 0 — sin denominador
+⛔ no hay cociente, y un 0 ahí afirma sobre un mes en el que ⛔ no se vendió nada.
+
+⚠️ **Lo que un cero legítimo sigue sin poder decir**: que en un mes con registro andando ⛔ no se
+haya anotado ningún reclamo ⛔ no quiere decir que no los hubo. Eso ⛔ no lo arregla ningún cálculo —
+lo dice la pantalla, al lado del número.
+
+### Las tres decisiones de qué se cuenta
+
+1. **Arriba, el reclamo ABIERTO EN EL MES** (`created_at`), ⛔ no el que hoy sigue abierto: un stock
+   dividido por un flujo da un número que ⛔ no existe.
+2. **`anulado` ⛔ no cuenta**, y ⛔ no es un criterio inventado: es lo que ya dice el confirm de la
+   pantalla al anular —*«queda registrado pero deja de contar»*—. Importa justo cuando el alta
+   pública empiece a producir duplicados.
+3. **Abajo, el canal `online`, que hoy es EXACTAMENTE «Tienda Nube»** (medido sobre las 4.694 ventas
+   de BDI desde marzo: es el único nombre que cae en `online`; Mercadolibre y Whatsapp caen en
+   `otro`). Tiene que ser ése: un reclamo cuelga de una **orden de Tienda Nube**, así que meter
+   Mercadolibre abajo agranda la población del divisor con ventas que ⛔ no pueden aparecer arriba.
+   La clasificación se **importa** de `canalDe` y ⛔ no se copia.
+
+### 🔴 Las dos formas silenciosas de romperlo, las dos cazadas por un mutante
+
+- **Paginar sin `order`.** Medido contra la base de BDI: pedir las ventas por páginas de 1.000 **sin
+  orden** devolvió **4.694 filas con 3.554 ids únicos** —repitió unas y se comió otras— y agosto pasó
+  de **283 ventas online a 89**. Un denominador chico **infla** el cociente ⇒ el modo de falla de
+  este número es **exagerar el problema, callado**. Y `date_sale` ⛔ no sirve de orden: se repite
+  decenas de veces por día. Las dos consultas van por `leerTodo` **ordenadas por `id`**.
+- **El huso.** `created_at` es UTC y `date_sale` es una fecha ya local: cortar los dos por
+  `slice(0,7)` manda al mes siguiente cada reclamo abierto **después de las 21:00 del último día del
+  mes**. Y el handler corre en Vercel, o sea en UTC: entre las 21:00 y las 24:00 del 31 la ventana
+  entera se corría un mes. Las dos puntas salen de `diaArgentino`, **importada**.
+
+### Cómo se verificó
+
+- **El instrumento se estrenó reproduciendo la medición vieja**: las ventas online de BDI de abril a
+  agosto —**173 · 161 · 125 · 124 · 283**— corridas por la función de verdad contra la base real.
+- **21 mutantes, 21 muertos**, y **un mutante inocuo de control que SOBREVIVIÓ** — lo único que
+  prueba que el arnés ⛔ no mata todo por igual. Dos escaparon en la primera vuelta: uno por un
+  **ancla mal apuntada** (⛔ no por falta de test) y el otro, el del huso en el servidor, porque
+  **⛔ nadie miraba esa línea**; tiene su test desde entonces.
+- **La regla y el cable, los dos**: `tests/reclamos-medidor.test.ts` (la función),
+  `tests/reclamos-medidor-servidor.test.ts` (el handler de verdad: qué le pide a la base) y
+  `tests/reclamos-medidor-pantalla.test.tsx` (lo dibujado, montando **Reclamos entera**).
+
+### ▶️ Lo que queda
+
+- **Zattia ⛔ no se pudo medir desde acá**: `ZATTIA_SUPABASE_SERVICE_KEY` vive sólo en Vercel y la
+  anon ⛔ no puede leer `ventas` (`permission denied`). Se verifica **abriendo la pantalla en prod
+  con la marca en Zattia**. Si esa base ⛔ no tiene la tabla sincronizada, el medidor **rompe con el
+  error a la vista** y ⛔ no contesta un cero — está atado por test.
+- **Todavía ⛔ no hay línea de base.** El primer mes con formulario público ⛔ no se compara contra
+  nada: el número que salga ⛔ no es «subió», es **el primero que se conoce**.
