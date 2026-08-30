@@ -27,10 +27,18 @@ process.env.SUPABASE_URL = URL
 process.env.SUPABASE_SERVICE_KEY = KEY
 if (!URL || !KEY) { console.error('Faltan SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1) }
 
+// 🔑 **Dos modos, y el segundo ⛔ no es opcional.** `--prod` le pega a la API deployada en vez de
+// al handler local: el bundle y **la función serverless deployan por separado**, así que verificar
+// el chunk ⛔ no dice nada del verbo. Sin `--prod`, el handler corre en proceso (que es lo que hay
+// que usar ANTES de pushear, porque prod todavía tiene el código viejo).
+const PROD = process.argv.includes('--prod')
+const API = 'https://monitorareben.vercel.app/api/postventa?recurso=reclamos'
+
 const { default: reclamos } = await import('../api/_reclamos.js')
 const { authKv } = await import('./lib/kv-auth.mjs')
 const { alertasDe } = await import('../lib/reclamos/tipos.ts')
 const auth = authKv(env)
+console.log(PROD ? '\n⚠️  Modo PROD: se le pega a la API deployada' : '\n   Modo local: el handler corre EN PROCESO')
 
 const sb = (path, init = {}) => fetch(`${URL}/rest/v1/${path}`, {
   ...init,
@@ -38,6 +46,10 @@ const sb = (path, init = {}) => fetch(`${URL}/rest/v1/${path}`, {
 })
 
 const postear = async (body) => {
+  if (PROD) {
+    const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', ...auth }, body: JSON.stringify(body) })
+    return { status: r.status, ...(await r.json().catch(() => ({}))) }
+  }
   let status = 0, cuerpo = null
   const res = { setHeader: () => res, status: (n) => { status = n; return res }, json: (o) => { cuerpo = o; return res }, end: () => res }
   await reclamos({ method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, query: {}, body }, res)

@@ -8,8 +8,12 @@
  * distingue «no se deployó» de «el crawl no llegó». Pasó dos veces hoy.
  */
 const BASE = 'https://monitorareben.vercel.app'
-const ORACULO = 'no le mandamos la etiqueta' // sin tildes (el minificador las escapa); 0 apariciones en el commit anterior
-const CONTROL = 'la etiqueta va en camino' // ya estaba en prod (se deployo hoy mas temprano)
+// 30-ago, D4: el confirm del «no aceptó» sobre un reclamo sin decision. 0 apariciones antes.
+// ⚠️ SIN TILDES a proposito en el corte, pero el chunk sirve las tildes LITERALES: se busca el
+// tramo que no las tiene («decisi» corta antes de la «ó»).
+const ORACULO = 'no tiene ninguna decisi'
+// El de control es del MISMO archivo y ya estaba en prod desde el 28-ago.
+const CONTROL = 'sigue lo que ya estaba decidido'
 
 const RUTA = /static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g
 const bajar = async (u) => { const r = await fetch(`${BASE}/_next/${u}`); return r.ok ? await r.text() : '' }
