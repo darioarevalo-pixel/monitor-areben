@@ -8,12 +8,22 @@
  * distingue «no se deployó» de «el crawl no llegó». Pasó dos veces hoy.
  */
 const BASE = 'https://monitorareben.vercel.app'
-// 30-ago, D4: el confirm del «no aceptó» sobre un reclamo sin decision. 0 apariciones antes.
-// ⚠️ SIN TILDES a proposito en el corte, pero el chunk sirve las tildes LITERALES: se busca el
-// tramo que no las tiene («decisi» corta antes de la «ó»).
-const ORACULO = 'Sin escribirle'
-// El de control es del MISMO archivo y ya estaba en prod (D4, del deploy anterior de hoy).
-const CONTROL = 'Copiar el mensaje con el link'
+// 30-ago, B4/B5/B6: las cuatro decisiones de la auditoria. 0 apariciones antes de este deploy.
+// ⚠️ SIN TILDES a proposito en los cortes, pero el chunk sirve las tildes LITERALES: se buscan los
+// tramos que no las tienen («cu» corta antes de la «á»).
+//
+// 🔑 Van TRES y ⛔ no uno: los tres salen de cambios distintos —el faltante del envio (nucleo), el
+// aviso del techo (pantalla) y el desglose del costo (nucleo)— asi que uno solo verde con los
+// otros dos rojos diria que el deploy llego a MEDIAS, que es lo que un unico oraculo no distingue.
+const ORACULOS = [
+  'sale traerlo',                 // `falta: 'envio'` — el cero que afirmaba (nucleo)
+  'Se pasa del techo',            // el aviso que hace auditable la oferta (pantalla)
+  'de recibirlo y reingresarlo',  // el desglose del costo operativo (nucleo)
+  'Apenas empata',                // la 2a rama del piso, la que antes no existia (nucleo)
+]
+// El de control es del MISMO archivo y ya estaba en prod desde el 27-ago: sin el, un 0 del oraculo
+// ⛔ no distingue «no se deployo» de «el crawl no llego al chunk».
+const CONTROL = 'Va contra la sugerencia'
 
 const RUTA = /static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g
 const bajar = async (u) => { const r = await fetch(`${BASE}/_next/${u}`); return r.ok ? await r.text() : '' }
@@ -31,7 +41,13 @@ for (let i = 0; i < cola.length; i++) {
 }
 
 const con = (s) => cuerpos.filter(([, c]) => c.includes(s)).map(([u]) => u.split('/').pop())
-const c = con(CONTROL), o = con(ORACULO)
+const c = con(CONTROL)
 console.log(`chunks bajados: ${cuerpos.length}`)
 console.log(`CONTROL «${CONTROL}» → ${c.length} ${c.length ? `✓ el crawl SÍ llega al chunk de Reclamos (${c.join(', ')})` : '❌ el crawl NO llega: el negativo no significa nada'}`)
-console.log(`ORACULO «${ORACULO}» → ${o.length} ${o.length ? `✓ DEPLOYADO (${o.join(', ')})` : '✗ todavía NO está en prod'}`)
+let todos = c.length > 0
+for (const oraculo of ORACULOS) {
+  const o = con(oraculo)
+  if (!o.length) todos = false
+  console.log(`ORACULO «${oraculo}» → ${o.length} ${o.length ? `✓ DEPLOYADO (${o.join(', ')})` : '✗ todavía NO está en prod'}`)
+}
+console.log(todos ? '\n✅ los cuatro en prod, con el control prendido' : '\n✗ falta alguno — o el crawl no llegó')
