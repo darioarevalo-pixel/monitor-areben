@@ -2092,5 +2092,13 @@ los dos únicos lugares que dicen cuánta plata se pierde.
 - ✅ **13 mutantes, 13 muertos.** Dos sobrevivieron a la primera vuelta y **los dos eran huecos
   reales**: el filtro de afuera **tapaba** al guard de adentro (el `0` a mano), y el test del «no
   recalcules» usaba un número que **coincidía** con la cuenta.
-- 🔴 ▶️ **Lo que ⛔ no se caminó**: ⛔ no se verificó contra GN qué costo tiene un producto real, y
-  las dos filas de BDI siguen con los ítems sin `product_id` cargado desde antes.
+- ✅ **Caminado EN VIVO contra prod, 7 de 7** (`scripts/caminar-costo-mercaderia.mjs`), con dos filas
+  sembradas y borradas y **las 2 reales intactas**. 🔑 **Y es el único oráculo de deploy que tenía
+  este cambio**: ⛔ no agrega ningún texto al bundle, así que el verificador de chunks ⛔ no sirve —
+  lo que dice «esto está en prod» es **el comportamiento**. Producto de control: *ZOEY CASE*,
+  costo **1.359,76**, leído de `productos` por otro camino que el hecho.
+- ⚠️ **Todo lo de arriba corre con `leerCostos` MOCKEADO**: comprueba que el handler lo *pide*, ⛔ no
+  que la consulta real devuelva algo. Por eso la caminata ⛔ no es opcional acá.
+- 🔴 ▶️ **Lo que sigue sin caminarse**: las dos filas reales de BDI tienen los ítems **sin
+  `product_id`** desde antes ⇒ su costo ⛔ no se completa solo, ni al decidir. Se llena el día que
+  esos ítems se re-enriquezcan, o a mano.
