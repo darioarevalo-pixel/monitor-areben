@@ -666,7 +666,9 @@ export default async function handler(req, res) {
           sugerencias.push({ id: e.id, estado: c.estado, precio: null, zona: null, motivo: motivoDeSugerencia(c.estado, c) });
           continue;
         }
-        aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad, reintento: c.reintento });
+        // `provincia` es obligatoria en `geocodificarEnEscalera` desde que el PRM también lo llama
+        // (para locales de CABA). Acá es constante de verdad: la moto reparte en Santa Fe.
+        aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' });
       }
 
       const puntos = aPreguntar.length ? await geocodificarEnEscalera(aPreguntar) : new Map();

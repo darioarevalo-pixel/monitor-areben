@@ -50,6 +50,8 @@ const Envios = dynamic(() => import('@/components/envios/Envios').then((m) => m.
 const Buzon = dynamic(() => import('@/components/buzon/Buzon').then((m) => m.Buzon), { loading: Cargando })
 const PedidosClientes = dynamic(() => import('@/components/pedidos-clientes/PedidosClientes').then((m) => m.PedidosClientes), { loading: Cargando })
 const Recepciones = dynamic(() => import('@/components/recepciones/Recepciones').then((m) => m.Recepciones), { loading: Cargando })
+const Recorridas = dynamic(() => import('@/components/recorridas/Recorridas').then((m) => m.Recorridas), { loading: Cargando })
+const PRM = dynamic(() => import('@/components/prm/PRM').then((m) => m.PRM), { loading: Cargando })
 const Insumos = dynamic(() => import('@/components/insumos/Insumos').then((m) => m.Insumos), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
@@ -217,6 +219,13 @@ export const SECCIONES: Record<string, ComponentType> = {
   // (selector + rango de 1ª venta + 4 KPIs + chart mensual + ranking). Charts en
   // recharts. Flip directo (bajo riesgo). Rollback: mover esta línea a SOMBRAS.
   proveedores: Proveedores,
+  // Recorridas y PRM (30-ago-2026): las dos caras del proveedor, y son DOS secciones porque son dos
+  // preguntas. `recorridas` (área Compras) es el HACER —el padrón de locales, el viaje y lo que se
+  // anota parado en la galería, desde el celular—; `prm` (área Proveedores, al lado de la de arriba)
+  // es el SABER —la ficha, los compromisos abiertos, si entrega lo que le pedimos y cómo vendió—.
+  // ⛔ Comparten `lib/prm/` y el handler `api/_prm.js`: ninguna regla vive dos veces.
+  recorridas: Recorridas,
+  prm: PRM,
   // El flip de Caducados (18-jul-2026, Tanda A #10): `/caducados` lo sirve el shell.
   // Candidatos a depurar (sin stock + última venta > N días) con fetches propios a
   // Supabase (stock por depósito + ventas ~2 años). Read-only: no borra nada (la baja

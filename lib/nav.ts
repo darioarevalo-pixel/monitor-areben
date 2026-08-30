@@ -226,7 +226,11 @@ const ICONO_POR_KEY: Record<string, string> = {
   'fundas-modelo': 'fundas-modelo',
   ingresos: 'ingresos',
   recepciones: 'recepciones',
+  recorridas: 'recorridas',
   proveedores: 'proveedores',
+  // El PRM comparte el ícono con la analítica por proveedor: son las dos caras del mismo sujeto y
+  // viven en el mismo grupo. Mismo criterio que `atencion: 'clientes'`.
+  prm: 'proveedores',
   disenos: 'disenos',
   retornos: 'retornos',
   // Clientes / Config
@@ -400,6 +404,8 @@ export const DESCRIPCIONES: Record<string, string> = {
   clientes: 'Clientes mayoristas: ranking, seguimiento y banco de mensajes.',
   'fundas-modelo': 'Ranking y demanda de fundas por modelo de iPhone, con simulador de pedido.',
   ingresos: 'Importaciones de fundas por llegar: diseños, cantidades, proveedor y estado.',
+  recorridas: 'Los locales de proveedores que hay que visitar y el viaje a verlos. Cargá la lista de una —pegando una nota o subiendo los lugares guardados de Google Maps—, armá la recorrida del día ordenada por cercanía, y en la calle anotá desde el celular qué te pareció, qué producto te interesa, si compraste y qué quedó prometido. La ficha de cada proveedor está en PRM.',
+  prm: 'La relación con cada proveedor: quién es, dónde queda, qué anotaste en cada visita, qué producto suyo te interesa y a qué precio, y qué quedó prometido de un lado y del otro. Al lado, lo que el sistema ya mide: si entrega lo que le pedimos y cómo vendió su mercadería. Lo de la calle se carga en Recorridas.',
   recepciones: 'Lo que entró de cada orden de compra: lo pedido contra lo contado, renglón por renglón, con lo que faltó y lo que sobró por separado, el cumplimiento de cada proveedor y los artículos que llegaron sin ficha en Gestión Nube. Llega sola cuando el sistema de Ingresos confirma una OC; acá no se carga nada a mano.',
   ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
   reposicion: 'Reposición diaria del local: variantes bajo mínimo con stock en depósito.',

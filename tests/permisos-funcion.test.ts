@@ -292,3 +292,37 @@ describe('permisos — veVentasHistoricas', () => {
     expect(veVentasHistoricas(u, 'bdi')).toBe(false)
   })
 })
+
+/**
+ * 🔴 **Mudar una sección de área le saca el acceso a quien la heredaba, y ningún otro test lo caza.**
+ * Está escrito en rojo en el docblock de `meta` dentro de `ACCESO_POR_FUNCION`: `seccionesDeFuncion`
+ * expande por ÁREA, así que mover el área es quitar el permiso — y no se lee como un permiso
+ * faltante sino como «la sección desapareció», que es la clase de bug que nadie reporta bien.
+ *
+ * El 30-ago-2026 `proveedores` se mudó de `compras` a un área propia (`proveedores`), junto con la
+ * sección nueva `prm`. Se midió antes de tocar: **ninguna función lista ninguna de las dos áreas**,
+ * así que la mudanza no movió a nadie. Esto lo deja medido para siempre en vez de una sola vez:
+ * el día que alguien le dé el área `proveedores` a una función, este test lo obliga a mirar si
+ * también quería darle la analítica de ventas, que es lo único que arrastra plata.
+ */
+describe('el área Proveedores no la hereda ninguna función', () => {
+  for (const f of Object.keys(ACCESO_POR_FUNCION) as (keyof typeof ACCESO_POR_FUNCION)[]) {
+    it(`${f} no recibe prm ni proveedores por su función`, () => {
+      const secciones = seccionesDeFuncion(f)
+      expect(secciones).not.toContain('prm')
+      expect(secciones).not.toContain('proveedores')
+    })
+  }
+
+  // La punta positiva: si `seccionesDeFuncion` devolviera vacío para todos, los ✓ de arriba no
+  // valdrían nada.
+  it('y las funciones SÍ devuelven secciones (si no, lo de arriba no prueba nada)', () => {
+    expect(seccionesDeFuncion('marketing').length).toBeGreaterThan(5)
+  })
+
+  // El permiso tildado a mano es por KEY y ⛔ no por área: sigue valiendo después de la mudanza.
+  it('quien tenía proveedores tildado a mano lo sigue viendo', () => {
+    const u = perfil({ acceso: { bdi: {}, zattia: { proveedores: true } } })
+    expect(puedeVer(u, 'zattia', 'proveedores')).toBe(true)
+  })
+})

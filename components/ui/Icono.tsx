@@ -490,6 +490,14 @@ const TRAZOS = {
     </>
   ),
   /** Proveedores — camión. */
+  /** Recorridas — dos chinches unidas por un camino: el viaje, no el mapa. */
+  recorridas: (
+    <>
+      <path d="M7.2 20.6c-1-1.4-2.6-2.9-2.6-4.7a2.6 2.6 0 1 1 5.2 0c0 1.8-1.6 3.3-2.6 4.7z" />
+      <path d="M16.8 10.4c-1-1.4-2.6-2.9-2.6-4.7a2.6 2.6 0 1 1 5.2 0c0 1.8-1.6 3.3-2.6 4.7z" />
+      <path d="M10.2 16.2h4.2a2.7 2.7 0 0 0 0-5.4h-2.6" />
+    </>
+  ),
   proveedores: (
     <>
       <path d="M2.8 6.6h10.6v9.8H2.8z" />

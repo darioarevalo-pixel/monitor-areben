@@ -59,7 +59,7 @@ export function imgAThumb(file: File | null | undefined, cb: (url: string) => vo
  * en `fundas/`**, porque el handler cae al default en vez de rechazar. Un prefijo nuevo son las dos
  * líneas o ninguna.
  */
-export type PrefijoBlob = 'fundas' | 'ingresos' | 'disenos' | 'manuales'
+export type PrefijoBlob = 'fundas' | 'ingresos' | 'disenos' | 'manuales' | 'prm'
 
 /**
  * Sube un data URL (thumb base64) a Vercel Blob vía `/api/blob-upload` y devuelve

@@ -163,6 +163,12 @@ ya tienen ficha:
   `lib/manuales/`, `lib/markdown/`, `components/ui/Markdown.tsx` o `components/ui/BarraFormato.tsx`. ⛔ **El parser NO es de Manuales**:
   lo comparten Novedades, la Guía y la Agenda —incluidos los pasos de la promo bancaria que se leen
   con el cliente delante—, así que un cambio ahí se camina en cinco pantallas.
+- PRM y Recorridas → **leer `docs/secciones/prm.md`** (y `docs/secciones/recorridas.md`) antes de
+  tocar `components/prm/`, `components/recorridas/`, `lib/prm/` o `api/_prm.js`. ⛔ **Son DOS
+  secciones de dos áreas sobre las MISMAS tablas y el MISMO handler**, y el permiso se parte acción
+  por acción. ⛔ **La visita no lleva monto**: la compra vuelve contada por la OC.
+  ⛔ `lib/prm/geo.core.js` es JS plano porque lo importa el handler, y **le sacó a `api/_georef.js`
+  la provincia clavada en «Santa Fe»** — ese cambio toca Envíos.
 - Insumos → **leer `docs/secciones/insumos.md`** antes de tocar `components/insumos/`,
   `lib/insumos/` o `api/_insumos.js`. ⛔ **El stock no es una columna: se suma del libro**, y de ahí
   sale el «desde cuándo falta» que es el `ts` del aviso. ⛔ Un traslado son DOS filas.

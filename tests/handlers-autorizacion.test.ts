@@ -109,6 +109,11 @@ const PUERTAS = [
   // base para las dos marcas: sin el gate, `store` sería un filtro que el que llama elige, no un
   // candado. Y además lee `ventas` de la otra base para medir el ritmo.
   { archivo: '_insumos', llave: 'insumos', que: 'el catálogo de insumos y su libro' },
+  // Nació con gate (30-ago-2026). Entra igual porque ESCRIBE y porque lo abren DOS secciones de
+  // dos áreas distintas (`prm` lee la ficha, `recorridas` escribe lo de la calle): el gate de acá
+  // es el único lugar donde se decide cuál de las dos puede hacer qué. Su tabla vive en UNA sola
+  // base para las dos marcas, así que `store` sin gate sería un filtro que elige el que llama.
+  { archivo: '_prm', llave: 'prm', que: 'el padrón de proveedores' },
 ] as const
 
 /** El perfil que SÍ tiene una sección tildada en BDI. */

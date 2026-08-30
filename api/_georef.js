@@ -76,6 +76,20 @@ async function pedir(direcciones) {
  */
 export async function geocodificarEnEscalera(pedidos) {
   const pendientes = (pedidos || []).map((p) => ({ ...p, resultado: null, usada: null }));
+
+  // 🔴 **`provincia` es obligatoria y por pedido, no una constante de este archivo.** Hasta el
+  // 30-ago-2026 estaba clavada en `'Santa Fe'`, que era verdad mientras el único que llamaba acá era
+  // Envíos (la moto sale de Rosario). El PRM pregunta por locales de Flores: con la provincia
+  // clavada, "Avellaneda 3200, CABA" resolvía **en Santa Fe**, y Georef contesta un punto plausible
+  // en vez de un error — o sea, exactamente el geocoder que inventa lejos por el que se descartó
+  // Nominatim. Un default acá dejaría el mismo agujero con otra cara: el que no la manda no se
+  // entera, y el que se entera es el punto equivocado tres pantallas después.
+  const sinProvincia = pendientes.filter((p) => !p.provincia);
+  if (sinProvincia.length) {
+    throw new Error(
+      `geocodificarEnEscalera: ${sinProvincia.length} pedido(s) sin provincia (${sinProvincia.slice(0, 3).map((p) => p.clave).join(', ')}). Es obligatoria: sin ella Georef busca en la provincia equivocada y contesta igual.`,
+    );
+  }
   const vueltas = Math.max(0, ...pendientes.map((p) => (p.intentos || []).length));
 
   for (let v = 0; v < vueltas; v++) {
@@ -85,7 +99,7 @@ export async function geocodificarEnEscalera(pedidos) {
     for (let i = 0; i < toca.length; i += POR_LOTE) {
       const parte = toca.slice(i, i + POR_LOTE);
       const res = await pedir(
-        parte.map((p) => ({ direccion: p.intentos[v], provincia: 'Santa Fe', localidad: p.localidad, max: 1 })),
+        parte.map((p) => ({ direccion: p.intentos[v], provincia: p.provincia, localidad: p.localidad, max: 1 })),
       );
       parte.forEach((p, k) => {
         if (res[k]) {

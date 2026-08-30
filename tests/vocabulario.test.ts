@@ -51,6 +51,11 @@ const SIMBOLOS = new Set([
   'MOTIVOS_QUITAR_ITEM',
   'Quitados',
   'alBorrar',
+  // Los tres helpers del borrador de una parada del PRM (`components/recorridas/Parada.tsx`).
+  // Ninguna pantalla podría decirlos: son camelCase y nombran el acceso a `localStorage`.
+  'borrarBorrador',
+  'guardarBorrador',
+  'leerBorrador',
   'bloqueoBorrado',
   'bloqueoQuitarItem',
   'borr',

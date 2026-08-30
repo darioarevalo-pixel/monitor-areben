@@ -165,9 +165,29 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
-    "key": "proveedores",
+    "key": "recorridas",
     "area": "compras",
-    "label": "Proveedores",
+    "label": "Recorridas",
+    "info": "Los locales de proveedores que hay que visitar y el viaje a verlos. Se cargan de a uno o en tanda —pegando una nota o subiendo los lugares guardados de Google Maps—, se arma la recorrida del día ordenada por cercanía, y en la calle se anota desde el celular qué pareció el local, qué producto interesa, si se compró y qué quedó prometido. ⛔ La compra no se carga acá: se le manda al sistema de Ingresos y vuelve contada por la orden de compra. La ficha completa de cada proveedor está en PRM.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
+    "key": "prm",
+    "area": "proveedores",
+    "label": "PRM",
+    "info": "La relación con cada proveedor (Provider Relationship Manager): quién es, dónde queda, qué se le anotó en cada visita, qué producto suyo interesa y a qué precio, y qué quedó prometido de un lado y del otro. Cruza eso con lo que el sistema ya mide: si entrega lo que le pedimos (de las órdenes de compra) y cómo vendió su mercadería. Es a los proveedores lo que Clientes es a los clientes; lo que pasa en la calle se carga en Recorridas.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
+    "key": "proveedores",
+    "area": "proveedores",
+    "label": "Ventas por proveedor",
     "info": "Análisis de ventas y stock por proveedor.",
     "brands": [
       "zattia"
@@ -1105,10 +1125,19 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "pedidos-clientes",
       "fundas-modelo",
+      "recorridas",
       "ingresos",
       "recepciones",
-      "proveedores",
       "disenos"
+    ]
+  },
+  {
+    "id": "proveedores",
+      "icono": "proveedores",
+    "label": "Proveedores",
+    "keys": [
+      "prm",
+      "proveedores"
     ]
   },
   {
