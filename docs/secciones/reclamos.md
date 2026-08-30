@@ -2298,9 +2298,11 @@ de BDI: **`tiene_mail: true` en las dos**.
   un guard que rechaza a todo el mundo también pasa el test de «rechaza».
   ✅ Caminado en prod: sin credencial **403**, con credencial del padrón **200 como siempre**, y el
   POST del cliente sigue contestando 404 sin pedir nada.
-  ▶️ **Lo que ⛔ no está caminado y necesita a Bruno**: abrir Reclamos o Cambios **en el navegador**
-  y buscar una orden. El servidor acepta la credencial y hay un test que fija que el front la manda,
-  pero **nadie apretó el botón** — es [[feedback_areben_deploy_llego_pero_la_puerta_no_se_aprieta]].
+  ✅ **Y caminado EN EL NAVEGADOR por Bruno el 30-ago-2026**: `/postventa?tab=reclamos`, orden 21033,
+  aparece con sus 2 productos. Era el único paso que ⛔ no se podía dar desde acá —el servidor
+  aceptando la credencial y un test fijando que el front la manda ⛔ no son que **el botón se pueda
+  apretar**— y es la mitad que este repo ya pagó antes
+  ([[feedback_areben_deploy_llego_pero_la_puerta_no_se_aprieta]]).
 - **El tope por rato** desde el mismo origen (freno 2 de los tres del §2) ⛔ no existe todavía: hoy
   el mail se puede probar sin límite.
 - 🔑 **El cruce lo tiene que hacer quien ESCRIBE.** Este endpoint es la primitiva; el handler que

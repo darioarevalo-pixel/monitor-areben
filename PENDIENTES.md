@@ -599,5 +599,5 @@ antes de rehacerlo.
   lo que pagó, forma de pago, envío, seguimiento y cada producto, por un número **correlativo**, con
   el repo público en GitHub. No era una decisión sino un olvido de una migración ya hecha (quedaban
   dos llamadores). Caminado en prod: sin credencial 403, con credencial 200 como siempre.
-  ▶️ **Una mano tuya**: abrir **Reclamos o Cambios en el navegador** y buscar una orden. El servidor
-  acepta la credencial y un test fija que el front la manda, pero nadie apretó el botón todavía.
+  ✅ **Caminado en el navegador el mismo día**: `/postventa?tab=reclamos`, orden 21033, aparece con
+  sus 2 productos. Nada que hacer acá.
