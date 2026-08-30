@@ -612,7 +612,9 @@ antes de rehacerlo.
   «todavía no me llegó» entra por `demora` y ⛔ no por `no_llego`).
   🔴 **Y destapó una CUARTA copia de la regla del portal**: `reemitir-token` acuñaba un link nuevo
   para un cambio ya decidido y contestaba «listo», y el portal después le daba **404 al cliente**.
-  ⛔ Sin migración · **31 mutantes, 31 muertos** (2 controles inocuos vivos).
-  ▶️ **Lo que falta para que alguien lo use**: **la pantalla** (los cuatro toques en
-  `ReclamoPublico.tsx` + la ruta pública), **caminarlo contra prod** con la orden 21033 sembrando y
-  borrando, y **decidir por dónde le llega el link al cliente** (eso es de Bruno).
+  ⛔ Sin migración · **31 mutantes, 31 muertos** (2 controles inocuos vivos) · ✅ **caminado contra
+  PRODUCCIÓN, 16 de 16** (`node scripts/caminar-alta-publica.mjs`), con una fila sembrada y borrada y
+  **las 2 reales intactas**.
+  ▶️ **Lo único que falta para que alguien lo use es LA PANTALLA**: los cuatro toques en
+  `ReclamoPublico.tsx` y la ruta pública por donde se entra.
+  ▶️ **De Bruno**: por dónde le llega el link al cliente (¿el mail de la compra? ¿el pie de la web?).

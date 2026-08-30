@@ -2442,13 +2442,23 @@ que **entra al bundle del navegador**.
   Tienda Nube, qué inserta, y que lo del body se ignore). Y `tests/reclamos-link-regenerado.test.ts`,
   que ⛔ **no existía**: `reemitir-token` ⛔ no tenía un solo test.
 - ⚠️ **⛔ Sin migración**: ninguna columna nueva.
+- ✅ **Caminado contra PRODUCCIÓN, 16 de 16** (`node scripts/caminar-alta-publica.mjs`), con una fila
+  sembrada y borrada y **las 2 reales intactas**. 🔑 **El oráculo del deploy es el comportamiento y ⛔
+  no el chunk**: el alta vive en una función serverless, que ⛔ no entra al bundle ⇒ lo que se mira es
+  que un alta mal formada conteste **400** donde antes contestaba **404** (la puerta del token).
+  🔑 **Y el oráculo de lo escrito viene por otro camino que el hecho**: se escribe por la API pública
+  y **la fila se lee cruda por PostgREST** con la service key.
+  ⚠️ **Conseguir el mail para caminarlo ⛔ no es trivial, a propósito**: `mail_diag` contesta sí o no
+  y ⛔ nunca cuál. Se cruzó el nombre que devuelve el `GET` interno de la orden contra
+  `ventas.client_email` — y eso ⛔ **no es la llave**, es una casualidad de tener las dos puntas.
+- 🔑 **Los dos frenos se caminaron con casos reales**: la orden **21100**, que ya tiene un reclamo
+  abierto, contestó **200 con el token del que ya existe** y ⛔ no creó nada (siguieron siendo 2
+  filas); y el segundo alta sobre la fila recién sembrada devolvió **el mismo link**.
 
 ### ▶️ Lo que queda
 
 - 🔴 **La pantalla**: la vista del alta en `ReclamoPublico.tsx` (los cuatro toques) y la ruta pública
   por donde se entra. Hasta que exista, **esto ⛔ no lo puede usar nadie**.
-- 🔴 **⛔ No se caminó contra prod**, y este es de los que se caminan: escribe filas y habla con el
-  otro repo. Falta el paso con una orden real —21033— sembrando y borrando.
 - **El link, ⛔ no está decidido dónde vive**: qué URL se le manda al cliente y desde dónde
   (¿el mail de la compra? ¿el pie de la web?). Es de Bruno.
 - ⚠️ El alta ⛔ no toma relato: el cliente lo escribe **después**, en el portal, con `accion: 'enviar'`
