@@ -362,6 +362,13 @@ export const DESCRIPCIONES: Record<string, string> = {
   agenda: 'Qué corre hoy y qué hay que hacer: las promociones bancarias, las rutinas del día y el trabajo que deja cada evento.',
   novedades: 'Qué cambió en los sistemas, de lo más nuevo a lo más viejo.',
   manuales: 'Cómo se hace cada cosa: los procedimientos de trabajo, escritos.',
+  // 🔴 **Faltaba, y el CI lo dijo desde las 15:02 del 30-ago-2026**: `seccion-header` exige que
+  // TODA sección registrada tenga descripción, y `organizacion` entró al registro sin la suya
+  // ⇒ el encabezado salía mudo, y el rojo tapaba cualquier otro que apareciera después.
+  // ⚠️ El texto sale de lo que la sección dice de sí misma (`components/organizacion/Organizacion.tsx`:
+  // *«de quién es cada cosa, sin fecha»*, la contracara de la Agenda), ⛔ no inventado: quien la
+  // construyó puede reescribirlo, pero mudo ⛔ no puede quedar.
+  organizacion: 'De quién es cada cosa: el organigrama, qué responde cada sector y cada persona, y lo que todavía no tiene dueño.',
   usuarios: 'Usuarios del equipo y qué ve cada uno, por marca y por sección.',
   resumen: 'Panel principal con los KPIs del negocio.',
   productos: 'Ventas, vida útil y stock de cada producto, con selección de outlet.',
