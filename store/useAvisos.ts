@@ -16,12 +16,12 @@
 import { create } from 'zustand'
 import { leerCajon } from '@/lib/solicitudes/cajon'
 import { leerFallas } from '@/lib/postventa/fallas/cliente'
-import { leerReclamosParaAviso } from '@/lib/reclamos/cliente'
+import { leerReclamosParaAviso, leerRetornos } from '@/lib/reclamos/cliente'
 import { puedeVer } from '@/lib/permisos'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeInsumo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeInsumo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeRetorno, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
 import { traerHallazgos } from '@/lib/meta-ads/cliente'
@@ -157,7 +157,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
           // fotos de Stunned existiría pero **no la vería nadie**: ésta es la lista de la que sale
           // el aviso y la pantalla `/solicitudes`, o sea por dónde el local se entera de que hay
           // algo para preparar. Una solicitud que no aparece acá no se prepara nunca.
-          const [porFoto, i, fallas, reclamos] = await Promise.all([
+          const [porFoto, i, fallas, reclamos, retornos] = await Promise.all([
             Promise.all(
               lineasDeMarca(m).map(async (l) => ({ l, r: await leerCajon<Solicitud>('sesionfotos', l) })),
             ),
@@ -173,13 +173,21 @@ export const useAvisos = create<AvisosState>((set, get) => ({
             puedeVer(perfil, m, 'postventa')
               ? leerReclamosParaAviso(m).catch(() => ({ filas: [], hayMas: false }))
               : Promise.resolve({ filas: [], hayMas: false }),
+            // 🔑 **La bandeja de Depósito, por la puerta angosta.** Mismo atajo de permiso que la
+            // línea de arriba, y el mismo motivo por el que hacen falta las dos lecturas: quien ve
+            // `postventa` baja los reclamos enteros y quien sólo ve `retornos` ⛔ **no puede** —esa
+            // puerta le contesta 403—, así que ésta es la única fuente que le llega. `avisosDeRetorno`
+            // vuelve a mirar los dos permisos y es el que decide.
+            puedeVer(perfil, m, 'retornos') && !puedeVer(perfil, m, 'postventa')
+              ? leerRetornos(m).catch(() => [])
+              : Promise.resolve([]),
           ])
           const solsFoto = porFoto.flatMap(({ r }) => (r.ok ? r.dato : []))
           const resumenes = [
             ...porFoto.flatMap(({ l, r }) => (r.ok ? r.dato.map((s) => resumenFoto(s, l)) : [])),
             ...(i.ok ? i.dato.map((s) => resumenInterna(s, m)) : []),
           ]
-          return { m, resumenes, solsFoto, fallas, reclamos }
+          return { m, resumenes, solsFoto, fallas, reclamos, retornos }
         }),
       )
 
@@ -200,6 +208,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...porMarca.flatMap((p) => avisosDeNoDevueltos(p.solsFoto, p.m, perfil)),
         ...porMarca.flatMap((p) => avisosDeFallas(p.fallas, p.m, perfil)),
         ...porMarca.flatMap((p) => avisosDeReclamo(p.reclamos.filas, p.m, perfil, p.reclamos.hayMas)),
+        ...porMarca.flatMap((p) => avisosDeRetorno(p.retornos, p.m, perfil)),
         ...canjes,
         ...pauta,
         ...insumos,

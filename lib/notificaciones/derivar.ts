@@ -13,7 +13,8 @@ import { faltantes, salio } from '@/lib/sesionfotos/core'
 import { veTodo, type ResumenSolicitud } from '@/lib/solicitudes/overview'
 import { pendientesDeTrabajo } from '@/lib/inicio/core'
 import type { FallaRow } from '@/lib/postventa/fallas/tipos'
-import { alertasDe, estaAbierto, MOTIVO_LABEL, numeroReclamo, type AlertaReclamo, type ReclamoRow } from '@/lib/reclamos/tipos'
+import { alertasDe, DIAS_ALERTA, estaAbierto, MOTIVO_LABEL, numeroReclamo, type AlertaReclamo, type ReclamoRow } from '@/lib/reclamos/tipos'
+import { bandejaDeRetornos, type RetornoRow } from '@/lib/reclamos/retornos'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
 import { gravedadDeHallazgo, type Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
@@ -195,6 +196,56 @@ export function avisosDeReclamo(filas: ReclamoRow[], marca: Marca, perfil: Perfi
       ts: a.ts,
       tono: a.tono,
     })))
+}
+
+/**
+ * **Lo que Depósito está esperando y ⛔ no aparece, y lo que tiene que despachar y ⛔ no salió.**
+ *
+ * 🔴 **Por qué hace falta un derivador aparte, y ⛔ no alcanzaba `avisosDeReclamo`.** El de arriba
+ * empieza con `puedeVer(perfil, marca, 'postventa')` — a propósito, porque manda a esa pantalla— y
+ * **Depósito ⛔ no tiene esa sección**: el tercer andén de Retornos se construyó justamente porque
+ * ⛔ no puede abrir Reclamos. ⇒ los dos relojes que la bandeja ya calcula —quince días sin aparecer,
+ * dos sin despachar— se dibujaban **sólo adentro de la pantalla**, o sea que quien hace el trabajo
+ * se enteraba únicamente si entraba a mirar. Es la **quinta vuelta del agujero propio del módulo**:
+ * el trabajo de un lado de la puerta y la señal del otro
+ * ⇒ [[feedback_areben_dos_lados_bien_y_la_pregunta_del_medio]].
+ *
+ * ⛔ **No hay reglas nuevas acá tampoco**: los andenes, los plazos y el `tarde` salen enteros de
+ * `bandejaDeRetornos`, igual que los de arriba salen de `alertasDe`.
+ *
+ * 🔑 **Y ⛔ no le avisa dos veces al mismo**: quien puede abrir `postventa` ya recibe el aviso del
+ * reclamo, que cuenta los mismos días con el mismo reloj. Dos avisos por la misma fila, con dos
+ * rutas distintas, es peor que uno.
+ *
+ * ⚠️ **El andén de «Para guardar» ⛔ no avisa, y es a propósito**: ⛔ no tiene plazo
+ * (`tarde` es siempre `false` ahí). Lo que llegó está adentro del depósito, así que ⛔ no hay a
+ * quién ir a buscar — inventarle un reloj sería el pendiente que apura a quien ya hizo su parte.
+ */
+export function avisosDeRetorno(filas: RetornoRow[], marca: Marca, perfil: Perfil | null): Aviso[] {
+  if (!puedeVer(perfil, marca, 'retornos')) return []
+  if (puedeVer(perfil, marca, 'postventa')) return []
+  const b = bandejaDeRetornos(filas)
+  // El `ts` es **cuándo el aviso empezó a existir** —la referencia más el plazo—, igual que en
+  // `alertasDe`: sale de la misma fecha desde la que se cuentan los días y ⛔ no de `ahora`, o el
+  // badge se "estrenaría" en cada refresco y ⛔ no se podría apagar nunca.
+  const cuando = (dias: number, plazo: number) => Date.now() - (dias - plazo) * 86400000
+  const aviso = (f: (typeof b.esperando)[number], que: 'esperando' | 'despachar'): Aviso => ({
+    id: `retorno:${que}:${marca}:${f.reclamo.id}`,
+    tipo: 'reclamo' as const,
+    marca,
+    linea: marca,
+    titulo: `${f.numero} · ${que === 'esperando' ? 'Sin aparecer' : 'Sin despachar'}`,
+    detalle: que === 'esperando'
+      ? `Hace ${f.dias} días que no llega${f.traba ? ` · ${f.traba}` : ''}`
+      : `Hace ${f.dias} días que no sale${f.sale ? ` · ${f.sale}` : ''}`,
+    ruta: '/retornos',
+    ts: cuando(f.dias, que === 'esperando' ? DIAS_ALERTA.transito : DIAS_ALERTA.despacho),
+    tono: que === 'esperando' ? 'warning' : 'danger',
+  })
+  return [
+    ...b.esperando.filter((f) => f.tarde).map((f) => aviso(f, 'esperando')),
+    ...b.despachar.filter((f) => f.tarde).map((f) => aviso(f, 'despachar')),
+  ]
 }
 
 /**

@@ -67,7 +67,7 @@ import {
   trabaParaRecibir as trabaParaRecibirJs,
   unidadesQueVuelven as unidadesQueVuelvenJs,
 } from './unidades.core.js'
-import { MOMENTOS_DEL_MENSAJE as MOMENTOS_DEL_MENSAJE_JS } from './mensajes.core.js'
+import { MOMENTOS_DEL_MENSAJE as MOMENTOS_DEL_MENSAJE_JS, yaSeLeEscribio } from './mensajes.core.js'
 
 /**
  * **Los momentos que se le pueden contar al cliente**, en runtime y tipados.
@@ -76,8 +76,9 @@ import { MOMENTOS_DEL_MENSAJE as MOMENTOS_DEL_MENSAJE_JS } from './mensajes.core
  * TypeScript. Acá queda la cara tipada, igual que `EFECTOS_RESOLUCION` y `faltantesParaCerrar`.
  */
 export type MomentoDelMensaje =
-  | 'pedir_fotos' | 'mas_fotos' | 'propuesta' | 'resolucion'
-  | 'etiqueta_en_camino' | 'etiqueta' | 'despacho_hecho' | 'plata_enviada'
+  | 'acuse' | 'pedir_fotos' | 'mas_fotos' | 'revisando' | 'propuesta' | 'resolucion'
+  | 'etiqueta_en_camino' | 'etiqueta' | 'despacho_hecho' | 'retorno_recibido'
+  | 'cupon_listo' | 'plata_enviada'
   | 'detalle_cambio'
 
 export const MOMENTOS_DEL_MENSAJE = MOMENTOS_DEL_MENSAJE_JS as MomentoDelMensaje[]
@@ -90,13 +91,17 @@ export const MOMENTOS_DEL_MENSAJE = MOMENTOS_DEL_MENSAJE_JS as MomentoDelMensaje
  * apertura), pero el registro cuenta lo que efectivamente ocurrió de este lado.
  */
 export const MOMENTO_MENSAJE_LABEL: Record<MomentoDelMensaje, string> = {
+  acuse: 'Acuse: recibimos el reclamo',
   pedir_fotos: 'Apertura: el link para las fotos',
   mas_fotos: 'Le pedimos más fotos',
+  revisando: 'Le avisamos que lo estamos revisando',
   propuesta: 'La propuesta de que se lo quede',
   resolucion: 'La resolución',
   etiqueta_en_camino: 'La etiqueta va en camino',
   etiqueta: 'La etiqueta, con su seguimiento',
   despacho_hecho: 'Ya le despachamos lo suyo',
+  retorno_recibido: 'Le avisamos que nos llegó lo que devolvió',
+  cupon_listo: 'El cupón, con su código',
   plata_enviada: 'La plata ya salió',
   detalle_cambio: 'El detalle del cambio',
 }
@@ -2372,7 +2377,20 @@ export function alertasDe(d: ReclamoRow, ahora = Date.now()): AlertaReclamo[] {
   if (esperandoOferta >= DIAS_ALERTA.oferta) {
     alertas.push({ tono: 'warning', texto: `Le ofrecimos que se lo quede hace ${esperandoOferta} días y no contestó`, dias: esperandoOferta, ts: cuando(esperandoOferta, DIAS_ALERTA.oferta) })
   }
-  if (d.estado === 'borrador' && !d.compensacion && desdeCreado >= DIAS_ALERTA.sinMandar) {
+  /**
+   * 🔴 🔑 **`yaSeLeEscribio` es el tercer guard, y sin él este aviso ACUSABA DE ALGO QUE LA PANTALLA
+   * ⛔ NO DEJABA HACER** (29-ago-2026, I1 del mapa operativo). Hasta acá lo único que lo apagaba era
+   * que la fila saliera de `borrador`, y el único gesto que la saca es **copiar el mensaje de
+   * apertura** — que **sólo existe en los casos que piden fotos**. En `demora`, `no_llego` y
+   * `sin_stock` no había un solo mensaje para copiar ⇒ el aviso quedaba prendido en rojo para
+   * siempre, y lo único que lo callaba era que Administración decidiera. Tres de los once casos.
+   *
+   * 🔑 Ahora pregunta lo que el texto del aviso dice: **si se le escribió**. Es lo que anota
+   * `NOTA_SE_LE_ESCRIBIO` en el `historial` —el hecho—, y ⛔ no `mensajes`, que salió de `COLS` a
+   * propósito por peso y acá ⛔ no llegaría. ⚠️ Las filas viejas ⛔ no tienen la nota, así que siguen
+   * avisando exactamente igual que antes: esto ⛔ no calla nada retroactivamente.
+   */
+  if (d.estado === 'borrador' && !d.compensacion && !yaSeLeEscribio(d) && desdeCreado >= DIAS_ALERTA.sinMandar) {
     alertas.push({ tono: 'danger', texto: `Abierto hace ${desdeCreado} días y todavía no se le escribió`, dias: desdeCreado, ts: cuando(desdeCreado, DIAS_ALERTA.sinMandar) })
   }
   return alertas
@@ -2569,6 +2587,22 @@ export function trackingUrl(via: ViaRetorno | null | undefined, codigo: string):
   if (via === 'andreani') return 'https://www.andreani.com/?tab=seguir-envio'
   if (via === 'correo') return `https://www.correoargentino.com.ar/formularios/e-commerce?id=${encodeURIComponent(c)}`
   return null
+}
+
+/**
+ * **¿El link se lleva el código, o hay que pegarlo a mano del otro lado?**
+ *
+ * 🔴 Andreani es un portal y ⛔ no toma el código por URL, así que `trackingUrl` devuelve **la misma
+ * dirección con código o sin él**: el link se abre en una pantalla vacía y quien lo apretó tiene que
+ * volver, seleccionar el código y pegarlo. Es chico y pasa **todas** las veces.
+ *
+ * 🔑 **Se DERIVA de las dos funciones, ⛔ no es una segunda lista de transportistas.** El día que
+ * Andreani acepte el código por URL —o que entre un correo nuevo— esto se contesta solo; una lista
+ * a mano al lado de otra es el defecto que este módulo ya pagó cuatro veces.
+ */
+export function elCodigoNoViajaEnElLink(via: ViaRetorno | null | undefined, codigo: string): boolean {
+  const con = trackingUrl(via, codigo)
+  return !!con && con === trackingPortalUrl(via)
 }
 
 /** El portal de seguimiento, sin código: para el link que va al lado del campo. */

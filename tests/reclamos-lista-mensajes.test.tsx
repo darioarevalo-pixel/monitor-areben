@@ -110,12 +110,17 @@ const apretar = async (
 }
 
 /**
- * ⚠️ El texto del botón viene con el ícono pegado adelante (`📋Msj: pedir fotos`), así que se
+ * ⚠️ El texto del botón viene con el ícono pegado adelante (`📋Copiar la resolución`), así que se
  * busca por `includes` y se devuelve el rótulo limpio: comparar contra el string entero ataría el
  * test al ícono del kit, que ⛔ no es lo que se está probando.
+ *
+ * 🔴 **El prefijo era `Msj:` hasta el 29-ago-2026** — jerga interna abreviada, que `VOCABULARIO.md`
+ * §3 prohíbe en pantalla. Ahora los doce son `Copiar …`, que además es el verbo en infinitivo que
+ * pide la misma regla, y `Copiar` ya era el verbo del módulo (el ticket del cambio).
  */
+const PREFIJO = 'Copiar '
 const conMensaje = (bs: string[]) =>
-  bs.filter((b) => b.includes('Msj:')).map((b) => b.slice(b.indexOf('Msj:')))
+  bs.filter((b) => b.includes(PREFIJO)).map((b) => b.slice(b.indexOf(PREFIJO)))
 
 beforeAll(() => { (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true })
 
@@ -123,23 +128,37 @@ describe('la lista dibuja los mensajes del momento', () => {
   beforeEach(() => { window.history.replaceState(null, '', '/postventa') })
 
   it('sin fotos: ofrece pedirlas', async () => {
-    expect(conMensaje(await botones([base]))).toEqual(['Msj: pedir fotos'])
+    expect(conMensaje(await botones([base]))).toEqual(['Copiar el pedido de fotos'])
   })
 
   /**
    * 🔴 El defecto que reportó Bruno: *«si ya cargó fotos, y estamos en la parte de decisión, no hay
    * más fotos que cargar»*. Con la foto cargada, la columna de acciones queda **sin** ese botón.
+   *
+   * 🔴 **Y hasta el 29-ago-2026 quedaba sin NINGUNO**, que era el otro medio defecto: el local se
+   * queda mirando el estado que más dura sin nada que contestarle. Ahora está el aviso de revisión
+   * —y `mas_fotos` sigue en el detalle, ⛔ no acá.
    */
-  it('🔴 con la foto ya cargada ⛔ no aparece «Msj: pedir fotos» en la fila', async () => {
+  it('🔴 con la foto ya cargada: el aviso de revisión, y ⛔ no el pedido de fotos', async () => {
     const conFoto = { ...base, estado: 'en_revision', fotos: [{ url: 'https://blob/1.jpg' }] } as unknown as ReclamoRow
     const bs = await botones([conFoto])
-    expect(conMensaje(bs)).toEqual([])
-    expect(bs.join(' ')).not.toContain('pedir fotos')
+    expect(conMensaje(bs)).toEqual(['Copiar el aviso de revisión'])
+    expect(bs.join(' ')).not.toContain('pedido de fotos')
+  })
+
+  /**
+   * 🔴 **El cable del acuse** (I1): la regla puede estar en verde y el botón no existir — que es
+   * exactamente el defecto de `mensajeSeguimiento(…, 'reenvio')`, que estuvo probado y sin llamador.
+   * Acá se monta la lista con un caso que ⛔ no pide fotos y se lee el rótulo **dibujado**.
+   */
+  it('🔴 un caso que no pide fotos dibuja el acuse, y ⛔ no queda mudo', async () => {
+    const mudo = { ...base, motivo: 'no_llego' } as unknown as ReclamoRow
+    expect(conMensaje(await botones([mudo]))).toEqual(['Copiar el acuse'])
   })
 
   it('decidido: aparece el de resolución', async () => {
     const decidido = { ...base, estado: 'en_revision', compensacion: 'plata_total' } as unknown as ReclamoRow
-    expect(conMensaje(await botones([decidido]))).toEqual(['Msj: resolución'])
+    expect(conMensaje(await botones([decidido]))).toEqual(['Copiar la resolución'])
   })
 
   /**
@@ -157,7 +176,7 @@ describe('la lista dibuja los mensajes del momento', () => {
       retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
     } as unknown as ReclamoRow
     const bs = await botones([esperando])
-    expect(conMensaje(bs)).toEqual(['Msj: la propuesta'])
+    expect(conMensaje(bs)).toEqual(['Copiar la propuesta'])
     expect(bs.join(' ')).not.toContain('resolución')
   })
 
@@ -173,16 +192,16 @@ describe('la lista dibuja los mensajes del momento', () => {
       retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: null,
     } as unknown as ReclamoRow
     const bs = (await botones([esperando])).map((b) => b.trim())
-    expect(bs).toContain('Aceptó')
-    expect(bs).toContain('No aceptó')
+    expect(bs).toContain('Registrar que aceptó')
+    expect(bs).toContain('Registrar que no aceptó')
   })
 
   /** ⛔ Y sin oferta esperando ⛔ no hay nada que contestar: los dos botones ⛔ no existen. */
   it('sin oferta esperando ⛔ no aparece ninguno de los dos', async () => {
     const decidido = { ...base, estado: 'en_revision', compensacion: 'plata_total' } as unknown as ReclamoRow
     const bs = (await botones([decidido])).map((b) => b.trim())
-    expect(bs).not.toContain('Aceptó')
-    expect(bs).not.toContain('No aceptó')
+    expect(bs).not.toContain('Registrar que aceptó')
+    expect(bs).not.toContain('Registrar que no aceptó')
   })
 
   /**
@@ -191,7 +210,7 @@ describe('la lista dibuja los mensajes del momento', () => {
    */
   it('🔴 en tránsito sin etiqueta: ofrece avisarle que va en camino', async () => {
     const sinEtiqueta = { ...base, estado: 'en_transito', compensacion: 'plata_total', via_retorno: 'andreani' } as unknown as ReclamoRow
-    expect(conMensaje(await botones([sinEtiqueta]))).toEqual(['Msj: resolución', 'Msj: la etiqueta va en camino'])
+    expect(conMensaje(await botones([sinEtiqueta]))).toEqual(['Copiar la resolución', 'Copiar el aviso de la etiqueta'])
   })
 
   /** Contestada, no hay nada que preguntar: vuelve el de resolución. */
@@ -200,7 +219,7 @@ describe('la lista dibuja los mensajes del momento', () => {
       ...base, estado: 'resuelto', compensacion: 'plata_total',
       retencion_monto: 13491, retencion_forma: 'plata', retencion_respuesta: 'rechazo',
     } as unknown as ReclamoRow
-    expect(conMensaje(await botones([contestada]))).toEqual(['Msj: resolución'])
+    expect(conMensaje(await botones([contestada]))).toEqual(['Copiar la resolución'])
   })
 
   /**
@@ -213,7 +232,7 @@ describe('la lista dibuja los mensajes del momento', () => {
       ...base, estado: 'resuelto', compensacion: 'otro_producto',
       envio_nuevo_estado: 'hecho', seguimiento_ida: 'IDA9',
     } as unknown as ReclamoRow
-    expect(conMensaje(await botones([despachado]))).toEqual(['Msj: resolución', 'Msj: ya lo despachamos'])
+    expect(conMensaje(await botones([despachado]))).toEqual(['Copiar la resolución', 'Copiar el aviso del despacho'])
   })
 
   /**
@@ -230,7 +249,7 @@ describe('la lista dibuja los mensajes del momento', () => {
    */
   it('🔴 apretar un mensaje lo REGISTRA, con el mismo texto que copió', async () => {
     const decidido = { ...base, id: 22, estado: 'en_revision', compensacion: 'plata_total', monto_total: 13491 } as unknown as ReclamoRow
-    const { copiado, registrado } = await apretar([decidido], 'Msj: resolución')
+    const { copiado, registrado } = await apretar([decidido], 'Copiar la resolución')
     expect(copiado).not.toBe('')
     expect(registrado).toMatchObject({ action: 'mensaje', tipo: 'resolucion', id: 22 })
     expect(registrado?.texto).toBe(copiado)
@@ -246,7 +265,7 @@ describe('la lista dibuja los mensajes del momento', () => {
       ...base, id: 23, estado: 'resuelto', compensacion: 'otro_producto',
       envio_nuevo_estado: 'hecho', seguimiento_ida: 'IDA9',
     } as unknown as ReclamoRow
-    const { registrado } = await apretar([despachado], 'Msj: ya lo despachamos')
+    const { registrado } = await apretar([despachado], 'Copiar el aviso del despacho')
     expect(registrado?.tipo).toBe('despacho_hecho')
   })
 
@@ -261,7 +280,7 @@ describe('la lista dibuja los mensajes del momento', () => {
    */
   it('🔴 si el portapapeles RECHAZA, ⛔ no se registra nada', async () => {
     const decidido = { ...base, id: 22, estado: 'en_revision', compensacion: 'plata_total' } as unknown as ReclamoRow
-    const { registrado } = await apretar([decidido], 'Msj: resolución', 'rechaza')
+    const { registrado } = await apretar([decidido], 'Copiar la resolución', 'rechaza')
     expect(registrado).toBeNull()
   })
 
@@ -270,7 +289,7 @@ describe('la lista dibuja los mensajes del momento', () => {
       ...base, estado: 'resuelto', compensacion: 'otro_producto',
       envio_nuevo_estado: 'hecho', seguimiento_ida: 'IDA9', monto_total: 15283,
     } as unknown as ReclamoRow
-    const txt = await copiadoAlApretar([despachado], 'Msj: ya lo despachamos')
+    const txt = await copiadoAlApretar([despachado], 'Copiar el aviso del despacho')
     expect(txt).toContain('el producto de tu cambio')
     expect(txt).toContain('IDA9')
     expect(txt).not.toContain('devolución')

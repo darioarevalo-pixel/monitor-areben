@@ -33,10 +33,17 @@ import { ESTADOS_CON_LINK as ESTADOS_CON_LINK_JS, elLinkSigueVivo } from './port
  * que lo que hay no alcanza. Es el mismo mensaje y el mismo link; lo que cambia es dónde está.
  */
 export type MensajeDeLaFila =
+  /**
+   * El acuse de recibo de los casos que ⛔ no piden fotos. Es el **complemento exacto** de
+   * `pedir_fotos`: donde no hay evidencia que pedir, igual hay que contestarle.
+   */
+  | 'acuse'
   /** El de apertura, con el link para que el cliente suba las fotos. */
   | 'pedir_fotos'
   /** El mismo link, cuando ya cargó fotos y no alcanzan. Va en el detalle, ⛔ no en la columna. */
   | 'mas_fotos'
+  /** Ya mandó lo suyo y nadie decidió todavía: se le dice que está en manos nuestras. */
+  | 'revisando'
   /** La oferta de que se lo quede, mientras espera respuesta. El único que hace una PREGUNTA. */
   | 'propuesta'
   /** Qué se resolvió. Existe desde que hay resolución, ⛔ no desde que hay campos cargados. */
@@ -47,6 +54,10 @@ export type MensajeDeLaFila =
   | 'etiqueta'
   /** Ya salió lo que se le manda: el cambio, la otra unidad o lo que faltaba. */
   | 'despacho_hecho'
+  /** Lo que devolvió ya está acá. Es el único movimiento físico que ⛔ no se le contaba. */
+  | 'retorno_recibido'
+  /** El cupón ya existe en la tienda y tiene código. */
+  | 'cupon_listo'
   /** La plata ya salió. */
   | 'plata_enviada'
 
@@ -128,6 +139,31 @@ export function linkVivo(d: ReclamoRow): boolean {
  * tilda Depósito—, exactamente como `plata_enviada` se lee de `reintegro_estado`: **el hecho lo
  * cuenta quien lo hizo**, ⛔ no un campo de texto aparte.
  *
+ * 🔴 🔑 **`acuse` es el COMPLEMENTO EXACTO de `pedir_fotos`, y por eso tapa el agujero más grande
+ * que tenía este archivo** (29-ago-2026, I1 del mapa operativo). `demora`, `no_llego` y `sin_stock`
+ * tienen `fotos: 'nunca'` ⇒ `pide` es `false` ⇒ **la columna quedaba en cero mensajes**: el local
+ * abría el reclamo y ⛔ no tenía una sola cosa para copiarle a un cliente que ya había escrito
+ * enojado. Y peor: el gesto de copiar la apertura **es** el único que saca la fila de `borrador`, así
+ * que esos tres ⛔ **no podían salir nunca** — mientras el aviso les gritaba *«abierto hace N días y
+ * todavía no se le escribió»*, que sólo apagaba que Administración decidiera. Tres de once casos, y
+ * los dos que más duelen. ⇒ [[feedback_areben_modulo_que_nace_mudo]], entrando por la puerta del
+ * texto.
+ *
+ * 🔑 **`revisando` es el estado de la decisión dicho en criollo**, y ⛔ no contradice la regla de
+ * «ni uno de más»: `en_revision` significa *el cliente ya mandó lo suyo*, puede durar días
+ * (`DIAS_ALERTA.sinDecidir`), y hasta hoy era el único momento abierto **sin nada que decir** — la
+ * escapatoria era `mas_fotos`, que vive adentro del `⋯` porque es una decisión, ⛔ no una respuesta.
+ * ⚠️ Se calla si `pedir_fotos` está pidiendo: el cliente puede apretar «enviar» sin subir nada, y ahí
+ * lo que corresponde es volver a pedirlas, ⛔ no decirle que las estamos mirando.
+ *
+ * 🔑 **`retorno_recibido` y `cupon_listo` son HECHOS, y los dos venían de la misma forma de
+ * defecto**: un pendiente que alguien tilda y el cliente ⛔ no se entera, que es exactamente D5.
+ * `recibido` era el único movimiento **físico** del ciclo sin mensaje —el cliente despachó, pagó la
+ * espera, y del otro lado nadie le decía que llegó—; y el cupón se prometía *«te pasamos el código
+ * apenas lo tengamos»* y después `cupon-emitido` lo sellaba **en silencio**. Los dos se leen del
+ * pendiente que los cuenta (`estado` y `cupon_estado`+`cupon_codigo`), ⛔ no de un campo nuevo: el
+ * hecho lo cuenta quien lo hizo.
+ *
  * 🔑 `resolucion` se gatea por `estaDecidido`, ⛔ no por «hay campos cargados»: desde que
  * «Confirmar paso» guarda por `editar`, el reclamo tiene datos mucho antes de tener decisión, y
  * un mensaje de resolución es una **promesa al cliente** — es la clase de botón que ⛔ no puede
@@ -138,14 +174,21 @@ export function mensajesDeLaFila(d: ReclamoRow): MensajeDeLaFila[] {
   const fotos = (d.fotos || []).length
   const ms: MensajeDeLaFila[] = []
   const esperando = ofertaEsperandoRespuesta(d)
-  const pide = linkVivo(d) && pideFotos(d.motivo, d.expectativa)
-  if (pide && !fotos && !esperando) ms.push('pedir_fotos')
+  // `linkVivo` ya contesta las dos mitades de «abierto»: el estado Y que nadie haya decidido.
+  const abierto = linkVivo(d)
+  const pide = abierto && pideFotos(d.motivo, d.expectativa)
+  const pidiendoFotos = pide && !fotos && !esperando
+  if (abierto && !pide && !esperando) ms.push('acuse')
+  if (pidiendoFotos) ms.push('pedir_fotos')
   if (pide && !!fotos) ms.push('mas_fotos')
+  if (abierto && d.estado === 'en_revision' && !esperando && !pidiendoFotos) ms.push('revisando')
   if (esperando) ms.push('propuesta')
   if (estaDecidido(d) && !esperando) ms.push('resolucion')
   if (laEtiquetaEstaDebida(d)) ms.push('etiqueta_en_camino')
   if (d.seguimiento_vuelta) ms.push('etiqueta')
   if (d.envio_nuevo_estado === 'hecho') ms.push('despacho_hecho')
+  if (d.estado === 'recibido') ms.push('retorno_recibido')
+  if (d.cupon_estado === 'hecho' && d.cupon_codigo) ms.push('cupon_listo')
   if (d.reintegro_estado === 'hecho') ms.push('plata_enviada')
   return ms
 }

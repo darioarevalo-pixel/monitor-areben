@@ -13,7 +13,7 @@
 
 import {
   MOTIVO_LABEL, VIA_LABEL,
-  type Compensacion, type Expectativa, type ReclamoRow, type ItemReclamo, type ViaRetorno,
+  type Compensacion, type Expectativa, type MotivoReclamo, type ReclamoRow, type ItemReclamo, type ViaRetorno,
 } from './tipos'
 
 
@@ -75,6 +75,90 @@ export function mensajeApertura(d: Pick<ReclamoRow, 'cliente' | 'orden_tn' | 'mo
     link,
     '',
     'Apenas las veamos te confirmamos cómo seguimos. ¡Gracias!',
+  ].join('\n')
+}
+
+/**
+ * **Qué le estamos haciendo al caso, cuando ⛔ no hay nada que pedirle.**
+ *
+ * Lista cerrada con salida genérica, igual que `QUE_SE_DESPACHO` y `ALTERNATIVA_POR_RESOLUCION`.
+ * ⚠️ **⛔ No promete un resultado ni una fecha**: en `demora` y `no_llego` lo que sigue depende del
+ * correo, y prometer por él es exactamente lo que este archivo existe para no dejar improvisar.
+ */
+const QUE_ESTAMOS_HACIENDO: Partial<Record<MotivoReclamo, string>> = {
+  demora: 'Ya estamos viendo con el correo qué pasó con tu envío.',
+  no_llego: 'Ya le estamos reclamando al correo para saber dónde está el paquete.',
+  sin_stock: 'Nos quedamos sin stock del producto que compraste, y lo sentimos mucho.',
+}
+
+/**
+ * **El cierre del acuse**, que ⛔ no es el mismo en los tres.
+ *
+ * 🔑 En `sin_stock` **decide el cliente** —es el único caso del módulo donde la salida la elige él—,
+ * así que el acuse termina en una PREGUNTA y la pelota queda de su lado. En `demora` y `no_llego` la
+ * pelota es **nuestra**: ahí el cierre dice explícitamente que ⛔ no tiene que hacer nada, por lo
+ * mismo que `mensajeEtiquetaEnCamino` — sin eso el cliente vuelve a escribir.
+ *
+ * ⚠️ Las dos opciones que se le ofrecen en `sin_stock` son las dos que **siempre** existen
+ * (`compensacionesDe`): el cambio y la plata. ⛔ La reposición ⛔ no entra —es lo único que no
+ * tenemos— y ofrecerla sería prometer justo lo que falta.
+ */
+const COMO_SIGUE: Partial<Record<MotivoReclamo, string>> = {
+  sin_stock: 'Contanos qué preferís y lo dejamos listo: te lo cambiamos por otro producto, o te devolvemos la plata. ¡Gracias!',
+}
+
+const COMO_SIGUE_POR_DEFECTO = 'No tenés que hacer nada: te contamos por acá apenas tengamos novedades. ¡Gracias por la paciencia!'
+
+/**
+ * 1b) **El acuse de recibo de los casos que ⛔ no piden fotos.**
+ *
+ * 🔴 Es el mensaje que faltaba, y el agujero era grande: `demora`, `no_llego` y `sin_stock` tienen
+ * `fotos: 'nunca'`, así que la columna del local quedaba en **cero mensajes** sobre un cliente que ya
+ * había escrito. Tres de los once casos, y los dos donde más duele el silencio.
+ *
+ * 🔑 **⛔ No pide nada: cuenta qué estamos haciendo.** Ésa es la diferencia con `mensajeApertura`, y
+ * es la razón por la que ⛔ no se resolvió mandando el link igual — en estos tres no hay ninguna foto
+ * que sirva, y pedir evidencia que no existe entrena a ignorar el pedido.
+ */
+export function mensajeAcuse(
+  d: Pick<ReclamoRow, 'cliente' | 'orden_tn' | 'motivo' | 'items'>,
+  numero: string,
+): string {
+  const items = d.items || []
+  const motivo = d.motivo as MotivoReclamo
+  return [
+    saludo(d.cliente),
+    '',
+    `Recibimos tu reclamo ${numero}${d.orden_tn ? ` por tu pedido #${d.orden_tn}` : ''}:`,
+    lista(items),
+    '',
+    QUE_ESTAMOS_HACIENDO[motivo] || 'Ya lo estamos revisando.',
+    '',
+    COMO_SIGUE[motivo] || COMO_SIGUE_POR_DEFECTO,
+  ].join('\n')
+}
+
+/**
+ * 1c) **Ya mandó lo suyo y todavía nadie decidió.**
+ *
+ * `en_revision` significa literalmente *«el cliente ya cargó las fotos»*, puede durar días
+ * (`DIAS_ALERTA.sinDecidir` avisa a los 3) y era el único momento abierto **sin nada para decirle**.
+ *
+ * ⚠️ **⛔ No adelanta la resolución** —todavía no existe— y ⛔ no promete un plazo. Lo único que
+ * afirma es un hecho: lo que mandó llegó, y la pelota es nuestra.
+ */
+export function mensajeRevisando(
+  d: Pick<ReclamoRow, 'cliente'>,
+  numero: string,
+): string {
+  return [
+    saludo(d.cliente),
+    '',
+    `Ya nos llegó todo lo que necesitábamos para el reclamo ${numero}.`,
+    '',
+    'Lo estamos revisando y te contamos cómo seguimos. No hace falta que hagas nada.',
+    '',
+    '¡Gracias por la paciencia!',
   ].join('\n')
 }
 
@@ -312,6 +396,71 @@ export function mensajeSeguimiento(
 
   partes.push('', '¡Gracias!')
   return partes.join('\n')
+}
+
+/**
+ * **Qué sigue una vez que la prenda volvió**, por resolución. Lista cerrada con salida genérica,
+ * igual que `QUE_SE_DESPACHO`: nombrar mal lo que viene es prometerle otra cosa de la que va a pasar.
+ */
+const SIGUE_AL_RECIBIR: Partial<Record<Compensacion, string>> = {
+  plata_total: 'Seguimos con la devolución de la plata.',
+  plata_parcial: 'Seguimos con la devolución de la plata.',
+  otro_producto: 'Seguimos con tu cambio.',
+  otra_unidad: 'Seguimos con el envío de la otra unidad.',
+  reenvio: 'Seguimos con el envío de lo que falta.',
+}
+
+/**
+ * 6) **Lo que devolviste ya está acá.**
+ *
+ * 🔴 Era el **único movimiento físico del ciclo sin mensaje**: el cliente despacha, espera, y del
+ * otro lado nadie le dice que llegó. Es el momento de más ansiedad de todo el recorrido —ya no tiene
+ * el producto **ni** la plata— y era justo donde el sistema se callaba.
+ *
+ * 🔑 Es un **hecho**, así que ⛔ no lo calla una oferta esperando respuesta, igual que `etiqueta`,
+ * `despacho_hecho` y `plata_enviada`. Lo cuenta el estado `recibido`, que lo sella Depósito al abrir
+ * la caja: **el hecho lo cuenta quien lo hizo**.
+ */
+export function mensajeRetornoRecibido(
+  d: Pick<ReclamoRow, 'cliente' | 'compensacion'>,
+  numero: string,
+): string {
+  return [
+    saludo(d.cliente),
+    '',
+    `Nos llegó lo que nos devolviste del reclamo ${numero}.`,
+    '',
+    SIGUE_AL_RECIBIR[d.compensacion as Compensacion] || 'Seguimos con lo que te contamos.',
+    '',
+    '¡Gracias!',
+  ].join('\n')
+}
+
+/**
+ * 7) **El cupón ya existe, y éste es el código.**
+ *
+ * 🔴 Misma forma de defecto que D5, una vuelta más adelante: sin código, `mensajeResolucion` promete
+ * *«te pasamos el código por acá apenas lo tengamos»* — y cuando `cupon-emitido` lo sellaba,
+ * **⛔ no había ningún momento que lo contara**. La promesa quedaba abierta y el cliente descubría el
+ * cupón en la próxima compra, o no lo descubría nunca.
+ *
+ * 🔑 Se lee del pendiente que lo cuenta (`cupon_estado === 'hecho'` **y** el código), ⛔ no de un
+ * campo nuevo. Y `cupon-emitido` **exige el código**, que es lo único que prueba que el cupón existe
+ * en la tienda: por eso acá el código ⛔ no puede faltar.
+ */
+export function mensajeCuponListo(
+  d: Pick<ReclamoRow, 'cliente' | 'cupon_codigo'>,
+  numero: string,
+): string {
+  return [
+    saludo(d.cliente),
+    '',
+    `Ya está listo el cupón del reclamo ${numero}.`,
+    '',
+    `Código: ${d.cupon_codigo}`,
+    '',
+    'Lo cargás al pagar, en tu próxima compra. ¡Gracias!',
+  ].join('\n')
 }
 
 /** Para el historial: qué mensaje se le mandó y cuándo. */

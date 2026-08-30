@@ -540,7 +540,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
           <><b>Guardá el borrador</b> y pasale el detalle al cliente. Queda esperando hasta que pague — no hace falta terminarlo de una.</>,
           <>Cuando cobres, <b>Marcar como pagado</b>. Recién ahí se habilita <b>Crear venta</b>.</>,
           <><b>Crear venta</b> genera la venta REAL en Gestión Nube: baja el stock de lo que se lleva y cuenta en la analítica.</>,
-          <>Cuando vuelva el producto, <b>Volvió</b> y después <b>Reingresado</b> (el reingreso en GN es a mano: la API no acepta una venta negativa).</>,
+          <>Cuando vuelva el producto, <b>Marcar recibido</b> y después <b>Reingresar</b> (el reingreso en GN es a mano: la API no acepta una venta negativa).</>,
         ]}
         ojo={<>El cambio <b>no lo aprueba Administración</b>: ya está decidido. Lo único que pasa por ella es la plata que sale de la caja, o sea cuando la cuenta queda a favor del cliente.</>}
       />
@@ -842,13 +842,13 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                             <Button size="sm" variant="solid" tone="action" onClick={() => void crearVentaLista(c)} disabled={ocup}>Crear venta</Button>
                           )}
                           {c.cobro_estado === 'pendiente' && (
-                            <Button size="sm" variant="soft" tone="success" onClick={() => void cobrar(c)} disabled={ocup}>Cobré la diferencia</Button>
+                            <Button size="sm" variant="soft" tone="success" onClick={() => void cobrar(c)} disabled={ocup}>Cobrar la diferencia</Button>
                           )}
                           {c.estado === 'en_transito' && (
-                            <Button size="sm" variant="outline" tone="action" onClick={() => void accion(c.id, async () => { await marcarRecibido(marca, c.id) }, 'Marcado como recibido.')} disabled={ocup}>Volvió</Button>
+                            <Button size="sm" variant="outline" tone="action" onClick={() => void accion(c.id, async () => { await marcarRecibido(marca, c.id) }, 'Marcado como recibido.')} disabled={ocup}>Marcar recibido</Button>
                           )}
                           {c.reingreso_estado === 'pendiente' && (c.estado === 'recibido' || c.estado === 'en_transito') && (
-                            <Button size="sm" variant="outline" tone="brand" onClick={() => void reingresar(c)} disabled={ocup}>Reingresado</Button>
+                            <Button size="sm" variant="outline" tone="brand" onClick={() => void reingresar(c)} disabled={ocup}>Reingresar</Button>
                           )}
                           {/* 🔴 **El pendiente que esta pantalla NOMBRABA y ⛔ no podía tildar**
                               (D14 de la auditoría del 28-ago-2026). Todo cambio nace con
@@ -862,7 +862,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                               sella sólo si el pendiente está vive en el handler, así que esta
                               pantalla ⛔ no puede afirmar de más aunque el botón se muestre mal. */}
                           {c.envio_nuevo_estado === 'pendiente' && (
-                            <Button size="sm" variant="outline" tone="action" onClick={() => void despachar(c)} disabled={ocup}>Despaché</Button>
+                            <Button size="sm" variant="outline" tone="action" onClick={() => void despachar(c)} disabled={ocup}>Despachar</Button>
                           )}
                           {esAdmin && c.estado !== 'cerrado' && !faltanCerrar.length && (
                             <Button size="sm" variant="solid" tone="success" onClick={() => void accion(c.id, () => cambiarEstado(marca, c.id, 'cerrado'), 'Cambio cerrado.')} disabled={ocup}>Cerrar</Button>
@@ -874,7 +874,7 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
                             marca={marca} id={c.id} tipo="detalle_cambio"
                             onSinRegistrar={(e) => toast.error(`El detalle se copió, pero ⛔ no quedó registrado: ${e.message}`)}
                             getText={() => detalleCambioTexto({ ...c, items: c.items, items_nuevos: c.items_nuevos })}
-                            label="Copiar" tone="neutral" variant="ghost"
+                            label="Copiar el detalle" tone="neutral" variant="ghost"
                           />
                           <Button size="sm" variant="ghost" onClick={() => setExpandido(expandido === c.id ? null : c.id)} title="Historial de estados">⋯</Button>
                           {esAdmin && <Button size="sm" variant="ghost" tone="danger" onClick={() => void borrar(c)} disabled={ocup}>Eliminar</Button>}

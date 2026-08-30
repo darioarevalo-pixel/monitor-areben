@@ -1170,7 +1170,7 @@ export function DecidirReclamo({
                           disabled={montoOferta <= 0}
                           title={montoOferta <= 0 ? 'Poné cuánto le ofreciste' : undefined}
                           onClick={() => contestoLaOferta('rechazo')}
-                        >No aceptó</Button>
+                        >No aceptó: sigue el reclamo</Button>
                         {retencion && !descuento.conviene && <StatusPill tone="warning" label="Va contra la sugerencia" />}
                       </div>
                       {/* 🔑 La rechazada es la que hay que registrar: la aceptada se adivina por la

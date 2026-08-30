@@ -7,6 +7,7 @@ import {
   avisosDeInsumo,
   avisosDeNoDevueltos,
   avisosDeReclamo,
+  avisosDeRetorno,
   avisosDeSolicitud,
   contarNuevos,
   ordenarAvisos,
@@ -329,6 +330,79 @@ describe('avisos de reclamos durmiendo', () => {
     expect(a.tono).toBe('danger')
     // ⛔ No inventa reglas: el plazo sigue estando en `alertasDe`, y el de ayer no llega.
     expect(avisosDeReclamo([reclamo({ estado: 'borrador', compensacion: null, created_at: hace(1), updated_at: hace(1) })], 'bdi', administracion)).toEqual([])
+  })
+
+  /**
+   * 🔴 **La bandeja de Depósito ⛔ no llegaba a ningún lado** (29-ago-2026, I6 del mapa operativo).
+   * `avisosDeReclamo` arranca con `puedeVer(…, 'postventa')` —a propósito, porque manda a esa
+   * pantalla— y **Depósito ⛔ no tiene esa sección**: el tercer andén de Retornos se construyó
+   * justamente porque ⛔ no puede abrir Reclamos. Los dos relojes de la bandeja se dibujaban sólo
+   * adentro de la pantalla, o sea que quien hace el trabajo se enteraba si entraba a mirar.
+   */
+  describe('la bandeja de retornos', () => {
+    const deposito = perfil({ funcion: ['deposito'] })
+    const retorno = (over: Record<string, unknown> = {}) =>
+      ({
+        id: 42, estado: 'en_transito', motivo: 'falla', compensacion: 'plata_total',
+        via_retorno: 'andreani', seguimiento_vuelta: 'AR123456789',
+        items: [{ producto: 'Campera', cantidad: 1 }], items_correctos: null, items_nuevos: null,
+        destino_prenda: 'stock', falla_ids: [], retorno_decidido: true,
+        reingreso_estado: 'no_aplica', envio_nuevo_estado: 'no_aplica',
+        created_at: hace(30), updated_at: hace(30), historial: [{ estado: 'en_transito', at: hace(30) }],
+        ...over,
+      }) as never
+
+    it('🔴 el paquete que no aparece le llega a DEPÓSITO, que ⛔ no puede abrir Reclamos', () => {
+      const [a] = avisosDeRetorno([retorno()], 'bdi', deposito)
+      expect(a.titulo).toContain('R-0042')
+      expect(a.detalle).toContain('días que no llega')
+      expect(a.ruta).toBe('/retornos')
+      expect(a.tono).toBe('warning')
+    })
+
+    it('lo que falta despachar avisa en rojo y con su propio plazo', () => {
+      const [a] = avisosDeRetorno([retorno({ estado: 'resuelto', envio_nuevo_estado: 'pendiente', compensacion: 'otro_producto' })], 'bdi', deposito)
+      expect(a.detalle).toContain('días que no sale')
+      expect(a.tono).toBe('danger')
+    })
+
+    /**
+     * 🔑 **⛔ No le avisa dos veces al mismo.** Administración ya recibe el aviso del reclamo, que
+     * cuenta los mismos días con el mismo reloj: dos avisos por la misma fila, con dos rutas
+     * distintas, es peor que uno.
+     */
+    it('🔑 Administración ⛔ no lo recibe: ya tiene el del reclamo', () => {
+      expect(avisosDeRetorno([retorno()], 'bdi', administracion)).toEqual([])
+      expect(avisosDeRetorno([retorno()], 'bdi', admin)).toEqual([])
+    })
+
+    it('⛔ no lo ve quien no tiene la bandeja', () => {
+      expect(avisosDeRetorno([retorno()], 'bdi', perfil({ funcion: ['marketing'] }))).toEqual([])
+      expect(avisosDeRetorno([retorno()], 'bdi', null)).toEqual([])
+    })
+
+    it('⛔ no inventa plazos: lo de ayer ⛔ no avisa', () => {
+      const reciente = retorno({ created_at: hace(1), updated_at: hace(1), historial: [{ estado: 'en_transito', at: hace(1) }] })
+      expect(avisosDeRetorno([reciente], 'bdi', deposito)).toEqual([])
+    })
+
+    /**
+     * ⚠️ **El andén de «Para guardar» ⛔ no avisa, y es a propósito**: ⛔ no tiene plazo. Lo que
+     * llegó está adentro del depósito ⇒ ⛔ no hay a quién ir a buscar, y ponerle un reloj sería
+     * apurar a quien ya hizo su parte.
+     */
+    it('⚠️ lo que ya llegó y falta guardar ⛔ no avisa: ⛔ no hay a quién ir a buscar', () => {
+      const guardar = retorno({ estado: 'recibido', reingreso_estado: 'pendiente', compensacion: 'otro_producto' })
+      expect(avisosDeRetorno([guardar], 'bdi', deposito).filter((a) => a.detalle.includes('no llega'))).toEqual([])
+    })
+
+    it('el id distingue los dos andenes: un cambio está en los dos a la vez', () => {
+      const enDos = retorno({ estado: 'en_transito', compensacion: 'otro_producto', envio_nuevo_estado: 'pendiente' })
+      const ids = avisosDeRetorno([enDos], 'bdi', deposito).map((a) => a.id)
+      expect(new Set(ids).size).toBe(ids.length)
+      expect(ids).toContain('retorno:esperando:bdi:42')
+      expect(ids).toContain('retorno:despachar:bdi:42')
+    })
   })
 
   it('el id es estable entre refrescos: si cambiara, el aviso volvería a contarse como nuevo', () => {

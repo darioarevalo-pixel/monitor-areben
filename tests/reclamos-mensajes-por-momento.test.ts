@@ -37,7 +37,7 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
    */
   it('con las fotos ya cargadas: ⛔ no se le vuelven a pedir en la columna', () => {
     const d = fila({ estado: 'en_revision', fotos: [{ url: 'https://blob/1.jpg' }] as never })
-    expect(mensajesDeLaFila(d)).toEqual(['mas_fotos'])
+    expect(mensajesDeLaFila(d)).toEqual(['mas_fotos', 'revisando'])
     expect(mensajesDeLaFila(d)).not.toContain('pedir_fotos')
   })
 
@@ -56,19 +56,55 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
       fotos: [{ url: 'https://blob/foto.jpg' }] as never,
       envio_nuevo_estado: 'pendiente', reingreso_estado: 'pendiente',
     })
-    expect(mensajesDeLaFila(r22)).toEqual(['mas_fotos'])
+    expect(mensajesDeLaFila(r22)).toEqual(['mas_fotos', 'revisando'])
   })
 
   /**
    * El link sirve para UNA cosa: que suba fotos. Si el caso no las necesita, el alta ya avisa
    * *«acá no hacen falta fotos»* — y la lista lo contradecía ofreciendo el mensaje igual.
+   *
+   * 🔴 **Y hasta el 29-ago-2026 este test afirmaba que ahí ⛔ no iba NINGÚN mensaje**, que era la
+   * premisa equivocada: no hay fotos que pedir, pero **sí hay un cliente al que contestarle**. Los
+   * tres quedaban con la columna en cero (I1 del mapa operativo) y, como el gesto que saca una fila
+   * de `borrador` es copiar la apertura, ⛔ no podían salir nunca. Una premisa escrita y nunca
+   * medida se defiende sola hasta que alguien que usa la app la contradice.
    */
-  it('un caso que no pide fotos: ni pedirlas ni pedir más', () => {
-    expect(mensajesDeLaFila(fila({ motivo: 'no_llego' }))).toEqual([])
-    expect(mensajesDeLaFila(fila({ motivo: 'demora' }))).toEqual([])
-    expect(mensajesDeLaFila(fila({ motivo: 'sin_stock' }))).toEqual([])
+  it('🔴 un caso que no pide fotos: el acuse, y ⛔ ningún pedido de fotos', () => {
+    expect(mensajesDeLaFila(fila({ motivo: 'no_llego' }))).toEqual(['acuse'])
+    expect(mensajesDeLaFila(fila({ motivo: 'demora' }))).toEqual(['acuse'])
+    expect(mensajesDeLaFila(fila({ motivo: 'sin_stock' }))).toEqual(['acuse'])
+    expect(mensajesDeLaFila(fila({ motivo: 'no_llego', estado: 'esperando_cliente' }))).toEqual(['acuse'])
     // Y si alguien del equipo igual subió una foto, tampoco se ofrece «pedir más».
-    expect(mensajesDeLaFila(fila({ motivo: 'no_llego', fotos: [{ url: 'u' }] as never }))).toEqual([])
+    expect(mensajesDeLaFila(fila({ motivo: 'no_llego', fotos: [{ url: 'u' }] as never }))).toEqual(['acuse'])
+  })
+
+  /**
+   * 🔑 **`acuse` es el complemento EXACTO de `pedir_fotos`, ⛔ no un mensaje más.** Donde se piden
+   * fotos ⛔ no va, y donde ⛔ no se piden va siempre: son las dos mitades de la misma pregunta, así
+   * que ⛔ **nunca pueden salir los dos juntos** ni pueden faltar los dos.
+   */
+  it('🔑 el acuse y el pedido de fotos ⛔ nunca conviven, y nunca faltan los dos', () => {
+    const casos = ['talle', 'arrepentimiento', 'no_esperaba', 'no_como_publicado', 'falla',
+      'faltante', 'mal_armado', 'excedente', 'demora', 'no_llego', 'sin_stock'] as const
+    for (const motivo of casos) {
+      const ms = mensajesDeLaFila(fila({ motivo }))
+      expect(ms.includes('acuse') && ms.includes('pedir_fotos'), motivo).toBe(false)
+      expect(ms.includes('acuse') || ms.includes('pedir_fotos'), motivo).toBe(true)
+    }
+  })
+
+  /** Decidido, el acuse se va: lo que corresponde es contarle la resolución. */
+  it('decidido ⛔ ya no se acusa recibo', () => {
+    expect(mensajesDeLaFila(fila({ motivo: 'demora', compensacion: 'cupon' }))).toEqual(['resolucion'])
+  })
+
+  /**
+   * ⚠️ **Con una oferta esperando, el acuse se calla igual que el pedido de fotos**: es una promesa
+   * de que estamos mirando el caso, y lo que hay arriba de la mesa es la propuesta.
+   */
+  it('con la oferta esperando ⛔ no se acusa recibo', () => {
+    const d = fila({ motivo: 'no_esperaba', retencion_monto: 5000, retencion_forma: 'plata' })
+    expect(mensajesDeLaFila(d)).not.toContain('acuse')
   })
 
   /**
@@ -83,7 +119,7 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
     expect(mensajesDeLaFila(fila({ motivo: 'talle', expectativa: 'mismo_producto' }))).toEqual(['pedir_fotos'])
     expect(mensajesDeLaFila(fila({ motivo: 'talle', expectativa: 'plata' }))).toEqual(['pedir_fotos'])
     // ⛔ Y lo que NO cambia: donde no hay nada que fotografiar, se sigue sin pedir.
-    expect(mensajesDeLaFila(fila({ motivo: 'no_llego', expectativa: 'otro_producto' }))).toEqual([])
+    expect(mensajesDeLaFila(fila({ motivo: 'no_llego', expectativa: 'otro_producto' }))).toEqual(['acuse'])
   })
 
   /**
@@ -287,6 +323,71 @@ describe('mensajesDeLaFila — qué se ofrece en cada momento', () => {
    * —la resolución, la etiqueta que va en camino— porque son otra cosa que la que se está
    * negociando; un paquete que ya está en la calle ⛔ no se contradice con nada.
    */
+  /**
+   * 🔴 **El estado de la decisión, que era el único abierto sin nada que decir** (29-ago-2026, I2).
+   * `en_revision` significa que el cliente ya mandó lo suyo y puede durar días — el aviso salta a
+   * los 3 —, y la única salida era «pedir más fotos», que vive adentro del `⋯` porque es una
+   * decisión y ⛔ no una respuesta al cliente.
+   */
+  it('🔴 ya mandó lo suyo y nadie decidió: se le avisa que lo estamos revisando', () => {
+    const d = fila({ estado: 'en_revision', fotos: [{ url: 'u' }] as never })
+    expect(mensajesDeLaFila(d)).toEqual(['mas_fotos', 'revisando'])
+    // Y en un caso sin fotos, el acuse y el aviso de revisión son cosas distintas y ⛔ no se pisan.
+    expect(mensajesDeLaFila(fila({ estado: 'en_revision', motivo: 'no_llego' })))
+      .toEqual(['acuse', 'revisando'])
+  })
+
+  /**
+   * ⚠️ **Se calla mientras se le están pidiendo las fotos.** El cliente puede apretar «enviar» sin
+   * subir nada —la fila pasa a `en_revision` igual—, y ahí lo que corresponde es volver a pedirlas,
+   * ⛔ no decirle que las estamos mirando: sería afirmar que llegó algo que no llegó.
+   */
+  it('en revisión pero sin fotos: se le vuelven a pedir y ⛔ no se le dice que se está mirando', () => {
+    expect(mensajesDeLaFila(fila({ estado: 'en_revision' }))).toEqual(['pedir_fotos'])
+  })
+
+  /** Decidido, o con la oferta esperando, el aviso de revisión ⛔ no corresponde. */
+  it('el aviso de revisión ⛔ no sobrevive a la decisión ni a la oferta', () => {
+    expect(mensajesDeLaFila(fila({ estado: 'en_revision', compensacion: 'plata_total', fotos: [{ url: 'u' }] as never })))
+      .toEqual(['resolucion'])
+    expect(mensajesDeLaFila(fila({ estado: 'en_revision', fotos: [{ url: 'u' }] as never, retencion_monto: 5000, retencion_forma: 'plata' })))
+      .toEqual(['mas_fotos', 'propuesta'])
+  })
+
+  /**
+   * 🔴 **El único movimiento FÍSICO del ciclo que ⛔ no se le contaba** (29-ago-2026, I3). El
+   * cliente despachó, ya no tiene ni el producto ni la plata, y nadie le decía que llegó.
+   *
+   * 🔑 Es un **hecho**: lo sella Depósito al abrir la caja, así que ⛔ no lo calla una propuesta.
+   */
+  it('🔴 volvió el producto: se le avisa que llegó', () => {
+    const d = fila({ estado: 'recibido', compensacion: 'plata_total' })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'retorno_recibido'])
+    // ⛔ Antes de recibirlo, ⛔ no se afirma que llegó.
+    expect(mensajesDeLaFila(fila({ estado: 'en_transito', compensacion: 'plata_total' })))
+      .not.toContain('retorno_recibido')
+    // Es un hecho: convive con la propuesta.
+    expect(mensajesDeLaFila(fila({ estado: 'recibido', compensacion: 'plata_total', retencion_monto: 900, retencion_forma: 'plata' })))
+      .toEqual(['propuesta', 'retorno_recibido'])
+  })
+
+  /**
+   * 🔴 **La promesa que quedaba abierta** (29-ago-2026, I4). Sin código, la resolución dice *«te
+   * pasamos el código por acá apenas lo tengamos»* — y `cupon-emitido` lo sellaba **en silencio**.
+   * Misma forma que D5: un pendiente que alguien tilda y el cliente ⛔ no se entera.
+   */
+  it('🔴 emitido el cupón: se le pasa el código', () => {
+    const d = fila({ estado: 'resuelto', compensacion: 'cupon', cupon_estado: 'hecho', cupon_codigo: 'BDI-10' })
+    expect(mensajesDeLaFila(d)).toEqual(['resolucion', 'cupon_listo'])
+    // ⛔ Pendiente ⛔ no se avisa: el cupón todavía no existe en la tienda.
+    expect(mensajesDeLaFila(fila({ estado: 'resuelto', compensacion: 'cupon', cupon_estado: 'pendiente' })))
+      .toEqual(['resolucion'])
+    // 🔑 Y **tildado sin código tampoco**: el código es lo único que prueba que existe, y el
+    // mensaje no tiene nada que decir sin él.
+    expect(mensajesDeLaFila(fila({ estado: 'resuelto', compensacion: 'cupon', cupon_estado: 'hecho', cupon_codigo: null })))
+      .toEqual(['resolucion'])
+  })
+
   it('con la oferta esperando, el despacho ya hecho se sigue contando', () => {
     const d = fila({
       estado: 'resuelto', compensacion: 'otro_producto', envio_nuevo_estado: 'hecho',

@@ -64,6 +64,7 @@ import { anotarLaOtraVenta, aplicarDestinos, descontarUnidades, DESTINOS, laUnid
 // Qué se le dijo al cliente y cuándo. ⛔ No se copia acá: la lista de momentos es cerrada, y un
 // `tipo` libre convierte esta columna en un campo de texto.
 import { apilarMensaje } from '../lib/reclamos/mensajes.core.js';
+import { leerSeguimiento } from '../lib/reclamos/seguimiento.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -641,8 +642,13 @@ export default async function handler(req, res) {
       if (b.envio_costo !== undefined) campos.envio_costo = num(b.envio_costo);
       if (b.descuento_manual !== undefined) campos.descuento_manual = num(b.descuento_manual);
       if (b.solicitud_envio !== undefined) campos.solicitud_envio = texto(b.solicitud_envio);
-      if (b.seguimiento_ida !== undefined) campos.seguimiento_ida = texto(b.seguimiento_ida);
-      if (b.seguimiento_vuelta !== undefined) campos.seguimiento_vuelta = texto(b.seguimiento_vuelta);
+      // Mismo piso que en `editar`: es la otra puerta por la que entran los dos códigos.
+      for (const campo of ['seguimiento_ida', 'seguimiento_vuelta']) {
+        if (b[campo] === undefined) continue;
+        const r = leerSeguimiento(b[campo]);
+        if (!r.ok) return res.status(400).json({ error: r.error });
+        campos[campo] = r.codigo;
+      }
       if (b.pagado !== undefined) campos.pagado = b.pagado === true;
       // La diferencia la calcula el cliente con `calcularCambio` (un solo lugar, con tests). Acá
       // solo se valida el rango: un cambio no puede cobrar más que el valor de lo que se lleva.
@@ -1069,8 +1075,17 @@ export default async function handler(req, res) {
       if (b.relato_cliente !== undefined) campos.relato_cliente = texto(b.relato_cliente);
       if (b.items !== undefined && Array.isArray(b.items)) campos.items = b.items;
       if (b.envio_costo !== undefined) campos.envio_costo = num(b.envio_costo);
-      if (b.seguimiento_vuelta !== undefined) campos.seguimiento_vuelta = texto(b.seguimiento_vuelta);
-      if (b.seguimiento_ida !== undefined) campos.seguimiento_ida = texto(b.seguimiento_ida);
+      // 🔴 **Los dos códigos se validan acá y ⛔ no sólo en la pantalla.** `seguimiento_vuelta` es
+      // el que decide el sub-estado de `en_transito`, el mensaje que se le ofrece al cliente y
+      // **cuál de los dos relojes corre** —el nuestro de 2 días o el del transporte de 15—: un
+      // código mal tipeado cambia a quién estamos yendo a buscar. Es un piso, ⛔ no un formato:
+      // el porqué está en `seguimiento.core.js`.
+      for (const campo of ['seguimiento_vuelta', 'seguimiento_ida']) {
+        if (b[campo] === undefined) continue;
+        const r = leerSeguimiento(b[campo]);
+        if (!r.ok) return res.status(400).json({ error: r.error });
+        campos[campo] = r.codigo;
+      }
       if (b.envio_ida_costo !== undefined) campos.envio_ida_costo = num(b.envio_ida_costo);
       if (b.via_retorno !== undefined && VIAS.includes(b.via_retorno)) campos.via_retorno = b.via_retorno;
       if (b.gn_venta_reemplazo_id !== undefined) campos.gn_venta_reemplazo_id = texto(b.gn_venta_reemplazo_id);

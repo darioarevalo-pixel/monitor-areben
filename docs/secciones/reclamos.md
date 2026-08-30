@@ -1732,7 +1732,6 @@ ahora `puedeOfrecerse && (hayFotos || ofreciIgual || hayOferta)`.
   `enviar` contesta 404 y **la fila ⛔ no se mueve**, y `compensacion` ⛔ no sale en la respuesta.
   Cuatro filas sembradas y borradas; las **2 reales, intactas**.
 
-
 ---
 
 ## 🆕 🔴 Los dos topes que se cortaban callados (29-ago-2026 — D12)
@@ -1792,3 +1791,93 @@ recorte por estado es del aviso, ⛔ no de la lista.
   proceso, dos filas sembradas y borradas, las 2 reales intactas). 🔑 **Esto ⛔ no lo puede decir
   ningún test**: el Supabase de mentira **ignora el `.in`** y devuelve la fila entera pida lo que
   pida el handler, así que un filtro mal escrito sale **verde**.
+
+## 🆕 🔴 Los cuatro momentos que estaban mudos, y el aviso que acusaba de más (29-ago-2026)
+
+📄 **De acá salió `docs/postventa-mapa-operativo.md`**: el recorrido de punta a punta —estado por
+estado, con su mensaje y su botón— que Bruno pidió para poder analizarlo. Esta ficha sigue contando
+**cómo está hecho**; el mapa cuenta **cómo se opera**.
+
+### 🔴 El agujero más grande: tres de los once casos NACÍAN MUDOS
+
+`demora`, `no_llego` y `sin_stock` tienen `fotos: 'nunca'` ⇒ `pideFotos` es `false` ⇒ ⛔ **no había
+botón de apertura**. Y el único gesto de toda la app que saca un reclamo de `borrador` es **copiar
+ese mensaje** (`Reclamos.tsx`, verificado: ⛔ no hay otro `setter` de `esperando_cliente`). Entonces:
+
+- el local abría el reclamo y ⛔ **no tenía una sola cosa para copiarle** a un cliente que ya había
+  escrito —y `no_llego` y `demora` son los dos casos donde escribió más enojado—;
+- la fila ⛔ **no podía salir nunca** de `borrador` por el camino normal;
+- a los 2 días saltaba un aviso en rojo: *«Abierto hace N días y todavía no se le escribió»*, y **lo
+  único que lo apagaba era que Administración decidiera**.
+
+⇒ Es [[feedback_areben_modulo_que_nace_mudo]] entrando por la puerta del texto, y de paso *el
+pendiente que nadie puede tildar*, que es el modo de falla propio de esta sección.
+
+✅ **Momento `acuse`, el complemento EXACTO de `pedir_fotos`** (donde no hay evidencia que pedir,
+igual hay que contestarle), con `QUE_ESTAMOS_HACIENDO` y `COMO_SIGUE` como listas cerradas con salida
+genérica, igual que `QUE_SE_DESPACHO`.
+
+🔑 **Y el estado se mueve sólo donde la pelota pasa a ser del cliente.** En `sin_stock` el acuse le
+pregunta qué prefiere ⇒ va a `esperando_cliente`. En `demora` y `no_llego` estamos esperando **al
+correo**: mandarla a `esperando_cliente` afirmaría una espera que ⛔ no es suya, así que la fila se
+queda donde está. Es la misma lección que `laEtiquetaEstaDebida`.
+
+🔑 **⇒ el aviso pasa a preguntar lo que su propio texto dice: si se le escribió.** El rastro va al
+`historial` con `NOTA_SE_LE_ESCRIBIO` —el **hecho**— y ⛔ **no a `mensajes`**, que son las **palabras**
+y que salió de `COLS` a propósito por peso (~1,9 KB por fila): acá ⛔ no llegaría. ⚠️ Las filas viejas
+⛔ no tienen la nota, así que avisan igual que antes: esto ⛔ no calla nada retroactivamente.
+
+### Los otros tres momentos, y por qué ⛔ no son «un mensaje más»
+
+- **`revisando`** — `en_revision` significa *«el cliente ya mandó lo suyo»*, puede durar días (el
+  aviso salta a los 3) y era el **único momento abierto sin nada que decirle**: la escapatoria era
+  «pedir más fotos», que vive adentro del `⋯` porque es una decisión, ⛔ no una respuesta. ⚠️ Se calla
+  si se le están pidiendo las fotos: el cliente puede apretar «enviar» sin subir nada.
+- **`retorno_recibido`** — el **único movimiento físico del ciclo que ⛔ no se le contaba**. El
+  cliente despachó, ya no tiene ni el producto ni la plata, y nadie le decía que llegó. Sale del
+  estado que sella Depósito al abrir la caja: **el hecho lo cuenta quien lo hizo**.
+- **`cupon_listo`** — misma forma que D5, una vuelta más adelante: sin código la resolución promete
+  *«te pasamos el código apenas lo tengamos»*, y `cupon-emitido` lo sellaba **en silencio**. Se lee de
+  `cupon_estado === 'hecho'` **y** el código: tildado sin código ⛔ no avisa, porque ⛔ no hay nada que decir.
+
+⛔ **No se agregó un mensaje de cierre**, y ⛔ no es un olvido: la resolución y los hechos posteriores
+ya se lo dijeron. Un momento de más cuesta lo mismo que uno de menos.
+
+### ⚠️ Y el test por momento afirmaba la premisa vieja
+
+`tests/reclamos-mensajes-por-momento.test.ts` decía, con todas las letras, que en esos tres casos ⛔
+no iba **ningún** mensaje. Era la premisa equivocada —no hay fotos que pedir, pero **sí hay un
+cliente al que contestarle**—, y se defendió sola hasta que alguien caminó la operación entera.
+📌 [[feedback_areben_premisa_escrita_nunca_medida]]. El invariante nuevo se fija en los dos sentidos:
+**el acuse y el pedido de fotos ⛔ nunca conviven, y nunca faltan los dos**, recorriendo los once casos.
+
+## 🆕 🔴 Los rótulos pasaron a infinitivo, y el glosario no tenía quién lo cuidara (29-ago-2026)
+
+`VOCABULARIO.md` §3 dice *«Botón = verbo en infinitivo»* desde que existe, y post-venta tenía **trece
+rótulos** en pasado o en tercera persona: «Despaché», «Anulé en GN», «Devolví la plata», «Cobré la
+diferencia», «Aceptó», «No aceptó», «Volvió», «Llegó», «Llegaron los N», «Reingresado», «Vendida».
+🔴 **Y había cinco tests que los clavaban**, así que renombrarlos ponía la suite en rojo — o sea que
+la regla escrita empujaba para un lado y el repo para el otro.
+📌 [[feedback_areben_invariante_escrito_no_frena]], cuarta vez en este módulo.
+
+🔑 **La distinción que faltaba, y que ahora está escrita: el botón pide la acción, el OK confirma el
+hecho.** §3.1 tiene una **cuarta voz** legítima —primera persona en pasado— y su ejemplo es
+*«Sí, ya lo despaché»*: eso es el **OK de un diálogo**, que confirma algo que pasó **afuera** de la
+app. El botón de la fila que abre ese diálogo ⛔ no es eso. Los ocho «Sí, ya…» se quedaron **y tienen
+su propio test**, porque si alguien los "corrige" a infinitivo el cartel pasa a prometer que la app
+va a despachar el pedido.
+
+- El prefijo **`Msj:`** salió: era jerga interna abreviada (§3), y los doce quedaron como `Copiar …`,
+  que además es el verbo que el módulo ya usaba para el ticket del cambio.
+- 🔑 **El cable es propio y ⛔ no reusa el extractor de rótulos** (`tests/vocabulario.test.ts`): las
+  seis familias prohíben **palabras**, que casi nunca significan otra cosa; ésta mira un **tiempo
+  verbal**, y el pasado es medio castellano. 📌 Medido: sobre todos los rótulos daba **diez** intrusos
+  y **uno solo era un botón**. ⇒ se leen los botones y nada más.
+- 🔑 **La regla es del PRIMER verbo**: «Registrar que aceptó» está bien —el gesto es *registrar*—, y
+  «Aceptó» a secas ⛔ no.
+- ⚠️ **Los que quedaron exceptuados ⛔ no son botones: son opciones de un grupo excluyente**
+  («Aceptó: se lo queda», «Se lo queda», «Que vuelva»). Están dibujados con `Button` sólo porque
+  `Chips` ⛔ no acepta `disabled` ni `title` por opción, y acá los dos hacen falta. El día que los
+  acepte, se mudan y la lista se vacía sola.
+- ⚠️ **Canjes tiene la misma forma** («Aceptó» / «No aceptó» en `FichaCanje.tsx`) y ⛔ **no** se tocó:
+  la sección se camina con su dueño antes de renombrarle los botones.

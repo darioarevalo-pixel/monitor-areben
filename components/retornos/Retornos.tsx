@@ -28,7 +28,7 @@ import {
   type FilaRetorno, type RetornoRow,
 } from '@/lib/reclamos/retornos'
 import {
-  DIAS_ALERTA, MOTIVO_LABEL, etiquetaEM, pideSeguimiento, trackingUrl, VIA_LABEL,
+  DIAS_ALERTA, MOTIVO_LABEL, elCodigoNoViajaEnElLink, etiquetaEM, pideSeguimiento, trackingUrl, VIA_LABEL,
   type UnidadQueVuelve,
 } from '@/lib/reclamos/tipos'
 
@@ -158,14 +158,14 @@ export function Retornos() {
           tone={tarde ? 'danger' : 'neutral'}
         />
         <KpiCard
-          label="Llegó y falta guardarlo"
+          label="Para guardar"
           value={String(bandeja.guardar.length)}
           tone={bandeja.guardar.length ? 'warning' : 'neutral'}
         />
         {/* El paquete que SALE. Iba en la misma operación y no se veía en ningún lado que
             Depósito pudiera abrir. */}
         <KpiCard
-          label="Falta despachar"
+          label="Para despachar"
           value={String(bandeja.despachar.length)}
           sub={sinDespachar ? `${sinDespachar} hace ${DIAS_ALERTA.despacho}+ días` : 'lo que se le manda al cliente'}
           tone={sinDespachar ? 'danger' : bandeja.despachar.length ? 'warning' : 'neutral'}
@@ -176,10 +176,10 @@ export function Retornos() {
         titulo="¿Qué es esta pantalla?"
         pasos={[
           <>Acá está <b>todo lo que estamos esperando que vuelva</b>: lo que el cliente despachó, lo que va a traer al local, y lo de los cambios. Lo más viejo va primero.</>,
-          <>Cuando el paquete llega, tocá <b>Llegó</b>. Con eso el reclamo deja de estar en la calle y pasa al otro andén.</>,
-          <>En <b>Llegó, falta guardarlo</b> está lo que ya tenés en la mano y todavía no volvió al stock: tocá <b>Reingresado</b> cuando lo hayas cargado en Gestión Nube.</>,
+          <>Cuando el paquete llega, tocá <b>Marcar recibido</b>. Con eso el reclamo deja de estar en la calle y pasa al otro andén.</>,
+          <>En <b>Para guardar</b> está lo que ya tenés en la mano y todavía no volvió al stock: tocá <b>Reingresar</b> cuando lo hayas cargado en Gestión Nube.</>,
           <>Si dice <b>Va a Fallas</b>, la unidad <b>no</b> vuelve a stock: se carga en Fallas y de ahí sigue Administración.</>,
-          <>En <b>Falta despachar</b> está lo que hay que <b>mandarle</b> al cliente: el cambio, la reposición y el reenvío. Tocá <b>Despaché</b> cuando el paquete esté en la calle, no cuando esté armado.</>,
+          <>En <b>Para despachar</b> está lo que hay que <b>mandarle</b> al cliente: el cambio, la reposición y el reenvío. Tocá <b>Despachar</b> cuando el paquete esté en la calle, no cuando esté armado.</>,
         ]}
         ojo={<>Acá no se decide nada: qué se le devuelve al cliente y qué pasa con el producto ya se decidió en <b>Reclamos</b>. Si algo llegó y no está en esta lista, avisá — quiere decir que el reclamo quedó en otro estado.</>}
       />
@@ -194,8 +194,8 @@ export function Retornos() {
           variant="underline" value={anden} onChange={(k) => setAnden(k as Anden)}
           items={[
             { key: 'esperando', label: `Esperando (${bandeja.esperando.length})` },
-            { key: 'guardar', label: `Llegó, falta guardarlo (${bandeja.guardar.length})` },
-            { key: 'despachar', label: `Falta despachar (${bandeja.despachar.length})` },
+            { key: 'guardar', label: `Para guardar (${bandeja.guardar.length})` },
+            { key: 'despachar', label: `Para despachar (${bandeja.despachar.length})` },
           ]}
         />
         <Button variant="outline" onClick={() => void recargar()} disabled={cargando}>Recargar</Button>
@@ -207,7 +207,7 @@ export function Retornos() {
         <Card padding={4}>
           <EmptyState
             title={{
-              esperando: 'No estamos esperando nada',
+              esperando: 'No hay ningún retorno esperando',
               guardar: 'Nada pendiente de guardar',
               despachar: 'No hay nada para mandar',
             }[anden]}
@@ -279,10 +279,20 @@ export function Retornos() {
                       <>
                         <div style={{ fontSize: font.sm }}>{d.via_retorno ? VIA_LABEL[d.via_retorno] : '—'}</div>
                         {d.seguimiento_vuelta && (
-                          <div style={{ fontSize: font.xs, marginTop: 2 }}>
+                          <div style={{ fontSize: font.xs, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                             {trackingUrl(d.via_retorno, d.seguimiento_vuelta)
                               ? <a href={trackingUrl(d.via_retorno, d.seguimiento_vuelta) || undefined} target="_blank" rel="noreferrer" style={{ color: color.action }}>↗ {d.seguimiento_vuelta}</a>
                               : d.seguimiento_vuelta}
+                            {/* 🔴 **Andreani es un portal y ⛔ no toma el código por URL**: el link
+                                abre una pantalla vacía y hay que pegarlo del otro lado. Sin esto,
+                                todas las veces alguien vuelve a seleccionarlo a mano. */}
+                            {elCodigoNoViajaEnElLink(d.via_retorno, d.seguimiento_vuelta) && (
+                              <CopyButton
+                                getText={() => d.seguimiento_vuelta || ''}
+                                label="Copiar el código"
+                                tone="neutral" variant="ghost"
+                              />
+                            )}
                           </div>
                         )}
                         <div style={{ marginTop: 4 }}>
@@ -308,22 +318,22 @@ export function Retornos() {
                           <>
                             {f.faltan.map((u) => (
                               <Button key={u.i} size="sm" variant="outline" tone="brand" disabled={ocup} onClick={() => void recibir(f, u)}>
-                                Llegó: {u.item.producto}
+                                Recibir: {u.item.producto}
                               </Button>
                             ))}
                             <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void recibir(f)}>
-                              Llegaron los {f.faltan.length}
+                              Recibir los {f.faltan.length}
                             </Button>
                           </>
                         ) : (
-                          <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void recibir(f)}>Llegó</Button>
+                          <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void recibir(f)}>Marcar recibido</Button>
                         )
                       )}
                       {anden === 'guardar' && d.reingreso_estado === 'pendiente' && (
-                        <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void reingresar(f)}>Reingresado</Button>
+                        <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void reingresar(f)}>Reingresar</Button>
                       )}
                       {anden === 'despachar' && (
-                        <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void despachar(f)}>Despaché</Button>
+                        <Button size="sm" variant="solid" tone="brand" disabled={ocup} onClick={() => void despachar(f)}>Despachar</Button>
                       )}
                       {/* El paquete que no aparece: el renglón para preguntar en el correo, ya
                           armado. Sin esto hay que abrir el reclamo y copiar cuatro cosas a mano. */}
@@ -339,7 +349,7 @@ export function Retornos() {
         </TableWrap>
       )}
 
-      <SectionCard title="Qué NO se hace desde acá" style={{ marginTop: space[4] }}>
+      <SectionCard title="Fuera de esta pantalla" style={{ marginTop: space[4] }}>
         <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.8 }}>
           Devolver la plata, anular la venta o decidir el destino del producto son de
           <b> Administración → Reclamos</b>. Si te llega algo que no tiene reclamo abierto, no entra

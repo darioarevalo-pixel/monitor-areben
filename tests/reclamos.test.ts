@@ -1576,6 +1576,47 @@ describe('alertas por antigüedad', () => {
     })
 
     /**
+     * 🔴 🔑 **Este aviso ACUSABA DE ALGO QUE LA PANTALLA ⛔ NO DEJABA HACER** (29-ago-2026, I1 del
+     * mapa operativo). Lo único que lo apagaba era que la fila saliera de `borrador`, y el único
+     * gesto que la saca es **copiar el mensaje de apertura** — que sólo existe en los casos que
+     * piden fotos. En `demora`, `no_llego` y `sin_stock` ⛔ no había un solo mensaje para copiar,
+     * así que quedaba prendido en rojo para siempre y sólo lo callaba que Administración decidiera.
+     * Tres de los once casos, y los dos donde el cliente escribió más enojado.
+     *
+     * 🔑 Ahora pregunta **lo que el texto del aviso dice**: si se le escribió. El rastro va al
+     * `historial` —el hecho— y ⛔ no a `mensajes`, que salió de `COLS` por peso y acá ⛔ no llegaría.
+     */
+    it('🔴 escrito el acuse, el aviso se calla — aunque la fila siga en borrador', () => {
+      const mudo = borrador({ motivo: 'no_llego', created_at: hace(9), updated_at: hace(9) })
+      expect(alertasDe(mudo, AHORA)[0].texto).toContain('todavía no se le escribió')
+
+      const escrito = borrador({
+        motivo: 'no_llego', created_at: hace(9), updated_at: hace(9),
+        historial: [
+          { estado: 'borrador', at: hace(9), nota: 'reclamo abierto' },
+          { estado: 'borrador', at: hace(8), nota: 'se le escribió: el acuse de recibo' },
+        ] as never,
+      })
+      expect(alertasDe(escrito, AHORA)).toEqual([])
+    })
+
+    /**
+     * ⚠️ **Las filas viejas ⛔ no tienen la nota, así que siguen avisando exactamente igual**: esto
+     * ⛔ no calla nada retroactivamente. Y una nota cualquiera tampoco lo apaga — sólo la que dice
+     * que se le escribió.
+     */
+    it('⚠️ una nota que ⛔ no es «se le escribió» ⛔ no apaga nada', () => {
+      const otraNota = borrador({
+        created_at: hace(9), updated_at: hace(9),
+        historial: [{ estado: 'borrador', at: hace(8), nota: 'se corrigió el producto' }] as never,
+      })
+      expect(alertasDe(otraNota, AHORA)[0].texto).toContain('todavía no se le escribió')
+      // Y sin historial —las filas de antes de la nota— tampoco.
+      expect(alertasDe(borrador({ created_at: hace(9), updated_at: hace(9), historial: [] as never }), AHORA)[0].texto)
+        .toContain('todavía no se le escribió')
+    })
+
+    /**
      * 🔴 El defecto que este módulo ya tuvo dos veces, acá evitado por construcción: si contara
      * desde `updated_at`, **abrir el borrador a corregirle una coma apagaría la alarma de que
      * nadie le escribió** — y ése es justo el toque más probable sobre un reclamo que duerme.

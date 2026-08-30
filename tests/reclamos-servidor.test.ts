@@ -336,3 +336,39 @@ describe('registrar un mensaje', () => {
     expect(res.code).toBe(200)
   })
 })
+
+/**
+ * **El piso del código de seguimiento, del lado del servidor** (29-ago-2026, I5).
+ *
+ * 🔑 Está acá y ⛔ no sólo en `Reclamos.tsx` por la regla que este módulo tiene escrita tres veces:
+ * *una pantalla que valida es una sugerencia, ⛔ no una regla*. Y este campo ⛔ no guarda un dato:
+ * **mueve el caso** —el rótulo del estado, el mensaje al cliente y cuál de los dos relojes corre.
+ */
+describe('el código de seguimiento', () => {
+  it('🔴 un código que ⛔ no puede serlo se rechaza, y ⛔ no se escribe nada', async () => {
+    const res = await postear(ADMIN, { action: 'editar', seguimiento_vuelta: '12' })
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('en camino')
+    expect(mundo.escrito).toBeNull()
+  })
+
+  it('uno de verdad pasa y queda escrito limpio', async () => {
+    const res = await postear(ADMIN, { action: 'editar', seguimiento_vuelta: '  AR123456789 ' })
+    expect(res.code).toBe(200)
+    expect(mundo.escrito?.seguimiento_vuelta).toBe('AR123456789')
+  })
+
+  /** ⛔ Vaciarlo es legítimo: se carga el equivocado, se borra, se pone el bueno. */
+  it('vaciarlo pasa y deja null', async () => {
+    const res = await postear(ADMIN, { action: 'editar', seguimiento_vuelta: '' })
+    expect(res.code).toBe(200)
+    expect(mundo.escrito?.seguimiento_vuelta).toBeNull()
+  })
+
+  /** 🔑 **Las dos puertas**: `editar` y `cambio` escriben los mismos dos campos. */
+  it('la otra puerta —el cambio— tiene el mismo piso', async () => {
+    const res = await postear(LOCAL, { action: 'cambio', seguimiento_ida: 'xx' })
+    expect(res.code).toBe(400)
+    expect(mundo.escrito).toBeNull()
+  })
+})

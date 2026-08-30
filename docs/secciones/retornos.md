@@ -155,3 +155,57 @@ Lo que los tests **no** cubren y hay que ejercer a mano, con una fila real:
 - **Que la puerta angosta sea angosta**: pedir `vista=retornos` con un perfil que sólo tenga
   `retornos` tiene que traer las columnas mínimas, y `vista=token` sobre el mismo perfil tiene que
   dar **403**.
+
+## 🆕 🔴 La bandeja ya avisa, y el código de seguimiento tiene piso (29-ago-2026)
+
+📄 El recorrido entero está en `docs/postventa-mapa-operativo.md`.
+
+### 🔴 Los dos relojes se calculaban acá y ⛔ no salían a ninguna parte
+
+`avisosDeReclamo` (`lib/notificaciones/derivar.ts`) arranca con `puedeVer(…, 'postventa')` —a
+propósito, porque manda a esa pantalla— y **Depósito ⛔ no tiene esa sección**: este andén se
+construyó justamente porque ⛔ no puede abrir Reclamos. ⇒ *«quince días sin aparecer»* y *«dos sin
+despachar»* se dibujaban **sólo adentro de esta pantalla**, o sea que quien hace el trabajo se
+enteraba **únicamente si entraba a mirar**. Es la **quinta vuelta del agujero propio del módulo**: el
+trabajo de un lado de la puerta y la señal del otro ⇒
+[[feedback_areben_dos_lados_bien_y_la_pregunta_del_medio]].
+
+✅ **`avisosDeRetorno`**, con su lectura por la **puerta angosta** (`vista=retornos`, que es la única
+que Depósito puede pedir). ⛔ **No hay reglas nuevas**: los andenes, los plazos y el «tarde» salen
+enteros de `bandejaDeRetornos`.
+
+- 🔑 **⛔ No le avisa dos veces al mismo**: quien puede abrir `postventa` ya recibe el aviso del
+  reclamo, que cuenta los mismos días con el mismo reloj. Dos avisos por la misma fila, con dos rutas
+  distintas, es peor que uno.
+- ⚠️ **«Para guardar» ⛔ no avisa, a propósito**: ⛔ no tiene plazo. Lo que llegó está adentro del
+  depósito ⇒ ⛔ no hay a quién ir a buscar, y ponerle un reloj sería apurar a quien ya hizo su parte.
+- El `id` distingue los dos andenes, porque **un cambio está en los dos a la vez**.
+
+### 🔴 El código de seguimiento ⛔ no guarda un dato: mueve el caso
+
+`seguimiento_vuelta` decide **cuatro cosas a la vez**: el rótulo del estado, el mensaje que se le
+ofrece al cliente, y **cuál de los dos relojes corre** —el nuestro, rojo a los 2 días, o el del
+transporte, amarillo a los 15—. ⇒ **un código mal tipeado cambia a quién estamos yendo a buscar**, y
+⛔ no rompe ninguna pantalla.
+
+✅ **`lib/reclamos/seguimiento.core.js`**, y lo aplican **las dos puertas del servidor** (`editar` y
+`cambio`) además de la pantalla: *una pantalla que valida es una sugerencia, ⛔ no una regla*.
+
+- 🔑 **Es un PISO, ⛔ no un formato.** Andreani y Correo ⛔ no publican uno estable y este repo ⛔ no
+  midió ninguno —los únicos códigos de la base son de prueba—. Un regex inventado rechazaría códigos
+  buenos, que es peor: deja a alguien sin poder cargar lo que tiene en la mano.
+- ⛔ **Vaciarlo es legítimo y ⛔ no se frena**: se carga el equivocado, se borra, se pone el bueno.
+
+### ⚠️ Andreani ⛔ no toma el código por URL
+
+`trackingUrl` devuelve **la misma dirección con código o sin él**, así que el link abría una pantalla
+vacía y había que volver a seleccionar el código a mano — chico, y **todas** las veces. Ahora al lado
+va el botón para copiarlo, y **`elCodigoNoViajaEnElLink` se DERIVA de las dos funciones**, ⛔ no es
+una segunda lista de transportistas: el día que Andreani lo acepte, esto se contesta solo.
+
+### Los rótulos
+
+Los tres gestos pasaron a infinitivo —**Recibir · Reingresar · Despachar**— y los dos andenes dejaron
+de llamarse con `falta`, que §1.2 del glosario ⛔ no permite como nombre de un bloque: **Para guardar**
+y **Para despachar**. Los «Sí, ya lo cargué» de los diálogos se quedan: son la cuarta voz. El relato,
+en `docs/secciones/reclamos.md`.

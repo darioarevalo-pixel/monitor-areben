@@ -39,7 +39,9 @@ import {
   type Expectativa,
   type ReclamoRow, type EstadoReclamo, type ItemReclamo, type MotivoReclamo, type OrdenTN,
 } from '@/lib/reclamos/tipos'
-import { mensajeApertura, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { mensajeAcuse, mensajeApertura, mensajeCuponListo, mensajeEtiquetaEnCamino, mensajePropuesta, mensajeResolucion, mensajeRetornoRecibido, mensajeRevisando, mensajeSeguimiento } from '@/lib/reclamos/mensajes'
+import { NOTA_SE_LE_ESCRIBIO } from '@/lib/reclamos/mensajes.core.js'
+import { leerSeguimiento } from '@/lib/reclamos/seguimiento.core.js'
 import { mensajesDeLaFila } from '@/lib/reclamos/botones'
 import { BotonMensaje } from './BotonMensaje'
 import { QueSeLeDijo } from './QueSeLeDijo'
@@ -314,11 +316,39 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
      */
     if (d.estado === 'borrador') {
       try {
-        await cambiarEstado(marca, d.id, 'esperando_cliente', 'se le mandó el link para las fotos')
+        await cambiarEstado(marca, d.id, 'esperando_cliente', `${NOTA_SE_LE_ESCRIBIO}: el link para las fotos`)
         void recargar()
       } catch { /* el mensaje se copia igual: no se pierde el trabajo por un fallo de red */ }
     }
     return mensajeApertura(d, numeroReclamo(d.id), linkDelCliente(token))
+  }
+
+  /**
+   * El acuse de los casos que ⛔ no piden fotos, y **el rastro de que se le escribió**.
+   *
+   * 🔴 Acá está la mitad que ⛔ no se ve: `demora`, `no_llego` y `sin_stock` ⛔ **no tenían ningún
+   * mensaje**, y como el único gesto que saca una fila de `borrador` es copiar la apertura —que en
+   * estos tres ⛔ no existe—, quedaban clavadas ahí con el aviso en rojo *«todavía no se le
+   * escribió»*, que sólo apagaba que Administración decidiera.
+   *
+   * 🔑 **Y el estado se mueve sólo donde la pelota pasa a ser del cliente.** En `sin_stock` el
+   * acuse le pregunta qué prefiere ⇒ va a `esperando_cliente`, igual que la apertura. En `demora` y
+   * `no_llego` estamos esperando **al correo**, ⛔ no a él: mandarla a `esperando_cliente` afirmaría
+   * una espera que no es suya, así que la fila se queda donde está y lo único que queda es el
+   * evento. Es la misma lección que `laEtiquetaEstaDebida` — ⛔ no se arranca un reloj contra
+   * alguien por una espera que es de otro.
+   */
+  const textoAcuse = async (d: ReclamoRow): Promise<string> => {
+    const laPelotaEsDelCliente = d.motivo === 'sin_stock'
+    try {
+      await cambiarEstado(
+        marca, d.id,
+        laPelotaEsDelCliente && d.estado === 'borrador' ? 'esperando_cliente' : d.estado,
+        `${NOTA_SE_LE_ESCRIBIO}: el acuse de recibo`,
+      )
+      void recargar()
+    } catch { /* el mensaje se copia igual: ⛔ no se pierde el trabajo por un fallo de red */ }
+    return mensajeAcuse(d, numeroReclamo(d.id))
   }
 
   // ── Acciones de la lista ──
@@ -483,13 +513,25 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
   }
 
   /** El código de seguimiento, cuando ya se emitió la etiqueta. */
+  /**
+   * 🔴 **Este campo ⛔ no guarda un dato: mueve el caso.** Vacío, el estado se lee «Falta mandarle
+   * la etiqueta», el mensaje dice *«te la mandamos apenas la tengamos»* y el reloj que corre es el
+   * **nuestro**, en rojo a los 2 días. Con cualquier cosa adentro pasa a «En camino de vuelta», se
+   * le manda un seguimiento al cliente y el reloj que corre es el del **transporte**, a los 15.
+   * ⇒ un código mal tipeado **cambia a quién estamos yendo a buscar**.
+   *
+   * Por eso hay un piso —⛔ no un formato, que este repo ⛔ no midió— y **lo aplica también el
+   * servidor** (`seguimiento.core.js`): una pantalla que valida es una sugerencia, ⛔ no una regla.
+   */
   const cargarSeguimiento = async (d: ReclamoRow) => {
     const codigo = await pedirTexto('Código de seguimiento de la vuelta', d.seguimiento_vuelta || '', {
       titulo: `Seguimiento — ${VIA_LABEL[d.via_retorno || 'andreani']}`,
       ok: 'Guardar',
     })
     if (codigo === null) return
-    await accion(() => editarReclamo(marca, d.id, { seguimiento_vuelta: codigo.trim() || null }), 'Seguimiento guardado.')
+    const leido = leerSeguimiento(codigo)
+    if (!leido.ok) { toast.error(leido.error); return }
+    await accion(() => editarReclamo(marca, d.id, { seguimiento_vuelta: leido.codigo }), 'Seguimiento guardado.')
   }
 
   /**
@@ -691,7 +733,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
           <>Buscá la <b>orden de Tienda Nube</b> por número, tildá los productos que reclama y elegí el <b>motivo</b>.</>,
           <>Al crear el reclamo se copia solo el <b>link para el cliente</b>: pegáselo por WhatsApp para que suba las fotos.</>,
           <>Cuando cargue, el reclamo pasa a <b>Para revisar</b>. Tocá <b>Decidir</b> y respondé las dos preguntas: si nos conviene que el producto vuelva, y qué recibe el cliente.</>,
-          <>Si vuelve, elegí <b>cómo vuelve</b> y cargá el <b>seguimiento</b> cuando tengas la etiqueta. Cuando llegue, <b>Volvió</b>.</>,
+          <>Si vuelve, elegí <b>cómo vuelve</b> y cargá el <b>seguimiento</b> cuando tengas la etiqueta. Cuando llegue, <b>Marcar recibido</b>.</>,
           <>Cerrá los pendientes que queden: <b>anular la venta en GN</b> (a mano), <b>devolver la plata</b>, y si hace falta <b>dar de baja el producto en GN</b> o <b>pasarlo a Fallas</b>.</>,
           <>Con todo resuelto, <b>Cerrar</b>.</>,
         ] : [
@@ -966,13 +1008,39 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           adonde va quien mira las que hay y concluye que no alcanzan. */}
                       {/* El mensaje entero, no el link pelado: si solo se copia el link, alguien
                           tiene que escribir el texto alrededor y ahí cada uno promete algo distinto. */}
+                      {/* 🔴 **El complemento exacto del de abajo, y el agujero más grande que
+                          tenía la columna**: en «demora», «no recibido» y «sin stock» ⛔ no hay
+                          fotos que pedir, así que acá ⛔ no había NADA — sobre un cliente que ya
+                          había escrito enojado. Copiarlo deja además el rastro de que se le
+                          escribió, que es lo que apaga el aviso. */}
+                      {mensajes.includes('acuse') && (
+                        <BotonMensaje
+                          marca={marca} id={d.id} tipo="acuse"
+                          getText={() => textoAcuse(d)}
+                          onError={(e) => toast.error(e.message)}
+                          onSinRegistrar={sinRegistrar}
+                          label="Copiar el acuse"
+                        />
+                      )}
                       {mensajes.includes('pedir_fotos') && (
                         <BotonMensaje
                           marca={marca} id={d.id} tipo="pedir_fotos"
                           getText={() => textoApertura(d)}
                           onError={(e) => toast.error(e.message)}
                           onSinRegistrar={sinRegistrar}
-                          label="Msj: pedir fotos"
+                          label="Copiar el pedido de fotos"
+                        />
+                      )}
+                      {/* 🔑 **El estado de la decisión, dicho en criollo.** `en_revision` puede
+                          durar días —el aviso salta a los 3— y era el único momento abierto sin
+                          nada que decirle: la escapatoria era «pedir más fotos», que vive adentro
+                          del `⋯` porque es una decisión y ⛔ no una respuesta. */}
+                      {mensajes.includes('revisando') && (
+                        <BotonMensaje
+                          marca={marca} id={d.id} tipo="revisando"
+                          getText={() => mensajeRevisando(d, numeroReclamo(d.id))}
+                          onSinRegistrar={sinRegistrar}
+                          label="Copiar el aviso de revisión"
                         />
                       )}
                       {/* 🔴 **El mensaje que más se va a usar, y era el único de los cuatro que no
@@ -988,7 +1056,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           marca={marca} id={d.id} tipo="propuesta"
                           getText={() => mensajePropuesta(d, numeroReclamo(d.id))}
                           onSinRegistrar={sinRegistrar}
-                          label="Msj: la propuesta"
+                          label="Copiar la propuesta"
                           tone="warning"
                         />
                       )}
@@ -1004,8 +1072,8 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           Lo que se escribe lo deriva el servidor con `camposAlContestarLaOferta`. */}
                       {mensajes.includes('propuesta') && (
                         <>
-                          <Button size="sm" variant="outline" tone="brand" onClick={() => void contesto(d, 'acepto')}>Aceptó</Button>
-                          <Button size="sm" variant="outline" tone="neutral" onClick={() => void contesto(d, 'rechazo')}>No aceptó</Button>
+                          <Button size="sm" variant="outline" tone="brand" onClick={() => void contesto(d, 'acepto')}>Registrar que aceptó</Button>
+                          <Button size="sm" variant="outline" tone="neutral" onClick={() => void contesto(d, 'rechazo')}>Registrar que no aceptó</Button>
                         </>
                       )}
                       {mensajes.includes('resolucion') && (
@@ -1013,7 +1081,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           marca={marca} id={d.id} tipo="resolucion"
                           getText={() => mensajeResolucion(d, numeroReclamo(d.id))}
                           onSinRegistrar={sinRegistrar}
-                          label="Msj: resolución"
+                          label="Copiar la resolución"
                           tone="brand"
                         />
                       )}
@@ -1023,10 +1091,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           este mensaje el reclamo queda mudo justo ahí, y el reloj de «hace N días
                           que no llega» arranca sobre una espera que nunca fue de él. */}
                       {mensajes.includes('etiqueta_en_camino') && (
-                        <BotonMensaje marca={marca} id={d.id} tipo="etiqueta_en_camino" onSinRegistrar={sinRegistrar} getText={() => mensajeEtiquetaEnCamino(d, numeroReclamo(d.id))} label="Msj: la etiqueta va en camino" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="etiqueta_en_camino" onSinRegistrar={sinRegistrar} getText={() => mensajeEtiquetaEnCamino(d, numeroReclamo(d.id))} label="Copiar el aviso de la etiqueta" tone="neutral" />
                       )}
                       {mensajes.includes('etiqueta') && (
-                        <BotonMensaje marca={marca} id={d.id} tipo="etiqueta" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Msj: etiqueta" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="etiqueta" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'etiqueta')} label="Copiar la etiqueta" tone="neutral" />
                       )}
                       {/* 🔴 **El único hecho del circuito que no se le contaba al cliente.** El
                           texto existía y estaba probado desde el 27-ago; su único llamador era el
@@ -1034,10 +1102,23 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           otro lado no llegaba nada. Sale del pendiente que tilda Depósito, igual
                           que «plata enviada» sale del que tilda Administración. */}
                       {mensajes.includes('despacho_hecho') && (
-                        <BotonMensaje marca={marca} id={d.id} tipo="despacho_hecho" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'reenvio')} label="Msj: ya lo despachamos" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="despacho_hecho" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'reenvio')} label="Copiar el aviso del despacho" tone="neutral" />
+                      )}
+                      {/* 🔴 **El único movimiento FÍSICO del ciclo que ⛔ no se le contaba.** El
+                          cliente despachó, pagó la espera, y ya no tiene ni el producto ni la
+                          plata: es el rato de más ansiedad de todo el recorrido, y era donde el
+                          sistema se callaba. Sale del estado que sella Depósito al abrir la caja. */}
+                      {mensajes.includes('retorno_recibido') && (
+                        <BotonMensaje marca={marca} id={d.id} tipo="retorno_recibido" onSinRegistrar={sinRegistrar} getText={() => mensajeRetornoRecibido(d, numeroReclamo(d.id))} label="Copiar el aviso de la llegada" tone="neutral" />
+                      )}
+                      {/* 🔴 **La promesa que quedaba abierta**: sin código, la resolución dice «te
+                          pasamos el código apenas lo tengamos», y «Cargar el cupón» lo sellaba en
+                          silencio. Misma forma que el despacho que no se avisaba. */}
+                      {mensajes.includes('cupon_listo') && (
+                        <BotonMensaje marca={marca} id={d.id} tipo="cupon_listo" onSinRegistrar={sinRegistrar} getText={() => mensajeCuponListo(d, numeroReclamo(d.id))} label="Copiar el cupón" tone="brand" />
                       )}
                       {mensajes.includes('plata_enviada') && (
-                        <BotonMensaje marca={marca} id={d.id} tipo="plata_enviada" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Msj: plata enviada" tone="neutral" />
+                        <BotonMensaje marca={marca} id={d.id} tipo="plata_enviada" onSinRegistrar={sinRegistrar} getText={() => mensajeSeguimiento(d, numeroReclamo(d.id), 'plata')} label="Copiar el aviso de la devolución" tone="neutral" />
                       )}
                       {/* Un cambio ya está decidido por definición: lo que falta es armarlo, y eso
                           vive en la pestaña Cambios. Ofrecer "Decidir" acá invita a resolverlo dos
@@ -1083,19 +1164,19 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                         </Button>
                       )}
                       {esAdmin && d.estado === 'en_transito' && (
-                        <Button size="sm" variant="outline" onClick={() => void accion(async () => { await marcarRecibido(marca, d.id) }, 'Marcado como recibido.')}>Volvió</Button>
+                        <Button size="sm" variant="outline" onClick={() => void accion(async () => { await marcarRecibido(marca, d.id) }, 'Marcado como recibido.')}>Marcar recibido</Button>
                       )}
                       {esAdmin && d.stock_estado === 'pendiente' && (
-                        <Button size="sm" variant="outline" onClick={() => void anularLaVentaEnGN(d)}>Anulé en GN</Button>
+                        <Button size="sm" variant="outline" onClick={() => void anularLaVentaEnGN(d)}>Anular en GN</Button>
                       )}
                       {esAdmin && d.reintegro_estado === 'pendiente' && (
-                        <Button size="sm" variant="outline" onClick={() => void reintegrar(d)}>Devolví la plata</Button>
+                        <Button size="sm" variant="outline" onClick={() => void reintegrar(d)}>Devolver la plata</Button>
                       )}
                       {/* Sin `esAdmin`: despacha Depósito. El pendiente lo dejan el cambio, la
                           reposición y el reenvío, y hasta hoy no tenía con qué tildarse — o sea
                           que ninguna de las tres se podía cerrar. */}
                       {d.envio_nuevo_estado === 'pendiente' && (
-                        <Button size="sm" variant="outline" onClick={() => void accion(() => marcarDespachado(marca, d.id), 'Anotado: ya salió.')}>Despaché</Button>
+                        <Button size="sm" variant="outline" onClick={() => void accion(() => marcarDespachado(marca, d.id), 'Anotado: ya salió.')}>Despachar</Button>
                       )}
                       {/* El cupón es una promesa hasta que existe en la tienda. */}
                       {esAdmin && d.cupon_estado === 'pendiente' && (
@@ -1106,14 +1187,14 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                           descuento: el faltante lo abre una persona y acá se anota cuál es. */}
                       {sinLaOtraVenta(d).length > 0 && (
                         <Button size="sm" variant="outline" tone="warning" onClick={() => void anotarLaOtra(d)}>
-                          ¿De qué venta salió?
+                          Cargar la otra venta
                         </Button>
                       )}
                       {/* Plata recuperable: sin este pendiente, un pedido perdido se cierra y el
                           reclamo al correo no lo hace nadie. */}
                       {esAdmin && d.reclamo_correo_estado === 'pendiente' && (
                         <Button size="sm" variant="outline" onClick={() => void cargarReclamoCorreo(d)}>
-                          {d.reclamo_correo ? 'Reclamo al correo ✓' : 'Reclamo al correo'}
+                          {d.reclamo_correo ? 'Cambiar el reclamo al correo' : 'Cargar el reclamo al correo'}
                         </Button>
                       )}
                       {/* Sin `esAdmin`: quien ve que el producto no está es Local, y tiene que
@@ -1224,7 +1305,7 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
                             getText={() => textoApertura(d)}
                             onError={(e) => toast.error(e.message)}
                             onSinRegistrar={sinRegistrar}
-                            label="Msj: pedir más fotos"
+                            label="Copiar el pedido de más fotos"
                             tone="neutral"
                           />
                           <span style={{ fontSize: font.xs, color: color.mut2 }}>

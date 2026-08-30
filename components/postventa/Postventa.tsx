@@ -307,7 +307,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
                     </Button>
                     {(f.estado === 'confirmada' || f.estado === 'en_deposito') && (
                       <>
-                        <Button size="sm" variant="outline" tone="success" onClick={() => void cambiarEstado(f, 'vendida_feria')}>Vendida</Button>
+                        <Button size="sm" variant="outline" tone="success" onClick={() => void cambiarEstado(f, 'vendida_feria')}>Marcar vendida</Button>
                           <Button size="sm" variant="ghost" onClick={() => void cambiarEstado(f, 'descartada')}>Descartar
                         </Button>
                       </>
