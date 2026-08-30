@@ -131,12 +131,29 @@ export function EditorNovedad({
             onChange={(e) => {
               const t = e.target.value
               const { marca } = destino
-              setDestino(t === 'seccion' ? { tipo: 'seccion', key: 'atencion', marca } : t === 'roles' ? { tipo: 'roles', roles: ['local'], marca } : { tipo: 'todos', marca })
+              setDestino(t === 'seccion' ? { tipo: 'seccion', key: 'atencion', marca }
+                : t === 'roles' ? { tipo: 'roles', roles: ['local'], marca }
+                : t === 'horas-extras' ? { tipo: 'horas-extras', marca }
+                : { tipo: 'todos', marca })
             }}
           >
             <option value="todos">A todo el equipo</option>
             <option value="seccion">A quien usa una pantalla</option>
             <option value="roles">A ciertos roles</option>
+            {/*
+              🔴 **Estaba afuera y eso ROMPIÓ una novedad ya cargada** (30-ago-2026). El
+              razonamiento fue «acá no significa nada, no la ofrezco»; el efecto fue que una novedad
+              guardada con ese destino, al abrirla para editar, mostraba **«A todo el equipo»** —un
+              `<select>` no puede dibujar un valor que no está entre sus `<option>`, así que cae al
+              primero— y guardar desde ahí se lo cambiaba de verdad. Lo vio Bruno: *«la novedad
+              estaba para todos»*.
+              🔑 **La regla, que vale para CUALQUIER select de este repo: sus opciones tienen que
+              cubrir todos los valores que el campo puede tener guardados**, aunque la pantalla no
+              los ofrezca para crear. Amarrado en `tests/novedades.test.ts`.
+              ⚠️ Es el mismo agujero que el desplegable «Cómo se hace» de la Agenda, que lista sólo
+              manuales publicados y por eso dice «— sin manual —» en las 75 rutinas que tienen uno.
+            */}
+            <option value="horas-extras">A quien hace horas extras</option>
           </Select>
         </Field>
 

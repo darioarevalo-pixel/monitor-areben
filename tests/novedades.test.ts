@@ -333,3 +333,52 @@ describe('clavesDestino — con qué se lo puede filtrar', () => {
     }
   })
 })
+
+/**
+ * 🔴 **El agujero que un `<select>` abre callado, y que ya mordió dos veces.**
+ *
+ * Un `<select>` **no puede dibujar un valor que no está entre sus `<option>`**: cae al primero. Así
+ * que una fila guardada con un destino que el editor no ofrece **se muestra como otra cosa**, y
+ * guardar desde esa pantalla la cambia de verdad. No falla, no avisa, y lo único que lo delata es
+ * que alguien mire la pantalla — que es como se cazó: «la novedad estaba para todos» (Bruno,
+ * 30-ago-2026), sobre una novedad guardada con `{tipo:'horas-extras'}`.
+ *
+ * 🔑 **La regla: las opciones de un editor tienen que CUBRIR todo lo que el campo puede tener
+ * guardado**, aunque esa pantalla no lo ofrezca para crear. Este test la sostiene leyendo los dos
+ * editores como texto: es feo y es lo único que se rompe el día que alguien agrega una sexta forma
+ * y se olvida de uno de los dos.
+ */
+describe('🔴 los editores ofrecen TODAS las formas de destino', () => {
+  const TIPOS: Destino['tipo'][] = ['todos', 'seccion', 'roles', 'personas', 'horas-extras']
+
+  const editores = [
+    // El de la Agenda ofrece las cinco.
+    { archivo: 'components/agenda/ModalItem.tsx', debe: TIPOS },
+    // ⚠️ El de Novedades ⛔ NO ofrece `personas` a propósito —la usa sólo la Agenda—, pero sí tiene
+    // que poder DIBUJARLA si alguna vez se guarda así. Por eso `personas` queda fuera de la lista
+    // exigida acá y su caso se cubre en `aQuien` de `Novedades.tsx`, que sí la sabe leer.
+    { archivo: 'components/novedades/EditorNovedad.tsx', debe: TIPOS.filter((t) => t !== 'personas') },
+  ]
+
+  for (const { archivo, debe } of editores) {
+    it(`${archivo} ofrece ${debe.join(', ')}`, async () => {
+      const { readFileSync } = await import('node:fs')
+      const src = readFileSync(new URL(`../${archivo}`, import.meta.url), 'utf8')
+      for (const tipo of debe) {
+        expect(src, `falta <option value="${tipo}"> en ${archivo}`).toContain(`<option value="${tipo}">`)
+      }
+    })
+  }
+
+  it('y `rotuloDestino` sabe leer las cinco: ninguna cae en «a todo el equipo»', () => {
+    const muestras: Destino[] = [
+      { tipo: 'seccion', key: 'atencion' },
+      { tipo: 'roles', roles: ['local'] },
+      { tipo: 'personas', personas: ['sofi'] },
+      { tipo: 'horas-extras' },
+    ]
+    for (const d of muestras) {
+      expect(rotuloDestino(d), `«${d.tipo}» se está leyendo como «todos»`).not.toBe('a todo el equipo')
+    }
+  })
+})

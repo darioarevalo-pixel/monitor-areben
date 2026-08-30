@@ -119,6 +119,20 @@ node scripts/novedad.mjs --listar
 
 ## Lo que ya se rompió acá
 
+- 🔴 **Una novedad guardada con un destino que el editor NO ofrecía se mostraba como «A todo el
+  equipo»** (30-ago-2026). Un `<select>` no puede dibujar un valor que no está entre sus `<option>`:
+  cae al primero. La novedad estaba bien guardada —`{tipo:'horas-extras'}`, verificado en la base—,
+  pero **abrirla para editar la mostraba dirigida a los dieciséis**, y guardar desde ahí se lo
+  cambiaba de verdad. Lo cazó Bruno mirando la pantalla: *«la novedad estaba para todos»*. La
+  decisión que lo causó fue mía y sonaba razonable: «`horas-extras` la usa sólo la Agenda, acá no la
+  ofrezco».
+  🔑 **La regla que quedó, y vale para CUALQUIER select del repo: sus opciones tienen que cubrir
+  todo lo que el campo puede tener GUARDADO, aunque esa pantalla no lo ofrezca para crear.**
+  Amarrada en `tests/novedades.test.ts`, que lee los dos editores y exige la opción de cada forma.
+  ⚠️ **Y hay un segundo caso vivo del mismo agujero**: el desplegable «Cómo se hace» de la Agenda
+  lista sólo manuales **publicados** (1 de 12) ⇒ las **75** rutinas con manual abren el modal
+  diciendo «— sin manual —».
+
 - 🔴 **El cartel de las importantes no se disparaba nunca, y era la propia sección.** Cada pieza
   estaba bien por separado y el agujero estaba ENTRE dos: no lo cazaba ningún test unitario, sólo
   mirar la pantalla.
