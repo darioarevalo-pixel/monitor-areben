@@ -351,12 +351,13 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
   cuatro puertas**: el manual «El nombre y la descripción del producto» cierra esos dos pasos **por
   puerta de entrada, no por sector**, y la dueña cambia con la puerta.
 
-  | entra por…            | el NOMBRE      | la DESCRIPCIÓN                          |
-  | --------------------- | -------------- | --------------------------------------- |
-  | Producción propia     | Stefi          | ya viene escrita — **no lleva renglón**  |
-  | Compra nacional       | Administración | **Zattia**: el local (básica + medidas) · **BDI**: Administración |
-  | Importación           | Marketing      | Marketing                                |
-  | Accesorios nacionales | Darío o Lorena | Administración                           |
+  | entra por…        | existe en  | el NOMBRE      | la DESCRIPCIÓN                          |
+  | ----------------- | ---------- | -------------- | --------------------------------------- |
+  | Producción propia | **Zattia** | Stefi          | ya viene escrita — **no lleva renglón**  |
+  | Compra nacional   | las dos    | **Zattia**: Administración · **BDI**: Darío o Lorena | **Zattia**: el local (básica + medidas) · **BDI**: Administración |
+  | Importación       | **BDI**    | Marketing      | Marketing                                |
+
+  🆕 **Eran CUATRO hasta el 1-sep-2026**: ver «cada puerta vive en su marca», más abajo.
 
   - 🔑 **La puerta es un dato del molde, no un `if`**: `datos.puertas`, y **vacío quiere decir
     todas** —la misma lectura que `marcas: []`—. Con eso los cuatro pasos que no cambian (precio,
@@ -688,6 +689,123 @@ pendiente que nadie le anunció.
 tanda el 27-ago y ninguna desde entonces —`OC-0412` se confirmó el 26 y llegó igual en la del 27—,
 así que puede que esto no se prenda hasta que Gerardo mande el primer evento en vivo. El tripwire es
 `eventos.ultimo` del GET de recepciones.
+
+## 🆕 EL PRIMER DÍA EN VIVO: diez órdenes, cien renglones — y las tres cosas que salieron de ahí
+
+**1-sep-2026.** El webhook de Ingresos empezó a mandar en vivo. Entraron **once preguntas de puerta**,
+se contestaron **diez** —todas de Zattia, todas «compra nacional»— y cada una sembró **diez pasos**:
+**100 renglones** en la Agenda en un día. Bruno lo caminó y salieron tres cosas. Las dos primeras son
+cambios; la tercera es la explicación de la que preguntó.
+
+### 1 · Cada puerta vive en su marca — y «accesorios nacionales» ⛔ no era una puerta
+
+> *«bdi y zattia tienen compra nacional; la diferencia es que bdi tiene importado, y zattia tiene
+> producción propia»* · *«accesorios nacionales sería compra nacional»* (Bruno, 1-sep-2026)
+
+Eran **cuatro** puertas y se ofrecían **las cuatro en las dos marcas**. Ahora son **tres**, y cada
+una dice en qué negocio existe (`PUERTAS[].marcas` en `lib/agenda/puertas.core.js`, **vacío = las
+dos**, la misma lectura de siempre).
+
+- 🔑 **Comprar accesorios en el país y comprar fundas en el país entran por el mismo lugar.** Lo
+  único que las distinguía —de quién son el nombre y la descripción— **ya lo separa la marca**, que
+  el ingreso trae solo. Dos claves para el mismo hecho eran dos formas de contestar bien la misma
+  pregunta, y **la de arriba en la lista se elige más**.
+- 🔑 **La marca acota QUÉ SE OFRECE, ⛔ no de quién es el paso.** De quién es cada renglón lo sigue
+  diciendo el molde (`marcas: []` = las dos). Esto es una capa antes.
+- 🔴 **El corte está en el SERVIDOR además de en la pantalla** (`ejeValeEnMarca`, en `sembrar`): la
+  pregunta se contesta con un POST y el webhook manda su propio vocabulario. Y el 400 **dice por
+  dónde SÍ entra en esa marca** — se dice distinto que «esa puerta no existe», porque la acción es
+  otra: allá se corrigió un tipeo, acá se eligió mal la marca o la puerta.
+- 🔴 **`accesorios` SIGUE ENTRANDO desde `ingreso2`**, traducido a `nacional` en `TIPOS_INGRESO2`.
+  Es el vocabulario de Gerardo, ⛔ no el nuestro: **sacarlo del mapa convertiría un aviso que hoy
+  entra en un 400**, y ese 400 lo cobra mercadería que ya llegó. 🔑 El mapa dejó de ser 1 a 1, que
+  es exactamente para lo que existe.
+- 🔑 **El eje que NO depende de la marca no cambió.** `clavesEn` es una función **opcional** del
+  catálogo del eje (`plantillas.core.js`) y sólo la trae el ingreso: el origen de una sesión de
+  fotos y el qué-cambió de una condición comercial son los mismos en los dos negocios. Quien la lee
+  es `clavesDeEje`, y con eso **la pantalla y el servidor cortan por la misma lista** — dos listas
+  distintas serían una pantalla ofreciendo lo que el servidor rechaza.
+- 🔴 **En el modal de alta a mano la MARCA se pregunta ahora ANTES que la puerta**, y al cambiarla
+  **se limpia la puerta elegida**: si no, «importación» con Zattia elegida después queda como una
+  opción imposible mostrada como elegida.
+- 🔴 **LOS MOLDES SON DATA Y HUBO QUE MIGRARLOS**, o el deploy perdía dos pasos **en silencio**:
+  `puertas: ['accesorios']` deja de matchear contra ninguna puerta viva ⇒ no los siembra nadie y
+  nada avisa; y si alguien abre uno en la pantalla y lo guarda, la lista vacía lo convierte en
+  «corre en TODAS». Lo hizo `scripts/agenda-fusionar-accesorios.mjs` (corrido el 1-sep-2026), que
+  además **relee y arma con el core qué siembra cada combinación**: ése es el oráculo, ⛔ no la
+  respuesta del PATCH.
+
+  | combinación | 03) el NOMBRE | 04) la DESCRIPCIÓN |
+  | --- | --- | --- |
+  | Zattia · Producción propia | Stefi | — (no lleva renglón) |
+  | Zattia · Compra nacional | Lorena | el local |
+  | BDI · Compra nacional | Darío + Lorena | Lorena |
+  | BDI · Importación | Sofi | Sofi |
+
+  ⚠️ **«04) La DESCRIPCIÓN de accesorios» se eliminó** —duplicaba a la de BDI, mismo destino— pero
+  **antes se le pegó su renglón** a la que quedó, que pasó a llamarse «04) La DESCRIPCIÓN de una
+  compra nacional de **BDI**»: la nota decía que *el formato de accesorios de celular todavía no
+  está hecho*, y eso es un pendiente escrito, ⛔ no un adorno.
+
+### 2 · Las actividades repetidas se unifican en una sola fila
+
+> *«cuando hay varias OC, estaría bueno las actividades de cada evento, unificarlas en factor
+> común»* (Bruno, 1-sep-2026)
+
+Diez órdenes × diez pasos = **100 renglones**, y ninguno decía nada que el de al lado no dijera:
+Lorena tenía **cuatro pasos repetidos diez veces**, y el «Hoy» de Bruno, «05) Decidir el PRECIO» diez
+veces. 🔑 **La regla de oro de «Hoy» es que sea corta**, y cien renglones la rompen aunque cada uno
+esté bien.
+
+El motor es `filasDeHoy()` (`lib/agenda/index.ts`), y lo dibuja `GrupoActividad` en
+`PendientesHoy.tsx`. **El paso se dice una vez y las órdenes van adentro**, cada una con su tilde.
+
+- 🔑 **La actividad es el título SIN el prefijo del hecho**, y sale de restarlo (`sembrado.nombre`),
+  ⛔ no de adivinarlo con una regex. Es el mismo prefijo que Bruno eligió el 24-ago-2026 diciendo
+  *«⛔ no se escribe un motor de agrupación hasta haberlo usado dos veces»*: **ya se usó dos veces**,
+  y éste es el motor. ⚠️ El clon ⛔ **no guarda de qué molde salió** — si algún día lo guardara, la
+  clave sería ésa.
+- 🔴 **Un título editado a mano ⛔ NO se mete en un grupo ajeno: queda suelto.** Los títulos se
+  editan como los de cualquier ítem. *Un grupo con nombre feo se arregla mirando; un renglón que no
+  entra en ningún grupo desaparece de la pantalla*, y ése es el modo de falla que no se puede tener.
+  Hay un test que fija que **lo que entra es lo que sale**.
+- 🔑 **De a DOS o más, ⛔ nunca de a uno.** Una tarjeta «grupo» con una sola orden adentro es la misma
+  información con un envoltorio más, y encima esconde el número de orden adentro de una ficha.
+- 🔴 **⛔ No cambia qué se tilda ni adónde va el tilde.** Cada orden conserva **su** ítem y **su**
+  fecha —el arrastre resuelve una fecha por renglón, y dos órdenes de días distintos cierran
+  ocurrencias distintas—. Esto es **cómo se dibuja**, ⛔ no qué se guarda: el badge, el Mes y
+  Cumplimiento siguen contando renglones y **no pueden discrepar con esto**.
+- 🔑 **Un tilde por orden, y ⛔ no uno solo que cierre las diez.** *«El precio de tres ya lo puse y de
+  siete no»* es la respuesta normal, y un tilde único la haría imposible de dar. El «Marcar las N»
+  está al lado para cuando sí es una sola pasada: va **de a uno y si falla dice cuántas quedaron** —
+  «no pasó nada» sobre diez órdenes es el aviso que hace que nadie vuelva a apretar el botón.
+- 🔑 **Se agrupa DESPUÉS de filtrar.** En Inicio sólo va lo que falta, y un grupo armado sobre la
+  lista entera diría «3 de 10» en una pantalla donde esos 3 no se muestran.
+- ⚠️ **Las preguntas de puerta también se unifican**, aunque ⛔ no sean clones: once tarjetas que
+  dicen lo mismo y se contestan igual. Ahí el hecho es **la orden**, el encabezado dice cuántas son y
+  adentro va una fila por orden con su proveedor y sus botones.
+- ⛔ **Una actividad de un evento NO se mezcla con la de otro** aunque se llame igual: la clave es
+  `evento + actividad`.
+
+### 3 · Por qué el «Hoy» de Bruno tiene cosas de Administración
+
+> *«la vista mía, tengo cosas de administración, ¿puede ser? ¿por qué sería?»* (Bruno, 1-sep-2026)
+
+**Sí, y es el atajo del admin**, medido ese mismo día contra la base:
+
+- **El admin recibe TODO lo dirigido por rol o por sección** (`esParaMi`, `lib/novedades/destino.core.js`).
+  ⇒ le caen las **11 preguntas de puerta** (`roles: ['administracion']`) y los **10 «04) La
+  DESCRIPCIÓN»** (`roles: ['local']`).
+- **Lo que va por NOMBRE ⛔ no le llega**, que es la excepción decidida el 23-ago-2026: los 36
+  renglones de Lorena y los 24 de Sofi no aparecen en su «Hoy». De suyo propio tenía los **10 «05)
+  Decidir el PRECIO»** (Bruno + Darío).
+- 🔑 **No es un bug y sacarlo tiene costo**: el admin recibe lo de los roles porque es el que tiene
+  que darse cuenta si algo se mandó al grupo equivocado. Lo que hacía la lista impagable no era eso,
+  era el **volumen** —21 renglones ajenos, todos el mismo renglón repetido— y eso lo arregla el
+  punto 2: las 11 preguntas son **una** tarjeta y los 10 «04)» son **una** fila.
+- ▶️ **Si igual molesta**, la salida barata ⛔ no es tocar `esParaMi` (lo comparte Novedades): es un
+  filtro «sólo lo mío» en Hoy, o dirigir la pregunta de la puerta por **nombre** en vez de por rol —
+  con el costo de que deja de seguir a quien esté en Administración, que es por lo que se eligió el rol.
 
 ## Lo que ya se rompió acá
 

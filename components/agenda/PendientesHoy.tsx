@@ -19,11 +19,12 @@
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, ButtonLink, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
-import { feriadoDe, pendientesDe, PUERTAS, type PendienteHoy } from '@/lib/agenda'
+import { feriadoDe, filasDeHoy, pendientesDe, puertasDeMarca, type FilaHoy, type PendienteHoy } from '@/lib/agenda'
 import { contestarPuerta } from '@/lib/agenda/cliente'
 import { rotuloFecha } from '@/lib/fechas/semana'
 import { leerManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
+import type { Marca } from '@/lib/nav.datos'
 import { useAgenda } from '@/store/useAgenda'
 import { useSistema } from '@/store/useSistema'
 
@@ -43,12 +44,173 @@ export function PendientesHoy({
   const lista = soloPendientes ? todos.filter((p) => !p.hecho) : todos
   if (lista.length === 0) return null
 
+  /*
+    🔑 **Se agrupa DESPUÉS de filtrar, ⛔ no antes.** En Inicio sólo va lo que falta, y un grupo
+    armado sobre la lista entera diría «3 de 10» en una pantalla donde los 3 hechos no se muestran.
+    El «de cuántas» tiene que contar lo que se está viendo.
+  */
+  const filas = filasDeHoy(lista)
+
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
-      {lista.map((p) => (
-        <Renglon key={p.item.id} p={p} yo={perfil?.name ?? ''} />
+      {filas.map((f) => (
+        f.tipo === 'grupo'
+          ? <GrupoActividad key={f.clave} g={f} yo={perfil?.name ?? ''} />
+          : <Renglon key={f.clave} p={f.p} yo={perfil?.name ?? ''} />
       ))}
     </div>
+  )
+}
+
+/**
+ * **La misma actividad de varias órdenes, en una sola tarjeta** (1-sep-2026, pedido de Bruno:
+ * *«cuando hay varias OC, las actividades de cada evento, unificarlas en factor común»*).
+ *
+ * El 1-sep entraron **diez órdenes en un día**: cada una siembra diez pasos y la lista de Hoy pasó a
+ * tener cien renglones donde ninguno decía nada que el de al lado no dijera. El paso se dice una vez
+ * y las órdenes van adentro.
+ *
+ * 🔴 **Cada orden conserva SU tilde**, y es la mitad de por qué esto sirve: *«el precio de tres ya lo
+ * puse y de siete no»* es la respuesta normal, y un tilde único que cerrara las diez la haría
+ * imposible de dar. El «marcar todas» está al lado para cuando sí es una sola pasada.
+ *
+ * ⚠️ **Y el tilde de cada una viaja a SU fecha** (`p.fecha`, la ocurrencia que ese renglón cierra),
+ * ⛔ no a la del grupo: dos órdenes de días distintos cierran ocurrencias distintas y el servidor
+ * rechaza un tilde en un día en que el ítem no corría.
+ */
+function GrupoActividad({ g, yo }: { g: Extract<FilaHoy, { tipo: 'grupo' }>; yo: string }) {
+  const marcar = useAgenda((s) => s.marcar)
+  const desmarcar = useAgenda((s) => s.desmarcar)
+  const [error, setError] = useState<string | null>(null)
+  const [todas, setTodas] = useState(false)
+
+  const pendientes = g.filas.filter((f) => !f.p.hecho)
+  // Las preguntas de puerta no se tildan: se contestan. Se dibujan como filas y ⛔ no como fichas.
+  const esPregunta = !!g.filas[0].p.item.preguntaIngreso
+
+  const toggle = async (f: { p: PendienteHoy }) => {
+    setError(null)
+    try {
+      if (f.p.hecho) await desmarcar(f.p.item.id, f.p.fecha)
+      else await marcar(f.p.item.id, f.p.fecha, yo)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar el tilde.')
+    }
+  }
+
+  /*
+    🔴 **De a uno y ⛔ no en paralelo, y si uno falla se DICE cuántos quedaron.** Cada tilde es un
+    POST que el servidor puede rechazar por su cuenta (la fecha, el destino), y «no pasó nada» sobre
+    diez órdenes es el aviso que hace que nadie vuelva a apretar el botón.
+  */
+  const marcarTodas = async () => {
+    setError(null)
+    setTodas(true)
+    let listas = 0
+    try {
+      for (const f of pendientes) {
+        await marcar(f.p.item.id, f.p.fecha, yo)
+        listas++
+      }
+    } catch (e) {
+      const falta = pendientes.length - listas
+      setError(`${e instanceof Error ? e.message : 'No se pudo guardar el tilde.'} Quedaron ${falta} sin marcar.`)
+    } finally {
+      setTodas(false)
+    }
+  }
+
+  return (
+    <Card padding={3}>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: font.base, fontWeight: weight.semibold, color: color.ink }}>
+              {g.actividad}
+            </span>
+            {/*
+              El «3 de 10» va siempre, también en 0 de 10: es el dato que dice si esta tarjeta ya se
+              puede saltear, y esconderlo cuando no hay ninguna hecha lo escondería justo el día que
+              recién empieza.
+            */}
+            <StatusPill
+              tone={g.hechas === g.filas.length ? 'success' : 'neutral'}
+              label={esPregunta
+                ? `${g.filas.length} ${g.filas.length === 1 ? 'orden' : 'órdenes'}`
+                : `${g.hechas} de ${g.filas.length}`}
+            />
+          </div>
+
+          {g.cuerpo && (
+            <div style={{ fontSize: font.sm, color: color.mut, marginTop: 2 }}>{g.cuerpo}</div>
+          )}
+
+          {esPregunta ? (
+            <div style={{ display: 'grid', gap: space[2], marginTop: space[2] }}>
+              {g.filas.map((f) => (
+                <div key={f.p.item.id}>
+                  <div style={{ fontSize: font.sm, color: color.ink, fontWeight: weight.semibold }}>
+                    {f.hecho}
+                    {f.p.item.preguntaIngreso?.proveedor ? ` · ${f.p.item.preguntaIngreso.proveedor}` : ''}
+                  </div>
+                  {f.p.item.preguntaIngreso && (
+                    <ElegirPuerta id={f.p.item.id} marca={f.p.item.preguntaIngreso.marca} />
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
+              {g.filas.map((f) => (
+                <ChipOrden key={f.p.item.id} hecho={f.hecho} p={f.p} onToggle={() => void toggle(f)} />
+              ))}
+              {pendientes.length > 1 && (
+                <Button size="sm" variant="ghost" loading={todas} onClick={() => void marcarTodas()}>
+                  Marcar las {pendientes.length}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {error && <Notice tone="danger" style={{ marginTop: space[2] }}>{error}</Notice>}
+        </div>
+
+        {g.manualId && <BotonComoSeHace manualId={g.manualId} />}
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * Una orden adentro de una actividad unificada: el número de orden **es** el tilde.
+ *
+ * ⚠️ Es un `button` con altura explícita porque `.shell-content button` fija altura y un botón de
+ * dos renglones se desborda (ver `AGENTS.md`).
+ */
+function ChipOrden({ hecho, p, onToggle }: { hecho: string; p: PendienteHoy; onToggle: () => void }) {
+  const listo = !!p.hecho
+  // De cuándo viene y quién lo marcó no entran en el chip: van en el `title`, que es donde se
+  // pregunta por una orden concreta sin llenar la tarjeta de diez veces el mismo renglón.
+  const detalle = listo
+    ? `Lo marcó ${p.hecho?.usuario}${hora(p.hecho?.hechoAt ?? null) ? ` a las ${hora(p.hecho?.hechoAt ?? null)}` : ''}`
+    : p.desde ? `Viene del ${rotuloFecha(p.desde)}` : 'Marcar como hecho'
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={listo}
+      title={detalle}
+      style={{
+        height: 30, borderRadius: 8, cursor: 'pointer', padding: `0 ${space[2]}px`,
+        fontSize: font.sm, lineHeight: 1, whiteSpace: 'nowrap',
+        border: `1px solid ${listo ? color.success : color.line2}`,
+        background: listo ? color.success : 'transparent',
+        color: listo ? '#fff' : color.ink,
+        textDecoration: listo ? 'line-through' : undefined,
+      }}
+    >
+      {listo ? `✓ ${hecho}` : hecho}
+    </button>
   )
 }
 
@@ -131,7 +293,9 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
             de Hoy es donde la persona ya está parada. Sólo mientras está sin tildar — contestada,
             el renglón vuelve a ser un pendiente hecho como cualquier otro.
           */}
-          {!hecho && p.item.preguntaIngreso && <ElegirPuerta id={p.item.id} />}
+          {!hecho && p.item.preguntaIngreso && (
+            <ElegirPuerta id={p.item.id} marca={p.item.preguntaIngreso.marca} />
+          )}
 
           {hecho && (
             <div style={{ fontSize: font.sm, color: color.mut2, marginTop: 2 }}>
@@ -153,18 +317,25 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
 }
 
 /**
- * **Los cuatro botones de la puerta.** Contestar siembra los seis pasos del ingreso y tilda la
- * pregunta, en un solo POST.
+ * **Los botones de la puerta.** Contestar siembra los pasos del ingreso y tilda la pregunta, en un
+ * solo POST.
  *
- * 🔑 **Cuatro botones y ⛔ no un `select` + «Confirmar»**: son cuatro opciones fijas y la gracia de
- * todo esto era que fuera **un click**. Un desplegable con botón de confirmar son tres.
+ * 🔑 **Botones y ⛔ no un `select` + «Confirmar»**: son pocas opciones fijas y la gracia de todo
+ * esto era que fuera **un click**. Un desplegable con botón de confirmar son tres.
+ *
+ * 🆕 🔴 **Y son las de LA MARCA DEL INGRESO, ⛔ no las tres siempre** (1-sep-2026, pedido de Bruno:
+ * *«bdi y zattia tienen compra nacional; la diferencia es que bdi tiene importado, y zattia tiene
+ * producción propia»*). Acá cada botón está a un click de sembrar seis renglones con dueña, y **la
+ * opción imposible que igual se puede apretar es la que se aprieta**. La marca sale de
+ * `preguntaIngreso.marca` —la del hecho— y ⛔ **no de la del header**: el que contesta puede estar
+ * mirando BDI y la orden ser de ropa. El servidor corta por la misma lista (`ejeValeEnMarca`).
  *
  * 🔴 **El que aprieta necesita `agenda.cargar`** —sembrar seis pendientes con dueña es cargar, no
  * tildar— y la pregunta llega por rol a Administración, que no es el mismo conjunto. Por eso, si el
  * servidor contesta que no, **se muestra el 403 tal cual en vez de tragarlo**: «no pasó nada» al
  * apretar es lo que hace que alguien lo intente tres veces y después no lo intente más.
  */
-function ElegirPuerta({ id }: { id: string }) {
+function ElegirPuerta({ id, marca }: { id: string; marca: Marca }) {
   const recargar = useAgenda((s) => s.cargar)
   const [mandando, setMandando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -191,7 +362,7 @@ function ElegirPuerta({ id }: { id: string }) {
   return (
     <div style={{ marginTop: space[2] }}>
       <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-        {PUERTAS.map((puerta) => (
+        {puertasDeMarca(marca).map((puerta) => (
           <Button
             key={puerta.key}
             size="sm"

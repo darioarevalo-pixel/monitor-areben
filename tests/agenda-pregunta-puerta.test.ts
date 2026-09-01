@@ -250,7 +250,9 @@ async function contestar(body: Record<string, unknown> = {}) {
   const mod = await import('@/api/_agenda.js')
   const res = resFalso()
   await (mod.default as (q: unknown, s: typeof res) => Promise<unknown>)(
-    { method: 'POST', headers: {}, query: {}, body: { action: 'ingreso-puerta', id: 'q1', puerta: 'importacion', ...body } }, res,
+    // ⚠️ «compra nacional» y ⛔ no «importación»: la pregunta de la fixture es de una OC de
+    // **Zattia**, y desde el 1-sep-2026 la importación sólo existe en BDI (`puertasDeMarca`).
+    { method: 'POST', headers: {}, query: {}, body: { action: 'ingreso-puerta', id: 'q1', puerta: 'nacional', ...body } }, res,
   )
   return res
 }
@@ -274,7 +276,7 @@ describe('contestar la pregunta: un click siembra los pasos del ingreso', () => 
     expect(clon.titulo).toBe('OC-0412 · 1) El NOMBRE del producto')
     expect(clon.marcas).toEqual(['zattia'])
     expect((clon.regla as { fecha: string }).fecha).toBe('2026-08-26')
-    expect((clon.datos as { puerta: string }).puerta).toBe('importacion')
+    expect((clon.datos as { puerta: string }).puerta).toBe('nacional')
   })
 
   it('🔴 el nombre, la fecha y la marca salen de la FILA y ⛔ NO del body', async () => {

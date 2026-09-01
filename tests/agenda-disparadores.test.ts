@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { CLAVES_PUERTA, PUERTAS, rotuloPuerta, type Puerta } from '@/lib/agenda'
+import { CLAVES_PUERTA, clavesDeEje, plantillaDe, PUERTAS, puertaDeTipo, puertasDeMarca, rotuloPuerta, type Puerta } from '@/lib/agenda'
 
 /**
  * **El disparador del ingreso** — la lista corta que hoy dispara una persona acordándose.
@@ -364,13 +364,17 @@ describe('la puerta de entrada: dos de los seis pasos cambian de dueña según p
     }
   })
 
-  it('🔑 lista vacía = TODAS: el paso que no cambia se carga una vez y corre en las cuatro', async () => {
-    for (const puerta of ['produccion', 'nacional', 'importacion', 'accesorios']) {
+  it('🔑 lista vacía = TODAS: el paso que no cambia se carga una vez y corre en todas', async () => {
+    // ⚠️ Cada puerta se prueba **en la marca donde existe**: desde el 1-sep-2026 producción propia
+    // sólo corre en Zattia e importación sólo en BDI, así que el par (puerta, marca) es el caso.
+    for (const [puerta, marca] of [
+      ['produccion', 'zattia'], ['nacional', 'zattia'], ['nacional', 'bdi'], ['importacion', 'bdi'],
+    ]) {
       mundo = nuevoMundo()
       mundo.items = [molde({ id: 'comun', titulo: 'Cargar el precio', datos: { plantilla: 'ingreso', offsetDias: 0 } })]
-      const res = await desdeAfuera({ puerta })
-      expect(res.code, puerta).toBe(200)
-      expect(mundo.insertados.map((f) => f.titulo), puerta).toEqual(['IMP2 · Cargar el precio'])
+      const res = await desdeAfuera({ puerta, marca })
+      expect(res.code, `${puerta}/${marca}`).toBe(200)
+      expect(mundo.insertados.map((f) => f.titulo), `${puerta}/${marca}`).toEqual(['IMP2 · Cargar el precio'])
     }
   })
 
@@ -391,15 +395,15 @@ describe('la puerta de entrada: dos de los seis pasos cambian de dueña según p
     // No hay ningún `if` que sepa esto: producción propia recibe los comunes y nada más, porque
     // ninguno de los dos moldes de nombre/descripción la incluye.
     mundo.items = conPuertas()
-    await desdeAfuera({ puerta: 'produccion' })
+    await desdeAfuera({ puerta: 'produccion', marca: 'zattia' })
     expect(mundo.insertados.map((f) => f.titulo)).toEqual(['IMP2 · Cargar el precio'])
   })
 
   it('hay moldes pero ninguno de esta puerta: lo dice distinto que «no hay moldes»', async () => {
     mundo.items = [molde({ id: 'nom-imp', datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['importacion'] } })]
-    const res = await desdeAfuera({ puerta: 'accesorios' })
+    const res = await desdeAfuera({ puerta: 'produccion', marca: 'zattia' })
     expect(res.code).toBe(400)
-    expect(String(res.body?.error)).toContain('Accesorios')
+    expect(String(res.body?.error)).toContain('Producción propia')
     expect(String(res.body?.error)).not.toContain('plantilla')
     expect(mundo.insertados).toEqual([])
   })
@@ -480,7 +484,9 @@ describe('la marca del ingreso: la descripción de una compra nacional no la esc
     for (const marca of ['bdi', 'zattia']) {
       mundo = nuevoMundo()
       mundo.items = [molde({ id: 'comun', titulo: 'Cargar el precio', marcas: [] })]
-      const res = await desdeAfuera({ marca })
+      // ⚠️ Va por «compra nacional», que es la única puerta que existe en las dos marcas: con
+      // «importación» este caso probaría el guard de marca y ⛔ no lo que dice el título.
+      const res = await desdeAfuera({ puerta: 'nacional', marca })
       expect(res.code, marca).toBe(200)
       expect(mundo.insertados.map((f) => f.titulo), marca).toEqual(['IMP2 · Cargar el precio'])
     }
@@ -552,7 +558,6 @@ describe('puertas del ingreso: el catálogo', () => {
       produccion: true,
       nacional: true,
       importacion: true,
-      accesorios: true,
     }
     expect([...CLAVES_PUERTA].sort()).toEqual(Object.keys(cubiertas).sort())
   })
@@ -563,6 +568,63 @@ describe('puertas del ingreso: el catálogo', () => {
       expect(p.ayuda.length, p.key).toBeGreaterThan(0)
       expect(rotuloPuerta(p.key)).toBe(p.label)
     }
+  })
+})
+
+describe('🆕 cada puerta vive en su marca (1-sep-2026)', () => {
+  // Bruno: *«bdi y zattia tienen compra nacional; la diferencia es que bdi tiene importado, y
+  // zattia tiene producción propia»* · *«accesorios nacionales sería compra nacional»*.
+
+  it('Zattia ofrece producción propia y compra nacional, ⛔ no importación', () => {
+    expect(puertasDeMarca('zattia').map((p) => p.key)).toEqual(['produccion', 'nacional'])
+  })
+
+  it('BDI ofrece compra nacional e importación, ⛔ no producción propia', () => {
+    expect(puertasDeMarca('bdi').map((p) => p.key)).toEqual(['nacional', 'importacion'])
+  })
+
+  it('⛔ una marca desconocida NO abre la lista: deja sólo las que corren en las dos', () => {
+    // Lo que falta cierra, no abre. Con el default al revés, un `marca` mal escrito ofrecería las
+    // tres y la de otro negocio está a un click de sembrar los pasos con la dueña equivocada.
+    expect(puertasDeMarca('stunned' as never).map((p) => p.key)).toEqual(['nacional'])
+  })
+
+  it('🔴 sembrar una puerta que en esa marca no existe es 400, y el error DICE cuáles valen', async () => {
+    mundo.items = [molde({ id: 'comun', titulo: 'Cargar el precio', datos: { plantilla: 'ingreso', offsetDias: 0 } })]
+    const res = await desdeAfuera({ puerta: 'importacion', marca: 'zattia' })
+    expect(res.code).toBe(400)
+    // ⚠️ Se dice **distinto** que «esa puerta no existe»: allá se corrigió un tipeo, acá se eligió
+    // mal la marca o la puerta, y el error tiene que decir por dónde SÍ entra en ese negocio.
+    expect(String(res.body?.error)).toContain('Importación')
+    expect(String(res.body?.error)).toContain('zattia')
+    expect(String(res.body?.error)).toContain('Producción propia')
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('🔴 y la producción propia de BDI también: el guard corre para las dos', async () => {
+    mundo.items = [molde({ id: 'comun', titulo: 'Cargar el precio', datos: { plantilla: 'ingreso', offsetDias: 0 } })]
+    const res = await desdeAfuera({ puerta: 'produccion', marca: 'bdi' })
+    expect(res.code).toBe(400)
+    expect(mundo.insertados).toEqual([])
+  })
+
+  it('🔑 «accesorios» sigue ENTRANDO desde ingreso2, traducido a compra nacional', async () => {
+    // El mapa existe para esto: era una puerta nuestra y dejó de serlo, pero un aviso que hoy
+    // entra tiene que seguir entrando — sacarlo del mapa cobraría el 400 sobre mercadería que llegó.
+    expect(puertaDeTipo('accesorios')).toBe('nacional')
+    mundo.items = [molde({ id: 'nac', titulo: 'Nombre (Administración)', datos: { plantilla: 'ingreso', offsetDias: 0, puertas: ['nacional'] } })]
+    const res = await desdeAfuera({ tipo: 'accesorios', puerta: undefined, marca: 'bdi' })
+    expect(res.code).toBe(200)
+    expect(mundo.insertados.map((f) => f.titulo)).toEqual(['IMP2 · Nombre (Administración)'])
+    expect((mundo.insertados[0].datos as { puerta?: string }).puerta).toBe('nacional')
+  })
+
+  it('el eje que NO depende de la marca sigue ofreciendo todo (la sesión de fotos)', () => {
+    // `clavesEn` es opcional a propósito: el origen de una sesión y el qué-cambió de una condición
+    // comercial son los mismos en los dos negocios, y un campo obligatorio los obligaría a mentir.
+    const sesion = plantillaDe('sesion-fotos')!
+    expect(clavesDeEje(sesion.eje, 'bdi')).toEqual(sesion.eje!.claves)
+    expect(clavesDeEje(sesion.eje, 'zattia')).toEqual(sesion.eje!.claves)
   })
 })
 

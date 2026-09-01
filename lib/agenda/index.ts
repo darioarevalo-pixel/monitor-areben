@@ -21,6 +21,9 @@ import {
   moldeCorreEn as moldeCorreEnJs,
   moldeCorreEnMarca as moldeCorreEnMarcaJs,
   PUERTAS as PUERTAS_JS,
+  puertaDeTipo as puertaDeTipoJs,
+  puertasDeMarca as puertasDeMarcaJs,
+  puertaValeEnMarca as puertaValeEnMarcaJs,
   rotuloPuerta as rotuloPuertaJs,
 } from './puertas.core.js'
 import {
@@ -36,6 +39,8 @@ import {
 } from './reglas.core.js'
 import {
   CLAVES_PLANTILLA as CLAVES_PLANTILLA_JS,
+  clavesDeEje as clavesDeEjeJs,
+  ejeValeEnMarca as ejeValeEnMarcaJs,
   esClavePlantilla as esClavePlantillaJs,
   hechoYaPaso as hechoYaPasoJs,
   moldeCorreEnEje as moldeCorreEnEjeJs,
@@ -67,10 +72,22 @@ export const ocurrencias = ocurrenciasJs as (regla: Regla, desde: FechaIso, hast
 export * from './tipos'
 export { hoyIso }
 
-// Las cuatro puertas de entrada del ingreso. El motor está en JS por el mismo motivo que el de las
+// Las puertas de entrada del ingreso. El motor está en JS por el mismo motivo que el de las
 // reglas: `api/_agenda.js` filtra los moldes antes de insertarlos y no puede importar TypeScript.
-export const PUERTAS = PUERTAS_JS as { key: Puerta; label: string; ayuda: string }[]
+export const PUERTAS = PUERTAS_JS as { key: Puerta; label: string; marcas: Marca[]; ayuda: string }[]
 export const CLAVES_PUERTA = CLAVES_PUERTA_JS as Puerta[]
+// 🔑 **Las que existen en ESTA marca**, que es lo único que la pantalla puede dibujar: una opción
+// imposible que igual se puede apretar es la que se aprieta, y acá cada click siembra seis
+// renglones con dueña. `marcas: []` en el catálogo quiere decir las dos.
+export const puertasDeMarca = puertasDeMarcaJs as (marca: Marca) => typeof PUERTAS
+export const puertaValeEnMarca = puertaValeEnMarcaJs as (key: string, marca: Marca) => boolean
+/**
+ * La puerta que le corresponde a un tipo de `ingreso2`, o `null` si no lo conocemos.
+ *
+ * 🔑 **El mapa ⛔ no es 1 a 1**: `accesorios` era una puerta nuestra hasta el 1-sep-2026 y hoy se
+ * traduce a `nacional`. Es el vocabulario de Gerardo, y por eso vive en el core.
+ */
+export const puertaDeTipo = puertaDeTipoJs as (tipo: unknown) => Puerta | null
 export const rotuloPuerta = rotuloPuertaJs as (key: string) => string
 export const moldeCorreEn = moldeCorreEnJs as (puertasDelMolde: Puerta[] | undefined, puerta: Puerta) => boolean
 // La marca del ingreso, que se lee igual: lista vacía = las dos. ⛔ No es `esDeMisMarcas`: acá el
@@ -92,6 +109,13 @@ export type EjeDePlantilla = {
   campoClon: 'puerta' | 'disparador' | 'cambio'
   titulo: string
   claves: string[]
+  /**
+   * 🆕 **Qué valores existen en cada marca**, cuando el eje depende del negocio. Sólo lo trae el
+   * ingreso: las puertas no son las mismas en Zattia que en BDI. **Ausente = los de `claves`**, que
+   * es el caso de los otros dos ejes. ⛔ No se llama directo: se lee con `clavesDeEje`, que es lo
+   * que hace que la pantalla y el servidor corten por la misma lista.
+   */
+  clavesEn?: (marca: Marca) => string[]
   rotulo: (key: string) => string
   /**
    * La ayuda de cada valor, para el modal que lo pregunta. Sólo la traen los ejes de las plantillas
@@ -155,6 +179,15 @@ export const esClavePlantilla = esClavePlantillaJs as (key: unknown) => boolean
 export const plantillaDe = plantillaDeJs as (key: unknown) => Plantilla | null
 /** ¿Corre este molde para este valor del eje? **Lista vacía = todos.** */
 export const moldeCorreEnEje = moldeCorreEnEjeJs as (listaDelMolde: string[] | undefined, valor: string) => boolean
+/**
+ * Los valores del eje que existen en esta marca. Sin `clavesEn` son todos.
+ *
+ * 🔑 **La dibuja el modal y con ella corta `sembrar`.** Dos listas distintas serían una pantalla
+ * ofreciendo lo que el servidor rechaza, que es el modo de falla de «no pasó nada al apretar».
+ */
+export const clavesDeEje = clavesDeEjeJs as (eje: EjeDePlantilla | null, marca: Marca) => string[]
+/** ¿Este valor del eje existe en esta marca? Es el guard de `sembrar`, y dice **qué hacer**. */
+export const ejeValeEnMarca = ejeValeEnMarcaJs as (eje: EjeDePlantilla, valor: string, marca: Marca) => boolean
 /** El `offsetDias` que acepta la plantilla, o `null` si no viene número o cae fuera de rango. */
 export const offsetDeMolde = offsetDeMoldeJs as (plantilla: string, v: unknown) => number | null
 /**
@@ -538,6 +571,115 @@ export function pendientesDe(
       }
     })
     .filter((p): p is PendienteHoy => p !== null)
+}
+
+/**
+ * **De qué actividad es este renglón, y de qué hecho** — o `null` si no salió de ningún evento.
+ *
+ * 🔑 **La actividad es el título SIN el prefijo del hecho.** El clon nace como `OC-0468 · 03) El
+ * NOMBRE de cada producto`, donde el prefijo es el agrupador que eligió Bruno el 24-ago-2026
+ * *«y ⛔ no se escribe un motor de agrupación hasta haberlo usado dos veces»*. Ya se usó: el 1-sep
+ * entraron **diez órdenes en un día** y la lista de Hoy pasó a tener el mismo paso repetido diez
+ * veces. Éste es el motor, y sigue colgando del prefijo porque el clon ⛔ no guarda de qué molde
+ * salió — lo que guarda (`sembrado.nombre`) es exactamente el prefijo, así que se resta, ⛔ no se
+ * adivina con una regex.
+ *
+ * 🔴 **Y si el título no empieza con ese prefijo, devuelve `null`.** Los títulos se editan como los
+ * de cualquier ítem: uno retocado a mano ⛔ **no puede desaparecer** dentro de un grupo ajeno —queda
+ * suelto, que es como estaba—. *Un grupo con nombre feo se arregla mirando; un renglón que no entra
+ * en ningún grupo desaparece de la pantalla.*
+ *
+ * ⚠️ **La pregunta de la puerta es su propia actividad**, aunque ⛔ no sea un clon: las once que
+ * abrió el webhook el 1-sep son once tarjetas que dicen lo mismo y se contestan igual. El hecho, ahí,
+ * es la orden.
+ */
+export const ACTIVIDAD_PREGUNTA_PUERTA = 'Por qué puerta entró cada orden'
+
+export function actividadDe(item: ItemAgenda): { evento: string; actividad: string; hecho: string } | null {
+  if (item.preguntaIngreso) {
+    return { evento: 'ingreso', actividad: ACTIVIDAD_PREGUNTA_PUERTA, hecho: item.preguntaIngreso.nombre }
+  }
+  const s = item.sembrado
+  if (!s) return null
+  const prefijo = `${s.nombre} · `
+  if (!item.titulo.startsWith(prefijo)) return null
+  const actividad = item.titulo.slice(prefijo.length).trim()
+  return actividad ? { evento: s.evento, actividad, hecho: s.nombre } : null
+}
+
+/**
+ * Un renglón de «Hoy»: o un pendiente suelto, o **la misma actividad de varios hechos**.
+ *
+ * `clave` es para el `key` de React y ⛔ no se muestra.
+ */
+export type FilaHoy =
+  | { tipo: 'suelto'; clave: string; p: PendienteHoy }
+  | {
+      tipo: 'grupo'
+      clave: string
+      /** Lo que se dice UNA vez: el paso, sin el número de orden adelante. */
+      actividad: string
+      evento: string
+      /** El cuerpo y el manual salen del primero: los clones de un mismo molde los traen iguales. */
+      cuerpo: string | null
+      manualId: string | null
+      /** Uno por hecho, ordenados por el nombre del hecho, que es como se sembraron. */
+      filas: { hecho: string; p: PendienteHoy }[]
+      /** Cuántos de los de adentro ya están tildados. Es el «3 de 10» del encabezado. */
+      hechas: number
+    }
+
+/**
+ * **Lo de Hoy, con las actividades repetidas unificadas en una sola fila** (1-sep-2026, pedido de
+ * Bruno: *«cuando hay varias OC, las actividades de cada evento, unificarlas en factor común»*).
+ *
+ * De dónde salió: ese día el webhook de Ingresos empezó a mandar en vivo y entraron **diez órdenes**.
+ * Cada una siembra diez pasos ⇒ **100 renglones**, y ninguno decía nada que el de al lado no dijera:
+ * Lorena tenía cuatro pasos repetidos diez veces, y el «Hoy» de Bruno, «05) Decidir el PRECIO» diez
+ * veces. 🔑 **La regla de oro de Hoy es que sea corta**, y cien renglones la rompen aunque cada uno
+ * esté bien.
+ *
+ * 🔑 **Agrupa de a DOS o más, ⛔ nunca de a uno.** Una tarjeta «grupo» con una sola orden adentro es
+ * la misma información con un envoltorio más, y encima esconde el número de orden en un chip.
+ *
+ * 🔴 **⛔ No cambia qué se tilda ni adónde va el tilde.** Cada orden de adentro conserva SU ítem y SU
+ * fecha —el arrastre resuelve una fecha por renglón, y dos órdenes de días distintos cierran
+ * ocurrencias distintas—. Esto es cómo se dibuja, ⛔ no qué se guarda: el badge del menú, el Mes y
+ * Cumplimiento siguen contando renglones y no pueden discrepar con esto.
+ *
+ * ⚠️ **El orden es el mismo criterio de siempre**: alfabético por lo que se ve. Un grupo se ordena
+ * por su actividad y un suelto por su título, en la misma lista — si los grupos fueran todos arriba,
+ * la lista cambiaría de orden sola el día que entra la segunda orden.
+ */
+export function filasDeHoy(pendientes: PendienteHoy[]): FilaHoy[] {
+  const grupos = new Map<string, { actividad: string; evento: string; items: { hecho: string; p: PendienteHoy }[] }>()
+  const sueltos: PendienteHoy[] = []
+  for (const p of pendientes) {
+    const a = actividadDe(p.item)
+    if (!a) { sueltos.push(p); continue }
+    const clave = `${a.evento}\u0000${a.actividad}`
+    const ya = grupos.get(clave)
+    if (ya) ya.items.push({ hecho: a.hecho, p })
+    else grupos.set(clave, { actividad: a.actividad, evento: a.evento, items: [{ hecho: a.hecho, p }] })
+  }
+  const filas: FilaHoy[] = sueltos.map((p) => ({ tipo: 'suelto', clave: p.item.id, p }))
+  for (const [clave, g] of grupos) {
+    // Uno solo ⛔ no es un grupo: vuelve a la lista como el renglón que era.
+    if (g.items.length < 2) { filas.push({ tipo: 'suelto', clave: g.items[0].p.item.id, p: g.items[0].p }); continue }
+    const items = [...g.items].sort((a, b) => a.hecho.localeCompare(b.hecho, 'es'))
+    filas.push({
+      tipo: 'grupo',
+      clave,
+      actividad: g.actividad,
+      evento: g.evento,
+      cuerpo: items[0].p.item.cuerpo,
+      manualId: items[0].p.item.manualId,
+      filas: items,
+      hechas: items.filter((x) => x.p.hecho).length,
+    })
+  }
+  const rotulo = (f: FilaHoy) => (f.tipo === 'grupo' ? f.actividad : f.p.item.titulo)
+  return filas.sort((a, b) => rotulo(a).localeCompare(rotulo(b), 'es'))
 }
 
 /**

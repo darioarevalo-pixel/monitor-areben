@@ -23,6 +23,8 @@ import {
   filtrarItems,
   rutinasYAvisos,
   actividadesDe,
+  actividadDe,
+  filasDeHoy,
   porHecho,
   plantillaDe,
   rotuloOffset,
@@ -1007,6 +1009,117 @@ describe('las tres poblaciones: rutinas, actividades de un evento, y lo copiado'
     it('lo que se cargó a mano ⛔ no entra en ningún grupo', () => {
       expect(porHecho([rutina, actNombre], [], '2026-08-28')).toEqual([])
     })
+  })
+})
+
+/**
+ * **`filasDeHoy`: la misma actividad de varias órdenes, en una fila** (1-sep-2026, pedido de Bruno:
+ * *«cuando hay varias OC, las actividades de cada evento, unificarlas en factor común»*).
+ *
+ * El caso real que lo abrió: ese día el webhook de Ingresos empezó a mandar en vivo, entraron **diez
+ * órdenes** y cada una sembró diez pasos ⇒ **100 renglones** en «Hoy», cuatro de ellos repetidos diez
+ * veces para la misma persona.
+ *
+ * 🔴 Lo que estos tests protegen no es el agrupado: es que **ningún renglón desaparezca**. Un grupo
+ * mal armado se ve y se arregla; un pendiente que se cayó adentro de un grupo ajeno —o que no entró
+ * en ninguna fila— no lo reclama nadie.
+ */
+describe('filasDeHoy: unificar las actividades repetidas de varias órdenes', () => {
+  const clonDe = (id: string, oc: string, actividad: string, over: Partial<ItemAgenda> = {}) => item({
+    id,
+    titulo: `${oc} · ${actividad}`,
+    regla: { tipo: 'unica', fecha: '2026-09-01' },
+    sembrado: { evento: 'ingreso', clave: `2026-09-01·${oc.toLowerCase()}`, nombre: oc, fecha: '2026-09-01' },
+    ...over,
+  })
+  const hoy = (items: ItemAgenda[], hechos: Hecho[] = []) => filasDeHoy(pendientesDe(items, hechos, '2026-09-01'))
+
+  it('actividadDe resta el prefijo del hecho: el paso es lo que queda', () => {
+    expect(actividadDe(clonDe('c1', 'OC-0466', '05) Decidir el PRECIO')))
+      .toEqual({ evento: 'ingreso', actividad: '05) Decidir el PRECIO', hecho: 'OC-0466' })
+  })
+
+  it('🔴 un título editado a mano ⛔ NO se mete en un grupo ajeno: queda suelto', () => {
+    // Los títulos se editan como los de cualquier ítem. Un renglón que no entra en ningún grupo
+    // desaparece de la pantalla, y ése es el modo de falla que no se puede tener.
+    const raro = clonDe('c9', 'OC-0470', 'x', { titulo: 'Le puse otro título' })
+    expect(actividadDe(raro)).toBeNull()
+    const filas = hoy([raro, clonDe('c1', 'OC-0466', 'Precio'), clonDe('c2', 'OC-0468', 'Precio')])
+    expect(filas.filter((f) => f.tipo === 'suelto').map((f) => f.p.item.id)).toEqual(['c9'])
+  })
+
+  it('lo cargado a mano ⛔ no se agrupa nunca: no salió de ningún evento', () => {
+    expect(actividadDe(item({ titulo: 'Reponer la vidriera' }))).toBeNull()
+  })
+
+  it('agrupa la misma actividad de diez órdenes en UNA fila, con las diez adentro', () => {
+    const ocs = ['OC-0466', 'OC-0468', 'OC-0470', 'OC-0471', 'OC-0472', 'OC-0473', 'OC-0474', 'OC-0475', 'OC-0799', 'OC-0801']
+    const filas = hoy(ocs.map((oc, n) => clonDe(`c${n}`, oc, '05) Decidir el PRECIO (y el costo)')))
+    expect(filas).toHaveLength(1)
+    expect(filas[0].tipo).toBe('grupo')
+    if (filas[0].tipo !== 'grupo') return
+    expect(filas[0].actividad).toBe('05) Decidir el PRECIO (y el costo)')
+    expect(filas[0].filas.map((f) => f.hecho)).toEqual(ocs)
+  })
+
+  it('🔑 UNA sola orden ⛔ no es un grupo: vuelve a ser el renglón que era', () => {
+    // Una tarjeta «grupo» con una sola orden adentro es la misma información con un envoltorio más,
+    // y encima esconde el número de orden adentro de una ficha.
+    const filas = hoy([clonDe('c1', 'OC-0466', 'Precio')])
+    expect(filas.map((f) => f.tipo)).toEqual(['suelto'])
+  })
+
+  it('dos actividades distintas del mismo ingreso son dos filas, ⛔ no una', () => {
+    const filas = hoy([
+      clonDe('c1', 'OC-0466', 'Precio'), clonDe('c2', 'OC-0468', 'Precio'),
+      clonDe('c3', 'OC-0466', 'Nombre'), clonDe('c4', 'OC-0468', 'Nombre'),
+    ])
+    expect(filas.map((f) => (f.tipo === 'grupo' ? f.actividad : f.p.item.titulo))).toEqual(['Nombre', 'Precio'])
+  })
+
+  it('⛔ NINGÚN pendiente se pierde: lo que entra es lo que sale', () => {
+    const items = [
+      clonDe('c1', 'OC-0466', 'Precio'), clonDe('c2', 'OC-0468', 'Precio'),
+      clonDe('c3', 'OC-0466', 'Nombre'),
+      item({ id: 'r1', titulo: 'Reponer la vidriera', regla: { tipo: 'unica', fecha: '2026-09-01' } }),
+    ]
+    const filas = hoy(items)
+    const ids = filas.flatMap((f) => (f.tipo === 'grupo' ? f.filas.map((x) => x.p.item.id) : [f.p.item.id]))
+    expect([...ids].sort()).toEqual(['c1', 'c2', 'c3', 'r1'])
+  })
+
+  it('cuenta cuántas están hechas: es el «3 de 10» del encabezado', () => {
+    const items = [clonDe('c1', 'OC-0466', 'Precio'), clonDe('c2', 'OC-0468', 'Precio'), clonDe('c3', 'OC-0470', 'Precio')]
+    const filas = hoy(items, [hecho({ itemId: 'c1', fecha: '2026-09-01' })])
+    expect(filas[0].tipo === 'grupo' && filas[0].hechas).toBe(1)
+    expect(filas[0].tipo === 'grupo' && filas[0].filas.length).toBe(3)
+  })
+
+  it('🔴 cada orden conserva SU ítem y SU fecha: el tilde no se comparte', () => {
+    const filas = hoy([clonDe('c1', 'OC-0466', 'Precio'), clonDe('c2', 'OC-0468', 'Precio')])
+    if (filas[0].tipo !== 'grupo') throw new Error('debería ser un grupo')
+    expect(filas[0].filas.map((f) => [f.p.item.id, f.p.fecha])).toEqual([['c1', '2026-09-01'], ['c2', '2026-09-01']])
+  })
+
+  it('las preguntas de puerta se unifican aunque ⛔ NO sean clones', () => {
+    // Son once tarjetas que dicen lo mismo y se contestan igual; el hecho, ahí, es la orden.
+    const pregunta = (id: string, oc: string) => item({
+      id,
+      titulo: `¿Por qué puerta entró ${oc} (RHOVE)?`,
+      regla: { tipo: 'unica', fecha: '2026-09-01' },
+      preguntaIngreso: { oc: `zattia:${id}`, nombre: oc, fecha: '2026-09-01', marca: 'zattia', proveedor: 'RHOVE' },
+    })
+    const filas = hoy([pregunta('p1', 'OC-0466'), pregunta('p2', 'OC-0468')])
+    expect(filas).toHaveLength(1)
+    expect(filas[0].tipo === 'grupo' && filas[0].filas.map((f) => f.hecho)).toEqual(['OC-0466', 'OC-0468'])
+  })
+
+  it('⛔ una actividad de un evento NO se mezcla con la del otro aunque se llame igual', () => {
+    const deOtro = clonDe('l1', 'Remera', 'Precio', {
+      sembrado: { evento: 'lanzamiento', clave: '2026-09-01·remera', nombre: 'Remera', fecha: '2026-09-01' },
+    })
+    const filas = hoy([clonDe('c1', 'OC-0466', 'Precio'), clonDe('c2', 'OC-0468', 'Precio'), deOtro])
+    expect(filas.filter((f) => f.tipo === 'suelto').map((f) => f.p.item.id)).toEqual(['l1'])
   })
 })
 

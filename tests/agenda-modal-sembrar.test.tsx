@@ -86,8 +86,12 @@ describe('el modal del hecho: la copia y los campos salen del catálogo', () => 
     expect(texto()).toContain('Cambió una condición comercial')
     expect(texto()).toContain('Qué cambió, en pocas palabras')
     expect(texto()).toContain('Desde cuándo rige')
-    // Los tres del manual, y ninguno más.
-    const opciones = [...selects()[0].options].map((o) => o.textContent)
+    // ⚠️ El eje es el SEGUNDO select desde el 1-sep-2026: la marca se pregunta primero, porque en
+    // el ingreso las puertas que existen dependen de ella.
+    expect([...selects()[0].options].map((o) => o.textContent)).toEqual(['Elegí la marca…', 'BDI', 'Zattia'])
+    // Los tres del manual, y ninguno más. Los del cambio ⛔ no dependen de la marca: van completos.
+    await act(async () => { tipear(selects()[0], 'bdi') })
+    const opciones = [...selects()[1].options].map((o) => o.textContent)
     expect(opciones).toEqual(['Elegí…', 'Una promo', 'Una forma de pago', 'Un cambio de envío'])
   })
 
@@ -131,8 +135,8 @@ describe('el modal del hecho: lo que manda al apretar', () => {
     await abrir('condicion', [molde()])
     await act(async () => { tipear(campos()[0], '3 cuotas Galicia') })
     await act(async () => { tipear(campos()[1], dia(3)) })
-    await act(async () => { tipear(selects()[0], 'forma-de-pago') })
-    await act(async () => { tipear(selects()[1], 'zattia') })
+    await act(async () => { tipear(selects()[0], 'zattia') })
+    await act(async () => { tipear(selects()[1], 'forma-de-pago') })
     // Antes de apretar, la pantalla cuenta cuántos van a salir: el conteo es la promesa.
     expect(texto()).toContain('Se van a crear')
     await act(async () => { boton('Cargar los pendientes').click() })
@@ -160,14 +164,38 @@ describe('el modal del hecho: lo que manda al apretar', () => {
     expect(llamadas).toEqual([])
   })
 
+  it('🆕 🔴 las PUERTAS que se ofrecen dependen de la marca, y cambiarla LIMPIA la elegida', async () => {
+    // Bruno, 1-sep-2026: *«bdi y zattia tienen compra nacional; la diferencia es que bdi tiene
+    // importado, y zattia tiene producción propia»*. 🔑 La lista es la misma por la que corta el
+    // servidor: si la pantalla ofreciera una puerta que `sembrar` rechaza, apretar sería un 400.
+    await abrir('ingreso', [molde({ plantilla: 'ingreso' })])
+    // ⛔ Sin marca ⛔ no hay lista: la puerta más común contestada sola es la que sale mal.
+    expect(selects()[1].disabled).toBe(true)
+    expect([...selects()[1].options].map((o) => o.textContent)).toEqual(['Elegí primero la marca…'])
+
+    await act(async () => { tipear(selects()[0], 'zattia') })
+    expect([...selects()[1].options].map((o) => o.textContent))
+      .toEqual(['Elegí…', 'Producción propia', 'Compra nacional'])
+
+    await act(async () => { tipear(selects()[1], 'produccion') })
+    expect(selects()[1].value).toBe('produccion')
+
+    // 🔴 Al pasar a BDI, «producción propia» ya no existe: si quedara elegida, el formulario
+    // mostraría como elegida una opción que la lista no ofrece y que el servidor rechaza.
+    await act(async () => { tipear(selects()[0], 'bdi') })
+    expect([...selects()[1].options].map((o) => o.textContent))
+      .toEqual(['Elegí…', 'Compra nacional', 'Importación'])
+    expect(selects()[1].value).toBe('')
+  })
+
   it('🔴 un molde que ⛔ no corre para lo elegido: lo dice y no deja apretar', async () => {
     // El mismo cálculo que hace el servidor. Sin esto, apretar contesta un 400 que se lee como una
     // falla del sistema en vez de «ese paso no corre para este cambio».
     await abrir('condicion', [molde({ cambios: ['promo'] })])
     await act(async () => { tipear(campos()[0], 'Envío gratis') })
     await act(async () => { tipear(campos()[1], dia(1)) })
-    await act(async () => { tipear(selects()[0], 'envio') })
-    await act(async () => { tipear(selects()[1], 'bdi') })
+    await act(async () => { tipear(selects()[0], 'bdi') })
+    await act(async () => { tipear(selects()[1], 'envio') })
     expect(texto()).toContain('Ninguno de los 1 moldes cargados corre')
     expect(boton('Cargar los pendientes').disabled).toBe(true)
   })

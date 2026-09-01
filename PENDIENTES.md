@@ -13,6 +13,44 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 AGENDA — el primer día del webhook en vivo — 1-sep-2026 (pedido de Bruno)
+
+> «la selección de opciones tiene que ser según marca: Zattia es producción propia o compra
+> nacional, y bdi el resto» · «cuando hay varias OC estaría bueno las actividades de cada evento,
+> unificarlas en factor común» · «la vista mía, tengo cosas de administración, ¿puede ser? ¿por qué
+> sería?»
+
+Aclarado por él en la misma vuelta: *«bdi y zattia tienen compra nacional; la diferencia es que bdi
+tiene importado, y zattia tiene producción propia»* y *«accesorios nacionales sería compra
+nacional»*.
+
+🏁 **Las tres, hechas** — el relato entero en `docs/secciones/agenda.md` § «EL PRIMER DÍA EN VIVO».
+Lo medido ese día contra la base: **11 preguntas de puerta**, **10 contestadas** (todas Zattia,
+todas «compra nacional») ⇒ **100 renglones sembrados**.
+
+1. **Las puertas pasaron de cuatro a tres, y cada una vive en su marca.** «Accesorios nacionales» era
+   la compra nacional de BDI. Zattia ofrece propia + nacional; BDI, nacional + importación. El
+   servidor corta por la misma lista que la pantalla, y `accesorios` **sigue entrando** desde
+   `ingreso2` traducido a `nacional`.
+2. **Las actividades repetidas se unifican en una fila** («05) Decidir el PRECIO · 3 de 10», con un
+   chip por orden). Cada orden conserva **su** tilde; ⛔ no cambió qué se guarda.
+3. **Lo de Administración en el «Hoy» de Bruno es el atajo del admin**, que recibe todo lo dirigido
+   **por rol** —las 11 preguntas (`administracion`) y los 10 «04) La DESCRIPCIÓN» (`local`)—. Lo que
+   va por nombre ⛔ no le llega. Con el punto 2, esos 21 renglones son **dos filas**.
+
+### ▶️ Lo que queda
+
+1. ▶️ **Caminar «Hoy» con las órdenes de verdad**, que es lo único que ningún test alcanza: que el
+   «3 de 10» se mueva al tildar un chip, que «Marcar las N» las cierre, y que la tarjeta de las
+   preguntas conteste una puerta sin recargar. 🔴 Y con **Lorena**, que es la que tiene los 36
+   renglones y la única sin `admin` que puede contestar la puerta.
+2. ▶️ **Decidir si el «Hoy» del admin lleva un filtro «sólo lo mío»** — o si la pregunta de la puerta
+   se dirige por nombre en vez de por rol. ⛔ **La salida barata NO es tocar `esParaMi`**: lo comparte
+   Novedades. Hoy queda como está: el volumen lo arregló la unificación.
+3. ▶️ **La novedad**, si Bruno quiere: la unificación **la ve todo el equipo**, no sólo quien carga.
+
+---
+
 ## 🆕 CANJES → la venta va a GESTIÓN NUBE — 1-sep-2026 (pedido de Bruno)
 
 > «quiero ver tema canjes, de poder escribir los canjes de las personas en ventas de gestión nube
@@ -912,3 +950,85 @@ antes de rehacerlo.
   ⛔ **Sin migración** · **12 mutantes, 12 muertos + 2 controles vivos** (uno tenía el **ancla
   repetida** —estaba en las dos funciones del archivo— y hubo que re-apuntarlo antes de leerlo).
   ▶️ **De post-venta queda SÓLO que se use**: 2 reclamos en BDI, 0 en Zattia.
+
+---
+
+## 🆕 MEDIDAS — el flujo para que las saque el local (1-sep-2026, pedido de Bruno)
+
+Sigue a Redacción (`gen-desc`), que Bruno dio por buena: *«descripción está bastante bien, me gusta
+lo que vi»*. La pregunta que abre esto es suya: **«¿cómo sería el flujo de medidas para el local que
+las saque?»**
+
+### La cola, medida contra la tienda viva el 1-sep-2026
+
+| | |
+|---|---|
+| publicados de Zattia | **316** |
+| ya tienen tabla | **205** — 49 con nuestra firma `AREBEN-TALLES`, **156 escritas a mano** |
+| sin ninguna medida | **111**, de los cuales 9 son bags/accesorios ⇒ **102 prendas** |
+| de esos 111, con eje de TALLE en las variantes | **13** |
+| BDI | ⛔ fuera de alcance: son fundas de iPhone (165 publicados, 0 tablas, 0 talles) |
+
+🔴 **Sólo 13 de los 111 tienen talles: para las otras 89 la tabla es UNA columna de 3-4 números.**
+Hoy `GEN_TALLES_PLANTILLAS` arranca con `['S','M','L','XL']` clavados ⇒ le pone al que carga una
+grilla de cuatro columnas a una prenda que tiene un solo talle, e invita a inventar tres. El trabajo
+real de la cola son **~480 números sobre ~102 prendas**, no 370 productos.
+
+🔑 **Y son DOS caminos, no uno**: 205 productos ya tienen las medidas escritas en el texto de TN y
+ésos ⛔ no se vuelven a medir con cinta — se importan (`extraerTabla` + `emparejarMedidas` ya
+existen). La cinta es para 102.
+
+### 🔴 La convención — la decisión de Bruno del 1-sep-2026
+
+> **«media prenda apoyada, es como mide el local»**
+
+⚠️ **Pero medido, la convención publicada no es una por prenda: es una por MEDIDA**, y el local ya
+la tiene decidida por el uso. Contado sobre las tablas publicadas de Zattia:
+
+| medida | n | apoyada (<45 cm) | contorno (≥45) | lo aclara el texto |
+|---|---|---|---|---|
+| busto | 39 | **26** | 13 | 2 |
+| cintura | 69 | 6 | **63** | 12 |
+| cadera | 47 | 2 | **45** | 5 |
+
+⇒ «apoyada para todo» choca con **108 de 116** filas de cintura y cadera ya publicadas, y
+convertirlas dividiendo por dos es lo que ⛔ no se puede hacer a ciegas: una faja elastizada apoyada
+⛔ no es contorno ÷ 2. ▶️ **Propuesto a Bruno y esperando su confirmación**: apoyada donde el local
+ya mide apoyado (busto, ancho, hombros, largo) y **contorno en cintura y cadera**.
+
+🔴 **Y el texto que hoy publicamos dice lo contrario de lo que publicamos.** `GT_M.busto` dice
+«Medir alrededor de la parte más ancha del busto» —contorno— mientras 26 de 39 fichas publicaron la
+prenda apoyada. La instrucción publicada contradice al número publicado en la misma ficha.
+
+### La bajada de línea son tres cosas, y ninguna es un manual
+
+1. **La etiqueta lo dice en la ficha publicada** («Busto (prenda apoyada)»). Hoy lo aclaran **19 de
+   155 filas**: el cliente lee «BUSTO 32 CM» y tiene que adivinar si lo duplica.
+2. **El casillero lo dice al cargar, con el dibujo al lado.** 📌 `diagramaUrl` está vacío en 12 de
+   las 13 plantillas y el único que hay es un screenshot en `postimg.cc` — ⛔ no es nuestro, y el día
+   que lo borren la ficha publicada queda con una imagen rota.
+3. 🔴 **Lo que frena es un rango por (medida, familia), no el texto.** Un busto de 64 en un top es un
+   contorno tipeado por error y hoy ⛔ no hay nada que lo mire.
+   📌 [[feedback_areben_invariante_escrito_no_frena]].
+
+⚠️ **Y por eso la importación de las 205 tablas viejas ⛔ no puede ser ciega**: clasifica por
+convención, importa las que coinciden y **marca** las que no, en vez de meter los dos criterios en la
+misma columna.
+
+### El flujo propuesto — calcado del de descripciones
+
+1. **La cola dice qué medir y arranca por lo accionable**: 102 prendas, sin accesorios, y con el
+   camino de importar separado del de la cinta.
+2. **La familia decide qué medidas se piden** — la misma `familiaDe` que ya decide los atributos, ⛔
+   no un desplegable de 13 tipos que hoy se adivina por el nombre del producto (`tipoDesdeNombre`).
+3. **Los talles salen de las variantes de TN, ⛔ no se tipean.** Sin eje de talle, una sola columna.
+4. **Se guarda al tipear, sin botón**, en `tn_medidas`, **una fila por (producto, talle, medida)** —
+   igual que `tn_atributos`: sumar una medida ⛔ no es una migración, y queda quién midió y cuándo.
+   Teclado numérico y un talle por pantalla: el que mide tiene la cinta en la otra mano.
+5. **Publica Marketing**, con el verbo que ya existe (respaldo → CAS → relectura). El local carga,
+   Marketing publica — la misma línea que en `gen-desc`; hoy `gen-talles` es sólo `marketing` y sin
+   sub-permiso.
+
+⚠️ **Antes de ordenar la cola por stock**: 110 de los 111 tienen stock en TN, pero TN ⛔ no dice si
+la prenda está **en el local** o en el depósito. Es la misma trampa que la cola de fotos (441
+aparentes, 168 reales).

@@ -248,14 +248,19 @@ export type ItemAgenda = {
 export type ClaseItem = 'pendiente' | 'aviso'
 
 /**
- * Por dónde entró el producto. Son cuatro y salen del manual 06.
+ * Por dónde entró el producto. Son **tres** y salen del manual 06.
  *
- * ⚠️ **El catálogo de verdad —con rótulos y ayuda— vive en `puertas.core.js`**, porque el handler lo
- * necesita y no puede importar TypeScript. Esto es sólo la unión, para que el editor ayude. El test
- * `puertas del ingreso` fija que las dos listas digan lo mismo: si alguien agrega una puerta en el
- * core y se olvida de acá, el test lo dice.
+ * 🆕 Eran cuatro hasta el 1-sep-2026: «accesorios nacionales» ⛔ no era una puerta, era **la compra
+ * nacional de BDI** (Bruno). Lo que la distinguía —de quién es el nombre y la descripción— lo dice
+ * la marca, que el ingreso trae solo. Sigue entrando por ese nombre desde `ingreso2`: el mapa
+ * `TIPOS_INGRESO2` lo traduce a `nacional`.
+ *
+ * ⚠️ **El catálogo de verdad —con rótulos, ayuda y en qué marca existe cada una— vive en
+ * `puertas.core.js`**, porque el handler lo necesita y no puede importar TypeScript. Esto es sólo la
+ * unión, para que el editor ayude. El test `puertas del ingreso` fija que las dos listas digan lo
+ * mismo: si alguien agrega una puerta en el core y se olvida de acá, el test lo dice.
  */
-export type Puerta = 'produccion' | 'nacional' | 'importacion' | 'accesorios'
+export type Puerta = 'produccion' | 'nacional' | 'importacion'
 
 /**
  * Qué cambió, cuando cambia una condición comercial. Son tres y salen de una sola frase del manual

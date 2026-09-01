@@ -44,7 +44,7 @@ import { CLAVES_PUERTA, moldeCorreEnMarca, puertaDeTipo } from '../lib/agenda/pu
 // la sesión de fotos— y este handler no sabe decir «ingreso»: lee cuál es la plantilla, cuál es su
 // eje y qué rango de días admite. La lista blanca vive en `plantillas.core.js` porque la pantalla
 // la necesita tipada y el handler la necesita en `.js`. Ver su encabezado.
-import { CLAVES_PLANTILLA, esClavePlantilla, hechoYaPaso, moldeCorreEnEje, offsetDeMolde, PLANTILLAS, plantillaDe } from '../lib/agenda/plantillas.core.js';
+import { CLAVES_PLANTILLA, clavesDeEje, ejeValeEnMarca, esClavePlantilla, hechoYaPaso, moldeCorreEnEje, offsetDeMolde, PLANTILLAS, plantillaDe } from '../lib/agenda/plantillas.core.js';
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
@@ -311,6 +311,22 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
         ? `No conozco la marca «${trajo.slice(0, 40)}». Las marcas son: ${MARCAS.join(', ')}.`
         : `Falta de qué marca es ${p.elHecho} (usá ${MARCAS.join(', ')}).`,
     };
+  }
+
+  /*
+    🆕 🔴 **Y el eje tiene que existir EN ESA MARCA** (1-sep-2026). Va acá y ⛔ no arriba porque
+    necesita las dos cosas ya validadas: hasta este punto no se sabe si la marca es una marca.
+
+    Bruno: *«bdi y zattia tienen compra nacional; la diferencia es que bdi tiene importado, y zattia
+    tiene producción propia»*. La pantalla ya no dibuja la puerta imposible, pero **el guard vive
+    acá igual**: la pregunta de la puerta se contesta con un POST, el webhook de Gerardo manda su
+    propio vocabulario, y una puerta que en esa marca no existe siembra los pasos con la dueña de
+    otro negocio. ⛔ Y se dice **distinto** que «esa puerta no existe»: la acción es otra —allá se
+    corrigió un tipeo, acá se eligió la marca o la puerta equivocada.
+  */
+  if (p.eje && !ejeValeEnMarca(p.eje, eje, marca)) {
+    const valen = clavesDeEje(p.eje, marca).map((k) => p.eje.rotulo(k)).join(', ');
+    return { error: `«${p.eje.rotulo(eje)}» no existe en ${marca}. Ahí ${p.elHecho} entra por: ${valen}.` };
   }
 
   /*

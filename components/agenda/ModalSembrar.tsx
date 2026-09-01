@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   Button, Field, Input, Modal, Notice, Select, color, font, space, useToast,
 } from '@/components/ui'
-import { hechoYaPaso, hoyIso, moldeCorreEnEje, moldeCorreEnMarca, type ItemAgenda, type Plantilla } from '@/lib/agenda'
+import { clavesDeEje, hechoYaPaso, hoyIso, moldeCorreEnEje, moldeCorreEnMarca, type ItemAgenda, type Plantilla } from '@/lib/agenda'
 import { sembrarAMano } from '@/lib/agenda/cliente'
 import type { Marca } from '@/lib/nav.datos'
 import { MARCAS } from './ModalItem'
@@ -122,18 +122,63 @@ export function ModalSembrar({ plantilla, moldes, onCerrar, onListo }: {
             )}
           </div>
           {/*
+            🔑 **De qué marca es el hecho.** 🆕 **Va PRIMERO desde el 1-sep-2026**, y no es orden de
+            lectura: en el ingreso las puertas que existen **dependen de la marca** —Zattia tiene
+            producción propia, BDI tiene importación, las dos tienen compra nacional— así que el
+            desplegable de abajo no se puede dibujar sin esta respuesta. Preguntarlo después dejaría
+            elegir una puerta y cambiarla sola al elegir la marca, que es la pantalla desdiciéndose.
+          */}
+          <div style={{ marginTop: space[3] }}>
+            <Field
+              label="De qué marca"
+              hint="El renglón nace en esta marca, y algunos pasos son de una sola."
+              width={280}
+            >
+              <Select
+                value={marcaHecho}
+                onChange={(e) => {
+                  setMarcaHecho(e.target.value as Marca | '')
+                  // 🔴 **Se limpia el eje al cambiar de marca**, ⛔ no se conserva: «importación» con
+                  // Zattia elegida después sería un valor que la lista ya no ofrece y que el
+                  // servidor rechaza — el formulario mostraría una opción imposible como elegida.
+                  setValorEje('')
+                }}
+              >
+                <option value="" disabled>Elegí la marca…</option>
+                {MARCAS.map((m) => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          {/*
             🔑 **El eje**, que es la columna que decide de quién es cada renglón y cuáles corren: la
             puerta en el ingreso, qué cambió en la condición comercial. Sin esto los renglones que
             más se caen salen con la persona equivocada.
+
+            🆕 **Las opciones salen de `clavesDeEje(eje, marca)`**, que es la MISMA lista por la que
+            corta el servidor: sin marca elegida no hay lista, y con marca elegida sólo están las
+            que existen en ese negocio.
 
             ⚠️ Va **sin opción vacía elegible**: el placeholder es un `disabled`, no un «cualquiera».
           */}
           {eje && (
             <div style={{ marginTop: space[3] }}>
               <Field label={eje.titulo} hint={eje.pide} width={280}>
-                <Select value={valorEje} onChange={(e) => setValorEje(e.target.value)}>
-                  <option value="" disabled>Elegí…</option>
-                  {eje.claves.map((k) => (
+                <Select
+                  value={valorEje}
+                  onChange={(e) => setValorEje(e.target.value)}
+                  disabled={!marcaHecho}
+                >
+                  <option value="" disabled>
+                    {marcaHecho ? 'Elegí…' : 'Elegí primero la marca…'}
+                  </option>
+                  {/*
+                    🔴 **Sin marca ⛔ no hay lista, ni siquiera la de las que corren en las dos.**
+                    `puertasDeMarca('')` devuelve «compra nacional» —lo que falta cierra, no abre—,
+                    y dibujarla acá sería ofrecer media respuesta antes de la pregunta.
+                  */}
+                  {(marcaHecho ? clavesDeEje(eje, marcaHecho) : []).map((k) => (
                     <option key={k} value={k}>{eje.rotulo(k)}</option>
                   ))}
                 </Select>
@@ -145,26 +190,6 @@ export function ModalSembrar({ plantilla, moldes, onCerrar, onListo }: {
               )}
             </div>
           )}
-          {/*
-            🔑 **De qué marca es el hecho**, y es una pregunta aparte del eje: las cuatro puertas
-            existen en los dos negocios, y una promo se comunica en las dos tiendas. Lo que cambia
-            con la marca es de quién es el renglón —la descripción de una compra nacional la escribe
-            el local en Zattia y Administración en BDI—, así que sin esto sale duplicado.
-          */}
-          <div style={{ marginTop: space[3] }}>
-            <Field
-              label="De qué marca"
-              hint="El renglón nace en esta marca, y algunos pasos son de una sola."
-              width={280}
-            >
-              <Select value={marcaHecho} onChange={(e) => setMarcaHecho(e.target.value as Marca | '')}>
-                <option value="" disabled>Elegí la marca…</option>
-                {MARCAS.map((m) => (
-                  <option key={m.key} value={m.key}>{m.label}</option>
-                ))}
-              </Select>
-            </Field>
-          </div>
           <div style={{ marginTop: space[3], color: color.mut, fontSize: font.sm }}>
             {!listo ? (
               <>Completá los campos para ver cuántos pendientes se van a crear.</>
