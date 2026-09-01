@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { estadoRealDe, filaSnapshot, isoDia, sumarDias, tramosDe } from '@/lib/meta-ads/snapshot'
 import { accion, metricasDe, CAMPOS_INSIGHTS } from '@/lib/meta-ads/metricas'
+import { ultimoDiaCerrado } from '@/lib/meta-ads/rendimiento.core.js'
 
 describe('cómo se parte el rango del backfill', () => {
   it('90 días salen en tres tramos de 30, sin huecos ni superposición', () => {
@@ -30,6 +31,34 @@ describe('cómo se parte el rango del backfill', () => {
     // `toISOString()` daría el día siguiente porque es UTC. Ese bug corría la fecha entera.
     const d = new Date(2026, 7, 8, 22, 30)
     expect(isoDia(d)).toBe('2026-08-08')
+  })
+})
+
+describe('capturado_at: el sello de LECTURA, no el de nacimiento de la fila', () => {
+  const insight = { date_start: '2026-08-31', adset_id: 'a1', adset_name: 'CELDA', spend: '100' }
+
+  it('la fila lo trae puesto: si no viaja explícito, el ON CONFLICT no lo pisa nunca', () => {
+    // 🔴 El bug del 1-sep-2026: lo ponía el default de la base, así que reescribir la fila dejaba
+    // el sello de la PRIMERA inserción del día. Dos corridas (08:35 y 14:00) y las 28 filas
+    // seguían diciendo 08:35, con los presupuestos ya actualizados.
+    const f = filaSnapshot(insight, 'conjunto', '123')
+    expect(f?.capturado_at).toBeTruthy()
+    expect(String(f?.capturado_at)).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('se puede inyectar, para que el llamador selle toda la corrida con la misma hora', () => {
+    const f = filaSnapshot(insight, 'conjunto', '123', { capturadoAt: '2026-09-01T17:00:00.000Z' })
+    expect(f?.capturado_at).toBe('2026-09-01T17:00:00.000Z')
+  })
+
+  it('🔑 releer AYER hoy lo deja CERRADO — que es lo que la pantalla usaba corrido un día', () => {
+    // `ultimoDiaCerrado()` deriva de `capturado_at > fecha`. Con el sello clavado en el día de la
+    // fila, el día de ayer releído hoy seguía figurando ABIERTO para siempre.
+    const ayerSinRelectura = filaSnapshot(insight, 'conjunto', '123', { capturadoAt: '2026-08-31T23:00:00Z' })
+    expect(ultimoDiaCerrado([ayerSinRelectura])).toBe(null)
+
+    const ayerReleidoHoy = filaSnapshot(insight, 'conjunto', '123', { capturadoAt: '2026-09-01T14:00:00Z' })
+    expect(ultimoDiaCerrado([ayerReleidoHoy])).toBe('2026-08-31')
   })
 })
 

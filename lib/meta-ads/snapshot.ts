@@ -46,6 +46,9 @@ export type FilaSnapshot = {
   /** En la UNIDAD MENOR de la moneda (en ARS, `150000` es $1.500). Ver `factorMoneda()`. */
   diario_crudo: number | null
   moneda: string | null
+  /** Cuándo se LEYÓ esta fila. Se refresca en cada escritura: `ultimoDiaCerrado()` decide con
+   *  `capturado_at > fecha` si el día ya cerró. Ver `filaSnapshot()`. */
+  capturado_at: string
   spend: number
   impresiones: number
   /** 🔴 Dedup dentro del período: NO sumar entre días. */
