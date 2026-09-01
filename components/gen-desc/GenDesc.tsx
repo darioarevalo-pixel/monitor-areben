@@ -10,6 +10,7 @@ import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
 import { FAMILIAS, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 
 /**
  * Descripción y medidas: la ficha de cada prenda y el párrafo que la vende.
@@ -63,7 +64,7 @@ export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, atributos, puedePublicar, error, refrescar, guardar, guardarAtributo, guardarFamilia, redactar, publicar } = useGenDesc(marca)
+  const { cargando, productos, cola, atributos, medidas, puedePublicar, error, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('ultimas-tandas')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
@@ -152,6 +153,7 @@ export function GenDesc() {
             p={p}
             fila={cola[p.id]}
             ficha={atributos[p.id] || {}}
+            medidas={medidas[p.id] || {}}
             abierto={abierto === p.id}
             onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
             puedePublicar={puedePublicar}
@@ -165,6 +167,18 @@ export function GenDesc() {
               const familia = familiaDeProducto(p)
               if (!familia) return 'Elegí primero qué prenda es.'
               const err = await guardarAtributo(p.id, familia, atributo, valor, p.name)
+              if (err) toast.error(err)
+              return err
+            }}
+            onMedida={async (talle, medida, valor) => {
+              const familia = familiaDeProducto(p)
+              if (!familia) return 'Elegí primero qué prenda es.'
+              const err = await guardarMedida(p.id, familia, atributos[p.id] || {}, talle, medida, valor, p.name)
+              if (err) toast.error(err)
+              return err
+            }}
+            onSinMedidas={async (motivo) => {
+              const err = await marcarSinMedidas(p.id, motivo, p.name)
               if (err) toast.error(err)
               return err
             }}
@@ -203,7 +217,7 @@ export function GenDesc() {
 }
 
 function FilaProducto({
-  p, fila, ficha, familia, abierto, onAbrir, puedePublicar, onFamilia, onAtributo, onRedactar, onGuardar, onPublicar,
+  p, fila, ficha, medidas, familia, abierto, onAbrir, puedePublicar, onFamilia, onAtributo, onMedida, onSinMedidas, onRedactar, onGuardar, onPublicar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
@@ -215,6 +229,9 @@ function FilaProducto({
   puedePublicar: boolean
   onFamilia: (familia: Familia) => Promise<string | null>
   onAtributo: (atributo: Atributo, valor: string) => Promise<string | null>
+  medidas: Medidas
+  onMedida: (talle: string, medida: Medida, valor: string) => Promise<string | null>
+  onSinMedidas: (motivo: string) => Promise<string | null>
   onRedactar: (modelo: string, insumo: string, bullets: { etiqueta: string; texto: string }[]) => Promise<ResultadoIA>
   onGuardar: (cuerpo: Record<string, unknown>) => Promise<string | null>
   onPublicar: (conservarResiduo: boolean) => Promise<string | null>
@@ -419,6 +436,9 @@ function FilaProducto({
             </div>
           )}
 
+          {/* ── Las medidas: mismo momento, misma prenda, misma pantalla ── */}
+          {familia && <BloqueMedidas p={p} fila={fila} ficha={ficha} familia={familia} medidas={medidas} onMedida={onMedida} onSinMedidas={onSinMedidas} />}
+
           <Field label="Insumo del local" hint="Lo que no entra en ningún campo y ayuda a escribir el párrafo. Ej: «llega esta semana, va con la campera Alpes».">
             <Input value={insumo} onChange={(e) => setInsumo(e.target.value)} placeholder="opcional" />
           </Field>
@@ -576,6 +596,168 @@ function FilaProducto({
  * si el guardado falla, el desplegable vuelve solo a lo que está guardado de verdad, en vez de
  * quedar mostrando una elección que no existe en ningún lado.
  */
+/**
+ * Las medidas de una prenda: la grilla que llena el local con la prenda apoyada y la cinta.
+ *
+ * 🔴 **Vive ADENTRO de la fila y no en una pantalla aparte**, y eso lo decidió la dinámica real que
+ * contó Bruno el 1-sep-2026: la mercadería entra al depósito, baja al local, y ahí Camila Quintana
+ * y Josefina Batter hacen **la descripción y las medidas en el mismo momento**, con la prenda en la
+ * mano. Dos pantallas serían buscar la misma prenda dos veces, y esa fricción es la que hace que
+ * una de las dos cosas no se haga.
+ */
+function BloqueMedidas({
+  p, fila, ficha, familia, medidas, onMedida, onSinMedidas,
+}: {
+  p: ProductoTn
+  fila: FilaCola | undefined
+  ficha: Cargados
+  familia: Familia
+  medidas: Medidas
+  onMedida: (talle: string, medida: Medida, valor: string) => Promise<string | null>
+  onSinMedidas: (motivo: string) => Promise<string | null>
+}) {
+  // 🔴 Los talles salen de las VARIANTES, no se tipean. Sin eje de talle es UNA columna: medido,
+  // 98 de los 111 productos sin medidas no tienen talles, así que ése es el caso normal.
+  const talles = useMemo(() => tallesDe(p.variantes), [p.variantes])
+  const cols = talles.length ? talles : ['']
+  const campos = useMemo(() => medidasDe(familia, ficha), [familia, ficha])
+  const cuenta = useMemo(() => contestadasDe(familia, ficha, talles, medidas), [familia, ficha, talles, medidas])
+  const sinMedidas = fila?.sin_medidas || ''
+  // 🔑 La ficha ya sabe la tela: el aviso sale solo, con la prenda delante, y no en un manual.
+  const estira = TELAS_QUE_ESTIRAN.includes(String(ficha.tela || ''))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Las medidas</div>
+        <span style={{ fontSize: 12, color: '#666' }}>
+          {sinMedidas ? 'esta prenda no lleva tabla' : `${cuenta.con} de ${cuenta.total} · en cm, la prenda apoyada y plana`}
+        </span>
+      </div>
+
+      {/* La salida para las elastizadas. Sin ella se quedan en la cola para siempre, y una cola
+          que nunca baja a cero deja de mirarse: son 60 de las 111. */}
+      <div style={{ marginBottom: 8, maxWidth: 320 }}>
+        <Select value={sinMedidas} onChange={(e) => void onSinMedidas(e.target.value)}>
+          <option value="">Lleva tabla de medidas</option>
+          <option value="elastizada">No lleva — es elastizada</option>
+          <option value="talle unico">No lleva — talle único sin variación</option>
+          <option value="accesorio">No lleva — es un accesorio</option>
+        </Select>
+      </div>
+
+      {!sinMedidas && (
+        <>
+          {estira && (
+            <Notice tone="neutral">
+              Es de <b>{String(ficha.tela)}</b>: si estira mucho, <b>no midas el ancho</b> —marcalo con «estira»— y
+              cargá el largo igual. El largo no se estira.
+            </Notice>
+          )}
+          <div style={{ overflowX: 'auto', marginTop: 8 }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600 }}>Medida</th>
+                  {cols.map((t) => (
+                    <th key={t} style={{ padding: '4px 8px', fontWeight: 600, minWidth: 78 }}>{t || 'Único'}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {campos.map((m) => (
+                  <tr key={m.key}>
+                    <td style={{ padding: '4px 8px', whiteSpace: 'nowrap' }} title={m.comoMedir}>
+                      {m.label}
+                      {m.duplicar && <span style={{ color: '#666' }}> (la mitad)</span>}
+                    </td>
+                    {cols.map((t) => (
+                      <td key={t} style={{ padding: '2px 4px' }}>
+                        <CasilleroMedida
+                          // 🔑 La `key` lleva el valor guardado adentro a propósito: cuando el
+                          // servidor confirma otro, el casillero se REMONTA y nace con lo que está
+                          // guardado de verdad. Es la alternativa al efecto que sincroniza estado
+                          // con props, que además es lo que prohíbe `set-state-in-effect`.
+                          key={t + '|' + (medidas[t]?.[m.key] || '')}
+                          puedeEstirar={m.estira}
+                          valor={medidas[t]?.[m.key] || ''}
+                          onGuardar={(v) => onMedida(t, m.key, v)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>
+            {/* El único lugar donde se dice el x2, y se dice donde se carga: la persona escribe lo
+                que midió y la tienda muestra el doble. */}
+            La cintura se mide por la mitad — se publica multiplicada por 2. Una fila sin ningún número no sale a la tienda.
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Un casillero de medida: un número, o el botón de «estira».
+ *
+ * ⚠️ El botón sólo aparece donde la medida puede estirar. En el largo ⛔ no existe, y ésa es la
+ * regla de Bruno hecha imposible de romper en vez de escrita en un cartel: «si elastiza mucho no se
+ * mide la medida que elastiza, pero se mide el largo».
+ */
+function CasilleroMedida({
+  valor, puedeEstirar, onGuardar,
+}: {
+  valor: string
+  puedeEstirar: boolean
+  onGuardar: (v: string) => Promise<string | null>
+}) {
+  const esEstira = valor === ESTIRA
+  // Nace con lo que está guardado. Si el guardado falla, el casillero vuelve solo a la verdad del
+  // servidor porque el padre lo remonta con la `key`. Mismo criterio que `CampoAtributo`.
+  const [texto, setTexto] = useState(esEstira ? '' : valor)
+  const [guardando, setGuardando] = useState(false)
+
+  const mandar = async (v: string) => {
+    setGuardando(true)
+    await onGuardar(v)
+    setGuardando(false)
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <Input
+        value={esEstira ? '' : texto}
+        disabled={guardando || esEstira}
+        inputMode="decimal"
+        placeholder={esEstira ? 'estira' : 'cm'}
+        style={{ width: 64, textAlign: 'center' }}
+        onChange={(e) => setTexto(e.target.value)}
+        onBlur={() => { if (texto.trim() !== valor) void mandar(texto.trim()) }}
+      />
+      {puedeEstirar && (
+        <button
+          type="button"
+          title={esEstira ? 'Volver a medirla' : 'Esta medida estira: no se toma'}
+          onClick={() => void mandar(esEstira ? '' : ESTIRA)}
+          disabled={guardando}
+          style={{
+            border: '1px solid ' + (esEstira ? '#222' : '#ddd'),
+            background: esEstira ? '#222' : 'none',
+            color: esEstira ? '#fff' : '#666',
+            borderRadius: 4, fontSize: 11, padding: '2px 5px', cursor: 'pointer', lineHeight: 1.4,
+          }}
+        >
+          estira
+        </button>
+      )}
+    </span>
+  )
+}
+
 function CampoAtributo({
   label, opciones, valor, libre, prestado = false, onElegir,
 }: {

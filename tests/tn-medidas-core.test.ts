@@ -16,6 +16,7 @@ import {
   filasDe,
   medidasDe,
   paraPublicar,
+  tallesDe,
 } from '../lib/tn-medidas/medidas'
 import type { Medida } from '../lib/tn-medidas/medidas'
 import { FAMILIAS } from '../lib/tn-desc/atributos'
@@ -139,5 +140,24 @@ describe('el contador de la fila cuenta «estira» como contestada', () => {
     expect(contestadasDe('tops', { manga: 'sin mangas' }, ['S'], { S: { largo: '40' } }))
       .toEqual({ con: 1, total: 2 })
     expect(contestadasDe('tops', { manga: 'sin mangas' }, ['S'], {})).toEqual({ con: 0, total: 2 })
+  })
+})
+
+describe('🔴 los talles salen de las variantes, no se tipean', () => {
+  it('separa los talles de los colores, y los ordena', () => {
+    // CORSET FRANK, tal cual viene de TiendaNube el 1-sep-2026.
+    expect(tallesDe(['Negro', 'XS', 'S', 'M', 'L', 'Blanco', 'Verde', 'Marrón'])).toEqual(['XS', 'S', 'M', 'L'])
+    expect(tallesDe(['38', '36', '40', '34'])).toEqual(['34', '36', '38', '40'])
+  })
+
+  it('⛔ un producto de sólo colores NO tiene talles: es el caso normal, no el borde', () => {
+    // 98 de los 111 productos sin medidas son así. La plantilla vieja arrancaba con S,M,L,XL
+    // clavados e invitaba a inventar tres talles que no existen.
+    expect(tallesDe(['Negro', 'Chocolate', 'Blanco'])).toEqual([])
+    expect(tallesDe([])).toEqual([])
+  })
+
+  it('con los dos ejes mezclados gana el que tiene más valores', () => {
+    expect(tallesDe(['34', '36', '38', 'M'])).toEqual(['34', '36', '38'])
   })
 })

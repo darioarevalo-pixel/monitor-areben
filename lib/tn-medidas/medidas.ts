@@ -22,6 +22,7 @@ import {
   filasDe as filasDeJs,
   medidasDe as medidasDeJs,
   paraPublicar as paraPublicarJs,
+  tallesDe as tallesDeJs,
 } from './medidas.core.js'
 import type { Cargados, Familia } from '@/lib/tn-desc/atributos'
 
@@ -54,6 +55,11 @@ export const MEDIDAS_QUE_ESTIRAN = MEDIDAS_QUE_ESTIRAN_JS as Medida[]
 export const MEDIDAS_POR_FAMILIA = MEDIDAS_POR_FAMILIA_JS as Record<Familia, Medida[]>
 /** Las telas con las que la pantalla avisa sobre el ancho, sin que nadie lo pregunte. */
 export const TELAS_QUE_ESTIRAN = TELAS_QUE_ESTIRAN_JS as string[]
+
+/** Los talles del producto, sacados de sus variantes. ⛔ No se tipean. */
+export function tallesDe(variantes: string[]): string[] {
+  return tallesDeJs(variantes) as string[]
+}
 
 /** Las medidas que se le piden a un producto. La ficha decide si hay manga que medir. */
 export function medidasDe(familia: Familia | null, ficha: Cargados): MedidaDeFamilia[] {

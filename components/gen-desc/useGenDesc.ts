@@ -5,6 +5,7 @@ import type { Marca } from '@/lib/nav.datos'
 import { apiFetch } from '@/lib/api-fetch'
 import { prosaDe, type Prosa } from '@/lib/tn-desc/prosa'
 import { familiaDe, type Atributo, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
+import type { Medida, Medidas } from '@/lib/tn-medidas/medidas'
 import type { Borrador } from '@/lib/tn-desc/formato'
 
 /**
@@ -52,6 +53,8 @@ export type FilaCola = {
   aprobado_por: string | null
   aprobado_at: string | null
   updated_at: string | null
+  /** «No lleva tabla de medidas», con su motivo de lista cerrada. `null` = sí lleva. */
+  sin_medidas: string | null
   /** 🔑 La ÚNICA copia del texto que había antes. TiendaNube no tiene historial. */
   html_previo: string | null
   /** ⛔ Que el PUT diera 200 no alcanza: esto es la relectura. */
@@ -119,6 +122,8 @@ export type EstadoGenDesc = {
   cola: Record<string, FilaCola>
   /** La ficha de cada producto: `{tn_id: {atributo: valor}}`. De acá salen los bullets. */
   atributos: Record<string, Cargados>
+  /** Las medidas: `{tn_id: {talle: {medida: valor}}}`. Sin talles, la clave es `''`. */
+  medidas: Record<string, Medidas>
   /** ¿El perfil puede aprobar y publicar, o sólo cargar el insumo? Lo dice el servidor. */
   puedePublicar: boolean
   error: string | null
@@ -129,6 +134,7 @@ async function leerTodo(marca: Marca): Promise<EstadoGenDesc> {
   let error: string | null = null
   let cola: Record<string, FilaCola> = {}
   let atributos: Record<string, Cargados> = {}
+  let medidas: Record<string, Medidas> = {}
   let puedePublicar = false
   try {
     const [, r] = await Promise.all([bajarAudit(marca), apiFetch(`${COLA}&store=${marca}`)])
@@ -138,11 +144,12 @@ async function leerTodo(marca: Marca): Promise<EstadoGenDesc> {
       puedePublicar = !!d.puedePublicar
       cola = Object.fromEntries(((d.filas || []) as FilaCola[]).map((f) => [String(f.tn_id), f]))
       atributos = (d.atributos || {}) as Record<string, Cargados>
+      medidas = (d.medidas || {}) as Record<string, Medidas>
     }
   } catch (e) {
     error = e instanceof Error ? e.message : 'No se pudo leer la cola.'
   }
-  return { cargando: false, productos: cacheProductos[marca] || [], cola, atributos, puedePublicar, error }
+  return { cargando: false, productos: cacheProductos[marca] || [], cola, atributos, medidas, puedePublicar, error }
 }
 
 export function useGenDesc(marca: Marca) {
@@ -151,6 +158,7 @@ export function useGenDesc(marca: Marca) {
     productos: [],
     cola: {},
     atributos: {},
+    medidas: {},
     puedePublicar: false,
     error: null,
   })
@@ -271,6 +279,65 @@ export function useGenDesc(marca: Marca) {
   )
 
   /**
+   * Guarda una medida. Misma forma que `guardarAtributo` —una por llamada, se guarda al tipear—
+   * y por el mismo motivo: un botón «Guardar» que junta doce números es un botón que alguien no
+   * aprieta, y ahí se pierde la carga de una prenda entera.
+   *
+   * 🔑 `ficha` viaja en el pedido porque el servidor **vuelve a preguntar** qué se le mide a esta
+   * prenda, y para eso necesita saber si tiene mangas. Que el casillero no se dibuje es una
+   * comodidad del que carga, no un candado.
+   */
+  const guardarMedida = useCallback(
+    async (tnId: string, familia: Familia, ficha: Cargados, talle: string, medida: Medida, valor: string, nombre?: string): Promise<string | null> => {
+      try {
+        const r = await apiFetch(COLA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'medida', familia, ficha, talle, medida, valor, nombre }),
+        })
+        const d = await r.json()
+        if (!r.ok || !d?.ok) return d?.error || `Error ${r.status}`
+        setEstado((e) => {
+          const delProducto: Medidas = { ...(e.medidas[tnId] || {}) }
+          const delTalle = { ...(delProducto[talle] || {}) }
+          if (d.valor) delTalle[medida] = d.valor as string
+          else delete delTalle[medida]
+          delProducto[talle] = delTalle
+          return { ...e, medidas: { ...e.medidas, [tnId]: delProducto } }
+        })
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : 'No se pudo guardar.'
+      }
+    },
+    [marca],
+  )
+
+  /** «Esta prenda no lleva tabla de medidas», con su motivo. Vacío lo saca. */
+  const marcarSinMedidas = useCallback(
+    async (tnId: string, motivo: string, nombre?: string): Promise<string | null> => {
+      try {
+        const r = await apiFetch(COLA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'sin-medidas', motivo, nombre }),
+        })
+        const d = await r.json()
+        if (!r.ok || !d?.ok) return d?.error || `Error ${r.status}`
+        setEstado((e) => {
+          const fila = e.cola[tnId]
+          if (!fila) return e
+          return { ...e, cola: { ...e.cola, [tnId]: { ...fila, sin_medidas: (d.motivo as string) || null } } }
+        })
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : 'No se pudo guardar.'
+      }
+    },
+    [marca],
+  )
+
+  /**
    * Le pide un borrador al modelo. **No guarda nada**: devuelve el texto para que alguien lo
    * mire. Guardar y aprobar siguen siendo dos botones aparte, y los aprieta una persona.
    *
@@ -329,5 +396,5 @@ export function useGenDesc(marca: Marca) {
     [marca, cargar],
   )
 
-  return { ...estado, cargar, refrescar, guardar, guardarAtributo, guardarFamilia, redactar, publicar }
+  return { ...estado, cargar, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar }
 }
