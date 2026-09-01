@@ -27,10 +27,9 @@ const GRANDE = 'https://ingreso2.arebensrl.com/uploads/801/2918/principal_detail
 const CHICA = 'https://ingreso2.arebensrl.com/uploads/801/2918/principal_thumb.webp'
 
 describe('Foto del renglón', () => {
-  it('dibuja la CHICA y enlaza a la GRANDE', () => {
+  it('dibuja la CHICA en la grilla', () => {
     const html = renderToStaticMarkup(<Foto l={linea({ imagen_url: GRANDE, imagen_thumb_url: CHICA })} lado={96} />)
     expect(html).toContain(`src="${CHICA}"`)
-    expect(html).toContain(`href="${GRANDE}"`)
   })
 
   it('🔴 sin foto no dibuja NADA — ni un recuadro vacío', () => {
@@ -47,9 +46,19 @@ describe('Foto del renglón', () => {
     expect(html).toContain('alt="VESTIDO BELMONT CHOCOLATE"')
   })
 
-  it('🔑 abre en otra pestaña con rel noopener: la URL es de OTRO servidor', () => {
-    const html = renderToStaticMarkup(<Foto l={linea({ imagen_thumb_url: CHICA })} lado={40} />)
-    expect(html).toContain('target="_blank"')
-    expect(html).toContain('rel="noopener noreferrer"')
+  it('🔴 es un BOTÓN y NO un enlace a la imagen: un `href` la DESCARGA', () => {
+    // Ingresos sirve los `.webp` como `application/octet-stream`. Adentro de un `<img>` el
+    // navegador los sniffea y los dibuja igual — por eso la miniatura no daba ninguna pista—, pero
+    // NAVEGANDO a esa URL el mismo content-type dispara la descarga. El defecto sólo se ve
+    // apretando la foto, así que lo que se fija acá es la FORMA: botón, nunca `href`.
+    const html = renderToStaticMarkup(<Foto l={linea({ imagen_url: GRANDE, imagen_thumb_url: CHICA })} lado={40} />)
+    expect(html).toContain('<button')
+    expect(html).not.toContain('href')
+    expect(html).not.toContain('download')
+  })
+
+  it('sin quien la amplíe no explota: el botón queda inerte', () => {
+    // La grilla y la tabla la usan con `onAmpliar`, pero el opcional tiene que aguantar sin él.
+    expect(renderToStaticMarkup(<Foto l={linea({ imagen_thumb_url: CHICA })} lado={40} />)).toContain('<img')
   })
 })

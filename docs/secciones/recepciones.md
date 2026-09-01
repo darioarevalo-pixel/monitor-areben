@@ -113,12 +113,25 @@ lugares: una grilla arriba —«Lo que entró»— y una miniatura en cada fila 
   una grilla de recuadros vacíos se lee como «se rompieron las fotos», que es otro problema. Y en
   el 1-sep faltaban 2 de 80 renglones (OC-0470): que falte una foto suelta es normal.
 - 🔴 **La URL se filtra por esquema en el núcleo** (`urlDe`): sólo `http`/`https`. Termina en el
-  `src` de un `<img>` y en el `href` de un enlace, y el que la manda es otro sistema.
+  `src` de un `<img>`, y el que la manda es otro sistema.
+- 🔴 **Apretar la foto abre el `Lightbox` del kit; ⛔ NO es un `<a href>` a la imagen.** Con el
+  enlace, el clic **descargaba el archivo** en vez de mostrarlo: Ingresos sirve los `.webp` como
+  `application/octet-stream` y el navegador, **navegando**, ante ese content-type descarga.
+  ⚠️ Adentro de un `<img>` el mismo byte se dibuja igual —lo sniffea—, así que la miniatura se veía
+  perfecta y nada anticipaba lo que iba a hacer el clic: **esto sólo se encuentra apretándola**.
 - ⛔ **La chica no se deriva de la grande.** Los dos nombres de archivo los elige el emisor;
   sacar uno del otro con un `replace` se rompe callado el día que los cambie.
 - 📌 Las fotos las sirve **`ingreso2.arebensrl.com`**, no el monitor: abren sin login (medido, 200)
   y si ese servidor se cae o mueve los archivos, el `onError` deja el renglón sin foto en vez del
   ícono de imagen rota. ⚠️ No se copian a nuestro lado: si allá se borran, acá desaparecen.
+
+## Quién la ve
+
+El permiso es `recepciones` (área Compras). Además de los admin, al 1-sep-2026: **Lorena Reyes** y
+las tres de marketing —**Candela Luis, Sofia Facello y Camila Budek**— en las dos marcas
+(`scripts/permiso-recepciones-marketing.mjs`). ⚠️ **«Cami» es Camila BUDEK**, ⛔ no
+`camilaquintana`, que es de local. 🔴 El POST que escribe el padrón lo bloquea el clasificador de
+esta Mac: el script se deja escrito y lo corre Bruno con `!`.
 
 ## Qué NO viaja
 

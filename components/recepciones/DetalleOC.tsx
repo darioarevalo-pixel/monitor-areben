@@ -13,6 +13,7 @@ import {
   EmptyState,
   Esqueleto,
   Notice,
+  Lightbox,
   Plegable,
   SectionCard,
   StatusPill,
@@ -53,6 +54,13 @@ function EnGN({ v }: { v: boolean | null }) {
 /**
  * La foto del artículo, si Ingresos la mandó.
  *
+ * 🔴 **Es un BOTÓN que abre el lightbox, ⛔ no un enlace a la imagen.** Cuando era un `<a href>`,
+ * apretarla **descargaba el archivo** en vez de mostrarlo: el servidor de Ingresos sirve los
+ * `.webp` como `application/octet-stream`, y ante ese content-type el navegador **navegando**
+ * descarga. ⚠️ Adentro de un `<img>` el mismo byte se dibuja igual —el navegador sniffea— así que
+ * la miniatura nunca dio ninguna señal de que el clic iba a hacer otra cosa. La única forma de
+ * verlo es apretarla.
+ *
  * 🔑 **Sin foto no dibuja un placeholder gris**: las 79 OC del historial (todo lo anterior al
  * 1-sep-2026) llegaron antes de que el emisor prendiera las imágenes, y una grilla de recuadros
  * vacíos se lee como "las fotos se rompieron" cuando lo que pasa es que nunca vinieron.
@@ -60,12 +68,17 @@ function EnGN({ v }: { v: boolean | null }) {
  * ⚠️ `onError` la esconde: la URL apunta al servidor de Ingresos, que es otra máquina. Si un día
  * mueve los archivos, acá tiene que quedar el renglón sin foto, ⛔ no el ícono de imagen rota.
  */
-export function Foto({ l, lado }: { l: LineaConCruce; lado: number }) {
+export function Foto({ l, lado, onAmpliar }: { l: LineaConCruce; lado: number; onAmpliar?: (l: LineaConCruce) => void }) {
   const [rota, setRota] = useState(false)
   const src = l.imagen_thumb_url || l.imagen_url
   if (!src || rota) return null
   return (
-    <a href={l.imagen_url || src} target="_blank" rel="noopener noreferrer" title={`${l.nombre || l.sku || ''} — ver grande`}>
+    <button
+      type="button"
+      onClick={() => onAmpliar?.(l)}
+      title={`${l.nombre || l.sku || ''} — ver grande`}
+      style={{ padding: 0, border: 0, background: 'none', cursor: 'zoom-in', display: 'block', lineHeight: 0 }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
@@ -76,7 +89,7 @@ export function Foto({ l, lado }: { l: LineaConCruce; lado: number }) {
         height={lado}
         style={{ width: lado, height: lado, objectFit: 'cover', borderRadius: 6, border: `1px solid ${color.line}`, display: 'block', background: color.bg2 }}
       />
-    </a>
+    </button>
   )
 }
 
@@ -84,6 +97,7 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
   const [datos, setDatos] = useState<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [verTodo, setVerTodo] = useState(false)
+  const [ampliada, setAmpliada] = useState<LineaConCruce | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -116,7 +130,7 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
     <Tr key={l.id}>
       <Td>
         <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
-          <Foto l={l} lado={40} />
+          <Foto l={l} lado={40} onAmpliar={setAmpliada} />
           <div>
             <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{l.sku || '—'}</div>
             <div style={{ color: color.ink2, fontSize: 12 }}>
@@ -190,7 +204,7 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: space[3] }}>
               {conFoto.map((l) => (
                 <div key={l.id} style={{ display: 'grid', gap: 4, justifyItems: 'center', textAlign: 'center' }}>
-                  <Foto l={l} lado={96} />
+                  <Foto l={l} lado={96} onAmpliar={setAmpliada} />
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: color.ink2, wordBreak: 'break-all' }}>{l.sku || '—'}</div>
                   <div style={{ fontSize: 11, color: color.mut }}>
                     {l.cantidad_contada} u.{l.diferencia !== 0 ? ' · ' : ''}
@@ -238,6 +252,13 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
             <TBody>{lineas.map(fila)}</TBody>
           </TableWrap>
         </Plegable>
+
+        {/* 🔑 La foto GRANDE, ⛔ no la miniatura: la del lightbox es para mirar el artículo. */}
+        <Lightbox
+          src={ampliada ? ampliada.imagen_url || ampliada.imagen_thumb_url : null}
+          alt={[ampliada?.sku, ampliada?.nombre, ampliada?.color].filter(Boolean).join(' · ')}
+          onCerrar={() => setAmpliada(null)}
+        />
 
         <div style={{ color: color.mut, fontSize: 12 }}>
           <StatusPill tone={r.oc_estado === 'confirmada' ? 'success' : 'neutral'} label={r.oc_estado || 'sin estado'} />{' '}
