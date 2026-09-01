@@ -23,7 +23,8 @@
  * entrega lo que le pedimos?», después «¿qué OC no cerró?», y recién al final la lista.
  */
 
-import { useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useCallback, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
   Badge,
@@ -44,7 +45,7 @@ import {
   space,
   type Tone,
 } from '@/components/ui'
-import { fechaDeIngreso, porProveedor, porcentaje, resumen, tonoDeCumplimiento, type Recepcion } from '@/lib/recepciones/core'
+import { fechaDeIngreso, ocPorRef, porProveedor, porcentaje, resumen, tonoDeCumplimiento, type Recepcion } from '@/lib/recepciones/core'
 import { useRecepciones } from './useRecepciones'
 import { DetalleOC } from './DetalleOC'
 
@@ -73,15 +74,77 @@ function haceCuanto(iso: string | null): string | null {
 export function Recepciones() {
   const { marca } = useSesion()
   const [dias, setDias] = useState<Dias>(180)
-  const [abierta, setAbierta] = useState<string | null>(null)
   const { recepciones, eventos, puede, cargando, error } = useRecepciones(marca, dias)
+
+  /*
+    🆕 **Se puede llegar a UNA orden por la URL** (1-sep-2026, pedido de Bruno: *«si apretás la OC,
+    que vaya a la OC para ver los productos»*, desde la Agenda). `router.push('/recepciones?oc=…')`.
+
+    🔑 **El valor inicial sale de `useSearchParams()` y ⛔ no de `window.location.search`**: se llega
+    con un `push` del router y no está garantizado que el History haya corrido cuando esta sección
+    monta. Es el mismo problema que ya pagó `useCampaniaAbierta` con `?liq=`, y la misma salida.
+
+    🔑 **Y se resuelve contra el ID *o* el RÓTULO**, porque de los dos lados hay uno distinto: la
+    pregunta de la puerta guarda el id (`store:oc_id`) y un renglón sembrado sólo tiene el rótulo
+    de la orden en su título. Aceptar los dos evita una migración de los clones ya sembrados.
+  */
+  const sp = useSearchParams()
+  const [abierta, setAbiertaState] = useState<string | null>(() => sp.get('oc') || null)
+  const setAbierta = useCallback((v: string | null) => {
+    setAbiertaState(v)
+    const url = new URL(window.location.href)
+    if (v) url.searchParams.set('oc', v)
+    else url.searchParams.delete('oc')
+    window.history.replaceState(null, '', url)
+  }, [])
 
   const res = useMemo(() => resumen(recepciones), [recepciones])
   const proveedores = useMemo(() => porProveedor(recepciones), [recepciones])
   const desde = haceCuanto(eventos.ultimo)
 
   if (!marca) return null
-  if (abierta) return <DetalleOC marca={marca} oc={abierta} onCerrar={() => setAbierta(null)} />
+  if (abierta) {
+    // 🔑 La resolución vive en el núcleo (`ocPorRef`) y ⛔ no acá: el id le gana al rótulo, y ese
+    // orden es una regla con test, no un detalle de esta pantalla.
+    const fila = ocPorRef(recepciones, abierta)
+    /*
+      🔴 **Mientras carga ⛔ no se dice que no está.** La lista llega por red: dibujar «no encontré
+      esa orden» durante ese segundo es afirmar algo falso, y quien lo lea se va.
+    */
+    if (cargando) return <Esqueleto />
+    if (fila) return <DetalleOC marca={marca} oc={fila.id} onCerrar={() => setAbierta(null)} />
+    /*
+      🔑 **No está ⛔ no es «entonces mostrá la lista».** Se llegó acá apretando una orden concreta;
+      caer callado en el listado se lee como que el link está roto. Los dos motivos posibles se
+      nombran, porque la acción es distinta: la ventana es un filtro que se puede abrir, y la marca
+      equivocada se arregla en el header.
+    */
+    return (
+      <div style={{ display: 'grid', gap: space[3] }}>
+        <Notice tone="warning">
+          <strong>No encontré la orden {abierta} entre las de {marca}.</strong> O es de la otra
+          marca —se cambia en el encabezado— o quedó fuera de la ventana de {dias} días. Probá con
+          una ventana más larga.
+        </Notice>
+        <FilterBar>
+          <Chips
+            value={String(dias)}
+            onChange={(v) => setDias(Number(v) as Dias)}
+            opciones={VENTANAS.map((d) => ({ key: String(d), label: d === 365 ? 'Un año' : `${d} días` }))}
+          />
+        </FilterBar>
+        <div>
+          <button
+            type="button"
+            onClick={() => setAbierta(null)}
+            style={{ height: 30, background: 'none', border: 'none', color: color.mut, cursor: 'pointer', padding: 0 }}
+          >
+            ← Ver todas las órdenes
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'grid', gap: space[5] }}>

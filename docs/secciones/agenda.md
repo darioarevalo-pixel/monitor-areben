@@ -787,6 +787,37 @@ El motor es `filasDeHoy()` (`lib/agenda/index.ts`), y lo dibuja `GrupoActividad`
 - ⛔ **Una actividad de un evento NO se mezcla con la de otro** aunque se llame igual: la clave es
   `evento + actividad`.
 
+#### 🆕 El tilde AFUERA del número, y el número abre la orden (1-sep-2026, segunda vuelta de Bruno)
+
+> *«estaría bueno que tenga la tilde afuera, en vez de apretar y que se marque como hecho»* · *«si
+> apretás la OC, que vaya a la OC para ver los productos»*
+
+🔴 **La primera versión tenía las dos cosas en un solo botón y estaba mal**: el número de orden
+**era** el tilde, así que la pregunta obvia —*«¿qué vino en esta orden?»*— no tenía dónde apretarse,
+y el gesto de ir a mirar marcaba el paso como hecho. Ahora son dos blancos: **el cuadradito tilda,
+el número abre la orden**.
+
+- 🔑 **El cuadradito es el MISMO de un renglón suelto** —mismo gesto, mismo color, mismo
+  significado—: lo que cambia es cuántos hay, ⛔ no qué quieren decir.
+- 🔑 **Con qué se abre lo contesta `actividadDe(item).oc`**, y sale en este orden: el **id** que
+  guardó el clon (`datos.oc`, `store:oc_id`), el de la pregunta, o —para lo sembrado antes de que
+  ese id existiera— el **rótulo** del hecho. `recepciones` sabe resolver los dos (`ocPorRef`), y
+  **eso es lo que evita migrar los cien clones ya sembrados**: preferir una línea allá a cien filas
+  tocadas acá.
+  - 🆕 **El id lo escribe `sembrar` con `ocRef`**, y sólo lo pasa `ingreso-puerta`. ⛔ **El alta a
+    mano no**: ahí el nombre lo escribe una persona y puede no ser ninguna orden.
+- 🔴 **`oc` es `null` en todo lo que NO salió de una orden de compra** —un paso de un lanzamiento,
+  de una sesión, una rutina— y ahí ⛔ **no se dibuja ningún link**: un botón que promete y contesta
+  «no la encontré» enseña a no apretarlo.
+- 🔴 **Sin el permiso `recepciones` tampoco se dibuja**: llevar a un 403 es peor que no llevar.
+- ⚠️ **El link va también en el renglón SUELTO** (`VerLaOrden`, «ver la orden ↗»). Un grupo se arma
+  de a dos o más, así que el día que entra una sola orden su renglón es un suelto — y sería el único
+  lugar de la Agenda donde la orden que lo generó no se puede abrir. En la tarjeta de **preguntas**
+  el link pesa todavía más: la puerta se elige mirando qué vino.
+- 📌 **Del otro lado**, `recepciones` abre una orden por `?oc=` (ver `docs/secciones/recepciones.md`):
+  se navega con `router.push` y el valor inicial se lee con `useSearchParams()`, ⛔ **no** de
+  `window.location.search` — es el bug que ya pagó `useCampaniaAbierta` con `?liq=`.
+
 ### 3 · Por qué el «Hoy» de Bruno tiene cosas de Administración
 
 > *«la vista mía, tengo cosas de administración, ¿puede ser? ¿por qué sería?»* (Bruno, 1-sep-2026)

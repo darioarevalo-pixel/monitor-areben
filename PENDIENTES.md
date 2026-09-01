@@ -32,8 +32,10 @@ todas «compra nacional») ⇒ **100 renglones sembrados**.
    la compra nacional de BDI. Zattia ofrece propia + nacional; BDI, nacional + importación. El
    servidor corta por la misma lista que la pantalla, y `accesorios` **sigue entrando** desde
    `ingreso2` traducido a `nacional`.
-2. **Las actividades repetidas se unifican en una fila** («05) Decidir el PRECIO · 3 de 10», con un
-   chip por orden). Cada orden conserva **su** tilde; ⛔ no cambió qué se guarda.
+2. **Las actividades repetidas se unifican en una fila** («05) Decidir el PRECIO · 3 de 10», con una
+   orden por ficha). Cada orden conserva **su** tilde; ⛔ no cambió qué se guarda. 🆕 **Segunda
+   vuelta**: el tilde quedó **afuera** del número de orden —eran un solo botón, así que ir a mirar
+   qué vino marcaba el paso como hecho— y **el número abre la orden** en Ingresos (`?oc=`).
 3. **Lo de Administración en el «Hoy» de Bruno es el atajo del admin**, que recibe todo lo dirigido
    **por rol** —las 11 preguntas (`administracion`) y los 10 «04) La DESCRIPCIÓN» (`local`)—. Lo que
    va por nombre ⛔ no le llega. Con el punto 2, esos 21 renglones son **dos filas**.
@@ -41,9 +43,13 @@ todas «compra nacional») ⇒ **100 renglones sembrados**.
 ### ▶️ Lo que queda
 
 1. ▶️ **Caminar «Hoy» con las órdenes de verdad**, que es lo único que ningún test alcanza: que el
-   «3 de 10» se mueva al tildar un chip, que «Marcar las N» las cierre, y que la tarjeta de las
-   preguntas conteste una puerta sin recargar. 🔴 Y con **Lorena**, que es la que tiene los 36
-   renglones y la única sin `admin` que puede contestar la puerta.
+   «3 de 10» se mueva al tildar el cuadradito, que «Marcar las N» las cierre, que **apretar el número
+   de orden abra esa orden en Ingresos** y que la tarjeta de las preguntas conteste una puerta sin
+   recargar. 🔴 Y con **Lorena**, que es la que tiene los 36 renglones y la única sin `admin` que
+   puede contestar la puerta.
+   ⚠️ Los cien renglones sembrados hoy ⛔ **no traen el id de la orden** —el campo nació después—:
+   abren por **rótulo**, que `recepciones` resuelve igual. Los que se siembren de ahora en más van
+   por id.
 2. ▶️ **Decidir si el «Hoy» del admin lleva un filtro «sólo lo mío»** — o si la pregunta de la puerta
    se dirige por nombre en vez de por rol. ⛔ **La salida barata NO es tocar `esParaMi`**: lo comparte
    Novedades. Hoy queda como está: el volumen lo arregló la unificación.

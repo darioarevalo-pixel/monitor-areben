@@ -195,6 +195,18 @@ export type ItemAgenda = {
    * ⚠️ `clave` es la **llave de idempotencia** (`fecha·nombre`, o el id de la sesión, que es estable
    * cuando lo hay): ⛔ no se toca ni se compone para mostrar. Lo que se muestra es `nombre`.
    */
+  /**
+   * **La orden de compra de la que salió este renglón**, cuando el hecho fue una OC confirmada.
+   * Es el id de `recepcion_oc` (`store:oc_id`), ⛔ no el rótulo.
+   *
+   * 🆕 Existe para poder **abrir la orden desde el renglón** (1-sep-2026, pedido de Bruno: *«si
+   * apretás la OC, que vaya a la OC para ver los productos»*).
+   *
+   * ⚠️ **Sólo lo traen los clones sembrados desde la pregunta de la puerta**, y ⛔ no los anteriores
+   * al 1-sep-2026 ni los del alta a mano. Sin esto la pantalla cae al **rótulo** del hecho, que es
+   * lo que `recepciones` también sabe resolver.
+   */
+  oc?: string | null
   sembrado?: {
     /** La clave de la plantilla que lo copió: `ingreso` · `sesion-fotos` · `lanzamiento` · `condicion`. */
     evento: string

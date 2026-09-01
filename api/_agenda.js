@@ -262,7 +262,7 @@ function normalizarBeneficio(b) {
  *
  * Devuelve `{ creados, ya }`: `ya` cuenta el caso en que estaba sembrado y no se tocó nada.
  */
-export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, marca, clave: claveDada }) {
+export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, marca, clave: claveDada, ocRef }) {
   const p = plantillaDe(plantilla);
   // ⛔ Nunca la primera por descarte: una plantilla desconocida sembraría la lista de otro hecho.
   if (!p) {
@@ -420,6 +420,19 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
       // existe para ser comparada, ⛔ no para ser leída. ⚠️ Va **al lado** de la clave y no adentro:
       // `datos[campoClave]` es la llave de idempotencia y ⛔ no se toca.
       hecho: { nombre: limpio, fecha },
+      /*
+        🆕 🔑 **De qué ORDEN salió, cuando el hecho fue una OC confirmada** (1-sep-2026, pedido de
+        Bruno: *«si apretás la OC, que vaya a la OC para ver los productos»*). Es el id de
+        `recepcion_oc` (`store:oc_id`), ⛔ no el rótulo: el rótulo es lo que se muestra y el id es lo
+        que resuelve.
+
+        ⚠️ **Sólo lo traen los clones sembrados desde la pregunta de la puerta**, ⛔ no los del
+        alta a mano —ahí el nombre lo escribe una persona y puede no ser ninguna orden—. Los
+        sembrados antes de hoy tampoco: la pantalla cae al rótulo, y por eso `recepciones` resuelve
+        el `?oc=` contra el id **o** el rótulo. Preferir un dato que no existe a una migración de
+        cien filas es la decisión, y el costo es una línea allá.
+      */
+      ...(ocRef ? { oc: String(ocRef) } : {}),
       ...(p.eje ? { [p.eje.campoClon]: eje } : {}),
       marca,
       // 🔑 El tope lo pone el MOLDE, no el disparador: el formulario del molde es el mismo que el
@@ -649,6 +662,8 @@ export default async function handler(req, res) {
         plantilla: (i.datos && i.datos.plantilla) || null,
         // De qué HECHO salió, si lo copió un evento. `null` = se cargó a mano.
         sembrado: hechoDelClon(i.datos, i.regla),
+        // La orden de la que salió el clon, cuando el hecho fue una OC confirmada. Ver `sembrar`.
+        oc: (i.datos && i.datos.oc) || null,
         offsetDias: i.datos && Number.isFinite(i.datos.offsetDias) ? i.datos.offsetDias : null,
         // En qué valores del eje corre el molde. **Vacío = todos**, igual que `marcas`. Es un campo
         // por eje y no uno «eje» genérico porque cada plantilla tiene el suyo y se guardan así en
@@ -1033,6 +1048,8 @@ export default async function handler(req, res) {
         autor: yo,
         eje: b.puerta,
         marca: p.marca,
+        // La orden de la que salió: es lo que después deja abrirla desde el renglón.
+        ocRef: p.oc,
       });
       if (r.error) return res.status(400).json({ error: r.error });
 

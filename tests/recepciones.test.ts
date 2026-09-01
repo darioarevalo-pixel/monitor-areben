@@ -9,6 +9,7 @@ import {
   tonoDeCumplimiento,
   SIN_PROVEEDOR,
   fechaDeIngreso,
+  ocPorRef,
   type Recepcion,
   type LineaRecepcion,
 } from '../lib/recepciones/core'
@@ -154,5 +155,44 @@ describe('fechaDeIngreso', () => {
 
   it('una fecha que no es fecha no sale como "Invalid Date" en la pantalla', () => {
     expect(fechaDeIngreso({ fecha_ingreso: null, confirmada_at: 'ayer', recibido_en: '' })).toBe('—')
+  })
+})
+
+/**
+ * `ocPorRef`: con qué se abre una orden desde afuera de esta sección.
+ *
+ * 🆕 1-sep-2026. Desde la Agenda se llega con `router.push('/recepciones?oc=…')`, y ese valor puede
+ * ser el **id** (lo que guarda la pregunta de la puerta) o el **rótulo** (lo único que traen los
+ * renglones sembrados antes de que el id se guardara). Aceptar los dos es lo que evita migrar los
+ * cien clones ya sembrados.
+ */
+describe('ocPorRef — abrir una orden por lo que venga en la URL', () => {
+  const oc = (id: string, label: string | null) => ({ id, oc_label: label })
+  const lista = [oc('zattia:412', 'OC-0412'), oc('zattia:466', 'OC-0466'), oc('bdi:9', null)]
+
+  it('la encuentra por el id', () => {
+    expect(ocPorRef(lista, 'zattia:466')?.id).toBe('zattia:466')
+  })
+
+  it('y también por el rótulo, que es lo único que trae un renglón sembrado', () => {
+    expect(ocPorRef(lista, 'OC-0412')?.id).toBe('zattia:412')
+  })
+
+  it('🔴 el ID le gana al rótulo: es el único de los dos que la base garantiza único', () => {
+    // Si un rótulo llegara repetido, buscar por rótulo primero abriría la orden equivocada callado.
+    const confuso = [oc('a', 'zattia:466'), oc('zattia:466', 'OC-0466')]
+    expect(ocPorRef(confuso, 'zattia:466')?.id).toBe('zattia:466')
+  })
+
+  it('lo que no está da null, ⛔ y no la primera de la lista', () => {
+    // `null` quiere decir «no está en ESTA lista» —una marca, una ventana de días—, y quien llame
+    // tiene que decirlo: caer en la primera sería abrir una orden que nadie pidió.
+    expect(ocPorRef(lista, 'OC-9999')).toBeNull()
+    expect(ocPorRef(lista, '')).toBeNull()
+    expect(ocPorRef([], 'OC-0412')).toBeNull()
+  })
+
+  it('un rótulo vacío ⛔ no matchea con una orden sin rótulo', () => {
+    expect(ocPorRef(lista, '   ')).toBeNull()
   })
 })

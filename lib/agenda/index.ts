@@ -592,19 +592,32 @@ export function pendientesDe(
  * ⚠️ **La pregunta de la puerta es su propia actividad**, aunque ⛔ no sea un clon: las once que
  * abrió el webhook el 1-sep son once tarjetas que dicen lo mismo y se contestan igual. El hecho, ahí,
  * es la orden.
+ *
+ * 🆕 **`oc` es con qué se abre esa orden** en `recepciones` (1-sep-2026, pedido de Bruno: *«si
+ * apretás la OC, que vaya a la OC para ver los productos»*), y **`null` cuando no hay orden que
+ * abrir**. Sale, en este orden: el id que guardó el clon (`item.oc`), el de la pregunta, o —para lo
+ * sembrado antes de que el id se guardara— el **rótulo** del hecho, que `recepciones` sabe resolver
+ * igual. ⛔ Sólo en el evento `ingreso`: el nombre de un lanzamiento o de una sesión ⛔ no es una
+ * orden, y un botón que promete y abre un «no la encontré» enseña a no apretarlo.
  */
 export const ACTIVIDAD_PREGUNTA_PUERTA = 'Por qué puerta entró cada orden'
 
-export function actividadDe(item: ItemAgenda): { evento: string; actividad: string; hecho: string } | null {
+export function actividadDe(item: ItemAgenda): { evento: string; actividad: string; hecho: string; oc: string | null } | null {
   if (item.preguntaIngreso) {
-    return { evento: 'ingreso', actividad: ACTIVIDAD_PREGUNTA_PUERTA, hecho: item.preguntaIngreso.nombre }
+    return {
+      evento: 'ingreso',
+      actividad: ACTIVIDAD_PREGUNTA_PUERTA,
+      hecho: item.preguntaIngreso.nombre,
+      oc: item.preguntaIngreso.oc || item.preguntaIngreso.nombre,
+    }
   }
   const s = item.sembrado
   if (!s) return null
   const prefijo = `${s.nombre} · `
   if (!item.titulo.startsWith(prefijo)) return null
   const actividad = item.titulo.slice(prefijo.length).trim()
-  return actividad ? { evento: s.evento, actividad, hecho: s.nombre } : null
+  if (!actividad) return null
+  return { evento: s.evento, actividad, hecho: s.nombre, oc: s.evento === 'ingreso' ? (item.oc || s.nombre) : null }
 }
 
 /**
@@ -624,7 +637,7 @@ export type FilaHoy =
       cuerpo: string | null
       manualId: string | null
       /** Uno por hecho, ordenados por el nombre del hecho, que es como se sembraron. */
-      filas: { hecho: string; p: PendienteHoy }[]
+      filas: { hecho: string; oc: string | null; p: PendienteHoy }[]
       /** Cuántos de los de adentro ya están tildados. Es el «3 de 10» del encabezado. */
       hechas: number
     }
@@ -652,15 +665,15 @@ export type FilaHoy =
  * la lista cambiaría de orden sola el día que entra la segunda orden.
  */
 export function filasDeHoy(pendientes: PendienteHoy[]): FilaHoy[] {
-  const grupos = new Map<string, { actividad: string; evento: string; items: { hecho: string; p: PendienteHoy }[] }>()
+  const grupos = new Map<string, { actividad: string; evento: string; items: { hecho: string; oc: string | null; p: PendienteHoy }[] }>()
   const sueltos: PendienteHoy[] = []
   for (const p of pendientes) {
     const a = actividadDe(p.item)
     if (!a) { sueltos.push(p); continue }
     const clave = `${a.evento}\u0000${a.actividad}`
     const ya = grupos.get(clave)
-    if (ya) ya.items.push({ hecho: a.hecho, p })
-    else grupos.set(clave, { actividad: a.actividad, evento: a.evento, items: [{ hecho: a.hecho, p }] })
+    if (ya) ya.items.push({ hecho: a.hecho, oc: a.oc, p })
+    else grupos.set(clave, { actividad: a.actividad, evento: a.evento, items: [{ hecho: a.hecho, oc: a.oc, p }] })
   }
   const filas: FilaHoy[] = sueltos.map((p) => ({ tipo: 'suelto', clave: p.item.id, p }))
   for (const [clave, g] of grupos) {

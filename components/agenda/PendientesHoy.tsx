@@ -16,15 +16,20 @@
  * un usuario de puesto es peor que no prometer nada, porque después alguien la usa para preguntar.
  */
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, ButtonLink, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
-import { feriadoDe, filasDeHoy, pendientesDe, puertasDeMarca, type FilaHoy, type PendienteHoy } from '@/lib/agenda'
+import {
+  actividadDe, feriadoDe, filasDeHoy, pendientesDe, puertasDeMarca,
+  type FilaHoy, type ItemAgenda, type PendienteHoy,
+} from '@/lib/agenda'
 import { contestarPuerta } from '@/lib/agenda/cliente'
 import { rotuloFecha } from '@/lib/fechas/semana'
 import { leerManual } from '@/lib/manuales/cliente'
 import type { Manual } from '@/lib/manuales/tipos'
 import type { Marca } from '@/lib/nav.datos'
+import { puedeVer } from '@/lib/permisos'
 import { useAgenda } from '@/store/useAgenda'
 import { useSistema } from '@/store/useSistema'
 
@@ -149,9 +154,13 @@ function GrupoActividad({ g, yo }: { g: Extract<FilaHoy, { tipo: 'grupo' }>; yo:
             <div style={{ display: 'grid', gap: space[2], marginTop: space[2] }}>
               {g.filas.map((f) => (
                 <div key={f.p.item.id}>
-                  <div style={{ fontSize: font.sm, color: color.ink, fontWeight: weight.semibold }}>
-                    {f.hecho}
-                    {f.p.item.preguntaIngreso?.proveedor ? ` · ${f.p.item.preguntaIngreso.proveedor}` : ''}
+                  <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: font.sm, color: color.ink, fontWeight: weight.semibold }}>
+                      {f.hecho}
+                      {f.p.item.preguntaIngreso?.proveedor ? ` · ${f.p.item.preguntaIngreso.proveedor}` : ''}
+                    </span>
+                    {/* 🔑 Acá el link pesa MÁS que en un paso: la puerta se elige mirando qué vino. */}
+                    <VerLaOrden item={f.p.item} />
                   </div>
                   {f.p.item.preguntaIngreso && (
                     <ElegirPuerta id={f.p.item.id} marca={f.p.item.preguntaIngreso.marca} />
@@ -162,7 +171,13 @@ function GrupoActividad({ g, yo }: { g: Extract<FilaHoy, { tipo: 'grupo' }>; yo:
           ) : (
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
               {g.filas.map((f) => (
-                <ChipOrden key={f.p.item.id} hecho={f.hecho} p={f.p} onToggle={() => void toggle(f)} />
+                <OrdenDeGrupo
+                  key={f.p.item.id}
+                  hecho={f.hecho}
+                  oc={f.oc}
+                  p={f.p}
+                  onToggle={() => void toggle(f)}
+                />
               ))}
               {pendientes.length > 1 && (
                 <Button size="sm" variant="ghost" loading={todas} onClick={() => void marcarTodas()}>
@@ -182,34 +197,118 @@ function GrupoActividad({ g, yo }: { g: Extract<FilaHoy, { tipo: 'grupo' }>; yo:
 }
 
 /**
- * Una orden adentro de una actividad unificada: el número de orden **es** el tilde.
+ * **Una orden adentro de una actividad unificada: el tilde AFUERA del número** (1-sep-2026, pedido
+ * de Bruno: *«estaría bueno que tenga la tilde afuera, en vez de apretar y que se marque como
+ * hecho»* · *«si apretás la OC, que vaya a la OC para ver los productos»*).
  *
- * ⚠️ Es un `button` con altura explícita porque `.shell-content button` fija altura y un botón de
- * dos renglones se desborda (ver `AGENTS.md`).
+ * 🔴 **Eran una sola cosa y estaba mal.** El número de orden **era** el botón de tildar, así que la
+ * pregunta obvia —*«¿qué vino en esta orden?»*— no tenía dónde apretarse, y el gesto de ir a mirar
+ * marcaba el paso como hecho. Son dos intenciones distintas y ahora son dos blancos distintos: el
+ * cuadradito tilda, el número abre la orden en Ingresos.
+ *
+ * 🔑 **El cuadradito es el mismo de un renglón suelto** —mismo gesto, mismo color, mismo
+ * significado—: lo que cambia es cuántos hay, ⛔ no qué quieren decir.
+ *
+ * ⚠️ Los dos son `button` con **altura explícita**, porque `.shell-content button` fija altura y uno
+ * de dos renglones se desborda (ver `AGENTS.md`).
  */
-function ChipOrden({ hecho, p, onToggle }: { hecho: string; p: PendienteHoy; onToggle: () => void }) {
+function OrdenDeGrupo({
+  hecho, oc, p, onToggle,
+}: {
+  hecho: string
+  oc: string | null
+  p: PendienteHoy
+  onToggle: () => void
+}) {
+  const router = useRouter()
+  const { perfil, marca } = useSesion()
   const listo = !!p.hecho
-  // De cuándo viene y quién lo marcó no entran en el chip: van en el `title`, que es donde se
-  // pregunta por una orden concreta sin llenar la tarjeta de diez veces el mismo renglón.
+  // ⛔ Sin el permiso de Ingresos ⛔ no se dibuja el link: llevar a un 403 es peor que no llevar.
+  const abrible = !!oc && !!marca && puedeVer(perfil, marca, 'recepciones')
+  // De cuándo viene y quién lo marcó van en el `title` y ⛔ no en el renglón: repetirlos diez veces
+  // sería volver a la lista que esta tarjeta vino a acortar.
   const detalle = listo
     ? `Lo marcó ${p.hecho?.usuario}${hora(p.hecho?.hechoAt ?? null) ? ` a las ${hora(p.hecho?.hechoAt ?? null)}` : ''}`
     : p.desde ? `Viene del ${rotuloFecha(p.desde)}` : 'Marcar como hecho'
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      border: `1px solid ${color.line2}`, borderRadius: 8, paddingRight: space[1],
+    }}>
+      {/*
+        Es un `button` y ⛔ no un `input type=checkbox`: el tilde viaja al servidor y puede fallar,
+        así que el estado real lo manda el store y no el navegador.
+      */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={listo}
+        title={detalle}
+        style={{
+          height: 28, width: 28, flex: '0 0 auto', borderRadius: 7, cursor: 'pointer',
+          fontSize: font.sm, lineHeight: 1, margin: 1,
+          border: `1px solid ${listo ? color.success : color.line2}`,
+          background: listo ? color.success : 'transparent',
+          color: listo ? '#fff' : color.mut,
+        }}
+      >
+        {listo ? '✓' : ''}
+      </button>
+      {abrible ? (
+        <button
+          type="button"
+          onClick={() => router.push(`/recepciones?oc=${encodeURIComponent(oc as string)}`)}
+          title={`Ver qué vino en ${hecho}`}
+          style={{
+            height: 28, background: 'none', border: 'none', cursor: 'pointer',
+            padding: `0 ${space[1]}px`, fontSize: font.sm, lineHeight: 1, whiteSpace: 'nowrap',
+            color: listo ? color.mut : color.ink,
+            textDecoration: listo ? 'line-through' : 'underline',
+          }}
+        >
+          {hecho} ↗
+        </button>
+      ) : (
+        <span style={{
+          height: 28, display: 'flex', alignItems: 'center', padding: `0 ${space[1]}px`,
+          fontSize: font.sm, whiteSpace: 'nowrap',
+          color: listo ? color.mut : color.ink,
+          textDecoration: listo ? 'line-through' : undefined,
+        }}>
+          {hecho}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * **«Ver la orden»**, al lado del título de un renglón suelto.
+ *
+ * ⚠️ Existe para que **una sola orden del día no pierda el link**: un grupo se arma de a dos o más,
+ * así que el día que entra una sola, su renglón es un suelto — y sería el único lugar de la Agenda
+ * donde la orden que lo generó no se puede abrir.
+ *
+ * ⛔ **Sin `oc` no se dibuja nada.** Lo que no salió de una orden de compra —una rutina, un paso de
+ * un lanzamiento, un ingreso cargado a mano con un nombre inventado— ⛔ no tiene orden que abrir, y
+ * un botón que promete y contesta «no la encontré» enseña a no apretarlo.
+ */
+function VerLaOrden({ item }: { item: ItemAgenda }) {
+  const router = useRouter()
+  const { perfil, marca } = useSesion()
+  const oc = actividadDe(item)?.oc
+  if (!oc || !marca || !puedeVer(perfil, marca, 'recepciones')) return null
   return (
     <button
       type="button"
-      onClick={onToggle}
-      aria-pressed={listo}
-      title={detalle}
+      onClick={() => router.push(`/recepciones?oc=${encodeURIComponent(oc)}`)}
       style={{
-        height: 30, borderRadius: 8, cursor: 'pointer', padding: `0 ${space[2]}px`,
-        fontSize: font.sm, lineHeight: 1, whiteSpace: 'nowrap',
-        border: `1px solid ${listo ? color.success : color.line2}`,
-        background: listo ? color.success : 'transparent',
-        color: listo ? '#fff' : color.ink,
-        textDecoration: listo ? 'line-through' : undefined,
+        height: 22, background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+        fontSize: font.sm, color: color.mut, textDecoration: 'underline', whiteSpace: 'nowrap',
       }}
     >
-      {listo ? `✓ ${hecho}` : hecho}
+      ver la orden ↗
     </button>
   )
 }
@@ -282,6 +381,8 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
               una nueva. Y es el dato con el que se decide si todavía tiene sentido hacerla.
             */}
             {p.desde && <StatusPill tone="warning" label={`viene del ${rotuloFecha(p.desde)}`} />}
+            {/* Que una sola orden del día no pierda el link: un grupo se arma de a dos o más. */}
+            <VerLaOrden item={p.item} />
           </div>
 
           {p.item.cuerpo && (

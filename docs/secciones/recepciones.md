@@ -141,6 +141,33 @@ lugares: una grilla arriba —«Lo que entró»— y una miniatura en cada fila 
   y si ese servidor se cae o mueve los archivos, el `onError` deja el renglón sin foto en vez del
   ícono de imagen rota. ⚠️ No se copian a nuestro lado: si allá se borran, acá desaparecen.
 
+## 🆕 Se puede entrar directo a UNA orden: `?oc=` (1-sep-2026)
+
+Pedido de Bruno mirando la Agenda: *«si apretás la OC, que vaya a la OC para ver los productos»*. Los
+renglones que un ingreso siembra en la Agenda nombran la orden, y hasta acá ese nombre era texto: para
+ver qué vino había que salir, entrar a Ingresos y buscarla en la lista.
+
+`router.push('/recepciones?oc=<id-o-rótulo>')` y la pantalla abre el detalle de esa orden.
+
+- 🔑 **El valor inicial se lee con `useSearchParams()` y ⛔ no de `window.location.search`.** Se llega
+  con un `push` del router y **no está garantizado que el History haya corrido** cuando esta sección
+  monta: leyendo la URL a mano, a veces se cae en el listado. Es exactamente el bug que ya pagó
+  `useCampaniaAbierta` con `?liq=` (`components/liquidacion/`), y la misma salida. Escribir sí va con
+  `history.replaceState`: abrir y cerrar una orden ⛔ no tiene por qué hacer navegar a Next.
+- 🔑 **Resuelve por el ID o por el RÓTULO** (`ocPorRef`, en el núcleo y con test), porque de cada lado
+  hay uno distinto: la pregunta de la puerta guarda el id (`store:oc_id`) y un renglón sembrado antes
+  de hoy sólo tiene el rótulo metido en su título. Aceptar los dos es lo que evitó **migrar cien
+  clones ya sembrados**. 🔴 **El id va primero**: es el único de los dos que la base garantiza único,
+  y con el rótulo primero un duplicado abriría la orden equivocada sin decir nada.
+- 🔴 **«No está» ⛔ NO es «entonces mostrá la lista».** Se llegó apretando una orden concreta; caer
+  callado en el listado se lee como que el link está roto. Se nombran **los dos motivos posibles**
+  —la otra marca, o fuera de la ventana de días— porque la acción es distinta: una se arregla en el
+  encabezado y la otra abriendo el filtro, que queda ahí mismo.
+- 🔴 **Mientras carga ⛔ no se dice que no está.** La lista llega por red: dibujar «no la encontré»
+  durante ese segundo es afirmar algo falso, y quien lo lee se va.
+- ⚠️ **Del otro lado el link ⛔ no se dibuja sin el permiso `recepciones`**: llevar a un 403 es peor
+  que no llevar. Ver `docs/secciones/agenda.md` § «El tilde AFUERA del número».
+
 ## Quién la ve, y quién ve a los PROVEEDORES
 
 El permiso es `recepciones` (área Compras). Además de los admin, al 1-sep-2026: **Lorena Reyes** y

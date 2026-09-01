@@ -300,6 +300,13 @@ describe('contestar la pregunta: un click siembra los pasos del ingreso', () => 
     expect(tildes()[0].fecha).toBe('2026-08-26')
   })
 
+  it('🆕 el clon se lleva el ID de la ORDEN, que es con lo que después se la abre', async () => {
+    // 1-sep-2026, pedido de Bruno: *«si apretás la OC, que vaya a la OC para ver los productos»*.
+    // 🔑 Va el **id** (`store:oc_id`) y ⛔ no el rótulo: el rótulo es lo que se muestra.
+    await contestar()
+    expect((sembrados()[0].datos as { oc?: string }).oc).toBe('zattia:412')
+  })
+
   it('una puerta inválida es 400 y ⛔ no siembra con una por defecto', async () => {
     const res = await contestar({ puerta: 'la-de-atras' })
     expect(res.code).toBe(400)

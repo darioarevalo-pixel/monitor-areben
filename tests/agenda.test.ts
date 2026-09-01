@@ -1036,7 +1036,45 @@ describe('filasDeHoy: unificar las actividades repetidas de varias órdenes', ()
 
   it('actividadDe resta el prefijo del hecho: el paso es lo que queda', () => {
     expect(actividadDe(clonDe('c1', 'OC-0466', '05) Decidir el PRECIO')))
-      .toEqual({ evento: 'ingreso', actividad: '05) Decidir el PRECIO', hecho: 'OC-0466' })
+      .toEqual({ evento: 'ingreso', actividad: '05) Decidir el PRECIO', hecho: 'OC-0466', oc: 'OC-0466' })
+  })
+
+  describe('con qué se abre la orden («si apretás la OC, que vaya a la OC»)', () => {
+    it('🔑 el ID guardado en el clon le gana al rótulo: el rótulo se muestra, el id resuelve', () => {
+      expect(actividadDe(clonDe('c1', 'OC-0466', 'Precio', { oc: 'zattia:466' }))?.oc).toBe('zattia:466')
+    })
+
+    it('sin id cae al RÓTULO, que es lo único que traen los clones sembrados antes', () => {
+      // Es lo que evita migrar los cien renglones ya sembrados: `recepciones` resuelve los dos.
+      expect(actividadDe(clonDe('c1', 'OC-0466', 'Precio'))?.oc).toBe('OC-0466')
+    })
+
+    it('🔴 lo que ⛔ NO salió de una orden no ofrece link: `oc` es null', () => {
+      // Un paso de un lanzamiento o de una sesión no tiene orden que abrir, y un botón que promete
+      // y contesta «no la encontré» enseña a no apretarlo.
+      const deLanzamiento = clonDe('l1', 'Remera', 'Precio', {
+        sembrado: { evento: 'lanzamiento', clave: '2026-09-01·remera', nombre: 'Remera', fecha: '2026-09-01' },
+      })
+      expect(actividadDe(deLanzamiento)?.oc).toBeNull()
+    })
+
+    it('la pregunta de la puerta abre por su id, que es el que guardó el webhook', () => {
+      const p = item({
+        id: 'p1',
+        titulo: '¿Por qué puerta entró OC-0466 (RHOVE)?',
+        preguntaIngreso: { oc: 'zattia:466', nombre: 'OC-0466', fecha: '2026-09-01', marca: 'zattia', proveedor: 'RHOVE' },
+      })
+      expect(actividadDe(p)?.oc).toBe('zattia:466')
+    })
+
+    it('y cada orden del grupo se lleva la suya, ⛔ no la del primero', () => {
+      const filas = hoy([
+        clonDe('c1', 'OC-0466', 'Precio', { oc: 'zattia:466' }),
+        clonDe('c2', 'OC-0468', 'Precio', { oc: 'zattia:468' }),
+      ])
+      if (filas[0].tipo !== 'grupo') throw new Error('debería ser un grupo')
+      expect(filas[0].filas.map((f) => [f.hecho, f.oc])).toEqual([['OC-0466', 'zattia:466'], ['OC-0468', 'zattia:468']])
+    })
   })
 
   it('🔴 un título editado a mano ⛔ NO se mete en un grupo ajeno: queda suelto', () => {

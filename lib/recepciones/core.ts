@@ -215,3 +215,29 @@ export function tonoDeCumplimiento(v: number | null): 'ok' | 'aviso' | 'malo' | 
   if (v >= 0.9) return 'aviso'
   return 'malo'
 }
+
+/**
+ * **La orden a la que apunta un `?oc=` de la URL**, o `null` si no está en lo que se bajó.
+ *
+ * 🆕 1-sep-2026, para que desde la Agenda se pueda abrir la orden de un renglón sembrado (pedido de
+ * Bruno: *«si apretás la OC, que vaya a la OC para ver los productos»*).
+ *
+ * 🔑 **Resuelve por el ID *o* por el RÓTULO, y ⛔ no por uno solo**, porque de cada lado hay uno
+ * distinto: la pregunta de la puerta guarda el id (`store:oc_id`) y un renglón sembrado antes de
+ * hoy sólo tiene el rótulo de la orden metido en su título. Aceptar los dos es lo que evita migrar
+ * los cien clones ya sembrados — y el rótulo lo elige el emisor, así que ⛔ no se compone acá.
+ *
+ * 🔴 **El id va PRIMERO.** Es el único de los dos que la base garantiza único: si un rótulo llegara
+ * repetido, buscar por rótulo primero abriría la orden equivocada sin decir nada.
+ *
+ * ⚠️ `null` quiere decir **«no está en esta lista»**, ⛔ no «no existe»: la lista es de una marca y
+ * de una ventana de días. Quien llame tiene que decir las dos cosas, porque la acción es distinta.
+ */
+export function ocPorRef<T extends { id: string; oc_label: string | null }>(
+  recepciones: T[],
+  ref: string,
+): T | null {
+  const r = String(ref || '').trim()
+  if (!r) return null
+  return recepciones.find((x) => x.id === r) || recepciones.find((x) => x.oc_label === r) || null
+}
