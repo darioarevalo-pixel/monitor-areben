@@ -57,6 +57,14 @@ describe('Foto del renglón', () => {
     expect(html).not.toContain('download')
   })
 
+  it('🔴 el botón lleva `height: auto`: `.shell-content button` le clava la altura de un control', () => {
+    // `globals.css` le da a todo `button` de la pantalla la altura fija del kit (~36 px). Con una
+    // foto de 96 adentro, la imagen desborda y se monta sobre el SKU del renglón de abajo — que es
+    // exactamente lo que se vio en prod el 1-sep. El estilo en línea le gana a la clase global.
+    const html = renderToStaticMarkup(<Foto l={linea({ imagen_thumb_url: CHICA })} lado={96} />)
+    expect(html).toMatch(/<button[^>]*height:\s*auto/)
+  })
+
   it('sin quien la amplíe no explota: el botón queda inerte', () => {
     // La grilla y la tabla la usan con `onAmpliar`, pero el opcional tiene que aguantar sin él.
     expect(renderToStaticMarkup(<Foto l={linea({ imagen_thumb_url: CHICA })} lado={40} />)).toContain('<img')

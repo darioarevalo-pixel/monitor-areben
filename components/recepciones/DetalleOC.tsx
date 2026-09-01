@@ -77,7 +77,11 @@ export function Foto({ l, lado, onAmpliar }: { l: LineaConCruce; lado: number; o
       type="button"
       onClick={() => onAmpliar?.(l)}
       title={`${l.nombre || l.sku || ''} — ver grande`}
-      style={{ padding: 0, border: 0, background: 'none', cursor: 'zoom-in', display: 'block', lineHeight: 0 }}
+      // 🔴 `height: auto` NO es decorativo. `globals.css` le da a TODO `button` de la pantalla
+      // (`.shell-content button`) una altura fija de control —la del kit—, así que sin esto el
+      // botón mide 36 px con una foto de 96 adentro: la imagen desborda y **se monta sobre el SKU
+      // del renglón de abajo**. Pasó apenas la foto dejó de ser un `<a>`. Un `<a>` no la agarraba.
+      style={{ padding: 0, border: 0, background: 'none', cursor: 'zoom-in', display: 'block', lineHeight: 0, height: 'auto', width: 'auto' }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -96,7 +100,8 @@ export function Foto({ l, lado, onAmpliar }: { l: LineaConCruce; lado: number; o
 export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; onCerrar: () => void }) {
   const [datos, setDatos] = useState<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [verTodo, setVerTodo] = useState(false)
+  // Abierto de entrada: la orden entera es lo que se viene a ver. Sigue plegable para cerrarla.
+  const [verTodo, setVerTodo] = useState(true)
   const [ampliada, setAmpliada] = useState<LineaConCruce | null>(null)
 
   useEffect(() => {
