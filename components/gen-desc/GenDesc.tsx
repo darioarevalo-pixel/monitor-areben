@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Badge, Button, Card, EmptyState, Field, Input, KpiCard, Notice, Select, Toolbar, useToast,
+  Badge, Button, Card, EmptyState, Field, Input, KpiCard, Lightbox, Notice, Select, Toolbar, useToast,
 } from '@/components/ui'
 import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
-import { FAMILIAS, atributosDe, bulletsDe, cargadosDe, type Atributo, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
+import { FAMILIAS, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 
 /**
  * Redacción: la ficha de cada prenda y el párrafo que la vende.
@@ -221,6 +221,9 @@ function FilaProducto({
   const [ia, setIa] = useState<ResultadoIA | null>(null)
   const [conservarResiduo, setConservarResiduo] = useState(true)
   const [publicando, setPublicando] = useState(false)
+  // La foto que se está mirando en grande. Es de la fila y no de la sección: se abre con la
+  // ficha delante, que es el momento en que hace falta.
+  const [foto, setFoto] = useState<string | null>(null)
 
   /**
    * Lo que hay hoy en la ficha además de la prosa nuestra: la prosa vieja sin marcar y los
@@ -235,6 +238,17 @@ function FilaProducto({
   const bullets = useMemo(() => bulletsDe(familia, ficha), [familia, ficha])
   const campos = useMemo(() => atributosDe(familia), [familia])
   const cuenta = useMemo(() => cargadosDe(familia, ficha), [familia, ficha])
+  /**
+   * Los atributos que la familia NO pide. Se dibujan sólo los que ya tienen valor, más el que se
+   * sume a mano: la lista entera arriba de la ficha convertiría el «+ agregar un dato» en seis
+   * campos más que nadie pidió.
+   */
+  const extras = useMemo(() => atributosExtra(familia), [familia])
+  const [sumado, setSumado] = useState<Atributo[]>([])
+  const extrasVisibles = useMemo(
+    () => extras.filter((a) => sumado.includes(a.key as Atributo) || String(ficha[a.key as Atributo] || '').trim()),
+    [extras, sumado, ficha],
+  )
 
   const problemas = useMemo(
     () => validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }),
@@ -298,6 +312,33 @@ function FilaProducto({
             </div>
           </div>
 
+          {/* 🔑 Van TODAS las fotos y no sólo la portada: el tajo, el botón, el escote de atrás o
+              el largo real casi nunca están en la primera, y son justo lo que hay que mirar para
+              contestar la ficha. La miniatura del encabezado no sirve —44×55 px y su clic abre la
+              fila—, así que la tira vive acá adentro, al lado de los campos que se cargan. */}
+          {p.imagenes.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Las fotos del producto <span style={{ fontWeight: 400, color: '#666' }}>· tocá una para verla en grande</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {p.imagenes.map((im) => (
+                  <button
+                    key={im.id}
+                    type="button"
+                    onClick={() => setFoto(im.src)}
+                    title="Ver en grande"
+                    style={{ padding: 0, border: '1px solid #ddd', borderRadius: 6, background: 'none', cursor: 'zoom-in', lineHeight: 0 }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={im.src} alt="" width={72} height={90} style={{ objectFit: 'cover', borderRadius: 5, display: 'block' }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <Lightbox src={foto} alt={p.name} onCerrar={() => setFoto(null)} />
+
           {/* ── La ficha: la carga el local y de acá salen los bullets ── */}
           {!familia ? (
             <div>
@@ -331,12 +372,44 @@ function FilaProducto({
                     key={a.key}
                     label={a.label}
                     libre={a.libre}
-                    valores={a.valores}
+                    opciones={familia ? opcionesDe(familia, a.key) : null}
+                    valor={ficha[a.key] || ''}
+                    onElegir={(v) => onAtributo(a.key, v)}
+                  />
+                ))}
+                {extrasVisibles.map((a) => (
+                  <CampoAtributo
+                    key={a.key}
+                    label={a.label}
+                    prestado
+                    libre={a.libre}
+                    opciones={familia ? opcionesDe(familia, a.key) : null}
                     valor={ficha[a.key] || ''}
                     onElegir={(v) => onAtributo(a.key, v)}
                   />
                 ))}
               </div>
+              {/* 🔑 «+ agregar un dato»: lo pidió Bruno el 1-sep-2026. Un short que cae en la
+                  familia `faldas` puede necesitar declarar su silueta, y agrandar la lista de
+                  TODA la familia por un producto le pregunta a las otras 39 algo que no les toca. */}
+              {extras.filter((a) => !extrasVisibles.some((v) => v.key === a.key)).length > 0 && (
+                <div style={{ marginTop: 10, maxWidth: 260 }}>
+                  <Select
+                    value=""
+                    onChange={(ev) => {
+                      const k = ev.target.value as Atributo
+                      if (k) setSumado((prev) => (prev.includes(k) ? prev : [...prev, k]))
+                    }}
+                  >
+                    <option value="">+ agregar un dato de otra prenda</option>
+                    {extras
+                      .filter((a) => !extrasVisibles.some((v) => v.key === a.key))
+                      .map((a) => (
+                        <option key={a.key} value={a.key}>{a.label}</option>
+                      ))}
+                  </Select>
+                </div>
+              )}
             </div>
           )}
 
@@ -498,12 +571,14 @@ function FilaProducto({
  * quedar mostrando una elección que no existe en ningún lado.
  */
 function CampoAtributo({
-  label, valores, valor, libre, onElegir,
+  label, opciones, valor, libre, prestado = false, onElegir,
 }: {
   label: string
-  valores: string[]
+  opciones: OpcionesAtributo | null
   valor: string
   libre: boolean
+  /** Un atributo que la familia no pide y alguien sumó a mano: se rotula para que se note. */
+  prestado?: boolean
   onElegir: (v: string) => Promise<string | null>
 }) {
   const [guardando, setGuardando] = useState(false)
@@ -529,13 +604,27 @@ function CampoAtributo({
     )
   }
 
+  const propios = opciones?.propios || []
+  const prestados = opciones?.prestados || []
   return (
-    <Field label={label}>
+    <Field label={prestado ? `${label} · de otra prenda` : label}>
       <Select value={valor} disabled={guardando} onChange={(e) => void mandar(e.target.value)}>
         <option value="">— sin cargar —</option>
-        {valores.map((v) => (
+        {propios.map((v) => (
           <option key={v} value={v}>{v}</option>
         ))}
+        {/* 🔑 Los prestados van en su propio grupo y ABAJO: la palabra de la familia se elige
+            primero, que es la que va a estar bien el 95% de las veces. Poner las 12 juntas es
+            hacer que el que carga tenga que leer todas para encontrar la suya. */}
+        {prestados.length > 0 && (
+          <optgroup label="de otras prendas">
+            {prestados.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </optgroup>
+        )}
+        {/* ⛔ Último, y separado: «no aplica» es una respuesta, no un valor de venta. */}
+        {opciones?.noAplica && <option value={NO_APLICA}>{NO_APLICA}</option>}
       </Select>
     </Field>
   )

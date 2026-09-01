@@ -17,8 +17,10 @@ import {
   ATRIBUTOS_CERRADOS as ATRIBUTOS_CERRADOS_JS,
   CATEGORIAS_FUERA_DE_ALCANCE as CATEGORIAS_FUERA_JS,
   FAMILIAS as FAMILIAS_JS,
+  NO_APLICA as NO_APLICA_JS,
   TELA_SIN_IDENTIFICAR as TELA_SIN_IDENTIFICAR_JS,
   atributosDe as atributosDeJs,
+  atributosExtra as atributosExtraJs,
   bulletsDe as bulletsDeJs,
   cargadosDe as cargadosDeJs,
   esValor as esValorJs,
@@ -26,8 +28,10 @@ import {
   familiaDe as familiaDeJs,
   fueraDeAlcance as fueraDeAlcanceJs,
   normalizarCategoria as normalizarCategoriaJs,
+  opcionesDe as opcionesDeJs,
   textoDeBullet as textoDeBulletJs,
   valoresDe as valoresDeJs,
+  valoresPrestados as valoresPrestadosJs,
 } from './atributos.core.js'
 
 /** Las claves de familia. Se escriben acá para que la pantalla no acepte una inventada. */
@@ -61,6 +65,9 @@ export type AtributoDeFamilia = {
   valores: string[]
 }
 
+/** Lo que ofrece un desplegable: la lista propia, la prestada y si va «no aplica». */
+export type OpcionesAtributo = { propios: string[]; prestados: string[]; noAplica: boolean }
+
 /** Lo que cargó el local para un producto: `{atributo: valor}`. */
 export type Cargados = Partial<Record<Atributo, string>>
 
@@ -73,6 +80,9 @@ export const CATEGORIAS_FUERA_DE_ALCANCE = CATEGORIAS_FUERA_JS as string[]
 
 /** El valor de Tela que significa «alguien lo miró y no supo». Se guarda; no sale a la ficha. */
 export const TELA_SIN_IDENTIFICAR: string = TELA_SIN_IDENTIFICAR_JS
+
+/** «Esta prenda no tiene eso». Vale en todo atributo cerrado salvo Tela; se guarda y no sale. */
+export const NO_APLICA: string = NO_APLICA_JS
 
 export function normalizarCategoria(s: string): string {
   return normalizarCategoriaJs(s)
@@ -89,6 +99,21 @@ export function fueraDeAlcance(categorias: string[]): boolean {
 
 export function valoresDe(familia: Familia, atributo: Atributo): string[] {
   return valoresDeJs(familia, atributo) as string[]
+}
+
+/** Los valores que ese atributo tiene en las otras familias, sin repetir los propios. */
+export function valoresPrestados(familia: Familia, atributo: Atributo): string[] {
+  return valoresPrestadosJs(familia, atributo) as string[]
+}
+
+/** Lo que dibuja el desplegable: propios, prestados de otras prendas y «no aplica». */
+export function opcionesDe(familia: Familia, atributo: Atributo): OpcionesAtributo {
+  return opcionesDeJs(familia, atributo) as OpcionesAtributo
+}
+
+/** Los atributos que la familia NO pide, para el «+ agregar un dato». */
+export function atributosExtra(familia: Familia | null): AtributoDeFamilia[] {
+  return atributosExtraJs(familia) as AtributoDeFamilia[]
 }
 
 /** Los atributos de una familia, en el orden canónico y con su lista ya resuelta. */

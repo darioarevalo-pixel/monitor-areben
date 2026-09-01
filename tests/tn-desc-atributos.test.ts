@@ -16,16 +16,20 @@ import {
   ATRIBUTOS_CERRADOS,
   CATEGORIAS_FUERA_DE_ALCANCE,
   FAMILIAS,
+  NO_APLICA,
   TELA_SIN_IDENTIFICAR,
   atributosDe,
+  atributosExtra,
   bulletsDe,
   cargadosDe,
   esValor,
   etiquetaDeBullet,
   familiaDe,
   fueraDeAlcance,
+  opcionesDe,
   textoDeBullet,
   valoresDe,
+  valoresPrestados,
 } from '../lib/tn-desc/atributos'
 import type { Atributo, Familia } from '../lib/tn-desc/atributos'
 
@@ -123,26 +127,79 @@ describe('las listas están sanas', () => {
   })
 })
 
-describe('🔴 los valores son de la familia, y el servidor lo chequea', () => {
-  it('un calce de pantalón no vale en un top', () => {
+describe('🔴 el valor sale de una lista cerrada, y el servidor lo chequea', () => {
+  // 🔴 Este bloque cambió el 1-sep-2026 y ⛔ no se borró ni una sola aserción: hasta ese día
+  // exigía «el valor tiene que ser de la lista de ESTA familia», y hoy exige «tiene que ser de
+  // la lista de ALGUNA familia». Lo pidió Bruno usando la pantalla —un short de ecocuero cae en
+  // `faldas`, cuyo `calce` ofrece palabras de pollera y ninguna le sirve. Lo que la lista cerrada
+  // existía para impedir sigue impedido: un valor inventado NO entra, que es de lo que depende
+  // que el catálogo se pueda sumar.
+
+  it('un calce de pantalón SE PUEDE PRESTAR en un top, y el propio sigue valiendo', () => {
     expect(esValor('pantalon', 'calce', 'wide leg')).toBe(true)
-    expect(esValor('tops', 'calce', 'wide leg')).toBe(false)
+    expect(esValor('tops', 'calce', 'wide leg')).toBe(true)
     expect(esValor('tops', 'calce', 'entallado')).toBe(true)
+    // Y prestado NO es lo mismo que propio: el desplegable los separa.
+    expect(valoresDe('tops', 'calce')).not.toContain('wide leg')
+    expect(valoresPrestados('tops', 'calce')).toContain('wide leg')
   })
 
-  it('un largo de falda no vale en un pantalón', () => {
+  it('un largo de falda se puede prestar en un pantalón', () => {
     expect(esValor('faldas', 'largo', 'mini')).toBe(true)
-    expect(esValor('pantalon', 'largo', 'mini')).toBe(false)
+    expect(esValor('pantalon', 'largo', 'mini')).toBe(true)
+    expect(valoresDe('pantalon', 'largo')).not.toContain('mini')
   })
 
-  it('un atributo que la familia no pide no vale, aunque el valor exista', () => {
-    expect(esValor('tops', 'tiro', 'tiro alto')).toBe(false)
-    expect(esValor('pantalon', 'tiro', 'tiro alto')).toBe(true)
-    expect(esValor('pantalon', 'escote', 'en V')).toBe(false)
+  it('🔴 un valor que no existe en NINGUNA familia sigue sin valer', () => {
+    expect(esValor('tops', 'calce', 'apretadito')).toBe(false)
+    expect(esValor('pantalon', 'largo', 'hasta el piso')).toBe(false)
+    expect(esValor('tops', 'escote', 'redondito')).toBe(false)
+  })
+
+  it('un atributo que la familia no pide se puede SUMAR, pero uno inventado no existe', () => {
+    expect(esValor('tops', 'tiro', 'tiro alto')).toBe(true)
+    expect(esValor('pantalon', 'escote', 'en V')).toBe(true)
+    // @ts-expect-error — un atributo que no está en el diccionario
+    expect(esValor('tops', 'color', 'negro')).toBe(false)
+    // @ts-expect-error — una familia inventada tampoco
+    expect(esValor('camisas', 'calce', 'entallado')).toBe(false)
+  })
+
+  it('⛔ «no aplica» vale en todo atributo cerrado MENOS tela', () => {
+    expect(esValor('tops', 'manga', NO_APLICA)).toBe(true)
+    expect(esValor('pantalon', 'largo', NO_APLICA)).toBe(true)
+    // Tela ya tiene «no identifico», que contesta otra cosa: dos maneras de decir lo mismo en la
+    // misma lista es lo que hace que después no se pueda sumar.
+    expect(esValor('tops', 'tela', NO_APLICA)).toBe(false)
+    expect(opcionesDe('tops', 'tela').noAplica).toBe(false)
+    expect(opcionesDe('tops', 'manga').noAplica).toBe(true)
   })
 
   it('el detalle es libre: cualquier texto vale', () => {
     expect(esValor('tops', 'detalle', 'argolla plateada en el medio')).toBe(true)
+  })
+})
+
+describe('🔑 el «+ agregar un dato»: los atributos de las otras familias', () => {
+  it('faldas no pide silueta, y por eso silueta es un extra suyo', () => {
+    expect(atributosDe('faldas').map((a) => a.key)).not.toContain('silueta')
+    expect(atributosExtra('faldas').map((a) => a.key)).toContain('silueta')
+  })
+
+  it('⛔ un extra nunca es también un campo propio', () => {
+    for (const fam of Object.keys(FAMILIAS) as Familia[]) {
+      const propios = new Set(atributosDe(fam).map((a) => a.key))
+      for (const e of atributosExtra(fam)) expect(propios.has(e.key)).toBe(false)
+    }
+  })
+
+  it('el extra llega con valores para elegir: sumarlo sin lista sería un campo muerto', () => {
+    for (const fam of Object.keys(FAMILIAS) as Familia[]) {
+      for (const e of atributosExtra(fam)) {
+        if (e.libre) continue
+        expect(e.valores.length).toBeGreaterThan(0)
+      }
+    }
   })
 })
 
@@ -221,11 +278,27 @@ describe('🔴 el bullet es determinista', () => {
     expect(b).toEqual([{ etiqueta: 'Calce', texto: 'holgado' }])
   })
 
-  it('🔴 un valor que no es de la familia no se dibuja, aunque esté guardado', () => {
+  it('🔴 un valor INVENTADO no se dibuja, aunque esté guardado', () => {
     // El guard del servidor puede haber sido salteado por un dato viejo: el que compone
     // vuelve a preguntar. Que la lista sea cerrada no puede depender de quién la escribió.
-    expect(bulletsDe('tops', { calce: 'wide leg', tela: 'lino' })).toEqual([
+    expect(bulletsDe('tops', { calce: 'apretadito', tela: 'lino' })).toEqual([
       { etiqueta: 'Tela', texto: 'lino' },
+    ])
+  })
+
+  it('⛔ «no aplica» se guarda pero NO sale a la ficha', () => {
+    expect(bulletsDe('tops', { manga: NO_APLICA, tela: 'lino' })).toEqual([
+      { etiqueta: 'Tela', texto: 'lino' },
+    ])
+  })
+
+  it('🔑 un atributo SUMADO de otra familia sí se dibuja, y en el orden canónico', () => {
+    // Si el «+ agregar un dato» guardara algo que después no se compone, el gesto no haría nada.
+    // Tiro es orden 4 y largo orden 7: el sumado se ordena por la lista, no por cuándo se cargó.
+    expect(bulletsDe('faldas', { largo: 'mini', silueta: 'oversize', tela: 'lino' })).toEqual([
+      { etiqueta: 'Tela', texto: 'lino' },
+      { etiqueta: 'Silueta', texto: 'oversize' },
+      { etiqueta: 'Largo', texto: 'mini' },
     ])
   })
 

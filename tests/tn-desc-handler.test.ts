@@ -123,14 +123,24 @@ describe('🆕 la ficha de atributos: la carga el local, con lista cerrada', () 
     expect(upserts[0]).toMatchObject({ atributo: 'tela', valor: 'morley', por: 'Local' })
   })
 
-  it('🔴 un valor que no está en la lista de esa familia se rechaza EN EL SERVIDOR', async () => {
+  it('🔴 un valor INVENTADO se rechaza EN EL SERVIDOR', async () => {
     // El `<select>` es una comodidad del que carga. Lo único que separa una lista cerrada de un
     // campo de texto —y con eso, un catálogo que se puede sumar de uno que no— es este chequeo.
+    // ⚠️ El 1-sep-2026 dejó de alcanzar con un valor de OTRA familia («wide leg» en un top) para
+    // probarlo: prestar entre familias ahora está permitido a pedido de Bruno, así que el caso
+    // que ejerce el guard tiene que ser una palabra que no existe en ninguna lista.
     sesionDe(LOCAL)
-    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'calce', valor: 'wide leg' }))
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'calce', valor: 'apretadito' }))
     expect(res.code).toBe(400)
     expect(String(res.body?.error)).toContain('no es un valor de calce para tops')
     expect(llamadas).toEqual([])
+  })
+
+  it('🔑 un valor prestado de otra prenda entra, y queda guardado', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'faldas', atributo: 'calce', valor: 'recto' }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ atributo: 'calce', valor: 'recto' })
   })
 
   it('una familia o un atributo inventados mueren en 400 sin tocar la base', async () => {

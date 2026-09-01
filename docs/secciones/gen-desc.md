@@ -74,6 +74,47 @@ Las otras cuatro de ese día, todas medidas contra la corrida real:
 7. **El modelo por defecto es el más barato** (Flash Lite): el catálogo entero sale **US$0,31**
    contra US$1,16, y es el único de los tres sin precio promocional.
 
+### 🔴 1-sep-2026 — la lista sigue cerrada, pero se afloja DE CUÁL sale el valor
+
+Las tres las pidió Bruno usando la pantalla, no leyendo el código:
+
+> «no se puede agrandar foto» · «hay un short de ecocuero que tiene puesto como short minis y demás»
+> · «capaz ver de no cerrar las opciones, ver la opción de sumar *no aplica*, y poder sumar alguna
+> información de otra categoría»
+
+8. **La foto se agranda, y son TODAS.** Se dibujaba en **44×55 px** y no era cliqueable; ahora hay
+   una tira de todas las fotos del producto adentro de la fila abierta, y cada una abre el
+   `Lightbox` del kit. 🔑 **Agrandar sólo la portada no contestaba el pedido**: el tajo, el botón,
+   el escote de atrás o el largo real casi nunca están en la primera foto, y son exactamente lo que
+   hay que mirar para contestar la ficha. La miniatura del encabezado se quedó como está: su clic
+   abre la fila.
+9. **«No aplica» es un valor más** (`NO_APLICA`), en todo atributo cerrado **menos Tela**. Se guarda
+   y ⛔ no sale a la ficha, igual que `no identifico`. 🔑 «Esta prenda no tiene eso» es distinto de
+   «nadie lo cargó», y esa diferencia es la única que dice si hay que volver a mirar la prenda —
+   sin él, el contador de la fila se queda en `4/5` para siempre. ⛔ En Tela no va porque ahí la
+   pregunta ya la contesta «no identifico», y dos maneras de decir lo mismo en la misma lista es lo
+   que hace que después no se pueda sumar.
+10. 🔴 **Un valor se puede PRESTAR de otra prenda, y un atributo se puede SUMAR.** El caso que lo
+    disparó: un short de ecocuero cae en la familia `faldas`, cuyo `calce` ofrece palabras de
+    pollera —`al cuerpo`, `recta`, `con vuelo`, `plisada`— y **ninguna le sirve**. El desplegable
+    ahora muestra los propios arriba y los de otras prendas abajo, en su propio grupo; y un
+    «+ agregar un dato» suma un atributo que la familia no pide (ej. `silueta` en ese short).
+    ⛔ **Lo que NO se aflojó es que el valor salga de una lista**: `esValor` sigue rechazando una
+    palabra que no existe en ninguna familia, que es de lo único que depende que el catálogo se
+    pueda SUMAR. Lo que cambió es **de cuál lista sale**, no si sale de alguna.
+    🔑 **Y el bullet del extra se compone**: si el «+ agregar un dato» guardara algo que después no
+    se dibuja, el gesto no haría nada. El orden lo sigue decidiendo la lista canónica.
+    ⚠️ **Los cuatro tests que vigilaban la regla vieja se RE-APUNTARON, ⛔ no se borraron**: el caso
+    que ejerce el guard dejó de poder ser «wide leg en un top» —eso ahora está permitido— y pasó a
+    ser una palabra inventada (`apretadito`). Un guard que se prueba con un caso que ya no viola
+    nada es un guard apagado que se ve prendido.
+    ▶️ **Lo que queda de este pedido**: «no cerrar las opciones» del todo —escribir un valor que no
+    existe— ⛔ no está hecho, y es lo único de los tres que toca el motivo de fondo del 27-ago. La
+    forma propuesta es un **valor propuesto**: se escribe, queda marcado, sale del análisis hasta
+    que Bruno lo apruebe, y entra a la lista con su palabra —como entraron `bandó` y `volcado`—
+    con **su propio reloj**, porque sin un aviso de «hace X días que nadie mira esto» la bandeja se
+    convierte en el campo libre por la puerta de atrás.
+
 ## La ficha de atributos — el diccionario de prendas
 
 `lib/tn-desc/atributos.core.js` (`.js` plano: lo importan los dos handlers) y la tabla
