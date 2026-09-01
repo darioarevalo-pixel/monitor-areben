@@ -42,14 +42,13 @@ todas «compra nacional») ⇒ **100 renglones sembrados**.
 
 ### ▶️ Lo que queda
 
-1. ▶️ **Caminar «Hoy» con las órdenes de verdad**, que es lo único que ningún test alcanza: que el
-   «3 de 10» se mueva al tildar el cuadradito, que «Marcar las N» las cierre, que **apretar el número
-   de orden abra esa orden en Ingresos** y que la tarjeta de las preguntas conteste una puerta sin
-   recargar. 🔴 Y con **Lorena**, que es la que tiene los 36 renglones y la única sin `admin` que
-   puede contestar la puerta.
-   ⚠️ Los cien renglones sembrados hoy ⛔ **no traen el id de la orden** —el campo nació después—:
-   abren por **rótulo**, que `recepciones` resuelve igual. Los que se siembren de ahora en más van
-   por id.
+1. 🏁 **Caminado por Bruno el 1-sep-2026 y anda** (*«si anda perfecto, ahí lo probé»*): el tilde, el
+   «Marcar las N» y el número de orden abriendo la orden en Ingresos. ⚠️ Lo caminó **con su usuario,
+   que es admin**: falta verlo con **Lorena**, que es la que tiene los 36 renglones y la única sin
+   `admin` que puede contestar la puerta.
+   ⚠️ Los cien renglones sembrados ese día ⛔ **no traen el id de la orden** —el campo nació
+   después—: abren por **rótulo**, que `recepciones` resuelve igual. Los que se siembren de ahora en
+   más van por id.
 2. ▶️ **Decidir si el «Hoy» del admin lleva un filtro «sólo lo mío»** — o si la pregunta de la puerta
    se dirige por nombre en vez de por rol. ⛔ **La salida barata NO es tocar `esParaMi`**: lo comparte
    Novedades. Hoy queda como está: el volumen lo arregló la unificación.
@@ -1045,3 +1044,56 @@ misma columna.
 ⚠️ **Antes de ordenar la cola por stock**: 110 de los 111 tienen stock en TN, pero TN ⛔ no dice si
 la prenda está **en el local** o en el depósito. Es la misma trampa que la cola de fotos (441
 aparentes, 168 reales).
+
+### 🆕 ▶️ REDACCIÓN — los tres cambios que pidió Bruno el 1-sep-2026
+
+Salieron de usarla, no de leer el código:
+
+> «no se puede agrandar foto. Principalmente para poder completar información complementaria del
+> producto» · «hay un short de ecocuero que tiene puesto como short minis y demás, pero habla de
+> tiro y demás» · «capaz ver de no cerrar las opciones, ver la opción de sumar *no aplica*, y poder
+> sumar alguna información de otra categoría»
+
+1. ▶️ **La foto se agranda, y son TODAS.** `components/gen-desc/GenDesc.tsx:269` la dibuja en
+   **44×55 px** y ⛔ no es cliqueable; `components/ui/Lightbox.tsx` ya existe en el kit (Escape y
+   toque para cerrar) ⇒ es reusar. 🔑 **Y la mitad que falta es otra**: hoy se muestra sólo
+   `imagenes[0]`, la de portada, y el tajo, el botón, el escote de atrás o el largo real casi nunca
+   están ahí. Sin las otras fotos, agrandar la portada ⛔ no contesta «información complementaria».
+2. ▶️ **El desajuste del short NO es Tiro: es Calce.** Verificado — `SHORT HILTON`, `SHORT VITTORIA`
+   y 12 más están en `SHORTS, MINIS y FALDAS` ⇒ familia `faldas`, cuyo `calce` ofrece palabras de
+   pollera (`al cuerpo`, `recta`, `con vuelo`, `plisada`), y un short de ecocuero ⛔ no es ninguna de
+   las cuatro. La familia mezcla porque **la categoría de TiendaNube los tiene juntos**. 📌 Medido el
+   1-sep-2026: de los **40 publicados** de esa familia, **14 son shorts o bermudas** y 26 son minis,
+   polleras y faldas.
+3. ▶️ **De los tres pedidos, sólo uno toca la decisión del 27-ago:**
+   - **«No aplica»** — entra sin discusión, con el precedente exacto de `TELA_SIN_IDENTIFICAR`: se
+     guarda y ⛔ no sale a la ficha. «No tiene» es distinto de «nadie lo cargó», y esa diferencia es
+     la que dice si hay que volver a mirar la prenda.
+   - **«+ agregar un dato» de otra familia** — ⛔ no rompe nada: el valor sigue saliendo de una lista
+     cerrada y lo único que se afloja es **qué se le pregunta** a cada familia, que hoy es la lista
+     fija de `FAMILIAS[x].atributos`. Con esto los 14 shorts se arreglan **sin tocar el mapa de
+     familias**, y partir `SHORTS` en familia propia queda para el final.
+   - 🔴 **No cerrar las opciones** — es exactamente lo que la lista cerrada existe para impedir: con
+     texto libre el catálogo deja de poder SUMARSE, que era el motivo de fondo. ⇒ **válvula**: se
+     escribe igual y queda **marcado como valor propuesto**, afuera del análisis hasta que Bruno lo
+     apruebe; ahí entra a la lista con su palabra, como entraron `bandó` y `volcado`.
+     ⚠️ Y el valor propuesto necesita **su propio reloj**: sin un aviso de «hace X días que nadie
+     mira esto», la bandeja se convierte en el campo libre por la puerta de atrás.
+     📌 [[feedback_areben_freno_sin_valvula]].
+
+▶️ **Orden recomendado**: «no aplica» + «+ agregar un dato» primero (cubren cualquier desajuste de
+familia, no sólo el del short), el valor propuesto después, el corte de `SHORTS` al final.
+
+### 🆕 📌 La guía de medidas de Bruno — el PDF (1-sep-2026)
+
+`~/Downloads/TOMA DE MEDIDAS CON GUÍA.pdf`, **9 páginas**. Leída la 1: dibujo técnico de la prenda
+**apoyada y plana**, con las flechas `ANCHO`, `LARGO` y `LARGO DE MANGA`, y la lista de a qué prendas
+aplica (buzos, sweaters, camperas, blazers, remeras con mangas, tops con mangas) — o sea **nuestra
+familia `abrigo` entera más parte de `tops`**.
+
+🔑 **Confirma la convención y además la NOMBRA bien**: la guía dice **ANCHO**, no «contorno de
+busto». `GT_M.busto` de `lib/gen-talles/plantillas.ts` dice «Contorno busto / Medir alrededor de la
+parte más ancha del busto», que es **otra medida**.
+
+▶️ Falta leer las 8 páginas restantes (`brew install poppler` corriendo el 1-sep) y cruzar el
+vocabulario de la guía contra el de las plantillas, familia por familia.
