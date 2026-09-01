@@ -34,8 +34,15 @@ export type Recepcion = {
   oc_estado: string | null
   fecha_compra: string | null
   fecha_ingreso: string | null
-  proveedor_id: number | null
-  proveedor_nombre: string | null
+  /** Cuándo se confirmó la orden del otro lado. Es el único instante que el emisor manda SIEMPRE. */
+  confirmada_at: string | null
+  /**
+   * 🔴 **Opcionales porque el servidor los BORRA** cuando el usuario no tiene el sub
+   * `recepciones.proveedores` (ver `api/_recepciones.js`). No es que a veces vengan vacíos: a veces
+   * el campo no viene. Declararlos requeridos dejaba que la pantalla los leyera sin preguntar.
+   */
+  proveedor_id?: number | null
+  proveedor_nombre?: string | null
   productos: number
   lineas: number
   unidades_pedidas: number
@@ -51,6 +58,33 @@ export type Recepcion = {
   espejo_consultado: boolean
   skus_sin_espejo: number | null
   recibido_en: string
+}
+
+/**
+ * La fecha con la que se muestra una orden, ya escrita para leer.
+ *
+ * 🔴 **`recibido_en` NO es la fecha del ingreso: es cuándo lo agarró el monitor.** El día que se
+ * prendió el envío entraron 79 órdenes del historial en el mismo minuto, así que la lista mostraba
+ * **27/8/2026 en 62 órdenes que eran de junio y julio**. Con la fecha como primera columna eso pasa
+ * de detalle a mentira de portada. El orden de preferencia es el de cuánto se parece cada dato a
+ * "cuándo entró la mercadería": la fecha de ingreso que carga una persona, si no el instante en que
+ * se confirmó la orden (viene en las 90, sin excepción), y recién al final cuándo nos llegó.
+ *
+ * 🔑 **La fecha sola se parte a mano y ⛔ no pasa por `new Date`.** `new Date('2026-08-25')` es
+ * medianoche **UTC**, que en Argentina es el 24 a las 21:00: formatearla corre todas las fechas un
+ * día para atrás. Sólo el instante completo, que sí trae zona, se puede formatear.
+ */
+export function fechaDeIngreso(
+  r: Pick<Recepcion, 'fecha_ingreso' | 'confirmada_at' | 'recibido_en'>,
+): string {
+  if (r.fecha_ingreso) {
+    const [a, m, d] = r.fecha_ingreso.slice(0, 10).split('-')
+    if (a && m && d) return `${Number(d)}/${Number(m)}/${a}`
+  }
+  const instante = r.confirmada_at || r.recibido_en
+  if (!instante) return '—'
+  const f = new Date(instante)
+  return Number.isNaN(f.getTime()) ? '—' : f.toLocaleDateString('es-AR')
 }
 
 /** Sin proveedor identificado no se puede agrupar: todas caerían en el mismo montón que miente. */

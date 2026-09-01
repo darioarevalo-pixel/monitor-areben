@@ -8,13 +8,14 @@ import {
   porcentaje,
   tonoDeCumplimiento,
   SIN_PROVEEDOR,
+  fechaDeIngreso,
   type Recepcion,
   type LineaRecepcion,
 } from '../lib/recepciones/core'
 
 const oc = (p: Partial<Recepcion>): Recepcion => ({
   id: 'bdi:1', store: 'bdi', oc_id: 1, oc_label: 'OC-0001', oc_estado: 'confirmada',
-  fecha_compra: null, fecha_ingreso: null, proveedor_id: 7, proveedor_nombre: 'Textil Sur',
+  fecha_compra: null, fecha_ingreso: null, confirmada_at: null, proveedor_id: 7, proveedor_nombre: 'Textil Sur',
   productos: 1, lineas: 1, unidades_pedidas: 0, unidades_contadas: 0, diferencia_unidades: 0,
   lineas_con_diferencia: 0, unidades_faltantes: 0, unidades_sobrantes: 0, lineas_nuevas: 0,
   cumplimiento: null, totales_coinciden: true, lineas_recibidas: 1, espejo_consultado: true,
@@ -125,5 +126,33 @@ describe('cómo se muestra', () => {
     expect(tonoDeCumplimiento(null)).toBe('neutro')
     // Sobre-entrega también es un problema, pero no es "malo": es plata que no se pidió.
     expect(tonoDeCumplimiento(1.5)).toBe('aviso')
+  })
+})
+
+describe('fechaDeIngreso', () => {
+  // 🔴 El defecto que motiva esto: `recibido_en` es cuándo lo agarró el monitor, y el backfill del
+  // 27-ago trajo 79 órdenes en el mismo minuto ⇒ la lista mostraba 27/8/2026 en 62 órdenes de junio.
+  it('🔴 prefiere confirmada_at antes que recibido_en: el backfill aplasta todo en un día', () => {
+    expect(fechaDeIngreso({ fecha_ingreso: null, confirmada_at: '2026-06-03T14:00:00Z', recibido_en: '2026-08-27T14:41:00Z' }))
+      .toBe('3/6/2026')
+  })
+
+  it('la fecha que cargó una persona le gana a las dos', () => {
+    expect(fechaDeIngreso({ fecha_ingreso: '2026-07-15', confirmada_at: '2026-06-03T14:00:00Z', recibido_en: '2026-08-27T14:41:00Z' }))
+      .toBe('15/7/2026')
+  })
+
+  it('🔴 la fecha SOLA no pasa por new Date: medianoche UTC en Argentina es el día anterior', () => {
+    // `new Date('2026-08-25').toLocaleDateString('es-AR')` da 24/8/2026. Un día menos, en todas.
+    expect(fechaDeIngreso({ fecha_ingreso: '2026-08-25', confirmada_at: null, recibido_en: '2026-08-27T14:41:00Z' }))
+      .toBe('25/8/2026')
+  })
+
+  it('sin ninguna de las tres no inventa una fecha', () => {
+    expect(fechaDeIngreso({ fecha_ingreso: null, confirmada_at: null, recibido_en: '' })).toBe('—')
+  })
+
+  it('una fecha que no es fecha no sale como "Invalid Date" en la pantalla', () => {
+    expect(fechaDeIngreso({ fecha_ingreso: null, confirmada_at: 'ayer', recibido_en: '' })).toBe('—')
   })
 })

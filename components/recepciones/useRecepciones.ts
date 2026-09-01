@@ -11,12 +11,15 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { leerRecepciones, type Eventos } from '@/lib/recepciones/cliente'
+import { leerRecepciones, type Eventos, type Puede } from '@/lib/recepciones/cliente'
 import type { Recepcion } from '@/lib/recepciones/core'
 
 export function useRecepciones(marca: string | null, dias: number) {
   const [recepciones, setRecepciones] = useState<Recepcion[]>([])
   const [eventos, setEventos] = useState<Eventos>({ rotos: [], ultimo: null })
+  // 🔑 Arranca en `false`: hasta que el servidor conteste, no se dibuja nada de proveedores. Al
+  // revés se vería el panel un instante y desaparecería, que es peor que no verlo nunca.
+  const [puede, setPuede] = useState<Puede>({ proveedores: false })
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
@@ -38,6 +41,7 @@ export function useRecepciones(marca: string | null, dias: number) {
         if (!vivo) return
         setRecepciones(r.recepciones)
         setEventos(r.eventos)
+        setPuede(r.puede)
       } catch (e) {
         if (!vivo) return
         setError(e instanceof Error ? e.message : 'No se pudieron leer las recepciones.')
@@ -50,5 +54,5 @@ export function useRecepciones(marca: string | null, dias: number) {
     }
   }, [marca, dias, tick])
 
-  return { recepciones, eventos, cargando, error, recargar }
+  return { recepciones, eventos, puede, cargando, error, recargar }
 }

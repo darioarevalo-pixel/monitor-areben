@@ -27,7 +27,7 @@ import {
   space,
 } from '@/components/ui'
 import { leerRecepcion, type LineaConCruce } from '@/lib/recepciones/cliente'
-import { renglonesQueNoCerraron, type Recepcion } from '@/lib/recepciones/core'
+import { renglonesQueNoCerraron } from '@/lib/recepciones/core'
 
 /** El renglón, con el signo adelante: `-2` y `+3` se leen distinto que `2` y `3`. */
 function Diferencia({ n }: { n: number }) {
@@ -98,7 +98,7 @@ export function Foto({ l, lado, onAmpliar }: { l: LineaConCruce; lado: number; o
 }
 
 export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; onCerrar: () => void }) {
-  const [datos, setDatos] = useState<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean } | null>(null)
+  const [datos, setDatos] = useState<Awaited<ReturnType<typeof leerRecepcion>> | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Abierto de entrada: la orden entera es lo que se viene a ver. Sigue plegable para cerrarla.
   const [verTodo, setVerTodo] = useState(true)
@@ -124,7 +124,7 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
   if (error) return <Notice tone="danger">{error}</Notice>
   if (!datos) return <Esqueleto />
 
-  const { recepcion: r, lineas, espejoConsultado } = datos
+  const { recepcion: r, lineas, espejoConsultado, puede } = datos
   const noCerraron = renglonesQueNoCerraron(lineas)
   // Lo que hay que dar de alta se calcula con el cruce **de hoy**, no con la foto guardada: el caso
   // normal de una importación es que el producto todavía no exista en GN cuando llega.
@@ -171,7 +171,9 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
 
   return (
     <SectionCard
-      title={`${r.oc_label || `OC ${r.oc_id}`} · ${r.proveedor_nombre || 'sin proveedor'}`}
+      // El proveedor sólo si lo puede ver: el servidor ya se lo borró a la respuesta, así que
+      // `|| 'sin proveedor'` diría «sin proveedor» sobre una orden que sí lo tiene.
+      title={puede.proveedores ? `${r.oc_label || `OC ${r.oc_id}`} · ${r.proveedor_nombre || 'sin proveedor'}` : r.oc_label || `OC ${r.oc_id}`}
       subtitle={`${r.lineas_recibidas} renglones · ${r.unidades_pedidas} pedidas · ${r.unidades_contadas} contadas${
         r.fecha_ingreso ? ` · ingresó el ${r.fecha_ingreso}` : ''
       }`}

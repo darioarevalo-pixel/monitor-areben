@@ -69,6 +69,22 @@ pierde los eventos de ese rato. Un 401 los habría perdido.
   hay quién lo vuelva a mandar**. El espejo de GN sí se lee de la base de cada marca, pero eso pasa
   después de guardar y su falla no se lleva puesto el evento.
 
+## La fecha de la lista
+
+La primera columna es **cuándo entró**, y sale de `fechaDeIngreso` (núcleo, con tests), que elige en
+este orden: `fecha_ingreso` → `confirmada_at` → `recibido_en`.
+
+- 🔴 **`recibido_en` NO es la fecha del ingreso: es cuándo lo agarró el monitor.** Las 79 del
+  backfill entraron en el mismo minuto, así que la columna mostraba **27/8/2026 en 62 órdenes que
+  eran de junio y julio**. Con la fecha como primera columna, eso pasaba de detalle a mentira de
+  portada.
+- 🔑 **La fecha sola se parte a mano y ⛔ no pasa por `new Date`**: `new Date('2026-08-25')` es
+  medianoche **UTC**, o sea el 24 a las 21:00 en Argentina — formatearla corre todas las fechas un
+  día para atrás.
+- ⚠️ El **orden** de la lista sigue siendo `confirmada_at desc` en el servidor, que ⛔ no es lo
+  mismo que lo que muestra la columna: una OC con `fecha_ingreso` cargada a mano puede mostrar una
+  fecha y ordenarse por otra.
+
 ## Reglas que el código no dice
 
 - 🔴 **`diferencia_unidades` es un NETO y un neto esconde el caso caro.** 2 de menos en un talle y 2
@@ -125,13 +141,29 @@ lugares: una grilla arriba —«Lo que entró»— y una miniatura en cada fila 
   y si ese servidor se cae o mueve los archivos, el `onError` deja el renglón sin foto en vez del
   ícono de imagen rota. ⚠️ No se copian a nuestro lado: si allá se borran, acá desaparecen.
 
-## Quién la ve
+## Quién la ve, y quién ve a los PROVEEDORES
 
 El permiso es `recepciones` (área Compras). Además de los admin, al 1-sep-2026: **Lorena Reyes** y
 las tres de marketing —**Candela Luis, Sofia Facello y Camila Budek**— en las dos marcas
 (`scripts/permiso-recepciones-marketing.mjs`). ⚠️ **«Cami» es Camila BUDEK**, ⛔ no
-`camilaquintana`, que es de local. 🔴 El POST que escribe el padrón lo bloquea el clasificador de
-esta Mac: el script se deja escrito y lo corre Bruno con `!`.
+`camilaquintana`, que es de local.
+
+🔴 **De quién vino cada orden es un permiso APARTE: el sub `recepciones.proveedores`.** Sin él la
+sección se ve entera —fechas, órdenes, artículos, fotos, lo que faltó— pero **sin el nombre del
+proveedor y sin el panel «Por proveedor»**. Pedido de Bruno el 1-sep: *«no tiene sentido que la
+gente de adentro vea los proveedores»*.
+
+- 🔴 🔑 **El corte está en el SERVIDOR** (`sinProveedor` en `_recepciones.js`), ⛔ no en la
+  pantalla: esconder la columna en el componente deja el nombre viajando en la respuesta, y eso se
+  lee abriendo la pestaña de red del navegador. **Un dato que no se puede ver es un dato que no se
+  manda.** Lo fija `tests/recepciones-handler.test.ts`, cuyo oráculo es el JSON serializado.
+- ⚠️ **Se borra también `proveedor_id`**: solo, ya agrupa las órdenes por proveedor. Y dejarlo haría
+  que el panel «Por proveedor» siguiera armando filas, todas con el nombre vacío.
+- 🔑 **Un sub ⛔ NUNCA lo trae la función**: ni la de Dirección. O lo tiene el admin, o se tilda a
+  mano en Config → «Además puede…». Al 1-sep **no lo tiene nadie tildado**: lo ven sólo Bruno y
+  Darío, por admin.
+- 🔑 **La respuesta trae `puede.proveedores`** y la pantalla ⛔ no lo deduce de que el campo venga
+  vacío: hay órdenes que de verdad llegaron sin proveedor, y son dos cosas distintas que decir.
 
 ## Qué NO viaja
 

@@ -37,20 +37,37 @@ export type Eventos = {
   ultimo: string | null
 }
 
-export async function leerRecepciones(store: string, dias: number): Promise<{ recepciones: Recepcion[]; eventos: Eventos }> {
+/**
+ * Lo que este usuario puede ver de más.
+ *
+ * 🔑 `proveedores` llega del SERVIDOR y ⛔ no se calcula acá: el nombre del proveedor se le borra a
+ * la respuesta antes de mandarla, así que esto sólo dice qué dibujar — la puerta ya se cerró del
+ * otro lado. El default es `false`: si la respuesta no lo trae, se esconde.
+ */
+export type Puede = { proveedores: boolean }
+
+const puedeDe = (d: { puede?: { proveedores?: unknown } } | null): Puede => ({
+  proveedores: d?.puede?.proveedores === true,
+})
+
+export async function leerRecepciones(
+  store: string,
+  dias: number,
+): Promise<{ recepciones: Recepcion[]; eventos: Eventos; puede: Puede }> {
   const r = await apiFetch(`${API}&store=${encodeURIComponent(store)}&dias=${dias}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las recepciones.')
   return {
     recepciones: (d.recepciones || []) as Recepcion[],
     eventos: (d.eventos || { rotos: [], ultimo: null }) as Eventos,
+    puede: puedeDe(d),
   }
 }
 
 export async function leerRecepcion(
   store: string,
   oc: string,
-): Promise<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean }> {
+): Promise<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean; puede: Puede }> {
   const r = await apiFetch(`${API}&store=${encodeURIComponent(store)}&oc=${encodeURIComponent(oc)}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo abrir la orden.')
@@ -58,5 +75,6 @@ export async function leerRecepcion(
     recepcion: d.recepcion as Recepcion,
     lineas: (d.lineas || []) as LineaConCruce[],
     espejoConsultado: Boolean(d.espejo_consultado),
+    puede: puedeDe(d),
   }
 }

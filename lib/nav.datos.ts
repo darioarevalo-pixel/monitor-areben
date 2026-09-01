@@ -162,6 +162,13 @@ export const PERM_CAT: PermCat[] = [
     "brands": [
       "bdi",
       "zattia"
+    ],
+    "subs": [
+      {
+        "key": "proveedores",
+        "label": "Puede ver de qué proveedor vino cada orden",
+        "info": "Sin este permiso la sección se ve entera —fechas, órdenes, artículos, fotos, lo que faltó— pero sin el nombre del proveedor y sin el panel «Por proveedor». El nombre tampoco viaja en la respuesta del servidor, así que no se puede espiar desde el navegador. Los admins lo ven siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      }
     ]
   },
   {

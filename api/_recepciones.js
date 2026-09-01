@@ -11,10 +11,29 @@
 // con login en el mismo archivo.
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
-import { puedeVerAlguna } from '../lib/permisos.core.js'
+import { esAdmin, marcaDePermisos, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 
 const PARA_VER = ['recepciones']
+/** El sub que destapa de quién vino cada orden. Sin él, la sección contesta todo menos eso. */
+const SUB_PROVEEDORES = 'proveedores'
+
+/**
+ * Le saca a la fila de quién vino.
+ *
+ * 🔴 **Va acá, en el servidor, y ⛔ no en la pantalla.** Esconder la columna en el componente deja
+ * el nombre viajando en la respuesta: se lee abriendo la pestaña de red del navegador, que es un
+ * gesto que hace cualquiera. Un dato que no se puede ver es un dato que no se manda. Es la misma
+ * regla que en `_reclamos.js` con la plata.
+ *
+ * ⚠️ Se borra también `proveedor_id`: el id solo ya agrupa las órdenes por proveedor, y de ahí a
+ * ponerle nombre hay un paso —el que compra los conoce—. Además, dejarlo haría que el agregado
+ * "Por proveedor" de la pantalla siguiera armando filas, con el nombre vacío.
+ */
+const sinProveedor = (fila) => {
+  const { proveedor_id: _id, proveedor_nombre: _nombre, ...resto } = fila
+  return resto
+}
 /** Techo de la lista. 500 OCs son más de un año de importaciones; la ventana la pone `dias`. */
 const TOPE = 500
 
@@ -58,6 +77,10 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'No tenés acceso a las recepciones de esta marca.' })
   }
 
+  // 🔑 El admin lo ve siempre; el resto sólo con el sub tildado a mano. Un sub ⛔ NUNCA lo trae la
+  // función, así que "es de compras" no alcanza — ver `puedeSub` en `lib/permisos.core.js`.
+  const verProveedores = esAdmin(perfil) || puedeSub(perfil, marcaDePermisos(store), 'recepciones', SUB_PROVEEDORES)
+
   const cfg = cfgDelMonitor()
   if (!cfg.url || !cfg.key) return res.status(500).json({ error: 'Faltan credenciales de Supabase.' })
   const sb = createClient(cfg.url, cfg.key)
@@ -82,7 +105,15 @@ export default async function handler(req, res) {
         en_gn_hoy: hoy ? hoy.has(String(l.sku || '')) : null,
         producto_id_hoy: hoy ? hoy.get(String(l.sku || '')) || null : null,
       }))
-      return res.status(200).json({ ok: true, recepcion: cab, lineas: conCruce, espejo_consultado: Boolean(hoy) })
+      return res.status(200).json({
+        ok: true,
+        recepcion: verProveedores ? cab : sinProveedor(cab),
+        lineas: conCruce,
+        espejo_consultado: Boolean(hoy),
+        // Viaja el permiso y ⛔ no se deduce de que el campo venga vacío: hay órdenes que de verdad
+        // llegaron sin proveedor, y la pantalla tiene que decir cosas distintas en cada caso.
+        puede: { proveedores: verProveedores },
+      })
     }
 
     const dias = Math.min(Math.max(Number(req.query.dias) || 180, 1), 730)
@@ -125,7 +156,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      recepciones: data || [],
+      recepciones: verProveedores ? data || [] : (data || []).map(sinProveedor),
+      puede: { proveedores: verProveedores },
       // 🔑 `rotos` no se filtra por marca: un evento que no se pudo procesar puede no tener marca
       // todavía —el error puede ser justamente que no se entendió de quién era—.
       eventos: { rotos: rotos || [], ultimo: (ultimo && ultimo[0] && ultimo[0].recibido_en) || null },

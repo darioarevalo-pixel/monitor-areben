@@ -44,7 +44,7 @@ import {
   space,
   type Tone,
 } from '@/components/ui'
-import { porProveedor, porcentaje, resumen, tonoDeCumplimiento, type Recepcion } from '@/lib/recepciones/core'
+import { fechaDeIngreso, porProveedor, porcentaje, resumen, tonoDeCumplimiento, type Recepcion } from '@/lib/recepciones/core'
 import { useRecepciones } from './useRecepciones'
 import { DetalleOC } from './DetalleOC'
 
@@ -74,7 +74,7 @@ export function Recepciones() {
   const { marca } = useSesion()
   const [dias, setDias] = useState<Dias>(180)
   const [abierta, setAbierta] = useState<string | null>(null)
-  const { recepciones, eventos, cargando, error } = useRecepciones(marca, dias)
+  const { recepciones, eventos, puede, cargando, error } = useRecepciones(marca, dias)
 
   const res = useMemo(() => resumen(recepciones), [recepciones])
   const proveedores = useMemo(() => porProveedor(recepciones), [recepciones])
@@ -169,6 +169,10 @@ export function Recepciones() {
             </Notice>
           )}
 
+          {/* 🔴 El panel entero cuelga del permiso, ⛔ no sólo la columna: es una lista de nombres de
+              proveedor con lo que le compramos a cada uno. Y el servidor ya borró el campo, así que
+              sin esto se dibujaría una tabla de filas «— sin proveedor —» que no dice nada. */}
+          {puede.proveedores && (
           <SectionCard
             title="Por proveedor"
             subtitle={`Sumado por unidades sobre las ${res.ocs} órdenes de la ventana, no promediando el porcentaje de cada una: si no, una orden de 4 unidades pesa lo mismo que una de 900.`}
@@ -210,14 +214,15 @@ export function Recepciones() {
               </TBody>
             </TableWrap>
           </SectionCard>
+          )}
 
           <SectionCard title="Las órdenes" subtitle="La más reciente arriba. Tocá una para ver sus renglones.">
             <TableWrap>
               <THead>
                 <Tr>
-                  <Th>Orden</Th>
-                  <Th>Proveedor</Th>
                   <Th>Ingresó</Th>
+                  <Th>Orden</Th>
+                  {puede.proveedores && <Th>Proveedor</Th>}
                   <Th align="right">Pedidas</Th>
                   <Th align="right">Contadas</Th>
                   <Th align="right">Faltaron</Th>
@@ -227,6 +232,7 @@ export function Recepciones() {
               <TBody>
                 {recepciones.map((r: Recepcion) => (
                   <Tr key={r.id} onClick={() => setAbierta(r.id)}>
+                    <Td>{fechaDeIngreso(r)}</Td>
                     <Td>
                       <strong>{r.oc_label || `OC ${r.oc_id}`}</strong>
                       <div style={{ color: color.mut, fontSize: 12 }}>
@@ -235,8 +241,7 @@ export function Recepciones() {
                         {!r.totales_coinciden ? ' · totales inconsistentes' : ''}
                       </div>
                     </Td>
-                    <Td>{r.proveedor_nombre || '—'}</Td>
-                    <Td>{r.fecha_ingreso || new Date(r.recibido_en).toLocaleDateString('es-AR')}</Td>
+                    {puede.proveedores && <Td>{r.proveedor_nombre || '—'}</Td>}
                     <Td align="right">{r.unidades_pedidas}</Td>
                     <Td align="right">{r.unidades_contadas}</Td>
                     <Td align="right">{r.unidades_faltantes || '—'}</Td>
