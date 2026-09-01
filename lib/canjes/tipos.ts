@@ -25,6 +25,7 @@ import {
   fechaISO as fechaISOJS,
   itemsVivos as itemsVivosJS,
   listoParaEntregar as listoParaEntregarJS,
+  listoParaVenderEnGn as listoParaVenderEnGnJS,
   MOTIVO_NO_ACEPTO_OTRO as MOTIVO_NO_ACEPTO_OTRO_JS,
   MOTIVOS_NO_ACEPTO as MOTIVOS_NO_ACEPTO_JS,
   numeroCanje as numeroCanjeJS,
@@ -33,6 +34,7 @@ import {
   RESULTADOS_UGC as RESULTADOS_UGC_JS,
   resultadosDe as resultadosDeJS,
   retiroLocalDisponible as retiroLocalDisponibleJS,
+  ventaGnDisponible as ventaGnDisponibleJS,
   TERMINALES as TERMINALES_JS,
   TRANSICIONES as TRANSICIONES_JS,
 } from './reglas.core.js'
@@ -304,6 +306,18 @@ export const listoParaEntregar: (
   c: Pick<CanjeRow, 'store' | 'estado' | 'retiro_local' | 'entregado_at' | 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
   items: CanjeItem[],
 ) => { ok: boolean; motivo: string | null } = listoParaEntregarJS
+
+/** Qué marcas escriben la venta del canje directo en Gestión Nube. Hoy sólo BDI. */
+export const ventaGnDisponible: (store: CanjeStore) => boolean = ventaGnDisponibleJS
+
+/**
+ * Si ya se puede escribir la venta en Gestión Nube (el canje que se ENVÍA). La hermana de
+ * `listoParaEntregar`, que es la del mostrador. Misma implementación para la pantalla y el handler.
+ */
+export const listoParaVenderEnGn: (
+  c: Pick<CanjeRow, 'store' | 'estado' | 'retiro_local' | 'compra_estado' | 'gn_venta_id' | 'gn_venta_number' | 'tope_tipo' | 'tope_pvp' | 'tope_unidades'>,
+  items: CanjeItem[],
+) => { ok: boolean; motivo: string | null } = listoParaVenderEnGnJS
 
 /**
  * El número que ve la gente. Derivado del id, **no es una columna**: mismo criterio que

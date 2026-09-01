@@ -91,7 +91,7 @@ import { normalizarInstagram } from '../lib/canjes/instagram.core.js';
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
 // Las reglas duras, LA implementación. El grafo lo consulta `puedeIr` y por eso `TRANSICIONES` no
 // se importa: se importaba sólo para re-exportarlo al test de espejo, que ya no existe.
-import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, numeroCanje, puedeIr, resultadosDe, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
+import { ESTADOS, fechaISO, MOTIVOS_NO_ACEPTO, noSePuedeEntregar, noSePuedeVenderEnGn, numeroCanje, puedeIr, resultadosDe, retiroLocalDisponible, seVaDelTope, TERMINALES } from '../lib/canjes/reglas.core.js';
 
 /**
  * La base maestra. NO recibe `store` a propósito: no hay a dónde rutear. Si algún día se separa
@@ -1848,6 +1848,56 @@ export default async function handler(req, res) {
       if (!canje.cupon_codigo && cfgCanje.cupon_codigo) campos.cupon_codigo = cfgCanje.cupon_codigo;
       const extra = canje.estado === 'acuerdo' ? { ...campos, estado: 'preparando' } : campos;
       await apilar(supabase, 'canjes', canjeId, { at: ahora(), usuario, nota: `orden ${campos.tn_orden} cargada` }, extra);
+      return res.status(200).json({ ok: true });
+    }
+
+    /**
+     * **La compra escrita directo en Gestión Nube** (el canje que se envía).
+     *
+     * Reemplaza a `compra` para el camino nuevo: no hay orden de Tienda Nube que tipear, así que
+     * tampoco hay número de orden que exigir. La etiqueta del envío se hace por afuera y se carga
+     * después con `envio`, como siempre.
+     *
+     * 🔴 **La venta ya está creada cuando esto corre**: la crea el navegador contra
+     * `/api/crear-venta` (donde viven los tokens de GN) y recién después llama acá, igual que
+     * `entrega-local`. Por eso el guard de duplicado importa tanto y por eso está TAMBIÉN acá y no
+     * sólo en la pantalla: Gestión Nube **no anula ventas por API**, así que una venta de más
+     * descuenta el stock dos veces y hay que ir a arreglarla a mano a la web de GN.
+     *
+     * ⚠️ Lo que este handler NO puede verificar es que la venta que le nombran sea la de este canje:
+     * confía en el número que le pasa el cliente, igual que `entrega-local`. Lo que sí hace es no
+     * dejar que se estampe dos veces.
+     */
+    if (action === 'compra-gn') {
+      const items = await itemsDe(canjeId);
+      const motivo = noSePuedeVenderEnGn(canje, items);
+      if (motivo) return res.status(409).json({ error: motivo });
+
+      const at = ahora();
+      const gnNumero = texto(b.gn_venta_number);
+      const gnId = parseInt(b.gn_venta_id, 10) || null;
+      if (!gnNumero && !gnId) {
+        return res.status(400).json({ error: 'falta el número de la venta de Gestión Nube' });
+      }
+      await apilar(supabase, 'canjes', canjeId, {
+        at, usuario,
+        nota: `venta ${gnNumero || gnId} creada en Gestión Nube`,
+      }, {
+        gn_venta_number: gnNumero,
+        gn_venta_id: gnId,
+        compra_estado: 'hecho',
+        compra_at: at,
+        compra_por: usuario,
+        // El stock salió de verdad: lo descontó la venta de GN. Es la misma marca que pone
+        // `entrega-local` por el mismo motivo. Hoy no la lee ninguna pantalla, pero dejarla en
+        // `pendiente` con la mercadería ya descontada sería guardar algo falso.
+        stock_estado: 'hecho',
+        // ⛔ **No se estampa `cupon_codigo`**, al revés que `compra`: ese cupón es el de 100 % con el
+        // que se tipeaba la orden en Tienda Nube para que saliera $0. Por este camino no hay orden
+        // ni cupón — el $0 lo hace el descuento a nivel venta de `crear-venta.js` — y guardar uno
+        // diría que se usó algo que nunca se usó.
+        ...(canje.estado === 'acuerdo' ? { estado: 'preparando' } : {}),
+      });
       return res.status(200).json({ ok: true });
     }
 

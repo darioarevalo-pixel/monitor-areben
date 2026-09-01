@@ -12,20 +12,28 @@
  * orden y no la crea es peor que no tenerlo.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Button, CopyButton, Field, Input, Notice, SectionCard, Select, StatusPill,
-  color, font, radius, space, weight, useToast, type Tone,
+  color, font, radius, space, weight, useConfirmar, useToast, type Tone,
 } from '@/components/ui'
 import { numeroEM, etiquetaEM, trackingUrl } from '@/lib/reclamos/tipos'
 import {
-  anotarIntentoEntrega, marcarAvisada, marcarEntregado, registrarCompra, registrarEnvio, verificarOrden,
+  anotarIntentoEntrega, comprarEnGn, marcarAvisada, marcarEntregado, registrarCompra, registrarEnvio,
+  verificarOrden,
 } from '@/lib/canjes/cliente'
+import { notaVentaCanje } from '@/lib/canjes/nota-gn.core.js'
+import {
+  DEPOSITO_GN, resolverLineas, traerArticulosDeGn,
+  type LineaVentaGn, type ProblemaVentaGn,
+} from '@/lib/canjes/venta-gn'
+import { credencialConPrompt } from '@/lib/sesion'
 import { mensajeDespacho, mensajeIntentoEntrega } from '@/lib/canjes/mensajes'
 import { normalizeArgPhone } from '@/lib/crm/core'
 import {
-  VIAS_ENVIO, VIA_ENVIO_LABEL, camposParaTiendaNube, direccionEnUnaLinea, pideSeguimiento,
-  queDatoPide, textoDeBusquedaDelItem, tieneDatosDeMarca, tieneDireccion,
+  VIAS_ENVIO, VIA_ENVIO_LABEL, camposParaTiendaNube, direccionEnUnaLinea, itemsVivos,
+  listoParaVenderEnGn, numeroCanje, pideSeguimiento, queDatoPide, textoDeBusquedaDelItem,
+  tieneDatosDeMarca, tieneDireccion, ventaGnDisponible,
   type CanjeConfig, type CanjeItem, type CanjePersona, type CanjeRow, type ViaEnvio,
 } from '@/lib/canjes/tipos'
 
@@ -123,11 +131,11 @@ function ParaTipearEnTiendaNube({
       <summary style={{
         cursor: 'pointer', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap',
       }}>
-        <span style={{ fontWeight: weight.semibold, fontSize: font.md }}>Para tipear en Tienda Nube</span>
+        <span style={{ fontWeight: weight.semibold, fontSize: font.md }}>Los datos de ella, campo por campo</span>
         <span style={{ color: color.mut, fontSize: font.sm }}>
           {compraHecha
             ? 'La compra ya está hecha. Abrilo si hace falta volver a mirar los datos.'
-            : 'Copiá cada campo y pegalo en el checkout.'}
+            : 'Para armar la etiqueta del envío: se copian de a uno, sin volver a partir la dirección.'}
         </span>
       </summary>
       <div style={{ marginTop: space[3] }} />
@@ -249,6 +257,210 @@ function ParaTipearEnTiendaNube({
   )
 }
 
+/**
+ * **La venta del canje, escrita directo en Gestión Nube.**
+ *
+ * Es el camino que reemplazó a tipear la orden en el admin de Tienda Nube (1-sep-2026, pedido de
+ * Bruno): un botón crea la venta a $0 en GN contra el cliente `Canjes BDI`, con el nombre de la
+ * creadora en la nota, y descuenta el stock del depósito. **La etiqueta del envío se hace por
+ * afuera** —por eso los datos de ella, campo por campo, siguen abajo con sus botones de copiar— y
+ * después se carga el despacho en el paso 2, como siempre.
+ *
+ * 🔑 **Muestra las líneas ANTES de apretar, y eso es el punto del bloque.** Lo que la creadora
+ * elige por su link viene con ids de Tienda Nube, así que el artículo de Gestión Nube lo resuelve
+ * el SKU (`resolverLineas`): quien aprieta tiene que poder ver qué producto exacto se va a
+ * descontar y de dónde. Un botón que dijera sólo "crear la venta" estaría pidiendo fe.
+ *
+ * 🔴 **Es irreversible**: Gestión Nube no anula ventas por API. De ahí la confirmación, el guard del
+ * servidor (`listoParaVenderEnGn`, la misma regla que usa esta pantalla) y que el botón se apague
+ * en cuanto hay número de venta.
+ */
+function VentaEnGestionNube({
+  canje, persona, items, onCambio,
+}: {
+  canje: CanjeRow
+  persona: CanjePersona | null
+  items: CanjeItem[]
+  onCambio: () => void
+}) {
+  const toast = useToast()
+  const { confirmar } = useConfirmar()
+
+  const vivos = useMemo(() => itemsVivos(items), [items])
+  const puede = listoParaVenderEnGn(canje, items)
+  const yaHecha = !!(canje.gn_venta_number || canje.gn_venta_id)
+  /**
+   * Si hay algo que ir a buscar a Gestión Nube. Se calcula ANTES del estado, y no dentro del
+   * efecto, porque el lint prohíbe `setState` sincrónico ahí (`react-hooks/set-state-in-effect`) —
+   * y con razón: el "cargando" inicial es un dato que ya se sabe al pintar, no algo que haya que
+   * corregir con un segundo render. Mismo patrón que `Ajustes.tsx`.
+   */
+  const debeResolver = !yaHecha && vivos.length > 0 && ventaGnDisponible(canje.store)
+
+  const [lineas, setLineas] = useState<LineaVentaGn[]>([])
+  const [problemas, setProblemas] = useState<ProblemaVentaGn[]>([])
+  const [cargando, setCargando] = useState(debeResolver)
+  const [errorCarga, setErrorCarga] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+
+  // El artículo de GN y su precio. No se piden si el canje ya tiene venta: sería trabajo para
+  // dibujar una tabla que nadie va a poder usar.
+  useEffect(() => {
+    // ⛔ La consulta va contra el espejo de BDI. Para otra marca no se pregunta: traería el
+    // inventario equivocado y dibujaría líneas de otra tienda debajo de un botón apagado.
+    if (!debeResolver) return
+    let vivo = true
+    void (async () => {
+      setCargando(true)
+      try {
+        const { inventario, precios } = await traerArticulosDeGn('bdi', vivos)
+        if (!vivo) return
+        const r = resolverLineas(vivos, inventario, precios)
+        setLineas(r.lineas)
+        setProblemas(r.problemas)
+      } catch (e) {
+        if (vivo) setErrorCarga(String((e as Error)?.message || e))
+      } finally {
+        if (vivo) setCargando(false)
+      }
+    })()
+    return () => { vivo = false }
+  }, [vivos, debeResolver])
+
+  const quien = [persona?.nombre, persona?.apellido].filter(Boolean).join(' ').trim() || 'sin nombre'
+  // La MISMA función que manda `comprarEnGn`: lo que dice acá es literalmente lo que GN va a
+  // guardar. Ver `lib/canjes/nota-gn.core.js`.
+  const nota = notaVentaCanje({ numero: numeroCanje(canje.id), quien, modo: 'envio' })
+
+  const faltaStock = lineas.filter((l) => l.stock_deposito != null && l.stock_deposito < l.cantidad)
+  const sePuedeApretar = puede.ok && !cargando && !problemas.length && lineas.length > 0
+
+  async function crear() {
+    const total = lineas.reduce((a, l) => a + l.cantidad, 0)
+    const ok = await confirmar({
+      titulo: `Crear la venta de ${quien}`,
+      mensaje:
+        `Salen ${total} ${total === 1 ? 'unidad' : 'unidades'} del stock del depósito y queda la venta ` +
+        `hecha en Gestión Nube a $0, a nombre de Canjes BDI. Esto no se puede deshacer desde el monitor.`,
+      ok: 'Crear la venta',
+    })
+    if (!ok) return
+
+    const cred = await credencialConPrompt('del Monitor')
+    if (!cred) return void toast.error('Sin tu contraseña no se puede crear la venta en Gestión Nube.')
+
+    setGuardando(true)
+    try {
+      const { gn_venta_number } = await comprarEnGn(canje, lineas, persona || {}, cred)
+      toast.ok(`Venta creada${gn_venta_number ? ` — nº ${gn_venta_number} en Gestión Nube` : ''}.`)
+      onCambio()
+    } catch (e) {
+      toast.error(String((e as Error)?.message || e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (yaHecha) {
+    return (
+      <Notice tone="success">
+        La venta ya está hecha en Gestión Nube{canje.gn_venta_number ? `, nº ${canje.gn_venta_number}` : ''}
+        {' '}— a nombre de Canjes BDI, con el stock descontado del depósito. Si hubo un error hay que
+        anularla a mano en Gestión Nube: por acá no se puede repetir.
+      </Notice>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: space[4] }}>
+      {!puede.ok && puede.motivo && (
+        <div style={{ marginBottom: space[2] }}><Notice tone="warning">{puede.motivo}</Notice></div>
+      )}
+
+      {cargando ? (
+        <div style={{ color: color.mut, fontSize: font.sm }}>Buscando los artículos en Gestión Nube…</div>
+      ) : errorCarga ? (
+        <Notice tone="warning">
+          No se pudo leer el inventario de Gestión Nube ({errorCarga}). Recargá la ficha antes de crear la venta.
+        </Notice>
+      ) : (
+        <>
+          {lineas.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space[1.5], marginBottom: space[3] }}>
+              {lineas.map((l) => (
+                <div key={l.item_id} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.base }}>
+                  <span style={{ fontWeight: weight.medium }}>{l.nombre || 'Sin nombre'}</span>
+                  {l.variante && <span style={{ color: color.mut }}>{l.variante}</span>}
+                  <span style={{ color: color.mut }}>× {l.cantidad}</span>
+                  <span style={{ color: color.mut }}>
+                    ${l.unit_price.toLocaleString('es-AR')}
+                    {/* De dónde salió el precio. Se dice porque hoy el de la vitrina está 10 veces
+                        abajo del real y un número sin origen no se puede discutir. */}
+                    {l.precio_de === 'gn' ? ' (precio de Gestión Nube)' : ' (precio del canje)'}
+                  </span>
+                  {/* Cómo se llegó al artículo: el SKU es el camino de lo que eligió ella. */}
+                  {l.via === 'sku' && l.sku && (
+                    <span style={{ color: color.mut2, fontSize: font.xs, fontFamily: 'ui-monospace, monospace' }}>
+                      por SKU {l.sku}
+                    </span>
+                  )}
+                  <span style={{
+                    color: l.stock_deposito != null && l.stock_deposito < l.cantidad ? color.danger : color.mut2,
+                    fontSize: font.xs,
+                  }}>
+                    {l.stock_deposito == null ? 'sin dato de stock' : `${l.stock_deposito} en ${DEPOSITO_GN}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Lo que no se pudo resolver, renglón por renglón. No bloquea con un "no se puede" pelado:
+              dice cuál y por qué, que es lo único con lo que alguien puede hacer algo. */}
+          {problemas.length > 0 && (
+            <div style={{ marginBottom: space[3] }}>
+              <Notice tone="warning">
+                <div style={{ fontWeight: weight.medium, marginBottom: space[1] }}>
+                  {problemas.length === 1 ? 'Hay un producto' : `Hay ${problemas.length} productos`} que no se
+                  {' '}{problemas.length === 1 ? 'puede' : 'pueden'} vender en Gestión Nube:
+                </div>
+                <ul style={{ margin: 0, paddingLeft: space[4] }}>
+                  {problemas.map((p) => (
+                    <li key={p.item_id}>{p.nombre || 'Sin nombre'}: {p.motivo}</li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: space[1.5] }}>
+                  Se arregla cargando ese producto con el buscador de Gestión Nube, arriba en «Qué se lleva».
+                </div>
+              </Notice>
+            </div>
+          )}
+
+          {faltaStock.length > 0 && (
+            <div style={{ marginBottom: space[3] }}>
+              <Notice tone="warning">
+                No hay stock suficiente en {DEPOSITO_GN} de: {faltaStock.map((l) => l.nombre).join(', ')}.
+                La venta se puede crear igual —Gestión Nube lo permite— pero el stock queda en negativo.
+              </Notice>
+            </div>
+          )}
+
+          {lineas.length > 0 && (
+            <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
+              Va a quedar en Gestión Nube a nombre de <strong style={{ fontWeight: weight.medium }}>Canjes BDI</strong>,
+              con la nota <strong style={{ fontWeight: weight.medium }}>«{nota}»</strong>, descontando del {DEPOSITO_GN}.
+            </div>
+          )}
+
+          <Button onClick={() => void crear()} loading={guardando} disabled={!sePuedeApretar}>
+            Crear la venta en Gestión Nube
+          </Button>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function BloqueEnvio({
   canje, persona, items, config, onCambio,
 }: {
@@ -357,7 +569,7 @@ export function BloqueEnvio({
   return (
     <SectionCard
       title="Compra y envío"
-      subtitle="El pedido se carga a mano en la tienda, como una venta común: el monitor no puede crearlo, sólo verificarlo."
+      subtitle="La venta se escribe en Gestión Nube desde acá; la etiqueta del envío se hace por afuera."
       actions={
         <div style={{ display: 'flex', gap: space[2] }}>
           <StatusPill tone={PENDIENTE_TONE[canje.compra_estado]} label={canje.compra_estado === 'hecho' ? 'Comprado' : 'Falta comprar'} />
@@ -367,11 +579,22 @@ export function BloqueEnvio({
     >
       <DatosDeElla canje={canje} persona={persona} />
 
-      {/* ── Paso 1: la orden ── */}
+      {/* ── Paso 1: la venta ──
+          🔑 **El pedido ya no se tipea en Tienda Nube**: la venta se escribe directo en Gestión Nube
+          (decisión de Bruno, 1-sep-2026) y la etiqueta del envío se hace por afuera. Los datos de
+          ella siguen abajo, campo por campo, porque son los que se copian PARA esa etiqueta. */}
       <div style={{ marginBottom: space[5] }}>
         <div style={{ fontWeight: weight.semibold, fontSize: font.md, marginBottom: space[2] }}>
-          1. Cargá el pedido en la tienda
+          1. Creá la venta en Gestión Nube
         </div>
+        {ventaGnDisponible(canje.store) ? (
+          <VentaEnGestionNube canje={canje} persona={persona} items={items} onCambio={onCambio} />
+        ) : (
+          <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[3] }}>
+            Esta marca todavía no escribe la venta en Gestión Nube: cargá el pedido en Tienda Nube y
+            anotá el número abajo.
+          </div>
+        )}
         {persona && (
           <ParaTipearEnTiendaNube
             persona={persona}
@@ -381,30 +604,43 @@ export function BloqueEnvio({
             compraHecha={canje.compra_estado === 'hecho'}
           />
         )}
-        <div style={{ color: color.mut, fontSize: font.sm, marginBottom: space[2] }}>
-          Como una venta común: buscás los productos, los ponés en el carrito, aplicás el cupón de 100%
-          y completás el checkout con los datos de arriba, campo por campo. Después pegá acá el número.
-          La orden cae sola en Gestión Nube y descuenta el stock por el camino normal.
-        </div>
-        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Field label="Nº de orden de Tienda Nube" width={200}>
-            <Input value={orden} onChange={(e) => setOrden(e.target.value)} disabled={cerrado} />
-          </Field>
-          <Field label="Nº de venta en GN" hint="Opcional" width={180}>
-            <Input value={gnVenta} onChange={(e) => setGnVenta(e.target.value)} disabled={cerrado} />
-          </Field>
-          <Button variant="outline" onClick={() => void verificar()} loading={verificando} disabled={!orden.trim() || cerrado}>
-            Verificar
-          </Button>
-          <Button variant="outline" onClick={() => void guardarCompra()} loading={guardando} disabled={!orden.trim() || cerrado}>
-            {canje.compra_estado === 'hecho' ? 'Actualizar' : 'Marcar comprado'}
-          </Button>
-        </div>
-        {avisoOrden && (
-          <div style={{ marginTop: space[2] }}>
-            <Notice tone="warning">{avisoOrden}</Notice>
+
+        {/* El camino viejo: cargar la orden en Tienda Nube y anotar acá el número.
+            ⛔ **No se borró, y no es indecisión.** Hay canjes que quedaron a mitad de camino con su
+            orden ya tipeada, y sigue habiendo casos que no pasan por Gestión Nube (algo que se pidió
+            de afuera, un pedido que se cargó antes de esto). Lo que cambia es la jerarquía: esto es
+            la excepción y va plegado, no el paso principal.
+            🔴 Hacer los dos descuenta el stock DOS veces: la orden de Tienda Nube también baja
+            stock por su propio camino. Por eso lo dice el resumen, en vez de confiar en que se sepa. */}
+        <details style={{
+          border: `1px solid ${color.line}`, borderRadius: radius.lg, padding: space[3],
+        }}>
+          <summary style={{ cursor: 'pointer', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: weight.medium, fontSize: font.base }}>Se cargó en Tienda Nube</span>
+            <span style={{ color: color.mut, fontSize: font.sm }}>
+              Sólo si este pedido se tipeó a mano en la tienda. No hagas las dos cosas: el stock baja dos veces.
+            </span>
+          </summary>
+          <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end', marginTop: space[3] }}>
+            <Field label="Nº de orden de Tienda Nube" width={200}>
+              <Input value={orden} onChange={(e) => setOrden(e.target.value)} disabled={cerrado} />
+            </Field>
+            <Field label="Nº de venta en GN" hint="Opcional" width={180}>
+              <Input value={gnVenta} onChange={(e) => setGnVenta(e.target.value)} disabled={cerrado} />
+            </Field>
+            <Button variant="outline" onClick={() => void verificar()} loading={verificando} disabled={!orden.trim() || cerrado}>
+              Verificar
+            </Button>
+            <Button variant="outline" onClick={() => void guardarCompra()} loading={guardando} disabled={!orden.trim() || cerrado}>
+              {canje.compra_estado === 'hecho' ? 'Actualizar' : 'Marcar comprado'}
+            </Button>
           </div>
-        )}
+          {avisoOrden && (
+            <div style={{ marginTop: space[2] }}>
+              <Notice tone="warning">{avisoOrden}</Notice>
+            </div>
+          )}
+        </details>
       </div>
 
       {/* ── Paso 2: el despacho ── */}

@@ -38,19 +38,47 @@ const CAMBIO_CLIENT = { zattia: 621329, bdi: 621331 };
 // pudo leer** —su token de lectura está vencido, igual que anota `CAMBIO_CHANNEL`— así que la
 // primera venta técnica de un reclamo de Zattia hay que mirarla en GN.
 const RECLAMO_CLIENT = { zattia: 652718, bdi: 652720 };
-// Ídem para las entregas de CANJES en el local (payload proposito:'canje'). Es el cliente
-// "PUBLICIDAD BDI" que ya existía en GN (id verificado contra la tabla `clientes` del espejo): un
-// canje con una influencer ES publicidad, así que no se creó uno nuevo. Sólo BDI: es la única marca
-// con local. Sin id, el handler corta con un error explícito en vez de caer al cliente de fotos —
-// una venta atribuida al cliente equivocado no se puede corregir por API.
-const CANJE_CLIENT = { bdi: 159249 };
-// El canal de la entrega de un canje. Hoy 12 = "Ninguno", o sea VENTA TÉCNICA: `esVentaTecnica()`
-// la reconoce y `lib/datos.ts` la descarta antes del ETL, así que esas unidades NO aparecen en
-// rotación, vida útil, caducados ni CRM. Es la decisión de Bruno (11-ago-2026), tomada sabiendo eso.
-// 🔑 Está acá y no sale de `cfg.channel_id` para que revertirla cueste una línea: el día que exista
-// un canal propio "Canje" en GN, se cambia este número y se agrega `if (n.includes('canje')) return
-// 'tecnica'` en `canalDe` (lib/liquidacion/resultado.ts) para que no ensucie el precio promedio.
-const CANJE_CHANNEL = { bdi: 12 };
+// Ídem para los CANJES (payload proposito:'canje'), los dos caminos: el que se entrega en el
+// mostrador y el que se envía.
+//
+// 🔑 **Es "Canjes BDI" (645369) desde el 1-sep-2026, y antes era "PUBLICIDAD BDI" (159249)** — lo
+// pidió Bruno: *«escribir los canjes… con el nombre de canjes bdi»*. El cliente ya existía en GN
+// (lo creó él el 23-ago) y estaba **sin usar: cero ventas**, verificado contra la tabla `clientes`
+// del espejo. Un canje con una creadora no es lo mismo que una acción de publicidad, y mezclarlos
+// hacía que en GN no se pudiera leer ninguno de los dos.
+// ⚠️ **El histórico queda partido a propósito**: las ventas de canje anteriores al 1-sep siguen
+// colgando de PUBLICIDAD BDI. Reatribuirlas pediría tocar ventas viejas en GN a mano, y la fecha
+// del corte es más fácil de explicar que un padrón reescrito.
+// Sólo BDI: es la única marca con canjes (medido: los 77 que existen son de BDI). Sin id, el
+// handler corta con un error explícito en vez de caer al cliente de fotos — una venta atribuida al
+// cliente equivocado no se puede corregir por API.
+const CANJE_CLIENT = { bdi: 645369 };
+// El canal de la venta de un canje (los dos caminos: mostrador y envío).
+//
+// 🔑 **Es 15 = "Influencer" desde el 1-sep-2026, y antes era 12 = "Ninguno"** (venta técnica). El
+// cambio es lo que cierra la decisión de Bruno: quiere que los canjes **CUENTEN** en la analítica.
+// Con el 12, `esVentaTecnica()` las reconocía y `lib/datos.ts` las descartaba antes del ETL ⇒ esas
+// unidades no existían para rotación, vida útil, caducados ni CRM. Con el 15 sí existen.
+//
+// ⚠️ **Es un canal PRESETEADO de GN, no uno propio, y esa fue la decisión de Bruno**: creó el canal
+// "Canjes" (ids de fila 1218/1219) pero **Gestión Nube no lo ofrece en el selector de la venta** —
+// hay que habilitarlo en Preferencias → "Personalizar Canales de Venta"— así que eligió usar uno que
+// ya está: *«utilicemos algún canal que tengan existentes, vi uno de influencer»*.
+//
+// 📊 **El id salió del DOM del selector de Nueva Venta** (`a.item_channel[data-id]`, 1-sep-2026) y
+// está **verificado contra una medición vieja**: en la misma lista `Mi Local` da 3 y `Mayorista` 10,
+// que son exactamente los `channel_id` de las ventas reales del espejo. La lista completa:
+// 1 Showroom · 2 Feria y Eventos · 3 Mi Local · 4 Mi Tienda Online · 5 Facebook/Instagram ·
+// 6 Email Marketing · 7 Mercadolibre · 8 Whatsapp · 9 Minorista · 10 Mayorista · 11 Revendedor ·
+// 12 Ninguno · 13 Otro Canal · **15 Influencer** · 16 Tienda Nube · 17 Vendedores · 1206 Catálogo ·
+// 1207 Tienda Negocio.
+//
+// 🔴 **«Influencer» queda RESERVADO para los canjes**: `canalDe` (lib/liquidacion/canal.core.js) lo
+// manda a `tecnica` para que una venta a $0 no hunda el precio promedio minorista. Si algún día se
+// carga por ese canal una venta **cobrada** —una campaña con link de influencer, por ejemplo—, esa
+// venta tampoco contaría para el promedio. Hoy no hay ninguna: medido sobre el espejo entero, los
+// canales con ventas son 1, 3, 7, 8, 9, 10, 12, 13 y 16.
+const CANJE_CHANNEL = { bdi: 15 };
 // Fase B.4 — venta REAL del cambio (accion:'cambio_real'): usa un canal NORMAL (para que CUENTE en la
 // analítica, NO el 12 "Ninguno") y la forma de pago real. IDs descubiertos escaneando ventas de GN
 // (Bruno eligió: canal "Otro Canal" 13; Tarjeta → MercadoPago 2; Transferencia → Transferencia Bancaria 5).

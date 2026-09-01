@@ -13,6 +13,35 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 CANJES → la venta va a GESTIÓN NUBE — 1-sep-2026 (pedido de Bruno)
+
+> «quiero ver tema canjes, de poder escribir los canjes de las personas en ventas de gestión nube
+> con el nombre de canjes bdi — en la nota que diga el nombre de la persona, y luego le genero
+> etiqueta por afuera»
+
+🏁 **Hecho y en el repo** (el relato entero, en `docs/secciones/canjes.md`): el paso 1 de un canje
+con envío crea la venta a $0 en GN contra el cliente **`Canjes BDI` (645369)**, con la nota
+`Canje C-0079 — Nombre Apellido — envío (Monitor)`, descontando del **Depósito Minorista**. La orden
+de Tienda Nube dejó de ser el camino principal y quedó plegada.
+
+### ▶️ Lo que está en manos de Bruno
+
+1. 🏁 **El canal quedó resuelto (1-sep): es el 15 «Influencer».** Bruno creó el canal propio
+   «Canjes» pero GN **no lo ofrece en el selector de la venta** (habría que habilitarlo en
+   Preferencias → «Personalizar Canales de Venta»), así que eligió uno preseteado. Con eso los
+   canjes **cuentan** en rotación, vida útil, caducados y CRM. 🔴 **Ese canal queda reservado para
+   canjes**: `canalDe` lo manda a `tecnica` para que las ventas a $0 no hundan el precio promedio,
+   así que **una venta cobrada cargada ahí tampoco contaría** para el promedio.
+2. 🔴 **Decidir qué hacer con el precio de la vitrina activa.** Medido el 1-sep: los **19 ítems** de
+   «Girlhood Collection» están a **$1.490** cuando valen **$13.990–14.990** ⇒ el balance de **13
+   canjes abiertos** cuenta ~10 veces menos de lo que costaron. Corregir la vitrina **no** corrige
+   los 45 ítems ya congelados: son dos manos distintas.
+3. ▶️ **Probarlo con un canje real**, y mirar dos cosas en GN: que la venta quedó a nombre de Canjes
+   BDI con la nota, y **si el stock de la tienda online bajó**. Sin la orden de Tienda Nube, eso
+   depende de la integración GN↔TN y **no está verificado**.
+
+---
+
 ## 0. La corrida de VOCABULARIO — 28-ago-2026 (pedido de Bruno)
 
 > «no me están gustando los títulos y los términos de los mensajes: lo que falta tendría que ser

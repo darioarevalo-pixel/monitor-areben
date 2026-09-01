@@ -12,7 +12,8 @@ Es la sección más grande del monitor (~18.700 líneas con tests) y **cruza cin
 | | |
 |---|---|
 | panel | `components/canjes/` (26 archivos; los caros: `FichaCanje.tsx` 866 · `Vitrinas.tsx` 783) |
-| lógica | `lib/canjes/` (16 archivos; `tipos.ts` **1.261** · `cliente.ts` 803 · `vitrina.ts` 462) |
+| lógica | `lib/canjes/` (18 archivos; `tipos.ts` **1.261** · `cliente.ts` 803 · `vitrina.ts` 462) |
+| la venta en GN | `lib/canjes/venta-gn.ts` (de qué sistema es cada id) · `lib/canjes/nota-gn.core.js` (la nota) |
 | reglas duras | `lib/canjes/reglas.core.js` — 📌 **se mudó de `api/_canjes-reglas.js`**, que ya no existe |
 | servidor | `api/_canjes.js` (**2.227**) y `api/_canje-portal.js`, por `api/postventa.js?recurso=canjes` y `?recurso=canje` |
 | la llave del portal | `api/_canje-token.js` — qué abre un token. **La comparten el portal y `api/blob-upload.js`** |
@@ -20,7 +21,7 @@ Es la sección más grande del monitor (~18.700 líneas con tests) y **cruza cin
 | el archivo en Drive | `lib/drive/subir.ts` (el browser sube) · `lib/canjes/drive.ts` (los nombres) · acción `evidencia-archivada` |
 | mostrador | `components/cupones/CanjesLocal.tsx` — la pestaña del local, adentro de **Cupones** |
 | base | 8 tablas `canje_*` en la base de **BDI, para las tres marcas** (`sql/migrate-canjes.sql`) |
-| tests | 12 archivos `tests/canje*.test.ts` (🆕 `canje-extras` y `canje-notas`) |
+| tests | 13 archivos `tests/canje*.test.ts` (🆕 `canjes-venta-gn`) |
 
 Portal público sin sesión: `/canje/<token>`, fuera del nav y resuelto antes del guard de permisos.
 
@@ -71,6 +72,55 @@ El módulo está muy documentado **adentro**. Esta ficha no lo repite: acá va q
 Decisiones de Bruno y cosas medidas contra los catálogos y las vitrinas reales. **Ya están tomadas:
 no re-preguntarlas.**
 
+- 🆕 🔴 🔑 **LA VENTA DEL CANJE SE ESCRIBE EN GESTIÓN NUBE, ⛔ YA NO SE TIPEA EN TIENDA NUBE**
+  (1-sep-2026, pedido de Bruno: *«poder escribir los canjes de las personas en ventas de gestión nube
+  con el nombre de canjes bdi, en la nota que diga el nombre de la persona, y luego le genero
+  etiqueta por afuera»*). Un botón en el paso 1 crea la venta a $0 y **la etiqueta del envío se hace
+  por afuera** — por eso los datos de ella, campo por campo, siguen ahí: son los que se copian para
+  esa etiqueta, no para un checkout.
+  - 🔑 **El cliente de GN es `Canjes BDI` (645369), y antes era `PUBLICIDAD BDI` (159249)** — para
+    los dos caminos, mostrador incluido. Ya existía en GN desde el 23-ago **y estaba sin usar**
+    (cero ventas, verificado contra el espejo). ⚠️ **El histórico queda partido en esa fecha** a
+    propósito: reatribuir las viejas es tocar ventas a mano en GN.
+  - 🔴 **Lo que la creadora elige por su link trae ids de TIENDA NUBE, no de Gestión Nube.** Medido
+    el 1-sep-2026: de los 49 ítems vivos de canjes con envío, **0 de 45 de origen `persona` existen
+    en GN** (ids 359.143.xxx) y **4 de 4 de origen `equipo` sí** (481.248–1.051.818). Mandar uno de
+    TN a GN, en el mejor caso lo rechaza y en el peor **le descuenta el stock a otro producto**.
+    🔑 **Los rescata el SKU**: los mismos 45 resuelven a un único artículo cruzando contra
+    `inventario` (45 de 45, sin ambigüedades). Eso es `resolverLineas` (`lib/canjes/venta-gn.ts`).
+    ⛔ **La verificación es "existe en el inventario de GN", NUNCA el rango del id**: que hoy los
+    rangos no se pisen es suerte, no un invariante, y el día que se pisen el error es mudo.
+  - 🔴 **Se valúa con el precio de GN, ⛔ no con el `pvp_unit` del canje.** La venta va a precio de
+    lista con 100 % de descuento justamente para que el histórico diga cuánto costó lo que se
+    regaló; con un precio mal, esa valuación no sirve. Y hoy está mal: ver el Pendiente.
+  - 🔑 **La pantalla muestra las líneas ANTES de apretar** (qué producto, de dónde salió el precio,
+    cuánto stock hay en el depósito) y **la nota sale de la misma función que la manda**
+    (`nota-gn.core.js`), como en `lib/sync-tn/nota.core.js`: si fueran dos, la pantalla prometería
+    una nota y GN guardaría otra.
+  - 🔴 **Es irreversible: GN no anula ventas por API.** El guard duro es que el canje no tenga ya
+    venta (`listoParaVenderEnGn`, la hermana de `listoParaEntregar`), y está en la pantalla **y** en
+    el handler. Los ítems se descuentan del **depósito** (13307), no del local.
+  - ⛔ **El camino de Tienda Nube no se borró**: quedó plegado, para los canjes que ya tenían su
+    orden tipeada y para lo que no pasa por GN. 🔴 Hacer los dos **descuenta el stock dos veces**, y
+    el resumen del bloque lo dice en vez de confiar en que se sepa.
+  - ⚠️ **Sólo BDI** (`ventaGnDisponible`), por lo mismo que el retiro en el local. Medido: los 77
+    canjes que existen son de BDI.
+  - 🆕 🔴 **El canal es 15 «Influencer», un canal PRESETEADO de GN** (1-sep). Bruno creó el canal
+    propio «Canjes» pero **GN no lo ofrece en el selector de la venta** —hay que habilitarlo en
+    Preferencias → «Personalizar Canales de Venta»— así que eligió uno existente: *«utilicemos algún
+    canal que tengan existentes, vi uno de influencer»*. Con esto los canjes **CUENTAN** en el ETL
+    (rotación, vida útil, caducados, CRM), que era el objetivo; antes iban con 12 «Ninguno» y
+    `esVentaTecnica` los borraba.
+    🔑 **El id salió del DOM del selector** (`a.item_channel[data-id]`) y **se validó contra una
+    medición vieja**: en la misma lista `Mi Local` da 3 y `Mayorista` 10, los mismos `channel_id` de
+    las ventas reales del espejo. La lista entera: 1 Showroom · 2 Feria y Eventos · 3 Mi Local ·
+    4 Mi Tienda Online · 5 Facebook/Instagram · 6 Email Marketing · 7 Mercadolibre · 8 Whatsapp ·
+    9 Minorista · 10 Mayorista · 11 Revendedor · 12 Ninguno · 13 Otro Canal · **15 Influencer** ·
+    16 Tienda Nube · 17 Vendedores · 1206 Catálogo · 1207 Tienda Negocio.
+    🔴 **«Influencer» queda RESERVADO para canjes**: `canalDe` lo manda a `tecnica` para que una
+    venta a $0 no hunda el precio promedio ⇒ **una venta COBRADA cargada en ese canal tampoco
+    contaría**. Hoy no hay ninguna (medido sobre el espejo entero: los canales con ventas son 1, 3,
+    7, 8, 9, 10, 12, 13 y 16).
 - 🔑 **El arranque son DOS contactos**: primero el sondeo («¿te interesa?») y **sólo si contesta que
   sí**, la propuesta con el número. Tirarle el trato antes de que quiera hablar se contesta que no
   mucho más fácil, y si queda corto la negociación arranca perdiendo. Por eso `mensajeSondeo` no
@@ -339,6 +389,21 @@ Dos tandas del 21-ago-2026, y la segunda **borra**. Leer esto antes de tocar `Co
   el catálogo de TN sólo se lee desde el panel.
 - ⚠️ `umbral_aprobacion_alta` sigue en `null`, o sea que **todo va a firma alta**.
 - ▶️ La novedad del retiro en el local quedó en **borrador**, sin publicar.
+- 🆕 🔴 **El precio de la vitrina activa está 10 veces abajo del real.** Medido el 1-sep-2026: los
+  **19 ítems** de «Girlhood Collection» están cargados a **$1.490** y esas fundas valen
+  **$13.990–14.990** en GN (la vitrina archivada, «Fundas Nuevas», tiene los precios bien). Ese
+  número se copia a `canje_items.pvp_unit` de cada persona que elige — **45 ítems, 13 canjes
+  abiertos** — así que **el balance de esos canjes cuenta ~10 veces menos de lo que costaron**, y en
+  un canje por monto el tope dejaría elegir diez veces más. ⚠️ **Corregir la vitrina NO corrige los
+  ítems ya congelados**: son dos manos. La venta en GN ya no lo hereda (usa el precio de GN), pero el
+  balance sí. **Falta que Bruno decida** si se corrige la vitrina, los ítems, o los dos.
+- ▶️ **Nada del camino nuevo se probó a mano todavía**: el guion es abrir un canje con envío en
+  `acuerdo`, mirar que las líneas resuelvan al artículo correcto, crear la venta y **verificar en GN**
+  que quedó a nombre de Canjes BDI, con la nota, y que el stock del depósito bajó.
+- 🆕 🔴 **Sin la orden de Tienda Nube, el stock de la tienda online no baja por ese lado.** Antes, la
+  orden tipeada en TN descontaba ahí; ahora la venta vive sólo en GN. Si la integración GN↔TN no lo
+  replica, una funda regalada sigue figurando disponible online. **No está verificado** — mirarlo en
+  la primera venta real.
 
 ## Dónde está parado uno
 

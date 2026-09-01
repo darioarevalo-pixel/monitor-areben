@@ -13,6 +13,8 @@ import { apiFetch } from '@/lib/api-fetch'
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Credencial } from '@/lib/sesion'
 import { baseDeCostos, numeroCanje } from './tipos'
+import { notaVentaCanje } from './nota-gn.core.js'
+import type { LineaVentaGn } from './venta-gn'
 import type {
   Balance, CanjeConfig, CanjeEntregable, CanjeEvidencia, CanjeItem, CanjePersona, CanjeRow,
   CanjeStore, CanjeVitrina, EstadoCanje, EstadoVitrina, IntentoEntrega, NivelAprobacion,
@@ -683,7 +685,7 @@ export async function entregarEnLocal(
   persona: { nombre?: string | null; apellido?: string | null },
   cred: Credencial,
 ): Promise<{ gn_venta_number: string | null }> {
-  const quien = [persona.nombre, persona.apellido].filter(Boolean).join(' ').trim() || 'sin nombre'
+  const quien = nombreDe(persona)
   const r = await enviarVentaFetch({
     store: canje.store,
     origen: 'local',
@@ -694,7 +696,7 @@ export async function entregarEnLocal(
       quantity: Number(i.cantidad) || 1,
       unit_price: i.pvp_unit ?? 0,
     })),
-    comments: `Canje ${canje.numero} — ${quien} — retiro en el local (Monitor)`.slice(0, 500),
+    comments: notaVentaCanje({ numero: canje.numero, quien, modo: 'local' }),
     solicitudId: `canje-${canje.id}`,
     ...cred,
   })
@@ -713,6 +715,75 @@ export async function entregarEnLocal(
     )
   }
   return { gn_venta_number: numero }
+}
+
+/**
+ * El nombre con el que la venta queda en Gestión Nube. Es lo único que en GN dice de quién era el
+ * canje: todas se atribuyen al mismo cliente `Canjes BDI`.
+ */
+function nombreDe(persona: { nombre?: string | null; apellido?: string | null }): string {
+  return [persona.nombre, persona.apellido].filter(Boolean).join(' ').trim() || 'sin nombre'
+}
+
+/**
+ * **La compra del canje que se ENVÍA: escribe la venta directo en Gestión Nube.**
+ *
+ * Es lo que pidió Bruno el 1-sep-2026 — *«poder escribir los canjes de las personas en ventas de
+ * Gestión Nube con el nombre de canjes bdi, en la nota que diga el nombre de la persona, y luego le
+ * genero etiqueta por afuera»*— y **reemplaza tipear la orden a mano en el admin de Tienda Nube**.
+ *
+ * Mismo orden y mismo modo de falla que `entregarEnLocal` y que `registrarVentaGN` de Fallas: se
+ * crea la venta y **recién después** se registra. Al revés, un canje quedaría marcado como comprado
+ * con el stock sin descontar y nadie se enteraría.
+ *
+ * 🔴 **La venta de GN es irreversible por API** —GN no permite anularla— así que si el registro
+ * falla, la venta ya existe. El mensaje lo dice con el número, que es lo único que sirve para
+ * arreglarlo a mano en GN.
+ *
+ * ⚠️ **Las líneas vienen resueltas de afuera** (`resolverLineas`, en `venta-gn.ts`) y no se arman
+ * acá a partir de los ítems: lo que la creadora elige trae ids de **Tienda Nube**, y mandarlos a GN
+ * descontaría el producto equivocado. Que la pantalla las muestre antes de apretar es el punto:
+ * quien aprieta ve exactamente qué se va a descontar.
+ */
+export async function comprarEnGn(
+  canje: Pick<CanjeRow, 'id' | 'store'>,
+  lineas: LineaVentaGn[],
+  persona: { nombre?: string | null; apellido?: string | null },
+  cred: Credencial,
+): Promise<{ gn_venta_number: string | null }> {
+  if (!lineas.length) throw new Error('No hay ningún producto que vender.')
+  const numero = numeroCanje(canje.id)
+  const r = await enviarVentaFetch({
+    store: canje.store,
+    // 🔑 Del DEPÓSITO, no del local: es de donde sale lo que se despacha (decisión de Bruno,
+    // 1-sep-2026). El retiro en el mostrador es el otro camino y ese sí descuenta del local.
+    origen: 'deposito',
+    proposito: 'canje',
+    items: lineas.map((l) => ({
+      product_id: l.product_id,
+      size_id: l.size_id,
+      quantity: l.cantidad,
+      unit_price: l.unit_price,
+    })),
+    comments: notaVentaCanje({ numero, quien: nombreDe(persona), modo: 'envio' }),
+    solicitudId: `canje-${canje.id}`,
+    ...cred,
+  })
+  if (!r.ok) throw new Error(`No se pudo crear la venta en Gestión Nube — ${r.error || ''}`)
+
+  const gnNumero = r.venta?.number != null ? String(r.venta.number) : null
+  try {
+    await postear({
+      store: canje.store, action: 'compra-gn', id: canje.id,
+      gn_venta_id: r.venta?.id ?? null, gn_venta_number: gnNumero,
+    })
+  } catch (e) {
+    throw new Error(
+      `La venta se creó en Gestión Nube (nº ${gnNumero || '?'}) pero no se pudo registrar en el canje: ` +
+      `${(e as Error)?.message || e}. Anulala a mano en GN antes de reintentar.`,
+    )
+  }
+  return { gn_venta_number: gnNumero }
 }
 
 // ── Entregables y evidencias ────────────────────────────────────────────────────
