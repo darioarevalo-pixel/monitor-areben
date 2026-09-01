@@ -1466,3 +1466,63 @@ describe('cargar un molde de condición comercial', () => {
     expect(items[0].cambios).toEqual(['envio'])
   })
 })
+
+/**
+ * El techo diario de sembrado.
+ *
+ * 🔴 **Existe por si un bucle empieza a sembrar solo, ⛔ no para racionar el trabajo** — y el
+ * 1-sep-2026 frenó a Bruno contestando puertas de órdenes reales: ese día el webhook empezó a
+ * mandar en vivo, entraron 11 órdenes, cada puerta contestada siembra 6 pasos y el techo estaba en
+ * 60. Se midió: 60 clones de ingreso + 8 de sesión de fotos = 68, y el mensaje decía «se llegó al
+ * tope» a secas, sin un número.
+ */
+describe('el techo diario', () => {
+  const hoy = new Date().toISOString().slice(0, 10)
+  const clonDeHoy = (i: number): Fila => ({
+    id: `c${i}`,
+    clase: 'pendiente',
+    titulo: `clon ${i}`,
+    cuerpo: null,
+    regla: { tipo: 'unica', fecha: hoy },
+    destino: null,
+    marcas: [],
+    manual_id: null,
+    datos: { de: 'ingreso', ingreso: `${hoy}·x${i}` },
+    created_at: `${hoy}T10:00:00.000Z`,
+  })
+
+  const sembrarUno = async (over: Record<string, unknown> = {}) => {
+    const mod = await import('@/api/_agenda.js')
+    return (mod.sembrar as unknown as (sb: unknown, o: Record<string, unknown>) => Promise<Record<string, unknown>>)(
+      fakeSupabase(),
+      { plantilla: 'ingreso', nombre: 'IMP9', fecha: hoy, autor: 'Bruno', eje: 'importacion', marca: 'bdi', ...over },
+    )
+  }
+
+  it('🔴 un día de 11 ingresos ENTRA: 66 pasos no pueden chocar contra el techo', async () => {
+    // 11 órdenes × 6 pasos = 66, más lo que siembre la sesión de fotos. Con el techo viejo en 60,
+    // esto era el error que vio Bruno.
+    mundo.items = [molde(), ...Array.from({ length: 74 }, (_, i) => clonDeHoy(i))]
+    const r = await sembrarUno()
+    expect(r.error).toBeUndefined()
+    expect(r.creados).toBe(1)
+  })
+
+  it('el techo sigue estando, y el mensaje dice los NÚMEROS y que cuenta todas las plantillas', async () => {
+    mundo.items = [molde(), ...Array.from({ length: 300 }, (_, i) => clonDeHoy(i))]
+    const r = await sembrarUno()
+    expect(String(r.error)).toContain('300 de 300')
+    expect(String(r.error)).toContain('todas las plantillas')
+    expect(mundo.insertados).toHaveLength(0)
+  })
+
+  it('⚠️ los clones de AYER no cuentan: el techo es por día, no un total', async () => {
+    const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    mundo.items = [
+      molde(),
+      ...Array.from({ length: 400 }, (_, i) => ({ ...clonDeHoy(i), created_at: `${ayer}T10:00:00.000Z` })),
+    ]
+    const r = await sembrarUno()
+    expect(r.error).toBeUndefined()
+  })
+})

@@ -86,8 +86,21 @@ const CANALES = ['mostrador', 'web'];
 const MARCAS = ['bdi', 'zattia'];
 const CLASES = ['pendiente', 'aviso'];
 
-/** Cuántos ítems puede sembrar la puerta en un día. Es un techo de cordura, no una regla de uso. */
-const TOPE_SEMBRADO_DIARIO = 60;
+/**
+ * Cuántos ítems puede sembrar la puerta en un día. Es un techo de **cordura** —para que un bucle no
+ * llene la Agenda—, ⛔ no una regla de uso: no está para racionarle el trabajo a nadie.
+ *
+ * 🔴 **Estaba en 60 y lo chocó el uso normal el 1-sep-2026.** Ese día el webhook de Ingresos empezó
+ * a mandar en vivo y entraron **11 órdenes**; contestar la puerta de cada una siembra **6 pasos**,
+ * y el tope cuenta además los clones de sesión de fotos: 60 de ingreso + 8 de sesión = **68**, así
+ * que la 11ª pregunta contestada devolvió «se llegó al tope» — un mensaje que no dice ni cuántos
+ * van ni qué hacer, sobre un día de trabajo perfectamente normal.
+ *
+ * 300 deja lugar a un día como aquél cuatro veces, y sigue siendo dos órdenes de magnitud menos que
+ * lo que dejaría un bucle. ⚠️ **Un tope que frena el uso normal no protege: enseña a ignorarlo** —
+ * y éste, además, frenaba de rebote a la otra plantilla.
+ */
+const TOPE_SEMBRADO_DIARIO = 300;
 
 const CAMPOS =
   'id, banco, medio, beneficio, regla, desde, hasta, condiciones, pasos, canales, marcas, activa, autor, created_at';
@@ -323,7 +336,11 @@ export async function sembrar(supabase, { plantilla, nombre, fecha, autor, eje, 
   const hoy = hoyUtc();
   const esClon = (i) => !!(i.datos && (i.datos.de || CLAVES_PLANTILLA.some((k) => i.datos[plantillaDe(k).campoClave])));
   const sembradosHoy = todos.filter((i) => esClon(i) && String(i.created_at || '').slice(0, 10) === hoy).length;
-  if (sembradosHoy >= TOPE_SEMBRADO_DIARIO) return { error: 'Se llegó al tope de listas sembradas por hoy.' };
+  // 🔑 El mensaje dice los NÚMEROS. El anterior era «se llegó al tope» a secas: quien lo leía no
+  // podía saber si le faltaba uno o cien, ni que lo que lo frenaba podía ser de otra plantilla.
+  if (sembradosHoy >= TOPE_SEMBRADO_DIARIO) {
+    return { error: `Se llegó al tope de listas sembradas por hoy: van ${sembradosHoy} de ${TOPE_SEMBRADO_DIARIO}, contando todas las plantillas. Mañana vuelve a cero.` };
+  }
 
   const deLaPlantilla = todos.filter((i) => i.datos && i.datos.plantilla === p.key);
   if (!deLaPlantilla.length) return { error: `No hay ningún paso cargado como plantilla de ${p.evento}.` };

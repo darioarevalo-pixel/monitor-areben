@@ -461,6 +461,15 @@ re-export tipado. Los dos archivos lo explican en su encabezado y no se repite a
     «igual» pondría la dueña equivocada — que es peor que no sembrar, porque nadie revisa un
     pendiente que ya tiene nombre puesto. Mismo criterio que el 503 de la puerta: **lo que falta
     cierra, no abre**. El renglón de al lado del selector avisa qué se pierde si queda vacío.
+  - 🆕 🔴 **EL TECHO DIARIO ESTABA EN 60 Y LO CHOCÓ UN DÍA NORMAL** (1-sep-2026). Ese día el webhook
+    de Ingresos empezó a mandar en vivo: entraron **11 órdenes**, cada puerta contestada siembra
+    **6 pasos**, y `TOPE_SEMBRADO_DIARIO` cuenta además los clones de la otra plantilla — 60 de
+    ingreso + 8 de sesión de fotos = **68** ⇒ la siguiente pregunta contestada devolvió «se llegó al
+    tope». 🔑 **Un techo que frena el uso normal ⛔ no protege: enseña a ignorarlo**, y éste además
+    frenaba **de rebote a la otra plantilla**. Subido a **300** (≈4 días como aquél, y sigue siendo
+    dos órdenes de magnitud menos que un bucle), y el mensaje ahora **dice los números** y que
+    cuenta todas las plantillas: el viejo era «se llegó al tope» a secas, así que quien lo leía no
+    podía saber si le faltaba uno o cien, ni que lo frenaba algo de otra plantilla.
   - 🔴 **Sembrar no puede voltear el guardado.** La sesión es el dato; los pendientes son la
     consecuencia. Si no hay moldes cargados o la base no contesta, la sesión igual se guarda y el
     error viaja en la respuesta (`sembrado`).
