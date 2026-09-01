@@ -414,8 +414,8 @@ export const PERM_CAT: PermCat[] = [
   {
     "key": "gen-desc",
     "area": "marketing",
-    "label": "Redacción",
-    "info": "Cola de descripciones de producto: el insumo que carga el local y el borrador que se aprueba antes de que salga a la tienda.",
+    "label": "Descripción y medidas",
+    "info": "La ficha de cada prenda: lo que el local carga con la prenda en la mano —atributos y medidas— y el párrafo que se aprueba antes de salir a la tienda.",
     "brands": [
       "zattia"
     ],
@@ -1093,7 +1093,7 @@ export const NAV_CATS: NavCat[] = [
           { "ruta": "/tncat/categorias", "label": "Categorías", "icono": "tn-categorias", "key": "tncat", "sub": ["categorias", "asignar"] },
           { "ruta": "/tncat/visibilidad", "label": "Visibilidad", "icono": "tn-visibilidad", "key": "tncat", "sub": "ocultar" },
           { "ruta": "/tncat/descripciones", "label": "Tabla de talles", "icono": "talles", "key": "gen-talles" },
-          { "ruta": "/tncat/redaccion", "label": "Redacción", "icono": "talles", "key": "gen-desc" }
+          { "ruta": "/tncat/redaccion", "label": "Descripción y medidas", "icono": "talles", "key": "gen-desc" }
         ]
       }
     ],

@@ -12,7 +12,13 @@ import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
 import { FAMILIAS, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 
 /**
- * Redacción: la ficha de cada prenda y el párrafo que la vende.
+ * Descripción y medidas: la ficha de cada prenda y el párrafo que la vende.
+ *
+ * ⚠️ **Se llamaba «Redacción» hasta el 1-sep-2026 y lo renombró Bruno** —«no me gusta que diga
+ * redacción»—: la pantalla dejó de ser sólo el párrafo cuando las medidas entraron adentro de la
+ * fila. 🔑 **Lo que cambió es el RÓTULO, ⛔ no la key ni la ruta**: `gen-desc` es el permiso que
+ * `josefinabatter` y `camilaquintana` ya tienen tildado, y renombrarlo lo destildaría —un permiso
+ * que nadie tilda es una pantalla que no ve nadie.
  *
  * Medido contra Zattia el 27-ago-2026 (328 publicados): **44 sin una palabra** —casi todos de las
  * dos últimas tandas, o sea los ingresos— y **194 con menos de 120 caracteres**.

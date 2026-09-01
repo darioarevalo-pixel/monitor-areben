@@ -21,7 +21,7 @@ import { color, font, space } from '@/components/ui'
 const GenTalles = dynamic(() => import('@/components/gen-talles/GenTalles').then((m) => m.GenTalles), {
   loading: () => <div style={{ padding: 16, color: color.mut2 }}>Cargando…</div>,
 })
-// Redacción es una SECCIÓN aparte (`gen-desc`), no un sub de `tncat`, y se monta acá igual
+// «Descripción y medidas» es una SECCIÓN aparte (`gen-desc`), no un sub de `tncat`, y se monta acá igual
 // que la tabla de talles porque la persona la busca en el mismo lugar. El permiso es propio:
 // redactar gasta plata en una API externa y reescribe el texto de venta de la tienda, así que
 // no se cuelga del permiso de pegar una tabla de medidas.
@@ -68,7 +68,7 @@ export function Tncat() {
     { key: 'categorias', label: 'Categorías', hint: 'Asignar y sacar categorías de la tienda', ok: verCat || verAsig },
     { key: 'visibilidad', label: 'Visibilidad', hint: 'Qué se muestra y qué no en la tienda, según el stock', ok: verOcultar },
     { key: 'descripciones', label: 'Descripciones', hint: 'Tabla de talles en la descripción del producto', ok: verTalles },
-    { key: 'redaccion', label: 'Redacción', hint: 'La cola de descripciones: el insumo del local y el borrador que se aprueba', ok: verRedaccion },
+    { key: 'redaccion', label: 'Descripción y medidas', hint: 'La ficha de la prenda: lo que carga el local con la prenda en la mano, y el párrafo que se aprueba', ok: verRedaccion },
   ]
   const visibles = subs.filter((s) => s.ok)
 

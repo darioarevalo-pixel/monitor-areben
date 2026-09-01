@@ -1,9 +1,11 @@
-// La cola de redacción de descripciones de producto — tabla tn_descripciones
-// (ver sql/migrate-tn-descripciones.sql).
+// «Descripción y medidas» — tablas tn_descripciones, tn_atributos y tn_medidas
+// (ver sql/migrate-tn-descripciones.sql, migrate-tn-atributos.sql y migrate-tn-medidas.sql).
 //
-//   GET  ?recurso=tn-desc&store=zattia                              → { ok, filas, atributos }
+//   GET  ?recurso=tn-desc&store=zattia                     → { ok, filas, atributos, medidas }
 //   POST { recurso:'tn-desc', store, tn_id, nombre?, op:'insumo',   insumo }
 //   POST { recurso:'tn-desc', store, tn_id, op:'atributos', familia, atributo, valor }
+//   POST { recurso:'tn-desc', store, tn_id, op:'medida', familia, ficha, talle, medida, valor }
+//   POST { recurso:'tn-desc', store, tn_id, op:'sin-medidas', motivo }
 //   POST { recurso:'tn-desc', store, tn_id, op:'familia', familia }
 //   POST { recurso:'tn-desc', store, tn_id, op:'borrador', borrador:{parrafo,bullets} }
 //   POST { recurso:'tn-desc', store, tn_id, op:'aprobar' }
@@ -31,9 +33,13 @@ import { puedeVerAlguna, puedeSub, esAdmin } from '../lib/permisos.core.js';
 import { generarHtml } from '../lib/tn-desc/formato.core.js';
 import { componer, conservaLaTabla } from '../lib/tn-desc/bloques.core.js';
 import { ATRIBUTOS, FAMILIAS, bulletsDe, esValor } from '../lib/tn-desc/atributos.core.js';
+import { esMedida, esValorDeMedida } from '../lib/tn-medidas/medidas.core.js';
 
 /** El único campo libre de la ficha. El tope es el mismo que tenía un bullet escrito a mano. */
 const MAX_DETALLE = 60;
+
+/** Por qué una prenda no lleva tabla. Lista cerrada: es un dato que se va a querer sumar. */
+const MOTIVOS_SIN_MEDIDAS = ['elastizada', 'talle unico', 'accesorio'];
 
 // El repo que tiene el token de TiendaNube. El monitor NUNCA habla con TiendaNube directo:
 // las credenciales de la tienda viven de aquel lado y de uno solo.
@@ -68,7 +74,7 @@ function cfgFor(store) {
 }
 
 const COLUMNAS =
-  'tn_id, nombre, familia, insumo, insumo_por, insumo_at, borrador, html_previo, hash_previo, html_escrito, verificado, estado, aprobado_por, aprobado_at, escrito_at, error, updated_at';
+  'tn_id, nombre, familia, insumo, insumo_por, insumo_at, borrador, html_previo, hash_previo, html_escrito, verificado, estado, aprobado_por, aprobado_at, escrito_at, error, updated_at, sin_medidas, sin_medidas_por, sin_medidas_at';
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -118,7 +124,22 @@ export default async function handler(req, res) {
         (atributos[id] || (atributos[id] = {}))[a.atributo] = a.valor;
       }
 
-      return res.status(200).json({ ok: true, filas: data || [], atributos, puedePublicar });
+      // Las medidas viajan en la MISMA respuesta que los atributos y por el mismo motivo: la fila
+      // las necesita para el contador y para saber si queda trabajo. Tres llamadas serían tres
+      // estados que se pueden desincronizar por medio segundo.
+      const { data: meds, error: eMeds } = await supabase
+        .from('tn_medidas')
+        .select('tn_id, talle, medida, valor')
+        .eq('store', store);
+      if (eMeds) throw new Error(eMeds.message);
+      const medidas = {};
+      for (const m of meds || []) {
+        const id = String(m.tn_id);
+        const porTalle = medidas[id] || (medidas[id] = {});
+        (porTalle[m.talle || ''] || (porTalle[m.talle || ''] = {}))[m.medida] = m.valor;
+      }
+
+      return res.status(200).json({ ok: true, filas: data || [], atributos, medidas, puedePublicar });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no soportado' });
@@ -224,6 +245,87 @@ export default async function handler(req, res) {
       if (eCola) throw new Error(eCola.message);
 
       return res.status(200).json({ ok: true, valor });
+    }
+
+    // Las medidas las carga el local con la prenda apoyada y la cinta en la mano, en el mismo
+    // momento que la ficha — por eso viven en la misma pantalla y piden el mismo permiso, no el de
+    // publicar. Una medida por llamada y se guarda al tipear, igual que los atributos: un botón
+    // «Guardar» que junta doce números es un botón que alguien no aprieta.
+    if (op === 'medida') {
+      const familia = String(body.familia || '');
+      const medida = String(body.medida || '');
+      const talle = String(body.talle || '');
+      const ficha = body.ficha && typeof body.ficha === 'object' ? body.ficha : {};
+      if (!FAMILIAS[familia]) return res.status(400).json({ error: `familia desconocida: ${familia}` });
+
+      // 🔴 El servidor vuelve a preguntar qué se le mide a esta prenda. Que el casillero no se
+      // dibuje es una comodidad del que carga: un top sin mangas no tiene largo de manga, y si
+      // esto no estuviera, un pedido por otro camino lo guardaría igual.
+      if (!esMedida(familia, medida, ficha)) {
+        return res.status(400).json({ error: `${medida} no es una medida de ${familia}` });
+      }
+
+      const valor = String(body.valor == null ? '' : body.valor).trim();
+
+      // Vacío = lo borraron. Se saca la fila en vez de guardar '': un vacío contaría como
+      // contestada y saldría en cualquier `group by` como una categoría más.
+      if (!valor) {
+        const { error } = await supabase
+          .from('tn_medidas')
+          .delete()
+          .eq('store', store)
+          .eq('tn_id', tnId)
+          .eq('talle', talle)
+          .eq('medida', medida);
+        if (error) throw new Error(error.message);
+        return res.status(200).json({ ok: true, valor: null });
+      }
+
+      // 🔴 Un número o la palabra «estira», y nada más. Y el largo NO admite «estira»: es la regla
+      // de Bruno —«si elastiza mucho no se mide la medida que elastiza, pero se mide el largo»—
+      // hecha imposible de romper, y la cierra el núcleo, no este `if`.
+      if (!esValorDeMedida(medida, valor)) {
+        return res.status(400).json({ error: `«${valor}» no es una medida válida de ${medida}` });
+      }
+
+      const { error } = await supabase
+        .from('tn_medidas')
+        .upsert({ store, tn_id: tnId, talle, medida, valor, por: yo, at: ahora }, { onConflict: 'store,tn_id,talle,medida' });
+      if (error) throw new Error(error.message);
+
+      // La familia se guarda en la cola igual que en `atributos`, y por el mismo motivo: el
+      // servidor no ve las categorías de TiendaNube.
+      const cola = { store, tn_id: tnId, familia, updated_at: ahora };
+      if (body.nombre != null) cola.nombre = String(body.nombre);
+      const { error: eCola } = await supabase.from('tn_descripciones').upsert(cola, { onConflict: 'store,tn_id' });
+      if (eCola) throw new Error(eCola.message);
+
+      return res.status(200).json({ ok: true, valor });
+    }
+
+    // «Esta prenda no lleva tabla de medidas», con su motivo.
+    //
+    // 🔴 Sin esta salida, las elastizadas se quedan en la cola para siempre y una cola que nunca
+    // baja a cero deja de mirarse. Medido el 1-sep-2026: 60 de las 111 prendas sin medidas hablan
+    // de una tela que estira. El motivo es de lista cerrada —no texto libre— porque «cuánto del
+    // catálogo no lleva medidas por elastizado» tiene que poder sumarse.
+    if (op === 'sin-medidas') {
+      const motivo = body.motivo == null ? '' : String(body.motivo).trim();
+      if (motivo && !MOTIVOS_SIN_MEDIDAS.includes(motivo)) {
+        return res.status(400).json({ error: `motivo desconocido: ${motivo}` });
+      }
+      const fila = {
+        store,
+        tn_id: tnId,
+        updated_at: ahora,
+        sin_medidas: motivo || null,
+        sin_medidas_por: motivo ? yo : null,
+        sin_medidas_at: motivo ? ahora : null,
+      };
+      if (body.nombre != null) fila.nombre = String(body.nombre);
+      const { error } = await supabase.from('tn_descripciones').upsert(fila, { onConflict: 'store,tn_id' });
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, motivo: motivo || null });
     }
 
     if (!puedePublicar) return res.status(403).json({ error: 'Esta acción pide el permiso de aprobar y publicar.' });

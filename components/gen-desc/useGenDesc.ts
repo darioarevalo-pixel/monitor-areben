@@ -8,7 +8,7 @@ import { familiaDe, type Atributo, type Cargados, type Familia } from '@/lib/tn-
 import type { Borrador } from '@/lib/tn-desc/formato'
 
 /**
- * Los datos de Redacción: el catálogo de TiendaNube y la cola de `tn_descripciones`.
+ * Los datos de «Descripción y medidas»: el catálogo de TiendaNube y la cola de `tn_descripciones`.
  *
  * El catálogo sale del mismo endpoint que usan Fotos y la Tabla de talles, pero **con
  * `?variantes=1`**: la regla que más importa del formato base es «no nombrar colores», y para

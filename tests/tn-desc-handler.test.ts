@@ -142,6 +142,55 @@ describe('🆕 la ficha de atributos: la carga el local, con lista cerrada', () 
     expect(res.code).toBe(200)
     expect(upserts[0]).toMatchObject({ atributo: 'calce', valor: 'recto' })
   })
+})
+
+describe('🆕 las medidas: las carga el local, con la prenda apoyada', () => {
+  it('🔑 `medida` NO pide el permiso de aprobar: es el mismo momento que la ficha', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'medida', familia: 'tops', ficha: {}, talle: 'S', medida: 'largo', valor: '40' }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ talle: 'S', medida: 'largo', valor: '40', por: 'Local' })
+  })
+
+  it('🔴 se guarda lo MEDIDO, no lo publicado: el x2 de la cintura no está acá', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'medida', familia: 'faldas', ficha: {}, talle: '', medida: 'contornoCintura', valor: '34' }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ medida: 'contornoCintura', valor: '34' })
+  })
+
+  it('🔴 el largo NO puede marcarse «estira», y el ancho sí', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'medida', familia: 'tops', ficha: {}, talle: '', medida: 'largo', valor: 'estira' }))).code).toBe(400)
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'medida', familia: 'tops', ficha: {}, talle: '', medida: 'ancho', valor: 'estira' }))).code).toBe(200)
+  })
+
+  it('⛔ una medida que no es de esa prenda muere en 400, aunque el casillero no se dibuje', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'medida', familia: 'tops', ficha: { manga: 'sin mangas' }, talle: '', medida: 'largoManga', valor: '58' }))).code).toBe(400)
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'medida', familia: 'tops', ficha: {}, talle: '', medida: 'contornoCintura', valor: '34' }))).code).toBe(400)
+  })
+
+  it('⛔ un texto no es una medida', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'medida', familia: 'tops', ficha: {}, talle: '', medida: 'largo', valor: '40 cm' }))).code).toBe(400)
+  })
+
+  it('«no lleva medidas» pide un motivo de la lista, y se puede sacar', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'sin-medidas', motivo: 'porque si' }))).code).toBe(400)
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'sin-medidas', motivo: 'elastizada' }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ sin_medidas: 'elastizada', sin_medidas_por: 'Local' })
+    sesionDe(LOCAL)
+    const off = await llamar(post({ op: 'sin-medidas', motivo: '' }))
+    expect(off.code).toBe(200)
+    // El último upsert, no el primero: `upserts` acumula los de todo el test.
+    expect(upserts[upserts.length - 1]).toMatchObject({ sin_medidas: null, sin_medidas_por: null })
+  })
 
   it('una familia o un atributo inventados mueren en 400 sin tocar la base', async () => {
     sesionDe(LOCAL)
