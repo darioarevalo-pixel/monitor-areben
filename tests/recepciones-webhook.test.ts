@@ -249,6 +249,43 @@ describe('normalizarEvento', () => {
     expect(normalizado(raro).oc.fecha_compra).toBeNull()
   })
 
+  // ── Las fotos ──────────────────────────────────────────────────────────────────────────────
+  // Llegaban desde el 1-sep-2026 y el receptor las tiraba. Estos tests fijan que se guarden y, sobre
+  // todo, QUÉ se descarta: lo que va a terminar en el `src` de un `<img>` viene de otro sistema.
+
+  const conFoto = (foto: unknown, thumb: unknown = undefined) => ({
+    ...ev,
+    data: { ...ev.data, lineas: [{ ...ev.data.lineas[0], imagen_url: foto, imagen_thumb_url: thumb }] },
+  })
+
+  it('guarda las DOS fotos del renglón, la grande y la chica', () => {
+    const r = normalizado(conFoto(
+      'https://ingreso2.arebensrl.com/uploads/801/2918/principal_detail.webp',
+      'https://ingreso2.arebensrl.com/uploads/801/2918/principal_thumb.webp',
+    ))
+    expect(r.lineas[0].imagen_url).toBe('https://ingreso2.arebensrl.com/uploads/801/2918/principal_detail.webp')
+    expect(r.lineas[0].imagen_thumb_url).toBe('https://ingreso2.arebensrl.com/uploads/801/2918/principal_thumb.webp')
+  })
+
+  it('🔴 una URL que no es http(s) NO se guarda: termina en el DOM de la pantalla', () => {
+    for (const veneno of ['javascript:alert(1)', 'data:text/html,<script>x</script>', 'file:///etc/passwd', '/uploads/801/x.webp', 'no soy una url']) {
+      expect(normalizado(conFoto(veneno)).lineas[0].imagen_url).toBeNull()
+    }
+  })
+
+  it('un renglón sin foto la deja en null y NO rompe el evento', () => {
+    const r = normalizado(ev)
+    expect(r.lineas[0].imagen_url).toBeNull()
+    expect(r.lineas[0].imagen_thumb_url).toBeNull()
+    expect(r.oc.id).toBe('zattia:42')
+  })
+
+  it('⛔ la chica NO se deriva de la grande: si el emisor manda una sola, la otra queda en null', () => {
+    // Adivinar el nombre del archivo con un `replace` se rompe callado el día que lo cambie.
+    const r = normalizado(conFoto('https://ingreso2.arebensrl.com/uploads/801/2918/principal_detail.webp'))
+    expect(r.lineas[0].imagen_thumb_url).toBeNull()
+  })
+
   it('el cruce con el espejo nace en null: todavía no se preguntó', () => {
     const r = normalizado(ev)
     expect(r.lineas[0].en_gn).toBeNull()

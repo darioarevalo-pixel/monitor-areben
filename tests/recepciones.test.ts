@@ -24,7 +24,7 @@ const oc = (p: Partial<Recepcion>): Recepcion => ({
 const linea = (p: Partial<LineaRecepcion>): LineaRecepcion => ({
   id: 'x', oc_ref: 'bdi:1', orden: 0, sku: 'A', codigo_barras: null, nombre: null, talle: null,
   color: null, cantidad_pedida: 0, cantidad_contada: 0, diferencia: 0, observaciones: null,
-  es_nuevo: false, en_gn: true, producto_id: '1', ...p,
+  es_nuevo: false, imagen_url: null, imagen_thumb_url: null, en_gn: true, producto_id: '1', ...p,
 })
 
 describe('porProveedor', () => {

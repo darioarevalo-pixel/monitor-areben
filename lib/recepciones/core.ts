@@ -19,6 +19,9 @@ export type LineaRecepcion = {
   diferencia: number
   observaciones: string | null
   es_nuevo: boolean
+  /** Las fotos que manda Ingresos. `null` en todo lo anterior al 1-sep-2026: antes no las mandaba. */
+  imagen_url: string | null
+  imagen_thumb_url: string | null
   en_gn: boolean | null
   producto_id: string | null
 }

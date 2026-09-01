@@ -178,6 +178,16 @@ create table if not exists recepcion_linea (
   producto_id text
 );
 
+-- ── Las fotos del renglón (agregadas el 1-sep-2026) ──────────────────────────────────────────
+-- Van como `alter` y no adentro del `create table` de arriba: la tabla YA existe en producción con
+-- 1.516 renglones, y `create table if not exists` no agrega columnas a una tabla que ya está — no
+-- falla, no hace nada, y el `insert` del webhook empieza a dar error por una columna que el .sql
+-- dice tener. Es el mismo motivo por el que este archivo se corre entero cada vez.
+-- 🔴 **La migración va ANTES del deploy**, no después: si el código que las manda sale primero, el
+-- insert rebota, el evento queda en `error` y la OC no se guarda.
+alter table recepcion_linea add column if not exists imagen_url text;
+alter table recepcion_linea add column if not exists imagen_thumb_url text;
+
 create index if not exists idx_recepcion_linea_oc on recepcion_linea (oc_ref);
 -- "De este SKU, ¿qué me llegó y cuándo?" — la pregunta que hace Compras.
 create index if not exists idx_recepcion_linea_sku on recepcion_linea (store, sku) where sku is not null;

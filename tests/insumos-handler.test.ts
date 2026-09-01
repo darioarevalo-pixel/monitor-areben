@@ -115,6 +115,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/**
+ * 🔴 **El día de la venta NO puede ser una fecha fija.** El handler trae los últimos 30 días
+ * (`DIAS_RITMO`) contados desde HOY, así que un `2026-08-01` clavado en el fixture entra en la
+ * ventana en agosto y se cae solo de ella el 1-sep — que es el día en que este test se puso rojo,
+ * sin que nadie tocara Insumos. Se calcula contra el mismo reloj que mira el handler.
+ */
+const AYER_AR = new Date(Date.now() - 3 * 3600 * 1000 - 86400000).toISOString().slice(0, 10)
+
 describe('lo que el GET manda', () => {
   it('🔴 NO manda plata de ventas: sólo cuentas de pedidos', async () => {
     base.tablas.insumo = [{
@@ -122,14 +130,14 @@ describe('lo que el GET manda', () => {
       marcas: ['bdi'], minimo: 2, dias_reposicion: null, consumo: { modo: 'por-venta', canal: 'local', porVenta: 1 },
       activo: true, nota: null, autor: 'Lorena', created_at: 'x', updated_at: 'x',
     }]
-    base.tablas.ventas = [{ date_sale: '2026-08-01', channel: 'Mi Local', total_price: 99999 }]
+    base.tablas.ventas = [{ date_sale: AYER_AR, channel: 'Mi Local', total_price: 99999 }]
     const res = await correr(pedir())
     expect(res.code).toBe(200)
     const texto = JSON.stringify(res.body)
     expect(texto).not.toContain('99999')
     expect(texto).not.toContain('plata')
     expect(texto).not.toContain('total_price')
-    expect(res.body?.comprasPorMarca).toEqual({ bdi: [{ fecha: '2026-08-01', local: 1, online: 0, mayorista: 0 }] })
+    expect(res.body?.comprasPorMarca).toEqual({ bdi: [{ fecha: AYER_AR, local: 1, online: 0, mayorista: 0 }] })
   })
 
   it('sin ningún insumo atado a las ventas no va a buscar ninguna venta', async () => {

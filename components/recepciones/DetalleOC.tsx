@@ -50,6 +50,36 @@ function EnGN({ v }: { v: boolean | null }) {
   return v ? <Badge tone="success">en GN</Badge> : <Badge tone="warning">falta crearlo en GN</Badge>
 }
 
+/**
+ * La foto del artículo, si Ingresos la mandó.
+ *
+ * 🔑 **Sin foto no dibuja un placeholder gris**: las 79 OC del historial (todo lo anterior al
+ * 1-sep-2026) llegaron antes de que el emisor prendiera las imágenes, y una grilla de recuadros
+ * vacíos se lee como "las fotos se rompieron" cuando lo que pasa es que nunca vinieron.
+ *
+ * ⚠️ `onError` la esconde: la URL apunta al servidor de Ingresos, que es otra máquina. Si un día
+ * mueve los archivos, acá tiene que quedar el renglón sin foto, ⛔ no el ícono de imagen rota.
+ */
+export function Foto({ l, lado }: { l: LineaConCruce; lado: number }) {
+  const [rota, setRota] = useState(false)
+  const src = l.imagen_thumb_url || l.imagen_url
+  if (!src || rota) return null
+  return (
+    <a href={l.imagen_url || src} target="_blank" rel="noopener noreferrer" title={`${l.nombre || l.sku || ''} — ver grande`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={[l.nombre, l.color, l.talle].filter(Boolean).join(' ') || l.sku || 'artículo'}
+        onError={() => setRota(true)}
+        loading="lazy"
+        width={lado}
+        height={lado}
+        style={{ width: lado, height: lado, objectFit: 'cover', borderRadius: 6, border: `1px solid ${color.line}`, display: 'block', background: color.bg2 }}
+      />
+    </a>
+  )
+}
+
 export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; onCerrar: () => void }) {
   const [datos, setDatos] = useState<{ recepcion: Recepcion; lineas: LineaConCruce[]; espejoConsultado: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -80,13 +110,19 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
   // Lo que hay que dar de alta se calcula con el cruce **de hoy**, no con la foto guardada: el caso
   // normal de una importación es que el producto todavía no exista en GN cuando llega.
   const sinAlta = lineas.filter((l) => l.en_gn_hoy === false)
+  const conFoto = lineas.filter((l) => l.imagen_thumb_url || l.imagen_url)
 
   const fila = (l: LineaConCruce) => (
     <Tr key={l.id}>
       <Td>
-        <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{l.sku || '—'}</div>
-        <div style={{ color: color.ink2, fontSize: 12 }}>
-          {[l.nombre, l.talle, l.color].filter(Boolean).join(' · ') || '—'}
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+          <Foto l={l} lado={40} />
+          <div>
+            <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{l.sku || '—'}</div>
+            <div style={{ color: color.ink2, fontSize: 12 }}>
+              {[l.nombre, l.talle, l.color].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
         </div>
       </Td>
       <Td align="right">{l.cantidad_pedida}</Td>
@@ -140,6 +176,30 @@ export function DetalleOC({ marca, oc, onCerrar }: { marca: string; oc: string; 
             No se pudo consultar el catálogo de Gestión Nube, así que la columna «en GN» no dice nada
             en esta pasada. <strong>No significa que los artículos no estén.</strong>
           </Notice>
+        )}
+
+        {conFoto.length > 0 && (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: space[2] }}>
+              Lo que entró — {conFoto.length}
+              {conFoto.length < lineas.length ? ` de ${lineas.length} renglones con foto` : ' artículos'}
+            </div>
+            {/* 🔑 La grilla va ARRIBA y fuera del plegable. La tabla se abre por lo que NO cerró, y
+                hoy la mayoría de las OC cierran completas: si las fotos vivieran sólo adentro de los
+                renglones, en una OC sin diferencias no se vería ninguna sin desplegar. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: space[3] }}>
+              {conFoto.map((l) => (
+                <div key={l.id} style={{ display: 'grid', gap: 4, justifyItems: 'center', textAlign: 'center' }}>
+                  <Foto l={l} lado={96} />
+                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: color.ink2, wordBreak: 'break-all' }}>{l.sku || '—'}</div>
+                  <div style={{ fontSize: 11, color: color.mut }}>
+                    {l.cantidad_contada} u.{l.diferencia !== 0 ? ' · ' : ''}
+                    {l.diferencia !== 0 && <Diferencia n={l.diferencia} />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {noCerraron.length === 0 ? (

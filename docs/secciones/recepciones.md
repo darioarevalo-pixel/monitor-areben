@@ -97,6 +97,29 @@ pierde los eventos de ese rato. Un 401 los habría perdido.
   entró ninguna orden», cuando lo que puede estar pasando es que el envío nunca se prendió — dos
   problemas distintos, de dos personas distintas.
 
+## Las fotos (1-sep-2026)
+
+Cada renglón puede traer **`imagen_url`** (la grande) y **`imagen_thumb_url`** (la de la grilla), y
+las dos se guardan en `recepcion_linea`. La pantalla dibuja la chica y enlaza a la grande, en dos
+lugares: una grilla arriba —«Lo que entró»— y una miniatura en cada fila de la tabla.
+
+- 🔑 **No hubo que pedirle NADA al emisor: ya las mandaba y las tirábamos.** Las 9 OC del 1-sep
+  llegaron dos veces —11:56–14:00 sin fotos, 14:41 con las fotos— y `normalizarEvento` no las
+  copiaba. Mismo caso que `confirmada_at`. El dato estaba de este lado, en
+  `recepcion_evento.payload`, y por eso el histórico se completó con
+  `scripts/backfill-fotos-recepciones.mjs` en vez de un reenvío.
+- ⚠️ **Las 79 OC del backfill del 27-ago NO tienen foto** y no la van a tener: son anteriores a que
+  Gerardo prendiera las imágenes. Por eso la pantalla **no dibuja un placeholder** cuando falta —
+  una grilla de recuadros vacíos se lee como «se rompieron las fotos», que es otro problema. Y en
+  el 1-sep faltaban 2 de 80 renglones (OC-0470): que falte una foto suelta es normal.
+- 🔴 **La URL se filtra por esquema en el núcleo** (`urlDe`): sólo `http`/`https`. Termina en el
+  `src` de un `<img>` y en el `href` de un enlace, y el que la manda es otro sistema.
+- ⛔ **La chica no se deriva de la grande.** Los dos nombres de archivo los elige el emisor;
+  sacar uno del otro con un `replace` se rompe callado el día que los cambie.
+- 📌 Las fotos las sirve **`ingreso2.arebensrl.com`**, no el monitor: abren sin login (medido, 200)
+  y si ese servidor se cae o mueve los archivos, el `onError` deja el renglón sin foto en vez del
+  ícono de imagen rota. ⚠️ No se copian a nuestro lado: si allá se borran, acá desaparecen.
+
 ## Qué NO viaja
 
 El costo con IVA, los descuentos, el flete y el margen **se quedan del lado de Ingresos**, por
