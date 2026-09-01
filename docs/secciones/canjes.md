@@ -389,14 +389,23 @@ Dos tandas del 21-ago-2026, y la segunda **borra**. Leer esto antes de tocar `Co
   el catálogo de TN sólo se lee desde el panel.
 - ⚠️ `umbral_aprobacion_alta` sigue en `null`, o sea que **todo va a firma alta**.
 - ▶️ La novedad del retiro en el local quedó en **borrador**, sin publicar.
-- 🆕 🔴 **El precio de la vitrina activa está 10 veces abajo del real.** Medido el 1-sep-2026: los
-  **19 ítems** de «Girlhood Collection» están cargados a **$1.490** y esas fundas valen
-  **$13.990–14.990** en GN (la vitrina archivada, «Fundas Nuevas», tiene los precios bien). Ese
-  número se copia a `canje_items.pvp_unit` de cada persona que elige — **45 ítems, 13 canjes
-  abiertos** — así que **el balance de esos canjes cuenta ~10 veces menos de lo que costaron**, y en
-  un canje por monto el tope dejaría elegir diez veces más. ⚠️ **Corregir la vitrina NO corrige los
-  ítems ya congelados**: son dos manos. La venta en GN ya no lo hereda (usa el precio de GN), pero el
-  balance sí. **Falta que Bruno decida** si se corrige la vitrina, los ítems, o los dos.
+- 🆕 🔑 **UNA VITRINA CONGELA EL PRECIO DEL DÍA QUE SE IMPORTÓ, Y ESO ENVEJECE MAL** (corregido el
+  1-sep-2026). «Girlhood Collection» tenía sus **19 ítems a $1.490** —importada el 4-ago— cuando esas
+  fundas valen **$13.990–14.990**, y ese número se había copiado ya a **45 ítems** elegidos por las
+  creadoras, así que el balance de **13 canjes abiertos** contaba ~10 veces menos de lo que costaron.
+  - 🔑 **El delator fue que 19 productos con precios de lista distintos dieran todos exactamente
+    1.490**: un valor idéntico repetido no es un precio. Y el oráculo vino **por otro camino que el
+    hecho** —el catálogo real de Tienda Nube, no el espejo ni la pantalla—: **0 de 252 productos**
+    tienen 1.490 ni en `price` ni en `promo_price`, y el más barato de la tienda es 1.990.
+  - ✅ Se corrigieron 19 ítems de vitrina y 39 ítems vivos de canjes abiertos con `precioVigente`
+    sobre el catálogo de hoy. ⛔ **No se tocaron** los de canjes terminados —su balance es historia—
+    ni los `quitado`.
+  - 🔴 **Antes de escribir se midió el efecto sobre el TOPE**, porque subir un precio 10× puede pasar
+    de tope un canje por monto y ahí `listoParaVenderEnGn` bloquearía la venta: los 13 son **por
+    unidades**, ninguno cambia. Es la lección de siempre — completar un dato es prender las cuentas
+    que lo consumen.
+  - ▶️ **Queda vivo el mecanismo**: nada refresca la vitrina sola. «Revisar el stock» la recorre
+    contra la tienda de hoy y es lo que hay que correr cada tanto, o los precios vuelven a envejecer.
 - ▶️ **Nada del camino nuevo se probó a mano todavía**: el guion es abrir un canje con envío en
   `acuerdo`, mirar que las líneas resuelvan al artículo correcto, crear la venta y **verificar en GN**
   que quedó a nombre de Canjes BDI, con la nota, y que el stock del depósito bajó.

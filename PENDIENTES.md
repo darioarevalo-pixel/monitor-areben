@@ -70,10 +70,17 @@ de Tienda Nube dejó de ser el camino principal y quedó plegada.
    canjes **cuentan** en rotación, vida útil, caducados y CRM. 🔴 **Ese canal queda reservado para
    canjes**: `canalDe` lo manda a `tecnica` para que las ventas a $0 no hundan el precio promedio,
    así que **una venta cobrada cargada ahí tampoco contaría** para el promedio.
-2. 🔴 **Decidir qué hacer con el precio de la vitrina activa.** Medido el 1-sep: los **19 ítems** de
-   «Girlhood Collection» están a **$1.490** cuando valen **$13.990–14.990** ⇒ el balance de **13
-   canjes abiertos** cuenta ~10 veces menos de lo que costaron. Corregir la vitrina **no** corrige
-   los 45 ítems ya congelados: son dos manos distintas.
+2. 🏁 **El precio congelado quedó corregido (1-sep).** La vitrina «Girlhood Collection» tenía sus
+   **19 ítems a $1.490** cuando en la tienda valen **$13.990–14.990**, y ese número se había copiado
+   a los ítems que las creadoras eligieron ⇒ el balance contaba ~10 veces menos de lo que costaron.
+   🔑 **El precio no existía en la tienda ni existió como promo**: medido contra el catálogo real de
+   Tienda Nube (`tiendanube-audit`), **0 de 252 productos** tienen 1.490 y el más barato es 1.990.
+   Fue la foto del **4-ago**, día en que se importó la vitrina, que quedó congelada.
+   ✅ Corregidos **19 ítems de vitrina** y **39 ítems vivos de los 13 canjes abiertos**, con el
+   precio de hoy de cada SKU (misma regla `precioVigente`, mismo catálogo — no un tercer precio).
+   ⛔ **No se tocaron** los de canjes cerrados o cancelados (su balance es historia) ni los ítems
+   `quitado`. ✅ Verificado antes de escribir que ninguno de los 13 se pasa de tope: **todos son por
+   unidades**, así que el precio no traba la venta de ninguno.
 3. ▶️ **Probarlo con un canje real**, y mirar dos cosas en GN: que la venta quedó a nombre de Canjes
    BDI con la nota, y **si el stock de la tienda online bajó**. Sin la orden de Tienda Nube, eso
    depende de la integración GN↔TN y **no está verificado**.
