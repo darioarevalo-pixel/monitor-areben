@@ -255,12 +255,12 @@ export function useGenDesc(marca: Marca) {
   )
 
   const guardarAtributo = useCallback(
-    async (tnId: string, familia: Familia, atributo: Atributo, valor: string, nombre?: string): Promise<string | null> => {
+    async (tnId: string, familia: Familia, atributo: Atributo, valor: string, nombre?: string, propuesto?: boolean): Promise<string | null> => {
       try {
         const r = await apiFetch(COLA, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'atributos', familia, atributo, valor, nombre }),
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, op: 'atributos', familia, atributo, valor, nombre, propuesto }),
         })
         const d = await r.json()
         if (!r.ok || !d?.ok) return d?.error || `Error ${r.status}`

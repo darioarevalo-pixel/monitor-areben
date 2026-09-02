@@ -9,7 +9,7 @@ import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
-import { FAMILIAS, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 
 /**
@@ -163,10 +163,10 @@ export function GenDesc() {
               if (err) toast.error(err)
               return err
             }}
-            onAtributo={async (atributo, valor) => {
+            onAtributo={async (atributo, valor, propuesto) => {
               const familia = familiaDeProducto(p)
               if (!familia) return 'Elegí primero qué prenda es.'
-              const err = await guardarAtributo(p.id, familia, atributo, valor, p.name)
+              const err = await guardarAtributo(p.id, familia, atributo, valor, p.name, propuesto)
               if (err) toast.error(err)
               return err
             }}
@@ -228,7 +228,7 @@ function FilaProducto({
   onAbrir: () => void
   puedePublicar: boolean
   onFamilia: (familia: Familia) => Promise<string | null>
-  onAtributo: (atributo: Atributo, valor: string) => Promise<string | null>
+  onAtributo: (atributo: Atributo, valor: string, propuesto?: boolean) => Promise<string | null>
   medidas: Medidas
   onMedida: (talle: string, medida: Medida, valor: string) => Promise<string | null>
   onSinMedidas: (motivo: string) => Promise<string | null>
@@ -409,7 +409,7 @@ function FilaProducto({
                     libre={a.libre}
                     opciones={familia ? opcionesDe(familia, a.key) : null}
                     valor={ficha[a.key] || ''}
-                    onElegir={(v) => onAtributo(a.key, v)}
+                    onElegir={(v, propuesto) => onAtributo(a.key, v, propuesto)}
                   />
                 ))}
                 {extrasVisibles.map((a) => (
@@ -420,7 +420,7 @@ function FilaProducto({
                     libre={a.libre}
                     opciones={familia ? opcionesDe(familia, a.key) : null}
                     valor={ficha[a.key] || ''}
-                    onElegir={(v) => onAtributo(a.key, v)}
+                    onElegir={(v, propuesto) => onAtributo(a.key, v, propuesto)}
                   />
                 ))}
               </div>
@@ -772,6 +772,9 @@ function CasilleroMedida({
   )
 }
 
+/** El valor del `<option>` que abre el campo para escribir una palabra que no está en la lista. */
+const OTRA = '__otra__'
+
 function CampoAtributo({
   label, opciones, valor, libre, prestado = false, onElegir,
 }: {
@@ -781,15 +784,17 @@ function CampoAtributo({
   libre: boolean
   /** Un atributo que la familia no pide y alguien sumó a mano: se rotula para que se note. */
   prestado?: boolean
-  onElegir: (v: string) => Promise<string | null>
+  onElegir: (v: string, propuesto?: boolean) => Promise<string | null>
 }) {
   const [guardando, setGuardando] = useState(false)
   const [texto, setTexto] = useState(valor)
+  const [proponiendo, setProponiendo] = useState(false)
 
-  const mandar = async (v: string) => {
+  const mandar = async (v: string, propuesto?: boolean) => {
     setGuardando(true)
-    await onElegir(v)
+    const err = await onElegir(v, propuesto)
     setGuardando(false)
+    if (!err) setProponiendo(false)
   }
 
   if (libre) {
@@ -808,9 +813,44 @@ function CampoAtributo({
 
   const propios = opciones?.propios || []
   const prestados = opciones?.prestados || []
+  // 🔑 Que el valor guardado sea una PROPUESTA no es un dato aparte: es que no está en ninguna de
+  // las dos listas. Así, el día que Bruno la aprueba y entra al diccionario, el cartel se apaga
+  // solo — acá y en todos los productos donde se haya cargado.
+  const esPropuesta = !!valor && valor !== NO_APLICA && !propios.includes(valor) && !prestados.includes(valor)
+
+  if (proponiendo || esPropuesta) {
+    return (
+      <Field label={prestado ? `${label} · de otra prenda` : label}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Input
+            value={texto}
+            disabled={guardando}
+            autoFocus={proponiendo}
+            maxLength={MAX_PROPUESTA}
+            placeholder="una o dos palabras"
+            onChange={(e) => setTexto(e.target.value)}
+            onBlur={() => { const v = texto.trim(); if (v && v !== valor && esPalabraPropuesta(v)) void mandar(v, true) }}
+          />
+          <Button size="sm" variant="outline" disabled={guardando} onClick={() => { setProponiendo(false); if (valor) void mandar('') }}>
+            volver
+          </Button>
+        </div>
+        <div style={{ fontSize: 11, color: '#a06000', marginTop: 3 }}>
+          {esPropuesta
+            ? <>Palabra propuesta: se guarda, pero <b>no sale a la tienda</b> hasta que Bruno la sume a la lista.</>
+            : 'Una o dos palabras, sin signos. Ej: «forrado».'}
+        </div>
+      </Field>
+    )
+  }
+
   return (
     <Field label={prestado ? `${label} · de otra prenda` : label}>
-      <Select value={valor} disabled={guardando} onChange={(e) => void mandar(e.target.value)}>
+      <Select
+        value={valor}
+        disabled={guardando}
+        onChange={(e) => { if (e.target.value === OTRA) { setTexto(''); setProponiendo(true) } else void mandar(e.target.value) }}
+      >
         <option value="">— sin cargar —</option>
         {propios.map((v) => (
           <option key={v} value={v}>{v}</option>
@@ -827,6 +867,11 @@ function CampoAtributo({
         )}
         {/* ⛔ Último, y separado: «no aplica» es una respuesta, no un valor de venta. */}
         {opciones?.noAplica && <option value={NO_APLICA}>{NO_APLICA}</option>}
+        {/* 🔑 La VÁLVULA. Un freno sin salida se lo saltea la gente: sin esto, la palabra que no
+            está en la lista termina en Detalle —texto libre— y se pierde para siempre para
+            cualquier cuenta. Acá se escribe igual, queda marcada, y entra a la lista cuando Bruno
+            la apruebe. 📌 feedback_areben_freno_sin_valvula */}
+        <option value={OTRA}>otra…</option>
       </Select>
     </Field>
   )

@@ -21,7 +21,8 @@ import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
 import { paraComprar, paraSubir, pedidosDemorados, rotuloUbicacion, type VistaInsumo } from '@/lib/insumos/core'
-import { nombrarFilas, pendientesDePublicar, type FilaPendiente } from '@/lib/tn-desc/pendientes.core'
+import { nombrarFilas, pendientesDePublicar, propuestasPendientes, type FilaPendiente } from '@/lib/tn-desc/pendientes.core'
+import type { Cargados } from '@/lib/tn-desc/atributos'
 import type { PedidoAbierto } from '@/lib/insumos/tipos'
 import type { Aviso } from './tipos'
 
@@ -594,7 +595,7 @@ function nombrarInsumos(vistas: VistaInsumo[], tope = 3): string {
  * sin párrafo» pide sentarse a escribir. Un solo número diría «17 pendientes» sin decir cuáles se
  * cierran en un minuto.
  */
-export function avisosDeFicha(filas: FilaPendiente[], perfil: Perfil | null, marcaActiva: Marca): Aviso[] {
+export function avisosDeFicha(filas: FilaPendiente[], atributos: Record<string, Cargados>, perfil: Perfil | null, marcaActiva: Marca): Aviso[] {
   if (!puedeSub(perfil, marcaActiva, 'gen-desc', 'publicar')) return []
 
   const { aprobadas, empezadas, esperaDesde } = pendientesDePublicar(filas)
@@ -612,6 +613,25 @@ export function avisosDeFicha(filas: FilaPendiente[], perfil: Perfil | null, mar
       // dijera «pausá X» con el botón de pausar X en otra pantalla.
       ruta: '/tncat/redaccion?ver=aprobados',
       ts: esperaDesde,
+      tono: 'warning' as const,
+    })
+  }
+
+  // 🔴 Una palabra propuesta ⛔ no sale a la tienda hasta que entre al diccionario, así que la
+  // prenda se publica SIN ese bullet. El escape necesita su propio reloj: sin esto, la bandeja de
+  // propuestas se convierte en el campo de texto libre por la puerta de atrás.
+  const palabras = propuestasPendientes(filas, atributos)
+  if (palabras.length) {
+    avisos.push({
+      id: 'palabra-propuesta',
+      tipo: 'palabra-propuesta' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: palabras.length === 1 ? '1 palabra nueva esperando tu OK' : `${palabras.length} palabras nuevas esperando tu OK`,
+      // Se nombran las PALABRAS y no los productos: la decisión es sobre la palabra.
+      detalle: palabras.map((p) => `«${p.valor}» en ${p.label}`).slice(0, 3).join(' · '),
+      ruta: '/tncat/redaccion',
+      ts: 0,
       tono: 'warning' as const,
     })
   }

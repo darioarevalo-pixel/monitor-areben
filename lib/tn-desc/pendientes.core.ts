@@ -7,7 +7,7 @@
  * Insumos.
  */
 
-import type { Familia } from '@/lib/tn-desc/atributos'
+import { propuestasDe, type Cargados, type Familia, type Propuesta } from '@/lib/tn-desc/atributos'
 
 /** Lo que el aviso necesita de cada fila de la cola. Un subconjunto de `FilaCola`. */
 export type FilaPendiente = {
@@ -70,4 +70,35 @@ export function nombrarFilas(filas: FilaPendiente[], hasta = 3): string {
   const nombres = filas.map((f) => f.nombre || f.tn_id).filter(Boolean)
   const cabeza = nombres.slice(0, hasta).join(' · ')
   return nombres.length > hasta ? `${cabeza} y ${nombres.length - hasta} más` : cabeza
+}
+
+/** Una palabra propuesta, con el producto donde alguien la escribió. */
+export type PropuestaEnProducto = Propuesta & { tn_id: string; nombre: string }
+
+/**
+ * Las palabras que alguien propuso y todavía ⛔ no están en el diccionario.
+ *
+ * 🔴 **Mientras estén acá, ⛔ no salen a la tienda**: `bulletsDe` saltea lo que `esValor` rechaza.
+ * O sea que una prenda con una palabra propuesta se publica **sin ese bullet** — por eso esto
+ * necesita que alguien lo mire, y por eso tiene aviso. Un escape sin reloj es el campo de texto
+ * libre por la puerta de atrás.
+ *
+ * 🔑 **Se agrupan por palabra y no por producto**: la decisión de Bruno es sobre la PALABRA
+ * («¿"forrado" entra a la lista?»), y verla repetida en seis filas no la hace más fácil.
+ */
+export function propuestasPendientes(
+  filas: FilaPendiente[],
+  atributos: Record<string, Cargados>,
+): { valor: string; label: string; atributo: string; productos: string[] }[] {
+  const porPalabra = new Map<string, { valor: string; label: string; atributo: string; productos: string[] }>()
+  for (const f of filas || []) {
+    if (!f.familia) continue
+    for (const p of propuestasDe(f.familia, atributos[String(f.tn_id)] || {})) {
+      const clave = `${p.atributo}|${p.valor}`
+      const ya = porPalabra.get(clave)
+      if (ya) ya.productos.push(f.nombre || f.tn_id)
+      else porPalabra.set(clave, { valor: p.valor, label: p.label, atributo: p.atributo, productos: [f.nombre || f.tn_id] })
+    }
+  }
+  return [...porPalabra.values()]
 }

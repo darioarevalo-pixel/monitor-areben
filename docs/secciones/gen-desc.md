@@ -129,12 +129,32 @@ Las tres las pidió Bruno usando la pantalla, no leyendo el código:
     que ejerce el guard dejó de poder ser «wide leg en un top» —eso ahora está permitido— y pasó a
     ser una palabra inventada (`apretadito`). Un guard que se prueba con un caso que ya no viola
     nada es un guard apagado que se ve prendido.
-    ▶️ **Lo que queda de este pedido**: «no cerrar las opciones» del todo —escribir un valor que no
-    existe— ⛔ no está hecho, y es lo único de los tres que toca el motivo de fondo del 27-ago. La
-    forma propuesta es un **valor propuesto**: se escribe, queda marcado, sale del análisis hasta
-    que Bruno lo apruebe, y entra a la lista con su palabra —como entraron `bandó` y `volcado`—
-    con **su propio reloj**, porque sin un aviso de «hace X días que nadie mira esto» la bandeja se
-    convierte en el campo libre por la puerta de atrás.
+11. 🏁 **La PALABRA PROPUESTA — la válvula, hecha el 1-sep-2026.** Es lo que faltaba de «no cerrar
+    las opciones», y el único de los tres pedidos que tocaba el motivo de fondo del 27-ago. Última
+    opción de cada desplegable: **«otra…»**, se escribe la palabra y sigue.
+    - 🔴 **Pide un gesto explícito** (`propuesto: true`). Sin eso el guard del servidor es el de
+      siempre ⇒ un valor mal escrito que llegue por cualquier otro camino se sigue rechazando. La
+      válvula es un gesto, ⛔ no un agujero.
+    - 🔴 **⛔ NO sale a la tienda hasta que la palabra entre al diccionario.** Es texto que lee una
+      clienta: un error de tipeo ⛔ no puede llegar solo a la ficha. La prenda se publica **sin ese
+      bullet**, y por eso la propuesta necesita que alguien la mire.
+    - 🔑 **⛔ No hay columna que marque la propuesta**: una palabra es propuesta si `esValor` la
+      rechaza. Es una consecuencia de la lista, ⛔ no un dato aparte que alguien podría olvidarse de
+      escribir — y tiene el efecto que se busca: **el día que la palabra entra al diccionario, deja
+      de ser propuesta sola**, en todos los productos donde se cargó y sin migrar nada. Es como
+      entraron `bandó` y `volcado`.
+    - ⚠️ **Se normaliza** (minúsculas, un espacio) o el escape trae de vuelta el problema que la
+      lista evita: «Wide Leg» y «wide leg » serían dos filas del `group by`.
+    - ⚠️ **Tiene forma de ETIQUETA**: 2 a 24 caracteres, hasta tres palabras, sin signos ni HTML.
+      «top negro con ballenas y encaje» ⛔ no es un valor de escote — eso es Detalle.
+    - 🔴 **Y tiene su propio reloj**: el aviso `palabra-propuesta`, que ve quien puede publicar y
+      **agrupa por PALABRA y ⛔ no por producto** (la decisión es sobre la palabra). Sin el reloj, la
+      bandeja se convierte en el campo libre por la puerta de atrás.
+      📌 [[feedback_areben_freno_sin_valvula]].
+    - ▶️ **Aprobar una palabra hoy es agregarla a `ATRIBUTOS` y deployar** — decisión de Bruno del
+      1-sep-2026: **empezar chico y medir cuántas aparecen**. Mover las listas a la base para que
+      aprobar sea un clic es bastante más trabajo y sólo se paga si son muchas; el diccionario
+      salió de leer 328 fichas reales, así que la mayoría de las palabras ya están.
 
 ## La ficha de atributos — el diccionario de prendas
 

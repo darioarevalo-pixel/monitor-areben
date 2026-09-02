@@ -18,8 +18,12 @@ import {
   FAMILIAS,
   NO_APLICA,
   TELA_SIN_IDENTIFICAR,
+  MAX_PROPUESTA,
   atributosDe,
   atributosExtra,
+  esPalabraPropuesta,
+  normalizarPropuesta,
+  propuestasDe,
   bulletsDe,
   cargadosDe,
   esValor,
@@ -318,5 +322,48 @@ describe('el contador que ve el local en la fila', () => {
     expect(cargadosDe('pantalon', {})).toEqual({ con: 0, total: 5 })
     expect(cargadosDe('pantalon', { tela: 'denim rígido', tiro: 'tiro alto', calce: 'mom', largo: 'al tobillo', detalle: 'roturas' }))
       .toEqual({ con: 5, total: 5 })
+  })
+})
+
+describe('🔑 la palabra propuesta: el escape que NO abre la lista', () => {
+  it('tiene que tener forma de etiqueta, no de frase', () => {
+    expect(esPalabraPropuesta('forrado')).toBe(true)
+    expect(esPalabraPropuesta('con ballenas')).toBe(true)
+    // ⛔ Esto es una descripción, y sería el campo de texto libre por la puerta de atrás.
+    expect(esPalabraPropuesta('top negro con ballenas y encaje')).toBe(false)
+    expect(esPalabraPropuesta('a')).toBe(false)
+    expect(esPalabraPropuesta('')).toBe(false)
+    // Termina pegado en la descripción de un producto el día que se apruebe.
+    expect(esPalabraPropuesta('<b>x</b>')).toBe(false)
+    expect(esPalabraPropuesta('x'.repeat(MAX_PROPUESTA + 1))).toBe(false)
+  })
+
+  it('🔴 se normaliza, o el escape trae de vuelta el problema que evita la lista', () => {
+    // «Wide Leg» y «wide leg » serían dos filas distintas en el group by.
+    expect(normalizarPropuesta('  Wide  Leg ')).toBe('wide leg')
+  })
+
+  it('es propuesta lo que NO está en ninguna lista, y se deriva: no hace falta marcarlo', () => {
+    const p = propuestasDe('tops', { tela: 'microfibra', escote: 'forrado', calce: 'entallado' })
+    expect(p.map((x) => x.valor)).toEqual(['forrado'])
+  })
+
+  it('⛔ un valor prestado de otra prenda NO es una propuesta', () => {
+    expect(propuestasDe('tops', { calce: 'wide leg' })).toEqual([])
+  })
+
+  it('🔴 y mientras sea propuesta NO se publica: el bullet no sale', () => {
+    // Es texto que lee una clienta: un error de tipeo ⛔ no puede llegar solo a la tienda.
+    expect(bulletsDe('tops', { tela: 'microfibra', escote: 'forrado' })).toEqual([
+      { etiqueta: 'Tela', texto: 'microfibra' },
+    ])
+  })
+
+  it('🔑 el día que la palabra entra al diccionario, deja de ser propuesta sola', () => {
+    // No hay migración: `bandó` y `volcado` entraron así. Lo que prueba el mecanismo es que un
+    // valor que YA está en la lista nunca aparece como propuesta.
+    for (const v of ATRIBUTOS.escote.valores || []) {
+      expect(propuestasDe('tops', { escote: v })).toEqual([])
+    }
   })
 })

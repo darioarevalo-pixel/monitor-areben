@@ -32,6 +32,7 @@ import { leerInsumos } from '@/lib/insumos/cliente'
 import { mirarTodos } from '@/lib/insumos/core'
 import type { Aviso } from '@/lib/notificaciones/tipos'
 import type { FilaPendiente } from '@/lib/tn-desc/pendientes.core'
+import type { Cargados } from '@/lib/tn-desc/atributos'
 import type { Perfil } from '@/lib/permisos'
 import type { Marca } from '@/lib/nav'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
@@ -157,7 +158,7 @@ async function avisosDeDescripciones(perfil: Perfil, marca: Marca): Promise<Avis
   const r = await apiFetch(`/api/datos?recurso=tn-desc&store=${marca}`)
   const d = await r.json()
   if (!d?.ok) return []
-  return avisosDeFicha((d.filas || []) as FilaPendiente[], perfil, marca)
+  return avisosDeFicha((d.filas || []) as FilaPendiente[], (d.atributos || {}) as Record<string, Cargados>, perfil, marca)
 }
 
 export const useAvisos = create<AvisosState>((set, get) => ({

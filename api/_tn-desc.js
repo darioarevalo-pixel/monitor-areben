@@ -3,7 +3,7 @@
 //
 //   GET  ?recurso=tn-desc&store=zattia                     → { ok, filas, atributos, medidas }
 //   POST { recurso:'tn-desc', store, tn_id, nombre?, op:'insumo',   insumo }
-//   POST { recurso:'tn-desc', store, tn_id, op:'atributos', familia, atributo, valor }
+//   POST { recurso:'tn-desc', store, tn_id, op:'atributos', familia, atributo, valor, propuesto? }
 //   POST { recurso:'tn-desc', store, tn_id, op:'medida', familia, ficha, talle, medida, valor }
 //   POST { recurso:'tn-desc', store, tn_id, op:'sin-medidas', motivo }
 //   POST { recurso:'tn-desc', store, tn_id, op:'familia', familia }
@@ -34,7 +34,7 @@ import { generarHtml } from '../lib/tn-desc/formato.core.js';
 import { componer, conservaLaTabla } from '../lib/tn-desc/bloques.core.js';
 import { htmlDeMedidas } from '../lib/tn-medidas/bloque.core.js';
 import { tallesDe } from '../lib/tn-medidas/medidas.core.js';
-import { ATRIBUTOS, FAMILIAS, bulletsDe, esValor } from '../lib/tn-desc/atributos.core.js';
+import { ATRIBUTOS, FAMILIAS, bulletsDe, esPalabraPropuesta, esValor, normalizarPropuesta } from '../lib/tn-desc/atributos.core.js';
 import { esMedida, esValorDeMedida } from '../lib/tn-medidas/medidas.core.js';
 
 /** El único campo libre de la ficha. El tope es el mismo que tenía un bullet escrito a mano. */
@@ -225,8 +225,27 @@ export default async function handler(req, res) {
       // 🔴 La lista cerrada la chequea el SERVIDOR, no el `<select>`. Un desplegable es una
       // comodidad del que carga; lo único que separa una lista cerrada de un campo de texto
       // —y con eso, un catálogo que se puede sumar de uno que no— es este `if`.
+      // La palabra PROPUESTA: el escape para lo que no está en ninguna lista.
+      //
+      // 🔴 Pide `propuesto: true` EXPLÍCITO. Sin eso, el guard es el de siempre — un valor mal
+      // escrito que llegue por cualquier otro camino se sigue rechazando, y ése es todo el punto
+      // de la lista cerrada. La válvula tiene que ser un gesto, no un agujero.
+      //
+      // ⛔ Y no se publica: `bulletsDe` saltea lo que `esValor` rechaza, así que la palabra queda
+      // guardada y NO sale a la ficha hasta que entre al diccionario. Es texto que lee una
+      // clienta: un error de tipeo ⛔ no puede llegar solo a la tienda.
+      let valorFinal = valor;
       if (!esValor(familia, atributo, valor)) {
-        return res.status(400).json({ error: `«${valor}» no es un valor de ${atributo} para ${familia}` });
+        if (body.propuesto !== true) {
+          return res.status(400).json({ error: `«${valor}» no es un valor de ${atributo} para ${familia}` });
+        }
+        if (ATRIBUTOS[atributo].libre) {
+          return res.status(400).json({ error: `${atributo} es un campo libre: no hace falta proponer nada` });
+        }
+        valorFinal = normalizarPropuesta(valor);
+        if (!esPalabraPropuesta(valorFinal)) {
+          return res.status(400).json({ error: `«${valor}» no tiene forma de etiqueta: una o dos palabras, sin signos` });
+        }
       }
       if (atributo === 'detalle' && valor.length > MAX_DETALLE) {
         return res.status(400).json({ error: `el detalle tiene ${valor.length} caracteres y el máximo es ${MAX_DETALLE}` });
@@ -234,7 +253,7 @@ export default async function handler(req, res) {
 
       const { error } = await supabase
         .from('tn_atributos')
-        .upsert({ store, tn_id: tnId, atributo, valor, por: yo, at: ahora }, { onConflict: 'store,tn_id,atributo' });
+        .upsert({ store, tn_id: tnId, atributo, valor: valorFinal, por: yo, at: ahora }, { onConflict: 'store,tn_id,atributo' });
       if (error) throw new Error(error.message);
 
       // 🔑 La familia se guarda en la cola en cada carga. El servidor no ve las categorías de
@@ -246,7 +265,7 @@ export default async function handler(req, res) {
       const { error: eCola } = await supabase.from('tn_descripciones').upsert(cola, { onConflict: 'store,tn_id' });
       if (eCola) throw new Error(eCola.message);
 
-      return res.status(200).json({ ok: true, valor });
+      return res.status(200).json({ ok: true, valor: valorFinal });
     }
 
     // Las medidas las carga el local con la prenda apoyada y la cinta en la mano, en el mismo

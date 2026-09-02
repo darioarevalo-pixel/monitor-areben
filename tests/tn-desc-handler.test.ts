@@ -144,6 +144,34 @@ describe('🆕 la ficha de atributos: la carga el local, con lista cerrada', () 
   })
 })
 
+describe('🔑 la palabra propuesta: la válvula pide un gesto, no es un agujero', () => {
+  it('🔴 sin `propuesto: true` el guard es el de siempre', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'escote', valor: 'forrado' }))
+    expect(res.code).toBe(400)
+    expect(llamadas).toEqual([])
+  })
+
+  it('con el gesto explícito entra, normalizada', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'escote', valor: '  Con  Ballenas ', propuesto: true }))
+    expect(res.code).toBe(200)
+    expect(upserts[0]).toMatchObject({ atributo: 'escote', valor: 'con ballenas' })
+  })
+
+  it('⛔ una frase no es una etiqueta, ni con el gesto', async () => {
+    sesionDe(LOCAL)
+    const res = await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'escote', valor: 'top negro con ballenas y encaje', propuesto: true }))
+    expect(res.code).toBe(400)
+    expect(llamadas).toEqual([])
+  })
+
+  it('⛔ en el campo libre no hay nada que proponer', async () => {
+    sesionDe(LOCAL)
+    expect((await llamar(post({ op: 'atributos', familia: 'tops', atributo: 'detalle', valor: 'lo que sea', propuesto: true }))).code).toBe(200)
+  })
+})
+
 describe('🆕 las medidas: las carga el local, con la prenda apoyada', () => {
   it('🔑 `medida` NO pide el permiso de aprobar: es el mismo momento que la ficha', async () => {
     sesionDe(LOCAL)

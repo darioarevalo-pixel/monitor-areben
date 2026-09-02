@@ -19,8 +19,12 @@ import {
   FAMILIAS as FAMILIAS_JS,
   NO_APLICA as NO_APLICA_JS,
   TELA_SIN_IDENTIFICAR as TELA_SIN_IDENTIFICAR_JS,
+  MAX_PROPUESTA as MAX_PROPUESTA_JS,
   atributosDe as atributosDeJs,
   atributosExtra as atributosExtraJs,
+  esPalabraPropuesta as esPalabraPropuestaJs,
+  normalizarPropuesta as normalizarPropuestaJs,
+  propuestasDe as propuestasDeJs,
   bulletsDe as bulletsDeJs,
   cargadosDe as cargadosDeJs,
   esValor as esValorJs,
@@ -83,6 +87,27 @@ export const TELA_SIN_IDENTIFICAR: string = TELA_SIN_IDENTIFICAR_JS
 
 /** «Esta prenda no tiene eso». Vale en todo atributo cerrado salvo Tela; se guarda y no sale. */
 export const NO_APLICA: string = NO_APLICA_JS
+
+/** El largo máximo de una palabra propuesta: es una etiqueta, no una descripción. */
+export const MAX_PROPUESTA: number = MAX_PROPUESTA_JS
+
+/** Una palabra que alguien propuso y que todavía ⛔ no está en ninguna lista. */
+export type Propuesta = { atributo: Atributo; label: string; valor: string }
+
+/** ¿Tiene FORMA de palabra del diccionario? ⛔ No dice que sea buena: eso lo decide Bruno. */
+export function esPalabraPropuesta(valor: string): boolean {
+  return esPalabraPropuestaJs(valor)
+}
+
+/** Minúsculas y un solo espacio: «Wide Leg» y «wide leg » ⛔ no pueden ser dos filas. */
+export function normalizarPropuesta(valor: string): string {
+  return normalizarPropuestaJs(valor) as string
+}
+
+/** Las palabras propuestas de un producto: las que ⛔ no están en ninguna lista. */
+export function propuestasDe(familia: Familia | null, cargados: Cargados): Propuesta[] {
+  return propuestasDeJs(familia, cargados) as Propuesta[]
+}
 
 export function normalizarCategoria(s: string): string {
   return normalizarCategoriaJs(s)
