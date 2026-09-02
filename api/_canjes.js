@@ -86,6 +86,7 @@ import { borrarBlob, pathnameDeBlob } from './_blob.js';
 import { esAdmin, puedeAtenderRetiroLocal, puedeSub, tieneFuncion } from '../lib/permisos.core.js';
 import { marcaDePermisos, marcasVisiblesCanjes } from '../lib/canjes/marcas.js';
 import { normalizarInstagram } from '../lib/canjes/instagram.core.js';
+import { provinciaCorregida } from '../lib/canjes/direccion.core.js';
 // El grafo de estados y el tope viven aparte porque **el portal público también los usa** desde la
 // tanda 2 (ella elige productos desde el link y hay que frenarla si se pasa del acuerdo), y ese
 // handler no puede arrastrar `_auth.js` + `permisos.core.js` por una función de quince líneas.
@@ -123,7 +124,7 @@ const STORES = ['bdi', 'zattia', 'stunned'];
  */
 
 const PERSONA_COLS = `id, instagram, instagram_raw, nombre, apellido, telefono, email, tiktok, ciudad,
-  dni, calle, numero, piso, depto, cp, provincia, localidad, direccion_nota,
+  dni, calle, numero, piso, depto, cp, barrio, provincia, localidad, direccion_nota,
   talles, modelo_celular, seguidores_ig, seguidores_tt, seguidores_at,
   destacada, destacada_nota, vetada, vetada_motivo, cadencia_dias,
   notas, archivos, historial, usuario, created_at, updated_at`.replace(/\s+/g, ' ');
@@ -872,13 +873,28 @@ export default async function handler(req, res) {
       }
 
       for (const k of ['nombre', 'apellido', 'telefono', 'email', 'tiktok', 'ciudad',
-        'dni', 'calle', 'numero', 'piso', 'depto', 'cp', 'provincia', 'localidad', 'direccion_nota',
+        'dni', 'calle', 'numero', 'piso', 'depto', 'cp', 'barrio', 'provincia', 'localidad', 'direccion_nota',
         'modelo_celular', 'destacada_nota', 'vetada_motivo']) {
         if (b[k] !== undefined) campos[k] = texto(b[k]);
       }
       for (const k of ['seguidores_ig', 'seguidores_tt']) {
         if (b[k] !== undefined) campos[k] = num(b[k]);
       }
+      // La misma corrección que corre en el portal: con un CP de CABA, «Buenos Aires» es un error,
+      // no una preferencia. Vive en `direccion.core.js` y la llaman los dos lados justamente porque
+      // las cuatro fichas que salieron mal las había tipeado el equipo desde acá, no ella.
+      // 🔑 El CP contra el que se corrige es el que quedó después de esta edición: si en la misma
+      // pasada le cambian el código postal, la provincia se juzga contra el nuevo, no contra el
+      // viejo. `undefined` = no lo tocaron, y entonces se mira el que ya está en la ficha.
+      if (campos.provincia !== undefined || campos.cp !== undefined) {
+        const { data: ficha } = await supabase.from('canje_personas')
+          .select('cp, provincia').eq('id', id).maybeSingle();
+        const cp = campos.cp !== undefined ? campos.cp : ficha?.cp;
+        const provincia = campos.provincia !== undefined ? campos.provincia : ficha?.provincia;
+        const { provincia: corregida, corregida: hubo } = provinciaCorregida(provincia, cp);
+        if (hubo) campos.provincia = corregida;
+      }
+
       // El número de seguidores sin fecha miente. Se estampa al guardarlo, no se pide aparte.
       if (b.seguidores_ig !== undefined || b.seguidores_tt !== undefined) campos.seguidores_at = ahora();
 
@@ -1917,7 +1933,7 @@ export default async function handler(req, res) {
       // La dirección se CONGELA acá: si el mes que viene se muda, el histórico no tiene que mentir
       // sobre a dónde se mandó esto.
       const { data: persona } = await supabase.from('canje_personas')
-        .select('nombre, apellido, dni, calle, numero, piso, depto, cp, provincia, localidad, direccion_nota, telefono')
+        .select('nombre, apellido, dni, calle, numero, piso, depto, cp, barrio, provincia, localidad, direccion_nota, telefono')
         .eq('id', canje.persona_id).maybeSingle();
       if (persona) campos.envio_direccion = persona;
 

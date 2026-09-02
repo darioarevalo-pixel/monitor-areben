@@ -54,6 +54,7 @@ type Datos = {
   piso: string | null
   depto: string | null
   cp: string | null
+  barrio: string | null
   localidad: string | null
   provincia: string | null
   direccion_nota: string | null
@@ -117,7 +118,7 @@ const bloque: React.CSSProperties = { marginBottom: 14 }
 const fila: React.CSSProperties = { display: 'flex', gap: 10 }
 
 function Campo({
-  titulo, valor, onChange, placeholder, tipo, opcional, ancho,
+  titulo, valor, onChange, placeholder, tipo, opcional, ancho, ayuda,
 }: {
   titulo: string
   valor: string
@@ -126,6 +127,9 @@ function Campo({
   tipo?: string
   opcional?: boolean
   ancho?: number
+  /** Una línea DEBAJO del campo, para lo que el rótulo solo no contesta. ⛔ No es el placeholder:
+      eso desaparece apenas escribe, justo cuando todavía está dudando qué poner. */
+  ayuda?: string
 }) {
   return (
     <div style={{ ...bloque, flex: ancho ?? 1 }}>
@@ -140,6 +144,7 @@ function Campo({
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
+      {ayuda && <p style={{ color: '#6b7280', fontSize: 12, margin: '4px 0 0', lineHeight: 1.4 }}>{ayuda}</p>}
     </div>
   )
 }
@@ -188,6 +193,7 @@ export function CanjePortal({ token }: { token: string | null }) {
           piso: v.datos.piso || '',
           depto: v.datos.depto || '',
           cp: v.datos.cp || '',
+          barrio: v.datos.barrio || '',
           localidad: v.datos.localidad || '',
           provincia: v.datos.provincia || '',
           direccion_nota: v.datos.direccion_nota || '',
@@ -324,7 +330,7 @@ export function CanjePortal({ token }: { token: string | null }) {
       const datos: Record<string, unknown> = {
         nombre: form.nombre, apellido: form.apellido, telefono: form.telefono, email: form.email,
         dni: form.dni, calle: form.calle, numero: form.numero, piso: form.piso, depto: form.depto,
-        cp: form.cp, localidad: form.localidad, provincia: form.provincia,
+        cp: form.cp, barrio: form.barrio, localidad: form.localidad, provincia: form.provincia,
         direccion_nota: form.direccion_nota,
       }
       // Sólo el dato que esta marca pide, y sólo si se lo mostramos: mandar una clave que el
@@ -569,6 +575,16 @@ export function CanjePortal({ token }: { token: string | null }) {
             <Campo titulo="Localidad" valor={form.localidad} onChange={set('localidad')} />
             <Campo titulo="Provincia" valor={form.provincia} onChange={set('provincia')} />
           </div>
+          {/* El barrio lo exige el correo para emitir la etiqueta, y es el único campo del
+              formulario que mucha gente no sabe qué contestar afuera de una ciudad grande: por eso
+              la ayuda dice qué poner en vez de dejarla adivinando. Sin esto había que deducirlo del
+              código postal, una dirección por vez. */}
+          <Campo
+            titulo="Barrio"
+            valor={form.barrio}
+            onChange={set('barrio')}
+            ayuda="Lo pide el correo. Si en tu ciudad no se usan los barrios, repetí la localidad."
+          />
           <Campo
             titulo="Alguna referencia"
             valor={form.direccion_nota}

@@ -540,15 +540,17 @@ describe('los datos para tipear la orden en Tienda Nube', () => {
     id: 1, instagram: 'lu', created_at: '2026-01-01', destacada: false, vetada: false, cadencia_dias: 90,
     nombre: 'Lucía', apellido: 'Méndez', email: 'lu@mail.com', telefono: '1155550000', dni: '38111222',
     calle: 'Av. Siempreviva', numero: '742', piso: '3', depto: 'B',
-    cp: '1425', localidad: 'Palermo', provincia: 'CABA', direccion_nota: 'portero eléctrico',
+    cp: '1425', barrio: 'Palermo', localidad: 'CABA', provincia: 'CABA', direccion_nota: 'portero eléctrico',
   } as CanjePersona
 
   const CFG = { email_pedido: 'canjes@bdi.com' }
 
-  it('los trece campos salen en el orden en que el admin los pide', () => {
+  // El orden es el del formulario que se tipea, y `barrio` está por Envío Nube: TN no lo pide y la
+  // etiqueta no se emite sin él.
+  it('los catorce campos salen en el orden en que el admin los pide', () => {
     expect(camposParaTiendaNube(P, CFG).map((c) => c.key)).toEqual([
       'nombre', 'apellido', 'email', 'telefono', 'dni',
-      'calle', 'numero', 'piso', 'depto', 'cp', 'localidad', 'provincia', 'direccion_nota',
+      'calle', 'numero', 'piso', 'depto', 'cp', 'barrio', 'localidad', 'provincia', 'direccion_nota',
     ])
   })
 
@@ -570,16 +572,27 @@ describe('los datos para tipear la orden en Tienda Nube', () => {
   it('lo que falta se devuelve igual, vacío', () => {
     // Esconder los vacíos haría la lista más corta y la pregunta que importa más difícil: qué le
     // falta a esta persona para poder despacharle.
-    const campos = camposParaTiendaNube({ ...P, piso: null, dni: '' } as CanjePersona, CFG)
-    expect(campos).toHaveLength(13)
+    const campos = camposParaTiendaNube({ ...P, piso: null, dni: '', barrio: null } as CanjePersona, CFG)
+    expect(campos).toHaveLength(14)
     expect(campos.find((c) => c.key === 'piso')?.valor).toBe('')
     expect(campos.find((c) => c.key === 'dni')?.valor).toBe('')
+    // El barrio es el más nuevo y el que más falta: las fichas cargadas antes del 2-sep-2026 no lo
+    // tienen, y la grilla tiene que decirlo en vez de dibujar una lista completa que no lo está.
+    expect(campos.find((c) => c.key === 'barrio')?.valor).toBe('')
   })
 
   it('la dirección en un renglón nombra el piso y el depto, y se saltea lo que no hay', () => {
-    expect(direccionEnUnaLinea(P)).toBe('Av. Siempreviva 742, piso 3, depto B, Palermo, CABA, CP 1425')
+    expect(direccionEnUnaLinea(P)).toBe('Av. Siempreviva 742, piso 3, depto B, Palermo, CABA, CABA, CP 1425')
     expect(direccionEnUnaLinea({ ...P, piso: null, depto: null } as CanjePersona))
-      .toBe('Av. Siempreviva 742, Palermo, CABA, CP 1425')
+      .toBe('Av. Siempreviva 742, Palermo, CABA, CABA, CP 1425')
+  })
+
+  // El renglón se copia entero en un formulario que lo acepta junto; si el barrio se cayera de acá,
+  // el que lo pega quedaría con la misma dirección incompleta que hay que completar a mano.
+  it('la dirección en un renglón lleva el barrio, y sin barrio no deja un hueco', () => {
+    expect(direccionEnUnaLinea(P)).toContain('Palermo, CABA, CABA')
+    expect(direccionEnUnaLinea({ ...P, barrio: null } as CanjePersona))
+      .toBe('Av. Siempreviva 742, piso 3, depto B, CABA, CABA, CP 1425')
   })
 })
 

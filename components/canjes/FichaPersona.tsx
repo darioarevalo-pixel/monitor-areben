@@ -289,6 +289,7 @@ export function FichaPersona({
             valor={[persona.calle, persona.numero, persona.piso && `piso ${persona.piso}`, persona.depto && `depto ${persona.depto}`]
               .filter(Boolean).join(' ') || null}
           />
+          <Dato label="Barrio" valor={persona.barrio} />
           <Dato label="Localidad" valor={[persona.localidad, persona.provincia].filter(Boolean).join(', ') || null} />
           <Dato label="Código postal" valor={persona.cp} />
           {persona.direccion_nota && <Dato label="Referencia" valor={persona.direccion_nota} />}
@@ -539,6 +540,7 @@ function EditarFicha({
       piso: persona.piso ?? null,
       depto: persona.depto ?? null,
       cp: persona.cp ?? null,
+      barrio: persona.barrio ?? null,
       provincia: persona.provincia ?? null,
       localidad: persona.localidad ?? null,
       direccion_nota: persona.direccion_nota ?? null,
@@ -605,6 +607,7 @@ function EditarFicha({
         <Field label="Piso"><Input value={f.piso ?? ''} onChange={(e) => set('piso', e.target.value)} /></Field>
         <Field label="Depto"><Input value={f.depto ?? ''} onChange={(e) => set('depto', e.target.value)} /></Field>
         <Field label="Código postal"><Input value={f.cp ?? ''} onChange={(e) => set('cp', e.target.value)} /></Field>
+        <Field label="Barrio" hint="Lo pide el correo para la etiqueta"><Input value={f.barrio ?? ''} onChange={(e) => set('barrio', e.target.value)} /></Field>
         <Field label="Localidad"><Input value={f.localidad ?? ''} onChange={(e) => set('localidad', e.target.value)} /></Field>
         <Field label="Provincia"><Input value={f.provincia ?? ''} onChange={(e) => set('provincia', e.target.value)} /></Field>
         <Field label="Referencia" hint="Portero, timbre, horario"><Input value={f.direccion_nota ?? ''} onChange={(e) => set('direccion_nota', e.target.value)} /></Field>

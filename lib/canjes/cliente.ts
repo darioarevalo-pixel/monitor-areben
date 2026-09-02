@@ -208,6 +208,7 @@ export type CamposPersona = Partial<{
   piso: string | null
   depto: string | null
   cp: string | null
+  barrio: string | null
   provincia: string | null
   localidad: string | null
   direccion_nota: string | null

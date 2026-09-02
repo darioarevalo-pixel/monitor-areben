@@ -731,3 +731,20 @@ alter table canjes add column if not exists notas jsonb not null default '[]'::j
 -- `extra` sería darle a la caja la llave para saltear el único control duro que hay. En esa rama el
 -- campo se ignora y la fila entra contando al tope.
 alter table canje_items add column if not exists extra boolean not null default false;
+
+-- **`canje_personas.barrio` — el dato que faltaba para emitir la etiqueta.**
+--
+-- Envío Nube exige el barrio para crear un envío manual, y el formulario que llena la creadora no se
+-- lo pedía. Las trece primeras etiquetas (1 y 2 de septiembre de 2026) se cargaron **deduciéndolo del
+-- código postal, una por una**, con el admin abierto al lado: en las ciudades grandes se puede, en el
+-- resto se termina repitiendo la localidad. Es trabajo manual que se repite en cada tanda.
+--
+-- 🔑 **Se pide sólo con envío.** Con retiro en el local no hay a dónde despachar nada, y el portal ya
+-- no dibuja el bloque de domicilio: sumarlo a los obligatorios de todos sería pedirle un dato a quien
+-- pasa a buscarlo por el mostrador.
+--
+-- ⛔ **No entra a `tieneDireccion`** (`lib/canjes/tipos.ts`). Las fichas cargadas antes de hoy no lo
+-- tienen, y meterlo en el criterio de "se puede despachar" dejaría a los canjes en curso con el aviso
+-- de «falta la dirección» prendido por un dato que nadie les pidió cuando cargaron. Lo nuevo se exige
+-- en la puerta; no se aplica hacia atrás sobre lo que ya está adentro.
+alter table canje_personas add column if not exists barrio text;

@@ -482,6 +482,12 @@ export type CanjePersona = {
   piso?: string | null
   depto?: string | null
   cp?: string | null
+  /**
+   * El barrio. Lo exige **Envío Nube** para emitir la etiqueta y el portal no lo pedía hasta el
+   * 2-sep-2026: las trece primeras etiquetas se cargaron deduciéndolo del código postal a mano.
+   * ⛔ No entra a `tieneDireccion` a propósito — ver el comentario de esa función.
+   */
+  barrio?: string | null
   provincia?: string | null
   localidad?: string | null
   direccion_nota?: string | null
@@ -1287,7 +1293,15 @@ export function nombrePersona(p: Pick<CanjePersona, 'nombre' | 'apellido' | 'ins
   return '@' + (p.instagram_raw || p.instagram)
 }
 
-/** ¿Tiene dirección suficiente para despachar? Es lo que decide si hace falta mandarle el link. */
+/**
+ * ¿Tiene dirección suficiente para despachar? Es lo que decide si hace falta mandarle el link.
+ *
+ * ⛔ **El `barrio` NO entra acá, y no es un olvido.** El formulario lo pide desde el 2-sep-2026,
+ * pero las fichas cargadas antes no lo tienen: sumarlo a este criterio dejaría a los canjes que hoy
+ * están en curso contestando «falta la dirección», con el aviso prendido y el despacho frenado, por
+ * un dato que nadie les pidió cuando cargaron. Lo nuevo se exige en la puerta de entrada; ⛔ no se
+ * aplica hacia atrás sobre lo que ya está adentro.
+ */
 export function tieneDireccion(p: Pick<CanjePersona, 'calle' | 'numero' | 'cp' | 'localidad'>): boolean {
   return Boolean(p.calle && p.numero && p.cp && p.localidad)
 }
@@ -1312,7 +1326,7 @@ export function tieneDatosDeMarca(p: Pick<CanjePersona, 'talles' | 'modelo_celul
 export function direccionEnUnaLinea(p: CanjePersona): string {
   const calle = [p.calle, p.numero].filter(Boolean).join(' ')
   const puerta = [p.piso && `piso ${p.piso}`, p.depto && `depto ${p.depto}`].filter(Boolean).join(', ')
-  return [calle, puerta, p.localidad, p.provincia, p.cp && `CP ${p.cp}`].filter(Boolean).join(', ')
+  return [calle, puerta, p.barrio, p.localidad, p.provincia, p.cp && `CP ${p.cp}`].filter(Boolean).join(', ')
 }
 
 export type CampoParaTN = { key: string; label: string; valor: string }
@@ -1323,6 +1337,11 @@ export type CampoParaTN = { key: string; label: string; valor: string }
  * El formulario de TN los pide separados —nombre por un lado, apellido por otro, calle y altura en
  * dos casillas—, así que copiar "la dirección entera" no alcanza: hay que volver a partirla a mano,
  * que es exactamente donde se cuelan los errores de tipeo en una dirección de envío.
+ *
+ * 🔑 **Desde que la venta va a Gestión Nube, esta grilla se copia sobre todo en el formulario de
+ * ENVÍO NUBE**, que es donde se emite la etiqueta: no hay API para la etiqueta manual, así que los
+ * catorce campos se tipean uno por uno. Por eso está el `barrio`, que TN no pide y Envío Nube
+ * exige.
  *
  * Los vacíos **se devuelven igual**, con `valor: ''`. Esconderlos haría más corta la lista y más
  * difícil la pregunta que importa: qué le falta a esta persona para poder despacharle.
@@ -1349,6 +1368,7 @@ export function camposParaTiendaNube(
     { key: 'piso', label: 'Piso', valor: txt(p.piso) },
     { key: 'depto', label: 'Depto', valor: txt(p.depto) },
     { key: 'cp', label: 'Código postal', valor: txt(p.cp) },
+    { key: 'barrio', label: 'Barrio', valor: txt(p.barrio) },
     { key: 'localidad', label: 'Localidad', valor: txt(p.localidad) },
     { key: 'provincia', label: 'Provincia', valor: txt(p.provincia) },
     { key: 'direccion_nota', label: 'Referencia', valor: txt(p.direccion_nota) },

@@ -42,6 +42,7 @@
 //     escritores sin coordinarse, igual que arriba.
 import { borrarBlob } from './_blob.js';
 import { buzonAbierto, seVaDelTope } from '../lib/canjes/reglas.core.js';
+import { provinciaCorregida } from '../lib/canjes/direccion.core.js';
 import {
   buscarPorToken, carpetaDeCanje, clienteMaestro, contarEvidencias, esTokenDeCanje,
   esUrlDeContenido, topeDeEvidencias,
@@ -73,7 +74,7 @@ const MAX_ELECCIONES = 50;
  */
 const CAMPOS_PERSONA = [
   'nombre', 'apellido', 'telefono', 'email', 'dni',
-  'calle', 'numero', 'piso', 'depto', 'cp', 'localidad', 'provincia', 'direccion_nota',
+  'calle', 'numero', 'piso', 'depto', 'cp', 'barrio', 'localidad', 'provincia', 'direccion_nota',
 ];
 
 /** Espejo de `queDatoPide` en `lib/canjes/tipos.ts`: BDI vende fundas, Zattia y Stunned, ropa. */
@@ -328,6 +329,13 @@ export function camposDeLaPersona(datos, store, retiroLocal) {
     if (!campos.modelo_celular) return { error: 'Falta el modelo de tu celular: sin eso no sabemos qué funda mandarte.' };
   }
 
+  // La provincia se corrige contra el CP antes de mirar los faltantes, porque lo que se guarda es
+  // lo corregido y es lo que la pantalla le vuelve a mostrar. `provinciaCorregida` sólo pisa cuando
+  // el CP no deja lugar a dudas (hoy: CABA) y ⛔ nunca completa un campo vacío.
+  if (campos.provincia !== undefined) {
+    campos.provincia = provinciaCorregida(campos.provincia, campos.cp !== undefined ? campos.cp : d.cp).provincia;
+  }
+
   // Los obligatorios se piden sólo si la clave vino: así un guardado parcial (que hoy no existe,
   // pero mañana sí) no se rompe contra una regla pensada para el formulario completo.
   const falta = (k, comoSeLlama) => campos[k] !== undefined && !campos[k] ? comoSeLlama : null;
@@ -351,6 +359,11 @@ export function camposDeLaPersona(datos, store, retiroLocal) {
       falta('calle', 'la calle'),
       falta('numero', 'la altura'),
       falta('cp', 'el código postal'),
+      // El barrio lo exige Envío Nube para emitir la etiqueta, y hasta el 2-sep-2026 el formulario
+      // no lo pedía: había que deducirlo del código postal, una por una, con el admin abierto al
+      // lado. Es obligatorio por eso, y la ayuda del campo le dice que si no tiene barrio repita la
+      // localidad — que es lo que se cargó a mano las trece veces anteriores.
+      falta('barrio', 'el barrio'),
       falta('localidad', 'la localidad'),
       falta('provincia', 'la provincia'),
     ]),

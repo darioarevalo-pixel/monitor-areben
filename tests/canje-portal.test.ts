@@ -193,7 +193,8 @@ describe('lo que la creadora puede escribir', () => {
   const COMPLETO = {
     nombre: 'Lucía', apellido: 'Méndez', telefono: '1155550000', email: 'lu@mail.com',
     dni: '38111222', calle: 'Av. Siempreviva', numero: '742', piso: '3', depto: 'B',
-    cp: '1425', localidad: 'Palermo', provincia: 'CABA', direccion_nota: 'portero',
+    cp: '1425', barrio: 'Palermo', localidad: 'CABA', provincia: 'Ciudad Autónoma de Buenos Aires',
+    direccion_nota: 'portero',
     talles: { remera: 'M', pantalon: '', calzado: '' },
   }
 
@@ -241,6 +242,9 @@ describe('lo que la creadora puede escribir', () => {
     ['el DNI', { dni: '' }, 'tu DNI'],
     ['la altura', { numero: '' }, 'la altura'],
     ['el código postal', { cp: '' }, 'el código postal'],
+    // El barrio lo exige Envío Nube para emitir la etiqueta. Hasta el 2-sep-2026 el formulario no
+    // lo pedía y había que deducirlo del código postal, una dirección por vez.
+    ['el barrio', { barrio: '' }, 'el barrio'],
     ['la provincia', { provincia: '' }, 'la provincia'],
   ])('avisa en criollo si falta %s', (_que, parche, esperado) => {
     const { error } = camposDeLaPersona({ ...COMPLETO, ...parche }, 'zattia')
@@ -268,6 +272,59 @@ describe('lo que la creadora puede escribir', () => {
   it('junta los faltantes en una sola frase, bien conjugada', () => {
     const { error } = camposDeLaPersona({ ...COMPLETO, cp: '', localidad: '' }, 'zattia')
     expect(error).toBe('Nos falta el código postal y la localidad.')
+  })
+
+  // ── Con retiro en el local no hay a dónde despachar ──────────────────────────
+  //
+  // El tercer parámetro no lo miraba ningún test, y es el que decide si se le pide el domicilio
+  // entero. Pedirle la dirección a quien pasa por el mostrador es la forma más barata de que
+  // abandone el formulario, y de quedarse con un dato que nadie va a usar.
+
+  it('con retiro en el local no pide NADA del domicilio', () => {
+    const sinDomicilio = {
+      nombre: 'Lucía', apellido: 'Méndez', telefono: '1155550000', email: 'lu@mail.com', dni: '38111222',
+      calle: '', numero: '', cp: '', barrio: '', localidad: '', provincia: '',
+    }
+    expect(camposDeLaPersona(sinDomicilio, 'zattia', true).error).toBeUndefined()
+  })
+
+  // La otra punta: sin el `true`, los mismos datos tienen que rebotar. Sin este caso, un guard que
+  // ignorara el parámetro y no pidiera nunca el domicilio pasaría el test de arriba igual.
+  it('y con envío, esos mismos datos vacíos rebotan', () => {
+    const sinDomicilio = {
+      nombre: 'Lucía', apellido: 'Méndez', telefono: '1155550000', email: 'lu@mail.com', dni: '38111222',
+      calle: '', numero: '', cp: '', barrio: '', localidad: '', provincia: '',
+    }
+    const { error } = camposDeLaPersona(sinDomicilio, 'zattia', false)
+    expect(error).toContain('la calle')
+    expect(error).toContain('el barrio')
+    expect(error).toContain('la provincia')
+  })
+
+  // ── La provincia se corrige contra el código postal ──────────────────────────
+  //
+  // Cuatro de las trece fichas que se tipearon en Envío Nube el 1-sep-2026 decían «Buenos Aires»
+  // siendo CABA, y una decía literalmente «Provincia». La regla vive en `direccion.core.js` y la
+  // llaman los dos lados que escriben; acá se prueba que este lado efectivamente la llama.
+
+  it('con un CP de CABA guarda la provincia corregida, no la que vino', () => {
+    const { campos = {}, error } = camposDeLaPersona({ ...COMPLETO, provincia: 'Buenos Aires' }, 'zattia')
+    expect(error).toBeUndefined()
+    expect(campos.provincia).toBe('Ciudad Autónoma de Buenos Aires')
+  })
+
+  // Fuera del único rango medido manda lo que escribió ella: esto no es "la provincia la decide el
+  // sistema". Berisso (1923) es Buenos Aires de verdad.
+  it('fuera de CABA no toca la provincia', () => {
+    const { campos = {} } = camposDeLaPersona({ ...COMPLETO, cp: '1923', provincia: 'Buenos Aires' }, 'zattia')
+    expect(campos.provincia).toBe('Buenos Aires')
+  })
+
+  // ⛔ Y no la completa sola: un obligatorio vacío tiene que seguir llegando vacío al control de
+  // faltantes. Darlo por afirmado sería aprobarle un dato que nunca escribió.
+  it('con la provincia vacía sigue faltando, aunque el CP la sepa', () => {
+    const { error } = camposDeLaPersona({ ...COMPLETO, provincia: '' }, 'zattia')
+    expect(error).toContain('la provincia')
   })
 
   // Con vitrina, el formulario NO dibuja "Tu celular" ni "Tus talles" —ya lo dijo eligiendo la

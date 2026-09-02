@@ -106,12 +106,21 @@ además lo que genera el código de seguimiento).
 5. ▶️ **Falta C-0082 Julieta Junco, que va a SUCURSAL** — el formulario es otro («Agregar envío
    manual → A sucursal») y **falta que Bruno diga a qué sucursal**. ⛔ C-0051 Celeste Aloe la sacó él:
    no lleva etiqueta.
-6. 🔴 **Falta agregar «Barrio» al link que llena la creadora.** Envío Nube lo exige para la etiqueta
-   y el portal no se lo pide, así que hoy hay que deducirlo del código postal, uno por uno. **Bruno
-   ya lo aprobó.** Con eso, la próxima tanda de etiquetas sale sin fricción.
-7. ⚠️ **Las fichas traen la provincia mal y nadie lo ve**: 4 de 13 decían «Buenos Aires» siendo CABA,
-   y una decía literalmente **«Provincia»**. Se corrigieron al cargar la etiqueta, pero **la ficha
-   sigue mal en el monitor**. Vale la pena un guard: si el CP es 1000-1499, la provincia es CABA.
+6. 🏁 **«Barrio» ya está en el link que llena la creadora** (2-sep). Es obligatorio **sólo con
+   envío** —con retiro en el local no se pide nada del domicilio— y la ayuda del campo dice qué poner
+   si en su ciudad no se usan los barrios: repetir la localidad, que es lo que se cargó a mano las
+   trece veces. Está también en la ficha del equipo y en la grilla de campos que se copia a Envío
+   Nube. ⛔ **No entra a `tieneDireccion`**: las fichas viejas no lo tienen y sumarlo al criterio de
+   «se puede despachar» frenaría canjes en curso por un dato que nadie les pidió.
+7. 🏁 **El guard de la provincia ya está** (2-sep): con un CP de 1000 a 1499 la provincia se corrige a
+   CABA al guardar, **en los dos lados que escriben** —el portal y la ficha del equipo—, porque las
+   cuatro que salieron mal las había tipeado el equipo. Hay **un solo rango y es a propósito**: los
+   demás se pisan entre sí y una tabla escrita de memoria corregiría direcciones que están bien.
+   ▶️ **Falta correr la migración de `canje_personas.barrio` en la base**, y hasta que esté no se
+   puede deployar el código: el portal manda la columna nueva y el update fallaría.
+   ▶️ **Y falta corregir las 6 fichas que hoy tienen la provincia peleada con el CP** (4 mal de
+   verdad y 2 escritas «CABA» en corto): el guard las arregla al próximo guardado, pero nadie las va
+   a volver a guardar.
 8. ⚠️ **Tres direcciones se cargaron interpretándolas, y conviene que la ficha lo refleje**:
    C-0078 «Av 101 9 de julio» **no eran dos calles** —es la Avenida 101, que en Villa Ballester se
    conoce como 9 de Julio; se cargó `Av. 101 (9 de Julio)`—; C-0075 el timbre no tiene campo propio y

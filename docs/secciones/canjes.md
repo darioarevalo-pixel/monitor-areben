@@ -121,6 +121,34 @@ no re-preguntarlas.**
     venta a $0 no hunda el precio promedio ⇒ **una venta COBRADA cargada en ese canal tampoco
     contaría**. Hoy no hay ninguna (medido sobre el espejo entero: los canales con ventas son 1, 3,
     7, 8, 9, 10, 12, 13 y 16).
+- 🆕 🔴 🔑 **EL BARRIO SE PIDE PORQUE LO EXIGE EL CORREO, Y LA PROVINCIA SE CORRIGE SOLA CONTRA EL
+  CÓDIGO POSTAL** (2-sep-2026). Las dos salieron del mismo trabajo: cargar a mano las trece etiquetas
+  de Envío Nube de los canjes con envío.
+  - **`barrio` es obligatorio sólo con envío.** Envío Nube no emite la etiqueta sin él y el
+    formulario no lo pedía: las trece se cargaron **deduciéndolo del código postal, una por una**.
+    Con retiro en el local no se pide, como el resto del domicilio.
+  - ⛔ **`barrio` NO entra a `tieneDireccion`, y no es un olvido.** Las fichas cargadas antes no lo
+    tienen: sumarlo al criterio de «se puede despachar» dejaría a los canjes en curso con el aviso
+    de «falta la dirección» prendido y el despacho frenado, por un dato que nadie les pidió cuando
+    cargaron. **Lo nuevo se exige en la puerta; no se aplica hacia atrás sobre lo que ya está
+    adentro.**
+  - 🔑 **La provincia se corrige contra el CP en `lib/canjes/direccion.core.js`**, JS plano y sin un
+    solo import, porque **lo llaman los dos lados que escriben**: el portal (`camposDeLaPersona`) y
+    la ficha del equipo (`persona-editar`). Media regla en una de las dos pantallas es exactamente
+    lo que dejó el problema: **de las trece fichas, cuatro decían «Buenos Aires» siendo CABA y una
+    decía literalmente «Provincia»** — y las había tipeado el equipo, no ella.
+  - 🔴 **Hay UN solo rango, y es a propósito**: CABA es 1000–1499 completo y ninguna otra provincia
+    entra ahí. ⛔ **No es el comienzo de una tabla CP → provincia**: el resto de los rangos se pisan
+    (el 2000 es Rosario pero el 2900 es San Nicolás, en Buenos Aires), así que una tabla larga
+    escrita de memoria corregiría direcciones que están bien. Entra un rango nuevo el día que
+    alguien lo mida contra el nomenclador.
+  - 🔑 **Pisa lo que escribió la persona, y queda VISIBLE**: el valor corregido es el que la pantalla
+    vuelve a mostrar. ⛔ Lo que no se puede es corregir callado hacia adentro. Y ⛔ **no completa un
+    campo vacío**: un obligatorio en blanco llega en blanco al control de faltantes y el formulario
+    lo reclama — darlo por afirmado sería aprobarle un dato que nunca escribió.
+  - ⚠️ `persona-editar` escribe la provincia **sólo si hubo corrección**. Un campo de más en el
+    `update` no es inocuo: dos personas editando la misma ficha se pisan el campo que ninguna tocó.
+    Es el mutante que sobrevivió a la primera tanda y hubo que escribirle el caso.
 - 🔑 **El arranque son DOS contactos**: primero el sondeo («¿te interesa?») y **sólo si contesta que
   sí**, la propuesta con el número. Tirarle el trato antes de que quiera hablar se contesta que no
   mucho más fácil, y si queda corto la negociación arranca perdiendo. Por eso `mensajeSondeo` no
@@ -438,6 +466,11 @@ nombre. Lo que no es obvio:
   frena una venta duplicada y **GN no permite anular por API**: dos toques seguidos serían dos ventas
   y dos veces el stock descontado. Hay test y se cazó **mutando la guarda** — si se toca esa zona,
   volver a mutarla.
+- 🆕 **`tests/canjes-direccion.test.ts` tiene las dos mitades del guard de la provincia**: la regla
+  pura y **el handler del equipo llamándola**, con un supabase de mentira. La segunda mitad es la que
+  importa —las fichas que salieron mal las tipeó el equipo, no ella— y sin ella borrar la corrección
+  de `persona-editar` deja la suite entera en verde. **9 mutantes, 9 muertos**; el que sobrevivió a
+  la primera vuelta fue escribir la provincia **siempre** en vez de sólo cuando hubo corrección.
 - 🆕 **`tests/canje-extras.test.ts` mantiene juntas las TRES cuentas del tope**, que es lo único que
   impide que se despeguen: la del panel (`controlDelTope`), la del balance (`itemsVivos`) y la del
   portal, que está escrita a mano en `api/_canje-portal.js`. **3 mutantes, 3 muertos** —sacar el
