@@ -10,6 +10,7 @@ import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
 import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { familiaDeProducto, listaDe, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 
 /**
@@ -35,8 +36,6 @@ import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Med
  * fresco, respalda, escribe con compare-and-swap y relee.
  */
 
-type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'corta' | 'aprobados' | 'en-la-tienda' | 'todos'
-
 const FILTROS: { v: Filtro; label: string }[] = [
   { v: 'ultimas-tandas', label: 'Últimas 2 tandas' },
   { v: 'sin-desc', label: 'Sin descripción' },
@@ -46,19 +45,6 @@ const FILTROS: { v: Filtro; label: string }[] = [
   { v: 'en-la-tienda', label: 'Publicados en la tienda' },
   { v: 'todos', label: 'Todos los publicados' },
 ]
-
-/**
- * Las fechas de alta de las dos últimas tandas.
- *
- * 🔑 Se calcula por **fechas distintas de alta** y no por «los últimos 14 días»: la mercadería
- * entra de golpe, no de a poco. Medido el 27-ago-2026: de dos semanas para acá no había entrado
- * NINGUNO, y los 41 mudos recientes eran dos tandas, de hace 15 y 27 días. Un umbral en días
- * habría mostrado una lista vacía justo el día que había 41 productos para cargar.
- */
-function ultimasTandas(productos: ProductoTn[], cuantas = 2): Set<string> {
-  const fechas = [...new Set(productos.map((p) => p.created_at.slice(0, 10)).filter(Boolean))]
-  return new Set(fechas.sort().reverse().slice(0, cuantas))
-}
 
 export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
@@ -71,41 +57,27 @@ export function GenDesc() {
 
   const publicados = useMemo(() => productos.filter((p) => p.published), [productos])
   const tandas = useMemo(() => ultimasTandas(publicados), [publicados])
-  /**
-   * 🔑 La categoría de TiendaNube GANA sobre la elegida a mano: si mañana alguien se la pone, la
-   * familia se corrige sola. Lo elegido a mano es el piso para los dos productos que no tienen
-   * ninguna, no una segunda fuente que compita con la tienda.
-   */
-  const familiaDeProducto = (p: ProductoTn): Familia | null => p.familia ?? cola[p.id]?.familia ?? null
-  const sinFicha = (p: ProductoTn) => !!familiaDeProducto(p) && !Object.keys(atributos[p.id] || {}).length
+  const familiaDe = (p: ProductoTn): Familia | null => familiaDeProducto(p, cola[p.id])
 
   const stats = useMemo(
     () => ({
       ultimas: publicados.filter((p) => tandas.has(p.created_at.slice(0, 10))).length,
       sinDesc: publicados.filter((p) => p.prosa.banda === 'nada').length,
-      sinFicha: publicados.filter(sinFicha).length,
+      // ⚠️ El contador cuenta la VERDAD, aunque la lista de abajo se quede con la fila abierta:
+      // «5 sin ficha» con 6 filas en pantalla es lo correcto — la 6ª ya tiene algo cargado.
+      sinFicha: publicados.filter((p) => sinFicha(p, cola[p.id], atributos[p.id])).length,
       aprobados: publicados.filter((p) => cola[p.id]?.estado === 'aprobado').length,
       enLaTienda: publicados.filter((p) => cola[p.id]?.estado === 'escrito').length,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [publicados, cola, atributos, tandas],
   )
 
-  const lista = useMemo(() => {
-    const f = publicados.filter((p) => {
-      const fila = cola[p.id]
-      if (filtro === 'ultimas-tandas') return tandas.has(p.created_at.slice(0, 10))
-      if (filtro === 'sin-desc') return p.prosa.banda === 'nada'
-      if (filtro === 'sin-ficha') return sinFicha(p)
-      if (filtro === 'corta') return p.prosa.banda === 'corta'
-      if (filtro === 'aprobados') return fila?.estado === 'aprobado'
-      if (filtro === 'en-la-tienda') return fila?.estado === 'escrito' || fila?.estado === 'falla'
-      return true
-    })
-    // Primero los mudos: son los que hoy salen a la calle sin decir nada.
-    return f.sort((a, b) => a.prosa.largo - b.prosa.largo || a.name.localeCompare(b.name))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publicados, cola, atributos, filtro, tandas])
+  // 🔴 `abierto` entra a la lista: la fila que se está cargando ⛔ NO se va aunque el guardado le
+  // haga dejar de cumplir el filtro. La regla —y el porqué, que es un caso real— vive en el núcleo.
+  const lista = useMemo(
+    () => listaDe(publicados, { filtro, cola, atributos, tandas, abierto }),
+    [publicados, cola, atributos, filtro, tandas, abierto],
+  )
 
   if (error) return <Notice tone="danger">{error}</Notice>
 
@@ -157,21 +129,21 @@ export function GenDesc() {
             abierto={abierto === p.id}
             onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
             puedePublicar={puedePublicar}
-            familia={familiaDeProducto(p)}
+            familia={familiaDe(p)}
             onFamilia={async (familia) => {
               const err = await guardarFamilia(p.id, familia, p.name)
               if (err) toast.error(err)
               return err
             }}
             onAtributo={async (atributo, valor, propuesto) => {
-              const familia = familiaDeProducto(p)
+              const familia = familiaDe(p)
               if (!familia) return 'Elegí primero qué prenda es.'
               const err = await guardarAtributo(p.id, familia, atributo, valor, p.name, propuesto)
               if (err) toast.error(err)
               return err
             }}
             onMedida={async (talle, medida, valor) => {
-              const familia = familiaDeProducto(p)
+              const familia = familiaDe(p)
               if (!familia) return 'Elegí primero qué prenda es.'
               const err = await guardarMedida(p.id, familia, atributos[p.id] || {}, talle, medida, valor, p.name)
               if (err) toast.error(err)

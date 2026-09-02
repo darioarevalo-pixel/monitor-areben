@@ -226,6 +226,36 @@ la pantalla lo dice — pedirle atributos a un producto del que no se sabe qué 
   como valores de variante igual que los colores y son cortos —y los de pantalón son **números**—,
   así que sin el piso «2 bolsillos» quedaría rechazado por «nombrar el talle 2».
 
+## 🔴 2-sep-2026 — «se le cierra y no guarda»: el filtro le cerraba la ficha en la mano
+
+Lo trajo Bruno desde el local: *«están queriendo poner descripción y medidas, pero cuando
+seleccionan una opción del desplegable se le cierra y no guarda»* — el usuario de Camila Quintana.
+
+**Lo que pasaba, medido contra la base antes de tocar una línea**: ese mediodía había **cuatro
+productos con UN solo atributo cargado** —`tela`, el primer desplegable de la ficha— a un minuto
+uno del otro (13:45, 13:46, 13:46 y 13:47 UTC) y ninguno siguió. Los cuatro son productos **viejos**
+(altas de 2024 y 2025) y **con categoría en TiendaNube**, así que no llegaron por «Últimas 2 tandas»
+ni por el desplegable de «¿Qué prenda es?»: llegaron por el KPI **«Sin ficha cargada»**.
+
+🔑 **Y ahí está todo**: ese filtro es *«tiene prenda y ⛔ ningún atributo»*, así que **el mismo gesto
+que guardaba la tela sacaba a la fila de la lista**. La ficha desaparecía de la pantalla en el
+instante de elegir. Se lee exactamente como «se cerró y no guardó» — y estaba **guardado**: los
+cuatro valores están en `tn_atributos`. El defecto ⛔ no era del guardado, era de la lista.
+
+⇒ **La regla, ahora en `lib/tn-desc/lista.core.ts` con `abierto` como parámetro OBLIGATORIO:** un
+filtro decide **qué se empieza a mirar, ⛔ no qué se puede terminar de cargar**. La fila abierta se
+queda en la lista aunque deje de cumplirlo, y se va recién cuando alguien la cierra.
+
+- ⚠️ **El KPI sigue contando la verdad** («5 sin ficha» con 6 filas en pantalla es correcto: la 6ª
+  ya tiene algo cargado). El que miente si se lo empareja es el contador, no la lista.
+- ⛔ **`abierto` no es una llave maestra**: un producto despublicado no vuelve a la lista por estar
+  abierto. Está fijado por test.
+- 🔑 El orden ⛔ no mira la ficha ni la cola —sólo el largo de la prosa y el nombre— justamente para
+  que una fila **no salte de lugar** mientras alguien la completa. También está fijado por test.
+- 📌 Es la misma familia que la media regla escrita en el JSX de una pantalla: mientras el filtro
+  vivió adentro del `useMemo` de `GenDesc.tsx`, ningún test podía mirarlo. Los mutantes que lo
+  defienden: sacar la excepción (3 rojos) y hacerla llave maestra (1 rojo).
+
 ## Dos permisos, y la línea está donde está el costo
 
 | nivel | quién | qué habilita |
