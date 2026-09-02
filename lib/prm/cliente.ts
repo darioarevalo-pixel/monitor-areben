@@ -20,6 +20,11 @@ import type { Compromiso, Interes, ProveedorLocal, Recorrida, Parada, Visita } f
 const API = '/api/datos?recurso=prm'
 
 export type LocalConResumen = ProveedorLocal & {
+  /**
+   * Las marcas a las que le compramos, **medidas de sus órdenes** y ⛔ no tildadas a mano.
+   * ⛔ Vacío ⛔ NO es «de ninguna»: es «todavía no le compramos» ⇒ se muestra en las dos.
+   */
+  marcas: string[]
   ultimaVisita: Pick<Visita, 'id' | 'local_id' | 'fecha' | 'opinion' | 'puntaje' | 'compre'> | null
   interesesAbiertos: number
   compromisosAbiertos: Compromiso[]

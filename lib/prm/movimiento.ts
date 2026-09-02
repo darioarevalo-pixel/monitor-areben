@@ -421,3 +421,21 @@ export function comparativa(
     })
     .sort((a, b) => b.vendidas - a.vendidas || b.comprado - a.comprado)
 }
+
+/**
+ * ¿Este local entra en la sección de esta marca?
+ *
+ * 🔴 **La marca se MIDE de las órdenes, ⛔ no se tilda.** Un campo tipeado al lado de un dato que el
+ * sistema ya sabe envejece: el proveedor que mañana le venda a la otra marca queda mal clasificado
+ * y nadie lo va a ir a corregir. Medido el 2-sep-2026: 28 de Zattia, 6 de BDI, **ninguno en las
+ * dos** — y el día que uno lo esté, aparece en las dos sin que nadie toque nada.
+ *
+ * ⛔ **Sin órdenes ⛔ NO es «de ninguna marca»: es «todavía no le compramos»** ⇒ entra en las dos.
+ * Un local de Flores cargado a mano antes de la primera compra sirve para la marca que sea, y
+ * esconderlo lo perdería justo cuando hay que ir a verlo.
+ */
+export function esDeLaMarca(local: { marcas?: string[] | null }, marca: string): boolean {
+  const m = local.marcas
+  if (!m || !m.length) return true
+  return m.includes(marca)
+}

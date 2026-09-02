@@ -130,11 +130,33 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
   - 🔴 **Si la base de una marca no contesta, la celda dice `?` y ⛔ NO 0** (`FilaComparativa.stores`
     existe sólo para eso). El día que falte una credencial serían **28 de 34** filas afirmando «no
     vendió nada».
+  - 🔴 **Los CONTADORES de las pestañas dicen `…` mientras carga, ⛔ NO `(0)`.** Es el bug que
+    reportó Bruno —*«queda en cero los datos y luego aparecen»*—: `Proveedores (0)` un segundo antes
+    de decir (28) afirma que no hay ninguno, y quien lo lee ⛔ no sabe que estaba cargando. Estaban
+    afuera del guard de `cargando` porque son el rótulo del botón, que se dibuja siempre.
+  - 🔴 **Cambiar la ventana en la ficha deja los números VIEJOS bajo un rótulo NUEVO** —«Vendido (90
+    días)» mostrando lo de 30— así que mientras llega la respuesta los KPI dicen `…`.
   - 🔴 **Mientras carga dice `…` y ⛔ no `—`.** Las columnas llegan en un pedido aparte del padrón
     —cruzan dos bases— y un guion afirmaría «no vendió nada» del que más vende durante ese segundo.
   - 🔑 **Lo único que el handler agrega es la roll-up de ventas por producto, y es TRANSPORTE**: 30
     días de BDI son **5.523 renglones** que terminan en ~350 números. La regla de negocio vive en
     `comparativa()` del núcleo.
+- 🆕 🔴 🔑 **CADA SECCIÓN MUESTRA LOS PROVEEDORES DE SU MARCA, y la marca ⛔ NO se tilda: se MIDE.**
+  Pedido de Bruno el 2-sep-2026: *«hay proveedores de bdi y zattia que hay que clasificar, para que
+  el dato aparezca en cada sección por separado»*. ⛔ **No hizo falta clasificar nada**: el dato ya
+  estaba en `recepcion_oc.store`. El padrón devuelve `marcas` por local y `esDeLaMarca()` decide.
+  Medido: **28 de Zattia · 6 de BDI** (CHINA, LOOKEADOS, CELULANDIA, CaseMe&Co, PHONE CASE y
+  **SUMA**), y **ninguno en las dos** — el día que uno lo esté, aparece en las dos solo.
+  - 🔴 **Un campo tipeado al lado de un dato medible envejece**: el proveedor que mañana le venda a
+    la otra marca quedaría mal clasificado y ⛔ nadie lo iría a corregir.
+  - ⛔ **`marcas: []` ⛔ NO es «de ninguna marca»: es «todavía no le compramos»** ⇒ aparece en las
+    DOS. Un local de Flores cargado a mano antes de la primera orden sirve para la marca que sea, y
+    esconderlo lo perdería justo cuando hay que ir a verlo. Hoy no hay ninguno así (los 34 nacieron
+    de las órdenes), y va a haberlos apenas se cargue el primero desde Recorridas.
+  - 🔑 **«Lo prometido» también se filtra**: si mostrara los compromisos de las dos, la pestaña que
+    justifica la sección le hablaría a la marca equivocada.
+  - 🔴 **El vacío distingue dos cosas**: «no hay ninguno cargado» y «los que hay son de la otra
+    marca» — la segunda se arregla cambiando la marca arriba, ⛔ no cargando un local.
 
 ## Lo que ya se rompió acá
 

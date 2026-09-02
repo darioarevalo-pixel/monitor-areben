@@ -17,7 +17,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
  */
 
 type Mundo = {
-  local: Record<string, unknown> | null
+  /**
+   * Lo que contesta `proveedor_local`. Es **un objeto** cuando el handler pide una ficha
+   * (`maybeSingle`) y **una lista** cuando pide el padrón: la misma tabla se lee de las dos formas.
+   */
+  local: Record<string, unknown> | Record<string, unknown>[] | null
   ocs: Record<string, unknown>[]
   inserts: { tabla: string; filas: unknown }[]
   updates: { tabla: string; patch: Record<string, unknown> }[]
@@ -165,6 +169,46 @@ describe('el permiso se parte por acción entre las dos secciones', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
+describe('la marca de cada proveedor se MIDE de sus órdenes', () => {
+  // 🔴 Un campo tipeado al lado de un dato que el sistema ya sabe envejece: el proveedor que mañana
+  // le venda a la otra marca queda mal clasificado y nadie lo va a ir a corregir.
+  const padron = () => llamar({ method: 'GET', query: { recurso: 'prm', store: 'bdi' } })
+
+  it('cada local viaja con las marcas de sus órdenes', async () => {
+    mundo.local = [
+      { id: 'pl1', nombre: 'CHINA', proveedor_id_ingresos: 7 },
+      { id: 'pl2', nombre: 'ALMA', proveedor_id_ingresos: 8 },
+      { id: 'pl3', nombre: 'SIN ORDEN', proveedor_id_ingresos: null },
+    ]
+    mundo.ocs = [
+      { proveedor_id: 7, store: 'bdi' },
+      { proveedor_id: 7, store: 'bdi' },
+      { proveedor_id: 8, store: 'zattia' },
+    ]
+    const r = await padron()
+    expect(r.code).toBe(200)
+    const locales = r.body?.locales as { nombre: string; marcas: string[] }[]
+    expect(locales.find((l) => l.nombre === 'CHINA')!.marcas).toEqual(['bdi'])
+    expect(locales.find((l) => l.nombre === 'ALMA')!.marcas).toEqual(['zattia'])
+  })
+
+  it('🔴 el que no tiene ninguna orden viaja con la lista VACÍA, ⛔ no con una marca inventada', async () => {
+    // Vacío ⛔ no es «de ninguna marca»: es «todavía no le compramos», y la pantalla lo muestra en
+    // las dos. Un local de Flores cargado antes de la primera compra sirve para la marca que sea.
+    mundo.local = [{ id: 'pl3', nombre: 'SIN ORDEN', proveedor_id_ingresos: null }]
+    mundo.ocs = [{ proveedor_id: 7, store: 'bdi' }]
+    const locales = (await padron()).body?.locales as { marcas: string[] }[]
+    expect(locales[0].marcas).toEqual([])
+  })
+
+  it('🔑 el que le vende a las DOS viaja con las dos, sin que nadie lo tilde', async () => {
+    mundo.local = [{ id: 'pl1', nombre: 'AMBAS', proveedor_id_ingresos: 7 }]
+    mundo.ocs = [{ proveedor_id: 7, store: 'zattia' }, { proveedor_id: 7, store: 'bdi' }]
+    const locales = (await padron()).body?.locales as { marcas: string[] }[]
+    expect(locales[0].marcas).toEqual(['bdi', 'zattia'])
+  })
+})
+
 describe('la ficha distingue "sin enganche" de "enganchado y sin nada"', () => {
   const abrir = () => llamar({ method: 'GET', query: { recurso: 'prm', store: 'bdi', action: 'local', id: 'pl1' } })
 

@@ -55,7 +55,7 @@ import {
   space,
 } from '@/components/ui'
 import { abiertosOrdenados, normalizarNombre } from '@/lib/prm/core'
-import { comparativa as calcularComparativa, type FilaComparativa } from '@/lib/prm/movimiento'
+import { comparativa as calcularComparativa, esDeLaMarca, type FilaComparativa } from '@/lib/prm/movimiento'
 import { diaDeIngreso } from '@/lib/recepciones/core'
 import { leerComparativa } from '@/lib/prm/cliente'
 import { usePRM } from './usePRM'
@@ -115,11 +115,23 @@ export function PRM() {
     }
   }, [marca])
 
+  /**
+   * 🔴 **La sección muestra los proveedores DE SU MARCA**, y la marca sale de las órdenes, ⛔ no de
+   * un tilde. Pedido de Bruno el 2-sep-2026: *«hay proveedores de bdi y zattia que hay que
+   * clasificar, para que el dato aparezca en cada sección por separado»*. ⛔ No hizo falta
+   * clasificar nada: el dato ya estaba en `recepcion_oc.store` — 28 de Zattia y 6 de BDI.
+   */
+  const deLaMarca = useMemo(
+    () => (marca ? locales.filter((l) => esDeLaMarca(l, marca)) : locales),
+    [locales, marca],
+  )
+  const deLaOtra = locales.length - deLaMarca.length
+
   const filtrados = useMemo(() => {
     const q = normalizarNombre(busca)
     const base = !q
-      ? locales
-      : locales.filter((l) =>
+      ? deLaMarca
+      : deLaMarca.filter((l) =>
           normalizarNombre(`${l.nombre} ${l.galeria ?? ''} ${l.rubro ?? ''} ${l.zona ?? ''}`).includes(q),
         )
     // 🔑 El orden se aplica acá y ⛔ no en el servidor: las columnas medidas llegan en otro pedido,
@@ -138,7 +150,7 @@ export function PRM() {
       const c = valor(a.id, orden.col) - valor(b.id, orden.col)
       return orden.desc ? -c : c
     })
-  }, [locales, busca, medido, orden])
+  }, [deLaMarca, busca, medido, orden])
 
   const compartidos = useMemo(
     () => (medido ? [...medido.values()].filter((f) => f.compartidos > 0).length : 0),
@@ -174,10 +186,10 @@ export function PRM() {
 
   /** Los compromisos abiertos de todos, con el nombre del local pegado. */
   const prometido = useMemo(() => {
-    const nombre = new Map(locales.map((l) => [l.id, l.nombre]))
-    const todos = locales.flatMap((l) => l.compromisosAbiertos)
+    const nombre = new Map(deLaMarca.map((l) => [l.id, l.nombre]))
+    const todos = deLaMarca.flatMap((l) => l.compromisosAbiertos)
     return abiertosOrdenados(todos, hoy).map((c) => ({ ...c, local: nombre.get(c.local_id) ?? '—' }))
-  }, [locales, hoy])
+  }, [deLaMarca, hoy])
 
   if (!marca) return null
 
@@ -199,11 +211,17 @@ export function PRM() {
   return (
     <div style={{ padding: space[4], display: 'grid', gap: space[3] }}>
       <div style={{ display: 'flex', gap: space[2] }}>
+        {/*
+          🔴 **Mientras carga va «…» y ⛔ NO un cero.** Un «Proveedores (0)» que un segundo después
+          dice (28) afirmó que no hay ninguno — y el que lo lee no sabe que estaba cargando. Es el
+          mismo cero que afirma de las columnas medidas, con la diferencia de que éste está en el
+          rótulo de la pestaña, o sea que se lee siempre.
+        */}
         <Button variant={vista === 'padron' ? 'solid' : 'ghost'} onClick={() => setVista('padron')}>
-          Proveedores ({locales.length})
+          Proveedores ({cargando ? '…' : deLaMarca.length})
         </Button>
         <Button variant={vista === 'prometido' ? 'solid' : 'ghost'} onClick={() => setVista('prometido')}>
-          Lo prometido ({prometido.length})
+          Lo prometido ({cargando ? '…' : prometido.length})
         </Button>
       </div>
 
@@ -221,6 +239,15 @@ export function PRM() {
             y ⛔ no en un tooltip: sin la primera, «Vendido» se lee como «cuánto de lo suyo se
             vendió» y un proveedor puede aparecer vendiendo más de lo que trajo.
           */}
+          {deLaOtra > 0 && (
+            <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
+              Se ven los proveedores a los que le compra <strong>{marca.toUpperCase()}</strong>.
+              Los otros {deLaOtra} le venden a la otra marca y están en su sección. La marca sale de
+              sus órdenes de compra, ⛔ no de un tilde; el que todavía no tiene ninguna orden aparece
+              en las dos.
+            </p>
+          )}
+
           <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
             <strong>Vendido</strong> son las unidades de <strong>los productos que él trajo</strong>,
             en los últimos {DIAS} días. ⛔ No es «cuánto de lo suyo se vendió»: el mismo producto pudo
@@ -241,10 +268,20 @@ export function PRM() {
             </Notice>
           )}
 
-          {!locales.length ? (
+          {!deLaMarca.length ? (
+            // 🔴 «No hay ninguno» y «los que hay son de la otra marca» son dos cosas distintas, y
+            // la segunda se arregla cambiando la marca en el encabezado, no cargando un local.
             <EmptyState
-              title="Todavía no hay proveedores cargados."
-              hint="Los locales se cargan en Recorridas, en el área de Compras."
+              title={
+                locales.length
+                  ? `Ningún proveedor le vende a ${marca.toUpperCase()}.`
+                  : 'Todavía no hay proveedores cargados.'
+              }
+              hint={
+                locales.length
+                  ? `Los ${locales.length} que hay le venden a la otra marca. Cambiá la marca arriba para verlos.`
+                  : 'Los locales se cargan en Recorridas, en el área de Compras.'
+              }
             />
           ) : (
             <TableWrap>

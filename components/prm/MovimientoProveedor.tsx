@@ -127,6 +127,12 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
   const { serie, r, c, filas, compradas, vendidas } = calculado
   // 🔴 El denominador del ranking son los productos que SÍ cruzaron. Los que no, se dicen aparte.
   const nuncaVendieron = filas.filter((f) => f.vendidas === 0).length
+  /**
+   * 🔴 **Cambiar la ventana deja los números VIEJOS abajo de un rótulo NUEVO.** «Vendido (90 días)»
+   * mostrando lo de 30 es una afirmación falsa, no un retardo: por eso mientras llega la respuesta
+   * los valores dicen «…» y ⛔ no el número anterior.
+   */
+  const val = (t: string) => (cargando ? '…' : t)
 
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
@@ -138,11 +144,11 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
       </p>
 
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <KpiCard label="Comprado" value={entero(compradas)} sub={`${mov.ocs.length} orden(es)`} />
-        <KpiCard label={`Vendido (${dias} días)`} value={entero(vendidas)} />
-        <KpiCard label="Últimos 7 días" value={entero(r.d7)} sub={`${decimal(r.porDia7)}/día`} />
-        <KpiCard label="Últimos 30 días" value={entero(r.d30)} sub={`${decimal(r.porDia30)}/día`} />
-        <KpiCard label="Productos suyos" value={entero(filas.length)} sub={nuncaVendieron ? `${nuncaVendieron} sin vender` : 'todos vendieron'} />
+        <KpiCard label="Comprado" value={val(entero(compradas))} sub={`${mov.ocs.length} orden(es)`} />
+        <KpiCard label={`Vendido (${dias} días)`} value={val(entero(vendidas))} />
+        <KpiCard label="Últimos 7 días" value={val(entero(r.d7))} sub={`${decimal(r.porDia7)}/día`} />
+        <KpiCard label="Últimos 30 días" value={val(entero(r.d30))} sub={`${decimal(r.porDia30)}/día`} />
+        <KpiCard label="Productos suyos" value={val(entero(filas.length))} sub={nuncaVendieron ? `${nuncaVendieron} sin vender` : 'todos vendieron'} />
         <Field label="Ventana de ventas" hint="Las órdenes más viejas son de junio de 2026.">
           <Select value={String(dias)} onChange={(e) => setDias(Number(e.target.value))}>
             {VENTANAS.map((v) => (

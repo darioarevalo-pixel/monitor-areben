@@ -121,14 +121,26 @@ async function geocodificar(cliente, locales) {
 
 /** El padrón con lo que la lista necesita de cada local, sin bajarse la historia entera. */
 async function padron(cliente) {
-  const [locales, visitas, intereses, compromisos] = await Promise.all([
+  const [locales, visitas, intereses, compromisos, ocs] = await Promise.all([
     cliente.from('proveedor_local').select('*').order('nombre').limit(TOPE),
     cliente.from(TABLAS_VISITA).select('id, local_id, fecha, opinion, puntaje, compre').order('fecha', { ascending: false }),
     cliente.from('proveedor_interes').select('id, local_id, estado'),
     cliente.from('proveedor_compromiso').select('id, local_id, para_cuando, cumplido_en, creado_en, que, de_quien'),
+    // 🔴 **De qué marca es cada proveedor NO se tilda a mano: se MIDE de sus órdenes.** Un campo
+    // tipeado al lado de un dato que el sistema ya sabe envejece —el proveedor que mañana le venda
+    // a la otra marca queda mal clasificado y nadie lo va a ir a corregir—. Al 2-sep-2026 son 28
+    // de Zattia y 6 de BDI (CHINA, LOOKEADOS, CELULANDIA, CaseMe&Co, PHONE CASE y SUMA), y
+    // **ninguno está en las dos**; el día que uno lo esté, aparece solo en las dos.
+    cliente.from('recepcion_oc').select('proveedor_id, store').not('proveedor_id', 'is', null).limit(5000),
   ])
-  for (const r of [locales, visitas, intereses, compromisos]) {
+  for (const r of [locales, visitas, intereses, compromisos, ocs]) {
     if (r.error) throw new Error(r.error.message)
+  }
+
+  const marcasDe = new Map()
+  for (const o of ocs.data || []) {
+    if (!marcasDe.has(o.proveedor_id)) marcasDe.set(o.proveedor_id, new Set())
+    marcasDe.get(o.proveedor_id).add(o.store)
   }
 
   const ultima = new Map()
@@ -147,6 +159,10 @@ async function padron(cliente) {
 
   return (locales.data || []).map((l) => ({
     ...l,
+    // ⛔ Vacío ⛔ NO es «de ninguna marca»: es «todavía no le compramos». Un local de Flores que se
+    // carga a mano antes de la primera orden sirve para la marca que sea, así que la pantalla lo
+    // muestra en las dos. Esconderlo sería perderlo justo cuando hay que ir a verlo.
+    marcas: [...(marcasDe.get(l.proveedor_id_ingresos) || [])].sort(),
     ultimaVisita: ultima.get(l.id) || null,
     interesesAbiertos: abiertos.get(l.id) || 0,
     compromisosAbiertos: porLocal.get(l.id) || [],

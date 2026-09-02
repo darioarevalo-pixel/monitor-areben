@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import {
   comparativa,
   curva,
+  esDeLaMarca,
   diasEntre,
   lunesDe,
   productosOrdenados,
@@ -284,5 +285,27 @@ describe('comparativa · las marcas de cada proveedor', () => {
       30,
     )
     expect(filas[0].stores.sort()).toEqual(['bdi', 'zattia'])
+  })
+})
+
+describe('esDeLaMarca', () => {
+  it('entra en la sección de la marca a la que le compramos', () => {
+    expect(esDeLaMarca({ marcas: ['bdi'] }, 'bdi')).toBe(true)
+    expect(esDeLaMarca({ marcas: ['bdi'] }, 'zattia')).toBe(false)
+  })
+
+  it('🔴 SIN órdenes entra en las DOS: ⛔ no es «de ninguna marca»', () => {
+    // Un local de Flores cargado a mano antes de la primera compra sirve para la marca que sea.
+    // Esconderlo lo perdería justo cuando hay que ir a verlo.
+    expect(esDeLaMarca({ marcas: [] }, 'bdi')).toBe(true)
+    expect(esDeLaMarca({ marcas: [] }, 'zattia')).toBe(true)
+    expect(esDeLaMarca({ marcas: null }, 'bdi')).toBe(true)
+    expect(esDeLaMarca({}, 'zattia')).toBe(true)
+  })
+
+  it('🔑 el que le vende a las dos aparece en las dos, sin que nadie lo tilde', () => {
+    // Hoy no hay ninguno (28 de Zattia y 6 de BDI, ninguno cruzado). El día que lo haya, sale solo.
+    expect(esDeLaMarca({ marcas: ['bdi', 'zattia'] }, 'bdi')).toBe(true)
+    expect(esDeLaMarca({ marcas: ['bdi', 'zattia'] }, 'zattia')).toBe(true)
   })
 })
