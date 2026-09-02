@@ -90,6 +90,15 @@ de Tienda Nube dejó de ser el camino principal y quedó plegada.
    BDI con la nota, y **si el stock de la tienda online bajó**. Sin la orden de Tienda Nube, eso
    depende de la integración GN↔TN y **no está verificado**.
 
+### 🆕 ▶️ Y lo que abrió hacer las ETIQUETAS (1-sep)
+
+4. 🔴 **Falta agregar «Barrio» al link que llena la creadora.** Envío Nube lo exige para la etiqueta
+   y el portal no se lo pide, así que hoy hay que deducirlo del código postal, uno por uno. **Bruno
+   ya lo aprobó.** Con eso, la próxima tanda de etiquetas sale sin fricción.
+5. ⚠️ **Las fichas traen la provincia mal y nadie lo ve**: 4 de 13 decían «Buenos Aires» siendo CABA,
+   y una decía literalmente **«Provincia»**. Se corrigieron al cargar la etiqueta, pero **la ficha
+   sigue mal en el monitor**. Vale la pena un guard: si el CP es 1000-1499, la provincia es CABA.
+
 ---
 
 ## 0. La corrida de VOCABULARIO — 28-ago-2026 (pedido de Bruno)
@@ -1041,9 +1050,35 @@ misma columna.
    Marketing publica — la misma línea que en `gen-desc`; hoy `gen-talles` es sólo `marketing` y sin
    sub-permiso.
 
-⚠️ **Antes de ordenar la cola por stock**: 110 de los 111 tienen stock en TN, pero TN ⛔ no dice si
-la prenda está **en el local** o en el depósito. Es la misma trampa que la cola de fotos (441
-aparentes, 168 reales).
+### 🔑 La dinámica real, dicha por Bruno el 1-sep-2026
+
+> «hoy miden Camila Quintana y Josefina Batter de Zattia, la dinámica es entra la mercadería al
+> depósito, y luego se va la ropa al local. y ahí se hace la descripción y las medidas»
+
+1. 🔴 **La descripción y las medidas son EL MISMO MOMENTO, con la misma prenda en la mano** ⇒ ⛔ no
+   pueden ser dos pantallas. Hoy son dos, cada una con su cola y su buscador: Redacción
+   (`/tncat/redaccion`) y Tabla de talles (`/tncat/descripciones`). ⇒ **las medidas van ADENTRO de
+   la fila de Redacción**, debajo de la ficha: se abre el producto una vez y se contesta todo.
+   📌 Es la misma lección que la prenda que pasa una sola vez por la mesa.
+2. ✅ **Las dos ya tienen los permisos.** `josefinabatter` y `camilaquintana` tienen `gen-desc` y
+   `gen-talles` tildados **desde el día uno**, verificado contra el padrón el 27-ago-2026
+   (`tests/nav-estructura.test.ts`). ⚠️ Y hasta ese día **la Tabla de talles no les abría** por el
+   guard que resolvía sólo el primer tramo de la ruta: la puerta está abierta hace días y ⛔ no
+   entró nadie.
+3. 🔑 **El disparador es la llegada AL LOCAL, ⛔ no el alta en TiendaNube** — y el sistema lo puede
+   saber. Gestión Nube trae el stock separado `local` / `deposito` por variante, y está medido
+   (31-jul-2026, `lib/tncat/stock-variante.ts`) que **en Zattia el stock de TiendaNube coincide con
+   el Local en el 98%**. ⇒ ⚠️ **Se corrige lo que decía este pendiente**: la cola SÍ se puede
+   ordenar por lo que está en el local. Medido el 1-sep: de las 111 sin medidas, **110 tienen
+   stock** ⇒ están casi todas en el local y la cola nace accionable.
+4. ⚠️ **Lo que se queda en el depósito ⛔ no lo mide nadie**: si una prenda no baja al local, no hay
+   mano que le ponga la cinta. La cola lo tiene que decir **aparte** —«esperando llegar al local»—
+   en vez de mezclarlo con lo que sí se puede hacer hoy. Misma lección que la cola de fotos: 441
+   aparentes contra 168 reales.
+5. **Dos personas sobre la misma tanda**: se guarda al tipear (ya es la regla de la ficha) y queda
+   **quién cargó cada valor** — `tn_atributos.por` ya lo hace y las medidas van igual. El reparto es
+   físico (cada una agarra una prenda) ⇒ ⛔ no hace falta reservar nada; lo que sí hace falta es que
+   la fila muestre lo cargado al toque, para que no midan dos veces la misma.
 
 ### 🆕 ▶️ REDACCIÓN — los tres cambios que pidió Bruno el 1-sep-2026
 
@@ -1095,5 +1130,59 @@ familia `abrigo` entera más parte de `tops`**.
 busto». `GT_M.busto` de `lib/gen-talles/plantillas.ts` dice «Contorno busto / Medir alrededor de la
 parte más ancha del busto», que es **otra medida**.
 
-▶️ Falta leer las 8 páginas restantes (`brew install poppler` corriendo el 1-sep) y cruzar el
-vocabulario de la guía contra el de las plantillas, familia por familia.
+🏁 **Las 9 páginas, leídas el 1-sep-2026.** ⚠️ `brew install poppler` quedó colgado sin escribir una
+línea de log; el camino que sirvió es **sin instalar nada**: partir el PDF con Quartz vía
+`osascript -l JavaScript` (`PDFDocument`) y pasar cada hoja por `sips -s format png`.
+
+### 🔴 La guía contesta la convención, y de una manera que no habíamos considerado
+
+Página 9, textual: **«CONTORNO DE CINTURA: ESTE SE MIDE AGARRANDO LA CINTURA POR LA MITAD, Y
+MULTIPLICANDO POR 2 LA CIFRA MEDIDA.»**
+
+⇒ ⛔ **No hay dos convenciones**: se mide **siempre la prenda apoyada**, y la cintura **se publica
+× 2**. Encaja con lo medido en la tienda (busto en media prenda, cintura en contorno): ⛔ no era una
+inconsistencia, era la guía. Y explica los **6 casos de cintura por debajo de 45 cm sobre 69**: son
+las veces que alguien **se olvidó de multiplicar**.
+
+🔑 **La multiplicación la hace el SISTEMA, ⛔ no la persona.** El local tipea lo que midió y la
+pantalla publica el doble ⇒ ese olvido **deja de poder ocurrir**.
+📌 Es la misma forma que los bullets: [[feedback_areben_escribir_la_regla_no_el_caso]].
+
+### Las 7 hojas de dibujos, contra qué familia van
+
+| hoja | prendas | → familia |
+|---|---|---|
+| 1 | buzos, sweaters, camperas, blazers, remeras y tops **con** mangas | abrigo + parte de tops |
+| 2 | tops sin mangas, musculosas, chalecos, corsets | tops |
+| 3 | jeans, pantalones, **shorts, bermudas** | pantalón |
+| 4 | monos | vestidos |
+| 5 | minis, polleras largas | faldas |
+| 6 | vestidos cortos y largos | vestidos |
+| 7 | bodys | tops |
+
+Las páginas **8 y 9 ⛔ no son dibujos de prenda**: son la bajada de línea A/B/C, una para prendas de
+arriba y otra para prendas de abajo.
+
+### 🔴 La guía manda partir SHORTS, y ⛔ no van a `pantalon`
+
+Pone **shorts y bermudas con jeans y pantalones**, ⛔ no con minis y polleras ⇒ los 14 shorts de la
+familia `faldas` se **miden** como pantalón. Sube «partir SHORTS» de «para el final» a decisión ya
+tomada. ⚠️ **Pero tampoco entran en `pantalon` tal cual**: su `largo` ofrece `capri / al tobillo /
+al piso`, que a un short ⛔ no le sirve. Es **familia propia**.
+
+### 🔴 Las plantillas de la Tabla de talles hay que REHACERLAS, no ajustarlas
+
+De las 3-4 medidas que pide cada una, entre 2 y 3 ⛔ no son las que la guía mide:
+
+| pide la plantilla hoy (`lib/gen-talles/plantillas.ts`) | mide la guía |
+|---|---|
+| `Contorno busto` — «medir alrededor de la parte más ancha» | **Ancho**, de sisa a sisa, prenda apoyada |
+| `Ancho de hombros` | ⛔ no existe en la guía |
+| `Contorno cadera` | **Ancho**, desde donde termina el tiro hasta el lateral |
+| `Tiro` | ⛔ no se mide: sólo es la referencia de dónde va el Ancho |
+| `Contorno cintura` | ✅ coincide — y la guía dice cómo: mitad × 2 |
+
+⚠️ **Y una consecuencia de forma**: la tabla publicada rotula las filas con letras (`a. Contorno
+busto`) y **los dibujos ⛔ no tienen letras** — rotulan con la palabra (ANCHO, LARGO, LARGO DE
+MANGA). Publicando el dibujo al lado, las filas pasan a la palabra o el cliente busca una «a» que en
+la imagen no está.
