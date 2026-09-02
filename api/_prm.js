@@ -6,6 +6,7 @@
 //   GET  ?recurso=prm&store=…&action=recorrida&id= → UN viaje entero, con todo lo de cada parada
 //   GET  ?recurso=prm&store=…&action=opciones      → los nombres para los dos desplegables de enganche
 //   GET  ?recurso=prm&store=…&action=movimiento&id=&dias=  → lo que le compramos y lo que se vendió
+//   GET  ?recurso=prm&store=…&action=comparativa&dias=      → lo mismo, para TODOS, para la lista
 //   POST ?recurso=prm&store=…  { action, … }       → las escrituras
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=prm`. El plan Hobby de
@@ -152,6 +153,83 @@ async function padron(cliente) {
   }))
 }
 
+
+
+/**
+ * **Los 34 proveedores comparados entre sí** — las columnas medidas de la lista del PRM.
+ *
+ * 🔑 **Es la misma pregunta que `movimiento`, corrida para todos.** Lo que la ficha contesta de a
+ * uno («¿cómo se vende lo de éste?»), acá se contesta en una tabla: es la única forma de mirar
+ * **¿a quién le recompro?**, que ⛔ no se puede ver abriendo fichas de a una.
+ *
+ * 🔴 **Lo único que este handler agrega es la ROLL-UP de ventas por producto, y es transporte, no
+ * regla.** Los 30 días de BDI son **5.523 renglones de venta** y ⛔ no tienen por qué viajar al
+ * navegador para terminar en 349 números. La regla de negocio —qué le toca a cada proveedor— vive
+ * en `comparativa()` de `lib/prm/movimiento.ts`, con las órdenes y los renglones crudos.
+ *
+ * 🔴 **Un producto que trajeron DOS proveedores cuenta en los dos, y la columna ⛔ no se puede
+ * sumar.** Medido el 2-sep-2026: pasa en **2 de 349** productos (`SWEATER MONT` de ALMA y
+ * MALABICHA, `SWEATER ROUTE` de MADAVA y RHOVE). Repartir la venta entre los dos sería inventar de
+ * quién se vendió cada unidad; dársela a uno solo sería mentirle al otro. La pantalla dice cuántos
+ * son.
+ */
+export async function comparativa(cliente, dias) {
+  const locales = await leerTodo(cliente, 'proveedor_local', (q) =>
+    q.select('id, nombre, proveedor_id_ingresos').not('proveedor_id_ingresos', 'is', null).order('id'),
+  )
+  if (!locales.length) return { dias, locales: [], ocs: [], lineas: [], ventasPorProducto: [] }
+
+  const ids = locales.map((l) => l.proveedor_id_ingresos)
+  const ocs = await leerTodo(cliente, 'recepcion_oc', (q) =>
+    q.select('id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas')
+      .in('proveedor_id', ids)
+      .order('id'),
+  )
+  const lineas = ocs.length
+    ? await leerTodo(cliente, 'recepcion_linea', (q) =>
+        q.select('oc_ref, store, producto_id, cantidad_contada').in('oc_ref', ocs.map((o) => o.id)).order('id'),
+      )
+    : []
+
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const porStore = new Map()
+  for (const l of lineas) {
+    if (!l.producto_id) continue
+    if (!porStore.has(l.store)) porStore.set(l.store, new Set())
+    porStore.get(l.store).add(Number(l.producto_id))
+  }
+
+  const ventasPorProducto = []
+  const marcasMudas = []
+  for (const [store, set] of porStore) {
+    const cfg = cfgDeMarca(store)
+    if (!cfg.url || !cfg.key) {
+      marcasMudas.push(store)
+      continue
+    }
+    try {
+      const c = createClient(cfg.url, cfg.key)
+      const filas = await leerTodo(c, 'venta_detalles', (q) =>
+        q
+          .select('product_id, quantity, ventas!inner(date_sale)')
+          .in('product_id', [...set].filter(Number.isFinite))
+          .gte('ventas.date_sale', desde)
+          .order('id'),
+      )
+      const acc = new Map()
+      for (const f of filas) {
+        if (!f.ventas || !f.ventas.date_sale) continue
+        const k = String(f.product_id)
+        acc.set(k, (acc.get(k) || 0) + (Number(f.quantity) || 0))
+      }
+      for (const [producto_id, unidades] of acc) ventasPorProducto.push({ store, producto_id, unidades })
+    } catch {
+      marcasMudas.push(store)
+    }
+  }
+
+  return { dias, desdeVentas: desde, locales, ocs, lineas, ventasPorProducto, marcasMudas }
+}
 
 /**
  * **Lo que le compramos y lo que se vendió de eso** — el bloque de movimiento de la ficha.
@@ -390,6 +468,14 @@ export default async function handler(req, res) {
         const pedidos = Number(req.query.dias)
         const dias = Number.isFinite(pedidos) && pedidos > 0 ? Math.min(pedidos, DIAS_MOVIMIENTO_MAX) : DIAS_MOVIMIENTO
         return res.status(200).json({ ok: true, ...(await movimiento(cliente, local, dias)) })
+      }
+
+      if (accion === 'comparativa') {
+        // 🔴 Mismo corte que `movimiento`: acá viajan las VENTAS, que ⛔ no son un dato de la calle.
+        if (!puede(PARA_ENGANCHAR)) return res.status(403).json({ error: 'La comparativa de proveedores es del PRM.' })
+        const pedidos = Number(req.query.dias)
+        const dias = Number.isFinite(pedidos) && pedidos > 0 ? Math.min(pedidos, DIAS_MOVIMIENTO_MAX) : 30
+        return res.status(200).json({ ok: true, ...(await comparativa(cliente, dias)) })
       }
 
       if (accion === 'recorridas') {

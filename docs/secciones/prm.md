@@ -116,6 +116,25 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 - 🔑 **La pestaña «Lo prometido» es lo que justifica la sección**: los compromisos abiertos de todos
   los proveedores juntos, ordenados por urgencia. Es lo único que no se puede ver desde la ficha de
   a uno, y es lo que se mira antes de salir.
+- 🆕 🔴 🔑 **La LISTA tiene tres columnas medidas — y existen porque la lista no decía nada.**
+  Preguntó Bruno el 2-sep-2026: *«¿y la vista PRM para qué estaría hecha?»*. Medido ese día: de sus
+  cinco columnas de dato, **cuatro decían «—» en las 34 filas** (galería, zona, rubro, última visita
+  y prometido salen todas de la mano de la calle, que nadie dio), y «Lo prometido» estaba en cero
+  ⇒ la lista era **34 nombres y un botón «Abrir»**. Ahora lleva **Comprado · Vendido 30 d · Por
+  día**, ordenables, que contestan **¿a quién le recompro?** — la única pregunta que la ficha de a
+  uno ⛔ no puede contestar.
+  - 🔴 **La columna «Vendido» ⛔ NO SE PUEDE SUMAR.** Un producto traído por dos proveedores cuenta
+    entero en los dos: repartir la venta sería inventar de quién se vendió cada unidad y dársela a
+    uno solo sería mentirle al otro. Medido: **2 de 349** (`SWEATER MONT` de ALMA y MALABICHA,
+    `SWEATER ROUTE` de MADAVA y RHOVE). Esas filas llevan un `*` y el pie lo explica.
+  - 🔴 **Si la base de una marca no contesta, la celda dice `?` y ⛔ NO 0** (`FilaComparativa.stores`
+    existe sólo para eso). El día que falte una credencial serían **28 de 34** filas afirmando «no
+    vendió nada».
+  - 🔴 **Mientras carga dice `…` y ⛔ no `—`.** Las columnas llegan en un pedido aparte del padrón
+    —cruzan dos bases— y un guion afirmaría «no vendió nada» del que más vende durante ese segundo.
+  - 🔑 **Lo único que el handler agrega es la roll-up de ventas por producto, y es TRANSPORTE**: 30
+    días de BDI son **5.523 renglones** que terminan en ~350 números. La regla de negocio vive en
+    `comparativa()` del núcleo.
 
 ## Lo que ya se rompió acá
 
@@ -158,6 +177,17 @@ npx vitest run tests/prm-core.test.ts tests/prm-handler.test.ts tests/prm-movimi
   tests/georef-provincia.test.ts --reporter=dot
 node scripts/caminar-prm-movimiento.mjs   # el bloque 5 contra las bases REALES (sólo lee)
 ```
+
+🔴 **`ZATTIA_SUPABASE_SERVICE_KEY` ⛔ NO está en el `.env` de la Mac de Bruno**, y con la anon key la
+base de Zattia contesta `permission denied for table venta_detalles` — a propósito: ahí hay plata.
+⇒ **en local, todo lo de ventas de Zattia sale mudo** (`marcasMudas`), que son **28 de los 34**
+proveedores. En Vercel sí está: la usan el ETL, `_costos.js`, `_ventas-diarias.js`, `_tn-desc.js` y
+el pase del espejo. La caminata lo dice con esas palabras en vez de contarlo como rojo.
+
+🔴 **Y por eso la caminata elige un proveedor de Zattia DESDE LA BASE, ⛔ no a mano.** La primera
+versión nombraba tres proveedores de BDI y salía **20 de 20** sin haber tocado nunca la otra base —
+la mitad de las órdenes y 28 de los 34 proveedores. Lo destapó la comparativa, que las toca a las
+dos. Ver [[feedback_areben_caminata_que_elige_sus_casos]].
 
 **`caminar-prm-movimiento.mjs` ⛔ no es un test**: invoca `movimiento()` tal cual la llama el handler
 contra las dos bases y **el oráculo es la misma cuenta por otro camino** (SQL directo por `pg`). Es

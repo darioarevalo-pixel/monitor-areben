@@ -5,6 +5,7 @@
 // la curva hundida por productos que todavía no llegaron a esa semana.
 import { describe, it, expect } from 'vitest'
 import {
+  comparativa,
   curva,
   diasEntre,
   lunesDe,
@@ -191,5 +192,97 @@ describe('productosOrdenados', () => {
     const filas = productosOrdenados([prod('a', 10, '2026-08-12T12:00:00Z')], [venta('a', '2026-08-25', 6)], '2026-08-26')
     expect(filas[0].semanasEnCalle).toBe(2)
     expect(filas[0].porSemana).toBe(3)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Los proveedores comparados entre sí
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('comparativa', () => {
+  const locales = [
+    { id: 'pl1', nombre: 'ALMA', proveedor_id_ingresos: 1 },
+    { id: 'pl2', nombre: 'MALABICHA', proveedor_id_ingresos: 2 },
+    { id: 'pl3', nombre: 'SIN ENGANCHE', proveedor_id_ingresos: null },
+  ]
+  const ocs = [
+    { ...oc('o1', '2026-08-10T12:00:00Z', 100), proveedor_id: 1 },
+    { ...oc('o2', '2026-08-20T12:00:00Z', 50), proveedor_id: 1 },
+    { ...oc('o3', '2026-08-15T12:00:00Z', 30), proveedor_id: 2 },
+  ]
+  const linea = (oc_ref: string, producto_id: string | null, cantidad_contada: number) => ({
+    oc_ref, store: 'bdi', producto_id, cantidad_contada,
+  })
+
+  it('🔴 un producto que trajeron DOS cuenta entero en los dos, y cada fila lo dice', () => {
+    // Repartir la venta sería inventar de quién se vendió cada unidad; dársela a uno solo sería
+    // mentirle al otro. Medido en producción: pasa en 2 de 349 productos.
+    const filas = comparativa(
+      locales,
+      ocs,
+      [linea('o1', 'SWEATER', 100), linea('o3', 'SWEATER', 30)],
+      [{ store: 'bdi', producto_id: 'SWEATER', unidades: 80 }],
+      30,
+    )
+    expect(filas.map((f) => f.nombre)).toEqual(['ALMA', 'MALABICHA'])
+    expect(filas[0].vendidas).toBe(80)
+    expect(filas[1].vendidas).toBe(80)
+    expect(filas[0].compartidos).toBe(1)
+    expect(filas[1].compartidos).toBe(1)
+  })
+
+  it('un producto de uno solo ⛔ no figura como compartido', () => {
+    const filas = comparativa(
+      locales,
+      ocs,
+      [linea('o1', 'PROPIO', 100), linea('o3', 'OTRO', 30)],
+      [{ store: 'bdi', producto_id: 'PROPIO', unidades: 9 }],
+      30,
+    )
+    expect(filas.find((f) => f.nombre === 'ALMA')).toMatchObject({ vendidas: 9, compartidos: 0, productos: 1 })
+  })
+
+  it('🔴 lo que no cruzó SUMA en comprado y se cuenta aparte', () => {
+    // Sacarlo del total haría que el proveedor entregara menos de lo que entregó; callarlo haría
+    // que uno sin cruce parezca uno que no vende.
+    const filas = comparativa(locales, ocs, [linea('o1', null, 40), linea('o2', 'X', 50)], [], 30)
+    const alma = filas.find((f) => f.nombre === 'ALMA')!
+    expect(alma.comprado).toBe(90)
+    expect(alma.sinCruce).toEqual({ lineas: 1, unidades: 40 })
+  })
+
+  it('cuenta las órdenes y toma la fecha de la ÚLTIMA', () => {
+    const alma = comparativa(locales, ocs, [], [], 30).find((f) => f.nombre === 'ALMA')!
+    expect(alma.ocs).toBe(2)
+    expect(alma.ultima).toBe('2026-08-20')
+  })
+
+  it('🔴 un local sin enganche ⛔ no entra: sus ceros no significan nada', () => {
+    expect(comparativa(locales, ocs, [], [], 30).map((f) => f.nombre)).not.toContain('SIN ENGANCHE')
+  })
+
+  it('el ritmo divide por la ventana pedida, ⛔ no por una fija', () => {
+    const filas = comparativa(locales, ocs, [linea('o1', 'X', 10)], [{ store: 'bdi', producto_id: 'X', unidades: 60 }], 30)
+    expect(filas[0].porDia).toBe(2)
+    const otra = comparativa(locales, ocs, [linea('o1', 'X', 10)], [{ store: 'bdi', producto_id: 'X', unidades: 60 }], 90)
+    expect(otra[0].porDia).toBeCloseTo(60 / 90)
+  })
+})
+
+describe('comparativa · las marcas de cada proveedor', () => {
+  it('🔴 cada fila dice de qué marcas son sus órdenes', () => {
+    // Es lo que deja que la pantalla dibuje «?» en vez de un 0 cuando una base no contesta. Sin
+    // esto, el día que falte una credencial 28 de 34 filas dirían «vendió 0», que es falso.
+    const filas = comparativa(
+      [{ id: 'pl1', nombre: 'UNO', proveedor_id_ingresos: 1 }],
+      [{ ...oc('o1', '2026-08-10T12:00:00Z', 10), proveedor_id: 1 }],
+      [
+        { oc_ref: 'o1', store: 'bdi', producto_id: 'a', cantidad_contada: 5 },
+        { oc_ref: 'o1', store: 'zattia', producto_id: 'b', cantidad_contada: 5 },
+      ],
+      [],
+      30,
+    )
+    expect(filas[0].stores.sort()).toEqual(['bdi', 'zattia'])
   })
 })

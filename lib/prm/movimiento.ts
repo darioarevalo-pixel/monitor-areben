@@ -290,3 +290,134 @@ export function productosOrdenados(
     })
     .sort((a, b) => b.vendidas - a.vendidas || b.unidades - a.unidades)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Los proveedores comparados entre sí — las columnas medidas de la lista
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+export type LocalComparativa = { id: string; nombre: string; proveedor_id_ingresos: number | null }
+export type LineaComparativa = { oc_ref: string; store: string; producto_id: string | null; cantidad_contada: number | null }
+export type VentaProducto = { store: string; producto_id: string; unidades: number }
+
+export type FilaComparativa = {
+  localId: string
+  nombre: string
+  proveedorId: number
+  ocs: number
+  /** Unidades CONTADAS de todas sus órdenes, incluidas las que no cruzaron. */
+  comprado: number
+  /** El día de su última orden, o `null`. */
+  ultima: string | null
+  productos: number
+  /**
+   * Las marcas de sus órdenes. 🔴 Es lo que deja que la pantalla NO dibuje un cero cuando la base
+   * de esa marca no contestó: sin esto, 28 de 34 proveedores mostrarían «vendió 0» el día que
+   * falta una credencial, y ese cero afirma.
+   */
+  stores: string[]
+  /** Cuántos de sus productos los trajo TAMBIÉN otro proveedor. Esas ventas cuentan en los dos. */
+  compartidos: number
+  /** Unidades vendidas de sus productos en la ventana. */
+  vendidas: number
+  porDia: number
+  sinCruce: { lineas: number; unidades: number }
+}
+
+/**
+ * 🔴 **La columna «vendidas» ⛔ NO SE PUEDE SUMAR, y por eso `compartidos` viaja al lado.**
+ * Un producto que trajeron dos proveedores cuenta entero en los dos: repartir la venta sería
+ * inventar de quién se vendió cada unidad, y dársela a uno solo sería mentirle al otro. Medido el
+ * 2-sep-2026: pasa en **2 de 349** productos. La pantalla dice cuántos son en cada fila.
+ *
+ * 🔑 **`comprado` incluye los renglones que ⛔ no cruzaron** —son unidades que entraron igual— y
+ * `sinCruce` dice cuántas. Sacarlas del total haría que un proveedor entregara menos de lo que
+ * entregó; callarlas haría que un proveedor sin cruce parezca uno que no vende.
+ */
+export function comparativa(
+  locales: LocalComparativa[],
+  ocs: (OcMovimiento & { proveedor_id: number | null })[],
+  lineas: LineaComparativa[],
+  ventasPorProducto: VentaProducto[],
+  dias: number,
+  diaDeLaOc: (o: OcMovimiento) => string | null = (o) => (o.confirmada_at ? o.confirmada_at.slice(0, 10) : null),
+): FilaComparativa[] {
+  const vendidas = new Map<string, number>()
+  for (const v of ventasPorProducto) vendidas.set(`${v.store}:${v.producto_id}`, Number(v.unidades) || 0)
+
+  const ocDe = new Map<string, { proveedor: number | null; dia: string | null }>()
+  for (const o of ocs) ocDe.set(o.id, { proveedor: o.proveedor_id, dia: diaDeLaOc(o) })
+
+  // Qué proveedores trajeron cada producto. Es lo que deja ver el solape en vez de esconderlo.
+  const duenos = new Map<string, Set<number>>()
+  for (const l of lineas) {
+    if (!l.producto_id) continue
+    const o = ocDe.get(l.oc_ref)
+    if (!o || o.proveedor == null) continue
+    const k = `${l.store}:${l.producto_id}`
+    if (!duenos.has(k)) duenos.set(k, new Set())
+    duenos.get(k)!.add(o.proveedor)
+  }
+
+  const porProveedor = new Map<
+    number,
+    { productos: Set<string>; stores: Set<string>; comprado: number; sinCruce: { lineas: number; unidades: number } }
+  >()
+  const tocar = (id: number) => {
+    if (!porProveedor.has(id))
+      porProveedor.set(id, { productos: new Set(), stores: new Set(), comprado: 0, sinCruce: { lineas: 0, unidades: 0 } })
+    return porProveedor.get(id)!
+  }
+  for (const l of lineas) {
+    const o = ocDe.get(l.oc_ref)
+    if (!o || o.proveedor == null) continue
+    const p = tocar(o.proveedor)
+    p.stores.add(l.store)
+    const u = Number(l.cantidad_contada) || 0
+    p.comprado += u
+    if (!l.producto_id) {
+      p.sinCruce.lineas += 1
+      p.sinCruce.unidades += u
+      continue
+    }
+    p.productos.add(`${l.store}:${l.producto_id}`)
+  }
+
+  const cuenta = new Map<number, { ocs: number; ultima: string | null }>()
+  for (const o of ocs) {
+    if (o.proveedor_id == null) continue
+    const c = cuenta.get(o.proveedor_id) || { ocs: 0, ultima: null }
+    c.ocs += 1
+    const dia = diaDeLaOc(o)
+    if (dia && (!c.ultima || dia > c.ultima)) c.ultima = dia
+    cuenta.set(o.proveedor_id, c)
+  }
+
+  return locales
+    .filter((l) => l.proveedor_id_ingresos != null)
+    .map((l) => {
+      const id = l.proveedor_id_ingresos as number
+      const p = porProveedor.get(id)
+      const c = cuenta.get(id) || { ocs: 0, ultima: null }
+      let u = 0
+      let compartidos = 0
+      for (const k of p?.productos ?? []) {
+        u += vendidas.get(k) || 0
+        if ((duenos.get(k)?.size ?? 1) > 1) compartidos += 1
+      }
+      return {
+        localId: l.id,
+        nombre: l.nombre,
+        proveedorId: id,
+        ocs: c.ocs,
+        comprado: p?.comprado ?? 0,
+        ultima: c.ultima,
+        productos: p?.productos.size ?? 0,
+        stores: [...(p?.stores ?? [])],
+        compartidos,
+        vendidas: u,
+        porDia: dias > 0 ? u / dias : 0,
+        sinCruce: p?.sinCruce ?? { lineas: 0, unidades: 0 },
+      }
+    })
+    .sort((a, b) => b.vendidas - a.vendidas || b.comprado - a.comprado)
+}

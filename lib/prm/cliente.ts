@@ -7,7 +7,14 @@
  */
 import { apiFetch } from '@/lib/api-fetch'
 import type { Recepcion } from '@/lib/recepciones/core'
-import type { OcMovimiento, ProductoMovimiento, VentaMovimiento } from './movimiento'
+import type {
+  LineaComparativa,
+  LocalComparativa,
+  OcMovimiento,
+  ProductoMovimiento,
+  VentaMovimiento,
+  VentaProducto,
+} from './movimiento'
 import type { Compromiso, Interes, ProveedorLocal, Recorrida, Parada, Visita } from './tipos'
 
 const API = '/api/datos?recurso=prm'
@@ -50,6 +57,22 @@ export type Movimiento = {
   marcasMudas: string[]
 }
 
+/**
+ * Los proveedores comparados entre sí, para las columnas medidas de la lista. Todo crudo salvo la
+ * roll-up de ventas por producto, que el servidor agrega **por transporte**: los 30 días de BDI son
+ * 5.523 renglones de venta y terminan en ~350 números.
+ */
+export type Comparativa = {
+  dias: number
+  desdeVentas: string
+  locales: LocalComparativa[]
+  ocs: (OcMovimiento & { proveedor_id: number | null })[]
+  lineas: LineaComparativa[]
+  ventasPorProducto: VentaProducto[]
+  /** ⛔ «No pude preguntar» ⛔ no es «no vendió»: la pantalla lo dice y no dibuja ceros. */
+  marcasMudas: string[]
+}
+
 export type ParadaViva = Parada & {
   local: ProveedorLocal | null
   intereses: Interes[]
@@ -85,6 +108,10 @@ export async function leerFicha(marca: string, id: string): Promise<Ficha> {
 export async function leerMovimiento(marca: string, id: string, dias?: number): Promise<Movimiento> {
   const d = dias ? `&dias=${dias}` : ''
   return pedir<Movimiento>(`${q(marca)}&action=movimiento&id=${encodeURIComponent(id)}${d}&nc=${Date.now()}`)
+}
+
+export async function leerComparativa(marca: string, dias = 30): Promise<Comparativa> {
+  return pedir<Comparativa>(`${q(marca)}&action=comparativa&dias=${dias}&nc=${Date.now()}`)
 }
 
 export async function leerOpciones(marca: string): Promise<Opciones> {
