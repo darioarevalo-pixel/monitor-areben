@@ -302,8 +302,11 @@ function FilaProducto({
     <Card>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }} onClick={onAbrir}>
         {p.imagenes[0] && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.imagenes[0].src} alt="" width={44} height={55} style={{ objectFit: 'cover', borderRadius: 4 }} />
+          // Misma caja fija que la tira de abajo, y por el mismo motivo.
+          <span style={{ width: 44, height: 55, flex: '0 0 auto', overflow: 'hidden', borderRadius: 4, display: 'block' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={p.imagenes[0].src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          </span>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <b>{p.name}</b>
@@ -346,15 +349,24 @@ function FilaProducto({
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {p.imagenes.map((im) => (
+                  // 🔴 La caja es del BOTÓN y la foto la llena adentro, con `overflow:hidden`.
+                  // Con el alto puesto sólo en el atributo `height` del `<img>`, las fotos salían
+                  // a su tamaño natural (~1024×1580) y **se montaban encima de la ficha de abajo**
+                  // —lo vio Bruno el 1-sep-2026—: `objectFit` no recorta nada si la caja no tiene
+                  // un alto que se respete. Así, ninguna regla que le pise el alto a un `<img>`
+                  // puede desbordar la tira.
                   <button
                     key={im.id}
                     type="button"
                     onClick={() => setFoto(im.src)}
                     title="Ver en grande"
-                    style={{ padding: 0, border: '1px solid #ddd', borderRadius: 6, background: 'none', cursor: 'zoom-in', lineHeight: 0 }}
+                    style={{
+                      padding: 0, border: '1px solid #ddd', borderRadius: 6, background: 'none',
+                      cursor: 'zoom-in', lineHeight: 0, width: 72, height: 90, flex: '0 0 auto', overflow: 'hidden',
+                    }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={im.src} alt="" width={72} height={90} style={{ objectFit: 'cover', borderRadius: 5, display: 'block' }} />
+                    <img src={im.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   </button>
                 ))}
               </div>
