@@ -38,6 +38,11 @@ export type OpcionesComponer = {
    * revisa lo vio en pantalla y lo tildó.
    */
   conservarResiduo?: boolean
+  /**
+   * La tabla de medidas nueva. REEMPLAZA la que había —usa la misma firma—, y si no viene, la
+   * vieja se conserva tal cual.
+   */
+  htmlTalles?: string
 }
 
 /** Parte la descripción actual en sus tres pedazos, sin perder un carácter. */
@@ -56,8 +61,8 @@ export function tieneBloqueProsa(actual: string | null | undefined): boolean {
 }
 
 /** ¿La descripción nueva conserva, byte a byte, la tabla que tenía la anterior? */
-export function conservaLaTabla(actual: string | null | undefined, nuevo: string): boolean {
-  return conservaLaTablaJs(actual, nuevo) as boolean
+export function conservaLaTabla(actual: string | null | undefined, nuevo: string, htmlTalles?: string): boolean {
+  return conservaLaTablaJs(actual, nuevo, htmlTalles) as boolean
 }
 
 export const PROSA_INI: string = PROSA_INI_JS

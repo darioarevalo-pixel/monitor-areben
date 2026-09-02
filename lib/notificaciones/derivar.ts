@@ -21,6 +21,7 @@ import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
 import { paraComprar, paraSubir, pedidosDemorados, rotuloUbicacion, type VistaInsumo } from '@/lib/insumos/core'
+import { nombrarFilas, pendientesDePublicar, type FilaPendiente } from '@/lib/tn-desc/pendientes.core'
 import type { PedidoAbierto } from '@/lib/insumos/tipos'
 import type { Aviso } from './tipos'
 
@@ -579,4 +580,55 @@ function nombrarInsumos(vistas: VistaInsumo[], tope = 3): string {
   const nombres = vistas.map((v) => v.insumo.nombre)
   if (nombres.length <= tope) return nombres.join(', ')
   return `${nombres.slice(0, tope).join(', ')} y ${nombres.length - tope} más`
+}
+
+/**
+ * La cola de «Descripción y medidas»: lo que el local ya cargó y todavía no está en la tienda.
+ *
+ * 🔴 **Sólo lo ve quien PUEDE publicar**, y eso es la decisión de Bruno del 1-sep-2026: las que
+ * cargan —Camila Quintana y Josefina Batter— ⛔ no publican; publica administración, o él y Darío.
+ * Mostrarles el aviso a las que cargan sería un reloj sin dueño: les avisaría de algo que no
+ * pueden resolver, que es la misma trampa que ya hubo que partir en Postventa.
+ *
+ * ⚠️ **Son dos avisos y no uno.** «Aprobada y sin publicar» se resuelve con UN clic; «cargada y
+ * sin párrafo» pide sentarse a escribir. Un solo número diría «17 pendientes» sin decir cuáles se
+ * cierran en un minuto.
+ */
+export function avisosDeFicha(filas: FilaPendiente[], perfil: Perfil | null, marcaActiva: Marca): Aviso[] {
+  if (!puedeSub(perfil, marcaActiva, 'gen-desc', 'publicar')) return []
+
+  const { aprobadas, empezadas, esperaDesde } = pendientesDePublicar(filas)
+  const avisos: Aviso[] = []
+
+  if (aprobadas.length) {
+    avisos.push({
+      id: 'ficha-sin-publicar',
+      tipo: 'ficha-sin-publicar' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: aprobadas.length === 1 ? '1 ficha aprobada sin publicar' : `${aprobadas.length} fichas aprobadas sin publicar`,
+      detalle: nombrarFilas(aprobadas),
+      // 🔑 El aviso lleva al botón que lo resuelve, ⛔ no a la sección. Ya nos pasó que un hallazgo
+      // dijera «pausá X» con el botón de pausar X en otra pantalla.
+      ruta: '/tncat/redaccion?ver=aprobados',
+      ts: esperaDesde,
+      tono: 'warning' as const,
+    })
+  }
+
+  if (empezadas.length) {
+    avisos.push({
+      id: 'ficha-sin-escribir',
+      tipo: 'ficha-sin-escribir' as const,
+      marca: marcaActiva,
+      linea: marcaActiva,
+      titulo: empezadas.length === 1 ? '1 prenda cargada sin descripción' : `${empezadas.length} prendas cargadas sin descripción`,
+      detalle: nombrarFilas(empezadas),
+      ruta: '/tncat/redaccion',
+      ts: 0,
+      tono: 'neutral' as const,
+    })
+  }
+
+  return avisos
 }

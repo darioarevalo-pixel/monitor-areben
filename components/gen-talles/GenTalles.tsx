@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from 'react'
 import { useSesion } from '@/components/SesionProvider'
+import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useGenTalles } from './useGenTalles'
 import { extraerTabla, tablaActualHtml } from './tabla-dom'
@@ -23,7 +24,21 @@ import { Button, Card, Field, Input, Select, color, font, space, useConfirmar, u
 const PRIMER_TIPO = Object.keys(GEN_TALLES_PLANTILLAS)[0] // 'top', como la 1ª opción del legacy
 
 export function GenTalles() {
-  const { marca } = useSesion()
+  const { marca, perfil } = useSesion()
+  /**
+   * 🔴 **Escribir en la tienda desde acá pide su propio permiso desde el 1-sep-2026.** Lo decidió
+   * Bruno: las que cargan —Camila Quintana y Josefina Batter— ⛔ no publican; publica
+   * administración, o él y Darío. Y las dos tenían `gen-talles` tildado **desde el día uno**, o
+   * sea que este botón les escribía en la tienda viva sin que nadie lo hubiera decidido.
+   *
+   * ⚠️ El botón **⛔ no se esconde**: se deshabilita y dice por qué. Una pantalla que se guarda un
+   * botón sin explicarlo manda a buscar algo que no está — que es la misma trampa que la entrada
+   * de menú que se dibujaba y rebotaba a Inicio.
+   *
+   * 📌 Esto es un candado de PANTALLA. El pedido que escribe sale del navegador derecho a
+   * `bdi-catalogo`, que es otro repo y otro deploy, así que el candado del servidor va allá.
+   */
+  const puedeEscribirEnTienda = esAdmin(perfil) || puedeSub(perfil, marca, 'gen-talles', 'publicar')
   const gt = useGenTalles(marca)
   const { datos } = useDatosMonitor()
   const { confirmar, avisar } = useConfirmar()
@@ -100,6 +115,12 @@ export function GenTalles() {
   }
 
   const onCargarEnTN = async () => {
+    // El botón ya está deshabilitado; esto es el segundo cerrojo, para que un camino nuevo a esta
+    // función no se salte la regla sin que nadie lo note.
+    if (!puedeEscribirEnTienda) {
+      await avisar('Escribir la tabla en la tienda lo hace administración. Podés copiar el HTML y pasárselo.')
+      return
+    }
     if (!elegido) {
       await avisar('Elegí un producto primero.')
       return
@@ -134,7 +155,14 @@ export function GenTalles() {
           Copiar HTML
         </Button>
         {elegido && (
-          <Button variant="solid" tone="brand" onClick={() => void onCargarEnTN()} loading={cargandoTN}>
+          <Button
+            variant="solid"
+            tone="brand"
+            onClick={() => void onCargarEnTN()}
+            loading={cargandoTN}
+            disabled={!puedeEscribirEnTienda}
+            title={puedeEscribirEnTienda ? undefined : 'Escribir en la tienda lo hace administración. Copiá el HTML y pasáselo.'}
+          >
             {cargandoTN ? 'Cargando…' : 'Cargar en TN'}
           </Button>
         )}

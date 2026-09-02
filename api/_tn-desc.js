@@ -32,6 +32,8 @@ import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna, puedeSub, esAdmin } from '../lib/permisos.core.js';
 import { generarHtml } from '../lib/tn-desc/formato.core.js';
 import { componer, conservaLaTabla } from '../lib/tn-desc/bloques.core.js';
+import { htmlDeMedidas } from '../lib/tn-medidas/bloque.core.js';
+import { tallesDe } from '../lib/tn-medidas/medidas.core.js';
 import { ATRIBUTOS, FAMILIAS, bulletsDe, esValor } from '../lib/tn-desc/atributos.core.js';
 import { esMedida, esValorDeMedida } from '../lib/tn-medidas/medidas.core.js';
 
@@ -386,7 +388,7 @@ export default async function handler(req, res) {
       // guardado — no de lo que mande el navegador: lo que se aprobó es lo que se publica.
       const { data: fila, error: eFila } = await supabase
         .from('tn_descripciones')
-        .select('borrador, estado, familia')
+        .select('borrador, estado, familia, sin_medidas')
         .eq('store', store)
         .eq('tn_id', tnId)
         .maybeSingle();
@@ -410,6 +412,24 @@ export default async function handler(req, res) {
       const cargados = Object.fromEntries((attrs || []).map((a) => [a.atributo, a.valor]));
       const bullets = bulletsDe(fila.familia, cargados);
 
+      // La tabla de medidas se compone acá, con lo que está GUARDADO, igual que los bullets: lo
+      // que manda el navegador no decide qué sale a la tienda.
+      const { data: meds, error: eMeds } = await supabase
+        .from('tn_medidas')
+        .select('talle, medida, valor')
+        .eq('store', store)
+        .eq('tn_id', tnId);
+      if (eMeds) throw new Error(eMeds.message);
+      const porTalle = {};
+      for (const m of meds || []) (porTalle[m.talle || ''] || (porTalle[m.talle || ''] = {}))[m.medida] = m.valor;
+      // ⚠️ Los talles salen de las variantes, y el servidor ⛔ no ve el catálogo de TiendaNube:
+      // los infiere de las claves que trae la tabla, que es lo que el navegador ya usó para
+      // dibujar los casilleros. Una prenda sin talles guarda con la clave vacía.
+      const tallesGuardados = tallesDe(Object.keys(porTalle));
+      // 🔴 Si la prenda está marcada «no lleva tabla», ⛔ no se compone ninguna: es una respuesta,
+      // no un olvido. Y una tabla vacía tampoco se compone, así que la que había queda intacta.
+      const htmlTalles = fila.sin_medidas ? '' : htmlDeMedidas(fila.familia, cargados, tallesGuardados, porTalle);
+
       // 1. Leer la descripción FRESCA de TiendaNube. No sale del audit, que está cacheado: lo
       //    que se lee acá es lo que se va a respaldar y lo que se va a comparar antes de pisar.
       const rLeer = await fetch(`${CATALOGO}?store=${store}&accion=descripcion&productId=${encodeURIComponent(tnId)}`, {
@@ -422,8 +442,8 @@ export default async function handler(req, res) {
       const actual = typeof dLeer.html === 'string' ? dLeer.html : '';
 
       // 2. Componer. Una sola vez y en un lugar solo (`lib/tn-desc/bloques.core.js`).
-      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets }), { conservarResiduo });
-      if (!conservaLaTabla(actual, nuevo)) {
+      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets }), { conservarResiduo, htmlTalles });
+      if (!conservaLaTabla(actual, nuevo, htmlTalles)) {
         return res.status(500).json({ error: 'La composición se come la tabla de talles. No se escribió nada.' });
       }
 

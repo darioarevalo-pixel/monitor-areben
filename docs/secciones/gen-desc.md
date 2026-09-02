@@ -1,8 +1,29 @@
-# Redacción (`gen-desc`) — ficha de sección
+# Descripción y medidas (`gen-desc`) — ficha de sección
 
-La cola de descripciones de producto de Zattia. Se llega por **Marketing > Tienda Nube >
-Redacción** (`/tncat/redaccion`); la monta `components/tncat/Tncat.tsx` como quinta subárea,
-pero **es una sección aparte con su propio permiso**, igual que la Tabla de talles.
+La ficha de cada prenda de Zattia: lo que el local carga **con la prenda en la mano** —atributos y
+medidas— y el párrafo que se aprueba antes de salir a la tienda. Se llega por **Marketing > Tienda
+Nube > Descripción y medidas** (`/tncat/redaccion`); la monta `components/tncat/Tncat.tsx` como
+quinta subárea, pero **es una sección aparte con su propio permiso**, igual que la Tabla de talles.
+
+⚠️ **Se llamaba «Redacción» hasta el 1-sep-2026 y lo renombró Bruno** —«no me gusta que diga
+redacción»—: dejó de ser sólo el párrafo cuando las medidas entraron adentro de la fila. 🔑 **Cambió
+el RÓTULO, ⛔ no la key ni la ruta**: `gen-desc` es el permiso que `josefinabatter` y
+`camilaquintana` ya tienen tildado, y renombrarlo lo destildaría.
+
+## 🔑 La dinámica real, que es la que decide la forma (1-sep-2026)
+
+La contó Bruno: **la mercadería entra al depósito, baja al local, y ahí Camila Quintana y Josefina
+Batter hacen la descripción y las medidas en el mismo momento**, con la prenda sobre la mesa.
+
+⇒ Por eso las medidas viven **adentro de la fila** y ⛔ no en una pantalla aparte: dos pantallas
+serían buscar la misma prenda dos veces, y esa fricción es la que hace que una de las dos no se
+haga. La prenda pasa por la mesa una sola vez.
+
+🔴 **Y las que cargan ⛔ NO publican.** Publica administración, o Bruno y Darío —decisión suya del
+1-sep-2026, «inicialmente para probar todo»—. Eso ya era así para la descripción (`gen-desc.publicar`)
+y ⛔ **no lo era para la Tabla de talles**: `gen-talles` no tenía sub, y las dos lo tenían tildado
+desde el día uno ⇒ ese botón les escribía en la tienda viva. Se le estrenó el sub
+`gen-talles.publicar` el mismo día.
 
 ## Por qué existe, con los números que la justifican
 
@@ -422,3 +443,77 @@ verbo (y otra tanda), porque nadie va a leer 370 borradores de corrido.
 oráculo fue la app en vivo, no la consola: `GET /api/datos?recurso=tn-desc&store=zattia` contesta
 `200 {"ok":true,"filas":[]}` — que además prueba que en Vercel está la service key de Zattia, porque
 el handler devuelve un 500 con nombre y apellido si la clave que agarra es la pública.
+
+## Las medidas (1-sep-2026)
+
+La guía de Bruno (`TOMA DE MEDIDAS CON GUÍA.pdf`, 9 páginas) es la fuente: 7 hojas de dibujo
+técnico con la prenda apoyada y las flechas rotuladas, más 2 de bajada de línea. El diccionario
+está en `lib/tn-medidas/medidas.core.js`, la tabla en `sql/migrate-tn-medidas.sql`, el bloque que
+se publica en `lib/tn-medidas/bloque.core.js`.
+
+🔴 **⛔ No es un ajuste de `lib/gen-talles/plantillas.ts`: es otro juego de medidas.** Aquéllas
+piden `Contorno busto`, `Ancho de hombros`, `Contorno cadera` y `Tiro`; la guía ⛔ no mide ninguna
+de las cuatro — mide **Ancho** de sisa a sisa con la prenda apoyada, y el tiro sólo le sirve de
+referencia para saber dónde va el ancho.
+
+### Las cuatro reglas, y por qué ninguna es un comentario
+
+1. **Se mide la prenda APOYADA Y PLANA**, y la cintura se agarra por la mitad y **se publica ×2**.
+   Lo dice la guía textual. 🔑 **La multiplicación la hace el sistema, ⛔ nunca la persona**
+   (`paraPublicar`): medido contra la tienda viva, de 69 tablas con cintura legible **63 están en
+   contorno y 6 por debajo de 45 cm** — esas 6 son las veces que alguien se olvidó de multiplicar.
+2. 🔴 **Lo que estira no se mide; el largo se mide SIEMPRE.** Regla de Bruno. `largo` tiene
+   `estira: false`, así que el botón «estira» ⛔ **no existe** en su casillero: la regla no depende
+   de que alguien la recuerde. 📌 [[feedback_areben_invariante_escrito_no_frena]].
+3. **«Estira» es un VALOR, ⛔ no un casillero vacío.** En blanco, «no lo medimos porque estira» y
+   «nadie lo cargó» se ven igual — y es la única diferencia que dice si falta trabajo. Misma forma
+   que `TELA_SIN_IDENTIFICAR`.
+4. 🔴 **Una fila sin un solo número ⛔ NO se publica.** Medido el 1-sep-2026: hay **5 productos
+   publicados** —VESTIDO SOLANA, VERONA, MALIA, AMBAR y MONO TIARE— con la tabla en la tienda
+   diciendo «CINTURA (CONTORNO TOTAL) CM», sin número, y **63 tablas con celdas en «-»**.
+
+### Lo que la pantalla sabe sin preguntar
+
+- 🔑 **La ficha ya tiene la TELA**, que es el atributo de orden 1 ⇒ con microfibra, lycra, morley o
+  ribb el aviso sobre el ancho sale solo, con la prenda delante, en vez de vivir en un manual.
+- 🔑 **La ficha ya tiene la MANGA** ⇒ un top sin mangas ⛔ no pide largo de manga. Y el servidor lo
+  **vuelve a preguntar**: que el casillero no se dibuje es una comodidad del que carga.
+- 🔴 **Los talles salen de las VARIANTES, ⛔ no se tipean.** La Tabla de talles vieja arrancaba con
+  `S, M, L, XL` clavados: medido, **98 de los 111** productos sin medidas ⛔ no tienen eje de talle,
+  así que esa grilla les pedía inventar tres talles que el selector de la tienda no ofrece.
+
+### El bloque que sale a la tienda
+
+Usa **la misma firma** que el generador viejo (`AREBEN-TALLES`) a propósito: **reemplaza** la tabla
+que había, ⛔ no se suma. ⚠️ Y una tabla nueva **vacía ⛔ no borra** la que había —`htmlDeMedidas`
+devuelve `''` tanto para «no lleva» como para «todavía nadie midió», y ninguna de las dos cosas
+puede costar la única copia que existe—. El guard `conservaLaTabla` sigue prendido: exige que la
+tabla **nueva** esté entera en el resultado.
+
+🔑 **Los rótulos dejan de ser letras** (`a. Contorno busto`) y pasan a la palabra, porque los
+dibujos de la guía ⛔ no tienen letras: rotulan ANCHO, LARGO, LARGO DE MANGA.
+
+🔴 **Y la ficha deja de contradecirse sola**: el bloque viejo decía «tomadas sobre superficies
+planas» arriba y «medir alrededor de toda la cintura» diez líneas abajo.
+
+## El aviso de la cola (1-sep-2026, pedido de Bruno)
+
+> «una vez que terminen la cola, que haya una alerta de x cantidad de descripciones o medidas sin
+> publicar»
+
+`avisosDeFicha` en `lib/notificaciones/derivar.ts`, con la regla en `lib/tn-desc/pendientes.core.ts`
+—el mismo núcleo que va a mirar la pantalla, para que el badge y la lista ⛔ no digan cosas
+distintas—.
+
+- 🔴 **Tiene DUEÑO: sólo lo ve quien puede publicar.** A las que cargan ⛔ no les llega: sería un
+  reloj que acusa a quien no puede hacer nada. 📌 [[feedback_areben_reloj_sin_dueno]].
+- ⚠️ **Son DOS avisos.** «Aprobada y sin publicar» se cierra con un clic; «cargada y sin párrafo»
+  pide sentarse a escribir. Un solo número diría «17 pendientes» sin decir cuáles se resuelven en
+  un minuto.
+- 🔴 **La espera se mide desde `aprobado_at`, ⛔ no desde `updated_at`**: `updated_at` se mueve cada
+  vez que alguien carga una medida, así que mediría «hace cuánto que nadie la toca».
+  📌 [[feedback_areben_updated_at_no_mide_la_espera]].
+- ⛔ Una prenda marcada «no lleva tabla» ⛔ **no** es un pendiente: si contara, la cola nunca bajaría
+  a cero — y una cola que nunca baja a cero deja de mirarse.
+- ⚠️ **Hoy el aviso nace en CERO y eso es correcto**: nadie cargó todavía una ficha. El día que la
+  primera se apruebe, aparece.

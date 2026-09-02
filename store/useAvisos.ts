@@ -17,11 +17,12 @@ import { create } from 'zustand'
 import { leerCajon } from '@/lib/solicitudes/cajon'
 import { leerFallas } from '@/lib/postventa/fallas/cliente'
 import { leerReclamosParaAviso, leerRetornos } from '@/lib/reclamos/cliente'
-import { puedeVer } from '@/lib/permisos'
+import { puedeSub, puedeVer } from '@/lib/permisos'
+import { apiFetch } from '@/lib/api-fetch'
 import { marcasVisibles } from '@/lib/inicio/core'
 import { lineasDeMarca } from '@/lib/lineas'
 import { filtrarPorFuncion, resumenFoto, resumenInterna, type ResumenSolicitud } from '@/lib/solicitudes/overview'
-import { avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeInsumo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeRetorno, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
+import { avisosDeFicha, avisosDeAprobacion, avisosDeCanjeAprobacion, avisosDeCanjeVencido, avisosDeContenidoSinRevisar, avisosDeFallas, avisosDeHallazgo, avisosDeInsumo, avisosDeNoDevueltos, avisosDeReclamo, avisosDeRetorno, avisosDeSolicitud, contarNuevos, ordenarAvisos } from '@/lib/notificaciones/derivar'
 import { esCiego, leerCanjes } from '@/lib/canjes/cliente'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
 import { traerHallazgos } from '@/lib/meta-ads/cliente'
@@ -30,6 +31,7 @@ import { vistoHasta } from '@/lib/notificaciones/visto'
 import { leerInsumos } from '@/lib/insumos/cliente'
 import { mirarTodos } from '@/lib/insumos/core'
 import type { Aviso } from '@/lib/notificaciones/tipos'
+import type { FilaPendiente } from '@/lib/tn-desc/pendientes.core'
 import type { Perfil } from '@/lib/permisos'
 import type { Marca } from '@/lib/nav'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
@@ -136,6 +138,28 @@ async function avisosDeInsumos(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
   return avisosDeInsumo(mirarTodos(d.insumos, d.movimientos, d.pedidos, d.comprasPorMarca), perfil, marca)
 }
 
+/**
+ * La cola de «Descripción y medidas»: cuántas fichas están cargadas y no llegaron a la tienda.
+ *
+ * 🔑 **El permiso se pregunta ANTES de pedir**, igual que con la pauta, los reclamos y los
+ * insumos: sin el sub de publicar esto sería un 403 en cada refresco de cada persona del local,
+ * cada 3 minutos. ⚠️ Es un atajo y ⛔ no la regla — la vuelve a mirar `avisosDeFicha`, que es el
+ * que decide.
+ *
+ * ⚠️ Y la regla de «qué falta» ⛔ no se escribe acá: sale de `pendientesDePublicar`, el mismo
+ * núcleo que va a mirar la pantalla.
+ */
+async function avisosDeDescripciones(perfil: Perfil, marca: Marca): Promise<Aviso[]> {
+  if (!puedeSub(perfil, marca, 'gen-desc', 'publicar')) return []
+  // ⛔ `apiFetch` y no `fetch` pelado: manda la credencial de quien está usando el monitor. Un
+  // `fetch` sin credencial contesta 403 y el aviso nacería siempre en cero, que es el modo de
+  // falla que no se ve — un cero se lee como «no hay nada pendiente».
+  const r = await apiFetch(`/api/datos?recurso=tn-desc&store=${marca}`)
+  const d = await r.json()
+  if (!d?.ok) return []
+  return avisosDeFicha((d.filas || []) as FilaPendiente[], perfil, marca)
+}
+
 export const useAvisos = create<AvisosState>((set, get) => ({
   avisos: [],
   resumenes: [],
@@ -200,6 +224,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         avisosDePauta(perfil).catch(() => [] as Aviso[]),
         avisosDeInsumos(perfil, marca).catch(() => [] as Aviso[]),
       ])
+      const fichas = await avisosDeDescripciones(perfil, marca).catch(() => [] as Aviso[])
 
       const resumenes = filtrarPorFuncion(porMarca.flatMap((p) => p.resumenes), perfil)
       const avisos = ordenarAvisos([
@@ -212,6 +237,7 @@ export const useAvisos = create<AvisosState>((set, get) => ({
         ...canjes,
         ...pauta,
         ...insumos,
+        ...fichas,
       ])
 
       set({ avisos, resumenes, nuevos: contarNuevos(avisos, vistoHasta(perfil.name)), cargadoEn: Date.now(), cargando: false })

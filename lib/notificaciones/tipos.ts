@@ -21,6 +21,7 @@ export type TipoAviso =
   | 'canje-aprobacion' | 'canje-vencido' | 'canje-contenido'
   | 'reclamo' | 'hallazgo'
   | 'insumo-comprar' | 'insumo-subir' | 'insumo-demorado'
+  | 'ficha-sin-publicar' | 'ficha-sin-escribir'
 
 export type Aviso = {
   /** Estable entre refrescos: es lo que permite comparar "esto ya lo vi". */
@@ -56,4 +57,6 @@ export const TIPO_LABEL: Record<TipoAviso, string> = {
   'insumo-comprar': 'Insumos por pedir',
   'insumo-subir': 'Insumos que faltan en un local',
   'insumo-demorado': 'Pedidos de insumos demorados',
+  'ficha-sin-publicar': 'Fichas aprobadas que no salieron a la tienda',
+  'ficha-sin-escribir': 'Prendas cargadas esperando su descripción',
 }

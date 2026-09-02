@@ -405,10 +405,17 @@ export const PERM_CAT: PermCat[] = [
     "key": "gen-talles",
     "area": "marketing",
     "label": "Tabla de talles",
-    "info": "Generador de tablas de talles (HTML) para las descripciones de TiendaNube.",
+    "info": "El generador viejo de tablas de talles. Sirve para RECUPERAR las 205 tablas que ya están escritas en la tienda; las medidas nuevas se cargan en «Descripción y medidas».",
     "brands": [
       "bdi",
       "zattia"
+    ],
+    "subs": [
+      {
+        "key": "publicar",
+        "label": "Escribir la tabla en la tienda",
+        "info": "Pegar la tabla en la descripción de TiendaNube. Sin esto se puede armar y copiar, pero no escribirla en la tienda."
+      }
     ]
   },
   {
