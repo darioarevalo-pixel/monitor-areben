@@ -11,6 +11,8 @@ import {
   parsearNota,
   puntoDeUrlMaps,
   ultimaVisita,
+  filaDeLocalSembrado,
+  nuevoIdDeLocal,
 } from '@/lib/prm/core'
 import type { Compromiso, Visita } from '@/lib/prm/tipos'
 
@@ -326,5 +328,68 @@ describe('puntoDeUrlMaps', () => {
 
   it('un link corto no inventa un punto', () => {
     expect(puntoDeUrlMaps('https://maps.app.goo.gl/abc123')).toBeNull()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// La ficha que nace de una orden de compra
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔑 La arman DOS llamadores —`api/_oc-webhook.js` y `scripts/sembrar-prm.mjs`— y por eso la fila
+ * se decide acá. Lo que estos tests fijan es lo que se rompería callado: una ficha con zona, una
+ * ficha de un proveedor que no existe, y una ficha sin motivo escrito.
+ */
+describe('filaDeLocalSembrado', () => {
+  const base = { id: 'pl1_abc', proveedorId: 650, nombre: 'YASANA', origen: 'Sembrado al llegar OC-0466' }
+
+  it('arma la fila con el estado medido, no con un default', () => {
+    // `compro` es la verdad: tiene órdenes de compra confirmadas.
+    expect(filaDeLocalSembrado(base)).toEqual({
+      id: 'pl1_abc',
+      nombre: 'YASANA',
+      estado: 'compro',
+      proveedor_id_ingresos: 650,
+      creado_por: 'sembrado',
+      nota: 'Sembrado al llegar OC-0466. Falta clasificarle la zona.',
+    })
+  })
+
+  it('🔴 ⛔ NO le pone zona, y la nota la pide', () => {
+    // La recorrida filtra por zona: un proveedor al que se le compra por mail no puede entrar a un
+    // viaje a Flores por accidente. Adivinarla por el nombre está medido y descartado.
+    expect(filaDeLocalSembrado(base)).not.toHaveProperty('zona')
+    expect(filaDeLocalSembrado(base).nota).toContain('Falta clasificarle la zona')
+  })
+
+  it('un proveedor sin nombre igual tiene ficha, con su número', () => {
+    // Sin ficha sus OCs no se ven desde el PRM, que es peor que una ficha con un nombre feo.
+    expect(filaDeLocalSembrado({ ...base, nombre: '   ' }).nombre).toBe('Proveedor #650')
+    expect(filaDeLocalSembrado({ ...base, nombre: null }).nombre).toBe('Proveedor #650')
+  })
+
+  it('🔴 `0` ⛔ no es un proveedor: tira', () => {
+    // `Number(null)` es 0, y `enteroDe` del webhook devuelve 0 cuando el campo no vino. Un 0 que
+    // pase deja UNA ficha fantasma compartida por todas las órdenes sin proveedor.
+    expect(() => filaDeLocalSembrado({ ...base, proveedorId: 0 })).toThrow(/proveedorId/)
+    expect(() => filaDeLocalSembrado({ ...base, proveedorId: -1 })).toThrow(/proveedorId/)
+    expect(() => filaDeLocalSembrado({ ...base, proveedorId: NaN })).toThrow(/proveedorId/)
+  })
+
+  it('🔑 el id y el motivo van obligatorios: ⛔ no se inventan acá adentro', () => {
+    expect(() => filaDeLocalSembrado({ ...base, id: '' })).toThrow(/id/)
+    expect(() => filaDeLocalSembrado({ ...base, origen: '' })).toThrow(/origen/)
+  })
+})
+
+describe('nuevoIdDeLocal', () => {
+  it('arma el id con el prefijo que espera la tabla', () => {
+    expect(nuevoIdDeLocal({ ahora: 1756800000000, azar: 'x7k2q1' })).toBe('pl1756800000000_x7k2q1')
+  })
+
+  it('🔑 el reloj y el azar van OBLIGATORIOS', () => {
+    // Si los tomara de adentro, el llamador no podría hacer reproducible ni una siembra ni un test.
+    expect(() => nuevoIdDeLocal({ ahora: NaN, azar: 'x' })).toThrow(/ahora/)
+    expect(() => nuevoIdDeLocal({ ahora: 1, azar: '' })).toThrow(/azar/)
   })
 })

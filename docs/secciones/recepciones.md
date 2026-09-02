@@ -230,12 +230,33 @@ test no probaría nada.
   sale de la documentación: salió de 79 mensajes que llegaron.
   🔑 **Y lo que lo cerró ⛔ no fue un test ni una caminata: fue mirar la base.** Un pendiente que
   se cierra solo, del otro lado y sin avisar, sólo se entera el que lo va a buscar.
-- ▶️ 🔴 **Lo que sigue abierto es OTRA cosa: que el emisor mande EN VIVO.** Las 79 entraron en una
-  sola tanda de trece minutos (27-ago, 14:00–14:13 UTC) — un **backfill** del historial — y desde
-  entonces ⛔ no llegó ninguna. `OC-0412` se **confirmó el 26** y llegó igual en esa tanda del 27,
-  o sea que ⛔ **ninguna OC llegó todavía el día que se confirmó**.
-  📌 **El tripwire es `eventos.ultimo`**, que la propia sección devuelve en el GET: hoy está clavado
-  en `2026-08-27T14:13`. La próxima OC que confirme Gerardo lo mueve, o no, y eso lo contesta.
+- ✅ 🏁 **EL EMISOR MANDA EN VIVO — contestado el 1-sep-2026, medido el 2-sep.** Era el pendiente
+  abierto: las 79 del 27-ago habían entrado en una sola tanda de trece minutos (un **backfill**) y
+  ninguna el día que se confirmó. El tripwire se movió.
+  **Lo medido**, `recibido_en - confirmada_at` por tanda:
+
+  | tanda | OCs | demora mínima | demora máxima |
+  | --- | --- | --- | --- |
+  | 27-ago (backfill) | 79 | 21 h | **85 días** |
+  | 1-sep | 13 | **0 s** | 2 h 45 |
+
+  🔑 **El oráculo es la demora, ⛔ no que hayan llegado órdenes nuevas**: un segundo backfill
+  también mueve `eventos.ultimo` y también trae filas nuevas. Los **0 segundos** son lo único que
+  separa «me lo mandó al confirmarlo» de «me mandó el historial otra vez».
+  Al 2-sep: **92 OCs** (18 BDI, 74 Zattia), **101 eventos**, **0 rotos**.
+- 🆕 🔴 **Este webhook también le abre la FICHA DEL PRM al proveedor nuevo** (2-sep-2026, paso 6).
+  Sin eso el padrón del PRM era una foto: lo sembró un script el 30-ago y dos días después ya le
+  faltaban cuatro proveedores —`YASANA`, `ELIANA IND`, `AIME`, `AUDAZ`, todos del 1-sep—, cuyas
+  órdenes ⛔ no se veían desde ninguna ficha. Ver `docs/secciones/prm.md`.
+  - Es **mejor esfuerzo** y va **último**, por el mismo motivo que la pregunta: es el único de los
+    seis pasos que se puede recuperar después, corriendo `scripts/sembrar-prm.mjs`.
+  - 🔴 **El corte es `proveedor_id <= 0`, ⛔ no `Number.isFinite`.** `enteroDe` devuelve 0 cuando el
+    campo no vino y recién después lo colapsa a `null`; `Number(null)` es **0** otra vez, y con el
+    finite a secas todas las órdenes sin proveedor compartían una ficha fantasma «Proveedor #0».
+    **Lo cazó el test, no la lectura.**
+  - ⚠️ **`scripts/caminar-oc-webhook.mjs` usa ahora `proveedor.id = 999999977`** y ⛔ ya no 77: la
+    caminata siembra una ficha de verdad, y un id chico la habría pegado a un proveedor real.
+    Su limpieza borra el local y el contador de `proveedor_local` entra en el oráculo del final.
 - ✅ 🏁 **ESTE WEBHOOK YA PRENDE EL DISPARADOR DEL INGRESO** (30-ago-2026). El hecho «llegó
   mercadería» entraba acá firmado mientras el disparador de la Agenda esperaba por una segunda
   puerta con un segundo secreto (`INGRESO_SECRETO`) que nadie cargó, y sembraba **cero**.

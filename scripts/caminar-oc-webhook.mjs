@@ -30,6 +30,10 @@ const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_K
 
 const OC = 999999901
 const REF = `bdi:${OC}`
+// 🔴 Fuera del rango de los ids reales de Gestión Nube (el más alto al 2-sep-2026 es 1124). Era
+// `77`, y desde que el webhook le abre ficha en el PRM al proveedor nuevo, un id chico habría
+// dejado un local pegado a un proveedor de verdad.
+const PROV = 999999977
 let ok = 0, mal = 0
 const chequeo = (nombre, cond, detalle) => {
   if (cond) { ok++; console.log(`  ✅ ${nombre}`) }
@@ -61,7 +65,7 @@ const evento = ({ lineas, totales, tipo = 'oc.confirmada', slug = 'bdi', ocId = 
   data: {
     negocio: { slug },
     orden_compra: { id: ocId, label: `OC-${ocId}`, estado: 'confirmada', fecha_compra: '2026-08-01', fecha_ingreso: '2026-08-25T14:00:00Z' },
-    proveedor: { id: 77, nombre: 'Proveedor de caminata' },
+    proveedor: { id: PROV, nombre: 'Proveedor de caminata' },
     lineas,
     totales,
   },
@@ -83,6 +87,7 @@ const antes = {
   evento: await contar('recepcion_evento'),
   oc: await contar('recepcion_oc'),
   linea: await contar('recepcion_linea'),
+  local: await contar('proveedor_local'),
 }
 console.log(`Antes: eventos ${antes.evento} · oc ${antes.oc} · líneas ${antes.linea}\n`)
 
@@ -110,6 +115,12 @@ chequeo('el espejo se consultó de verdad', oc1?.espejo_consultado === true)
 chequeo('y contó 1 SKU sin espejo', oc1?.skus_sin_espejo === 1, String(oc1?.skus_sin_espejo))
 chequeo('lineas_nuevas = 1', oc1?.lineas_nuevas === 1, String(oc1?.lineas_nuevas))
 
+// La ficha del PRM: sin ella las órdenes de un proveedor nuevo no se ven desde ninguna pantalla.
+const { data: ficha } = await sb.from('proveedor_local').select('*').eq('proveedor_id_ingresos', PROV).maybeSingle()
+chequeo('le abrió la ficha en el PRM al proveedor nuevo', Boolean(ficha), JSON.stringify(r1.body?.prm))
+chequeo('la ficha nace SIN zona (no entra a una recorrida por accidente)', ficha?.zona === null, String(ficha?.zona))
+chequeo('y con el motivo escrito, nombrando la orden', String(ficha?.nota || '').includes(`OC-${OC}`), String(ficha?.nota))
+
 const { data: l1 } = await sb.from('recepcion_linea').select('*').eq('oc_ref', REF).order('orden')
 chequeo('quedaron las 2 líneas', l1?.length === 2, String(l1?.length))
 chequeo('la diferencia se RECALCULÓ (−2), no se copió el 999 del emisor', l1?.[0]?.diferencia === -2, String(l1?.[0]?.diferencia))
@@ -126,6 +137,7 @@ console.log('\n2 · La misma entrega otra vez no duplica nada')
 const r2 = await postear({ id: 'caminata-1', cuerpo: cuerpo1 })
 chequeo('contesta 200 repetido', r2.status === 200 && r2.body?.repetido === true, JSON.stringify(r2))
 chequeo('las líneas siguen siendo 2', (await contar('recepcion_linea', (q) => q.eq('oc_ref', REF))) === 2)
+chequeo('y sigue habiendo UNA sola ficha de proveedor', (await contar('proveedor_local', (q) => q.eq('proveedor_id_ingresos', PROV))) === 1)
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 console.log('\n3 · Un conteo posterior de la MISMA OC pisa, no acumula')
@@ -169,12 +181,14 @@ console.log('\n6 · Se borra lo sembrado')
 await sb.from('recepcion_linea').delete().eq('oc_ref', REF)
 await sb.from('recepcion_oc').delete().eq('id', REF)
 await sb.from('recepcion_evento').delete().like('webhook_id', 'caminata-%')
+await sb.from('proveedor_local').delete().eq('proveedor_id_ingresos', PROV)
 const despues = {
   evento: await contar('recepcion_evento'),
   oc: await contar('recepcion_oc'),
   linea: await contar('recepcion_linea'),
+  local: await contar('proveedor_local'),
 }
-chequeo('los contadores volvieron a donde estaban', despues.evento === antes.evento && despues.oc === antes.oc && despues.linea === antes.linea, JSON.stringify({ antes, despues }))
+chequeo('los contadores volvieron a donde estaban', despues.evento === antes.evento && despues.oc === antes.oc && despues.linea === antes.linea && despues.local === antes.local, JSON.stringify({ antes, despues }))
 
 console.log(`\n${ok} de ${ok + mal}${mal ? ` — ❌ ${mal} EN ROJO` : ''}`)
 process.exit(mal ? 1 : 0)

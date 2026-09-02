@@ -36,6 +36,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 import { verificarFirma, normalizarEvento } from '../lib/recepciones/webhook.core.js'
 import { CAMPO, preguntaDeOc } from '../lib/agenda/pregunta-ingreso.core.js'
+import { filaDeLocalSembrado, nuevoIdDeLocal } from '../lib/prm/sembrado.core.js'
 import { cfgDelMonitor, cfgDeMarca, LIMITE_CRUDO } from './_recepciones-base.js'
 
 /** Lee el cuerpo tal como llegó. Corta si se pasa del techo: nadie manda una OC de 5 MB. */
@@ -157,6 +158,54 @@ async function abrirPreguntaDePuerta(sb, oc) {
   }
 }
 
+/**
+ * **Le abre la ficha del PRM al proveedor, si todavía no tiene.** Devuelve un texto, siempre.
+ *
+ * 🔴 **El padrón del PRM ENVEJECE SOLO, y por eso esto vive acá y no en un script.** Los 30
+ * primeros locales los sembró `scripts/sembrar-prm.mjs` el 30-ago-2026 leyendo las OCs que había
+ * ese día: es una **foto**. Dos días después llegaron cuatro proveedores nuevos —`YASANA`,
+ * `ELIANA IND`, `AIME`, `AUDAZ`— y sus órdenes no se veían desde ninguna ficha, porque no existía.
+ * Un módulo que se alimenta a mano no sobrevive a que la mitad de lo medido no aparezca.
+ *
+ * 🔑 **Mejor esfuerzo, igual que la pregunta de la puerta**: la OC ya está guardada y el evento
+ * ⛔ no se pierde por esto. Y el motivo viaja en la respuesta: callarse se lee como que anda.
+ *
+ * ⚠️ **La ficha nace SIN zona a propósito** (`filaDeLocalSembrado`): la recorrida filtra por zona,
+ * así que un proveedor al que se le compra por mail no entra a un viaje por accidente.
+ */
+async function abrirFichaDeProveedor(sb, oc) {
+  const id = Number(oc.proveedor_id)
+  // ⛔ No es un error: hay órdenes que de verdad llegan sin proveedor, y una ficha colgada de
+  // `null` la compartirían todas.
+  // 🔴 **El corte es `<= 0`, ⛔ no `Number.isFinite`**: `Number(null)` es **0**, y con el finite a
+  // secas una OC sin proveedor abría la ficha «Proveedor #0». Lo cazó el test, no la lectura.
+  if (!Number.isInteger(id) || id <= 0) return 'la OC no trae proveedor'
+  try {
+    const { data, error } = await sb
+      .from('proveedor_local')
+      .select('id')
+      .eq('proveedor_id_ingresos', id)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (data) return `${oc.proveedor_nombre || `#${id}`} ya tenía ficha`
+
+    const fila = filaDeLocalSembrado({
+      id: nuevoIdDeLocal({ ahora: Date.now(), azar: Math.random().toString(36).slice(2, 8) }),
+      proveedorId: id,
+      nombre: oc.proveedor_nombre,
+      origen: `Sembrado al llegar ${oc.oc_label || oc.id}`,
+    })
+    const { error: eIns } = await sb.from('proveedor_local').insert([fila])
+    // 23505 = el índice único de `proveedor_id_ingresos`. Dos OCs del mismo proveedor nuevo en la
+    // misma tanda: ganó la otra, y eso es exactamente lo que el índice tiene que hacer.
+    if (eIns && String(eIns.code) === '23505') return `${fila.nombre} ya tenía ficha`
+    if (eIns) throw new Error(eIns.message)
+    return `ficha abierta para ${fila.nombre}`
+  } catch (e) {
+    return `la ficha no se pudo abrir: ${e.message}`
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' })
 
@@ -265,7 +314,11 @@ export default async function handler(req, res) {
     // fallo al escribir la OC dejaría una pregunta sobre un ingreso que no está en ningún lado.
     const agenda = await abrirPreguntaDePuerta(sb, oc)
 
-    return res.status(200).json({ ok: true, oc: oc.id, lineas: lineas.length, agenda })
+    // 6 · La ficha del proveedor en el PRM. Va al final y por el mismo motivo que la pregunta: es
+    // lo único de los seis pasos que se puede recuperar corriendo `scripts/sembrar-prm.mjs`.
+    const prm = await abrirFichaDeProveedor(sb, oc)
+
+    return res.status(200).json({ ok: true, oc: oc.id, lineas: lineas.length, agenda, prm })
   } catch (e) {
     // Queda anotado para poder reprocesarlo, y se contesta 5xx **a propósito**: es el código que
     // hace que el emisor reintente, y sus reintentos cubren casi 17 horas.

@@ -11,6 +11,7 @@ import {
   distanciaKm as distanciaKmJs,
   ordenarPorCercania as ordenarPorCercaniaJs,
 } from './geo.core.js'
+import { filaDeLocalSembrado as filaDeLocalSembradoJs, nuevoIdDeLocal as nuevoIdDeLocalJs } from './sembrado.core.js'
 import type { Candidato, Compromiso, CompromisoConReloj, Parseo, ProveedorLocal, Visita } from './tipos'
 
 /**
@@ -33,6 +34,27 @@ export const consultaDeLocal: (
   local: Pick<ProveedorLocal, 'id' | 'direccion' | 'localidad' | 'provincia'>,
 ) => { clave: string; intentos: string[]; localidad: string; provincia: string } | { motivo: string } =
   consultaDeLocalJs
+
+/**
+ * ⚠️ **La ficha que nace de una OC vive en `lib/prm/sembrado.core.js`, también en JS plano**: la
+ * arman `api/_oc-webhook.js` y `scripts/sembrar-prm.mjs`, y ninguno de los dos pasa por el
+ * compilador de Next. Acá se re-exporta tipada. ⛔ No se copia.
+ */
+export const nuevoIdDeLocal: (args: { ahora: number; azar: string }) => string = nuevoIdDeLocalJs
+
+export const filaDeLocalSembrado: (args: {
+  id: string
+  proveedorId: number
+  nombre: string | null | undefined
+  origen: string
+}) => {
+  id: string
+  nombre: string
+  estado: string
+  proveedor_id_ingresos: number
+  creado_por: string
+  nota: string
+} = filaDeLocalSembradoJs
 
 export function nuevoId(prefijo: string): string {
   return `${prefijo}${Date.now()}_${Math.random().toString(36).slice(2, 8)}`

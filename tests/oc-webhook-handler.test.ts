@@ -64,6 +64,12 @@ let previo: { estado: string } | null = null
 let escrituras: { tabla: string; op: string; datos: unknown }[] = []
 /** Para probar que la Agenda caída ⛔ no voltea el evento: la OC no se puede perder. */
 let agendaRota = false
+/** El proveedor ya tiene ficha en el PRM (lo normal: 30 de los 34 la tienen). */
+let fichaExistente: { id: string } | null = null
+/** Dos OCs del mismo proveedor nuevo en la misma tanda: el índice único corta la segunda. */
+let fichaChoca = false
+/** El PRM no contesta: la OC no se puede perder por eso. */
+let prmRoto = false
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
@@ -76,10 +82,15 @@ vi.mock('@supabase/supabase-js', () => ({
         in: () => q,
         order: () => q,
         limit: () => q,
-        maybeSingle: async () => ({ data: tabla === 'recepcion_evento' ? previo : null, error: null }),
+        maybeSingle: async () => ({
+          data: tabla === 'recepcion_evento' ? previo : tabla === 'proveedor_local' ? fichaExistente : null,
+          error: null,
+        }),
         upsert: async (fila: unknown) => { escrituras.push({ tabla, op: 'upsert', datos: fila }); return { error: null } },
         insert: async (filas: unknown) => {
           if (tabla === 'agenda_items' && agendaRota) return { error: { message: 'la agenda no contesta' } }
+          if (tabla === 'proveedor_local' && fichaChoca) return { error: { code: '23505', message: 'duplicate key' } }
+          if (tabla === 'proveedor_local' && prmRoto) return { error: { message: 'el PRM no contesta' } }
           escrituras.push({ tabla, op: 'insert', datos: filas }); return { error: null }
         },
         delete: () => ({ eq: async () => { escrituras.push({ tabla, op: 'delete', datos: null }); return { error: null } } }),
@@ -103,6 +114,9 @@ beforeEach(() => {
   previo = null
   escrituras = []
   agendaRota = false
+  fichaExistente = null
+  fichaChoca = false
+  prmRoto = false
   vi.stubEnv('INGRESO_WEBHOOK_SECRET', SECRETO)
   vi.stubEnv('SUPABASE_URL', 'https://ejemplo.supabase.co')
   vi.stubEnv('SUPABASE_SERVICE_KEY', 'k')
@@ -131,6 +145,9 @@ describe('el camino feliz', () => {
       'recepcion_oc.upsert',
       'recepcion_linea.delete',
       'recepcion_linea.insert',
+      // 🔑 La ficha del PRM va ÚLTIMA: es el único de los pasos que se puede recuperar después
+      // corriendo `scripts/sembrar-prm.mjs`.
+      'proveedor_local.insert',
     ])
     const oc = escrituras[1].datos as Record<string, unknown>
     expect(oc.id).toBe('bdi:42')
@@ -304,5 +321,87 @@ describe('la pregunta de la puerta', () => {
     const res = await llamar(conFirma())
     expect(typeof res.body?.agenda).toBe('string')
     expect(String(res.body?.agenda).length).toBeGreaterThan(3)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// La ficha del PRM: un proveedor nuevo que llega y no existe en ninguna pantalla
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔴 **El padrón del PRM envejecía solo, y nadie se enteraba.** Lo sembró un script el 30-ago-2026
+ * leyendo las OCs de ese día —una foto—; el 1-sep llegaron cuatro proveedores nuevos y sus órdenes
+ * no se veían desde ninguna ficha. El modo de falla es silencioso por partida doble: el webhook
+ * contesta 200, la OC entra, la pantalla de Ingresos la muestra, y **lo único que falta es la
+ * mitad del PRM que se supone que ya está medida**.
+ */
+describe('la ficha del proveedor en el PRM', () => {
+  const fichas = () => escrituras.filter((e) => e.tabla === 'proveedor_local')
+  const primera = () => (fichas()[0].datos as Record<string, unknown>[])[0]
+
+  it('le abre la ficha al proveedor que todavía no la tiene', async () => {
+    const res = await llamar(conFirma())
+    expect(res.code).toBe(200)
+    expect(fichas()).toHaveLength(1)
+    expect(primera()).toMatchObject({
+      nombre: 'Textil Sur',
+      estado: 'compro',
+      proveedor_id_ingresos: 7,
+      creado_por: 'sembrado',
+    })
+    expect(String(res.body?.prm)).toContain('ficha abierta')
+  })
+
+  it('🔴 la ficha nace SIN zona: un proveedor de mail ⛔ no entra a una recorrida por accidente', async () => {
+    // La recorrida filtra por zona. Adivinarla por el nombre está descartado y medido: `CHINA` se
+    // lee sola, `RHOVE` y `ASKDENIM` no — y una zona mal puesta mete un local en un viaje a Flores.
+    await llamar(conFirma())
+    expect(primera()).not.toHaveProperty('zona')
+  })
+
+  it('🔑 el motivo queda escrito en la fila, con la orden que la trajo', async () => {
+    // Dentro de un mes, «¿de dónde salió éste?» tiene que contestarse solo.
+    await llamar(conFirma())
+    expect(String(primera().nota)).toContain('OC-0042')
+    expect(String(primera().nota)).toContain('Falta clasificarle la zona')
+  })
+
+  it('🔴 el que YA tiene ficha ⛔ no la vuelve a abrir', async () => {
+    // 30 de los 34 proveedores ya la tienen: sin este corte, cada OC pisaría el trabajo de quien
+    // le cargó la dirección, la galería y la zona a mano.
+    fichaExistente = { id: 'pl1_abc' }
+    const res = await llamar(conFirma())
+    expect(fichas()).toEqual([])
+    expect(String(res.body?.prm)).toContain('ya tenía ficha')
+  })
+
+  it('🔑 dos OCs del mismo proveedor nuevo en la misma tanda: el índice único corta, y no es error', async () => {
+    fichaChoca = true
+    const res = await llamar(conFirma())
+    expect(res.code).toBe(200)
+    expect(String(res.body?.prm)).toContain('ya tenía ficha')
+  })
+
+  it('🔴 una OC SIN proveedor ⛔ no abre ninguna ficha, y lo dice', async () => {
+    // Una ficha colgada de `null` la compartirían todas las órdenes sin proveedor.
+    const sinProv = JSON.stringify({ ...EVENTO, data: { ...EVENTO.data, proveedor: null } }, null, 1)
+    const res = await llamar(conFirma(sinProv, 'msg_sin_prov'))
+    expect(res.code).toBe(200)
+    expect(fichas()).toEqual([])
+    expect(String(res.body?.prm)).toContain('no trae proveedor')
+  })
+
+  it('🔴 el PRM caído ⛔ NO voltea el evento: la OC se guarda y el emisor recibe 200', async () => {
+    prmRoto = true
+    const res = await llamar(conFirma())
+    expect(res.code).toBe(200)
+    expect(escrituras.some((e) => e.tabla === 'recepcion_oc')).toBe(true)
+    expect(String(res.body?.prm)).toContain('no se pudo abrir')
+  })
+
+  it('🔑 lo que pasó con la ficha viaja SIEMPRE en la respuesta', async () => {
+    const res = await llamar(conFirma())
+    expect(typeof res.body?.prm).toBe('string')
+    expect(String(res.body?.prm).length).toBeGreaterThan(3)
   })
 })

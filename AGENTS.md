@@ -168,7 +168,9 @@ ya tienen ficha:
   secciones de dos áreas sobre las MISMAS tablas y el MISMO handler**, y el permiso se parte acción
   por acción. ⛔ **La visita no lleva monto**: la compra vuelve contada por la OC.
   ⛔ `lib/prm/geo.core.js` es JS plano porque lo importa el handler, y **le sacó a `api/_georef.js`
-  la provincia clavada en «Santa Fe»** — ese cambio toca Envíos.
+  la provincia clavada en «Santa Fe»** — ese cambio toca Envíos. ⛔ **`api/_oc-webhook.js` también
+  escribe en `proveedor_local`** (le abre la ficha al proveedor nuevo, con `lib/prm/sembrado.core.js`):
+  el alta de un local tiene **dos llamadores**, y ese no pasa por `api/_prm.js` ni por su permiso.
 - Insumos → **leer `docs/secciones/insumos.md`** antes de tocar `components/insumos/`,
   `lib/insumos/` o `api/_insumos.js`. ⛔ **El stock no es una columna: se suma del libro**, y de ahí
   sale el «desde cuándo falta» que es el `ts` del aviso. ⛔ Un traslado son DOS filas.

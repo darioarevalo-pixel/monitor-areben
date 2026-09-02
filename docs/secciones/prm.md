@@ -36,6 +36,11 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
   (`PREFIJOS` del handler y `PrefijoBlob` de `lib/imagenes.ts`); con una sola, la foto **se guarda
   igual pero en `fundas/`**.
 - **`lib/recepciones/core.ts`** (`porProveedor`): lo llama la ficha, ⛔ no el handler.
+- 🆕 🔴 **`api/_oc-webhook.js` ESCRIBE en `proveedor_local`** (2-sep-2026). El receptor del webhook de
+  Ingresos —que ⛔ no pide sesión— le abre la ficha al proveedor que todavía no la tiene, con la
+  misma fila que el script de siembra: **`lib/prm/sembrado.core.js`**, JS plano por lo mismo que
+  `geo.core.js`. ⇒ el que toque el alta de un local tiene **dos llamadores**, y uno de ellos no
+  pasa por `api/_prm.js` ni por su permiso.
 
 ## Reglas que el código no dice
 
@@ -57,6 +62,14 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
   bloque «Lo que vendió», y eso ⛔ no es un dato faltante — la pantalla lo dice con esas palabras.
   Por eso el GET de opciones devuelve `gnDisponible`: un desplegable vacío por no haber podido
   preguntar se lee igual que uno vacío porque no hay.
+- 🆕 🔴 🔑 **El padrón ENVEJECE SOLO, y por eso el alta no puede ser un script.** Los 30 primeros
+  locales salieron de `scripts/sembrar-prm.mjs` el 30-ago-2026 leyendo las OCs de ese día: es una
+  **foto**. El 1-sep entraron 13 órdenes con **cuatro proveedores nuevos** —`YASANA`, `ELIANA IND`,
+  `AIME`, `AUDAZ`— y sus órdenes ⛔ no se veían desde ninguna ficha, porque la ficha no existía.
+  El modo de falla es mudo por partida doble: el webhook contesta 200, la OC entra, Ingresos la
+  muestra, y lo único que falta es **la mitad del PRM que se supone medida**. Desde el 2-sep lo
+  siembra el webhook (`abrirFichaDeProveedor`), y el script quedó para backfill y reparación.
+  ⚠️ **La ficha nace sin zona igual que las sembradas**, así que sigue sin entrar a una recorrida.
 - 🔴 **Los dos enganches se tildan A MANO y ⛔ no se adivinan por nombre.** Está medido: de los 30
   proveedores de las 79 OCs, `CHINA` se lee sola y `RHOVE`/`ASKDENIM` no. **Un enganche mal puesto
   es peor que ninguno**: una ficha que ya muestra cumplimiento y margen no la vuelve a revisar
@@ -96,9 +109,15 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 - ▶️ **Enganche con los otros dos padrones de proveedores del grupo** — `areben-produccion` (Prisma,
   facturas de tela) y `areben-dashboard` (Supabase, financiero). Están en otras bases, modelan
   facturas y **ninguno tiene dirección**. El puente, si hace falta, es `proveedor_id_ingresos`.
-- 🔴 ▶️ **Nadie lo usó todavía.** Es un módulo que se alimenta 100% a mano: si después del primer
-  viaje no se cargó nada, no sirve. Por eso `scripts/sembrar-prm.mjs` lo arranca con los 30
-  proveedores de las OCs, para que la ficha diga algo desde el día uno.
+- 🔴 ▶️ **Nadie lo usó todavía.** Medido contra la base el 2-sep-2026: **30 locales · 0 con zona ·
+  0 con dirección · 0 visitas · 0 intereses · 0 compromisos · 0 recorridas**. Es un módulo que se
+  alimenta 100% a mano; por eso `scripts/sembrar-prm.mjs` lo arrancó con los proveedores de las OCs
+  y por eso el webhook los sigue sembrando, para que la ficha diga algo desde el día uno.
+- 🔴 ▶️ **La mano que lo destraba es una sola: la ZONA.** Los 30 están en `null` a propósito y sin
+  zona ⛔ no entran a ninguna recorrida, así que «Armar recorrida» no sirve hasta que se clasifiquen.
+  ⛔ **Y ⛔ no se puede hacer de este lado**: no hay dirección en ninguno de los tres padrones del
+  grupo (verificado en `areben-produccion`, cuyo modelo `Proveedor` tiene cuit/contacto/notas y
+  **ninguna dirección**), y adivinar por el nombre está medido y descartado.
 - ⚠️ **Sin novedad, a propósito**: es para admin.
 
 ## Cómo se prueba

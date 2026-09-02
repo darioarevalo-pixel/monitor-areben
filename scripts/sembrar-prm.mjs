@@ -15,8 +15,14 @@
 //
 // 🔑 **Idempotente.** Vuelve a correrse sin duplicar: se saltean los `proveedor_id` que ya tienen
 // local. El oráculo es que la segunda corrida diga `0 nuevos`.
+//
+// 🆕 **Desde el 2-sep-2026 esto ⛔ ya NO es la única puerta**: `api/_oc-webhook.js` le abre la ficha
+// a cada proveedor nuevo en cuanto llega su primera OC (`abrirFichaDeProveedor`), con la MISMA fila
+// —`lib/prm/sembrado.core.js`—. Este script quedó para el backfill y para reparar: el padrón se
+// había quedado en la foto del 30-ago y en dos días ya le faltaban cuatro proveedores.
 import { readFileSync } from 'fs'
 import pg from 'pg'
+import { filaDeLocalSembrado, nuevoIdDeLocal } from '../lib/prm/sembrado.core.js'
 
 const DRY = process.argv.includes('--dry')
 
@@ -80,17 +86,18 @@ try {
     console.log('\n(--dry: no se escribió nada)')
   } else if (nuevos.length) {
     for (const p of nuevos) {
+      // 🔑 La fila la arma el núcleo, que es el MISMO que usa `api/_oc-webhook.js` cuando aparece un
+      // proveedor nuevo. Escribirla acá a mano serían dos reglas sobre la misma ficha.
+      const fila = filaDeLocalSembrado({
+        id: nuevoIdDeLocal({ ahora: Date.now(), azar: Math.random().toString(36).slice(2, 8) }),
+        proveedorId: p.proveedor_id,
+        nombre: p.nombre,
+        origen: `Sembrado desde las órdenes de compra (${p.ocs} OC)`,
+      })
       await client.query(
         `insert into proveedor_local (id, nombre, estado, proveedor_id_ingresos, creado_por, nota)
-         values ($1, $2, 'compro', $3, 'sembrado', $4)`,
-        [
-          `pl${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          p.nombre || `Proveedor #${p.proveedor_id}`,
-          p.proveedor_id,
-          // El motivo va escrito en la fila: dentro de un mes, "¿de dónde salió este?" tiene que
-          // contestarse solo. Y `estado = 'compro'` es la verdad: tiene OCs confirmadas.
-          `Sembrado desde las órdenes de compra (${p.ocs} OC). Falta clasificarle la zona.`,
-        ],
+         values ($1, $2, $3, $4, $5, $6)`,
+        [fila.id, fila.nombre, fila.estado, fila.proveedor_id_ingresos, fila.creado_por, fila.nota],
       )
     }
     console.log(`\n✓ ${nuevos.length} locales sembrados.`)
