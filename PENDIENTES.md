@@ -116,11 +116,14 @@ además lo que genera el código de seguimiento).
    CABA al guardar, **en los dos lados que escriben** —el portal y la ficha del equipo—, porque las
    cuatro que salieron mal las había tipeado el equipo. Hay **un solo rango y es a propósito**: los
    demás se pisan entre sí y una tabla escrita de memoria corregiría direcciones que están bien.
-   ▶️ **Falta correr la migración de `canje_personas.barrio` en la base**, y hasta que esté no se
-   puede deployar el código: el portal manda la columna nueva y el update fallaría.
-   ▶️ **Y falta corregir las 6 fichas que hoy tienen la provincia peleada con el CP** (4 mal de
-   verdad y 2 escritas «CABA» en corto): el guard las arregla al próximo guardado, pero nadie las va
-   a volver a guardar.
+   ✅ **Migración corrida en BDI y EN PROD** (2-sep): la columna verificada contra
+   `information_schema` y la escritura **ejercida de verdad por PostgREST y revertida** —el caché de
+   esquema de PostgREST ya mordió una vez—. El campo se leyó en el bundle de producción.
+   ⛔ **Las 6 fichas que hoy tienen la provincia peleada con el CP quedan como están, por decisión de
+   Bruno** (4 mal de verdad —Mercedes Jaime, Melisa Bruno, Maia Cigorraga, laureana bottini— y 2
+   escritas «CABA» en corto). El guard las corrige al próximo guardado; hasta entonces siguen así.
+   ▶️ **Falta lo único que ningún test puede**: abrir el link desde un **celular**, cargar el barrio
+   y ver que se guarda. El bundle dice que el campo está dibujado, ⛔ no que la escritura funcione.
 8. ⚠️ **Tres direcciones se cargaron interpretándolas, y conviene que la ficha lo refleje**:
    C-0078 «Av 101 9 de julio» **no eran dos calles** —es la Avenida 101, que en Villa Ballester se
    conoce como 9 de Julio; se cargó `Av. 101 (9 de Julio)`—; C-0075 el timbre no tiene campo propio y
