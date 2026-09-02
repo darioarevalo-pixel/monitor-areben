@@ -768,6 +768,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "acreedores",
+    "area": "direccion",
+    "label": "A quién le debemos",
+    "info": "A quién le debemos plata (el contador, el abogado), cuánto, y a qué cuenta bancaria hay que transferirle. Sirve para pedirle a un cliente que nos debe que le transfiera DIRECTO al acreedor: con una transferencia se cancelan las dos deudas. El saldo lo calcula el dashboard y acá se lee —no hay una segunda copia—, así que si el dashboard no contesta la sección se ve igual, con un aviso en vez de los montos. Solo lectura: no mueve un peso.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "integraciones",
     "area": "integraciones",
     "label": "Integraciones",
@@ -950,7 +960,8 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "gerencial",
       "memo",
-      "norte"
+      "norte",
+      "acreedores"
     ]
   },
   {

@@ -52,6 +52,7 @@ const PedidosClientes = dynamic(() => import('@/components/pedidos-clientes/Pedi
 const Recepciones = dynamic(() => import('@/components/recepciones/Recepciones').then((m) => m.Recepciones), { loading: Cargando })
 const Recorridas = dynamic(() => import('@/components/recorridas/Recorridas').then((m) => m.Recorridas), { loading: Cargando })
 const PRM = dynamic(() => import('@/components/prm/PRM').then((m) => m.PRM), { loading: Cargando })
+const Acreedores = dynamic(() => import('@/components/acreedores/Acreedores').then((m) => m.Acreedores), { loading: Cargando })
 const Insumos = dynamic(() => import('@/components/insumos/Insumos').then((m) => m.Insumos), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
@@ -319,6 +320,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   // que es la importación que VIENE (proyectada, sólo BDI, en el KV de bdi-catalogo). Ésta es la
   // que LLEGÓ, para las dos marcas, y la escribe un webhook — la pantalla sólo lee.
   recepciones: Recepciones,
+  acreedores: Acreedores,
   // Insumos: lo que la empresa consume y no vende —bolsas, rollos, yerba—, con su stock por lugar y
   // el aviso del anteúltimo. ⛔ No es stock de mercadería: un insumo no existe en Gestión Nube, así
   // que ni el espejo ni el motor de conteos (que exige `inventory_id`) sirven acá.

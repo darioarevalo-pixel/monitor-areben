@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-60 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+61 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -67,6 +67,10 @@ local mientras el depósito tiene. ⛔ No es stock de mercadería: un insumo no 
 
 **Dirección** — `gerencial` · `memo` (semanal, por `?recurso=memo`, sin `store`) ·
 `norte → components/norte + lib/norte` (cruza el ETL con el KV de `ingresos`, por `?recurso=norte`) ·
+`acreedores → components/acreedores + lib/acreedores` (a quién le debemos y a qué cuenta transferirle,
+por `?recurso=acreedores`, sin `store`: la deuda es de la empresa. ⛔ **No tiene base propia**: el
+saldo lo calcula el dashboard y este handler se lo pide por HTTP — si lo rehiciera acá, las dos apps
+darían números distintos)
 **Integraciones** — `integraciones`
 
 **Sistema** — `novedades` y `manuales → components/… + lib/…`, los dos por `?recurso=sistema` en

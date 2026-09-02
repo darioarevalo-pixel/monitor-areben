@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -42,6 +42,7 @@ import recepciones from './_recepciones.js';
 import prm from './_prm.js';
 import insumos from './_insumos.js';
 import ocWebhook from './_oc-webhook.js';
+import acreedores from './_acreedores.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -144,6 +145,11 @@ const RECURSOS = {
   // secciones (`prm` lee la ficha, `recorridas` escribe lo de la calle) porque es el mismo dato;
   // el permiso se separa adentro, acción por acción.
   prm,
+  // A quién le debemos: la cuenta corriente de los acreedores del dashboard, con la cuenta
+  // bancaria de cada uno. Entra por acá y no por un archivo de ruta propio como todo el resto
+  // (12 funciones de Hobby). ⛔ Sólo LEE, y ni siquiera de una base propia: se la pide al
+  // dashboard, que es donde vive el cálculo del saldo.
+  acreedores,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

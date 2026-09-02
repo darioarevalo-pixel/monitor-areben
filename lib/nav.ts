@@ -233,6 +233,10 @@ const ICONO_POR_KEY: Record<string, string> = {
   prm: 'proveedores',
   disenos: 'disenos',
   retornos: 'retornos',
+  // Los acreedores son proveedores de SERVICIOS (así los modela el dashboard desde la
+  // migración 079: el abogado y el contador viven en el mismo maestro `proveedores`), y por eso
+  // llevan su mismo ícono. No se pisan en ningún menú: éste cuelga de Dirección.
+  acreedores: 'proveedores',
   // Clientes / Config
   clientes: 'clientes',
   usuarios: 'usuarios',
@@ -427,6 +431,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'postventa-deposito': 'Cargá las fallas de la mercadería de depósito (descuenta del stock de depósito). El motor está en Administración.',
   'cambios-local': 'Armá un cambio de punta a punta: la diferencia, el cobro y la venta en GN. No hace falta que lo apruebe nadie.',
   'reclamos-local': 'Pasale al cliente el link para que cargue el reclamo él mismo, o abrilo vos desde la orden si no puede. La plata la devuelve Administración.',
+  acreedores: 'A quién le debemos plata, cuánto, y a qué cuenta transferirle. Sirve para pedirle a un cliente que nos debe que le transfiera derecho al acreedor: con una transferencia se cancelan las dos deudas. Los montos los calcula el dashboard y acá se leen.',
   retornos: 'Lo que estamos esperando que vuelva y lo que hay que mandarle al cliente por el mismo caso, ordenado por hace cuánto: marcás que llegó, que lo reingresaste y que lo despachaste. No es Envíos, que es el reparto del día.',
 }
 
