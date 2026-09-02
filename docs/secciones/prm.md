@@ -79,6 +79,15 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
     `CONTAMINA BY LATTE CHIC`, `Boucle` ← `BOUCLE LOCAL`). Los **4 sin sugerencia** son los que
     entraron el 1-sep y todavía ⛔ no tienen productos en GN. **Ninguno de los 6 de BDI se cruza por
     accidente.** Y al 2-sep **había 0 enganchados**: nadie lo tildó nunca desde que salió la sección.
+  - ✅ 🏁 **Los 24 quedaron enganchados el 2-sep** (`scripts/enganchar-gn.mjs`, lo pidió Bruno). El
+    script ⛔ no copia la regla: importa `sugerirProveedorGn` del núcleo y aprieta los mismos
+    botones que la pantalla. **El oráculo ⛔ no fue que la columna quedara escrita, sino que el
+    enganche SIRVIERA**: contados del otro lado, los 24 traen **649 productos** y **ninguno apunta a
+    un nombre que no existe** — y las dos «probables» son de las que más traen (`Boucle` 94,
+    `Contamina` 73). Los 10 que quedan sin enganche son los **6 de BDI** (donde la columna no
+    existe) y los **4 del 1-sep** que todavía no tienen productos en GN.
+    ⚠️ **Idempotente y ⛔ no pisa lo tildado a mano** (`… where proveedor_gn is null`): la segunda
+    corrida dice `0`.
   - 🔴 **Se compara por PREFIJO, ⛔ no por «contiene»**: así crecen estos nombres —la marca primero—
     y con «contiene» un local que arranca con otra marca y nombra a `Contamina` en el medio recibe
     esa sugerencia. 🔑 **El mutante «prefijo → contiene» SOBREVIVIÓ** la primera vez: los dos casos
