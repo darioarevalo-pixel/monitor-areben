@@ -162,7 +162,25 @@ export default function Seccion() {
     return key === 'canje' ? <CanjePortal token={token} /> : <ReclamoPublico token={token} tienda={marcaDelLink} />
   }
 
-  if (cargando) return <div className="login-screen" />
+  /**
+   * 🔴 **La pantalla en blanco del refresco.** Reportado por Bruno el 2-sep-2026: *«actualizo, queda
+   * blanco y luego al segundo carga los datos»*. En **cada** recarga la sesión se revalida —Google
+   * refresca el token, o se reprueba la credencial contra el KV— y ese ida y vuelta se dibujaba
+   * como un `<div>` vacío: un segundo sin una sola palabra, indistinguible de una app colgada.
+   *
+   * ⛔ **Y no se puede mostrar el login mientras tanto**: la sesión guardada casi siempre vale, así
+   * que sería un parpadeo de «no estás adentro» seguido de la app. Por eso va **un cartel que dice
+   * qué está pasando**, sobre el mismo fondo: ni la app, ni el login, ni el vacío.
+   *
+   * ⚠️ Esto es del SHELL y ⛔ no de una sección: se ve al recargar cualquier pantalla.
+   */
+  if (cargando) {
+    return (
+      <div className="login-screen">
+        <div style={{ color: 'var(--mo-mut)', fontSize: 13 }} aria-busy="true">Entrando…</div>
+      </div>
+    )
+  }
   if (!perfil) return <LoginScreen />
 
   /**
@@ -180,7 +198,16 @@ export default function Seccion() {
     return <PanelWhatsApp tel={Array.isArray(partes) ? (partes[1] ?? null) : null} />
   }
 
-  if (!permitida) return <div className="login-screen" />
+  // ⛔ El otro blanco del shell: acá el `useEffect` de arriba ya está mandando al fallback, pero
+  // hasta que navegue hay un cuadro vacío. Un renglón cuesta nada y evita que un permiso que falta
+  // se lea como una pantalla rota.
+  if (!permitida) {
+    return (
+      <div className="login-screen">
+        <div style={{ color: 'var(--mo-mut)', fontSize: 13 }}>Esta sección no está habilitada para tu usuario. Llevándote al inicio…</div>
+      </div>
+    )
+  }
 
   // createElement y no <Seccion />: la regla "Cannot create components during
   // render" no puede saber que `componenteDe` devuelve una referencia estable de
