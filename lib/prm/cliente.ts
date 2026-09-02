@@ -7,6 +7,7 @@
  */
 import { apiFetch } from '@/lib/api-fetch'
 import type { Recepcion } from '@/lib/recepciones/core'
+import type { OcMovimiento, ProductoMovimiento, VentaMovimiento } from './movimiento'
 import type { Compromiso, Interes, ProveedorLocal, Recorrida, Parada, Visita } from './tipos'
 
 const API = '/api/datos?recurso=prm'
@@ -28,6 +29,25 @@ export type Ficha = {
    * un cero afirma que no le compramos nunca, y sin enganche eso no se sabe.
    */
   recepciones: Recepcion[] | null
+}
+
+/**
+ * Lo que le compramos y cómo se vendió eso. Todo crudo: el agregado lo hace `lib/prm/movimiento.ts`.
+ *
+ * 🔴 **`sinEnganche` ⛔ no es «no vendió nada»**, y `sinCruce` tampoco: son los dos ceros que
+ * afirman de más. El primero dice que nadie ató este local a un proveedor de Ingresos; el segundo,
+ * cuántos renglones de sus órdenes no se pudieron cruzar contra el espejo de Gestión Nube.
+ */
+export type Movimiento = {
+  sinEnganche?: true
+  dias: number
+  desdeVentas: string
+  ocs: OcMovimiento[]
+  productos: ProductoMovimiento[]
+  ventas: VentaMovimiento[]
+  sinCruce: { lineas: number; unidades: number }
+  /** Marcas cuya base no contestó. ⛔ No es «vendió 0»: es «no pude preguntar». */
+  marcasMudas: string[]
 }
 
 export type ParadaViva = Parada & {
@@ -60,6 +80,11 @@ export async function leerPadron(marca: string): Promise<LocalConResumen[]> {
 
 export async function leerFicha(marca: string, id: string): Promise<Ficha> {
   return pedir<Ficha>(`${q(marca)}&action=local&id=${encodeURIComponent(id)}&nc=${Date.now()}`)
+}
+
+export async function leerMovimiento(marca: string, id: string, dias?: number): Promise<Movimiento> {
+  const d = dias ? `&dias=${dias}` : ''
+  return pedir<Movimiento>(`${q(marca)}&action=movimiento&id=${encodeURIComponent(id)}${d}&nc=${Date.now()}`)
 }
 
 export async function leerOpciones(marca: string): Promise<Opciones> {

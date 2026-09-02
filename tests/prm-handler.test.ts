@@ -130,6 +130,26 @@ describe('el permiso se parte por acción entre las dos secciones', () => {
     expect((await postear(visita)).code).toBe(403)
   })
 
+  it('🔴 el MOVIMIENTO es del PRM: con Recorridas la ficha se lee y las ventas NO', async () => {
+    // Ahí viajan las ventas del catálogo, que ⛔ no son un dato de la calle. Mismo criterio que el
+    // enganche: es una decisión de escritorio, no un gesto parado en una galería.
+    perfil = soloCon('recorridas')
+    mundo.local = { id: 'pl1', nombre: 'Un local', proveedor_id_ingresos: null }
+    expect((await llamar({ method: 'GET', query: { recurso: 'prm', store: 'bdi', action: 'local', id: 'pl1' } })).code).toBe(200)
+    const r = await llamar({ method: 'GET', query: { recurso: 'prm', store: 'bdi', action: 'movimiento', id: 'pl1' } })
+    expect(r.code).toBe(403)
+    expect(String(r.body?.error)).toContain('PRM')
+  })
+
+  it('y con PRM sí se lee', async () => {
+    perfil = soloCon('prm')
+    mundo.local = { id: 'pl1', nombre: 'Un local', proveedor_id_ingresos: null }
+    const r = await llamar({ method: 'GET', query: { recurso: 'prm', store: 'bdi', action: 'movimiento', id: 'pl1' } })
+    expect(r.code).toBe(200)
+    // Sin enganche ⛔ no contesta ceros: dice que nadie lo ató a un proveedor de Ingresos.
+    expect(r.body?.sinEnganche).toBe(true)
+  })
+
   it('sin ninguna de las dos no se lee nada', async () => {
     perfil = soloCon('recepciones')
     const r = await llamar({ method: 'GET', query: { recurso: 'prm', store: 'bdi' } })

@@ -5,6 +5,7 @@
 //   GET  ?recurso=prm&store=…&action=recorridas    → los viajes
 //   GET  ?recurso=prm&store=…&action=recorrida&id= → UN viaje entero, con todo lo de cada parada
 //   GET  ?recurso=prm&store=…&action=opciones      → los nombres para los dos desplegables de enganche
+//   GET  ?recurso=prm&store=…&action=movimiento&id=&dias=  → lo que le compramos y lo que se vendió
 //   POST ?recurso=prm&store=…  { action, … }       → las escrituras
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=prm`. El plan Hobby de
@@ -25,6 +26,7 @@ import { geocodificarEnEscalera } from './_georef.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 import { consultaDeLocal, ordenarPorCercania } from '../lib/prm/geo.core.js'
+import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { puntoDeGeoref } from '../lib/envios/direccion.core.js'
 
 /** Leer el padrón lo puede cualquiera de las dos secciones: es el mismo dato mirado de dos lados. */
@@ -40,6 +42,10 @@ const PARA_ENGANCHAR = ['prm']
 
 /** Techo de la lista. El padrón de Flores no llega a cientos, pero una consulta sin techo no existe. */
 const TOPE = 1000
+
+/** La ventana de ventas por defecto, y su techo. Las OCs más viejas son de junio de 2026. */
+const DIAS_MOVIMIENTO = 180
+const DIAS_MOVIMIENTO_MAX = 730
 
 const TABLAS_VISITA = 'proveedor_visita'
 
@@ -146,6 +152,133 @@ async function padron(cliente) {
   }))
 }
 
+
+/**
+ * **Lo que le compramos y lo que se vendió de eso** — el bloque de movimiento de la ficha.
+ *
+ * 🔴 🔑 **QUÉ MIDE, Y QUÉ ⛔ NO MIDE.** El puente es el PRODUCTO, ⛔ no la unidad: se cruzan los
+ * renglones de sus OCs contra el espejo de Gestión Nube (`recepcion_linea.producto_id`) y se
+ * cuentan las ventas **de esos productos**. Eso ⛔ NO es «cuánto de lo que él trajo se vendió»: el
+ * mismo producto pudo entrar por otra OC, de otro proveedor, o ya estaba en el depósito.
+ * **Medido el 2-sep-2026: `CaseMe&Co` compró 793 unidades y sus productos vendieron 968.** Un
+ * número así, sin la frase que lo explica, se lee como un faltante de inventario y no lo es.
+ *
+ * 🔑 **Esto es OTRO corte que «Lo que vendió»**, que sale del ETL por `proveedor_gn` y es **el
+ * catálogo entero** del proveedor en GN, sólo Zattia y por mes. Éste son **los productos de sus
+ * órdenes**, las dos marcas y por semana. Dos preguntas distintas sobre la misma plata: por eso
+ * conviven y la pantalla dice cuál contesta cada una.
+ *
+ * 🔴 **Lo que no cruzó se DEVUELVE contado** (`sinCruce`) y ⛔ no se calla: al 2-sep cruzan 749 de
+ * 803 renglones en BDI y 622 de 819 en Zattia. Sin ese número, un proveedor cuyos renglones no
+ * cruzaron muestra «vendió 0» y eso es una afirmación falsa.
+ */
+export async function movimiento(cliente, local, dias) {
+  if (local.proveedor_id_ingresos == null) return { sinEnganche: true }
+
+  const ocs = await leerTodo(cliente, 'recepcion_oc', (q) =>
+    q
+      .select('id, store, oc_label, confirmada_at, fecha_ingreso, unidades_pedidas, unidades_contadas')
+      .eq('proveedor_id', local.proveedor_id_ingresos)
+      .order('id'),
+  )
+  if (!ocs.length) return { ocs: [], productos: [], ventas: [], sinCruce: { lineas: 0, unidades: 0 }, dias }
+
+  const lineas = await leerTodo(cliente, 'recepcion_linea', (q) =>
+    q
+      .select('oc_ref, store, producto_id, nombre, sku, cantidad_contada')
+      .in('oc_ref', ocs.map((o) => o.id))
+      .order('id'),
+  )
+
+  // Cuándo llegó cada orden. 🔑 `confirmada_at` y ⛔ no `recibido_en`: el backfill del 27-ago puso
+  // `recibido_en` en el mismo minuto para tres meses de historia.
+  const llegada = new Map(ocs.map((o) => [o.id, o.confirmada_at || null]))
+
+  const productos = new Map()
+  const sinCruce = { lineas: 0, unidades: 0 }
+  for (const l of lineas) {
+    const u = Number(l.cantidad_contada) || 0
+    if (!l.producto_id) {
+      sinCruce.lineas += 1
+      sinCruce.unidades += u
+      continue
+    }
+    const clave = `${l.store}:${l.producto_id}`
+    const p = productos.get(clave) || {
+      clave,
+      store: l.store,
+      producto_id: String(l.producto_id),
+      nombre: l.nombre || null,
+      sku: l.sku || null,
+      unidades: 0,
+      // 🔴 **La PRIMERA llegada, y una sola vez por producto.** Contarla por orden haría que un
+      // producto traído dos veces sume dos veces sus ventas del solape — el mismo pozo común que
+      // ya mordió en Norte.
+      desde: null,
+    }
+    p.unidades += u
+    const f = llegada.get(l.oc_ref)
+    if (f && (!p.desde || f < p.desde)) p.desde = f
+    if (!p.nombre && l.nombre) p.nombre = l.nombre
+    productos.set(clave, p)
+  }
+
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const porStore = new Map()
+  for (const p of productos.values()) {
+    if (!porStore.has(p.store)) porStore.set(p.store, [])
+    porStore.get(p.store).push(p.producto_id)
+  }
+
+  const ventas = []
+  const marcasMudas = []
+  for (const [store, ids] of porStore) {
+    const cfg = cfgDeMarca(store)
+    if (!cfg.url || !cfg.key) {
+      // ⛔ No es «vendió 0»: es «no pude preguntar». Viaja con nombre y la pantalla lo dice.
+      marcasMudas.push(store)
+      continue
+    }
+    try {
+      const c = createClient(cfg.url, cfg.key)
+      // 🔴 El `order('id')` ⛔ no es decorativo: `leerTodo` pagina con `range`, y sin un orden por
+      // una columna ÚNICA PostgREST repite filas y se come otras — el conteo sale más bajo y nada
+      // avisa. `venta_detalles.id` es la clave.
+      const filas = await leerTodo(c, 'venta_detalles', (q) =>
+        q
+          .select('product_id, quantity, ventas!inner(date_sale)')
+          .in('product_id', ids.map((x) => Number(x)).filter(Number.isFinite))
+          .gte('ventas.date_sale', desde)
+          .order('id'),
+      )
+      for (const f of filas) {
+        const fecha = f.ventas && f.ventas.date_sale
+        if (!fecha) continue
+        ventas.push({ store, producto_id: String(f.product_id), fecha: String(fecha).slice(0, 10), unidades: Number(f.quantity) || 0 })
+      }
+    } catch {
+      marcasMudas.push(store)
+    }
+  }
+
+  return {
+    dias,
+    desdeVentas: desde,
+    ocs: ocs.map((o) => ({
+      id: o.id,
+      store: o.store,
+      oc_label: o.oc_label,
+      confirmada_at: o.confirmada_at,
+      unidades_pedidas: o.unidades_pedidas,
+      unidades_contadas: o.unidades_contadas,
+    })),
+    productos: [...productos.values()],
+    ventas,
+    sinCruce,
+    marcasMudas,
+  }
+}
+
 /**
  * Los nombres de los dos desplegables de enganche.
  *
@@ -242,6 +375,21 @@ export default async function handler(req, res) {
           compromisos: compromisos.data || [],
           recepciones,
         })
+      }
+
+      if (accion === 'movimiento') {
+        // 🔴 **Pide `prm` y ⛔ no `recorridas`**, aunque el resto de la ficha se lea con las dos.
+        // Acá viajan las VENTAS del catálogo, que ⛔ no son un dato de la calle: quien anota una
+        // visita parado en una galería no tiene por qué ver cuánto salió de cada producto. Mismo
+        // criterio que el enganche, y por el mismo motivo: es una decisión de escritorio.
+        if (!puede(PARA_ENGANCHAR)) return res.status(403).json({ error: 'El movimiento del proveedor es del PRM.' })
+        const id = String(req.query.id || '')
+        const { data: local, error } = await cliente.from('proveedor_local').select('*').eq('id', id).maybeSingle()
+        if (error) throw new Error(error.message)
+        if (!local) return res.status(404).json({ error: 'Ese local no está.' })
+        const pedidos = Number(req.query.dias)
+        const dias = Number.isFinite(pedidos) && pedidos > 0 ? Math.min(pedidos, DIAS_MOVIMIENTO_MAX) : DIAS_MOVIMIENTO
+        return res.status(200).json({ ok: true, ...(await movimiento(cliente, local, dias)) })
       }
 
       if (accion === 'recorridas') {

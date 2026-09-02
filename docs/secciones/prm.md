@@ -11,15 +11,16 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 ## Dónde vive
 
 - Pantalla: `components/prm/` (`PRM.tsx` la lista + la pestaña «Lo prometido», `FichaProveedor.tsx`
-  la ficha de a uno, `usePRM.ts` la carga).
-- Dominio: `lib/prm/` — `core.ts` (puro, y **re-exporta tipado** lo de `geo.core.js`), `tipos.ts`,
-  `cliente.ts`, `geo.core.js`.
+  la ficha de a uno, `MovimientoProveedor.tsx` el bloque de compras y ventas, `usePRM.ts` la carga).
+- Dominio: `lib/prm/` — `core.ts` (puro, y **re-exporta tipado** lo de `geo.core.js` y
+  `sembrado.core.js`), `tipos.ts`, `cliente.ts`, `geo.core.js`, `sembrado.core.js`,
+  **`movimiento.ts`** (las cuentas del bloque 5, puras).
 - Servidor: `api/_prm.js`, por la puerta `api/datos?recurso=prm`. **Un handler para las dos
   secciones**, con el permiso partido acción por acción.
 - Datos: Supabase **de BDI**, seis tablas — `proveedor_local`, `proveedor_visita`,
   `proveedor_interes`, `proveedor_compromiso`, `recorrida`, `recorrida_parada`
   (`sql/migrate-prm.sql`, que es la fuente de verdad del modelo y explica cada campo).
-- Tests: `tests/prm-core.test.ts` (33) y `tests/prm-handler.test.ts` (14).
+- Tests: `tests/prm-core.test.ts`, `tests/prm-handler.test.ts` y `tests/prm-movimiento.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -82,6 +83,36 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 - 🔑 **El agregado de entrega lo hace la PANTALLA con `porProveedor`, no el handler.** `api/*.js` no
   puede importar TypeScript, así que el handler devuelve las OCs crudas. Copiar la fórmula acá sería
   una segunda regla sobre la misma plata.
+- 🆕 🔴 🔑 **«Cómo se mueve lo que le compro» (bloque 5) cuelga de las ÓRDENES, ⛔ no de
+  `proveedor_gn`** — pedido de Bruno el 2-sep-2026: *«compra por semana, vendidos en los últimos
+  días, curvas de venta promedio»*. Por eso es **el único bloque de venta que también contesta para
+  BDI**. El puente es `recepcion_linea.producto_id`, o sea el cruce de cada renglón contra el espejo
+  de Gestión Nube.
+  - 🔴 🔑 **El puente es el PRODUCTO, ⛔ NO la unidad, y la pantalla lo dice arriba de todo.** Se
+    cuentan las ventas **de los productos que él trajo**, que ⛔ no es «cuánto de lo suyo se
+    vendió»: el mismo producto pudo entrar por otra orden, de otro proveedor, o ya estar en el
+    depósito. **Medido: `CaseMe&Co` compró 793 unidades y sus productos vendieron 968.** Sin esa
+    frase, el 968 se lee como un agujero de inventario. Por lo mismo lo vendido **antes** de la
+    primera llegada se muestra en vez de tirarse: es la prueba de que el producto no es sólo suyo.
+  - 🔴 **Cada producto entra a la curva UNA vez, desde su PRIMERA llegada.** Hacerla por orden
+    contaría dos veces el solape de un producto traído dos veces — el mismo pozo común que ya mordió
+    en Norte con el stock arribado.
+  - 🔴 **El denominador de cada semana de la curva son los productos MADUROS**, ⛔ no todos: uno que
+    llegó hace dos semanas no tiene semana 5, y meterlo en el divisor hunde la cola hasta que la
+    forma dice «se deja de vender» cuando lo que pasa es que todavía no llegó.
+  - 🔴 **`sinCruce` viaja contado y se dice en pantalla.** Al 2-sep cruzan **749 de 803** renglones
+    en BDI y **622 de 819** en Zattia: un proveedor cuyos renglones no cruzaron mostraría «vendió 0»,
+    que es falso. Lo mismo con `marcasMudas` («no pude preguntar» ⛔ no es «no vendió»).
+  - 🔴 **El `order('id')` de `leerTodo` ⛔ no es decorativo**: PostgREST corta en 1.000 filas sin
+    avisar y sin un orden por columna única la paginación repite filas y se come otras. CHINA trae
+    **4.141** renglones de venta: sin paginar habría dicho 1.000 y nada habría fallado.
+  - 🔑 **Es OTRO corte que «Lo que vendió» (bloque 4), y los dos conviven a propósito**: aquél es el
+    catálogo entero del proveedor en GN (sólo Zattia, por mes), éste son los productos de sus
+    órdenes (las dos marcas, por semana). Van a dar números distintos y la pantalla dice cuál
+    contesta cada uno.
+  - 🔴 **La acción `movimiento` pide `prm` y ⛔ no `recorridas`**, aunque el resto de la ficha se lea
+    con las dos: ahí viajan las ventas del catálogo, que ⛔ no son un dato de la calle. Atado por
+    test en las dos direcciones.
 - 🔑 **La pestaña «Lo prometido» es lo que justifica la sección**: los compromisos abiertos de todos
   los proveedores juntos, ordenados por urgencia. Es lo único que no se puede ver desde la ficha de
   a uno, y es lo que se mira antes de salir.
@@ -123,8 +154,16 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 ## Cómo se prueba
 
 ```bash
-npx vitest run tests/prm-core.test.ts tests/prm-handler.test.ts tests/georef-provincia.test.ts --reporter=dot
+npx vitest run tests/prm-core.test.ts tests/prm-handler.test.ts tests/prm-movimiento.test.ts \
+  tests/georef-provincia.test.ts --reporter=dot
+node scripts/caminar-prm-movimiento.mjs   # el bloque 5 contra las bases REALES (sólo lee)
 ```
+
+**`caminar-prm-movimiento.mjs` ⛔ no es un test**: invoca `movimiento()` tal cual la llama el handler
+contra las dos bases y **el oráculo es la misma cuenta por otro camino** (SQL directo por `pg`). Es
+lo único que caza que el embed `ventas!inner` o la paginación se estén comiendo filas — un conteo
+más bajo se ve exactamente igual que una semana floja. Caminada el 2-sep-2026: **20 de 20**, con
+CHINA trayendo 4.141 renglones (o sea que pasó el corte de 1.000).
 
 Lo que **no** es obvio:
 

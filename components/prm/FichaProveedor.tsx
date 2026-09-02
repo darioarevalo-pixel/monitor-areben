@@ -9,6 +9,14 @@
  *  3. **Lo que entró** — de `recepcion_oc`, por `proveedor_id_ingresos`. El agregado lo hace
  *     `porProveedor` de `lib/recepciones/core.ts`: ⛔ NO se recalcula acá.
  *  4. **Lo que vendió** — del ETL, por `proveedor_gn`.
+ *  5. **Cómo se mueve lo que le compro** — compras y ventas por semana, el ritmo de los últimos
+ *     días y la curva desde que entra. Cuelga de las ÓRDENES, no de `proveedor_gn`, así que es el
+ *     único bloque de venta que también contesta para BDI. Vive en `MovimientoProveedor.tsx`.
+ *
+ * ⚠️ **4 y 5 son DOS cortes distintos de la misma plata y por eso conviven.** «Lo que vendió» es el
+ * catálogo entero del proveedor en Gestión Nube (sólo Zattia, por mes); el 5 son **los productos de
+ * sus órdenes** (las dos marcas, por semana). Contestan preguntas distintas y van a dar números
+ * distintos: la pantalla dice cuál contesta cada una.
  *
  * 🔴 **Los dos bloques de abajo distinguen TRES estados y no dos**: sin enganche · enganchado y sin
  * datos · con datos. Un cero mudo afirmaría que no le compramos nunca o que no vendió nada, y sin
@@ -41,6 +49,7 @@ import { porProveedor, porcentaje } from '@/lib/recepciones/core'
 import { kpisProveedor, ranking } from '@/lib/proveedores'
 import { escribir, leerFicha, type Ficha, type Opciones } from '@/lib/prm/cliente'
 import { abiertosOrdenados, conReloj } from '@/lib/prm/core'
+import { MovimientoProveedor } from './MovimientoProveedor'
 
 const TONO_SITUACION = { vencido: 'danger', hoy: 'warning', por_venir: 'neutral', sin_fecha: 'neutral', cumplido: 'success' } as const
 
@@ -309,6 +318,14 @@ export function FichaProveedor({
             </TableWrap>
           </>
         )}
+      </SectionCard>
+
+      {/* ── 5 · Cómo se mueve lo que le compro ───────────────────────────────────────────── */}
+      <SectionCard
+        title="Cómo se mueve lo que le compro"
+        subtitle="De sus órdenes cruzadas contra el catálogo: qué entró, qué salió de eso, y con qué forma"
+      >
+        <MovimientoProveedor marca={marca} id={id} hoy={hoy} />
       </SectionCard>
     </div>
   )

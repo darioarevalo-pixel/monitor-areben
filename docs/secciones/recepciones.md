@@ -192,6 +192,14 @@ gente de adentro vea los proveedores»*.
 - 🔑 **La respuesta trae `puede.proveedores`** y la pantalla ⛔ no lo deduce de que el campo venga
   vacío: hay órdenes que de verdad llegaron sin proveedor, y son dos cosas distintas que decir.
 
+## 🆕 El PRM se cuelga de estos renglones (2-sep-2026)
+
+`recepcion_linea.producto_id` —el cruce de cada renglón contra el espejo de Gestión Nube— es el
+puente con el que la ficha del proveedor contesta **cómo se vendió lo que él trajo**
+(`docs/secciones/prm.md`, bloque 5). ⚠️ **Ese campo dejó de ser sólo una marca de «falta darlo de
+alta»**: si algún día se deja de guardar, o se llena con otro criterio, el PRM se queda mudo sin que
+falle nada acá. Al 2-sep cruzan **749 de 803** renglones en BDI y **622 de 819** en Zattia.
+
 ## Qué NO viaja
 
 El costo con IVA, los descuentos, el flete y el margen **se quedan del lado de Ingresos**, por

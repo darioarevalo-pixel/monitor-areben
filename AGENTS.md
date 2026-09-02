@@ -168,7 +168,10 @@ ya tienen ficha:
   secciones de dos áreas sobre las MISMAS tablas y el MISMO handler**, y el permiso se parte acción
   por acción. ⛔ **La visita no lleva monto**: la compra vuelve contada por la OC.
   ⛔ `lib/prm/geo.core.js` es JS plano porque lo importa el handler, y **le sacó a `api/_georef.js`
-  la provincia clavada en «Santa Fe»** — ese cambio toca Envíos. ⛔ **`api/_oc-webhook.js` también
+  la provincia clavada en «Santa Fe»** — ese cambio toca Envíos. ⛔ **El bloque «Cómo se mueve lo
+  que le compro» lee la base de la OTRA marca** (las ventas salen del espejo de cada una) y su
+  puente es `recepcion_linea.producto_id`: es el PRODUCTO, ⛔ no la unidad — vendido puede dar más
+  que comprado y ⛔ no es un error. ⛔ **`api/_oc-webhook.js` también
   escribe en `proveedor_local`** (le abre la ficha al proveedor nuevo, con `lib/prm/sembrado.core.js`):
   el alta de un local tiene **dos llamadores**, y ese no pasa por `api/_prm.js` ni por su permiso.
 - Insumos → **leer `docs/secciones/insumos.md`** antes de tocar `components/insumos/`,

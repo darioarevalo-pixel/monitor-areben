@@ -77,14 +77,38 @@ export type Recepcion = {
 export function fechaDeIngreso(
   r: Pick<Recepcion, 'fecha_ingreso' | 'confirmada_at' | 'recibido_en'>,
 ): string {
+  const dia = diaDeIngreso(r)
+  if (!dia) return '—'
+  const [a, m, d] = dia.split('-')
+  return `${Number(d)}/${Number(m)}/${a}`
+}
+
+/**
+ * La misma fecha, en `YYYY-MM-DD`, para **hacer cuentas** con ella.
+ *
+ * 🔑 **El ORDEN de preferencia vive acá y una sola vez**: `fechaDeIngreso` formatea lo que ésta
+ * elige. Escribir la cadena de `if` dos veces es como se llega a una pantalla que muestra una fecha
+ * y una cuenta que usa otra.
+ *
+ * 🔴 **El instante se pasa a día en la zona de ARGENTINA, explícita.** Sin `timeZone` la conversión
+ * la decide el reloj de quien corre el código: en el navegador de acá da bien y **en el servidor de
+ * Vercel, que está en UTC, una confirmación de las 21:30 cae al día siguiente**. La fecha sola
+ * (`fecha_ingreso`) ⛔ no pasa por `new Date`: `new Date('2026-08-25')` es medianoche UTC, o sea el
+ * 24 a las 21:00 en Argentina.
+ */
+export function diaDeIngreso(
+  r: Pick<Recepcion, 'fecha_ingreso' | 'confirmada_at' | 'recibido_en'>,
+): string | null {
   if (r.fecha_ingreso) {
     const [a, m, d] = r.fecha_ingreso.slice(0, 10).split('-')
-    if (a && m && d) return `${Number(d)}/${Number(m)}/${a}`
+    if (a && m && d) return `${a}-${m}-${d}`
   }
   const instante = r.confirmada_at || r.recibido_en
-  if (!instante) return '—'
+  if (!instante) return null
   const f = new Date(instante)
-  return Number.isNaN(f.getTime()) ? '—' : f.toLocaleDateString('es-AR')
+  if (Number.isNaN(f.getTime())) return null
+  // `en-CA` es el único locale que formatea `YYYY-MM-DD` de fábrica.
+  return f.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
 /** Sin proveedor identificado no se puede agrupar: todas caerían en el mismo montón que miente. */
