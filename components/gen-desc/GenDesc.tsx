@@ -703,9 +703,11 @@ function BloqueMedidas({
             </table>
           </div>
           <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>
-            {/* El único lugar donde se dice el x2, y se dice donde se carga: la persona escribe lo
-                que midió y la tienda muestra el doble. */}
-            La cintura se mide por la mitad — se publica multiplicada por 2. Una fila sin ningún número no sale a la tienda.
+            {/* ⚠️ Lo del x2 sale SÓLO si esta prenda tiene una medida que se duplica. Un top no
+                tiene cintura, y el cartel le hablaba de un campo que no está en su tabla: un texto
+                que nombra algo que no se ve manda a buscarlo. */}
+            {campos.some((m) => m.duplicar) && 'La cintura se mide por la mitad — se publica multiplicada por 2. '}
+            Una fila sin ningún número no sale a la tienda.
           </div>
         </>
       )}
