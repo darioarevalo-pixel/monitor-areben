@@ -11,6 +11,7 @@ import {
   parsearNota,
   puntoDeUrlMaps,
   ultimaVisita,
+  sugerirProveedorGn,
   filaDeLocalSembrado,
   nuevoIdDeLocal,
 } from '@/lib/prm/core'
@@ -391,5 +392,63 @@ describe('nuevoIdDeLocal', () => {
     // Si los tomara de adentro, el llamador no podría hacer reproducible ni una siembra ni un test.
     expect(() => nuevoIdDeLocal({ ahora: NaN, azar: 'x' })).toThrow(/ahora/)
     expect(() => nuevoIdDeLocal({ ahora: 1, azar: '' })).toThrow(/azar/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Sugerir el proveedor de Gestión Nube
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔑 Sugerir ⛔ no es adivinar: acá nada se escribe solo, lo acepta una persona con un click. Lo que
+ * estos tests fijan es **cuándo NO hay que sugerir**, que es la mitad que importa: una sugerencia
+ * entre dos parecidos es la que se acepta sin mirar.
+ */
+describe('sugerirProveedorGn', () => {
+  const CATALOGO = ['Contamina', 'Boucle', 'Play Urban', 'ALMA', 'NOX', 'ACRIS JEANS', 'Maysix']
+
+  it('el mismo nombre, en cualquier caja, es exacta', () => {
+    expect(sugerirProveedorGn('alma', CATALOGO)).toEqual({ nombre: 'ALMA', seguridad: 'exacta' })
+    expect(sugerirProveedorGn('Acris Jeans', CATALOGO)).toEqual({ nombre: 'ACRIS JEANS', seguridad: 'exacta' })
+  })
+
+  it('🔴 el ESPACIO de más ⛔ no lo separa: sigue siendo exacta', () => {
+    // Medido: `PLAYURBAN` en el padrón y `Play Urban` en Gestión Nube. Es el mismo proveedor
+    // escrito por dos personas, y la primera versión de esta función lo dejaba afuera.
+    expect(sugerirProveedorGn('PLAYURBAN', CATALOGO)).toEqual({ nombre: 'Play Urban', seguridad: 'exacta' })
+  })
+
+  it('el nombre largo contra el corto es PROBABLE, y se dice', () => {
+    // Así crecen estos nombres: la marca primero. Medido: 2 de los 28.
+    expect(sugerirProveedorGn('CONTAMINA BY LATTE CHIC', CATALOGO)).toEqual({ nombre: 'Contamina', seguridad: 'probable' })
+    expect(sugerirProveedorGn('BOUCLE LOCAL', CATALOGO)).toEqual({ nombre: 'Boucle', seguridad: 'probable' })
+  })
+
+  it('🔴 compara por PREFIJO y ⛔ no por «contiene»', () => {
+    // El caso que separa las dos reglas: la palabra está, pero **en el medio**. Con «contiene»
+    // esto sugiere `Contamina` para un local que se llama de otra manera y arranca con otra marca.
+    // 🔑 Sin esta línea el mutante «prefijo → contiene» SOBREVIVE: las otras dos las tapaba el
+    // mínimo de 4 letras.
+    expect(sugerirProveedorGn('LATTE CHIC DE CONTAMINA', CATALOGO)).toBeNull()
+    expect(sugerirProveedorGn('TIENDA MAYSIX CENTRO', CATALOGO)).toBeNull()
+    expect(sugerirProveedorGn('LATTE CHIC', CATALOGO)).toBeNull()
+    expect(sugerirProveedorGn('CASA NOX SRL', CATALOGO)).toBeNull()
+  })
+
+  it('🔴 una palabra de menos de 4 letras ⛔ no sugiere medio catálogo', () => {
+    expect(sugerirProveedorGn('NOX BUENOS AIRES', CATALOGO)).toBeNull()
+  })
+
+  it('🔴 con DOS candidatos ⛔ no sugiere NADA', () => {
+    // Una sugerencia entre dos parecidos es la que se acepta sin mirar, y es justo el caso en que
+    // hay que mirar.
+    expect(sugerirProveedorGn('BOUCLE LOCAL', ['Boucle', 'Boucle Local Sur'])).toBeNull()
+  })
+
+  it('el que no está en el catálogo ⛔ no inventa nada', () => {
+    // Los 4 que entraron el 1-sep todavía no tienen productos en Gestión Nube.
+    expect(sugerirProveedorGn('YASANA', CATALOGO)).toBeNull()
+    expect(sugerirProveedorGn('', CATALOGO)).toBeNull()
+    expect(sugerirProveedorGn('ALMA', [])).toBeNull()
   })
 })

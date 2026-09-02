@@ -48,7 +48,7 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { porProveedor, porcentaje } from '@/lib/recepciones/core'
 import { kpisProveedor, ranking } from '@/lib/proveedores'
 import { escribir, leerFicha, type Ficha, type Opciones } from '@/lib/prm/cliente'
-import { abiertosOrdenados, conReloj } from '@/lib/prm/core'
+import { abiertosOrdenados, conReloj, sugerirProveedorGn } from '@/lib/prm/core'
 import { MovimientoProveedor } from './MovimientoProveedor'
 
 const TONO_SITUACION = { vencido: 'danger', hoy: 'warning', por_venir: 'neutral', sin_fecha: 'neutral', cumplido: 'success' } as const
@@ -99,6 +99,18 @@ export function FichaProveedor({
     if (!ficha?.recepciones || !ficha.recepciones.length) return null
     return porProveedor(ficha.recepciones)[0] ?? null
   }, [ficha])
+
+  /**
+   * 🔑 **Una SUGERENCIA, ⛔ no un enganche.** La regla del módulo sigue en pie —los dos enganches se
+   * tildan a mano, porque uno mal puesto es peor que ninguno—: acá ⛔ no se escribe nada solo, sólo
+   * se deja de hacer buscar el nombre en una lista de 33. Medido el 2-sep-2026: de los 28
+   * proveedores de Zattia, **22 dan exacta y 2 probables**; los 4 que quedan afuera son los que
+   * entraron el 1-sep y todavía no tienen productos en Gestión Nube.
+   */
+  const sugerencia = useMemo(() => {
+    if (!ficha || ficha.local.proveedor_gn || !opciones.gnDisponible) return null
+    return sugerirProveedorGn(ficha.local.nombre, opciones.deGn)
+  }, [ficha, opciones])
 
   const ventas = useMemo(() => {
     const gn = ficha?.local.proveedor_gn
@@ -179,6 +191,23 @@ export function FichaProveedor({
                 <option key={n} value={n}>{n}</option>
               ))}
             </Select>
+            {/*
+              🔴 **El nombre sugerido va A LA VISTA y el botón dice qué va a hacer.** ⛔ No se
+              preselecciona en el desplegable: un valor puesto de antemano se guarda solo en cuanto
+              alguien toca cualquier otra cosa, y ahí deja de ser una sugerencia.
+              🔑 Y **«probable» se dice**: `Contamina` contra `CONTAMINA BY LATTE CHIC` es de las que
+              hay que mirar antes de aceptar, y la de al lado puede no serlo.
+            */}
+            {sugerencia && (
+              <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginTop: space[1] }}>
+                <Button size="sm" onClick={() => void enganchar({ proveedor_gn: sugerencia.nombre })}>
+                  Enganchar con «{sugerencia.nombre}»
+                </Button>
+                <span style={{ fontSize: 11, color: color.mut2 }}>
+                  {sugerencia.seguridad === 'exacta' ? 'mismo nombre' : 'se le parece — miralo antes'}
+                </span>
+              </div>
+            )}
           </Field>
         </div>
       </SectionCard>

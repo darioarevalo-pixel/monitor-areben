@@ -70,6 +70,60 @@ export function normalizarNombre(s: string | null | undefined): string {
     .trim()
 }
 
+/**
+ * **El nombre de Gestión Nube que probablemente sea este proveedor.** Devuelve una SUGERENCIA, y
+ * quien la acepta es una persona con un click.
+ *
+ * 🔴 **Sugerir ⛔ NO es adivinar, y la diferencia es que acá nada se escribe solo.** La regla del
+ * módulo sigue en pie —*«los dos enganches se tildan A MANO y ⛔ no se adivinan por nombre»*,
+ * porque un enganche mal puesto es peor que ninguno: una ficha que ya muestra cumplimiento y margen
+ * no la vuelve a revisar nadie—. Lo que cambia es que el que tilda no tiene que ir a buscar el
+ * nombre en una lista de 33.
+ *
+ * Dos reglas, y la segunda dice que es una corazonada:
+ *
+ * 1. **`exacta`** — el mismo nombre, sin tildes ni puntuación ni mayúsculas. Y **también sin
+ *    ESPACIOS**: `PLAYURBAN` de un lado y `PLAY URBAN` del otro son el mismo proveedor escrito por
+ *    dos personas distintas, y la primera versión de esta función lo dejaba afuera. Al 2-sep-2026
+ *    son **22 de los 28** proveedores de Zattia.
+ * 2. **`probable`** — uno de los dos nombres es el **PRINCIPIO** del otro, palabra por palabra:
+ *    `Contamina` contra `CONTAMINA BY LATTE CHIC`. Es como crecen estos nombres —la marca primero—
+ *    y por eso se compara por prefijo y ⛔ no por «contiene»: con «contiene», `LATTE` suelto
+ *    matchearía, y `NOX` entraría adentro de cualquier cosa que lo lleve en el medio.
+ *
+ * 🔴 **Con DOS candidatos ⛔ no se sugiere nada.** Una sugerencia entre dos parecidos es la que se
+ * acepta sin mirar, y es justo el caso en que hay que mirar.
+ * 🔴 **El prefijo pide una palabra de 4+ letras.** Sin eso, un nombre de dos letras sugiere medio
+ * catálogo.
+ */
+export type SugerenciaGn = { nombre: string; seguridad: 'exacta' | 'probable' }
+
+export function sugerirProveedorGn(nombreLocal: string, opciones: string[]): SugerenciaGn | null {
+  const clave = normalizarNombre(nombreLocal)
+  if (!clave) return null
+
+  const exacta = opciones.find((o) => normalizarNombre(o) === clave)
+  if (exacta) return { nombre: exacta, seguridad: 'exacta' }
+
+  // Sin espacios: sigue siendo el MISMO nombre carácter por carácter, así que no baja a «probable».
+  // ⚠️ Se pide que sea único igual: dos opciones que sólo difieran en un espacio son la misma marca
+  // escrita dos veces, y elegir una de las dos a ciegas es elegir mal la mitad de las veces.
+  const pegado = clave.replace(/ /g, '')
+  const pegadas = opciones.filter((o) => normalizarNombre(o).replace(/ /g, '') === pegado)
+  if (pegadas.length === 1) return { nombre: pegadas[0], seguridad: 'exacta' }
+
+  const tokens = clave.split(' ').filter(Boolean)
+  const esPrefijo = (corto: string[], largo: string[]) =>
+    corto.length < largo.length && corto.every((t, i) => t === largo[i]) && corto.some((t) => t.length >= 4)
+
+  const candidatos = opciones.filter((o) => {
+    const otros = normalizarNombre(o).split(' ').filter(Boolean)
+    if (!otros.length) return false
+    return esPrefijo(otros, tokens) || esPrefijo(tokens, otros)
+  })
+  return candidatos.length === 1 ? { nombre: candidatos[0], seguridad: 'probable' } : null
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // Pegar la nota
 // ═══════════════════════════════════════════════════════════════════════════════════════════════

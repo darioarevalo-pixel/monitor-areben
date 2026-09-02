@@ -71,6 +71,25 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
   muestra, y lo único que falta es **la mitad del PRM que se supone medida**. Desde el 2-sep lo
   siembra el webhook (`abrirFichaDeProveedor`), y el script quedó para backfill y reparación.
   ⚠️ **La ficha nace sin zona igual que las sembradas**, así que sigue sin entrar a una recorrida.
+- 🆕 🔑 **El de Gestión Nube se SUGIERE, y sugerir ⛔ no es adivinar** (2-sep-2026,
+  `sugerirProveedorGn`). La regla de abajo sigue entera: acá ⛔ **no se escribe nada solo**, aparece
+  un botón *«Enganchar con «X»»* que aprieta una persona. Lo que se dejó de pedir es buscar el
+  nombre en una lista de 33.
+  - **Medido**: de los 28 proveedores de Zattia, **22 dan `exacta` y 2 `probable`** (`Contamina` ←
+    `CONTAMINA BY LATTE CHIC`, `Boucle` ← `BOUCLE LOCAL`). Los **4 sin sugerencia** son los que
+    entraron el 1-sep y todavía ⛔ no tienen productos en GN. **Ninguno de los 6 de BDI se cruza por
+    accidente.** Y al 2-sep **había 0 enganchados**: nadie lo tildó nunca desde que salió la sección.
+  - 🔴 **Se compara por PREFIJO, ⛔ no por «contiene»**: así crecen estos nombres —la marca primero—
+    y con «contiene» un local que arranca con otra marca y nombra a `Contamina` en el medio recibe
+    esa sugerencia. 🔑 **El mutante «prefijo → contiene» SOBREVIVIÓ** la primera vez: los dos casos
+    que tenía los tapaba el mínimo de 4 letras, y hizo falta uno con la palabra **en el medio**.
+  - 🔴 **Con DOS candidatos ⛔ no se sugiere nada**: una sugerencia entre dos parecidos es la que se
+    acepta sin mirar, y es justo el caso en que hay que mirar.
+  - 🔴 **El espacio ⛔ no separa**: `PLAYURBAN` en el padrón y `Play Urban` en GN son el mismo, y la
+    primera versión los dejaba afuera. Sigue siendo `exacta` — es el mismo nombre carácter por
+    carácter — pero se pide que sea único igual.
+  - ⛔ **La sugerencia ⛔ NO se preselecciona en el desplegable**: un valor puesto de antemano se
+    guarda solo en cuanto alguien toca cualquier otra cosa, y ahí deja de ser una sugerencia.
 - 🔴 **Los dos enganches se tildan A MANO y ⛔ no se adivinan por nombre.** Está medido: de los 30
   proveedores de las 79 OCs, `CHINA` se lee sola y `RHOVE`/`ASKDENIM` no. **Un enganche mal puesto
   es peor que ninguno**: una ficha que ya muestra cumplimiento y margen no la vuelve a revisar
