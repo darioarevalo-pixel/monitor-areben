@@ -995,6 +995,62 @@ antes de rehacerlo.
 
 ## 🆕 MEDIDAS — el flujo para que las saque el local (1-sep-2026, pedido de Bruno)
 
+### 🏁 DÓNDE QUEDÓ AL CERRAR EL 1-sep-2026
+
+**Construido y en producción** (`cb3ef88` → `62c38ad`), con el relato entero en
+`docs/secciones/gen-desc.md`:
+
+- 🏁 La sección se llama **«Descripción y medidas»** (Bruno: *«no me gusta que diga redacción»*).
+  ⚠️ Cambió el **rótulo**, ⛔ no la key `gen-desc` ni la ruta.
+- 🏁 Las **medidas viven adentro de la fila**, con la tabla `tn_medidas` (migración **corrida en las
+  dos bases**), los talles saliendo de las variantes, el ×2 de la cintura del lado del sistema, el
+  botón «estira» —que ⛔ no existe en el largo— y el «No lleva tabla» con motivo.
+- 🏁 El **bloque que sale a la tienda** reemplaza al de la Tabla de talles vieja, con el vocabulario
+  de la guía y sin filas vacías.
+- 🏁 Los **tres pedidos de Redacción**: la foto se agranda y son todas · «no aplica» · «+ agregar un
+  dato de otra prenda» · y la **palabra propuesta** con su aviso.
+- 🏁 El **aviso de la cola**, en tres formas —aprobadas sin publicar · cargadas sin descripción ·
+  palabras propuestas—, y **sólo lo ve quien puede publicar**.
+- 🏁 Se cerró un agujero que la decisión de Bruno destapó: `gen-talles` ⛔ no tenía sub de publicar y
+  las dos que cargan lo tenían tildado ⇒ ese botón les escribía en la tienda viva.
+- 🏁 **Novedad publicada** por Bruno (`n1788310480693_vmmg5h`), y el WhatsApp para el equipo quedó
+  en `~/Desktop/whatsapp-descripcion-y-medidas.txt`.
+
+🔑 **MEDIDO CONTRA LA BASE DE ZATTIA AL CERRAR** —y esto es lo que dice qué falta de verdad:
+
+| | |
+|---|---|
+| productos con la ficha empezada | **44** (41 con los 7 campos) |
+| **medidas cargadas** | **0** — ⛔ ni una |
+| párrafos escritos y aprobados | **0** |
+| palabras propuestas | **0** |
+| las cargó | **`josefinabatter`**, ⛔ no Bruno |
+
+- 🔑 **El diccionario aguantó 44 prendas reales sin que nadie necesitara una palabra nueva.** Es lo
+  que valida haber empezado chico con las propuestas: mover las listas a la base ⛔ no hace falta
+  todavía.
+- 🔴 **La ficha se usa y las medidas ⛔ no las tocó nadie**: el circuito completo —cargar, escribir,
+  aprobar, publicar y **mirarlo en TiendaNube**— sigue sin ejercerlo una persona **ni una vez**. Es
+  el único oráculo que vale y sigue pendiente.
+- 📌 **5 prendas quedaron con la tela en «no identifico»**: alguien las miró y no supo. Son las que
+  hay que volver a mirar, y ese dato ⛔ no existía antes de esta sección.
+
+### ▶️ Lo que queda
+
+1. 🔴 **Que alguien cargue UNA prenda entera y se publique**, mirándola en la tienda. ⛔ Ningún test
+   toca el verbo que escribe.
+2. ▶️ **Los 7 dibujos de la guía**, subidos al Blob con **pathname fijo** —una vez adentro de 300
+   fichas publicadas esa URL ⛔ no se puede mover— y cableados por familia. `diagramaUrl` existe en
+   las plantillas viejas y **⛔ ninguna ficha lo publica**; el único cargado es un screenshot en
+   `postimg.cc`, que ⛔ no es nuestro.
+3. ▶️ **Rehacer `lib/gen-talles/plantillas.ts` contra la guía**, o retirar la Tabla de talles: su
+   vocabulario (`Contorno busto`, `Ancho de hombros`, `Tiro`) ⛔ ya no es el que se mide.
+4. ▶️ **Importar las 205 tablas ya escritas** en la tienda, clasificando por convención y **marcando**
+   las que no coinciden. ⛔ Importar a ciegas mete los dos criterios en la misma columna.
+5. ▶️ **Partir `SHORTS` en familia propia**: la guía los mide como pantalón, y su `largo` de pollera
+   ⛔ no les sirve.
+
+
 Sigue a Redacción (`gen-desc`), que Bruno dio por buena: *«descripción está bastante bien, me gusta
 lo que vi»*. La pregunta que abre esto es suya: **«¿cómo sería el flujo de medidas para el local que
 las saque?»**
