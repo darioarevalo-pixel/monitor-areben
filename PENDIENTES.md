@@ -90,14 +90,33 @@ de Tienda Nube dejó de ser el camino principal y quedó plegada.
    BDI con la nota, y **si el stock de la tienda online bajó**. Sin la orden de Tienda Nube, eso
    depende de la integración GN↔TN y **no está verificado**.
 
-### 🆕 ▶️ Y lo que abrió hacer las ETIQUETAS (1-sep)
+### 🆕 Las ETIQUETAS: las 13 a domicilio están CREADAS (2-sep)
 
-4. 🔴 **Falta agregar «Barrio» al link que llena la creadora.** Envío Nube lo exige para la etiqueta
+🏁 **Las 13 etiquetas a domicilio quedaron creadas en Envío Nube, todas «Por enviar» y SIN COMPRAR.**
+El saldo no se movió: sigue en **$39.721** (crear no cobra; el gasto es «Comprar etiqueta», que es
+además lo que genera el código de seguimiento).
+- 1-sep, 7: `EM4240` Mercedes Jaime · `EM4241` Jennifer Bilbao · `EM4242` Lourdes Cuchero ·
+  `EM4243` Melisa Bruno · `EM4244` Delfina Cassarino · `EM4246` Maia Cigorraga ·
+  `EM4247` Giuliana Gardonio.
+- 2-sep, 6: `EM4254` Luisina Bidart (C-0075) · `EM4255` Berenise Ahumada (C-0077) · `EM4256` Julieta
+  Clara (C-0078) · `EM4257` Manuela Melkun (C-0079) · `EM4258` Abril Gobio (C-0080) · `EM4259`
+  Victoria Bartos (C-0081; Rosario→Rosario sale **$7.600**, el resto **$8.776**).
+
+4. ▶️ **La mano que queda es de Bruno: COMPRAR las 13.** Son ~$113.500 y el saldo alcanza para 4.
+5. ▶️ **Falta C-0082 Julieta Junco, que va a SUCURSAL** — el formulario es otro («Agregar envío
+   manual → A sucursal») y **falta que Bruno diga a qué sucursal**. ⛔ C-0051 Celeste Aloe la sacó él:
+   no lleva etiqueta.
+6. 🔴 **Falta agregar «Barrio» al link que llena la creadora.** Envío Nube lo exige para la etiqueta
    y el portal no se lo pide, así que hoy hay que deducirlo del código postal, uno por uno. **Bruno
    ya lo aprobó.** Con eso, la próxima tanda de etiquetas sale sin fricción.
-5. ⚠️ **Las fichas traen la provincia mal y nadie lo ve**: 4 de 13 decían «Buenos Aires» siendo CABA,
+7. ⚠️ **Las fichas traen la provincia mal y nadie lo ve**: 4 de 13 decían «Buenos Aires» siendo CABA,
    y una decía literalmente **«Provincia»**. Se corrigieron al cargar la etiqueta, pero **la ficha
    sigue mal en el monitor**. Vale la pena un guard: si el CP es 1000-1499, la provincia es CABA.
+8. ⚠️ **Tres direcciones se cargaron interpretándolas, y conviene que la ficha lo refleje**:
+   C-0078 «Av 101 9 de julio» **no eran dos calles** —es la Avenida 101, que en Villa Ballester se
+   conoce como 9 de Julio; se cargó `Av. 101 (9 de Julio)`—; C-0075 el timbre no tiene campo propio y
+   entró en Departamento (`5 C (timbre 53)`); C-0081 piso y depto venían como `03`/`06` y se cargó
+   `Piso 3 Dto 6`.
 
 ---
 
