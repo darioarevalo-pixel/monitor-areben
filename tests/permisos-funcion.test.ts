@@ -17,9 +17,39 @@ const perfil = (over: Partial<Perfil> = {}): Perfil => ({
  * lo único que le gana a una función es la excepción explícita.
  */
 describe('permisos — precedencia de puedeVer', () => {
-  it('el admin ve todo, aun con excepción puesta', () => {
+  /**
+   * 🔴 **La excepción le gana al admin, y es lo ÚNICO que le gana.** Hasta el 3-sep-2026 este test
+   * afirmaba lo contrario (`el admin ve todo, aun con excepción puesta`), y esa era la razón por la
+   * que a un administrador sólo se le podía sacar una sección **degradándolo**: destildarle
+   * «Administrador» le saca además Config, el memo, el calendario y la liquidación.
+   *
+   * Lo levantó Bruno —*«veo lo de descripciones y preparar pedidos, córramelas»*— y el padrón
+   * medido ese día decía que él y Darío tenían `funcion: ['direccion']` y **cero tildes**: no era
+   * un rol de local asignado de más, era el admin.
+   */
+  it('la excepción le gana al admin, y sólo en la marca y la sección donde está puesta', () => {
     const u = perfil({ admin: true, acceso: { bdi: { [marcaExcluir('reposicion')]: true }, zattia: {} } })
-    expect(puedeVer(u, 'bdi', 'reposicion')).toBe(true)
+    expect(puedeVer(u, 'bdi', 'reposicion')).toBe(false)
+    expect(puedeVer(u, 'zattia', 'reposicion')).toBe(true) // el permiso es por marca
+    expect(puedeVer(u, 'bdi', 'conteo')).toBe(true) // lo demás lo sigue viendo todo
+  })
+
+  it('al admin también se le puede sacar un SUB sin tocarle la sección', () => {
+    const u = perfil({ admin: true, acceso: { bdi: { [marcaExcluir('canjes.aprobar')]: true }, zattia: {} } })
+    expect(puedeSub(u, 'bdi', 'canjes', 'aprobar')).toBe(false)
+    expect(puedeVer(u, 'bdi', 'canjes')).toBe(true)
+  })
+
+  /**
+   * ⛔ El candado que no se puede cerrar sobre uno mismo. `usuarios` (Config) **no es una fila de
+   * la matriz de permisos**: la gatean con `esAdmin` derecho el sidebar (`components/layout/
+   * Sidebar.tsx`) y el guard (`app/[[...seccion]]/page.tsx`), así que no hay casilla para
+   * destildarla y una excepción no puede dejar a un administrador afuera de la única pantalla
+   * donde se desarma. El día que alguien la sume a `PERM_CAT`, este test se pone rojo y hay que
+   * pensar de nuevo qué pasa si se destilda.
+   */
+  it('«usuarios» no está en la matriz: una excepción no puede encerrar al admin afuera de Config', () => {
+    expect(PERM_CAT.some((c) => c.key === 'usuarios')).toBe(false)
   })
 
   it('el permiso tildado sigue valiendo (compatibilidad: nadie pierde acceso)', () => {

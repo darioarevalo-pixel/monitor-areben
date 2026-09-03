@@ -85,6 +85,53 @@ describe('usuarios/core — funcion', () => {
   })
 })
 
+/**
+ * 🔴 **Al admin también se le puede sacar una sección, y sin degradarlo** (3-sep-2026).
+ *
+ * Antes la ficha de un administrador no dibujaba matriz: decía «para darle permisos de a uno,
+ * destildá Administrador». Y aunque se hubiera dibujado, destildar no habría escrito nada —
+ * `togglePerm` sólo dejaba la excepción cuando el permiso «venía solo» por función o por
+ * `KEYS_PARA_TODOS`—, así que la casilla se volvía a marcar sola al redibujar.
+ */
+describe('usuarios/core — sacarle una sección a un administrador', () => {
+  const jefe = () => base({ admin: true, funcion: ['direccion'] })
+
+  it('destildar escribe la EXCEPCIÓN, que es lo único que le gana al admin', () => {
+    const u = togglePerm(jefe(), 'bdi', 'conteo', false)
+    expect(u.acceso.bdi?.[marcaExcluir('conteo')]).toBe(true)
+    expect(tienePermiso(u, 'bdi', 'conteo')).toBe(false)
+    expect(origenPermiso(u, 'bdi', 'conteo')).toBe('excluido')
+    expect(tienePermiso(u, 'zattia', 'conteo')).toBe(true) // la otra marca no se toca
+    expect(tienePermiso(u, 'bdi', 'cupones')).toBe(true) // el resto lo sigue viendo
+  })
+
+  it('volver a tildarlo saca la excepción y no deja tilde redundante', () => {
+    let u = togglePerm(jefe(), 'bdi', 'conteo', false)
+    u = togglePerm(u, 'bdi', 'conteo', true)
+    expect(u.acceso.bdi?.[marcaExcluir('conteo')]).toBeUndefined()
+    expect(u.acceso.bdi?.['conteo']).toBeUndefined() // lo ve por ser admin: no hace falta tildarlo
+    expect(tienePermiso(u, 'bdi', 'conteo')).toBe(true)
+  })
+
+  it('un SUB se le saca igual, y volver a tildarlo no le tilda el padre', () => {
+    let u = togglePerm(jefe(), 'bdi', 'cupones.crear', false)
+    expect(u.acceso.bdi?.[marcaExcluir('cupones.crear')]).toBe(true)
+    expect(tienePermiso(u, 'bdi', 'cupones.crear')).toBe(false)
+    expect(tienePermiso(u, 'bdi', 'cupones')).toBe(true)
+    u = togglePerm(u, 'bdi', 'cupones.crear', true)
+    expect(u.acceso.bdi?.['cupones']).toBeUndefined()
+    expect(tienePermiso(u, 'bdi', 'cupones.crear')).toBe(true)
+  })
+
+  it('el resumen de la ficha lo cuenta: baja el «ve N de M» y lista la excepción', () => {
+    const antes = resumenUsuario(jefe())
+    const u = togglePerm(togglePerm(jefe(), 'bdi', 'conteo', false), 'zattia', 'conteo', false)
+    const r = resumenUsuario(u)
+    expect(r.secciones.bdi.tiene).toBe(antes.secciones.bdi.tiene - 1)
+    expect(r.excepciones.length).toBe(1)
+  })
+})
+
 describe('usuarios/core — permisos que vienen por función', () => {
   const local = () => base({ funcion: ['local'] })
 

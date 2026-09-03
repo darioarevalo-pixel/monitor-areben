@@ -90,8 +90,12 @@ export function Sidebar({
     if (!it.sub) return true
     // La herramienta se ve si tiene alguno de sus sub-permisos (Categorías por modelo
     // es de BDI y la asignación por Excel de Zattia: la entrada es la misma).
+    // ⛔ Sin `esAdmin(perfil) ||` adelante, a propósito: `puedeSub` ya le dice que sí al admin —y
+    // desde el 3-sep-2026 le dice que NO cuando hay una excepción puesta sobre ese sub. Con el
+    // atajo, un administrador que se sacó las dos herramientas de una entrada la seguía viendo en
+    // el menú y entraba a una pantalla sin nada para hacer.
     const subs = Array.isArray(it.sub) ? it.sub : [it.sub]
-    return esAdmin(perfil) || subs.some((s) => puedeSub(perfil, marca, it.key, s))
+    return subs.some((s) => puedeSub(perfil, marca, it.key, s))
   }
 
   const cats = NAV_CATS.map((cat) => {

@@ -39,12 +39,29 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
    ▶️ **Los títulos son DATA, ⛔ no código** — se editan en `/agenda/eventos`. Falta que Bruno diga
    cuáles. Ver `docs/secciones/agenda.md` § 3-sep.
 
-3. ▶️ 🔴 **PERMISOS — Bruno ve cosas del LOCAL y no debería. Sacárselas a él y a Darío.**
+3. 🏁/▶️ **PERMISOS — la respuesta a la pregunta es NO, y por eso hubo que cambiar el motor.**
    > «¿Puede ser que yo tenga permisos del local? Porque veo lo de descripciones, y preparar
    > pedidos. El usuario de Bruno. Si es así, córramelos. Y también a Darío.»
 
-   ⚠️ Bruno es **admin**: hay que ver si lo que ve viene del rol `local` asignado de más o del
-   atajo del admin (que recibe todo lo dirigido por rol — ver § AGENDA del 1-sep).
+   🔑 **Medido el padrón (16 usuarios): Bruno y Darío tienen `funcion: ['direccion']` y CERO
+   tildes.** ⛔ No hay ningún rol de local asignado de más: los ven por ser **admin**, que en
+   `puedeVer` ganaba arriba de todo.
+   🔴 **Y por eso «córramelas» ⛔ no se podía hacer**: la única forma de sacarle una sección a un
+   administrador era **destildarle «Administrador»** —la ficha lo decía con todas las letras—, y
+   eso le saca además Config, el memo, el calendario y la liquidación. La matriz de permisos ni
+   siquiera se le dibujaba.
+   🏁 **Hecho el 3-sep**: la **excepción ahora le gana al admin** (paso 1 de `puedeVer`) y la ficha
+   de un administrador dibuja la matriz. Destildar una sección le escribe la excepción, por marca;
+   volver a tildarla la saca. ⛔ **Config no se puede cerrar sobre uno mismo**: `usuarios` no pasa
+   por `puedeVer` ni está en la matriz, y hay un test que se pone rojo si eso cambia.
+   ⚠️ Lo que **no** cambia son los ~160 `esAdmin(perfil) || …` de `api/`: casi todos contestan
+   «¿puede escribir?», no «¿la ve?». La sección desaparece del menú y el guard rebota; que un
+   handler suelto conteste el dato ⛔ no es un agujero — es el dueño sacándose una entrada de la
+   vista, no un candado.
+   ▶️ **Falta que Bruno destilde las que no quiere ver** —en Config, su ficha, «Sacarle secciones
+   del menú»—, o que diga cuáles y las escribo yo. ⚠️ Lo pidió **también para Darío**, y eso ⛔ no
+   lo toco sin que lo diga de nuevo: son dos nombres que él nombró en una sola frase y «descripciones»
+   puede ser **Descripción y medidas** (`gen-desc`) o **Fotos y descripciones** (`marketing`).
 
 4. 🏁 **AGENDA — hecho el 3-sep. Eran dos defectos apilados, y uno era de DATO.**
    > «En la [pregunta] de cómo entró la orden, voy a agenda hoy, y no puedo ver lo de la selección

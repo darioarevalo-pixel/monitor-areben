@@ -56,10 +56,14 @@ export function toggleFuncion(u: UsuarioConfig, f: Funcion, val: boolean): Usuar
 export type OrigenPermiso = 'admin' | 'explicito' | 'funcion' | 'todos' | 'excluido' | 'no'
 
 export function origenPermiso(u: UsuarioConfig, brand: Marca, key: string): OrigenPermiso {
-  if (u.admin) return 'admin'
   const b = u.acceso?.[brand] || {}
   const porFuncion = !!funcionQueDa(u, key)
+  // 🔴 La excepción va ANTES de `admin`, igual que en `puedeVer` (paso 1): desde el 3-sep-2026 un
+  // tilde apagado le saca la sección también a un administrador, y si acá se contestara `admin`
+  // la casilla se dibujaría marcada sobre una sección que la persona ya no ve. Es el mismo
+  // "Config miente" que arregló `todos`, y esta vez con el estado que uno acaba de tocar.
   if (b[marcaExcluir(key)]) return 'excluido'
+  if (u.admin) return 'admin'
   if (b[key]) return 'explicito'
   if (porFuncion) return 'funcion'
   // Va último y no antes que `explicito`: si además se lo tildaron a mano, lo honesto es mostrar
@@ -85,7 +89,14 @@ export function origenPermiso(u: UsuarioConfig, brand: Marca, key: string): Orig
 export function togglePerm(u: UsuarioConfig, brand: Marca, key: string, val: boolean): UsuarioConfig {
   const b: Record<string, boolean> = { ...(u.acceso?.[brand] || {}) }
   const excl = marcaExcluir(key)
-  const vieneSolo = !key.includes('.') && (!!funcionQueDa(u, key) || KEYS_PARA_TODOS.has(key))
+  // `u.admin` cuenta como "le viene solo" por la misma razón que la función y que KEYS_PARA_TODOS:
+  // no hay ningún tilde puesto que borrar, así que sin escribir la excepción destildar no haría
+  // nada y la casilla volvería sola a marcarse. Es lo que hacía falta para poder sacarle una
+  // sección a un administrador sin degradarlo (ver `puedeVer` en `lib/permisos.core.js`).
+  // ⚠️ Al admin le viene solo TAMBIÉN el sub (`canjes.aprobar`): la función nunca da subs, pero
+  // `puedeSub` termina en `puedeVer` y ahí el admin dice que sí. Sin esto, destildarle un sub a un
+  // administrador no escribía nada y la casilla se volvía a marcar sola.
+  const vieneSolo = !!u.admin || (!key.includes('.') && (!!funcionQueDa(u, key) || KEYS_PARA_TODOS.has(key)))
 
   if (val) {
     delete b[excl]
@@ -97,8 +108,10 @@ export function togglePerm(u: UsuarioConfig, brand: Marca, key: string, val: boo
 
   const padre = key.split('.')[0]
   if (key.includes('.')) {
-    // Un sub no sirve sin su padre: si el padre no viene por función, se tilda.
-    if (val && !funcionQueDa(u, padre)) b[padre] = true
+    // Un sub no sirve sin su padre: si el padre no viene por función, se tilda. Al admin no se le
+    // tilda nada —ya lo ve— pero sí se le saca la exclusión del padre, que es lo único que se la
+    // podría estar tapando.
+    if (val && !u.admin && !funcionQueDa(u, padre)) b[padre] = true
     if (val) delete b[marcaExcluir(padre)]
   } else {
     const cat = PERM_CAT.find((c) => c.key === padre)
@@ -285,9 +298,9 @@ export function resumenUsuario(u: UsuarioConfig): ResumenUsuario {
     funciones: FUNCIONES.filter((f) => (u.funcion ?? []).includes(f.key)).map((f) => f.label),
     marcas,
     secciones,
-    // Sin caso especial para el admin: `tienePermiso` ya le da todo y `origenPermiso` le
-    // devuelve 'admin' antes que 'excluido', así que le salen los 32 extras y cero excepciones.
-    // Es lo correcto —ve todo— y la ficha igual lo resuelve con un cartel en vez de la lista.
+    // Sin caso especial para el admin: `tienePermiso` ya le da todo lo que no tenga una excepción
+    // puesta, así que le salen los 32 extras y las excepciones que efectivamente tenga — desde el
+    // 3-sep-2026 un administrador también puede tener. La ficha lo resuelve igual que a los demás.
     extras: SUBS_PLANOS.filter((s) => enAlgunaMarca(s.clave, s.brands)).map((s) => `${s.seccionLabel}: ${s.label}`),
     excepciones: PERM_CAT.filter((c) =>
       marcas.some((m) => c.brands.includes(m) && origenPermiso(u, m, c.key) === 'excluido'),

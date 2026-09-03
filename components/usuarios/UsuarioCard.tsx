@@ -171,20 +171,32 @@ export function UsuarioCard({
               quedara del lado de los permisos no se le podría tildar. */}
           <HorasExtras u={u} onCampo={onCampo} onHorasExtras={onHorasExtras} />
 
-          {u.admin ? (
+          {/* 🔴 El admin también tiene matriz, desde el 3-sep-2026. Antes acá había SÓLO un cartel que
+              decía "para darle permisos de a uno, destildá «Administrador»", y eso era la única
+              salida: para sacarle una entrada del menú a un administrador había que degradarlo, lo
+              que le saca además Config, el memo, el calendario y la liquidación. Lo levantó Bruno
+              —*«veo lo de descripciones y preparar pedidos, córramelas»*— y medido el padrón él no
+              tenía ningún permiso de local: los veía por ser admin. Ahora la excepción le gana al
+              admin (`puedeVer`, paso 1) y destildar acá escribe esa excepción. */}
+          {u.admin && (
             <div style={{ fontSize: font.sm, color: color.mut, padding: '8px 0' }}>
               Es administrador: ve todas las secciones de las dos marcas, puede hacer todas las acciones y gestionar
-              usuarios. Para darle permisos de a uno, destildá «Administrador».
+              usuarios. Si hay algo que no quiere ver en el menú, destildalo abajo: queda como excepción y es lo
+              único que le gana a «Administrador». Config nunca se le puede sacar.
             </div>
-          ) : (
-            <>
-              <Extras u={u} onPerm={onPerm} />
+          )}
+          <>
+              {!u.admin && <Extras u={u} onPerm={onPerm} />}
 
               <Plegable
                 abierto={ajuste}
                 onToggle={() => setAjuste((a) => !a)}
-                titulo="Ajustar a mano (avanzado)"
-                ayuda={`Sección por sección y marca por marca. Hoy ve ${r.secciones.bdi.tiene} de ${r.secciones.bdi.total} en BDI y ${r.secciones.zattia.tiene} de ${r.secciones.zattia.total} en Zattia. Casi nunca hace falta: lo que decide qué ve es su función.`}
+                titulo={u.admin ? 'Sacarle secciones del menú (avanzado)' : 'Ajustar a mano (avanzado)'}
+                ayuda={
+                  u.admin
+                    ? `Sección por sección y marca por marca. Destildar escribe una excepción; volver a tildar la saca. Hoy ve ${r.secciones.bdi.tiene} de ${r.secciones.bdi.total} en BDI y ${r.secciones.zattia.tiene} de ${r.secciones.zattia.total} en Zattia.`
+                    : `Sección por sección y marca por marca. Hoy ve ${r.secciones.bdi.tiene} de ${r.secciones.bdi.total} en BDI y ${r.secciones.zattia.tiene} de ${r.secciones.zattia.total} en Zattia. Casi nunca hace falta: lo que decide qué ve es su función.`
+                }
               >
                 <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[2] }}>
                   <span style={{ fontSize: font.sm, color: color.mut }}>
@@ -200,7 +212,6 @@ export function UsuarioCard({
                 <MatrizPermisos u={u} onPerm={onPerm} onPermArea={onPermArea} />
               </Plegable>
             </>
-          )}
 
           <div style={{ marginTop: 12 }}>
             <Button size="sm" variant="outline" tone="danger" onClick={onEliminar}>
