@@ -132,6 +132,41 @@ describe('etiquetasDesactualizadas · la etiqueta dice otro número del que se p
     expect(r).toHaveLength(1)
   })
 
+  /**
+   * 🔴 El falso positivo que inflaba la cola, medido en prod el 3-sep-2026: **las 118 «por número»
+   * de Zattia eran prendas cuya etiqueta decía EXACTAMENTE lo que se cobra hoy**. Sin oferta el
+   * sello guarda `precioLista: null` y el precio de hoy trae `lista = aCobrar`, así que la
+   * comparación del tachado daba siempre distinto: la prenda volvía a la cola al segundo de
+   * imprimirla y no salía nunca más.
+   */
+  it('🔴 sin oferta y sin cambios NO entra: la lista del sello es su propio número', () => {
+    expect(
+      etiquetasDesactualizadas(
+        { '1': sello({ precio: 14990, precioLista: null }) },
+        { '1': { aCobrar: 14990, lista: 14990 } },
+        { '1': 17 },
+      ),
+    ).toEqual([])
+  })
+
+  it('sin oferta pero con el precio cambiado, sí entra', () => {
+    const r = etiquetasDesactualizadas(
+      { '1': sello({ precio: 14990, precioLista: null }) },
+      { '1': { aCobrar: 19990, lista: 19990 } },
+      { '1': 17 },
+    )
+    expect(r).toEqual([{ pid: '1', decia: 14990, ahora: 19990, cuando: '2026-08-13T12:00:00.000Z' }])
+  })
+
+  it('se etiquetó a precio de lista y DESPUÉS le pusieron oferta: entra', () => {
+    const r = etiquetasDesactualizadas(
+      { '1': sello({ precio: 19990, precioLista: null }) },
+      { '1': { aCobrar: 13990, lista: 19990 } },
+      { '1': 17 },
+    )
+    expect(r).toHaveLength(1)
+  })
+
   it('🔑 un sello SIN número no acusa a nadie', () => {
     // Las 262 del sellado inicial no tienen precio: no se puede inventar qué decía una etiqueta que
     // se imprimió a mano la semana pasada. Tratarlas como distintas las mandaba a la cola el primer

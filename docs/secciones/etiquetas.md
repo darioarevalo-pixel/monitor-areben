@@ -97,6 +97,13 @@ todos los colores de un producto juntos.
   de lista?»*: ahí se vio el agujero, porque el de lista se carga a mano en GN sin dejar rastro. Por
   eso la etiqueta guarda **el número que dijo** (`precio`, `precio_lista`) y la comparación se hace
   **en el navegador**, que es donde vive el precio de Tienda Nube.
+- 🔴 **Y la prenda SIN oferta volvía a la cola al segundo de imprimirla, para siempre** (3-sep-2026).
+  El sello guarda `precioLista: null` cuando la etiqueta no tacha nada, y el precio de hoy trae
+  `lista = aCobrar` en ese mismo caso ⇒ comparar el `null` crudo daba **siempre distinto**. Medido en
+  prod: **las 118 «por número» de Zattia eran todas esto** —118 de 118 con el mismo número en la
+  etiqueta y en la tienda— y la lista crecía con cada impresión. La comparación normaliza:
+  `listaSello = precioLista ?? precio`. ⛔ Arreglarlo del lado que ESCRIBE no alcanzaba: los 397
+  sellos ya guardados tienen el `null` adentro.
 - ⚠️ **Un sello sin número no acusa a nadie.** Las 262 filas del sellado inicial (17-ago) no tienen
   precio: ahí manda la fecha. Con el `null` contando como «distinto», sellar no habría servido.
 - 🔑 **Reimprimir es libre y no avisa nada** (caso «se trabó la impresora»), y **de la cola sale sólo
