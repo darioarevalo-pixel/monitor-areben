@@ -199,11 +199,21 @@ describe('nav — la puerta del sector propio (Solicitudes)', () => {
    * el momento en que una key cuelga de dos grupos, el menú se le recorta al sector de quien mira.
    * Que crezca no es un problema — que crezca **sin que nadie lo sepa**, sí.
    */
-  it('las keys que cruzan categorías son DOS, y las dos a propósito', () => {
+  it('las keys que cruzan categorías son TRES, y las tres a propósito', () => {
     const cruzan = [...new Set(NAV_CATS.flatMap((c) => keysDeCat(c)))].filter((k) => categoriasDe(k).length > 1)
     // `retornos` (25-ago-2026): la bandeja de lo que vuelve es UNA pantalla que miran los dos
     // sectores que abren la caja — Depósito, y el Local, que está abierto muchas más horas.
-    expect(cruzan.sort()).toEqual(['retornos', 'solicitudes'])
+    //
+    // `acreedores` (3-sep-2026, pedido por Darío): vivía sólo en Dirección, que es un área que se
+    // abre poco, y es lo primero que se mira hablando con un cliente que debe. Se repite en
+    // Clientes como "Cobranza".
+    //
+    // ⚠️ **Ésta cruza distinto que las otras dos**: `clientes` NO es una función (`lib/permisos.ts`
+    // sólo tiene direccion/marketing/local/deposito/administracion), así que el recorte no reparte
+    // la sección entre dos sectores — a quien tenga la función `direccion` y no sea admin le
+    // aparece sólo en Dirección, como antes. Los admins y los que tienen otra función (o ninguna)
+    // la ven en los dos lados. Nadie pierde acceso, que es lo que este recorte cuida.
+    expect(cruzan.sort()).toEqual(['acreedores', 'retornos', 'solicitudes'])
   })
 
   it('la bandeja de retornos se recorta igual: cada sector la ve en SU grupo, no dos veces', () => {

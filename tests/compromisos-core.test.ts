@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  estaAbierto, puedeIr, porQueNo, prometidoPorAcreedor, prometidoPorCliente,
-  sePuedePrometer, restanteTrasConfirmar, type EstadoCompromiso,
+  colaDeCobranza, diasPara, estaAbierto, puedeIr, porQueNo, prometidoPorAcreedor,
+  prometidoPorCliente, sePuedePrometer, restanteTrasConfirmar,
+  type Compromiso, type EstadoCompromiso,
 } from '@/lib/compromisos/core'
 
 const c = (estado: EstadoCompromiso, monto: number, acreedor = 'a1', cliente: string | null = 'cli1') =>
@@ -98,5 +99,88 @@ describe('cuando el cliente transfiere de menos', () => {
 
   it('si entró de más tampoco: el excedente no es una promesa pendiente', () => {
     expect(restanteTrasConfirmar(500_000, 600_000)).toBe(0)
+  })
+})
+
+// ─── La cola de cobranza (la pestaña "Pagos" del panel) ───────────────────────
+
+const fila = (
+  id: string,
+  estado: EstadoCompromiso,
+  { monto = 1000, fecha = null as string | null, creado = '2026-09-01T10:00:00Z', confirmado = null as string | null } = {},
+) => ({ id, estado, monto, fecha_prometida: fecha, creado_en: creado, confirmado_en: confirmado }) as unknown as Compromiso
+
+describe('cuántos días faltan para lo prometido', () => {
+  it('cuenta días, no horas: hoy es 0 y ayer es -1', () => {
+    expect(diasPara('2026-09-03', '2026-09-03')).toBe(0)
+    expect(diasPara('2026-09-02', '2026-09-03')).toBe(-1)
+    expect(diasPara('2026-09-10', '2026-09-03')).toBe(7)
+  })
+
+  it('sin fecha prometida no inventa un número', () => {
+    expect(diasPara(null, '2026-09-03')).toBeNull()
+  })
+
+  it('cruza el cambio de mes sin equivocarse', () => {
+    expect(diasPara('2026-09-01', '2026-08-30')).toBe(2)
+  })
+})
+
+describe('la cola de cobranza', () => {
+  it('🔑 separa lo que espera trabajo nuestro de lo que espera al cliente', () => {
+    const cola = colaDeCobranza([
+      fila('a', 'prometido'),
+      fila('b', 'transferido'),
+      fila('c', 'confirmado'),
+      fila('d', 'cancelado'),
+    ])
+    // Un "dice que transfirió" se resuelve mirando el banco; un "prometido" sólo se puede reclamar.
+    expect(cola.porConfirmar.map((c) => c.id)).toEqual(['b'])
+    expect(cola.esperando.map((c) => c.id)).toEqual(['a'])
+    expect(cola.cerradas.map((c) => c.id)).toEqual(['c', 'd'])
+  })
+
+  it('lo más vencido arriba, y lo que nunca se agendó al final', () => {
+    const cola = colaDeCobranza([
+      fila('sin-fecha', 'prometido', { creado: '2026-08-01T10:00:00Z' }),
+      fila('para-el-10', 'prometido', { fecha: '2026-09-10' }),
+      fila('vencida', 'prometido', { fecha: '2026-08-20' }),
+    ])
+    expect(cola.esperando.map((c) => c.id)).toEqual(['vencida', 'para-el-10', 'sin-fecha'])
+  })
+
+  it('entre las que no tienen fecha, primero la más vieja: es la que más hace que no se mueve', () => {
+    const cola = colaDeCobranza([
+      fila('nueva', 'prometido', { creado: '2026-09-02T10:00:00Z' }),
+      fila('vieja', 'prometido', { creado: '2026-07-02T10:00:00Z' }),
+    ])
+    expect(cola.esperando.map((c) => c.id)).toEqual(['vieja', 'nueva'])
+  })
+
+  it('las cerradas se leen al revés: lo último que pasó, primero', () => {
+    const cola = colaDeCobranza([
+      fila('vieja', 'confirmado', { confirmado: '2026-08-01T10:00:00Z' }),
+      fila('ultima', 'confirmado', { confirmado: '2026-09-02T10:00:00Z' }),
+    ])
+    expect(cola.cerradas.map((c) => c.id)).toEqual(['ultima', 'vieja'])
+  })
+
+  it('el total es lo prometido sin entrar: no cuenta lo confirmado ni lo caído', () => {
+    const cola = colaDeCobranza([
+      fila('a', 'prometido', { monto: 100_000 }),
+      fila('b', 'transferido', { monto: 50_000 }),
+      // Lo confirmado ya bajó la deuda en el ledger del dashboard: sumarlo acá sería contarlo dos
+      // veces, que es justo el error que este número existe para evitar.
+      fila('c', 'confirmado', { monto: 900_000 }),
+      fila('d', 'cancelado', { monto: 900_000 }),
+    ])
+    expect(cola.totalAbierto).toBe(150_000)
+  })
+
+  it('no toca la lista que le dan', () => {
+    const entrada = [fila('b', 'prometido', { fecha: '2026-09-10' }), fila('a', 'prometido', { fecha: '2026-08-01' })]
+    const copia = [...entrada]
+    colaDeCobranza(entrada)
+    expect(entrada).toEqual(copia)
   })
 })

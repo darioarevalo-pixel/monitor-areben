@@ -1182,8 +1182,12 @@ export const NAV_CATS: NavCat[] = [
       "icono": "clientes",
     "label": "Clientes",
     "keys": [
-      "clientes"
-    ]
+      "clientes",
+      "acreedores"
+    ],
+    "labels": {
+      "acreedores": "Cobranza"
+    }
   },
   {
     "id": "config",

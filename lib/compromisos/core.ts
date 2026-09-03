@@ -130,3 +130,92 @@ export function sePuedePrometer(disponibleDashboard: number, yaPrometido: number
 export function restanteTrasConfirmar(prometido: number, entro: number): number {
   return Math.max(0, centavos(prometido - entro))
 }
+
+/**
+ * Cuántos días faltan para una fecha prometida. Negativo = ya venció; `null` = no tiene fecha.
+ *
+ * Las dos fechas son `YYYY-MM-DD` y se comparan como días, no como instantes: si se restaran
+ * `Date` armados con hora local, un compromiso para hoy podría decir "vence mañana" según la hora
+ * a la que se mire.
+ */
+export function diasPara(fechaISO: string | null, hoyISO: string): number | null {
+  if (!fechaISO) return null
+  const a = Date.parse(`${fechaISO.slice(0, 10)}T00:00:00Z`)
+  const b = Date.parse(`${hoyISO.slice(0, 10)}T00:00:00Z`)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  return Math.round((a - b) / 86_400_000)
+}
+
+/**
+ * El orden de una cola de cobranza: primero lo que tiene fecha, de la más vieja a la más nueva
+ * (o sea lo más vencido arriba), y al final lo que nunca se agendó, de lo más viejo a lo más
+ * reciente.
+ *
+ * 🔑 **Lo que no tiene fecha va último, no primero.** Es tentador ponerlo arriba porque "no se
+ * sabe"; pero la cola se lee de arriba para abajo y lo que ya venció es lo que hay que reclamar
+ * hoy. Lo sin fecha se ordena por antigüedad, que es lo único que dice algo: cuánto hace que está
+ * ahí sin moverse.
+ */
+function porUrgencia(a: Compromiso, b: Compromiso): number {
+  const fa = a.fecha_prometida
+  const fb = b.fecha_prometida
+  if (fa && fb && fa !== fb) return fa < fb ? -1 : 1
+  if (fa && !fb) return -1
+  if (!fa && fb) return 1
+  const ca = a.creado_en || ''
+  const cb = b.creado_en || ''
+  if (ca === cb) return 0
+  return ca < cb ? -1 : 1
+}
+
+/** Lo cerrado se lee al revés: lo último que pasó primero. */
+function porReciente(a: Compromiso, b: Compromiso): number {
+  const ca = a.confirmado_en || a.creado_en || ''
+  const cb = b.confirmado_en || b.creado_en || ''
+  if (ca === cb) return 0
+  return ca < cb ? 1 : -1
+}
+
+export type ColaDeCobranza = {
+  /** Dijeron que ya transfirieron: falta mirar el banco y confirmarlo. */
+  porConfirmar: Compromiso[]
+  /** Se lo pedimos y todavía no dijeron nada. */
+  esperando: Compromiso[]
+  /** Las que ya no ocupan plata: entraron o se cayeron. */
+  cerradas: Compromiso[]
+  /** Cuánta plata hay prometida y sin entrar, en total. */
+  totalAbierto: number
+}
+
+/**
+ * La lista de trabajo de cobranza, partida en las dos cosas distintas que hay para hacer.
+ *
+ * 🔑 **`transferido` y `prometido` no son dos escalones de lo mismo: son dos tareas de dos
+ * personas distintas.** Un `transferido` espera que NOSOTROS miremos el banco y lo confirmemos —
+ * es trabajo propio y sale de la lista con un clic. Un `prometido` espera al cliente: lo único que
+ * se puede hacer es volver a hablarle. Mezclados en una sola lista, lo que depende de uno queda
+ * escondido entre lo que depende de otro.
+ */
+export function colaDeCobranza(compromisos: Compromiso[]): ColaDeCobranza {
+  const porConfirmar: Compromiso[] = []
+  const esperando: Compromiso[] = []
+  const cerradas: Compromiso[] = []
+  let total = 0
+  for (const c of compromisos) {
+    if (c.estado === 'transferido') {
+      porConfirmar.push(c)
+      total = centavos(total + Number(c.monto))
+    } else if (c.estado === 'prometido') {
+      esperando.push(c)
+      total = centavos(total + Number(c.monto))
+    } else {
+      cerradas.push(c)
+    }
+  }
+  return {
+    porConfirmar: porConfirmar.sort(porUrgencia),
+    esperando: esperando.sort(porUrgencia),
+    cerradas: cerradas.sort(porReciente),
+    totalAbierto: total,
+  }
+}

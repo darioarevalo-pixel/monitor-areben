@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { Aislado } from './Aislado'
-import { PagaAUnAcreedor } from './PagaAUnAcreedor'
+import { Pagos } from './Pagos'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
@@ -371,8 +371,13 @@ function PanelInterno({
    * Qué se está mirando. Sin chat abierto arranca en la lista: es la pantalla con la que se
    * empieza el día, y un cartel diciendo "abrí un chat" no le sirve a nadie que todavía no sabe a
    * quién abrir. Con un chat abierto arranca en la ficha, que es a lo que se vino.
+   *
+   * ⛔ **"Pagos" nunca arranca sola, y eso es lo que la hace gratis**: sus dos consultas salen
+   * recién cuando alguien la toca. Si fuera la de entrada, cada chat abierto costaría leer el
+   * saldo del dashboard y las promesas — que es exactamente el error que dejó la ficha sin abrir
+   * el 3-sep-2026 (ver `Aislado.tsx`).
    */
-  const [solapa, setSolapa] = useState<'cliente' | 'hoy'>(tel ? 'cliente' : 'hoy')
+  const [solapa, setSolapa] = useState<'cliente' | 'hoy' | 'pagos'>(tel ? 'cliente' : 'hoy')
   /**
    * ¿Corre adentro del panel de la extensión? Estar embebido es la única forma de saberlo desde
    * acá: el contenedor es de otro origen (`chrome-extension://…`) y no se puede leer. Alcanza —lo
@@ -615,11 +620,28 @@ function PanelInterno({
     }
   }
 
+  /**
+   * Saltar de una fila de "Pagos" a la ficha de esa persona.
+   *
+   * ⚠️ **Muestra la ficha; no abre el chat.** Un compromiso guarda el id del cliente y el nombre,
+   * no el teléfono, así que desde acá no hay número que mandarle a la extensión. Para escribirle,
+   * el camino es el buscador de "Hoy", que sí trae el teléfono.
+   *
+   * Que quede la ficha de alguien distinto al chat abierto no se desincroniza sola: el aviso de
+   * "cambió el chat" limpia `pedido` cuando el número nuevo no es el que se había pedido (y con
+   * `tel: ''` nunca lo es), así que el próximo chat que se abra manda.
+   */
+  const verFicha = (id: number) => {
+    setPedido({ id, tel: '' })
+    setSolapa('cliente')
+  }
+
   const solapas = (
     <div style={{ display: 'flex', borderBottom: `1px solid ${color.line2}`, background: color.bg2 }}>
       {([
         ['cliente', 'Cliente'],
         ['hoy', 'Hoy'],
+        ['pagos', 'Pagos'],
       ] as const).map(([k, txt]) => (
         <button
           key={k}
@@ -652,6 +674,29 @@ function PanelInterno({
         ) : (
           <Cargando />
         )}
+      </Envoltorio>
+    )
+
+  /**
+   * 🔑 **Va ANTES del corte por "no hay chat abierto", y no después.** Es una lista de trabajo que
+   * cruza a todos los clientes: sirve igual con el chat cerrado, y el único que se pierde es el
+   * formulario de anotar (que sí necesita saber quién va a transferir).
+   *
+   * El cliente sale de la ficha ya resuelta: nunca se anota una promesa a nombre de nadie. Y
+   * mientras la ficha carga se avisa aparte (`buscandoCliente`), para no mandar a abrir un chat
+   * que ya está abierto.
+   */
+  if (solapa === 'pagos')
+    return (
+      <Envoltorio aviso={aviso}>
+        {solapas}
+        <Aislado nombre="Pagos">
+          <Pagos
+            cliente={estado.t === 'ficha' ? { id: estado.ficha.cliente.id, name: estado.ficha.cliente.name } : null}
+            buscandoCliente={estado.t === 'cargando' && !!(telNorm || pedido)}
+            onVerCliente={verFicha}
+          />
+        </Aislado>
       </Envoltorio>
     )
 
@@ -849,15 +894,6 @@ function PanelInterno({
           }}
           onTachar={() => mutar((m) => cumplirPendiente(m, c.id, hoyISO()), 'Listo, queda en las notas')}
         />
-
-        {/* Que le pague a un acreedor.
-            🔴 Va envuelto en `Aislado` y NO se puede sacar de ahí: la primera versión de este
-            bloque dejó la ficha sin abrir (3-sep-2026), porque la app no tiene ningún
-            ErrorBoundary y lo que falla adentro de un bloque desmonta todo el árbol. Nace cerrado
-            y no pide nada hasta que alguien lo toca. */}
-        <Aislado nombre="Que le pague a un acreedor">
-          <PagaAUnAcreedor cliente={{ id: c.id, name: c.name }} />
-        </Aislado>
 
         {/* Lo último que llevó */}
         <Bloque titulo="Lo último que llevó">
