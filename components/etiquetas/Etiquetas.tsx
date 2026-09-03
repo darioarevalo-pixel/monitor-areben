@@ -675,6 +675,7 @@ function ModoPanel({
         <BolsaPanel
           bolsa={bolsa}
           grande={cfgSku.grande}
+          agrupa={cfgSku.grupo}
           tildar={(id, on) =>
             setBolsa((b) => {
               if (!b) return b
@@ -1178,7 +1179,7 @@ function OpcionesSku({ cfg, set }: { cfg: ConfigSku; set: (campo: keyof ConfigSk
  * 🔑 **Los de stock cero se listan destildados, no se esconden.** Una bolsa puede existir con el
  * espejo en cero (llegó hoy, todavía no se cargó); esconderla obliga a buscar el SKU a mano.
  */
-function BolsaPanel({ bolsa, grande, tildar, imprimir, cerrar }: { bolsa: Bolsa; grande: boolean; tildar: (id: string, on: boolean) => void; imprimir: () => void; cerrar: () => void }) {
+function BolsaPanel({ bolsa, grande, agrupa, tildar, imprimir, cerrar }: { bolsa: Bolsa; grande: boolean; agrupa: boolean; tildar: (id: string, on: boolean) => void; imprimir: () => void; cerrar: () => void }) {
   const elegidas = bolsa.hermanas.filter((h) => bolsa.elegidas.has(h.id)).length
   return (
     <Card>
@@ -1188,10 +1189,24 @@ function BolsaPanel({ bolsa, grande, tildar, imprimir, cerrar }: { bolsa: Bolsa;
           Cerrar
         </button>
       </div>
+      {/* 🔴 **Con una sola variante hay que decir POR QUÉ, y son dos motivos distintos.** El cartel
+          decía «este producto tiene un solo color», que con la tilde apagada es directamente falso:
+          ni se buscaron las otras. Los dos casos se ven igual en pantalla —una fila sola— y quien
+          esperaba cuatro etiquetas no tiene con qué distinguirlos. */}
       <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
-        {bolsa.hermanas.length === 1
-          ? 'Este producto tiene un solo color con SKU.'
-          : `Los ${bolsa.hermanas.length} colores del producto. Vienen tildados los que tienen stock; cambiá los tildes y reimprimí si hace falta otro.`}
+        {bolsa.hermanas.length > 1 ? (
+          `Las ${bolsa.hermanas.length} variantes del producto. Vienen tildadas las que tienen stock; cambiá los tildes y reimprimí si hace falta otra.`
+        ) : agrupa ? (
+          <>
+            Busqué las otras variantes de este producto y <b>no hay ninguna más con SKU</b>. Si en el local tiene más colores, en Gestión
+            Nube están cargados como <b>productos separados</b> y no como variantes del mismo producto: por ahí no los puedo juntar.
+          </>
+        ) : (
+          <>
+            Está imprimiendo de a una. Para que salgan también las otras variantes del producto, prendé arriba{' '}
+            <b>«Imprimir también los otros colores del mismo producto»</b>.
+          </>
+        )}
       </div>
       <div style={{ display: 'grid', gap: 4, marginBottom: 12 }}>
         {bolsa.hermanas.map((h) => (
