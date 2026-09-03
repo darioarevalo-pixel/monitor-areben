@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Badge, Button, Card, EmptyState, Field, Input, KpiCard, Lightbox, Notice, Select, Toolbar, useToast,
+  Badge, Button, Card, color, EmptyState, Field, Input, KpiCard, Lightbox, Notice, Select, Toolbar, useToast,
 } from '@/components/ui'
 import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
@@ -12,6 +12,7 @@ import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
 import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { familiaDeProducto, listaDe, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
+import { fraseDeModelo, modeloDeProducto, resumenDeModelo, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
 
 /**
  * Descripción y medidas: la ficha de cada prenda y el párrafo que la vende.
@@ -50,7 +51,7 @@ export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, atributos, medidas, puedePublicar, error, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar } = useGenDesc(marca)
+  const { cargando, productos, cola, atributos, medidas, puedePublicar, modelos, errorModelos, error, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('ultimas-tandas')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
@@ -129,6 +130,7 @@ export function GenDesc() {
             abierto={abierto === p.id}
             onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
             puedePublicar={puedePublicar}
+            talleModelo={modeloDeProducto(p.skus, modelos)}
             familia={familiaDe(p)}
             onFamilia={async (familia) => {
               const err = await guardarFamilia(p.id, familia, p.name)
@@ -183,13 +185,17 @@ export function GenDesc() {
           />
         ))}
       </div>
+      {/* 🔴 Se dice, y no se traga: sin este cartel «esta prenda no tiene talle de modelo» y «no se
+          pudieron leer las sesiones» se ven exactamente igual — un renglón que no está. */}
+      {errorModelos && <Notice tone="warning">{errorModelos} El talle de la modelo no se va a ver en ninguna ficha.</Notice>}
+
       {lista.length > 200 && <Notice tone="neutral">Se muestran 200 de {lista.length}. Afiná el filtro.</Notice>}
     </div>
   )
 }
 
 function FilaProducto({
-  p, fila, ficha, medidas, familia, abierto, onAbrir, puedePublicar, onFamilia, onAtributo, onMedida, onSinMedidas, onRedactar, onGuardar, onPublicar,
+  p, fila, ficha, medidas, familia, abierto, onAbrir, puedePublicar, talleModelo, onFamilia, onAtributo, onMedida, onSinMedidas, onRedactar, onGuardar, onPublicar,
 }: {
   p: ProductoTn
   fila: FilaCola | undefined
@@ -199,6 +205,8 @@ function FilaProducto({
   abierto: boolean
   onAbrir: () => void
   puedePublicar: boolean
+  /** Qué modelo lo fotografió y qué talle usa. `null` = ninguna sesión de fotos lo tocó. */
+  talleModelo: TalleDeModelo | null
   onFamilia: (familia: Familia) => Promise<string | null>
   onAtributo: (atributo: Atributo, valor: string, propuesto?: boolean) => Promise<string | null>
   medidas: Medidas
@@ -422,6 +430,26 @@ function FilaProducto({
 
           {/* ── Las medidas: mismo momento, misma prenda, misma pantalla ── */}
           {familia && <BloqueMedidas p={p} fila={fila} ficha={ficha} familia={familia} medidas={medidas} onMedida={onMedida} onSinMedidas={onSinMedidas} />}
+
+          {/* 🔴 EL TALLE DE LA MODELO SE MUESTRA, ⛔ NO SE PUBLICA — y no es una etapa a medias, es
+              una regla que se cruza con otra. Lo pidió Bruno el 3-sep-2026 («cargar el talle que usa
+              la modelo en la descripción del producto») y el párrafo **no puede nombrar un talle**:
+              lo rechaza `validarParrafo` desde el 27-ago por decisión suya —«eso lo dicen el selector
+              y la tabla»—, porque los talles del PRODUCTO se desactualizan solos. El de la modelo no
+              es ese talle y no se desactualiza nunca, así que sale como un BLOQUE compuesto —al lado
+              de los bullets y de la tabla— y ⛔ no como prosa. Ese bloque todavía no existe: es la
+              decisión que falta. Mientras tanto el dato está acá, que es donde se escribe la ficha. */}
+          {talleModelo ? (
+            <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '8px 10px', background: color.bg, fontSize: 13 }}>
+              👗 <b>{fraseDeModelo(talleModelo.modelo)}</b>{' '}
+              <span style={{ color: color.mut2 }}>
+                — {resumenDeModelo(talleModelo.modelo)} · sesión del {talleModelo.fecha}
+              </span>
+              <div style={{ fontSize: 11, color: color.mut, marginTop: 2 }}>
+                Sale de la sesión de fotos. Todavía ⛔ no se escribe solo en la tienda.
+              </div>
+            </div>
+          ) : null}
 
           <Field label="Insumo del local" hint="Lo que no entra en ningún campo y ayuda a escribir el párrafo. Ej: «llega esta semana, va con la campera Alpes».">
             <Input value={insumo} onChange={(e) => setInsumo(e.target.value)} placeholder="opcional" />

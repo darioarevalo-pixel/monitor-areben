@@ -567,3 +567,30 @@ distintas—.
   a cero — y una cola que nunca baja a cero deja de mirarse.
 - ⚠️ **Hoy el aviso nace en CERO y eso es correcto**: nadie cargó todavía una ficha. El día que la
   primera se apruebe, aparece.
+
+## El talle de la modelo (3-sep-2026, pedido de Bruno)
+
+> «Dinámica sesión de fotos con talle de la modelo — para luego cargar el talle que usa la modelo en
+> la descripción del producto.»
+
+La ficha de cada producto ahora muestra **qué modelo lo fotografió y qué talle usa**, arriba del
+insumo del local. Sale de la **sesión de fotos** (`lib/sesionfotos/modelo.ts`), y el puente es el
+**SKU de variante** —por eso `ProductoTn` conserva `skus`, que `normalizar()` tiraba—: la sesión
+arma sus ítems con el catálogo de Gestión Nube y esta pantalla con el de TiendaNube.
+
+🔴 **SE MUESTRA, ⛔ NO SE PUBLICA, y eso ⛔ no es una etapa a medias: son dos reglas que se cruzan.**
+El párrafo **no puede nombrar un talle** —`validarParrafo` lo rechaza desde el 27-ago-2026 por
+decisión de Bruno: *«eso lo dicen el selector y la tabla»*, porque los talles del PRODUCTO se
+desactualizan solos—. El talle de la modelo ⛔ no es ese talle y ⛔ no se desactualiza nunca, así que
+la frase **no va en la prosa**: va como un **bloque compuesto**, al lado de los bullets y de la tabla
+de medidas, con la misma doctrina del 27-ago («los bullets no son redacción, son atributos»).
+▶️ **Ese bloque todavía no existe y es lo que falta decidir**: si sale en todas las fichas, con qué
+palabras y si lo compone el servidor al publicar (que es donde tendría que vivir, en
+`lib/tn-desc/bloques.core.js`).
+
+⚠️ **Se leen las sesiones de TODAS las líneas de la marca** (`lineasDeMarca`), no sólo `zattia`: las
+de Stunned son filas `store='stunned'` y sus prendas están en la misma tienda. Y la lectura **falla
+ABIERTA** —al revés que `leerCajon`, que falla cerrada porque río arriba se escribe sobre lo leído—:
+si una línea no contesta, la pantalla abre igual **con un cartel**. 🔑 Sin ese cartel, «esta prenda
+no tiene talle de modelo» y «no se pudieron leer las sesiones» se ven exactamente igual: un renglón
+que no está.

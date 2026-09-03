@@ -74,10 +74,25 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
    ⛔ **Sin caminar todavía**: ese día no había ninguna pregunta en el Hoy. Se mira cuando entre una OC.
    El relato, en `docs/secciones/agenda.md` § 3-sep.
 
-5. ▶️ **FOTOS — la sesión tiene que registrar el TALLE DE LA MODELO**, para después cargarlo en la
-   descripción del producto.
+5. 🏁/▶️ **FOTOS — el talle de la modelo ya se anota y ya se ve en la ficha. Publicarlo choca con
+   una regla tuya, y esa decisión falta.**
    > «Dinámica sesión de fotos con talle de la modelo - para luego cargar el talle que usa la
    > modelo en la descripción del producto.»
+
+   🏁 **La sesión lo guarda** (nombre · talle · altura) y **«Descripción y medidas» lo muestra** en
+   la ficha del producto: *«La modelo mide 1,70 m y usa talle S»*. El relato entero en
+   `docs/secciones/sesionfotos.md` § La modelo y su talle.
+   🔑 **Es de la SESIÓN y no de la prenda** (elegido por Bruno): una sesión es una modelo, y su
+   talle es el mismo en las 30 prendas. **El talle es lo obligatorio, el nombre no.**
+   🔴 **El puente con la descripción es el SKU, ⛔ no el id**: la sesión usa el catálogo de Gestión
+   Nube y la ficha el de TiendaNube. 📌 **Medido: 79 de 79 SKU cruzan** (en BDI; en Zattia la tabla
+   tiene RLS y no se pudo medir desde afuera).
+   ▶️ 🔴 **Falta UNA decisión tuya: cómo se publica.** El párrafo ⛔ **no puede nombrar un talle** —lo
+   rechaza `validarParrafo` desde el 27-ago, por decisión tuya: *«eso lo dicen el selector y la
+   tabla»*—. El de la modelo ⛔ no es ese talle y ⛔ no se desactualiza nunca, así que tiene que salir
+   como **un bloque compuesto**, al lado de los bullets y de la tabla. **Hoy se ve en el monitor y
+   ⛔ no sale a la tienda.** Falta decir: ¿va en todas las fichas?, ¿con qué palabras?
+   ▶️ Y falta **caminarlo**: cargar una modelo en una sesión real y ver la frase en la ficha.
 
 6. ▶️ **MODEL MANAGEMENT — sección nueva en el monitor.**
    > «Sección en monitor de Model Management - fichas - Booker - Portafolio con mejores fotos de la

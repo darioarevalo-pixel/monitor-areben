@@ -132,6 +132,12 @@ export type Solicitud = {
    * fotografiarse y fotografiarse sin volver.
    */
   fotos?: Record<string, RegistroFoto>
+  /**
+   * Quién fue la modelo y **qué talle usa**. Sólo en el cajón de fotos. Ausente en todas las
+   * sesiones anteriores al 3-sep-2026 y en las que nadie contestó — la regla y el porqué del
+   * campo, en `lib/sesionfotos/modelo.ts`.
+   */
+  modelo?: ModeloSesion
   eliminados?: ItemEliminado[]
   /** Historial de cambios (edición): agregar/quitar/cambiar cantidad/editar, con hora y motivo. */
   cambios?: Cambio[]
@@ -156,6 +162,13 @@ export type Solicitud = {
 
 /** Lo que se anota por variante al contestar si se fotografió. */
 export type RegistroFoto = { ok: boolean; motivo?: string; por?: string; ts?: number }
+
+/**
+ * La modelo de la sesión. `talle` es lo único obligatorio: es lo que va a la descripción del
+ * producto, y exigir el nombre —que en el momento no siempre se sabe cómo se escribe— perdería el
+ * dato que sirve por el que no. `altura` se guarda ya normalizada (`1,70 m`).
+ */
+export type ModeloSesion = { nombre?: string; talle: string; altura?: string; por?: string; ts?: number }
 
 /** Fase de verificación por escaneo. */
 export type Fase = 'retiro' | 'devolucion'

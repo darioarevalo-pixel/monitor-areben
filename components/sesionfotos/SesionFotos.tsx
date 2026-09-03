@@ -86,6 +86,7 @@ import {
   respuestaFoto,
   resumenFotos,
 } from '@/lib/sesionfotos/fotografiado'
+import { conModelo, hayModelo, resumenDeModelo, talleNormalizado } from '@/lib/sesionfotos/modelo'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
@@ -1123,6 +1124,13 @@ function Detalle({
         </div>
       ) : null}
 
+      {/* La modelo y SU TALLE. Lo pidió Bruno el 3-sep-2026 para poder escribirlo después en la
+          descripción del producto: es lo que la clienta pregunta antes de comprar y lo único de la
+          sesión que, si no se anota en el momento, ya no se puede reconstruir.
+          🔑 Se muestra desde que la sesión existe —⛔ no cuando ya salió algo, como el bloque de
+          abajo—: la modelo se sabe al armarla, y el bloque también sirve para dejarla anotada. */}
+      {esFotosDet ? <FichaModelo s={s} editable={editable} usuario={usuario} setWork={setWork} /> : null}
+
       {/* ¿Qué se fotografió? El RESULTADO de la sesión, que hasta el 24-ago-2026 no se registraba en
           ningún lado: una solicitud podía llegar a `cerrada` sin una sola foto sacada.
           🔴 Se muestra el «sin contestar» en vez de asumirlo: no saber si se fotografió no es lo
@@ -1946,6 +1954,141 @@ function ScanInput({ disabled, placeholder, onScan }: { disabled: boolean; place
         background: disabled ? color.bg : '#fff',
       }}
     />
+  )
+}
+
+/**
+ * La ficha de la modelo de la sesión: quién es y qué talle usa.
+ *
+ * 🔑 **Los tres campos se escriben en un borrador local y se guardan al SALIR de cada uno**, no en
+ * cada tecla. `conModelo` normaliza y **borra la ficha entera cuando el talle queda vacío**, así que
+ * guardando letra por letra el primer backspace del talle se llevaría puesto el nombre y la altura.
+ *
+ * ⚠️ Los talles sugeridos salen de **las variantes de esta misma sesión**, ⛔ no de una lista fija:
+ * son exactamente los que la modelo tuvo en la mano, y así el campo no impone un alfabeto (S/M/L
+ * contra 38/40/42) que en Zattia conviven.
+ */
+function FichaModelo({
+  s,
+  editable,
+  usuario,
+  setWork,
+}: {
+  s: Solicitud
+  editable: boolean
+  usuario: string
+  setWork: (f: (w: Solicitud) => Solicitud) => void
+}) {
+  const [borrador, setBorrador] = useState({
+    nombre: s.modelo?.nombre || '',
+    talle: s.modelo?.talle || '',
+    altura: s.modelo?.altura || '',
+  })
+  const guardar = () => setWork((w) => conModelo(w, borrador, { por: usuario, ts: Date.now() }))
+  const talles = [...new Set((s.items || []).map((i) => talleNormalizado(i.variante)).filter(Boolean))]
+
+  if (!editable) {
+    if (!hayModelo(s.modelo)) return null
+    return (
+      <div style={{ fontSize: 12, color: color.mut2, margin: '8px 0' }}>👗 Modelo: {resumenDeModelo(s.modelo)}</div>
+    )
+  }
+
+  return (
+    <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '10px 12px', margin: '10px 0', background: color.bg }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}>
+        La modelo{' '}
+        <InfoPopover titulo="El talle de la modelo">
+          Qué talle tiene puesto la modelo en esta sesión. Es lo que la clienta pregunta antes de comprar, y se
+          usa después en «Descripción y medidas» para escribirlo en la ficha del producto. El nombre es para
+          adentro: a la tienda sale sólo el talle y la altura.
+        </InfoPopover>
+      </div>
+      <div style={{ fontSize: 12, color: color.mut2, marginBottom: 8 }}>
+        Con el talle alcanza. Si no lo cargás, la descripción de estas prendas no lo va a poder decir.
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <CampoModelo
+          label="Nombre"
+          ancho={160}
+          valor={borrador.nombre}
+          onCambio={(v) => setBorrador((b) => ({ ...b, nombre: v }))}
+          onSalir={guardar}
+          placeholder="Sofi"
+        />
+        <CampoModelo
+          label="Talle que usa"
+          ancho={110}
+          valor={borrador.talle}
+          onCambio={(v) => setBorrador((b) => ({ ...b, talle: v }))}
+          onSalir={guardar}
+          placeholder="S"
+          lista={talles}
+        />
+        <CampoModelo
+          label="Altura"
+          ancho={110}
+          valor={borrador.altura}
+          onCambio={(v) => setBorrador((b) => ({ ...b, altura: v }))}
+          onSalir={guardar}
+          placeholder="1,70"
+        />
+        <div style={{ fontSize: 12, color: hayModelo(s.modelo) ? color.successInk : color.mut, paddingBottom: 8 }}>
+          {hayModelo(s.modelo) ? `✓ ${resumenDeModelo(s.modelo)}` : 'Sin cargar'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Un campo de la ficha de la modelo. `lista` dibuja las sugerencias sin cerrar el campo. */
+function CampoModelo({
+  label,
+  valor,
+  onCambio,
+  onSalir,
+  placeholder,
+  ancho,
+  lista,
+}: {
+  label: string
+  valor: string
+  onCambio: (v: string) => void
+  onSalir: () => void
+  placeholder: string
+  ancho: number
+  lista?: string[]
+}) {
+  const id = `modelo-${label.replace(/\s+/g, '-').toLowerCase()}`
+  return (
+    <label style={{ fontSize: 11, color: color.mut2, display: 'inline-block' }}>
+      {label}
+      <input
+        value={valor}
+        placeholder={placeholder}
+        list={lista?.length ? `${id}-lista` : undefined}
+        onChange={(e) => onCambio(e.target.value)}
+        onBlur={onSalir}
+        style={{
+          display: 'block',
+          width: ancho,
+          padding: '6px 8px',
+          marginTop: 2,
+          border: `1px solid ${color.line2}`,
+          borderRadius: 8,
+          fontSize: 14,
+          boxSizing: 'border-box',
+          background: '#fff',
+        }}
+      />
+      {lista?.length ? (
+        <datalist id={`${id}-lista`}>
+          {lista.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+      ) : null}
+    </label>
   )
 }
 

@@ -7,6 +7,10 @@ import { prosaDe, type Prosa } from '@/lib/tn-desc/prosa'
 import { familiaDe, type Atributo, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
 import type { Medida, Medidas } from '@/lib/tn-medidas/medidas'
 import type { Borrador } from '@/lib/tn-desc/formato'
+import { leerCajon } from '@/lib/solicitudes/cajon'
+import { lineasDeMarca } from '@/lib/lineas'
+import { talleDeModeloPorSku, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
+import type { Solicitud } from '@/lib/sesionfotos/tipos'
 
 /**
  * Los datos de «Descripción y medidas»: el catálogo de TiendaNube y la cola de `tn_descripciones`.
@@ -34,6 +38,12 @@ export type ProductoTn = {
   imagenes: { id: string; src: string }[]
   /** Los valores de todas las variantes (colores y talles). De acá sale lo que NO se nombra. */
   variantes: string[]
+  /**
+   * Los SKU de las variantes. Es el ÚNICO puente con la sesión de fotos: ella arma sus ítems con
+   * el catálogo de Gestión Nube y esta pantalla con el de TiendaNube — dos numeraciones distintas,
+   * un solo SKU. Ver `lib/sesionfotos/modelo.ts`.
+   */
+  skus: string[]
   /** Alta en TiendaNube. Es lo que separa «lo que entró esta tanda» de los 328 de siempre. */
   created_at: string
   /** La familia del diccionario. `null` = le falta la categoría en la tienda. */
@@ -69,7 +79,14 @@ const enVuelo: Partial<Record<Marca, Promise<void>>> = {}
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function normalizar(p: any): ProductoTn {
   const valores: string[] = []
-  for (const v of p?.variantes || []) for (const val of v?.valores || []) if (val) valores.push(String(val))
+  const skus: string[] = []
+  for (const v of p?.variantes || []) {
+    for (const val of v?.valores || []) if (val) valores.push(String(val))
+    if (v?.sku) skus.push(String(v.sku).trim())
+  }
+  // El SKU del producto entra igual que los de sus variantes: los ítems de una sesión traen el de
+  // la variante, pero un producto de talle único los tiene iguales y conviene no depender de cuál.
+  if (p?.sku) skus.push(String(p.sku).trim())
   return {
     id: String(p?.id ?? ''),
     name: String(p?.name ?? ''),
@@ -79,6 +96,7 @@ function normalizar(p: any): ProductoTn {
     image_count: p?.image_count ?? 0,
     imagenes: (p?.imagenes || []).filter((i: any) => i?.src),
     variantes: [...new Set(valores)],
+    skus: [...new Set(skus.filter(Boolean))],
     created_at: String(p?.created_at ?? ''),
     familia: familiaDe(p?.categories || []),
     prosa: prosaDe(p?.raw_desc),
@@ -126,6 +144,15 @@ export type EstadoGenDesc = {
   medidas: Record<string, Medidas>
   /** ¿El perfil puede aprobar y publicar, o sólo cargar el insumo? Lo dice el servidor. */
   puedePublicar: boolean
+  /**
+   * Qué modelo fotografió cada prenda, **indexado por SKU**. Lo pidió Bruno el 3-sep-2026: el
+   * talle que usa la modelo se anota en la sesión de fotos y se escribe acá, en la ficha.
+   * ⚠️ Vacío ⛔ no significa «ninguna sesión tuvo modelo»: también es «no se pudieron leer las
+   * sesiones», y por eso el fallo va aparte en `errorModelos` en vez de mezclarse con `error` —
+   * la pantalla entera no se cae porque falte un dato de adorno.
+   */
+  modelos: Map<string, TalleDeModelo>
+  errorModelos: string | null
   error: string | null
 }
 
@@ -136,6 +163,7 @@ async function leerTodo(marca: Marca): Promise<EstadoGenDesc> {
   let atributos: Record<string, Cargados> = {}
   let medidas: Record<string, Medidas> = {}
   let puedePublicar = false
+  const { modelos, errorModelos } = await leerModelos(marca)
   try {
     const [, r] = await Promise.all([bajarAudit(marca), apiFetch(`${COLA}&store=${marca}`)])
     const d = await r.json()
@@ -149,7 +177,32 @@ async function leerTodo(marca: Marca): Promise<EstadoGenDesc> {
   } catch (e) {
     error = e instanceof Error ? e.message : 'No se pudo leer la cola.'
   }
-  return { cargando: false, productos: cacheProductos[marca] || [], cola, atributos, medidas, puedePublicar, error }
+  return { cargando: false, productos: cacheProductos[marca] || [], cola, atributos, medidas, puedePublicar, modelos, errorModelos, error }
+}
+
+/**
+ * Las sesiones de fotos de la marca, reducidas al índice «SKU → qué modelo lo usó».
+ *
+ * 🔴 **Son varias LÍNEAS, no una marca**: la sesión de Stunned es una lista aparte (`store='stunned'`)
+ * y sus prendas están en la misma tienda de Zattia. Leer sólo `zattia` dejaría sin talle de modelo a
+ * todo lo de esa línea, y ⛔ no se vería como un error: se vería como sesiones sin modelo cargada.
+ *
+ * ⚠️ **Falla ABIERTA, al revés que el cajón.** `leerCajon` falla cerrada porque río arriba se
+ * escribe sobre lo leído y una lista vacía borraría el historial; acá sólo se lee para adornar una
+ * ficha, así que una línea que no contesta se salta con su motivo anotado y la pantalla abre igual.
+ */
+async function leerModelos(marca: Marca): Promise<{ modelos: Map<string, TalleDeModelo>; errorModelos: string | null }> {
+  const sols: Solicitud[] = []
+  const fallaron: string[] = []
+  for (const linea of lineasDeMarca(marca)) {
+    const r = await leerCajon<Solicitud>('sesionfotos', linea)
+    if (r.ok) sols.push(...r.dato)
+    else fallaron.push(`${linea}: ${r.motivo}`)
+  }
+  return {
+    modelos: talleDeModeloPorSku(sols),
+    errorModelos: fallaron.length ? `No se pudieron leer las sesiones de fotos (${fallaron.join(' · ')}).` : null,
+  }
 }
 
 export function useGenDesc(marca: Marca) {
@@ -160,6 +213,8 @@ export function useGenDesc(marca: Marca) {
     atributos: {},
     medidas: {},
     puedePublicar: false,
+    modelos: new Map(),
+    errorModelos: null,
     error: null,
   })
 

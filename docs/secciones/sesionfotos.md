@@ -254,6 +254,47 @@ entera vive en el jsonb/KV.
 - ▶️ **Nadie lo contestó todavía en una sesión real**: las 30 solicitudes existentes arrancan las 30
   en «sin contestar», que es exactamente lo que la pantalla debe decir.
 
+## La modelo y su talle (3-sep-2026, pedido de Bruno)
+
+> «Dinámica sesión de fotos con talle de la modelo — para luego cargar el talle que usa la modelo en
+> la descripción del producto.»
+
+Es el dato que la clienta pregunta antes de comprar —*¿qué talle tiene puesto?*— y que hasta hoy ⛔
+no estaba escrito en ningún lado: lo sabía quien estuvo en la sesión, y cuando alguien redacta la
+ficha —días después, otra persona— ya no se puede preguntar.
+
+**Dónde vive:** `lib/sesionfotos/modelo.ts` (núcleo puro) · `Solicitud.modelo` en `tipos.ts` ·
+la ficha en `SesionFotos.tsx` (`FichaModelo`) · `tests/sesionfotos-modelo.test.ts`.
+
+- 🔑 **Es de la SESIÓN, ⛔ no de la prenda.** Lo eligió Bruno entre tres formas: una sesión es una
+  modelo y su talle es el mismo en las 30 prendas. Anotarlo prenda por prenda sería 30 veces el
+  mismo dato, y 30 lugares donde escribirlo distinto.
+- ⚠️ **`talle` es lo obligatorio; `nombre` NO.** Al revés de lo que parece: el talle es lo que va a la
+  descripción, y exigir el nombre —que en el momento no siempre se sabe cómo se escribe— perdería el
+  dato que sirve por el que no. **Sin talle se borra la ficha entera**, y ése es el gesto de deshacer.
+- 🔴 **El talle ⛔ no sale de una lista cerrada, pero se NORMALIZA a mayúsculas.** En Zattia conviven
+  dos alfabetos (`S/M/L` y `38/40/42`) y encima se escribe `Talle M`, `m`, `M`. Cerrar la lista
+  dejaría afuera al primer `ÚNICO` que aparezca — y una sesión sin el dato es el único fracaso que
+  este campo no puede permitirse. Las sugerencias del campo salen de **las variantes de esa misma
+  sesión**: son los talles que la modelo tuvo en la mano.
+- 🔴 **La altura que no parsea se DESCARTA, ⛔ no se guarda cruda**: `170`, `1.70`, `1,70` y `1,70 m`
+  son la misma persona y se guardan `1,70 m`, porque ese texto sale tal cual a una ficha que lee una
+  clienta. Fuera de 1,20–2,20 no es una altura.
+- 🔴 **El puente con «Descripción y medidas» es el SKU, ⛔ no el id del producto**: la sesión arma sus
+  ítems con el catálogo de Gestión Nube y la ficha se escribe sobre el de TiendaNube — dos
+  numeraciones. 📌 **Medido antes de escribirlo**: de los **79 SKU** distintos de las sesiones de BDI,
+  **79 cruzan** con un SKU de variante de TiendaNube. ⚠️ En Zattia —la única marca donde corre
+  `gen-desc`— ⛔ no se pudo medir desde afuera: `solicitudes` tiene RLS y la clave pública no entra.
+- 🔴 **Una prenda contestada «no se fotografió» ⛔ NO hereda la modelo.** Ahí la respuesta explícita
+  dice que no se la puso. Las que **nadie contestó** sí: salieron con la sesión, y `sin-contestar`
+  significa «nadie lo anotó», ⛔ no «no pasó» (la misma regla de tres respuestas de arriba).
+
+▶️ **Lo que falta, y es una decisión de Bruno**: hoy el talle **se muestra** en la ficha del producto
+y ⛔ **no se publica solo**. El párrafo ⛔ no puede nombrar un talle —lo rechaza `validarParrafo`
+desde el 27-ago por decisión suya, porque los talles del PRODUCTO se desactualizan— así que la frase
+tiene que salir como **un bloque compuesto**, al lado de los bullets y de la tabla de medidas. Ese
+bloque todavía no existe. Ver `docs/secciones/gen-desc.md`.
+
 ## Lo que se midió, y lo que nunca se ejerció (16-ago-2026)
 
 Contra las dos bases, no contra la memoria: **BDI 10 solicitudes** (todas de fotos, 1-jul → 28-jul,
