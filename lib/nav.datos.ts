@@ -276,6 +276,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "modelos",
+    "area": "marketing",
+    "label": "Modelos",
+    "info": "El padrón de las modelos que trabajan con nosotros: quién es cada una, cómo se la contacta, quién la representa (agencia y booker, o directa), qué talle usa, cuánto mide y las medidas. El talle y la altura son los que salen a la descripción del producto cuando la modelo se elige en la sesión de fotos. Quien ve la sección también carga: no hay un permiso aparte para escribir.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "sesion-fotos",
     "area": "marketing",
     "label": "Sesión de fotos",
@@ -1109,6 +1119,7 @@ export const NAV_CATS: NavCat[] = [
       "marketing",
       "calendario",
       "canjes",
+      "modelos",
       "solicitudes"
     ],
     "grupos": [

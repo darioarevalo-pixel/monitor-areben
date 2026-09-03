@@ -94,10 +94,33 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
    ⛔ no sale a la tienda.** Falta decir: ¿va en todas las fichas?, ¿con qué palabras?
    ▶️ Y falta **caminarlo**: cargar una modelo en una sesión real y ver la frase en la ficha.
 
-6. ▶️ **MODEL MANAGEMENT — sección nueva en el monitor.**
+6. 🏁/▶️ **MODEL MANAGEMENT — la FICHA ya está y la base también; falta CAMINARLA.**
    > «Sección en monitor de Model Management - fichas - Booker - Portafolio con mejores fotos de la
    > modelo con nosotros. Principalmente para análisis. También que se pueda agregar ideas,
    > modelos, como si fuese una base de datos.»
+
+   🏁 **Sección nueva «Modelos», en Marketing** (3-sep): el padrón y la ficha de cada una —quién es,
+   Instagram y teléfono, **agencia y booker** (las tres vacías dicen «Directa», que acá es lo más
+   común), talle, altura y medidas, para qué marcas trabaja y notas—. El relato entero en
+   `docs/secciones/modelos.md`.
+   🔑 **Su primer lector ⛔ no es su pantalla: es la sesión de fotos.** El talle y la altura de la
+   sesión (el punto 5) se tipeaban a mano porque este padrón no existía; ahora los dos normalizan
+   con **la misma función**, que se mudó a `lib/modelos/core.core.js`. Eso decide texto que sale a
+   la ficha de un producto que lee una clienta.
+   ⛔ **La pantalla no dibuja ninguna columna medida** —cuántas sesiones hizo, qué vendió lo que
+   fotografió—: 📌 medido el 3-sep, **0 de 11 sesiones de BDI tienen modelo anotada** (y en Zattia la
+   tabla ⛔ no se pudo leer desde afuera, así que ese 0 es «no se pudo medir»). Con 0 enganchadas
+   esas columnas dirían **0 para todas**, y un cero afirma.
+   ✅ **La migración ya corrió en BDI** y está verificada por otro camino que el que la corrió
+   (PostgREST contesta `200 []`, y una tabla inventada al lado contesta 404).
+   ▶️ **Falta caminarla**: cargar una modelo de verdad y ver que quede.
+   ▶️ **Lo que sigue, en este orden**: (1) que **la sesión de fotos ELIJA la modelo del padrón** en
+   vez de tipearla —es lo que llena el padrón solo y lo que habilita el análisis—; (2) **el
+   análisis** («principalmente para análisis»): cuántas sesiones hizo cada una y cómo vendió lo que
+   fotografió; (3) **el portafolio** de fotos.
+   ▶️ ⚠️ **Y dos preguntas tuyas**: las **«ideas»** del dictado, ¿son de producción, de looks o de
+   modelos a contactar? —hoy entran en la nota de cada ficha—; y el **cachet**, que ⛔ no puse: lo
+   vería todo el que ve la sección, y ése no es el permiso de la liquidación.
 
 7. 🏁 **ANÁLISIS — hecho el 3-sep: el buscador miraba SÓLO el nombre.**
    > «Sumar en análisis, también poder buscar por código de proveedor las ventas de producto.»

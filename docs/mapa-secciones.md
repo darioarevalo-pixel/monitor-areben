@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-61 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+62 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -54,7 +54,10 @@ vuelva; **también cuelga del menú de Local**, con rótulo propio, y lee la tab
 puerta angosta `vista=retornos`)
 
 **Marketing** — `mkt-ventas → components/mkt-ventas + lib/mkt-ventas` · `marketing` · `tncat` · `sesion-fotos → components/sesionfotos + lib/sesionfotos` · `canjes` ·
-`gen-talles` · `gen-desc → components/gen-desc + lib/tn-desc` · `calendario`
+`gen-talles` · `gen-desc → components/gen-desc + lib/tn-desc` · `calendario` ·
+`modelos → components/modelos + lib/modelos` (el padrón de las modelos, por `?recurso=modelos`;
+su tabla vive **sólo en la base de BDI** y la lista de marcas vacía quiere decir las dos. 🔑 Su primer lector
+⛔ no es su pantalla: es `sesion-fotos`, que de acá saca el talle y la altura)
 
 **Meta** (área propia) — `meta-ads → components/meta-ads + lib/meta-ads`, doce vistas por el 2º
 tramo de la URL (la doceava, fría vs remarketing, es del 30-ago-2026); el perfil de Marketing

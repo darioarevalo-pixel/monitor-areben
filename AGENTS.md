@@ -117,6 +117,10 @@ ya tienen ficha:
   ⛔ **`lib/sesionfotos/` NO es solo de esta sección**: es el motor de las solicitudes, que montan el
   MISMO componente con otro preset. ⛔ **Crear la venta pega por URL absoluta a PROD**, también
   desde localhost.
+- Modelos (el padrón de las modelos, Model Management) → **leer `docs/secciones/modelos.md`** antes
+  de tocar `components/modelos/`, `lib/modelos/`, `api/_modelos.js` o `sql/migrate-modelos.sql`.
+  ⛔ **`lib/modelos/core.core.js` NO es sólo de esta sección**: de ahí saca `lib/sesionfotos/modelo.ts`
+  la normalización del talle y de la altura, que salen a la descripción del producto.
 - Liquidación → **leer `docs/secciones/liquidacion.md`** antes de tocar `components/liquidacion/`,
   `lib/liquidacion/` o `api/_liquidacion.js` — ⛔ ese handler lo abren también Etiquetas y Análisis.
 - Etiquetas → **leer `docs/secciones/etiquetas.md`** antes de tocar `components/etiquetas/` o

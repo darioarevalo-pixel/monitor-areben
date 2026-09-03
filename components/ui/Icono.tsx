@@ -135,6 +135,20 @@ const TRAZOS = {
     </>
   ),
   /** Clientes — dos personas. */
+  /**
+   * Modelos — una persona de medio cuerpo dentro del encuadre de una foto.
+   *
+   * ⚠️ **No puede ser el mismo trazo que `clientes`**: son dos padrones de personas y en el menú
+   * están a dos áreas de distancia, así que dos siluetas iguales se leen como la misma sección. Lo
+   * que las separa acá es el **marco**: esta persona está encuadrada.
+   */
+  modelos: (
+    <>
+      <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="2.4" />
+      <circle cx="12" cy="10" r="2.6" />
+      <path d="M7.4 18.4c0-2.5 2.1-4.2 4.6-4.2s4.6 1.7 4.6 4.2" />
+    </>
+  ),
   clientes: (
     <>
       <circle cx="9.2" cy="8.4" r="3.2" />

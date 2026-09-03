@@ -54,6 +54,7 @@ const Recorridas = dynamic(() => import('@/components/recorridas/Recorridas').th
 const PRM = dynamic(() => import('@/components/prm/PRM').then((m) => m.PRM), { loading: Cargando })
 const Acreedores = dynamic(() => import('@/components/acreedores/Acreedores').then((m) => m.Acreedores), { loading: Cargando })
 const Insumos = dynamic(() => import('@/components/insumos/Insumos').then((m) => m.Insumos), { loading: Cargando })
+const Modelos = dynamic(() => import('@/components/modelos/Modelos').then((m) => m.Modelos), { loading: Cargando })
 const Comisiones = dynamic(() => import('@/components/comisiones/Comisiones').then((m) => m.Comisiones), { loading: Cargando })
 const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/ConteoDeposito').then((m) => m.ConteoDeposito), { loading: Cargando })
 const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), { loading: Cargando })
@@ -325,6 +326,9 @@ export const SECCIONES: Record<string, ComponentType> = {
   // el aviso del anteúltimo. ⛔ No es stock de mercadería: un insumo no existe en Gestión Nube, así
   // que ni el espejo ni el motor de conteos (que exige `inventory_id`) sirven acá.
   insumos: Insumos,
+  // Modelos (Model Management): el padrón de las modelos. Su primer lector NO es esta pantalla sino
+  // la sesión de fotos, que de acá saca el talle y la altura que salen a la descripción del producto.
+  modelos: Modelos,
   // El flip de Comisiones (18-jul-2026): `/comisiones` lo sirve el shell. Margen neto
   // real por forma de pago × canal (comisiones/financiación/IIBB/DREI/Ganancias/IVA) +
   // simulador por producto + break-even + piso + lista de precios de sale (XLSX/PDF).

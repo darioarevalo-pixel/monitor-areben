@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|modelos&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -41,6 +41,7 @@ import clavados from './_clavados.js';
 import recepciones from './_recepciones.js';
 import prm from './_prm.js';
 import insumos from './_insumos.js';
+import modelos from './_modelos.js';
 import ocWebhook from './_oc-webhook.js';
 import acreedores from './_acreedores.js';
 import compromisos from './_compromisos.js';
@@ -122,6 +123,11 @@ const RECURSOS = {
   // la base de BDI —una caja de bolsas no es de una marca— pero la puerta SÍ valida `store`, porque
   // el permiso de la sección es por marca.
   insumos,
+  // Modelos: el padrón de las modelos (Model Management). Entra por acá y no por un archivo de
+  // ruta propio, como todo el resto (12 funciones de Hobby). Su tabla vive sólo en la base de BDI
+  // —la misma modelo hace las dos marcas— pero la puerta SÍ valida `store`, porque el permiso de
+  // la sección es por marca. Mismo arreglo que `insumos`.
+  modelos,
   // Mensajes de clientes. Entra por acá y no por un archivo de ruta propio como todo el resto: el
   // plan Hobby admite 12 funciones y cada ruta cuenta una. Tampoco valida `store` en la puerta —la
   // bandeja es una sola, como la de Envíos— pero adentro recorta a las marcas del perfil.

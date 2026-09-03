@@ -13,12 +13,20 @@
  * la ficha de la modelo (Model Management, el punto 6 del mismo dictado) este campo pasa a salir de
  * ahí; hasta entonces se tipea, y por eso `nombre` es libre.
  *
+ * 🔑 **La normalización del talle y de la altura ya ⛔ NO vive acá: vive en `lib/modelos/core.core.js`**
+ * (3-sep-2026, cuando nació el padrón de modelos). Desde que hay DOS lugares donde se escribe el
+ * talle de una modelo —su ficha y esta sesión—, la misma regla escrita dos veces se lee como un
+ * descuido y el próximo que viera las dos las emparejaría mal. Acá se **re-exportan**, así que sus
+ * consumidores (`SesionFotos.tsx`, `gen-desc`) no se enteraron. Es el mismo arreglo que
+ * `lib/crm/telefono.core.js` con `lib/crm/core.ts`.
+ *
  * ⚠️ **`talle` es lo obligatorio y `nombre` no.** Al revés de lo que parece: el talle es lo que va a
  * la descripción, y si el campo exigiera el nombre —que en el momento de la sesión no siempre se
  * sabe cómo se escribe— el dato que sirve se perdería por el que no. Un nombre sin talle no se
  * guarda: no contesta nada.
  */
 
+import { alturaNormalizada as alturaNormalizadaJs, talleNormalizado as talleNormalizadoJs } from '@/lib/modelos/core.core.js'
 import { fotografiables, respuestaFoto } from './fotografiado'
 import type { Solicitud } from './tipos'
 
@@ -31,36 +39,13 @@ export type ModeloEditable = { nombre?: string; talle?: string; altura?: string 
 const limpiar = (s: unknown) => String(s ?? '').trim().replace(/\s+/g, ' ')
 
 /**
- * El talle, normalizado a MAYÚSCULAS.
- *
- * ⛔ No es cosmético y ⛔ no es una lista cerrada. Los talles de Zattia conviven en dos alfabetos
- * —`S`/`M`/`L` y `38`/`40`/`42`— y encima aparecen como `Talle M` o `m` según quién escriba. Sin
- * normalizar, «m» y «M» son dos talles distintos para cualquier cosa que después quiera agrupar.
- * Cerrar la lista sería peor: el día que entre un `XXL` o un `Único` el campo lo rechazaría y la
- * sesión quedaría sin el dato, que es el único fracaso que este módulo no puede permitirse.
+ * El talle y la altura, normalizados. **Los dos son re-exports del padrón de modelos**
+ * (`lib/modelos/core.core.js`): el talle a MAYÚSCULAS y sin el prefijo «Talle», la altura siempre
+ * como `1,70 m` y descartando lo que no parsea. El porqué de cada regla está allá, al lado de la
+ * tabla que las guarda.
  */
-export function talleNormalizado(v: unknown): string {
-  return limpiar(v).replace(/^talles?\s+/i, '').toUpperCase()
-}
-
-/**
- * La altura, siempre en metros y con coma: `1,70 m`.
- *
- * Se escribe de cuatro maneras (`170`, `1.70`, `1,70`, `1,70 m`) y las cuatro quieren decir lo
- * mismo. La que se guarda es una sola, porque este texto sale tal cual a la ficha del producto.
- * ⛔ Lo que no parsea se descarta en vez de guardarse crudo: una altura que no es una altura
- * escrita en la descripción de una prenda es peor que no tenerla.
- */
-export function alturaNormalizada(v: unknown): string {
-  const t = limpiar(v).replace(/\s*m\.?$/i, '').replace(',', '.')
-  if (!t) return ''
-  const n = Number(t)
-  if (!Number.isFinite(n) || n <= 0) return ''
-  // 170 y 1,70 son la misma persona: arriba de 3 se lee como centímetros.
-  const metros = n > 3 ? n / 100 : n
-  if (metros < 1.2 || metros > 2.2) return ''
-  return `${metros.toFixed(2).replace('.', ',')} m`
-}
+export const talleNormalizado = talleNormalizadoJs as (v: unknown) => string
+export const alturaNormalizada = alturaNormalizadaJs as (v: unknown) => string
 
 /** ¿Hay algo que valga la pena guardar? El talle es lo que contesta la pregunta. */
 export function hayModelo(m: ModeloSesion | undefined | null): m is ModeloSesion {

@@ -266,6 +266,14 @@ ficha —días después, otra persona— ya no se puede preguntar.
 **Dónde vive:** `lib/sesionfotos/modelo.ts` (núcleo puro) · `Solicitud.modelo` en `tipos.ts` ·
 la ficha en `SesionFotos.tsx` (`FichaModelo`) · `tests/sesionfotos-modelo.test.ts`.
 
+🔴 **La normalización del talle y de la altura ya ⛔ no vive acá: se mudó a `lib/modelos/core.core.js`**
+el mismo 3-sep, cuando nació el padrón de modelos (`docs/secciones/modelos.md`). Desde que hay DOS
+lugares donde se escribe el talle de una modelo —su ficha y esta sesión—, la misma regla escrita dos
+veces se lee como un descuido. Acá se **re-exporta**, así que `SesionFotos.tsx` y `gen-desc` no se
+enteraron, y `tests/modelos-core.test.ts` fija con un `toBe` que son **la misma función**.
+▶️ **Lo que sigue es que la sesión ELIJA la modelo del padrón** en vez de tipearla: hoy guarda un
+`nombre` libre y la ficha tiene un `id`, así que las dos puntas todavía ⛔ no se cruzan.
+
 - 🔑 **Es de la SESIÓN, ⛔ no de la prenda.** Lo eligió Bruno entre tres formas: una sesión es una
   modelo y su talle es el mismo en las 30 prendas. Anotarlo prenda por prenda sería 30 veces el
   mismo dato, y 30 lugares donde escribirlo distinto.

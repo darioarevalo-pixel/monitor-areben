@@ -218,6 +218,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   tncat: 'tienda-nube',
   'gen-talles': 'talles',
   'gen-desc': 'talles',
+  modelos: 'modelos',
   integraciones: 'integraciones',
   // Administración / Compras
   reposicion: 'reposicion',
@@ -414,6 +415,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   ubicaciones: 'Ubicación física (NN-N) de cada producto en el Depósito Minorista.',
   reposicion: 'Reposición diaria del local: variantes bajo mínimo con stock en depósito.',
   insumos: 'Lo que se consume y no se vende: bolsas, rollos, papel. Qué hay en cada lugar, cuánto sale y cuánto dura.',
+  modelos: 'El padrón de las modelos: quién es cada una, cómo se la contacta, quién la representa, qué talle usa y cuánto mide. El talle y la altura de acá son los que salen a la descripción del producto cuando la modelo se elige en la sesión de fotos.',
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
   conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',
