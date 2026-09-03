@@ -27,7 +27,7 @@ import { geocodificarEnEscalera } from './_georef.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 import { consultaDeLocal, ordenarPorCercania } from '../lib/prm/geo.core.js'
-import { leerTodo } from '../lib/supabase/paginar.core.js'
+import { leerTodo, leerTodoEnParalelo } from '../lib/supabase/paginar.core.js'
 import { puntoDeGeoref } from '../lib/envios/direccion.core.js'
 
 /** Leer el padrón lo puede cualquiera de las dos secciones: es el mismo dato mirado de dos lados. */
@@ -227,9 +227,13 @@ export async function comparativa(cliente, dias) {
       if (!cfg.url || !cfg.key) return { mudo: store, filas: [] }
       try {
         const c = createClient(cfg.url, cfg.key)
-        const filas = await leerTodo(c, 'venta_detalles', (q) =>
+        // 🔴 **Acá van las PÁGINAS en paralelo, ⛔ no el `leerTodo` de siempre.** Es la consulta más
+        // grande del handler —30 días de BDI son **5.311 filas, o sea 6 páginas de mil**— y de a
+        // una son ~1,6 s de puro ir y venir. ⚠️ El `armar` recibe las opciones del `select` y hay
+        // que pasárselas: sin ellas no viene el conteo y no hay con qué paralelizar.
+        const filas = await leerTodoEnParalelo(c, 'venta_detalles', (q, opts) =>
           q
-            .select('product_id, quantity, ventas!inner(date_sale)')
+            .select('product_id, quantity, ventas!inner(date_sale)', opts)
             .in('product_id', [...set].filter(Number.isFinite))
             .gte('ventas.date_sale', desde)
             .order('id'),

@@ -200,10 +200,26 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
     nombre, la flecha está ahí, y las cuatro columnas medidas ⛔ **no se ofrecen para ordenar**: un
     click que no mueve nada es peor que un botón que todavía no está. Es el mismo cero de carga del
     rótulo de las pestañas, escrito con una flecha.
+  - 🔴 🔑 **Y poner las dos marcas en paralelo ⛔ NO movió el número — el costo son los VIAJES.**
+    Medido después de deployar, 5 corridas contra prod: **mediana 2.744 ms**, contra los 2.681 de
+    la única corrida de antes. ⛔ Dentro del ruido. 🔑 **Un cambio correcto ⛔ no es un cambio que
+    sirve, y la única forma de saberlo es medir DESPUÉS**: el paralelo sigue, porque ⛔ ninguna
+    marca tiene por qué esperar a la otra, pero el 🔴 está en otro lado.
+    - 📌 **Dónde está**: el mismo pedido con `dias=1` tarda **1.385 ms** (mediana de 5) contra
+      2.744 con `dias=30` ⇒ **~1,4 s son FIJOS** —`proveedor_local` → `recepcion_oc` →
+      `recepcion_linea` → primera página de ventas, **uno detrás del otro**, a ~270 ms el viaje— y
+      **~1,3 s** son las páginas de mil de las ventas. ⛔ No es el volumen: es la fila india.
+    - ✅ 🔑 **Por eso las PÁGINAS de la consulta de ventas ahora van juntas** (`leerTodoEnParalelo`,
+      `lib/supabase/paginar.core.js`): 30 días de BDI son **5.311 filas = 6 páginas**, y de a una
+      son ~1,6 s. 🔴 **El largo lo dice el `count` de la primera página, y ese conteo es también el
+      GUARD que a `leerTodo` le falta**: si al final no están todas, **tira** en vez de devolver un
+      número más bajo con cara de dato. Caminado contra la base real el 3-sep-2026: **5.311 = 5.311
+      filas, 67 productos, 0 sumas distintas**, y de 2.318 a 1.304 ms desde esta Mac.
   - ▶️ **Lo que queda, y es de Bruno**: las ventas se bajan CRUDAS —5.311 renglones de BDI para
-    llegar a 72 números— porque el agregado del lado de la base está **APAGADO en el proyecto**
+    llegar a 67 números— porque el agregado del lado de la base está **APAGADO en el proyecto**
     (`select('quantity.sum()')` contesta `Use of aggregate functions is not allowed`, probado el
-    3-sep-2026). Prenderlo en los dos proyectos de Supabase colapsa **6 viajes de mil filas en 1**.
+    3-sep-2026). Prenderlo en los dos proyectos de Supabase deja **1 viaje en vez de 6**, y de paso
+    saca 173 KB del cable.
     ⛔ La otra idea —pedir sólo la marca que se está mirando— ⛔ NO se hizo: `comprado` y `stores`
     hoy suman las órdenes de **las dos** marcas, y filtrar cambiaría lo que MIDE la columna para un
     proveedor que le venda a las dos. Eso lo decide Bruno, ⛔ no el que optimiza.
