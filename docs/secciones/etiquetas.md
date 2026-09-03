@@ -104,6 +104,16 @@ todos los colores de un producto juntos.
   etiqueta y en la tienda— y la lista crecía con cada impresión. La comparación normaliza:
   `listaSello = precioLista ?? precio`. ⛔ Arreglarlo del lado que ESCRIBE no alcanzaba: los 397
   sellos ya guardados tienen el `null` adentro.
+- 🆕 **Y se compara también contra el espejo de Gestión Nube** (Bruno, 3-sep-2026: *«comparalo también
+  contra el espejo de GN»*). La cola pregunta por el precio de **Tienda Nube**, que es lo que el
+  cliente paga, así que un precio cargado en GN que todavía no propagó no la despierta.
+  `preciosDesalineados` lista los que **los dos lados no cuentan igual**. 🔴 **Va como AVISO y ⛔ no
+  como filas para imprimir**: la etiqueta se dibuja con el precio de la tienda ⇒ imprimir no arregla
+  el desacuerdo y la prenda volvería a acusar mañana (el mismo ciclo del `precioLista: null`). Se
+  arregla emparejando el precio en uno de los dos lados. 📌 **Medido antes de escribirlo**: GN y la
+  tienda coinciden en el **99,4 %** (Zattia 494 de 495 con stock, BDI 215 de 218) ⇒ lo que salga es
+  señal, no ruido. ⚠️ El espejo de GN se refresca **una vez por día**: es una lista para mirar, ⛔ no
+  un semáforo.
 - ⚠️ **Un sello sin número no acusa a nadie.** Las 262 filas del sellado inicial (17-ago) no tienen
   precio: ahí manda la fecha. Con el `null` contando como «distinto», sellar no habría servido.
 - 🔑 **Reimprimir es libre y no avisa nada** (caso «se trabó la impresora»), y **de la cola sale sólo

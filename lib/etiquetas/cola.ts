@@ -9,6 +9,7 @@
 import {
   armarCola as armarColaJs,
   etiquetasDesactualizadas as etiquetasDesactualizadasJs,
+  preciosDesalineados as preciosDesalineadosJs,
   precioQueQuedo as precioQueQuedoJs,
   sinEtiquetar as sinEtiquetarJs,
   STOCK_MINIMO as STOCK_MINIMO_JS,
@@ -90,3 +91,19 @@ export const etiquetasDesactualizadas = etiquetasDesactualizadasJs as (
   precioHoy: Record<string, { aCobrar: number | null; lista: number | null }>,
   stockPorPid: Record<string, number>,
 ) => EtiquetaVieja[]
+
+/** Un producto cuyo precio de lista no coincide entre Gestión Nube y la tienda. */
+export interface PrecioDesalineado {
+  pid: string
+  gn: number
+  tienda: number
+}
+
+/**
+ * Los que **Gestión Nube y la tienda** no cuentan igual. ⛔ No son para imprimir: mientras los dos
+ * lados digan distinto, la etiqueta cuelga el número de la tienda y el desacuerdo sigue ahí.
+ */
+export const preciosDesalineados = preciosDesalineadosJs as (
+  listaPorPid: Record<string, { gn: number | null; tienda: number | null }>,
+  stockPorPid: Record<string, number>,
+) => PrecioDesalineado[]

@@ -7,7 +7,7 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
-import { etiquetasDesactualizadas } from '@/lib/etiquetas/cola'
+import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
 import {
   agruparCantidades,
   conStock,
@@ -135,6 +135,35 @@ export function Etiquetas() {
     () => etiquetasDesactualizadas(cola.sellos, precioHoyPorPid, cola.stock),
     [cola.sellos, precioHoyPorPid, cola.stock],
   )
+
+  /**
+   * Los que **Gestión Nube y la tienda** no cuentan igual.
+   *
+   * 🔑 **Lo pidió Bruno: «comparalo también contra el espejo de GN».** La cola compara contra Tienda
+   * Nube porque es lo que el cliente paga, así que un precio cargado en GN que todavía no propagó no
+   * la despierta. Esto lo muestra.
+   *
+   * 🔴 **Va como aviso y ⛔ NO como filas para imprimir**: la etiqueta se dibuja con el precio de la
+   * tienda, así que mientras los dos lados digan distinto, imprimir cuelga el número de la tienda y
+   * la prenda vuelve a acusar mañana. Se arregla emparejando el precio, no etiquetando.
+   */
+  const listaPorPid = useMemo(() => {
+    const m: Record<string, { gn: number | null; tienda: number | null }> = {}
+    for (const p of (datos?.allProductos ?? []) as { id: string; retailer_price?: number }[]) {
+      const pid = String(p.id)
+      const pr = promos[pid]
+      const tienda = pr ? pr.normal : precios[pid] || 0
+      const gn = Number(p.retailer_price || 0)
+      m[pid] = { gn: gn > 0 ? gn : null, tienda: tienda > 0 ? tienda : null }
+    }
+    return m
+  }, [datos, precios, promos])
+  const desalineados = useMemo(() => preciosDesalineados(listaPorPid, cola.stock), [listaPorPid, cola.stock])
+  const nombrePorPid = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const v of vars) if (v.name && !m[v.pid]) m[v.pid] = v.name
+    return m
+  }, [vars])
 
   /** Cuántas prendas hay para reetiquetar, por las dos puertas. Lo usan la pestaña y el encabezado. */
   const nCola = cola.pendientes.length + viejasPorNumero.length
@@ -364,6 +393,7 @@ export function Etiquetas() {
       />
 
       {sub === 'cola' && <CabeceraCola cola={cola} filtro={filtroCampania} setFiltro={setFiltroCampania} porNumero={viejasPorNumero.length} />}
+      {sub === 'cola' && desalineados.length > 0 && <AvisoDesalineados filas={desalineados} nombreDe={nombrePorPid} />}
 
       {sub === 'libre' ? (
         <LibreEditor />
@@ -836,6 +866,37 @@ function ModoPanel({
       </Card>
 
       {modo === 'loc' && <FPEditor fpLines={fpLines} guardarFP={guardarFP} catalogoListo={catalogoListo} />}
+    </div>
+  )
+}
+
+/**
+ * Los precios que **Gestión Nube y la tienda** no cuentan igual.
+ *
+ * 🔑 **No dice «reetiquetá»: dice «emparejá el precio».** Con los dos lados en desacuerdo, la
+ * etiqueta que salga va a decir el número de la tienda y el desacuerdo va a seguir ahí. Por eso va
+ * arriba, separado de la lista de imprimir, y nombra los dos números.
+ *
+ * ⚠️ **El espejo de GN se refresca una vez por día**, así que un cambio de hoy en cualquiera de los
+ * dos lados puede tardar en verse o en dejar de verse acá.
+ */
+function AvisoDesalineados({ filas, nombreDe }: { filas: PrecioDesalineado[]; nombreDe: Record<string, string> }) {
+  const items = filas.slice(0, 30)
+  const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
+  return (
+    <div style={{ background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: color.warningInk }}>
+      ⚠️ <b>{filas.length === 1 ? 'Un producto tiene' : `${filas.length} productos tienen`} en Gestión Nube un precio de lista distinto del de la tienda.</b>{' '}
+      {filas.length === 1 ? 'No entra' : 'No entran'} a la lista de abajo a propósito: la etiqueta sale con el precio de la tienda, así que
+      esto se arregla emparejando el precio en uno de los dos lados —y recién después se etiqueta—.
+      <details style={{ marginTop: 4 }}>
+        <summary style={{ cursor: 'pointer' }}>Ver cuáles</summary>
+        {items.map((f) => (
+          <div key={f.pid} style={{ marginTop: 2 }}>
+            • {nombreDe[f.pid] || `Producto ${f.pid}`} — Gestión Nube {pesos(f.gn)} · tienda {pesos(f.tienda)}
+          </div>
+        ))}
+        {filas.length > 30 && <div style={{ marginTop: 2, color: color.mut2 }}>…y {filas.length - 30} más</div>}
+      </details>
     </div>
   )
 }

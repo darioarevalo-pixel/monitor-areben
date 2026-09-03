@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { armarCola, etiquetasDesactualizadas, precioQueQuedo, sinEtiquetar, type EventoDePrecio } from '@/lib/etiquetas/cola'
+import { armarCola, etiquetasDesactualizadas, precioQueQuedo, preciosDesalineados, sinEtiquetar, type EventoDePrecio } from '@/lib/etiquetas/cola'
 
 const T = (iso: string) => iso
 function ev(over: Partial<EventoDePrecio> = {}): EventoDePrecio {
@@ -185,5 +185,44 @@ describe('etiquetasDesactualizadas · la etiqueta dice otro número del que se p
 
   it('los centavos no cuentan: la etiqueta imprime pesos redondos', () => {
     expect(etiquetasDesactualizadas({ '1': sello({ precio: 12290 }) }, { '1': { aCobrar: 12290.4, lista: 20490 } }, { '1': 5 })).toEqual([])
+  })
+})
+
+/**
+ * La comparación contra el espejo de Gestión Nube, pedida por Bruno el 3-sep-2026 después de
+ * cambiar un precio en GN y no ver la prenda en la cola: la cola compara contra Tienda Nube —lo que
+ * el cliente paga— y un precio que todavía no propagó no la despierta.
+ *
+ * 🔴 **Es un aviso, ⛔ no filas para imprimir**: con los dos lados en desacuerdo la etiqueta cuelga el
+ * número de la tienda y el desacuerdo sigue, así que la lista de impresión no lo puede resolver.
+ */
+describe('preciosDesalineados · Gestión Nube contra la tienda', () => {
+  it('los que no coinciden salen, con los dos números', () => {
+    const r = preciosDesalineados({ '1': { gn: 36990, tienda: 45990 } }, { '1': 4 })
+    expect(r).toEqual([{ pid: '1', gn: 36990, tienda: 45990 }])
+  })
+
+  it('los que coinciden no salen — y son el 99 % del catálogo', () => {
+    expect(preciosDesalineados({ '1': { gn: 14990, tienda: 14990 } }, { '1': 17 })).toEqual([])
+  })
+
+  it('los centavos no cuentan, igual que en la etiqueta', () => {
+    expect(preciosDesalineados({ '1': { gn: 14990.4, tienda: 14990 } }, { '1': 17 })).toEqual([])
+  })
+
+  it('sin uno de los dos números no se compara: no está en la tienda, o no cruzó', () => {
+    expect(preciosDesalineados({ '1': { gn: 14990, tienda: null }, '2': { gn: null, tienda: 9990 } }, { '1': 5, '2': 5 })).toEqual([])
+  })
+
+  it('sin stock no se pregunta: no hay prenda ni cartel', () => {
+    expect(preciosDesalineados({ '1': { gn: 36990, tienda: 45990 } }, { '1': 0 })).toEqual([])
+  })
+
+  it('🔑 la diferencia más grande va primero: es la que cuesta plata en el mostrador', () => {
+    const r = preciosDesalineados(
+      { '1': { gn: 6990, tienda: 5990 }, '2': { gn: 3990, tienda: 12490 }, '3': { gn: 5990, tienda: 8990 } },
+      { '1': 2, '2': 2, '3': 2 },
+    )
+    expect(r.map((x) => x.pid)).toEqual(['2', '3', '1'])
   })
 })
