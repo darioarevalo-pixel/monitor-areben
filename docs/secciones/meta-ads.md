@@ -1965,9 +1965,13 @@ elegir una** (nombrándolas) · esta marca no tiene ninguna cuenta con campañas
   regla**, que es donde vivió el defecto las dos veces: `useParte(laCuenta ? … : null)`. Mata el
   mutante que vuelve al defecto original. Sin este archivo el núcleo puede quedar perfecto y la
   pantalla seguir sin pedir nada: los dos lados en verde y el bug en la pregunta del medio.
-- ⛔ **NO se caminó — y acá está la lección de la vuelta anterior**: esto vuelve si no se camina.
-  ▶️ Qué mirar, con «Hoy» puesto: que el **Gasto** de arriba se mueva, que diga «Compras · Meta» en
-  vez de «Pedidos reales», y que «Hoy» y «7 días» den números **distintos**.
+- 🏁 **CAMINADO EN PRODUCCIÓN el 3-sep a las 09:41**, que es lo que faltó la vuelta anterior. Con
+  el eje en **«Todas (3)»** —o sea el caso que estaba roto— y la línea Zattia: al apretar «Hoy»
+  apareció la **banda del día en curso** («Gasto de hoy $ 1.756 · 18% de los $ 9.700 prendidos ·
+  Compras 0 · Carritos 7»), el **Gasto** de arriba pasó de **$ 66.751** (7 días) a **$ 1.756**, y el
+  rótulo cambió a **«Compras · Meta»**. Antes del arreglo, las tres ventanas daban los $ 66.751.
+- 📌 Dato de paso: **Zattia pautea en una sola de las tres cuentas**, así que la autoselección
+  alcanza para el caso real de hoy. Con dos, el cartel pide elegir y las nombra.
 
 ## 🆕🏁 30-ago-2026 (tarde): FRÍA vs REMARKETING — la pregunta que sí tiene una mano del otro lado
 

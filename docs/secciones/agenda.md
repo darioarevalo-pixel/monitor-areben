@@ -893,9 +893,13 @@ Que las reuniones lleven sector es **carga** (cambiarles el destino a «roles» 
   Se editan en `/agenda/eventos`. Falta que Bruno diga **cuáles**. ⚠️ Al renombrar un molde, los
   clones ya sembrados conservan el título viejo y quedan en otra tarjeta hasta que se cierren
   (`actividadDe` agrupa por el prefijo de la OC, no por el `NN)`).
-- ⛔ **NO se caminó la pantalla**: el login es de Bruno. ▶️ Qué mirar — con dos o más órdenes del
-  día: que la ya contestada muestre **✓ y «Entró por …»** en vez de botones, que el contador diga
-  «X de N», y que cada renglón diga de qué sector es.
+- 🏁 **El SECTOR, caminado en producción el 3-sep**: el Hoy de Bruno muestra «Local» en «04) La
+  DESCRIPCIÓN» y en «Preparar los pedidos de Tienda Nube», y «Bruno Arevalo y Camila Budek» en la
+  semanal de pauta. 📌 Y esa misma pantalla es **la evidencia del pedido de permisos**: los dos
+  renglones que le sobran a Bruno dicen «Local» y le llegan por el atajo del admin.
+- ⛔ **La PUERTA no se pudo caminar todavía**: ese día no había ninguna pregunta abierta ni
+  contestada en el Hoy (no entró ninguna OC). ▶️ Qué mirar el día que entren dos o más órdenes: que
+  la ya contestada muestre **✓ y «Entró por …»** en vez de botones, y que el contador diga «X de N».
 
 ### Verificado
 

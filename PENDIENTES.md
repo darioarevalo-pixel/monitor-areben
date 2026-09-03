@@ -27,15 +27,15 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
    las tres ventanas dibujaban la misma foto de 7 días, sin que saliera un fetch. El relato entero
    —y el cartel que mentía diciendo «Meta no contestó»— en `docs/secciones/meta-ads.md`.
    ⚠️ **Es la SEGUNDA vez que lo reporta**: el 30-ago se arregló otra cosa real y quedó sin caminar.
-   ⛔ **Sigue sin caminarse**: el login es de Bruno. ▶️ Con «Hoy» puesto, que el **Gasto** de arriba
-   se mueva y que «Hoy» y «7 días» den números distintos.
+   🏁 **Esta vez SÍ se caminó, en producción**: con «Todas (3)» y Zattia, «Hoy» ahora abre la banda
+   del día en curso y el Gasto pasa de $ 66.751 (7 días) a $ 1.756 (hoy, en vivo).
 
 2. 🏁/▶️ **AGENDA — el SECTOR ya está; los títulos los tenés que elegir vos.**
    > «La agenda - los títulos están medios extraños. Además, en las reuniones no dice qué sector, y
    > tengo 3 sectores que dirijo.»
 
-   🏁 El sector ya se dibuja en cada renglón del Hoy (el dato viajaba y era la única pantalla que no
-   lo mostraba). ⚠️ Una reunión dirigida **por nombre** no tiene sector: eso se cambia cargando.
+   🏁 El sector ya se dibuja en cada renglón del Hoy —**caminado en producción**: dice «Local» y
+   «Bruno Arevalo y Camila Budek»— (el dato viajaba y era la única pantalla que no lo mostraba). ⚠️ Una reunión dirigida **por nombre** no tiene sector: eso se cambia cargando.
    ▶️ **Los títulos son DATA, ⛔ no código** — se editan en `/agenda/eventos`. Falta que Bruno diga
    cuáles. Ver `docs/secciones/agenda.md` § 3-sep.
 
@@ -53,7 +53,8 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
 
    La tarjeta unificada dibujaba los botones **sin mirar el tilde** (el renglón suelto sí lo
    miraba, por eso se veía bien con una sola orden), y abajo **la puerta elegida no se guardaba en
-   ningún lado**. Ahora el renglón contestado muestra ✓ y «Entró por …». ⛔ **Sin caminar.**
+   ningún lado**. Ahora el renglón contestado muestra ✓ y «Entró por …».
+   ⛔ **Sin caminar todavía**: ese día no había ninguna pregunta en el Hoy. Se mira cuando entre una OC.
    El relato, en `docs/secciones/agenda.md` § 3-sep.
 
 5. ▶️ **FOTOS — la sesión tiene que registrar el TALLE DE LA MODELO**, para después cargarlo en la
@@ -73,6 +74,7 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
 
    «Por producto» ahora matchea **nombre · SKU · proveedor**, y «Por variante» suma **SKU y código
    de barras**. Sin migración ni endpoint: los tres campos ya viajaban en el payload del ETL.
+   🏁 **Caminado en producción**: buscar `5000` devuelve el TOP SKYLER, 1 producto.
    ⚠️ Si algún código no aparece, es el campo **«Código»** de Gestión Nube —otro campo, que hoy ⛔ no
    se guarda: en BDI el sync lo descarta— y eso sí es una migración en las dos bases.
 
