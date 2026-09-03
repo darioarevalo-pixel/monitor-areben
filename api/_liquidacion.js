@@ -362,27 +362,35 @@ export default async function handler(req, res) {
     // El stock sale de `inventario` sumando los dos depósitos: una prenda que está sólo en Depósito
     // igual hay que etiquetarla cuando salga al salón, y quién la tiene es otra pregunta.
     if (vistaEtiquetas && String(req.query.cola || '') === '1') {
+      // 🔴 **Las tres van por `leerTodo`: PostgREST corta en 1.000 filas y NO avisa.** Medido en
+      // prod el 3-sep-2026 con las tres sin paginar: el inventario de Zattia son **3.892 filas** y
+      // el mapa de stock salía con **256 productos de 734** ⇒ para las otras 478 la cola leía
+      // «sin stock» y las descartaba en silencio, tanto acá como en la comparación de números del
+      // navegador. Lo destapó Bruno: cambió el precio de MINI BLUSH —17 unidades en el Local— y la
+      // prenda no aparecía. El modo de falla es el caro: siempre de menos, y una cola corta se ve
+      // igual que una cola al día.
       const [ev, im, inv] = await Promise.all([
-        supabase.from('liquidacion_bitacora')
-          .select('pid, producto, sku, cuando, precio_a, precio_lista, liq_nombre, modo')
-          .eq('store', store).order('cuando', { ascending: false }),
-        supabase.from('etiquetas_impresas').select('pid, cuando, modo, precio, precio_lista').eq('store', store),
-        supabase.from('inventario').select('product_id, available_quantity'),
+        leerTodo(supabase, 'liquidacion_bitacora', (q) =>
+          q.select('pid, producto, sku, cuando, precio_a, precio_lista, liq_nombre, modo')
+            // 🔑 El `pid` desempata: sin un orden total, dos filas con el mismo `cuando` pueden
+            // caer las dos en el borde de una página y una se pierde.
+            .eq('store', store).order('cuando', { ascending: false }).order('pid')),
+        leerTodo(supabase, 'etiquetas_impresas', (q) =>
+          q.select('pid, cuando, modo, precio, precio_lista').eq('store', store).order('pid')),
+        leerTodo(supabase, 'inventario', (q) =>
+          q.select('product_id, available_quantity').order('product_id')),
       ]);
-      if (ev.error) throw new Error(ev.error.message);
-      if (im.error) throw new Error(im.error.message);
-      if (inv.error) throw new Error(inv.error.message);
 
       // Uno por producto: el más nuevo. 🔑 **Se cuenta por el ÚLTIMO movimiento y no por evento**
       // —la etiqueta es de la prenda, no del cambio de precio—: tres cambios en una tarde son UNA
       // etiqueta, y guardarlo por evento haría que imprimir una vez dejara dos sin tildar.
       const ultimo = new Map();
-      for (const r of ev.data || []) if (!ultimo.has(r.pid)) ultimo.set(r.pid, r);
+      for (const r of ev) if (!ultimo.has(r.pid)) ultimo.set(r.pid, r);
 
       const impresas = {};
-      for (const r of im.data || []) impresas[r.pid] = r.cuando;
+      for (const r of im) impresas[r.pid] = r.cuando;
       const stock = {};
-      for (const r of inv.data || []) {
+      for (const r of inv) {
         const k = String(r.product_id);
         stock[k] = (stock[k] || 0) + Number(r.available_quantity || 0);
       }
@@ -402,7 +410,7 @@ export default async function handler(req, res) {
       // hoy?» se hace en el navegador, que es donde están los precios de Tienda Nube. El servidor
       // no los tiene y traerlos acá sería una consulta externa por request.
       const sellos = {};
-      for (const r of im.data || []) {
+      for (const r of im) {
         sellos[r.pid] = {
           cuando: r.cuando,
           modo: r.modo,

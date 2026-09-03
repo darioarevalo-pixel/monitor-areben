@@ -56,6 +56,14 @@ una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ag
   mismo error frenaba el **escaneo** (`modoV`, el modo de esa prenda y no el de la pestaña): escanear
   una prenda que volvió a lista contestaba «no está en promoción». La pestaña además contaba **una
   sola de las dos puertas**, así que se quedaba sin número justo cuando todas entraban por la otra.
+- 🔴 **Y la cola leía sólo las primeras 1.000 filas de cada tabla, sin avisar** (3-sep-2026): las
+  tres consultas del bloque `&cola=1` salían sin paginar en un archivo que ya importaba `leerTodo`
+  para las otras nueve. Medido en prod: el inventario de Zattia son **3.892 filas** y el mapa de
+  stock llegaba con **256 productos de 734** ⇒ las otras 478 se leían «sin stock» y se descartaban,
+  acá y en la comparación de números del navegador. Lo destapó Bruno cambiándole el precio a **MINI
+  BLUSH** —17 unidades en el Local— y no verla aparecer. ⚠️ **El mock del test devolvía todas las
+  filas**, así que el corte no existía para el CI: ahora `tests/etiquetas-cola-handler.test.ts`
+  corta en 1.000 como PostgREST y pagina de verdad en `range`.
 - 🔑 **La cola pregunta «¿lo que dice el cartelito es lo que el cliente paga HOY?»**, no «¿hubo una
   campaña?». Arrancó comparando fechas contra la bitácora y Bruno preguntó *«¿y si cambia el precio
   de lista?»*: ahí se vio el agujero, porque el de lista se carga a mano en GN sin dejar rastro. Por

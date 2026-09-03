@@ -13,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * filas de mentira y anota qué se le pidió.
  */
 
+/** Lo que PostgREST devuelve como máximo sin `range`, y sin decir que cortó. */
+const TOPE_POSTGREST = 1000
+
 let filasPorTabla: Record<string, unknown[]> = {}
 const consultas: { tabla: string; pasos: string[] }[] = []
 
@@ -31,9 +34,14 @@ vi.mock('@supabase/supabase-js', () => ({
       const unaFila = () => Promise.resolve({ data: (filasPorTabla[tabla] || [])[0] ?? null, error: null })
       q.single = unaFila
       q.maybeSingle = unaFila
-      q.range = (desde: number) => Promise.resolve({ data: desde === 0 ? filasPorTabla[tabla] || [] : [], error: null })
+      // 🔑 **El mock corta en 1.000 como PostgREST.** Devolver siempre todas las filas es
+      // exactamente lo que hacía verde a una consulta sin paginar: el defecto sólo existe pasadas
+      // las mil, y el mock lo escondía. `range` pagina de verdad; `then` (la consulta sin `range`)
+      // entrega el tope y nada más, sin error, como el servidor.
+      q.range = (desde: number, hasta: number) =>
+        Promise.resolve({ data: (filasPorTabla[tabla] || []).slice(desde, hasta + 1), error: null })
       q.then = (ok: (v: unknown) => unknown) =>
-        Promise.resolve({ data: filasPorTabla[tabla] || [], error: null }).then(ok)
+        Promise.resolve({ data: (filasPorTabla[tabla] || []).slice(0, TOPE_POSTGREST), error: null }).then(ok)
       return q
     },
   }),
@@ -144,6 +152,55 @@ describe('GET ?etiquetas=1&cola=1 — la cola sale de la bitácora, no de una ca
     const sellos = res.body?.sellos as Record<string, { precio: number | null; precioLista: number | null }>
     expect(sellos['7']).toEqual({ cuando: ayer, modo: 'impresa', precio: 12290, precioLista: 20490 })
     expect(sellos['8'].precio).toBeNull()
+  })
+
+  /**
+   * 🔴 El defecto que destapó Bruno el 3-sep-2026: cambió el precio de MINI BLUSH —17 unidades en
+   * el Local— y la prenda no aparecía en la cola. Las tres consultas leían sin paginar, así que
+   * PostgREST devolvía **las primeras 1.000 filas y ninguna señal**: del inventario de Zattia
+   * (3.892 filas) salía un mapa de stock con **256 productos de 734**, y todo lo que quedaba afuera
+   * se leía como «sin stock» y se descartaba.
+   */
+  it('🔴 lee el inventario ENTERO: la prenda de la fila 1001 tenía stock y salía sin stock', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    filasPorTabla['liquidacion_bitacora'] = [
+      { pid: '9999', producto: 'MINI BLUSH', sku: 'RMI-0055', cuando: ayer, precio_a: 14990, precio_lista: 19990, liq_nombre: null, modo: 'poner' },
+    ]
+    filasPorTabla['inventario'] = [
+      ...Array.from({ length: TOPE_POSTGREST }, (_, i) => ({ product_id: i + 1, available_quantity: 1 })),
+      { product_id: 9999, available_quantity: 17 },
+    ]
+    const res = await llamar(pedir())
+    expect((res.body?.stock as Record<string, number>)['9999']).toBe(17)
+    expect((res.body?.pendientes as { pid: string; stock: number }[])).toMatchObject([{ pid: '9999', stock: 17 }])
+    expect(res.body?.sinStock).toEqual([])
+  })
+
+  it('🔴 lee la bitácora ENTERA: el cambio de precio 1001 no desaparece de la cola', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    filasPorTabla['liquidacion_bitacora'] = [
+      ...Array.from({ length: TOPE_POSTGREST }, (_, i) => ({ pid: String(i + 1), producto: 'X', sku: null, cuando: ayer, precio_a: 100, precio_lista: 200, liq_nombre: null, modo: 'poner' })),
+      { pid: '9999', producto: 'MINI BLUSH', sku: null, cuando: anteayer, precio_a: 14990, precio_lista: 19990, liq_nombre: null, modo: 'poner' },
+    ]
+    filasPorTabla['inventario'] = [{ product_id: 9999, available_quantity: 17 }]
+    const res = await llamar(pedir())
+    expect((res.body?.pendientes as { pid: string }[]).map((p) => p.pid)).toContain('9999')
+  })
+
+  it('🔴 lee los sellos ENTEROS: sin el 1001 la prenda vuelve a la cola ya etiquetada', async () => {
+    sesionDe(SOLO_ETIQUETAS)
+    filasPorTabla['liquidacion_bitacora'] = [
+      { pid: '9999', producto: 'MINI BLUSH', sku: null, cuando: anteayer, precio_a: 14990, precio_lista: 19990, liq_nombre: null, modo: 'poner' },
+    ]
+    filasPorTabla['etiquetas_impresas'] = [
+      ...Array.from({ length: TOPE_POSTGREST }, (_, i) => ({ pid: String(i + 1), cuando: ayer, modo: 'impresa', precio: 100, precio_lista: 200 })),
+      { pid: '9999', cuando: ayer, modo: 'impresa', precio: 14990, precio_lista: 19990 },
+    ]
+    filasPorTabla['inventario'] = [{ product_id: 9999, available_quantity: 17 }]
+    const res = await llamar(pedir())
+    expect((res.body?.hechas as { pid: string }[]).map((p) => p.pid)).toEqual(['9999'])
+    expect(res.body?.pendientes).toEqual([])
+    expect((res.body?.sellos as Record<string, unknown>)['9999']).toBeTruthy()
   })
 
   it('la respuesta dice CUÁNDO se leyó: una cola vacía sana se ve igual que una rota', async () => {
