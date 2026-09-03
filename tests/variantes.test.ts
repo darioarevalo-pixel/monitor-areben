@@ -18,9 +18,9 @@ function variante(over: Partial<Variante> & { id: string }): Variante {
 
 describe('filtrarVariantes', () => {
   const lista = [
-    variante({ id: '1', name: 'Remera Boxy', size: 'M Negro', phase: { label: 'declive', cls: 'badge-warning' } }),
-    variante({ id: '2', name: 'Buzo Over', size: 'L Gris', phase: { label: 'crecimiento', cls: 'badge-success' } }),
-    variante({ id: '3', name: 'Pantalón', size: 'M Negro', phase: { label: 'madurez', cls: 'badge-info' } }),
+    variante({ id: '1', name: 'Remera Boxy', size: 'M Negro', sku: 'RB-101-M', barcode: '7791111111111', phase: { label: 'declive', cls: 'badge-warning' } }),
+    variante({ id: '2', name: 'Buzo Over', size: 'L Gris', sku: 'BO-202-L', barcode: '7792222222222', phase: { label: 'crecimiento', cls: 'badge-success' } }),
+    variante({ id: '3', name: 'Pantalón', size: 'M Negro', sku: 'PA-303-M', barcode: '7793333333333', phase: { label: 'madurez', cls: 'badge-info' } }),
   ]
 
   it('busca por NOMBRE', () => {
@@ -28,6 +28,12 @@ describe('filtrarVariantes', () => {
   })
   it('busca también por VARIANTE (size), a diferencia de productos', () => {
     expect(filtrarVariantes(lista, { busqueda: 'negro', estado: '' }).map((v) => v.id)).toEqual(['1', '3'])
+  })
+  it('🔑 busca por SKU de la variante', () => {
+    expect(filtrarVariantes(lista, { busqueda: 'PA-303-M', estado: '' }).map((v) => v.id)).toEqual(['3'])
+  })
+  it('🔑 busca por CÓDIGO DE BARRAS: es la única tabla donde el lector llega a la fila exacta', () => {
+    expect(filtrarVariantes(lista, { busqueda: '7792222222222', estado: '' }).map((v) => v.id)).toEqual(['2'])
   })
   it('filtra por estado', () => {
     expect(filtrarVariantes(lista, { busqueda: '', estado: 'crecimiento' }).map((v) => v.id)).toEqual(['2'])

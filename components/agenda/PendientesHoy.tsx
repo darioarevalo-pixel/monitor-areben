@@ -21,7 +21,7 @@ import { useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { Button, ButtonLink, Card, Markdown, Modal, Notice, StatusPill, color, font, space, weight } from '@/components/ui'
 import {
-  actividadDe, feriadoDe, filasDeHoy, pendientesDe, puertasDeMarca,
+  actividadDe, feriadoDe, filasDeHoy, pendientesDe, puertasDeMarca, rotuloDestinoCorto, rotuloPuerta,
   type FilaHoy, type ItemAgenda, type PendienteHoy,
 } from '@/lib/agenda'
 import { contestarPuerta } from '@/lib/agenda/cliente'
@@ -138,11 +138,16 @@ function GrupoActividad({ g, yo }: { g: Extract<FilaHoy, { tipo: 'grupo' }>; yo:
               puede saltear, y esconderlo cuando no hay ninguna hecha lo escondería justo el día que
               recién empieza.
             */}
+            {/* El sector va en la tarjeta y ⛔ no en cada orden: las diez comparten molde, así que
+                repetirlo diez veces sería la misma palabra diez veces. */}
+            <DeQuienEs item={g.filas[0].p.item} />
+            {/* 🔑 **También las preguntas cuentan «X de N».** Decían «11 órdenes» a secas, así que
+                una tarjeta con diez ya contestadas se leía igual que una recién abierta — y era el
+                único lugar donde el avance podía delatarse, porque abajo los botones tampoco lo
+                decían. Contestar ES el hecho: se tilda con la misma tabla que un paso. */}
             <StatusPill
               tone={g.hechas === g.filas.length ? 'success' : 'neutral'}
-              label={esPregunta
-                ? `${g.filas.length} ${g.filas.length === 1 ? 'orden' : 'órdenes'}`
-                : `${g.hechas} de ${g.filas.length}`}
+              label={`${g.hechas} de ${g.filas.length}`}
             />
           </div>
 
@@ -152,21 +157,44 @@ function GrupoActividad({ g, yo }: { g: Extract<FilaHoy, { tipo: 'grupo' }>; yo:
 
           {esPregunta ? (
             <div style={{ display: 'grid', gap: space[2], marginTop: space[2] }}>
-              {g.filas.map((f) => (
-                <div key={f.p.item.id}>
-                  <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: font.sm, color: color.ink, fontWeight: weight.semibold }}>
-                      {f.hecho}
-                      {f.p.item.preguntaIngreso?.proveedor ? ` · ${f.p.item.preguntaIngreso.proveedor}` : ''}
-                    </span>
-                    {/* 🔑 Acá el link pesa MÁS que en un paso: la puerta se elige mirando qué vino. */}
-                    <VerLaOrden item={f.p.item} />
+              {g.filas.map((f) => {
+                const q = f.p.item.preguntaIngreso
+                // 🔴 **El tilde manda, ⛔ no la puerta guardada.** Las preguntas contestadas antes
+                // del 3-sep-2026 no tienen `puerta` escrita —el campo nació después— y volverían a
+                // ofrecer los tres botones sobre una orden ya sembrada. Contestada es contestada;
+                // qué se eligió se dice **si se sabe**.
+                const contestada = !!f.p.hecho
+                return (
+                  <div key={f.p.item.id}>
+                    <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          fontSize: font.sm,
+                          color: contestada ? color.mut : color.ink,
+                          fontWeight: weight.semibold,
+                        }}
+                      >
+                        {contestada ? '✓ ' : ''}
+                        {f.hecho}
+                        {q?.proveedor ? ` · ${q.proveedor}` : ''}
+                      </span>
+                      {/* 🔑 Acá el link pesa MÁS que en un paso: la puerta se elige mirando qué vino. */}
+                      <VerLaOrden item={f.p.item} />
+                    </div>
+                    {contestada ? (
+                      <div style={{ fontSize: font.sm, color: color.mut2, marginTop: 2 }}>
+                        {q?.puerta
+                          ? `Entró por ${rotuloPuerta(q.puerta)}`
+                          : 'Ya se contestó'}
+                        {q?.contestadaPor ? ` · lo eligió ${q.contestadaPor}` : ''}
+                        {hora(q?.contestadaAt ?? null) ? ` a las ${hora(q?.contestadaAt ?? null)}` : ''}
+                      </div>
+                    ) : (
+                      q && <ElegirPuerta id={f.p.item.id} marca={q.marca} />
+                    )}
                   </div>
-                  {f.p.item.preguntaIngreso && (
-                    <ElegirPuerta id={f.p.item.id} marca={f.p.item.preguntaIngreso.marca} />
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginTop: space[2] }}>
@@ -313,6 +341,21 @@ function VerLaOrden({ item }: { item: ItemAgenda }) {
   )
 }
 
+/**
+ * **De qué sector es el renglón.** El dato ya viajaba —el servidor manda el `destino` armado— y lo
+ * dibujan Rutinas, Cumplimiento y la grilla del mes; la única que no lo dibujaba era ésta, que es
+ * la que se mira todos los días. Sin él, quien dirige varios sectores no puede saber de cuál es la
+ * reunión que tiene delante.
+ *
+ * 🔑 **`{tipo:'todos'}` no dibuja nada** (`rotuloDestinoCorto` devuelve la cadena vacía): es el caso
+ * más común y un rótulo que aparece siempre no distingue nada.
+ */
+function DeQuienEs({ item }: { item: ItemAgenda }) {
+  const rotulo = rotuloDestinoCorto(item.destino)
+  if (!rotulo) return null
+  return <StatusPill tone="neutral" label={rotulo} />
+}
+
 function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
   const marcar = useAgenda((s) => s.marcar)
   const desmarcar = useAgenda((s) => s.desmarcar)
@@ -374,6 +417,7 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
               El feriado se avisa y no se saltea: saltearlo solo sería deducir que el local está
               cerrado, y hay feriados que se trabaja. Quien mira decide.
             */}
+            <DeQuienEs item={p.item} />
             {feriado && <StatusPill tone="warning" label={`feriado · ${feriado}`} />}
             {/*
               De cuándo viene. Un pendiente que aparece un día en que su regla no corre se lee como
@@ -400,7 +444,11 @@ function Renglon({ p, yo }: { p: PendienteHoy; yo: string }) {
 
           {hecho && (
             <div style={{ fontSize: font.sm, color: color.mut2, marginTop: 2 }}>
-              Lo marcó <b>{hecho.usuario}</b>
+              {/* En una pregunta contestada, lo que hace falta saber ⛔ no es que alguien apretó:
+                  es POR QUÉ PUERTA entró, que es lo que decide de quién son los pasos sembrados. */}
+              {p.item.preguntaIngreso?.puerta
+                ? <>Entró por <b>{rotuloPuerta(p.item.preguntaIngreso.puerta)}</b> · lo eligió <b>{hecho.usuario}</b></>
+                : <>Lo marcó <b>{hecho.usuario}</b></>}
               {hora(hecho.hechoAt) ? ` a las ${hora(hecho.hechoAt)}` : ''}
             </div>
           )}

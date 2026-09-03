@@ -54,6 +54,7 @@ import { useZona } from '@/components/meta-ads/zona/useZona'
 import { entero, plata } from '@/lib/meta-ads/formato'
 import { diasDeLaFoto, fusionarVivo, VENTANAS_ZONA, ventanaZona, type Celda, type CeldaViva, type RespuestaZona, type TotalesVivos, type VentanaZona } from '@/lib/meta-ads/rendimiento'
 import { sumarVivas } from '@/lib/meta-ads/parte'
+import { cuentaDelParte, motivoSinVivo, type SinVivo } from '@/lib/meta-ads/cuentas'
 import { contarParaDecidir, repartirHallazgos, silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
@@ -63,7 +64,7 @@ import {
 } from '@/components/ui'
 
 export function ZonaRendimiento() {
-  const { linea, visibles, laCuenta } = useMeta()
+  const { linea, visibles, cuenta, cuentas } = useMeta()
   // 🔑 La ventana es una CLAVE y ⛔ no un número de días, porque «Hoy» y «Hoy y ayer» ⛔ no son
   // ventanas de la foto: son Meta en vivo. Un número solo no puede distinguir la fuente, y la fuente
   // es justamente lo que cambia si el veredicto se puede calcular o no.
@@ -88,7 +89,13 @@ export function ZonaRendimiento() {
   // no se pedía solo era una SUPOSICIÓN sobre el cupo; medido el 26-ago contra prod, la cuenta está
   // en 1-3%. Los candados que hacen segura la decisión —caché, dedup y la hora a la vista— viven en
   // `useParte`, ⛔ no acá.
-  const parte = useParte(laCuenta ? laCuenta.id : null, laLinea || undefined)
+  // 🔴 **La cuenta del parte ⛔ no es `laCuenta` a secas.** El eje arranca en «Todas» y ahí
+  // `laCuenta` es `null`, así que el parte no se pedía nunca entrando por el menú: «Hoy» y «Hoy y
+  // ayer» caían a la foto —que sólo tiene días cerrados— y dibujaban lo mismo que «7 días», sin
+  // que saliera un solo pedido. La regla vive en el núcleo (`cuentaDelParte`), con el mismo
+  // criterio que `laLinea` de arriba: con una sola se elige sola, con varias se pide.
+  const delParte = cuentaDelParte(cuentas, laLinea, cuenta)
+  const parte = useParte(delParte.cuenta ? delParte.cuenta.id : null, laLinea || undefined)
   const lineasDeReglas = useMemo(() => (laLinea ? [laLinea] : []), [laLinea])
   const poda = usePoda(lineasDeReglas)
 
@@ -155,6 +162,7 @@ export function ZonaRendimiento() {
               anclado={anclado}
               onElegir={setAnclado}
               vivas={parte.estado.fase === 'ok' ? parte.estado.dato.vivas : null}
+              sinVivo={motivoSinVivo(parte.estado.fase, delParte.candidatas, parte.estado.fase === 'error' ? parte.estado.motivo : null)}
               lineaViva={laLinea}
               reglas={r}
               poda={poda}
@@ -168,7 +176,10 @@ export function ZonaRendimiento() {
       {/* 🔑 El Parte queda como lo que ahora es: el MISMO día en curso de la banda de arriba, pero
           entero y en texto para pegarlo en una conversación. Comparte `useParte`, así que abrirlo
           ⛔ no pide nada — las cinco llamadas ya se hicieron una vez. */}
-      <ParteDelDia cuenta={laCuenta ? laCuenta.id : null} linea={laLinea || undefined} />
+      {/* La MISMA cuenta que la banda: comparten `useParte`, y dos criterios distintos para «de
+          qué cuenta es el día» dejarían el bloque de abajo pidiendo elegir una cuenta arriba de una
+          banda que ya la resolvió sola. */}
+      <ParteDelDia cuenta={delParte.cuenta ? delParte.cuenta.id : null} linea={laLinea || undefined} />
     </div>
   )
 }
@@ -244,7 +255,29 @@ function BarraVentana({ ventana, setVentana, anclado, volverALaVentana }: {
   )
 }
 
-function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, lineaViva, reglas, poda }: {
+/**
+ * **Por qué no se está viendo el día en curso.**
+ *
+ * 🔴 Hasta el 3-sep-2026 esto decía siempre *«Meta todavía no contestó»*, y en el caso más común
+ * —entrar por el menú, con el eje en «Todas»— **a Meta ni se le había preguntado**: el parte es de
+ * una cuenta sola y no había ninguna elegida. Nombrar mal la causa manda a revisar un token que
+ * está bien. Las cuatro se dicen distinto porque **la mano que las arregla es distinta**.
+ */
+function CausaDelSinVivo({ s }: { s: SinVivo | null }) {
+  if (!s || s.tipo === 'pidiendo') return <>Todavía estamos pidiéndole a Meta el día en curso.</>
+  if (s.tipo === 'error') return <>Meta no contestó el día en curso: {s.motivo}.</>
+  if (s.tipo === 'elegir') {
+    return (
+      <>
+        Esta marca pautea en {s.cuentas.length} cuentas ({s.cuentas.join(' y ')}) y el día en curso
+        es de una sola: <b>elegí una cuenta acá arriba</b> para verlo.
+      </>
+    )
+  }
+  return <>Esta marca no tiene ninguna cuenta publicitaria con campañas asignadas, así que no hay día en curso que pedir.</>
+}
+
+function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVivo, lineaViva, reglas, poda }: {
   d: RespuestaZona
   /** `null` con un día anclado: ahí la ventana la manda la tira, no la barra. */
   ventana: VentanaZona | null
@@ -253,6 +286,8 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
   anclado: string | null
   onElegir: (fecha: string | null) => void
   vivas: { hoy: CeldaViva[]; ayer: CeldaViva[] } | null
+  /** Por qué no hay día en curso. `null` cuando sí lo hay. */
+  sinVivo: SinVivo | null
   lineaViva: LineaPauta
   reglas: ReturnType<typeof useReglas>
   poda: ReturnType<typeof usePoda>
@@ -373,9 +408,9 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, linea
             mirando en su lugar, porque una tabla que dice «hoy» arriba y muestra la semana es peor
             que una que no ofrece «hoy». */}
         {ventana?.vivo && !vivas && (
-          <Notice tone="neutral">
-            Meta todavía no contestó el día en curso, así que abajo está la foto de los {z.ventanaJuicio} días
-            cerrados. No es que hoy no haya gastado.
+          <Notice tone={sinVivo?.tipo === 'elegir' ? 'warning' : 'neutral'}>
+            <CausaDelSinVivo s={sinVivo} />
+            {' '}Abajo está la foto de los {z.ventanaJuicio} días cerrados. No es que hoy no haya gastado.
           </Notice>
         )}
         {/* 🔴 Con la ventana anclada a un día, los NÚMEROS son de ese día pero el VEREDICTO, el

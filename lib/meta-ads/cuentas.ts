@@ -81,6 +81,73 @@ export function resolverCuenta(
 }
 
 /**
+ * **De qué cuenta se pide el parte del día en curso.**
+ *
+ * 🔴 **Existe porque «Hoy» y «Hoy y ayer» no andaban, y la causa era ésta.** El parte —lo único que
+ * tiene el día en curso, porque la foto diaria sólo guarda días cerrados— **es de UNA cuenta
+ * publicitaria**. El eje arranca en `'todas'` y `resolverCuenta` nunca autoselecciona, así que
+ * entrando a la sección por el menú (sin `?cuenta=` en la URL) no había cuenta ⇒ no se pedía el
+ * parte ⇒ las dos ventanas vivas caían a la foto de 7 días. Y como a la foto le piden lo mismo que
+ * «7 días», la pantalla quedaba **idéntica** en las tres y sin salir ni un pedido: eso es *«cambio
+ * la fecha y no cambia nada, tampoco actualiza»*.
+ *
+ * 🔑 **El criterio es el mismo que la zona ya usa para la línea**: «con una sola se elige sola; con
+ * varias, se pide». Elegir por la persona cuando hay dos sería mostrarle medio gasto sin decírselo.
+ *
+ * ⚠️ Las candidatas son las cuentas donde esa línea **efectivamente pautea** (`c.lineas`), ⛔ no las
+ * que ofrece el selector: aquél deja pasar también a las que tienen campañas sin asignar —para que
+ * no desaparezca el único lugar donde se arregla eso— y esa cuenta no tiene por qué tener gasto de
+ * esta línea hoy.
+ *
+ * Devuelve las candidatas además de la elegida para que la pantalla pueda **nombrarlas** cuando hay
+ * más de una: «elegí una arriba» sin decir cuáles es la mitad de una instrucción.
+ */
+export function cuentaDelParte(
+  cuentas: readonly CuentaMeta[],
+  linea: LineaPauta | null,
+  elegida: ElegidaCuenta,
+): { cuenta: CuentaMeta | null; candidatas: CuentaMeta[] } {
+  // Lo elegido a mano gana siempre: es la respuesta a una pregunta que ya se hizo.
+  if (elegida !== 'todas') {
+    return { cuenta: cuentas.find((c) => c.id === elegida) ?? null, candidatas: [] }
+  }
+  // Sin línea no hay parte que pedir: el gasto de dos líneas en una cuenta no es de ninguna.
+  if (!linea) return { cuenta: null, candidatas: [] }
+  const candidatas = cuentas.filter((c) => c.lineas.includes(linea))
+  return { cuenta: candidatas.length === 1 ? candidatas[0] : null, candidatas }
+}
+
+/** Por qué la pantalla ⛔ no está mostrando el día en curso. `null` = lo está mostrando. */
+export type SinVivo =
+  | { tipo: 'pidiendo' }
+  /** Meta contestó mal (token, 502, cupo). Es el único caso que de verdad es «Meta no contestó». */
+  | { tipo: 'error'; motivo: string }
+  /** La línea pautea en varias cuentas y el parte es de una sola: hay que elegir. */
+  | { tipo: 'elegir'; cuentas: string[] }
+  /** La línea no pautea en ninguna cuenta: no hay día en curso que pedir. */
+  | { tipo: 'sin-cuenta' }
+
+/**
+ * **Por qué no hay día en curso**, para que el cartel diga la causa REAL.
+ *
+ * 🔴 El cartel decía siempre *«Meta todavía no contestó el día en curso»*, y en el caso que más
+ * pasaba —entrar por el menú, sin cuenta elegida— **a Meta ni se le había preguntado**. Un cartel
+ * que nombra mal la causa manda a revisar el token durante media hora.
+ */
+export function motivoSinVivo(
+  fase: 'sin-cuenta' | 'cargando' | 'error' | 'ok',
+  candidatas: readonly CuentaMeta[],
+  motivo?: string | null,
+): SinVivo | null {
+  if (fase === 'ok') return null
+  if (fase === 'cargando') return { tipo: 'pidiendo' }
+  if (fase === 'error') return { tipo: 'error', motivo: motivo || 'no se pudo leer el parte' }
+  return candidatas.length > 1
+    ? { tipo: 'elegir', cuentas: candidatas.map((c) => c.nombre) }
+    : { tipo: 'sin-cuenta' }
+}
+
+/**
  * La línea vigente. Mismo criterio que `resolverCuenta`, más el corte de permisos: una línea que
  * este perfil no puede ver no se queda elegida ni viniendo de la URL.
  *

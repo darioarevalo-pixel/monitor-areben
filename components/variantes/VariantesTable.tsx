@@ -131,7 +131,7 @@ export function VariantesTable() {
         {() => (
           <>
             <FilterBar>
-              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar variante…" />
+              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por nombre, talle, SKU o código…" />
               <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 200 }} aria-label="Estado">
                 <option value="">Todos los estados</option>
                 <option value="nuevo">Nuevo</option>

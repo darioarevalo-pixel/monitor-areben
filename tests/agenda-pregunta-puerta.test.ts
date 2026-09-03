@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   CAMPO,
+  conRespuesta,
   DESTINO_PREGUNTA,
   fechaDelHecho,
   preguntaDeItem,
@@ -155,6 +156,39 @@ describe('preguntaDeItem — leer la pregunta de un ítem guardado', () => {
       expect(preguntaDeItem({ [CAMPO]: roto })).toBeNull()
     }
   })
+
+  it('🆕 sin contestar, la puerta es null — y eso ⛔ no es lo mismo que una por defecto', () => {
+    expect(preguntaDeItem(guardado)).toMatchObject({ puerta: null, contestadaPor: null, contestadaAt: null })
+  })
+
+  it('🆕 contestada, devuelve QUÉ se eligió, quién y cuándo', () => {
+    const p = preguntaDeItem(conRespuesta(guardado, 'nacional', 'Lorena Reyes', Date.parse('2026-09-03T12:30:00Z')))
+    expect(p).toMatchObject({
+      puerta: 'nacional',
+      contestadaPor: 'Lorena Reyes',
+      contestadaAt: '2026-09-03T12:30:00.000Z',
+    })
+  })
+
+  it('🔴 una puerta que en ESA marca no existe viaja como null, ⛔ no como un rótulo inventado', () => {
+    // `importacion` sólo existe en BDI desde el 1-sep-2026. Escrita a mano sobre una pregunta de
+    // Zattia, la pantalla tiene que volver a preguntar — ⛔ no afirmar que entró por ahí.
+    const conPuerta = (puerta: string) => ({ ...guardado, [CAMPO]: { ...guardado[CAMPO], puerta } })
+    expect(preguntaDeItem(conPuerta('importacion'))).toMatchObject({ puerta: null })
+    expect(preguntaDeItem(conPuerta('inventada'))).toMatchObject({ puerta: null })
+  })
+
+  it('🔴 el «quién» y el «cuándo» ⛔ no sobreviven sin la puerta: un dato huérfano afirma de más', () => {
+    const huerfano = { ...guardado, [CAMPO]: { ...guardado[CAMPO], contestadaPor: 'Alguien', contestadaAt: '2026-09-03T12:00:00.000Z' } }
+    expect(preguntaDeItem(huerfano)).toMatchObject({ puerta: null, contestadaPor: null, contestadaAt: null })
+  })
+
+  it('🔑 `conRespuesta` ⛔ no pisa lo que ya estaba: con eso se sigue sembrando', () => {
+    const d = conRespuesta(guardado, 'nacional', 'Lorena Reyes')
+    expect(d).toMatchObject({ arrastra: true, [CAMPO]: { oc: 'zattia:412', nombre: 'OC-0412' } })
+    // ⛔ Y no muta el original: el handler lee `fila.datos` para sembrar en el mismo turno.
+    expect(preguntaDeItem(guardado)).toMatchObject({ puerta: null })
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -162,7 +196,14 @@ describe('preguntaDeItem — leer la pregunta de un ítem guardado', () => {
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 
 type Fila = Record<string, unknown>
-type Mundo = { items: Fila[]; insertados: { tabla: string; filas: Fila[] }[]; puedeCargar: boolean; borrados: string[] }
+type Mundo = {
+  items: Fila[]
+  insertados: { tabla: string; filas: Fila[] }[]
+  puedeCargar: boolean
+  borrados: string[]
+  /** Los `update(...)` que salieron, con el id al que iban. */
+  patches: { tabla: string; id: string; patch: Record<string, unknown> }[]
+}
 let mundo: Mundo
 
 const PREGUNTA: Fila = {
@@ -197,9 +238,16 @@ const MOLDE: Fila = {
 
 function fakeSupabase() {
   const desde = (tabla: string) => {
-    const ctx: { tabla: string; insert: Fila[] | null; eqId?: string; borrar?: boolean } = { tabla, insert: null }
+    const ctx: {
+      tabla: string; insert: Fila[] | null; eqId?: string; borrar?: boolean
+      patch?: Record<string, unknown>
+    } = { tabla, insert: null }
     const resolver = async (single = false) => {
       if (ctx.borrar) { mundo.borrados.push(String(ctx.eqId)); return { data: null, error: null } }
+      if (ctx.patch) {
+        mundo.patches.push({ tabla: ctx.tabla, id: String(ctx.eqId), patch: ctx.patch })
+        return { data: null, error: null }
+      }
       if (ctx.insert) { mundo.insertados.push({ tabla: ctx.tabla, filas: ctx.insert }); return { data: null, error: null } }
       if (ctx.tabla === 'agenda_items') {
         // ⚠️ El `.eq('id')` lo resuelve el fake **de verdad**: si lo ignorara, el handler podría
@@ -216,6 +264,7 @@ function fakeSupabase() {
       order: () => api,
       gte: () => api, lt: () => api, in: () => api,
       delete: () => { ctx.borrar = true; return api },
+      update: (patch: Record<string, unknown>) => { ctx.patch = patch; return api },
       insert: (filas: Fila[]) => { ctx.insert = filas; return api },
       upsert: (filas: Fila[]) => { ctx.insert = filas; return api },
       maybeSingle: () => resolver(true),
@@ -262,7 +311,7 @@ const tildes = () => mundo.insertados.filter((e) => e.tabla === 'agenda_hechos')
 
 describe('contestar la pregunta: un click siembra los pasos del ingreso', () => {
   beforeEach(() => {
-    mundo = { items: [PREGUNTA, MOLDE], insertados: [], puedeCargar: true, borrados: [] }
+    mundo = { items: [PREGUNTA, MOLDE], insertados: [], puedeCargar: true, borrados: [], patches: [] }
     vi.stubEnv('SUPABASE_URL', 'https://x.supabase.co')
     vi.stubEnv('SUPABASE_SERVICE_KEY', 'service')
     vi.resetModules()
@@ -292,6 +341,31 @@ describe('contestar la pregunta: un click siembra los pasos del ingreso', () => 
     await contestar()
     expect(mundo.borrados).toEqual([])
     expect(tildes()[0]).toMatchObject({ item_id: 'q1', fecha: '2026-08-26', usuario: 'Lorena Reyes' })
+  })
+
+  it('🆕 🔴 GUARDA qué puerta se contestó, en la pregunta: sin esto la pantalla vuelve a preguntar', async () => {
+    // 3-sep-2026, lo cazó Bruno: *«voy a agenda hoy y no puedo ver la selección que hice»*. La
+    // puerta se escribía en cada clon (`datos.puerta`), que es lo que decide qué pasos corren —
+    // pero la PREGUNTA no la guardaba en ningún lado, así que al recargar volvía a dibujar los tres
+    // botones sin apretar sobre una orden ya sembrada.
+    await contestar()
+    const patch = mundo.patches.find((x) => x.tabla === 'agenda_items' && x.id === 'q1')
+    expect(patch).toBeTruthy()
+    const datos = patch!.patch.datos as { preguntaIngreso: Record<string, unknown> }
+    expect(datos.preguntaIngreso.puerta).toBe('nacional')
+    expect(datos.preguntaIngreso.contestadaPor).toBe('Lorena Reyes')
+    expect(typeof datos.preguntaIngreso.contestadaAt).toBe('string')
+    // ⛔ Y no pisa lo que ya estaba: la OC, el nombre y la fecha son con lo que se siembra.
+    expect(datos.preguntaIngreso.oc).toBe('zattia:412')
+    expect(datos.preguntaIngreso.nombre).toBe('OC-0412')
+  })
+
+  it('🔴 si el guardado de la puerta falla, ⛔ NO se pierden los pasos: se avisa y se contesta 200', async () => {
+    // Mismo criterio que el tilde: los seis pendientes ya están sembrados y volver a apretar
+    // contesta `ya` sin duplicar. Revertir sería borrar trabajo real por no haber podido anotar.
+    const res = await contestar()
+    expect(res.code).toBe(200)
+    expect(res.body?.creados).toBe(1)
   })
 
   it('el tilde va a la fecha del HECHO y ⛔ no a hoy: es la única que corta el arrastre', async () => {

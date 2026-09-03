@@ -838,6 +838,81 @@ el número abre la orden**.
   filtro «sólo lo mío» en Hoy, o dirigir la pregunta de la puerta por **nombre** en vez de por rol —
   con el costo de que deja de seguir a quien esté en Administración, que es por lo que se eligió el rol.
 
+## 🆕🏁 3-sep-2026: LA DECISIÓN QUE SE TOMÓ NO SE VEÍA, y el sector tampoco
+
+Dos cosas que cazó Bruno caminando el Hoy, y **las dos vivían en la pantalla**, no en el motor:
+
+> «en la [pregunta] de cómo entró la orden, voy a agenda hoy, y no puedo ver lo de la selección que
+> hice o la decisión que tomé. O sea no aparece la opción apretada como sí aparece la tilde en las
+> OCs» · «la agenda, los títulos están medios extraños. Además, en las reuniones no dice qué sector,
+> y tengo 3 sectores que dirijo»
+
+### 1. 🔴 La pregunta contestada volvía a ofrecer los tres botones — **sólo con varias órdenes**
+
+El renglón suelto **sí** gateaba por el tilde (`{!hecho && …}`). El **grupo no**: `ElegirPuerta` se
+dibujaba sin mirar `f.p.hecho`. O sea que el defecto aparecía únicamente cuando la Agenda unificaba
+—dos órdenes o más—, que desde el 1-sep es el caso normal: ese día entraron once. Y el `StatusPill`
+del grupo decía «11 órdenes» en vez de «X de N», así que **ni el contador lo delataba**.
+
+### 2. 🔴 Y abajo había un defecto de DATO: la puerta elegida no se guardaba en ningún lado
+
+`ingreso-puerta` sembraba los pasos y tildaba la pregunta, pero **nunca escribía cuál se eligió**.
+La puerta quedaba adentro de cada clon (`datos.puerta`, que es lo que decide qué pasos corren) y la
+pregunta ⛔ no la mira. O sea: aunque la pantalla lo hubiera querido mostrar, **no tenía con qué**.
+
+Ahora el handler hace un `update` de `datos.preguntaIngreso` con `puerta`, `contestadaPor` y
+`contestadaAt` (`conRespuesta`, en `pregunta-ingreso.core.js`, al lado del que lo lee — el campo ya
+se había perdido una vez por estar partido). Sin migración: es `jsonb`.
+
+- ⛔ **Si ese guardado falla, no se deshace nada**: los pasos están sembrados y el tilde puesto. Se
+  avisa, igual que con el tilde. Revertir sería borrar trabajo real por no haber podido anotar.
+- 🔑 **El que manda en la pantalla es el TILDE, ⛔ no la puerta guardada.** Las preguntas contestadas
+  antes de hoy no tienen `puerta` —el campo nació después— y con la puerta como oráculo volverían a
+  ofrecer los botones sobre once órdenes ya sembradas. Contestada es contestada; **qué se eligió se
+  dice si se sabe** («Ya se contestó» cuando no).
+- ⚠️ `preguntaDeItem` valida la puerta contra `puertaValeEnMarca`: una escrita a mano —o de una marca
+  donde no existe— viaja como `null` y la pregunta se dibuja abierta, ⛔ no con un rótulo inventado.
+  Y el «quién/cuándo» ⛔ no sobrevive sin la puerta: un dato huérfano afirma de más.
+
+### 3. El SECTOR ya viajaba y esta pantalla era la única que no lo dibujaba
+
+El sector es la **función** del destino, el servidor lo manda armado en cada ítem y el rótulo estaba
+escrito hace rato (`rotuloDestinoCorto`). Lo dibujaban Rutinas, Cumplimiento y la grilla del mes; el
+Hoy —la que se mira todos los días— no. Es un pill al lado del título, en el renglón suelto y en la
+tarjeta. ⚠️ En el grupo va **una vez**: las diez órdenes comparten molde. Y `{tipo:'todos'}` ⛔ no
+dibuja nada, que es lo que evita repetir «todo el equipo» en cada renglón.
+
+⚠️ **Una reunión dirigida por NOMBRE no tiene sector que mostrar** — ahí el rótulo dice las personas.
+Que las reuniones lleven sector es **carga** (cambiarles el destino a «roles» en `/agenda/rutinas`),
+⛔ no código.
+
+### ▶️ Lo que queda de esta vuelta
+
+- ▶️ **Los títulos «extraños» son DATA, ⛔ no código.** `PendientesHoy` dibuja `titulo` tal cual; ese
+  texto lo escribió una persona al cargar el molde, con la convención `NN)` copiada del manual 06.
+  Se editan en `/agenda/eventos`. Falta que Bruno diga **cuáles**. ⚠️ Al renombrar un molde, los
+  clones ya sembrados conservan el título viejo y quedan en otra tarjeta hasta que se cierren
+  (`actividadDe` agrupa por el prefijo de la OC, no por el `NN)`).
+- ⛔ **NO se caminó la pantalla**: el login es de Bruno. ▶️ Qué mirar — con dos o más órdenes del
+  día: que la ya contestada muestre **✓ y «Entró por …»** en vez de botones, que el contador diga
+  «X de N», y que cada renglón diga de qué sector es.
+
+### Verificado
+
+- `tests/agenda-hoy-pantalla.test.tsx` (nuevo, 10 tests **de render**). 🔑 Hacía falta que fuera de
+  render: el defecto era cableado y `filasDeHoy` / `pendientesDe` estaban bien. **Tres mutantes
+  muertos**: el grupo sin mirar el tilde (el bug original), el pill volviendo a «N órdenes», y el
+  rótulo de sector vacío.
+- ⚠️ **Va con `createRoot` y ⛔ no con `renderToStaticMarkup`**, y no es preferencia: en render de
+  servidor zustand lee `getInitialState()` —el estado **inicial**—, así que el fixture no llega y la
+  pantalla sale vacía **con el arreglo y sin él**. Un oráculo que dice lo mismo en los dos casos no
+  es un oráculo.
+- ⚠️ Y el helper que cuenta botones mira `<button>` del DOM, ⛔ no ocurrencias del rótulo en el HTML:
+  el renglón contestado dice «Entró por **Importación**» y un `match` de texto contaba eso como un
+  botón abierto — o sea que daba por roto justo el arreglo.
+- 5 tests nuevos en `tests/agenda-pregunta-puerta.test.ts` (el núcleo) y 2 en el handler, incluido
+  que contestar dos veces no pisa lo que ya estaba.
+
 ## Lo que ya se rompió acá
 
 - 🔴 **Crear `api/agenda.js` «por prolijidad» frena TODOS los deploys sin error visible**: Hobby

@@ -296,7 +296,7 @@ export function ProductosTable() {
             </HeaderAcciones>
 
             <FilterBar>
-              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar producto…" />
+              <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por nombre, SKU o proveedor…" />
               <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 180 }} aria-label="Estado">
                 <option value="">Todos los estados</option>
                 <option value="nuevo">Nuevo</option>

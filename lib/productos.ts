@@ -8,6 +8,7 @@
 
 import { LIFESPAN_SIN_DATO, type Producto } from './etl/tipos'
 import { lifespanDaysEfectivo } from './etl/helpers'
+import { matcheaTexto } from './tabla'
 
 /** Los 4 modos del selector de vida útil (index.html:396-400). */
 export type ModoVidaUtil = '7d' | '15d' | '30d' | 'firstSale'
@@ -32,7 +33,7 @@ export function lifespanDaysByMode(p: Producto, mode: ModoVidaUtil): number | nu
 }
 
 export type FiltrosProductos = {
-  /** Texto de búsqueda por nombre (lower, ya recortado por el caller o acá). */
+  /** Texto de búsqueda: matchea contra nombre, SKU o proveedor (lower, se recorta acá). */
   busqueda: string
   /** Estado (phase.label) o '' = todos. */
   estado: string
@@ -46,13 +47,18 @@ export type FiltrosProductos = {
 
 /**
  * Aplica los filtros de la toolbar. Port de renderProductos (index.html:2846-2851)
- * + filtrarLista (2666): búsqueda por nombre, estado, proveedor, pills de ingreso y
+ * + filtrarLista (2666): búsqueda, estado, proveedor, pills de ingreso y
  * "ocultar sin stock". El orden y la paginación se aplican después (lib/tabla).
+ *
+ * 🔑 **La búsqueda mira nombre, SKU y proveedor**, y ⛔ no sólo el nombre como el legacy. Los tres
+ * ya se dibujan en la fila (`ProductosTable`, la línea `meta`): un código que está a la vista y no
+ * se puede buscar se lee como que el producto no está. El filtro `proveedor` de al lado sigue
+ * siendo el select **exacto** — son dos gestos distintos y no se pisan.
  */
 export function filtrarProductos(productos: Producto[], f: FiltrosProductos): Producto[] {
   const q = f.busqueda.trim().toLowerCase()
   return productos.filter((p) => {
-    if (q && !(p.name || '').toLowerCase().includes(q)) return false
+    if (!matcheaTexto(q, [p.name, p.sku, p.proveedor])) return false
     if (f.estado && p.phase.label !== f.estado) return false
     if (f.proveedor && p.proveedor !== f.proveedor) return false
     if (f.ingresos.size && (!p.ingresoMes || !f.ingresos.has(p.ingresoMes))) return false

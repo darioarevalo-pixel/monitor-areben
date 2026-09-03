@@ -1062,7 +1062,7 @@ describe('filasDeHoy: unificar las actividades repetidas de varias órdenes', ()
       const p = item({
         id: 'p1',
         titulo: '¿Por qué puerta entró OC-0466 (RHOVE)?',
-        preguntaIngreso: { oc: 'zattia:466', nombre: 'OC-0466', fecha: '2026-09-01', marca: 'zattia', proveedor: 'RHOVE' },
+        preguntaIngreso: { oc: 'zattia:466', nombre: 'OC-0466', fecha: '2026-09-01', marca: 'zattia', proveedor: 'RHOVE', puerta: null, contestadaPor: null, contestadaAt: null },
       })
       expect(actividadDe(p)?.oc).toBe('zattia:466')
     })
@@ -1145,7 +1145,7 @@ describe('filasDeHoy: unificar las actividades repetidas de varias órdenes', ()
       id,
       titulo: `¿Por qué puerta entró ${oc} (RHOVE)?`,
       regla: { tipo: 'unica', fecha: '2026-09-01' },
-      preguntaIngreso: { oc: `zattia:${id}`, nombre: oc, fecha: '2026-09-01', marca: 'zattia', proveedor: 'RHOVE' },
+      preguntaIngreso: { oc: `zattia:${id}`, nombre: oc, fecha: '2026-09-01', marca: 'zattia', proveedor: 'RHOVE', puerta: null, contestadaPor: null, contestadaAt: null },
     })
     const filas = hoy([pregunta('p1', 'OC-0466'), pregunta('p2', 'OC-0468')])
     expect(filas).toHaveLength(1)

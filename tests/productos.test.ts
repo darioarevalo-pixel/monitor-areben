@@ -34,14 +34,34 @@ function prod(over: Partial<Producto>): Producto {
 
 describe('filtrarProductos', () => {
   const lista = [
-    prod({ id: '1', name: 'Remera Boxy', proveedor: 'ACME', ingresoMes: '2026-05', stock: 3, phase: { label: 'declive', cls: 'badge-warning' } }),
-    prod({ id: '2', name: 'Buzo Over', proveedor: 'ZETA', ingresoMes: '2026-06', stock: 0, phase: { label: 'crecimiento', cls: 'badge-success' } }),
-    prod({ id: '3', name: 'Remera Oversize', proveedor: 'ACME', ingresoMes: '2026-05', stock: 10, phase: { label: 'madurez', cls: 'badge-info' } }),
+    prod({ id: '1', name: 'Remera Boxy', sku: 'RB-101', proveedor: 'ACME', ingresoMes: '2026-05', stock: 3, phase: { label: 'declive', cls: 'badge-warning' } }),
+    prod({ id: '2', name: 'Buzo Over', sku: 'BO-202', proveedor: 'ZETA', ingresoMes: '2026-06', stock: 0, phase: { label: 'crecimiento', cls: 'badge-success' } }),
+    prod({ id: '3', name: 'Remera Oversize', sku: 'RO-303', proveedor: 'ACME', ingresoMes: '2026-05', stock: 10, phase: { label: 'madurez', cls: 'badge-info' } }),
   ]
   const base = { busqueda: '', estado: '', proveedor: '', ingresos: new Set<string>(), ocultarSinStock: false }
 
   it('busca por nombre (case-insensitive)', () => {
     expect(filtrarProductos(lista, { ...base, busqueda: 'remera' }).map((p) => p.id)).toEqual(['1', '3'])
+  })
+  it('🔑 busca por SKU, que se dibuja en la fila y antes no se buscaba', () => {
+    expect(filtrarProductos(lista, { ...base, busqueda: 'BO-202' }).map((p) => p.id)).toEqual(['2'])
+  })
+  it('busca por PARTE del sku, y sin importar la caja', () => {
+    expect(filtrarProductos(lista, { ...base, busqueda: 'ro-3' }).map((p) => p.id)).toEqual(['3'])
+  })
+  it('busca por nombre de PROVEEDOR', () => {
+    expect(filtrarProductos(lista, { ...base, busqueda: 'zeta' }).map((p) => p.id)).toEqual(['2'])
+  })
+  it('⛔ un producto sin sku ni proveedor no matchea con cualquier cosa: los campos vacíos se saltean', () => {
+    // El riesgo del cambio es el opuesto al bug: que un `null` cuente como coincidencia y la
+    // búsqueda devuelva la tabla entera. Un producto pelado sólo lo encuentra su nombre.
+    const pelado = [prod({ id: '9', name: 'Pelado' })]
+    expect(filtrarProductos(pelado, { ...base, busqueda: 'acme' })).toEqual([])
+    expect(filtrarProductos(pelado, { ...base, busqueda: 'pelado' }).map((p) => p.id)).toEqual(['9'])
+  })
+  it('el filtro PROVEEDOR sigue siendo exacto, y no se lo come la búsqueda', () => {
+    // Son dos gestos: el select elige un proveedor entero; el texto busca adentro de tres campos.
+    expect(filtrarProductos(lista, { ...base, proveedor: 'ACM' })).toEqual([])
   })
   it('filtra por estado (phase.label)', () => {
     expect(filtrarProductos(lista, { ...base, estado: 'declive' }).map((p) => p.id)).toEqual(['1'])

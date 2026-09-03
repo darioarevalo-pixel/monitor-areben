@@ -30,3 +30,16 @@ export function paginar<T>(lista: T[], page: number): T[] {
 export function totalPaginas(total: number): number {
   return Math.ceil(total / PAGE_SIZE)
 }
+
+/**
+ * ¿Alguno de estos campos contiene el texto buscado?
+ *
+ * 🔑 Vive acá y no en cada tabla porque **la pregunta es la misma en las dos** y ya se contestó
+ * distinto una vez: «Por producto» miraba sólo el nombre aunque dibujara el SKU y el proveedor en
+ * cada fila, así que buscar por un código que estaba **a la vista** no encontraba nada. Un `q`
+ * vacío no filtra, y los campos ausentes se saltean (⛔ no cuentan como "no coincide").
+ */
+export function matcheaTexto(q: string, campos: (string | null | undefined)[]): boolean {
+  if (!q) return true
+  return campos.some((c) => !!c && c.toLowerCase().includes(q))
+}

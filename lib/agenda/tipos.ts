@@ -183,6 +183,15 @@ export type ItemAgenda = {
     fecha: FechaIso
     marca: Marca
     proveedor: string | null
+    /**
+     * 🔑 **Qué se contestó.** `null` = todavía nadie eligió, y es la única forma de saberlo desde la
+     * pantalla: los pasos sembrados llevan la puerta adentro, pero la Agenda no los está mirando.
+     * Sin esto, una pregunta ya resuelta volvía a dibujar los tres botones sin apretar.
+     */
+    puerta: string | null
+    /** Quién la contestó y cuándo (ISO, como el `hechoAt` del tilde). Ambos `null` sin `puerta`. */
+    contestadaPor: string | null
+    contestadaAt: string | null
   } | null
   /**
    * De qué **hecho salió este renglón**, cuando lo copió un evento. `null`/ausente = se cargó a mano.

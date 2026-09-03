@@ -1907,6 +1907,68 @@ como de hoy al lado de las tres de arriba.
   ⛔ no sólo la tabla, que diga «Compras · Meta» en vez de «Pedidos reales», y que «3 días» y un día
   de la tira den números distintos entre sí.
 
+## 🆕🏁 3-sep-2026: «CAMBIO LA FECHA Y NO ANDA» — LA SEGUNDA VUELTA, y la causa era otra
+
+> «En rendimiento cambio la fecha y no anda el filtro de hoy, ni de hoy y ayer. **Por eso no la
+> uso.** Tampoco actualiza ninguna info.»
+
+🔴 **Es el mismo reporte del 30-ago, y eso es el dato**: aquella vuelta arregló dos cosas reales
+—los KPIs vivos y `diasDeLaFoto` en el núcleo, con 13 tests— pero cerró con *«⛔ NO se caminó: el
+login es de Bruno»*. **Nada de todo aquello se ve si el vivo nunca llega**, y no llegaba.
+
+### La causa, una sola, y explica los DOS síntomas
+
+«Hoy» y «Hoy y ayer» son las únicas ventanas que salen de Meta en vivo. El vivo lo trae el **parte**,
+y el parte **es de UNA cuenta publicitaria**. Pero:
+
+- el eje arranca en `cuenta: 'todas'` (`ContextoMeta`), y `resolverCuenta` **nunca autoselecciona** —
+  la *línea* sí lo hace (`lineaDeEntrada`), la cuenta no;
+- con «Todas», `laCuenta` es `null` ⇒ `useParte(null)` ⇒ fase `sin-cuenta` ⇒ **no se pide nada**;
+- sin `vivas`, `enVivo` es `false` ⇒ las tres ventanas dibujan la foto de 7 días…
+- …y como `useZona` tiene la misma clave, **tampoco sale un fetch**.
+
+⇒ Entrando por el menú —o sea siempre, salvo que la URL traiga `?cuenta=`— «Hoy», «Hoy y ayer» y «7
+días» daban **la misma pantalla y ningún pedido**. Eso es, palabra por palabra, «cambio la fecha y
+no cambia nada, tampoco actualiza».
+
+⚠️ Que las tres le pidan lo mismo **a la foto** sigue siendo la regla y ⛔ no un bug: un veredicto no
+se juzga sobre medio día. Lo que faltaba es que el **vivo** llegara.
+
+### El arreglo: la cuenta del parte se resuelve con el MISMO criterio que la línea
+
+`cuentaDelParte(cuentas, linea, elegida)` en `lib/meta-ads/cuentas.ts`: lo elegido a mano gana
+siempre; con «Todas», si la línea pautea en **una sola** cuenta, ésa; con varias, `null` y se pide.
+Es literalmente lo que la zona ya hacía con la línea —*«con una sola visible se elige sola; con
+varias, se pide»*—, y va **al núcleo**, ⛔ no a la pantalla.
+
+- ⚠️ Las candidatas son las cuentas donde la línea **efectivamente pautea** (`c.lineas`), ⛔ no las
+  que ofrece el selector: aquél deja pasar también a las que tienen campañas **sin asignar** —para
+  no esconder el único lugar donde eso se arregla— y ésas no tienen por qué tener gasto de esta
+  línea hoy. Con el criterio del selector, una cuenta a medio asignar rompe la autoselección.
+- 🔑 La misma cuenta la usan la **banda de hoy** y el **Parte** de abajo: dos criterios distintos
+  dejarían el bloque pidiendo elegir una cuenta arriba de una banda que ya la resolvió sola.
+
+### 🔴 Y el cartel MENTÍA, que es la mitad de por qué costó encontrarlo
+
+Decía siempre *«Meta todavía no contestó el día en curso»*. En el caso que más pasaba, **a Meta ni
+se le había preguntado**. Un cartel que nombra mal la causa manda a revisar un token que está bien.
+Ahora son cuatro estados (`motivoSinVivo`), y se dicen distinto **porque la mano que los arregla es
+distinta**: pidiendo · Meta no contestó (con el motivo) · esta marca pautea en N cuentas y **hay que
+elegir una** (nombrándolas) · esta marca no tiene ninguna cuenta con campañas.
+
+### Verificado
+
+- `tests/meta-cuenta-parte.test.ts` (12, núcleo) — **4 mutantes muertos**: elegir la primera de
+  varias, tomar las candidatas del selector en vez de las que pautean, que lo elegido a mano deje de
+  ganar, y el cartel volviendo a decir «no contestó» mientras todavía se está pidiendo.
+- 🔴 `tests/meta-zona-cuenta-cable.test.tsx` (4, **de render**) — fija **la única línea que usa la
+  regla**, que es donde vivió el defecto las dos veces: `useParte(laCuenta ? … : null)`. Mata el
+  mutante que vuelve al defecto original. Sin este archivo el núcleo puede quedar perfecto y la
+  pantalla seguir sin pedir nada: los dos lados en verde y el bug en la pregunta del medio.
+- ⛔ **NO se caminó — y acá está la lección de la vuelta anterior**: esto vuelve si no se camina.
+  ▶️ Qué mirar, con «Hoy» puesto: que el **Gasto** de arriba se mueva, que diga «Compras · Meta» en
+  vez de «Pedidos reales», y que «Hoy» y «7 días» den números **distintos**.
+
 ## 🆕🏁 30-ago-2026 (tarde): FRÍA vs REMARKETING — la pregunta que sí tiene una mano del otro lado
 
 Lo pidió Bruno, y nació de una objeción suya al Embudo de esta misma mañana: *«contesta qué etapa

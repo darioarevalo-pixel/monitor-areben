@@ -13,6 +13,71 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 LOS SIETE DE BRUNO — 3-sep-2026 (dictado, sin analizar todavía)
+
+Dicho por él, textual, en una sola vuelta. ⛔ Nada de acá está verificado aún: se anota primero,
+se mide después. Cada punto se borra de esta lista cuando esté hecho y **caminado por Bruno**.
+
+1. 🏁 **RENDIMIENTO — hecho el 3-sep. Era UNA causa y explicaba los dos síntomas.**
+   > «En rendimiento cambio la fecha y no anda el filtro de hoy, ni de hoy y ayer. Por eso no la
+   > uso. Tampoco actualiza ninguna info.»
+
+   El día en curso lo trae el **parte**, que es de **una cuenta publicitaria sola**, y el eje
+   arranca en «Todas» sin autoseleccionar ⇒ entrando por el menú **el parte no se pedía nunca** y
+   las tres ventanas dibujaban la misma foto de 7 días, sin que saliera un fetch. El relato entero
+   —y el cartel que mentía diciendo «Meta no contestó»— en `docs/secciones/meta-ads.md`.
+   ⚠️ **Es la SEGUNDA vez que lo reporta**: el 30-ago se arregló otra cosa real y quedó sin caminar.
+   ⛔ **Sigue sin caminarse**: el login es de Bruno. ▶️ Con «Hoy» puesto, que el **Gasto** de arriba
+   se mueva y que «Hoy» y «7 días» den números distintos.
+
+2. 🏁/▶️ **AGENDA — el SECTOR ya está; los títulos los tenés que elegir vos.**
+   > «La agenda - los títulos están medios extraños. Además, en las reuniones no dice qué sector, y
+   > tengo 3 sectores que dirijo.»
+
+   🏁 El sector ya se dibuja en cada renglón del Hoy (el dato viajaba y era la única pantalla que no
+   lo mostraba). ⚠️ Una reunión dirigida **por nombre** no tiene sector: eso se cambia cargando.
+   ▶️ **Los títulos son DATA, ⛔ no código** — se editan en `/agenda/eventos`. Falta que Bruno diga
+   cuáles. Ver `docs/secciones/agenda.md` § 3-sep.
+
+3. ▶️ 🔴 **PERMISOS — Bruno ve cosas del LOCAL y no debería. Sacárselas a él y a Darío.**
+   > «¿Puede ser que yo tenga permisos del local? Porque veo lo de descripciones, y preparar
+   > pedidos. El usuario de Bruno. Si es así, córramelos. Y también a Darío.»
+
+   ⚠️ Bruno es **admin**: hay que ver si lo que ve viene del rol `local` asignado de más o del
+   atajo del admin (que recibe todo lo dirigido por rol — ver § AGENDA del 1-sep).
+
+4. 🏁 **AGENDA — hecho el 3-sep. Eran dos defectos apilados, y uno era de DATO.**
+   > «En la [pregunta] de cómo entró la orden, voy a agenda hoy, y no puedo ver lo de la selección
+   > que hice o la decisión que tomé. O sea no aparece la opción apretada como sí aparece la tilde
+   > en las OCs.»
+
+   La tarjeta unificada dibujaba los botones **sin mirar el tilde** (el renglón suelto sí lo
+   miraba, por eso se veía bien con una sola orden), y abajo **la puerta elegida no se guardaba en
+   ningún lado**. Ahora el renglón contestado muestra ✓ y «Entró por …». ⛔ **Sin caminar.**
+   El relato, en `docs/secciones/agenda.md` § 3-sep.
+
+5. ▶️ **FOTOS — la sesión tiene que registrar el TALLE DE LA MODELO**, para después cargarlo en la
+   descripción del producto.
+   > «Dinámica sesión de fotos con talle de la modelo - para luego cargar el talle que usa la
+   > modelo en la descripción del producto.»
+
+6. ▶️ **MODEL MANAGEMENT — sección nueva en el monitor.**
+   > «Sección en monitor de Model Management - fichas - Booker - Portafolio con mejores fotos de la
+   > modelo con nosotros. Principalmente para análisis. También que se pueda agregar ideas,
+   > modelos, como si fuese una base de datos.»
+
+7. 🏁 **ANÁLISIS — hecho el 3-sep: el buscador miraba SÓLO el nombre.**
+   > «Sumar en análisis, también poder buscar por código de proveedor las ventas de producto.»
+   > Aclarado con una captura: *«sería buscar 5000 y que aparezca ese top skyler»* — o sea el
+   > **SKU**, que la fila ya dibujaba (`5000 · Contamina`) y no se podía buscar.
+
+   «Por producto» ahora matchea **nombre · SKU · proveedor**, y «Por variante» suma **SKU y código
+   de barras**. Sin migración ni endpoint: los tres campos ya viajaban en el payload del ETL.
+   ⚠️ Si algún código no aparece, es el campo **«Código»** de Gestión Nube —otro campo, que hoy ⛔ no
+   se guarda: en BDI el sync lo descarta— y eso sí es una migración en las dos bases.
+
+---
+
 ## 🆕 AGENDA — el primer día del webhook en vivo — 1-sep-2026 (pedido de Bruno)
 
 > «la selección de opciones tiene que ser según marca: Zattia es producción propia o compra

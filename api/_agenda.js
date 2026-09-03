@@ -48,7 +48,7 @@ import { CLAVES_PLANTILLA, clavesDeEje, ejeValeEnMarca, esClavePlantilla, hechoY
 // El techo. Va acá y no en la pantalla por lo mismo que el destino: un pendiente que se
 // filtra sólo al dibujar igual enciende el badge y sigue viajando en el JSON.
 import { esDeArriba, veLoDeArriba } from '../lib/agenda/jerarquia.core.js';
-import { CAMPO as CAMPO_PREGUNTA, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
+import { CAMPO as CAMPO_PREGUNTA, conRespuesta, preguntaDeItem } from '../lib/agenda/pregunta-ingreso.core.js';
 
 /**
  * Siempre la base de BDI, tenga la sesión la marca que tenga. No es un descuido: acá no hay marca.
@@ -1070,11 +1070,31 @@ export default async function handler(req, res) {
         [{ item_id: id, fecha: fechaTilde, usuario: yo, nota: null }],
         { onConflict: 'item_id,fecha', ignoreDuplicates: true },
       );
+
+      /*
+        🔑 **Se guarda QUÉ SE CONTESTÓ, y va acá y no en el clon.** La puerta ya se escribía en cada
+        paso sembrado (`datos.puerta`), pero eso vive en los seis renglones nuevos y la pregunta ⛔ no
+        lo mira: al recargar volvía a dibujar los tres botones sin apretar. Con esto el renglón puede
+        decir «entró por Compra nacional», que es la mitad de para qué se pregunta.
+
+        ⛔ **Y si esto falla, tampoco se deshace nada**: los pasos están sembrados y el tilde puesto.
+        Es el mismo criterio que el tilde de arriba — se avisa, no se revierte.
+      */
+      const { error: eGuardar } = await supabase.from('agenda_items')
+        .update({ datos: conRespuesta(fila.datos, b.puerta, yo) })
+        .eq('id', id);
+
       return res.status(200).json({
         ok: true,
         creados: r.creados,
         ya: r.ya,
-        ...(eTilde ? { aviso: 'Se sembraron los pasos, pero la pregunta quedó sin tildar.' } : {}),
+        ...(eTilde || eGuardar
+          ? {
+            aviso: eTilde
+              ? 'Se sembraron los pasos, pero la pregunta quedó sin tildar.'
+              : 'Se sembraron los pasos, pero no quedó anotado por qué puerta.',
+          }
+          : {}),
       });
     }
 
