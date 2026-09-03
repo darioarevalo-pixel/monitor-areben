@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
+import type { QuienPaga } from './NuevaPromesa'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
@@ -265,9 +266,43 @@ function Chip({ children, tone = 'neutro' }: { children: React.ReactNode; tone?:
   )
 }
 
+/**
+ * Quién está del otro lado del chat, para la pestaña "Pagos".
+ *
+ * 🔑 **Los tres casos son cobrables, y hasta el 3-sep-2026 sólo uno lo era.** Un mayorista nuevo
+ * compra por WhatsApp y se carga a Gestión Nube después, cuando se arma el pedido — pero el cobro
+ * se arregla en esa misma charla. Que el panel no tuviera nada que ofrecerle a un número
+ * desconocido era perder justo el momento en que la cobranza se decide (lo levantó Darío usándolo).
+ *
+ * ⚠️ **Cuál teléfono viaja no es un detalle**: es la llave con la que después se reengancha la
+ * promesa. Cuando la ficha se resolvió POR ID (`via: 'id'` — se saltó acá desde una fila, o se
+ * eligió entre dos candidatos) el número del chat abierto puede ser el de otra persona, así que en
+ * ese caso manda el teléfono de la ficha. Si no, manda el del chat, que es con el que se anotó.
+ */
+export function quienPaga(estado: Estado, telNorm: string): QuienPaga | null {
+  if (estado.t === 'ficha') {
+    const telFicha = normalizeArgPhone(estado.ficha.cliente.phone || '') || null
+    return {
+      tipo: 'erp',
+      id: estado.ficha.cliente.id,
+      nombre: estado.ficha.cliente.name,
+      telefono: estado.ficha.via === 'id' ? telFicha : telNorm || telFicha,
+    }
+  }
+  // Un prospecto ya cargado que compra es exactamente el mismo caso: se sabe el nombre y el
+  // número, no existe en Gestión Nube todavía.
+  if (estado.t === 'lead') {
+    return { tipo: 'sin-cargar', nombre: estado.lead.nombre, telefono: normalizeArgPhone(estado.lead.telefono) || telNorm }
+  }
+  if (estado.t === 'desconocido' && telNorm) {
+    return { tipo: 'sin-cargar', nombre: '', telefono: telNorm }
+  }
+  return null
+}
+
 // ── El panel ─────────────────────────────────────────────────────────────────
 
-type Estado =
+export type Estado =
   | { t: 'cargando' }
   | { t: 'error'; motivo: string }
   | { t: 'ficha'; ficha: FichaPanel; crudo: RespuestaPanel }
@@ -621,19 +656,26 @@ function PanelInterno({
   }
 
   /**
-   * Saltar de una fila de "Pagos" a la ficha de esa persona.
+   * Saltar de una fila de "Pagos" a esa persona.
    *
-   * ⚠️ **Muestra la ficha; no abre el chat.** Un compromiso guarda el id del cliente y el nombre,
-   * no el teléfono, así que desde acá no hay número que mandarle a la extensión. Para escribirle,
-   * el camino es el buscador de "Hoy", que sí trae el teléfono.
+   * Con teléfono se abre el chat, que es lo que se quiere para reclamar; sin teléfono —las
+   * promesas viejas, anotadas antes de que el compromiso lo guardara— sólo queda mostrar la ficha.
    *
    * Que quede la ficha de alguien distinto al chat abierto no se desincroniza sola: el aviso de
-   * "cambió el chat" limpia `pedido` cuando el número nuevo no es el que se había pedido (y con
-   * `tel: ''` nunca lo es), así que el próximo chat que se abra manda.
+   * "cambió el chat" limpia `pedido` cuando el número nuevo no es el que se había pedido, así que
+   * el próximo chat que se abra manda.
    */
-  const verFicha = (id: number) => {
-    setPedido({ id, tel: '' })
-    setSolapa('cliente')
+  const irAlCliente = (c: { cliente_id: string | null; cliente_telefono: string | null }) => {
+    const id = Number(c.cliente_id)
+    const idOk = Number.isFinite(id) && id > 0 ? id : 0
+    if (c.cliente_telefono) {
+      abrirChat(idOk, c.cliente_telefono)
+      return
+    }
+    if (idOk) {
+      setPedido({ id: idOk, tel: '' })
+      setSolapa('cliente')
+    }
   }
 
   const solapas = (
@@ -692,9 +734,9 @@ function PanelInterno({
         {solapas}
         <Aislado nombre="Pagos">
           <Pagos
-            cliente={estado.t === 'ficha' ? { id: estado.ficha.cliente.id, name: estado.ficha.cliente.name } : null}
+            cliente={quienPaga(estado, telNorm)}
             buscandoCliente={estado.t === 'cargando' && !!(telNorm || pedido)}
-            onVerCliente={verFicha}
+            onIrAlCliente={irAlCliente}
           />
         </Aislado>
       </Envoltorio>
@@ -789,6 +831,7 @@ function PanelInterno({
         {solapas}
         <NumeroNuevo
           tel={telNorm}
+          onCobranza={() => setSolapa('pagos')}
           onVinculado={async (cliente) => {
             // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
             // se rearma cada 6 h, así que buscar por teléfono todavía no lo encontraría.
@@ -1484,11 +1527,14 @@ function NumeroNuevo({
   tel,
   onVinculado,
   onGuardado,
+  onCobranza,
   onError,
 }: {
   tel: string
   onVinculado: (cliente: FilaCliente) => void
   onGuardado: (lead: Lead) => void
+  /** Ya compró y hay que cobrarle, aunque todavía no esté cargado en Gestión Nube. */
+  onCobranza: () => void
   onError: (t: string) => void
 }) {
   const [camino, setCamino] = useState<'elegir' | 'cliente' | 'lead'>('elegir')
@@ -1505,8 +1551,20 @@ function NumeroNuevo({
       <Button variant="outline" fullWidth style={{ marginBottom: 8, justifyContent: 'flex-start' }} onClick={() => setCamino('cliente')}>
         Ya es cliente mío, cambió de número
       </Button>
-      <Button variant="outline" fullWidth style={{ justifyContent: 'flex-start' }} onClick={() => setCamino('lead')}>
+      <Button variant="outline" fullWidth style={{ marginBottom: 8, justifyContent: 'flex-start' }} onClick={() => setCamino('lead')}>
         Es alguien nuevo, guardarlo como lead
+      </Button>
+      {/*
+        🔑 **El tercer camino, que faltaba** (Darío, 3-sep-2026). Un mayorista nuevo compra por
+        WhatsApp y recién después se carga en Gestión Nube, cuando se arma el pedido — pero el cobro
+        se arregla en la charla. Sin esto, el único momento en que se puede pedir que le transfiera
+        al contador es justo el momento en que el panel no tenía nada para ofrecer.
+
+        No crea nada acá: lleva a "Pagos", que ya sabe anotar una promesa con el nombre a mano y el
+        teléfono de este chat, y engancharla sola cuando el cliente por fin exista.
+      */}
+      <Button variant="outline" fullWidth style={{ justifyContent: 'flex-start' }} onClick={onCobranza}>
+        Ya compró y le tengo que cobrar
       </Button>
     </div>
   )

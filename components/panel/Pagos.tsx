@@ -44,9 +44,9 @@ import { Button } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { useAcreedores } from '@/components/acreedores/useAcreedores'
 import { useCompromisos } from '@/components/acreedores/useCompromisos'
-import { NuevaPromesa } from './NuevaPromesa'
-import { cambiarEstado, confirmarCompromiso } from '@/lib/compromisos/cliente'
-import { colaDeCobranza, diasPara, type Compromiso } from '@/lib/compromisos/core'
+import { NuevaPromesa, type QuienPaga } from './NuevaPromesa'
+import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
+import { colaDeCobranza, diasPara, sinVincular, type Compromiso } from '@/lib/compromisos/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
 
 const plata = (n: number) =>
@@ -166,7 +166,7 @@ function Confirmar({ c, onListo, onCancelar }: {
   )
 }
 
-function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado, onVerCliente }: {
+function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado, onIrAlCliente }: {
   c: Compromiso
   hoy: string
   puede: { prometer: boolean; confirmar: boolean }
@@ -174,11 +174,12 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
   onConfirmarAbrir: (id: string | null) => void
   onConfirmar: (c: Compromiso, monto: number, fecha: string) => Promise<void>
   onEstado: (c: Compromiso, estado: 'prometido' | 'transferido' | 'cancelado') => void
-  onVerCliente: ((id: number) => void) | null
+  onIrAlCliente: ((c: Compromiso) => void) | null
 }) {
   const fecha = cuando(c.fecha_prometida, hoy)
   const idCliente = Number(c.cliente_id)
-  const puedeVer = onVerCliente && Number.isFinite(idCliente) && idCliente > 0
+  // Con teléfono se puede abrir el chat; con id, la ficha. Sin ninguno de los dos, es texto.
+  const puedeIr = !!onIrAlCliente && (!!c.cliente_telefono || (Number.isFinite(idCliente) && idCliente > 0))
 
   return (
     <div style={{ borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${space[3]}px` }}>
@@ -187,14 +188,20 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
           {plata(Number(c.monto))}
         </span>
         <span style={{ fontSize: font.sm, color: color.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {puedeVer ? (
-            <button type="button" onClick={() => onVerCliente(idCliente)} title="Ver su ficha"
+          {puedeIr ? (
+            <button type="button" onClick={() => onIrAlCliente(c)}
+              title={c.cliente_telefono ? 'Abrir su chat' : 'Ver su ficha'}
               style={{ height: 'auto', padding: 0, background: 'none', border: 0, font: 'inherit', color: color.brand, cursor: 'pointer', textDecoration: 'underline' }}>
               {c.cliente_nombre}
             </button>
           ) : c.cliente_nombre}
         </span>
       </div>
+      {/* Que todavía no esté en el ERP se dice: es lo que explica por qué esa promesa no cruza con
+          ninguna deuda, y es un pendiente de carga, no un error. */}
+      {!c.cliente_id && (
+        <div style={{ fontSize: font.xs, color: color.warningInk }}>todavía no está cargado en el sistema</div>
+      )}
       <div style={{ fontSize: font.xs, color: fecha.tarde ? color.dangerInk : color.mut2, marginTop: 2 }}>
         para {c.acreedor_nombre}
         {c.cuenta_alias ? ` · ${c.cuenta_alias}` : ''} · {fecha.txt}
@@ -223,16 +230,19 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
   )
 }
 
-export function Pagos({ cliente, buscandoCliente, onVerCliente }: {
-  /** El cliente del chat abierto, si la ficha ya resolvió quién es. */
-  cliente: { id: number; name: string } | null
+export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
+  /**
+   * Quién está del otro lado del chat: el cliente de Gestión Nube, o alguien que compró y todavía
+   * no se cargó (ver `QuienPaga`). `null` sólo cuando no hay ningún chat abierto.
+   */
+  cliente: QuienPaga | null
   /**
    * Hay un chat abierto pero la ficha todavía está cargando. Sin esto la pestaña diría "abrí el
    * chat de un cliente" con el chat abierto — un cartel que manda a hacer lo que ya está hecho.
    */
   buscandoCliente?: boolean
-  /** Saltar de una fila a la ficha de esa persona. `null` cuando desde acá no se puede. */
-  onVerCliente: ((id: number) => void) | null
+  /** Saltar de una fila a esa persona: su chat si hay teléfono, su ficha si no. */
+  onIrAlCliente: ((c: Compromiso) => void) | null
 }) {
   const deudas = useAcreedores()
   const promesas = useCompromisos()
@@ -244,6 +254,11 @@ export function Pagos({ cliente, buscandoCliente, onVerCliente }: {
 
   const cola = useMemo(() => colaDeCobranza(promesas.compromisos), [promesas.compromisos])
   const puede = promesas.puede
+  // Las promesas de ESTE número que se anotaron antes de que el cliente existiera en Gestión Nube.
+  const porVincular = useMemo(
+    () => (puede.prometer && cliente?.tipo === 'erp' ? sinVincular(promesas.compromisos, cliente.telefono) : []),
+    [promesas.compromisos, cliente, puede.prometer],
+  )
 
   async function correr(fn: () => Promise<string>) {
     setError(null)
@@ -300,7 +315,7 @@ export function Pagos({ cliente, buscandoCliente, onVerCliente }: {
                   : `Listo: ${plata(monto)} registrados en el dashboard.`
               })
             }}
-            onVerCliente={onVerCliente}
+            onIrAlCliente={onIrAlCliente}
           />
         ))}
       </>
@@ -318,6 +333,36 @@ export function Pagos({ cliente, buscandoCliente, onVerCliente }: {
           No se pudo leer a quién le debemos, así que no se puede anotar una promesa nueva. La lista
           de abajo anda igual.
         </div>
+      )}
+
+      {/*
+        🔑 **El reenganche, en el único momento en que el dato existe.**
+        Se anotó la cobranza de alguien que todavía no estaba en Gestión Nube, y ahora el panel
+        abrió su ficha de verdad: es acá donde se sabe que esas dos personas son la misma. Si no se
+        ofrece en este momento, la promesa queda para siempre con un nombre escrito a mano que no
+        cruza con ninguna deuda — y nadie va a ir a buscarla.
+      */}
+      {porVincular.length > 0 && cliente?.tipo === 'erp' && (
+        <Bloque titulo="Se anotó antes de que estuviera cargado">
+          <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8 }}>
+            Con este número hay {porVincular.length === 1 ? 'una promesa anotada' : `${porVincular.length} promesas anotadas`}{' '}
+            a nombre de <b style={{ color: color.ink }}>{porVincular.map((c) => c.cliente_nombre).join(', ')}</b>,
+            de cuando todavía no estaba en el sistema. ¿Es {cliente.nombre || `#${cliente.id}`}?
+          </div>
+          <Button
+            size="sm"
+            onClick={() => correr(async () => {
+              for (const c of porVincular) {
+                await vincularCompromiso(c.id, { id: String(cliente.id), nombre: cliente.nombre })
+              }
+              return porVincular.length === 1
+                ? `Listo: la promesa quedó a nombre de ${cliente.nombre}.`
+                : `Listo: las ${porVincular.length} promesas quedaron a nombre de ${cliente.nombre}.`
+            })}
+          >
+            Sí, es {cliente.nombre || 'este cliente'}
+          </Button>
+        </Bloque>
       )}
 
       {/* Anotar. Arriba de todo porque es lo que se hace CON el cliente adelante. */}

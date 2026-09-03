@@ -23,6 +23,8 @@ export type NuevoCompromiso = {
   cliente_id?: string | null
   cliente_store?: string
   cliente_nombre: string
+  /** El teléfono del chat, ya normalizado. Va cuando el cliente todavía no existe en Gestión Nube. */
+  cliente_telefono?: string | null
   titular_real?: string | null
   monto: number
   fecha_prometida?: string | null
@@ -53,6 +55,26 @@ export async function leerCompromisos(): Promise<{ compromisos: Compromiso[]; pu
 
 export async function crearCompromiso(compromiso: NuevoCompromiso): Promise<Compromiso> {
   const d = await pedir({ action: 'crear', compromiso })
+  return d.compromiso as Compromiso
+}
+
+/**
+ * El cliente por fin existe en Gestión Nube: colgarle la promesa que se había anotado a mano.
+ *
+ * ⛔ Sólo sirve para las que todavía no se confirmaron. Una confirmada ya le mandó el pagador al
+ * dashboard, y vincularla acá dejaría al pago del ledger apuntando a otro lado.
+ */
+export async function vincularCompromiso(
+  id: string,
+  cliente: { id: string; nombre: string; store?: string },
+): Promise<Compromiso> {
+  const d = await pedir({
+    action: 'vincular',
+    id,
+    cliente_id: cliente.id,
+    cliente_nombre: cliente.nombre,
+    cliente_store: cliente.store || 'bdi',
+  })
   return d.compromiso as Compromiso
 }
 

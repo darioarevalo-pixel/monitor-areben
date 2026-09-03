@@ -4,6 +4,7 @@
 //   POST { recurso:'compromisos', action:'crear', compromiso }
 //   POST { recurso:'compromisos', action:'estado', id, estado }
 //   POST { recurso:'compromisos', action:'confirmar', id, monto_real, fecha }
+//   POST { recurso:'compromisos', action:'vincular', id, cliente_id, cliente_nombre, cliente_store }
 //
 // Un compromiso es "este cliente le va a transferir a este acreedor". Se anota mientras la plata
 // TODAVÍA NO se movió, que es justo el rato que hoy no queda registrado en ningún lado.
@@ -56,7 +57,7 @@ function base() {
 
 const CAMPOS =
   'id, acreedor_id, acreedor_nombre, cuenta_alias, cuenta_cbu, cuenta_banco, cuenta_titular, ' +
-  'cliente_id, cliente_store, cliente_nombre, titular_real, monto, monto_confirmado, estado, ' +
+  'cliente_id, cliente_store, cliente_nombre, cliente_telefono, titular_real, monto, monto_confirmado, estado, ' +
   'fecha_prometida, notas, operacion_id, pagos_dashboard, viene_de, creado_en, creado_por, ' +
   'confirmado_en, confirmado_por';
 
@@ -133,6 +134,10 @@ export default async function handler(req, res) {
         cliente_id: texto(c.cliente_id, 60),
         cliente_store: c.cliente_store === 'zattia' ? 'zattia' : 'bdi',
         cliente_nombre: texto(c.cliente_nombre, 160),
+        // 🔑 El teléfono del chat, para las promesas que se anotan ANTES de que el cliente exista
+        // en Gestión Nube. Es con lo que se reengancha después (acción `vincular`). Llega ya
+        // normalizado del panel: dos formas del mismo número no se comparan iguales.
+        cliente_telefono: texto(c.cliente_telefono, 40),
         titular_real: texto(c.titular_real, 160),
         monto,
         fecha_prometida: c.fecha_prometida || null,
@@ -173,6 +178,51 @@ export default async function handler(req, res) {
     const { data, error } = await base()
       .from('compromisos_pago')
       .update({ estado, actualizado_en: new Date().toISOString(), actualizado_por: quien })
+      .eq('id', body.id)
+      .select(CAMPOS)
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true, compromiso: data });
+  }
+
+  // ── Vincular: el cliente por fin existe en Gestión Nube ───────────────────
+  //
+  // La promesa se anotó cuando el mayorista todavía no estaba cargado: quedó con el nombre escrito
+  // a mano y el teléfono del chat, sin `cliente_id`. Cuando aparece en GN, esto le pone el id.
+  //
+  // ⛔ **No se vincula una promesa ya confirmada**, y no es una precaución de más: al confirmar se
+  // le manda al dashboard el `pagador_cliente_id`, así que el pago del ledger quedaría apuntando a
+  // "sin cliente" mientras acá figura vinculado. Sería una divergencia entre dos sistemas creada
+  // por un botón. Si hay que corregir eso, se corrige el pago en el dashboard.
+  if (accion === 'vincular') {
+    if (!puede.prometer) {
+      return res.status(403).json({ error: 'No tenés permiso para cambiar promesas de pago.' });
+    }
+    const idCliente = texto(body.cliente_id, 60);
+    const nombre = texto(body.cliente_nombre, 160);
+    if (!idCliente || !nombre) {
+      return res.status(400).json({ error: 'Falta a qué cliente vincularla.' });
+    }
+
+    const { data: actual, error: eLeer } = await base()
+      .from('compromisos_pago').select('estado, cliente_id').eq('id', body.id).single();
+    if (eLeer || !actual) return res.status(404).json({ error: 'No se encontró esa promesa.' });
+    if (actual.estado === 'confirmado') {
+      return res.status(409).json({ error: 'Esa promesa ya impactó en el dashboard: el pago quedó a nombre de quien figuraba. Si hay que corregirlo, se corrige el pago en el dashboard.' });
+    }
+    if (actual.cliente_id) {
+      return res.status(409).json({ error: 'Esa promesa ya está vinculada a un cliente.' });
+    }
+
+    const { data, error } = await base()
+      .from('compromisos_pago')
+      .update({
+        cliente_id: idCliente,
+        cliente_nombre: nombre,
+        cliente_store: body.cliente_store === 'zattia' ? 'zattia' : 'bdi',
+        actualizado_en: new Date().toISOString(),
+        actualizado_por: quien,
+      })
       .eq('id', body.id)
       .select(CAMPOS)
       .single();
@@ -285,6 +335,9 @@ export default async function handler(req, res) {
           cliente_id: c.cliente_id,
           cliente_store: c.cliente_store,
           cliente_nombre: c.cliente_nombre,
+          // ⚠️ El teléfono se copia también: sin él, el resto de una promesa de alguien que
+          // todavía no está en Gestión Nube nace huérfano y ya no se puede reenganchar.
+          cliente_telefono: c.cliente_telefono,
           titular_real: c.titular_real,
           monto: restante,
           notas: `Lo que faltó de la promesa del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,

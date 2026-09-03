@@ -12,6 +12,21 @@
  * Acá el cliente ya está identificado: viene de la ficha del chat abierto, con su id de Gestión
  * Nube y su nombre. Lo único que se elige es a QUIÉN le va a transferir y CUÁNTO.
  *
+ * # 🔑 También sirve para el que TODAVÍA NO está en Gestión Nube
+ *
+ * Un mayorista nuevo compra por WhatsApp y se carga al ERP después, cuando se arma el pedido — pero
+ * el cobro se arregla en esa misma charla. Hasta el 3-sep-2026 esos chats no tenían nada que
+ * ofrecer: sin ficha no había cliente, y sin cliente no había promesa (lo levantó Darío usándolo).
+ *
+ * Ahora el que paga llega en dos formas (`QuienPaga`): el de la ficha, con su id de GN, y el que
+ * **todavía no existe**, del que se sabe el nombre escrito a mano y —lo que importa— **el teléfono
+ * del chat**. Ese número es lo que después permite reengancharla de un clic cuando el cliente
+ * aparece en GN; el nombre no alcanza, se escribe distinto cada vez.
+ *
+ * ⚠️ Y es también con lo que se cuenta "cuánto ya le pedimos" mientras no tenga id
+ * (`prometidoPorTelefono`): sin eso, al mismo mayorista nuevo se le puede pedir dos veces la misma
+ * plata en dos charlas.
+ *
  * # ⛔ Lo que todavía NO muestra: cuánto debe el cliente
  *
  * El planteo pide "debe en GN − ya comprometido = lo que se le puede pedir". La mitad derecha está
@@ -36,14 +51,28 @@ import { Button } from '@/components/ui'
 import { color, font, radius } from '@/components/ui/tokens'
 import type { Acreedor } from '@/lib/acreedores/cliente'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
-import { estaAbierto, prometidoPorAcreedor, prometidoPorCliente, sePuedePrometer, type Compromiso } from '@/lib/compromisos/core'
+import {
+  estaAbierto, prometidoPorAcreedor, prometidoPorCliente, prometidoPorTelefono, sePuedePrometer,
+  type Compromiso,
+} from '@/lib/compromisos/core'
 
 const plata = (n: number) =>
   n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
+/**
+ * De quién es la plata que va a entrar.
+ *
+ * Las dos formas existen porque la charla no espera al ERP: `erp` es el cliente que el panel
+ * encontró en Gestión Nube, y `sin-cargar` es el que compró recién y todavía no se cargó. Lo que
+ * los une es el teléfono del chat, que en el segundo caso es la única llave que queda.
+ */
+export type QuienPaga =
+  | { tipo: 'erp'; id: number; nombre: string; telefono: string | null }
+  | { tipo: 'sin-cargar'; nombre: string; telefono: string }
+
 export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando, onCreado }: {
-  /** El cliente del chat abierto. Sin chat no hay a quién pedirle, y la pestaña dice eso en vez de mostrar esto. */
-  cliente: { id: number; name: string }
+  /** Quién va a transferir. Sin chat abierto no hay a quién pedirle, y la pestaña dice eso en vez de mostrar esto. */
+  cliente: QuienPaga
   acreedores: Acreedor[]
   compromisos: Compromiso[]
   puede: PuedeCompromisos
@@ -53,13 +82,22 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
   const [elegido, setElegido] = useState<string | null>(null)
   const [monto, setMonto] = useState('')
   const [titular, setTitular] = useState('')
+  /** Sólo para el que no está en Gestión Nube: ahí el nombre se escribe, no se sabe. */
+  const [nombre, setNombre] = useState(cliente.tipo === 'sin-cargar' ? cliente.nombre : '')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const idCliente = String(cliente.id)
   const prometidoAcreedor = useMemo(() => prometidoPorAcreedor(compromisos), [compromisos])
-  const yaLePedimos = prometidoPorCliente(compromisos).get(idCliente) ?? 0
-  const susPromesas = compromisos.filter((c) => c.cliente_id === idCliente && estaAbierto(c))
+  // La misma cuenta con la llave que haya: el id de GN si existe, el teléfono del chat si no.
+  const yaLePedimos = cliente.tipo === 'erp'
+    ? prometidoPorCliente(compromisos).get(String(cliente.id)) ?? 0
+    : prometidoPorTelefono(compromisos).get(cliente.telefono) ?? 0
+  const susPromesas = compromisos.filter(
+    (c) => estaAbierto(c) && (cliente.tipo === 'erp'
+      ? c.cliente_id === String(cliente.id)
+      : !c.cliente_id && c.cliente_telefono === cliente.telefono),
+  )
+  const nombreFinal = cliente.tipo === 'erp' ? cliente.nombre : nombre.trim()
 
   // Sólo los que tienen deuda a la que imputar: prometerle a uno saldado rebota en la puerta.
   const conDeuda = acreedores
@@ -70,7 +108,7 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
   const cuenta = sel?.a.cuentas.find((c) => c.sugerida) ?? sel?.a.cuentas[0] ?? null
   const n = Number(String(monto).replace(/\./g, '').replace(',', '.'))
   const sePasa = !!sel && Number.isFinite(n) && n > sel.puedePedirse + 0.005
-  const puedeGuardar = !!sel && Number.isFinite(n) && n > 0 && !sePasa && !guardando
+  const puedeGuardar = !!sel && Number.isFinite(n) && n > 0 && !sePasa && !guardando && !!nombreFinal
 
   if (!puede.prometer) {
     return (
@@ -82,10 +120,31 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
 
   return (
     <>
-      <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8 }}>
-        Que <b style={{ color: color.ink }}>{cliente.name || `#${cliente.id}`}</b> le transfiera a un
-        acreedor nuestro. Con una transferencia se cancelan dos deudas.
-      </div>
+      {cliente.tipo === 'erp' ? (
+        <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8 }}>
+          Que <b style={{ color: color.ink }}>{cliente.nombre || `#${cliente.id}`}</b> le transfiera a
+          un acreedor nuestro. Con una transferencia se cancelan dos deudas.
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 6 }}>
+            Este número todavía no está en el sistema. Se puede anotar el cobro igual: queda con el
+            nombre que pongas y con este teléfono, y cuando lo cargues en Gestión Nube se engancha
+            solo desde acá.
+          </div>
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="¿Cómo se llama?"
+            aria-label="¿Cómo se llama?"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: font.sm,
+              marginBottom: 8, border: `1px solid ${color.line}`, borderRadius: radius.md,
+              background: color.bg, color: color.ink,
+            }}
+          />
+        </>
+      )}
 
       {yaLePedimos > 0 && (
         <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8 }}>
@@ -177,8 +236,11 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                         cuenta_cbu: cuenta?.cbu ?? null,
                         cuenta_banco: cuenta?.banco ?? null,
                         cuenta_titular: cuenta?.titular ?? null,
-                        cliente_id: idCliente,
-                        cliente_nombre: cliente.name,
+                        // 🔑 Sin id cuando todavía no está en Gestión Nube: la promesa se guarda
+                        // igual y queda esperando el vínculo, que lo da el teléfono.
+                        cliente_id: cliente.tipo === 'erp' ? String(cliente.id) : null,
+                        cliente_nombre: nombreFinal,
+                        cliente_telefono: cliente.telefono || null,
                         titular_real: titular.trim() || null,
                         monto: n,
                       })
@@ -194,6 +256,12 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                   {guardando ? 'Guardando…' : 'Crear la promesa'}
                 </Button>
               </div>
+
+              {!nombreFinal && (
+                <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 6 }}>
+                  Poné un nombre arriba: es con lo que la vas a reconocer en la lista.
+                </div>
+              )}
 
               {sePasa && (
                 <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>

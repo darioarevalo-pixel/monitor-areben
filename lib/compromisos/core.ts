@@ -18,6 +18,11 @@ export type Compromiso = {
   cliente_id: string | null
   cliente_store: string
   cliente_nombre: string
+  /**
+   * El teléfono del chat, normalizado. Lo tienen las promesas que se anotaron **antes** de que el
+   * cliente existiera en Gestión Nube: es con lo que se reenganchan después.
+   */
+  cliente_telefono: string | null
   titular_real: string | null
   monto: number
   monto_confirmado: number | null
@@ -103,6 +108,38 @@ export function prometidoPorCliente(compromisos: { cliente_id: string | null; mo
     m.set(c.cliente_id, centavos((m.get(c.cliente_id) ?? 0) + Number(c.monto)))
   }
   return m
+}
+
+/**
+ * Y lo mismo por teléfono, para el que TODAVÍA no existe en Gestión Nube.
+ *
+ * 🔑 **Sin esto, al mayorista nuevo se le puede pedir dos veces la misma plata.** La cuenta de
+ * "cuánto ya le pedimos" cuelga del `cliente_id`, que esas promesas no tienen; el número del chat
+ * es lo único que las junta. Es la misma resta, con la otra llave.
+ */
+export function prometidoPorTelefono(compromisos: { cliente_telefono: string | null; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const c of compromisos) {
+    if (!estaAbierto(c) || !c.cliente_telefono) continue
+    m.set(c.cliente_telefono, centavos((m.get(c.cliente_telefono) ?? 0) + Number(c.monto)))
+  }
+  return m
+}
+
+/**
+ * Las promesas de este número que están esperando que el cliente aparezca en Gestión Nube.
+ *
+ * Es lo que dispara el ofrecimiento de vincular: se anotó la cobranza de alguien que todavía no
+ * estaba cargado, y ahora el panel abrió su ficha de verdad. El momento en que se sabe a quién
+ * corresponde es ése, y si no se aprovecha, la promesa queda para siempre con un nombre escrito a
+ * mano que no cruza con ninguna deuda.
+ *
+ * ⛔ Las confirmadas quedan afuera: su pago ya se escribió en el dashboard a nombre de quien
+ * figuraba, y vincularlas acá dejaría los dos sistemas diciendo cosas distintas.
+ */
+export function sinVincular(compromisos: Compromiso[], telefono: string | null): Compromiso[] {
+  if (!telefono) return []
+  return compromisos.filter((c) => c.cliente_telefono === telefono && !c.cliente_id && estaAbierto(c))
 }
 
 /**

@@ -208,3 +208,68 @@ describe('cuando entra menos de lo prometido', () => {
     expect(insertados).toHaveLength(0)
   })
 })
+
+/**
+ * Reenganchar una promesa que se anotó antes de que el cliente existiera en Gestión Nube.
+ *
+ * 🔑 El caso lo levantó Darío el 3-sep-2026: el mayorista nuevo compra por WhatsApp y se carga al
+ * ERP recién cuando se arma el pedido, pero el cobro se arregla en esa charla. La promesa nace sin
+ * `cliente_id` y con el teléfono del chat; cuando el cliente aparece, esto le pone el id.
+ */
+describe('vincular una promesa al cliente que recién ahora existe', () => {
+  it('le pone el id y el nombre de verdad', async () => {
+    filas.c1 = { ...COMPROMISO, cliente_id: null, cliente_nombre: 'la chica de Resistencia', cliente_telefono: '5493624667485' }
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'vincular', id: 'c1', cliente_id: '77', cliente_nombre: 'Leire Veron' }))
+    expect(res.code).toBe(200)
+    expect(filas.c1.cliente_id).toBe('77')
+    expect(filas.c1.cliente_nombre).toBe('Leire Veron')
+    // El teléfono NO se borra: es lo que permitió el cruce y sirve para abrir el chat.
+    expect(filas.c1.cliente_telefono).toBe('5493624667485')
+  })
+
+  it('⛔ no toca una que ya está confirmada: el pago del dashboard quedaría apuntando a otro lado', async () => {
+    filas.c1 = { ...COMPROMISO, cliente_id: null, estado: 'confirmado' }
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'vincular', id: 'c1', cliente_id: '77', cliente_nombre: 'Leire Veron' }))
+    expect(res.code).toBe(409)
+    expect(filas.c1.cliente_id).toBeNull()
+  })
+
+  it('no repisa una que ya tiene cliente', async () => {
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'vincular', id: 'c1', cliente_id: '77', cliente_nombre: 'Otro' }))
+    expect(res.code).toBe(409)
+    expect(filas.c1.cliente_id).toBe('cli-9')
+  })
+
+  it('pide permiso de prometer', async () => {
+    filas.c1 = { ...COMPROMISO, cliente_id: null }
+    escenario({ name: 'Mirón', admin: false, acceso: { bdi: { acreedores: true } } }, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'vincular', id: 'c1', cliente_id: '77', cliente_nombre: 'Leire' }))
+    expect(res.code).toBe(403)
+  })
+})
+
+describe('la promesa de alguien que todavía no está en el ERP', () => {
+  it('se guarda sin cliente_id y con el teléfono del chat', async () => {
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: {
+        acreedor_id: 'ac-1', acreedor_nombre: 'Contador', cliente_nombre: 'la chica de Resistencia',
+        cliente_telefono: '5493624667485', monto: 1000,
+      },
+    }))
+    expect(res.code).toBe(200)
+    expect(insertados[0]).toMatchObject({ cliente_id: null, cliente_telefono: '5493624667485' })
+  })
+
+  it('⚠️ el resto de una promesa parcial hereda el teléfono, o nace huérfano', async () => {
+    filas.c1 = { ...COMPROMISO, cliente_id: null, cliente_telefono: '5493624667485' }
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-03' }))
+    expect(res.code).toBe(200)
+    expect(insertados[0]).toMatchObject({ cliente_telefono: '5493624667485', monto: 300000 })
+  })
+})

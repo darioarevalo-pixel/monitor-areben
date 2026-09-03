@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   colaDeCobranza, diasPara, estaAbierto, puedeIr, porQueNo, prometidoPorAcreedor,
-  prometidoPorCliente, sePuedePrometer, restanteTrasConfirmar,
+  prometidoPorCliente, prometidoPorTelefono, sePuedePrometer, restanteTrasConfirmar, sinVincular,
   type Compromiso, type EstadoCompromiso,
 } from '@/lib/compromisos/core'
 
@@ -182,5 +182,59 @@ describe('la cola de cobranza', () => {
     const copia = [...entrada]
     colaDeCobranza(entrada)
     expect(entrada).toEqual(copia)
+  })
+})
+
+// ─── El cliente que todavía no está en Gestión Nube ──────────────────────────
+
+const sinErp = (
+  id: string,
+  { tel = '5493624667485' as string | null, cliente = null as string | null, estado = 'prometido' as EstadoCompromiso, monto = 1000 } = {},
+) => ({ id, estado, monto, cliente_id: cliente, cliente_telefono: tel, acreedor_id: 'a1' }) as unknown as Compromiso
+
+describe('cuánto ya se le pidió a alguien que no tiene id de Gestión Nube', () => {
+  it('se cuenta por teléfono, que es la única llave que hay', () => {
+    const m = prometidoPorTelefono([
+      sinErp('a', { monto: 100_000 }),
+      sinErp('b', { monto: 50_000 }),
+      sinErp('c', { tel: '5491100000000', monto: 7_000 }),
+    ])
+    expect(m.get('5493624667485')).toBe(150_000)
+    expect(m.get('5491100000000')).toBe(7_000)
+  })
+
+  it('no cuenta lo cerrado, igual que la cuenta por cliente', () => {
+    const m = prometidoPorTelefono([
+      sinErp('a', { monto: 100_000 }),
+      sinErp('b', { monto: 900_000, estado: 'confirmado' }),
+      sinErp('c', { monto: 900_000, estado: 'cancelado' }),
+    ])
+    expect(m.get('5493624667485')).toBe(100_000)
+  })
+
+  it('saltea las que no tienen teléfono', () => {
+    expect(prometidoPorTelefono([sinErp('a', { tel: null })]).size).toBe(0)
+  })
+})
+
+describe('qué promesas están esperando que el cliente exista', () => {
+  const todas = [
+    sinErp('espera', {}),
+    sinErp('ya-vinculada', { cliente: '77' }),
+    sinErp('otro-numero', { tel: '5491100000000' }),
+    sinErp('confirmada', { estado: 'confirmado' }),
+  ]
+
+  it('sólo las de ESE número, sin cliente y todavía abiertas', () => {
+    expect(sinVincular(todas, '5493624667485').map((c) => c.id)).toEqual(['espera'])
+  })
+
+  it('⛔ una confirmada no se ofrece: su pago ya se escribió a nombre de quien figuraba', () => {
+    const soloConfirmada = [sinErp('confirmada', { estado: 'confirmado' })]
+    expect(sinVincular(soloConfirmada, '5493624667485')).toEqual([])
+  })
+
+  it('sin teléfono no pregunta nada', () => {
+    expect(sinVincular(todas, null)).toEqual([])
   })
 })
