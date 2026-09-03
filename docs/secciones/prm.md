@@ -169,6 +169,44 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
   - 🔑 **Lo único que el handler agrega es la roll-up de ventas por producto, y es TRANSPORTE**: 30
     días de BDI son **5.523 renglones** que terminan en ~350 números. La regla de negocio vive en
     `comparativa()` del núcleo.
+- 🆕 🔴 🔑 **«3 SEGUNDOS DE DATOS VACÍOS»: el arreglo anterior le puso la palabra, ⛔ no le sacó la
+  ESPERA.** Bruno lo volvió a reportar el 3-sep-2026 —*«cada vez que cargo PRM tiene 3 segundos de
+  datos vacíos»*—, y es el MISMO reporte de dos líneas más arriba (*«queda en cero los datos y luego
+  aparecen»*): aquella vez se cambió el `(0)` por `(…)` y el `—` por `…`, que es dejar de mentir,
+  ⛔ pero la pantalla seguía tardando lo mismo. 🔑 **Cuando alguien reporta un vacío, el arreglo
+  honesto y el arreglo del vacío son DOS trabajos, y el segundo no se hizo hasta que lo pidió de
+  nuevo.**
+  - 📌 **Medido en prod, sesión de Zattia, una carga** (`performance.getEntriesByType('resource')`,
+    ⛔ no a ojo): el shell tarda **4,19 s** hasta disparar los pedidos del PRM, y ahí salen los tres
+    juntos — padrón **679 ms** · opciones **925 ms** · comparativa **2.681 ms**. ⇒ la tabla aparecía
+    a los 5,12 s y las cuatro columnas medidas se llenaban a los **6,88 s**. Los ~3 segundos que
+    cuenta Bruno son de 4,19 a 6,88.
+  - 🔴 **El transporte ⛔ NO era el problema: la comparativa son 10,5 KB en el cable y 2.677 ms de
+    TTFB.** Es todo tiempo de servidor. Adentro: `proveedor_local` → `recepcion_oc` →
+    `recepcion_linea` → las ventas de cada marca, y **las dos marcas iban una detrás de la otra**
+    aunque son dos bases sin nada en común ⇒ ahora van en `Promise.all`, con el `catch` adentro del
+    `map` para que la que falle ⛔ no se lleve puesta a la otra. Lo clava
+    `tests/prm-comparativa-marcas.test.ts`, y su oráculo es el **SOLAPE**, ⛔ no el total.
+  - 🔴 **La lista esperaba a `opciones`, que la lista ⛔ no dibuja**: son los dos desplegables de
+    enganche de la FICHA. Estaban en el mismo `Promise.all` y bajo la misma bandera `cargando`
+    (679 contra 925 ms). Ahora van por separado, y `opciones` arranca en **`null` = todavía
+    viajando** ⇒ la ficha espera con su esqueleto. ⛔ Con una `Opciones` vacía el bloque de Gestión
+    Nube **afirma** «no se pudo leer el catálogo» de algo que sigue en camino; `SIN_OPCIONES` es
+    sólo lo que queda cuando el pedido **falló**, y ahí esa frase sí es cierta.
+  - 🔴 **Y la flecha del encabezado afirmaba un orden que ⛔ no estaba aplicado.** El orden por
+    defecto es «Vendido ↓», pero ese número llega en el otro pedido: durante esos ~2 s todos los
+    valores son −1, la lista sale **alfabética** y la flecha decía otra cosa — y cuando llegaban los
+    números la lista **saltaba entera**. Ahora, mientras no llegó la comparativa, la lista está por
+    nombre, la flecha está ahí, y las cuatro columnas medidas ⛔ **no se ofrecen para ordenar**: un
+    click que no mueve nada es peor que un botón que todavía no está. Es el mismo cero de carga del
+    rótulo de las pestañas, escrito con una flecha.
+  - ▶️ **Lo que queda, y es de Bruno**: las ventas se bajan CRUDAS —5.311 renglones de BDI para
+    llegar a 72 números— porque el agregado del lado de la base está **APAGADO en el proyecto**
+    (`select('quantity.sum()')` contesta `Use of aggregate functions is not allowed`, probado el
+    3-sep-2026). Prenderlo en los dos proyectos de Supabase colapsa **6 viajes de mil filas en 1**.
+    ⛔ La otra idea —pedir sólo la marca que se está mirando— ⛔ NO se hizo: `comprado` y `stores`
+    hoy suman las órdenes de **las dos** marcas, y filtrar cambiaría lo que MIDE la columna para un
+    proveedor que le venda a las dos. Eso lo decide Bruno, ⛔ no el que optimiza.
 - 🆕 🔴 🔑 **CADA SECCIÓN MUESTRA LOS PROVEEDORES DE SU MARCA, y la marca ⛔ NO se tilda: se MIDE.**
   Pedido de Bruno el 2-sep-2026: *«hay proveedores de bdi y zattia que hay que clasificar, para que
   el dato aparezca en cada sección por separado»*. ⛔ **No hizo falta clasificar nada**: el dato ya

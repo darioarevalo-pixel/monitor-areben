@@ -64,7 +64,12 @@ export function FichaProveedor({
   marca: string
   id: string
   hoy: string
-  opciones: Opciones
+  /**
+   * 🔴 `null` = **todavía viajando**, que ⛔ no es «no hay ninguna». Con una `Opciones` vacía los
+   * dos desplegables salen vacíos y el bloque de Gestión Nube afirma «no se pudo leer el catálogo»
+   * de algo que sigue en camino ⇒ mientras sea `null` la ficha espera con su esqueleto.
+   */
+  opciones: Opciones | null
   onVolver: () => void
   onCambio: () => void
 }) {
@@ -108,7 +113,7 @@ export function FichaProveedor({
    * entraron el 1-sep y todavía no tienen productos en Gestión Nube.
    */
   const sugerencia = useMemo(() => {
-    if (!ficha || ficha.local.proveedor_gn || !opciones.gnDisponible) return null
+    if (!ficha || ficha.local.proveedor_gn || !opciones?.gnDisponible) return null
     return sugerirProveedorGn(ficha.local.nombre, opciones.deGn)
   }, [ficha, opciones])
 
@@ -131,7 +136,7 @@ export function FichaProveedor({
     }
   }
 
-  if (cargando) return <Esqueleto />
+  if (cargando || !opciones) return <Esqueleto />
   if (error && !ficha) return <Notice tone="danger">{error}</Notice>
   if (!ficha) return null
 

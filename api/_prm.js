@@ -215,34 +215,41 @@ export async function comparativa(cliente, dias) {
     porStore.get(l.store).add(Number(l.producto_id))
   }
 
-  const ventasPorProducto = []
-  const marcasMudas = []
-  for (const [store, set] of porStore) {
-    const cfg = cfgDeMarca(store)
-    if (!cfg.url || !cfg.key) {
-      marcasMudas.push(store)
-      continue
-    }
-    try {
-      const c = createClient(cfg.url, cfg.key)
-      const filas = await leerTodo(c, 'venta_detalles', (q) =>
-        q
-          .select('product_id, quantity, ventas!inner(date_sale)')
-          .in('product_id', [...set].filter(Number.isFinite))
-          .gte('ventas.date_sale', desde)
-          .order('id'),
-      )
-      const acc = new Map()
-      for (const f of filas) {
-        if (!f.ventas || !f.ventas.date_sale) continue
-        const k = String(f.product_id)
-        acc.set(k, (acc.get(k) || 0) + (Number(f.quantity) || 0))
+  // 🔴 **Las marcas se preguntan EN PARALELO, y ⛔ no una detrás de la otra.** Son DOS bases
+  // distintas, sin nada que una espere de la otra, y cada una se baja de a mil filas: encadenarlas
+  // hacía que la pantalla esperara la suma de las dos. Medido el 3-sep-2026 en prod: el pedido
+  // tardaba **2.681 ms** y las ventas eran la mayor parte (5.311 renglones sólo de BDI).
+  // ⛔ El orden del resultado NO puede depender de cuál conteste primero: se arma por `map` sobre
+  // `porStore` y se aplana en ese orden, así `marcasMudas` sale siempre igual.
+  const porMarca = await Promise.all(
+    [...porStore].map(async ([store, set]) => {
+      const cfg = cfgDeMarca(store)
+      if (!cfg.url || !cfg.key) return { mudo: store, filas: [] }
+      try {
+        const c = createClient(cfg.url, cfg.key)
+        const filas = await leerTodo(c, 'venta_detalles', (q) =>
+          q
+            .select('product_id, quantity, ventas!inner(date_sale)')
+            .in('product_id', [...set].filter(Number.isFinite))
+            .gte('ventas.date_sale', desde)
+            .order('id'),
+        )
+        const acc = new Map()
+        for (const f of filas) {
+          if (!f.ventas || !f.ventas.date_sale) continue
+          const k = String(f.product_id)
+          acc.set(k, (acc.get(k) || 0) + (Number(f.quantity) || 0))
+        }
+        return { mudo: null, filas: [...acc].map(([producto_id, unidades]) => ({ store, producto_id, unidades })) }
+      } catch {
+        // ⛔ Que una marca no conteste NO puede voltear a la otra: por eso el `catch` está adentro
+        // del `map` y ⛔ no afuera del `Promise.all`, que cortaría con la primera que falle.
+        return { mudo: store, filas: [] }
       }
-      for (const [producto_id, unidades] of acc) ventasPorProducto.push({ store, producto_id, unidades })
-    } catch {
-      marcasMudas.push(store)
-    }
-  }
+    }),
+  )
+  const ventasPorProducto = porMarca.flatMap((r) => r.filas)
+  const marcasMudas = porMarca.filter((r) => r.mudo).map((r) => r.mudo)
 
   return { dias, desdeVentas: desde, locales, ocs, lineas, ventasPorProducto, marcasMudas }
 }

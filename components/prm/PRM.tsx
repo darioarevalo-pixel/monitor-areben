@@ -127,6 +127,18 @@ export function PRM() {
   )
   const deLaOtra = locales.length - deLaMarca.length
 
+  /**
+   * 🔴 **Mientras las columnas medidas no llegaron, la lista está POR NOMBRE — y el encabezado lo
+   * dice.** El orden por defecto es «Vendido ↓», pero ese número viaja en otro pedido: durante los
+   * ~2 s que tarda, las 34 celdas dicen «…» y la flecha en «Vendido» afirmaba un orden que ⛔ no
+   * estaba aplicado (todos los valores son −1, o sea que la lista salía alfabética). Es el mismo
+   * cero de carga del rótulo de las pestañas, escrito con una flecha.
+   */
+  const ordenVivo = useMemo<{ col: Columna; desc: boolean }>(
+    () => (medido ? orden : { col: 'nombre', desc: false }),
+    [medido, orden],
+  )
+
   const filtrados = useMemo(() => {
     const q = normalizarNombre(busca)
     const base = !q
@@ -143,29 +155,34 @@ export function PRM() {
       return m[col] as number
     }
     return [...base].sort((a, b) => {
-      if (orden.col === 'nombre') {
+      if (ordenVivo.col === 'nombre') {
         const c = a.nombre.localeCompare(b.nombre, 'es')
-        return orden.desc ? -c : c
+        return ordenVivo.desc ? -c : c
       }
-      const c = valor(a.id, orden.col) - valor(b.id, orden.col)
-      return orden.desc ? -c : c
+      const c = valor(a.id, ordenVivo.col) - valor(b.id, ordenVivo.col)
+      return ordenVivo.desc ? -c : c
     })
-  }, [deLaMarca, busca, medido, orden])
+  }, [deLaMarca, busca, medido, ordenVivo])
 
   const compartidos = useMemo(
     () => (medido ? [...medido.values()].filter((f) => f.compartidos > 0).length : 0),
     [medido],
   )
 
-  const cabecera = (col: Columna, texto: string, align: 'left' | 'right' = 'right') => (
-    <Th
-      align={align}
-      sort={orden.col === col ? (orden.desc ? 'desc' : 'asc') : null}
-      onClick={() => setOrden((o) => (o.col === col ? { col, desc: !o.desc } : { col, desc: true }))}
-    >
-      {texto}
-    </Th>
-  )
+  const cabecera = (col: Columna, texto: string, align: 'left' | 'right' = 'right') => {
+    // ⛔ Una columna que todavía dice «…» en las 34 filas ⛔ no se ofrece para ordenar: el click no
+    // movería nada y la flecha mentiría. Vuelve sola en cuanto llega la comparativa.
+    const ordenable = col === 'nombre' || !!medido
+    return (
+      <Th
+        align={align}
+        sort={ordenable && ordenVivo.col === col ? (ordenVivo.desc ? 'desc' : 'asc') : null}
+        onClick={ordenable ? () => setOrden((o) => (o.col === col ? { col, desc: !o.desc } : { col, desc: true })) : undefined}
+      >
+        {texto}
+      </Th>
+    )
+  }
 
   /**
    * 🔴 **Mientras carga dice «…», ⛔ NO «—».** Un guion afirma «este proveedor no vendió nada» y lo
