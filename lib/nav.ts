@@ -400,7 +400,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   envios: 'La hoja del cadete: los envíos que salen hoy, con la dirección, lo que hay que cobrar y la etiqueta para pegar.',
   buzon: 'Lo que la clienta escribió y nadie resolvió todavía. Mientras siga abierto, Envíos avisa antes de que el paquete de esa orden salga.',
   'pedidos-clientes': 'Lo que los clientes piden y no tenemos, con el ranking de lo más pedido. Se anota desde Atención al cliente, mientras se atiende.',
-  etiquetas: 'Etiquetas de 5 × 2,5 cm con código de barras, y la cola de lo que hay que reetiquetar porque le cambió el precio.',
+  etiquetas: 'Etiquetas de 5 × 2,5 cm con código de barras, la de bolsa de 10 × 15 con los SKU del producto, y la cola de lo que hay que reetiquetar porque le cambió el precio.',
   atencion: 'Links y mensajes listos para copiar y pegar en Instagram y WhatsApp.',
   cupones: 'Descuentos por cliente y los canjes que se retiran en el local.',
   'solicitudes-internas': 'Retiros de uso interno (muestras, video, consumo) con aprobación.',

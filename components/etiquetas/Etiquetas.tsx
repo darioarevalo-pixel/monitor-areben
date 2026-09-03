@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
@@ -10,8 +10,10 @@ import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from
 import { etiquetasDesactualizadas } from '@/lib/etiquetas/cola'
 import {
   agruparCantidades,
+  conStock,
   construirPrecios,
   filtrarVariantes,
+  hermanasDe,
   nombrarSinPrecio,
   partirPorPrecio,
   resolverScan,
@@ -21,13 +23,15 @@ import {
   variantesEtiquetables,
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
-import { buildEtiquetasPdf, buildLibrePdf, imprimirPdf, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
+import { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
 import {
+  CONFIG_SKU_DEFAULT,
   ETIQUETA,
   MODO_DE,
   PESTANIAS,
   rotuloPestania,
   type Cantidades,
+  type ConfigSku,
   type LineaEtiqueta,
   type ModoEtiqueta,
   type Pestania,
@@ -53,6 +57,7 @@ const FP_DEFAULT: LineaEtiqueta[] = [
 const keyCant = (slot: string, marca: Marca) => `monitor_etiquetas_${slot}_${marca}`
 const keyAutoClear = (marca: Marca) => `monitor_eti_autoclear_${marca}`
 const keyFP = (marca: Marca) => `monitor_eti_fp_v3_${marca}`
+const keyCfgSku = (marca: Marca) => `monitor_eti_sku_cfg_${marca}`
 function lsGet<T>(key: string, fallback: T): T {
   try {
     const r = localStorage.getItem(key)
@@ -87,6 +92,14 @@ export function Etiquetas() {
   )
   const nuevosSinCatalogo = useMemo(() => new Set((datos?.allVariantesHuerfanas ?? []).map((v) => v.pid)).size, [datos])
   const vars = useMemo(() => variantesEtiquetables(allVariantes), [allVariantes])
+  /**
+   * De dónde salen las hermanas de la pestaña de SKU.
+   *
+   * 🔑 **NO es `vars`.** Ésa filtra por código de barras, que es lo que hace falta para *escanear*;
+   * la etiqueta de SKU no dibuja barras, así que un color sin código —que existe como bolsa en el
+   * depósito igual— tiene que entrar. Filtrarlo acá le escondería una bolsa al que la está armando.
+   */
+  const varsSku = useMemo(() => allVariantes.filter((v) => (v.sku || '').trim()), [allVariantes])
   const varsById = useMemo(() => Object.fromEntries(vars.map((v) => [v.id, v])) as Record<string, VarianteEti>, [vars])
   const sinCodigo = useMemo(() => variantesSinCodigo(allVariantes), [allVariantes])
   const { precios, promos, fueraDeTn } = useMemo(() => construirPrecios(datos?.allProductos ?? [], tn.tnIdx), [datos, tn.tnIdx])
@@ -148,6 +161,7 @@ export function Etiquetas() {
   const [cant, setCant] = useState<Record<Slot, Cantidades>>({ dep: {}, loc: {}, promo: {}, sku: {}, cola: {} })
   const [autoClear, setAutoClear] = useState(true)
   const [fpLines, setFpLines] = useState<LineaEtiqueta[]>(FP_DEFAULT)
+  const [cfgSku, setCfgSku] = useState<ConfigSku>(CONFIG_SKU_DEFAULT)
   // Carga en un IIFE async (no setState sincrónico en el effect: dispararía cascada
   // y lo marca el CI) y sin leer localStorage en el SSR (evita el mismatch de
   // hidratación). Mismas claves del legacy → el flip preserva lo guardado.
@@ -164,10 +178,14 @@ export function Etiquetas() {
       // El autoclear es un string CRUDO ('1'/'0') en el legacy, no JSON.
       const ac = localStorage.getItem(keyAutoClear(marca)) !== '0'
       const fp = lsGet<LineaEtiqueta[]>(keyFP(marca), FP_DEFAULT)
+      // Con `...DEFAULT` delante para que un guardado viejo al que le falte una tilde no la deje
+      // `undefined` y convierta el checkbox en no controlado a mitad de camino.
+      const cs = { ...CONFIG_SKU_DEFAULT, ...lsGet<Partial<ConfigSku>>(keyCfgSku(marca), {}) }
       if (!vivo) return
       setCant(c)
       setAutoClear(ac)
       setFpLines(fp)
+      setCfgSku(cs)
     })()
     return () => {
       vivo = false
@@ -209,6 +227,13 @@ export function Etiquetas() {
   const guardarFP = (lines: LineaEtiqueta[]) => {
     setFpLines(lines)
     lsSet(keyFP(marca), lines)
+  }
+  const guardarCfgSku = (campo: keyof ConfigSku, on: boolean) => {
+    setCfgSku((prev) => {
+      const next = { ...prev, [campo]: on }
+      lsSet(keyCfgSku(marca), next)
+      return next
+    })
   }
 
   // 🔴 Memoizados los DOS: la vista previa los tiene como dependencia de un efecto, y un objeto
@@ -255,8 +280,14 @@ export function Etiquetas() {
       )
     }
     if (!imprimibles.length) return
-    const labels = secuenciaLabels(imprimibles, opts)
-    imprimirPdf(await buildEtiquetasPdf(labels, modo, ctxDe(slot)))
+    const pdf =
+      modo === 'sku' && cfgSku.grande
+        ? // Una bolsa por etiqueta: la cantidad de la fila son **copias de la misma bolsa**. Juntar
+          // los colores de un producto en una sola es cosa del escáner, que es donde hay una prenda
+          // en la mano y un producto claro; acá cada fila es una variante y su número.
+          await buildSkuGrandePdf(imprimibles.flatMap((g) => Array.from({ length: g.cant }, (): BolsaSku => ({ producto: g.v.name || '', variantes: [g.v] }))))
+        : await buildEtiquetasPdf(secuenciaLabels(imprimibles, opts), modo, ctxDe(slot))
+    if (pdf) imprimirPdf(pdf)
     if (slot === 'cola') anotarEtiquetado(imprimibles)
     setTimeout(() => {
       void (async () => {
@@ -276,6 +307,19 @@ export function Etiquetas() {
         }
       })()
     }, 600)
+  }
+
+  /**
+   * La etiqueta de SKU de una bolsa del depósito: una sola de 10 × 15 con todos los SKU adentro, o
+   * una de 5 × 2,5 por cada color. Quiénes son «todos» lo decidió el escáner (ver `hermanasDe`).
+   */
+  const imprimirSku = async (lista: VarianteEti[]) => {
+    if (!lista.length) return
+    const pdf = cfgSku.grande
+      ? await buildSkuGrandePdf([{ producto: lista[0].name || '', variantes: lista }])
+      : await buildEtiquetasPdf(lista, 'sku', ctx)
+    if (pdf) imprimirPdf(pdf)
+    anotarEtiquetado(lista.map((v) => ({ v })))
   }
 
   const imprimirUno = async (slot: Slot, v: VarianteEti, conFP: boolean) => {
@@ -343,6 +387,10 @@ export function Etiquetas() {
           onRefrescarPrecios={tn.refrescar}
           onImprimir={(opts) => imprimir(sub, opts)}
           onImprimirUno={(v, conFP) => imprimirUno(sub, v, conFP)}
+          varsSku={varsSku}
+          cfgSku={cfgSku}
+          setCfgSku={guardarCfgSku}
+          onImprimirSku={(lista) => void imprimirSku(lista)}
           ctx={ctxDe(sub)}
           fpLines={fpLines}
           guardarFP={guardarFP}
@@ -422,6 +470,10 @@ function ModoPanel({
   onRefrescarPrecios,
   onImprimir,
   onImprimirUno,
+  varsSku,
+  cfgSku,
+  setCfgSku,
+  onImprimirSku,
   ctx,
   fpLines,
   guardarFP,
@@ -446,6 +498,11 @@ function ModoPanel({
   onRefrescarPrecios: () => Promise<void>
   onImprimir: (opts: { sep: boolean; conFP: boolean }) => void
   onImprimirUno: (v: VarianteEti, conFP: boolean) => void
+  /** Todas las variantes con SKU (⛔ no filtradas por código de barras): de acá salen las hermanas. */
+  varsSku: VarianteEti[]
+  cfgSku: ConfigSku
+  setCfgSku: (campo: keyof ConfigSku, on: boolean) => void
+  onImprimirSku: (lista: VarianteEti[]) => void
   /** El mismo contexto con el que se imprime, para que la vista previa no pueda mostrar otra cosa. */
   ctx: CtxEtiqueta
   fpLines: LineaEtiqueta[]
@@ -456,6 +513,12 @@ function ModoPanel({
   const [conFP, setConFP] = useState(false)
   const [feedback, setFeedback] = useState<{ ok: boolean; html: string } | null>(null)
   const [refrescando, setRefrescando] = useState(false)
+  /**
+   * La última bolsa escaneada en la pestaña de SKU: qué colores tiene el producto y cuáles están
+   * tildados. **Queda en pantalla después de imprimir**, y ésa es la gracia: si hacía falta otro
+   * color se cambia el tilde y se reimprime, sin volver a buscar la prenda para escanearla.
+   */
+  const [bolsa, setBolsa] = useState<Bolsa | null>(null)
   const scanRef = useRef<HTMLInputElement>(null)
 
   // La antigüedad de los precios se recalcula sola cada minuto. `Date.now()` en el render lo prohíbe
@@ -511,6 +574,23 @@ function ModoPanel({
       inp.focus()
       return
     }
+    // 🔑 **La pestaña de SKU imprime la BOLSA, no la prenda.** Un producto de cuatro colores son
+    // cuatro bolsas en el depósito, y hasta ahora había que escanear las cuatro. Lo que se imprime
+    // lo deciden las opciones de arriba; lo que quedó tildado se ve abajo y se puede reimprimir.
+    if (modoV === 'sku') {
+      const hermanas = cfgSku.grupo ? hermanasDe(varsSku, v) : [v]
+      const elegidas = conStock(hermanas, v)
+      setBolsa({ escaneada: v, hermanas, elegidas: new Set(elegidas.map((x) => x.id)) })
+      if (cfgSku.elegir) {
+        setFeedback({ ok: true, html: `${v.name || ''}: elegí los SKU acá abajo y después imprimí.` })
+        inp.focus()
+        return
+      }
+      onImprimirSku(elegidas)
+      setFeedback({ ok: true, html: `✓ Imprimiendo ${textoBolsa(elegidas.length, cfgSku.grande)} · ${v.name || ''}` })
+      inp.focus()
+      return
+    }
     // Sin esto la etiqueta salía igual, pero sin el precio: el dibujo se cae a la de información
     // cuando el precio es cero, y la prenda termina colgada sin número.
     if (modoV === 'loc' && !(precioDe(v) > 0)) {
@@ -538,8 +618,12 @@ function ModoPanel({
     onImprimirUno(v, modoV === 'loc' && conFP)
     const p = precioDe(v)
     const pr = modoV === 'promo' ? promoDe(v) : null
-    const extra =
-      modoV === 'sku' ? ` · SKU ${v.sku}` : pr ? ` · $${Math.round(pr.normal).toLocaleString('es-AR')} → $${Math.round(pr.promo).toLocaleString('es-AR')}` : modoV === 'loc' && p ? ` · $${Math.round(p).toLocaleString('es-AR')}` : ''
+    // ⚠️ La rama de `sku` ya volvió arriba, con su propio cartel: acá quedan las tres con precio.
+    const extra = pr
+      ? ` · $${Math.round(pr.normal).toLocaleString('es-AR')} → $${Math.round(pr.promo).toLocaleString('es-AR')}`
+      : modoV === 'loc' && p
+        ? ` · $${Math.round(p).toLocaleString('es-AR')}`
+        : ''
     setFeedback({ ok: true, html: `✓ Imprimiendo: ${v.name || ''} · ${v.size || ''}${extra}` })
     inp.focus()
   }
@@ -554,9 +638,22 @@ function ModoPanel({
       <Card style={cardScanStyle}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>⚡ Impresión rápida (escáner)</div>
         <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
-          Escaneá el código de barras de un producto: imprime su etiqueta de{' '}
-          <b>{campania ? 'la que le corresponda por su precio de hoy' : ETIQUETA[modo].alEscanear}</b> al instante.
-          {campania && ' Imprime siempre, esté o no en la lista: reimprimir es gratis.'}
+          {modo === 'sku' ? (
+            cfgSku.elegir ? (
+              <>Escaneá el código de barras de una prenda: abre la lista de SKU del producto para que elijas cuáles imprimir.</>
+            ) : (
+              <>
+                Escaneá el código de barras de una prenda: imprime{' '}
+                <b>{cfgSku.grupo ? 'la etiqueta de SKU de todos los colores del producto' : 'su etiqueta de SKU'}</b> al instante.
+              </>
+            )
+          ) : (
+            <>
+              Escaneá el código de barras de un producto: imprime su etiqueta de{' '}
+              <b>{campania ? 'la que le corresponda por su precio de hoy' : ETIQUETA[modo].alEscanear}</b> al instante.
+              {campania && ' Imprime siempre, esté o no en la lista: reimprimir es gratis.'}
+            </>
+          )}
         </div>
         <input
           ref={scanRef}
@@ -571,7 +668,31 @@ function ModoPanel({
           style={{ width: 320, maxWidth: '100%', fontSize: 15, padding: '9px 12px', border: `2px solid ${scanBorder}`, borderRadius: 8, boxSizing: 'border-box' }}
         />
         {feedback && <div style={{ fontSize: 13, marginTop: 8, color: feedback.ok ? color.success : color.danger }}>{feedback.html}</div>}
+        {modo === 'sku' && <OpcionesSku cfg={cfgSku} set={setCfgSku} />}
       </Card>
+
+      {modo === 'sku' && bolsa && (
+        <BolsaPanel
+          bolsa={bolsa}
+          grande={cfgSku.grande}
+          tildar={(id, on) =>
+            setBolsa((b) => {
+              if (!b) return b
+              const elegidas = new Set(b.elegidas)
+              if (on) elegidas.add(id)
+              else elegidas.delete(id)
+              return { ...b, elegidas }
+            })
+          }
+          imprimir={() => {
+            const lista = bolsa.hermanas.filter((h) => bolsa.elegidas.has(h.id))
+            if (!lista.length) return
+            onImprimirSku(lista)
+            setFeedback({ ok: true, html: `✓ Imprimiendo ${textoBolsa(lista.length, cfgSku.grande)} · ${bolsa.escaneada.name || ''}` })
+          }}
+          cerrar={() => setBolsa(null)}
+        />
+      )}
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
@@ -585,7 +706,14 @@ function ModoPanel({
           </div>
           {/* La etiqueta se entiende mirándola. Va con el primero de la lista de abajo, así que
               acompaña lo que se está por imprimir en vez de mostrar un ejemplo inventado. */}
-          <VistaPrevia modo={muestraModo} muestra={muestra} ctx={ctx} />
+          <VistaPrevia
+            modo={muestraModo}
+            muestra={muestra}
+            ctx={ctx}
+            grande={modo === 'sku' && cfgSku.grande}
+            agrupar={modo === 'sku' && cfgSku.grupo}
+            varsSku={varsSku}
+          />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, SKU o código…" className="mo-input" style={{ width: 240, maxWidth: '100%' }} />
         </div>
 
@@ -892,7 +1020,7 @@ function subtitulo(modo: ModoEtiqueta): string {
  * las dependencias que de verdad cambian el dibujo. Formas de pago escribe letra por letra: ahí va
  * con espera, para no armar un PDF por tecla.
  */
-function PreviaPdf({ construir, alt, espera = 0, vacio }: { construir: () => ReturnType<typeof buildEtiquetasPdf> | null; alt: string; espera?: number; vacio?: string }) {
+function PreviaPdf({ construir, alt, espera = 0, vacio, retrato = false }: { construir: () => ReturnType<typeof buildEtiquetasPdf> | null; alt: string; espera?: number; vacio?: string; retrato?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -906,7 +1034,9 @@ function PreviaPdf({ construir, alt, espera = 0, vacio }: { construir: () => Ret
           return
         }
         const pdf = await pendiente
-        if (!vivo) return
+        // La etiqueta grande devuelve `null` cuando ninguna variante tiene SKU: sin esto la previa
+        // se cae con un TypeError y se lleva la pantalla entera.
+        if (!vivo || !pdf) return
         anterior = pdf.output('bloburl') as string
         setUrl(anterior)
       })()
@@ -920,10 +1050,13 @@ function PreviaPdf({ construir, alt, espera = 0, vacio }: { construir: () => Ret
     }
   }, [construir, espera])
 
+  // La caja acompaña la forma de la etiqueta: la de 10 × 15 es vertical y en un recuadro apaisado
+  // queda del tamaño de una uña.
+  const caja = retrato ? { width: 124, height: 186 } : { width: 200, height: 100 }
   return url ? (
-    <iframe src={url} title={alt} style={{ width: 200, height: 100, border: `1px solid ${color.line2}`, borderRadius: 6, background: '#fff' }} />
+    <iframe src={url} title={alt} style={{ ...caja, border: `1px solid ${color.line2}`, borderRadius: 6, background: '#fff' }} />
   ) : (
-    <div style={{ width: 200, height: 100, border: `1px dashed ${color.line2}`, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut2, textAlign: 'center', padding: 6 }}>
+    <div style={{ ...caja, border: `1px dashed ${color.line2}`, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut2, textAlign: 'center', padding: 6 }}>
       {vacio ?? 'Dibujando…'}
     </div>
   )
@@ -934,23 +1067,146 @@ function PreviaPdf({ construir, alt, espera = 0, vacio }: { construir: () => Ret
  *
  * Lo pidió Bruno: entender la etiqueta mirándola, en vez de leer un párrafo que la describa.
  */
-function VistaPrevia({ modo, muestra, ctx }: { modo: ModoEtiqueta; muestra: VarianteEti | null; ctx: CtxEtiqueta }) {
-  const construir = useCallback(() => (muestra ? buildEtiquetasPdf([muestra], modo, ctx) : null), [modo, muestra, ctx])
+function VistaPrevia({
+  modo,
+  muestra,
+  ctx,
+  grande,
+  agrupar,
+  varsSku,
+}: {
+  modo: ModoEtiqueta
+  muestra: VarianteEti | null
+  ctx: CtxEtiqueta
+  /** La de 10 × 15 de la pestaña de SKU. */
+  grande: boolean
+  /** La previa junta los colores del producto, como haría el escaneo. Sólo en la pestaña de SKU. */
+  agrupar: boolean
+  varsSku: VarianteEti[]
+}) {
+  // 🔑 **La previa muestra lo que un escaneo de ESA prenda produciría**, colores incluidos: con las
+  // opciones de la bolsa prendidas, la etiqueta de una variante sola ya no es lo que se imprime.
+  const bolsa = useMemo(
+    () => (agrupar && muestra ? conStock(hermanasDe(varsSku, muestra), muestra) : []),
+    [agrupar, muestra, varsSku],
+  )
+  const construir = useCallback(() => {
+    const lista = bolsa.length ? bolsa : muestra ? [muestra] : []
+    if (!lista.length) return null
+    return grande ? buildSkuGrandePdf([{ producto: lista[0].name || '', variantes: lista }]) : buildEtiquetasPdf(lista, modo, ctx)
+  }, [modo, muestra, ctx, grande, bolsa])
 
   return (
-    <div style={{ minWidth: 210 }}>
+    <div style={{ minWidth: grande ? 134 : 210 }}>
       <div style={{ fontSize: 12, color: color.mut, marginBottom: 6 }}>Así sale:</div>
       <PreviaPdf
         construir={construir}
+        retrato={grande}
         alt={`Vista previa de la etiqueta de ${ETIQUETA[modo].nombre.toLowerCase()}`}
         vacio={muestra ? 'Dibujando…' : 'Sin productos para mostrar'}
       />
       {muestra && (
         <div style={{ fontSize: 11, color: color.mut2, marginTop: 4 }}>
           Ejemplo: {muestra.name || '—'}
+          {bolsa.length > 1 && ` · ${bolsa.length} colores`}
         </div>
       )}
     </div>
+  )
+}
+
+// ── La pestaña de SKU: las opciones de la bolsa y lo que dejó el último escaneo ──
+
+/** Lo que dejó el último escaneo en la pestaña de SKU. */
+type Bolsa = { escaneada: VarianteEti; hermanas: VarianteEti[]; elegidas: Set<string> }
+
+/**
+ * Cómo se nombra lo que se está por imprimir.
+ *
+ * 🔑 **Dice el TAMAÑO y cuántos SKU, no «4 etiquetas».** Con la grande, cuatro colores son **una
+ * sola** etiqueta con cuatro SKU adentro: decir «4» al lado de una impresora que escupe una hoja
+ * hace pensar que salieron mal.
+ */
+function textoBolsa(n: number, grande: boolean): string {
+  if (!grande) return `${n} ${n === 1 ? 'etiqueta' : 'etiquetas'} de 5 × 2,5`
+  const hojas = Math.max(1, Math.ceil(n / SKU_POR_BOLSA))
+  return `${hojas} ${hojas === 1 ? 'etiqueta' : 'etiquetas'} de 10 × 15 con ${n} SKU`
+}
+
+function Tilde({ on, set, children }: { on: boolean; set: (on: boolean) => void; children: ReactNode }) {
+  return (
+    <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'flex-start', gap: 6, cursor: 'pointer' }}>
+      <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)', marginTop: 2 }} checked={on} onChange={(e) => set(e.target.checked)} />
+      <span>{children}</span>
+    </label>
+  )
+}
+
+/**
+ * Las tres opciones de la etiqueta de bolsa.
+ *
+ * 🔑 **Van adentro del recuadro del escáner y no abajo con las otras tildes**, porque cambian **lo
+ * que hace el escaneo**: quien lo prende está mirando el campo donde va a escanear.
+ */
+function OpcionesSku({ cfg, set }: { cfg: ConfigSku; set: (campo: keyof ConfigSku, on: boolean) => void }) {
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${color.brandBorder}`, display: 'grid', gap: 7 }}>
+      <Tilde on={cfg.grupo} set={(x) => set('grupo', x)}>
+        Imprimir también <b>los otros colores del mismo producto</b> — una etiqueta por bolsa, sin escanear color por color
+      </Tilde>
+      <Tilde on={cfg.grande} set={(x) => set('grande', x)}>
+        Usar la etiqueta <b>grande de 10 × 15 cm</b> — todos los SKU juntos en una sola, en vez de una de 5 × 2,5 por color
+      </Tilde>
+      <Tilde on={cfg.elegir} set={(x) => set('elegir', x)}>
+        Elegir los colores <b>antes de imprimir</b> — el escaneo abre la lista y no imprime hasta que se lo pida
+      </Tilde>
+      <div style={{ fontSize: 11, color: color.mut2 }}>
+        Quedan guardadas en esta computadora. Las cantidades de la tabla de abajo no juntan colores: cada renglón imprime el suyo.
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Lo que dejó el último escaneo: los colores del producto, cuáles se imprimieron y el botón para
+ * reimprimir con otros.
+ *
+ * 🔑 **Queda en pantalla DESPUÉS de imprimir.** Es lo que reemplaza al «elegí antes» sin costarle
+ * un paso a los días normales: se escanea, sale, y si hacía falta otro color está acá, sin ir a
+ * buscar la prenda de nuevo.
+ *
+ * 🔑 **Los de stock cero se listan destildados, no se esconden.** Una bolsa puede existir con el
+ * espejo en cero (llegó hoy, todavía no se cargó); esconderla obliga a buscar el SKU a mano.
+ */
+function BolsaPanel({ bolsa, grande, tildar, imprimir, cerrar }: { bolsa: Bolsa; grande: boolean; tildar: (id: string, on: boolean) => void; imprimir: () => void; cerrar: () => void }) {
+  const elegidas = bolsa.hermanas.filter((h) => bolsa.elegidas.has(h.id)).length
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>🛍️ {bolsa.escaneada.name || '—'}</div>
+        <button className="btn-sm" onClick={cerrar} style={{ background: '#fff', border: `1px solid ${color.line2}` }}>
+          Cerrar
+        </button>
+      </div>
+      <div style={{ fontSize: 12, color: color.mut, marginBottom: 10 }}>
+        {bolsa.hermanas.length === 1
+          ? 'Este producto tiene un solo color con SKU.'
+          : `Los ${bolsa.hermanas.length} colores del producto. Vienen tildados los que tienen stock; cambiá los tildes y reimprimí si hace falta otro.`}
+      </div>
+      <div style={{ display: 'grid', gap: 4, marginBottom: 12 }}>
+        {bolsa.hermanas.map((h) => (
+          <Tilde key={h.id} on={bolsa.elegidas.has(h.id)} set={(on) => tildar(h.id, on)}>
+            <b style={{ fontSize: 13, color: color.ink }}>{h.sku}</b>
+            {h.size ? ` · ${h.size}` : ''}
+            <span style={{ color: color.mut2 }}> · stock {h.stock || 0}</span>
+            {h.id === bolsa.escaneada.id && <span style={{ color: color.mut2 }}> · escaneada</span>}
+          </Tilde>
+        ))}
+      </div>
+      <Button variant="solid" tone="brand" disabled={!elegidas} onClick={imprimir}>
+        Imprimir {textoBolsa(elegidas, grande)}
+      </Button>
+    </Card>
   )
 }
 

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   agruparCantidades,
+  conStock,
   construirPrecios,
   filtrarVariantes,
+  hermanasDe,
   nombrarSinPrecio,
   partirPorPrecio,
   resolverScan,
@@ -270,5 +272,48 @@ describe('las pestañas y los sub-permisos declarados dicen lo mismo', () => {
     for (const s of PERM_CAT.find((c) => c.key === 'etiquetas')?.subs ?? []) {
       expect(s.label).toBe(rotuloPestania(s.key as Pestania).nombre)
     }
+  })
+})
+
+/**
+ * La bolsa del depósito: escanear un color y que salgan las etiquetas de todos.
+ *
+ * 🔑 **Lo que se prueba acá es de quién sale la lista y quién arranca tildado**, que es donde estaba
+ * el trabajo manual: un producto de cuatro colores obligaba a cuatro escaneos.
+ */
+describe('las hermanas de una bolsa', () => {
+  const BOLSA: VarianteEti[] = [
+    v({ id: 'n', pid: '9', name: 'Campera', size: 'Negro', sku: 'CP-NEG', barcode: '', stock: 2 }), // sin código
+    v({ id: 'b', pid: '9', name: 'Campera', size: 'Blanco', sku: 'CP-BLA', stock: 0 }),
+    v({ id: 'r', pid: '9', name: 'Campera', size: 'Rojo', sku: 'CP-ROJ', stock: 5 }),
+    v({ id: 'x', pid: '9', name: 'Campera', size: 'Sin SKU', sku: '', stock: 7 }),
+    v({ id: 'o', pid: '8', name: 'Otra', size: 'Negro', sku: 'OT-NEG', stock: 4 }),
+  ]
+
+  it('son las del mismo producto con SKU, ordenadas por color, y la de otro producto no entra', () => {
+    expect(hermanasDe(BOLSA, BOLSA[2]).map((h) => h.sku)).toEqual(['CP-BLA', 'CP-NEG', 'CP-ROJ'])
+  })
+
+  /**
+   * 🔴 Filtrar por código de barras acá le escondería una bolsa al que la está armando: la etiqueta
+   * de SKU no dibuja barras y el color sin código existe igual en el depósito.
+   */
+  it('entra la variante SIN código de barras, y no la que no tiene SKU', () => {
+    const skus = hermanasDe(BOLSA, BOLSA[2]).map((h) => h.sku)
+    expect(skus).toContain('CP-NEG')
+    expect(skus).not.toContain('')
+  })
+
+  it('arrancan tildadas sólo las que tienen stock', () => {
+    expect(conStock(hermanasDe(BOLSA, BOLSA[2]), BOLSA[2]).map((h) => h.sku)).toEqual(['CP-NEG', 'CP-ROJ'])
+  })
+
+  /**
+   * 🔴 Sin esta vuelta, escanear una bolsa que el espejo todavía cuenta en cero no imprimía NADA y
+   * la pantalla no decía por qué: quien tiene la bolsa en la mano espera una etiqueta que no viene.
+   */
+  it('si ninguna tiene stock, se imprime la que se escaneó', () => {
+    const cero = BOLSA.filter((x) => x.pid === '9' && x.sku).map((x) => ({ ...x, stock: 0 }))
+    expect(conStock(cero, cero[1]).map((h) => h.id)).toEqual([cero[1].id])
   })
 })

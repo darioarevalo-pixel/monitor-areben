@@ -57,7 +57,7 @@ export const ETIQUETA: Record<ModoEtiqueta, { emoji: string; nombre: string; dic
   sku: {
     emoji: '🔢',
     nombre: 'SKU',
-    dice: 'Sólo el SKU, grande y centrado, en 5 × 2,5 cm.',
+    dice: 'Sólo el SKU, grande y centrado. Es la que se pega en la bolsa del depósito, y se puede imprimir en 5 × 2,5 cm o en 10 × 15 cm.',
     alEscanear: 'sólo el SKU',
   },
 }
@@ -125,3 +125,19 @@ export type LibreConfig = {
   precio: number | null
   lineas: LineaEtiqueta[]
 }
+
+/**
+ * Cómo imprime la pestaña de SKU. Las tres son de esa pestaña sola y se recuerdan por marca.
+ *
+ * 🔑 **Existe porque la bolsa del depósito no es una prenda.** Un producto de cuatro colores son
+ * cuatro bolsas, y hasta el 3-sep-2026 había que escanear las cuatro. `grupo` convierte un escaneo
+ * en las cuatro etiquetas y `grande` las manda a una sola de 10 × 15 en vez de a cuatro chiquitas.
+ *
+ * 🔑 **`elegir` es el freno, y arranca apagado a propósito.** Toda la sección es «escaneá y ya está»:
+ * si cada escaneo abriera una lista para tildar, el escáner dejaría de ahorrar nada. Prendido, el
+ * escaneo abre la lista en vez de imprimir — para el día del ingreso raro, no para todos los días.
+ */
+export type ConfigSku = { grupo: boolean; grande: boolean; elegir: boolean }
+
+/** Lo que ve quien nunca tocó nada: exactamente el comportamiento de siempre. */
+export const CONFIG_SKU_DEFAULT: ConfigSku = { grupo: false, grande: false, elegir: false }

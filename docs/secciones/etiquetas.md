@@ -2,14 +2,17 @@
 
 Sección `etiquetas`, área `local`. Imprime las etiquetas de 5 × 2,5 cm de las prendas (Code 128) en
 una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ago-2026 incluye la
-**cola de reetiquetado**: qué prenda hay que volver a etiquetar porque le cambió el precio.
+**cola de reetiquetado**: qué prenda hay que volver a etiquetar porque le cambió el precio. Desde el
+3-sep-2026 la pestaña de SKU imprime además la **etiqueta de bolsa de 10 × 15 cm**, con los SKU de
+todos los colores de un producto juntos.
 
 ## Dónde vive
 
 - `components/etiquetas/` — `Etiquetas.tsx` (944 l.: los seis paneles, el escáner y las dos vistas
   previas) · `useEtiquetasTn.ts` (el catálogo y los precios de Tienda Nube, con caché) ·
   `useColaReetiquetado.ts`.
-- `lib/etiquetas/` — `pdf.ts` (el dibujo) · `core.ts` (precios, filtros, la secuencia de impresión)
+- `lib/etiquetas/` — `pdf.ts` (el dibujo, **las dos geometrías**) · `core.ts` (precios, filtros, la
+  secuencia de impresión, **las hermanas de una bolsa**)
   · `cola.core.js` + `cola.ts` (la regla de la cola) · `tipos.ts` (los tipos **y la tabla de
   metadatos de cada etiqueta**).
 - Handler: **no tiene uno propio**. Entra por `api/_liquidacion.js` con `?etiquetas=1` (ver abajo).
@@ -33,6 +36,31 @@ una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ag
   se etiqueta con precio y en el control de exhibición sale «sin precio en Tienda Nube».
 
 ## Reglas que el código no dice
+
+- 🔑 **La pestaña de SKU etiqueta BOLSAS, no prendas** (Bruno, 3-sep-2026). El depósito guarda una
+  bolsa por color y cada una lleva su SKU pegado, así que un producto de cuatro colores son cuatro
+  etiquetas — y hasta ese día había que escanear las cuatro. `hermanasDe` convierte un escaneo en
+  todas, y `conStock` decide cuáles arrancan tildadas. ⚠️ **La lista de hermanas NO sale de
+  `variantesEtiquetables`**: ésa filtra por código de barras, que hace falta para *escanear* y no
+  para la etiqueta de SKU, que no dibuja barras — filtrarlo escondía la bolsa de un color sin código.
+- 🔑 **En la etiqueta de 10 × 15 manda el SKU y el nombre es el pie** (Bruno: *«el depósito se ordena
+  por SKU»*). Los SKU arrancan en 46 puntos y bajan de a uno hasta entrar a lo alto y a lo ancho; el
+  nombre del producto va abajo, en cuerpo fijo y gris, sólo para confirmar que la bolsa es la
+  correcta. ⛔ **No lleva código de barras**: con cuatro SKU adentro no se sabría cuál se escanea.
+- 🔑 **Los SKU de más se reparten PAREJO entre las etiquetas, no llenando la primera**
+  (`repartirSku`). Cortando de a seis, diez colores daban una hoja apretadísima y otra con dos SKU
+  enormes: la misma bolsa con dos etiquetas que no se parecían en nada.
+- 🔑 **Escanear imprime y recién después se puede elegir**, y es a propósito. Toda la sección es
+  «escaneá y ya está»; una lista para tildar en cada escaneo le sacaba al escáner justo lo que vino a
+  ahorrar. El panel de la bolsa **queda en pantalla después de imprimir** con los colores tildados,
+  así que corregir es cambiar un tilde y reimprimir, sin ir a buscar la prenda de nuevo. La tilde
+  «elegir antes de imprimir» invierte el orden y **arranca apagada**.
+- ⚠️ **Las tres tildes de la bolsa son de la pestaña de SKU y viven en `localStorage` por marca**
+  (`monitor_eti_sku_cfg_<marca>`), con `CONFIG_SKU_DEFAULT` delante al leerlas: un guardado viejo al
+  que le falte una tilde la dejaría `undefined` y convertiría el checkbox en no controlado.
+- ⚠️ **Juntar colores es cosa del ESCÁNER, no de las cantidades de la tabla.** Ahí cada renglón es
+  una variante y su número, así que con la etiqueta grande la cantidad son **copias de la misma
+  bolsa**. El tamaño sí manda en las dos.
 
 - 🔑 **Las etiquetas se llaman por lo que DICEN, no por dónde se pegan** (Bruno, 16-ago-2026):
   información de producto · precio · precio rebajado · SKU · libre. «Depósito» y «Local» eran
@@ -88,8 +116,9 @@ una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ag
 - 🔴 **El caché de precios de TN tiene vencimiento de 30 minutos** (`TTL_PRECIOS_MS`) y la pantalla
   dice de cuándo es el precio que va a imprimir. Sin eso, con todos los descuentos entrando por el
   Monitor, se cambia un precio y la pestaña de al lado sigue imprimiendo el viejo, en silencio.
-- ⚠️ **La geometría del PDF no se toca.** Los 5 × 2,5 cm y cada constante salen en una Zebra real y
-  el archivo es un port byte-fiel del legacy. Los tres dibujos con barras comparten un solo cuerpo
+- ⚠️ **La geometría de 5 × 2,5 no se toca.** Esos milímetros y cada constante salen en una Zebra real
+  y el archivo es un port byte-fiel del legacy. ⚠️ **La de 10 × 15 (`BOLSA`) es otra cosa**: nació
+  acá el 3-sep-2026 y sí se puede ajustar, con el diff de la cinta delante. Los tres dibujos con barras comparten un solo cuerpo
   (`dibujarCuerpo`) desde el 17-ago; lo que cambió es dónde está escrito, no un milímetro.
 - ⚠️ **En jsPDF el corte de línea depende de la fuente activa** ⇒ el `setFont` va **antes** del
   `splitTextToSize`. Medir en normal y escribir en negrita parte el nombre en otro lado.
@@ -108,6 +137,12 @@ una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ag
   Ahora las dos previas de la pantalla son el PDF real, por `PreviaPdf`.
 
 ## Pendiente
+
+- 🔴 ⛔ **La etiqueta de bolsa no se imprimió nunca de verdad.** El dibujo se miró en PDF (jsPDF real,
+  no el doble de los tests) y entra bien con uno, cuatro y seis SKU, pero **falta el rollo de 10 × 15
+  en la impresora**: que Bruno escanee una prenda con las dos tildes prendidas y vea salir la hoja.
+  Como el resto de la sección, eso no lo puede ejercer una sesión de IA (`autoPrint` abre el diálogo
+  del navegador).
 
 - 🔴 ⛔ **NADA de la cola se ejerció a mano.** Falta que Bruno cargue una cantidad, imprima con el
   lector y vea que la prenda **sale** de la cola. `pdf.autoPrint()` abre el diálogo del navegador y

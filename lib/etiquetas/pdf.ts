@@ -322,3 +322,152 @@ export function imprimirPdf(pdf: Pdf) {
   }
   f.src = url
 }
+
+// ── La etiqueta de bolsa: 10 × 15 cm con los SKU de un producto ──
+
+/**
+ * Geometría de la etiqueta grande.
+ *
+ * 🔑 **Acá manda el SKU y el nombre es el pie.** El depósito se ordena **por SKU** (Bruno,
+ * 3-sep-2026): el número es lo que se busca de lejos y el nombre del producto sólo confirma que la
+ * bolsa es la correcta. Por eso el SKU arranca enorme y se achica hasta entrar, y el nombre tiene un
+ * cuerpo fijo y chico abajo de todo.
+ *
+ * ⚠️ **No es la geometría de la Zebra de 5 × 2,5.** Aquélla es un port byte-fiel y no se toca; ésta
+ * nació acá y se puede ajustar mirando el diff de la cinta de `tests/etiquetas-pdf.test.ts`.
+ */
+const BOLSA = {
+  W: 100,
+  Hh: 150,
+  M: 8,
+  /** El SKU arranca así de grande y baja de a un punto hasta entrar a lo alto y a lo ancho. */
+  fsMax: 46,
+  fsMin: 15,
+  /** El color, abajo de su SKU: dice cuál de las bolsas es, no se busca por él. */
+  ratioVar: 0.42,
+  fsVarMin: 8,
+  gapSkuVar: 1.2,
+  gapBloques: 4,
+  /** El pie con el nombre del producto: cuerpo fijo, y el aire que lo separa de los SKU. */
+  fsPie: 11,
+  gapPie: 5,
+}
+
+/**
+ * Cuántos SKU entran en una etiqueta antes de que el número deje de leerse de lejos: de ahí en más
+ * el producto pasa a una segunda etiqueta en vez de amontonarlos. Con seis el cuerpo no baja de ~27
+ * puntos, que es lo que se lee parado frente al estante.
+ */
+export const SKU_POR_BOLSA = 6
+
+/**
+ * Cómo se reparten los SKU de un producto en varias etiquetas: **parejo, no llenando la primera**.
+ *
+ * 🔴 Cortando de a seis, diez colores daban una etiqueta apretadísima y otra con dos SKU enormes —
+ * la misma bolsa con dos etiquetas que no se parecen en nada. Repartidos, las dos salen de cinco y
+ * con el mismo cuerpo.
+ */
+export function repartirSku<T>(vs: T[], tope = SKU_POR_BOLSA): T[][] {
+  if (vs.length <= tope) return vs.length ? [vs] : []
+  const hojas = Math.ceil(vs.length / tope)
+  const porHoja = Math.ceil(vs.length / hojas)
+  const out: T[][] = []
+  for (let i = 0; i < vs.length; i += porHoja) out.push(vs.slice(i, i + porHoja))
+  return out
+}
+
+/** Una bolsa del depósito: un producto y los SKU que van pegados en ella. */
+export type BolsaSku = { producto: string; variantes: VarianteEti[] }
+
+/** Alto en mm de la tira de SKU con un cuerpo dado. Una variante sin color no gasta su renglón. */
+function altoBloques(vs: VarianteEti[], fs: number): number {
+  const fsVar = Math.max(BOLSA.fsVarMin, fs * BOLSA.ratioVar)
+  let alto = 0
+  vs.forEach((v, i) => {
+    if (i) alto += BOLSA.gapBloques
+    alto += fs * 0.42
+    if ((v.size || '').trim()) alto += BOLSA.gapSkuVar + fsVar * 0.42
+  })
+  return alto
+}
+
+/** El SKU más ancho con ese cuerpo. ⚠️ Deja puesta la tipografía: quien llama la vuelve a fijar. */
+function anchoMayor(pdf: Pdf, vs: VarianteEti[], fs: number): number {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(fs)
+  return vs.reduce((m: number, v) => Math.max(m, pdf.getTextWidth(v.sku || '')), 0)
+}
+
+function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku) {
+  const { W, Hh, M } = BOLSA
+  const CX = W / 2
+  const ancho = W - M * 2
+  const vs = bolsa.variantes
+
+  // El pie se mide PRIMERO: el lugar que ocupa es el que los SKU no tienen, y son ellos los que se
+  // achican. Al revés, un nombre de dos renglones les comía el borde de abajo sin avisar.
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(BOLSA.fsPie)
+  const pie = pdf.splitTextToSize((bolsa.producto || '—').toUpperCase(), ancho).slice(0, 2)
+  const altoPie = pie.length * (BOLSA.fsPie * 0.42) + BOLSA.gapPie
+  const disponible = Hh - M * 2 - altoPie
+
+  let fs = BOLSA.fsMax
+  while (fs > BOLSA.fsMin && (altoBloques(vs, fs) > disponible || anchoMayor(pdf, vs, fs) > ancho)) fs -= 1
+  const fsVar = Math.max(BOLSA.fsVarMin, fs * BOLSA.ratioVar)
+
+  let y = M + Math.max(0, (disponible - altoBloques(vs, fs)) / 2)
+  vs.forEach((v, i) => {
+    if (i) y += BOLSA.gapBloques
+    pdf.setTextColor(0)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(fs)
+    pdf.text(v.sku || '', CX, y, { align: 'center', baseline: 'top' })
+    y += fs * 0.42
+    const variante = (v.size || '').trim()
+    if (variante) {
+      y += BOLSA.gapSkuVar
+      pdf.setTextColor(90)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(fsVar)
+      pdf.text(pdf.splitTextToSize(variante, ancho).slice(0, 1), CX, y, { align: 'center', baseline: 'top' })
+      y += fsVar * 0.42
+    }
+  })
+
+  const yPie = Hh - M - pie.length * (BOLSA.fsPie * 0.42)
+  pdf.setDrawColor(170)
+  pdf.setLineWidth(0.3)
+  pdf.line(M, yPie - BOLSA.gapPie / 2, W - M, yPie - BOLSA.gapPie / 2)
+  pdf.setTextColor(90)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(BOLSA.fsPie)
+  pdf.text(pie, CX, yPie, { align: 'center', baseline: 'top' })
+}
+
+/**
+ * El PDF de las etiquetas de bolsa (10 × 15 cm): una hoja por bolsa, con sus SKU grandes y el
+ * nombre del producto al pie.
+ *
+ * 🔑 **Una bolsa puede llevar varios SKU.** Es toda la razón del tamaño grande: los cuatro colores
+ * de un producto van juntos y en 5 × 2,5 no entran.
+ *
+ * ⚠️ **Una variante sin SKU no entra**, porque no habría nada que imprimir; una bolsa que se queda
+ * sin ninguna se saltea entera. Con todas vacías devuelve `null` en vez de un PDF en blanco, que es
+ * lo que se manda a la impresora sin que nadie se entere.
+ */
+export async function buildSkuGrandePdf(bolsas: BolsaSku[]): Promise<Pdf | null> {
+  const { jsPDF } = await import('jspdf')
+  const { W, Hh } = BOLSA
+  const hojas: BolsaSku[] = []
+  for (const b of bolsas || []) {
+    for (const tanda of repartirSku((b.variantes || []).filter((v) => (v.sku || '').trim()))) hojas.push({ producto: b.producto, variantes: tanda })
+  }
+  if (!hojas.length) return null
+  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'portrait' })
+  hojas.forEach((hoja, i) => {
+    if (i > 0) pdf.addPage([W, Hh], 'portrait')
+    dibujarBolsa(pdf, hoja)
+  })
+  return pdf
+}

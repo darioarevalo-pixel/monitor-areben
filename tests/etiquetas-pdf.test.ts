@@ -84,7 +84,7 @@ vi.stubGlobal('document', {
   createElement: () => ({ toDataURL: () => 'data:image/png;base64,XX' }),
 })
 
-const { buildEtiquetasPdf, buildLibrePdf } = await import('@/lib/etiquetas/pdf')
+const { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf } = await import('@/lib/etiquetas/pdf')
 type VarianteEti = import('@/lib/etiquetas/tipos').VarianteEti
 
 /** Un producto fijo. Nada de esto se toca: mover el fixture invalida la comparación. */
@@ -92,6 +92,11 @@ const PRENDA: VarianteEti = {
   id: 'v1', pid: '101', name: 'Jean Foster Tiro Alto', size: '38', sku: 'JF-38', barcode: '7790001234567', stock: 4,
 }
 const SIN_SKU: VarianteEti = { ...PRENDA, id: 'v2', sku: '', name: 'Top Aurea', size: 'U' }
+
+/** Los colores de un mismo producto: la bolsa que la etiqueta de 10 × 15 vino a resolver. */
+const COLORES: VarianteEti[] = ['Negro', 'Blanco', 'Rojo', 'Azul'].map((c, i) => ({
+  id: `c${i}`, pid: '202', name: 'Campera Puffer', size: c, sku: `CP-${c.slice(0, 3).toUpperCase()}`, barcode: `77900200${i}`, stock: 3,
+}))
 
 const CTX = {
   precioDe: () => 34990,
@@ -123,6 +128,15 @@ describe('el dibujo de las etiquetas no se mueve', () => {
     )
     // 🔴 Precio cero en la etiqueta de precio: cae a la de información, sin precio y sin avisar.
     salida['loc-precio-cero'] = await grabar(() => buildEtiquetasPdf([PRENDA], 'loc', { ...CTX, precioDe: () => 0 }))
+    // La etiqueta de bolsa: una sola, los cuatro colores juntos, y el corte a la segunda hoja.
+    salida['sku-grande-1'] = await grabar(() => buildSkuGrandePdf([{ producto: 'Campera Puffer', variantes: [COLORES[0]] }]))
+    salida['sku-grande-4'] = await grabar(() => buildSkuGrandePdf([{ producto: 'Campera Puffer', variantes: COLORES }]))
+    // Diez SKU no entran en una hoja: pasan a una segunda en vez de amontonarse.
+    salida['sku-grande-10'] = await grabar(() =>
+      buildSkuGrandePdf([{ producto: 'Campera Puffer', variantes: Array.from({ length: 10 }, (_, i) => ({ ...COLORES[0], id: `x${i}`, size: `Color ${i}`, sku: `CP-${i}` })) }]),
+    )
+    // Sin color en la variante no se dibuja el renglón de abajo: no hay nada que decir.
+    salida['sku-grande-sin-color'] = await grabar(() => buildSkuGrandePdf([{ producto: 'Campera Puffer', variantes: [{ ...COLORES[0], size: '' }] }]))
     salida['libre-chica'] = await grabar(() =>
       buildLibrePdf({ grande: false, copias: 2, barcode: '779000', precio: 12990, lineas: CTX.fpLines }),
     )
@@ -138,5 +152,14 @@ describe('el dibujo de las etiquetas no se mueve', () => {
 
   it('la etiqueta libre vacía no dibuja nada: devuelve null', async () => {
     expect(await buildLibrePdf({ grande: false, copias: 1, barcode: '', precio: null, lineas: [] })).toBeNull()
+  })
+
+  /**
+   * 🔴 Sin esto salía un PDF con una hoja en blanco y se mandaba a la impresora igual: la etiqueta
+   * de SKU sin SKU no dibuja nada, y nadie se entera hasta que la Zebra escupe una etiqueta vacía.
+   */
+  it('la etiqueta de bolsa sin ninguna variante con SKU devuelve null', async () => {
+    expect(await buildSkuGrandePdf([{ producto: 'Top Aurea', variantes: [SIN_SKU] }])).toBeNull()
+    expect(await buildSkuGrandePdf([])).toBeNull()
   })
 })

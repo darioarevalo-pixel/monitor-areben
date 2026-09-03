@@ -210,3 +210,35 @@ export function secuenciaLabels(grupos: Grupo[], opts: { sep: boolean; conFP: bo
 export function totalEtiquetas(cant: Cantidades): number {
   return Object.values(cant || {}).reduce((a, b) => a + b, 0)
 }
+
+/**
+ * Las variantes del MISMO producto que la escaneada, ella incluida.
+ *
+ * 🔑 **Es lo que convierte un escaneo en las cuatro bolsas del producto.** El depósito guarda una
+ * bolsa por color y cada una lleva su etiqueta de SKU: escanear las cuatro para imprimir cuatro
+ * etiquetas es el trabajo que esta función saca del medio (lo pidió Bruno el 3-sep-2026).
+ *
+ * ⚠️ **Pide SKU, no código de barras.** La etiqueta de SKU no dibuja barras, así que una variante
+ * sin código —que no se puede escanear, pero cuya bolsa existe igual— tiene que entrar. La lista de
+ * entrada por eso NO es `variantesEtiquetables`, que filtra por barras.
+ */
+export function hermanasDe(vars: VarianteEti[], v: VarianteEti): VarianteEti[] {
+  return (vars || [])
+    .filter((x) => x.pid === v.pid && x.sku)
+    .sort((a, b) => (a.size || '').localeCompare(b.size || '', 'es', { numeric: true }))
+}
+
+/**
+ * Cuáles de las hermanas se imprimen sin que nadie tilde nada: **las que tienen stock**.
+ *
+ * 🔑 **La bolsa existe porque hay mercadería.** Un color en cero no tiene bolsa en el depósito y su
+ * etiqueta se tira, así que el tilde arranca apagado — se puede prender a mano en la lista.
+ *
+ * 🔴 **Salvo que no haya ninguna con stock, y ahí manda la escaneada.** Si no, escanear una bolsa de
+ * algo que el espejo todavía cuenta en cero no imprimía NADA y la pantalla decía que estaba todo
+ * bien: quien tiene la bolsa en la mano se queda esperando una etiqueta que no va a venir.
+ */
+export function conStock(hermanas: VarianteEti[], escaneada: VarianteEti): VarianteEti[] {
+  const con = (hermanas || []).filter((x) => (x.stock || 0) > 0)
+  return con.length ? con : (hermanas || []).filter((x) => x.id === escaneada.id)
+}
