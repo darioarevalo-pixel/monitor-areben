@@ -22,25 +22,69 @@
  * Mientras tanto la pantalla dice lo que sí sabe —cuánto ya se le pidió a este cliente— y no
  * inventa la otra mitad. Un número de deuda sacado del espejo estaría desactualizado y se
  * prometería contra un saldo que ya no existe.
+ *
+ * # 🔴 Perezoso y aislado, y las dos cosas se aprendieron a golpes (3-sep-2026)
+ *
+ * La primera versión pedía los datos al ABRIR el chat, desde `PanelInterno`, y la ficha del cliente
+ * dejó de abrir. La app no tiene ningún `ErrorBoundary`, así que lo que fallara acá desmontaba todo
+ * el árbol de arriba: se veía el panel muerto y sin ninguna pista.
+ *
+ * Las dos cosas que cambiaron:
+ *   1. **No se pide nada hasta que alguien toca el bloque.** Los datos viven adentro del hijo, que
+ *      recién se monta al abrir. Cero consultas por cliente mientras no se use — que es justo lo
+ *      que este panel cuida (ver el comentario de `telChat` en PanelWhatsApp).
+ *   2. Del lado de afuera va envuelto en `<Aislado>`, así un error de acá no puede volver a
+ *      llevarse puesta la ficha.
  */
 
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
-import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
-import { estaAbierto, prometidoPorAcreedor, prometidoPorCliente, sePuedePrometer, type Compromiso } from '@/lib/compromisos/core'
-import type { Acreedor } from '@/lib/acreedores/cliente'
+import { useAcreedores } from '@/components/acreedores/useAcreedores'
+import { useCompromisos } from '@/components/acreedores/useCompromisos'
+import { crearCompromiso } from '@/lib/compromisos/cliente'
+import { estaAbierto, prometidoPorAcreedor, prometidoPorCliente, sePuedePrometer } from '@/lib/compromisos/core'
 
 const plata = (n: number) =>
   n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
-export function PagaAUnAcreedor({ cliente, acreedores, compromisos, puede, onCambio }: {
+export function PagaAUnAcreedor({ cliente }: { cliente: { id: number; name: string } }) {
+  const [abierto, setAbierto] = useState(false)
+
+  // ⛔ Mientras esté cerrado NO se monta el hijo, o sea que no sale ninguna consulta. Es la
+  // diferencia entre "dos requests por cada chat que se abre" y "dos requests cuando se usa".
+  if (!abierto) {
+    return (
+      <div style={{ margin: `0 ${space[2]}px ${space[2]}px` }}>
+        <button
+          type="button"
+          onClick={() => setAbierto(true)}
+          style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer',
+            background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
+            padding: `${space[2]}px ${space[3]}px`, fontSize: font.sm, color: color.mut,
+          }}
+        >
+          ¿Que le pague a un acreedor?
+        </button>
+      </div>
+    )
+  }
+
+  return <Contenido cliente={cliente} onCerrar={() => setAbierto(false)} />
+}
+
+function Contenido({ cliente, onCerrar }: {
   cliente: { id: number; name: string }
-  acreedores: Acreedor[]
-  compromisos: Compromiso[]
-  puede: PuedeCompromisos
-  onCambio: () => void
+  onCerrar: () => void
 }) {
+  // Recién acá salen las consultas: este componente se monta al abrir el bloque.
+  const deudas = useAcreedores()
+  const promesas = useCompromisos()
+  const acreedores = deudas.acreedores
+  const compromisos = promesas.compromisos
+  const puede = promesas.puede
+  const onCambio = promesas.recargar
   const [elegido, setElegido] = useState<string | null>(null)
   const [monto, setMonto] = useState('')
   const [titular, setTitular] = useState('')
@@ -58,7 +102,6 @@ export function PagaAUnAcreedor({ cliente, acreedores, compromisos, puede, onCam
     .map((a) => ({ a, puedePedirse: sePuedePrometer(a.disponible, prometidoAcreedor.get(a.id) ?? 0) }))
     .filter((x) => x.puedePedirse > 0)
 
-  if (!puede.prometer) return null
 
   const sel = conDeuda.find((x) => x.a.id === elegido) ?? null
   const cuenta = sel?.a.cuentas.find((c) => c.sugerida) ?? sel?.a.cuentas[0] ?? null
@@ -73,9 +116,27 @@ export function PagaAUnAcreedor({ cliente, acreedores, compromisos, puede, onCam
         padding: `${space[2]}px ${space[3]}px ${space[3]}px`, margin: `0 ${space[2]}px ${space[2]}px`,
       }}
     >
-      <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase', marginBottom: 6 }}>
-        Que le pague a un acreedor
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <div style={{ fontSize: font.xs, fontWeight: 700, letterSpacing: 0.4, color: color.mut2, textTransform: 'uppercase' }}>
+          Que le pague a un acreedor
+        </div>
+        <button type="button" onClick={onCerrar}
+          style={{ background: 'none', border: 0, cursor: 'pointer', fontSize: font.xs, color: color.mut2 }}>
+          cerrar
+        </button>
       </div>
+
+      {/* Los tres estados se dicen; ninguno deja el recuadro en blanco. */}
+      {(deudas.cargando || promesas.cargando) && (
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>Buscando a quién le debemos…</div>
+      )}
+      {!promesas.cargando && !puede.prometer && (
+        <div style={{ fontSize: font.sm, color: color.mut2 }}>
+          Tu usuario puede ver esto pero no crear promesas de pago. Se activa en Usuarios.
+        </div>
+      )}
+      {deudas.error && <div style={{ fontSize: font.xs, color: color.dangerInk }}>{deudas.error}</div>}
+      {promesas.error && <div style={{ fontSize: font.xs, color: color.dangerInk }}>{promesas.error}</div>}
 
       {yaLePedimos > 0 && (
         <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 6 }}>
@@ -85,7 +146,7 @@ export function PagaAUnAcreedor({ cliente, acreedores, compromisos, puede, onCam
         </div>
       )}
 
-      {conDeuda.length === 0 ? (
+      {puede.prometer && !deudas.cargando && (conDeuda.length === 0 ? (
         <div style={{ fontSize: font.sm, color: color.mut2 }}>
           {acreedores.length === 0
             ? 'No se pudo leer a quién le debemos. Probá de nuevo en un rato.'
@@ -193,7 +254,7 @@ export function PagaAUnAcreedor({ cliente, acreedores, compromisos, puede, onCam
             </>
           )}
         </>
-      )}
+      ))}
 
       {error && <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>{error}</div>}
       {listo && <div style={{ fontSize: font.xs, color: color.successInk, marginTop: 6 }}>{listo}</div>}

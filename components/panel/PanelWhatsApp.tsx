@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
+import { Aislado } from './Aislado'
+import { PagaAUnAcreedor } from './PagaAUnAcreedor'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
@@ -848,11 +850,14 @@ function PanelInterno({
           onTachar={() => mutar((m) => cumplirPendiente(m, c.id, hoyISO()), 'Listo, queda en las notas')}
         />
 
-        {/* ⛔ Acá iba "Que le pague a un acreedor" (`PagaAUnAcreedor`), y se sacó el 3-sep-2026
-            porque ROMPÍA la ficha del cliente: dejaba de abrir. El componente sigue en el repo, sin
-            usar, hasta entender por qué — el panel es la herramienta de todos los días y no se
-            queda roto mientras se averigua. La sección del Monitor (Dirección → A quién le debemos)
-            no se tocó y sigue andando entera. */}
+        {/* Que le pague a un acreedor.
+            🔴 Va envuelto en `Aislado` y NO se puede sacar de ahí: la primera versión de este
+            bloque dejó la ficha sin abrir (3-sep-2026), porque la app no tiene ningún
+            ErrorBoundary y lo que falla adentro de un bloque desmonta todo el árbol. Nace cerrado
+            y no pide nada hasta que alguien lo toca. */}
+        <Aislado nombre="Que le pague a un acreedor">
+          <PagaAUnAcreedor cliente={{ id: c.id, name: c.name }} />
+        </Aislado>
 
         {/* Lo último que llevó */}
         <Bloque titulo="Lo último que llevó">
