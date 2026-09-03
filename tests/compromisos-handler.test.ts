@@ -156,8 +156,53 @@ describe('confirmar', () => {
     expect(alDashboard).toHaveLength(1)
     expect(alDashboard[0].body.operacion_id).toBe('op-del-compromiso')
     expect(alDashboard[0].body.monto).toBe(500000)
-    // El pagador viaja como el titular real, que es lo que muestra el extracto del banco.
-    expect((alDashboard[0].body.pagador as { nombre: string }).nombre).toBe('Nazarena Luciani')
+  })
+
+  /**
+   * 🔑 **Los DOS nombres, no uno** (Darío, 3-sep-2026). La deuda es de un cliente; la transferencia
+   * la puede mandar otro. Antes viajaba `titular_real || cliente_nombre`, así que si transfería un
+   * tercero el pago del ledger quedaba con el nombre del tercero y sólo el ID de la clienta — y el
+   * dashboard no resuelve ids de Gestión Nube, o sea que de quién era la deuda no se podía leer.
+   */
+  it('manda de quién era la deuda Y a nombre de quién vino, separados', async () => {
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    await llamar(pedido({
+      action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02',
+      titular_real: 'Juan Pérez',
+    }))
+    const pagador = alDashboard[0].body.pagador as { cliente_id: string; nombre: string; titular: string | null }
+    expect(pagador.cliente_id).toBe('cli-9')
+    expect(pagador.nombre).toBe('Nazarena')      // el cliente: de quién era la deuda
+    expect(pagador.titular).toBe('Juan Pérez')   // el extracto: de quién es el movimiento
+  })
+
+  it('si transfirió el cliente, el titular va NULL y no repetido', async () => {
+    // Repetir el nombre obligaría a comparar las dos columnas para saber si hubo un tercero, y
+    // "hubo un tercero" es justo lo que se quiere ver de un vistazo.
+    filas.c1 = { ...COMPROMISO, titular_real: null }
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02' }))
+    const pagador = alDashboard[0].body.pagador as { nombre: string; titular: string | null }
+    expect(pagador.nombre).toBe('Nazarena')
+    expect(pagador.titular).toBeNull()
+  })
+
+  it('lo que se lee del extracto pisa lo que se había adivinado al prometer', async () => {
+    // La promesa decía "Nazarena Luciani"; en el banco vino a nombre del socio.
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    await llamar(pedido({
+      action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02', titular_real: 'Luciani SRL',
+    }))
+    expect((alDashboard[0].body.pagador as { titular: string }).titular).toBe('Luciani SRL')
+    expect(filas.c1.titular_real).toBe('Luciani SRL')
+  })
+
+  it('⛔ el resto de una promesa parcial NO hereda el titular: es otra transferencia', async () => {
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    await llamar(pedido({
+      action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-02', titular_real: 'Juan Pérez',
+    }))
+    expect(insertados[0]).toMatchObject({ monto: 300000, titular_real: null })
   })
 
   it('si el dashboard rechaza, acá NO se marca nada', async () => {

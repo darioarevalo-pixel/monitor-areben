@@ -149,9 +149,9 @@ export function Promesas({ acreedor, compromisos, puede, onCambio }: {
         {confirmando && (
           <FormConfirmar
             compromiso={confirmando}
-            onConfirmar={async (monto, fecha) => {
+            onConfirmar={async (monto, fecha, titular) => {
               await correr(async () => {
-                const r = await confirmarCompromiso(confirmando.id, monto, fecha)
+                const r = await confirmarCompromiso(confirmando.id, monto, fecha, titular)
                 setConfirmando(null)
                 setAviso(
                   r.nueva
@@ -178,7 +178,6 @@ function FormPromesa({ acreedor, maximo, onGuardar, onCancelar }: {
 }) {
   const sugerida = acreedor.cuentas.find((c) => c.sugerida) ?? acreedor.cuentas[0] ?? null
   const [cliente, setCliente] = useState('')
-  const [titular, setTitular] = useState('')
   const [clienteId, setClienteId] = useState('')
   const [monto, setMonto] = useState('')
   const [fecha, setFecha] = useState('')
@@ -208,9 +207,6 @@ function FormPromesa({ acreedor, maximo, onGuardar, onCancelar }: {
 
       <Field label="¿Qué cliente va a transferir?">
         <Input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Ej: Nazarena Luciani" autoFocus />
-      </Field>
-      <Field label="¿A nombre de quién viene la transferencia? (si es distinto)" hint="Es lo que va a mostrar el extracto del banco.">
-        <Input value={titular} onChange={(e) => setTitular(e.target.value)} placeholder="Ej: Luciani SRL" />
       </Field>
       <Field label="Número de cliente en Gestión Nube (opcional)">
         <Input value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="para poder cruzarlo con su deuda" />
@@ -250,7 +246,6 @@ function FormPromesa({ acreedor, maximo, onGuardar, onCancelar }: {
                 cuenta_banco: sugerida?.banco ?? null,
                 cuenta_titular: sugerida?.titular ?? null,
                 cliente_nombre: cliente.trim(),
-                titular_real: titular.trim() || null,
                 cliente_id: clienteId.trim() || null,
                 monto: nMonto,
                 fecha_prometida: fecha || null,
@@ -272,12 +267,14 @@ function FormPromesa({ acreedor, maximo, onGuardar, onCancelar }: {
 
 function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
   compromiso: Compromiso
-  onConfirmar: (monto: number, fecha: string) => Promise<void>
+  onConfirmar: (monto: number, fecha: string, titular: string | null) => Promise<void>
   onCancelar: () => void
 }) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [monto, setMonto] = useState(String(compromiso.monto))
   const [fecha, setFecha] = useState(hoy)
+  const [otro, setOtro] = useState(!!compromiso.titular_real && compromiso.titular_real !== compromiso.cliente_nombre)
+  const [titular, setTitular] = useState(compromiso.titular_real || '')
   const [yendo, setYendo] = useState(false)
 
   const n = Number(String(monto).replace(/\./g, '').replace(',', '.'))
@@ -287,7 +284,7 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
     <div style={{ display: 'grid', gap: space[3] }}>
       <p className="muted" style={{ fontSize: 12 }}>
         Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {compromiso.acreedor_nombre} y
-        queda a nombre de {compromiso.titular_real || compromiso.cliente_nombre}.
+        queda anotado como plata de {compromiso.cliente_nombre}.
       </p>
 
       <Field label="¿Cuánto entró de verdad?" hint={`Se había prometido ${formatMoney(Number(compromiso.monto))}.`}>
@@ -296,6 +293,25 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
       <Field label="¿Qué día transfirió?" hint="No es hoy necesariamente: el cierre de mes usa esta fecha.">
         <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
       </Field>
+
+      {/*
+        🔑 A nombre de quién vino se pregunta ACÁ y no al prometer: la promesa es del cliente, pero
+        la plata la manda muy seguido otro, y en la charla eso es una adivinanza. Mirando el
+        extracto se lee. El default es el cliente, así que el caso normal no obliga a escribir nada.
+      */}
+      {otro ? (
+        <Field label="¿A nombre de quién vino la transferencia?" hint="Es lo que muestra el extracto del banco.">
+          <Input value={titular} onChange={(e) => setTitular(e.target.value)} placeholder="Ej: Luciani SRL" autoFocus />
+          <Button variant="ghost" size="sm" style={{ marginTop: 4 }} onClick={() => { setOtro(false); setTitular('') }}>
+            No, transfirió {compromiso.cliente_nombre}
+          </Button>
+        </Field>
+      ) : (
+        <p className="muted" style={{ fontSize: 12 }}>
+          Va a quedar como que transfirió <b>{compromiso.cliente_nombre}</b>.{' '}
+          <Button variant="ghost" size="sm" onClick={() => setOtro(true)}>Vino a nombre de otro</Button>
+        </p>
+      )}
 
       {falta > 0 && (
         <Notice tone="brand">
@@ -309,8 +325,8 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
       <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
         <Button variant="ghost" onClick={onCancelar}>Cancelar</Button>
         <Button
-          disabled={!Number.isFinite(n) || n <= 0 || yendo}
-          onClick={async () => { setYendo(true); try { await onConfirmar(n, fecha) } finally { setYendo(false) } }}
+          disabled={!Number.isFinite(n) || n <= 0 || (otro && !titular.trim()) || yendo}
+          onClick={async () => { setYendo(true); try { await onConfirmar(n, fecha, otro ? titular.trim() : null) } finally { setYendo(false) } }}
         >
           {yendo ? 'Registrando…' : 'Sí, entró'}
         </Button>

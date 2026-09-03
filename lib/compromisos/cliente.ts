@@ -25,6 +25,10 @@ export type NuevoCompromiso = {
   cliente_nombre: string
   /** El teléfono del chat, ya normalizado. Va cuando el cliente todavía no existe en Gestión Nube. */
   cliente_telefono?: string | null
+  /**
+   * ⚠️ Casi nunca va: a nombre de quién viene la transferencia se pregunta al CONFIRMAR, mirando el
+   * extracto. Sólo se manda cuando el cliente lo dijo en la charla ("te transfiere mi socio").
+   */
   titular_real?: string | null
   monto: number
   fecha_prometida?: string | null
@@ -87,12 +91,17 @@ export async function cambiarEstado(id: string, estado: EstadoCompromiso): Promi
  * La plata entró: que impacte en el dashboard. `monto_real` puede ser MENOR que lo prometido —
  * cuando pasa, el servidor cierra este compromiso por lo que entró y devuelve en `nueva` la
  * promesa que anotó sola por lo que falta.
+ *
+ * 🔑 `titular_real` es **a nombre de quién vino la transferencia**, y se pasa acá y no al prometer:
+ * es un dato que se lee del extracto, no que se adivina en la charla. Vacío = transfirió el
+ * cliente, que es el caso más común.
  */
 export async function confirmarCompromiso(
   id: string,
   monto_real: number,
   fecha: string,
+  titular_real?: string | null,
 ): Promise<{ compromiso: Compromiso; nueva: Compromiso | null }> {
-  const d = await pedir({ action: 'confirmar', id, monto_real, fecha })
+  const d = await pedir({ action: 'confirmar', id, monto_real, fecha, titular_real: titular_real || null })
   return { compromiso: d.compromiso as Compromiso, nueva: (d.nueva ?? null) as Compromiso | null }
 }

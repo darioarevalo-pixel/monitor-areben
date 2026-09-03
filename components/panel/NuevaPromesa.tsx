@@ -27,6 +27,13 @@
  * (`prometidoPorTelefono`): sin eso, al mismo mayorista nuevo se le puede pedir dos veces la misma
  * plata en dos charlas.
  *
+ * # ⛔ Acá NO se pregunta a nombre de quién viene la transferencia
+ *
+ * Se preguntaba, y era pedir una adivinanza (lo levantó Darío el 3-sep-2026): **la promesa es del
+ * cliente**, pero la plata la manda muy seguido otro —el novio, el socio, la razón social— y en
+ * medio de la charla nadie sabe cuál. Ese nombre se pregunta al **confirmar**, que es cuando se
+ * está mirando el extracto: ahí se lee en vez de predecirse.
+ *
  * # ⛔ Lo que todavía NO muestra: cuánto debe el cliente
  *
  * El planteo pide "debe en GN − ya comprometido = lo que se le puede pedir". La mitad derecha está
@@ -81,7 +88,6 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
 }) {
   const [elegido, setElegido] = useState<string | null>(null)
   const [monto, setMonto] = useState('')
-  const [titular, setTitular] = useState('')
   /** Sólo para el que no está en Gestión Nube: ahí el nombre se escribe, no se sabe. */
   const [nombre, setNombre] = useState(cliente.tipo === 'sin-cargar' ? cliente.nombre : '')
   const [guardando, setGuardando] = useState(false)
@@ -213,16 +219,6 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                     borderRadius: radius.md, background: color.bg, color: color.ink,
                   }}
                 />
-                <input
-                  value={titular}
-                  onChange={(e) => setTitular(e.target.value)}
-                  placeholder="¿transfiere a nombre de otro?"
-                  style={{
-                    flex: '1 1 150px', minWidth: 0, padding: '7px 9px', fontSize: font.sm,
-                    border: `1px solid ${color.line}`, borderRadius: radius.md,
-                    background: color.bg, color: color.ink,
-                  }}
-                />
                 <Button
                   size="sm"
                   disabled={!puedeGuardar}
@@ -241,10 +237,9 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                         cliente_id: cliente.tipo === 'erp' ? String(cliente.id) : null,
                         cliente_nombre: nombreFinal,
                         cliente_telefono: cliente.telefono || null,
-                        titular_real: titular.trim() || null,
                         monto: n,
                       })
-                      setMonto(''); setTitular(''); setElegido(null)
+                      setMonto(''); setElegido(null)
                       onCreado(`Listo: quedó la promesa de ${plata(n)} a ${sel.a.nombre}.`)
                     } catch (e) {
                       setError(e instanceof Error ? e.message : 'No se pudo guardar.')

@@ -3,7 +3,7 @@
 //   GET  ?recurso=compromisos                                → { ok, compromisos, puede }
 //   POST { recurso:'compromisos', action:'crear', compromiso }
 //   POST { recurso:'compromisos', action:'estado', id, estado }
-//   POST { recurso:'compromisos', action:'confirmar', id, monto_real, fecha }
+//   POST { recurso:'compromisos', action:'confirmar', id, monto_real, fecha, titular_real }
 //   POST { recurso:'compromisos', action:'vincular', id, cliente_id, cliente_nombre, cliente_store }
 //
 // Un compromiso es "este cliente le va a transferir a este acreedor". Se anota mientras la plata
@@ -138,6 +138,8 @@ export default async function handler(req, res) {
         // en Gestión Nube. Es con lo que se reengancha después (acción `vincular`). Llega ya
         // normalizado del panel: dos formas del mismo número no se comparan iguales.
         cliente_telefono: texto(c.cliente_telefono, 40),
+        // ⛔ `titular_real` NO se pide al prometer: ver el bloque de `confirmar`. Se acepta si
+        // viene —el cliente a veces lo dice en la charla— pero nadie lo tiene que adivinar.
         titular_real: texto(c.titular_real, 160),
         monto,
         fecha_prometida: c.fecha_prometida || null,
@@ -255,6 +257,20 @@ export default async function handler(req, res) {
       ? body.fecha
       : new Date().toISOString().slice(0, 10);
 
+    /**
+     * 🔑 **A nombre de quién vino la transferencia se pregunta ACÁ, no al prometer**
+     * (planteado por Darío el 3-sep-2026).
+     *
+     * Al prometer eso es una adivinanza: la promesa la hace el cliente, pero la plata la manda muy
+     * seguido otro —el novio, el socio, la razón social— y en ese momento no se sabe cuál. Al
+     * confirmar sí se sabe, porque se está mirando el extracto: el nombre no se predice, se lee.
+     *
+     * ⚠️ Lo que llega acá **pisa** lo que se hubiera anotado al prometer, y está bien: uno es lo
+     * que se dijo y el otro es lo que pasó. Si no viene nada, queda lo que había (que puede ser
+     * nada, y entonces transfirió el cliente).
+     */
+    const titular = texto(body.titular_real, 160) ?? c.titular_real;
+
     const secreto = process.env.DASHBOARD_PUENTE_SECRET;
     if (!secreto) {
       return res.status(503).json({ error: 'Falta conectar el dashboard (DASHBOARD_PUENTE_SECRET). Sin eso el pago no se puede registrar.' });
@@ -276,9 +292,20 @@ export default async function handler(req, res) {
           monto: montoReal,
           fecha,
           instrumento: 'TRANSFERENCIA',
-          pagador: { cliente_id: c.cliente_id, nombre: c.titular_real || c.cliente_nombre },
+          /**
+           * 🔑 **Los DOS nombres, no uno.** Antes viajaba `titular_real || cliente_nombre`, o sea
+           * que si transfería un tercero el pago quedaba con el nombre del tercero y el id de la
+           * clienta — y de quién era la deuda no se podía leer, porque el dashboard no resuelve
+           * ids de Gestión Nube. Son las dos preguntas que se hacen cuando el acreedor dice que no
+           * le llegó: *de qué cliente era* y *de quién es este movimiento del extracto*.
+           */
+          pagador: {
+            cliente_id: c.cliente_id,
+            nombre: c.cliente_nombre,
+            titular: titular && titular !== c.cliente_nombre ? titular : null,
+          },
           pedido_por: quien,
-          notas: `Transferencia de ${c.cliente_nombre}${c.titular_real && c.titular_real !== c.cliente_nombre ? ` (a nombre de ${c.titular_real})` : ''}`,
+          notas: `Transferencia de ${c.cliente_nombre}${titular && titular !== c.cliente_nombre ? ` (a nombre de ${titular})` : ''}`,
         }),
       });
       const d = await r.json().catch(() => null);
@@ -302,6 +329,8 @@ export default async function handler(req, res) {
       .update({
         estado: 'confirmado',
         monto_confirmado: montoReal,
+        // Lo que se leyó del extracto queda también acá: es lo que la lista de promesas muestra.
+        titular_real: titular,
         pagos_dashboard: respuesta,
         confirmado_en: new Date().toISOString(),
         confirmado_por: quien,
@@ -338,7 +367,9 @@ export default async function handler(req, res) {
           // ⚠️ El teléfono se copia también: sin él, el resto de una promesa de alguien que
           // todavía no está en Gestión Nube nace huérfano y ya no se puede reenganchar.
           cliente_telefono: c.cliente_telefono,
-          titular_real: c.titular_real,
+          // ⛔ El titular NO se hereda: el resto es OTRA transferencia y la puede mandar otra
+          // persona. Se vuelve a leer del extracto cuando esa entre.
+          titular_real: null,
           monto: restante,
           notas: `Lo que faltó de la promesa del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,
           viene_de: c.id,

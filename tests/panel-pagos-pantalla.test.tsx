@@ -229,3 +229,26 @@ describe('quienPaga', () => {
     expect(quienPaga({ t: 'desconocido' } as never, '')).toBeNull()
   })
 })
+
+/**
+ * A nombre de quién vino la transferencia, en el formulario de confirmar.
+ *
+ * 🔑 Se pregunta acá y no al prometer (Darío, 3-sep-2026): la promesa es del cliente, pero la plata
+ * la manda muy seguido otro. Al confirmar se está mirando el extracto — el nombre se lee, no se
+ * adivina. Y el caso normal tiene que salir apretando un botón: el default es el cliente.
+ */
+describe('Pagos · quién transfirió se pregunta al confirmar', () => {
+  it('el default dice que transfirió el cliente, sin ningún campo que completar', () => {
+    compromisos.valor = { ...compromisos.valor, compromisos: [promesa({ estado: 'transferido' })] }
+    const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
+    // El formulario está plegado hasta que se toca "Ya entró": lo que se ve es el botón.
+    expect(html).toContain('Ya entró')
+  })
+
+  it('el formulario de anotar ya NO pregunta a nombre de quién', () => {
+    const html = renderToStaticMarkup(
+      <Pagos cliente={{ tipo: 'erp', id: 77, nombre: 'Nazarena', telefono: null }} onIrAlCliente={null} />,
+    )
+    expect(html).not.toContain('a nombre de otro')
+  })
+})

@@ -121,14 +121,26 @@ function Accion({ children, onClick, tono }: {
  * cliente muchas veces manda menos de lo prometido (y entonces el servidor cierra ésta por lo que
  * entró y abre una nueva por el resto); la fecha porque **el cierre de mes del dashboard imputa
  * por ella**, y "hoy" no es necesariamente el día en que transfirió.
+ *
+ * # 🔑 Y acá se pregunta a nombre de quién vino, con el default puesto
+ *
+ * Es el lugar donde ese dato existe: se está mirando el extracto. Al prometer era una adivinanza —
+ * la promesa es del cliente, pero la plata la manda muy seguido otro (Darío, 3-sep-2026).
+ *
+ * **El caso normal es un botón y nada más.** Lo que se ve por defecto es "transfirió {el cliente}",
+ * y con apretar "Sí, entró" su nombre viaja hasta el ledger. Sólo si fue otro hay que escribir, y
+ * para eso está el enlace de al lado. Al revés —un campo vacío que hay que completar siempre—
+ * el caso frecuente pagaría el precio del raro.
  */
 function Confirmar({ c, onListo, onCancelar }: {
   c: Compromiso
-  onListo: (monto: number, fecha: string) => Promise<void>
+  onListo: (monto: number, fecha: string, titular: string | null) => Promise<void>
   onCancelar: () => void
 }) {
   const [monto, setMonto] = useState(String(c.monto))
   const [fecha, setFecha] = useState(hoyISO())
+  const [otro, setOtro] = useState(!!c.titular_real && c.titular_real !== c.cliente_nombre)
+  const [titular, setTitular] = useState(c.titular_real || '')
   const [yendo, setYendo] = useState(false)
   const n = Number(String(monto).replace(/\./g, '').replace(',', '.'))
   const falta = Math.max(0, Math.round((Number(c.monto) - n) * 100) / 100)
@@ -149,6 +161,33 @@ function Confirmar({ c, onListo, onCancelar }: {
         <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
           aria-label="¿Qué día transfirió?" style={{ ...input, flex: '1 1 130px' }} />
       </div>
+
+      {/* Quién transfirió: el cliente por defecto, y el otro nombre a un clic. */}
+      <div style={{ marginTop: 6, fontSize: font.xs, color: color.mut }}>
+        {otro ? (
+          <>
+            <input
+              value={titular}
+              onChange={(e) => setTitular(e.target.value)}
+              placeholder="¿a nombre de quién vino?"
+              aria-label="¿A nombre de quién vino la transferencia?"
+              style={{ ...input, width: '100%', boxSizing: 'border-box' }}
+            />
+            <button type="button" onClick={() => { setOtro(false); setTitular('') }}
+              style={{ height: 'auto', marginTop: 4, padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: color.brand, textDecoration: 'underline' }}>
+              no, transfirió {c.cliente_nombre}
+            </button>
+          </>
+        ) : (
+          <>
+            Transfirió <b style={{ color: color.ink }}>{c.cliente_nombre}</b>.{' '}
+            <button type="button" onClick={() => setOtro(true)}
+              style={{ height: 'auto', padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: color.brand, textDecoration: 'underline' }}>
+              vino a nombre de otro
+            </button>
+          </>
+        )}
+      </div>
       {falta > 0 && (
         <div style={{ fontSize: font.xs, color: color.mut, marginTop: 6 }}>
           Entró {plata(falta)} menos de lo prometido. Ésta se cierra por lo que entró y queda una
@@ -156,8 +195,8 @@ function Confirmar({ c, onListo, onCancelar }: {
         </div>
       )}
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        <Button size="sm" disabled={!Number.isFinite(n) || n <= 0 || yendo}
-          onClick={async () => { setYendo(true); try { await onListo(n, fecha) } finally { setYendo(false) } }}>
+        <Button size="sm" disabled={!Number.isFinite(n) || n <= 0 || (otro && !titular.trim()) || yendo}
+          onClick={async () => { setYendo(true); try { await onListo(n, fecha, otro ? titular.trim() : null) } finally { setYendo(false) } }}>
           {yendo ? 'Registrando…' : 'Sí, entró'}
         </Button>
         <Accion onClick={onCancelar}>Ahora no</Accion>
@@ -172,7 +211,7 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
   puede: { prometer: boolean; confirmar: boolean }
   abierta: boolean
   onConfirmarAbrir: (id: string | null) => void
-  onConfirmar: (c: Compromiso, monto: number, fecha: string) => Promise<void>
+  onConfirmar: (c: Compromiso, monto: number, fecha: string, titular: string | null) => Promise<void>
   onEstado: (c: Compromiso, estado: 'prometido' | 'transferido' | 'cancelado') => void
   onIrAlCliente: ((c: Compromiso) => void) | null
 }) {
@@ -213,7 +252,7 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
 
       {abierta ? (
         <Confirmar c={c} onCancelar={() => onConfirmarAbrir(null)}
-          onListo={(monto, f) => onConfirmar(c, monto, f)} />
+          onListo={(monto, f, titular) => onConfirmar(c, monto, f, titular)} />
       ) : (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
           {puede.confirmar && <Accion tono="fuerte" onClick={() => onConfirmarAbrir(c.id)}>Ya entró</Accion>}
@@ -306,9 +345,9 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
                   ? 'Anotado: dice que ya transfirió. Falta confirmarlo.'
                   : 'Vuelve a quedar como prometida.'
             })}
-            onConfirmar={async (x, monto, fecha) => {
+            onConfirmar={async (x, monto, fecha, titular) => {
               await correr(async () => {
-                const r = await confirmarCompromiso(x.id, monto, fecha)
+                const r = await confirmarCompromiso(x.id, monto, fecha, titular)
                 setConfirmando(null)
                 return r.nueva
                   ? `Listo: ${plata(monto)} registrados en el dashboard. Como entró menos, quedó una promesa nueva por ${plata(Number(r.nueva.monto))}.`

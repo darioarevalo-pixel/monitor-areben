@@ -23,6 +23,15 @@ export type Compromiso = {
    * cliente existiera en Gestión Nube: es con lo que se reenganchan después.
    */
   cliente_telefono: string | null
+  /**
+   * A nombre de quién vino la transferencia, cuando NO es el cliente. `null` = la mandó él.
+   *
+   * 🔑 **Se llena al CONFIRMAR, no al prometer** (Darío, 3-sep-2026): la promesa es del cliente,
+   * pero la plata la manda muy seguido otro —el novio, el socio, la razón social— y en el momento
+   * de prometer eso es una adivinanza. Al confirmar se está mirando el extracto, así que el nombre
+   * se lee en vez de predecirse. Puede venir desde antes si el cliente lo dijo en la charla, y en
+   * ese caso lo confirmado lo pisa: uno es lo que se dijo, el otro es lo que pasó.
+   */
   titular_real: string | null
   monto: number
   monto_confirmado: number | null
