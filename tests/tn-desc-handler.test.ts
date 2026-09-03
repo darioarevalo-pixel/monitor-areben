@@ -22,6 +22,15 @@ let filaGuardada: Record<string, unknown> | null = { borrador: { parrafo: 'x', b
 
 /** La ficha guardada del producto. De acá salen los bullets que se publican. */
 let atributosGuardados: { atributo: string; valor: string }[] = []
+/** Lo que tiene cada tabla, para el GET. Las claves son los nombres de tabla. */
+let enLaBase: Record<string, Record<string, unknown>[]> = {}
+/** Cada `range` que pidió el handler: `'tn_atributos:0-999'`. Es lo que prueba que PAGINÓ. */
+const rangos: string[] = []
+
+function filasDe(nombre?: string): Record<string, unknown>[] {
+  if (nombre === 'tn_atributos' && atributosGuardados.length) return atributosGuardados
+  return enLaBase[nombre || ''] || []
+}
 
 function tabla(nombre?: string) {
   const q: Record<string, unknown> = {
@@ -30,7 +39,16 @@ function tabla(nombre?: string) {
     upsert: async (fila: Record<string, unknown>) => { llamadas.push('upsert'); upserts.push(fila); escrito = fila; return { error: null } },
     update: (fila: Record<string, unknown>) => { llamadas.push('update'); updates.push(fila); escrito = fila; return q },
     delete: () => { llamadas.push('delete'); return q },
-    then: (r: (v: unknown) => void) => r({ data: nombre === 'tn_atributos' ? atributosGuardados : [], error: null }),
+    // 🔴 `range` es lo que usa `leerTodo`, y el mock lo respeta de verdad —corta el array— en vez
+    // de devolver todo siempre: un mock que ignora el rango daría VERDE con el bug adentro.
+    range: async (desde: number, hasta: number) => {
+      rangos.push(`${nombre}:${desde}-${hasta}`)
+      return { data: filasDe(nombre).slice(desde, hasta + 1), error: null }
+    },
+    // ⛔ Una lectura SIN `range` corta en 1.000 y no avisa, igual que PostgREST. El mock imita el
+    // corte a propósito: si devolviera todo, un handler que se olvidó de paginar daría VERDE acá
+    // y rojo en producción, que es exactamente lo que pasó.
+    then: (r: (v: unknown) => void) => r({ data: filasDe(nombre).slice(0, 1000), error: null }),
   }
   return q
 }
@@ -87,6 +105,8 @@ beforeEach(() => {
   llamadas.length = 0
   updates.length = 0
   upserts.length = 0
+  rangos.length = 0
+  enLaBase = {}
   escrito = null
   atributosGuardados = []
   filaGuardada = { borrador: { parrafo: 'x', bullets: [] } }
@@ -487,5 +507,52 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     const ultimo = updates[updates.length - 1]
     expect(ultimo?.verificado).toBe(false)
     expect(String(ultimo?.error)).toContain('relectura')
+  })
+})
+
+/**
+ * 🔴 **PostgREST corta en 1.000 filas y NO avisa.** Es un caso real, medido el 3-sep-2026 contra
+ * la base viva de Zattia: la sección devolvía `atributos` con **exactamente 1.000** pares y los
+ * productos que caían más allá volvían con la ficha en blanco. El local cargaba los siete campos,
+ * los veía cargados, y al recargar la cola el producto reaparecía vacío — «dice como que está
+ * completado pero al refrescar vuelve el mismo producto sin los datos».
+ *
+ * 🔑 Lo que este test cuida no es el número: es que **«no se guardó» y «no lo leímos» se ven igual
+ * desde la pantalla**, y el primero manda a cargar todo de nuevo. El guardado siempre estuvo bien.
+ */
+describe('🔴 el GET lee la tabla ENTERA, no las primeras 1.000 filas', () => {
+  const get = { method: 'GET', headers: { 'x-monitor-auth': sobre({ user: 'x', pass: 'p' }) }, query: { store: 'zattia' }, body: {} }
+
+  it('con 1.500 atributos guardados, los devuelve los 1.500 (y pide la segunda página)', async () => {
+    sesionDe(LOCAL)
+    // 1.500 productos con un atributo cada uno: lo que importa es cruzar el techo de la página.
+    enLaBase.tn_atributos = Array.from({ length: 1500 }, (_, i) => ({ tn_id: `p${i}`, atributo: 'tela', valor: 'morley' }))
+    const res = await llamar(get)
+    expect(res.code).toBe(200)
+    expect(Object.keys(res.body?.atributos as object).length).toBe(1500)
+    // ⛔ Sin el `range`, la primera página se devolvería como si fuera todo. Que haya una SEGUNDA
+    // es la prueba de que paginó, y no de que el mock devolvió todo de una.
+    expect(rangos).toContain('tn_atributos:0-999')
+    expect(rangos).toContain('tn_atributos:1000-1999')
+  })
+
+  it('⚠️ y las medidas también: crecen MÁS RÁPIDO (una fila por casillero por talle)', async () => {
+    sesionDe(LOCAL)
+    // 1.200 filas = 40 prendas de 5 talles × 6 medidas. Es una tanda, no un caso de borde.
+    enLaBase.tn_medidas = Array.from({ length: 1200 }, (_, i) => ({
+      tn_id: `p${Math.floor(i / 30)}`, talle: String(i % 5), medida: 'largo' + (i % 6), valor: '50',
+    }))
+    const res = await llamar(get)
+    expect(res.code).toBe(200)
+    expect(Object.keys(res.body?.medidas as object).length).toBe(40)
+    expect(rangos).toContain('tn_medidas:1000-1999')
+  })
+
+  it('y la cola de descripciones, por el mismo motivo', async () => {
+    sesionDe(LOCAL)
+    enLaBase.tn_descripciones = Array.from({ length: 1100 }, (_, i) => ({ tn_id: `p${i}`, estado: 'sin-insumo' }))
+    const res = await llamar(get)
+    expect(res.code).toBe(200)
+    expect((res.body?.filas as unknown[]).length).toBe(1100)
   })
 })

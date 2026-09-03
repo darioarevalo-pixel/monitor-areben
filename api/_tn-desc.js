@@ -36,6 +36,7 @@ import { htmlDeMedidas } from '../lib/tn-medidas/bloque.core.js';
 import { tallesDe } from '../lib/tn-medidas/medidas.core.js';
 import { ATRIBUTOS, FAMILIAS, bulletsDe, esPalabraPropuesta, esValor, normalizarPropuesta } from '../lib/tn-desc/atributos.core.js';
 import { esMedida, esValorDeMedida } from '../lib/tn-medidas/medidas.core.js';
+import { leerTodo } from '../lib/supabase/paginar.core.js';
 
 /** El único campo libre de la ficha. El tope es el mismo que tenía un bullet escrito a mano. */
 const MAX_DETALLE = 60;
@@ -109,17 +110,32 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const { data, error } = await supabase.from('tn_descripciones').select(COLUMNAS).eq('store', store);
-      if (error) throw new Error(error.message);
+      // 🔴 **Las tres van por `leerTodo`: PostgREST corta en 1.000 filas y NO avisa.**
+      //
+      // Es un caso REAL, medido el 3-sep-2026 contra la base viva de Zattia: la sección devolvía
+      // `atributos` con **exactamente 1.000** pares —el número redondo es la firma del corte— y
+      // los productos que caían más allá de esa fila volvían con la ficha en blanco. El local
+      // cargaba los siete campos, los veía cargados (la pantalla se queda con lo que confirmó el
+      // servidor al elegir cada uno), y al recargar la cola el producto reaparecía vacío. Lo
+      // contó Bruno así: «dice como que está completado pero al refrescar vuelve el mismo
+      // producto sin los datos».
+      //
+      // ⛔ Y **el guardado estaba bien**: lo que fallaba era la LECTURA. Ése es el modo de falla
+      // caro de este corte —«no se guardó» y «no lo leímos» se ven igual desde la pantalla, y el
+      // primero manda a cargar todo de nuevo—. Es la tercera vez en este repo (la cola de
+      // etiquetas y el stock de MINI BLUSH fueron las otras dos).
+      //
+      // ⚠️ Las tres, no sólo la que se rompió: `tn_medidas` iba por 303 pares ese mismo día, pero
+      // crece MÁS RÁPIDO que los atributos —una fila por casillero **por talle**, hasta 30 en una
+      // prenda con 5 talles— así que es la próxima en cruzar el techo, no la que está a salvo.
+      const data = await leerTodo(supabase, 'tn_descripciones', (q) => q.select(COLUMNAS).eq('store', store));
 
       // Los atributos viajan en la MISMA respuesta y no en un endpoint aparte: la pantalla los
       // necesita para dibujar cada fila (el contador «4/6») y para componer el bullet, así que
       // dos llamadas serían dos estados que se pueden desincronizar por medio segundo.
-      const { data: attrs, error: eAttrs } = await supabase
-        .from('tn_atributos')
-        .select('tn_id, atributo, valor')
-        .eq('store', store);
-      if (eAttrs) throw new Error(eAttrs.message);
+      const attrs = await leerTodo(supabase, 'tn_atributos', (q) =>
+        q.select('tn_id, atributo, valor').eq('store', store),
+      );
       const atributos = {};
       for (const a of attrs || []) {
         const id = String(a.tn_id);
@@ -129,11 +145,9 @@ export default async function handler(req, res) {
       // Las medidas viajan en la MISMA respuesta que los atributos y por el mismo motivo: la fila
       // las necesita para el contador y para saber si queda trabajo. Tres llamadas serían tres
       // estados que se pueden desincronizar por medio segundo.
-      const { data: meds, error: eMeds } = await supabase
-        .from('tn_medidas')
-        .select('tn_id, talle, medida, valor')
-        .eq('store', store);
-      if (eMeds) throw new Error(eMeds.message);
+      const meds = await leerTodo(supabase, 'tn_medidas', (q) =>
+        q.select('tn_id, talle, medida, valor').eq('store', store),
+      );
       const medidas = {};
       for (const m of meds || []) {
         const id = String(m.tn_id);
