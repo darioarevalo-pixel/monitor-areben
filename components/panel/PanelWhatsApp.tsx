@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
+import { PagaAUnAcreedor } from './PagaAUnAcreedor'
+import { useAcreedores } from '@/components/acreedores/useAcreedores'
+import { useCompromisos } from '@/components/acreedores/useCompromisos'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
@@ -363,6 +366,18 @@ function PanelInterno({
    */
   const [crmLeads, setCrmLeads] = useState<MapaLeads>({})
   const [aviso, setAviso] = useState<{ txt: string; mal?: boolean } | null>(null)
+  /**
+   * A quién le debemos y qué se le prometió a quién.
+   *
+   * 🔑 Se pide UNA vez por panel y no por chat: la lista de acreedores es la misma para todos los
+   * clientes, y pedirla en cada cambio de chat sería exactamente lo que este panel evita a
+   * propósito (ver el comentario de `telChat`).
+   *
+   * Si el dashboard no contesta, `acreedores` viene vacío y el bloque se dibuja diciéndolo. Nunca
+   * rompe la ficha: la deuda con el contador no tiene nada que ver con poder atender al cliente.
+   */
+  const deudas = useAcreedores()
+  const promesas = useCompromisos()
   const [guardando, setGuardando] = useState(false)
   const [today] = useState(() => new Date())
   /**
@@ -846,6 +861,16 @@ function PanelInterno({
             mutar((m) => setter(m, c.id, valor), 'Guardado')
           }}
           onTachar={() => mutar((m) => cumplirPendiente(m, c.id, hoyISO()), 'Listo, queda en las notas')}
+        />
+
+        {/* Que le pague a un acreedor. Va ARRIBA de "lo último que llevó" a propósito: cuando el
+            cliente debe plata, esto es lo que se está por hablar; el historial es contexto. */}
+        <PagaAUnAcreedor
+          cliente={{ id: c.id, name: c.name }}
+          acreedores={deudas.acreedores}
+          compromisos={promesas.compromisos}
+          puede={promesas.puede}
+          onCambio={promesas.recargar}
         />
 
         {/* Lo último que llevó */}

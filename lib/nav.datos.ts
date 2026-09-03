@@ -771,10 +771,22 @@ export const PERM_CAT: PermCat[] = [
     "key": "acreedores",
     "area": "direccion",
     "label": "A quién le debemos",
-    "info": "A quién le debemos plata (el contador, el abogado), cuánto, y a qué cuenta bancaria hay que transferirle. Sirve para pedirle a un cliente que nos debe que le transfiera DIRECTO al acreedor: con una transferencia se cancelan las dos deudas. El saldo lo calcula el dashboard y acá se lee —no hay una segunda copia—, así que si el dashboard no contesta la sección se ve igual, con un aviso en vez de los montos. Solo lectura: no mueve un peso.",
+    "info": "A quién le debemos plata (el contador, el abogado), cuánto, y a qué cuenta bancaria hay que transferirle. Sirve para pedirle a un cliente que nos debe que le transfiera DIRECTO al acreedor: con una transferencia se cancelan las dos deudas. El saldo lo calcula el dashboard y acá se lee —no hay una segunda copia—, así que si el dashboard no contesta la sección se ve igual, con un aviso en vez de los montos. Ver la sección no mueve un peso; anotar y confirmar son permisos aparte.",
     "brands": [
       "bdi",
       "zattia"
+    ],
+    "subs": [
+      {
+        "key": "prometer",
+        "label": "Puede anotar promesas de pago",
+        "info": "Anotar que un cliente va a transferirle a un acreedor, y mover esa promesa de estado. NO registra nada en el dashboard: hasta que alguien confirme, no se movió un peso. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      },
+      {
+        "key": "confirmar",
+        "label": "Puede confirmar que la plata entró",
+        "info": "Confirmar escribe el pago DE VERDAD en el dashboard: baja la deuda con el acreedor y queda a nombre del cliente que transfirió. Va separado de anotar a propósito: abrirle a alguien la posibilidad de anotar promesas no tiene por qué darle la de mover plata. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+      }
     ]
   },
   {
