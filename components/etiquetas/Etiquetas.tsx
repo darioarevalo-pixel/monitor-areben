@@ -17,7 +17,7 @@ import {
   resolverScan,
   secuenciaLabels,
   totalEtiquetas,
-  variantesDeCampania,
+  variantesAListar,
   variantesEtiquetables,
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
@@ -122,6 +122,9 @@ export function Etiquetas() {
     () => etiquetasDesactualizadas(cola.sellos, precioHoyPorPid, cola.stock),
     [cola.sellos, precioHoyPorPid, cola.stock],
   )
+
+  /** Cuántas prendas hay para reetiquetar, por las dos puertas. Lo usan la pestaña y el encabezado. */
+  const nCola = cola.pendientes.length + viejasPorNumero.length
 
   // La campaña dejó de ser la que decide qué etiquetar y quedó como filtro. Viaja en cada fila, así
   // que filtrar no cuesta una consulta más.
@@ -305,7 +308,10 @@ export function Etiquetas() {
         items={PESTANIAS.map((p) => {
           const { emoji, nombre } = rotuloPestania(p)
           // El único rótulo que lleva algo más que su nombre: cuántas prendas están esperando.
-          const cuantas = p === 'cola' && cola.pendientes.length ? ` (${cola.pendientes.length})` : ''
+          // 🔑 **El mismo número que el encabezado.** La cola tiene dos puertas —cambió el precio
+          // después de etiquetarla, y la etiqueta dice otro número del que se cobra— y contar sólo
+          // la primera dejaba la pestaña sin número justo cuando todas entraron por la segunda.
+          const cuantas = p === 'cola' && nCola ? ` (${nCola})` : ''
           return { key: p, label: `${emoji} ${nombre}${cuantas}` }
         })}
         value={sub}
@@ -462,10 +468,14 @@ function ModoPanel({
   }, [])
 
   const conPrecio = modo === 'loc'
-  const esPromo = modo === 'promo'
-  const enCampania = esPromo ? vars.filter((v) => promoDe(v)) : vars
+  // 🔑 **La cola se dibuja con el modo `promo` pero NO es la pestaña de promo.** Mezcla las que
+  // entran a una oferta con las que volvieron a precio de lista, así que ni el filtro de la lista ni
+  // el freno del escaneo pueden pedir «que tenga promo»: `soloPromo` separa las dos cosas.
+  const enCola = !!campania
+  const soloPromo = modo === 'promo' && !enCola
+  const conAntesAhora = soloPromo || enCola
   // La campaña acota *cuáles*; el precio lo sigue poniendo Tienda Nube.
-  const listaBase = campania ? variantesDeCampania(enCampania, campania.pids) : enCampania
+  const listaBase = variantesAListar(vars, modo, campania ?? null, (v) => !!promoDe(v))
   const lista = filtrarVariantes(listaBase, q)
   // 🔑 **La lista de una liquidación NO se corta.** El tope de 500 protege al catálogo entero, que
   // son miles de variantes; una campaña ya viene acotada (las de agosto son 260 productos / 675
@@ -492,14 +502,18 @@ function ModoPanel({
       inp.focus()
       return
     }
-    if (modo === 'sku' && !v.sku) {
+    // 🔑 **La etiqueta que le toca a ESTA prenda, no la de la pestaña.** En la cola una prenda que
+    // volvió a precio de lista lleva la de precio: preguntarle por la promo la rechazaba, y era
+    // justo la prenda que el local vino a reetiquetar.
+    const modoV = ctx.modoDe ? ctx.modoDe(v) : modo
+    if (modoV === 'sku' && !v.sku) {
       setFeedback({ ok: false, html: `✗ ${v.name || ''} no tiene SKU cargado.` })
       inp.focus()
       return
     }
     // Sin esto la etiqueta salía igual, pero sin el precio: el dibujo se cae a la de información
     // cuando el precio es cero, y la prenda termina colgada sin número.
-    if (modo === 'loc' && !(precioDe(v) > 0)) {
+    if (modoV === 'loc' && !(precioDe(v) > 0)) {
       setFeedback({ ok: false, html: `✗ ${v.name || ''} no tiene precio: la etiqueta saldría sin número. Probá «🔄 Actualizar precios».` })
       inp.focus()
       return
@@ -511,7 +525,7 @@ function ModoPanel({
       inp.focus()
       return
     }
-    if (modo === 'promo' && !promoDe(v)) {
+    if (modoV === 'promo' && !promoDe(v)) {
       setFeedback({
         ok: false,
         html: campania
@@ -521,17 +535,17 @@ function ModoPanel({
       inp.focus()
       return
     }
-    onImprimirUno(v, modo === 'loc' && conFP)
+    onImprimirUno(v, modoV === 'loc' && conFP)
     const p = precioDe(v)
-    const pr = modo === 'promo' ? promoDe(v) : null
+    const pr = modoV === 'promo' ? promoDe(v) : null
     const extra =
-      modo === 'sku' ? ` · SKU ${v.sku}` : pr ? ` · $${Math.round(pr.normal).toLocaleString('es-AR')} → $${Math.round(pr.promo).toLocaleString('es-AR')}` : modo === 'loc' && p ? ` · $${Math.round(p).toLocaleString('es-AR')}` : ''
+      modoV === 'sku' ? ` · SKU ${v.sku}` : pr ? ` · $${Math.round(pr.normal).toLocaleString('es-AR')} → $${Math.round(pr.promo).toLocaleString('es-AR')}` : modoV === 'loc' && p ? ` · $${Math.round(p).toLocaleString('es-AR')}` : ''
     setFeedback({ ok: true, html: `✓ Imprimiendo: ${v.name || ''} · ${v.size || ''}${extra}` })
     inp.focus()
   }
 
-  const scanBorder = esPromo ? color.brand : color.brandSolid
-  const cardScanStyle: CSSProperties = esPromo
+  const scanBorder = soloPromo ? color.brand : color.brandSolid
+  const cardScanStyle: CSSProperties = soloPromo
     ? { border: `1px solid ${color.brandBorder}`, background: color.brandBg }
     : { border: `1px solid ${color.brandBorder}`, background: color.brandBg }
 
@@ -579,7 +593,7 @@ function ModoPanel({
           <Button variant="solid" tone="brand" disabled={!total} onClick={() => onImprimir({ sep: modo === 'dep' && sep, conFP: modo === 'loc' && conFP })}>
             Imprimir {total} {total === 1 ? 'etiqueta' : 'etiquetas'}
           </Button>
-          {(conPrecio || esPromo) && (
+          {(conPrecio || conAntesAhora) && (
             <>
               <button
                 className="btn-sm"
@@ -631,15 +645,15 @@ function ModoPanel({
                   {th('SKU')}
                   {th('Código')}
                   {conPrecio && th('Precio', 'right')}
-                  {esPromo && th('Antes', 'right')}
-                  {esPromo && th('Ahora', 'right')}
+                  {conAntesAhora && th('Antes', 'right')}
+                  {conAntesAhora && th('Ahora', 'right')}
                   {th('Stock', 'center')}
                   {th('Etiquetas', 'center')}
                 </tr>
               </thead>
               <tbody>
                 {shown.map((v) => {
-                  const pr = esPromo ? promoDe(v) : null
+                  const pr = conAntesAhora ? promoDe(v) : null
                   return (
                     <tr key={v.id} style={{ borderTop: `1px solid ${color.line}` }}>
                       <td style={tdC}>
@@ -665,8 +679,11 @@ function ModoPanel({
                           )}
                         </td>
                       )}
-                      {esPromo && <td style={{ ...tdC, textAlign: 'right', color: color.mut2, textDecoration: 'line-through' }}>{pr ? '$' + Math.round(pr.normal).toLocaleString('es-AR') : '—'}</td>}
-                      {esPromo && <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: color.brand }}>{pr ? '$' + Math.round(pr.promo).toLocaleString('es-AR') : '—'}</td>}
+                      {conAntesAhora && <td style={{ ...tdC, textAlign: 'right', color: color.mut2, textDecoration: 'line-through' }}>{pr ? '$' + Math.round(pr.normal).toLocaleString('es-AR') : '—'}</td>}
+                      {/* 🔑 Sin promo, «ahora» es el precio de hoy —el de lista—, que es el número
+                          que va a salir impreso. Dejarlo en «—» convertía la fila de la prenda que
+                          volvió a lista en dos guiones. */}
+                      {conAntesAhora && <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: color.brand }}>{pr || precioDe(v) ? '$' + Math.round(pr ? pr.promo : precioDe(v)).toLocaleString('es-AR') : '—'}</td>}
                       <td style={{ ...tdC, textAlign: 'center', color: color.mut2 }}>{v.stock || 0}</td>
                       <td style={{ ...tdC, textAlign: 'center' }}>
                         <input type="number" min={0} value={cant[v.id] || ''} onChange={(e) => setCant(v.id, e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 68, textAlign: 'center', padding: '0 6px', height: 32 }} />
@@ -679,8 +696,8 @@ function ModoPanel({
           ) : (
             <div style={{ color: color.mut2, padding: 24, textAlign: 'center' }}>
               {campania
-                ? 'No hay productos de esta liquidación (con código de barras y precio puesto en la tienda) que coincidan.'
-                : esPromo
+                ? 'No hay prendas para reetiquetar (con código de barras) que coincidan.'
+                : soloPromo
                   ? 'No hay productos en promoción (con código de barras) que coincidan.'
                   : 'No hay variantes con código de barras que coincidan.'}
             </div>

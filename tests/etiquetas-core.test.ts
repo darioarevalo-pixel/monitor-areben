@@ -7,6 +7,7 @@ import {
   partirPorPrecio,
   resolverScan,
   secuenciaLabels,
+  variantesAListar,
   variantesDeCampania,
   variantesEtiquetables,
   variantesSinCodigo,
@@ -53,6 +54,38 @@ describe('variantesDeCampania', () => {
   })
   it('un pid de la campaña que no tiene variantes no inventa filas', () => {
     expect(variantesDeCampania(VARS, new Set(['1', '99'])).map((x) => x.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('variantesAListar · qué lista cada pestaña', () => {
+  const conPromo = (v: VarianteEti) => v.pid === '1' // sólo el Buzo está rebajado hoy
+
+  it('sin campaña, la pestaña de promo lista únicamente lo rebajado', () => {
+    expect(variantesAListar(VARS, 'promo', null, conPromo).map((x) => x.id)).toEqual(['a', 'b'])
+  })
+
+  it('sin campaña, las otras pestañas listan todo', () => {
+    expect(variantesAListar(VARS, 'loc', null, conPromo).map((x) => x.id)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  /**
+   * 🔴 El defecto medido en prod el 3-sep-2026: la cola se dibuja con el modo `promo`, y eso le
+   * aplicaba «sólo lo rebajado». La prenda a la que se le SACÓ la oferta —la mitad de la razón de
+   * ser de la cola— ya no tiene promo, así que el encabezado contaba 30 prendas y la lista salía
+   * vacía.
+   */
+  it('la cola lista sus prendas AUNQUE ya no estén rebajadas', () => {
+    const cola = { pids: new Set(['2']) } // la Remera volvió a precio de lista: no tiene promo
+    expect(variantesAListar(VARS, 'promo', cola, conPromo).map((x) => x.id)).toEqual(['c', 'd'])
+  })
+
+  it('la cola tampoco pierde las que sí siguen rebajadas', () => {
+    const cola = { pids: new Set(['1', '2']) }
+    expect(variantesAListar(VARS, 'promo', cola, conPromo).map((x) => x.id)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('una cola vacía no devuelve toda la marca', () => {
+    expect(variantesAListar(VARS, 'promo', { pids: new Set() }, conPromo)).toEqual([])
   })
 })
 

@@ -47,6 +47,15 @@ una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ag
   **sobre qué prendas**. La cola es el caso que lo prueba: no tiene dibujo propio —usa los que ya
   están, y elige **prenda por prenda** con `modoDe`, porque mezcla las que entran a una oferta con
   las que vuelven a precio de lista.
+- 🔴 **El contador decía 30 y la lista salía VACÍA** (medido en prod el 3-sep-2026: Zattia 30, BDI
+  18, las dos con la tabla en cero). La cola usa el **dibujo** `promo`, y la pantalla leía eso como
+  «mostrá sólo lo que hoy está rebajado en Tienda Nube» ⇒ la prenda a la que se le **sacó** la
+  oferta —la mitad de la razón de ser de la cola— desaparecía de la lista, y el local no tenía cómo
+  saber cuál buscar. Los dos ejes otra vez: **el dibujo no elige la lista**. La regla vive en
+  `variantesAListar` (`lib/etiquetas/core.ts`) con la campaña como **parámetro obligatorio**, y el
+  mismo error frenaba el **escaneo** (`modoV`, el modo de esa prenda y no el de la pestaña): escanear
+  una prenda que volvió a lista contestaba «no está en promoción». La pestaña además contaba **una
+  sola de las dos puertas**, así que se quedaba sin número justo cuando todas entraban por la otra.
 - 🔑 **La cola pregunta «¿lo que dice el cartelito es lo que el cliente paga HOY?»**, no «¿hubo una
   campaña?». Arrancó comparando fechas contra la bitácora y Bruno preguntó *«¿y si cambia el precio
   de lista?»*: ahí se vio el agujero, porque el de lista se carga a mano en GN sin dejar rastro. Por

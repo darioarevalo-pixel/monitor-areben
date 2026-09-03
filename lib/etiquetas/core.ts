@@ -40,6 +40,35 @@ export function variantesDeCampania(lista: VarianteEti[], pids: Set<string>): Va
 }
 
 /**
+ * Las variantes que **lista** una pestaña de Etiquetas.
+ *
+ * 🔴 **Una lista acotada por pid NO se filtra además por promoción vigente.** La pestaña de la cola
+ * de reetiquetado se dibuja con el modo `promo` —la mayoría de sus prendas entran a una oferta— y
+ * eso le aplicaba el filtro «sólo lo que hoy está rebajado en Tienda Nube». Justo la mitad de la
+ * cola es lo contrario: la prenda a la que **se le sacó** la oferta y volvió a precio de lista, que
+ * ya no tiene promo y desaparecía de la tabla. Resultado medido en prod el 3-sep-2026: el
+ * encabezado decía «30 prendas para reetiquetar» (Zattia) y «18» (BDI) y la lista de abajo estaba
+ * VACÍA en las dos ⇒ el local no tenía cómo saber cuáles buscar.
+ *
+ * 🔑 **Cuál etiqueta le toca a cada prenda se decide después, prenda por prenda** (`ctx.modoDe` en
+ * la pantalla): con el tachado si sigue en oferta, con un número solo si volvió a lista. Por eso el
+ * filtro de la lista no tiene por qué mirar la promo.
+ *
+ * @param campania La lista acotada (la cola, una liquidación), o `null` si la pestaña es el catálogo
+ *   entero. Obligatorio: es la única diferencia entre «acotada» y «todo», y omitirlo por descuido es
+ *   exactamente el defecto de arriba.
+ */
+export function variantesAListar(
+  vars: VarianteEti[],
+  modo: ModoEtiqueta,
+  campania: { pids: Set<string> } | null,
+  tienePromo: (v: VarianteEti) => boolean,
+): VarianteEti[] {
+  if (campania) return variantesDeCampania(vars, campania.pids)
+  return modo === 'promo' ? (vars || []).filter((v) => tienePromo(v)) : vars || []
+}
+
+/**
  * Mapa de precios por producto: el que la tienda cobra hoy, con respaldo al minorista de GN si el
  * producto no está en Tienda Nube. Además el mapa de promo (sólo descuentos reales) y el conjunto de
  * los que **no** salieron de Tienda Nube. Port de _etiBuildPrecios, reusando `matchTn`
