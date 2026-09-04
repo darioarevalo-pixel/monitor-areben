@@ -254,6 +254,41 @@ describe('el bullet no repite la etiqueta que ya tiene adelante', () => {
   })
 })
 
+describe('el bullet no grita: lo que está TODO en mayúsculas baja a minúscula', () => {
+  // Lo pidió Bruno el 4-sep-2026 mirando la primera ficha real: el local carga el `detalle` en
+  // mayúsculas («DETALLE EN EL BOLSILLO») y así salía a la tienda.
+  it('el detalle en mayúsculas sale en minúscula', () => {
+    // ⚠️ «DETALLE EN EL BOLSILLO» pierde además la etiqueta repetida, que es la regla de al lado:
+    // el bullet ya dice «Detalle:». Las dos cosas se aplican al mismo valor.
+    expect(textoDeBullet('detalle', 'DETALLE EN EL BOLSILLO')).toBe('en el bolsillo')
+    expect(textoDeBullet('detalle', 'CON LENTEJUELAS')).toBe('con lentejuelas')
+    expect(textoDeBullet('detalle', 'TRANSPARENTE')).toBe('transparente')
+    expect(textoDeBullet('detalle', 'ESTAMPA DE LUNARES')).toBe('estampa de lunares')
+  })
+
+  it('los acentos también bajan', () => {
+    expect(textoDeBullet('detalle', 'CON APLIQUE DE CORAZÓN')).toBe('con aplique de corazón')
+  })
+
+  it('⛔ lo que tiene mezcla queda como lo escribieron', () => {
+    expect(textoDeBullet('detalle', 'argolla plateada en el medio')).toBe('argolla plateada en el medio')
+    expect(textoDeBullet('detalle', 'cuello V')).toBe('cuello V')
+    expect(textoDeBullet('detalle', 'Con Argolla Plateada')).toBe('Con Argolla Plateada')
+  })
+
+  it('las listas cerradas no cambian: ya vienen en minúscula', () => {
+    expect(textoDeBullet('tela', 'denim rígido')).toBe('denim rígido')
+    expect(textoDeBullet('manga', 'manga larga')).toBe('larga')
+  })
+
+  it('y sale así en el bullet compuesto, que es lo que ve la clienta', () => {
+    expect(bulletsDe('pantalon', { tela: 'denim rígido', detalle: 'DETALLE EN EL BOLSILLO' })).toEqual([
+      { etiqueta: 'Tela', texto: 'denim rígido' },
+      { etiqueta: 'Detalle', texto: 'en el bolsillo' },
+    ])
+  })
+})
+
 describe('🔴 el bullet es determinista', () => {
   const cargado = { largo: 'crop', tela: 'microfibra', manga: 'breteles', calce: 'entallado' }
 

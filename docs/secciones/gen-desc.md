@@ -196,6 +196,14 @@ la pantalla lo dice — pedirle atributos a un producto del que no se sabe qué 
   distinto de «nadie lo cargó», y esa diferencia es la que dice si hay que volver a mirar la prenda.
 - ⛔ **`detalle` es el único campo libre y queda FUERA de todo análisis.** Es el escape para lo que
   no entra en ninguna lista, y va último en el bullet por la misma razón: es lo menos comparable.
+- 🔑 **El bullet no GRITA** (4-sep-2026, pedido de Bruno mirando la primera ficha real): un valor
+  escrito **todo en mayúsculas** sale en minúscula. Muerde sólo en `detalle`, que es el único que
+  se tipea —hoy están cargados «DETALLE EN EL BOLSILLO», «CON LENTEJUELAS», «TRANSPARENTE»—; los
+  demás salen de listas cerradas y ya vienen en minúscula. Se baja al **componer** y ⛔ no al
+  guardar: el valor sigue siendo la palabra del local. ⛔ Y sólo si no tiene ninguna minúscula:
+  un valor con mezcla («cuello V») está escrito a propósito.
+  ⚠️ Un `detalle` que **empieza con la palabra «detalle»** pierde además esa palabra, por la regla
+  de al lado: «DETALLE EN EL BOLSILLO» sale **«Detalle: en el bolsillo»**.
 - 🔴 **La lista cerrada la chequea el SERVIDOR** (`op:'atributos'`), no el `<select>`. Y el que
   compone **vuelve a preguntar**: un valor que no es de la familia no se dibuja aunque esté
   guardado. Un desplegable es una comodidad del que carga, no un candado.
