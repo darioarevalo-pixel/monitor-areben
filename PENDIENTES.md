@@ -748,6 +748,45 @@ de 3 compras se lee como "revertir el escalón", no como "matar"**.
 que no hubo cambio, que es lo correcto.
 
 
+### 🆕 ▶️ ZATTIA: se termina la SALE y entran PRIMAVERA-VERANO y la FERIA (3-sep-2026, dictado)
+
+**Lo que viene, en palabras de Bruno**: la sale *«ya está terminando»*; la semana del **8-sep**
+arranca la **feria** —*«montar la feria»*— y además la **temporada primavera-verano**, con todo
+nuevo. 🔑 **La feria ⛔ NO es sale**: es otra propuesta, no la continuación de la que está corriendo.
+
+🔴 **Zattia es UN SOLO conjunto** (`TEST INTERESES 1 - ZATTIA 07/05`). Bajarlo o apagarlo es bajar o
+apagar **la línea entera**, no una celda. Hoy quedó en **$7.760/día** (−20% del 3-sep, aplicado y
+verificado).
+
+⛔ **NI PV NI LA FERIA SE CUELGAN DE ESE CONJUNTO.** Es el 🔴 medido del 28-ago, en la sección «La
+FORMA del test» de más arriba: en los **10** conjuntos donde se sumó un aviso a uno que **ya
+gastaba**, el incumbente se llevó el **100%** de los dos primeros días —10 de 10— y la pieza nueva
+se quedó con **$0 en 8 de 10**. Ese conjunto viene gastando $93.376 en diez días ⇒ una pieza de PV
+metida adentro **no sale al aire**, y a los dos días se concluye «PV no funciona» cuando nunca
+corrió. **Van en conjuntos NUEVOS.**
+
+⛔ **Y PV y la feria tampoco comparten conjunto entre sí**: arrancando juntas la #1 se lleva el 79%
+y la #2 el 20%. Son dos propuestas con público y mensaje distintos; mezclarlas es no poder leer
+ninguna. **Dos celdas separadas, arrancadas a la vez.**
+
+▶️ **Las dos preguntas abiertas, las dos de Bruno:**
+
+1. **La plata.** Zattia queda en $7.760/día. Dos celdas de test son **$10.000/día cada una por dos
+   días** ⇒ **más que triplica** la línea mientras la sale todavía corre. ¿Van las dos juntas, o
+   primero PV y la feria después?
+2. 🔴 **¿La feria es PRESENCIAL?** *«Montar la feria»* suena a stand físico. Si lo es, **el
+   instrumento no sirve**: el techo de Zattia ($4.428) es por **compra ONLINE**, y una pauta que
+   trae gente al lugar ⛔ no genera esa compra. La regla del test la leería como «$20.000, 0
+   compras ⇒ MUERE» **a los dos días, funcionando perfecto**. ⇒ **antes de prenderla** hay que
+   decidir contra qué se la mide (visitas al lugar, mensajes, alcance local), o queda afuera de la
+   regla del test explícitamente.
+
+📌 **Por qué el −20% de hoy fue el único toque**: el aprendizaje de ese conjunto se pierde igual
+cuando entre lo nuevo, así que el paso salió gratis; lo que se compró con él es llegar al estreno
+con el público **menos quemado** (venía en frecuencia 1,65-1,79 diez días seguidos, con el alcance
+cayendo de 3.981 a 2.017). ⚠️ **Si la feria REUSA este conjunto**, entonces ⛔ no se lo toca otra vez
+antes del arranque: cada cambio reinicia el aprendizaje.
+
 ### 🔴 REGLA DE INSTRUMENTO — el snapshot tiene una VENTANA CIEGA de 21:00 a 24:00 (3-sep-2026)
 
 **Un cambio de presupuesto o una PAUSA hechos después de las 21:00 hora argentina ⛔ NO quedan
