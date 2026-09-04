@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { estadoRealDe, filaSnapshot, isoDia, sumarDias, tramosDe } from '@/lib/meta-ads/snapshot'
+import { estadoRealDe, filaSnapshot, isoDia, isoDiaEnZona, sumarDias, tramosDe } from '@/lib/meta-ads/snapshot'
 import { accion, metricasDe, CAMPOS_INSIGHTS } from '@/lib/meta-ads/metricas'
 import { ultimoDiaCerrado } from '@/lib/meta-ads/rendimiento.core.js'
 
@@ -31,6 +31,28 @@ describe('cómo se parte el rango del backfill', () => {
     // `toISOString()` daría el día siguiente porque es UTC. Ese bug corría la fecha entera.
     const d = new Date(2026, 7, 8, 22, 30)
     expect(isoDia(d)).toBe('2026-08-08')
+  })
+})
+
+describe('qué día es HOY para la cuenta — la ventana ciega de 21 a 24', () => {
+  // El instante exacto que lo destapó: 22:03 del 3-sep en Argentina, que en UTC ya es el 4.
+  const laNoche = new Date('2026-09-04T01:03:00Z')
+
+  it('a las 22:03 de Argentina el día de la cuenta sigue siendo el 3, aunque en UTC sea el 4', () => {
+    expect(isoDiaEnZona(laNoche, 'America/Argentina/Buenos_Aires')).toBe('2026-09-03')
+    // El contraste es el bug: quien mira en UTC ya pasó de día y manda la fila del 3 al lote sin
+    // configuración, así que el −20% de esa noche no se guarda y el objeto sigue figurando ACTIVE.
+    expect(isoDiaEnZona(laNoche, 'UTC')).toBe('2026-09-04')
+  })
+
+  it('⛔ sin zona TIRA: un default silencioso es exactamente el error que se está arreglando', () => {
+    expect(() => isoDiaEnZona(laNoche, '')).toThrow(/zona de la cuenta/)
+  })
+
+  it('la zona manda aunque el proceso corra en otra: mediodía de Argentina es el mismo día en las dos', () => {
+    const mediodia = new Date('2026-09-03T15:00:00Z')
+    expect(isoDiaEnZona(mediodia, 'America/Argentina/Buenos_Aires')).toBe('2026-09-03')
+    expect(isoDiaEnZona(mediodia, 'UTC')).toBe('2026-09-03')
   })
 })
 

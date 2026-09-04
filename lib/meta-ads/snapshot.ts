@@ -16,6 +16,7 @@ import {
   estadoRealDe as estadoRealDeJs,
   filaSnapshot as filaSnapshotJs,
   isoDia as isoDiaJs,
+  isoDiaEnZona as isoDiaEnZonaJs,
   sumarDias as sumarDiasJs,
   tramosDe as tramosDeJs,
 } from './snapshot.core.js'
@@ -108,6 +109,8 @@ export const DIAS_POR_TRAMO = DIAS_POR_TRAMO_JS as number
 export const DIAS_RELECTURA = DIAS_RELECTURA_JS as number
 
 export const isoDia = isoDiaJs as (d: Date) => string
+/** 🔴 `zona` es obligatoria a propósito: sin ella el día sale de la hora del proceso. Ver el core. */
+export const isoDiaEnZona = isoDiaEnZonaJs as (d: Date, zona: string) => string
 export const tramosDe = tramosDeJs as (desde: string, hasta: string, dias?: number) => { since: string; until: string }[]
 export const estadoRealDe = estadoRealDeJs as (
   estadoConjunto: string | null | undefined,

@@ -28,7 +28,7 @@ import { resolve } from 'path'
 import { graph, insightsTodas, mensajeError, tokenMeta } from '../lib/meta-ads/graph.core.js'
 import { CAMPOS_INSIGHTS, ATTR, num } from '../lib/meta-ads/metricas.core.js'
 import {
-  DIAS_RELECTURA, estadoRealDe, filaSnapshot, isoDia, NIVELES_SNAPSHOT, tramosDe,
+  DIAS_RELECTURA, estadoRealDe, filaSnapshot, isoDia, isoDiaEnZona, NIVELES_SNAPSHOT, tramosDe,
 } from '../lib/meta-ads/snapshot.core.js'
 
 const problemas = []
@@ -168,6 +168,11 @@ async function configDe(cuentaId) {
  * Por eso la fila de HOY lleva la configuración y las demás no. PostgREST exige que todas las
  * filas de un lote tengan las mismas claves, así que son dos `upsert` distintos — y las claves
  * ausentes no entran en el `ON CONFLICT DO UPDATE SET`, o sea que releer no pisa nada.
+ *
+ * 🔴 **`hoy` tiene que venir en la zona de la CUENTA, no en la del runner.** En Actions el runner
+ * es UTC: a las 21:00 de Argentina ya es el día siguiente para él, la fila del día que de verdad
+ * está corriendo cae en `sinConfig` y el cambio de presupuesto o la pausa de esa noche ⛔ no se
+ * guardan. Pasó el 3-sep-2026 y dejó al monitor ciego de 21 a 24. Ver `isoDiaEnZona()`.
  */
 const CONFIG_COLS = ['objetivo', 'estado', 'estado_efectivo', 'estado_real', 'diario_crudo']
 
@@ -203,6 +208,9 @@ async function main() {
 
   // Qué días se piden. Sin argumentos, la ventana de relectura: Meta reatribuye conversiones hacia
   // atrás durante la ventana de atribución, así que la fila de anteayer todavía cambia.
+  // ⚠️ Este `hoyLocal` es la hora del PROCESO y sólo sirve para acotar el rango que se le pide a
+  // Meta: pedir un día de más devuelve vacío y no rompe nada. ⛔ NO decide qué fila lleva la
+  // configuración — eso va con el día de cada cuenta, más abajo. Ver `isoDiaEnZona()`.
   const hoyLocal = isoDia(new Date())
   let desde = DESDE_ARG
   let hasta = HASTA_ARG || hoyLocal
@@ -275,7 +283,12 @@ async function main() {
       }
     }
 
-    const n = await guardar(filas, hoyLocal)
+    // El día es el de la CUENTA. Sin `timezone_name` no se inventa uno: se cae al del proceso y se
+    // avisa, porque en esa corrida la ventana ciega de la noche vuelve a estar abierta.
+    let hoyCuenta = hoyLocal
+    if (cuenta.zona) hoyCuenta = isoDiaEnZona(new Date(), cuenta.zona)
+    else anotar(`la cuenta ${cuenta.id}`, 'sin timezone_name: el día sale de la hora del runner (UTC en Actions)')
+    const n = await guardar(filas, hoyCuenta)
     total += n
     console.log(`  ${String(n).padStart(5)} filas${SIMULAR ? ' (no escritas)' : ''}`)
   }

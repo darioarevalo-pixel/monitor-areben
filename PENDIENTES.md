@@ -637,6 +637,96 @@ test no es una puerta: dice cuánto AIRE tiene la celda para escalar.** Con la e
 tocar el techo — y el `TOPE_ESCALONES = 6` del código la frena en 3× ($3.308, 43% del techo).
 ⚠️ Ese 18× es optimista: la elasticidad se midió sobre la cuenta entera, y **una celda sola satura
 su público más rápido**. ▶️ Vale revisar el tope para celdas que arrancan muy abajo.
+### 🔑 La regla del ESCALADO — la VENTANA no puede cruzar un cambio de presupuesto (3-sep-2026)
+
+**Escalar pide las TRES de siempre** —CPA < 75% del techo, entrega ≥ 85% en días cerrados,
+frecuencia que no se esté yendo— **y el paso es de 20% MÁXIMO**, porque cada cambio reinicia el
+aprendizaje del conjunto. Esta sección agrega **la cuarta, que es sobre QUÉ DÍAS se miden esas
+tres**. ⛔ No deroga nada de arriba.
+
+🔴 **La ventana arranca en el ÚLTIMO CAMBIO DE PRESUPUESTO del objeto, no hace 7 días.** Un cambio
+parte la historia en dos regímenes distintos y promediarlos **miente**: da el CPA de un presupuesto
+que ya no existe.
+
+**El caso que la fijó — 3-sep-2026, lo objetó Bruno**: *«si se le realizó el escalado días previos,
+el análisis tiene que ser cómo rindió luego del escalado previo, no un análisis de ventas de los
+últimos 7 días»*. El parte ofrecía escalar **GIRLHOOD FRIO - INTERESES 1** con *«CPA $4.125 = 54%
+del techo»*. Se le había subido el presupuesto **el 1-sep** ($8.640 → $10.368, +20%). Los días
+cerrados **desde ese escalón** eran dos:
+
+| día | gasto | compras | CPA |
+|---|---|---|---|
+| 1-sep | $10.800 | 3 | $3.600 |
+| 2-sep | $10.763 | **0** | — |
+| **desde el escalón** | **$21.563** | **3** | **$7.188 = 95% del techo ($7.595)** |
+
+⇒ **no pasaba el < 75%: estaba al 95%.** El «54%» salía de que la ventana fija se comía el 29 y
+30-ago, **anteriores al escalón**, cuando corría a $8.640 y compraba a $1.726 y $3.408. Escalar así
+es subirle plata a un escalón **que todavía no devolvió nada**.
+
+🔴 **Y un escalón con menos de 2 días CERRADOS no se lee**: no es que rinda mal, es que **no hay
+lectura todavía**. Mismo espíritu que el 1er día parcial de una celda de test.
+
+✅ **Contracaso, el mismo día**: **GIRLHOOD FRIO - COPY B** sí pasó, y por el motivo contrario — su
+último cambio fue el **26-ago** (−20% a $8.000) y **nunca se tocó desde entonces**, así que los 7
+días del 27/8 al 2/9 son **un tramo homogéneo al mismo presupuesto**: $56.513 / 13 compras =
+**$4.347 = 57% del techo**, entrega 101%, frecuencia plana 1,04-1,10. Ésa es la lectura que vale.
+
+🔧 **Está en el código**: `herramientas/parte-del-dia.mjs` del repo `analista-meta`
+(`ultimoCambioDePresupuesto`). El parte ahora imprime, debajo de cada candidato, **en cuántos días y
+desde qué fecha lo midió**, y contra qué escalón.
+
+🔴 **CORRECCIÓN de la misma tarde**: se escribió acá que «A BAJAR sigue con ventana fija». **Es
+falso** — `A BAJAR` se alimenta del MISMO array `cands` que `A ESCALAR`, así que quedó alcanzada por
+el cambio sin que nadie lo pidiera. Se vio a las 18:26 del 3-sep porque **dos veredictos de bajada
+cambiaron**: FUNDAS MENOS 15MIL pasó de 221% (PAUSAR) a 117% (−20%) —el 221% mezclaba días
+anteriores a su propio −20% del 1-sep— y apareció TEST BROAD BDI a 208%. 🔑 **La lección no es el
+error de tipeo: es que una ventana compartida propaga el cambio a secciones que no se están
+mirando.** ⇒ al tocar `cands`, revisar quién más lo consume.
+
+🔴 ▶️ **ABIERTO, y lo destapó esa propagación: el umbral de PAUSAR (≥150%) NO tiene piso de
+observaciones.** Se calibró sobre ventanas de 5-7 días; con la ventana recortada al post-escalón,
+**2 días y 1 compra alcanzan para pedir una pausa**. Caso real, 3-sep: `TEST BROAD BDI - 06/05` se
+escaló el 1-sep ($6.552 → $7.862) y el parte lo mandó a PAUSAR con $15.771 / **1 compra** = 208%…
+mientras que **en los 5 días ANTERIORES al escalón iba a $31.927 / 6 compras = $5.321 = 70% del
+techo**. Lo que corresponde ahí ⛔ no es pausar: es **revertir el escalón** (−20%: $7.862 → $6.552),
+al presupuesto donde rendía. ⇒ mientras no haya piso, **una pausa medida en menos de 3 días o menos
+de 3 compras se lee como "revertir el escalón", no como "matar"**.
+
+⚠️ Sólo se miran los últimos 10 días: si el último cambio quedó fuera de esa ventana, se toma como
+que no hubo cambio, que es lo correcto.
+
+
+### 🔴 REGLA DE INSTRUMENTO — el snapshot tiene una VENTANA CIEGA de 21:00 a 24:00 (3-sep-2026)
+
+**Un cambio de presupuesto o una PAUSA hechos después de las 21:00 hora argentina ⛔ NO quedan
+registrados en la foto de ese día.** El monitor sigue mostrando el valor viejo y el objeto sigue
+figurando `ACTIVE`.
+
+**Por qué.** `snapshot-meta.mjs` parte las filas en dos lotes: sólo la fila de **HOY** lleva las
+columnas de configuración (`CONFIG_COLS` = objetivo, estado, estado_efectivo, estado_real,
+**diario_crudo**); las demás van sin ellas, a propósito, para que releer los últimos días no pise el
+presupuesto correcto de ayer con el de hoy. Y **`hoyLocal = isoDia(new Date())` usa la hora del
+runner, que en GitHub Actions es UTC**. Pasadas las 00:00 UTC (21:00 en Argentina) el script cree
+que «hoy» es el día siguiente ⇒ la fila del día que de verdad está corriendo cae en el lote **sin
+configuración**, y la fila del día nuevo no se escribe porque Meta todavía no tiene métricas para
+una fecha que, en la zona de la cuenta, no empezó.
+
+**Cómo se descubrió, y por qué importa.** El 3-sep a las 22:03 Bruno aplicó un −20% en
+`TEST INTERESES 1 - ZATTIA 07/05` ($9.700 → $7.760) y se sacó una foto para verificarlo: seguía
+diciendo **$9.700**, y ningún presupuesto de la cuenta figuraba cambiado. 🔑 **La foto no desmentía
+el cambio: no podía verlo.** La prueba de que la fila igual se reescribió es que el `spend` de Zattia
+del 3-sep sí se actualizó ($5.557 → $7.669) y el `capturado_at` quedó en 01:03Z — **métricas nuevas,
+configuración vieja**.
+
+⇒ **Cómo se trabaja mientras esto esté así:**
+- ⛔ **Después de las 21:00 no se verifica un cambio de config contra la foto.** Se verifica a la
+  mañana siguiente, cuando UTC y la cuenta vuelven a coincidir.
+- 🔴 Y al revés, que es lo peligroso: **un `ACTIVE` o un presupuesto leídos en esa franja pueden ser
+  de hasta 3 h antes.** Vale para el parte del día y para cualquier regla que se apoye en el estado.
+- ▶️ **El arreglo**: `hoyLocal` tiene que salir de la **zona de la cuenta** —`timezone_name`, que el
+  propio script ya trae en `me/adaccounts`— y no de la hora del runner.
+
 ### 🔑 La FORMA del test — cuántos avisos por conjunto (28-ago-2026)
 
 La sección de arriba dice **cuánta plata y qué puertas**. Ésta dice **cómo se agrupan los avisos**.
