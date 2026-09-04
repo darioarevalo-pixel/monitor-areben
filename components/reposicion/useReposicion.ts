@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { leerRepoConfig } from '@/lib/reposicion/cfg'
-import { guardarRepoConfig, leerInventario, ventasLocal7d } from '@/lib/reposicion/cliente'
+import { guardarRepoConfig, leerInventario, ultimaSincronizacion, ventasLocal7d } from '@/lib/reposicion/cliente'
 import { repoCfgDefault, type RepoCfg } from '@/lib/reposicion/tipos'
 import type { FilaInvRepo } from '@/lib/reposicion/inventario'
 
 /**
  * Carga y persistencia de Reposición. Port de repoInit/repoCargarInventario/
  * repoCfgLoad/repoCfgSave (index.html:12499-12547). Read-only sobre stock: baja el
- * inventario (Local+Depósito) y las ventas 7d de Supabase, y la config COMPARTIDA de
- * REPO_API (la ven todos, se guarda con debounce). El armado de `repoInv` (con TN +
+ * inventario (Local+Depósito), las ventas 7d y la hora del último sync de Supabase, y la config
+ * COMPARTIDA de REPO_API (la ven todos, se guarda con debounce). El armado de `repoInv` (con TN +
  * catsOff) lo hace el componente por `useMemo` (reactivo a tnIdx/catsOff).
  */
 
@@ -47,11 +47,20 @@ export function useReposicion(marca: Marca): EstadoReposicion {
     setCargando(true)
     setError(null)
     try {
-      const [config, inv, ventas] = await Promise.all([leerRepoConfig(marca), leerInventario(marca), ventasLocal7d(marca)])
+      const [config, inv, ventas, sincro] = await Promise.all([
+        leerRepoConfig(marca),
+        leerInventario(marca),
+        ventasLocal7d(marca),
+        ultimaSincronizacion(marca),
+      ])
       setCfg(config)
       setRawInv(inv)
       setS7(ventas)
-      setLastUpdate(new Date())
+      // 🔑 **La hora del SYNC, no la de la lectura.** Acá había un `new Date()`, y por eso la
+      // pantalla nunca podía estar desactualizada: cada vez que leía el espejo —aunque el espejo
+      // fuera de ayer— se sellaba con la hora de recién. `ultimaSincronizacion` devuelve `null`
+      // mientras ningún sync haya pasado desde que esto existe, y ahí la pantalla dice «—».
+      setLastUpdate(sincro)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

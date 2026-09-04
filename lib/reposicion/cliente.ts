@@ -51,6 +51,35 @@ export async function ventasLocal7d(marca: Marca): Promise<Record<string, number
   return out
 }
 
+/**
+ * Cuándo se escribió por última vez el espejo de inventario.
+ *
+ * 🔑 **Es la hora que la pantalla decía tener y no tenía.** «Actualizado: hh:mm» salía de un
+ * `new Date()` en el navegador —la hora de la LECTURA—, así que un espejo del día anterior se
+ * mostraba como recién traído, y esa misma hora falsa se imprimía en el PDF que se llevan al
+ * depósito. El 4-sep-2026 el sync se pasó del techo de espera y el local vio «actualizado» con
+ * el stock de ayer.
+ *
+ * Las dos claves son los dos syncs que escriben `inventario`: el rápido del botón (`inventario`)
+ * y el nocturno (`diario`, que además trae ventas). Se toma la más reciente, igual que
+ * `api/_ventas-diarias.js`. `null` si todavía no hay ninguna: la pantalla muestra «—», que es
+ * honesto, en vez de inventar una hora.
+ */
+export async function ultimaSincronizacion(marca: Marca): Promise<Date | null> {
+  try {
+    const filas = await fetchAll<{ clave: string; updated_at: string | null }>(
+      CUENTAS[marca],
+      'sync_state',
+      'select=clave,updated_at&clave=in.(inventario,diario)&order=clave',
+    )
+    const fechas = filas.map((f) => (f.updated_at ? new Date(f.updated_at).getTime() : 0)).filter((t) => t > 0)
+    return fechas.length ? new Date(Math.max(...fechas)) : null
+  } catch {
+    // Que no se pueda leer el reloj no puede voltear la pantalla: el stock ya vino.
+    return null
+  }
+}
+
 /** Guarda la config compartida (mins/topes/apagados/…). Port de repoCfgSave @11314. */
 export async function guardarRepoConfig(marca: Marca, config: RepoCfg): Promise<{ ok: boolean; error?: string }> {
   try {

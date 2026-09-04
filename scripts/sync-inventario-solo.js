@@ -103,6 +103,32 @@ async function syncProductos() {
   return { inactiveIds, prodSku, varBarcode };
 }
 
+/**
+ * Deja la hora en que el espejo de inventario quedó escrito.
+ *
+ * 🔑 **Sin esto, la pantalla no tiene forma de saber si lo que muestra es de hoy.** Reposición
+ * decía «Actualizado: <hora>» con `new Date()` del navegador —o sea, la hora en que LEYÓ, no la
+ * hora del sync—, así que un espejo de ayer se veía recién traído. `inventario` no tiene columna
+ * de fecha (son 7.193 filas que se pisan con upsert), así que el reloj va en `sync_state`, que es
+ * donde ya viven los otros dos (`diario` y `ventas-hoy-mkt`).
+ *
+ * Fila propia (`inventario`) y no la de `diario`: son dos syncs distintos con dos cadencias
+ * distintas, y el diario también escribe ventas. Quien lee toma la más reciente de las dos.
+ *
+ * No tira si falla: un reloj que no se pudo sellar no puede voltear un sync que ya guardó el
+ * stock. Se ve en el log y la pantalla muestra la hora anterior.
+ */
+async function sellarHora() {
+  const { error } = await supabase
+    .from('sync_state')
+    .upsert({ clave: 'inventario', updated_at: new Date().toISOString() }, { onConflict: 'clave' });
+  if (error) {
+    console.warn(`[sync-state] no pude sellar la hora del inventario (${error.code || error.message}); la pantalla va a mostrar la anterior.`);
+    return;
+  }
+  console.log('[sync-state] hora del inventario sellada.');
+}
+
 (async () => {
   console.log(`=== Sync RÁPIDO (productos + inventario) — ${STORE.toUpperCase()} ===`);
   console.log('Supabase:', CFG.url, '| GN token:', CFG.token.slice(0, 6) + '...');
@@ -154,5 +180,6 @@ async function syncProductos() {
     process.stdout.write(`  upsert ${i + lote.length}/${inv.length}\r`);
   }
   console.log(`\n[inventario] OK — ${STORE}`);
+  await sellarHora();
   console.log(`\n[listo] productos + inventario — ${STORE}`);
 })().catch(e => { console.error('ERROR:', e.message); process.exit(1); });

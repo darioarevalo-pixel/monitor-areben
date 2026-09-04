@@ -1,5 +1,12 @@
 name: Sync rápido de inventario
 
+# 🔑 **La marca va en el TÍTULO del run porque es el único lugar donde el Monitor puede verla.**
+# La API de GitHub no devuelve los `inputs` al listar runs, así que `bdi-catalogo/api/sync.js`
+# pedía el último run del workflow y lo daba por tuyo fuera de la marca que fuera: un sync de
+# Zattia disparado por otra persona le decía «listo» a quien estaba esperando BDI. Con esto el
+# `display_title` trae la marca y el estado se puede filtrar.
+run-name: Sync rápido de inventario — ${{ inputs.store }}
+
 # 🔒 **Los ocho workflows que hablan con Gestión Nube comparten UN candado.** No es paranoia de
 # libro: `scripts/lib/gn-rate-limit.mjs:12` documenta que "el diario del 11-ago hizo 29 páginas
 # seguidas antes de chocar y el rápido del 12 chocó a la séptima, así que hay una ventana más larga
@@ -26,9 +33,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 🔑 **`cache: 'npm'` no es una optimización, es lo que hace que el botón cumpla su promesa.**
+      # El 4-sep-2026 `npm ci` pasó de 13 segundos a 7 MINUTOS (un mal momento del registry, nada
+      # del código). El sync en sí seguía tardando 40 s, pero el navegador espera 7 minutos y
+      # Reposición mostró "actualizado" con el stock viejo. Se instalan 548 paquetes —Next, React,
+      # recharts, jspdf, vitest— para correr un script que sólo importa `@supabase/supabase-js`:
+      # mientras eso siga así, el caché es lo único que separa un sync de 40 s de uno de 8 minutos.
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       # `npm ci` y no `npm install`: instala EXACTAMENTE lo que dice package-lock.json. Con
       # `install`, un sync de producción resolvía dependencias frescas cada noche y podía traerse

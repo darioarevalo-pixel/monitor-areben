@@ -82,6 +82,12 @@ const CATALOGO = {
   venta_detalles: ['sale_id', 'product_id', 'size_id', 'size', 'quantity'],
   productos: ['id', 'name', 'category', 'sku', 'proveedor', 'retailer_price', 'created_at', 'active'],
   variante_color_manual: ['product_name', 'color'],
+  // 📌 El reloj de los syncs: dos o tres filas con una clave y una fecha, sin una sola columna de
+  // negocio. Entra porque Reposición necesita poder decir «Actualizado: <hora del sync>» en vez de
+  // la hora en que el navegador leyó, que es lo que hacía y por eso un espejo de ayer se veía
+  // fresco. No tiene sentido darle puerta propia con permiso: es la misma fecha que ya se muestra
+  // en Liquidación y en Ventas diarias, y quien la ve ya está adentro del Monitor.
+  sync_state: ['clave', 'updated_at'],
 };
 
 // `select`, `order`, `limit`, `offset`, `or`, `and` y `not` tienen su propia revisión más abajo.

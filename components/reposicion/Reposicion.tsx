@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
@@ -84,13 +84,26 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
     if (syncing) return
     setSyncing(true)
     try {
-      await dispararSyncStock(marca, setSyncLabel)
+      // 🔑 **El `done` no se puede tirar.** `dispararSyncStock` devuelve `false` cuando se le
+      // acaban los 7 minutos de espera, y acá el resultado se descartaba: la pantalla recargaba
+      // el espejo VIEJO, sellaba «Actualizado: <ahora>» y apagaba el botón como si todo hubiera
+      // salido bien. Las otras cuatro secciones que usan esta misma función —Exhibición,
+      // Ubicaciones, Caducados y «Actualizar inventario»— sí lo miran y avisan; Reposición era la
+      // única que no. El 4-sep-2026 `npm ci` tardó 7 minutos en el workflow y el sync entero se
+      // pasó del techo: el local vio «actualizado» con el stock del día anterior, apretó de nuevo,
+      // y el segundo intento quedó 7:40 haciendo cola detrás del primero.
+      const done = await dispararSyncStock(marca, setSyncLabel)
       setSyncLabel('↻ Recargando…')
       // `rep.traer()` refresca SOLO inventario + ventas 7d + config. El catálogo (`allProductos`,
       // que es contra lo que se cruza el inventario) vive en el caché de IndexedDB y sin este
       // `recargar()` quedaba viejo: se sincronizaba y el producto nuevo seguía sin aparecer.
       await Promise.all([rep.traer(), recargar()])
       setManual({})
+      if (done) toast.ok('Stock actualizado')
+      else
+        toast.aviso(
+          'La actualización está tardando más de lo normal y todavía no terminó. Lo que ves es lo último que quedó guardado — puede no tener los movimientos de hoy. Esperá un minuto y tocá «Recargar».',
+        )
     } catch (e) {
       toast.error('No se pudo actualizar: ' + (e as Error).message)
     } finally {
@@ -98,6 +111,29 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
       setSyncLabel('🔄 Cargar de Gestión Nube')
     }
   }
+
+  // Antigüedad del espejo, en texto corto.
+  //
+  // 🔑 **El reloj corre porque el caso que importa es la pestaña que quedó abierta.** Leer
+  // `Date.now()` en el render, además de impuro, congela la cuenta en el momento en que la pantalla
+  // se armó: una pestaña abierta a las 9 de la mañana seguiría diciendo «hace 5 min» a las 18. Que
+  // es —con otra forma— la misma mentira que estamos sacando. Un minuto de resolución alcanza para
+  // un cartel que se mide en horas.
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const edadMin = rep.lastUpdate ? Math.max(0, Math.round((ahora - rep.lastUpdate.getTime()) / 60000)) : null
+  const sincroVieja = edadMin != null && edadMin >= 360
+  const antiguedad =
+    edadMin == null
+      ? ''
+      : edadMin < 60
+        ? `hace ${edadMin} min`
+        : edadMin < 1440
+          ? `hace ${Math.floor(edadMin / 60)} h`
+          : `hace ${Math.floor(edadMin / 1440)} d`
 
   const onPDF = async () => {
     const ok = await reposicionPDF(inv, cfg, marca, manual, rep.lastUpdate)
@@ -180,8 +216,14 @@ function Contenido({ allProductos }: { allProductos: Producto[] }) {
                 ↺ Volver a sugeridos
               </Button>
             )}
-            <span style={{ marginLeft: 'auto', fontSize: font.sm, color: color.mut2 }}>
-              Actualizado: {rep.lastUpdate ? rep.lastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+            {/* 🔑 **Decir CUÁNTO hace, no sólo cuándo.** Una fecha sola no se lee: «04/09 10:30» a
+                las 18:00 parece de recién si no la mirás dos veces. Lo que el local necesita saber
+                antes de bajar al depósito es si esto tiene los movimientos de hoy, y eso es la
+                antigüedad. Ámbar a partir de las 6 h, que es cuando ya pasó media jornada de ventas. */}
+            <span style={{ marginLeft: 'auto', fontSize: font.sm, color: sincroVieja ? color.warningInk : color.mut2 }}>
+              {rep.lastUpdate
+                ? `Stock de Gestión Nube: ${rep.lastUpdate.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} (${antiguedad})`
+                : 'Stock de Gestión Nube: sin datos de cuándo se sincronizó'}
             </span>
           </div>
 

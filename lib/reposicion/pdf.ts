@@ -29,8 +29,12 @@ export async function reposicionPDF(
   cfg: RepoCfg,
   marca: string,
   manual: Record<string, number>,
-  /** Cuándo se leyeron los datos (el "Actualizado" de la pantalla). Un PDF de una pestaña abierta hace tres horas trae stock de hace tres horas. */
-  leido?: Date | null,
+  /**
+   * Cuándo Gestión Nube escribió este stock (no cuándo lo leyó la pantalla: eso era lo que decía
+   * antes, y por eso una hoja impresa con el espejo de ayer llevaba la hora de recién). Quien
+   * camina el depósito con el papel en la mano necesita poder ver que el stock es viejo.
+   */
+  sincronizado?: Date | null,
 ): Promise<boolean> {
   const esBdi = marca === 'bdi'
   const rep = reporte(inv, cfg, esBdi).filter((it) => moverFinal(it, cfg, esBdi, manual) > 0)
@@ -52,8 +56,8 @@ export async function reposicionPDF(
   pdf.text(`${fecha} · ${filas.length} variantes · ${totalMover} u. a mover`, M, y)
   y += 4
   // La aclaración del "!" va en el papel: quien camina el depósito no estuvo en esta conversación.
-  const cuando = leido ? leido.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
-  pdf.text(`${cuando ? `Stock leido: ${cuando}  ·  ` : ''}"!" = sin stock en el local (0 o 1): llevarlo primero`, M, y)
+  const cuando = sincronizado ? sincronizado.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
+  pdf.text(`${cuando ? `Stock de Gestión Nube: ${cuando}  ·  ` : ''}"!" = sin stock en el local (0 o 1): llevarlo primero`, M, y)
   pdf.setTextColor(0)
   y += 8
   const X = { ubic: M, prod: 30, loc: 104, dep: 120, rep: 138, pick: 156, nf: 178 }

@@ -66,6 +66,7 @@ const POR_EL_SERVIDOR = new Set([
   'venta_detalles',
   'productos',
   'variante_color_manual',
+  'sync_state',
 ])
 
 /** `bdi` | `zattia` a partir de la cuenta. Las secciones pasan `CUENTAS[marca]`, y dos de ellas una fija. */
