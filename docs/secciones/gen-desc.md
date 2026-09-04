@@ -293,11 +293,30 @@ positivo **se paga**: dispara un reintento y el borrador salió **US$0,0050 en v
 3,5 veces más por una «s». `nombraLaPrenda` acepta el plural; ⛔ pero no cualquier palabra que
 empiece igual («jeanetta» ⛔ no nombra un jean).
 
-▶️ **Falta el pie de marca** («Producto 100% Zattia 🇦🇷»), que Bruno quiere **sólo si el producto
-es de producción propia**. 🔴 Ese dato ⛔ no existe en ningún lado: los SKU de TiendaNube son el
-nombre del producto (medido: 1.815 variantes, ninguna con el formato `ZAT-TOP-NG-001` de
-producción) y ninguna de las 25 categorías de la tienda lo dice. Lo propuesto es un casillero
-`Origen` en la ficha; **lo decide Bruno**.
+### 🏁 El pie de marca sale de la ORDEN DE COMPRA (`lib/tn-desc/origen.core.js`)
+
+«Producto 100% Zattia 🇦🇷» va **sólo si el producto es de producción propia**; si es compra nacional
+⛔ no va. El primer intento fue buscar el dato en TiendaNube y **no está**: los SKU son el nombre del
+producto (1.815 variantes, ninguna con el formato `ZAT-TOP-NG-001`) y ninguna de las 25 categorías
+lo dice. 🔑 **Lo contestó Bruno: sale de la OC por la que entró** — y alcanza.
+
+- **Producción propia = la OC cuyo proveedor es la marca misma.** De las 74 OC de Zattia hay 27
+  proveedores y uno se llama `ZATTIA`: 15 órdenes, **34 productos publicados** (BABY TEE ARGENTINA,
+  REMERA STRIPES BLUE y PINK, BODY VEGAS, BUZO BROWN…). Confirmado por Bruno.
+- **El cruce va por NOMBRE** contra `recepcion_linea` → `recepcion_oc.proveedor_nombre`. Medido:
+  igualdad insensible a mayúsculas cruza **218**, normalizando **220**, y los 2 que se pierden son
+  pañuelos (fuera de alcance) ⇒ ⛔ no hay nada que ganar complicando la llave. Por SKU da lo mismo
+  (219), así que tampoco.
+- 🔴 **Cubre 220 de 356 publicados (62 %)**: los otros 136 son anteriores al webhook de Ingresos.
+  **Por eso la regla falla CERRADA: sin OC, sin pie.** Poner «100% Zattia» en algo comprado es una
+  afirmación falsa sobre el producto; no ponerlo en algo propio es una línea que falta.
+- ⛔ **Proveedores mezclados tampoco llevan pie.** Hoy ⛔ no pasa —de los 220, cero tienen `ZATTIA` y
+  otro— pero el día que pase es una pregunta abierta, ⛔ no algo para contestar solo.
+- ⚠️ **Si la consulta falla, el pie ⛔ no sale y la descripción se publica igual**: es una línea de
+  más, ⛔ no un motivo para no publicar.
+- ⚠️ **BDI ⛔ no tiene pie**: nadie definió su texto ni cuál sería su proveedor propio.
+- 📌 De la tanda del 2-sep cruzan **62 de 67 y ninguno es `ZATTIA`** ⇒ el pie ⛔ no va en ninguno de
+  los 40 que están para publicar.
 
 ## Lo que muerde
 

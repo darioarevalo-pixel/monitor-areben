@@ -35,6 +35,8 @@ function filasDe(nombre?: string): Record<string, unknown>[] {
 function tabla(nombre?: string) {
   const q: Record<string, unknown> = {
     select: () => q, eq: () => q, order: () => q,
+    // El cruce del pie de marca: `ilike` por nombre en las líneas de OC, `in` por los ids de OC.
+    ilike: () => q, in: () => q,
     maybeSingle: async () => ({ data: filaGuardada, error: null }),
     upsert: async (fila: Record<string, unknown>) => { llamadas.push('upsert'); upserts.push(fila); escrito = fila; return { error: null } },
     update: (fila: Record<string, unknown>) => { llamadas.push('update'); updates.push(fila); escrito = fila; return q },
@@ -405,6 +407,8 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     mandado = {}
     // 🔴 La ficha tiene que traer TELA: desde el 4-sep-2026 una prenda sin tela no se publica.
     atributosGuardados = [{ atributo: 'tela', valor: 'gasa' }]
+    enLaBase.recepcion_linea = []
+    enLaBase.recepcion_oc = []
   })
 
   it('🔴 el respaldo se escribe y confirma ANTES de tocar la tienda', async () => {
@@ -512,6 +516,33 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     expect(nuevo).not.toContain('Lavar del revés con agua fría.') // el del grupo «punto»
     // Y las dos telas salen en UN bullet, que es como lo lee la clienta.
     expect(nuevo).toContain('<b>Tela:</b> microfibra + microtul')
+  })
+
+  it('🆕 el PIE DE MARCA sale cuando la OC es de producción propia', async () => {
+    enLaBase.recepcion_linea = [{ oc_ref: 'zattia:412' }]
+    enLaBase.recepcion_oc = [{ proveedor_nombre: 'ZATTIA' }]
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar' }))
+    expect(String(mandado.nuevo)).toContain('Producto 100% Zattia')
+  })
+
+  it('⛔ y NO sale si la prenda es comprada', async () => {
+    enLaBase.recepcion_linea = [{ oc_ref: 'zattia:466' }]
+    enLaBase.recepcion_oc = [{ proveedor_nombre: 'ASKDENIM' }]
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar' }))
+    expect(String(mandado.nuevo)).not.toContain('100% Zattia')
+  })
+
+  it('🔴 sin ninguna OC tampoco sale: la regla falla CERRADA', async () => {
+    // 136 de los 356 publicados son anteriores al webhook de Ingresos y no tienen OC. Poner
+    // «100% Zattia» en algo comprado es peor que no ponerlo en algo propio.
+    enLaBase.recepcion_linea = []
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar' }))
+    expect(String(mandado.nuevo)).not.toContain('100% Zattia')
+    // Y la descripción se publica igual: el pie es una línea de más, no un motivo para frenar.
+    expect(String(mandado.nuevo)).toContain('AREBEN-PROSA-INI')
   })
 
   it('⛔ un borrador que NO está aprobado no sale a la tienda', async () => {

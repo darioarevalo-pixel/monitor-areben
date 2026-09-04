@@ -36,6 +36,7 @@ import { htmlDeMedidas } from '../lib/tn-medidas/bloque.core.js';
 import { tallesDe } from '../lib/tn-medidas/medidas.core.js';
 import { ATRIBUTOS, FAMILIAS, bulletsDe, esPalabraPropuesta, esValor, normalizarPropuesta, sinTela } from '../lib/tn-desc/atributos.core.js';
 import { cuidadosDe } from '../lib/tn-desc/cuidados.core.js';
+import { pieDe } from '../lib/tn-desc/origen.core.js';
 import { esMedida, esValorDeMedida } from '../lib/tn-medidas/medidas.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 
@@ -455,6 +456,30 @@ export default async function handler(req, res) {
       // Los cuidados se componen acá, desde la tela guardada, igual que los bullets y la tabla.
       const cuidados = cuidadosDe(cargados);
 
+      // 🆕 El PIE DE MARCA sale de la orden de compra por la que entró el producto, ⛔ no de un
+      // campo que alguien carga: producción propia es «la OC cuyo proveedor es la marca misma».
+      // El cruce va por NOMBRE, que es lo que las dos puntas comparten —medido: con igualdad
+      // insensible a mayúsculas cruzan 218 de los 220 que cruzan normalizando, y los 2 que se
+      // pierden son pañuelos, que están fuera de alcance—.
+      // 🔴 Si esto falla, el pie ⛔ no sale y la descripción se publica igual: es una línea de más,
+      // ⛔ no un motivo para no publicar.
+      let proveedores = [];
+      try {
+        const { data: lin } = await supabase
+          .from('recepcion_linea')
+          .select('oc_ref')
+          .eq('store', store)
+          .ilike('nombre', String(fila.nombre || '').trim());
+        const refs = [...new Set((lin || []).map((l) => l.oc_ref).filter(Boolean))];
+        if (refs.length) {
+          const { data: ocs } = await supabase.from('recepcion_oc').select('proveedor_nombre').in('id', refs);
+          proveedores = (ocs || []).map((o) => o.proveedor_nombre).filter(Boolean);
+        }
+      } catch {
+        proveedores = [];
+      }
+      const pie = pieDe(store, proveedores);
+
       // La tabla de medidas se compone acá, con lo que está GUARDADO, igual que los bullets: lo
       // que manda el navegador no decide qué sale a la tienda.
       const { data: meds, error: eMeds } = await supabase
@@ -485,7 +510,7 @@ export default async function handler(req, res) {
       const actual = typeof dLeer.html === 'string' ? dLeer.html : '';
 
       // 2. Componer. Una sola vez y en un lugar solo (`lib/tn-desc/bloques.core.js`).
-      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets, tip: fila.borrador.tip, cuidados }), { conservarResiduo, htmlTalles });
+      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets, tip: fila.borrador.tip, cuidados, pie }), { conservarResiduo, htmlTalles });
       if (!conservaLaTabla(actual, nuevo, htmlTalles)) {
         return res.status(500).json({ error: 'La composición se come la tabla de talles. No se escribió nada.' });
       }

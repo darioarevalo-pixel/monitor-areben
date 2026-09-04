@@ -35,7 +35,7 @@ export type Bullet = { etiqueta: string; texto: string }
  * tip. `cuidados` ⛔ no se escribe ni se guarda — lo compone `cuidados.core.js` desde la tela al
  * momento de publicar, igual que los bullets.
  */
-export type Borrador = { parrafo: string; bullets: Bullet[]; tip?: string; cuidados?: { grupo: string; lineas: string[] } | null }
+export type Borrador = { parrafo: string; bullets: Bullet[]; tip?: string; cuidados?: { grupo: string; lineas: string[] } | null; pie?: string | null }
 
 export const MAX_PARRAFO: number = MAX_PARRAFO_JS
 
