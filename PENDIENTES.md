@@ -146,6 +146,57 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
 
 ---
 
+## 🆕 EL OCTAVO: LA SESIÓN DE FOTOS COMO **EVENTO** — 3-sep-2026 (dictado, sin analizar todavía)
+
+Textual, en una sola vuelta, y ⛔ **nada de acá está diseñado**: se anota primero, se mide después.
+Lo abrió él mismo diciendo por qué: *«estoy teniendo inconvenientes con el armado de los mismos, las
+solicitudes de productos y demás»* ⇒ el pedido sale de **usarla**, ⛔ no de leer el código.
+
+> «Sobre sesión de fotos me gustaría profundizar un poco más. Sesión de fotos es un evento que viene
+> de tres motivos. Por eso mismo necesito que el evento opción de fotos también despliegue una
+> disparada de tareas a cada persona con la sesión de fotos, siendo un evento con **modelo, fecha,
+> hora, tiempo aproximado**. Dentro de la misma además tiene que poder solicitarse **varias
+> solicitudes de productos**. Además la solicitud de fotos tiene que poder pedirse productos **de
+> stock o de ingresos directamente, sacar info de la OC**. Eso tiene que generar un **banco de
+> productos de la sesión**, donde se realiza una **clasificación rápida** y se generan **outfits
+> digitales** con distintos productos de arriba y abajo. Si el producto de la OC que ingresó no
+> alcanza para armar outfits, se procede a pedir una **solicitud a local**, es decir, el armado de
+> outfits se realiza desde ahí, entonces va más ordenado.»
+
+🔑 **El pedido de fondo da vuelta el objeto**: hoy **la solicitud ES la sesión** (1 a 1), y esto pide
+que la **SESIÓN sea el padre** —un evento con modelo, fecha, hora y duración— y que las solicitudes
+de productos sean **hijas** (varias). Todo lo demás cuelga de ese cambio.
+
+📌 **Primera lectura, medida contra el código el 3-sep — la mitad ya existe:**
+
+| lo que pide | cómo está hoy |
+|---|---|
+| «viene de tres motivos» | ✅ **ya es un eje**: `disparador` = faltante · campaña · ingreso (`lib/solicitudes/disparador.ts`) ▶️ pero **ninguna puerta lo llena sola**: hoy se elige a mano |
+| «que despliegue una disparada de tareas a cada persona» | ✅ **ya existe y está vivo**: los **9 moldes** de la plantilla `sesion-fotos` (Agenda), que se siembran solos cuando alguien crea la sesión, **cada paso con su dueña** y su offset (la modelo −2, las referencias −1, el día 0). Cargados y ejercidos el 29-ago |
+| «con modelo» | ✅ **desde hoy**, y ahora sale del padrón (punto 6) |
+| «fecha, **hora, tiempo aproximado**» | 🔴 **fecha sí; hora y duración ⛔ NO EXISTEN** en la solicitud |
+| «varias solicitudes de productos dentro de la misma» | 🔴 **⛔ no se puede**: la sesión **es** la solicitud. Es el cambio estructural del pedido ⚠️ y ya hay un caso real que lo pide desde otro lado: una sesión que fotografía Zattia y Stunned **son dos solicitudes** |
+| «pedir de stock **o de ingresos, sacando info de la OC**» | 🔴 el borrador se arma sólo sobre el **stock** (`allProductos`/`allVariantes`); de la OC o de la recepción ⛔ nada |
+| «banco de productos + clasificación rápida + **outfits digitales** arriba/abajo» | 🔴 **⛔ no existe**. Lo único cercano es **físico**: las bolsas numeradas, donde cada bolsa **es un look** (`lib/sesionfotos/tipos.ts:70`) |
+| «si la OC no alcanza, pedir una **solicitud a local** desde ahí» | ⚠️ el sistema ya decide **depósito o local por ítem** (`origen`), pero ⛔ no como «completar un outfit» |
+
+▶️ **Lo que hay que decidir antes de escribir una línea** (⛔ ninguna es código):
+1. **Qué es una sesión sin solicitudes**: ¿el evento se crea primero —con modelo, fecha y hora— y las
+   solicitudes se le cuelgan después? Eso cambia **cuándo se siembran los 9 pasos de la Agenda**, que
+   hoy se disparan al crear la solicitud.
+2. **Qué es un outfit**: ¿arriba + abajo y nada más, o entra calzado y accesorios? ¿Un producto puede
+   estar en dos outfits? ¿El outfit se le asigna a una modelo y a una hora?
+3. **Qué es «clasificación rápida»**: ¿arriba/abajo/vestido sale de la **categoría de TiendaNube**
+   —que ya mezcla: 14 de 40 de «SHORTS, MINIS y FALDAS» son shorts, medido el 1-sep— o se tilda a
+   mano prenda por prenda?
+4. **De dónde sale «lo que ingresó por la OC»**: ¿la recepción del monitor, la OC de Gestión Nube o
+   el aviso de ingreso? Son tres fuentes con tres momentos distintos.
+5. 🔴 **Y la más cara**: ¿esto **reemplaza** la pantalla de sesión de fotos o **la envuelve**? Hay 30
+   sesiones vivas con su historial adentro, y el ciclo —venta en GN que separa stock → retiro →
+   devolución → anulación— ⛔ no se puede partir por la mitad.
+
+---
+
 ## 🆕 AGENDA — el primer día del webhook en vivo — 1-sep-2026 (pedido de Bruno)
 
 > «la selección de opciones tiene que ser según marca: Zattia es producción propia o compra
