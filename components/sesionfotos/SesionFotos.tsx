@@ -60,6 +60,7 @@ import {
   bloqueoEdicion,
   bolsasDe,
   cambiarCantidadSol,
+  conZona,
   contarBolsas,
   contarCerradas,
   maxBolsa,
@@ -76,6 +77,14 @@ import {
   sinSolicitud,
 } from '@/lib/sesionfotos/core'
 import { MOTIVOS_CAMBIO } from '@/lib/sesionfotos/tipos'
+import {
+  ROTULO_ZONA,
+  alertasDe,
+  aplicaOutfits,
+  sinZona,
+  zonasDe,
+  type ZonaPrenda,
+} from '@/lib/sesionfotos/outfits'
 import { DISPARADOR_AYUDA, DISPARADOR_LABEL, DISPARADORES, type Disparador, esDisparador } from '@/lib/solicitudes/disparador'
 import {
   conRespuestaFoto,
@@ -792,6 +801,24 @@ function Detalle({
   const grupos = bolsasDe(s)
   const nBolsas = contarBolsas(s)
   const proxBolsa = maxBolsa(s) + 1
+
+  /**
+   * Los outfits: cada bolsa es un look y cada prenda ocupa arriba, abajo o las dos.
+   *
+   * 🔑 **Se le pasa el nombre y ⛔ NO el catálogo.** El núcleo acepta las categorías de Gestión
+   * Nube como segunda fuente, pero medido el 4-sep-2026 **el 100% de lo dado de alta desde julio
+   * viene sin categoría** —y eso es justo lo que una sesión de fotos pide—, así que traer el
+   * catálogo hasta acá sería cargar props para agregar casi nada. El nombre solo clasifica
+   * **481 de las 501** con stock de Zattia.
+   *
+   * 🔴 En BDI `aplicaOutfits` da falso —fundas y cables ⛔ no son ropa— y el bloque entero
+   * desaparece: el módulo se calla en vez de afirmar.
+   */
+  const hayOutfits = aplicaOutfits(s.items)
+  const zonas = zonasDe(s.items, s.clasifOutfits)
+  const alertasOutfit = alertasDe(s.items, s.clasifOutfits)
+  const aClasificar = sinZona(s.items, s.clasifOutfits)
+  const onZona = (it: ItemSolicitud, z: ZonaPrenda | null) => setWork((w) => conZona(w, it.vid, z))
   const onAgregarVariante = (v: Variante) =>
     conMotivo(`Agregar "${v.name} · ${v.size}"`, (motivo) =>
       setWork((w) =>
@@ -894,6 +921,37 @@ function Detalle({
                       />
                     ) : typeof i.bolsa === 'number' ? (
                       <span style={{ marginRight: 6 }}><Badge tone="brand" subtle>B{i.bolsa}</Badge></span>
+                    ) : null}
+                    {/* La zona del outfit. Sólo aparece si la sesión es de ropa (`aplicaOutfits`):
+                        en BDI, donde todo son fundas, ⛔ no se pregunta nada.
+                        🔑 «Sin zona» ⛔ no es un valor que se guarde: es soltar la corrección y
+                        volver a lo que dice el nombre. */}
+                    {hayOutfits && editable ? (
+                      <select
+                        value={s.clasifOutfits?.[i.vid] ?? ''}
+                        onChange={(e) => onZona(i, (e.target.value || null) as ZonaPrenda | null)}
+                        title={
+                          zonas[i.vid]
+                            ? `Zona del outfit: ${ROTULO_ZONA[zonas[i.vid] as ZonaPrenda]}${s.clasifOutfits?.[i.vid] ? ' (corregida a mano)' : ' (propuesta por el nombre)'}`
+                            : 'Sin zona: el nombre no dice si va arriba o abajo. Elegila.'
+                        }
+                        style={{
+                          fontSize: 11,
+                          border: `1px solid ${zonas[i.vid] ? color.line : color.warningInk}`,
+                          borderRadius: 5,
+                          padding: '1px 2px',
+                          marginRight: 6,
+                          maxWidth: 96,
+                          background: zonas[i.vid] ? '#fff' : color.warningBg,
+                        }}
+                      >
+                        <option value="">{zonas[i.vid] ? `· ${ROTULO_ZONA[zonas[i.vid] as ZonaPrenda]}` : '· sin zona'}</option>
+                        <option value="arriba">{ROTULO_ZONA.arriba}</option>
+                        <option value="abajo">{ROTULO_ZONA.abajo}</option>
+                        <option value="entero">{ROTULO_ZONA.entero}</option>
+                      </select>
+                    ) : hayOutfits && zonas[i.vid] ? (
+                      <span style={{ marginRight: 6, fontSize: 11, color: color.mut2 }}>{ROTULO_ZONA[zonas[i.vid] as ZonaPrenda]}</span>
                     ) : null}
                     {editable && !i.manual ? (
                       <button
@@ -1107,7 +1165,10 @@ function Detalle({
       {/* Bolsas (Fase C #3): resumen del armado por bolsa. Aparece si hay alguna asignada. */}
       {nBolsas > 0 ? (
         <div style={{ border: `1px solid ${color.brandBorder}`, borderRadius: 9, padding: '9px 12px', margin: '10px 0', background: color.brandBg }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 6 }}>Bolsas ({nBolsas})</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: color.brand, marginBottom: 6 }}>
+            Bolsas ({nBolsas})
+            {hayOutfits ? <span style={{ fontWeight: 400, color: color.mut2 }}> · cada bolsa es un outfit: arriba + abajo, o una prenda entera</span> : null}
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {grupos.map((g) => (
               <div key={g.n ?? 'sin'} style={{ border: `1px solid ${g.n != null ? color.brandBorder : color.line}`, background: '#fff', borderRadius: 8, padding: '6px 9px', minWidth: 150 }}>
@@ -1117,12 +1178,30 @@ function Detalle({
                 {g.items.map((i) => (
                   <div key={i.vid} style={{ fontSize: 11, color: color.ink2, padding: '1px 0' }}>
                     • {i.nombre} · {i.variante} {i.qty > 1 ? `(x${i.qty})` : ''} <MarcaOrigen o={i.origen} soloIcono size={11} />
+                    {hayOutfits && zonas[i.vid] ? <span style={{ color: color.mut2 }}> · {ROTULO_ZONA[zonas[i.vid] as ZonaPrenda]}</span> : null}
                   </div>
                 ))}
+                {/* El aviso, pegado a SU bolsa: leerlo en una lista aparte obliga a buscar cuál era. */}
+                {g.n != null && alertasOutfit.some((a) => a.n === g.n) ? (
+                  <div style={{ fontSize: 11, color: color.warningInk, background: color.warningBg, borderRadius: 5, padding: '2px 5px', marginTop: 4 }}>
+                    {alertasOutfit.find((a) => a.n === g.n)?.texto}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
           {editable ? <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>Asigná bolsas con el campo de bolsa de cada ítem (próxima libre: {proxBolsa}).</div> : null}
+          {/* Lo que el sistema ⛔ NO pudo decir. Se muestra en vez de asumirlo: una prenda sin zona
+              ⛔ no cuenta para el aviso, así que sin este renglón «no falta nada» podría ser
+              «no sé nada». Los accesorios ⛔ no entran acá (`sinZona` los saca). */}
+          {hayOutfits && aClasificar.length ? (
+            <div style={{ fontSize: 11, color: color.warningInk, marginTop: 4 }}>
+              {aClasificar.length === 1 ? 'Falta decir de qué zona es' : `Faltan clasificar ${aClasificar.length} prendas`}
+              : {aClasificar.slice(0, 4).map((i) => i.nombre).join(' · ')}
+              {aClasificar.length > 4 ? ` y ${aClasificar.length - 4} más` : ''}
+              . Hasta que estén, el aviso de outfit incompleto ⛔ no las cuenta.
+            </div>
+          ) : null}
         </div>
       ) : null}
 

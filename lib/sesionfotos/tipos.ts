@@ -9,6 +9,8 @@
  * devuelto— y la solicitud no cierra hasta que volvió todo.
  */
 
+import type { ZonaPrenda } from './outfits'
+
 /** Ubicación física de la que se retira una variante. */
 export type Origen = 'deposito' | 'local'
 
@@ -138,6 +140,18 @@ export type Solicitud = {
    * campo, en `lib/sesionfotos/modelo.ts`.
    */
   modelo?: ModeloSesion
+  /**
+   * La zona del outfit CORREGIDA a mano, por `vid` (arriba · abajo · prenda entera).
+   *
+   * 🔑 **Sólo guarda la corrección, ⛔ no la propuesta.** La propuesta la calcula
+   * `lib/sesionfotos/outfits.ts` desde el nombre cada vez que se dibuja: si mañana el
+   * vocabulario aprende una palabra nueva, las sesiones viejas la aprovechan solas. Guardar la
+   * propuesta las dejaría congeladas en lo que el sistema sabía el día que se armaron.
+   *
+   * Ausente en todas las anteriores al 4-sep-2026, y ausente también en las que nadie corrigió
+   * nada — que es el caso normal y ⛔ no un dato faltante.
+   */
+  clasifOutfits?: Record<string, ZonaPrenda>
   eliminados?: ItemEliminado[]
   /** Historial de cambios (edición): agregar/quitar/cambiar cantidad/editar, con hora y motivo. */
   cambios?: Cambio[]

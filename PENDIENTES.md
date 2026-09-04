@@ -217,24 +217,47 @@ aparte. Verificado: `sql/migrate-solicitudes.sql` **⛔ no tiene CHECK** sobre `
   armado siguen andando sin tocarlos, y **un outfit puede cruzar dos solicitudes** —el top del
   depósito y el jean del local—, que es exactamente el caso que Bruno describe.
 
-### 🔴 Lo que hay que MEDIR antes de escribir la primera línea
+### 🏁 Lo que había que MEDIR: medido el 4-sep, y contestó que NO
 
-`familiaDe()` (`lib/tn-desc/atributos.core.js:322`) está escrita y medida contra las **categorías de
-TiendaNube**, y la sesión de fotos arma todo con el catálogo de **Gestión Nube**, cuyo
-`Producto.category` es **otra taxonomía, nunca comparada contra `FAMILIAS`**.
-⇒ **Primer paso: medir cuántos productos de GN caen en una familia.** Si cruza bien, la zona se
-propone con el catálogo que la pantalla ya tiene; si no, se cruza por SKU como `cruzarParaSesion`
-—cuya cobertura medida es **BDI 89,5 % / Zattia 73,3 %**, o sea que **una de cada diez piezas nace
-sin zona**—. Por eso «sin zona» es un estado de primera que se muestra y se corrige de un toque,
-⛔ **nunca un default a «arriba»**: un default afirma.
+La pregunta era si el `category` de Gestión Nube cruza con `FAMILIAS`. **No cruza, y por dos
+motivos distintos** (medido contra las dos bases por `pg` directo):
+
+| | BDI | Zattia |
+|---|---|---|
+| productos con stock | 223 | 501 |
+| cruzan con una familia | **0 (0%)** | **36 (7,2%)** |
+| sin categoría en GN | 1 | **400 (79,8%)** |
+
+- 🔴 **La categoría de GN dejó de llenarse.** De lo dado de alta **desde julio-2026** con stock en
+  Zattia, **el 100% viene sin categoría** (35/35 · 50/50 · 67/67). Y una sesión de fotos pide,
+  justamente, **lo que acaba de entrar** ⇒ la categoría ⛔ no puede contestar, ni siquiera bien
+  llenada.
+- 🔴 **En BDI el 0% ⛔ no es un defecto: no vende ropa.** Fundas, cables y vidrios templados.
+- 🔑 **En GN `category` ⛔ no es una categoría: es una lista separada por comas** (`'NEW IN, DAY,
+  DENIM'`). Medirla como cadena sola daba «casi nada cruza»; partida, Zattia pasa de 9,9% a 24,1%.
+
+⇒ 🔑 **la zona sale del NOMBRE**, que está siempre: `TOP` 131 · `SHORT` 40 · `MINI` 34 · `BABY` 31…
+La categoría queda de segunda fuente. ⛔ **La salida por SKU contra TiendaNube ⛔ no hacía falta.**
+El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
 
 ### Las cinco fases, por valor entregado
 
-1. 🔑 **Clasificación + el aviso «al outfit 3 le falta el abajo», SOBRE LAS BOLSAS QUE YA EXISTEN.**
-   ⛔ No necesita evento, ni tabla, ni banco: vive adentro de la solicitud de hoy. **Es lo que
-   contesta la queja de Bruno.** Nuevo `lib/sesionfotos/outfits.ts` (`zonaSugerida` envolviendo
-   `familiaDe`; `alertasDe`), `Solicitud.clasifOutfits?` para la corrección a mano, `conZona` en
-   `core.ts` con el molde de `asignarBolsa`, y el bloque «Bolsas» de la pantalla extendido.
+1. 🏁 **HECHA el 4-sep-2026 — clasificación + el aviso «al outfit 3 le falta el abajo», sobre las
+   bolsas que ya existían.** Sin evento, sin tabla, sin banco y **sin migración**: vive adentro de
+   la solicitud de hoy. `lib/sesionfotos/outfits.ts` (`zonaSugerida` desde el NOMBRE,
+   `esPrendaDeOutfit`, `aplicaOutfits`, `alertasDe`, `sinZona`), `Solicitud.clasifOutfits?`,
+   `conZona` en `core.ts` y el bloque «Bolsas» de la pantalla extendido con el selector por ítem.
+   ✅ 31 tests nuevos · suite entera verde (6.961) · `tsc` y `eslint` limpios.
+   📌 **Caminado contra el catálogo real**: Zattia **481 de 501 con zona (96,0%)** —322 arriba, 137
+   abajo, 22 enteras—; de las 20 restantes **19 son accesorios reconocidos** y **una sola prenda**
+   queda sin decir (`FADE #002`). BDI: **223 sin zona, y está bien**.
+   🔴 **Dos cosas las cazó la caminata y el test ⛔ no podía**: (a) «no es una prenda» y «no sé qué
+   es» eran el mismo `null` ⇒ la pantalla iba a pedir clasificar **un cinto**; (b) en BDI
+   `fueraDeAlcance` ⛔ no alcanza para una funda ⇒ una sesión de BDI mostraba **223 pendientes**.
+   Por eso existe `aplicaOutfits`: **sin una sola prenda, el módulo entero se calla**.
+   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Falta ejercerlo a mano en Zattia —ver la zona propuesta,
+   corregir una, ver que la bolsa avisa y deja de avisar, **salir y volver a entrar** a que la
+   corrección quedó— y abrir una de **BDI** para confirmar que ahí ⛔ no aparece nada.
 2. **El evento como padre**: `kind` nuevo, `lib/sesionfotos/evento.ts`, `procesarDraft` acepta
    `eventoId`, cuarto puente en `puente.ts`, pantalla «Nueva sesión» reusando `FichaModelo`.
    ⚠️ Editar la fecha del evento ⛔ no reescribe las hijas ya creadas: se corrige a mano, y se dice.

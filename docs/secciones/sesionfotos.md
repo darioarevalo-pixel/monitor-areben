@@ -364,3 +364,94 @@ npx vitest run tests/sesionfotos-fotografiado.test.ts --reporter=dot # el result
   incluido (4 mutantes, uno por caso).
 - 🔑 **Un test de escaneo que no dice la fase está probando `retiro`, y `retiro` no distingue nada**
   (`esperadoEn` devuelve `i.qty`). Todo caso nuevo sobre topes va **en devolución** o no mide.
+
+## Los OUTFITS: la Fase 1 del octavo (4-sep-2026)
+
+Lo pidió Bruno el 3-sep: *«eso tiene que generar un banco de productos de la sesión, donde se
+realiza una clasificación rápida y se generan outfits digitales con distintos productos de arriba y
+abajo»*. Esta es la **primera de las cinco fases** del plan que está en el `PENDIENTES.md`, y la
+que contesta la queja **sin evento, sin tabla y sin banco**: vive adentro de la solicitud de hoy.
+
+🔑 **El outfit ⛔ no es un objeto nuevo: es la BOLSA que ya existía** (`ItemSolicitud.bolsa`,
+construida el 16-ago y nunca estrenada). Lo único que se sumó es **qué es cada prenda** y el aviso.
+
+La regla, dictada por él: **un outfit es arriba + abajo, o una prenda entera** (un vestido o un mono
+ocupa las dos ranuras).
+
+### 🔴 La medición que dio vuelta el plan: la categoría ⛔ no podía contestar
+
+El plan decía envolver `familiaDe`, que lee las categorías de **TiendaNube**. Se midió antes de
+escribir una línea —4-sep-2026, contra las dos bases por `pg` directo— y no servía:
+
+| | BDI | Zattia |
+|---|---|---|
+| productos con stock | 223 | 501 |
+| cruzan con una familia | **0 (0%)** | **36 (7,2%)** |
+| sin categoría en Gestión Nube | 1 | **400 (79,8%)** |
+
+- 🔴 **La categoría de GN dejó de llenarse.** De lo dado de alta **desde julio-2026** con stock en
+  Zattia, **el 100% viene sin categoría** (35/35 en julio, 50/50 en agosto, 67/67 en septiembre). Y
+  lo que una sesión de fotos pide es, justamente, **lo que acaba de entrar**.
+- 🔑 **En GN `category` ⛔ no es una categoría: es una lista separada por comas** (`'NEW IN, DAY,
+  DENIM'`). La primera pasada de la medición la trató como una cadena sola y dio «casi nada cruza»;
+  partida por coma, Zattia pasó de 9,9% a 24,1% sobre el catálogo entero. `catsDeGN` la parte.
+- 🔴 **En BDI el 0% ⛔ no es un defecto: no vende ropa.** Son fundas, cables y vidrios templados.
+
+⇒ **la zona sale del NOMBRE**, que está siempre y es un vocabulario cerrado (`TOP` 131, `SHORT` 40,
+`MINI` 34, `BABY` 31…). La categoría queda de **segunda fuente**, para los productos viejos que sí
+la tienen.
+
+### Caminado contra el catálogo real, ⛔ no sólo contra el test
+
+Pasando `zonaSugerida` por las dos bases el 4-sep:
+
+- **Zattia, 501 con stock**: 322 arriba · 137 abajo · 22 enteras = **481 con zona (96,0%)**. De los
+  20 restantes, **19 son accesorios que el vocabulario reconoce** (cintos, fajas, pañuelos,
+  `MINI BAG`, `MINI CLUTCH`) y **una sola prenda** queda sin poder decirse: `FADE #002`.
+  ⇒ de prendas de verdad, **481 de 482**.
+- **BDI, 223 con stock**: **223 sin zona, y está bien.** Ahí el bloque entero desaparece.
+
+🔴 **Lo que la caminata cazó y el test no podía**: `zonaSugerida` devolvía `null` igual para un
+accesorio conocido que para una prenda desconocida ⇒ la pantalla iba a pedir que alguien
+**clasificara un cinto**. Los separa `esPrendaDeOutfit`, y es lo que mira `sinZona`.
+
+🔴 **Y en BDI eso todavía no alcanzaba**: `fueraDeAlcance` sólo conoce `ACCESORIOS`/`BAGS`, así que
+una funda quedaba como «prenda sin clasificar» y una sesión de BDI habría mostrado **223 pendientes**.
+Por eso existe `aplicaOutfits`: **si la solicitud ⛔ no tiene una sola prenda, el módulo entero se
+calla**. Es la misma forma que `alertasDe`, que ⛔ no reclama sobre una bolsa sin nada clasificado.
+
+### Las trampas del vocabulario, que salieron de mirar los nombres reales
+
+- **`MINI BAG` y `MINI CLUTCH` son carteras**, ⛔ no polleras ⇒ las frases de dos palabras se
+  prueban **antes** que la primera palabra. Sin eso, cuatro carteras entraban al outfit.
+- **`BABY TEE` es una remera** (31 productos), ⛔ no ropa de bebé. Lo mismo `LONG TEE`.
+- **El bikini es un outfit**: `CORPIÑO` va arriba y `BOMBACHA` abajo. Los nombres vienen con y sin
+  tilde en la misma familia, así que la Ñ y los acentos se normalizan.
+- **`FAJA` en Zattia es un accesorio** (categoría `ACCESORIOS`), ⛔ no ropa interior.
+
+### Lo que se guarda, y lo que ⛔ no
+
+`Solicitud.clasifOutfits?: Record<vid, ZonaPrenda>` guarda **sólo la corrección a mano**. La
+propuesta se recalcula cada vez que se dibuja: 🔑 **si mañana el vocabulario aprende una palabra
+nueva, las sesiones viejas la aprovechan solas.** Guardar la propuesta las dejaría congeladas en lo
+que el sistema sabía el día que se armaron.
+
+Y **soltar una corrección BORRA la clave**, ⛔ no la deja en `null`: con la clave puesta en null la
+prenda quedaría «decidida como nada», y lo que se quiere es que vuelva a valer la propuesta.
+
+⛔ **Sin migración**: `clasifOutfits` viaja adentro de `datos` (jsonb) y el cajón guarda el
+documento entero sin lista blanca (`filaDe`), igual que `modelo` el día anterior.
+
+### Cómo se camina
+
+```bash
+npx vitest run tests/sesionfotos-outfits.test.ts --reporter=dot
+```
+
+▶️ 🔴 **Nadie abrió la pantalla todavía.** Lo que hay que ejercer a mano, con una sesión de Zattia:
+abrir una solicitud con prendas de arriba y de abajo, asignarles bolsa, **ver la zona propuesta**,
+**corregir una** y comprobar que la bolsa con sólo «arriba» avisa y **deja de avisar** al sumarle el
+abajo. Un verde ⛔ no dice que guardar ande: hay que **salir y volver a entrar** a ver que la
+corrección quedó.
+⚠️ Y abrir una de **BDI**: ahí ⛔ no tiene que aparecer ni el selector, ni el aviso, ni el renglón
+de «faltan clasificar».

@@ -46,6 +46,9 @@ const RAICES = ['borr', 'quit', 'remov']
  * vacía sola cuando lo que excusaba se fue.
  */
 const SIMBOLOS = new Set([
+  // Una prenda del catálogo de Zattia, ⛔ no el verbo: es una clave del vocabulario de
+  // `lib/sesionfotos/outfits.ts`, que dice si la prenda va arriba o abajo del outfit.
+  'SAQUITO',
   'Borrador',
   'Borradores',
   'MOTIVOS_QUITAR_ITEM',

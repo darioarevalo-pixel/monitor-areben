@@ -9,6 +9,7 @@
  */
 
 import { type Disparador, disparadoresDe, tieneDisparador } from '../solicitudes/disparador'
+import type { ZonaPrenda } from './outfits'
 import type { Cambio, EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
 
 /** El mapa de conteo de la fase: `verif` para preparado, `devuelto` para la vuelta. */
@@ -317,6 +318,25 @@ export function cambiarCantidadSol(s: Solicitud, vid: string, nuevaQty: number, 
 export function asignarBolsa(s: Solicitud, vid: string, n: number | null): Solicitud {
   const bolsa = n == null ? undefined : Math.max(1, Math.floor(n))
   return { ...s, items: (s.items || []).map((i) => (i.vid === vid ? { ...i, bolsa } : i)) }
+}
+
+/**
+ * Corrige (o suelta, con `zona = null`) la zona del outfit de un ítem: arriba · abajo · entera.
+ *
+ * Mismo molde que `asignarBolsa`, con una diferencia que es la regla: 🔑 **soltar la corrección
+ * BORRA la clave, ⛔ no la deja en `null`.** Con la clave puesta en null la prenda quedaría
+ * «decidida como nada», y lo que se quiere es lo contrario: que vuelva a valer la propuesta del
+ * nombre, que mañana puede ser mejor que hoy. Ver `lib/sesionfotos/outfits.ts`.
+ */
+export function conZona(s: Solicitud, vid: string, zona: ZonaPrenda | null): Solicitud {
+  const clasif = { ...(s.clasifOutfits || {}) }
+  if (zona == null) delete clasif[vid]
+  else clasif[vid] = zona
+  if (!Object.keys(clasif).length) {
+    const { clasifOutfits: _fuera, ...resto } = s
+    return resto as Solicitud
+  }
+  return { ...s, clasifOutfits: clasif }
 }
 
 /** Una bolsa derivada: su número, sus ítems y las unidades totales. */
