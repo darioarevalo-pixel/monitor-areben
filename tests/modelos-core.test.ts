@@ -10,6 +10,7 @@ import {
   claveDeNombre,
   esDeLaMarca,
   esDirecta,
+  esElegible,
   ESTADOS,
   fichaQueChoca,
   filtrarModelos,
@@ -169,5 +170,34 @@ describe('modelos — la lista', () => {
     expect(filtrarModelos(lista, 'zoezoe').map((m) => m.id)).toEqual(['a'])
     expect(filtrarModelos(lista, 'multi').map((m) => m.id)).toEqual(['b'])
     expect(filtrarModelos(lista, '').map((m) => m.id)).toEqual(['a', 'b', 'c'])
+  })
+})
+
+/**
+ * A quién se le puede ofrecer una ficha cuando se carga una sesión de fotos. Vive en el núcleo `.js`
+ * y ⛔ no en `core.ts` porque **el handler la corre** para armar la lista corta: escrita dos veces
+ * sería exactamente lo que ya pasó con el talle.
+ */
+describe('modelos — a quién se puede elegir en una sesión', () => {
+  const m = (over: Partial<Modelo> = {}): Pick<Modelo, 'estado' | 'marcas'> => ({
+    estado: 'activa',
+    marcas: [],
+    ...over,
+  })
+
+  it('🔴 `marcas` vacío quiere decir LAS DOS, ⛔ no «ninguna»', () => {
+    expect(esDeLaMarca(m(), 'bdi')).toBe(true)
+    expect(esDeLaMarca(m(), 'zattia')).toBe(true)
+    expect(esDeLaMarca(m({ marcas: ['zattia'] }), 'bdi')).toBe(false)
+  })
+
+  it('la archivada sale de la lista de a quién llamar, y por eso ⛔ no se ofrece', () => {
+    expect(esElegible(m({ estado: 'archivada' }), 'bdi')).toBe(false)
+    expect(esElegible(m(), 'bdi')).toBe(true)
+  })
+
+  /** ⚠️ Sin talle igual se elige: el talle se tipea en la sesión. Exigirlo escondería a la modelo. */
+  it('una ficha a medio cargar se ofrece igual', () => {
+    expect(esElegible(m({ talle: null, altura: null }), 'bdi')).toBe(true)
   })
 })

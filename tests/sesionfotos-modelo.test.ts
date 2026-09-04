@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   alturaNormalizada,
   conModelo,
+  desdeFicha,
   fraseDeModelo,
   hayModelo,
   resumenDeModelo,
@@ -171,5 +172,56 @@ describe('sesionfotos/modelo — buscar por los SKU de un producto de TiendaNube
   it('un producto que ninguna sesión tocó no inventa nada', () => {
     expect(modeloDeProducto(['OTRO-1'], idx())).toBeNull()
     expect(modeloDeProducto([], idx())).toBeNull()
+  })
+})
+
+/**
+ * Elegir la modelo del PADRÓN (3-sep-2026). Lo que este bloque defiende ⛔ no es la comodidad de no
+ * tipear: es el `id` — lo único que después deja contar cuántas sesiones hizo cada modelo. Una
+ * sesión con el nombre bien escrito y sin `id` ⛔ no cuenta para nada.
+ */
+describe('sesionfotos/modelo — elegir del padrón', () => {
+  const sofi = { id: 'mo1', nombre: 'Sofi', talle: 'm', altura: '170' }
+
+  it('elegir una ficha trae su talle y su altura, ya normalizados', () => {
+    expect(desdeFicha(sofi, {})).toEqual({ id: 'mo1', nombre: 'Sofi', talle: 'M', altura: '1,70 m' })
+  })
+
+  it('la ficha PISA lo que estaba tipeado: para eso se la elige', () => {
+    expect(desdeFicha(sofi, { nombre: 'sofia?', talle: 'L' })).toEqual({
+      id: 'mo1',
+      nombre: 'Sofi',
+      talle: 'M',
+      altura: '1,70 m',
+    })
+  })
+
+  /** 🔑 El caso que importa: la ficha existe pero todavía no dice qué talle usa. */
+  it('un dato que la ficha NO tiene no pisa el que ya estaba escrito', () => {
+    const nueva = { id: 'mo2', nombre: 'Juana', talle: null, altura: null }
+    expect(desdeFicha(nueva, { talle: 'S', altura: '1,60 m' })).toEqual({
+      id: 'mo2',
+      nombre: 'Juana',
+      talle: 'S',
+      altura: '1,60 m',
+    })
+  })
+
+  it('sacar la ficha se lleva el id y deja lo tipeado', () => {
+    expect(desdeFicha(null, { id: 'mo1', nombre: 'Sofi', talle: 'M' })).toEqual({ nombre: 'Sofi', talle: 'M' })
+  })
+
+  it('el id queda guardado en la sesión, y sin talle no queda nada', () => {
+    const conFicha = conModelo(sol(), { id: 'mo1', nombre: 'Sofi', talle: 'M' }, meta)
+    expect(conFicha.modelo).toMatchObject({ id: 'mo1', nombre: 'Sofi', talle: 'M' })
+    // Borrar el talle borra la ficha ENTERA, id incluido: no queda un enganche sin dato.
+    expect(conModelo(conFicha, { id: 'mo1', nombre: 'Sofi', talle: '' }, meta).modelo).toBeUndefined()
+  })
+
+  /** ⚠️ Las sesiones de antes del padrón ⛔ no tienen id, y eso ⛔ no las rompe. */
+  it('la modelo tipeada a mano se sigue guardando, sin id', () => {
+    const m = conModelo(sol(), { nombre: 'La de la agencia', talle: 's' }, meta).modelo
+    expect(m).toMatchObject({ nombre: 'La de la agencia', talle: 'S' })
+    expect(m && 'id' in m).toBe(false)
   })
 })

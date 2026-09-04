@@ -6,7 +6,7 @@
  */
 
 import { apiFetch } from '@/lib/api-fetch'
-import type { Modelo, ModeloEditable } from './tipos'
+import type { Modelo, ModeloEditable, ModeloElegible } from './tipos'
 
 const API = '/api/datos?recurso=modelos'
 
@@ -15,6 +15,23 @@ export async function leerModelos(store: string): Promise<Modelo[]> {
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer las modelos.')
   return (d.modelos || []) as Modelo[]
+}
+
+/**
+ * La lista corta para elegir la modelo de una sesión de fotos: **id, nombre, talle y altura**.
+ *
+ * 🔑 **`marca` es la MARCA y ⛔ nunca la línea.** La sesión de fotos se mira por línea —`stunned` es
+ * una línea de Zattia, ⛔ no una marca— y el permiso se pide por marca: mandar `stunned` acá da 403
+ * sin decir por qué. Ya mordió en otras pantallas.
+ *
+ * ⚠️ **Puede fallar con 403 y eso ⛔ no es un error de la sesión**: quien la carga puede no tener la
+ * sección Modelos. La pantalla lo dice en chico y deja tipear, que es como se venía haciendo.
+ */
+export async function leerModelosElegibles(marca: string): Promise<ModeloElegible[]> {
+  const r = await apiFetch(`${API}&modo=elegibles&store=${encodeURIComponent(marca)}&nc=${Date.now()}`)
+  const d = await r.json().catch(() => null)
+  if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer el padrón de modelos.')
+  return (d.modelos || []) as ModeloElegible[]
 }
 
 async function escribir(store: string, cuerpo: Record<string, unknown>): Promise<Record<string, unknown>> {

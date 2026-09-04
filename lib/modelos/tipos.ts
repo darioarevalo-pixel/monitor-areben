@@ -50,3 +50,15 @@ export type Modelo = {
 
 /** Lo que la pantalla manda a guardar. Todo opcional salvo el nombre. */
 export type ModeloEditable = Partial<Omit<Modelo, 'creado' | 'actualizado' | 'autor'>> & { nombre: string }
+
+/**
+ * La ficha **como la ve la sesión de fotos** para elegir a quién fotografió: cuatro campos y ⛔ nada
+ * más.
+ *
+ * 🔴 **Es un tipo aparte y ⛔ no un `Modelo` con campos en `null`.** Quien carga una sesión puede no
+ * tener la sección Modelos tildada, y devolverle la ficha entera con el teléfono, el mail y la
+ * agencia en `null` **afirmaría que no los hay**: un `null` acá se leería «no tiene Instagram», no
+ * «no te lo muestro». Es la misma trampa del cero que afirma. Lo que sale por `modo=elegibles` es la
+ * respuesta a otra pregunta —«¿a quién puedo elegir?»— y por eso tiene su propia forma.
+ */
+export type ModeloElegible = Pick<Modelo, 'id' | 'nombre' | 'talle' | 'altura'>

@@ -30,11 +30,18 @@ import { alturaNormalizada as alturaNormalizadaJs, talleNormalizado as talleNorm
 import { fotografiables, respuestaFoto } from './fotografiado'
 import type { Solicitud } from './tipos'
 
+/**
+ * La ficha del padrón, como la ve esta sesión. Es `ModeloElegible` de `lib/modelos/tipos`, escrito
+ * acá como forma mínima para que el núcleo de la sesión ⛔ no dependa de la sección Modelos: la
+ * sesión funciona igual sin padrón, que es como funcionó hasta el 3-sep-2026.
+ */
+export type FichaElegible = { id: string; nombre: string; talle?: string | null; altura?: string | null }
+
 export type { ModeloSesion } from './tipos'
 import type { ModeloSesion } from './tipos'
 
 /** Lo que se puede editar de la ficha. `por` y `ts` los pone `conModelo`. */
-export type ModeloEditable = { nombre?: string; talle?: string; altura?: string }
+export type ModeloEditable = { id?: string; nombre?: string; talle?: string; altura?: string }
 
 const limpiar = (s: unknown) => String(s ?? '').trim().replace(/\s+/g, ' ')
 
@@ -67,9 +74,41 @@ export function conModelo(s: Solicitud, edit: ModeloEditable, meta: { por: strin
   }
   const nombre = limpiar(edit.nombre)
   const altura = alturaNormalizada(edit.altura)
+  const id = limpiar(edit.id)
   return {
     ...s,
-    modelo: { talle, ...(nombre ? { nombre } : {}), ...(altura ? { altura } : {}), por: meta.por, ts: meta.ts },
+    modelo: {
+      talle,
+      ...(id ? { id } : {}),
+      ...(nombre ? { nombre } : {}),
+      ...(altura ? { altura } : {}),
+      por: meta.por,
+      ts: meta.ts,
+    },
+  }
+}
+
+/**
+ * Lo que queda en el borrador cuando se **elige una ficha del padrón** (3-sep-2026).
+ *
+ * 🔑 **La ficha pisa lo tipeado, pero un dato que la ficha ⛔ NO tiene no pisa nada.** Elegir a
+ * Sofi tiene que traer el talle de Sofi —para eso se elige—, y si su ficha todavía ⛔ no dice qué
+ * talle usa, lo que ya estaba escrito en la sesión es lo único que hay: borrarlo sería cambiar un
+ * dato por un vacío. Es la misma regla con la que `conModelo` ⛔ no guarda medidas en 0.
+ *
+ * ⚠️ **`null` es «se saca la ficha»**: el nombre y el talle quedan como están —la sesión los sigue
+ * necesitando— y lo único que se va es el `id`, que es lo que dice «esto es del padrón».
+ */
+export function desdeFicha(f: FichaElegible | null, actual: ModeloEditable): ModeloEditable {
+  if (!f) {
+    const { id: _fuera, ...resto } = actual
+    return resto
+  }
+  return {
+    id: f.id,
+    nombre: limpiar(f.nombre) || actual.nombre,
+    talle: talleNormalizado(f.talle) || actual.talle,
+    altura: alturaNormalizada(f.altura) || actual.altura,
   }
 }
 

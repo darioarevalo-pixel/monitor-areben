@@ -1,6 +1,7 @@
 // Modelos: el padrón de las modelos que trabajan con nosotros (`/api/datos?recurso=modelos`).
 //
 //   GET  ?recurso=modelos&store=bdi|zattia
+//   GET  ?recurso=modelos&store=…&modo=elegibles   → la lista corta, para la sesión de fotos
 //   POST { recurso:'modelos', action:'guardar',  modelo }
 //   POST { recurso:'modelos', action:'eliminar', id }
 //
@@ -31,6 +32,7 @@ import { leerTodo } from '../lib/supabase/paginar.core.js';
 import {
   alturaNormalizada,
   CLAVES_ESTADO,
+  esElegible,
   instagramNormalizado,
   medidasNormalizadas,
   motivoModeloInvalido,
@@ -83,7 +85,16 @@ export default async function handler(req, res) {
   const store = String(req.query?.store || (req.body && req.body.store) || 'bdi');
   // 🔑 `puedeVerAlguna` y no `puedeVer` pelado: la `store` la elige el request, y `puedeVer` no
   // aplica la cuenta fija. Va ANTES de crear ningún cliente de Supabase.
-  if (!puedeVerAlguna(perfil, store, ['modelos'])) {
+  //
+  // 🔴 **La lista corta la puede pedir también quien carga una SESIÓN DE FOTOS**, y ésa es toda la
+  // diferencia entre los dos modos. Las dos secciones son de Marketing, así que en el padrón de hoy
+  // casi siempre van juntas — pero desde el 3-sep-2026 una sección se le puede sacar a alguien de a
+  // una (la excepción por marca de `puedeVer`), y el día que a un fotógrafo le saquen Modelos el
+  // selector de la sesión ⛔ no puede empezar a contestar 403. Lo que ese permiso NO abre: el
+  // teléfono, el mail, la agencia, la nota y **escribir**, que siguen pidiendo `modelos`.
+  const elegibles = req.method === 'GET' && String(req.query?.modo || '') === 'elegibles';
+  const secciones = elegibles ? ['modelos', 'sesion-fotos'] : ['modelos'];
+  if (!puedeVerAlguna(perfil, store, secciones)) {
     return res.status(403).json({ error: 'No tenés acceso a Modelos.' });
   }
 
@@ -96,8 +107,17 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const modelos = (await leerTodo(sb, 'modelo', (q) => q.select(COLS).order('nombre'))).map(salida);
-      return res.status(200).json({ ok: true, modelos });
+      const filas = await leerTodo(sb, 'modelo', (q) => q.select(COLS).order('nombre'));
+      if (elegibles) {
+        // ⛔ **Cuatro campos y ninguno más**, aunque la fila los tenga al lado: es lo que hace que
+        // este modo se le pueda abrir a quien ⛔ no tiene la sección. El filtro es del núcleo
+        // (`esElegible`), ⛔ no un `where` escrito acá: la pantalla del padrón usa el mismo.
+        const lista = filas
+          .filter((f) => esElegible({ estado: f.estado || 'activa', marcas: Array.isArray(f.marcas) ? f.marcas : [] }, store))
+          .map((f) => ({ id: f.id, nombre: f.nombre, talle: f.talle ?? null, altura: f.altura ?? null }));
+        return res.status(200).json({ ok: true, modelos: lista });
+      }
+      return res.status(200).json({ ok: true, modelos: filas.map(salida) });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });

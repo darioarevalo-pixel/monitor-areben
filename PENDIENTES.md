@@ -113,11 +113,22 @@ se mide después. Cada punto se borra de esta lista cuando esté hecho y **camin
    esas columnas dirían **0 para todas**, y un cero afirma.
    ✅ **La migración ya corrió en BDI** y está verificada por otro camino que el que la corrió
    (PostgREST contesta `200 []`, y una tabla inventada al lado contesta 404).
-   ▶️ **Falta caminarla**: cargar una modelo de verdad y ver que quede.
-   ▶️ **Lo que sigue, en este orden**: (1) que **la sesión de fotos ELIJA la modelo del padrón** en
-   vez de tipearla —es lo que llena el padrón solo y lo que habilita el análisis—; (2) **el
-   análisis** («principalmente para análisis»): cuántas sesiones hizo cada una y cómo vendió lo que
-   fotografió; (3) **el portafolio** de fotos.
+   🏁 **Y la sesión de fotos ya ELIGE la modelo del padrón** (3-sep, más tarde): un selector «Del
+   padrón» arriba de los tres campos que trae su talle y su altura y —lo que importa— **deja el
+   `id` de la ficha adentro de la sesión**. Era el enganche que faltaba: tipear el nombre ⛔ no cruza
+   nada, y sin cruce el análisis que pediste ⛔ no se puede calcular. Los tres campos siguen libres,
+   así que la modelo sin ficha se anota como siempre.
+   🔴 **Lo que hubo que abrir para eso**: quien carga una sesión ⛔ puede no tener Modelos tildada
+   —justo desde el punto 3, que permite sacar secciones de a una— y el selector no podía empezar a
+   contestar 403. La lista corta (`?modo=elegibles`) la puede pedir también `sesion-fotos`, y por
+   ahí viajan **cuatro campos**: id, nombre, talle y altura. El teléfono, el mail, la agencia, la
+   nota y **escribir** siguen pidiendo Modelos.
+   ▶️ **Falta caminarla**: cargar una modelo de verdad, elegirla en una sesión y ver que quede. ⚠️ El
+   padrón está vacío, así que el selector ⛔ no se dibujó nunca con una ficha adentro.
+   ▶️ **Lo que sigue, en este orden**: (1) **el análisis** («principalmente para análisis»): cuántas
+   sesiones hizo cada una y cómo vendió lo que fotografió —ahora ya hay con qué cruzarlo, pero
+   ⚠️ **la primera columna medida ⛔ no se dibuja hasta que haya sesiones enganchadas**: hoy serían 0
+   para todas, y un cero afirma—; (2) **el portafolio** de fotos.
    ▶️ ⚠️ **Y dos preguntas tuyas**: las **«ideas»** del dictado, ¿son de producción, de looks o de
    modelos a contactar? —hoy entran en la nota de cada ficha—; y el **cachet**, que ⛔ no puse: lo
    vería todo el que ve la sección, y ése no es el permiso de la liquidación.

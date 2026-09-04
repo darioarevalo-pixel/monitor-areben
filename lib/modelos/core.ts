@@ -10,7 +10,9 @@ import {
   claveDeNombre as claveDeNombreJs,
   CLAVES_ESTADO as CLAVES_ESTADO_JS,
   CLAVES_MEDIDA as CLAVES_MEDIDA_JS,
+  esDeLaMarca as esDeLaMarcaJs,
   esDirecta as esDirectaJs,
+  esElegible as esElegibleJs,
   ESTADOS as ESTADOS_JS,
   fichaQueChoca as fichaQueChocaJs,
   instagramNormalizado as instagramNormalizadoJs,
@@ -39,15 +41,19 @@ export const fichaQueChoca = fichaQueChocaJs as (
 export const etiquetaEstado = (e: EstadoModelo) => ESTADOS.find((x) => x.key === e)?.label ?? e
 
 /**
- * ¿Esta ficha es de la marca que está mirando quien abrió la sección?
+ * ¿Esta ficha es de la marca que está mirando quien abrió la sección? Y ¿se le puede ofrecer a
+ * quien está cargando una sesión de fotos?
  *
- * ⚠️ **`marcas` vacío quiere decir LAS DOS**, ⛔ no «ninguna». Es el mismo criterio de `insumo`, y es
- * lo que hace que una modelo cargada sin pensar en la marca aparezca en las dos en vez de
- * desaparecer de las dos — que es la forma en que un filtro esconde datos sin que nadie se entere.
+ * 🔑 **Las dos se MUDARON a `core.core.js`** el 3-sep-2026, cuando la sesión de fotos empezó a
+ * elegir la modelo de una lista que arma el handler —que ⛔ no puede importar TypeScript—. Acá se
+ * re-exportan: sus consumidores (`Modelos.tsx`) ⛔ no se enteraron. El porqué de cada regla está
+ * allá, al lado de la tabla que las guarda. Es el mismo arreglo que `talleNormalizado`.
  */
-export function esDeLaMarca(m: Pick<Modelo, 'marcas'>, marca: string): boolean {
-  return !m.marcas?.length || m.marcas.includes(marca)
-}
+export const esDeLaMarca = esDeLaMarcaJs as (m: Pick<Modelo, 'marcas'>, marca: string) => boolean
+export const esElegible = esElegibleJs as (
+  m: Pick<Modelo, 'marcas' | 'estado'>,
+  marca: string,
+) => boolean
 
 /**
  * El texto sobre el que busca la pantalla. Va acá y ⛔ no en el componente porque la búsqueda

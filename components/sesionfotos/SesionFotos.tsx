@@ -86,7 +86,9 @@ import {
   respuestaFoto,
   resumenFotos,
 } from '@/lib/sesionfotos/fotografiado'
-import { conModelo, hayModelo, resumenDeModelo, talleNormalizado } from '@/lib/sesionfotos/modelo'
+import { conModelo, desdeFicha, hayModelo, resumenDeModelo, talleNormalizado } from '@/lib/sesionfotos/modelo'
+import { useModelosElegibles } from '@/components/modelos/useModelos'
+import type { ModeloEditable } from '@/lib/sesionfotos/modelo'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
@@ -1967,6 +1969,16 @@ function ScanInput({ disabled, placeholder, onScan }: { disabled: boolean; place
  * ⚠️ Los talles sugeridos salen de **las variantes de esta misma sesión**, ⛔ no de una lista fija:
  * son exactamente los que la modelo tuvo en la mano, y así el campo no impone un alfabeto (S/M/L
  * contra 38/40/42) que en Zattia conviven.
+ *
+ * 🔑 **Desde el 3-sep-2026 la modelo se ELIGE del padrón** (Model Management) en vez de tipearse, y
+ * eso ⛔ no es comodidad: elegirla deja el `id` de su ficha en la sesión, que es lo único con lo que
+ * después se puede contestar «cuántas sesiones hizo cada una y cómo vendió lo que fotografió» — el
+ * análisis que pidió Bruno en el mismo dictado. Tipear el nombre ⛔ no engancha nada.
+ * ⚠️ **Los tres campos siguen estando y siguen siendo libres**: la modelo que está parada en el
+ * estudio y ⛔ no tiene ficha se anota igual, como se venía haciendo. El selector es un atajo, ⛔ no
+ * una puerta.
+ * 🔴 **El padrón se pide por MARCA y ⛔ nunca por línea**: `stunned` es una línea de Zattia y el
+ * permiso es por marca — pedirlo con la línea contesta 403 sin decir por qué.
  */
 function FichaModelo({
   s,
@@ -1979,12 +1991,24 @@ function FichaModelo({
   usuario: string
   setWork: (f: (w: Solicitud) => Solicitud) => void
 }) {
-  const [borrador, setBorrador] = useState({
+  const { marca } = useSesion()
+  const [borrador, setBorrador] = useState<ModeloEditable>({
+    id: s.modelo?.id,
     nombre: s.modelo?.nombre || '',
     talle: s.modelo?.talle || '',
     altura: s.modelo?.altura || '',
   })
-  const guardar = () => setWork((w) => conModelo(w, borrador, { por: usuario, ts: Date.now() }))
+  const { modelos: padron, error: errPadron } = useModelosElegibles(editable ? marca : null)
+  // ⚠️ `guardarCon` toma el borrador POR PARÁMETRO y `guardar` ⛔ no toma ninguno: `onBlur={onSalir}`
+  // le pasa el evento del DOM a lo que le den, y un evento como borrador es un talle vacío — o sea
+  // `conModelo` **borrando la ficha entera** en el primer blur. Dos funciones, y ninguna trampa.
+  const guardarCon = (b: ModeloEditable) => setWork((w) => conModelo(w, b, { por: usuario, ts: Date.now() }))
+  const guardar = () => guardarCon(borrador)
+  const elegir = (id: string) => {
+    const b = desdeFicha(padron.find((m) => m.id === id) || null, borrador)
+    setBorrador(b)
+    guardarCon(b)
+  }
   const talles = [...new Set((s.items || []).map((i) => talleNormalizado(i.variante)).filter(Boolean))]
 
   if (!editable) {
@@ -2008,10 +2032,37 @@ function FichaModelo({
         Con el talle alcanza. Si no lo cargás, la descripción de estas prendas no lo va a poder decir.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        {padron.length ? (
+          <label style={{ fontSize: 11, color: color.mut2, display: 'inline-block' }}>
+            Del padrón
+            <select
+              value={borrador.id || ''}
+              onChange={(e) => elegir(e.target.value)}
+              style={{
+                display: 'block',
+                width: 180,
+                padding: '6px 8px',
+                marginTop: 2,
+                border: `1px solid ${color.line2}`,
+                borderRadius: 8,
+                fontSize: 14,
+                boxSizing: 'border-box',
+                background: '#fff',
+              }}
+            >
+              <option value="">Tipear a mano</option>
+              {padron.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {[m.nombre, m.talle ? `talle ${m.talle}` : null].filter(Boolean).join(' · ')}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <CampoModelo
           label="Nombre"
           ancho={160}
-          valor={borrador.nombre}
+          valor={borrador.nombre || ''}
           onCambio={(v) => setBorrador((b) => ({ ...b, nombre: v }))}
           onSalir={guardar}
           placeholder="Sofi"
@@ -2019,7 +2070,7 @@ function FichaModelo({
         <CampoModelo
           label="Talle que usa"
           ancho={110}
-          valor={borrador.talle}
+          valor={borrador.talle || ''}
           onCambio={(v) => setBorrador((b) => ({ ...b, talle: v }))}
           onSalir={guardar}
           placeholder="S"
@@ -2028,7 +2079,7 @@ function FichaModelo({
         <CampoModelo
           label="Altura"
           ancho={110}
-          valor={borrador.altura}
+          valor={borrador.altura || ''}
           onCambio={(v) => setBorrador((b) => ({ ...b, altura: v }))}
           onSalir={guardar}
           placeholder="1,70"
@@ -2037,6 +2088,24 @@ function FichaModelo({
           {hayModelo(s.modelo) ? `✓ ${resumenDeModelo(s.modelo)}` : 'Sin cargar'}
         </div>
       </div>
+      {/* ⚠️ Se dice, ⛔ no se esconde: sin padrón el selector no está y el que carga tiene que saber
+          por qué —si no, lo lee como que la sección no anda—. Las dos son frases de una línea y
+          ninguna frena nada: los tres campos siguen ahí abajo. */}
+      {errPadron ? (
+        <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
+          No se pudo leer el padrón de Modelos ({errPadron}). Se anota a mano igual.
+        </div>
+      ) : !padron.length ? (
+        <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
+          Todavía no hay fichas cargadas en Modelos: la modelo se anota a mano, y cuando su ficha
+          exista se la elige de la lista.
+        </div>
+      ) : borrador.id ? null : (
+        <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
+          Tipeada a mano: no queda enganchada con su ficha, así que esta sesión ⛔ no le va a contar
+          para «cuántas hizo».
+        </div>
+      )}
     </div>
   )
 }

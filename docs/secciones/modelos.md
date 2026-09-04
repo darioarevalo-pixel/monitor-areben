@@ -24,6 +24,7 @@ ideas están abajo, en Pendiente.
 | handler | `api/_modelos.js`, por la puerta **`/api/datos?recurso=modelos`** (límite de 12 funciones de Vercel) |
 | tabla | `modelo`, **sólo en la base de BDI** (`sql/migrate-modelos.sql`, `node scripts/apply-modelos.mjs`) |
 | tests | `tests/modelos-core.test.ts` · `tests/modelos-handler.test.ts` |
+| el puente con la sesión | `esElegible` (núcleo) · `?modo=elegibles` (handler) · `leerModelosElegibles`/`useModelosElegibles` · `desdeFicha` en `lib/sesionfotos/modelo.ts` |
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -81,10 +82,18 @@ afirma — se leería como «esta modelo no vendió nada».
 
 ## Pendiente
 
-- ▶️ 🔴 **El puente con la sesión de fotos: que la sesión ELIJA del padrón** en vez de tipear. Es lo
-  que hace que este padrón se llene solo y lo que habilita todo lo de abajo. El encabezado de
-  `lib/sesionfotos/modelo.ts` ya lo anticipaba. Mientras no exista, las dos puntas no se cruzan por
-  ningún lado: la sesión guarda `nombre` libre y la ficha tiene un `id`.
+- 🏁 **El puente con la sesión de fotos: la sesión ya ELIGE del padrón** (3-sep-2026, un rato
+  después). El selector «Del padrón» vive arriba de los tres campos de la sesión, trae el talle y la
+  altura de la ficha y **deja el `id` en `Solicitud.modelo`** — que es el enganche que faltaba. El
+  relato entero, en `docs/secciones/sesionfotos.md` § La modelo y su talle.
+  🔴 **Lo que se abrió para que ande: `?modo=elegibles`.** Quien carga una sesión ⛔ puede no tener
+  esta sección tildada —desde el 3-sep una sección se le saca a alguien de a una— y el selector ⛔ no
+  puede empezar a contestar 403. Ese modo lo puede pedir también `sesion-fotos`, y por ahí viajan
+  **cuatro campos**: id, nombre, talle y altura. El teléfono, el mail, la agencia, la nota y
+  **escribir** siguen pidiendo `modelos`. Es un tipo aparte (`ModeloElegible`) y ⛔ no la ficha con
+  los campos en `null`: un `null` ahí **afirmaría** que no tiene Instagram.
+  ⚠️ **Sin caminar**: hoy el padrón está vacío, así que el selector ⛔ no se dibujó nunca con una
+  ficha adentro. Se camina junto con la primera ficha.
 - ▶️ **El análisis** —«principalmente para análisis», dijo Bruno—: cuántas sesiones hizo cada una y
   cómo vendió lo que fotografió. Depende del puente de arriba; el camino ya existe
   (`talleDeModeloPorSku` cruza por SKU, 79 de 79 medidos en BDI).

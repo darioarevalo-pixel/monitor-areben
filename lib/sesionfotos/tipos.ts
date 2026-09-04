@@ -167,8 +167,13 @@ export type RegistroFoto = { ok: boolean; motivo?: string; por?: string; ts?: nu
  * La modelo de la sesión. `talle` es lo único obligatorio: es lo que va a la descripción del
  * producto, y exigir el nombre —que en el momento no siempre se sabe cómo se escribe— perdería el
  * dato que sirve por el que no. `altura` se guarda ya normalizada (`1,70 m`).
+ *
+ * `id` es **la ficha del padrón de la que salió** (Model Management, 3-sep-2026). Está ausente en
+ * las sesiones anteriores y en las que se tipearon a mano, y eso ⛔ no es un defecto: el talle
+ * escrito sirve igual. Lo que ⛔ no se puede hacer sin él es contar cuántas sesiones hizo cada
+ * modelo — por eso el selector existe.
  */
-export type ModeloSesion = { nombre?: string; talle: string; altura?: string; por?: string; ts?: number }
+export type ModeloSesion = { id?: string; nombre?: string; talle: string; altura?: string; por?: string; ts?: number }
 
 /** Fase de verificación por escaneo. */
 export type Fase = 'retiro' | 'devolucion'

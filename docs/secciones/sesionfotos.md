@@ -271,8 +271,25 @@ el mismo 3-sep, cuando nació el padrón de modelos (`docs/secciones/modelos.md`
 lugares donde se escribe el talle de una modelo —su ficha y esta sesión—, la misma regla escrita dos
 veces se lee como un descuido. Acá se **re-exporta**, así que `SesionFotos.tsx` y `gen-desc` no se
 enteraron, y `tests/modelos-core.test.ts` fija con un `toBe` que son **la misma función**.
-▶️ **Lo que sigue es que la sesión ELIJA la modelo del padrón** en vez de tipearla: hoy guarda un
-`nombre` libre y la ficha tiene un `id`, así que las dos puntas todavía ⛔ no se cruzan.
+🏁 **Y desde el 3-sep-2026 la modelo se ELIGE del padrón** (`Del padrón`, arriba de los tres campos).
+Elegirla trae su talle y su altura **y deja el `id` de su ficha en la sesión** — que es lo único con
+lo que después se puede contestar *«cuántas sesiones hizo cada modelo y cómo vendió lo que
+fotografió»*, el análisis que Bruno pidió en el mismo dictado. **Tipear el nombre ⛔ no engancha
+nada**, y la pantalla lo dice en chico cuando se tipea a mano en vez de elegir.
+
+- ⚠️ **Los tres campos siguen libres**: la modelo que está parada en el estudio y ⛔ no tiene ficha se
+  anota como siempre. El selector es un atajo, ⛔ no una puerta — y con el padrón vacío ⛔ no se
+  dibuja, pero la pantalla explica por qué en vez de dejar el hueco.
+- 🔑 **La ficha PISA lo tipeado, pero un dato que la ficha ⛔ NO tiene no pisa nada**: elegir a alguien
+  cuyo talle todavía no se sabe ⛔ no borra el talle que ya estaba escrito (`desdeFicha`).
+- 🔴 **El padrón se pide por MARCA y ⛔ nunca por línea.** Esta pantalla se mira por línea y `stunned`
+  es una línea de Zattia: pedirlo con la línea contesta **403 sin decir por qué**.
+- 🔴 **Quien carga una sesión ⛔ puede no tener la sección Modelos**, y el selector igual tiene que
+  andar: el handler abre `?modo=elegibles` a `sesion-fotos` y ahí viajan **cuatro campos** —id,
+  nombre, talle, altura—. El teléfono, el mail, la agencia, la nota y **escribir** siguen pidiendo
+  `modelos`. Es un tipo aparte (`ModeloElegible`) y ⛔ no la ficha con campos en `null`: un `null` ahí
+  **afirmaría** que no tiene Instagram.
+▶️ **Falta caminarlo**: cargar una ficha en Modelos, elegirla en una sesión real y ver que quede.
 
 - 🔑 **Es de la SESIÓN, ⛔ no de la prenda.** Lo eligió Bruno entre tres formas: una sesión es una
   modelo y su talle es el mismo en las 30 prendas. Anotarlo prenda por prenda sería 30 veces el

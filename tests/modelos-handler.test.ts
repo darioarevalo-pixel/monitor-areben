@@ -58,6 +58,8 @@ const sobre = (d: unknown) => Buffer.from(JSON.stringify(d), 'utf8').toString('b
 const CON_MODELOS = { name: 'Cami', admin: false, cuenta: null, acceso: { bdi: { modelos: true } }, funcion: [] }
 /** La misma persona sin la sección: es el control del gate. */
 const SIN_MODELOS = { name: 'Cami', admin: false, cuenta: null, acceso: { bdi: { insumos: true } }, funcion: [] }
+/** El fotógrafo: carga sesiones y ⛔ NO tiene Modelos. Es quien pide la lista corta. */
+const SOLO_SESION = { name: 'Cami', admin: false, cuenta: null, acceso: { bdi: { 'sesion-fotos': true } }, funcion: [] }
 
 function sesionDe(perfil: unknown) {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, perfil }) })))
@@ -208,5 +210,62 @@ describe('una acción que no existe', () => {
     const res = await correr(pedir({ method: 'POST', body: { action: 'publicar', store: 'bdi' } }))
     expect(res.code).toBe(400)
     expect(base.escrituras).toEqual([])
+  })
+})
+
+/**
+ * La lista corta (`modo=elegibles`), que es la que ve la SESIÓN DE FOTOS.
+ *
+ * 🔑 El oráculo de este bloque es **qué campos viajan**, ⛔ no que conteste 200: lo que hace que este
+ * modo se le pueda abrir a alguien sin la sección es justamente que el teléfono, el mail y la
+ * agencia ⛔ no salgan. Un 200 con la ficha entera adentro sería el agujero.
+ */
+describe('la lista para elegir en la sesión de fotos', () => {
+  const fila = (over: Record<string, unknown> = {}) => ({
+    id: 'mo1', nombre: 'Sofi', instagram: 'sofi', telefono: '351 555', mail: 'sofi@x.com',
+    agencia: 'Multitalent', booker: 'Ana', booker_contacto: '351 666', talle: 'M', altura: '1,70 m',
+    medidas: { busto: 88 }, estado: 'activa', marcas: [], nota: 'privada', autor: 'Cami',
+    created_at: 'c', updated_at: 'u', ...over,
+  })
+  const elegibles = (extra: Record<string, unknown> = {}) =>
+    pedir({ query: { store: 'bdi', modo: 'elegibles', ...extra } })
+
+  it('🔴 el fotógrafo SIN la sección Modelos igual puede elegir', async () => {
+    sesionDe(SOLO_SESION)
+    base.tablas.modelo = [fila()]
+    const res = await correr(elegibles())
+    expect(res.code).toBe(200)
+    expect(res.body?.modelos).toEqual([{ id: 'mo1', nombre: 'Sofi', talle: 'M', altura: '1,70 m' }])
+  })
+
+  it('🔴 y con ese mismo permiso el GET completo le sigue diciendo que no', async () => {
+    sesionDe(SOLO_SESION)
+    base.tablas.modelo = [fila()]
+    const res = await correr(pedir())
+    expect(res.code).toBe(403)
+  })
+
+  it('el que no tiene ninguna de las dos secciones no entra ni a la lista corta', async () => {
+    sesionDe(SIN_MODELOS)
+    const res = await correr(elegibles())
+    expect(res.code).toBe(403)
+  })
+
+  it('una archivada ⛔ no se ofrece, y una de la otra marca tampoco', async () => {
+    base.tablas.modelo = [
+      fila({ id: 'mo1', estado: 'archivada' }),
+      fila({ id: 'mo2', nombre: 'Juana', marcas: ['zattia'] }),
+      fila({ id: 'mo3', nombre: 'Pili', marcas: ['bdi'] }),
+      fila({ id: 'mo4', nombre: 'Lu', marcas: [] }),
+    ]
+    const res = await correr(elegibles())
+    expect((res.body?.modelos as { id: string }[]).map((m) => m.id)).toEqual(['mo3', 'mo4'])
+  })
+
+  /** ⚠️ Una ficha a medio cargar SÍ se ofrece: el talle se tipea en la sesión. */
+  it('la ficha sin talle se ofrece igual, con el talle en null', async () => {
+    base.tablas.modelo = [fila({ talle: null, altura: null })]
+    const res = await correr(elegibles())
+    expect(res.body?.modelos).toEqual([{ id: 'mo1', nombre: 'Sofi', talle: null, altura: null }])
   })
 })
