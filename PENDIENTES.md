@@ -1498,14 +1498,10 @@ minúscula palabra por palabra · **al publicar se PISA el texto viejo** · y el
 SÍ hablar, con el relleno prohibido.
 📊 El párrafo bueno sale **US$0,0014**: los 40 de la tanda del 2-sep son menos de seis centavos.
 
-▶️ 🔴 **LO ÚNICO QUE FALTA DECIDIR: de dónde sale «producción propia».** Bruno quiere el pie
-«Producto 100% Zattia 🇦🇷» **sólo si el producto es de producción propia** —si es compra nacional
-⛔ no va—, y **ese dato no existe en ningún lado**: medido, los **1.815 SKU de Tienda Nube son el
-nombre del producto** (ninguno con el formato `ZAT-TOP-NG-001` de producción) y ninguna de las
-**25 categorías** de la tienda dice el origen. Lo propuesto es un casillero `Origen` en la ficha
-(dos valores, lo carga el local con la prenda en la mano), que de yapa contestaría qué porcentaje
-del catálogo es propio. **Decide Bruno.**
-
+🏁 **El pie de marca quedó cerrado el 4-sep**: sale de la **orden de compra** (lo contestó Bruno), y
+producción propia es la OC cuyo proveedor se llama `ZATTIA` —confirmado por él—. Cubre **220 de 356
+publicados (62 %)**; los otros 136 son anteriores al webhook de Ingresos y **la regla falla cerrada:
+sin OC, sin pie**. 📌 De la tanda del 2-sep, **ninguno es propio** ⇒ el pie ⛔ no va en esos 40.
 ▶️ 🔴 **Y falta la MANO: nadie publicó todavía ninguno de la tanda.** El circuito está entero y
 caminado hasta el párrafo (JEAN MARINA y BLUSA SOUTH, un intento cada uno, sin problemas del
 validador), pero **ninguno se aprobó ni salió a la tienda**. Los **16 mudos con ficha completa** son
