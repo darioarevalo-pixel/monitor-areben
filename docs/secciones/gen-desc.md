@@ -262,6 +262,37 @@ justo lo que molestaba del párrafo. Lo que faltaba de verdad era esto:
 
 **El orden que sale a la tienda**: párrafo → bullets → tip → cuidados → tabla de talles.
 
+### 🔴 El párrafo genérico no lo causaba el insumo vacío: lo causaba el PROMPT
+
+JEAN MARINA salió *«…aporta volumen y movimiento natural en cada paso. Suma comodidad a tus outfits
+diarios gracias a su estructura relajada…»*. El primer diagnóstico —«le falta el insumo»— **era
+falso**, y mandaba a sumarle trabajo al local para nada.
+
+🔑 **El prompt le prohibía repetir los datos de la ficha y ⛔ no le decía de qué hablar** ⇒ lo único
+que le quedaba eran adjetivos. Y «estructura relajada» **es** el `Calce: wide leg` del bullet dicho
+con otras palabras: el modelo intentaba decir el dato prohibido.
+
+⇒ Ahora el prompt dice **de qué se trata el párrafo**: lo que la lista no puede decir y la foto sí
+muestra —la estampa, los apliques, las costuras, cómo cae, cómo queda puesta—; le prohíbe el
+relleno **con los ejemplos reales de la corrida**; y le dice que **un párrafo corto es una salida
+válida** (el largo objetivo era lo que empujaba a rellenar).
+
+📊 **Medido sobre el mismo producto, misma ficha y misma foto**, con Flash Lite:
+
+> **Antes**: «Jean con un corte que aporta volumen y movimiento natural en cada paso…» (178)
+> **Después**: «Jean de corte recto y generosa amplitud en la bota que enfatiza la caída pesada de
+> la tela, con costuras laterales marcadas que estructuran su silueta hasta el ruedo.» (166,
+> **US$0,0014**, sin problemas del validador) — elegido por Bruno.
+
+⛔ **Y el INSUMO no se toca**: quedó redundante desde que la tela es un atributo de lista cerrada.
+Cargarlo era trabajo humano por un dato que la ficha ya tiene. Sigue existiendo, opcional.
+
+🔴 **El plural del validador, encontrado en esa misma corrida**: el modelo escribió «Jeans…» y la
+regla de nombrar la prenda lo rechazó —compara palabra entera y «jeans» ≠ «jean»—. Ese falso
+positivo **se paga**: dispara un reintento y el borrador salió **US$0,0050 en vez de US$0,0014**,
+3,5 veces más por una «s». `nombraLaPrenda` acepta el plural; ⛔ pero no cualquier palabra que
+empiece igual («jeanetta» ⛔ no nombra un jean).
+
 ▶️ **Falta el pie de marca** («Producto 100% Zattia 🇦🇷»), que Bruno quiere **sólo si el producto
 es de producción propia**. 🔴 Ese dato ⛔ no existe en ningún lado: los SKU de TiendaNube son el
 nombre del producto (medido: 1.815 variantes, ninguna con el formato `ZAT-TOP-NG-001` de

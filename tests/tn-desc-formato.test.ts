@@ -208,3 +208,27 @@ describe('🆕 el HTML: cuidados y tip (4-sep-2026)', () => {
     expect(cuerpo).toContain('No poner en secadora.')
   })
 })
+
+describe('🔴 el plural nombra la prenda igual (4-sep-2026)', () => {
+  // Salió midiendo: el modelo escribió «Jeans con un proceso de lavado localizado…» y el validador
+  // dijo que no nombraba el jean. El falso positivo dispara un reintento y el borrador costó
+  // US$0,0050 en vez de US$0,0014 — 3,5 veces más por una «s».
+  const jean = { variantes: [], nombre: 'JEAN MARINA', bullets: [] }
+
+  it('«Jeans» cuenta como «jean»', () => {
+    expect(validarParrafo('Jeans con un proceso de lavado localizado que acentúa las costuras.', jean)).toEqual([])
+  })
+
+  it('y el singular sigue contando', () => {
+    expect(validarParrafo('Jean de corte recto con costuras marcadas hasta el ruedo.', jean)).toEqual([])
+  })
+
+  it('⛔ pero no cualquier palabra que empiece igual', () => {
+    expect(validarParrafo('Jeanetta de corte recto con costuras marcadas hasta el ruedo.', jean)).toHaveLength(1)
+    expect(validarParrafo('Prenda de corte recto con costuras marcadas hasta el ruedo.', jean)).toHaveLength(1)
+  })
+
+  it('los moldes de dos palabras también pluralizan', () => {
+    expect(validarParrafo('Baby tees de algodón con estampa al frente y ruedo crudo.', { variantes: [], nombre: 'BABY TEE ICON', bullets: [] })).toEqual([])
+  })
+})
