@@ -137,6 +137,13 @@ describe('el sistema dice las reglas que el esquema no puede', () => {
     expect(SISTEMA).toContain('una sola oración')
   })
 
+  it('🆕 y le prohíbe el vocabulario de revista (4-sep-2026)', () => {
+    // Lo cazó Bruno leyendo el primer tip: «usala con un bralette al tono debajo». La palabra no se
+    // usa en un local de ropa, y el catálogo tiene las suyas.
+    expect(SISTEMA).toContain('bralette')
+    expect(SISTEMA).toContain('como habla la clienta')
+  })
+
   it('🔑 el esquema pide el párrafo y el tip, y nada más: los bullets ya no los escribe el modelo', () => {
     // El tip entró el 4-sep-2026 (decisión de Bruno). Los bullets siguen afuera: los compone la
     // ficha. Que esta lista sea corta ES la tanda del 27-ago — si vuelve a crecer, algo volvió a
