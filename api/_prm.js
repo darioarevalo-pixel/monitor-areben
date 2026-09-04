@@ -196,16 +196,39 @@ export async function comparativa(cliente, dias) {
   if (!locales.length) return { dias, locales: [], ocs: [], lineas: [], ventasPorProducto: [] }
 
   const ids = locales.map((l) => l.proveedor_id_ingresos)
-  const ocs = await leerTodo(cliente, 'recepcion_oc', (q) =>
-    q.select('id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas')
+
+  // 🔑 **Las órdenes y sus renglones vienen EN UNA sola consulta**, por el embed de PostgREST (hay
+  // FK: `recepcion_linea.oc_ref → recepcion_oc.id`). Eran dos lecturas encadenadas —y la de
+  // renglones son 1.622 filas, o sea dos páginas de mil— porque la segunda necesita los ids de la
+  // primera. Medido el 3-sep-2026 contra la base real: **1.348 ms de a una, 352 ms así**, con los
+  // mismos 92 pedidos y los mismos 1.622 renglones.
+  //
+  // 🔴 **Y el corte de mil filas también existe acá adentro, callado.** Por eso viaja
+  // `lineas_recibidas` —*cuántos renglones vinieron de verdad*, lo escribe el mismo webhook que los
+  // guardó— y se compara contra los que trajo el embed: si PostgREST recortó, esto **tira** en vez
+  // de dejar a un proveedor comprando menos de lo que compró. Al 3-sep-2026 son 92/92, y la OC más
+  // grande tiene **130** renglones. ⛔ `unidades_contadas` ⛔ no sirve de guard: sale de los totales
+  // del EVENTO, no de los renglones guardados — el emisor puede mandar la cabecera entera con los
+  // renglones recortados, y para eso está `totales_coinciden`.
+  const conRenglones = await leerTodo(cliente, 'recepcion_oc', (q) =>
+    q.select(
+      'id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas, lineas_recibidas, recepcion_linea(oc_ref, store, producto_id, cantidad_contada)',
+    )
       .in('proveedor_id', ids)
       .order('id'),
   )
-  const lineas = ocs.length
-    ? await leerTodo(cliente, 'recepcion_linea', (q) =>
-        q.select('oc_ref, store, producto_id, cantidad_contada').in('oc_ref', ocs.map((o) => o.id)).order('id'),
-      )
-    : []
+
+  const ocs = []
+  const lineas = []
+  for (const o of conRenglones) {
+    const { recepcion_linea: suyos, lineas_recibidas: cuantos, ...oc } = o
+    const traidos = suyos || []
+    if (traidos.length !== (cuantos || 0)) {
+      throw new Error(`la OC ${o.id} guardó ${cuantos} renglones y el embed trajo ${traidos.length}`)
+    }
+    ocs.push(oc)
+    for (const l of traidos) lineas.push(l)
+  }
 
   const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const porStore = new Map()

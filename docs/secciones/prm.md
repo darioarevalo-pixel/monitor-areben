@@ -215,6 +215,18 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
       GUARD que a `leerTodo` le falta**: si al final no están todas, **tira** en vez de devolver un
       número más bajo con cara de dato. Caminado contra la base real el 3-sep-2026: **5.311 = 5.311
       filas, 67 productos, 0 sumas distintas**, y de 2.318 a 1.304 ms desde esta Mac.
+    - ✅ 🔑 **Y las órdenes con sus renglones ahora son UNA consulta, ⛔ no dos encadenadas.** Es el
+      embed de PostgREST (hay FK `recepcion_linea.oc_ref → recepcion_oc.id`): eran una lectura de
+      92 órdenes y otra de **1.622 renglones = 2 páginas de mil**, y la segunda ⛔ no podía arrancar
+      sin los ids de la primera. Medido contra la base real el 3-sep-2026: **1.348 → 352 ms**.
+      🔴 **El corte de mil filas existe TAMBIÉN adentro del embed y es callado**, así que viaja
+      `recepcion_oc.lineas_recibidas` —*cuántos renglones vinieron de verdad*, lo escribe el mismo
+      webhook que los guardó— y se compara con los que trajo el embed: si recortó, **tira**. Al
+      3-sep son 92/92 y la OC más grande tiene **130** renglones.
+      ⛔ **`unidades_contadas` ⛔ NO servía de guard**: sale de los totales del EVENTO, ⛔ no de los
+      renglones guardados — el emisor puede mandar la cabecera entera con los renglones recortados,
+      y para ese caso ya existe `totales_coinciden`. Coincide hoy en las 92, y aun así ⛔ no es el
+      número que hay que mirar.
   - ▶️ **Lo que queda, y es de Bruno**: las ventas se bajan CRUDAS —5.311 renglones de BDI para
     llegar a 67 números— porque el agregado del lado de la base está **APAGADO en el proyecto**
     (`select('quantity.sum()')` contesta `Use of aggregate functions is not allowed`, probado el

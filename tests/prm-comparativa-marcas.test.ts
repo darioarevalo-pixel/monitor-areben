@@ -26,6 +26,8 @@ const demora: Record<string, number> = {}
 /** `store → [empezó, terminó]` en ms desde el arranque de la corrida. */
 let ventana: Record<string, [number, number]>
 let rompe: string | null
+/** La OC cuyo `lineas_recibidas` dice MÁS de lo que trae el embed: PostgREST recortó. */
+let recorta: string | null
 
 vi.mock('@/api/_recepciones-base.js', () => ({
   cfgDelMonitor: () => ({ url: 'u-monitor', key: 'k-monitor' }),
@@ -73,19 +75,27 @@ function monitor() {
       limit: () => api,
       range: async () => {
         if (t === 'proveedor_local') return { data: [{ id: 'L1', nombre: 'UNO', proveedor_id_ingresos: 11 }], error: null }
+        // ⚠️ Los renglones vienen EMBEBIDOS en la orden, que es como los pide el handler desde el
+        // 3-sep-2026: una consulta en vez de dos encadenadas.
         if (t === 'recepcion_oc')
           return {
             data: [
-              { id: 'o-bdi', store: 'bdi', proveedor_id: 11, confirmada_at: '2026-08-01T00:00:00Z' },
-              { id: 'o-zat', store: 'zattia', proveedor_id: 11, confirmada_at: '2026-08-01T00:00:00Z' },
-            ],
-            error: null,
-          }
-        if (t === 'recepcion_linea')
-          return {
-            data: [
-              { oc_ref: 'o-bdi', store: 'bdi', producto_id: '7', cantidad_contada: 5 },
-              { oc_ref: 'o-zat', store: 'zattia', producto_id: '7', cantidad_contada: 5 },
+              {
+                id: 'o-bdi',
+                store: 'bdi',
+                proveedor_id: 11,
+                confirmada_at: '2026-08-01T00:00:00Z',
+                lineas_recibidas: recorta === 'o-bdi' ? 2 : 1,
+                recepcion_linea: [{ oc_ref: 'o-bdi', store: 'bdi', producto_id: '7', cantidad_contada: 5 }],
+              },
+              {
+                id: 'o-zat',
+                store: 'zattia',
+                proveedor_id: 11,
+                confirmada_at: '2026-08-01T00:00:00Z',
+                lineas_recibidas: 1,
+                recepcion_linea: [{ oc_ref: 'o-zat', store: 'zattia', producto_id: '7', cantidad_contada: 5 }],
+              },
             ],
             error: null,
           }
@@ -104,6 +114,7 @@ beforeEach(() => {
   for (const k of Object.keys(demora)) delete demora[k]
   ventana = {}
   rompe = null
+  recorta = null
   T0 = Date.now()
 })
 
@@ -146,6 +157,20 @@ describe('comparativa · las dos marcas', () => {
 
     expect(r.marcasMudas).toEqual(['zattia'])
     expect(r.ventasPorProducto).toEqual([{ store: 'bdi', producto_id: '7', unidades: 3 }])
+  })
+
+  /**
+   * 🔴 **El corte de mil filas de PostgREST existe TAMBIÉN adentro del embed, y es callado.** Sin
+   * este guard, un proveedor aparece comprando menos de lo que compró y ⛔ nada falla: es el modo
+   * de falla caro de siempre, mudado al lugar nuevo. `lineas_recibidas` lo escribe el mismo webhook
+   * que guardó los renglones, así que decir cuántos guardó ⛔ no cuesta un viaje.
+   */
+  it('🔴 si el embed trae MENOS renglones de los que la OC guardó, TIRA', async () => {
+    cfg.bdi = { url: 'u-bdi', key: 'k' }
+    cfg.zattia = { url: 'u-zat', key: 'k' }
+    recorta = 'o-bdi'
+
+    await expect(comparativa(monitor(), 30)).rejects.toThrow(/o-bdi guardó 2 renglones y el embed trajo 1/)
   })
 
   it('🔴 el orden del resultado ⛔ no depende de cuál conteste primero', async () => {
