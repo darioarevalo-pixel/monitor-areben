@@ -19,6 +19,9 @@ import {
   FAMILIAS as FAMILIAS_JS,
   NO_APLICA as NO_APLICA_JS,
   TELA_SIN_IDENTIFICAR as TELA_SIN_IDENTIFICAR_JS,
+  TELAS as TELAS_JS,
+  telasDe as telasDeJs,
+  sinTela as sinTelaJs,
   MAX_PROPUESTA as MAX_PROPUESTA_JS,
   atributosDe as atributosDeJs,
   atributosExtra as atributosExtraJs,
@@ -84,6 +87,22 @@ export const CATEGORIAS_FUERA_DE_ALCANCE = CATEGORIAS_FUERA_JS as string[]
 
 /** El valor de Tela que significa «alguien lo miró y no supo». Se guarda; no sale a la ficha. */
 export const TELA_SIN_IDENTIFICAR: string = TELA_SIN_IDENTIFICAR_JS
+
+/** Las telas de la lista cerrada. Las piden los dos casilleros de tela, `tela` y `tela2`. */
+export const TELAS: string[] = TELAS_JS as string[]
+
+/** Las telas cargadas de un producto (las dos), sin las vacías ni «no identifico». */
+export function telasDe(cargados: Cargados): string[] {
+  return telasDeJs(cargados) as string[]
+}
+
+/**
+ * ⛔ ¿Esta prenda NO tiene tela? Sin tela ⛔ no se redacta ni se publica: la tela es la que decide
+ * los cuidados (decisión de Bruno, 4-sep-2026).
+ */
+export function sinTela(cargados: Cargados): boolean {
+  return sinTelaJs(cargados) as boolean
+}
 
 /** «Esta prenda no tiene eso». Vale en todo atributo cerrado salvo Tela; se guarda y no sale. */
 export const NO_APLICA: string = NO_APLICA_JS

@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { validarParrafo, generarHtml, tipoDe, MAX_PARRAFO, PRIMEROS } from '../lib/tn-desc/formato'
+import { validarParrafo, validarTip, generarHtml, tipoDe, MAX_PARRAFO, PRIMEROS } from '../lib/tn-desc/formato'
 import type { Contexto } from '../lib/tn-desc/formato'
 
 const ctx: Contexto = {
@@ -155,5 +155,56 @@ describe('generarHtml', () => {
 
   it('sin bullets no deja una lista vacía colgada', () => {
     expect(generarHtml({ parrafo: 'Sola.', bullets: [] })).not.toContain('<ul')
+  })
+})
+
+describe('🆕 el tip de look (4-sep-2026)', () => {
+  // Decisión de Bruno mirando FALDA SAGE: el tip va, pero opcional — un tip flojo pesa más que la
+  // falta de tip. Por eso vacío ⛔ no es un problema.
+  it('vacío está bien: es opcional', () => {
+    expect(validarTip('', { variantes: [] })).toEqual([])
+    expect(validarTip('   ', { variantes: [] })).toEqual([])
+  })
+
+  it('el de FALDA SAGE pasa', () => {
+    expect(validarTip('Con un top básico metido adentro para marcar la cintura.', { variantes: [] })).toEqual([])
+  })
+
+  it('le corren las mismas reglas duras que al párrafo: viven en el mismo campo de TN', () => {
+    expect(validarTip('Queda bien con el pantalón off white.', { variantes: ['OFF WHITE'] })).toHaveLength(1)
+    expect(validarTip('Pedí un talle más para que quede holgado.', { variantes: [] })).toHaveLength(1)
+    expect(validarTip('Dobla 5 cm el ruedo y queda perfecta.', { variantes: [] })).toHaveLength(1)
+  })
+
+  it('⛔ pero NO le corre la de arrancar por la prenda: un tip arranca por cómo se usa', () => {
+    expect(validarTip('Esta se lleva con las botas de caña alta.', { variantes: [] })).toEqual([])
+  })
+
+  it('un tip largo se rechaza: es una línea, no un segundo párrafo', () => {
+    expect(validarTip('x'.repeat(121), { variantes: [] })).toHaveLength(1)
+  })
+})
+
+describe('🆕 el HTML: cuidados y tip (4-sep-2026)', () => {
+  const base = { parrafo: 'Jean de tiro bajo con caída amplia.', bullets: [{ etiqueta: 'Tela', texto: 'denim rígido' }] }
+
+  it('sin tip y sin cuidados sale exactamente lo de antes', () => {
+    const h = generarHtml(base)
+    expect(h).not.toContain('Tip de look')
+    expect(h).not.toContain('Cuidados de la prenda')
+  })
+
+  it('el orden es párrafo → bullets → tip → cuidados', () => {
+    const h = generarHtml({ ...base, tip: 'Con zapatilla blanca y remera corta.', cuidados: { grupo: 'denim', lineas: ['No poner en secadora.'] } })
+    expect(h.indexOf('Jean de tiro bajo')).toBeLessThan(h.indexOf('denim rígido'))
+    expect(h.indexOf('denim rígido')).toBeLessThan(h.indexOf('Tip de look'))
+    expect(h.indexOf('Tip de look')).toBeLessThan(h.indexOf('Cuidados de la prenda'))
+  })
+
+  it('🔑 y todo queda ADENTRO de la firma, para que se pueda reemplazar entero', () => {
+    const h = generarHtml({ ...base, tip: 'Un tip.', cuidados: { grupo: 'denim', lineas: ['No poner en secadora.'] } })
+    const cuerpo = h.slice(h.indexOf('<!--AREBEN-PROSA-INI-->'), h.indexOf('<!--AREBEN-PROSA-FIN-->'))
+    expect(cuerpo).toContain('Un tip.')
+    expect(cuerpo).toContain('No poner en secadora.')
   })
 })

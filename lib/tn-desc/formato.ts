@@ -20,16 +20,27 @@ import {
   PROSA_FIN as PROSA_FIN_JS,
   tipoDe as tipoDeJs,
   validarParrafo as validarParrafoJs,
+  validarTip as validarTipJs,
+  MAX_TIP as MAX_TIP_JS,
   generarHtml as generarHtmlJs,
 } from './formato.core.js'
 
 /** Un bullet ya compuesto. La etiqueta la decide `atributos.core.js`, no quien escribe. */
 export type Bullet = { etiqueta: string; texto: string }
 
-/** Lo que se guarda y lo que se pinta: el párrafo escrito + los bullets compuestos. */
-export type Borrador = { parrafo: string; bullets: Bullet[] }
+/**
+ * Lo que se guarda y lo que se pinta: el párrafo escrito + los bullets compuestos.
+ *
+ * ⚠️ `tip` es OPCIONAL por decisión de Bruno (4-sep-2026): un tip flojo pesa más que la falta de
+ * tip. `cuidados` ⛔ no se escribe ni se guarda — lo compone `cuidados.core.js` desde la tela al
+ * momento de publicar, igual que los bullets.
+ */
+export type Borrador = { parrafo: string; bullets: Bullet[]; tip?: string; cuidados?: { grupo: string; lineas: string[] } | null }
 
 export const MAX_PARRAFO: number = MAX_PARRAFO_JS
+
+/** El techo del tip de look: es una línea, no un segundo párrafo. */
+export const MAX_TIP: number = MAX_TIP_JS
 export const PRIMEROS: number = PRIMEROS_JS
 
 export const PROSA_INI: string = PROSA_INI_JS
@@ -53,6 +64,14 @@ export type Problema = { campo: string; motivo: string }
  */
 export function validarParrafo(parrafo: string, ctx: Contexto): Problema[] {
   return validarParrafoJs(parrafo, ctx) as Problema[]
+}
+
+/**
+ * Los problemas del TIP DE LOOK. Vacío = se puede aprobar, y **vacío también es válido**: el tip
+ * es opcional (decisión de Bruno, 4-sep-2026).
+ */
+export function validarTip(tip: string, ctx: Pick<Contexto, 'variantes'>): Problema[] {
+  return validarTipJs(tip, ctx) as Problema[]
 }
 
 /** El tipo de prenda según el nombre del producto («TOP BLISS» → «TOP»). */

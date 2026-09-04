@@ -403,6 +403,8 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     filaGuardada = { ...APROBADA }
     respEscribir = { status: 200, body: { ok: true, escrito: 'lo que quedó', verificado: true } }
     mandado = {}
+    // 🔴 La ficha tiene que traer TELA: desde el 4-sep-2026 una prenda sin tela no se publica.
+    atributosGuardados = [{ atributo: 'tela', valor: 'gasa' }]
   })
 
   it('🔴 el respaldo se escribe y confirma ANTES de tocar la tienda', async () => {
@@ -421,11 +423,20 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     catalogoFalso(MKT)
     const mod = await import('@supabase/supabase-js')
     // La base falla justo en el `update` del respaldo.
+    // ⚠️ El mock distingue la tabla: la ficha tiene que traer TELA o el handler frena antes de
+    // llegar al respaldo, que es justo lo que este test quiere ejercer.
     vi.spyOn(mod, 'createClient').mockReturnValue({
-      from: () => ({
-        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: APROBADA, error: null }) }) }) }),
-        update: () => ({ eq: () => ({ eq: async () => ({ error: { message: 'la base dijo que no' } }) }) }),
-      }),
+      from: (t: string) => {
+        const filas = t === 'tn_atributos' ? [{ atributo: 'tela', valor: 'gasa' }] : []
+        const hoja = {
+          maybeSingle: async () => ({ data: APROBADA, error: null }),
+          then: (r: (v: unknown) => unknown) => r({ data: filas, error: null }),
+        }
+        return {
+          select: () => ({ eq: () => ({ eq: () => hoja }) }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: { message: 'la base dijo que no' } }) }) }),
+        }
+      },
     } as never)
     const res = await llamar(post({ op: 'publicar' }))
     expect(res.code).toBe(500)
@@ -467,6 +478,40 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     const nuevo = String(mandado.nuevo)
     expect(nuevo).not.toContain('<h5>Top de red.</h5>')
     expect(nuevo).toContain('<!--AREBEN-TALLES-INI-->')
+  })
+
+  it('🔴 SIN TELA no sale a la tienda, y la tienda ni se lee', async () => {
+    // Decisión de Bruno del 4-sep-2026: la tela decide los cuidados, así que sin tela no hay
+    // descripción. El freno vive en el servidor y no sólo en la pantalla.
+    atributosGuardados = [{ atributo: 'largo', valor: 'crop' }]
+    catalogoFalso(MKT)
+    const res = await llamar(post({ op: 'publicar' }))
+    expect(res.code).toBe(400)
+    expect(String(res.body?.error)).toContain('Sin tela')
+    expect(diario).toEqual([])
+  })
+
+  it('🔴 «no identifico» cuenta como sin tela: se guarda, pero no se publica', async () => {
+    atributosGuardados = [{ atributo: 'tela', valor: 'no identifico' }]
+    catalogoFalso(MKT)
+    expect((await llamar(post({ op: 'publicar' }))).code).toBe(400)
+    expect(diario).toEqual([])
+  })
+
+  it('🆕 los CUIDADOS salen de la tela, y con dos telas gana la más restrictiva', async () => {
+    // El caso de FALDA SAGE: base de microfibra (grupo «punto») con capa de microtul («delicadas»).
+    atributosGuardados = [
+      { atributo: 'tela', valor: 'microfibra' },
+      { atributo: 'tela2', valor: 'microtul' },
+    ]
+    catalogoFalso(MKT)
+    await llamar(post({ op: 'publicar' }))
+    const nuevo = String(mandado.nuevo)
+    expect(nuevo).toContain('Cuidados de la prenda')
+    expect(nuevo).toContain('Lavar a mano con agua fría')
+    expect(nuevo).not.toContain('Lavar del revés con agua fría.') // el del grupo «punto»
+    // Y las dos telas salen en UN bullet, que es como lo lee la clienta.
+    expect(nuevo).toContain('<b>Tela:</b> microfibra + microtul')
   })
 
   it('⛔ un borrador que NO está aprobado no sale a la tienda', async () => {

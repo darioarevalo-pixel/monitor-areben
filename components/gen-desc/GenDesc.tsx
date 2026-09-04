@@ -8,8 +8,9 @@ import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
-import { MAX_PARRAFO, generarHtml, validarParrafo } from '@/lib/tn-desc/formato'
-import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip } from '@/lib/tn-desc/formato'
+import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
 import { familiaDeProducto, listaDe, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 import { fraseDeModelo, modeloDeProducto, resumenDeModelo, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
@@ -218,11 +219,15 @@ function FilaProducto({
 }) {
   const [insumo, setInsumo] = useState(fila?.insumo || '')
   const [parrafo, setParrafo] = useState(fila?.borrador?.parrafo || '')
+  const [tip, setTip] = useState(fila?.borrador?.tip || '')
   const [guardando, setGuardando] = useState(false)
   const [modelo, setModelo] = useState<string>(MODELO_POR_DEFECTO)
   const [redactando, setRedactando] = useState(false)
   const [ia, setIa] = useState<ResultadoIA | null>(null)
-  const [conservarResiduo, setConservarResiduo] = useState(true)
+  // ⛔ Arranca DESTILDADO: los productos de la tanda del 2-sep tienen un renglón escrito a mano en
+  // TiendaNube, y conservarlo dejaría el texto viejo abajo del párrafo nuevo, diciendo lo mismo.
+  // Decisión de Bruno del 4-sep-2026: se pisa. El respaldo queda igual en `html_previo`.
+  const [conservarResiduo, setConservarResiduo] = useState(false)
   const [publicando, setPublicando] = useState(false)
   // La foto que se está mirando en grande. Es de la fila y no de la sección: se abre con la
   // ficha delante, que es el momento en que hace falta.
@@ -254,9 +259,13 @@ function FilaProducto({
   )
 
   const problemas = useMemo(
-    () => validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }),
-    [parrafo, p.variantes, p.name, bullets],
+    () => [...validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }), ...validarTip(tip, { variantes: p.variantes })],
+    [parrafo, tip, p.variantes, p.name, bullets],
   )
+  /** Los cuidados que le tocan a esta prenda por su tela. `null` si todavía no tiene ninguna. */
+  const cuidados = useMemo(() => cuidadosDe(ficha), [ficha])
+  /** 🔴 Sin tela no se redacta ni se publica: la tela es la que decide los cuidados. */
+  const faltaTela = useMemo(() => sinTela(ficha), [ficha])
   const vacio = !parrafo.trim()
 
   /**
@@ -270,6 +279,7 @@ function FilaProducto({
     setRedactando(false)
     setIa(r)
     if (r.borrador?.parrafo) setParrafo(r.borrador.parrafo)
+    if (typeof r.borrador?.tip === 'string') setTip(r.borrador.tip)
   }
 
   const correr = async (cuerpo: Record<string, unknown>) => {
@@ -472,9 +482,12 @@ function FilaProducto({
                     ))}
                   </Select>
                 </Field>
-                <Button size="sm" variant="outline" disabled={redactando} onClick={() => void pedirIa()}>
+                <Button size="sm" variant="outline" disabled={redactando || faltaTela} onClick={() => void pedirIa()}>
                   {redactando ? 'Redactando…' : 'Escribir el párrafo con IA'}
                 </Button>
+                {faltaTela && (
+                  <span style={{ fontSize: 12, color: '#a00' }}>Cargá la tela: es la que decide los cuidados de la prenda.</span>
+                )}
                 {ia && !ia.error && (
                   <span style={{ fontSize: 12, color: '#666' }}>
                     {ia.modeloNombre} · {ia.intentos === 1 ? 'un intento' : `${ia.intentos} intentos`} ·{' '}
@@ -489,6 +502,13 @@ function FilaProducto({
                 hint="Arranca nombrando la prenda. No repitas lo que ya dicen los datos de la ficha."
               >
                 <Input value={parrafo} onChange={(e) => setParrafo(e.target.value)} />
+              </Field>
+
+              <Field
+                label={`Tip de look (${tip.trim().length} de ${MAX_TIP}) — opcional`}
+                hint="Cómo combinarla o cómo queda mejor puesta. Si no suma, dejalo vacío."
+              >
+                <Input value={tip} onChange={(e) => setTip(e.target.value)} />
               </Field>
 
               {!vacio && problemas.length > 0 && (
@@ -507,13 +527,13 @@ function FilaProducto({
                   <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Cómo va a quedar</div>
                   <div
                     style={{ border: '1px solid #eee', borderRadius: 6, padding: 10 }}
-                    dangerouslySetInnerHTML={{ __html: generarHtml({ parrafo, bullets }) }}
+                    dangerouslySetInnerHTML={{ __html: generarHtml({ parrafo, bullets, tip, cuidados }) }}
                   />
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets } })}>
+                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets, tip: tip.trim() } })}>
                   Guardar el párrafo
                 </Button>
                 <Button

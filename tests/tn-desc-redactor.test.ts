@@ -126,9 +126,12 @@ describe('el sistema dice las reglas que el esquema no puede', () => {
     expect(SISTEMA).toContain('No repitas')
   })
 
-  it('🔑 el esquema es de UNA sola clave: los bullets ya no los escribe el modelo', () => {
-    expect(Object.keys(ESQUEMA.properties)).toEqual(['parrafo'])
-    expect(ESQUEMA.required).toEqual(['parrafo'])
+  it('🔑 el esquema pide el párrafo y el tip, y nada más: los bullets ya no los escribe el modelo', () => {
+    // El tip entró el 4-sep-2026 (decisión de Bruno). Los bullets siguen afuera: los compone la
+    // ficha. Que esta lista sea corta ES la tanda del 27-ago — si vuelve a crecer, algo volvió a
+    // pedirle al modelo lo que ya es dato.
+    expect(Object.keys(ESQUEMA.properties)).toEqual(['parrafo', 'tip'])
+    expect(ESQUEMA.required).toEqual(['parrafo', 'tip'])
   })
 
   it('sin `additionalProperties` en ningún nivel: Gemini devuelve 400 y no se redacta nada', () => {
@@ -144,7 +147,7 @@ describe('redactar', () => {
     expect(r.error).toBeNull()
     expect(r.problemas).toEqual([])
     expect(r.intentos).toBe(1)
-    expect(r.borrador).toEqual(BUENO)
+    expect(r.borrador).toEqual({ ...BUENO, tip: '' })
   })
 
   it('un borrador que nombra un color se rechaza y el segundo intento sale', async () => {
@@ -154,7 +157,7 @@ describe('redactar', () => {
     const r = await redactar(CTX, llamar)
     expect(r.intentos).toBe(2)
     expect(r.problemas).toEqual([])
-    expect(r.borrador).toEqual(BUENO)
+    expect(r.borrador).toEqual({ ...BUENO, tip: '' })
     // Y el segundo pedido le explicó por qué, con el color adentro.
     expect(textoDe(pedidos[1])).toContain('blanco')
   })
@@ -176,7 +179,7 @@ describe('redactar', () => {
     const r = await redactar(CTX, llamar)
     expect(r.intentos).toBe(INTENTOS)
     expect(r.error).toBeNull()
-    expect(r.borrador).toEqual(largo)
+    expect(r.borrador).toEqual({ ...largo, tip: '' })
     expect(r.problemas.map((p: { campo: string }) => p.campo)).toContain('parrafo')
   })
 
@@ -189,7 +192,7 @@ describe('redactar', () => {
     const r = await redactar({ ...CTX, insumo: '', bullets: [{ etiqueta: 'Tela', texto: 'gasa' }] }, llamar)
     // Lo que sí se rechaza es que el párrafo repita lo que el bullet ya dice.
     expect(r.problemas.map((p: { motivo: string }) => p.motivo).join(' ')).not.toContain('tela')
-    expect(r.borrador).toEqual(conTela)
+    expect(r.borrador).toEqual({ ...conTela, tip: '' })
   })
 
   it('🆕 el párrafo que repite lo que dice un bullet se rechaza y se reintenta', async () => {
@@ -227,7 +230,7 @@ describe('redactar', () => {
     const { llamar } = modeloFalso([conColor, new Error('la API contestó 503: overloaded')])
     const r = await redactar(CTX, llamar)
     expect(r.error).toContain('503')
-    expect(r.borrador).toEqual(conColor)
+    expect(r.borrador).toEqual({ ...conColor, tip: '' })
     expect(r.uso.entrada).toBe(1000) // la que sí ocurrió
   })
 })
@@ -235,7 +238,7 @@ describe('redactar', () => {
 describe('interpretar', () => {
   it('lee el párrafo y nada más: los bullets que mande el modelo se ignoran', () => {
     const r = interpretar('{"parrafo":"hola","bullets":[{"etiqueta":"Tela"}]}')
-    expect(r.borrador).toEqual({ parrafo: 'hola' })
+    expect(r.borrador).toEqual({ parrafo: 'hola', tip: '' })
   })
 
   it('un array pelado no es un borrador', () => {

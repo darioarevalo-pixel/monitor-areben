@@ -274,6 +274,15 @@ export default async function handler(req, res) {
     });
   }
 
+  // 🔴 SIN TELA NO SE REDACTA (decisión de Bruno, 4-sep-2026). La tela es lo que decide los
+  // cuidados, y una prenda sin tela ⛔ no puede salir a la tienda: pedirle el párrafo antes sería
+  // pagar una llamada por un texto que no se va a poder publicar. Se mira el bullet compuesto,
+  // que es lo que ya viaja — el freno de verdad, el que cuenta, está en `op:'publicar'`.
+  const bullets = bulletsDe(body.bullets);
+  if (!bullets.some((b) => b.etiqueta === 'Tela')) {
+    return res.status(400).json({ ok: false, error: 'Sin tela cargada no se redacta: la tela decide los cuidados de la prenda.' });
+  }
+
   const ctx = {
     marca: store === 'zattia' ? 'Zattia' : 'BDI',
     nombre,
@@ -287,7 +296,7 @@ export default async function handler(req, res) {
     // Los bullets ya compuestos por `lib/tn-desc/atributos.core.js`. Vienen del navegador igual
     // que las variantes y la prosa actual: no deciden nada que se guarde —este endpoint no
     // guarda— y lo único que cambian es qué NO tiene que repetir el párrafo.
-    bullets: bulletsDe(body.bullets),
+    bullets,
   };
 
   const llamar = llamador(modelo, clave);

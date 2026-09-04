@@ -34,7 +34,8 @@ import { generarHtml } from '../lib/tn-desc/formato.core.js';
 import { componer, conservaLaTabla } from '../lib/tn-desc/bloques.core.js';
 import { htmlDeMedidas } from '../lib/tn-medidas/bloque.core.js';
 import { tallesDe } from '../lib/tn-medidas/medidas.core.js';
-import { ATRIBUTOS, FAMILIAS, bulletsDe, esPalabraPropuesta, esValor, normalizarPropuesta } from '../lib/tn-desc/atributos.core.js';
+import { ATRIBUTOS, FAMILIAS, bulletsDe, esPalabraPropuesta, esValor, normalizarPropuesta, sinTela } from '../lib/tn-desc/atributos.core.js';
+import { cuidadosDe } from '../lib/tn-desc/cuidados.core.js';
 import { esMedida, esValorDeMedida } from '../lib/tn-medidas/medidas.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
 
@@ -443,7 +444,16 @@ export default async function handler(req, res) {
         .eq('tn_id', tnId);
       if (eAttrs) throw new Error(eAttrs.message);
       const cargados = Object.fromEntries((attrs || []).map((a) => [a.atributo, a.valor]));
+      // 🔴 SIN TELA NO SALE A LA TIENDA (decisión de Bruno, 4-sep-2026). El freno vive acá y no
+      // sólo en la pantalla por el mismo motivo que la lista cerrada: un botón escondido es una
+      // comodidad, no un candado. Y `no identifico` cuenta como sin tela: es la prenda que hay
+      // que volver a mirar, no una que se puede publicar a medias.
+      if (sinTela(cargados)) {
+        return res.status(400).json({ error: 'Sin tela cargada no se publica: la tela decide los cuidados de la prenda.' });
+      }
       const bullets = bulletsDe(fila.familia, cargados);
+      // Los cuidados se componen acá, desde la tela guardada, igual que los bullets y la tabla.
+      const cuidados = cuidadosDe(cargados);
 
       // La tabla de medidas se compone acá, con lo que está GUARDADO, igual que los bullets: lo
       // que manda el navegador no decide qué sale a la tienda.
@@ -475,7 +485,7 @@ export default async function handler(req, res) {
       const actual = typeof dLeer.html === 'string' ? dLeer.html : '';
 
       // 2. Componer. Una sola vez y en un lugar solo (`lib/tn-desc/bloques.core.js`).
-      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets }), { conservarResiduo, htmlTalles });
+      const nuevo = componer(actual, generarHtml({ parrafo: fila.borrador.parrafo, bullets, tip: fila.borrador.tip, cuidados }), { conservarResiduo, htmlTalles });
       if (!conservaLaTabla(actual, nuevo, htmlTalles)) {
         return res.status(500).json({ error: 'La composición se come la tabla de talles. No se escribió nada.' });
       }

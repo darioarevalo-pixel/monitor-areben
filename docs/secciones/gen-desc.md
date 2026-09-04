@@ -218,6 +218,56 @@ la pantalla lo dice — pedirle atributos a un producto del que no se sabe qué 
   una migración, el análisis es un `group by`, y queda registrado **quién cargó cada valor** (con
   una columna por atributo, `por` diría sólo el último y taparía a los demás).
 
+## 🆕 4-sep-2026 — cuidados, tip y el freno de la tela
+
+Salió de mirar **FALDA SAGE**, una descripción escrita a mano que quedó bien, contra la primera
+corrida real del módulo (JEAN MARINA). SAGE tenía seis bloques y nosotros dos.
+
+**Lo que se sumó, y lo que NO.** Material y Calce ⛔ no se suman: ya son bullets, y repetirlos es
+justo lo que molestaba del párrafo. Lo que faltaba de verdad era esto:
+
+- 🔑 **Cuidados de la prenda, derivados de la TELA** (`lib/tn-desc/cuidados.core.js`). ⛔ No lo
+  escribe nadie: la tela ya es lista cerrada, así que el bloque se compone solo, como los bullets.
+  Un cuidado equivocado ⛔ no es una frase floja: es una prenda arruinada que vuelve como cambio.
+  **Cinco grupos y no veintidós textos** —«casi siempre es más o menos el mismo», Bruno—:
+  `no-agua` (ecocuero, piel) · `delicadas` (encaje, microtul, red, lurex, satén, gasa, batista) ·
+  `deforman` (morley, lanilla, frisa, crepe) · `denim` (denim rígido y elastizado, corderoy, lino,
+  bengalina) · `punto` (microfibra, jersey, ribb, lycra).
+  🔴 **Con dos telas gana la MÁS RESTRICTIVA, ⛔ no la principal**: FALDA SAGE es microfibra con
+  capa de microtul y se cuida como el microtul. El orden del array **es** la prioridad.
+  ⚠️ `no-agua` va antes que `delicadas` a propósito: «lavar a mano» ya metió la prenda en el agua.
+  ⛔ **Sin «bolsa de red»**, que lo sacó Bruno: «no es algo habitual» — un cuidado que pide algo
+  que la clienta no tiene en casa no se cumple.
+  🔑 **El test que lo sostiene es el de COBERTURA**: agregar una tela a la lista y no darle grupo
+  deja `tests/tn-desc-cuidados.test.ts` en rojo. Sin eso, el mapa se pudre en silencio.
+- 🆕 **Segunda tela** (`tela2`). ⛔ No se le pide a ninguna familia: vive en «+ agregar un dato»,
+  porque la mayoría tiene una sola y un casillero para dejar vacío siempre ensucia la ficha.
+  ⛔ **No sale como bullet propio**: se fusiona («Tela: microfibra + microtul»), que es como lo lee
+  la clienta. En la base sigue siendo su fila, así que el análisis las ve separadas.
+- 🔴 **SIN TELA NO SE REDACTA NI SE PUBLICA** (decisión de Bruno). El freno está en el servidor
+  —`op:'publicar'` y el handler de IA—, ⛔ no sólo en la pantalla. `no identifico` **cuenta como
+  sin tela**: se sigue guardando, porque «lo miró y no supo» es la prenda que hay que volver a
+  mirar, pero ⛔ no alcanza para salir a la tienda.
+- 🆕 **Tip de look**, y es **opcional**: «un tip flojo pesa más que la falta de tip». Se le pide al
+  modelo siempre (va en el esquema junto al párrafo) y quien revisa lo borra si no suma. Le corren
+  las mismas reglas duras —colores, talles, centímetros— porque vive en el mismo campo de TN;
+  ⛔ no le corre la de arrancar por la prenda: un tip arranca por cómo se usa.
+- 🆕 **4ª regla del párrafo: ⛔ no puede nombrar el producto.** Lo trajo «Jean Marina con un corte
+  que aporta volumen…». ⚠️ Se mira el nombre **sin el tipo de prenda** («Marina», ⛔ no «Jean
+  Marina»): la 3ª regla EXIGE nombrar la prenda, y prohibir el nombre entero sería dos reglas
+  peleándose.
+- ⛔ **Al publicar, el texto viejo se PISA**: el casillero «conservar» arranca destildado. Los 24
+  productos de la tanda del 2-sep tienen un renglón escrito a mano en TiendaNube, y conservarlo
+  dejaría dos textos diciendo lo mismo. El respaldo (`html_previo`) queda igual.
+
+**El orden que sale a la tienda**: párrafo → bullets → tip → cuidados → tabla de talles.
+
+▶️ **Falta el pie de marca** («Producto 100% Zattia 🇦🇷»), que Bruno quiere **sólo si el producto
+es de producción propia**. 🔴 Ese dato ⛔ no existe en ningún lado: los SKU de TiendaNube son el
+nombre del producto (medido: 1.815 variantes, ninguna con el formato `ZAT-TOP-NG-001` de
+producción) y ninguna de las 25 categorías de la tienda lo dice. Lo propuesto es un casillero
+`Origen` en la ficha; **lo decide Bruno**.
+
 ## Lo que muerde
 
 - 🔴 **La descripción de TiendaNube tiene TRES cosas en un solo campo**: la prosa, la tabla de
