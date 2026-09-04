@@ -297,10 +297,32 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    prenda sola**) · un candidato sin outfit deja el ítem **sin bolsa**, ⛔ no se le inventa número ·
    al pedir se guardan las dos puntas **en orden**: primero la solicitud, después el banco.
    ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § El BANCO.
-4. **Traer de la OC recibida** al banco: `lib/sesionfotos/banco-oc.ts`, **calcado del cruce de
-   `cruzarParaSesion`** (SKU y después barcode) con sus mismos motivos de exclusión.
-   🔴 Se usa el recruce **en vivo** (`producto_id_hoy`/`en_gn_hoy`), ⛔ **no** el `producto_id` de la
-   línea, que es la foto del momento de la recepción. Lo que no cruza se lista **con su motivo**.
+4. 🏁 **HECHA el 4-sep-2026 — la orden recibida entra al banco.** `lib/sesionfotos/banco-oc.ts`
+   (`itemsBancoDesdeOC`) + `components/sesionfotos/AgregarDesdeOC.tsx`, colgado arriba del buscador
+   del banco. Lee por `?recurso=recepciones`, el endpoint de «Lo que entró» ⇒ ⛔ sin permiso nuevo,
+   ⛔ sin tabla y ⛔ sin migración.
+   ✅ 23 tests nuevos (17 del cruce + 6 de la pantalla montada) · suite entera verde (7.192, con el
+   rojo conocido de `crm-paridad` que ⛔ no es de acá) · `tsc`, `eslint` y `build` limpios.
+   🔴 🔑 **La foto vieja del renglón ⛔ NO decide nada, y está MEDIDO**: de las 74 órdenes de Zattia
+   (819 renglones), **186 llegaron con `en_gn` en false o null y HOY sí cruzan** —el caso normal de
+   una importación es que el alta en GN venga después—. Leerla habría tirado **uno de cada cuatro**
+   llamándolo «no está cargado». Por eso `LineaOC` **⛔ ni siquiera declara `en_gn`/`producto_id`**:
+   ⛔ no es un comentario pidiendo que no se usen, es `tsc` diciendo que no están.
+   📌 **Cobertura medida contra las dos bases**: cruzan por código **Zattia 802/819 (97,9%)** y
+   **BDI 749/803 (93,3%)** —casi todo por SKU: el de la orden lo escribe el mismo Ingresos que carga
+   GN—. Sobre las **10 órdenes más recientes**, que es el caso real, **Zattia 167/167** y
+   **BDI 402/424**. El resto se va casi todo por **sin stock**, que son las OCs viejas ya vendidas.
+   🔑 **El cruce ⛔ no se reescribió: se abrieron dos FIRMAS.** `variantesGnDe` pasó a pedir
+   `ConCodigos` (`{sku?, barcode?}`) en vez de `VarianteFchk`, y `porMotivo` sólo `{motivo}` ⇒ la
+   cola de fotos y el banco ⛔ no pueden llegar a productos distintos con el mismo código, ni
+   ordenar los motivos distinto.
+   🔴 **Lo cazó el test de la PANTALLA y ⛔ no la revisión**: con la lectura fallada el desplegable
+   decía «Sin órdenes en los últimos 90 días» — la mentira que manda a buscar una OC que sí existe.
+   Ahora son **cuatro estados**: cargando · ⛔ no se pudieron leer · sin órdenes · elegí una.
+   ⚠️ **`ambiguo` ⛔ no pasó nunca** (0 de 1.622) y **ninguna orden trajo un SKU de Stunned** (0 de
+   819) ⇒ ⛔ no se inventó el motivo «es de la otra línea». El guard de ambiguo queda igual.
+   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § La ORDEN
+   RECIBIDA entra al banco.
 5. **La Agenda: que las tareas salgan del EVENTO**, con clave `sesion-fotos·evento:<id>` —prefijo
    nuevo para ⛔ no chocar con las claves viejas, que quedan intactas y ⛔ no se re-siembran— y las
    hijas con `eventoId` excluidas, o se sembraría N veces lo mismo. La **hora va en el título del

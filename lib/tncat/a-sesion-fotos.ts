@@ -97,11 +97,23 @@ export function indexar(variantes: Variante[]): Indice {
 }
 
 /**
- * Las variantes de GN de una variante de TN. **SKU primero y barcode después**, igual que
+ * Lo único que hace falta para llegar a una variante de GN: los dos códigos.
+ *
+ * 🔑 **Es una forma estructural a propósito, ⛔ no `VarianteFchk`.** Del otro lado del cruce no
+ * siempre hay una variante de Tienda Nube: desde la Fase 4 del octavo también entra un **renglón de
+ * una orden de compra recibida** (`lib/sesionfotos/banco-oc.ts`), que trae los mismos dos códigos y
+ * ⛔ nada más. Pedir el tipo entero obligaba a copiar el «SKU primero, barcode después» en el otro
+ * módulo — y el día que uno de los dos cambiara de criterio, la cola de fotos y el banco de la
+ * sesión llegarían a **productos distintos con el mismo código**.
+ */
+export type ConCodigos = { sku?: string | null; barcode?: string | null }
+
+/**
+ * Las variantes de GN de algo que trae códigos. **SKU primero y barcode después**, igual que
  * `stockDeVariante`: si los dos criterios se contestaran distinto, el stock que muestra la cola y
  * el producto que abre el borrador serían de dos productos diferentes.
  */
-export function variantesGnDe(v: VarianteFchk, idx: Indice): Variante[] {
+export function variantesGnDe(v: ConCodigos, idx: Indice): Variante[] {
   // Sin guard del código vacío: el índice ya no tiene la clave `''` (lo filtra `indexar`), así que
   // buscarla devuelve undefined y cae al criterio siguiente. Repetir el guard acá lo volvía
   // INALCANZABLE — un mutante que lo sacaba del índice sobrevivía, tapado por esta copia.
@@ -176,8 +188,15 @@ export function cruzarParaSesion(
   return { pedir, excluidos }
 }
 
-/** Cuántos productos quedaron afuera por cada motivo, en el orden fijo de la lista. */
-export function porMotivo(excluidos: Excluido[]): { motivo: MotivoExcluido; n: number }[] {
+/**
+ * Cuántos quedaron afuera por cada motivo, en el orden fijo de la lista.
+ *
+ * 🔑 Pide **sólo el motivo** y ⛔ no `Excluido`: del otro lado también cuenta los renglones de una
+ * orden recibida (`lib/sesionfotos/banco-oc.ts`), que ⛔ no tienen `tnId`. Con el tipo entero, ese
+ * módulo tenía que **copiar el orden de los cuatro motivos** — y dos listas del mismo cruce se
+ * ordenarían distinto el día que se agregue un motivo nuevo.
+ */
+export function porMotivo(excluidos: { motivo: MotivoExcluido }[]): { motivo: MotivoExcluido; n: number }[] {
   const orden: MotivoExcluido[] = ['sin-cruce', 'sin-producto-gn', 'sin-stock', 'ambiguo']
   return orden
     .map((motivo) => ({ motivo, n: excluidos.filter((e) => e.motivo === motivo).length }))

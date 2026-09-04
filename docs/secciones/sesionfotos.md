@@ -628,3 +628,105 @@ npx vitest run tests/sesionfotos-banco.test.ts --reporter=dot
 5. Intentar sacar del banco una ya pedida → ⛔ no tiene que dejar.
 6. **Salir y volver a entrar**: el banco tiene que estar igual.
 ⚠️ Y abrir una sesión de **BDI**: ahí ⛔ no tiene que aparecer ni zona ni aviso.
+
+## La ORDEN RECIBIDA entra al banco: la Fase 4 del octavo (4-sep-2026)
+
+Es la puerta que le faltaba al banco, y la mitad del pedido de Bruno del 3-sep: *«si el producto de
+la OC que ingresó no alcanza para armar outfits, se procede a pedir una solicitud a local»*. Para
+que esa frase se pueda ejecutar, **lo que entró tiene que poder apoyarse en la mesa sin tipearlo de
+nuevo**: una importación de 130 renglones cargada a mano no la carga nadie.
+
+Adentro de un evento, arriba del buscador del banco, aparece **«Agregar desde una orden recibida»**:
+un desplegable con las órdenes de los últimos 90 días —rótulo, fecha de ingreso y cuántos
+renglones— y un botón. El núcleo es `lib/sesionfotos/banco-oc.ts` (`itemsBancoDesdeOC`); la pantalla
+es `components/sesionfotos/AgregarDesdeOC.tsx`.
+
+### 🔴 Se cruza con el espejo de HOY, ⛔ nunca con la foto que quedó guardada
+
+Cada renglón de una recepción trae `en_gn` y `producto_id`: **la foto del momento en que llegó la
+orden**. Y el caso normal de una importación es que el producto **todavía no esté** en Gestión Nube
+cuando el aviso entra — se da de alta después.
+
+📌 **Medido el 4-sep sobre las 74 órdenes de Zattia (819 renglones): 186 llegaron con `en_gn` en
+false o null y HOY sí cruzan.** Leer la foto vieja habría dejado afuera **casi uno de cada cuatro**,
+y quien mirara la pantalla lo habría leído como «esto no está cargado» — que es falso, y manda a
+hacer un alta que ya está hecha.
+
+🔑 Por eso `LineaOC` —el tipo que el cruce acepta— **⛔ ni siquiera declara `en_gn` ni
+`producto_id`**. No es un comentario pidiendo que no se usen: es `tsc` diciendo que no están.
+
+### 🔑 El cruce ⛔ no se reescribió: es el de la cola de fotos
+
+`variantesGnDe` —**SKU primero, barcode después**— y los cuatro motivos de exclusión
+(`sin-cruce` · `sin-producto-gn` · `sin-stock` · `ambiguo`) son los de `cruzarParaSesion`. Para
+reusarlos hubo que **abrir dos firmas, ⛔ no copiar dos funciones**:
+
+- `variantesGnDe` pasó a pedir `ConCodigos` (`{ sku?, barcode? }`) en vez de `VarianteFchk`: del
+  otro lado del cruce ahora hay un renglón de una orden, que trae los mismos dos códigos y nada más.
+- `porMotivo` pasa a pedir sólo `{ motivo }`: así el conteo del banco y el de la cola **se ordenan
+  igual el día que se agregue un motivo nuevo**.
+
+Lo único que cambia es la **unidad**: la cola pregunta por un producto de Tienda Nube, el banco por
+un renglón de una orden, que ya es una variante.
+
+### Lo medido, y por qué este número ⛔ no se parece al de la cola
+
+El cruce TN → GN de la cola de fotos cubre **BDI 89,5% / Zattia 73,3%**, porque son dos catálogos
+cargados por manos distintas. El de la orden es **otra cosa**: el SKU del renglón lo escribe el
+mismo sistema de Ingresos que carga Gestión Nube.
+
+| | renglones | cruzan por código | por SKU | por barcode | ⛔ no cruzan | sin stock hoy | al banco |
+|---|---|---|---|---|---|---|---|
+| Zattia (74 OCs) | 819 | **802 (97,9%)** | 800 | 2 | 17 | 252 | 550 |
+| BDI (18 OCs) | 803 | **749 (93,3%)** | 749 | 0 | 54 | 83 | 666 |
+
+Y sobre las **10 órdenes más recientes** —que es el caso de uso real, una sesión sobre lo que acaba
+de entrar— queda **Zattia 167 de 167** y **BDI 402 de 424**.
+
+🔑 **«Sin stock» ⛔ no es un defecto del cruce**: son las órdenes viejas, ya vendidas. Es la misma
+exclusión que hereda el pedido (`expandirProductos`), y por eso se nombra igual.
+
+⚠️ **`ambiguo` y el renglón que llega a dos variantes ⛔ no pasaron nunca** (0 de 1.622). El guard
+queda igual: cuesta una línea, y el día que pase, elegir sería adivinar.
+
+⚠️ **Ninguna orden trajo nunca mercadería de Stunned** (0 renglones con SKU `STU` en 819) ⇒ ⛔ no se
+inventó un motivo «es de la otra línea». Una sesión de Stunned pide las órdenes de **Zattia**
+(`baseDeLinea`, porque las recepciones ⛔ no conocen las líneas) y lo que ⛔ no cruce contra el
+catálogo de la línea sale como «no cruza», que es lo que un catálogo partido puede contestar sin
+adivinar.
+
+### Lo que la pantalla dice en vez de esconder
+
+- 🔴 **Nada se descarta en silencio**: cada renglón sale como candidato o como excluido **con su
+  motivo**, contado por motivo abajo del parte. Un cruce que esconde lo que no pudo hace que la
+  sesión salga corta y **nadie se entere**.
+- 🔴 **Cuatro estados en el desplegable, ⛔ no dos**: cargando · **⛔ no se pudieron leer** · sin
+  órdenes en la ventana · elegí una. «Sin órdenes» sobre una lectura que **falló** es la mentira que
+  manda a buscar una orden que sí existe. *(Lo cazó el test de la pantalla, ⛔ no la revisión.)*
+- **El 403 se lee como falta de permiso.** La lectura entra por `?recurso=recepciones`, el endpoint
+  de «Lo que entró»: ⛔ no se estrena permiso, y quien no tenga esa sección lee que se destraba en
+  Configuración.
+- **El parte cuenta lo que entró DE VERDAD**, contando el banco antes y después: `agregarAlBanco`
+  ⛔ no duplica, así que agregar dos veces la misma orden dice «0 al banco · N ya estaban».
+- El nombre y el talle del candidato salen de **Gestión Nube**, ⛔ no del renglón: el banco y la
+  solicitud hablan el idioma del pedido, que es donde alguien lo va a ir a buscar.
+
+### Cómo se camina
+
+```bash
+npx vitest run tests/sesionfotos-banco-oc.test.ts tests/sesionfotos-agregar-desde-oc.test.ts --reporter=dot
+```
+
+▶️ 🔴 **Nadie abrió la pantalla.** En una sesión de Zattia, adentro de un evento:
+1. **«Agregar desde una orden recibida»** → el desplegable tiene que traer las órdenes de los
+   últimos 90 días, con rótulo y fecha.
+2. Elegir una reciente y **«Agregar al banco»** → las prendas aparecen en «Sin repartir», con el
+   badge **«de la OC»**.
+3. Mirar el parte de abajo: el número tiene que coincidir con lo que apareció, y lo que ⛔ no entró
+   tiene que estar **contado por motivo**.
+4. **Volver a agregarla** → «0 prendas al banco · N ya estaban», y el banco ⛔ no puede duplicarse.
+5. Armar un outfit con lo que entró, ver que **falta el abajo**, y pedir ese faltante **al local**:
+   es el caso entero que dictó Bruno.
+6. **Salir y volver a entrar**: los candidatos de la orden tienen que seguir ahí, con su `de la OC`.
+⚠️ Y con un usuario **sin la sección «Lo que entró»**: tiene que decir que falta el permiso, ⛔ no
+que no hay órdenes.

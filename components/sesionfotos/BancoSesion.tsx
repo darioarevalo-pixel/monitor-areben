@@ -18,6 +18,7 @@ import {
   zonasDelBanco,
   type ItemBanco,
 } from '@/lib/sesionfotos/banco'
+import { AgregarDesdeOC } from './AgregarDesdeOC'
 import { ROTULO_ZONA, type ZonaPrenda } from '@/lib/sesionfotos/outfits'
 import { buscarProductos } from '@/lib/sesionfotos/draft'
 import type { Origen } from '@/lib/sesionfotos/tipos'
@@ -38,12 +39,22 @@ import type { Variante } from '@/lib/etl/tipos'
 export function BancoSesion({
   banco,
   variantes,
+  huerfanas,
+  linea,
   editable,
   onCambiar,
   onPedir,
 }: {
   banco: ItemBanco[]
   variantes: Variante[]
+  /**
+   * Las variantes cuyo producto todavía ⛔ no está en Gestión Nube. Sólo se usan para **nombrar el
+   * motivo** de lo que ⛔ no entra desde una OC: «cargalo en GN» ⛔ no es la misma mano que
+   * «mapeá el SKU».
+   */
+  huerfanas: Variante[]
+  /** La línea de la sesión: de ella sale la marca cuyas órdenes recibidas se pueden agregar. */
+  linea: string
   editable: boolean
   onCambiar: (b: ItemBanco[]) => void
   /** Crea la solicitud hija con lo elegido. Devuelve los `vid` que ⛔ no entraron, o `null` si falló. */
@@ -84,6 +95,19 @@ export function BancoSesion({
     )
   }
 
+  /**
+   * Suma al banco lo que salió de una orden y devuelve **cuántos entraron de verdad**.
+   *
+   * 🔑 El número sale de contar el banco antes y después, ⛔ no de `items.length`: `agregarAlBanco`
+   * ⛔ no duplica, así que agregar dos veces la misma orden ⛔ no suma nada — y decir «12 prendas al
+   * banco» cuando entraron 0 sería un parte que ⛔ no describe lo que pasó.
+   */
+  const agregarDesdeOC = (items: ItemBanco[]): number => {
+    const nuevo = agregarAlBanco(banco, items)
+    onCambiar(nuevo)
+    return nuevo.length - banco.length
+  }
+
   const pedir = async (destino: Origen) => {
     if (!elegidos.length || pidiendo) return
     setPidiendo(true)
@@ -119,7 +143,10 @@ export function BancoSesion({
 
       {editable ? (
         <div style={{ marginBottom: 8 }}>
-          <Input value={busq} onChange={(e) => setBusq(e.target.value)} placeholder="Buscar por nombre o SKU para agregar al banco…" style={{ width: '100%', maxWidth: 420 }} />
+          {/* 🔑 Agregar una OC entera va ARRIBA del buscador a propósito: es el gesto que abre una
+              sesión sobre lo que acaba de entrar, y buscar de a una es el que la completa. */}
+          <AgregarDesdeOC linea={linea} variantes={variantes} huerfanas={huerfanas} onAgregar={agregarDesdeOC} />
+          <Input value={busq} onChange={(e) => setBusq(e.target.value)} placeholder="Buscar por nombre o SKU para agregar al banco…" style={{ width: '100%', maxWidth: 420, marginTop: 6 }} />
           {busq.trim().length >= 2 ? (
             <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
               {buscarProductos(variantes, busq, yaEn).slice(0, 15).map((r) => (

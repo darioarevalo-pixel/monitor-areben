@@ -46,6 +46,8 @@ export function Eventos({
   eventos,
   solicitudes,
   variantes,
+  huerfanas,
+  linea,
   editable,
   usuario,
   persistir,
@@ -57,6 +59,10 @@ export function Eventos({
   solicitudes: Solicitud[]
   /** El catálogo de la línea, para el buscador del banco. */
   variantes: Variante[]
+  /** Las huérfanas del espejo: sólo para nombrar por qué un renglón de una OC ⛔ no entró. */
+  huerfanas: Variante[]
+  /** La línea de la sesión: de ella sale la marca cuyas órdenes recibidas se pueden traer. */
+  linea: string
   editable: boolean
   usuario: string
   persistir: (mutar: (l: SesionEvento[]) => SesionEvento[]) => Promise<boolean>
@@ -140,6 +146,8 @@ export function Eventos({
             e={e}
             hijas={hijasDe(solicitudes, e.id)}
             variantes={variantes}
+            huerfanas={huerfanas}
+            linea={linea}
             editable={editable}
             usuario={usuario}
             abierto={abierto === e.id}
@@ -163,6 +171,8 @@ export function Eventos({
                 e={e}
                 hijas={hijasDe(solicitudes, e.id)}
                 variantes={variantes}
+                huerfanas={huerfanas}
+                linea={linea}
                 editable={editable}
                 usuario={usuario}
                 abierto={abierto === e.id}
@@ -253,6 +263,8 @@ function FilaEvento({
   e,
   hijas,
   variantes,
+  huerfanas,
+  linea,
   editable,
   usuario,
   abierto,
@@ -266,6 +278,8 @@ function FilaEvento({
   e: SesionEvento
   hijas: Solicitud[]
   variantes: Variante[]
+  huerfanas: Variante[]
+  linea: string
   editable: boolean
   usuario: string
   abierto: boolean
@@ -377,6 +391,8 @@ function FilaEvento({
           <BancoSesion
             banco={e.banco || []}
             variantes={variantes}
+            huerfanas={huerfanas}
+            linea={linea}
             editable={editable}
             onCambiar={(b: ItemBanco[]) => onGuardar(conBanco(e, b))}
             onPedir={onPedirDelBanco}

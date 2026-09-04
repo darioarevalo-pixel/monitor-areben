@@ -51,8 +51,18 @@ export type ItemBanco = {
   stockDep?: number
   stockLoc?: number
   candidato: CandidatoBanco
-  /** La OC de la que salió, cuando `candidato` es `oc`. Se llena en la Fase 4. */
+  /**
+   * El **id** de la orden de compra de la que salió, cuando `candidato` es `oc` (`<marca>:<oc>`).
+   * Es la clave con la que se vuelve a abrir la orden, y por eso ⛔ no se guarda el rótulo acá.
+   */
   ocRef?: string
+  /**
+   * El rótulo de esa orden («OC-0469»), que es lo que lee una persona.
+   *
+   * 🔑 Va guardado y ⛔ no se deriva de `ocRef`: el id ⛔ no lo contiene, y el banco se abre meses
+   * después, cuando la pantalla ya ⛔ no tiene la lista de órdenes cargada.
+   */
+  ocLabel?: string
   /**
    * La zona CORREGIDA a mano. Ausente = vale la que propone el nombre.
    * 🔑 Misma regla que `Solicitud.clasifOutfits`: se guarda la corrección, ⛔ nunca la propuesta.

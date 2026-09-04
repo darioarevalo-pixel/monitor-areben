@@ -216,6 +216,8 @@ export function SolicitudesInner({
         catalogoListo={catalogoListo}
         variantes={datos?.allVariantes ?? []}
         productos={datos?.allProductos ?? []}
+        huerfanas={datos?.allVariantesHuerfanas ?? []}
+        linea={clave}
       />
     </>
   )
@@ -233,6 +235,8 @@ function Contenido({
   catalogoListo,
   variantes,
   productos,
+  huerfanas,
+  linea,
 }: {
   preset: PresetSolicitud
   data: Solicitud[]
@@ -246,6 +250,17 @@ function Contenido({
   catalogoListo: boolean
   variantes: Variante[]
   productos: Producto[]
+  /**
+   * Las variantes cuyo producto todavía ⛔ no está en Gestión Nube. ⛔ No se mezclan con
+   * `variantes` —el pedido ⛔ no las puede expandir—: sirven sólo para que el banco pueda decir
+   * «esto hay que cargarlo en GN» en vez de «no cruza».
+   */
+  huerfanas: Variante[]
+  /**
+   * La línea de la sesión. 🔑 Es `clave`, que en Sesión de fotos ES la línea; el bloque de eventos
+   * —lo único que la usa— ⛔ no se dibuja en Solicitudes internas, donde `clave` es la marca.
+   */
+  linea: string
 }) {
   const { confirmar, avisar } = useConfirmar()
   const { marca, perfil } = useSesion()
@@ -406,6 +421,8 @@ function Contenido({
                 editable={puedePedir(perfil)}
                 usuario={perfil?.name ?? ''}
                 variantes={variantes}
+                huerfanas={huerfanas}
+                linea={linea}
                 persistir={eventos.persistir}
                 onPedirDelBanco={pedirDelBanco}
                 onPedirProductos={(id) => {
