@@ -180,20 +180,83 @@ de productos sean **hijas** (varias). Todo lo demás cuelga de ese cambio.
 | «banco de productos + clasificación rápida + **outfits digitales** arriba/abajo» | 🔴 **⛔ no existe**. Lo único cercano es **físico**: las bolsas numeradas, donde cada bolsa **es un look** (`lib/sesionfotos/tipos.ts:70`) |
 | «si la OC no alcanza, pedir una **solicitud a local** desde ahí» | ⚠️ el sistema ya decide **depósito o local por ítem** (`origen`), pero ⛔ no como «completar un outfit» |
 
-▶️ **Lo que hay que decidir antes de escribir una línea** (⛔ ninguna es código):
-1. **Qué es una sesión sin solicitudes**: ¿el evento se crea primero —con modelo, fecha y hora— y las
-   solicitudes se le cuelgan después? Eso cambia **cuándo se siembran los 9 pasos de la Agenda**, que
-   hoy se disparan al crear la solicitud.
-2. **Qué es un outfit**: ¿arriba + abajo y nada más, o entra calzado y accesorios? ¿Un producto puede
-   estar en dos outfits? ¿El outfit se le asigna a una modelo y a una hora?
-3. **Qué es «clasificación rápida»**: ¿arriba/abajo/vestido sale de la **categoría de TiendaNube**
-   —que ya mezcla: 14 de 40 de «SHORTS, MINIS y FALDAS» son shorts, medido el 1-sep— o se tilda a
-   mano prenda por prenda?
-4. **De dónde sale «lo que ingresó por la OC»**: ¿la recepción del monitor, la OC de Gestión Nube o
-   el aviso de ingreso? Son tres fuentes con tres momentos distintos.
-5. 🔴 **Y la más cara**: ¿esto **reemplaza** la pantalla de sesión de fotos o **la envuelve**? Hay 30
-   sesiones vivas con su historial adentro, y el ciclo —venta en GN que separa stock → retiro →
-   devolución → anulación— ⛔ no se puede partir por la mitad.
+### ✅ Las cinco decisiones, CONTESTADAS por Bruno el 3-sep — y el plan que salió
+
+1. **El evento se crea primero**, con modelo, fecha, hora y duración; las solicitudes se le cuelgan
+   después y pueden ser **varias**.
+2. **Un outfit es arriba + abajo, o una prenda entera** (un vestido o un mono ocupa las dos ranuras).
+3. **La clasificación se propone sola y se corrige** a mano.
+4. 🔑 **El outfit ES la bolsa que YA EXISTE** (`ItemSolicitud.bolsa`), ⛔ no un objeto nuevo. Está
+   construido entero —selector por ítem, `bolsasDe`, etiqueta «BOLSA n/N» y reporte A4 de armado— y
+   📌 **nunca se usó: 0 ítems con bolsa en las dos marcas**.
+5. **Del ingreso alcanza la OC ya recibida** — que además es lo único que existe: la tabla se llena
+   con el evento `oc.confirmada` y ⛔ **no hay ninguna OC «en camino»** en el monitor.
+
+▶️ **La sexta la salteó dos veces, y dijo por qué**: *«el motor es de administración, habría que ver
+si no hay problema»*. **Tiene razón y por eso se ENVUELVE, ⛔ no se reemplaza**: la pantalla de la
+solicitud queda intacta —retiro, escaneo, devolución y anulación contra Gestión Nube— y la sesión
+nace arriba. 🔑 **Medido, ⛔ no supuesto**: la vista `/solicitudes` es de área **local** y la función
+`administracion` la tiene entre sus keys; pero el bloque de siembra ya exige `kind === 'sesionfotos'`
+(`api/_solicitudes.js:149`) ⇒ **una solicitud interna nunca entra ahí**, ni hoy ni después. Y el
+motor (`useHistorialSolicitudes` + `preset.ts`) ⛔ no se toca: carga **por `kind`**, y el evento es un
+`kind` nuevo que Administración no pide nunca.
+
+### 🔑 El modelo de datos — SIN una sola migración
+
+**El evento es un `kind` nuevo (`sesion-evento`) en la MISMA tabla `solicitudes`**, ⛔ no una tabla
+aparte. Verificado: `sql/migrate-solicitudes.sql` **⛔ no tiene CHECK** sobre `kind` ni sobre `estado`
+—la única lista blanca vive en `KINDS` de `api/_solicitudes.js`— ⇒ sumar un valor es **una línea**.
+`filaDe` sirve tal cual (el evento también tiene `fecha`, `estado`, `creado`, `creadoPor`), reusa
+`leerCajon`/`diffSolicitudes` y ⛔ **no gasta una de las 12 funciones de Vercel**.
+
+- `SesionEvento`: `id · fecha · hora? · duracionMin? · modelo?` (el MISMO `ModeloSesion`) `·
+  disparador? · descripcion · estado · banco?[] · creado · creadoPor`.
+- `Solicitud` suma **un solo campo**: `eventoId?: string` (jsonb ⇒ sin migración). Ausente = solicitud
+  suelta, que es como quedan las existentes: siguen abriéndose igual, **sin backfill**.
+- 🔑 **El outfit se numera por EVENTO y al pedir viaja a `item.bolsa`** ⇒ la etiqueta y el reporte de
+  armado siguen andando sin tocarlos, y **un outfit puede cruzar dos solicitudes** —el top del
+  depósito y el jean del local—, que es exactamente el caso que Bruno describe.
+
+### 🔴 Lo que hay que MEDIR antes de escribir la primera línea
+
+`familiaDe()` (`lib/tn-desc/atributos.core.js:322`) está escrita y medida contra las **categorías de
+TiendaNube**, y la sesión de fotos arma todo con el catálogo de **Gestión Nube**, cuyo
+`Producto.category` es **otra taxonomía, nunca comparada contra `FAMILIAS`**.
+⇒ **Primer paso: medir cuántos productos de GN caen en una familia.** Si cruza bien, la zona se
+propone con el catálogo que la pantalla ya tiene; si no, se cruza por SKU como `cruzarParaSesion`
+—cuya cobertura medida es **BDI 89,5 % / Zattia 73,3 %**, o sea que **una de cada diez piezas nace
+sin zona**—. Por eso «sin zona» es un estado de primera que se muestra y se corrige de un toque,
+⛔ **nunca un default a «arriba»**: un default afirma.
+
+### Las cinco fases, por valor entregado
+
+1. 🔑 **Clasificación + el aviso «al outfit 3 le falta el abajo», SOBRE LAS BOLSAS QUE YA EXISTEN.**
+   ⛔ No necesita evento, ni tabla, ni banco: vive adentro de la solicitud de hoy. **Es lo que
+   contesta la queja de Bruno.** Nuevo `lib/sesionfotos/outfits.ts` (`zonaSugerida` envolviendo
+   `familiaDe`; `alertasDe`), `Solicitud.clasifOutfits?` para la corrección a mano, `conZona` en
+   `core.ts` con el molde de `asignarBolsa`, y el bloque «Bolsas» de la pantalla extendido.
+2. **El evento como padre**: `kind` nuevo, `lib/sesionfotos/evento.ts`, `procesarDraft` acepta
+   `eventoId`, cuarto puente en `puente.ts`, pantalla «Nueva sesión» reusando `FichaModelo`.
+   ⚠️ Editar la fecha del evento ⛔ no reescribe las hijas ya creadas: se corrige a mano, y se dice.
+3. **El banco y los outfits ANTES de pedir**: `lib/sesionfotos/banco.ts`, reusando el `outfits.ts` de
+   la fase 1 **con un adaptador, ⛔ no una copia**; y «Pedir al depósito / Pedir al local» que arma
+   las hijas con el número de outfit ya copiado en `item.bolsa`.
+4. **Traer de la OC recibida** al banco: `lib/sesionfotos/banco-oc.ts`, **calcado del cruce de
+   `cruzarParaSesion`** (SKU y después barcode) con sus mismos motivos de exclusión.
+   🔴 Se usa el recruce **en vivo** (`producto_id_hoy`/`en_gn_hoy`), ⛔ **no** el `producto_id` de la
+   línea, que es la foto del momento de la recepción. Lo que no cruza se lista **con su motivo**.
+5. **La Agenda: que las tareas salgan del EVENTO**, con clave `sesion-fotos·evento:<id>` —prefijo
+   nuevo para ⛔ no chocar con las claves viejas, que quedan intactas y ⛔ no se re-siembran— y las
+   hijas con `eventoId` excluidas, o se sembraría N veces lo mismo. La **hora va en el título del
+   pendiente**: ⛔ **no se toca `Regla`**, que es día calendario en toda la Agenda y llevarla a
+   hora-del-día afectaría Hoy, Mes, arrastre y cumplimiento a la vez.
+
+⛔ **Lo que este plan NO hace**: tocar el motor compartido con Administración ni el ciclo contra
+Gestión Nube · migrar nada (ni tabla, ni solicitudes, ni clones de agenda ya sembrados) · inventar un
+objeto «outfit» · traer OCs «en camino» · estrenar permiso o sección nueva.
+
+📌 El plan largo, con rutas archivo por archivo y cómo se camina cada fase, quedó en
+`~/.claude/plans/a-ver-planiemos-eso-inherited-gem.md`.
 
 ---
 
