@@ -1486,6 +1486,34 @@ antes de rehacerlo.
 
 ## 🆕 MEDIDAS — el flujo para que las saque el local (1-sep-2026, pedido de Bruno)
 
+### 🏁 4-sep-2026 — LA ESTRUCTURA DE LA DESCRIPCIÓN, CERRADA CON BRUNO
+
+Salió de comparar **FALDA SAGE** —una descripción escrita a mano que quedó bien— con la primera
+corrida real del módulo. Relato entero en `docs/secciones/gen-desc.md`; acá lo que falta.
+
+**Lo decidido y ya en producción** (`379813b` → `603215e`): cuidados derivados de la tela (5 grupos,
+gana la más restrictiva) · segunda tela en la ficha · **sin tela no se redacta ni se publica** ·
+tip de look opcional · el párrafo ⛔ no puede nombrar el producto · el detalle en mayúsculas baja a
+minúscula palabra por palabra · **al publicar se PISA el texto viejo** · y el prompt le dice de qué
+SÍ hablar, con el relleno prohibido.
+📊 El párrafo bueno sale **US$0,0014**: los 40 de la tanda del 2-sep son menos de seis centavos.
+
+▶️ 🔴 **LO ÚNICO QUE FALTA DECIDIR: de dónde sale «producción propia».** Bruno quiere el pie
+«Producto 100% Zattia 🇦🇷» **sólo si el producto es de producción propia** —si es compra nacional
+⛔ no va—, y **ese dato no existe en ningún lado**: medido, los **1.815 SKU de Tienda Nube son el
+nombre del producto** (ninguno con el formato `ZAT-TOP-NG-001` de producción) y ninguna de las
+**25 categorías** de la tienda dice el origen. Lo propuesto es un casillero `Origen` en la ficha
+(dos valores, lo carga el local con la prenda en la mano), que de yapa contestaría qué porcentaje
+del catálogo es propio. **Decide Bruno.**
+
+▶️ 🔴 **Y falta la MANO: nadie publicó todavía ninguno de la tanda.** El circuito está entero y
+caminado hasta el párrafo (JEAN MARINA y BLUSA SOUTH, un intento cada uno, sin problemas del
+validador), pero **ninguno se aprobó ni salió a la tienda**. Los **16 mudos con ficha completa** son
+los de menor riesgo: no hay texto que pisar.
+
+▶️ ⚠️ **Los `no identifico` quedaron frenados** —TOP SHAPE entre ellos, que ya está publicado—: es
+lo que Bruno pidió, pero significa que alguien tiene que volver a mirar esas prendas.
+
 ### 🏁 DÓNDE QUEDÓ AL CERRAR EL 1-sep-2026
 
 **Construido y en producción** (`cb3ef88` → `62c38ad`), con el relato entero en
