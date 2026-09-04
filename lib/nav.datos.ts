@@ -175,7 +175,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "recorridas",
     "area": "compras",
     "label": "Recorridas",
-    "info": "Los locales de proveedores que hay que visitar y el viaje a verlos. Se cargan de a uno o en tanda —pegando una nota o subiendo los lugares guardados de Google Maps—, se arma la recorrida del día ordenada por cercanía, y en la calle se anota desde el celular qué pareció el local, qué producto interesa, si se compró y qué quedó prometido. ⛔ La compra no se carga acá: se le manda al sistema de Ingresos y vuelve contada por la orden de compra. La ficha completa de cada proveedor está en PRM.",
+    "info": "Los locales de proveedores que hay que visitar y el viaje a verlos. Se cargan de a uno o en tanda —pegando una nota o subiendo los lugares guardados de Google Maps—, se arma la recorrida del día ordenada por cercanía, y en la calle se anota desde el celular qué pareció el local, qué producto interesa, si se compró y qué quedó comprometido. ⛔ La compra no se carga acá: se le manda al sistema de Ingresos y vuelve contada por la orden de compra. La ficha completa de cada proveedor está en PRM.",
     "brands": [
       "bdi",
       "zattia"
@@ -185,7 +185,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "prm",
     "area": "proveedores",
     "label": "PRM",
-    "info": "La relación con cada proveedor (Provider Relationship Manager): quién es, dónde queda, qué se le anotó en cada visita, qué producto suyo interesa y a qué precio, y qué quedó prometido de un lado y del otro. Cruza eso con lo que el sistema ya mide: si entrega lo que le pedimos (de las órdenes de compra) y cómo vendió su mercadería. Es a los proveedores lo que Clientes es a los clientes; lo que pasa en la calle se carga en Recorridas.",
+    "info": "La relación con cada proveedor (Provider Relationship Manager): quién es, dónde queda, qué se le anotó en cada visita, qué producto suyo interesa y a qué precio, y qué quedó comprometido de un lado y del otro. Cruza eso con lo que el sistema ya mide: si entrega lo que le pedimos (de las órdenes de compra) y cómo vendió su mercadería. Es a los proveedores lo que Clientes es a los clientes; lo que pasa en la calle se carga en Recorridas.",
     "brands": [
       "bdi",
       "zattia"
@@ -242,7 +242,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "canjes",
     "area": "marketing",
     "label": "Canjes",
-    "info": "Canjes con influencers y creadoras: el padrón de personas (compartido entre las tres marcas), qué se le manda, qué prometió publicar y si cumplió.",
+    "info": "Canjes con influencers y creadoras: el padrón de personas (compartido entre las tres marcas), qué se le manda, qué se comprometió publicar y si cumplió.",
     "brands": [
       "bdi",
       "zattia"
@@ -261,7 +261,7 @@ export const PERM_CAT: PermCat[] = [
       {
         "key": "cerrar",
         "label": "Puede cerrar un canje incompleto",
-        "info": "Cierra un canje aunque la persona no haya cumplido todo lo que prometió, dejando el motivo. Queda marcado como incompleto y le baja el puntaje a ella."
+        "info": "Cierra un canje aunque la persona no haya cumplido todo lo que se comprometió, dejando el motivo. Queda marcado como incompleto y le baja el puntaje a ella."
       }
     ]
   },
@@ -789,13 +789,13 @@ export const PERM_CAT: PermCat[] = [
     "subs": [
       {
         "key": "prometer",
-        "label": "Puede anotar promesas de pago",
-        "info": "Anotar que un cliente va a transferirle a un acreedor, y mover esa promesa de estado. NO registra nada en el dashboard: hasta que alguien confirme, no se movió un peso. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+        "label": "Puede anotar compromisos de pago",
+        "info": "Anotar que un cliente va a transferirle a un acreedor, y mover ese compromiso de estado. NO registra nada en el dashboard: hasta que alguien confirme, no se movió un peso. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
       },
       {
         "key": "confirmar",
         "label": "Puede confirmar que la plata entró",
-        "info": "Confirmar escribe el pago DE VERDAD en el dashboard: baja la deuda con el acreedor y queda a nombre del cliente que transfirió. Va separado de anotar a propósito: abrirle a alguien la posibilidad de anotar promesas no tiene por qué darle la de mover plata. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
+        "info": "Confirmar escribe el pago DE VERDAD en el dashboard: baja la deuda con el acreedor y queda a nombre del cliente que transfirió. Va separado de anotar a propósito: abrirle a alguien la posibilidad de anotar compromisos no tiene por qué darle la de mover plata. Los admins pueden siempre. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en las dos marcas."
       }
     ]
   },

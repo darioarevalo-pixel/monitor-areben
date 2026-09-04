@@ -3,15 +3,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 /**
  * `confirmar` es el único verbo del monitor que escribe plata en OTRO sistema. Lo que se fija acá:
  *
- *  1. Anotar y confirmar son permisos distintos. Quien puede prometer no puede, por eso solo,
+ *  1. Anotar y confirmar son permisos distintos. Quien puede comprometer no puede, por eso solo,
  *     mover un peso.
  *  2. `estado` no es una puerta de atrás a `confirmado`: si lo fuera, se saltearían el permiso de
- *     confirmar Y la escritura en el dashboard, y la promesa diría "listo" sin que exista el pago.
+ *     confirmar Y la escritura en el dashboard, y el compromiso diría "listo" sin que exista el pago.
  *  3. Se manda el `operacion_id` DEL COMPROMISO y no uno nuevo. Es la mitad de la idempotencia:
  *     un reintento tiene que llegar con el mismo número o el dashboard escribe los pagos de nuevo.
  *  4. Si el dashboard rechaza, acá no se marca nada. Un compromiso confirmado sin pago atrás es
  *     peor que uno sin confirmar: dice que la deuda bajó cuando no bajó.
- *  5. Si entró menos de lo prometido, lo que falta queda anotado como una promesa nueva.
+ *  5. Si entró menos de lo comprometido, lo que falta queda anotado como un compromiso nuevo.
  */
 
 const filas: Record<string, Record<string, unknown>> = {}
@@ -113,7 +113,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); delete process.env.DASHBOARD_PUENTE_SECRET })
 
 describe('anotar y confirmar son permisos distintos', () => {
-  it('quien puede prometer NO puede confirmar', async () => {
+  it('quien puede comprometer NO puede confirmar', async () => {
     escenario(SOLO_PROMETE, { ok: true, body: {} })
     const res = await llamar(pedido({ action: 'confirmar', id: 'c1' }))
     expect(res.code).toBe(403)
@@ -121,7 +121,7 @@ describe('anotar y confirmar son permisos distintos', () => {
     expect(alDashboard).toHaveLength(0)  // ni se golpeó la puerta
   })
 
-  it('pero sí puede anotar una promesa', async () => {
+  it('pero sí puede anotar un compromiso', async () => {
     escenario(SOLO_PROMETE, { ok: true, body: {} })
     const res = await llamar(pedido({
       action: 'crear',
@@ -187,8 +187,8 @@ describe('confirmar', () => {
     expect(pagador.titular).toBeNull()
   })
 
-  it('lo que se lee del extracto pisa lo que se había adivinado al prometer', async () => {
-    // La promesa decía "Nazarena Luciani"; en el banco vino a nombre del socio.
+  it('lo que se lee del extracto pisa lo que se había adivinado al comprometer', async () => {
+    // El compromiso decía "Nazarena Luciani"; en el banco vino a nombre del socio.
     escenario(ADMIN, { ok: true, body: { pagos: [] } })
     await llamar(pedido({
       action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02', titular_real: 'Luciani SRL',
@@ -197,7 +197,7 @@ describe('confirmar', () => {
     expect(filas.c1.titular_real).toBe('Luciani SRL')
   })
 
-  it('⛔ el resto de una promesa parcial NO hereda el titular: es otra transferencia', async () => {
+  it('⛔ el resto de un compromiso parcial NO hereda el titular: es otra transferencia', async () => {
     escenario(ADMIN, { ok: true, body: { pagos: [] } })
     await llamar(pedido({
       action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-02', titular_real: 'Juan Pérez',
@@ -231,8 +231,8 @@ describe('confirmar', () => {
   })
 })
 
-describe('cuando entra menos de lo prometido', () => {
-  it('se confirma por lo que entró y lo que falta queda como una promesa nueva', async () => {
+describe('cuando entra menos de lo comprometido', () => {
+  it('se confirma por lo que entró y lo que falta queda como un compromiso nuevo', async () => {
     escenario(ADMIN, { ok: true, body: { pagos: [{ pago_id: 'p1' }], imputado: 300000 } })
     const res = await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 300000 }))
     expect(res.code).toBe(200)
@@ -247,7 +247,7 @@ describe('cuando entra menos de lo prometido', () => {
     expect(String(nueva.notas)).toMatch(/faltó/)
   })
 
-  it('si entró todo, no se anota ninguna promesa nueva', async () => {
+  it('si entró todo, no se anota ningún compromiso nuevo', async () => {
     escenario(ADMIN, { ok: true, body: { pagos: [{ pago_id: 'p1' }], imputado: 500000 } })
     await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 500000 }))
     expect(insertados).toHaveLength(0)
@@ -255,13 +255,13 @@ describe('cuando entra menos de lo prometido', () => {
 })
 
 /**
- * Reenganchar una promesa que se anotó antes de que el cliente existiera en Gestión Nube.
+ * Reenganchar un compromiso que se anotó antes de que el cliente existiera en Gestión Nube.
  *
  * 🔑 El caso lo levantó Darío el 3-sep-2026: el mayorista nuevo compra por WhatsApp y se carga al
- * ERP recién cuando se arma el pedido, pero el cobro se arregla en esa charla. La promesa nace sin
+ * ERP recién cuando se arma el pedido, pero el cobro se arregla en esa charla. El compromiso nace sin
  * `cliente_id` y con el teléfono del chat; cuando el cliente aparece, esto le pone el id.
  */
-describe('vincular una promesa al cliente que recién ahora existe', () => {
+describe('vincular un compromiso al cliente que recién ahora existe', () => {
   it('le pone el id y el nombre de verdad', async () => {
     filas.c1 = { ...COMPROMISO, cliente_id: null, cliente_nombre: 'la chica de Resistencia', cliente_telefono: '5493624667485' }
     escenario(ADMIN, { ok: true, body: {} })
@@ -288,7 +288,7 @@ describe('vincular una promesa al cliente que recién ahora existe', () => {
     expect(filas.c1.cliente_id).toBe('cli-9')
   })
 
-  it('pide permiso de prometer', async () => {
+  it('pide permiso de comprometer', async () => {
     filas.c1 = { ...COMPROMISO, cliente_id: null }
     escenario({ name: 'Mirón', admin: false, acceso: { bdi: { acreedores: true } } }, { ok: true, body: {} })
     const res = await llamar(pedido({ action: 'vincular', id: 'c1', cliente_id: '77', cliente_nombre: 'Leire' }))
@@ -296,7 +296,7 @@ describe('vincular una promesa al cliente que recién ahora existe', () => {
   })
 })
 
-describe('la promesa de alguien que todavía no está en el ERP', () => {
+describe('el compromiso de alguien que todavía no está en el ERP', () => {
   it('se guarda sin cliente_id y con el teléfono del chat', async () => {
     escenario(ADMIN, { ok: true, body: {} })
     const res = await llamar(pedido({
@@ -310,7 +310,7 @@ describe('la promesa de alguien que todavía no está en el ERP', () => {
     expect(insertados[0]).toMatchObject({ cliente_id: null, cliente_telefono: '5493624667485' })
   })
 
-  it('⚠️ el resto de una promesa parcial hereda el teléfono, o nace huérfano', async () => {
+  it('⚠️ el resto de un compromiso parcial hereda el teléfono, o nace huérfano', async () => {
     filas.c1 = { ...COMPROMISO, cliente_id: null, cliente_telefono: '5493624667485' }
     escenario(ADMIN, { ok: true, body: { pagos: [] } })
     const res = await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-03' }))

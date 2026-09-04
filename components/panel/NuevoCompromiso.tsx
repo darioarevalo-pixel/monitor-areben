@@ -16,7 +16,7 @@
  *
  * Un mayorista nuevo compra por WhatsApp y se carga al ERP después, cuando se arma el pedido — pero
  * el cobro se arregla en esa misma charla. Hasta el 3-sep-2026 esos chats no tenían nada que
- * ofrecer: sin ficha no había cliente, y sin cliente no había promesa (lo levantó Darío usándolo).
+ * ofrecer: sin ficha no había cliente, y sin cliente no había compromiso (lo levantó Darío usándolo).
  *
  * Ahora el que paga llega en dos formas (`QuienPaga`): el de la ficha, con su id de GN, y el que
  * **todavía no existe**, del que se sabe el nombre escrito a mano y —lo que importa— **el teléfono
@@ -24,12 +24,12 @@
  * aparece en GN; el nombre no alcanza, se escribe distinto cada vez.
  *
  * ⚠️ Y es también con lo que se cuenta "cuánto ya le pedimos" mientras no tenga id
- * (`prometidoPorTelefono`): sin eso, al mismo mayorista nuevo se le puede pedir dos veces la misma
+ * (`comprometidoPorTelefono`): sin eso, al mismo mayorista nuevo se le puede pedir dos veces la misma
  * plata en dos charlas.
  *
  * # ⛔ Acá NO se pregunta a nombre de quién viene la transferencia
  *
- * Se preguntaba, y era pedir una adivinanza (lo levantó Darío el 3-sep-2026): **la promesa es del
+ * Se preguntaba, y era pedir una adivinanza (lo levantó Darío el 3-sep-2026): **el compromiso es del
  * cliente**, pero la plata la manda muy seguido otro —el novio, el socio, la razón social— y en
  * medio de la charla nadie sabe cuál. Ese nombre se pregunta al **confirmar**, que es cuando se
  * está mirando el extracto: ahí se lee en vez de predecirse.
@@ -37,13 +37,13 @@
  * # ⛔ Lo que todavía NO muestra: cuánto debe el cliente
  *
  * El planteo pide "debe en GN − ya comprometido = lo que se le puede pedir". La mitad derecha está
- * (las promesas viven acá). La izquierda **no existe todavía**: `total_due` viene por venta en
+ * (los compromisos viven acá). La izquierda **no existe todavía**: `total_due` viene por venta en
  * `GET /ventas` y el sync del espejo lo descarta, así que hoy no hay de dónde leerlo sin salir a
  * preguntarle a GN. Es la sección "Deudas de clientes", que va aparte.
  *
  * Mientras tanto la pantalla dice lo que sí sabe —cuánto ya se le pidió a este cliente— y no
  * inventa la otra mitad. Un número de deuda sacado del espejo estaría desactualizado y se
- * prometería contra un saldo que ya no existe.
+ * comprometería contra un saldo que ya no existe.
  *
  * # 🔑 No pide nada por su cuenta
  *
@@ -59,7 +59,7 @@ import { color, font, radius } from '@/components/ui/tokens'
 import type { Acreedor } from '@/lib/acreedores/cliente'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
 import {
-  estaAbierto, prometidoPorAcreedor, prometidoPorCliente, prometidoPorTelefono, sePuedePrometer,
+  estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
   type Compromiso,
 } from '@/lib/compromisos/core'
 
@@ -77,7 +77,7 @@ export type QuienPaga =
   | { tipo: 'erp'; id: number; nombre: string; telefono: string | null }
   | { tipo: 'sin-cargar'; nombre: string; telefono: string }
 
-export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando, onCreado }: {
+export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, cargando, onCreado }: {
   /** Quién va a transferir. Sin chat abierto no hay a quién pedirle, y la pestaña dice eso en vez de mostrar esto. */
   cliente: QuienPaga
   acreedores: Acreedor[]
@@ -93,21 +93,21 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const prometidoAcreedor = useMemo(() => prometidoPorAcreedor(compromisos), [compromisos])
+  const comprometidoAcreedor = useMemo(() => comprometidoPorAcreedor(compromisos), [compromisos])
   // La misma cuenta con la llave que haya: el id de GN si existe, el teléfono del chat si no.
   const yaLePedimos = cliente.tipo === 'erp'
-    ? prometidoPorCliente(compromisos).get(String(cliente.id)) ?? 0
-    : prometidoPorTelefono(compromisos).get(cliente.telefono) ?? 0
-  const susPromesas = compromisos.filter(
+    ? comprometidoPorCliente(compromisos).get(String(cliente.id)) ?? 0
+    : comprometidoPorTelefono(compromisos).get(cliente.telefono) ?? 0
+  const susCompromisos = compromisos.filter(
     (c) => estaAbierto(c) && (cliente.tipo === 'erp'
       ? c.cliente_id === String(cliente.id)
       : !c.cliente_id && c.cliente_telefono === cliente.telefono),
   )
   const nombreFinal = cliente.tipo === 'erp' ? cliente.nombre : nombre.trim()
 
-  // Sólo los que tienen deuda a la que imputar: prometerle a uno saldado rebota en la puerta.
+  // Sólo los que tienen deuda a la que imputar: comprometerle a uno saldado rebota en la puerta.
   const conDeuda = acreedores
-    .map((a) => ({ a, puedePedirse: sePuedePrometer(a.disponible, prometidoAcreedor.get(a.id) ?? 0) }))
+    .map((a) => ({ a, puedePedirse: sePuedeComprometer(a.disponible, comprometidoAcreedor.get(a.id) ?? 0) }))
     .filter((x) => x.puedePedirse > 0)
 
   const sel = conDeuda.find((x) => x.a.id === elegido) ?? null
@@ -119,7 +119,7 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
   if (!puede.prometer) {
     return (
       <div style={{ fontSize: font.sm, color: color.mut2 }}>
-        Tu usuario puede ver las promesas pero no crearlas. Se activa en Usuarios.
+        Tu usuario puede ver los compromisos pero no crearlos. Se activa en Usuarios.
       </div>
     )
   }
@@ -155,7 +155,7 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
       {yaLePedimos > 0 && (
         <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8 }}>
           Ya le pedimos <b style={{ color: color.ink }}>{plata(yaLePedimos)}</b> en{' '}
-          {susPromesas.length === 1 ? 'una transferencia' : `${susPromesas.length} transferencias`} que
+          {susCompromisos.length === 1 ? 'una transferencia' : `${susCompromisos.length} transferencias`} que
           todavía no entraron.
         </div>
       )}
@@ -232,7 +232,7 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                         cuenta_cbu: cuenta?.cbu ?? null,
                         cuenta_banco: cuenta?.banco ?? null,
                         cuenta_titular: cuenta?.titular ?? null,
-                        // 🔑 Sin id cuando todavía no está en Gestión Nube: la promesa se guarda
+                        // 🔑 Sin id cuando todavía no está en Gestión Nube: el compromiso se guarda
                         // igual y queda esperando el vínculo, que lo da el teléfono.
                         cliente_id: cliente.tipo === 'erp' ? String(cliente.id) : null,
                         cliente_nombre: nombreFinal,
@@ -240,7 +240,7 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                         monto: n,
                       })
                       setMonto(''); setElegido(null)
-                      onCreado(`Listo: quedó la promesa de ${plata(n)} a ${sel.a.nombre}.`)
+                      onCreado(`Listo: quedó el compromiso de ${plata(n)} a ${sel.a.nombre}.`)
                     } catch (e) {
                       setError(e instanceof Error ? e.message : 'No se pudo guardar.')
                     } finally {
@@ -248,7 +248,7 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
                     }
                   }}
                 >
-                  {guardando ? 'Guardando…' : 'Crear la promesa'}
+                  {guardando ? 'Guardando…' : 'Crear el compromiso'}
                 </Button>
               </div>
 
@@ -260,8 +260,8 @@ export function NuevaPromesa({ cliente, acreedores, compromisos, puede, cargando
 
               {sePasa && (
                 <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>
-                  Es más de lo que se le debe a {sel.a.nombre} sin prometer. Si va a mandar más, el
-                  resto va como otra promesa a otro acreedor.
+                  Es más de lo que se le debe a {sel.a.nombre} sin comprometer. Si va a mandar más, el
+                  resto va como otro compromiso a otro acreedor.
                 </div>
               )}
             </>

@@ -11,7 +11,7 @@
 //
 // # El único verbo que sale de esta casa es `confirmar`
 //
-// Crear una promesa y cambiarle el estado son cosas de acá. `confirmar` es distinto: escribe pagos
+// Crear un compromiso y cambiarle el estado son cosas de acá. `confirmar` es distinto: escribe pagos
 // REALES en el ledger del dashboard, por su puerta de servicio. Por eso es el único que:
 //   - pide su propio permiso (`acreedores.confirmar`, aparte de `acreedores.prometer`),
 //   - manda el `operacion_id` que nació con el compromiso, para que reintentar no duplique pagos,
@@ -61,7 +61,7 @@ const CAMPOS =
   'fecha_prometida, notas, operacion_id, pagos_dashboard, viene_de, creado_en, creado_por, ' +
   'confirmado_en, confirmado_por';
 
-/** Ver la sección alcanza para leer; prometer y confirmar son permisos aparte. */
+/** Ver la sección alcanza para leer; comprometer y confirmar son permisos aparte. */
 function permisos(perfil) {
   const admin = esAdmin(perfil);
   const ve = admin || marcasConAcceso(perfil, 'acreedores', ['bdi', 'zattia']).length > 0;
@@ -103,10 +103,10 @@ export default async function handler(req, res) {
   const accion = String(body.action || '');
   const quien = perfil.name || null;
 
-  // ── Anotar una promesa ────────────────────────────────────────────────────
+  // ── Anotar un compromiso ────────────────────────────────────────────────────
   if (accion === 'crear') {
     if (!puede.prometer) {
-      return res.status(403).json({ error: 'No tenés permiso para crear promesas de pago.' });
+      return res.status(403).json({ error: 'No tenés permiso para crear compromisos de pago.' });
     }
     const c = body.compromiso || {};
     if (!c.acreedor_id || !texto(c.acreedor_nombre)) {
@@ -125,7 +125,7 @@ export default async function handler(req, res) {
       .insert({
         acreedor_id: c.acreedor_id,
         acreedor_nombre: texto(c.acreedor_nombre),
-        // 🔑 La cuenta se CONGELA acá: si mañana cambia el CBU, esta promesa tiene que seguir
+        // 🔑 La cuenta se CONGELA acá: si mañana cambia el CBU, este compromiso tiene que seguir
         // diciendo a dónde se mandó la plata, no a dónde se manda hoy.
         cuenta_alias: texto(c.cuenta_alias, 60),
         cuenta_cbu: texto(c.cuenta_cbu, 30),
@@ -134,7 +134,7 @@ export default async function handler(req, res) {
         cliente_id: texto(c.cliente_id, 60),
         cliente_store: c.cliente_store === 'zattia' ? 'zattia' : 'bdi',
         cliente_nombre: texto(c.cliente_nombre, 160),
-        // 🔑 El teléfono del chat, para las promesas que se anotan ANTES de que el cliente exista
+        // 🔑 El teléfono del chat, para los compromisos que se anotan ANTES de que el cliente exista
         // en Gestión Nube. Es con lo que se reengancha después (acción `vincular`). Llega ya
         // normalizado del panel: dos formas del mismo número no se comparan iguales.
         cliente_telefono: texto(c.cliente_telefono, 40),
@@ -157,7 +157,7 @@ export default async function handler(req, res) {
   // ── Moverla de estado (sin tocar el dashboard) ────────────────────────────
   if (accion === 'estado') {
     if (!puede.prometer) {
-      return res.status(403).json({ error: 'No tenés permiso para cambiar promesas de pago.' });
+      return res.status(403).json({ error: 'No tenés permiso para cambiar compromisos de pago.' });
     }
     const estado = String(body.estado || '');
     if (!ESTADOS.includes(estado)) return res.status(400).json({ error: 'Ese estado no existe.' });
@@ -169,10 +169,10 @@ export default async function handler(req, res) {
 
     const { data: actual, error: eLeer } = await base()
       .from('compromisos_pago').select('estado').eq('id', body.id).single();
-    if (eLeer || !actual) return res.status(404).json({ error: 'No se encontró esa promesa.' });
+    if (eLeer || !actual) return res.status(404).json({ error: 'No se encontró ese compromiso.' });
     if (!(TRANSICIONES[actual.estado] || []).includes(estado)) {
       const motivo = actual.estado === 'confirmado'
-        ? 'Esa promesa ya impactó en el dashboard y no se puede volver atrás desde acá. Si hay que corregirla, se borra el pago en el dashboard.'
+        ? 'Ese compromiso ya impactó en el dashboard y no se puede volver atrás desde acá. Si hay que corregirla, se borra el pago en el dashboard.'
         : `No se puede pasar de "${actual.estado}" a "${estado}".`;
       return res.status(409).json({ error: motivo });
     }
@@ -189,31 +189,31 @@ export default async function handler(req, res) {
 
   // ── Vincular: el cliente por fin existe en Gestión Nube ───────────────────
   //
-  // La promesa se anotó cuando el mayorista todavía no estaba cargado: quedó con el nombre escrito
+  // El compromiso se anotó cuando el mayorista todavía no estaba cargado: quedó con el nombre escrito
   // a mano y el teléfono del chat, sin `cliente_id`. Cuando aparece en GN, esto le pone el id.
   //
-  // ⛔ **No se vincula una promesa ya confirmada**, y no es una precaución de más: al confirmar se
+  // ⛔ **No se vincula un compromiso ya confirmada**, y no es una precaución de más: al confirmar se
   // le manda al dashboard el `pagador_cliente_id`, así que el pago del ledger quedaría apuntando a
   // "sin cliente" mientras acá figura vinculado. Sería una divergencia entre dos sistemas creada
   // por un botón. Si hay que corregir eso, se corrige el pago en el dashboard.
   if (accion === 'vincular') {
     if (!puede.prometer) {
-      return res.status(403).json({ error: 'No tenés permiso para cambiar promesas de pago.' });
+      return res.status(403).json({ error: 'No tenés permiso para cambiar compromisos de pago.' });
     }
     const idCliente = texto(body.cliente_id, 60);
     const nombre = texto(body.cliente_nombre, 160);
     if (!idCliente || !nombre) {
-      return res.status(400).json({ error: 'Falta a qué cliente vincularla.' });
+      return res.status(400).json({ error: 'Falta a qué cliente vincularlo.' });
     }
 
     const { data: actual, error: eLeer } = await base()
       .from('compromisos_pago').select('estado, cliente_id').eq('id', body.id).single();
-    if (eLeer || !actual) return res.status(404).json({ error: 'No se encontró esa promesa.' });
+    if (eLeer || !actual) return res.status(404).json({ error: 'No se encontró ese compromiso.' });
     if (actual.estado === 'confirmado') {
-      return res.status(409).json({ error: 'Esa promesa ya impactó en el dashboard: el pago quedó a nombre de quien figuraba. Si hay que corregirlo, se corrige el pago en el dashboard.' });
+      return res.status(409).json({ error: 'Ese compromiso ya impactó en el dashboard: el pago quedó a nombre de quien figuraba. Si hay que corregirlo, se corrige el pago en el dashboard.' });
     }
     if (actual.cliente_id) {
-      return res.status(409).json({ error: 'Esa promesa ya está vinculada a un cliente.' });
+      return res.status(409).json({ error: 'Ese compromiso ya está vinculado a un cliente.' });
     }
 
     const { data, error } = await base()
@@ -235,17 +235,17 @@ export default async function handler(req, res) {
   // ── Confirmar: la plata se movió, que impacte en el dashboard ─────────────
   if (accion === 'confirmar') {
     if (!puede.confirmar) {
-      return res.status(403).json({ error: 'No tenés permiso para confirmar pagos. Podés crear la promesa y que la confirme otro.' });
+      return res.status(403).json({ error: 'No tenés permiso para confirmar pagos. Podés crear el compromiso y que la confirme otro.' });
     }
 
     const { data: c, error: eLeer } = await base()
       .from('compromisos_pago').select(CAMPOS).eq('id', body.id).single();
-    if (eLeer || !c) return res.status(404).json({ error: 'No se encontró esa promesa.' });
+    if (eLeer || !c) return res.status(404).json({ error: 'No se encontró ese compromiso.' });
     if (c.estado === 'confirmado') {
-      return res.status(409).json({ error: 'Esa promesa ya está confirmada.', compromiso: c });
+      return res.status(409).json({ error: 'Ese compromiso ya está confirmado.', compromiso: c });
     }
     if (c.estado === 'cancelado') {
-      return res.status(409).json({ error: 'Esa promesa está cancelada. Reabrila antes de confirmarla.' });
+      return res.status(409).json({ error: 'Ese compromiso está cancelado. Reabrilo antes de confirmarlo.' });
     }
 
     // Lo que entró DE VERDAD. Puede ser menos de lo prometido: se confirma por esto.
@@ -258,10 +258,10 @@ export default async function handler(req, res) {
       : new Date().toISOString().slice(0, 10);
 
     /**
-     * 🔑 **A nombre de quién vino la transferencia se pregunta ACÁ, no al prometer**
+     * 🔑 **A nombre de quién vino la transferencia se pregunta ACÁ, no al comprometer**
      * (planteado por Darío el 3-sep-2026).
      *
-     * Al prometer eso es una adivinanza: la promesa la hace el cliente, pero la plata la manda muy
+     * Al comprometer eso es una adivinanza: el compromiso la hace el cliente, pero la plata la manda muy
      * seguido otro —el novio, el socio, la razón social— y en ese momento no se sabe cuál. Al
      * confirmar sí se sabe, porque se está mirando el extracto: el nombre no se predice, se lee.
      *
@@ -329,7 +329,7 @@ export default async function handler(req, res) {
       .update({
         estado: 'confirmado',
         monto_confirmado: montoReal,
-        // Lo que se leyó del extracto queda también acá: es lo que la lista de promesas muestra.
+        // Lo que se leyó del extracto queda también acá: es lo que la lista de compromisos muestra.
         titular_real: titular,
         pagos_dashboard: respuesta,
         confirmado_en: new Date().toISOString(),
@@ -347,7 +347,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Si entró menos de lo prometido, lo que falta va como una promesa NUEVA (decidido con Darío):
+    // Si entró menos de lo comprometido, lo que falta va como un compromiso NUEVA (decidido con Darío):
     // un compromiso es una transferencia, así que dos transferencias son dos filas.
     const restante = Math.max(0, Math.round((Number(c.monto) - montoReal) * 100) / 100);
     let nueva = null;
@@ -364,14 +364,14 @@ export default async function handler(req, res) {
           cliente_id: c.cliente_id,
           cliente_store: c.cliente_store,
           cliente_nombre: c.cliente_nombre,
-          // ⚠️ El teléfono se copia también: sin él, el resto de una promesa de alguien que
+          // ⚠️ El teléfono se copia también: sin él, el resto de un compromiso de alguien que
           // todavía no está en Gestión Nube nace huérfano y ya no se puede reenganchar.
           cliente_telefono: c.cliente_telefono,
           // ⛔ El titular NO se hereda: el resto es OTRA transferencia y la puede mandar otra
           // persona. Se vuelve a leer del extracto cuando esa entre.
           titular_real: null,
           monto: restante,
-          notas: `Lo que faltó de la promesa del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,
+          notas: `Lo que faltó de el compromiso del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,
           viene_de: c.id,
           creado_por: quien,
           actualizado_por: quien,

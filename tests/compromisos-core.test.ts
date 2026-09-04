@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  colaDeCobranza, diasPara, estaAbierto, puedeIr, porQueNo, prometidoPorAcreedor,
-  prometidoPorCliente, prometidoPorTelefono, sePuedePrometer, restanteTrasConfirmar, sinVincular,
+  ESTADOS,
+  colaDeCobranza, diasPara, estaAbierto, puedeIr, porQueNo, comprometidoPorAcreedor,
+  comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer, restanteTrasConfirmar, sinVincular,
   type Compromiso, type EstadoCompromiso,
 } from '@/lib/compromisos/core'
 
@@ -9,7 +10,7 @@ const c = (estado: EstadoCompromiso, monto: number, acreedor = 'a1', cliente: st
   ({ estado, monto, acreedor_id: acreedor, cliente_id: cliente })
 
 describe('qué compromisos siguen ocupando plata', () => {
-  it('los prometidos y los transferidos sí; los confirmados y los cancelados no', () => {
+  it('los comprometidos y los transferidos sí; los confirmados y los cancelados no', () => {
     expect(estaAbierto({ estado: 'prometido' })).toBe(true)
     expect(estaAbierto({ estado: 'transferido' })).toBe(true)
     // Un confirmado ya bajó la deuda en el ledger: contarlo de nuevo sería contarlo dos veces.
@@ -45,9 +46,9 @@ describe('de qué estado se puede pasar a cuál', () => {
   })
 })
 
-describe('cuánta plata hay prometida sin confirmar', () => {
+describe('cuánta plata hay comprometida sin confirmar', () => {
   it('suma solo lo abierto, por acreedor', () => {
-    const m = prometidoPorAcreedor([
+    const m = comprometidoPorAcreedor([
       c('prometido', 100_000),
       c('transferido', 50_000),
       c('confirmado', 900_000),   // ya bajó la deuda de verdad
@@ -59,7 +60,7 @@ describe('cuánta plata hay prometida sin confirmar', () => {
   })
 
   it('lo mismo del lado del cliente, salteando los que no lo tienen cargado', () => {
-    const m = prometidoPorCliente([
+    const m = comprometidoPorCliente([
       c('prometido', 100_000, 'a1', 'cli1'),
       c('prometido', 20_000, 'a2', 'cli1'),
       c('prometido', 5_000, 'a1', null),
@@ -69,21 +70,21 @@ describe('cuánta plata hay prometida sin confirmar', () => {
   })
 
   it('los centavos no se van sumando solos', () => {
-    const m = prometidoPorAcreedor([c('prometido', 0.1), c('prometido', 0.2)])
+    const m = comprometidoPorAcreedor([c('prometido', 0.1), c('prometido', 0.2)])
     expect(m.get('a1')).toBe(0.3)
   })
 })
 
-describe('cuánto se le puede prometer todavía', () => {
-  // El caso que evita prometer dos veces sobre la misma deuda: el dashboard dice que se le deben
+describe('cuánto se le puede comprometer todavía', () => {
+  // El caso que evita comprometer dos veces sobre la misma deuda: el dashboard dice que se le deben
   // 492.838, pero ya hay 200.000 camino a él que el dashboard no ve.
-  it('descuenta lo que ya está prometido acá', () => {
-    expect(sePuedePrometer(492_838, 200_000)).toBe(292_838)
+  it('descuenta lo que ya está comprometido acá', () => {
+    expect(sePuedeComprometer(492_838, 200_000)).toBe(292_838)
   })
 
-  it('si ya se prometió todo (o de más), no se puede prometer nada', () => {
-    expect(sePuedePrometer(492_838, 492_838)).toBe(0)
-    expect(sePuedePrometer(100_000, 150_000)).toBe(0)
+  it('si ya se se comprometió todo (o de más), no se puede comprometer nada', () => {
+    expect(sePuedeComprometer(492_838, 492_838)).toBe(0)
+    expect(sePuedeComprometer(100_000, 150_000)).toBe(0)
   })
 })
 
@@ -97,7 +98,7 @@ describe('cuando el cliente transfiere de menos', () => {
     expect(restanteTrasConfirmar(500_000, 500_000)).toBe(0)
   })
 
-  it('si entró de más tampoco: el excedente no es una promesa pendiente', () => {
+  it('si entró de más tampoco: el excedente no es un compromiso pendiente', () => {
     expect(restanteTrasConfirmar(500_000, 600_000)).toBe(0)
   })
 })
@@ -110,14 +111,14 @@ const fila = (
   { monto = 1000, fecha = null as string | null, creado = '2026-09-01T10:00:00Z', confirmado = null as string | null } = {},
 ) => ({ id, estado, monto, fecha_prometida: fecha, creado_en: creado, confirmado_en: confirmado }) as unknown as Compromiso
 
-describe('cuántos días faltan para lo prometido', () => {
+describe('cuántos días faltan para lo comprometido', () => {
   it('cuenta días, no horas: hoy es 0 y ayer es -1', () => {
     expect(diasPara('2026-09-03', '2026-09-03')).toBe(0)
     expect(diasPara('2026-09-02', '2026-09-03')).toBe(-1)
     expect(diasPara('2026-09-10', '2026-09-03')).toBe(7)
   })
 
-  it('sin fecha prometida no inventa un número', () => {
+  it('sin fecha comprometida no inventa un número', () => {
     expect(diasPara(null, '2026-09-03')).toBeNull()
   })
 
@@ -165,7 +166,7 @@ describe('la cola de cobranza', () => {
     expect(cola.cerradas.map((c) => c.id)).toEqual(['ultima', 'vieja'])
   })
 
-  it('el total es lo prometido sin entrar: no cuenta lo confirmado ni lo caído', () => {
+  it('el total es lo comprometido sin entrar: no cuenta lo confirmado ni lo caído', () => {
     const cola = colaDeCobranza([
       fila('a', 'prometido', { monto: 100_000 }),
       fila('b', 'transferido', { monto: 50_000 }),
@@ -194,7 +195,7 @@ const sinErp = (
 
 describe('cuánto ya se le pidió a alguien que no tiene id de Gestión Nube', () => {
   it('se cuenta por teléfono, que es la única llave que hay', () => {
-    const m = prometidoPorTelefono([
+    const m = comprometidoPorTelefono([
       sinErp('a', { monto: 100_000 }),
       sinErp('b', { monto: 50_000 }),
       sinErp('c', { tel: '5491100000000', monto: 7_000 }),
@@ -204,7 +205,7 @@ describe('cuánto ya se le pidió a alguien que no tiene id de Gestión Nube', (
   })
 
   it('no cuenta lo cerrado, igual que la cuenta por cliente', () => {
-    const m = prometidoPorTelefono([
+    const m = comprometidoPorTelefono([
       sinErp('a', { monto: 100_000 }),
       sinErp('b', { monto: 900_000, estado: 'confirmado' }),
       sinErp('c', { monto: 900_000, estado: 'cancelado' }),
@@ -213,11 +214,11 @@ describe('cuánto ya se le pidió a alguien que no tiene id de Gestión Nube', (
   })
 
   it('saltea las que no tienen teléfono', () => {
-    expect(prometidoPorTelefono([sinErp('a', { tel: null })]).size).toBe(0)
+    expect(comprometidoPorTelefono([sinErp('a', { tel: null })]).size).toBe(0)
   })
 })
 
-describe('qué promesas están esperando que el cliente exista', () => {
+describe('qué compromisos están esperando que el cliente exista', () => {
   const todas = [
     sinErp('espera', {}),
     sinErp('ya-vinculada', { cliente: '77' }),
@@ -236,5 +237,28 @@ describe('qué promesas están esperando que el cliente exista', () => {
 
   it('sin teléfono no pregunta nada', () => {
     expect(sinVincular(todas, null)).toEqual([])
+  })
+})
+
+/**
+ * 🔴 **Los nombres que NO se pueden renombrar aunque cambie el vocabulario de la pantalla.**
+ *
+ * El 4-sep-2026 la pantalla pasó de decir "promesa de pago" a "compromiso de pago". El
+ * find/replace se llevó puesta la key del permiso (`prometer` → `comprometer`) y se detectó de
+ * casualidad: **no rompe nada visible**, simplemente todos los que tenían el permiso tildado lo
+ * pierden, porque la key está guardada por usuario y por marca en la base de permisos.
+ *
+ * Estos tres grupos son contratos con algo de afuera —la base, el padrón de permisos, el sobre
+ * que viaja al navegador— y el vocabulario de la interfaz no los alcanza.
+ */
+describe('los identificadores que el vocabulario NO puede tocar', () => {
+  it('⛔ los estados son los del check de la base, no los de la pantalla', () => {
+    // `compromisos_pago` tiene un CHECK con estos cuatro. Uno distinto no se guarda.
+    expect(ESTADOS).toEqual(['prometido', 'transferido', 'confirmado', 'cancelado'])
+  })
+
+  it('⛔ `fecha_prometida` es una columna: renombrarla es una migración, no un reemplazo', () => {
+    const c = { fecha_prometida: '2026-09-10' } as unknown as Compromiso
+    expect(diasPara(c.fecha_prometida, '2026-09-03')).toBe(7)
   })
 })

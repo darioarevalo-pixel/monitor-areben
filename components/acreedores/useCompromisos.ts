@@ -5,9 +5,9 @@ import { leerCompromisos, type PuedeCompromisos } from '@/lib/compromisos/client
 import type { Compromiso } from '@/lib/compromisos/core'
 
 /**
- * Las promesas de pago. Va en un hook aparte de `useAcreedores` a propósito: son dos fuentes
+ * Los compromisos de pago. Va en un hook aparte de `useAcreedores` a propósito: son dos fuentes
  * distintas —una es el dashboard, la otra la base del monitor— y si el dashboard no contesta, las
- * promesas se tienen que seguir viendo igual.
+ * compromisos se tienen que seguir viendo igual.
  */
 export function useCompromisos() {
   const [compromisos, setCompromisos] = useState<Compromiso[]>([])
@@ -30,7 +30,7 @@ export function useCompromisos() {
         setPuede(r.puede)
       } catch (e) {
         if (!vivo) return
-        setError(e instanceof Error ? e.message : 'No se pudieron leer las promesas.')
+        setError(e instanceof Error ? e.message : 'No se pudieron leer los compromisos.')
       } finally {
         if (vivo) setCargando(false)
       }

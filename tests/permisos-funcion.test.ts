@@ -366,3 +366,20 @@ describe('el área Proveedores no la hereda ninguna función', () => {
     expect(puedeVer(u, 'zattia', 'proveedores')).toBe(true)
   })
 })
+
+/**
+ * 🔴 **La key del permiso de acreedores es `prometer`, y no se renombra.**
+ *
+ * Está guardada tildada por usuario y por marca en el padrón de permisos. Cambiarla no rompe nada
+ * a la vista: simplemente todos los que la tenían habilitada la pierden, en silencio. El 4-sep-2026
+ * el find/replace que cambió el vocabulario de la pantalla ("promesa" → "compromiso") se la llevó
+ * puesta, y se detectó de casualidad. El rótulo que se ve sí puede cambiar; la key no.
+ */
+describe('la key del permiso de acreedores', () => {
+  it('⛔ sigue siendo `prometer`, aunque la pantalla diga "compromiso de pago"', () => {
+    const subs = PERM_CAT.find((s) => s.key === 'acreedores')?.subs ?? []
+    expect(subs.map((x) => x.key).sort()).toEqual(['confirmar', 'prometer'])
+    // El rótulo sí cambió, y eso es lo que se quería.
+    expect(subs.find((x) => x.key === 'prometer')?.label).toMatch(/compromisos de pago/i)
+  })
+})

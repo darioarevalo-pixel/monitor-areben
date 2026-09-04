@@ -1,5 +1,5 @@
 /**
- * Las promesas de pago, del lado del navegador (`/api/datos?recurso=compromisos`).
+ * Los compromisos de pago, del lado del navegador (`/api/datos?recurso=compromisos`).
  *
  * ⚠️ `confirmar` es el único de estos verbos que mueve plata: escribe el pago en el ledger del
  * dashboard. Los otros dos sólo tocan la tabla del monitor.
@@ -50,7 +50,7 @@ async function pedir(body: Record<string, unknown>) {
 export async function leerCompromisos(): Promise<{ compromisos: Compromiso[]; puede: PuedeCompromisos }> {
   const r = await apiFetch(`${API}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
-  if (!r.ok) throw new Error((d && d.error) || 'No se pudieron leer las promesas.')
+  if (!r.ok) throw new Error((d && d.error) || 'No se pudieron leer los compromisos.')
   return {
     compromisos: (d?.compromisos || []) as Compromiso[],
     puede: (d?.puede || { ver: false, prometer: false, confirmar: false }) as PuedeCompromisos,
@@ -63,10 +63,10 @@ export async function crearCompromiso(compromiso: NuevoCompromiso): Promise<Comp
 }
 
 /**
- * El cliente por fin existe en Gestión Nube: colgarle la promesa que se había anotado a mano.
+ * El cliente por fin existe en Gestión Nube: colgarle el compromiso que se había anotado a mano.
  *
- * ⛔ Sólo sirve para las que todavía no se confirmaron. Una confirmada ya le mandó el pagador al
- * dashboard, y vincularla acá dejaría al pago del ledger apuntando a otro lado.
+ * ⛔ Sólo sirve para las que todavía no se confirmaron. Uno confirmado ya le mandó el pagador al
+ * dashboard, y vincularlo acá dejaría al pago del ledger apuntando a otro lado.
  */
 export async function vincularCompromiso(
   id: string,
@@ -88,9 +88,9 @@ export async function cambiarEstado(id: string, estado: EstadoCompromiso): Promi
 }
 
 /**
- * La plata entró: que impacte en el dashboard. `monto_real` puede ser MENOR que lo prometido —
+ * La plata entró: que impacte en el dashboard. `monto_real` puede ser MENOR que lo comprometido —
  * cuando pasa, el servidor cierra este compromiso por lo que entró y devuelve en `nueva` la
- * promesa que anotó sola por lo que falta.
+ * compromiso que anotó sola por lo que falta.
  *
  * 🔑 `titular_real` es **a nombre de quién vino la transferencia**, y se pasa acá y no al prometer:
  * es un dato que se lee del extracto, no que se adivina en la charla. Vacío = transfirió el

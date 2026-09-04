@@ -19,16 +19,16 @@ export type Compromiso = {
   cliente_store: string
   cliente_nombre: string
   /**
-   * El teléfono del chat, normalizado. Lo tienen las promesas que se anotaron **antes** de que el
+   * El teléfono del chat, normalizado. Lo tienen los compromisos que se anotaron **antes** de que el
    * cliente existiera en Gestión Nube: es con lo que se reenganchan después.
    */
   cliente_telefono: string | null
   /**
    * A nombre de quién vino la transferencia, cuando NO es el cliente. `null` = la mandó él.
    *
-   * 🔑 **Se llena al CONFIRMAR, no al prometer** (Darío, 3-sep-2026): la promesa es del cliente,
+   * 🔑 **Se llena al CONFIRMAR, no al comprometer** (Darío, 3-sep-2026): el compromiso es del cliente,
    * pero la plata la manda muy seguido otro —el novio, el socio, la razón social— y en el momento
-   * de prometer eso es una adivinanza. Al confirmar se está mirando el extracto, así que el nombre
+   * de comprometer eso es una adivinanza. Al confirmar se está mirando el extracto, así que el nombre
    * se lee en vez de predecirse. Puede venir desde antes si el cliente lo dijo en la charla, y en
    * ese caso lo confirmado lo pisa: uno es lo que se dijo, el otro es lo que pasó.
    */
@@ -66,10 +66,10 @@ export function estaAbierto(c: { estado: EstadoCompromiso }): boolean {
  * volver a escribir todo.
  */
 const TRANSICIONES: Record<EstadoCompromiso, EstadoCompromiso[]> = {
-  // Se puede confirmar derecho desde `prometido`: muchas veces el cliente transfiere mientras se
+  // Se puede confirmar derecho desde `comprometido`: muchas veces el cliente transfiere mientras se
   // está hablando, y obligar a pasar por `transferido` sería un clic que no dice nada nuevo.
   prometido: ['transferido', 'confirmado', 'cancelado'],
-  // Vuelve a `prometido` si dijo que había transferido y no era.
+  // Vuelve a `comprometido` si dijo que había transferido y no era.
   transferido: ['confirmado', 'prometido', 'cancelado'],
   confirmado: [],
   cancelado: ['prometido'],
@@ -94,13 +94,13 @@ function centavos(n: number): number {
 }
 
 /**
- * Cuánta plata hay prometida y todavía sin confirmar, por acreedor.
+ * Cuánta plata hay comprometida y todavía sin confirmar, por acreedor.
  *
  * 🔑 Es la mitad que le falta al saldo del dashboard. El dashboard no sabe que esa plata está
  * comprometida, así que su saldo dice "se le debe X" cuando en realidad ya hay X−Y camino a él.
- * Sin esta resta se promete dos veces sobre la misma deuda.
+ * Sin esta resta se compromete dos veces sobre la misma deuda.
  */
-export function prometidoPorAcreedor(compromisos: { acreedor_id: string; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
+export function comprometidoPorAcreedor(compromisos: { acreedor_id: string; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
   const m = new Map<string, number>()
   for (const c of compromisos) {
     if (!estaAbierto(c)) continue
@@ -110,7 +110,7 @@ export function prometidoPorAcreedor(compromisos: { acreedor_id: string; monto: 
 }
 
 /** Lo mismo del lado del cliente: cuánto ya se le pidió y todavía no pagó. */
-export function prometidoPorCliente(compromisos: { cliente_id: string | null; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
+export function comprometidoPorCliente(compromisos: { cliente_id: string | null; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
   const m = new Map<string, number>()
   for (const c of compromisos) {
     if (!estaAbierto(c) || !c.cliente_id) continue
@@ -123,10 +123,10 @@ export function prometidoPorCliente(compromisos: { cliente_id: string | null; mo
  * Y lo mismo por teléfono, para el que TODAVÍA no existe en Gestión Nube.
  *
  * 🔑 **Sin esto, al mayorista nuevo se le puede pedir dos veces la misma plata.** La cuenta de
- * "cuánto ya le pedimos" cuelga del `cliente_id`, que esas promesas no tienen; el número del chat
+ * "cuánto ya le pedimos" cuelga del `cliente_id`, que esos compromisos no tienen; el número del chat
  * es lo único que las junta. Es la misma resta, con la otra llave.
  */
-export function prometidoPorTelefono(compromisos: { cliente_telefono: string | null; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
+export function comprometidoPorTelefono(compromisos: { cliente_telefono: string | null; monto: number; estado: EstadoCompromiso }[]): Map<string, number> {
   const m = new Map<string, number>()
   for (const c of compromisos) {
     if (!estaAbierto(c) || !c.cliente_telefono) continue
@@ -136,14 +136,14 @@ export function prometidoPorTelefono(compromisos: { cliente_telefono: string | n
 }
 
 /**
- * Las promesas de este número que están esperando que el cliente aparezca en Gestión Nube.
+ * Los compromisos de este número que están esperando que el cliente aparezca en Gestión Nube.
  *
  * Es lo que dispara el ofrecimiento de vincular: se anotó la cobranza de alguien que todavía no
  * estaba cargado, y ahora el panel abrió su ficha de verdad. El momento en que se sabe a quién
- * corresponde es ése, y si no se aprovecha, la promesa queda para siempre con un nombre escrito a
+ * corresponde es ése, y si no se aprovecha, el compromiso queda para siempre con un nombre escrito a
  * mano que no cruza con ninguna deuda.
  *
- * ⛔ Las confirmadas quedan afuera: su pago ya se escribió en el dashboard a nombre de quien
+ * ⛔ Los confirmados quedan afuera: su pago ya se escribió en el dashboard a nombre de quien
  * figuraba, y vincularlas acá dejaría los dos sistemas diciendo cosas distintas.
  */
 export function sinVincular(compromisos: Compromiso[], telefono: string | null): Compromiso[] {
@@ -152,19 +152,19 @@ export function sinVincular(compromisos: Compromiso[], telefono: string | null):
 }
 
 /**
- * Cuánto se le puede prometer todavía a un acreedor: lo que se le puede imputar según el
- * dashboard, menos lo que ya está prometido acá. Nunca negativo.
+ * Cuánto se le puede comprometer todavía a un acreedor: lo que se le puede imputar según el
+ * dashboard, menos lo que ya está comprometido acá. Nunca negativo.
  *
  * ⚠️ Se parte de `disponible` y NO de `saldo`: `disponible` ya descuenta los cheques entregados
- * que el banco no debitó. Usar el saldo haría prometer plata para una deuda que ya está saldada
+ * que el banco no debitó. Usar el saldo haría comprometer plata para una deuda que ya está saldada
  * con un papel en la calle.
  */
-export function sePuedePrometer(disponibleDashboard: number, yaPrometido: number): number {
-  return Math.max(0, centavos(disponibleDashboard - yaPrometido))
+export function sePuedeComprometer(disponibleDashboard: number, yaComprometido: number): number {
+  return Math.max(0, centavos(disponibleDashboard - yaComprometido))
 }
 
 /**
- * Qué pasa cuando el cliente transfiere MENOS de lo prometido (decidido con Darío, 2-sep-2026):
+ * Qué pasa cuando el cliente transfiere MENOS de lo comprometido (decidido con Darío, 2-sep-2026):
  * este compromiso se cierra por lo que entró de verdad, y lo que falta se anota como uno NUEVO.
  *
  * ⛔ No se deja el compromiso abierto con un remanente. Un compromiso es *una transferencia*: si
@@ -173,12 +173,12 @@ export function sePuedePrometer(disponibleDashboard: number, yaPrometido: number
  *
  * Devuelve cuánto quedaría pendiente, o 0 si entró todo (o de más).
  */
-export function restanteTrasConfirmar(prometido: number, entro: number): number {
-  return Math.max(0, centavos(prometido - entro))
+export function restanteTrasConfirmar(comprometido: number, entro: number): number {
+  return Math.max(0, centavos(comprometido - entro))
 }
 
 /**
- * Cuántos días faltan para una fecha prometida. Negativo = ya venció; `null` = no tiene fecha.
+ * Cuántos días faltan para una fecha comprometida. Negativo = ya venció; `null` = no tiene fecha.
  *
  * Las dos fechas son `YYYY-MM-DD` y se comparan como días, no como instantes: si se restaran
  * `Date` armados con hora local, un compromiso para hoy podría decir "vence mañana" según la hora
@@ -229,16 +229,16 @@ export type ColaDeCobranza = {
   esperando: Compromiso[]
   /** Las que ya no ocupan plata: entraron o se cayeron. */
   cerradas: Compromiso[]
-  /** Cuánta plata hay prometida y sin entrar, en total. */
+  /** Cuánta plata hay comprometida y sin entrar, en total. */
   totalAbierto: number
 }
 
 /**
  * La lista de trabajo de cobranza, partida en las dos cosas distintas que hay para hacer.
  *
- * 🔑 **`transferido` y `prometido` no son dos escalones de lo mismo: son dos tareas de dos
+ * 🔑 **`transferido` y `comprometido` no son dos escalones de lo mismo: son dos tareas de dos
  * personas distintas.** Un `transferido` espera que NOSOTROS miremos el banco y lo confirmemos —
- * es trabajo propio y sale de la lista con un clic. Un `prometido` espera al cliente: lo único que
+ * es trabajo propio y sale de la lista con un clic. Un `comprometido` espera al cliente: lo único que
  * se puede hacer es volver a hablarle. Mezclados en una sola lista, lo que depende de uno queda
  * escondido entre lo que depende de otro.
  */

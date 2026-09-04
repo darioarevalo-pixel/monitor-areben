@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
-import type { QuienPaga } from './NuevaPromesa'
+import type { QuienPaga } from './NuevoCompromiso'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
 import { addDiasISO, diaHabil, PLAZOS_DIAS, siguienteTemperatura } from '@/lib/crm/core'
@@ -275,7 +275,7 @@ function Chip({ children, tone = 'neutro' }: { children: React.ReactNode; tone?:
  * desconocido era perder justo el momento en que la cobranza se decide (lo levantó Darío usándolo).
  *
  * ⚠️ **Cuál teléfono viaja no es un detalle**: es la llave con la que después se reengancha la
- * promesa. Cuando la ficha se resolvió POR ID (`via: 'id'` — se saltó acá desde una fila, o se
+ * compromiso. Cuando la ficha se resolvió POR ID (`via: 'id'` — se saltó acá desde una fila, o se
  * eligió entre dos candidatos) el número del chat abierto puede ser el de otra persona, así que en
  * ese caso manda el teléfono de la ficha. Si no, manda el del chat, que es con el que se anotó.
  */
@@ -409,7 +409,7 @@ function PanelInterno({
    *
    * ⛔ **"Pagos" nunca arranca sola, y eso es lo que la hace gratis**: sus dos consultas salen
    * recién cuando alguien la toca. Si fuera la de entrada, cada chat abierto costaría leer el
-   * saldo del dashboard y las promesas — que es exactamente el error que dejó la ficha sin abrir
+   * saldo del dashboard y los compromisos — que es exactamente el error que dejó la ficha sin abrir
    * el 3-sep-2026 (ver `Aislado.tsx`).
    */
   const [solapa, setSolapa] = useState<'cliente' | 'hoy' | 'pagos'>(tel ? 'cliente' : 'hoy')
@@ -659,7 +659,7 @@ function PanelInterno({
    * Saltar de una fila de "Pagos" a esa persona.
    *
    * Con teléfono se abre el chat, que es lo que se quiere para reclamar; sin teléfono —las
-   * promesas viejas, anotadas antes de que el compromiso lo guardara— sólo queda mostrar la ficha.
+   * compromisos viejos, anotadas antes de que el compromiso lo guardara— sólo queda mostrar la ficha.
    *
    * Que quede la ficha de alguien distinto al chat abierto no se desincroniza sola: el aviso de
    * "cambió el chat" limpia `pedido` cuando el número nuevo no es el que se había pedido, así que
@@ -724,7 +724,7 @@ function PanelInterno({
    * cruza a todos los clientes: sirve igual con el chat cerrado, y el único que se pierde es el
    * formulario de anotar (que sí necesita saber quién va a transferir).
    *
-   * El cliente sale de la ficha ya resuelta: nunca se anota una promesa a nombre de nadie. Y
+   * El cliente sale de la ficha ya resuelta: nunca se anota un compromiso a nombre de nadie. Y
    * mientras la ficha carga se avisa aparte (`buscandoCliente`), para no mandar a abrir un chat
    * que ya está abierto.
    */
@@ -1560,7 +1560,7 @@ function NumeroNuevo({
         se arregla en la charla. Sin esto, el único momento en que se puede pedir que le transfiera
         al contador es justo el momento en que el panel no tenía nada para ofrecer.
 
-        No crea nada acá: lleva a "Pagos", que ya sabe anotar una promesa con el nombre a mano y el
+        No crea nada acá: lleva a "Pagos", que ya sabe anotar un compromiso con el nombre a mano y el
         teléfono de este chat, y engancharla sola cuando el cliente por fin exista.
       */}
       <Button variant="outline" fullWidth style={{ justifyContent: 'flex-start' }} onClick={onCobranza}>

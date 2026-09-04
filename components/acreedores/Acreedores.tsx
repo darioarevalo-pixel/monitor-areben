@@ -39,8 +39,8 @@ import {
 } from '@/components/ui'
 import { useAcreedores } from './useAcreedores'
 import { useCompromisos } from './useCompromisos'
-import { Promesas } from './Promesas'
-import { prometidoPorAcreedor } from '@/lib/compromisos/core'
+import { Compromisos } from './Compromisos'
+import { comprometidoPorAcreedor } from '@/lib/compromisos/core'
 import type { Compromiso } from '@/lib/compromisos/core'
 import type { PuedeCompromisos } from '@/lib/compromisos/cliente'
 import type { Acreedor, CuentaBancaria } from '@/lib/acreedores/cliente'
@@ -64,17 +64,17 @@ function fechaCorta(iso: string | null): string | null {
 
 export function Acreedores() {
   const { acreedores, aviso, cargando, error, recargar } = useAcreedores()
-  // Las promesas van por su propia puerta: si el dashboard no contesta, se tienen que seguir viendo.
-  const promesas = useCompromisos()
+  // Los compromisos van por su propia puerta: si el dashboard no contesta, se tienen que seguir viendo.
+  const cobros = useCompromisos()
   const [abierto, setAbierto] = useState<string | null>(null)
 
   const datos = cargando ? null : acreedores
   const totalDeuda = acreedores.reduce((s, a) => s + a.saldo, 0)
   const conDeuda = acreedores.filter((a) => a.saldo > 0)
   const sinCuenta = conDeuda.filter((a) => a.cuentas.length === 0)
-  // Lo prometido y todavía sin entrar, sobre TODOS los acreedores: es la plata que ya está en
+  // Lo comprometido y todavía sin entrar, sobre TODOS los acreedores: es la plata que ya está en
   // camino y que el dashboard no ve.
-  const enCamino = [...prometidoPorAcreedor(promesas.compromisos).values()].reduce((s, n) => s + n, 0)
+  const enCamino = [...comprometidoPorAcreedor(cobros.compromisos).values()].reduce((s, n) => s + n, 0)
 
   return (
     <div style={{ display: 'grid', gap: space[5] }}>
@@ -103,7 +103,7 @@ export function Acreedores() {
                 <KpiCard label="Cuentas con saldo" value={`${conDeuda.length} de ${lista.length}`} />
                 {enCamino > 0 && (
                   <KpiCard
-                    label="Prometido y sin entrar"
+                    label="Comprometido y sin entrar"
                     value={formatMoney(enCamino)}
                     sub="plata en camino que el dashboard todavía no ve"
                   />
@@ -122,9 +122,9 @@ export function Acreedores() {
                   <FilaAcreedor
                     key={a.id}
                     acreedor={a}
-                    compromisos={promesas.compromisos}
-                    puede={promesas.puede}
-                    onCambio={promesas.recargar}
+                    compromisos={cobros.compromisos}
+                    puede={cobros.puede}
+                    onCambio={cobros.recargar}
                     abierto={abierto === a.id}
                     onToggle={() => setAbierto(abierto === a.id ? null : a.id)}
                   />
@@ -179,7 +179,7 @@ function FilaAcreedor({ acreedor, compromisos, puede, onCambio, abierto, onToggl
 
       <CuentasDe acreedor={acreedor} />
 
-      <Promesas acreedor={acreedor} compromisos={compromisos} puede={puede} onCambio={onCambio} />
+      <Compromisos acreedor={acreedor} compromisos={compromisos} puede={puede} onCambio={onCambio} />
 
       {abierto && (
         <div style={{ marginTop: space[4] }}>
