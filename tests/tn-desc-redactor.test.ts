@@ -126,6 +126,17 @@ describe('el sistema dice las reglas que el esquema no puede', () => {
     expect(SISTEMA).toContain('No repitas')
   })
 
+  it('🆕 le dice de qué SÍ hablar, y le prohíbe el relleno (4-sep-2026)', () => {
+    // El prompt viejo sólo decía qué NO repetir, y el modelo contestaba con adjetivos: «aporta
+    // volumen», «estructura relajada» —que es el `wide leg` del bullet dicho con otras palabras—.
+    // Medido sobre JEAN MARINA, la primera corrida real de la tanda del 2-sep.
+    expect(SISTEMA).toContain('la foto sí muestra')
+    expect(SISTEMA).toContain('relleno')
+    expect(SISTEMA).toContain('escribí menos')
+    // Y que un párrafo corto es una salida válida: el mínimo de largo es lo que empuja al relleno.
+    expect(SISTEMA).toContain('una sola oración')
+  })
+
   it('🔑 el esquema pide el párrafo y el tip, y nada más: los bullets ya no los escribe el modelo', () => {
     // El tip entró el 4-sep-2026 (decisión de Bruno). Los bullets siguen afuera: los compone la
     // ficha. Que esta lista sea corta ES la tanda del 27-ago — si vuelve a crecer, algo volvió a
