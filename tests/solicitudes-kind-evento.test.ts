@@ -10,9 +10,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
  *    el que lo recibiera como solicitud se rompe en el primer `s.items.length`. Hoy ⛔ ningún
  *    llamador lo omite, y por eso el guard va con test: el día que alguien lo omita, ⛔ no va a
  *    leer este comentario.
- * 2. **Un evento se guarda y ⛔ NO siembra nada en la Agenda.** La siembra es de la solicitud
- *    (`kind === 'sesionfotos'`); que las tareas salgan del evento es la Fase 5, y hacerlo ahora
- *    sembraría los nueve pasos una vez por el evento y otra por cada hija.
+ * 2. **Un evento se guarda, y desde la Fase 5 (4-sep-2026) SIEMBRA él** — antes ⛔ no sembraba
+ *    nadie por el evento y lo hacía cada hija. Acá va sólo que la puerta lo deja pasar y que **sin
+ *    origen ⛔ no siembra**; la regla entera —la hija que ⛔ no repite, la clave nueva, la hora en
+ *    el título— vive en `tests/solicitudes-siembra.test.ts`, que es donde se prueba la siembra.
  * 3. La lista blanca sigue siendo una lista blanca: un kind inventado sigue dando 400.
  */
 
@@ -152,9 +153,19 @@ describe('guardar un evento', () => {
     expect(upserts[0][0].datos).toEqual(evento)
   })
 
-  it('🔴 y ⛔ NO siembra nada en la Agenda — eso es la Fase 5', async () => {
+  it('🆕 con origen SIEMBRA él (Fase 5), y con la clave de su propio espacio de nombres', async () => {
     await llamar('POST', {}, { store: 'bdi', kind: 'sesion-evento', solicitud: { ...evento, disparador: 'campania' } })
+    expect(sembrados).toHaveLength(1)
+    expect(sembrados[0]).toMatchObject({ clave: 'sesion-fotos·evento:ev1', marca: 'bdi', eje: 'campania' })
+  })
+
+  it('🔴 sin origen ⛔ no siembra, y el evento se guarda igual', async () => {
+    // El alta ofrece «Sin definir» a propósito: de dónde viene la sesión decide de quién es cada
+    // paso, así que sembrar «igual» deja nueve renglones con la dueña equivocada.
+    const res = await llamar('POST', {}, { store: 'bdi', kind: 'sesion-evento', solicitud: evento })
+    expect(res.code).toBe(200)
     expect(sembrados).toEqual([])
+    expect(upserts).toHaveLength(1)
   })
 
   it('un kind inventado no guarda nada', async () => {

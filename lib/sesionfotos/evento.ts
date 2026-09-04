@@ -23,16 +23,19 @@
  *
  * ## 🔴 Lo que este archivo NO hace
  *
- * - ⛔ **No siembra en la Agenda.** Eso es la Fase 5, y hasta entonces el que siembra sigue siendo
- *   la solicitud (`api/_solicitudes.js` exige `kind === 'sesionfotos'`, así que un evento ⛔ no
- *   entra ahí ni por accidente). Si sembrara ahora, un evento con tres hijas sembraría **cuatro
- *   veces** los mismos nueve pasos.
+ * - ⛔ **No siembra en la Agenda desde acá.** 🆕 Desde la **Fase 5** (4-sep-2026) el que siembra
+ *   **es el evento**, pero la decisión vive en `evento.core.js` (`siembraDeSesion`) y la ejecuta el
+ *   handler: es el único lugar que sabe que la fila es **nueva**, y sembrar en cada guardado le
+ *   tiraría los nueve pasos encima a tres personas cada vez que alguien corrige la hora. 🔴 Y por
+ *   eso mismo la **hija ⛔ no siembra**: un evento con tres solicitudes sembraría **cuatro veces**
+ *   los mismos nueve pasos.
  * - ⛔ **No toca el motor compartido con Administración.** El motor carga **por `kind`** y este es
  *   uno nuevo que Solicitudes internas ⛔ no pide nunca.
  * - ⚠️ **Editar la fecha del evento ⛔ no reescribe las hijas ya creadas.** Se corrige a mano, y la
  *   pantalla lo dice: reescribirlas pisaría una fecha que alguien pudo haber corregido a propósito.
  */
 
+import { horaNormalizada } from './evento.core.js'
 import type { Disparador } from '../solicitudes/disparador'
 import type { ItemBanco } from './banco'
 import type { ModeloSesion, Solicitud } from './tipos'
@@ -88,17 +91,12 @@ export type AltaEvento = {
 /**
  * Normaliza una hora a `HH:MM` en 24 h, o `null` si ⛔ no se puede leer como hora.
  *
- * 🔴 **Devolver `null` y ⛔ no `'00:00'` es la regla**: un `00:00` inventado se dibuja igual que
- * una medianoche real y el que lea la agenda va a creer que la sesión es de madrugada.
+ * 🔑 **Se MUDÓ a `evento.core.js`** el 4-sep-2026 y acá se re-exporta: desde la Fase 5 la hora
+ * entra al **título de un pendiente de la Agenda**, que lo arma `api/_solicitudes.js` — y un
+ * handler ⛔ no puede importar TypeScript. Escribirla dos veces es la forma exacta en que la hora
+ * que dibuja la pantalla y la que sale al pendiente terminan diciendo cosas distintas.
  */
-export function horaNormalizada(v: unknown): string | null {
-  const m = /^\s*(\d{1,2})\s*[:.]\s*(\d{2})\s*$/.exec(String(v ?? ''))
-  if (!m) return null
-  const h = Number(m[1])
-  const min = Number(m[2])
-  if (!Number.isInteger(h) || !Number.isInteger(min) || h < 0 || h > 23 || min < 0 || min > 59) return null
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
-}
+export { horaNormalizada }
 
 /**
  * Los minutos de duración, o `null` si ⛔ no es un número de minutos que signifique algo.

@@ -504,9 +504,9 @@ con los dos mutantes muertos (sacar el `else` · sacar el kind de la lista blanc
 
 ### Lo que se decidió no hacer, y por qué
 
-- ⛔ **No siembra en la Agenda.** Eso es la Fase 5. Si sembrara ahora, un evento con tres hijas
-  sembraría **cuatro veces** los mismos nueve pasos. El guard ya existía y ⛔ no se tocó: la siembra
-  exige `kind === 'sesionfotos'`, así que un evento ⛔ no entra ahí ni por accidente. **Con test.**
+- ⛔ **No siembra en la Agenda.** *(🆕 Lo hace desde la **Fase 5**, más abajo. Lo que sigue valiendo
+  es el por qué: si el evento **y** sus hijas sembraran, uno con tres solicitudes sembraría **cuatro
+  veces** los mismos nueve pasos — y por eso la hija ⛔ no siembra.)*
 - ⛔ **No se tocó el motor compartido con Administración** — la objeción que levantó el propio Bruno
   (*«el motor es de administración, habría que ver si no hay problema»*). El bloque lo dibuja **sólo
   Sesión de fotos**: Solicitudes internas comparte `SolicitudesInner` y ⛔ no le pasa eventos.
@@ -730,3 +730,78 @@ npx vitest run tests/sesionfotos-banco-oc.test.ts tests/sesionfotos-agregar-desd
 6. **Salir y volver a entrar**: los candidatos de la orden tienen que seguir ahí, con su `de la OC`.
 ⚠️ Y con un usuario **sin la sección «Lo que entró»**: tiene que decir que falta el permiso, ⛔ no
 que no hay órdenes.
+
+## La Agenda sale del EVENTO, con la hora: la Fase 5 del octavo (4-sep-2026)
+
+Cierra el octavo. Hasta hoy los nueve pasos del manual 05 los sembraba **cada solicitud**; desde
+acá los siembra **el evento**, una vez, y sus hijas ⛔ no repiten. La decisión vive en
+`lib/sesionfotos/evento.core.js` (`siembraDeSesion`) y la ejecuta `api/_solicitudes.js`, que es el
+único lugar que sabe que la fila es **nueva**.
+
+### La regla, con sus tres respuestas
+
+| lo que se guarda | ¿siembra? | clave |
+|---|---|---|
+| `sesion-evento` con origen | **sí** | `sesion-fotos·evento:<id>` |
+| `sesionfotos` **con `eventoId`** (una hija) | 🔴 **no** — ya sembró el padre | — |
+| `sesionfotos` suelta | sí, **igual que siempre** | `sesion-fotos·<id>` |
+
+🔴 **Lo caro es el doble, y ⛔ ningún test del núcleo lo vería**: cada guardado por separado está
+bien, y lo que rompe es la combinación. Un evento con tres hijas son **36 renglones** encima de tres
+personas. Por eso el test que importa es el que guarda el evento **y después** sus tres hijas.
+
+🔴 **El prefijo `evento:` es un espacio de nombres nuevo, a propósito.** Lo sembrado antes de hoy
+vive con `sesion-fotos·<idSolicitud>` y **queda intacto: ⛔ no se re-siembra ni se migra**. Si el
+evento usara la misma forma, un id repetido entre los dos cajones —los dos los elegimos nosotros—
+dejaría a uno de los dos sin sembrar **para siempre**, y el que lo mirara ⛔ no tendría cómo saberlo.
+
+### 🔑 La hora va en el TÍTULO, y `Regla` ⛔ no se toca
+
+El pendiente queda **«Cápsula primavera 15:30 · Buscar modelo»**. La hora ⛔ no baja a la regla:
+`Regla` es **día calendario en toda la Agenda** —Hoy, Mes, arrastre y cumplimiento la leen así— y
+llevarla a hora-del-día por esto tocaría las cuatro a la vez, que ⛔ no lo pidió nadie. Lo que hace
+falta es que quien abre el pendiente **sepa a qué hora tiene que estar**, y eso lo contesta el texto.
+
+⛔ **Sin hora ⛔ no se inventa ninguna**: el evento la deja ausente hasta que se sepa —el alta lo
+dice— y un «00:00» colgado del título se lee como una sesión de madrugada.
+
+### Lo que se movió, y por qué ⛔ no se copió
+
+- **`horaNormalizada` se MUDÓ** de `evento.ts` a `evento.core.js`, que `evento.ts` re-exporta.
+  Desde esta fase la hora ⛔ ya no decide sólo lo que dibuja una pantalla: **entra al título de un
+  pendiente que leen otras personas**, y ese texto lo arma un handler — que ⛔ no puede importar
+  TypeScript. Mismo movimiento que `talleNormalizado` cuando la sesión empezó a escribir la ficha.
+- **La lista de kinds que siembran vive en el núcleo y el handler la importa.** Allá sólo decide si
+  vale la pena preguntarle a la base cuáles son nuevas; dos listas de los mismos dos valores es la
+  forma exacta en que el atajo y la regla terminan diciendo cosas distintas. *(Lo destapó un
+  **mutante que sobrevivió**: borrar el guard del kind adentro del núcleo ⛔ no ponía nada en rojo,
+  porque el handler ya filtraba antes.)*
+
+### Lo que esta fase ⛔ NO hace
+
+- ⛔ **No re-siembra nada de lo viejo**, ni migra los clones ya sembrados.
+- ⛔ **No toca el motor compartido con Administración**: `persistir` y `aplicarDiff` quedan como
+  están. ⚠️ El costo, y hay que decirlo: **el resultado de sembrar ⛔ no se ve en la pantalla**. La
+  respuesta lo trae (`sembrado: [{creados, ya}]` o `{error}`) y el cliente lo descarta — es así
+  **desde el 24-ago**, cuando sembró la primera solicitud. Si ⛔ no hay moldes cargados para ese eje
+  y esa marca, el evento se guarda y ⛔ nadie se entera de que no sembró: se ve **abriendo la
+  Agenda**. ▶️ Surfacearlo toca el motor compartido y es una decisión aparte.
+- ⛔ **No siembra al EDITAR**: el hecho es crear la sesión. Corregirle la hora después ⛔ no
+  re-siembra —y por eso el título del pendiente queda con la hora **con la que se creó**. ⚠️ Es la
+  misma ausencia que la fecha de las hijas, y se corrige a mano.
+
+### Cómo se camina
+
+```bash
+npx vitest run tests/solicitudes-siembra.test.ts tests/solicitudes-kind-evento.test.ts --reporter=dot
+```
+
+▶️ 🔴 **Nadie abrió la pantalla.** En Zattia:
+1. Crear una **sesión** (evento) con día, **hora** y **«De dónde viene»** cargado.
+2. Abrir la **Agenda** → tienen que estar los pasos del manual 05, con el título
+   **«<lo que escribiste> <hora> · <paso>»** y cada uno en su día (el offset del molde).
+3. Volver a la sesión, **pedir del banco** una o dos solicitudes → la Agenda ⛔ **no** puede sumar
+   ningún renglón nuevo.
+4. Crear una **solicitud suelta** (sin evento) con origen → esa **sí** siembra, como siempre.
+5. **Editar la hora** del evento → los pendientes ⛔ no se re-siembran ni cambian de título.
+6. Crear una sesión **sin «De dónde viene»** → ⛔ no siembra nada, y se guarda igual.

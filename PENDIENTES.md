@@ -323,11 +323,36 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    819) ⇒ ⛔ no se inventó el motivo «es de la otra línea». El guard de ambiguo queda igual.
    ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § La ORDEN
    RECIBIDA entra al banco.
-5. **La Agenda: que las tareas salgan del EVENTO**, con clave `sesion-fotos·evento:<id>` —prefijo
-   nuevo para ⛔ no chocar con las claves viejas, que quedan intactas y ⛔ no se re-siembran— y las
-   hijas con `eventoId` excluidas, o se sembraría N veces lo mismo. La **hora va en el título del
-   pendiente**: ⛔ **no se toca `Regla`**, que es día calendario en toda la Agenda y llevarla a
-   hora-del-día afectaría Hoy, Mes, arrastre y cumplimiento a la vez.
+5. 🏁 **HECHA el 4-sep-2026 — la Agenda sale del EVENTO, con la hora. CIERRA EL OCTAVO.**
+   `lib/sesionfotos/evento.core.js` (`siembraDeSesion`, JS plano porque lo importa el handler) +
+   `api/_solicitudes.js`. Clave `sesion-fotos·evento:<id>` —espacio de nombres **nuevo**: lo
+   sembrado antes queda **intacto y ⛔ no se re-siembra ni se migra**—.
+   ✅ 16 tests nuevos · suite entera verde (7.213, con el rojo conocido de `crm-paridad`, que ⛔ no
+   es de acá) · `tsc`, `eslint` y `build` limpios · **4 mutantes muertos**.
+   🔴 🔑 **Lo caro es EL DOBLE, y ⛔ ningún test del núcleo lo veía**: cada guardado por separado
+   está bien y lo que rompe es la **combinación**. Un evento con tres hijas sembraría los nueve
+   pasos **cuatro veces** = 36 renglones encima de tres personas. El test que lo fija guarda el
+   evento **y después** sus tres hijas.
+   🔑 **La hora va en el TÍTULO** («Cápsula primavera 15:30 · Buscar modelo») y ⛔ **`Regla` ⛔ no se
+   toca**: es día calendario en toda la Agenda —Hoy, Mes, arrastre y cumplimiento— y bajarla a
+   hora-del-día tocaría las cuatro a la vez. ⛔ **Sin hora ⛔ no se inventa ninguna.**
+   🔑 **`horaNormalizada` se MUDÓ** a `evento.core.js` (`evento.ts` la re-exporta): desde acá la
+   hora ⛔ ya no decide sólo una pantalla, **entra a un pendiente que leen otros**. Mismo movimiento
+   que `talleNormalizado`.
+   🔴 **Un mutante que SOBREVIVIÓ destapó una copia**: la lista de kinds que siembran estaba en el
+   handler *y* en el núcleo. Ahora vive en el núcleo y el handler la **importa**.
+   📌 **Medido antes de dar por bueno que sirve**: hay **9 moldes** cargados de la plantilla
+   `sesion-fotos`, ninguno atado a marca, y para **cualquier** eje quedan 9 ⇒ el módulo ⛔ no nace
+   mudo. Y hay **2 sesiones ya sembradas con la clave vieja** (16 clones), **0** con el prefijo nuevo.
+   🔴 ▶️ **LO QUE ⛔ NO SE VE, y hay que decirlo**: el resultado de sembrar ⛔ **no llega a la
+   pantalla** —la respuesta lo trae y el cliente lo descarta, **desde el 24-ago**—. Si un día ⛔ no
+   hubiera moldes para ese eje y esa marca, el evento se guarda y ⛔ nadie se entera: se ve
+   **abriendo la Agenda**. Surfacearlo toca el **motor compartido con Administración** ⇒ es una
+   decisión aparte.
+   ⚠️ **⛔ No siembra al EDITAR**: el hecho es crear la sesión ⇒ corregirle la hora después deja el
+   título con la hora **con la que se creó**. Misma ausencia que la fecha de las hijas.
+   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § La Agenda
+   sale del EVENTO.
 
 ⛔ **Lo que este plan NO hace**: tocar el motor compartido con Administración ni el ciclo contra
 Gestión Nube · migrar nada (ni tabla, ni solicitudes, ni clones de agenda ya sembrados) · inventar un

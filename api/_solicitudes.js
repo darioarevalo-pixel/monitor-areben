@@ -25,7 +25,9 @@ import { baseDeLinea } from '../lib/lineas.core.js';
 // El 2º disparador de la Agenda. Armar una sesión de fotos es un hecho que prende trabajo en tres
 // sectores, y sus nueve pasos están escritos con dueña en el manual 05: acá es donde ocurre el hecho.
 import { sembrarEnMaestra } from './_agenda.js';
-import { esDisparador } from '../lib/solicitudes/disparador.core.js';
+// 🔑 Qué siembra cada fila del cajón —el evento sí, su hija ⛔ no, la solicitud suelta como
+// siempre— vive en el núcleo y ⛔ no en el `for` de abajo: así el test llama a la MISMA función.
+import { KINDS_QUE_SIEMBRAN, siembraDeSesion } from '../lib/sesionfotos/evento.core.js';
 
 function cfgFor(store) {
   // Stunned comparte la base de Zattia: la traducción la hace el núcleo, no un `||` acá.
@@ -43,10 +45,11 @@ function cfgFor(store) {
 
 // 🔑 `sesion-evento` es la sesión de fotos como PADRE (4-sep-2026): mismo cajón, `kind` distinto.
 // Sumarlo es esta línea y nada más — la tabla ⛔ no tiene CHECK sobre `kind` (`sql/migrate-solicitudes.sql`).
-// 🔴 Y ⛔ NO siembra en la Agenda: la siembra de más abajo exige `kind === 'sesionfotos'`, así que un
-// evento ⛔ no entra ahí ni por accidente. Que las tareas salgan del evento es la Fase 5, y hacerlo
-// ahora sembraría los nueve pasos una vez por el evento y otra por cada hija.
+// 🆕 Desde la Fase 5 (4-sep-2026) **el que siembra en la Agenda es el EVENTO**, y su hija ⛔ no:
+// las dos preguntas las contesta `siembraDeSesion`, en el núcleo. Sembrar por hija repetiría los
+// nueve pasos una vez por pedido — un evento con tres solicitudes son 36 renglones.
 const KINDS = ['sesionfotos', 'solicitudesinternas', 'sesion-evento'];
+
 
 /**
  * 🔴 Los kinds que son una SOLICITUD de verdad — los que el GET devuelve cuando ⛔ no le pasan
@@ -166,7 +169,7 @@ export default async function handler(req, res) {
       // 🔴 **Sólo el guardado de a UNA siembra.** El lote es la migración del KV, y ahí «no existe
       // todavía en la tabla» es verdad de TODAS las sesiones históricas: sembraría los nueve pasos
       // de cada sesión de dos años atrás, todos arrastrando, encima de tres personas.
-      const unaSola = kind === 'sesionfotos' && !Array.isArray(b.solicitudes) && validas.length === 1;
+      const unaSola = KINDS_QUE_SIEMBRAN.includes(kind) && !Array.isArray(b.solicitudes) && validas.length === 1;
       const nuevas = unaSola ? await idsNuevos(supabase, store, validas) : new Set();
 
       const { error } = await supabase
@@ -188,21 +191,31 @@ export default async function handler(req, res) {
       const sembrado = [];
       for (const s of validas) {
         if (!nuevas.has(String(s.id))) continue;
-        if (!esDisparador(s.disparador)) continue;
+        /*
+          🔑 **Quién siembra y con qué clave lo contesta el NÚCLEO** (`siembraDeSesion`): el evento
+          sí, su hija ⛔ no —sus pasos ya los sembró el padre—, la solicitud suelta igual que
+          siempre, y sin disparador ninguno. Acá quedan sólo los datos que el handler tiene y el
+          núcleo ⛔ no: quién guardó y a qué marca va.
+
+          🔑 **La hora entra por `nombre`**, que es el agrupador del título de cada clon
+          («Cápsula primavera 15:30 · Buscar modelo»). ⛔ **`Regla` ⛔ NO se toca**: es día
+          calendario en toda la Agenda —Hoy, Mes, arrastre y cumplimiento— y bajarla a hora-del-día
+          por esto tocaría las cuatro a la vez.
+        */
+        const plan = siembraDeSesion(kind, s);
+        if (!plan) continue;
         const r = await sembrarEnMaestra({
           plantilla: 'sesion-fotos',
-          // El agrupador del título de cada clon. La descripción es lo que la persona escribió para
-          // reconocer la sesión; sin ella, la fecha alcanza para no confundir dos del mismo mes.
-          nombre: String(s.descripcion || '').trim() || `Sesión ${s.fecha || ''}`.trim(),
+          nombre: plan.nombre,
           fecha: s.fecha,
           autor: perfil.name || 'Sesión de fotos',
           eje: s.disparador,
           // 🔴 **Stunned no es una marca: es una línea de Zattia**, y la Agenda tiene dos marcas. La
           // traducción la hace el núcleo, igual que para elegir la base — ⛔ no un `||` acá.
           marca: baseDeLinea(store),
-          // 🔑 La clave es el **id de la sesión**, ⛔ no `fecha·nombre`: la fecha de una sesión se
-          // edita, y con la fecha adentro moverla un día sembraría los nueve otra vez.
-          clave: `sesion-fotos·${s.id}`,
+          // 🔑 La clave es el **id del hecho**, ⛔ no `fecha·nombre`: la fecha se edita, y con la
+          // fecha adentro moverla un día sembraría los nueve otra vez.
+          clave: plan.clave,
         });
         sembrado.push({ id: String(s.id), ...r });
       }
