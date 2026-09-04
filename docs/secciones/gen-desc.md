@@ -200,8 +200,10 @@ la pantalla lo dice — pedirle atributos a un producto del que no se sabe qué 
   escrito **todo en mayúsculas** sale en minúscula. Muerde sólo en `detalle`, que es el único que
   se tipea —hoy están cargados «DETALLE EN EL BOLSILLO», «CON LENTEJUELAS», «TRANSPARENTE»—; los
   demás salen de listas cerradas y ya vienen en minúscula. Se baja al **componer** y ⛔ no al
-  guardar: el valor sigue siendo la palabra del local. ⛔ Y sólo si no tiene ninguna minúscula:
-  un valor con mezcla («cuello V») está escrito a propósito.
+  guardar: el valor sigue siendo la palabra del local. 🔴 **Se decide palabra por palabra**: el
+  primer intento miraba el valor entero y se cayó con el primer caso real —Bruno corrigió a mano
+  `DETALLE EN EL BOLSILLO trasero` y esa única minúscula dejaba las otras cuatro gritando—.
+  ⛔ Una palabra baja sólo con **dos letras o más**: «escote en V» es la forma, no un grito.
   ⚠️ Un `detalle` que **empieza con la palabra «detalle»** pierde además esa palabra, por la regla
   de al lado: «DETALLE EN EL BOLSILLO» sale **«Detalle: en el bolsillo»**.
 - 🔴 **La lista cerrada la chequea el SERVIDOR** (`op:'atributos'`), no el `<select>`. Y el que

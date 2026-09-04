@@ -270,9 +270,19 @@ describe('el bullet no grita: lo que está TODO en mayúsculas baja a minúscula
     expect(textoDeBullet('detalle', 'CON APLIQUE DE CORAZÓN')).toBe('con aplique de corazón')
   })
 
+  it('🔴 la mezcla se resuelve PALABRA POR PALABRA: el caso real de Bruno', () => {
+    // Cargado en mayúsculas por el local y corregido a mano después. Con la regla mirando el valor
+    // entero, esa única minúscula dejaba las otras cuatro palabras gritando.
+    expect(textoDeBullet('detalle', 'DETALLE EN EL BOLSILLO trasero')).toBe('en el bolsillo trasero')
+    expect(textoDeBullet('detalle', 'CON LENTEJUELAS en el ruedo')).toBe('con lentejuelas en el ruedo')
+  })
+
   it('⛔ lo que tiene mezcla queda como lo escribieron', () => {
     expect(textoDeBullet('detalle', 'argolla plateada en el medio')).toBe('argolla plateada en el medio')
+    // ⛔ Una letra sola es la forma que nombra, no un grito.
     expect(textoDeBullet('detalle', 'cuello V')).toBe('cuello V')
+    expect(textoDeBullet('detalle', 'ESCOTE EN V')).toBe('escote en V')
+    expect(textoDeBullet('detalle', '100% ALGODÓN')).toBe('100% algodón')
     expect(textoDeBullet('detalle', 'Con Argolla Plateada')).toBe('Con Argolla Plateada')
   })
 
