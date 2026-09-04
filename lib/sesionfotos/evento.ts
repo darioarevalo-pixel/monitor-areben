@@ -34,6 +34,7 @@
  */
 
 import type { Disparador } from '../solicitudes/disparador'
+import type { ItemBanco } from './banco'
 import type { ModeloSesion, Solicitud } from './tipos'
 
 /**
@@ -62,6 +63,12 @@ export type SesionEvento = {
   disparador?: Disparador
   descripcion: string
   estado: EstadoEvento
+  /**
+   * Los candidatos de la sesión: lo que se puso sobre la mesa para armar los looks, **antes de
+   * pedir nada** (Fase 3). Ausente = todavía nadie lo llenó, que es como nacen todos los eventos
+   * y ⛔ no un dato faltante. Ver `lib/sesionfotos/banco.ts`.
+   */
+  banco?: ItemBanco[]
   creado: number
   creadoPor: string
 }
@@ -178,6 +185,20 @@ export function conDisparadorEvento(e: SesionEvento, d: Disparador | null): Sesi
 /** Cierra el evento, o lo vuelve a abrir. */
 export function conEstadoEvento(e: SesionEvento, estado: EstadoEvento): SesionEvento {
   return e.estado === estado ? e : { ...e, estado }
+}
+
+/**
+ * Cambia el banco del evento. **Un banco vacío BORRA la clave**, ⛔ no la deja en `[]`: el evento
+ * vuelve a decir «todavía nadie lo llenó», que es lo que quiere decir, y el diff del cajón queda
+ * igual que el de un evento que nunca tuvo banco.
+ */
+export function conBanco(e: SesionEvento, banco: ItemBanco[]): SesionEvento {
+  if (!banco || !banco.length) {
+    if (e.banco == null) return e
+    const { banco: _fuera, ...resto } = e
+    return resto
+  }
+  return { ...e, banco }
 }
 
 /** Las solicitudes hijas de un evento, en el orden en que se crearon. */

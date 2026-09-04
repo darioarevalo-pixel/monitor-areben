@@ -278,9 +278,25 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    dibuja sólo Sesión de fotos. Las dos cosas, con test.
    ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos a caminar, en `docs/secciones/sesionfotos.md`
    § La sesión como EVENTO.
-3. **El banco y los outfits ANTES de pedir**: `lib/sesionfotos/banco.ts`, reusando el `outfits.ts` de
-   la fase 1 **con un adaptador, ⛔ no una copia**; y «Pedir al depósito / Pedir al local» que arma
-   las hijas con el número de outfit ya copiado en `item.bolsa`.
+3. 🏁 **HECHA el 4-sep-2026 — el banco y los outfits ANTES de pedir.** `lib/sesionfotos/banco.ts`
+   + `components/sesionfotos/BancoSesion.tsx`, colgado del evento (`SesionEvento.banco`, jsonb ⇒
+   ⛔ sin migración). El orden pasó de *busco → pido → después agrupo* a **candidatos → outfits →
+   pido**, y cada pieza sale con su número de outfit puesto.
+   ✅ 23 tests nuevos · suite entera verde (7.051) · `tsc` y `eslint` limpios.
+   🔑 **El adaptador, ⛔ no la copia**: `outfits.ts` pasó a hablar `PrendaClasificable` y el banco
+   mapea su `outfit` al `bolsa` de esa forma **en una línea**. Las reglas de zona y de aviso son
+   **las mismas** que las de la solicitud, escritas una vez.
+   🔑 **Un outfit puede CRUZAR dos solicitudes** —el top del depósito y el jean del local son el
+   mismo outfit 5—, que es el caso que Bruno describió. Con test.
+   🔴 **Invariante: ninguna pieza pedida se pierde.** Se reusa `expandirProductos`, que deja afuera
+   lo que se quedó sin stock ⇒ ese control se hereda gratis y lo que ⛔ no entró **se nombra con su
+   causa** y queda en el banco. ⛔ Nunca desaparece en silencio.
+   🔴 **La secuencia de pedir vive en el NÚCLEO** (`pedidoDesdeBanco`), ⛔ no en la pantalla: estaba
+   escrita en las dos y **un test que prueba una copia deja de vigilar** el día que el botón cambia.
+   🔴 Lo ya pedido ⛔ no se saca del banco ni se vuelve a pedir (serían **dos ventas en GN por una
+   prenda sola**) · un candidato sin outfit deja el ítem **sin bolsa**, ⛔ no se le inventa número ·
+   al pedir se guardan las dos puntas **en orden**: primero la solicitud, después el banco.
+   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § El BANCO.
 4. **Traer de la OC recibida** al banco: `lib/sesionfotos/banco-oc.ts`, **calcado del cruce de
    `cruzarParaSesion`** (SKU y después barcode) con sus mismos motivos de exclusión.
    🔴 Se usa el recruce **en vivo** (`producto_id_hoy`/`en_gn_hoy`), ⛔ **no** el `producto_id` de la

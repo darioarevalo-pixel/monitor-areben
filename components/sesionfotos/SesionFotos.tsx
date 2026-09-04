@@ -10,7 +10,8 @@ import { useSesionFotos } from './useSesionFotos'
 import { FichaModelo } from './FichaModelo'
 import { Eventos } from './Eventos'
 import { useEventosSesion } from './useEventosSesion'
-import type { SesionEvento } from '@/lib/sesionfotos/evento'
+import { conBanco, type SesionEvento } from '@/lib/sesionfotos/evento'
+import { marcarPedidos, pedidoDesdeBanco } from '@/lib/sesionfotos/banco'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
 import { origenesDe } from '@/lib/inicio/core'
 import { veTodo } from '@/lib/solicitudes/overview'
@@ -275,6 +276,42 @@ function Contenido({
    */
   const [eventoAlArmar, setEventoAlArmar] = useState<string | null>(null)
 
+  /**
+   * Pedir del banco: arma la solicitud hija con lo elegido y devuelve lo que ⛔ no entró.
+   *
+   * 🔑 **Reusa el armado del borrador que ya existe** (`expandirProductos` + `tildarVariantes` +
+   * `procesarDraft`) y ⛔ no construye ítems a mano. Eso ⛔ no es prolijidad: `expandirProductos`
+   * deja afuera las variantes **sin stock**, así que una prenda que se agotó entre que entró al
+   * banco y que se pidió ⛔ no entra — y `vidsAusentes` la nombra, para que la sesión ⛔ no salga
+   * corta sin que nadie se entere.
+   *
+   * 🔴 **Se guardan las DOS puntas y en este orden**: primero la solicitud, después el banco con
+   * los candidatos marcados. Si fallara la segunda, la solicitud existe y el banco vuelve a
+   * ofrecer esas piezas —duplicar un pedido se ve y se arregla—, mientras que al revés el banco
+   * diría «ya pedidas» piezas que ⛔ nunca salieron.
+   */
+  const pedirDelBanco = async (ev: SesionEvento, vids: string[], destino: Origen): Promise<string[] | null> => {
+    if (!eventos) return null
+    const { sol, ausentes } = pedidoDesdeBanco(ev.banco || [], vids, destino, { variantes, productos }, {
+      id: nuevoId(),
+      fecha: hoyISO(),
+      creado: Date.now(),
+      creadoPor: perfil?.name ?? '',
+      eventoId: ev.id,
+      descripcion: ev.descripcion || 'Sesión de fotos',
+      // Los mismos dos ejes con los que nace cualquier borrador de este cajón (ver `Draft`).
+      motivo: motivosDe(preset)[0] || MOTIVO_DEFAULT,
+      tipo: DESTINO_DEFAULT,
+      disparador: ev.disparador ?? null,
+    })
+    if (!sol) return ausentes
+    const ok = await persistir((l) => [sol, ...l])
+    if (!ok) return null
+    const entraron = sol.items.map((i) => i.vid)
+    await eventos.persistir((l) => l.map((x) => (x.id === ev.id ? conBanco(x, marcarPedidos(x.banco || [], entraron, sol.id)) : x)))
+    return ausentes
+  }
+
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
 
@@ -368,7 +405,9 @@ function Contenido({
                 solicitudes={data}
                 editable={puedePedir(perfil)}
                 usuario={perfil?.name ?? ''}
+                variantes={variantes}
                 persistir={eventos.persistir}
+                onPedirDelBanco={pedirDelBanco}
                 onPedirProductos={(id) => {
                   setEventoAlArmar(id)
                   setArmando(true)

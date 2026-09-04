@@ -4,8 +4,13 @@ import { useState } from 'react'
 import { Badge, Button, Field, Input, Select, color, useConfirmar } from '@/components/ui'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { FichaModelo } from './FichaModelo'
+import { BancoSesion } from './BancoSesion'
+import type { ItemBanco } from '@/lib/sesionfotos/banco'
+import type { Variante } from '@/lib/etl/tipos'
+import type { Origen } from '@/lib/sesionfotos/tipos'
 import {
   bloqueoEliminarEvento,
+  conBanco,
   conDescripcionEvento,
   conDisparadorEvento,
   conDuracion,
@@ -40,19 +45,28 @@ import type { Solicitud } from '@/lib/sesionfotos/tipos'
 export function Eventos({
   eventos,
   solicitudes,
+  variantes,
   editable,
   usuario,
   persistir,
   onPedirProductos,
+  onPedirDelBanco,
   onVerSolicitud,
 }: {
   eventos: SesionEvento[]
   solicitudes: Solicitud[]
+  /** El catálogo de la línea, para el buscador del banco. */
+  variantes: Variante[]
   editable: boolean
   usuario: string
   persistir: (mutar: (l: SesionEvento[]) => SesionEvento[]) => Promise<boolean>
   /** Abre el borrador de una solicitud ya colgada de este evento. */
   onPedirProductos: (eventoId: string) => void
+  /**
+   * Pide del banco: crea la solicitud hija con lo elegido y devuelve los `vid` que ⛔ no entraron
+   * (por stock), o `null` si el guardado falló.
+   */
+  onPedirDelBanco: (e: SesionEvento, vids: string[], destino: Origen) => Promise<string[] | null>
   onVerSolicitud: (id: string) => void
 }) {
   const { avisar, confirmar } = useConfirmar()
@@ -125,6 +139,7 @@ export function Eventos({
             key={e.id}
             e={e}
             hijas={hijasDe(solicitudes, e.id)}
+            variantes={variantes}
             editable={editable}
             usuario={usuario}
             abierto={abierto === e.id}
@@ -132,6 +147,7 @@ export function Eventos({
             onGuardar={guardar}
             onEliminar={() => onEliminar(e)}
             onPedirProductos={() => onPedirProductos(e.id)}
+            onPedirDelBanco={(vids, destino) => onPedirDelBanco(e, vids, destino)}
             onVerSolicitud={onVerSolicitud}
           />
         ))}
@@ -146,6 +162,7 @@ export function Eventos({
                 key={e.id}
                 e={e}
                 hijas={hijasDe(solicitudes, e.id)}
+                variantes={variantes}
                 editable={editable}
                 usuario={usuario}
                 abierto={abierto === e.id}
@@ -153,6 +170,7 @@ export function Eventos({
                 onGuardar={guardar}
                 onEliminar={() => onEliminar(e)}
                 onPedirProductos={() => onPedirProductos(e.id)}
+                onPedirDelBanco={(vids, destino) => onPedirDelBanco(e, vids, destino)}
                 onVerSolicitud={onVerSolicitud}
               />
             ))}
@@ -234,6 +252,7 @@ function FormNueva({ usuario, onCrear, onCancelar }: { usuario: string; onCrear:
 function FilaEvento({
   e,
   hijas,
+  variantes,
   editable,
   usuario,
   abierto,
@@ -241,10 +260,12 @@ function FilaEvento({
   onGuardar,
   onEliminar,
   onPedirProductos,
+  onPedirDelBanco,
   onVerSolicitud,
 }: {
   e: SesionEvento
   hijas: Solicitud[]
+  variantes: Variante[]
   editable: boolean
   usuario: string
   abierto: boolean
@@ -252,6 +273,7 @@ function FilaEvento({
   onGuardar: (e: SesionEvento) => void
   onEliminar: () => void
   onPedirProductos: () => void
+  onPedirDelBanco: (vids: string[], destino: Origen) => Promise<string[] | null>
   onVerSolicitud: (id: string) => void
 }) {
   return (
@@ -341,9 +363,24 @@ function FilaEvento({
             </div>
           ) : null}
 
-          {/* 🔑 La MISMA ficha de la solicitud, ⛔ no una copia. Sin talles sugeridos: el evento
-              todavía no tiene ninguna prenda en la mano, y una lista fija impondría un alfabeto. */}
-          <FichaModelo s={e} talles={[]} editable={editable} usuario={usuario} setWork={(f) => onGuardar(f(e))} />
+          {/* 🔑 La MISMA ficha de la solicitud, ⛔ no una copia. Los talles sugeridos salen de lo que
+              ya hay en el banco: si todavía no hay nada, la lista vacía es la respuesta correcta. */}
+          <FichaModelo
+            s={e}
+            talles={[...new Set((e.banco || []).map((i) => i.variante).filter(Boolean))]}
+            editable={editable}
+            usuario={usuario}
+            setWork={(f) => onGuardar(f(e))}
+          />
+
+          {/* El banco: los candidatos y los outfits, ANTES de pedir. */}
+          <BancoSesion
+            banco={e.banco || []}
+            variantes={variantes}
+            editable={editable}
+            onCambiar={(b: ItemBanco[]) => onGuardar(conBanco(e, b))}
+            onPedir={onPedirDelBanco}
+          />
 
           {hijas.length ? (
             <div style={{ fontSize: 11, color: color.mut, marginTop: 2 }}>

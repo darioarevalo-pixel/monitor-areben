@@ -545,3 +545,86 @@ npx vitest run tests/sesionfotos-evento.test.ts tests/solicitudes-kind-evento.te
 5. Pedir una **segunda** solicitud de la misma sesión: es el pedido textual de Bruno.
 6. Intentar eliminar una sesión con pedidos → tiene que frenar y decir por qué.
 ⚠️ Y abrir **Solicitudes internas**: ahí ⛔ no tiene que aparecer nada de esto.
+
+## El BANCO de productos: la Fase 3 del octavo (4-sep-2026)
+
+Lo pidió Bruno el 3-sep: *«eso tiene que generar un banco de productos de la sesión, donde se
+realiza una clasificación rápida y se generan outfits digitales con distintos productos de arriba y
+abajo. Si el producto de la OC que ingresó no alcanza para armar outfits, se procede a pedir una
+solicitud a local, es decir, el armado de outfits se realiza desde ahí, entonces va más ordenado»*.
+
+🔑 **Es el paso que faltaba entre elegir y pedir.** Hasta la Fase 2 el orden era *busco → pido →
+después veo cómo lo agrupo*. Ahora es **candidatos → outfits → pido**, y el pedido sale ya repartido:
+cada pieza viaja con su número de outfit puesto.
+
+### 🔑 El outfit se numera por EVENTO, y al pedir viaja a `item.bolsa`
+
+Con eso la etiqueta «BOLSA n/N» y el reporte A4 de armado **siguen andando sin tocarlos** — y, lo
+que el pedido de Bruno necesitaba, **un outfit puede cruzar dos solicitudes**: el top que sale del
+depósito y el jean que sale del local son el **mismo outfit 5**. Fijado por test.
+
+### Lo que se reusó, y lo que por eso ⛔ no hubo que escribir
+
+- **La clasificación arriba/abajo/entero ⛔ no se reescribió.** `outfits.ts` pasó a hablar
+  `PrendaClasificable` —`vid`, `nombre`, `pid`, `bolsa`— y el banco **mapea su `outfit` a ese
+  `bolsa` en una línea** (`comoPrendas`). Ése es el adaptador entero. Escribir las reglas dos veces
+  es lo que haría que un día el aviso del banco y el de la solicitud dijeran cosas distintas del
+  mismo outfit.
+- **El armado del pedido reusa el borrador que ya existía** (`expandirProductos` +
+  `tildarVariantes` + `procesarDraft`) en vez de construir ítems a mano. 🔴 Y eso ⛔ no es
+  prolijidad: `expandirProductos` **deja afuera las variantes sin stock**, así que ese control se
+  hereda gratis, y el origen de cada pieza lo sigue decidiendo `procesarDraft` con la prioridad más
+  el fallback por stock de siempre («Pedir al depósito» con una prenda que sólo hay en local la
+  manda a local, como cualquier solicitud).
+- **El buscador es `buscarProductos`**, el mismo del borrador.
+
+### 🔴 Ninguna pieza pedida se pierde
+
+Es el invariante que el plan pedía y el que sostiene el test de la cadena entera: cada `vid` que se
+mandó a pedir **o entra a la solicitud, o sale nombrado en la lista de ausentes** — ⛔ nunca
+desaparece en silencio. La pantalla los dice con la causa (*«no entraron porque ya ⛔ no tienen
+stock»*) y **quedan en el banco**: una prenda que se agotó entre que entró al banco y que se pidió
+haría que la sesión saliera corta sin que nadie se entere.
+
+🔑 **La secuencia de pedir vive en el núcleo (`pedidoDesdeBanco`) y ⛔ no en la pantalla.** Estaba
+escrita en las dos —el botón y el test— y un test que prueba **una copia** de la secuencia deja de
+vigilar el día que el botón cambia.
+
+### Las otras reglas, y por qué
+
+- 🔴 **Lo ya pedido ⛔ no se saca del banco** (`bloqueoSacarDelBanco`): esa pieza está en una
+  solicitud real con su venta en Gestión Nube. Sacarla del banco ⛔ no la devuelve — sólo borra el
+  único rastro de que salió por esta sesión.
+- 🔴 **Lo ya pedido ⛔ no se vuelve a pedir** (`paraPedir` lo filtra): en el depósito, pedir dos
+  veces la misma pieza son **dos ventas en Gestión Nube por una prenda sola**.
+- 🔑 **Un candidato sin outfit deja el ítem sin bolsa**: numerarlo al pedir le pondría un número que
+  nadie eligió, y el reporte de armado imprimiría una bolsa que ⛔ no existe.
+- **Soltar el outfit, o la zona, BORRA la clave** — la misma regla de las otras dos fases.
+- **Un banco vacío borra `SesionEvento.banco`**: el evento vuelve a decir «nadie lo llenó», que es
+  lo que quiere decir, y el diff del cajón queda igual que el de un evento que nunca tuvo banco.
+- 🔴 **En BDI el banco se calla igual que la solicitud**: fundas y cables ⛔ no son ropa, así que no
+  hay selector de zona, ni aviso, ni pendientes por clasificar.
+- ⚠️ **`outfitsCompletos` ⛔ no se dibuja como un logro cuando el banco está vacío**: hoy diría 0
+  para todas las sesiones, y eso es lo que dice un banco que nadie llenó, ⛔ no un problema.
+- 🔴 **Al pedir se guardan las DOS puntas, en este orden**: primero la solicitud, después el banco
+  con los candidatos marcados. Si fallara la segunda, la solicitud existe y el banco vuelve a
+  ofrecer esas piezas —duplicar un pedido **se ve** y se arregla—; al revés, el banco diría «ya
+  pedidas» piezas que ⛔ nunca salieron.
+
+### Cómo se camina
+
+```bash
+npx vitest run tests/sesionfotos-banco.test.ts --reporter=dot
+```
+
+▶️ 🔴 **Nadie abrió la pantalla.** En una sesión de Zattia, adentro de un evento:
+1. Buscar y agregar dos prendas (una de arriba, una de abajo) → tienen que aparecer en «Sin repartir».
+2. Ponerles a las dos el outfit 1 → el aviso «le falta el abajo» tiene que aparecer con una sola y
+   **apagarse** al poner la segunda.
+3. Tildar una sola y **«Pedir al depósito»** → nace la solicitud hija, la prenda queda «ya pedida»
+   y la solicitud lleva la bolsa 1.
+4. Tildar la otra y **«Pedir al local»** → segunda solicitud, **mismo outfit 1**: es el caso que
+   Bruno describió.
+5. Intentar sacar del banco una ya pedida → ⛔ no tiene que dejar.
+6. **Salir y volver a entrar**: el banco tiene que estar igual.
+⚠️ Y abrir una sesión de **BDI**: ahí ⛔ no tiene que aparecer ni zona ni aviso.

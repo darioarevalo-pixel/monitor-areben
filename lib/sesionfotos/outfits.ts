@@ -47,7 +47,23 @@
  */
 
 import { familiaDe, fueraDeAlcance, type Familia } from '../tn-desc/atributos'
-import type { ItemSolicitud } from './tipos'
+
+/**
+ * Lo mínimo que una prenda necesita para poder clasificarse y entrar a un outfit.
+ *
+ * 🔑 **Es el adaptador, ⛔ no una copia.** `ItemSolicitud` lo cumple tal cual, y desde la Fase 3
+ * también lo cumple un ítem del BANCO del evento —que llama `outfit` a lo que la solicitud llama
+ * `bolsa`, y se mapea en una línea (`lib/sesionfotos/banco.ts`)—. Escribir estas reglas dos veces,
+ * una por cada forma, es exactamente lo que haría que un día el aviso del banco y el de la
+ * solicitud dijeran cosas distintas sobre el mismo outfit.
+ */
+export type PrendaClasificable = {
+  vid: string
+  nombre: string
+  pid?: string | null
+  /** El número de outfit: `bolsa` en la solicitud, `outfit` en el banco. Ausente = sin repartir. */
+  bolsa?: number
+}
 
 /** Qué ranura del outfit ocupa la prenda. `entero` ocupa las dos (vestido, mono, enterito). */
 export type ZonaPrenda = 'arriba' | 'abajo' | 'entero'
@@ -240,7 +256,7 @@ export type ZonaPorItem = Record<string, ZonaPrenda | null>
  * sólo agrega los productos viejos que sí tienen categoría.
  */
 export function zonasDe(
-  items: ItemSolicitud[],
+  items: PrendaClasificable[],
   clasif?: Record<string, ZonaPrenda>,
   cats?: Record<string, string[]>,
 ): ZonaPorItem {
@@ -264,7 +280,7 @@ export function zonasDe(
  * - **Los ítems SIN bolsa ⛔ no son un outfit** y no se cuentan: todavía no los repartió nadie.
  */
 export function alertasDe(
-  items: ItemSolicitud[],
+  items: PrendaClasificable[],
   clasif?: Record<string, ZonaPrenda>,
   cats?: Record<string, string[]>,
 ): AlertaOutfit[] {
@@ -298,7 +314,7 @@ export function alertasDe(
  * ⇒ **si no hay una sola prenda, el módulo entero se calla.**
  */
 export function aplicaOutfits(
-  items: ItemSolicitud[],
+  items: PrendaClasificable[],
   clasif?: Record<string, ZonaPrenda>,
   cats?: Record<string, string[]>,
 ): boolean {
@@ -312,11 +328,11 @@ export function aplicaOutfits(
  * Los accesorios ⛔ no entran —el vocabulario ya dijo que no ocupan ranura— y en una solicitud
  * donde ⛔ **nada** es ropa la lista sale vacía, por `aplicaOutfits`.
  */
-export function sinZona(
-  items: ItemSolicitud[],
+export function sinZona<T extends PrendaClasificable>(
+  items: T[],
   clasif?: Record<string, ZonaPrenda>,
   cats?: Record<string, string[]>,
-): ItemSolicitud[] {
+): T[] {
   if (!aplicaOutfits(items, clasif, cats)) return []
   const zonas = zonasDe(items, clasif, cats)
   return (items || []).filter((i) => {
