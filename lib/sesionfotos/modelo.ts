@@ -65,12 +65,12 @@ export function hayModelo(m: ModeloSesion | undefined | null): m is ModeloSesion
  * Sin talle **se borra la ficha entera**: no es que quede a medias, es que no contesta nada. Y así
  * el mismo gesto sirve para deshacer una carga equivocada, sin un botón «borrar» aparte.
  */
-export function conModelo(s: Solicitud, edit: ModeloEditable, meta: { por: string; ts: number }): Solicitud {
+export function conModelo<T extends { modelo?: ModeloSesion }>(s: T, edit: ModeloEditable, meta: { por: string; ts: number }): T {
   const talle = talleNormalizado(edit.talle)
   if (!talle) {
     if (!s.modelo) return s
     const { modelo: _fuera, ...resto } = s
-    return resto as Solicitud
+    return resto as T
   }
   const nombre = limpiar(edit.nombre)
   const altura = alturaNormalizada(edit.altura)

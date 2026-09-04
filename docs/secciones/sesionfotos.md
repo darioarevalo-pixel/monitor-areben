@@ -455,3 +455,93 @@ abajo. Un verde ⛔ no dice que guardar ande: hay que **salir y volver a entrar*
 corrección quedó.
 ⚠️ Y abrir una de **BDI**: ahí ⛔ no tiene que aparecer ni el selector, ni el aviso, ni el renglón
 de «faltan clasificar».
+
+## La sesión como EVENTO: la Fase 2 del octavo (4-sep-2026)
+
+🔑 **El pedido de Bruno da vuelta el objeto.** Hasta hoy **la solicitud ERA la sesión**, 1 a 1. Él lo
+pidió al revés: *«sesión de fotos es un evento […] con modelo, fecha, hora, tiempo aproximado.
+Dentro de la misma además tiene que poder solicitarse varias solicitudes de productos»*. Ahora la
+sesión es el **padre** y las solicitudes son **hijas**.
+
+Y ya había un caso real esperándolo desde otro lado: una sesión que fotografía **Zattia y Stunned
+son dos solicitudes**, porque el catálogo se corta por línea a propósito.
+
+### ⛔ Sin una sola migración, y sin gastar una función de Vercel
+
+El evento es un **`kind` nuevo (`sesion-evento`) en la MISMA tabla `solicitudes`**, ⛔ no una tabla
+aparte. 📌 **Verificado contra las dos bases reales el 4-sep**, ⛔ no contra el `.sql`: el único
+constraint de `solicitudes` es `PRIMARY KEY (store, id)` — ⛔ **no hay CHECK** sobre `kind` ni sobre
+`estado` ⇒ sumar un valor es **una línea** en `KINDS` de `api/_solicitudes.js`.
+
+`filaDe` sirve tal cual (el evento también tiene `id`, `fecha`, `estado`, `creado`, `creadoPor`) y
+reusa `leerCajon`/`diffSolicitudes`/`aplicarDiff` y el permiso `sesion-fotos`. `Solicitud` suma **un
+solo campo**: `eventoId?`. Ausente = suelta, que es como quedan las **35 existentes** (BDI 11 ·
+Zattia 18 + 6 internas): se siguen abriendo igual, **sin backfill**.
+
+### 🔴 El agujero que abrió el kind nuevo, y que ⛔ no lo veía ningún test del núcleo
+
+El GET de `api/_solicitudes.js` **siempre aceptó omitir el `kind`**, y eso significaba «todo el
+historial de la marca». Con `sesion-evento` en la tabla, ese llamado pasaba a devolver **eventos
+mezclados con solicitudes** — y un evento ⛔ no tiene `items`: el que lo recibiera se rompe en el
+primer `s.items.length`.
+
+Medido: **⛔ ningún llamador lo omite hoy** (todos pasan por `leerTabla`, que siempre manda el kind).
+🔑 **Y por eso se arregló ahora y no «cuando pase»**: sin `kind` el GET filtra por `KINDS_SOLICITUD`
+—los dos de siempre— y el significado viejo queda intacto. Fijado por `tests/solicitudes-kind-evento.test.ts`,
+con los dos mutantes muertos (sacar el `else` · sacar el kind de la lista blanca).
+
+### Las ausencias que ⛔ no se rellenan
+
+- **Sin hora ⛔ no es «00:00».** `horaNormalizada` devuelve `null` y la clave **no se guarda**: una
+  medianoche inventada se dibuja igual que una real y el que lee la agenda cree que la sesión es de
+  madrugada.
+- **El cero ⛔ no es una duración: es «no lo sé».** `duracionNormalizada` lo rechaza, y por eso
+  `finEstimado` ⛔ no puede decir que una sesión termina a la misma hora que empieza.
+- 🔴 **`finEstimado` necesita las DOS.** Con una sola contesta `null`: suponer «arranca a las 0» o
+  «dura una hora» sería inventar el dato que la pantalla iba a mostrar como cargado.
+- **Soltar cualquiera de las tres BORRA la clave**, ⛔ no la deja en `null` — la misma regla que la
+  corrección de zona de los outfits, y por el mismo motivo: `diffSolicitudes` compara por JSON.
+
+### Lo que se decidió no hacer, y por qué
+
+- ⛔ **No siembra en la Agenda.** Eso es la Fase 5. Si sembrara ahora, un evento con tres hijas
+  sembraría **cuatro veces** los mismos nueve pasos. El guard ya existía y ⛔ no se tocó: la siembra
+  exige `kind === 'sesionfotos'`, así que un evento ⛔ no entra ahí ni por accidente. **Con test.**
+- ⛔ **No se tocó el motor compartido con Administración** — la objeción que levantó el propio Bruno
+  (*«el motor es de administración, habría que ver si no hay problema»*). El bloque lo dibuja **sólo
+  Sesión de fotos**: Solicitudes internas comparte `SolicitudesInner` y ⛔ no le pasa eventos.
+- ⚠️ **Editar el día del evento ⛔ NO reescribe las hijas ya creadas**, y la pantalla lo dice. Se
+  corrige a mano: reescribirlas pisaría una fecha que alguien pudo haber corregido a propósito.
+- 🔴 **Un evento con hijas ⛔ no se elimina de un click** (`bloqueoEliminarEvento`): las hijas son
+  retiros con venta en Gestión Nube, y el que borra el evento creyendo que «cancela la sesión»
+  dejaría la mercadería separada y sin nadie que la devuelva.
+- 🔴 **Una hija cuyo evento se eliminó sigue apareciendo en la lista plana**, como suelta. Es un
+  retiro real: desaparecer de la pantalla es peor que quedar suelta.
+- 🔴 **Si el cajón de eventos no se puede leer, la sección ⛔ NO se frena**: se dice en una línea y
+  las solicitudes andan igual. Son el trabajo de todos los días; el evento es lo nuevo.
+
+### La ficha de la modelo se mudó, y ahora es una sola para las dos
+
+`FichaModelo` vivía adentro de `SesionFotos.tsx` y sabía de `Solicitud`. Ahora está en
+`components/sesionfotos/FichaModelo.tsx`, es genérica sobre «algo que tiene `modelo`» y **recibe los
+talles sugeridos por prop**: en una solicitud salen de las variantes que la modelo tuvo en la mano;
+en un evento **todavía no hay ninguna**, y la lista vacía es la respuesta correcta — ⛔ no una lista
+fija que imponga un alfabeto (S/M/L contra 38/40/42, que en Zattia conviven).
+🔑 Vive en su archivo y ⛔ no adentro de la pantalla porque importarla de ahí sería un ciclo.
+`conModelo` pasó a ser genérica **sin cambiar una línea de su cuerpo**.
+
+### Cómo se camina
+
+```bash
+npx vitest run tests/sesionfotos-evento.test.ts tests/solicitudes-kind-evento.test.ts --reporter=dot
+```
+
+▶️ 🔴 **Nadie abrió la pantalla.** Lo que hay que ejercer a mano, en Zattia:
+1. Crear una sesión con día y **sin hora** → tiene que decir sólo la fecha, ⛔ nunca «00:00».
+2. Ponerle hora y duración → tiene que aparecer «15:30 a 17:00 (1 h 30)».
+3. Elegir la modelo del padrón adentro del evento, **salir y volver a entrar** a ver que quedó.
+4. «+ Pedir productos» → armar una solicitud → tiene que quedar colgada de la sesión (el chip en la
+   fila del evento) **y** con el rótulo «de una sesión» en la lista de abajo.
+5. Pedir una **segunda** solicitud de la misma sesión: es el pedido textual de Bruno.
+6. Intentar eliminar una sesión con pedidos → tiene que frenar y decir por qué.
+⚠️ Y abrir **Solicitudes internas**: ahí ⛔ no tiene que aparecer nada de esto.

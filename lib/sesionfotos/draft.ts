@@ -227,7 +227,17 @@ export function totalDraft(draft: Draft): number {
   return enProds + enPend + enMan
 }
 
-export type MetaSolicitud = { id: string; fecha: string; creado: number; creadoPor: string }
+export type MetaSolicitud = {
+  id: string
+  fecha: string
+  creado: number
+  creadoPor: string
+  /**
+   * De qué evento es hija (4-sep-2026). Ausente = solicitud suelta, que es el caso de todas las
+   * que se crearon hasta hoy y de las que se sigan creando desde el botón «Nueva solicitud».
+   */
+  eventoId?: string
+}
 
 /**
  * Convierte el borrador en una solicitud. Asigna el origen de cada variante:
@@ -270,7 +280,10 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
   // porque una clave con `null` en el KV se lee igual que una ausente y ensucia el diff del
   // cajón (`diffSolicitudes` compara por JSON).
   const disp = draft.disparador ? { disparador: draft.disparador } : {}
-  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items, ...disp }
+  // Lo mismo con el evento: una clave con `undefined` ⛔ no es igual a una ausente para
+  // `diffSolicitudes`, que compara por JSON.
+  const ev = meta.eventoId ? { eventoId: meta.eventoId } : {}
+  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items, ...disp, ...ev }
   // Capa internas: si el borrador trae `tipo`, es una solicitud interna. El consumo nace
   // `pendiente` (necesita aprobación); el retornable nace `aprobada`. Fotos: `pendiente`.
   if (draft.tipo != null) {

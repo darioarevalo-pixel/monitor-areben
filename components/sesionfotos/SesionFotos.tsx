@@ -7,6 +7,10 @@ import { SelectorLinea } from '@/components/ui'
 import type { DatosETL } from '@/lib/etl/tipos'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { useSesionFotos } from './useSesionFotos'
+import { FichaModelo } from './FichaModelo'
+import { Eventos } from './Eventos'
+import { useEventosSesion } from './useEventosSesion'
+import type { SesionEvento } from '@/lib/sesionfotos/evento'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
 import { origenesDe } from '@/lib/inicio/core'
 import { veTodo } from '@/lib/solicitudes/overview'
@@ -95,9 +99,7 @@ import {
   respuestaFoto,
   resumenFotos,
 } from '@/lib/sesionfotos/fotografiado'
-import { conModelo, desdeFicha, hayModelo, resumenDeModelo, talleNormalizado } from '@/lib/sesionfotos/modelo'
-import { useModelosElegibles } from '@/components/modelos/useModelos'
-import type { ModeloEditable } from '@/lib/sesionfotos/modelo'
+import { talleNormalizado } from '@/lib/sesionfotos/modelo'
 import type { EstadoSolicitud, Fase, ItemSolicitud, Origen, Solicitud } from '@/lib/sesionfotos/tipos'
 import { puedePedir, puedeRetirar } from '@/lib/solicitudes/overview'
 import { imprimirTicket80 } from '@/lib/sesionfotos/ticket'
@@ -125,9 +127,15 @@ const DISABLED_TITLE = 'Disponible al completar la migración de Sesión de foto
 export function SesionFotos() {
   const { datos, linea, setLinea, lineas } = useDatosMonitor({ porLinea: true })
   const sf = useSesionFotos(linea)
+  // 🔑 El cajón de EVENTOS lo monta SÓLO esta entrada: Solicitudes internas comparte el motor de
+  // UI de abajo y ⛔ no le pasa nada, así que no le aparece el bloque. Es la objeción que Bruno
+  // levantó él mismo — «el motor es de administración, habría que ver si no hay problema» —, y la
+  // salida es ENVOLVER, ⛔ no reemplazar.
+  const ev = useEventosSesion(linea)
   return (
     <SolicitudesInner
       sf={sf}
+      eventos={ev}
       preset={PRESET_FOTOS}
       datos={datos}
       clave={linea}
@@ -148,12 +156,18 @@ export function SesionFotos() {
  */
 export function SolicitudesInner({
   sf,
+  eventos,
   preset,
   datos,
   clave,
   selector,
 }: {
   sf: HistorialSolicitudes<Solicitud>
+  /**
+   * El cajón de sesiones (eventos). Lo manda **sólo Sesión de fotos**; ausente en Solicitudes
+   * internas, y ahí el bloque ⛔ no se dibuja.
+   */
+  eventos?: HistorialSolicitudes<SesionEvento>
   preset: PresetSolicitud
   /** El ETL de la línea (fotos) o de la marca entera (internas). `null` mientras carga. */
   datos: DatosETL | null
@@ -192,6 +206,7 @@ export function SolicitudesInner({
         key={clave}
         preset={preset}
         data={sf.data}
+        eventos={eventos}
         prioridad={sf.prioridad}
         persistir={sf.persistir}
         crearVentasDe={sf.crearVentasDe}
@@ -208,6 +223,7 @@ export function SolicitudesInner({
 function Contenido({
   preset,
   data,
+  eventos,
   prioridad,
   persistir,
   crearVentasDe,
@@ -219,6 +235,8 @@ function Contenido({
 }: {
   preset: PresetSolicitud
   data: Solicitud[]
+  /** Sólo en Sesión de fotos. Ver `SolicitudesInner`. */
+  eventos?: HistorialSolicitudes<SesionEvento>
   prioridad: Origen
   persistir: Persistir
   crearVentasDe: CrearVentasDe
@@ -251,6 +269,11 @@ function Contenido({
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [combiIds, setCombiIds] = useState<string[] | null>(null)
   const [armando, setArmando] = useState(!!selPuente?.pids.length || !!altaInicial)
+  /**
+   * De qué sesión (evento) es hija la solicitud que se está armando. `null` = suelta, que es lo
+   * que sale por «Nueva solicitud» y por los puentes de Marketing y de la cola de fotos.
+   */
+  const [eventoAlArmar, setEventoAlArmar] = useState<string | null>(null)
 
   const solViendo = viendo ? data.find((s) => s.id === viendo) ?? null : null
   const solsCombi = combiIds ? combiIds.map((id) => data.find((s) => s.id === id)).filter((s): s is Solicitud => !!s) : null
@@ -294,9 +317,14 @@ function Contenido({
           productos={productos}
           desdePuente={selPuente}
           alta={altaInicial}
-          onCancelar={() => setArmando(false)}
+          eventoId={eventoAlArmar}
+          onCancelar={() => {
+            setArmando(false)
+            setEventoAlArmar(null)
+          }}
           onCreada={(id) => {
             setArmando(false)
+            setEventoAlArmar(null)
             setViendo(id)
           }}
         />
@@ -329,9 +357,34 @@ function Contenido({
           onVolver={() => setViendo(null)}
         />
       ) : (
-        <Historial
-          preset={preset}
-          data={data}
+        <>
+          {/* Las sesiones planificadas, arriba de las solicitudes. 🔴 Si el cajón de eventos no se
+              pudo leer se dice en una línea y ⛔ NO se frena la sección: las solicitudes son el
+              trabajo de todos los días y el evento es lo nuevo. */}
+          {eventos ? (
+            eventos.data ? (
+              <Eventos
+                eventos={eventos.data}
+                solicitudes={data}
+                editable={puedePedir(perfil)}
+                usuario={perfil?.name ?? ''}
+                persistir={eventos.persistir}
+                onPedirProductos={(id) => {
+                  setEventoAlArmar(id)
+                  setArmando(true)
+                }}
+                onVerSolicitud={setViendo}
+              />
+            ) : eventos.error ? (
+              <div style={{ fontSize: 12, color: color.warningInk, margin: '8px 0' }}>
+                No se pudieron leer las sesiones planificadas ({eventos.error}). Las solicitudes de abajo
+                andan igual.
+              </div>
+            ) : null
+          ) : null}
+          <Historial
+            preset={preset}
+            data={data}
           admin={admin}
           puedeQuitar={puedeQuitar}
           verCerradas={verCerradas}
@@ -349,11 +402,12 @@ function Contenido({
               return n
             })
           }
-          onVerCombinada={() => {
-            setCombiIds([...seleccion].filter((id) => data.some((s) => s.id === id)))
-            setViendo(null)
-          }}
-        />
+            onVerCombinada={() => {
+              setCombiIds([...seleccion].filter((id) => data.some((s) => s.id === id)))
+              setViendo(null)
+            }}
+          />
+        </>
       )}
     </div>
   )
@@ -585,6 +639,10 @@ function Historial({
                 <div style={{ fontWeight: 600 }}>
                   {f.descripcion || '(sin descripción)'}
                   {f.cerrada ? <Badge tone="success" subtle style={{ marginLeft: 6 }}>Cerrada</Badge> : null}
+                  {/* Una hija se reconoce en la lista plana. 🔑 Se muestra acá y ⛔ no se esconde
+                      de la lista: es un retiro real, con venta en Gestión Nube, y el que busca
+                      «qué salió del depósito» tiene que verla esté colgada o no. */}
+                  {s.eventoId ? <Badge tone="brand" subtle style={{ marginLeft: 6 }}>de una sesión</Badge> : null}
                   {f.porDevolver ? (
                     <span style={{ background: color.dangerBg, color: color.dangerInk, borderRadius: 999, padding: '1px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>
                       {f.porDevolver} por devolver
@@ -814,6 +872,10 @@ function Detalle({
    * 🔴 En BDI `aplicaOutfits` da falso —fundas y cables ⛔ no son ropa— y el bloque entero
    * desaparece: el módulo se calla en vez de afirmar.
    */
+  // Los talles que la modelo tuvo en la mano en ESTA sesión: es lo que sugiere su ficha, y sale
+  // de las variantes reales para ⛔ no imponer un alfabeto (S/M/L contra 38/40/42, que conviven).
+  const tallesDeLaSesion = [...new Set((s.items || []).map((i) => talleNormalizado(i.variante)).filter(Boolean))]
+
   const hayOutfits = aplicaOutfits(s.items)
   const zonas = zonasDe(s.items, s.clasifOutfits)
   const alertasOutfit = alertasDe(s.items, s.clasifOutfits)
@@ -1210,7 +1272,7 @@ function Detalle({
           sesión que, si no se anota en el momento, ya no se puede reconstruir.
           🔑 Se muestra desde que la sesión existe —⛔ no cuando ya salió algo, como el bloque de
           abajo—: la modelo se sabe al armarla, y el bloque también sirve para dejarla anotada. */}
-      {esFotosDet ? <FichaModelo s={s} editable={editable} usuario={usuario} setWork={setWork} /> : null}
+      {esFotosDet ? <FichaModelo s={s} talles={tallesDeLaSesion} editable={editable} usuario={usuario} setWork={setWork} /> : null}
 
       {/* ¿Qué se fotografió? El RESULTADO de la sesión, que hasta el 24-ago-2026 no se registraba en
           ningún lado: una solicitud podía llegar a `cerrada` sin una sola foto sacada.
@@ -1536,6 +1598,7 @@ function Draft({
   productos,
   desdePuente,
   alta,
+  eventoId,
   onCancelar,
   onCreada,
 }: {
@@ -1552,6 +1615,12 @@ function Draft({
   desdePuente?: SeleccionFotos | null
   /** Motivo + destino elegidos en Solicitudes al pedir el alta. */
   alta?: AltaSolicitud | null
+  /**
+   * De qué SESIÓN (evento) es hija esta solicitud, cuando se pidió desde adentro de una.
+   * Ausente = solicitud suelta, que es como sale por «Nueva solicitud» y como quedó todo lo
+   * anterior al 4-sep-2026. Ver `lib/sesionfotos/evento.ts`.
+   */
+  eventoId?: string | null
   onCancelar: () => void
   onCreada: (id: string) => void
 }) {
@@ -1620,7 +1689,7 @@ function Draft({
     setManQty('1')
   }
   const procesar = () => {
-    const sol = procesarDraft(draft, prioridad, { id: nuevoId(), fecha: hoyISO(), creado: Date.now(), creadoPor: usuario })
+    const sol = procesarDraft(draft, prioridad, { id: nuevoId(), fecha: hoyISO(), creado: Date.now(), creadoPor: usuario, ...(eventoId ? { eventoId } : {}) })
     if (!sol) {
       void avisar('Escaneá o tildá al menos un producto para procesar.')
       return
@@ -2038,212 +2107,7 @@ function ScanInput({ disabled, placeholder, onScan }: { disabled: boolean; place
   )
 }
 
-/**
- * La ficha de la modelo de la sesión: quién es y qué talle usa.
- *
- * 🔑 **Los tres campos se escriben en un borrador local y se guardan al SALIR de cada uno**, no en
- * cada tecla. `conModelo` normaliza y **borra la ficha entera cuando el talle queda vacío**, así que
- * guardando letra por letra el primer backspace del talle se llevaría puesto el nombre y la altura.
- *
- * ⚠️ Los talles sugeridos salen de **las variantes de esta misma sesión**, ⛔ no de una lista fija:
- * son exactamente los que la modelo tuvo en la mano, y así el campo no impone un alfabeto (S/M/L
- * contra 38/40/42) que en Zattia conviven.
- *
- * 🔑 **Desde el 3-sep-2026 la modelo se ELIGE del padrón** (Model Management) en vez de tipearse, y
- * eso ⛔ no es comodidad: elegirla deja el `id` de su ficha en la sesión, que es lo único con lo que
- * después se puede contestar «cuántas sesiones hizo cada una y cómo vendió lo que fotografió» — el
- * análisis que pidió Bruno en el mismo dictado. Tipear el nombre ⛔ no engancha nada.
- * ⚠️ **Los tres campos siguen estando y siguen siendo libres**: la modelo que está parada en el
- * estudio y ⛔ no tiene ficha se anota igual, como se venía haciendo. El selector es un atajo, ⛔ no
- * una puerta.
- * 🔴 **El padrón se pide por MARCA y ⛔ nunca por línea**: `stunned` es una línea de Zattia y el
- * permiso es por marca — pedirlo con la línea contesta 403 sin decir por qué.
- */
-function FichaModelo({
-  s,
-  editable,
-  usuario,
-  setWork,
-}: {
-  s: Solicitud
-  editable: boolean
-  usuario: string
-  setWork: (f: (w: Solicitud) => Solicitud) => void
-}) {
-  const { marca } = useSesion()
-  const [borrador, setBorrador] = useState<ModeloEditable>({
-    id: s.modelo?.id,
-    nombre: s.modelo?.nombre || '',
-    talle: s.modelo?.talle || '',
-    altura: s.modelo?.altura || '',
-  })
-  const { modelos: padron, error: errPadron } = useModelosElegibles(editable ? marca : null)
-  // ⚠️ `guardarCon` toma el borrador POR PARÁMETRO y `guardar` ⛔ no toma ninguno: `onBlur={onSalir}`
-  // le pasa el evento del DOM a lo que le den, y un evento como borrador es un talle vacío — o sea
-  // `conModelo` **borrando la ficha entera** en el primer blur. Dos funciones, y ninguna trampa.
-  const guardarCon = (b: ModeloEditable) => setWork((w) => conModelo(w, b, { por: usuario, ts: Date.now() }))
-  const guardar = () => guardarCon(borrador)
-  const elegir = (id: string) => {
-    const b = desdeFicha(padron.find((m) => m.id === id) || null, borrador)
-    setBorrador(b)
-    guardarCon(b)
-  }
-  const talles = [...new Set((s.items || []).map((i) => talleNormalizado(i.variante)).filter(Boolean))]
 
-  if (!editable) {
-    if (!hayModelo(s.modelo)) return null
-    return (
-      <div style={{ fontSize: 12, color: color.mut2, margin: '8px 0' }}>👗 Modelo: {resumenDeModelo(s.modelo)}</div>
-    )
-  }
-
-  return (
-    <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '10px 12px', margin: '10px 0', background: color.bg }}>
-      <div style={{ fontWeight: 700, marginBottom: 2 }}>
-        La modelo{' '}
-        <InfoPopover titulo="El talle de la modelo">
-          Qué talle tiene puesto la modelo en esta sesión. Es lo que la clienta pregunta antes de comprar, y se
-          usa después en «Descripción y medidas» para escribirlo en la ficha del producto. El nombre es para
-          adentro: a la tienda sale sólo el talle y la altura.
-        </InfoPopover>
-      </div>
-      <div style={{ fontSize: 12, color: color.mut2, marginBottom: 8 }}>
-        Con el talle alcanza. Si no lo cargás, la descripción de estas prendas no lo va a poder decir.
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        {padron.length ? (
-          <label style={{ fontSize: 11, color: color.mut2, display: 'inline-block' }}>
-            Del padrón
-            <select
-              value={borrador.id || ''}
-              onChange={(e) => elegir(e.target.value)}
-              style={{
-                display: 'block',
-                width: 180,
-                padding: '6px 8px',
-                marginTop: 2,
-                border: `1px solid ${color.line2}`,
-                borderRadius: 8,
-                fontSize: 14,
-                boxSizing: 'border-box',
-                background: '#fff',
-              }}
-            >
-              <option value="">Tipear a mano</option>
-              {padron.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {[m.nombre, m.talle ? `talle ${m.talle}` : null].filter(Boolean).join(' · ')}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <CampoModelo
-          label="Nombre"
-          ancho={160}
-          valor={borrador.nombre || ''}
-          onCambio={(v) => setBorrador((b) => ({ ...b, nombre: v }))}
-          onSalir={guardar}
-          placeholder="Sofi"
-        />
-        <CampoModelo
-          label="Talle que usa"
-          ancho={110}
-          valor={borrador.talle || ''}
-          onCambio={(v) => setBorrador((b) => ({ ...b, talle: v }))}
-          onSalir={guardar}
-          placeholder="S"
-          lista={talles}
-        />
-        <CampoModelo
-          label="Altura"
-          ancho={110}
-          valor={borrador.altura || ''}
-          onCambio={(v) => setBorrador((b) => ({ ...b, altura: v }))}
-          onSalir={guardar}
-          placeholder="1,70"
-        />
-        <div style={{ fontSize: 12, color: hayModelo(s.modelo) ? color.successInk : color.mut, paddingBottom: 8 }}>
-          {hayModelo(s.modelo) ? `✓ ${resumenDeModelo(s.modelo)}` : 'Sin cargar'}
-        </div>
-      </div>
-      {/* ⚠️ Se dice, ⛔ no se esconde: sin padrón el selector no está y el que carga tiene que saber
-          por qué —si no, lo lee como que la sección no anda—. Las dos son frases de una línea y
-          ninguna frena nada: los tres campos siguen ahí abajo. */}
-      {errPadron ? (
-        <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
-          No se pudo leer el padrón de Modelos ({errPadron}). Se anota a mano igual.
-        </div>
-      ) : !padron.length ? (
-        <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
-          Todavía no hay fichas cargadas en Modelos: la modelo se anota a mano, y cuando su ficha
-          exista se la elige de la lista.
-        </div>
-      ) : borrador.id ? null : (
-        <div style={{ fontSize: 11, color: color.mut, marginTop: 6 }}>
-          Tipeada a mano: no queda enganchada con su ficha, así que esta sesión ⛔ no le va a contar
-          para «cuántas hizo».
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Un campo de la ficha de la modelo. `lista` dibuja las sugerencias sin cerrar el campo. */
-function CampoModelo({
-  label,
-  valor,
-  onCambio,
-  onSalir,
-  placeholder,
-  ancho,
-  lista,
-}: {
-  label: string
-  valor: string
-  onCambio: (v: string) => void
-  onSalir: () => void
-  placeholder: string
-  ancho: number
-  lista?: string[]
-}) {
-  const id = `modelo-${label.replace(/\s+/g, '-').toLowerCase()}`
-  return (
-    <label style={{ fontSize: 11, color: color.mut2, display: 'inline-block' }}>
-      {label}
-      <input
-        value={valor}
-        placeholder={placeholder}
-        list={lista?.length ? `${id}-lista` : undefined}
-        onChange={(e) => onCambio(e.target.value)}
-        onBlur={onSalir}
-        style={{
-          display: 'block',
-          width: ancho,
-          padding: '6px 8px',
-          marginTop: 2,
-          border: `1px solid ${color.line2}`,
-          borderRadius: 8,
-          fontSize: 14,
-          boxSizing: 'border-box',
-          background: '#fff',
-        }}
-      />
-      {lista?.length ? (
-        <datalist id={`${id}-lista`}>
-          {lista.map((t) => (
-            <option key={t} value={t} />
-          ))}
-        </datalist>
-      ) : null}
-    </label>
-  )
-}
-
-/**
- * El resultado de una sesión, en una línea. El «sin contestar» se dice con el mismo peso que los
- * otros dos: es lo que distingue «no se fotografió» de «nadie lo anotó».
- */
 function ResultadoFotos({ s }: { s: Solicitud }) {
   if (!hayQuePreguntar(s)) return null
   const r = resumenFotos(s)

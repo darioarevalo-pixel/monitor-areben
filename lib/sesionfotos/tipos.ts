@@ -141,6 +141,18 @@ export type Solicitud = {
    */
   modelo?: ModeloSesion
   /**
+   * De qué EVENTO es hija esta solicitud (la sesión de fotos como padre, 4-sep-2026).
+   *
+   * 🔑 **Ausente = solicitud suelta**, que es como quedan todas las anteriores: se siguen
+   * abriendo igual y ⛔ **no hubo backfill**. Una sesión puede tener varias hijas —el pedido de
+   * Bruno— y ya había un caso esperándolo: fotografiar Zattia y Stunned **son dos solicitudes**,
+   * porque el catálogo se corta por línea.
+   *
+   * ⛔ El evento ⛔ no es una tabla: es un `kind` nuevo (`sesion-evento`) de la MISMA tabla.
+   * Ver `lib/sesionfotos/evento.ts`.
+   */
+  eventoId?: string
+  /**
    * La zona del outfit CORREGIDA a mano, por `vid` (arriba · abajo · prenda entera).
    *
    * 🔑 **Sólo guarda la corrección, ⛔ no la propuesta.** La propuesta la calcula

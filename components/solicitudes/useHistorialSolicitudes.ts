@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav.datos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
-import type { KindLista } from '@/lib/kv/cliente'
-import { aplicarDiff, diffSolicitudes, leerCajon } from '@/lib/solicitudes/cajon'
+import { aplicarDiff, diffSolicitudes, leerCajon, type KindCajon } from '@/lib/solicitudes/cajon'
 import { useToast } from '@/components/ui'
 import { leerPrioridadRetiro } from '@/lib/sesionfotos/cfg'
 import type { Origen, VentaGN } from '@/lib/sesionfotos/tipos'
@@ -80,7 +79,7 @@ export type HistorialSolicitudes<T> = {
 }
 
 export type OpcionesHistorial<T> = {
-  kind: KindLista
+  kind: KindCajon
   /** Nombre para los mensajes de error ("Sesión de fotos" / "Solicitudes internas"). */
   etiqueta: string
   /** Estado que toma la solicitud al crear la venta GN ('cargada' en fotos, 'retirada' en internas). */

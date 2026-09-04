@@ -41,7 +41,24 @@ function cfgFor(store) {
   };
 }
 
-const KINDS = ['sesionfotos', 'solicitudesinternas'];
+// 🔑 `sesion-evento` es la sesión de fotos como PADRE (4-sep-2026): mismo cajón, `kind` distinto.
+// Sumarlo es esta línea y nada más — la tabla ⛔ no tiene CHECK sobre `kind` (`sql/migrate-solicitudes.sql`).
+// 🔴 Y ⛔ NO siembra en la Agenda: la siembra de más abajo exige `kind === 'sesionfotos'`, así que un
+// evento ⛔ no entra ahí ni por accidente. Que las tareas salgan del evento es la Fase 5, y hacerlo
+// ahora sembraría los nueve pasos una vez por el evento y otra por cada hija.
+const KINDS = ['sesionfotos', 'solicitudesinternas', 'sesion-evento'];
+
+/**
+ * 🔴 Los kinds que son una SOLICITUD de verdad — los que el GET devuelve cuando ⛔ no le pasan
+ * `kind`.
+ *
+ * El GET siempre aceptó omitirlo y significaba «todo el historial de la marca». Al sumar
+ * `sesion-evento` eso pasó a incluir **eventos**, que ⛔ no tienen `items`: cualquier lector que
+ * los recibiera como solicitudes se rompería en el primer `s.items.length`. Hoy ⛔ ningún llamador
+ * lo omite (todos pasan por `leerTabla`, que siempre manda el kind), y **por eso se arregla ahora**:
+ * un `else` de una línea deja el significado viejo intacto en vez de dejar el arma cargada.
+ */
+const KINDS_SOLICITUD = ['sesionfotos', 'solicitudesinternas'];
 
 /**
  * Fila a partir del documento. Las columnas son proyecciones para filtrar; el documento
@@ -109,6 +126,9 @@ export default async function handler(req, res) {
       const limit = Math.min(parseInt(req.query.limit, 10) || 2000, 5000);
       let q = supabase.from('solicitudes').select('datos').eq('store', store);
       if (kind) q = q.eq('kind', kind);
+      // Sin `kind` se devuelven **sólo las solicitudes**, que es lo que ese llamado quiso decir
+      // siempre: un evento ⛔ no es una solicitud y ⛔ no tiene `items`. Ver `KINDS_SOLICITUD`.
+      else q = q.in('kind', KINDS_SOLICITUD);
       const { data, error } = await q.order('creado', { ascending: false }).limit(limit);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, list: (data || []).map((r) => r.datos) });

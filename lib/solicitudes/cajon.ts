@@ -35,12 +35,25 @@ const API = '/api/postventa?recurso=solicitudes'
  */
 export const MIGRACION_LISTA = true
 
+/**
+ * Los `kind` que viven en el cajón. Son **uno más que los del KV**: `sesion-evento` (la sesión de
+ * fotos como padre, 4-sep-2026) **nació en la tabla** y ⛔ nunca tuvo clave en el KV.
+ *
+ * 🔴 Por eso el tipo es propio y ⛔ no `KindLista`: la red de la mudanza —que se vuelve a prender
+ * poniendo `MIGRACION_LISTA` en false— le pediría al KV una clave que ⛔ no existe. Abajo se
+ * saltea explícitamente, con el mismo molde que ya tiene Stunned.
+ */
+export type KindCajon = KindLista | 'sesion-evento'
+
+/** ¿Este kind tiene respaldo en el KV? Sólo los dos que vienen de la mudanza. */
+const enElKv = (k: KindCajon): k is KindLista => k === 'sesionfotos' || k === 'solicitudesinternas'
+
 /** Lo mínimo que el cajón necesita de una solicitud para poder fusionar por id. */
 type ConId = { id: string }
 
 export type LecturaCajon<T> = { ok: true; dato: T[] } | { ok: false; motivo: string }
 
-async function leerTabla<T>(kind: KindLista, store: Linea): Promise<LecturaCajon<T>> {
+async function leerTabla<T>(kind: KindCajon, store: Linea): Promise<LecturaCajon<T>> {
   try {
     const r = await apiFetch(`${API}&store=${store}&kind=${kind}&nc=${Date.now()}`)
     const d = await r.json().catch(() => null)
@@ -63,7 +76,7 @@ async function leerTabla<T>(kind: KindLista, store: Linea): Promise<LecturaCajon
  * en vez de una lista vacía. Es lo que sostiene la disciplina de `cargado` río arriba —
  * guardar sobre una lista vacía borraría el historial.
  */
-export async function leerCajon<T extends ConId>(kind: KindLista, store: Linea): Promise<LecturaCajon<T>> {
+export async function leerCajon<T extends ConId>(kind: KindCajon, store: Linea): Promise<LecturaCajon<T>> {
   const tabla = await leerTabla<T>(kind, store)
   if (!tabla.ok) return tabla
   if (MIGRACION_LISTA) return tabla
@@ -72,6 +85,8 @@ export async function leerCajon<T extends ConId>(kind: KindLista, store: Linea):
   // mudanza no le aplica y pedirle `sesionfotos:stunned` al KV sería pedir una clave que no existe.
   const marcaKv = store === 'bdi' || store === 'zattia' ? store : null
   if (!marcaKv) return tabla
+  // ⚠️ Y el evento tampoco: `sesion-evento` nació en la tabla, así que el KV ⛔ no tiene su clave.
+  if (!enElKv(kind)) return tabla
 
   const kv = await leerLista<T>(kind, marcaKv)
   // El KV es la red, no la fuente: si no se pudo leer, seguimos con la tabla.
@@ -84,7 +99,7 @@ export async function leerCajon<T extends ConId>(kind: KindLista, store: Linea):
 }
 
 /** Guarda (upsert) una sola solicitud. */
-export async function guardarSolicitud<T extends ConId>(kind: KindLista, store: Linea, solicitud: T): Promise<{ ok: boolean; motivo?: string }> {
+export async function guardarSolicitud<T extends ConId>(kind: KindCajon, store: Linea, solicitud: T): Promise<{ ok: boolean; motivo?: string }> {
   try {
     const r = await apiFetch(API, {
       method: 'POST',
@@ -133,7 +148,7 @@ export function diffSolicitudes<T extends ConId>(previa: T[], nueva: T[]): { gua
 }
 
 /** Aplica un diff contra la tabla. Devuelve el primer error, si hubo. */
-export async function aplicarDiff<T extends ConId>(kind: KindLista, store: Linea, diff: { guardar: T[]; borrar: string[] }): Promise<{ ok: boolean; motivo?: string }> {
+export async function aplicarDiff<T extends ConId>(kind: KindCajon, store: Linea, diff: { guardar: T[]; borrar: string[] }): Promise<{ ok: boolean; motivo?: string }> {
   for (const s of diff.guardar) {
     const r = await guardarSolicitud(kind, store, s)
     if (!r.ok) return r

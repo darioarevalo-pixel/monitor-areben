@@ -258,9 +258,26 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Falta ejercerlo a mano en Zattia —ver la zona propuesta,
    corregir una, ver que la bolsa avisa y deja de avisar, **salir y volver a entrar** a que la
    corrección quedó— y abrir una de **BDI** para confirmar que ahí ⛔ no aparece nada.
-2. **El evento como padre**: `kind` nuevo, `lib/sesionfotos/evento.ts`, `procesarDraft` acepta
-   `eventoId`, cuarto puente en `puente.ts`, pantalla «Nueva sesión» reusando `FichaModelo`.
-   ⚠️ Editar la fecha del evento ⛔ no reescribe las hijas ya creadas: se corrige a mano, y se dice.
+2. 🏁 **HECHA el 4-sep-2026 — el evento como padre, con modelo, fecha, hora y duración.**
+   `kind` nuevo `sesion-evento` en la MISMA tabla, `lib/sesionfotos/evento.ts`, `procesarDraft`
+   acepta `eventoId`, bloque «Sesiones planificadas» arriba del historial y `FichaModelo` mudada a
+   su archivo, genérica y **reusada tal cual** por el evento.
+   ✅ 38 tests nuevos · suite entera verde (6.999) · `tsc` y `eslint` limpios · 2 mutantes muertos.
+   📌 **Verificado contra las dos bases, ⛔ no contra el `.sql`**: el único constraint de
+   `solicitudes` es `PRIMARY KEY (store, id)` — ⛔ ni un CHECK sobre `kind` ni sobre `estado` ⇒
+   ⛔ **sin migración**. Las 35 solicitudes existentes (BDI 11 · Zattia 18 + 6 internas) quedan
+   **sueltas, sin backfill**.
+   🔴 **El kind nuevo abrió un agujero que ningún test del núcleo veía**: el GET de
+   `api/_solicitudes.js` **siempre aceptó omitir el `kind`** y eso significaba «todo el historial»
+   ⇒ pasaba a devolver eventos mezclados con solicitudes, y un evento ⛔ no tiene `items`. Medido:
+   ⛔ ningún llamador lo omite hoy, **y por eso se arregló ahora** — sin `kind` filtra por los dos
+   de siempre. Con test y los dos mutantes muertos.
+   ⚠️ Editar el día del evento ⛔ no reescribe las hijas ya creadas: se corrige a mano, y la
+   pantalla lo dice. Y un evento con hijas ⛔ no se elimina de un click.
+   ⛔ **No siembra en la Agenda** (Fase 5) y ⛔ **no toca el motor de Administración**: el bloque lo
+   dibuja sólo Sesión de fotos. Las dos cosas, con test.
+   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos a caminar, en `docs/secciones/sesionfotos.md`
+   § La sesión como EVENTO.
 3. **El banco y los outfits ANTES de pedir**: `lib/sesionfotos/banco.ts`, reusando el `outfits.ts` de
    la fase 1 **con un adaptador, ⛔ no una copia**; y «Pedir al depósito / Pedir al local» que arma
    las hijas con el número de outfit ya copiado en `item.bolsa`.
