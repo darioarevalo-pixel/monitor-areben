@@ -13,6 +13,32 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 FERIA AL COSTO DE ZATTIA — 5-sep-2026 (dictado)
+
+> «quiero armar feria de zattia con las cosas que metimos en liquidación, pero el plan es vender al
+> costo, por ende sería solo presencial, con productos de invierno y que ya están en la liquidación
+> actual»
+
+El plan comercial (lote, mesas de precio, operativo) quedó en un documento aparte. Acá va **lo que
+es del monitor**, que es un hueco medido, no una idea:
+
+- 🔴 🔑 **NO HAY PRECIO QUE SEA SÓLO DEL LOCAL, y eso rompe «solo presencial».** El aplicador
+  escribe `tiendanube_promotional_price` (`api/_liquidacion.js:1116`) y ese precio **rige en las dos
+  puntas**: medido sobre las ventas desde el 25-ago, **134 u en Mi Local y 50 en Tienda Nube salieron
+  exactamente al precio de campaña**. Una feria cargada por la sección se publica online el mismo
+  día. ⇒ hoy la única salida es **cartel de mesa + descuento a mano en la caja** (ya se hace:
+  **603 de 658 ventas del local desde el 1-ago llevan descuento cargado a mano**, promedio $4.647).
+  ▶️ Si esto se va a repetir, lo que falta es un `tipo` de campaña **presencial**: decide precios,
+  imprime carteles y ⛔ **no escribe nada en GN**.
+- 🔴 **La campaña «Sale Invierno Agosto 2026» venció el 2-sep y sigue puesta**: 259 de 262 productos
+  con el promocional vivo en GN y los 262 ítems en `aplicado`. El aviso de vigencia vencida ⛔ no la
+  cerró sola.
+- 🔑 **GN ya devuelve el precio promocional por API** (`tiendanube_promotional_price` viene en
+  `GET /productos/obtener`) y **el ETL no lo baja** (`scripts/sync-diario.js:96` mapea una lista
+  fija) ⇒ el espejo muestra a los 262 productos **a precio de lista** y Análisis no puede ver qué
+  está liquidado. Es la corrección de un dato viejo: cuando se armó la sección, GN no lo exponía.
+- 🔑 **La etiqueta por prenda no sirve para una feria**: sale del precio de TN, o sea el de sale.
+
 ## 🆕 RENDIMIENTO DE META — 5-sep-2026 (dictado, y ya medido contra producción)
 
 Dicho por Bruno en una vuelta, sobre `/meta-ads`. **El filtro de fecha anda bien y no se toca** —lo
