@@ -94,8 +94,36 @@ medido**: los números salieron de ejercer prod, ⛔ no de leer el código.
   de las 07:50 siguen empujando igual.
 - **Orden**: una sola tanda, números y vista al mismo deploy.
 
-▶️ **El plan entero, con archivo:línea, está en `docs/secciones/meta-ads.md` cuando se cierre.**
-Este renglón se borra cuando esté hecho **y caminado por Bruno**.
+### 🏁 HECHO Y VERIFICADO EJERCIENDO PRODUCCIÓN (5-sep, mismo día)
+
+Commit `35127c8`, CI verde, **el relato entero con archivo:línea en `docs/secciones/meta-ads.md`**.
+Medido contra prod DESPUÉS de deployar, ⛔ no leyendo un verde de Actions:
+
+| | antes | después |
+|---|---|---|
+| pautas que dicen «pausar» (techo actual $6.668) | **8** | **5** |
+| …y con el techo medido ($7.558) | 8 | **2** |
+| hallazgos abiertos | **19** | **6** |
+| el contador del renglón, del badge y del mail | 19 | **4** |
+
+El asunto del mail de las 07:50 ya salió con el texto nuevo: *«Pauta · 4 para decidir, 4 para
+pausar»*. La ventana de juicio se estiró sola en 4 pautas (dos a 14 días, dos a 30).
+
+▶️ **Las dos manos de Bruno, y la primera es la que falta para llegar a 2:**
+1. 🔴 **Poner `usaRaspa` en ~25 en la ficha de BDI** (`/meta-ads/rentabilidad`). Hoy está en **100**
+   —el modelo asume que el 100% de los compradores usa la raspadita— y con eso descuenta 16,9%
+   cuando la caja descuenta **9,3%**. El techo pasa de **$6.668 a $7.558**. ⚠️ Después de guardarla
+   hay que **releer `FILA_BDI` en `tests/meta-ads-rentabilidad.test.ts`**: es una copia de producción
+   y va a afirmar algo falso **quedándose verde**.
+2. **Caminar la pantalla**: que la tabla esté arriba, que la fila se abra tocando cualquier lado, y
+   que el número de «Decidir» del menú coincida con el del mail de mañana.
+
+▶️ **Y lo que ⛔ no se pudo medir**: las fichas de **Zattia** y **Stunned**. `medir-economia-bdi.mjs`
+está clavado a la base de BDI y `ZATTIA_SUPABASE_KEY` ⛔ no tiene permiso sobre `ventas` — hace falta
+la service key de Zattia o entrar por `DATABASE_URL_ZATTIA` con `pg`. Stunned ⛔ no tiene ficha: sus
+2 pautas salen «Sin techo», que es correcto.
+
+Este renglón se borra cuando Bruno lo camine.
 
 ---
 
