@@ -13,6 +13,8 @@ import {
   agrupar as agruparJs,
   agruparHallazgos as agruparHallazgosJs,
   contarParaDecidir as contarParaDecidirJs,
+  aCerrarPorRevalidacion as aCerrarPorRevalidacionJs,
+  esParaDecidir as esParaDecidirJs,
   cortesDe as cortesDeJs,
   insistenciaDe as insistenciaDeJs,
   repartirHallazgos as repartirHallazgosJs,
@@ -379,6 +381,21 @@ export const repartirHallazgos = repartirHallazgosJs as (
  * mail de las 07:50**: si la pantalla y el mail contaran distinto, quien abre los dos no sabría a
  * cuál creerle.
  */
+/**
+ * Los `id` de los hallazgos abiertos que la corrida de hoy ya ⛔ no detecta. Ver el núcleo: los
+ * tres candados —regla `apagada`, simulacro, `--hasta` en el pasado— los pone el que la llama.
+ */
+export const aCerrarPorRevalidacion = aCerrarPorRevalidacionJs as (
+  abiertos: Array<{ id: number; objeto_id?: string; objetoId?: string }>,
+  detectados: Array<{ objeto_id?: string; objetoId?: string }>,
+) => number[]
+
+/**
+ * ¿Es algo que hay que DECIDIR, o es un dato? La leen el contador de la pantalla, el asunto del
+ * mail de las 07:50 y el badge del sidebar — **las tres, la misma**.
+ */
+export const esParaDecidir = esParaDecidirJs as (h: Hallazgo | null | undefined) => boolean
+
 export const contarParaDecidir = contarParaDecidirJs as (
   hallazgos: Hallazgo[],
 ) => { total: number; quemando: number }

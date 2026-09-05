@@ -53,6 +53,7 @@ import { Rendimiento } from '@/components/meta-ads/Rendimiento'
 import { Auditoria } from '@/components/meta-ads/Auditoria'
 import { Campanias } from '@/components/meta-ads/campanias/Campanias'
 import { Automatizaciones } from '@/components/meta-ads/reglas/Automatizaciones'
+import { Decidir } from '@/components/meta-ads/reglas/Decidir'
 import { Biblioteca } from '@/components/meta-ads/biblioteca/Biblioteca'
 import { CargarPiezas } from '@/components/meta-ads/piezas/CargarPiezas'
 import { Informes } from '@/components/meta-ads/informes/Informes'
@@ -85,6 +86,8 @@ const SIN_EJE = new Set(['rentabilidad', 'configurar'])
 const EJE_PROPIO = new Set([''])
 
 const VISTAS: Record<string, () => React.ReactElement> = {
+  // Lo que hay que decidir, sacado de Rendimiento el 5-sep-2026. Ver `reglas/Decidir.tsx`.
+  decidir: Decidir,
   // Las cuatro del menú de hoy.
   producir: Producir,
   analizar: Analizar,

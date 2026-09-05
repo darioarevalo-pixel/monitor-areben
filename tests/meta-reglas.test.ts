@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { indexar, type Decision } from '@/lib/meta-ads/decisiones'
 import {
+  aCerrarPorRevalidacion,
   agrupar,
   agruparHallazgos,
+  esParaDecidir,
   calibrar,
   CLAVES_PRESET,
   compararCtr,
@@ -1329,5 +1331,96 @@ describe('cortesDe — de dónde sale cada número, sin inventar ninguno', () =>
   it('⛔ una clave repetida entre `requiere` y `requiereUno` sale UNA vez', () => {
     const r = cortesDe(preset(['roas_objetivo'], ['roas_objetivo']), null, { roas_objetivo: 3 }, DEF, null)
     expect(r).toHaveLength(1)
+  })
+})
+
+/**
+ * **EL CICLO DE VIDA DEL HALLAZGO.**
+ *
+ * 🔴 Lo que fijan estos casos, medido el 5-sep-2026: había **19 hallazgos abiertos** y **13 tenían
+ * `fecha` anterior a la última corrida de su regla**. La regla ya había dejado de detectarlos y
+ * nadie los cerró — uno llevaba **diez días** contradiciendo a la tabla de la misma pantalla.
+ */
+describe('cerrar lo que la corrida de hoy ya no detecta', () => {
+  const abierto = (id: number, objeto: string) => ({ id, objeto_id: objeto })
+
+  it('cierra el que ya no aparece, y deja el que la regla sigue confirmando', () => {
+    const ids = aCerrarPorRevalidacion(
+      [abierto(1, 'a1'), abierto(2, 'a2'), abierto(3, 'a3')],
+      [{ objeto_id: 'a2' }],
+    )
+    expect(ids).toEqual([1, 3])
+  })
+
+  it('sin nada detectado hoy, se cierran todos: la regla corrió y no encontró nada', () => {
+    expect(aCerrarPorRevalidacion([abierto(1, 'a1')], [])).toEqual([1])
+  })
+
+  it('sin abiertos ⛔ no devuelve undefined ni null: una lista vacía', () => {
+    expect(aCerrarPorRevalidacion([], [{ objeto_id: 'a1' }])).toEqual([])
+    expect(aCerrarPorRevalidacion(null as never, null as never)).toEqual([])
+  })
+
+  it('🔴 un id de Meta que llega como NÚMERO ⇒ ⛔ no se cierra nada, ni siquiera lo que sí sobra', () => {
+    // `120251374921030478` parseado como número vuelve `...480`: dos dígitos de diferencia, el
+    // hallazgo vivo ⛔ no matchea y se cerraría. La precisión ya se perdió, así que ⛔ no se puede
+    // reparar — lo único correcto es no cerrar. Callar de más cuesta un renglón repetido; callar de
+    // menos apaga un aviso real en silencio.
+    const ids = aCerrarPorRevalidacion(
+      [{ id: 7, objeto_id: '120251374921030478' }, { id: 8, objeto_id: 'otro' }],
+      [{ objeto_id: 120251374921030478 as unknown as string }],
+    )
+    expect(ids).toEqual([])
+  })
+
+  it('un número CHICO sí se compara: no todo id numérico es un id de Meta', () => {
+    expect(aCerrarPorRevalidacion([{ id: 7, objeto_id: '42' }], [{ objeto_id: 42 as unknown as string }])).toEqual([])
+    expect(aCerrarPorRevalidacion([{ id: 7, objeto_id: '42' }], [{ objeto_id: 43 as unknown as string }])).toEqual([7])
+  })
+
+  it('acepta las dos formas del campo — la fila cruda y la de la vista', () => {
+    const ids = aCerrarPorRevalidacion([{ id: 9, objetoId: 'a1' } as never], [{ objetoId: 'a1' } as never])
+    expect(ids).toEqual([])
+  })
+})
+
+/**
+ * **Qué CUENTA como algo para decidir.** La misma función la leen el contador de la pantalla, el
+ * asunto del mail de las 07:50 y el badge del sidebar: tres criterios distintos serían tres números
+ * sobre lo mismo.
+ */
+describe('decisión contra dato', () => {
+  const h = (preset: string, sug: Hallazgo['sugerencia'] = null) =>
+    ({ preset, sugerencia: sug }) as unknown as Hallazgo
+
+  it('🔴 la atribución tardía y la fatiga son DATO: ⛔ no tienen una mano del otro lado', () => {
+    expect(esParaDecidir(h('atribucion-tardia'))).toBe(false)
+    expect(esParaDecidir(h('fatiga'))).toBe(false)
+  })
+
+  it('el costo alto, el freno y la escalada SÍ son decisiones', () => {
+    for (const p of ['costo-alto', 'freno-emergencia', 'gastos-hormiga', 'ganador-escalar', 'sin-avisos']) {
+      expect(esParaDecidir(h(p))).toBe(true)
+    }
+  })
+
+  it('🔑 un preset DESCONOCIDO cuenta: un aviso de más se ve, uno de menos ⛔ no se entera nadie', () => {
+    expect(esParaDecidir(h('preset-que-no-existe-todavia'))).toBe(true)
+  })
+
+  it('el contador ⛔ no suma los datos — es lo que lo hacía inservible con 19 abiertos', () => {
+    const c = contarParaDecidir([
+      h('costo-alto', { accion: 'estado', status: 'PAUSED' } as never),
+      h('atribucion-tardia', { accion: 'estado', status: 'ACTIVE' } as never),
+      h('fatiga'),
+      h('ganador-escalar', { accion: 'presupuesto' } as never),
+    ])
+    expect(c).toEqual({ total: 2, quemando: 1 })
+  })
+
+  it('TODOS los presets declaran su clase: uno nuevo ⛔ no puede entrar sin decidirlo', () => {
+    for (const k of CLAVES_PRESET) {
+      expect(['decision', 'dato']).toContain((PRESETS[k as ClavePreset] as { clase?: string }).clase)
+    }
   })
 })

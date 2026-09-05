@@ -1,0 +1,14 @@
+-- El motivo por el que un hallazgo dejó de estar pendiente.
+--
+-- 🔴 Por qué (5-sep-2026). Los hallazgos se abrían y **nunca se cerraban solos**: al medir la base
+-- había 19 abiertos, y 13 tenían `fecha` anterior a la última corrida de su regla — o sea que la
+-- regla ya había dejado de detectarlos y nadie los cerró. El más viejo llevaba **diez días** y
+-- contradecía a la tabla de la misma pantalla. Ver `aCerrarPorRevalidacion` en `reglas.core.js`.
+--
+-- 🔑 El estado `'caducado'` YA estaba previsto en el DDL original (`sql/migrate-meta-reglas.sql:83`)
+-- y ⛔ no hay CHECK que romper: lo único que faltaba era poder decir POR QUÉ. Sin el motivo, un
+-- hallazgo cerrado y uno ignorado a mano se ven igual, y la próxima sesión ⛔ no puede auditar si el
+-- cierre automático apagó algo real.
+--
+-- ⛔ El cierre ⛔ NO borra: la fila queda y `?recurso=hallazgos&estado=todos` la sigue trayendo.
+alter table meta_ads_hallazgo add column if not exists cierre_motivo text;

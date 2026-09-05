@@ -78,7 +78,7 @@ export function BandaDeHoy({ b, fecha, leidoA, actualizar, error }: {
 
   return (
     <SectionCard
-      title={`Cómo viene hoy · ${fecha || 'el día en curso'}`}
+      title={`Hoy · ${fecha || 'el día en curso'}`}
       subtitle="El día EN CURSO, que es lo único que la foto no puede tener. Sale de Meta y se compara contra ayer a esta misma hora."
       actions={
         <div style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>

@@ -15,7 +15,7 @@ import {
   CONV_APRENDIZAJE, DIAS_SERVIBLES, aprendizajeDe, armarZona, avisosPorCelda,
   celdasDeLaFoto, concentracionDe, desdeDe, firmaDePieza, desgasteDe, elegirCierre, elegirVentana, enVentana,
   diasDeLaFoto, fusionarVivo, ordenarCeldas, ultimoDiaCerrado, VENTANAS_ZONA, ventanaZona,
-  veredictoDeCelda,
+  veredictoDeCelda, ESTADO_DE_CLASE, MANO_DE_ACCION, TONO_DE_CLASE,
 } from '@/lib/meta-ads/rendimiento'
 import type { Celda, CeldaViva } from '@/lib/meta-ads/rendimiento'
 import { sumarDias } from '@/lib/meta-ads/snapshot'
@@ -188,7 +188,8 @@ describe('el veredicto de una celda', () => {
   it('⛔ sin techo cargado no juzga ni inventa un default', () => {
     const v = veredictoDeCelda(base({ spend: 2000, compras: 1 }), { techo: 0 })
     expect(v.clase).toBe('sin-techo')
-    expect(v.accion).toBe('mirar')
+    // La MANO, en infinitivo: el pill dibuja esto y ⛔ no el estado. Ver `MANO_DE_ACCION`.
+    expect(v.accion).toBe('cargar-techo')
   })
 
   it('prendida y sin avisos gana a todo: es plata que creés que trabaja', () => {
@@ -870,7 +871,9 @@ describe('la ventana elegida tiene que MOVER los números', () => {
     expect(r.totales.revenue).toBe(16000)
     // 8000 / 3 = 2.666,67 — el costo por compra SEGÚN META, que es la única fuente que tiene hoy.
     expect(Math.round(r.totales.costoMeta)).toBe(2667)
-    expect(Math.round(r.totales.pctTecho!)).toBe(40)
+    // 🔑 `pctTechoMeta`, ⛔ no `pctTecho`: el nombre dice con qué compras se calculó.
+    expect(Math.round(r.totales.pctTechoMeta!)).toBe(40)
+    expect(r.totales).not.toHaveProperty('pctTecho')
     expect(r.totales.roas).toBe(2)
   })
 
@@ -886,11 +889,11 @@ describe('la ventana elegida tiene que MOVER los números', () => {
   it('sin compras el costo vivo es 0 y el % del techo es null: «no se puede juzgar» ⛔ no es «va bien»', () => {
     const r = fusionarVivo([], [celdaViva({ compras: 0, revenue: 0 })], { linea: 'bdi', techo: 6668 })
     expect(r.totales.compras).toBe(0)
-    expect(r.totales.pctTecho).toBeNull()
+    expect(r.totales.pctTechoMeta).toBeNull()
   })
 
   it('sin techo cargado tampoco hay % — ⛔ nunca 0', () => {
-    expect(fusionarVivo([], [celdaViva()], { linea: 'bdi', techo: 0 }).totales.pctTecho).toBeNull()
+    expect(fusionarVivo([], [celdaViva()], { linea: 'bdi', techo: 0 }).totales.pctTechoMeta).toBeNull()
   })
 
   it('🔴 «Hoy», «Hoy y ayer» y «7 días» le piden a la foto LO MISMO — por eso hay que decirlo', () => {
@@ -915,5 +918,221 @@ describe('la ventana elegida tiene que MOVER los números', () => {
       expect(DIAS_SERVIBLES).toContain(diasDeLaFoto(v, null))
     }
     expect(DIAS_SERVIBLES).toContain(diasDeLaFoto(null, null))
+  })
+})
+
+/**
+ * **EL PISO DE EVIDENCIA — un costo de dos compras ⛔ no manda a apagar.**
+ *
+ * 🔴 El defecto que estos casos fijan, medido contra producción el 5-sep-2026: de 11 pautas de BDI
+ * que entregaban, **8 salían `pausar`**, y cuatro de las ocho se apoyaban en **2 o 3 compras**. El
+ * total de la cuenta estaba en el 96% del techo mientras la pantalla mandaba a apagar el 73% de lo
+ * que gastaba. Bruno: *«parece que están todas quemando plata, raro raro»*.
+ *
+ * 🔑 **El caso que más importa acá es el INVERSO**, y por eso va primero: *una pauta que está mal
+ * de verdad SIGUE mandando a apagar*. Sin él, «no propone nada nunca» pasaría por arreglo — que es
+ * el modo de falla opuesto y peor, porque una pantalla que no dice nada se apaga sola.
+ */
+describe('el piso de evidencia — el exceso tiene que ser más grande que el ruido de la muestra', () => {
+  /** Una celda de 7 días con TOTALES exactos: el gasto se reparte y las compras caen el primer día. */
+  const cel = (spend: number, compras: number, over: Record<string, unknown> = {}) =>
+    celdasDeLaFoto(serie(7, '2026-08-18', (i) => ({ spend: spend / 7, compras: i === 0 ? compras : 0, ...over })))[0]
+
+  it('🔑 EL INVERSO 1: un exceso GRANDE con poquitas compras SIGUE mandando a apagar', () => {
+    // 2 compras ⇒ ±71% ⇒ el corte está en 171%. Esto está al 200%.
+    const v = veredictoDeCelda(cel(28000, 2), { techo: 7000 })
+    expect(v.clase).toBe('alto')
+    expect(v.accion).toBe('pausar')
+  })
+
+  it('🔑 EL INVERSO 2: un exceso CHICO con muchas compras también manda a apagar — la banda se achica con n', () => {
+    // 60 compras ⇒ ±13% ⇒ el corte está en 113%. Esto está al 120%.
+    const v = veredictoDeCelda(cel(504000, 60), { techo: 7000 })
+    expect(v.clase).toBe('alto')
+    expect(v.accion).toBe('pausar')
+  })
+
+  it('🔴 arriba del techo pero DENTRO del ruido ⇒ `sin-prueba`: ⛔ ni «pausar» ni «rinde»', () => {
+    // 13 compras ⇒ ±28% ⇒ el corte está en 128%. Esto está al 112%.
+    const v = veredictoDeCelda(cel(101920, 13), { techo: 7000 })
+    expect(v.clase).toBe('sin-prueba')
+    // ⛔ `accion: null` es la decisión: un pill en cada fila gris sería un muro que no señala nada.
+    expect(v.accion).toBeNull()
+    expect(v.porque[0]).toContain('⛔ no se distingue de 100%')
+  })
+
+  it('el gris ⛔ NO es mudo: dice el excedente y cuántas compras harían falta', () => {
+    const v = veredictoDeCelda(cel(101920, 13), { techo: 7000 })
+    // 101.920 − 13 × 7.000 = 10.920 pagados de más.
+    expect(v.excedente).toBe(10920)
+    expect(v.porque.join(' ')).toContain('10920 de más')
+    // Al 112%, (100/12)² ≈ 70 compras. Y como pasa de 50, dice que ⛔ no se va a poder probar.
+    expect(v.porque.join(' ')).toContain('la decisión es de presupuesto')
+  })
+
+  it('con exceso grande el «cuántas faltan» es un número alcanzable y ⛔ no la frase de rendición', () => {
+    // 3 compras al 142% ⇒ dentro del ruido (±58% ⇒ corte 158%), pero (100/42)² ≈ 6 compras.
+    const v = veredictoDeCelda(cel(29820, 3), { techo: 7000 })
+    expect(v.clase).toBe('sin-prueba')
+    expect(v.porque.join(' ')).toContain('~6 compras')
+    expect(v.porque.join(' ')).not.toContain('la decisión es de presupuesto')
+  })
+
+  it('🔴 gastó más que un techo y compró CERO sigue mandando a apagar SIN banda: no hay tasa que tenga ruido', () => {
+    const v = veredictoDeCelda(cel(7100, 0), { techo: 7000 })
+    expect(v.clase).toBe('alto')
+    expect(v.accion).toBe('pausar')
+    expect(v.ruido).toBeNull()
+  })
+
+  it('🔴 el guard ⛔ NO toca escalar: pausar es caro de revertir, escalar cuesta 20% una semana', () => {
+    // 56% del techo con 13 compras (±28%): un guard simétrico exigiría que 56+28 < 75 y la sacaría.
+    const c = cel(51000, 13, { diario_crudo: 750000 })
+    const v = veredictoDeCelda(c, { techo: 7000 })
+    expect(v.clase).toBe('escalar')
+    expect(v.accion).toBe('escalar')
+  })
+
+  it('la banda se REPORTA en todas las filas, ⛔ no sólo en las grises', () => {
+    // Una que rinde clarito: igual viaja el ruido, para que 90% ±71% ⛔ no se lea como una afirmación.
+    const v = veredictoDeCelda(cel(12600, 2), { techo: 7000 })
+    expect(v.clase).toBe('ok')
+    expect(Math.round(v.ruido! * 100)).toBe(71)
+    expect(Math.round(v.umbralPct!)).toBe(171)
+    expect(v.n).toBe(2)
+  })
+
+  it('sin techo ⛔ no hay banda ni excedente inventados', () => {
+    const v = veredictoDeCelda(cel(2000, 1), { techo: 0 })
+    expect(v.ruido).toBeNull()
+    expect(v.umbralPct).toBeNull()
+    expect(v.excedente).toBeNull()
+  })
+})
+
+/**
+ * **LA VENTANA DE JUICIO SE ESTIRA cuando la muestra no alcanza.**
+ *
+ * 🔴 Medido en prod el 5-sep-2026: `TEST BROAD BDI` decía «124%, pausar» sobre 6 compras y en 30
+ * días compra al 56%; `TEST IP AZUL` decía «144%, pausar» sobre 3 y en 30 días está en 92%. La
+ * pantalla mandaba a apagar dos pautas que rinden.
+ */
+describe('la ventana de juicio elástica', () => {
+  /**
+   * Treinta días: los primeros 23 compran a $2.000 y los últimos 7 a $5.000.
+   * Con techo $4.500 la ventana de 7 da 111% sobre 14 compras (±27% ⇒ corte en 127%): ⛔ no alcanza.
+   * La de 14 días da 63% sobre 49 compras, y ahí sí se puede decir algo.
+   */
+  const filasMixtas = () => [
+    ...serie(30, '2026-08-01', (i) => ({ spend: 10000, compras: i < 23 ? 5 : 2 })),
+    ...serie(30, '2026-08-01', (i) => ({ nivel: 'campania', objeto_id: 'c1', spend: 10000, compras: i < 23 ? 5 : 2 })),
+  ]
+
+  it('🔑 lo que en 7 días no se puede probar, se juzga con más días — y la fila dice con cuántos', () => {
+    const z = armarZona({ filas: filasMixtas(), techo: 4500, hasta: '2026-08-30', ventana: 7 })
+    const c = z.celdas.find((x) => x.id === 'a1')!
+    expect(c.veredicto.ventanaJuicio).toBe(14)
+    expect(c.veredicto.clase).toBe('ok')
+    // ⛔ Y las MÉTRICAS de la fila siguen siendo las de la ventana que se está mirando: son 7 días
+    // de $10.000. Lo que se estiró es el JUICIO, ⛔ no lo que dicen las columnas.
+    expect(c.spend).toBe(70000)
+  })
+
+  it('⛔ el estiramiento NO puede proponer escalar: treinta días buenos no habilitan a subirle plata', () => {
+    const filas = [
+      ...serie(30, '2026-08-01', (i) => ({ spend: 10000, compras: i < 23 ? 10 : 3, diario_crudo: 1010000 })),
+      ...serie(30, '2026-08-01', (i) => ({ nivel: 'campania', objeto_id: 'c1', spend: 10000, compras: i < 23 ? 10 : 3 })),
+    ]
+    const z = armarZona({ filas, techo: 1050, hasta: '2026-08-30', ventana: 7 })
+    const c = z.celdas.find((x) => x.id === 'a1')!
+    expect(c.veredicto.clase).not.toBe('escalar')
+    expect(c.veredicto.accion).not.toBe('escalar')
+  })
+
+  it('una pauta que rinde en la ventana ⛔ no se estira: se para en el primer escalón que decide', () => {
+    const filas = [
+      ...serie(30, '2026-08-01', () => ({ spend: 1000, compras: 10 })),
+      ...serie(30, '2026-08-01', () => ({ nivel: 'campania', objeto_id: 'c1', spend: 1000, compras: 10 })),
+    ]
+    const z = armarZona({ filas, techo: 5000, hasta: '2026-08-30', ventana: 7 })
+    expect(z.celdas.find((x) => x.id === 'a1')!.veredicto.ventanaJuicio).toBe(7)
+  })
+})
+
+/**
+ * **El par ESTADO / MANO.** Ata los tres mapas para que una clase nueva ⛔ no pueda entrar sin sus
+ * tres etiquetas — que es exactamente cómo entró `sin-prueba` sin tocar una línea de pantalla.
+ */
+describe('el catálogo de estados y manos', () => {
+  const cel = (spend: number, compras: number, over: Record<string, unknown> = {}) =>
+    celdasDeLaFoto(serie(7, '2026-08-18', (i) => ({ spend: spend / 7, compras: i === 0 ? compras : 0, ...over })))[0]
+
+  it('toda clase que el núcleo puede devolver tiene estado y tono', () => {
+    const casos: Array<[string, Parameters<typeof veredictoDeCelda>[0], number]> = [
+      ['apagada', cel(1000, 1, { estado: 'PAUSED' }), 1000],
+      ['rota', cel(5000, 0, { estado_real: 'sin-avisos' }), 1000],
+      ['quieta', cel(0, 0), 1000],
+      ['sin-techo', cel(2000, 1), 0],
+      ['midiendo', cel(100, 0), 100000],
+      ['sin-prueba', cel(101920, 13), 7000],
+      ['alto', cel(28000, 2), 7000],
+      ['ok', cel(12600, 2), 7000],
+    ]
+    for (const [esperada, celda, techo] of casos) {
+      const v = veredictoDeCelda(celda, { techo })
+      expect(v.clase).toBe(esperada)
+      expect(ESTADO_DE_CLASE[v.clase]).toBeTruthy()
+      expect(TONO_DE_CLASE[v.clase]).toBeTruthy()
+      // La mano, cuando la hay, siempre está en el catálogo y siempre es un infinitivo.
+      if (v.accion) expect(MANO_DE_ACCION[v.accion]).toBeTruthy()
+    }
+  })
+
+  it('🔑 las manos están en INFINITIVO — es lo que pide VOCABULARIO §3 para un título de acción', () => {
+    for (const mano of Object.values(MANO_DE_ACCION)) {
+      expect(mano).toMatch(/^(Pausar|Escalar|Revisar|Cargar el techo)$/)
+    }
+  })
+
+  it('los estados son SUSTANTIVOS cortos, ⛔ no frases: van en un badge al lado del nombre', () => {
+    for (const estado of Object.values(ESTADO_DE_CLASE)) {
+      expect(estado.split(' ').length).toBeLessThanOrEqual(3)
+    }
+  })
+})
+
+/** El orden es lo que le queda por decir a una fila que ⛔ no propone nada. */
+describe('el orden: primero lo que pide una mano, y el gris por lo que pagó de más', () => {
+  const celda = (id: string, spend: number, clase: string, excedente: number | null) =>
+    ({ id, spend, veredicto: { clase, excedente } }) as unknown as Celda
+
+  it('🔴 el gris se ordena por EXCEDENTE y ⛔ no por gasto — por gasto sale al revés', () => {
+    // El caso medido: TEST FUNDAS gastó menos y pagó MÁS de más que TEST BROAD BDI.
+    const r = ordenarCeldas([
+      celda('broad', 49770, 'sin-prueba', 5634),
+      celda('fundas', 32146, 'sin-prueba', 9927),
+    ])
+    expect(r.map((c) => c.id)).toEqual(['fundas', 'broad'])
+  })
+
+  it('lo que pide una mano va arriba de lo que no, aunque gaste mucho menos', () => {
+    const r = ordenarCeldas([
+      celda('gorda', 900000, 'sin-prueba', 1000),
+      celda('cara', 10000, 'alto', 500),
+    ])
+    expect(r[0].id).toBe('cara')
+  })
+
+  it('lo apagado sigue al fondo, aunque haya pagado muchísimo de más', () => {
+    const r = ordenarCeldas([
+      celda('apagada', 500000, 'apagada', 400000),
+      celda('viva', 1000, 'ok', -100),
+    ])
+    expect(r[1].id).toBe('apagada')
+  })
+
+  it('sin excedente en ninguna de las dos, desempata el gasto', () => {
+    const r = ordenarCeldas([celda('chica', 10, 'ok', null), celda('grande', 100, 'ok', null)])
+    expect(r.map((c) => c.id)).toEqual(['grande', 'chica'])
   })
 })

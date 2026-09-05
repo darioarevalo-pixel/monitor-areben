@@ -13,6 +13,8 @@
  * se apoya en el scroll de la página.
  */
 
+import { color } from './tokens'
+
 export function TableWrap({ children, maxHeight, style }: { children: React.ReactNode; maxHeight?: number | string; style?: React.CSSProperties }) {
   return (
     <div
@@ -44,9 +46,27 @@ export function TFoot({ children }: { children: React.ReactNode }) {
   return <tfoot>{children}</tfoot>
 }
 
-export function Tr({ children, onClick, style }: { children: React.ReactNode; onClick?: () => void; style?: React.CSSProperties }) {
+/**
+ * Una fila. Con `onClick` se vuelve clickeable entera; con `activa` además se pinta y **lo dice**.
+ *
+ * 🔑 `activa` existe para que el fondo y el `aria-expanded` viajen JUNTOS. Las tablas que ya abrían
+ * un detalle lo resolvían con un `style` a mano y quedaban sin ARIA: el que usa lector de pantalla
+ * ⛔ no se enteraba de que la fila despliega algo. Un prop, las dos cosas, una sola vez.
+ */
+export function Tr({ children, onClick, activa, style }: {
+  children: React.ReactNode
+  onClick?: () => void
+  /** La fila tiene un detalle desplegado debajo. `undefined` = la fila no despliega nada. */
+  activa?: boolean
+  style?: React.CSSProperties
+}) {
   return (
-    <tr onClick={onClick} className={onClick ? 'mo-tr--click' : undefined} style={style}>
+    <tr
+      onClick={onClick}
+      className={onClick ? 'mo-tr--click' : undefined}
+      aria-expanded={activa === undefined ? undefined : activa}
+      style={activa ? { background: color.brandBg, ...style } : style}
+    >
       {children}
     </tr>
   )

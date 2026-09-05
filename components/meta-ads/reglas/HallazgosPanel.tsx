@@ -130,7 +130,7 @@ function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void
     >
       <div style={{ minWidth: 0, flex: '1 1 320px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: space[1.5], flexWrap: 'wrap' }}>
-          <StatusPill tone="warning" label="Detectado" />
+          <StatusPill tone="warning" label="Sin decidir" />
           <span style={{ fontSize: font.base, fontWeight: weight.semibold }}>{h.objetoNombre || h.objetoId}</span>
           <span style={{ fontSize: font.sm, color: color.mut2 }}>{ETIQUETA_LINEA[h.linea]}</span>
           <Insistencia h={h} />
@@ -144,7 +144,7 @@ function FilaHallazgo({ h, quitar }: { h: Hallazgo; quitar: (id: number) => void
           </Button>
         )}
         <Button variant="ghost" size="sm" disabled={ocupado} onClick={() => setDecidiendo(true)}>
-          No hay que hacer nada
+          Dejarlo así
         </Button>
       </div>
 

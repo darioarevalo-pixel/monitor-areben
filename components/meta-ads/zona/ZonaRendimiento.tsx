@@ -36,7 +36,7 @@
  * sin correr, y corrieron sin encontrar nada— porque **sólo la última significa «está todo bien»**.
  */
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { ModalesDeAccion, useAccionMeta } from '@/components/meta-ads/acciones'
 import { useMeta } from '@/components/meta-ads/ContextoMeta'
@@ -46,8 +46,6 @@ import { TiraDeDias } from '@/components/meta-ads/zona/TiraDeDias'
 import { ParteDelDia } from '@/components/meta-ads/parte/ParteDelDia'
 import { useParte } from '@/components/meta-ads/parte/useParte'
 import { PlanesEnCurso } from '@/components/meta-ads/planes/PlanesEnCurso'
-import { HallazgosPanel } from '@/components/meta-ads/reglas/HallazgosPanel'
-import { PodaPendiente, usePoda } from '@/components/meta-ads/reglas/PodaPendiente'
 import { useReglas } from '@/components/meta-ads/reglas/useReglas'
 import { TablaCeldas } from '@/components/meta-ads/zona/TablaCeldas'
 import { useZona } from '@/components/meta-ads/zona/useZona'
@@ -55,7 +53,8 @@ import { entero, plata } from '@/lib/meta-ads/formato'
 import { diasDeLaFoto, fusionarVivo, VENTANAS_ZONA, ventanaZona, type Celda, type CeldaViva, type RespuestaZona, type TotalesVivos, type VentanaZona } from '@/lib/meta-ads/rendimiento'
 import { sumarVivas } from '@/lib/meta-ads/parte'
 import { cuentaDelParte, motivoSinVivo, type SinVivo } from '@/lib/meta-ads/cuentas'
-import { contarParaDecidir, repartirHallazgos, silencioDeReglas, type Regla } from '@/lib/meta-ads/reglas'
+import { contarParaDecidir, repartirHallazgos } from '@/lib/meta-ads/reglas'
+import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import type { Acciones } from '@/components/meta-ads/acciones/tipos'
 import type { LineaPauta } from '@/lib/meta-ads/tipos'
 import {
@@ -96,8 +95,8 @@ export function ZonaRendimiento() {
   // criterio que `laLinea` de arriba: con una sola se elige sola, con varias se pide.
   const delParte = cuentaDelParte(cuentas, laLinea, cuenta)
   const parte = useParte(delParte.cuenta ? delParte.cuenta.id : null, laLinea || undefined)
-  const lineasDeReglas = useMemo(() => (laLinea ? [laLinea] : []), [laLinea])
-  const poda = usePoda(lineasDeReglas)
+  // ⛔ La poda ya ⛔ NO se pide acá: se mudó a `/meta-ads/decidir` con el resto de los pendientes.
+  // Rendimiento se ahorra una llamada por línea al entrar.
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
@@ -165,7 +164,6 @@ export function ZonaRendimiento() {
               sinVivo={motivoSinVivo(parte.estado.fase, delParte.candidatas, parte.estado.fase === 'error' ? parte.estado.motivo : null)}
               lineaViva={laLinea}
               reglas={r}
-              poda={poda}
             />
           )}
           {/* Los cinco modales de escritura, dibujados una vez para toda la pantalla. */}
@@ -185,38 +183,6 @@ export function ZonaRendimiento() {
 }
 
 /**
- * El reloj entra acá y no adentro del render: `react-hooks/purity` prohíbe `Date.now()` en el
- * cuerpo de un componente, y con razón. El núcleo lo recibe como parámetro para poder probarlo.
- */
-function leerSilencio(reglas: Regla[] | null) {
-  return silencioDeReglas(reglas, Date.now())
-}
-
-/**
- * El cartel de cuando no hay nada que decidir. **Dice por qué está vacío, y el porqué lo mide.**
- *
- * 🔑 Sólo una de las tres causas es buena noticia, y la que manda a cargar reglas aparece **sólo si
- * de verdad no hay ninguna prendida**. La decisión vive en `silencioDeReglas()` —con `ahora` como
- * parámetro, para poder probarla— y acá queda nada más que a dónde lleva el link.
- */
-function Silencio({ reglas, cargando }: { reglas: Regla[] | null; cargando: boolean }) {
-  const s = leerSilencio(reglas)
-  return (
-    <div style={{ fontSize: font.base, color: color.mut, lineHeight: 1.5 }}>
-      {cargando ? 'Buscando las automatizaciones…' : s.texto}
-      {s.clase === 'sin-reglas' && (
-        <>
-          {' '}
-          <Link href="/meta-ads/automatizaciones" style={{ color: color.brandSolid, fontWeight: weight.semibold }}>
-            Prenderlas →
-          </Link>
-        </>
-      )}
-    </div>
-  )
-}
-
-/**
  * El selector de ventana.
  *
  * 🔑 **Las dos primeras llevan un punto: salen de Meta EN VIVO, las otras de la foto.** No es
@@ -231,7 +197,11 @@ function BarraVentana({ ventana, setVentana, anclado, volverALaVentana }: {
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-      <span style={{ fontSize: font.sm, color: color.mut }}>Mirando:</span>
+      {/* 🔑 **El infinitivo va UNA vez, en el rótulo, y cubre los seis botones.** `VOCABULARIO.md`
+          §3 lo pide para los títulos de acción, y Bruno lo nombró: *«las celdas de hoy y ayer, la
+          terminología que no es infinitiva no me convence»*. ⛔ Seis «Ver …» apilados repiten el
+          mismo verbo seis veces y dejan de distinguir lo único que cambia, que es el período. */}
+      <span style={{ fontSize: font.sm, color: color.mut }}>Mirar:</span>
       {VENTANAS_ZONA.map((x) => (
         // ⛔ Con un día anclado NINGUNO va en `solid`: la ventana no es la que dice el botón, y
         // dejarlo marcado sería que la barra afirme una cosa y la tabla muestre otra.
@@ -244,7 +214,9 @@ function BarraVentana({ ventana, setVentana, anclado, volverALaVentana }: {
           <span style={{ fontSize: font.sm, color: color.brandSolid, fontWeight: weight.semibold }}>
             — anclado al {anclado}
           </span>
-          <Button size="sm" variant="ghost" onClick={volverALaVentana}>Volver a la ventana</Button>
+          {/* El MISMO gesto que el ✕ de la tira, con el mismo rótulo: escrito de dos maneras en la
+              misma pantalla se lee como dos cosas distintas. */}
+          <Button size="sm" variant="ghost" onClick={volverALaVentana}>Ver el período entero</Button>
         </>
       ) : (
         <span style={{ fontSize: font.xs, color: color.mut2 }}>
@@ -277,7 +249,13 @@ function CausaDelSinVivo({ s }: { s: SinVivo | null }) {
   return <>Esta marca no tiene ninguna cuenta publicitaria con campañas asignadas, así que no hay día en curso que pedir.</>
 }
 
-function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVivo, lineaViva, reglas, poda }: {
+/**
+ * 🔑 **Se exporta para poder testear EL ORDEN**, igual que `FilaDeKpis` se exportó para poder
+ * testear qué objeto lee cada tarjeta. El orden vertical de esta pantalla es una decisión de
+ * producto —Bruno la reportó dos veces— y hasta el 5-sep-2026 **nada lo miraba**: la próxima tanda
+ * podía mover la tabla tres bloques hacia abajo sin que se pusiera rojo nada.
+ */
+export function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVivo, lineaViva, reglas }: {
   d: RespuestaZona
   /** `null` con un día anclado: ahí la ventana la manda la tira, no la barra. */
   ventana: VentanaZona | null
@@ -290,7 +268,6 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVi
   sinVivo: SinVivo | null
   lineaViva: LineaPauta
   reglas: ReturnType<typeof useReglas>
-  poda: ReturnType<typeof usePoda>
 }) {
   if (!d.zona) {
     return <Notice tone="warning">{d.motivo || 'La foto no tiene ningún día cerrado todavía.'}</Notice>
@@ -327,63 +304,31 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVi
         </Notice>
       )}
 
-      <Cabecera d={d} />
+      {/* Lo único de la cabecera vieja que ⛔ no puede bajar: invalida la columna `% techo`. */}
+      <AlarmaDeFicha d={d} />
 
       <FilaDeKpis z={z} tv={tv} techo={d.techo} ventana={enVivo ? ventana : null} />
 
-      {/* Va entre los KPIs y la tabla: es el puente entre «cómo viene la ventana» y «qué pasó ese
-          día». Sale de `z.caja`, que ya viaja: ⛔ cero llamadas. */}
+      {/* Es un control de período, como la barra de arriba: elegir un día. Queda pegado a los KPIs
+          y arriba de la tabla, que es lo que ancla. Sale de `z.caja`, que ya viaja: ⛔ cero llamadas. */}
       <TiraDeDias caja={z.caja} techo={d.techo || 0} anclado={anclado} onElegir={onElegir} />
 
-      {/* 🔴 **Arriba de la tabla y ⛔ no al final de la página.** Estaba después de la banda, los
-          planes, los KPIs, la tira, la tabla ENTERA y el oráculo — y medido el 30-ago-2026 tenía 21
-          hallazgos, los 21 sin accionar en cuatro días. Lo que baja acá es lo que ⛔ no tiene fila;
-          el resto está marcado abajo, en la suya. */}
-      <SectionCard
-        title="Qué hay que decidir"
-        subtitle="Lo que detectaron las automatizaciones. Sale de la base, así que se ve aunque Meta no conteste."
-      >
-        {reglas.hallazgos.length === 0 && poda.resumenes.length === 0 ? (
-          // 🔴 Se dice que está vacío Y POR QUÉ, y el porqué **se pregunta**: hasta el 26-ago-2026
-          // esta frase afirmaba «no hay reglas cargadas» con el texto clavado, y siguió diciéndolo
-          // la tarde en que se prendieron las once. Un cartel que manda a cargar reglas al que ya
-          // las cargó es el que hace que se le deje de creer a la pantalla. Ver `silencioDeReglas`.
-          <Silencio reglas={reglas.estado.fase === 'ok' ? reglas.estado.data.reglas : null} cargando={reglas.estado.fase === 'cargando'} />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
-            {/* 🔑 El mismo criterio que el asunto del mail de las 07:50 («4 cosas para decidir, 1
-                quemando plata»): si la pantalla y el mail contaran distinto, quien abre los dos ⛔ no
-                sabría a cuál creerle. */}
-            {cuenta.total > 0 && (
-              <div style={{ fontSize: font.base, fontWeight: weight.semibold }}>
-                {cuenta.total} {cuenta.total === 1 ? 'cosa' : 'cosas'} para decidir
-                {cuenta.quemando > 0 && (
-                  <span style={{ color: color.dangerInk }}> · {cuenta.quemando} quemando plata</span>
-                )}
-              </div>
-            )}
-            <HallazgosPanel hallazgos={reparto.sueltos} quitar={reglas.quitar} />
-            {/* Lo que sí tiene fila ⛔ no se repite acá: se dice DÓNDE está. Repetirlo sería volver a
-                partir la mano en dos, que es el defecto que esto vino a arreglar. */}
-            {reparto.porCelda.size > 0 && (
-              <div style={{ fontSize: font.sm, color: color.mut }}>
-                {reparto.porCelda.size === 1
-                  ? 'Y 1 está marcado en su celda, en la tabla de acá abajo — se acciona ahí.'
-                  : `Y ${reparto.porCelda.size} están marcados en sus celdas, en la tabla de acá abajo — se accionan ahí.`}
-              </div>
-            )}
-            <PodaPendiente resumenes={poda.resumenes} recargar={poda.recargar} />
-          </div>
-        )}
-      </SectionCard>
-
+      {/* 🔴🔑 **LA TABLA VA ARRIBA.** Bruno: *«primordialmente en la vista rendimiento tiene que
+          estar los rendimientos más arriba. Está muy muy rara la vista de esta sección, muy larga,
+          comprimida toda hacia la de veredicto»*. Estaba sexta, con ≈1.080 px de contexto encima:
+          la banda de hoy (4 tarjetas y dos párrafos), los planes, la cabecera, los KPIs, la tira y
+          un bloque con 19 pendientes. Ahora lo primero que se ve es el rendimiento de las pautas.
+          ⛔ «celda» ⛔ no se dice más en pantalla: es jerga que ⛔ no existe ni en Meta ni en el
+          negocio, y él escribió «una pauta». Los SÍMBOLOS (`TablaCeldas`, `AvisosDeCelda`) ⛔ no se
+          tocan — VOCABULARIO §1: se renombra lo que se lee, ⛔ no lo que se importa. */}
       <SectionCard
         title={anclado
-          ? `Las celdas del ${anclado} (${celdas.length})`
+          ? `Las pautas · el ${anclado} (${celdas.length})`
           : enVivo
-            ? `Las celdas ${ventana!.label.toLowerCase()} (${celdas.length})`
-            : `Las celdas (${celdas.length})`}
-        subtitle="Una fila por conjunto, ordenadas por gasto. El «por qué» de cada veredicto son los números que lo sostienen, no una frase. Abrí una para ver qué creativo hay adentro, su embudo y su día a día."
+            ? `Las pautas · ${ventana!.label.toLowerCase()} (${celdas.length})`
+            : `Las pautas (${celdas.length})`}
+        subtitle="Una fila por pauta, de la que más gasta a la que menos. Tocá cualquier lado de la fila para abrirla."
+        actions={<RenglonDecidir cuenta={cuenta} linea={lineaViva} />}
       >
         {/* 🔴 El aviso más importante de la pantalla en modo vivo. Medio día de gasto contra medio
             día de compras da un costo por compra que no existe: a las 10 de la mañana casi toda
@@ -440,9 +385,13 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVi
             // La cuenta sale de la FOTO y ⛔ no del selector de arriba: la que vale es la de los
             // datos que se están mirando, no la que quedó elegida en el eje.
             cuenta={z.celdas[0]?.cuentaId ?? null}
+            dias={dias}
           />
         )}
       </SectionCard>
+
+      {/* Abajo de la tabla: es de dónde salen los datos, ⛔ no una decisión. */}
+      <Cabecera d={d} />
 
       <Oraculo d={d} dias={dias} />
     </>
@@ -458,14 +407,83 @@ function Contenido({ d, ventana, dias, acciones, anclado, onElegir, vivas, sinVi
  * cero. Se le creyó toda una tarde. 🔑 **Una regla no protege de una ficha mal cargada: hay que
  * contrastar la ficha**, y la única manera de que eso pase es que la pantalla lo haga sola.
  */
-function Cabecera({ d }: { d: RespuestaZona }) {
+/**
+ * **El renglón que reemplaza al bloque de pendientes: un link con el número.**
+ *
+ * # 🔴 Por qué (5-sep-2026)
+ *
+ * Bruno: *«las decisiones automáticas o lo que hay que decidir no me está convenciendo,
+ * principalmente porque son 14 pendientes que alargan la lista y que no estoy ejecutando nada por
+ * ahí… pensaría en una sección exclusiva que sea decidir y que ahí se ponga todo»*.
+ *
+ * 📊 Medidos los 19 abiertos ese día, uno por uno contra el estado de la cuenta: **7 apuntaban a
+ * algo ya apagado**, 1 a un objeto que ⛔ ni estaba en la ventana, 1 contradecía a la tabla de abajo
+ * (decía «156% del techo, pausar» donde la fila decía «Rinde, 58%», y era del 26-ago), 4 eran
+ * informativos y 1 era ruido de frecuencia. **Quedaban ~2.** ⇒ la lista ⛔ no estaba larga porque
+ * faltara una pantalla: estaba larga porque el 89% ⛔ no debería estar ahí. Eso se arregla en el
+ * motor; lo que se arregla acá es que ⛔ no ocupe media pantalla de Rendimiento.
+ *
+ * # ⚠️ Y por qué esto NO contradice «no hay pantalla de alertas»
+ *
+ * `HallazgosPanel` tiene escrito *«una pantalla nueva sería un segundo lugar al que hay que
+ * acordarse de entrar, y el que no entra no se entera»*, y sigue valiendo. **Este renglón ES el
+ * link**: el contador está donde Bruno ya mira todos los días, y el badge del sidebar, la pantalla
+ * de Inicio y el mail de las 07:50 siguen empujando exactamente igual. Lo que cambia es **dónde se
+ * hace**, ⛔ no **cómo se entera**. Y accionar sigue pasando en un solo lado por objeto: lo que
+ * tiene fila se acciona en su fila (`repartirHallazgos`), lo que ⛔ no tiene, en `/meta-ads/decidir`.
+ *
+ * 🔑 **Nombra la LÍNEA.** El badge del menú cuenta todas las que la persona ve y este renglón sólo
+ * la del eje: sin el nombre serían dos números distintos sobre lo mismo, que es exactamente el
+ * defecto que `contarParaDecidir` existe para evitar entre la pantalla y el mail.
+ */
+function RenglonDecidir({ cuenta, linea }: { cuenta: { total: number; quemando: number }; linea: LineaPauta }) {
+  if (cuenta.total === 0) return null
+  return (
+    <Link
+      href={`/meta-ads/decidir?linea=${linea}`}
+      style={{ fontSize: font.sm, fontWeight: weight.semibold, color: color.brandSolid, textDecoration: 'none' }}
+    >
+      {cuenta.total} de {ETIQUETA_LINEA[linea] || linea} para decidir
+      {cuenta.quemando > 0 && (
+        <span style={{ color: color.dangerInk }}> · {cuenta.quemando} para pausar</span>
+      )}
+      {' →'}
+    </Link>
+  )
+}
+
+/**
+ * 🔴 **La alarma va sola y ARRIBA de la tabla, separada de la prosa** (5-sep-2026).
+ *
+ * Antes las dos vivían adentro de `Cabecera`, que estaba cuarta y por encima de todo. Pero son dos
+ * cosas de peso opuesto: *«sale de la foto diaria y llega hasta el X»* es contexto que se lee una
+ * vez, y *«el techo está mal cargado»* **invalida la columna `% techo` de todas las filas**. Lo
+ * segundo va arriba de la tabla o ⛔ no sirve; lo primero puede irse abajo y devolver 80 píxeles.
+ */
+function AlarmaDeFicha({ d }: { d: RespuestaZona }) {
   const z = d.zona
   if (!z) return null
   const ticketReal = z.totales.compras ? z.totales.revenue / z.totales.compras : 0
   const dif = d.ficha && d.ficha.ticket > 0 && ticketReal > 0
     ? ((ticketReal - d.ficha.ticket) / d.ficha.ticket) * 100
     : null
+  if (dif == null || Math.abs(dif) < 15) return null
+  return (
+    <Notice tone="danger">
+      🔴 El techo está calculado sobre un ticket de {plata(d.ficha!.ticket)} y el ticket REAL de
+      esta ventana es {plata(ticketReal)} ({dif >= 0 ? '+' : ''}{Math.round(dif)}%).{' '}
+      <strong>Hasta que la ficha se corrija, el % del techo de cada pauta está mal.</strong> Y el
+      error no es proporcional: el costo de la mercadería no baja con el precio, así que un
+      descuento se lleva casi tres veces su valor de techo.{' '}
+      <Link href="/meta-ads/rentabilidad" style={{ color: 'inherit', textDecoration: 'underline' }}>Corregirla →</Link>
+    </Notice>
+  )
+}
 
+/** De dónde sale y hasta cuándo llega. Contexto, ⛔ no alarma: por eso vive DEBAJO de la tabla. */
+function Cabecera({ d }: { d: RespuestaZona }) {
+  const z = d.zona
+  if (!z) return null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
       <div style={{ fontSize: font.sm, color: color.mut }}>
@@ -488,16 +506,6 @@ function Cabecera({ d }: { d: RespuestaZona }) {
           </span>
         )}
       </div>
-      {dif != null && Math.abs(dif) >= 15 && (
-        <Notice tone="danger">
-          🔴 El techo está calculado sobre un ticket de {plata(d.ficha!.ticket)} y el ticket REAL de
-          esta ventana es {plata(ticketReal)} ({dif >= 0 ? '+' : ''}{Math.round(dif)}%).{' '}
-          <strong>Hasta que la ficha se corrija, el % del techo de cada celda está mal.</strong> Y el
-          error no es proporcional: el costo de la mercadería no baja con el precio, así que un
-          descuento se lleva casi tres veces su valor de techo.{' '}
-          <Link href="/meta-ads/rentabilidad" style={{ color: 'inherit', textDecoration: 'underline' }}>Corregirla →</Link>
-        </Notice>
-      )}
     </div>
   )
 }
@@ -520,7 +528,7 @@ function Oraculo({ d, dias }: { d: RespuestaZona; dias: number }) {
   const m = z.marginal
   return (
     <SectionCard
-      title="Pedidos reales vs. lo que Meta se atribuye"
+      title="Pedidos reales contra Meta"
       subtitle="El oráculo del escalado. Si atrib% sube mientras el costo por compra de Meta baja, la mejora es de atribución y no hay una sola venta nueva."
     >
       {m.marginal ? (
@@ -617,10 +625,21 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
   if (!z) return null
   const t = z.totales
   const conc = z.concentracion.mayor
-  // 🔑 La vara es UNA sola —el techo por compra— pero el numerador cambia de fuente con la ventana.
-  // Se elige acá y ⛔ no en cada tarjeta, para que el número y su color ⛔ no puedan salir de dos
-  // cuentas distintas.
-  const pctVara = tv ? tv.pctTecho : t.pctTecho
+  // 🔴🔑 **LA VARA ES LA DE META, y es la MISMA con la que se juzga cada fila** (5-sep-2026).
+  //
+  // Hasta hoy esta tarjeta dividía el gasto por los **pedidos reales de Tienda Nube** mientras la
+  // tabla de abajo dividía por las **compras que Meta se atribuye**, y las dos decían «% del
+  // techo»: el total marcaba 81% y las filas 106%, sobre la misma plata. No había forma de saber a
+  // cuál creerle.
+  //
+  // Lo corrigió Bruno, y la razón es del negocio: *«los pedidos reales pueden ser de otros canales
+  // que no sean Meta, por ese motivo, solo tiene que ser META»*. Los 113 pedidos de la tienda
+  // incluyen orgánico, mail, directo y WhatsApp ⇒ la diferencia contra las 84 compras de Meta ⛔ no
+  // es «lo que Meta no ve», y usarla para abaratar el costo de la pauta le regalaría plata.
+  //
+  // ⇒ los pedidos reales ⛔ no se van de la pantalla: bajan al renglón de abajo, a la tira de días y
+  // al Oráculo, **rotulados y sin el tono del techo**. Son la vara del NEGOCIO, ⛔ no de la pauta.
+  const pctVara = tv ? tv.pctTechoMeta : t.pctTechoMeta
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: space[2] }}>
@@ -630,15 +649,13 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
           sub={tv ? `${(ventana ? ventana.label : 'hoy').toLowerCase()} · en vivo de Meta` : `${z.desde} → ${z.hasta}`}
         />
         <KpiCard
-          label={tv ? 'Compras · Meta' : 'Pedidos reales'}
-          value={entero(tv ? tv.compras : t.pedidos)}
-          sub={tv
-            ? 'atribuidas por Meta, ⛔ no la caja de la tienda'
-            : `${t.pedidosDia.toFixed(1)}/día${z.objetivoPedidos ? ` · meta ${z.objetivoPedidos}` : ''}`}
+          label="Compras · Meta"
+          value={entero(tv ? tv.compras : t.compras)}
+          sub="atribuidas por Meta, ⛔ no la caja de la tienda"
         />
         <KpiCard
-          label={tv ? 'Costo por compra · Meta' : 'Costo por pedido'}
-          value={tv ? (tv.compras ? plata(tv.costoMeta) : '—') : (t.pedidos ? plata(t.costoPedidoReal) : '—')}
+          label="Costo por compra · Meta"
+          value={(tv ? tv.compras : t.compras) ? plata(tv ? tv.costoMeta : t.costoMeta) : '—'}
           sub={pctVara == null ? 'sin techo cargado' : `${Math.round(pctVara)}% del techo`}
           tone={pctVara != null && pctVara > 100 ? 'danger' : pctVara != null ? 'success' : 'warning'}
         />
@@ -665,15 +682,27 @@ export function FilaDeKpis({ z, tv, techo, ventana }: {
         )}
       </div>
 
-      {/* 🔴 **Lo que falta se dice, ⛔ no se rellena.** El costo por PEDIDO REAL es la vara de todo
-          el módulo y sale de la caja de Tienda Nube, que sólo tiene días cerrados. */}
-      {tv && (
-        <div style={{ fontSize: font.sm, color: color.mut2 }}>
-          Los <b>pedidos reales de la tienda</b> ⛔ no están para hoy: la caja cierra el día. El
-          último cerrado es el <b>{z.hasta}</b> — mirá «7 días» o tocá un día en la tira para el
-          costo por pedido real.
-        </div>
-      )}
+      {/* 🔑 **Los pedidos de la tienda, DECLARADOS como lo que son.** Sin tono y sin «% del techo»:
+          son de todos los canales, así que ⛔ no juzgan una pauta. Sirven para dimensionar el
+          negocio —de acá salen el marginal y la elasticidad— y para ver, en el Oráculo, si Meta se
+          está atribuyendo de más. Va como renglón y ⛔ no como tarjeta a propósito: una tarjeta
+          igual a las de arriba se lee como una vara más. */}
+      <div style={{ fontSize: font.sm, color: color.mut2 }}>
+        {tv ? (
+          <>
+            Los <b>pedidos reales de la tienda</b> ⛔ no están para hoy: la caja cierra el día. El
+            último cerrado es el <b>{z.hasta}</b> — mirá «7 días» o tocá un día en la tira.
+          </>
+        ) : (
+          <>
+            <b>Pedidos de la tienda: {entero(t.pedidos)}</b> ({t.pedidosDia.toFixed(1)}/día
+            {z.objetivoPedidos ? ` · meta ${z.objetivoPedidos}` : ''}
+            {t.pedidos ? ` · ${plata(t.costoPedidoReal)} cada uno` : ''}). Son <b>todos los canales</b>,
+            así que ⛔ no son la vara de la pauta: sirven para dimensionar el negocio. La vara de cada
+            fila es la compra que <b>Meta</b> se atribuye.
+          </>
+        )}
+      </div>
     </>
   )
 }

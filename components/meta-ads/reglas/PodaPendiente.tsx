@@ -73,7 +73,7 @@ export function PodaPendiente({ resumenes, recargar }: { resumenes: Resumen[]; r
         >
           <div style={{ minWidth: 0, flex: '1 1 320px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space[1.5], flexWrap: 'wrap' }}>
-              <StatusPill tone="danger" label="Quemando" />
+              <StatusPill tone="danger" label="Gasta sin vender" />
               <span style={{ fontSize: font.base, fontWeight: weight.semibold }}>
                 {r.cuantos === 1
                   ? `1 aviso de ${ETIQUETA_LINEA[r.linea]} viene gastando sin vender`
@@ -86,7 +86,7 @@ export function PodaPendiente({ resumenes, recargar }: { resumenes: Resumen[]; r
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => setAbierta(r.linea)}>
-            {r.puede ? 'Ver y podar' : 'Ver cuáles'}
+            {r.puede ? 'Ver y apagar' : 'Ver cuáles'}
           </Button>
         </div>
       ))}

@@ -5,6 +5,7 @@ import { FUNNEL, TIPO_FUNNEL } from '@/lib/meta-ads/metricas'
 import {
   bandaDeHoy, cruzarConLaCaja, horaEnCurso, limpiar, marginalEntreVentanas, porConjunto,
   renderParte, sumarHasta, sumarVivas, topeQueEntrega, veredicto,
+  comprasParaAfirmar, ruidoDeTasa, veredictoDeCosto,
   type FilaAviso,
 } from '@/lib/meta-ads/parte'
 import { aCeldaViva } from '@/lib/meta-ads/parte.core.js'
@@ -543,5 +544,60 @@ describe('porConjunto — la clave es el ID, el nombre es el respaldo', () => {
 
   it('sin `conjuntoId` cae al nombre: una fila sin id ⛔ no se puede perder', () => {
     expect(porConjunto([{ conjunto: 'X', gasto: 1 }, { conjunto: 'X', gasto: 2 }] as FilaAviso[])).toHaveLength(1)
+  })
+})
+
+/**
+ * **El medidor del costo, y la línea que NO se puede cruzar.**
+ *
+ * `veredictoDeCosto` es el único lugar donde se decide «esta pauta está cara», y `veredicto` es el
+ * que NO lleva banda. Los dos casos de abajo son la misma invariante mirada desde los dos lados, y
+ * están acá porque el día que alguien los unifique «de paso» nada más se va a poner rojo.
+ */
+describe('el piso de evidencia, y por qué veredicto() se queda afuera', () => {
+  it('el ruido de una tasa es 1/√n, y sin compras es null y ⛔ nunca 0', () => {
+    expect(Math.round(ruidoDeTasa(4)! * 100)).toBe(50)
+    expect(Math.round(ruidoDeTasa(25)! * 100)).toBe(20)
+    expect(ruidoDeTasa(0)).toBeNull()
+    expect(ruidoDeTasa(null)).toBeNull()
+  })
+
+  it('🔑 el corte se toma contra el TECHO y ⛔ no contra el CPA — con cpa/√n no se propondría nada nunca', () => {
+    // 2 compras: contra el techo el corte queda en 171%. Contra el CPA daría 341% y al 200% de
+    // techo esta pauta —que paga el doble de lo que vale un cliente— saldría «no se sabe».
+    const m = veredictoDeCosto(28000, 2, 7000)
+    expect(Math.round(m.umbralPct!)).toBe(171)
+    expect(m.estado).toBe('ALTO')
+  })
+
+  it('arriba del techo pero dentro de la banda ⇒ SIN-PRUEBA, que ⛔ no es OK', () => {
+    const m = veredictoDeCosto(101920, 13, 7000)
+    expect(m.estado).toBe('SIN-PRUEBA')
+    expect(Math.round(m.pct!)).toBe(112)
+    expect(m.excedente).toBe(10920)
+  })
+
+  it('cero compras con el techo pasado sigue siendo un ALTO probado, y ⛔ sin banda', () => {
+    const m = veredictoDeCosto(7100, 0, 7000)
+    expect(m.estado).toBe('SIN-COMPRAS-ALTO')
+    expect(m.ruido).toBeNull()
+  })
+
+  it('🔴 veredicto() ⛔ NO lleva banda, y por eso los dos DIFIEREN — es la invariante, no un bug', () => {
+    // Un día suelto con UNA compra al 200% del techo. Con la banda (±100% ⇒ corte en 200%) ⛔ no
+    // alcanza para afirmar nada, y está bien: sobre una compra no se decide.
+    expect(veredictoDeCosto(14000, 1, 7000).estado).toBe('SIN-PRUEBA')
+    // Pero `veredicto()` **tiene que seguir diciendo ALTO**, porque de él cuelga
+    // `diasSeguidosBajoElTecho`: si un día caro dejara de cortar la racha «porque una sola compra
+    // es ruido», una pauta que gotea días malos acumularía racha y terminaría con una propuesta de
+    // SUBIRLE plata. Unificar los dos «de paso» es el error caro de este archivo.
+    expect(veredicto(14000, 1, 7000)).toBe('ALTO')
+  })
+
+  it('cuántas compras faltan para afirmar un exceso, y cuándo la respuesta es «no se va a poder»', () => {
+    expect(comprasParaAfirmar(142)).toBe(6)
+    expect(comprasParaAfirmar(112)).toBe(70)
+    expect(comprasParaAfirmar(100)).toBeNull()
+    expect(comprasParaAfirmar(90)).toBeNull()
   })
 })

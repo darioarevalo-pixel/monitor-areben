@@ -59,7 +59,7 @@ export function TiraDeDias({ caja, techo, anclado, onElegir }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2] }}>
         <span style={{ fontSize: font.xs, fontWeight: weight.semibold, color: color.mut }}>
-          DÍA POR DÍA · pedidos reales de la tienda
+          DÍA POR DÍA · pedidos de la tienda (todos los canales)
         </span>
         {anclado && (
           <button
@@ -71,7 +71,7 @@ export function TiraDeDias({ caja, techo, anclado, onElegir }: {
               fontSize: font.xs, color: color.brandSolid, fontWeight: weight.semibold,
             }}
           >
-            ver la ventana entera ✕
+            Ver el período entero ✕
           </button>
         )}
       </div>

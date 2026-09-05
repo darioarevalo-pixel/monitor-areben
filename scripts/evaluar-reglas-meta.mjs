@@ -38,7 +38,8 @@ import { indexar, porQueCallado } from '../lib/meta-ads/decisiones.core.js'
 import { COLS_REGLA, leerDecisiones, leerSnapshot, leerTechos, leerUmbrales, techoDe } from '../lib/meta-ads/leer-snapshot.core.js'
 import { isoDia } from '../lib/meta-ads/snapshot.core.js'
 import {
-  agruparHallazgos, calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla, PRESETS,
+  aCerrarPorRevalidacion, agruparHallazgos, calibrar, CLAVES_PRESET, contextoUmbrales, evaluarRegla,
+  PRESETS,
 } from '../lib/meta-ads/reglas.core.js'
 import { armarMail } from '../lib/meta-ads/mail-hallazgos.core.js'
 import { mandarMail } from './lib/mail.mjs'
@@ -71,6 +72,13 @@ const CALIBRAR = flag('--calibrar')
 const LINEA_UNICA = valor('--linea')
 const DIAS = Math.max(1, parseInt(valor('--dias'), 10) || 90)
 const HASTA = valor('--hasta') || isoDia(new Date())
+
+/**
+ * 🔴 **Si esta corrida puede CERRAR hallazgos viejos.** Ver `cerrarLosQueYaNoPasan`: cerrar por «ya
+ * no lo detecto» sólo vale cuando la corrida es la de verdad y mira el día de hoy. Un simulacro ⛔
+ * no escribe, y una corrida sobre una fecha pasada cerraría todo lo posterior de una.
+ */
+const PUEDE_CERRAR = !SIMULACRO && !CALIBRAR && HASTA === isoDia(new Date())
 
 // ── Entorno ──────────────────────────────────────────────────────────────────
 
@@ -165,6 +173,48 @@ async function guardar(reglaId, hallazgos) {
   return (data || []).length
 }
 
+/**
+ * **Cierra los hallazgos de una regla que la corrida de hoy ya ⛔ no detecta.**
+ *
+ * 🔴 **Los tres candados están acá y son parte del contrato de `aCerrarPorRevalidacion`.** Los tres
+ * protegen la misma cosa —que «no lo detecté» signifique de verdad «ya no pasa»— y sin cualquiera
+ * de los tres esto **apaga avisos reales en silencio**, que es el modo de falla más caro del módulo:
+ *
+ *  1. ⛔ **Nunca con la regla `apagada`** (le falta un umbral). Una regla que ⛔ no pudo mirar ⛔ no
+ *     detecta nada, y cerrar por eso sería confundir «no pasa» con «no miré». El llamador ya sale
+ *     por `continue` antes de llegar acá, y esto es el segundo cerrojo.
+ *  2. ⛔ **Nunca en simulacro ni calibrando**: los dos existen para poder mirar sin tocar.
+ *  3. ⛔ **Nunca con `--hasta` en el pasado.** Re-correr el script sobre el 26-ago cerraría todo lo
+ *     de septiembre de una, porque en agosto esos objetos ⛔ ni existían.
+ *
+ * ⛔ **No borra**: cambia el estado y deja el motivo. `?recurso=hallazgos&estado=todos` los sigue
+ * trayendo, que es lo que deja auditar si esto apagó algo que no correspondía.
+ */
+async function cerrarLosQueYaNoPasan(reglaId, detectados) {
+  if (!PUEDE_CERRAR) return 0
+  const { data: abiertos, error: e1 } = await supabase
+    .from('meta_ads_hallazgo')
+    .select('id,objeto_id')
+    .eq('regla_id', reglaId)
+    .eq('estado', 'nuevo')
+  if (e1) { anotar(`leer abiertos de la regla ${reglaId}`, e1.message); return 0 }
+
+  const ids = aCerrarPorRevalidacion(abiertos || [], detectados)
+  if (!ids.length) return 0
+
+  const { error } = await supabase
+    .from('meta_ads_hallazgo')
+    .update({
+      estado: 'caducado',
+      cierre_motivo: `la regla ⛔ ya no lo detecta al ${HASTA}`,
+      resuelto_por: 'el reloj de las 07:50',
+      resuelto_en: new Date().toISOString(),
+    })
+    .in('id', ids)
+  if (error) { anotar(`cerrar hallazgos de la regla ${reglaId}`, error.message); return 0 }
+  return ids.length
+}
+
 async function marcarCorrida(reglaId, detalle) {
   if (SIMULACRO) return
   const { error } = await supabase
@@ -252,6 +302,8 @@ async function modoDiario(filas, umbrales, decisiones, techos) {
       continue
     }
     const nuevos = await guardar(regla.id, r.hallazgos)
+    // 🔑 Después de guardar y **sólo acá**: la rama `apagada` salió por `continue` más arriba.
+    const cerrados = await cerrarLosQueYaNoPasan(regla.id, r.hallazgos)
     total += nuevos
     // ⚠️ «Nada que reportar» y «todo callado por una decisión» son cosas distintas y la pantalla lee
     // esta frase: sin la segunda mitad, una regla enteramente silenciada se vería igual que una que
@@ -261,7 +313,9 @@ async function modoDiario(filas, umbrales, decisiones, techos) {
       : ''
     const detalle = (r.hallazgos.length === 0
       ? 'Nada que reportar.'
-      : `${r.hallazgos.length} detectado${r.hallazgos.length === 1 ? '' : 's'}, ${nuevos} nuevo${nuevos === 1 ? '' : 's'}.`) + callados
+      : `${r.hallazgos.length} detectado${r.hallazgos.length === 1 ? '' : 's'}, ${nuevos} nuevo${nuevos === 1 ? '' : 's'}.`)
+      + (cerrados ? ` ${cerrados} cerrado${cerrados === 1 ? '' : 's'} porque ya no pasa${cerrados === 1 ? '' : 'n'}.` : '')
+      + callados
     console.log(`  ${r.hallazgos.length ? '●' : '·'} ${nombre}: ${detalle}`)
     for (const h of r.hallazgos.slice(0, 5)) {
       console.log(`      · ${(h.objeto_nombre || h.objeto_id).slice(0, 62)} — ${h.motivo}`)
@@ -307,7 +361,20 @@ async function mandarElParte() {
     .limit(200)
   if (error) { anotar('leer los hallazgos abiertos para el mail', error.message); return }
 
-  const mail = armarMail(agruparHallazgos(data || []), HASTA)
+  /**
+   * 🔴 **El `preset` ⛔ no está en la fila del hallazgo: vive en la REGLA.** Y sin él
+   * `esParaDecidir` ⛔ no puede distinguir un dato de una decisión y los cuenta todos —el default es
+   * «mostralo», que es lo correcto ante un preset desconocido y lo equivocado ante uno que ⛔ no se
+   * fue a buscar—. 📊 Medido el 5-sep-2026: el asunto decía **«20 cosas para decidir»** cuando las
+   * accionables eran **14**. Es el mismo agujero que la pantalla ya tenía resuelto con
+   * `presetPorRegla` en `api/_meta-reglas.js`, y por eso se resuelve igual acá.
+   */
+  const { data: reglas, error: e2 } = await supabase.from('meta_ads_regla').select('id,preset')
+  if (e2) { anotar('leer los presets para el mail', e2.message); return }
+  const presetDe = new Map((reglas || []).map((r) => [r.id, r.preset]))
+  const conPreset = (data || []).map((h) => ({ ...h, preset: presetDe.get(h.regla_id) || null }))
+
+  const mail = armarMail(agruparHallazgos(conPreset), HASTA)
   if (!mail) {
     // ⛔ No se manda un mail para decir que no hay nada: ver el 🔑 del core. El log sí lo dice,
     // porque acá la pregunta «¿corrió y no encontró nada, o no corrió?» tiene que tener respuesta.

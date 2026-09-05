@@ -36,6 +36,12 @@ const LINEA = (flag('linea', 'bdi') || 'bdi').toLowerCase()
 const DIAS = Number(flag('dias', 7))
 const HASTA = flag('hasta', null)
 const JSON_OUT = args.includes('--json')
+// 🔑 `--techo` pisa el de la ficha. Existe para poder contestar **antes** de tocar un dato de
+// producción qué pasaría si la ficha estuviera bien: el 5-sep-2026 la de BDI tenía `usaRaspa: 100`
+// (asume que el 100% de los compradores usa la raspadita) y el techo real medido era $7.558 contra
+// los $6.668 cargados. Mover el dato primero y mirar después es exactamente el orden que no hay
+// que usar cuando el número mueve el corte de once reglas.
+const TECHO_MANO = flag('techo', null) ? Number(flag('techo')) : null
 
 const env = leerEnv()
 if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) {
@@ -91,6 +97,11 @@ async function main() {
     techoCaja = r.costoMaxCaja !== r.costoMax ? r.costoMaxCaja : null
     techoDe = rent[0].updated_at
   }
+  if (TECHO_MANO != null) {
+    techo = TECHO_MANO
+    techoCaja = null
+    techoDe = null
+  }
 
   // Los pedidos REALES de la tienda. ⛔ Sin filtro de estado: una venta anulada se ELIMINA en
   // Gestión Nube, no se marca, así que filtrar fabrica un derrumbe falso.
@@ -138,9 +149,15 @@ async function main() {
   const t = z.totales
   console.log(
     `\nTOTALES  gasto ${money(t.spend)} · pedidos ${t.pedidos} (${t.pedidosDia.toFixed(1)}/día) · ` +
-      `costo por pedido REAL ${money(t.costoPedidoReal)} = ${pct(t.pctTecho)} del techo`,
+      `costo por pedido REAL ${money(t.costoPedidoReal)} = ${pct(t.pctTechoPedidoReal)} del techo`,
   )
-  console.log(`         compras que Meta se atribuye ${Math.round(t.compras)} · su costo ${money(t.costoMeta)}`)
+  console.log(
+    `         ⚠️ esos pedidos son de TODOS los canales. LA VARA de cada fila es la de abajo:`,
+  )
+  console.log(
+    `         compras que Meta se atribuye ${Math.round(t.compras)} · su costo ${money(t.costoMeta)}` +
+      ` = ${pct(t.pctTechoMeta)} del techo`,
+  )
 
   const m = z.marginal
   if (m.marginal) {

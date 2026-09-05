@@ -578,6 +578,226 @@ corrida reescribe los últimos 4 días). Con `-f backfill=N` para más atrás.
 🔑 **El scheduler de GitHub dispara 35-59 minutos TARDE** (medido sobre 8 corridas seguidas) ⇒ el
 cron pide 07:20 y 19:20 para aterrizar a las 8 y a las 20.
 
+## 🆕🏁 5-sep-2026: EL PISO DE EVIDENCIA — la pantalla dejó de afirmar lo que no sabe
+
+Bruno caminó `/meta-ads` y dijo tres cosas que parecían distintas: *«parece que están todas quemando
+plata, raro raro»* · *«son 14 pendientes que alargan la lista y no estoy ejecutando nada por ahí»* ·
+*«está muy muy rara la vista, muy larga, comprimida toda hacia la de veredicto»*. **Son la misma
+falla con tres caras: la pantalla afirmaba más de lo que sabía.** El filtro de fecha anda bien y ⛔ no
+se tocó — lo dijo él.
+
+📊 **Todo lo que sigue está medido ejerciendo producción, ⛔ no leyendo el código.** BDI, ventana
+29-ago→4-sep.
+
+### 1. 🔴 El corte ⛔ no miraba cuántas compras lo sostenían
+
+`veredictoDeCelda` clasificaba `alto`/`pausar` con `gasto/compras > techo` a **1,0× exacto, sin
+tolerancia y sin piso de observaciones**: de 11 pautas que entregaban, **8 salían «pausar»**, y
+**cuatro de las ocho se apoyaban en 2 o 3 compras**. Al mismo tiempo el total de la cuenta estaba en
+el 96% del techo. La suma de las partes mandaba a apagar el 73% de lo que gastaba.
+
+⚠️ Y el bloque de aprendizaje **ya lo decía en la misma fila**: *«2 de 50 compras/semana»*. La
+pantalla afirmaba las dos cosas juntas: «no alcanza para juzgarla» y «pausala».
+
+**El arreglo**: `ruidoDeTasa(n)` y `veredictoDeCosto()` en `parte.core.js`, al lado de `veredicto()`.
+El medidor devuelve la magnitud —`cpa`, `pct`, `n`, `ruido`, `umbralPct`, `excedente`— y **el corte
+lo aplica el detector**, que es la lección que este módulo ya tenía escrita para el CTR.
+
+🔴 **El ruido se toma como fracción del TECHO, ⛔ no del CPA, y hay que leerlo así: es un piso de
+MAGNITUD calibrado sobre el ruido, ⛔ no un test de hipótesis.** Con `cpa/√n` —el error estándar
+formalmente correcto— el umbral para 2 compras daría **341%** y para 6, **169%** ⇒ **ninguna pauta de
+la cuenta propondría nada nunca**, que es el modo de falla opuesto y peor: una pantalla que no dice
+nada se apaga sola. Contra el techo queda acotado y monótono: 2 compras ⇒ 171%, 6 ⇒ 141%, 25 ⇒ 120%.
+
+**Clase nueva `sin-prueba`** —arriba del techo pero dentro del ruido—, con `accion: null` y tono
+`warning`. ⛔ **No es `midiendo`**: ésa significa «gastó menos que el techo y todavía no compró», y
+meterle una pauta de $110.000 que compró 13 veces al 112% colapsaría dos hechos y perdería el número.
+
+### 2. 🔴 Y dos cosas que el guard NO puede tocar, las dos con test y con mutante
+
+- **`escalar` ⛔ no se frena.** Pausar es irreversible en el sentido caro —mata algo que puede estar
+  rindiendo, y volver a prenderlo reinicia el aprendizaje—; escalar cuesta +20% una semana. Además
+  `escalar` **ya tiene su propio piso**: `CON_AIRE = 75%` deja 25% de margen. Con un guard simétrico
+  `GIRLHOOD FRIO COPY B` (56% ±28%) saldría de la lista, y es la única que hoy califica.
+- 🔴 **`veredicto()` se queda SIN banda**, y de eso depende que la escalada no se rompa: de él
+  cuelgan `diasSeguidosBajoElTecho()` y `hayRacha()`. Si un día caro dejara de cortar la racha «por
+  ruidoso», una pauta que gotea días malos acumularía racha y terminaría con una propuesta de
+  **subirle plata**. ✅ Hay un test que exige que los dos DIFIERAN sobre el mismo caso.
+- **Gastó más que un techo y compró CERO sigue mandando a apagar sin banda**: no hay tasa que tenga
+  ruido. `ruidoDeTasa(0)` es `null` y esa rama ⛔ no lo mira.
+
+### 3. 🔴 La ventana de juicio se ESTIRA cuando la muestra no alcanza
+
+`juicio = max(VENTANA, ventana)` resolvía «no juzgar un día suelto». Lo que ⛔ no resolvía es que
+**siete días tampoco alcanzan** para juzgar una pauta que compró dos veces. Ahora, cuando el
+veredicto sale `sin-prueba`, se vuelve a juzgar con **14 y después 30 días**, y para en el primer
+escalón que decide.
+
+📊 Medido: `TEST BROAD BDI` decía «124%, pausar» sobre 6 compras y en 30 días compra al **56%**;
+`TEST IP AZUL` decía «144%, pausar» sobre 3 y en 30 días está en **92%**; `TEST UNBOXING` decía
+«102%» y en 30 días está en **87%**. La pantalla mandaba a apagar tres pautas que rinden.
+
+🔑 **Cuesta cero llamadas**: `COLCHON` ya trae 40 días o más, así que las filas ya estaban acá.
+⛔ **El estiramiento sólo puede BAJAR la alarma, ⛔ nunca proponer escalar**: treinta días buenos ⛔ no
+habilitan a subirle plata a algo que la última semana pagó de más. Un `escalar` que aparece recién al
+estirar se degrada a `ok`, y hay test.
+⚠️ **Lo que se paga es que el juicio envejece.** Lo cubren las señales que ⛔ no usan esa ventana: el
+freno de emergencia, el desgaste y el marginal, cada uno con su propio reloj. Y **la fila dice sobre
+cuántos días la juzgó** cuando ⛔ no coincide con lo que se está mirando.
+
+### 4. 🔴 DOS VARAS con el mismo nombre en la misma pantalla
+
+La tarjeta de KPI calculaba el `% del techo` con **pedidos reales de Tienda Nube** y cada fila con
+**compras de Meta**: el total marcaba 81% y las filas 106%, sobre la misma plata, las dos rotuladas
+igual.
+
+🔑 **Lo corrigió Bruno, y la razón es del negocio**: *«los pedidos reales pueden ser de otros canales
+que no sean Meta, por ese motivo, solo tiene que ser META»*. Los 113 pedidos de la tienda incluyen
+orgánico, mail, directo y WhatsApp ⇒ la diferencia contra las 84 compras de Meta ⛔ **no** es «lo que
+Meta no ve», y usarla para abaratar el costo de la pauta le regalaría plata.
+
+⇒ `totales.pctTecho` **se borra** y entran `pctTechoMeta` (la vara) y `pctTechoPedidoReal`
+(referencia). Se borra en vez de cambiarle el valor **a propósito**: un cliente con el JS cacheado
+lee `undefined` y la tarjeta dice «sin techo cargado» — degradación visible. Dejarlo con el número
+nuevo serían dos valores plausibles y ninguno avisando que cambió de significado.
+Los pedidos de la tienda ⛔ no se van: bajan a un renglón que dice *«son todos los canales, así que ⛔
+no son la vara de la pauta»*, y siguen en la tira de días y en el Oráculo.
+
+### 5. 🔴 Los 19 pendientes eran un cementerio: ~2 servían
+
+Cruzados uno por uno contra el estado de la cuenta: **7 apuntaban a algo ya apagado** · 1 a un objeto
+que ⛔ ni aparecía en la ventana · **1 contradecía a la tabla de la misma pantalla** —decía «156% del
+techo, pausar» donde la fila decía «Rinde, 58%», y era del **26-ago: diez días**— · 4 eran
+`atribucion-tardia` · 1 era `fatiga` por frecuencia 1,4 contra un máximo de 1,3.
+
+📊 **El dato que ordenó la solución**: las once reglas habían corrido el 4-sep a las 14:34Z y **13 de
+los 19 tenían `fecha` anterior a esa corrida**. La regla ya había dejado de detectarlos y **nadie los
+cerró**. ⇒ ⛔ no hacía falta un detector de obsolescencia —los detectores ya chequean `estaActivo()`—:
+hacía falta **cerrar**.
+
+- **`aCerrarPorRevalidacion()`**, pura y con test, la llama el cron después de `guardar()`. Estado
+  `'caducado'` (ya previsto en el DDL) + `cierre_motivo` (columna nueva). ⛔ **No borra.**
+- 🔴 **Tres candados**: ⛔ nunca con la regla `apagada` (cerrar por «no lo detectó» una regla que ⛔ no
+  pudo mirar es apagar un aviso en silencio) · ⛔ nunca en simulacro ni calibrando · ⛔ nunca con
+  `--hasta` en el pasado (re-correr sobre el 26-ago cerraría todo lo de septiembre).
+- 🔴 **Y un candado más que salió de un test que escribí para que fallara**: si un `objeto_id` de
+  Meta llega como **número**, ⛔ no se cierra nada. Son enteros de 17-18 dígitos y
+  `Number.MAX_SAFE_INTEGER` tiene 16: `120251374921030478` parseado como número vuelve `...480`, y
+  esa diferencia de dos dígitos haría que el hallazgo VIVO ⛔ no matchee y se cierre. La precisión ya
+  está perdida cuando llega ⇒ ⛔ no se puede reparar, sólo no cerrar.
+- ⛔ **NO hay vencimiento por edad, a propósito.** Con revalidación, un hallazgo de diez días es uno
+  que la regla **confirma todas las mañanas y nadie accionó**: vencerlo escondería justo el único que
+  sí es real. `insistenciaDe()` ya lo envejece a la vista, y recién ahora ese número dice la verdad.
+
+**`atribucion-tardia` y `fatiga` pasan a `clase: 'dato'`**: siguen visibles, ⛔ no cuentan. Y
+**`esParaDecidir()` es UNA función porque la leen TRES** —el contador de la pantalla, el asunto del
+mail de las 07:50 y el badge del sidebar—. ⚠️ Un preset desconocido **cuenta**: un aviso de más se ve,
+uno de menos ⛔ no se entera nadie.
+
+🔴 **Y ahí apareció un agujero que ⛔ no estaba en el plan**: el `preset` ⛔ no vive en la fila del
+hallazgo sino en la REGLA, y la consulta del mail ⛔ no lo traía ⇒ el filtro pasaba de largo y el
+asunto decía **«20 cosas para decidir»** con 14 accionables. Se resuelve como ya lo resolvía la
+pantalla, con un mapa `id → preset`. 📊 Verificado con `--simulacro`: 20 → 15.
+
+### 6. La vista: la tabla subió, y de once columnas a seis
+
+Orden viejo: controles → banda de hoy → planes → cabecera → KPIs → tira → **19 pendientes** → *recién
+ahí* la tabla. ≈1.080 px arriba del rendimiento. Ahora: controles → alarma (sólo si la hay) → KPIs →
+tira → **la tabla** → planes → cabecera → oráculo → parte.
+
+🔑 **El hallazgo que ordenó el recorte de columnas: en 7 de las 8 ramas, `porque[0]` es la versión en
+PROSA de columnas dibujadas al lado** —*«compra a $4.850 contra un techo de $6.668 (73%)»* con
+`Costo` y `% techo` a diez píxeles—. Era el mismo dato dos veces, y como `avisar()` empuja una frase
+por desgaste, otra por aprendizaje y otra por reinicio, **casi toda fila eran DOS `<tr>`**, el segundo
+diciendo sólo «y 2 razones más». ⇒ la regla escrita —*«un veredicto sin el número que lo sostiene es
+un renglón que nadie aprieta»*— **se cumple mejor con el número en su columna**: alineado, comparable
+y sin repetir.
+
+- `% diario` baja al pie del **Gasto** y `% techo` al pie del **Costo**, los dos con **su banda
+  (`±`)**, que se dibuja en TODAS las filas: un `90% ±71%` ⛔ no es «rinde».
+- `CTRΔ`/`CPMΔ` bajan al detalle, pero **su conclusión se queda**: la firma del desgaste ya es un
+  badge. Al detalle bajan los cuatro absolutos, que **se calculaban y ⛔ no se dibujaban en ningún
+  lado** — igual que `aprendizaje.reiniciadoEl`, la fecha en que el contador arrancó de cero, que es
+  lo que hay que mirar ANTES de escalar.
+- 🔴 **El pill se dibuja SÓLO donde hay una mano.** Con el reparto real (2 caras, 2 que rinden, el
+  resto sin prueba) un pill por fila sería un muro gris que ⛔ no señala nada. El **estado**
+  (sustantivo) va siempre como badge; la **mano** (infinitivo) sólo cuando la hay.
+- 🔑 **Con dos rojos entre doce, ordenar pesa más que pintar**: `ordenarCeldas` pasa a agrupar por
+  clase y a ordenar el gris por **`excedente`** —la plata que ya pagó de más— y ⛔ no por gasto. 📊
+  `TEST FUNDAS` gastó $32.146 y pagó $9.927 de más; `TEST BROAD BDI` gastó $49.770 y pagó $5.634. Por
+  gasto salen al revés de como hay que mirarlas.
+- **Click en cualquier lado de la fila** (`ProductosTable` era el patrón), con `stopPropagation` en
+  los botones. `Tr` del kit gana `activa`, que pone el fondo **y** el `aria-expanded` juntos.
+- **`COLUMNAS` es una constante** y el `colSpan` sale de ahí: estaba clavado en `11` a mano.
+
+### 7. «Decidir» es una entrada del menú de Meta, y eso NO contradice la doctrina
+
+`HallazgosPanel` tiene escrito *«una pantalla nueva de alertas sería un segundo lugar al que hay que
+acordarse de entrar, y el que no entra no se entera»*. **Sigue valiendo y esto lo cumple**: en
+Rendimiento quedó **un renglón con el número** que es el link, y el badge del sidebar, Inicio y el
+mail de las 07:50 empujan igual que antes. Cambia **dónde se hace**, ⛔ no **cómo se entera**. Y
+accionar sigue pasando en un solo lado por objeto: lo que tiene fila se acciona en su fila.
+
+🔑 **Reusa `key: 'meta-ads'`** ⇒ se saltea entero el checklist de permisos: ⛔ no toca `PERM_CAT`, ni
+`SECCION_AREA`, ni `DESCRIPCIONES`. Son 4 puntos: el `item` en `NAV_CATS`, la vista en `VISTAS`, la
+`ZONAS` y el badge en `optItem`. `components/meta-ads/reglas/Decidir.tsx` es **una mudanza**:
+`HallazgosPanel` + `PodaPendiente` + el silencio, que ya existían y ya estaban probados.
+
+🔴 **Trampa resuelta antes de escribirla**: el badge del menú cuenta **todas las líneas visibles** y
+el renglón de Rendimiento **la del eje** ⇒ dos números distintos sobre lo mismo. Por eso el renglón
+**nombra la línea** («3 de BDI para decidir →») y el badge no.
+
+### 8. El vocabulario
+
+Bruno: *«el no hay que hacer nada y toda la tipografía no está en infinitivo»* y *«las celdas de hoy
+y ayer, la terminología que no es infinitiva no me convence»*.
+
+🔑 **El arreglo ⛔ no era traducir diez títulos: era separar dos cosas que estaban en el mismo
+string.** El pill decía `Compra arriba del techo` —un ESTADO— y lo que hace falta leer de un vistazo
+es **la MANO**: `Pausar`. `ESTADO_DE_CLASE`, `MANO_DE_ACCION` y `TONO_DE_CLASE` son tres mapas por
+clase **en el núcleo**, así que una clase nueva entra con tres renglones de datos y cero cambios de
+pantalla. Y `accion` —que existía en el tipo desde siempre y **⛔ no se dibujaba en ningún lado**—
+pasa a ser lo que manda.
+
+🔑 **Lo de «hoy y ayer» se arregla con UNA palabra**: el rótulo del selector pasa de `Mirando:` a
+**`Mirar:`**, y con eso los seis botones quedan cubiertos. ⛔ Seis «Ver …» apilados repiten el verbo
+seis veces y dejan de distinguir lo único que cambia.
+
+⛔ **«celda» ⛔ no se dice más en pantalla**: es jerga que ⛔ no existe ni en Meta ni en el negocio, y
+Bruno escribió «una pauta». **Sólo el TEXTO** — los símbolos (`TablaCeldas`, `AvisosDeCelda`) ⛔ no se
+tocan.
+⚠️ **Y un rótulo lo tumbó el test de vocabulario**: `Anotar la decisión` viola §1.3 (`anotar` está
+prohibido; va `Agregar`/`Crear`/`Cargar`). Quedó **`Dejarlo así`**, que además nombra el resultado.
+Otros: `Detectado` → `Sin decidir` · `Quemando` → `Gasta sin vender` · `lo detectó una regla` → `Lo
+vio una automatización` (§3: la entrada del menú se llama **Automatizaciones**) · `Ver y podar` →
+`Ver y apagar` · `Volver a la ventana` y `ver la ventana entera ✕` → **`Ver el período entero`** los
+dos, que eran el mismo gesto escrito de dos maneras en la misma pantalla.
+
+### Verificado
+
+📊 **El oráculo es `scripts/medir-rendimiento-celdas.mjs`, ⛔ no la suite** — que estaba en verde con
+el defecto adentro. Se le agregó **`--techo`**, para poder contestar **antes** de tocar un dato de
+producción qué pasa si la ficha está bien:
+
+| | pausar | reparto |
+|---|---|---|
+| antes | **8** | — |
+| con el piso de evidencia y la ventana elástica (techo $6.668) | **5** | 5 alto · 1 sin-prueba · 4 ok · 1 escalar · 4 apagada |
+| **con el techo medido ($7.558)** | **2** | 2 alto · 2 sin-prueba · 6 ok · 1 escalar · 4 apagada |
+
+Total de la cuenta en unidad Meta: **96% del techo**, coherente con sus partes.
+
+✅ **Tests nuevos**: `meta-zona-tabla` (la tabla ⛔ **no se renderizaba en ninguno** hasta hoy) ·
+`meta-zona-fila-abre` (jsdom: que un clic en la celda de Gasto abra y que uno en Pausar **NO**) ·
+`meta-zona-orden` (que la tabla esté antes que el oráculo — **el orden vertical ⛔ no lo miraba nada**,
+y Bruno lo reportó dos veces) · el piso de evidencia con **los dos casos inversos**, que son los que
+valen: *un exceso grande con pocas compras SIGUE mandando a apagar*, y *uno chico con muchas también*.
+
+▶️ **Falta la mano de Bruno**: poner `usaRaspa: 25` en la ficha de BDI desde `/meta-ads/rentabilidad`
+(hoy está en 100, y con eso el techo pasa de $6.668 a **$7.558**), y **medir Zattia y Stunned** — el
+script de economía está clavado a la base de BDI, y `ZATTIA_SUPABASE_KEY` ⛔ no tiene permiso sobre
+`ventas`.
+
 ## 🆕🏁 26-ago-2026 (2ª tanda): EL TECHO ENGANCHADO, y el corte que manda YA CORRE
 
 **El motor de reglas dejó de correr en vacío.** Lo que faltaba no era prender nada: era que el número

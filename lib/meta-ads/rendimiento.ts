@@ -16,6 +16,11 @@ import {
   configDeHoy as configDeHoyJs,
   CON_AIRE as CON_AIRE_JS,
   CONV_APRENDIZAJE as CONV_APRENDIZAJE_JS,
+  ESCALONES_JUICIO as ESCALONES_JUICIO_JS,
+  ESTADO_DE_CLASE as ESTADO_DE_CLASE_JS,
+  MANO_DE_ACCION as MANO_DE_ACCION_JS,
+  TONO_DE_CLASE as TONO_DE_CLASE_JS,
+  PRIORIDAD_CLASE as PRIORIDAD_CLASE_JS,
   COLS_RENDIMIENTO as COLS_RENDIMIENTO_JS,
   desdeDe as desdeDeJs,
   desgasteDe as desgasteDeJs,
@@ -103,17 +108,31 @@ export type Aprendizaje = {
   reiniciadoEl: string | null
 }
 
-export type ClaseVeredicto = 'apagada' | 'rota' | 'quieta' | 'sin-techo' | 'midiendo' | 'alto' | 'escalar' | 'ok'
+export type ClaseVeredicto =
+  | 'apagada' | 'rota' | 'quieta' | 'sin-techo' | 'midiendo' | 'sin-prueba' | 'alto' | 'escalar' | 'ok'
+
+/** La MANO, en infinitivo. `null` = no hay nada que hacer ⇒ la pantalla ⛔ no dibuja pill. */
+export type AccionVeredicto = 'pausar' | 'escalar' | 'revisar' | 'cargar-techo' | null
 
 export type Veredicto = {
   clase: ClaseVeredicto
   titulo: string
   /** Qué acción propone. `null` = ninguna. */
-  accion: 'pausar' | 'escalar' | 'mirar' | null
+  accion: AccionVeredicto
   /** 🔑 Los NÚMEROS que lo sostienen, no una frase. Es lo que separa una decisión de una corazonada. */
   porque: string[]
   pctTecho: number | null
   pctDiario: number | null
+  /** Cuántas compras sostienen el costo. `null` sin compras: ⛔ nunca 0. */
+  n: number | null
+  /** El ruido de esa tasa, como fracción (`1/√n`). Se REPORTA siempre y se USA en un solo corte. */
+  ruido: number | null
+  /** El corte: `100 × (1 + ruido)`. Arriba de esto el exceso ⛔ ya no se explica por la muestra. */
+  umbralPct: number | null
+  /** `gasto − compras × techo`: la plata que ya pagó de más en la ventana. Ordena el gris. */
+  excedente: number | null
+  /** Sobre cuántos días se juzgó, que puede ser MÁS que la ventana que se está mirando. */
+  ventanaJuicio: number | null
 }
 
 /**
@@ -243,7 +262,10 @@ export type Zona = {
     pedidos: number
     pedidosDia: number
     costoPedidoReal: number
-    pctTecho: number | null
+    /** 🔑 LA VARA: la misma con la que se juzga cada fila. Sale de las compras que Meta atribuye. */
+    pctTechoMeta: number | null
+    /** Referencia de negocio: los pedidos son de TODOS los canales. ⛔ Nunca se pinta con el techo. */
+    pctTechoPedidoReal: number | null
   }
   techo: number
   techoCaja: number | null
@@ -276,6 +298,17 @@ export const CAIDA_CTR = CAIDA_CTR_JS as number
 export const SUBA_CPM = SUBA_CPM_JS as number
 export const USA_LA_CAJA = USA_LA_CAJA_JS as number
 export const CON_AIRE = CON_AIRE_JS as number
+export const ESCALONES_JUICIO = ESCALONES_JUICIO_JS as readonly number[]
+
+/**
+ * 🔑 **El par ESTADO / MANO, y el color.** Tres mapas por clase, en el núcleo y ⛔ no en el JSX:
+ * una clase nueva entra con tres renglones de datos y cero cambios de pantalla. El relato entero
+ * está en el docblock del núcleo.
+ */
+export const ESTADO_DE_CLASE = ESTADO_DE_CLASE_JS as Record<ClaseVeredicto, string>
+export const MANO_DE_ACCION = MANO_DE_ACCION_JS as Record<NonNullable<AccionVeredicto>, string>
+export const TONO_DE_CLASE = TONO_DE_CLASE_JS as Record<ClaseVeredicto, 'neutral' | 'success' | 'warning' | 'danger' | 'brand'>
+export const PRIORIDAD_CLASE = PRIORIDAD_CLASE_JS as Record<ClaseVeredicto, number>
 /**
  * Lo apagado al fondo, y arriba lo que más gasta. ⚠️ Ordena por `veredicto.clase` y ⛔ no por
  * `estado`: la clase ya resolvió que la configuración es de HOY, mientras que `estado` en una
@@ -320,7 +353,9 @@ export type TotalesVivos = {
   checkouts: number | null
   lpv: number | null
   costoMeta: number
-  pctTecho: number | null
+  pctTechoMeta: number | null
+  /** En vivo ⛔ no existe: la caja de Tienda Nube sólo cierra días. Siempre `null`, y lo dice. */
+  pctTechoPedidoReal: null
   roas: number
 }
 export const totalesVivos = totalesVivosJs as (celdas: Celda[], techo?: number) => TotalesVivos

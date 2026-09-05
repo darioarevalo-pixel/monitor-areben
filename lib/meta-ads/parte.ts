@@ -132,6 +132,25 @@ export type ArmarParte = {
 
 export const limpiar = core.limpiar as (s: unknown) => string
 export const veredicto = core.veredicto as (gasto: number, compras: number, techo: number | undefined) => string
+
+/** El ruido de una tasa calculada sobre `n` compras, como FRACCIÓN (`1/√n`). MIDE y ⛔ no decide. */
+export const ruidoDeTasa = core.ruidoDeTasa as (n: number | null | undefined) => number | null
+
+/** La medición del costo contra el techo, con su banda. Es el ÚNICO lugar donde se decide «cara». */
+export const veredictoDeCosto = core.veredictoDeCosto as (
+  gasto: number, compras: number, techo: number | undefined,
+) => {
+  estado: '?' | '-' | 'MIDIENDO' | 'SIN-COMPRAS-ALTO' | 'ALTO' | 'SIN-PRUEBA' | 'OK'
+  cpa: number | null
+  pct: number | null
+  n: number | null
+  ruido: number | null
+  umbralPct: number | null
+  excedente: number | null
+}
+
+/** Cuántas compras harían falta para que un exceso de `pct`% supere su propio ruido. */
+export const comprasParaAfirmar = core.comprasParaAfirmar as (pct: number | null | undefined) => number | null
 export const sumar = core.sumar as (filas: FilaAviso[]) => Record<string, number>
 export const porConjunto = core.porConjunto as (filas: FilaAviso[]) => (FilaAviso & { filas: FilaAviso[] })[]
 /**

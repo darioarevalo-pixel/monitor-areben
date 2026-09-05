@@ -25,7 +25,10 @@ const zona = {
   totales: {
     spend: 700000, compras: 60, revenue: 1600000, clicks: 9000, impresiones: 400000,
     carritos: 300, checkouts: 120, lpv: 8000,
-    costoMeta: 11666, pedidos: 100, pedidosDia: 14.3, costoPedidoReal: 7000, pctTecho: 105,
+    // 🔑 700.000 / 60 compras de Meta = $11.666 = 175% del techo. LA VARA.
+    // Y 700.000 / 100 pedidos de la tienda = $7.000: referencia de negocio, ⛔ no vara.
+    costoMeta: 11666, pedidos: 100, pedidosDia: 14.3, costoPedidoReal: 7000,
+    pctTechoMeta: 175, pctTechoPedidoReal: 105,
   },
   techo: 6668,
   techoCaja: null,
@@ -62,18 +65,30 @@ describe('la fila de KPIs sigue a la ventana elegida', () => {
   it('el costo por compra vivo sale de lo de hoy, y su % del techo también', () => {
     expect(vivo).toContain('4.000')
     expect(vivo).toContain('60% del techo')
-    // El de la foto es otro número y otra vara: $7.000 por PEDIDO REAL, 105% del techo.
-    expect(foto).toContain('7.000')
-    expect(foto).toContain('105% del techo')
+    // 🔴🔑 **Y el de la foto es el de META, ⛔ no el de la tienda.** Hasta el 5-sep-2026 esta tarjeta
+    // dividía por los 100 pedidos de Tienda Nube ($7.000, 105%) mientras cada fila de la tabla
+    // dividía por las 60 compras de Meta ($11.666, 175%), y las dos decían «% del techo»: el total
+    // marcaba 105 y las filas 175, sobre la misma plata.
+    expect(foto).toContain('11.666')
+    expect(foto).toContain('175% del techo')
+    expect(foto).not.toContain('105% del techo')
   })
 
-  it('🔴🔑 en vivo la tarjeta cambia de RÓTULO: lo que se muestra es Meta, ⛔ no la caja', () => {
-    expect(foto).toContain('Pedidos reales')
-    expect(foto).toContain('Costo por pedido')
-    expect(vivo).toContain('Compras')
-    expect(vivo).toContain('Costo por compra')
-    // ⛔ Nunca las dos cosas: «Pedidos reales» arriba de un número de Meta es el defecto con otra ropa.
-    expect(vivo).not.toContain('Pedidos reales</')
+  it('🔴🔑 LA VARA es siempre Meta — la ventana ya ⛔ no le cambia el rótulo a la tarjeta', () => {
+    for (const m of [foto, vivo]) {
+      expect(m).toContain('Compras · Meta')
+      expect(m).toContain('Costo por compra · Meta')
+      // ⛔ «Pedidos reales» arriba de una vara es el defecto con otra ropa: bajaron al renglón.
+      expect(m).not.toContain('Costo por pedido<')
+    }
+  })
+
+  it('🔑 los pedidos de la tienda ⛔ NO desaparecen: bajan a un renglón que dice que no son la vara', () => {
+    expect(foto).toContain('Pedidos de la tienda: 100')
+    expect(foto).toContain('todos los canales')
+    expect(foto).toContain('⛔ no son la vara de la pauta')
+    // Sin tono: un renglón gris ⛔ no se lee como un semáforo. La tarjeta sí, y es la de Meta.
+    expect(foto).toContain('7.000')
   })
 
   it('y dice que los pedidos reales de hoy NO existen, con el último día cerrado', () => {
@@ -98,6 +113,12 @@ describe('la fila de KPIs sigue a la ventana elegida', () => {
     const sinCompras = pinta(totalesVivos([{ spend: 30000, compras: 0, revenue: 0 }] as never, 6668))
     expect(sinCompras).toContain('sin techo cargado')
     expect(sinCompras).not.toContain('% del techo')
+  })
+
+  it('🔴 el 175% del techo pinta la tarjeta de PELIGRO — con la vara vieja salía verde al 105%… no: al revés', () => {
+    // Con `pctTechoPedidoReal` (105%) también pintaba danger, pero por otro número. Lo que fija
+    // este caso es DE DÓNDE sale el tono: de la misma vara con la que se juzga cada fila.
+    expect(foto).toContain('var(--mo-danger-ink)')
   })
 
   it('sin techo cargado tampoco colorea nada, en las dos ventanas', () => {

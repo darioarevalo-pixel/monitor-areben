@@ -468,6 +468,10 @@ export const ZONAS: Record<string, Record<string, { titulo: string; desc: string
       titulo: 'Rendimiento',
       desc: 'Qué apagar, qué escalar y qué testear hoy: una fila por celda con lo que cuesta cada compra ahí, cuánto es eso contra el techo que banca el producto y si el creativo se está gastando.',
     },
+    decidir: {
+      titulo: 'Decidir',
+      desc: 'Lo que las automatizaciones encontraron y todavía no resolvió nadie: qué pausar, qué escalar y qué anotar como decidido. Lo que tiene fila propia se acciona en su fila, en Rendimiento.',
+    },
     producir: {
       titulo: 'Producir',
       desc: 'De dónde sale una pieza nueva: se cargan los videos y sale una tanda donde cada uno va a su propio conjunto, todo pausado. Más la biblioteca de avisos con la pieza a la vista.',

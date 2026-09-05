@@ -36,17 +36,17 @@ describe('el mail de la mañana — cuándo NO se manda', () => {
 
 describe('el mail de la mañana — el asunto, que es lo que se lee sin abrirlo', () => {
   it('dice cuántas son', () => {
-    expect(asuntoDe([h({ sugerencia: null })])).toBe('Pauta · 1 cosa para decidir')
-    expect(asuntoDe([h({ sugerencia: null }), h({ sugerencia: null })])).toBe('Pauta · 2 cosas para decidir')
+    expect(asuntoDe([h({ sugerencia: null })])).toBe('Pauta · 1 para decidir')
+    expect(asuntoDe([h({ sugerencia: null }), h({ sugerencia: null })])).toBe('Pauta · 2 para decidir')
   })
 
   it('🔴 y si alguna está QUEMANDO plata, lo dice ahí: es lo que decide si se abre ahora o después', () => {
-    expect(asuntoDe([h(), h({ sugerencia: reactivar })])).toBe('Pauta · 2 cosas para decidir, 1 quemando plata')
-    expect(asuntoDe([h(), h()])).toBe('Pauta · 2 cosas para decidir, 2 quemando plata')
+    expect(asuntoDe([h(), h({ sugerencia: reactivar })])).toBe('Pauta · 2 para decidir, 1 para pausar')
+    expect(asuntoDe([h(), h()])).toBe('Pauta · 2 para decidir, 2 para pausar')
   })
 
   it('⛔ pausar es lo único que quema: reactivar y subir presupuesto es plata que se deja de ganar', () => {
-    expect(asuntoDe([h({ sugerencia: reactivar }), h({ sugerencia: subir })])).toBe('Pauta · 2 cosas para decidir')
+    expect(asuntoDe([h({ sugerencia: reactivar }), h({ sugerencia: subir })])).toBe('Pauta · 2 para decidir')
   })
 })
 

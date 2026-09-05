@@ -13,6 +13,92 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 RENDIMIENTO DE META — 5-sep-2026 (dictado, y ya medido contra producción)
+
+Dicho por Bruno en una vuelta, sobre `/meta-ads`. **El filtro de fecha anda bien y no se toca** —lo
+dijo él—; lo que sigue es todo lo demás. ⚠️ A diferencia de los dictados anteriores, éste **ya está
+medido**: los números salieron de ejercer prod, ⛔ no de leer el código.
+
+> «Lo único que las decisiones automáticas o lo que hay que decidir no me está convenciendo,
+> principalmente porque son 14 pendientes que alargan la lista y que no estoy ejecutando nada por
+> ahí. Además considero que los análisis no los hace bien, como que no está bien armado, entonces
+> son inconsistentes. Incluso pensaría en una sección exclusiva en el Side bar que sea decidir y que
+> ahí se ponga todo. Luego obvio el no hay que hacer nada y toda la tipografía no está en infinitivo,
+> osea no está bien armado. Después parece que están todas quemando plata, raro raro. Luego las
+> celdas de hoy y ayer, la terminología que no es infinitiva no me convence. Incluso la vista no me
+> convence como está, me gusta más la de totales por cuenta, no sé si se puede buscar que sea algo
+> parecido, está mucho más clara. Incluso más ordenado, y la vista está menos alargada
+> horizontalmente. Me parece que la mejor idea sería que una pauta se vea la información súper
+> importante ahí. Y si tocás en cualquier lado de la fila, que abra la información adicional
+> importante para tomar decisiones.»
+>
+> «De todas maneras, primordialmente en la vista rendimiento tiene que estar los rendimientos más
+> arriba. Está muy muy rara la vista de esta sección, muy larga, comprimida toda hacia la de
+> veredicto, no me convence nada.»
+
+**Las tres quejas son la misma falla con tres caras: la pantalla afirma más de lo que sabe.**
+
+### Lo medido el 5-sep (BDI, ventana 29-ago→4-sep)
+
+1. 🔴 **8 de las 11 pautas que entregan salen «pausar», y no porque estén mal: el corte ⛔ no mira
+   cuántas compras lo sostienen.** `veredictoDeCelda` clasifica `alto` con `gasto/compras > techo` a
+   **1,0× exacto, sin tolerancia y sin piso de observaciones**. Cuatro de esas ocho se apoyan en
+   **2 o 3 compras**. Con el error relativo de una tasa (~1/√n) quedan **2**.
+   ⚠️ Y el bloque de aprendizaje **ya lo decía en la misma fila**: *«2 de 50 compras/semana»*. La
+   pantalla dice al mismo tiempo «no alcanza para juzgarla» y «pausala».
+
+2. 🔴 **El techo de BDI está 13% bajo, y la causa ⛔ NO es la que estaba anotada.**
+   📊 `scripts/medir-economia-bdi.mjs --dias 30`, 375 ventas online, dos caminos independientes:
+   **las unidades por pedido están BIEN** (1,94 por `items_sold` y 1,94 por `venta_detalles`, contra
+   1,93 cargadas) ⇒ ⛔ **cae la nota de «2,2-2,3»: corregir ese campo no arreglaba nada.**
+   El tilde real es **`usaRaspa: 100`** —la ficha asume que el 100% de los compradores usa la
+   raspadita y descuenta 16,9%; la caja descuenta **9,3%**—. Con `usaRaspa: 25` el ticket del modelo
+   da $25.737 contra $25.546 medidos (**0,7%**) ⇒ techo **$6.668 → $7.558**.
+   ⚠️ **Zattia sin medir**: el script está clavado a la base de BDI, y `ZATTIA_SUPABASE_KEY` ⛔ no
+   tiene permiso sobre `ventas`. Su ficha ya tiene `usaRaspa: 0`, así que ahí el sospechoso sí son
+   las unidades (1,57 cargadas contra 1,03 de una medición vieja).
+
+3. 🔴 **Los pendientes son 19, no 14, y ~2 sirven.** Cruzados uno por uno contra el estado de hoy:
+   **7 apuntan a algo ya apagado** (gasto $0 en la ventana) · 1 a un objeto que no está en la
+   ventana · **1 contradice a la tabla de abajo en la misma pantalla** (`GIRLHOOD FRIO`: el hallazgo
+   dice *«156% del techo, pausar»* y la fila dice **`Rinde` · 58%**; el hallazgo es del **26-ago,
+   diez días viejo**) · 4 son `atribucion-tardia`, que ⛔ no es una decisión sino un dato · 1 es
+   `fatiga` por frecuencia 1,4 contra un máximo de 1,3.
+   🔑 **Las 11 reglas corrieron el 4-sep 14:34Z y 13 de los 19 tienen `fecha` anterior**: la regla ya
+   dejó de detectarlos y **nadie los cerró**. ⇒ ⛔ no falta un detector de obsolescencia: falta
+   **cerrar lo que la corrida de hoy no revalidó**.
+   ⚠️ La lista ⛔ **no está larga porque falte una pantalla: está larga porque el 89% no debería
+   estar ahí.** El 30-ago se la subió de lugar por el mismo síntoma; eso trató la posición, ⛔ no la
+   causa.
+
+4. 🔴 **Dos varas con el mismo nombre en la misma pantalla**: la tarjeta de KPI calcula el `% del
+   techo` con **pedidos reales de Tienda Nube** y cada fila con **compras de Meta**.
+   🔑 **Y lo corrigió Bruno**: *«los pedidos reales pueden ser de otros canales que no sean Meta, por
+   ese motivo, solo tiene que ser META»*. Tiene razón — los 113 pedidos incluyen orgánico, mail y
+   directo, así que 84/113 ⛔ **no** es «lo que Meta no ve». ⇒ el veredicto se juzga **sólo con
+   Meta**, y los pedidos reales quedan rotulados como referencia de negocio, **nunca adentro del
+   veredicto**.
+
+5. **La vista pone el rendimiento sexto**: hay ≈1.080 px de cosas arriba de la tabla, y la tabla
+   tiene **11 columnas sin ancho declarado**, con la de veredicto llevando pill + una frase de hasta
+   diez palabras + badges en 320 px. 🔑 Y en **7 de las 8 ramas** el `porque[0]` es la versión en
+   prosa de columnas que están dibujadas al lado: **el mismo dato dos veces.**
+
+### Lo que Bruno decidió (5-sep)
+
+- **El techo**: medir antes de corregir. Ya está medido para BDI y fue la decisión correcta, porque
+  la causa era otra. Falta Zattia.
+- **Con qué se juzga**: **sólo Meta** (ver punto 4).
+- **Dónde se decide**: **«Decidir» como una entrada más dentro del menú de Meta**, ⛔ no una sección
+  propia del sidebar. En Rendimiento queda un solo renglón. El badge del sidebar, Inicio y el mail
+  de las 07:50 siguen empujando igual.
+- **Orden**: una sola tanda, números y vista al mismo deploy.
+
+▶️ **El plan entero, con archivo:línea, está en `docs/secciones/meta-ads.md` cuando se cierre.**
+Este renglón se borra cuando esté hecho **y caminado por Bruno**.
+
+---
+
 ## 🆕 LOS SIETE DE BRUNO — 3-sep-2026 (dictado, sin analizar todavía)
 
 Dicho por él, textual, en una sola vuelta. ⛔ Nada de acá está verificado aún: se anota primero,

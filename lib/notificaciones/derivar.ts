@@ -16,7 +16,7 @@ import type { FallaRow } from '@/lib/postventa/fallas/tipos'
 import { alertasDe, DIAS_ALERTA, estaAbierto, MOTIVO_LABEL, numeroReclamo, type AlertaReclamo, type ReclamoRow } from '@/lib/reclamos/tipos'
 import { bandejaDeRetornos, type RetornoRow } from '@/lib/reclamos/retornos'
 import { lineasQueVe } from '@/lib/meta-ads/acciones'
-import { gravedadDeHallazgo, type Hallazgo } from '@/lib/meta-ads/reglas'
+import { esParaDecidir, gravedadDeHallazgo, type Hallazgo } from '@/lib/meta-ads/reglas'
 import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { baseDeLinea, type Linea } from '@/lib/lineas'
 import type { Marca } from '@/lib/nav'
@@ -290,6 +290,10 @@ export function avisosDeHallazgo(hallazgos: Hallazgo[], perfil: Perfil | null): 
   const ve = new Set(lineasQueVe(perfil))
   return hallazgos
     .filter((h) => ve.has(h.linea))
+    // 🔑 La MISMA función que el contador de la pantalla y el asunto del mail: un preset que sólo
+    // informa ⛔ no prende un badge. Tres contadores con tres criterios serían tres números sobre
+    // lo mismo, y el que abre los tres ⛔ no sabría a cuál creerle.
+    .filter(esParaDecidir)
     .map((h) => ({
       id: `hallazgo:${h.reglaId}:${h.objetoId}`,
       tipo: 'hallazgo' as const,

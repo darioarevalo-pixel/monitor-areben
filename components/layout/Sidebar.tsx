@@ -55,6 +55,18 @@ export function Sidebar({
   const { perfil, marca, setMarca, salir } = useSesion()
   // Lo único que el menú lee de los datos. El refresco lo hace el shell (useAvisosPoll), no acá.
   const nuevos = useAvisos((st) => st.nuevos)
+  /**
+   * 🔑 **El número de «Decidir» sale del MISMO store que ya alimenta Inicio**, ⛔ no de una consulta
+   * nueva ni de un criterio nuevo: son los avisos de tipo `hallazgo`, que `avisosDeHallazgo` ya
+   * derivó filtrando por las líneas que esta persona puede ver.
+   *
+   * ⚠️ Cuenta **todas las líneas visibles**, mientras que el renglón de Rendimiento cuenta **la del
+   * eje**. Por eso ese renglón nombra la línea («3 de BDI para decidir →») y éste no: dicho así los
+   * dos pueden dar números distintos sin que ninguno mienta. Sin el nombre serían dos contadores
+   * sobre lo mismo, que es el defecto que `contarParaDecidir` existe para evitar entre la pantalla
+   * y el mail de las 07:50.
+   */
+  const paraDecidir = useAvisos((st) => st.avisos.filter((a) => a.tipo === 'hallazgo').length)
   const sinLeerN = useSistema((st) => contarSinLeer(st))
   const itemsAgenda = useAgenda((st) => st.items)
   const hechosAgenda = useAgenda((st) => st.hechos)
@@ -258,6 +270,13 @@ export function Sidebar({
               >
                 {hayIcono(it.icono) && <Icono nombre={it.icono} size={15} />}
                 {it.label}
+                {/* El cuarto contador, y el único que cuelga de una entrada de subárea. Mismo
+                    criterio que los otros tres: se apaga ACCIONANDO, que es el trabajo real. */}
+                {it.ruta === '/meta-ads/decidir' && paraDecidir > 0 && (
+                  <span className="nav-badge" title={`${paraDecidir} ${paraDecidir === 1 ? 'cosa para decidir' : 'cosas para decidir'} en la pauta`}>
+                    {paraDecidir > 99 ? '99+' : paraDecidir}
+                  </span>
+                )}
               </Link>
             )
             return (
