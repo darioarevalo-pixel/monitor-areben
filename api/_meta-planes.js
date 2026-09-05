@@ -317,6 +317,28 @@ async function prepararDuplicar(perfil, b, marcador) {
     const ads = await insightsTodas(`${objetoId}/ads?fields=id,name,creative{id}&limit=200`);
     if (!ads.ok) return { ok: false, status: 502, error: `No se pudieron leer los avisos del conjunto (${ads.error}).` };
     censo.avisos = ads.rows.map(aAvisoCenso);
+
+    // **Qué avisos del original entran.** Sin `avisosElegidos` entran todos, que es como se comportó
+    // siempre y es lo que espera quien sólo quiere otra igual.
+    const elegidos = Array.isArray(b.avisosElegidos) ? b.avisosElegidos.map(String) : null;
+    if (elegidos) {
+      if (!elegidos.length) {
+        return { ok: false, status: 400, error: 'No se eligió ningún aviso, así que la copia saldría vacía.' };
+      }
+      // 🔴 Un id que no está en el conjunto se DICE, no se descarta en silencio. Quien lo pidió cree
+      // que esa pieza va, y una copia a la que le falta una no se nota hasta que se miran los
+      // números y falta una fila. Mismo criterio que el chequeo de `creativeId` de acá abajo: lo que
+      // no va a poder ser se dice ANTES de armar nada.
+      const hay = new Set(censo.avisos.map((a) => a.id));
+      const faltan = elegidos.filter((id) => !hay.has(id));
+      if (faltan.length) {
+        return {
+          ok: false, status: 409,
+          error: `Ese conjunto no tiene ${faltan.length} de los avisos elegidos (${faltan.join(', ')}), así que no se armó nada.`,
+        };
+      }
+      censo.avisos = censo.avisos.filter((a) => elegidos.includes(a.id));
+    }
   } else {
     const [sets, ads] = await Promise.all([
       insightsTodas(`${objetoId}/adsets?fields=id,name,daily_budget&limit=200`),
@@ -366,6 +388,8 @@ async function prepararDuplicar(perfil, b, marcador) {
   const entrada = {
     nivel, objetoId, cuentaId, campaignId, nombreOriginal: String(obj.name || ''),
     copias: Number(b.copias) || 1,
+    // Repartir: un conjunto por aviso en vez de una copia con todos adentro. Ver `armarPlanDuplicar`.
+    unoPorAviso: Boolean(b.unoPorAviso),
     nombre: b.nombre ? String(b.nombre).trim() : null,
     presupuestoCrudo: diarioPedido,
     censo,

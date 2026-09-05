@@ -223,6 +223,67 @@ describe('armarPlanDuplicar', () => {
     expect(armarPlanDuplicar({ ...conjunto, copias: TOPE_COPIAS + 1 }, marcador).ok).toBe(false)
     expect(armarPlanDuplicar({ ...conjunto, nivel: 'aviso' }, marcador).ok).toBe(false)
   })
+
+  describe('unoPorAviso — repartir las piezas en un conjunto cada una', () => {
+    it('🔴 cada aviso queda en SU conjunto, no todos en el mismo', () => {
+      // Esta aserción es el punto entero del modo. Si dos avisos apuntaran al mismo `adsetId`, Meta
+      // le daría casi todo el presupuesto a uno y la otra pieza «no perdió, no jugó» — que es
+      // exactamente lo que pasó en las TANDA 9 y lo que este modo existe para evitar.
+      const r = armarPlanDuplicar({ ...conjunto, unoPorAviso: true }, marcador)
+      if (!r.ok) throw new Error(r.error)
+      const conjuntos = r.pasos.filter((p) => p.tipo === 'crear-conjunto')
+      const avisos = r.pasos.filter((p) => p.tipo === 'crear-aviso')
+      expect(conjuntos).toHaveLength(2)
+      expect(avisos).toHaveLength(2)
+      const destinos = avisos.map((a) => a.pedido!.adsetId)
+      expect(new Set(destinos).size).toBe(2)
+      // Y cada uno cuelga del conjunto que se creó JUSTO antes, no de cualquiera.
+      for (const a of avisos) {
+        const suyo = conjuntos.find((c) => a.pedido!.adsetId === `{{${c.orden}}}`)
+        expect(suyo).toBeDefined()
+        expect(suyo!.orden).toBeLessThan(a.orden)
+      }
+    })
+
+    it('🔑 el nombre del conjunto lleva el del aviso: es lo único que después dice cuál es cuál', () => {
+      const r = armarPlanDuplicar({ ...conjunto, nombre: 'TANDA 1', unoPorAviso: true }, marcador)
+      if (!r.ok) throw new Error(r.error)
+      const finales = r.pasos.filter((p) => p.tipo === 'nombre').map((p) => p.pedido!.name)
+      expect(finales).toEqual(['TANDA 1 · Aviso 1', 'TANDA 1 · Aviso 2'])
+      // Y el nombre definitivo va SIEMPRE, aunque no lo hayan pedido: sin él quedan N conjuntos con
+      // la marca del plan y ninguna manera de saber qué pieza tiene cada uno.
+      const sinNombre = armarPlanDuplicar({ ...conjunto, unoPorAviso: true }, marcador)
+      if (!sinNombre.ok) throw new Error(sinNombre.error)
+      expect(sinNombre.pasos.filter((p) => p.tipo === 'nombre')).toHaveLength(2)
+    })
+
+    it('el nombre se recorta a lo que Meta acepta', () => {
+      const largo = { id: 'a1', nombre: 'x'.repeat(LARGO_NOMBRE * 2), creativeId: 'c1' }
+      const r = armarPlanDuplicar({ ...conjunto, censo: { avisos: [largo] }, unoPorAviso: true }, marcador)
+      if (!r.ok) throw new Error(r.error)
+      for (const p of r.pasos.filter((x) => x.tipo === 'nombre')) {
+        expect(String(p.pedido!.name).length).toBeLessThanOrEqual(LARGO_NOMBRE)
+      }
+    })
+
+    it('⛔ no se combina con varias copias ni con una campaña, y sin avisos no arma nada', () => {
+      // Repartir YA hace varios conjuntos: pedir además 3 copias de un reparto de 2 avisos son 6
+      // conjuntos que nadie quiso.
+      expect(armarPlanDuplicar({ ...conjunto, unoPorAviso: true, copias: 3 }, marcador).ok).toBe(false)
+      expect(armarPlanDuplicar({
+        nivel: 'campania', objetoId: '100', cuentaId: '999', campaignId: '100', nombreOriginal: 'Camp',
+        copias: 1, unoPorAviso: true, censo: { conjuntos: [] },
+      }, marcador).ok).toBe(false)
+      expect(armarPlanDuplicar({ ...conjunto, censo: { avisos: [] }, unoPorAviso: true }, marcador).ok).toBe(false)
+    })
+
+    it('sin el modo, se comporta igual que siempre: UN conjunto con todos los avisos adentro', () => {
+      const r = armarPlanDuplicar(conjunto, marcador)
+      if (!r.ok) throw new Error(r.error)
+      expect(r.pasos.filter((p) => p.tipo === 'crear-conjunto')).toHaveLength(1)
+      expect(new Set(r.pasos.filter((p) => p.tipo === 'crear-aviso').map((p) => p.pedido!.adsetId)).size).toBe(1)
+    })
+  })
 })
 
 describe('armarPlanMoverPlata', () => {

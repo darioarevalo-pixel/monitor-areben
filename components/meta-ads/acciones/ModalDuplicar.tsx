@@ -41,6 +41,7 @@ import { avanzarHasta } from '@/components/meta-ads/planes/usePlanes'
 import { dondeVaElPresupuesto, segunLosConjuntos, type Presupuestable } from '@/lib/meta-ads/copia'
 import { money } from '@/lib/meta-ads/formato'
 import { bloqueoDeLaCopia, copiaCondenada, type BloqueoCopia } from '@/lib/meta-ads/mejoras'
+import type { AvisoMejoras } from '@/lib/meta-ads/tipos'
 import { ETIQUETA_LINEA } from '@/lib/meta-ads/lineas'
 import {
   Button, ConfirmDetalle, Field, Input, Modal, Notice, NumberField, color, font, space,
@@ -150,6 +151,24 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
   ))
 
   /**
+   * **Repartir**: un conjunto por pieza en vez de una copia con todas adentro.
+   *
+   * 🔑 Existe porque **Meta reparte el presupuesto de un conjunto entre sus avisos según lo que va
+   * aprendiendo**: dos piezas en el mismo conjunto no compiten parejo — una se lleva casi todo a los
+   * dos días y la otra no perdió, no jugó. Medido en esta cuenta el 4-sep-2026: en las dos TANDA 9
+   * un solo aviso se llevó el 84% y el 92% del gasto de su conjunto, y las cuatro piezas restantes
+   * quedaron sin veredicto con menos de $3.200 cada una.
+   *
+   * Los avisos salen de la MISMA lectura que ya se pide para el cartel de bloqueo: no hay un viaje
+   * más a Meta por abrir el modal.
+   */
+  const [susAvisos, setSusAvisos] = useState<AvisoMejoras[]>([])
+  const [repartir, setRepartir] = useState(false)
+  // Se guardan los EXCLUIDOS y no los elegidos: así la lista nace con todos adentro, que es como se
+  // comportó siempre, y un aviso que aparezca tarde entra solo en vez de quedar afuera en silencio.
+  const [excluidos, setExcluidos] = useState<string[]>([])
+
+  /**
    * ¿Meta va a aceptar esta copia? Una lectura, al abrir el modal.
    *
    * 🔑 **Acá y no al desplegar la fila.** Es el único momento en que la respuesta cambia una decisión;
@@ -161,7 +180,11 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
     if (!camp) return
     let vivo = true
     traerMejoras(camp).then((r) => {
-      if (vivo) setBloqueo(bloqueoDeLaCopia(o.nivel, o.id, r))
+      if (!vivo) return
+      setBloqueo(bloqueoDeLaCopia(o.nivel, o.id, r))
+      // El corte por conjunto es el mismo que hace `bloqueoDeLaCopia`: se duplica el conjunto, así
+      // que los avisos que importan son los suyos.
+      if (r.ok && o.nivel === 'conjunto') setSusAvisos(r.dato.ads.filter((a) => a.conjunto === o.id))
     })
     return () => { vivo = false }
   }, [o.campania, o.nivel, o.id])
@@ -193,6 +216,11 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
   const ajusta = (!!limpio && !nombreLargo) || cambiaPlata
   const delta = nuevoMonto - base
   const condenada = copiaCondenada(bloqueo)
+  const elegidos = susAvisos.filter((a) => !excluidos.includes(a.id))
+  const puedeRepartir = o.nivel === 'conjunto' && susAvisos.length >= 2
+  // Sin ninguno tildado no hay nada que crear, y el botón lo dice en vez de dejar que el servidor
+  // conteste 400 después de un viaje.
+  const sinElegir = susAvisos.length > 0 && elegidos.length === 0
 
   /**
    * Arma el plan. ⚠️ **No escribe en Meta**: deja los pasos guardados para poder leerlos antes de
@@ -207,8 +235,16 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
       nivel: o.nivel,
       objetoId: o.id,
       copias: 1,
-      nombre: limpio || null,
+      // ⛔ El nombre propio no va con `repartir`: ahí cada conjunto se llama por su pieza, y un
+      // nombre único para todos borraría justo lo que los distingue.
+      nombre: (repartir ? null : limpio) || null,
       presupuestoCrudo: cambiaPlata ? aCrudo(nuevoMonto, o.moneda) : null,
+      unoPorAviso: puedeRepartir && repartir,
+      // Sólo cuando de verdad es un subconjunto: mandar la lista completa haría que el servidor
+      // valide una selección que nadie hizo.
+      avisosElegidos: elegidos.length && elegidos.length !== susAvisos.length
+        ? elegidos.map((a) => a.id)
+        : null,
     })
     setEnPlan(false)
     if (!r.ok) { setMotivoPlan(r.motivo); return }
@@ -277,7 +313,7 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
           <Button
             variant="solid"
             tone="brand"
-            disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando'}
+            disabled={trabajando || enPlan || nombreLargo || montoInvalido || presu.fase === 'mirando' || sinElegir}
             onClick={() => void armarPlan()}
           >
             {enPlan ? 'Armando el plan…' : 'Armar un plan'}
@@ -313,6 +349,60 @@ export function ModalDuplicar({ o, diarioCrudo, sinPresupuesto, onCerrar, onDupl
         </div>
 
         <AvisoBloqueo b={bloqueo} nivel={o.nivel} />
+
+        {puedeRepartir && (
+          <div style={{
+            border: `1px solid ${repartir ? color.brandBorder : color.line}`,
+            borderRadius: 8, padding: space[3], display: 'flex', flexDirection: 'column', gap: space[2],
+          }}
+          >
+            <label style={{ display: 'flex', gap: space[2], alignItems: 'flex-start', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={repartir}
+                onChange={(ev) => setRepartir(ev.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span style={{ fontSize: font.base, lineHeight: 1.5 }}>
+                <b>Un conjunto por pieza.</b> En vez de una copia con los {susAvisos.length} avisos
+                adentro, crea {elegidos.length} conjuntos con una pieza cada uno.
+              </span>
+            </label>
+            <div style={{ fontSize: font.sm, color: color.mut, lineHeight: 1.5 }}>
+              Meta le da casi todo el presupuesto de un conjunto a un solo aviso, así que la pieza que
+              queda sin entrega <b>no perdió: no jugó</b>. Con un conjunto cada una, cada pieza tiene
+              su propia plata y el número del final se puede comparar. Cada conjunto se llama por su
+              pieza, que es lo único que después dice cuál es cuál.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
+              {susAvisos.map((a) => (
+                <label
+                  key={a.id}
+                  style={{
+                    display: 'flex', gap: space[2], alignItems: 'center', cursor: 'pointer',
+                    fontSize: font.sm, color: excluidos.includes(a.id) ? color.mut2 : color.ink2,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!excluidos.includes(a.id)}
+                    onChange={(ev) => setExcluidos((prev) => (
+                      ev.target.checked ? prev.filter((x) => x !== a.id) : [...prev, a.id]
+                    ))}
+                  />
+                  <span style={{ textDecoration: excluidos.includes(a.id) ? 'line-through' : undefined }}>
+                    {a.nombre || a.id}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {sinElegir && (
+              <Notice tone="danger">
+                No queda ninguna pieza tildada, así que no habría nada que crear.
+              </Notice>
+            )}
+          </div>
+        )}
 
         <Notice tone="brand">
           <b>El plan es el camino recomendado.</b> En vez de pedirle a Meta la fotocopia, lee cómo
