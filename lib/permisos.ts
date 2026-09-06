@@ -13,6 +13,7 @@
 import type { Marca } from './nav.datos'
 import {
   ACCESO_POR_FUNCION as ACCESO_POR_FUNCION_JS,
+  DETALLE_DE as DETALLE_DE_JS,
   esAdmin as esAdminJs,
   veVentasHistoricas as veVentasHistoricasJs,
   estaExcluido as estaExcluidoJs,
@@ -26,6 +27,7 @@ import {
   puedeSub as puedeSubJs,
   puedeVer as puedeVerJs,
   puedeVerAlguna as puedeVerAlgunaJs,
+  puedeVerPropio as puedeVerPropioJs,
   SECCIONES_ANALISIS_VENTAS as SECCIONES_ANALISIS_VENTAS_JS,
   seccionesDeFuncion as seccionesDeFuncionJs,
   SECCION_AREA as SECCION_AREA_JS,
@@ -56,6 +58,12 @@ export const ACCESO_POR_FUNCION: Record<Funcion, { areas: string[]; keys?: strin
 
 /** A qué área pertenece cada sección. Espejo de `PermCat.area`, amarrado por test. */
 export const SECCION_AREA: Record<string, string> = SECCION_AREA_JS
+
+/**
+ * Las secciones que son el DETALLE de otra: quien entra a la madre, entra al detalle. Es lo que
+ * separa `puedeVer` de `puedeVerPropio`, y por eso los tests la recorren en vez de copiarla.
+ */
+export const DETALLE_DE: Record<string, string> = DETALLE_DE_JS
 
 /**
  * Las secciones que ve todo el equipo sin permiso. **Es la puerta abierta de verdad** — no
@@ -154,6 +162,14 @@ export function tieneFuncion(perfil: Perfil | null, f: Funcion): boolean {
 /** ¿Este perfil ve `key` en `marca`? Precedencia y matices, en el core. */
 export function puedeVer(perfil: Perfil | null, marca: Marca, key: string): boolean {
   return puedeVerJs(perfil, marca, key)
+}
+
+/**
+ * Lo mismo, pero sin heredar de la madre (`DETALLE_DE`). Es la pregunta del **menú**: «¿esto es
+ * suyo?», no «¿puede abrirlo?». El guard de la ruta sigue con `puedeVer`. Detalle en el core.
+ */
+export function puedeVerPropio(perfil: Perfil | null, marca: Marca, key: string): boolean {
+  return puedeVerPropioJs(perfil, marca, key)
 }
 
 /** Permiso granular de sub-acción (`canjes.aprobar`). Los subs NO se heredan de la función. */

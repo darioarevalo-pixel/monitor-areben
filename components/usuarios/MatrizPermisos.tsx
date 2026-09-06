@@ -40,9 +40,10 @@ const LABEL_AREA = new Map(NAV_CATS.map((c) => [c.id, c.label]))
  * únicamente ahí y darle Solicitudes a la cuenta de Depósito era imposible desde su sector —
  * había que saber que estaba escondida en Local. Es el reclamo de Bruno.
  *
- * Las que no tienen entrada de menú caen en su área: `resumen`, y `sesion-fotos` /
- * `solicitudes-internas`, que ya no son secciones sino el detalle de Solicitudes y siguen en
- * la lista por sus sub-permisos (editar, aprobar consumos).
+ * Las que no tienen entrada de menú caen en su área: `resumen`, y `solicitudes-internas`, que no es
+ * una sección sino el detalle de Solicitudes y sigue en la lista por sus sub-permisos (aprobar
+ * consumos). `sesion-fotos` volvió al menú el 5-sep-2026 y cae en Marketing, que es su misma área:
+ * la fila no se mueve de lugar.
  */
 export const AREAS = NAV_CATS.map((c) => ({
   id: c.id,

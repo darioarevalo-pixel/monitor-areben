@@ -1,5 +1,5 @@
 import { NAV_CATS, PERM_CAT, type Marca, type NavCat, type NavGrupo, type NavItem, type PermCat } from './nav.datos'
-import { esAdmin, tieneFuncion, type Funcion, type Perfil } from './permisos'
+import { esAdmin, marcasConAcceso, puedeSub, puedeVerPropio, tieneFuncion, type Funcion, type Perfil } from './permisos'
 
 export { NAV_CATS, PERM_CAT }
 export type { Marca, NavCat, NavGrupo, NavItem, PermCat }
@@ -208,6 +208,10 @@ const ICONO_POR_KEY: Record<string, string> = {
   'conteo-estandar-stunned': 'conteo',
   exhib: 'exhib',
   // Marketing
+  // La cámara, la misma de la cola de fotos de Tienda Nube: es el mismo trabajo en dos momentos —
+  // lo que la cola detecta que falta fotografiar se pide acá, y `components/tncat/ColaCard.tsx`
+  // navega derecho a `/sesion-fotos`. Mismo criterio que `atencion: 'clientes'`.
+  'sesion-fotos': 'tn-fotos',
   // La brújula, la misma de Norte: es la sección de «hacia dónde vamos» de Marketing. No se
   // pisan en ningún menú — quien ve Norte es de Dirección y no ve ésta, y al revés.
   'mkt-ventas': 'norte',
@@ -335,6 +339,76 @@ export function sectorVisible(perfil: Perfil | null, key: string, catId: string)
   const mias = donde.filter((c) => tieneFuncion(perfil, c as Funcion))
   if (!mias.length) return true // ninguna función aplica acá → ve todas (compatibilidad)
   return mias.includes(catId)
+}
+
+/** Una categoría del menú ya filtrada: mismas propiedades, pero con lo que este perfil ve. */
+export type NavCatVisible = Omit<NavCat, 'items' | 'grupos'> & {
+  keys: string[]
+  items: NavItem[]
+  grupos: (Omit<NavGrupo, 'items'> & { items: NavItem[] })[]
+}
+
+/**
+ * ── El MENÚ, como función pura ──
+ *
+ * Vive acá y no en `components/layout/Sidebar.tsx` por lo mismo que `sectorVisible`: **no hay
+ * ningún test que renderice el Sidebar**, así que una regla escrita adentro del componente es una
+ * regla que nadie vigila. Lo que decide quién ve qué entrada se prueba en `tests/nav-menu.test.ts`.
+ *
+ * 🔑 **La diferencia con el guard de la ruta es `puedeVerPropio`, y es a propósito.** El menú
+ * pregunta *«¿esto es suyo?»*; la ruta (`app/[[...seccion]]/page.tsx`) pregunta *«¿puede
+ * abrirlo?»* y ahí la herencia de `DETALLE_DE` tiene que seguir valiendo: Depósito, Local y
+ * Administración abren `/sesion-fotos` con el botón «Ver» de la lista unificada, pero ⛔ no tienen
+ * que ver el renglón de Marketing en su sidebar.
+ */
+export function keyVisibleEnMenu(perfil: Perfil | null, marca: Marca, key: string): boolean {
+  if (!esDeMarca(key, marca)) return false
+  if (key === 'usuarios') return esAdmin(perfil)
+  if (key === 'inicio') return true
+  // Las secciones cuyo eje no es la marca del sidebar (Meta Ads) se ven si se tienen en ALGUNA
+  // marca: adentro no hay nada que dependa de la de arriba. Mismo criterio que el guard de
+  // `page.tsx`, y tiene que ser el mismo — si no, el link se esconde y la URL igual entra.
+  if (KEYS_CROSS_MARCA.has(key)) return marcasConAcceso(perfil, key, ['bdi', 'zattia']).length > 0
+  return puedeVerPropio(perfil, marca, key)
+}
+
+/**
+ * Una entrada de subárea se ve si se ve su sección y, cuando pide sub-permisos, si tiene alguno.
+ * Vale igual para las de un subgrupo y para las que cuelgan derecho de la categoría (Meta).
+ */
+export function itemVisibleEnMenu(perfil: Perfil | null, marca: Marca, it: NavItem): boolean {
+  if (!keyVisibleEnMenu(perfil, marca, it.key)) return false
+  if (!it.sub) return true
+  // La herramienta se ve si tiene alguno de sus sub-permisos (Categorías por modelo
+  // es de BDI y la asignación por Excel de Zattia: la entrada es la misma).
+  // ⛔ Sin `esAdmin(perfil) ||` adelante, a propósito: `puedeSub` ya le dice que sí al admin —y
+  // desde el 3-sep-2026 le dice que NO cuando hay una excepción puesta sobre ese sub. Con el
+  // atajo, un administrador que se sacó las dos herramientas de una entrada la seguía viendo en
+  // el menú y entraba a una pantalla sin nada para hacer.
+  const subs = Array.isArray(it.sub) ? it.sub : [it.sub]
+  return subs.some((s) => puedeSub(perfil, marca, it.key, s))
+}
+
+/** Las categorías del menú que este perfil ve en esta marca, ya filtradas y en su orden. */
+export function catsVisibles(perfil: Perfil | null, marca: Marca): NavCatVisible[] {
+  return NAV_CATS.map((cat) => {
+    if (cat.adminOnly && !esAdmin(perfil)) return null
+    // 🔴 La arrow explícita no es cosmética: `Array.filter` le pasa el ÍNDICE como 2º argumento,
+    // así que extender `keyVisibleEnMenu(k, catId?)` en vez de envolverlo le metería un número
+    // donde va el id del grupo y el bug sería mudo. `sectorVisible` es no-op en 44 de las 46.
+    const deEsteSector = (k: string) => keyVisibleEnMenu(perfil, marca, k) && sectorVisible(perfil, k, cat.id)
+    const visibleItem = (it: NavItem) => itemVisibleEnMenu(perfil, marca, it) && sectorVisible(perfil, it.key, cat.id)
+    const keys = cat.keys.filter(deEsteSector)
+    const items = (cat.items ?? []).filter(visibleItem)
+    // Un subgrupo (2º nivel, ej. Local > Actividades) se filtra igual que el grupo y
+    // desaparece entero si no queda ninguna sección visible adentro.
+    const grupos = (cat.grupos ?? [])
+      .map((g) => ({ ...g, keys: g.keys.filter(deEsteSector), items: (g.items ?? []).filter(visibleItem) }))
+      .filter((g) => g.keys.length > 0 || g.items.length > 0)
+    // 🔴 `items` va en la condición: una categoría que es un módulo (Meta) no tiene keys sueltas ni
+    // subgrupos, así que sin esto desaparecería entera del menú para todo el mundo.
+    return keys.length || items.length || grupos.length ? { ...cat, keys, items, grupos } : null
+  }).filter((c): c is NavCatVisible => c !== null)
 }
 
 /**

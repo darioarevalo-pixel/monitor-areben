@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PERM_CAT, type Marca } from '@/lib/nav.datos'
-import { SECCION_AREA, marcasConAcceso, puedeVer, seccionesDeFuncion, type Funcion, type Perfil } from '@/lib/permisos'
+import { SECCION_AREA, marcasConAcceso, puedeVer, puedeVerPropio, seccionesDeFuncion, type Funcion, type Perfil } from '@/lib/permisos'
 import { veMarcaCanjes } from '@/lib/canjes/permisos'
 import { marcasVisiblesCanjes } from '@/lib/canjes/marcas'
 
@@ -91,8 +91,8 @@ describe('cliente y servidor deciden lo mismo en Canjes', () => {
 /**
  * La puerta pintada: Depósito veía la solicitud de fotos en la lista unificada y al abrirla el
  * guard lo mandaba a Inicio, porque `sesion-fotos` es del área de Marketing y su función solo le
- * da `solicitudes`. Como las dos pantallas ya no están en el menú (se entra por "Ver"), el permiso
- * de la madre alcanza.
+ * da `solicitudes`. Como a esas dos pantallas Depósito llega por el botón "Ver" y no por el menú,
+ * el permiso de la madre alcanza.
  */
 describe('el detalle de Solicitudes se abre con el permiso de Solicitudes', () => {
   const DETALLES = ['sesion-fotos', 'solicitudes-internas']
@@ -129,6 +129,19 @@ describe('el detalle de Solicitudes se abre con el permiso de Solicitudes', () =
   it('no cruza de marca', () => {
     const p = perfil({ acceso: { bdi: { solicitudes: true } } })
     expect(puedeVer(p, 'zattia', 'sesion-fotos')).toBe(false)
+  })
+
+  /**
+   * 🔑 **La otra mitad de la regla, y vive acá a propósito.** Desde el 5-sep-2026 `sesion-fotos` es
+   * otra vez una entrada del menú —la puerta de Marketing—, así que la herencia habilita la
+   * PANTALLA pero ⛔ no el renglón: si el sidebar preguntara con `puedeVer`, a Depósito, Local y
+   * Administración les aparecería un grupo «Marketing» entero que hoy no ven. El menú pregunta con
+   * `puedeVerPropio`. Quien lea una mitad tiene que encontrar la otra al lado.
+   */
+  it.each(DETALLES)('…pero el MENÚ ⛔ no lo hereda: %s', (k) => {
+    const p = perfil({ funcion: ['deposito'] })
+    expect(puedeVer(p, 'bdi', k)).toBe(true)
+    expect(puedeVerPropio(p, 'bdi', k)).toBe(false)
   })
 })
 

@@ -8,8 +8,8 @@ import { useAgenda } from '@/store/useAgenda'
 import { contarSinLeer, useSistema } from '@/store/useSistema'
 import { contarSinTildar, hoyIso } from '@/lib/agenda'
 import { comoLeLlamamos } from '@/lib/inicio/core'
-import { esDeMarca, estaEnVariosGrupos, iconoDe, KEYS_CROSS_MARCA, labelDeMenu, NAV_CATS, sectorVisible, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
-import { esAdmin, marcasConAcceso, puedeCambiarMarca, puedeSub, puedeVer } from '@/lib/permisos'
+import { catsVisibles, estaEnVariosGrupos, iconoDe, labelDeMenu, type Marca, type NavGrupo, type NavItem } from '@/lib/nav'
+import { puedeCambiarMarca } from '@/lib/permisos'
 import { CUENTAS } from '@/lib/cuentas'
 import { useConfirmar } from '@/components/ui/Confirm'
 import { color } from '@/components/ui/tokens'
@@ -80,55 +80,9 @@ export function Sidebar({
   // solo tres horas antes de tiempo.
   const sinTildar = contarSinTildar(itemsAgenda, hechosAgenda, hoyIso(), { marca })
 
-  // Mismo criterio que aplicarVisibilidadTabs + renderNav del legacy: una sección
-  // se ve si es de esta marca Y el perfil tiene permiso.
-  const visible = (k: string) => {
-    if (!esDeMarca(k, marca)) return false
-    if (k === 'usuarios') return esAdmin(perfil)
-    if (k === 'inicio') return true
-    // Las secciones cuyo eje no es la marca del sidebar (Meta Ads) se ven si se tienen en ALGUNA
-    // marca: adentro no hay nada que dependa de la de arriba. Mismo criterio que el guard de
-    // `page.tsx`, y tiene que ser el mismo — si no, el link se esconde y la URL igual entra.
-    if (KEYS_CROSS_MARCA.has(k)) return marcasConAcceso(perfil, k, ['bdi', 'zattia']).length > 0
-    return puedeVer(perfil, marca, k)
-  }
-
-  // Un subgrupo (2º nivel, ej. Local > Actividades) se filtra igual que el grupo y
-  // desaparece entero si no queda ninguna sección visible adentro.
-  // Una entrada de subárea se ve si se ve su sección y, cuando pide sub-permisos, si tiene alguno.
-  // Vale igual para las de un subgrupo y para las que cuelgan derecho de la categoría (Meta).
-  const itemVisible = (it: NavItem) => {
-    if (!visible(it.key)) return false
-    if (!it.sub) return true
-    // La herramienta se ve si tiene alguno de sus sub-permisos (Categorías por modelo
-    // es de BDI y la asignación por Excel de Zattia: la entrada es la misma).
-    // ⛔ Sin `esAdmin(perfil) ||` adelante, a propósito: `puedeSub` ya le dice que sí al admin —y
-    // desde el 3-sep-2026 le dice que NO cuando hay una excepción puesta sobre ese sub. Con el
-    // atajo, un administrador que se sacó las dos herramientas de una entrada la seguía viendo en
-    // el menú y entraba a una pantalla sin nada para hacer.
-    const subs = Array.isArray(it.sub) ? it.sub : [it.sub]
-    return subs.some((s) => puedeSub(perfil, marca, it.key, s))
-  }
-
-  const cats = NAV_CATS.map((cat) => {
-    if (cat.adminOnly && !esAdmin(perfil)) return null
-    // 🔴 La arrow explícita no es cosmética: `Array.filter` le pasa el ÍNDICE como 2º argumento,
-    // así que extender `visible(k, catId?)` en vez de envolverlo le metería un número donde va el
-    // id del grupo y el bug sería mudo. `sectorVisible` es no-op en 44 de las 45 secciones.
-    const deEsteSector = (k: string) => visible(k) && sectorVisible(perfil, k, cat.id)
-    const keys = cat.keys.filter(deEsteSector)
-    const items = (cat.items ?? []).filter((it) => itemVisible(it) && sectorVisible(perfil, it.key, cat.id))
-    const grupos = (cat.grupos ?? [])
-      .map((g) => ({
-        ...g,
-        keys: g.keys.filter(deEsteSector),
-        items: (g.items ?? []).filter((it) => itemVisible(it) && sectorVisible(perfil, it.key, cat.id)),
-      }))
-      .filter((g) => g.keys.length > 0 || g.items.length > 0)
-    // 🔴 `items` va en la condición: una categoría que es un módulo (Meta) no tiene keys sueltas ni
-    // subgrupos, así que sin esto desaparecería entera del menú para todo el mundo.
-    return keys.length || items.length || grupos.length ? { ...cat, keys, items, grupos } : null
-  }).filter((c): c is NonNullable<typeof c> => c !== null)
+  // Quién ve qué entrada vive en `lib/nav.ts` como función pura: acá no hay ningún test que
+  // renderice, así que una regla escrita adentro del componente es una regla que nadie vigila.
+  const cats = catsVisibles(perfil, marca)
 
   const contieneActiva = (c: (typeof cats)[number]) =>
     c.keys.includes(activa)

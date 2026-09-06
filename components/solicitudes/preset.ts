@@ -65,12 +65,29 @@ export const PRESET_INTERNAS: PresetSolicitud = {
 }
 
 /**
+ * Los motivos que salen por MARKETING, y por eso viven en el cajón de la sesión de fotos.
+ *
+ * 🔑 **Video/contenido entró acá el 5-sep-2026, por pedido de Bruno**: *«sesión de video y
+ * contenido también es sesión de fotos; muestra, moldería y uso interno no aplican para
+ * marketing»*. Es la misma producción —la misma modelo, el mismo día, los mismos outfits— y
+ * mandarla al otro cajón tenía tres precios que no compraba nadie: se guardaba con el permiso de
+ * `solicitudes-internas`, que es del área **local**; tomaba `estadoTrasVenta: 'retirada'`; y
+ * **perdía el eje «De dónde viene»**, que sólo se pregunta en este cajón — un video de campaña ⛔ no
+ * podía decir que venía de una campaña.
+ *
+ * ⚠️ **⛔ Sin backfill**: el `kind` está escrito en la fila. Las de video ya guardadas se quedan en
+ * internas y se siguen abriendo igual (`motivosVisibles` agrega el motivo actual a la lista para
+ * ⛔ no reescribirlo al abrir).
+ */
+export const MOTIVOS_FOTOS: readonly string[] = ['Sesión de fotos', 'Video/contenido']
+
+/**
  * El motivo elige el preset (y con él la fila donde se guarda). Es lo que deja que "Sesión
  * de fotos" sea un motivo más sin volver a migrar datos: las de fotos siguen comportándose
  * como siempre y el resto como las internas.
  */
 export function presetPorMotivo(motivo?: string): PresetSolicitud {
-  return !motivo || motivo === 'Sesión de fotos' ? PRESET_FOTOS : PRESET_INTERNAS
+  return !motivo || MOTIVOS_FOTOS.includes(motivo) ? PRESET_FOTOS : PRESET_INTERNAS
 }
 
 /** ¿Necesita que alguien la apruebe? Lo decide el DESTINO, no la sección por la que entró. */
@@ -81,8 +98,14 @@ export function necesitaAprobacion(s: { tipo?: TipoSol }): boolean {
 /**
  * Los motivos que se pueden elegir sin cambiar de cajón. El motivo se elige ANTES (en
  * Solicitudes, que rutea con `ponerAltaSolicitud`); adentro del borrador se puede corregir,
- * pero solo entre los del mismo cajón: la venta en GN sale con el cliente del preset, así
- * que mover el motivo al otro grupo cambiaría a nombre de quién queda la venta.
+ * pero solo entre los del mismo cajón.
+ *
+ * ⚠️ **Esta última frase decía que mover el motivo al otro grupo «cambiaría a nombre de quién queda
+ * la venta», y era falsa** (medido el 5-sep-2026): `api/crear-venta.js` elige el cliente por
+ * `proposito` y **ninguno de los dos cajones lo manda**, así que las dos ventas salen al MISMO
+ * cliente de GN. Lo que de verdad cambia es el permiso con que se gatea (`seccionKey`), el
+ * `estadoTrasVenta` y el comentario de la venta. Se deja el corte por cajón por eso, ⛔ no por la
+ * razón que estaba escrita.
  */
 export function motivosDe(preset: PresetSolicitud): string[] {
   return MOTIVOS.filter((m) => presetPorMotivo(m).kind === preset.kind)

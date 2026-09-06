@@ -6,9 +6,19 @@ stock), se retira, se fotografía y **vuelve**. El eje es que el retiro es rever
 cuenta dos veces —preparado y devuelto— y la solicitud no cierra hasta que GN confirma que la venta
 se anuló. Reemplazó a la pantalla `sfXxx` del `index.html` legacy, de la que es un port literal.
 
-⚠️ **Ya no es una entrada del menú.** La absorbió `solicitudes` (la vista unificada de estado); a
-esta pantalla se llega por el botón «Ver» de ahí, o por el puente de Marketing. Ver `DETALLE_DE` y
-`ALIAS_COMPAT` en `lib/permisos.core.js:121-152`, que explican por qué el permiso viaja solo.
+🔑 **Es la puerta de MARKETING, y desde el 5-sep-2026 vuelve a tener entrada de menú** — el primer
+renglón del grupo, arriba de todo. Entre el 24-jul y esa fecha ⛔ no la tuvo (la había absorbido
+`solicitudes`, la vista unificada de estado), y el precio fue que **el evento, el banco y los
+outfits vivieron cinco días en producción sin que nadie pudiera llegar**: las dos únicas puertas
+—el botón «Ver» y el puente de Marketing— aterrizan **con una solicitud abierta**, o sea tapando el
+bloque «Sesiones planificadas», que vive arriba de la lista.
+
+⚠️ **Sigue siendo además el destino del botón «Ver»** de Depósito, Local y Administración, que
+llegan por `DETALLE_DE` (`lib/permisos.core.js`) sin tener el área `marketing`. Las dos cosas
+conviven porque **el menú y la ruta preguntan distinto**: el sidebar usa `puedeVerPropio` («¿esto es
+suyo?») y el guard de la ruta `puedeVer` («¿puede abrirlo?»). Sin esa distinción, a los tres
+sectores que sólo ejecutan les aparecía un grupo «Marketing» entero de un solo renglón. Amarrado por
+`tests/nav-menu.test.ts`.
 
 ## Dónde vive
 

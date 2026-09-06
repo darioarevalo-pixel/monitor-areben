@@ -1116,6 +1116,7 @@ export const NAV_CATS: NavCat[] = [
       "icono": "marketing",
     "label": "Marketing",
     "keys": [
+      "sesion-fotos",
       "mkt-ventas",
       "marketing",
       "calendario",
@@ -1140,7 +1141,7 @@ export const NAV_CATS: NavCat[] = [
       }
     ],
     "labels": {
-      "solicitudes": "Solicitudes de productos"
+      "solicitudes": "Estado de las solicitudes"
     },
     "accent": "marketing"
   },

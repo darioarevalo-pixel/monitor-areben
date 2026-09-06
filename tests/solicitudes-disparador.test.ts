@@ -61,8 +61,9 @@ describe('disparador — es un eje aparte y NO toca el cajón', () => {
     expect(presetPorMotivo(interna.motivo).kind).toBe(PRESET_INTERNAS.kind)
   })
 
-  it('los motivos elegibles de fotos no cambiaron', () => {
-    expect(motivosDe(PRESET_FOTOS)).toEqual(['Sesión de fotos'])
+  // Los dos motivos de Marketing, y son los dos que preguntan «De dónde viene».
+  it('el cajón de fotos son los motivos de Marketing', () => {
+    expect(motivosDe(PRESET_FOTOS)).toEqual(['Sesión de fotos', 'Video/contenido'])
   })
 
   it('las tres tienen rótulo y ayuda (una opción sin explicación se elige a ciegas)', () => {

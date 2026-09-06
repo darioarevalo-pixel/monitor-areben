@@ -20,21 +20,31 @@ describe('solicitudes — motivo y destino', () => {
     expect(necesitaAprobacion({ tipo: 'consumo' })).toBe(true)
   })
 
-  it('"Sesión de fotos" es un motivo más, y elige el cajón de fotos', () => {
+  /**
+   * 🔑 **Video/contenido está del lado de fotos desde el 5-sep-2026** (pedido de Bruno: *«sesión de
+   * video y contenido también es sesión de fotos»*). Es la misma producción; lo que lo separaba le
+   * costaba el permiso de Marketing y el eje «De dónde viene».
+   */
+  it('los motivos de Marketing eligen el cajón de fotos, y los otros el de internas', () => {
     expect(MOTIVOS).toContain('Sesión de fotos')
     expect(presetPorMotivo('Sesión de fotos').kind).toBe(PRESET_FOTOS.kind)
-    expect(presetPorMotivo('Video/contenido').kind).toBe(PRESET_INTERNAS.kind)
+    expect(presetPorMotivo('Video/contenido').kind).toBe(PRESET_FOTOS.kind)
     expect(presetPorMotivo('Muestra').kind).toBe(PRESET_INTERNAS.kind)
+    expect(presetPorMotivo('Moldería').kind).toBe(PRESET_INTERNAS.kind)
+    expect(presetPorMotivo('Uso interno').kind).toBe(PRESET_INTERNAS.kind)
+    expect(presetPorMotivo('Otro').kind).toBe(PRESET_INTERNAS.kind)
   })
 
   it('sin motivo (solicitudes históricas de fotos) cae en el cajón de fotos', () => {
     expect(presetPorMotivo(undefined).kind).toBe(PRESET_FOTOS.kind)
   })
 
-  it('los motivos elegibles no cruzan de cajón (la venta GN sale a nombre del preset)', () => {
-    expect(motivosDe(PRESET_FOTOS)).toEqual(['Sesión de fotos'])
+  it('los motivos elegibles no cruzan de cajón: cada uno se corrige entre los suyos', () => {
+    expect(motivosDe(PRESET_FOTOS)).toEqual(['Sesión de fotos', 'Video/contenido'])
     expect(motivosDe(PRESET_INTERNAS)).not.toContain('Sesión de fotos')
-    expect(motivosDe(PRESET_INTERNAS).length).toBe(MOTIVOS.length - 1)
+    expect(motivosDe(PRESET_INTERNAS)).not.toContain('Video/contenido')
+    // Los dos cajones juntos son el catálogo entero: ningún motivo se queda sin puerta.
+    expect(motivosDe(PRESET_FOTOS).length + motivosDe(PRESET_INTERNAS).length).toBe(MOTIVOS.length)
   })
 })
 
