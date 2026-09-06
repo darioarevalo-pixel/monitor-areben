@@ -350,6 +350,41 @@ Sobre esas 30 filas:
   pantalla las muestra como «sin origen» — una lista de «sin origen» se lee como «falta cargarlo»,
   que es lo cierto, y no como «no vienen de ningún lado».
 
+## El TOUR de la sección (5-sep-2026)
+
+Está el botón **«Cómo se usa»** en el encabezado: recorre 13 pasos parándose sobre los controles
+reales. Los pasos viven en `lib/sesionfotos/guia.ts` y el motor es el de Envíos
+(`lib/guia/core.ts` + `components/ui/Guia.tsx` + `store/useGuia.ts`), sin una línea nueva.
+
+Lo pidió Bruno mirando la sección recién abierta: *«si cambia mucho, no estaría mal pensar en un
+tour virtual»*. Y es cierto acá más que en ninguna otra: **la mitad de lo que hay adentro no existía
+la semana pasada**, y quien la abre no tiene cómo saber que el banco va ANTES de pedir.
+
+🔑 **Acá NO van reglas de negocio.** El tour contesta *«¿dónde se aprieta?»*; el **manual** contesta
+*«¿qué pasa si sale mal?»*. Que la venta salga por lo PREPARADO, que separar no sea retirar, que la
+anulación se haga a mano en GN: eso vive en el manual y en esta ficha. Dos textos que cuentan lo
+mismo derivan; dos que contestan cosas distintas, no.
+
+🔴 **Las anclas: esta pantalla ⛔ no tiene pestañas, tiene ESTADOS**, y el tour ⛔ no puede abrirlos
+—no hay ninguna sesión que abrir hasta que alguien cree la primera, y acá los botones **crean ventas
+en Gestión Nube**—. Por eso casi todos los pasos anclan en el bloque «Sesiones planificadas»
+(`sf.eventos`), que es **de lo que el paso habla**, y el control puntual va como `anclaFina`: con la
+sesión cerrada el globo se para en el bloque y el texto dice **dónde aparece** el control. Ningún
+paso se saltea, que es la lección que dejó Envíos.
+
+⚠️ **`sf.eventos` vive en el envoltorio de `SesionFotos.tsx`, ⛔ no adentro de `Eventos`**: el
+bloque de adentro ⛔ no existe mientras el cajón carga ni cuando falla, y un ancla que desaparece
+deja el globo en el centro de la pantalla. Hay un test que lo fija.
+
+Las 12 anclas están repartidas en cinco archivos (la pantalla, `Eventos`, `FichaModelo`,
+`BancoSesion`, `AgregarDesdeOC`) y `tests/guia.test.ts` las afirma **una por una, en los dos
+sentidos**: que cada paso tenga su ancla en el JSX, y que ⛔ no quede ningún `data-guia` huérfano.
+Sacar un botón pone el test en rojo en vez de dejar un globo señalando el vacío.
+
+⚠️ El tour se registra en `SesionFotos()` y ⛔ **no en `SolicitudesInner`**, que es el motor
+compartido: Solicitudes internas monta el mismo componente y su recorrido sería otro — la mitad de
+los pasos habla de sesiones, que ahí no existen.
+
 ## Cómo se prueba
 
 ```bash

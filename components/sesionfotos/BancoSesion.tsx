@@ -121,7 +121,7 @@ export function BancoSesion({
   return (
     <div style={{ border: `1px solid ${color.line}`, borderRadius: 8, padding: '8px 10px', marginTop: 8, background: color.bg }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }} data-guia="sf.banco">
           Banco de productos{res.total ? ` (${res.total})` : ''}{' '}
           <InfoPopover titulo="Los candidatos, antes de pedirlos">
             Acá se apoyan las prendas candidatas de la sesión y se arman los outfits: arriba + abajo,
@@ -146,7 +146,7 @@ export function BancoSesion({
           {/* 🔑 Agregar una OC entera va ARRIBA del buscador a propósito: es el gesto que abre una
               sesión sobre lo que acaba de entrar, y buscar de a una es el que la completa. */}
           <AgregarDesdeOC linea={linea} variantes={variantes} huerfanas={huerfanas} onAgregar={agregarDesdeOC} />
-          <Input value={busq} onChange={(e) => setBusq(e.target.value)} placeholder="Buscar por nombre o SKU para agregar al banco…" style={{ width: '100%', maxWidth: 420, marginTop: 6 }} />
+          <Input value={busq} onChange={(e) => setBusq(e.target.value)} data-guia="sf.bancoBuscar" placeholder="Buscar por nombre o SKU para agregar al banco…" style={{ width: '100%', maxWidth: 420, marginTop: 6 }} />
           {busq.trim().length >= 2 ? (
             <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
               {buscarProductos(variantes, busq, yaEn).slice(0, 15).map((r) => (
@@ -291,7 +291,7 @@ export function BancoSesion({
           <span style={{ fontSize: 12, color: color.mut2 }}>
             {elegidos.length ? `${elegidos.length} elegidas` : 'Tildá lo que querés pedir'}
           </span>
-          <Button size="sm" variant="outline" disabled={!elegidos.length || pidiendo} onClick={() => pedir('deposito')}>
+          <Button size="sm" variant="outline" disabled={!elegidos.length || pidiendo} onClick={() => pedir('deposito')} data-guia="sf.bancoPedir">
             Pedir al depósito
           </Button>
           <Button size="sm" variant="outline" disabled={!elegidos.length || pidiendo} onClick={() => pedir('local')}>

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { anclasDeLaGuia, anterior, resolverPaso, siguiente, type PasoGuia } from '@/lib/guia/core'
 import { GUIA_ENVIOS } from '@/lib/envios/guia'
+import { GUIA_SESION_FOTOS } from '@/lib/sesionfotos/guia'
 
 /**
  * Dos mitades que prueban cosas distintas:
@@ -19,6 +20,20 @@ import { GUIA_ENVIOS } from '@/lib/envios/guia'
 const raiz = join(__dirname, '..')
 const jsx = readFileSync(join(raiz, 'components/envios/Envios.tsx'), 'utf8')
 const tabs = readFileSync(join(raiz, 'components/ui/Tabs.tsx'), 'utf8')
+
+/**
+ * Sesión de fotos reparte sus controles en CINCO archivos: la pantalla, el bloque de sesiones, la
+ * ficha de la modelo, el banco y el traído desde una orden. Se leen todos juntos porque la
+ * pregunta que contesta el test —¿este ancla existe en algún lado de la sección?— es una sola.
+ */
+const ARCHIVOS_SF = [
+  'components/sesionfotos/SesionFotos.tsx',
+  'components/sesionfotos/Eventos.tsx',
+  'components/sesionfotos/FichaModelo.tsx',
+  'components/sesionfotos/BancoSesion.tsx',
+  'components/sesionfotos/AgregarDesdeOC.tsx',
+]
+const jsxSf = ARCHIVOS_SF.map((f) => readFileSync(join(raiz, f), 'utf8')).join('\n')
 
 /** Los `data-guia` que el JSX pone de verdad: literales, adentro de un ternario, o vía `TabItem.guia`. */
 function anclasDelJsx(fuente: string): Set<string> {
@@ -109,6 +124,53 @@ describe('la guía de Envíos no puede envejecer', () => {
 
   it('un paso con control fino siempre trae su "si no está" (lo obliga el tipo, se afirma igual)', () => {
     for (const p of GUIA_ENVIOS) {
+      if (p.anclaFina) expect(p.siNoEsta && p.siNoEsta.length > 10).toBe(true)
+    }
+  })
+})
+
+/**
+ * La misma red para Sesión de fotos, que es la sección donde más barato sale que el tour envejezca:
+ * la mitad de lo que recorre (el evento, el banco, los outfits, la orden recibida) se construyó en
+ * un solo día y todavía se está acomodando.
+ */
+describe('la guía de Sesión de fotos no puede envejecer', () => {
+  it('cada ancla que la guía nombra existe como data-guia en alguna de sus pantallas', () => {
+    const enLaPantalla = anclasDelJsx(jsxSf)
+    for (const ancla of anclasDeLaGuia(GUIA_SESION_FOTOS)) {
+      expect(enLaPantalla, `falta data-guia="${ancla}" en components/sesionfotos/`).toContain(ancla)
+    }
+  })
+
+  it('y no queda ningún data-guia huérfano', () => {
+    const usadas = new Set(anclasDeLaGuia(GUIA_SESION_FOTOS))
+    for (const ancla of anclasDelJsx(jsxSf)) {
+      expect(usadas, `data-guia="${ancla}" no lo nombra ningún paso de lib/sesionfotos/guia.ts`).toContain(ancla)
+    }
+  })
+
+  /**
+   * 🔴 Esta pantalla ⛔ NO tiene pestañas, tiene ESTADOS, y el tour ⛔ no puede abrirlos: no hay
+   * ninguna sesión que abrir hasta que alguien cree la primera, y acá los botones crean ventas en
+   * Gestión Nube. Por eso ningún paso declara `pestania` — si alguien le pone una, no hay quién la
+   * atienda: `registrar` se llama sin `irAPestania` y el paso se mostraría mudo en el estado que
+   * estuviera.
+   */
+  it('ningún paso pide cambiar de pestaña: la sección no tiene', () => {
+    for (const p of GUIA_SESION_FOTOS) expect(p.pestania).toBeUndefined()
+  })
+
+  /**
+   * El ancla estable de los pasos del evento tiene que ser el envoltorio de `SesionFotos.tsx`, y NO
+   * algo de adentro de `Eventos`: lo de adentro no existe mientras el cajón carga ni cuando falla.
+   */
+  it('🔴 el ancla estable del bloque de sesiones vive en el envoltorio, no adentro del bloque', () => {
+    expect(readFileSync(join(raiz, 'components/sesionfotos/SesionFotos.tsx'), 'utf8')).toContain('data-guia="sf.eventos"')
+    expect(readFileSync(join(raiz, 'components/sesionfotos/Eventos.tsx'), 'utf8')).not.toContain('data-guia="sf.eventos"')
+  })
+
+  it('un paso con control fino siempre trae su "si no está"', () => {
+    for (const p of GUIA_SESION_FOTOS) {
       if (p.anclaFina) expect(p.siNoEsta && p.siNoEsta.length > 10).toBe(true)
     }
   })

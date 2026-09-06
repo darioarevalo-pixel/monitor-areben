@@ -113,7 +113,7 @@ export function Eventos({
           </InfoPopover>
         </div>
         {editable ? (
-          <Button size="sm" variant={creando ? 'outline' : 'solid'} onClick={() => setCreando((v) => !v)}>
+          <Button size="sm" variant={creando ? 'outline' : 'solid'} onClick={() => setCreando((v) => !v)} data-guia="sf.nuevaSesion">
             {creando ? 'Cancelar' : '+ Nueva sesión'}
           </Button>
         ) : null}
@@ -312,11 +312,11 @@ function FilaEvento({
             {hijas.length === 0 ? 'sin pedidos' : hijas.length === 1 ? '1 pedido' : `${hijas.length} pedidos`}
           </span>
           {editable ? (
-            <Button size="sm" variant="outline" onClick={onPedirProductos}>
+            <Button size="sm" variant="outline" onClick={onPedirProductos} data-guia="sf.pedirProductos">
               + Pedir productos
             </Button>
           ) : null}
-          <Button size="sm" variant="ghost" onClick={onAbrir}>
+          <Button size="sm" variant="ghost" onClick={onAbrir} data-guia="sf.abrir">
             {abierto ? 'Cerrar' : 'Abrir'}
           </Button>
         </div>

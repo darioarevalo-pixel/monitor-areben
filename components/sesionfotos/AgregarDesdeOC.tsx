@@ -110,7 +110,7 @@ export function AgregarDesdeOC({
 
   if (!abierto) {
     return (
-      <Button size="sm" variant="ghost" onClick={abrir}>
+      <Button size="sm" variant="ghost" onClick={abrir} data-guia="sf.bancoOC">
         Agregar desde una orden recibida
       </Button>
     )

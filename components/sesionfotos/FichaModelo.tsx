@@ -83,7 +83,7 @@ export function FichaModelo<T extends { modelo?: ModeloSesion }>({
 
   return (
     <div style={{ border: `1px solid ${color.line}`, borderRadius: 9, padding: '10px 12px', margin: '10px 0', background: color.bg }}>
-      <div style={{ fontWeight: 700, marginBottom: 2 }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }} data-guia="sf.modelo">
         La modelo{' '}
         <InfoPopover titulo="El talle de la modelo">
           Qué talle tiene puesto la modelo en esta sesión. Es lo que la clienta pregunta antes de comprar, y se

@@ -10,6 +10,8 @@ import { useSesionFotos } from './useSesionFotos'
 import { FichaModelo } from './FichaModelo'
 import { Eventos } from './Eventos'
 import { useEventosSesion } from './useEventosSesion'
+import { GUIA_SESION_FOTOS } from '@/lib/sesionfotos/guia'
+import { useGuia } from '@/store/useGuia'
 import { conBanco, type SesionEvento } from '@/lib/sesionfotos/evento'
 import { marcarPedidos, pedidoDesdeBanco } from '@/lib/sesionfotos/banco'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
@@ -133,6 +135,15 @@ export function SesionFotos() {
   // levantó él mismo — «el motor es de administración, habría que ver si no hay problema» —, y la
   // salida es ENVOLVER, ⛔ no reemplazar.
   const ev = useEventosSesion(linea)
+  // El tour («Cómo se usa», en el encabezado). Se registra SÓLO acá y ⛔ no en `SolicitudesInner`,
+  // que es el motor compartido: Solicitudes internas monta el mismo componente y su recorrido es
+  // otro — la mitad de los pasos habla de sesiones, que ahí no existen.
+  const registrarGuia = useGuia((g) => g.registrar)
+  const olvidarGuia = useGuia((g) => g.olvidar)
+  useEffect(() => {
+    registrarGuia(GUIA_SESION_FOTOS)
+    return olvidarGuia
+  }, [registrarGuia, olvidarGuia])
   return (
     <SolicitudesInner
       sf={sf}
@@ -140,7 +151,7 @@ export function SesionFotos() {
       preset={PRESET_FOTOS}
       datos={datos}
       clave={linea}
-      selector={<SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />}
+      selector={<span data-guia="sf.linea"><SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} /></span>}
     />
   )
 }
@@ -412,7 +423,11 @@ function Contenido({
         <>
           {/* Las sesiones planificadas, arriba de las solicitudes. 🔴 Si el cajón de eventos no se
               pudo leer se dice en una línea y ⛔ NO se frena la sección: las solicitudes son el
-              trabajo de todos los días y el evento es lo nuevo. */}
+              trabajo de todos los días y el evento es lo nuevo.
+              ⚠️ El `data-guia` va en este envoltorio y NO adentro de `Eventos`: es el ancla estable
+              de casi todo el tour, y el bloque de adentro no existe mientras el cajón carga ni
+              cuando falla. Un ancla que desaparece deja el globo en el centro de la pantalla. */}
+          <div data-guia="sf.eventos">
           {eventos ? (
             eventos.data ? (
               <Eventos
@@ -438,6 +453,7 @@ function Contenido({
               </div>
             ) : null
           ) : null}
+          </div>
           <Historial
             preset={preset}
             data={data}
@@ -612,7 +628,7 @@ function Historial({
         {/* Local y Depósito ejecutan, no piden: para ellos el botón no existe (ver
             `puedePedir`). Piden Marketing, Administración y los admins. */}
         {puedePedir(perfilHist) && (
-          <Button variant="solid" tone="brand" onClick={onNueva}>
+          <Button variant="solid" tone="brand" onClick={onNueva} data-guia="sf.nuevaSolicitud">
             + Nueva solicitud
           </Button>
         )}
@@ -647,9 +663,9 @@ function Historial({
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 6 }}>
-        <div style={{ fontSize: 12, color: color.mut2, letterSpacing: 0 }}>Historial</div>
+        <div style={{ fontSize: 12, color: color.mut2, letterSpacing: 0 }} data-guia="sf.historial">Historial</div>
         {esFotosHist ? (
-          <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <label style={{ fontSize: 12, color: color.mut, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }} data-guia="sf.filtroOrigen">
             De dónde viene
             <select
               value={filtroDisp || ''}

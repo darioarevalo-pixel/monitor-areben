@@ -552,8 +552,18 @@ decisión aparte: arrastra `ACCESO_POR_FUNCION` o `sectorVisible`, y `tests/perm
 sector, pero hay que empezar a clarificar y sectorizar»*. Hoy `NuevaSolicitud` ⛔ **no recibe el
 perfil** y le muestra los seis motivos a cualquiera.
 
-▶️ **Un TOUR VIRTUAL de la sección**, idea de Bruno: *«si cambia mucho, no estaría mal pensar en un
-tour virtual»*. ⛔ No hay nada de eso en el repo: es un módulo nuevo, con su propio plan.
+🏁 **El TOUR de la sección — HECHO el 5-sep-2026.** Idea de Bruno: *«si cambia mucho, no estaría
+mal pensar en un tour virtual»*. 🔑 **No hizo falta ningún módulo nuevo: el motor ya estaba**, hecho
+para Envíos (`lib/guia/core.ts` + `components/ui/Guia.tsx` + `store/useGuia.ts`), y el botón «Cómo
+se usa» aparece solo en cuanto una sección registra sus pasos. Se escribieron los 13 pasos
+(`lib/sesionfotos/guia.ts`) y las 12 anclas, repartidas en cinco archivos.
+🔴 **Esta pantalla ⛔ no tiene pestañas, tiene ESTADOS, y el tour ⛔ no puede abrirlos**: no hay
+sesión que abrir hasta que alguien cree la primera, y acá los botones **crean ventas en GN**. Por
+eso casi todo ancla en el bloque «Sesiones planificadas» y el control puntual va como `anclaFina`:
+con la sesión cerrada el globo se para en el bloque y dice **dónde aparece**. Ningún paso se saltea.
+✅ 6 tests nuevos, y **el de deriva se verificó al revés**: sacando un `data-guia` a mano, se pone
+rojo. ▶️ **Falta caminarlo**: apretar «Cómo se usa» y ver los 13 globos, con una sesión abierta y
+con ninguna.
 
 ---
 
