@@ -9,7 +9,7 @@
 
 import { armarItemSale, redondear90 } from '@/lib/comisiones/core'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
-import { TIPO_CAMPANIA, type Aviso, type ConteoCampania, type DecisionItem, type EstadoItem, type LiquidacionItem, type RevisionItem, type TipoCampania } from './tipos'
+import { TIPO_CAMPANIA, type Aviso, type ConteoCampania, type DecisionItem, type EstadoCampania, type EstadoItem, type LiquidacionItem, type RevisionItem, type TipoCampania } from './tipos'
 
 /** Id de campaña. Se genera en el cliente, como en `disenos` y el calendario. */
 export function nuevoIdLiquidacion(): string {
@@ -308,6 +308,19 @@ export function reprecificar(
     .filter((i) => i.estado !== 'descartado' && i.foto.precioNormal > 0)
     .map((i) => decidirItem(i, { pctDesc }, quien))
 }
+
+/**
+ * Si la campaña todavía se puede tocar.
+ *
+ * 🔴 **`borrador` SÍ se toca — es el estado en el que se arma.** Salió de un defecto real: los
+ * precios de mesa nacieron con la condición del botón de al lado (`en_curso` o `aplicada`), que es
+ * la de «terminar un sale», y el botón **no se dibujaba justo cuando hace falta**: en la campaña
+ * recién creada, que es donde se cargan 381 precios. Una campaña nueva nace en `borrador`.
+ *
+ * `cerrada` es el único que frena: ahí la campaña ya se está mirando contra lo que se vendió, y
+ * moverle un precio cambia el pasado. Para eso está «Reabrir».
+ */
+export const campaniaEditable = (estado: EstadoCampania): boolean => estado !== 'cerrada'
 
 /**
  * Los precios de una feria: una escalera de precios redondos, y cada producto va al **primer

@@ -76,7 +76,11 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   NO se toca** —mandarlo al más alto lo remata abajo del costo sin decisión de nadie— y ⛔ **el que
   ya tenía ese precio no vuelve a la cola de revisión**: correr la escalera dos veces mientras se
   arma una feria no puede desconfirmar lo que alguien ya miró. Los dos guardan por `decidir-masivo`,
-  o sea que **ninguno toca la tienda**: escribir sigue siendo `aplicar`. 🔑 Un precio de mesa
+  o sea que **ninguno toca la tienda**: escribir sigue siendo `aplicar`. 🔴 **«Precios de mesa» se
+  dibuja mientras la campaña no esté `cerrada` (`campaniaEditable`), ⛔ no con la condición de
+  `reprecificar`**: nació con esa —`en_curso` o `aplicada`, la de «terminar un sale»— y el botón
+  **no aparecía en la campaña recién creada**, que nace en `borrador` y es donde se cargan los
+  precios. Lo cazó Bruno abriendo la pantalla, ⛔ no un test. 🔑 Un precio de mesa
   **no pasa por el redondeo a 90** (`precioDeSale` con `precioSale` sólo hace `Math.round`): el
   número del cartel es el que se guarda.
 - 🔑 **`TOPE_APLICAR` es 5 y lo fija el tope de Gestión Nube** (60 consultas/minuto, compartidas con

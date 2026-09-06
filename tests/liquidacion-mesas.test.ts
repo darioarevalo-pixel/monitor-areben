@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   armarItemDesdeProducto,
+  campaniaEditable,
   confirmarItem,
   decidirItem,
   leerEscalera,
@@ -152,5 +153,23 @@ describe('leerEscalera — la escalera tal como se tipea', () => {
   it('sin nada escrito, null', () => {
     expect(leerEscalera('')).toBeNull()
     expect(leerEscalera('  , ; ')).toBeNull()
+  })
+})
+
+describe('campaniaEditable — cuándo se pueden tocar los precios', () => {
+  it('🔴 en BORRADOR sí: es el estado en el que se arma la campaña', () => {
+    // El defecto real: los precios de mesa nacieron con la condición de «terminar un sale»
+    // (`en_curso` o `aplicada`) y el botón no se dibujaba en la campaña recién creada, que es
+    // exactamente donde se cargan los 381 precios.
+    expect(campaniaEditable('borrador')).toBe(true)
+  })
+
+  it('en curso y aplicada también', () => {
+    expect(campaniaEditable('en_curso')).toBe(true)
+    expect(campaniaEditable('aplicada')).toBe(true)
+  })
+
+  it('cerrada no: ahí la campaña se mira contra lo que se vendió', () => {
+    expect(campaniaEditable('cerrada')).toBe(false)
   })
 })

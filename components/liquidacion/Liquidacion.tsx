@@ -47,7 +47,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, confirmarItem, contar, leerEscalera, nuevoIdLiquidacion, pidsPorAplicar, porEscalera,
+  avisos, campaniaEditable, confirmarItem, contar, leerEscalera, nuevoIdLiquidacion, pidsPorAplicar, porEscalera,
   reprecificar, resumenCampania,
   TIPO_CAMPANIA, TIPOS_CAMPANIA, tipoDe, TOPE_APLICAR, TOPE_MASIVO,
   type Colgadas, type EstadoCampania, type EstadoItem, type Liquidacion as Campania,
@@ -936,7 +936,7 @@ function DetalleCampania({
             Se esconde sin el permiso de Análisis → Por producto: el shell rebota a Inicio a quien
             no lo tenga (`app/[[...seccion]]/page.tsx`), así que el botón sería una trampa.
           */}
-          {campania.estado !== 'cerrada' && puedeVer(perfil, marca, 'productos') && (
+          {campaniaEditable(campania.estado) && puedeVer(perfil, marca, 'productos') && (
             <Button variant="ghost" size="sm" onClick={() => router.push(`/productos?liq=${encodeURIComponent(campania.id)}`)}>
               Agregar productos
             </Button>
@@ -1009,7 +1009,7 @@ function DetalleCampania({
               Otro precio para todos
             </Button>
           )}
-          {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && puede.aplicar && (
+          {campaniaEditable(campania.estado) && puede.aplicar && (
             <Button variant="ghost" size="sm" disabled={ocupadoMasivo || !!aplicando} onClick={() => void preciosDeMesa()}>
               Precios de mesa
             </Button>
@@ -1139,7 +1139,7 @@ function DetalleCampania({
         <Revision
           items={items}
           tipo={tipo}
-          puedeRevisar={puede.admin && campania.estado !== 'cerrada'}
+          puedeRevisar={puede.admin && campaniaEditable(campania.estado)}
           ingresoDe={ingresoDe}
           onRevisar={guardarRevision}
           onConfirmarTodos={confirmarTodos}
@@ -1215,7 +1215,7 @@ function DetalleCampania({
                     key={i.pid}
                     item={i}
                     tipo={tipo}
-                    puedeMover={campania.estado !== 'cerrada'}
+                    puedeMover={campaniaEditable(campania.estado)}
                     onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: n })}
                     onDescartar={() => void moverEstado(i, 'descartado')}
                     onVolver={() => void moverEstado(i, 'pendiente')}
@@ -1253,7 +1253,7 @@ function DetalleCampania({
           tipo={tipo}
           posicion={definiendo.i + 1}
           total={definiendo.orden.length}
-          puedeEditar={campania.estado !== 'cerrada'}
+          puedeEditar={campaniaEditable(campania.estado)}
           onAnterior={definiendo.i > 0 ? () => irAlIndice(definiendo.i - 1) : null}
           onSiguiente={definiendo.i < definiendo.orden.length - 1 ? () => irAlIndice(definiendo.i + 1) : null}
           onGuardar={guardarDecision}
