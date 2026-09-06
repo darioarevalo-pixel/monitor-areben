@@ -568,8 +568,16 @@ sesión que abrir hasta que alguien cree la primera, y acá los botones **crean 
 eso casi todo ancla en el bloque «Sesiones planificadas» y el control puntual va como `anclaFina`:
 con la sesión cerrada el globo se para en el bloque y dice **dónde aparece**. Ningún paso se saltea.
 ✅ 6 tests nuevos, y **el de deriva se verificó al revés**: sacando un `data-guia` a mano, se pone
-rojo. ▶️ **Falta caminarlo**: apretar «Cómo se usa» y ver los 13 globos, con una sesión abierta y
-con ninguna.
+rojo.
+🔴 **Caminado por Bruno el mismo día, y encontró lo que ningún test veía**: *«desde la 4 no muestra
+nada, porque no hay nada creado»*. Nueve de los trece pasos hablan de lo que hay ADENTRO de una
+sesión ⇒ con la lista vacía el tour repetía «esto aparece cuando abrís una» en vez de mostrarlo.
+🏁 **Arreglado**: mientras el globo está abierto se dibuja una **sesión de EJEMPLO** —rotulada, ya
+desplegada, con modelo, hora y un outfit completo de dos prendas—, que ⛔ no se guarda ni la ve
+nadie más. ⛔ **⛔ No se crea una sesión de verdad**: el cajón es compartido y desde adentro se piden
+productos que **crean ventas en GN**. 🔑 **El candado vive en `conEvento`, ⛔ no en un comentario**:
+rechaza el id del ejemplo pase por donde pase. ✅ 9 tests más —4 de ellos **montando la pantalla**,
+que es la mitad que el test de fuente ⛔ no puede ver— y el guard verificado sacándolo.
 
 ---
 

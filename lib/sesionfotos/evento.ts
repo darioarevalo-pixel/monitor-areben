@@ -278,8 +278,25 @@ export function sinEvento(eventos: SesionEvento[], id: string): SesionEvento[] {
   return (eventos || []).filter((e) => e.id !== id)
 }
 
-/** Mete o reemplaza un evento en la lista, ordenada por fecha descendente (lo próximo arriba). */
+/**
+ * El id de la sesión de EJEMPLO que dibuja el tour (`sesionDeMuestra`, en `lib/sesionfotos/guia.ts`).
+ *
+ * 🔴 **Vive acá y ⛔ no en la guía porque el candado es de ESTE lado.** El ejemplo se dibuja para
+ * enseñar dónde está cada botón; el día que alguien le enchufe un `onGuardar` de verdad —o que un
+ * refactor le pase el `persistir` real por descuido— una sesión que ⛔ no existe entraría al cajón
+ * COMPARTIDO, la vería el equipo entero, y desde adentro se piden productos que **crean ventas en
+ * Gestión Nube**. Un comentario ⛔ no impide eso; `conEvento` sí.
+ */
+export const ID_SESION_DE_MUESTRA = 'guia:ejemplo'
+
+/**
+ * Mete o reemplaza un evento en la lista, ordenada por fecha descendente (lo próximo arriba).
+ *
+ * ⛔ **La sesión de ejemplo del tour ⛔ no entra nunca**, pase por donde pase. Ver
+ * `ID_SESION_DE_MUESTRA`.
+ */
 export function conEvento(eventos: SesionEvento[], e: SesionEvento): SesionEvento[] {
+  if (e.id === ID_SESION_DE_MUESTRA) return eventos || []
   const otros = (eventos || []).filter((x) => x.id !== e.id)
   return [...otros, e].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : (b.creado || 0) - (a.creado || 0)))
 }

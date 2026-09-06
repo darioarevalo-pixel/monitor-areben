@@ -54,6 +54,7 @@ export function Eventos({
   onPedirProductos,
   onPedirDelBanco,
   onVerSolicitud,
+  muestra,
 }: {
   eventos: SesionEvento[]
   solicitudes: Solicitud[]
@@ -74,6 +75,14 @@ export function Eventos({
    */
   onPedirDelBanco: (e: SesionEvento, vids: string[], destino: Origen) => Promise<string[] | null>
   onVerSolicitud: (id: string) => void
+  /**
+   * La sesión de EJEMPLO del tour, o `null`. Se dibuja arriba de la lista, abierta y con todos sus
+   * botones inertes, y ⛔ no toca la base: ver `sesionDeMuestra` en `lib/sesionfotos/guia.ts`.
+   *
+   * 🔑 Va como prop y ⛔ no la arma este componente: quién la muestra y cuándo es una decisión de
+   * la sección (mientras el globo está abierto), y acá adentro ⛔ no se sabe nada del tour.
+   */
+  muestra?: SesionEvento | null
 }) {
   const { avisar, confirmar } = useConfirmar()
   const [creando, setCreando] = useState(false)
@@ -140,6 +149,33 @@ export function Eventos({
       ) : null}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {muestra ? (
+          // ⛔ Va PRIMERA a propósito: el tour busca sus anclas con `querySelector`, que devuelve la
+          // primera coincidencia. Puesta abajo, el globo señalaría los botones de una sesión real.
+          <div>
+            <div style={{ fontSize: 11, color: color.mut2, marginBottom: 3 }}>
+              <Badge tone="brand" subtle>Ejemplo</Badge>{' '}
+              Esta sesión no existe: se dibuja sólo mientras mirás el tour, para que se vea dónde está cada
+              cosa. ⛔ No se guarda, y nadie más la ve.
+            </div>
+            <FilaEvento
+              e={muestra}
+              hijas={[]}
+              variantes={variantes}
+              huerfanas={huerfanas}
+              linea={linea}
+              editable={editable}
+              usuario={usuario}
+              abierto
+              onAbrir={() => {}}
+              onGuardar={() => {}}
+              onEliminar={() => {}}
+              onPedirProductos={() => {}}
+              onPedirDelBanco={async () => []}
+              onVerSolicitud={() => {}}
+            />
+          </div>
+        ) : null}
         {planificadas.map((e) => (
           <FilaEvento
             key={e.id}

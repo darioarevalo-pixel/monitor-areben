@@ -3,7 +3,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { anclasDeLaGuia, anterior, resolverPaso, siguiente, type PasoGuia } from '@/lib/guia/core'
 import { GUIA_ENVIOS } from '@/lib/envios/guia'
-import { GUIA_SESION_FOTOS } from '@/lib/sesionfotos/guia'
+import { GUIA_SESION_FOTOS, sesionDeMuestra } from '@/lib/sesionfotos/guia'
+import { conEvento, ID_SESION_DE_MUESTRA, type SesionEvento } from '@/lib/sesionfotos/evento'
+import { alertasDe, zonaSugerida } from '@/lib/sesionfotos/outfits'
+import { comoPrendas } from '@/lib/sesionfotos/banco'
 
 /**
  * Dos mitades que prueban cosas distintas:
@@ -173,5 +176,58 @@ describe('la guía de Sesión de fotos no puede envejecer', () => {
     for (const p of GUIA_SESION_FOTOS) {
       if (p.anclaFina) expect(p.siNoEsta && p.siNoEsta.length > 10).toBe(true)
     }
+  })
+})
+
+/**
+ * ── La sesión de EJEMPLO ──
+ *
+ * 🔴 La pidió Bruno caminando el tour: *«desde la 4 no muestra nada, porque no hay nada creado»*.
+ * Nueve de los trece pasos hablan de lo que hay ADENTRO de una sesión, y en una instalación sin
+ * ninguna —la de quien recién abre la sección— el tour repetía «esto aparece cuando abrís una»
+ * en vez de mostrarlo.
+ *
+ * Lo que hay que sostener es que el ejemplo **enseñe lo correcto** y que **no pueda volverse real**.
+ */
+describe('la sesión de ejemplo del tour', () => {
+  const m = sesionDeMuestra('2026-09-10')
+
+  it('trae lo que los pasos nombran: hora, duración, modelo con talle, origen y banco', () => {
+    // Si el ejemplo no tuviera hora, el paso que explica «15:30 a 17:00» señalaría una fecha pelada.
+    expect(m.hora).toBeTruthy()
+    expect(m.duracionMin).toBeTruthy()
+    expect(m.modelo?.talle).toBeTruthy()
+    expect(m.disparador).toBeTruthy()
+    expect(m.banco?.length).toBe(2)
+  })
+
+  /**
+   * 🔑 Un outfit COMPLETO, y es la mitad de lo que el ejemplo enseña: arriba + abajo = un look.
+   * Con una sola prenda se vería el aviso «le falta el abajo» y el ejemplo enseñaría el error.
+   */
+  it('el outfit del ejemplo está completo: una de arriba, una de abajo, y sin aviso', () => {
+    const banco = m.banco ?? []
+    const zonas = banco.map((i) => zonaSugerida(i.nombre))
+    expect(zonas).toContain('arriba')
+    expect(zonas).toContain('abajo')
+    expect(banco.every((i) => i.outfit === 1)).toBe(true)
+    expect(alertasDe(comoPrendas(banco), {})).toEqual([])
+  })
+
+  /**
+   * 🔴 El candado, y por eso vive en `conEvento` y no en un comentario: el cajón es COMPARTIDO. Una
+   * sesión de mentira que entra al cajón la ve el equipo entero, y desde adentro se piden productos
+   * que crean ventas en Gestión Nube.
+   */
+  it('🔴 no puede entrar al cajón, ni aunque alguien la mande a guardar', () => {
+    const reales: SesionEvento[] = [{ ...m, id: 'real-1', descripcion: 'La de verdad' }]
+    expect(conEvento(reales, m)).toEqual(reales)
+    expect(conEvento([], m)).toEqual([])
+    expect(m.id).toBe(ID_SESION_DE_MUESTRA)
+  })
+
+  it('y una sesión de verdad sigue entrando igual', () => {
+    const real: SesionEvento = { ...m, id: 'real-2' }
+    expect(conEvento([], real).map((e) => e.id)).toEqual(['real-2'])
   })
 })

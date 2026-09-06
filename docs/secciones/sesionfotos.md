@@ -385,6 +385,36 @@ Sacar un botón pone el test en rojo en vez de dejar un globo señalando el vac�
 compartido: Solicitudes internas monta el mismo componente y su recorrido sería otro — la mitad de
 los pasos habla de sesiones, que ahí no existen.
 
+### La sesión de EJEMPLO, y por qué no es una sesión de verdad
+
+🔴 **Lo cazó Bruno caminando el tour**: *«desde la 4 no muestra nada, porque no hay nada creado»*.
+Nueve de los trece pasos hablan de lo que hay ADENTRO de una sesión, y en una instalación sin
+ninguna —la de quien recién abre la sección— los nueve caían al ancla estable. El motor hacía lo
+correcto (⛔ no saltear, decir dónde aparece), pero **un tour que explica nueve veces seguidas «esto
+aparece cuando abrís una sesión» ⛔ no enseña: enseñar dónde está un botón es MOSTRARLO.**
+
+Mientras el globo está abierto se dibuja **una sesión de ejemplo** arriba de la lista, rotulada
+«Ejemplo», ya desplegada, con modelo, hora y un banco de dos prendas —un top y un short, los dos en
+el outfit 1— para que se vea un look completo y el aviso apagado. Se arma en
+`sesionDeMuestra` (`lib/sesionfotos/guia.ts`) y desaparece al cerrar el tour.
+
+⛔ **⛔ NO se crea una sesión de verdad para esto.** El cajón es compartido: la vería el equipo
+entero, alguien la abriría, y desde adentro se piden productos que **crean ventas en Gestión Nube**.
+Una sesión de mentira que se puede pedir ⛔ no es una demo: es un pedido real esperando.
+
+🔴 **Y el candado ⛔ no es un comentario: `conEvento` la rechaza por id** (`ID_SESION_DE_MUESTRA`,
+en `evento.ts`). Si mañana alguien le enchufa el `persistir` real por descuido, el ejemplo **igual
+⛔ no entra al cajón**. Con test, y el test se verificó sacando el guard.
+
+📌 **Dos tests, y prueban cosas distintas**: `tests/guia.test.ts` lee el fuente y afirma que cada
+ancla existe en algún JSX; `tests/sesionfotos-guia-muestra.test.tsx` **monta** y afirma que, con la
+lista vacía, los siete controles de los pasos 4 a 10 están **en pantalla**. Lo primero ⛔ no dice
+nada de lo segundo, que es justo donde estaba el defecto.
+
+⚠️ Y por eso el paso del botón «Abrir» ⛔ **no lo nombra**: en el ejemplo la sesión nace desplegada,
+así que ese mismo botón dice «Cerrar». Un globo que resalta «Cerrar» mientras el texto dice «Abrir»
+es la falla que dejó escrita Envíos, y se ve perfecta en un test.
+
 ## Cómo se prueba
 
 ```bash

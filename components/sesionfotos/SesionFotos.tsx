@@ -10,8 +10,9 @@ import { useSesionFotos } from './useSesionFotos'
 import { FichaModelo } from './FichaModelo'
 import { Eventos } from './Eventos'
 import { useEventosSesion } from './useEventosSesion'
-import { GUIA_SESION_FOTOS } from '@/lib/sesionfotos/guia'
+import { GUIA_SESION_FOTOS, sesionDeMuestra } from '@/lib/sesionfotos/guia'
 import { useGuia } from '@/store/useGuia'
+import { hoyIso } from '@/lib/agenda'
 import { conBanco, type SesionEvento } from '@/lib/sesionfotos/evento'
 import { marcarPedidos, pedidoDesdeBanco } from '@/lib/sesionfotos/banco'
 import { type HistorialSolicitudes, type ResultadoCrearGen } from '@/components/solicitudes/useHistorialSolicitudes'
@@ -144,8 +145,15 @@ export function SesionFotos() {
     registrarGuia(GUIA_SESION_FOTOS)
     return olvidarGuia
   }, [registrarGuia, olvidarGuia])
+  // 🔴 La sesión de ejemplo existe SÓLO mientras el globo está abierto (`paso != null`), y se
+  // rehace en cuanto se cierra. Sin esto, nueve de los trece pasos caían al ancla estable en una
+  // instalación sin sesiones —que es justo la de quien recién abre la sección— y el tour repetía
+  // «esto aparece cuando abrís una sesión» en vez de mostrarlo. Lo cazó Bruno caminándolo.
+  const enTour = useGuia((g) => g.paso != null)
+  const muestra = useMemo(() => (enTour ? sesionDeMuestra(hoyIso()) : null), [enTour])
   return (
     <SolicitudesInner
+      muestra={muestra}
       sf={sf}
       eventos={ev}
       preset={PRESET_FOTOS}
@@ -173,6 +181,7 @@ export function SolicitudesInner({
   datos,
   clave,
   selector,
+  muestra,
 }: {
   sf: HistorialSolicitudes<Solicitud>
   /**
@@ -187,6 +196,8 @@ export function SolicitudesInner({
   clave: string
   /** El selector de línea, dibujado arriba de todo. Sólo lo manda Sesión de fotos. */
   selector?: React.ReactNode
+  /** La sesión de EJEMPLO del tour. La arma Sesión de fotos; acá sólo se pasa para abajo. */
+  muestra?: SesionEvento | null
 }) {
   // allVariantes del ETL → mapa código-de-barras → vid para el escaneo. Se baja en
   // paralelo con el historial; hasta que esté, el escaneo va deshabilitado.
@@ -229,6 +240,7 @@ export function SolicitudesInner({
         productos={datos?.allProductos ?? []}
         huerfanas={datos?.allVariantesHuerfanas ?? []}
         linea={clave}
+        muestra={muestra}
       />
     </>
   )
@@ -248,6 +260,7 @@ function Contenido({
   productos,
   huerfanas,
   linea,
+  muestra,
 }: {
   preset: PresetSolicitud
   data: Solicitud[]
@@ -272,6 +285,8 @@ function Contenido({
    * —lo único que la usa— ⛔ no se dibuja en Solicitudes internas, donde `clave` es la marca.
    */
   linea: string
+  /** La sesión de EJEMPLO del tour, o `null`. Ver `sesionDeMuestra` en `lib/sesionfotos/guia.ts`. */
+  muestra?: SesionEvento | null
 }) {
   const { confirmar, avisar } = useConfirmar()
   const { marca, perfil } = useSesion()
@@ -431,6 +446,7 @@ function Contenido({
           {eventos ? (
             eventos.data ? (
               <Eventos
+                muestra={muestra}
                 eventos={eventos.data}
                 solicitudes={data}
                 editable={puedePedir(perfil)}

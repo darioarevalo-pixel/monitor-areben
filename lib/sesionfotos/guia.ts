@@ -35,6 +35,7 @@
  */
 
 import type { PasoGuia } from '@/lib/guia/core'
+import { ID_SESION_DE_MUESTRA, type SesionEvento } from '@/lib/sesionfotos/evento'
 
 export const GUIA_SESION_FOTOS: readonly PasoGuia[] = [
   {
@@ -54,8 +55,11 @@ export const GUIA_SESION_FOTOS: readonly PasoGuia[] = [
   {
     ancla: 'sf.eventos',
     anclaFina: 'sf.abrir',
-    texto: '«Abrir» despliega la sesión: adentro están la modelo, el banco de productos y los pedidos que ya le colgaste. Lo de abajo se trabaja todo ahí adentro.',
-    siNoEsta: 'Cada sesión de la lista trae su «Abrir» a la derecha; ahora no hay ninguna planificada.',
+    // ⚠️ El texto ⛔ no nombra «Abrir»: en el ejemplo la sesión nace DESPLEGADA, así que este mismo
+    // botón dice «Cerrar». Un globo que resalta «Cerrar» mientras el texto dice «Abrir» es la
+    // misma falla que dejó Envíos —señalar una cosa y nombrar otra—, y se ve perfecta en un test.
+    texto: 'Este botón despliega la sesión, y adentro está todo el trabajo: la modelo, el banco de productos y los pedidos que ya le colgaste. Acá está desplegada para que puedas verlo.',
+    siNoEsta: 'Está a la derecha de cada sesión de la lista.',
   },
   {
     ancla: 'sf.eventos',
@@ -110,3 +114,65 @@ export const GUIA_SESION_FOTOS: readonly PasoGuia[] = [
     siNoEsta: 'El filtro está a la derecha del título «Historial».',
   },
 ]
+
+/**
+ * ── La sesión de EJEMPLO que el tour muestra mientras corre ──
+ *
+ * 🔴 **La pidió Bruno caminando el tour, y era el defecto entero**: *«desde la 4 no muestra nada,
+ * porque no hay nada creado»*. De los 13 pasos, **nueve hablan de lo que hay ADENTRO de una sesión**
+ * —la modelo, el banco, los outfits, los dos botones de pedir— y con la lista vacía los nueve caían
+ * al ancla estable. El motor hacía lo correcto (⛔ no saltear, decir dónde aparece), pero un tour
+ * que explica nueve veces seguidas *«esto aparece cuando abrís una sesión»* ⛔ no enseña nada:
+ * enseñar dónde está un botón **es mostrarlo**.
+ *
+ * ⛔ **Y ⛔ NO se crea una sesión de verdad para eso.** El cajón es compartido: la vería el equipo
+ * entero, alguien la abriría, y desde adentro se piden productos que **crean ventas en Gestión
+ * Nube**. Una sesión de mentira que se puede pedir ⛔ no es una demo: es un pedido real esperando.
+ *
+ * Por eso ésta vive **sólo en memoria y sólo mientras el globo está abierto**: se dibuja arriba de
+ * la lista, rotulada **«Ejemplo»**, con todos sus botones inertes, y desaparece al cerrar el tour.
+ * ⛔ No se guarda, ⛔ no se sincroniza y ⛔ no la ve nadie más. Mientras el tour corre, además, el
+ * overlay tapa la pantalla: cualquier click cierra el tour antes de llegar a un botón.
+ *
+ * 🔑 **El banco trae DOS prendas y un outfit armado a propósito**: un top y un short, los dos en el
+ * outfit 1. Es el estado que hay que entender —arriba + abajo = un look— y el único que muestra de
+ * una que el aviso «le falta el abajo» está apagado porque el outfit está completo. Con una sola
+ * prenda se vería el aviso; con tres, el ejemplo dejaría de ser un ejemplo.
+ */
+export function sesionDeMuestra(hoy: string): SesionEvento {
+  return {
+    id: ID_SESION_DE_MUESTRA,
+    fecha: hoy,
+    hora: '15:30',
+    duracionMin: 90,
+    descripcion: 'Cápsula primavera (ejemplo)',
+    disparador: 'campania',
+    modelo: { nombre: 'Ejemplo', talle: 'S', altura: '1,70' },
+    estado: 'planificado',
+    creado: 0,
+    creadoPor: 'el tour',
+    banco: [
+      {
+        vid: 'guia:arriba',
+        pid: null,
+        sid: null,
+        nombre: 'TOP CANDELA',
+        variante: 'S',
+        sku: 'EJEMPLO-1',
+        candidato: 'oc',
+        ocLabel: 'OC-0000',
+        outfit: 1,
+      },
+      {
+        vid: 'guia:abajo',
+        pid: null,
+        sid: null,
+        nombre: 'SHORT MILA',
+        variante: 'S',
+        sku: 'EJEMPLO-2',
+        candidato: 'stock',
+        outfit: 1,
+      },
+    ],
+  }
+}
