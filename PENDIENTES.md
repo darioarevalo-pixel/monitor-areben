@@ -30,6 +30,10 @@ es del monitor**, que es un hueco medido, no una idea:
   **603 de 658 ventas del local desde el 1-ago llevan descuento cargado a mano**, promedio $4.647).
   ▶️ Si esto se va a repetir, lo que falta es un `tipo` de campaña **presencial**: decide precios,
   imprime carteles y ⛔ **no escribe nada en GN**.
+  🆕 **Bruno lo resolvió por otro lado: OCULTA en Tienda Nube todo lo que va a la feria** ⇒ el precio
+  puede vivir en el sistema sin publicarse. ▶️ **Falta probar con UNA prenda que el sync no la
+  republique** (GN le escribe a TN todos los días) — ⛔ no se puede medir desde este repo: el
+  `TIENDANUBE_TOKEN` del `.env` es el de BDI.
 - 🔴 **La campaña «Sale Invierno Agosto 2026» venció el 2-sep y sigue puesta**: 259 de 262 productos
   con el promocional vivo en GN y los 262 ítems en `aplicado`. El aviso de vigencia vencida ⛔ no la
   cerró sola.
@@ -500,6 +504,56 @@ objeto «outfit» · traer OCs «en camino» · estrenar permiso o sección nuev
 
 📌 El plan largo, con rutas archivo por archivo y cómo se camina cada fase, quedó en
 `~/.claude/plans/a-ver-planiemos-eso-inherited-gem.md`.
+
+---
+
+## 🏁 LA PUERTA DE MARKETING: «Sesión de fotos» vuelve al menú — 5-sep-2026 (pedido de Bruno)
+
+> «no entiendo cómo llegar… la puerta de entrada de marketing es siempre sesión de fotos, porque
+> sesión de video y contenido también es sesión de fotos; muestra, moldería y uso interno no aplica
+> para marketing. Ese lugar es sólo de marketing; dentro de sesión de fotos quedan las solicitudes,
+> que el motor está en administración. Luego vemos cómo ordenarlo.»
+
+🔴 **El octavo entero (evento, banco, outfits, OC, Agenda) estuvo CINCO DÍAS en producción sin que
+nadie pudiera llegar, y ⛔ no era la pantalla: era que no había puerta.** Desde el 24-jul
+(`d0b4eca`) `sesion-fotos` ⛔ no era entrada de menú, y las dos formas de llegar —el botón «Ver» y
+el puente de Marketing— **aterrizan con una solicitud abierta**, o sea tapando el bloque «Sesiones
+planificadas», que vive arriba de la lista. 🔑 **Un módulo sin entrada propia ⛔ no se estrena solo.**
+
+**Hecho** (⛔ sin commitear todavía: los archivos del nav los está tocando la otra sesión):
+- **`sesion-fotos` es el PRIMER renglón del grupo Marketing**, con la cámara de la cola de fotos.
+- **`solicitudes` pasó a llamarse «Estado de las solicitudes»** dentro de Marketing: dejaba de
+  quedar claro cuál era la puerta con las dos compitiendo por el mismo nombre.
+- 🔑 **`puedeVerPropio` en `lib/permisos.core.js`, y el filtro del menú bajó a `lib/nav.ts`**
+  (`keyVisibleEnMenu` · `itemVisibleEnMenu` · `catsVisibles`). **El menú y la ruta preguntan
+  distinto**: el menú «¿esto es suyo?», la ruta «¿puede abrirlo?». Sin eso, a Depósito, Local y
+  Administración —que abren la pantalla por `DETALLE_DE`— les aparecía un grupo «Marketing» entero,
+  de un solo renglón, que hoy ⛔ no ven. ⛔ **El guard sigue con `puedeVer`**: unificarlo reabre el
+  bug de `6d84591` en silencio.
+- **«Video/contenido» pasó al cajón de fotos.** Estaba en internas (área **local**), tomaba
+  `estadoTrasVenta: 'retirada'` y **perdía el eje «De dónde viene»** ⇒ un video de campaña ⛔ no
+  podía decir que venía de una campaña. ⚠️ ⛔ Sin backfill: la que ya existe se queda en internas.
+- ✅ 8 tests nuevos en `tests/nav-menu.test.ts` (archivo nuevo a propósito:
+  `tests/permisos-funcion.test.ts` lo tiene tomado la otra sesión) · `tsc` y `eslint` limpios.
+  🔑 **El invariante se verificó al revés**: con `puedeVer` en vez de `puedeVerPropio`, el test se
+  pone rojo. Un verde que no se prueba que caza ⛔ no prueba nada.
+
+▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Falta ver, con `npm run dev`: el renglón primero y con ícono ·
+que caiga en **la lista** y ⛔ no en un detalle · el eyebrow «MARKETING», que antes ⛔ no existía ·
+y, con una cuenta de **Local o Depósito**, que el grupo Marketing ⛔ no aparezca **y** que el botón
+«Ver» siga abriendo la pantalla — las dos mitades, juntas.
+
+▶️ **El reemplazo completo quedó afuera, y por qué**: sacarle `solicitudes` a Marketing hace que
+`sectorVisible` caiga en su rama de compatibilidad y le **aparezcan tres grupos ajenos** (Local,
+Depósito, Administración), cada uno de un renglón — el bug que esa función vino a arreglar. Es una
+decisión aparte: arrastra `ACCESO_POR_FUNCION` o `sectorVisible`, y `tests/permisos-funcion.test.ts`.
+
+▶️ **Sectorizar los motivos.** Bruno: *«si pusimos algún otro motivo sería porque lo usa otro
+sector, pero hay que empezar a clarificar y sectorizar»*. Hoy `NuevaSolicitud` ⛔ **no recibe el
+perfil** y le muestra los seis motivos a cualquiera.
+
+▶️ **Un TOUR VIRTUAL de la sección**, idea de Bruno: *«si cambia mucho, no estaría mal pensar en un
+tour virtual»*. ⛔ No hay nada de eso en el repo: es un módulo nuevo, con su propio plan.
 
 ---
 
