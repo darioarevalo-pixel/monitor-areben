@@ -80,7 +80,12 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   dibuja mientras la campaña no esté `cerrada` (`campaniaEditable`), ⛔ no con la condición de
   `reprecificar`**: nació con esa —`en_curso` o `aplicada`, la de «terminar un sale»— y el botón
   **no aparecía en la campaña recién creada**, que nace en `borrador` y es donde se cargan los
-  precios. Lo cazó Bruno abriendo la pantalla, ⛔ no un test. 🔑 Un precio de mesa
+  precios. Lo cazó Bruno abriendo la pantalla, ⛔ no un test.
+  ✅ **Ejercido en prod el 5-sep-2026** con dos productos de «Feria Septiembre 2026»: el cartel
+  dijo «Repartir 2 productos en 2 mesas · $19.900: 1 · $24.900: 1» y **la base quedó con los dos
+  números redondos, los ítems en `definido` y la bitácora en CERO** — o sea que no tocó la tienda.
+  ⛔ **El `window.prompt` lo tiene que apretar una persona**: un diálogo nativo congela el puente
+  de Chrome, así que este camino ⛔ no se puede caminar desde una sesión de IA. 🔑 Un precio de mesa
   **no pasa por el redondeo a 90** (`precioDeSale` con `precioSale` sólo hace `Math.round`): el
   número del cartel es el que se guarda.
 - 🔑 **`TOPE_APLICAR` es 5 y lo fija el tope de Gestión Nube** (60 consultas/minuto, compartidas con

@@ -36,7 +36,11 @@ es del monitor**, que es un hueco medido, no una idea:
   `TIENDANUBE_TOKEN` del `.env` es el de BDI.
 - ✅ **«Precios de mesa» EN EL REPO** (`porEscalera` + el botón, 14 casos y 6 mutantes muertos): el
   masivo que había sólo sabía «−X% sobre lista», y una feria de 8 mesas sobre 381 modelos eran 381
-  modales. ⛔ **SIN ejercer a mano**: nadie apretó el botón todavía.
+  modales. ✅ **EJERCIDO EN PROD** (5-sep): el cartel dio «$19.900: 1 · $24.900: 1» y la base quedó
+  con los precios redondos, los ítems en `definido` y **la bitácora en cero**. 🔴 **Nació con la
+  condición del botón de al lado y ⛔ no se dibujaba en `borrador`** —donde se arma la campaña—;
+  arreglado con `campaniaEditable` (`9cc1ea6`). ⛔ **El prompt lo aprieta una persona**: un diálogo
+  nativo congela el puente de Chrome.
 - ▶️ 🔴 **El ORDEN de la feria, que es lo que sale caro al revés**: ocultar en Tienda Nube **primero**,
   aplicar los precios **después**. Aplicar antes deja el precio de feria publicado online, que es
   justo lo que la feria no quiere.
