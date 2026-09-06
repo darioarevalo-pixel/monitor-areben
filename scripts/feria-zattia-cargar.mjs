@@ -13,8 +13,12 @@
  *   node scripts/feria-zattia-cargar.mjs --escribir → manda las tandas
  */
 import { authKv } from './lib/kv-auth.mjs'
+// El cruce con Tienda Nube, IMPORTADO y no copiado: así la foto que se congela acá es la misma que
+// elegiría la pantalla. Node 25 despoja los tipos del `.ts` solo.
+import { indexarTn, imagenDe } from '../lib/tn.ts'
 
 const BASE = 'https://monitorareben.vercel.app/api'
+const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const H = { ...authKv(), 'content-type': 'application/json' }
 const LIQ = 'l1788656536418_tdukfi'     // Feria Septiembre 2026
 const SALE_AGO = 'l1785967225514_jqqfp8' // Sale Invierno Agosto 2026
@@ -46,14 +50,19 @@ async function espejo(tabla, params) {
 const hoy = new Date()
 const diaMenos = (n) => new Date(hoy.getTime() - n * 864e5).toISOString().slice(0, 10)
 
-const [prods, inv, ventas, det, costosR] = await Promise.all([
+// 🔴 `foto.imagen` es un campo CONGELADO: la pantalla dibuja `item.foto.imagen` y nada más
+// (`Liquidacion.tsx:1286`, `DefinirPrecio.tsx:518`). Cargar con `null` deja la campaña sin fotos
+// para siempre aunque Tienda Nube las tenga — pasó el 6-sep con los 376 de la feria.
+const [prods, inv, ventas, det, costosR, cat] = await Promise.all([
   espejo('productos', 'select=id,name,category,sku,retailer_price,created_at,active&active=eq.true'),
   espejo('inventario', 'select=product_id,store_name,available_quantity'),
   espejo('ventas', `select=id,date_sale&date_sale=gte.${diaMenos(120)}`),
   espejo('venta_detalles', 'select=sale_id,product_id,quantity'),
   post({ recurso: 'costos', store: 'zattia' }),
+  fetch(`${AUDIT}?store=zattia`, { headers: H }).then((r) => r.json()),
 ])
 const costos = costosR.costos || {}
+const idxTn = indexarTn(cat.products || [])
 
 // ── Las ventas por producto, en las tres ventanas que congela la foto ──────────────────────────
 const fechaDe = new Map(ventas.map((v) => [v.id, String(v.date_sale).slice(0, 10)]))
@@ -107,7 +116,7 @@ for (const p of prods) {
       vidaUtil: null,
       ultimaVenta: ultima[p.id] || null,
       diasSinVender: dias(ultima[p.id]),
-      imagen: null,
+      imagen: imagenDe({ sku: p.sku, name: p.name }, idxTn),
     },
     decision: { precioSale: null, pctDesc: null, markup: null, margen: null, nota: null, porQuien: null, cuando: null },
     revision: { porQuien: null, cuando: null, objecion: null, precioAnterior: null },
