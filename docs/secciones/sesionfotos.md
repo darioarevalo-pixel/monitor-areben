@@ -523,7 +523,7 @@ documento entero sin lista blanca (`filaDe`), igual que `modelo` el día anterio
 npx vitest run tests/sesionfotos-outfits.test.ts --reporter=dot
 ```
 
-▶️ 🔴 **Nadie abrió la pantalla todavía.** Lo que hay que ejercer a mano, con una sesión de Zattia:
+🏁 **Caminada en prod el 6-sep-2026** (ver § La CAMINATA del 6-sep). Lo que se ejerció, con una sesión de Zattia:
 abrir una solicitud con prendas de arriba y de abajo, asignarles bolsa, **ver la zona propuesta**,
 **corregir una** y comprobar que la bolsa con sólo «arriba» avisa y **deja de avisar** al sumarle el
 abajo. Un verde ⛔ no dice que guardar ande: hay que **salir y volver a entrar** a ver que la
@@ -611,7 +611,7 @@ fija que imponga un alfabeto (S/M/L contra 38/40/42, que en Zattia conviven).
 npx vitest run tests/sesionfotos-evento.test.ts tests/solicitudes-kind-evento.test.ts --reporter=dot
 ```
 
-▶️ 🔴 **Nadie abrió la pantalla.** Lo que hay que ejercer a mano, en Zattia:
+🏁 **Caminada en prod el 6-sep-2026** (ver § La CAMINATA del 6-sep). Los seis pasos, en Zattia:
 1. Crear una sesión con día y **sin hora** → tiene que decir sólo la fecha, ⛔ nunca «00:00».
 2. Ponerle hora y duración → tiene que aparecer «15:30 a 17:00 (1 h 30)».
 3. Elegir la modelo del padrón adentro del evento, **salir y volver a entrar** a ver que quedó.
@@ -692,7 +692,7 @@ vigilar el día que el botón cambia.
 npx vitest run tests/sesionfotos-banco.test.ts --reporter=dot
 ```
 
-▶️ 🔴 **Nadie abrió la pantalla.** En una sesión de Zattia, adentro de un evento:
+🏁 **Caminada en prod el 6-sep-2026** (ver § La CAMINATA del 6-sep). En una sesión de Zattia, adentro de un evento:
 1. Buscar y agregar dos prendas (una de arriba, una de abajo) → tienen que aparecer en «Sin repartir».
 2. Ponerles a las dos el outfit 1 → el aviso «le falta el abajo» tiene que aparecer con una sola y
    **apagarse** al poner la segunda.
@@ -792,7 +792,7 @@ adivinar.
 npx vitest run tests/sesionfotos-banco-oc.test.ts tests/sesionfotos-agregar-desde-oc.test.ts --reporter=dot
 ```
 
-▶️ 🔴 **Nadie abrió la pantalla.** En una sesión de Zattia, adentro de un evento:
+🏁 **Caminada en prod el 6-sep-2026** (ver § La CAMINATA del 6-sep). En una sesión de Zattia, adentro de un evento:
 1. **«Agregar desde una orden recibida»** → el desplegable tiene que traer las órdenes de los
    últimos 90 días, con rótulo y fecha.
 2. Elegir una reciente y **«Agregar al banco»** → las prendas aparecen en «Sin repartir», con el
@@ -871,7 +871,7 @@ dice— y un «00:00» colgado del título se lee como una sesión de madrugada.
 npx vitest run tests/solicitudes-siembra.test.ts tests/solicitudes-kind-evento.test.ts --reporter=dot
 ```
 
-▶️ 🔴 **Nadie abrió la pantalla.** En Zattia:
+🏁 **Caminada en prod el 6-sep-2026** (ver § La CAMINATA del 6-sep). En Zattia:
 1. Crear una **sesión** (evento) con día, **hora** y **«De dónde viene»** cargado.
 2. Abrir la **Agenda** → tienen que estar los pasos del manual 05, con el título
    **«<lo que escribiste> <hora> · <paso>»** y cada uno en su día (el offset del molde).
@@ -880,3 +880,52 @@ npx vitest run tests/solicitudes-siembra.test.ts tests/solicitudes-kind-evento.t
 4. Crear una **solicitud suelta** (sin evento) con origen → esa **sí** siembra, como siempre.
 5. **Editar la hora** del evento → los pendientes ⛔ no se re-siembran ni cambian de título.
 6. Crear una sesión **sin «De dónde viene»** → ⛔ no siembra nada, y se guarda igual.
+
+## La CAMINATA del 6-sep-2026: las cinco fases del octavo, ejercidas en producción
+
+Las cinco fases estaban hechas, testeadas y deployadas desde el 4-sep, y **ninguna se había
+abierto**. Se caminaron las cinco en **prod**, con Zattia y con BDI, y con la **base como oráculo**
+(`DATABASE_URL_ZATTIA` por `pg`, ⛔ no la anon: con RLS prendido y cero políticas, la anon devuelve
+`[]` con 200 y eso se lee como «no hay nada»). Todo lo que la prueba escribió se borró después: la
+tabla `solicitudes` de Zattia arrancó y terminó con **24 filas**.
+
+### Lo que anduvo, y ⛔ no es poco
+
+Los 26 pasos escritos en las cinco secciones de arriba se ejercieron y **dieron lo que decían**:
+la zona sale del nombre, el aviso del outfit se prende y se apaga, la corrección a mano sobrevive a
+salir y volver, dos solicitudes de la misma sesión comparten el outfit, la OC entra sin duplicarse
+(«0 prendas al banco · 2 ya estaban»), la hora entra al título de los pendientes con el offset de
+cada molde, editar la hora ⛔ no re-siembra, y una sesión con pedidos ⛔ no se puede eliminar.
+
+### 🔴 Lo que ⛔ ningún test podía ver, y salió de abrir la pantalla
+
+- 🔴 🔑 **El que planifica la sesión ⛔ NO PUEDE VER lo que sembró.** Ya estaba escrito que la
+  respuesta del POST ⛔ no llega a la pantalla; lo que faltaba decir es que **la Agenda es
+  personal**: los 8 renglones nacen de Sofi, Cande y Cami, así que en el **Hoy**, la **Semana** y el
+  **Mes** de quien creó la sesión ⛔ no aparece **ninguno**. El único lugar donde se ven es
+  `/agenda/eventos` → **«LO QUE YA SE COPIÓ»**, abajo de todo, un renglón por sesión y **sin
+  botones**. ⇒ sembrar es hoy un acto **a ciegas de punta a punta**.
+- 🔴 **Borrar una sesión ⛔ no borra sus pendientes, y nadie lo dice.** Medido: quedan **8 renglones
+  de «SS 27»** —sesión creada el 5-sep, que sembró y después **se eliminó**— colgados de Sofi, Cande
+  y Cami, 5 de ellos venciendo el 6-sep. El diálogo del borrado dice *«No hay papelera»*, pero habla
+  de **la sesión**, ⛔ no de la Agenda. Y desde el monitor ⛔ no hay forma de sacarlos: `borrar-item`
+  existe en la API, pero esa lista ⛔ no ofrece el botón.
+- 🔴 **«Pedir al depósito» acierta 1 de cada 4 veces, y ⛔ no avisa.** El fallback por stock está
+  bien y es de siempre (`procesarDraft`: prioridad + fallback), pero el botón promete depósito y la
+  solicitud nace **al local** sin decirlo en el momento —se ve recién adentro, en «Retirar de
+  Local»—. 📌 **De las 1.011 variantes de Zattia con stock, 738 (73%) tienen 0 en depósito.**
+- ⚠️ **⛔ No hay ni una ficha cargada en Modelos (Zattia)**, así que el paso «elegí la modelo del
+  padrón» ⛔ no se pudo caminar: se anota a mano, que es el camino que la pantalla ya ofrece.
+- ⚠️ **El bloque de sesiones tarda en aparecer**: el cajón de eventos es un fetch aparte y hasta que
+  contesta la pantalla ⛔ no dibuja **nada** ahí —ni el título ni «+ Nueva sesión»—. Una captura
+  tomada al segundo de entrar ⛔ no lo tiene.
+- ⚠️ **Plural**: el parte del banco dice «1 completos · 1 ya pedidas» — va en singular con 1.
+- ⚠️ **En BDI la ficha «La modelo» se dibuja igual** (en una solicitud de fundas), mientras que los
+  outfits sí se callan solos. ⛔ No es del octavo, pero se ve al lado.
+
+### Lo que ⛔ quedó sin caminar
+
+- El mensaje de **«falta el permiso»** del desplegable de OCs: pide un usuario **sin** la sección
+  «Lo que entró».
+- Que una **solicitud suelta con origen** siembre: ⛔ no se ejerció en esta caminata, pero está
+  **medido en producción** — hay clones con la clave vieja (`sesion-fotos·s…`) del 1 y el 2-sep.

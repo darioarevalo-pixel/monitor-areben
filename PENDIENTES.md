@@ -409,9 +409,11 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    es» eran el mismo `null` ⇒ la pantalla iba a pedir clasificar **un cinto**; (b) en BDI
    `fueraDeAlcance` ⛔ no alcanza para una funda ⇒ una sesión de BDI mostraba **223 pendientes**.
    Por eso existe `aplicaOutfits`: **sin una sola prenda, el módulo entero se calla**.
-   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Falta ejercerlo a mano en Zattia —ver la zona propuesta,
-   corregir una, ver que la bolsa avisa y deja de avisar, **salir y volver a entrar** a que la
-   corrección quedó— y abrir una de **BDI** para confirmar que ahí ⛔ no aparece nada.
+   🏁 **CAMINADA EN PROD el 6-sep-2026** (Zattia y BDI, la ficha tiene el detalle): la zona
+   propuesta salió bien en las dos prendas (TOP → Arriba, SHORT → Abajo), el bloque «Bolsas» avisó
+   **«Al outfit 1 le falta el abajo»**, se apagó al sumar el abajo, **volvió** al corregir la zona a
+   mano, y la corrección **sobrevivió a salir y volver a entrar**. En **BDI** ⛔ no apareció ni el
+   selector, ni bolsas, ni aviso, ni «faltan clasificar».
 2. 🏁 **HECHA el 4-sep-2026 — el evento como padre, con modelo, fecha, hora y duración.**
    `kind` nuevo `sesion-evento` en la MISMA tabla, `lib/sesionfotos/evento.ts`, `procesarDraft`
    acepta `eventoId`, bloque «Sesiones planificadas» arriba del historial y `FichaModelo` mudada a
@@ -430,8 +432,13 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    pantalla lo dice. Y un evento con hijas ⛔ no se elimina de un click.
    ⛔ **No siembra en la Agenda** (Fase 5) y ⛔ **no toca el motor de Administración**: el bloque lo
    dibuja sólo Sesión de fotos. Las dos cosas, con test.
-   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos a caminar, en `docs/secciones/sesionfotos.md`
-   § La sesión como EVENTO.
+   🏁 **CAMINADA EN PROD el 6-sep-2026**, los seis pasos: sin hora dice sólo la fecha (⛔ ningún
+   «00:00»); con hora y duración dice «15:30 a 17:00 (1 h 30)»; la modelo quedó tras salir y volver;
+   «+ Pedir productos» dejó la solicitud colgada (chip «2 pedidos» + rótulo «de una sesión»); la
+   segunda solicitud de la misma sesión anduvo; y eliminar una sesión con pedidos **frenó**
+   («tiene 2 solicitudes de productos colgadas»). En **Solicitudes internas** ⛔ no aparece nada.
+   🔴 **Lo que ⛔ no se pudo caminar**: elegir la modelo **del padrón** — en Zattia ⛔ no hay ni una
+   ficha cargada en Modelos, así que se anotó a mano.
 3. 🏁 **HECHA el 4-sep-2026 — el banco y los outfits ANTES de pedir.** `lib/sesionfotos/banco.ts`
    + `components/sesionfotos/BancoSesion.tsx`, colgado del evento (`SesionEvento.banco`, jsonb ⇒
    ⛔ sin migración). El orden pasó de *busco → pido → después agrupo* a **candidatos → outfits →
@@ -450,7 +457,16 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    🔴 Lo ya pedido ⛔ no se saca del banco ni se vuelve a pedir (serían **dos ventas en GN por una
    prenda sola**) · un candidato sin outfit deja el ítem **sin bolsa**, ⛔ no se le inventa número ·
    al pedir se guardan las dos puntas **en orden**: primero la solicitud, después el banco.
-   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § El BANCO.
+   🏁 **CAMINADA EN PROD el 6-sep-2026**, los seis pasos: las dos prendas cayeron en «Sin repartir»
+   con su zona, el aviso del outfit se prendió y se apagó, «Pedir al depósito» y «Pedir al local»
+   nacieron **dos solicitudes con el MISMO outfit 1** (verificado en la base: las dos hijas con
+   `bolsa: 1`), la ya pedida ⛔ no se puede sacar del banco (**se le va el `×`**) y todo sobrevivió
+   a salir y volver.
+   🔴 🔑 **Y la caminata destapó una honestidad que falta**: apretar **«Pedir al depósito»** sobre una
+   prenda con 0 en depósito crea la solicitud **al LOCAL** —el fallback por stock, que está bien— y
+   **⛔ nada lo dice en el momento**: se ve recién al abrir la solicitud, que dice «Retirar de Local».
+   📌 **Y ⛔ no es un caso raro: de las 1.011 variantes de Zattia con stock, 738 (73%) tienen 0 en
+   depósito.** El botón acierta 1 de cada 4 veces.
 4. 🏁 **HECHA el 4-sep-2026 — la orden recibida entra al banco.** `lib/sesionfotos/banco-oc.ts`
    (`itemsBancoDesdeOC`) + `components/sesionfotos/AgregarDesdeOC.tsx`, colgado arriba del buscador
    del banco. Lee por `?recurso=recepciones`, el endpoint de «Lo que entró» ⇒ ⛔ sin permiso nuevo,
@@ -475,8 +491,13 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    Ahora son **cuatro estados**: cargando · ⛔ no se pudieron leer · sin órdenes · elegí una.
    ⚠️ **`ambiguo` ⛔ no pasó nunca** (0 de 1.622) y **ninguna orden trajo un SKU de Stunned** (0 de
    819) ⇒ ⛔ no se inventó el motivo «es de la otra línea». El guard de ambiguo queda igual.
-   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § La ORDEN
-   RECIBIDA entra al banco.
+   🏁 **CAMINADA EN PROD el 6-sep-2026**, los seis pasos: el desplegable trajo **74 órdenes** con
+   rótulo, fecha y renglones; OC-0469 metió «2 prendas al banco» con el badge **«de la OC»**;
+   volver a agregarla dijo **«0 prendas al banco · 2 ya estaban»** y el banco ⛔ no se duplicó; se
+   armó el outfit con lo que entró, avisó que le faltaba el abajo y ese faltante se pidió al local;
+   y todo siguió ahí, con su «de la OC», tras salir y volver.
+   ▶️ **Lo único sin caminar**: el mensaje con un usuario **sin la sección «Lo que entró»** — hace
+   falta otro usuario.
 5. 🏁 **HECHA el 4-sep-2026 — la Agenda sale del EVENTO, con la hora. CIERRA EL OCTAVO.**
    `lib/sesionfotos/evento.core.js` (`siembraDeSesion`, JS plano porque lo importa el handler) +
    `api/_solicitudes.js`. Clave `sesion-fotos·evento:<id>` —espacio de nombres **nuevo**: lo
@@ -505,8 +526,24 @@ El relato entero, en `docs/secciones/sesionfotos.md` § Los OUTFITS.
    decisión aparte.
    ⚠️ **⛔ No siembra al EDITAR**: el hecho es crear la sesión ⇒ corregirle la hora después deja el
    título con la hora **con la que se creó**. Misma ausencia que la fecha de las hijas.
-   ▶️ 🔴 **NADIE ABRIÓ LA PANTALLA.** Los seis pasos, en `docs/secciones/sesionfotos.md` § La Agenda
-   sale del EVENTO.
+   🏁 **CAMINADA EN PROD el 6-sep-2026**: una sesión con hora y origen sembró **8 renglones**
+   —⛔ no nueve: por el eje «campaña» el molde 08 va una sola vez— con el título
+   **«PRUEBA CLAUDE 2 - borrar 16:45 · 03) Sacar las fotos»** y cada uno en su día por el offset
+   (01 a −2, 02 a −1, 07 a +2). Pedir del banco ⛔ **no sumó ni un renglón**; **editar la hora**
+   ⛔ no re-sembró **ni cambió el título** (quedó la hora vieja); y una sesión **sin origen** ⛔ no
+   sembró nada y se guardó igual. Todo lo de la prueba se borró después.
+   🔴 🔑 **Y acá está el hallazgo que ⛔ ningún test podía ver: el que planifica la sesión ⛔ NO
+   PUEDE VER lo que sembró.** La respuesta del POST ⛔ no llega a la pantalla (ya estaba escrito), y
+   **la Agenda es personal**: los 8 renglones van a Sofi, Cande y Cami, así que en el **Hoy**, la
+   **Semana** y el **Mes** de Bruno ⛔ no aparece ninguno. El único lugar donde se ven es
+   `/agenda/eventos`, abajo de todo, en **«LO QUE YA SE COPIÓ»** — un renglón por sesión, **sin
+   botones**.
+   🔴 **Corolario medido, y éste muerde**: hay **8 renglones de «SS 27» colgados de una sesión que
+   ya ⛔ no existe** —se creó el 5-sep, sembró, y después alguien **eliminó la sesión**—. 5 de esos 8
+   vencían el 6-sep sobre Sofi, Cande y Cami. ⇒ **borrar una sesión ⛔ no borra sus pendientes, y la
+   pantalla del borrado ⛔ no lo dice** («No hay papelera» habla de la sesión, ⛔ no de la Agenda).
+   ▶️ Y ⛔ no hay forma de borrarlos desde el monitor: `borrar-item` existe en la API, pero la lista
+   de «LO QUE YA SE COPIÓ» ⛔ no ofrece el botón.
 
 ⛔ **Lo que este plan NO hace**: tocar el motor compartido con Administración ni el ciclo contra
 Gestión Nube · migrar nada (ni tabla, ni solicitudes, ni clones de agenda ya sembrados) · inventar un
