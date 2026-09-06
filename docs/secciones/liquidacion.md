@@ -13,7 +13,7 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
 - `components/liquidacion/` — `Liquidacion.tsx` (1.331 l.: la portada, la campaña por dentro y el
   aviso de ofertas colgadas) · `DefinirPrecio.tsx` (582) · `Resultado.tsx` (513) · `Revision.tsx`
   (389) · `Bitacora.tsx` · `MandarALiquidacion.tsx` · `CeldaEnSale.tsx`.
-- `lib/liquidacion/` — `core.ts` (avisos, topes, `reprecificar`) · `resultado.ts` (el contraste
+- `lib/liquidacion/` — `core.ts` (avisos, topes, `reprecificar`, `porEscalera`) · `resultado.ts` (el contraste
   contra lo cobrado, y los agotados que no cierran) · `bitacora.core.js` + `.ts` ·
   `colgadas.core.js` + `.ts` · `vendido.core.js` + `.ts` · `ventas.ts` · `persistencia.ts` ·
   `tipos.ts`.
@@ -68,6 +68,17 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   lista de tipos válidos vive en `lib/liquidacion/tipo.core.js` porque **la valida el handler**.
 - 🔴 **El sub-permiso `liquidacion.aplicar` no se hereda de la función**: hay que tildarlo a mano, y
   en las dos marcas. Es el único permiso del Monitor que escribe precios en la tienda.
+- 🔑 **Hay DOS masivos de precio y contestan preguntas distintas.** `reprecificar` mueve la campaña
+  entera un % **sobre el precio de lista** — para terminar un sale sin volver de golpe a lista.
+  `porEscalera` reparte los productos en **mesas de precio redondo**, y ahí el precio lo fija la
+  mesa y no el producto: cada uno va al **primer escalón `>=` su costo**, que es la promesa de una
+  mesa («nada de acá cuesta más de lo que la mesa cobra»). ⛔ **El que no entra en ningún escalón
+  NO se toca** —mandarlo al más alto lo remata abajo del costo sin decisión de nadie— y ⛔ **el que
+  ya tenía ese precio no vuelve a la cola de revisión**: correr la escalera dos veces mientras se
+  arma una feria no puede desconfirmar lo que alguien ya miró. Los dos guardan por `decidir-masivo`,
+  o sea que **ninguno toca la tienda**: escribir sigue siendo `aplicar`. 🔑 Un precio de mesa
+  **no pasa por el redondeo a 90** (`precioDeSale` con `precioSale` sólo hace `Math.round`): el
+  número del cartel es el que se guarda.
 - 🔑 **`TOPE_APLICAR` es 5 y lo fija el tope de Gestión Nube** (60 consultas/minuto, compartidas con
   los otros sistemas de la casa) ⇒ el bucle de una campaña de 260 vive **en el cliente**, con barra
   de progreso, no en el handler. Cualquier acción nueva que escriba precios en lote hereda eso: si no
@@ -128,7 +139,7 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
 ## Cómo se prueba
 
 ```bash
-npx vitest run tests/liquidacion-resultado.test.ts --reporter=dot   # y los otros ocho
+npx vitest run tests/liquidacion-resultado.test.ts --reporter=dot   # y los otros nueve
 ```
 
 - 🔴 **El mutante que hay que ver caer**: copiarle a `agotadosQueNoCierran` el filtro de canal de

@@ -310,6 +310,74 @@ export function reprecificar(
 }
 
 /**
+ * Los precios de una feria: una escalera de precios redondos, y cada producto va al **primer
+ * escalón que le cubre el costo**.
+ *
+ * 🔑 **Es la otra forma de decidir en masa, y no es un % .** `reprecificar` sirve para mover una
+ * campaña entera unos puntos; esto sirve cuando el precio lo fija la MESA y no el producto —
+ * "todo lo de esta mesa a $14.900"—, que es como se arma una feria. Con un % sobre lista cada
+ * prenda termina en un número distinto y no hay cartel que lo explique.
+ *
+ * 🔑 **El escalón se elige por el COSTO, no por el precio de lista.** Una mesa es una promesa: la
+ * prenda más cara de esa mesa no puede costar más de lo que la mesa cobra. Por eso se toma el
+ * primer escalón `>=` costo, y por eso el que no entra en ninguno **no se toca**: bajarlo al
+ * escalón más alto sería rematarlo abajo del costo sin que nadie lo haya decidido.
+ *
+ * 🔑 **Un precio que ya estaba no vuelve a la cola de revisión.** `decidirItem` devuelve el ítem a
+ * `definido` y le borra la revisión, que es lo correcto para un precio NUEVO; correr la escalera
+ * dos veces —algo normal mientras se arma— no tiene por qué desconfirmar lo que alguien ya miró.
+ *
+ * Sale con las tres listas separadas porque **la pantalla las tiene que poder nombrar**: cuántos
+ * cambian, cuántos ya estaban, y cuáles quedaron afuera y por qué.
+ */
+export interface RepartoEscalera {
+  cambiados: LiquidacionItem[]
+  yaEstaban: LiquidacionItem[]
+  afuera: { pid: string; nombre: string; costo: number; motivo: 'sin-costo' | 'mas-caro' }[]
+}
+
+export function porEscalera(
+  items: LiquidacionItem[],
+  escalera: number[],
+  quien: string | null,
+): RepartoEscalera {
+  const escalones = [...new Set(escalera)].sort((a, b) => a - b)
+  const out: RepartoEscalera = { cambiados: [], yaEstaban: [], afuera: [] }
+  for (const i of items) {
+    if (i.estado === 'descartado') continue
+    const costo = i.foto.costo
+    // 🔴 Sin costo no hay mesa posible: con costo cero cualquier precio parece tener 100% de margen.
+    if (!(costo > 0)) {
+      out.afuera.push({ pid: i.pid, nombre: i.foto.nombre, costo: costo || 0, motivo: 'sin-costo' })
+      continue
+    }
+    const escalon = escalones.find((v) => v >= costo)
+    if (escalon == null) {
+      out.afuera.push({ pid: i.pid, nombre: i.foto.nombre, costo, motivo: 'mas-caro' })
+      continue
+    }
+    if (i.decision.precioSale === escalon) out.yaEstaban.push(i)
+    else out.cambiados.push(decidirItem(i, { precioSale: escalon }, quien))
+  }
+  return out
+}
+
+/**
+ * La escalera tal como se escribe: "5900, 9900, 14900" — con o sin `$`, con o sin puntos de miles.
+ *
+ * Devuelve `null` si algo no es un número usable, en vez de saltearlo: una escalera a la que se le
+ * cayó un escalón en silencio manda prendas a la mesa equivocada, y son precios que se le escriben
+ * a la tienda.
+ */
+export function leerEscalera(texto: string): number[] | null {
+  const partes = texto.split(/[,;\n]+/).map((t) => t.replace(/[$\s.]/g, '').replace(',', '.')).filter(Boolean)
+  if (!partes.length) return null
+  const nums = partes.map(Number)
+  if (nums.some((n) => !Number.isFinite(n) || n <= 0)) return null
+  return [...new Set(nums.map((n) => Math.round(n)))].sort((a, b) => a - b)
+}
+
+/**
  * Qué pids faltan escribir (o borrar) en Gestión Nube.
  *
  * 🔑 **`aplicado` significa "su precio está puesto en GN ahora"**, no "alguna vez se aplicó". Por eso

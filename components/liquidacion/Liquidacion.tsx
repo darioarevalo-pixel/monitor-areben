@@ -47,7 +47,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, confirmarItem, contar, nuevoIdLiquidacion, pidsPorAplicar, reprecificar, resumenCampania,
+  avisos, confirmarItem, contar, leerEscalera, nuevoIdLiquidacion, pidsPorAplicar, porEscalera,
+  reprecificar, resumenCampania,
   TIPO_CAMPANIA, TIPOS_CAMPANIA, tipoDe, TOPE_APLICAR, TOPE_MASIVO,
   type Colgadas, type EstadoCampania, type EstadoItem, type Liquidacion as Campania,
   type LiquidacionItem, type MotivoColgada, type TipoCampania,
@@ -95,6 +96,16 @@ const ROTULO_ITEM: Record<EstadoItem, { label: string; tono: Tone }> = {
 }
 
 /** `2026-08-05` → `5-ago`. Sin `toLocaleDateString`, que se corre de día por zona horaria. */
+/**
+ * La escalera que trae el prompt de «Precios de mesa», sólo como punto de partida: se edita ahí
+ * mismo y no se guarda en ningún lado.
+ *
+ * Son precios de cartel —redondos, terminados en 900— porque el número de una mesa lo lee alguien
+ * parado adelante, no una planilla. Cuál corresponde a cada campaña lo decide quien la arma: acá
+ * no hay una regla de negocio escondida, hay un renglón para no tipear seis números de cero.
+ */
+const MESAS_SUGERIDAS = '5900, 9900, 14900, 19900, 24900, 29900'
+
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 function fechaCorta(f: string | null): string {
   if (!f) return '—'
@@ -762,6 +773,66 @@ function DetalleCampania({
     }
   }
 
+  /**
+   * Los precios de una feria: una escalera de precios redondos y cada producto a la mesa que le
+   * cubre el costo.
+   *
+   * 🔑 **No es «otro precio para todos» con otro número.** Ahí el precio sale de un % sobre la
+   * lista y cada prenda termina distinta; acá el precio lo fija la MESA, que es lo que dice el
+   * cartel. La regla vive en `porEscalera`; esto sólo pregunta, muestra y guarda.
+   *
+   * 🔑 **Los que quedan afuera se NOMBRAN.** Sin costo, o más caros que el último escalón: la
+   * pantalla no les inventa una mesa — se definen a mano, que es donde se ve el margen.
+   */
+  async function preciosDeMesa() {
+    const txt = window.prompt(
+      'Los precios de las mesas, separados por coma. Cada producto va a la primera mesa que le cubre el costo.',
+      MESAS_SUGERIDAS,
+    )
+    if (txt == null) return
+    const escalera = leerEscalera(txt)
+    if (!escalera) {
+      toast.error('Poné los precios separados por coma, por ejemplo: 5900, 9900, 14900.')
+      return
+    }
+    const { cambiados, yaEstaban, afuera } = porEscalera(items || [], escalera, yo)
+    if (!cambiados.length) {
+      toast.error(yaEstaban.length ? 'Ya estaban todos en su mesa.' : 'Ningún producto entra en esas mesas.')
+      return
+    }
+    // El reparto va con la cuenta por mesa: «se cambian 381 precios» no deja ver que la mesa de
+    // $5.900 se lleva 2.622 prendas y la de $29.900 seis.
+    const porMesa = escalera
+      .map((e) => ({ e, n: cambiados.filter((i) => i.decision.precioSale === e).length }))
+      .filter((x) => x.n > 0)
+      .map((x) => `$${x.e.toLocaleString('es-AR')}: ${x.n}`)
+      .join(' · ')
+    const sobran = afuera.length
+      ? ` Quedan afuera ${afuera.length}: ${afuera.slice(0, 3).map((a) => `${a.nombre} (${a.motivo === 'sin-costo' ? 'sin costo' : `costo $${Math.round(a.costo).toLocaleString('es-AR')}`})`).join(' · ')}${afuera.length > 3 ? ' y otros' : ''}. Esos se definen a mano.`
+      : ''
+    const ok = await confirmar({
+      titulo: `Repartir ${cambiados.length} ${cambiados.length === 1 ? 'producto' : 'productos'} en ${porMesa.split(' · ').length} mesas`,
+      mensaje: `${porMesa}.${yaEstaban.length ? ` Otros ${yaEstaban.length} ya estaban en su mesa y no se tocan.` : ''}${sobran} Quedan para revisar y después hay que escribirlos en Gestión Nube: esto todavía no toca la tienda.`,
+      ok: `Poner ${cambiados.length} precios`,
+      tono: 'brand',
+    })
+    if (!ok) return
+    setOcupadoMasivo(true)
+    try {
+      for (let i = 0; i < cambiados.length; i += TOPE_MASIVO) {
+        await decidirMasivo(marca, campania.id, cambiados.slice(i, i + TOPE_MASIVO))
+      }
+      await cargar()
+      onCambio()
+      toast.ok(`${cambiados.length} precios de mesa puestos.${afuera.length ? ` ${afuera.length} sin mesa, a definir a mano.` : ''}`)
+    } catch (e) {
+      await cargar()
+      toast.error(e instanceof Error ? e.message : 'No se pudieron poner los precios.')
+    } finally {
+      setOcupadoMasivo(false)
+    }
+  }
+
   async function aplicar(modo: 'poner' | 'sacar', destino: 'lista' | 'previa' = 'lista') {
     const pids = pidsPorAplicar(items || [], modo)
     if (!pids.length) {
@@ -936,6 +1007,11 @@ function DetalleCampania({
           {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && puede.aplicar && (
             <Button variant="ghost" size="sm" disabled={ocupadoMasivo || !!aplicando} onClick={() => void reprecificarTodos()}>
               Otro precio para todos
+            </Button>
+          )}
+          {(campania.estado === 'en_curso' || campania.estado === 'aplicada') && puede.aplicar && (
+            <Button variant="ghost" size="sm" disabled={ocupadoMasivo || !!aplicando} onClick={() => void preciosDeMesa()}>
+              Precios de mesa
             </Button>
           )}
           {/*

@@ -34,6 +34,12 @@ es del monitor**, que es un hueco medido, no una idea:
   puede vivir en el sistema sin publicarse. ▶️ **Falta probar con UNA prenda que el sync no la
   republique** (GN le escribe a TN todos los días) — ⛔ no se puede medir desde este repo: el
   `TIENDANUBE_TOKEN` del `.env` es el de BDI.
+- ✅ **«Precios de mesa» EN EL REPO** (`porEscalera` + el botón, 14 casos y 6 mutantes muertos): el
+  masivo que había sólo sabía «−X% sobre lista», y una feria de 8 mesas sobre 381 modelos eran 381
+  modales. ⛔ **SIN ejercer a mano**: nadie apretó el botón todavía.
+- ▶️ 🔴 **El ORDEN de la feria, que es lo que sale caro al revés**: ocultar en Tienda Nube **primero**,
+  aplicar los precios **después**. Aplicar antes deja el precio de feria publicado online, que es
+  justo lo que la feria no quiere.
 - 🔴 **La campaña «Sale Invierno Agosto 2026» venció el 2-sep y sigue puesta**: 259 de 262 productos
   con el promocional vivo en GN y los 262 ítems en `aplicado`. El aviso de vigencia vencida ⛔ no la
   cerró sola.
