@@ -15,6 +15,48 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ## 🆕 DESCRIPCIONES DE ZATTIA — SALIERON LAS DOS PRIMERAS DE LA TANDA (7-sep-2026)
 
+### 🔴 EL VEREDICTO DE BRUNO AL CERRAR EL DÍA, QUE ES LO PRIMERO QUE HAY QUE LEER
+
+> «meto clear, sigo más tarde, pq **mucha fricción, tengo que revisar todo, no me está
+> convenciendo**»
+
+⛔ **⛔ No se toca nada más de este módulo sin resolver eso.** Lo dijo después de aprobar un par de
+borradores a mano, y ⛔ no es una queja sobre un texto: es que **el circuito le pide revisar todo**.
+Hoy, para que salga una prenda, alguien tiene que mirar el párrafo, el tip, los 6 bullets **y la
+foto** — y los bullets los cargó otra persona en 27 segundos (mediana medida).
+
+🔑 **Las tres cosas que ya se sabe que le suman fricción, y ninguna es el párrafo**:
+1. **La ficha ⛔ no es confiable todavía** ⇒ revisar el párrafo obliga a revisar también los bullets.
+   Medido hoy: 4 de 20 prendas de la tanda tienen la ficha peleada con la foto (TOP LOLA dice
+   `Manga: 3/4` y es sin mangas · BLUSA BORA dice `Cuello: mao` y es palabra de honor · BABY TEE
+   CAMO dice `Escote: asimétrico` y es barco · BLUSA HUBER dice `Detalle: trasnparencias`, con la
+   ese cambiada de lugar). ⇒ ▶️ **es el 20 %, y hasta que baje, cada publicación es una auditoría**.
+2. **`escote` tiene 23 «polera» contra 2 «mao»** ⇒ la lista usa palabras que en el local ⛔ no se
+   usan así, y quien revisa tiene que dudar de cada una.
+3. **Son TRES gestos por prenda** —Guardar, Aprobar, Publicar— más abrir la fila. Para 277 prendas
+   eso es el trabajo, ⛔ no el texto.
+
+⚠️ **Lo que ⛔ NO hay que hacer es escribir más borradores.** Hay 19 esperando y el cuello ⛔ no es
+escribirlos: es que revisarlos cuesta. ▶️ **La próxima sesión arranca preguntándole a Bruno QUÉ
+parte le pesa** —revisar el texto, revisar la ficha, o los tres botones—, ⛔ no proponiendo otra
+tanda.
+
+
+### 🏁 Lo que se construyó el 7-sep después de esa entrada
+
+- 🏁 **Las dos reglas del TIP** (`a8fb8fa`): la otra mitad del look, ⛔ nunca lo que va debajo (el
+  forro ⛔ no está en la foto ni en la ficha) y ⛔ sin prescribir tiro ni corte.
+- 🏁 **Una MINI ⛔ no se podía nombrar** (`c571467`): `Largo: mini` + la regla que exige nombrar la
+  prenda ⇒ el validador nunca daba cero y **el botón de aprobar exige cero** ⇒ **20 productos** ⛔
+  no se podían sacar por la pantalla (18 minis, BUZO BROWN, CAMISA AMELIE). Gana la regla que obliga.
+- 🏁 **Filtro «En borrador» y buscador por nombre** (`f94679e`): los 19 borradores sólo se
+  encontraban de memoria. La búsqueda le corre **también a la fila abierta**, y el filtro ⛔ no.
+- 🏁 **«no sé» en TODO atributo cerrado** (`809611f`), con su filtro y tarjeta **«Para volver a
+  mirar»**. ▶️ **Falta avisarle al local que existe**: una opción que nadie sabe que está ⛔ no se usa.
+- 📌 **19 borradores escritos POR SESIÓN** —mirando las dos fotos, con el validador real— y
+  **2 publicadas** (JEAN MARINA, BLUSA CLOE). ⛔ Ninguno de los 19 está aprobado.
+
+
 **El relato entero está en `docs/secciones/gen-desc.md`** § «7-sep-2026 — el tip, y las dos primeras
 que SALIERON de la tanda». Acá va sólo lo que queda abierto y lo que muerde.
 
