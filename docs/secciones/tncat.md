@@ -11,7 +11,7 @@ el cliente, en el momento.** Y del otro lado no hay historial: lo que se pisa, s
 
 | | |
 |---|---|
-| panel | `components/tncat/` (12 archivos; los caros: `FotosCard.tsx` **816** · `FichaProducto.tsx` 492 · `ImagenesCard.tsx` 443 · `AsignarCard.tsx` 310 · `ColaCard.tsx` 300) |
+| panel | `components/tncat/` (12 archivos; los caros: `FotosCard.tsx` **816** · `FichaProducto.tsx` 492 · `ImagenesCard.tsx` 443 · `AsignarCard.tsx` 362 · `ColaCard.tsx` 300) |
 | lógica | `lib/tncat/` (17 archivos; `auditoria.ts` **451** · `prioridad.ts` **371** · `cola.ts` 290 · `cliente.ts` 204) |
 | caché del catálogo | `lib/tn-audit.ts` — **no es de esta sección**, lo comparten cinco más |
 | servidor que escribe | **ninguno del monitor**: `tn-categorias`, `tn-subir-imagen` y `tiendanube-audit` son de **`bdi-catalogo`** (otro repo, otro proyecto de Vercel) — los tres conocen `?store=bdi\|zattia\|stunned` |
@@ -23,9 +23,20 @@ el cliente, en el momento.** Y del otro lado no hay historial: lo que se pisa, s
 Stunned tiene la suya (store 7516263, token propio, `stunned.com.ar`) aunque comparta la base de
 Zattia. Es el final del ciclo de la sesión de fotos — antes la foto de una prenda de Stunned no tenía
 por dónde subir, porque `bdi-catalogo/api/tn-subir-imagen.js` sólo conocía dos tiendas.
+🔑 **Y «Asignar categoría (Excel)» también, desde el 7-sep-2026**, por el mismo motivo: escribe
+`categories` en **una** tienda. Sin el selector, los ingresos de Stunned se cruzaban contra el
+catálogo de Zattia y volvían **todos como «no encontrados»** — sin error y sin nada roto, sólo una
+lista vacía. El servidor ya conocía `?store=stunned`; lo que faltaba era de este lado.
+🔴 **Cambiar de línea BORRA la previsualización, y no es cosmético**: `matched` son `id` de producto
+**de la tienda que se cruzó**, así que aplicar ese lote con la otra línea elegida escribiría sobre
+productos ajenos elegidos por número. Lo único que sobrevive es la lista de nombres del Excel. Lo
+defiende `tests/tncat-asignar-linea.test.tsx` (monta la card de verdad: lo que se prueba vive en un
+cambio de estado, no en el markup del primer cuadro).
 ⛔ **Las otras cards NO lo llevan**: la revisión de fotos, los agotados y el con-stock se apoyan en
 `tn_ignorados` y `tn_fotos_verificadas`, que son **una tabla por marca** y todavía no saben de
 líneas. Dárselo sin eso mostraría los ignorados de Zattia sobre el catálogo de Stunned.
+⚠️ **La auto-categorización por modelo de iPhone (card «Categorías») sigue por marca a propósito**:
+su regla es el árbol «Modelo de iPhone» de BDI, que en Zattia y Stunned no existe.
 El eje entero está en `docs/lineas.md`.
 
 🔑 **No es una pantalla: son SEIS subáreas**, cada una con su URL y su entrada de sidebar

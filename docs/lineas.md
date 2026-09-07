@@ -121,7 +121,8 @@ Ponerle el selector sin tocar eso mostraría el total de la marca con el rótulo
 | **Resumen · Ventas de Marketing · Por producto · Por variante · Márgenes** | **selector de línea** (22-ago-2026) |
 | **Norte › Metas** | **selector PARCIAL** (23-ago-2026): sólo los objetivos: el resto de la pantalla es de la marca |
 | **Sesión de fotos** | **selector + historial propio** (`store='stunned'`), 22-ago-2026 |
-| **Marketing · Tienda Nube › Carga de imágenes** | **selector** (22-ago-2026): hablan con **una** Tienda Nube |
+| **Marketing · Tienda Nube › Carga de imágenes** y **la cola de fotos** | **selector** (22-ago-2026): hablan con **una** Tienda Nube |
+| **Marketing · Tienda Nube › Asignar categoría (Excel)** | **selector** (7-sep-2026), mismo motivo: escribe `categories` en **una** tienda. Cambiar de línea **borra la previsualización** — el lote son `id` de producto de la tienda que se cruzó |
 | Solicitudes (la lista) · Inicio · el chip de marca | el resumen y el aviso traen `linea` además de `marca` |
 
 ## Los TRES stores de Stunned, que no son el mismo (22-ago-2026)

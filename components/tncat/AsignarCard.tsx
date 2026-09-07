@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, previsualizarAsignar, traerCategorias } from '@/lib/tncat/cliente'
 import { nombresDeFilas } from '@/lib/tncat/excel'
 import { tomarPuenteAsignar } from '@/lib/tncat/puente'
 import type { AsigMatched, AsigPreview, Categoria } from '@/lib/tncat/tipos'
 import { leerXlsx } from '@/lib/excel'
-import { Card, color as paleta, useConfirmar, useToast } from '@/components/ui'
+import { ETIQUETA_LINEA, type Linea } from '@/lib/lineas'
+import { Card, color as paleta, SelectorLinea, useConfirmar, useToast } from '@/components/ui'
+import { useLinea } from '@/components/fundas/useDatosMonitor'
 
 const CHUNK = 20
 
@@ -40,7 +41,25 @@ function rutaDe(c: Categoria, todas: Categoria[]): string {
  * AGREGA la categoría a los que matcheen (sin borrar las que ya tengan). El cruce y
  * la escritura los hace el server. Port de tncatAsig*.
  */
-export function AsignarCard({ marca }: { marca: Marca }) {
+/**
+ * 🔑 **Lleva selector de línea porque escribe en UNA Tienda Nube** (7-sep-2026), por el mismo
+ * motivo que la Carga de imágenes: Stunned comparte el Gestión Nube de Zattia pero tiene **tienda
+ * propia** (store 7516263, token aparte), así que con la marca sola los ingresos de Stunned no
+ * tenían por dónde categorizarse — se cruzaban contra el catálogo de Zattia y volvían todos como
+ * «no encontrados». El servidor (`bdi-catalogo/api/tn-categorias.js`) ya conocía `?store=stunned`;
+ * lo que faltaba estaba de este lado.
+ *
+ * ⛔ **Esta card no se apoya en `tn_ignorados` ni `tn_fotos_verificadas`** —las tablas por marca que
+ * frenan a la revisión de fotos y a los agotados—: habla sólo con `tn-categorias`. Por eso puede
+ * llevar el selector y las otras todavía no.
+ *
+ * 🔴 **Cambiar de línea BORRA la previsualización, y no es cosmético**: `matched` son `id` de
+ * producto **de la tienda que se cruzó**, y aplicar ese lote apuntando a la otra escribiría
+ * `categories` sobre productos ajenos elegidos por número. El id de categoría es de esa tienda
+ * también. Lo único que sobrevive es la lista de nombres del Excel, que no es de nadie.
+ */
+export function AsignarCard() {
+  const { linea, lineas, setLinea } = useLinea()
   const { confirmar } = useConfirmar()
   const toast = useToast()
   const [categorias, setCategorias] = useState<Categoria[] | null>(null)
@@ -70,11 +89,37 @@ export function AsignarCard({ marca }: { marca: Marca }) {
   const [resultado, setResultado] = useState<React.ReactNode>(null)
   const [progreso, setProgreso] = useState<number | null>(null)
 
+  /**
+   * **Cambió la línea ⇒ se cae todo lo que se cruzó contra la tienda anterior.**
+   *
+   * Va durante el render y no en un efecto: el reset es estado de ESTA card derivado de un valor
+   * que cambió, no una sincronización con nada de afuera, y hacerlo en un efecto pinta un cuadro
+   * intermedio con los datos de la otra tienda (además de que el lint lo rechaza, con razón).
+   *
+   * ⚠️ Y no se resuelve en el `onChange` del selector: la línea también cambia sin que nadie la
+   * toque —al pasar de marca, `useLinea` la re-normaliza con `lineaVigente`— y esta card no se
+   * desmonta.
+   *
+   * Los nombres del Excel se conservan a propósito: son la lista de ingresos, no son de ninguna
+   * tienda, y volver a pedir el archivo para mirar la otra sería fricción sin motivo.
+   */
+  const [lineaCruzada, setLineaCruzada] = useState<Linea>(linea)
+  if (linea !== lineaCruzada) {
+    setLineaCruzada(linea)
+    setCategorias(null)
+    setCatId('')
+    setPreview(null)
+    setPrevMsg(null)
+    setMatched([])
+    setCatName('')
+    setResultado(null)
+  }
+
   useEffect(() => {
     let vivo = true
     ;(async () => {
       try {
-        const cats = await traerCategorias(marca)
+        const cats = await traerCategorias(linea)
         if (vivo) setCategorias(cats)
       } catch {
         if (vivo) setCategorias([])
@@ -83,7 +128,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     return () => {
       vivo = false
     }
-  }, [marca])
+  }, [linea])
 
   const onArchivo = async (file: File | undefined) => {
     if (!file) return
@@ -114,7 +159,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     }
     setPrevMsg(<div style={{ color: paleta.mut2, fontSize: 13, padding: 8 }}>Cruzando con TiendaNube…</div>)
     try {
-      const d = await previsualizarAsignar(marca, categoriaId, nn, sacarAhora)
+      const d = await previsualizarAsignar(linea, categoriaId, nn, sacarAhora)
       if (!d.ok) {
         setPreview(null)
         setPrevMsg(<div style={{ color: paleta.danger, fontSize: 13 }}>Error: {d.error || 'desconocido'}</div>)
@@ -157,8 +202,10 @@ export function AsignarCard({ marca }: { marca: Marca }) {
         // El aviso de los huérfanos va en el diálogo y no en un cartel al costado: es lo último que
         // se lee antes de escribir en la tienda EN VIVO, y un producto sin categoría deja de estar
         // en la navegación.
-        ? `Se le saca "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO.${huerfanos.length ? ` ⚠️ ${huerfanos.length} ${huerfanos.length === 1 ? 'quedaría' : 'quedarían'} SIN NINGUNA categoría (${huerfanos.slice(0, 3).join(', ')}${huerfanos.length > 3 ? '…' : ''}): a la tienda dejan de aparecer en el menú, se llega sólo por buscador.` : ''}`
-        : `Se agrega "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO.`,
+        ? `Se le saca "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO de ${ETIQUETA_LINEA[linea]}.${huerfanos.length ? ` ⚠️ ${huerfanos.length} ${huerfanos.length === 1 ? 'quedaría' : 'quedarían'} SIN NINGUNA categoría (${huerfanos.slice(0, 3).join(', ')}${huerfanos.length > 3 ? '…' : ''}): a la tienda dejan de aparecer en el menú, se llega sólo por buscador.` : ''}`
+        // 🔑 La tienda va EN EL DIÁLOGO y no sólo en la pestaña de arriba: es lo último que se lee
+        // antes de escribir, y Zattia y Stunned tienen categorías con los mismos nombres.
+        : `Se agrega "${catName}" a ${matched.length} ${matched.length === 1 ? 'producto' : 'productos'} en la tienda EN VIVO de ${ETIQUETA_LINEA[linea]}.`,
     })
     if (!ok) return
     setAplicando(true)
@@ -170,7 +217,7 @@ export function AsignarCard({ marca }: { marca: Marca }) {
     try {
       for (let i = 0; i < total; i += CHUNK) {
         const lote = matched.slice(i, i + CHUNK)
-        const d = await aplicarAsignarLote(marca, lote)
+        const d = await aplicarAsignarLote(linea, lote)
         if (d.ok) {
           aplicados += d.aplicados || 0
           if (d.errores) errores.push(...d.errores)
@@ -229,8 +276,13 @@ export function AsignarCard({ marca }: { marca: Marca }) {
           ? <>se le <b>saca</b> esa categoría a los que la tengan — las demás no se tocan.</>
           : <>se le <b>agrega</b> esa categoría a los que matcheen — sin eliminar las que ya tengan.</>}
       </div>
+      {/* ⚠️ Va arriba de todo, como en la Carga de imágenes: lo que se aplique abajo entra a la
+          tienda de la línea que diga acá, y son dos tiendas distintas con catálogos distintos.
+          Cambiarlo borra la previsualización (ver el docblock de arriba). */}
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
+
       {/*
-        El switch va arriba de todo y cambia el título de la card: es lo que decide si se agrega o
+        El switch va abajo del selector y cambia el título de la card: es lo que decide si se agrega o
         se quita, y descubrirlo recién en el diálogo de confirmación sería tarde. Cambiarlo vuelve a
         cruzar, porque el «matchean / ya la tenían» se da vuelta entero.
       */}

@@ -121,7 +121,7 @@ function Categorias({ marca, verCat, verAsig }: { marca: Marca; verCat: boolean;
     <>
       <ExplorarCategoriaCard marca={marca} />
       {verCat && <CategoriasCard marca={marca} />}
-      {verAsig && <AsignarCard marca={marca} />}
+      {verAsig && <AsignarCard />}
     </>
   )
 }
