@@ -14,7 +14,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
+import { credencialConPrompt } from '@/lib/sesion'
 import {
   Button, Card, Chips, EmptyState, Field, Input, Notice, Select, SectionCard, StatusPill,
   TableWrap, THead, TBody, Tr, Th, Td, MoneyText, formatMoney, Toolbar, Tabs, KpiCard,
@@ -50,15 +50,14 @@ import { DecidirReclamo } from './DecidirReclamo'
 import { Medidor } from './Medidor'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
 
-/** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (typeof window !== 'undefined' ? window.prompt('Ingresá tu contraseña del Monitor (para descontar el stock en GN):') || '' : '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
+/**
+ * La credencial del Monitor para escribir en GN.
+ *
+ * 🔴 Era un `obtenerPass()` propio, o sea **la contraseña y nada más**: con el SSO, quien entra con
+ * Google no tiene ninguna que mandar y las tres escrituras de acá le daban 403 con la sesión viva.
+ * `credencialConPrompt` sirve las dos formas y es la que ya usan las pantallas migradas.
+ */
+const obtenerCred = () => credencialConPrompt('del Monitor')
 
 const ESTADO_TONE: Record<EstadoReclamo, Tone> = {
   borrador: 'neutral',
@@ -504,13 +503,13 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
     })
     if (!si) return
     try {
-      // La contraseña sólo hace falta si hay que escribir en GN. Se pide una vez y queda cacheada.
-      const pass = descuenta ? obtenerPass() : undefined
-      if (descuenta && !pass) {
-        toast.aviso('Sin la contraseña no se puede descontar el stock en GN. La falla no se creó.')
+      // La credencial sólo hace falta si hay que escribir en GN. Se pide una vez y queda cacheada.
+      const cred = descuenta ? await obtenerCred() : null
+      if (descuenta && !cred) {
+        toast.aviso('Sin la credencial del Monitor no se puede descontar el stock en GN. La falla no se creó.')
         return
       }
-      const ids = await pasarAFallas(marca, d, { usuario: perfil?.name, pass })
+      const ids = await pasarAFallas(marca, d, { usuario: perfil?.name, cred })
       toast.ok(descuenta
         ? `${ids.length} falla${ids.length === 1 ? '' : 's'} en el depósito, descontada${ids.length === 1 ? '' : 's'} de GN.`
         : `${ids.length} falla${ids.length === 1 ? '' : 's'} en el depósito.`)
@@ -581,10 +580,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
       mensaje: `Se crea la venta técnica en Gestión Nube que saca del depósito ${(d.items || []).map((i) => `${i.cantidad} × ${i.producto}`).join(', ')}. Neto $0: el cliente ya lo pagó en la compra original.`,
     })
     if (!si) return
-    const pass = obtenerPass()
-    if (!pass) { toast.aviso('Sin la contraseña no se puede escribir la venta en GN.'); return }
+    const cred = await obtenerCred()
+    if (!cred) { toast.aviso('Sin la credencial del Monitor no se puede escribir la venta en GN.'); return }
     try {
-      const v = await descontarReemplazo(marca, d, { user: perfil?.name || '', pass })
+      const v = await descontarReemplazo(marca, d, { usuario: perfil?.name || '', cred })
       toast.ok(v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
       void recargar()
     } catch (e) {
@@ -614,10 +613,10 @@ function ReclamosInner({ modo }: { modo: 'local' | 'admin' }) {
         + 'Va al cliente «Reclamo», neto $0 y valuada a precio de lista. ⛔ No entra a Fallas: el producto está sano.',
     })
     if (!si) return
-    const pass = obtenerPass()
-    if (!pass) { toast.aviso('Sin la contraseña no se puede escribir la venta en GN.'); return }
+    const cred = await obtenerCred()
+    if (!cred) { toast.aviso('Sin la credencial del Monitor no se puede escribir la venta en GN.'); return }
     try {
-      const v = await descontarRegaladas(marca, d, { user: perfil?.name || '', pass })
+      const v = await descontarRegaladas(marca, d, { usuario: perfil?.name || '', cred })
       toast.ok(v.number ? `Stock descontado (venta ${v.number} en GN).` : 'Stock descontado en GN.')
       void recargar()
     } catch (e) {

@@ -37,14 +37,14 @@ afterEach(() => vi.unstubAllGlobals())
 describe('la venta técnica que saca la unidad del stock', () => {
   it('la unidad SANA va al cliente RECLAMO de GN, ⛔ no al de Fallas', async () => {
     stubGN()
-    await descontarRegaladas('bdi', REGALADA, { user: 'bruno', pass: 'x' })
+    await descontarRegaladas('bdi', REGALADA, { usuario: 'bruno', cred: { user: 'bruno', pass: 'x' } })
     expect(ventaA('reclamo')).toBeTruthy()
     expect(pedidos.some((p) => p.proposito === 'falla')).toBe(false)
   })
 
   it('y su nota lo dice: producto SANO, con el reclamo, la orden y el cliente de verdad', async () => {
     stubGN()
-    await descontarRegaladas('bdi', REGALADA, { user: 'bruno', pass: 'x' })
+    await descontarRegaladas('bdi', REGALADA, { usuario: 'bruno', cred: { user: 'bruno', pass: 'x' } })
     const nota = ventaA('reclamo').comments
     expect(nota).toContain('Reclamo R-0012')
     expect(nota).toContain('producto sano')
@@ -55,7 +55,7 @@ describe('la venta técnica que saca la unidad del stock', () => {
 
   it('el reemplazo que se le manda dice que es un reemplazo, no que se lo queda', async () => {
     stubGN()
-    await descontarReemplazo('bdi', { ...REGALADA, motivo: 'falla' }, { user: 'bruno', pass: 'x' })
+    await descontarReemplazo('bdi', { ...REGALADA, motivo: 'falla' }, { usuario: 'bruno', cred: { user: 'bruno', pass: 'x' } })
     const nota = ventaA('falla').comments
     expect(nota).toContain('reemplazo que se le manda')
     expect(nota).not.toContain('producto sano')
@@ -63,7 +63,26 @@ describe('la venta técnica que saca la unidad del stock', () => {
 
   it('la nota entra en el campo de GN aunque el reclamo venga con todo cargado', async () => {
     stubGN()
-    await descontarRegaladas('bdi', { ...REGALADA, cliente: 'M'.repeat(300) }, { user: 'bruno', pass: 'x' })
+    await descontarRegaladas('bdi', { ...REGALADA, cliente: 'M'.repeat(300) }, { usuario: 'bruno', cred: { user: 'bruno', pass: 'x' } })
     expect(String(ventaA('reclamo').comments).length).toBeLessThan(500)
+  })
+
+  /**
+   * 🔴 **El 403 del 7-sep-2026**: «No se pudo crear la venta del cambio en GN — Necesitás estar
+   * logueado en el Monitor». Quien entró con Google ⛔ no tiene contraseña que mandar, y estas
+   * escrituras armaban el cuerpo con `{user, pass}` fijo ⇒ salía con los dos vacíos y
+   * `crear-venta` contestaba 403 con la sesión perfectamente viva.
+   *
+   * 🔑 El oráculo es **el cuerpo del pedido**, ⛔ no que la función no tire: sin el token adentro
+   * el 403 lo pone el servidor, que acá está mockeado y siempre dice que sí.
+   */
+  it('la sesión de Google manda el TOKEN en el pedido, y ⛔ no un usuario y contraseña vacíos', async () => {
+    stubGN()
+    await descontarRegaladas('bdi', REGALADA, { usuario: 'Lorena', cred: { token: 'jwt-de-google' } })
+    const pedido = ventaA('reclamo') as unknown as Record<string, unknown>
+    expect(pedido.token).toBe('jwt-de-google')
+    expect('pass' in pedido).toBe(false)
+    // El nombre del padrón sigue firmando la nota: la credencial y la firma son dos cosas.
+    expect(String(pedido.comments)).toContain('Decidió: Lorena')
   })
 })

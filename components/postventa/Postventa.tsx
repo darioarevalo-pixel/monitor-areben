@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
+import { credencialConPrompt } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import {
   Button, SectionCard, Card, StatusPill, Field, Input, Select, NumberField, Toolbar, Tabs, EmptyState, KpiCard,
@@ -83,15 +83,14 @@ const ESTADO_TONE: Record<FallaEstado, Tone> = {
 const ACTIVOS: FallaEstado[] = ['cargada', 'recibida', 'confirmada', 'en_deposito']
 const FILTROS: ('todas' | FallaEstado)[] = ['todas', 'cargada', 'recibida', 'confirmada', 'vendida_feria', 'descartada']
 
-/** Contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que SesionFotos. */
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (typeof window !== 'undefined' ? window.prompt('Ingresá tu contraseña del Monitor (para escribir la venta en GN):') || '' : '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
+/**
+ * La credencial del Monitor para escribir la venta técnica en GN.
+ *
+ * 🔴 Era un `obtenerPass()` propio, o sea **la contraseña y nada más**: con el SSO, quien entra con
+ * Google no tiene ninguna que mandar y la falla quedaba cargada sin descontar el stock.
+ * `credencialConPrompt` sirve las dos formas y es la que ya usa Sesión de fotos.
+ */
+const obtenerCred = () => credencialConPrompt('del Monitor')
 
 const FORM0 = { producto: '', sku: '', variante: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', precio_lista: '', ubicacion: 'local', product_id: '', size_id: '' }
 
@@ -162,12 +161,12 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
       setForm({ ...FORM0 })
       const etiq = barcode ? ` (etiqueta ${barcode})` : ''
       if (snap.product_id && snap.size_id && id) {
-        const pass = obtenerPass()
-        if (!pass) {
-          setMsg(`Falla cargada${etiq}. Falta tu contraseña para descontar el stock en GN — se puede rehacer desde Administración.`)
+        const cred = await obtenerCred()
+        if (!cred) {
+          setMsg(`Falla cargada${etiq}. Falta tu credencial del Monitor para descontar el stock en GN — se puede rehacer desde Administración.`)
         } else {
           try {
-            await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: snap.ubicacion, precio_lista: snap.precio_lista }, { user: usuario, pass })
+            await registrarVentaGN(marca, { id, product_id: snap.product_id, size_id: snap.size_id, cantidad: snap.cantidad, sku: snap.sku, motivo: snap.motivo, barcode: barcode ?? null, ubicacion: snap.ubicacion, precio_lista: snap.precio_lista }, { usuario, cred })
             setMsg(`Falla cargada${etiq} — venta $0 en GN, stock −1.`)
           } catch (ve) { setError(`Falla cargada${etiq}, pero la venta en GN falló: ${(ve as Error).message}`) }
         }

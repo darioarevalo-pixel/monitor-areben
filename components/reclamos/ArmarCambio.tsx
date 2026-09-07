@@ -26,7 +26,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
-import { guardarAdminPass, leerAdminPass } from '@/lib/sesion'
+import { credencialConPrompt } from '@/lib/sesion'
 import { BuscarArticuloGN, type ArticuloGN } from '@/components/ui/BuscarArticuloGN'
 import { DondeVa } from '@/components/postventa/GuiaPostventa'
 import { BotonMensaje } from './BotonMensaje'
@@ -48,15 +48,16 @@ import {
   type OrdenTN, type ProductoOrdenTN, type ReclamoRow, type ViaRetorno,
 } from '@/lib/reclamos/tipos'
 
-/** La contraseña del Monitor para escribir en GN (cacheada; se pide una vez). Igual que Post-venta. */
-function obtenerPass(): string {
-  let p = leerAdminPass()
-  if (!p) {
-    p = (typeof window !== 'undefined' ? window.prompt('Ingresá tu contraseña del Monitor (para la venta en GN):') || '' : '').trim()
-    if (p) guardarAdminPass(p)
-  }
-  return p
-}
+/**
+ * La credencial del Monitor para escribir la venta en GN.
+ *
+ * 🔴 Era un `obtenerPass()` propio de esta pantalla, o sea **la contraseña y nada más**. Quien entra
+ * con Google no tiene contraseña que mandar, así que crear la venta del cambio le devolvía 403
+ * («Necesitás estar logueado en el Monitor») con la sesión viva. `credencialConPrompt` sirve las
+ * dos formas —token del proveedor, o usuario y contraseña pidiéndola una sola vez— y es la misma
+ * que ya usan Sesión de fotos, Ingresos, Comisiones y Canjes.
+ */
+const obtenerCred = () => credencialConPrompt('del Monitor')
 
 /**
  * Una línea de la tabla unificada (solo UI). `cantidad` es la magnitud, siempre positiva: el signo
@@ -349,9 +350,9 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
       mensaje: 'Se crea la venta REAL: baja el stock de lo que se lleva el cliente y cuenta en la analítica. No se puede deshacer desde acá.',
     })
     if (!si) return false
-    const pass = obtenerPass()
-    if (!pass) { setError('Sin la contraseña del Monitor no se puede escribir la venta en GN.'); return false }
-    const v = await procesarCambio(marca, row, orden, { user: usuario, pass })
+    const cred = await obtenerCred()
+    if (!cred) { setError('Sin la credencial del Monitor no se puede escribir la venta en GN.'); return false }
+    const v = await procesarCambio(marca, row, orden, { usuario, cred })
     toast.ok(v.number ? `Venta ${v.number} creada en GN.` : 'Venta creada en GN.')
     return true
   }, [marca, usuario, orden, confirmar, toast])
@@ -464,15 +465,15 @@ function ArmarCambioInner({ modo }: { modo: 'local' | 'admin' }) {
     setOcupada(c.id); setError(null)
     try {
       const o = c.orden_tn ? await buscarOrden(marca, c.orden_tn).catch(() => null) : null
-      const pass = obtenerPass()
-      if (!pass) { setError('Sin la contraseña del Monitor no se puede escribir la venta en GN.'); return }
+      const cred = await obtenerCred()
+      if (!cred) { setError('Sin la credencial del Monitor no se puede escribir la venta en GN.'); return }
       const si = await confirmar({
         titulo: 'Crear la venta del cambio en Gestión Nube',
         tono: 'warning', ok: 'Crear la venta',
         mensaje: 'Se crea la venta REAL: baja el stock de lo que se lleva el cliente y cuenta en la analítica. No se puede deshacer desde acá.',
       })
       if (!si) return
-      const v = await procesarCambio(marca, c, o, { user: usuario, pass })
+      const v = await procesarCambio(marca, c, o, { usuario, cred })
       toast.ok(v.number ? `Venta ${v.number} creada en GN.` : 'Venta creada en GN.')
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setOcupada(null) }

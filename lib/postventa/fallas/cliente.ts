@@ -10,6 +10,7 @@ import { apiFetch } from '../../api-fetch'
 import { enviarVentaFetch } from '@/lib/sesionfotos/ventas'
 import type { Origen } from '@/lib/sesionfotos/tipos'
 import type { Marca } from '@/lib/nav.datos'
+import type { Credencial } from '@/lib/sesion'
 import type { FallaInput, FallaRow } from './tipos'
 
 /**
@@ -18,6 +19,17 @@ import type { FallaInput, FallaRow } from './tipos'
  * más en `api/` frenaba TODOS los deploys). El contrato del handler no cambió.
  */
 const API = '/api/postventa?recurso=fallas'
+
+/**
+ * Con qué se identifica quien crea la venta técnica en GN, y con qué NOMBRE se firma.
+ *
+ * 🔴 Antes era `{user, pass}`, o sea **la contraseña como única forma de escribir**. Quien entra
+ * con Google no tiene ninguna que mandar, así que cargar una falla linkeada le contestaba 403
+ * («Necesitás estar logueado en el Monitor») con la sesión perfectamente viva. `crear-venta`
+ * acepta las dos credenciales desde el SSO; lo que faltaba migrar era el llamador.
+ * Gemela de `CtxVentaReclamo` (`lib/reclamos/cliente.ts`).
+ */
+export type CtxVentaFalla = { usuario: string; cred: Credencial }
 
 export async function leerFallas(store: Marca): Promise<FallaRow[]> {
   const r = await apiFetch(`${API}&store=${store}&nc=${Date.now()}`)
@@ -57,7 +69,7 @@ export async function recibirFalla(store: Marca, id: number, usuario?: string): 
 export async function registrarVentaGN(
   store: Marca,
   falla: Pick<FallaRow, 'id' | 'product_id' | 'size_id' | 'cantidad' | 'sku' | 'motivo' | 'barcode' | 'ubicacion' | 'precio_lista'>,
-  ctx: { user: string; pass: string },
+  ctx: CtxVentaFalla,
   /**
    * La nota de la venta, cuando quien la pide sabe más que el ledger de fallas.
    *
@@ -79,8 +91,7 @@ export async function registrarVentaGN(
     items: [{ product_id: falla.product_id, size_id: falla.size_id, quantity: falla.cantidad || 1, unit_price: Number(falla.precio_lista) || 0 }],
     comments: (nota || `Falla ${falla.sku || ''} — ${falla.motivo || 'sin motivo'} — ${falla.barcode || ''} (Monitor)`).slice(0, 500),
     solicitudId: `falla-${falla.id}`,
-    user: ctx.user,
-    pass: ctx.pass,
+    ...ctx.cred,
     proposito: 'falla' as const, // → crear-venta usa el cliente "Falla" de GN (no el de fotos)
   }
   const r = await enviarVentaFetch(pedido)
@@ -89,7 +100,7 @@ export async function registrarVentaGN(
   const resp = await apiFetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, usuario: ctx.user }),
+    body: JSON.stringify({ store, action: 'venta', id: falla.id, gn_venta_id: r.venta?.id ?? null, gn_venta_number: r.venta?.number ?? null, usuario: ctx.usuario }),
   })
   const d = await resp.json()
   if (!d || !d.ok) throw new Error((d && d.error) || 'La venta se creó en GN pero no se pudo registrar en la falla.')

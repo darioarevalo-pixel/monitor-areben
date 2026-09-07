@@ -74,6 +74,39 @@ Tabla `devoluciones` (`sql/migrate-devoluciones*.sql`, `sql/migrate-reclamos-efe
 `tests/reclamos-escenarios.test.ts`, `tests/reclamos-mensajes.test.ts`, `tests/reclamo-publico.test.ts`,
 `tests/reclamos-decidir-pestanas.test.tsx` (jsdom, monta el modal).
 
+## 🔴 Escribir en GN acepta las DOS credenciales (7-sep-2026)
+
+Bruno, desde Administración: *«quiero crear la venta desde administración lorena, y me aparece
+esto»* → **«No se pudo crear la venta del cambio en GN — Necesitás estar logueado en el Monitor»**,
+con la sesión perfectamente viva.
+
+🔑 **El 403 lo ponía el llamador, ⛔ no el servidor.** `api/crear-venta.js` acepta las dos formas de
+identificarse desde el SSO (`api/_auth.js`: `{user, pass}` **o** `{token}`), pero estas cuatro
+escrituras armaban el cuerpo con `user`/`pass` **fijos**, sacados de un `obtenerPass()` copiado en
+cada pantalla. **Quien entra con Google ⛔ no tiene contraseña que mandar** ⇒ salía con los dos
+vacíos y el servidor contestaba, con razón, que nadie estaba logueado.
+
+Las cuatro eran las **últimas** del Monitor sin migrar —Sesión de fotos, Ingresos, Comisiones,
+Usuarios y Canjes ya usaban `credencialConPrompt`—, y son justo las que tocan stock:
+
+| dónde | qué escribe |
+|---|---|
+| `procesarCambio` | la venta REAL del cambio (la del cartel) |
+| `descontarReemplazo` | la venta técnica de la unidad de reemplazo |
+| `descontarRegaladas` | la venta técnica de la unidad sana que se queda el cliente |
+| `registrarVentaGN` (Post-venta → Fallas) | la venta $0 que saca la falla del stock |
+
+⛔ **La credencial y la FIRMA son dos cosas distintas, y estaban pegadas en una sola.** `user` hacía
+de las dos: abría la puerta *y* firmaba la nota de GN («Decidió: bruno»). Por eso el contrato nuevo
+es `{ usuario, cred }` (`CtxVentaReclamo` / `CtxVentaFalla`) y ⛔ no `Credencial` a secas: con token
+no hay ningún nombre adentro de la credencial, y sin separarlos la nota de GN quedaba **sin
+firmar**. `usuario` sigue saliendo de `perfil.name`, que es la clave del padrón.
+
+⚠️ **Ningún test lo veía y no era descuido del test, era del oráculo**: los de venta técnica miran
+el cuerpo del pedido con `fetch` mockeado, y un mock siempre dice que sí. El test nuevo
+(`tests/reclamos-venta-tecnica.test.ts`) mira que el **token esté adentro del cuerpo**, ⛔ no que la
+función no tire. Mutante ensayado: mandar `pass: ''` con el usuario puesto → **rojo**.
+
 ## ⛔ Lo que comparte con otras secciones
 
 - **`lib/reclamos/efectos.core.js` lo lee el handler Y la app.** Va en `.js` plano por lo mismo que

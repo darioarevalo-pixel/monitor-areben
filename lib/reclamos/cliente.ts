@@ -12,6 +12,7 @@ import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import { crearFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import type { Marca } from '@/lib/nav.datos'
+import type { Credencial } from '@/lib/sesion'
 import { calcularCambio, laFallaDescuentaStock, loQueFaltaDescontar, numeroReclamo } from './tipos'
 import { faltaAnularAntesDeDescontar } from './efectos.core.js'
 import type { MensajeRegistrado, MomentoDelMensaje } from './tipos'
@@ -39,6 +40,21 @@ const ORDEN_API = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
  * tokens de ventas de Gestión Nube viven solo ahí. Mismo criterio que Sesión de fotos y Cambios.
  */
 const CREAR_VENTA_API = 'https://monitorareben.vercel.app/api/crear-venta'
+
+/**
+ * Con qué se identifica quien escribe una venta en GN, y con qué NOMBRE se firma.
+ *
+ * 🔴 **Son dos cosas distintas y acá estaban pegadas en una sola** (`{user, pass}`): `user` servía
+ * de credencial *y* de firma de la nota. Mientras la única forma de entrar fue la contraseña daba
+ * igual, porque el nombre del padrón era las dos cosas. Con el SSO dejó de dar igual: quien entra
+ * con Google **no tiene contraseña que mandar**, así que estas cuatro escrituras —las tres de
+ * Devoluciones y la venta técnica de Fallas— eran las únicas del Monitor que le contestaban 403
+ * («Necesitás estar logueado en el Monitor») a alguien que estaba perfectamente logueado.
+ *
+ * `crear-venta` acepta las dos credenciales desde el SSO (`api/_auth.js`); lo que faltaba migrar
+ * era el llamador. `usuario` sigue siendo el nombre del padrón, que es lo que va a la nota de GN.
+ */
+export type CtxVentaReclamo = { usuario: string; cred: Credencial }
 
 async function postear(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const r = await apiFetch(API, {
@@ -476,7 +492,7 @@ export async function eliminarReclamo(store: Marca, id: number): Promise<void> {
 export async function pasarAFallas(
   marca: Marca,
   d: ReclamoRow,
-  extra?: { pvpFeria?: number | null; usuario?: string; pass?: string },
+  extra?: { pvpFeria?: number | null; usuario?: string; cred?: Credencial | null },
 ): Promise<number[]> {
   const descuenta = laFallaDescuentaStock(d.compensacion)
   /**
@@ -522,7 +538,7 @@ export async function pasarAFallas(
      * Es lo que dice `laFallaDescuentaStock`, que estaba escrita y nunca se conectaba a GN: la
      * falla se creaba en el Monitor y el stock quedaba contado de más.
      */
-    if (id && descuenta && it.product_id && it.size_id && extra?.pass) {
+    if (id && descuenta && it.product_id && it.size_id && extra?.cred) {
       await registrarVentaGN(
         marca,
         {
@@ -536,7 +552,7 @@ export async function pasarAFallas(
           ubicacion: 'deposito',
           precio_lista: it.precio == null ? null : Number(it.precio),
         },
-        { user: extra.usuario || '', pass: extra.pass },
+        { usuario: extra.usuario || '', cred: extra.cred },
         // La nota la arma el RECLAMO, no el ledger: la fila de la falla no sabe de qué orden ni de
         // qué cliente salió esa unidad, y en Gestión Nube eso es lo único que la explica.
         notaVentaTecnica('falla', d, { usuario: extra.usuario, barcode }),
@@ -562,7 +578,7 @@ export async function pasarAFallas(
 export async function descontarReemplazo(
   marca: Marca,
   d: ReclamoRow,
-  ctx: { user: string; pass: string },
+  ctx: CtxVentaReclamo,
 ): Promise<{ id?: string; number?: string }> {
   const items = (d.items || [])
     .filter((i) => i.product_id && i.size_id)
@@ -579,11 +595,10 @@ export async function descontarReemplazo(
       items,
       // 100% de descuento: la unidad sale del stock pero no se cobra (ya la pagó en la compra original).
       descuento: items.reduce((s, it) => s + it.unit_price * it.quantity, 0),
-      comments: notaVentaTecnica('reemplazo', d, { usuario: ctx.user }),
+      comments: notaVentaTecnica('reemplazo', d, { usuario: ctx.usuario }),
       solicitudId: `devolucion-${d.id}-reemplazo`, // idempotencia: dos clicks no generan dos ventas
       proposito: 'falla',
-      user: ctx.user,
-      pass: ctx.pass,
+      ...ctx.cred,
     }),
   })
   const j = await r.json().catch(() => ({}))
@@ -616,7 +631,7 @@ export async function descontarReemplazo(
 export async function descontarRegaladas(
   marca: Marca,
   d: ReclamoRow,
-  ctx: { user: string; pass: string },
+  ctx: CtxVentaReclamo,
 ): Promise<{ id?: string; number?: string; descontadas: number }> {
   const faltan = loQueFaltaDescontar(d)
   if (!faltan.length) throw new Error('No hay ningún producto sano pendiente de descontar en este reclamo.')
@@ -650,11 +665,10 @@ export async function descontarRegaladas(
       items,
       // Precio de lista + 100 % de descuento: sale del stock, no se cobra, y queda valuada real.
       descuento: items.reduce((s, it) => s + it.unit_price * it.quantity, 0),
-      comments: notaVentaTecnica('regalada', d, { usuario: ctx.user }),
+      comments: notaVentaTecnica('regalada', d, { usuario: ctx.usuario }),
       solicitudId: `reclamo-${d.id}-regaladas`, // idempotencia: dos clicks no generan dos ventas
       proposito: 'reclamo',
-      user: ctx.user,
-      pass: ctx.pass,
+      ...ctx.cred,
     }),
   })
   const j = await r.json().catch(() => ({}))
@@ -724,7 +738,7 @@ export async function procesarCambio(
   marca: Marca,
   d: ReclamoRow,
   orden: OrdenTN | null | undefined,
-  ctx: { user: string; pass: string },
+  ctx: CtxVentaReclamo,
 ): Promise<{ id?: string; number?: string }> {
   const nuevos = (d.items_nuevos || []).filter((i) => i.product_id && i.size_id)
   if (!nuevos.length) throw new Error('Lo que se lleva el cliente no está linkeado a Gestión Nube: sin eso la venta no puede descontar stock.')
@@ -754,10 +768,9 @@ export async function procesarCambio(
       // Red de seguridad: si el crear-venta desplegado no tuviera el bloque `cambio_real`, cae al
       // camino normal y `proposito:'cambio'` hace que igual use el cliente "Cambio" de GN.
       proposito: 'cambio',
-      comments: notaVentaTecnica('cambio', d, { usuario: ctx.user }),
+      comments: notaVentaTecnica('cambio', d, { usuario: ctx.usuario }),
       solicitudId: `reclamo-${d.id}-cambio`, // idempotencia: dos clicks no generan dos ventas
-      user: ctx.user,
-      pass: ctx.pass,
+      ...ctx.cred,
     }),
   })
   const j = await r.json().catch(() => ({}))
