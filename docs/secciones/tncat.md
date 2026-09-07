@@ -139,6 +139,8 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
   ⚠️ **Amplía la PORTADA, no las otras fotos del producto**: `Lightbox` muestra una sola imagen y
   darle navegación es tocar el componente que usan otras cuatro secciones. Para ver los colores está
   la ficha de producto de la pantalla de Fotos.
+  ✅ **Caminado en prod el 7-sep**: la foto abre a pantalla completa, cierra con Escape, **y el
+  producto queda SIN tildar**; tildar por el nombre sigue andando. ⛔ No se apretó nada que escriba.
 - 🔴 **El buscador de "lo que está adentro" filtra la VISTA, ⛔ no el lote.** Lo tildado sobrevive al
   cambio de texto —si no, buscar dos veces obligaría a tildar de nuevo—, así que el botón saca
   también lo que no está a la vista, **y la pantalla lo dice con el número** antes de que se

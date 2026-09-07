@@ -66,6 +66,14 @@ manda a sacar de NEW IN lo que recién llegó.
 🔴 **El buscador de adentro filtra la vista, ⛔ no el lote**: lo tildado sobrevive al cambio de texto
 y la pantalla avisa con el número cuántos salen sin estar a la vista.
 
+🏁 **Y las fotos se agrandan** (pedido de la misma charla): la miniatura abre el `Lightbox` del kit.
+🔴 **Lo que había que cuidar: la fila entera es un `<label>` con el checkbox de sacar** ⇒ sin frenar
+el evento, mirar una prenda la tildaba para sacarla de la tienda. Caminado en prod: amplía, cierra
+con Escape, y el producto queda sin tildar.
+
+📉 **Y mirándolo se vio moverse**: 498 (13:47) → 416 (14:53) → **335 (15:26)**, y los de 325 días ya
+no están. Alguien está limpiando NEW IN ahora mismo; el más viejo que queda lleva 151 d.
+
 El relato está en `docs/secciones/tncat.md`.
 
 🏁 **CAMINADO EN PROD** (7-sep, con la sesión abierta en Chrome, ⛔ sin escribir nada): Zattia →
