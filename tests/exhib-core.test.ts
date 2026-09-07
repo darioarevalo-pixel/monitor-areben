@@ -201,7 +201,7 @@ describe('sospechososNoExhibidos', () => {
  */
 describe('armarProdMap — el cruce GN ↔ TN', () => {
   const tn = [{ id: 99, sku: 'AN-01', name: 'Anillo Sol', images: ['http://img'], categories: ['Anillos', 'SALE'], price: 1000, promo_price: 800 }]
-  const gn = [{ id: 5, name: 'Anillo Sol', sku: 'AN-01' }] as Parameters<typeof armarProdMap>[0]
+  const gn = [{ id: 5, name: 'Anillo Sol', sku: 'AN-01' }]
   const inv = [{ product_id: 5, product_name: 'Anillo Sol', size_name: 'Único', sku: 'AN-01', barcode: 779, available_quantity: 3 }]
 
   it('con el catálogo del ETL cargado, la prenda llega con categoría, foto y los dos precios', () => {
@@ -218,7 +218,7 @@ describe('armarProdMap — el cruce GN ↔ TN', () => {
   })
 
   it('el producto que no cruza con TN queda sin categoría, pero los que cruzan no se pierden', () => {
-    const gn2 = [...gn, { id: 6, name: 'Prenda que no está en la tienda', sku: 'ZZ-99' }] as typeof gn
+    const gn2 = [...gn, { id: 6, name: 'Prenda que no está en la tienda', sku: 'ZZ-99' }]
     const inv2 = [...inv, { product_id: 6, product_name: 'Prenda que no está en la tienda', size_name: 'M', sku: 'ZZ-99', barcode: 780, available_quantity: 1 }]
     expect(ordenarCats(construirItems(inv2, armarProdMap(gn2, tn), {}))).toEqual(['Anillos', SIN_CATEGORIA])
   })

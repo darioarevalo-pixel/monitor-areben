@@ -6,8 +6,7 @@
  */
 
 import { CATS_GENERICAS, esFundaCat, esModeloCat, esPromo } from '../reposicion/grupos'
-import { indexarTn, matchTn, type TnProducto } from '../tn'
-import type { Producto } from '../etl/tipos'
+import { indexarTn, matchTn, type ClaveGN, type TnProducto } from '../tn'
 import { adminBaseUrl, ofertaVigente, type OfertaVigente } from '../tienda'
 import type { Linea } from '../lineas'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstado, type ExhibEstados, type ExhibItem } from './tipos'
@@ -42,8 +41,11 @@ export type ProdMap = Record<string, { img: string | null; tnCats: string[]; tnI
  *
  * 🔑 **Los precios ya venían en el mismo payload de `tiendanube-audit`** (`price` / `promo_price`),
  * que es lo que Márgenes ya usa: no hace falta ni una consulta nueva, ni una columna en el espejo.
+ *
+ * ⚠️ Pide **la forma que usa** —id, SKU y nombre— y ⛔ no el `Producto` entero del ETL: es lo único
+ * que mira, y así el caso se puede escribir en un test sin inventar veinte campos que no importan.
  */
-export function armarProdMap(productos: Producto[], tnProducts: TnProducto[]): ProdMap {
+export function armarProdMap(productos: Array<ClaveGN & { id: string | number }>, tnProducts: TnProducto[]): ProdMap {
   const idx = indexarTn(tnProducts)
   const prodMap: ProdMap = {}
   productos.forEach((p) => {
