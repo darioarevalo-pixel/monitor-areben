@@ -34,6 +34,18 @@ import type { MotivoCola, PlanSync, PlanVenta } from '@/lib/sync-tn/tipos'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Badge as BadgeKit, Button, ConfirmDetalle, EmptyState, Esqueleto, Notice, TBody, THead, TableWrap, Tabs, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
+// Qué variantes de `inventario` (la copia de GN de Zattia) son de Stunned. Es un filtro por
+// PREFIJO DE SKU porque `inventario` no trae la marca.
+//
+// 🔴 `CAM-` está por la CAMPERA WEAR, que rompió la convención: nació `CAM-0001` en vez de
+// `STU-CAM-0001`, así que con el filtro viejo (`STU*`) quedaba invisible para el mapeo y sus 4
+// talles nunca se emparejaban. El arreglo de fondo es el SKU, no esto; mientras tanto, acá.
+//
+// ⚠️ **El guion de `CAM-` NO es decorado.** Zattia tiene variantes cuyo SKU es un nombre suelto
+// —"CAMPERA ROCK - VERDE INGLÉS"—, así que `CAM*` las arrastraría a un mapeo que es de `stunned`.
+// `CAM-*` no las toca. Antes de sumar un prefijo acá, mirar contra qué más matchea.
+const FILTRO_SKU_STUNNED = 'or=(sku.ilike.STU*,sku.ilike.CAM-*)'
+
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
 const TN_STOCK_API = 'https://bdi-catalogo.vercel.app/api/tn-categorias' // acción 'stock'
 const STORE = 'stunned' as const
@@ -190,7 +202,7 @@ export function Integraciones() {
       const gnRaw = await sbFetch<FilaInventarioGN>(
         CUENTAS.zattia,
         'inventario',
-        'select=product_id,product_name,sku,barcode,size_id&sku=ilike.STU*&order=sku',
+        `select=product_id,product_name,sku,barcode,size_id&${FILTRO_SKU_STUNNED}&order=sku`,
       )
       const gn: GnVar[] = gnRaw
         .filter((v) => v.sku)
@@ -275,7 +287,7 @@ export function Integraciones() {
       const inv = await sbFetch<{ sku: string | null; product_name: string | null; available_quantity: number | null }>(
         CUENTAS.zattia,
         'inventario',
-        'select=sku,product_name,available_quantity&sku=ilike.STU*',
+        `select=sku,product_name,available_quantity&${FILTRO_SKU_STUNNED}`,
       )
       const gnStock = new Map<string, number>()
       const nombrePorSku = new Map<string, string>()
