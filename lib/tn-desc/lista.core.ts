@@ -20,7 +20,7 @@
 
 import type { Cargados, Familia } from '@/lib/tn-desc/atributos'
 
-export type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'corta' | 'aprobados' | 'en-la-tienda' | 'todos'
+export type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'corta' | 'borrador' | 'aprobados' | 'en-la-tienda' | 'todos'
 
 /** Lo que la lista necesita de un producto de TiendaNube. Un subconjunto de `ProductoTn`. */
 export type ProductoLista = {
@@ -81,15 +81,49 @@ export type OpcionesLista = {
    * cargando, sacarla es cerrarle la ficha en la mano.
    */
   abierto: string | null
+  /**
+   * 🆕 Lo tipeado en el buscador. **Obligatorio**, por el mismo motivo que `abierto`: si vive en
+   * el `useMemo` de la pantalla es media regla que ningún test puede mirar.
+   *
+   * ⚠️ Va vacío para no buscar nada. ⛔ No es un filtro más: se combina con el que esté puesto.
+   */
+  busca: string
 }
 
-/** ¿Esta fila cumple el filtro elegido? ⛔ Sin la excepción de la fila abierta: eso lo hace `listaDe`. */
-export function cumpleFiltro(p: ProductoLista, o: Omit<OpcionesLista, 'abierto'>): boolean {
+/**
+ * ¿El nombre coincide con lo buscado?
+ *
+ * 🔑 **Palabra por palabra y sin acentos**, así «blusa cami» encuentra a BLUSA CAMELIA y «camelia
+ * blusa» también: quien busca escribe lo que se acuerda, ⛔ no el nombre exacto en orden. Y sin
+ * acentos porque los nombres de la tienda están en mayúsculas y sin ellos (`PANTALON MALIBÚ`
+ * convive con `PANTALON ASH`).
+ */
+export function coincide(nombre: string, busca: string): boolean {
+  const sin = (x: string) =>
+    String(x || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  const partes = sin(busca).split(/\s+/).filter(Boolean)
+  if (!partes.length) return true
+  const n = sin(nombre)
+  return partes.every((x) => n.includes(x))
+}
+
+/**
+ * ¿Esta fila cumple el filtro elegido? ⛔ Sin la excepción de la fila abierta ni la búsqueda: esas
+ * dos las aplica `listaDe`, y por eso ⛔ no entran acá ni como parámetro.
+ */
+export function cumpleFiltro(p: ProductoLista, o: Omit<OpcionesLista, 'abierto' | 'busca'>): boolean {
   const fila = o.cola[p.id]
   if (o.filtro === 'ultimas-tandas') return o.tandas.has(p.created_at.slice(0, 10))
   if (o.filtro === 'sin-desc') return p.prosa.banda === 'nada'
   if (o.filtro === 'sin-ficha') return sinFicha(p, fila, o.atributos[p.id])
   if (o.filtro === 'corta') return p.prosa.banda === 'corta'
+  // 🆕 7-sep-2026, pedido de Bruno. Es el estado que faltaba nombrar: el párrafo está escrito y
+  // NADIE lo miró todavía. Sin este filtro, los borradores sólo se encontraban de memoria —y el
+  // día que se escriben 19 de una, eso es una lista de 19 nombres en la cabeza de alguien.
+  if (o.filtro === 'borrador') return fila?.estado === 'borrador'
   if (o.filtro === 'aprobados') return fila?.estado === 'aprobado'
   if (o.filtro === 'en-la-tienda') return fila?.estado === 'escrito' || fila?.estado === 'falla'
   return true
@@ -99,12 +133,17 @@ export function cumpleFiltro(p: ProductoLista, o: Omit<OpcionesLista, 'abierto'>
  * La lista que se dibuja: los publicados que cumplen el filtro **más la fila abierta**, con los
  * mudos primero — son los que hoy salen a la calle sin decir nada.
  *
+ * 🔑 **La búsqueda le corre TAMBIÉN a la fila abierta, y el filtro ⛔ no.** ⛔ No es una
+ * inconsistencia: la fila abierta se protege de lo que pasa SOLO —guardar un atributo la sacaba
+ * de la lista sin que nadie tocara el filtro—, y buscar es un gesto explícito sobre la lista. Si
+ * la abierta sobreviviera a la búsqueda, tipear un nombre devolvería otro producto.
+ *
  * ⚠️ El orden ⛔ no depende de la ficha ni de la cola, sólo de la prosa y del nombre: una fila que
  * se está cargando no puede saltar de lugar mientras alguien la completa.
  */
 export function listaDe<T extends ProductoLista>(productos: T[], o: OpcionesLista): T[] {
-  const { abierto, ...filtro } = o
+  const { abierto, busca, ...filtro } = o
   return productos
-    .filter((p) => p.published && (p.id === abierto || cumpleFiltro(p, filtro)))
+    .filter((p) => p.published && coincide(p.name, busca) && (p.id === abierto || cumpleFiltro(p, filtro)))
     .sort((a, b) => a.prosa.largo - b.prosa.largo || a.name.localeCompare(b.name))
 }

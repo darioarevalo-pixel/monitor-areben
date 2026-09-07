@@ -13,7 +13,7 @@
  * puede terminar de cargar**.
  */
 import { describe, expect, it } from 'vitest'
-import { cumpleFiltro, familiaDeProducto, listaDe, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
+import { coincide, cumpleFiltro, familiaDeProducto, listaDe, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
 import type { Cargados } from '../lib/tn-desc/atributos'
 
 const prod = (o: Partial<ProductoLista> = {}): ProductoLista => ({
@@ -32,6 +32,7 @@ const opciones = (o: Partial<Parameters<typeof listaDe>[1]> = {}) => ({
   atributos: {} as Record<string, Cargados | undefined>,
   tandas: new Set<string>(),
   abierto: null as string | null,
+  busca: '',
   ...o,
 })
 
@@ -152,5 +153,40 @@ describe('las últimas tandas', () => {
       prod({ id: '3', created_at: '2026-05-19T10:00:00Z' }),
     ]
     expect([...ultimasTandas(ps)].sort()).toEqual(['2026-08-12', '2026-08-13'])
+  })
+})
+
+describe('🆕 el filtro «En borrador» y el buscador por nombre (7-sep-2026, pedido de Bruno)', () => {
+  const enBorrador = prod({ id: '10', name: 'BLUSA CAMELIA' })
+  const enLaTienda = prod({ id: '11', name: 'BLUSA CLOE' })
+  const cola = {
+    '10': { familia: 'tops' as const, estado: 'borrador' },
+    '11': { familia: 'tops' as const, estado: 'escrito' },
+  }
+
+  it('«En borrador» es el párrafo escrito que NADIE miró todavía: ⛔ ni el aprobado ni el publicado', () => {
+    const o = opciones({ filtro: 'borrador' as const, cola })
+    expect(listaDe([enBorrador, enLaTienda], o).map((p) => p.id)).toEqual(['10'])
+  })
+
+  it('el buscador va por palabras y sin acentos, en cualquier orden', () => {
+    expect(coincide('BLUSA CAMELIA', 'camelia')).toBe(true)
+    expect(coincide('BLUSA CAMELIA', 'blusa camel')).toBe(true)
+    expect(coincide('BLUSA CAMELIA', 'camelia blusa')).toBe(true)
+    expect(coincide('PANTALON MALIBÚ', 'malibu')).toBe(true)
+    expect(coincide('BLUSA CAMELIA', 'jean')).toBe(false)
+    // Vacío no busca nada: la lista queda como estaba.
+    expect(coincide('BLUSA CAMELIA', '   ')).toBe(true)
+  })
+
+  it('🔑 la búsqueda le corre TAMBIÉN a la fila abierta, y el filtro ⛔ no', () => {
+    const o = opciones({ filtro: 'todos' as const, cola, abierto: '10', busca: 'cloe' })
+    // Si la abierta sobreviviera a la búsqueda, tipear un nombre devolvería otro producto.
+    expect(listaDe([enBorrador, enLaTienda], o).map((p) => p.id)).toEqual(['11'])
+  })
+
+  it('la búsqueda se COMBINA con el filtro, no lo reemplaza', () => {
+    const o = opciones({ filtro: 'borrador' as const, cola, busca: 'blusa' })
+    expect(listaDe([enBorrador, enLaTienda], o).map((p) => p.id)).toEqual(['10'])
   })
 })

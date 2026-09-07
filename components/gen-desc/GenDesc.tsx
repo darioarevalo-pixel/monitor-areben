@@ -43,6 +43,7 @@ const FILTROS: { v: Filtro; label: string }[] = [
   { v: 'sin-desc', label: 'Sin descripción' },
   { v: 'sin-ficha', label: 'Sin ficha cargada' },
   { v: 'corta', label: 'Descripción corta' },
+  { v: 'borrador', label: 'En borrador' },
   { v: 'aprobados', label: 'Aprobados' },
   { v: 'en-la-tienda', label: 'Publicados en la tienda' },
   { v: 'todos', label: 'Todos los publicados' },
@@ -54,6 +55,7 @@ export function GenDesc() {
   const { marca } = useSesion()
   const { cargando, productos, cola, atributos, medidas, puedePublicar, modelos, errorModelos, error, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('ultimas-tandas')
+  const [busca, setBusca] = useState('')
   const [abierto, setAbierto] = useState<string | null>(null)
   const toast = useToast()
 
@@ -68,6 +70,7 @@ export function GenDesc() {
       // ⚠️ El contador cuenta la VERDAD, aunque la lista de abajo se quede con la fila abierta:
       // «5 sin ficha» con 6 filas en pantalla es lo correcto — la 6ª ya tiene algo cargado.
       sinFicha: publicados.filter((p) => sinFicha(p, cola[p.id], atributos[p.id])).length,
+      borradores: publicados.filter((p) => cola[p.id]?.estado === 'borrador').length,
       aprobados: publicados.filter((p) => cola[p.id]?.estado === 'aprobado').length,
       enLaTienda: publicados.filter((p) => cola[p.id]?.estado === 'escrito').length,
     }),
@@ -77,8 +80,8 @@ export function GenDesc() {
   // 🔴 `abierto` entra a la lista: la fila que se está cargando ⛔ NO se va aunque el guardado le
   // haga dejar de cumplir el filtro. La regla —y el porqué, que es un caso real— vive en el núcleo.
   const lista = useMemo(
-    () => listaDe(publicados, { filtro, cola, atributos, tandas, abierto }),
-    [publicados, cola, atributos, filtro, tandas, abierto],
+    () => listaDe(publicados, { filtro, cola, atributos, tandas, abierto, busca }),
+    [publicados, cola, atributos, filtro, tandas, abierto, busca],
   )
 
   if (error) return <Notice tone="danger">{error}</Notice>
@@ -96,6 +99,7 @@ export function GenDesc() {
         <KpiCard label="Últimas 2 tandas" value={stats.ultimas} tone="neutral" activo={filtro === 'ultimas-tandas'} onClick={() => setFiltro('ultimas-tandas')} />
         <KpiCard label="Sin descripción" value={stats.sinDesc} tone="danger" activo={filtro === 'sin-desc'} onClick={() => setFiltro('sin-desc')} />
         <KpiCard label="Sin ficha cargada" value={stats.sinFicha} tone="warning" activo={filtro === 'sin-ficha'} onClick={() => setFiltro('sin-ficha')} />
+        <KpiCard label="En borrador" value={stats.borradores} tone="warning" activo={filtro === 'borrador'} onClick={() => setFiltro('borrador')} />
         <KpiCard label="Aprobados" value={stats.aprobados} tone="success" activo={filtro === 'aprobados'} onClick={() => setFiltro('aprobados')} />
         <KpiCard label="En la tienda" value={stats.enLaTienda} tone="success" activo={filtro === 'en-la-tienda'} onClick={() => setFiltro('en-la-tienda')} />
       </div>
@@ -108,6 +112,14 @@ export function GenDesc() {
             ))}
           </Select>
         </Field>
+        <Field label="Buscar">
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Nombre del producto"
+            style={{ minWidth: 200 }}
+          />
+        </Field>
         <Button variant="outline" onClick={() => void refrescar()} disabled={cargando}>
           {cargando ? 'Cargando…' : 'Cargar de TiendaNube'}
         </Button>
@@ -117,7 +129,7 @@ export function GenDesc() {
       {cargando && !productos.length && <Card>Cargando el catálogo…</Card>}
 
       {!cargando && !lista.length && (
-        <EmptyState title="No queda ninguno acá" hint="Probá con otro filtro." />
+        <EmptyState title="No queda ninguno acá" hint={busca ? `Ningún producto se llama «${busca}». Probá con menos letras o borrá la búsqueda.` : 'Probá con otro filtro.'} />
       )}
 
       <div style={{ display: 'grid', gap: 10 }}>
