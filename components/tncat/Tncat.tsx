@@ -119,7 +119,7 @@ function Fotos({ marca }: { marca: Marca }) {
 function Categorias({ marca, verCat, verAsig }: { marca: Marca; verCat: boolean; verAsig: boolean }) {
   return (
     <>
-      <ExplorarCategoriaCard marca={marca} />
+      <ExplorarCategoriaCard />
       {verCat && <CategoriasCard marca={marca} />}
       {verAsig && <AsignarCard />}
     </>

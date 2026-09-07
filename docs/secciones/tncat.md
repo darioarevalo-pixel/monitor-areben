@@ -23,15 +23,23 @@ el cliente, en el momento.** Y del otro lado no hay historial: lo que se pisa, s
 Stunned tiene la suya (store 7516263, token propio, `stunned.com.ar`) aunque comparta la base de
 Zattia. Es el final del ciclo de la sesión de fotos — antes la foto de una prenda de Stunned no tenía
 por dónde subir, porque `bdi-catalogo/api/tn-subir-imagen.js` sólo conocía dos tiendas.
-🔑 **Y «Asignar categoría (Excel)» también, desde el 7-sep-2026**, por el mismo motivo: escribe
+🔑 **Y las dos cards de categorías también, desde el 7-sep-2026** —«Explorar una categoría» (la
+asignación **a mano**: se tilda y se aplica) y «Asignar categoría (Excel)»—, por el mismo motivo: escribe
 `categories` en **una** tienda. Sin el selector, los ingresos de Stunned se cruzaban contra el
 catálogo de Zattia y volvían **todos como «no encontrados»** — sin error y sin nada roto, sólo una
 lista vacía. El servidor ya conocía `?store=stunned`; lo que faltaba era de este lado.
-🔴 **Cambiar de línea BORRA la previsualización, y no es cosmético**: `matched` son `id` de producto
-**de la tienda que se cruzó**, así que aplicar ese lote con la otra línea elegida escribiría sobre
-productos ajenos elegidos por número. Lo único que sobrevive es la lista de nombres del Excel. Lo
-defiende `tests/tncat-asignar-linea.test.tsx` (monta la card de verdad: lo que se prueba vive en un
-cambio de estado, no en el markup del primer cuadro).
+🔴 **Cambiar de línea suelta lo elegido, y no es cosmético**: lo tildado y el `matched` son `id` de
+producto **de la tienda que se estaba mirando**, así que aplicarlos con la otra línea elegida
+escribiría `categories` sobre productos ajenos elegidos por número. En «Explorar» el filo es peor
+—los ids van **directo** al PUT, sin el cruce por nombre que revalida en la del Excel—. Lo único que
+sobrevive es la lista de nombres del Excel, que no es de ninguna tienda. Lo defienden
+`tests/tncat-asignar-linea.test.tsx` y `tests/tncat-explorar-linea.test.tsx`, que montan las cards
+de verdad (`createRoot` + `act`): lo que se prueba vive en un cambio de estado, no en el markup del
+primer cuadro.
+⚠️ **Y lo que cierra la puerta es que se suelte la CATEGORÍA**, no el `Set` de tildados: sin `catId`
+no hay botón que apretar, y elegir cualquier categoría vacía lo tildado igual. Se midió con
+mutantes: sacar `setSacar(new Set())` del reset **no rompe nada** —es redundancia—; sacar
+`setCatId('')` sí.
 ⛔ **Las otras cards NO lo llevan**: la revisión de fotos, los agotados y el con-stock se apoyan en
 `tn_ignorados` y `tn_fotos_verificadas`, que son **una tabla por marca** y todavía no saben de
 líneas. Dárselo sin eso mostraría los ignorados de Zattia sobre el catálogo de Stunned.

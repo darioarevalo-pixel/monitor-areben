@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import type { Marca } from '@/lib/nav'
+import { ETIQUETA_LINEA, type Linea } from '@/lib/lineas'
 import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '@/lib/tncat/cliente'
 import {
   buscar,
@@ -16,7 +16,8 @@ import {
 } from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
 import { FotoTn } from './FotoTn'
-import { Card, color, Lightbox, useConfirmar } from '@/components/ui'
+import { Card, color, Lightbox, SelectorLinea, useConfirmar } from '@/components/ui'
+import { useLinea } from '@/components/fundas/useDatosMonitor'
 
 const CHUNK = 20
 const MINI = 40
@@ -38,7 +39,8 @@ const MINI = 40
  * puede decidir lo único que importa en NEW IN —**498 de los 770 productos de Zattia están ahí, y
  * 279 hace más de 90 días**—, que es qué dejó de ser novedad.
  */
-export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
+export function ExplorarCategoriaCard() {
+  const { linea, lineas, setLinea } = useLinea()
   const { confirmar } = useConfirmar()
   const [categorias, setCategorias] = useState<Categoria[] | null>(null)
   const [catId, setCatId] = useState('')
@@ -57,18 +59,44 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   const [ampliada, setAmpliada] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
+  /**
+   * **Cambió la línea ⇒ se cae todo lo que se eligió sobre la tienda anterior.**
+   *
+   * 🔴 Lo tildado son `id` de producto **de la tienda que se está mirando**, y acá se aplican
+   * DIRECTO (no hay un cruce por nombre en el medio que los revalide): con la otra línea elegida,
+   * «Agregar los 12» escribiría `categories` sobre los productos de la otra tienda que tengan esos
+   * números. La categoría elegida es de esa tienda también.
+   *
+   * Va durante el render y no en un efecto: es estado de esta card derivado de un valor que
+   * cambió, y en un efecto se pinta un cuadro intermedio con los productos de la tienda anterior
+   * y la categoría de la otra.
+   */
+  const [lineaMirada, setLineaMirada] = useState<Linea>(linea)
+  if (linea !== lineaMirada) {
+    setLineaMirada(linea)
+    setCategorias(null)
+    setProductos(null)
+    setCatId('')
+    setQ('')
+    setQDentro('')
+    setEstado('todos')
+    setSacar(new Set())
+    setSumar(new Set())
+    setMsg(null)
+  }
+
   useEffect(() => {
     let vivo = true
-    traerCategorias(marca)
+    traerCategorias(linea)
       .then((c) => vivo && setCategorias(c))
       .catch(() => vivo && setCategorias([]))
-    auditProductos(marca)
+    auditProductos(linea)
       .then((p) => vivo && setProductos(p))
       .catch(() => vivo && setProductos([]))
     return () => {
       vivo = false
     }
-  }, [marca])
+  }, [linea])
 
   const catNombre = categorias?.find((c) => String(c.id) === catId)?.name ?? ''
   // Lo que está adentro, SIN filtrar: es la base del lote. Lo tildado se acumula entre búsquedas
@@ -119,7 +147,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
       mensaje: (
         <>
           {verbo} {uno ? '1 producto' : `${items.length} productos`} {prep} “{catNombre}”. Se escribe en la tienda EN
-          VIVO.
+          VIVO de {ETIQUETA_LINEA[linea]}.
           {huerfanos.length > 0 && (
             <div style={{ marginTop: 10, fontWeight: 600 }}>
               {huerfanos.length === 1
@@ -143,7 +171,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
     const errores: string[] = []
     try {
       for (let i = 0; i < items.length; i += CHUNK) {
-        const d = await aplicarAsignarLote(marca, items.slice(i, i + CHUNK))
+        const d = await aplicarAsignarLote(linea, items.slice(i, i + CHUNK))
         if (d.ok) {
           ok += d.aplicados || 0
           ;(d.errores || []).forEach((e) => errores.push(`${e.nombre || ''}: ${e.msg || e.status || ''}`))
@@ -164,7 +192,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
       setSacar(new Set())
       setSumar(new Set())
       setMsg(`${ok === 1 ? '1 producto actualizado' : `${ok} productos actualizados`}${errores.length ? ` · ${errores.length} con error` : ''}.`)
-      void bustAudit(marca)
+      void bustAudit(linea)
     } catch (e) {
       setMsg('' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -229,6 +257,10 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
           se manda la lista completa de categorías del producto, y de eso se encarga el sistema.
         </InfoPopover>
       </div>
+
+      {/* ⚠️ Arriba del selector de categorías y no al lado del botón: las categorías que se listan
+          abajo, los productos y lo que se escriba son de la tienda que diga acá. */}
+      <SelectorLinea linea={linea} lineas={lineas} onChange={setLinea} />
 
       <select
         value={catId}
