@@ -102,6 +102,10 @@ es `{ usuario, cred }` (`CtxVentaReclamo` / `CtxVentaFalla`) y ⛔ no `Credencia
 no hay ningún nombre adentro de la credencial, y sin separarlos la nota de GN quedaba **sin
 firmar**. `usuario` sigue saliendo de `perfil.name`, que es la clave del padrón.
 
+✅ **Caminado en prod el mismo día**: Lorena creó la venta del cambio desde Administración. Era el
+único paso que ⛔ no se podía dar desde acá — el servidor aceptando el token y un test fijando que el
+front lo manda ⛔ no son que **el botón se pueda apretar**.
+
 ⚠️ **Ningún test lo veía y no era descuido del test, era del oráculo**: los de venta técnica miran
 el cuerpo del pedido con `fetch` mockeado, y un mock siempre dice que sí. El test nuevo
 (`tests/reclamos-venta-tecnica.test.ts`) mira que el **token esté adentro del cuerpo**, ⛔ no que la
