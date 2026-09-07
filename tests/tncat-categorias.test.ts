@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { buscar, enCategoria, etiquetaAntiguedad, itemsParaAplicar, nuevasCategorias, tieneCategoria } from '@/lib/tncat/categorias'
+import {
+  buscar,
+  enCategoria,
+  estaOculto,
+  etiquetaAntiguedad,
+  itemsParaAplicar,
+  nuevasCategorias,
+  quedarianSinCategoria,
+  tieneCategoria,
+} from '@/lib/tncat/categorias'
 import { agruparPorCategoria, SIN_CATEGORIA, type GrupoSinStock } from '@/lib/tncat/variantes-sin-stock'
 import type { ProductoCat } from '@/lib/tncat/tipos'
 
@@ -126,5 +135,52 @@ describe('tncat — lo que dice la fila sobre la antigüedad', () => {
 
   it('una fecha futura dice “entró hoy”, no “hace -85 d”', () => {
     expect(etiquetaAntiguedad('2026-12-01T00:00:00+0000', ahora)).toBe('entró hoy')
+  })
+})
+
+/**
+ * Sacar de a 91 no es sacar de a uno 91 veces: aparece un modo de falla que de a uno no existía
+ * —dejar productos sin NINGUNA categoría, o sea fuera de la navegación de la tienda— y el filtro
+ * que arma la tanda es el que decide a quién se le escribe.
+ */
+describe('tncat — sacar en tanda a los ocultos', () => {
+  const p2 = (id: string, name: string, cats: string[], published?: boolean): ProductoCat => ({
+    id,
+    name,
+    category_ids: cats,
+    published,
+  })
+  const prods = [
+    p2('1', 'Oculto con otra', ['20', '30'], false),
+    p2('2', 'Oculto sin otra', ['20'], false),
+    p2('3', 'Visible', ['20', '30'], true),
+    p2('4', 'Sin published', ['20']),
+  ]
+
+  it('“sólo los ocultos” deja fuera al visible Y al que no dice nada (en TN eso es publicado)', () => {
+    expect(enCategoria(prods, '20', { estado: 'ocultos' }).map((x) => x.id)).toEqual(['1', '2'])
+    // El orden por defecto es alfabético: "Sin published" va antes que "Visible".
+    expect(enCategoria(prods, '20', { estado: 'visibles' }).map((x) => x.id)).toEqual(['4', '3'])
+    expect(enCategoria(prods, '20', { estado: 'todos' }).length).toBe(4)
+  })
+
+  it('el filtro se combina con la búsqueda, no la reemplaza', () => {
+    expect(enCategoria(prods, '20', { estado: 'ocultos', q: 'sin otra' }).map((x) => x.id)).toEqual(['2'])
+  })
+
+  it('avisa QUIÉNES quedan sin ninguna categoría, no cuántos', () => {
+    const items = itemsParaAplicar(enCategoria(prods, '20', { estado: 'ocultos' }), '20', 'quitar')
+    expect(items.length).toBe(2)
+    expect(quedarianSinCategoria(items)).toEqual(['Oculto sin otra'])
+  })
+
+  it('al AGREGAR nadie queda sin categoría: la lista es vacía', () => {
+    const items = itemsParaAplicar([p2('9', 'Nuevo', [])], '20', 'agregar')
+    expect(quedarianSinCategoria(items)).toEqual([])
+  })
+
+  it('estaOculto no confunde “no dice” con “oculto”', () => {
+    expect(estaOculto(prods[1])).toBe(true)
+    expect(estaOculto(prods[3])).toBe(false)
   })
 })

@@ -141,6 +141,16 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
   la ficha de producto de la pantalla de Fotos.
   ✅ **Caminado en prod el 7-sep**: la foto abre a pantalla completa, cierra con Escape, **y el
   producto queda SIN tildar**; tildar por el nombre sigue andando. ⛔ No se apretó nada que escriba.
+- 🆕 🔴 **SACAR EN TANDA A LOS OCULTOS, y el aviso que eso obliga** (7-sep-2026, pedido de Bruno).
+  El filtro «sólo los ocultos» con «Tildar estos N» es el gesto que pidió; el que importa es el
+  otro. **Sacar 91 de una no es sacar de a uno 91 veces**: aparece un modo de falla que de a uno
+  casi no se ve — **el producto que se queda SIN NINGUNA categoría deja de aparecer en la navegación
+  de la tienda** (se llega por buscador o link directo). Medido el 7-sep: de los **272** de NEW IN
+  hay **91 ocultos**, y **7 de esos 91 no tienen otra categoría**. ⇒ el confirmar los cuenta **y los
+  nombra** antes de escribir, como ya hacía el flujo del Excel con `quedanSinCategoria`.
+  🔑 **`estaOculto` es `published === false`, ⛔ no `!published`**: en TiendaNube el campo ausente es
+  *publicado*, y con `!published` los 4 sin dato entrarían en la tanda de los ocultos. Hay test.
+  🔑 El botón de tanda **no escribe**: tilda. El que escribe es el de abajo, que vuelve a confirmar.
 - 🔴 **El buscador de "lo que está adentro" filtra la VISTA, ⛔ no el lote.** Lo tildado sobrevive al
   cambio de texto —si no, buscar dos veces obligaría a tildar de nuevo—, así que el botón saca
   también lo que no está a la vista, **y la pantalla lo dice con el número** antes de que se

@@ -4,7 +4,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '@/lib/tncat/cliente'
-import { buscar, enCategoria, etiquetaAntiguedad, itemsParaAplicar, type OrdenCat } from '@/lib/tncat/categorias'
+import {
+  buscar,
+  enCategoria,
+  estaOculto,
+  etiquetaAntiguedad,
+  itemsParaAplicar,
+  quedarianSinCategoria,
+  type EstadoCat,
+  type OrdenCat,
+} from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
 import { FotoTn } from './FotoTn'
 import { Card, color, Lightbox, useConfirmar } from '@/components/ui'
@@ -37,6 +46,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   const [q, setQ] = useState('')
   const [qDentro, setQDentro] = useState('')
   const [orden, setOrden] = useState<OrdenCat>('antiguos')
+  const [estado, setEstado] = useState<EstadoCat>('todos')
   const [sacar, setSacar] = useState<Set<string>>(new Set())
   const [sumar, setSumar] = useState<Set<string>>(new Set())
   const [aplicando, setAplicando] = useState(false)
@@ -65,9 +75,12 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   // igual que del lado de agregar, y aplicar sobre la vista filtrada perdería lo que no se ve.
   const dentro = useMemo(() => (productos && catId ? enCategoria(productos, catId) : []), [productos, catId])
   const dentroVista = useMemo(
-    () => (productos && catId ? enCategoria(productos, catId, { q: qDentro, orden }) : []),
-    [productos, catId, qDentro, orden],
+    () => (productos && catId ? enCategoria(productos, catId, { q: qDentro, orden, estado }) : []),
+    [productos, catId, qDentro, orden, estado],
   )
+  const ocultosDentro = useMemo(() => dentro.filter(estaOculto).length, [dentro])
+  /** ¿Ya están todos los que se ven? Decide si el botón de tanda tilda o destilda. */
+  const vistaEntera = dentroVista.length > 0 && dentroVista.every((p) => sacar.has(String(p.id)))
   const tildadosOcultos = useMemo(() => {
     const visibles = new Set(dentroVista.map((p) => String(p.id)))
     return [...sacar].filter((id) => !visibles.has(id)).length
@@ -89,11 +102,32 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
     const items = itemsParaAplicar(base.filter((p) => elegidos.has(String(p.id))), catId, accion)
     if (!items.length || aplicando) return
     const verbo = accion === 'quitar' ? 'sacar de' : 'agregar a'
+    // 🔴 Sólo al SACAR: los que se quedan sin NINGUNA categoría no aparecen más en la navegación
+    // de la tienda. Se dicen con nombre y ANTES de escribir — sacar de a uno no lo hacía visible,
+    // sacar 91 de una sí.
+    const huerfanos = accion === 'quitar' ? quedarianSinCategoria(items) : []
     const confirmado = await confirmar({
       titulo: `${verbo[0].toUpperCase()}${verbo.slice(1)} la categoría`,
       tono: 'warning',
       ok: `${verbo[0].toUpperCase()}${verbo.slice(1)} en ${items.length}`,
-      mensaje: `Se ${verbo} "${catNombre}" en ${items.length === 1 ? '1 producto' : `${items.length} productos`}. Se escribe en la tienda EN VIVO.`,
+      mensaje: (
+        <>
+          Se {verbo} “{catNombre}” en {items.length === 1 ? '1 producto' : `${items.length} productos`}. Se escribe en la
+          tienda EN VIVO.
+          {huerfanos.length > 0 && (
+            <div style={{ marginTop: 10, fontWeight: 600 }}>
+              {huerfanos.length === 1
+                ? '1 de ellos se queda SIN NINGUNA categoría'
+                : `${huerfanos.length} de ellos se quedan SIN NINGUNA categoría`}{' '}
+              y deja de aparecer en la navegación de la tienda (se llega por buscador o link directo):{' '}
+              <span style={{ fontWeight: 400 }}>
+                {huerfanos.slice(0, 8).join(' · ')}
+                {huerfanos.length > 8 ? ` … y ${huerfanos.length - 8} más` : ''}
+              </span>
+            </div>
+          )}
+        </>
+      ),
     })
     if (!confirmado) return
 
@@ -195,6 +229,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
         onChange={(e) => {
           setCatId(e.target.value)
           setQDentro('')
+          setEstado('todos')
           setSacar(new Set())
           setSumar(new Set())
           setMsg(null)
@@ -244,14 +279,44 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
                     <option value="nuevos">Más nuevos primero</option>
                     <option value="nombre">A–Z</option>
                   </select>
+                  {/* El filtro nombra lo que hay: "ocultos (91)" dice de entrada el tamaño del
+                      trabajo, y con 0 no se ofrece un filtro que deja la lista vacía. */}
+                  <select
+                    value={estado}
+                    onChange={(e) => setEstado(e.target.value as EstadoCat)}
+                    style={{ padding: '7px 8px', border: `1px solid ${color.line2}`, borderRadius: 7, fontSize: 12.5 }}
+                  >
+                    <option value="todos">Ocultos y visibles</option>
+                    <option value="ocultos" disabled={ocultosDentro === 0}>
+                      Sólo los ocultos ({ocultosDentro})
+                    </option>
+                    <option value="visibles" disabled={ocultosDentro === dentro.length}>
+                      Sólo los visibles ({dentro.length - ocultosDentro})
+                    </option>
+                  </select>
                 </div>
-                {qDentro.trim() && (
-                  <div style={{ fontSize: 12, color: color.mut2, marginBottom: 6 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 12, color: color.mut2 }}>
                     {dentroVista.length === 0
-                      ? 'Ninguno de los que están en la categoría coincide.'
+                      ? 'Ninguno de los que están en la categoría coincide con este filtro.'
                       : `${dentroVista.length} de ${dentro.length}`}
                   </div>
-                )}
+                  {/* Tildar de a uno 91 ocultos no es trabajo, es una fuente de errores. El botón
+                      dice SIEMPRE cuántos toca, y nunca escribe: el que escribe es el de abajo,
+                      que además vuelve a confirmar. */}
+                  {dentroVista.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const n = new Set(sacar)
+                        dentroVista.forEach((p) => (vistaEntera ? n.delete(String(p.id)) : n.add(String(p.id))))
+                        setSacar(n)
+                      }}
+                      style={{ background: 'none', border: 'none', color: color.brandSolid, cursor: 'pointer', padding: 0, fontSize: 12, textDecoration: 'underline' }}
+                    >
+                      {vistaEntera ? `Destildar estos ${dentroVista.length}` : `Tildar estos ${dentroVista.length}`}
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflow: 'auto' }}>
                   {dentroVista.map((p) => fila(p, sacar.has(String(p.id)), () => toggle(sacar, setSacar, String(p.id))))}
                 </div>

@@ -26,6 +26,28 @@ const ids = (p: ProductoCat): string[] => (p.category_ids || []).map(String)
  */
 export type OrdenCat = 'antiguos' | 'nuevos' | 'nombre'
 
+/**
+ * Qué mitad de la categoría se mira. Existe porque el trabajo grande de NEW IN es **sacar lo que
+ * ya no está a la venta**: medido el 7-sep-2026, de los 272 productos de NEW IN **91 están
+ * ocultos** — la tienda no los muestra y la categoría los sigue contando.
+ */
+export type EstadoCat = 'todos' | 'ocultos' | 'visibles'
+
+/** Oculto en la tienda. `published` sin definir es publicado: es el default de TiendaNube. */
+export const estaOculto = (p: ProductoCat): boolean => p.published === false
+
+/**
+ * Los del lote que quedarían **sin ninguna categoría**.
+ *
+ * 🔴 Un producto sin categoría ⛔ no aparece en la navegación de la tienda: se llega por el buscador
+ * o por link directo. Sacar de a uno eso casi no pasa; sacar 91 de una, sí — medido el 7-sep, **7
+ * de los 91 ocultos de NEW IN no tienen otra categoría**. Por eso se cuentan ANTES de escribir, con
+ * nombre y todo, igual que hace el flujo del Excel (`quedanSinCategoria` de `AsigPreview`).
+ */
+export function quedarianSinCategoria(items: { nombre: string; nuevas: string[] }[]): string[] {
+  return items.filter((i) => i.nuevas.length === 0).map((i) => i.nombre)
+}
+
 /** ¿El texto matchea el nombre o el SKU? Es el MISMO criterio en los dos lados de la pantalla. */
 export function coincide(p: ProductoCat, q: string): boolean {
   const t = q.trim().toLowerCase()
@@ -81,9 +103,15 @@ export function tieneCategoria(p: ProductoCat, catId: string): boolean {
 export function enCategoria(
   productos: ProductoCat[],
   catId: string,
-  opts: { q?: string; orden?: OrdenCat; ahora?: number } = {},
+  opts: { q?: string; orden?: OrdenCat; estado?: EstadoCat; ahora?: number } = {},
 ): ProductoCat[] {
-  const dentro = productos.filter((p) => tieneCategoria(p, catId) && coincide(p, opts.q || ''))
+  const estado = opts.estado ?? 'todos'
+  const dentro = productos.filter(
+    (p) =>
+      tieneCategoria(p, catId) &&
+      coincide(p, opts.q || '') &&
+      (estado === 'todos' || (estado === 'ocultos' ? estaOculto(p) : !estaOculto(p))),
+  )
   return ordenar(dentro, opts.orden ?? 'nombre', opts.ahora)
 }
 
