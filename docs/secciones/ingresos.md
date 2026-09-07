@@ -25,6 +25,14 @@ Blob**, carpeta `ingresos/`, por `api/blob-upload.js` (una de las 12 funciones d
   **piezas de Meta Ads** y esta galería (las dos por el camino de cliente), y **el contenido que
   sube la creadora de un canje**. Los topes y formatos de cada carpeta están en `CARPETAS_CLIENTE`;
   tocar el de una sin mirar la otra le cambia el límite a alguien que no pidió nada.
+- 🔴 **El cartel de una subida que falla NO es el `error` que contesta el handler.** `upload()` de
+  `@vercel/blob/client` descarta el cuerpo de toda respuesta que no sea 200 y muestra siempre
+  «Failed to retrieve the client token» (`dist/client.js:405`). Por eso el motivo lo traduce
+  `lib/blob-motivo.ts`, que ante ESE cartel vuelve a pedir el permiso con un `fetch` nuestro y lee
+  el `error`. Lo usan los tres hooks que suben (`useSubirGaleria`, `useSubirPiezas`,
+  `useSubirContenido`) y el cuarto que se escriba tiene que usarlo: ya tapó un 403 de sesión en
+  Meta (9-ago-2026) y el tope de evidencias de un canje (7-sep-2026), las dos veces con los tests
+  del handler en verde.
 - 🔴 **Y desde el 21-ago-2026 ese archivo tiene una rama SIN SESIÓN**: la de canjes se identifica con
   el token del link de ella y corre **antes** de `exigirUsuario`. Sus reglas viven aparte
   (`api/_canje-token.js`, con su propio tope y su propia carpeta) y no tocan `CARPETAS_CLIENTE`,

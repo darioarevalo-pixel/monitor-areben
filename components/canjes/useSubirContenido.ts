@@ -33,6 +33,7 @@
 
 import { useCallback, useState } from 'react'
 import { upload } from '@vercel/blob/client'
+import { motivoDeSubida, RUTA_PERMISO, type PedidoDePermiso } from '@/lib/blob-motivo'
 import { claseDeArchivo, EXTENSIONES_MEDIA, mimeDeArchivo, type ClaseMedia } from '@/lib/media'
 
 /** Arriba de esto el SDK parte el archivo y reintenta sólo el pedazo que se cortó. */
@@ -89,17 +90,25 @@ export function useSubirContenido(
         marcar(fila.key, { estado: 'fallada', motivo: 'Volvé a abrir el link y probá de nuevo.' })
         return
       }
+      // 🔴 **El pedido se arma antes del `try` porque el cartel de error lo necesita.** Si el
+      // permiso se deniega, `upload()` tira «Failed to retrieve the client token» y el motivo real
+      // hay que ir a buscarlo con el MISMO pedido (ver `lib/blob-motivo.ts`).
+      const pedido: PedidoDePermiso = {
+        pathname: `${carpeta}/${fila.nombre}`,
+        clientPayload: SOBRE + token,
+        // Sin esto, un video grande sube en un solo PUT y una red de celular que se corta a los
+        // 300 MB vuelve a empezar de cero.
+        multipart: file.size > MULTIPART_DESDE,
+      }
       try {
-        const blob = await upload(`${carpeta}/${fila.nombre}`, file, {
+        const blob = await upload(pedido.pathname, file, {
           access: 'public',
-          handleUploadUrl: '/api/blob-upload',
-          clientPayload: SOBRE + token,
+          handleUploadUrl: RUTA_PERMISO,
+          clientPayload: pedido.clientPayload,
           // ⚠️ Deducido de la extensión y mandado a mano: un archivo que sale de un chat puede
           // llegar como `application/octet-stream`, y la lista del servidor no lo dejaría pasar.
           contentType: mimeDeArchivo(fila.nombre) || undefined,
-          // Sin esto, un video grande sube en un solo PUT y una red de celular que se corta a los
-          // 300 MB vuelve a empezar de cero.
-          multipart: file.size > MULTIPART_DESDE,
+          multipart: pedido.multipart,
         })
         // Registrar va DESPUÉS de subir y es lo que hace que el archivo exista para nosotros: no
         // hay `onUploadCompleted` (ver el encabezado de `api/blob-upload.js`), así que si esto falla
@@ -107,7 +116,10 @@ export function useSubirContenido(
         await alSubir({ url: blob.url, clase })
         sacar(fila.key)
       } catch (e) {
-        marcar(fila.key, { estado: 'fallada', motivo: (e as Error)?.message || 'No se pudo subir.' })
+        // ⚠️ El motivo NO es `e.message`: cuando el servidor deniega el permiso, el SDK descarta lo
+        // que contestó y deja un cartel que habla de un token. Acá es donde ella lee «Ya subiste
+        // todo lo que entra» en vez de eso.
+        marcar(fila.key, { estado: 'fallada', motivo: await motivoDeSubida(e, pedido) })
       }
     },
     [alSubir, carpeta, marcar, sacar, token],

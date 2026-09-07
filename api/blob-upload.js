@@ -141,6 +141,8 @@ export default async function handler(req, res) {
   // `useSubirPiezas` se lo pasa por la opción `headers` de `upload()`. Sin eso este guard contesta
   // **403 a un usuario perfectamente logueado** y el SDK lo traduce a «Failed to retrieve the client
   // token», un cartel que no menciona la sesión por ningún lado. Pasó en prod el 9-ago-2026.
+  // (Desde el 7-sep-2026 `lib/blob-motivo.ts` va a buscar el motivo real, pero eso **traduce** el
+  // cartel: no arregla que el guard conteste 403 a quien tenía que pasar.)
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
 
@@ -198,8 +200,11 @@ async function permisoDeSubida(req, res, body) {
     });
     return res.status(200).json(salida);
   } catch (e) {
-    // El SDK tira con el motivo adentro; devolverlo tal cual es lo que hace que el cartel del
-    // browser diga «pesa más de la cuenta» en vez de «falló la subida».
+    // 🔴 **Este texto NO llega solo al browser.** `upload()` descarta el cuerpo de toda respuesta
+    // que no sea 200 y muestra siempre «Failed to retrieve the client token». Lo que hace que la
+    // persona lea «pesa más de la cuenta» es `lib/blob-motivo.ts`, que ante ese cartel vuelve a
+    // pedir el permiso con un `fetch` nuestro y sí lee el `error` de acá. Escribirlo bien de este
+    // lado es la mitad del trabajo; la otra está allá.
     return res.status(400).json({ error: (e && e.message) || 'No se pudo autorizar la subida.' });
   }
 }
@@ -239,6 +244,9 @@ async function permisoDeLaCreadora(req, res, body, token) {
       contarEvidencias(supabase, canje.id),
     ]);
     if (previas >= topeDeEvidencias(cfg)) {
+      // 🔴 Este es el cartel que la creadora de BDI **no** vio el 7-sep-2026: llegó a las 30
+      // evidencias del tope, sus dos videos fallaron con «Failed to retrieve the client token» y
+      // entendió que el link no aceptaba videos. Lo que lo hace visible es `lib/blob-motivo.ts`.
       return res.status(409).json({ error: 'Ya subiste todo lo que entra. Si falta algo, escribinos.' });
     }
 
@@ -263,9 +271,10 @@ async function permisoDeLaCreadora(req, res, body, token) {
     });
     return res.status(200).json(salida);
   } catch (e) {
-    // El SDK tira con el motivo adentro (`pesa más de la cuenta`, `formato no permitido`), y eso es
-    // lo que ella lee. Lo que NO sale de acá es nada sobre el canje: si llegó hasta este punto el
-    // token era válido, así que el mensaje habla del archivo y no del link.
+    // El motivo (`pesa más de la cuenta`, `formato no permitido`) llega a su pantalla por
+    // `lib/blob-motivo.ts`, ⛔ no solo: el SDK tira el cuerpo de todo lo que no sea 200. Lo que NO
+    // sale de acá es nada sobre el canje: si llegó hasta este punto el token era válido, así que el
+    // mensaje habla del archivo y no del link.
     return res.status(400).json({ error: (e && e.message) || 'No se pudo subir ese archivo.' });
   }
 }

@@ -31,6 +31,7 @@
 import { useCallback, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { sobreDeAuth } from '@/lib/api-fetch'
+import { motivoDeSubida, RUTA_PERMISO, type PedidoDePermiso } from '@/lib/blob-motivo'
 import { bajarDeDrive } from '@/lib/drive/picker'
 import type { DocDrive } from '@/lib/drive/archivos'
 import { nombreDeDrive } from '@/lib/drive/archivos'
@@ -98,6 +99,10 @@ export function useSubirPiezas(): SubidaPiezas {
       return
     }
     marcar(p.key, { estado: 'subiendo', avance: null })
+    // El pedido de permiso, que se completa abajo. Vive afuera del `try` porque el cartel de error
+    // lo necesita: si el servidor lo deniega, el motivo real hay que ir a buscarlo con el MISMO
+    // pedido (ver `lib/blob-motivo.ts`).
+    let pedido: PedidoDePermiso = { pathname: `piezas/${p.nombre}` }
     try {
       // 🔴 **La sesión hay que pasársela a mano.** `upload()` no usa `apiFetch`: hace su propia
       // llamada a `/api/blob-upload` para pedir el permiso, y ahí el header no viaja solo. Sin
@@ -109,18 +114,26 @@ export function useSubirPiezas(): SubidaPiezas {
         marcar(p.key, { estado: 'fallada', motivo: 'No encuentro tu sesión del Monitor. Entrá de nuevo y volvé a probar.' })
         return
       }
-      const blob = await upload(`piezas/${p.nombre}`, file, {
-        access: 'public',
-        handleUploadUrl: '/api/blob-upload',
+      pedido = {
+        pathname: `piezas/${p.nombre}`,
         headers: { 'x-monitor-auth': sobre },
-        contentType: mimeDePieza(p.nombre) || undefined,
         // ⚠️ Sin esto, un archivo grande sube en un solo PUT y una red que se corta a los 300 MB
         // vuelve a empezar de cero. Con multipart, el SDK lo parte y reintenta sólo el pedazo.
         multipart: file.size > 8 * 1024 * 1024,
+      }
+      const blob = await upload(pedido.pathname, file, {
+        access: 'public',
+        handleUploadUrl: RUTA_PERMISO,
+        headers: pedido.headers,
+        contentType: mimeDePieza(p.nombre) || undefined,
+        multipart: pedido.multipart,
       })
       marcar(p.key, { estado: 'lista', url: blob.url, motivo: null })
     } catch (e) {
-      marcar(p.key, { estado: 'fallada', motivo: (e as Error)?.message || 'No se pudo subir.' })
+      // ⚠️ El motivo NO es `e.message`: cuando el servidor deniega el permiso, el SDK descarta lo
+      // que contestó y deja el cartel del token que en agosto tapó un 403 de sesión una semana
+      // entera (`lib/blob-motivo.ts`).
+      marcar(p.key, { estado: 'fallada', motivo: await motivoDeSubida(e, pedido) })
     }
   }, [marcar])
 

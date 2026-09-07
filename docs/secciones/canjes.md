@@ -306,6 +306,16 @@ no re-preguntarlas.**
     `entregable_id`) y **sin verificar**, y una evidencia sin verificar no cuenta ⇒ subir diez fotos
     no le cierra un reel sola. Atarlas a un entregable es un juicio, y lo hace el equipo.
   - ⛔ **El equipo NO sube archivos** en esta tanda (lo decidió Bruno): sube sólo ella, por su link.
+  - 🔴 **El tope de evidencias se leía como «no se pueden subir videos» (7-sep-2026).** Una creadora
+    de BDI llegó a las 30 del `tope_evidencias_por_canje`, sus dos videos fallaron y el cartel que
+    vio fue **«Vercel Blob: Failed to retrieve the client token»**. El 409 del servidor decía «Ya
+    subiste todo lo que entra», pero `upload()` de `@vercel/blob/client` **descarta el cuerpo** de
+    toda respuesta que no sea 200 y muestra siempre ese texto. Lo traduce `lib/blob-motivo.ts`:
+    ante ESE cartel vuelve a pedir el permiso con un `fetch` nuestro y muestra el motivo real.
+    🔑 La lección que se paga dos veces (la primera fue el 403 de sesión de las piezas de Meta, en
+    agosto): **un error que el servidor escribe bien no es un error que la pantalla muestre**, y el
+    test del handler que mira el `res.status(409)` queda verde igual. El tope quedó en **100** para
+    las tres marcas; el campo es «Tope de evidencias» en Canjes → Ajustes, por marca.
 - 🔑 **El mail de la orden de Tienda Nube es el de la MARCA** (`canje_config.email_pedido`), nunca el
   de ella: la orden es un trámite interno para que el envío salga y la venta marque $0. Con el de
   ella, TN le mandaba los avisos de una compra que no hizo. ⚠️ Si la marca no lo cargó el campo sale

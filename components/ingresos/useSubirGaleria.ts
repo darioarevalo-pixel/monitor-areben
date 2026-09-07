@@ -36,6 +36,7 @@
 import { useCallback, useState } from 'react'
 import { upload } from '@vercel/blob/client'
 import { sobreDeAuth } from '@/lib/api-fetch'
+import { motivoDeSubida, RUTA_PERMISO, type PedidoDePermiso } from '@/lib/blob-motivo'
 import { achicarAArchivo } from '@/lib/imagenes'
 import { claseDeArchivo, EXTENSIONES_MEDIA, mimeDeArchivo, type ClaseMedia } from '@/lib/media'
 
@@ -85,6 +86,10 @@ export function useSubirGaleria(alSubir: (item: { url: string; clase: ClaseMedia
         marcar(fila.key, { estado: 'fallada', motivo: `No reconozco «${fila.nombre}». Se aceptan ${EXTENSIONES_MEDIA.join(', ')}.` })
         return
       }
+      // El pedido de permiso, que se completa abajo. Vive afuera del `try` porque el cartel de
+      // error lo necesita: si el servidor lo deniega, el motivo real hay que ir a buscarlo con el
+      // MISMO pedido (ver `lib/blob-motivo.ts`).
+      let pedido: PedidoDePermiso = { pathname: `${CARPETA}/${fila.nombre}` }
       try {
         // 🔴 **La sesión hay que pasársela a mano.** `upload()` no usa `apiFetch`: hace su propia
         // llamada a `/api/blob-upload` para pedir el permiso, y ahí el header no viaja solo. Sin
@@ -104,19 +109,26 @@ export function useSubirGaleria(alSubir: (item: { url: string; clase: ClaseMedia
         const aSubir = achicable ? await achicarAArchivo(file).catch(() => file) : file
         const nombre = aSubir.name || fila.nombre
 
-        const blob = await upload(`${CARPETA}/${nombre}`, aSubir, {
-          access: 'public',
-          handleUploadUrl: '/api/blob-upload',
+        pedido = {
+          pathname: `${CARPETA}/${nombre}`,
           headers: { 'x-monitor-auth': sobre },
-          contentType: mimeDeArchivo(nombre) || undefined,
           // ⚠️ Sin esto, un archivo grande sube en un solo PUT y una red que se corta a los 300 MB
           // vuelve a empezar de cero.
           multipart: aSubir.size > MULTIPART_DESDE,
+        }
+        const blob = await upload(pedido.pathname, aSubir, {
+          access: 'public',
+          handleUploadUrl: RUTA_PERMISO,
+          headers: pedido.headers,
+          contentType: mimeDeArchivo(nombre) || undefined,
+          multipart: pedido.multipart,
         })
         alSubir({ url: blob.url, clase, nombre: fila.nombre })
         sacar(fila.key)
       } catch (e) {
-        marcar(fila.key, { estado: 'fallada', motivo: (e as Error)?.message || 'No se pudo subir.' })
+        // ⚠️ El motivo NO es `e.message`: cuando el servidor deniega el permiso, el SDK descarta lo
+        // que contestó y deja un cartel que habla de un token (`lib/blob-motivo.ts`).
+        marcar(fila.key, { estado: 'fallada', motivo: await motivoDeSubida(e, pedido) })
       }
     },
     [alSubir, marcar, sacar],
