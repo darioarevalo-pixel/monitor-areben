@@ -159,8 +159,9 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
       </div>
 
       {/*
-        🔴 Los tres carteles del cero. Cada uno dice algo que un número no puede decir solo, y los
-        tres son la diferencia entre «no vendió» y «no lo pude preguntar».
+        🔴 Los cuatro carteles del cero. Cada uno dice algo que un número no puede decir solo, y
+        los cuatro son la diferencia entre «no vendió» y «no lo pude preguntar» —o «todavía no
+        estaba cargado».
       */}
       {mov.marcasMudas.length > 0 && (
         <Notice tone="warning">
@@ -173,6 +174,13 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
           {mov.sinCruce.lineas} renglón(es) de sus órdenes —{entero(mov.sinCruce.unidades)} unidades—
           ⛔ no cruzaron con el catálogo de Gestión Nube, así que de esos no se sabe qué se vendió.
           Están sumados en «Comprado» y afuera de todo lo demás.
+        </Notice>
+      )}
+      {mov.recruzados > 0 && (
+        <Notice tone="neutral">
+          {mov.recruzados} renglón(es) de sus órdenes se dieron de alta en Gestión Nube{' '}
+          <strong>después</strong> de que entrara el aviso, así que se cruzaron recién ahora. Sus
+          ventas están contadas abajo.
         </Notice>
       )}
       {c.antes > 0 && (

@@ -47,6 +47,12 @@ const desde = new Date(Date.now() - DIAS * 24 * 60 * 60 * 1000).toISOString().sl
 // caminata tenía los tres de BDI nomás y salía 20 de 20: las bases son DOS y la mitad de las
 // órdenes —28 de los 34 proveedores— nunca se ejercía. Lo destapó la comparativa, que las toca a
 // las dos.
+//
+// 🔴 **Y uno cuya columna guardada está ENTERA en null, también elegido por la base** (7-sep-2026):
+// es el caso del recruce. Su mercadería se dio de alta en Gestión Nube DESPUÉS de que entrara el
+// aviso, así que la foto que guardó el webhook ⛔ no cruza con nada y sin el recruce la ficha dice
+// «vendió 0». Escribirlo a mano lo dejaría envejecer: el día que a ese proveedor lo recruce alguien
+// más, el caso deja de ejercer lo que dice ejercer.
 const { rows: elegidos } = await pgc.query(`
   select l.id, l.nombre, l.proveedor_id_ingresos
     from proveedor_local l
@@ -55,30 +61,69 @@ const { rows: elegidos } = await pgc.query(`
   select l.id, l.nombre, l.proveedor_id_ingresos
     from proveedor_local l
     join (select proveedor_id, count(*) n from recepcion_oc where store = 'zattia' group by 1
-          order by 2 desc limit 1) z on z.proveedor_id = l.proveedor_id_ingresos`)
-chequeo('los cuatro proveedores de la caminata están en el padrón', elegidos.length === 4, String(elegidos.length))
-chequeo('y uno de ellos es de ZATTIA, o se camina media base', elegidos.length === 4)
+          order by 2 desc limit 1) z on z.proveedor_id = l.proveedor_id_ingresos
+   union all
+  select l.id, l.nombre, l.proveedor_id_ingresos
+    from proveedor_local l
+    join (select o.proveedor_id
+            from recepcion_oc o join recepcion_linea li on li.oc_ref = o.id
+           group by 1 having count(li.producto_id) = 0
+           order by count(*) desc limit 1) v on v.proveedor_id = l.proveedor_id_ingresos`)
+chequeo('los cinco proveedores de la caminata están en el padrón', elegidos.length === 5, String(elegidos.length))
+chequeo('y uno de ellos es de ZATTIA, o se camina media base', elegidos.length === 5)
 
 for (const e of elegidos) {
   console.log(`\n── ${e.nombre}`)
   const m = await movimiento(sb, e, DIAS)
 
-  const { rows: ctrl } = await pgc.query(
-    `select count(*)::int lineas, count(li.producto_id)::int cruzadas,
-            count(distinct li.producto_id)::int productos, sum(li.cantidad_contada)::int unidades
+  // 🔴 🔑 **El control se arma contra el espejo de HOY, ⛔ no contra la columna guardada.**
+  // `recepcion_linea.producto_id` es la foto de cuando llegó la orden y el handler la recruza; un
+  // control que contara la columna diría «trajo 2 productos y la base dice 0» justo en el caso que
+  // el recruce existe para arreglar. Se rehace acá **por otro camino** —SQL a las dos bases y la
+  // cuenta en JS— y ⛔ no importando el núcleo, que sería preguntarle al acusado.
+  const { rows: crudas } = await pgc.query(
+    `select li.store, li.sku, li.codigo_barras, li.producto_id, li.cantidad_contada
        from recepcion_oc o join recepcion_linea li on li.oc_ref = o.id
       where o.proveedor_id = $1`, [e.proveedor_id_ingresos])
 
-  chequeo('trajo los productos que la base dice', m.productos.length === ctrl[0].productos, `${m.productos.length} vs ${ctrl[0].productos}`)
+  const deHoy = new Map()
+  for (const store of new Set(crudas.map((l) => l.store))) {
+    const suyas = crudas.filter((l) => l.store === store)
+    const { rows: inv } = await (store === 'zattia' ? zat : pgc).query(
+      `select sku, barcode, product_id from inventario where sku = any($1::text[]) or barcode = any($2::text[])`,
+      [suyas.map((l) => l.sku).filter(Boolean), suyas.map((l) => l.codigo_barras).filter(Boolean)],
+    )
+    const porSku = new Map(inv.filter((f) => f.sku).map((f) => [f.sku, String(f.product_id ?? '')]))
+    const porBarra = new Map(inv.filter((f) => f.barcode).map((f) => [f.barcode, String(f.product_id ?? '')]))
+    for (const l of suyas) {
+      const pid = porSku.get(l.sku) || porBarra.get(l.codigo_barras) || (l.producto_id ? String(l.producto_id) : '')
+      deHoy.set(l, pid || null)
+    }
+  }
+  const conPid = crudas.filter((l) => deHoy.get(l))
+  const ctrl = [{
+    lineas: crudas.length,
+    cruzadas: conPid.length,
+    productos: new Set(conPid.map((l) => `${l.store}:${deHoy.get(l)}`)).size,
+    unidades: crudas.reduce((a, l) => a + (Number(l.cantidad_contada) || 0), 0),
+  }]
+
+  // 🔴 **Con la marca muda, el control VE el espejo (entra por `pg`) y el handler NO** (entra por
+  // PostgREST con la anon key, que en esta Mac no llega a `inventario`). Comparar los dos sería
+  // inventar un rojo: el handler conserva la foto porque es lo único honesto que puede hacer.
+  // Se dice SIN CAMINAR, con su causa, igual que las ventas.
+  if (m.marcasMudas.length) {
+    console.log(`  ⚠️  SIN CAMINAR nada de ${m.marcasMudas.join(', ')} — falta la service key de esa marca en .env:`)
+    console.log('     con la anon key esa base contesta `permission denied` para `inventario` y `venta_detalles`.')
+  } else {
+    chequeo('trajo los productos que la base dice', m.productos.length === ctrl[0].productos, `${m.productos.length} vs ${ctrl[0].productos}`)
+    chequeo('los renglones sin cruce están CONTADOS, no escondidos',
+      m.sinCruce.lineas === ctrl[0].lineas - ctrl[0].cruzadas, `${m.sinCruce.lineas} vs ${ctrl[0].lineas - ctrl[0].cruzadas}`)
+  }
+  // Ésta cierra siempre: lo comprado sale de la base del monitor, que se lee acá con o sin espejo.
   chequeo('las unidades compradas cierran con el SQL',
     m.productos.reduce((a, p) => a + p.unidades, 0) + m.sinCruce.unidades === ctrl[0].unidades,
     `${m.productos.reduce((a, p) => a + p.unidades, 0)} + ${m.sinCruce.unidades} vs ${ctrl[0].unidades}`)
-  chequeo('los renglones sin cruce están CONTADOS, no escondidos',
-    m.sinCruce.lineas === ctrl[0].lineas - ctrl[0].cruzadas, `${m.sinCruce.lineas} vs ${ctrl[0].lineas - ctrl[0].cruzadas}`)
-  if (m.marcasMudas.length) {
-    // ⚠️ No es un rojo del código: es un pedazo sin caminar, y se dice con su causa.
-    console.log(`  ⚠️  SIN CAMINAR las ventas de ${m.marcasMudas.join(', ')} — falta la service key de esa marca en .env`)
-  }
 
   // 🔴 El oráculo caro: las unidades vendidas, contadas por SQL en la base de cada marca. Es lo
   // único que caza que el embed `ventas!inner` o la paginación se estén comiendo filas.
@@ -98,7 +143,14 @@ for (const e of elegidos) {
     chequeo(`las unidades vendidas cierran al peso (${vendidas})`, vendidas === esperadas, `${vendidas} vs ${esperadas}`)
     chequeo('y no son cero, o el caso no prueba nada', vendidas > 0, String(vendidas))
   }
-  console.log(`     compradas ${m.productos.reduce((a, p) => a + p.unidades, 0)} u · vendidas ${vendidas} u en ${m.ventas.length} renglones · ${m.productos.length} productos`)
+  // 🏁 El caso del recruce: la columna guardada está entera en null y la ficha igual encuentra
+  // productos. Sin `recruzados`, un 0 acá no se distinguiría de «no le compramos nada».
+  const guardadasConPid = crudas.filter((l) => l.producto_id).length
+  if (guardadasConPid === 0 && crudas.length > 0 && !m.marcasMudas.length) {
+    chequeo('🏁 llegó SIN cruzar y hoy cruza: el recruce lo levantó', m.recruzados > 0, `recruzados ${m.recruzados}`)
+    chequeo('   y esos productos tienen ventas, o el caso no prueba nada', vendidas > 0, String(vendidas))
+  }
+  console.log(`     compradas ${m.productos.reduce((a, p) => a + p.unidades, 0)} u · vendidas ${vendidas} u en ${m.ventas.length} renglones · ${m.productos.length} productos · recruzados ${m.recruzados}`)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════

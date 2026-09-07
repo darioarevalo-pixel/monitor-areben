@@ -29,6 +29,18 @@ import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 import { consultaDeLocal, ordenarPorCercania } from '../lib/prm/geo.core.js'
 import { leerTodo, leerTodoEnParalelo } from '../lib/supabase/paginar.core.js'
 import { puntoDeGeoref } from '../lib/envios/direccion.core.js'
+import { recruzarPorMarca } from '../lib/recepciones/espejo.core.js'
+
+/**
+ * La base de una marca, para el recruce contra el espejo. `null` = ⛔ no hay con qué preguntar.
+ *
+ * 🔴 En esta Mac `ZATTIA_SUPABASE_SERVICE_KEY` ⛔ no está en el `.env`, así que en local esto
+ * devuelve `null` para Zattia y el recruce deja la foto. En Vercel sí está.
+ */
+const baseDeMarca = (store) => {
+  const cfg = cfgDeMarca(store)
+  return cfg.url && cfg.key ? createClient(cfg.url, cfg.key) : null
+}
 
 /** Leer el padrón lo puede cualquiera de las dos secciones: es el mismo dato mirado de dos lados. */
 const PARA_LEER = ['prm', 'recorridas']
@@ -212,7 +224,7 @@ export async function comparativa(cliente, dias) {
   // renglones recortados, y para eso está `totales_coinciden`.
   const conRenglones = await leerTodo(cliente, 'recepcion_oc', (q) =>
     q.select(
-      'id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas, lineas_recibidas, recepcion_linea(oc_ref, store, producto_id, cantidad_contada)',
+      'id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas, lineas_recibidas, recepcion_linea(oc_ref, store, producto_id, sku, codigo_barras, cantidad_contada)',
     )
       .in('proveedor_id', ids)
       .order('id'),
@@ -230,9 +242,21 @@ export async function comparativa(cliente, dias) {
     for (const l of traidos) lineas.push(l)
   }
 
+  // 🔴 🔑 **El mismo recruce que la ficha, y por la misma razón**: `producto_id` es la foto de
+  // cuando llegó la orden y acá se cuenta lo que se vendió **hoy**. Sin esto, el proveedor cuya
+  // mercadería se dio de alta en GN después del aviso aparece en la lista con «Vendido 30 d» en
+  // cero — que es la columna con la que se decide a quién recomprarle. Medido el 7-sep-2026: eran
+  // **43 unidades en 13 proveedores** las que no se veían.
+  //
+  // ⛔ **`sku` y `codigo_barras` ⛔ no viajan al navegador**: se piden para poder recruzar acá y se
+  // sacan antes de contestar. Son 1.622 renglones; mandarlos sería engordar la respuesta con dos
+  // columnas que la pantalla no mira.
+  const recruce = await recruzarPorMarca(lineas, baseDeMarca)
+  const conCruce = recruce.lineas.map(({ sku: _s, codigo_barras: _b, ...l }) => l)
+
   const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const porStore = new Map()
-  for (const l of lineas) {
+  for (const l of conCruce) {
     if (!l.producto_id) continue
     if (!porStore.has(l.store)) porStore.set(l.store, new Set())
     porStore.get(l.store).add(Number(l.producto_id))
@@ -276,9 +300,11 @@ export async function comparativa(cliente, dias) {
     }),
   )
   const ventasPorProducto = porMarca.flatMap((r) => r.filas)
-  const marcasMudas = porMarca.filter((r) => r.mudo).map((r) => r.mudo)
+  // La marca cuyo espejo no contestó tampoco contestó por las ventas —es la misma base—, así que
+  // las dos listas se juntan y se deduplica.
+  const marcasMudas = [...new Set([...recruce.mudas, ...porMarca.filter((r) => r.mudo).map((r) => r.mudo)])]
 
-  return { dias, desdeVentas: desde, locales, ocs, lineas, ventasPorProducto, marcasMudas }
+  return { dias, desdeVentas: desde, locales, ocs, lineas: conCruce, ventasPorProducto, marcasMudas, recruzados: recruce.recruzados }
 }
 
 /**
@@ -311,12 +337,22 @@ export async function movimiento(cliente, local, dias) {
   )
   if (!ocs.length) return { ocs: [], productos: [], ventas: [], sinCruce: { lineas: 0, unidades: 0 }, dias }
 
-  const lineas = await leerTodo(cliente, 'recepcion_linea', (q) =>
+  const guardadas = await leerTodo(cliente, 'recepcion_linea', (q) =>
     q
-      .select('oc_ref, store, producto_id, nombre, sku, cantidad_contada')
+      .select('oc_ref, store, producto_id, codigo_barras, nombre, sku, cantidad_contada')
       .in('oc_ref', ocs.map((o) => o.id))
       .order('id'),
   )
+
+  // 🔴 🔑 **El `producto_id` guardado es la FOTO de cuando llegó la orden, y acá se pregunta por
+  // ventas: hace falta el producto de HOY.** Un proveedor nuevo entrega, el aviso entra, y el alta
+  // en Gestión Nube se hace después — el renglón queda con `producto_id` en null **para siempre**,
+  // porque el webhook cruza una sola vez. Medido el 7-sep-2026: las 13 órdenes del 1-sep entraron
+  // con **182 de 188 renglones sin cruzar** y los 182 cruzan hoy; ELIANA IND mostraba «vendió 0»
+  // teniendo 7 unidades vendidas. Con el espejo mudo se conserva la foto y la marca viaja en
+  // `marcasMudas`, que ⛔ no es «vendió 0».
+  const recruce = await recruzarPorMarca(guardadas, baseDeMarca)
+  const lineas = recruce.lineas
 
   // Cuándo llegó cada orden. 🔑 `confirmada_at` y ⛔ no `recibido_en`: el backfill del 27-ago puso
   // `recibido_en` en el mismo minuto para tres meses de historia.
@@ -359,7 +395,9 @@ export async function movimiento(cliente, local, dias) {
   }
 
   const ventas = []
-  const marcasMudas = []
+  // Las del espejo ya vienen del recruce: es la MISMA base, así que la que no contestó para el
+  // catálogo tampoco va a contestar por las ventas. Se juntan y se deduplica más abajo.
+  const marcasMudas = [...recruce.mudas]
   for (const [store, ids] of porStore) {
     const cfg = cfgDeMarca(store)
     if (!cfg.url || !cfg.key) {
@@ -403,7 +441,9 @@ export async function movimiento(cliente, local, dias) {
     productos: [...productos.values()],
     ventas,
     sinCruce,
-    marcasMudas,
+    marcasMudas: [...new Set(marcasMudas)],
+    /** Cuántos renglones cruzaron **hoy** y ⛔ no cuando llegó la orden. La pantalla lo dice. */
+    recruzados: recruce.recruzados,
   }
 }
 

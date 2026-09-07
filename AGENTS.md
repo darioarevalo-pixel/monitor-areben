@@ -175,7 +175,9 @@ ya tienen ficha:
   la provincia clavada en «Santa Fe»** — ese cambio toca Envíos. ⛔ **El bloque «Cómo se mueve lo
   que le compro» lee la base de la OTRA marca** (las ventas salen del espejo de cada una) y su
   puente es `recepcion_linea.producto_id`: es el PRODUCTO, ⛔ no la unidad — vendido puede dar más
-  que comprado y ⛔ no es un error. ⛔ **`api/_oc-webhook.js` también
+  que comprado y ⛔ no es un error. ⛔ **Y ese puente se RECRUZA en vivo** con
+  `lib/recepciones/espejo.core.js`: la columna es la foto de cuando llegó la orden y el alta en GN
+  suele hacerse después — sin recruzar, el proveedor nuevo dice «vendió 0». ⛔ **`api/_oc-webhook.js` también
   escribe en `proveedor_local`** (le abre la ficha al proveedor nuevo, con `lib/prm/sembrado.core.js`):
   el alta de un local tiene **dos llamadores**, y ese no pasa por `api/_prm.js` ni por su permiso.
 - Insumos → **leer `docs/secciones/insumos.md`** antes de tocar `components/insumos/`,

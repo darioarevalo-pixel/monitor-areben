@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { esAdmin, marcaDePermisos, puedeSub, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
+import { leerEspejo, productoDeLinea, estaEnEspejo } from '../lib/recepciones/espejo.core.js'
 
 const PARA_VER = ['recepciones']
 /** El sub que destapa de quién vino cada orden. Sin él, la sección contesta todo menos eso. */
@@ -45,25 +46,17 @@ const TOPE = 500
  * alta después. Sin este segundo cruce, la lista de "falta darlo de alta" nunca se vaciaría y en
  * una semana nadie la miraría más.
  *
+ * 🔑 **La regla es la del núcleo** (`lib/recepciones/espejo.core.js`), la misma que escribe la foto
+ * en el webhook. ⚠️ Acá estaba escrita aparte y preguntaba **sólo por SKU**: ahora el código de
+ * barras también cruza, que es lo que ya hacía el webhook. Medido el 7-sep-2026 sobre los 1.622
+ * renglones del historial, el barcode rescata **2** que el SKU no encuentra (los dos de Zattia).
+ *
  * Devuelve `null` si no se pudo preguntar, que ⛔ no es lo mismo que "ninguno está".
  */
 async function cruceDeHoy(store, lineas) {
   const cfg = cfgDeMarca(store)
   if (!cfg.url || !cfg.key) return null
-  const skus = [...new Set(lineas.map((l) => l.sku).filter(Boolean))]
-  if (!skus.length) return null
-  try {
-    const sb = createClient(cfg.url, cfg.key)
-    const encontrados = new Map()
-    for (let i = 0; i < skus.length; i += 200) {
-      const { data, error } = await sb.from('inventario').select('sku, product_id').in('sku', skus.slice(i, i + 200))
-      if (error) throw new Error(error.message)
-      for (const f of data || []) if (f.sku) encontrados.set(String(f.sku), String(f.product_id ?? ''))
-    }
-    return encontrados
-  } catch {
-    return null
-  }
+  return leerEspejo(createClient(cfg.url, cfg.key), lineas)
 }
 
 export default async function handler(req, res) {
@@ -102,8 +95,8 @@ export default async function handler(req, res) {
       const conCruce = (lineas || []).map((l) => ({
         ...l,
         // Tres estados, no dos: está / no está / no se pudo preguntar.
-        en_gn_hoy: hoy ? hoy.has(String(l.sku || '')) : null,
-        producto_id_hoy: hoy ? hoy.get(String(l.sku || '')) || null : null,
+        en_gn_hoy: estaEnEspejo(l, hoy),
+        producto_id_hoy: productoDeLinea(l, hoy),
       }))
       return res.status(200).json({
         ok: true,

@@ -60,6 +60,12 @@ export type Movimiento = {
   sinCruce: { lineas: number; unidades: number }
   /** Marcas cuya base no contestó. ⛔ No es «vendió 0»: es «no pude preguntar». */
   marcasMudas: string[]
+  /**
+   * Renglones que cruzaron **hoy** y ⛔ no cuando llegó la orden: el alta en Gestión Nube se hizo
+   * después del aviso. El número no es trivia — es lo único que separa «este proveedor no vendió»
+   * de «su mercadería todavía no estaba cargada el día que entró».
+   */
+  recruzados: number
 }
 
 /**
@@ -76,6 +82,8 @@ export type Comparativa = {
   ventasPorProducto: VentaProducto[]
   /** ⛔ «No pude preguntar» ⛔ no es «no vendió»: la pantalla lo dice y no dibuja ceros. */
   marcasMudas: string[]
+  /** Renglones cruzados **hoy** y no al llegar la orden. Ver `Movimiento['recruzados']`. */
+  recruzados: number
 }
 
 export type ParadaViva = Parada & {

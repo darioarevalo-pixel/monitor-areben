@@ -35,6 +35,7 @@
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 import { verificarFirma, normalizarEvento } from '../lib/recepciones/webhook.core.js'
+import { leerEspejo, productoDeLinea } from '../lib/recepciones/espejo.core.js'
 import { CAMPO, preguntaDeOc } from '../lib/agenda/pregunta-ingreso.core.js'
 import { filaDeLocalSembrado, nuevoIdDeLocal } from '../lib/prm/sembrado.core.js'
 import { cfgDelMonitor, cfgDeMarca, LIMITE_CRUDO } from './_recepciones-base.js'
@@ -64,44 +65,17 @@ function leerCrudo(req) {
  * 🔑 **Es mejor esfuerzo y no puede voltear el evento.** Si el espejo no contesta —credenciales de
  * esa marca sin cargar, base lenta, tabla vacía— la OC se guarda igual con `espejo_consultado` en
  * false. Perder el evento sería definitivo: no hay quién lo vuelva a mandar. Perder el cruce no:
- * la pantalla lo vuelve a hacer en vivo cada vez que se abre.
+ * **quien mira lo vuelve a cruzar en vivo** (Recepciones, el banco de fotos y el PRM lo hacen).
  *
- * ⛔ Devuelve `null` (no un mapa vacío) cuando no se pudo preguntar. Un mapa vacío se leería como
- * "ninguno de estos SKU existe en GN", que es justo la afirmación cara y falsa.
+ * 🔑 **La regla vive en `lib/recepciones/espejo.core.js` y acá sólo se elige la base.** Estaba
+ * escrita entera acá y otra vez en `_recepciones.js`, con una diferencia callada: aquélla
+ * preguntaba sólo por SKU. Dos copias de "a qué producto apunta este renglón" es cómo dos
+ * pantallas llegan a productos distintos con el mismo código.
  */
 async function cruzarConElEspejo(store, lineas) {
   const cfg = cfgDeMarca(store)
   if (!cfg.url || !cfg.key) return null
-
-  const skus = [...new Set(lineas.map((l) => l.sku).filter(Boolean))]
-  const codigos = [...new Set(lineas.map((l) => l.codigo_barras).filter(Boolean))]
-  if (!skus.length && !codigos.length) return null
-
-  try {
-    const sb = createClient(cfg.url, cfg.key)
-    const porSku = new Map()
-    const porBarra = new Map()
-    // De a 200: el `in` de PostgREST viaja en la query string y una OC de 800 renglones armaría una
-    // URL que el proxy corta por largo — y cortada devuelve 200 con menos filas, no un error.
-    for (let i = 0; i < skus.length; i += 200) {
-      const { data, error } = await sb.from('inventario').select('sku, barcode, product_id').in('sku', skus.slice(i, i + 200))
-      if (error) throw new Error(error.message)
-      for (const f of data || []) {
-        if (f.sku) porSku.set(String(f.sku), String(f.product_id ?? ''))
-        if (f.barcode) porBarra.set(String(f.barcode), String(f.product_id ?? ''))
-      }
-    }
-    for (let i = 0; i < codigos.length; i += 200) {
-      const { data, error } = await sb.from('inventario').select('sku, barcode, product_id').in('barcode', codigos.slice(i, i + 200))
-      if (error) throw new Error(error.message)
-      for (const f of data || []) {
-        if (f.barcode) porBarra.set(String(f.barcode), String(f.product_id ?? ''))
-      }
-    }
-    return { porSku, porBarra }
-  } catch {
-    return null
-  }
+  return leerEspejo(createClient(cfg.url, cfg.key), lineas)
 }
 
 /**
@@ -285,7 +259,7 @@ export default async function handler(req, res) {
     const espejo = await cruzarConElEspejo(norm.store, norm.lineas)
     const lineas = norm.lineas.map((l) => {
       if (!espejo) return l
-      const pid = (l.sku && espejo.porSku.get(l.sku)) || (l.codigo_barras && espejo.porBarra.get(l.codigo_barras)) || null
+      const pid = productoDeLinea(l, espejo)
       return { ...l, en_gn: Boolean(pid), producto_id: pid || null }
     })
     const oc = {

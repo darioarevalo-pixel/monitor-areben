@@ -200,6 +200,60 @@ puente con el que la ficha del proveedor contesta **cómo se vendió lo que él 
 alta»**: si algún día se deja de guardar, o se llena con otro criterio, el PRM se queda mudo sin que
 falle nada acá. Al 2-sep cruzan **749 de 803** renglones en BDI y **622 de 819** en Zattia.
 
+## 🆕🔴 La foto ENVEJECE, y el que pregunta por ventas tiene que recruzar (7-sep-2026)
+
+Lo trajo Bruno: *«entré a ELIANA IND y no me aparece lo que vendí»*. La ficha decía **vendió 0** y
+el proveedor **había vendido 7 unidades** el 4 y 5 de septiembre.
+
+🔑 **Nada estaba roto: la columna era vieja.** El webhook cruza **una sola vez**, cuando entra el
+aviso, y el caso normal de un proveedor nuevo —o de una importación— es que el alta en Gestión Nube
+se haga **después**. La OC de ELIANA IND entró el **1-sep 12:36** y sus dos productos se crearon en
+GN el **2-sep 17:32**: 29 horas más tarde. Sus 5 renglones quedaron con `producto_id` en `null`
+**para siempre**, y el bloque de movimiento no tenía con qué buscar ventas.
+
+📌 **Medido ese día contra las dos bases, y ⛔ no era un caso aislado:**
+
+| | |
+|---|---|
+| renglones de Zattia de septiembre | **188, sólo 6 cruzados** (jun 440/450 · jul 59/60 · ago 117/121) |
+| de esos 182 sin cruzar, cruzarían HOY | **182 de 182** |
+| ventas invisibles en 30 días | **43 unidades en 13 proveedores** (EFFIE 8, ELIANA IND 7, AIME 6, PSYCHIC 6, ASKDENIM 4…) |
+
+🔴 **La salida ⛔ NO fue reescribir la columna**, aunque era lo primero que pedía el cuerpo. Esa
+columna **es la foto del momento en que llegó la orden** y hay quien depende de que lo siga siendo:
+`lib/sesionfotos/banco-oc.ts` lo dice en su encabezado y el banco de la sesión de fotos la usa así.
+⇒ **el que necesita el producto de HOY lo vuelve a cruzar**, que es lo que ya hacían la pantalla de
+Recepciones y el banco de fotos, y lo que le faltaba al PRM.
+
+🔑 **Y la regla quedó en UN solo lugar**: `lib/recepciones/espejo.core.js`. Estaba escrita entera en
+`api/_oc-webhook.js` y otra vez en `api/_recepciones.js`, con una diferencia callada —aquélla
+preguntaba **sólo por SKU**—. Ahora los tres llamadores importan el mismo núcleo:
+
+| quién | para qué |
+|---|---|
+| `api/_oc-webhook.js` | escribe la **foto** con el espejo del momento (`en_gn`, `producto_id`) |
+| `api/_recepciones.js` | `en_gn_hoy` / `producto_id_hoy`, el recruce de la pantalla |
+| `api/_prm.js` | recruza antes de contar ventas, en la ficha **y** en la lista de los 34 |
+
+⚠️ **Al unificar, el código de barras pasó a cruzar también en Recepciones.** Medido sobre los 1.622
+renglones del historial: rescata **2** que el SKU no encuentra (los dos de Zattia; en BDI, 0).
+
+🔴 **Los tres ceros que este cambio tuvo que seguir distinguiendo:**
+
+- **«No se pudo preguntar»** ⛔ no es «no está»: con el espejo mudo se **conserva la foto** y la
+  marca viaja en `marcasMudas`. Poner `null` sería contestar con la única respuesta que no tenemos.
+- **«No había nada que preguntar»** ⛔ no es una marca muda: renglones sin SKU ni código no se le
+  pueden preguntar a nadie, y encender el cartel taparía los números buenos de toda la marca.
+- **«Cruzó recién ahora»** es un dato, ⛔ no ruido: viaja como `recruzados` y la ficha lo dice —«se
+  dieron de alta en GN después de que entrara el aviso»—, que es lo que separa «este proveedor no
+  vendió» de «su mercadería todavía no estaba cargada el día que entró».
+
+⚠️ **Lo que ⛔ NO se pudo caminar en la Mac**: los únicos casos vivos son de Zattia, y desde acá esa
+base contesta `permission denied` para `inventario` y `venta_detalles` (falta
+`ZATTIA_SUPABASE_SERVICE_KEY` en el `.env`; en Vercel sí está).
+`scripts/caminar-prm-movimiento.mjs` los elige **desde la base** y los imprime **SIN CAMINAR con su
+causa**: el día que la clave esté, ese caso se ejerce solo.
+
 ## Qué NO viaja
 
 El costo con IVA, los descuentos, el flete y el margen **se quedan del lado de Ingresos**, por
@@ -210,6 +264,7 @@ alcanzar — hoy no la tiene, y por eso `recepciones` es un permiso de Compras a
 ## Cómo se prueba
 
 ```bash
+npx vitest run tests/recepciones-espejo-core.test.ts --reporter=dot  # el cruce contra el espejo
 npx vitest run tests/recepciones-webhook.test.ts --reporter=dot   # firma, ventana, normalización
 npx vitest run tests/oc-webhook-handler.test.ts --reporter=dot    # el handler entero: bytes → base
 npx vitest run tests/recepciones.test.ts --reporter=dot           # lo que deriva la pantalla
