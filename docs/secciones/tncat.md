@@ -151,6 +151,14 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
   🔑 **`estaOculto` es `published === false`, ⛔ no `!published`**: en TiendaNube el campo ausente es
   *publicado*, y con `!published` los 4 sin dato entrarían en la tanda de los ocultos. Hay test.
   🔑 El botón de tanda **no escribe**: tilda. El que escribe es el de abajo, que vuelve a confirmar.
+  ✅ **Caminado en prod el 7-sep**: «sólo los ocultos (26)» → «Tildar estos 26» → el cartel nombró
+  **los 7 exactos** que la medición decía (MINI CALA · MINI FLAME · MINI RALPH · SHORT BRICK ·
+  SHORT CLYDE · SHORT CROC · SKORT DRIP) y se **canceló**: ⛔ no se escribió nada.
+  ⚠️ **Y caminarlo mostró un defecto de redacción viejo que la tanda volvió visible**: el cartel
+  decía «Se **sacar de** "NEW IN" en 26 productos» y el botón «Sacar de **en** 26» — el verbo se
+  armaba de un solo string para las dos acciones. Ahora se conjuga: «Se sacan 26 productos de "NEW
+  IN"» / «Sacar los 26». Con 26 productos a punto de escribirse en la tienda, ese cartel es lo
+  único que se lee antes.
 - 🔴 **El buscador de "lo que está adentro" filtra la VISTA, ⛔ no el lote.** Lo tildado sobrevive al
   cambio de texto —si no, buscar dos veces obligaría a tildar de nuevo—, así que el botón saca
   también lo que no está a la vista, **y la pantalla lo dice con el número** antes de que se

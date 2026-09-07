@@ -101,25 +101,31 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
     const base = accion === 'quitar' ? dentro : (productos ?? [])
     const items = itemsParaAplicar(base.filter((p) => elegidos.has(String(p.id))), catId, accion)
     if (!items.length || aplicando) return
-    const verbo = accion === 'quitar' ? 'sacar de' : 'agregar a'
+    const uno = items.length === 1
+    // Se conjuga de verdad: el mensaje decía «Se sacar de "NEW IN" en 26 productos» y el botón
+    // «Sacar de en 26». Con 26 productos a punto de escribirse en la tienda, el cartel es lo único
+    // que se lee antes.
+    const verbo = accion === 'quitar' ? (uno ? 'Se saca' : 'Se sacan') : uno ? 'Se agrega' : 'Se agregan'
+    const prep = accion === 'quitar' ? 'de' : 'a'
+    const titulo = accion === 'quitar' ? 'Sacar de la categoría' : 'Agregar a la categoría'
     // 🔴 Sólo al SACAR: los que se quedan sin NINGUNA categoría no aparecen más en la navegación
     // de la tienda. Se dicen con nombre y ANTES de escribir — sacar de a uno no lo hacía visible,
     // sacar 91 de una sí.
     const huerfanos = accion === 'quitar' ? quedarianSinCategoria(items) : []
     const confirmado = await confirmar({
-      titulo: `${verbo[0].toUpperCase()}${verbo.slice(1)} la categoría`,
+      titulo,
       tono: 'warning',
-      ok: `${verbo[0].toUpperCase()}${verbo.slice(1)} en ${items.length}`,
+      ok: `${accion === 'quitar' ? 'Sacar' : 'Agregar'} ${uno ? '1' : `los ${items.length}`}`,
       mensaje: (
         <>
-          Se {verbo} “{catNombre}” en {items.length === 1 ? '1 producto' : `${items.length} productos`}. Se escribe en la
-          tienda EN VIVO.
+          {verbo} {uno ? '1 producto' : `${items.length} productos`} {prep} “{catNombre}”. Se escribe en la tienda EN
+          VIVO.
           {huerfanos.length > 0 && (
             <div style={{ marginTop: 10, fontWeight: 600 }}>
               {huerfanos.length === 1
-                ? '1 de ellos se queda SIN NINGUNA categoría'
-                : `${huerfanos.length} de ellos se quedan SIN NINGUNA categoría`}{' '}
-              y deja de aparecer en la navegación de la tienda (se llega por buscador o link directo):{' '}
+                ? '1 de ellos se queda SIN NINGUNA categoría y deja'
+                : `${huerfanos.length} de ellos se quedan SIN NINGUNA categoría y dejan`}{' '}
+              de aparecer en la navegación de la tienda (se llega por buscador o link directo):{' '}
               <span style={{ fontWeight: 400 }}>
                 {huerfanos.slice(0, 8).join(' · ')}
                 {huerfanos.length > 8 ? ` … y ${huerfanos.length - 8} más` : ''}
