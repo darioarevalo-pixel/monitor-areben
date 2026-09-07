@@ -905,11 +905,14 @@ cada molde, editar la hora ⛔ no re-siembra, y una sesión con pedidos ⛔ no s
   **Mes** de quien creó la sesión ⛔ no aparece **ninguno**. El único lugar donde se ven es
   `/agenda/eventos` → **«LO QUE YA SE COPIÓ»**, abajo de todo, un renglón por sesión y **sin
   botones**. ⇒ sembrar es hoy un acto **a ciegas de punta a punta**.
-- 🔴 **Borrar una sesión ⛔ no borra sus pendientes, y nadie lo dice.** Medido: quedan **8 renglones
-  de «SS 27»** —sesión creada el 5-sep, que sembró y después **se eliminó**— colgados de Sofi, Cande
-  y Cami, 5 de ellos venciendo el 6-sep. El diálogo del borrado dice *«No hay papelera»*, pero habla
-  de **la sesión**, ⛔ no de la Agenda. Y desde el monitor ⛔ no hay forma de sacarlos: `borrar-item`
-  existe en la API, pero esa lista ⛔ no ofrece el botón.
+- 🔴 **Borrar una sesión ⛔ no borra sus pendientes, y nadie lo dice.** Medido: habían quedado **8
+  renglones de «SS 27»** —sesión creada el 5-sep, que sembró y después **se eliminó**— colgados de
+  Sofi, Cande y Cami, 5 de ellos venciendo el 6-sep. El diálogo del borrado dice *«No hay papelera»*,
+  pero habla de **la sesión**, ⛔ no de la Agenda. Y desde el monitor ⛔ no hay forma de sacarlos:
+  `borrar-item` existe en la API, pero esa lista ⛔ no ofrece el botón.
+  🏁 **Los 8 se borraron el 7-sep** (eran de una prueba de Bruno) y **él fijó la regla**: *«la sesión
+  no se tiene que eliminar, se tiene que terminar»* ⇒ el pendiente de diseño vive en el
+  `PENDIENTES.md` del repo, § UNA SESIÓN DE FOTOS NO SE ELIMINA.
 - 🔴 **«Pedir al depósito» acierta 1 de cada 4 veces, y ⛔ no avisa.** El fallback por stock está
   bien y es de siempre (`procesarDraft`: prioridad + fallback), pero el botón promete depósito y la
   solicitud nace **al local** sin decirlo en el momento —se ve recién adentro, en «Retirar de

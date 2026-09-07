@@ -13,6 +13,32 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 UNA SESIÓN DE FOTOS NO SE ELIMINA: SE TERMINA — 7-sep-2026 (dictado)
+
+> «la sesion no se tiene que eliminar, se tiene que terminar»
+
+Lo dijo Bruno mirando lo que dejó **«SS 27»**, que era una prueba suya del 5-sep: la sesión se
+**eliminó** y sus **8 renglones de Agenda quedaron huérfanos** sobre Sofi, Cande y Cami, 5 de ellos
+venciendo el 6-sep. 🏁 **Los 8 los borré el 7-sep** (lista blanca de ids + la clave de siembra;
+`agenda_items` pasó de 234 a 226, y quedan **0** con «SS 27»). ⛔ No quedó nada más de esa sesión:
+⛔ ni el evento —ya lo había borrado él— ni solicitudes hijas.
+
+🔴 **El hueco, que es de diseño y ⛔ no de datos**: hoy la sesión abierta ofrece **dos** salidas,
+«Marcar como hecha» y **«Eliminar»**, y la segunda es la que rompe — borra el hecho y **deja el
+trabajo que ese hecho sembró**. El diálogo dice *«No hay papelera»*, pero habla de la sesión, ⛔ no
+de la Agenda, y quien la borra ⛔ no ve los pendientes (son de otras personas ⇒ ⛔ no salen ni en su
+Hoy, ni en su Semana, ni en su Mes). Ver `docs/secciones/sesionfotos.md` § La CAMINATA del 6-sep.
+
+▶️ **Falta decidir la forma** (dos caminos razonables, y la elección es de Bruno):
+1. **Sacar «Eliminar»** y dejar sólo «Marcar como hecha» ⇒ una sesión cargada por error se termina
+   igual que una real, y ⛔ nada queda colgado.
+2. **Dejarlo sólo mientras la sesión ⛔ no haya sembrado ni tenga pedidos** —el guard de las hijas ya
+   existe—, y en cuanto sembró, que el único camino sea terminarla.
+⚠️ En los dos casos hay que decir en la pantalla **qué pasa con los pendientes ya sembrados**: hoy
+⛔ no lo dice ninguno de los dos botones.
+
+---
+
 ## 🆕 FERIA AL COSTO DE ZATTIA — 5-sep-2026 (dictado)
 
 > «quiero armar feria de zattia con las cosas que metimos en liquidación, pero el plan es vender al
