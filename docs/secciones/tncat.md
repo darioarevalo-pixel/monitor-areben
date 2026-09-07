@@ -131,6 +131,14 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
   ⚠️ **Y el número se mueve rápido**: la misma medición **una hora antes daba 498**, y el diff dice
   que entre las 13:47 y las 14:53 del 7-sep **salieron 82 y no entró ninguno** (alguien estaba
   limpiándola). ⇒ un número de esta categoría se cita **con su hora**, ⛔ no como constante.
+- 🔴 **La miniatura se amplía, y el click NO puede tildar.** La fila entera es un `<label>` con el
+  checkbox de "sacar de la categoría": sin `preventDefault` en el click de la foto, mirar una prenda
+  la marcaba para sacarla de la tienda. El visor es el `Lightbox` del kit (Escape y click para
+  cerrar), y recibe la URL de TiendaNube **tal cual** —los 700 KB del original se bajan sólo al
+  abrirla; la miniatura estirada se vería peor—.
+  ⚠️ **Amplía la PORTADA, no las otras fotos del producto**: `Lightbox` muestra una sola imagen y
+  darle navegación es tocar el componente que usan otras cuatro secciones. Para ver los colores está
+  la ficha de producto de la pantalla de Fotos.
 - 🔴 **El buscador de "lo que está adentro" filtra la VISTA, ⛔ no el lote.** Lo tildado sobrevive al
   cambio de texto —si no, buscar dos veces obligaría a tildar de nuevo—, así que el botón saca
   también lo que no está a la vista, **y la pantalla lo dice con el número** antes de que se

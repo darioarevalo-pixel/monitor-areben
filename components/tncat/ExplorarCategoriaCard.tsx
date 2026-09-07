@@ -7,7 +7,7 @@ import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '
 import { buscar, enCategoria, etiquetaAntiguedad, itemsParaAplicar, type OrdenCat } from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
 import { FotoTn } from './FotoTn'
-import { Card, color, useConfirmar } from '@/components/ui'
+import { Card, color, Lightbox, useConfirmar } from '@/components/ui'
 
 const CHUNK = 20
 const MINI = 40
@@ -43,6 +43,8 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   // Se fija una vez: con `Date.now()` en cada render, dos filas del mismo día podrían contarse
   // distinto entre un dibujo y el siguiente.
   const [ahora] = useState(() => Date.now())
+  /** La foto que se está mirando en grande, o `null`. Es la ORIGINAL, no la miniatura. */
+  const [ampliada, setAmpliada] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -139,7 +141,20 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
         {/* Sin foto se dibuja el hueco igual: si la fila se achicara, "sin foto" se leería como
             un renglón más corto y no como lo que es. */}
         {foto ? (
-          <FotoTn src={foto} alt={p.name} ancho={MINI} style={{ width: MINI, height: MINI, objectFit: 'cover', borderRadius: 6, background: color.line, flex: '0 0 auto' }} />
+          /* 🔴 La fila entera es un <label>: sin frenar el evento acá, ampliar la foto TILDARÍA el
+             producto para sacarlo de la categoría. El click se para en el span, no en la <img>,
+             para que tape también el borde de la miniatura. */
+          <span
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setAmpliada(foto)
+            }}
+            title="Ver la foto en grande"
+            style={{ display: 'flex', flex: '0 0 auto', cursor: 'zoom-in' }}
+          >
+            <FotoTn src={foto} alt={p.name} ancho={MINI} style={{ width: MINI, height: MINI, objectFit: 'cover', borderRadius: 6, background: color.line }} />
+          </span>
         ) : (
           <div title="El producto no tiene ninguna foto en la tienda" style={{ width: MINI, height: MINI, borderRadius: 6, background: color.line, color: color.mut2, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', flex: '0 0 auto' }}>
             sin foto
@@ -302,6 +317,12 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
           </div>
         </div>
       )}
+
+      {/* Se le pasa la URL de TiendaNube TAL CUAL, sin `thumbTN`: la miniatura de 80 px estirada a
+          pantalla completa se ve peor que la foto que la tienda ya sirve, y los 700 KB del original
+          se bajan sólo cuando alguien la abre. Es la regla que ya está escrita en `thumb.ts`.
+          El `Lightbox` es el del kit: cierra con Escape y con un click en cualquier lado. */}
+      <Lightbox src={ampliada} alt="" onCerrar={() => setAmpliada(null)} />
     </Card>
   )
 }
