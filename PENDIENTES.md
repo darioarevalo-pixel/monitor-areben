@@ -13,6 +13,23 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 CERRAR EL MEMO CONGELA LOS NÚMEROS, NO EL ACTA — 7-sep-2026 (dictado, y hecho)
+
+> «pq no se puede seguir escribiendo lo de memo semanal personal de cada uno, o sino un boton de
+> desbloquear, escribir, y volver a bloquear, para que no este abierta la seccion»
+
+Lo dijo después de cerrar la `w2026-08-31`. El interruptor del cierre apagaba **cuatro** cosas de
+una vez —foto, señales, avances y **acta**— y no había verbo de vuelta: se salía con un UPDATE a
+mano. Ya había costado dos actas (`w2026-08-10` cerrada vacía para siempre; `w2026-08-31` cerrada en
+blanco). 🏁 **Las dos cosas que pidió, hechas**: el acta se escribe siempre —regla en
+`puedeEscribirBloque` del núcleo, aplicada por la pantalla **y por el handler**, donde el candado
+⛔ no existía— y hay **Desbloquear** / **Volver a cerrar**, que ⛔ no recalcula la foto (el capital
+parado es un número de HOY: se movió $133.780 en un día). El relato está en `docs/secciones/memo.md`.
+
+▶️ Lo que queda es del ritual, ⛔ no del código: la **`w2026-08-24` sigue abierta y sin acta**.
+
+---
+
 ## 🆕 UNA SESIÓN DE FOTOS NO SE ELIMINA: SE TERMINA — 7-sep-2026 (dictado)
 
 > «la sesion no se tiene que eliminar, se tiene que terminar»

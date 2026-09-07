@@ -11,6 +11,7 @@ import {
   TEMAS as TEMAS_JS,
   cerrada as cerradaJs,
   claveValida as claveValidaJs,
+  puedeEscribirBloque as puedeEscribirBloqueJs,
   etiquetaSemana as etiquetaSemanaJs,
   hoyAr as hoyArJs,
   semanaAnterior as semanaAnteriorJs,
@@ -148,6 +149,8 @@ export const semanaSiguiente = semanaSiguienteJs as (s: Semana) => Semana
 export const cerrada = cerradaJs as (s: Semana, hoy: string) => boolean
 export const etiquetaSemana = etiquetaSemanaJs as (s: Semana) => string
 export const claveValida = claveValidaJs as (bloque: string, clave: string) => boolean
+/** El acta se escribe SIEMPRE; los avances, sólo con la semana abierta. Ver `semana.core.js`. */
+export const puedeEscribirBloque = puedeEscribirBloqueJs as (bloque: Bloque, estado: string) => boolean
 
 /** El corte por canal: `mayorista + minorista = total`, y `tecnica` viaja aparte y con nombre. */
 export type ResumenCanales = {

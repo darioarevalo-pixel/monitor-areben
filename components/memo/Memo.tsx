@@ -11,8 +11,8 @@ import { useGerencial } from '@/components/gerencial/useGerencial'
 import { useSesion } from '@/components/SesionProvider'
 import {
   LABEL_LINEA, LINEAS_MEMO, MARCAS_MEMO, SISTEMAS, TEMAS,
-  costoPorCompra, delta, etiquetaSemana, fusionarPorCanal, resumirCanales, semaforoPauta,
-  semanaAnterior, semanaSiguiente, ticketPromedio,
+  costoPorCompra, delta, etiquetaSemana, fusionarPorCanal, puedeEscribirBloque, resumirCanales,
+  semaforoPauta, semanaAnterior, semanaSiguiente, ticketPromedio,
   type Bloque, type Campo, type CanalDeMarca, type Foto, type Linea, type Semana, type Senales,
   type VentaLinea,
 } from '@/lib/memo/tipos'
@@ -35,13 +35,20 @@ import { resumirSenales, semanaHoy, useAutoguardado, useMemoSemanal } from './us
 export function Memo() {
   const [semana, setSemana] = useState<Semana>(() => semanaHoy())
   const hoy = semanaHoy()
-  const { memo, campos, foto, puedeEscribir, cargando, calculando, error, guardar, sellar, cerrar } =
+  const { memo, campos, foto, puedeEscribir, cargando, calculando, error, guardar, sellar, cerrar, reabrir } =
     useMemoSemanal(semana.id)
   const { perfil } = useSesion()
   const toast = useToast()
   const yo = perfil?.name || ''
 
   const estaCerrado = memo?.estado === 'cerrado'
+  // 🔴 **El estado de la semana ya no es una sola llave que apaga todo.** Hasta el 7-sep-2026 este
+  // mismo `estaCerrado` apagaba la foto, las señales, los avances y el acta, y no había verbo de
+  // vuelta: el acta de una semana cerrada sólo se podía escribir con un UPDATE a mano. Ahora quién
+  // se apaga con el cierre lo dice el núcleo, y hay `Desbloquear`.
+  const estado = memo?.estado || 'abierto'
+  // Los números se congelan cuando se toman, y siguen congelados aunque la semana se desbloquee.
+  const fotoTomada = !!memo?.foto
   // "Terminada" es que la semana de hoy ya es otra. El servidor lo vuelve a comprobar con su propio
   // reloj: acá sólo decide si el botón se ve, allá decide si se puede.
   const semanaTerminada = semana.ini < hoy.ini
@@ -49,9 +56,21 @@ export function Memo() {
   const onCerrar = async () => {
     try {
       await cerrar()
-      toast.ok('Memo cerrado. Los números quedaron congelados.')
+      // ⚠️ Volver a cerrar una semana desbloqueada NO vuelve a congelar nada: la foto que se tomó
+      // la primera vez se conserva. Decir "los números quedaron congelados" ahí sería afirmar que
+      // pasó algo que no pasó.
+      toast.ok(fotoTomada ? 'Semana cerrada de nuevo.' : 'Memo cerrado. Los números quedaron congelados.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cerrar.')
+    }
+  }
+
+  const onReabrir = async () => {
+    try {
+      await reabrir()
+      toast.ok('Semana desbloqueada. Los números siguen congelados.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo desbloquear.')
     }
   }
 
@@ -62,7 +81,8 @@ export function Memo() {
           Qué pasó esta semana (lunes a domingo). Arriba, los números que arma el monitor; abajo, el
           avance de cada sistema y el acta que escribimos. Venta y pauta se congelan cuando la semana
           termina; el capital parado y los pendientes se congelan cuando se toman y van con la fecha
-          puesta.
+          puesta. El acta se escribe siempre, también con la semana cerrada; para corregir un avance
+          hay que desbloquearla.
         </InfoPopover>
         <Button variant="ghost" onClick={() => setSemana(semanaAnterior(semana))}>← Semana anterior</Button>
         <Button
@@ -82,9 +102,11 @@ export function Memo() {
         estado={memo ? (memo.estado === 'cerrado' ? 'cerrado' : 'abierto') : null}
         semanaTerminada={semanaTerminada}
         puedeEscribir={puedeEscribir}
+        fotoTomada={fotoTomada}
         cerradoPor={memo?.cerrado_por}
         cerradoAt={memo?.cerrado_at}
         onCerrar={onCerrar}
+        onReabrir={onReabrir}
       />
 
       {error && <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>{error}</Notice>}
@@ -98,7 +120,9 @@ export function Memo() {
         <Esqueleto forma="tabla" filas={6} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space[4] }}>
-          <BloqueFoto foto={foto} calculando={calculando} congelada={estaCerrado} />
+          {/* Congelada es que la foto esté GUARDADA, no que la semana esté cerrada: una semana
+              desbloqueada muestra los números tal como se tomaron. */}
+          <BloqueFoto foto={foto} calculando={calculando} congelada={fotoTomada} />
           <BloqueSenales
             senales={memo?.senales ?? null}
             tomadas={memo?.senales_tomadas_at ?? null}
@@ -112,18 +136,18 @@ export function Memo() {
             entradas={SISTEMAS}
             campos={campos}
             yo={yo}
-            puedeEscribir={puedeEscribir && !estaCerrado}
+            puedeEscribir={puedeEscribir && puedeEscribirBloque('avance', estado)}
             guardar={guardar}
             placeholder="Qué salió, qué se arregló, qué quedó a mitad de camino…"
           />
           <BloqueCampos
             titulo="El acta"
-            subtitulo="Cada uno escribe en su casilla. Se guarda solo."
+            subtitulo="Cada uno escribe en su casilla. Se guarda solo, y también con la semana cerrada."
             bloque="acta"
             entradas={TEMAS}
             campos={campos}
             yo={yo}
-            puedeEscribir={puedeEscribir && !estaCerrado}
+            puedeEscribir={puedeEscribir && puedeEscribirBloque('acta', estado)}
             guardar={guardar}
             placeholder="Escribí acá…"
           />

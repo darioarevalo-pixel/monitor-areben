@@ -44,12 +44,30 @@ el motivo duro está escrito arriba del `create table`.
 
 ## Reglas que el código no dice
 
-- 🔴 **Cerrar la semana apaga MUCHO más que los números.** El botón dice "Cerrar la semana y
-  congelar los números", pero `estaCerrado` gobierna además **el acta, los ocho avances y el botón
-  de señales** (`puedeEscribir && !estaCerrado`, tres veces en `Memo.tsx`). Cerrar con el acta en
-  blanco la deja congelada vacía, **y no hay verbo de reabrir**: se sale con un UPDATE a
-  `memo_semana` (`estado='abierto'`, `cerrado_at`/`cerrado_por` a `null`, sin tocar `foto`). Pasó el
-  18-ago-2026. ⇒ **el orden del ritual es parte del diseño: acta el viernes, cerrar el lunes.**
+- 🔴 🔑 **Cerrar congela los NÚMEROS; el acta se sigue escribiendo. Y hay verbo de vuelta**
+  (7-sep-2026). Hasta ese día `estaCerrado` gobernaba **cuatro** cosas de una vez —la foto, las
+  señales, los ocho avances y el acta— y la única salida era un UPDATE a mano contra producción.
+  Costó dos semanas de acta: la `w2026-08-10` quedó cerrada vacía para siempre y la `w2026-08-31` se
+  cerró con el acta en blanco. Lo dijo Bruno: *«por qué no se puede seguir escribiendo lo de memo
+  semanal personal de cada uno, o sino un botón de desbloquear, escribir, y volver a bloquear»*.
+  Ahora:
+  - **El acta pasa siempre.** Es de **una** persona, va con su firma y su hora, y ningún número
+    deriva de ella. La regla es `puedeEscribirBloque(bloque, estado)` en `semana.core.js`, y la
+    aplican **los dos llamadores**: la pantalla decide si dibuja el textarea y `api/_memo.js` si
+    guarda. 🔴 Antes el candado vivía **entero en el JSX**, así que un POST a una semana cerrada
+    entraba igual — el cierre nunca existió del lado del servidor.
+  - **Los avances no**: son parte de la foto de la semana ⇒ piden **Desbloquear**
+    (`accion:'reabrir'`), que devuelve `estado` a `abierto` y ⛔ **no toca** `foto`, `foto_tomada_at`,
+    `senales` ni `senales_tomadas_at`. El que no puede escribir no ve el botón.
+  - 🔴 **Volver a cerrar NO recalcula la foto, y es lo que hace que desbloquear sea seguro.** Venta y
+    pauta son un rango cerrado y darían igual, pero `foto.clavados` lleva el **capital parado**, que
+    es un número de HOY: entre el 6 y el 7-sep-2026 se movió **$133.780** sin que cambiara una venta
+    de la semana. Con `foto_tomada_at` ya sellado, `cerrar` conserva la foto y sólo mueve el estado.
+  - ⚠️ **El encabezado tiene TRES caras, no dos**: abierta, cerrada, y abierta con la foto ya
+    congelada — chip **«Desbloqueado»** y botón **«Volver a cerrar»**, que ⛔ no vuelve a prometer
+    que congela algo. Dibujarla como «En curso» sería la pantalla afirmando lo que no pasó.
+  - 📌 El orden del ritual sigue siendo **acta el viernes, cerrar el lunes** — pero ya no es la
+    diferencia entre tener acta y no tenerla.
 - 🔑 **Los avances los redacta la IA leyendo los mensajes de commit de los repos**, no los escribe
   el equipo: los repos de Areben commitean en prosa de negocio. Escala medida: ~640 commits en 14
   días, 10 repos; la semana del 17 al 23 fueron **323 commits en 8 repos** (marketing 154, monitor
@@ -196,6 +214,8 @@ veces se olvidó — que es lo que hace que la decisión no sea una corazonada.
 - ▶️ **El acta de la semana 17 al 23**: es la primera que la lleva. La `w2026-08-10` se cerró **sin
   acta, por decisión de Bruno** ("va a ser complicado que lo armemos, lo armamos esta semana") ⇒ ⛔
   no se re-abre.
+- ▶️ **La `w2026-08-24` sigue ABIERTA** (los 8 avances y las señales están; el acta, no) y la
+  `w2026-08-31` está **cerrada con el acta en blanco** — que ahora se puede escribir igual.
 - ▶️ **El cron de los avances** (arriba): decidido el enfoque, sin escribir.
 - 🔴 **Las semanas cerradas antes del 24-ago-2026 no tienen el corte por canal** y **no hay verbo de
   reabrir**. `Foto.canal` es opcional a propósito y la pantalla dice **«no se midió esa semana»**.
@@ -213,7 +233,8 @@ veces se olvidó — que es lo que hace que la decisión no sea una corazonada.
 
 ## Cómo se prueba
 
-`npx vitest run tests/memo.test.ts --reporter=dot` (43 casos).
+`npx vitest run tests/memo.test.ts --reporter=dot` (47 casos) y
+`npx vitest run tests/memo-encabezado-semana.test.tsx --reporter=dot` (15, render puro).
 
 Lo que no es obvio:
 
@@ -231,6 +252,13 @@ Lo que no es obvio:
   `fusionarVenta` acumule **sobre el objeto que recibe** —leer el total de la empresa dejaría el
   número de BDI ya sumado con el de Zattia, y nadie mira el mismo número dos veces— y que `MARCAS`
   se escriba como las `LINEAS`, que mete a **Stunned como si fuera una tercera base**.
+- **Dos mutantes del candado del cierre, dos muertos** (7-sep-2026): sacarle al acta la excepción
+  (`return estado !== 'cerrado'` a secas) y apagar la tercera cara del encabezado
+  (`desbloqueada = false`). Los dos mueren con `AssertionError`, no con error de compilación.
+- 🔴 **`reabrir` y la foto conservada al re-cerrar tampoco los ejerce ningún test**, por lo mismo que
+  el resto del handler: `api/_memo.js` no entra en la suite. El oráculo es prod, y es barato —
+  desbloquear, volver a cerrar, y comparar `foto` y `foto_tomada_at` **antes y después**: tienen que
+  ser idénticos.
 - 🔴 **Lo que ningún test ejerce es la FORMA que arma el handler** (`canal: { marcas: … }`): los
   cores se prueban sueltos y `api/_memo.js` no entra en la suite. El oráculo de eso es prod contra
   `psql` — medido el 24-ago sobre la semana del 17 al 23, marca por marca: BDI local $1.591.710 /

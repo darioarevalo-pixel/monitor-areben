@@ -80,8 +80,19 @@ export function sellarSenales(id: string, senales: Senales) {
 }
 
 export function cerrarMemo(id: string) {
-  return postear<{ foto: Foto; cerrado_por: string; cerrado_at: string }>(
+  return postear<{ foto: Foto; cerrado_por: string; cerrado_at: string; fotoConservada?: boolean }>(
     { accion: 'cerrar', id },
     'No se pudo cerrar el memo.',
+  )
+}
+
+/**
+ * Desbloquear una semana cerrada. Devuelve el estado a "abierto" y **no toca los números**: la foto
+ * y las señales siguen congeladas con la fecha en que se tomaron.
+ */
+export function reabrirMemo(id: string) {
+  return postear<{ estado: string; yaEstaba?: boolean }>(
+    { accion: 'reabrir', id },
+    'No se pudo desbloquear la semana.',
   )
 }

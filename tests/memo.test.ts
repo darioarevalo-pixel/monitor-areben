@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   TEMAS, SISTEMAS, cerrada, claveValida, diaSemana, etiquetaSemana, hoyAr, idSemana,
-  lunesDe, semanaAnterior, semanaDe, semanaSiguiente, sumarDias,
+  lunesDe, puedeEscribirBloque, semanaAnterior, semanaDe, semanaSiguiente, sumarDias,
 } from '@/lib/memo/semana.core.js'
 import {
   costoPorCompra, delta, esStunned, fusionarPorCanal, fusionarVenta, lineaDe, pautaPorLinea,
@@ -89,6 +89,34 @@ describe('las claves de los campos las valida el servidor', () => {
   it('HC Arévalo no está entre los sistemas', () => {
     // Es de Bruno, no de Areben (15-ago-2026). Si alguien lo agrega sin querer, esto lo caza.
     expect(SISTEMAS.map((s) => s.clave)).not.toContain('hc-arevalo')
+  })
+})
+
+describe('🔴 cerrar la semana congela los números, NO el acta', () => {
+  // El caso: la `w2026-08-10` quedó cerrada sin acta para siempre y la `w2026-08-31` se cerró con
+  // el acta en blanco, porque el mismo interruptor del cierre apagaba las cuatro cosas y no había
+  // verbo de vuelta. Pedido de Bruno el 7-sep-2026.
+  it('el acta se escribe con la semana abierta Y con la semana cerrada', () => {
+    expect(puedeEscribirBloque('acta', 'abierto')).toBe(true)
+    expect(puedeEscribirBloque('acta', 'cerrado')).toBe(true)
+  })
+
+  it('los avances se apagan al cerrar: son parte de la foto de la semana', () => {
+    expect(puedeEscribirBloque('avance', 'abierto')).toBe(true)
+    expect(puedeEscribirBloque('avance', 'cerrado')).toBe(false)
+  })
+
+  it('una semana que todavía no existe en la base se escribe: el estado por defecto es abierto', () => {
+    // La fila nace al escribir el primer campo, así que el handler resuelve `estado` a 'abierto'
+    // cuando no hay fila. Si esto fuera al revés, el primer avance de cada semana chocaría contra
+    // un candado que nadie cerró.
+    expect(puedeEscribirBloque('avance', 'abierto')).toBe(true)
+  })
+
+  it('un estado desconocido NO se lee como cerrado', () => {
+    // El último `if` de una cadena es un default: lo desconocido tiene que salir escribible, no
+    // bloqueado. Un candado que se cierra solo con un estado nuevo dejaría el memo mudo sin aviso.
+    expect(puedeEscribirBloque('avance', 'lo-que-sea')).toBe(true)
   })
 })
 

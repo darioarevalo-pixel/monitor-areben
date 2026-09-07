@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { cerrarMemo, guardarCampo, leerFotoViva, leerMemo, sellarSenales } from '@/lib/memo/cliente'
+import { cerrarMemo, guardarCampo, leerFotoViva, leerMemo, reabrirMemo, sellarSenales } from '@/lib/memo/cliente'
 import { hoyAr, semanaDe, type Bloque, type Campo, type Foto, type MemoSemana, type Senales } from '@/lib/memo/tipos'
 import type { Accionable } from '@/lib/gerencial/tipos'
 
@@ -72,7 +72,11 @@ export function useMemoSemanal(id: string) {
       setCaja({ id, dato: { memo: d.memo, campos: d.campos } })
       setPuedeEscribir(d.puede.escribir)
 
-      if (d.memo.estado === 'cerrado' && d.memo.foto) {
+      // 🔑 **Manda la foto GUARDADA, no el estado.** Una semana desbloqueada vuelve a `abierto`
+      // pero sus números ya se congelaron: recalcularlos en vivo mostraría la venta que la base
+      // tenga hoy bajo el título de una semana vieja —y de paso pagaría la consulta cara del módulo
+      // para tirar el resultado—.
+      if (d.memo.foto) {
         setCajaFoto({ id, dato: d.memo.foto })
       } else {
         // La foto viva es la consulta cara del módulo (dos semanas de `venta_detalles` en las dos
@@ -131,6 +135,12 @@ export function useMemoSemanal(id: string) {
     await cargar()
   }, [id, cargar])
 
+  /** Desbloquear: la semana vuelve a escribirse, los números quedan como estaban. */
+  const reabrir = useCallback(async () => {
+    await reabrirMemo(id)
+    await cargar()
+  }, [id, cargar])
+
   const guardado = deLaSemana(caja, id)
 
   return {
@@ -147,6 +157,7 @@ export function useMemoSemanal(id: string) {
     guardar,
     sellar,
     cerrar,
+    reabrir,
   }
 }
 

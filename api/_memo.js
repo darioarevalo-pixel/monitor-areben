@@ -6,6 +6,7 @@
 //   POST { recurso:'memo', accion:'guardar-campo', id, bloque, clave, texto }
 //   POST { recurso:'memo', accion:'senales',       id, senales }
 //   POST { recurso:'memo', accion:'cerrar',        id }
+//   POST { recurso:'memo', accion:'reabrir',       id }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=memo`. El plan Hobby de
 // Vercel admite 12 funciones y crear `api/memo.js` "por prolijidad" **frena todos los deploys sin
@@ -46,7 +47,7 @@ import { leerTodo } from '../lib/supabase/paginar.core.js';
 import { esAdmin, marcasConAcceso } from '../lib/permisos.core.js';
 import { leerSnapshot } from '../lib/meta-ads/leer-snapshot.core.js';
 import { calcularRentabilidad, normalizar } from '../lib/meta-ads/rentabilidad.core.js';
-import { claveValida, cerrada, esFecha, hoyAr, idSemana, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
+import { claveValida, cerrada, esFecha, hoyAr, idSemana, puedeEscribirBloque, semanaAnterior, semanaDe } from '../lib/memo/semana.core.js';
 import { fusionarVenta, pautaPorLinea, ventaPorCanal, ventaPorLinea } from '../lib/memo/foto.core.js';
 import { renglonClavado, resumirClavados, ventaPorProducto } from '../lib/clavados/core.js';
 
@@ -391,6 +392,19 @@ export default async function handler(req, res) {
       const clave = String(b.clave || '');
       if (!claveValida(bloque, clave)) return res.status(400).json({ error: `campo inválido (${bloque}/${clave})` });
 
+      // 🔴 El candado del cierre **no existía acá**: vivía entero en el JSX de la pantalla, así que
+      // un POST entraba igual en una semana cerrada. Ahora la regla es una sola
+      // (`puedeEscribirBloque`) y la aplican los dos: la pantalla decide si dibuja el textarea, esto
+      // decide si guarda. El acta pasa siempre — es de una persona, va firmada y ningún número
+      // deriva de ella—; los avances son parte de la foto de la semana y piden desbloquear.
+      const { data: filaEstado, error: eEstado } = await sb
+        .from('memo_semana').select('estado').eq('id', sem.id).maybeSingle();
+      if (eEstado) throw new Error(eEstado.message);
+      const estadoSemana = (filaEstado && filaEstado.estado) || 'abierto';
+      if (!puedeEscribirBloque(bloque, estadoSemana)) {
+        return res.status(409).json({ error: 'La semana está cerrada. Desbloqueála para corregir los avances.' });
+      }
+
       await asegurarSemana(sb, sem);
       const ahora = new Date().toISOString();
       // 🔑 Una fila por (semana, bloque, clave, AUTOR). Es lo que hace que Bruno y Darío puedan
@@ -427,13 +441,44 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Esa semana todavía no terminó. El memo se cierra a partir del lunes siguiente.' });
       }
       await asegurarSemana(sb, sem);
-      const foto = await calcularFoto(sb, sem);
+
+      // 🔴 **Volver a cerrar NO recalcula la foto**, y esto es lo que hace que desbloquear sea
+      // seguro. Venta y pauta son un rango cerrado y darían lo mismo, pero `foto.clavados` lleva
+      // adentro el capital PARADO, que es un número de HOY: entre el 6 y el 7-sep-2026 se movió
+      // $133.780 sin que cambiara una sola venta de la semana. Recalcular al re-cerrar reescribiría
+      // el capital parado de una semana vieja con el de hoy — un dato falso con cara de dato de esa
+      // semana, que es justo lo que el sello de `senales_tomadas_at` evita del otro lado.
+      const { data: ya, error: e0 } = await sb
+        .from('memo_semana').select('foto, foto_tomada_at').eq('id', sem.id).maybeSingle();
+      if (e0) throw new Error(e0.message);
+      const congelada = ya && ya.foto_tomada_at && ya.foto;
+      const foto = congelada ? ya.foto : await calcularFoto(sb, sem);
       const ahora = new Date().toISOString();
-      const { error } = await sb.from('memo_semana').update({
-        estado: 'cerrado', foto, foto_tomada_at: ahora, cerrado_at: ahora, cerrado_por: yo, updated_at: ahora,
-      }).eq('id', sem.id);
+      const cambios = { estado: 'cerrado', cerrado_at: ahora, cerrado_por: yo, updated_at: ahora };
+      if (!congelada) { cambios.foto = foto; cambios.foto_tomada_at = ahora; }
+      const { error } = await sb.from('memo_semana').update(cambios).eq('id', sem.id);
       if (error) throw new Error(error.message);
-      return res.status(200).json({ ok: true, foto, cerrado_por: yo, cerrado_at: ahora });
+      return res.status(200).json({ ok: true, foto, cerrado_por: yo, cerrado_at: ahora, fotoConservada: !!congelada });
+    }
+
+    if (accion === 'reabrir') {
+      // Desbloquear una semana cerrada, para corregir un avance o tomar las señales que faltaron.
+      //
+      // 🔑 **Devuelve el estado, ⛔ no los números.** No toca `foto`, `foto_tomada_at`, `senales`
+      // ni `senales_tomadas_at`: lo congelado sigue congelado y la pantalla lo sigue mostrando como
+      // congelado. Antes de esto la única salida era un UPDATE a mano contra producción — se hizo
+      // el 18-ago-2026 — y un verbo que sólo existe como SQL suelto no lo tiene nadie a mano.
+      const { data: fila, error: e0 } = await sb
+        .from('memo_semana').select('estado').eq('id', sem.id).maybeSingle();
+      if (e0) throw new Error(e0.message);
+      if (!fila) return res.status(404).json({ error: 'Esa semana todavía no existe.' });
+      if (fila.estado !== 'cerrado') return res.status(200).json({ ok: true, yaEstaba: true });
+
+      const ahora = new Date().toISOString();
+      const { error } = await sb.from('memo_semana')
+        .update({ estado: 'abierto', cerrado_at: null, cerrado_por: null, updated_at: ahora }).eq('id', sem.id);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, estado: 'abierto', reabierto_por: yo, reabierto_at: ahora });
     }
 
     return res.status(400).json({ error: `acción inválida (${accion || 'vacía'})` });

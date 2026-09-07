@@ -17,9 +17,12 @@ import { deLaSemana } from '@/components/memo/useMemoSemanal'
  * estado de otra, sin error y sin aviso.
  *
  * 🔴 **Lo que muerde no es el chip: es el botón.** "Cerrar la semana y congelar los números" apaga
- * el acta, los avances y el botón de señales de una sola vez. Ofrecerlo mientras el estado todavía
- * es el de otra semana es ofrecer apagar lo que no se está mirando — y ya hay un precedente de una
- * semana cerrada con el acta vacía.
+ * los avances y el botón de señales de una sola vez. Ofrecerlo mientras el estado todavía es el de
+ * otra semana es ofrecer apagar lo que no se está mirando.
+ *
+ * 🔑 **Desde el 7-sep-2026 el encabezado tiene TRES estados, no dos** — abierta, cerrada, y abierta
+ * con la foto ya congelada ("Desbloqueado")— y eso también se defiende acá: la tercera no puede
+ * dibujarse como "En curso" (sus números no se mueven) ni volver a prometer que congela algo.
  *
  * ⚠️ Es render, no interacción: defiende **qué dice y qué botones hay**, no qué pasa al apretarlos.
  */
@@ -31,9 +34,11 @@ const props: Props = {
   estado: null,
   semanaTerminada: false,
   puedeEscribir: true,
+  fotoTomada: false,
   cerradoPor: null as string | null,
   cerradoAt: null as string | null,
   onCerrar: () => {},
+  onReabrir: () => {},
 }
 
 const pintar = (over: Partial<Props>) =>
@@ -91,6 +96,41 @@ describe('EncabezadoSemana: cuando sí se sabe', () => {
   it('cerrada sin firma no inventa un "Cerrado por"', () => {
     const html = pintar({ estado: 'cerrado', semanaTerminada: true, cerradoPor: null })
     expect(html).not.toContain('Cerrado por')
+  })
+})
+
+describe('EncabezadoSemana: desbloquear', () => {
+  it('una semana cerrada ofrece desbloquear, y dice que el acta se sigue escribiendo', () => {
+    const html = pintar({
+      estado: 'cerrado', semanaTerminada: true, fotoTomada: true, cerradoPor: 'Bruno Arevalo',
+    })
+    expect(html).toContain('Desbloquear')
+    expect(html).toContain('El acta se puede seguir escribiendo')
+  })
+
+  it('quien no puede escribir no ve el botón de desbloquear', () => {
+    const html = pintar({ estado: 'cerrado', semanaTerminada: true, fotoTomada: true, puedeEscribir: false })
+    expect(html).not.toContain('Desbloquear')
+  })
+
+  it('desbloqueada NO se dibuja como "En curso" ni como "Terminada, sin cerrar"', () => {
+    const html = pintar({ estado: 'abierto', semanaTerminada: true, fotoTomada: true })
+    expect(html).toContain('Desbloqueado')
+    expect(html).not.toContain('En curso')
+    expect(html).not.toContain('Terminada, sin cerrar')
+  })
+
+  it('desbloqueada no vuelve a prometer que congela: el botón dice "Volver a cerrar"', () => {
+    const html = pintar({ estado: 'abierto', semanaTerminada: true, fotoTomada: true })
+    expect(html).toContain('Volver a cerrar')
+    expect(html).not.toContain('congelar los números')
+    expect(html).toContain('los números siguen congelados')
+  })
+
+  it('una semana que nunca se cerró sigue ofreciendo congelar', () => {
+    const html = pintar({ estado: 'abierto', semanaTerminada: true, fotoTomada: false })
+    expect(html).toContain('Cerrar la semana y congelar los números')
+    expect(html).not.toContain('Volver a cerrar')
   })
 })
 
