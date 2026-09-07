@@ -16,6 +16,10 @@ import { authKv } from './lib/kv-auth.mjs'
 // El cruce con Tienda Nube, IMPORTADO y no copiado: así la foto que se congela acá es la misma que
 // elegiría la pantalla. Node 25 despoja los tipos del `.ts` solo.
 import { indexarTn, imagenDe } from '../lib/tn.ts'
+// La línea del producto. `esStunned` es EL corte por SKU —el mismo que usan el memo, Norte y
+// márgenes—, y por eso se importa en vez de escribir /^STU/ acá: cuando esa regla se copia, las
+// copias se despegan (lo cuenta el encabezado de `lineas.core.js`, donde ya pasó tres veces).
+import { esStunned } from '../lib/lineas.core.js'
 
 const BASE = 'https://monitorareben.vercel.app/api'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -102,6 +106,12 @@ for (const p of prods) {
   const u = stock[p.id] || 0
   if (u <= 0) continue
   if (p.created_at >= '2026-08-01' && !ABRIGO.test(p.name)) continue
+  // 🔴 **Stunned comparte la base y el Gestión Nube de Zattia, pero NO es de esta feria**: nunca
+  // entró a una liquidación —el sale de agosto tiene 0 de sus productos— y vende por su propia
+  // Tienda Nube. Sin este corte se colaron 25 (182 prendas, $2,9M) el 6-sep, y se notaron porque
+  // eran los únicos sin foto: sus fotos viven en la TN de Stunned, no en la de Zattia.
+  // ⚠️ El separador es el SKU y un producto de Stunned sin SKU se contaría como Zattia.
+  if (esStunned(p.sku)) continue
   const costo = Number(costos[p.id]) || 0
   lote.push({
     pid: String(p.id),
