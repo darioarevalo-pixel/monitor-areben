@@ -13,7 +13,7 @@
  * puede terminar de cargar**.
  */
 import { describe, expect, it } from 'vitest'
-import { coincide, cumpleFiltro, familiaDeProducto, listaDe, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
+import { coincide, cumpleFiltro, familiaDeProducto, listaDe, paraVolverAMirar, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
 import type { Cargados } from '../lib/tn-desc/atributos'
 
 const prod = (o: Partial<ProductoLista> = {}): ProductoLista => ({
@@ -188,5 +188,29 @@ describe('🆕 el filtro «En borrador» y el buscador por nombre (7-sep-2026, p
   it('la búsqueda se COMBINA con el filtro, no lo reemplaza', () => {
     const o = opciones({ filtro: 'borrador' as const, cola, busca: 'blusa' })
     expect(listaDe([enBorrador, enLaTienda], o).map((p) => p.id)).toEqual(['10'])
+  })
+})
+
+describe('🆕 «Para volver a mirar»: que «no sé» no sea un campo de sólo escritura (7-sep-2026)', () => {
+  const dudosa = prod({ id: '20', name: 'BLUSA CAMELIA' })
+  const resuelta = prod({ id: '21', name: 'BLUSA CLOE' })
+  const atributos = {
+    '20': { tela: 'encaje', escote: 'no identifico' },
+    '21': { tela: 'encaje', escote: 'redondo' },
+  }
+
+  it('la marca cualquier atributo en «no sé», ⛔ no sólo la tela', () => {
+    expect(paraVolverAMirar(atributos['20'])).toBe(true)
+    expect(paraVolverAMirar(atributos['21'])).toBe(false)
+    expect(paraVolverAMirar(undefined)).toBe(false)
+  })
+
+  it('⛔ «no aplica» NO la marca: eso es una respuesta, no una duda', () => {
+    expect(paraVolverAMirar({ silueta: 'no aplica' })).toBe(false)
+  })
+
+  it('el filtro las junta: sin esto quedaban marcadas en la base e invisibles en la pantalla', () => {
+    const o = opciones({ filtro: 'para-mirar' as const, atributos })
+    expect(listaDe([dudosa, resuelta], o).map((p) => p.id)).toEqual(['20'])
   })
 })

@@ -17,6 +17,8 @@ import {
   CATEGORIAS_FUERA_DE_ALCANCE,
   FAMILIAS,
   NO_APLICA,
+  NO_SE,
+  TELAS,
   TELA_SIN_IDENTIFICAR,
   MAX_PROPUESTA,
   atributosDe,
@@ -410,5 +412,36 @@ describe('🔑 la palabra propuesta: el escape que NO abre la lista', () => {
     for (const v of ATRIBUTOS.escote.valores || []) {
       expect(propuestasDe('tops', { escote: v })).toEqual([])
     }
+  })
+})
+
+describe('🆕 «no sé» vale en TODO atributo cerrado, no sólo en la tela (7-sep-2026)', () => {
+  // Pedido de Bruno: «algunas me parecen demasiado raras, como que no saben qué poner y
+  // completan». La única salida que ofrecía la pantalla era «no aplica», que AFIRMA que la prenda
+  // no tiene eso. Sin un «no sé», el desplegable mide lo que la persona se animó a poner.
+  it('el desplegable lo ofrece en los cerrados, y ⛔ no en la tela: ahí ya viene en la lista', () => {
+    expect(opcionesDe('tops', 'escote').noSe).toBe(true)
+    expect(opcionesDe('tops', 'tela').noSe).toBe(false)
+    expect(TELAS).toContain(NO_SE)
+  })
+
+  it('el servidor lo acepta en cualquier atributo cerrado', () => {
+    expect(esValor('tops', 'escote', NO_SE)).toBe(true)
+    expect(esValor('pantalon', 'largo', NO_SE)).toBe(true)
+    expect(esValor('tops', 'tela', NO_SE)).toBe(true)
+  })
+
+  it('⛔ NO sale a la ficha, igual que «no aplica»', () => {
+    const bullets = bulletsDe('tops', { tela: 'encaje', escote: NO_SE, manga: 'manga larga' })
+    expect(bullets.map((b) => b.etiqueta)).toEqual(['Tela', 'Manga'])
+  })
+
+  it('🔑 pero CUENTA como contestado: si no, el contador de la fila se queda corto para siempre', () => {
+    const con = cargadosDe('tops', { tela: 'encaje', escote: NO_SE })
+    expect(con.con).toBe(2)
+  })
+
+  it('⛔ y no es una palabra propuesta: nadie tiene que aprobarla', () => {
+    expect(propuestasDe('tops', { escote: NO_SE })).toEqual([])
   })
 })

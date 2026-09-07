@@ -18,9 +18,9 @@
  * decide qué se EMPIEZA a mirar, ⛔ no qué se puede terminar de cargar.**
  */
 
-import type { Cargados, Familia } from '@/lib/tn-desc/atributos'
+import { NO_SE, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
 
-export type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'corta' | 'borrador' | 'aprobados' | 'en-la-tienda' | 'todos'
+export type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'para-mirar' | 'corta' | 'borrador' | 'aprobados' | 'en-la-tienda' | 'todos'
 
 /** Lo que la lista necesita de un producto de TiendaNube. Un subconjunto de `ProductoTn`. */
 export type ProductoLista = {
@@ -55,6 +55,21 @@ export function familiaDeProducto(p: ProductoLista, fila: FilaLista | undefined)
  */
 export function sinFicha(p: ProductoLista, fila: FilaLista | undefined, ficha: Cargados | undefined): boolean {
   return !!familiaDeProducto(p, fila) && !Object.keys(ficha || {}).length
+}
+
+/**
+ * ¿Alguien miró esta prenda y no supo qué poner en algún casillero?
+ *
+ * 🔴 **Existe para que «no sé» no sea un campo de sólo escritura.** El valor se estrenó el
+ * 7-sep-2026 y sin esta pregunta no habría forma de volver a esas prendas: quedarían marcadas en
+ * la base y **invisibles en la pantalla**, que es lo mismo que no haberlas marcado. La `tela` ya
+ * venía con ese problema —su «no identifico» sólo se notaba porque frena la publicación—.
+ *
+ * ⚠️ ⛔ No frena nada: es una lista de trabajo, no un error. La prenda se publica igual, con un
+ * bullet menos.
+ */
+export function paraVolverAMirar(ficha: Cargados | undefined): boolean {
+  return Object.values(ficha || {}).some((v) => String(v || '').trim() === NO_SE)
 }
 
 /**
@@ -119,6 +134,7 @@ export function cumpleFiltro(p: ProductoLista, o: Omit<OpcionesLista, 'abierto' 
   if (o.filtro === 'ultimas-tandas') return o.tandas.has(p.created_at.slice(0, 10))
   if (o.filtro === 'sin-desc') return p.prosa.banda === 'nada'
   if (o.filtro === 'sin-ficha') return sinFicha(p, fila, o.atributos[p.id])
+  if (o.filtro === 'para-mirar') return paraVolverAMirar(o.atributos[p.id])
   if (o.filtro === 'corta') return p.prosa.banda === 'corta'
   // 🆕 7-sep-2026, pedido de Bruno. Es el estado que faltaba nombrar: el párrafo está escrito y
   // NADIE lo miró todavía. Sin este filtro, los borradores sólo se encontraban de memoria —y el

@@ -9,9 +9,9 @@ import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip } from '@/lib/tn-desc/formato'
-import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
-import { familiaDeProducto, listaDe, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
+import { familiaDeProducto, listaDe, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 import { fraseDeModelo, modeloDeProducto, resumenDeModelo, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
 
@@ -42,6 +42,7 @@ const FILTROS: { v: Filtro; label: string }[] = [
   { v: 'ultimas-tandas', label: 'Últimas 2 tandas' },
   { v: 'sin-desc', label: 'Sin descripción' },
   { v: 'sin-ficha', label: 'Sin ficha cargada' },
+  { v: 'para-mirar', label: 'Para volver a mirar' },
   { v: 'corta', label: 'Descripción corta' },
   { v: 'borrador', label: 'En borrador' },
   { v: 'aprobados', label: 'Aprobados' },
@@ -70,6 +71,7 @@ export function GenDesc() {
       // ⚠️ El contador cuenta la VERDAD, aunque la lista de abajo se quede con la fila abierta:
       // «5 sin ficha» con 6 filas en pantalla es lo correcto — la 6ª ya tiene algo cargado.
       sinFicha: publicados.filter((p) => sinFicha(p, cola[p.id], atributos[p.id])).length,
+      paraMirar: publicados.filter((p) => paraVolverAMirar(atributos[p.id])).length,
       borradores: publicados.filter((p) => cola[p.id]?.estado === 'borrador').length,
       aprobados: publicados.filter((p) => cola[p.id]?.estado === 'aprobado').length,
       enLaTienda: publicados.filter((p) => cola[p.id]?.estado === 'escrito').length,
@@ -99,6 +101,7 @@ export function GenDesc() {
         <KpiCard label="Últimas 2 tandas" value={stats.ultimas} tone="neutral" activo={filtro === 'ultimas-tandas'} onClick={() => setFiltro('ultimas-tandas')} />
         <KpiCard label="Sin descripción" value={stats.sinDesc} tone="danger" activo={filtro === 'sin-desc'} onClick={() => setFiltro('sin-desc')} />
         <KpiCard label="Sin ficha cargada" value={stats.sinFicha} tone="warning" activo={filtro === 'sin-ficha'} onClick={() => setFiltro('sin-ficha')} />
+        <KpiCard label="Para volver a mirar" value={stats.paraMirar} tone="warning" activo={filtro === 'para-mirar'} onClick={() => setFiltro('para-mirar')} />
         <KpiCard label="En borrador" value={stats.borradores} tone="warning" activo={filtro === 'borrador'} onClick={() => setFiltro('borrador')} />
         <KpiCard label="Aprobados" value={stats.aprobados} tone="success" activo={filtro === 'aprobados'} onClick={() => setFiltro('aprobados')} />
         <KpiCard label="En la tienda" value={stats.enLaTienda} tone="success" activo={filtro === 'en-la-tienda'} onClick={() => setFiltro('en-la-tienda')} />
@@ -324,6 +327,7 @@ function FilaProducto({
             : <Badge tone="warning">Falta decir qué prenda es</Badge>}
           {p.prosa.banda === 'nada' && <Badge tone="danger">Sin descripción</Badge>}
           {p.prosa.banda === 'corta' && <Badge tone="warning">Corta</Badge>}
+          {paraVolverAMirar(ficha) && <Badge tone="warning">Para volver a mirar</Badge>}
           {fila?.estado === 'aprobado' && <Badge tone="success">Aprobado</Badge>}
           {fila?.estado === 'escrito' && <Badge tone={fila.verificado ? 'success' : 'warning'}>{fila.verificado ? 'En la tienda' : 'Escrito sin verificar'}</Badge>}
           {fila?.estado === 'escribiendo' && <Badge tone="warning">Quedó a medias</Badge>}
@@ -848,7 +852,7 @@ function CampoAtributo({
   // 🔑 Que el valor guardado sea una PROPUESTA no es un dato aparte: es que no está en ninguna de
   // las dos listas. Así, el día que Bruno la aprueba y entra al diccionario, el cartel se apaga
   // solo — acá y en todos los productos donde se haya cargado.
-  const esPropuesta = !!valor && valor !== NO_APLICA && !propios.includes(valor) && !prestados.includes(valor)
+  const esPropuesta = !!valor && valor !== NO_APLICA && valor !== NO_SE && !propios.includes(valor) && !prestados.includes(valor)
 
   if (proponiendo || esPropuesta) {
     return (
@@ -897,8 +901,12 @@ function CampoAtributo({
             ))}
           </optgroup>
         )}
-        {/* ⛔ Último, y separado: «no aplica» es una respuesta, no un valor de venta. */}
-        {opciones?.noAplica && <option value={NO_APLICA}>{NO_APLICA}</option>}
+        {/* ⛔ Últimos, y separados: son respuestas, no valores de venta. Y son DOS porque dicen
+            cosas distintas — «esta prenda no tiene eso» contra «la miré y no sé» —: sin la
+            segunda, quien no sabe elige un valor cualquiera y la ficha queda midiendo lo que la
+            persona se animó a poner (pedido de Bruno, 7-sep-2026). */}
+        {opciones?.noAplica && <option value={NO_APLICA}>no aplica — la prenda no tiene eso</option>}
+        {opciones?.noSe && <option value={NO_SE}>no sé — la miré y no me doy cuenta</option>}
         {/* 🔑 La VÁLVULA. Un freno sin salida se lo saltea la gente: sin esto, la palabra que no
             está en la lista termina en Detalle —texto libre— y se pierde para siempre para
             cualquier cuenta. Acá se escribe igual, queda marcada, y entra a la lista cuando Bruno

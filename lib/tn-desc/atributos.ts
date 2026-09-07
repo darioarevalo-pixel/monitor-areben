@@ -18,6 +18,7 @@ import {
   CATEGORIAS_FUERA_DE_ALCANCE as CATEGORIAS_FUERA_JS,
   FAMILIAS as FAMILIAS_JS,
   NO_APLICA as NO_APLICA_JS,
+  NO_SE as NO_SE_JS,
   TELA_SIN_IDENTIFICAR as TELA_SIN_IDENTIFICAR_JS,
   TELAS as TELAS_JS,
   telasDe as telasDeJs,
@@ -73,7 +74,7 @@ export type AtributoDeFamilia = {
 }
 
 /** Lo que ofrece un desplegable: la lista propia, la prestada y si va «no aplica». */
-export type OpcionesAtributo = { propios: string[]; prestados: string[]; noAplica: boolean }
+export type OpcionesAtributo = { propios: string[]; prestados: string[]; noAplica: boolean; noSe: boolean }
 
 /** Lo que cargó el local para un producto: `{atributo: valor}`. */
 export type Cargados = Partial<Record<Atributo, string>>
@@ -106,6 +107,13 @@ export function sinTela(cargados: Cargados): boolean {
 
 /** «Esta prenda no tiene eso». Vale en todo atributo cerrado salvo Tela; se guarda y no sale. */
 export const NO_APLICA: string = NO_APLICA_JS
+
+/**
+ * «No sé»: alguien miró la prenda y no supo. Vale en TODO atributo cerrado desde el 7-sep-2026;
+ * se guarda, cuenta como contestado y ⛔ no sale a la ficha. ⛔ No es lo mismo que «no aplica»:
+ * esa diferencia es la única que dice qué prenda hay que volver a mirar.
+ */
+export const NO_SE: string = NO_SE_JS
 
 /** El largo máximo de una palabra propuesta: es una etiqueta, no una descripción. */
 export const MAX_PROPUESTA: number = MAX_PROPUESTA_JS
