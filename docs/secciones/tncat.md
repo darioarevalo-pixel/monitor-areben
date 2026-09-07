@@ -114,6 +114,25 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
   el flujo de los sales de Zattia. El componente lo chequea por `marca`, no por perfil.
 - ⚠️ **"Explorar categoría" escribe en la tienda y NO tiene sub-permiso propio**: entra con
   `categorias` (BDI) o con `asignar` (Zattia), o sea que se hereda del que sí lo tiene.
+- 🆕 🔑 **La fila de "Explorar categoría" muestra la FOTO y hace cuánto entró el producto**
+  (7-sep-2026, pedido de Bruno). Las dos salen del payload que la card **ya bajaba**: `images` y
+  `created_at` vienen en el audit **liviano** —medido: 770/770 productos de Zattia y 252/252 de BDI
+  traen `created_at`— así que ⛔ no hace falta el `?variantes=1`, que pesa el doble.
+  🔴 **`created_at` es el alta del PRODUCTO EN TIENDANUBE, ⛔ no el ingreso de la mercadería**: eso
+  vive en Gestión Nube y acá no se cruza. Lo dice el `title` de la fila y el InfoPopover, porque
+  leída como fecha de ingreso manda a sacar de NEW IN lo que recién llegó.
+  🔑 **El orden por defecto de lo que está adentro pasó a "más viejos primero"**, que es la pregunta
+  de la pantalla —qué dejó de corresponder—; A–Z sigue estando y sirve para encontrar uno que ya se
+  sabe cuál es. **Lo que no tiene fecha va al final en LOS DOS sentidos**: no se sabe cuándo entró,
+  y encabezar "lo más viejo" con eso es justo lo que se está por sacar de la tienda.
+  📊 **El número que lo justifica: NEW IN de Zattia tiene 498 de los 770 productos de la tienda, y
+  279 hace más de 90 días** (42 hace más de 180; el más viejo, 325 d). O sea que la categoría dejó
+  de significar «lo nuevo» y nadie podía verlo desde la pantalla.
+- 🔴 **El buscador de "lo que está adentro" filtra la VISTA, ⛔ no el lote.** Lo tildado sobrevive al
+  cambio de texto —si no, buscar dos veces obligaría a tildar de nuevo—, así que el botón saca
+  también lo que no está a la vista, **y la pantalla lo dice con el número** antes de que se
+  apriete. `enCategoria(prods, cat)` sin `q` es la lista que arma el lote; con `q`, la que se
+  dibuja. Hay test del invariante.
 - 🔑 **Una foto que no carga se ve igual que un color sin foto** — por eso `FotoTn` cae sola a la
   original si el optimizador no contesta: sin ese respaldo, un problema de red se lee como un
   problema del catálogo y manda a fotografiar de nuevo algo que ya está.

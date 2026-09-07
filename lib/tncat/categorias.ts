@@ -12,28 +12,88 @@
  * tocar nada del lado del servidor.
  */
 
+import { diasDesde } from './dias'
 import type { ProductoCat } from './tipos'
 
 const ids = (p: ProductoCat): string[] => (p.category_ids || []).map(String)
+
+/**
+ * Cómo se ordena lo que hay adentro de la categoría.
+ *
+ * `antiguos` existe porque el gesto de esta pantalla es SACAR, y lo que hay que sacar de una
+ * categoría viva —NEW IN sobre todo— es lo que hace más que entró. Alfabético sirve para
+ * encontrar uno que ya se sabe cuál es; para eso está el buscador.
+ */
+export type OrdenCat = 'antiguos' | 'nuevos' | 'nombre'
+
+/** ¿El texto matchea el nombre o el SKU? Es el MISMO criterio en los dos lados de la pantalla. */
+export function coincide(p: ProductoCat, q: string): boolean {
+  const t = q.trim().toLowerCase()
+  if (!t) return true
+  return p.name.toLowerCase().includes(t) || (p.sku || '').toLowerCase().includes(t)
+}
+
+const porNombre = (a: ProductoCat, b: ProductoCat) => a.name.localeCompare(b.name, 'es')
+
+/**
+ * Ordena por antigüedad del alta en TiendaNube. **Lo que no tiene fecha va al final en los dos
+ * sentidos**: no se sabe cuándo entró, y ponerlo primero en «más viejos» lo haría pasar por lo
+ * que más tiempo lleva ahí — que es justo lo que se está por sacar de la tienda.
+ */
+function porFecha(orden: 'antiguos' | 'nuevos', ahora: number) {
+  return (a: ProductoCat, b: ProductoCat) => {
+    const da = diasDesde(a.created_at, ahora)
+    const db = diasDesde(b.created_at, ahora)
+    if (da === null || db === null) return da === db ? porNombre(a, b) : da === null ? 1 : -1
+    if (da === db) return porNombre(a, b)
+    return orden === 'antiguos' ? db - da : da - db
+  }
+}
+
+/**
+ * Lo que dice la fila sobre la antigüedad. Es texto, pero la regla es cuál de los tres casos
+ * cae —hoy, hace N días, no se sabe— y ⛔ «no se sabe» no puede salir como 0.
+ */
+export function etiquetaAntiguedad(created_at: string | null | undefined, ahora: number): string {
+  const d = diasDesde(created_at, ahora)
+  if (d === null) return 'sin fecha'
+  return d === 0 ? 'entró hoy' : `hace ${d} d`
+}
+
+/** Aplica el orden elegido. Público porque el orden es regla, no pintura de la pantalla. */
+export function ordenar(productos: ProductoCat[], orden: OrdenCat, ahora: number = Date.now()): ProductoCat[] {
+  return productos.slice().sort(orden === 'nombre' ? porNombre : porFecha(orden, ahora))
+}
 
 /** ¿El producto está en esa categoría? */
 export function tieneCategoria(p: ProductoCat, catId: string): boolean {
   return ids(p).includes(String(catId))
 }
 
-/** Los productos que HOY están en la categoría (lo que se ve en la tienda al entrar a ella). */
-export function enCategoria(productos: ProductoCat[], catId: string): ProductoCat[] {
-  return productos.filter((p) => tieneCategoria(p, catId)).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+/**
+ * Los productos que HOY están en la categoría (lo que se ve en la tienda al entrar a ella).
+ *
+ * `q` filtra por nombre o SKU — NEW IN de Zattia tiene 498 productos, y sin buscador la única
+ * forma de llegar a uno era scrollear. 🔴 **Lo filtrado NO es lo que se aplica**: quien tilda,
+ * cambia el texto y aprieta tiene que sacar los que tildó antes, no sólo los que está viendo, así
+ * que la card guarda la lista sin filtrar para armar el lote.
+ */
+export function enCategoria(
+  productos: ProductoCat[],
+  catId: string,
+  opts: { q?: string; orden?: OrdenCat; ahora?: number } = {},
+): ProductoCat[] {
+  const dentro = productos.filter((p) => tieneCategoria(p, catId) && coincide(p, opts.q || ''))
+  return ordenar(dentro, opts.orden ?? 'nombre', opts.ahora)
 }
 
 /** Búsqueda por nombre o SKU, para sumar productos que todavía no están en la categoría. */
 export function buscar(productos: ProductoCat[], q: string, catId?: string): ProductoCat[] {
-  const t = q.trim().toLowerCase()
-  if (!t) return []
+  if (!q.trim()) return []
   return productos
     .filter((p) => !catId || !tieneCategoria(p, catId))
-    .filter((p) => p.name.toLowerCase().includes(t) || (p.sku || '').toLowerCase().includes(t))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    .filter((p) => coincide(p, q))
+    .sort(porNombre)
     .slice(0, 40)
 }
 

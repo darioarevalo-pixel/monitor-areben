@@ -49,6 +49,7 @@
 import type { Variante } from '@/lib/etl/tipos'
 import type { RegistroFoto, Solicitud } from '@/lib/sesionfotos/tipos'
 import { cruzarParaSesion, indexar, variantesGnDe, variantesSinFoto, type MotivoExcluido } from './a-sesion-fotos'
+import { diasDesde } from './dias'
 import type { ProductoFchk } from './tipos'
 
 /**
@@ -116,15 +117,6 @@ export type FilaCola = {
 
 const norm = (s: string | null | undefined): string => String(s ?? '').toLowerCase().trim()
 
-const DIA = 86400000
-
-/** Días enteros entre el alta y ahora. Negativo se recorta a 0: una fecha futura no es una espera. */
-function diasDesde(iso: string | null | undefined, ahora: number): number | null {
-  if (!iso) return null
-  const t = new Date(iso).getTime()
-  if (!Number.isFinite(t)) return null
-  return Math.max(0, Math.floor((ahora - t) / DIA))
-}
 
 /** El índice vid → cuántas veces salió, cuándo, y qué se contestó la última vez. */
 type Historial = Map<string, { salidas: number; ultima: string | null; intento: RegistroFoto | null }>

@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import type { Marca } from '@/lib/nav'
 import { aplicarAsignarLote, auditProductos, bustAudit, traerCategorias } from '@/lib/tncat/cliente'
-import { buscar, enCategoria, itemsParaAplicar } from '@/lib/tncat/categorias'
+import { buscar, enCategoria, etiquetaAntiguedad, itemsParaAplicar, type OrdenCat } from '@/lib/tncat/categorias'
 import type { Categoria, ProductoCat } from '@/lib/tncat/tipos'
+import { FotoTn } from './FotoTn'
 import { Card, color, useConfirmar } from '@/components/ui'
 
 const CHUNK = 20
+const MINI = 40
 
 /**
  * Explorar una categoría: ver qué tiene adentro, sacar lo que ya no va y sumar lo que falta.
@@ -20,6 +22,12 @@ const CHUNK = 20
  *
  * Los dos lados de la pantalla son el mismo gesto: tildás productos y decidís si entran o
  * salen. Nada se escribe hasta confirmar, y se avisa siempre cuántos productos se tocan.
+ *
+ * 🔑 **La fila muestra la FOTO y hace cuánto entró el producto** (7-sep-2026). Las dos salen del
+ * payload que la card ya bajaba: `images` y `created_at` vienen en el audit liviano, así que no
+ * cuesta una llamada más. Sin la foto hay que acordarse de qué es cada nombre; sin la fecha no se
+ * puede decidir lo único que importa en NEW IN —**498 de los 770 productos de Zattia están ahí, y
+ * 279 hace más de 90 días**—, que es qué dejó de ser novedad.
  */
 export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   const { confirmar } = useConfirmar()
@@ -27,9 +35,14 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   const [catId, setCatId] = useState('')
   const [productos, setProductos] = useState<ProductoCat[] | null>(null)
   const [q, setQ] = useState('')
+  const [qDentro, setQDentro] = useState('')
+  const [orden, setOrden] = useState<OrdenCat>('antiguos')
   const [sacar, setSacar] = useState<Set<string>>(new Set())
   const [sumar, setSumar] = useState<Set<string>>(new Set())
   const [aplicando, setAplicando] = useState(false)
+  // Se fija una vez: con `Date.now()` en cada render, dos filas del mismo día podrían contarse
+  // distinto entre un dibujo y el siguiente.
+  const [ahora] = useState(() => Date.now())
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -46,7 +59,17 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
   }, [marca])
 
   const catNombre = categorias?.find((c) => String(c.id) === catId)?.name ?? ''
+  // Lo que está adentro, SIN filtrar: es la base del lote. Lo tildado se acumula entre búsquedas
+  // igual que del lado de agregar, y aplicar sobre la vista filtrada perdería lo que no se ve.
   const dentro = useMemo(() => (productos && catId ? enCategoria(productos, catId) : []), [productos, catId])
+  const dentroVista = useMemo(
+    () => (productos && catId ? enCategoria(productos, catId, { q: qDentro, orden }) : []),
+    [productos, catId, qDentro, orden],
+  )
+  const tildadosOcultos = useMemo(() => {
+    const visibles = new Set(dentroVista.map((p) => String(p.id)))
+    return [...sacar].filter((id) => !visibles.has(id)).length
+  }, [dentroVista, sacar])
   const candidatos = useMemo(() => (productos && catId ? buscar(productos, q, catId) : []), [productos, q, catId])
 
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
@@ -107,25 +130,47 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
     }
   }
 
-  const fila = (p: ProductoCat, marcado: boolean, onToggle: () => void) => (
-    <label key={String(p.id)} style={{ display: 'flex', gap: 9, alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
-      <input type="checkbox" checked={marcado} onChange={onToggle} />
-      <div style={{ flex: 1, minWidth: 140 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{p.name}</div>
-        {p.sku ? <div style={{ fontSize: 11.5, color: color.mut2 }}>SKU {p.sku}</div> : null}
-      </div>
-      {p.published === false ? <span style={{ fontSize: 11, color: color.warningInk, background: color.warningBg, borderRadius: 6, padding: '1px 7px' }}>oculto</span> : null}
-    </label>
-  )
+  const fila = (p: ProductoCat, marcado: boolean, onToggle: () => void) => {
+    const foto = (p.images || [])[0]
+    const alta = p.created_at ? new Date(p.created_at).toLocaleDateString('es-AR') : null
+    return (
+      <label key={String(p.id)} style={{ display: 'flex', gap: 9, alignItems: 'center', border: `1px solid ${color.line}`, borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+        <input type="checkbox" checked={marcado} onChange={onToggle} />
+        {/* Sin foto se dibuja el hueco igual: si la fila se achicara, "sin foto" se leería como
+            un renglón más corto y no como lo que es. */}
+        {foto ? (
+          <FotoTn src={foto} alt={p.name} ancho={MINI} style={{ width: MINI, height: MINI, objectFit: 'cover', borderRadius: 6, background: color.line, flex: '0 0 auto' }} />
+        ) : (
+          <div title="El producto no tiene ninguna foto en la tienda" style={{ width: MINI, height: MINI, borderRadius: 6, background: color.line, color: color.mut2, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', flex: '0 0 auto' }}>
+            sin foto
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{p.name}</div>
+          <div style={{ fontSize: 11.5, color: color.mut2 }}>
+            {p.sku ? <>SKU {p.sku} · </> : null}
+            {/* La fecha es el ALTA EN LA TIENDA, no el ingreso al depósito: se dice en el title
+                para que nadie la lea como otra cosa. Sin fecha se dice "sin fecha", no 0 días. */}
+            <span title={alta ? `Alta en la tienda: ${alta}` : 'El catálogo no trajo la fecha de alta'}>
+              {etiquetaAntiguedad(p.created_at, ahora)}
+            </span>
+          </div>
+        </div>
+        {p.published === false ? <span style={{ fontSize: 11, color: color.warningInk, background: color.warningBg, borderRadius: 6, padding: '1px 7px' }}>oculto</span> : null}
+      </label>
+    )
+  }
 
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>Explorar una categoría</div>
         <InfoPopover titulo="Explorar una categoría">
-          Elegí una categoría y vas a ver <b>qué productos tiene hoy</b>, para sacar los que ya no van, y un
-          buscador para <b>agregar</b> los que faltan. Sirve sobre todo para las categorías que cambian seguido
-          (Best sellers, Ofertas). Escribe en la tienda online al confirmar; TiendaNube no tiene un “sacar”:
+          Elegí una categoría y vas a ver <b>qué productos tiene hoy</b>, con su foto y{' '}
+          <b>hace cuánto entraron a la tienda</b>, para sacar los que ya no van; y un buscador para{' '}
+          <b>agregar</b> los que faltan. Sirve sobre todo para las categorías que cambian seguido (NEW IN,
+          Best sellers, Ofertas). La fecha es la del <b>alta del producto en la tienda online</b>, no la del
+          ingreso de la mercadería. Escribe en la tienda online al confirmar; TiendaNube no tiene un “sacar”:
           se manda la lista completa de categorías del producto, y de eso se encarga el sistema.
         </InfoPopover>
       </div>
@@ -134,6 +179,7 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
         value={catId}
         onChange={(e) => {
           setCatId(e.target.value)
+          setQDentro('')
           setSacar(new Set())
           setSumar(new Set())
           setMsg(null)
@@ -167,9 +213,44 @@ export function ExplorarCategoriaCard({ marca }: { marca: Marca }) {
               <div style={{ fontSize: 13, color: color.mut2, padding: '8px 2px' }}>La categoría está vacía.</div>
             ) : (
               <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflow: 'auto' }}>
-                  {dentro.map((p) => fila(p, sacar.has(String(p.id)), () => toggle(sacar, setSacar, String(p.id))))}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <input
+                    value={qDentro}
+                    onChange={(e) => setQDentro(e.target.value)}
+                    placeholder="Buscar acá adentro…"
+                    style={{ flex: '1 1 140px', minWidth: 0, boxSizing: 'border-box', padding: '7px 9px', border: `1px solid ${color.line2}`, borderRadius: 7 }}
+                  />
+                  <select
+                    value={orden}
+                    onChange={(e) => setOrden(e.target.value as OrdenCat)}
+                    style={{ padding: '7px 8px', border: `1px solid ${color.line2}`, borderRadius: 7, fontSize: 12.5 }}
+                  >
+                    <option value="antiguos">Más viejos primero</option>
+                    <option value="nuevos">Más nuevos primero</option>
+                    <option value="nombre">A–Z</option>
+                  </select>
                 </div>
+                {qDentro.trim() && (
+                  <div style={{ fontSize: 12, color: color.mut2, marginBottom: 6 }}>
+                    {dentroVista.length === 0
+                      ? 'Ninguno de los que están en la categoría coincide.'
+                      : `${dentroVista.length} de ${dentro.length}`}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflow: 'auto' }}>
+                  {dentroVista.map((p) => fila(p, sacar.has(String(p.id)), () => toggle(sacar, setSacar, String(p.id))))}
+                </div>
+                {/* Lo tildado sobrevive al filtro (si no, buscar dos veces obligaría a tildar de
+                    nuevo) ⇒ hay que decir cuántos van a salir sin estar a la vista. */}
+                {tildadosOcultos > 0 && (
+                  <div style={{ fontSize: 12, color: color.warningInk, marginTop: 6 }}>
+                    {tildadosOcultos === 1 ? '1 tildado no se ve' : `${tildadosOcultos} tildados no se ven`} con esta búsqueda, y también{' '}
+                    {tildadosOcultos === 1 ? 'sale' : 'salen'}.{' '}
+                    <button onClick={() => setSacar(new Set())} style={{ background: 'none', border: 'none', color: color.brandSolid, cursor: 'pointer', padding: 0, fontSize: 12, textDecoration: 'underline' }}>
+                      Destildar todo
+                    </button>
+                  </div>
+                )}
                 <button
                   className="btn-sm"
                   disabled={sacar.size === 0 || aplicando}

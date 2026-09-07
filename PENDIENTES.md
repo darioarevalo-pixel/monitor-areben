@@ -41,6 +41,38 @@ CAMINAR con su causa: el día que la clave esté, se ejerce solo.
 
 ---
 
+## 🏁 «PARA SACAR DE LA CATEGORÍA, PODER VER LA FOTO Y HACE CUÁNTO ENTRÓ» — 7-sep-2026 (dictado, y hecho)
+
+> «quiero ir a monitor categorías, para sacar de la categoría estaría bueno poder ver las fotos de
+> los productos de esa categoría, se puede? además capaz que se pueda ver la fecha de ingreso del
+> producto, principalmente para las categorías new in, para ir viendo eso» · y enseguida: *«ahí
+> habría que poner también para buscar productos escribiendo, porque sólo me deja buscar lo que
+> quiero agregar»*
+
+Las tres cosas salieron del dato que la pantalla **ya bajaba**: `images` y `created_at` vienen en el
+audit liviano (770/770 de Zattia, 252/252 de BDI), así que ⛔ no costó ni una llamada más ni el
+payload `?variantes=1`. 🏁 **La fila muestra la foto, hace cuánto entró y el SKU; lo de adentro tiene
+buscador y orden (más viejos / más nuevos / A–Z), con "más viejos primero" por defecto.**
+
+📊 **Lo que se ve al abrirlo es el motivo del pedido: NEW IN de Zattia tiene 498 de los 770 productos
+de la tienda, y 279 hace más de 90 días** (42 hace más de 180; el más viejo hace 325 d, del
+16-oct-2025). La categoría dejó de significar «lo nuevo».
+
+🔴 **La fecha es el alta del producto EN TIENDANUBE, ⛔ no el ingreso de la mercadería** (eso vive en
+Gestión Nube y acá no se cruza). Se dice en la fila y en el InfoPopover: leída como fecha de ingreso
+manda a sacar de NEW IN lo que recién llegó.
+🔴 **El buscador de adentro filtra la vista, ⛔ no el lote**: lo tildado sobrevive al cambio de texto
+y la pantalla avisa con el número cuántos salen sin estar a la vista.
+
+El relato está en `docs/secciones/tncat.md`.
+
+▶️ **Falta el gesto de Bruno: abrir `/tncat/categorias` → "Explorar una categoría" → NEW IN.** Lo que
+escribe ⛔ no cambió (mismo `accion:'asignar'` por items), pero la pantalla no se caminó: el login
+pide contraseña. El núcleo sí se corrió **contra el catálogo real de Zattia** y da 498, TOP KAIRA
+primero con 325 d, 33 sin foto, 0 sin fecha.
+
+---
+
 ## 🏁 CERRAR EL MEMO CONGELA LOS NÚMEROS, NO EL ACTA — 7-sep-2026 (dictado, y hecho)
 
 > «pq no se puede seguir escribiendo lo de memo semanal personal de cada uno, o sino un boton de

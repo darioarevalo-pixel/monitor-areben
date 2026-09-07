@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buscar, enCategoria, itemsParaAplicar, nuevasCategorias, tieneCategoria } from '@/lib/tncat/categorias'
+import { buscar, enCategoria, etiquetaAntiguedad, itemsParaAplicar, nuevasCategorias, tieneCategoria } from '@/lib/tncat/categorias'
 import { agruparPorCategoria, SIN_CATEGORIA, type GrupoSinStock } from '@/lib/tncat/variantes-sin-stock'
 import type { ProductoCat } from '@/lib/tncat/tipos'
 
@@ -66,5 +66,65 @@ describe('tncat — variantes sin stock agrupadas por categoría', () => {
     const r = agruparPorCategoria([g('A', []), g('B', ['Verano'])])
     expect(r.map((x) => x.categoria)).toEqual(['Verano', SIN_CATEGORIA])
     expect(r[1].grupos.map((x) => x.nombre)).toEqual(['A'])
+  })
+})
+
+/**
+ * La foto y la antigüedad son lo que hace decidible «esto ya no es NEW IN». El riesgo no es
+ * dibujarlas mal: es ORDENAR mal —que algo sin fecha encabece «lo más viejo»— y que el filtro de
+ * texto se lleve puesto lo que ya estaba tildado para sacar.
+ */
+describe('tncat — mirar la categoría por dentro: orden por antigüedad y búsqueda', () => {
+  const q = (id: string, name: string, created_at: string | null): ProductoCat => ({
+    id,
+    name,
+    category_ids: ['20'],
+    created_at,
+  })
+  const ahora = new Date('2026-09-07T12:00:00Z').getTime()
+  const prods = [
+    q('nuevo', 'Top Drip', '2026-09-02T14:22:29+0000'),
+    q('viejo', 'Top Kaira', '2025-10-16T17:47:38+0000'),
+    q('mudo', 'Top Sin Fecha', null),
+  ]
+
+  it('“más viejos primero” encabeza por el que hace más que entró', () => {
+    expect(enCategoria(prods, '20', { orden: 'antiguos', ahora }).map((x) => x.id)).toEqual(['viejo', 'nuevo', 'mudo'])
+  })
+
+  it('el que no tiene fecha va al final en LOS DOS sentidos: no se hace pasar por viejo ni por nuevo', () => {
+    expect(enCategoria(prods, '20', { orden: 'antiguos', ahora }).at(-1)!.id).toBe('mudo')
+    expect(enCategoria(prods, '20', { orden: 'nuevos', ahora }).at(-1)!.id).toBe('mudo')
+  })
+
+  it('sin orden pedido sigue siendo alfabético (lo que veía el que ya la usaba)', () => {
+    expect(enCategoria(prods, '20').map((x) => x.name)).toEqual(['Top Drip', 'Top Kaira', 'Top Sin Fecha'])
+  })
+
+  it('el buscador de adentro filtra por nombre o SKU, y NO cambia lo que hay adentro', () => {
+    expect(enCategoria(prods, '20', { q: 'kaira' }).map((x) => x.id)).toEqual(['viejo'])
+    // El invariante que sostiene el lote: lo que se aplica sale de la lista SIN filtrar.
+    expect(enCategoria(prods, '20').length).toBe(3)
+    expect(itemsParaAplicar(enCategoria(prods, '20'), '20', 'quitar').map((i) => i.id)).toEqual(['nuevo', 'viejo', 'mudo'])
+  })
+
+  it('una fecha futura no cuenta como espera negativa: queda en 0 días, adelante de todo', () => {
+    const futuro = [q('futuro', 'Top Futuro', '2026-12-01T00:00:00+0000'), prods[1]]
+    expect(enCategoria(futuro, '20', { orden: 'nuevos', ahora }).map((x) => x.id)).toEqual(['futuro', 'viejo'])
+  })
+})
+
+describe('tncat — lo que dice la fila sobre la antigüedad', () => {
+  const ahora = new Date('2026-09-07T12:00:00Z').getTime()
+
+  it('distingue los tres casos, y “no se sabe” NO sale como 0 días', () => {
+    expect(etiquetaAntiguedad('2025-10-16T17:47:38+0000', ahora)).toBe('hace 325 d')
+    expect(etiquetaAntiguedad('2026-09-07T01:00:00+0000', ahora)).toBe('entró hoy')
+    expect(etiquetaAntiguedad(null, ahora)).toBe('sin fecha')
+    expect(etiquetaAntiguedad('no es una fecha', ahora)).toBe('sin fecha')
+  })
+
+  it('una fecha futura dice “entró hoy”, no “hace -85 d”', () => {
+    expect(etiquetaAntiguedad('2026-12-01T00:00:00+0000', ahora)).toBe('entró hoy')
   })
 })

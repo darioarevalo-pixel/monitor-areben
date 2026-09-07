@@ -156,4 +156,17 @@ export type ProductoCat = {
   published?: boolean
   categories?: string[]
   category_ids?: (string | number)[]
+  /**
+   * Las fotos del producto, en el orden de la tienda (`images[0]` es la portada). El audit las
+   * manda **en el payload liviano** desde siempre: no hay que pedir `?variantes=1` —que pesa el
+   * doble— para poner una miniatura al lado del nombre.
+   */
+  images?: string[]
+  /**
+   * Alta del PRODUCTO en TiendaNube (⛔ no el ingreso de la mercadería al depósito, que vive en
+   * Gestión Nube y no se cruza acá). Es lo que contesta «hace cuánto que esto está publicado como
+   * novedad», que es la pregunta de NEW IN. Viene en 770/770 de Zattia y 252/252 de BDI (medido el
+   * 7-sep-2026); igual es opcional, y ⛔ no se rellena con nada: la fila dice «sin fecha».
+   */
+  created_at?: string | null
 }
