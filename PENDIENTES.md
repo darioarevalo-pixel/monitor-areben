@@ -13,6 +13,29 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «ENTRÉ A ELIANA IND Y NO ME APARECE LO QUE VENDÍ» — 7-sep-2026 (dictado, y hecho)
+
+> «seguimos con prm, que falta para saber en prm las ventas de los productos de los proveedores?
+> pq entre a eliana ind pero no me aparece lo que vendi»
+
+Nada estaba roto: **la columna era vieja**. El webhook cruza los renglones contra el espejo de
+Gestión Nube **una sola vez**, y el alta en GN de un proveedor nuevo se hace **después** del aviso.
+🏁 **El PRM ahora recruza en vivo** —la ficha y la lista de los 34—, con la regla en un solo lugar
+(`lib/recepciones/espejo.core.js`), que es también la del webhook y la de Recepciones. El relato
+entero en `docs/secciones/recepciones.md`.
+
+▶️ 🔴 **Queda abierto el OTRO bloque, y ⛔ no lo arregla el código: «Lo que vendió».** Ése sale del
+ETL por `proveedor_gn`, y los productos de ELIANA IND tienen `productos.proveedor` en **null** en
+Gestión Nube — por eso quedó sin enganche el 2-sep, junto con YASANA, AIME y AUDAZ. **La mano es
+cargarle el proveedor al producto en GN**; recién ahí `scripts/enganchar-gn.mjs` los sugiere.
+
+▶️ **Y falta caminarlo con datos de Zattia.** Desde esta Mac esa base contesta `permission denied`
+para `inventario` y `venta_detalles` (falta `ZATTIA_SUPABASE_SERVICE_KEY` en el `.env`; en Vercel
+está). `scripts/caminar-prm-movimiento.mjs` ya elige el caso **desde la base** y lo imprime SIN
+CAMINAR con su causa: el día que la clave esté, se ejerce solo.
+
+---
+
 ## 🏁 CERRAR EL MEMO CONGELA LOS NÚMEROS, NO EL ACTA — 7-sep-2026 (dictado, y hecho)
 
 > «pq no se puede seguir escribiendo lo de memo semanal personal de cada uno, o sino un boton de
