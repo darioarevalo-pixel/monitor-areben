@@ -232,3 +232,26 @@ describe('🔴 el plural nombra la prenda igual (4-sep-2026)', () => {
     expect(validarParrafo('Baby tees de algodón con estampa al frente y ruedo crudo.', { variantes: [], nombre: 'BABY TEE ICON', bullets: [] })).toEqual([])
   })
 })
+
+describe('🆕 cuando el tipo de prenda ES el valor de un bullet, gana la regla que OBLIGA (7-sep-2026)', () => {
+  // MINI ARLET: la ficha dice `Largo: mini` y el nombre obliga a nombrar «mini» en los primeros
+  // 60 caracteres. Antes de esto las dos reglas se peleaban y el párrafo NO podía quedar verde
+  // nunca — con el botón de aprobar exigiendo cero problemas, esos productos no se podían sacar.
+  // 📊 Medido contra el catálogo de Zattia: 20 productos (18 minis, BUZO BROWN, CAMISA AMELIE).
+  const bullets = [
+    { etiqueta: 'Tela', texto: 'ecocuero' },
+    { etiqueta: 'Largo', texto: 'mini' },
+    { etiqueta: 'Tiro', texto: 'bajo' },
+  ]
+  const ctx = { nombre: 'MINI ARLET', variantes: [], bullets }
+
+  it('nombrar la prenda NO cuenta como repetir el bullet', () => {
+    const p = 'Mini de superficie lisa y brillo parejo, sin costuras a la vista adelante: apoya sobre la cadera y cae recta hasta el ruedo.'
+    expect(validarParrafo(p, ctx)).toEqual([])
+  })
+
+  it('⛔ pero el resto de los bullets se sigue mirando igual', () => {
+    const p = 'Mini de ecocuero con brillo parejo, sin costuras a la vista adelante y ruedo recto.'
+    expect(validarParrafo(p, ctx).map((x) => x.motivo).join(' ')).toContain('ecocuero')
+  })
+})
