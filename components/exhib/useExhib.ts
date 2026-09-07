@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import type { Producto } from '@/lib/etl/tipos'
-import { cargarDatosExhib } from '@/lib/exhib/datos'
-import { buscarItem, esCruce, exhibId, ordenarCats } from '@/lib/exhib/core'
+import { bajarExhib, type CrudosExhib } from '@/lib/exhib/datos'
+import { armarProdMap, buscarItem, construirItems, esCruce, exhibId, ordenarCats } from '@/lib/exhib/core'
 import type { ExhibErrores, ExhibEstado, ExhibEstados, ExhibItem } from '@/lib/exhib/tipos'
 
 const keyEstados = (m: Marca) => 'monitor_exhib_' + m
@@ -36,8 +36,7 @@ export type ResultadoMarca = { tipo: 'no-encontrado'; code: string } | { tipo: '
  * lector físico (`marcarPorCodigo`); la cámara ZXing del legacy era código muerto.
  */
 export function useExhib(marca: Marca, productos: Producto[]) {
-  const [items, setItems] = useState<ExhibItem[]>([])
-  const [cats, setCats] = useState<string[]>([])
+  const [crudos, setCrudos] = useState<CrudosExhib>({ inv: [], tnProducts: [] })
   const [estados, setEstados] = useState<ExhibEstados>({})
   const [errores, setErrores] = useState<ExhibErrores>({})
   const [cargando, setCargando] = useState(true)
@@ -55,10 +54,9 @@ export function useExhib(marca: Marca, productos: Producto[]) {
       setCargando(true)
       setErrorMsg(null)
       try {
-        const { items } = await cargarDatosExhib(marca, productos, err)
+        const bajado = await bajarExhib(marca)
         if (!vivo) return
-        setItems(items)
-        setCats(ordenarCats(items))
+        setCrudos(bajado)
       } catch (e) {
         if (vivo) setErrorMsg((e as Error).message)
       } finally {
@@ -68,23 +66,35 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     return () => {
       vivo = false
     }
-    // productos se pasa estable desde el store; recargar solo al cambiar de marca.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marca])
+
+  /**
+   * 🔴 **El cruce es DERIVADO, ⛔ no un resultado guardado — y ésa es la corrección del 7-sep-2026.**
+   *
+   * El catálogo del ETL (`productos`) llega **después** de que esta pantalla monta: el store lo
+   * publica asincrónico. Mientras la bajada guardaba los ítems ya cruzados, cruzaba contra una
+   * lista vacía y ahí se quedaba —las 870 prendas del Local en «(Sin categoría)», el desplegable
+   * con dos opciones, sin foto y sin precio de góndola—, porque nada volvía a cruzar cuando el
+   * catálogo llegaba. Derivándolo, el día que `productos` aparece los ítems se rearman solos.
+   *
+   * ⚠️ Los `errores` entran acá y ⛔ no se aplican a mano en otro lado: `construirItems` ya sabe
+   * reasignar la categoría marcada. Escribirlo dos veces era la copia que se despega.
+   */
+  const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
+  const items = useMemo(() => construirItems(crudos.inv, prodMap, errores), [crudos.inv, prodMap, errores])
+  const cats = useMemo(() => ordenarCats(items), [items])
 
   const recargar = useCallback(async () => {
     setCargando(true)
     try {
-      const { items } = await cargarDatosExhib(marca, productos, errores)
-      setItems(items)
-      setCats(ordenarCats(items))
+      setCrudos(await bajarExhib(marca))
       setErrorMsg(null)
     } catch (e) {
       setErrorMsg((e as Error).message)
     } finally {
       setCargando(false)
     }
-  }, [marca, productos, errores])
+  }, [marca])
 
   const persistEstados = useCallback((next: ExhibEstados) => {
     setEstados(next)
@@ -107,20 +117,16 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it }
   }, [items, estados, persistEstados])
 
-  /** "Va acá → corregir TN": registra el error y reasigna la categoría del ítem. */
+  /**
+   * "Va acá → corregir TN": registra el error y reasigna la categoría del ítem.
+   *
+   * La reasignación ⛔ no se escribe acá: `errores` alimenta `construirItems`, así que guardar el
+   * error **es** cambiar la categoría del ítem y las cats se reordenan solas.
+   */
   const marcarErrorCat = useCallback((pid: string, catCorrecta: string) => {
     const it = items.find((x) => x.productId === pid)
     if (!it) return
     persistErrores({ ...errores, [pid]: { name: it.name, sku: it.sku || '', tnId: it.tnId || null, catTN: it.cat, catCorrecta } })
-    setItems((prev) => {
-      const next = prev.map((x) => {
-        if (x.productId !== pid) return x
-        const cleanCats = x.cleanCats.includes(catCorrecta) ? x.cleanCats : [...x.cleanCats, catCorrecta]
-        return { ...x, cat: catCorrecta, cleanCats }
-      })
-      setCats(ordenarCats(next))
-      return next
-    })
     persistEstados({ ...estados, [exhibId(it)]: 'exhibido' })
   }, [items, errores, estados, persistErrores, persistEstados])
 

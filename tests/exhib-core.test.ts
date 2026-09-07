@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPDF, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
+import { agruparPDF, armarProdMap, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstados, type ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, precio: null, promo: null, ...over })
@@ -183,5 +183,43 @@ describe('sospechososNoExhibidos', () => {
 
   it('cruza aunque los pid vengan como número de un lado y texto del otro', () => {
     expect(sospechososNoExhibidos([faltante], [10 as unknown as string])).toHaveLength(1)
+  })
+})
+
+
+/**
+ * 🔴 **El caso del 7-sep-2026: el catálogo del ETL llega TARDE.**
+ *
+ * En el teléfono, el Chequeo de exhibición mostraba **dos** opciones en «Categoría a recorrer»
+ * —«Todas» y «(Sin categoría)»— con 870 prendas cargadas. No era Tienda Nube ni el inventario: los
+ * dos contestaban bien. Era que el cruce se hacía **una sola vez**, al montar la pantalla, cuando
+ * `allProductos` del store todavía era `[]`; el mapa salía vacío y nada lo volvía a armar cuando el
+ * ETL publicaba. Un mapa vacío ⛔ no da error: da todo en «(Sin categoría)», sin foto y sin precio.
+ *
+ * Estos casos fijan la mitad pura: **el mapa vale lo que valga `productos` en el momento en que se
+ * arma**, así que el que lo llame tiene que derivarlo, ⛔ no guardarlo.
+ */
+describe('armarProdMap — el cruce GN ↔ TN', () => {
+  const tn = [{ id: 99, sku: 'AN-01', name: 'Anillo Sol', images: ['http://img'], categories: ['Anillos', 'SALE'], price: 1000, promo_price: 800 }]
+  const gn = [{ id: 5, name: 'Anillo Sol', sku: 'AN-01' }] as Parameters<typeof armarProdMap>[0]
+  const inv = [{ product_id: 5, product_name: 'Anillo Sol', size_name: 'Único', sku: 'AN-01', barcode: 779, available_quantity: 3 }]
+
+  it('con el catálogo del ETL cargado, la prenda llega con categoría, foto y los dos precios', () => {
+    const [it] = construirItems(inv, armarProdMap(gn, tn), {})
+    expect(it).toMatchObject({ cat: 'Anillos', img: 'http://img', tnId: 99, precio: 1000, promo: 800 })
+    expect(ordenarCats(construirItems(inv, armarProdMap(gn, tn), {}))).toEqual(['Anillos'])
+  })
+
+  it('🔴 sin el catálogo del ETL el mapa sale VACÍO y todo cae en (Sin categoría): el desplegable queda con una sola', () => {
+    const items = construirItems(inv, armarProdMap([], tn), {})
+    expect(ordenarCats(items)).toEqual([SIN_CATEGORIA])
+    expect(items[0].img).toBeNull()
+    expect(items[0].precio).toBeNull()
+  })
+
+  it('el producto que no cruza con TN queda sin categoría, pero los que cruzan no se pierden', () => {
+    const gn2 = [...gn, { id: 6, name: 'Prenda que no está en la tienda', sku: 'ZZ-99' }] as typeof gn
+    const inv2 = [...inv, { product_id: 6, product_name: 'Prenda que no está en la tienda', size_name: 'M', sku: 'ZZ-99', barcode: 780, available_quantity: 1 }]
+    expect(ordenarCats(construirItems(inv2, armarProdMap(gn2, tn), {}))).toEqual(['Anillos', SIN_CATEGORIA])
   })
 })

@@ -6,6 +6,8 @@
  */
 
 import { CATS_GENERICAS, esFundaCat, esModeloCat, esPromo } from '../reposicion/grupos'
+import { indexarTn, matchTn, type TnProducto } from '../tn'
+import type { Producto } from '../etl/tipos'
 import { adminBaseUrl, ofertaVigente, type OfertaVigente } from '../tienda'
 import type { Linea } from '../lineas'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstado, type ExhibEstados, type ExhibItem } from './tipos'
@@ -27,6 +29,35 @@ export function limpiarCats(tnCats: string[] | undefined | null): string[] {
 export type FilaInvExhib = { product_id: number | string; product_name?: string | null; size_name?: string | null; sku?: string | null; barcode?: number | string | null; available_quantity?: number | null }
 /** Datos TN por productId GN: imagen, categorías crudas, tnId y los dos precios. */
 export type ProdMap = Record<string, { img: string | null; tnCats: string[]; tnId: string | number | null; precio?: number | null; promo?: number | null }>
+
+/**
+ * El cruce catálogo GN ↔ catálogo TN: por cada producto del espejo, su foto, sus categorías, su
+ * id de TN y los dos precios.
+ *
+ * 🔑 **Es puro y se recalcula, no se congela.** Vivía adentro de la bajada, y ahí quedaba clavado
+ * al valor que `productos` tuviera en el momento del `fetch` — que al montar la pantalla es `[]`,
+ * porque el ETL publica después. Con la lista vacía el mapa sale vacío, y un mapa vacío ⛔ no da un
+ * error: da 870 prendas en «(Sin categoría)», sin foto y sin precio de góndola, que es exactamente
+ * el número que el recorrido va a comparar contra la etiqueta de papel.
+ *
+ * 🔑 **Los precios ya venían en el mismo payload de `tiendanube-audit`** (`price` / `promo_price`),
+ * que es lo que Márgenes ya usa: no hace falta ni una consulta nueva, ni una columna en el espejo.
+ */
+export function armarProdMap(productos: Producto[], tnProducts: TnProducto[]): ProdMap {
+  const idx = indexarTn(tnProducts)
+  const prodMap: ProdMap = {}
+  productos.forEach((p) => {
+    const tn = matchTn(p, idx)
+    prodMap[String(p.id)] = {
+      img: (tn && tn.images && tn.images[0]) || null,
+      tnCats: (tn && tn.categories) || [],
+      tnId: (tn && tn.id) || null,
+      precio: (tn && tn.price) ?? null,
+      promo: (tn && tn.promo_price) ?? null,
+    }
+  })
+  return prodMap
+}
 
 /**
  * Arma los ítems del recorrido cruzando inventario ↔ TN, aplicando los errores de
