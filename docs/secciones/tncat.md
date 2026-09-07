@@ -125,9 +125,12 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
   de la pantalla —qué dejó de corresponder—; A–Z sigue estando y sirve para encontrar uno que ya se
   sabe cuál es. **Lo que no tiene fecha va al final en LOS DOS sentidos**: no se sabe cuándo entró,
   y encabezar "lo más viejo" con eso es justo lo que se está por sacar de la tienda.
-  📊 **El número que lo justifica: NEW IN de Zattia tiene 498 de los 770 productos de la tienda, y
-  279 hace más de 90 días** (42 hace más de 180; el más viejo, 325 d). O sea que la categoría dejó
-  de significar «lo nuevo» y nadie podía verlo desde la pantalla.
+  📊 **El número que lo justifica: NEW IN de Zattia tiene 416 de los 770 productos de la tienda, y
+  199 hace más de 90 días** (25 hace más de 180; el más viejo, TOP KAIRA, 325 d — 16-oct-2025). O
+  sea que la categoría dejó de significar «lo nuevo» y nadie podía verlo desde la pantalla.
+  ⚠️ **Y el número se mueve rápido**: la misma medición **una hora antes daba 498**, y el diff dice
+  que entre las 13:47 y las 14:53 del 7-sep **salieron 82 y no entró ninguno** (alguien estaba
+  limpiándola). ⇒ un número de esta categoría se cita **con su hora**, ⛔ no como constante.
 - 🔴 **El buscador de "lo que está adentro" filtra la VISTA, ⛔ no el lote.** Lo tildado sobrevive al
   cambio de texto —si no, buscar dos veces obligaría a tildar de nuevo—, así que el botón saca
   también lo que no está a la vista, **y la pantalla lo dice con el número** antes de que se

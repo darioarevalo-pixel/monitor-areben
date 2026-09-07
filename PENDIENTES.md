@@ -54,9 +54,11 @@ audit liviano (770/770 de Zattia, 252/252 de BDI), así que ⛔ no costó ni una
 payload `?variantes=1`. 🏁 **La fila muestra la foto, hace cuánto entró y el SKU; lo de adentro tiene
 buscador y orden (más viejos / más nuevos / A–Z), con "más viejos primero" por defecto.**
 
-📊 **Lo que se ve al abrirlo es el motivo del pedido: NEW IN de Zattia tiene 498 de los 770 productos
-de la tienda, y 279 hace más de 90 días** (42 hace más de 180; el más viejo hace 325 d, del
+📊 **Lo que se ve al abrirlo es el motivo del pedido: NEW IN de Zattia tiene 416 de los 770 productos
+de la tienda, y 199 hace más de 90 días** (25 hace más de 180; el más viejo hace 325 d, del
 16-oct-2025). La categoría dejó de significar «lo nuevo».
+⚠️ **El número se mueve**: una hora antes eran 498, y el diff de los dos audits dice que **salieron
+82 y no entró ninguno** entre las 13:47 y las 14:53 del 7-sep. Se cita con su hora.
 
 🔴 **La fecha es el alta del producto EN TIENDANUBE, ⛔ no el ingreso de la mercadería** (eso vive en
 Gestión Nube y acá no se cruza). Se dice en la fila y en el InfoPopover: leída como fecha de ingreso
@@ -66,10 +68,13 @@ y la pantalla avisa con el número cuántos salen sin estar a la vista.
 
 El relato está en `docs/secciones/tncat.md`.
 
-▶️ **Falta el gesto de Bruno: abrir `/tncat/categorias` → "Explorar una categoría" → NEW IN.** Lo que
-escribe ⛔ no cambió (mismo `accion:'asignar'` por items), pero la pantalla no se caminó: el login
-pide contraseña. El núcleo sí se corrió **contra el catálogo real de Zattia** y da 498, TOP KAIRA
-primero con 325 d, 33 sin foto, 0 sin fecha.
+🏁 **CAMINADO EN PROD** (7-sep, con la sesión abierta en Chrome, ⛔ sin escribir nada): Zattia →
+NEW IN abre en **416**, encabezado por CAMISA MICH / FALDA EMMA / TOP KAIRA / TOP ROMA (325 d) y
+TOP NATE (276 d) — **el mismo orden que da el núcleo corrido aparte contra el catálogo**. Las
+miniaturas cargan (la de TOP KAIRA: 700 KB de original → **1,26 KB** por `images.weserv.nl`), el
+buscador de adentro dice **«1 de 416»**, y con un tildado fuera del filtro la pantalla avisa **«1
+tildado no se ve con esta búsqueda, y también sale»** con su «Destildar todo». ⛔ El botón de sacar
+no se apretó: lo que escribe no cambió (mismo `accion:'asignar'` por items).
 
 ---
 
