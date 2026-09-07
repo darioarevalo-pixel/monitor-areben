@@ -137,6 +137,23 @@ describe('el sistema dice las reglas que el esquema no puede', () => {
     expect(SISTEMA).toContain('una sola oración')
   })
 
+  it('🆕 las dos reglas del TIP: ni lo que va debajo, ni el tiro de la otra prenda (7-sep-2026)', () => {
+    // Las dos salieron de Bruno mirando los tips reales de la corrida del 7-sep.
+    // 1. «Usala con un corpiño/top debajo» apareció en 2 de 6 tips, y las 2 eran de encaje —
+    //    justo las prendas que llevan forro. Si tiene forro o no NO está en la foto ni en la
+    //    ficha: sólo se sabe con la prenda en la mano, así que el tip no puede afirmarlo.
+    // 2. 3 de esos 6 tips nombraban un tiro y 2 pedían «tiro alto». Medido contra la ficha:
+    //    de las 76 prendas con tiro cargado son 44 medio, 23 bajo y 8 alto ⇒ el tip mandaba a
+    //    la clienta a un corte que la tienda casi no tiene.
+    // ⚠️ El ejemplo viejo del prompt («con un top básico metido adentro») enseñaba la regla 1 al
+    //    revés: por eso se cambió el ejemplo y no sólo se agregó la prohibición.
+    expect(SISTEMA).toContain('OTRA MITAD del look')
+    expect(SISTEMA).toContain('DEBAJO de esta prenda')
+    expect(SISTEMA).toContain('forro')
+    expect(SISTEMA).toContain('No le prescribas el tiro')
+    expect(SISTEMA).not.toContain('metido adentro para marcar la cintura')
+  })
+
   it('🆕 y le prohíbe el vocabulario de revista (4-sep-2026)', () => {
     // Lo cazó Bruno leyendo el primer tip: «usala con un bralette al tono debajo». La palabra no se
     // usa en un local de ropa, y el catálogo tiene las suyas.
