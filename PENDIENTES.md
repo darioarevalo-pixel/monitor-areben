@@ -13,6 +13,45 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 DESCRIPCIONES DE ZATTIA — SALIERON LAS DOS PRIMERAS DE LA TANDA (7-sep-2026)
+
+**El relato entero está en `docs/secciones/gen-desc.md`** § «7-sep-2026 — el tip, y las dos primeras
+que SALIERON de la tanda». Acá va sólo lo que queda abierto y lo que muerde.
+
+🏁 **Cae el «nadie publicó todavía ninguno»**: **JEAN MARINA** y **BLUSA CLOE** están en la tienda,
+`verificado: true` y releídas por un tercer camino. Con TOP BLISS (27-ago) van **3**.
+🏁 **Las dos reglas del TIP, en producción** (`a8fb8fa`, CI verde, deploy confirmado): el tip habla
+de **la otra mitad del look** —⛔ nunca de lo que va debajo, porque **el forro ⛔ no está en la foto
+ni en la ficha**— y ⛔ **no prescribe tiro ni corte** (📊 de 76 prendas con tiro: **44 medio, 23
+bajo, 8 alto** ⇒ pedir «tiro alto» manda a la clienta a lo que no hay). ⚠️ **El ejemplo del prompt
+enseñaba la primera regla al revés** ⇒ se cambió el ejemplo, ⛔ no sólo se agregó la prohibición.
+
+📊 **La cola, medida contra prod el 7-sep**: **335 fichas de atributos** cargadas por el local
+(josefinabatter 193, camilaquintana 142) y **207 prendas con medidas** — el 1-sep eran **44 fichas y
+CERO medidas** ⇒ 🔑 **la están usando**. **277 publicados con ficha completa y tela válida**, de los
+cuales **24 mudos**.
+
+▶️ 🔴 **LO QUE ESPERA A BRUNO: las 8 palabras de tela propuestas.** `hilo` ×20 (los sweaters),
+`algodon` ×5, `lentejuelas` ×3, `gamuza`, `lana`, `foil` ×2, `sastrera`, `gamuzado`. Son **36
+prendas, 35 ya publicadas**, y hoy **pasan el freno de la tela y saldrían sin bullet de tela y sin
+cuidados, calladas**: `sinTela` mira si la cadena está, ⛔ no si es un valor. Cuáles entran al
+diccionario y **en qué grupo de cuidados**. ⚠️ El test de cobertura ⛔ no lo caza: cubre las telas de
+la lista y éstas ⛔ no están en la lista.
+
+▶️ **La tanda que sigue: los 22 mudos sanos** (los 24 menos BABY TEE NEX y BLUE, que son de
+`algodon` y esperan lo de arriba). Se escriben **por sesión** —mirando las fotos, con el validador
+real, `op:'borrador'`—, en tandas de ~20.
+
+▶️ **Dos del párrafo, abiertas**: al modelo se le manda **una sola foto** (`imagenes[0]`, cuerpo
+entero) y la de espalda ⛔ nunca — mandarle todas ≈ duplica el borrador (US$0,0015 → ~0,003; los 277
+serían US$0,80) — y **el prompt ⛔ no le dice «si no lo ves con seguridad, ⛔ no lo nombres»**:
+JEAN MARINA salió con «terminaciones deshilachadas» sobre un **dobladillo limpio**.
+
+🔴 **Y una del oficio, que se pagó hoy**: **un borrador guardado ANTES de una corrección ⛔ no vuelve
+solo**. Bruno marcó el deshilachado en la conversación y **se publicó igual**, porque lo que estaba
+guardado en la base era el texto viejo ⇒ **antes de publicar se relee el texto contra lo que ya se
+dijo**, ⛔ no contra la fila. Se republicó corregido el mismo día.
+
 ## 🏁 «ENTRÉ A ELIANA IND Y NO ME APARECE LO QUE VENDÍ» — 7-sep-2026 (dictado, y hecho)
 
 > «seguimos con prm, que falta para saber en prm las ventas de los productos de los proveedores?

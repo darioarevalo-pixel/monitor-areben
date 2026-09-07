@@ -318,6 +318,71 @@ lo dice. 🔑 **Lo contestó Bruno: sale de la OC por la que entró** — y alca
 - 📌 De la tanda del 2-sep cruzan **62 de 67 y ninguno es `ZATTIA`** ⇒ el pie ⛔ no va en ninguno de
   los 40 que están para publicar.
 
+## 🆕 7-sep-2026 — el tip, y las dos primeras que SALIERON de la tanda
+
+🏁 **Cae el «nadie publicó todavía ninguno de la tanda»**: salieron **JEAN MARINA** y **BLUSA CLOE**,
+las dos con `verificado: true` y releídas de la tienda por un tercer camino (el audit con
+`refresh=1`, ⛔ no la respuesta del propio endpoint que las escribió).
+
+### 🔑 Las dos reglas del TIP, y cómo se midieron
+
+Salieron de Bruno leyendo los tips reales de una corrida de **6 prendas** de Zattia:
+
+- 🔴 **El tip habla de la OTRA MITAD del look, ⛔ nunca de lo que va DEBAJO de esta prenda.**
+  «Usala con un corpiño/top debajo» apareció en **2 de los 6**, y los 2 eran **de encaje** — justo
+  las que llevan forro. 🔑 **Si tiene forro o no ⛔ no está en la foto ni en la ficha**: sólo se sabe
+  con la prenda en la mano, así que el tip lo estaba afirmando sin poder saberlo.
+- 🔴 **⛔ No le prescribe el tiro ni el corte a la otra prenda.** **3 de los 6** nombraban un tiro y
+  **2 pedían «tiro alto»**. 📊 Medido contra la ficha: de las **76** prendas con tiro cargado son
+  **44 medio, 23 bajo y 8 alto** ⇒ el tip mandaba a la clienta a un corte que la tienda casi no
+  tiene. Va en general: cuándo se usa y qué levanta.
+
+⚠️ **El ejemplo que traía el prompt enseñaba la primera regla AL REVÉS** —«con un top básico metido
+adentro para marcar la cintura»— ⇒ se cambió **el ejemplo**, ⛔ no sólo se agregó la prohibición: el
+modelo copia el ejemplo antes que la regla. Fijado por test en `tests/tn-desc-redactor.test.ts`
+(mutado: cambiar «No le prescribas el tiro» por «No le sugieras» lo deja en rojo).
+
+### 🔴 El párrafo dejó de ser genérico y empezó a INVENTAR
+
+JEAN MARINA salió con *«terminaciones deshilachadas en la botamanga»* y **el ruedo es un dobladillo
+limpio** — lo cazó Bruno, que conoce la prenda. Dos causas que se suman:
+
+1. 🔑 **Se le manda UNA sola foto, `imagenes[0]`**, de cuerpo entero a 1024×1024: la botamanga ahí
+   son ~60 píxeles y encima cae sobre el calzado. **La segunda foto —la de espalda— ⛔ no se le
+   manda nunca**, y es la que muestra el bolsillo trasero, que es el `detalle` que cargó el local.
+2. 🔑 El prompt del 4-sep le pide hablar de lo que la foto muestra, pero ⛔ **no le dice «si no lo
+   ves con seguridad, ⛔ no lo nombres»**. Arreglar el relleno cambió **relleno por invención**, y
+   eso es peor: el genérico aburre, esto **afirma algo falso del producto**.
+
+▶️ **Las dos quedan abiertas** (mandarle todas las fotos ≈ duplica el costo del borrador, de
+US$0,0015 a ~US$0,003; los 277 pendientes serían US$0,80 en vez de US$0,40).
+
+### 🆕 El borrador también lo puede escribir una SESIÓN, y ⛔ el motivo no es la plata
+
+Pedido de Bruno. Una sesión lee la ficha de la base, **mira las fotos**, escribe el párrafo, le
+corre **el validador de verdad** (`validarParrafo`/`validarTip`, ⛔ no una copia) y lo deja con
+`op:'borrador'`. La pantalla ⛔ no se entera: la fila queda igual que si hubieran apretado el botón.
+Así salieron las dos de hoy.
+
+📊 **La plata ⛔ no es el argumento**: los 277 pendientes con Flash Lite son **US$0,42 en total**. Lo
+que se gana es lo del deshilachado —una sesión mira las dos fotos y ve el ruedo—; lo que se pierde
+es que **deja de ser un botón**: administración ya no lo saca sola, sale cuando hay sesión. Y va por
+tandas de ~20 prendas (2 fotos cada una).
+
+### 🔴 El agujero que destapó medir la cola: la PALABRA PROPUESTA de tela pasa el freno
+
+**36 prendas** (35 ya publicadas) tienen como tela una palabra que ⛔ no está en `TELAS`: `hilo` ×20
+—los sweaters—, `algodon` ×5, `lentejuelas` ×3, `gamuza`, `lana`, `foil` ×2, `sastrera`, `gamuzado`.
+
+🔑 **`sinTela` mira si la cadena está, ⛔ no si es un valor** ⇒ contesta «sí tiene tela» y el freno
+del 4-sep la deja pasar. Pero **`bulletsDe` vuelve a preguntar y borra el bullet**, y **`cuidadosDe`
+devuelve `null`** ⇒ esa prenda saldría a la tienda **sin tela y sin cuidados, callada** — que es
+exactamente lo que el freno existía para impedir. Verificado corriendo los dos núcleos con
+`{tela:'hilo'}`.
+
+⚠️ **El test de cobertura ⛔ no lo caza**: cubre las telas de la lista, y estas 8 no están en la
+lista. ▶️ **Espera decisión de Bruno**: cuáles entran al diccionario y en qué grupo de cuidados.
+
 ## Lo que muerde
 
 - 🔴 **La descripción de TiendaNube tiene TRES cosas en un solo campo**: la prosa, la tabla de
