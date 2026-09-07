@@ -24,10 +24,15 @@ Gestión Nube **una sola vez**, y el alta en GN de un proveedor nuevo se hace **
 (`lib/recepciones/espejo.core.js`), que es también la del webhook y la de Recepciones. El relato
 entero en `docs/secciones/recepciones.md`.
 
-▶️ 🔴 **Queda abierto el OTRO bloque, y ⛔ no lo arregla el código: «Lo que vendió».** Ése sale del
-ETL por `proveedor_gn`, y los productos de ELIANA IND tienen `productos.proveedor` en **null** en
-Gestión Nube — por eso quedó sin enganche el 2-sep, junto con YASANA, AIME y AUDAZ. **La mano es
-cargarle el proveedor al producto en GN**; recién ahí `scripts/enganchar-gn.mjs` los sugiere.
+🏁 **Y el OTRO bloque también quedó cerrado, el mismo día**: *«ahí cargaron los cruces de proveedor
+en gestión nube»*. Con `productos.proveedor` cargado, `scripts/enganchar-gn.mjs` enganchó los 4 que
+faltaban —**AIME · AUDAZ · ELIANA IND · YASANA**, las 4 exactas, 0 dudosas— y el padrón pasó a
+**28 de 28** locales con órdenes de Zattia. 🔑 **El oráculo ⛔ no fue que la columna quedara escrita,
+sino que el enganche SIRVIERA**: contados del otro lado traen **716 productos** y **ninguno apunta a
+un nombre inexistente**; la segunda corrida dice `0`. Verificado además **en prod y por la misma
+puerta que usa el ETL** (`?recurso=espejo`): los 15 productos de los 4 vuelven con su `proveedor`.
+⚠️ **Los 6 que quedan sin enganchar son de BDI y así se quedan**: `productos.proveedor` ⛔ no existe
+de ese lado.
 
 ▶️ **Y falta caminarlo con datos de Zattia.** Desde esta Mac esa base contesta `permission denied`
 para `inventario` y `venta_detalles` (falta `ZATTIA_SUPABASE_SERVICE_KEY` en el `.env`; en Vercel
