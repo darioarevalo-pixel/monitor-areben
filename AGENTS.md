@@ -135,6 +135,10 @@ ya tienen ficha:
 - Ventas de Marketing → **leer `docs/secciones/mkt-ventas.md`** antes de tocar
   `components/mkt-ventas/`, `lib/mkt-ventas/` o la llave `?metas=1` de `api/_norte.js` — ⛔ esa
   llave saca objetivos del área de Dirección: por ahí puede viajar la meta, **nunca plata**.
+- Archivos (qué hay guardado en el Blob) → **leer `docs/secciones/archivos.md`** antes de tocar
+  `components/archivos/`, `lib/blob/` o `api/_blob-refs.js`. ⛔ **Es la pantalla que ELIMINA del
+  Blob**, y el error que no se deshace es llamar huérfano a algo vivo: lo recién subido y lo que no
+  se pudo verificar ⛔ nunca se ofrecen.
 - Ingresos proyectados → **leer `docs/secciones/ingresos.md`** antes de tocar
   `components/ingresos/`, `lib/ingresos/`, `lib/media.core.js` o `api/blob-upload.js`. ⛔ **Sacar un
   ítem de la galería BORRA el archivo del Blob** — y `api/blob-upload.js` lo comparten Fundas,

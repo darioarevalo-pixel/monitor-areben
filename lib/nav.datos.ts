@@ -920,6 +920,17 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "archivos",
+    "area": "sistema",
+    "label": "Archivos",
+    "info": "Qué hay guardado arriba: las fotos y videos que suben las creadoras, la galería de las importaciones, las piezas de Meta, los diseños y las fotos de los reclamos. Cuánto lugar queda del plan y qué se puede eliminar porque ya no lo usa ninguna pantalla. 🔴 LA VEN SÓLO LOS ADMINISTRADORES, y el servidor lo vuelve a pedir: mirar los archivos es ver los nombres de las tres marcas, y eliminar no se puede deshacer. Tildar esta fila acá NO se la muestra a nadie más.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": []
+  },
+  {
     "key": "agenda",
     "area": "agenda",
     "label": "Agenda",
@@ -972,7 +983,8 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "novedades",
       "manuales",
-      "organizacion"
+      "organizacion",
+      "archivos"
     ]
   },
   {

@@ -43,6 +43,7 @@ const Atencion = dynamic(() => import('@/components/atencion/Atencion').then((m)
 const Agenda = dynamic(() => import('@/components/agenda/Agenda').then((m) => m.Agenda), { loading: Cargando })
 const Novedades = dynamic(() => import('@/components/novedades/Novedades').then((m) => m.Novedades), { loading: Cargando })
 const Manuales = dynamic(() => import('@/components/manuales/Manuales').then((m) => m.Manuales), { loading: Cargando })
+const Archivos = dynamic(() => import('@/components/archivos/Archivos').then((m) => m.Archivos), { loading: Cargando })
 const Organizacion = dynamic(() => import('@/components/organizacion/Organizacion').then((m) => m.Organizacion), { loading: Cargando })
 const Cupones = dynamic(() => import('@/components/cupones/Cupones').then((m) => m.Cupones), { loading: Cargando })
 const Etiquetas = dynamic(() => import('@/components/etiquetas/Etiquetas').then((m) => m.Etiquetas), { loading: Cargando })
@@ -297,6 +298,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // puerta, `?recurso=organizacion`. Es la contracara de la Agenda: aquélla contesta "¿qué me toca
   // hoy?" y ésta "¿de quién es esto?".
   organizacion: Organizacion,
+  // "Archivos": qué hay guardado en el Blob y qué se puede eliminar. Admin-only y sin marca —los
+  // archivos son de las tres— y por la puerta de `api/blob-upload.js`, que ya es la del Blob: ⛔ no
+  // gasta una de las 12 funciones. Salió el 7-sep-2026, el día que el store topó el giga del plan
+  // y frenó TODA subida del monitor sin que se pudiera ver desde acá qué lo llenaba.
+  archivos: Archivos,
   // La agenda operativa: qué corre HOY. Misma forma que las dos de arriba —la ve todo el equipo,
   // cargar es un sub-permiso, sin marca, base de BDI— pero por su propia puerta, `?recurso=agenda`.
   agenda: Agenda,

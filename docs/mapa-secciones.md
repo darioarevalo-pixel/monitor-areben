@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-62 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+63 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -86,6 +86,13 @@ esto?». Tablas `organizacion_nodos` y `organizacion_resp`; el sub-permiso es `o
 🔴 **Y ⛔ NO está en `KEYS_PARA_TODOS`, a diferencia de sus dos hermanas de área**: está en obra
 (Bruno, 30-ago-2026) y hoy la ven **sólo los admin**, porque ninguna función hereda esa área.
 Se abre al equipo con una línea, cuando la vista esté.
+
+Y `archivos → components/archivos + lib/blob` (qué hay guardado en el Blob, cuánto lugar queda del
+plan y qué se puede eliminar). **Admin-only y sin `store`**: los archivos son de las tres marcas.
+⛔ **No tiene handler propio**: entra por `api/blob-upload.js` —la puerta que ya era del Blob— con
+las acciones **inventario** y **eliminar-huerfanos**, las dos con `esAdmin()` del lado del servidor. El
+cruce de «quién usa qué» vive en `api/_blob-refs.js`, y ⛔ **el de la galería de Ingresos NO**: sus
+URLs están en el KV de bdi-catalogo y las aporta la pantalla (`lib/blob/cliente.ts`).
 
 **Agenda** — `agenda → components/agenda + lib/agenda` (área propia, por `?recurso=agenda`).
 ⚠️ **Una sección con SEIS entradas de menú** (como Meta): `/agenda` · `/agenda/semana` ·

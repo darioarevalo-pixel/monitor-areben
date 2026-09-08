@@ -45,7 +45,9 @@
 // (login server-side contra el KV). No es admin-only: Fundas la usan no-admins.
 // Si el Blob no está configurado, responde 500 y el cliente cae a guardar base64 (degradación).
 import { handleUpload } from '@vercel/blob/client';
-import { borrarBlob, hayBlob, subirDataUrl } from './_blob.js';
+import { borrarBlob, hayBlob, listarBlobs, subirDataUrl } from './_blob.js';
+import { CARPETAS_CUBIERTAS, piezasYaEnMeta, referenciasDeLaBase } from './_blob-refs.js';
+import { carpetaDe, estadoDeArchivo, sePuedeEliminarEnLote } from '../lib/blob/inventario.core.js';
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import {
   buscarPorToken, carpetaDeCanje, clienteMaestro, contarEvidencias, esTokenDeCanje, topeDeEvidencias,
@@ -120,6 +122,19 @@ function tokenDeCanjeDelBody(body) {
  */
 const CARPETAS_BORRABLES = ['ingresos'];
 
+/**
+ * Lo que puede tocar un ADMIN desde la pantalla «Archivos» (`accion:'inventario'` y
+ * `'eliminar-huerfanos'`), que es más que el × de la galería.
+ *
+ * 🔑 **Es una lista y no «todas»**: el día que el store guarde algo que no salga de ninguna de estas
+ * carpetas, borrarlo tiene que costar agregar un renglón acá y pensarlo, ⛔ no salir gratis por un
+ * comodín que nadie volvió a leer.
+ */
+const CARPETAS_ADMIN = ['canjes', 'piezas', 'ingresos', 'disenos', 'reclamos', 'fundas', 'manuales', 'prm'];
+
+/** Cuántos archivos borra un lote. Más que esto no entra en el tiempo de una función de Vercel. */
+const TOPE_LOTE = 200;
+
 /** Ingresos proyectados es sólo de BDI (`brands: ['bdi']` en el registro de secciones). */
 const puedeBorrarIngresos = (perfil) => esAdmin(perfil) || puedeSub(perfil, 'bdi', 'ingresos', 'editar');
 
@@ -153,6 +168,15 @@ export default async function handler(req, res) {
     return await permisoDeSubida(req, res, body);
   }
 
+  // ── La pantalla «Archivos» (Sistema, admin) ──────────────────────────────────
+  //
+  // 🔴 **Las dos acciones son admin y nada más.** Ver el store entero es ver los nombres de los
+  // archivos de las tres marcas, y borrar de acá no tiene deshacer.
+  if (body.accion === 'inventario' || body.accion === 'eliminar-huerfanos') {
+    if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un administrador puede ver o limpiar los archivos.' });
+    return await pantallaDeArchivos(req, res, body);
+  }
+
   if (body.accion === 'borrar') {
     if (!puedeBorrarIngresos(perfil)) {
       return res.status(403).json({ error: 'No tenés permiso para borrar archivos de Ingresos proyectados.' });
@@ -166,6 +190,92 @@ export default async function handler(req, res) {
   const r = await subirDataUrl(body.dataUrl, prefix);
   if (!r.ok) return res.status(r.status || 500).json({ error: r.error });
   return res.status(200).json({ ok: true, url: r.url });
+}
+
+/**
+ * El inventario del store y el borrado de lo que quedó sin dueño.
+ *
+ * # Por qué existe
+ *
+ * El 7-sep-2026 el Blob topó el giga del plan Hobby y **frenó toda subida del monitor** —el link de
+ * las creadoras, las fotos de un reclamo, los diseños— con un cartel que hablaba del archivo y no
+ * del store. Para mirar qué había adentro hubo que entrar al dashboard de Vercel, y para borrar
+ * hacía falta un token que ⛔ no se puede ni copiar. Esta pantalla es eso, adentro del monitor.
+ *
+ * # 🔴 Qué se puede borrar, y quién lo decide
+ *
+ * El estado de cada archivo lo decide `lib/blob/inventario.core.js`, **la misma función que dibuja
+ * la pantalla**. Acá se vuelve a correr sobre la lista real antes de borrar: lo que llega del
+ * browser es una lista de URLs, y obedecerla sería dejar que un botón equivocado —o cualquiera con
+ * una sesión de admin y curiosidad— borre lo que está en uso. Lo único que se borra es lo que el
+ * servidor **acaba de ver** sin dueño y fuera de la ventana de gracia.
+ *
+ * ⚠️ `ingresos` es el caso raro y por eso viaja `refsCliente`: sus URLs viven en el KV de
+ * bdi-catalogo, que este servidor ⛔ no lee. Las manda la pantalla, que sí lo lee con la sesión de
+ * quien mira; si no las manda, la carpeta queda `no-verificable` y ⛔ no se borra nada de ahí.
+ */
+async function pantallaDeArchivos(req, res, body) {
+  const inv = await listarBlobs();
+  if (!inv.ok) return res.status(inv.status || 500).json({ error: inv.error });
+
+  const [{ usadas, sinVerificar }, meta] = await Promise.all([referenciasDeLaBase(), piezasYaEnMeta()]);
+  // ⛔ Si la consulta de los planes falló, `piezas` no se puede afirmar: ni «sobra» ni «ya está en
+  // Meta». Se marca sin verificar, como cualquier otra fuente caída.
+  const sinPiezas = meta.ok ? [] : ['piezas'];
+
+  // Lo que la pantalla leyó del KV de Ingresos. Es la única parte del cruce que no sale de acá.
+  const refsCliente = Array.isArray(body.refsCliente) ? body.refsCliente : null;
+  for (const clave of refsCliente || []) {
+    const s = String(clave || '').replace(/^\/+/, '');
+    if (s) usadas.set(s, 'ingresos');
+  }
+  // ⛔ Sin las referencias del cliente, `ingresos` no se puede verificar. Se dice, no se supone.
+  const carpetasSinVerificar = [...new Set([...sinVerificar, ...sinPiezas, ...(refsCliente ? [] : ['ingresos'])])];
+  // Toda carpeta que no cubre ninguna fuente conocida tampoco se puede afirmar vacía de dueños.
+  for (const a of inv.archivos) {
+    const c = carpetaDe(a.pathname);
+    if (c !== 'ingresos' && !CARPETAS_CUBIERTAS.includes(c) && !carpetasSinVerificar.includes(c)) {
+      carpetasSinVerificar.push(c);
+    }
+  }
+
+  const ctx = { usadas, enMeta: meta.enMeta, sinVerificar: carpetasSinVerificar, ahora: Date.now() };
+
+  if (body.accion === 'inventario') {
+    return res.status(200).json({
+      ok: true,
+      truncado: !!inv.truncado,
+      sinVerificar: carpetasSinVerificar,
+      archivos: inv.archivos.map((a) => ({
+        ...a,
+        estado: estadoDeArchivo(a, ctx),
+        usadoPor: usadas.get(a.pathname) || null,
+        /** El id que le puso Meta. Es lo que hace verificable el «ya está subida». */
+        idEnMeta: meta.enMeta.get(a.pathname) || null,
+      })),
+    });
+  }
+
+  // ── Borrar ────────────────────────────────────────────────────────────────
+  const pedidas = new Set((Array.isArray(body.urls) ? body.urls : []).map((u) => String(u || '')));
+  if (!pedidas.size) return res.status(400).json({ error: 'No viene ningún archivo para borrar.' });
+  if (pedidas.size > TOPE_LOTE) return res.status(400).json({ error: `De a ${TOPE_LOTE} como mucho.` });
+
+  const eliminables = inv.archivos.filter((a) => pedidas.has(a.url)
+    && sePuedeEliminarEnLote(estadoDeArchivo(a, ctx))
+    && CARPETAS_ADMIN.includes(carpetaDe(a.pathname)));
+
+  let eliminados = 0;
+  let bytes = 0;
+  for (const a of eliminables) {
+    const r = await borrarBlob(a.url, CARPETAS_ADMIN);
+    if (!r.ok) return res.status(r.status || 500).json({ error: r.error, eliminados, bytes });
+    eliminados += 1;
+    bytes += Number(a.size) || 0;
+  }
+  // 🔑 Se contesta cuántos se saltearon, ⛔ no sólo cuántos se borraron: la diferencia es un archivo
+  // que la pantalla creía huérfano y el servidor encontró vivo, y eso hay que poder verlo.
+  return res.status(200).json({ ok: true, eliminados, bytes, salteados: pedidas.size - eliminables.length });
 }
 
 /**

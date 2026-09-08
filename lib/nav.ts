@@ -173,6 +173,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   novedades: 'novedades',
   manuales: 'manuales',
   organizacion: 'organizacion',
+  archivos: 'sistema',
   gerencial: 'gerencial',
   // El memo lleva `historial` y no un ícono propio a propósito: lo que lo distingue de Gerencial
   // es justamente que tiene pasado. Gerencial es hoy; el memo es la serie de semanas.
@@ -452,6 +453,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   // *«de quién es cada cosa, sin fecha»*, la contracara de la Agenda), ⛔ no inventado: quien la
   // construyó puede reescribirlo, pero mudo ⛔ no puede quedar.
   organizacion: 'De quién es cada cosa: el organigrama, qué responde cada sector y cada persona, y lo que todavía no tiene dueño.',
+  archivos: 'Qué hay guardado arriba —fotos, videos y piezas—, cuánto lugar queda y qué se puede eliminar porque ya no lo usa ninguna pantalla.',
   usuarios: 'Usuarios del equipo y qué ve cada uno, por marca y por sección.',
   resumen: 'Panel principal con los KPIs del negocio.',
   productos: 'Ventas, vida útil y stock de cada producto, con selección de outlet.',

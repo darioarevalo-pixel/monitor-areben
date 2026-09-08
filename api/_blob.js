@@ -9,7 +9,7 @@
 //     resuelva, o sea NO pasarle `token`.
 //   - Los viejos inyectan `BLOB_READ_WRITE_TOKEN` y se lo pasamos explícito.
 // El orden lo fija `resolveBlobAuth` del propio SDK: token explícito → OIDC+storeId → env token.
-import { del, put } from '@vercel/blob';
+import { del, list, put } from '@vercel/blob';
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 const STORE_ID = process.env.BLOB_STORE_ID;
@@ -105,4 +105,44 @@ export async function borrarBlob(url, carpetas) {
   } catch (e) {
     return { ok: false, status: 500, error: 'No se pudo borrar del Blob: ' + String((e && e.message) || e).slice(0, 200) };
   }
+}
+
+/**
+ * Todo lo que hay arriba, archivo por archivo. Es la mitad que faltaba: hasta el 7-sep-2026 el
+ * monitor sabía subir y borrar de a uno, pero **no sabía qué había** — y el día que el store topó
+ * el giga del plan Hobby, la única forma de mirarlo fue entrar al dashboard de Vercel.
+ *
+ * 🔑 **Pagina hasta el final.** `list()` devuelve de a 1.000 y un `cursor`; cortar en la primera
+ * página daría un inventario que se ve completo y miente por abajo — justo el error que hace creer
+ * que sobra lugar. `tope` existe para que un store enorme no cuelgue la función, y cuando se toca
+ * el resultado sale con `truncado: true` para que la pantalla lo pueda decir en vez de callarlo.
+ *
+ * ⚠️ El `size` lo informa el Blob y es el que cuenta contra la cuota: ⛔ no se estima ni se suma
+ * del lado del cliente.
+ */
+export async function listarBlobs({ tope = 5000 } = {}) {
+  if (!hayBlob()) return { ok: false, status: 500, error: 'Blob no configurado' };
+  const archivos = [];
+  let cursor;
+  try {
+    do {
+      const pagina = await list({
+        limit: 1000,
+        ...(cursor ? { cursor } : {}),
+        ...(TOKEN ? { token: TOKEN } : {}),
+      });
+      for (const b of pagina.blobs || []) {
+        archivos.push({
+          pathname: b.pathname,
+          url: b.url,
+          size: Number(b.size) || 0,
+          subidoEn: b.uploadedAt ? new Date(b.uploadedAt).toISOString() : null,
+        });
+      }
+      cursor = pagina.hasMore ? pagina.cursor : null;
+    } while (cursor && archivos.length < tope);
+  } catch (e) {
+    return { ok: false, status: 500, error: 'No se pudo leer el Blob: ' + String((e && e.message) || e).slice(0, 200) };
+  }
+  return { ok: true, archivos, truncado: !!cursor };
 }
