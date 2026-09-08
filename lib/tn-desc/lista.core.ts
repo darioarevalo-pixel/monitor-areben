@@ -20,7 +20,7 @@
 
 import { NO_SE, type Cargados, type Familia } from '@/lib/tn-desc/atributos'
 
-export type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'para-mirar' | 'corta' | 'borrador' | 'aprobados' | 'en-la-tienda' | 'todos'
+export type Filtro = 'ultimas-tandas' | 'sin-desc' | 'sin-ficha' | 'sin-medidas' | 'para-mirar' | 'corta' | 'borrador' | 'aprobados' | 'en-la-tienda' | 'todos'
 
 /** Lo que la lista necesita de un producto de TiendaNube. Un subconjunto de `ProductoTn`. */
 export type ProductoLista = {
@@ -34,7 +34,10 @@ export type ProductoLista = {
 }
 
 /** Lo que la lista necesita de la fila de la cola. Un subconjunto de `FilaCola`. */
-export type FilaLista = { familia: Familia | null; estado: string }
+export type FilaLista = { familia: Familia | null; estado: string; sin_medidas?: string | null }
+
+/** Las medidas cargadas de UN producto: `{talle: {medida: valor}}`. Un talle único es la clave ''. */
+export type MedidasDeProducto = Record<string, Record<string, string> | undefined>
 
 /**
  * La familia con la que se dibuja la ficha.
@@ -80,8 +83,20 @@ export function paraVolverAMirar(ficha: Cargados | undefined): boolean {
  * NINGUNO, y los 41 mudos recientes eran dos tandas, de hace 15 y 27 días. Un umbral en días
  * habría mostrado una lista vacía justo el día que había 41 productos para cargar.
  */
+export const MINIMO_DE_TANDA = 3
+
 export function ultimasTandas(productos: ProductoLista[], cuantas = 2): Set<string> {
-  const fechas = [...new Set(productos.map((p) => p.created_at.slice(0, 10)).filter(Boolean))]
+  const cuenta = new Map<string, number>()
+  for (const p of productos) {
+    const f = p.created_at.slice(0, 10)
+    if (f) cuenta.set(f, (cuenta.get(f) || 0) + 1)
+  }
+  // 🔴 **Una fecha con dos prendas ⛔ NO es una tanda, y eso escondía un ingreso entero.** Medido
+  // el 8-sep-2026: el 13-ago tenía **UN** producto —un alta suelta— y ocupaba una de las dos
+  // ranuras, así que el filtro por defecto mostraba 59 prendas y **dejaba afuera las 39 del
+  // 12-ago**, que era el ingreso que el local tenía pendiente. La mercadería entra de golpe: lo
+  // que entra de a uno es una corrección, ⛔ no una tanda.
+  const fechas = [...cuenta.entries()].filter(([, n]) => n >= MINIMO_DE_TANDA).map(([f]) => f)
   return new Set(fechas.sort().reverse().slice(0, cuantas))
 }
 
@@ -124,10 +139,39 @@ export function paraRevisar<T extends ProductoLista>(
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/**
+ * 🆕 ¿Le falta la TABLA DE MEDIDAS? (8-sep-2026)
+ *
+ * 🔴 **Existe porque el local ⛔ no podía ver su propia cola.** Lo cazó Bruno preguntando *«al
+ * local le falta seguir haciendo? pq si es así, ⛔ no les aparece creo en la vista de ellos»*.
+ * Medido ese día: **134 prendas sin tabla**, y con el filtro que viene puesto se veían **10**. Una
+ * cola que ⛔ no se puede listar ⛔ no se termina nunca — y las medidas son la mitad de lo que la
+ * clienta pregunta.
+ *
+ * ⚠️ Sin familia ⛔ NO cuenta, igual que en `sinFicha`: la pantalla ni siquiera sabe qué medirle.
+ * ⛔ Y «no lleva tabla» ⛔ tampoco: es una RESPUESTA —elastizada, talle único, accesorio— y son 60
+ * de las 111 que había el 1-sep. Si contaran, la cola nunca bajaría a cero y dejaría de mirarse.
+ */
+export function sinMedidas(
+  p: ProductoLista,
+  fila: FilaLista | undefined,
+  medidas: MedidasDeProducto | undefined,
+): boolean {
+  if (!familiaDeProducto(p, fila)) return false
+  if (fila && fila.sin_medidas) return false
+  return !Object.values(medidas || {}).some((t) => Object.keys(t || {}).length > 0)
+}
+
 export type OpcionesLista = {
   filtro: Filtro
   cola: Record<string, FilaLista | undefined>
   atributos: Record<string, Cargados | undefined>
+  /**
+   * 🔴 Las medidas cargadas, por producto. **Obligatorio** por el mismo motivo que `abierto`: sin
+   * esto el filtro «Sin medidas» viviría en el `useMemo` de la pantalla, y es media regla que
+   * ningún test puede mirar.
+   */
+  medidas: Record<string, MedidasDeProducto | undefined>
   tandas: Set<string>
   /**
    * 🔴 El `tn_id` de la fila que está ABIERTA, o `null`. **Obligatorio.** Esa fila se queda en la
@@ -173,6 +217,7 @@ export function cumpleFiltro(p: ProductoLista, o: Omit<OpcionesLista, 'abierto' 
   if (o.filtro === 'ultimas-tandas') return o.tandas.has(p.created_at.slice(0, 10))
   if (o.filtro === 'sin-desc') return p.prosa.banda === 'nada'
   if (o.filtro === 'sin-ficha') return sinFicha(p, fila, o.atributos[p.id])
+  if (o.filtro === 'sin-medidas') return sinMedidas(p, fila, o.medidas[p.id])
   if (o.filtro === 'para-mirar') return paraVolverAMirar(o.atributos[p.id])
   if (o.filtro === 'corta') return p.prosa.banda === 'corta'
   // 🆕 7-sep-2026, pedido de Bruno. Es el estado que faltaba nombrar: el párrafo está escrito y

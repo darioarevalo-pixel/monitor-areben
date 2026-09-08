@@ -11,7 +11,7 @@ import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip, type Chivato } from '@/lib/tn-desc/formato'
 import { ATRIBUTOS, FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, insumosDe, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { GRUPOS, cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
-import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
+import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, sinMedidas, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 import { fraseDeModelo, modeloDeProducto, resumenDeModelo, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
 
@@ -42,6 +42,7 @@ const FILTROS: { v: Filtro; label: string }[] = [
   { v: 'ultimas-tandas', label: 'Últimas 2 tandas' },
   { v: 'sin-desc', label: 'Sin descripción' },
   { v: 'sin-ficha', label: 'Sin ficha cargada' },
+  { v: 'sin-medidas', label: 'Sin medidas' },
   { v: 'para-mirar', label: 'Para volver a mirar' },
   { v: 'corta', label: 'Descripción corta' },
   { v: 'borrador', label: 'En borrador' },
@@ -83,19 +84,22 @@ export function GenDesc() {
       // ⚠️ El contador cuenta la VERDAD, aunque la lista de abajo se quede con la fila abierta:
       // «5 sin ficha» con 6 filas en pantalla es lo correcto — la 6ª ya tiene algo cargado.
       sinFicha: publicados.filter((p) => sinFicha(p, cola[p.id], atributos[p.id])).length,
+      // 🔴 La cola que el local ⛔ NO podía ver: 134 prendas el 8-sep-2026, y con el filtro que
+      // venía puesto se veían 10. Ver `sinMedidas` en el núcleo.
+      sinMedidas: publicados.filter((p) => sinMedidas(p, cola[p.id], medidas[p.id])).length,
       paraMirar: publicados.filter((p) => paraVolverAMirar(atributos[p.id])).length,
       borradores: publicados.filter((p) => cola[p.id]?.estado === 'borrador').length,
       aprobados: publicados.filter((p) => cola[p.id]?.estado === 'aprobado').length,
       enLaTienda: publicados.filter((p) => cola[p.id]?.estado === 'escrito').length,
     }),
-    [publicados, cola, atributos, tandas],
+    [publicados, cola, atributos, medidas, tandas],
   )
 
   // 🔴 `abierto` entra a la lista: la fila que se está cargando ⛔ NO se va aunque el guardado le
   // haga dejar de cumplir el filtro. La regla —y el porqué, que es un caso real— vive en el núcleo.
   const lista = useMemo(
-    () => listaDe(publicados, { filtro, cola, atributos, tandas, abierto, busca }),
-    [publicados, cola, atributos, filtro, tandas, abierto, busca],
+    () => listaDe(publicados, { filtro, cola, atributos, medidas, tandas, abierto, busca }),
+    [publicados, cola, atributos, medidas, filtro, tandas, abierto, busca],
   )
 
   const paraLeer = useMemo(
@@ -147,6 +151,7 @@ export function GenDesc() {
         <KpiCard label="Últimas 2 tandas" value={stats.ultimas} tone="neutral" activo={filtro === 'ultimas-tandas'} onClick={() => setFiltro('ultimas-tandas')} />
         <KpiCard label="Sin descripción" value={stats.sinDesc} tone="danger" activo={filtro === 'sin-desc'} onClick={() => setFiltro('sin-desc')} />
         <KpiCard label="Sin ficha cargada" value={stats.sinFicha} tone="warning" activo={filtro === 'sin-ficha'} onClick={() => setFiltro('sin-ficha')} />
+        <KpiCard label="Sin medidas" value={stats.sinMedidas} tone="warning" activo={filtro === 'sin-medidas'} onClick={() => setFiltro('sin-medidas')} />
         <KpiCard label="Para volver a mirar" value={stats.paraMirar} tone="warning" activo={filtro === 'para-mirar'} onClick={() => setFiltro('para-mirar')} />
         <KpiCard label="En borrador" value={stats.borradores} tone="warning" activo={filtro === 'borrador'} onClick={() => setFiltro('borrador')} />
         <KpiCard label="Aprobados" value={stats.aprobados} tone="success" activo={filtro === 'aprobados'} onClick={() => setFiltro('aprobados')} />

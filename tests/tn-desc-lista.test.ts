@@ -13,7 +13,7 @@
  * puede terminar de cargar**.
  */
 import { describe, expect, it } from 'vitest'
-import { coincide, cumpleFiltro, familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
+import { coincide, cumpleFiltro, familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, sinMedidas, ultimasTandas, type FilaLista, type MedidasDeProducto, type ProductoLista } from '../lib/tn-desc/lista.core'
 import type { Cargados } from '../lib/tn-desc/atributos'
 
 const prod = (o: Partial<ProductoLista> = {}): ProductoLista => ({
@@ -30,6 +30,7 @@ const opciones = (o: Partial<Parameters<typeof listaDe>[1]> = {}) => ({
   filtro: 'sin-ficha' as const,
   cola: {} as Record<string, FilaLista | undefined>,
   atributos: {} as Record<string, Cargados | undefined>,
+  medidas: {} as Record<string, MedidasDeProducto | undefined>,
   tandas: new Set<string>(),
   abierto: null as string | null,
   busca: '',
@@ -42,7 +43,7 @@ describe('🔴 la fila ABIERTA no se va de la lista aunque deje de cumplir el fi
   it('el caso real: con «Sin ficha cargada», guardar la tela la sacaba de la lista en el mismo gesto', () => {
     const conLaTela = opciones({ atributos: { '345200035': { tela: 'hilo' } } })
     // El filtro, solo, dice la verdad: ya no está sin ficha.
-    expect(cumpleFiltro(p, { filtro: 'sin-ficha', cola: conLaTela.cola, atributos: conLaTela.atributos, tandas: conLaTela.tandas })).toBe(false)
+    expect(cumpleFiltro(p, { filtro: 'sin-ficha', cola: conLaTela.cola, atributos: conLaTela.atributos, medidas: conLaTela.medidas, tandas: conLaTela.tandas })).toBe(false)
     // Y sin `abierto`, la fila desaparece — eso es lo que se leía como «se cierra y no guarda».
     expect(listaDe([p], conLaTela)).toEqual([])
     // Con la fila abierta, se queda: alguien la está cargando.
@@ -105,7 +106,7 @@ describe('los filtros', () => {
     '1': { familia: 'pantalon', estado: 'aprobado' },
     '2': { familia: 'tops', estado: 'falla' },
   }
-  const base = { cola, atributos: {} as Record<string, Cargados | undefined>, tandas: new Set(['2026-08-12']) }
+  const base = { cola, atributos: {} as Record<string, Cargados | undefined>, medidas: {} as Record<string, MedidasDeProducto | undefined>, tandas: new Set(['2026-08-12']) }
 
   it('«últimas 2 tandas» mira la FECHA de alta, no los días que pasaron', () => {
     expect(cumpleFiltro(prod({ created_at: '2026-08-12T09:00:00Z' }), { ...base, filtro: 'ultimas-tandas' })).toBe(true)
@@ -147,11 +148,10 @@ describe('el orden: primero los mudos, y estable mientras se carga', () => {
 
 describe('las últimas tandas', () => {
   it('son las 2 FECHAS de alta más nuevas, aunque estén lejos en el calendario', () => {
-    const ps = [
-      prod({ id: '1', created_at: '2026-08-12T10:00:00Z' }),
-      prod({ id: '2', created_at: '2026-08-13T10:00:00Z' }),
-      prod({ id: '3', created_at: '2026-05-19T10:00:00Z' }),
-    ]
+    // ⚠️ Tres por fecha: desde el 8-sep-2026 una fecha con menos de 3 prendas ⛔ no es una tanda.
+    const tanda = (id: string, fecha: string) =>
+      Array.from({ length: 3 }, (_, i) => prod({ id: id + i, created_at: `${fecha}T10:00:00Z` }))
+    const ps = [...tanda('a', '2026-08-12'), ...tanda('b', '2026-08-13'), ...tanda('c', '2026-05-19')]
     expect([...ultimasTandas(ps)].sort()).toEqual(['2026-08-12', '2026-08-13'])
   })
 })
@@ -273,5 +273,59 @@ describe('🆕 paraRevisar: lo que está esperando que alguien lo mire', () => {
   it('⛔ un producto despublicado no se revisa', () => {
     const ocultos = [prod({ id: 'b', name: 'BLUSA CLOE', published: false })]
     expect(paraRevisar(ocultos, { cola, busca: '', retenidos: new Set(['b']) })).toEqual([])
+  })
+})
+
+/**
+ * 🆕 LA COLA DEL LOCAL QUE NO SE VEÍA (8-sep-2026).
+ *
+ * 🔴 Lo cazó Bruno con una pregunta, ⛔ no un test: *«al local le falta seguir haciendo? pq si es
+ * así, ⛔ no les aparece creo en la vista de ellos»*. Medido ese día: **134 prendas sin tabla de
+ * medidas**, y con el filtro que venía puesto se veían **10**.
+ */
+describe('🆕 sinMedidas: lo que el local todavía tiene que medir', () => {
+  const p = prod({ id: 'x' })
+  const fila = { familia: null, estado: 'sin-insumo' } as FilaLista
+
+  it('sin ninguna medida cargada, falta', () => {
+    expect(sinMedidas(p, fila, undefined)).toBe(true)
+    expect(sinMedidas(p, fila, {})).toBe(true)
+    expect(sinMedidas(p, fila, { '': {} })).toBe(true)
+  })
+
+  it('con un solo número ya no falta: la fila se empezó', () => {
+    expect(sinMedidas(p, fila, { '': { largo: '68' } })).toBe(false)
+  })
+
+  it('⛔ «no lleva tabla» NO cuenta: es una respuesta, no un olvido', () => {
+    // Son 60 de las 111 que había el 1-sep. Si contaran, la cola nunca bajaría a cero y por eso
+    // mismo dejaría de mirarse.
+    expect(sinMedidas(p, { ...fila, sin_medidas: 'elastizada' }, {})).toBe(false)
+  })
+
+  it('⚠️ y sin familia tampoco: la pantalla ni sabe qué medirle', () => {
+    expect(sinMedidas(prod({ id: 'x', familia: null }), { familia: null, estado: '' }, {})).toBe(false)
+  })
+
+  it('el filtro lo usa, y ⛔ no vive en el `useMemo` de la pantalla', () => {
+    const o = opciones({ filtro: 'sin-medidas' as const, cola: { x: fila }, medidas: {} })
+    expect(cumpleFiltro(p, o)).toBe(true)
+    expect(cumpleFiltro(p, { ...o, medidas: { x: { '': { largo: '68' } } } })).toBe(false)
+  })
+})
+
+describe('🔴 una fecha con UNA prenda ⛔ no es una tanda: escondía un ingreso entero', () => {
+  it('las fechas con menos de 3 prendas ⛔ no ocupan ranura', () => {
+    // 8-sep-2026: el 13-ago tenía UN producto —un alta suelta— y se comía una de las dos ranuras,
+    // así que el filtro por defecto mostraba 59 prendas y dejaba afuera las 39 del 12-ago, que era
+    // justo el ingreso que el local tenía pendiente.
+    const ps = [
+      ...Array.from({ length: 5 }, (_, i) => prod({ id: 'a' + i, created_at: '2026-09-02T10:00:00Z' })),
+      prod({ id: 'suelta', created_at: '2026-08-13T10:00:00Z' }),
+      ...Array.from({ length: 4 }, (_, i) => prod({ id: 'b' + i, created_at: '2026-08-12T10:00:00Z' })),
+    ]
+    const t = ultimasTandas(ps)
+    expect([...t].sort()).toEqual(['2026-08-12', '2026-09-02'])
+    expect(t.has('2026-08-13')).toBe(false)
   })
 })
