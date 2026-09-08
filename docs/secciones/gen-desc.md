@@ -927,6 +927,21 @@ es la ficha.
 que la lista vacía significa «lo miré y está bien», ⛔ no «no me fijé». ⛔ Y que la **tela nunca se
 marca**: una foto no distingue una gasa de un voile — es el único dato que necesita a una persona.
 
+### 🔴 QUIÉN escribe el borrador y el chivato: LA SESIÓN, ⛔ no el botón
+
+⛔ **La corrida de tanda por la API ⛔ NO se paga.** Lo dijo Bruno el 8-sep-2026 —*«dijimos que lo
+hacemos acá por este medio, ⛔ no vamos a pagar»*— y ⛔ no es una preferencia de costo: la sesión
+**mira las dos fotos igual** y encima ve cosas que el botón no (el ruedo, la caída, si la ficha
+miente). El botón «Escribir el párrafo con IA» sigue existiendo para quien lo quiera apretar, de a
+una prenda; **el circuito normal es `/descripciones`**, que ⛔ no gasta nada.
+
+⚠️ **Y esta ficha se escribió pagando una llamada que ⛔ no hacía falta.** El 8-sep se corrió el
+endpoint contra TOP LOLA para «verificar el eslabón» **después** de que Bruno dijera que las
+descripciones se hacen por acá: **US$0,0038**. Lo que se aprendió sirve —está abajo— pero la
+verificación se podía hacer mirando la foto, que es exactamente lo que el chivato hace.
+🔑 **La lección, que es más grande que estos milésimos**: *«ejercer a mano el verbo que gasta»* ⛔
+no es una excepción a *«no gastar»* — es la que hay que preguntar antes.
+
 ### 🏁 Ejercido contra el modelo de verdad (8-sep-2026)
 
 ⛔ **Ningún test puede ejercer este eslabón**, así que se corrió a mano contra producción, con
@@ -948,7 +963,8 @@ dos, con las dos fotos — o sea que el número de referencia para el catálogo 
 
 ### ▶️ Lo que falta, en orden
 
-1. **Correr el chivato sobre las 209** y contar los **falsos positivos**. Es el número que falta.
+1. **Contar los falsos positivos del chivato sobre las 209** — ⛔ **NO por la API**: los mira la
+   sesión, con las dos fotos de cada una, como se miraron las 4 primeras. Es el número que falta.
 2. Recién ahí, **sacar los bullets** de lo que se publica y dejar tela + cuidados + medidas.
 3. **Silueta sale igual**, sin esperar nada: el 94 % es `regular` o `no aplica`.
 4. ⚠️ Si los bullets se van, tienen que irse **de las dos puntas**: un campo que sigue alimentando

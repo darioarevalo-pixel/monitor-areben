@@ -645,8 +645,15 @@ del modelo pisando un dato cargado con la prenda en la mano es peor que el error
 borradores los escribe la sesión** mirando las dos fotos, con el **validador real** y relectura.
 Ejercido contra prod las dos puntas: el rechazo (⛔ no escribe) y el guardado idempotente.
 
-▶️ 🔴 **LO QUE FALTA, EN ORDEN**: (1) **correr el chivato sobre las 209 y contar los FALSOS
-POSITIVOS** —el 3 de 3 está sesgado, son casos elegidos porque ya se sabían malos—; (2) recién ahí
+⛔ **LA TANDA ⛔ NO SE CORRE POR LA API** (Bruno, 8-sep: *«dijimos que lo hacemos acá por este
+medio, ⛔ no vamos a pagar»*). Los borradores y los chivatos los escribe **la sesión** mirando las
+dos fotos — `/descripciones`. El botón con IA queda para quien lo quiera apretar, de a una.
+⚠️ Se pagó **US$0,0038** el 8-sep corriendo el endpoint contra TOP LOLA *después* de que él lo
+dijera: 🔑 **«ejercer a mano el verbo que gasta» ⛔ no es una excepción a «no gastar»** — es lo que
+hay que preguntar antes.
+
+▶️ 🔴 **LO QUE FALTA, EN ORDEN**: (1) **contar los FALSOS POSITIVOS del chivato sobre las 209,
+mirándolas la sesión y ⛔ NO por la API** —el 3 de 3 está sesgado, son casos elegidos porque ya se sabían malos—; (2) recién ahí
 **sacar los bullets** de lo que se publica y dejar tela + cuidados + medidas; (3) **silueta sale
 igual**, sin esperar nada (el **94 %** es `regular` o `no aplica`).
 ⚠️ **Si los bullets se van, tienen que irse de las DOS puntas**: un campo que sigue alimentando el
