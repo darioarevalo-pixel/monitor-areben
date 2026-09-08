@@ -9,6 +9,7 @@ import {
   parsearMonto as parsearMontoJS,
   redondear as redondearJS,
   restante as restanteJS,
+  sePuedeComprometer as sePuedeComprometerJS,
 } from './plata.core.js'
 
 /**
@@ -174,16 +175,15 @@ export function sinVincular(compromisos: Compromiso[], telefono: string | null):
 }
 
 /**
- * Cuánto se le puede comprometer todavía a un acreedor: lo que se le puede imputar según el
- * dashboard, menos lo que ya está comprometido acá. Nunca negativo.
+ * Cuánto se le puede comprometer todavía a un acreedor.
  *
- * ⚠️ Se parte de `disponible` y NO de `saldo`: `disponible` ya descuenta los cheques entregados
- * que el banco no debitó. Usar el saldo haría comprometer plata para una deuda que ya está saldada
- * con un papel en la calle.
+ * 🔑 Vive en `plata.core.js` porque **el servidor también la usa**: desde el 7-sep-2026 el handler
+ * la vuelve a aplicar antes de guardar, con los números frescos. Mientras estaba sólo acá, la regla
+ * central del circuito la hacía cumplir el navegador contra su copia de los datos — y dos personas
+ * en dos chats la salteaban sin querer.
  */
-export function sePuedeComprometer(disponibleDashboard: number, yaComprometido: number): number {
-  return Math.max(0, centavos(disponibleDashboard - yaComprometido))
-}
+export const sePuedeComprometer: (disponibleDashboard: number, yaComprometido: number) => number =
+  sePuedeComprometerJS
 
 /**
  * Qué pasa cuando el cliente transfiere MENOS de lo comprometido (decidido con Darío, 2-sep-2026):

@@ -22,9 +22,23 @@ function tabla() {
   const q: Record<string, unknown> = {}
   const api: Record<string, unknown> = {
     select: () => api,
-    eq: (_c: string, v: string) => { q.id = v; return api },
+    // Guarda por COLUMNA y no siempre como id: el control de "cuánto ya se le comprometió" filtra
+    // por `acreedor_id`, no por la clave.
+    eq: (col: string, v: string) => { q[col] = v; return api },
     order: () => api,
     limit: () => Promise.resolve({ data: Object.values(filas), error: null }),
+    /**
+     * `.in('estado', [...])` — lo usa el control del servidor para sumar lo abierto de un acreedor.
+     * Como esa consulta se resuelve con `await` directo (sin `.single()`), el objeto tiene que ser
+     * esperable: de ahí el `then`.
+     */
+    in: (col: string, vals: string[]) => {
+      const filtradas = Object.values(filas).filter(
+        (f) => vals.includes(String(f[col])) &&
+          (q.acreedor_id === undefined || String(f.acreedor_id) === String(q.acreedor_id)),
+      )
+      return { then: (ok: (r: unknown) => void) => ok({ data: filtradas, error: null }) }
+    },
     single: () => Promise.resolve({ data: filas[q.id as string] ?? null, error: filas[q.id as string] ? null : { message: 'no está' } }),
     insert: (row: Record<string, unknown>) => {
       const id = `nueva-${insertados.length + 1}`
@@ -64,11 +78,29 @@ const sobre = (d: unknown) => Buffer.from(JSON.stringify(d), 'utf8').toString('b
 
 let alDashboard: { url: string; body: Record<string, unknown> }[] = []
 
-function escenario(perfil: unknown, puerta: { ok: boolean; status?: number; body?: unknown }) {
+/**
+ * Lo que el dashboard dice que se le debe. Es la mitad izquierda del control de "cuánto se le puede
+ * pedir todavía"; la derecha son los compromisos abiertos, que salen de la base de mentira.
+ *
+ * Por defecto sobra deuda, para que los tests que no van de esto no tengan que decir nada.
+ */
+const DEUDA_DE_SOBRA = [{ id: 'ac-1', nombre: 'Contador', saldo: 1_000_000, disponible: 1_000_000 }]
+
+function escenario(
+  perfil: unknown,
+  puerta: { ok: boolean; status?: number; body?: unknown },
+  deuda: { acreedores?: unknown[]; caido?: boolean } = {},
+) {
   alDashboard = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { body?: string }) => {
     if (String(url).includes('bdi-catalogo.vercel.app/api/usuarios')) {
       return { ok: true, json: async () => ({ ok: true, perfil }) }
+    }
+    // La puerta de LECTURA (a quién le debemos), que ahora consulta también `crear`. Es otra puerta
+    // que la de escritura de pagos: no se cuenta en `alDashboard`, que mide sólo lo que mueve plata.
+    if (String(url).includes('puente/acreedores')) {
+      if (deuda.caido) return { ok: false, status: 502, text: async () => 'se cayó' }
+      return { ok: true, status: 200, json: async () => ({ acreedores: deuda.acreedores ?? DEUDA_DE_SOBRA }) }
     }
     alDashboard.push({ url: String(url), body: JSON.parse(init?.body ?? '{}') })
     return { ok: puerta.ok, status: puerta.status ?? (puerta.ok ? 200 : 409), json: async () => puerta.body }
@@ -356,5 +388,92 @@ describe('el compromiso de alguien que todavía no está en el ERP', () => {
     const res = await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-03' }))
     expect(res.code).toBe(200)
     expect(insertados[0]).toMatchObject({ cliente_telefono: '5493624667485', monto: 300000 })
+  })
+})
+
+/**
+ * 🔴 **El control del circuito, ahora del lado que manda.**
+ *
+ * Toda la sección existe para una cosa: que no se comprometa dos veces la misma deuda. El dashboard
+ * no sabe que hay plata comprometida —su saldo dice "se le debe X" cuando ya hay X−Y camino a él—,
+ * así que la resta la hace el Monitor.
+ *
+ * Hasta el 7-sep-2026 esa resta la hacía **sólo la pantalla**, con su copia de los números, y en
+ * DOS formularios distintos que la calculaban cada uno por su cuenta. El servidor guardaba lo que
+ * le mandaran. O sea que el enemigo que el diseño nombra por su nombre —dos charlas en paralelo
+ * sobre la misma deuda— pasaba igual, porque cada navegador decidía con lo que había leído hace un
+ * rato.
+ */
+describe('no se le puede comprometer a un acreedor más de lo que se le debe', () => {
+  // ⚠️ Se arranca sin ninguna fila: el `c1` de $500.000 del arranque general ocupa por sí solo toda
+  // la deuda de estos casos, y cada test de acá dice explícitamente qué hay comprometido.
+  beforeEach(() => { for (const k of Object.keys(filas)) delete filas[k] })
+
+  const anotar = (monto: number, acreedor = 'ac-1') => pedido({
+    action: 'crear',
+    compromiso: { acreedor_id: acreedor, acreedor_nombre: 'Contador', cliente_nombre: 'Nazarena', monto },
+  })
+
+  it('deja anotar lo que entra en la deuda', async () => {
+    escenario(ADMIN, { ok: true, body: {} }, { acreedores: [{ id: 'ac-1', nombre: 'Contador', disponible: 500_000 }] })
+    const res = await llamar(anotar(400_000))
+    expect(res.code).toBe(200)
+  })
+
+  it('🔑 rebota lo que se pasa, aunque la pantalla lo haya dejado mandar', async () => {
+    escenario(ADMIN, { ok: true, body: {} }, { acreedores: [{ id: 'ac-1', nombre: 'Contador', disponible: 500_000 }] })
+    const res = await llamar(anotar(600_000))
+    expect(res.code).toBe(409)
+    expect(String(res.body?.error)).toMatch(/hasta \$500\.000/)
+    expect(insertados).toHaveLength(0)
+  })
+
+  /**
+   * 🔑 **El caso que motivó todo esto.** Dos charlas en el mismo día sobre la misma deuda: la
+   * segunda pantalla se cargó antes de que existiera el compromiso de la primera, así que ofrece
+   * los $500.000 enteros. El servidor sí ve la fila de la otra.
+   */
+  it('🔑 descuenta lo que YA está comprometido, que es lo que la otra pantalla no vio', async () => {
+    filas.c1 = { ...COMPROMISO, acreedor_id: 'ac-1', monto: 300_000, estado: 'prometido' }
+    escenario(ADMIN, { ok: true, body: {} }, { acreedores: [{ id: 'ac-1', nombre: 'Contador', disponible: 500_000 }] })
+
+    const res = await llamar(anotar(400_000))   // 400 < 500 de deuda, pero ya hay 300 pedidos
+    expect(res.code).toBe(409)
+    expect(String(res.body?.error)).toMatch(/ya hay \$300\.000 comprometidos/)
+    expect(res.body?.se_puede).toBe(200_000)
+    expect(insertados).toHaveLength(0)
+  })
+
+  it('lo confirmado y lo caído NO ocupan lugar: ya bajaron la deuda o se cayeron', async () => {
+    filas.c1 = { ...COMPROMISO, acreedor_id: 'ac-1', monto: 300_000, estado: 'confirmado' }
+    filas.c2 = { ...COMPROMISO, id: 'c2', acreedor_id: 'ac-1', monto: 300_000, estado: 'cancelado' }
+    escenario(ADMIN, { ok: true, body: {} }, { acreedores: [{ id: 'ac-1', nombre: 'Contador', disponible: 500_000 }] })
+    expect((await llamar(anotar(500_000))).code).toBe(200)
+  })
+
+  it('lo comprometido a OTRO acreedor no le ocupa lugar a éste', async () => {
+    filas.c1 = { ...COMPROMISO, acreedor_id: 'ac-2', monto: 400_000, estado: 'prometido' }
+    escenario(ADMIN, { ok: true, body: {} }, { acreedores: [{ id: 'ac-1', nombre: 'Contador', disponible: 500_000 }] })
+    expect((await llamar(anotar(500_000))).code).toBe(200)
+  })
+
+  it('a un acreedor que ya no figura con deuda no se le anota nada', async () => {
+    escenario(ADMIN, { ok: true, body: {} }, { acreedores: [{ id: 'otro', nombre: 'Otro', disponible: 999 }] })
+    const res = await llamar(anotar(1000))
+    expect(res.code).toBe(409)
+    expect(String(res.body?.error)).toMatch(/ya no figura con deuda/)
+    expect(insertados).toHaveLength(0)
+  })
+
+  /**
+   * ⚠️ Sin dashboard **no se anota**, y es a propósito: sin saber cuánto se le debe no hay con qué
+   * controlar. Dejar pasar abriría el agujero justo cuando nadie lo puede ver.
+   */
+  it('con el dashboard caído no se anota, y se explica por qué', async () => {
+    escenario(ADMIN, { ok: true, body: {} }, { caido: true })
+    const res = await llamar(anotar(1000))
+    expect(res.code).toBe(503)
+    expect(String(res.body?.error)).toMatch(/no se puede anotar/i)
+    expect(insertados).toHaveLength(0)
   })
 })

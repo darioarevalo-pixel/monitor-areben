@@ -32,7 +32,8 @@ import { exigirUsuario } from './_auth.js';
 import { esAdmin, marcasConAcceso, puedeSub } from '../lib/permisos.core.js';
 // La misma cuenta que hacen los dos formularios de confirmar, no una copia parecida: el aviso de
 // "entró de menos" y el compromiso del resto que se abre acá tienen que dar SIEMPRE el mismo número.
-import { redondear, restante } from '../lib/compromisos/plata.core.js';
+import { redondear, restante, sePuedeComprometer } from '../lib/compromisos/plata.core.js';
+import { leerAcreedoresDelDashboard } from '../lib/acreedores/puente.core.js';
 
 const URL_PUENTE_PAGOS =
   process.env.DASHBOARD_PUENTE_PAGOS_URL || 'https://dashboard.arebensrl.com/api/puente/pagos';
@@ -121,6 +122,59 @@ export default async function handler(req, res) {
     const monto = redondear(c.monto);
     if (!Number.isFinite(monto) || monto <= 0) {
       return res.status(400).json({ error: 'Poné cuánto va a transferir.' });
+    }
+
+    /**
+     * 🔴 **EL control del circuito, del lado que manda.**
+     *
+     * Toda esta sección existe para que no se comprometa dos veces la misma deuda. Hasta el
+     * 7-sep-2026 esa resta la hacía **sólo la pantalla**, contra su copia de los números: cada
+     * navegador decidía con lo que había leído hace un rato, y el servidor guardaba lo que le
+     * mandaran. O sea que el enemigo que el diseño nombra —dos charlas en paralelo comprometiendo
+     * la misma deuda— pasaba igual, y encima con DOS formularios distintos calculándolo cada uno
+     * por su cuenta.
+     *
+     * Acá se vuelve a preguntar con los números frescos, un instante antes de guardar.
+     *
+     * ⚠️ **No es un candado, es una ventana mucho más chica.** Dos `crear` exactamente simultáneos
+     * leen el mismo estado y los dos pasan: cerrarlo del todo pide una transacción con lock, y el
+     * `disponible` vive en OTRA base (la del dashboard), así que un CHECK no lo puede ver. Lo que
+     * cambia es el tamaño del agujero: de "dos personas en la misma tarde" a "dos personas en el
+     * mismo milisegundo".
+     */
+    const deuda = await leerAcreedoresDelDashboard();
+    if (deuda.aviso) {
+      /*
+       * Sin saber cuánto se le debe no se puede controlar nada, así que no se anota. Es más
+       * incómodo que dejar pasar, y es a propósito: dejar pasar abre el agujero justo cuando nadie
+       * lo puede ver. La pantalla ya no deja elegir acreedor sin dashboard — esto lo hace de verdad.
+       */
+      return res.status(503).json({ error: `${deuda.aviso} Sin eso no se puede anotar un compromiso, porque no hay con qué controlar que no se le pida de más.` });
+    }
+    const acreedor = (deuda.acreedores || []).find((a) => String(a.id) === String(c.acreedor_id));
+    if (!acreedor) {
+      return res.status(409).json({ error: 'Ese acreedor ya no figura con deuda abierta. Actualizá la pantalla: puede haberse pagado desde el dashboard.' });
+    }
+
+    // Lo ya comprometido y sin entrar, de ESTE acreedor. Los dos estados abiertos van literales:
+    // el grafo entero vive más arriba en este mismo archivo (⏭️ unificarlo con `lib/` es lo que
+    // sigue en la tanda 2).
+    const { data: abiertos, error: eAbiertos } = await base()
+      .from('compromisos_pago')
+      .select('monto')
+      .eq('acreedor_id', c.acreedor_id)
+      .in('estado', ['prometido', 'transferido']);
+    if (eAbiertos) return res.status(500).json({ error: eAbiertos.message });
+
+    const yaComprometido = (abiertos || []).reduce((s, f) => redondear(s + Number(f.monto)), 0);
+    const libre = sePuedeComprometer(acreedor.disponible, yaComprometido);
+    if (monto > libre + 0.005) {
+      return res.status(409).json({
+        error: yaComprometido > 0
+          ? `A ${acreedor.nombre} se le puede pedir hasta $${libre.toLocaleString('es-AR')}: se le deben $${Number(acreedor.disponible).toLocaleString('es-AR')} y ya hay $${yaComprometido.toLocaleString('es-AR')} comprometidos que todavía no entraron.`
+          : `A ${acreedor.nombre} se le puede pedir hasta $${libre.toLocaleString('es-AR')}, que es lo que se le debe.`,
+        se_puede: libre,
+      });
     }
 
     const { data, error } = await base()
