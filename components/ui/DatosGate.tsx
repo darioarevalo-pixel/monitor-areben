@@ -115,6 +115,30 @@ function edad(min: number): string {
   return `${h} ${h === 1 ? 'hora' : 'horas'}`
 }
 
+/**
+ * **El esqueleto de UNA celda**: la barrita gris que late mientras el número viaja.
+ *
+ * 🔴 🔑 **Existe porque un «…» se lee como un dato, ⛔ no como una espera.** Lo dijo Bruno el
+ * 8-sep-2026 mirando la lista del PRM: *«estaría bueno que marque algo como cargando, en vez de que
+ * marque en cero los resultados»*. Los puntos suspensivos ya evitaban el 0 —que afirma «no vendió
+ * nada»—, pero **evitar la mentira ⛔ no es lo mismo que decir la verdad**: en una tabla de 34 filas
+ * los tres puntitos parecen la celda vacía de un dato que no está. La barra que late ⛔ no se puede
+ * confundir con un valor.
+ *
+ * ⚠️ Con `prefers-reduced-motion` la animación se apaga (la apaga `kit.css`) y queda la barra
+ * quieta: sigue sin parecer un número, que es lo que importa.
+ */
+export function SkelCelda({ ancho = 34 }: { ancho?: number }) {
+  return (
+    <span
+      className="mo-skel"
+      aria-busy="true"
+      aria-label="Cargando"
+      style={{ display: 'inline-block', width: ancho, height: 9, verticalAlign: 'middle' }}
+    />
+  )
+}
+
 /** Esqueleto de carga: la forma de lo que viene, para que la espera no parezca vacío. */
 export function Esqueleto({ forma = 'tabla', filas = 8 }: { forma?: 'tabla' | 'kpis' | 'tarjetas'; filas?: number }) {
   if (forma === 'kpis') {

@@ -32,6 +32,7 @@ import {
   KpiCard,
   Notice,
   Select,
+  SkelCelda,
   TBody,
   TableWrap,
   THead,
@@ -176,10 +177,14 @@ export function MovimientoProveedor({ marca, id, hoy }: { marca: string; id: str
   const nuncaVendieron = filas.filter((f) => f.vendidas === 0).length
   /**
    * 🔴 **Cambiar la ventana deja los números VIEJOS abajo de un rótulo NUEVO.** «Vendido (90 días)»
-   * mostrando lo de 30 es una afirmación falsa, no un retardo: por eso mientras llega la respuesta
-   * los valores dicen «…» y ⛔ no el número anterior.
+   * mostrando lo de 30 es una afirmación falsa, ⛔ no un retardo: por eso mientras llega la
+   * respuesta la tarjeta muestra el esqueleto y ⛔ no el número anterior.
+   *
+   * 🔴 **Y muestra una BARRA que late, ⛔ no tres puntitos.** Bruno, 8-sep-2026: *«estaría bueno que
+   * marque algo como cargando, en vez de que marque en cero los resultados»*. Los puntos ya no
+   * afirmaban un cero, pero se leen como un dato vacío igual. Ver `SkelCelda`.
    */
-  const val = (t: string) => (cargando ? '…' : t)
+  const val = (t: string) => (cargando ? <SkelCelda ancho={40} /> : t)
   /**
    * Cuándo se sincronizó el espejo de stock. 🔴 **Va al lado del número y ⛔ no en un tooltip**: el
    * sync de inventario lo aprieta una persona, así que un stock sin fecha se lee como «ahora» y

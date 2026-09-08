@@ -45,6 +45,7 @@ import {
   Esqueleto,
   FilterBar,
   Notice,
+  SkelCelda,
   TBody,
   TableWrap,
   THead,
@@ -213,7 +214,9 @@ export function PRM() {
     // preguntar —se haya caído el pedido o una marca— y el «—» del que ⛔ no tiene órdenes.
     switch (estadoDeCelda({ medido, fallo: falloMedido, mudas, fila: m, dependeDeVentas })) {
       case 'cargando':
-        return <span style={{ color: color.mut2 }}>…</span>
+        // 🔴 Una barra que late y ⛔ no tres puntitos: ver `SkelCelda`. Los puntos ya no afirmaban
+        // un cero, pero igual se leían como la celda vacía de un dato que no está.
+        return <SkelCelda />
       case 'fallo':
         return <span style={{ color: color.mut2 }} title="No se pudieron leer las columnas medidas">?</span>
       case 'muda':
@@ -310,10 +313,13 @@ export function PRM() {
             trajo la lista.
           */}
           {!medido && (
-            <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
-              <strong>Comprado</strong>, <strong>Vendido</strong>, <strong>Por día</strong> y{' '}
-              <strong>Última orden</strong> están viajando: cruzan las órdenes contra las ventas de
-              las dos marcas y llegan en un pedido aparte. La lista de abajo ya está entera.
+            <p style={{ fontSize: 12, color: color.mut, margin: 0, display: 'flex', alignItems: 'center', gap: space[2] }}>
+              <SkelCelda ancho={22} />
+              <span>
+                <strong>Cargando</strong> Comprado, Vendido, Por día y Última orden: cruzan las
+                órdenes contra las ventas de las dos marcas y llegan en un pedido aparte. La lista
+                de abajo ya está entera.
+              </span>
             </p>
           )}
 

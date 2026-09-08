@@ -31,6 +31,16 @@ tarda se ve igual que una colgada. Ahora dice qué está viajando; y si ese pedi
 celdas pasan a «?» con un aviso — antes decían «—», que afirma «no vendió nada» en las 34 filas y
 ⛔ no se distinguía de «este proveedor no tiene órdenes».
 
+🏁 **Y las celdas muestran una BARRA QUE LATE, ⛔ no «…»** — lo pidió Bruno el mismo día: *«estaría
+bueno que marque algo como cargando, en vez de que marque en cero los resultados»*. 🔑 **Evitar la
+mentira ⛔ no es lo mismo que decir la verdad**: los puntitos ya ⛔ no afirmaban un cero, pero en una
+tabla de 34 filas se leen como la celda vacía de un dato que no está.
+
+▶️ **Queda medido y sin hacer**: el pedido son tres etapas en fila —padrón + órdenes ~1,0 s →
+recruce ~0,8 s → ventas ~1,1 s—. Arrancar las ventas de los renglones que YA tienen `producto_id`
+en paralelo con el recruce valdría **~0,7 s**, a cambio de dos consultas de ventas en vez de una.
+Decide Bruno.
+
 ▶️ 🔴 **Falta que Bruno lo mire.** ⛔ No pude entrar a producción —la credencial del Monitor es
 suya—, así que lo que está verificado es el bundle y las mediciones contra las bases reales.
 

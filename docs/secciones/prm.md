@@ -266,6 +266,20 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
     Un «…» que tarda se ve igual que una pantalla colgada. Ahora, mientras viaja, arriba de la tabla
     dice **qué está viajando y por qué tarda** (cruza las órdenes contra las ventas de las dos
     marcas, y es un pedido aparte del que trajo la lista).
+  - 🔴 🔑 **Y el «…» de las celdas pasó a ser una BARRA QUE LATE** (`SkelCelda`, en el kit). Bruno lo
+    pidió con esas palabras el mismo día: *«estaría bueno que marque algo como cargando, en vez de
+    que marque en cero los resultados»*. 🔑 **Evitar la mentira ⛔ no es lo mismo que decir la
+    verdad**: los puntos suspensivos ya ⛔ no afirmaban un cero, pero en una tabla de 34 filas se
+    leen como la celda vacía de un dato que no está. Lo único que el test clava es lo que ⛔ no puede
+    volver atrás: que el estado de carga **⛔ no dibuje texto**, porque cualquier carácter adentro de
+    una celda numérica se va a poder leer como un valor. Va también en las tarjetas de la ficha, que
+    tenían el mismo «…» al cambiar la ventana.
+  - ▶️ **Lo que queda, medido y ⛔ sin hacer**: el pedido son **tres etapas en fila** —padrón +
+    órdenes (~1,0 s) → recruce (~0,8 s) → ventas (~1,1 s)— y las dos últimas están encadenadas
+    porque las ventas necesitan los productos que el recruce resuelve. Se podría **arrancar las
+    ventas de los renglones que YA tienen `producto_id`** en paralelo con el recruce y pedir después
+    sólo los que agregó (hoy son **0**), que valen ~0,7 s. ⛔ No se hizo: son dos consultas de ventas
+    en vez de una, en un handler que ya es delicado, y el que decide si vale la pena es Bruno.
   - 🔴 🔑 **Y si ese pedido FALLA, las celdas decían «—», que afirma «no vendió nada» — en las 34
     filas.** El `catch` dejaba un mapa vacío y ⛔ nada distinguía «se cayó» de «este proveedor no
     tiene órdenes». Ahora es «?» y con un aviso arriba, igual que la marca muda. 🔑 **La regla de
