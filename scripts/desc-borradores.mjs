@@ -18,6 +18,11 @@
  * 🔑 Y **relee la fila después de escribir**: que el POST conteste 200 ⛔ no prueba que quedó
  * guardado el texto que se mandó.
  *
+ * 🔴 **`guardar` AFIRMA que miraste las fotos.** Guarda `chivatos: []` cuando ⛔ no le pasás
+ * ninguno, y en la pantalla eso se dibuja como **«revisado contra la foto: la ficha coincide»** —
+ * que es distinto de una prenda que nadie miró. ⛔ No lo uses para arreglar una coma sin abrir las
+ * fotos: estarías firmando una revisión que ⛔ no hiciste.
+ *
  * ⛔ Este script NO publica. Escribir en la tienda es otro verbo, lo aprieta una persona mirando
  * el texto, y vive en la pantalla.
  */
@@ -118,6 +123,13 @@ async function listar() {
       variantes: valoresDe(p),
       insumo: (fila && fila.insumo) || '',
       dice_hoy: (p.desc || '').slice(0, 300),
+      // 🔑 Con `--que borradores` va también el texto QUE HAY QUE REVISAR. Sin esto, revisar
+      // obliga a abrir la pantalla producto por producto, que es justo la fricción que se está
+      // sacando. `null` cuando todavía no hay borrador: es distinto de la cadena vacía.
+      parrafo: (fila && fila.borrador && fila.borrador.parrafo) || null,
+      tip: (fila && fila.borrador && fila.borrador.tip) || null,
+      chivatos: (fila && fila.borrador && fila.borrador.chivatos) || [],
+      ficha,
     })
     if (salida.length >= cuantos) break
   }

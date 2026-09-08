@@ -334,7 +334,7 @@ function FilaProducto({
   const [redactando, setRedactando] = useState(false)
   const [ia, setIa] = useState<ResultadoIA | null>(null)
   /** Lo que la última mirada a las fotos vio distinto de la ficha. Se guarda con el borrador. */
-  const [chivatos, setChivatos] = useState<Chivato[]>(fila?.borrador?.chivatos || [])
+  const [chivatos, setChivatos] = useState<Chivato[] | undefined>(fila?.borrador?.chivatos)
   // ⛔ Arranca DESTILDADO: los productos de la tanda del 2-sep tienen un renglón escrito a mano en
   // TiendaNube, y conservarlo dejaría el texto viejo abajo del párrafo nuevo, diciendo lo mismo.
   // Decisión de Bruno del 4-sep-2026: se pisa. El respaldo queda igual en `html_previo`.
@@ -652,7 +652,7 @@ function FilaProducto({
               )}
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets, tip: tip.trim(), chivatos } })}>
+                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets, tip: tip.trim(), ...(chivatos ? { chivatos } : {}) } })}>
                   Guardar el párrafo
                 </Button>
                 <Button
@@ -1088,7 +1088,14 @@ function TarjetaRevision({
   // 🔴 Los chivatos VIAJAN con el borrador aunque acá no se toquen: guardar el párrafo manda el
   // objeto entero, así que no incluirlos sería BORRAR los avisos al corregir una coma. Nacen del
   // vistazo a las fotos, no de este campo.
-  const textoDeAhora = () => ({ parrafo, bullets, tip: tip.trim(), chivatos: fila?.borrador?.chivatos || [] })
+  const textoDeAhora = () => ({
+    parrafo,
+    bullets,
+    tip: tip.trim(),
+    // ⛔ Si ⛔ no hay chivatos guardados ⛔ no se manda `[]`: eso AFIRMA que alguien miró la foto, y
+    // corregir una coma en el párrafo ⛔ no es haber revisado la ficha.
+    ...(fila?.borrador?.chivatos ? { chivatos: fila.borrador.chivatos } : {}),
+  })
 
   /** 🔑 Se guarda al SALIR del campo, sin botón. Si no cambió nada, ⛔ no se escribe. */
   const alSalir = async () => {
@@ -1223,7 +1230,7 @@ function TarjetaRevision({
 
           {/* 🆕 EL CHIVATO: lo que quien miró las fotos vio distinto de la ficha. Va ARRIBA de
               los cuidados y abajo de los bullets, que es donde se mira el dato que discute. */}
-          <Chivatos chivatos={fila?.borrador?.chivatos || []} ficha={ficha} onCorregir={() => setCorrigiendo(true)} />
+          <Chivatos chivatos={fila?.borrador?.chivatos} ficha={ficha} onCorregir={() => setCorrigiendo(true)} />
 
           {cuidados && (
             <div style={{ fontSize: font.xs, color: color.mut2 }} title={cuidados.lineas.join(' ')}>
@@ -1307,7 +1314,14 @@ function TarjetaRevision({
 function Chivatos({
   chivatos, ficha, onCorregir,
 }: {
-  chivatos: Chivato[]
+  /**
+   * 🔴 **`undefined` y `[]` dicen cosas DISTINTAS, y ésa es la mitad del valor de esto**:
+   * `undefined` es «nadie la miró contra la foto» y `[]` es «la miré y coincide». Si las dos se
+   * dibujaran igual, quien revisa tendría que volver a mirar las 17 para saber cuáles ya se
+   * miraron — que es exactamente el trabajo que esto viene a sacar. Es la misma regla que el
+   * «no sé» de la ficha: una respuesta ⛔ no es lo mismo que un casillero vacío.
+   */
+  chivatos: Chivato[] | undefined
   ficha: Cargados
   /**
    * ⚠️ OPCIONAL a propósito: en la fila de «Cargar» la ficha ya está abierta arriba del aviso, y
@@ -1316,7 +1330,14 @@ function Chivatos({
    */
   onCorregir?: () => void
 }) {
-  if (!chivatos.length) return null
+  if (!chivatos) return null
+  if (!chivatos.length) {
+    return (
+      <div style={{ fontSize: font.xs, color: color.mut2 }}>
+        ✓ Revisado contra la foto: la ficha coincide.
+      </div>
+    )
+  }
   const norm = (x: string) => String(x || '').trim().toLowerCase()
   const filas = chivatos.map((c) => {
     const actual = String(ficha[c.campo as Atributo] || '')
