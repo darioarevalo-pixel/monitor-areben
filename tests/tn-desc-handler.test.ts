@@ -642,6 +642,28 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
       expect(diario).toEqual([])
     })
 
+    it('🔴 el `dice` del chivato lo pone LA FICHA, ⛔ no quien mira la foto', async () => {
+      // Caminar la pantalla el 8-sep-2026: BLUSA HUBER mostraba el aviso de la manga como SALDADO
+      // —«✓ la ficha decía "larga" … ahora dice "manga larga"»— sin que nadie hubiera corregido
+      // nada. El valor guardado era `manga larga` y el chivato se había escrito con `larga`.
+      // 🔴 Y «saldado» ⛔ no se guarda, se deduce ⇒ con un `dice` aproximado el aviso SE APAGA
+      // SOLO Y EN SILENCIO, que es peor que no tenerlo.
+      atributosGuardados = [{ atributo: 'tela', valor: 'gasa' }, { atributo: 'manga', valor: 'manga larga' }]
+      catalogoFalso(MKT)
+      await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [], chivatos: [{ campo: 'manga', dice: 'larga', veo: 'manga 3/4' }] } }))
+      const guardados = (upserts[0]?.borrador as { chivatos: { dice: string; veo: string }[] }).chivatos
+      expect(guardados[0].dice).toBe('manga larga')
+      expect(guardados[0].veo).toBe('manga 3/4')
+    })
+
+    it('⚠️ y un chivato sobre un campo que la ficha ⛔ no tiene queda con `dice` vacío, no inventado', async () => {
+      atributosGuardados = [{ atributo: 'tela', valor: 'gasa' }]
+      catalogoFalso(MKT)
+      await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [], chivatos: [{ campo: 'manga', dice: 'lo que sea', veo: 'sin mangas' }] } }))
+      const guardados = (upserts[0]?.borrador as { chivatos: { dice: string }[] }).chivatos
+      expect(guardados[0].dice).toBe('')
+    })
+
     it('🔴 el local ⛔ no puede: es el mismo permiso que aprobar', async () => {
       catalogoFalso(LOCAL)
       const res = await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [] } }))

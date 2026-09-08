@@ -1340,6 +1340,9 @@ function Chivatos({
   }
   const norm = (x: string) => String(x || '').trim().toLowerCase()
   const filas = chivatos.map((c) => {
+    // 🔑 La comparación vale porque `dice` lo escribe EL SERVIDOR desde la ficha guardada, ⛔ no
+    // quien mira la foto (ver `conDiceReal`). Con un `dice` aproximado —«larga» contra «manga
+    // larga»— el aviso se apagaba solo, en silencio, sin que nadie hubiera corregido nada.
     const actual = String(ficha[c.campo as Atributo] || '')
     return { ...c, actual, saldado: !!actual && norm(actual) !== norm(c.dice) }
   })
@@ -1356,7 +1359,12 @@ function Chivatos({
         {filas.map((f, i) => (
           <div key={i} style={{ fontSize: font.xs, color: f.saldado ? color.mut : color.ink }}>
             {f.saldado ? '✓ ' : '• '}
-            <b>{etiquetaDe(f.campo)}</b>: la ficha {f.saldado ? 'decía' : 'dice'} «{f.dice}» y en la foto se ve <b>{f.veo}</b>
+            <b>{etiquetaDe(f.campo)}</b>:{' '}
+            {/* ⚠️ Un chivato sobre un campo VACÍO se dice distinto: «no dice nada» ⛔ no es «dice ""». */}
+            {f.dice
+              ? <>la ficha {f.saldado ? 'decía' : 'dice'} «{f.dice}»</>
+              : <>la ficha {f.saldado ? 'no decía nada' : 'no dice nada'}</>}
+            {' '}y en la foto se ve <b>{f.veo}</b>
             {f.saldado && <> — ahora dice «{f.actual}»</>}
           </div>
         ))}

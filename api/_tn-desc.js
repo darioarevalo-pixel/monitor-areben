@@ -83,6 +83,35 @@ const COLUMNAS =
   'tn_id, nombre, familia, insumo, insumo_por, insumo_at, borrador, html_previo, hash_previo, html_escrito, verificado, estado, aprobado_por, aprobado_at, escrito_at, error, updated_at, sin_medidas, sin_medidas_por, sin_medidas_at';
 
 /**
+ * 🔴 **El `dice` de un chivato lo pone LA FICHA, ⛔ no quien mira la foto.**
+ *
+ * Lo encontró caminar la pantalla el 8-sep-2026: BLUSA HUBER mostraba el aviso de la manga como
+ * **saldado** —«✓ la ficha decía "larga" … ahora dice "manga larga"»— cuando ⛔ nadie había
+ * corregido nada. El valor guardado era `manga larga` y el chivato se había escrito con `larga`:
+ * dos cadenas distintas, el mismo valor.
+ *
+ * 🔑 **Y el modo de falla es el peor posible**: «saldado» ⛔ no se guarda, se DEDUCE de que el
+ * valor actual ⛔ no sea el que el aviso discute. Con un `dice` aproximado, el aviso **se apaga
+ * solo y en silencio** — desaparece sin que nadie haya tocado la ficha. Un aviso que se apaga sin
+ * que pase nada es peor que no tenerlo.
+ *
+ * ⇒ Quien mira la foto aporta **`campo` y `veo`**, que es lo que sabe. El `dice` se toma de
+ * `tn_atributos` al guardar, así que es exacto por construcción y la comparación de la pantalla
+ * vale. Es la misma doctrina que los bullets: el dato lo pone quien lo tiene, ⛔ no quien lo cuenta.
+ */
+async function conDiceReal(supabase, store, tnId, chivatos) {
+  if (!Array.isArray(chivatos) || !chivatos.length) return chivatos;
+  const { data, error } = await supabase
+    .from('tn_atributos')
+    .select('atributo, valor')
+    .eq('store', store)
+    .eq('tn_id', tnId);
+  if (error) throw new Error(error.message);
+  const ficha = Object.fromEntries((data || []).map((a) => [a.atributo, a.valor]));
+  return chivatos.map((c) => ({ ...c, dice: String(ficha[c.campo] || '') }));
+}
+
+/**
  * 🆕 Guarda el borrador que se acaba de leer y lo aprueba, **en una sola escritura**.
  *
  * 🔴 Existe por el veredicto de Bruno del 7-sep-2026 —«mucha fricción, tengo que revisar todo»—:
@@ -126,7 +155,9 @@ async function guardarYAprobar({ supabase, store, tnId, yo, ahora, nombre, borra
   const fila = {
     store,
     tn_id: tnId,
-    borrador,
+    borrador: Array.isArray(borrador.chivatos)
+      ? { ...borrador, chivatos: await conDiceReal(supabase, store, tnId, borrador.chivatos) }
+      : borrador,
     estado: 'aprobado',
     aprobado_por: yo,
     aprobado_at: ahora,
@@ -439,7 +470,7 @@ export default async function handler(req, res) {
         store,
         tn_id: tnId,
         nombre: body.nombre != null ? String(body.nombre) : null,
-        borrador: b,
+        borrador: Array.isArray(b.chivatos) ? { ...b, chivatos: await conDiceReal(supabase, store, tnId, b.chivatos) } : b,
         estado: 'borrador',
         // Un borrador nuevo desaprueba lo que hubiera: si no, quedaría aprobado un texto
         // que nadie leyó, con la firma de quien aprobó el anterior.
