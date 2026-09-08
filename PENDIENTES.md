@@ -794,6 +794,51 @@ del modelo pisando un dato cargado con la prenda en la mano es peor que el error
 borradores los escribe la sesión** mirando las dos fotos, con el **validador real** y relectura.
 Ejercido contra prod las dos puntas: el rechazo (⛔ no escribe) y el guardado idempotente.
 
+### 🆕 8-sep-2026 (cierre) — DÓNDE QUEDÓ TODO, Y POR DÓNDE SE SIGUE
+
+📊 **El mapa del catálogo de Zattia, medido con el audit fresco** (365 publicados):
+
+| estado | cuántas |
+|---|---|
+| ✅ con nuestra descripción **publicada** | **22** |
+| 🟡 **borradores esperando que Bruno los mire** | **27** |
+| 🔴 mudas, sin una palabra | 25 → **quedan 12** después de los 13 escritos |
+| ⚠️ cortas (menos de 120 caracteres) | 233 → **quedan ~219** |
+| 🟢 con descripción larga | 85 |
+
+▶️ **LO PRIMERO DE MAÑANA: Bruno revisa y publica las 27.** Están todas con el validador en cero.
+
+🔑 **La prioridad la fijó él y ⛔ no es el catálogo entero: es lo último que ingresó.** Los dos
+ingresos que importan son el del **2-sep (58 prendas)** y el del **12-ago (39)** — «teníamos antes
+de los últimos ingresos 40 pendientes».
+
+**Del ingreso del 2-sep ya ⛔ no queda nada mío**: 11 publicadas + 27 en borrador. Lo que falta es
+de otros:
+- **LOCAL**: **18 tablas de medidas** y 3 fichas (BLUSA SOUL, MILA, SHORT MINT).
+- **BRUNO**: **8 categorías en TiendaNube** —BERMUDA FOUR, ZAHA, AMBER, SEOUL · SHORT VITA, CLIFF,
+  GAIA, NATE—, que es **un gesto y destraba las 8**.
+- **BRUNO + la diseñadora**: **5 telas fuera de la lista** — `algodon` ×2, `lentejuelas`,
+  **`bambula`** (VESTIDO BLAZE) y el `denim rígido` dudoso de SHORT ZEBRA.
+
+▶️ **Lo mío que sigue: las 31 cortas del ingreso del 12-ago.** Se listan con
+`node scripts/desc-borradores.mjs listar --que cortas --alta 2026-08-12 --fresco`.
+
+### 🔴 EL PATRÓN QUE YA NO SE PUEDE IGNORAR: `musculosa` EN PRENDAS QUE SE ATAN AL CUELLO
+
+De los **21 chivatos** que salieron hoy revisando 44 prendas, **9 son el mismo error**. 🔑 Y ⛔ no
+es distracción del local: **`halter` existe en la lista pero como valor de ESCOTE, ⛔ no de MANGA**,
+y la opción correcta en manga (`sin mangas`) ⛔ no se parece a lo que la persona tiene delante.
+▶️ **Es un arreglo de una línea en la lista, y lo decide Bruno.** El resto se reparte entre escote
+(4), largo (3) y calce (2).
+
+### 🔴 Y LA COLA DEL LOCAL, QUE NO SE VEÍA
+
+Lo cazó Bruno preguntando: *«¿al local le falta seguir haciendo? porque ⛔ no les aparece en la
+vista de ellos»*. Eran dos agujeros: ⛔ **no había contador ni filtro de «sin medidas»** —**134
+prendas**, y con el filtro que venía puesto se veían **10**— y **«Últimas 2 tandas» se comía una
+ranura con una fecha de UN producto** (el 13-ago), dejando afuera las 39 del 12-ago. Los dos
+arreglados (`3f6f902`). ▶️ **Esa tarjeta es la que el local tiene que mirar todos los días.**
+
 ### 🆕 8-sep-2026 — LOS 17 BORRADORES, REVISADOS UNO POR UNO CONTRA LA FOTO
 
 Bruno: *«primero vaciemos los 20 borradores que están esperando, ¿los vas a revisar?»* ⇒ se miraron
