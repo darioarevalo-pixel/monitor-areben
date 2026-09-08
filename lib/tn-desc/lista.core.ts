@@ -94,10 +94,16 @@ export function ultimasTandas(productos: ProductoLista[], cuantas = 2): Set<stri
  * y revisar es la tarea de al lado: la prenda ya está cargada y lo único que falta es mirar la foto
  * contra lo que se va a publicar. Con la fila cerrada por default, eso son 19 clics para empezar.
  *
- * 🔴 **`retenidos` es OBLIGATORIO y es la misma lección que `abierto`**: publicar cambia el estado
- * de la fila a `escrito` y sin esto la tarjeta **desaparecería en el mismo gesto** que la publica —
- * quien aprieta no llega a ver si se verificó, y una tarjeta que se esfuma se lee como «se borró».
- * Se retiene lo que se tocó **en esta visita**, ⛔ no lo publicado alguna vez.
+ * 🔴 **`retenidos` es OBLIGATORIO, y es lo que queda de una vuelta en falso.** Nació reteniendo
+ * *todo* lo publicado en la visita —para que quien aprieta llegara a ver si verificó— y Bruno lo
+ * cazó en el primer uso: *«publiqué en tienda, pero no me ocultó el publicado»*. 🔑 **⛔ No es lo
+ * mismo que la lección de `abierto`**: aquella protege a la fila de irse **sin que nadie la toque**,
+ * y acá la persona **apretó un botón cuyo efecto esperado es justamente que salga de la cola**. Una
+ * cola que ⛔ no baja mientras trabajás es otra vez la fricción que esto vino a sacar.
+ *
+ * ⇒ Hoy se retiene **sólo lo que todavía pide una mirada**: la publicación que ⛔ no verificó y la
+ * que falló. Lo que salió y se releyó bien **se va**, que es lo que el gesto prometía; la
+ * confirmación la da el aviso y el contador «En la tienda».
  *
  * ⚠️ El orden es **por nombre y nada más**: ⛔ no por estado. Ordenar por estado haría saltar de
  * lugar la tarjeta que alguien está editando en cuanto el guardado la desaprueba.

@@ -242,15 +242,19 @@ describe('🆕 paraRevisar: lo que está esperando que alguien lo mire', () => {
     expect(ids(paraRevisar(productos, { cola, busca: '', retenidos: new Set() })).sort()).toEqual(['a', 'b'])
   })
 
-  it('🔴 el que se acaba de publicar SE QUEDA: si no, la tarjeta se esfuma en el mismo gesto', () => {
-    // Sin `retenidos`, apretar «Publicar» cambia el estado a `escrito` y la tarjeta desaparece
-    // antes de que quien apretó pueda ver si se verificó. Un cartel que no se llega a leer es
-    // indistinguible de un botón que borró algo.
+  it('🔴 lo RETENIDO se queda aunque su estado ya no sea de la cola', () => {
+    // Es el mecanismo con el que la tarjeta sobrevive al viaje —mientras el botón dice
+    // «Publicando…» la fila ya cambió de estado— y con el que se queda la que NO verificó.
     const r = paraRevisar(productos, { cola, busca: '', retenidos: new Set(['e']) })
     expect(ids(r)).toContain('e')
   })
 
-  it('⚠️ pero lo publicado en otra visita ⛔ NO vuelve: la cola es lo que falta, no el historial', () => {
+  it('🔴 y la que se publicó BIEN se va: es lo que el botón prometía', () => {
+    // Bruno, 8-sep-2026, en el primer uso: «publiqué en tienda, pero no me ocultó el publicado».
+    // ⛔ No es el caso de `abierto`: acá la persona apretó un botón cuyo efecto esperado es que la
+    // prenda salga de la cola. Una cola que no baja mientras trabajás es la fricción de vuelta.
+    // Quien suelta el id es la pantalla, cuando la relectura confirmó; acá se amarra que soltarlo
+    // alcanza para que la tarjeta se vaya.
     expect(ids(paraRevisar(productos, { cola, busca: '', retenidos: new Set() }))).not.toContain('e')
   })
 

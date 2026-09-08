@@ -65,7 +65,10 @@ export function GenDesc() {
    * todo abierto, todo junto, y un botón.
    */
   const [vista, setVista] = useState<'cargar' | 'revisar'>('cargar')
-  /** 🔴 Los que se publicaron en esta visita: se quedan en la pantalla de revisión. Ver `paraRevisar`. */
+  /**
+   * 🔴 Los que **todavía piden una mirada**: se quedan en la pantalla aunque su estado ya ⛔ no sea
+   * de la cola. Ver `paraRevisar` — ahí está el caso que lo escribió.
+   */
   const [retenidos, setRetenidos] = useState<Set<string>>(new Set())
   const toast = useToast()
 
@@ -281,14 +284,26 @@ export function GenDesc() {
                   return err
                 }}
                 onPublicar={async (borrador, conservarResiduo) => {
-                  // 🔴 Se retiene ANTES de publicar: si se retuviera después, entre la respuesta y
-                  // el `setState` la tarjeta ya se habría ido de la lista con el estado nuevo.
+                  // 🔴 Se retiene ANTES de publicar y se SUELTA al final si salió bien: si no se
+                  // retuviera durante el viaje, la tarjeta se iría de la lista en cuanto la fila
+                  // cambia de estado, con el botón todavía diciendo «Publicando…».
                   setRetenidos((prev) => (prev.has(p.id) ? prev : new Set(prev).add(p.id)))
                   const { error: err, verificado } = await revisar(p.id, p.name, borrador, conservarResiduo)
                   if (err) toast.error(err)
                   else if (verificado) toast.ok('Publicado en la tienda.')
                   // ⛔ El PUT dio 200 y la relectura no coincidió: no se dice «listo».
                   else toast.error('Se escribió, pero la relectura no coincide. Miralo en la tienda.')
+                  // 🔑 Salió y se releyó bien ⇒ **se va de la cola**, que es lo que el botón
+                  // prometía (pedido de Bruno, 8-sep-2026). Lo que ⛔ no verificó o falló se queda:
+                  // ahí sí hay algo que mirar, y el cartel de la tarjeta es dónde se mira.
+                  if (!err && verificado) {
+                    setRetenidos((prev) => {
+                      if (!prev.has(p.id)) return prev
+                      const proximo = new Set(prev)
+                      proximo.delete(p.id)
+                      return proximo
+                    })
+                  }
                   return err
                 }}
               />
