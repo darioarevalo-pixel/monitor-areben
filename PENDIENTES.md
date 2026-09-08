@@ -13,6 +13,33 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 EL BLOB — la pantalla «Archivos» ya está, y queda plata arriba (7-sep-2026)
+
+Ese día el store topó **el giga del plan Hobby** y **frenó TODA subida del monitor** (el link de las
+creadoras, las fotos de un reclamo, los diseños, las piezas de Meta) con un cartel que hablaba del
+archivo, no del lugar. 🏁 Se destrabó archivando a Drive los canjes 71, 78 y 84 —**532 MB, 65 de 65
+evidencias**— y salió **Sistema → Archivos** (admin), que ahora lo muestra y lo limpia desde acá.
+
+**El inventario real, leído en producción el 7-sep a la noche: 519,6 MB de 1 GB, 118 archivos.**
+
+- ▶️ **Piezas de Meta: 193,9 MB para eliminar y ⛔ SIN HACER** — cinco videos que Meta ya tiene
+  adentro del aviso (su copia queda allá), dos huérfanos de 30,3 y 28 MB que ninguna fila nombra, y
+  dos sondas. ⚠️ **Falta que Bruno confirme que tiene los originales**: eso es lo único que se pierde.
+- 🔴 **227 MB en `canjes/71` son DOS SUBIDAS DUPLICADAS**: el sufijo del archivo que está arriba ⛔ no
+  es el que guarda `canje_evidencias` (los suyos ya se borraron al archivar). O sea que la creadora
+  subió el mismo video dos veces —o un intento se cortó al registrar— y **nadie lo iba a ver nunca**.
+  ▶️ Hoy salen «Recién subido» (ventana de gracia de 24 h) ⇒ **se pueden eliminar a partir del 8-sep**.
+- 🔴 **`evidencia-archivada` contesta `buzon: 'quedó arriba'` cuando el Blob no se pudo borrar, y el
+  cliente ⛔ NO lo mira** (`components/canjes/ContenidoDeElla.tsx`) ⇒ un archivado que dejó los bytes
+  arriba se ve idéntico a uno que los sacó. ▶️ Mostrarlo.
+- 🔑 **El techo de 1 GB es del plan Hobby de la cuenta de Darío.** La salida de fondo sigue siendo
+  transferir el proyecto **y el store** al team de Bruno, que ya está pago. ⛔ Nunca recrear el store:
+  cambia el host de todas las URLs ya guardadas.
+- ⚠️ **Zattia y Stunned ⛔ no tienen carpeta de Drive en Ajustes de Canjes** ⇒ ahí el botón «Enviar a
+  Drive» ni aparece, y el contenido de una creadora de esas marcas no tiene cómo archivarse.
+
+La ficha con las reglas (qué ⛔ nunca se ofrece para eliminar y por qué) es `docs/secciones/archivos.md`.
+
 ## 🆕 STUNNED — LA ECONOMÍA DE LA PAUTA Y EL ENVÍO GRATIS (7-sep-2026, medido + decidido)
 
 > «tengo que analizar lo de envio gratis para stunned, incluso para que sea escalable con pauta.
