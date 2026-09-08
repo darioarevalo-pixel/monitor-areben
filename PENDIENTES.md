@@ -13,6 +13,76 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 DOS BUGS DEL `parte-del-dia` QUE CAZÓ BRUNO — 8-sep-2026 (medido, ⛔ sin arreglar)
+
+Los dos salieron de que Bruno no le creyó al parte, ⛔ no de leer el código. Viven en
+`~/Projects/analista-meta/herramientas/parte-del-dia.mjs`, que **lee** de acá pero es otro repo.
+Los dos hacen lo mismo: **piden accionar con menos evidencia de la que el propio archivo exige.**
+
+### 🔴 1. «LA PUERTA DEL TEST» ⛔ NO VE LAS TANDAS — filtra por el nombre
+
+El bloque de la puerta se queda sólo con los conjuntos cuyo nombre matchea `/^TEST /i`. Las celdas
+de la **TANDA 10** se llaman `TANDA 10 - BROAD X …` ⇒ **nunca entraron a la puerta**, y el parte
+imprimió «ninguna celda con la puerta abierta» el día exacto en que las cuatro vencían.
+
+Salieron por la puerta de atrás —la sección «A BAJAR», que juzga por CPA— y ahí la lectura sale
+**dada vuelta**: BLUE CASES aparecía como «−20%» cuando por la puerta **pasaba** (2 compras ⇒
+sigue), y a NEW IN y POV la puerta las mata por regla (1 compra), ⛔ no por CPA. Medido el 8-sep
+sobre sus 2 días completos (6 y 7/9):
+
+| celda | 2 días completos | compras | la puerta dice | el parte decía |
+|---|---|---|---|---|
+| NEW IN | $22.176 | 1 | 🔴 MUERE | «PAUSAR, CPA 301%» (coincide por casualidad) |
+| POV MARCA FAVORITA | $21.214 | 1 | 🔴 MUERE | «PAUSAR, CPA 288%» (idem) |
+| BLUE CASES | $20.181 | 2 | 🟡 SIGUE | 🔴 **«−20%»** — lo contrario |
+| FUNDAS POPSTAR | $20.299 | 3 | 🟡 SIGUE | (no aparecía) |
+
+🔑 **La marca de «esto es una celda de test» ⛔ no puede ser el nombre.** Es el mismo agujero que ya
+está declarado arriba en la tabla de cortes —*«antes hace falta poder marcar una celda como test —
+no hay dónde guardarlo»*—: mientras no haya dónde, el prefijo lo elige quien tipea el conjunto, y
+cada tanda nueva se lo saltea sin que nadie se entere. ⚠️ Y el parte **declara** lo que descarta
+(`· miradas: N …`) pero estas ⛔ no caen en ningún contador: no llegan ni a ser miradas.
+
+▶️ **Lo mínimo mientras tanto**: que el filtro acepte también `/^TANDA /i`, y que el renglón de
+«miradas» cuente los conjuntos nuevos que ⛔ **no** matchearon ningún prefijo.
+
+⚠️ Aparte, el umbral está tipeado dos veces y ⛔ no coinciden: el encabezado dice **$20.000** (la
+regla de Bruno del 26-ago, la de abajo en este archivo) y el código corta en **$15.000**. Las
+cuatro celdas pasaban los dos, así que no cambió nada hoy — pero **gana el repo: son $20.000**.
+
+### 🔴 2. «A BAJAR» ⛔ no pide los 2 días cerrados desde el escalón, y ⛔ no declara su ventana
+
+«A ESCALAR» sí lo pide —*«un escalón con menos de 2 días CERRADOS no se lee»*— y **«A BAJAR» come
+de la misma variable sin ese chequeo**. Resultado del 8-sep: mandó a pausar `BROAD X ASMR TIARA`
+con el renglón *«sin compras y ya gastó $9.230»*, y esos $9.230 eran **un solo día — AYER**, porque
+su escalón fue el 7/9. Bruno lo cazó por el reloj: *«¿9.230 de gasto hoy, si hoy es martes 9am?»*.
+
+Son dos fallas encimadas, y la segunda es la que engaña:
+
+1. **La ventana puede ser de 1 día** y el parte pide pausar igual.
+2. **El renglón ⛔ no dice de qué ventana habla.** Imprime `${M(o.s)}` a secas, y al lado de un
+   parte que arranca con «EL DÍA» eso se lee como *hoy*. Lo leí como hoy y lo informé como hoy.
+
+🔑 Y el mismo día, la misma ventana recortada casi manda a pausar `GIRLHOOD FRIO - COPY B`, que en
+7 días está **debajo del techo** (CPA $6.601, ROAS 4,57) y en su vida es de los mejores de la cuenta
+(24 compras, ROAS 5,17). El parte veía sus 72h post-escalón (ROAS 1,78). **Pausar por una ventana de
+3 días al 4º mejor objeto de BDI** era el error más caro del día, y lo frenó Bruno de memoria:
+*«girlhood frio copy B estás seguro? el otro día cazó varias ventas»*.
+
+▶️ **Lo mínimo**: (a) el mismo veto de «2 días cerrados desde el escalón» que ya tiene A ESCALAR;
+(b) que **todo número de gasto imprima su ventana** (`$9.230 en 1 día: 7/9`), que es la regla que
+este archivo ya aplica en otros lados; y (c) antes de proponer PAUSAR, **contrastar la ventana
+recortada contra los 7 días y contra la vida del objeto** — si la vida está debajo del techo, lo que
+corresponde es revertir el escalón, ⛔ no matar el objeto.
+
+🔑 **Lo que une a los dos bugs, y es lo que hay que llevarse**: el parte del día está afinado para
+**no repetir lo de ayer**, y por eso cada sección mira una ventana cortita distinta. Eso está bien
+para *«qué cambió»* y está **mal para *«qué apago»***: una decisión irreversible ⛔ no se toma con
+la ventana más corta del archivo. Las tres decisiones del 8-sep quedaron en `meta_ads_decision`
+(ids 240-244) y **ninguna de las tres usó el argumento que había dado el parte**.
+
+---
+
 ## 🆕 EL BLOB — la pantalla «Archivos» ya está, y queda plata arriba (7-sep-2026)
 
 Ese día el store topó **el giga del plan Hobby** y **frenó TODA subida del monitor** (el link de las
