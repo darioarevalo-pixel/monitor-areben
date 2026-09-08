@@ -10,7 +10,7 @@ import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip } from '@/lib/tn-desc/formato'
 import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
-import { cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
+import { GRUPOS, cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
 import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 import { fraseDeModelo, modeloDeProducto, resumenDeModelo, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
@@ -251,9 +251,9 @@ export function GenDesc() {
       ) : (
         <>
           <Notice tone="neutral">
-            Acá está lo que ya tiene párrafo escrito y todavía ⛔ no salió. Mirá <b>la foto</b> contra
-            lo que dicen los datos y el párrafo: se corrige <b>acá mismo</b> —cada dato al elegirlo, el
-            párrafo al salir del campo— y <b>Publicar</b> aprueba y escribe en la tienda en un gesto.
+            Acá está lo que ya tiene párrafo escrito y todavía no salió a la tienda. Mirá <b>la foto</b>
+            contra lo que dicen los datos y el párrafo: se corrige <b>acá mismo</b> —cada dato al
+            elegirlo, el párrafo al salir del campo— y <b>Publicar</b> aprueba y escribe en un gesto.
           </Notice>
 
           {!cargando && !paraLeer.length && (
@@ -563,7 +563,7 @@ function FilaProducto({
                 — {resumenDeModelo(talleModelo.modelo)} · sesión del {talleModelo.fecha}
               </span>
               <div style={{ fontSize: 11, color: color.mut, marginTop: 2 }}>
-                Sale de la sesión de fotos. Todavía ⛔ no se escribe solo en la tienda.
+                Sale de la sesión de fotos. Todavía no se escribe solo en la tienda.
               </div>
             </div>
           ) : null}
@@ -899,6 +899,12 @@ function CasilleroMedida({
   )
 }
 
+/** Cómo se llama en castellano el grupo de cuidados. `cuidadosDe` devuelve la `key`. */
+function nombreDeCuidados(key: string): string {
+  const g = (GRUPOS as { key: string; nombre: string }[]).find((x) => x.key === key)
+  return g ? g.nombre : key
+}
+
 /** El valor del `<option>` que abre el campo para escribir una palabra que no está en la lista. */
 const OTRA = '__otra__'
 
@@ -1195,14 +1201,16 @@ function TarjetaRevision({
           )}
           {corrigiendo && !familia && (
             <Notice tone="warning">
-              Este producto ⛔ no tiene categoría en TiendaNube, así que la ficha no sabe qué preguntarle.
+              Este producto no tiene categoría en TiendaNube, así que la ficha no sabe qué preguntarle.
               Decile qué prenda es desde <b>Cargar y escribir</b>.
             </Notice>
           )}
 
           {cuidados && (
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>
-              Cuidados: <b>{cuidados.grupo}</b> — salen solos de la tela.
+            <div style={{ fontSize: font.xs, color: color.mut2 }} title={cuidados.lineas.join(' ')}>
+              {/* ⚠️ El NOMBRE del grupo, ⛔ no su `key`: «punto» es el identificador del código y en
+                  la pantalla no quiere decir nada. Las líneas que van a salir, en el `title`. */}
+              Cuidados: <b>{nombreDeCuidados(cuidados.grupo)}</b> — salen solos de la tela.
             </div>
           )}
 
@@ -1217,7 +1225,7 @@ function TarjetaRevision({
             </Notice>
           )}
           {faltaTela && (
-            <Notice tone="warning">Sin tela cargada ⛔ no sale a la tienda: la tela decide los cuidados.</Notice>
+            <Notice tone="warning">Sin tela cargada no sale a la tienda: la tela decide los cuidados de la prenda.</Notice>
           )}
 
           {/* 🔴 El residuo se decide acá también: sin este tilde, publicar desde la revisión sería
