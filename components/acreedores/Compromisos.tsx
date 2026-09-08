@@ -32,6 +32,7 @@ import {
   type Compromiso,
 } from '@/lib/compromisos/core'
 import type { Acreedor } from '@/lib/acreedores/cliente'
+import { hoyISO } from '@/lib/crm/seguimiento'
 
 const TONO = {
   prometido: 'warning',
@@ -277,7 +278,16 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
   onConfirmar: (monto: number, fecha: string, titular: string | null) => Promise<void>
   onCancelar: () => void
 }) {
-  const hoy = new Date().toISOString().slice(0, 10)
+  /**
+   * 🔴 **El día LOCAL, no el de UTC.** Estaba con `toISOString()`, que a partir de las 21:00 de
+   * Argentina ya devuelve el día siguiente: el formulario proponía MAÑANA como fecha de la
+   * transferencia. Y no es cosmético — el cartel de abajo lo dice: **el cierre de mes imputa por
+   * esta fecha**, así que un pago confirmado el 30 a la noche caía en el mes siguiente.
+   *
+   * El panel usa `hoyISO()` desde siempre; era esta copia la que estaba sola. Es el mismo defecto
+   * que tenían dos tests de la pestaña, que se caían en la Mac y pasaban en el CI.
+   */
+  const hoy = hoyISO()
   // ⛔ `paraEditar` y no `String(...)`: ver el bloque de `plata.core.js`. Es el mismo casillero que
   // en el panel, y tenía el mismo bug.
   const [monto, setMonto] = useState(paraEditar(compromiso.monto))

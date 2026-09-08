@@ -148,3 +148,31 @@ describe('⛔ la cuenta de los montos no se vuelve a escribir a mano', () => {
     }
   })
 })
+
+/**
+ * 🔴 **La otra cuenta que no se escribe a mano: el día de hoy.**
+ *
+ * Este defecto ya apareció DOS veces en el mismo circuito —en dos tests de la pestaña y en el
+ * formulario de confirmar de la sección—, siempre igual: `new Date().toISOString()` da el día en
+ * **UTC**, que a partir de las 21:00 de Argentina ya es el día siguiente.
+ *
+ * Y no es cosmético: la fecha que propone ese formulario es **por la que el dashboard imputa el
+ * pago en el cierre de mes**. Un pago confirmado el 30 a la noche caía en el mes siguiente. Encima
+ * no falla nunca de día, así que se ve sólo si alguien mira el campo de noche.
+ *
+ * `hoyISO()` da el día local, y es lo que el panel usó desde el principio.
+ */
+describe('⛔ "hoy" sale del día local, no del de UTC', () => {
+  const CON_FECHAS = [
+    'components/panel/Pagos.tsx',
+    'components/acreedores/Compromisos.tsx',
+    'tests/panel-pagos-pantalla.test.tsx',
+  ]
+
+  it('ningún archivo del circuito saca una fecha de toISOString()', () => {
+    const enUtc = /\.toISOString\(\)\.slice\(0, ?10\)/
+    for (const f of CON_FECHAS) {
+      expect(enUtc.test(readFileSync(f, 'utf8')), `${f}: usá hoyISO(), que da el día local`).toBe(false)
+    }
+  })
+})
