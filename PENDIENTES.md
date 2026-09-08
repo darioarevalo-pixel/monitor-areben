@@ -22,9 +22,9 @@ evidencias**— y salió **Sistema → Archivos** (admin), que ahora lo muestra 
 
 **El inventario real, leído en producción el 7-sep a la noche: 519,6 MB de 1 GB, 118 archivos.**
 
-- ▶️ **Piezas de Meta: 193,9 MB para eliminar y ⛔ SIN HACER** — cinco videos que Meta ya tiene
-  adentro del aviso (su copia queda allá), dos huérfanos de 30,3 y 28 MB que ninguna fila nombra, y
-  dos sondas. ⚠️ **Falta que Bruno confirme que tiene los originales**: eso es lo único que se pierde.
+- 🏁 **Piezas de Meta: eliminados 193,9 MB** (9 archivos, 7-sep, con Bruno confirmando que tenía los
+  originales) ⇒ el store quedó en **325,7 MB de 1 GB, 109 archivos**. Verificado con HEAD: las
+  eliminadas dan 404 y el `UNBOXING` que un plan pendiente todavía nombra sigue en 200.
 - 🔴 **227 MB en `canjes/71` son DOS SUBIDAS DUPLICADAS**: el sufijo del archivo que está arriba ⛔ no
   es el que guarda `canje_evidencias` (los suyos ya se borraron al archivar). O sea que la creadora
   subió el mismo video dos veces —o un intento se cortó al registrar— y **nadie lo iba a ver nunca**.
