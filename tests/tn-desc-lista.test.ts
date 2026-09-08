@@ -13,7 +13,7 @@
  * puede terminar de cargar**.
  */
 import { describe, expect, it } from 'vitest'
-import { coincide, cumpleFiltro, familiaDeProducto, listaDe, paraVolverAMirar, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
+import { coincide, cumpleFiltro, familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type FilaLista, type ProductoLista } from '../lib/tn-desc/lista.core'
 import type { Cargados } from '../lib/tn-desc/atributos'
 
 const prod = (o: Partial<ProductoLista> = {}): ProductoLista => ({
@@ -212,5 +212,62 @@ describe('🆕 «Para volver a mirar»: que «no sé» no sea un campo de sólo 
   it('el filtro las junta: sin esto quedaban marcadas en la base e invisibles en la pantalla', () => {
     const o = opciones({ filtro: 'para-mirar' as const, atributos })
     expect(listaDe([dudosa, resuelta], o).map((p) => p.id)).toEqual(['20'])
+  })
+})
+
+/**
+ * 🆕 LA PANTALLA DE REVISIÓN (8-sep-2026).
+ *
+ * 🔴 La escribió el veredicto de Bruno del 7-sep —«mucha fricción, tengo que revisar todo»— con
+ * **19 borradores escritos y ninguno aprobado**. Es la misma lección que la fila abierta, en otro
+ * lugar: **lo que alguien está trabajando ⛔ no se va solo de la pantalla.**
+ */
+describe('🆕 paraRevisar: lo que está esperando que alguien lo mire', () => {
+  const cola = {
+    b: { familia: null, estado: 'borrador' },
+    a: { familia: null, estado: 'aprobado' },
+    e: { familia: null, estado: 'escrito' },
+    f: { familia: null, estado: 'falla' },
+  } as Record<string, FilaLista | undefined>
+  const productos = [
+    prod({ id: 'b', name: 'BLUSA CLOE' }),
+    prod({ id: 'a', name: 'ABRIGO NIEVE' }),
+    prod({ id: 'e', name: 'ESQUÍ TOP' }),
+    prod({ id: 'f', name: 'FALDA SAGE' }),
+    prod({ id: 'z', name: 'ZAPATO' }),
+  ]
+  const ids = (r: ProductoLista[]) => r.map((p) => p.id)
+
+  it('entran el borrador y el aprobado, y nada más', () => {
+    expect(ids(paraRevisar(productos, { cola, busca: '', retenidos: new Set() })).sort()).toEqual(['a', 'b'])
+  })
+
+  it('🔴 el que se acaba de publicar SE QUEDA: si no, la tarjeta se esfuma en el mismo gesto', () => {
+    // Sin `retenidos`, apretar «Publicar» cambia el estado a `escrito` y la tarjeta desaparece
+    // antes de que quien apretó pueda ver si se verificó. Un cartel que no se llega a leer es
+    // indistinguible de un botón que borró algo.
+    const r = paraRevisar(productos, { cola, busca: '', retenidos: new Set(['e']) })
+    expect(ids(r)).toContain('e')
+  })
+
+  it('⚠️ pero lo publicado en otra visita ⛔ NO vuelve: la cola es lo que falta, no el historial', () => {
+    expect(ids(paraRevisar(productos, { cola, busca: '', retenidos: new Set() }))).not.toContain('e')
+  })
+
+  it('⚠️ el orden es por nombre, y NO cambia cuando el guardado desaprueba la que se está editando', () => {
+    const antes = ids(paraRevisar(productos, { cola, busca: '', retenidos: new Set() }))
+    // La aprobada se toca y vuelve a «borrador»: la tarjeta ⛔ no puede saltar de lugar.
+    const despues = ids(paraRevisar(productos, { cola: { ...cola, a: { familia: null, estado: 'borrador' } }, busca: '', retenidos: new Set() }))
+    expect(antes).toEqual(['a', 'b'])
+    expect(despues).toEqual(antes)
+  })
+
+  it('la búsqueda corre acá también', () => {
+    expect(ids(paraRevisar(productos, { cola, busca: 'cloe', retenidos: new Set() }))).toEqual(['b'])
+  })
+
+  it('⛔ un producto despublicado no se revisa', () => {
+    const ocultos = [prod({ id: 'b', name: 'BLUSA CLOE', published: false })]
+    expect(paraRevisar(ocultos, { cola, busca: '', retenidos: new Set(['b']) })).toEqual([])
   })
 })

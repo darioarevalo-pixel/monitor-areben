@@ -451,5 +451,42 @@ export function useGenDesc(marca: Marca) {
     [marca, cargar],
   )
 
-  return { ...estado, cargar, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar }
+  /**
+   * 🆕 El gesto único de la pantalla de revisión: **guarda el texto que se está leyendo, lo aprueba
+   * y lo publica**, en un solo pedido.
+   *
+   * 🔴 Va en UNA llamada y ⛔ no en tres seguidas desde el navegador por el mismo motivo por el que
+   * `publicar` vive del lado del servidor: encadenar `borrador` → `aprobar` → `publicar` acá deja
+   * dos puntos en el medio donde cerrar la pestaña —o perder la red— frena todo con la fila a
+   * medias. Del otro lado los tres pasos son uno.
+   *
+   * 🔑 Le manda el `borrador` que tiene la pantalla, ⛔ no lo guardado: si alguien acaba de
+   * corregir el párrafo y aprieta publicar, publicar lo viejo sería peor que no publicar.
+   */
+  const revisar = useCallback(
+    async (
+      tnId: string,
+      nombre: string,
+      borrador: Borrador,
+      conservarResiduo: boolean,
+    ): Promise<{ error: string | null; verificado: boolean }> => {
+      try {
+        const r = await apiFetch(COLA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recurso: 'tn-desc', store: marca, tn_id: tnId, nombre, op: 'revisar', borrador, conservarResiduo }),
+        })
+        const d = await r.json()
+        await cargar()
+        if (!r.ok || !d?.ok) return { error: d?.error || `Error ${r.status}`, verificado: false }
+        return { error: null, verificado: !!d.verificado }
+      } catch (e) {
+        await cargar()
+        return { error: e instanceof Error ? e.message : 'No se pudo publicar.', verificado: false }
+      }
+    },
+    [marca, cargar],
+  )
+
+  return { ...estado, cargar, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar, revisar }
 }

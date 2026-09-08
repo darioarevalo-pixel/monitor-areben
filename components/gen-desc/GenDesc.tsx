@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Badge, Button, Card, color, EmptyState, Field, Input, KpiCard, Lightbox, Notice, Select, Toolbar, useToast,
+  Badge, Button, Card, color, EmptyState, Field, font, Input, KpiCard, Lightbox, Notice, Select, Tabs, Toolbar, useToast,
 } from '@/components/ui'
 import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
@@ -11,7 +11,7 @@ import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip } from '@/lib/tn-desc/formato'
 import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
-import { familiaDeProducto, listaDe, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
+import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
 import { fraseDeModelo, modeloDeProducto, resumenDeModelo, type TalleDeModelo } from '@/lib/sesionfotos/modelo'
 
@@ -54,10 +54,19 @@ export function GenDesc() {
   // La marca sale de la sesión, no de una prop: así entra al registro de secciones como
   // cualquier otra pantalla (el molde es `GenTalles`).
   const { marca } = useSesion()
-  const { cargando, productos, cola, atributos, medidas, puedePublicar, modelos, errorModelos, error, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar } = useGenDesc(marca)
+  const { cargando, productos, cola, atributos, medidas, puedePublicar, modelos, errorModelos, error, refrescar, guardar, guardarAtributo, guardarMedida, marcarSinMedidas, guardarFamilia, redactar, publicar, revisar } = useGenDesc(marca)
   const [filtro, setFiltro] = useState<Filtro>('ultimas-tandas')
   const [busca, setBusca] = useState('')
   const [abierto, setAbierto] = useState<string | null>(null)
+  /**
+   * 🆕 **Las dos manos de esta pantalla, separadas** (7-sep-2026, veredicto de Bruno). «Cargar» es
+   * la de siempre: buscar una prenda, abrirla, completar la ficha y las medidas. «Revisar» es la
+   * otra tarea —mirar la foto contra lo que se va a publicar y sacarlo— y necesita lo contrario:
+   * todo abierto, todo junto, y un botón.
+   */
+  const [vista, setVista] = useState<'cargar' | 'revisar'>('cargar')
+  /** 🔴 Los que se publicaron en esta visita: se quedan en la pantalla de revisión. Ver `paraRevisar`. */
+  const [retenidos, setRetenidos] = useState<Set<string>>(new Set())
   const toast = useToast()
 
   const publicados = useMemo(() => productos.filter((p) => p.published), [productos])
@@ -86,6 +95,25 @@ export function GenDesc() {
     [publicados, cola, atributos, filtro, tandas, abierto, busca],
   )
 
+  const paraLeer = useMemo(
+    () => paraRevisar(publicados, { cola, busca, retenidos }),
+    [publicados, cola, busca, retenidos],
+  )
+
+  /**
+   * Guardar un dato de la ficha. Vive acá y ⛔ no adentro de cada tarjeta porque **las dos vistas
+   * escriben la misma ficha**: la fila de «Cargar» y la tarjeta de «Revisar» son dos lugares donde
+   * se corrige lo mismo, y dos copias de esta función serían dos maneras de que una guarde bien y
+   * la otra no.
+   */
+  const alElegirDato = (p: ProductoTn) => async (atributo: Atributo, valor: string, propuesto?: boolean) => {
+    const familia = familiaDe(p)
+    if (!familia) return 'Elegí primero qué prenda es.'
+    const err = await guardarAtributo(p.id, familia, atributo, valor, p.name, propuesto)
+    if (err) toast.error(err)
+    return err
+  }
+
   if (error) return <Notice tone="danger">{error}</Notice>
 
   return (
@@ -97,6 +125,20 @@ export function GenDesc() {
         escribe en la tienda de a un producto y guarda el texto anterior antes de pisarlo.
       </Notice>
 
+      {/* 🔑 Las dos manos, separadas: cargar es de a una prenda con la prenda en la mano; revisar
+          es leer varias seguidas. La pestaña de revisar sólo existe para quien puede publicar. */}
+      {puedePublicar && (
+        <Tabs
+          items={[
+            { key: 'cargar', label: 'Cargar y escribir' },
+            { key: 'revisar', label: 'Revisar y publicar', badge: stats.borradores + stats.aprobados || undefined },
+          ]}
+          value={vista}
+          onChange={(k) => setVista(k as 'cargar' | 'revisar')}
+        />
+      )}
+
+      {vista === 'cargar' && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }}>
         <KpiCard label="Últimas 2 tandas" value={stats.ultimas} tone="neutral" activo={filtro === 'ultimas-tandas'} onClick={() => setFiltro('ultimas-tandas')} />
         <KpiCard label="Sin descripción" value={stats.sinDesc} tone="danger" activo={filtro === 'sin-desc'} onClick={() => setFiltro('sin-desc')} />
@@ -106,15 +148,18 @@ export function GenDesc() {
         <KpiCard label="Aprobados" value={stats.aprobados} tone="success" activo={filtro === 'aprobados'} onClick={() => setFiltro('aprobados')} />
         <KpiCard label="En la tienda" value={stats.enLaTienda} tone="success" activo={filtro === 'en-la-tienda'} onClick={() => setFiltro('en-la-tienda')} />
       </div>
+      )}
 
       <Toolbar>
-        <Field label="Ver">
-          <Select value={filtro} onChange={(e) => setFiltro(e.target.value as Filtro)}>
-            {FILTROS.map((o) => (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </Select>
-        </Field>
+        {vista === 'cargar' && (
+          <Field label="Ver">
+            <Select value={filtro} onChange={(e) => setFiltro(e.target.value as Filtro)}>
+              {FILTROS.map((o) => (
+                <option key={o.v} value={o.v}>{o.label}</option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Buscar">
           <Input
             value={busca}
@@ -131,6 +176,8 @@ export function GenDesc() {
 
       {cargando && !productos.length && <Card>Cargando el catálogo…</Card>}
 
+      {vista === 'cargar' ? (
+        <>
       {!cargando && !lista.length && (
         <EmptyState title="No queda ninguno acá" hint={busca ? `Ningún producto se llama «${busca}». Probá con menos letras o borrá la búsqueda.` : 'Probá con otro filtro.'} />
       )}
@@ -153,13 +200,7 @@ export function GenDesc() {
               if (err) toast.error(err)
               return err
             }}
-            onAtributo={async (atributo, valor, propuesto) => {
-              const familia = familiaDe(p)
-              if (!familia) return 'Elegí primero qué prenda es.'
-              const err = await guardarAtributo(p.id, familia, atributo, valor, p.name, propuesto)
-              if (err) toast.error(err)
-              return err
-            }}
+            onAtributo={alElegirDato(p)}
             onMedida={async (talle, medida, valor) => {
               const familia = familiaDe(p)
               if (!familia) return 'Elegí primero qué prenda es.'
@@ -206,6 +247,56 @@ export function GenDesc() {
       {errorModelos && <Notice tone="warning">{errorModelos} El talle de la modelo no se va a ver en ninguna ficha.</Notice>}
 
       {lista.length > 200 && <Notice tone="neutral">Se muestran 200 de {lista.length}. Afiná el filtro.</Notice>}
+        </>
+      ) : (
+        <>
+          <Notice tone="neutral">
+            Acá está lo que ya tiene párrafo escrito y todavía ⛔ no salió. Mirá <b>la foto</b> contra
+            lo que dicen los datos y el párrafo: se corrige <b>acá mismo</b> —cada dato al elegirlo, el
+            párrafo al salir del campo— y <b>Publicar</b> aprueba y escribe en la tienda en un gesto.
+          </Notice>
+
+          {!cargando && !paraLeer.length && (
+            <EmptyState
+              title="No hay nada esperando que lo miren"
+              hint={busca ? `Ningún borrador se llama «${busca}».` : 'Los párrafos se escriben en «Cargar y escribir».'}
+            />
+          )}
+
+          <div style={{ display: 'grid', gap: 12 }}>
+            {paraLeer.slice(0, 60).map((p) => (
+              <TarjetaRevision
+                key={p.id}
+                p={p}
+                fila={cola[p.id]}
+                ficha={atributos[p.id] || {}}
+                familia={familiaDe(p)}
+                onAtributo={alElegirDato(p)}
+                onGuardarTexto={async (borrador) => {
+                  const err = await guardar({ tn_id: p.id, nombre: p.name, op: 'borrador', borrador })
+                  if (err) toast.error(err)
+                  return err
+                }}
+                onPublicar={async (borrador, conservarResiduo) => {
+                  // 🔴 Se retiene ANTES de publicar: si se retuviera después, entre la respuesta y
+                  // el `setState` la tarjeta ya se habría ido de la lista con el estado nuevo.
+                  setRetenidos((prev) => (prev.has(p.id) ? prev : new Set(prev).add(p.id)))
+                  const { error: err, verificado } = await revisar(p.id, p.name, borrador, conservarResiduo)
+                  if (err) toast.error(err)
+                  else if (verificado) toast.ok('Publicado en la tienda.')
+                  // ⛔ El PUT dio 200 y la relectura no coincidió: no se dice «listo».
+                  else toast.error('Se escribió, pero la relectura no coincide. Miralo en la tienda.')
+                  return err
+                }}
+              />
+            ))}
+          </div>
+
+          {paraLeer.length > 60 && (
+            <Notice tone="neutral">Se muestran 60 de {paraLeer.length}. Buscá por nombre.</Notice>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -914,5 +1005,255 @@ function CampoAtributo({
         <option value={OTRA}>otra…</option>
       </Select>
     </Field>
+  )
+}
+
+/**
+ * 🆕 Una prenda esperando que la miren: **la foto grande al lado de todo lo que va a salir**, y un
+ * solo botón.
+ *
+ * 🔴 **Es la respuesta al veredicto de Bruno del 7-sep-2026** —«mucha fricción, tengo que revisar
+ * todo, no me está convenciendo»— y a las tres cosas que él mismo nombró al día siguiente: que ⛔
+ * no le confía a los bullets, que revisar de a una cuesta, y que son tres botones por prenda.
+ *
+ * 🔑 **La foto grande ⛔ no es estética: es el ORÁCULO de la ficha.** Medido el 7-sep: 4 de 20
+ * prendas tenían la ficha peleada con la foto (TOP LOLA decía `Manga: 3/4` y es sin mangas). Con
+ * la ficha en una fila cerrada y la foto en otra pantalla, la única forma de cazar eso era
+ * acordarse de mirar; acá el error y su oráculo entran juntos en la misma mirada.
+ *
+ * 🔑 **Y se corrige en el lugar donde se ve** —lo pidió Bruno: «poder editar rápido, o poder
+ * editar algunas partes»—: cada dato de la ficha se corrige al elegirlo y el párrafo al salir del
+ * campo, sin botón de guardar. Es la misma regla que ya tenía la ficha desde el 27-ago: un botón
+ * que junta seis campos es un botón que alguien no aprieta.
+ *
+ * ⚠️ La tarjeta ⛔ no muestra las medidas ni el insumo: eso se carga con la prenda en la mano y es
+ * la otra pestaña. Acá se lee y se decide.
+ */
+function TarjetaRevision({
+  p, fila, ficha, familia, onAtributo, onGuardarTexto, onPublicar,
+}: {
+  p: ProductoTn
+  fila: FilaCola | undefined
+  ficha: Cargados
+  familia: Familia | null
+  onAtributo: (atributo: Atributo, valor: string, propuesto?: boolean) => Promise<string | null>
+  onGuardarTexto: (borrador: { parrafo: string; bullets: { etiqueta: string; texto: string }[]; tip: string }) => Promise<string | null>
+  onPublicar: (
+    borrador: { parrafo: string; bullets: { etiqueta: string; texto: string }[]; tip: string },
+    conservarResiduo: boolean,
+  ) => Promise<string | null>
+}) {
+  const [parrafo, setParrafo] = useState(fila?.borrador?.parrafo || '')
+  const [tip, setTip] = useState(fila?.borrador?.tip || '')
+  const [guardando, setGuardando] = useState(false)
+  const [publicando, setPublicando] = useState(false)
+  const [corrigiendo, setCorrigiendo] = useState(false)
+  // ⛔ Arranca DESTILDADO, igual que en la fila: decisión de Bruno del 4-sep-2026, el renglón
+  // viejo escrito a mano se pisa. El respaldo queda en `html_previo` igual.
+  const [conservarResiduo, setConservarResiduo] = useState(false)
+  const [foto, setFoto] = useState<string | null>(null)
+
+  const bullets = useMemo(() => bulletsDe(familia, ficha), [familia, ficha])
+  const cuidados = useMemo(() => cuidadosDe(ficha), [ficha])
+  const campos = useMemo(() => atributosDe(familia), [familia])
+  const cuenta = useMemo(() => cargadosDe(familia, ficha), [familia, ficha])
+  const partes = useMemo(() => partir(p.raw_desc), [p.raw_desc])
+  const problemas = useMemo(
+    () => [...validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }), ...validarTip(tip, { variantes: p.variantes })],
+    [parrafo, tip, p.variantes, p.name, bullets],
+  )
+  const faltaTela = useMemo(() => sinTela(ficha), [ficha])
+  const vacio = !parrafo.trim()
+  const sucio = parrafo !== (fila?.borrador?.parrafo || '') || tip.trim() !== (fila?.borrador?.tip || '')
+  const enLaTienda = fila?.estado === 'escrito'
+
+  const textoDeAhora = () => ({ parrafo, bullets, tip: tip.trim() })
+
+  /** 🔑 Se guarda al SALIR del campo, sin botón. Si no cambió nada, ⛔ no se escribe. */
+  const alSalir = async () => {
+    if (!sucio || vacio) return
+    setGuardando(true)
+    await onGuardarTexto(textoDeAhora())
+    setGuardando(false)
+  }
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        {/* ── La foto, del tamaño en que se puede ver una manga ── */}
+        <div style={{ flex: '0 0 auto', width: 190 }}>
+          {p.imagenes[0] ? (
+            <button
+              type="button"
+              onClick={() => setFoto(p.imagenes[0].src)}
+              title="Ver en grande"
+              style={{ padding: 0, border: `1px solid ${color.line}`, borderRadius: 8, background: 'none', cursor: 'zoom-in', lineHeight: 0, width: 190, height: 238, overflow: 'hidden', display: 'block' }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.imagenes[0].src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            </button>
+          ) : (
+            <div style={{ width: 190, height: 238, border: `1px dashed ${color.line}`, borderRadius: 8, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut }}>
+              sin fotos
+            </div>
+          )}
+          {/* Las demás, chicas: el tajo o el largo real casi nunca están en la portada. */}
+          {p.imagenes.length > 1 && (
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+              {p.imagenes.slice(1).map((im) => (
+                <button
+                  key={im.id}
+                  type="button"
+                  onClick={() => setFoto(im.src)}
+                  title="Ver en grande"
+                  style={{ padding: 0, border: `1px solid ${color.line}`, borderRadius: 5, background: 'none', cursor: 'zoom-in', lineHeight: 0, width: 43, height: 54, overflow: 'hidden' }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={im.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Lo que va a salir a la tienda ── */}
+        <div style={{ flex: '1 1 340px', minWidth: 280, display: 'grid', gap: 9 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <b style={{ fontSize: font.base }}>{p.name}</b>
+            {familia
+              ? <Badge tone={cuenta.con === cuenta.total ? 'success' : 'neutral'}>Ficha {cuenta.con}/{cuenta.total}</Badge>
+              : <Badge tone="warning">Falta decir qué prenda es</Badge>}
+            {paraVolverAMirar(ficha) && <Badge tone="warning">Para volver a mirar</Badge>}
+            {fila?.estado === 'aprobado' && <Badge tone="success">Aprobado</Badge>}
+            {enLaTienda && <Badge tone={fila?.verificado ? 'success' : 'warning'}>{fila?.verificado ? 'En la tienda' : 'Escrito sin verificar'}</Badge>}
+            {guardando && <span style={{ fontSize: font.xs, color: color.mut }}>guardando…</span>}
+          </div>
+
+          <textarea
+            className="mo-input mo-input--multi"
+            rows={3}
+            value={parrafo}
+            onChange={(e) => setParrafo(e.target.value)}
+            onBlur={() => void alSalir()}
+            placeholder="El párrafo que la vende"
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: font.base }}
+          />
+          <div style={{ fontSize: font.xs, color: color.mut, marginTop: -6 }}>
+            Párrafo · {parrafo.trim().length} de {MAX_PARRAFO}
+          </div>
+
+          <textarea
+            className="mo-input mo-input--multi"
+            rows={2}
+            value={tip}
+            onChange={(e) => setTip(e.target.value)}
+            onBlur={() => void alSalir()}
+            placeholder="Tip de look (opcional): con qué se combina"
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: font.base }}
+          />
+          <div style={{ fontSize: font.xs, color: color.mut, marginTop: -6 }}>
+            Tip · {tip.trim().length} de {MAX_TIP}
+          </div>
+
+          {/* 🔑 Los bullets, tal como salen — y cada uno abre la ficha para corregirlo. Son lo que
+              hay que mirar contra la foto, así que se leen enteros y ⛔ no escondidos. */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {bullets.length === 0 && <span style={{ fontSize: font.sm, color: '#a00' }}>Sin ningún dato cargado.</span>}
+            {bullets.map((b) => (
+              <button
+                key={b.etiqueta}
+                type="button"
+                onClick={() => setCorrigiendo(true)}
+                title="Corregir la ficha"
+                style={{ border: `1px solid ${color.line}`, borderRadius: 999, background: color.bg, cursor: 'pointer', fontSize: font.xs, padding: '2px 9px', color: color.ink }}
+              >
+                {b.etiqueta}: <b>{b.texto}</b>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCorrigiendo((v) => !v)}
+              style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: font.xs, color: color.mut2, textDecoration: 'underline' }}
+            >
+              {corrigiendo ? 'listo' : '✎ corregir la ficha'}
+            </button>
+          </div>
+
+          {corrigiendo && familia && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 9, padding: 10, background: color.bg, borderRadius: 8 }}>
+              {campos.map((a) => (
+                <CampoAtributo
+                  key={a.key}
+                  label={a.label}
+                  libre={a.libre}
+                  opciones={opcionesDe(familia, a.key)}
+                  valor={ficha[a.key] || ''}
+                  onElegir={(v, propuesto) => onAtributo(a.key, v, propuesto)}
+                />
+              ))}
+            </div>
+          )}
+          {corrigiendo && !familia && (
+            <Notice tone="warning">
+              Este producto ⛔ no tiene categoría en TiendaNube, así que la ficha no sabe qué preguntarle.
+              Decile qué prenda es desde <b>Cargar y escribir</b>.
+            </Notice>
+          )}
+
+          {cuidados && (
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              Cuidados: <b>{cuidados.grupo}</b> — salen solos de la tela.
+            </div>
+          )}
+
+          {!vacio && problemas.length > 0 && (
+            <Notice tone="warning">
+              <b>Falta corregir:</b>
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                {problemas.map((x, i) => (
+                  <li key={i}>{x.motivo}</li>
+                ))}
+              </ul>
+            </Notice>
+          )}
+          {faltaTela && (
+            <Notice tone="warning">Sin tela cargada ⛔ no sale a la tienda: la tela decide los cuidados.</Notice>
+          )}
+
+          {/* 🔴 El residuo se decide acá también: sin este tilde, publicar desde la revisión sería
+              un camino que tira texto viejo sin que nadie lo vea. TiendaNube ⛔ no tiene historial. */}
+          {!!partes.residuo && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: font.sm }}>
+              <input type="checkbox" checked={conservarResiduo} onChange={(e) => setConservarResiduo(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>
+                Conservar lo que ya había escrito además de la tabla de talles
+                {partes.residuo.includes('<img') && <b> (incluye una imagen)</b>}.
+                <span style={{ color: color.mut, display: 'block' }}>{partes.residuo.replace(/<[^>]+>/g, ' ').trim().slice(0, 140)}</span>
+              </span>
+            </label>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button
+              size="sm"
+              disabled={publicando || guardando || vacio || problemas.length > 0 || faltaTela}
+              onClick={() => {
+                void (async () => {
+                  setPublicando(true)
+                  await onPublicar(textoDeAhora(), conservarResiduo)
+                  setPublicando(false)
+                })()
+              }}
+            >
+              {publicando ? 'Publicando…' : enLaTienda ? 'Volver a publicar' : 'Publicar en la tienda'}
+            </Button>
+            <span style={{ fontSize: font.xs, color: color.mut }}>
+              Aprueba y escribe en un solo gesto. La tabla de talles se conserva siempre y el texto anterior se guarda antes de pisarlo.
+            </span>
+          </div>
+        </div>
+      </div>
+      <Lightbox src={foto} alt={p.name} onCerrar={() => setFoto(null)} />
+    </Card>
   )
 }

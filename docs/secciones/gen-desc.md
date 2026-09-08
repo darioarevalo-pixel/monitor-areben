@@ -769,3 +769,90 @@ ABIERTA** —al revés que `leerCajon`, que falla cerrada porque río arriba se 
 si una línea no contesta, la pantalla abre igual **con un cartel**. 🔑 Sin ese cartel, «esta prenda
 no tiene talle de modelo» y «no se pudieron leer las sesiones» se ven exactamente igual: un renglón
 que no está.
+
+## 🆕 8-sep-2026 — «Revisar y publicar»: la pestaña que contesta el veredicto de la fricción
+
+🔴 **Lo primero, porque es lo que la escribió.** El 7-sep Bruno cerró el día así:
+
+> «meto clear, sigo más tarde, pq **mucha fricción, tengo que revisar todo, no me está
+> convenciendo**»
+
+…con **19 borradores escritos y ninguno aprobado**. Al día siguiente se le preguntó **qué parte le
+pesa**, ⛔ en vez de escribir otra tanda de borradores, y contestó **tres cosas a la vez** —⛔ no
+una—:
+
+1. **La ficha: ⛔ no confía en los bullets.** Medido el 7-sep: **4 de 20** prendas tenían la ficha
+   peleada con la foto (TOP LOLA decía `Manga: 3/4` y es sin mangas).
+2. **Revisar de a una.** La lista está hecha para **cargar** —fila cerrada, se abre una, se
+   completa— y revisar 19 así son 19 clics antes de empezar a leer.
+3. **Los tres botones por prenda** —Guardar, Aprobar, Publicar—, más abrir la fila.
+
+Y agregó la cuarta, que es la que ata a las otras tres:
+
+> «además en ese revisar de a uno, **poder editar rápido, o poder editar algunas partes**»
+
+### Lo que se construyó: una tarea distinta, ⛔ no una lista con otro filtro
+
+La sección quedó con **dos pestañas y dos manos**, y ⛔ no es una preferencia de diseño: son dos
+tareas con necesidades opuestas.
+
+| | **Cargar y escribir** | **Revisar y publicar** |
+|---|---|---|
+| quién | el local, con la prenda en la mano | quien puede publicar |
+| el gesto | abrir UNA fila y completarla | leer varias seguidas |
+| la fila | cerrada por default | **todo abierto, todo junto** |
+| la foto | una tira de 72×90 adentro de la fila | **190×238 al lado de lo que va a salir** |
+| el final | Guardar → Aprobar → Publicar | **un botón** |
+
+🔑 **La foto grande ⛔ no es estética: es el ORÁCULO de la ficha.** El defecto que Bruno nombra
+—«no confío en los bullets»— sólo se caza mirando la prenda, y con la ficha en una fila cerrada y la
+foto en otra pantalla la única forma de cazarlo era **acordarse de mirar**. En la tarjeta, el error
+y su oráculo entran en la misma mirada: los bullets se leen enteros al lado de la foto, y **cada uno
+es un botón que abre la ficha** para corregirlo ahí mismo.
+
+🔑 **Y se corrige donde se ve, sin botón de guardar**: cada dato al elegirlo y el párrafo al salir
+del campo. Es la misma regla que la ficha tiene desde el 27-ago —un botón que junta seis campos es
+un botón que alguien no aprieta—, ahora también para el texto. El párrafo pasó de un `<input>` de
+una línea a un `textarea`: corregir una frase en el medio de 220 caracteres en un renglón que
+scrollea es parte de la fricción que se estaba midiendo.
+
+### El gesto único: `op:'revisar'`, y lo que ⛔ NO se aflojó
+
+Los tres botones eran **dos pasos que ⛔ no preguntaban nada nuevo**: quien aprieta «Publicar» en la
+tarjeta ya miró la foto, los bullets y el párrafo. `op:'revisar'` (en `api/_tn-desc.js`) los junta:
+**guarda el borrador que se está leyendo, lo aprueba con la firma de quien apretó, y publica**.
+
+🔴 **El invariante queda igual, y por eso el orden importa**: primero se ESCRIBE el borrador
+aprobado, y recién después se toca la tienda —de ahí para abajo `revisar` y `publicar` son
+literalmente el mismo camino, que compone el HTML **de lo que quedó guardado en la base**, ⛔ no de
+lo que mandó el navegador—. Si el pedido se corta en el medio, lo que queda es **una fila aprobada
+con el texto que se leyó**, ⛔ nunca una tienda escrita con un texto que no está en ningún lado.
+Va en UNA llamada y ⛔ no en tres seguidas desde el navegador por el mismo motivo por el que
+`publicar` vive del lado del servidor.
+
+⛔ **Lo que sigue pidiendo lo mismo**: el permiso (`gen-desc.publicar`, el mismo que aprobar — el
+local ⛔ no puede), la tela cargada (sin tela ⛔ no sale), el validador en cero, el respaldo antes de
+escribir, el compare-and-swap y la relectura. Un pedido con la forma del borrador cambiada muere en
+400 **sin tocar la tienda**, igual que antes.
+
+### 🔴 La tarjeta que se está mirando ⛔ no se puede ir sola
+
+`paraRevisar` (en `lib/tn-desc/lista.core.ts`) tiene **`retenidos` como parámetro obligatorio**, y
+es la misma lección que `abierto` en la lista de arriba: publicar cambia el estado de la fila a
+`escrito`, y sin eso **la tarjeta desaparecería en el mismo gesto que la publica** —quien apretó ⛔
+no llega a ver si se verificó, y una tarjeta que se esfuma se lee como «se borró algo»—. Se retiene
+lo que se tocó **en esta visita**, ⛔ no lo publicado alguna vez: la pantalla es la cola de lo que
+falta, ⛔ no el historial.
+
+⚠️ Y **el orden es por nombre y nada más**: ordenar por estado haría **saltar de lugar la tarjeta
+que alguien está editando** en cuanto el guardado la desaprueba.
+
+### ▶️ Lo que esto ⛔ NO resuelve
+
+- **La ficha sigue siendo el 20 %.** La tarjeta hace que el error se vea y se corrija en el acto,
+  pero ⛔ no lo evita: sigue habiendo 4 de 20 fichas peleadas con la foto, y cada publicación sigue
+  siendo una auditoría hasta que ese número baje.
+- **`escote` sigue con 23 «polera» contra 2 «mao»** — la lista usa palabras que en el local ⛔ no se
+  usan así, y quien revisa tiene que dudar de cada una. Es la 2ª de las tres cosas que Bruno nombró
+  el 7-sep y ⛔ no se tocó.
+- **Las 8 palabras de tela** quedaron **frenadas a pedido de Bruno**: se ven con la diseñadora.

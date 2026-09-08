@@ -574,6 +574,92 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     expect(updates[0]?.html_previo).toBe(HTML_ACTUAL)
   })
 
+  /**
+   * 🆕 EL GESTO ÚNICO — `op:'revisar'` (8-sep-2026).
+   *
+   * 🔴 Existe por el veredicto de Bruno del 7-sep: *«mucha fricción, tengo que revisar todo, no me
+   * está convenciendo»*, dicho con 19 borradores escritos y **ninguno aprobado**. Publicar pedía
+   * TRES gestos —Guardar, Aprobar, Publicar— sobre un texto que la persona ya había leído.
+   *
+   * ⛔ Lo que ⛔ NO se aflojó es el invariante: el texto se ESCRIBE primero y la tienda se toca
+   * después, y lo que sale se compone de lo que quedó guardado en la base.
+   */
+  describe('🆕 revisar: guardar, aprobar y publicar en un solo pedido', () => {
+    it('🔑 escribe el borrador aprobado ANTES de tocar la tienda', async () => {
+      catalogoFalso(MKT)
+      const res = await llamar(post({ op: 'revisar', nombre: 'CAMISA AMELIE', borrador: { parrafo: 'NUEVO', bullets: [] } }))
+      expect(res.code).toBe(200)
+      // El upsert trae el texto nuevo Y la aprobación firmada, en una sola escritura.
+      expect(upserts[0]?.borrador).toEqual({ parrafo: 'NUEVO', bullets: [] })
+      expect(upserts[0]?.estado).toBe('aprobado')
+      expect(upserts[0]?.aprobado_por).toBe('Marta')
+      expect(upserts[0]?.nombre).toBe('CAMISA AMELIE')
+      // 🔴 Y recién después la tienda: la PRIMERA escritura de la base es el borrador aprobado,
+      // y el respaldo (`update`) viene después. Si se invirtiera, la tienda podría quedar escrita
+      // con un texto que no está guardado en ningún lado.
+      expect(llamadas[0]).toBe('upsert')
+      expect(diario).toEqual(['tn:leer', 'tn:escribir'])
+    })
+
+    it('🔴 lo que sale a la tienda se lee de la BASE, ⛔ no del body', async () => {
+      // El mock contesta siempre la fila vieja: así se ve que el handler publica lo LEÍDO y no lo
+      // que le mandaron. En producción esa lectura devuelve lo que el upsert de arriba acaba de
+      // escribir — que es justo por lo que el orden importa.
+      catalogoFalso(MKT)
+      await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [] } }))
+      expect(String(mandado.nuevo)).toContain('Camisa de gasa liviana.')
+      expect(String(mandado.nuevo)).not.toContain('NUEVO')
+    })
+
+    it('⚠️ sin `nombre` ⛔ no le borra el nombre a la fila: el pie de marca cruza por nombre', async () => {
+      catalogoFalso(MKT)
+      await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [] } }))
+      expect(Object.keys(upserts[0] || {})).not.toContain('nombre')
+    })
+
+    it('sin borrador en el pedido, aprueba lo que ya estaba guardado', async () => {
+      catalogoFalso(MKT)
+      const res = await llamar(post({ op: 'revisar' }))
+      expect(res.code).toBe(200)
+      expect(upserts.length).toBe(0)
+      expect(updates[0]?.estado).toBe('aprobado')
+      expect(updates[0]?.aprobado_por).toBe('Marta')
+    })
+
+    it('⛔ y si no hay ninguno guardado, muere en 400 sin tocar la tienda', async () => {
+      filaGuardada = null
+      catalogoFalso(MKT)
+      const res = await llamar(post({ op: 'revisar' }))
+      expect(res.code).toBe(400)
+      expect(diario).toEqual([])
+    })
+
+    it('⛔ un borrador con otra forma se rechaza en la frontera, y la tienda ni se lee', async () => {
+      catalogoFalso(MKT)
+      const res = await llamar(post({ op: 'revisar', borrador: { parrafo: 'sin bullets' } }))
+      expect(res.code).toBe(400)
+      expect(upserts.length).toBe(0)
+      expect(diario).toEqual([])
+    })
+
+    it('🔴 el local ⛔ no puede: es el mismo permiso que aprobar', async () => {
+      catalogoFalso(LOCAL)
+      const res = await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [] } }))
+      expect(res.code).toBe(403)
+      expect(upserts.length).toBe(0)
+      expect(diario).toEqual([])
+    })
+
+    it('🔴 sin tela tampoco sale por este camino, aunque el borrador quede aprobado', async () => {
+      atributosGuardados = []
+      catalogoFalso(MKT)
+      const res = await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [] } }))
+      expect(res.code).toBe(400)
+      expect(String(res.body?.error)).toContain('Sin tela')
+      expect(diario).toEqual([])
+    })
+  })
+
   it('🔴 un PUT con 200 y relectura que NO coincide queda marcado, no silenciado', async () => {
     catalogoFalso(MKT)
     respEscribir = { status: 200, body: { ok: true, escrito: 'otra cosa', verificado: false } }

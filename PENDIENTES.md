@@ -490,9 +490,33 @@ foto** — y los bullets los cargó otra persona en 27 segundos (mediana medida)
    eso es el trabajo, ⛔ no el texto.
 
 ⚠️ **Lo que ⛔ NO hay que hacer es escribir más borradores.** Hay 19 esperando y el cuello ⛔ no es
-escribirlos: es que revisarlos cuesta. ▶️ **La próxima sesión arranca preguntándole a Bruno QUÉ
-parte le pesa** —revisar el texto, revisar la ficha, o los tres botones—, ⛔ no proponiendo otra
-tanda.
+escribirlos: es que revisarlos cuesta.
+
+
+### 🆕 8-sep-2026 — SE LE PREGUNTÓ, Y CONTESTÓ LAS TRES
+
+Se le preguntó qué parte le pesa antes de tocar nada, y ⛔ **no eligió una: marcó las tres** —la
+ficha, revisar de a una y los tres botones— y agregó la cuarta, que es la que las ata:
+
+> «además en ese revisar de a uno, **poder editar rápido, o poder editar algunas partes**»
+
+🏁 **«Revisar y publicar»: una pestaña nueva en la misma sección** (`gen-desc`, ⛔ sin permiso
+nuevo). Las tarjetas se ven **todas abiertas**, con **la foto a 190×238 al lado de lo que va a
+salir**, el párrafo y el tip en `textarea` que **se guardan al salir del campo**, los bullets
+enteros —**cada uno es un botón que abre la ficha para corregirlo ahí mismo**— y **UN botón**:
+`op:'revisar'` guarda, aprueba y publica en un solo pedido.
+🔴 **El invariante ⛔ no se aflojó**: primero se escribe el borrador aprobado y **recién después** se
+toca la tienda; el HTML se compone de lo GUARDADO, ⛔ no de lo que manda el navegador. Mismo permiso,
+misma tela obligatoria, mismo respaldo, mismo compare-and-swap, misma relectura.
+🔴 **`retenidos` es obligatorio en `paraRevisar`**: sin eso la tarjeta **se esfuma en el mismo gesto
+que la publica** y quien apretó ⛔ no llega a ver si se verificó. Misma lección que `abierto`.
+📌 **El relato entero, en `docs/secciones/gen-desc.md`** § «8-sep-2026 — Revisar y publicar».
+
+▶️ 🔴 **LO QUE FALTA ES QUE BRUNO LA CAMINE**: publicar **uno** desde la tarjeta nueva. Es el único
+eslabón que ningún test puede ejercer, y el que dice si la fricción se fue o cambió de lugar.
+▶️ **Lo que esto ⛔ NO resuelve, y sigue abierto**: la ficha sigue peleada con la foto en 4 de 20
+—la tarjeta hace que se VEA, ⛔ no que no pase— y **`escote` sigue con 23 «polera» contra 2 «mao»**,
+que es la 2ª cosa que él nombró el 7-sep y ⛔ no se tocó.
 
 
 ### 🏁 Lo que se construyó el 7-sep después de esa entrada
@@ -526,6 +550,8 @@ enseñaba la primera regla al revés** ⇒ se cambió el ejemplo, ⛔ no sólo s
 CERO medidas** ⇒ 🔑 **la están usando**. **277 publicados con ficha completa y tela válida**, de los
 cuales **24 mudos**.
 
+⛔ **FRENADO POR BRUNO EL 8-sep**: *«analicemos luego de las fricciones las 8 palabras con la
+diseñadora, así lo vemos»* ⇒ ⛔ no se decide ninguna sin ella.
 ▶️ 🔴 **LO QUE ESPERA A BRUNO: las 8 palabras de tela propuestas.** `hilo` ×20 (los sweaters),
 `algodon` ×5, `lentejuelas` ×3, `gamuza`, `lana`, `foil` ×2, `sastrera`, `gamuzado`. Son **36
 prendas, 35 ya publicadas**, y hoy **pasan el freno de la tela y saldrían sin bullet de tela y sin

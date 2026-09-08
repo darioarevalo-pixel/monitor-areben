@@ -85,6 +85,39 @@ export function ultimasTandas(productos: ProductoLista[], cuantas = 2): Set<stri
   return new Set(fechas.sort().reverse().slice(0, cuantas))
 }
 
+/**
+ * 🆕 Los que están esperando que alguien los MIRE: tienen el párrafo escrito y todavía no salieron.
+ *
+ * 🔴 **Existe por el veredicto de Bruno del 7-sep-2026** —«mucha fricción, tengo que revisar todo,
+ * no me está convenciendo»—, dicho con **19 borradores escritos y ninguno aprobado**. La lista de
+ * arriba está hecha para CARGAR de a una prenda —se abre la fila, se completa la ficha, se cierra—
+ * y revisar es la tarea de al lado: la prenda ya está cargada y lo único que falta es mirar la foto
+ * contra lo que se va a publicar. Con la fila cerrada por default, eso son 19 clics para empezar.
+ *
+ * 🔴 **`retenidos` es OBLIGATORIO y es la misma lección que `abierto`**: publicar cambia el estado
+ * de la fila a `escrito` y sin esto la tarjeta **desaparecería en el mismo gesto** que la publica —
+ * quien aprieta no llega a ver si se verificó, y una tarjeta que se esfuma se lee como «se borró».
+ * Se retiene lo que se tocó **en esta visita**, ⛔ no lo publicado alguna vez.
+ *
+ * ⚠️ El orden es **por nombre y nada más**: ⛔ no por estado. Ordenar por estado haría saltar de
+ * lugar la tarjeta que alguien está editando en cuanto el guardado la desaprueba.
+ *
+ * ⚠️ ⛔ No entran `falla` ni `escribiendo`: ésos ⛔ no piden una lectura, piden mirar qué pasó en
+ * TiendaNube, y eso vive en la fila de la lista de arriba con su cartel.
+ */
+export function paraRevisar<T extends ProductoLista>(
+  productos: T[],
+  o: { cola: Record<string, FilaLista | undefined>; busca: string; retenidos: Set<string> },
+): T[] {
+  return productos
+    .filter((p) => {
+      const estado = o.cola[p.id]?.estado
+      const espera = estado === 'borrador' || estado === 'aprobado' || o.retenidos.has(p.id)
+      return p.published && espera && coincide(p.name, o.busca)
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 export type OpcionesLista = {
   filtro: Filtro
   cola: Record<string, FilaLista | undefined>

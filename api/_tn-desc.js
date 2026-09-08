@@ -10,6 +10,7 @@
 //   POST { recurso:'tn-desc', store, tn_id, op:'borrador', borrador:{parrafo,bullets} }
 //   POST { recurso:'tn-desc', store, tn_id, op:'aprobar' }
 //   POST { recurso:'tn-desc', store, tn_id, op:'publicar', conservarResiduo? }
+//   POST { recurso:'tn-desc', store, tn_id, op:'revisar',  borrador?, conservarResiduo? }
 //   POST { recurso:'tn-desc', store, tn_id, op:'quitar' }
 //
 // 🔑 Dos niveles de permiso, y la línea está donde está el costo: cargar el INSUMO ("gasa,
@@ -80,6 +81,65 @@ function cfgFor(store) {
 
 const COLUMNAS =
   'tn_id, nombre, familia, insumo, insumo_por, insumo_at, borrador, html_previo, hash_previo, html_escrito, verificado, estado, aprobado_por, aprobado_at, escrito_at, error, updated_at, sin_medidas, sin_medidas_por, sin_medidas_at';
+
+/**
+ * 🆕 Guarda el borrador que se acaba de leer y lo aprueba, **en una sola escritura**.
+ *
+ * 🔴 Existe por el veredicto de Bruno del 7-sep-2026 —«mucha fricción, tengo que revisar todo»—:
+ * publicar una prenda pedía TRES gestos (Guardar, Aprobar, Publicar) sobre un texto que la persona
+ * ya había leído. Tres botones para una sola decisión no son tres controles, son dos pasos que
+ * cuestan y no preguntan nada nuevo: quien aprieta «Publicar» en la pantalla de revisión ya miró
+ * la foto, los bullets y el párrafo.
+ *
+ * ⛔ Lo que ⛔ NO se afloja es el invariante: el HTML que sale a la tienda se compone del borrador
+ * **guardado** y de la ficha **guardada** —`op:'publicar'` vuelve a leer la fila de la base— así
+ * que este paso escribe primero y publica después, ⛔ nunca al revés. Si el pedido se corta en el
+ * medio, lo que queda es una fila aprobada con el texto que se leyó, ⛔ no una tienda escrita con
+ * un texto que no está en ningún lado.
+ *
+ * `borrador` es opcional: sin él se aprueba lo que ya estaba guardado (el caso de la fila que se
+ * revisó sin tocarle una letra). Devuelve el motivo del rechazo, o `null` si quedó aprobada.
+ */
+async function guardarYAprobar({ supabase, store, tnId, yo, ahora, nombre, borrador }) {
+  if (borrador === undefined || borrador === null) {
+    // ⛔ Mismo freno que `op:'aprobar'`: sin borrador guardado, aprobar sella una firma sobre nada.
+    const { data, error } = await supabase
+      .from('tn_descripciones')
+      .select('borrador')
+      .eq('store', store)
+      .eq('tn_id', tnId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data || !data.borrador) return 'no hay borrador guardado para aprobar';
+    const { error: e2 } = await supabase
+      .from('tn_descripciones')
+      .update({ estado: 'aprobado', aprobado_por: yo, aprobado_at: ahora, updated_at: ahora })
+      .eq('store', store)
+      .eq('tn_id', tnId);
+    if (e2) throw new Error(e2.message);
+    return null;
+  }
+  // La misma frontera que `op:'borrador'`: el handler no confía en la forma que manda el navegador.
+  if (typeof borrador !== 'object' || typeof borrador.parrafo !== 'string' || !Array.isArray(borrador.bullets)) {
+    return 'borrador inválido: se espera {parrafo, bullets:[{etiqueta,texto}]}';
+  }
+  const fila = {
+    store,
+    tn_id: tnId,
+    borrador,
+    estado: 'aprobado',
+    aprobado_por: yo,
+    aprobado_at: ahora,
+    updated_at: ahora,
+  };
+  // ⚠️ `nombre` se manda SÓLO si vino. Ponerlo en `null` cuando el navegador no lo mandó le
+  // borraría el nombre a la fila, y el pie de marca cruza las OC **por nombre**: la prenda
+  // saldría sin el pie y sin que nadie se entere.
+  if (nombre != null) fila.nombre = String(nombre);
+  const { error } = await supabase.from('tn_descripciones').upsert(fila, { onConflict: 'store,tn_id' });
+  if (error) throw new Error(error.message);
+  return null;
+}
 
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
@@ -412,12 +472,20 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    if (op === 'publicar') {
+    // 🆕 `revisar` es `publicar` con el aprobado adentro del mismo gesto: la pantalla de revisión
+    // manda el texto que la persona tiene delante, se guarda, se aprueba y sale. De acá para abajo
+    // ⛔ no hay ninguna diferencia entre las dos ops — el HTML se compone de lo que quedó GUARDADO.
+    if (op === 'publicar' || op === 'revisar') {
       // Se conserva la prosa vieja sin marcar (y los `<img>` que vengan con ella) salvo que
       // quien revisa lo haya visto en pantalla y lo haya destildado. Sin default destructivo.
       const conservarResiduo = body.conservarResiduo !== false;
       const sobre = req.headers && req.headers['x-monitor-auth'];
       if (!sobre) return res.status(400).json({ error: 'Falta la credencial para hablar con el catálogo.' });
+
+      if (op === 'revisar') {
+        const motivo = await guardarYAprobar({ supabase, store, tnId, yo, ahora, nombre: body.nombre, borrador: body.borrador });
+        if (motivo) return res.status(400).json({ error: motivo });
+      }
 
       // ⛔ Sólo sale a la tienda un borrador APROBADO. El HTML se arma acá, del borrador
       // guardado — no de lo que mande el navegador: lo que se aprobó es lo que se publica.
