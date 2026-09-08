@@ -123,9 +123,10 @@ export function GenDesc() {
     <div style={{ display: 'grid', gap: 16 }}>
       <Notice tone="neutral">
         Primero se carga la <b>ficha</b> de la prenda —tela, calce, escote, manga, largo— eligiendo
-        de una lista. De ahí salen solos los datos que se leen abajo de la descripción. Después se
-        escribe el <b>párrafo</b>, y recién cuando está aprobado aparece el botón de publicar, que
-        escribe en la tienda de a un producto y guarda el texto anterior antes de pisarlo.
+        de una lista. De ella salen los <b>cuidados</b> y los tres datos que se leen abajo de la
+        descripción —tela, tiro y detalle—; el resto no se publica: es lo que el <b>párrafo</b>
+        tiene que contar. Publicar escribe en la tienda de a un producto y guarda el texto anterior
+        antes de pisarlo.
       </Notice>
 
       {/* 🔑 Las dos manos, separadas: cargar es de a una prenda con la prenda en la mano; revisar
