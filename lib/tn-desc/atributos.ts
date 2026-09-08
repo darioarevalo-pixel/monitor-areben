@@ -30,6 +30,7 @@ import {
   normalizarPropuesta as normalizarPropuestaJs,
   propuestasDe as propuestasDeJs,
   bulletsDe as bulletsDeJs,
+  insumosDe as insumosDeJs,
   cargadosDe as cargadosDeJs,
   esValor as esValorJs,
   etiquetaDeBullet as etiquetaDeBulletJs,
@@ -188,6 +189,11 @@ export function textoDeBullet(atributo: Atributo, valor: string): string {
 /** Los bullets de la ficha: deterministas, ordenados y sin nada que validar. */
 export function bulletsDe(familia: Familia | null, cargados: Cargados): BulletAtributo[] {
   return bulletsDeJs(familia, cargados) as BulletAtributo[]
+}
+
+/** Lo que se cargó y ⛔ NO se publica: material para el párrafo. Ver `insumosDe` en el núcleo. */
+export function insumosDe(familia: Familia | null, cargados: Cargados): BulletAtributo[] {
+  return insumosDeJs(familia, cargados) as BulletAtributo[]
 }
 
 /** El `4/6` de la fila: cuántos atributos de su familia tiene cargados este producto. */

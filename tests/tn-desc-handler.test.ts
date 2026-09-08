@@ -463,17 +463,21 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
     // La ficha es el dato vivo: si alguien la corrigió después de aprobar el texto, lo que sale
     // a la tienda tiene que ser la corrección. El párrafo sí sale del borrador aprobado.
     atributosGuardados = [
-      { atributo: 'largo', valor: 'crop' },
+      { atributo: 'detalle', valor: 'con tajo' },
       { atributo: 'tela', valor: 'morley' },
+      // ⚠️ `largo` se carga igual pero desde el 8-sep-2026 ⛔ NO se publica: es insumo del párrafo.
+      { atributo: 'largo', valor: 'crop' },
     ]
     catalogoFalso(MKT)
     await llamar(post({ op: 'publicar' }))
     const nuevo = String(mandado.nuevo)
     expect(nuevo).toContain('<b>Tela:</b> morley')
-    expect(nuevo).toContain('<b>Largo:</b> crop')
+    expect(nuevo).toContain('<b>Detalle:</b> con tajo')
     expect(nuevo).not.toContain('VIEJO')
+    // 🔴 Y lo que dejó de publicarse NO se cuela por el borrador guardado ni por ningún otro lado.
+    expect(nuevo).not.toContain('Largo:')
     // Y en el orden canónico, no en el de carga.
-    expect(nuevo.indexOf('Tela:')).toBeLessThan(nuevo.indexOf('Largo:'))
+    expect(nuevo.indexOf('Tela:')).toBeLessThan(nuevo.indexOf('Detalle:'))
   })
 
   it('destildar «conservar» tira el residuo, pero NUNCA la tabla', async () => {

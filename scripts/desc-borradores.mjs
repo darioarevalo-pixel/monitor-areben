@@ -29,7 +29,7 @@
 
 import { authKv, leerEnv } from './lib/kv-auth.mjs'
 import { validarParrafo, validarTip } from '../lib/tn-desc/formato.core.js'
-import { bulletsDe, sinTela } from '../lib/tn-desc/atributos.core.js'
+import { bulletsDe, insumosDe, sinTela } from '../lib/tn-desc/atributos.core.js'
 import { familiaDe } from '../lib/tn-desc/atributos.core.js'
 
 const MONITOR = process.env.MONITOR_URL || 'https://monitorareben.vercel.app'
@@ -134,7 +134,11 @@ async function listar() {
       nombre: p.name,
       categorias: p.categories,
       fotos: (p.images || []).slice(0, 2),
+      // Lo que SÍ va a salir abajo del párrafo. Son tres: tela, tiro y detalle.
       bullets: bulletsDe(familia, ficha).map((b) => `${b.etiqueta}: ${b.texto}`),
+      // 🆕 Y lo que el local cargó y ⛔ NO se publica: es material para escribir, y de esto
+      // el párrafo se tiene que hacer cargo porque la clienta ⛔ no lo lee en ningún otro lado.
+      insumo_ficha: insumosDe(familia, ficha).map((b) => `${b.etiqueta}: ${b.texto}`),
       variantes: valoresDe(p),
       insumo: (fila && fila.insumo) || '',
       dice_hoy: (p.desc || '').slice(0, 300),

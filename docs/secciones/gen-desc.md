@@ -970,3 +970,57 @@ dos, con las dos fotos — o sea que el número de referencia para el catálogo 
 4. ⚠️ Si los bullets se van, tienen que irse **de las dos puntas**: un campo que sigue alimentando
    el párrafo convierte un error de ficha en **prosa afirmativa**, más difícil de cazar que un
    bullet visiblemente falso.
+
+## 🆕 8-sep-2026 (tarde) — La ficha dejó de ser vidriera: qué se publica y qué no
+
+Con la cola **en cero** —las 22 salieron y quedaron verificadas— se aplicó el cambio de fondo que
+Bruno había pedido a la mañana. 🔑 **El momento no fue casual**: con borradores esperando, cambiar
+el formato deja textos escritos bajo una regla y publicados bajo otra.
+
+### Lo que sale a la tienda ahora
+
+| bloque | antes | ahora |
+|---|---|---|
+| párrafo | lo que la lista NO dice | **la prenda entera**: corte, escote, mangas, largo, cómo cae |
+| lista de datos | los **7** de la ficha | **3**: `Tela`, `Tiro`, `Detalle` |
+| tip · cuidados · medidas · pie | igual | igual |
+
+🔴 **El criterio ⛔ no es «qué importa»: es qué NO contesta la foto.** La tela porque una foto de
+estudio no distingue una gasa de un voile —y de ella salen los cuidados—; el **tiro** porque
+revisando las 17 hubo que **recortar la foto de JEAN INDIGO y aun así quedó en duda** (si con la
+foto delante no se decide, la clienta tampoco); y el `detalle` porque es el campo libre.
+
+⛔ **`calce`, `silueta`, `escote`, `manga` y `largo` dejaron de publicarse**, y ⛔ no es que no
+importen: **se ven en la foto**, y son los cinco donde apareció **el 100 % de los errores de ficha**
+cazados el 8-sep. Un dato que la foto contradice ⛔ no ayuda: confunde.
+
+### 🔴 Las dos puntas, porque una sola habría empeorado la ficha
+
+Sacar los bullets **sin tocar el prompt** habría hecho desaparecer el dato: el párrafo tenía
+**prohibido** nombrar lo que decían los bullets, así que el escote, la manga y el largo no los
+habría dicho nadie. Por eso cambió también el pedido al modelo:
+
+- «La ficha YA tiene abajo una lista (tela, calce, escote, manga, largo)… tu párrafo NO es para
+  repetirlo» → **«Abajo hay SOLO TRES DATOS… todo el resto lo dice TU PÁRRAFO»**.
+- Se agregó el freno del lado opuesto: **«no los enumeres como una ficha… escribí una prenda, ⛔ no
+  un formulario»**.
+- Y lo que dejó de publicarse **igual viaja al prompt**, ahora como **material** (`insumosDe`) y ⛔
+  no como lista prohibida: *«Lo que el local cargó mirándola. NO se publica… si algo NO coincide
+  con la foto, escribí lo que ves y marcalo en discrepancias»*.
+
+🔑 `insumosDe` es **el complemento exacto** de `bulletsDe`: los dos leen `SE_PUBLICAN`, así que
+mover un atributo de un lado al otro es tocar **una** lista.
+
+### ⛔ `silueta` salió de la carga
+
+📊 De las **207** prendas de arriba con ficha: **67 % `regular` + 27 % `no aplica` = 94 %** entre dos
+valores que ⛔ no distinguen nada, contra **12 `oversize`**. Un desplegable que en 19 de cada 20
+prendas contesta lo mismo ⛔ no es un dato: es un casillero que hay que atender **con la prenda en la
+mano**, que es donde el tiempo cuesta. ⛔ **No se borró**: las 207 que lo tienen cargado lo siguen
+mostrando y se puede sumar con «+ agregar un dato».
+
+### ⚠️ Las 22 que ya salieron quedan como están
+
+Su HTML en la tienda tiene los 7 bullets y su párrafo se escribió para ⛔ no repetirlos. Nadie las
+reescribe solo, así que **conviven dos formatos** hasta que se republiquen — y republicarlas sin
+reescribir el párrafo las dejaría **más flacas**, ⛔ no mejor. Es una deuda conocida, ⛔ no un olvido.

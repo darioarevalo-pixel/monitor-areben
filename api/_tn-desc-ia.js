@@ -1,7 +1,7 @@
 // El redactor: le pide a Gemini el borrador de UN producto y lo devuelve validado.
 //
 //   POST { recurso:'tn-desc-ia', store, tn_id, nombre, insumo?, variantes?, categorias?,
-//          prosaActual?, imagenes?, imagen?, bullets?, modelo? }
+//          prosaActual?, imagenes?, imagen?, bullets?, ficha?, modelo? }
 //     → { ok, borrador:{parrafo,tip,chivatos}, problemas, intentos, modelo, uso, costo }
 //
 // 🔑 Desde el 27-ago-2026 devuelve SÓLO `{parrafo}`: los bullets se componen desde la ficha de
@@ -306,6 +306,10 @@ export default async function handler(req, res) {
     // que las variantes y la prosa actual: no deciden nada que se guarde —este endpoint no
     // guarda— y lo único que cambian es qué NO tiene que repetir el párrafo.
     bullets,
+    // 🆕 Lo que el local cargó y ⛔ NO se publica (8-sep-2026): entra como MATERIAL para el
+    // párrafo. Se limpia con el mismo cepillo que los bullets — es texto que va adentro del
+    // pedido, así que un objeto cualquiera acá sería prompt arbitrario.
+    ficha: bulletsDe(body.ficha),
   };
 
   const llamar = llamador(modelo, clave);

@@ -9,7 +9,7 @@ import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
 import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip, type Chivato } from '@/lib/tn-desc/formato'
-import { ATRIBUTOS, FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { ATRIBUTOS, FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, insumosDe, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { GRUPOS, cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
 import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
@@ -229,6 +229,8 @@ export function GenDesc() {
                 // marcaría como error lo que sólo estaba fuera del cuadro.
                 imagenes: p.imagenes.slice(0, 2).map((im) => im.src),
                 bullets,
+                // 🆕 Lo cargado que ⛔ no se publica: el párrafo se hace cargo de decirlo.
+                ficha: insumosDe(familiaDe(p), atributos[p.id] || {}),
                 modelo,
               })
             }

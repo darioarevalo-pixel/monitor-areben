@@ -140,11 +140,21 @@ describe('el sistema dice las reglas que el esquema no puede', () => {
     // El prompt viejo sólo decía qué NO repetir, y el modelo contestaba con adjetivos: «aporta
     // volumen», «estructura relajada» —que es el `wide leg` del bullet dicho con otras palabras—.
     // Medido sobre JEAN MARINA, la primera corrida real de la tanda del 2-sep.
-    expect(SISTEMA).toContain('la foto sí muestra')
+    expect(SISTEMA).toContain('la clienta no tiene ninguna otra lista donde leerlos')
     expect(SISTEMA).toContain('relleno')
     expect(SISTEMA).toContain('escribí menos')
     // Y que un párrafo corto es una salida válida: el mínimo de largo es lo que empuja al relleno.
     expect(SISTEMA).toContain('una sola oración')
+  })
+
+  it('🆕 8-sep-2026: el párrafo se hace cargo de lo que la lista dejó de decir', () => {
+    // La ficha pasó a ser INSUMO: abajo quedan tres datos y el resto lo dice el párrafo. Si el
+    // prompt siguiera diciendo «no repitas los datos de abajo», la descripción perdería el escote,
+    // la manga y el largo de golpe — nadie los diría.
+    expect(SISTEMA).toContain('SOLO TRES DATOS')
+    expect(SISTEMA).toContain('Nombralos cuando aporten')
+    // ⛔ Y que no se convierta en una lista con otra tipografía.
+    expect(SISTEMA).toContain('escribí una prenda, no un formulario')
   })
 
   it('🆕 las dos reglas del TIP: ni lo que va debajo, ni el tiro de la otra prenda (7-sep-2026)', () => {

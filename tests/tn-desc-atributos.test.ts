@@ -27,6 +27,7 @@ import {
   normalizarPropuesta,
   propuestasDe,
   bulletsDe,
+  insumosDe,
   cargadosDe,
   esValor,
   etiquetaDeBullet,
@@ -211,17 +212,24 @@ describe('🔑 el «+ agregar un dato»: los atributos de las otras familias', (
 
 describe('🔑 Silueta es un campo aparte de Calce', () => {
   it('un sweater puede ser entallado Y oversize a la vez', () => {
-    const b = bulletsDe('abrigo', { calce: 'entallado', silueta: 'oversize' })
-    expect(b).toEqual([
+    // ⚠️ Desde el 8-sep-2026 ninguno de los dos se PUBLICA: son insumo del párrafo. Lo que este
+    // test amarra sigue siendo lo de antes —que son dos campos y no uno— y por eso mira `insumosDe`.
+    expect(insumosDe('abrigo', { calce: 'entallado', silueta: 'oversize' })).toEqual([
       { etiqueta: 'Calce', texto: 'entallado' },
       { etiqueta: 'Silueta', texto: 'oversize' },
     ])
+    expect(bulletsDe('abrigo', { calce: 'entallado', silueta: 'oversize' })).toEqual([])
   })
 
-  it('no se le pide a pantalón ni a falda', () => {
-    expect(atributosDe('pantalon').map((a) => a.key)).not.toContain('silueta')
-    expect(atributosDe('faldas').map((a) => a.key)).not.toContain('silueta')
-    expect(atributosDe('vestidos').map((a) => a.key)).toContain('silueta')
+  it('⛔ y desde el 8-sep-2026 ya NO se le pide a nadie: el 94 % contestaba lo mismo', () => {
+    // 67 % `regular` y 27 % `no aplica` sobre 207 prendas. Un desplegable que en 19 de cada 20
+    // contesta igual no es un dato: es un casillero que hay que atender con la prenda en la mano.
+    for (const f of ['tops', 'abrigo', 'vestidos', 'pantalon', 'faldas'] as const) {
+      expect(atributosDe(f).map((a) => a.key)).not.toContain('silueta')
+    }
+    // 🔑 Pero NO se borró: las 207 que ya lo tienen cargado lo siguen mostrando, y se puede sumar
+    // a mano con «+ agregar un dato».
+    expect(atributosExtra('tops').map((a) => a.key)).toContain('silueta')
   })
 })
 
@@ -305,8 +313,10 @@ describe('🔴 el bullet es determinista', () => {
   const cargado = { largo: 'crop', tela: 'microfibra', manga: 'breteles', calce: 'entallado' }
 
   it('sale en el orden canónico, no en el orden de carga', () => {
-    expect(bulletsDe('tops', cargado)).toEqual([
-      { etiqueta: 'Tela', texto: 'microfibra' },
+    // ⚠️ De estos cuatro, sólo la tela se publica desde el 8-sep-2026. El orden se mira donde
+    // están los cuatro: el insumo, que ES el complemento exacto de los bullets.
+    expect(bulletsDe('tops', cargado)).toEqual([{ etiqueta: 'Tela', texto: 'microfibra' }])
+    expect(insumosDe('tops', cargado)).toEqual([
       { etiqueta: 'Calce', texto: 'entallado' },
       { etiqueta: 'Manga', texto: 'breteles' },
       { etiqueta: 'Largo', texto: 'crop' },
@@ -325,8 +335,11 @@ describe('🔴 el bullet es determinista', () => {
   })
 
   it('⛔ «no identifico» se guarda pero NO sale a la ficha', () => {
-    const b = bulletsDe('tops', { tela: TELA_SIN_IDENTIFICAR, calce: 'holgado' })
-    expect(b).toEqual([{ etiqueta: 'Calce', texto: 'holgado' }])
+    expect(bulletsDe('tops', { tela: TELA_SIN_IDENTIFICAR, calce: 'holgado' })).toEqual([])
+    // Y tampoco se le manda al modelo como material: «lo miré y no supe» no es un dato de la prenda.
+    expect(insumosDe('tops', { tela: TELA_SIN_IDENTIFICAR, calce: 'holgado' })).toEqual([
+      { etiqueta: 'Calce', texto: 'holgado' },
+    ])
   })
 
   it('🔴 un valor INVENTADO no se dibuja, aunque esté guardado', () => {
@@ -345,9 +358,11 @@ describe('🔴 el bullet es determinista', () => {
 
   it('🔑 un atributo SUMADO de otra familia sí se dibuja, y en el orden canónico', () => {
     // Si el «+ agregar un dato» guardara algo que después no se compone, el gesto no haría nada.
-    // Tiro es orden 4 y largo orden 7: el sumado se ordena por la lista, no por cuándo se cargó.
+    // El sumado se ordena por la lista canónica, no por cuándo se cargó.
     expect(bulletsDe('faldas', { largo: 'mini', silueta: 'oversize', tela: 'lino' })).toEqual([
       { etiqueta: 'Tela', texto: 'lino' },
+    ])
+    expect(insumosDe('faldas', { largo: 'mini', silueta: 'oversize', tela: 'lino' })).toEqual([
       { etiqueta: 'Silueta', texto: 'oversize' },
       { etiqueta: 'Largo', texto: 'mini' },
     ])
@@ -365,7 +380,7 @@ describe('🔴 el bullet es determinista', () => {
 
 describe('el contador que ve el local en la fila', () => {
   it('cuenta los cargados sobre el total de la familia', () => {
-    expect(cargadosDe('tops', { tela: 'morley', calce: 'entallado' })).toEqual({ con: 2, total: 7 })
+    expect(cargadosDe('tops', { tela: 'morley', calce: 'entallado' })).toEqual({ con: 2, total: 6 })
     expect(cargadosDe('pantalon', {})).toEqual({ con: 0, total: 5 })
     expect(cargadosDe('pantalon', { tela: 'denim rígido', tiro: 'tiro alto', calce: 'mom', largo: 'al tobillo', detalle: 'roturas' }))
       .toEqual({ con: 5, total: 5 })
@@ -432,8 +447,10 @@ describe('🆕 «no sé» vale en TODO atributo cerrado, no sólo en la tela (7-
   })
 
   it('⛔ NO sale a la ficha, igual que «no aplica»', () => {
-    const bullets = bulletsDe('tops', { tela: 'encaje', escote: NO_SE, manga: 'manga larga' })
-    expect(bullets.map((b) => b.etiqueta)).toEqual(['Tela', 'Manga'])
+    const cargado = { tela: 'encaje', escote: NO_SE, manga: 'manga larga' }
+    expect(bulletsDe('tops', cargado).map((b) => b.etiqueta)).toEqual(['Tela'])
+    // ⛔ Y tampoco entra como material del párrafo: «lo miré y no supe» no describe la prenda.
+    expect(insumosDe('tops', cargado).map((b) => b.etiqueta)).toEqual(['Manga'])
   })
 
   it('🔑 pero CUENTA como contestado: si no, el contador de la fila se queda corto para siempre', () => {
