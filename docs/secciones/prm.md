@@ -14,13 +14,17 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
   la ficha de a uno, `MovimientoProveedor.tsx` el bloque de compras y ventas, `usePRM.ts` la carga).
 - Dominio: `lib/prm/` — `core.ts` (puro, y **re-exporta tipado** lo de `geo.core.js` y
   `sembrado.core.js`), `tipos.ts`, `cliente.ts`, `geo.core.js`, `sembrado.core.js`,
-  **`movimiento.ts`** (las cuentas del bloque 5, puras).
+  **`movimiento.ts`** (las cuentas del bloque 5, puras, y **re-exporta tipado**
+  `estrellas.core.js`), **`estrellas.core.js`** (lo que entró hace poco y ya se vende) y
+  **`mail-estrellas.core.js`** (el texto del mail de la recompra).
+- Reloj: **`.github/workflows/prm-estrellas.yml`**, los lunes 12:00 UTC → `scripts/estrellas-prm.mjs`.
 - Servidor: `api/_prm.js`, por la puerta `api/datos?recurso=prm`. **Un handler para las dos
   secciones**, con el permiso partido acción por acción.
 - Datos: Supabase **de BDI**, seis tablas — `proveedor_local`, `proveedor_visita`,
   `proveedor_interes`, `proveedor_compromiso`, `recorrida`, `recorrida_parada`
   (`sql/migrate-prm.sql`, que es la fuente de verdad del modelo y explica cada campo).
-- Tests: `tests/prm-core.test.ts`, `tests/prm-handler.test.ts` y `tests/prm-movimiento.test.ts`.
+- Tests: `tests/prm-core.test.ts`, `tests/prm-handler.test.ts`, `tests/prm-movimiento.test.ts`,
+  `tests/prm-estrellas.test.ts` y `tests/prm-mail-estrellas.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -235,6 +239,71 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
     ⛔ La otra idea —pedir sólo la marca que se está mirando— ⛔ NO se hizo: `comprado` y `stores`
     hoy suman las órdenes de **las dos** marcas, y filtrar cambiaría lo que MIDE la columna para un
     proveedor que le venda a las dos. Eso lo decide Bruno, ⛔ no el que optimiza.
+- 🆕 🔴 🔑 **«LOS PRODUCTOS ESTRELLA DEL PROVEEDOR, PERO DE LOS ÚLTIMOS 15 O 30 DÍAS»** — pedido de
+  Bruno el 8-sep-2026:
+  > *«necesitaría saber los productos estrella del proveedor, pero que sean del último mes o de los
+  > últimos 15 días, que hayan ingresado y se hayan vendido bien. no me sirve los estrella del
+  > histórico pq no sirve, pero si algo se trajo hace 15 o 20 días, puede llegar a haber recompra.
+  > incluso una alerta por mail podríamos ejecutar»*
+
+  El bloque 5 ya tenía una tabla de productos, y **contestaba otra cosa**: `productosOrdenados`
+  ordena por unidades vendidas en toda la ventana, o sea **el más vendido de siempre**. Ése gana
+  siempre por acumulación —un producto de junio con 40 vendidas le pasa por arriba a uno de la
+  semana pasada colocado entero en cinco días— y **el único de los dos que se puede recomprar a
+  tiempo es el segundo**. Por eso el corte nuevo es **cuándo LLEGÓ** y el orden es **cuándo se
+  termina**. Los dos bloques conviven y la pantalla dice cuál contesta cada uno.
+  - 🔴 🔑 **Sólo entra el que llegó por PRIMERA vez adentro de la ventana. El REPUESTO ⛔ no, y ⛔ no
+    es un olvido**: de un producto que él ya había traído en junio y repuso la semana pasada ⛔ no se
+    puede decir «colocó el 60% de lo que trajo», porque lo vendido sale de un montón donde también
+    está el stock viejo. Se cuentan aparte (`repuestos`) y la pantalla los nombra — un producto que
+    desaparece sin explicación se lee como un dato que falta. Por eso `ProductoMovimiento` ahora
+    lleva **`hasta`** además de `desde`: sin la última llegada, esa exclusión ⛔ ni se podría explicar.
+  - 🔑 **El orden es «de qué me quedo sin primero»** (`seAgotaEn` = lo que le queda de su compra
+    dividido el ritmo de estos días), ⛔ **no por vendidas**: entre `TOP TERRA` (colocó las 5 que
+    trajo) y `TOP ALO` (vendió 7 de 12), el que hay que ir a buscar es el primero aunque haya
+    vendido menos. Está atado por test en las dos direcciones.
+  - 🔴 🔑 **EL STOCK DE HOY VIAJA AL LADO, Y ⛔ NO SE RESTA DE NADA. Medido el 8-sep-2026** sobre los
+    109 productos que entraron en 30 días: `comprado − vendido` **da el stock en 97 y ⛔ no en 12**.
+    `TOP TERRA` de CONTAMINA compró **5**, vendió **5** y tiene **5**; `TOP SOLENE` compró 8, vendió
+    7 y tiene 8 — nueve de los doce son del mismo proveedor, que repuso sin que entrara una orden.
+    ⇒ **la resta acierta casi siempre, y por eso el que falla ⛔ no se ve**: es un número plausible
+    que manda a Flores a comprar algo que ya está en el depósito. La columna es el stock **del
+    producto entero** en Gestión Nube, depósito y local, y la pantalla lo dice con esas palabras.
+  - 🔴 **Y viaja CUÁNDO se sincronizó ese espejo**, porque el de inventario ⛔ no tiene reloj:
+    `sync-inventario.yml` es sólo `workflow_dispatch`, lo aprieta una persona desde Reposición. Un
+    stock sin fecha al lado se lee como «ahora» y puede ser de anteayer — y de eso depende si la
+    recompra es urgente o si ya se hizo. Sale de `sync_state`, la misma fila que mira el cartel de
+    «última actualización» del monitor, y se formatea **en la zona de Argentina y explícita**
+    (`updated_at` es UTC: sin `timeZone`, un stock de las 11:45 dice «14:45»).
+  - 🔴 **Los tres ceros que ⛔ no son ceros, cada uno con su guion**: el que llegó **hoy** ⛔ no tiene
+    ritmo cero —⛔ no tiene ritmo—; el que ⛔ no vendió nada ⛔ no se termina en 0 días —⛔ no se
+    termina—; y el producto que ⛔ no está en el espejo ⛔ no tiene stock 0. Los tres atados por test,
+    y los tres mutantes mueren.
+  - 🔑 **El umbral del aviso vive UNA vez** (`UMBRAL_AVISO`: vendió ≥ 3 y se termina en ≤ 7 días) y
+    lo leen el mail **y** la pantalla, que marca las mismas filas con ⭐. Si cada uno tuviera el
+    suyo, el mail avisaría de algo que la ficha ⛔ no resalta.
+    - **Las dos condiciones juntas, y ⛔ ninguna sola alcanza**: sin el piso de 3, una compra de 2
+      unidades vendida entera encabeza la lista de 109 (medido); sin el plazo, un producto que
+      vendió 5 de 60 en un mes avisaría sin tener nada de urgente.
+  - 🔴 🔑 **`filas.filter(paraAvisar)` DEVOLVÍA UNA LISTA VACÍA, sin un error.** `filter` pasa el
+    **índice** como segundo argumento, que es donde va el umbral: con un número ahí, `u.vendidas` es
+    `undefined` y toda comparación da `false`. Lo destapó la medición del 8-sep —«5 para avisar»
+    arriba y **ninguna fila abajo**—. En TypeScript ⛔ no compila (la firma lo frena, y es la mejor
+    defensa), pero `scripts/*.mjs` ⛔ no pasa por `tsc`: por eso el núcleo **ignora lo que ⛔ no es un
+    umbral**, y hay un test que lo clava.
+  - 📌 **Lo que hay hoy, medido el 8-sep-2026**: en 30 días entraron **109 productos nuevos** de
+    **16 proveedores**; 61 vendieron al menos una unidad y **5 llegan al umbral**, de 3 proveedores
+    (CONTAMINA ×3, ELIANA IND, AIME). En 15 días son **66 productos** y **4** pasan el 30% colocado.
+    ⚠️ **Todo eso es de Zattia: BDI ⛔ no recibió ninguna orden en 30 días**, así que el bloque le va
+    a decir «ninguna orden suya trajo un producto nuevo» y eso ⛔ no es un error.
+  - 🔴 **El mail ⛔ NO tiene estado, y ahí se diferencia del de la pauta.** Aquél manda **los
+    abiertos** porque un hallazgo se acciona y se marca; acá ⛔ no hay nada que marcar — el producto
+    sale solo de la lista cuando pasa la ventana o cuando la recompra entra y deja de ser nuevo.
+    ⇒ **un mismo producto puede aparecer dos lunes seguidos**, y eso significa que se sigue yendo y
+    todavía nadie recompró.
+  - 🔑 **Los lunes y ⛔ no todos los días**: la recompra es una decisión semanal —se va a Flores— y
+    este dato se mueve despacio. Un mail diario diciendo lo mismo cinco veces enseña a no abrirlo,
+    que es lo único que este mail ⛔ no puede permitirse. Sale 09:00 AR, después del mail de la pauta.
 - 🆕 🔴 🔑 **CADA SECCIÓN MUESTRA LOS PROVEEDORES DE SU MARCA, y la marca ⛔ NO se tilda: se MIDE.**
   Pedido de Bruno el 2-sep-2026: *«hay proveedores de bdi y zattia que hay que clasificar, para que
   el dato aparezca en cada sección por separado»*. ⛔ **No hizo falta clasificar nada**: el dato ya
@@ -269,6 +338,10 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 
 ## Pendiente
 
+- ▶️ 🔴 **NADIE ABRIÓ TODAVÍA EL BLOQUE NUEVO EN LA PANTALLA** («Lo que entró hace poco y ya se
+  vende»), ni corrió el reloj de los lunes una vez. El mail está **armado y probado con datos
+  reales** —da 5 productos de 3 proveedores— pero **⛔ no se mandó ninguno**: `MAIL_ESTRELLAS_A` y el
+  cron salen a la calle recién con este deploy.
 - ▶️ **Que un compromiso siembre un pendiente en la Agenda** (`lib/agenda/reglas.core.js`). Es el
   paso natural y no se hizo: la Agenda **la ve todo el equipo** y esto todavía es de una persona.
   Se decide después de un viaje real.
@@ -290,9 +363,23 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
 
 ```bash
 npx vitest run tests/prm-core.test.ts tests/prm-handler.test.ts tests/prm-movimiento.test.ts \
-  tests/georef-provincia.test.ts --reporter=dot
+  tests/prm-estrellas.test.ts tests/prm-mail-estrellas.test.ts tests/georef-provincia.test.ts \
+  --reporter=dot
 node scripts/caminar-prm-movimiento.mjs   # el bloque 5 contra las bases REALES (sólo lee)
+node scripts/caminar-prm-estrellas.mjs    # lo que entró hace poco, ídem (sólo lee)
+node scripts/estrellas-prm.mjs --simulacro  # el mail de la recompra, sin mandarlo
 ```
+
+🔑 **`caminar-prm-estrellas.mjs` tiene DOS caminos y por eso sirve**: el del handler
+(`movimiento()` → PostgREST → recruce) y un control propio por `pg` que cruza SKU → `inventario` a
+mano. 🔴 **Su primera versión agrupó el control por SKU y tiró «75 contra 6»**: cada producto de
+Gestión Nube tiene un SKU por talle y color —`JEAN SLATE` son 8—, así que un control por SKU ⛔ no
+cuenta productos, cuenta variantes, y el rojo que tira ⛔ no es un bug del código.
+
+⚠️ **Y en esta Mac el control VE lo que el handler NO**: el control entra por `pg` y PostgREST pide
+la service key que falta, así que para Zattia salen **6 productos contra 23** —el handler se queda
+con la foto vieja del `producto_id`—. La caminata lo dice con esas palabras en vez de contarlo como
+rojo, y la REGLA queda ejercida igual contra los datos de verdad.
 
 🔴 **`ZATTIA_SUPABASE_SERVICE_KEY` ⛔ NO está en el `.env` de la Mac de Bruno**, y con la anon key la
 base de Zattia contesta `permission denied for table venta_detalles` — a propósito: ahí hay plata.

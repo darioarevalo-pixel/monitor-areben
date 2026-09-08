@@ -13,6 +13,45 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «LOS PRODUCTOS ESTRELLA DEL PROVEEDOR, PERO DE LOS ÚLTIMOS 15 O 30 DÍAS» — 8-sep-2026 (dictado, y hecho)
+
+> «seguimos con proveedores prm, necesitaría saber los productos estrella del proveedor, pero que
+> sean del último mes o de los últimos 15 días, que hayan ingresado y se hayan vendido bien. se
+> entiende? o sea no me sirve los estrella del histórico pq no sirve, pero si algo se trajo hace 15
+> o 20 días, puede llegar a haber recompra. incluso una alerta por mail podríamos ejecutar»
+
+🏁 **Están las dos cosas: el bloque en la ficha y el mail de los lunes.** El relato entero, con las
+reglas y las mediciones, en `docs/secciones/prm.md`.
+
+🔑 **Por qué la tabla que ya había ⛔ no servía**: ordena por unidades vendidas en toda la ventana, o
+sea **el más vendido de siempre**, y ése gana siempre por acumulación. Un producto de junio con 40
+vendidas le pasa por arriba a uno de la semana pasada que se colocó entero en cinco días — y el
+único de los dos que se puede recomprar a tiempo es el segundo.
+
+📌 **Lo que hay hoy, medido el 8-sep contra las dos bases**: en 30 días entraron **109 productos
+nuevos** de **16 proveedores**; 61 vendieron algo y **5 llegan al umbral**, de 3 proveedores
+(CONTAMINA ×3, ELIANA IND, AIME). En 15 días son 66 productos y 4 pasan el 30% colocado.
+
+🔴 **TODO ESO ES DE ZATTIA: BDI ⛔ no recibió NINGUNA orden de compra en 30 días.** El bloque le va a
+decir «ninguna orden suya trajo un producto nuevo», y eso ⛔ no es un error de la pantalla.
+
+🔴 **El stock de hoy ⛔ NO es «lo que le queda de lo que trajo», y por poco.** Sobre los 109,
+`comprado − vendido` da el stock en **97** y ⛔ no en **12** — `TOP TERRA` compró 5, vendió 5 y tiene
+5 —. La resta acierta casi siempre y **por eso el que falla ⛔ no se ve**: es un número plausible que
+manda a Flores a comprar algo que ya está en el depósito. La columna dice el stock de verdad y la
+pantalla explica que los dos ⛔ no se restan entre sí.
+
+▶️ 🔴 **NADIE ABRIÓ LA PANTALLA TODAVÍA, y ⛔ no se mandó ningún mail.** El mail está armado y
+probado con datos reales (`node scripts/estrellas-prm.mjs --simulacro`), pero el cron de los lunes
+sale a la calle recién con este deploy.
+
+▶️ **Y es de Bruno**: el stock que muestra la columna sale de `sync-inventario.yml`, que es **sólo a
+mano** —lo aprieta una persona desde Reposición—. Por eso el mail y la pantalla dicen **cuándo** se
+sincronizó ese espejo, en vez de callarlo. Si conviene que el reloj de los lunes lo dispare antes de
+mirar, eso toca el candado `gestion-nube` y ⛔ no se hizo.
+
+---
+
 ## 🔴🔴 LA FICHA DE RENTABILIDAD IGNORA EL SALE — 8-sep-2026 (medido, ⛔ SIN DECIDIR, y la plata SE ESTÁ YENDO HOY)
 
 **Es el más caro de los cuatro de hoy, y el único que ⛔ no es del script sino de acá.** Lo destapó

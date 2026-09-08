@@ -19,6 +19,13 @@
  * agujero de inventario.
  */
 
+import {
+  estrellas as estrellasJs,
+  paraAvisar as paraAvisarJs,
+  UMBRAL_AVISO as UMBRAL_AVISO_JS,
+  VENTANAS_ESTRELLAS as VENTANAS_ESTRELLAS_JS,
+} from './estrellas.core.js'
+
 export type OcMovimiento = {
   id: string
   store: string
@@ -40,9 +47,72 @@ export type ProductoMovimiento = {
   unidades: number
   /** El instante de la PRIMERA orden suya que lo trajo. `null` si ninguna traía fecha. */
   desde: string | null
+  /**
+   * El instante de la ÚLTIMA. 🔑 Es lo único que separa un producto **nuevo** de uno **repuesto**:
+   * sin él, uno de junio que él volvió a traer la semana pasada se ve igual que uno que ⛔ no
+   * volvió, y `estrellas()` ⛔ no podría decir por qué lo dejó afuera. Ver `estrellas.core.js`.
+   */
+  hasta?: string | null
 }
 
 export type VentaMovimiento = { store: string; producto_id: string; fecha: string; unidades: number }
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Lo que entró hace poco y ya se vende — re-exportado TIPADO del núcleo en JS plano
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ⚠️ **La regla vive en `lib/prm/estrellas.core.js`, en JS plano**, porque la necesitan
+ * `api/_prm.js` y `scripts/estrellas-prm.mjs` (Node 20 en Actions), y ninguno de los dos pasa por
+ * el compilador de Next. Acá se re-exporta tipada, igual que hace `core.ts` con `geo.core.js`.
+ * ⛔ No se copia: una segunda definición de «cuándo algo es estrella» haría que el mail avise de lo
+ * que la ficha ⛔ no resalta.
+ */
+export type Estrella = {
+  clave: string
+  store: string
+  producto_id: string
+  nombre: string | null
+  sku: string | null
+  /** Unidades que trajo ESTE proveedor, sumando todas sus órdenes de este producto. */
+  unidades: number
+  /** Primera llegada, `YYYY-MM-DD`. */
+  desde: string
+  /** Días desde esa llegada. */
+  dias: number
+  /** Vendidas DESDE que llegó. ⛔ Lo anterior ⛔ no cuenta como colocado: va en `antes`. */
+  vendidas: number
+  antes: number
+  /** `null` = llegó hoy. ⛔ No tiene ritmo cero: ⛔ no tiene ritmo. */
+  porDia: number | null
+  /** `vendidas / unidades`. `null` si ⛔ no trajo unidades. */
+  colocado: number | null
+  /** Días hasta que ⛔ no quede nada **de lo que él trajo**, al ritmo de hoy. `null` = no vendió. */
+  seAgotaEn: number | null
+  /** 🔴 Stock de HOY del producto entero, ⛔ no el resto de su compra. `null` = ⛔ no se pudo preguntar. */
+  stock: number | null
+}
+
+export type Estrellas = {
+  ventana: number
+  filas: Estrella[]
+  /** Productos suyos que ya había traído antes y REPUSO adentro de la ventana. ⛔ No son nuevos. */
+  repuestos: number
+  sinFecha: number
+}
+
+export const VENTANAS_ESTRELLAS: number[] = VENTANAS_ESTRELLAS_JS
+export const UMBRAL_AVISO: { vendidas: number; seAgotaEn: number } = UMBRAL_AVISO_JS
+
+export const estrellas: (
+  productos: ProductoMovimiento[],
+  ventas: VentaMovimiento[],
+  hoy: string,
+  opciones?: { dias?: number; stock?: Map<string, number> | null },
+) => Estrellas = estrellasJs
+
+export const paraAvisar: (fila: Estrella, umbral?: { vendidas: number; seAgotaEn: number }) => boolean =
+  paraAvisarJs
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // Fechas

@@ -29,7 +29,7 @@ import { cfgDelMonitor, cfgDeMarca } from './_recepciones-base.js'
 import { consultaDeLocal, ordenarPorCercania } from '../lib/prm/geo.core.js'
 import { leerTodo, leerTodoEnParalelo } from '../lib/supabase/paginar.core.js'
 import { puntoDeGeoref } from '../lib/envios/direccion.core.js'
-import { recruzarPorMarca } from '../lib/recepciones/espejo.core.js'
+import { enLotes, recruzarPorMarca } from '../lib/recepciones/espejo.core.js'
 
 /**
  * La base de una marca, para el recruce contra el espejo. `null` = ⛔ no hay con qué preguntar.
@@ -335,7 +335,17 @@ export async function movimiento(cliente, local, dias) {
       .eq('proveedor_id', local.proveedor_id_ingresos)
       .order('id'),
   )
-  if (!ocs.length) return { ocs: [], productos: [], ventas: [], sinCruce: { lineas: 0, unidades: 0 }, dias }
+  if (!ocs.length)
+    return {
+      ocs: [],
+      productos: [],
+      ventas: [],
+      stockPorProducto: [],
+      stockMudo: [],
+      stockAl: [],
+      sinCruce: { lineas: 0, unidades: 0 },
+      dias,
+    }
 
   const guardadas = await leerTodo(cliente, 'recepcion_linea', (q) =>
     q
@@ -379,10 +389,16 @@ export async function movimiento(cliente, local, dias) {
       // producto traído dos veces sume dos veces sus ventas del solape — el mismo pozo común que
       // ya mordió en Norte.
       desde: null,
+      // 🔑 **Y la ÚLTIMA, que ⛔ no es redundante.** Es lo único que distingue un producto NUEVO de
+      // uno REPUESTO, y `estrellas.core.js` deja afuera al repuesto a propósito: de él ⛔ no se
+      // puede decir «colocó el 60% de lo que trajo», porque lo vendido sale de un montón donde
+      // también está el stock viejo. Sin este campo, esa exclusión ⛔ no se podría ni explicar.
+      hasta: null,
     }
     p.unidades += u
     const f = llegada.get(l.oc_ref)
     if (f && (!p.desde || f < p.desde)) p.desde = f
+    if (f && (!p.hasta || f > p.hasta)) p.hasta = f
     if (!p.nombre && l.nombre) p.nombre = l.nombre
     productos.set(clave, p)
   }
@@ -393,6 +409,70 @@ export async function movimiento(cliente, local, dias) {
     if (!porStore.has(p.store)) porStore.set(p.store, [])
     porStore.get(p.store).push(p.producto_id)
   }
+
+  // ── El stock de HOY, que es lo que decide si la recompra es urgente ─────────────────────────
+  //
+  // 🔴 🔑 **⛔ NO es «lo que le queda de lo que trajo», y está medido.** Sobre los 109 productos que
+  // entraron en 30 días, `comprado − vendido` da el stock en **97** y ⛔ no en **12**: `TOP TERRA`
+  // de CONTAMINA compró 5, vendió 5 y tiene 5. ⇒ la resta acierta casi siempre, y por eso el que
+  // falla ⛔ no se ve. Viaja el stock de verdad —el del producto entero, depósito y local— y la
+  // pantalla lo dice con esas palabras.
+  //
+  // 🔴 **El orden de la paginación son las TRES columnas de la clave primaria**
+  // (`product_id, size_id, store_name`). Con una sola, `range` repite filas y se come otras: un
+  // producto de BDI llega a tener **273 filas** de talle × sucursal, así que un lote de 200
+  // productos pasa las mil de largo y el corte es callado.
+  //
+  // ⚠️ **⛔ No se espera acá: se espera al final.** Este bloque ⛔ no tiene nada que ver con las
+  // ventas, y encadenarlos le sumaría su tiempo entero a una pantalla que ya se peleó con los
+  // ~3 segundos de datos vacíos (ver `docs/secciones/prm.md`). Es la misma razón por la que las dos
+  // marcas van en `Promise.all` adentro de la comparativa.
+  //
+  // 🔴 🔑 **Y viaja CUÁNDO se sincronizó ese espejo, porque el de inventario ⛔ no tiene reloj.**
+  // `sync-inventario.yml` es sólo `workflow_dispatch`: lo aprieta una persona desde Reposición. Un
+  // número de stock sin fecha al lado se lee como «ahora», y puede ser de anteayer — y de eso
+  // depende si la recompra es urgente o ya se hizo. Sale de `sync_state`, la misma fila que mira el
+  // cartel de «última actualización» del monitor.
+  const stockPorProducto = []
+  const stockMudo = []
+  const stockAl = []
+  const stockListo = Promise.all(
+    [...porStore].map(async ([store, ids]) => {
+      const cfg = cfgDeMarca(store)
+      if (!cfg.url || !cfg.key) {
+        stockMudo.push(store)
+        return
+      }
+      try {
+        const c = createClient(cfg.url, cfg.key)
+        const numeros = ids.map((x) => Number(x)).filter(Number.isFinite)
+        const suma = new Map()
+        for (const lote of enLotes(numeros)) {
+          const filas = await leerTodo(c, 'inventario', (q) =>
+            q
+              .select('product_id, available_quantity')
+              .in('product_id', lote)
+              .order('product_id')
+              .order('size_id')
+              .order('store_name'),
+          )
+          for (const f of filas) {
+            const k = String(f.product_id)
+            suma.set(k, (suma.get(k) || 0) + (Number(f.available_quantity) || 0))
+          }
+        }
+        // ⛔ Los productos que ⛔ no están en el espejo ⛔ no viajan con un 0: no viajan. Un 0 diría
+        // «⛔ no queda nada», que es justo la afirmación que dispara una recompra al pedo.
+        for (const [producto_id, unidades] of suma) stockPorProducto.push({ store, producto_id, unidades })
+        // ⚠️ Que falte la fila ⛔ no rompe el stock: se muestran los números sin la fecha, que es
+        // peor que con ella y mucho mejor que no mostrar nada.
+        const { data: estado } = await c.from('sync_state').select('updated_at').eq('clave', 'inventario').maybeSingle()
+        if (estado && estado.updated_at) stockAl.push({ store, cuando: estado.updated_at })
+      } catch {
+        stockMudo.push(store)
+      }
+    }),
+  )
 
   const ventas = []
   // Las del espejo ya vienen del recruce: es la MISMA base, así que la que no contestó para el
@@ -427,6 +507,8 @@ export async function movimiento(cliente, local, dias) {
     }
   }
 
+  await stockListo
+
   return {
     dias,
     desdeVentas: desde,
@@ -440,6 +522,12 @@ export async function movimiento(cliente, local, dias) {
     })),
     productos: [...productos.values()],
     ventas,
+    /** El stock de HOY por producto. ⛔ No es el resto de su compra: ver el bloque de arriba. */
+    stockPorProducto,
+    /** Marcas cuyo inventario ⛔ no se pudo leer. `stock: null` en la pantalla, ⛔ no 0. */
+    stockMudo: [...new Set(stockMudo)],
+    /** Cuándo se sincronizó el espejo de inventario de cada marca. Lo aprieta una persona. */
+    stockAl,
     sinCruce,
     marcasMudas: [...new Set(marcasMudas)],
     /** Cuántos renglones cruzaron **hoy** y ⛔ no cuando llegó la orden. La pantalla lo dice. */

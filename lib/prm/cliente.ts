@@ -57,6 +57,25 @@ export type Movimiento = {
   ocs: OcMovimiento[]
   productos: ProductoMovimiento[]
   ventas: VentaMovimiento[]
+  /**
+   * El stock de HOY de cada producto suyo, sumando talles y sucursales.
+   *
+   * 🔴 **⛔ No es «lo que le queda de lo que trajo».** Medido el 8-sep-2026 sobre los 109 productos
+   * que entraron en 30 días: `comprado − vendido` da el stock en 97 y ⛔ no en 12 (`TOP TERRA`
+   * compró 5, vendió 5 y tiene 5). La resta acierta casi siempre, y por eso el que falla ⛔ no se
+   * ve. Un producto que ⛔ no está en el espejo ⛔ no viaja con un 0: no viaja.
+   */
+  stockPorProducto: { store: string; producto_id: string; unidades: number }[]
+  /** Marcas cuyo inventario ⛔ no contestó. La pantalla muestra `—` y ⛔ no un 0. */
+  stockMudo: string[]
+  /**
+   * Cuándo se sincronizó por última vez el espejo de inventario de cada marca.
+   *
+   * 🔴 **El sync de inventario ⛔ no tiene reloj: lo aprieta una persona** desde Reposición
+   * (`sync-inventario.yml` es sólo `workflow_dispatch`). Un stock sin fecha al lado se lee como
+   * «ahora» y puede ser de anteayer — y de eso depende si la recompra es urgente o ya se hizo.
+   */
+  stockAl: { store: string; cuando: string }[]
   sinCruce: { lineas: number; unidades: number }
   /** Marcas cuya base no contestó. ⛔ No es «vendió 0»: es «no pude preguntar». */
   marcasMudas: string[]

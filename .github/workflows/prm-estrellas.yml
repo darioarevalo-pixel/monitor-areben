@@ -1,0 +1,71 @@
+name: Estrellas del PRM — el mail de la recompra
+
+# 🔑 **LOS LUNES, ⛔ NO TODOS LOS DÍAS.** La recompra es una decisión semanal —se va a Flores, ⛔ no
+# se aprieta un botón—, y este dato se mueve despacio: un producto que se está terminando el martes
+# se sigue terminando el miércoles. Un mail diario diciendo lo mismo cinco veces enseña a no abrirlo,
+# que es exactamente lo que este mail ⛔ no puede permitirse. 🔴 Y ya hay un mail diario a las ~08:30
+# (`meta-reglas.yml`): éste sale después, para que ⛔ no compitan en la misma bandeja.
+#
+# 12:00 UTC = 09:00 en Argentina.
+#
+# ⚠️ **Depende del sync diario de ventas** (`sync-diario.yml` y `sync-diario-zattia.yml`, 06:00 UTC),
+# que a esta hora ya cerró: el mail lee el espejo, ⛔ no habla con Gestión Nube.
+# 🔴 **Del stock ⛔ NO depende, y ⛔ no puede**: `sync-inventario.yml` es sólo `workflow_dispatch` —lo
+# aprieta una persona desde Reposición—, así que el número de stock puede ser de días atrás. Por eso
+# **el mail dice cuándo se sincronizó ese espejo** en vez de callarlo: un stock viejo con cara de
+# fresco es lo que manda a comprar algo que ya se repuso.
+#
+# 🔓 Sin candado de concurrencia a propósito: esto ⛔ no habla con Gestión Nube ni escribe en ningún
+# lado —lo único que sale es un mail—, así que ⛔ no comparte el cupo de `group: gestion-nube`.
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: 'true = arma el mail y lo imprime, pero ⛔ NO lo manda'
+        required: false
+        default: 'false'
+      dias:
+        description: 'Ventana de ingreso en días (default 30; la otra que se usa es 15)'
+        required: false
+        default: ''
+
+jobs:
+  estrellas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # `npm ci` y ⛔ no `npm install`: instala EXACTAMENTE lo que dice package-lock.json.
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Buscar lo que hay que recomprar
+        env:
+          # La base de BDI: ahí viven el padrón del PRM y las órdenes de las DOS marcas.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # 🔴 **Sin ésta, 28 de los 34 proveedores salen mudos** y el mail sería corto por una
+          # credencial y no por una semana floja. El script lo dice en el log con esas palabras.
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+          ENTRADA_DIAS: ${{ inputs.dias }}
+          # El mismo SES que ya usan `areben-mailer` y el mail de la pauta (us-east-1, dominio
+          # verificado con DKIM). ⚠️ **Su ausencia ⛔ NO rompe la corrida a propósito**: sin las
+          # credenciales el script lo dice fuerte en el log y sale verde. Con las credenciales
+          # puestas, un envío que falla SÍ tiñe de rojo — alguien pidió el mail y no llegó.
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          MAIL_ESTRELLAS_A: ${{ vars.MAIL_ESTRELLAS_A }}
+          MAIL_HALLAZGOS_A: ${{ vars.MAIL_HALLAZGOS_A }}
+        run: node scripts/estrellas-prm.mjs
