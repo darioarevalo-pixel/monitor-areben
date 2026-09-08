@@ -927,6 +927,25 @@ es la ficha.
 que la lista vacía significa «lo miré y está bien», ⛔ no «no me fijé». ⛔ Y que la **tela nunca se
 marca**: una foto no distingue una gasa de un voile — es el único dato que necesita a una persona.
 
+### 🏁 Ejercido contra el modelo de verdad (8-sep-2026)
+
+⛔ **Ningún test puede ejercer este eslabón**, así que se corrió a mano contra producción, con
+**TOP LOLA** — la prenda cuya ficha dice `Manga: manga 3/4` y que en la foto **no tiene mangas**:
+
+```
+fotos que van: 2 · intentos: 2 · costo: US$0,0038
+parrafo:   «Top con frunces laterales que ajustan la silueta y tiras en los hombros para anudar…»
+chivatos:  [{ campo: 'manga', dice: '3/4', veo: 'sin manga' }]
+```
+
+🔑 **Cazó exactamente el error que sabíamos, y ⛔ no inventó ninguno más**: los otros cinco campos
+de esa ficha están bien (`tela: lycra`, `calce: entallado`, `escote: en V`, `largo: a la cadera`,
+`silueta: no aplica`) y ⛔ no marcó ninguno. Es **una** observación de falso positivo —0 de 5—, ⛔
+no una tasa; la tasa sale de la corrida sobre las 209.
+
+⚠️ **Salió en 2 intentos**: el primer párrafo lo rechazó el validador. El costo de arriba son los
+dos, con las dos fotos — o sea que el número de referencia para el catálogo (US$0,80) sigue en pie.
+
 ### ▶️ Lo que falta, en orden
 
 1. **Correr el chivato sobre las 209** y contar los **falsos positivos**. Es el número que falta.
