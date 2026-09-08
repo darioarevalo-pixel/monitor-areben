@@ -18,12 +18,19 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Badge, Button, Field, Input, Modal, Notice, formatMoney, space } from '@/components/ui'
+import { Badge, Button, Field, Input, Modal, Notice, space } from '@/components/ui'
 import {
   cambiarEstado, confirmarCompromiso, crearCompromiso,
   type PuedeCompromisos,
 } from '@/lib/compromisos/cliente'
-import { estaAbierto, comprometidoPorAcreedor, sePuedeComprometer, type Compromiso } from '@/lib/compromisos/core'
+import {
+  estaAbierto, comprometidoPorAcreedor, sePuedeComprometer,
+  // 🔑 El mismo par de siempre, no el formateador general del kit: acá los montos pueden tener
+  // centavos (el resto de un cobro parcial) y `formatMoney` los corta, que es lo que escondía la
+  // diferencia entre lo que la lista mostraba y lo que el casillero de confirmar tenía adentro.
+  mostrar as formatMoney, paraEditar, parsearMonto, restanteTrasConfirmar,
+  type Compromiso,
+} from '@/lib/compromisos/core'
 import type { Acreedor } from '@/lib/acreedores/cliente'
 
 const TONO = {
@@ -184,7 +191,7 @@ function FormCompromiso({ acreedor, maximo, onGuardar, onCancelar }: {
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
 
-  const nMonto = Number(String(monto).replace(/\./g, '').replace(',', '.'))
+  const nMonto = parsearMonto(monto)
   const sePasa = Number.isFinite(nMonto) && nMonto > maximo + 0.005
   const listo = cliente.trim().length > 0 && Number.isFinite(nMonto) && nMonto > 0 && !sePasa
 
@@ -271,14 +278,16 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
   onCancelar: () => void
 }) {
   const hoy = new Date().toISOString().slice(0, 10)
-  const [monto, setMonto] = useState(String(compromiso.monto))
+  // ⛔ `paraEditar` y no `String(...)`: ver el bloque de `plata.core.js`. Es el mismo casillero que
+  // en el panel, y tenía el mismo bug.
+  const [monto, setMonto] = useState(paraEditar(compromiso.monto))
   const [fecha, setFecha] = useState(hoy)
   const [otro, setOtro] = useState(!!compromiso.titular_real && compromiso.titular_real !== compromiso.cliente_nombre)
   const [titular, setTitular] = useState(compromiso.titular_real || '')
   const [yendo, setYendo] = useState(false)
 
-  const n = Number(String(monto).replace(/\./g, '').replace(',', '.'))
-  const falta = Math.max(0, Math.round((Number(compromiso.monto) - n) * 100) / 100)
+  const n = parsearMonto(monto)
+  const falta = restanteTrasConfirmar(Number(compromiso.monto), n)
 
   return (
     <div style={{ display: 'grid', gap: space[3] }}>

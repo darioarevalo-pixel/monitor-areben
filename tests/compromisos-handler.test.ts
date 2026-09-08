@@ -214,6 +214,24 @@ describe('confirmar', () => {
     expect(filas.c1.monto_confirmado).toBeFalsy()
   })
 
+  /**
+   * 🔴 **El caso que dejaba el compromiso trabado para siempre.**
+   *
+   * La puerta contesta 200 pero con un cuerpo que no parsea (un HTML de error de la CDN, una
+   * respuesta vacía). Antes eso seguía derecho al `update`, que rebota contra el CHECK de la base
+   * —un confirmado tiene que decir con qué operación se pagó—, así que el compromiso NO se marcaba
+   * y el mensaje invitaba a reintentar… para volver a fallar igual, siempre.
+   */
+  it('🔑 si el dashboard contesta algo que no se entiende, se puede reintentar', async () => {
+    escenario(ADMIN, { ok: true, body: null })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 500000 }))
+    expect(res.code).toBe(502)
+    expect(String(res.body?.error)).toMatch(/no se entiende/i)
+    // Lo importante: la fila quedó como estaba, o sea que el reintento tiene de dónde salir.
+    expect(filas.c1.estado).toBe('prometido')
+    expect(filas.c1.pagos_dashboard).toBeFalsy()
+  })
+
   it('sin la credencial del dashboard avisa, y no marca nada', async () => {
     delete process.env.DASHBOARD_PUENTE_SECRET
     escenario(ADMIN, { ok: true, body: {} })
@@ -245,6 +263,28 @@ describe('cuando entra menos de lo comprometido', () => {
     expect(nueva.acreedor_id).toBe('ac-1')
     expect(nueva.cliente_nombre).toBe('Nazarena')
     expect(String(nueva.notas)).toMatch(/faltó/)
+  })
+
+  /**
+   * 🔴 El cobro en tres partes es el que fabricaba el bug de los cien: $100.000 en tres pagos deja
+   * un resto de 66666.67, y ese resto es el que después se confirma. Antes, el casillero de
+   * confirmar lo escribía como "66666.67" y lo volvía a leer como 6.666.667 — cien veces el monto,
+   * escrito de verdad en el ledger del dashboard. Ver `lib/compromisos/plata.core.js`.
+   */
+  it('🔑 el resto de un cobro parcial nace con los centavos exactos', async () => {
+    filas.c1 = { ...COMPROMISO, monto: 100000 }
+    escenario(ADMIN, { ok: true, body: { pagos: [{ pago_id: 'p1' }] } })
+    await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 33333.33, fecha: '2026-09-04' }))
+    expect(filas.c1.monto_confirmado).toBe(33333.33)
+    expect(insertados.at(-1)!.monto).toBe(66666.67)   // ni 66666.670000000005, ni 6666667
+  })
+
+  it('el monto sale redondeado a centavos hacia la puerta del dashboard', async () => {
+    // La columna es numeric(15,2) de los dos lados: mandar tres decimales deja dos sistemas
+    // guardando números que no son exactamente el mismo.
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 33333.333, fecha: '2026-09-04' }))
+    expect(alDashboard[0].body.monto).toBe(33333.33)
   })
 
   it('si entró todo, no se anota ningún compromiso nuevo', async () => {

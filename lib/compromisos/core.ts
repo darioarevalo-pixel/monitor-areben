@@ -3,6 +3,30 @@
 // Un compromiso es "este cliente le va a transferir a este acreedor". Vive en el Monitor porque es
 // donde se habla con el cliente; el dashboard sólo se entera cuando la plata ya se movió.
 
+import {
+  mostrar as mostrarJS,
+  paraEditar as paraEditarJS,
+  parsearMonto as parsearMontoJS,
+  redondear as redondearJS,
+  restante as restanteJS,
+} from './plata.core.js'
+
+/**
+ * La plata, re-exportada con tipos desde `plata.core.js` (mismo patrón que `lib/canjes/tipos.ts`).
+ *
+ * Vive en un `.js` porque `api/_compromisos.js` corre en Node sin pasar por el compilador de Next
+ * y no puede importar TypeScript: es la única forma de que el servidor y los formularios hagan la
+ * MISMA cuenta en vez de dos copias parecidas.
+ *
+ * ⛔ **La regla de uso**: hacia un `<input>` de plata va `paraEditar(n)`, nunca `String(n)`.
+ * `String()` escribe el punto como decimal y `parsearMonto` lo lee como separador de miles — es
+ * exactamente el desencuentro que multiplicaba los montos por cien.
+ */
+export const parsearMonto: (entrada: unknown) => number = parsearMontoJS
+export const paraEditar: (n: unknown) => string = paraEditarJS
+export const mostrar: (n: unknown) => string = mostrarJS
+export const redondear: (n: unknown) => number = redondearJS
+
 export type EstadoCompromiso = 'prometido' | 'transferido' | 'confirmado' | 'cancelado'
 
 export const ESTADOS: EstadoCompromiso[] = ['prometido', 'transferido', 'confirmado', 'cancelado']
@@ -89,9 +113,7 @@ export function porQueNo(desde: EstadoCompromiso, hasta: EstadoCompromiso): stri
   return `No se puede pasar de "${desde}" a "${hasta}".`
 }
 
-function centavos(n: number): number {
-  return Math.round(n * 100) / 100
-}
+const centavos = redondear
 
 /**
  * Cuánta plata hay comprometida y todavía sin confirmar, por acreedor.
@@ -172,10 +194,13 @@ export function sePuedeComprometer(disponibleDashboard: number, yaComprometido: 
  * hace falta mirar adentro de una fila para saber cuánto entró.
  *
  * Devuelve cuánto quedaría pendiente, o 0 si entró todo (o de más).
+ *
+ * 🔑 Es `restante` de `plata.core.js` con otro nombre, y no una segunda implementación: la resta la
+ * hacen el servidor (para abrir el compromiso del resto) y los dos formularios de confirmar (para
+ * dibujar el aviso de "entró de menos"). Estaban escritas por separado, así que el aviso podía
+ * decir una cosa y el servidor anotar otra.
  */
-export function restanteTrasConfirmar(comprometido: number, entro: number): number {
-  return Math.max(0, centavos(comprometido - entro))
-}
+export const restanteTrasConfirmar: (comprometido: number, entro: number) => number = restanteJS
 
 /**
  * Cuántos días faltan para una fecha comprometida. Negativo = ya venció; `null` = no tiene fecha.

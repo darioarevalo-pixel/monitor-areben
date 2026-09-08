@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { hoyISO } from '@/lib/crm/seguimiento'
+
+/**
+ * ⚠️ **"Ayer" se calcula con la MISMA función de fecha que usa la pantalla.**
+ *
+ * Estaba con `new Date(...).toISOString()`, que da el día en **UTC**, contra un componente que
+ * compara con `hoyISO()`, que da el día **local**. Las dos fechas coinciden sólo si la máquina
+ * corre en UTC: el CI sí, una Mac en Argentina no. O sea que el test pasaba en el CI y se caía en
+ * la máquina de acá, y el que lo veía en rojo no tenía forma de saber que no era su cambio.
+ */
+const AYER = hoyISO(new Date(Date.now() - 86_400_000))
 
 /**
  * La pestaña "Pagos" del panel de WhatsApp, del lado de la pantalla.
@@ -13,13 +24,23 @@ import { renderToStaticMarkup } from 'react-dom/server'
  * puerta por la que esta pantalla habla con el servidor.
  */
 
-const acreedores = vi.hoisted(() => ({ valor: { acreedores: [] as unknown[], aviso: null, cargando: false, error: null, recargar: () => {} } }))
+const acreedores = vi.hoisted(() => ({
+  valor: {
+    acreedores: [] as unknown[],
+    aviso: null as string | null,
+    cargando: false,
+    recargando: false,
+    error: null as string | null,
+    recargar: () => {},
+  },
+}))
 const compromisos = vi.hoisted(() => ({
   valor: {
     compromisos: [] as unknown[],
     puede: { ver: true, prometer: true, confirmar: true },
     cargando: false,
-    error: null,
+    recargando: false,
+    error: null as string | null,
     recargar: () => {},
   },
 }))
@@ -31,11 +52,14 @@ const { Pagos } = await import('@/components/panel/Pagos')
 
 // Cada caso arranca del mismo lugar: si no, el orden de los `it` decide el resultado.
 beforeEach(() => {
-  acreedores.valor = { acreedores: [], aviso: null, cargando: false, error: null, recargar: () => {} }
+  acreedores.valor = {
+    acreedores: [], aviso: null, cargando: false, recargando: false, error: null, recargar: () => {},
+  }
   compromisos.valor = {
     compromisos: [],
     puede: { ver: true, prometer: true, confirmar: true },
     cargando: false,
+    recargando: false,
     error: null,
     recargar: () => {},
   }
@@ -84,8 +108,7 @@ describe('Pagos · la lista de trabajo', () => {
   })
 
   it('un compromiso vencida lo dice con los días, no con la fecha cruda', () => {
-    const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
-    compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ fecha_prometida: ayer })] }
+    compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ fecha_prometida: AYER })] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     expect(html).toContain('vencida hace 1 día')
   })
@@ -355,9 +378,78 @@ describe('Pagos · lo que ya no se dibuja', () => {
   })
 
   it('✅ pero lo vencido SÍ se dice: eso no lo cuenta ningún título y cambia todos los días', () => {
-    const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
-    compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ fecha_prometida: ayer })] }
+    compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ fecha_prometida: AYER })] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     expect(html).toContain('vencida hace 1 día')
+  })
+})
+
+/**
+ * 🔴 **Los tres estados de "no hay nada", que no son el mismo.**
+ *
+ * Es el oráculo declarado al principio de este archivo, ejercido sobre la otra mitad de la pestaña:
+ * **una pantalla que anuncia "no hay nada" cuando en realidad no pudo leer es una buena noticia
+ * falsa, y nadie la reporta.** Faltaba mirar el tercer estado: cuando el dashboard no contesta,
+ * `leerAcreedores` NO tira — devuelve la lista vacía y el motivo en `aviso`, así que `error` viene
+ * en `null` y el vacío se leía como "no le debemos nada a nadie".
+ */
+const { VistaAcreedores } = await import('@/components/panel/Pagos')
+
+describe('Pagos · el dashboard caído no se cuenta como "no hay deudas"', () => {
+  // ⚠️ Se monta la vista directo: la pestaña arranca en "Compromisos" y al chip de "A quién le
+  // debemos" no se le puede hacer clic desde un render estático. De paso queda cubierta, que hasta
+  // hoy no lo estaba — y era justo donde vivía el cartel equivocado.
+  const vista = (props: { acreedores?: unknown[]; error?: string | null; aviso?: string | null }) =>
+    renderToStaticMarkup(
+      <VistaAcreedores
+        acreedores={(props.acreedores ?? []) as never}
+        compromisos={[]}
+        cargando={false}
+        error={props.error ?? null}
+        aviso={props.aviso ?? null}
+      />,
+    )
+
+  it('🔑 con aviso del dashboard dice que no se pudo leer, NO que no hay deudas', () => {
+    const html = vista({ aviso: 'El dashboard no respondió.' })
+    expect(html).toContain('No se pudo leer a quién le debemos')
+    expect(html).not.toContain('No hay ninguna deuda con acreedores ahora')
+  })
+
+  it('sin deudas de verdad —sin aviso ni error— sí dice que no hay', () => {
+    const html = vista({})
+    expect(html).toContain('No hay ninguna deuda con acreedores ahora')
+    expect(html).not.toContain('No se pudo leer a quién le debemos')
+  })
+
+  it('el aviso también frena el formulario de anotar, con el chat abierto', () => {
+    acreedores.valor = { ...acreedores.valor, acreedores: [], aviso: 'El dashboard no respondió.' }
+    const html = renderToStaticMarkup(
+      <Pagos cliente={{ tipo: 'erp', id: 77, nombre: 'Nazarena', telefono: null }} onIrAlCliente={null} />,
+    )
+    expect(html).toContain('no se puede anotar un compromiso nuevo')
+  })
+})
+
+/**
+ * ⚠️ **Un refresco no borra la pantalla.**
+ *
+ * `cargando` quería decir "estoy pidiendo" y se prendía en cada recarga — y como cada confirmar,
+ * cancelar o anotar dispara una, la pestaña entera se reemplazaba por "Buscando…", incluido el
+ * cartel de "Listo" que acababa de aparecer. Ahora quiere decir "todavía no tengo nada que
+ * mostrar", que es lo único que justifica tapar lo que ya está en pantalla.
+ */
+describe('Pagos · un refresco no borra lo que ya se está mostrando', () => {
+  it('🔑 con datos en pantalla, una recarga deja la lista donde estaba', () => {
+    compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})], cargando: true }
+    const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
+    expect(html).toContain('Nazarena Luciani')
+    expect(html).not.toContain('Buscando los compromisos')
+  })
+
+  it('pero la primera vez, sin nada que mostrar, sí avisa que está buscando', () => {
+    compromisos.valor = { ...compromisos.valor, compromisos: [], cargando: true }
+    const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
+    expect(html).toContain('Buscando los compromisos')
   })
 })

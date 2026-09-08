@@ -60,11 +60,9 @@ import type { Acreedor } from '@/lib/acreedores/cliente'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
+  mostrar as plata, parsearMonto,
   type Compromiso,
 } from '@/lib/compromisos/core'
-
-const plata = (n: number) =>
-  n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
 /**
  * De quién es la plata que va a entrar.
@@ -77,13 +75,20 @@ export type QuienPaga =
   | { tipo: 'erp'; id: number; nombre: string; telefono: string | null }
   | { tipo: 'sin-cargar'; nombre: string; telefono: string }
 
-export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, cargando, onCreado }: {
+export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, cargando, noSePudoLeer, onCreado }: {
   /** Quién va a transferir. Sin chat abierto no hay a quién pedirle, y la pestaña dice eso en vez de mostrar esto. */
   cliente: QuienPaga
   acreedores: Acreedor[]
   compromisos: Compromiso[]
   puede: PuedeCompromisos
   cargando: boolean
+  /**
+   * 🔴 El dashboard no contestó. Se pasa desde arriba porque acá NO se distingue solo: sin
+   * dashboard la lista de acreedores llega vacía, igual que cuando de verdad no le debemos nada a
+   * nadie — y son dos carteles opuestos. Antes se adivinaba por `acreedores.length === 0`, o sea
+   * que "no hay deudas" se anunciaba como una falla y una falla como "no hay deudas".
+   */
+  noSePudoLeer?: boolean
   onCreado: (texto: string) => void
 }) {
   const [elegido, setElegido] = useState<string | null>(null)
@@ -112,7 +117,7 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
 
   const sel = conDeuda.find((x) => x.a.id === elegido) ?? null
   const cuenta = sel?.a.cuentas.find((c) => c.sugerida) ?? sel?.a.cuentas[0] ?? null
-  const n = Number(String(monto).replace(/\./g, '').replace(',', '.'))
+  const n = parsearMonto(monto)
   const sePasa = !!sel && Number.isFinite(n) && n > sel.puedePedirse + 0.005
   const puedeGuardar = !!sel && Number.isFinite(n) && n > 0 && !sePasa && !guardando && !!nombreFinal
 
@@ -164,7 +169,7 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
         <div style={{ fontSize: font.sm, color: color.mut2 }}>Buscando a quién le debemos…</div>
       ) : conDeuda.length === 0 ? (
         <div style={{ fontSize: font.sm, color: color.mut2 }}>
-          {acreedores.length === 0
+          {noSePudoLeer
             ? 'No se pudo leer a quién le debemos. Probá de nuevo en un rato.'
             : 'No hay ninguna deuda con acreedores a la que se pueda mandar plata ahora.'}
         </div>

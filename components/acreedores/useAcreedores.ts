@@ -15,7 +15,13 @@ import { leerAcreedores, type Acreedor } from '@/lib/acreedores/cliente'
 export function useAcreedores() {
   const [acreedores, setAcreedores] = useState<Acreedor[]>([])
   const [aviso, setAviso] = useState<string | null>(null)
+  /**
+   * 🔑 **"Todavía no tengo nada que mostrar", no "estoy pidiendo"** — igual que en
+   * `useCompromisos`. Se prendía en cada recarga, y como las pantallas cortan con esto, cada acción
+   * que toca los saldos hacía parpadear los montos a un cartel de "buscando" y de vuelta.
+   */
   const [cargando, setCargando] = useState(true)
+  const [recargando, setRecargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
@@ -24,7 +30,7 @@ export function useAcreedores() {
   useEffect(() => {
     let vivo = true
     void (async () => {
-      setCargando(true)
+      setRecargando(true)
       setError(null)
       try {
         const r = await leerAcreedores()
@@ -35,7 +41,10 @@ export function useAcreedores() {
         if (!vivo) return
         setError(e instanceof Error ? e.message : 'No se pudo leer a quién le debemos.')
       } finally {
-        if (vivo) setCargando(false)
+        if (vivo) {
+          setCargando(false)
+          setRecargando(false)
+        }
       }
     })()
     return () => {
@@ -43,5 +52,5 @@ export function useAcreedores() {
     }
   }, [tick])
 
-  return { acreedores, aviso, cargando, error, recargar }
+  return { acreedores, aviso, cargando, recargando, error, recargar }
 }

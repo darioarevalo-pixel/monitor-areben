@@ -47,11 +47,12 @@ import { useCompromisos } from '@/components/acreedores/useCompromisos'
 import { NuevoCompromiso, type QuienPaga } from './NuevoCompromiso'
 import type { Acreedor } from '@/lib/acreedores/cliente'
 import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
-import { colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular, type Compromiso } from '@/lib/compromisos/core'
+import {
+  colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
+  mostrar as plata, paraEditar, parsearMonto, restanteTrasConfirmar,
+  type Compromiso,
+} from '@/lib/compromisos/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
-
-const plata = (n: number) =>
-  n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
 /** De a cuántas cerradas se muestran. No es una lista de trabajo: es para mirar atrás un rato. */
 const CERRADAS = 10
@@ -185,13 +186,18 @@ function Confirmar({ c, onListo, onCancelar }: {
   onListo: (monto: number, fecha: string, titular: string | null) => Promise<void>
   onCancelar: () => void
 }) {
-  const [monto, setMonto] = useState(String(c.monto))
+  /**
+   * ⛔ **`paraEditar` y no `String(c.monto)`.** Acá vivía el bug que mandaba cien veces el monto al
+   * ledger: `String()` escribe el punto como decimal y el lector de abajo lo toma como separador
+   * de miles, así que un resto de 66666.67 salía del casillero como 6.666.667. Ver `plata.core.js`.
+   */
+  const [monto, setMonto] = useState(paraEditar(c.monto))
   const [fecha, setFecha] = useState(hoyISO())
   const [otro, setOtro] = useState(!!c.titular_real && c.titular_real !== c.cliente_nombre)
   const [titular, setTitular] = useState(c.titular_real || '')
   const [yendo, setYendo] = useState(false)
-  const n = Number(String(monto).replace(/\./g, '').replace(',', '.'))
-  const falta = Math.max(0, Math.round((Number(c.monto) - n) * 100) / 100)
+  const n = parsearMonto(monto)
+  const falta = restanteTrasConfirmar(Number(c.monto), n)
 
   const input: React.CSSProperties = {
     minWidth: 0, padding: '6px 8px', fontSize: font.sm, border: `1px solid ${color.line2}`,
@@ -272,23 +278,41 @@ function Confirmar({ c, onListo, onCancelar }: {
  * `yaPagadoSinDebitar`, que es plata ya mandada que el banco no debitó (un cheque entregado), y
  * está justamente para que nadie la mande dos veces.
  */
-export function VistaAcreedores({ acreedores, compromisos, cargando, error }: {
+export function VistaAcreedores({ acreedores, compromisos, cargando, error, aviso }: {
   acreedores: Acreedor[]
   compromisos: Compromiso[]
   cargando: boolean
   error: string | null
+  /**
+   * 🔴 El dashboard no contestó, con la lista llegando vacía y **sin error**. Es el tercer estado
+   * que faltaba mirar: `leerAcreedores` devuelve el motivo por acá justamente para que la pantalla
+   * no confunda "no pude leer" con "no hay nada".
+   */
+  aviso: string | null
 }) {
   const comprometido = useMemo(() => comprometidoPorAcreedor(compromisos), [compromisos])
 
   if (cargando) {
     return <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>Buscando a quién le debemos…</div>
   }
-  if (error || acreedores.length === 0) {
+  /*
+    🔴 **"No hay deudas" y "no pude leer" no se pueden decir con el mismo cartel**, y hasta acá se
+    decían: sin dashboard la lista llega vacía y `error` viene en null, así que la pantalla anunciaba
+    "No hay ninguna deuda con acreedores ahora" —una buena noticia falsa, de las que nadie reporta.
+    Es el mismo defecto que la lista del día ya pagó (ver el encabezado de
+    `tests/panel-pagos-pantalla.test.tsx`).
+  */
+  if (error || aviso) {
     return (
       <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
-        {error
-          ? 'No se pudo leer a quién le debemos. Probá de nuevo en un rato.'
-          : 'No hay ninguna deuda con acreedores ahora.'}
+        No se pudo leer a quién le debemos. Los montos viven en el dashboard; probá de nuevo en un rato.
+      </div>
+    )
+  }
+  if (acreedores.length === 0) {
+    return (
+      <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
+        No hay ninguna deuda con acreedores ahora.
       </div>
     )
   }
@@ -515,7 +539,13 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
     }
   }
 
-  if (cobros.cargando) {
+  /*
+    ⚠️ **Sólo mientras no haya NADA que mostrar.** El hook ya no prende `cargando` en los
+    refrescos, pero la pantalla lo comprueba igual: es la que se ve, y un refresco que borre la
+    pestaña entera —con el cartel de "Listo" adentro— es un síntoma demasiado caro para dejarlo
+    colgando de una sola línea en otro archivo.
+  */
+  if (cobros.cargando && cobros.compromisos.length === 0) {
     return <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>Buscando los compromisos de pago…</div>
   }
 
@@ -600,7 +630,13 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
           {cobros.error}
         </div>
       )}
-      {deudas.error && (
+      {/*
+        🔴 **`aviso` y no sólo `error`.** Cuando el dashboard no contesta, `leerAcreedores` NO tira:
+        devuelve la lista vacía y el motivo en `aviso`. Mirando sólo `error`, la caída del dashboard
+        —que es la forma normal en que esto falla— pasaba sin un solo cartel, y las pantallas de
+        abajo la contaban como "no hay ninguna deuda".
+      */}
+      {(deudas.error || deudas.aviso) && (
         <div style={{ margin: space[2], fontSize: font.xs, color: color.mut, background: color.bg2, border: `1px solid ${color.line2}`, borderRadius: radius.sm, padding: '6px 8px' }}>
           No se pudo leer a quién le debemos, así que no se puede anotar un compromiso nuevo. La lista
           de abajo anda igual.
@@ -666,6 +702,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
             compromisos={cobros.compromisos}
             cargando={deudas.cargando}
             error={deudas.error}
+            aviso={deudas.aviso}
           />
         </div>
       ) : (
@@ -684,6 +721,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
             compromisos={cobros.compromisos}
             puede={puede}
             cargando={deudas.cargando}
+            noSePudoLeer={!!(deudas.error || deudas.aviso)}
             onCreado={(txt) => { decir(txt); cobros.recargar() }}
           />
         </Bloque>

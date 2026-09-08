@@ -30,6 +30,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { esAdmin, marcasConAcceso, puedeSub } from '../lib/permisos.core.js';
+// La misma cuenta que hacen los dos formularios de confirmar, no una copia parecida: el aviso de
+// "entró de menos" y el compromiso del resto que se abre acá tienen que dar SIEMPRE el mismo número.
+import { redondear, restante } from '../lib/compromisos/plata.core.js';
 
 const URL_PUENTE_PAGOS =
   process.env.DASHBOARD_PUENTE_PAGOS_URL || 'https://dashboard.arebensrl.com/api/puente/pagos';
@@ -115,7 +118,7 @@ export default async function handler(req, res) {
     if (!texto(c.cliente_nombre)) {
       return res.status(400).json({ error: 'Falta qué cliente va a transferir.' });
     }
-    const monto = Number(c.monto);
+    const monto = redondear(c.monto);
     if (!Number.isFinite(monto) || monto <= 0) {
       return res.status(400).json({ error: 'Poné cuánto va a transferir.' });
     }
@@ -249,7 +252,10 @@ export default async function handler(req, res) {
     }
 
     // Lo que entró DE VERDAD. Puede ser menos de lo prometido: se confirma por esto.
-    const montoReal = Number(body.monto_real ?? c.monto);
+    // ⚠️ Redondeado a centavos ANTES de salir: la columna es `numeric(15,2)` y el ledger del otro
+    // lado también. Sin esto, un 33333.333 viaja con tres decimales y los dos sistemas guardan
+    // números que no son exactamente el mismo.
+    const montoReal = redondear(body.monto_real ?? c.monto);
     if (!Number.isFinite(montoReal) || montoReal <= 0) {
       return res.status(400).json({ error: 'Poné cuánta plata entró de verdad.' });
     }
@@ -312,6 +318,24 @@ export default async function handler(req, res) {
       if (!r.ok) {
         return res.status(409).json({ error: (d && d.error) || `El dashboard rechazó el pago (${r.status}).`, detalle: d || null });
       }
+      /**
+       * 🔴 **Contestó que sí, pero con algo que no se entiende.**
+       *
+       * Sin este corte, `respuesta` quedaba en `null` y se seguía derecho al `update` — que choca
+       * contra el CHECK `compromisos_pago_confirmado_completo` (un confirmado tiene que decir con
+       * qué operación se pagó). O sea que el compromiso NO se marcaba, se devolvía "volvé a apretar
+       * confirmar" y el reintento fallaba exactamente igual: **quedaba trabado para siempre**, sin
+       * más salida que el SQL Editor.
+       *
+       * Cortar acá no pierde nada, porque el `operacion_id` es el mismo de siempre: el reintento le
+       * vuelve a preguntar a la puerta y, si el pago ya estaba escrito, lo devuelve sin duplicarlo.
+       * Lo que cambia es que el compromiso queda como estaba y se puede volver a intentar de verdad.
+       */
+      if (!d || typeof d !== 'object') {
+        return res.status(502).json({
+          error: 'El dashboard contestó algo que no se entiende. Fijate si el pago quedó registrado y volvé a intentar: si ya está, no se va a duplicar.',
+        });
+      }
       respuesta = d;
     } catch (e) {
       const msg = e?.name === 'AbortError'
@@ -349,9 +373,9 @@ export default async function handler(req, res) {
 
     // Si entró menos de lo comprometido, lo que falta va como un compromiso NUEVA (decidido con Darío):
     // un compromiso es una transferencia, así que dos transferencias son dos filas.
-    const restante = Math.max(0, Math.round((Number(c.monto) - montoReal) * 100) / 100);
+    const falta = restante(c.monto, montoReal);
     let nueva = null;
-    if (restante > 0.005 && body.anotar_restante !== false) {
+    if (falta > 0.005 && body.anotar_restante !== false) {
       const { data: n } = await base()
         .from('compromisos_pago')
         .insert({
@@ -370,7 +394,7 @@ export default async function handler(req, res) {
           // ⛔ El titular NO se hereda: el resto es OTRA transferencia y la puede mandar otra
           // persona. Se vuelve a leer del extracto cuando esa entre.
           titular_real: null,
-          monto: restante,
+          monto: falta,
           notas: `Lo que faltó de el compromiso del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,
           viene_de: c.id,
           creado_por: quien,
