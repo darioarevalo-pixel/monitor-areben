@@ -645,6 +645,41 @@ del modelo pisando un dato cargado con la prenda en la mano es peor que el error
 borradores los escribe la sesión** mirando las dos fotos, con el **validador real** y relectura.
 Ejercido contra prod las dos puntas: el rechazo (⛔ no escribe) y el guardado idempotente.
 
+### 🆕 8-sep-2026 — LOS 17 BORRADORES, REVISADOS UNO POR UNO CONTRA LA FOTO
+
+Bruno: *«primero vaciemos los 20 borradores que están esperando, ¿los vas a revisar?»* ⇒ se miraron
+**las fotos de las 17** (14 en borrador + 3 aprobados) contra el párrafo y contra la ficha.
+
+📊 **El resultado, que es también la primera medición de falsos positivos**: de ~100 valores de
+ficha mirados, **6 no coinciden con la foto** (5 prendas) y **16 de 17 párrafos están bien**.
+
+| lo que apareció | cuántas |
+|---|---|
+| ✅ párrafo correcto, ficha coherente | 12 |
+| ⚠️ párrafo correcto, **la ficha miente** | 4 (JUNE · ASTRA · LIBIA · AVERY) |
+| 🔴 **el párrafo INVENTA** | 1 — **BLUSA CAMELIA**, y estaba **APROBADA** |
+
+🔴 **BLUSA CAMELIA decía «botones al medio» y ⛔ no hay botones**: hay un lazo y una abertura. Se
+vio recortando la foto. **Estaba aprobada**, o sea a un clic de la tienda ⇒ 🔑 **el estado
+«aprobado» ⛔ NO prueba que alguien lo haya contrastado con la foto.** Es el 2º caso de la misma
+forma que JEAN MARINA. Corregido y guardado (vuelve a `borrador`, que es lo correcto: el texto
+cambió, hay que volver a aprobarlo).
+
+🔑 **Y el patrón de la ficha ⛔ no es aleatorio: `musculosa` en prendas HALTER**, 3 de las 4
+(JUNE, ASTRA, LIBIA: se atan al cuello y dejan los hombros al aire). ⚠️ **`halter` existe en la
+lista, pero como valor de ESCOTE, ⛔ no de manga** — y en manga la opción correcta (`sin mangas`)
+⛔ no se parece a lo que la persona ve. ▶️ Es un arreglo de **lista**, ⛔ no de persona.
+La 4ª es AVERY: `Escote: asimétrico` en un top **simétrico** con abertura en gota y cuello alto.
+
+🏁 **Los 4 chivatos quedaron guardados** y se ven en la pantalla. ⛔ **La ficha ⛔ NO se tocó**:
+marca, ⛔ no corrige — los corrige Bruno con el botón.
+
+▶️ **BLUSA HUBER (aprobada) tiene DOS**: `Cuello: redondo` siendo cuello alto y `Manga: larga`
+siendo **3/4**. ⛔ No se guardaron **a propósito**: guardar el borrador la desaprobaría, y esa
+aprobación es de Bruno. Se corrigen tocando la ficha.
+
+▶️ **Quedan 17 para publicar**: 15 en borrador y 2 aprobadas (LISBOA y HUBER).
+
 ⛔ **LA TANDA ⛔ NO SE CORRE POR LA API** (Bruno, 8-sep: *«dijimos que lo hacemos acá por este
 medio, ⛔ no vamos a pagar»*). Los borradores y los chivatos los escribe **la sesión** mirando las
 dos fotos — `/descripciones`. El botón con IA queda para quien lo quiera apretar, de a una.
