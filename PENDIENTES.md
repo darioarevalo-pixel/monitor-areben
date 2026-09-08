@@ -13,6 +13,83 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🔴🔴 LA FICHA DE RENTABILIDAD IGNORA EL SALE — 8-sep-2026 (medido, ⛔ SIN DECIDIR, y la plata SE ESTÁ YENDO HOY)
+
+**Es el más caro de los cuatro de hoy, y el único que ⛔ no es del script sino de acá.** Lo destapó
+Bruno de memoria: *«recordá que es sale, o sea que hay problemas con el tema del costo por compra,
+no puede irse tan arriba»*, y después *«hoy está todo casi al costo, con IVA pero casi al costo»*.
+
+### Lo que pasa
+
+`meta_ads_rentabilidad` guarda el **precio de lista** y el motor recalcula el techo **sólo por las
+unidades observadas** (`calcularRentabilidad({...norm, unidades: u})`): **el precio queda clavado.**
+Y los supuestos ⛔ **no tienen campo de descuento** — el único que modelan es el **10% por
+transferencia** (`transf`), que es un medio de pago, ⛔ no un sale de temporada.
+
+Zattia: lista **$32.416**/unidad, costo neto **$14.623** (el 45% del precio). El descuento sale
+entero del margen, ⛔ no del costo ⇒ el techo se derrumba mucho más rápido de lo que parece:
+
+| precio/u | = costo × | off de lista | contrib/u | techo margen | techo **caja** |
+|---|---|---|---|---|---|
+| $32.416 | 2,22 | 0% | $7.702 | $4.946 ← **el que usa el parte hoy** | $10.228 |
+| $27.554 | 1,88 | 15% | $4.353 | $3.289 | — |
+| $23.397 | 1,60 | 28% | $1.490 | $1.326 | $4.747 |
+| $21.203 | 1,45 | 35% | **−$20** | **no existe** | $3.401 |
+| **$17.694** | **1,21** | **45%** | **−$2.437** | **no existe** | **$554** |
+
+🔴 **«Casi al costo con IVA» = costo × 1,21 ⇒ cada venta pierde ~$2.400 ANTES de gastar un peso en
+pauta.** No es que el CPA se fue arriba del techo: **no hay techo que superar.** La única vara que
+sobrevive es la de CAJA (`costoMaxCaja`, que ya existe en el motor y nadie usa) — y el CPA real de
+zattia ($3.561, 7 días cerrados) queda entre **105% y 643%** de ella según cuán al costo esté. ⇒ ni
+siquiera como operación de liquidación se paga.
+
+### 🔑 La verificación independiente, que ⛔ no toca la ficha
+
+El ticket atribuido de zattia es **$39.424**. Eso implica **1,28 items por pedido** si el precio
+fuera de lista, y **1,96** si es de sale. Lo MEDIDO en Tienda Nube (`ventas`, 30 días) es
+**1,94-2,04 items por pedido**. ⇒ los pedidos reales dicen **sale**, ⛔ no lista. La ficha es lo
+único que sigue creyendo en el precio de lista.
+
+### Por qué nadie se enteró
+
+**Ninguna regla disparó nunca sobre zattia**, y ⛔ no es que las reglas fallen: con el techo inflado
+2 a 9 veces, zattia se ve **sana** en todos lados — el parte, el motor de hallazgos y la pantalla de
+Rendimiento. En esta misma sesión yo informé *«es la pauta más eficiente de la casa, CPA al 73% del
+techo»* y era falso por esto. ⚠️ **Le pega igual a BDI y a stunned**: mismo motor, mismo agujero,
+y BDI tiene promo de 2ª unidad.
+
+⇒ 🔑 **Un techo que se recalcula por unidades pero ⛔ no por precio da la sensación de estar
+midiendo la realidad.** Es lo que lo volvió invisible: el número se mueve todos los días, así que
+parece vivo.
+
+### ▶️ Lo que queda abierto (Bruno: *«dejalo anotado, lo vemos más tarde»*)
+
+1. 🔴 **ZATTIA SIGUE GASTANDO ~$7.760/día** — un solo conjunto, `TEST INTERESES 1 - ZATTIA 07/05`,
+   más dos `ACTIVE` en cero. ⛔ **NO se pausó**: queda pendiente de decisión. La nota está en
+   `meta_ads_decision` id **247**, con `vence: null` **a propósito**, para que las reglas sigan
+   gritando en vez de callarse.
+2. **Cargar el precio efectivo en la ficha** — falta UN dato: el precio promedio real de zattia (o
+   cargar «costo × 1,21»). Es lo que destraba todo lo demás.
+3. **La ficha necesita un campo de descuento** que ⛔ no sea `transf`, y el techo tiene que
+   recalcularse por PRECIO además de por unidades.
+4. ⚠️ **`costoMaxCaja` ya existe y nadie lo usa.** Cuando el objetivo es liquidar stock —que es lo
+   que un sale al costo ES— **ésa es la vara correcta**, ⛔ no el margen. Hoy no se muestra en
+   ningún lado.
+5. ⚠️ **La cuenta publicitaria nueva de zattia (`1766605934148471`) ⛔ NO arregla esto.** Bruno
+   preguntó si convenía apagar y rearmar ahí. Ninguna cuenta, creatividad o público arregla un
+   margen negativo: **lo que destraba zattia es PRECIO, no pauta.**
+
+### 🔴 Y un tercer bug del parte, del mismo día
+
+El renglón **«BDI · pedidos REALES de la tienda»** cuenta **BDI + Zattia juntos**: la tabla `ventas`
+⛔ no separa las marcas (todo cae en `channel='Tienda Nube'` / `store='Deposito Minorista'`).
+Verificado: 99 pedidos en 7 días ÷ 7 = **14,1/día**, exactamente lo que el parte atribuye a BDI solo.
+⚠️ Y `ventas.total_cost` da un margen bruto del **89%**, imposible en indumentaria (la ficha misma
+supone 45% de costo) ⇒ **esa columna ⛔ no sirve para medir margen**, y es la que uno agarraría
+primero para arreglar lo de arriba.
+
+---
+
 ## 🆕 DOS BUGS DEL `parte-del-dia` QUE CAZÓ BRUNO — 8-sep-2026 (medido, ⛔ sin arreglar)
 
 Los dos salieron de que Bruno no le creyó al parte, ⛔ no de leer el código. Viven en
