@@ -620,6 +620,42 @@ enseñaba la primera regla al revés** ⇒ se cambió el ejemplo, ⛔ no sólo s
 CERO medidas** ⇒ 🔑 **la están usando**. **277 publicados con ficha completa y tela válida**, de los
 cuales **24 mudos**.
 
+### 🆕 8-sep-2026 — LA FICHA PASA A SER INSUMO, Y EL TEXTO LE AVISA CUANDO NO COINCIDE
+
+**Decisión de Bruno**, mirando los 7 desplegables de las prendas de arriba: *«calce, cuello, manga
+y largo, ¿es necesario? Porque todo eso se ve en la foto… la ficha estuvo pensada para armar la
+descripción, ⛔ no para que esté expuesta en la descripción»* ⇒ **«que quede como insumo del
+párrafo, y luego que el texto confirme o mejore»**.
+
+📊 **Medido antes de tocar nada.** De las 4 prendas que sabíamos peleadas con la foto, **las 3 que
+ya tenían párrafo lo tenían BIEN** (BORA «apoya fuera de los hombros» contra `Cuello: mao`; CAMO
+«escote amplio» contra `Escote: asimétrico`; HUBER «cuello alto» contra `Escote: redondo`).
+🔴 **Y el dato que decidió el rumbo: `tn_atributos` lo lee UN SOLO lugar en todo el repo — la
+propia pantalla.** El «qué escote se vendió más» que justificó las listas cerradas ⛔ no existe:
+el único consumidor real de calce, escote, manga y largo era el bullet que se publicaba.
+
+🏁 **Las DOS fotos** (`95f5f94`): el pedido pasa de `{system, texto, imagen}` a `imagenes`. Con la
+portada sola el modelo ⛔ no ve la espalda ni el ruedo. **US$0,80 el catálogo entero.**
+🏁 **El CHIVATO**: el esquema pide `{parrafo, tip, discrepancias}` y cada aviso es
+`{campo, dice, veo}`. Vive adentro del borrador, **muere con él** y ⛔ no sale a la tienda.
+🔴 **MARCA, ⛔ NO CORRIGE** — el aviso ofrece el botón, el valor lo cambia una persona. Un invento
+del modelo pisando un dato cargado con la prenda en la mano es peor que el error que arregla.
+🔑 **Que esté saldado ⛔ no se guarda: se deduce de la ficha.** Y **la lista vacía AFIRMA**.
+🏁 **`scripts/desc-borradores.mjs` + el comando `/descripciones`**: la dinámica de que **los
+borradores los escribe la sesión** mirando las dos fotos, con el **validador real** y relectura.
+Ejercido contra prod las dos puntas: el rechazo (⛔ no escribe) y el guardado idempotente.
+
+▶️ 🔴 **LO QUE FALTA, EN ORDEN**: (1) **correr el chivato sobre las 209 y contar los FALSOS
+POSITIVOS** —el 3 de 3 está sesgado, son casos elegidos porque ya se sabían malos—; (2) recién ahí
+**sacar los bullets** de lo que se publica y dejar tela + cuidados + medidas; (3) **silueta sale
+igual**, sin esperar nada (el **94 %** es `regular` o `no aplica`).
+⚠️ **Si los bullets se van, tienen que irse de las DOS puntas**: un campo que sigue alimentando el
+párrafo convierte un error de ficha en **prosa afirmativa**, más difícil de cazar que un bullet
+visiblemente falso.
+⚠️ Hallazgo al pasar: en `calce`, **50 de 208** usaron «al cuerpo», que es una palabra **prestada
+de faldas** — la lista propia de tops es sólo `entallado`/`holgado`. Si el campo se queda, la
+lista está corta.
+
 ⛔ **FRENADO POR BRUNO EL 8-sep**: *«analicemos luego de las fricciones las 8 palabras con la
 diseñadora, así lo vemos»* ⇒ ⛔ no se decide ninguna sin ella.
 ▶️ 🔴 **LO QUE ESPERA A BRUNO: las 8 palabras de tela propuestas.** `hilo` ×20 (los sweaters),
