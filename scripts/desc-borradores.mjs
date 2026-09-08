@@ -7,7 +7,7 @@
  * miente». Lo que se pierde es que deja de ser un botón que aprieta el local; por eso este script
  * existe, para que la parte mecánica sea siempre la misma.
  *
- *   node scripts/desc-borradores.mjs listar [--marca zattia] [--cuantos 20] [--que mudos|borradores]
+ *   node scripts/desc-borradores.mjs listar [--marca zattia] [--cuantos 20] [--que mudos|cortas|borradores] [--alta 2026-09-02] [--fresco]
  *   node scripts/desc-borradores.mjs guardar --id 123 --parrafo "…" [--tip "…"] [--chivato escote=redondo>cuello alto]
  *
  * 🔑 **`guardar` corre el VALIDADOR REAL** —el mismo `validarParrafo`/`validarTip` que usa la
@@ -30,6 +30,7 @@
 import { authKv, leerEnv } from './lib/kv-auth.mjs'
 import { validarParrafo, validarTip } from '../lib/tn-desc/formato.core.js'
 import { bulletsDe, insumosDe, sinTela } from '../lib/tn-desc/atributos.core.js'
+import { prosaDe } from '../lib/tn-desc/prosa.core.js'
 import { familiaDe } from '../lib/tn-desc/atributos.core.js'
 
 const MONITOR = process.env.MONITOR_URL || 'https://monitorareben.vercel.app'
@@ -100,14 +101,22 @@ async function listar() {
   // la categoría, que les falte la tela, o que YA tengan borrador esperando que alguien lo mire.
   const embudo = { publicados: 0, mudos: 0, conFicha: 0, conTela: 0, yaTienenBorrador: 0, yaEnLaTienda: 0 }
 
+  // 🆕 `--alta` acota a UN ingreso. Bruno, 8-sep-2026: «la prioridad es lo que le falta a lo
+  // último que ingresó» — y sin esto la lista mezcla el ingreso nuevo con el catálogo entero.
+  const alta = arg('alta', '')
   for (const p of productos) {
     if (!p.published) continue
+    if (alta && String(p.created_at || '').slice(0, 10) !== alta) continue
     embudo.publicados++
     const fila = filas[String(p.id)]
     const ficha = atributos[String(p.id)] || {}
     const familia = familiaDeProducto(p, fila)
     const estado = fila && fila.estado
-    const mudo = !p.has_desc || p.desc_length === 0
+    // 🔴 La banda sale de `prosaDe`, ⛔ NO de `has_desc` ni de `desc_length` del audit: los dos
+    // miden el HTML crudo, así que **el texto de la tabla de talles les cuenta como descripción**.
+    // Medido el 19-ago-2026: el contador decía 39 mudos y eran 41.
+    const banda = prosaDe(p.raw_desc).banda
+    const mudo = banda === 'nada'
     if (mudo) embudo.mudos++
     if (que === 'mudos') {
       if (!mudo) continue
@@ -127,6 +136,13 @@ async function listar() {
       // borrador esperando ⇒ 0 para escribir» y los 13 eran exactamente los que faltaban.
       if (['borrador', 'aprobado'].includes(estado)) { embudo.yaTienenBorrador++; continue }
     }
+    if (que === 'cortas') {
+      if (banda !== 'corta') continue
+      if (!familia) continue
+      if (sinTela(ficha)) continue
+      if (['escrito', 'escribiendo', 'falla'].includes(estado)) continue
+      if (['borrador', 'aprobado'].includes(estado)) continue
+    }
     if (que === 'borradores' && estado !== 'borrador') continue
     if (que === 'borradores' && !familia) continue
     salida.push({
@@ -141,7 +157,9 @@ async function listar() {
       insumo_ficha: insumosDe(familia, ficha).map((b) => `${b.etiqueta}: ${b.texto}`),
       variantes: valoresDe(p),
       insumo: (fila && fila.insumo) || '',
-      dice_hoy: (p.desc || '').slice(0, 300),
+      // 🔑 Para las CORTAS esto es el insumo más valioso: las «6 o 7 palabras» del local suelen
+      // nombrar una tela o un detalle que ⛔ no está en ningún otro lado. Se lee antes de pisarlo.
+      dice_hoy: prosaDe(p.raw_desc).texto.slice(0, 300),
       // 🔑 Con `--que borradores` va también el texto QUE HAY QUE REVISAR. Sin esto, revisar
       // obliga a abrir la pantalla producto por producto, que es justo la fricción que se está
       // sacando. `null` cuando todavía no hay borrador: es distinto de la cadena vacía.
