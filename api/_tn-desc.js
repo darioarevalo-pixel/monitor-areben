@@ -101,14 +101,24 @@ const COLUMNAS =
  */
 async function conDiceReal(supabase, store, tnId, chivatos) {
   if (!Array.isArray(chivatos) || !chivatos.length) return chivatos;
-  const { data, error } = await supabase
-    .from('tn_atributos')
-    .select('atributo, valor')
-    .eq('store', store)
-    .eq('tn_id', tnId);
+  const [{ data, error }, { data: filaVieja }] = await Promise.all([
+    supabase.from('tn_atributos').select('atributo, valor').eq('store', store).eq('tn_id', tnId),
+    supabase.from('tn_descripciones').select('borrador').eq('store', store).eq('tn_id', tnId).maybeSingle(),
+  ]);
   if (error) throw new Error(error.message);
   const ficha = Object.fromEntries((data || []).map((a) => [a.atributo, a.valor]));
-  return chivatos.map((c) => ({ ...c, dice: String(ficha[c.campo] || '') }));
+  const previos = (filaVieja && filaVieja.borrador && filaVieja.borrador.chivatos) || [];
+  return chivatos.map((c) => {
+    // 🔴 **`dice` se fija UNA vez: la primera.** Reescribirlo en cada guardado tiene el defecto
+    // simétrico al que este helper vino a arreglar — el 8-sep, después de que Bruno corrigiera las
+    // cinco fichas y publicara, `op:'revisar'` volvió a copiar el valor **ya corregido** adentro
+    // del aviso, así que `dice` y el valor actual pasaron a coincidir y los cinco avisos quedaron
+    // marcados como PENDIENTES para siempre. Antes se apagaban solos; así ⛔ no se apagan nunca.
+    // ⇒ Si ya había un aviso del mismo campo diciendo lo mismo, se conserva su `dice` original:
+    // el aviso ⛔ no cambió, y lo que tiene que cambiar es la ficha.
+    const previo = previos.find((x) => x && x.campo === c.campo && x.veo === c.veo);
+    return { ...c, dice: previo ? String(previo.dice || '') : String(ficha[c.campo] || '') };
+  });
 }
 
 /**

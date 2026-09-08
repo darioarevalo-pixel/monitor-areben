@@ -656,6 +656,23 @@ describe('publicar: el respaldo va ANTES que la tienda', () => {
       expect(guardados[0].veo).toBe('manga 3/4')
     })
 
+    it('🔴 y el `dice` se fija UNA vez: al republicar ⛔ no se copia el valor ya corregido', async () => {
+      // 8-sep-2026: Bruno corrigió las cinco fichas y publicó. `op:'revisar'` volvió a copiar el
+      // valor YA CORREGIDO adentro del aviso ⇒ `dice` pasó a coincidir con la ficha y los cinco
+      // avisos quedaron marcados PENDIENTES para siempre. Es el defecto simétrico del anterior:
+      // antes se apagaban solos, así no se apagan nunca.
+      atributosGuardados = [{ atributo: 'tela', valor: 'gasa' }, { atributo: 'manga', valor: 'sin mangas' }];
+      filaGuardada = {
+        ...APROBADA,
+        borrador: { ...APROBADA.borrador, chivatos: [{ campo: 'manga', dice: 'musculosa', veo: 'sin mangas (halter)' }] },
+      };
+      catalogoFalso(MKT)
+      await llamar(post({ op: 'revisar', borrador: { parrafo: 'NUEVO', bullets: [], chivatos: [{ campo: 'manga', dice: 'lo que mande el navegador', veo: 'sin mangas (halter)' }] } }))
+      const guardados = (upserts[0]?.borrador as { chivatos: { dice: string }[] }).chivatos
+      // ⛔ NO es «sin mangas» (el valor ya corregido): es el que tenía cuando se marcó.
+      expect(guardados[0].dice).toBe('musculosa')
+    })
+
     it('⚠️ y un chivato sobre un campo que la ficha ⛔ no tiene queda con `dice` vacío, no inventado', async () => {
       atributosGuardados = [{ atributo: 'tela', valor: 'gasa' }]
       catalogoFalso(MKT)

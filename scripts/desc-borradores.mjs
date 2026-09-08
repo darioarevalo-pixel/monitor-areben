@@ -49,10 +49,17 @@ function args(nombre) {
 const marca = arg('marca', 'zattia')
 const headers = { ...authKv(leerEnv()), 'Content-Type': 'application/json' }
 
-/** El catálogo de TiendaNube y la cola del monitor, juntos y por `tn_id`. */
+/**
+ * El catálogo de TiendaNube y la cola del monitor, juntos y por `tn_id`.
+ *
+ * 🔴 **`--fresco` existe porque el audit está CACHEADO** y eso miente justo después de publicar:
+ * el producto ya tiene su descripción en la tienda y el audit lo sigue contando como mudo. Sin
+ * esto, el embudo de abajo dice «32 sin una palabra» el mismo día que salieron 22.
+ */
 async function traerTodo() {
+  const fresco = process.argv.includes('--fresco')
   const [rAudit, rCola] = await Promise.all([
-    fetch(`${AUDIT}?store=${marca}&variantes=1`),
+    fetch(`${AUDIT}?store=${marca}&variantes=1${fresco ? `&refresh=1&nc=${Date.now()}` : ''}`),
     fetch(`${MONITOR}/api/datos?recurso=tn-desc&store=${marca}`, { headers }),
   ])
   if (!rAudit.ok) throw new Error(`el audit contestó ${rAudit.status}`)
@@ -91,7 +98,7 @@ async function listar() {
   // 🔴 El EMBUDO, que se imprime siempre. Una lista vacía sin esto se lee como «no hay nada que
   // hacer», y puede ser cualquiera de cuatro cosas distintas: que no queden mudos, que les falte
   // la categoría, que les falte la tela, o que YA tengan borrador esperando que alguien lo mire.
-  const embudo = { publicados: 0, mudos: 0, conFicha: 0, conTela: 0, yaTienenBorrador: 0 }
+  const embudo = { publicados: 0, mudos: 0, conFicha: 0, conTela: 0, yaTienenBorrador: 0, yaEnLaTienda: 0 }
 
   for (const p of productos) {
     if (!p.published) continue
@@ -110,7 +117,15 @@ async function listar() {
       embudo.conFicha++
       if (sinTela(ficha)) continue
       embudo.conTela++
-      if (estado) { embudo.yaTienenBorrador++; continue }
+      // ⚠️ «Ya salió» y «tiene un borrador esperando» ⛔ no son lo mismo, y contarlos juntos hace
+      // que el embudo mienta el día después de publicar una tanda: el audit cacheado los sigue
+      // viendo mudos y el renglón diría que hay 20 esperando que alguien los mire.
+      if (['escrito', 'escribiendo', 'falla'].includes(estado)) { embudo.yaEnLaTienda++; continue }
+      // 🔴 **`estado` a secas ⛔ NO significa «tiene borrador».** La fila nace con `sin-insumo` en
+      // cuanto alguien carga UN atributo, así que preguntar `if (estado)` descartaba justo a las
+      // prendas que hay que escribir: el 8-sep, con la cola vacía, el embudo decía «13 tienen
+      // borrador esperando ⇒ 0 para escribir» y los 13 eran exactamente los que faltaban.
+      if (['borrador', 'aprobado'].includes(estado)) { embudo.yaTienenBorrador++; continue }
     }
     if (que === 'borradores' && estado !== 'borrador') continue
     if (que === 'borradores' && !familia) continue
@@ -138,7 +153,9 @@ async function listar() {
     console.error(
       `\nEmbudo: ${embudo.publicados} publicados · ${embudo.mudos} sin una palabra · ` +
         `${embudo.conFicha} con categoría · ${embudo.conTela} con tela cargada · ` +
-        `${embudo.yaTienenBorrador} YA tienen borrador esperando ⇒ ${salida.length} para escribir.`,
+        `${embudo.yaEnLaTienda} YA salieron a la tienda · ` +
+        `${embudo.yaTienenBorrador} tienen borrador esperando ⇒ ${salida.length} para escribir.` +
+        (embudo.yaEnLaTienda ? '\n⚠️ Si eso no cuadra, el audit está cacheado: volvé a correrlo con --fresco.' : ''),
     )
   }
   console.error(`${salida.length} prendas. Mirá LAS DOS fotos de cada una antes de escribir.`)
