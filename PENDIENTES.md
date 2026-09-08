@@ -13,6 +13,432 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 STUNNED — LA ECONOMÍA DE LA PAUTA Y EL ENVÍO GRATIS (7-sep-2026, medido + decidido)
+
+> «tengo que analizar lo de envio gratis para stunned, incluso para que sea escalable con pauta.
+> por ese motivo con este nuevo ingreso, tengo que calcular el equilibrio de costo por venta, el
+> roas de equilibrio, y si tiene envio gratis, a partir de cuanto»
+
+🏁 **DECIDIDO POR BRUNO: envío gratis a partir de $75.000, y ⛔ sin tocar ningún precio.**
+
+### 🔴 De dónde parte esto (la tienda estuvo cerrada hasta la tarde del 7-sep)
+
+**Estuvo cerrada con clave** —`stunned.com.ar` contestaba **302 a `/password/`**— por *Tienda online
+› Página en construcción*, con el mensaje **«DROP 2 - COMING SOON»**: ⛔ **no era un olvido, esperaba
+el drop**. 🏁 **Bruno la abrió el 7-sep a la tarde** (ver el bloque de abajo).
+🔴 **Lo que queda como lección es lo que se pautó contra esa puerta**: online Stunned lleva **2
+ventas en 180 días, las dos de abril**, el snapshot de su pauta **se corta el 23-ago** ($22.949 en 9
+días, 1 compra) y el panel de TN marcaba **60 visitas únicas en un día, con la puerta cerrada**. ⇒
+**el orden es CLAVE PRIMERO, PAUTA DESPUÉS.**
+
+🔴 **Y el ROAS de equilibrio ⛔ no se puede leer en Ads Manager**: el píxel de Stunned no tiene el
+evento Compra ([[project_stunned_pauta_broad]]). El único semáforo posible es el **costo por compra**
+contado a mano.
+
+### La ficha, medida — ⛔ no estimada
+
+Ponderada por las **319 unidades que hay para vender hoy**, con precios y costos sacados de **GN
+directo**: 🔴 **el espejo de Supabase todavía tiene 28 productos y ⛔ no vio el ingreso nuevo** (el
+sync de productos no corrió). ⚠️ **Y el renglón de arriba de este archivo quedó viejo el mismo día**:
+decía «15 sin precio ni costo» y **los 12 nuevos ya están cargados**; a $1 quedan sólo REMERA JET LAG
+y REMERA LABEL (las de abril), **con stock y publicables**.
+
+| | |
+|---|---|
+| precio de venta por unidad (con las promos cargadas) | **$39.799** |
+| costo por unidad | **$17.078** |
+| contribución por unidad | **$11.949 (30 %)** |
+| unidades por pedido | **1,13** (152 pedidos / 171 u, 180 d) |
+
+🔑 **El chequeo cruzado es lo que la vuelve creíble**: el modelo da **$39.799** de bruto contra
+**$39.795** medido, y **$35.845** contra los **$35.831** que la caja efectivamente cobró (0,04 %).
+Impuestos y comisiones **heredados de la ficha de Zattia** (mismo CUIT, misma ciudad, mismo checkout).
+
+⚠️ **Las 1,13 son del LOCAL**: online ⛔ no hay con qué medirlo (2 ventas). En Zattia online la gente
+compra **1,27× más** que en su local; si Stunned se le parece son ~1,43 y todo mejora.
+
+### Los tres números
+
+| | cliente paga el envío | envío gratis ($7.742) |
+|---|---|---|
+| ticket | $44.972 | $44.972 |
+| **costo por venta de EQUILIBRIO** | **$13.502** | **$7.104** |
+| **ROAS de EQUILIBRIO** | **3,33×** | **6,33×** |
+| techo al 50/50 (el que va al semáforo) | $6.751 | $3.552 |
+
+🔴 **El equilibrio ⛔ no es el objetivo**: entre $7.104 y $3.552 se gana plata, sólo que menos de lo
+decidido. Confundirlos hace apagar campañas que están dando ganancia. 📌 [[project_bdi_umbral_rentabilidad]]
+
+El envío está medido sobre **156 envíos pagos de Zattia online** (mediana $7.781 · p25 $6.271 ·
+p90 $9.477). ⚠️ **Es un proxy**: mismo origen, mismo Envío Nube, prendas parecidas — Stunned online
+⛔ no tiene con qué medirlo.
+
+### Por qué $75.000
+
+🔑 **El envío neto de IVA son $6.398 = el 54 % de la contribución de UNA unidad** ⇒ regalarlo sin que
+el pedido crezca ⛔ no se banca. **Empata cuando el pedido pasa de 1,13 a 1,67 u (+47 %)**, o sea un
+ticket de $66.283.
+
+| umbral | 1 unidad sola alcanza | 2 unidades alcanzan | contribución | ROAS de equilibrio |
+|---|---|---|---|---|
+| $60.000 | 47 u (15 %) | 84 % de los pares | $12.617 | 5,15× |
+| $70.000 | 27 u (8 %) | 57 % | $14.618 | 4,79× |
+| **$75.000 ← el elegido** | **11 u (3 %)** | **51 %** | **$16.119** | **4,65×** |
+| $80.000 | 11 u (3 %) | 45 % | $17.499 | 4,55× |
+
+A $75.000 **sólo la CAMPERA WEAR ($81.990) lo alcanza sola**: casi nadie se lo lleva de arriba, y la
+mitad de las combinaciones de dos prendas llega ⇒ el upsell es pedible y ⛔ no imposible.
+
+⚠️ **Lo que se aceptó a sabiendas**: **BUZO FLECK sale $74.990 y queda afuera por $10.** Se propuso
+subirlo a $76.990 y **Bruno dijo que no se toca ningún precio**. Son **8 de 319 unidades (2,5 %)**.
+Los otros que quedan afuera comprando uno solo: BUZO MADE $71.990 · BUZO PHRASE $69.990 ·
+BUZO STND $66.990.
+
+### 🏁 8-sep · DECIDIDO: LA PAUTA VA AL DROP 2 ⇒ la ficha quedó en el techo del drop
+
+> Bruno: **«la pauta va al drop 2»**.
+
+🏁 **Ficha de Stunned actualizada** (8-sep 00:32, camino real, releída del servidor, ningún campo
+recortado). La vara del semáforo pasó de $3.638 (la mezcla) a:
+
+| | |
+|---|---|
+| **techo por compra** | **$8.486** |
+| ROAS objetivo | **6,2×** |
+| punto de equilibrio | **3,08×** |
+| techo con el saldo de IVA | $13.022 |
+| ticket · contribución | $52.271 · $16.971 (32 %) |
+| presupuesto diario para 5 ventas/día | **$42.428** |
+| vaciar las 137 unidades | 121 compras · **$6.337.330** · 24,2 días |
+
+✅ **Y la landing existe y CIERRA CON LA FICHA AL PESO**: la categoría **`THE MATCH DROP`**
+(`https://www.stunned.com.ar/the-match-drop/`, **200**) tiene **13 productos · 137 unidades · lista
+$50.253 · costo $18.569 · markup 2,71× · 0 % de descuento** — exactamente los supuestos guardados.
+🔑 **Es lo que vuelve legítima la ficha**: la vara mide **la misma vidriera a la que apunta el
+anuncio**, ⛔ no un promedio de la tienda. La otra categoría, `STAGE ONE`, es el drop 1 (a −29,3 %).
+⚠️ El 13º es **REMERA CIRCLE BROWN**, del drop 1 pero **sin promo y sin stock** ⇒ ⛔ no ensucia.
+
+### 🔴 Lo que NO hay que hacer todavía
+
+**Hoy `THE MATCH DROP` tiene 2 productos publicados de 13** (BUZO STND y REMERA STARRY, 30 u de 137).
+⛔ **No prender la pauta contra esa landing hasta que esté poblada** —el viernes—: es la misma forma
+del error que ya costó plata en agosto (pautar contra una puerta que ⛔ no estaba lista), sólo que
+esta vez la puerta abre pero está casi vacía. 🔑 **Y con 2 productos el umbral de $75.000 es
+inalcanzable en la práctica**: hacen falta dos prendas y sólo hay dos para elegir.
+
+### 🔑 Las dos reglas que protegen este techo
+
+1. ⛔ **Al drop 2 NO se le pone promo.** Con envío gratis y 2 unidades: **0 % ⇒ 3,94×** de
+   equilibrio · −10 % ⇒ 4,96× · −15 % ⇒ 5,85× · **−30 % ⇒ 19,30×**. **Techo −15 %, y lo que conviene
+   es 0.**
+2. ✅ **El umbral de $75.000 le queda hecho a medida**: la prenda promedio del drop sale **$50.253**
+   ⇒ una ⛔ no llega, dos llegan sobrado ($100.506). El envío gratis **empata a 1,56 u/pedido** y hoy
+   el pedido es 1,13 ⇒ pedir la segunda prenda es justo lo que falta. **2 u con envío gratis dejan
+   $23.509 contra $16.971** de una que paga el envío.
+
+▶️ **Al viernes, con las 13 publicadas**: rehacer la medición (`tiendanube-audit?store=stunned`),
+confirmar que ninguna salió con promo y **volver a guardar la ficha si el promedio se movió**.
+▶️ Y remedir **`unidades`** —hoy 1,13, que sale del LOCAL y del drop 1— con la primera decena de
+ventas online: es el supuesto que más mueve el techo y el que el umbral está empujando a propósito.
+
+### 🔑 8-sep · MEDIDO SOBRE EL DROP 2 SOLO — y ahí SÍ cierra
+
+Pedido de Bruno: *«pensemos con los productos nuevos, osea la tanda nueva de productos. no para el
+primer drop»*. Los 12 del 7-sep, aislados de la vidriera vieja.
+
+🔑 **El dato que lo explica todo: el DROP 2 está a precio de LISTA, sin una sola promo.** Los 12,
+medidos en TN: lista = precio de venta, **0 % de descuento de vidriera**. El drop 1, al lado, va a
+**−29,3 %**.
+
+| | drop 2 (137 u) | mezcla de HOY (223 u) | drop 1 (193 u) |
+|---|---|---|---|
+| precio de venta | **$50.253** | $33.765 | $31.306 |
+| costo | $18.569 | $16.136 | $15.885 |
+| markup | **2,71×** | 2,09× | 1,97× |
+| descuento de vidriera | **0 %** | 24,9 % | 29,3 % |
+| contribución por pedido | **$16.971 (32 %)** | $7.276 (21 %) | $5.682 (17 %) |
+| **ROAS de equilibrio** | **3,08×** | 4,83× | 5,73× |
+| **techo por venta** | **$8.486** | $3.638 | $2.841 |
+
+⇒ **el drop 2 tiene 2,3× el techo de la mezcla y 3× el del drop 1.** (Todos ya incluyen el 15 % de
+«con Efectivo» con mix 53 %.)
+
+### 🏁 Y el umbral de $75.000 le queda hecho a medida
+
+**La prenda promedio del drop 2 sale $50.253**: una sola ⛔ no llega, **dos llegan sobrado**
+($100.506). 🔑 **El envío gratis empata a 1,56 u/pedido y hoy el pedido es 1,13** ⇒ pedir la segunda
+prenda es exactamente lo que falta, y el umbral es el que lo pide.
+
+| drop 2 | contribución | ROAS de equilibrio | techo por venta |
+|---|---|---|---|
+| 1 u, el cliente paga el envío | $16.971 | 3,08× | $8.486 |
+| **2 u con ENVÍO GRATIS** | **$23.509** | **3,94×** | **$11.754** |
+| la campera sola ($81.990) con envío gratis | $15.539 | 4,86× | $7.770 |
+
+⇒ **el que se lleva dos y activa el envío gratis deja $23.509 contra $16.971 del que se lleva una y
+paga el envío.** El envío gratis **ganó plata**, ⛔ no la costó.
+
+### 🔴 Lo único que puede romperlo: ponerle promo al drop 2
+
+| descuento de vidriera del drop 2 (2 u, envío gratis) | ROAS de equilibrio |
+|---|---|
+| **0 % — como está hoy** | **3,94×** |
+| −10 % | 4,96× |
+| −15 % | 5,85× |
+| −20 % | 7,35× |
+| −30 % (como el drop 1) | **19,30×** |
+
+⛔ **No pasar de −15 %, y lo que conviene es dejarlo en 0.** Con −30 % el drop 2 queda igual de
+inservible para pauta que el drop 1.
+
+### ▶️ Qué ficha tiene que gobernar el semáforo
+
+Hoy la fila guardada es **la mezcla publicada** (techo $3.638) — y **envejece el viernes**, cuando
+entren las 137 unidades del drop 2. Al viernes la mezcla da **$46.746 de lista · 16,2 % de descuento
+· techo $5.188 · equilibrio 3,93×**.
+🔑 **La pregunta que lo decide, y es de Bruno: ¿la pauta lleva a la TIENDA ENTERA o al DROP 2?**
+- a la tienda entera ⇒ la vara es la mezcla del viernes: **$5.188**
+- a una landing / categoría del drop 2 ⇒ la vara es **$8.486**, y es 64 % más de aire
+
+⚠️ **Al viernes hay que rehacer la medición igual**: hoy sólo **2 de los 12** del drop 2 están
+publicados (BUZO STND y REMERA STARRY, 30 u de 137).
+
+### 🔴🔴 8-sep · DOS CORRECCIONES MÍAS, Y LA SEGUNDA DA VUELTA EL VEREDICTO
+
+**1) «Stunned no tiene punto de retiro» era FALSO.** Lo cazó Bruno. Existe y anda:
+**`Pop Up Stunned` · Santa Fe 1435, Centro, Rosario · GRATIS · Lunes a sábado 10-19 · cobertura
+Santa Fe › Rosario (tildado) · plazo 0-1 días hábiles**. **Caminado en la tienda viva**: con CP 2000
+y un carrito de **$31.490** —o sea **muy por debajo** de los $75.000— el checkout ofrece
+«RETIRAR POR › **Pop Up Stunned … Gratis**, Retiras el martes 08/09». ⇒ **⛔ no depende del monto y
+⛔ no está roto.** Los dos «Punto de retiro» de $6.650 y $7.385 de la captura son **sucursales de
+Correo y Andreani**, ⛔ no el local. ▶️ La captura donde ⛔ no aparecía es de **antes** de que el
+punto estuviera activo (sus tarifas son otras: $9.076 contra $7.900 ⇒ otro carrito, otro peso).
+🔑 **El defecto de método**: resumí «Medios de envío» mirando **la solapa que venía abierta**.
+⛔ **Una pantalla con solapas no se resume sin abrirlas todas.** 📌 [[MEMORY_probar]]
+
+**2) 🔴 LA FICHA ESTABA MAL, Y LA CORREGÍ: el techo NO es $6.751, es $3.638.**
+La primera versión salió de **Gestión Nube**, y GN ⛔ **no ve el precio real de la tienda**. Medido
+contra la vidriera (`tiendanube-audit?store=stunned`, 8-sep 00:24) sobre **27 productos publicados ·
+223 unidades**:
+
+| | GN (lo que cargué primero) | la TIENDA VIVA (lo bueno) |
+|---|---|---|
+| lista ponderada | $46.548 | $44.974 |
+| descuento de vidriera | 14,5 % | **24,9 %** |
+| …y el **«con Efectivo»** encima | ⛔ no lo veía | **15 % más** |
+| precio que se cobra | $39.799 | **$33.765** (o $28.701 con efectivo) |
+| costo | $17.078 | $16.136 |
+| **contribución por pedido** | $13.502 | **$7.276** |
+| **ROAS de equilibrio** | 3,33× | **4,83×** |
+| **techo por venta (50/50)** | $6.751 | **$3.638** |
+
+🔑 **El chequeo cruzado que la valida**: el modelo da **$33.775** contra **$33.765** de vidriera y
+**$28.709** contra **$28.701** con efectivo (0,03 %). 🔴 **La ficha guardada quedó actualizada** (8-sep
+00:25, mismo camino real, releída del servidor, ningún campo recortado).
+⚠️ **El mix casi no mueve nada** (4,78× a 4,88× entre 0 % y 100 % de efectivo) ⇒ igual que en BDI,
+**el semáforo es el costo por compra, ⛔ no el ROAS**.
+
+### 🔴 Y esto cambia la respuesta sobre el ENVÍO GRATIS
+
+| escenario (precios reales) | contribución | ROAS de equilibrio |
+|---|---|---|
+| el pedido de hoy (1,13 u), cliente paga el envío | $7.276 | 4,83× |
+| **el mismo, con envío gratis** | **$747 (2 %)** | **47×** |
+| 2 unidades (lo que el umbral fuerza), cliente paga | $12.877 | 4,83× |
+| **2 unidades con envío gratis** | **$6.348 (10 %)** | **9,79×** |
+
+⇒ 🔴 **Con el descuento de vidriera de HOY (24,9 % + 15 %), el envío gratis a $75.000 deja el pedido
+sin margen para pauta**: 9,79× de equilibrio ⛔ no lo paga ninguna campaña. **El umbral está bien
+puesto; lo que ⛔ no cierra es el DESCUENTO.** Es el mismo hallazgo de la primera vuelta —«el freno
+⛔ no es el envío, es la promo»— pero ahora medido sobre la tienda viva y **mucho más grande de lo
+que parecía**.
+▶️ **La decisión que queda, y es de Bruno**: para que la pauta tenga aire hay que mover **uno** de
+los tres: bajar el descuento de vidriera, sacar el 15 % de efectivo, o subir el precio. ⛔ Tocar el
+umbral de envío ⛔ no alcanza.
+⚠️ **Y hay una promesa desalineada**: el banner dice **«10% OFF TRANSFERENCIA»** y la ficha del
+producto cobra **15 %** ($46.590 → $39.601,50). Alguien está regalando 5 puntos, o el banner miente.
+
+✅ **Se cae una alarma**: REMERA JET LAG y REMERA LABEL (las de $1) están entre los **13 sin publicar**
+⇒ ⛔ no hay nada a $1 en la vidriera. **Publicados: 27 de 40**, coherente con el lanzamiento
+escalonado hasta el viernes.
+
+### 🏁 LA TIENDA SE ABRIÓ (7-sep, tarde) — y el lanzamiento es ESCALONADO hasta el viernes
+
+Medido después de que Bruno la prendió: `stunned.com.ar` y `www.stunned.com.ar` contestan **200**,
+⛔ ya no redirigen a `/password/`. **Se retira lo de «la puerta está cerrada»**: ya no aplica.
+
+> Bruno: «ya esta encendida la tienda, pero **hasta el dia viernes vamos a ir lanzando los productos
+> por la tienda online**».
+
+🔴🔑 **Eso le pone fecha al umbral, y hay que leerlo así**: el $75.000 se alcanza con **2 unidades**
+(el artículo promedio sale $39.799), y **con el catálogo saliendo de a poco, las combinaciones de 2
+que llegan son menos que las 51 % que mide la tabla de arriba** —esa cuenta está hecha sobre las
+**319 unidades de stock**, ⛔ no sobre lo que está publicado hoy—. ⇒ ▶️ **la tasa de envío gratis va
+a subir sola a medida que entren productos, y el número honesto para juzgar la semana es el del
+VIERNES, con todo publicado.** ⛔ No leer una semana floja de envío gratis como que el umbral está
+mal puesto: puede ser sólo que el catálogo todavía no estaba entero.
+
+▶️ **Y lo que hay que medir el viernes o el lunes, ⛔ no antes**: **qué fracción de los pedidos elige
+RETIRAR** en el Pop Up. Es el número que decide si `envio` sigue en 0 o hay que cargarlo — y es el
+mismo que en BDI resultó ser **el 57 % de la venta online**.
+
+### 🏁 CAMINADO EN PROD EL 7-sep, EN LAS DOS PUNTAS
+
+**1) El $75.000 está PUESTO y ACTIVADO** — visto en `stunned3.mitiendanube.com/admin/free-shipping`
+(regla `792204`): «Monto del carrito · Mayor de **$75.000**», Zonas **Todas**, Aplica a **Toda la
+tienda**, Estado **Activado**.
+
+🔴🔑 **Pero cubre UN SOLO medio de envío de los CUATRO que la tienda ofrece.** El chip de la regla
+dice **«Envío Nube - Correo Argentino Clásico a sucursal»**, y las modalidades activas en Medios de
+envío son **cuatro**: Correo Argentino **a domicilio**, Correo Argentino **a sucursal**, Andreani
+**a domicilio**, Andreani **a sucursal**. ⇒ **quien pase los $75.000 y quiera recibirlo en su casa,
+PAGA**. Una pieza que prometa «envío gratis desde $75.000» va a decir algo que el checkout no
+cumple — es el mismo defecto que las «6 cuotas» que la tienda daba en 3.
+▶️ **Se arregla en la misma pantalla**, y hay dos caminos con consecuencias distintas: agregar los
+otros tres chips (el envío gratis pasa a costar hasta el precio de Andreani a domicilio), o tildar
+**«Ofrecer descuento solo en el medio de envío de menor costo»** (hoy DESTILDADO), que lo deja
+gratis en el más barato y cobrado en el resto — que es lo que la regla hace hoy, pero **dicho en el
+checkout** en vez de escondido.
+
+⚠️ **«Permitir combinar con otras promociones» está TILDADO** ⇒ el envío gratis **se suma al −30 %**
+del catálogo viejo. Es exactamente el cruce que la tabla de arriba mide en **7,71× de equilibrio**.
+⚠️ Y el mínimo es **«mayor de»**: un carrito de exactamente $75.000 ⛔ no califica.
+
+✅ **STUNNED SÍ TIENE RETIRO GRATIS** — y **acá me equivoqué y Bruno lo cazó**:
+**`Pop Up Stunned` · «Con retiro» · Santa Fe 1435, Centro, Rosario (CP 2000) · Lunes a Sábado de
+10 a 19 · GRATIS, listo en hasta 1 día hábil · provincias: Santa Fe (1)**.
+🔴🔑 **El defecto de método, que es lo que hay que guardar**: miré la pestaña **«Gestión de envíos»**,
+vi sólo Envío Nube y escribí «no tiene ninguna opción de retiro». **Los puntos de retiro viven en su
+PROPIA PESTAÑA** (`Puntos de retiro`, al lado), y yo **concluí sobre una pestaña que no abrí**. ⇒
+**una pantalla con solapas ⛔ no se resume mirando la que viene abierta.** 📌 [[MEMORY_probar]]
+
+🔑 **Y cambia el análisis para MEJOR, ⛔ no para peor**: hay **tres** caminos por los que la empresa
+⛔ no paga el envío —retiro gratis en el Pop Up · pedido por debajo de los $75.000 · pedido arriba
+del umbral que elija domicilio o Andreani— y **uno solo** por el que sí (arriba de $75.000 y por
+Correo Clásico a sucursal). ⇒ **`envio: 0` en la ficha queda MEJOR justificado de lo que estaba**, y
+⛔ no hay que tocarla. En BDI el **57 %** de la venta online retira gratis en Rosario y en Zattia el
+**88 %** del tramo de menos de $30k: si Stunned se le parece, el envío pesa aún menos.
+⚠️ **Lo que sigue en pie**: el retiro sirve en **Rosario** y la pauta compra **tráfico nacional** —
+es la misma brecha de geografía que [[project_bdi_escalado_100_ventas]] encontró del otro lado.
+
+**2) LA FICHA DE STUNNED QUEDÓ GUARDADA** (`/meta-ads/rentabilidad`, 7-sep, por Bruno Arevalo).
+Escrita por el **camino real** —`POST /api/datos?recurso=meta-rentabilidad`, el mismo que usa el
+botón—, ⛔ no por SQL. Verificada **releyendo del servidor**: los 19 campos volvieron idénticos,
+ninguno recortado. Y caminada en prod: la pantalla dice «Los números de **Stunned**, guardados por
+Bruno Arevalo el 07 de sept de 2026», **techo por compra $6.751**, techo con el saldo $10.654,
+ROAS objetivo 6,7×, punto de equilibrio 3,3×, ticket $44.972.
+⇒ **sus pautas dejan de salir «Sin techo»**.
+
+🔑 **`envio` quedó en 0, y es una decisión, ⛔ no un olvido**: hoy el envío gratis pide **más de
+$75.000** y cubre **1 de 4 modalidades** ⇒ la enorme mayoría de los pedidos lo paga el cliente. **El
+día que el envío gratis se generalice hay que cargarlo**: con $7.742 el techo baja de **$6.751 a
+$3.552** y el equilibrio sube de 3,33× a 6,33×. ⛔ No es un ajuste fino: es la mitad del techo.
+
+⚠️ **Lo que la pantalla agrega y hay que mirar con cuidado**: dice «**Pagás $689 · 9,8× de aire**,
+medido sobre 07/08→13/08, 32 pedidos». 🔴 Esa foto es de **hace un mes**, de una cuenta cuyo snapshot
+**se corta el 23-ago**, y con la tienda cerrada. ▶️ **Antes de leer ese 9,8× como permiso para
+escalar, hay que saber qué contó como «pedido»** — si son pedidos del LOCAL, el aire es ficticio.
+📌 [[MEMORY_numeros]]
+
+⚠️ **`unidades: 1,13` sale del LOCAL** (online son 2 ventas en 180 días). En Zattia la gente compra
+**1,27× más** online que en el local. ▶️ **Remedirlo con la primera decena de ventas online.**
+
+### 🔴 El hallazgo grande: el problema ⛔ no es el envío, es la PROMO
+
+| escenario (2 u/pedido, envío gratis) | contribución | ROAS de equilibrio |
+|---|---|---|
+| **el ingreso nuevo a precio de LISTA** | **$29.767 (30 %)** | **3,38×** |
+| el ingreso nuevo con −30 % | $7.776 (11 %) | 9,05× |
+| el catálogo viejo (promo −27 %) | $8.286 (13 %) | 7,71× |
+
+⇒ **el −30 % se lleva más que el envío**. Con el catálogo viejo en promo ⛔ **no hay umbral que
+cierre**: pedirle 7,71× a una pauta que hoy no registra ni una compra ⛔ no es escalar. Y llegar a
+$75.000 con remeras de promo ($19-24k) pide **4 unidades**. **El umbral funciona sobre el ingreso
+nuevo a precio de lista** — que es como está cargado hoy, y conviene que siga así.
+
+### ▶️ Lo abierto, y son manos de Bruno
+
+1. 🔴🔴 **REMERA JET LAG y REMERA LABEL están a $1 con stock — y la tienda YA ESTÁ ABIERTA.**
+   Era lo que había que bajar *antes* de sacar la clave. ⇒ **es lo más urgente de esta lista.**
+2. 🏁 **El umbral de $75.000 YA ESTÁ PUESTO Y ACTIVO** (lo puso Bruno el 7-sep). ▶️ Lo que queda
+   es **decidir qué hacer con los otros tres medios de envío**: ver el bloque «CAMINADO EN PROD».
+3. 🏁 **La ficha de Stunned YA ESTÁ GUARDADA** en `/meta-ads/rentabilidad` (7-sep) y caminada.
+   ⚠️ ⛔ No hizo falta tocar ningún test: `tests/meta-ads-rentabilidad.test.ts` clava la fila de
+   **BDI** y los fixtures de «Sin techo» de `memo` y `meta-rendimiento` ⛔ no leen la fila real.
+4. **Decidir la promo del ingreso nuevo**: a lista 3,38× de equilibrio, con −30 % 9,05×.
+5. Sigue abierto de la sección de abajo: el SKU de CAMPERA WEAR (`CAM-0001-*`, ⇒ **para el Monitor es
+   Zattia**), las 10 unidades fantasma y ESSENTIAL $36.990 vs $45.990.
+
+---
+
+## 🆕 STUNNED EN TIENDA NUBE — 12 PRODUCTOS NUEVOS SIN PRECIO NI COSTO (7-sep-2026, dictado)
+
+> «cargue productos en tienda nube stunned, podemos ver de cargar precios y costos de todos? y
+> ordenar la integracion»
+
+Medido el 7-sep contra GN de Zattia (`productos/obtener` + `inventario/obtener`: 746 productos,
+3.988 renglones de inventario) y contra TN Stunned (`tiendanube-audit?store=stunned&variantes=1&refresh=1`:
+40 productos, 160 variantes). ⛔ No se escribió nada en ninguna de las dos puntas.
+
+### El vínculo está sano — lo que falta son NÚMEROS, no cañería
+
+- ✅ **40 de 40 productos de TN cruzan con GN por SKU**, normalizando guiones: el barcode de la
+  variante en GN (`STUBUZ0014M`) es el sku de la variante en TN (`STU-BUZ-0014-M`), y el
+  `inventario.sku` de GN lo trae ya con guiones. ⛔ No hay huérfanos en ninguna punta.
+- ✅ **Stock: 150 de 160 variantes coinciden.** Las 48 variantes nuevas coinciden **todas**.
+
+### 🔴 Los 15 que están a $1 y $0
+
+**15 productos tienen `retailer_price` = 1 y `unit_cost` = 0 en GN, y esos mismos 15 están a $1 en
+TN**: los 12 cargados hoy más 3 de abril que quedaron ocultos desde entonces (REMERA CIRCLE BROWN,
+REMERA JET LAG, REMERA LABEL). Los otros 25 tienen costo y precio.
+
+🔴 **2 de los 12 nuevos están PUBLICADOS a $1 con stock**: **BUZO STND** (12 u) y **REMERA STARRY**
+(18 u). Hoy ⛔ no los compra nadie porque **la tienda entera está detrás de la clave** —
+`stunned.com.ar/productos/<handle>/` redirige a `/password/`, medido —. El día que se saque la
+clave, salen a $1.
+
+### 🔴 CAMPERA WEAR entró sin el prefijo `STU` ⇒ para el Monitor es ZATTIA
+
+Su SKU es `CAM-0001-{S,M,L,XL}` (así en el `inventario` de GN y así en TN). `esStunned()`
+(`lib/lineas.core.js`) es `/^stu/i` y **es la única señal que hay**: no existe columna de marca ni
+depósito propio. ⇒ sus **11 unidades** y todo lo que venda se cuentan en la línea Zattia, en las 8
+pantallas que parten por línea y en el conteo `conteo-estandar-stunned`.
+▶️ Se arregla renombrando el SKU en GN a `STU-CAM-0001-*` (y en TN, que es donde lo lee el audit).
+
+### Lo demás que quedó torcido, medido
+
+- **REMERA ESSENTIAL: GN dice 36.990 y TN cobra 45.990.** El espejo del Monitor lee GN ⇒ muestra un
+  precio que ⛔ no es el de la tienda. Es el único de los 40 en que GN y TN no coinciden.
+- **5 productos tienen promo puesta en TN y `tiendanube_promotional_price` en 0 en GN**: REMERA
+  CAMEO / PIXEL / SCOTTISH (49.990 → 42.490, −15 %), BUZO MAIN (37.490 → 29.990, −20 %) y BUZO ROAD
+  (42.990 → 34.390, −20 %). Se cargaron directo en TN ⇒ desde GN esos cinco **se leen a precio de
+  lista**, y cualquier margen que salga del espejo los sobreestima.
+- **10 unidades de stock fantasma online**: en 10 variantes TN tiene **exactamente una unidad más**
+  que GN (REMERA VINTAGE L · SUCCED XL · STUDIOS XL · STND S · OFICIAL S · ST\*NNED M · BUZO Y2K M
+  y L · BUZO LABEL S · BUZO MAIN M). Es el patrón de la venta en el local que ⛔ no bajó de la
+  tienda. Lo arregla el sync GN→TN de **Integraciones**, que se aplica **fila por fila y a mano**.
+
+### Para cargar precios y costos: qué falta de verdad
+
+- 🔴 **El Monitor hoy escribe SÓLO el precio promocional** (`api/_liquidacion.js`, PATCH a
+  `productos/{id}` con `tiendanube_promotional_price`). `retailer_price` y `unit_cost` **se cargan a
+  mano en GN** — lo dice `docs/secciones/liquidacion.md`. Hacerlo desde el Monitor pide
+  **parametrizar ese PATCH**, y ⛔ nunca se probó que GN acepte esos dos campos.
+- 🔑 **El precio sale solo si hay costo, y está medido sobre los 25 cargados**: lista ≈ **costo ×
+  2,7** (min 2,59 · mediana 2,76 · max 3,22) y **promo = −30 % de lista** en **19 de 20** de los que
+  tienen promo en GN (0,298-0,300; la excepción es ESSENTIAL, que es justo el del precio desfasado).
+- 🔴 **El costo ⛔ no está en ningún lado todavía.** En `areben-produccion` hay **9 escandallos de
+  lisos de Stunned actualizados HOY** (`STU-REM-OVER-{NG,BL,GR,MAR}`, `STU-REM-BOXY-{NG,BL}`,
+  `STU-BUZ-OVER-{NG,AZ}`, `STU-BUZ-BOXY-NG`) — son el **liso**, sin la estampa, y su `datos` ⛔ no
+  guarda el total: lo calcula la app.
+  ▶️ **Es la pregunta que decide todo**: ¿el costo de los 12 sale de liso + estampa, o lo dicta Bruno?
+
+▶️ **Lo abierto**: (1) los 15 costos · (2) los 15 precios · (3) el SKU de CAMPERA WEAR · (4) las 10
+unidades fantasma · (5) ESSENTIAL 36.990 vs 45.990 · (6) los 5 con promo que GN ⛔ no ve.
+
+---
+
 ## 🆕 DESCRIPCIONES DE ZATTIA — SALIERON LAS DOS PRIMERAS DE LA TANDA (7-sep-2026)
 
 ### 🔴 EL VEREDICTO DE BRUNO AL CERRAR EL DÍA, QUE ES LO PRIMERO QUE HAY QUE LEER
@@ -93,6 +519,74 @@ JEAN MARINA salió con «terminaciones deshilachadas» sobre un **dobladillo lim
 solo**. Bruno marcó el deshilachado en la conversación y **se publicó igual**, porque lo que estaba
 guardado en la base era el texto viejo ⇒ **antes de publicar se relee el texto contra lo que ya se
 dijo**, ⛔ no contra la fila. Se republicó corregido el mismo día.
+
+## 🆕 «NO EXISTEN CATEGORÍAS CLARAS PARA CUBRIR TODAS LAS OPCIONES» — 7-sep-2026 (dictado, medido, sin tocar nada)
+
+> «miremos, se están realizando chequeos de exhibición, qué resultados están dando, para ver el tema
+> de categorías» · «hay muchas categorías?» · «lo que no entiendo es por qué aparecen las categorías
+> duplicadas» · y el pedido de fondo: **«no existen categorías claras para poder cubrir todas las
+> opciones»**
+
+⛔ **No se tocó Tienda Nube.** Todo lo de abajo es medición sobre el audit de Zattia
+(`bdi-catalogo/api/tiendanube-audit?store=zattia`, 770 productos, `cached_at` **2026-09-07T14:53Z**).
+
+### 🔑 No son 25 categorías: son **35**, porque el nombre no es la categoría — el ID sí
+
+El desplegable de `/tncat/categorias` muestra **JEANS tres veces** y ACCESORIOS · BUZOS · CAMPERAS ·
+CORSETS · TOPS Y BODIES · REMERAS · SWEATERS · PANTALONES **dos veces cada una**. ⛔ No es un bug de
+la pantalla: en TN son categorías **distintas con el mismo nombre**.
+
+🔑 **La causa está en los IDs: hay 13 consecutivas, `40361419` → `40361431`.** Consecutivas ⇒ creadas
+todas de una sentada. Alguien armó un juego nuevo (BLUSAS Y CAMISAS, VESTIDOS, BLAZERS y las
+repetidas) **sin borrar el viejo**, y les fue cargando productos encima.
+⇒ los duplicados son **redundantes**: las mismas prendas están en las dos.
+
+🔴 **El chequeo de exhibición NO ve esto y por eso no protesta**: `limpiarCats` devuelve **nombres**,
+así que las tres JEANS le parecen una sola. El desorden se ve en `/tncat`, ⛔ no en el recorrido.
+
+### ▶️ Borrar 16 categorías: qué falta antes
+
+Fusionando por nombre quedan **19** (17 de prenda + NEW IN 416 + WINTER SALE 261). Se borran 16.
+7 se borran **sin tocar nada** (REMERAS, SWEATERS, PANTALONES, BUZOS, ACCESORIOS, CORSETS, BLAZERS):
+cero huérfanos. **Sólo 16 productos hay que reasignar antes** — SHORTS 8 · BLUSAS Y CAMISAS 3 ·
+JEANS 2 · CAMPERAS 2 · TOPS Y BODIES 1. La lista con SKU y link al admin salió en la sesión.
+
+🔴 **Dos cosas ⛔ NO verificadas, y las dos frenan el borrado:**
+- ⛔ **No se sabe si las 13 son subcategorías de un padre ni si están en el menú de la tienda.** El
+  audit sólo da `id → nombre`. `TIENDANUBE_STORE_ID` y `TIENDANUBE_TOKEN` están **vacías en el `.env`
+  de la Mac de Bruno** (probado: 401). Si alguna cuelga del menú, borrarla saca el link al cliente.
+- ⛔ **El monitor no borra categorías**: `/tncat/categorias` asigna y saca *productos*. Borrar es a
+  mano en el admin de TN, y ahí ⛔ no hay staging ni historial.
+
+### 🔑 El pedido de fondo: la categoría ⛔ no dice qué es la prenda
+
+Sacada del catálogo mismo (primera palabra del nombre, 39 tipos reales contra 770 productos):
+
+| lo que muerde | medido |
+|---|---|
+| **sin ninguna categoría** | **FAJA 7 · PAÑUELO 2 · SKORT 1** — caen en el vacío |
+| **TOPS Y BODIES es un bolsón de 291** | se come TOP 201 · BODY 34 · BLUSA 29 · CAMISA 12 · CORSET 8 · MUSCULOSA 3 |
+| **BIKINIS no es bikinis** | mete **CORPIÑO 20 y BOMBACHA 20** — es lencería, ⛔ no baño |
+| **BABY: 45 prendas enteras en REMERAS** | el tipo más grande sin categoría propia |
+| SHORT 55 → 13 sin cat · BERMUDA 14 → **9** sin cat · PANTALON 16 → 3 | los de abajo son los peor cubiertos |
+
+▶️ **Falta decidir el árbol nuevo con Bruno.** ⛔ No se propuso ninguno todavía.
+
+### 🔴 Lo que el chequeo de exhibición ⛔ no puede contestar
+
+**El recorrido no guarda nada**: estados y errores de categoría viven en el `localStorage` del
+aparato que escanea (`monitor_exhib_<cuenta>`, `monitor_exhib_err_<cuenta>`). `Exhib.tsx` ⛔ no tiene
+un solo `fetch` de escritura ⇒ **desde otra máquina no hay forma de ver qué está dando un chequeo en
+curso**, ni de leerlo después. Lo que marcan en el local muere en ese teléfono.
+
+🔴 **Y la lista del recorrido viene corta, callada.** `construirItems` mete cada prenda en
+`cleanCats[0]` — su **primera** categoría y nada más. Medido sobre los 770: **BLUSAS (26), SHORTS
+(10) y BERMUDAS (8) muestran CERO** porque nunca son primeras; JEANS lista 40 de 79 y DENIM 57 de 96.
+Elegir esa categoría da pantalla vacía, que se lee como «no hay nada que chequear».
+▶️ Son dos funciones de `lib/exhib/core.ts` (`construirItems` y `esCruce`, que compara con `includes`
+exacto ⇒ `SHORTS, MINIS y FALDAS` vs `...Y FALDAS` da **cruce falso**). ⛔ No se tocaron.
+
+---
 
 ## 🏁 «ENTRÉ A ELIANA IND Y NO ME APARECE LO QUE VENDÍ» — 7-sep-2026 (dictado, y hecho)
 
