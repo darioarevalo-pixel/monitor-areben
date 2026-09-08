@@ -44,8 +44,12 @@ const PRODUCTO = {
   variantes: ['38', '40', '42', '44'],
   categorias: ['NEW IN', 'Jeans'],
   prosaActual: '',
-  imagen:
-    'https://acdn-us.mitiendanube.com/stores/004/445/369/products/jean-leska-1-2-071cab7b2b86735e6317806701952923-1024-1024.webp',
+  // 🆕 Las DOS, como en producción (8-sep-2026): probar con una sola dejaría sin ejercer
+  // justamente el pedido que cambió de forma, y el chivato se apoya en la segunda.
+  imagenes: [
+    'https://acdn-us.mitiendanube.com/stores/004/445/369/products/jean-leska-1-2-071cab7b2b86735e6317806701952923-1024-1024.jpg',
+    'https://acdn-us.mitiendanube.com/stores/004/445/369/products/jean-leska-5-2-0964cc6d99aa7831c417806701952009-1024-1024.jpg',
+  ],
 };
 
 const modelo = process.argv[2] || MODELO_POR_DEFECTO;

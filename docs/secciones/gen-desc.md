@@ -856,3 +856,82 @@ que alguien está editando** en cuanto el guardado la desaprueba.
   usan así, y quien revisa tiene que dudar de cada una. Es la 2ª de las tres cosas que Bruno nombró
   el 7-sep y ⛔ no se tocó.
 - **Las 8 palabras de tela** quedaron **frenadas a pedido de Bruno**: se ven con la diseñadora.
+
+## 🆕 8-sep-2026 — Las DOS fotos y el CHIVATO: la ficha pasa a ser insumo, no vidriera
+
+**La decisión de Bruno**, después de mirar los 7 desplegables de las prendas de arriba:
+
+> «Calce cuello manga y largo es necesario? Porque todo eso se ve en la foto. Incluso te diría que
+> la ficha estuvo pensada principalmente para armar la descripción con esa información, no sé si
+> para intentar que la ficha esté expuesta en la descripción» · y después: **«yo intentaría que la
+> ficha quede como insumo del párrafo, y luego que el texto confirme o mejore»**
+
+### 📊 Lo que se midió antes de tocar una línea
+
+**Las 209 prendas de arriba con ficha cargada** (tops, bodies, remeras, blusas, corsets):
+
+| campo | cargados | valores distintos | el más repetido |
+|---|---|---|---|
+| tela | 209 | 19 | microfibra, **16 %** |
+| escote | 208 | 17 | redondo, 38 % |
+| manga | 206 | 11 | manga corta, 27 % |
+| largo | 207 | 6 | a la cintura, 42 % |
+| calce | 208 | 4 | entallado, 54 % |
+| **silueta** | 207 | 4 | regular, **67 %** — con «no aplica», el **94 %** |
+| detalle | 194 | 118 | (texto libre) |
+
+🔴 **Y el dato que decide: `tn_atributos` lo lee UN SOLO lugar en todo el repo — esta pantalla.**
+El «qué escote se vendió más», que fue *el motivo de fondo* de las listas cerradas el 27-ago, hoy
+⛔ **no existe como pantalla**: es una promesa. O sea que el único consumidor real de calce,
+escote, manga y largo era el bullet que se publicaba abajo del párrafo.
+
+🔑 **Y la evidencia de que el texto le gana a la ficha, medida sobre las 4 prendas que ya sabíamos
+peleadas con la foto**: de las 3 que tenían párrafo escrito, **las 3 lo tenían BIEN**.
+
+| prenda | la ficha dice | la foto muestra | el párrafo dice |
+|---|---|---|---|
+| BLUSA BORA | Cuello: **mao** | palabra de honor | «el borde superior elastizado, que **apoya fuera de los hombros**» ✅ |
+| BABY TEE CAMO | Escote: **asimétrico** | barco, simétrico | «El escote es **amplio y se apoya sobre el hombro**» ✅ |
+| BLUSA HUBER | Escote: **redondo** | cuello alto | «…y **cuello alto**» ✅ |
+| TOP LOLA | Manga: **3/4** | **sin mangas** | (todavía sin borrador) |
+
+⚠️ **Ese 3 de 3 está sesgado y hay que decirlo**: son casos elegidos porque ya se sabían malos. Lo
+que ⛔ **no** está medido es al revés — **cuántas veces marcaría una ficha que está bien**. Ése es
+el número que decide cuánto se le cree, y sale de correr el chivato sobre las 209.
+
+### 🏁 Lo que se construyó
+
+**1. Las DOS fotos** (`MAX_FOTOS` en `redactor.core.js`). El pedido pasó de `{system, texto,
+imagen}` a `{system, texto, imagenes}`. Con una sola —la portada— el modelo ⛔ no ve la espalda ni
+el ruedo; y ahora que además chequea la ficha, **marcaría como error lo que sólo estaba fuera del
+cuadro**. Medido: ~duplica el costo del borrador (US$0,0015 → ~0,003) ⇒ **US$0,80 el catálogo**.
+
+**2. El CHIVATO.** El esquema pasó de `{parrafo, tip}` a `{parrafo, tip, discrepancias}`: por cada
+dato que ⛔ no coincide con la foto, `{campo, dice, veo}`. Se guarda **adentro del borrador**
+(`borrador.chivatos`) y ⛔ **no sale a la tienda** — `generarHtml` sólo mira párrafo, bullets, tip,
+cuidados y pie.
+
+🔴 **MARCA, ⛔ NO CORRIGE, y no es una etapa a medias: es la regla.** El aviso ofrece el botón; el
+que cambia el valor es una persona. Un invento del modelo pisando un dato que alguien cargó **con
+la prenda en la mano** es peor que el error que arregla — y este mismo modelo ya inventó
+«terminaciones deshilachadas» sobre un dobladillo limpio (JEAN MARINA, 7-sep).
+
+🔑 **`campo` se valida contra la lista cerrada de atributos**, igual que un valor de ficha: un campo
+inventado sería un aviso que habla de un casillero que no existe y que ningún botón puede abrir.
+
+🔑 **Que un chivato esté saldado ⛔ no se guarda: se DEDUCE.** Si el valor de la ficha ya ⛔ no es el
+que el aviso discute, se muestra tildado. Sin estado nuevo que pueda quedar mintiendo: la verdad
+es la ficha.
+
+🔑 **La lista vacía AFIRMA**: se le pide el chequeo *siempre* (va en `required`), y el prompt dice
+que la lista vacía significa «lo miré y está bien», ⛔ no «no me fijé». ⛔ Y que la **tela nunca se
+marca**: una foto no distingue una gasa de un voile — es el único dato que necesita a una persona.
+
+### ▶️ Lo que falta, en orden
+
+1. **Correr el chivato sobre las 209** y contar los **falsos positivos**. Es el número que falta.
+2. Recién ahí, **sacar los bullets** de lo que se publica y dejar tela + cuidados + medidas.
+3. **Silueta sale igual**, sin esperar nada: el 94 % es `regular` o `no aplica`.
+4. ⚠️ Si los bullets se van, tienen que irse **de las dos puntas**: un campo que sigue alimentando
+   el párrafo convierte un error de ficha en **prosa afirmativa**, más difícil de cazar que un
+   bullet visiblemente falso.

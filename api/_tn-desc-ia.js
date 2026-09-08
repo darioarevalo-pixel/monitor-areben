@@ -1,8 +1,8 @@
 // El redactor: le pide a Gemini el borrador de UN producto y lo devuelve validado.
 //
 //   POST { recurso:'tn-desc-ia', store, tn_id, nombre, insumo?, variantes?, categorias?,
-//          prosaActual?, imagen?, bullets?, modelo? }
-//     → { ok, borrador, problemas, intentos, modelo, uso, costo }
+//          prosaActual?, imagenes?, imagen?, bullets?, modelo? }
+//     → { ok, borrador:{parrafo,tip,chivatos}, problemas, intentos, modelo, uso, costo }
 //
 // 🔑 Desde el 27-ago-2026 devuelve SÓLO `{parrafo}`: los bullets se componen desde la ficha de
 // atributos y no los escribe nadie. `bullets` entra como CONTEXTO —los datos que ya están
@@ -36,6 +36,7 @@ import { exigirUsuario } from './_auth.js';
 import { puedeSub, esAdmin } from '../lib/permisos.core.js';
 import {
   ESQUEMA,
+  MAX_FOTOS,
   MODELOS,
   MODELO_POR_DEFECTO,
   costoDe,
@@ -192,10 +193,12 @@ export function llamador(modelo, clave, alRecibir) {
   /** Una llamada al modelo. Devuelve `{texto, uso}`; `redactar` decide si hace falta otra. */
   return async (pedido) => {
     const entrada = [];
-    // La foto primero: es lo único que el modelo tiene para describir la prenda, y en los 41
-    // mudos no hay ni insumo ni prosa previa. Va con los bytes adentro, no con la URL — ver
+    // Las fotos primero: son lo único que el modelo tiene para describir la prenda, y en los 41
+    // mudos no hay ni insumo ni prosa previa. Van con los bytes adentro, no con la URL — ver
     // `bajarFoto`, que es donde está medido por qué.
-    if (pedido.imagen) entrada.push({ type: 'image', ...(await bajarFoto(pedido.imagen)) });
+    // ⚠️ Se bajan EN SERIE y no con un `Promise.all`: son dos, del mismo CDN, y si la segunda
+    // falla queremos el error de la segunda y no una carrera.
+    for (const foto of pedido.imagenes || []) entrada.push({ type: 'image', ...(await bajarFoto(foto)) });
     entrada.push({ type: 'text', text: pedido.texto });
 
     const r = await fetch(URL_API, {
@@ -292,7 +295,13 @@ export default async function handler(req, res) {
     variantes: textos(body.variantes, 60),
     categorias: textos(body.categorias, 10),
     prosaActual: String(body.prosaActual || '').trim().slice(0, 1200),
-    imagen: imagenValida(body.imagen),
+    // 🆕 DOS fotos (8-sep-2026). Cada una pasa por la lista blanca del CDN de TiendaNube, igual
+    // que pasaba la única de antes. `imagen` sigue aceptándose porque `scripts/probar-redactor.mjs`
+    // lo usa así, y porque una sola foto es una respuesta válida: hay productos con una.
+    imagenes: [...(Array.isArray(body.imagenes) ? body.imagenes : []), body.imagen]
+      .map(imagenValida)
+      .filter(Boolean)
+      .slice(0, MAX_FOTOS),
     // Los bullets ya compuestos por `lib/tn-desc/atributos.core.js`. Vienen del navegador igual
     // que las variantes y la prosa actual: no deciden nada que se guarde —este endpoint no
     // guarda— y lo único que cambian es qué NO tiene que repetir el párrafo.

@@ -21,6 +21,7 @@ import {
   MODELO_POR_DEFECTO,
   SISTEMA,
   armarPedido,
+  chivatosDe,
   costoDe,
   esModelo,
   interpretar,
@@ -37,7 +38,10 @@ const CTX = {
   variantes: ['blanco', 'negro', 'S', 'M', 'L'],
   categorias: ['NEW IN', 'Blusas'],
   prosaActual: '',
-  imagen: 'https://acdn-us.mitiendanube.com/stores/004/445/369/products/mira-1024-1024.jpg',
+  imagenes: [
+    'https://acdn-us.mitiendanube.com/stores/004/445/369/products/mira-1024-1024.jpg',
+    'https://acdn-us.mitiendanube.com/stores/004/445/369/products/mira-espalda-1024-1024.jpg',
+  ],
   // Los bullets ya compuestos por la ficha: el modelo NO los escribe, los recibe para no
   // repetirlos. Los compone `lib/tn-desc/atributos.core.js`.
   bullets: [
@@ -50,7 +54,7 @@ const BUENO = {
   parrafo: 'Blusa liviana que se pone con jean de día o con sastrero a la noche.',
 }
 
-type Pedido = { system: string; texto: string; imagen: string | null }
+type Pedido = { system: string; texto: string; imagenes: string[] }
 
 /** Un modelo falso que contesta la cola de respuestas que se le da, y anota qué le pidieron. */
 function modeloFalso(respuestas: unknown[]) {
@@ -76,16 +80,22 @@ describe('el pedido que se arma', () => {
     expect(t).toContain('NO se pueden nombrar')
   })
 
-  it('la foto viaja aparte del texto, sin forma de proveedor: el pedido es {system, texto, imagen}', () => {
+  it('las fotos viajan aparte del texto, sin forma de proveedor: el pedido es {system, texto, imagenes}', () => {
     // 🔑 Si la forma de cable volviera a meterse acá, cambiar de proveedor dejaría de ser un
     // archivo. Ya pasó una vez: el pedido salía con bloques de Anthropic adentro del núcleo.
     const p = armarPedido(CTX)
-    expect(p.imagen).toBe(CTX.imagen)
-    expect(Object.keys(p).sort()).toEqual(['imagen', 'system', 'texto'])
+    expect(p.imagenes).toEqual(CTX.imagenes)
+    expect(Object.keys(p).sort()).toEqual(['imagenes', 'system', 'texto'])
   })
 
-  it('sin foto manda `null`, no una URL vacía que el handler mandaría igual', () => {
-    expect(armarPedido({ ...CTX, imagen: null }).imagen).toBeNull()
+  it('🆕 son DOS y no más: la tercera vuelve a pagar la entrada y no agrega prenda', () => {
+    const p = armarPedido({ ...CTX, imagenes: [...CTX.imagenes, 'https://acdn-us.mitiendanube.com/stores/004/445/369/products/mira-3-1024-1024.jpg'] })
+    expect(p.imagenes.length).toBe(2)
+  })
+
+  it('sin fotos manda una lista VACÍA, no un `null` que el handler tendría que adivinar', () => {
+    expect(armarPedido({ ...CTX, imagenes: [] }).imagenes).toEqual([])
+    expect(armarPedido({ ...CTX, imagenes: [null, ''] }).imagenes).toEqual([])
   })
 
   it('sin insumo lo dice, en vez de mandar el campo en blanco', () => {
@@ -161,12 +171,24 @@ describe('el sistema dice las reglas que el esquema no puede', () => {
     expect(SISTEMA).toContain('como habla la clienta')
   })
 
-  it('🔑 el esquema pide el párrafo y el tip, y nada más: los bullets ya no los escribe el modelo', () => {
-    // El tip entró el 4-sep-2026 (decisión de Bruno). Los bullets siguen afuera: los compone la
-    // ficha. Que esta lista sea corta ES la tanda del 27-ago — si vuelve a crecer, algo volvió a
-    // pedirle al modelo lo que ya es dato.
-    expect(Object.keys(ESQUEMA.properties)).toEqual(['parrafo', 'tip'])
-    expect(ESQUEMA.required).toEqual(['parrafo', 'tip'])
+  it('🔑 el esquema pide el párrafo, el tip y las discrepancias — y NADA de bullets', () => {
+    // El tip entró el 4-sep-2026 y las discrepancias el 8-sep, las dos por decisión de Bruno.
+    // Los bullets siguen afuera: los compone la ficha. Que esta lista siga sin ellos ES la tanda
+    // del 27-ago — si vuelve a aparecer `bullets`, algo volvió a pedirle al modelo lo que ya es
+    // dato. ⚠️ Las discrepancias NO son una excepción a eso: no escriben la ficha, la chequean.
+    expect(Object.keys(ESQUEMA.properties)).toEqual(['parrafo', 'tip', 'discrepancias'])
+    expect(ESQUEMA.required).toEqual(['parrafo', 'tip', 'discrepancias'])
+    expect(Object.keys(ESQUEMA.properties)).not.toContain('bullets')
+  })
+
+  it('🆕 se le pide el chequeo SIEMPRE, y se le dice que la lista vacía afirma', () => {
+    // Pedirlo «si ves algo raro» devuelve silencio, que es indistinguible de «está todo bien».
+    expect(SISTEMA).toContain('la lista vacía')
+    expect(SISTEMA).toContain('lo miré y está bien')
+    // 🔴 Y que NO corrige: el que cambia el valor es una persona.
+    expect(SISTEMA).toContain('Vos NO corregís la ficha')
+    // ⛔ Y que la tela no se marca: una foto no distingue una gasa de un voile.
+    expect(SISTEMA).toContain('La TELA no se ve en una foto')
   })
 
   it('sin `additionalProperties` en ningún nivel: Gemini devuelve 400 y no se redacta nada', () => {
@@ -182,7 +204,7 @@ describe('redactar', () => {
     expect(r.error).toBeNull()
     expect(r.problemas).toEqual([])
     expect(r.intentos).toBe(1)
-    expect(r.borrador).toEqual({ ...BUENO, tip: '' })
+    expect(r.borrador).toEqual({ ...BUENO, tip: '', chivatos: [] })
   })
 
   it('un borrador que nombra un color se rechaza y el segundo intento sale', async () => {
@@ -192,7 +214,7 @@ describe('redactar', () => {
     const r = await redactar(CTX, llamar)
     expect(r.intentos).toBe(2)
     expect(r.problemas).toEqual([])
-    expect(r.borrador).toEqual({ ...BUENO, tip: '' })
+    expect(r.borrador).toEqual({ ...BUENO, tip: '', chivatos: [] })
     // Y el segundo pedido le explicó por qué, con el color adentro.
     expect(textoDe(pedidos[1])).toContain('blanco')
   })
@@ -214,7 +236,7 @@ describe('redactar', () => {
     const r = await redactar(CTX, llamar)
     expect(r.intentos).toBe(INTENTOS)
     expect(r.error).toBeNull()
-    expect(r.borrador).toEqual({ ...largo, tip: '' })
+    expect(r.borrador).toEqual({ ...largo, tip: '', chivatos: [] })
     expect(r.problemas.map((p: { campo: string }) => p.campo)).toContain('parrafo')
   })
 
@@ -227,7 +249,7 @@ describe('redactar', () => {
     const r = await redactar({ ...CTX, insumo: '', bullets: [{ etiqueta: 'Tela', texto: 'gasa' }] }, llamar)
     // Lo que sí se rechaza es que el párrafo repita lo que el bullet ya dice.
     expect(r.problemas.map((p: { motivo: string }) => p.motivo).join(' ')).not.toContain('tela')
-    expect(r.borrador).toEqual({ ...conTela, tip: '' })
+    expect(r.borrador).toEqual({ ...conTela, tip: '', chivatos: [] })
   })
 
   it('🆕 el párrafo que repite lo que dice un bullet se rechaza y se reintenta', async () => {
@@ -265,7 +287,7 @@ describe('redactar', () => {
     const { llamar } = modeloFalso([conColor, new Error('la API contestó 503: overloaded')])
     const r = await redactar(CTX, llamar)
     expect(r.error).toContain('503')
-    expect(r.borrador).toEqual({ ...conColor, tip: '' })
+    expect(r.borrador).toEqual({ ...conColor, tip: '', chivatos: [] })
     expect(r.uso.entrada).toBe(1000) // la que sí ocurrió
   })
 })
@@ -273,7 +295,7 @@ describe('redactar', () => {
 describe('interpretar', () => {
   it('lee el párrafo y nada más: los bullets que mande el modelo se ignoran', () => {
     const r = interpretar('{"parrafo":"hola","bullets":[{"etiqueta":"Tela"}]}')
-    expect(r.borrador).toEqual({ parrafo: 'hola', tip: '' })
+    expect(r.borrador).toEqual({ parrafo: 'hola', tip: '', chivatos: [] })
   })
 
   it('un array pelado no es un borrador', () => {
@@ -437,5 +459,63 @@ describe('bajar la foto del producto', () => {
         throw new Error('ECONNRESET')
       }),
     ).rejects.toThrow('ECONNRESET')
+  })
+})
+
+/**
+ * 🆕 EL CHIVATO (8-sep-2026).
+ *
+ * 🔴 Lo pidió Bruno después de decidir que **la ficha queda como insumo del párrafo y ⛔ no se
+ * publica**: *«que el texto confirme o mejore»*. Y la evidencia de que servía estaba medida antes
+ * de escribir una línea: de las 4 prendas que sabíamos peleadas con la foto, las **3** que ya
+ * tenían párrafo lo tenían BIEN —el modelo, mirando la foto, describió lo que la ficha decía mal
+ * (BLUSA BORA «apoya fuera de los hombros» contra `Cuello: mao`; BABY TEE CAMO «escote amplio,
+ * apoyado sobre el hombro» contra `Escote: asimétrico`; BLUSA HUBER «cuello alto» contra
+ * `Escote: redondo`)—.
+ *
+ * 🔴 Y la regla que lo sostiene: **marca, ⛔ no corrige.** Lo que sigue amarra que el aviso no
+ * pueda hablar de un campo que no existe.
+ */
+describe('🆕 chivatosDe: lo que el modelo vio distinto, contra la lista cerrada', () => {
+  it('normaliza el campo y deja pasar el aviso bueno', () => {
+    expect(chivatosDe([{ campo: 'Escote', dice: 'asimétrico', veo: 'barco' }])).toEqual([
+      { campo: 'escote', dice: 'asimétrico', veo: 'barco' },
+    ])
+  })
+
+  it('🔴 un campo INVENTADO se tira: el aviso tiene que poder abrir un casillero que existe', () => {
+    // Es la misma doctrina que un valor de ficha: lo que contesta el modelo no se dibuja crudo.
+    expect(chivatosDe([{ campo: 'vibra', dice: 'x', veo: 'y' }])).toEqual([])
+  })
+
+  it('sin `veo` no hay aviso: «algo no cierra» no se puede corregir', () => {
+    expect(chivatosDe([{ campo: 'manga', dice: '3/4', veo: '' }])).toEqual([])
+  })
+
+  it('⛔ lo que no es una lista es una lista vacía, no un error', () => {
+    expect(chivatosDe(null)).toEqual([])
+    expect(chivatosDe('escote')).toEqual([])
+  })
+
+  it('los textos se cortan: son un renglón al lado del campo, no un párrafo', () => {
+    const c = chivatosDe([{ campo: 'largo', dice: 'a'.repeat(200), veo: 'b'.repeat(200) }])
+    expect(c[0].dice.length).toBe(40)
+    expect(c[0].veo.length).toBe(40)
+  })
+
+  it('y hay tope de avisos: seis discrepancias ya no son una ficha con un error', () => {
+    const muchos = Array.from({ length: 12 }, () => ({ campo: 'largo', dice: 'x', veo: 'y' }))
+    expect(chivatosDe(muchos).length).toBe(6)
+  })
+
+  it('🔑 el borrador los trae SIEMPRE, aunque el modelo no mande ninguno', () => {
+    // La lista vacía es una afirmación —«lo miré y coincide»—, así que tiene que existir.
+    const r = interpretar('{"parrafo":"Blusa de trama calada.","tip":""}')
+    expect(r.borrador?.chivatos).toEqual([])
+  })
+
+  it('y los lee cuando vienen', () => {
+    const r = interpretar('{"parrafo":"Blusa.","tip":"","discrepancias":[{"campo":"escote","dice":"redondo","veo":"cuello alto"}]}')
+    expect(r.borrador?.chivatos).toEqual([{ campo: 'escote', dice: 'redondo', veo: 'cuello alto' }])
   })
 })

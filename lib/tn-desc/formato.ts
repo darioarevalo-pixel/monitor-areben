@@ -29,13 +29,30 @@ import {
 export type Bullet = { etiqueta: string; texto: string }
 
 /**
+ * 🆕 Un CHIVATO: un dato de la ficha que ⛔ no coincide con lo que muestra la foto.
+ *
+ * 🔴 **Marca, ⛔ no corrige** (decisión de Bruno, 8-sep-2026). Lo escribe quien miró las fotos
+ * —el modelo, o la sesión— y lo arregla una persona apretando el campo. ⛔ Nunca pisa solo un
+ * valor que alguien cargó con la prenda en la mano: este mismo modelo inventó «terminaciones
+ * deshilachadas» sobre un dobladillo limpio, y un invento que pisa a una persona es peor que
+ * el error que arregla.
+ */
+export type Chivato = { campo: string; dice: string; veo: string }
+
+/**
  * Lo que se guarda y lo que se pinta: el párrafo escrito + los bullets compuestos.
  *
  * ⚠️ `tip` es OPCIONAL por decisión de Bruno (4-sep-2026): un tip flojo pesa más que la falta de
  * tip. `cuidados` ⛔ no se escribe ni se guarda — lo compone `cuidados.core.js` desde la tela al
  * momento de publicar, igual que los bullets.
+ *
+ * ⚠️ `chivatos` viaja ADENTRO del borrador a propósito, y ⛔ no en una columna nueva: nacen del
+ * mismo vistazo a las fotos que el párrafo y **mueren con él**. Un borrador nuevo se escribe
+ * mirando de nuevo, así que arrastrar los avisos del anterior sería mostrar una alarma que ya
+ * nadie chequeó. Y ⛔ no salen a la tienda: `generarHtml` sólo mira párrafo, bullets, tip,
+ * cuidados y pie.
  */
-export type Borrador = { parrafo: string; bullets: Bullet[]; tip?: string; cuidados?: { grupo: string; lineas: string[] } | null; pie?: string | null }
+export type Borrador = { parrafo: string; bullets: Bullet[]; tip?: string; chivatos?: Chivato[]; cuidados?: { grupo: string; lineas: string[] } | null; pie?: string | null }
 
 export const MAX_PARRAFO: number = MAX_PARRAFO_JS
 

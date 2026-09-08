@@ -8,8 +8,8 @@ import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
-import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip } from '@/lib/tn-desc/formato'
-import { FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
+import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip, type Chivato } from '@/lib/tn-desc/formato'
+import { ATRIBUTOS, FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { GRUPOS, cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
 import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
 import { ESTIRA, TELAS_QUE_ESTIRAN, contestadasDe, medidasDe, tallesDe, type Medida, type Medidas } from '@/lib/tn-medidas/medidas'
@@ -221,7 +221,10 @@ export function GenDesc() {
                 variantes: p.variantes,
                 categorias: p.categories,
                 prosaActual: p.prosa.texto,
-                imagen: p.imagenes[0]?.src || null,
+                // 🆕 Las DOS primeras (8-sep-2026): la portada y la que sigue. Con una sola, el
+                // modelo no ve la espalda ni el ruedo — y ahora que además chequea la ficha,
+                // marcaría como error lo que sólo estaba fuera del cuadro.
+                imagenes: p.imagenes.slice(0, 2).map((im) => im.src),
                 bullets,
                 modelo,
               })
@@ -330,6 +333,8 @@ function FilaProducto({
   const [modelo, setModelo] = useState<string>(MODELO_POR_DEFECTO)
   const [redactando, setRedactando] = useState(false)
   const [ia, setIa] = useState<ResultadoIA | null>(null)
+  /** Lo que la última mirada a las fotos vio distinto de la ficha. Se guarda con el borrador. */
+  const [chivatos, setChivatos] = useState<Chivato[]>(fila?.borrador?.chivatos || [])
   // ⛔ Arranca DESTILDADO: los productos de la tanda del 2-sep tienen un renglón escrito a mano en
   // TiendaNube, y conservarlo dejaría el texto viejo abajo del párrafo nuevo, diciendo lo mismo.
   // Decisión de Bruno del 4-sep-2026: se pisa. El respaldo queda igual en `html_previo`.
@@ -386,6 +391,9 @@ function FilaProducto({
     setIa(r)
     if (r.borrador?.parrafo) setParrafo(r.borrador.parrafo)
     if (typeof r.borrador?.tip === 'string') setTip(r.borrador.tip)
+    // ⚠️ Se pisan con los del pedido nuevo, ⛔ no se suman: el modelo volvió a mirar las fotos, y
+    // arrastrar un aviso de la corrida anterior sería mostrar algo que nadie chequeó.
+    if (r.borrador) setChivatos(r.borrador.chivatos || [])
   }
 
   const correr = async (cuerpo: Record<string, unknown>) => {
@@ -604,6 +612,10 @@ function FilaProducto({
               </Toolbar>
               {ia?.error && <Notice tone="danger">{ia.error}</Notice>}
 
+              {/* 🆕 El chivato también acá: quien aprieta «Escribir el párrafo» es el primero que
+                  se entera de que la ficha no coincide con la foto. */}
+              <Chivatos chivatos={chivatos} ficha={ficha} />
+
               <Field
                 label={`Párrafo (${parrafo.trim().length} de ${MAX_PARRAFO})`}
                 hint="Arranca nombrando la prenda. No repitas lo que ya dicen los datos de la ficha."
@@ -640,7 +652,7 @@ function FilaProducto({
               )}
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets, tip: tip.trim() } })}>
+                <Button size="sm" variant="outline" disabled={guardando || vacio} onClick={() => void correr({ op: 'borrador', borrador: { parrafo, bullets, tip: tip.trim(), chivatos } })}>
                   Guardar el párrafo
                 </Button>
                 <Button
@@ -1073,7 +1085,10 @@ function TarjetaRevision({
   const sucio = parrafo !== (fila?.borrador?.parrafo || '') || tip.trim() !== (fila?.borrador?.tip || '')
   const enLaTienda = fila?.estado === 'escrito'
 
-  const textoDeAhora = () => ({ parrafo, bullets, tip: tip.trim() })
+  // 🔴 Los chivatos VIAJAN con el borrador aunque acá no se toquen: guardar el párrafo manda el
+  // objeto entero, así que no incluirlos sería BORRAR los avisos al corregir una coma. Nacen del
+  // vistazo a las fotos, no de este campo.
+  const textoDeAhora = () => ({ parrafo, bullets, tip: tip.trim(), chivatos: fila?.borrador?.chivatos || [] })
 
   /** 🔑 Se guarda al SALIR del campo, sin botón. Si no cambió nada, ⛔ no se escribe. */
   const alSalir = async () => {
@@ -1206,6 +1221,10 @@ function TarjetaRevision({
             </Notice>
           )}
 
+          {/* 🆕 EL CHIVATO: lo que quien miró las fotos vio distinto de la ficha. Va ARRIBA de
+              los cuidados y abajo de los bullets, que es donde se mira el dato que discute. */}
+          <Chivatos chivatos={fila?.borrador?.chivatos || []} ficha={ficha} onCorregir={() => setCorrigiendo(true)} />
+
           {cuidados && (
             <div style={{ fontSize: font.xs, color: color.mut2 }} title={cuidados.lineas.join(' ')}>
               {/* ⚠️ El NOMBRE del grupo, ⛔ no su `key`: «punto» es el identificador del código y en
@@ -1264,4 +1283,78 @@ function TarjetaRevision({
       <Lightbox src={foto} alt={p.name} onCerrar={() => setFoto(null)} />
     </Card>
   )
+}
+
+/**
+ * 🆕 Los CHIVATOS de una prenda: lo que quien miró las fotos vio distinto de lo que dice la ficha.
+ *
+ * 🔴 **Existe porque la ficha ⛔ no es confiable y eso era la mitad de la fricción** (Bruno,
+ * 7-sep-2026: «no confío en los bullets»). Medido ese día: 4 de 20 prendas tenían la ficha
+ * peleada con la foto, y la única forma de cazarlo era acordarse de mirar. El 8-sep se midió lo
+ * otro: en las 3 de esas 4 que ya tenían párrafo, **el texto —que sí mira la foto— describía
+ * bien lo que la ficha decía mal**. O sea que el error ya estaba visto: lo que faltaba era que
+ * alguien lo dijera en voz alta.
+ *
+ * 🔴 **Marca, ⛔ no corrige** (decisión de Bruno). El aviso ofrece el botón; el que cambia el
+ * valor es una persona. Un invento del modelo pisando un dato que alguien cargó con la prenda en
+ * la mano es peor que el error que arregla — y este mismo modelo ya inventó «terminaciones
+ * deshilachadas» sobre un dobladillo limpio.
+ *
+ * 🔑 **Que esté corregido ⛔ no se guarda: se DEDUCE.** Si el valor de la ficha ya ⛔ no es el que
+ * el chivato discute, el aviso se muestra saldado. Sin estado nuevo que pueda quedar mintiendo:
+ * la verdad es la ficha.
+ */
+function Chivatos({
+  chivatos, ficha, onCorregir,
+}: {
+  chivatos: Chivato[]
+  ficha: Cargados
+  /**
+   * ⚠️ OPCIONAL a propósito: en la fila de «Cargar» la ficha ya está abierta arriba del aviso, y
+   * un botón «corregir la ficha» que no lleva a ningún lado es una pantalla que miente. Sin
+   * `onCorregir`, el aviso se lee y nada más.
+   */
+  onCorregir?: () => void
+}) {
+  if (!chivatos.length) return null
+  const norm = (x: string) => String(x || '').trim().toLowerCase()
+  const filas = chivatos.map((c) => {
+    const actual = String(ficha[c.campo as Atributo] || '')
+    return { ...c, actual, saldado: !!actual && norm(actual) !== norm(c.dice) }
+  })
+  const pendientes = filas.filter((f) => !f.saldado)
+
+  return (
+    <div style={{ border: `1px solid ${pendientes.length ? '#e6c200' : color.line}`, background: pendientes.length ? '#fffbe6' : color.bg, borderRadius: 8, padding: '8px 10px' }}>
+      <div style={{ fontSize: font.xs, fontWeight: 600, marginBottom: 5 }}>
+        {pendientes.length
+          ? `La foto no coincide con la ficha en ${pendientes.length === 1 ? 'un dato' : `${pendientes.length} datos`}`
+          : 'La foto no coincidía con la ficha, y ya está corregido'}
+      </div>
+      <div style={{ display: 'grid', gap: 4 }}>
+        {filas.map((f, i) => (
+          <div key={i} style={{ fontSize: font.xs, color: f.saldado ? color.mut : color.ink }}>
+            {f.saldado ? '✓ ' : '• '}
+            <b>{etiquetaDe(f.campo)}</b>: la ficha {f.saldado ? 'decía' : 'dice'} «{f.dice}» y en la foto se ve <b>{f.veo}</b>
+            {f.saldado && <> — ahora dice «{f.actual}»</>}
+          </div>
+        ))}
+      </div>
+      {pendientes.length > 0 && onCorregir && (
+        <button
+          type="button"
+          onClick={onCorregir}
+          style={{ marginTop: 6, border: 0, background: 'none', cursor: 'pointer', fontSize: font.xs, color: color.mut2, textDecoration: 'underline', padding: 0 }}
+        >
+          corregir la ficha
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** El rótulo del campo, como se llama en la ficha. `escote` no le dice nada a nadie. */
+function etiquetaDe(campo: string): string {
+  const a = (ATRIBUTOS as Record<string, { label?: string }>)[campo]
+  return (a && a.label) || campo
 }
