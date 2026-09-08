@@ -13,6 +13,29 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «SIGUE EL PROBLEMA, MARCA $0 EN TODA LA INFORMACIÓN» — 8-sep-2026 (dictado, y hecho)
+
+> «mirá, sigue el problema que el resultado marca pesos $0 en toda la información» *(con la captura
+> de la lista del PRM: las cuatro columnas medidas en «…»)*
+
+**⛔ No estaba rota: estaba viajando** — y el pedido había pasado de ~2,7 s (medido el 3-sep) a
+**4,36 s** sin que nadie lo volviera a medir. Lo que lo duplicó fue el **recruce que entró el
+7-sep**, el arreglo de ELIANA IND: `leerEspejo` pedía sus lotes en **fila india** —8 viajes seguidos
+por marca— y costaba **3,1 s** él solo.
+
+🏁 **Ahora los lotes van en paralelo, y el padrón y las órdenes también.** Medido después, mediana de
+5 corridas: **4.362 → 2.185 ms**, con la huella idéntica.
+
+🔴 **Y la otra mitad del reporte ⛔ no era la velocidad: la pantalla ⛔ no decía nada.** Un «…» que
+tarda se ve igual que una colgada. Ahora dice qué está viajando; y si ese pedido **falla**, las
+celdas pasan a «?» con un aviso — antes decían «—», que afirma «no vendió nada» en las 34 filas y
+⛔ no se distinguía de «este proveedor no tiene órdenes».
+
+▶️ 🔴 **Falta que Bruno lo mire.** ⛔ No pude entrar a producción —la credencial del Monitor es
+suya—, así que lo que está verificado es el bundle y las mediciones contra las bases reales.
+
+---
+
 ## 🏁 «LOS PRODUCTOS ESTRELLA DEL PROVEEDOR, PERO DE LOS ÚLTIMOS 15 O 30 DÍAS» — 8-sep-2026 (dictado, y hecho)
 
 > «seguimos con proveedores prm, necesitaría saber los productos estrella del proveedor, pero que

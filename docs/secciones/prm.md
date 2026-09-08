@@ -239,6 +239,39 @@ la decisión de volver o no a un local de Flores se tomaba de cabeza.
     ⛔ La otra idea —pedir sólo la marca que se está mirando— ⛔ NO se hizo: `comprado` y `stores`
     hoy suman las órdenes de **las dos** marcas, y filtrar cambiaría lo que MIDE la columna para un
     proveedor que le venda a las dos. Eso lo decide Bruno, ⛔ no el que optimiza.
+- 🆕 🔴 🔑 **«SIGUE EL PROBLEMA, MARCA $0 EN TODA LA INFORMACIÓN» — 8-sep-2026, y la lista tardaba
+  el DOBLE que en la medición anterior.** Bruno mandó la captura de la lista con las cuatro columnas
+  medidas en «…». ⛔ No estaba rota: **estaba viajando**, y el pedido había pasado de ~2,7 s a más
+  del doble sin que nadie lo midiera de nuevo.
+  - 🔴 **Lo que lo duplicó fue el RECRUCE que entró el 7-sep** (el arreglo de ELIANA IND). Medido el
+    8-sep contra la base real: padrón **527 ms** · órdenes con su embed **565 ms** · **recruce
+    3.106 ms** · ventas de BDI 1.475 ms ⇒ **mediana de 5 corridas: 4.362 ms**. El recruce solo era
+    más de la mitad.
+  - ✅ 🔑 **Y era otra vez la fila india, ⛔ no el volumen.** `leerEspejo` pedía sus lotes **uno
+    detrás de otro**: 1.622 renglones son 793 SKU de BDI y 782 de Zattia ⇒ `enLotes(200)` da
+    **4 + 4 = 8 viajes seguidos por marca**, y ninguno espera nada del anterior. Ahora van en
+    `Promise.all`. 🔴 **Los dos GRUPOS siguen en orden —SKU primero, códigos de barras después— y
+    eso ⛔ no es un descuido**: `porBarra` lo escriben los dos y el segundo tiene que poder pisar al
+    primero. **El mutante que invierte los grupos SOBREVIVÍA**, así que ahora hay un test que lo
+    clava.
+  - ✅ **Y el padrón y las órdenes van en paralelo.** La segunda esperaba a la primera **sólo** para
+    armar un `in(...)` que ⛔ no cambia el resultado: el cruce local↔orden lo hace `comparativa()`
+    del núcleo, y una orden sin ficha ⛔ no entra en ninguna fila. Ahora el corte «con proveedor» lo
+    hace la consulta.
+  - 📌 **Medido DESPUÉS, que es la única forma de saber si sirvió**: mediana de 5 corridas
+    **4.362 → 2.185 ms**, con la huella idéntica (34 locales · 92 órdenes · 1.622 renglones · 67
+    productos con venta). ⚠️ Es desde esta Mac y con Zattia muda; en Vercel los números son otros,
+    pero **lo que se sacó son VIAJES**, que es lo que domina en los dos lados.
+  - 🔴 🔑 **Y la otra mitad del reporte ⛔ no era la velocidad: era que la pantalla ⛔ NO DECÍA NADA.**
+    Un «…» que tarda se ve igual que una pantalla colgada. Ahora, mientras viaja, arriba de la tabla
+    dice **qué está viajando y por qué tarda** (cruza las órdenes contra las ventas de las dos
+    marcas, y es un pedido aparte del que trajo la lista).
+  - 🔴 🔑 **Y si ese pedido FALLA, las celdas decían «—», que afirma «no vendió nada» — en las 34
+    filas.** El `catch` dejaba un mapa vacío y ⛔ nada distinguía «se cayó» de «este proveedor no
+    tiene órdenes». Ahora es «?» y con un aviso arriba, igual que la marca muda. 🔑 **La regla de
+    qué puede decir cada celda vive en el núcleo** (`estadoDeCelda`, cinco estados) y ⛔ no en el
+    JSX: es la cuarta vez que esta pantalla se hace la misma pregunta —el `(0)` de las pestañas, el
+    `—` de las celdas, la flecha del encabezado— y las tres anteriores se resolvieron a mano.
 - 🆕 🔴 🔑 **«LOS PRODUCTOS ESTRELLA DEL PROVEEDOR, PERO DE LOS ÚLTIMOS 15 O 30 DÍAS»** — pedido de
   Bruno el 8-sep-2026:
   > *«necesitaría saber los productos estrella del proveedor, pero que sean del último mes o de los

@@ -124,6 +124,32 @@ describe('leerEspejo: tres estados, no dos', () => {
     expect(await leerEspejo(null, [{ sku: 'A' }])).toBeNull()
   })
 
+  it('🔴 🔑 el grupo de CÓDIGOS DE BARRAS se escribe DESPUÉS del de SKU, y por eso puede pisarlo', async () => {
+    // Los lotes de cada grupo van en paralelo desde el 8-sep-2026 —eran 8 viajes en fila india por
+    // marca y costaban 3,1 s del pedido de la lista—, pero **los dos grupos siguen en orden**.
+    // Adentro de un grupo el orden ⛔ no importa (los lotes son pedazos disjuntos de la misma
+    // lista); entre grupos sí: `porBarra` lo escriben los dos, y la consulta por barcode es la que
+    // preguntó por ese código. Sin esto, paralelizar de más cambia a qué producto apunta un
+    // renglón y ⛔ nada falla.
+    const c = clienteFalso(
+      [{ sku: 'A', barcode: 'b1', product_id: 7 }],
+      [{ sku: null, barcode: 'b1', product_id: 9 }],
+    )
+    const e = await leerEspejo(c, [{ sku: 'A', codigo_barras: 'b1' }])
+    expect(e!.porBarra.get('b1')).toBe('9')
+    expect(e!.porSku.get('A')).toBe('7')
+  })
+
+  it('los lotes de un grupo se piden TODOS, aunque vayan juntos', async () => {
+    // 250 SKU distintos son 2 lotes de 200 + 50. Lo que se clava es que ninguno se pierda al
+    // paralelizarlos: un lote menos es un puñado de renglones que se quedan sin cruzar, callados.
+    const skus = Array.from({ length: 250 }, (_, i) => `S${i}`)
+    const c = clienteFalso(skus.map((sku, i) => ({ sku, barcode: null, product_id: i })))
+    const e = await leerEspejo(c, skus.map((sku) => ({ sku, codigo_barras: null })))
+    expect(e!.porSku.size).toBe(250)
+    expect(c.pedidos.filter((p) => p.col === 'sku')).toHaveLength(2)
+  })
+
   it('sin nada que preguntar es null, ⛔ no un mapa que diría «no está ninguno»', async () => {
     const c = clienteFalso([])
     expect(await leerEspejo(c, [{ sku: null, codigo_barras: null }])).toBeNull()

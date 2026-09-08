@@ -202,12 +202,27 @@ async function padron(cliente) {
  * son.
  */
 export async function comparativa(cliente, dias) {
-  const locales = await leerTodo(cliente, 'proveedor_local', (q) =>
-    q.select('id, nombre, proveedor_id_ingresos').not('proveedor_id_ingresos', 'is', null).order('id'),
-  )
+  // 🔴 🔑 **El padrón y las órdenes van EN PARALELO, y por eso las órdenes ⛔ no se filtran por los
+  // ids del padrón.** Encadenarlas costaba un viaje entero de nada: la segunda esperaba a la
+  // primera **sólo** para armar un `in(...)` que ⛔ no cambia el resultado — `comparativa()` del
+  // núcleo cuelga cada orden de su local y las que no tienen ficha ⛔ no entran en ninguna fila.
+  // Medido el 8-sep-2026 contra la base real: padrón **527 ms**, órdenes **565 ms**, y de a una
+  // eran los dos. ⇒ **el corte «con proveedor» lo hace la consulta y el cruce lo hace el núcleo**,
+  // que es donde ya vivía.
+  const [locales, conRenglones] = await Promise.all([
+    leerTodo(cliente, 'proveedor_local', (q) =>
+      q.select('id, nombre, proveedor_id_ingresos').not('proveedor_id_ingresos', 'is', null).order('id'),
+    ),
+    leerTodo(cliente, 'recepcion_oc', (q) =>
+      q
+        .select(
+          'id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas, lineas_recibidas, recepcion_linea(oc_ref, store, producto_id, sku, codigo_barras, cantidad_contada)',
+        )
+        .not('proveedor_id', 'is', null)
+        .order('id'),
+    ),
+  ])
   if (!locales.length) return { dias, locales: [], ocs: [], lineas: [], ventasPorProducto: [] }
-
-  const ids = locales.map((l) => l.proveedor_id_ingresos)
 
   // 🔑 **Las órdenes y sus renglones vienen EN UNA sola consulta**, por el embed de PostgREST (hay
   // FK: `recepcion_linea.oc_ref → recepcion_oc.id`). Eran dos lecturas encadenadas —y la de
@@ -222,14 +237,6 @@ export async function comparativa(cliente, dias) {
   // grande tiene **130** renglones. ⛔ `unidades_contadas` ⛔ no sirve de guard: sale de los totales
   // del EVENTO, no de los renglones guardados — el emisor puede mandar la cabecera entera con los
   // renglones recortados, y para eso está `totales_coinciden`.
-  const conRenglones = await leerTodo(cliente, 'recepcion_oc', (q) =>
-    q.select(
-      'id, store, oc_label, confirmada_at, fecha_ingreso, recibido_en, proveedor_id, unidades_pedidas, unidades_contadas, lineas_recibidas, recepcion_linea(oc_ref, store, producto_id, sku, codigo_barras, cantidad_contada)',
-    )
-      .in('proveedor_id', ids)
-      .order('id'),
-  )
-
   const ocs = []
   const lineas = []
   for (const o of conRenglones) {

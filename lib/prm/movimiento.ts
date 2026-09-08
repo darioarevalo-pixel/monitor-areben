@@ -493,6 +493,41 @@ export function comparativa(
 }
 
 /**
+ * **Qué tiene derecho a decir una celda de las columnas medidas.**
+ *
+ * 🔴 **Los cuatro estados se dibujaban con TRES símbolos, y dos de ellos afirmaban de más.** Es la
+ * pregunta que esta pantalla ya se hizo tres veces —el `(0)` de las pestañas, el `—` de las celdas,
+ * la flecha del encabezado— y cada vez se resolvió en el JSX. Acá vive una sola vez, y por eso se
+ * puede probar sin montar la pantalla:
+ *
+ * - `cargando` — el pedido viaja. Va «…»: un guion afirmaría que ⛔ no vendió nada del que más vende.
+ * - `fallo` — el pedido ⛔ no volvió. Va «?»: un guion en las 34 filas son 34 afirmaciones falsas, y
+ *   ⛔ ninguna forma de saber que se cayó. Lo reportó Bruno el 8-sep-2026.
+ * - `muda` — la base de SU marca ⛔ no contestó. Va «?». ⛔ No es lo mismo que `fallo` —acá el pedido
+ *   volvió y las demás filas son buenas— pero se dibuja igual, porque para el que mira es la misma
+ *   frase: «esto ⛔ no se pudo preguntar».
+ * - `sinDato` — el pedido volvió y este local ⛔ no está: ⛔ no tiene órdenes. Ahí el «—» es cierto.
+ * - `valor` — hay número.
+ */
+export type EstadoCelda = 'cargando' | 'fallo' | 'muda' | 'sinDato' | 'valor'
+
+export function estadoDeCelda(args: {
+  /** `null` = el pedido todavía viaja. */
+  medido: Map<string, FilaComparativa> | null
+  fallo: boolean
+  mudas: string[]
+  fila: FilaComparativa | undefined
+  /** ⛔ «Comprado» y «Última orden» ⛔ no dependen de las ventas: una marca muda ⛔ no las ensucia. */
+  dependeDeVentas: boolean
+}): EstadoCelda {
+  if (!args.medido) return 'cargando'
+  if (args.fallo) return 'fallo'
+  if (!args.fila) return 'sinDato'
+  if (args.dependeDeVentas && args.fila.stores.some((st) => args.mudas.includes(st))) return 'muda'
+  return 'valor'
+}
+
+/**
  * ¿Este local entra en la sección de esta marca?
  *
  * 🔴 **La marca se MIDE de las órdenes, ⛔ no se tilda.** Un campo tipeado al lado de un dato que el

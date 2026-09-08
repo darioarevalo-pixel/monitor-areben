@@ -55,7 +55,12 @@ import {
   space,
 } from '@/components/ui'
 import { abiertosOrdenados, normalizarNombre } from '@/lib/prm/core'
-import { comparativa as calcularComparativa, esDeLaMarca, type FilaComparativa } from '@/lib/prm/movimiento'
+import {
+  comparativa as calcularComparativa,
+  esDeLaMarca,
+  estadoDeCelda,
+  type FilaComparativa,
+} from '@/lib/prm/movimiento'
 import { diaDeIngreso } from '@/lib/recepciones/core'
 import { leerComparativa } from '@/lib/prm/cliente'
 import { usePRM } from './usePRM'
@@ -84,6 +89,14 @@ export function PRM() {
   const [busca, setBusca] = useState('')
   const [medido, setMedido] = useState<Map<string, FilaComparativa> | null>(null)
   const [mudas, setMudas] = useState<string[]>([])
+  /**
+   * 🔴 **Que el pedido FALLE ⛔ no es «no vendió nada», y hasta hoy se dibujaba igual.** El `catch`
+   * dejaba un mapa vacío y las 34 filas mostraban «—» en las cuatro columnas medidas: 34
+   * afirmaciones falsas con cara de dato, y ninguna manera de saber que el pedido se cayó. Es el
+   * mismo cero que esta pantalla ya distingue en `mudas` — sólo que aquél es «no contestó una
+   * marca» y éste es «no contestó el servidor».
+   */
+  const [falloMedido, setFalloMedido] = useState(false)
   const [orden, setOrden] = useState<{ col: Columna; desc: boolean }>({ col: 'vendidas', desc: true })
 
   const hoy = hoyLocal()
@@ -99,15 +112,20 @@ export function PRM() {
       try {
         const c = await leerComparativa(marca, DIAS)
         if (!vivo) return
+        setFalloMedido(false)
         const filas = calcularComparativa(c.locales, c.ocs, c.lineas, c.ventasPorProducto, c.dias, (o) =>
           diaDeIngreso({ fecha_ingreso: o.fecha_ingreso ?? null, confirmada_at: o.confirmada_at, recibido_en: o.recibido_en ?? '' }),
         )
         setMedido(new Map(filas.map((f) => [f.localId, f])))
         setMudas(c.marcasMudas || [])
       } catch {
-        // ⛔ Sin cartel de error: la lista sirve igual sin las columnas medidas, y un rojo arriba de
-        // una pantalla que anda manda a arreglar lo que no está roto. Las celdas quedan en «—».
-        if (vivo) setMedido(new Map())
+        // ⛔ Sin cartel ROJO: la lista sirve igual sin las columnas medidas, y un rojo arriba de una
+        // pantalla que anda manda a arreglar lo que no está roto. 🔴 **Pero callarlo tampoco**: las
+        // celdas pasan a «?» y arriba va un aviso neutro, porque un «—» en las 34 filas afirma que
+        // ninguno vendió nada.
+        if (!vivo) return
+        setMedido(new Map())
+        setFalloMedido(true)
       }
     })()
     return () => {
@@ -189,16 +207,22 @@ export function PRM() {
    * afirmaría del que más vende, durante el segundo que tarda el pedido.
    */
   const celda = (id: string, f: (m: FilaComparativa) => string, dependeDeVentas = true) => {
-    if (!medido) return <span style={{ color: color.mut2 }}>…</span>
-    const m = medido.get(id)
-    if (!m) return '—'
-    // 🔴 Si la base de su marca no contestó, acá va «?» y ⛔ NO un 0. Un cero dice «no vendió nada»
-    // de un proveedor del que no se pudo preguntar — y el día que falte una credencial serían 28
-    // de 34 filas mintiendo con cara de dato.
-    if (dependeDeVentas && m.stores.some((st) => mudas.includes(st))) {
-      return <span style={{ color: color.mut2 }} title="No se pudo preguntar por esa marca">?</span>
+    const m = medido?.get(id)
+    // 🔑 **Cuál de los cinco estados es lo decide `estadoDeCelda`, en el núcleo y una sola vez.**
+    // Acá sólo se elige el símbolo: el «…» de lo que viaja, el «?» de lo que ⛔ no se pudo
+    // preguntar —se haya caído el pedido o una marca— y el «—» del que ⛔ no tiene órdenes.
+    switch (estadoDeCelda({ medido, fallo: falloMedido, mudas, fila: m, dependeDeVentas })) {
+      case 'cargando':
+        return <span style={{ color: color.mut2 }}>…</span>
+      case 'fallo':
+        return <span style={{ color: color.mut2 }} title="No se pudieron leer las columnas medidas">?</span>
+      case 'muda':
+        return <span style={{ color: color.mut2 }} title="No se pudo preguntar por esa marca">?</span>
+      case 'sinDato':
+        return '—'
+      default:
+        return f(m as FilaComparativa)
     }
-    return f(m)
   }
 
   /** Los compromisos abiertos de todos, con el nombre del local pegado. */
@@ -276,6 +300,31 @@ export function PRM() {
               </>
             )}
           </p>
+
+          {/*
+            🔴 🔑 **El «…» de las cuatro columnas se ve igual que una pantalla colgada, y por eso
+            hay que decir qué está pasando.** Lo reportó Bruno el 8-sep-2026 —«marca $0 en toda la
+            información»— mirando la lista mientras el pedido viajaba. Los puntitos ya evitaban
+            afirmar un cero; lo que faltaba era **decir que están viajando y por qué tardan**: ese
+            pedido cruza las órdenes de las dos marcas contra sus ventas, y ⛔ no es el mismo que
+            trajo la lista.
+          */}
+          {!medido && (
+            <p style={{ fontSize: 12, color: color.mut, margin: 0 }}>
+              <strong>Comprado</strong>, <strong>Vendido</strong>, <strong>Por día</strong> y{' '}
+              <strong>Última orden</strong> están viajando: cruzan las órdenes contra las ventas de
+              las dos marcas y llegan en un pedido aparte. La lista de abajo ya está entera.
+            </p>
+          )}
+
+          {falloMedido && (
+            <Notice tone="warning">
+              ⛔ No se pudieron leer las columnas medidas —Comprado, Vendido, Por día y Última
+              orden—, así que dicen <strong>?</strong>. ⛔ No es que estos proveedores no hayan
+              vendido: es que el pedido que cruza las órdenes contra las ventas no volvió. El resto
+              de la lista es de otro pedido y está entero.
+            </Notice>
+          )}
 
           {mudas.length > 0 && (
             <Notice tone="warning">

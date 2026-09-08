@@ -8,11 +8,13 @@ import {
   comparativa,
   curva,
   esDeLaMarca,
+  estadoDeCelda,
   diasEntre,
   lunesDe,
   productosOrdenados,
   ritmo,
   semanas,
+  type FilaComparativa,
   type OcMovimiento,
   type ProductoMovimiento,
   type VentaMovimiento,
@@ -307,5 +309,61 @@ describe('esDeLaMarca', () => {
     // Hoy no hay ninguno (28 de Zattia y 6 de BDI, ninguno cruzado). El día que lo haya, sale solo.
     expect(esDeLaMarca({ marcas: ['bdi', 'zattia'] }, 'bdi')).toBe(true)
     expect(esDeLaMarca({ marcas: ['bdi', 'zattia'] }, 'zattia')).toBe(true)
+  })
+})
+
+describe('estadoDeCelda · qué tiene derecho a decir una celda medida', () => {
+  const fila = (stores: string[] = ['zattia']): FilaComparativa => ({
+    localId: 'L1',
+    nombre: 'ASKDENIM',
+    proveedorId: 2,
+    ocs: 3,
+    comprado: 100,
+    ultima: '2026-09-01',
+    productos: 12,
+    stores,
+    compartidos: 0,
+    vendidas: 40,
+    porDia: 1.3,
+    sinCruce: { lineas: 0, unidades: 0 },
+  })
+  const medido = new Map([['L1', fila()]])
+  const base = { medido, fallo: false, mudas: [] as string[], fila: fila(), dependeDeVentas: true }
+
+  it('con el pedido en viaje dice que está cargando, aunque ya haya una fila vieja', () => {
+    expect(estadoDeCelda({ ...base, medido: null })).toBe('cargando')
+  })
+
+  it('🔴 el pedido que ⛔ NO volvió ⛔ no es «no vendió nada»: es «no se pudo preguntar»', () => {
+    // Reportado por Bruno el 8-sep-2026. Antes esto caía en el mismo «—» que el proveedor sin
+    // órdenes: 34 filas afirmando un cero, y ninguna manera de saber que el pedido se cayó.
+    expect(estadoDeCelda({ ...base, fallo: true })).toBe('fallo')
+  })
+
+  it('🔴 y el fallo gana sobre todo lo demás: sin datos ⛔ no se puede decir «no tiene órdenes»', () => {
+    expect(estadoDeCelda({ ...base, fallo: true, fila: undefined })).toBe('fallo')
+  })
+
+  it('la marca muda también es «no se pudo preguntar», y ⛔ no un cero', () => {
+    expect(estadoDeCelda({ ...base, mudas: ['zattia'] })).toBe('muda')
+  })
+
+  it('🔴 pero una marca muda ⛔ NO ensucia «Comprado» ni «Última orden»: ésas ⛔ no salen de las ventas', () => {
+    expect(estadoDeCelda({ ...base, mudas: ['zattia'], dependeDeVentas: false })).toBe('valor')
+  })
+
+  it('🔑 la marca muda que ⛔ no es la SUYA ⛔ no lo afecta: el corte es por las órdenes de cada uno', () => {
+    expect(estadoDeCelda({ ...base, mudas: ['bdi'], fila: fila(['zattia']) })).toBe('valor')
+    expect(estadoDeCelda({ ...base, mudas: ['bdi'], fila: fila(['bdi']) })).toBe('muda')
+    // El que le vende a las dos queda mudo si falla cualquiera: su número estaría incompleto.
+    expect(estadoDeCelda({ ...base, mudas: ['bdi'], fila: fila(['zattia', 'bdi']) })).toBe('muda')
+  })
+
+  it('el local que ⛔ no está en la respuesta ⛔ no tiene órdenes, y ahí el guion es cierto', () => {
+    expect(estadoDeCelda({ ...base, fila: undefined })).toBe('sinDato')
+  })
+
+  it('con todo en orden, hay número', () => {
+    expect(estadoDeCelda(base)).toBe('valor')
   })
 })
