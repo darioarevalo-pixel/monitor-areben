@@ -251,8 +251,8 @@ export function GenDesc() {
       ) : (
         <>
           <Notice tone="neutral">
-            Acá está lo que ya tiene párrafo escrito y todavía no salió a la tienda. Mirá <b>la foto</b>
-            contra lo que dicen los datos y el párrafo: se corrige <b>acá mismo</b> —cada dato al
+            Acá está lo que ya tiene párrafo escrito y todavía no salió a la tienda.
+            Mirá <b>la foto</b> contra lo que dicen los datos y el párrafo: se corrige <b>acá mismo</b> —cada dato al
             elegirlo, el párrafo al salir del campo— y <b>Publicar</b> aprueba y escribe en un gesto.
           </Notice>
 
