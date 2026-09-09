@@ -1362,6 +1362,20 @@ es del monitor**, que es un hueco medido, no una idea:
   MINI ANNE · BODY ORIANA · SHORT VIBE · TOP CAIRO). Confirmado ⛔ no es aplicado: descartarlos
   todavía ⛔ no toca la tienda.
   📌 Los otros 3 con repo pero que ⛔ no venden: TOP AZURE (v90 3) · TOP DUBAI (2) · TOP MARIAN (−1).
+- 🔴 🔑 **LA COMPRA DEL 31/8 A CONTAMINA ⛔ NO ESTÁ EN EL SISTEMA, y el hueco es del feed.**
+  Bruno: *«pero compré también el 31/8, fijate»*. Revisado: **las OC del 30 y 31-ago SÍ entraron
+  —13 OC, 580 u, el 1-sep— pero son de otros 12 proveedores** (PSYCHIC · ASKDENIM ×2 · EFFIE ·
+  RHOVE · MAIE · YASANA · ELIANA · NATURAL · SCOPO · AUDAZ · AIME · PLAYURBAN), **ninguna de
+  CONTAMINA**. Su última recepción sigue siendo **OC-0308, compra 10-ago**.
+  🔑 **Recepciones guarda lo RECIBIDO Y CONTADO, ⛔ no lo comprado** —lo escribe `api/_oc-webhook.js`
+  cuando Ingresos confirma la OC— ⇒ una compra del 31/8 que todavía ⛔ no se recibió/confirmó **no
+  puede** aparecer. ⚠️ Y de las 13 del 31-ago, **sólo un producto está en la feria**: SWEATER ZARA
+  (ASKDENIM, alta nueva, 8 u, v90 0).
+  🔴 **El feed tiene sólo DOS días de actividad**: 27-ago (61 OC, la carga histórica) y 1-sep
+  (13 OC). **Desde el 1-sep ⛔ no entró ninguna** — 8 días. ▶️ Vale chequear del lado de Ingresos si
+  la OC de CONTAMINA del 31/8 quedó sin confirmar, o si el webhook dejó de traer.
+  ⇒ **Para la decisión, la palabra de Bruno reemplaza al dato**: si le volvió a comprar a CONTAMINA,
+  la línea está viva y los 14 salen de la feria.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
