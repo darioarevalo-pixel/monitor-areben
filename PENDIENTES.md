@@ -1376,6 +1376,26 @@ es del monitor**, que es un hueco medido, no una idea:
   la OC de CONTAMINA del 31/8 quedó sin confirmar, o si el webhook dejó de traer.
   ⇒ **Para la decisión, la palabra de Bruno reemplaza al dato**: si le volvió a comprar a CONTAMINA,
   la línea está viva y los 14 salen de la feria.
+- 🛑 **CORTADO POR BRUNO**: *«dejémoslo ahí, hasta ahí. Lo que todavía no quedó confirmado
+  esperemos»*. ⛔ No se saca nada más de la feria. Estado al cierre: **286 confirmado · 65 definido ·
+  25 descartado**.
+- 🔴 🔑 **ETIQUETAR LA FERIA ⛔ NO DEPENDE DE CONFIRMAR: DEPENDE DE APLICAR** (pregunta de Bruno:
+  *«lo importante es que lo del depósito esté confirmado para empezar a etiquetar»*).
+  Con la campaña `en_curso`, **`pidsAEtiquetar` devuelve SÓLO los `aplicado`** (`api/_liquidacion.js`)
+  ⇒ con **0 aplicados**, la feria **⛔ no aparece en Etiquetas** aunque se confirmen los 351.
+  🔑 **Y el precio de la etiqueta sale de Tienda Nube, ⛔ no de la campaña**: hoy TN tiene el precio
+  del sale de agosto ⇒ etiquetar antes de aplicar **cuelga en la percha el precio viejo**.
+  ⛔ **El atajo «Ya cargué los precios» ⛔ NO sirve**: pasa la campaña a `aplicada` y ahí Etiquetas
+  suma los `confirmado`, pero **la etiqueta seguiría imprimiendo el precio de TN**.
+  ⇒ el orden del domingo 13 no cambia: **sacar el sale → ocultar en TN → aplicar → recién ahí
+  etiquetar**. 📌 Y para una feria de MESAS la prenda ⛔ no lleva etiqueta de precio: lleva el
+  **cartel de la mesa** — lo que sí se puede empezar ya es **bajar del depósito y separar por mesa**,
+  que ⛔ no depende de nada del sistema.
+- ✅ **Y la premisa de la pregunta ⛔ no es cierta: los precios SÍ se pueden editar.**
+  `campaniaEditable` es `estado !== 'cerrada'`: ni la fecha de inicio ni el `confirmado` congelan
+  nada. Cambiar un precio confirmado lo devuelve a `definido` y **borra la confirmación**, a
+  propósito — un precio nuevo es un precio que nadie miró. Lo único que cambia después de **aplicar**
+  es que hay que reescribirlo en GN.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
