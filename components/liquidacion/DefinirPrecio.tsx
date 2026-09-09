@@ -42,7 +42,7 @@ import {
   type LiquidacionItem, type TipoCampania,
 } from '@/lib/liquidacion'
 import {
-  Button, Field, Input, Modal, Notice, StatusPill, formatMoney, useConfirmar,
+  Button, Field, Input, Lightbox, Modal, Notice, StatusPill, formatMoney, useConfirmar,
   color, font, radius, space, weight,
 } from '@/components/ui'
 
@@ -513,15 +513,29 @@ function FichaProducto({ item, ctx }: { item: LiquidacionItem; ctx: Contexto }) 
   const f = item.foto
   const conStock = ctx.talles.filter((t) => t.stock > 0)
   const enDeposito = conStock.reduce((s, t) => s + t.deposito, 0)
+  /**
+   * La foto en grande, encima del modal. A 64 px se ve que hay una prenda, no CUÁL: el color y el
+   * largo —lo que decide si el precio es el que corresponde— sólo aparecen a tamaño completo, y la
+   * URL guardada ya es la de 1024 px. El `Lightbox` del kit va por encima del backdrop (z-index
+   * 3000 contra 200), así que el modal no lo tapa.
+   */
+  const [ampliada, setAmpliada] = useState<string | null>(null)
   return (
     <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', marginBottom: space[3] }}>
+      <Lightbox src={ampliada} alt={f.nombre} onCerrar={() => setAmpliada(null)} />
       {f.imagen ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={f.imagen}
-          alt=""
-          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: radius.md, flex: 'none', border: `1px solid ${color.line}` }}
-        />
+        <button
+          type="button"
+          onClick={() => setAmpliada(f.imagen)}
+          title="Ver la foto en grande"
+          style={{
+            padding: 0, background: 'none', border: `1px solid ${color.line}`, borderRadius: radius.md,
+            width: 64, height: 64, flex: 'none', overflow: 'hidden', cursor: 'zoom-in', lineHeight: 0,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={f.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </button>
       ) : (
         <div style={{ width: 64, height: 64, borderRadius: radius.md, background: color.bg2, border: `1px solid ${color.line}`, flex: 'none' }} />
       )}

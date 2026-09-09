@@ -65,9 +65,9 @@ import { Resultado } from './Resultado'
 import { Revision } from './Revision'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
-  Badge, BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard, Modal,
-  Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, formatMoney, useConfirmar,
-  useFiltroUrl, useToast, color, font, radius, space, weight, type Tone,
+  Badge, BuscarInput, Button, Card, EmptyState, Esqueleto, Field, FilterBar, Input, KpiCard,
+  Lightbox, Modal, Notice, Select, StatusPill, TBody, THead, TableWrap, Tabs, Td, Th, Tr, formatMoney,
+  useConfirmar, useFiltroUrl, useToast, color, font, radius, space, weight, type Tone,
 } from '@/components/ui'
 
 /**
@@ -526,6 +526,11 @@ function DetalleCampania({
    * "siguiente" sería otro producto cada vez que se guarda uno y se terminaría saltando la mitad.
    */
   const [definiendo, setDefiniendo] = useState<{ orden: string[]; i: number } | null>(null)
+  /**
+   * La foto que se está mirando en grande. Se guarda el nombre además del `src` porque el
+   * lightbox tapa la fila: sin el rótulo no se sabe de cuál de los 351 productos es la foto.
+   */
+  const [foto, setFoto] = useState<{ src: string | null; nombre: string } | null>(null)
   const [pestania, setPestania] = useFiltroUrl<string>('t', 'productos')
   /**
    * La escritura contra Gestión Nube, mientras corre.
@@ -1217,6 +1222,7 @@ function DetalleCampania({
                     tipo={tipo}
                     puedeMover={campaniaEditable(campania.estado)}
                     onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: n })}
+                    onFoto={() => setFoto({ src: i.foto.imagen, nombre: i.foto.nombre })}
                     onDescartar={() => void moverEstado(i, 'descartado')}
                     onVolver={() => void moverEstado(i, 'pendiente')}
                     onQuitar={() => void quitar(i)}
@@ -1261,12 +1267,14 @@ function DetalleCampania({
           onCerrar={() => setDefiniendo(null)}
         />
       )}
+
+      <Lightbox src={foto?.src || null} alt={foto?.nombre || ''} onCerrar={() => setFoto(null)} />
     </>
   )
 }
 
 function FilaItem({
-  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar,
+  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar, onFoto,
 }: {
   item: LiquidacionItem
   tipo: TipoCampania
@@ -1275,6 +1283,7 @@ function FilaItem({
   onDescartar: () => void
   onVolver: () => void
   onQuitar: () => void
+  onFoto: () => void
 }) {
   const rot = ROTULO_ITEM[item.estado] || ROTULO_ITEM.pendiente
   const problemas = avisos(item, tipo).filter((a) => a.nivel === 'alto')
@@ -1283,13 +1292,32 @@ function FilaItem({
   return (
     <Tr onClick={onDefinir} style={apagado ? { opacity: 0.55 } : undefined}>
       <Td style={{ width: 48 }}>
+        {/*
+          🔑 **La miniatura abre la FOTO, no la fila.** A 36 px no se ve si el corte es el que uno
+          cree, y el único camino para mirarla era entrar a "Definir" producto por producto: son
+          351 en la feria de Zattia. Es el mismo problema que ya estaba escrito en `GenDesc`
+          ("la miniatura del encabezado no sirve: 44×55 px y su clic abre la fila").
+          El `stopPropagation` es lo que separa los dos gestos: sin él la `<Tr>` de arriba abre el
+          modal detrás del lightbox.
+        */}
         {item.foto.imagen ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.foto.imagen}
-            alt=""
-            style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: radius.sm, display: 'block' }}
-          />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onFoto() }}
+            title="Ver la foto en grande"
+            style={{
+              padding: 0, border: 'none', background: 'none', display: 'block',
+              cursor: 'zoom-in', lineHeight: 0, borderRadius: radius.sm, overflow: 'hidden',
+              width: 36, height: 36,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.foto.imagen}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          </button>
         ) : (
           <div style={{ width: 36, height: 36, borderRadius: radius.sm, background: color.bg2, border: `1px solid ${color.line}` }} />
         )}

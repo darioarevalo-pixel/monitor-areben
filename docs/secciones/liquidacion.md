@@ -53,6 +53,11 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
 - 🔑 **La foto del producto se congela al entrar a la campaña** (costo, precio, stock, ventas). Si
   leyera el ETL de hoy, un producto definido la semana pasada mostraría otro margen que el que se
   aprobó — y el ETL no guarda historia, así que el número viejo no se recupera.
+  🆕 **La miniatura se toca y la foto se abre en grande**, tanto en la lista como en la ficha del
+  modal. A 36 px se ve que hay una prenda, no cuál: el color y el largo —lo que decide si el precio
+  es el que corresponde— sólo aparecen a tamaño completo, y hasta ahora el único camino era entrar
+  a «Definir» producto por producto (la feria de Zattia son 351). Es el `Lightbox` del kit; la
+  imagen guardada ya es la de 1024 px, así que no hay una segunda lectura de Tienda Nube.
 - 🔑 **El estado de la campaña sigue a lo que hay puesto en Gestión Nube, en los DOS sentidos.**
   Poner la deja `aplicada`; **sacar la última oferta la devuelve a `en_curso`**. ⇒ una campaña que se
   levantó bien y una que nadie levantó **se ven igual desde el estado**: cualquier chequeo de «esto
