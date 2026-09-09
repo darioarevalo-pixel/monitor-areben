@@ -1265,6 +1265,20 @@ es del monitor**, que es un hueco medido, no una idea:
   costo $3.940 y lista $19.990). ⛔ No hizo falta gastar un peso en titulares.
 - 📌 **Quedan 2 avisos altos**, los dos por caer con la mesa EXACTAMENTE en el costo —**TOP FRAY**
   ($5.990, 3 u) y **TOP DASH** ($6.990, 2 u)—, que es literalmente «no ganar». Avisos medios: 14.
+- ✅ 🔑 **BOMBACHA Y CORPIÑO A $4.990 LA PARTE, PLANO** (Bruno: *«pondría bombacha y corpiño 4990
+  la parte, así directo»*) — **36 modelos · 2.340 prendas · un solo precio**, que es el **44% de las
+  prendas de la feria** y todas con lista $19.990 ⇒ **75% off en un cartel de un renglón**.
+  Aplicado con `decidirItem` importado del núcleo + `decidir-masivo`; verificado por GET: los 36 en
+  $4.990. Recauda **$11.676.600** contra **$11.086.423** de costo ⇒ **el bloque queda $590.177
+  ARRIBA del costo**, y resigna **$323.000** contra las mesas que tenía.
+  🔴 **Pero 814 prendas quedan por debajo del costo** (−$329.000, $404 por prenda): los siete
+  **CORPIÑO TAYRA** ($5.295) y **CORPIÑO BORA** ($5.490). A $5.490 no perdería ninguna y daría
+  73% off, pero deja de ser un solo número. **Es lo que decidió Bruno sabiendo el número.**
+  🔑 **Se pierde el titular de $3.990** (491 bombachas al 80%) y se gana uno **cinco veces más
+  grande**: 2.340 prendas al 75%. Los avisos altos pasaron de 2 a **9**.
+- 🔴 🔑 **CUIDADO: volver a apretar «Precios de mesa» PISA este precio plano.** `porEscalera`
+  reparte por costo y devolvería los corpiños caros a $5.990 — y ⛔ nada avisa que había una
+  decisión a mano encima. Si hay que recorrer la escalera de nuevo, esto se vuelve a aplicar después.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
