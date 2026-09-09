@@ -1129,30 +1129,44 @@ es del monitor**, que es un hueco medido, no una idea:
   nativo congela el puente de Chrome.
 - ✅ 🔑 **9-sep-2026: LA FERIA YA ESTÁ DEFINIDA — 351 ítems con precio de mesa, 0 pendientes.**
   El botón ⛔ no se apretó: se corrió por API con `porEscalera` **importado** del núcleo
-  (`lib/liquidacion/core.ts`), que es la misma regla que ejecuta la pantalla, y por `decidir-masivo`,
-  que es el mismo endpoint. ⛔ No toca Gestión Nube. Verificado **por GET**, no por lo que contestó
-  el POST: `376 = 351 definido + 25 descartado`, **ninguno sin precio**.
-  Reparto: **$5.900** 86 modelos/2.620 prendas · **$9.900** 114/580 · **$14.900** 73/1.577 ·
-  **$19.900** 33/324 · **$24.900** 22/83 · **$29.900** 17/124 · **$39.900** 4/21 · **$54.900** 2/6.
-  **Techo $58.086.500 contra $47.830.300 de costo (1,21×)**, 51% off promedio sobre lista y
-  **cero prendas por debajo del costo**.
+  (`lib/liquidacion/core.ts`) y por `decidir-masivo`, el mismo endpoint. ⛔ No toca Gestión Nube.
+  Verificado **por GET**, ⛔ no por lo que contestó el POST: `376 = 351 definido + 25 descartado`,
+  **ninguno sin precio, cero por debajo del costo**.
   🔑 **Para importar el núcleo TS desde un script hay que resolver el alias `@/`**: `registerHooks`
   de `node:module` reescribiendo `@/x` → `<raíz>/x` y agregando la extensión `.ts`. Sin eso Node no
-  puede leer `lib/liquidacion/core.ts` y la única salida es **copiar la regla**, que es lo que el
-  cargador se había cuidado de no hacer.
-- 🔴 🔑 **LO QUE FALTA DECIDIR ⛔ NO ES UN PRECIO: SON 30 MODELOS A LOS QUE LA FERIA LES SUBE
-  EL PRECIO** (343 prendas). El sale de agosto ya los tiene **más baratos** de lo que va a decir el
-  cartel de la mesa, y ⛔ **no hay mesa más baja posible: la que sigue les queda por debajo del
-  costo**, que es justo lo que `porEscalera` se niega a hacer sin que alguien lo decida. Los dos
-  grandes son los que el sale ⛔ **no movió**: **BODY SWEET** (87 u, costo $12.403, hoy $10.990 →
-  mesa $14.900, **2 ventas en 90 días**) y **BODY CLARI** (57 u, costo $14.205, hoy $10.990 → mesa
-  $14.900, **1 venta**). ⇒ **ya están abajo del costo y aun así no se mueven.** Bruno ya dijo que
-  la pérdida no lo frena —«no busco ganancia»—, pero **la escalera ⛔ no la puede tomar sola**:
-  o se los deja subir, o se les pone precio a mano por debajo del costo.
-- 🔴 **Dos avisos ALTOS que «Confirmar todos» entierra**: **ACCESORIO NRO 1 LILA** queda a $5.900
-  con **lista $4.990** —la mesa le SUBE el precio por arriba del de lista, 7 u, y es el único caso—
-  y **BABY TEE IA** cae en la mesa de $5.900 con **costo $5.900** (4 u: margen cero antes del
-  descuento de caja). Se definen a mano o se descartan. Los 30 avisos medios son los 30 de arriba.
+  puede leer `lib/liquidacion/core.ts` y la única salida es **copiar la regla**.
+- 🔴 🔑 **LA ESCALERA DE 8 MESAS DEJABA LOS PRECIOS LEJOS DEL COSTO, Y LA FERIA ES AL COSTO.**
+  Lo cazó Bruno: *«los precios de mesa van al costo, no? pq sino faltan más opciones de precio de
+  mesa»*. Medido: con las 8 mesas viejas **sólo 925 de 5.335 prendas quedaban a menos de 10% del
+  costo** y **2.056 quedaban más de 25% arriba** — las bombachas de $3.940 en la mesa de $5.900
+  (+50%), un accesorio de $1.200 a $5.900 (+392%). El techo daba **21,4% sobre el costo**.
+  🔑 **Y el problema ⛔ no era «pocas mesas»: era DÓNDE estaban.** Calculado por programación
+  dinámica (partir los costos ordenados en N grupos, precio del grupo = el costo más caro
+  redondeado al X.900 de arriba, minimizando la distancia al costo pesada por prendas): las
+  **mejores 8** ya daban 12,4% en vez de 21,4%. De 14 mesas para arriba el rendimiento se aplana
+  (14 → 8,4% · 19 → 7,0%): **seis carteles más compran $0,8M de acercamiento**.
+- ✅ **La escalera quedó en 14 mesas**: `1900, 4900, 5900, 6900, 8900, 11900, 12900, 13900, 14900,
+  17900, 20900, 27900, 34900, 43900`. Verificado por GET — techo **$51.840.500** contra
+  **$47.830.300** de costo (**1,08×, 8,4% arriba**, era 1,21×), **56% off promedio sobre lista**,
+  **3.429 prendas a menos de 10% del costo** (eran 925) y **cero por debajo del costo**.
+  Reparto: $1.900 3 modelos/56 u · $4.900 51/1.674 · $5.900 32/890 · $6.900 30/186 · $8.900 68/325 ·
+  $11.900 41/405 · $12.900 24/743 · $13.900 13/226 · $14.900 11/272 · $17.900 26/271 ·
+  $20.900 12/96 · $27.900 33/162 · $34.900 4/16 · $43.900 3/13.
+  🔑 **La mesa de $54.900 ⛔ no existía**: el costo más caro del lote es **$43.626**.
+- ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
+  les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
+  (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
+  NRO 1 LILA, ahora en la mesa de $1.900). Los avisos medios bajaron de 30 a 8.
+- 🔴 **Lo que queda es una decisión, ⛔ no un número: 8 modelos (190 prendas) a los que la mesa
+  igual les sube el precio**, porque la mesa de abajo les queda debajo del costo. Los dos grandes
+  son los que el sale ⛔ no movió: **BODY SWEET** (87 u, costo $12.403, hoy $10.990 → mesa $12.900,
+  2 ventas en 90 días) y **BODY CLARI** (57 u, costo $14.205, hoy $10.990 → mesa $14.900, 1 venta).
+  **Ya están abajo del costo y aun así no se mueven** ⇒ o se los deja subir, o se les pone precio a
+  mano por debajo del costo. Bruno ya dijo que la pérdida no lo frena, pero `porEscalera` ⛔ no
+  puede tomar esa decisión sola.
+- 🔴 **Dos avisos ALTOS que «Confirmar todos» entierra**, los dos por caer con la mesa EXACTAMENTE
+  en el costo (margen cero antes del descuento de caja): **BABY TEE IA** ($5.900, 4 u) y
+  **REMERA OVERLAY** ($17.900, 15 u).
 - ▶️ **El estado quedó en `definido`, ⛔ no en `confirmado`**: la segunda mirada sigue pendiente y es
   la que habilita «Escribir los precios en Gestión Nube». El orden del domingo 13 ⛔ no cambia.
 - ▶️ 🔴 **El ORDEN de la feria, que es lo que sale caro al revés**: ocultar en Tienda Nube **primero**,
