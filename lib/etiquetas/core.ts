@@ -190,9 +190,12 @@ export function nombrarSinPrecio(sinPrecio: Grupo[], tope = 10): string {
 
 /**
  * La secuencia de labels a imprimir: cada grupo expande sus copias; `sep` intercala
- * un separador en blanco (null) entre variantes (depósito); `conFP` intercala la
- * etiqueta de formas de pago después de cada copia (local). Port de la construcción
- * de `labels` en etiImprimir.
+ * un separador en blanco (null) entre variantes (información de producto); `conFP` intercala la
+ * etiqueta de formas de pago después de cada copia. Port de la construcción de `labels` en
+ * etiImprimir.
+ *
+ * ⚠️ **Acá `conFP` ya viene decidido**: quién puede pedirlo lo dice `admiteFormasDePago`
+ * (`tipos.ts`), y son las dos etiquetas que dicen un precio.
  */
 export function secuenciaLabels(grupos: Grupo[], opts: { sep: boolean; conFP: boolean }): (VarianteEti | null | { __fp: true })[] {
   const labels: (VarianteEti | null | { __fp: true })[] = []

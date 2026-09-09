@@ -16,7 +16,7 @@ import {
   type ProductoPrecio,
 } from '@/lib/etiquetas/core'
 import { indexarTn, type TnProducto } from '@/lib/tn'
-import { PESTANIAS, rotuloPestania, type Pestania, type VarianteEti } from '@/lib/etiquetas/tipos'
+import { admiteFormasDePago, MODO_DE, PESTANIAS, rotuloPestania, type ModoEtiqueta, type Pestania, type VarianteEti } from '@/lib/etiquetas/tipos'
 import { PERM_CAT } from '@/lib/nav.datos'
 import { cargarPreciosLegacy, cargarVariantesLegacy } from './legacy-etiquetas'
 
@@ -249,6 +249,25 @@ describe('agruparCantidades y secuenciaLabels', () => {
 
   it('sin opciones: solo las copias', () => {
     expect(secuenciaLabels([{ v: varsById.a, cant: 3 }], { sep: false, conFP: false })).toEqual([varsById.a, varsById.a, varsById.a])
+  })
+})
+
+/**
+ * Quién puede pedir la etiqueta de formas de pago detrás.
+ *
+ * 🔴 **Vivía como `modo === 'loc'` escrito en tres lugares** —la tilde, el botón de imprimir y el
+ * escáner— y por eso una prenda en oferta no la tenía, que es justo cuando el cliente pregunta en
+ * cuántas cuotas (Bruno, 9-sep-2026). Ahora la regla es una sola función y este test es el candado:
+ * la de precio rebajado entra, y con ella **la cola**, que dibuja con `promo`.
+ */
+describe('la etiqueta de formas de pago va detrás de las que dicen un precio', () => {
+  it('precio y precio rebajado sí; información de producto y SKU no', () => {
+    const admiten = (['dep', 'loc', 'promo', 'sku'] as ModoEtiqueta[]).filter(admiteFormasDePago)
+    expect(admiten).toEqual(['loc', 'promo'])
+  })
+
+  it('la cola queda adentro por el dibujo que usa', () => {
+    expect(admiteFormasDePago(MODO_DE.cola)).toBe(true)
   })
 })
 

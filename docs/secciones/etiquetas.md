@@ -4,7 +4,8 @@ Sección `etiquetas`, área `local`. Imprime las etiquetas de 5 × 2,5 cm de las
 una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ago-2026 incluye la
 **cola de reetiquetado**: qué prenda hay que volver a etiquetar porque le cambió el precio. Desde el
 3-sep-2026 la pestaña de SKU imprime además la **etiqueta de bolsa de 10 × 15 cm**, con los SKU de
-todos los colores de un producto juntos.
+todos los colores de un producto juntos. Desde el 9-sep-2026 la **etiqueta de formas de pago** ya no
+es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen un número.
 
 ## Dónde vive
 
@@ -61,6 +62,20 @@ todos los colores de un producto juntos.
 - ⚠️ **Juntar colores es cosa del ESCÁNER, no de las cantidades de la tabla.** Ahí cada renglón es
   una variante y su número, así que con la etiqueta grande la cantidad son **copias de la misma
   bolsa**. El tamaño sí manda en las dos.
+
+- 🔑 **La etiqueta de formas de pago va con el PRECIO, no con la pestaña** (Bruno, 9-sep-2026).
+  Nació en «Precio» y la condición `modo === 'loc'` estaba escrita en tres lugares —la tilde, el
+  botón de imprimir y el escáner—, así que una prenda **en oferta** no la tenía: justo el caso en
+  que el cliente pregunta en cuántas cuotas. La regla es una sola función, `admiteFormasDePago`
+  (`tipos.ts`), y dice `loc` y `promo` ⇒ con eso queda también en **«Para reetiquetar»**, que dibuja
+  con `promo` y elige prenda por prenda (el escáner la consulta con `modoV`, el modo de *esa* prenda,
+  no el de la pestaña). ⛔ Información de producto y SKU quedan afuera: no dicen ningún número.
+  Lo ata `tests/etiquetas-core.test.ts`.
+- 🔑 **El editor 💳 sigue viviendo en «Precio», y en las otras dos aparece con la tilde puesta**
+  (Bruno: *«solo cuando se selecciona y se tilda el casillero»*). En Precio va siempre porque ahí
+  está la **única** puerta para imprimir formas de pago sueltas («Imprimir solo formas de pago…»), y
+  esconderla detrás de la tilde sacaría una función. ⚠️ **Las líneas son una sola para las tres**
+  (`fpLines`, guardado arriba): editarla desde Precio rebajado cambia también la de Precio.
 
 - 🔑 **Las etiquetas se llaman por lo que DICEN, no por dónde se pegan** (Bruno, 16-ago-2026):
   información de producto · precio · precio rebajado · SKU · libre. «Depósito» y «Local» eran
@@ -152,6 +167,7 @@ todos los colores de un producto juntos.
   mirar ninguna otra.
 - ⚠️ **La vista previa de formas de pago mentía**: era HTML con tamaños en px contra un PDF en pt.
   Ahora las dos previas de la pantalla son el PDF real, por `PreviaPdf`.
+- ⚠️ **Y la de formas de pago existía sólo para la mitad de los casos**: ver la regla de arriba.
 
 ## Pendiente
 

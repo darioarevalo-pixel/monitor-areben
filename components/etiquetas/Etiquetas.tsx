@@ -25,6 +25,7 @@ import {
 } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
 import {
+  admiteFormasDePago,
   CONFIG_SKU_DEFAULT,
   ETIQUETA,
   MODO_DE,
@@ -645,7 +646,7 @@ function ModoPanel({
       inp.focus()
       return
     }
-    onImprimirUno(v, modoV === 'loc' && conFP)
+    onImprimirUno(v, admiteFormasDePago(modoV) && conFP)
     const p = precioDe(v)
     const pr = modoV === 'promo' ? promoDe(v) : null
     // ⚠️ La rama de `sku` ya volvió arriba, con su propio cartel: acá quedan las tres con precio.
@@ -749,7 +750,7 @@ function ModoPanel({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-          <Button variant="solid" tone="brand" disabled={!total} onClick={() => onImprimir({ sep: modo === 'dep' && sep, conFP: modo === 'loc' && conFP })}>
+          <Button variant="solid" tone="brand" disabled={!total} onClick={() => onImprimir({ sep: modo === 'dep' && sep, conFP: admiteFormasDePago(modo) && conFP })}>
             Imprimir {total} {total === 1 ? 'etiqueta' : 'etiquetas'}
           </Button>
           {(conPrecio || conAntesAhora) && (
@@ -787,7 +788,7 @@ function ModoPanel({
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={sep} onChange={(e) => setSep(e.target.checked)} /> Dejar una etiqueta en blanco al cambiar de variante (para separar más fácil)
           </label>
         )}
-        {modo === 'loc' && (
+        {admiteFormasDePago(modo) && (
           <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
             <input type="checkbox" style={{ accentColor: "var(--mo-brand-solid)" }} checked={conFP} onChange={(e) => setConFP(e.target.checked)} /> Imprimir también la etiqueta de <b>&nbsp;formas de pago</b>&nbsp; (1 después de cada precio)
           </label>
@@ -865,7 +866,14 @@ function ModoPanel({
         </div>
       </Card>
 
-      {modo === 'loc' && <FPEditor fpLines={fpLines} guardarFP={guardarFP} catalogoListo={catalogoListo} />}
+      {/* 🔑 **En «Precio» el editor va siempre; en las otras dos, sólo con la tilde puesta**
+          (Bruno, 9-sep-2026: *«solo cuando se selecciona y se tilda el casillero»*). Acá vive la
+          única puerta para imprimir formas de pago sueltas, así que esconderla detrás de la tilde
+          sacaría una función; en Precio rebajado y en la cola es un panel de más si nadie la va a
+          usar, y aparece recién cuando alguien dijo que la quiere. */}
+      {admiteFormasDePago(modo) && (modo === 'loc' || conFP) && (
+        <FPEditor fpLines={fpLines} guardarFP={guardarFP} catalogoListo={catalogoListo} />
+      )}
     </div>
   )
 }
@@ -955,7 +963,7 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
   return (
     <Card>
       <div style={{ fontSize: 14, fontWeight: 700 }}>💳 Etiqueta de formas de pago</div>
-      <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 12px' }}>Diseñala una vez (queda guardada). Se imprime junto a las etiquetas de precio cuando tildás la opción de arriba. Tamaño 5 × 2,5 cm.</div>
+      <div style={{ fontSize: 12, color: color.mut2, margin: '2px 0 12px' }}>Diseñala una vez (queda guardada, y es la misma en Precio, Precio rebajado y Para reetiquetar). Se imprime detrás de cada etiqueta cuando tildás la opción de arriba. Tamaño 5 × 2,5 cm.</div>
       {fpLines.map((l, i) => (
         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
           <input value={l.texto} placeholder="Texto" onChange={(e) => setLinea(i, 'texto', e.target.value)} className="mo-input" style={{ flex: 1, minWidth: 160 }} />

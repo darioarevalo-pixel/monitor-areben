@@ -86,6 +86,21 @@ export function rotuloPestania(p: Pestania): { emoji: string; nombre: string } {
  */
 export const MODO_DE: Record<Slot, ModoEtiqueta> = { dep: 'dep', loc: 'loc', promo: 'promo', sku: 'sku', cola: 'promo' }
 
+/**
+ * Qué etiquetas pueden llevar la de **formas de pago** detrás: las dos que dicen un precio.
+ *
+ * 🔑 **Va con el precio, no con la pestaña** (Bruno, 9-sep-2026). Nació sólo en «Precio» y la
+ * pregunta que la ordenó fue por qué una prenda en oferta —que es justo cuando el cliente pregunta
+ * en cuántas cuotas— no la tenía. `promo` la habilita, y con eso queda también en **«Para
+ * reetiquetar»**, que dibuja con `promo` y elige prenda por prenda entre las dos que sí la admiten.
+ *
+ * ⛔ **Información de producto y SKU quedan afuera**: ninguna dice un número, así que una etiqueta
+ * de cuotas detrás no acompaña nada.
+ */
+export function admiteFormasDePago(m: ModoEtiqueta): boolean {
+  return m === 'loc' || m === 'promo'
+}
+
 /** La variante etiquetable, tal como viene de `allVariantes` del ETL. */
 export type VarianteEti = {
   id: string
