@@ -162,6 +162,70 @@ primero para arreglar lo de arriba.
 
 ---
 
+## 🆕 LA REGLA DE BRUNO DEL 9-sep: UN OBJETO SE JUZGA POR VENTANAS, ⛔ NO POR SU VIDA
+
+> «no me hagas el histórico de test broad, no tiene sentido. haceme análisis de 7 días, 3 días,
+> antes de ayer y ayer»
+
+**Dictado por Bruno el 9-sep-2026, y me lo dijo cortándome un análisis que ya había entregado.**
+Yo había defendido `TEST BROAD BDI - 06/05` con su vida entera —111 días, $372.869, 80 compras,
+CPA $4.661 = **59% del techo**, ROAS 4,83— para no tocarlo. El argumento es malo y por qué importa:
+
+🔑 **Una vida de 111 días promedia por arriba de cambios de pieza, de público y de FICHA.** El techo
+con el que se compara hoy ($7.933) ⛔ no es el que regía en mayo, y las piezas que corrían entonces
+ya no existen. Un promedio de vida **siempre** va a parecer sano en un objeto viejo que anduvo bien
+alguna vez, y eso lo vuelve **inmune a apagarse**: cuanto más viejo, más lo protege su propio
+pasado. Es el error contrario al de los dos bugs de abajo —ahí la ventana era **demasiado corta**,
+acá **demasiado larga**— y el remedio es el mismo: **la ventana se declara y se muestra**.
+
+⇒ **Las cuatro ventanas, y son estas cuatro**: `7 días` · `3 días` · `anteayer` · `ayer`, cada una
+con gasto, compras y **% del techo**. Las cuatro juntas, ⛔ nunca una sola.
+
+⚠️ **Y lo que las columnas de día NO pueden sostener**: a este volumen un día son 0 a 6 compras,
+así que **una sola compra mueve el %techo cien puntos**. El 8-sep `ADVANTAGE+ CONJUNTO ÚNICO` dio
+**26% anteayer y 183% ayer** sin que cambiara nada: es la misma cosa medida dos veces. ⇒ **anteayer
+y ayer sirven para ver si algo se despertó o se murió, ⛔ no para decidir.** Deciden 7d y 3d.
+
+🔑 **La forma que sí decide, y que salió de esto**: se apaga lo que está arriba del techo en **las
+cuatro ventanas**; se recorta lo que está arriba en 7d y 3d pero tiene días buenos; ⛔ no se toca lo
+que ya recibió su escalón y todavía no tiene 2 días cerrados. El 9-sep las tres salieron solas:
+`TEST FUNDAS` (110/141/0c/0c ⇒ **apagar**), `GIRLHOOD INTERESES 1` (139/170/98/115 ⇒ **recortar,
+pero recién mañana**), `TEST BROAD` (129/138/95/0c ⇒ **esperar, la mano ya está dada**).
+
+▶️ **Lo que falta en el `parte-del-dia`**: hoy imprime una sola ventana por sección y **⛔ no dice
+cuál**. Que cada fila accionable salga con las cuatro.
+
+### 🔴 EL BUG 2 VOLVIÓ A DISPARAR AL DÍA SIGUIENTE — sigue sin arreglar
+
+El 9-sep el parte pidió **−20% para `GIRLHOOD FRIO - INTERESES 1 - 7/8`**. Su escalón anterior fue
+el **7-sep** (decisión 235) ⇒ al 9-sep hay **UN solo día cerrado** con el presupuesto nuevo. Es
+exactamente el veto que falta, descrito abajo, **24 h después de haberlo escrito**. Se frenó a mano.
+
+⇒ 🔑 **Mientras el veto no esté en el código, todo `−20%` que proponga el parte hay que cruzarlo a
+mano contra la fecha del último escalón.** No es una revisión opcional: falló dos días seguidos.
+
+---
+
+## 🆕 EL SÁBADO 5-sep SE CAYÓ LA TIENDA ENTERA, Y ESTÁ ADENTRO DE TODAS LAS MEDIAS DE 7 DÍAS
+
+Medido el 9-sep mirando **todos los canales**, ⛔ no sólo Tienda Nube:
+
+| canal | vie 4 | **sáb 5** | dom 6 | lun 7 | mar 8 |
+|---|---|---|---|---|---|
+| Tienda Nube | 16 | **2** | 14 | 24 | 20 |
+| Mi Local | 32 | **5** | — | 25 | 22 |
+| Mercadolibre | — | **2** | 2 | 2 | 2 |
+
+**Los tres cayeron el mismo día**, con la pauta gastando sus $83.375 normales. Un día así ⛔ no es
+demanda ni es pauta: o se cayó la tienda o se cayó el sync. **Sigue sin explicarse** — y la decisión
+229 ya había pedido mirar el embudo del 5-sep, así que es la segunda vez que aparece.
+
+🔴 **Lo que muerde ⛔ no es el día: es que queda DENTRO de la media de 7 días** con la que el parte
+compara todos los días siguientes. Le baja la vara a todo hasta el 12-sep. ⇒ **al leer cualquier
+«contra su media de 7d» hasta esa fecha, acordarse de que la media tiene un día roto adentro.**
+
+---
+
 ## 🆕 DOS BUGS DEL `parte-del-dia` QUE CAZÓ BRUNO — 8-sep-2026 (medido, ⛔ sin arreglar)
 
 Los dos salieron de que Bruno no le creyó al parte, ⛔ no de leer el código. Viven en
