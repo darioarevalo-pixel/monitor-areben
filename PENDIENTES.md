@@ -1145,14 +1145,30 @@ es del monitor**, que es un hueco medido, no una idea:
   redondeado al X.900 de arriba, minimizando la distancia al costo pesada por prendas): las
   **mejores 8** ya daban 12,4% en vez de 21,4%. De 14 mesas para arriba el rendimiento se aplana
   (14 → 8,4% · 19 → 7,0%): **seis carteles más compran $0,8M de acercamiento**.
-- ✅ **La escalera quedó en 14 mesas**: `1900, 4900, 5900, 6900, 8900, 11900, 12900, 13900, 14900,
-  17900, 20900, 27900, 34900, 43900`. Verificado por GET — techo **$51.840.500** contra
-  **$47.830.300** de costo (**1,08×, 8,4% arriba**, era 1,21×), **56% off promedio sobre lista**,
-  **3.429 prendas a menos de 10% del costo** (eran 925) y **cero por debajo del costo**.
-  Reparto: $1.900 3 modelos/56 u · $4.900 51/1.674 · $5.900 32/890 · $6.900 30/186 · $8.900 68/325 ·
-  $11.900 41/405 · $12.900 24/743 · $13.900 13/226 · $14.900 11/272 · $17.900 26/271 ·
-  $20.900 12/96 · $27.900 33/162 · $34.900 4/16 · $43.900 3/13.
+- ✅ **La escalera quedó en 17 mesas**: `1900, 2900, 3900, 4900, 5900, 6900, 8900, 10900, 11900,
+  12900, 13900, 14900, 17900, 20900, 27900, 34900, 43900`. Verificado por GET — techo
+  **$51.600.500** contra **$47.830.300** de costo (**1,08×, 7,9% arriba**, era 1,21×), **56% off
+  promedio sobre lista**, **3.546 prendas a menos de 10% del costo** (eran 925) y **cero por debajo
+  del costo**. Reparto: $1.900 3 mod/56 u · $2.900 2/36 · $3.900 4/16 · $4.900 45/1.638 ·
+  $5.900 32/890 · $6.900 30/186 · $8.900 68/325 · $10.900 30/152 · $11.900 11/253 · $12.900 24/743 ·
+  $13.900 13/226 · $14.900 11/272 · $17.900 26/271 · $20.900 12/96 · $27.900 33/162 · $34.900 4/16 ·
+  $43.900 3/13.
   🔑 **La mesa de $54.900 ⛔ no existía**: el costo más caro del lote es **$43.626**.
+- 🔴 🔑 **UNA ESCALERA EFICIENTE ⛔ NO ES UNA ESCALERA CON BUENOS GANCHOS, y son dos objetivos
+  distintos.** Bruno: *«busco conseguir también los mejores precios en sweaters y tops para que sean
+  ganchos de la acción»*. La optimización pesa **por prendas** ⇒ pone las mesas donde está la masa
+  (1.264 corpiños y 1.076 bombachas), ⛔ **no donde está el titular**. Las tres mesas de gancho
+  ($2.900, $3.900, $10.900) se agregaron a mano: mueven 204 prendas y bajan el techo $240.000.
+  🔑 **Y el techo del gancho ⛔ NO lo pone la escalera: lo pone el COSTO.** El sweater más barato
+  del lote cuesta **$10.000** ⇒ ⛔ no hay escalera que dé un sweater a $7.900 sin ir a pérdida.
+  Pasar de 17 a 22 mesas ⛔ **no mejora ni un gancho**: sólo el promedio (7,9% → 6,6%).
+- 📌 **Los titulares medidos, con lo que cuestan** (⇒ decisión de Bruno, `porEscalera` ⛔ no la toma):
+  **SWEATERS a $12.900 sobre los 5 con volumen y poca venta** (SEATTLE 42 u v90 4 · STANFORD 48 u
+  **v90 1** · VIENNA 37 · MONTEREY 20 · OREGON 28) = **175 prendas al 62% off por $56.804**; a
+  $13.900 son **$3.836** y 59% off; a $9.900, 71% off y **$485.038**.
+  **TOPS**: el titular fuerte ya está y es **gratis** — **TOP FLARE** $4.900 con lista $16.490
+  (**70% off**, costo $2.876, 25 u) y **TOP WHISPER** $1.900 con lista $10.490 (**82% off**, costo
+  $1.625, 14 u). Un «TODOS LOS TOPS a $4.900» sobre las 616 prendas costaría **$1.455.157**.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
