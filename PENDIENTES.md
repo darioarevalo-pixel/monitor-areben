@@ -749,6 +749,63 @@ unidades fantasma · (5) ESSENTIAL 36.990 vs 45.990 · (6) los 5 con promo que G
 
 ---
 
+## 🆕 DESCRIPCIONES DE ZATTIA — LOS DOS ÚLTIMOS INGRESOS, CERRADOS (9-sep-2026)
+
+| estado | cuántas |
+|---|---|
+| 🟢 publicadas por Bruno hoy | **9** (las 4 que escribí + 5 de la cola vieja) |
+| 🟡 **borradores esperando que Bruno los mire** | **39** — ⛔ **dijo que NO los va a confirmar todavía** |
+| 🔴 mudas que ⛔ NO se pueden escribir | **8** — les falta la CATEGORÍA |
+| ⚪ cortas de catálogo viejo | 171 (junio y antes) |
+
+**Escritas las 39 cortas de los dos últimos ingresos** (4 del 2-sep + 35 del 12-ago), mirando las
+dos fotos de cada una, con el validador real y relectura. Del 2-sep y del 12-ago ⛔ no queda nada.
+
+🔴 **Las 8 mudas son 4 bermudas (FOUR, ZAHA, AMBER, SEOUL) y 4 shorts (VITA, CLIFF, GAIA,
+NATE), todas con `NEW IN` como ÚNICA categoría** ⇒ `familiaDe` da `null`, sin familia no hay ficha
+y sin ficha ⛔ no hay párrafo posible. **Es mano en Tienda Nube, ⛔ no texto.**
+
+### 🔴🔑 CAMBIÓ LA REGLA DEL CHIVATO: ahora la ficha la CORRIGE la sesión
+
+Bruno, 9-sep: *«¿vos no podés corregir las fichas que están mal, así dejo de mirar fichas y miro
+entonces el texto?»* ⇒ cae el «⛔ nunca cambies vos un valor de ficha». **El cuello era que revisar
+el texto obligaba a revisar también los bullets.** Ya está escrito en `~/.claude/commands/descripciones.md` § 4.
+📊 **15 escrituras, 15 OK, 14 releídas y confirmadas** por `op:'atributos'`.
+
+🔑 **Y lo que enseña el guard cuando rebota: si el valor no entra, la ficha ⛔ no estaba mal
+— la LISTA no alcanza.** Para eso está `propuesto: true`, que guarda la palabra y **⛔ NO la
+publica**.
+
+### ▶️ LO QUE FALTA: dos palabras en el diccionario
+
+**`halter` y `wide` están guardados como PROPUESTA en 4 prendas y van a seguir MUDOS** hasta que
+entren a `lib/tn-desc/atributos.core.js`:
+
+- **`halter` como valor de `manga`** (TOP ARIES, TOP BOULDER). Hoy `halter` existe **sólo como
+  ESCOTE**, y por eso el local venía poniendo `musculosa` en todo lo que se ata al cuello — es el
+  chivato más repetido de las últimas tres tandas. ⚠️ Ojo con el fondo: escote/cuello es **UN
+  campo**, así que una prenda halter con escote en V hoy ⛔ no puede decir las dos cosas.
+- **`wide` como valor de `calce` en la familia `faldas`** (BERMUDA HAYDEN, BERMUDA TIDE): las dos
+  dicen `recta` sobre piernas anchísimas. `wide leg` ya existe, pero en `pantalon`.
+
+📌 Y quedó un chivato **sin corregir a propósito**: HAYDEN y TIDE dicen `largo: a la rodilla` y el
+ruedo llega a media pantorrilla — `faldas` sólo ofrece mini / a la rodilla / midi / maxi.
+
+### 📌 Dos reglas del validador que sólo se ven ejerciéndolo
+
+1. El párrafo tiene que **nombrar la prenda de la FAMILIA en los primeros 60 caracteres**: «Remera…»
+   en un producto de familia `tops` se rechaza, va «Top…».
+2. **La repetición se mide contra el VALOR del bullet, ⛔ no contra su etiqueta**: con `Tela: lino`
+   la palabra «tela» pasa; con `Detalle: Con doble tela en el busto` quedan prohibidas «tela» y «busto».
+
+🔑 **Y el estilo del tip lo fijó Bruno editando, ⛔ no dictando**: de los 4 textos míos que
+publicó, editó 2, y los dos cambios son del mismo signo — se cayó el **adjetivo de tela** sobre la
+prenda del tip («falda satinada» → «falda») y la **tercera prenda** del look («y una camisa abierta
+encima»). ⇒ **el tip nombra la prenda, ⛔ no la califica ni la acumula**, y los dos pasaban `validarTip`.
+📌 Al párrafo de VESTIDO BLAZE le **agregó** «con frunces», que yo había evitado por el bullet
+«Detalle: elastizado» ⇒ **la regla de no repetir es sobre el DATO, ⛔ no sobre la palabra**.
+
+
 ## 🆕 DESCRIPCIONES DE ZATTIA — SALIERON LAS DOS PRIMERAS DE LA TANDA (7-sep-2026)
 
 ### 🔴 EL VEREDICTO DE BRUNO AL CERRAR EL DÍA, QUE ES LO PRIMERO QUE HAY QUE LEER
@@ -1396,6 +1453,22 @@ es del monitor**, que es un hueco medido, no una idea:
   nada. Cambiar un precio confirmado lo devuelve a `definido` y **borra la confirmación**, a
   propósito — un precio nuevo es un precio que nadie miró. Lo único que cambia después de **aplicar**
   es que hay que reescribirlo en GN.
+- ✅ 🔑 **PERO LA ETIQUETA DE LA FERIA ES SÓLO EL PRECIO, SIN NOMBRE — y eso YA SE PUEDE HACER HOY,
+  sin campaña, sin aplicar y sin Tienda Nube** (Bruno: *«la idea sería sólo etiqueta de precio sin
+  nombre… lo que tengo que hacer es etiquetar lo que no tengo exhibido en el local, llevarlo listo»*).
+  🔑 **La pestaña «Libre» (✏️) de Etiquetas es exactamente eso**: líneas de texto opcionales,
+  **campo de precio**, **copias** y tamaño; el código de barras se deja vacío. `buildLibrePdf` acepta
+  precio solo. ⇒ **el etiquetado del depósito ⛔ NO depende de nada de Liquidación**: son
+  **13 tiradas**, una por mesa con depósito.
+- 📌 **Cuántas etiquetas por mesa** (medido contra `inventario` del espejo, `store_name` =
+  Local / Deposito, sin Mayorista — **5.313 prendas vivas: 1.323 en el local y 3.990 en depósito,
+  el 75%**):
+  **$4.990 → 2.377** · **$12.990 → 630** · **$14.990 → 229** · **$11.990 → 211** · **$13.990 → 143** ·
+  **$17.990 → 135** · **$10.990 → 63** · **$27.990 → 62** · **$8.990 → 60** · **$20.990 → 31** ·
+  **$2.990 → 28** · **$1.990 → 9** · **$5.990 → 9** · **$43.990 → 3**.
+  ⛔ Sin depósito: $3.990, $6.990 y $34.990 (todo lo suyo está en el local).
+  ⚠️ El total del espejo (5.313) es 22 prendas menos que la foto congelada (5.335): la foto es del
+  6-sep y el inventario es de hoy. La diferencia es venta, no un error.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
