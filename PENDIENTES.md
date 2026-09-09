@@ -1183,6 +1183,24 @@ es del monitor**, que es un hueco medido, no una idea:
   costo). Bajar el piso a $7.900 con esos tres: $558.000. ▶️ **Decisión de Bruno.**
   🔑 **El precio a mano se pone con `decidirItem` IMPORTADO** del núcleo (la cuenta de margen,
   markup y % off es la misma que la pantalla) y se guarda con `guardar-item`. ⛔ No toca GN.
+- 🔴 🔑 **«NO BUSCO PERDER, BUSCO NO GANAR» — y eso REVIERTE el gancho bajo costo** (Bruno):
+  *«si va desde 10990, que sea ese el precio»*. ⇒ **⛔ ningún precio por debajo del costo**, y el
+  piso de cada familia es el que salga. SWEATER MONTEREY volvió de $9.900 a su mesa.
+  ✅ 🔑 **Y el número que él tipeó destapó la mejora: la escalera va terminada en `.990`, ⛔ no en
+  `.900`** — que además es **cómo Zattia escribe todos sus precios** (el sale de agosto: $6.990,
+  $8.990, $10.990, $14.990). Contra la intuición, subir cada escalón $90 **acerca** al costo: el que
+  cuesta $3.940 deja de saltar a $4.900 y cae en **$3.990**. Medido: **7,9% → 7,3%** sobre el costo.
+  ✅ **Aplicado y verificado por GET**: `1990, 2990, 3990, 4990, 5990, 6990, 8990, 10990, 11990,
+  12990, 13990, 14990, 17990, 20990, 27990, 34990, 43990` — techo **$51.345.650** sobre
+  **$47.830.300** de costo (**1,07×**), **57% off promedio**, **cero por debajo del costo**.
+- ✅ 🔑 **LOS GANCHOS SALIERON SOLOS Y NO CUESTAN NADA.** Piso por familia, todos sin perder un peso:
+  **BOMBACHAS $3.990 — 491 prendas, 80% off** · **CORPIÑOS $4.990 — 450 prendas, 75% off** ·
+  TOPS desde $1.990 (14 u, 81%) · SWEATERS desde $10.990 (22 u, 59%) · CORSETS $8.990 · BODIES
+  $6.990 · VESTIDOS $8.990 · CAMPERAS $10.990. 🔑 **Los dos primeros son 941 prendas al 75-80% off
+  con pérdida CERO**: es el aviso del domingo, y confirma lo que ya estaba medido (bombachas de
+  costo $3.940 y lista $19.990). ⛔ No hizo falta gastar un peso en titulares.
+- 📌 **Quedan 2 avisos altos**, los dos por caer con la mesa EXACTAMENTE en el costo —**TOP FRAY**
+  ($5.990, 3 u) y **TOP DASH** ($6.990, 2 u)—, que es literalmente «no ganar». Avisos medios: 14.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
