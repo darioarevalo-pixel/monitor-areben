@@ -1127,6 +1127,34 @@ es del monitor**, que es un hueco medido, no una idea:
   condición del botón de al lado y ⛔ no se dibujaba en `borrador`** —donde se arma la campaña—;
   arreglado con `campaniaEditable` (`9cc1ea6`). ⛔ **El prompt lo aprieta una persona**: un diálogo
   nativo congela el puente de Chrome.
+- ✅ 🔑 **9-sep-2026: LA FERIA YA ESTÁ DEFINIDA — 351 ítems con precio de mesa, 0 pendientes.**
+  El botón ⛔ no se apretó: se corrió por API con `porEscalera` **importado** del núcleo
+  (`lib/liquidacion/core.ts`), que es la misma regla que ejecuta la pantalla, y por `decidir-masivo`,
+  que es el mismo endpoint. ⛔ No toca Gestión Nube. Verificado **por GET**, no por lo que contestó
+  el POST: `376 = 351 definido + 25 descartado`, **ninguno sin precio**.
+  Reparto: **$5.900** 86 modelos/2.620 prendas · **$9.900** 114/580 · **$14.900** 73/1.577 ·
+  **$19.900** 33/324 · **$24.900** 22/83 · **$29.900** 17/124 · **$39.900** 4/21 · **$54.900** 2/6.
+  **Techo $58.086.500 contra $47.830.300 de costo (1,21×)**, 51% off promedio sobre lista y
+  **cero prendas por debajo del costo**.
+  🔑 **Para importar el núcleo TS desde un script hay que resolver el alias `@/`**: `registerHooks`
+  de `node:module` reescribiendo `@/x` → `<raíz>/x` y agregando la extensión `.ts`. Sin eso Node no
+  puede leer `lib/liquidacion/core.ts` y la única salida es **copiar la regla**, que es lo que el
+  cargador se había cuidado de no hacer.
+- 🔴 🔑 **LO QUE FALTA DECIDIR ⛔ NO ES UN PRECIO: SON 30 MODELOS A LOS QUE LA FERIA LES SUBE
+  EL PRECIO** (343 prendas). El sale de agosto ya los tiene **más baratos** de lo que va a decir el
+  cartel de la mesa, y ⛔ **no hay mesa más baja posible: la que sigue les queda por debajo del
+  costo**, que es justo lo que `porEscalera` se niega a hacer sin que alguien lo decida. Los dos
+  grandes son los que el sale ⛔ **no movió**: **BODY SWEET** (87 u, costo $12.403, hoy $10.990 →
+  mesa $14.900, **2 ventas en 90 días**) y **BODY CLARI** (57 u, costo $14.205, hoy $10.990 → mesa
+  $14.900, **1 venta**). ⇒ **ya están abajo del costo y aun así no se mueven.** Bruno ya dijo que
+  la pérdida no lo frena —«no busco ganancia»—, pero **la escalera ⛔ no la puede tomar sola**:
+  o se los deja subir, o se les pone precio a mano por debajo del costo.
+- 🔴 **Dos avisos ALTOS que «Confirmar todos» entierra**: **ACCESORIO NRO 1 LILA** queda a $5.900
+  con **lista $4.990** —la mesa le SUBE el precio por arriba del de lista, 7 u, y es el único caso—
+  y **BABY TEE IA** cae en la mesa de $5.900 con **costo $5.900** (4 u: margen cero antes del
+  descuento de caja). Se definen a mano o se descartan. Los 30 avisos medios son los 30 de arriba.
+- ▶️ **El estado quedó en `definido`, ⛔ no en `confirmado`**: la segunda mirada sigue pendiente y es
+  la que habilita «Escribir los precios en Gestión Nube». El orden del domingo 13 ⛔ no cambia.
 - ▶️ 🔴 **El ORDEN de la feria, que es lo que sale caro al revés**: ocultar en Tienda Nube **primero**,
   aplicar los precios **después**. Aplicar antes deja el precio de feria publicado online, que es
   justo lo que la feria no quiere.
