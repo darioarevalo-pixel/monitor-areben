@@ -1279,6 +1279,32 @@ es del monitor**, que es un hueco medido, no una idea:
 - 🔴 🔑 **CUIDADO: volver a apretar «Precios de mesa» PISA este precio plano.** `porEscalera`
   reparte por costo y devolvería los corpiños caros a $5.990 — y ⛔ nada avisa que había una
   decisión a mano encima. Si hay que recorrer la escalera de nuevo, esto se vuelve a aplicar después.
+- 🆕 🔑 **QUÉ SACAR DE LA FERIA, MEDIDO CONTRA LAS VENTAS A PRECIO DE LISTA** (Bruno: *«las que
+  se vendieron en precio sale tenemos sesgo y no puedo hacer nada, pero sí puedo ver lo que se
+  vendió bien a precio de lista»*). Se contesta con `venta_detalles.unit_price` contra
+  `foto.precioNormal`, por la acción `ventas-campania` de `api/_liquidacion.js` — 10.621 líneas de
+  los 351 en 12 meses. **A lista = pagó ≥90% de la lista de hoy, sin el canal Mayorista**; la
+  ventana limpia es **15-may → 12-ago**, ANTES de que arrancara el sale el 13-ago.
+  🔴 **El ranking crudo por «vendió a lista» ⛔ NO sirve: lo encabeza la lencería de VERANO**
+  (AYLA/NYA a lista en enero). Eso ⛔ no es demanda viva, es estacionalidad — y ya estaba medido
+  aparte (guardarlos a oct-dic rinde $7,6M más).
+  ✅ **Con stock de repo (≥8 u) y ritmo vivo salen 14 modelos · 268 prendas · vale $4.393.000**, y
+  se parten en dos con criterios opuestos:
+  **abrigo** (SWEATER NEVADA 41 u · DALLAS 40 · ARIZONA 29 · BERLIN 20 · CAMPERA LINES 9 = 139
+  prendas, $2.992.000) — 🔴 **su ritmo se midió EN invierno y no se sostiene en primavera**:
+  sacarlos de la feria es bancarlos hasta abril-2027; y **no estacional o de verano** (JEAN FOSTER ·
+  BLUSA AZALEA · BLUSA ANTHEA · TOP BELICE · ACCESORIO NRO 2 FUCSIA · TOP ZARA · TOP MOVE ·
+  MINI ARLET · BABY TEE ICON BLACK = 129 prendas, $1.401.000), donde el argumento es **al revés**:
+  su temporada empieza.
+- 🔴 🔑 **LA SEÑAL MÁS LIMPIA ES «PAGÓ LISTA CON EL SALE PUESTO», Y ME CONTRADICE LOS GANCHOS.**
+  Desde el 13-ago, con toda la tienda en oferta, estos siguieron saliendo a precio de lista:
+  **TOP MOVE** 10 u · **TOP MIST** 8 u · **ACCESORIO NRO 2 FUCSIA** 7 u · **TOP WHISPER** 6 u ·
+  **SWEATER MONTEREY** 4 u · **TOP ZARA** 4 u · **MINI BLUSH** 4 u (7 modelos, 120 prendas).
+  🔴 **TOP WHISPER ($1.990 en la feria, lista $10.490) y TOP MIST ($2.990, lista $13.490) son
+  justo los dos que yo había propuesto de titular**, y **SWEATER MONTEREY** era el piso de
+  «SWEATERS DESDE $10.990». La escalera elige por COSTO y el costo bajo ⛔ no dice nada de la
+  demanda: los tres tienen gente pagando lista **hoy**. ▶️ **Decisión de Bruno**, y si salen hay
+  que buscar otro titular.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
