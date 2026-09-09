@@ -1486,6 +1486,25 @@ es del monitor**, que es un hueco medido, no una idea:
   depósito**, y coincide con la expectativa ya medida de **500-700 prendas en los 6 días**.
   Alternativas: piso 3 + 10% → 427 · +20% → 810 · +25% → 1.016. Con el piso 3, **los 351 modelos
   están en la mesa desde el lunes**, que es lo que Bruno pidió.
+- 🔴 🔑 **CORREGIDO POR BRUNO: «SÍ ESTUVIERON, EL AÑO PASADO»** — y el dato está. Los 48 vendieron
+  **2.852 u** entre **ene-2025** (donde arranca el espejo de `ventas`) y hoy, **todo minorista,
+  mayorista CERO**. Mi «no se puede analizar ventas» miraba **90 días**; la pregunta era por la
+  **temporada anterior**. 📌 El producto en GN **ya es por color** (BOMBACHA BORA - NEGRO es su
+  propio `product_id`) ⇒ el análisis por variante de color **sale solo**; el talle también está, en
+  `venta_detalles.size_id`.
+  🔑 **Su temporada es dic → marzo**: el mejor mes es **marzo-2026** en 38 de los 48 y
+  **diciembre-2025** en el resto.
+- 🔴 🔑 **Y EL HALLAZGO QUE DA VUELTA EL REPARTO: EL STOCK QUE QUEDA ES INVERSO A LO QUE VENDIÓ.**
+  Los 15 con **más de 80** en depósito vendieron **35 u** en promedio; los 15 con **menos de 20**
+  vendieron **70 u**. El stock alto **es el síntoma** de que no se vendía. ⇒ repartir el parcial
+  **por stock estaba exactamente al revés**: le daba **37** etiquetas al CORPIÑO TAYRA NEGRO
+  (58 vendidos en 20 meses, 245 parados) y **1** al CORPIÑO AYLA ZEBRA (126 vendidos, 1 parado).
+  ✅ **Repartido por VENTA** —el mejor mes de cada uno, tope el depósito, piso 2— dan **504 prendas**
+  de los 48. Suben: CORPIÑO TAYRA PRINT 8→27 · FADE #002 7→25 · CORPIÑO NYA ROSA 4→24 · BOMBACHA
+  NYA ROSA 3→23 · BOMBACHA/CORPIÑO AYLA MARRÓN →22. Bajan: CORPIÑO TAYRA NEGRO 37→13 · BOMBACHA
+  BORA NEGRO 24→13 · CORPIÑO TAYRA VIOLETA 23→9 · SHORT ARTEMIS 14→2 · BOMBACHA BORA CHERRY 16→2.
+  ⚠️ El mejor mes se midió **a precio normal**, ⛔ no a precio de feria: sirve para el **reparto
+  relativo entre colores**, ⛔ no para el volumen absoluto — por eso es un parcial y se repone.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
