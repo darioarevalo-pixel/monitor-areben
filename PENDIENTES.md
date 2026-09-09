@@ -1469,6 +1469,23 @@ es del monitor**, que es un hueco medido, no una idea:
   ⛔ Sin depósito: $3.990, $6.990 y $34.990 (todo lo suyo está en el local).
   ⚠️ El total del espejo (5.313) es 22 prendas menos que la foto congelada (5.335): la foto es del
   6-sep y el inventario es de hoy. La diferencia es venta, no un error.
+- 🛑 🔑 **Y BRUNO FRENÓ LAS 3.990: «no voy a etiquetar algo que no sé si voy a vender, y luego
+  desetiquetar»**. El plan es **progresivo**: identificar qué está y qué no en el local, analizar
+  ventas sobre lo que no está, y llegar al lunes **con todos los productos etiquetados pero un
+  PARCIAL** de cada uno; después se arma en el local y se sigue stockeando.
+  ✅ **Paso 1, medido**: de los **351 modelos, 298 YA tienen algo en el local** y sólo **48 están en
+  cero** — pero esos 48 son **2.885 prendas** (36 de lencería = 2.340, y 12 de short/bermuda = 545).
+  Los 298 que sí están tienen además **1.105 en depósito**, que es refuerzo de talle y color.
+  🔴 🔑 **Paso 2 ⛔ NO SE PUEDE: los 48 tienen `ventas90 = 0`, LOS 48.** Es el mismo cero por
+  ocultamiento que ya estaba anotado (se apagaron online por no ser temporada y nunca estuvieron en
+  el salón) ⇒ **un cero de algo que nadie pudo comprar ⛔ no dice nada del producto**, y ⛔ no se
+  puede repartir el parcial por ventas. El reparto tiene que ser por **variedad de exhibición**, y
+  la corrección la da el propio lunes.
+  ✅ **Paso 3, el parcial dimensionado**: con **piso 3 por modelo + 15% del depósito** son
+  **620 prendas** (453 de los 48 que no están + 167 de refuerzo de los 298 que sí) — el **16% del
+  depósito**, y coincide con la expectativa ya medida de **500-700 prendas en los 6 días**.
+  Alternativas: piso 3 + 10% → 427 · +20% → 810 · +25% → 1.016. Con el piso 3, **los 351 modelos
+  están en la mesa desde el lunes**, que es lo que Bruno pidió.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
