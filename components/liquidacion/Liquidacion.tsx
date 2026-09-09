@@ -758,7 +758,9 @@ function DetalleCampania({
     }
     const conAvisoAlto = lista.filter((i) => avisos(i, tipo).some((a) => a.nivel === 'alto'))
     const ok = await confirmar({
-      titulo: `Confirmar ${lista.length} precios sin mirarlos de a uno`,
+      titulo: lista.length === 1
+        ? 'Confirmar 1 precio sin mirarlo de a uno'
+        : `Confirmar ${lista.length} precios sin mirarlos de a uno`,
       mensaje: `${comoSeEligieron} ${conAvisoAlto.length
         ? `De los ${lista.length}, hay ${conAvisoAlto.length} con un aviso importante sin resolver (precio abajo del costo, costo que no vino de Gestión Nube o sin precio de lista): ${conAvisoAlto.slice(0, 4).map((i) => i.foto.nombre).join(', ')}${conAvisoAlto.length > 4 ? '…' : ''}. Confirmándolos en masa, nadie los va a mirar.`
         : 'Quedan listos para escribirse en Gestión Nube sin que nadie los haya mirado de a uno.'}`,
@@ -774,7 +776,7 @@ function DetalleCampania({
       await cargar()
       onCambio()
       setMarcados(new Set())
-      toast.ok(`${lista.length} confirmados.`)
+      toast.ok(lista.length === 1 ? '1 confirmado.' : `${lista.length} confirmados.`)
     } catch (e) {
       await cargar()
       toast.error(e instanceof Error ? e.message : 'No se pudieron confirmar.')
