@@ -1323,6 +1323,27 @@ es del monitor**, que es un hueco medido, no una idea:
   **15 meses**. Short + bermuda: 559 prendas, 161 u a lista en nov-feb ⇒ **14 meses**. ⇒ guardarlas
   ⛔ no es esperar UNA temporada, es esperar **dos**. ⚠️ El ritmo es sólo el de precio de lista: en
   verano también venderían con descuento, así que 15 meses es el techo, no el número exacto.
+- ✅ 🔑 **LA REGLA DEFINITIVA LA DIO BRUNO Y ES DE COMPRA, ⛔ NO DE VENTA**: *«todo lo que es
+  temporada vieja y no tengo recompra, no me sirve no liquidarlo. Sólo me interesaría no liquidar
+  algo que se venda bien, y que haya podido recomprar en los últimos ingresos»*. ⇒ el eje que
+  faltaba ⛔ no era la temporada ni el precio de lista: es **si puede REPONERLO**. Sin repo, aunque
+  venda bien, liquidarlo es lo correcto — no hay línea que sostener.
+  🔑 **Se contesta con la sección Recepciones** (`?recurso=recepciones&store=zattia&dias=365`,
+  y el detalle por OC con `&oc=zattia:<id>`): las líneas traen `sku`, `producto_id_hoy`,
+  `cantidad_contada` y **`es_nuevo`**, que distingue **alta nueva** de **RECOMPRA**.
+  🔴 🔑 **PERO EL INSTRUMENTO TIENE UN AGUJERO Y CASI LO REPORTO MAL: 50 de las 74 OC se cargaron
+  el 27-ago-2026 de una sola vez** —306 productos, `fecha_compra` en **null**— porque es la **carga
+  histórica** del webhook, ⛔ no un ingreso. Ordenando por `recibido_en` daban «última recompra hace
+  13 días» **77 modelos**. Con sólo las 24 OC de fecha real (**6-jul → 31-ago, 1.029 u, 17
+  proveedores**) quedan **28 productos de la feria**, y **RECOMPRAS de verdad: 6**.
+  ✅ **Los 6, y aplicando el «que venda bien» quedan 5** (TOP MONTANA tiene v90 = 0):
+  **SWEATER NEVADA** (41 u, v90 45, 10 u el 6-jul, DUET) · **SWEATER BERLIN** (20 u, v90 22, 5 u) ·
+  **SWEATER GEORGIA** (4 u, v90 11) · **SWEATER BOSTON** (3 u, v90 11) · **JEAN WORN** (5 u, v90 7,
+  10 u el 10-ago, ASKDENIM). **73 prendas · resignan $1.761.000.**
+  📌 **SWEATER MONTEREY** entró 25 u el 6-jul de DUET pero marcado como **alta nueva**: es mercadería
+  fresca aunque ⛔ no figure como recompra — y es el piso de «SWEATERS DESDE $10.990».
+  ▶️ **La ventana es 6-jul → 31-ago y ⛔ no hay más**: lo recomprado antes de julio ⛔ no está en el
+  dato. Si hace falta mirar más atrás, hay que pedirlo del lado de Ingresos.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
