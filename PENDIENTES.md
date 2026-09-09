@@ -1305,6 +1305,24 @@ es del monitor**, que es un hueco medido, no una idea:
   «SWEATERS DESDE $10.990». La escalera elige por COSTO y el costo bajo ⛔ no dice nada de la
   demanda: los tres tienen gente pagando lista **hoy**. ▶️ **Decisión de Bruno**, y si salen hay
   que buscar otro titular.
+- 🔴 🔑 **CORREGIDO POR BRUNO EN LA VUELTA SIGUIENTE, Y LA LISTA ENTERA SE CAE**: *«el whisper y
+  el mist los tengo que poner pq son de invierno, tienen manga larga»*. Yo había clasificado la
+  temporada **por el NOMBRE** —«TOP» ⇒ no es abrigo—, y un top puede ser de manga larga.
+  🔑 **La temporada se lee en CUÁNDO vendió a lista, ⛔ no en cómo se llama.** Rehecho por mes:
+  WHISPER vendió sus 6 u **todas en agosto**, MIST 7 en agosto y 2 en septiembre. Y **los 19
+  candidatos que había armado dan INVIERNO, los 19**: cero unidades a lista entre noviembre y
+  febrero. ⇒ **⛔ no hay que sacar ninguno**: venden a lista **porque es su temporada, y es la que
+  se termina**. De los 351, 120 dan INVIERNO y 65 VERANO por este criterio.
+  🔑 **La pregunta útil es la de al revés: quién vende a lista en VERANO** (nov-feb), porque a
+  ésos la feria les quema la temporada que viene. Son **34 modelos · 2.185 prendas**: 21 de
+  **lencería** (1.694 prendas, justo el cartel de $4.990) y 13 más — SHORT ARES · CORSET BERNA ·
+  FADE #002 · SHORT KAOS · SHORT NIX · SHORT CRONOS · SHORT ATLAS · BERMUDA DOJA · VESTIDO AIXA ·
+  VESTIDO SOLANA · TOP BANGKOK · TOP NARA · TOP RISE (491 prendas).
+- ✅ 🔑 **Y EL NÚMERO CIERRA EL CASO A FAVOR DE DEJARLOS**: la lencería vendió a lista **637 u en
+  los 4 meses del verano pasado = 159 u/mes**; con **2.340 prendas**, vaciarla a esa velocidad son
+  **15 meses**. Short + bermuda: 559 prendas, 161 u a lista en nov-feb ⇒ **14 meses**. ⇒ guardarlas
+  ⛔ no es esperar UNA temporada, es esperar **dos**. ⚠️ El ritmo es sólo el de precio de lista: en
+  verano también venderían con descuento, así que 15 meses es el techo, no el número exacto.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
