@@ -1344,6 +1344,24 @@ es del monitor**, que es un hueco medido, no una idea:
   fresca aunque ⛔ no figure como recompra — y es el piso de «SWEATERS DESDE $10.990».
   ▶️ **La ventana es 6-jul → 31-ago y ⛔ no hay más**: lo recomprado antes de julio ⛔ no está en el
   dato. Si hace falta mirar más atrás, hay que pedirlo del lado de Ingresos.
+- 🆕 🔑 **EL FOCO LO PUSO BRUNO: CONTAMINA BY LATTE CHIC** (*«de esos no hay nada, el foco está
+  en el proveedor contamina que tuvo recompra recién»*). Tiene **3 OC**: **OC-0308** (compra 10-ago,
+  ingreso 11-ago, 12 productos, 89 u — la reciente) y **OC-0051** y **OC-0104**, sin fecha porque
+  entraron en la carga histórica del 27-ago.
+  🔴 **La compra reciente ⛔ NO repuso NADA de la feria: sus 12 modelos son todos ALTAS NUEVAS**
+  (TOP CELINE · SKYLER · ODESSA · BRENNA · CIRA · ODETTE · HAVEN · SOLENE · TERRA · LIBIA · SORA ·
+  BODY LIVIA) y **ninguno está en la campaña**. La línea está viva, pero lo que llegó es colección
+  nueva, ⛔ no repo de lo viejo.
+  ✅ **Igual, 24 productos de CONTAMINA SÍ están en la feria y 17 tuvieron repo** en las OC
+  anteriores. Con la regla completa —repo **y** v90 ≥ 5— quedan **14 modelos · 80 prendas ·
+  resignan $746.000**: TOP MOVE (9 u, v90 24) · TOP ZARA (14, 12) · TOP ELENA (3, 12) · TOP JUNE
+  (4, 11) · TOP LILI (6, 8) · SAQUITO VENECIA (2, 8) · MINI ANNE (7, 7) · TOP COWIN (1, 7) ·
+  MINI BLUSH (17, 7) · BODY ORIANA (1, 6) · SHORT VIBE (4, 6) · MINI ZEN (2, 6) · TOP CAIRO (2, 6) ·
+  MINI ARLET (8, 5).
+  ⚠️ **8 de esos 14 ya están `confirmado`** (TOP ELENA · TOP JUNE · SAQUITO VENECIA · TOP LILI ·
+  MINI ANNE · BODY ORIANA · SHORT VIBE · TOP CAIRO). Confirmado ⛔ no es aplicado: descartarlos
+  todavía ⛔ no toca la tienda.
+  📌 Los otros 3 con repo pero que ⛔ no venden: TOP AZURE (v90 3) · TOP DUBAI (2) · TOP MARIAN (−1).
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
