@@ -47,7 +47,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, campaniaEditable, confirmarItem, contar, leerEscalera, nuevoIdLiquidacion, pidsPorAplicar, porEscalera,
+  avisos, campaniaEditable, confirmarItem, contar, itemsSinRevisar, leerEscalera, nuevoIdLiquidacion,
+  pidsPorAplicar, porEscalera,
   reprecificar, resumenCampania,
   TIPO_CAMPANIA, TIPOS_CAMPANIA, tipoDe, TOPE_APLICAR, TOPE_MASIVO,
   type Colgadas, type EstadoCampania, type EstadoItem, type Liquidacion as Campania,
@@ -531,6 +532,15 @@ function DetalleCampania({
    * lightbox tapa la fila: sin el rótulo no se sabe de cuál de los 351 productos es la foto.
    */
   const [foto, setFoto] = useState<{ src: string | null; nombre: string } | null>(null)
+  /**
+   * Los productos marcados en la lista, por pid.
+   *
+   * 🔑 **La selección SOBREVIVE al filtro y a la búsqueda**, igual que la de "Mandar a
+   * liquidación": revisar una campaña de 351 es ir juntando de a tandas —los de una familia,
+   * después los de otra—, y limpiarla en cada tecla del buscador obligaría a hacerlo de una sola
+   * vez. Por eso la barra dice cuántos hay marcados FUERA de lo que se está viendo.
+   */
+  const [marcados, setMarcados] = useState<Set<string>>(new Set())
   const [pestania, setPestania] = useFiltroUrl<string>('t', 'productos')
   /**
    * La escritura contra Gestión Nube, mientras corre.
@@ -590,6 +600,34 @@ function DetalleCampania({
         return peso(a.estado) - peso(b.estado) || b.foto.costo * b.foto.stock - a.foto.costo * a.foto.stock
       })
   }, [items, busqueda, filtro])
+
+  /** Confirmar es de admin, y sólo mientras la campaña se pueda editar — la misma puerta que Revisión. */
+  const puedeConfirmar = puede.admin && campaniaEditable(campania.estado)
+  /**
+   * De lo marcado, lo que **realmente** se puede confirmar: la regla es `itemsSinRevisar` del
+   * núcleo, la misma que usa la pestaña Revisión. Marcar un confirmado, un pendiente sin precio o
+   * un objetado no rompe nada — simplemente no entra, y la barra lo dice con el número.
+   */
+  const confirmables = useMemo(
+    () => itemsSinRevisar((items || []).filter((i) => marcados.has(i.pid))),
+    [items, marcados],
+  )
+  /** Marcados que el filtro o la búsqueda de ahora NO están mostrando. Va en la barra. */
+  const marcadosFuera = useMemo(
+    () => marcados.size - visibles.filter((i) => marcados.has(i.pid)).length,
+    [marcados, visibles],
+  )
+  /** Los de la vista de ahora que se podrían confirmar: es lo que marca "Marcar los que se ven". */
+  const visiblesConfirmables = useMemo(() => itemsSinRevisar(visibles), [visibles])
+
+  function marcar(pid: string, on: boolean) {
+    setMarcados((s) => {
+      const n = new Set(s)
+      if (on) n.add(pid)
+      else n.delete(pid)
+      return n
+    })
+  }
 
   /**
    * La fecha de alta del producto, del ETL. No está en la foto congelada y no hace falta que esté:
@@ -701,32 +739,42 @@ function DetalleCampania({
    * contador de errores sin los nombres obliga a revisar los 260 a mano para encontrar los 3.
    */
   /**
-   * Confirmar de una todos los que no pasaron por revisión.
+   * Confirmar muchos precios de una — el mismo motor para los dos caminos que llevan acá.
    *
    * 🔑 **El cartel dice cuántos tienen un aviso ALTO**, que es lo único que la revisión de a uno
    * hubiera cazado y esto se saltea. El 13-ago-2026 se confirmaron 260 con un script y quedaron
    * adentro 7 con el precio de sale por debajo del costo: sin ese número, «confirmar todos» parece
    * gratis.
+   *
+   * 🔑 **Uno solo, y no una copia por pantalla.** Entran por «Confirmar los que faltan» (pestaña
+   * Revisión) y por «Confirmar los marcados» (lista de Productos); lo único que cambia es de dónde
+   * salió la lista, y eso es una frase del cartel, no otra función. `comoSeEligieron` existe para
+   * que el cartel no mienta sobre lo que se está por confirmar.
    */
-  async function confirmarTodos(sinRevisar: LiquidacionItem[]) {
-    const conAvisoAlto = sinRevisar.filter((i) => avisos(i, tipo).some((a) => a.nivel === 'alto'))
+  async function confirmarEnMasa(lista: LiquidacionItem[], comoSeEligieron: string) {
+    if (!lista.length) {
+      toast.error('No hay precios para confirmar.')
+      return
+    }
+    const conAvisoAlto = lista.filter((i) => avisos(i, tipo).some((a) => a.nivel === 'alto'))
     const ok = await confirmar({
-      titulo: `Confirmar ${sinRevisar.length} precios sin mirarlos de a uno`,
-      mensaje: conAvisoAlto.length
-        ? `De los ${sinRevisar.length}, hay ${conAvisoAlto.length} con un aviso importante sin resolver (precio abajo del costo, costo que no vino de Gestión Nube o sin precio de lista): ${conAvisoAlto.slice(0, 4).map((i) => i.foto.nombre).join(', ')}${conAvisoAlto.length > 4 ? '…' : ''}. Confirmándolos en masa, nadie los va a mirar.`
-        : `Quedan listos para escribirse en Gestión Nube sin que nadie los haya mirado de a uno.`,
-      ok: `Confirmar los ${sinRevisar.length}`,
+      titulo: `Confirmar ${lista.length} precios sin mirarlos de a uno`,
+      mensaje: `${comoSeEligieron} ${conAvisoAlto.length
+        ? `De los ${lista.length}, hay ${conAvisoAlto.length} con un aviso importante sin resolver (precio abajo del costo, costo que no vino de Gestión Nube o sin precio de lista): ${conAvisoAlto.slice(0, 4).map((i) => i.foto.nombre).join(', ')}${conAvisoAlto.length > 4 ? '…' : ''}. Confirmándolos en masa, nadie los va a mirar.`
+        : 'Quedan listos para escribirse en Gestión Nube sin que nadie los haya mirado de a uno.'}`,
+      ok: `Confirmar los ${lista.length}`,
       tono: conAvisoAlto.length ? 'danger' : 'brand',
     })
     if (!ok) return
     setOcupadoMasivo(true)
     try {
-      for (let i = 0; i < sinRevisar.length; i += TOPE_MASIVO) {
-        await Promise.all(sinRevisar.slice(i, i + TOPE_MASIVO).map((it) => revisarItem(marca, campania.id, confirmarItem(it, yo))))
+      for (let i = 0; i < lista.length; i += TOPE_MASIVO) {
+        await Promise.all(lista.slice(i, i + TOPE_MASIVO).map((it) => revisarItem(marca, campania.id, confirmarItem(it, yo))))
       }
       await cargar()
       onCambio()
-      toast.ok(`${sinRevisar.length} confirmados.`)
+      setMarcados(new Set())
+      toast.ok(`${lista.length} confirmados.`)
     } catch (e) {
       await cargar()
       toast.error(e instanceof Error ? e.message : 'No se pudieron confirmar.')
@@ -1147,7 +1195,7 @@ function DetalleCampania({
           puedeRevisar={puede.admin && campaniaEditable(campania.estado)}
           ingresoDe={ingresoDe}
           onRevisar={guardarRevision}
-          onConfirmarTodos={confirmarTodos}
+          onConfirmarTodos={(sinRevisar) => confirmarEnMasa(sinRevisar, 'Son los que todavía no pasaron por revisión.')}
         />
       )}
 
@@ -1187,7 +1235,63 @@ function DetalleCampania({
               <option value="descartado">Descartados ({resumen.descartados})</option>
               <option value="aplicado">Aplicados ({resumen.aplicados})</option>
             </Select>
+            {/*
+              El atajo que hace útil a la selección: filtrar «Definidos», buscar «CORPIÑO» y marcar
+              de una todo lo que quedó a la vista. Sin esto, confirmar 351 sigue siendo 351 clics.
+              🔑 Sólo marca los CONFIRMABLES de la vista, no todo lo que se ve: marcar un confirmado
+              o un descartado infla el contador con productos que después no van a entrar.
+            */}
+            {puedeConfirmar && visiblesConfirmables.length > 0 && (
+              <Button size="sm" variant="soft" tone="brand" onClick={() => setMarcados((m) => new Set([...m, ...visiblesConfirmables.map((i) => i.pid)]))}>
+                Marcar los {visiblesConfirmables.length} que se ven
+              </Button>
+            )}
           </FilterBar>
+
+          {/*
+            🔑 **La barra de marcados sólo aparece cuando hay algo marcado**, y dice tres cosas que
+            de otro modo el que confirma no puede saber: cuántos marcó, cuántos de esos se pueden
+            confirmar de verdad, y cuántos quedaron marcados FUERA del filtro que está mirando.
+            Sin ese último número, achicar la búsqueda y apretar "Confirmar los marcados" confirma
+            productos que no están en pantalla.
+          */}
+          {marcados.size > 0 && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap',
+                marginBottom: space[3], padding: '8px 12px',
+                background: color.brandBg, border: `1px solid ${color.brandBorder}`,
+                borderRadius: radius.lg, fontSize: font.base, color: color.brand,
+              }}
+            >
+              <span>
+                <b>{marcados.size}</b> {marcados.size === 1 ? 'producto marcado' : 'productos marcados'}
+                {confirmables.length !== marcados.size && (
+                  <span style={{ opacity: 0.8 }}>
+                    {' '}· {confirmables.length === 0
+                      ? 'ninguno se puede confirmar (ya confirmados, sin precio, descartados u objetados)'
+                      : `${confirmables.length} para confirmar; el resto ya está confirmado, sin precio, descartado u objetado`}
+                  </span>
+                )}
+                {marcadosFuera > 0 && <span style={{ opacity: 0.8 }}> · {marcadosFuera} fuera de este filtro</span>}
+              </span>
+              {puedeConfirmar && (
+                <Button
+                  size="sm"
+                  variant="solid"
+                  tone="brand"
+                  loading={ocupadoMasivo}
+                  disabled={!confirmables.length}
+                  onClick={() => void confirmarEnMasa(confirmables, 'Son los que marcaste en la lista.')}
+                >
+                  Confirmar {confirmables.length} {confirmables.length === 1 ? 'precio' : 'precios'}
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" tone="brand" onClick={() => setMarcados(new Set())} style={{ marginLeft: 'auto' }}>
+                Limpiar selección
+              </Button>
+            </div>
+          )}
 
           {!visibles.length ? (
             <EmptyState
@@ -1202,6 +1306,7 @@ function DetalleCampania({
             <TableWrap>
               <THead>
                 <Tr>
+                  {puedeConfirmar && <Th width={34} />}
                   <Th />
                   <Th>Producto</Th>
                   <Th align="right">Precio</Th>
@@ -1223,6 +1328,9 @@ function DetalleCampania({
                     puedeMover={campaniaEditable(campania.estado)}
                     onDefinir={() => setDefiniendo({ orden: visibles.map((v) => v.pid), i: n })}
                     onFoto={() => setFoto({ src: i.foto.imagen, nombre: i.foto.nombre })}
+                    marcable={puedeConfirmar}
+                    marcado={marcados.has(i.pid)}
+                    onMarcar={(on) => marcar(i.pid, on)}
                     onDescartar={() => void moverEstado(i, 'descartado')}
                     onVolver={() => void moverEstado(i, 'pendiente')}
                     onQuitar={() => void quitar(i)}
@@ -1274,7 +1382,7 @@ function DetalleCampania({
 }
 
 function FilaItem({
-  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar, onFoto,
+  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar, onFoto, marcable, marcado, onMarcar,
 }: {
   item: LiquidacionItem
   tipo: TipoCampania
@@ -1284,6 +1392,9 @@ function FilaItem({
   onVolver: () => void
   onQuitar: () => void
   onFoto: () => void
+  marcable: boolean
+  marcado: boolean
+  onMarcar: (on: boolean) => void
 }) {
   const rot = ROTULO_ITEM[item.estado] || ROTULO_ITEM.pendiente
   const problemas = avisos(item, tipo).filter((a) => a.nivel === 'alto')
@@ -1291,6 +1402,21 @@ function FilaItem({
 
   return (
     <Tr onClick={onDefinir} style={apagado ? { opacity: 0.55 } : undefined}>
+      {/*
+        El tilde vive DENTRO de la fila que ya abre "Definir", así que el `stopPropagation` va en el
+        contenedor y no sólo en el input: sin él, tildar abría el modal encima de la lista.
+      */}
+      {marcable && (
+        <Td style={{ width: 34 }} onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={marcado}
+            onChange={(e) => onMarcar(e.target.checked)}
+            aria-label={`Marcar ${item.foto.nombre}`}
+            style={{ accentColor: 'var(--mo-brand-solid)', display: 'block', cursor: 'pointer' }}
+          />
+        </Td>
+      )}
       <Td style={{ width: 48 }}>
         {/*
           🔑 **La miniatura abre la FOTO, no la fila.** A 36 px no se ve si el corte es el que uno

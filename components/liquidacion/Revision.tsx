@@ -28,7 +28,7 @@
 import { useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  confirmarItem, objetarItem, precioDeSale, revisionDe, TIPO_CAMPANIA,
+  confirmarItem, itemsSinRevisar, objetarItem, precioDeSale, revisionDe, TIPO_CAMPANIA,
   type LiquidacionItem, type TipoCampania,
 } from '@/lib/liquidacion'
 import {
@@ -72,11 +72,8 @@ export function Revision({
     () => items.filter((i) => i.estado === 'definido' || i.estado === 'confirmado'),
     [items],
   )
-  /** Los que nunca pasaron por revisión: ni confirmados ni devueltos con motivo. */
-  const sinRevisar = useMemo(
-    () => conPrecio.filter((i) => i.estado === 'definido' && !revisionDe(i).objecion),
-    [conPrecio],
-  )
+  /** Los que nunca pasaron por revisión. La regla vive en el núcleo: la lista de Productos la usa igual. */
+  const sinRevisar = useMemo(() => itemsSinRevisar(conPrecio), [conPrecio])
   const cuentas = useMemo(() => ({
     sinRevisar: sinRevisar.length,
     objetados: conPrecio.filter((i) => i.estado === 'definido' && !!revisionDe(i).objecion).length,

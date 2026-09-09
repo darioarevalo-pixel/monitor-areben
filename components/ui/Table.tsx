@@ -108,8 +108,14 @@ export type TdProps = {
   colSpan?: number
   /** Tooltip nativo: algunas celdas explican de dónde sale el número. */
   title?: string
-  /** Celda que abre el detalle de la fila (no la fila entera: el resto tiene sus links). */
-  onClick?: () => void
+  /**
+   * Celda que abre el detalle de la fila (no la fila entera: el resto tiene sus links).
+   *
+   * 🔑 **Recibe el evento** porque la otra mitad de los usos es la contraria: una celda que hospeda
+   * un control propio —un tilde de selección dentro de una `<Tr onClick>`— y necesita
+   * `stopPropagation` para que tildar no abra además el detalle de la fila.
+   */
+  onClick?: (e: React.MouseEvent<HTMLTableCellElement>) => void
   style?: React.CSSProperties
 }
 

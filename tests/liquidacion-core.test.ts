@@ -10,6 +10,7 @@ import {
   faltanRevisar,
   faltantes,
   itemsAplicables,
+  itemsSinRevisar,
   objetados,
   objetarItem,
   pidsPorAplicar,
@@ -295,6 +296,37 @@ describe('itemsAplicables', () => {
     const aplicado = { ...definido, pid: 'd', estado: 'aplicado' as const }
 
     expect(itemsAplicables([definido, confirmado, pendiente, descartado, aplicado]).map((i) => i.pid)).toEqual(['e'])
+  })
+})
+
+describe('itemsSinRevisar', () => {
+  /**
+   * Lo que protege: **el "confirmar los marcados" de la lista de Productos no puede barrer una
+   * objeción**. Un objetado es alguien que miró el precio y dijo que no; si entrara acá, marcarlo
+   * de paso en una tanda de cincuenta lo confirmaría sin que nadie leyera el motivo — y la pestaña
+   * Revisión dejaría de ser una puerta. Es la diferencia exacta contra `faltanRevisar`.
+   */
+  const definido = decidirItem(armarItemDesdeProducto(prod({ id: 'a' })), { pctDesc: 30 })
+  const objetado = objetarItem({ ...definido, pid: 'b' }, 'no me cierra el margen', 'Darío')
+  const confirmado = confirmarItem({ ...definido, pid: 'c' }, 'Darío')
+  const pendiente = armarItemDesdeProducto(prod({ id: 'd' }))
+  const descartado = { ...definido, pid: 'e', estado: 'descartado' as const }
+  const aplicado = { ...confirmado, pid: 'f', estado: 'aplicado' as const }
+  const todos = [definido, objetado, confirmado, pendiente, descartado, aplicado]
+
+  it('🔑 deja SÓLO los que nadie miró: ni confirmados, ni pendientes, ni descartados, ni aplicados', () => {
+    expect(itemsSinRevisar(todos).map((i) => i.pid)).toEqual([definido.pid])
+  })
+
+  it('🔴 el OBJETADO queda afuera, y es lo único que lo separa de faltanRevisar', () => {
+    expect(faltanRevisar(todos).map((i) => i.pid)).toEqual([definido.pid, 'b'])
+    expect(itemsSinRevisar(todos).map((i) => i.pid)).not.toContain('b')
+  })
+
+  it('🔑 un objetado que se vuelve a definir SÍ entra: el precio nuevo no arrastra la objeción vieja', () => {
+    // `decidirItem` borra la revisión a propósito; sin eso, corregir un precio objetado lo dejaría
+    // fuera del confirmar masivo para siempre y habría que confirmarlo de a uno sin saber por qué.
+    expect(itemsSinRevisar([decidirItem(objetado, { pctDesc: 50 })]).map((i) => i.pid)).toEqual(['b'])
   })
 })
 

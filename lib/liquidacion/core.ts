@@ -168,6 +168,21 @@ export function objetados(items: LiquidacionItem[]): LiquidacionItem[] {
 }
 
 /**
+ * Los que **nadie miró todavía**: tienen precio y ninguna objeción encima.
+ *
+ * 🔑 **Es la RESTA de las dos de arriba, y por eso se escribe como una resta.** `faltanRevisar`
+ * incluye a los objetados a propósito —siguen sin resolverse—, pero el que confirma en masa no
+ * puede barrerlos: alguien los miró y dijo que no, y confirmarlos borraría justo la objeción que la
+ * pestaña Revisión existe para sostener. Derivarla evita que las tres se separen con el tiempo.
+ *
+ * 🔑 Vive acá porque la piden **dos** pantallas: la pestaña Revisión, que los lista, y la lista
+ * de Productos, que deja marcarlos y confirmarlos sin salir del filtro.
+ */
+export function itemsSinRevisar(items: LiquidacionItem[]): LiquidacionItem[] {
+  return faltanRevisar(items).filter((i) => !revisionDe(i).objecion)
+}
+
+/**
  * El precio que sale de lo que se tipeó. **Una sola regla, un solo lugar**: la usa `decidirItem`
  * para guardar y el modal para mostrar el precio mientras se escribe. Si el modal la calculara por
  * su cuenta, lo que se ve antes de guardar y lo que queda guardado podrían no ser el mismo número.

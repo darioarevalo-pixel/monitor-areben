@@ -71,6 +71,22 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   campañas viejas no traen el campo: `tipoDe()` las lee como `liquidacion`, y el default de `avisos`
   es el mismo, o sea que un llamador que se olvide del tipo **avisa de más, nunca de menos**. La
   lista de tipos válidos vive en `lib/liquidacion/tipo.core.js` porque **la valida el handler**.
+- 🆕 🔑 **Confirmar en masa se hace desde la lista de Productos, marcando.** Cada fila tiene un
+  tilde, «Marcar los N que se ven» marca de una todo lo confirmable del filtro actual —filtrar
+  «Definidos», buscar «CORPIÑO» y marcar— y la barra confirma la tanda. Lo pidió Bruno: la vista de
+  Productos tiene el buscador y el filtro de estado, así que es donde se puede elegir *qué* se
+  confirma; la pestaña Revisión sólo sabía «confirmar todos los que faltan».
+  🔑 **La selección sobrevive al filtro y a la búsqueda** —revisar 351 es ir juntando por
+  tandas— y por eso la barra dice **cuántos quedaron marcados fuera de lo que se está viendo**: sin
+  ese número, achicar la búsqueda y apretar confirmar toca productos que no están en pantalla.
+  🔑 **Un OBJETADO no entra nunca**, aunque se lo marque: la regla es `itemsSinRevisar` del núcleo
+  —`faltanRevisar` menos `objetados`—, la misma que lista la pestaña Revisión. Alguien lo miró y
+  dijo que no; barrerlo en una tanda de cincuenta borraría la objeción sin que nadie leyera el
+  motivo. Marcar un confirmado, un pendiente sin precio o un descartado tampoco rompe nada: no
+  entran, y la barra lo dice con el número.
+  🔑 **Los dos caminos usan el mismo motor** (`confirmarEnMasa`), así que el cartel que nombra
+  **cuántos tienen un aviso ALTO** —precio bajo el costo, costo que no vino de GN, sin precio de
+  lista— aparece igual por los dos lados. Es lo único que la revisión de a uno hubiera cazado.
 - 🔴 **El sub-permiso `liquidacion.aplicar` no se hereda de la función**: hay que tildarlo a mano, y
   en las dos marcas. Es el único permiso del Monitor que escribe precios en la tienda.
 - 🔑 **Hay DOS masivos de precio y contestan preguntas distintas.** `reprecificar` mueve la campaña
