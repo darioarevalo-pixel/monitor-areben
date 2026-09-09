@@ -1169,6 +1169,20 @@ es del monitor**, que es un hueco medido, no una idea:
   **TOPS**: el titular fuerte ya está y es **gratis** — **TOP FLARE** $4.900 con lista $16.490
   (**70% off**, costo $2.876, 25 u) y **TOP WHISPER** $1.900 con lista $10.490 (**82% off**, costo
   $1.625, 14 u). Un «TODOS LOS TOPS a $4.900» sobre las 616 prendas costaría **$1.455.157**.
+- ✅ 🔑 **EL GANCHO ES EL PISO, ⛔ NO UN PRECIO PLANO** (decisión de Bruno): *«yo haría para cada
+  uno un precio distinto pq no son los únicos sweaters, pero mientras más abajo sea el gancho, mejor
+  es el gancho: puedo decir sweaters desde $10.900»*. ⇒ la escalera se queda como está y **lo único
+  que se toca a mano es el más barato de la familia**, que es el que va al cartel.
+  ✅ **Hecho: SWEATER MONTEREY $10.900 → $9.900** (20 u, costo $10.000, **63% off**) — verificado por
+  GET. Resigna **$20.000** y queda **$2.000** bajo costo, y **rompe los cinco dígitos**: el titular
+  pasa de «desde $10.900» a **«SWEATERS DESDE $9.900»**. Es la mejor relación de toda la feria.
+  🔴 **Pero son 20 prendas**: con tope de 2 por persona son **10 clientes** ⇒ el cartel se queda
+  sin respaldo el primer día. **Sostenerlo cuesta**: sumando **SEATTLE** (42 u, costo $11.977,
+  v90 4) el piso pasa a **62 prendas** y resigna **$146.000** ($89.234 bajo costo); sumando también
+  **STANFORD** (48 u, costo $13.007, **v90 1**) son **110 prendas** por **$338.000** ($238.370 bajo
+  costo). Bajar el piso a $7.900 con esos tres: $558.000. ▶️ **Decisión de Bruno.**
+  🔑 **El precio a mano se pone con `decidirItem` IMPORTADO** del núcleo (la cuenta de margen,
+  markup y % off es la misma que la pantalla) y se guarda con `guardar-item`. ⛔ No toca GN.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
