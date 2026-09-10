@@ -70,12 +70,12 @@ import { Icono } from '@/components/ui/Icono'
 import { CopyButton } from '@/components/ui/CopyButton'
 import { useSesion } from '@/components/SesionProvider'
 import { hoyIso } from '@/lib/calendario'
-import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
+import { agendar, anotarMovimiento, anularMovimiento, borrarEnvio, cambiarEstado, cotizarDireccion, desagendar, guardarCosto, guardarEnvio, leerPortal, linkDelCadete, marcarBonificado, marcarCobrado, marcarPagado, rotarPortal, sugerirPrecios, type PortalDelCadete } from '@/lib/envios/cliente'
 import { imprimirRecibo } from '@/lib/envios/recibo'
 import { imprimirTicketsCadete } from '@/lib/envios/ticket'
 import type { Tone } from '@/components/ui'
 import type { Marca } from '@/lib/nav'
-import type { AccionDePago, ClaseMovimiento, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, Turno } from '@/lib/envios/tipos'
+import type { AccionDePago, ClaseMovimiento, CotizacionSuelta, Envio, EstadoEnvio, MovimientoCuenta, SugerenciaDePrecio, Turno } from '@/lib/envios/tipos'
 import { useCuentaCadete, useEnvios } from './useEnvios'
 import { ZonasDeReparto } from './ZonasDeReparto'
 
@@ -297,6 +297,22 @@ export function Envios() {
           { key: 'zonas', label: 'Zonas y precios', hint: 'El mapa de reparto: en qué zona cae cada dirección y cuánto sale.' },
         ]}
       />
+
+      {/* 🔑 **Arriba de la lista y en las dos pestañas de la operación**, no adentro de `Pendientes`:
+          ese componente se reemplaza entero por el `EmptyState` cuando no hay nada, y la bandeja
+          vacía es justo cuando más se cotiza —la clienta que pregunta antes de que exista pedido—.
+          En «Cuenta del cadete» y «Zonas y precios» no va: son de otra frecuencia y sería ruido. */}
+      {pestania === 'dia' || pestania === 'pendientes' ? (
+        <CotizarDireccion
+          marca={marcaActiva}
+          onCargar={(e) => {
+            setEditando(e)
+            // 🔴 El envío nace SIN FECHA, así que vive en «Sin fecha». Sin este salto, cargarlo
+            // parado en la hoja del día guarda bien y parece que no pasó nada.
+            setPestania('pendientes')
+          }}
+        />
+      ) : null}
 
       {pestania === 'zonas' ? (
         <ZonasDeReparto activa={pestania === 'zonas'} />
@@ -786,6 +802,150 @@ function SugerirPrecios({
           </Button>
         ) : null}
       </div>
+    </Card>
+  )
+}
+
+/**
+ * **«¿Cuánto sale un envío a…?», sin cargar un envío.**
+ *
+ * 🔑 **Existe porque la pregunta llega antes que el pedido.** Una clienta escribe por WhatsApp para
+ * saber cuánto le sale el envío, y hasta hoy la única forma de contestarle era cargar una fila
+ * entera —marca, cliente, dirección, teléfono— para después borrarla. Y borrar tampoco alcanzaba:
+ * la traída de Tienda Nube resucita lo borrado mientras siga en la ventana de tres días.
+ *
+ * 🔑 **Pide dos datos y medio**: dirección, localidad, y el código postal si se sabe. No pide marca
+ * ni cliente porque no está creando nada — el mapa no los mira.
+ *
+ * 🔴 **Es la misma regla que la propuesta de la bandeja: cuando no hay precio, se muestra el motivo
+ * y NADA más.** Sin número a medias, sin «aproximado». El único error caro de todo esto sería el
+ * precio de la zona de al lado, así que cada estado que no es `sugerido` es el sistema negándose a
+ * contestar. Acá importa más todavía: no hay una fila de la base contra la cual contrastar lo que
+ * salió, así que **la dirección que entendió el mapa se muestra a la vista** —no en un tooltip como
+ * en la bandeja— y es lo que convierte un «$4.300» en algo revisable.
+ *
+ * 🔑 **Va colapsado.** La bandeja se mira muchas veces por día para otra cosa; cotizar es una de
+ * esas veces, no todas. Mismo criterio que «Sugerir precios», que es un botón y no algo que pase
+ * solo al abrir la pestaña.
+ */
+function CotizarDireccion({ marca, onCargar }: { marca: Marca | null; onCargar: (e: Partial<Envio>) => void }) {
+  const toast = useToast()
+  const [abierto, setAbierto] = useState(false)
+  const [direccion, setDireccion] = useState('')
+  const [localidad, setLocalidad] = useState('')
+  const [cp, setCp] = useState('')
+  const [pidiendo, setPidiendo] = useState(false)
+  const [cotizacion, setCotizacion] = useState<CotizacionSuelta | null>(null)
+
+  function limpiar() {
+    setDireccion('')
+    setLocalidad('')
+    setCp('')
+    setCotizacion(null)
+  }
+
+  async function cotizar() {
+    setPidiendo(true)
+    try {
+      setCotizacion(await cotizarDireccion({ direccion, localidad, cp }))
+    } catch (e) {
+      setCotizacion(null)
+      toast.error(e instanceof Error ? e.message : 'No se pudo cotizar la dirección.')
+    } finally {
+      setPidiendo(false)
+    }
+  }
+
+  /**
+   * 🔑 **El precio se siembra SÓLO si el mapa lo propuso.** Cuando no, el campo queda vacío y se
+   * tipea a mano como siempre: `monto_envio: 0` no significa «no se cobra» en ningún lado de esta
+   * sección, así que sembrar un cero sería sembrar un envío bonificado sin que nadie lo decida.
+   *
+   * La dirección va **tal como se tipeó**, sin normalizar: lo que el motor limpia es una copia, y
+   * pisarle el texto a la persona escondería el error que quiso cotizar.
+   */
+  function cargar() {
+    const sugerido = cotizacion?.estado === 'sugerido' && cotizacion.precio != null
+    onCargar({
+      ...envioNuevoAMano({ marca }),
+      direccion,
+      localidad,
+      cp: cp || null,
+      ...(sugerido ? { monto_envio: cotizacion?.precio as number } : {}),
+    })
+    setAbierto(false)
+    limpiar()
+  }
+
+  if (!abierto) {
+    return (
+      <Card>
+        <Button variant="ghost" iconLeft={<Icono nombre="direccion" />} onClick={() => setAbierto(true)}>
+          ¿Cuánto sale un envío?
+        </Button>
+        <span style={{ marginLeft: space[3], opacity: 0.7, fontSize: 13 }}>
+          Cotizá una dirección sin cargar nada, para contestarle a una clienta que todavía no compró.
+        </span>
+      </Card>
+    )
+  }
+
+  const listo = direccion.trim() !== '' && localidad.trim() !== ''
+  const conPrecio = cotizacion?.estado === 'sugerido' && cotizacion.precio != null
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <Field label="Dirección" hint="Con altura: sin número el mapa no ubica el punto.">
+          <Input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="San Martín 1200" />
+        </Field>
+        <Field label="Localidad" hint="La moto reparte en el Gran Rosario.">
+          <Input value={localidad} onChange={(e) => setLocalidad(e.target.value)} placeholder="Rosario" />
+        </Field>
+        {/* Texto y no `number`: el CPA es alfanumérico (`S2000ABC`). */}
+        <Field label="Código postal" hint="Opcional. Es la segunda señal: si dice otra localidad que la de al lado, no se propone nada y el motivo nombra a las dos.">
+          <Input value={cp} onChange={(e) => setCp(e.target.value)} placeholder="2000" />
+        </Field>
+        <Button variant="outline" disabled={pidiendo || !listo} onClick={() => void cotizar()}>
+          {pidiendo ? 'Preguntándole al mapa…' : 'Cotizar'}
+        </Button>
+        <Button variant="ghost" onClick={() => { setAbierto(false); limpiar() }}>
+          Cerrar
+        </Button>
+      </div>
+
+      <div style={{ marginTop: space[2], opacity: 0.7, fontSize: 13 }}>
+        Busca la dirección en el mapa y dice el precio de la zona. <strong>No guarda nada</strong>: si se
+        recarga la pantalla, el número se fue.
+      </div>
+
+      {cotizacion ? (
+        <div style={{ marginTop: space[3], display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {conPrecio ? (
+            <>
+              <Badge tone="brand">
+                {cotizacion.zona?.nombre} · {formatMoney(cotizacion.precio as number)}
+              </Badge>
+              {cotizacion.zona?.coordinar ? <Badge tone="warning">coordinar</Badge> : null}
+            </>
+          ) : (
+            <span style={{ fontSize: 13, opacity: 0.75 }}>
+              el mapa no propone: {cotizacion.motivo || 'no se pudo ubicar'}
+              {cotizacion.estado === 'ambigua' && cotizacion.zonas?.length ? ` (${cotizacion.zonas.join(' y ')})` : ''}
+            </span>
+          )}
+          {/* Llevarse el texto al formulario ahorra retipearlo aunque el mapa no haya contestado. */}
+          <Button size="sm" variant="ghost" onClick={cargar}>
+            cargar este envío
+          </Button>
+        </div>
+      ) : null}
+
+      {cotizacion?.encontrado ? (
+        <div style={{ marginTop: space[2], fontSize: 12, opacity: 0.6 }}>
+          El mapa entendió: {cotizacion.encontrado}
+        </div>
+      ) : null}
     </Card>
   )
 }

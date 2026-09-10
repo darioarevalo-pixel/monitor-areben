@@ -301,26 +301,38 @@ export type ZonaDeReparto = {
 }
 
 /**
+ * **En qué termina una consulta al mapa.**
+ *
+ * 🔑 **`sugerido` es el único estado con precio.** Los otros ocho dicen por qué no lo hay, y esa
+ * dirección se tipea a mano exactamente como hasta ahora — que es la mitad barata del error. Los
+ * motivos están escritos en `MOTIVO_SUGERENCIA` (`direccion.core.js`), una sola vez para el handler
+ * y la pantalla.
+ *
+ * 🔴 **`localidad_dudosa` estaba faltando en esta lista y el handler lo devuelve desde el 17-ago.**
+ * Nace en `consultaDe` (`direccion.core.js`), que es un `.js` sin tipos, y la pantalla sólo lo
+ * compara contra `'sugerido'`, así que nunca falló nada — pero el union mentía justo sobre el estado
+ * más caro, el que avisa que el código postal y la localidad se contradicen. Un `switch` exhaustivo
+ * lo habría descubierto de la peor manera.
+ */
+export type EstadoDeSugerencia =
+  | 'sugerido'
+  | 'ambigua'
+  | 'sin_zona'
+  | 'no_vamos'
+  | 'sin_direccion'
+  | 'sin_localidad'
+  | 'sin_altura'
+  | 'localidad_dudosa'
+  | 'no_ubicada'
+  | 'punto_impreciso'
+
+/**
  * **El precio que el mapa propone para una fila de la bandeja.** No es un dato guardado: se calcula
  * cuando alguien aprieta «Sugerir precios» y vive hasta que se recarga la pantalla.
- *
- * 🔑 **`sugerido` es el único estado con precio.** Los otros siete dicen por qué no lo hay, y esa
- * fila se tipea a mano exactamente como hasta ahora — que es la mitad barata del error. Los motivos
- * están escritos en `MOTIVO_SUGERENCIA` (`direccion.core.js`), una sola vez para el handler y la
- * pantalla.
  */
 export type SugerenciaDePrecio = {
   id: string
-  estado:
-    | 'sugerido'
-    | 'ambigua'
-    | 'sin_zona'
-    | 'no_vamos'
-    | 'sin_direccion'
-    | 'sin_localidad'
-    | 'sin_altura'
-    | 'no_ubicada'
-    | 'punto_impreciso'
+  estado: EstadoDeSugerencia
   precio: number | null
   zona: { id: string; nombre: string; coordinar: boolean } | null
   /** Los nombres de todas las zonas que contienen el punto: con `ambigua`, cuáles son las dos. */
@@ -330,6 +342,18 @@ export type SugerenciaDePrecio = {
   consulta?: string | null
   encontrado?: string | null
 }
+
+/**
+ * **Lo que contesta el mapa sobre una dirección suelta**, cotizada desde el panel de Envíos sin que
+ * exista ninguna fila.
+ *
+ * 🔑 **Es una `SugerenciaDePrecio` SIN `id`, y esa ausencia es la garantía, no un detalle.** Lo que
+ * hace peligroso cotizar una dirección que vino tipeada es que el número termine pegado a un envío
+ * que dice otra cosa; sin `id` no hay envío al que pegarse, y ninguna pantalla puede tomar esta
+ * respuesta y escribirla en una fila «la que corresponde». Que compartan la forma es lo que evita
+ * que las dos pantallas se separen; que no compartan el `id` es lo que las mantiene distintas.
+ */
+export type CotizacionSuelta = Omit<SugerenciaDePrecio, 'id'>
 
 /** Lo que va a pasar si se importa el archivo del mapa, antes de escribir nada. */
 export type PlanDeImportacion = {

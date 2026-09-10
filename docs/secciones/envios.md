@@ -15,11 +15,11 @@ Sección `envios`, área `local`. En prod desde el 13-ago-2026. Reemplaza la pla
 | **El mensaje a la clienta** | `lib/envios/mensajes.ts` — puro y con tests, molde de `lib/canjes/mensajes.ts`. Lo abre el botón de WhatsApp de la fila (`Direccion`), **sólo en la bandeja «Sin fecha»** |
 | **Los dos papeles** | `lib/envios/ticket.ts` (el que va pegado al paquete) · `lib/envios/recibo.ts` (el del movimiento de la cuenta), los dos sobre **`lib/rollo80.ts`** — la geometría del rollo, el medidor y el dibujo de textos y reglas. ⛔ **Las medidas del rollo no se copian**: `lib/sesionfotos/ticket.ts` es un tercer papel de 80 mm que **no está migrado a propósito** (su interlineado es 0.42 contra 0.38) |
 | **El mapa de zonas** | `lib/envios/zonas.core.js` — ⛔ **no traer turf**: son 30 líneas copiadas con su misma semántica, cotejadas contra él en 195.428 puntos · pantalla en `components/envios/ZonasDeReparto.tsx` (4ª pestaña) · tabla `envios_zonas` |
-| **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por `action: 'zonas-sugerir'` y **no escribe nada** |
+| **De la dirección al punto** | `lib/envios/direccion.core.js` (el limpiador y **el candado**) + `api/_georef.js` (el geocoder del Estado, por lote). Entra por dos acciones —`zonas-sugerir` (la bandeja, por `ids`) y `zonas-cotizar` (una dirección suelta)— y **ninguna escribe nada**. El **orden de las dos vueltas** vive en `cotizarPuntos`, en el handler: es lo único que las dos comparten, y es justo lo que no puede estar escrito dos veces |
 | Handlers | `api/_envios.js` (por `datos.js?recurso=envios`) · `api/_cadete.js` (cuelga de `postventa.js`) |
 | Tablas (base de **BDI**, como Canjes) | `envios_reparto` · `envios_movimientos` · `envios_portal`. ⚠️ **`envios_dia` quedó vestigial**: ver «Cerrar el día se sacó» |
 | Migraciones | `scripts/apply-envios.mjs` · `sql/migrate-envios-*.sql` |
-| Tests | `tests/envios-core.test.ts` · `envios-cliente.test.ts` · `cadete-portal.test.ts` · `envios-mensajes.test.ts` |
+| Tests | `tests/envios-core.test.ts` · `envios-cliente.test.ts` · `cadete-portal.test.ts` · `envios-mensajes.test.ts` · `envios-cotizar-suelta.test.ts` |
 
 **Cero funciones nuevas de Vercel**: los dos handlers son `_*.js` y cuelgan de puertas existentes.
 
@@ -351,6 +351,51 @@ coordenada de pantalla.
 - ⛔ **El tour no arranca solo la primera vez.** El equipo ya tiene un cartel modal bloqueante (el de
   las novedades importantes); una segunda cosa que se pone adelante sin que la pidan es la que
   enseña a cerrar carteles sin leerlos.
+
+### Cotizar una dirección suelta: por qué es una acción APARTE y no un permiso más
+
+Desde el 10-sep-2026 hay, arriba de la lista de Envíos, un panel que contesta «¿cuánto sale un envío
+a tal dirección?» sin cargar nada (`action: 'zonas-cotizar'`). Existe porque **la pregunta llega
+antes que el pedido**: una clienta escribe por WhatsApp, y hasta ahora la única forma de
+contestarle era cargar una fila entera para después borrarla — y borrar no alcanzaba, porque la
+traída de Tienda Nube la resucita mientras siga en la ventana de tres días.
+
+🔴 **Rompe, a propósito, la única regla que protegía el precio.** `zonas-sugerir` toma `ids` y lee la
+dirección de la base *justamente* para que nadie pueda pedir «el precio de una dirección que no es la
+del envío», porque el número que vuelve tiene cara de oficial. Acá la dirección viene del body.
+
+🔑 **Lo que hace aceptable la excepción es estructural, no una cuestión de confianza: esta acción no
+conoce ningún envío.** No recibe `id`, no lee `envios_reparto`, y lo que devuelve **no tiene `id`**,
+así que no hay fila a la cual el número pueda quedar pegado. El agujero que el comentario de
+`zonas-sugerir` cierra se escribe «cotizame ESTA otra dirección y aplicámelo a ESE envío», y con esta
+forma esa oración no se puede ni formar. Un test la afirma (`expect(bloque).not.toMatch(/\bb\.ids?\b/)`).
+
+⛔ **Por eso `zonas-sugerir` no se relajó para aceptar direcciones sueltas.** Habría sido una acción
+menos, pero deja las dos mitades juntas: el mismo llamado con `id` y con `direccion`, y el día que
+alguien mande los dos, nadie sabe cuál gana.
+
+🔑 **Superficie**: quien llega ya pasó por `puedeEnvios`, o sea que con la otra acción ya podía
+geocodificar **cien** direcciones de un saque. Ésta hace una. Por eso **no** se inventó un rate limit:
+este repo no tiene rate limiting en ninguna puerta, y un contador en memoria de una función
+serverless no cuenta nada (cada instancia arranca en cero).
+
+🔴 **El texto largo se RECHAZA, nunca se recorta.** Un `slice` cotizaría una dirección que no es la
+que se pidió, y contestaría 200.
+
+🔑 **`encontrado` se muestra A LA VISTA, no en un tooltip como en la bandeja.** Allá hay una fila por
+clienta y no entra; acá no hay ninguna fila de la base contra la cual contrastar el número, así que
+ver **qué dirección entendió el mapa** es lo único que permite cazar que Georef resolvió otra calle.
+
+⚠️ **La provincia sigue clavada en Santa Fe y acá el texto es libre**, que es el riesgo nuevo: una
+calle de otra provincia homónima de una de Rosario podría dar un punto preciso adentro de una zona.
+Medido el 10-sep contra Georef vivo, «Avellaneda 3200, Flores» sale **no ubicada**, y el hint del
+campo dice «La moto reparte en el Gran Rosario». ⛔ No se restringe la localidad a la lista de
+reparto: dejaría afuera a Ibarlucea, Soldini y Pueblo Esther, que hoy salen bien como «fuera del mapa».
+
+**El envío que crea «cargar este envío» nace SIN FECHA** ⇒ vive en la bandeja «Sin fecha», y por eso
+la pantalla salta a esa pestaña al cargarlo: sin el salto, cargarlo parado en la hoja del día guarda
+bien y **parece que no pasó nada**. El precio se siembra **sólo si el mapa lo propuso**; cuando no,
+el campo queda vacío y nunca en `0`, que en esta sección significa «envío bonificado».
 
 ## Lo que ya se rompió acá
 

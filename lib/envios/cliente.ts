@@ -9,7 +9,7 @@
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav'
 import { ordenesQueNoLlegaron } from './core'
-import type { ClaseMovimiento, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
+import type { ClaseMovimiento, CotizacionSuelta, Envio, MovimientoCuenta, OrdenTN, PlanDeImportacion, SugerenciaDePrecio, Turno, ZonaDeReparto } from './tipos'
 
 const API = '/api/datos?recurso=envios'
 const AUDIT = 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
@@ -266,6 +266,32 @@ export async function sugerirPrecios(ids: string[]): Promise<SugerenciaDePrecio[
     'No se pudieron sugerir los precios.',
   )
   return d.sugerencias || []
+}
+
+/**
+ * **Cuánto sale un envío a una dirección, sin que exista el envío.** Es el panel de arriba de la
+ * bandeja: alguien pregunta por WhatsApp y se contesta sin cargar una fila que después hay que
+ * borrar —y borrar no alcanza, porque la traída de Tienda Nube la resucita mientras siga en la
+ * ventana de tres días—.
+ *
+ * 🔑 **Acá sí van la dirección y la localidad, y por eso es una función aparte de `sugerirPrecios`.**
+ * La regla de arriba no se aflojó: sigue siendo cierta para las filas de la bandeja. Lo que vuelve
+ * de acá **no tiene `id`**, así que no hay envío al que el número pueda quedar pegado.
+ *
+ * El código postal es opcional y conviene ponerlo: es la segunda señal que caza la localidad que se
+ * contradice con la dirección. Sin él queda una sola, que es donde ya salieron precios de la zona de
+ * al lado.
+ */
+export async function cotizarDireccion(d: {
+  direccion: string
+  localidad: string
+  cp?: string
+}): Promise<CotizacionSuelta> {
+  const r = await postear<{ cotizacion: CotizacionSuelta }>(
+    { action: 'zonas-cotizar', direccion: d.direccion, localidad: d.localidad, cp: d.cp || '' },
+    'No se pudo cotizar la dirección.',
+  )
+  return r.cotizacion
 }
 
 export async function importarZonas(

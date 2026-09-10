@@ -17,6 +17,8 @@
 //   POST { recurso:'envios', action:'zona-guardar', zona }   ·  action:'zona-borrar', id
 //   POST { recurso:'envios', action:'zonas-importar', archivo, ajuste, confirmar }
 //   POST { recurso:'envios', action:'zonas-sugerir', ids:[…] }  → { ok, sugerencias } (no escribe)
+//   POST { recurso:'envios', action:'zonas-cotizar', direccion, localidad, cp }  → { ok, cotizacion }
+//                                                (una dirección suelta, sin envío; no escribe)
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=envios`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas. Si alguien crea `api/envios.js` "por prolijidad",
@@ -142,6 +144,43 @@ function filaDe(e, yo) {
     autor: yo,
     updated_at: new Date().toISOString(),
   };
+}
+
+/**
+ * **Las dos vueltas al geocoder: una sola decisión, en un solo lugar.**
+ *
+ * Recibe pedidos ya pasados por el candado (`consultaDe`) y devuelve, por `clave`, en qué terminó
+ * cada uno. Lo usan las dos formas de cotizar —la bandeja por `ids` y la dirección suelta— y por eso
+ * vive acá y no copiado en cada una: lo que se duplicaría no es código de adorno, es **el orden**.
+ *
+ * 🔴 **La segunda vuelta va con la localidad del CP, y sólo para las que no ubicaron nada.** Es una
+ * vuelta más de lote, no una por fila. Que corra **después** es toda la seguridad que tiene: no
+ * puede pisar un punto que ya salió bien, sólo llenar un hueco. Al revés —el CP primero— devuelve
+ * puntos precisos de la zona de al lado, con 200 y con cara de buenos, que es el único error caro de
+ * todo este módulo. `consultaDe` ya dejó `reintento` en `null` cuando la localidad se reconoció.
+ *
+ * 🔑 **Por eso no hay dos copias de este bloque.** Cuando el orden vivía escrito adentro de la única
+ * acción que cotizaba, la red era un test que afirmaba ese orden ahí; con dos llamadores, dos copias
+ * serían dos órdenes que hay que corregir juntos —y corregir uno solo es exactamente el modo de
+ * falla que esta sección ya se comió con `cobrado`—. Acá hay una sola cosa que afirmar.
+ */
+async function cotizarPuntos(aPreguntar, zonas) {
+  const puntos = aPreguntar.length ? await geocodificarEnEscalera(aPreguntar) : new Map();
+
+  const segunda = pedidosDelReintento(aPreguntar, puntos);
+  if (segunda.length) {
+    const otra = await geocodificarEnEscalera(segunda);
+    for (const p of segunda) {
+      const r = otra.get(p.clave);
+      if (r && r.resultado) puntos.set(p.clave, r);
+    }
+  }
+
+  return aPreguntar.map((p) => {
+    const hallazgo = puntos.get(p.clave) || {};
+    const s = sugerenciaDePunto(hallazgo.resultado, zonas);
+    return { clave: p.clave, ...s, motivo: motivoDeSugerencia(s.estado), consulta: hallazgo.usada };
+  });
 }
 
 export default async function handler(req, res) {
@@ -625,6 +664,74 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, plan: resumen, escrito: true });
     }
 
+    // ── Cotizar UNA dirección suelta, sin envío que la sostenga ───────────────
+    //
+    // 🔑 **Acá la dirección SÍ viene del body, y es exactamente lo contrario de lo que hace
+    // `zonas-sugerir` unas líneas más abajo.** La diferencia no es de confianza, es que esta acción
+    // **no conoce ningún envío**: no recibe `id`, no lee `envios_reparto`, y lo que devuelve no
+    // tiene dónde pegarse. El agujero que aquel comentario cierra se escribe «cotizame ESTA otra
+    // dirección y aplicámelo a ESE envío», y acá esa oración no se puede ni formar.
+    //
+    // 🔴 **Por eso `zonas-sugerir` no se relajó para aceptar direcciones sueltas.** Habría sido una
+    // acción menos y dejaría las dos mitades juntas: el mismo llamado con `id` y con `direccion`, y
+    // el día que alguien mande los dos, nadie sabe cuál gana. Dos acciones que no se pisan valen más
+    // que la línea que ahorrarían.
+    //
+    // 🔑 **Superficie**: quien llega acá ya pasó por `exigirUsuario` y `puedeEnvios`, o sea que ya
+    // podía geocodificar **cien** direcciones de un saque con la otra acción. Ésta hace una.
+    //
+    // ⛔ **No escribe nada**, igual que su hermana: el único `select` es al mapa. El precio llega a
+    // la base sólo si una persona aprieta «cargar este envío», ve el número en un campo editable y
+    // guarda — o sea, por `action: 'guardar'`, como cualquier alta a mano.
+    if (b.action === 'zonas-cotizar') {
+      const direccion = String(b.direccion == null ? '' : b.direccion).trim();
+      const localidad = String(b.localidad == null ? '' : b.localidad).trim();
+      const cp = String(b.cp == null ? '' : b.cp).trim();
+
+      if (!direccion) return res.status(400).json({ error: 'Escribí la dirección.' });
+      // Sin localidad no se pregunta, y no es una validación de formulario: Georef necesita el
+      // pueblo, y la diferencia entre Rosario y Funes la decide ese dato. Preguntar sólo por la
+      // provincia hace que una calle de Funes matchee su homónima de Rosario y devuelva un punto
+      // **preciso** en la zona equivocada.
+      if (!localidad) {
+        return res.status(400).json({ error: 'Escribí la localidad: sin ella el mapa no distingue una calle de Funes de su homónima de Rosario.' });
+      }
+      // 🔴 **Largo: se RECHAZA, nunca se recorta.** Un `slice` acá cotiza una dirección que no es la
+      // que se pidió, contesta 200 y el número sale con la misma cara de bueno que los demás.
+      if (direccion.length > 200 || localidad.length > 80 || cp.length > 12) {
+        return res.status(400).json({ error: 'La dirección, la localidad o el código postal son demasiado largos.' });
+      }
+
+      const { data: mapa, error: errZonas } = await supabase.from('envios_zonas').select(CAMPOS_ZONA);
+      if (errZonas) throw new Error(errZonas.message);
+      const zonas = mapa || [];
+      // Sin esto, `precioSugerido` contesta `sin_zona` para todo y el panel le diría «fuera del
+      // mapa» a una dirección del centro de Rosario.
+      if (!zonas.length) {
+        return res.status(400).json({ error: 'Todavía no hay zonas cargadas: importá el mapa desde «Zonas y precios».' });
+      }
+
+      // El candado, igual que en la bandeja: el `cp` va SIEMPRE, porque es la segunda señal con la
+      // que se caza la localidad que miente. Dejarlo afuera no rompe nada — afloja en silencio.
+      const c = consultaDe({ direccion, localidad, cp });
+      if (c.estado) {
+        // Se contesta sin gastar una consulta a un servicio ajeno y gratis.
+        return res.status(200).json({
+          ok: true,
+          cotizacion: { estado: c.estado, precio: null, zona: null, motivo: motivoDeSugerencia(c.estado, c) },
+        });
+      }
+
+      // `provincia` es constante de verdad: la moto reparte en Santa Fe. Una localidad de otra
+      // provincia tiene que salir sin ubicar, que es la respuesta correcta.
+      const [cotizada] = await cotizarPuntos(
+        [{ clave: 'suelta', intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' }],
+        zonas,
+      );
+      const { clave, ...cotizacion } = cotizada;
+      return res.status(200).json({ ok: true, cotizacion });
+    }
+
     // ── Proponer el precio de un puñado de filas, por zona ────────────────────
     //
     // 🔑 **No escribe nada.** Devuelve una sugerencia por fila y el campo del precio sigue vacío
@@ -671,25 +778,11 @@ export default async function handler(req, res) {
         aPreguntar.push({ clave: e.id, intentos: c.intentos, localidad: c.localidad, reintento: c.reintento, provincia: 'Santa Fe' });
       }
 
-      const puntos = aPreguntar.length ? await geocodificarEnEscalera(aPreguntar) : new Map();
-
-      // 🔑 **La segunda vuelta va con la localidad del CP, y sólo para las que no ubicaron nada.**
-      // Es una vuelta más de lote, no una por fila. Que corra **después** es toda la seguridad que
-      // tiene: no puede pisar un punto que ya salió bien, sólo llenar un hueco — por eso el reintento
-      // de una localidad que Georef entendió (aunque haya mandado la dirección afuera del mapa) no
-      // existe. `consultaDe` ya dejó `reintento` en `null` cuando la localidad se reconoció.
-      const segunda = pedidosDelReintento(aPreguntar, puntos);
-      if (segunda.length) {
-        const otra = await geocodificarEnEscalera(segunda);
-        for (const p of segunda) {
-          const r = otra.get(p.clave);
-          if (r && r.resultado) puntos.set(p.clave, r);
-        }
-      }
-
-      for (const p of aPreguntar) {
-        const s = sugerenciaDePunto((puntos.get(p.clave) || {}).resultado, zonas);
-        sugerencias.push({ id: p.clave, ...s, motivo: motivoDeSugerencia(s.estado), consulta: (puntos.get(p.clave) || {}).usada });
+      // Las dos vueltas —y sobre todo su orden— viven en `cotizarPuntos`, arriba: es lo único que
+      // esta acción comparte con la cotización de una dirección suelta, y es justo lo que no puede
+      // estar escrito dos veces.
+      for (const { clave, ...resto } of await cotizarPuntos(aPreguntar, zonas)) {
+        sugerencias.push({ id: clave, ...resto });
       }
 
       return res.status(200).json({ ok: true, sugerencias });

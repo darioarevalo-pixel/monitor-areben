@@ -14,6 +14,11 @@ import { describe, expect, it } from 'vitest'
  * 2. **El orden de las dos vueltas de geocodificación.** Que la del código postal corra **después** y
  *    sólo sobre las que no ubicaron nada es toda la seguridad que tiene el reintento. La decisión se
  *    sacó a `pedidosDelReintento` para poder afirmarla, pero nada obliga al handler a llamarla.
+ *    🔑 **Desde que también se cotiza una dirección suelta, ese orden vive en `cotizarPuntos`** y no
+ *    adentro de esta acción: dos llamadores con dos copias serían dos órdenes que hay que corregir
+ *    juntos, y corregir uno solo es el modo de falla que esta sección ya se comió con `cobrado`. Así
+ *    que acá se afirma que la acción **usa** el helper, y el orden se afirma sobre el helper —una
+ *    sola vez, en el lugar donde de verdad está—.
  *
  * Texto contra texto a propósito, igual que `envios-cobrado-handler.test.ts` y `permisos-espejo`:
  * el handler corre en Node sin pasar por el compilador y acá no se prueba comportamiento, se prueba
@@ -38,15 +43,18 @@ describe('🔴 la acción `zonas-sugerir` del handler', () => {
     expect(bloque).toMatch(/from\('envios_reparto'\)\.select\('[^']*\bcp\b[^']*'\)/)
   })
 
-  it('🔴 la segunda vuelta la decide `pedidosDelReintento`, que sí se puede afirmar', () => {
-    expect(bloque).toContain('pedidosDelReintento(aPreguntar, puntos)')
+  it('🔴 no geocodifica por su cuenta: delega en `cotizarPuntos`, que es donde vive el orden', () => {
+    expect(bloque).toContain('cotizarPuntos(aPreguntar, zonas)')
+    // Si vuelve a llamar al geocoder desde acá, es que alguien recreó la copia que este helper vino
+    // a borrar — y entonces hay dos órdenes, y sólo uno testeado.
+    expect(bloque).not.toContain('geocodificarEnEscalera(')
   })
 
-  it('🔴 y corre DESPUÉS de la primera: al revés, el CP le pisa el punto a las que ya resolvieron', () => {
-    const primera = bloque.indexOf('await geocodificarEnEscalera(aPreguntar)')
-    const segunda = bloque.indexOf('pedidosDelReintento')
-    expect(primera).toBeGreaterThan(-1)
-    expect(segunda).toBeGreaterThan(primera)
+  it('🔴 y no pierde la clave: la sugerencia sale con el `id` de la fila que se preguntó', () => {
+    // `cotizarPuntos` devuelve `clave`; mapearla mal deja a cada fila con la propuesta de otra, que
+    // es el corrimiento de un lugar que `alinear` existe para hacer imposible del otro lado.
+    expect(bloque).toMatch(/const \{ clave, \.\.\.resto \}/)
+    expect(bloque).toContain('sugerencias.push({ id: clave, ...resto })')
   })
 
   // Sin esto el motivo de `localidad_dudosa` sale genérico («no coinciden») y pierde los dos nombres,
