@@ -229,6 +229,16 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "precios",
+    "area": "marketing",
+    "label": "Precios de campaña",
+    "info": "La lista de precios de una liquidación o feria, para poder comunicarla antes de que los precios estén publicados en la tienda: foto, precio de lista, precio de campaña, % off y stock. Muestra sólo las campañas que se compartieron desde Liquidación, y marca cuáles precios ya están confirmados y cuáles todavía se pueden mover. ⛔ No lleva costo ni margen, y desde acá no se cambia ningún precio.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ]
+  },
+  {
     "key": "marketing",
     "area": "marketing",
     "label": "Fotos y descripciones",
@@ -1130,6 +1140,7 @@ export const NAV_CATS: NavCat[] = [
     "keys": [
       "sesion-fotos",
       "mkt-ventas",
+      "precios",
       "marketing",
       "calendario",
       "canjes",

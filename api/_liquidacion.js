@@ -10,6 +10,7 @@
 //   POST { recurso:'liquidacion', store, action:'crear',       campania:{id,nombre,tipo,desde,hasta,nota} }
 //   POST { recurso:'liquidacion', store, action:'renombrar',   id, nombre?, tipo?, desde?, hasta?, nota? }
 //   POST { recurso:'liquidacion', store, action:'estado',      id, estado }
+//   POST { recurso:'liquidacion', store, action:'compartir',   id, compartida }  (admin)
 //   POST { recurso:'liquidacion', store, action:'sumar-items', id, items:[…] }
 //   POST { recurso:'liquidacion', store, action:'guardar-item',id, item }
 //   POST { recurso:'liquidacion', store, action:'estado-item', id, pid, estado }
@@ -146,6 +147,11 @@ function aCampania(row, conteo) {
     // Cuándo se trajeron por última vez las ventas del día al espejo, desde el botón de Resultado.
     // `null` es lo normal: la campaña se mide contra el sync diario y nadie apretó nada.
     ventasSync: d.ventasSync || null,
+    // Si Marketing puede ver la lista de precios de esta campaña (sección `precios`). Ver la
+    // acción `compartir` acá abajo.
+    compartida: !!d.compartida,
+    compartidaPor: d.compartidaPor || null,
+    compartidaEn: d.compartidaEn || null,
     conteo: conteo || { total: 0, pendientes: 0, definidos: 0, confirmados: 0, descartados: 0, aplicados: 0 },
   };
 }
@@ -783,6 +789,47 @@ export default async function handler(req, res) {
         .update({ nombre, datos, updated_at: ahora }).eq('store', store).eq('id', id);
       if (error) throw new Error(error.message);
       return res.status(200).json({ ok: true, campania: aCampania({ id, nombre, estado: previo.estado, datos }) });
+    }
+
+    // ── Compartir la lista de precios con Marketing. ───────────────────────────────────────────
+    //
+    // 🔑 **Es un interruptor explícito y ⛔ no se deriva del estado.** El caso que lo abrió: la
+    // Feria de Septiembre de Zattia arranca el lunes con los precios decididos y **sin publicar en
+    // la tienda** —va oculta en Tienda Nube—, y Marketing tiene que armar las piezas el jueves. Un
+    // "se comparte cuando está `en_curso`" dejaría afuera a una campaña en borrador con los precios
+    // listos, y adentro a una prueba que nadie quiere ver. Lo decide quien la arma.
+    //
+    // 🔴 **Es de ADMIN.** Abre una campaña entera a un área que ⛔ no tiene permiso de Liquidación
+    // justamente porque ahí adentro está el costo; lo que sale del otro lado pasa por la lista
+    // blanca de `lib/precios/core.core.js`, pero **quién puede abrir la puerta** es otra pregunta.
+    //
+    // ⚠️ **`datos` se lee y se reescribe ACÁ, ⛔ nunca viaja en el body.** `guardar-item`,
+    // `revisar` y `decidir-masivo` ya reescriben el `datos` del ÍTEM con el objeto del navegador
+    // (por eso la bitácora es una tabla aparte); dejar que el flag de la CAMPAÑA entre por el body
+    // sería repetir ese modo de falla en el único campo que decide quién ve los precios.
+    if (b.action === 'compartir') {
+      if (!puede.admin) {
+        return res.status(403).json({ error: 'Compartir la lista de precios con Marketing lo hace un administrador.' });
+      }
+      const { data: previo, error: e0 } = await supabase.from('liquidaciones')
+        .select('nombre, estado, datos').eq('store', store).eq('id', id).maybeSingle();
+      if (e0) throw new Error(e0.message);
+      if (!previo) return res.status(404).json({ error: 'esa campaña no existe' });
+
+      const compartida = !!b.compartida;
+      const d = previo.datos || {};
+      const datos = {
+        ...d,
+        compartida,
+        // Al dejar de compartir se conserva quién la había abierto: la pregunta "¿quién dejó ver
+        // esto y cuándo?" no deja de tener respuesta porque el interruptor se haya apagado.
+        compartidaPor: compartida ? yo : (d.compartidaPor || null),
+        compartidaEn: compartida ? ahora : (d.compartidaEn || null),
+      };
+      const { error } = await supabase.from('liquidaciones')
+        .update({ datos, updated_at: ahora }).eq('store', store).eq('id', id);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, campania: aCampania({ id, nombre: previo.nombre, estado: previo.estado, datos }) });
     }
 
     // ── Mover el estado de la campaña. ─────────────────────────────────────────────────────────

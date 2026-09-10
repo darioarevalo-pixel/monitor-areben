@@ -55,11 +55,14 @@ import {
   type LiquidacionItem, type MotivoColgada, type TipoCampania,
 } from '@/lib/liquidacion'
 import {
-  aplicarPrecios, borrarCampania, cambiarEstadoCampania, crearCampania, decidirMasivo, estadoItem,
-  guardarItem, leerCampanias, leerItems, quitarItem, renombrarCampania, revisarItem, type Permisos,
+  aplicarPrecios, borrarCampania, cambiarEstadoCampania, compartirCampania, crearCampania,
+  decidirMasivo, estadoItem, guardarItem, leerCampanias, leerItems, quitarItem, renombrarCampania,
+  revisarItem, type Permisos,
 } from '@/lib/liquidacion/persistencia'
 import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
+import { useDestacados } from '@/components/destacados/useDestacados'
+import { Estrella } from '@/components/destacados/Estrella'
 import { DefinirPrecio } from './DefinirPrecio'
 import { Bitacora } from './Bitacora'
 import { Resultado } from './Resultado'
@@ -528,6 +531,14 @@ function DetalleCampania({
    */
   const [definiendo, setDefiniendo] = useState<{ orden: string[]; i: number } | null>(null)
   /**
+   * Las ⭐ de ESTA campaña: cuáles de estos productos son los que se comunican.
+   *
+   * ⚠️ El alcance es la campaña (`campania.id`), ⛔ no el producto a secas: un básico barato puede
+   * ser la estrella de una feria al costo y no serlo nunca más. La ⭐ general vive en Análisis →
+   * Por producto, con el mismo botón y `liq = null`. Ver `sql/migrate-destacados.sql`.
+   */
+  const destacados = useDestacados(marca, campania.id)
+  /**
    * La foto que se está mirando en grande. Se guarda el nombre además del `src` porque el
    * lightbox tapa la fila: sin el rótulo no se sabe de cuál de los 351 productos es la foto.
    */
@@ -967,6 +978,26 @@ function DetalleCampania({
     }
   }
 
+  /**
+   * Abre (o cierra) la lista de precios de esta campaña para Marketing (sección «Precios de
+   * campaña»).
+   *
+   * 🔑 **Es un interruptor y ⛔ no se deriva del estado**: la Feria de Septiembre arranca el lunes
+   * con los precios decididos y **sin publicar en la tienda**, y Marketing tiene que armar las
+   * piezas antes. Del otro lado ⛔ no viaja el costo: ver `lib/precios/core.core.js`.
+   */
+  async function compartir(valor: boolean) {
+    try {
+      await compartirCampania(marca, campania.id, valor)
+      onCambio()
+      toast.ok(valor
+        ? 'Marketing ya ve la lista de precios de esta campaña, en «Precios de campaña».'
+        : 'Marketing dejó de ver la lista de precios de esta campaña.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo cambiar con quién se comparte.')
+    }
+  }
+
   const rot = ROTULO_CAMPANIA[campania.estado] || ROTULO_CAMPANIA.borrador
 
   return (
@@ -997,6 +1028,29 @@ function DetalleCampania({
             </Button>
           )}
           <Button variant="ghost" size="sm" onClick={onEditar}>Editar</Button>
+          {/*
+            🔴 **Compartir con Marketing es de ADMIN, y por eso el botón cuelga de `puede.admin`.**
+            Abre la campaña a un área que ⛔ no tiene permiso de Liquidación justamente porque acá
+            adentro está el costo. Lo que Marketing ve del otro lado pasa por una lista blanca
+            —foto, lista, precio, % off, stock— pero **quién abre la puerta** es otra pregunta.
+
+            ⛔ Y una campaña `cerrada` no se ofrece: sus precios ya no rigen, y dejarla visible es la
+            misma clase de mentira que la oferta colgada (la regla también está del lado del
+            servidor, en `compartidaConMarketing`).
+          */}
+          {puede.admin && campaniaEditable(campania.estado) && (
+            <Button
+              variant={campania.compartida ? 'soft' : 'ghost'}
+              tone={campania.compartida ? 'success' : 'neutral'}
+              size="sm"
+              title={campania.compartida
+                ? `Marketing ve esta lista de precios en «Precios de campaña»${campania.compartidaPor ? `. La compartió ${campania.compartidaPor}` : ''}. Sin costo ni margen.`
+                : 'Deja que Marketing vea a qué precio va cada producto, sin costo ni margen, antes de que los precios estén en la tienda.'}
+              onClick={() => void compartir(!campania.compartida)}
+            >
+              {campania.compartida ? '✓ La ve Marketing' : 'Compartir con Marketing'}
+            </Button>
+          )}
           {campania.estado === 'borrador' && (
             <Button variant="soft" tone="brand" size="sm" onClick={() => void cambiarEstado('en_curso')}>
               Marcar en curso
@@ -1309,6 +1363,7 @@ function DetalleCampania({
               <THead>
                 <Tr>
                   {puedeConfirmar && <Th width={34} />}
+                  <Th width={40} />
                   <Th />
                   <Th>Producto</Th>
                   <Th align="right">Precio</Th>
@@ -1333,6 +1388,8 @@ function DetalleCampania({
                     marcable={puedeConfirmar}
                     marcado={marcados.has(i.pid)}
                     onMarcar={(on) => marcar(i.pid, on)}
+                    estrella={destacados.porProducto.get(i.pid) || null}
+                    onEstrella={() => destacados.alternar({ id: i.pid, nombre: i.foto.nombre, sku: i.foto.sku })}
                     onDescartar={() => void moverEstado(i, 'descartado')}
                     onVolver={() => void moverEstado(i, 'pendiente')}
                     onQuitar={() => void quitar(i)}
@@ -1384,7 +1441,8 @@ function DetalleCampania({
 }
 
 function FilaItem({
-  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar, onFoto, marcable, marcado, onMarcar,
+  item, tipo, puedeMover, onDefinir, onDescartar, onVolver, onQuitar, onFoto, marcable, marcado,
+  onMarcar, estrella, onEstrella,
 }: {
   item: LiquidacionItem
   tipo: TipoCampania
@@ -1397,6 +1455,9 @@ function FilaItem({
   marcable: boolean
   marcado: boolean
   onMarcar: (on: boolean) => void
+  /** La ⭐ de ESTA campaña. `null` = no está destacado. Ver `sql/migrate-destacados.sql`. */
+  estrella: Parameters<typeof Estrella>[0]['marcado']
+  onEstrella: () => Promise<void>
 }) {
   const rot = ROTULO_ITEM[item.estado] || ROTULO_ITEM.pendiente
   const problemas = avisos(item, tipo).filter((a) => a.nivel === 'alto')
@@ -1419,6 +1480,16 @@ function FilaItem({
           />
         </Td>
       )}
+      {/*
+        La ⭐ de la campaña: cuál de estos productos es el que se comunica. Va acá y ⛔ no sólo en la
+        pantalla de Marketing porque **el momento de decidirlo es éste**: quien está barriendo los
+        351 precios es quien sabe cuál es la oferta que vale contar. Es la misma lección de
+        Faltantes que ya está escrita en `useClavados.ts` — una lista nueva no existe hasta que
+        entra donde se toma el trabajo.
+      */}
+      <Td style={{ width: 40 }}>
+        <Estrella marcado={estrella} nombre={item.foto.nombre} onAlternar={onEstrella} titulo="de esta campaña" />
+      </Td>
       <Td style={{ width: 48 }}>
         {/*
           🔑 **La miniatura abre la FOTO, no la fila.** A 36 px no se ve si el corte es el que uno

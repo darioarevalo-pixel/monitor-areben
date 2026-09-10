@@ -87,6 +87,20 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   🔑 **Los dos caminos usan el mismo motor** (`confirmarEnMasa`), así que el cartel que nombra
   **cuántos tienen un aviso ALTO** —precio bajo el costo, costo que no vino de GN, sin precio de
   lista— aparece igual por los dos lados. Es lo único que la revisión de a uno hubiera cazado.
+- 🆕 🔑 **«Compartir con Marketing» abre la lista de precios SIN abrir la sección** (10-sep-2026).
+  Pedido de Bruno con fecha encima: la Feria de Septiembre arranca el lunes 14 con 351 precios
+  decididos y **sin publicar en la tienda** —va oculta en Tienda Nube—, y quien arma las piezas ⛔ no
+  podía verlos. Marketing ⛔ **no** ve esta sección a propósito (acá hay costo y margen), así que lo
+  que se abrió es la sección **`precios`** (`docs/secciones/precios.md`), que sirve una proyección
+  por lista blanca: foto, lista, precio, % off, stock. El botón es de **admin** y escribe
+  `datos.compartida` en la campaña, **leyendo y reescribiendo `datos` en el servidor** — el flag ⛔
+  nunca viaja en el body, por el mismo motivo que `confirmado`. ⛔ Una campaña `cerrada` no se
+  ofrece: sus precios ya no rigen.
+- 🆕 **La ⭐ de la fila es «producto estrella DE esta campaña»**, y ⛔ no la general del producto (esa
+  vive en Análisis → Por producto, con el mismo botón). Va acá porque **el momento de decidir cuál
+  se comunica es éste**: quien barre los 351 precios es quien sabe cuál es la oferta que vale
+  contar. La tabla y las dos preguntas, en `sql/migrate-destacados.sql`. 🔑 **Marcar pide lo mismo
+  que ver** (decisión de Bruno) — al revés que `clavados`, que es de admin.
 - 🔴 **El sub-permiso `liquidacion.aplicar` no se hereda de la función**: hay que tildarlo a mano, y
   en las dos marcas. Es el único permiso del Monitor que escribe precios en la tienda.
 - 🔑 **Hay DOS masivos de precio y contestan preguntas distintas.** `reprecificar` mueve la campaña

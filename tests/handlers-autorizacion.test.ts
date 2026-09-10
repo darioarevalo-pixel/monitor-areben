@@ -289,6 +289,78 @@ describe('_liquidacion · Ventas de Marketing no entra', () => {
   })
 })
 
+/**
+ * 🔴 **Precios de campaña: la puerta que Marketing SÍ tiene, y por qué es otra puerta.**
+ *
+ * Marketing ⛔ no puede ver `liquidacion` **a propósito**: la foto congelada de cada ítem trae
+ * costo, markup, margen y ventas, y la Feria de Septiembre de Zattia se vende al costo. Lo que se
+ * abrió el 10-sep-2026 es `?recurso=precios`, un handler **de sólo lectura** cuya salida pasa por
+ * la lista blanca de `lib/precios/core.core.js`.
+ *
+ * Este bloque fija las dos mitades: que la puerta nueva ⛔ no sea una llave de la vieja, y que la
+ * vieja siga cerrada. Sin la segunda mitad, "abrirle precios a Marketing" podría terminar siendo
+ * "abrirle Liquidación" sin que nada se ponga rojo.
+ */
+describe('_precios · la puerta de Marketing, y la que sigue cerrada', () => {
+  const SOLO_PRECIOS = { name: 'Marketing', admin: false, cuenta: null, acceso: { bdi: { precios: true } }, funcion: [] }
+
+  it('🔴 con `precios` NO se abre `_liquidacion`: la sección con el costo sigue cerrada', async () => {
+    sesionDe(SOLO_PRECIOS)
+    const res = await llamar('_liquidacion', conSesion({ query: { store: 'bdi' } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 y tampoco por POST', async () => {
+    sesionDe(SOLO_PRECIOS)
+    for (const action of ['crear', 'guardar-item', 'compartir', 'aplicar']) {
+      const res = await llamar('_liquidacion', conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action, liq: 'l1', pids: ['1'] } }))
+      expect(res.code, `action «${action}»`).toBe(403)
+    }
+  })
+
+  it('con `precios` SÍ entra a `_precios` — si no, lo de arriba estaría verde por prohibir todo', async () => {
+    sesionDe(SOLO_PRECIOS)
+    try {
+      const res = await llamar('_precios', conSesion({ query: { store: 'bdi' } }))
+      expect(res.code).not.toBe(403)
+    } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+    }
+  })
+
+  it('🔴 sin ninguna de las dos secciones, `_precios` da 403 antes de tocar la base', async () => {
+    sesionDe(SIN_NADA)
+    const res = await llamar('_precios', conSesion({ query: { store: 'bdi' } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('🔴 `_precios` es de SOLO LECTURA: un POST ⛔ no escribe nada, ni con permiso', async () => {
+    // La única escritura de esta pantalla es la ⭐, y vive en otro recurso. Si algún día alguien le
+    // suma un verbo acá, este test se pone rojo primero.
+    sesionDe(SOLO_PRECIOS)
+    const res = await llamar('_precios', conSesion({ method: 'POST', query: { store: 'bdi' }, body: { store: 'bdi', action: 'lo-que-sea' } }))
+    expect(res.code).toBe(405)
+  })
+
+  it('🔴 `_destacados` sin ninguna de sus tres secciones da 403', async () => {
+    sesionDe(SIN_NADA)
+    const res = await llamar('_destacados', conSesion({ query: { store: 'bdi' } }))
+    expect(res.code).toBe(403)
+  })
+
+  it('la ⭐ la mueve quien ve la lista: con `precios` entra a `_destacados`', async () => {
+    // Decisión de Bruno (10-sep-2026): marcar pide lo mismo que ver. La firma `marcada_por` es lo
+    // que sostiene la responsabilidad, ⛔ no un candado — al revés que `clavados`, que es de admin.
+    sesionDe(SOLO_PRECIOS)
+    try {
+      const res = await llamar('_destacados', conSesion({ query: { store: 'bdi' } }))
+      expect(res.code).not.toBe(403)
+    } catch (e) {
+      expect(String(e)).toContain('LLEGÓ A LA BASE')
+    }
+  })
+})
+
 describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
   const SOLO_ETIQUETAS = { name: 'Local', admin: false, cuenta: null, acceso: { bdi: { etiquetas: true } }, funcion: [] }
   const postDe = (body: Record<string, unknown>) =>
@@ -305,7 +377,7 @@ describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
     // `stock-campania` y `ventas-campania` son lecturas, pero entran por el POST y contestan datos
     // de la campaña: la llave de Etiquetas no las abre. Van en la lista por lo mismo que las otras
     // —la garantía se ejerce, no se argumenta—, y porque las dos viven ARRIBA del guard del id.
-    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item', 'ventas-campania', 'stock-campania']) {
+    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item', 'ventas-campania', 'stock-campania', 'compartir']) {
       sesionDe(SOLO_ETIQUETAS)
       const res = await llamar('_liquidacion', postDe({ action, liq: 'l1' }))
       expect(res.code, `action «${action}» no puede entrar con la llave de Etiquetas`).toBe(403)

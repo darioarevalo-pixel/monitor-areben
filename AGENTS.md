@@ -123,6 +123,12 @@ ya tienen ficha:
   la normalización del talle y de la altura, que salen a la descripción del producto.
 - Liquidación → **leer `docs/secciones/liquidacion.md`** antes de tocar `components/liquidacion/`,
   `lib/liquidacion/` o `api/_liquidacion.js` — ⛔ ese handler lo abren también Etiquetas y Análisis.
+- Precios de campaña (la lista de precios que ve Marketing) → **leer `docs/secciones/precios.md`**
+  antes de tocar `components/precios/`, `lib/precios/` o `api/_precios.js`. ⛔ **`lib/precios/
+  core.core.js` es una LISTA BLANCA**: es lo único que separa a Marketing del **costo**, y
+  `liquidacion` está fuera de esa función justamente por eso. Un campo se agrega ahí o no viaja.
+  ⛔ La ⭐ de producto estrella es otra cosa: `api/_destacados.js` + `sql/migrate-destacados.sql`,
+  y se marca desde TRES pantallas de dos áreas.
 - Etiquetas → **leer `docs/secciones/etiquetas.md`** antes de tocar `components/etiquetas/` o
   `lib/etiquetas/`. ⛔ **La geometría del PDF sale en una Zebra real**: el dibujo se toca sólo con
   el test de paridad delante.

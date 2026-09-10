@@ -112,6 +112,17 @@ export interface Liquidacion {
    * `null` mientras nadie lo apriete: ahí el resultado se mide contra lo que dejó el sync diario.
    */
   ventasSync: string | null
+  /**
+   * Si Marketing puede ver la lista de precios de esta campaña, en la sección **Precios de
+   * campaña** (`lib/precios`). Es un interruptor explícito y ⛔ no se deriva del estado: una
+   * campaña en borrador puede tener los precios listos y ser justo la que hay que comunicar. Lo
+   * prende un admin, y lo que ve Marketing del otro lado pasa por una lista blanca sin costo ni
+   * margen.
+   */
+  compartida?: boolean
+  compartidaPor?: string | null
+  /** ISO. */
+  compartidaEn?: string | null
   /** Cuántos productos tiene y cómo se reparten. Proyección del servidor, no se guarda. */
   conteo: ConteoCampania
 }

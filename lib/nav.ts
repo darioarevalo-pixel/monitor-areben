@@ -216,6 +216,12 @@ const ICONO_POR_KEY: Record<string, string> = {
   // La brújula, la misma de Norte: es la sección de «hacia dónde vamos» de Marketing. No se
   // pisan en ningún menú — quien ve Norte es de Dirección y no ve ésta, y al revés.
   'mkt-ventas': 'norte',
+  // La etiqueta de precio con la flecha para abajo, la misma de Liquidación: es la misma campaña
+  // vista desde el otro lado —allá se decide el precio, acá se comunica—. No se pisan en ningún
+  // menú de nadie salvo el de un admin, que ve las dos, y ahí decir "esto es lo mismo, en otro
+  // lado" es justo lo que corresponde. Mismo criterio que `atencion: 'clientes'` y `prm:
+  // 'proveedores'`.
+  precios: 'liquidacion',
   marketing: 'marketing',
   calendario: 'calendario',
   canjes: 'canjes',
@@ -500,6 +506,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   'meta-ads': 'La pauta de Meta en cuatro zonas: Rendimiento —qué apagar, qué escalar y qué testear hoy, con una fila por celda, su costo por compra contra el techo, el desgaste del creativo y los botones para accionar ahí mismo—, Producir —piezas nuevas, ideas y la biblioteca de avisos—, Analizar —campañas, embudo, los totales por cuenta, el registro de lo accionado y los informes en prosa— y Configurar —la rentabilidad, que es el techo con el que se juzga todo, y las automatizaciones, que proponen sin ejecutar—.',
   calendario: 'Las fechas comerciales y los hitos propios, con cuánto falta y qué etapas ya tienen ideas anotadas.',
   liquidacion: 'Campañas de sale: mandás los productos desde Productos, les definís el precio uno por uno y queda guardado para todo el equipo.',
+  precios: 'A qué precio va cada producto de una campaña, para poder comunicarla antes de que los precios estén publicados en la tienda. Sólo se miran: los precios se deciden en Liquidación.',
   gerencial: 'Lo que requiere una decisión hoy, de todas tus marcas, con la acción recomendada.',
   memo: 'Qué pasó esta semana: los números de lunes a domingo, el avance de cada sistema y el acta.',
   norte: 'Hacia dónde vamos: el stock que entra contra el que sale, los pagos que vienen y las metas.',

@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-63 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+64 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -54,6 +54,8 @@ vuelva; **también cuelga del menú de Local**, con rótulo propio, y lee la tab
 puerta angosta `vista=retornos`)
 
 **Marketing** — `mkt-ventas → components/mkt-ventas + lib/mkt-ventas` · `marketing` · `tncat` · `sesion-fotos → components/sesionfotos + lib/sesionfotos` · `canjes` ·
+`precios → components/precios + lib/precios` (la lista de precios de una campaña de Liquidación, por `?recurso=precios`; ⛔ **sólo lee**, y lo que sale pasa
+por la lista blanca de `lib/precios/core.core.js` — es lo único que separa a Marketing del **costo**) ·
 `gen-talles` · `gen-desc → components/gen-desc + lib/tn-desc` · `calendario` ·
 `modelos → components/modelos + lib/modelos` (el padrón de las modelos, por `?recurso=modelos`;
 su tabla vive **sólo en la base de BDI** y la lista de marcas vacía quiere decir las dos. 🔑 Su primer lector

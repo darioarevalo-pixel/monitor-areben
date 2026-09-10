@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|modelos&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|modelos|precios|destacados&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -45,6 +45,8 @@ import modelos from './_modelos.js';
 import ocWebhook from './_oc-webhook.js';
 import acreedores from './_acreedores.js';
 import compromisos from './_compromisos.js';
+import precios from './_precios.js';
+import destacados from './_destacados.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -162,6 +164,17 @@ const RECURSOS = {
   // lee y no escribe una fila; éste escribe, y su verbo `confirmar` mueve plata de verdad en el
   // ledger del dashboard. Mezclarlos es como se cuela un verbo que se olvidó de pedir permiso.
   compromisos,
+  // La lista de precios de una campaña de liquidación, para MARKETING. Va SEPARADO de
+  // `liquidacion` a propósito y por dos motivos que se refuerzan: aquel handler ya tiene cuatro
+  // llaves y su test de autorización se apoya en que una llave ajena corte antes de las `action`;
+  // y sobre todo, la foto congelada de un ítem trae **costo, markup y margen**, que es exactamente
+  // lo que la función `marketing` no puede ver. Éste sólo LEE, y lo que devuelve pasa por la lista
+  // blanca de `lib/precios/core.core.js`.
+  precios,
+  // Los productos estrella: la marca de "esto es lo que se comunica". Recurso propio y no un verbo
+  // de `precios` porque se marca desde TRES pantallas de dos áreas distintas (la lista de precios,
+  // la campaña por dentro y Análisis → Por producto), y `precios` es de sólo lectura.
+  destacados,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

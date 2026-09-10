@@ -13,6 +13,8 @@ import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
 import { MarcaClavado } from '@/components/clavados/MarcaClavado'
 import { useClavados, type Clavados } from '@/components/clavados/useClavados'
+import { MarcaEstrella } from '@/components/destacados/MarcaEstrella'
+import { useDestacados, type Destacados } from '@/components/destacados/useDestacados'
 import { useVendidoSale } from '@/components/liquidacion/useVendidoSale'
 import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
 import { ofertaHoy, type EnSale } from '@/lib/liquidacion/vendido'
@@ -115,6 +117,9 @@ export function ProductosTable() {
   const camp = useCampaniaAbierta(marca)
   // Los clavados de la marca: un pedido para toda la tabla, no uno por fila.
   const clavados = useClavados(marca)
+  // Las ⭐ GENERALES de la marca (`liq = null`): las que valen para todas las campañas. Un pedido
+  // para toda la tabla, no uno por fila. Ver `components/destacados/MarcaEstrella.tsx`.
+  const destacados = useDestacados(marca, null)
 
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
@@ -470,6 +475,7 @@ export function ProductosTable() {
                   <THead>
                     <Tr>
                       <Th width={36} />
+                      <Th width={40} />
                       <Th width={78}>Foto</Th>
                       {th('name', 'Producto')}
                       {th('lastSale', 'Última venta')}
@@ -496,6 +502,7 @@ export function ProductosTable() {
                         yaEsta={camp.liq ? camp.yaEstan[p.id] : undefined}
                         onMarcar={(on) => toggleOutlet(p.id, on)}
                         clavados={clavados}
+                        destacados={destacados}
                         expandido={expandido === p.id}
                         onToggle={() => setExpandido((id) => (id === p.id ? null : p.id))}
                         onFoto={(imagenes) => setLightbox({ imagenes, nombre: p.name })}
@@ -527,6 +534,7 @@ function FilaProducto({
   yaEsta,
   onMarcar,
   clavados,
+  destacados,
   expandido,
   onToggle,
   onFoto,
@@ -542,6 +550,8 @@ function FilaProducto({
   marcado: boolean
   /** Los clavados de la marca. La fila sólo pregunta si el suyo está adentro. */
   clavados: Clavados
+  /** Las ⭐ generales de la marca. La fila sólo pregunta si la suya está adentro. */
+  destacados: Destacados
   /** En qué estado está este producto dentro de la campaña activa, si está. */
   yaEsta?: EstadoItem
   onMarcar: (on: boolean) => void
@@ -575,6 +585,11 @@ function FilaProducto({
               style={{ accentColor: 'var(--mo-brand-solid)', cursor: 'pointer' }}
             />
           </span>
+        </Td>
+        {/* La ⭐ general: «este producto es de los nuestros». Vive en components/destacados/ —
+            esta fila es del repo compartido. */}
+        <Td align="center" style={{ cursor: 'default' }}>
+          <MarcaEstrella p={p} destacados={destacados} />
         </Td>
         <Td tall>
           <span onClick={(e) => e.stopPropagation()}>

@@ -81,6 +81,7 @@ const Retornos = dynamic(() => import('@/components/retornos/Retornos').then((m)
 const Canjes = dynamic(() => import('@/components/canjes/Canjes').then((m) => m.Canjes), { loading: Cargando })
 const Calendario = dynamic(() => import('@/components/calendario/Calendario').then((m) => m.Calendario), { loading: Cargando })
 const Liquidacion = dynamic(() => import('@/components/liquidacion/Liquidacion').then((m) => m.Liquidacion), { loading: Cargando })
+const Precios = dynamic(() => import('@/components/precios/Precios').then((m) => m.Precios), { loading: Cargando })
 
 /**
  * El interruptor del strangler: qué secciones sirve el shell y cuáles siguen
@@ -429,6 +430,11 @@ export const SECCIONES: Record<string, ComponentType> = {
   // queda guardado en la base. Hasta ahora la selección vivía en un `useState` que se perdía al
   // recargar y la lista de precios, en el `localStorage` de una sola persona.
   liquidacion: Liquidacion,
+  // Precios de campaña (Marketing). La misma campaña de Liquidación vista desde el otro lado: allá
+  // se decide el precio, acá se comunica. ⛔ No es "Liquidación con otro permiso" — lo que baja pasa
+  // por una lista blanca **sin costo, sin markup, sin margen y sin ventas**, que es exactamente por
+  // lo que `liquidacion` queda afuera de la función `marketing`.
+  precios: Precios,
 }
 
 /**

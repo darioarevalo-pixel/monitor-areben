@@ -121,6 +121,21 @@ export async function cambiarEstadoCampania(store: Marca, id: string, estado: Es
 }
 
 /**
+ * Abre (o cierra) la lista de precios de esta campaña para Marketing — la sección **Precios de
+ * campaña**. Pide admin.
+ *
+ * ⛔ El flag ⛔ no viaja adentro de `datos`: el servidor lee la campaña y lo reescribe él, por el
+ * mismo motivo por el que `confirmado` no entra por `guardar-item`.
+ */
+export async function compartirCampania(store: Marca, id: string, compartida: boolean): Promise<Liquidacion> {
+  const d = await postear(
+    { store, action: 'compartir', id, compartida },
+    'No se pudo cambiar con quién se comparte la campaña.',
+  )
+  return d.campania as Liquidacion
+}
+
+/**
  * Suma productos a una campaña. Los que ya estaban **no se pisan**.
  *
  * Es lo que hace "Mandar a liquidación" desde Análisis, y mandar dos veces el mismo producto es lo

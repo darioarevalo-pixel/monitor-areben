@@ -2,8 +2,13 @@
  * Ventas de Marketing (`/api/datos?recurso=mkt-ventas`).
  *
  * Un solo verbo: **traer las ventas de hoy al espejo**. Todo lo demás que dibuja la sección sale de
- * datos que ya tiene el navegador (el ETL) o de puertas que ya existían (`?metas=1` de Norte,
- * `?resultado=1` de Liquidación).
+ * datos que ya tiene el navegador (el ETL) o de puertas que ya existían (`?metas=1` de Norte).
+ *
+ * ⚠️ **Acá decía «`?resultado=1` de Liquidación». Esa llave ⛔ NO EXISTE**: se sacó, y hoy
+ * `tests/handlers-autorizacion.test.ts` fija lo contrario —con sólo `mkt-ventas`, ese GET tiene que
+ * dar 403—. Corregido el 10-sep-2026, junto con su gemelo en `lib/permisos.core.js`. Lo que
+ * Marketing sí ve de una campaña es la sección `precios` (`api/_precios.js`), que pasa por una
+ * lista blanca sin costo ni margen.
  *
  * # Por qué hace falta el botón
  *
