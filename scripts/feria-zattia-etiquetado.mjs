@@ -55,6 +55,14 @@ const DIA1 = 100               // la venta esperada del primer día, medida cont
 // ⇒ **la curva es de 2 a 3 POR TALLE**, y la demanda sólo mueve adentro de esa banda.
 const MINTALLE = Number(process.argv.find(a => a.startsWith('--min-talle='))?.split('=')[1] || 2)
 const MAXTALLE = Number(process.argv.find(a => a.startsWith('--max-talle='))?.split('=')[1] || 3)
+// 🔴 **LO QUE YA ESTÁ EN EL SALÓN ⛔ NO ES TRABAJO DE DEPÓSITO** (Bruno, 10-sep: *«campera rock ya
+// hay allá, así que sacalo; lo mismo con campera lines, sí hay en el local»*). Se etiqueta **con lo
+// exhibido, el día antes** — completarle la curva desde el depósito era mío y ⛔ no lo pidió nadie.
+// ⚠️ **Y el espejo puede estar equivocado en el otro sentido**: POLLERA DOT figura en **0 en el
+// local** y Bruno dice *«tiene que haber normalmente, así que se hace en el etiquetado del día»*
+// ⇒ **la palabra de Bruno le gana al espejo**, y por eso la exclusión es una LISTA con nombre, ⛔ no
+// un filtro que se pueda deducir del dato.
+const EN_EL_LOCAL = ['POLLERA DOT']
 const HOY = new Date().toISOString().slice(0, 10)
 const DESDE_SALE = '2026-08-13'
 const json = process.argv.includes('--json')
@@ -126,7 +134,10 @@ for (const f of filas) {
   f.porDemanda = Math.max(0, f.demanda1 - f.local) > f.piso
   f.bajar = Math.min(f.depo, Math.min(f.techo, Math.max(f.piso, Math.max(0, f.demanda1 - f.local))))
 }
-const orden = filas.filter(f => f.bajar > 0).sort((a, b) => a.etiqueta - b.etiqueta || b.bajar - a.bajar)
+const orden = filas
+  .filter(f => f.bajar > 0 && f.local === 0 && !EN_EL_LOCAL.includes(f.nombre))
+  .sort((a, b) => a.etiqueta - b.etiqueta || b.bajar - a.bajar)
+const fuera = filas.filter(f => f.bajar > 0 && (f.local > 0 || EN_EL_LOCAL.includes(f.nombre)))
 
 if (json) { console.log(JSON.stringify({ generado: HOY, dia1: DIA1, minTalle: MINTALLE, maxTalle: MAXTALLE, orden }, null, 1)); process.exit(0) }
 
@@ -155,7 +166,11 @@ const cuenta = n => filas.reduce((a, f) => a + Math.min(f.depo, Math.max(0, f.ta
 for (const n of [1, 2, 3]) {
   console.log(`   ${n} de cada talle  →  ${String(cuenta(n)).padStart(4)} etiquetas${n === MINTALLE ? '   ← el piso de la orden de arriba' : ''}`)
 }
-const cortos = filas.filter(f => f.bajar > 0 && f.depo < f.piso)
+if (fuera.length) {
+  console.log('\n📌 Fuera de la orden porque YA ESTÁN EN EL SALÓN — se etiquetan con lo exhibido, el día antes:')
+  for (const f of fuera) console.log(`     ${f.nombre.padEnd(26)} ${f.local ? `${f.local} en el salón` : 'el espejo dice 0, pero Bruno dice que hay'}`)
+}
+const cortos = orden.filter(f => f.depo < f.piso)
 if (cortos.length) {
   console.log(`\n🔴 ${cortos.length} modelos ⛔ no llegan al piso de ${MINTALLE} por talle porque NO HAY MÁS en el depósito:`)
   for (const f of cortos) console.log(`     ${f.nombre.padEnd(24)} ${f.talles} talles · sólo ${f.depo} en el depósito`)
