@@ -143,3 +143,41 @@ describe('totalDraft', () => {
     expect(totalDraft(d)).toBe(2 + 3 + 4) // la no-seleccionada (5) no cuenta
   })
 })
+
+/**
+ * El caso del 2-sep-2026: el SKU de Gestión Nube lleva guiones (`RVE-0047-NG`) y la etiqueta que
+ * se escanea es el mismo código sin ellos (`RVE0047NG`). Escanear el SKU de un producto que SÍ
+ * existe lo mandaba a la caja de «nuevos sin cargar».
+ */
+describe('escanearDraft · el SKU también se prueba normalizado (10-sep-2026)', () => {
+  const VARS: Variante[] = [mkVar({ id: '9_90', pid: '9', sid: '90', name: 'VESTIDO BLAZE', size: 'NEGRO', sku: 'RVE-0047-NG', deposito: 4, barcode: '' })]
+  const PRODS: Producto[] = [prod('9', 'VESTIDO BLAZE')]
+  const mapa = construirMapaBc(VARS)
+
+  it('encuentra la variante escaneando el SKU sin guiones', () => {
+    const { resultado } = escanearDraft(draftVacio(), 'RVE0047NG', mapa, VARS, 'deposito', PRODS)
+    expect(resultado).toMatchObject({ tipo: 'variante', nombre: 'VESTIDO BLAZE', size: 'NEGRO' })
+  })
+
+  it('lo que no cruza con nada sigue yendo a «nuevo»', () => {
+    const { resultado } = escanearDraft(draftVacio(), 'RMI0055CR', mapa, VARS, 'deposito', PRODS)
+    expect(resultado).toMatchObject({ tipo: 'nuevo', barcode: 'RMI0055CR' })
+  })
+})
+
+describe('procesarDraft · un «a mano» con forma de código guarda el código', () => {
+  const meta = { id: 's_cod', fecha: '2026-09-02', creado: 1, creadoPor: 'lorena' }
+
+  it('el código escaneado viaja en barcode, no sólo en el nombre', () => {
+    const d: Draft = { ...draftVacio(), manuales: [{ mid: 'm1', desc: 'RVE0047NG', qty: 1 }] }
+    const i = procesarDraft(d, 'deposito', meta)!.items[0]
+    expect(i).toMatchObject({ nombre: 'RVE0047NG', barcode: 'RVE0047NG', manual: true, nuevo: true, sku: '' })
+  })
+
+  it('una descripción de verdad NO se guarda como código', () => {
+    const d: Draft = { ...draftVacio(), manuales: [{ mid: 'm2', desc: 'Remera estampa X', qty: 2 }] }
+    const i = procesarDraft(d, 'deposito', meta)!.items[0]
+    expect(i.nombre).toBe('Remera estampa X')
+    expect(i.barcode).toBeUndefined()
+  })
+})

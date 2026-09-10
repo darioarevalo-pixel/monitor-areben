@@ -932,3 +932,97 @@ cada molde, editar la hora ⛔ no re-siembra, y una sesión con pedidos ⛔ no s
   «Lo que entró».
 - Que una **solicitud suelta con origen** siembre: ⛔ no se ejerció en esta caminata, pero está
   **medido en producción** — hay clones con la clave vieja (`sesion-fotos·s…`) del 1 y el 2-sep.
+
+## El código escaneado que quedaba de NOMBRE, y la vinculación que nunca se había portado (10-sep-2026)
+
+Lo trajo Bruno: *«cargué unos productos sin código de barra pero tenía el SKU, entonces los escaneé
+y los metí. Ahora quiero devolver los productos y está como nombre de producto y no como SKU.
+Estaría bueno que si el nombre es como un SKU, que el SKU o código de barras sea eso mismo»*.
+
+**Medido contra la base de Zattia antes de escribir una línea**, ⛔ no supuesto:
+
+| | |
+|---|---|
+| solicitud | `s1788353298507_54730` · `pendiente` · 2-sep · «SESION ESTUDIO 02/09» (Lorena Reyes) |
+| ítems | **152, los 152 `man_`** — `nombre` = el código (`RVE0047NG`, `RTO0380BLS`…), `sku: ''`, ⛔ sin `barcode` |
+| avance | `verif` 6 · `devuelto` 1 |
+| cruce con el espejo | **150 de 152** cruzan con una variante real, **0 ambiguas** |
+| los 2 que no | `RMI0056` y `RMI0055CR` — ⛔ no existen en GN (existe `RMI-0056-NG`, pero eso sería adivinar) |
+
+🔴 **La puerta por la que entró es el campo «Cargalo sin código», que dispara con Enter.** Un lector
+físico tipea el código + Enter ⇒ escanear con el foco puesto ahí crea un ítem cuyo **nombre** es el
+código. Y ese ítem es **irrecuperable por escáner**: `resolverItem` prueba vid → `sku` → `barcode`,
+y los tres están vacíos. La devolución sólo se podía contar con los −/+.
+
+### Los tres defectos, que eran uno solo mirado desde tres lados
+
+1. 🔴 **`sfVincularNuevos` (`index.html:9800`) NUNCA se portó.** El campo `vinculado` existía en
+   `tipos.ts` y ⛔ no lo escribía nadie, mientras la pantalla seguía prometiendo abajo de los
+   «Nuevos escaneados»: *«cuando el producto se cargue en GN, se vinculan solos»*. Los `bc_` con
+   `vinculado: true` que hay en la base son de **julio**, hechos por el legacy antes de morir.
+   🔑 **Una pantalla que promete algo que no pasa es peor que una que no promete nada**: nadie va a
+   revisar un ítem que el sistema dijo que se iba a arreglar solo.
+2. 🔴 **El SKU se comparaba EXACTO, y el código de barras es el SKU sin guiones.** En Gestión Nube
+   la variante tiene `sku` `RVE-0047-NG` y `barcode` `RVE0047NG` ⇒ escanear la etiqueta de un ítem
+   **ya vinculado** tampoco lo encontraba por SKU. El mismo desfasaje mandaba a la caja de «nuevos
+   sin cargar» un producto que **sí existía**, cuando se escaneaba su SKU en el borrador.
+3. 🔴 **El código no se guardaba en ningún campo buscable**, sólo en el nombre.
+
+### Cómo quedó
+
+| dónde | qué |
+|---|---|
+| `lib/sesionfotos/codigo.ts` | `normCodigo` (comparar sin guiones) · `pareceCodigo` (¿lo tipeó alguien o lo escupió un lector?) |
+| `lib/sesionfotos/vincular.ts` | el port de `sfVincularNuevos`, **ampliado a los `man_`** |
+| `escaneo.ts` · `draft.ts` | el SKU normalizado como **última** red, después del match exacto |
+| `SesionFotos.tsx` | el efecto que vincula al abrir · «Cargalo sin código» busca **antes** de dar por sentado que no está |
+| tests | `sesionfotos-vincular` (nuevo) + bloques en `sesionfotos-escaneo` y `sesionfotos-draft` |
+
+- 🔴 **Vincular ⛔ NO toca el `vid`.** `verif`, `devuelto`, `fotos`, `clasifOutfits` y `bolsa` están
+  indexados por ahí: moverlo tira los 6 preparados y el 1 devuelto que esa solicitud ya tenía.
+- 🔴 **Vincular ⛔ NO saca el `manual` ni el `nuevo`** — **decisión de Bruno**. Un ítem vinculado
+  sigue sin venta en Gestión Nube y sigue con los −/+. Crear la venta ahora **separaría stock de
+  mercadería que físicamente ya salió**, y `salio()` (`core.ts:99`) mira justamente `i.manual`.
+  Lo que se completa es la **identidad**: nombre real, talle, SKU, barcode, `pid`/`sid`.
+- 🔴 **Una clave que cae en DOS variantes se DESCARTA, ⛔ no se elige una.** Vincular mal es peor que
+  no vincular: el ítem quedaría con el nombre de otra prenda y nadie lo notaría hasta contar la
+  devolución. (Medido: en esta solicitud son 0.)
+- 🔴 **`normCodigo` va SIEMPRE al final.** Borrar los guiones fusiona el espacio de los SKU con el de
+  los barcodes: **894 claves del ETL de BDI son las dos cosas, y 3 apuntan a variantes distintas**.
+  Como última red no cambia nada de lo que ya resolvía exacto; como primer intento, sí.
+- 🔑 **Un código que ⛔ no cruza igual se guarda en `barcode`**: queda escaneable hoy y se vincula
+  solo el día que el producto entre a GN. Es literalmente lo que pidió Bruno.
+- 🔑 **La forma ⛔ no decide a qué producto corresponde, y no puede.** En Zattia un SKU puede ser
+  literalmente el nombre del producto (`ANGELINA`, `BABY TEE HOT`, `CORSET FRANK`). `pareceCodigo`
+  contesta **sólo** «¿esto lo tipeó una persona?»; **a qué producto pertenece lo contesta el cruce
+  contra el espejo**, que es una medición.
+- ⚠️ **Sin migración y sin script que toque producción**: la corrección la hace la pantalla al abrir
+  la sección, por `persistir` —que re-lee fresco y escribe **sólo el diff**—, una sola vez por carga.
+- ⚠️ **Vale tal cual para Solicitudes internas**, que monta el mismo componente: ahí ⛔ no hay ítems
+  `nuevo` ni «a mano» por diseño ⇒ `cambios` da 0 y ⛔ no se escribe nada.
+
+### El ENSAYO contra los datos reales, ⛔ no sólo contra el test
+
+Se corrió el núcleo sobre las **152 filas reales** y el espejo de Zattia (2.003 variantes), sin
+escribir nada: **150 con SKU · 2 sin** (`RMI0056`, `RMI0055CR`, los dos con su código en `barcode`) ·
+**vids intactos** · **2ª pasada: 0 cambios** (idempotente). Es la predicción con la que se verifica
+después de deployar.
+
+### Cómo se camina
+
+```bash
+npx vitest run tests/sesionfotos-vincular.test.ts tests/sesionfotos-escaneo.test.ts tests/sesionfotos-draft.test.ts --reporter=dot
+```
+
+🔴 **Los mutantes, verificados uno por uno**: sacar el fallback `normCodigo` de `resolverItem` (3
+rojos) · dejar que `vincularItem` pise el `vid` (1) · dejar que `mapaDeCodigos` elija una de dos
+ambiguas (1) · sacar el código del ítem «a mano» en `procesarDraft` (1).
+
+🔴 **Y lo que sólo se sabe ejerciéndolo en prod** (⛔ no tengo la credencial del Monitor):
+1. Abrir la solicitud del 2-sep: las filas tienen que pasar de `RVE0047NG` a **VESTIDO BLAZE ·
+   NEGRO · RVE-0047-NG**, y **⛔ sin perder** los 6 preparados ni el 1 devuelto.
+2. **Escanear una etiqueta de verdad en la devolución**, con el lector puesto: es lo único que
+   prueba el cero inicial comido.
+3. Volver a leer la base y contar: **150 con `sku`**, y los 2 restantes tienen que ser `RMI0056` y
+   `RMI0055CR`.
+4. Abrir **Solicitudes internas**: ahí ⛔ no tiene que cambiar ni guardarse nada.

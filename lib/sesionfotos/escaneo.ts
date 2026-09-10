@@ -10,6 +10,7 @@
  */
 
 import { esperadoEn, faseCompleta } from './core'
+import { normCodigo } from './codigo'
 import type { Fase, ItemSolicitud, Origen, Solicitud } from './tipos'
 
 /** Igual que `_sfNormBc`: normaliza un código de barras (trim + mayúsculas). */
@@ -48,6 +49,15 @@ export function vidDeBarcode(code: string, mapa: Record<string, string>): string
  * Resuelve el ítem que matchea un código dentro de un array: por vid (del mapa de
  * barcode), luego por SKU, y opcionalmente por el código de barras del propio ítem
  * (para los "nuevos" sin cargar; sfScan lo usa, sfScanCombi no).
+ *
+ * 🔴 **El último intento es el SKU NORMALIZADO, y no es un adorno**: en Gestión Nube el código de
+ * barras de una variante es su SKU sin guiones (SKU `RVE-0047-NG` ↔ barcode `RVE0047NG`), así que
+ * la etiqueta que se escanea **nunca** es igual al `sku` del ítem. Con la comparación exacta sola,
+ * un ítem vinculado por código de barras no se podía devolver escaneando su propia etiqueta.
+ *
+ * 🔑 **Va al final a propósito.** `normCodigo` borra los guiones y eso fusiona el espacio de los SKU
+ * con el de los barcodes (894 claves de BDI son las dos cosas); dejándolo como última red, todo lo
+ * que hoy resuelve exacto sigue resolviendo igual y esto sólo atrapa lo que antes se perdía.
  */
 export function resolverItem(
   arr: ItemSolicitud[],
@@ -59,6 +69,8 @@ export function resolverItem(
   let it = vid ? arr.find((i) => i.vid === vid) : null
   if (!it && code) it = arr.find((i) => String(i.sku).toLowerCase() === code.toLowerCase())
   if (!it && code && conBarcode) it = arr.find((i) => !!i.barcode && normBc(i.barcode) === normBc(code))
+  const c = normCodigo(code)
+  if (!it && c) it = arr.find((i) => (!!i.sku && normCodigo(i.sku) === c) || (!!i.barcode && normCodigo(i.barcode) === c))
   return it ?? null
 }
 

@@ -60,6 +60,8 @@ import {
   type Draft as DraftT,
   type ResultadoDraftScan,
 } from '@/lib/sesionfotos/draft'
+import { pareceCodigo } from '@/lib/sesionfotos/codigo'
+import { mapaDeCodigos, vincularSolicitudes } from '@/lib/sesionfotos/vincular'
 import type { Producto, Variante } from '@/lib/etl/tipos'
 import {
   agregarItemSol,
@@ -292,6 +294,31 @@ function Contenido({
   const { marca, perfil } = useSesion()
   const admin = esAdmin(perfil)
   const puedeQuitar = admin || puedeSub(perfil, marca, preset.seccionKey, 'quitar-item')
+
+  /**
+   * **Los ítems que entraron sin producto se vinculan solos cuando el catálogo los alcanza.**
+   *
+   * Es lo que la pantalla ya prometía abajo de los «Nuevos escaneados» —*«cuando el producto se
+   * cargue en GN, se vinculan solos»*— y que ⛔ no hacía nadie: `sfVincularNuevos` (el legacy) nunca
+   * se portó. Ahora entran también los «a mano» cuyo nombre es un código, que es lo que pasa al
+   * escanear con el foco en el campo «Cargalo sin código» (dispara con Enter, como el lector).
+   *
+   * 🔑 **Se guarda por `persistir`, que re-lee fresco y escribe SÓLO el diff**: el cajón es
+   * compartido y esto corre al abrir la sección. Mismo camino que `cerrarAnuladas`.
+   * 🔴 **Una sola vez por carga** (la ref): `persistir` actualiza `data`, y sin la guarda el efecto
+   * volvería a entrar por su propio resultado.
+   * ⚠️ **Vale tal cual para Solicitudes internas**, que monta este mismo componente: ahí ⛔ no hay
+   * ítems `nuevo` ni «a mano» por diseño, así que `cambios` da 0 y ⛔ no se escribe nada.
+   */
+  const mapaCodigos = useMemo(() => mapaDeCodigos(variantes), [variantes])
+  const yaVinculo = useRef(false)
+  useEffect(() => {
+    if (yaVinculo.current || !variantes.length) return
+    if (!vincularSolicitudes(data, mapaCodigos).cambios) return
+    yaVinculo.current = true
+    void persistir((l) => vincularSolicitudes(l, mapaCodigos).sols)
+  }, [data, variantes, mapaCodigos, persistir])
+
   const puedeEditarDesc = admin || puedeSub(perfil, marca, preset.seccionKey, 'editar-desc')
   const puedeRetiroDep = puedeRetirar(perfil, 'deposito')
   const puedeRetiroLoc = puedeRetirar(perfil, 'local')
@@ -1754,6 +1781,7 @@ function Draft({
   const [fbScan, setFbScan] = useState<ResultadoDraftScan | null>(null)
   const [manDesc, setManDesc] = useState('')
   const [manQty, setManQty] = useState('1')
+  const [fbMan, setFbMan] = useState<string | null>(null)
 
   const total = totalDraft(draft)
   const yaEn = useMemo(() => new Set(draft.prods.map((p) => p.pid)), [draft])
@@ -1766,13 +1794,37 @@ function Draft({
     setDraft(nd)
     setFbScan(resultado)
   }
+  /**
+   * Cargar sin código.
+   *
+   * 🔴 **Antes de dar por sentado que no está, se lo busca.** Este campo dispara con Enter y un
+   * lector tipea código + Enter, así que escanear con el foco acá era la forma silenciosa de crear
+   * un ítem cuyo NOMBRE es el código: sin SKU, sin código de barras y **imposible de devolver
+   * escaneando**. Pasó de verdad el 2-sep-2026, con 152 prendas.
+   *
+   * 🔑 Se reusa `escanearDraft`, ⛔ no una segunda resolución: la regla de «a qué variante
+   * corresponde este código» tiene que ser una sola. Si encuentra el producto, se agrega el
+   * producto de verdad; si no, sigue el camino de siempre —y el código igual viaja adentro del
+   * ítem (`procesarDraft`), así se vincula solo cuando GN lo tenga.
+   */
   const addManual = () => {
     const desc = manDesc.trim()
     if (!desc) {
       void avisar('Escribí una descripción (ej. Remera estampa X).')
       return
     }
+    if (pareceCodigo(desc)) {
+      const { draft: nd, resultado } = escanearDraft(draft, desc, mapaBc, variantes, origenSel, productos)
+      if (resultado.tipo === 'variante') {
+        setDraft(nd)
+        setFbMan(`Lo encontré en el catálogo: ${resultado.nombre} · ${resultado.size}. Se agregó como producto, no a mano.`)
+        setManDesc('')
+        setManQty('1')
+        return
+      }
+    }
     setDraft((d) => agregarManual(d, nuevoMid(), desc, Math.max(1, parseInt(manQty) || 1)))
+    setFbMan(null)
     setManDesc('')
     setManQty('1')
   }
@@ -1962,6 +2014,8 @@ function Draft({
           <span style={{ fontWeight: 600, fontSize: 12.5, color: color.ink2 }}>¿No lo encontrás? Cargalo sin código</span>
           <InfoPopover titulo="Producto sin código de barra">
             Para prendas que todavía no tienen código de barras. No genera venta: solo se controla que salga y vuelva.
+            Si escaneás un código y el producto ya existe en Gestión Nube, se carga como producto; si todavía no está, el
+            código queda guardado y se vincula solo cuando aparezca.
           </InfoPopover>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1989,6 +2043,7 @@ function Draft({
             + Agregar
           </Button>
         </div>
+        {fbMan ? <div style={{ fontSize: 12, color: color.success, marginTop: 6 }}>✓ {fbMan}</div> : null}
       </div>
 
       {/* Agregados — lo que llevás pedido en esta sesión. */}

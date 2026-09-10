@@ -13,6 +13,7 @@
  */
 
 import type { Producto, Variante } from '../etl/tipos'
+import { normCodigo, pareceCodigo } from './codigo'
 import { normBc, vidDeBarcode } from './escaneo'
 import type { Disparador } from '../solicitudes/disparador'
 import type { ItemSolicitud, Origen, Solicitud, TipoSol } from './tipos'
@@ -171,6 +172,11 @@ export type ResultadoDraftScan =
  * Escaneo dentro del borrador. Busca la variante en el inventario (por vid, luego
  * por SKU); si no está, la guarda como "nuevo" por código de barras. Cada escaneo
  * suma 1 y fija la ubicación elegida. Port de sfDraftScan.
+ *
+ * 🔴 **El SKU se prueba exacto y después NORMALIZADO** (10-sep-2026): el SKU de Gestión Nube lleva
+ * guiones (`RVE-0047-NG`) y la etiqueta que se escanea es el mismo código sin ellos (`RVE0047NG`).
+ * Con la comparación exacta sola, escanear el SKU de un producto que **sí existe** lo mandaba a la
+ * caja de "nuevos sin cargar". El orden importa: lo exacto primero, esto como red.
  */
 export function escanearDraft(
   draft: Draft,
@@ -184,6 +190,8 @@ export function escanearDraft(
   const vid = vidDeBarcode(c, mapaBc)
   let it = vid ? variantes.find((v) => v.id === vid) ?? null : null
   if (!it && c) it = variantes.find((v) => String(v.sku || '').toLowerCase() === c.toLowerCase()) ?? null
+  const cn = normCodigo(c)
+  if (!it && cn) it = variantes.find((v) => normCodigo(v.sku) === cn || normCodigo(v.barcode) === cn) ?? null
 
   if (!it) {
     // Producto NUEVO (aún no en GN): se guarda solo el código de barras.
@@ -273,7 +281,13 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
     const desc = String(mn.desc || '').trim()
     if (!desc) return
     const qty = Math.max(1, Number(mn.qty) || 1)
-    items.push({ vid: 'man_' + mn.mid, pid: null, sid: null, nombre: desc, variante: '', sku: '', qty, origen: 'deposito', nuevo: true, manual: true })
+    // 🔴 Si la descripción tiene forma de CÓDIGO, viaja también en `barcode`. El campo "Cargalo sin
+    // código" dispara con Enter y un lector tipea código + Enter, así que escanear con el foco ahí
+    // deja el código guardado como NOMBRE: sin esto, el ítem queda con `sku: ''` y sin `barcode`, y
+    // `resolverItem` no lo encuentra nunca — la devolución sólo se podía contar con los −/+.
+    // Guardarlo acá además lo hace vinculable (`lib/sesionfotos/vincular.ts`).
+    const cod = pareceCodigo(desc) ? { barcode: desc } : {}
+    items.push({ vid: 'man_' + mn.mid, pid: null, sid: null, nombre: desc, variante: '', sku: '', qty, origen: 'deposito', nuevo: true, manual: true, ...cod })
   })
   if (!items.length) return null
   // El disparador viaja en la solicitud solo si el borrador lo trae: `null` no se guarda,

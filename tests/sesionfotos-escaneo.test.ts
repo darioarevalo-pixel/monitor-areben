@@ -202,3 +202,43 @@ describe('escanearCombi · en devolución el tope es lo que SALIÓ', () => {
     expect(ns.find((s) => s.id === 's1')!.devuelto).toEqual({ a: 2 }) // intacta
   })
 })
+
+/**
+ * 🔴 **El SKU de Gestión Nube lleva guiones y su código de barras es el mismo código sin ellos**
+ * (`RVE-0047-NG` ↔ `RVE0047NG`). Con la comparación exacta sola, escanear la etiqueta de un ítem
+ * que ya tiene su SKU no lo encontraba nunca.
+ *
+ * 🔑 **Todo el bloque va en fase `devolucion`**: en `retiro` `esperadoEn` es `i.qty` y no distingue
+ * nada — un test de escaneo que no dice la fase está probando la mitad fácil.
+ */
+describe('resolverItem · el SKU también se compara normalizado (10-sep-2026)', () => {
+  const mapa = construirMapaBc([]) // el catálogo todavía no trae estas variantes: por eso el ítem existe
+  const conSalida = (over: Partial<Solicitud['items'][number]>): Solicitud =>
+    sol({ items: [item({ vid: 'man_a', qty: 1, ...over })], estado: 'preparada', verif: { man_a: 1 }, ventas: { deposito: { id: 1 } } })
+
+  it('encuentra por SKU con guiones escaneando el código sin guiones', () => {
+    const s = conSalida({ sku: 'RVE-0047-NG', manual: true, nuevo: true })
+    const { sol: ns, resultado } = escanearSol(s, 'deposito', 'devolucion', 'RVE0047NG', mapa)
+    expect(resultado).toMatchObject({ tipo: 'ok', done: 1, qty: 1 })
+    expect(ns.devuelto).toEqual({ man_a: 1 })
+  })
+
+  it('encuentra por el barcode del ítem aunque venga con guiones en el lector', () => {
+    const s = conSalida({ sku: '', barcode: 'RBE002236', manual: true, nuevo: true })
+    const { resultado } = escanearSol(s, 'deposito', 'devolucion', 'rbe-0022-36', mapa)
+    expect(resultado.tipo).toBe('ok')
+  })
+
+  it('un código de otra prenda sigue dando no-encontrado', () => {
+    const s = conSalida({ sku: 'RVE-0047-NG', manual: true, nuevo: true })
+    expect(escanearSol(s, 'deposito', 'devolucion', 'RTO0380BLS', mapa).resultado.tipo).toBe('no-encontrado')
+  })
+
+  // La vista combinada pasa `conBarcode: false` a propósito (paridad con el legacy). Que el ítem
+  // vinculado tenga SKU es lo que la hace funcionar sin tocar esa decisión.
+  it('la vista combinada también lo encuentra, por SKU normalizado', () => {
+    const s = conSalida({ sku: 'RVE-0047-NG', manual: true, nuevo: true })
+    const { resultado } = escanearCombi([s], 'deposito', 'devolucion', 'RVE0047NG', mapa)
+    expect(resultado).toMatchObject({ tipo: 'ok', done: 1, qty: 1 })
+  })
+})

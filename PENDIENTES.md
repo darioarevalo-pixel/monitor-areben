@@ -13,6 +13,32 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «ESTÁ COMO NOMBRE DE PRODUCTO Y NO COMO SKU» — 10-sep-2026 (dictado, y hecho)
+
+> «cargué unos productos sin código de barra pero tenía el SKU, entonces los escaneé y los metí.
+> Fijate en el de Zattia. Ahora quiero devolver los productos y está como nombre de producto y no
+> como SKU. Estaría bueno que si el nombre es como un SKU, que el SKU o código de barras sea eso
+> mismo. Esto en solicitudes de productos.»
+
+**Medido antes de escribir**: la solicitud es `s1788353298507_54730` (Zattia, 2-sep, «SESION
+ESTUDIO 02/09»), **152 ítems y los 152 cargados «a mano»**, con el código de nombre y el SKU vacío.
+El campo «Cargalo sin código» dispara con Enter y un lector tipea código + Enter: escanear ahí crea
+un ítem que **⛔ ningún escaneo puede encontrar después**.
+
+🏁 **Ahora se vinculan solos** —que es lo que la pantalla ya prometía y ⛔ no hacía nadie:
+`sfVincularNuevos` del legacy nunca se había portado— y se completan nombre real, talle, SKU y
+código de barras. **Ensayado contra los datos reales: 150 de 152**, los 2 restantes son códigos que
+⛔ no existen en GN y quedan con su código guardado, escaneables.
+
+🔴 **Siguen siendo «a mano» — lo decidió Bruno**: ⛔ no generan venta en Gestión Nube. Crear la venta
+ahora separaría stock de mercadería que ya salió.
+
+▶️ **Falta que Bruno lo camine**: abrir la solicitud, ver los nombres reales sin perder los 6
+preparados ni el 1 devuelto, y **escanear una etiqueta con el lector puesto**. El relato entero, en
+`docs/secciones/sesionfotos.md`.
+
+---
+
 ## 🏁 «SIGUE EL PROBLEMA, MARCA $0 EN TODA LA INFORMACIÓN» — 8-sep-2026 (dictado, y hecho)
 
 > «mirá, sigue el problema que el resultado marca pesos $0 en toda la información» *(con la captura
