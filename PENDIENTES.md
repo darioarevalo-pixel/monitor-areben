@@ -1505,6 +1505,13 @@ es del monitor**, que es un hueco medido, no una idea:
   BORA NEGRO 24→13 · CORPIÑO TAYRA VIOLETA 23→9 · SHORT ARTEMIS 14→2 · BOMBACHA BORA CHERRY 16→2.
   ⚠️ El mejor mes se midió **a precio normal**, ⛔ no a precio de feria: sirve para el **reparto
   relativo entre colores**, ⛔ no para el volumen absoluto — por eso es un parcial y se repone.
+- 📌 **Lo que está en el LOCAL ⛔ no se analiza** (Bruno): sigue en el local y **se etiqueta lo
+  exhibido, el día antes**. ⇒ el trabajo de anticipación es **sólo el depósito**, y es este.
+- ✅ **`scripts/feria-zattia-parcial.mjs`** — la cuenta entera, reproducible y sin escribir nada:
+  los tres pasos (qué está en el local · qué vendió lo que no está, mirando la **temporada
+  anterior** · cuántas etiquetas), con el reparto **por venta** y la comparación contra el
+  **por stock** para que el error no se repita. `node scripts/feria-zattia-parcial.mjs`.
+  Da hoy **502 prendas** para los 48 modelos que están en cero en el local.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
