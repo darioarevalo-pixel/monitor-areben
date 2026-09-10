@@ -1585,6 +1585,15 @@ es del monitor**, que es un hueco medido, no una idea:
   ✅ 🔑 **IMPRIMIR DE MÁS ES GRATIS, PEGAR DE MÁS NO**: la etiqueta es sólo el precio, sin nombre ni
   código ⇒ **la misma sirve para cualquier prenda de esa mesa**. Se imprime el doble (282) y se
   pegan 141: la reposición queda resuelta sin trabajo que deshacer.
+  ✅ **PISO DE 2 POR MODELO** (Bruno: *«el mínimo tiene que ser 2 x modelo, con un máximo de 3? pq
+  si se vende a primera hora el día lunes, no tengo más para ese mismo lunes»*): muerde en los **8
+  modelos de UN SOLO TALLE**, que bajaban 1 prenda sola ⇒ **141 → 145**.
+  🔴 **El TOPE de 3 ⛔ no se aplicó, y el número es el argumento**: ahorra **13 prendas** y a cambio
+  manda **9 modelos a la mesa SIN la curva completa** —SHORT ATLAS/ARTEMIS/ARES/KAOS/KAER/ALVES,
+  BERMUDA LUX/DOJA, FADE #002, de 4 y 5 talles—, justo donde **el talle decide la venta**.
+  ⚠️ 🔑 **Y el piso por MODELO ⛔ no cubre el mismo caso por TALLE**: en un modelo de 3 talles sigue
+  habiendo **un solo M**. Para eso hay que subir la curva (`--por-talle=2`) y son **287**, el doble
+  de trabajo. ▶️ Decisión abierta de Bruno.
   📌 El documento con la orden tocable (queda guardado lo marcado):
   https://claude.ai/code/artifact/ababe1d3-552a-4c74-afc0-3db2118a96d4
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
