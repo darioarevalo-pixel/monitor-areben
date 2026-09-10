@@ -13,6 +13,62 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «QUE LAS CHICAS PUEDAN VER QUÉ PRECIO VAN A ESTAR» — 10-sep-2026 (dictado, y hecho)
+
+> «ya armé la liquidación de zattia, tengo varios productos confirmados con el precio, que todavía
+> no está publicado en la tienda pq se lanza el lunes y hoy es jueves, pero necesito que las chicas
+> puedan ver qué precio van a estar los distintos productos. sobre esa liquidación, una vista y unas
+> estrellas para poder marcar como favorito y hacerle marketing a eso. son acciones comerciales
+> donde hay varios productos, pero nosotros identificamos las estrella. incluso en el análisis de
+> cada producto, estaría bueno poder marcarlos en general.»
+
+🔴 **El hueco no era una pantalla que faltaba: era un permiso que está cerrado A PROPÓSITO.**
+Marketing ⛔ no ve `liquidacion` porque la foto congelada de cada ítem trae **costo, markup, margen y
+ventas** —y la feria se vende **al costo**: el ítem que usa el test tiene costo $8.295,89 contra un
+precio de mesa de $8.990—. Abrirle la sección era publicar el margen de la casa adentro del equipo.
+
+🏁 **Sección nueva `precios` (área `marketing`)**: la lista de una campaña con foto, precio de lista,
+precio de campaña, % off y stock. Entra por el área ⇒ ⛔ **no hay que tildarle nada a nadie**. Lo que
+sale pasa entero por la **lista blanca** de `lib/precios/core.core.js` — un campo se agrega ahí o no
+viaja. **5 mutantes, 5 muertos**, y el fixture del test es un ítem real de la feria. El relato
+entero, en `docs/secciones/precios.md`.
+
+🔑 **Tres cosas que la pantalla dice en voz alta, y que salieron de medir antes de escribir:**
+- **286 confirmados y 65 sin revisar.** Un `definido` es un precio que nadie miró y que cambiar lo
+  devuelve a la cola ⇒ van con chip **Confirmado** / **Provisorio** y un aviso arriba. Mostrarlos
+  iguales le hace prometer a Marketing el **18%** de una lista que se puede mover.
+- **El stock es el de HOY**, ⛔ no el de la foto congelada (la de la feria es del **6-sep**), con el
+  sello de `sync_state` al lado.
+- **Se comparte con un interruptor de admin, ⛔ no con el estado**: derivarlo de `en_curso` dejaba
+  afuera justo esta campaña, que tiene los precios listos y todavía ⛔ no rige.
+
+🏁 **Y la ⭐ de producto estrella** (tabla `destacados`, migrada en las **dos** bases con las sondas
+ejercidas por rollback — incluida la que importa: sin `coalesce(liq_id,'')` las generales, que
+tienen `liq_id` nulo, se podían marcar cien veces sin que nada fallara). **Un mecanismo, dos
+alcances**: `liq_id` = campaña es «de esta acción comercial»; `liq_id` null es «producto estrella en
+general», el de Análisis → Por producto. 🔑 **Marcar pide lo mismo que ver** (lo decidió Bruno:
+*«también marketing»*) — al revés que `clavados`, que es de admin.
+
+⚠️ **De paso, dos comentarios que mentían**: `lib/permisos.core.js` y `api/_mkt-ventas.js` afirmaban
+que Marketing ve el resultado del sale por la llave `?resultado=1` de `_liquidacion`, que **⛔ no
+existe** y que el test de autorización fija en el sentido contrario.
+
+▶️ 🔴 **Faltan DOS manos de Bruno, y sin la primera Marketing ve la pantalla vacía:**
+1. **Liquidación → Feria Septiembre 2026 → «Compartir con Marketing»** (un click; es de admin).
+2. **Publicar la novedad** `n1789046242845_7xbdsh`, que está cargada como borrador en `/novedades`.
+
+▶️ ⛔ **Nadie con perfil de Marketing la caminó**: ⛔ no pude entrar a producción —la credencial del
+Monitor es de Bruno— así que lo verificado es el router de prod contestando por los dos recursos
+nuevos, la proyección corrida contra los 376 ítems reales de la feria (**351 renglones = 286 + 65**,
+**cero** apariciones del costo) y las sondas de la base. **La pantalla misma ⛔ no se abrió.**
+
+📌 **Un límite que no es del código y conviene saber**: en una feria **al costo**, el precio de mesa
+de un producto **puede ser** su costo —pasa en 2 de los 351— porque cada uno va al primer escalón
+`>=` su costo. Eso lo puede deducir cualquiera que mire la lista, y ⛔ no lo arregla ninguna lista
+blanca: es la forma de la feria, ⛔ no una fuga.
+
+---
+
 ## 🏁 «ESTÁ COMO NOMBRE DE PRODUCTO Y NO COMO SKU» — 10-sep-2026 (dictado, y hecho)
 
 > «cargué unos productos sin código de barra pero tenía el SKU, entonces los escaneé y los metí.
