@@ -1566,6 +1566,27 @@ es del monitor**, que es un hueco medido, no una idea:
   ⚠️ **Qué mide el instrumento**: «sin ingreso en 365 días» es **sin ingreso desde que existe el
   feed de recepciones**, que tiene 74 OC y sólo dos días de actividad. ⛔ No prueba que nunca se
   compró; prueba que **el sistema no lo vio**.
+- 🔴 🔑 **10-sep: LA ORDEN DE ETIQUETADO ES DEL DÍA 1, Y ESO LE CAMBIA LA NATURALEZA.**
+  Corrección de Bruno sobre mi primera versión: *«me parece un montón etiquetar 17 prendas, pq si no
+  se vende 17, se tiene que reetiquetar o sacar la etiqueta; o sea, vamos reponiendo a demanda, pero
+  necesitamos para el primer día»*. 🔑 **Una etiqueta de más ⛔ NO es trabajo de más: es trabajo que
+  hay que DESHACER** —despegarla o reescribirla— sobre lo que no se vendió. Yo había dimensionado a
+  **6 días** (700 prendas ⇒ 333 etiquetas, máximo 17 en un modelo) y la pregunta era **el primer**.
+  ✅ **El día 1 está MEDIDO, ⛔ no estimado: el sale abrió el jueves 13-ago con 38 unidades** de
+  estos mismos 351 modelos, contra **7 a 30 por día la semana previa** (6→12 ago). Con la
+  expectativa de ~2,6× el ritmo del sale, **el día 1 de la feria son ~100 prendas**. 📌 El pico es
+  el **día 2**: el sale hizo **58** el viernes.
+  🔑 **Y a un día de horizonte la orden ⛔ NO la manda la demanda: la manda el SURTIDO.** 100 prendas
+  repartidas entre 351 modelos dan **menos de una por modelo** ⇒ lo que decide es
+  **la curva de talles que le falta a la mesa** (N por talle vivo, menos lo exhibido), y la demanda
+  sólo pisa cuando es mayor. ✅ **49 modelos · 141 prendas · máximo 5 en un modelo** (era 17), el
+  **4%** del depósito, y **todos en cero en el salón**. Tiradas: $4.990 → 91 · $12.990 → 35 ·
+  $14.990 → 14 · $8.990 → 1. Curva de 2 → 287 · de 3 → 458.
+  ✅ 🔑 **IMPRIMIR DE MÁS ES GRATIS, PEGAR DE MÁS NO**: la etiqueta es sólo el precio, sin nombre ni
+  código ⇒ **la misma sirve para cualquier prenda de esa mesa**. Se imprime el doble (282) y se
+  pegan 141: la reposición queda resuelta sin trabajo que deshacer.
+  📌 El documento con la orden tocable (queda guardado lo marcado):
+  https://claude.ai/code/artifact/ababe1d3-552a-4c74-afc0-3db2118a96d4
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
