@@ -7,6 +7,16 @@
  * exactamente lo que la lista blanca de `lib/precios/core.core.js` existe para cortar.
  */
 
+/** Una variante (talle y color juntos, como los guarda Gestión Nube) con sus unidades. */
+export interface VariantePrecio {
+  /** `Bordó - M`, o `Variante Única` cuando el producto no tiene variantes. */
+  nombre: string
+  /** Unidades por tienda. Las claves son los `store_name` reales de la marca: Zattia tiene dos y
+   *  BDI tres (`Local`, `Deposito Minorista`, `Deposito Mayorista`). ⛔ Puede faltar una. */
+  por: Record<string, number>
+  total: number
+}
+
 /** Un renglón de la lista de precios, tal como sale del handler. */
 export interface PrecioItem {
   pid: string
@@ -22,8 +32,16 @@ export interface PrecioItem {
   pctDesc: number | null
   /** `false` = el precio todavía lo tiene que mirar otra persona y se puede mover. */
   firme: boolean
-  /** Unidades de HOY, del espejo. Ver `leidoEn`. */
+  /** Unidades de HOY, del espejo. Ver `leidoEn`. Es la suma de `variantes`, no una cuenta aparte. */
   stock: number
+  /**
+   * El desglose por talle/color, para desplegar. En Gestión Nube el talle y el color son **una
+   * sola cosa** (`Bordó - M`), así que esto es un solo nivel y no dos.
+   *
+   * ⛔ Trae **todas** las variantes, incluidas las que están en cero: los renglones tienen que
+   * sumar `stock`. Qué se pliega lo decide la pantalla.
+   */
+  variantes: VariantePrecio[]
   /** `true` si alguien lo marcó como producto estrella de esta campaña. */
   estrella: boolean
 }
@@ -44,6 +62,11 @@ export interface CampaniaPrecios {
 export interface ListaDePrecios {
   campania: CampaniaPrecios
   items: PrecioItem[]
+  /**
+   * Las tiendas que existen en esta marca, ya ordenadas (Local primero). Viaja aparte de los ítems
+   * para que la tabla del desglose tenga las mismas columnas en todas las filas.
+   */
+  tiendas: string[]
   /**
    * ISO de cuándo se sincronizó el espejo del que salió el stock. `null` = no se pudo saber, y la
    * pantalla lo dice en vez de inventar un "recién".

@@ -1,7 +1,7 @@
 // "Precios de campaña" — la lista de precios de una liquidación, para MARKETING.
 //
 //   GET  ?recurso=precios&store=bdi|zattia          → las campañas compartidas con Marketing
-//   GET  ?recurso=precios&store=…&liq=<id>          → { campania, items, leidoEn }
+//   GET  ?recurso=precios&store=…&liq=<id>          → { campania, items, tiendas, leidoEn }
 //
 // ⛔ Sólo LEE. Compartir una campaña se hace desde Liquidación (`api/_liquidacion.js`,
 // `action:'compartir'`, admin); marcar una estrella, por `?recurso=destacados`.
@@ -28,7 +28,9 @@ import { createClient } from '@supabase/supabase-js';
 import { exigirUsuario } from './_auth.js';
 import { puedeVerAlguna } from '../lib/permisos.core.js';
 import { leerTodo } from '../lib/supabase/paginar.core.js';
-import { compartidaConMarketing, ESTADOS_VISIBLES, listaParaMarketing } from '../lib/precios/core.core.js';
+import {
+  compartidaConMarketing, desglosarInventario, ESTADOS_VISIBLES, listaParaMarketing,
+} from '../lib/precios/core.core.js';
 import { indicePorPid } from '../lib/destacados/core.js';
 
 function cfgFor(store) {
@@ -77,19 +79,20 @@ function aCampaniaPrecios(row, n) {
  * mañana. Si no está, va `null` y la pantalla lo dice en vez de inventarlo.
  */
 async function stockDe(db, pids) {
-  const stock = {};
-  if (!pids.length) return { stock, leidoEn: null };
+  if (!pids.length) return { porPid: {}, tiendas: [], leidoEn: null };
+  const filas = [];
   for (let i = 0; i < pids.length; i += 200) {
     const grupo = pids.slice(i, i + 200);
     const inv = await leerTodo(db, 'inventario', (q) =>
-      q.select('product_id, available_quantity').in('product_id', grupo).order('product_id'));
-    for (const f of inv) {
-      const k = String(f.product_id);
-      stock[k] = (stock[k] || 0) + (Number(f.available_quantity) || 0);
-    }
+      q.select('product_id, size_name, store_name, available_quantity').in('product_id', grupo).order('product_id'));
+    filas.push(...inv);
   }
+  // 🔑 **El total sale del MISMO desglose que se manda**, ⛔ no de una suma aparte. Con dos cuentas,
+  // el número de la fila y los renglones que se despliegan abajo pueden dejar de cerrar sin que nada
+  // falle — y una tabla de stock cuyo encabezado no suma sus renglones no se puede usar para nada.
+  const { porPid, tiendas } = desglosarInventario(filas);
   const sync = await db.from('sync_state').select('updated_at').eq('clave', 'diario').maybeSingle();
-  return { stock, leidoEn: (!sync.error && sync.data && sync.data.updated_at) || null };
+  return { porPid, tiendas, leidoEn: (!sync.error && sync.data && sync.data.updated_at) || null };
 }
 
 /**
@@ -172,7 +175,7 @@ export default async function handler(req, res) {
 
     const items = listaParaMarketing((filas || []).map((r) => r.datos));
     const pids = items.map((i) => Number(i.pid)).filter((x) => Number.isInteger(x) && x > 0);
-    const [{ stock, leidoEn }, estrellas] = await Promise.all([
+    const [{ porPid, tiendas, leidoEn }, estrellas] = await Promise.all([
       stockDe(db, pids),
       estrellasDe(db, store, liq),
     ]);
@@ -180,7 +183,21 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       campania: aCampaniaPrecios(c, items.length),
-      items: items.map((i) => ({ ...i, stock: stock[i.pid] ?? 0, estrella: !!estrellas[i.pid] })),
+      items: items.map((i) => {
+        const d = porPid[i.pid];
+        return {
+          ...i,
+          stock: d ? d.total : 0,
+          // El desglose por talle/color, para desplegar. Medido sobre la feria: 955 variantes en
+          // 351 productos, **17 KB**, así que viaja entero y ⛔ no hace falta un segundo pedido por
+          // producto — que serían 351 requests para una tabla que se mira de arriba abajo.
+          variantes: d ? d.variantes : [],
+          estrella: !!estrellas[i.pid],
+        };
+      }),
+      // Las tiendas que EXISTEN en esta marca, para que la tabla del desglose tenga las mismas
+      // columnas en todas las filas. Zattia tiene dos y BDI tres — ver `desglosarInventario`.
+      tiendas,
       leidoEn,
     });
   } catch (e) {

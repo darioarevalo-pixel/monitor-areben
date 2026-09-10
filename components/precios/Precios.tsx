@@ -34,6 +34,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { leerCampaniasCompartidas, leerListaDePrecios } from '@/lib/precios/persistencia'
+import { tieneVariantes, VARIANTE_UNICA } from '@/lib/precios/core'
 import type { CampaniaPrecios, PrecioItem } from '@/lib/precios/tipos'
 import { useDestacados } from '@/components/destacados/useDestacados'
 import { Estrella } from '@/components/destacados/Estrella'
@@ -72,7 +73,10 @@ export function Precios() {
   const [q, setQ] = useFiltroUrl<string>('q', '')
   const [soloEstrella, setSoloEstrella] = useState(false)
   const [orden, setOrden] = useState<Orden>('precio-desc')
-  const [lista, setLista] = useState<{ items: PrecioItem[]; leidoEn: string | null } | null>(null)
+  const [lista, setLista] = useState<{ items: PrecioItem[]; tiendas: string[]; leidoEn: string | null } | null>(null)
+  /** Qué filas tienen el desglose de stock abierto. Se pueden abrir varias a la vez: comparar
+   *  dos productos es justo lo que se hace al armar una pieza. */
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set())
   const [foto, setFoto] = useState<{ url: string; alt: string } | null>(null)
 
   const elegida = useMemo(
@@ -114,7 +118,7 @@ export function Precios() {
       try {
         const d = await leerListaDePrecios(marca, idElegida)
         if (!vivo) return
-        setLista({ items: d.items, leidoEn: d.leidoEn })
+        setLista({ items: d.items, tiendas: d.tiendas, leidoEn: d.leidoEn })
         setError(null)
       } catch (e) {
         if (vivo) setError(e instanceof Error ? e.message : 'No se pudo leer la lista de precios.')
@@ -247,6 +251,13 @@ export function Precios() {
                 <Fila
                   key={i.pid}
                   item={i}
+                  tiendas={lista.tiendas}
+                  abierto={abiertas.has(i.pid)}
+                  onAbrir={() => setAbiertas((s) => {
+                    const n = new Set(s)
+                    if (!n.delete(i.pid)) n.add(i.pid)
+                    return n
+                  })}
                   marcado={destacados.porProducto.get(i.pid) || null}
                   onAlternar={() => destacados.alternar({ id: i.pid, nombre: i.nombre, sku: i.sku })}
                   onFoto={() => i.imagen && setFoto({ url: i.imagen, alt: i.nombre })}
@@ -270,14 +281,20 @@ export function Precios() {
 }
 
 function Fila({
-  item, marcado, onAlternar, onFoto,
+  item, tiendas, abierto, onAbrir, marcado, onAlternar, onFoto,
 }: {
   item: PrecioItem
+  /** Las tiendas de la marca, ya ordenadas. Zattia tiene dos y BDI tres. */
+  tiendas: string[]
+  abierto: boolean
+  onAbrir: () => void
   marcado: Parameters<typeof Estrella>[0]['marcado']
   onAlternar: () => Promise<void>
   onFoto: () => void
 }) {
+  const hayQueDesplegar = tieneVariantes(item)
   return (
+    <>
     <Tr>
       <Td>
         <Estrella marcado={marcado} nombre={item.nombre} onAlternar={onAlternar} titulo="de esta campaña" />
@@ -317,10 +334,33 @@ function Fila({
       </Td>
       {/* ⛔ `null` dice «—» y ⛔ nunca 0%: un 0% off afirma que el precio no bajó. */}
       <Td align="right">{item.pctDesc == null ? '—' : `${Math.round(item.pctDesc)}%`}</Td>
+      {/*
+        🔑 **El stock se toca y se abre por talle y color.** Pedido de Bruno: un número solo dice
+        cuántas hay, ⛔ no CUÁLES — y una pieza que promete un corset que sólo queda en Verde S no
+        sirve. En Gestión Nube el talle y el color son una sola cosa (`Bordó - M`), así que es un
+        solo nivel. El producto sin variantes ⛔ no se abre: no hay nada que desplegar.
+      */}
       <Td align="right">
-        {item.stock > 0
-          ? item.stock
-          : <span style={{ color: color.warning, fontWeight: weight.medium }}>0</span>}
+        {hayQueDesplegar ? (
+          <button
+            type="button"
+            onClick={onAbrir}
+            aria-expanded={abierto}
+            aria-label={`Ver el stock por talle de ${item.nombre}`}
+            style={{
+              border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', color: item.stock > 0 ? color.brand : color.warning,
+              fontWeight: weight.medium, display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            {item.stock}
+            <span style={{ fontSize: font.xs, opacity: 0.7 }}>{abierto ? '▾' : '▸'}</span>
+          </button>
+        ) : (
+          item.stock > 0
+            ? item.stock
+            : <span style={{ color: color.warning, fontWeight: weight.medium }}>0</span>
+        )}
       </Td>
       <Td>
         {item.firme
@@ -328,5 +368,83 @@ function Fila({
           : <Badge tone="warning">Provisorio</Badge>}
       </Td>
     </Tr>
+    {abierto && (
+      <Tr>
+        <Td colSpan={8} style={{ background: color.bg2, padding: space[3] }}>
+          <Desglose item={item} tiendas={tiendas} />
+        </Td>
+      </Tr>
+    )}
+    </>
+  )
+}
+
+/**
+ * El desglose de un producto: una línea por talle/color, con las unidades en cada tienda.
+ *
+ * 🔑 **Las que están en CERO se pliegan, ⛔ no se borran.** El total de la fila de arriba las
+ * incluye, así que esconderlas sin decirlo dejaría un desglose que no suma su propio encabezado.
+ * Medido sobre la Feria de Septiembre: de 955 variantes, **630 tienen unidades** — sin plegar, un
+ * CORSET FRANK son 28 renglones y 6 con algo.
+ *
+ * 🔑 **Las columnas salen del dato** (`tiendas`), ⛔ no de una lista escrita a mano: Zattia tiene
+ * `Local` y `Deposito`, y BDI tiene además `Deposito Mayorista`. Ver `desglosarInventario`.
+ */
+function Desglose({ item, tiendas }: { item: PrecioItem; tiendas: string[] }) {
+  const [verTodas, setVerTodas] = useState(false)
+  const conUnidades = item.variantes.filter((v) => v.total !== 0)
+  const enCero = item.variantes.length - conUnidades.length
+  const visibles = verTodas ? item.variantes : conUnidades
+
+  if (!item.variantes.length) {
+    return <span style={{ color: color.mut, fontSize: font.sm }}>No hay stock cargado de este producto.</span>
+  }
+
+  return (
+    <div style={{ maxWidth: 520 }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: font.sm }}>
+        <THead>
+          <Tr>
+            <Th>Talle y color</Th>
+            {tiendas.map((t) => <Th key={t} align="right">{t}</Th>)}
+            <Th align="right">Total</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {visibles.map((v) => (
+            <Tr key={v.nombre}>
+              <Td>{v.nombre === VARIANTE_UNICA ? <span style={{ color: color.mut }}>Sin variantes</span> : v.nombre}</Td>
+              {tiendas.map((t) => (
+                <Td key={t} align="right" style={{ color: (v.por[t] || 0) === 0 ? color.mut2 : undefined }}>
+                  {v.por[t] ?? 0}
+                </Td>
+              ))}
+              <Td align="right"><strong>{v.total}</strong></Td>
+            </Tr>
+          ))}
+          {!visibles.length && (
+            <Tr>
+              <Td colSpan={tiendas.length + 2}>
+                <span style={{ color: color.mut }}>Ninguna variante tiene unidades.</span>
+              </Td>
+            </Tr>
+          )}
+        </TBody>
+      </table>
+      {enCero > 0 && (
+        <button
+          type="button"
+          onClick={() => setVerTodas((v) => !v)}
+          style={{
+            border: 'none', background: 'none', padding: 0, marginTop: space[2], cursor: 'pointer',
+            fontSize: font.xs, color: color.mut2, textDecoration: 'underline',
+          }}
+        >
+          {verTodas
+            ? `Ocultar las ${enCero} sin unidades`
+            : `y ${enCero} ${enCero === 1 ? 'variante' : 'variantes'} sin unidades`}
+        </button>
+      )}
+    </div>
   )
 }

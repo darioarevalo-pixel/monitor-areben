@@ -28,5 +28,10 @@ export async function leerListaDePrecios(store: Marca, liqId: string): Promise<L
   const r = await apiFetch(`${API}&store=${store}&liq=${encodeURIComponent(liqId)}&nc=${Date.now()}`)
   const d = await r.json().catch(() => null)
   if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudo leer la lista de precios.')
-  return { campania: d.campania, items: d.items || [], leidoEn: d.leidoEn ?? null }
+  return {
+    campania: d.campania,
+    items: d.items || [],
+    tiendas: d.tiendas || [],
+    leidoEn: d.leidoEn ?? null,
+  }
 }

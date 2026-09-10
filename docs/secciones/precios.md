@@ -49,6 +49,22 @@ suma un campo a la foto — y el test tiene un caso que fija exactamente eso.
   6-sep) y esta lista manda a alguien a comunicar un producto: hace falta saber si queda algo.
   Y por eso viaja el sello (`sync_state.updated_at`) — el espejo se sincroniza una vez por día,
   así que decir «recién» sobre un número de ayer a la mañana sería mentir.
+- 🆕 🔑 **El stock se toca y se abre por talle y color** (pedido de Bruno, 10-sep). Un número solo
+  dice cuántas hay, ⛔ no CUÁLES — y una pieza que promete un corset que sólo queda en Verde S no
+  sirve. 🔑 **En Gestión Nube el talle y el color son UNA sola cosa**: `size_name` viene como
+  `Bordó - M`, así que «por talle o color» ⛔ no son dos desgloses, es uno.
+  🔴 **Las columnas de tienda salen del DATO, ⛔ no de una lista escrita a mano.** Medido en las dos
+  bases: Zattia tiene `Local` y **`Deposito ` con un espacio al final** (de ahí el `trim`), y **BDI
+  tiene TRES** — `Local`, `Deposito Minorista` y `Deposito Mayorista`, este último con **−13
+  unidades**. Un `store_name === 'Local' ? … : 'deposito'` se habría tragado el mayorista de BDI sin
+  que nada fallara, y en una feria presencial la pregunta es justamente **dónde está la prenda**.
+  🔑 **El total de la fila y los renglones del desglose salen de la MISMA cuenta**, así que las
+  variantes en cero **viajan** aunque la pantalla las pliegue: filtrarlas en el núcleo dejaría un
+  desglose que no suma su propio encabezado. Medido: de **955 variantes, 630 tienen unidades** — un
+  CORSET FRANK son 28 renglones y **3** con algo. Y viaja **entero en el payload** (60 KB para los
+  351): un pedido por producto serían 351 requests para una tabla que se mira de arriba abajo.
+  ⛔ **Un producto sin variantes ⛔ no se abre**: `Variante Única` es como GN dice «no tiene», ⛔ no es
+  un talle. Son 68 de los 351.
 - ⛔ **Los `descartado` y los `pendiente` ⛔ no entran.** Un descartado se miró y se decidió que NO
   va (25 en la feria): comunicarlo es prometer algo que no está en la mesa. Un pendiente ⛔ no tiene
   precio, y un renglón sin número en una lista de precios es una pregunta abierta, no información.
@@ -75,7 +91,11 @@ npx vitest run tests/precios-marketing.test.ts tests/handlers-autorizacion.test.
 
 - 🔴 **El mutante que hay que ver caer**: hacer que `paraMarketing` devuelva `{ ...item, ...f, ...d }`
   en vez de campo por campo. Es la lista blanca convertida en lista negra, y es el único cambio que
-  reabre el costo sin romper ninguna pantalla. Los otros cuatro están listados en el docblock del test.
+  reabre el costo sin romper ninguna pantalla. Los otros nueve están listados en los dos docblocks
+  del test — **10 mutantes, 10 muertos**.
+- 🔑 **El desglose se mide contra SQL, ⛔ no contra sí mismo**: el total de cada producto tiene que
+  dar lo mismo que un `sum(available_quantity) group by product_id`. Corrido el 10-sep sobre los
+  351: **0 diferencias**.
 - **El fixture del test es un ítem REAL de la feria**, leído de la base. A propósito: un fixture
   escrito a mano tiende a traer sólo los campos que uno se acuerda, que son justo los que la lista
   blanca ya deja pasar.

@@ -9,13 +9,16 @@
 import type { LiquidacionItem } from '@/lib/liquidacion'
 import {
   compartidaConMarketing as compartidaJs,
+  desglosarInventario as desglosarJs,
+  tieneVariantes as tieneVariantesJs,
+  VARIANTE_UNICA as VARIANTE_UNICA_JS,
   descuentoDe as descuentoDeJs,
   esFirme as esFirmeJs,
   ESTADOS_VISIBLES as ESTADOS_VISIBLES_JS,
   listaParaMarketing as listaJs,
   paraMarketing as paraMarketingJs,
 } from './core.core.js'
-import type { PrecioItem } from './tipos'
+import type { PrecioItem, VariantePrecio } from './tipos'
 
 /** Lo que sale de la lista blanca, sin lo que le pega el handler (`stock`, `estrella`). */
 export type PrecioProyectado = Omit<PrecioItem, 'stock' | 'estrella'>
@@ -27,4 +30,24 @@ export const paraMarketing = paraMarketingJs as (item: LiquidacionItem) => Preci
 export const listaParaMarketing = listaJs as (items: LiquidacionItem[]) => PrecioProyectado[]
 export const compartidaConMarketing = compartidaJs as (
   campania: { estado: string; datos?: { compartida?: boolean } | null },
+) => boolean
+
+/** Una fila cruda de `inventario`, como la lee el handler. */
+export interface FilaInventario {
+  product_id: number | string
+  size_name: string | null
+  store_name: string | null
+  available_quantity: number | null
+}
+
+export const VARIANTE_UNICA = VARIANTE_UNICA_JS as string
+
+export const desglosarInventario = desglosarJs as (filas: FilaInventario[]) => {
+  porPid: Record<string, { total: number; variantes: VariantePrecio[] }>
+  tiendas: string[]
+}
+
+/** ¿Hay algo que desplegar? Un producto sin variantes trae un solo renglón, y no cuenta. */
+export const tieneVariantes = tieneVariantesJs as (
+  desglose: { variantes: VariantePrecio[] } | null | undefined,
 ) => boolean

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  compartidaConMarketing, descuentoDe, esFirme, ESTADOS_VISIBLES, listaParaMarketing, paraMarketing,
+  compartidaConMarketing, descuentoDe, desglosarInventario, esFirme, ESTADOS_VISIBLES,
+  listaParaMarketing, paraMarketing, tieneVariantes,
 } from '@/lib/precios/core.core.js'
 
 /**
@@ -168,5 +169,89 @@ describe('qué campaña ve Marketing', () => {
 
   it('🔴 pero una CERRADA no, aunque tenga el flag: sus precios ya no rigen', () => {
     expect(compartidaConMarketing(camp('cerrada', { compartida: true }))).toBe(false)
+  })
+})
+
+
+/**
+ * El desglose del stock por talle y color.
+ *
+ * Los mutantes que tienen que caer:
+ *
+ *  6. Agrupar por `store_name` **sin `trim`** — el depósito de Zattia se llama `Deposito ` con un
+ *     espacio al final, así que saldría partido en dos columnas.
+ *  7. Escribir `store_name === 'Local' ? 'local' : 'deposito'` — le mete el `Deposito Mayorista` de
+ *     BDI adentro de «Depósito» sin que nada falle.
+ *  8. Filtrar las variantes en cero adentro del núcleo — el desglose deja de sumar el total.
+ *  9. `tieneVariantes` devolviendo `true` para un producto con una sola `Variante Única`.
+ */
+/** El núcleo es `.js` plano (lo importa el handler), así que acá se le pone la cara tipada UNA vez. */
+type Desglosado = {
+  porPid: Record<string, { total: number; variantes: { nombre: string; total: number; por: Record<string, number> }[] }>
+  tiendas: string[]
+}
+const desglosar = desglosarInventario as (filas: unknown[]) => Desglosado
+const hayVariantes = tieneVariantes as (d: unknown) => boolean
+
+describe('el desglose por talle y color', () => {
+  /** Filas reales de Zattia: el depósito viene con un espacio al final. */
+  const ZATTIA = [
+    { product_id: 1, size_name: 'Bordó - M', store_name: 'Deposito ', available_quantity: 12 },
+    { product_id: 1, size_name: 'Bordó - M', store_name: 'Local', available_quantity: 2 },
+    { product_id: 1, size_name: 'Verde - S', store_name: 'Deposito ', available_quantity: 48 },
+    { product_id: 1, size_name: 'Verde - S', store_name: 'Local', available_quantity: 5 },
+    { product_id: 1, size_name: 'Negro - XS', store_name: 'Local', available_quantity: 0 },
+    { product_id: 2, size_name: 'Variante Única', store_name: 'Local', available_quantity: 3 },
+  ]
+
+  it('🔴 el depósito de Zattia viene con un ESPACIO al final y no puede salir partido en dos', () => {
+    const { tiendas } = desglosar(ZATTIA)
+    expect(tiendas).toEqual(['Local', 'Deposito'])
+  })
+
+  it('🔴 las tres tiendas de BDI salen las tres: el mayorista ⛔ no se mete adentro del depósito', () => {
+    // Medido el 10-sep-2026: BDI tiene Local · Deposito Minorista · Deposito Mayorista, y el
+    // mayorista suma −13 unidades. Aplanarlo a «depósito» pierde de qué depósito se trata.
+    const { tiendas } = desglosar([
+      { product_id: 9, size_name: 'M', store_name: 'Deposito Minorista', available_quantity: 4 },
+      { product_id: 9, size_name: 'M', store_name: 'Deposito Mayorista', available_quantity: -2 },
+      { product_id: 9, size_name: 'M', store_name: 'Local', available_quantity: 1 },
+    ])
+    expect(tiendas).toEqual(['Local', 'Deposito Mayorista', 'Deposito Minorista'])
+  })
+
+  it('🔴 los renglones SUMAN el total de la fila, ceros incluidos', () => {
+    const { porPid } = desglosar(ZATTIA)
+    const p = porPid['1']
+    expect(p.total).toBe(67)
+    expect(p.variantes.reduce((a, v) => a + v.total, 0)).toBe(p.total)
+    // Y la que está en cero sigue estando: plegarla es de la pantalla, borrarla rompe la cuenta.
+    expect(p.variantes.map((v) => v.nombre)).toContain('Negro - XS')
+  })
+
+  it('la de más unidades va primero: en una feria lo que se comunica es el talle que sobra', () => {
+    const { porPid } = desglosar(ZATTIA)
+    expect(porPid['1'].variantes.map((v) => v.nombre)).toEqual(['Verde - S', 'Bordó - M', 'Negro - XS'])
+    expect(porPid['1'].variantes[0].por).toEqual({ Deposito: 48, Local: 5 })
+  })
+
+  it('🔴 un producto sin variantes ⛔ no se despliega: «Variante Única» no es un talle', () => {
+    const { porPid } = desglosar(ZATTIA)
+    expect(hayVariantes(porPid['2'])).toBe(false)
+    expect(hayVariantes(porPid['1'])).toBe(true)
+    // Pero su renglón sigue existiendo, porque el total tiene que cerrar igual.
+    expect(porPid['2'].total).toBe(3)
+  })
+
+  it('un solo talle de verdad SÍ se despliega: saber que sólo queda la M es el dato', () => {
+    const { porPid } = desglosar([
+      { product_id: 3, size_name: 'M', store_name: 'Local', available_quantity: 2 },
+    ])
+    expect(hayVariantes(porPid['3'])).toBe(true)
+  })
+
+  it('sin filas devuelve vacío y ⛔ no explota', () => {
+    expect(desglosar([])).toEqual({ porPid: {}, tiendas: [] })
+    expect(hayVariantes(undefined)).toBe(false)
   })
 })
