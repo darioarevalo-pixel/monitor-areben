@@ -1527,6 +1527,19 @@ es del monitor**, que es un hueco medido, no una idea:
   cero sin precio. 🔴 **Los 65 sin confirmar son el 21% de la recaudación** y adentro están los
   que MÁS venden de toda la feria: CORSET FRANK (126 u, **v90 147**), CORSET NAPOLES (84, 118),
   CORSET ADAM (73, 79), CORSET FRANK SE (69, 53) — más de la mitad de esas prendas.
+- ✅ 🔑 **10-sep: LA REGLA DE COMPRA CONTESTA SOLA LOS 65, Y CONTRA LA INTUICIÓN LOS DEJA TODOS
+  ADENTRO.** Pasada la regla de Bruno —no liquidar sólo lo que vende bien **y** pudo recomprarse—
+  sobre los 65 `definido`: **ninguno tuvo recompra en la ventana con fecha real** (6-jul → 31-ago;
+  los 19 que aparecen ahí son **altas**, casi todas de 1 u del proveedor «ZATTIA», que son las
+  baby tees y los tops nuevos). 🔴 **Los cuatro CORSET que más venden de toda la feria —FRANK
+  v90 147 · NAPOLES 118 · ADAM 79 · FRANK SE 53, 352 prendas, $4.377.480— ⛔ no tienen NINGÚN
+  ingreso registrado en 365 días** ⇒ **vender bien ⛔ no alcanza: sin repo, van.**
+  📌 Con repo hay **9 modelos · 67 prendas · $594.330** (TOP MOVE · PANTALON BIZZ · CAMPERA LINES ·
+  POLLERA DOT · TOP ZARA · TOP ZIAN · MINI BLUSH · TOP COWIN · MINI ARLET), y los 9 lo tienen
+  **sólo en OC de la carga histórica** ⇒ ⛔ no se sabe cuándo. Es 1,6% de la feria.
+  ⚠️ **Qué mide el instrumento**: «sin ingreso en 365 días» es **sin ingreso desde que existe el
+  feed de recepciones**, que tiene 74 OC y sólo dos días de actividad. ⛔ No prueba que nunca se
+  compró; prueba que **el sistema no lo vio**.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
