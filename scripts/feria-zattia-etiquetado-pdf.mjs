@@ -17,14 +17,14 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const crudo = await new Promise(res => { let s = ''; process.stdin.on('data', d => s += d).on('end', () => res(s)) })
-const { generado, minTalle, maxTalle, orden } = JSON.parse(crudo)
+const { generado, minTalle, orden } = JSON.parse(crudo)
 const ar = n => Number(n).toLocaleString('es-AR')
 const total = orden.reduce((a, f) => a + f.bajar, 0)
 const mesas = [...new Set(orden.map(f => f.etiqueta))].sort((a, b) => a - b)
 
 const { jsPDF } = await import('jspdf')
 const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-const ANCHO = 210, IZQ = 16, DER = 194
+const IZQ = 16, DER = 194
 let y = 0, pagina = 0
 
 const pie = () => {
