@@ -83,3 +83,23 @@ const porVenta = rows.map(x => {
 console.log('producto              |depósito| vendió | mejor mes | POR VENTA | (por stock, el criterio viejo)')
 for (const x of porVenta) console.log(`${x.n.slice(0,22).padEnd(22)}|${String(x.depo).padStart(7)} |${String(x.tot).padStart(7)} |${String(x.pico).padStart(10)} |${String(x.porVenta).padStart(10)} | ${x.porStock}`)
 console.log(`\n  por VENTA: ${porVenta.reduce((a,x)=>a+x.porVenta,0)} prendas · por STOCK: ${porVenta.reduce((a,x)=>a+x.porStock,0)} prendas`)
+
+// ── Paso 4: las TIRADAS de etiquetas, que es como se imprime ──────────────────
+// 🔑 La etiqueta de la feria es SÓLO EL PRECIO (Bruno, 9-sep) ⇒ no hay una etiqueta por producto:
+// hay UNA por mesa, repetida N veces. Se imprime en Etiquetas → pestaña «Libre» (✏️), con el campo
+// de precio y el de copias, y el código de barras vacío. ⛔ No depende de la campaña ni de aplicar.
+console.log('\n═══ LAS TIRADAS PARA ETIQUETAS → LIBRE (precio · copias) ═══')
+const tiradas = new Map()
+for (const x of porVenta) tiradas.set(x.mesa, (tiradas.get(x.mesa)||0) + x.porVenta)
+const orden = [...tiradas.entries()].sort((a,b)=>a[0]-b[0])
+for (const [precio, copias] of orden) console.log(`  $${String(precio).padStart(6)}  →  ${String(copias).padStart(4)} copias`)
+console.log(`\n  ${orden.length} tiradas · ${orden.reduce((a,[,c])=>a+c,0)} etiquetas  ← lo que baja del depósito, PRE-etiquetado`)
+
+// Y lo que YA ESTÁ EXHIBIDO, que se etiqueta el día antes: mismo corte, sobre el stock del LOCAL.
+const tirLocal = new Map()
+for (const i of vivos) { const q = L.get(String(i.pid))||0; if (!q) continue
+  const m = i.decision?.precioSale||0; tirLocal.set(m, (tirLocal.get(m)||0)+q) }
+const ordL = [...tirLocal.entries()].sort((a,b)=>a[0]-b[0])
+console.log('\n═══ Y LO EXHIBIDO EN EL LOCAL, QUE SE ETIQUETA EL DÍA ANTES ═══')
+for (const [precio, copias] of ordL) console.log(`  $${String(precio).padStart(6)}  →  ${String(copias).padStart(4)} copias`)
+console.log(`\n  ${ordL.length} tiradas · ${ordL.reduce((a,[,c])=>a+c,0)} etiquetas`)
