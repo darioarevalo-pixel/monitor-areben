@@ -1585,15 +1585,18 @@ es del monitor**, que es un hueco medido, no una idea:
   ✅ 🔑 **IMPRIMIR DE MÁS ES GRATIS, PEGAR DE MÁS NO**: la etiqueta es sólo el precio, sin nombre ni
   código ⇒ **la misma sirve para cualquier prenda de esa mesa**. Se imprime el doble (282) y se
   pegan 141: la reposición queda resuelta sin trabajo que deshacer.
-  ✅ **PISO DE 2 POR MODELO** (Bruno: *«el mínimo tiene que ser 2 x modelo, con un máximo de 3? pq
-  si se vende a primera hora el día lunes, no tengo más para ese mismo lunes»*): muerde en los **8
-  modelos de UN SOLO TALLE**, que bajaban 1 prenda sola ⇒ **141 → 145**.
-  🔴 **El TOPE de 3 ⛔ no se aplicó, y el número es el argumento**: ahorra **13 prendas** y a cambio
-  manda **9 modelos a la mesa SIN la curva completa** —SHORT ATLAS/ARTEMIS/ARES/KAOS/KAER/ALVES,
-  BERMUDA LUX/DOJA, FADE #002, de 4 y 5 talles—, justo donde **el talle decide la venta**.
-  ⚠️ 🔑 **Y el piso por MODELO ⛔ no cubre el mismo caso por TALLE**: en un modelo de 3 talles sigue
-  habiendo **un solo M**. Para eso hay que subir la curva (`--por-talle=2`) y son **287**, el doble
-  de trabajo. ▶️ Decisión abierta de Bruno.
+  🔴 🔑 **LA UNIDAD DE LA MESA ES EL TALLE, ⛔ NO EL MODELO** — Bruno tuvo que corregirme **dos
+  veces**: *«el mínimo tiene que ser 2 x talle, con un máximo de 3, pq si se vende a primera hora el
+  día lunes, no tengo más para ese mismo lunes»*, y después *«lo que dije era por talle, no por
+  modelo; **nunca puede ser 2 por modelo, sino me quedo sin nada**»*. **La clienta ⛔ no compra el
+  modelo, compra SU TALLE**: un corpiño de 3 talles con 3 unidades tiene **un solo M**, y si el M se
+  va a las 9 el modelo está agotado **para esa clienta** aunque queden dos prendas en la mesa.
+  ⇒ ✅ **la banda es de 2 a 3 POR TALLE**, y la demanda sólo mueve adentro de ella:
+  **53 modelos · 287 prendas** (un modelo de 3 talles baja 6, uno de 5 baja 10). Tiradas:
+  $4.990 → 176 · $12.990 → 70 · $14.990 → 28 · $27.990 → 10 · $8.990 → 2 · $10.990 → 1.
+  📌 Entran **4 modelos que SÍ están exhibidos** pero con talles faltantes (las CAMPERA ROCK).
+  🔴 **CORPIÑO AYLA FUCSIA y CORPIÑO AYLA ZEBRA ⛔ no llegan al piso**: hay **1 sola unidad** de cada
+  uno en el depósito.
   📌 El documento con la orden tocable (queda guardado lo marcado):
   https://claude.ai/code/artifact/ababe1d3-552a-4c74-afc0-3db2118a96d4
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
