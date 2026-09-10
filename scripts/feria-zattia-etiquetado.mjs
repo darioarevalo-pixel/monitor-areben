@@ -14,9 +14,9 @@
  * la manda la demanda: la manda el SURTIDO**, porque la venta esperada del día 1 repartida entre
  * 351 modelos da menos de una unidad por modelo. Lo que decide es otra cosa:
  *
- *        bajar = la CURVA DE TALLES que le falta a la mesa   (N por talle vivo, menos lo exhibido)
+ *        bajar = la CURVA DE TALLES que le falta a la mesa   (2 a 3 de CADA talle, menos lo exhibido)
  *
- * y si algún modelo tiene demanda esperada mayor que eso, manda la demanda. Tope: el depósito.
+ * La demanda sólo mueve adentro de esa banda. Tope duro: lo que hay en el depósito.
  *
  * 🔴 **El reparto va por VENTA y ⛔ NUNCA por stock** — medido el 9-sep: los modelos con más de 80
  * en depósito vendieron 35 u en promedio y los de menos de 20 vendieron 70. **El stock alto es el
@@ -34,9 +34,9 @@
  *          producto, es de que nadie puede verlas.
  *     ⚠️ A es a precio de oferta y B a precio normal: sirve para REPARTIR, ⛔ no para prometer.
  *
- *   node scripts/feria-zattia-etiquetado.mjs                → la orden del día 1, por mesa
- *   node scripts/feria-zattia-etiquetado.mjs --por-talle=2  → dos de cada talle en la mesa
- *   node scripts/feria-zattia-etiquetado.mjs --json         → la misma orden, para el documento
+ *   node scripts/feria-zattia-etiquetado.mjs                 → la orden del día 1, por mesa
+ *   node scripts/feria-zattia-etiquetado.mjs --min-talle=3   → mover la banda
+ *   node scripts/feria-zattia-etiquetado.mjs --json          → la misma orden, para el documento
  *
  * ⛔ No escribe nada: ni en la campaña, ni en Gestión Nube, ni en Tienda Nube.
  */
@@ -46,13 +46,15 @@ const H = { ...authKv(), 'content-type': 'application/json' }
 const API = 'https://monitorareben.vercel.app/api/datos'
 const LIQ = 'l1788656536418_tdukfi'
 const DIA1 = 100               // la venta esperada del primer día, medida contra la apertura del sale
-const PORTALLE = Number(process.argv.find(a => a.startsWith('--por-talle='))?.split('=')[1] || 1)
-// 🔑 El PISO por modelo, pedido por Bruno el 10-sep: *«el mínimo tiene que ser 2 x modelo, pq si se
-// vende a primera hora el día lunes, no tengo más para ese mismo lunes»*. Muerde en los 8 modelos
-// de UN SOLO TALLE, que con la curva bajaban 1 sola prenda: uno es nada, se vende y el modelo
-// desaparece de la mesa el mismo día. ⚠️ El piso por MODELO ⛔ no cubre el mismo caso por TALLE:
-// para eso hay que subir la curva (`--por-talle=2`), que sale el doble de trabajo.
-const MINMODELO = Number(process.argv.find(a => a.startsWith('--min-modelo='))?.split('=')[1] || 2)
+// 🔴 🔑 **LA UNIDAD DE LA MESA ES EL TALLE, ⛔ NO EL MODELO** (Bruno, 10-sep, corrigiéndome dos
+// veces): *«el mínimo tiene que ser 2 x talle, con un máximo de 3, pq si se vende a primera hora el
+// día lunes, no tengo más para ese mismo lunes»* — y después, sobre mi versión por modelo:
+// *«nunca puede ser 2 por modelo, sino me quedo sin nada»*. **Tiene razón: la clienta ⛔ no compra
+// «el modelo», compra SU TALLE.** Un corpiño con 3 talles y 3 unidades tiene **un solo M**: si el M
+// se va a las 9, para esa clienta el modelo está agotado aunque queden dos prendas en la mesa.
+// ⇒ **la curva es de 2 a 3 POR TALLE**, y la demanda sólo mueve adentro de esa banda.
+const MINTALLE = Number(process.argv.find(a => a.startsWith('--min-talle='))?.split('=')[1] || 2)
+const MAXTALLE = Number(process.argv.find(a => a.startsWith('--max-talle='))?.split('=')[1] || 3)
 const HOY = new Date().toISOString().slice(0, 10)
 const DESDE_SALE = '2026-08-13'
 const json = process.argv.includes('--json')
@@ -116,26 +118,26 @@ const filas = vivos.map(i => {
 })
 const suma = filas.reduce((a, f) => a + f.peso, 0)
 for (const f of filas) {
-  // la curva: N de cada talle en la mesa, descontando lo que ya está exhibido
-  f.curva = Math.max(0, f.talles * PORTALLE - f.local)
-  // la demanda del día 1, por si algún modelo se come su curva el primer día
+  // la banda de la mesa: entre MINTALLE y MAXTALLE de CADA talle, descontando lo exhibido
+  f.piso = Math.max(0, f.talles * MINTALLE - f.local)
+  f.techo = Math.max(0, f.talles * MAXTALLE - f.local)
+  // la demanda del día 1: sólo mueve adentro de la banda
   f.demanda1 = Math.round(DIA1 * f.peso / suma)
-  f.porDemanda = Math.max(0, f.demanda1 - f.local) > f.curva
-  f.porPiso = f.curva < MINMODELO && Math.max(0, f.demanda1 - f.local) < MINMODELO && f.depo > 0
-  f.bajar = Math.min(f.depo, Math.max(f.curva, Math.max(0, f.demanda1 - f.local), f.local ? 0 : MINMODELO))
+  f.porDemanda = Math.max(0, f.demanda1 - f.local) > f.piso
+  f.bajar = Math.min(f.depo, Math.min(f.techo, Math.max(f.piso, Math.max(0, f.demanda1 - f.local))))
 }
 const orden = filas.filter(f => f.bajar > 0).sort((a, b) => a.etiqueta - b.etiqueta || b.bajar - a.bajar)
 
-if (json) { console.log(JSON.stringify({ generado: HOY, dia1: DIA1, porTalle: PORTALLE, orden }, null, 1)); process.exit(0) }
+if (json) { console.log(JSON.stringify({ generado: HOY, dia1: DIA1, minTalle: MINTALLE, maxTalle: MAXTALLE, orden }, null, 1)); process.exit(0) }
 
-console.log(`\n═══ ORDEN DE ETIQUETADO — DEPÓSITO, DÍA 1 (${PORTALLE} por talle, piso ${MINMODELO} por modelo) ═══`)
+console.log(`\n═══ ORDEN DE ETIQUETADO — DEPÓSITO, DÍA 1 (${MINTALLE} a ${MAXTALLE} por talle) ═══`)
 let mesa = null
 for (const f of orden) {
   if (f.etiqueta !== mesa) { mesa = f.etiqueta
     const t = orden.filter(x => x.etiqueta === mesa)
     console.log(`\n── ETIQUETA $${mesa.toLocaleString('es-AR')} · ${t.reduce((a, x) => a + x.bajar, 0)} etiquetas · ${t.length} modelos ──`)
   }
-  console.log(`   ${f.nombre.slice(0, 26).padEnd(26)} ${String(f.bajar).padStart(3)}  talles ${f.listaTalles.join('/').padEnd(14)} salón ${String(f.local).padStart(3)} · depósito ${String(f.depo).padStart(3)}${f.porDemanda ? '   ← por demanda' : f.porPiso ? '   ← por el piso de ' + MINMODELO : ''}`)
+  console.log(`   ${f.nombre.slice(0, 26).padEnd(26)} ${String(f.bajar).padStart(3)}  talles ${f.listaTalles.join('/').padEnd(14)} salón ${String(f.local).padStart(3)} · depósito ${String(f.depo).padStart(3)}${f.porDemanda ? '   ← por demanda, arriba del piso' : ''}${f.bajar === f.depo && f.depo < f.piso ? '   ← no hay más en el depósito' : ''}`)
 }
 const tot = orden.reduce((a, f) => a + f.bajar, 0)
 const depoTot = filas.reduce((a, f) => a + f.depo, 0)
@@ -149,14 +151,12 @@ for (const [p, c] of [...tir].sort((a, b) => a[0] - b[0])) console.log(`   $${St
 // ── 4. qué cuesta cada elección de curva ─────────────────────────────────────
 console.log('\n═══ LA ÚNICA PERILLA ES LA CURVA ═══')
 console.log('   Etiquetar de más ⛔ no es trabajo de más: es trabajo que hay que DESHACER.\n')
-const cuenta = n => filas.reduce((a, f) => a + Math.min(f.depo, Math.max(Math.max(0, f.talles * n - f.local), Math.max(0, f.demanda1 - f.local), f.local ? 0 : MINMODELO)), 0)
+const cuenta = n => filas.reduce((a, f) => a + Math.min(f.depo, Math.max(0, f.talles * n - f.local)), 0)
 for (const n of [1, 2, 3]) {
-  console.log(`   ${n} de cada talle  →  ${String(cuenta(n)).padStart(4)} etiquetas${n === PORTALLE ? '   ← la orden de arriba' : ''}`)
+  console.log(`   ${n} de cada talle  →  ${String(cuenta(n)).padStart(4)} etiquetas${n === MINTALLE ? '   ← el piso de la orden de arriba' : ''}`)
 }
-// 🔴 El TOPE por modelo que propuso Bruno (máximo 3) ⛔ no se aplica y acá está por qué: ahorra 13
-// prendas y a cambio manda 9 modelos a la mesa **sin la curva completa** — los shorts y bermudas de
-// 4 y 5 talles, justo donde el talle decide la venta.
-const conTope = filas.reduce((a, f) => a + Math.min(f.depo, 3, Math.max(f.curva, Math.max(0, f.demanda1 - f.local), f.local ? 0 : MINMODELO)), 0)
-const rotos = filas.filter(f => f.talles > 3 && f.bajar > 3)
-console.log(`\n   con tope de 3 por modelo  →  ${conTope} etiquetas (ahorra ${cuenta(PORTALLE) - conTope}), pero ${rotos.length} modelos van a la mesa SIN la curva completa:`)
-console.log('     ' + rotos.map(f => `${f.nombre} (${f.talles} talles)`).join(' · '))
+const cortos = filas.filter(f => f.bajar > 0 && f.depo < f.piso)
+if (cortos.length) {
+  console.log(`\n🔴 ${cortos.length} modelos ⛔ no llegan al piso de ${MINTALLE} por talle porque NO HAY MÁS en el depósito:`)
+  for (const f of cortos) console.log(`     ${f.nombre.padEnd(24)} ${f.talles} talles · sólo ${f.depo} en el depósito`)
+}
