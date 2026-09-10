@@ -1512,6 +1512,21 @@ es del monitor**, que es un hueco medido, no una idea:
   anterior** · cuántas etiquetas), con el reparto **por venta** y la comparación contra el
   **por stock** para que el error no se repita. `node scripts/feria-zattia-parcial.mjs`.
   Da hoy **502 prendas** para los 48 modelos que están en cero en el local.
+- ✅ 🔑 **10-sep: LA IMPRESIÓN NO SE PIENSA POR PRODUCTO, SE PIENSA POR MESA — y eso la achica.**
+  La etiqueta es sólo el precio ⇒ ⛔ no hay una etiqueta por modelo: hay **una por mesa, repetida
+  N veces**, y en Etiquetas → **Libre** eso es un formulario con precio y copias. El script ahora
+  lo saca solo (paso 4):
+  **lo que baja del depósito son 4 tiradas · 502 etiquetas** — $4.990 → 380 · $12.990 → 70 ·
+  $14.990 → 49 · $8.990 → 3 — porque los 48 modelos en cero **caen casi todos en la mesa de la
+  lencería**; y **lo exhibido en el local son 17 tiradas · 1.309 etiquetas** ($8.990 → 250 ·
+  $6.990 → 167 · $10.990 → 120 · $17.990 → 107 · $27.990 → 97 · $4.990 → 87 · $13.990 → 81 …).
+  **Total 1.811.** ⛔ No depende de la campaña, ni de aplicar, ni de Tienda Nube: **se puede
+  imprimir hoy.**
+- 📌 **Estado al 10-sep, verificado por GET** (⛔ no cambió desde el cierre del 9): **286 confirmado
+  (4.224 prendas · $36,8M) · 65 definido (1.111 · $14,2M) · 25 descartado** · **0 aplicados** ·
+  cero sin precio. 🔴 **Los 65 sin confirmar son el 21% de la recaudación** y adentro están los
+  que MÁS venden de toda la feria: CORSET FRANK (126 u, **v90 147**), CORSET NAPOLES (84, 118),
+  CORSET ADAM (73, 79), CORSET FRANK SE (69, 53) — más de la mitad de esas prendas.
 - ✅ **La escalera densa arregló sola casi todo lo que estaba mal**: los modelos a los que la feria
   les SUBÍA el precio respecto de la oferta que ya tienen puesta pasaron de **30 (343 prendas) a 8
   (190)**, y los que quedaban **por arriba del precio de lista pasaron de 1 a 0** (era ACCESORIO
