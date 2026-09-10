@@ -1594,7 +1594,14 @@ es del monitor**, que es un hueco medido, no una idea:
   ⇒ ✅ **la banda es de 2 a 3 POR TALLE**, y la demanda sólo mueve adentro de ella:
   **53 modelos · 287 prendas** (un modelo de 3 talles baja 6, uno de 5 baja 10). Tiradas:
   $4.990 → 176 · $12.990 → 70 · $14.990 → 28 · $27.990 → 10 · $8.990 → 2 · $10.990 → 1.
-  📌 Entran **4 modelos que SÍ están exhibidos** pero con talles faltantes (las CAMPERA ROCK).
+  🔴 **LO QUE YA ESTÁ EN EL SALÓN ⛔ NO ES TRABAJO DE DEPÓSITO** (Bruno: *«campera rock ya hay allá,
+  así que sacalo… campera lines sí hay en el local»*): completarle la curva desde el depósito a algo
+  ya exhibido **era mío y ⛔ no lo pidió nadie** — se etiqueta **con lo exhibido, el día antes**.
+  Salen las 3 CAMPERA ROCK, CAMPERA LINES y POLLERA DOT ⇒ **48 modelos · 274 prendas**
+  ($4.990 → 176 · $12.990 → 70 · $14.990 → 28).
+  ⚠️ 🔑 **POLLERA DOT sale por LISTA CON NOMBRE, ⛔ no por filtro**: el espejo dice **0 en el local**
+  y Bruno dice *«tiene que haber normalmente»* ⇒ **la palabra de Bruno le gana al espejo**, y eso
+  ⛔ no se puede deducir del dato.
   🔴 **CORPIÑO AYLA FUCSIA y CORPIÑO AYLA ZEBRA ⛔ no llegan al piso**: hay **1 sola unidad** de cada
   uno en el depósito.
   📌 El documento con la orden tocable (queda guardado lo marcado):
