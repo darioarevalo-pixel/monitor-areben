@@ -880,7 +880,10 @@ function CotizarDireccion({ marca, onCargar }: { marca: Marca | null; onCargar: 
   if (!abierto) {
     return (
       <Card>
-        <Button variant="ghost" iconLeft={<Icono nombre="direccion" />} onClick={() => setAbierto(true)}>
+        {/* `outline` y no `ghost`: es el gemelo de «Cargar uno a mano» —misma card, mismo lugar,
+            misma jerarquía— y sin borde se leía como un texto suelto, blanco sobre blanco. Lo cazó
+            Bruno mirando la pantalla, igual que «Cargar horas extras» en Inicio. */}
+        <Button variant="outline" iconLeft={<Icono nombre="direccion" />} onClick={() => setAbierto(true)}>
           ¿Cuánto sale un envío?
         </Button>
         <span style={{ marginLeft: space[3], opacity: 0.7, fontSize: 13 }}>
