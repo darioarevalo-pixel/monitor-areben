@@ -1602,6 +1602,19 @@ es del monitor**, que es un hueco medido, no una idea:
   ⚠️ 🔑 **POLLERA DOT sale por LISTA CON NOMBRE, ⛔ no por filtro**: el espejo dice **0 en el local**
   y Bruno dice *«tiene que haber normalmente»* ⇒ **la palabra de Bruno le gana al espejo**, y eso
   ⛔ no se puede deducir del dato.
+- ✅ **LA ORDEN EN PDF, PARA ADMINISTRACIÓN** (Bruno: *«sólo lista como pdf común con precio y lista para
+  imprimir, para dársela a administración y le digo: hacé esto»*):
+  `node scripts/feria-zattia-etiquetado.mjs --json | node scripts/feria-zattia-etiquetado-pdf.mjs`
+  → `~/Downloads/orden-etiquetado-feria.pdf`, 2 páginas. 🔑 **La regla ⛔ NO se copia en el PDF**:
+  ese script sólo DIBUJA y la cuenta le llega por stdin ⇒ mover la banda o el horizonte se hace en
+  un solo lugar.
+- ✅ 🔑 **EL TEST QUE CAZA UN ESPEJO EQUIVOCADO: «está en CERO en el salón y sin embargo VENDIÓ».**
+  Sobre los 351: da **7 modelos**, y el primero es **POLLERA DOT** (vendió 6, la última el 9-sep) — el
+  mismo que cazó Bruno de memoria. Los otros 6 (BODY ORIANA, BODY SEOUL, BABY TEE UNI, BABY TEE
+  CUPID, TOP OXY, JEAN MILLER) tienen **cero también en el depósito** ⇒ están **agotados**, ⛔ no
+  mal ubicados. ✅ **De los 48 de la orden, NINGUNO vendió nada desde el 13-ago** ⇒ el cero de la
+  lencería es real (está oculta), y la orden pasa el test.
+  ⚠️ **Lo que el test ⛔ NO ve**: un modelo que esté en el salón, marcado en cero **y sin vender**.
   🔴 **CORPIÑO AYLA FUCSIA y CORPIÑO AYLA ZEBRA ⛔ no llegan al piso**: hay **1 sola unidad** de cada
   uno en el depósito.
   📌 El documento con la orden tocable (queda guardado lo marcado):
