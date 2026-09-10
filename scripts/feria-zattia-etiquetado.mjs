@@ -47,6 +47,12 @@ const API = 'https://monitorareben.vercel.app/api/datos'
 const LIQ = 'l1788656536418_tdukfi'
 const DIA1 = 100               // la venta esperada del primer día, medida contra la apertura del sale
 const PORTALLE = Number(process.argv.find(a => a.startsWith('--por-talle='))?.split('=')[1] || 1)
+// 🔑 El PISO por modelo, pedido por Bruno el 10-sep: *«el mínimo tiene que ser 2 x modelo, pq si se
+// vende a primera hora el día lunes, no tengo más para ese mismo lunes»*. Muerde en los 8 modelos
+// de UN SOLO TALLE, que con la curva bajaban 1 sola prenda: uno es nada, se vende y el modelo
+// desaparece de la mesa el mismo día. ⚠️ El piso por MODELO ⛔ no cubre el mismo caso por TALLE:
+// para eso hay que subir la curva (`--por-talle=2`), que sale el doble de trabajo.
+const MINMODELO = Number(process.argv.find(a => a.startsWith('--min-modelo='))?.split('=')[1] || 2)
 const HOY = new Date().toISOString().slice(0, 10)
 const DESDE_SALE = '2026-08-13'
 const json = process.argv.includes('--json')
@@ -115,20 +121,21 @@ for (const f of filas) {
   // la demanda del día 1, por si algún modelo se come su curva el primer día
   f.demanda1 = Math.round(DIA1 * f.peso / suma)
   f.porDemanda = Math.max(0, f.demanda1 - f.local) > f.curva
-  f.bajar = Math.min(f.depo, Math.max(f.curva, Math.max(0, f.demanda1 - f.local)))
+  f.porPiso = f.curva < MINMODELO && Math.max(0, f.demanda1 - f.local) < MINMODELO && f.depo > 0
+  f.bajar = Math.min(f.depo, Math.max(f.curva, Math.max(0, f.demanda1 - f.local), f.local ? 0 : MINMODELO))
 }
 const orden = filas.filter(f => f.bajar > 0).sort((a, b) => a.etiqueta - b.etiqueta || b.bajar - a.bajar)
 
 if (json) { console.log(JSON.stringify({ generado: HOY, dia1: DIA1, porTalle: PORTALLE, orden }, null, 1)); process.exit(0) }
 
-console.log(`\n═══ ORDEN DE ETIQUETADO — DEPÓSITO, DÍA 1 (${PORTALLE} por talle) ═══`)
+console.log(`\n═══ ORDEN DE ETIQUETADO — DEPÓSITO, DÍA 1 (${PORTALLE} por talle, piso ${MINMODELO} por modelo) ═══`)
 let mesa = null
 for (const f of orden) {
   if (f.etiqueta !== mesa) { mesa = f.etiqueta
     const t = orden.filter(x => x.etiqueta === mesa)
     console.log(`\n── ETIQUETA $${mesa.toLocaleString('es-AR')} · ${t.reduce((a, x) => a + x.bajar, 0)} etiquetas · ${t.length} modelos ──`)
   }
-  console.log(`   ${f.nombre.slice(0, 26).padEnd(26)} ${String(f.bajar).padStart(3)}  talles ${f.listaTalles.join('/').padEnd(14)} salón ${String(f.local).padStart(3)} · depósito ${String(f.depo).padStart(3)}${f.porDemanda ? '   ← por demanda, no por curva' : ''}`)
+  console.log(`   ${f.nombre.slice(0, 26).padEnd(26)} ${String(f.bajar).padStart(3)}  talles ${f.listaTalles.join('/').padEnd(14)} salón ${String(f.local).padStart(3)} · depósito ${String(f.depo).padStart(3)}${f.porDemanda ? '   ← por demanda' : f.porPiso ? '   ← por el piso de ' + MINMODELO : ''}`)
 }
 const tot = orden.reduce((a, f) => a + f.bajar, 0)
 const depoTot = filas.reduce((a, f) => a + f.depo, 0)
@@ -142,8 +149,14 @@ for (const [p, c] of [...tir].sort((a, b) => a[0] - b[0])) console.log(`   $${St
 // ── 4. qué cuesta cada elección de curva ─────────────────────────────────────
 console.log('\n═══ LA ÚNICA PERILLA ES LA CURVA ═══')
 console.log('   Etiquetar de más ⛔ no es trabajo de más: es trabajo que hay que DESHACER.\n')
+const cuenta = n => filas.reduce((a, f) => a + Math.min(f.depo, Math.max(Math.max(0, f.talles * n - f.local), Math.max(0, f.demanda1 - f.local), f.local ? 0 : MINMODELO)), 0)
 for (const n of [1, 2, 3]) {
-  const t = filas.reduce((a, f) => a + Math.min(f.depo, Math.max(Math.max(0, f.talles * n - f.local), Math.max(0, f.demanda1 - f.local))), 0)
-  const m = filas.filter(f => Math.min(f.depo, Math.max(Math.max(0, f.talles * n - f.local), Math.max(0, f.demanda1 - f.local))) > 0).length
-  console.log(`   ${n} de cada talle  →  ${String(t).padStart(4)} etiquetas · ${m} modelos${n === PORTALLE ? '   ← la orden de arriba' : ''}`)
+  console.log(`   ${n} de cada talle  →  ${String(cuenta(n)).padStart(4)} etiquetas${n === PORTALLE ? '   ← la orden de arriba' : ''}`)
 }
+// 🔴 El TOPE por modelo que propuso Bruno (máximo 3) ⛔ no se aplica y acá está por qué: ahorra 13
+// prendas y a cambio manda 9 modelos a la mesa **sin la curva completa** — los shorts y bermudas de
+// 4 y 5 talles, justo donde el talle decide la venta.
+const conTope = filas.reduce((a, f) => a + Math.min(f.depo, 3, Math.max(f.curva, Math.max(0, f.demanda1 - f.local), f.local ? 0 : MINMODELO)), 0)
+const rotos = filas.filter(f => f.talles > 3 && f.bajar > 3)
+console.log(`\n   con tope de 3 por modelo  →  ${conTope} etiquetas (ahorra ${cuenta(PORTALLE) - conTope}), pero ${rotos.length} modelos van a la mesa SIN la curva completa:`)
+console.log('     ' + rotos.map(f => `${f.nombre} (${f.talles} talles)`).join(' · '))
