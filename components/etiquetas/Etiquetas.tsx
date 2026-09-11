@@ -1161,14 +1161,16 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
       {camp.error && <Notice tone="danger" icon="✗">{camp.error}</Notice>}
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
-        <label style={{ fontSize: 12, color: color.mut }}>Campaña<br />
-          <Select value={camp.liqEfectivo} onChange={(e) => setLiq(e.target.value)} style={{ width: 300, maxWidth: '100%' }}>
-            <option value="">Elegí una campaña…</option>
-            {camp.campanias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
-            ))}
-          </Select>
-        </label>
+        {camp.campanias.length > 0 && (
+          <label style={{ fontSize: 12, color: color.mut }}>Campaña<br />
+            <Select value={camp.liqEfectivo} onChange={(e) => setLiq(e.target.value)} style={{ width: 300, maxWidth: '100%' }}>
+              <option value="">Elegí una campaña…</option>
+              {camp.campanias.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
+            </Select>
+          </label>
+        )}
         <label style={{ fontSize: 12, color: color.mut }}>Copias por escaneo<br />
           <input type="number" value={copias} min={1} max={50} onChange={(e) => setCopias(e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 110 }} />
         </label>
@@ -1191,7 +1193,17 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
         </label>
       </div>
 
-      {!camp.liqEfectivo ? (
+      {/* 🔴 **Una lista vacía sana se ve igual que una rota, y acá se veía igual que las dos.** El
+          selector se dibujaba con su «Elegí una campaña…» aunque adentro ⛔ no hubiera ninguna, así
+          que la pantalla decía «elegí» sobre una lista de cero y no había forma de saber por qué.
+          Las dos causas son distintas y las dos tienen arreglo, así que se nombran. */}
+      {!camp.cargando && camp.campanias.length === 0 ? (
+        <Notice tone="warning" icon="🎪">
+          <b>No hay ninguna campaña para etiquetar en {marca === 'bdi' ? 'BDI' : 'Zattia'}.</b> Acá aparecen sólo las que están{' '}
+          <b>en curso</b> o <b>aplicadas</b>: una campaña en <b>borrador</b> ⛔ no entra, aunque ya tenga los precios decididos.
+          Se cambia desde <b>Liquidación</b>. {marca === 'bdi' ? 'Ojo con el selector de marca de arriba: la feria es de Zattia.' : ''}
+        </Notice>
+      ) : !camp.liqEfectivo ? (
         <Notice tone="brand" icon="🎪">Elegí la campaña para empezar a escanear.</Notice>
       ) : camp.cargando ? (
         <Notice tone="neutral" icon="⏳">Leyendo los precios de la campaña…</Notice>

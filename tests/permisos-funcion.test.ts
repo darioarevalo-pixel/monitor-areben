@@ -164,6 +164,21 @@ describe('permisos — qué da cada función', () => {
     expect(seccionesDeFuncion('local')).not.toContain('reposicion')
   })
 
+  /**
+   * 🔴 **Etiquetas la ven LAS DOS, y por eso entra por `keys`** (pedido de Bruno, 11-sep-2026).
+   * Mover la sección del área `local` a `administracion` habría dado el mismo resultado en una
+   * pantalla y se la habría SACADO al Local, que es quien la usa todos los días — y eso ⛔ no lo
+   * caza ningún otro test, porque el espejo sólo compara `SECCION_AREA` contra `PERM_CAT.area` y
+   * las dos dirían `administracion` felizmente. El test es el que fija que son las dos.
+   */
+  it('Etiquetas la ven el Local (por su área) y Administración (por key)', () => {
+    expect(seccionesDeFuncion('local')).toContain('etiquetas')
+    expect(seccionesDeFuncion('administracion')).toContain('etiquetas')
+    // Y ⛔ no se la lleva cualquiera: la sección sigue siendo del área del local.
+    expect(seccionesDeFuncion('marketing')).not.toContain('etiquetas')
+    expect(seccionesDeFuncion('deposito')).not.toContain('etiquetas')
+  })
+
   it('las tres funciones que ejecutan solicitudes las ven', () => {
     for (const f of ['marketing', 'deposito', 'administracion'] as const) {
       expect(seccionesDeFuncion(f)).toContain('solicitudes')

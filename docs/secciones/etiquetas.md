@@ -1,6 +1,6 @@
 # Etiquetas — ficha de sección
 
-Sección `etiquetas`, área `local`. Imprime las etiquetas de 5 × 2,5 cm de las prendas (Code 128) en
+Sección `etiquetas`, área `local` — **y desde el 11-sep-2026 la ve también Administración**, por `keys` en `ACCESO_POR_FUNCION` y ⛔ no moviéndole el área (moverla se la sacaba al Local, que es quien la usa todos los días). Imprime las etiquetas de 5 × 2,5 cm de las prendas (Code 128) en
 una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 11-sep-2026 tiene la
 pestaña **Precio de campaña**, que escanea contra una liquidación y saca el precio **de la campaña**,
 no de Tienda Nube (ver abajo: es la única que no depende de que el precio esté puesto en la tienda). Desde el 17-ago-2026 incluye la
@@ -118,6 +118,12 @@ venga vinculada con los precios definidos en monitor»*.
   falla que ⛔ no se ve hasta que las prendas están en la mesa.
   📌 **Vacío es válido y es el default**: la etiqueta sale sólo con el precio, que es como se decidió
   la feria de mesas.
+- 🔴 **Y la lista de campañas vacía ⛔ no decía por qué** (lo cazó Bruno el 11-sep: *«listan las
+  campañas pero no se ve ninguna»*). El selector se dibujaba con su «Elegí una campaña…» aunque
+  adentro hubiera **cero**, así que una lista sana vacía se veía igual que una rota. **Medido: BDI
+  tiene 0 campañas vivas y Zattia 2** ⇒ el caso más probable es el **selector de marca**. Ahora,
+  sin campañas, el selector ⛔ no se dibuja y el cartel nombra las dos causas: la marca, y que una
+  campaña en **borrador** ⛔ no entra aunque tenga los precios decididos (`ESTADOS_CAMPANIA_VIVA`).
 - 🔑 **La TIRADA POR MESA: escribir la cantidad e imprimir, sin escanear** (Bruno, 11-sep-2026:
   *«también un casillero para poder escribir la cantidad y poder imprimirlas, sin necesidad de
   escanear»*). Es el caso del **depósito**, donde escanear ⛔ no aporta nada: la prenda está en una
