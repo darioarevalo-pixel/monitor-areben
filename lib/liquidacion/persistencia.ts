@@ -100,17 +100,17 @@ export async function leerBitacora(store: Marca, liqId: string): Promise<EventoB
 
 export async function crearCampania(
   store: Marca,
-  campania: { id: string; nombre: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null },
+  campania: { id: string; nombre: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null; nombreComercial?: string | null },
 ): Promise<Liquidacion> {
   const d = await postear({ store, action: 'crear', campania }, 'No se pudo crear la campaña.')
   return d.campania as Liquidacion
 }
 
-/** Cambia nombre, tipo, fechas o nota. Lo que no venga queda como estaba. */
+/** Cambia nombre, nombre comercial, tipo, fechas o nota. Lo que no venga queda como estaba. */
 export async function renombrarCampania(
   store: Marca,
   id: string,
-  cambios: { nombre?: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null },
+  cambios: { nombre?: string; tipo?: TipoCampania; desde?: string | null; hasta?: string | null; nota?: string | null; nombreComercial?: string | null },
 ): Promise<Liquidacion> {
   const d = await postear({ store, action: 'renombrar', id, ...cambios }, 'No se pudo guardar la campaña.')
   return d.campania as Liquidacion

@@ -1041,13 +1041,42 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
    * del dedo.
    */
   const [cargadas, setCargadas] = useState<Record<string, string>>({})
+  /**
+   * Qué precio dibuja la previa. 🔑 **Es el último que se imprimió o escaneó, ⛔ no un ejemplo
+   * inventado**: la previa que sirve es la de lo que acaba de salir, para poder compararla con el
+   * papel que se tiene en la mano. Antes de la primera, la mesa más barata de la campaña.
+   */
+  const [ultimoPrecio, setUltimoPrecio] = useState<number | null>(null)
+
+  /**
+   * EL DIBUJO DE LA ETIQUETA, EN UN SOLO LUGAR.
+   *
+   * 🔴 **La previa y la impresión salen de acá las dos.** Una previa armada aparte es una previa que
+   * miente el día que alguien toca una de las dos: se ve linda y sale otra cosa en la percha. Es el
+   * mismo criterio que `PreviaPdf`, que dibuja el PDF de verdad y ⛔ no un HTML parecido.
+   *
+   * 🔑 **Sin nombre comercial la etiqueta es SÓLO EL PRECIO** —como se decidió la feria de mesas— y
+   * con él le entra un renglón arriba. `buildLibrePdf` descarta las líneas vacías, así que el
+   * dibujo es el mismo objeto en los dos casos.
+   */
+  const dibujo = useCallback(
+    (precio: number, copias: number, barcode: string) => ({
+      grande: false,
+      copias,
+      barcode,
+      precio,
+      lineas: [{ texto: camp.rotulo?.nombreComercial || '', tam: 'titulo' as const, bold: true }],
+    }),
+    [camp.rotulo],
+  )
 
   /** Una tirada entera de una mesa: N etiquetas del mismo precio, sin escanear ninguna prenda. */
   const imprimirMesa = async (precio: number, n: number) => {
     if (n < 1) return
-    const pdf = await buildLibrePdf({ grande: false, copias: n, barcode: '', precio, lineas: [] })
+    const pdf = await buildLibrePdf(dibujo(precio, n, ''))
     if (pdf) imprimirPdf(pdf)
     anotarTirada(precio, n)
+    setUltimoPrecio(precio)
     // El casillero se vacía al imprimir: dejarlo con el número puesto es la forma de imprimir la
     // misma tirada dos veces sin darse cuenta.
     setCargadas((prev) => ({ ...prev, [String(precio)]: '' }))
@@ -1092,9 +1121,10 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
       inp.focus()
       return
     }
-    const pdf = await buildLibrePdf({ grande: false, copias: n, barcode: conBarras ? String(v.barcode || '') : '', precio: item.precio, lineas: [] })
+    const pdf = await buildLibrePdf(dibujo(item.precio, n, conBarras ? String(v.barcode || '') : ''))
     if (pdf) imprimirPdf(pdf)
     anotarTirada(item.precio, n)
+    setUltimoPrecio(item.precio)
     setFeedback({
       ok: true,
       tono: item.firme ? undefined : 'warn',
@@ -1102,6 +1132,14 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
     })
     inp.focus()
   }
+
+  // Una sola copia: la previa es para MIRAR la etiqueta, y dibujar 176 páginas para verla cuesta lo
+  // mismo que imprimirlas.
+  const precioPrevia = ultimoPrecio ?? camp.porPrecio[0]?.precio ?? null
+  const construirPrevia = useCallback(
+    () => (precioPrevia == null ? null : buildLibrePdf(dibujo(precioPrevia, 1, ''))),
+    [precioPrevia, dibujo],
+  )
 
   const provisorios = camp.porPrecio.reduce((a, m) => a + (m.modelos - m.firmes), 0)
   const totalTirada = Object.values(tirada).reduce((a, b) => a + b, 0)
@@ -1171,6 +1209,24 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
               </Notice>
             </div>
           )}
+
+          {/* 🔑 **Es el PDF de verdad, ⛔ no un dibujo parecido** — sale de `dibujo()`, la misma
+              función que imprime. Una previa armada aparte se ve linda y miente el día que alguien
+              toca una de las dos. */}
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginTop: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 6 }}>CÓMO SALE LA ETIQUETA</div>
+              <PreviaPdf construir={construirPrevia} alt="Vista previa de la etiqueta de campaña" espera={250} vacio="(elegí una mesa)" />
+            </div>
+            <div style={{ fontSize: 12, color: color.mut2, maxWidth: 340, paddingTop: 22 }}>
+              {camp.rotulo?.nombreComercial ? (
+                <>Sale con el título <b>«{camp.rotulo.nombreComercial}»</b> arriba del precio.</>
+              ) : (
+                <>Sale <b>sólo con el precio</b>. Para que lleve un título —«FERIA ZATTIA»— se le carga el <b>nombre comercial</b> a la campaña, en Liquidación → Editar campaña.</>
+              )}
+              {precioPrevia != null && <> La previa muestra <b>${Math.round(precioPrevia).toLocaleString('es-AR')}</b>, que es {ultimoPrecio == null ? 'la mesa más barata' : 'lo último que salió'}.</>}
+            </div>
+          </div>
 
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 18 }}>
             {/* ── La tirada por MESA: escribir la cantidad e imprimir, sin escanear nada ──────────
@@ -1379,7 +1435,10 @@ function subtitulo(modo: ModoEtiqueta): string {
  * las dependencias que de verdad cambian el dibujo. Formas de pago escribe letra por letra: ahí va
  * con espera, para no armar un PDF por tecla.
  */
-function PreviaPdf({ construir, alt, espera = 0, vacio, retrato = false }: { construir: () => ReturnType<typeof buildEtiquetasPdf> | null; alt: string; espera?: number; vacio?: string; retrato?: boolean }) {
+// ⚠️ `construir` puede devolver el PDF de una etiqueta **libre**, que es `Promise<Pdf | null>`: la
+// libre vuelve `null` cuando no tiene ni texto, ni barras, ni precio. El cuerpo ya lo contemplaba
+// (`if (!vivo || !pdf) return`); lo que faltaba era decirlo en el tipo.
+function PreviaPdf({ construir, alt, espera = 0, vacio, retrato = false }: { construir: () => Awaited<ReturnType<typeof buildEtiquetasPdf>> extends infer P ? Promise<P | null> | null : never; alt: string; espera?: number; vacio?: string; retrato?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
 
   useEffect(() => {

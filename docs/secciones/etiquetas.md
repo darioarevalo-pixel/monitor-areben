@@ -75,6 +75,27 @@ venga vinculada con los precios definidos en monitor»*.
   y ⛔ no con `buildEtiquetasPdf`, y por eso **cualquier etiqueta de esa mesa sirve para cualquier
   prenda de esa mesa** ⇒ imprimir de más es gratis, pegar de más no. El código de barras es una
   tilde aparte, para el caso en que la etiqueta tape la que la prenda ya tiene.
+- ✅ 🔑 **LA PREVIA ES EL PDF DE VERDAD, Y LAS DOS SALEN DE LA MISMA FUNCIÓN** (Bruno, 11-sep-2026:
+  *«no puedo ver la previsualización de la etiqueta»*). `dibujo()` arma el objeto que consume
+  `buildLibrePdf`, y lo usan **la previa y las dos formas de imprimir**. Una previa armada aparte se
+  ve linda y **miente** el día que alguien toca una de las dos. Dibuja **el último precio que salió**
+  —⛔ no un ejemplo inventado—, para poder compararla con el papel que se tiene en la mano, y con
+  **una sola copia**: dibujar 176 páginas para mirarlas cuesta lo mismo que imprimirlas.
+  ⚠️ De paso, `PreviaPdf` acepta ahora `Promise<Pdf | null>`: la etiqueta **libre** vuelve `null`
+  cuando no tiene ni texto, ni barras, ni precio — el cuerpo ya lo contemplaba y **el tipo no lo
+  decía**.
+- ✅ 🔑 **EL NOMBRE COMERCIAL DE LA CAMPAÑA ES LO QUE SALE IMPRESO** (Bruno: *«me gustaría poder
+  ponerle nombre comercial al evento así la etiqueta sale con ese título»*). Campo nuevo
+  `nombreComercial` en `liquidaciones.datos`, que se carga en **Liquidación → Editar campaña**.
+  🔑 **Es OTRA COSA que `nombre`**, y por eso son dos campos: el interno tiene que identificar la
+  campaña dentro de seis meses («Feria Septiembre 2026»); el comercial tiene que entrar en 5 × 2,5 cm
+  y decirle algo a quien tiene la prenda en la mano («FERIA ZATTIA»). Se recorta a **40** para que
+  `splitTextToSize` ⛔ no lo parta en tres renglones y le coma el lugar al precio.
+  🔴 **Vive en la CAMPAÑA y ⛔ no en cada máquina**: va impreso en ~1.800 etiquetas y tiene que ser
+  uno solo. Dos personas etiquetando desde dos computadoras con un cartel distinto es el modo de
+  falla que ⛔ no se ve hasta que las prendas están en la mesa.
+  📌 **Vacío es válido y es el default**: la etiqueta sale sólo con el precio, que es como se decidió
+  la feria de mesas.
 - 🔑 **La TIRADA POR MESA: escribir la cantidad e imprimir, sin escanear** (Bruno, 11-sep-2026:
   *«también un casillero para poder escribir la cantidad y poder imprimirlas, sin necesidad de
   escanear»*). Es el caso del **depósito**, donde escanear ⛔ no aporta nada: la prenda está en una

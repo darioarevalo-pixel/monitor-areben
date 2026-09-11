@@ -170,7 +170,7 @@ export function Liquidacion() {
     if (abierta && campanias && !laAbierta) setAbierta('')
   }, [abierta, campanias, laAbierta, setAbierta])
 
-  async function guardarCampania(datos: { nombre: string; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
+  async function guardarCampania(datos: { nombre: string; nombreComercial: string | null; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
     try {
       if (editando === 'nueva') {
         const c = await crearCampania(marca, { id: nuevoIdLiquidacion(), ...datos })
@@ -1643,12 +1643,13 @@ function ModalCampania({
 }: {
   editando: Campania | 'nueva'
   onCerrar: () => void
-  onGuardar: (d: { nombre: string; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
+  onGuardar: (d: { nombre: string; nombreComercial: string | null; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
 }) {
   const esNueva = editando === 'nueva'
   const previa = editando === 'nueva' ? null : editando
 
   const [nombre, setNombre] = useState(previa?.nombre || '')
+  const [nombreComercial, setNombreComercial] = useState(previa?.nombreComercial || '')
   const [tipo, setTipo] = useState<TipoCampania>(tipoDe(previa))
   const [desde, setDesde] = useState(previa?.desde || '')
   const [hasta, setHasta] = useState(previa?.hasta || '')
@@ -1661,7 +1662,7 @@ function ModalCampania({
     if (!nombre.trim() || malLasFechas || guardando) return
     setGuardando(true)
     try {
-      await onGuardar({ nombre: nombre.trim(), tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
+      await onGuardar({ nombre: nombre.trim(), nombreComercial: nombreComercial.trim() || null, tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
     } finally {
       setGuardando(false)
     }
@@ -1685,6 +1686,14 @@ function ModalCampania({
     >
       <Field label="Nombre" hint="El que lo va a identificar dentro de seis meses: «Sale invierno ago-2026».">
         <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Sale invierno ago-2026" data-foco />
+      </Field>
+      {/* 🔑 **El nombre de arriba es el INTERNO y éste es el que se IMPRIME.** Van separados porque
+          tienen dos trabajos distintos: uno identifica la campaña dentro de seis meses y el otro
+          tiene que entrar en una etiqueta de 5 cm. ⛔ Vacío es válido: la etiqueta sale sólo con el
+          precio. Y vive en la campaña, ⛔ no en cada máquina: va impreso en miles de etiquetas y
+          tiene que ser uno solo. */}
+      <Field label="Nombre comercial" hint="Opcional. El que sale IMPRESO en la etiqueta, arriba del precio: «FERIA ZATTIA». Vacío = sólo el precio.">
+        <Input value={nombreComercial} onChange={(e) => setNombreComercial(e.target.value)} placeholder="FERIA ZATTIA" maxLength={40} />
       </Field>
       <Field label="Qué es" hint={TIPO_CAMPANIA[tipo].ayuda}>
         <Select value={tipo} onChange={(e) => setTipo(e.target.value as TipoCampania)}>

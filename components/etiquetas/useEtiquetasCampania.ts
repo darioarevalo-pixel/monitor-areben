@@ -29,8 +29,16 @@ export type PrecioCampania = { pid: string; nombre: string; precio: number; firm
 
 export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null }
 
+/** Lo que la etiqueta imprime arriba del precio. `null` = sólo el precio. */
+export type RotuloCampania = { id: string; nombre: string; nombreComercial: string | null }
+
 export interface EstadoCampania {
   campanias: CampaniaEti[]
+  /**
+   * El rótulo que va IMPRESO arriba del precio, tal como lo dejó quien armó la campaña. 🔑 Sale del
+   * servidor y ⛔ no de esta máquina: va en miles de etiquetas y tiene que ser uno solo.
+   */
+  rotulo: RotuloCampania | null
   /** pid → precio de campaña. El mapa es lo que consume el escaneo. */
   porPid: Record<string, PrecioCampania>
   /** Cuántos hay de cada precio: es el recuento por MESA, que es como se piensa una feria. */
@@ -48,6 +56,7 @@ export interface EstadoCampania {
 export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): EstadoCampania {
   const [campanias, setCampanias] = useState<CampaniaEti[]>([])
   const [items, setItems] = useState<PrecioCampania[]>([])
+  const [rotulo, setRotulo] = useState<RotuloCampania | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,6 +77,7 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): 
   const traerItems = useCallback(async () => {
     if (!activo || !liqEfectivo) {
       setItems([])
+      setRotulo(null)
       return
     }
     setCargando(true)
@@ -77,10 +87,12 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): 
       const d = await r.json().catch(() => null)
       if (!r.ok || !d?.ok) throw new Error((d && d.error) || 'No se pudieron leer los precios de la campaña.')
       setItems(d.items || [])
+      setRotulo(d.campania || null)
     } catch (e) {
       // 🔑 La lista se vacía al fallar, igual que la cola: seguir escaneando contra un mapa viejo
       // imprime precios que ya no son los de la campaña, y eso no se ve hasta que está en la percha.
       setItems([])
+      setRotulo(null)
       setError(e instanceof Error ? e.message : 'No se pudieron leer los precios de la campaña.')
     } finally {
       setCargando(false)
@@ -122,5 +134,5 @@ export function useEtiquetasCampania(marca: Marca, liq: string, activo = true): 
     return [...m.values()].sort((a, b) => a.precio - b.precio)
   }, [items])
 
-  return { campanias, porPid, porPrecio, cargando, error, liqEfectivo }
+  return { campanias, rotulo, porPid, porPrecio, cargando, error, liqEfectivo }
 }

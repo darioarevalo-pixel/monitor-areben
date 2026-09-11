@@ -147,6 +147,9 @@ function aCampania(row, conteo) {
     desde: d.desde || null,
     hasta: d.hasta || null,
     nota: d.nota || null,
+    // El rótulo para el cliente, el que sale impreso en la etiqueta. Distinto de `nombre`, que es
+    // el interno. Vacío es válido: la etiqueta sale sólo con el precio.
+    nombreComercial: d.nombreComercial || null,
     creadoPor: d.creadoPor || null,
     creado: d.creado || null,
     // Cuándo se trajeron por última vez las ventas del día al espejo, desde el botón de Resultado.
@@ -497,7 +500,7 @@ export default async function handler(req, res) {
       // feria de local ANTES de aplicar. Ver `preciosAEtiquetar`.
       const porAnticipado = String(req.query.precios || '') === '1';
       const [c, i] = await Promise.all([
-        supabase.from('liquidaciones').select('id, nombre, estado').eq('store', store).eq('id', liq).maybeSingle(),
+        supabase.from('liquidaciones').select('id, nombre, estado, datos').eq('store', store).eq('id', liq).maybeSingle(),
         // 🔴 `leerTodo` y ⛔ no un select pelado: PostgREST corta en 1.000 filas **sin avisar**, y
         // una campaña con más ítems que eso devolvería una lista corta que se ve igual que una
         // completa. La feria de septiembre son 376, pero el que venga después no se sabe.
@@ -516,7 +519,14 @@ export default async function handler(req, res) {
       if (porAnticipado) {
         return res.status(200).json({
           ok: true,
-          campania: { id: c.data.id, nombre: c.data.nombre },
+          // 🔑 **`nombreComercial` viaja y `nombre` también, y no son lo mismo**: el de arriba es el
+          // que se IMPRIME («FERIA ZATTIA») y el de abajo el interno, que es el que la pantalla usa
+          // para que quien etiqueta sepa qué campaña eligió.
+          campania: {
+            id: c.data.id,
+            nombre: c.data.nombre,
+            nombreComercial: (c.data.datos || {}).nombreComercial || null,
+          },
           items: preciosAEtiquetar((i || []).map((r) => r.datos)),
         });
       }
@@ -714,6 +724,8 @@ export default async function handler(req, res) {
         desde: c.desde ? String(c.desde) : null,
         hasta: c.hasta ? String(c.hasta) : null,
         nota: txtOrNull(c.nota),
+        // El rótulo para el cliente, el que va impreso en la etiqueta. Ver `renombrar`.
+        nombreComercial: txtOrNull(String(c.nombreComercial || '').trim().slice(0, 40)),
         creadoPor: yo,
         creado: Date.now(),
       };
@@ -846,6 +858,11 @@ export default async function handler(req, res) {
         desde,
         hasta,
         nota: b.nota === undefined ? d.nota || null : txtOrNull(b.nota),
+        // 🔑 Se recorta a 40: entra en los 5 cm de la etiqueta sin que `splitTextToSize` lo parta en
+        // tres renglones y le coma el lugar al precio, que es lo que la etiqueta viene a decir.
+        nombreComercial: b.nombreComercial === undefined
+          ? d.nombreComercial || null
+          : txtOrNull(String(b.nombreComercial || '').trim().slice(0, 40)),
       };
       const { error } = await supabase.from('liquidaciones')
         .update({ nombre, datos, updated_at: ahora }).eq('store', store).eq('id', id);

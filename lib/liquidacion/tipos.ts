@@ -105,6 +105,20 @@ export interface Liquidacion {
   desde: string | null
   hasta: string | null
   nota: string | null
+  /**
+   * Cómo se llama la acción **para el cliente**, y lo que sale impreso en la etiqueta arriba del
+   * precio: «FERIA ZATTIA».
+   *
+   * 🔑 **Es otra cosa que `nombre`**, que es el rótulo interno («Feria Septiembre 2026»): ése tiene
+   * que identificar la campaña dentro de seis meses, éste tiene que entrar en 5 × 2,5 cm y decirle
+   * algo a quien tiene la prenda en la mano. ⛔ Vacío es válido y es el default: la etiqueta sale
+   * sólo con el precio, que es como se decidió la feria de mesas.
+   *
+   * 🔴 **Vive en la CAMPAÑA y ⛔ no en cada máquina**: va impreso en ~1.800 etiquetas y tiene que ser
+   * uno solo. Dos personas etiquetando desde dos computadoras con un cartel distinto es el modo de
+   * falla que no se ve hasta que las prendas están en la mesa.
+   */
+  nombreComercial?: string | null
   creadoPor: string | null
   creado: number
   /**
