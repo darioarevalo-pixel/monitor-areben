@@ -106,17 +106,28 @@ suma un campo a la foto — y el test tiene un caso que fija exactamente eso.
   📌 `clavados` tiene la misma forma de id y el mismo agujero latente; ahí casi no muerde porque
   marcar un clavado es una decisión que se toma una vez. **Si alguna vez se vuelve un interruptor,
   hay que arreglarlo igual.**
-- 🔴 **La ⭐ arrancaba con alcance NULO mientras viajaba la lista de campañas.** `null` en
-  `destacados` ⛔ no es «todavía no sé»: es **la estrella GENERAL del producto**, otra marca. Un
-  click en esa ventana escribía la general, y la pantalla —que después pide las de la campaña— la
-  mostraba **apagada**: se ve exactamente como *«apreté y no guardó»*. Ahora el hook queda **quieto**
-  hasta saber de qué campaña es.
+- 🔴 🔑 **«Las marqué y no las veo destacadas» era una CARRERA, ⛔ no el guardado.** Reporte de
+  Bruno, 11-sep-2026 — y medido contra la base, **las 13 estaban guardadas**, todas cruzando con
+  ítems de la campaña. La pantalla pide las ⭐ **dos veces**: primero sin alcance (mientras viaja la
+  lista de campañas, y `null` ahí es la estrella **GENERAL**, que viene vacía) y después con la
+  campaña, que trae las 13. ⛔ **Nada garantizaba el orden de llegada**: si la vacía contestaba
+  segunda, su `setPorProducto` **pisaba las 13 con un mapa vacío** y quedaban todas apagadas con las
+  filas en la base. 🔑 **Por eso «a veces anda»** — depende de qué respuesta llega primero, y es lo
+  que hace que este defecto no aparezca nunca en una demo.
+  ⇒ Dos candados: **la respuesta viaja pegada a su alcance y la vieja se descarta**
+  (`useDestacados`, mismo arreglo que `useResumenRonda` en Diseños) y **el hook queda quieto** hasta
+  saber de qué campaña es, así que ⛔ ni siquiera hay un segundo pedido que pueda llegar tarde.
+  ⚠️ **Un `vivo` en el efecto ⛔ no alcanza**: el pedido viejo sigue corriendo y su `setState` es
+  perfectamente válido — sólo que contesta otra pregunta.
 - 🔴 **Y un fallo al marcar era MUDO.** `Estrella` hace `void onAlternar()`, así que una promesa
   rechazada ⛔ no la ve nadie: el botón vuelve a su lugar y la pantalla queda igual que si no
   hubieras apretado — indistinguible de «no pasó nada», que es como se reporta un error del
   servidor. Ahora avisa, como ya hacía `MarcaEstrella` en Análisis.
-  🔑 Los dos están fijados en `tests/precios-desglose-gesto.test.tsx`, que **monta la pantalla y
-  clickea**: es el único lugar donde estos dos defectos se pueden ver.
+  🔑 Todo esto está fijado en dos tests que **montan la pantalla**: `precios-desglose-gesto.test.tsx`
+  (mockea el hook y clickea) y `precios-estrella-se-ve.test.tsx`, que corre **el hook de verdad** y
+  reemplaza `apiFetch` — ahí adentro la respuesta vacía se hace llegar tarde **a propósito**, para
+  que la carrera ⛔ no sea intermitente. 🔴 **El tramo que iba del JSON del handler al ★ de la fila
+  ⛔ no lo miraba ningún test, y es exactamente donde vivía el defecto.**
 - ⚠️ **`TableWrap` YA es el `<table>`** (`components/ui/Table.tsx`), así que esta pantalla nació con
   uno propio adentro y quedó `table > table`: HTML inválido, y encima le saca la cabecera pegajosa y
   la densidad del kit. **Lo destapó el test de gestos al montar la pantalla de verdad** — ningún test
