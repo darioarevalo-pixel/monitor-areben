@@ -59,6 +59,26 @@ existe** y que el test de autorización fija en el sentido contrario.
 2. ▶️ **Publicar la novedad** `n1789046242845_7xbdsh` («Precios de campaña: a qué precio va cada
    producto»), que **sigue en `borrador`** — medido contra `?recurso=sistema`.
 
+🔴 **Y la ⭐ ESTUVO ROTA hasta hoy, sin que nada lo dijera.** Prenderla, apagarla y volver a
+prenderla **el mismo día** chocaba contra la clave primaria (el id llevaba sólo la fecha, copiado de
+`clavados`), y el handler leía ese choque como «ya estaba» ⇒ contestaba **200 sobre una estrella que
+⛔ no quedó marcada**. ⚠️ **Los tests y las sondas de la migración estaban las dos en verde**:
+ninguna vuelve a marcar en el mismo día. Lo cazó **ejercer el verbo contra la base**. Arreglado en
+`c186f15` (el id lleva el instante; el handler mira el nombre del índice, ⛔ no «duplicate key»), con
+`tests/destacados.test.ts` y 3 mutantes muertos. El relato, en `docs/secciones/precios.md` § Lo que
+ya se rompió acá. 📌 **`clavados` tiene la misma forma de id y el mismo agujero latente**; ahí casi
+no muerde porque marcar se hace una vez.
+
+✅ **Y ya está ejercida en PROD por Bruno**: `CAMPERA REVOLUTION` (pid 1012499) quedó destacada en la
+feria el 11-sep 11:46, con el id del formato nuevo ⇒ el arreglo está deployado y anduvo.
+
+▶️ **Lo que sigue sin verificarse, y es lo mismo que en Ventas de Marketing**: ⛔ **nadie con perfil
+de Marketing caminó la pantalla.** Todo lo ejercido fue con admin.
+
+📌 **Dos cosas para mirar antes del lunes, medidas el 11-sep**: quedan **65 precios en `definido`**
+(la pantalla los muestra como **Provisorio** y avisa arriba), y **10 de los 351 están hoy en CERO de
+stock** — comunicarlos es prometer algo que no está.
+
 ▶️ ⛔ **Nadie con perfil de Marketing la caminó**: ⛔ no pude entrar a producción —la credencial del
 Monitor es de Bruno— así que lo verificado es el router de prod contestando por los dos recursos
 nuevos, la proyección corrida contra los 376 ítems reales de la feria (**351 renglones = 286 + 65**,
