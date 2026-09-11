@@ -18,7 +18,8 @@ se vende presencial— así que la tienda ⛔ no sirve de lista de precios.
 - ⛔ **No tiene tablas propias.** Lee `liquidaciones` + `liquidacion_items` (de Liquidación),
   `inventario` y `sync_state` (el espejo) y `destacados` (las ⭐).
 - Tests: `tests/precios-marketing.test.ts` (la lista blanca y el desglose, 10 mutantes),
-  `tests/destacados.test.ts` (la ⭐, 3 mutantes) y el bloque
+  `tests/destacados.test.ts` (la ⭐, 3 mutantes), `tests/precios-desglose-gesto.test.tsx` (los
+  clicks, 4 mutantes) y el bloque
   `_precios · la puerta de Marketing, y la que sigue cerrada` de `tests/handlers-autorizacion.test.ts`.
 
 ## 🔴 Por qué existe en vez de darle `liquidacion` a Marketing
@@ -66,6 +67,13 @@ suma un campo a la foto — y el test tiene un caso que fija exactamente eso.
   351): un pedido por producto serían 351 requests para una tabla que se mira de arriba abajo.
   ⛔ **Un producto sin variantes ⛔ no se abre**: `Variante Única` es como GN dice «no tiene», ⛔ no es
   un talle. Son 68 de los 351.
+  🆕 **Y lo abre la FILA ENTERA, ⛔ no sólo el número** (Bruno, 11-sep: *«cuando apretemos en el
+  producto»*). Nació con el número como único botón: son 30 px que hay que encontrar, y el gesto que
+  la gente hace es apretar el producto. 🔴 **Eso convirtió tres cosas de la fila en trampas**: la ⭐,
+  la foto y el propio número se clickean, y sin `stopPropagation` apretar el número dispara **el
+  botón y la fila** —abre y cierra en el mismo click, que se lee como «no anda»—. Está fijado en
+  `tests/precios-desglose-gesto.test.tsx`, que monta la pantalla y **clickea de verdad**: 4 mutantes,
+  4 muertos.
 - ⛔ **Los `descartado` y los `pendiente` ⛔ no entran.** Un descartado se miró y se decidió que NO
   va (25 en la feria): comunicarlo es prometer algo que no está en la mesa. Un pendiente ⛔ no tiene
   precio, y un renglón sin número en una lista de precios es una pregunta abierta, no información.
@@ -98,6 +106,11 @@ suma un campo a la foto — y el test tiene un caso que fija exactamente eso.
   📌 `clavados` tiene la misma forma de id y el mismo agujero latente; ahí casi no muerde porque
   marcar un clavado es una decisión que se toma una vez. **Si alguna vez se vuelve un interruptor,
   hay que arreglarlo igual.**
+- ⚠️ **`TableWrap` YA es el `<table>`** (`components/ui/Table.tsx`), así que esta pantalla nació con
+  uno propio adentro y quedó `table > table`: HTML inválido, y encima le saca la cabecera pegajosa y
+  la densidad del kit. **Lo destapó el test de gestos al montar la pantalla de verdad** — ningún test
+  de núcleo mira el HTML. 📌 El mismo patrón está en `Revision.tsx`, `VotacionPanel.tsx` y Ventas
+  mensuales; ⛔ no se tocaron.
 - ⚠️ **El `.env` local ⛔ no tiene `ZATTIA_SUPABASE_SERVICE_KEY`, sólo la anon.** Un script corrido
   desde esta máquina **puede LEER Zattia por PostgREST y ⛔ no escribir**: contesta
   `permission denied for table …` (42501). ⛔ No es un problema de la tabla ni de RLS — los GRANT de

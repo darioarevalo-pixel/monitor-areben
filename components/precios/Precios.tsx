@@ -231,9 +231,16 @@ export function Precios() {
         <KpiCard label="★ Destacados" value={resumen.estrellas} />
       </div>
 
+      {/*
+          ⛔ **Sin un `<table>` propio adentro: `TableWrap` YA es la tabla** (`components/ui/Table.tsx`
+          renderiza `<table className="mo-table">`). Meterle otro deja `table > table`, que es HTML
+          inválido y le saca a la tabla la cabecera pegajosa y la densidad del kit. Lo destapó el
+          test de gestos al montar la pantalla de verdad.
+          ⚠️ El patrón está repetido en `Revision.tsx`, `VotacionPanel.tsx` y Ventas mensuales, que
+          ⛔ no se tocan acá.
+      */}
       {!lista ? <Esqueleto filas={8} /> : (
         <TableWrap maxHeight={640}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <THead>
               <Tr>
                 <Th width={44}> </Th>
@@ -271,7 +278,6 @@ export function Precios() {
                 </Tr>
               )}
             </TBody>
-          </table>
         </TableWrap>
       )}
 
@@ -295,7 +301,20 @@ function Fila({
   const hayQueDesplegar = tieneVariantes(item)
   return (
     <>
-    <Tr>
+    {/*
+      🔑 **La fila ENTERA abre el desglose** (pedido de Bruno, 11-sep): *«cuando apretemos en el
+      producto, que se pueda desplegar el stock con las variantes por talle y color»*. Nació con el
+      número de stock como único botón y es un blanco de 30 px que hay que encontrar — el gesto que
+      la gente hace es apretar el producto, que es la fila. El número sigue siendo botón igual: es
+      el que se ve con el teclado, y dice con la flechita que ahí hay algo que abrir.
+
+      ⛔ **El que ⛔ no tiene variantes ⛔ no se abre y ⛔ no dice que se puede**: sin `onClick` no hay
+      cursor de mano. Una fila que invita a apretarla y no hace nada se lee como que está rota.
+    */}
+    <Tr
+      onClick={hayQueDesplegar ? onAbrir : undefined}
+      style={hayQueDesplegar ? { cursor: 'pointer' } : undefined}
+    >
       <Td>
         <Estrella marcado={marcado} nombre={item.nombre} onAlternar={onAlternar} titulo="de esta campaña" />
       </Td>
@@ -305,7 +324,8 @@ function Fila({
           // CUÁL. Mismo camino que en Liquidación; la URL guardada ya es la de 1024 px.
           <button
             type="button"
-            onClick={onFoto}
+            // 🔴 La fila entera abre el desglose: sin esto, mirar la foto lo abre también.
+            onClick={(e) => { e.stopPropagation(); onFoto() }}
             style={{ border: 'none', background: 'none', padding: 0, cursor: 'zoom-in', display: 'block' }}
             aria-label={`Ver la foto de ${item.nombre}`}
           >
@@ -344,7 +364,9 @@ function Fila({
         {hayQueDesplegar ? (
           <button
             type="button"
-            onClick={onAbrir}
+            // 🔴 Sin el `stopPropagation` esto se dispara DOS veces —el botón y la fila— y el
+            // desglose se abre y se cierra en el mismo click: el defecto se ve como «no anda».
+            onClick={(e) => { e.stopPropagation(); onAbrir() }}
             aria-expanded={abierto}
             aria-label={`Ver el stock por talle de ${item.nombre}`}
             style={{
