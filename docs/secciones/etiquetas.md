@@ -1,7 +1,9 @@
 # Etiquetas — ficha de sección
 
 Sección `etiquetas`, área `local`. Imprime las etiquetas de 5 × 2,5 cm de las prendas (Code 128) en
-una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 17-ago-2026 incluye la
+una Zebra, cargando cantidades a mano o escaneando con el lector. Desde el 11-sep-2026 tiene la
+pestaña **Precio de campaña**, que escanea contra una liquidación y saca el precio **de la campaña**,
+no de Tienda Nube (ver abajo: es la única que no depende de que el precio esté puesto en la tienda). Desde el 17-ago-2026 incluye la
 **cola de reetiquetado**: qué prenda hay que volver a etiquetar porque le cambió el precio. Desde el
 3-sep-2026 la pestaña de SKU imprime además la **etiqueta de bolsa de 10 × 15 cm**, con los SKU de
 todos los colores de un producto juntos. Desde el 9-sep-2026 la **etiqueta de formas de pago** ya no
@@ -37,6 +39,58 @@ es sólo de la pestaña de Precio: va detrás de cualquiera de las dos que dicen
   se etiqueta con precio y en el control de exhibición sale «sin precio en Tienda Nube».
 
 ## Reglas que el código no dice
+
+### 🎪 Precio de campaña — la pestaña que etiqueta ANTES de aplicar (11-sep-2026)
+
+Pedido de Bruno, armando la feria de Zattia: *«pensar en etiqueta una sección de carga automática de
+etiqueta en etiqueta libre, y que sea escaneo y que imprima la etiqueta de feria de ese producto, que
+venga vinculada con los precios definidos en monitor»*.
+
+- 🔴 **Es la ÚNICA pestaña donde el precio ⛔ no sale de Tienda Nube, y no es comodidad.** La regla de
+  toda la sección —«la campaña dice *cuáles*, TN dice *a cuánto*»— supone que el precio ya está puesto
+  en la tienda. **En una feria de local no lo está y ⛔ no lo va a estar**: las prendas se **ocultan**
+  en Tienda Nube justo para que el precio de remate no se publique online. Preguntarle a TN ahí no
+  devuelve un precio viejo: devuelve el del sale anterior, o nada.
+  ⇒ **etiquetar deja de depender de aplicar**, que era lo que ataba las 1.282 prendas del local al
+  único día del switch.
+- 🔑 **Entra por la MISMA llave** (`?recurso=liquidacion&etiquetas=1`), con `&precios=1`: el permiso
+  es el que el local ya tiene. Lo que viaja lo arma `preciosAEtiquetar` (`api/_liquidacion.js`) y es
+  **lista blanca de cuatro campos** — `pid`, `nombre`, `precio`, `firme`. 🔴 **La foto congelada del
+  ítem trae costo, markup, margen y ventas, y la feria se vende AL COSTO**: un `select` en vez de la
+  lista blanca publica el margen de la casa. Mismo criterio que `listaParaMarketing`
+  (`lib/precios/core.core.js`), de donde se **importan** `ESTADOS_VISIBLES` y `esFirme` en vez de
+  copiarlos: dos definiciones de «firme» que se separen dejan a una etiquetando lo que la otra
+  todavía no aprobó.
+- 🔑 **`firme` viaja y ⛔ no se esconde, y los provisorios NO se imprimen por default.** Un `definido`
+  es un precio que nadie revisó: cambiarlo lo devuelve a la cola. **Una etiqueta de más ⛔ no es
+  trabajo de más: es trabajo que hay que DESHACER** —ir a sacarla de la percha—, que es el costo que
+  Bruno nombró el 10-sep sobre la orden de etiquetado. La tilde está y arranca apagada, con la
+  cuenta de cuántos hay sin revisar al lado.
+- 🔑 **⛔ NO anota la etiqueta como hecha** (`etiquetas_impresas`). La cola compara lo que dice la
+  etiqueta contra el precio de **Tienda Nube**; sellar acá el precio de campaña —que en TN ⛔ no está,
+  porque la prenda se oculta— marcaría las 1.282 como «desactualizadas» al instante. Una etiqueta de
+  feria ⛔ no es un reetiquetado: es una etiqueta paralela que se saca cuando la feria termina.
+- 🔑 **La etiqueta es SÓLO EL PRECIO, sin nombre** (decisión de Bruno). En una feria de mesas la
+  prenda ⛔ no lleva su propia ficha: lleva el número de la mesa. Por eso dibuja con `buildLibrePdf`
+  y ⛔ no con `buildEtiquetasPdf`, y por eso **cualquier etiqueta de esa mesa sirve para cualquier
+  prenda de esa mesa** ⇒ imprimir de más es gratis, pegar de más no. El código de barras es una
+  tilde aparte, para el caso en que la etiqueta tape la que la prenda ya tiene.
+- 🔑 **Las COPIAS por escaneo son lo que hace que esto entre en un día.** El local de Zattia tiene
+  **294 modelos y 1.282 prendas**: 4,4 prendas por modelo, todas a la misma mesa ⇒ se escanea **una
+  prenda por modelo** y se piden las copias que tenga. 294 escaneos, ⛔ no 1.282.
+
+🔴 **POR QUÉ ESTO Y NO LAS DOS ALTERNATIVAS OBVIAS — medido el 11-sep-2026 sobre el local de Zattia:**
+
+- **«voy con las 17 tiradas y saco prenda por prenda»**: **el perchero ⛔ no ordena por mesa.** Los
+  380 TOP del local caen en **13 mesas distintas**, los SWEATER en 9, las MINI en 6 ⇒ en un perchero
+  de tops hacen falta casi todas las pilas a la vez. De 28 familias, sólo 9 caen en una sola mesa y
+  entre todas son 78 prendas de 1.282.
+- **«leo el precio que la prenda ya tiene y lo convierto»**: ⛔ **esa tabla no existe.** El precio de
+  hoy determina la mesa sin ambigüedad en el **26%** de las prendas y el de lista en el **28%** — una
+  regla de conversión se equivocaría en tres de cada cuatro.
+- ⇒ **la consulta por modelo es inevitable.** Lo que hace la pestaña es que **la consulta y la
+  etiqueta sean el mismo acto**: se escanea, sale el número, y ⛔ no hay ninguna pila que elegir.
+
 
 - 🔑 **La pestaña de SKU etiqueta BOLSAS, no prendas** (Bruno, 3-sep-2026). El depósito guarda una
   bolsa por color y cada una lleva su SKU pegado, así que un producto de cuatro colores son cuatro

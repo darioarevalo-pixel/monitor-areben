@@ -383,7 +383,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "etiquetas",
     "area": "local",
     "label": "Etiquetas",
-    "info": "Etiquetas nombradas por lo que dicen (información de producto · precio · precio rebajado · SKU · libre), y la cola de lo que hay que reetiquetar.",
+    "info": "Etiquetas nombradas por lo que dicen (información de producto · precio · precio rebajado · SKU · precio de campaña · libre), y la cola de lo que hay que reetiquetar.",
     "brands": [
       "bdi",
       "zattia"
@@ -418,6 +418,11 @@ export const PERM_CAT: PermCat[] = [
         "key": "cola",
         "label": "Para reetiquetar",
         "info": "La cola de prendas cuyo precio cambió después de la última etiqueta."
+      },
+      {
+        "key": "campania",
+        "label": "Precio de campaña",
+        "info": "Se escanea la prenda y sale su etiqueta con el precio de la campaña: sólo el número, sin nombre. Sirve para etiquetar ANTES de que el precio esté puesto en la tienda."
       }
     ]
   },

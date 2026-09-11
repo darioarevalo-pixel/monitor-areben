@@ -7,6 +7,7 @@ import { BotonActualizarInventario } from '@/components/productos/BotonActualiza
 import { BotonRecargar } from '@/components/productos/BotonRecargar'
 import { useEtiquetasTn } from './useEtiquetasTn'
 import { pidsDe, useColaReetiquetado, type EstadoCola, type PrecioImpreso } from './useColaReetiquetado'
+import { useEtiquetasCampania, type PrecioCampania } from './useEtiquetasCampania'
 import { etiquetasDesactualizadas, preciosDesalineados, type PrecioDesalineado } from '@/lib/etiquetas/cola'
 import {
   agruparCantidades,
@@ -59,6 +60,8 @@ const keyCant = (slot: string, marca: Marca) => `monitor_etiquetas_${slot}_${mar
 const keyAutoClear = (marca: Marca) => `monitor_eti_autoclear_${marca}`
 const keyFP = (marca: Marca) => `monitor_eti_fp_v3_${marca}`
 const keyCfgSku = (marca: Marca) => `monitor_eti_sku_cfg_${marca}`
+const keyCampaniaLiq = (marca: Marca) => `monitor_eti_campania_liq_${marca}`
+const keyCampaniaTirada = (marca: Marca) => `monitor_eti_campania_tirada_${marca}`
 function lsGet<T>(key: string, fallback: T): T {
   try {
     const r = localStorage.getItem(key)
@@ -398,6 +401,8 @@ export function Etiquetas() {
 
       {sub === 'libre' ? (
         <LibreEditor />
+      ) : sub === 'campania' ? (
+        <PrecioDeCampania vars={vars} marca={marca} />
       ) : (
         <ModoPanel
           key={sub === 'cola' ? `cola:${filtroCampania}` : sub}
@@ -982,6 +987,231 @@ function FPEditor({ fpLines, guardarFP, catalogoListo }: { fpLines: LineaEtiquet
         <PreviaPdf construir={construirFP} alt="Vista previa de la etiqueta de formas de pago" espera={400} vacio="(vacía)" />
         <Button size="sm" variant="outline" disabled={!catalogoListo} onClick={imprimirSolo}>Imprimir solo formas de pago…</Button>
       </div>
+    </Card>
+  )
+}
+
+// ── 🎪 PRECIO DE CAMPAÑA: escanear una prenda y que salga su etiqueta con el precio de la campaña ──
+//
+// Pedido de Bruno (11-sep-2026), sobre cómo etiquetar el local en un día:
+//   «pensar en etiqueta una sección de carga automática de etiqueta en etiqueta libre, y que sea
+//    escaneo y que imprima la etiqueta de feria de ese producto, que venga vinculada con los
+//    precios definidos en monitor»
+//
+// 🔴 **LO QUE ESTO RESUELVE, MEDIDO — y por qué las dos alternativas no servían.** El local tiene
+// **294 modelos · 1.282 prendas repartidas en 17 mesas**, y Bruno tiene 18 percheros:
+//
+//   · **«voy con las etiquetas y saco una por una»** ⇒ hay que llevar las 17 tiradas encima y
+//     elegir la correcta prenda por prenda. **El perchero ⛔ no ordena por mesa**: los 380 TOP del
+//     local caen en **13 mesas distintas**, los SWEATER en 9, las MINI en 6. O sea: en un perchero
+//     de tops hacen falta casi todas las pilas a la vez. Eso es el quilombo que él nombró.
+//   · **«leo el precio que ya tiene la prenda y lo convierto»** ⇒ ⛔ no existe esa tabla. Medido:
+//     el precio de hoy determina la mesa sin ambigüedad en **26%** de las prendas, y el de lista en
+//     **28%**. Una regla de conversión se equivocaría en tres de cada cuatro prendas.
+//
+// ⇒ **la consulta es inevitable, y son ~294** (una por modelo, no una por prenda: 4,4 prendas caen
+// por consulta). Lo que hace esta pestaña es que la consulta **y la etiqueta sean el mismo acto**:
+// se escanea, sale el número, y ⛔ no hay ninguna pila que elegir.
+//
+// 🔑 **El precio sale de la CAMPAÑA, ⛔ no de Tienda Nube** —ver `useEtiquetasCampania`—, y por eso
+// esto se puede hacer el sábado con la feria arrancando el lunes: etiquetar deja de depender de
+// aplicar.
+//
+// 🔑 **⛔ NO anota la etiqueta como hecha.** La cola de reetiquetado compara lo que dice la etiqueta
+// contra el precio de Tienda Nube; sellar acá el precio de feria —que en TN ⛔ no está, porque la
+// prenda se oculta— marcaría las 1.282 como «desactualizadas» al instante. La feria ⛔ no es un
+// reetiquetado: es una etiqueta paralela que se saca cuando la feria termina.
+function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }) {
+  const [liq, setLiq] = useState(() => lsGet(keyCampaniaLiq(marca), ''))
+  const [copias, setCopias] = useState('1')
+  const [conBarras, setConBarras] = useState(false)
+  const [conProvisorios, setConProvisorios] = useState(false)
+  const [feedback, setFeedback] = useState<{ ok: boolean; tono?: 'warn'; html: string } | null>(null)
+  const [tirada, setTirada] = useState<Record<string, number>>(() => lsGet(keyCampaniaTirada(marca), {}))
+  const scanRef = useRef<HTMLInputElement>(null)
+  const camp = useEtiquetasCampania(marca, liq)
+
+  useEffect(() => {
+    lsSet(keyCampaniaLiq(marca), liq)
+  }, [liq, marca])
+
+  const anotarTirada = (precio: number, n: number) => {
+    setTirada((prev) => {
+      const sig = { ...prev, [String(precio)]: (prev[String(precio)] || 0) + n }
+      lsSet(keyCampaniaTirada(marca), sig)
+      return sig
+    })
+  }
+
+  const onScan = async () => {
+    const inp = scanRef.current
+    if (!inp) return
+    const code = inp.value.trim()
+    inp.value = ''
+    if (!code) return
+    const n = Math.max(1, Math.min(50, Number(copias) || 1))
+    const v = resolverScan(vars, code)
+    if (!v) {
+      setFeedback({ ok: false, html: `✗ No se encontró ningún producto con el código «${code}».` })
+      inp.focus()
+      return
+    }
+    const item: PrecioCampania | undefined = camp.porPid[v.pid]
+    // 🔴 **Éste es el freno que importa.** Una prenda que no está en la feria ⛔ no tiene precio de
+    // mesa, y la alternativa silenciosa —imprimir algo igual— la cuelga con un número inventado.
+    if (!item) {
+      setFeedback({ ok: false, html: `✗ <b>${v.name || ''}</b> no está en la feria: no lleva etiqueta de mesa.` })
+      inp.focus()
+      return
+    }
+    if (!item.firme && !conProvisorios) {
+      setFeedback({
+        ok: false,
+        tono: 'warn',
+        html: `⚠️ <b>${item.nombre}</b> tiene precio <b>provisorio</b> ($${Math.round(item.precio).toLocaleString('es-AR')}): nadie lo revisó todavía y puede cambiar. Si igual lo querés etiquetar, tildá la opción de arriba.`,
+      })
+      inp.focus()
+      return
+    }
+    const pdf = await buildLibrePdf({ grande: false, copias: n, barcode: conBarras ? String(v.barcode || '') : '', precio: item.precio, lineas: [] })
+    if (pdf) imprimirPdf(pdf)
+    anotarTirada(item.precio, n)
+    setFeedback({
+      ok: true,
+      tono: item.firme ? undefined : 'warn',
+      html: `✓ ${n === 1 ? '1 etiqueta' : `${n} etiquetas`} de <b>$${Math.round(item.precio).toLocaleString('es-AR')}</b> · ${item.nombre}${item.firme ? '' : ' <b>(provisorio)</b>'}`,
+    })
+    inp.focus()
+  }
+
+  const provisorios = camp.porPrecio.reduce((a, m) => a + (m.modelos - m.firmes), 0)
+  const totalTirada = Object.values(tirada).reduce((a, b) => a + b, 0)
+  const filas = Object.entries(tirada)
+    .map(([p, n]) => ({ precio: Number(p), n }))
+    .sort((a, b) => a.precio - b.precio)
+
+  return (
+    <Card>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>🎪 Etiquetas de feria (escaneo)</div>
+      <div style={{ fontSize: 12, color: color.mut2, marginBottom: 14 }}>
+        Escaneá una prenda y sale <b>su etiqueta de mesa: sólo el precio</b>, sacado de la campaña. No hace falta que el precio esté puesto en la tienda.
+      </div>
+
+      {camp.error && <Notice tone="danger" icon="✗">{camp.error}</Notice>}
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
+        <label style={{ fontSize: 12, color: color.mut }}>Campaña<br />
+          <Select value={camp.liqEfectivo} onChange={(e) => setLiq(e.target.value)} style={{ width: 300, maxWidth: '100%' }}>
+            <option value="">Elegí una campaña…</option>
+            {camp.campanias.map((c) => (
+              <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+          </Select>
+        </label>
+        <label style={{ fontSize: 12, color: color.mut }}>Copias por escaneo<br />
+          <input type="number" value={copias} min={1} max={50} onChange={(e) => setCopias(e.target.value)} className="mo-input mo-input--num" inputMode="numeric" style={{ width: 110 }} />
+        </label>
+      </div>
+
+      {/* 🔑 Las copias son la única forma de que 1.282 prendas no sean 1.282 escaneos: el modelo trae
+          4,4 prendas en promedio y todas van a la misma mesa. Se escanea una y se piden las que hay. */}
+      <div style={{ fontSize: 12, color: color.mut2, marginTop: -6, marginBottom: 12 }}>
+        Escaneá <b>una prenda por modelo</b> y pedí tantas copias como unidades tenga: todas van a la misma mesa.
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+        <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={conBarras} onChange={(e) => setConBarras(e.target.checked)} />
+          Incluir el código de barras <span style={{ color: color.mut2 }}>(si la etiqueta tapa la que ya tiene)</span>
+        </label>
+        <label style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <input type="checkbox" style={{ accentColor: 'var(--mo-brand-solid)' }} checked={conProvisorios} onChange={(e) => setConProvisorios(e.target.checked)} />
+          Imprimir también los <b>provisorios</b>{provisorios > 0 ? ` (${provisorios} sin revisar)` : ''}
+        </label>
+      </div>
+
+      {!camp.liqEfectivo ? (
+        <Notice tone="brand" icon="🎪">Elegí la campaña para empezar a escanear.</Notice>
+      ) : camp.cargando ? (
+        <Notice tone="neutral" icon="⏳">Leyendo los precios de la campaña…</Notice>
+      ) : (
+        <>
+          <input
+            ref={scanRef}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void onScan()
+            }}
+            placeholder="Escaneá acá el código de barras…"
+            style={{ width: 320, maxWidth: '100%', fontSize: 15, padding: '9px 12px', border: `2px solid ${color.brandSolid}`, borderRadius: 8, boxSizing: 'border-box' }}
+          />
+          {feedback && (
+            <div style={{ marginTop: 10 }}>
+              <Notice tone={feedback.ok ? 'success' : feedback.tono === 'warn' ? 'warning' : 'danger'} icon={feedback.ok ? '✓' : feedback.tono === 'warn' ? '⚠️' : '✗'}>
+                <span dangerouslySetInnerHTML={{ __html: feedback.html }} />
+              </Notice>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 18 }}>
+            {/* 🔑 **Las mesas de la campaña, no los productos.** Una feria se piensa por mesa: lo que
+                hace falta saber antes de empezar es cuántos carteles distintos hay. */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 6 }}>
+                LAS MESAS DE LA CAMPAÑA ({camp.porPrecio.length})
+              </div>
+              <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+                <tbody>
+                  {camp.porPrecio.map((m) => (
+                    <tr key={m.precio}>
+                      <td style={{ padding: '2px 12px 2px 0', fontWeight: 700 }}>${Math.round(m.precio).toLocaleString('es-AR')}</td>
+                      <td style={{ padding: '2px 0', color: color.mut2 }}>
+                        {m.modelos} {m.modelos === 1 ? 'modelo' : 'modelos'}
+                        {m.modelos > m.firmes && <span style={{ color: '#b45309' }}> · {m.modelos - m.firmes} provisorio{m.modelos - m.firmes === 1 ? '' : 's'}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* La tirada de hoy: cuántas etiquetas salieron de cada mesa. Sobrevive a un refresh —es
+                lo único que dice cuánto se avanzó, y la jornada dura más que una pestaña abierta. */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 6 }}>
+                IMPRESAS EN ESTA MÁQUINA ({totalTirada})
+              </div>
+              {filas.length === 0 ? (
+                <div style={{ fontSize: 13, color: color.mut2 }}>Todavía no se imprimió ninguna.</div>
+              ) : (
+                <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {filas.map((f) => (
+                      <tr key={f.precio}>
+                        <td style={{ padding: '2px 12px 2px 0', fontWeight: 700 }}>${f.precio.toLocaleString('es-AR')}</td>
+                        <td style={{ padding: '2px 0', color: color.mut2 }}>{f.n}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {totalTirada > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    setTirada({})
+                    lsSet(keyCampaniaTirada(marca), {})
+                  }}
+                >
+                  Empezar de nuevo la cuenta
+                </Button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </Card>
   )
 }

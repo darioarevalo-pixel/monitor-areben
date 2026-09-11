@@ -19,7 +19,7 @@ export type ModoEtiqueta = 'dep' | 'loc' | 'promo' | 'sku'
 export type Slot = ModoEtiqueta | 'cola'
 
 /** Las pestañas de la pantalla, en orden. `libre` no carga cantidades: es un editor. */
-export const PESTANIAS = ['dep', 'loc', 'promo', 'cola', 'sku', 'libre'] as const
+export const PESTANIAS = ['dep', 'loc', 'promo', 'cola', 'sku', 'campania', 'libre'] as const
 export type Pestania = (typeof PESTANIAS)[number]
 
 /**
@@ -63,18 +63,23 @@ export const ETIQUETA: Record<ModoEtiqueta, { emoji: string; nombre: string; dic
 }
 
 /**
- * Las dos pestañas que no son un dibujo: una es una lista y la otra un editor. Van acá y no en
- * `ETIQUETA` porque no tienen `dice` —no hay una etiqueta que describir— y meterlas ahí obligaría a
- * inventarles uno.
+ * Las tres pestañas que no son un dibujo de `ETIQUETA`: una lista, un escaneo contra una campaña y
+ * un editor. Van acá porque no tienen `dice` —no hay una etiqueta que describir— y meterlas ahí
+ * obligaría a inventarles uno.
+ *
+ * 🔑 **`campania` se llama por lo que DICE la etiqueta —el precio de la campaña—, ⛔ no por dónde se
+ * usa.** Dibuja la etiqueta LIBRE: sólo el precio, sin nombre. Lo decidió Bruno para la feria de
+ * mesas, donde la prenda ⛔ no lleva su propia ficha: lleva el número de la mesa en la que está.
  */
-const PESTANIA_EXTRA: Record<'cola' | 'libre', { emoji: string; nombre: string }> = {
+const PESTANIA_EXTRA: Record<'cola' | 'campania' | 'libre', { emoji: string; nombre: string }> = {
   cola: { emoji: '🔁', nombre: 'Para reetiquetar' },
+  campania: { emoji: '🎪', nombre: 'Precio de campaña' },
   libre: { emoji: '✏️', nombre: 'Libre' },
 }
 
 /** Cómo se llama cada pestaña, con su ícono. */
 export function rotuloPestania(p: Pestania): { emoji: string; nombre: string } {
-  return p === 'cola' || p === 'libre' ? PESTANIA_EXTRA[p] : ETIQUETA[p]
+  return p === 'cola' || p === 'campania' || p === 'libre' ? PESTANIA_EXTRA[p] : ETIQUETA[p]
 }
 
 /**

@@ -56,6 +56,11 @@ import { armarCola } from '../lib/etiquetas/cola.core.js';
 import { ofertasColgadas } from '../lib/liquidacion/colgadas.core.js';
 // Qué clase de cambio de precio es la campaña: la lista de tipos válidos y su default.
 import { TIPOS_CAMPANIA, tipoDe } from '../lib/liquidacion/tipo.core.js';
+// Qué ítems tienen precio comunicable y cuál de ellos ya pasó por una segunda mirada. **Se importan,
+// ⛔ no se copian**: es exactamente la misma pregunta que contesta la pantalla de Precios de
+// Marketing, y dos definiciones de «firme» que se separen dejan a una de las dos etiquetando lo que
+// la otra todavía no aprobó.
+import { ESTADOS_VISIBLES, esFirme } from '../lib/precios/core.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -179,6 +184,46 @@ export function pidsAEtiquetar(items, estadoCampania) {
     ? (e) => e === 'aplicado' || e === 'confirmado'
     : (e) => e === 'aplicado';
   return (items || []).filter((i) => vale(i.estado)).map((i) => i.pid);
+}
+
+/**
+ * ETIQUETAR POR ANTICIPADO: el precio sale de la CAMPAÑA, ⛔ no de Tienda Nube.
+ *
+ * 🔴 **Es la excepción al encabezado de arriba, y tiene un motivo que no es comodidad.** La regla
+ * general —«la campaña dice *cuáles*, el precio lo pone Tienda Nube»— supone que el precio ya está
+ * puesto en la tienda. **En una feria de local no lo está y ⛔ no lo va a estar**: los productos se
+ * OCULTAN en Tienda Nube justo para que el precio de remate no se publique online. Preguntarle a TN
+ * en ese caso ⛔ no devuelve un precio viejo: devuelve el del sale anterior, o nada.
+ *
+ * ⇒ acá la campaña contesta **cuáles y a cuánto**, y la etiqueta se puede imprimir **días antes** de
+ * aplicar. Eso es lo que separa etiquetar de aplicar, que era lo que ataba el etiquetado del local
+ * al domingo del switch.
+ *
+ * 🔑 **Lista blanca, por el mismo motivo que `listaParaMarketing`**: la foto congelada del ítem trae
+ * **costo, markup, margen y ventas** y la feria se vende al costo. Salen cuatro campos y ninguno es
+ * el costo. Un campo se agrega ACÁ o no viaja.
+ *
+ * 🔑 **`firme` viaja y ⛔ no se esconde.** Un `definido` es un precio que nadie miró todavía:
+ * cambiarlo lo devuelve a la cola. Pegarle a una prenda una etiqueta con un número que se puede
+ * mover ⛔ no es trabajo de más, es trabajo que después hay que DESHACER —sacar la etiqueta de la
+ * percha—, que es el costo que Bruno nombró el 10-sep sobre la orden de etiquetado.
+ */
+export function preciosAEtiquetar(items) {
+  const out = [];
+  for (const i of items || []) {
+    if (!i || !i.pid || !ESTADOS_VISIBLES.includes(i.estado)) continue;
+    const precio = Number((i.decision || {}).precioSale);
+    // Un ítem sin precio ⛔ no es una etiqueta en blanco: es una prenda que todavía no se decidió.
+    // Dejarlo pasar imprime `$0` y nadie lo ve hasta que está colgado.
+    if (!Number.isFinite(precio) || precio <= 0) continue;
+    out.push({
+      pid: String(i.pid),
+      nombre: String((i.foto || {}).nombre || ''),
+      precio,
+      firme: esFirme(i.estado),
+    });
+  }
+  return out;
 }
 
 /**
@@ -447,16 +492,33 @@ export default async function handler(req, res) {
         });
       }
 
+      // 🔑 **`?precios=1` pide la otra pregunta**: ⛔ no «cuáles tienen el precio puesto en la
+      // tienda» sino «a cuánto va a estar cada una», que es la que hace falta para etiquetar una
+      // feria de local ANTES de aplicar. Ver `preciosAEtiquetar`.
+      const porAnticipado = String(req.query.precios || '') === '1';
       const [c, i] = await Promise.all([
         supabase.from('liquidaciones').select('id, nombre, estado').eq('store', store).eq('id', liq).maybeSingle(),
-        supabase.from('liquidacion_items').select('pid, estado').eq('store', store).eq('liq_id', liq),
+        // 🔴 `leerTodo` y ⛔ no un select pelado: PostgREST corta en 1.000 filas **sin avisar**, y
+        // una campaña con más ítems que eso devolvería una lista corta que se ve igual que una
+        // completa. La feria de septiembre son 376, pero el que venga después no se sabe.
+        porAnticipado
+          ? leerTodo(supabase, 'liquidacion_items', (q) =>
+              q.select('datos').eq('store', store).eq('liq_id', liq).order('pid'))
+          : supabase.from('liquidacion_items').select('pid, estado').eq('store', store).eq('liq_id', liq),
       ]);
       if (c.error) throw new Error(c.error.message);
-      if (i.error) throw new Error(i.error.message);
+      if (!porAnticipado && i.error) throw new Error(i.error.message);
       // El estado se revalida acá y no sólo en la lista: un id de una campaña en borrador, tipeado
       // a mano en la URL, no puede devolver los productos de un sale que no está en la tienda.
       if (!c.data || !ESTADOS_CAMPANIA_VIVA.includes(c.data.estado)) {
         return res.status(404).json({ error: 'La campaña no existe o todavía no tiene los precios puestos.' });
+      }
+      if (porAnticipado) {
+        return res.status(200).json({
+          ok: true,
+          campania: { id: c.data.id, nombre: c.data.nombre },
+          items: preciosAEtiquetar((i || []).map((r) => r.datos)),
+        });
       }
       return res.status(200).json({
         ok: true,
