@@ -103,7 +103,13 @@ export default async function handler(req, res) {
       // `clavados`: dos personas apretando la misma estrella con un segundo de diferencia es lo
       // esperable acá —marcar es de cualquiera que vea la lista—, y un cartel rojo por eso diría
       // que algo salió mal cuando el resultado es exactamente el que se pidió.
-      if (error && /duplicate key/i.test(error.message)) {
+      //
+      // 🔴 **Se mira el NOMBRE del índice, ⛔ no «duplicate key» a secas.** Un `duplicate key`
+      // también lo tira la clave primaria, y ésa ⛔ no quiere decir «ya estaba»: quiere decir que el
+      // id se repitió. Con el test a secas, ese choque contestaba **200 «ya estaba»** sobre una
+      // estrella que ⛔ NO quedó marcada — el usuario aprieta, no pasa nada y nadie ve un error.
+      // Es exactamente lo que pasaba hasta el 11-sep-2026, cuando el id llevaba sólo la fecha.
+      if (error && /idx_destacados_uno_activo/i.test(error.message)) {
         return res.status(200).json({ ok: true, id: null, yaEstaba: true });
       }
       if (error) throw new Error(error.message);

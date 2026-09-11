@@ -17,7 +17,8 @@ se vende presencial— así que la tienda ⛔ no sirve de lista de precios.
 - Handler: `api/_precios.js`, por `/api/datos?recurso=precios`. **Sólo GET.**
 - ⛔ **No tiene tablas propias.** Lee `liquidaciones` + `liquidacion_items` (de Liquidación),
   `inventario` y `sync_state` (el espejo) y `destacados` (las ⭐).
-- Tests: `tests/precios-marketing.test.ts` (la lista blanca, 5 mutantes) y el bloque
+- Tests: `tests/precios-marketing.test.ts` (la lista blanca y el desglose, 10 mutantes),
+  `tests/destacados.test.ts` (la ⭐, 3 mutantes) y el bloque
   `_precios · la puerta de Marketing, y la que sigue cerrada` de `tests/handlers-autorizacion.test.ts`.
 
 ## 🔴 Por qué existe en vez de darle `liquidacion` a Marketing
@@ -82,6 +83,26 @@ suma un campo a la foto — y el test tiene un caso que fija exactamente eso.
 - **`compartida` vive en `liquidaciones.datos`** (jsonb, sin migración) y lo escribe
   `api/_liquidacion.js`. ⛔ El flag **nunca viaja en el body**: se lee y se reescribe en el servidor,
   por el mismo motivo por el que `confirmado` no entra por `guardar-item`.
+
+## Lo que ya se rompió acá
+
+- 🔴 **La ⭐ se prendía, se apagaba y ⛔ NO se podía volver a prender el mismo día — y contestaba
+  200.** El id de la fila llevaba sólo la FECHA (copiado de `clavados`), así que la segunda decisión
+  del mismo día chocaba contra la **clave primaria**; y el handler leía `duplicate key` **a secas**
+  como «ya estaba», así que devolvía **200 sobre una estrella que no quedó marcada**. La persona
+  aprieta, no pasa nada, y nadie ve un error.
+  ⚠️ **Los tests y las sondas de la migración estaban las dos en verde**: ninguna vuelve a marcar
+  *en el mismo día* —la sonda usaba una fecha vieja escrita a mano—. Lo cazó **ejercer el verbo
+  contra la base**, que es lo único que lo podía cazar. Ahora el id lleva el instante y el handler
+  mira el **nombre del índice** (`idx_destacados_uno_activo`), ⛔ no «duplicate key».
+  📌 `clavados` tiene la misma forma de id y el mismo agujero latente; ahí casi no muerde porque
+  marcar un clavado es una decisión que se toma una vez. **Si alguna vez se vuelve un interruptor,
+  hay que arreglarlo igual.**
+- ⚠️ **El `.env` local ⛔ no tiene `ZATTIA_SUPABASE_SERVICE_KEY`, sólo la anon.** Un script corrido
+  desde esta máquina **puede LEER Zattia por PostgREST y ⛔ no escribir**: contesta
+  `permission denied for table …` (42501). ⛔ No es un problema de la tabla ni de RLS — los GRANT de
+  `destacados` y `clavados` son idénticos. Para ejercer una escritura de Zattia desde local hay que
+  ir por `DATABASE_URL_ZATTIA` (pg directo), o ejercerla en **BDI**, que sí tiene la service key.
 
 ## Cómo se prueba
 
