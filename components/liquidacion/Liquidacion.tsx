@@ -47,7 +47,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { puedeVer } from '@/lib/permisos'
 import {
-  avisos, campaniaEditable, confirmarItem, contar, itemsSinRevisar, leerEscalera, nuevoIdLiquidacion,
+  avisos, campaniaEditable, confirmarItem, contar, filtrarGrilla, itemsSinRevisar, leerEscalera,
+  nuevoIdLiquidacion, opcionesDeGrilla,
   pidsPorAplicar, porEscalera,
   reprecificar, resumenCampania,
   TIPO_CAMPANIA, TIPOS_CAMPANIA, tipoDe, TOPE_APLICAR, TOPE_MASIVO,
@@ -523,6 +524,17 @@ function DetalleCampania({
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [filtro, setFiltro] = useFiltroUrl<string>('f', '')
   /**
+   * Los dos cortes para revisar de a tandas (pedido de Bruno, 11-sep). Van en la URL como el resto:
+   * revisar 351 productos es volver varias veces, y un filtro que se pierde al recargar obliga a
+   * rearmar la tanda de cero.
+   *
+   * 🔑 **`mesa` es el que ⛔ no se podía improvisar**: por tipo alcanzaba con escribir «SWEATER» en
+   * el buscador, pero por precio ⛔ no había ninguna forma — y una feria de mesas está armada
+   * justamente por precio.
+   */
+  const [mesa, setMesa] = useFiltroUrl<string>('mesa', '')
+  const [prenda, setPrenda] = useFiltroUrl<string>('prenda', '')
+  /**
    * Qué producto está abierto en el modal, y en qué orden se recorren.
    *
    * 🔑 **El orden se congela al abrir.** La grilla ordena por estado (primero lo que falta
@@ -597,10 +609,9 @@ function DetalleCampania({
   )
 
   const visibles = useMemo(() => {
-    const q = busqueda.trim().toLowerCase()
-    return (items || [])
-      .filter((i) => (filtro ? i.estado === filtro : true))
-      .filter((i) => !q || i.foto.nombre.toLowerCase().includes(q) || (i.foto.sku || '').toLowerCase().includes(q))
+    // 🔑 La MISMA regla que cuenta las opciones de los selectores (`opcionesDeGrilla`): con dos
+    // implementaciones, el número del selector y lo que dibuja la tabla pueden dejar de coincidir.
+    return filtrarGrilla(items || [], { estado: filtro, q: busqueda, mesa, prenda })
       // Primero lo que espera una decisión nuestra; dentro de cada grupo, el que tiene más plata
       // parada arriba. Ordenar por nombre pondría a la vista lo que da lo mismo mirar primero.
       .sort((a, b) => {
@@ -610,7 +621,20 @@ function DetalleCampania({
           e === 'pendiente' ? 0 : e === 'definido' || e === 'confirmado' ? 1 : e === 'aplicado' ? 2 : 3
         return peso(a.estado) - peso(b.estado) || b.foto.costo * b.foto.stock - a.foto.costo * a.foto.stock
       })
-  }, [items, busqueda, filtro])
+  }, [items, busqueda, filtro, mesa, prenda])
+
+  /**
+   * Las opciones de los dos cortes, **contadas sobre lo que dejan pasar los OTROS filtros**.
+   *
+   * 🔴 **Un número que no mira el resto miente**: con «Sin revisar» puesto, una mesa que dijera «27»
+   * y mostrara 15 manda a buscar doce productos que ⛔ no están. Cada selector se cuenta a sí mismo
+   * ignorando **su propia** elección —si no, la lista se quedaría con una sola opción— y respetando
+   * las de los demás.
+   */
+  const opciones = useMemo(
+    () => opcionesDeGrilla(items || [], { estado: filtro, q: busqueda, mesa, prenda }),
+    [items, busqueda, filtro, mesa, prenda],
+  )
 
   /** Confirmar es de admin, y sólo mientras la campaña se pueda editar — la misma puerta que Revisión. */
   const puedeConfirmar = puede.admin && campaniaEditable(campania.estado)
@@ -1291,6 +1315,31 @@ function DetalleCampania({
               <option value="descartado">Descartados ({resumen.descartados})</option>
               <option value="aplicado">Aplicados ({resumen.aplicados})</option>
             </Select>
+            {/*
+              🔑 **Los dos cortes para revisar de a tandas** (Bruno, 11-sep-2026). Van acá y ⛔ no en
+              la pestaña Revisión porque **es acá donde se elige QUÉ se confirma**: la barra de
+              marcados y «Marcar los N que se ven» trabajan sobre lo que este filtro deja a la
+              vista, así que filtrar una mesa y confirmarla entera ya es una tanda.
+
+              ⛔ **Sólo se dibujan si hay más de uno**: un selector con una sola opción ⛔ no filtra
+              nada y ocupa el mismo lugar que algo que sí sirve.
+            */}
+            {opciones.mesas.length > 1 && (
+              <Select value={mesa} onChange={(e) => setMesa(e.target.value)} style={{ width: 180 }} aria-label="Precio de mesa">
+                <option value="">Todos los precios</option>
+                {opciones.mesas.map((m) => (
+                  <option key={m.precio} value={String(m.precio)}>{formatMoney(m.precio)} ({m.n})</option>
+                ))}
+              </Select>
+            )}
+            {opciones.prendas.length > 1 && (
+              <Select value={prenda} onChange={(e) => setPrenda(e.target.value)} style={{ width: 180 }} aria-label="Tipo de prenda">
+                <option value="">Todas las prendas</option>
+                {opciones.prendas.map((t) => (
+                  <option key={t.tipo} value={t.tipo}>{t.tipo} ({t.n})</option>
+                ))}
+              </Select>
+            )}
             {/*
               El atajo que hace útil a la selección: filtrar «Definidos», buscar «CORPIÑO» y marcar
               de una todo lo que quedó a la vista. Sin esto, confirmar 351 sigue siendo 351 clics.

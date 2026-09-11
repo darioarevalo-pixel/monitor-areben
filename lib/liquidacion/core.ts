@@ -489,3 +489,101 @@ export function avisos(item: LiquidacionItem, tipo: TipoCampania = 'liquidacion'
   const apaga = TIPO_CAMPANIA[tipo].apaga
   return apaga.length ? out.filter((a) => !apaga.includes(a.clave)) : out
 }
+
+// ── Agrupar los productos de una campaña ─────────────────────────────────────────────────────────
+//
+// Pedido de Bruno el 11-sep-2026: *«quiero terminar de revisar los productos de la feria, pero no
+// tengo un filtro para poder agruparlos en la pestaña de productos»*. La feria son **351 productos**
+// y le quedaban **65 sin revisar**; sin agrupar, revisarlos es barrer una lista de 351 buscando
+// cuáles son.
+//
+// 🔑 **Los dos cortes ⛔ no valen lo mismo, y por eso hay dos.** «Por tipo de prenda» ya se podía
+// improvisar escribiendo `SWEATER` en el buscador; **por precio ⛔ no hay ninguna forma**, y es
+// justamente el corte con el que está armada una feria de mesas: todo lo de $5.990 junto es una
+// mesa, y mirarlos juntos es como se ve de una que hay uno que ⛔ no corresponde ahí.
+
+/** Cada cuánto se repite un precio en la campaña. La clave es el precio; sin precio ⛔ no entra. */
+export function mesasDe(items: LiquidacionItem[]): { precio: number; n: number }[] {
+  const m = new Map<number, number>()
+  for (const i of items || []) {
+    const p = i.decision.precioSale
+    if (p == null) continue
+    m.set(p, (m.get(p) || 0) + 1)
+  }
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([precio, n]) => ({ precio, n }))
+}
+
+/**
+ * El «tipo de prenda» de un producto: **la primera palabra de su nombre**.
+ *
+ * ⚠️ **Es una heurística sobre un texto que nadie normalizó, y se eligió después de MEDIRLA** sobre
+ * los 351 de la feria: da **32 tipos**, con TOP (83), BABY (28) y MINI (26) arriba, y sólo 8 tipos
+ * de un solo producto. ⛔ No pretende ser una taxonomía —`BABY` es en realidad «BABY TEE»— sino el
+ * corte más barato que agrupa bien; el nombre real sigue estando en cada fila.
+ *
+ * ⛔ La lista sale **del dato**, ⛔ nunca de una lista escrita a mano: una campaña de otra temporada
+ * trae otras prendas, y un enum fijo la dejaría sin agrupar sin que nada fallara.
+ */
+export function tipoDePrenda(nombre: string): string {
+  const t = String(nombre || '').trim().split(/\s+/)[0]
+  return t || '—'
+}
+
+/** Lo que la grilla de Productos tiene puesto en cada filtro. */
+export interface CortesDeGrilla {
+  /** El estado del `Select` de estado (`''` = todos). */
+  estado?: string
+  /** Texto del buscador. */
+  q?: string
+  /** Precio de mesa elegido, como texto (`''` = todos). */
+  mesa?: string
+  /** Tipo de prenda elegido (`''` = todos). */
+  prenda?: string
+}
+
+/** ¿Este ítem pasa los filtros, salteando el que se indique? `salvo` es el que se está contando. */
+function pasaCortes(i: LiquidacionItem, c: CortesDeGrilla, salvo?: 'mesa' | 'prenda'): boolean {
+  const q = (c.q || '').trim().toLowerCase()
+  if (c.estado && i.estado !== c.estado) return false
+  if (salvo !== 'mesa' && c.mesa && String(i.decision.precioSale ?? '') !== c.mesa) return false
+  if (salvo !== 'prenda' && c.prenda && tipoDePrenda(i.foto.nombre) !== c.prenda) return false
+  if (q && !i.foto.nombre.toLowerCase().includes(q) && !(i.foto.sku || '').toLowerCase().includes(q)) return false
+  return true
+}
+
+/**
+ * Las opciones de los dos cortes, **contadas sobre lo que dejan pasar los OTROS filtros**.
+ *
+ * 🔴 **Un número que ⛔ no mira el resto miente.** Con «Sin revisar» puesto, una mesa que dijera
+ * «27» y mostrara 15 manda a buscar doce productos que ⛔ no están — y en una lista de 351, un
+ * contador equivocado es peor que no tener contador.
+ *
+ * 🔑 **Cada selector se cuenta a sí mismo IGNORANDO SU PROPIA elección.** Si mirara la suya, al
+ * elegir una mesa la lista se quedaría con esa única opción y ⛔ no habría cómo saltar a otra sin
+ * limpiar el filtro primero.
+ */
+export function opcionesDeGrilla(items: LiquidacionItem[], c: CortesDeGrilla): {
+  mesas: { precio: number; n: number }[]
+  prendas: { tipo: string; n: number }[]
+} {
+  const lista = items || []
+  return {
+    mesas: mesasDe(lista.filter((i) => pasaCortes(i, c, 'mesa'))),
+    prendas: tiposDe(lista.filter((i) => pasaCortes(i, c, 'prenda'))),
+  }
+}
+
+/** Los ítems que la grilla tiene que mostrar con estos filtros. La MISMA regla que los contadores. */
+export function filtrarGrilla(items: LiquidacionItem[], c: CortesDeGrilla): LiquidacionItem[] {
+  return (items || []).filter((i) => pasaCortes(i, c))
+}
+
+/** Los tipos presentes en la campaña, del más numeroso al menos. */
+export function tiposDe(items: LiquidacionItem[]): { tipo: string; n: number }[] {
+  const m = new Map<string, number>()
+  for (const i of items || []) {
+    const t = tipoDePrenda(i.foto.nombre)
+    m.set(t, (m.get(t) || 0) + 1)
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tipo, n]) => ({ tipo, n }))
+}

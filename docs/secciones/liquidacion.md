@@ -101,6 +101,26 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
   se comunica es éste**: quien barre los 351 precios es quien sabe cuál es la oferta que vale
   contar. La tabla y las dos preguntas, en `sql/migrate-destacados.sql`. 🔑 **Marcar pide lo mismo
   que ver** (decisión de Bruno) — al revés que `clavados`, que es de admin.
+- 🆕 🔑 **Dos cortes para revisar de a tandas: por PRECIO DE MESA y por TIPO DE PRENDA** (Bruno,
+  11-sep-2026: *«quiero terminar de revisar los productos de la feria, pero no tengo un filtro para
+  poder agruparlos»* — 351 productos y 65 sin revisar). 🔑 **Los dos ⛔ no valen lo mismo**: «por
+  tipo» ya se improvisaba escribiendo `SWEATER` en el buscador; **por precio ⛔ no había ninguna
+  forma**, y es el corte con el que está armada una feria de mesas — todo lo de $5.990 junto **es**
+  una mesa, y mirarlos juntos es como se ve de una que hay uno que no corresponde ahí.
+  🔴 **Los contadores miran los OTROS filtros.** Con «Definidos» puesto, una mesa que dijera «27» y
+  mostrara 15 manda a buscar doce productos que ⛔ no están; en una lista de 351 eso es peor que no
+  tener contador. Y **cada selector se cuenta ignorando SU PROPIA elección**: si mirara la suya, al
+  elegir una mesa quedaría una sola opción y ⛔ no habría cómo saltar a otra.
+  🔑 **La tabla y los contadores son LA MISMA función** (`filtrarGrilla` y `opcionesDeGrilla`, las
+  dos sobre `pasaCortes`): con dos implementaciones, el número del selector y lo que se dibuja
+  pueden separarse sin que nada falle. Medido contra la feria: las 14 mesas con algo sin revisar
+  suman **65**, y cada contador da exactamente lo que muestra la tabla.
+  ⚠️ **El tipo de prenda es la PRIMERA PALABRA del nombre**, una heurística sobre un texto que nadie
+  normalizó — elegida después de medirla: da 32 tipos, sólo 8 de un producto. ⛔ Sale del dato y
+  ⛔ nunca de una lista escrita a mano, porque otra temporada trae otras prendas.
+  📌 Van en la pestaña **Productos** y ⛔ no en Revisión: es acá donde se elige *qué* se confirma, y
+  «Marcar los N que se ven» trabaja sobre lo que el filtro deja a la vista ⇒ filtrar una mesa y
+  confirmarla entera **ya es una tanda**.
 - 🔴 **El sub-permiso `liquidacion.aplicar` no se hereda de la función**: hay que tildarlo a mano, y
   en las dos marcas. Es el único permiso del Monitor que escribe precios en la tienda.
 - 🔑 **Hay DOS masivos de precio y contestan preguntas distintas.** `reprecificar` mueve la campaña
@@ -183,7 +203,7 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
 ## Cómo se prueba
 
 ```bash
-npx vitest run tests/liquidacion-resultado.test.ts --reporter=dot   # y los otros nueve
+npx vitest run tests/liquidacion-resultado.test.ts --reporter=dot   # y los otros diez
 ```
 
 - 🔴 **El mutante que hay que ver caer**: copiarle a `agotadosQueNoCierran` el filtro de canal de
