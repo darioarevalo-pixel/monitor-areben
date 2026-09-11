@@ -61,6 +61,9 @@ import { TIPOS_CAMPANIA, tipoDe } from '../lib/liquidacion/tipo.core.js';
 // Marketing, y dos definiciones de «firme» que se separen dejan a una de las dos etiquetando lo que
 // la otra todavía no aprobó.
 import { ESTADOS_VISIBLES, esFirme } from '../lib/precios/core.core.js';
+// El diseño de la etiqueta de la campaña: qué va debajo del precio y de qué tamaño. Lista blanca,
+// porque esto se DIBUJA en un PDF y un objeto crudo del navegador se ve recién en la Zebra.
+import { etiquetaDeCampania } from '../lib/liquidacion/etiqueta.core.js';
 
 function cfgFor(store) {
   if (store === 'zattia') {
@@ -150,6 +153,8 @@ function aCampania(row, conteo) {
     // El rótulo para el cliente, el que sale impreso en la etiqueta. Distinto de `nombre`, que es
     // el interno. Vacío es válido: la etiqueta sale sólo con el precio.
     nombreComercial: d.nombreComercial || null,
+    // Cómo se dibuja su etiqueta. Siempre completo, también para una campaña vieja que no lo tiene.
+    etiqueta: etiquetaDeCampania(d.etiqueta),
     creadoPor: d.creadoPor || null,
     creado: d.creado || null,
     // Cuándo se trajeron por última vez las ventas del día al espejo, desde el botón de Resultado.
@@ -526,6 +531,8 @@ export default async function handler(req, res) {
             id: c.data.id,
             nombre: c.data.nombre,
             nombreComercial: (c.data.datos || {}).nombreComercial || null,
+            // El dibujo entero, para que Etiquetas imprima lo que decidió quien armó la campaña.
+            etiqueta: etiquetaDeCampania((c.data.datos || {}).etiqueta),
           },
           items: preciosAEtiquetar((i || []).map((r) => r.datos)),
         });
@@ -726,6 +733,7 @@ export default async function handler(req, res) {
         nota: txtOrNull(c.nota),
         // El rótulo para el cliente, el que va impreso en la etiqueta. Ver `renombrar`.
         nombreComercial: txtOrNull(String(c.nombreComercial || '').trim().slice(0, 40)),
+        etiqueta: etiquetaDeCampania(c.etiqueta),
         creadoPor: yo,
         creado: Date.now(),
       };
@@ -863,6 +871,7 @@ export default async function handler(req, res) {
         nombreComercial: b.nombreComercial === undefined
           ? d.nombreComercial || null
           : txtOrNull(String(b.nombreComercial || '').trim().slice(0, 40)),
+        etiqueta: etiquetaDeCampania(b.etiqueta === undefined ? d.etiqueta : b.etiqueta),
       };
       const { error } = await supabase.from('liquidaciones')
         .update({ nombre, datos, updated_at: ahora }).eq('store', store).eq('id', id);

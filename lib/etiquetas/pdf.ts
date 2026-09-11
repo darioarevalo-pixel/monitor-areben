@@ -243,8 +243,23 @@ export async function buildEtiquetasPdf(labels: LabelItem[], modoLote: ModoEtiqu
   return pdf
 }
 
-/** Etiqueta libre (5×2,5 cm o 10×15 cm) con texto, código de barras y/o precio. Port de _libreBuildPdf. */
-export async function buildLibrePdf(cfg: { grande: boolean; copias: number; barcode: string; precio: number | null; lineas: LineaEtiqueta[] }): Promise<Pdf | null> {
+/**
+ * Etiqueta libre (5×2,5 cm o 10×15 cm) con texto, código de barras y/o precio. Port de
+ * _libreBuildPdf.
+ *
+ * 🔑 **Los bloques se apilan en el orden en que se empujan a `ops` y el conjunto se centra vertical**
+ * ⇒ sumar algo DEBAJO del precio es empujar sus ops después del de `precio`, y ⛔ no una geometría
+ * nueva. Eso es `lineasAbajo`, que nació para las condiciones de una feria: «EFECTIVO ·
+ * TRANSFERENCIA» abajo del número.
+ *
+ * ⚠️ **`tamPrecio` se respeta tal cual y ⛔ no se clampea al alto de la etiqueta.** Con el título,
+ * el precio grande y dos renglones abajo, el conjunto puede pasarse de los 25 mm y salir cortado. El
+ * freno ⛔ no es una cuenta escondida: es la **previa**, que dibuja este mismo PDF y se ve.
+ *
+ * 📌 Los dos campos son opcionales y vacíos por default ⇒ una llamada vieja dibuja **exactamente lo
+ * mismo** (lo ata la cinta de `tests/etiquetas-pdf.test.ts`).
+ */
+export async function buildLibrePdf(cfg: { grande: boolean; copias: number; barcode: string; precio: number | null; lineas: LineaEtiqueta[]; lineasAbajo?: LineaEtiqueta[]; tamPrecio?: number }): Promise<Pdf | null> {
   const { jsPDF } = await import('jspdf')
   const JsBarcode = (await import('jsbarcode')).default
   const { grande } = cfg
@@ -258,7 +273,11 @@ export async function buildLibrePdf(cfg: { grande: boolean; copias: number; barc
   const barcode = (cfg.barcode || '').trim()
   const precio = cfg.precio
   const lineas = cfg.lineas.filter((l) => (l.texto || '').trim())
-  if (!lineas.length && !barcode && precio == null) return null
+  const lineasAbajo = (cfg.lineasAbajo || []).filter((l) => (l.texto || '').trim())
+  // El cuerpo del precio se puede pisar desde la campaña. Acotado a algo dibujable: por debajo de 6
+  // no se lee y por arriba del doble del default no entra ni solo.
+  const fsPrecio = Math.max(6, Math.min(FS.precio * 2, Number(cfg.tamPrecio) || FS.precio))
+  if (!lineas.length && !lineasAbajo.length && !barcode && precio == null) return null
 
   const orient = grande ? 'portrait' : 'landscape'
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: orient })
@@ -272,7 +291,16 @@ export async function buildLibrePdf(cfg: { grande: boolean; copias: number; barc
     ops.push({ type: 'text', wrapped, fs, bold: l.bold, h: wrapped.length * (fs * 0.42), gap: ops.length ? textGap : 0 })
   })
   if (barcode) ops.push({ type: 'barcode', h: barH, gap: ops.length ? (grande ? 4 : 1.2) : 0 })
-  if (precio != null && !isNaN(precio)) ops.push({ type: 'precio', h: FS.precio * 0.42, gap: ops.length ? (grande ? 5 : 1.0) : 0 })
+  if (precio != null && !isNaN(precio)) ops.push({ type: 'precio', h: fsPrecio * 0.42, fs: fsPrecio, gap: ops.length ? (grande ? 5 : 1.0) : 0 })
+  // Lo que va DEBAJO del precio. Mismo dibujo que las de arriba: lo único que cambia es el lugar en
+  // la pila, que es lo que decide dónde caen.
+  lineasAbajo.forEach((l) => {
+    pdf.setFont('helvetica', l.bold ? 'bold' : 'normal')
+    const fs = (FS as Record<string, number>)[l.tam] || FS.normal
+    pdf.setFontSize(fs)
+    const wrapped = pdf.splitTextToSize(l.texto, W - M * 2)
+    ops.push({ type: 'text', wrapped, fs, bold: l.bold, h: wrapped.length * (fs * 0.42), gap: ops.length ? textGap : 0 })
+  })
   const totalH = ops.reduce((s, o) => s + o.gap + o.h, 0)
 
   for (let c = 0; c < copias; c++) {
@@ -297,7 +325,7 @@ export async function buildLibrePdf(cfg: { grande: boolean; copias: number; barc
         }
       } else if (o.type === 'precio') {
         pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(FS.precio)
+        pdf.setFontSize(o.fs!)
         pdf.text('$ ' + (precio as number).toLocaleString('es-AR'), CX, y, { align: 'center', baseline: 'top' })
       }
       y += o.h

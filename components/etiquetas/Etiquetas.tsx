@@ -1065,7 +1065,11 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
       copias,
       barcode,
       precio,
-      lineas: [{ texto: camp.rotulo?.nombreComercial || '', tam: 'titulo' as const, bold: true }],
+      lineas: [{ texto: camp.rotulo?.nombreComercial || '', tam: camp.rotulo?.etiqueta?.tamTitulo || ('titulo' as const), bold: true }],
+      // Las condiciones del evento, debajo del precio. Salen del diseño de la CAMPAÑA: acá ⛔ no se
+      // editan, justamente para que sean las mismas en todas las máquinas.
+      lineasAbajo: camp.rotulo?.etiqueta?.abajo || [],
+      tamPrecio: camp.rotulo?.etiqueta?.tamPrecio,
     }),
     [camp.rotulo],
   )
@@ -1222,8 +1226,14 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
               {camp.rotulo?.nombreComercial ? (
                 <>Sale con el título <b>«{camp.rotulo.nombreComercial}»</b> arriba del precio.</>
               ) : (
-                <>Sale <b>sólo con el precio</b>. Para que lleve un título —«FERIA ZATTIA»— se le carga el <b>nombre comercial</b> a la campaña, en Liquidación → Editar campaña.</>
+                <>Sale <b>sólo con el precio</b>.</>
               )}
+              {camp.rotulo?.etiqueta?.abajo?.length ? (
+                <> Y abajo, <b>{camp.rotulo.etiqueta.abajo.map((l) => l.texto).join(' · ')}</b>.</>
+              ) : null}
+              {/* 🔑 **El diseño ⛔ no se edita acá, y el cartel lo dice.** Va en miles de etiquetas:
+                  se decide una vez, en la campaña, y ⛔ no una vez por computadora. */}
+              <> Se diseña en <b>Liquidación → Editar campaña</b>, ⛔ no acá: es el mismo para todos los que etiqueten.</>
               {precioPrevia != null && <> La previa muestra <b>${Math.round(precioPrevia).toLocaleString('es-AR')}</b>, que es {ultimoPrecio == null ? 'la mesa más barata' : 'lo último que salió'}.</>}
             </div>
           </div>

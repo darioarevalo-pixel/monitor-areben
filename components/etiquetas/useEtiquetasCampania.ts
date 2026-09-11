@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type { Marca } from '@/lib/nav.datos'
+import type { EtiquetaCampania } from '@/lib/liquidacion/etiqueta'
 
 /**
  * LOS PRECIOS DE UNA CAMPAÑA, PARA ETIQUETAR ANTES DE APLICARLOS.
@@ -29,8 +30,12 @@ export type PrecioCampania = { pid: string; nombre: string; precio: number; firm
 
 export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null }
 
-/** Lo que la etiqueta imprime arriba del precio. `null` = sólo el precio. */
-export type RotuloCampania = { id: string; nombre: string; nombreComercial: string | null }
+/**
+ * Cómo se imprime la etiqueta de esta campaña: el título de arriba y el diseño (qué va debajo del
+ * precio y de qué tamaño). 🔑 **Las dos cosas salen del SERVIDOR**: van en miles de etiquetas y
+ * tienen que ser una sola, no una por computadora.
+ */
+export type RotuloCampania = { id: string; nombre: string; nombreComercial: string | null; etiqueta: EtiquetaCampania }
 
 export interface EstadoCampania {
   campanias: CampaniaEti[]

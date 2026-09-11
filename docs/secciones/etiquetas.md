@@ -84,6 +84,28 @@ venga vinculada con los precios definidos en monitor»*.
   ⚠️ De paso, `PreviaPdf` acepta ahora `Promise<Pdf | null>`: la etiqueta **libre** vuelve `null`
   cuando no tiene ni texto, ni barras, ni precio — el cuerpo ya lo contemplaba y **el tipo no lo
   decía**.
+- ✅ 🔑 **EL DISEÑO DE LA ETIQUETA VIVE EN LA CAMPAÑA, CON LAS CONDICIONES DEL EVENTO** (idea de
+  Bruno, 11-sep-2026: *«no estaría mal pensar en que la edición de la etiqueta esté en la campaña con
+  las condiciones del evento»*). Se edita en **Liquidación → Editar campaña → 🏷️ La etiqueta de esta
+  campaña**, y tiene tres cosas: el **título** y su cuerpo, los **renglones debajo del precio** —
+  «EFECTIVO · TRANSFERENCIA», hasta 3 — y el **tamaño del precio** (8 a 30 pt, default 15).
+  🔴 **Es el lugar correcto porque las condiciones son del EVENTO, ⛔ no de la máquina que imprime.**
+  Va en ~1.800 etiquetas y tiene que ser una sola: guardado por computadora, dos personas etiquetando
+  desde dos lugares cuelgan carteles distintos y ⛔ nadie se entera hasta que las prendas están en la
+  mesa. Por eso en la pestaña de Etiquetas el diseño **se ve y ⛔ no se edita**, y el cartel lo dice.
+  🔑 **Lo normaliza `lib/liquidacion/etiqueta.core.js`, que es LISTA BLANCA**: esto se DIBUJA en un
+  PDF, así que un `tam` que no existe, treinta renglones o un texto de dos mil caracteres ⛔ no rompen
+  ninguna pantalla — se ven cuando ya salieron doscientas etiquetas mal. Y devuelve **siempre el
+  objeto completo**, también para una campaña vieja sin nada guardado: ésa tiene que seguir dibujando
+  exactamente la etiqueta de siempre (`tests/liquidacion-etiqueta-campania.test.ts`).
+- 🔑 **Poner texto DEBAJO del precio ⛔ no fue una geometría nueva.** `buildLibrePdf` apila los
+  bloques en el orden en que se empujan a `ops` y centra el conjunto ⇒ alcanza con empujar esas
+  líneas **después** del bloque del precio. Eso es `lineasAbajo`; el cuerpo del número es
+  `tamPrecio`. Los dos son opcionales y vacíos por default, así que **la cinta de paridad ⛔ no se
+  movió** — lo que la protege es justamente eso.
+  ⚠️ **`tamPrecio` ⛔ no se acota al alto de la etiqueta.** Con título, precio grande y tres renglones
+  abajo el conjunto se pasa de los 25 mm y sale cortado. **El freno ⛔ no es una cuenta escondida: es
+  la previa**, que dibuja este mismo PDF y está en las dos pantallas.
 - ✅ 🔑 **EL NOMBRE COMERCIAL DE LA CAMPAÑA ES LO QUE SALE IMPRESO** (Bruno: *«me gustaría poder
   ponerle nombre comercial al evento así la etiqueta sale con ese título»*). Campo nuevo
   `nombreComercial` en `liquidaciones.datos`, que se carga en **Liquidación → Editar campaña**.

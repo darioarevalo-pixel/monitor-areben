@@ -9,6 +9,7 @@
  */
 
 import { TIPOS_CAMPANIA as TIPOS_CAMPANIA_JS, tipoDe as tipoDeJs } from './tipo.core.js'
+import type { EtiquetaCampania } from './etiqueta'
 
 /**
  * En qué anda una campaña.
@@ -94,6 +95,8 @@ export const TIPO_CAMPANIA: Record<
 /** El tipo de una campaña, con el default de las que nacieron antes del campo. */
 export const tipoDe = tipoDeJs as (c: { tipo?: TipoCampania | null } | null | undefined) => TipoCampania
 
+export type { EtiquetaCampania }
+
 /** Una campaña. Los conteos los arma el servidor: la pantalla no baja los ítems para contarlos. */
 export interface Liquidacion {
   id: string
@@ -119,6 +122,17 @@ export interface Liquidacion {
    * falla que no se ve hasta que las prendas están en la mesa.
    */
   nombreComercial?: string | null
+  /**
+   * Cómo se dibuja la etiqueta de esta campaña: qué va **debajo** del precio (las condiciones del
+   * evento — «EFECTIVO · TRANSFERENCIA») y de qué tamaño sale el número y el título.
+   *
+   * 🔴 **Vive en la campaña y ⛔ no en la máquina que imprime**, por el mismo motivo que
+   * `nombreComercial`: va en ~1.800 etiquetas y tiene que ser uno solo.
+   *
+   * ⚠️ El servidor lo devuelve **siempre completo** (`etiquetaDeCampania`), también para una campaña
+   * vieja que no lo tiene: la pantalla ⛔ no tiene que preguntar si existe.
+   */
+  etiqueta?: EtiquetaCampania
   creadoPor: string | null
   creado: number
   /**

@@ -64,6 +64,14 @@ import { ponerPuenteAsignar } from '@/lib/tncat/puente'
 import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useDestacados } from '@/components/destacados/useDestacados'
 import { Estrella } from '@/components/destacados/Estrella'
+// El editor de renglones y el diseño de la etiqueta viven en Etiquetas: es SU etiqueta, acá sólo se
+// decide. Ver `components/etiquetas/EditorLineas.tsx`.
+import { EditorLineas, TAMANIOS } from '@/components/etiquetas/EditorLineas'
+import { buildLibrePdf } from '@/lib/etiquetas/pdf'
+import {
+  etiquetaDeCampania, MAX_LINEAS_ABAJO, MAX_TEXTO_LINEA, TAM_PRECIO_DEFAULT, TAM_PRECIO_MAX, TAM_PRECIO_MIN,
+  type EtiquetaCampania,
+} from '@/lib/liquidacion/etiqueta'
 import { DefinirPrecio } from './DefinirPrecio'
 import { Bitacora } from './Bitacora'
 import { Resultado } from './Resultado'
@@ -170,7 +178,7 @@ export function Liquidacion() {
     if (abierta && campanias && !laAbierta) setAbierta('')
   }, [abierta, campanias, laAbierta, setAbierta])
 
-  async function guardarCampania(datos: { nombre: string; nombreComercial: string | null; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
+  async function guardarCampania(datos: { nombre: string; nombreComercial: string | null; etiqueta: EtiquetaCampania; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) {
     try {
       if (editando === 'nueva') {
         const c = await crearCampania(marca, { id: nuevoIdLiquidacion(), ...datos })
@@ -1643,13 +1651,14 @@ function ModalCampania({
 }: {
   editando: Campania | 'nueva'
   onCerrar: () => void
-  onGuardar: (d: { nombre: string; nombreComercial: string | null; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
+  onGuardar: (d: { nombre: string; nombreComercial: string | null; etiqueta: EtiquetaCampania; tipo: TipoCampania; desde: string | null; hasta: string | null; nota: string | null }) => Promise<void>
 }) {
   const esNueva = editando === 'nueva'
   const previa = editando === 'nueva' ? null : editando
 
   const [nombre, setNombre] = useState(previa?.nombre || '')
   const [nombreComercial, setNombreComercial] = useState(previa?.nombreComercial || '')
+  const [eti, setEti] = useState<EtiquetaCampania>(() => etiquetaDeCampania(previa?.etiqueta))
   const [tipo, setTipo] = useState<TipoCampania>(tipoDe(previa))
   const [desde, setDesde] = useState(previa?.desde || '')
   const [hasta, setHasta] = useState(previa?.hasta || '')
@@ -1662,7 +1671,7 @@ function ModalCampania({
     if (!nombre.trim() || malLasFechas || guardando) return
     setGuardando(true)
     try {
-      await onGuardar({ nombre: nombre.trim(), nombreComercial: nombreComercial.trim() || null, tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
+      await onGuardar({ nombre: nombre.trim(), nombreComercial: nombreComercial.trim() || null, etiqueta: eti, tipo, desde: desde || null, hasta: hasta || null, nota: nota.trim() || null })
     } finally {
       setGuardando(false)
     }
@@ -1712,9 +1721,113 @@ function ModalCampania({
       <Field label="Nota" hint="Opcional: por qué se arma, qué se busca mover.">
         <Input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Bajar el stock de camperas antes de la temporada" />
       </Field>
+
+      {/* ── La etiqueta de la campaña ────────────────────────────────────────────────────────────
+          Idea de Bruno (11-sep-2026): *«no estaría mal pensar en que la edición de la etiqueta esté
+          en la campaña con las condiciones del evento»*.
+
+          🔴 **Es el lugar correcto porque las condiciones son del EVENTO, ⛔ no de la máquina que
+          imprime.** Va en ~1.800 etiquetas y tiene que ser una sola: guardado en cada computadora,
+          dos personas etiquetando desde dos lugares cuelgan carteles distintos y ⛔ nadie se entera
+          hasta que las prendas están en la mesa.
+
+          🔑 **La previa es el PDF de verdad**, con el mismo llamado que la impresión. */}
+      <div style={{ borderTop: `1px solid ${color.line}`, margin: `${space[4]}px 0 ${space[3]}px` }} />
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>🏷️ La etiqueta de esta campaña</div>
+      <div style={{ fontSize: 12, color: color.mut2, marginBottom: space[3] }}>
+        Lo que sale impreso en la prenda, en 5 × 2,5 cm. El precio lo pone cada producto; acá se decide el resto.
+      </div>
+
+      <Field label="Nombre comercial" hint="Opcional. Sale IMPRESO arriba del precio: «FERIA ZATTIA». Vacío = sólo el precio.">
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+          <Input value={nombreComercial} onChange={(e) => setNombreComercial(e.target.value)} placeholder="FERIA ZATTIA" maxLength={40} />
+          <Select value={eti.tamTitulo} onChange={(e) => setEti({ ...eti, tamTitulo: e.target.value as EtiquetaCampania['tamTitulo'] })} style={{ width: 120 }}>
+            {TAMANIOS.map(([val, t]) => <option key={val} value={val}>{t}</option>)}
+          </Select>
+        </div>
+      </Field>
+
+      <Field label="Debajo del precio" hint={`Las condiciones del evento: «EFECTIVO · TRANSFERENCIA». Hasta ${MAX_LINEAS_ABAJO} renglones.`}>
+        <EditorLineas
+          lineas={eti.abajo}
+          setLineas={(abajo) => setEti({ ...eti, abajo })}
+          placeholder="Renglón"
+          max={MAX_LINEAS_ABAJO}
+          maxLargo={MAX_TEXTO_LINEA}
+        />
+      </Field>
+
+      <div style={{ display: 'flex', gap: space[4], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <Field label="Tamaño del precio" hint={`En puntos. El de siempre es ${TAM_PRECIO_DEFAULT}.`}>
+          <Input
+            type="number"
+            min={TAM_PRECIO_MIN}
+            max={TAM_PRECIO_MAX}
+            value={String(eti.tamPrecio)}
+            onChange={(e) => setEti({ ...eti, tamPrecio: Number(e.target.value) || TAM_PRECIO_DEFAULT })}
+            style={{ width: 110 }}
+          />
+        </Field>
+        <div>
+          <div style={{ fontSize: 12, color: color.mut, marginBottom: 6 }}>Así sale</div>
+          <PreviaEtiquetaCampania titulo={nombreComercial} eti={eti} />
+        </div>
+      </div>
+      {/* ⚠️ El freno del alto ⛔ NO es una cuenta: es esto. Con el título, un precio grande y tres
+          renglones abajo el conjunto se pasa de los 25 mm y sale cortado — y se ve acá. */}
     </Modal>
   )
 }
 
 /** Se exporta para el selector de campaña de Análisis, que necesita los mismos rótulos. */
 export { ROTULO_CAMPANIA, contar }
+
+/**
+ * LA PREVIA DE LA ETIQUETA DE LA CAMPAÑA.
+ *
+ * 🔑 **Dibuja el PDF de verdad** —el mismo `buildLibrePdf` que imprime Etiquetas— y ⛔ no un HTML
+ * parecido. Es el mismo criterio que `PreviaPdf` en Etiquetas: una previa armada aparte se ve linda
+ * y miente el día que alguien toca una de las dos.
+ *
+ * 📌 El precio es de muestra: la campaña ⛔ no tiene uno, lo pone cada producto. Se dibuja un valor
+ * fijo para que el tamaño se pueda juzgar.
+ */
+function PreviaEtiquetaCampania({ titulo, eti }: { titulo: string; eti: EtiquetaCampania }) {
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    let anterior: string | null = null
+    // Con espera: el título se escribe letra por letra y sin esto se arma un PDF por tecla.
+    const t = setTimeout(() => {
+      void (async () => {
+        const pdf = await buildLibrePdf({
+          grande: false,
+          copias: 1,
+          barcode: '',
+          precio: 8990,
+          lineas: [{ texto: titulo.trim(), tam: eti.tamTitulo, bold: true }],
+          lineasAbajo: eti.abajo,
+          tamPrecio: eti.tamPrecio,
+        })
+        if (!vivo || !pdf) return
+        anterior = pdf.output('bloburl') as string
+        setUrl(anterior)
+      })()
+    }, 300)
+    return () => {
+      vivo = false
+      clearTimeout(t)
+      if (anterior) URL.revokeObjectURL(anterior)
+    }
+  }, [titulo, eti])
+
+  const caja = { width: 200, height: 100 }
+  return url ? (
+    <iframe src={url} title="Vista previa de la etiqueta de la campaña" style={{ ...caja, border: `1px solid ${color.line2}`, borderRadius: 6, background: '#fff' }} />
+  ) : (
+    <div style={{ ...caja, border: `1px dashed ${color.line2}`, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 12, color: color.mut2 }}>
+      Dibujando…
+    </div>
+  )
+}

@@ -155,6 +155,50 @@ describe('el dibujo de las etiquetas no se mueve', () => {
   })
 
   /**
+   * LO QUE VA DEBAJO DEL PRECIO — las condiciones del evento («EFECTIVO · TRANSFERENCIA»).
+   *
+   * 🔑 **El orden es el dibujo**: los bloques se apilan como se empujan, así que lo único que separa
+   * «arriba del precio» de «abajo del precio» es dónde entran en la pila. El test lo mira por el
+   * lado que se ve: el texto tiene que dibujarse **después** del número.
+   */
+  describe('lineasAbajo y tamPrecio', () => {
+    const ABAJO = [{ texto: 'EFECTIVO · TRANSFERENCIA', tam: 'chico' as const, bold: false }]
+    const BASE = { grande: false, copias: 1, barcode: '', precio: 4990, lineas: [] }
+
+    it('el texto de abajo se dibuja DESPUÉS del precio, y más abajo en la etiqueta', async () => {
+      const cinta = await grabar(() => buildLibrePdf({ ...BASE, lineasAbajo: ABAJO }))
+      const iPrecio = cinta.findIndex((o) => o.includes('4.990'))
+      const iAbajo = cinta.findIndex((o) => o.includes('EFECTIVO'))
+      expect(iPrecio).toBeGreaterThanOrEqual(0)
+      expect(iAbajo).toBeGreaterThan(iPrecio)
+      // Y no alcanza con el orden de las llamadas: lo que se ve es la Y. `text("…"@x,y …)`.
+      const y = (o: string) => Number(o.split('@')[1].split(' ')[0].split(',')[1])
+      expect(y(cinta[iAbajo])).toBeGreaterThan(y(cinta[iPrecio]))
+    })
+
+    it('una etiqueta que SÓLO tiene texto de abajo igual se dibuja', async () => {
+      // Sin esto caía en el `return null` de la etiqueta vacía y no salía nada, en silencio.
+      expect(await buildLibrePdf({ grande: false, copias: 1, barcode: '', precio: null, lineas: [], lineasAbajo: ABAJO })).not.toBeNull()
+    })
+
+    it('tamPrecio cambia el cuerpo del número, y se acota a algo dibujable', async () => {
+      // La cinta anota el cuerpo al final de cada `text(…)`: `text("$ 4.990"@25,7 center/top … 15)`.
+      const cuerpoDelPrecio = async (tam?: number) => {
+        const cinta = await grabar(() => buildLibrePdf({ ...BASE, tamPrecio: tam }))
+        const o = cinta.find((x) => x.includes('4.990'))
+        return o ? Number(o.trim().replace(/\)$/, '').split(' ').pop()) : null
+      }
+      expect(await cuerpoDelPrecio()).toBe(15)
+      expect(await cuerpoDelPrecio(22)).toBe(22)
+      // 🔴 Un 0 o un texto vacío caían en `|| FS.precio`; un 2 dibujaría un precio ilegible y un 400
+      // se comería la etiqueta entera. Los dos extremos se acotan.
+      expect(await cuerpoDelPrecio(0)).toBe(15)
+      expect(await cuerpoDelPrecio(2)).toBe(6)
+      expect(await cuerpoDelPrecio(400)).toBe(30)
+    })
+  })
+
+  /**
    * 🔴 Sin esto salía un PDF con una hoja en blanco y se mandaba a la impresora igual: la etiqueta
    * de SKU sin SKU no dibuja nada, y nadie se entera hasta que la Zebra escupe una etiqueta vacía.
    */
