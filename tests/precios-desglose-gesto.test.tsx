@@ -55,9 +55,29 @@ vi.mock('@/lib/precios/persistencia', () => ({
   leerListaDePrecios: vi.fn(async () => LISTA),
 }))
 
-// La ⭐ pega a su propio recurso; acá sólo importa que el botón exista y que su click no abra nada.
+/**
+ * La ⭐ pega a su propio recurso. Se espía `alternar` porque «no abre el desglose» ⛔ NO alcanza:
+ * un click que ⛔ no llega a ningún lado también cumple eso, y se ve exactamente como
+ * «apreté y no guardó».
+ */
+const ALTERNADOS: string[] = []
+/** Cuando vale, `alternar` falla — para poder mirar qué ve la persona cuando el servidor rebota. */
+const FALLA = { ahora: false }
+/** Con qué alcance arrancó el hook. `null` ahí ⛔ no es «todavía no sé»: es la estrella GENERAL. */
+const ALCANCES: (string | null)[] = []
 vi.mock('@/components/destacados/useDestacados', () => ({
-  useDestacados: () => ({ porProducto: new Map(), cargando: false, error: null, alternar: async () => {} }),
+  useDestacados: (marca: string | null, liq: string | null) => {
+    ALCANCES.push(marca == null ? 'QUIETO' : liq)
+    return {
+      porProducto: new Map(),
+      cargando: false,
+      error: null,
+      alternar: async (p: { id: number | string }) => {
+        if (FALLA.ahora) throw new Error('Se rompió del lado del servidor')
+        ALTERNADOS.push(String(p.id))
+      },
+    }
+  },
 }))
 
 const { Precios } = await import('@/components/precios/Precios')
@@ -132,11 +152,27 @@ describe('🔑 apretar el producto abre el stock por talle y color', () => {
     await p.cerrar()
   })
 
-  it('🔴 marcar la ⭐ ⛔ no abre el desglose', async () => {
+  it('🔴 marcar la ⭐ ⛔ no abre el desglose — y SÍ marca', async () => {
+    // 🔴 Las dos mitades. «No abre» solo lo cumple igual un click que ⛔ no llega a ningún lado, que
+    // es como se ve un «apreté y no guardó». Y **exactamente una vez**: con la fila clickeable, un
+    // click que se propague puede terminar disparando el verbo dos veces.
+    ALTERNADOS.length = 0
     const p = await pintar()
     const estrella = p.filaDe('CORSET FRANK').querySelector('button[aria-pressed]')
     await p.click(estrella)
     expect(p.abierto()).toBe(false)
+    expect(ALTERNADOS).toEqual(['1'])
+    await p.cerrar()
+  })
+
+  it('🔴 abrir el desglose ⛔ no marca la ⭐ de paso', async () => {
+    // El sentido contrario del mismo cruce: la fila entera es clickeable, así que un gesto de
+    // «quiero ver los talles» ⛔ no puede dejar el producto destacado sin que nadie lo pida.
+    ALTERNADOS.length = 0
+    const p = await pintar()
+    await p.click(p.filaDe('CORSET FRANK'))
+    expect(p.abierto()).toBe(true)
+    expect(ALTERNADOS).toEqual([])
     await p.cerrar()
   })
 
@@ -148,6 +184,30 @@ describe('🔑 apretar el producto abre el stock por talle y color', () => {
     expect(fila.style.cursor).not.toBe('pointer')
     await p.click(fila)
     expect(p.abierto()).toBe(false)
+    await p.cerrar()
+  })
+
+  it('🔴 si el guardado FALLA, la pantalla lo dice — ⛔ no se queda igual que si no hubieras apretado', async () => {
+    // El defecto que se reporta como «apreté y no guardó»: `Estrella` hace `void onAlternar()`, así
+    // que una promesa rechazada ⛔ no la ve nadie y el botón vuelve a su lugar sin más.
+    FALLA.ahora = true
+    const p = await pintar()
+    const estrella = p.filaDe('CORSET FRANK').querySelector('button[aria-pressed]')
+    await p.click(estrella)
+    expect(p.div.textContent).toContain('Se rompió del lado del servidor')
+    FALLA.ahora = false
+    await p.cerrar()
+  })
+
+  it('🔴 la ⭐ ⛔ no arranca con alcance NULO: eso escribiría la general en vez de la de la campaña', async () => {
+    // `null` en esta tabla ⛔ no es «todavía no sé», es otra marca distinta. Mientras la lista de
+    // campañas viaja, el hook tiene que estar QUIETO — si no, un click rápido escribe la general y
+    // la pantalla, que después pide las de la campaña, la muestra apagada.
+    ALCANCES.length = 0
+    const p = await pintar()
+    expect(ALCANCES[0]).toBe('QUIETO')
+    expect(ALCANCES).toContain('lX')
+    expect(ALCANCES).not.toContain(null)
     await p.cerrar()
   })
 

@@ -58,7 +58,11 @@ export function Estrella({
         // Ver la decisión 1 del docblock: la fila entera es clickeable en las tres pantallas.
         e.stopPropagation()
         setYendo(true)
-        void onAlternar().finally(() => setYendo(false))
+        // 🔴 **Quien pasa `onAlternar` es responsable de avisarle a la persona si falla.** Acá el
+        // `catch` sólo existe para que una promesa rechazada ⛔ no quede colgada: si el botón se
+        // limitara a volver a su lugar, un error del servidor se vería **igual que no haber
+        // apretado nada** — y así se reporta como «no anda». Los dos llamadores avisan.
+        void onAlternar().catch(() => {}).finally(() => setYendo(false))
       }}
       style={{
         width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

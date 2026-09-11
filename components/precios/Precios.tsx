@@ -40,7 +40,7 @@ import { useDestacados } from '@/components/destacados/useDestacados'
 import { Estrella } from '@/components/destacados/Estrella'
 import {
   Badge, BuscarInput, Button, Card, EmptyState, Esqueleto, FilterBar, KpiCard, Lightbox, Notice,
-  Select, TBody, THead, TableWrap, Td, Th, Tr, formatMoney, useFiltroUrl,
+  Select, TBody, THead, TableWrap, Td, Th, Tr, formatMoney, useFiltroUrl, useToast,
   color, font, radius, space, weight,
 } from '@/components/ui'
 
@@ -67,6 +67,7 @@ type Orden = 'precio-desc' | 'precio-asc' | 'desc-desc' | 'nombre'
 
 export function Precios() {
   const { marca } = useSesion()
+  const toast = useToast()
   const [campanias, setCampanias] = useState<CampaniaPrecios[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [liq, setLiq] = useFiltroUrl<string>('liq', '')
@@ -83,7 +84,18 @@ export function Precios() {
     () => (campanias || []).find((c) => c.id === liq) || null,
     [campanias, liq],
   )
-  const destacados = useDestacados(marca, elegida?.id ?? null)
+  /**
+   * 🔴 **La ⭐ ⛔ no puede existir antes de saber DE QUÉ CAMPAÑA es.**
+   *
+   * Esto decía `useDestacados(marca, elegida?.id ?? null)`, y `elegida` es `null` mientras la lista
+   * de campañas viaja. En esa ventana el alcance caía en `null`, que en esta tabla ⛔ no es «todavía
+   * no sé»: es **la estrella GENERAL del producto**, otra marca distinta. Un click ahí escribía la
+   * general y, al llegar la campaña, la pantalla volvía a pedir **las de la campaña** — donde esa
+   * estrella ⛔ no está. Se ve exactamente como **«apreté y no guardó»**.
+   *
+   * Pasarle `null` como marca deja el hook quieto: sin pedido y sin `alternar` que escriba.
+   */
+  const destacados = useDestacados(elegida ? marca : null, elegida?.id ?? null)
 
   useEffect(() => {
     let vivo = true
@@ -126,6 +138,21 @@ export function Precios() {
     })()
     return () => { vivo = false }
   }, [marca, idElegida])
+
+  /**
+   * 🔴 **Un fallo al marcar tiene que VERSE.** `Estrella` hace `void onAlternar()`, así que una
+   * promesa rechazada ⛔ no la ve nadie: el botón vuelve a su lugar y la pantalla queda igual que si
+   * nunca se hubiera apretado. Eso es indistinguible de «no pasó nada», y es lo que hace que un
+   * error del servidor se reporte como «no anda». Mismo criterio que `MarcaEstrella` en Análisis,
+   * que ya avisaba.
+   */
+  async function marcarEstrella(i: PrecioItem) {
+    try {
+      await destacados.alternar({ id: i.pid, nombre: i.nombre, sku: i.sku })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la estrella.')
+    }
+  }
 
   const visibles = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -266,7 +293,7 @@ export function Precios() {
                     return n
                   })}
                   marcado={destacados.porProducto.get(i.pid) || null}
-                  onAlternar={() => destacados.alternar({ id: i.pid, nombre: i.nombre, sku: i.sku })}
+                  onAlternar={() => marcarEstrella(i)}
                   onFoto={() => i.imagen && setFoto({ url: i.imagen, alt: i.nombre })}
                 />
               ))}

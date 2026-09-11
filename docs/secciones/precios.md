@@ -106,6 +106,17 @@ suma un campo a la foto — y el test tiene un caso que fija exactamente eso.
   📌 `clavados` tiene la misma forma de id y el mismo agujero latente; ahí casi no muerde porque
   marcar un clavado es una decisión que se toma una vez. **Si alguna vez se vuelve un interruptor,
   hay que arreglarlo igual.**
+- 🔴 **La ⭐ arrancaba con alcance NULO mientras viajaba la lista de campañas.** `null` en
+  `destacados` ⛔ no es «todavía no sé»: es **la estrella GENERAL del producto**, otra marca. Un
+  click en esa ventana escribía la general, y la pantalla —que después pide las de la campaña— la
+  mostraba **apagada**: se ve exactamente como *«apreté y no guardó»*. Ahora el hook queda **quieto**
+  hasta saber de qué campaña es.
+- 🔴 **Y un fallo al marcar era MUDO.** `Estrella` hace `void onAlternar()`, así que una promesa
+  rechazada ⛔ no la ve nadie: el botón vuelve a su lugar y la pantalla queda igual que si no
+  hubieras apretado — indistinguible de «no pasó nada», que es como se reporta un error del
+  servidor. Ahora avisa, como ya hacía `MarcaEstrella` en Análisis.
+  🔑 Los dos están fijados en `tests/precios-desglose-gesto.test.tsx`, que **monta la pantalla y
+  clickea**: es el único lugar donde estos dos defectos se pueden ver.
 - ⚠️ **`TableWrap` YA es el `<table>`** (`components/ui/Table.tsx`), así que esta pantalla nació con
   uno propio adentro y quedó `table > table`: HTML inválido, y encima le saca la cabecera pegajosa y
   la densidad del kit. **Lo destapó el test de gestos al montar la pantalla de verdad** — ningún test
