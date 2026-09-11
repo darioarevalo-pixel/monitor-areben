@@ -53,9 +53,11 @@ general», el de Análisis → Por producto. 🔑 **Marcar pide lo mismo que ver
 que Marketing ve el resultado del sale por la llave `?resultado=1` de `_liquidacion`, que **⛔ no
 existe** y que el test de autorización fija en el sentido contrario.
 
-▶️ 🔴 **Faltan DOS manos de Bruno, y sin la primera Marketing ve la pantalla vacía:**
-1. **Liquidación → Feria Septiembre 2026 → «Compartir con Marketing»** (un click; es de admin).
-2. **Publicar la novedad** `n1789046242845_7xbdsh`, que está cargada como borrador en `/novedades`.
+▶️ 🔴 **Queda UNA mano de Bruno** (11-sep, verificado por GET):
+1. ✅ **«Compartir con Marketing» YA ESTÁ APRETADO** — la campaña trae `compartida: true`,
+   `compartidaPor: Bruno Arevalo`, `compartidaEn: 2026-09-10T13:36:57Z` ⇒ Marketing **ya ve** la lista.
+2. ▶️ **Publicar la novedad** `n1789046242845_7xbdsh` («Precios de campaña: a qué precio va cada
+   producto»), que **sigue en `borrador`** — medido contra `?recurso=sistema`.
 
 ▶️ ⛔ **Nadie con perfil de Marketing la caminó**: ⛔ no pude entrar a producción —la credencial del
 Monitor es de Bruno— así que lo verificado es el router de prod contestando por los dos recursos
