@@ -1035,6 +1035,25 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
     lsSet(keyCampaniaLiq(marca), liq)
   }, [liq, marca])
 
+  /**
+   * Lo escrito en el casillero de cada mesa. 🔑 **Se guarda como TEXTO**, no como número: con un
+   * número, borrar el casillero para reescribirlo lo deja en `0` y el campo parpadea a cero abajo
+   * del dedo.
+   */
+  const [cargadas, setCargadas] = useState<Record<string, string>>({})
+
+  /** Una tirada entera de una mesa: N etiquetas del mismo precio, sin escanear ninguna prenda. */
+  const imprimirMesa = async (precio: number, n: number) => {
+    if (n < 1) return
+    const pdf = await buildLibrePdf({ grande: false, copias: n, barcode: '', precio, lineas: [] })
+    if (pdf) imprimirPdf(pdf)
+    anotarTirada(precio, n)
+    // El casillero se vacía al imprimir: dejarlo con el número puesto es la forma de imprimir la
+    // misma tirada dos veces sin darse cuenta.
+    setCargadas((prev) => ({ ...prev, [String(precio)]: '' }))
+    setFeedback({ ok: true, html: `✓ ${n} ${n === 1 ? 'etiqueta' : 'etiquetas'} de <b>$${Math.round(precio).toLocaleString('es-AR')}</b> — tirada de mesa, sin escaneo.` })
+  }
+
   const anotarTirada = (precio: number, n: number) => {
     setTirada((prev) => {
       const sig = { ...prev, [String(precio)]: (prev[String(precio)] || 0) + n }
@@ -1154,23 +1173,63 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
           )}
 
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 18 }}>
-            {/* 🔑 **Las mesas de la campaña, no los productos.** Una feria se piensa por mesa: lo que
-                hace falta saber antes de empezar es cuántos carteles distintos hay. */}
+            {/* ── La tirada por MESA: escribir la cantidad e imprimir, sin escanear nada ──────────
+                Pedido de Bruno (11-sep-2026): *«también un casillero para poder escribir la cantidad
+                y poder imprimirlas, sin necesidad de escanear»*.
+
+                🔑 **Es el caso del DEPÓSITO, y ahí escanear ⛔ no aporta nada.** La prenda está en
+                una bolsa y la cuenta ya está hecha afuera —la orden de etiquetado del día 1 son
+                **3 tiradas: $4.990 × 176, $12.990 × 70, $14.990 × 28**—: lo único que hay que decir
+                es «de esta mesa, tantas». Escanear ahí sería preguntarle al sistema algo que ya
+                sabemos, prenda por prenda.
+
+                🔑 **Y por qué no alcanza con la pestaña Libre**, que ya imprime precio + copias: ahí
+                el precio se TIPEA. Un dedo de más en un `$4.990` sale igual de lindo y nadie lo ve
+                hasta que está colgado en la mesa. Acá las mesas son las de la campaña y ⛔ no se
+                puede inventar una. */}
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 2 }}>
                 LAS MESAS DE LA CAMPAÑA ({camp.porPrecio.length})
+              </div>
+              <div style={{ fontSize: 12, color: color.mut2, marginBottom: 8 }}>
+                Escribí la cantidad e imprimí la tirada. Sin escanear: la etiqueta es sólo el precio, así que sirve para cualquier prenda de esa mesa.
               </div>
               <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
                 <tbody>
-                  {camp.porPrecio.map((m) => (
-                    <tr key={m.precio}>
-                      <td style={{ padding: '2px 12px 2px 0', fontWeight: 700 }}>${Math.round(m.precio).toLocaleString('es-AR')}</td>
-                      <td style={{ padding: '2px 0', color: color.mut2 }}>
-                        {m.modelos} {m.modelos === 1 ? 'modelo' : 'modelos'}
-                        {m.modelos > m.firmes && <span style={{ color: '#b45309' }}> · {m.modelos - m.firmes} provisorio{m.modelos - m.firmes === 1 ? '' : 's'}</span>}
-                      </td>
-                    </tr>
-                  ))}
+                  {camp.porPrecio.map((m) => {
+                    const escrito = cargadas[String(m.precio)] || ''
+                    const n = Math.max(0, Math.min(2000, Number(escrito) || 0))
+                    return (
+                      <tr key={m.precio}>
+                        <td style={{ padding: '3px 12px 3px 0', fontWeight: 700 }}>${Math.round(m.precio).toLocaleString('es-AR')}</td>
+                        <td style={{ padding: '3px 12px 3px 0', color: color.mut2, whiteSpace: 'nowrap' }}>
+                          {m.modelos} {m.modelos === 1 ? 'modelo' : 'modelos'}
+                          {m.modelos > m.firmes && <span style={{ color: '#b45309' }}> · {m.modelos - m.firmes} provisorio{m.modelos - m.firmes === 1 ? '' : 's'}</span>}
+                        </td>
+                        <td style={{ padding: '3px 6px 3px 0' }}>
+                          <input
+                            type="number"
+                            min={1}
+                            max={2000}
+                            value={escrito}
+                            onChange={(e) => setCargadas((prev) => ({ ...prev, [String(m.precio)]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void imprimirMesa(m.precio, n)
+                            }}
+                            placeholder="cant."
+                            className="mo-input mo-input--num"
+                            inputMode="numeric"
+                            style={{ width: 84 }}
+                          />
+                        </td>
+                        <td style={{ padding: '3px 0' }}>
+                          <Button size="sm" variant="outline" disabled={n < 1} style={{ height: 'auto' }} onClick={() => void imprimirMesa(m.precio, n)}>
+                            Imprimir
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

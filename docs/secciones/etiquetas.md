@@ -75,6 +75,15 @@ venga vinculada con los precios definidos en monitor»*.
   y ⛔ no con `buildEtiquetasPdf`, y por eso **cualquier etiqueta de esa mesa sirve para cualquier
   prenda de esa mesa** ⇒ imprimir de más es gratis, pegar de más no. El código de barras es una
   tilde aparte, para el caso en que la etiqueta tape la que la prenda ya tiene.
+- 🔑 **La TIRADA POR MESA: escribir la cantidad e imprimir, sin escanear** (Bruno, 11-sep-2026:
+  *«también un casillero para poder escribir la cantidad y poder imprimirlas, sin necesidad de
+  escanear»*). Es el caso del **depósito**, donde escanear ⛔ no aporta nada: la prenda está en una
+  bolsa y la cuenta ya viene hecha de afuera —la orden del día 1 son **3 tiradas: $4.990 × 176,
+  $12.990 × 70, $14.990 × 28**—, así que lo único que hay que decir es «de esta mesa, tantas».
+  ⚠️ **Y por qué no alcanza con la pestaña Libre**, que ya imprime precio + copias: ahí el precio se
+  **tipea**. Un dedo de más en un `$4.990` sale igual de lindo y nadie lo ve hasta que está colgado
+  en la mesa. Acá las mesas son las de la campaña y ⛔ no se puede inventar una. El casillero se
+  **vacía al imprimir**: dejarlo cargado es cómo se imprime la misma tirada dos veces.
 - 🔑 **Las COPIAS por escaneo son lo que hace que esto entre en un día.** El local de Zattia tiene
   **294 modelos y 1.282 prendas**: 4,4 prendas por modelo, todas a la misma mesa ⇒ se escanea **una
   prenda por modelo** y se piden las copias que tenga. 294 escaneos, ⛔ no 1.282.
