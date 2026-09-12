@@ -436,6 +436,49 @@ describe('armarPlanPiezas — una pieza, un conjunto propio, un aviso', () => {
       .toBe('PIEZAS 12/8 · reel-uno')
   })
 
+  describe('el copy es POR PIEZA: modelo ← tanda ← pieza', () => {
+    const dos = [
+      { nombre: 'a.mp4', url: 'https://blob.vercel-storage.com/a.mp4', clase: 'video' },
+      { nombre: 'b.jpg', url: 'https://blob.vercel-storage.com/b.jpg', clase: 'imagen' },
+    ]
+    const copies = (r: ReturnType<typeof armarPlanPiezas>) => {
+      if (!r.ok) throw new Error(r.error)
+      return r.pasos.filter((p) => p.tipo === 'crear-creativo').map((p) => p.pedido!.copy)
+    }
+
+    it('🔑 contraprueba: sin textos, cada creativo lleva el copy del modelo tal cual', () => {
+      expect(copies(armarPlanPiezas({ ...base, piezas: dos }, MARCADOR))).toEqual([COPY, COPY])
+    })
+
+    it('el texto de la tanda llega a todas las piezas', () => {
+      const r = armarPlanPiezas({ ...base, piezas: dos, textos: { mensaje: 'Llegaron las nuevas' } }, MARCADOR)
+      expect(copies(r)).toEqual([
+        { ...COPY, mensaje: 'Llegaron las nuevas' },
+        { ...COPY, mensaje: 'Llegaron las nuevas' },
+      ])
+    })
+
+    it('el texto propio de una pieza pisa sólo la suya, y hereda lo que no escribió', () => {
+      const r = armarPlanPiezas({
+        ...base,
+        textos: { mensaje: 'De la tanda', titulo: 'Título de la tanda' },
+        piezas: [dos[0], { ...dos[1], textos: { mensaje: 'Propio de b' } }],
+      }, MARCADOR)
+      expect(copies(r)).toEqual([
+        { ...COPY, mensaje: 'De la tanda', titulo: 'Título de la tanda' },
+        { ...COPY, mensaje: 'Propio de b', titulo: 'Título de la tanda' },
+      ])
+    })
+
+    it('⛔ una pieza con el texto vacío no arma NADA, ni las otras', () => {
+      const r = armarPlanPiezas({
+        ...base, piezas: [dos[0], { ...dos[1], textos: { mensaje: '' } }],
+      }, MARCADOR)
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.error).toContain('b.jpg')
+    })
+  })
+
   it('se planta sin campaña, sin receta, sin copy y sin piezas', () => {
     expect(armarPlanPiezas({ ...base, campaignId: '' }, MARCADOR).ok).toBe(false)
     expect(armarPlanPiezas({ ...base, receta: null }, MARCADOR).ok).toBe(false)

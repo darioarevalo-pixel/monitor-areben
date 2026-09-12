@@ -10,16 +10,21 @@
  * se lleva casi todo a los dos días— y la que quedó sin entrega **no perdió, no jugó**. Con un
  * conjunto cada una, cada pieza tiene su propio presupuesto y el número final se puede comparar.
  *
- * # 🔑 Lo único que se elige es la pieza, y es a propósito
+ * # 🔑 Se elige la pieza y se escribe el texto; lo demás se hereda, y es a propósito
  *
- * El texto, el título, el botón, el destino y la página salen de un **aviso modelo**; la
- * segmentación, la optimización, el cobro y el píxel salen de un **conjunto de referencia**. Los dos
- * de la misma campaña, o sea de algo que Meta ya aceptó y que hoy está entregando. Es la misma
- * decisión que toma `ModalCrear` y por el mismo motivo: el `targeting spec` y la matriz de
- * *objetivo × optimización × cobro* son la fuente número uno de rechazos, y un formulario con esos
- * campos es pedirle a una persona que adivine qué combinaciones son legales.
+ * El botón, el destino y la página salen de un **aviso modelo**; la segmentación, la optimización,
+ * el cobro y el píxel salen de un **conjunto de referencia**. Los dos de la misma campaña, o sea de
+ * algo que Meta ya aceptó y que hoy está entregando. Es la misma decisión que toma `ModalCrear` y por
+ * el mismo motivo: el `targeting spec` y la matriz de *objetivo × optimización × cobro* son la
+ * fuente número uno de rechazos, y un formulario con esos campos es pedirle a una persona que adivine
+ * qué combinaciones son legales.
  *
- * Lo que queda para elegir es lo que se está probando —el archivo— más el nombre y el presupuesto.
+ * **El texto, el título y la descripción sí se escriben** (desde el 12-sep-2026): se precargan del
+ * modelo, se pueden cambiar para toda la tanda y **cada pieza puede llevar el suyo**. El copy es del
+ * aviso — ver `armarPlanPiezas()`. 🔴 Sólo viajan los campos que alguien tocó: lo que nadie tocó lo
+ * hereda el servidor como antes. No es prolijidad: la vista previa (`piezaDe`) y el servidor
+ * (`copyDeCreativo`) leen el texto con cadenas de respaldo en distinto orden, así que mandar lo
+ * precargado podría cambiar el texto de una tanda que nadie editó.
  *
  * # Los bytes no pasan por el servidor
  *
@@ -42,7 +47,7 @@ import {
 import { elegirDeDrive, hayDrive } from '@/lib/drive/picker'
 import { aCrudo, aMonto, LARGO_NOMBRE } from '@/lib/meta-ads/acciones'
 import { nuevoIdemPlan, type Plan } from '@/lib/meta-ads/planes'
-import { TOPE_PIEZAS } from '@/lib/meta-ads/pieza'
+import { LARGO_TEXTOS, TOPE_PIEZAS, type TextosDelAviso } from '@/lib/meta-ads/pieza'
 import type { AvisoCreativo, CampañaEtapa, ConjuntoMeta } from '@/lib/meta-ads/tipos'
 import {
   Button, Card, Field, Input, Notice, NumberField, SectionCard, Select, color, font, radius, space,
@@ -61,6 +66,33 @@ const DIARIO_TRAFICO = 1800
 /** Los `optimization_goal` que son tráfico. `LINK_CLICKS` está retirado pero sigue en conjuntos vivos. */
 const METAS_TRAFICO = new Set(['LINK_CLICKS', 'LANDING_PAGE_VIEWS'])
 
+type ClaveTexto = keyof TextosDelAviso
+const CLAVES_TEXTO: ClaveTexto[] = ['mensaje', 'titulo', 'descripcion']
+
+/** Lo que dice el modelo para cada campo. `mensaje` en la vista previa se llama `texto`. */
+function delModelo(modelo: AvisoCreativo | null): Record<ClaveTexto, string> {
+  return {
+    mensaje: modelo?.texto || '',
+    titulo: modelo?.titulo || '',
+    descripcion: modelo?.descripcion || '',
+  }
+}
+
+/** Lo que se ve en cada campo: lo escrito, o si nadie lo tocó, lo de abajo. */
+function conEscrito(abajo: Record<ClaveTexto, string>, escrito: TextosDelAviso): Record<ClaveTexto, string> {
+  return {
+    mensaje: escrito.mensaje ?? abajo.mensaje,
+    titulo: escrito.titulo ?? abajo.titulo,
+    descripcion: escrito.descripcion ?? abajo.descripcion,
+  }
+}
+
+/** ¿Hay algo escrito que el servidor va a rechazar? Mismas reglas que `textosDelCopy`. */
+function textosInvalidos(escrito: TextosDelAviso): boolean {
+  return (escrito.mensaje !== undefined && !escrito.mensaje.trim())
+    || CLAVES_TEXTO.some((k) => (escrito[k]?.trim().length || 0) > LARGO_TEXTOS[k])
+}
+
 export function CargarPiezas() {
   const { linea } = useMeta()
   const subida = useSubirPiezas()
@@ -74,6 +106,10 @@ export function CargarPiezas() {
   const [avisos, setAvisos] = useState<AvisoCreativo[] | null>(null)
   const [referenciaId, setReferenciaId] = useState('')
   const [modeloId, setModeloId] = useState('')
+  // Sólo lo que alguien TOCÓ. Un campo sin clave lo hereda el servidor del modelo.
+  const [textosTanda, setTextosTanda] = useState<TextosDelAviso>({})
+  // Por `key` de la pieza. Que haya entrada = la pieza lleva texto propio.
+  const [textosPorPieza, setTextosPorPieza] = useState<Record<string, TextosDelAviso>>({})
 
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState<number | ''>('')
@@ -118,6 +154,17 @@ export function CargarPiezas() {
   const elegirCampania = (id: string) => {
     setCampaniaId(id)
     setConjuntos(null); setAvisos(null); setReferenciaId(''); setModeloId(''); setMonto('')
+    setTextosTanda({})
+  }
+
+  /**
+   * ⛔ **Cambiar de modelo olvida el texto de la tanda.** Lo escrito sobre un modelo se escribió
+   * leyendo ese texto: dejarlo pegado arriba de otro modelo es mandar un texto que nadie releyó
+   * contra la página y el destino nuevos. Los textos propios de cada pieza quedan: son de la pieza.
+   */
+  const elegirModelo = (id: string) => {
+    setModeloId(id)
+    setTextosTanda({})
   }
 
   /**
@@ -138,8 +185,12 @@ export function CargarPiezas() {
   const limpio = nombre.trim()
   const nombreLargo = limpio.length > LARGO_NOMBRE
   const montoInvalido = typeof monto !== 'number' || monto <= 0
+  // Los textos propios de las piezas que siguen en la lista. Una que se sacó no manda nada.
+  const propios = subida.listas.filter((p) => textosPorPieza[p.key])
+  const textosMal = textosInvalidos(textosTanda) || propios.some((p) => textosInvalidos(textosPorPieza[p.key]))
+
   const listo = !!limpio && !nombreLargo && !montoInvalido && !!campaniaId && !!referenciaId
-    && !!modeloId && subida.listas.length > 0 && !subida.subiendo && !subida.demasiadas
+    && !!modeloId && subida.listas.length > 0 && !subida.subiendo && !subida.demasiadas && !textosMal
 
   const armar = async () => {
     setEnPlan(true)
@@ -150,8 +201,11 @@ export function CargarPiezas() {
       campaignId: campaniaId,
       referenciaId,
       modeloId,
+      textos: textosTanda,
       nombre: limpio,
-      piezas: subida.listas,
+      piezas: subida.listas.map(({ key, nombre: n, url }) => ({
+        nombre: n, url, ...(textosPorPieza[key] ? { textos: textosPorPieza[key] } : {}),
+      })),
       presupuestoCrudo: typeof monto === 'number' ? aCrudo(monto, moneda) : null,
     })
     setEnPlan(false)
@@ -188,7 +242,7 @@ export function CargarPiezas() {
             onCancelar={() => { void cancelarPlan(plan.id).then((r) => { if (r.ok) setPlan(r.dato.plan) }) }}
           />
           <div>
-            <Button variant="ghost" onClick={() => { setPlan(null); subida.limpiar(); setNombre('') }}>
+            <Button variant="ghost" onClick={() => { setPlan(null); subida.limpiar(); setNombre(''); setTextosPorPieza({}) }}>
               Cargar otra tanda
             </Button>
           </div>
@@ -240,22 +294,40 @@ export function CargarPiezas() {
                 <Notice tone="warning">Esa campaña no tiene conjuntos legibles: elegí otra.</Notice>
               )}
 
-              <Field label="Texto" hint="Se copia de este aviso.">
-                <Select value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
+              <Field label="Aviso modelo" hint="De acá salen la página, el botón y el destino, y se precarga el texto.">
+                <Select value={modeloId} onChange={(e) => elegirModelo(e.target.value)}>
                   <option value="">{avisos ? 'Elegí un aviso…' : 'Cargando…'}</option>
                   {(avisos || []).map((a) => (
                     <option key={a.id} value={a.id}>{a.nombre}</option>
                   ))}
                 </Select>
               </Field>
-              {modelo && <VistaDelCopy modelo={modelo} />}
+              {modelo && (
+                <TextoDeLaTanda
+                  modelo={modelo}
+                  escrito={textosTanda}
+                  onCambio={(k, v) => setTextosTanda((t) => ({ ...t, [k]: v }))}
+                />
+              )}
             </>
           )}
         </div>
       </SectionCard>
 
       <SectionCard title="Los archivos">
-        <ZonaDeArchivos subida={subida} />
+        <ZonaDeArchivos
+          subida={subida}
+          // Lo que precarga un texto propio: el de la tanda tal como se ve. Sin modelo elegido todavía
+          // no hay nada que precargar, y el botón no aparece.
+          textoTanda={modelo ? conEscrito(delModelo(modelo), textosTanda) : null}
+          textosPorPieza={textosPorPieza}
+          onPropio={(key, valores) => setTextosPorPieza((t) => {
+            const sale = { ...t }
+            if (valores) sale[key] = valores
+            else delete sale[key]
+            return sale
+          })}
+        />
       </SectionCard>
 
       <SectionCard title="Nombre y presupuesto">
@@ -316,30 +388,82 @@ export function CargarPiezas() {
   )
 }
 
-/** Lo que se hereda del aviso modelo, a la vista antes de armar nada. */
-function VistaDelCopy({ modelo }: { modelo: AvisoCreativo }) {
+/**
+ * El texto de la tanda, precargado del modelo y editable. Lo que NO se edita —el botón y el
+ * destino— queda a la vista al lado, sin campo: salen del modelo sí o sí (ver `textosDelCopy`).
+ */
+function TextoDeLaTanda({ modelo, escrito, onCambio }: {
+  modelo: AvisoCreativo
+  escrito: TextosDelAviso
+  onCambio: (k: ClaveTexto, v: string) => void
+}) {
   return (
     <Card>
-      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start' }}>
-        {modelo.imagen && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={modelo.imagen}
-            alt=""
-            style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: radius.sm, flex: '0 0 auto' }}
-          />
-        )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: space[1], minWidth: 0 }}>
-          <div style={{ fontSize: font.sm, color: color.mut }}>Se hereda de este aviso:</div>
-          {modelo.titulo && <div style={{ fontWeight: 600 }}>{modelo.titulo}</div>}
-          {modelo.texto && <div style={{ fontSize: font.sm, color: color.ink2 }}>{modelo.texto}</div>}
-          <div style={{ fontSize: font.sm, color: color.mut }}>
-            {modelo.cta ? <>Botón: <b>{modelo.cta}</b>. </> : 'Sin botón propio. '}
-            {modelo.destino ? <>Va a <span style={{ wordBreak: 'break-all' }}>{modelo.destino}</span></> : 'Sin destino legible.'}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start' }}>
+          {modelo.imagen && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={modelo.imagen}
+              alt=""
+              style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: radius.sm, flex: '0 0 auto' }}
+            />
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space[1], minWidth: 0 }}>
+            <div style={{ fontWeight: 600 }}>Texto de la tanda</div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>
+              Viene de este aviso y lo podés cambiar: va a todas las piezas que no tengan texto propio.
+            </div>
+            <div style={{ fontSize: font.sm, color: color.mut }}>
+              No se cambian: {modelo.cta ? <>botón <b>{modelo.cta}</b>, </> : 'sin botón propio, '}
+              {modelo.destino ? <>va a <span style={{ wordBreak: 'break-all' }}>{modelo.destino}</span></> : 'sin destino legible'}
+              {' '}y la página del aviso.
+            </div>
           </div>
         </div>
+        <CamposDeTexto valores={conEscrito(delModelo(modelo), escrito)} onCambio={onCambio} />
       </div>
     </Card>
+  )
+}
+
+/**
+ * Los tres campos, con sus avisos. Los usan la tanda y cada pieza con texto propio: las reglas son
+ * las mismas que aplica el servidor en `textosDelCopy`, y acá sólo se adelantan.
+ */
+function CamposDeTexto({ valores, onCambio }: {
+  valores: Record<ClaveTexto, string>
+  onCambio: (k: ClaveTexto, v: string) => void
+}) {
+  const largo = (k: ClaveTexto) => valores[k].trim().length > LARGO_TEXTOS[k]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: space[2] }}>
+      <Field label="Texto" error={largo('mensaje') ? `No puede pasar de ${LARGO_TEXTOS.mensaje} caracteres.` : undefined}>
+        <textarea
+          className="mo-input"
+          rows={4}
+          value={valores.mensaje}
+          onChange={(e) => onCambio('mensaje', e.target.value)}
+          style={{ resize: 'vertical', fontFamily: 'inherit' }}
+        />
+      </Field>
+      {!valores.mensaje.trim() && (
+        <Notice tone="danger">Falta el texto: un aviso sin texto no se arma.</Notice>
+      )}
+      <Field label="Título" error={largo('titulo') ? `No puede pasar de ${LARGO_TEXTOS.titulo} caracteres.` : undefined}>
+        <Input value={valores.titulo} onChange={(e) => onCambio('titulo', e.target.value)} />
+      </Field>
+      <Field label="Descripción" error={largo('descripcion') ? `No puede pasar de ${LARGO_TEXTOS.descripcion} caracteres.` : undefined}>
+        <Input value={valores.descripcion} onChange={(e) => onCambio('descripcion', e.target.value)} />
+      </Field>
+      {(!valores.titulo.trim() || !valores.descripcion.trim()) && (
+        <Notice tone="warning">
+          {!valores.titulo.trim() && !valores.descripcion.trim()
+            ? 'Sale sin título y sin descripción.'
+            : !valores.titulo.trim() ? 'Sale sin título.' : 'Sale sin descripción.'}
+        </Notice>
+      )}
+    </div>
   )
 }
 
@@ -397,8 +521,14 @@ function DesdeDrive({ subida }: { subida: ReturnType<typeof useSubirPiezas> }) {
   )
 }
 
-/** Elegir y soltar archivos, con el estado de cada subida a la vista. */
-function ZonaDeArchivos({ subida }: { subida: ReturnType<typeof useSubirPiezas> }) {
+/** Elegir y soltar archivos, con el estado de cada subida a la vista y el texto propio de cada una. */
+function ZonaDeArchivos({ subida, textoTanda, textosPorPieza, onPropio }: {
+  subida: ReturnType<typeof useSubirPiezas>
+  textoTanda: Record<ClaveTexto, string> | null
+  textosPorPieza: Record<string, TextosDelAviso>
+  /** `null` = vuelve a usar el de la tanda. */
+  onPropio: (key: string, valores: TextosDelAviso | null) => void
+}) {
   const [encima, setEncima] = useState(false)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
@@ -441,21 +571,36 @@ function ZonaDeArchivos({ subida }: { subida: ReturnType<typeof useSubirPiezas> 
         <div
           key={p.key}
           style={{
-            display: 'flex', alignItems: 'center', gap: space[2], justifyContent: 'space-between',
+            display: 'flex', flexDirection: 'column', gap: space[2],
             padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.sm,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
-            <div style={{ fontSize: font.sm, color: p.estado === 'fallada' ? color.danger : color.mut }}>
-              {p.estado === 'esperando' && 'En la cola…'}
-              {p.estado === 'bajando' && (p.avance === null ? 'Bajando de Drive…' : `Bajando de Drive… ${p.avance}%`)}
-              {p.estado === 'subiendo' && 'Subiendo…'}
-              {p.estado === 'lista' && `Lista · ${p.clase === 'video' ? 'video' : 'imagen'} · ${(p.tamanio / 1048576).toFixed(1)} MB`}
-              {p.estado === 'fallada' && p.motivo}
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[2], justifyContent: 'space-between' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
+              <div style={{ fontSize: font.sm, color: p.estado === 'fallada' ? color.danger : color.mut }}>
+                {p.estado === 'esperando' && 'En la cola…'}
+                {p.estado === 'bajando' && (p.avance === null ? 'Bajando de Drive…' : `Bajando de Drive… ${p.avance}%`)}
+                {p.estado === 'subiendo' && 'Subiendo…'}
+                {p.estado === 'lista' && `Lista · ${p.clase === 'video' ? 'video' : 'imagen'} · ${(p.tamanio / 1048576).toFixed(1)} MB`}
+                {p.estado === 'fallada' && p.motivo}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: space[1], flex: '0 0 auto' }}>
+              {textoTanda && p.estado !== 'fallada' && (
+                textosPorPieza[p.key]
+                  ? <Button variant="ghost" size="sm" onClick={() => onPropio(p.key, null)}>Usar el de la tanda</Button>
+                  : <Button variant="ghost" size="sm" onClick={() => onPropio(p.key, { ...textoTanda })}>Escribir un texto propio</Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => { onPropio(p.key, null); subida.sacar(p.key) }}>Sacar</Button>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => subida.sacar(p.key)}>Sacar</Button>
+          {textosPorPieza[p.key] && textoTanda && (
+            <CamposDeTexto
+              valores={conEscrito(textoTanda, textosPorPieza[p.key])}
+              onCambio={(k, v) => onPropio(p.key, { ...textosPorPieza[p.key], [k]: v })}
+            />
+          )}
         </div>
       ))}
     </div>

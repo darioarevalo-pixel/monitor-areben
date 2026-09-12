@@ -4,9 +4,12 @@ import {
   copyDeCreativo,
   cuerpoDeCreativo,
   destinoDe,
+  LARGO_TEXTOS,
   puedeUsarLaPagina,
+  textosDelCopy,
   TOPE_PIEZAS,
   validarPiezas,
+  type CopyDeAviso,
   type CreativoLeido,
 } from '@/lib/meta-ads/pieza'
 import { piezaDe } from '@/lib/meta-ads/creativos.core.js'
@@ -71,6 +74,75 @@ describe('claseDePieza — la extensión, no el mime del browser', () => {
     expect(claseDePieza('catalogo.pdf')).toBeNull()
     expect(claseDePieza('sin-extension')).toBeNull()
     expect(claseDePieza('')).toBeNull()
+  })
+})
+
+describe('textosDelCopy — escribir el texto sin tocar adónde lleva el aviso', () => {
+  const COPY: CopyDeAviso = {
+    pageId: '102030405060708', instagramId: '17841400000000000',
+    mensaje: 'Bajamos los precios', titulo: 'Hasta 40% off', descripcion: 'Envío gratis',
+    destino: 'https://bdi.com.ar/frio', cta: 'SHOP_NOW',
+  }
+
+  it('🔴 la página, Instagram, el destino y el botón NO se pisan aunque vengan en el cuerpo', () => {
+    // Si un campo libre pudiera cambiar esto, un editor de texto sería un editor de a dónde lleva
+    // el aviso — y `pageId` es lo que se validó contra `puedeUsarLaPagina()`.
+    const colado = {
+      mensaje: 'Nuevo', pageId: '999', instagramId: '888', destino: 'https://otro.com', cta: 'LEARN_MORE',
+    } as unknown as Parameters<typeof textosDelCopy>[1]
+    const r = textosDelCopy(COPY, colado)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.copy).toEqual({ ...COPY, mensaje: 'Nuevo' })
+  })
+
+  it('sin textos, el copy sale IDÉNTICO al del modelo', () => {
+    for (const nada of [undefined, null, {}]) {
+      const r = textosDelCopy(COPY, nada)
+      if (!r.ok) throw new Error(r.error)
+      expect(r.copy).toEqual(COPY)
+    }
+  })
+
+  it('pisa sólo lo que vino, recortado', () => {
+    const r = textosDelCopy(COPY, { titulo: '  Llegó la nueva  ' })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.copy.titulo).toBe('Llegó la nueva')
+    expect(r.copy.mensaje).toBe('Bajamos los precios')
+    expect(r.copy.descripcion).toBe('Envío gratis')
+  })
+
+  it('⛔ un texto vacío NO hereda el del modelo: frena, y dice de qué pieza', () => {
+    const r = textosDelCopy(COPY, { mensaje: '   ' }, 'de «reel.mp4»')
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.status).toBe(400)
+      expect(r.error).toContain('reel.mp4')
+    }
+  })
+
+  it('un título o una descripción vacíos SÍ pasan: el aviso sale sin eso', () => {
+    const r = textosDelCopy(COPY, { titulo: '', descripcion: '' })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.copy.titulo).toBeNull()
+    expect(r.copy.descripcion).toBeNull()
+  })
+
+  it('frena el texto que pasa del tope', () => {
+    expect(textosDelCopy(COPY, { mensaje: 'x'.repeat(LARGO_TEXTOS.mensaje) }).ok).toBe(true)
+    expect(textosDelCopy(COPY, { mensaje: 'x'.repeat(LARGO_TEXTOS.mensaje + 1) }).ok).toBe(false)
+    expect(textosDelCopy(COPY, { titulo: 'x'.repeat(LARGO_TEXTOS.titulo + 1) }).ok).toBe(false)
+  })
+})
+
+describe('validarPiezas — el texto propio de cada pieza', () => {
+  it('lo conserva, reducido a las tres claves que se pueden pisar', () => {
+    const r = validarPiezas([
+      { nombre: 'a.mp4', url: 'https://blob.vercel-storage.com/a.mp4', textos: { mensaje: 'Hola', pageId: '999' } },
+      { nombre: 'b.jpg', url: 'https://blob.vercel-storage.com/b.jpg' },
+    ])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.piezas[0].textos).toEqual({ mensaje: 'Hola' })
+    expect('textos' in r.piezas[1]).toBe(false)
   })
 })
 

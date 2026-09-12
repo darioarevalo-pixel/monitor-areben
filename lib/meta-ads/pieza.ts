@@ -18,7 +18,9 @@ import {
   TIPOS_PIEZA as TIPOS_PIEZA_JS,
   cuerpoDeCreativo as cuerpoDeCreativoJs,
   destinoDe as destinoDeJs,
+  LARGO_TEXTOS as LARGO_TEXTOS_JS,
   puedeUsarLaPagina as puedeUsarLaPaginaJs,
+  textosDelCopy as textosDelCopyJs,
   TOPE_PIEZAS as TOPE_PIEZAS_JS,
   validarPiezas as validarPiezasJs,
 } from './pieza.core.js'
@@ -71,11 +73,19 @@ export interface CopyDeAviso {
   cta: string | null
 }
 
+/**
+ * Los textos que alguien escribió desde el monitor. **Sólo estas tres claves**: la página, el destino
+ * y el botón salen siempre del modelo. Clave ausente = se hereda la del modelo.
+ */
+export type TextosDelAviso = Partial<Record<'mensaje' | 'titulo' | 'descripcion', string>>
+
 /** Una pieza ya subida al Blob y lista para mandarle a Meta. */
 export interface PiezaCargada {
   nombre: string
   url: string
   clase: ClasePieza
+  /** El texto propio de la pieza, que pisa al de la tanda. Ausente = va con el de la tanda. */
+  textos?: TextosDelAviso
 }
 
 /** Lo que se le pasa a `cuerpoDeCreativo` una vez que la pieza ya vive en Meta (o en el Blob). */
@@ -92,6 +102,18 @@ export const MIME_POR_EXTENSION = MIME_POR_EXTENSION_JS as Record<string, string
 /** Los MIME que el permiso de subida deja pasar. Es lo que usa `api/blob-upload.js`. */
 export const TIPOS_PIEZA = TIPOS_PIEZA_JS as string[]
 export const TOPE_PIEZAS = TOPE_PIEZAS_JS as number
+/** Los topes de largo de los textos escritos desde el monitor. Nuestros, no de Meta. */
+export const LARGO_TEXTOS = LARGO_TEXTOS_JS as Record<keyof TextosDelAviso, number>
+
+/**
+ * El copy del modelo con los textos escritos encima. Sólo pisa texto, título y descripción; un
+ * texto vacío se rechaza. Ver `pieza.core.js`.
+ */
+export const textosDelCopy = textosDelCopyJs as (
+  copy: CopyDeAviso | null,
+  textos: TextosDelAviso | null | undefined,
+  donde?: string,
+) => { ok: true; copy: CopyDeAviso } | Falla
 
 export const claseDePieza = claseDePiezaJs as (nombre: string) => ClasePieza | null
 export const extensionDe = extensionDeJs as (nombre: string) => string

@@ -54,7 +54,7 @@ export type PiezaEnCurso = {
 export type SubidaPiezas = {
   piezas: PiezaEnCurso[]
   /** Las que ya están arriba, en la forma que espera el plan. */
-  listas: { nombre: string; url: string }[]
+  listas: { key: string; nombre: string; url: string }[]
   subiendo: boolean
   /** Se pasó del tope: no se sube nada hasta que saquen alguna. */
   demasiadas: boolean
@@ -179,7 +179,7 @@ export function useSubirPiezas(): SubidaPiezas {
 
   const listas = piezas
     .filter((p) => p.estado === 'lista' && p.url)
-    .map((p) => ({ nombre: p.nombre, url: p.url as string }))
+    .map((p) => ({ key: p.key, nombre: p.nombre, url: p.url as string }))
 
   return {
     piezas,

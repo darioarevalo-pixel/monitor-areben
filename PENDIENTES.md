@@ -13,6 +13,78 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ STUNNED: PAUTA DE TRÁFICO PARA LLEGAR A 10.000 SEGUIDORES — 12-sep-2026 (dictado por Bruno)
+
+> «tengo pocos seguidores… me recomendaron para arrancar hacer pauta de tráfico» ·
+> «vos sabes que primero haria trafico… tenemos que llegar a 10mil seguidores, luego vamos por la
+> venta con una pagina con esa cantidad, sino no hay conversiones ni datos» ·
+> «hoy no vende la marca, y tampoco vendio nunca, pero necesito que me conozcan»
+
+🔑 **La decisión es de Bruno y está tomada: TRÁFICO primero, venta después de los 10.000.** La
+sesión había contestado que no (tráfico compró CERO en las tres líneas y se dio de baja el 22-ago),
+y **ese antecedente ⛔ no refuta lo de Stunned**: Zattia y BDI ya tenían ~100.000 seguidores cuando
+se midió, o sea tráfico ahí era redundante. Stunned tiene ~3.300.
+
+🔴 **Y Stunned ⛔ NO es «la línea de Zattia» para nada comercial: es MARCA APARTE** —lo corrigió
+Bruno— **con pop-up dentro de Zattia**. ⇒ ⛔ **no se le puede prestar el público de los 96.000 de
+Zattia**: la propuesta de empujar el drop desde la cuenta grande quedó descartada por eso. Lo que
+sí es prueba social propia: el **pop-up** (punto de venta físico real), los **comentarios
+acumulados del aviso** (⇒ correr SIEMPRE la misma publicación: copiar el anuncio arranca de cero)
+y **reseñas en la landing del drop 2**.
+
+### La vara: COSTO POR SEGUIDOR INCREMENTAL, ⛔ no CTR ni visitas
+
+Base medida en la propia cuenta (7 días de agosto, `STUNNED - Tráfico a Perfil`): $15.236 → 539
+visitas al perfil a $28,27 → 118 seguimientos brutos − 27 bajas − ~73 orgánicos = **~45 nuevos de
+la pauta ⇒ $338 por seguidor incremental**.
+
+| | seguidores a comprar | a $338 | a $5.000/día |
+|---|---|---|---|
+| 3.300 → 10.000 | 6.700 | **$2,3 M** | ~15 meses |
+| si el costo baja a $150 | 6.700 | $1,0 M | ~7 meses |
+
+⇒ **el plan vive o muere en bajar el $338**, ⛔ no en el presupuesto. Palancas ya medidas en esta
+cuenta: **broad y ⛔ no intereses** (CPM $992 contra $3.163 = 3,2×) y **destino sólo perfil de IG**.
+
+🔴 **El costo por seguidor ⛔ NO sale de Ads Manager**: `visitas_perfil` viene en 0 por API y las
+visitas salen de la columna «Resultados»; **los seguidores se leen en las estadísticas de Instagram
+(seguimientos − bajas) y hay que restar la base orgánica** (~73 por semana). Sin eso el número no
+existe.
+
+🔴 **La regla del test ⛔ NO aplica tal cual**: las puertas por compras acumuladas darían «MUERE» a
+los 2 días con la pauta funcionando perfecto (es el mismo caso que la feria presencial de Zattia,
+más arriba). Acá la puerta es **costo por seguidor incremental**, y el total sigue siendo $20.000.
+
+### 🏁 Lo que quedó PUBLICADO Y PAUSADO el 12-sep (cuenta `4366752500136303`)
+
+**Campaña `TRAFICO - STUNNED - PERFIL IG - 12/9`** — objetivo Tráfico, **manual** (⛔ no la
+«configuración recomendada»), presupuesto en el CONJUNTO, sin compartir 20%. **Campaña
+DESACTIVADA** ⇒ ⛔ no entrega.
+- **Conjunto `BROAD - PERFIL IG - 3 PIEZAS - 12/9`**: destino **sólo Perfil de Instagram
+  @stunned.co** (se DESTILDÓ la página de Facebook: un clic a FB ⛔ no deja un seguidor de IG),
+  objetivo de rendimiento «maximizar visitas al perfil», **$5.000/día**, Argentina, 18-65+, **sin
+  segmentación detallada** (38,1-44,8 M), sin límite de puja, sin fecha de fin.
+- **3 anuncios arrancados a la par**, mismo texto, lo único que cambia es el video:
+  `AD01 - BRUNITO PUBLI`, `AD02 - CARTA NOVIOS`, `AD03 - META STUNNED 2` (los tres 1080×1920).
+- Texto: «Stunned. / Ropa que no vas a ver en todos lados. / Seguinos y mirá el drop completo.»
+
+⚠️ **Tres cosas que Meta ⛔ no dejó fijar, o que hay que hacer al prender:**
+1. **Ubicaciones: ⛔ no hay modo manual** con destino Instagram — fuerza «Ubicaciones Advantage+».
+2. **Sin fecha de fin**: al prenderla hay que ponerle corte a los **4 días** ($20.000 totales).
+3. 🔴 **La traducción Advantage+ vino PRENDIDA en el anuncio duplicado** (12 idiomas + «Spanish»):
+   se apagó a mano en los tres. **Revisar esto en cada duplicado** — traducir al mismo idioma es
+   la IA reescribiendo el copy. Y el diálogo de duplicar trae **«Agrega una imagen» pre-tildado**.
+
+▶️ **Lo que falta y ⛔ no lo puede hacer la sesión:**
+- **Instrumentar el local**: la pauta trae gente al pop-up y eso ⛔ no lo mide Meta. Antes de
+  prender hay que definir el oráculo (preguntar «¿cómo nos conociste?» en el mostrador, o un
+  código). Sin eso, «vino gente» ⛔ no se distingue de nada.
+- **Destrabar el evento `Purchase` del píxel** (Tienda Nube ⛔ no lo manda): cuando pase a venta,
+  sin eso la campaña entrega a ciegas.
+- **Decidir si la campaña de VENTAS convive o queda pausada** (hoy toda la cuenta está apagada).
+
+---
+
 ## 🏁 «QUE LAS CHICAS DEL LOCAL VEAN LOS PRODUCTOS DE LA CAMPAÑA Y EL PRECIO» — 12-sep-2026 (dictado, y hecho)
 
 > «en la parte de precios de campaña estaría bueno que las chicas del local puedan ver los productos
@@ -3926,7 +3998,32 @@ conjuntos y 4 avisos— más los videos y creativos, que no salen en ningún inf
 ▶️ **ABIERTO — vale automatizarlo**: un paso final del plan que renombre sacando el sufijo, o un
 botón «limpiar nombres» sobre un plan terminado. Hoy son 8 renombres a mano por tanda.
 
-### ▶️ ABIERTO: ESCRIBIR EL COPY DESDE EL MONITOR (pedido de Bruno, 12-sep — ⛔ no hacer todavía)
+### 🏁 HECHO (12-sep, noche): ESCRIBIR EL COPY DESDE EL MONITOR — y ⛔ CORRIGE la decisión de abajo
+
+**En «Anuncio nuevo» el texto, el título y la descripción ya se escriben.** Se precargan del aviso
+modelo, se cambian para toda la tanda, y **cada pieza puede llevar su texto propio**
+(«Escribir un texto propio» en la fila del archivo). La página, el botón y el destino **siguen
+saliendo del modelo** y ⛔ no tienen campo: `textosDelCopy()` (`lib/meta-ads/pieza.core.js`) ignora
+cualquier otra clave aunque venga en el cuerpo, y la página se valida sobre el copy del modelo.
+
+⛔ **La regla «UN COPY POR TANDA» de abajo NO quedó**: Bruno eligió **uno por pieza** al armarlo,
+con la misma razón del 1-sep (*«si la diferencia es la pieza, ¿por qué no hacemos copys a cada
+uno?»*): el copy es del aviso, y un texto genérico perjudica a todas las piezas. ⚠️ Lo que se
+resigna, a sabiendas: si gana una pieza con texto propio, no se separa cuánto fue la pieza y cuánto
+el texto.
+
+- **Texto vacío frena** el armado (decidido por Bruno). Título y descripción vacíos pasan, con aviso.
+- 🔑 **Sólo viaja lo que alguien tocó.** La vista previa (`piezaDe`, `body` primero) y el servidor
+  (`copyDeCreativo`, `body` último) leen el texto en distinto orden: mandar lo precargado podía
+  cambiar una tanda que nadie editó. Sin tocar nada, el plan sale **idéntico** al de antes (test).
+- ✅ Tests en `meta-pieza` y `meta-ads-planes`, **4 mutantes muertos**.
+- ▶️ **La mano que falta: armarla contra Meta** — una tanda de 2 piezas (una con texto de tanda, otra
+  con texto propio), releer los creativos y confirmar texto nuevo con página, botón y destino del
+  modelo; y la contraprueba sin tocar nada. Todo nace pausado.
+
+Lo que sigue es el pedido original, que queda como historia:
+
+#### (histórico) ESCRIBIR EL COPY DESDE EL MONITOR (pedido de Bruno, 12-sep — ⛔ no hacer todavía)
 
 *«para las descripciones, no hagamos nada ahora, pero se podría hacer algo con código para poder
 hacerlo desde monitor?»*. **Sí, y es contenido.** Hoy el copy ⛔ no se escribe: se HEREDA entero de

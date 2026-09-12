@@ -397,6 +397,8 @@ export type AvisoCreativo = {
   thumb: string | null
   titulo: string | null
   texto: string | null
+  /** La línea chica debajo del título. Null si el aviso no tiene. */
+  descripcion: string | null
   /** El botón del aviso, ya en castellano («Comprar», «Más información»). */
   cta: string | null
   /** A dónde manda el aviso. */

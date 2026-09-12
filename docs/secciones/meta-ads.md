@@ -45,6 +45,11 @@ token de Meta**: lee la foto) · `avanzar-planes-meta.yml` cada hora a las :20 (
   la base y a los permisos de Zattia — igual que `sku_map` con `store='stunned'`. Sin ese helper,
   `puedeVer(perfil, 'stunned')` da false y contesta 403 sin que se entienda.
 - Piezas usa `api/blob-upload.js` (otra de las 7 funciones) y `lib/drive/`.
+- 🔴 **En Piezas el copy se escribe, pero sólo el TEXTO** (desde el 12-sep-2026): texto, título y
+  descripción, para la tanda y **por pieza**. La página, el botón y el destino salen **siempre** del
+  aviso modelo — `textosDelCopy()` (`pieza.core.js`) ignora cualquier otra clave, y
+  `puedeUsarLaPagina()` se corre sobre el copy del modelo. Un texto vacío frena. El cliente manda
+  **sólo lo que alguien tocó**: lo precargado se lee con otra cadena de respaldos que la del servidor.
 - ⚠️ **`lib/gerencial/detectores/ads.ts` NO usa nada de esto**: atribuye por totales de cuenta con una
   regex sobre el nombre. Quedó así a sabiendas. Bajarlo a nivel campaña es otra tanda.
 

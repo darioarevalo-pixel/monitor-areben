@@ -36,7 +36,7 @@ import {
   TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import {
-  CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, puedeUsarLaPagina, validarPiezas,
+  CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, puedeUsarLaPagina, soloTextos, validarPiezas,
 } from '../lib/meta-ads/pieza.core.js';
 import { contextoDeEscalon, correrEscalon } from '../lib/meta-ads/correr-escalon.core.js';
 import { contextoDePoda, correrPoda } from '../lib/meta-ads/correr-poda.core.js';
@@ -622,7 +622,9 @@ async function prepararPiezas(perfil, b, marcador) {
     modeloId, modeloNombre: String(mod.data.name || ''),
     cuentaId, nombre, linea: linea.linea,
     presupuestoCrudo: diarioPedido,
-    piezas: val.piezas, copy: leido.copy, paginaNombre: puede.nombre || '',
+    // 🔴 La página se validó arriba sobre el copy del MODELO, y `textosDelCopy` no la deja pisar: los
+    // textos escritos desde el monitor cambian qué dice el aviso, nunca de dónde sale ni adónde lleva.
+    piezas: val.piezas, copy: leido.copy, textos: soloTextos(b.textos), paginaNombre: puede.nombre || '',
     receta: rec.receta,
     avisos: [...new Set(rec.receta.notas || [])],
   };
