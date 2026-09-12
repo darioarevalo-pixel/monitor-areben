@@ -4041,7 +4041,16 @@ por dónde inyectarlo. La UI ya lo muestra en `VistaDelCopy`, pero de sólo lect
    convertir un editor de texto en un editor de a dónde lleva el aviso.
 4. Abajo no cambia nada: `cuerpoDeCreativo(copy, pieza)` ya recibe el copy como objeto.
 
-🔴 **Y la decisión de diseño que va con esto: UN COPY POR TANDA, ⛔ NO UNO POR PIEZA.** Si cada pieza
-puede llevar su texto, el copy vuelve a ser una variable y el test deja de leerse — es exactamente el
-motivo por el que todo va a BROAD y por el que va una pieza por conjunto. El editor tiene que estar
-arriba, al lado del modelo, no adentro de cada archivo.
+🔴 **UN COPY POR PIEZA, ⛔ NO UNO SOLO PARA LA TANDA** — corregido el mismo 12-sep. Lo primero que
+escribí acá fue lo contrario («un copy por tanda»), por pureza del test, y **está mal**: lo frenó
+Bruno en el momento —*«quiero armarle descripción a cada uno»*— y el razonamiento ya estaba cerrado
+por él en `meta_ads_decision` **224**: *«no se busca una comparación limpia sino una celda que pague,
+y una celda es una apuesta, no un experimento»*.
+
+Con UGC el copy **es parte del concepto de la pieza**: forzar la misma caption en las 4 handicapea a
+varias y mide algo que después nadie va a correr así. ⇒ **lo que se testea es el AVISO (video +
+copy), ⛔ no el video suelto.** Cuando una celda gane, ganó el paquete — para escalarla no importa, y
+sólo importaría para reusar ese video con otro texto, que sería un test nuevo igual.
+
+⇒ el editor va **al lado de cada archivo**, precargado con lo del modelo: quien no toca nada saca lo
+mismo que hoy, y quien quiere cambiar una sola pieza cambia una sola.
