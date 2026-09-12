@@ -22,6 +22,8 @@ import {
   totalEtiquetas,
   variantesAListar,
   variantesEtiquetables,
+  productosDeCampania,
+  filtrarProductosDeCampania,
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
@@ -1049,6 +1051,26 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
   const [ultimoPrecio, setUltimoPrecio] = useState<number | null>(null)
 
   /**
+   * QUÉ PRODUCTOS ENTRAN Y A QUÉ MESA VA CADA UNO — la consulta sin el escáner.
+   *
+   * Pedido de Bruno (12-sep-2026): *«en el mismo lugar donde se imprime la etiqueta se pueda ver
+   * abajo los productos confirmados con precio sale»*.
+   *
+   * 🔑 **Contesta otra pregunta que el escaneo.** Escanear contesta «esta prenda que tengo en la
+   * mano, a cuánto»; la lista contesta **«¿está en la feria?»** y **«¿a qué mesa va?»** sin la
+   * prenda delante —desde el mostrador, con el lector ocupado, o cuando la etiqueta ya está puesta
+   * y lo que hay que saber es el precio para cobrarlo—.
+   *
+   * 🔑 **⛔ No cuesta una consulta más**: son las mismas filas que la pestaña ya bajó para poder
+   * escanear (`camp.porPid`), y siguen siendo las cuatro de la lista blanca — pid, nombre, precio y
+   * si es firme. **Costo, margen y ventas ⛔ no viajan**, que es lo que deja abrir esto al local.
+   */
+  const [buscar, setBuscar] = useState('')
+  const varsDeCampania = useMemo(() => vars.filter((v) => !!camp.porPid[v.pid]), [vars, camp.porPid])
+  const productos = useMemo(() => productosDeCampania(camp.porPid, varsDeCampania), [camp.porPid, varsDeCampania])
+  const filtrados = useMemo(() => filtrarProductosDeCampania(productos, varsDeCampania, buscar), [buscar, productos, varsDeCampania])
+
+  /**
    * EL DIBUJO DE LA ETIQUETA, EN UN SOLO LUGAR.
    *
    * 🔴 **La previa y la impresión salen de acá las dos.** Una previa armada aparte es una previa que
@@ -1346,6 +1368,60 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* ── LOS PRODUCTOS DE LA CAMPAÑA ────────────────────────────────────────────────────
+              🔑 **La lista de una campaña ⛔ NO se corta** —mismo criterio que la pestaña de
+              Liquidaciones—: acá la lista *es* la respuesta a «¿qué entra y a cuánto?», y un
+              «refiná la búsqueda» esconde justo la prenda que se vino a consultar. */}
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: color.mut, marginBottom: 2 }}>
+              LOS PRODUCTOS DE LA CAMPAÑA ({productos.length})
+            </div>
+            <div style={{ fontSize: 12, color: color.mut2, marginBottom: 8 }}>
+              Buscá por nombre, SKU o código para ver a qué mesa va. Las unidades son las del stock de hoy.
+              {provisorios > 0 && (
+                <> Los <b style={{ color: '#b45309' }}>provisorios</b> todavía no los revisó nadie: el precio puede moverse.</>
+              )}
+            </div>
+            <input
+              value={buscar}
+              onChange={(e) => setBuscar(e.target.value)}
+              placeholder="Buscar un producto…"
+              className="mo-input"
+              style={{ width: 320, maxWidth: '100%', marginBottom: 10 }}
+            />
+            {filtrados.length === 0 ? (
+              <div style={{ fontSize: 13, color: color.mut2 }}>
+                Ningún producto de la campaña coincide con «{buscar.trim()}».
+              </div>
+            ) : (
+              <div style={{ maxHeight: 420, overflowY: 'auto', border: `1px solid ${color.brandBorder}`, borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {filtrados.map((p) => (
+                      <tr key={p.pid} style={{ borderBottom: `1px solid ${color.brandBorder}` }}>
+                        <td style={{ padding: '5px 10px' }}>
+                          {p.nombre}
+                          {!p.firme && <span style={{ color: '#b45309', fontSize: 11, fontWeight: 700 }}> · PROVISORIO</span>}
+                        </td>
+                        <td style={{ padding: '5px 10px', color: color.mut2, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                          {p.unidades} u
+                        </td>
+                        <td style={{ padding: '5px 10px', fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                          ${Math.round(p.precio).toLocaleString('es-AR')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {buscar.trim() && filtrados.length > 0 && (
+              <div style={{ fontSize: 12, color: color.mut2, marginTop: 6 }}>
+                {filtrados.length} de {productos.length}
+              </div>
+            )}
           </div>
         </>
       )}

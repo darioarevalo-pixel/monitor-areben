@@ -120,6 +120,43 @@ export function filtrarVariantes(lista: VarianteEti[], q: string): VarianteEti[]
   return lista.filter((v) => (v.name || '').toLowerCase().includes(qq) || (v.sku || '').toLowerCase().includes(qq) || (v.barcode || '').includes(qq))
 }
 
+/** Un producto de la campaña, como llega de `preciosAEtiquetar`. */
+export type ProductoDeCampania = { pid: string; nombre: string; precio: number; firme: boolean }
+
+/** El mismo, ya con las unidades que tiene HOY en el espejo. */
+export type ProductoConUnidades = ProductoDeCampania & { unidades: number }
+
+/**
+ * Los productos de una campaña, ordenados por nombre y con sus unidades de hoy.
+ *
+ * 🔑 **Las unidades salen de las VARIANTES del espejo, ⛔ no de la foto congelada del ítem** —la de
+ * la feria de septiembre es del 6-sep—. Quien mira la lista está por bajar mercadería del depósito:
+ * el número que le sirve es el de hoy.
+ */
+export function productosDeCampania(porPid: Record<string, ProductoDeCampania>, vars: VarianteEti[]): ProductoConUnidades[] {
+  const unidades: Record<string, number> = {}
+  for (const v of vars || []) unidades[v.pid] = (unidades[v.pid] || 0) + (v.stock || 0)
+  return Object.values(porPid || {})
+    .map((p) => ({ ...p, unidades: unidades[p.pid] || 0 }))
+    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'))
+}
+
+/**
+ * Filtra esa lista por texto.
+ *
+ * 🔑 **Reusa `filtrarVariantes`**, que es la búsqueda del resto de Etiquetas (nombre, SKU o código):
+ * dos búsquedas que se separan es la forma de que con el mismo texto una encuentre y la otra no.
+ * Se le suma el nombre del ítem porque un producto **sin** variantes con código de barras ⛔ no está
+ * en `vars` —`variantesEtiquetables` las filtra— y por el código no aparecería nunca.
+ */
+export function filtrarProductosDeCampania(productos: ProductoConUnidades[], vars: VarianteEti[], q: string): ProductoConUnidades[] {
+  const qq = (q || '').trim()
+  if (!qq) return productos
+  const porCodigo = new Set(filtrarVariantes(vars || [], qq).map((v) => v.pid))
+  const min = qq.toLowerCase()
+  return (productos || []).filter((p) => porCodigo.has(p.pid) || (p.nombre || '').toLowerCase().includes(min))
+}
+
 /** Resuelve un código escaneado a una variante: por código exacto, sin ceros a la izquierda, o por SKU. Port de etiScan. */
 export function resolverScan(vars: VarianteEti[], code: string): VarianteEti | null {
   const c = (code || '').trim()

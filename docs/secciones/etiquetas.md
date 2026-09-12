@@ -267,6 +267,34 @@ venga vinculada con los precios definidos en monitor»*.
 - ⚠️ **En jsPDF el corte de línea depende de la fuente activa** ⇒ el `setFont` va **antes** del
   `splitTextToSize`. Medir en normal y escribir en negrita parte el nombre en otro lado.
 
+### 📋 La lista de la campaña, abajo del escaneo (12-sep-2026)
+
+Pedido de Bruno: *«en el mismo lugar donde se imprime la etiqueta se pueda ver abajo los productos
+confirmados con precio sale»*.
+
+- 🔑 **Contesta otra pregunta que el escáner.** Escanear contesta «esta prenda que tengo en la mano,
+  a cuánto»; la lista contesta **«¿está en la feria?»** y **«¿a qué mesa va?»** sin la prenda
+  delante: desde el mostrador, con el lector ocupado, o cuando la etiqueta ya está puesta y lo que
+  hace falta es el precio para cobrarlo.
+- 🔑 **⛔ No cuesta una consulta más ni un campo más.** Son las mismas filas que la pestaña ya bajaba
+  para poder escanear (`camp.porPid`), y siguen siendo las cuatro de la lista blanca de
+  `preciosAEtiquetar` — pid, nombre, precio y `firme`. **Costo, margen y ventas ⛔ no viajan**, que
+  es justo lo que deja tener esto abierto en el local.
+- 🔑 **Las unidades salen del espejo (HOY), ⛔ no de la foto congelada del ítem**: la de la Feria
+  Septiembre es del **6-sep**, y quien mira la lista está por bajar mercadería del depósito.
+- 🔑 **La búsqueda es `filtrarVariantes`, la MISMA del resto de Etiquetas** (nombre, SKU o código).
+  Dos búsquedas separadas es la forma de que con el mismo texto una encuentre y la otra no.
+  ⚠️ Se le suma el nombre del ítem porque un producto **sin** variantes con código ⛔ no está en
+  `vars` —`variantesEtiquetables` filtra las que no tienen barcode— y por código no aparecería nunca.
+- 🔴 **La lista ⛔ no se corta** (mismo criterio que la pestaña de Liquidaciones): acá la lista *es*
+  la respuesta a «¿qué entra y a cuánto?», y un «refiná la búsqueda» esconde justo la prenda que se
+  vino a consultar.
+- 🔑 **La lógica vive en `lib/etiquetas/core.ts`** (`productosDeCampania`, `filtrarProductosDeCampania`)
+  y se testea sola: **5 mutantes, 5 muertos**. 🔴 Uno de ellos —«no ordena por nombre»— **sobrevivió
+  al primer intento**: con pids que parecen índices (`492904`), `Object.values` ya los devuelve
+  ordenados por número, así que el fixture pasaba solo. El test ahora lleva un producto real con el
+  pid más alto y el nombre primero del abecedario (BODY ORIANA, 941566).
+
 ## Lo que ya se rompió acá
 
 - 🔴 **La pestaña «🏷️ Liquidaciones» mostraba CERO justo el día que más hay para etiquetar.** Al

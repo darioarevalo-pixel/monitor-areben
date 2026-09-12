@@ -3,10 +3,12 @@ import {
   agruparCantidades,
   conStock,
   construirPrecios,
+  filtrarProductosDeCampania,
   filtrarVariantes,
   hermanasDe,
   nombrarSinPrecio,
   partirPorPrecio,
+  productosDeCampania,
   resolverScan,
   secuenciaLabels,
   variantesAListar,
@@ -334,5 +336,80 @@ describe('las hermanas de una bolsa', () => {
   it('si ninguna tiene stock, se imprime la que se escaneó', () => {
     const cero = BOLSA.filter((x) => x.pid === '9' && x.sku).map((x) => ({ ...x, stock: 0 }))
     expect(conStock(cero, cero[1]).map((h) => h.id)).toEqual([cero[1].id])
+  })
+})
+
+/**
+ * LA LISTA DE LA PESTAÑA DE FERIA: qué entra y a qué mesa va.
+ *
+ * El fixture es real, sacado de la Feria Septiembre 2026 de Zattia: CAMPERA ROCK - VERDE OLIVA
+ * (pid 492904, seis talles, uno en cero) a $14.990, MINI ARLET (pid 828958, dos colores) que quedó
+ * DESCARTADA de la campaña, y un producto de la campaña sin ninguna variante en el espejo.
+ */
+describe('productosDeCampania · la lista de la pestaña de feria', () => {
+  const PORPID = {
+    '492904': { pid: '492904', nombre: 'CAMPERA ROCK - VERDE OLIVA', precio: 14990, firme: true },
+    '492902': { pid: '492902', nombre: 'CAMPERA ROCK - VERDE INGLÉS', precio: 14990, firme: false },
+    // 🔑 Su pid es el MÁS ALTO y su nombre el primero del abecedario, a propósito: con pids que
+    // parecen índices, `Object.values` ya los devuelve ordenados por número, y sin este la prueba
+    // del orden pasaba sola aunque nadie ordenara nada.
+    '941566': { pid: '941566', nombre: 'BODY ORIANA', precio: 8990, firme: true },
+  }
+  const ESPEJO: VarianteEti[] = [
+    v({ id: '1', pid: '492904', name: 'CAMPERA ROCK - VERDE OLIVA', size: 'L', sku: 'RCA-0007-L', barcode: '1004041', stock: 6 }),
+    v({ id: '2', pid: '492904', name: 'CAMPERA ROCK - VERDE OLIVA', size: 'M', sku: 'RCA-0007-M', barcode: '1004040', stock: 7 }),
+    v({ id: '3', pid: '492904', name: 'CAMPERA ROCK - VERDE OLIVA', size: 'S', sku: 'RCA-0007-S', barcode: '1004043', stock: 0 }),
+    // Descartada de la feria: está en el espejo y ⛔ no tiene que aparecer en la lista.
+    v({ id: '4', pid: '828958', name: 'MINI ARLET', size: 'NEGRO', sku: 'RMI-0056-NG', barcode: 'RMI0056NG', stock: 5 }),
+  ]
+
+  it('suma las unidades de HOY por producto y deja afuera lo que no está en la campaña', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(lista.map((p) => p.pid)).not.toContain('828958')
+    expect(lista.find((p) => p.pid === '492904')?.unidades).toBe(13)
+  })
+
+  /**
+   * 🔴 Un producto de la campaña sin variantes con código ⛔ no está en `vars` —`variantesEtiquetables`
+   * las filtra— y se caía de la lista: el que consulta el precio veía «no está en la feria» de algo
+   * que sí está.
+   */
+  it('el producto sin variantes en el espejo aparece igual, con cero unidades', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(lista.find((p) => p.pid === '492902')?.unidades).toBe(0)
+  })
+
+  it('ordena por nombre, con la Í acentuada donde va', () => {
+    expect(productosDeCampania(PORPID, ESPEJO).map((p) => p.nombre)).toEqual([
+      'BODY ORIANA',
+      'CAMPERA ROCK - VERDE INGLÉS',
+      'CAMPERA ROCK - VERDE OLIVA',
+    ])
+  })
+
+  it('busca por nombre, por SKU y por código de barras', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(filtrarProductosDeCampania(lista, ESPEJO, 'oliva').map((p) => p.pid)).toEqual(['492904'])
+    expect(filtrarProductosDeCampania(lista, ESPEJO, 'RCA-0007-M').map((p) => p.pid)).toEqual(['492904'])
+    expect(filtrarProductosDeCampania(lista, ESPEJO, '1004041').map((p) => p.pid)).toEqual(['492904'])
+  })
+
+  /**
+   * 🔴 **El producto sin variantes con código sólo se puede encontrar por su NOMBRE.** Buscando
+   * únicamente por `vars` desaparecía de la búsqueda justo el que ya cuesta más encontrar.
+   */
+  it('encuentra por nombre al que no tiene ninguna variante en el espejo', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(filtrarProductosDeCampania(lista, ESPEJO, 'inglés').map((p) => p.pid)).toEqual(['492902'])
+  })
+
+  /**
+   * 🔴 Buscar el código de algo que está DESCARTADO tiene que dar vacío, ⛔ no la lista entera: una
+   * búsqueda sin resultados que devuelve todo es la forma de cobrar el precio de otra prenda.
+   */
+  it('el código de una prenda que no está en la campaña no devuelve nada', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(filtrarProductosDeCampania(lista, ESPEJO, 'RMI0056NG')).toEqual([])
+    expect(filtrarProductosDeCampania(lista, ESPEJO, '')).toHaveLength(3)
   })
 })

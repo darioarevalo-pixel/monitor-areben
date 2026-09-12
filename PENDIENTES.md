@@ -13,30 +13,33 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
-## 🆕 «QUE LAS CHICAS DEL LOCAL VEAN LOS PRODUCTOS DE LA CAMPAÑA Y EL PRECIO» — 12-sep-2026 (dictado)
+## 🏁 «QUE LAS CHICAS DEL LOCAL VEAN LOS PRODUCTOS DE LA CAMPAÑA Y EL PRECIO» — 12-sep-2026 (dictado, y hecho)
 
 > «en la parte de precios de campaña estaría bueno que las chicas del local puedan ver los productos
-> de la campaña y el precio»
+> de la campaña y el precio» · *«yo quería que en el mismo lugar donde se imprime la etiqueta se pueda
+> ver abajo los productos confirmados con precio sale»*
 
-🔑 **La pantalla YA EXISTE y ya tiene exactamente eso**: la sección **`precios`** («Precios de
-campaña»), hecha el 10-sep por el pedido hermano —*«necesito que las chicas puedan ver qué precio
-van a estar»*—, lista foto, **precio de lista, precio de campaña, % off y stock**, con el chip
-Confirmado/Provisorio, y ⛔ **no lleva costo ni margen** (lista blanca de `lib/precios/core.core.js`).
+🔴 **La segunda frase corrige a la primera, y cambia el trabajo entero.** Con la primera yo había
+contestado «esa pantalla ya existe»: la sección **`precios`** (área marketing) lista foto, precio de
+lista, precio de campaña, % off y stock, y lo único que faltaba era **una línea de permisos**
+(`'precios': 'marketing'` ⇒ el local ⛔ no la ve). **Pero el pedido ⛔ no era mandarlas a otra
+pantalla: era no tener que salir de la que están usando para etiquetar.**
 
-🔴 **Lo único que falta es QUIÉN LA VE: `lib/permisos.core.js` la tiene en `'precios': 'marketing'`**
-⇒ las del local, que entran por el área **local** (`'etiquetas': 'local'`), ⛔ no la ven. El pedido
-⛔ no es una pantalla nueva: **es una línea de permisos** — y la decisión que hay atrás es si el
-local entra por el área `marketing` (le abre todo el área) o si `precios` pasa a ser de las dos.
-
-✅ **Lo demás ya está listo, medido el 12-sep**: la Feria Septiembre 2026 está **`compartida: true`**
-con nombre comercial **«FERIA ZATTIA»**, y los 339 productos están **confirmados** ⇒ el día que el
-local vea la sección, la lista aparece entera y sin provisorios.
-
-⚠️ **La pestaña «Precios de campaña» de Etiquetas es OTRA cosa** y se llama igual: ésa es para
-imprimir (escanear y que salga la etiqueta de mesa). La de mirar y buscar un precio es la sección
-`precios`. Si el pedido era ver la lista **dentro de Etiquetas**, los datos ya viajan en
-`camp.porPid` (pid, nombre, precio, firme) y es sólo dibujarla — pero **⛔ no hay que hacerlo dos
-veces**: primero decidir cuál de las dos es.
+🏁 **Hecho: la lista va ABAJO del escaneo, en Etiquetas → Precios de campaña.** Buscador por nombre,
+SKU o código; nombre · unidades de hoy · precio de mesa, y el chip **PROVISORIO** donde corresponde.
+- 🔑 **⛔ No cuesta una consulta más ni un campo más**: son las mismas filas que la pestaña ya bajaba
+  para escanear (`camp.porPid`), y siguen siendo las cuatro de la lista blanca de `preciosAEtiquetar`
+  — **costo, margen y ventas ⛔ no viajan**, que es lo que deja tenerla abierta en el local.
+- 🔑 **Las unidades son las del espejo de HOY**, ⛔ no las de la foto congelada (la de la feria es del
+  6-sep): quien mira la lista está por bajar mercadería del depósito.
+- 🔑 La lógica vive en `lib/etiquetas/core.ts` (`productosDeCampania`, `filtrarProductosDeCampania`):
+  **5 mutantes, 5 muertos**, fixture con productos reales de la feria. 🔴 El mutante «no ordena por
+  nombre» **sobrevivió al primer intento**: con pids que parecen índices (`492904`), `Object.values`
+  ya los devuelve ordenados por número y el test pasaba solo.
+- ▶️ **Falta pushear**: el local está etiquetando HOY ⇒ el deploy se pide. Lint, typecheck y 363 de
+  364 archivos de test en verde (el rojo es `crm-paridad`, que es el `CRM.tsx` sin commitear).
+- 📌 **Queda abierto lo otro**, que ⛔ no es lo mismo: si además el local tiene que ver la sección
+  `precios` (con foto y % off), eso sigue siendo la línea de permisos, sin decidir.
 
 ---
 
