@@ -13,6 +13,61 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «QUÉ ETIQUETO HOY SÁBADO SIN REGALAR LA VENTA DEL SÁBADO» — 12-sep-2026 (dictado, y medido)
+
+> «si hago etiquetar el local el lunes no llego al horario de partida que son las 10am, entonces
+> creo que tengo que empezar a etiquetar hoy… si la gente ve esa etiqueta, se vende a ese precio, se
+> cambia manualmente, pero la forma de pago de eso es efectivo/transferencia. y además ver de todos
+> los productos qué podemos etiquetar hoy, que no molesten tanto o por la cantidad o por vender a
+> ese precio… hay otros que conviene etiquetarlos a la tarde pq conviene que menos gente compre a
+> ese precio, pq se puede vender sin problema al precio que está hoy.»
+
+🔑 **Lo que cuesta etiquetar algo temprano es una plata, ⛔ no una intuición:**
+
+    riesgo = (precio que tiene HOY − precio de feria) × lo que ese modelo vende UN SÁBADO
+
+**Las dos mitades engañan por separado**: una prenda que resigna $28.000 pero ⛔ no vende no cuesta
+nada, y una que resigna $4.000 pero vende tres sí. `scripts/feria-zattia-riesgo-sabado.mjs`
+(⛔ no escribe nada; `--dejar=N` mueve el corte).
+
+- 🔴 🔑 **LA UNIDAD DEL LOCAL ES LA ETIQUETA, ⛔ NO LA PRENDA** — corregido por Bruno: *«del local
+  sólo se va a etiquetar lo exhibido, una sola unidad por color»*. **Yo había contado 1.149**, que
+  es el stock del salón. **El pid de Gestión Nube YA ES el color** —está adentro del nombre
+  (REMERA S-MAIL BLACK, CAMPERA ROCK - VIOLETA) y en el salón **⛔ no hay un solo nombre con dos
+  pids**, verificado— ⇒ **el salón son 280 etiquetas**, una por ítem vivo de la campaña que tenga
+  stock en el local.
+- 🔑 **Y el DEPÓSITO es otra cuenta Y OTRA GENTE** (Bruno: *«eso no tiene nada que ver la gente del
+  local»*): **2 por talle por color**, que da **48 modelos · 274 etiquetas** en 3 tiradas
+  ($4.990 → 176 · $12.990 → 70 · $14.990 → 28). `feria-zattia-etiquetado.mjs --min-talle=2 --max-talle=2`.
+- ✅ **El techo del riesgo es chico: $199.375** — y eso es si **toda** la venta de un sábado entero
+  se hiciera al precio de feria. **El depósito es riesgo CERO**: nadie compra lo que no está a la vista.
+- ✅ 🔑 **EL RIESGO ESTÁ CONCENTRADO EN MODELOS SUELTOS, ⛔ NO EN MESAS** ⇒ la orden operativa es
+  «etiquetá todo **salvo esta lista**», que además es la única que funciona porque **el perchero ⛔ no
+  ordena por mesa**. **De 280 modelos del salón, 217 ⛔ no vendieron NI UNA en los 4 sábados medidos**
+  y sólo **63** tienen riesgo. **9 modelos son el 50%**; **CORSET FRANK ($39.990 → $11.990, 8 u) y
+  JEAN WORN ($56.490 → $27.990, 6 u) solos son el 32%**.
+  ⇒ **dejando 20 etiquetas para el cierre se ahorra $142.350 (71%) y quedan 260 para hacer ahora.**
+- ⚠️ **Qué mide el instrumento**: el «⛔ no vende un sábado» son **4 observaciones** (los 4 sábados
+  con el sale ya puesto: 15, 22, 29-ago y 5-sep) ⇒ sirve para **ORDENAR**, ⛔ no para prometer que
+  no se venda. Y **hoy se excluye**: el sábado está a medias y contarlo lo subestima.
+- 🔑 **El «precio de hoy» sale de `aplicacion.precioEscrito` del Sale Invierno Agosto 2026**, que
+  sigue `aplicada` y sigue puesto en GN; el que ⛔ no está en esa campaña está a **lista**.
+  ⛔ **No sirve `foto.promoPrevia`**: la foto de la feria está congelada al 6-sep.
+- 🔴 **El control contra el 11-sep ⛔ NO da igual, y la diferencia está explicada**: el salón pasó de
+  294 modelos / 1.282 prendas a **280 / 1.149** porque el 11 se descartaron los 7 de CONTAMINA
+  (que estaban en el salón y a precio de lista) más dos días de venta. Y de los **6 que «subían»
+  quedan 2** (VESTIDO LUA +$1.000, TOP BRIA +$500): a BODY SWEET, BODY CLARI, TOP KOBE y VESTIDO
+  AMBAR **alguien les igualó la mesa al precio de hoy** entre el 11 y el 12.
+- 🔴 **El precio de la etiqueta es el FINAL** (confirmado por Bruno): en la caja se carga el
+  descuento a mano **hasta ese número**, ⛔ **sin el 15% de efectivo ni el 10% de transferencia**
+  que el sistema tiene cargado. Medido el 5-sep: con ese descuento encima el bloque queda **$6,63M
+  contra $6,91M de costo**.
+- ▶️ 🔴 **Sigue sin hacerse, y es lo único que puede arruinar 550 etiquetas: sacar UNA en la Zebra
+  real** con el título `FERIA ZATTIA` y el renglón `EFT/TRANSF` puestos. `tamPrecio` ⛔ no se acota
+  al alto de los 25 mm.
+
+---
+
 ## 🏁 «QUE LAS CHICAS PUEDAN VER QUÉ PRECIO VAN A ESTAR» — 10-sep-2026 (dictado, y hecho)
 
 > «ya armé la liquidación de zattia, tengo varios productos confirmados con el precio, que todavía
