@@ -24,6 +24,7 @@ import {
   variantesEtiquetables,
   productosDeCampania,
   filtrarProductosDeCampania,
+  categoriasDeCampania,
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
 import { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
@@ -45,7 +46,7 @@ import {
 import type { Marca } from '@/lib/nav.datos'
 import { fmtHace } from '@/lib/resumen'
 import { HeaderAcciones } from '@/components/layout/acciones'
-import { Badge, Button, Card, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
+import { Badge, Button, Card, Lightbox, Notice, Select, Tabs, color, space, useConfirmar } from '@/components/ui'
 
 const CAP = 500
 
@@ -1066,9 +1067,21 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
    * si es firme. **Costo, margen y ventas ⛔ no viajan**, que es lo que deja abrir esto al local.
    */
   const [buscar, setBuscar] = useState('')
+  /**
+   * 🔑 **El corte es por CATEGORÍA porque así se camina el perchero** —lo mismo que decidió la orden
+   * de etiquetado del sábado—: quien etiqueta no recorre la tienda por mesa, recorre los sweaters,
+   * después los tops. La categoría sale de `tipoDePrenda`, **importada de Liquidación**.
+   */
+  const [categoria, setCategoria] = useState('')
+  /** La foto en grande: a 40 px se ve que hay una prenda, ⛔ no CUÁL. */
+  const [foto, setFoto] = useState<{ url: string; alt: string } | null>(null)
   const varsDeCampania = useMemo(() => vars.filter((v) => !!camp.porPid[v.pid]), [vars, camp.porPid])
   const productos = useMemo(() => productosDeCampania(camp.porPid, varsDeCampania), [camp.porPid, varsDeCampania])
-  const filtrados = useMemo(() => filtrarProductosDeCampania(productos, varsDeCampania, buscar), [buscar, productos, varsDeCampania])
+  const categorias = useMemo(() => categoriasDeCampania(productos), [productos])
+  const filtrados = useMemo(
+    () => filtrarProductosDeCampania(productos, varsDeCampania, buscar, categoria),
+    [buscar, categoria, productos, varsDeCampania],
+  )
 
   /**
    * EL DIBUJO DE LA ETIQUETA, EN UN SOLO LUGAR.
@@ -1379,28 +1392,60 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
               LOS PRODUCTOS DE LA CAMPAÑA ({productos.length})
             </div>
             <div style={{ fontSize: 12, color: color.mut2, marginBottom: 8 }}>
-              Buscá por nombre, SKU o código para ver a qué mesa va. Las unidades son las del stock de hoy.
+              Buscá por nombre, SKU o código —o filtrá por categoría, que es como se camina el perchero— para ver a qué mesa va cada una. Las unidades son las del stock de hoy.
               {provisorios > 0 && (
                 <> Los <b style={{ color: '#b45309' }}>provisorios</b> todavía no los revisó nadie: el precio puede moverse.</>
               )}
             </div>
-            <input
-              value={buscar}
-              onChange={(e) => setBuscar(e.target.value)}
-              placeholder="Buscar un producto…"
-              className="mo-input"
-              style={{ width: 320, maxWidth: '100%', marginBottom: 10 }}
-            />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+              <input
+                value={buscar}
+                onChange={(e) => setBuscar(e.target.value)}
+                placeholder="Buscar un producto…"
+                className="mo-input"
+                style={{ width: 280, maxWidth: '100%' }}
+              />
+              {/* 🔑 **Cada categoría dice cuántas trae.** Un desplegable de 26 nombres sin número no
+                  deja elegir por dónde empezar, que es la pregunta de quien encara el perchero. */}
+              <Select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: 220, maxWidth: '100%' }}>
+                <option value="">Todas las categorías ({productos.length})</option>
+                {categorias.map((c) => (
+                  <option key={c.categoria} value={c.categoria}>{c.categoria} ({c.n})</option>
+                ))}
+              </Select>
+              {(categoria || buscar.trim()) && (
+                <Button size="sm" variant="outline" onClick={() => { setCategoria(''); setBuscar('') }}>
+                  Ver todo
+                </Button>
+              )}
+            </div>
             {filtrados.length === 0 ? (
               <div style={{ fontSize: 13, color: color.mut2 }}>
-                Ningún producto de la campaña coincide con «{buscar.trim()}».
+                Ningún producto de la campaña coincide con lo que buscaste.
               </div>
             ) : (
-              <div style={{ maxHeight: 420, overflowY: 'auto', border: `1px solid ${color.brandBorder}`, borderRadius: 8 }}>
+              <div style={{ maxHeight: 460, overflowY: 'auto', border: `1px solid ${color.brandBorder}`, borderRadius: 8 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <tbody>
                     {filtrados.map((p) => (
                       <tr key={p.pid} style={{ borderBottom: `1px solid ${color.brandBorder}` }}>
+                        <td style={{ padding: '4px 8px', width: 48 }}>
+                          {p.imagen ? (
+                            // La miniatura se toca y la foto se abre en grande: mismo camino que en
+                            // Precios y en Liquidación. La URL guardada ya es la de 1024 px.
+                            <button
+                              type="button"
+                              onClick={() => setFoto({ url: p.imagen as string, alt: p.nombre })}
+                              style={{ border: 'none', background: 'none', padding: 0, cursor: 'zoom-in', display: 'block' }}
+                              aria-label={`Ver la foto de ${p.nombre}`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={p.imagen} alt="" style={{ width: 40, height: 50, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                            </button>
+                          ) : (
+                            <span style={{ color: color.mut2 }}>—</span>
+                          )}
+                        </td>
                         <td style={{ padding: '5px 10px' }}>
                           {p.nombre}
                           {!p.firme && <span style={{ color: '#b45309', fontSize: 11, fontWeight: 700 }}> · PROVISORIO</span>}
@@ -1417,12 +1462,13 @@ function PrecioDeCampania({ vars, marca }: { vars: VarianteEti[]; marca: Marca }
                 </table>
               </div>
             )}
-            {buscar.trim() && filtrados.length > 0 && (
+            {(buscar.trim() || categoria) && filtrados.length > 0 && (
               <div style={{ fontSize: 12, color: color.mut2, marginTop: 6 }}>
                 {filtrados.length} de {productos.length}
               </div>
             )}
           </div>
+          {foto && <Lightbox src={foto.url} alt={foto.alt} onCerrar={() => setFoto(null)} />}
         </>
       )}
     </Card>

@@ -26,7 +26,7 @@ import type { EtiquetaCampania } from '@/lib/liquidacion/etiqueta'
 const API = '/api/datos?recurso=liquidacion'
 
 /** Un producto de la campaña, tal como sale de `preciosAEtiquetar`. */
-export type PrecioCampania = { pid: string; nombre: string; precio: number; firme: boolean }
+export type PrecioCampania = { pid: string; nombre: string; imagen: string | null; precio: number; firme: boolean }
 
 export type CampaniaEti = { id: string; nombre: string; desde: string | null; hasta: string | null }
 

@@ -36,7 +36,19 @@ SKU o código; nombre · unidades de hoy · precio de mesa, y el chip **PROVISOR
   **5 mutantes, 5 muertos**, fixture con productos reales de la feria. 🔴 El mutante «no ordena por
   nombre» **sobrevivió al primer intento**: con pids que parecen índices (`492904`), `Object.values`
   ya los devuelve ordenados por número y el test pasaba solo.
-- ▶️ **Falta pushear**: el local está etiquetando HOY ⇒ el deploy se pide. Lint, typecheck y 363 de
+🏁 **Y la segunda vuelta, el mismo día** (*«me gustó, que tengan foto de producto, y algún filtro
+para que se pueda ver por categoría»*): **miniatura de 40 px que se toca y abre en grande**
+(`Lightbox`, el mismo de Precios) y **filtro por categoría con el número al lado de cada una**.
+- 🔴 **La foto obligó a tocar la lista blanca** de `preciosAEtiquetar`: entra `imagen` —la URL
+  pública de la tienda, la misma que ya iba a Marketing— y son **cinco** campos, ninguno el costo.
+  El test fija la lista entera, así que ⛔ no crece sin que alguien lo decida.
+- 🔑 **La categoría es `tipoDePrenda` IMPORTADA de Liquidación**, la misma de la grilla y de la orden
+  de etiquetado del sábado: dos definiciones que se separen dejan al local filtrando por una cosa
+  distinta de la que dice la hoja que tiene en la mano. **30 categorías** en la feria.
+- 📌 **36 de 339 quedan sin foto, y ⛔ no es del snapshot: tampoco la tienen hoy en Tienda Nube.**
+  ⚠️ `BABY` es «BABY TEE» y `FADE` es «FADE #002»: la heurística es la primera palabra.
+- **8 mutantes, 8 muertos.** Lint, typecheck y todo verde salvo `crm-paridad` (el `CRM.tsx` sin
+  commitear, que ⛔ no es de acá).
   364 archivos de test en verde (el rojo es `crm-paridad`, que es el `CRM.tsx` sin commitear).
 - 📌 **Queda abierto lo otro**, que ⛔ no es lo mismo: si además el local tiene que ver la sección
   `precios` (con foto y % off), eso sigue siendo la línea de permisos, sin decidir.

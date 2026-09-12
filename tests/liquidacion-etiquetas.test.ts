@@ -100,10 +100,20 @@ describe('preciosAEtiquetar', () => {
     // la feria se vende AL COSTO: un `select` en vez de una lista blanca publica el margen de la
     // casa el día que alguien agregue un campo a la foto.
     const [uno] = preciosAEtiquetar([
-      { pid: '9', estado: 'confirmado', foto: { nombre: 'X', costo: 8295.89, ventas90: 6, precioNormal: 18990 }, decision: { precioSale: 8990, margen: 7.7, markup: 8.3 } },
+      { pid: '9', estado: 'confirmado', foto: { nombre: 'X', costo: 8295.89, ventas90: 6, precioNormal: 18990, imagen: 'https://acdn-us.mitiendanube.com/x-1024-1024.jpg' }, decision: { precioSale: 8990, margen: 7.7, markup: 8.3 } },
     ])
-    expect(Object.keys(uno).sort()).toEqual(['firme', 'nombre', 'pid', 'precio'])
+    // 🔑 `imagen` entró el 12-sep y es lo único que se sumó: la foto pública de la tienda ⛔ no
+    // dice nada del costo. Si esta lista crece sin que nadie lo decida, el test lo frena acá.
+    expect(Object.keys(uno).sort()).toEqual(['firme', 'imagen', 'nombre', 'pid', 'precio'])
+    expect(uno.imagen).toBe('https://acdn-us.mitiendanube.com/x-1024-1024.jpg')
     expect(JSON.stringify(uno)).not.toContain('8295')
+  })
+
+  it('el producto sin foto viaja con imagen en null', () => {
+    // ⛔ `undefined` desaparece al serializar y la pantalla no puede distinguir «no tiene foto» de
+    // «el campo no llegó».
+    const [uno] = preciosAEtiquetar([{ pid: '6', estado: 'confirmado', foto: { nombre: 'X' }, decision: { precioSale: 4990 } }])
+    expect(uno.imagen).toBeNull()
   })
 
   it('saltea el que no tiene precio en vez de imprimir $0', () => {

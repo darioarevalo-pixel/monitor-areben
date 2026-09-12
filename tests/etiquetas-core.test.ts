@@ -3,6 +3,7 @@ import {
   agruparCantidades,
   conStock,
   construirPrecios,
+  categoriasDeCampania,
   filtrarProductosDeCampania,
   filtrarVariantes,
   hermanasDe,
@@ -401,6 +402,28 @@ describe('productosDeCampania · la lista de la pestaña de feria', () => {
   it('encuentra por nombre al que no tiene ninguna variante en el espejo', () => {
     const lista = productosDeCampania(PORPID, ESPEJO)
     expect(filtrarProductosDeCampania(lista, ESPEJO, 'inglés').map((p) => p.pid)).toEqual(['492902'])
+  })
+
+  /**
+   * 🔑 La categoría es `tipoDePrenda` —la primera palabra del nombre—, la MISMA que usa la grilla de
+   * Liquidación y la orden de etiquetado. Acá se ve por qué importa que sea una sola: las tres
+   * CAMPERA ROCK caen juntas aunque sean tres productos distintos.
+   */
+  it('agrupa por categoría, de la más grande a la más chica', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(categoriasDeCampania(lista)).toEqual([
+      { categoria: 'CAMPERA', n: 2 },
+      { categoria: 'BODY', n: 1 },
+    ])
+  })
+
+  it('el filtro por categoría deja sólo la suya, y se combina con la búsqueda', () => {
+    const lista = productosDeCampania(PORPID, ESPEJO)
+    expect(filtrarProductosDeCampania(lista, ESPEJO, '', 'CAMPERA').map((p) => p.pid)).toEqual(['492902', '492904'])
+    expect(filtrarProductosDeCampania(lista, ESPEJO, 'oliva', 'CAMPERA').map((p) => p.pid)).toEqual(['492904'])
+    // 🔴 La categoría manda: buscar algo que existe pero es de OTRA categoría tiene que dar vacío,
+    // ⛔ no ignorar el filtro y devolverlo igual.
+    expect(filtrarProductosDeCampania(lista, ESPEJO, 'oriana', 'CAMPERA')).toEqual([])
   })
 
   /**

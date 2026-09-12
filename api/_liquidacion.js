@@ -208,7 +208,7 @@ export function pidsAEtiquetar(items, estadoCampania) {
  * al domingo del switch.
  *
  * 🔑 **Lista blanca, por el mismo motivo que `listaParaMarketing`**: la foto congelada del ítem trae
- * **costo, markup, margen y ventas** y la feria se vende al costo. Salen cuatro campos y ninguno es
+ * **costo, markup, margen y ventas** y la feria se vende al costo. Salen cinco campos y ninguno es
  * el costo. Un campo se agrega ACÁ o no viaja.
  *
  * 🔑 **`firme` viaja y ⛔ no se esconde.** Un `definido` es un precio que nadie miró todavía:
@@ -227,6 +227,11 @@ export function preciosAEtiquetar(items) {
     out.push({
       pid: String(i.pid),
       nombre: String((i.foto || {}).nombre || ''),
+      // 🔑 **La foto entra a la lista blanca el 12-sep** (pedido de Bruno: *«que tengan foto de
+      // producto»*). Es la URL pública de la tienda —la misma que ya viaja a Precios de
+      // Marketing—: ⛔ no dice nada del costo y es lo único que deja reconocer la prenda sin leer
+      // el nombre, que es lo que hace quien camina el perchero.
+      imagen: txtOrNull((i.foto || {}).imagen),
       precio,
       firme: esFirme(i.estado),
     });

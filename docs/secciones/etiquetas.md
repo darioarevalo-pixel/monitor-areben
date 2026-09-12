@@ -289,8 +289,24 @@ confirmados con precio sale»*.
 - 🔴 **La lista ⛔ no se corta** (mismo criterio que la pestaña de Liquidaciones): acá la lista *es*
   la respuesta a «¿qué entra y a cuánto?», y un «refiná la búsqueda» esconde justo la prenda que se
   vino a consultar.
-- 🔑 **La lógica vive en `lib/etiquetas/core.ts`** (`productosDeCampania`, `filtrarProductosDeCampania`)
-  y se testea sola: **5 mutantes, 5 muertos**. 🔴 Uno de ellos —«no ordena por nombre»— **sobrevivió
+- 🆕 **Foto y filtro por categoría (12-sep, mismo día)**: *«me gustó, que tengan foto de producto, y
+  algún filtro para que se pueda ver por categoría»*.
+  - **La foto obligó a tocar la lista blanca**: `preciosAEtiquetar` ahora manda **`imagen`** —la URL
+    pública de la tienda, la misma que ya viaja a Precios de Marketing—. Son **cinco** campos y
+    ninguno es el costo; el test fija la lista entera, así que no crece sin que alguien lo decida.
+    ⚠️ **Viaja `null`, ⛔ no `undefined`**: `undefined` desaparece al serializar y la pantalla no
+    podría separar «no tiene foto» de «el campo no llegó». 📌 En la Feria Septiembre son **36 de 339
+    sin foto**, y ⛔ no es un agujero del snapshot: **tampoco la tienen hoy en Tienda Nube**.
+  - **La categoría es `tipoDePrenda` IMPORTADA de Liquidación** (la primera palabra del nombre), la
+    misma que usa la grilla de Productos y la orden de etiquetado del sábado. Dos definiciones de
+    categoría que se separen dejan al local filtrando por una cosa distinta de la que dice la hoja
+    que tiene en la mano. En la feria da **30 categorías**: TOP 80, BABY 28, SWEATER 28, SHORT 25…
+    ⚠️ **`BABY` es «BABY TEE» y `FADE` es «FADE #002»** — la heurística es la primera palabra y ⛔ no
+    una taxonomía; el nombre real sigue en cada fila.
+  - Cada opción del desplegable **dice cuántas trae**: un menú de 30 nombres sin número ⛔ no deja
+    elegir por dónde empezar, que es justo la pregunta de quien encara el perchero.
+- 🔑 **La lógica vive en `lib/etiquetas/core.ts`** (`productosDeCampania`, `filtrarProductosDeCampania`, `categoriasDeCampania`)
+  y se testea sola: **8 mutantes, 8 muertos**. 🔴 Uno de ellos —«no ordena por nombre»— **sobrevivió
   al primer intento**: con pids que parecen índices (`492904`), `Object.values` ya los devuelve
   ordenados por número, así que el fixture pasaba solo. El test ahora lleva un producto real con el
   pid más alto y el nombre primero del abecedario (BODY ORIANA, 941566).

@@ -5,6 +5,7 @@
  * DOM ni globales. El dibujo del PDF (no puro, usa jsPDF+JsBarcode) vive en pdf.ts.
  */
 
+import { tipoDePrenda } from '../liquidacion/core'
 import { ofertaVigente } from '../tienda'
 import { matchTn, type IndiceTn } from '../tn'
 import type { Cantidades, MapaPrecios, MapaPromo, ModoEtiqueta, VarianteEti } from './tipos'
@@ -121,7 +122,7 @@ export function filtrarVariantes(lista: VarianteEti[], q: string): VarianteEti[]
 }
 
 /** Un producto de la campaña, como llega de `preciosAEtiquetar`. */
-export type ProductoDeCampania = { pid: string; nombre: string; precio: number; firme: boolean }
+export type ProductoDeCampania = { pid: string; nombre: string; imagen?: string | null; precio: number; firme: boolean }
 
 /** El mismo, ya con las unidades que tiene HOY en el espejo. */
 export type ProductoConUnidades = ProductoDeCampania & { unidades: number }
@@ -149,12 +150,38 @@ export function productosDeCampania(porPid: Record<string, ProductoDeCampania>, 
  * Se le suma el nombre del ítem porque un producto **sin** variantes con código de barras ⛔ no está
  * en `vars` —`variantesEtiquetables` las filtra— y por el código no aparecería nunca.
  */
-export function filtrarProductosDeCampania(productos: ProductoConUnidades[], vars: VarianteEti[], q: string): ProductoConUnidades[] {
+export function filtrarProductosDeCampania(
+  productos: ProductoConUnidades[],
+  vars: VarianteEti[],
+  q: string,
+  categoria = '',
+): ProductoConUnidades[] {
+  const conCategoria = categoria ? (productos || []).filter((p) => tipoDePrenda(p.nombre) === categoria) : productos || []
   const qq = (q || '').trim()
-  if (!qq) return productos
+  if (!qq) return conCategoria
   const porCodigo = new Set(filtrarVariantes(vars || [], qq).map((v) => v.pid))
   const min = qq.toLowerCase()
-  return (productos || []).filter((p) => porCodigo.has(p.pid) || (p.nombre || '').toLowerCase().includes(min))
+  return conCategoria.filter((p) => porCodigo.has(p.pid) || (p.nombre || '').toLowerCase().includes(min))
+}
+
+/**
+ * Las categorías de la campaña, con cuántos productos tiene cada una.
+ *
+ * 🔑 **Es `tipoDePrenda` —la primera palabra del nombre—, IMPORTADA de Liquidación.** La misma que
+ * usa la grilla de Productos y la que eligió la orden de etiquetado del sábado: *«la unidad es la
+ * categoría, que es como se camina el perchero»*. Dos definiciones de categoría que se separen
+ * dejan al local filtrando por una cosa distinta de la que dice la hoja que tiene en la mano.
+ *
+ * ⛔ **La lista sale del DATO, ⛔ nunca de un enum escrito a mano**: otra temporada trae otras
+ * prendas y un enum fijo las dejaría sin agrupar sin que nada fallara.
+ */
+export function categoriasDeCampania(productos: ProductoDeCampania[]): { categoria: string; n: number }[] {
+  const m = new Map<string, number>()
+  for (const p of productos || []) {
+    const c = tipoDePrenda(p.nombre)
+    m.set(c, (m.get(c) || 0) + 1)
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es')).map(([categoria, n]) => ({ categoria, n }))
 }
 
 /** Resuelve un código escaneado a una variante: por código exacto, sin ceros a la izquierda, o por SKU. Port de etiScan. */
