@@ -497,11 +497,25 @@ Son dos fallas encimadas, y la segunda es la que engaña:
 3 días al 4º mejor objeto de BDI** era el error más caro del día, y lo frenó Bruno de memoria:
 *«girlhood frio copy B estás seguro? el otro día cazó varias ventas»*.
 
-▶️ **Lo mínimo**: (a) el mismo veto de «2 días cerrados desde el escalón» que ya tiene A ESCALAR;
+🏁 **LOS TRES CERRADOS EL 12-sep-2026.** (a) «A BAJAR» ahora sale de la MISMA `lectura()` que A
+ESCALAR, así que hereda el veto del escalón: un objeto con menos de 2 días cerrados sale por un
+renglón `⏳ ESPERANDO … ⛔ no se juzga ni para arriba ni para abajo`, ⛔ no por una propuesta de
+pausa. (b) Todo número de gasto imprime su ventana (`CPA $10.286 (121%) **en 7 días desde
+2026-09-05**`). (c) Antes de proponer PAUSAR se contrasta contra los 7 días y contra la ventana de
+datos: si afuera está debajo del techo, el renglón pasa de `🔴 PAUSAR` a **`🟠 REVERTIR — ⛔ NO
+PAUSAR: revertir el escalón del <fecha> y volver a mirar`**, con las otras dos ventanas impresas al
+lado y la marca `⇐ 🔴 SANO fuera de la ventana corta`. ⚠️ Y cuando el objeto es más joven que las
+ventanas se dice *«no hay más historia»* en vez de repetir el mismo número tres veces, que sería
+ruido con cara de confirmación.
+⚠️ **La rama (c) está EJERCIDA, ⛔ no sólo escrita**: se inyectó a mano el caso de GIRLHOOD FRIO -
+COPY B del 8-sep (200% en la ventana corta, 60% y 55% afuera) y el parte dijo REVERTIR. Sin ese
+empujón la rama no corre ningún día en que nada esté para pausar, o sea casi todos.
+
+~~▶️ **Lo mínimo**: (a) el mismo veto de «2 días cerrados desde el escalón» que ya tiene A ESCALAR;
 (b) que **todo número de gasto imprima su ventana** (`$9.230 en 1 día: 7/9`), que es la regla que
 este archivo ya aplica en otros lados; y (c) antes de proponer PAUSAR, **contrastar la ventana
 recortada contra los 7 días y contra la vida del objeto** — si la vida está debajo del techo, lo que
-corresponde es revertir el escalón, ⛔ no matar el objeto.
+corresponde es revertir el escalón, ⛔ no matar el objeto.~~
 
 🔑 **Lo que une a los dos bugs, y es lo que hay que llevarse**: el parte del día está afinado para
 **no repetir lo de ayer**, y por eso cada sección mira una ventana cortita distinta. Eso está bien
@@ -3884,3 +3898,53 @@ Media de 7 días para BDI: **Meta 10,4 compras/día · la tienda 14,1 pedidos/d�
 todos los techos del parte se calculan contra **las compras de Meta**. Si la brecha es estable, cada
 CPA del informe está corrido hacia arriba. ⛔ No se tocó nada: **hay que medirlo antes**, separando
 lo que Meta no atribuye de lo que es venta orgánica. Bruno el 12-sep: «ahora no, dejalo anotado».
+
+### 🔑 TODO CONJUNTO Y TODO AVISO LLEVA FECHA EN EL NOMBRE — regla de Bruno, 12-sep-2026
+
+*«recordá a todos ponerles fecha tanto a los cda como los anuncios»*. Es la convención que ya tenían
+a mano todos los objetos vivos (`GIRLHOOD FRIO - COPY B - 23/8`, `ASMR TIARA CASE - 26/8`,
+`TANDA 10 - BROAD X BLUE CASES 5/9`) y que ⛔ **no estaba escrita en ningún lado**.
+
+🔑 **En una tanda de piezas la fecha va en el NOMBRE DE LA TANDA, no en el del archivo.** El plan
+nombra cada objeto `${tanda} · ${archivo sin extensión}`, así que la fecha puesta una sola vez baja
+a los 4 conjuntos y a los 4 avisos. ⚠️ Y en el archivo **no puede ir**: macOS ⛔ no admite `/` en un
+nombre de archivo.
+
+### ⚠️ EL SUFIJO ` · #<marcador>-<paso>` ⛔ NO SE PUEDE EVITAR AL CREAR — se limpia después
+
+Bruno, 12-sep: *«el cda quedó con el nombre y un código larguísimo al final, eso no quiero que
+esté»*. El sufijo lo pone `marcaDePaso()` y **es la sonda de reconciliación**: sale del `idem` del
+plan y es lo único que le permite, si la llamada se corta a la mitad, **encontrar lo que ya creó en
+vez de crearlo dos veces**. Es la falla que tumbó los planes del 8-ago. Sacarlo al crear cambia
+«nombre feo» por «conjuntos duplicados u huérfanos».
+
+⇒ **Se limpia después, y para eso existe `renombrar` en los TRES niveles** (ver el comentario de
+`ACCIONES.nombre` en `acciones.core.js`: *«la copia sale con el sufijo que genera el servidor y hay
+que poderle poner el nombre de verdad»*). Una tanda de 4 piezas marca **8 objetos visibles** —4
+conjuntos y 4 avisos— más los videos y creativos, que no salen en ningún informe.
+
+▶️ **ABIERTO — vale automatizarlo**: un paso final del plan que renombre sacando el sufijo, o un
+botón «limpiar nombres» sobre un plan terminado. Hoy son 8 renombres a mano por tanda.
+
+### ▶️ ABIERTO: ESCRIBIR EL COPY DESDE EL MONITOR (pedido de Bruno, 12-sep — ⛔ no hacer todavía)
+
+*«para las descripciones, no hagamos nada ahora, pero se podría hacer algo con código para poder
+hacerlo desde monitor?»*. **Sí, y es contenido.** Hoy el copy ⛔ no se escribe: se HEREDA entero de
+un aviso modelo —mensaje, título, descripción, botón, destino y página— y lo arma **el servidor**
+(`_meta-planes.js` → `copyDeCreativo(leido)`); el navegador manda sólo el `modeloId`, así que no hay
+por dónde inyectarlo. La UI ya lo muestra en `VistaDelCopy`, pero de sólo lectura.
+
+**El cambio, si se hace:**
+1. `components/meta-ads/piezas/CargarPiezas.tsx`: `VistaDelCopy` pasa de vista a **campos editables**
+   para `mensaje`, `titulo`, `descripcion` (y `cta` si se quiere). Ya tiene los valores a la vista.
+2. El cliente manda esos tres junto al `modeloId`.
+3. `_meta-planes.js`: sigue **leyendo el modelo** para `pageId`, `instagramId` y `destino`, y aplica
+   encima **sólo los overrides de texto**. 🔴 Eso no es prolijidad: `pageId` es lo que valida
+   `puedeUsarLaPagina()` y `destino` es adónde va el click — dejar que un campo libre los cambie es
+   convertir un editor de texto en un editor de a dónde lleva el aviso.
+4. Abajo no cambia nada: `cuerpoDeCreativo(copy, pieza)` ya recibe el copy como objeto.
+
+🔴 **Y la decisión de diseño que va con esto: UN COPY POR TANDA, ⛔ NO UNO POR PIEZA.** Si cada pieza
+puede llevar su texto, el copy vuelve a ser una variable y el test deja de leerse — es exactamente el
+motivo por el que todo va a BROAD y por el que va una pieza por conjunto. El editor tiene que estar
+arriba, al lado del modelo, no adentro de cada archivo.
