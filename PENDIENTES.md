@@ -13,6 +13,33 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🆕 «QUE LAS CHICAS DEL LOCAL VEAN LOS PRODUCTOS DE LA CAMPAÑA Y EL PRECIO» — 12-sep-2026 (dictado)
+
+> «en la parte de precios de campaña estaría bueno que las chicas del local puedan ver los productos
+> de la campaña y el precio»
+
+🔑 **La pantalla YA EXISTE y ya tiene exactamente eso**: la sección **`precios`** («Precios de
+campaña»), hecha el 10-sep por el pedido hermano —*«necesito que las chicas puedan ver qué precio
+van a estar»*—, lista foto, **precio de lista, precio de campaña, % off y stock**, con el chip
+Confirmado/Provisorio, y ⛔ **no lleva costo ni margen** (lista blanca de `lib/precios/core.core.js`).
+
+🔴 **Lo único que falta es QUIÉN LA VE: `lib/permisos.core.js` la tiene en `'precios': 'marketing'`**
+⇒ las del local, que entran por el área **local** (`'etiquetas': 'local'`), ⛔ no la ven. El pedido
+⛔ no es una pantalla nueva: **es una línea de permisos** — y la decisión que hay atrás es si el
+local entra por el área `marketing` (le abre todo el área) o si `precios` pasa a ser de las dos.
+
+✅ **Lo demás ya está listo, medido el 12-sep**: la Feria Septiembre 2026 está **`compartida: true`**
+con nombre comercial **«FERIA ZATTIA»**, y los 339 productos están **confirmados** ⇒ el día que el
+local vea la sección, la lista aparece entera y sin provisorios.
+
+⚠️ **La pestaña «Precios de campaña» de Etiquetas es OTRA cosa** y se llama igual: ésa es para
+imprimir (escanear y que salga la etiqueta de mesa). La de mirar y buscar un precio es la sección
+`precios`. Si el pedido era ver la lista **dentro de Etiquetas**, los datos ya viajan en
+`camp.porPid` (pid, nombre, precio, firme) y es sólo dibujarla — pero **⛔ no hay que hacerlo dos
+veces**: primero decidir cuál de las dos es.
+
+---
+
 ## 🏁 «QUÉ ETIQUETO HOY SÁBADO SIN REGALAR LA VENTA DEL SÁBADO» — 12-sep-2026 (dictado, y medido)
 
 > «si hago etiquetar el local el lunes no llego al horario de partida que son las 10am, entonces
@@ -62,6 +89,20 @@ nada, y una que resigna $4.000 pero vende tres sí. `scripts/feria-zattia-riesgo
   descuento a mano **hasta ese número**, ⛔ **sin el 15% de efectivo ni el 10% de transferencia**
   que el sistema tiene cargado. Medido el 5-sep: con ese descuento encima el bloque queda **$6,63M
   contra $6,91M de costo**.
+- 🔴 🔑 **LA ORDEN OPERATIVA SE DA POR CATEGORÍA, ⛔ NO POR MESA NI POR LISTA DE RIESGO** (Bruno,
+  12-sep: *«tengo que mandarles algo como en categorías… arranquemos con todos los sweaters, luego
+  con…»* y *«o seleccioname en categorías»*). **Es la segunda vez que el perchero gana**: ya estaba
+  medido que ⛔ no ordena por mesa (los TOP del salón caen en 13 mesas), y yo igual entregué primero
+  una tabla por mesa y después una lista suelta de 20 nombres. **Quien etiqueta camina un perchero,
+  ⇒ la unidad de la orden es la CATEGORÍA y la excepción se cuelga DEBAJO de su categoría.**
+  🔑 **Y la categoría sale de la PRIMERA PALABRA del nombre** (con BABY TEE y FADE #002 a mano):
+  **26 categorías en el salón**, y **19 ⛔ no tienen ni una excepción** ⇒ 128 etiquetas se hacen sin
+  mirar ninguna lista. Las 7 con excepción: TOP 77 (4) · SWEATER 28 (7) · JEAN 17 (4) · SHORT 16 (1)
+  · CORSET 6 (2) · REMERA 6 (1) · BUZO 2 (1).
+  ✅ **El orden lo eligió Bruno: SWEATER, después TOP, después el resto.**
+- 📌 **La hoja que va al local**: https://claude.ai/code/artifact/ee5209d4-f77a-4d93-afc4-8c47c4cc1064
+  — las 26 categorías en orden con sus excepciones, las 3 tiradas del depósito y las 3 reglas de
+  caja. 🔴 **⛔ No lleva costo, margen ni la plata que se resigna**: eso vive acá, ⛔ no en la hoja.
 - ▶️ 🔴 **Sigue sin hacerse, y es lo único que puede arruinar 550 etiquetas: sacar UNA en la Zebra
   real** con el título `FERIA ZATTIA` y el renglón `EFT/TRANSF` puestos. `tamPrecio` ⛔ no se acota
   al alto de los 25 mm.
@@ -3762,3 +3803,69 @@ De las 3-4 medidas que pide cada una, entre 2 y 3 ⛔ no son las que la guía mi
 busto`) y **los dibujos ⛔ no tienen letras** — rotulan con la palabra (ANCHO, LARGO, LARGO DE
 MANGA). Publicando el dibujo al lado, las filas pasan a la palabra o el cliente busca una «a» que en
 la imagen no está.
+
+---
+
+## 🆕 EL `parte-del-dia` LE DABA MAL LA INFO A BRUNO — 12-sep-2026 (medido y ARREGLADO)
+
+Otra vez salió de que **Bruno no le creyó al parte**, ⛔ no de leer el código: «advantage lo
+desescalé ayer, y no estaba andando bien». El archivo es
+`~/Projects/analista-meta/herramientas/parte-del-dia.mjs` (otro repo, lee de acá).
+
+### 🔴 LA CAUSA: el presupuesto de un CBO vive en la CAMPAÑA y el parte miraba sólo el conjunto
+
+`ADVANTAGE+ CONJUNTO UNICO - 17/8` es **CBO**: su fila de conjunto tiene `diario_crudo` en **NULL
+todos los días** y el número vive en la campaña `120251374921020478`. Bruno le hizo un −20%
+($12.800 → $10.240) el 11-sep, registrado y ejecutado (`meta_ads_decision` **251**, HTTP 200).
+`ultimoCambioDePresupuesto()` miraba el nivel conjunto ⇒ devolvía `null` ⇒ **la ventana no se
+reiniciaba** ⇒ el «CPA 98% del techo» promediaba **6 días a $12.800 con 1 día a $10.240**.
+
+🔑 **Lo que lo prueba, y es el oráculo para no perderlo**: `GIRLHOOD FRIO - INTERESES 1` recibió su
+−20% **el mismo 11-sep** y salió bien, porque su presupuesto es propio. **Mismo día, mismo paso,
+dos lecturas opuestas.** Después del arreglo los dos leen igual. Si vuelven a diferir, volvió.
+
+### 🔴 Y el parte se CONTRADECÍA SOLO: 81% en una sección, 98% en otra, el mismo objeto
+
+Había **DOS ventanas**: «LO QUE CAMBIÓ» usaba 5 días fijos ciegos a los escalones, «A ESCALAR»
+usaba *desde el escalón*. Ahora hay **una** (`lectura()`), y al cierre un control **corta con exit
+1** si un objeto imprimió dos porcentajes distintos. ⚠️ El control está **ejercido a mano**
+(sabotaje inyectado: dio 1; restaurado: dio 0), ⛔ no sólo escrito.
+
+### 🔴 Lo que YA se decidió no silenciaba nada
+
+`meta_ads_decision` sólo se leía para las celdas de test y para congelamientos **con `vence`**. La
+251 tiene `vence: null` y nivel `campania` ⇒ no entraba por ninguna puerta, y el parte volvía a
+diagnosticar desde cero lo que Bruno había hecho el día anterior. Ahora se cuelgan también **las
+decisiones de la campaña**, porque un CBO se decide a ese nivel y el parte recorre conjuntos.
+
+### 🔴 Un día RECIÉN CERRADO no está terminado, y el parte lo juzgaba
+
+Medido el 12-sep contra los pedidos reales de la tienda: el **11-sep Meta atribuía 3 de 9 (33%)**,
+mientras los días ya maduros van **67-93%**. El CPA de ayer salía **$19.355** contra un techo de
+$8.513 — un número que en 3 días va a ser otro, y que manda a apagar objetos sanos. El parte ahora
+lo dice con el porcentaje de cobertura. Es la misma razón por la que existe `DIAS_RELECTURA = 4`.
+
+### 🔴 EL CRON DE LA MAÑANA LLEGA ~4 HORAS TARDE — ⛔ SIN ARREGLAR, decide Bruno
+
+`meta-snapshot.yml` pide **10:20 UTC** y GitHub lo dispara **~14:30 UTC (11:30 ART)**, TODOS los
+días: medido sobre las 8 corridas del 4 al 11-sep (13:43, 14:24, 14:30, 14:38, 14:39, 15:55…).
+⇒ a las 9 de la mañana **nunca hay foto del día**, y `meta-reglas.yml` (que corre 30' después)
+**evalúa 4 h tarde**. 🔴 `docs/secciones/meta-ads.md` línea 578 dice «35-59 minutos tarde, medido
+sobre 8 corridas»: **ese número ya no vale**, y la línea 28 de esa ficha dice 06:30/07:00 UTC,
+que tampoco es lo que hay en el YAML.
+
+**Lo que SÍ se hizo** (en el repo propio, sin tocar nada compartido): el parte **dispara el
+snapshot solo** si la foto falta o pasó de 3 h, espera y recién ahí mide. Ejercido a mano con
+`--forzar-foto`: disparó, esperó, `completed success`, foto a 0,0 h.
+
+**Lo que NO se hizo, a propósito**: mover el cron. El atraso **varía entre 2 y 5 h**, así que
+cualquier horario nuevo es una adivinanza, y adelantarlo le saca horas de reatribución a la foto de
+la mañana — que es justo lo que el encabezado del workflow eligió a propósito. ▶️ **Decisión de
+Bruno**: dejarlo (el auto-disparo ya cubre el parte) o adelantar los dos crons juntos.
+
+### ▶️ ABIERTO Y SIN MEDIR: Meta cuenta MENOS compras que la tienda, y todos los CPA salen de Meta
+
+Media de 7 días para BDI: **Meta 10,4 compras/día · la tienda 14,1 pedidos/día**. Todos los CPA y
+todos los techos del parte se calculan contra **las compras de Meta**. Si la brecha es estable, cada
+CPA del informe está corrido hacia arriba. ⛔ No se tocó nada: **hay que medirlo antes**, separando
+lo que Meta no atribuye de lo que es venta orgánica. Bruno el 12-sep: «ahora no, dejalo anotado».
