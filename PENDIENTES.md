@@ -372,7 +372,7 @@ mirar, eso toca el candado `gestion-nube` y ⛔ no se hizo.
 
 ---
 
-## 🔴🔴 LA FICHA DE RENTABILIDAD IGNORA EL SALE — 8-sep-2026 (medido, ⛔ SIN DECIDIR, y la plata SE ESTÁ YENDO HOY)
+## 🔴 LA FICHA DE RENTABILIDAD IGNORA EL SALE — 8-sep-2026 (medido) · 🏁 DECIDIDO el 12-sep: la ficha QUEDA COMO ESTÁ, y el % del techo ⛔ no decide
 
 **Es el más caro de los cuatro de hoy, y el único que ⛔ no es del script sino de acá.** Lo destapó
 Bruno de memoria: *«recordá que es sale, o sea que hay problemas con el tema del costo por compra,
@@ -421,16 +421,35 @@ y BDI tiene promo de 2ª unidad.
 midiendo la realidad.** Es lo que lo volvió invisible: el número se mueve todos los días, así que
 parece vivo.
 
+### 🏁 12-sep-2026 · LO DECIDIÓ BRUNO, Y NO ES «ARREGLAR LA FICHA»
+
+> «está bien, está armado para la temporada, no para ahora. pero sí es importante: en las decisiones
+> por ahora no tener en cuenta lo de rentabilidad, así que con eso no te preocupes»
+
+🔑 **La ficha ⛔ no está mal cargada: está cargada para la TEMPORADA que viene** —precio de lista, que
+es lo que va a regir cuando termine la sale— y lo que está mal es **usarla hoy**. ⇒ ⛔ **no se toca la
+ficha, ⛔ no se le carga un precio de sale, ⛔ no se agrega el campo de descuento por ahora.** Lo que
+cambia es **cómo se lee el parte**: el **% del techo ⛔ NO decide** mientras la sale corra.
+
+🔴 **Y esto ⛔ no es sólo una nota de lectura: el `parte-del-dia` decide por % del techo en las DOS
+secciones que mueven plata** («A ESCALAR» pide < 75%, «A BAJAR» dispara arriba del 100%). Con el techo
+inflado 2 a 9 veces en la línea que está en sale, esos dos números están corridos **hacia sano**.
+▶️ **Queda por decidir con qué se reemplaza mientras tanto** —candidatos que ya existen y ⛔ no piden
+tocar la ficha: `costoMaxCaja` (la vara de liquidar, que es lo que un sale ES), el CPA contra su
+propia media de 7 días, o los pedidos reales de la tienda que desde hoy el parte trae por línea—.
+⛔ Hasta que eso se decida, el % del techo de las líneas en sale **se lee como referencia, no como
+semáforo**, y el freno sigue siendo el de siempre: **el costo por compra en pesos**.
+
 ### ▶️ Lo que queda abierto (Bruno: *«dejalo anotado, lo vemos más tarde»*)
 
 1. 🔴 **ZATTIA SIGUE GASTANDO ~$7.760/día** — un solo conjunto, `TEST INTERESES 1 - ZATTIA 07/05`,
    más dos `ACTIVE` en cero. ⛔ **NO se pausó**: queda pendiente de decisión. La nota está en
    `meta_ads_decision` id **247**, con `vence: null` **a propósito**, para que las reglas sigan
    gritando en vez de callarse.
-2. **Cargar el precio efectivo en la ficha** — falta UN dato: el precio promedio real de zattia (o
-   cargar «costo × 1,21»). Es lo que destraba todo lo demás.
-3. **La ficha necesita un campo de descuento** que ⛔ no sea `transf`, y el techo tiene que
-   recalcularse por PRECIO además de por unidades.
+2. ⏸ ~~**Cargar el precio efectivo en la ficha**~~ — **SUSPENDIDO por Bruno el 12-sep** (arriba): la
+   ficha queda como está, apuntando a la temporada.
+3. ⏸ ~~**La ficha necesita un campo de descuento**~~ que ⛔ no sea `transf` — **SUSPENDIDO el
+   12-sep**. Vuelve a la mesa cuando la ficha tenga que servir para hoy, ⛔ no ahora.
 4. ⚠️ **`costoMaxCaja` ya existe y nadie lo usa.** Cuando el objetivo es liquidar stock —que es lo
    que un sale al costo ES— **ésa es la vara correcta**, ⛔ no el margen. Hoy no se muestra en
    ningún lado.
@@ -438,14 +457,51 @@ parece vivo.
    preguntó si convenía apagar y rearmar ahí. Ninguna cuenta, creatividad o público arregla un
    margen negativo: **lo que destraba zattia es PRECIO, no pauta.**
 
-### 🔴 Y un tercer bug del parte, del mismo día
+### ⛔ Y un tercer bug del parte, que NO EXISTÍA — corregido el 12-sep-2026 (medido)
 
-El renglón **«BDI · pedidos REALES de la tienda»** cuenta **BDI + Zattia juntos**: la tabla `ventas`
-⛔ no separa las marcas (todo cae en `channel='Tienda Nube'` / `store='Deposito Minorista'`).
-Verificado: 99 pedidos en 7 días ÷ 7 = **14,1/día**, exactamente lo que el parte atribuye a BDI solo.
-⚠️ Y `ventas.total_cost` da un margen bruto del **89%**, imposible en indumentaria (la ficha misma
-supone 45% de costo) ⇒ **esa columna ⛔ no sirve para medir margen**, y es la que uno agarraría
-primero para arreglar lo de arriba.
+~~El renglón **«BDI · pedidos REALES de la tienda»** cuenta **BDI + Zattia juntos**: la tabla
+`ventas` ⛔ no separa las marcas. Verificado: 99 pedidos en 7 días ÷ 7 = **14,1/día**, exactamente lo
+que el parte atribuye a BDI solo.~~
+
+🔴🔑 **ES FALSO, y el «verificado» era CIRCULAR.** `SUPABASE_URL` es la base de **BDI** y adentro no
+hay otra marca: medido el 12-sep, **205 productos distintos en 30 días y todos son accesorios de
+celular** (`SHINY CASE`, `TEMPLADO 9D`, `ENCHUFE USB-C`, `HIDROGEL`), **cero prendas**. Zattia vive en
+**otra base de Supabase** (`ZATTIA_SUPABASE_URL`) — es lo que dice `lib/lineas.core.js`, que una marca
+del monitor ES una base. Y el número que se dio como prueba —99 ÷ 7 = 14,1— **es el que ese mismo
+renglón imprime**: se comparó el renglón consigo mismo. ⇒ 🔑 **Un renglón ⛔ no se verifica contra su
+propia salida: hace falta una fuente que llegue por otro camino** (acá, los renglones de la venta).
+
+🔑 **Y lo que SÍ estaba roto era lo de al lado, que nadie había anotado**: el parte imprime las tres
+líneas de gasto y **un solo** renglón de pedidos ⇒ **zattia y stunned ⛔ no tenían pedidos reales, ni
+uno**, y el aviso de reatribución —que cuelga de ese renglón— corría **sólo para BDI**. Las otras dos
+se juzgaban con el CPA de Meta sin nada que lo cruzara. 🏁 **Cerrado el 12-sep** (`analista-meta`
+`93a97b4`): un renglón **por línea**, BDI de su base y zattia/stunned de la de Zattia, separadas por
+el prefijo de SKU `STU` —la misma regla que `esStunned()`—. ⚠️ La base de Zattia se lee por **Postgres
+directo** (`DATABASE_URL_ZATTIA`): la clave que hay en el `.env` de esta Mac es la **anónima** y
+contra `ventas` contesta «permission denied»; `ZATTIA_SUPABASE_SERVICE_KEY` vive sólo en Vercel.
+
+🔴🔑 **Y ASÍ APARECIÓ EL BUG QUE SÍ ERA GRAVE: el día EN CURSO ⛔ NO TIENE ESPEJO.** `sync-diario.yml`
+y `sync-diario-zattia.yml` corren **una sola vez por día, a la mañana** (cron `0 6`, aterrizan
+~10:30 UTC) ⇒ el día de hoy se carga **mañana**. Medido el 12-sep a las **21:38, con 22 de las 24 h
+transcurridas: BDI tenía CERO ventas del 12** y la última cargada era del **11**. El parte imprimía
+«0 pedidos en lo que va» y eso se lee como **«hoy no vendimos»** cuando lo que pasa es que **nadie lo
+trajo todavía**. Ahora el renglón **declara hasta dónde llegó el espejo** (🔴 si ni el día aparece,
+`⚠️ parcial` siempre en el día en curso, porque `date_sale` no tiene hora y una venta de la madrugada
+⛔ no pone al espejo al día) y el pie del bloque dice los **TRES** motivos por los que el día en curso
+subcuenta, ⛔ no dos. 📌 Es la misma forma que la foto de Meta vieja: **un instrumento que no dice
+hasta cuándo llegó afirma sobre lo que no miró**.
+
+🆕 **Y de paso salió un dato de negocio que ninguna pantalla mostraba: STUNNED ⛔ NO VENDE ONLINE.**
+30 días, tienda de Zattia: **164 pedidos, 164 de Zattia, 0 de Stunned, 0 mixtos**. Con `STU` el mismo
+cruce encuentra **21 pedidos y 23 unidades en «Mi Local»** (el pop-up) ⇒ 🔑 **el cero es del negocio,
+⛔ no del cruce roto** —el control del instrumento va impreso al lado del cero, porque un cero solo no
+distingue «no vendió» de «lo estoy midiendo mal»—. ⚠️ **Esto le pega directo a la pauta de tráfico de
+Stunned de más arriba**: cualquier vara por **compras online** arranca contra un histórico de cero, y
+por eso la vara que se eligió (costo por seguidor) es la única que se puede leer.
+
+⚠️ Lo único que queda en pie de la entrada original: **`ventas.total_cost` da un margen bruto del
+89%**, imposible en indumentaria (la ficha supone 45% de costo) ⇒ **esa columna ⛔ no sirve para medir
+margen**, y es la que uno agarraría primero.
 
 ---
 
@@ -543,8 +599,14 @@ no hay dónde guardarlo»*—: mientras no haya dónde, el prefijo lo elige quie
 cada tanda nueva se lo saltea sin que nadie se entere. ⚠️ Y el parte **declara** lo que descarta
 (`· miradas: N …`) pero estas ⛔ no caen en ningún contador: no llegan ni a ser miradas.
 
-▶️ **Lo mínimo mientras tanto**: que el filtro acepte también `/^TANDA /i`, y que el renglón de
-«miradas» cuente los conjuntos nuevos que ⛔ **no** matchearon ningún prefijo.
+~~▶️ **Lo mínimo mientras tanto**: que el filtro acepte también `/^TANDA /i`, y que el renglón de
+«miradas» cuente los conjuntos nuevos que ⛔ **no** matchearon ningún prefijo.~~
+
+🏁 **HECHO el 12-sep-2026** (`analista-meta` `e41a6e7`), y estaba sin marcar acá: `PREFIJOS_TEST`
+acepta los dos prefijos, lo que ⛔ no matchea **ninguno** se cuenta y se nombra («N conjuntos nuevos
+que la puerta ⛔ NO mira»), y el umbral quedó en **$20.000** en un solo lugar (`PLATA_CELDA`), que es
+la regla del repo. ⚠️ **La marca sigue siendo el NOMBRE**: mientras no haya dónde guardar «esta celda
+es un test», una tanda que se llame de otra forma se sigue saliendo — pero ahora **sale contada**.
 
 ⚠️ Aparte, el umbral está tipeado dos veces y ⛔ no coinciden: el encabezado dice **$20.000** (la
 regla de Bruno del 26-ago, la de abajo en este archivo) y el código corta en **$15.000**. Las
