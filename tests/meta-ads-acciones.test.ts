@@ -407,3 +407,34 @@ describe('releer y comparar: `ok` no sale del POST', () => {
     expect(fotoDe({ status: 1 }, {})).toEqual({ status: null })
   })
 })
+
+/**
+ * **El «¿se puede volver atrás?» de cada acción** (12-sep-2026, P1 de `PENDIENTES.md`).
+ *
+ * 🔑 Se testea acá y ⛔ no en la pantalla porque es una propiedad de la ACCIÓN, igual que
+ * `reintentable`: una acción nueva sin este campo es una que va a aparecer en el menú sin decir si
+ * deshace, y eso ⛔ no lo caza ningún test de render.
+ */
+describe('vuelta atrás — cada acción declara si se deshace', () => {
+  it('TODA acción la declara, con un texto y ⛔ no sólo con la etiqueta', () => {
+    const mal = Object.entries(ACCIONES).filter(([, a]) => {
+      const v = (a as { vuelta?: { como?: string; texto?: string } }).vuelta
+      return !v || !['si', 'parcial', 'no'].includes(String(v.como)) || (v.texto ?? '').trim().length < 30
+    }).map(([k]) => k)
+    expect(mal).toEqual([])
+  })
+
+  /**
+   * 🔴 El caso que obliga a que sean DOS campos: cambiar el presupuesto es `reintentable: true` —el
+   * servidor puede repetir la llamada— y su vuelta atrás es `parcial`, porque el reinicio del
+   * aprendizaje ⛔ no se deshace. Si alguien los unifica «porque dicen lo mismo», esto se pone rojo.
+   */
+  it('`vuelta` ⛔ no es un alias de `reintentable`', () => {
+    const pres = ACCIONES.presupuesto as unknown as { reintentable: boolean; vuelta: { como: string } }
+    expect(pres.reintentable).toBe(true)
+    expect(pres.vuelta.como).toBe('parcial')
+    const dup = ACCIONES.duplicar as unknown as { reintentable: boolean; vuelta: { como: string } }
+    expect(dup.reintentable).toBe(false)
+    expect(dup.vuelta.como).toBe('no')
+  })
+})

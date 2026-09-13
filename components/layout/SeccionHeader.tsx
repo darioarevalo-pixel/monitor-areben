@@ -3,8 +3,10 @@
 import { useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { categoriaDesde, descripcionDe, tituloDesde, zonaDe } from '@/lib/nav'
+import { declaracionDe } from '@/lib/secciones-declaracion'
 import { useRegistrarSlot } from '@/components/layout/acciones'
 import { AyudaDeSeccion } from '@/components/layout/AyudaDeSeccion'
+import { InfoPopover } from '@/components/ui/InfoPopover'
 
 /**
  * Encabezado uniforme de cada sección servida por el shell: eyebrow de categoría +
@@ -32,6 +34,18 @@ export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: str
   const eyebrow = zona ? tituloDesde(seccion, grupo) : categoriaDesde(seccion, grupo)
   const titulo = zona ? zona.titulo : tituloDesde(seccion, grupo)
   const desc = zona ? zona.desc : descripcionDe(seccion)
+  // 🔴 P1 de `PENDIENTES.md`, dicho por Bruno el 25-ago-2026: «los sectores en monitor no se entienden
+  // qué hace ni qué ejecutan». El renglón de arriba alcanza para RECONOCER la sección y ⛔ no para
+  // saber qué pasa si apretás algo, que es lo que se preguntó. El texto largo ya existía —el `info`
+  // de `PERM_CAT`, 62 de 64 secciones— y se veía sólo en `/usuarios`, cuando un admin reparte
+  // permisos: acá se publica donde se trabaja. Ver `lib/secciones-declaracion.ts`.
+  // ⚠️ Va en un popover y ⛔ no suelto en la pantalla: son párrafos de 2 a 6 renglones y empujarían
+  // la tabla abajo del pliegue en las 64 secciones, todos los días, para leerse una vez.
+  // Y si el largo ⛔ no agrega nada sobre el corto, ⛔ no se dibuja: un ⓘ que repite lo de al lado
+  // enseña a no apretar el ⓘ. En una ZONA se calla, porque la zona tiene su propio texto y la
+  // declaración es de la sección entera (la regla que arregló «Producir explicaba Rendimiento»).
+  const larga = zona ? undefined : declaracionDe(seccion)
+  const vale = !!larga && larga.trim() !== (desc ?? '').trim()
   const registrar = useRegistrarSlot()
 
   // Callback ref y no useEffect: publica el nodo en el mismo commit en que existe, y lo
@@ -49,7 +63,17 @@ export function SeccionHeader({ seccion, grupo }: { seccion: string; grupo?: str
       <div className="seccion-header-txt">
         {eyebrow && <div className="seccion-eyebrow">{eyebrow}</div>}
         <h1 className="seccion-titulo">{titulo}</h1>
-        {desc && <p className="seccion-desc">{desc}</p>}
+        {desc && (
+          <p className="seccion-desc">
+            {desc}
+            {vale && (
+              <>
+                {' '}
+                <InfoPopover titulo="Qué hace y qué escribe">{larga}</InfoPopover>
+              </>
+            )}
+          </p>
+        )}
         {/*
           La ayuda de esta pantalla —«Manual de uso» y «Tour virtual»—, si la hay. Va ACÁ y no
           adentro de `seccion-acciones`: ese div es un portal que llenan las secciones, y meterle un

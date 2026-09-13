@@ -37,7 +37,25 @@
  */
 
 import { Icono, MenuAcciones, color, space, type AccionMenu } from '@/components/ui'
+import { ACCIONES } from '@/lib/meta-ads/acciones.core.js'
 import type { Acciones, ObjetoMeta } from '@/components/meta-ads/acciones/tipos'
+
+/**
+ * 🔴 **El «¿se puede volver atrás?» se lee ANTES de apretar** (12-sep-2026, P1 de `PENDIENTES.md`).
+ * Cada `hint` decía qué hace la acción y ⛔ no si se puede deshacer, que es la otra mitad de la
+ * pregunta de Bruno —«no se entiende qué ejecutan»—: eso se leía recién adentro del modal, cuando ya
+ * se decidió entrar, y en Duplicar ⛔ no se leía en ningún lado.
+ *
+ * 🔑 El texto ⛔ no se escribe acá: sale de `ACCIONES[x].vuelta` en el núcleo, que es donde vive todo
+ * lo que el servidor deja pasar. Un texto tipeado en la pantalla se despega del día que la acción
+ * cambie de naturaleza; uno leído del núcleo cambia con ella.
+ */
+const vueltaDe = (clave: keyof typeof ACCIONES) => {
+  const v = ACCIONES[clave]?.vuelta
+  if (!v) return ''
+  const marca = v.como === 'si' ? '↩︎ Se deshace' : v.como === 'parcial' ? '⚠️ Se deshace a medias' : '🔴 ⛔ No se deshace'
+  return ` · ${marca}: ${v.texto}`
+}
 
 export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, inerte, acciones }: {
   objeto: ObjetoMeta
@@ -71,28 +89,28 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
   const mas: AccionMenu[] = [
     puedePresupuesto && conPlata ? {
       key: 'presupuesto', label: 'Cambiar el presupuesto', icono: 'presupuesto' as const,
-      hint: 'Pone otro diario ahora mismo. Meta lo prorratea sobre lo que queda del día',
+      hint: `Pone otro diario ahora mismo. Meta lo prorratea sobre lo que queda del día${vueltaDe('presupuesto')}`,
       onClick: () => acciones.onPresupuesto(objeto, diarioCrudo),
     } : null,
     puedeEscalar && conPlata ? {
       key: 'escalar', label: 'Escalar de a 20%', icono: 'escalar' as const,
-      hint: 'Sube el presupuesto de a 20%, un escalón por día, y se frena solo si deja de rendir o llega al techo de la marca. Los escalones se dan aunque nadie entre al monitor',
+      hint: `Sube el presupuesto de a 20%, un escalón por día, y se frena solo si deja de rendir o llega al techo de la marca. Los escalones se dan aunque nadie entre al monitor${vueltaDe('presupuesto')}`,
       onClick: () => acciones.onEscalar(objeto, diarioCrudo),
     } : null,
     puedeDuplicar ? {
       key: 'duplicar', label: 'Duplicar', icono: 'duplicar' as const,
-      hint: 'Crea una copia pausada, con sus conjuntos y avisos, y le pone el nombre y el presupuesto que le digas',
+      hint: `Crea una copia pausada, con sus conjuntos y avisos, y le pone el nombre y el presupuesto que le digas${vueltaDe('duplicar')}`,
       onClick: () => acciones.onDuplicar(objeto, diarioCrudo, !!sinPresupuesto),
     } : null,
     puedeCrear ? {
       key: 'crear', label: 'Crear una campaña', icono: 'mas' as const,
-      hint: 'Crea una campaña NUEVA, pausada, con esta misma segmentación y estos mismos avisos. Duplicar, en cambio, deja la copia adentro de la campaña actual',
+      hint: `Crea una campaña NUEVA, pausada, con esta misma segmentación y estos mismos avisos. Duplicar, en cambio, deja la copia adentro de la campaña actual${vueltaDe('duplicar')}`,
       onClick: () => acciones.onCrear(objeto, diarioCrudo),
     } : null,
     // Renombrar va último: es lo único de esta lista que no cambia lo que Meta hace.
     puedeNombre ? {
       key: 'nombre', label: 'Renombrar', icono: 'lapiz' as const,
-      hint: 'Cambia sólo el nombre. No toca la entrega ni el presupuesto',
+      hint: `Cambia sólo el nombre. No toca la entrega ni el presupuesto${vueltaDe('nombre')}`,
       onClick: () => acciones.onNombre(objeto),
     } : null,
   ].filter(Boolean) as AccionMenu[]
@@ -106,7 +124,9 @@ export function BotonesAccion({ objeto, estado, diarioCrudo, sinPresupuesto, ine
           // 🔑 El rótulo lleva la COSA adentro: diez «Pausar» apilados son diez botones idénticos
           // para quien no ve la pantalla. Es la misma frase que después pregunta el diálogo.
           aria-label={`${activo ? 'Pausar' : 'Reactivar'} «${objeto.nombre}»`}
-          title={activo ? 'Deja de mostrarse y de gastar en el acto. Es reversible' : 'Vuelve a entregar. El aprendizaje del conjunto sigue donde quedó'}
+          title={(activo
+            ? 'Deja de mostrarse y de gastar en el acto'
+            : 'Vuelve a entregar. El aprendizaje del conjunto sigue donde quedó') + vueltaDe('estado')}
           onClick={() => acciones.onEstado(objeto, estado)}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
