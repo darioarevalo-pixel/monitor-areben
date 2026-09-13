@@ -535,8 +535,21 @@ que ya recibió su escalón y todavía no tiene 2 días cerrados. El 9-sep las t
 `TEST FUNDAS` (110/141/0c/0c ⇒ **apagar**), `GIRLHOOD INTERESES 1` (139/170/98/115 ⇒ **recortar,
 pero recién mañana**), `TEST BROAD` (129/138/95/0c ⇒ **esperar, la mano ya está dada**).
 
-▶️ **Lo que falta en el `parte-del-dia`**: hoy imprime una sola ventana por sección y **⛔ no dice
-cuál**. Que cada fila accionable salga con las cuatro.
+🏁 **HECHO el 12-sep-2026** (`analista-meta` `99b6657`): cada fila accionable de **A ESCALAR** y de
+**A BAJAR** sale con las cuatro —gasto, compras y % del techo— y el encabezado de cada sección dice
+cuáles deciden. ⚠️ Los % de las ventanas **⛔ no pasan por `decir()`**: son cuatro lecturas declaradas
+del mismo objeto, ⛔ no cuatro veredictos, y meterlas en el control de coherencia lo haría explotar
+todos los días sobre algo que está bien.
+
+🔑 **Y el veredicto quedó ATADO a la regla, porque tenerla sólo en el informe es tenerla en la
+cabeza**: (a) para **PAUSAR** ninguna de las dos ventanas que deciden puede estar debajo del techo;
+(b) arriba en 7d y **debajo en 3d** es un caso que el parte ⛔ no sabía leer y ahora tiene nombre
+—**🟡 MIRAR**—: el objeto viene corrigiendo solo y recortarlo reinicia el aprendizaje justo cuando
+enderezaba (el paso se imprime igual, por si se decide recortar). 📊 Medido ese día: `BLUE CASES`
+daba **7d 121% · 3d 81% · anteayer 36%** y el parte pedía −20% mirando sólo el 121%.
+⚠️ Y el «no hay más historia» **silenciaba la tira entera** en un objeto joven: por eso BLUE CASES
+salía con un «CPA 121%» pelado. Las tres ramas —PAUSAR, REVERTIR, MIRAR— quedaron **ejercidas con
+casos inyectados a mano**, porque ninguna corre sola un día normal.
 
 ### 🔴 EL BUG 2 VOLVIÓ A DISPARAR AL DÍA SIGUIENTE — sigue sin arreglar
 
@@ -2935,22 +2948,65 @@ manuales **publicados** (`publicados = manuales.filter((m) => m.publicado)`), y 
   Bruno). La alternativa, si eso tarda: que el desplegable incluya el manual que la fila ya tiene,
   aunque esté en borrador, marcado como «sin publicar».
 
-### ▶️ P1 — Cada sección declara, EN LA PANTALLA, qué hace y qué ejecuta
+### 🏁 P1 — Cada sección declara, EN LA PANTALLA, qué hace y qué ejecuta — HECHO el 12-sep-2026
+
+🔑 **El texto largo YA ESTABA ESCRITO, y el trabajo era MOSTRARLO**: es el `info` de `PERM_CAT`, y lo
+tienen **62 de las 64** secciones registradas (medido). Hasta hoy se veía **sólo en `/usuarios`**,
+cuando un admin reparte permisos — o sea, la explicación existía en el repo y ⛔ no en la pantalla
+donde se trabaja. ⇒ el encabezado de cada sección publica un **ⓘ «Qué hace y qué escribe»** al lado
+del renglón corto (`components/layout/SeccionHeader.tsx`). ⛔ No se dibuja si repetiría al corto, ni
+en una **zona** —ahí el encabezado es de la zona, la regla que arregló «Producir explicaba
+Rendimiento»—. ⚠️ Va en popover y ⛔ no suelto: son párrafos de 2 a 6 renglones y en 64 pantallas
+empujarían la tabla abajo del pliegue todos los días para leerse una vez.
+
+📊 **Las seis que no declaraban nada salieron MEDIDAS, ⛔ no elegidas a dedo** (menos de 60
+caracteres): cinco son de análisis y su propio docblock dice *«read-only sobre el store del ETL»*, de
+ahí sale el **«⛔ no escribe nada»** —que es la respuesta que el usuario ⛔ no podía saber—. La sexta
+era **`tncat`, que decía «Herramientas de TiendaNube.» siendo la que más escribe afuera del
+monitor**: ahora dice qué toca de la tienda pública, que **dos ediciones del mismo producto se
+pisan**, y que eliminar una categoría es a mano en el admin.
+
+⚠️ **`lib/secciones-declaracion.ts` es un archivo NUEVO a propósito**: `nav.datos.ts` —su lugar
+natural— lo está editando la otra sesión y acá ⛔ no hay merge. `PROPIAS` está para mudarse allá, y
+el test la obliga a **ENCOGERSE**: cada entrada declara **por qué** pisa al `info` (`sin-info` /
+`no-dice-si-escribe`) y sobra en cuanto el motivo deja de valer.
+
+🏁 **Y la mitad de Meta también, que era la que estaba escrita a medias**: el **«¿se puede volver
+atrás?» se lee ANTES de apretar**. Cada acción declara `vuelta` en `acciones.core.js`, y 🔑 **⛔ no es
+`reintentable`**: `reintentable` dice si el SERVIDOR puede repetir la llamada, `vuelta` si la PERSONA
+puede dejar las cosas como estaban — cambiar el presupuesto es `reintentable: true` y se deshace **a
+medias**, porque el número se repone y **el reinicio del aprendizaje ⛔ no**. Duplicar es el único que
+⛔ no se deshace: el monitor ⛔ no elimina lo que crea. Los `hint` del menú y el `title` del botón de
+pausa **lo leen del núcleo**, así que un texto ⛔ no puede despegarse de la acción.
+
+⚠️ **Lo que queda de P1, y es chico**: el modal de presupuesto avisa del reinicio de aprendizaje por
+una regla de forma (salto ≥ 25%) y ⛔ **no** con el dato real de `aprendizajeDe()`, que ya se calcula
+y se muestra en el «por qué» de la celda. Para pasárselo hay que cablear la serie de la celda hasta
+el modal, que hoy sólo recibe el objeto y el diario.
+
+### 📌 El plan original, y en qué la realidad lo corrigió
 
 Lo mínimo, en el encabezado de cada sección: **una línea de qué resuelve** y, si tiene botones que
 escriben, **qué toca cada uno, dónde, y si se puede volver atrás**.
 
 Cómo hacerlo sin escribir 55 textos sueltos:
-- El registro de secciones ya existe y ya está amarrado por `tests/agents-mapa-secciones.test.ts`.
-  **Sumarle dos campos obligatorios: `queHace` y `queEscribe`** (este último `null` si la sección
-  sólo lee). Un test que exija los dos, igual que hoy exige que la sección figure en el mapa.
+- ⛔ **Esto se planeó al revés, y lo corrigió medirlo**: decía *«sumarle dos campos obligatorios:
+  `queHace` y `queEscribe`»*, o sea **escribir 64 textos nuevos**. `queHace` **ya existía dos veces**
+  —el renglón corto de `DESCRIPCIONES` y el párrafo de `PERM_CAT.info`— y el segundo, en 62 de 64
+  secciones, **ya decía buena parte de lo que escribe**. 🔑 Antes de agregar un campo obligatorio,
+  mirar si el dato ya está escrito en otro lado y **lo que falta es publicarlo**. El test que exige
+  los dos sí se escribió, y es lo que quedó: `tests/seccion-declara.test.ts`.
+- ⛔ **Y lo que ⛔ NO se pudo derivar, medido**: intenté sacar el «qué escribe» del código —seguir los
+  imports de cada sección y juntar los `fetch` que escriben— y el instrumento dio **dos resultados
+  opuestos y los dos falsos**: con el endpoint pegado al `method` dio «45 de 64 sólo leen» (y entre
+  ellas `usuarios` y `agenda`, que claramente escriben — el endpoint vive en una constante), y
+  siguiendo tres niveles de imports dio **«escriben las 64»**, porque arrastra helpers comunes.
+  🔑 **Un grafo de imports ⛔ no distingue «esta pantalla escribe» de «importó algo que escribe».**
 - Las acciones de Meta ya tienen la mitad hecha: `lib/meta-ads/acciones.core.js` tiene `rotulo`
   («pausar o activar», «cambiar el presupuesto diario») y `reintentable`. **Falta que eso se lea en
-  la pantalla ANTES de apretar**, no sólo en el modal de confirmación. ▶️ Sigue pendiente: la zona
-  monta los botones en la fila pero el rótulo y el «¿se puede volver atrás?» se siguen leyendo recién
-  adentro del modal. Y en el de presupuesto falta el aviso de si el paso **reinicia el aprendizaje**
-  —el dato ya lo calcula `aprendizajeDe()` y se muestra en el «por qué» de la celda, pero no en el
-  modal, que es donde se decide.
+  la pantalla ANTES de apretar**, no sólo en el modal de confirmación. 🏁 **Cerrado el 12-sep** con un campo
+  nuevo, `vuelta`, porque `reintentable` **contestaba otra pregunta** (ver arriba). Lo que queda es
+  sólo el dato real de `aprendizajeDe()` dentro del modal de presupuesto.
 
 ⚠️ **Esto es lo primero porque es lo que pidió el usuario**, y porque sin esto ninguna de las otras
 mejoras se descubre.
