@@ -75,8 +75,8 @@ admin, `stunned.com.ar` seguía mostrando el texto viejo de CAMPERA WEAR y parec
 pasado. El oráculo que ⛔ no miente es `GET /api/tn-categorias?store=stunned&accion=descripcion`.
 Las dos quedaron con **1 tabla y 4 filas**, intactas: el editor ⛔ no se comió la tabla.
 
-▶️ **REMERA MADE ⛔ no tiene foto de espalda** (son 4 y ninguna es de atrás) ⇒ su párrafo ⛔ no la
-nombra. Si atrás lleva algo, falta.
+✅ **REMERA MADE es SÓLO FRENTE** (lo confirmó Bruno, 12-sep): no tiene foto de espalda porque
+atrás ⛔ no lleva nada. Su párrafo ⛔ no la nombra, y está bien así. **Nada abierto de esta tanda.**
 📌 MAIN, COLLEGE y ROAD arrastran `class="font-claude-response-body …"` en sus `<p>` viejos, de un
 copiar-pegar anterior. Inocuo, sigue ahí.
 
