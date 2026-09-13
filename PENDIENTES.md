@@ -13,6 +13,75 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 DESCRIPCIONES DE STUNNED — LAS 6 QUE FALTABAN, PUBLICADAS (12-sep-2026)
+
+> «terminemos descripciones de los productos que quedaron pendientes en stunned» ·
+> «buzo college y campera wear son frisa, es la misma frisa que los otros buzos» ·
+> «mostrámelos y publicalos»
+
+**40 productos, 0 sin párrafo.** Publicadas BUZO MAIN, BUZO ROAD, BUZO COLLEGE, CAMPERA WEAR,
+REMERA GRAPH y REMERA MADE, miradas las dos fotos de cada una. Verificado por dos caminos: la
+relectura del endpoint (`verificado:true`, byte a byte) y la vidriera pública.
+
+### 🔴 STUNNED ⛔ NO ESTÁ EN EL MÓDULO DE DESCRIPCIONES — y por eso ⛔ no hay respaldo
+
+`api/_tn-desc.js:191` acepta **sólo `bdi` y `zattia`**: `store=stunned` da **400**. No es un
+permiso, es que el módulo entero es por store (creds de Supabase, token de TN, `puedeVer`) y
+Stunned es **su propia Tienda Nube** (7516263, token propio). ⇒ para Stunned **⛔ no hay cola, ni
+validador, ni botón de aprobar, ni fila donde quede el respaldo**, y TiendaNube ⛔ no tiene
+historial. `scripts/desc-borradores.mjs --marca stunned` **muere en la primera llamada**.
+
+🔑 **Pero SÍ hay camino de escritura, y acepta stunned**: `POST /api/tn-categorias?store=stunned`
+con `accion:'descripcion-prosa'` (bdi-catalogo), que trae las tres preguntas hechas —
+compare-and-swap por `hashPrevio`, el guard de `conservaLaTabla` y la relectura—. Se lee antes con
+`GET ?accion=descripcion&productId=…`, que ⛔ **no** está cacheado (el audit sí).
+⚠️ **El respaldo hay que escribirlo a mano**: el handler lo asume hecho del lado del monitor, y
+para Stunned ese lado no existe. Las 6 versiones anteriores quedaron en el scratchpad de la sesión.
+
+### 🔑 La tela sale de la TABLA DE TALLES, ⛔ no de la foto
+
+Una foto ⛔ no distingue frisa de rústico. Lo que sí decide es que **dos prendas compartan la tabla
+byte a byte**: ROAD la comparte con BUZO MAIN (⇒ rústico premium intermedio), GRAPH con CIRCLE
+BROWN y LONG BROWN, MADE con REMERA TIME (⇒ algodón peinado). **COLLEGE y CAMPERA WEAR tienen
+tabla ÚNICA** ⇒ ahí no había de dónde deducirla y quedó en blanco: **la dictó Bruno** (frisa, la
+misma que el resto de los buzos). ⇒ **agrupar por tabla de talles antes de preguntar** deja sólo
+las que de verdad necesitan a una persona: fueron 2 de 6.
+
+### 📌 Lo que corrigió Bruno de mis textos
+
+1. **Sacó «Es el buzo más largo de la marca: 80 cm en XL»** de COLLEGE: *«es al pedo»*. Era un dato
+   medido y cierto, y aun así sobra — **la tabla ya lo dice**, y el párrafo ⛔ no repite la tabla.
+2. **Agregó «Cierre YKK»** a CAMPERA WEAR: un dato que ⛔ **no se ve en la foto** y que ninguna
+   tabla trae. ⇒ el otro insumo que sólo tiene una persona, además de la tela.
+
+Las dos correcciones las pidió **por Chrome**, y se hicieron en el admin de Stunned.
+
+### 🔴 EL PUENTE DE CHROME CONTESTÓ OK Y NO LLEGÓ — y la captura salió EN BLANCO
+
+El primer intento fue `left_click` sobre el párrafo + `End` + 47 `Backspace`: **las tres contestaron
+OK**. El click ⛔ no enfocó el editor, `End` **scrolleó la página hasta el final**, los 47 backspace
+se fueron al aire y la captura siguiente vino **toda blanca** — que se lee como «se rompió», y era
+sólo que la página había scrolleado. El texto seguía intacto. ⛔ **Ninguna de las tres respuestas
+avisó.**
+
+🔑 **Lo que lo destrabó, y es la regla**: ⛔ no teclear nunca a ciegas contra un editor.
+`find` → `scroll_to` por `ref` → click → y **leer `getSelection()` por JS ANTES de tocar el
+teclado**, que dice dónde quedó el caret de verdad (`anchorOffset` y el texto a cada lado). Recién
+ahí los 47 backspace pegaron donde tenían que pegar. Lo mismo para reemplazar una palabra:
+`double_click` y **confirmar `s.toString()==='entero'`** antes de tipear encima.
+
+📌 Y al verificar: **la vidriera pública está CACHEADA por el CDN de TN**. Después de guardar en el
+admin, `stunned.com.ar` seguía mostrando el texto viejo de CAMPERA WEAR y parecía que no había
+pasado. El oráculo que ⛔ no miente es `GET /api/tn-categorias?store=stunned&accion=descripcion`.
+Las dos quedaron con **1 tabla y 4 filas**, intactas: el editor ⛔ no se comió la tabla.
+
+▶️ **REMERA MADE ⛔ no tiene foto de espalda** (son 4 y ninguna es de atrás) ⇒ su párrafo ⛔ no la
+nombra. Si atrás lleva algo, falta.
+📌 MAIN, COLLEGE y ROAD arrastran `class="font-claude-response-body …"` en sus `<p>` viejos, de un
+copiar-pegar anterior. Inocuo, sigue ahí.
+
+---
+
 ## ▶️ STUNNED: PAUTA DE TRÁFICO PARA LLEGAR A 10.000 SEGUIDORES — 12-sep-2026 (dictado por Bruno)
 
 > «tengo pocos seguidores… me recomendaron para arrancar hacer pauta de tráfico» ·
