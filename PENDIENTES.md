@@ -2886,6 +2886,28 @@ lo medido eran 1,93-1,99: **26% de sobrestimación**, o sea conjuntos que la app
 no lo eran. Si el número con el que la app juzga está mal, se deja de creerle a la app entera —y no
 vuelve sola cuando el número se arregla.
 
+## 🆕 LAS NOVEDADES SIN PUBLICAR SON OCHO — inventario medido el 12-sep-2026
+
+Contadas en la base (`novedades`, 27 filas: **19 publicadas y 8 en borrador**), ⛔ no leídas de este
+archivo — que tenía tres anotadas y una de ellas **ya estaba publicada**. 🔑 **Un pendiente de «falta
+el click de alguien» se vence solo y ⛔ no se entera nadie**: se cuenta en la base o no se cuenta.
+
+| creada | novedad | destino |
+|---|---|---|
+| 🔴 **25-ago** | **Los pedidos de Tienda Nube ahora se preparan desde Logística** — la única `importante: true` | roles `local` + `administracion` de **zattia** |
+| 26-ago | Lo que entró: qué llegó de cada compra | sección `recepciones` |
+| 26-ago | Canjes: notas del canje y cargar un producto a mano | sección `canjes` |
+| 28-ago | Insumos: qué hay, cuánto sale y cuándo pedirlo | sección `insumos` |
+| 29-ago | Cambiaron algunos nombres de botones | **todos** |
+| 30-ago | La Agenda, ahora por partes | **todos** |
+| 10-sep | Escanear el SKU al pedir prendas: ahora se reconoce el producto | sección `sesion-fotos` |
+| 10-sep | Precios de campaña: a qué precio va cada producto | sección `precios` |
+
+🔴 **La de Logística lleva 18 días y es la única que cambia un PROCESO**: los pedidos de Tienda Nube
+pasan a `logistica.arebensrl.com`, *«en BDI ya se trabaja así; ahora arranca el local»*. ⇒ o el local
+ya trabaja así y la novedad cuenta algo que pasó hace tres semanas, o ⛔ no arrancó y es justamente la
+que falta que lean. ⚠️ Las otras siete ⛔ no frenan a nadie: ninguna es `importante`.
+
 ## 3. Los pendientes, en orden
 
 ### 🆕 ▶️ P0 — Lo que queda de la Agenda partida en seis (29-ago-2026)
@@ -2925,7 +2947,9 @@ sus perfiles de `/usuarios`, y la rutina `it178752572363714_6wxkmp` pasó de los
 - **El control de dos lados en la ficha de Organización**: a **Cami Budek** (tildada) la rutina le
   aparece; a **Sofi** (sin tildar) ⛔ no —con una rutina suya visible en el mismo barrido, que es lo
   que prueba que la lista no estaba ciega—.
-- ✅ **La novedad ya está escrita y cargada como BORRADOR**: `n1788116275709_u56o8j`, «Tus horas
+- 🏁 **PUBLICADA el 30-ago** (medido en la base el 12-sep: `estado: publicada`, `publicada_at`
+  2026-08-30) — este renglón decía «queda el click de Bruno» y ya estaba dado. ~~Cargada como
+  BORRADOR~~: `n1788116275709_u56o8j`, «Tus horas
   extras las cargás vos», destino `horas-extras` (⇒ le llega **sólo a las cuatro**, y la lista se
   ajusta sola) y **sin `importante`** —las 15 publicadas están las 15 en importante, y si todas
   frenan, ninguna frena—. ▶️ **Queda el click de Bruno en Publicar.**
