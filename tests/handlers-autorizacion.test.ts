@@ -377,7 +377,7 @@ describe('_liquidacion · la llave de Etiquetas escribe una sola cosa', () => {
     // `stock-campania` y `ventas-campania` son lecturas, pero entran por el POST y contestan datos
     // de la campaña: la llave de Etiquetas no las abre. Van en la lista por lo mismo que las otras
     // —la garantía se ejerce, no se argumenta—, y porque las dos viven ARRIBA del guard del id.
-    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item', 'ventas-campania', 'stock-campania', 'compartir']) {
+    for (const action of ['crear', 'borrar', 'guardar-item', 'revisar', 'decidir-masivo', 'sumar-items', 'quitar-item', 'ventas-campania', 'stock-campania', 'reposicion-campania', 'compartir']) {
       sesionDe(SOLO_ETIQUETAS)
       const res = await llamar('_liquidacion', postDe({ action, liq: 'l1' }))
       expect(res.code, `action «${action}» no puede entrar con la llave de Etiquetas`).toBe(403)

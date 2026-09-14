@@ -805,6 +805,49 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ventas, detalles });
     }
 
+    // ── Reposición durante la campaña: el inventario por variante y tienda, y lo vendido desde. ──
+    //
+    // Pedido de Bruno el 14-sep-2026, el día que abrió la Feria de Zattia: ver en el día qué talle
+    // se está quedando sin nada en el local y todavía tiene en el depósito. La cuenta vive en
+    // `lib/liquidacion/reposicion.ts`; esto sólo baja las filas.
+    //
+    // 🔑 **Las ventas se bajan desde el día del ÚLTIMO SYNC de inventario**, ⛔ no desde el inicio de
+    // la campaña: lo anterior ya está descontado en el stock del espejo. Y cada línea lleva su
+    // `sale_id` y la TIENDA de la que salió (`ventas.store`): la pantalla resta sólo lo que su base
+    // todavía no vio, y lo resta del lugar correcto. En Zattia una venta de Tienda Nube sale del
+    // `Local` (medido el 14-sep).
+    //
+    // `leidoEn` es el más nuevo de los dos syncs que escriben `inventario` (el diario y el rápido).
+    //
+    // 🔴 **Va ARRIBA del `const id`**, por lo mismo que `stock-campania`: pregunta por productos.
+    if (b.action === 'reposicion-campania') {
+      const pids = [...new Set((Array.isArray(b.pids) ? b.pids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+      if (!pids.length) return res.status(200).json({ ok: true, filas: [], ventas: [], detalles: [], leidoEn: null });
+
+      const { data: syncs, error: eS } = await supabase.from('sync_state')
+        .select('clave, updated_at').in('clave', ['diario', 'inventario']);
+      if (eS) throw new Error(eS.message);
+      const leidoEn = (syncs || []).map((s) => s.updated_at).filter(Boolean).sort().pop() || null;
+      // La fecha de Argentina del sync: Vercel corre en UTC y a las 21 h ya sería el día siguiente.
+      const desde = leidoEn
+        ? new Date(leidoEn).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+        : new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+      const [filas, ventas] = await Promise.all([
+        leerTodo(supabase, 'inventario', (q) =>
+          q.select('product_id, size_id, size_name, store_name, available_quantity').in('product_id', pids).order('product_id').order('size_id')),
+        leerTodo(supabase, 'ventas', (q) =>
+          q.select('id, date_sale, channel, store').gte('date_sale', desde).order('id')),
+      ]);
+      if (!ventas.length) return res.status(200).json({ ok: true, filas, ventas: [], detalles: [], leidoEn, desde });
+
+      const detalles = await leerTodo(supabase, 'venta_detalles', (q) =>
+        q.select('sale_id, product_id, size_id, quantity, total')
+          .in('product_id', pids).gte('sale_id', ventas[0].id).lte('sale_id', ventas[ventas.length - 1].id).order('sale_id'));
+
+      return res.status(200).json({ ok: true, filas, ventas, detalles, leidoEn, desde });
+    }
+
     // ── El stock de HOY de los productos de la campaña. ────────────────────────────────────────
     //
     // Es lo que le falta a la foto congelada para poder preguntar *«el sistema dice que este

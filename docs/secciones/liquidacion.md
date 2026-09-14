@@ -164,6 +164,30 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
 - 🔑 **Al conciliar stock se cuenta TODO lo que descuenta unidades** —mayorista, canjes y fallas
   incluidos—, al revés que el resto de `resultado.ts`, que los excluye para no hundir el precio
   promedio. Las dos reglas conviven en el mismo archivo y las dos están bien.
+- 🔴 🔑 **Y las salidas se cuentan DESDE QUE ENTRÓ CADA ÍTEM (la foto), ⛔ no desde `desde`** (14-sep-2026).
+  La Feria de Zattia se fotografió el 6-sep y arrancó el 14: la semana del medio quedaba afuera y
+  Resultado daba **17 agotados que no cierran; contando desde la foto cierran 13**. Los 4 que
+  quedan tampoco son prendas perdidas: tres jeans con la foto sacada de un stock ya viejo y un top
+  que tuvo repo. El handler pega **`entro` = `created_at`** al leer los ítems y ⛔ no se guarda
+  (`itemDelBody` no lo deja pasar); la fecha se lee **en Argentina** (la carga empezó a las 22 h
+  del 5). ⚠️ La unidad es el día: una venta de la mañana del día de la foto cuenta de más.
+- 🆕 🔑 **Pestaña «Reposición»** (14-sep-2026, pedido de Bruno el día que abrió la Feria): qué talle
+  bajar del depósito al local, con las ventas de hoy. Es de admin, como la sección.
+  - **Stock ahora = una BASE − las ventas que la base no vio.** La base es el espejo (sync antes de
+    abrir) o GN en vivo («Releer stock de Gestión Nube», `api/_inventario-vivo.js`, local y depósito
+    de a uno). 🔑 **La base lleva el conjunto de `sale_id` que ya tiene descontados**: por eso lo que
+    se repuso sale de la lista al releer sin restar dos veces lo vendido. Cada venta se resta de su
+    tienda (`ventas.store`; en Zattia una venta de Tienda Nube sale del `Local`).
+  - Se refresca sola **cada 5 min con la pestaña visible**: `sincronizar-ventas` (1 s) + la acción
+    `reposicion-campania`, que baja inventario por variante y las ventas desde el día del último sync.
+  - 🔴 **Sólo productos que YA están en el local.** Medido antes de la primera venta: con «local ≤ 1 y
+    depósito con algo» salían **153 talles, 138 de 48 productos que nunca estuvieron en el local**
+    (lencería entera en depósito). Esos van aparte y plegados (`nuncaEnLocal`): bajarlos es otra
+    decisión. «En el local» es **por producto**: el M vacío de un producto exhibido sí se baja.
+  - Lo que se agotó sin depósito también va plegado: se acaba ahí (Bruno). La clave es `pid_sid`,
+    ⛔ no el nombre del talle; el orden es por categoría (el depósito camina por perchero).
+  - ⚠️ Una venta que entra justo mientras se lee GN (20-60 s) se puede restar dos veces. Y si el
+    sync del espejo corrió con el local abierto la pantalla lo avisa: la venta no tiene hora.
 
 ## Lo que ya se rompió acá
 

@@ -75,6 +75,7 @@ import {
 import { DefinirPrecio } from './DefinirPrecio'
 import { Bitacora } from './Bitacora'
 import { Resultado } from './Resultado'
+import { Reposicion } from './Reposicion'
 import { Revision } from './Revision'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import {
@@ -91,7 +92,7 @@ import {
  * dibujar abajo— y con la condición escrita a mano en los dos, sumar una pestaña es acordarse de
  * las dos. Al sumar la tercera ya se notaba.
  */
-const PESTANIAS_PROPIAS = ['revision', 'resultado', 'bitacora']
+const PESTANIAS_PROPIAS = ['revision', 'resultado', 'reposicion', 'bitacora']
 
 const ROTULO_CAMPANIA: Record<EstadoCampania, { label: string; tono: Tone }> = {
   borrador: { label: 'Borrador', tono: 'neutral' },
@@ -1258,6 +1259,13 @@ function DetalleCampania({
                 : 'Necesita una fecha de inicio',
             },
             {
+              key: 'reposicion',
+              label: 'Reposición',
+              // Sin badge: el número cambia cada 5 minutos y un contador que se mueve solo en la
+              // pestaña de al lado distrae de la que se está mirando.
+              hint: 'Qué talle bajar del depósito al local, con las ventas de hoy',
+            },
+            {
               key: 'bitacora',
               label: 'Actividad',
               // ⛔ **Sin badge, a propósito.** Los otros dos cuentan pendientes —algo que hacer—; acá
@@ -1270,6 +1278,10 @@ function DetalleCampania({
 
       {items !== null && pestania === 'resultado' && (
         <Resultado campania={campania} items={items} puedeSincronizar={puede.admin} />
+      )}
+
+      {items !== null && pestania === 'reposicion' && (
+        <Reposicion campania={campania} items={items} puedeSincronizar={puede.admin} />
       )}
 
       {items !== null && pestania === 'bitacora' && (

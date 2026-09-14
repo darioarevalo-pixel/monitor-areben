@@ -13,6 +13,25 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 FERIA ZATTIA: LOS 17 AGOTADOS Y LA PESTAÑA «REPOSICIÓN» — 14-sep-2026 (dictado, y hecho)
+
+> «me pregunto qué sería lo de 17 agotados que no da la cuenta» · «me gustaría una pestaña para ver
+> los resultados y cómo viene el stock del local así le damos reposición, me da miedo que se venda
+> mucho… principalmente de artículos que quedan disponibles en depósito»
+
+- ✅ **Los 17 eran un error de la pantalla** (`880eccf5`, en Producción por SHA): la foto es del 6-sep y
+  las ventas se contaban desde el 14. Contando desde la foto **cierran 13**; los 4 que quedan son tres
+  jeans con foto de stock viejo (GRAPHITE vendió el 5-sep) y TOP COWIN, que tuvo repo. Medido con psql.
+- 🏁 **Pestaña Reposición** en la campaña, de admin: ventas cada 5 min + «Releer stock de Gestión
+  Nube» para después de reponer. **17 tests, 4 mutantes muertos**. El relato en
+  `docs/secciones/liquidacion.md`.
+- 🔴 **La lista es sólo de productos que ya están en el local**: sin eso eran 153 talles y 138 de 48
+  productos enteros en depósito. Oráculo por psql antes de abrir: **15 talles a reponer con umbral 1**.
+- ▶️ **Sin caminar en prod**: abrir Feria → Reposición y ver que dé ~15 antes de ventas · que se refresque
+  sola · apretar «Releer stock de GN» y comparar una variante contra GN · que lo repuesto salga de la lista.
+
+---
+
 ## 🏁 DESCRIPCIONES DE STUNNED — LAS 6 QUE FALTABAN, PUBLICADAS (12-sep-2026)
 
 > «terminemos descripciones de los productos que quedaron pendientes en stunned» ·

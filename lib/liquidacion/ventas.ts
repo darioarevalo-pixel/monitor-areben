@@ -32,6 +32,7 @@
 
 import type { Marca } from '../nav.datos'
 import { apiFetch } from '../api-fetch'
+import type { FilaStock, LineaReposicion } from './reposicion'
 
 /** Una línea de venta de un producto de la campaña, ya cruzada con su fecha y su canal. */
 export interface LineaVenta {
@@ -164,4 +165,58 @@ export async function leerStockDeCampania(
   }
   if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} leyendo el stock de los productos.`)
   return { stock: d.stock || {}, leidoEn: d.leidoEn || null }
+}
+
+/**
+ * Lo que necesita la pestaña Reposición: el inventario por variante y tienda de estos productos, y
+ * las ventas desde el día del último sync de inventario, **cada una con su `sale_id` y su tienda**.
+ *
+ * El cruce venta ↔ detalle es el mismo de `leerVentasDeCampania` (el `sale_id` es el único puente) y
+ * **las devoluciones viajan**: la cuenta de stock las necesita. Qué se resta y de dónde lo decide
+ * `stockAhora`, que es puro.
+ */
+export async function leerReposicionCampania(
+  marca: Marca,
+  pids: string[],
+): Promise<{ filas: FilaStock[]; lineas: LineaReposicion[]; leidoEn: string | null }> {
+  const quiero = new Set(pids.map(String))
+  if (!quiero.size) return { filas: [], lineas: [], leidoEn: null }
+
+  const r = await apiFetch('/api/datos?recurso=liquidacion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store: marca, action: 'reposicion-campania', pids: [...quiero] }),
+  })
+  const d = (await r.json().catch(() => ({}))) as {
+    ok?: boolean
+    filas?: FilaStock[]
+    ventas?: { id: number; date_sale: string | null; channel: string | null; store: string | null }[]
+    detalles?: { sale_id: number | string; product_id: number | string | null; size_id: number | string | null; quantity: number | null; total: number | null }[]
+    leidoEn?: string | null
+    error?: string
+  }
+  if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status} leyendo el stock para reponer.`)
+
+  const deVenta = new Map((d.ventas || []).map((v) => [String(v.id), v]))
+  const lineas: LineaReposicion[] = []
+  for (const x of d.detalles || []) {
+    const v = deVenta.get(String(x.sale_id))
+    if (!v || !v.date_sale) continue
+    const pid = String(x.product_id ?? '')
+    if (!quiero.has(pid)) continue
+    // `quantity` en null es una unidad, igual que en `leerVentasDeCampania`.
+    const unidades = Number(x.quantity ?? 1) || 0
+    if (!unidades) continue
+    lineas.push({
+      saleId: String(x.sale_id),
+      pid,
+      sid: String(x.size_id ?? ''),
+      tienda: v.store,
+      canal: v.channel || '',
+      fecha: String(v.date_sale).slice(0, 10),
+      unidades,
+      plata: Number(x.total ?? 0),
+    })
+  }
+  return { filas: d.filas || [], lineas, leidoEn: d.leidoEn || null }
 }
