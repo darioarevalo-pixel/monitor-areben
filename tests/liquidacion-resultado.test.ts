@@ -339,6 +339,23 @@ describe('agotadosQueNoCierran', () => {
     expect(a.diferencia).toBe(2)
   })
 
+  it('🔴 las salidas se cuentan DESDE LA FOTO, no desde que arranca la campaña', () => {
+    // El caso de la Feria de Zattia (14-sep-2026): foto el 6-sep, campaña desde el 14. Una prenda
+    // vendida el 10 salió del stock de la foto; una vendida el 1 ya estaba descontada. Contando
+    // desde el inicio de la campaña, MINI PORTLAND pedía buscar 2 prendas que se habían vendido.
+    const items = [item({ pid: 'p1', entro: '2026-09-06T15:18:58Z', foto: { nombre: 'MINI PORTLAND', stock: 2 } as never })]
+    const lineas = [
+      linea({ pid: 'p1', unidades: 1, fecha: '2026-09-01' }),
+      linea({ pid: 'p1', unidades: 2, fecha: '2026-09-10' }),
+    ]
+    expect(agotadosQueNoCierran(items, lineas, agotado)).toHaveLength(0)
+  })
+
+  it('la foto se lee en la fecha de ARGENTINA: la de las 22 h del 5 es del 5, no del 6', () => {
+    const items = [item({ pid: 'p1', entro: '2026-09-06T01:03:55Z', foto: { stock: 1 } as never })]
+    expect(agotadosQueNoCierran(items, [linea({ pid: 'p1', unidades: 1, fecha: '2026-09-05' })], agotado)).toHaveLength(0)
+  })
+
   it('el que todavía tiene stock no es una caminata, por mal que cierre la cuenta', () => {
     const items = [item({ pid: 'p1', foto: { stock: 9 } as never })]
     expect(agotadosQueNoCierran(items, [], { p1: 4 })).toHaveLength(0)

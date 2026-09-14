@@ -33,7 +33,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import {
-  agotadosQueNoCierran, rangoDeCampania, resultadoCampania,
+  agotadosQueNoCierran, fechaDeEntrada, rangoDeCampania, resultadoCampania,
   type AgotadoQueNoCierra, type EstadoCarga, type Liquidacion as Campania, type LiquidacionItem,
   type ResultadoItem,
 } from '@/lib/liquidacion'
@@ -136,8 +136,21 @@ export function Resultado({
 
   const pids = useMemo(() => items.map((i) => i.pid), [items])
 
+  /**
+   * 🔴 **Desde cuándo se bajan las ventas: la foto más vieja, ⛔ no el inicio de la campaña.** La
+   * conciliación cuenta lo que salió desde que se congeló cada stock, y la Feria de Zattia se
+   * fotografió el 6-sep para arrancar el 14: bajando desde el 14, esa semana faltaba y daba 17
+   * agotados que no cierran cuando eran 4. Nunca después de `rango.desde`.
+   */
+  const bajarDesde = useMemo(() => {
+    if (!rango) return null
+    const fechas = items.map((i) => fechaDeEntrada(i.entro)).filter((f): f is string => !!f)
+    const min = fechas.length ? fechas.reduce((a, b) => (b < a ? b : a)) : rango.desde
+    return min < rango.desde ? min : rango.desde
+  }, [items, rango])
+
   const cargar = useCallback(async () => {
-    if (!rango) return
+    if (!rango || !bajarDesde) return
     setError(null)
     try {
       // 🔑 **Las ventas se bajan hasta HOY, no hasta el fin de la campaña.** La conciliación de
@@ -145,7 +158,7 @@ export function Resultado({
       // cerrada, lo vendido después quedaría afuera y el producto aparecería como prenda perdida.
       // El resultado de la campaña sigue siendo del rango — el corte lo hace `resultadoCampania`.
       const [ls, inv] = await Promise.all([
-        leerVentasDeCampania(marca, pids, rango.desde, hoy),
+        leerVentasDeCampania(marca, pids, bajarDesde, hoy),
         leerStockDeCampania(marca, pids),
       ])
       setLineas(ls)
@@ -154,7 +167,7 @@ export function Resultado({
       setLineas([])
       setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas del período.')
     }
-  }, [marca, pids, rango, hoy])
+  }, [marca, pids, rango, bajarDesde, hoy])
 
   // El lint prohíbe setState sincrónico en un efecto: la carga va adentro de un async suelto.
   useEffect(() => {

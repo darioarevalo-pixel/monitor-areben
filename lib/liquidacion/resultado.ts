@@ -346,6 +346,19 @@ export function resultadoCampania(
 }
 
 /**
+ * La fecha de Argentina (YYYY-MM-DD) en que un ítem entró a la campaña, o `null` si no se sabe.
+ *
+ * 🔑 **Argentina, ⛔ no UTC**: la carga de la Feria arrancó el 6-sep a las 01:03 UTC, que en el local
+ * todavía era el 5 a las 22 h. Con `slice(0, 10)` una venta del 5 a la tarde contaría dos veces.
+ */
+export function fechaDeEntrada(entro: string | null | undefined): string | null {
+  if (!entro) return null
+  const t = Date.parse(entro)
+  if (!Number.isFinite(t)) return null
+  return new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+/**
  * Los agotados **cuya cuenta no da**: la caminata corta que sí se hace.
  *
  * Lo pidió Bruno al cerrar la campaña —*«listar los productos agotados así la gente del local
@@ -373,6 +386,14 @@ export function resultadoCampania(
  * no cruzó con el espejo, y las dos cosas se ven igual desde acá. Medido el 17-ago-2026 sobre la
  * campaña de Zattia: los 266 ítems tienen fila, así que hoy no esconde nada.
  *
+ * 🔴 🔑 **Y cada ítem cuenta sus salidas DESDE QUE ENTRÓ (`entro`), ⛔ no desde que arranca la
+ * campaña.** La foto es de ese día: una venta anterior ya está descontada del stock de entrada, y
+ * una posterior —aunque sea antes de `desde`— salió de ese stock. Medido en la Feria de Zattia el
+ * 14-sep-2026: foto del 6-sep, campaña desde el 14, y la pantalla daba **17 agotados que no
+ * cierran** porque la semana del medio no se contaba; contándola, **cierran 13**.
+ * ⚠️ La unidad es el DÍA (`LineaVenta.fecha` no tiene hora): una venta de la mañana del mismo día
+ * de la foto cuenta como salida aunque ya estuviera descontada. Sin `entro`, se cuentan todas.
+ *
  * @param stockHoy pid → unidades de hoy, sumando los dos depósitos. Sin la clave = no se sabe.
  */
 export function agotadosQueNoCierran(
@@ -380,14 +401,23 @@ export function agotadosQueNoCierran(
   lineas: LineaVenta[],
   stockHoy: Record<string, number>,
 ): AgotadoQueNoCierra[] {
-  const salidas = new Map<string, number>()
-  for (const l of lineas) salidas.set(l.pid, (salidas.get(l.pid) || 0) + l.unidades)
+  const porPid = new Map<string, LineaVenta[]>()
+  for (const l of lineas) {
+    const ls = porPid.get(l.pid)
+    if (ls) ls.push(l)
+    else porPid.set(l.pid, [l])
+  }
 
   const out: AgotadoQueNoCierra[] = []
   for (const it of items) {
     const hoy = stockHoy[it.pid]
     if (hoy == null || hoy > 0) continue
-    const salieron = salidas.get(it.pid) || 0
+    const desde = fechaDeEntrada(it.entro)
+    let salieron = 0
+    for (const l of porPid.get(it.pid) || []) {
+      if (desde && l.fecha < desde) continue
+      salieron += l.unidades
+    }
     const diferencia = it.foto.stock - salieron
     if (diferencia === 0) continue
     out.push({

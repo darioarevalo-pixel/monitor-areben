@@ -261,6 +261,13 @@ export interface LiquidacionItem {
   /** Opcional: los ítems guardados antes de que existiera la revisión no la traen. */
   revision?: RevisionItem
   aplicacion: AplicacionItem
+  /**
+   * Cuándo entró a la campaña (ISO): el `created_at` de la fila, que es el momento en que se sacó
+   * la foto. **Lo pega el handler al leer y ⛔ no se guarda** —`itemDelBody` no lo deja pasar—: se
+   * deriva de la columna, así que una copia en `datos` sólo podría discrepar.
+   * Opcional: lo que se arma en el cliente antes de guardarse no lo trae.
+   */
+  entro?: string | null
 }
 
 /** Qué tan grave es un aviso. `alto` es el que frena: no se define un precio sin resolverlo. */

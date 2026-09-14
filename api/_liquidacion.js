@@ -675,10 +675,14 @@ export default async function handler(req, res) {
       }
 
       if (liq) {
+        // 🔑 `entro` es el `created_at` de la fila —el momento de la foto— y viaja pegado al ítem.
+        // Lo necesita la conciliación de agotados: las salidas se cuentan desde que se congeló el
+        // stock, ⛔ no desde que arranca la campaña (la Feria de Zattia se fotografió el 6-sep y
+        // arrancó el 14: la semana del medio daba 17 «agotados que no cierran» y cerraban 13).
         const { data, error } = await supabase.from('liquidacion_items')
-          .select('datos').eq('store', store).eq('liq_id', liq);
+          .select('datos, created_at').eq('store', store).eq('liq_id', liq);
         if (error) throw new Error(error.message);
-        return res.status(200).json({ ok: true, items: (data || []).map((r) => r.datos), puede });
+        return res.status(200).json({ ok: true, items: (data || []).map((r) => ({ ...r.datos, entro: r.created_at || null })), puede });
       }
 
       const [c, i] = await Promise.all([
