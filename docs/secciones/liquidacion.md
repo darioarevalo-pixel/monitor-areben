@@ -184,6 +184,11 @@ Reemplazó tres pantallas y un archivo: se tildaban productos en Análisis → P
     depósito con algo» salían **153 talles, 138 de 48 productos que nunca estuvieron en el local**
     (lencería entera en depósito). Esos van aparte y plegados (`nuncaEnLocal`): bajarlos es otra
     decisión. «En el local» es **por producto**: el M vacío de un producto exhibido sí se baja.
+  - 🆕 **«Cerca del límite»** (Bruno, mirando la pestaña: *«también estaría bueno lo que está más al
+    límite»*): `umbral < local ≤ umbral + 2`, con depósito y producto en el local. Es lo que conviene
+    bajar de paso. 🔑 **Las dos listas ⛔ no se pisan** —`local ≤ umbral` es de la de reponer— y
+    primero va lo que **a este ritmo se acaba hoy** (vendió hoy ≥ lo que le queda). ⛔ No va por
+    categoría: acá la pregunta es cuál cruza primero.
   - Lo que se agotó sin depósito también va plegado: se acaba ahí (Bruno). La clave es `pid_sid`,
     ⛔ no el nombre del talle; el orden es por categoría (el depósito camina por perchero).
   - ⚠️ Una venta que entra justo mientras se lee GN (20-60 s) se puede restar dos veces. Y si el

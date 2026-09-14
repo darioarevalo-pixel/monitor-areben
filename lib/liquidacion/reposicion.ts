@@ -185,6 +185,53 @@ export function aReponer(
     a.categoria.localeCompare(b.categoria) || b.vendidas - a.vendidas || a.nombre.localeCompare(b.nombre) || a.talle.localeCompare(b.talle))
 }
 
+export interface CercaDelLimite extends ParaReponer {
+  /** Hoy vendió al menos lo que le queda en el local: a este ritmo cruza la línea antes de cerrar. */
+  alRitmo: boolean
+}
+
+/**
+ * Lo que está **cerca de cruzar la línea**: producto en el local, depósito con algo, y el local
+ * apenas por encima del umbral (`umbral < local ≤ umbral + margen`).
+ *
+ * Lo pidió Bruno el 14-sep-2026 mirando la pestaña: *«me aparece sólo lo que hay para reponer, pero
+ * también estaría bueno lo que está más al límite»*. Es lo que conviene bajar **de paso**, en el
+ * mismo viaje al depósito, antes de que se vacíe.
+ *
+ * 🔑 **El que no entra acá está en `aReponer`**: las dos listas no se pisan (`local ≤ umbral` es de
+ * la otra), así que un talle ⛔ nunca aparece dos veces.
+ *
+ * Orden: primero los que **a este ritmo se acaban hoy** (vendieron hoy ≥ lo que queda en el local),
+ * después el que menos tiene, después el que más vendió. ⛔ No por categoría: acá la pregunta es
+ * cuál va a cruzar primero, no por dónde se camina.
+ */
+export function cercaDelLimite(
+  variantes: Iterable<VarianteAhora>,
+  items: LiquidacionItem[],
+  umbral: number,
+  margen = 2,
+): CercaDelLimite[] {
+  const vs = [...variantes]
+  const porPid = deLaCampania(items)
+  const enLocal = productosEnLocal(vs)
+  const out: CercaDelLimite[] = []
+  for (const v of vs) {
+    const it = porPid.get(v.pid)
+    if (!it || !enLocal.has(v.pid)) continue
+    if (v.local <= umbral || v.local > umbral + margen || v.deposito <= 0) continue
+    out.push({
+      ...v,
+      nombre: it.foto.nombre,
+      imagen: it.foto.imagen,
+      categoria: tipoDePrenda(it.foto.nombre),
+      sugerido: Math.min(v.deposito, Math.max(2, v.vendidas)),
+      alRitmo: v.vendidas > 0 && v.vendidas >= v.local,
+    })
+  }
+  return out.sort((a, b) =>
+    Number(b.alRitmo) - Number(a.alRitmo) || a.local - b.local || b.vendidas - a.vendidas || a.nombre.localeCompare(b.nombre))
+}
+
 /** Lo que se vendió y quedó en cero en el local sin nada en el depósito: murió ahí. */
 export function agotadosSinDeposito(variantes: Iterable<VarianteAhora>, items: LiquidacionItem[]): ParaReponer[] {
   const porPid = deLaCampania(items)

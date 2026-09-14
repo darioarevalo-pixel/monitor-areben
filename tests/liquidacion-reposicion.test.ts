@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { agotadosSinDeposito, aReponer, nuncaEnLocal, stockAhora, ventasDelDia } from '@/lib/liquidacion/reposicion'
+import { agotadosSinDeposito, aReponer, cercaDelLimite, nuncaEnLocal, stockAhora, ventasDelDia } from '@/lib/liquidacion/reposicion'
 import type { FilaStock, LineaReposicion } from '@/lib/liquidacion/reposicion'
 import type { LiquidacionItem } from '@/lib/liquidacion'
 
@@ -132,6 +132,46 @@ describe('aReponer', () => {
   it('un descartado no se repone: no es de la feria', () => {
     const vs = stockAhora([fila('p1', 'v1', 'Local', 0), fila('p1', 'v1', 'Deposito ', 4), fila('p1', 'v2', 'Local', 3, 'L')], new Set(), [])
     expect(aReponer(vs.values(), [item('p1', 'TOP ZARA', 'descartado')], 1)).toHaveLength(0)
+  })
+})
+
+describe('cercaDelLimite', () => {
+  const items = [item('p1', 'TOP ZARA'), item('p2', 'SWEATER MONROE'), item('p3', 'TOP MIST')]
+  const con = (local: number, dep = 5, pid = 'p1') => [fila(pid, 'v1', 'Local', local), fila(pid, 'v1', 'Deposito ', dep)]
+
+  it('entra lo que está hasta 2 por encima del umbral, con depósito', () => {
+    const vs = stockAhora([...con(2), ...con(3, 5, 'p2')], new Set(), [])
+    expect(cercaDelLimite(vs.values(), items, 1).map((r) => r.nombre)).toEqual(['TOP ZARA', 'SWEATER MONROE'])
+  })
+
+  it('🔴 no pisa a aReponer: lo que ya está en la línea va en la otra lista, nunca en las dos', () => {
+    const vs = stockAhora(con(1), new Set(), [])
+    expect(cercaDelLimite(vs.values(), items, 1)).toHaveLength(0)
+    expect(aReponer(vs.values(), items, 1)).toHaveLength(1)
+  })
+
+  it('🔴 lo que está lejos de la línea no entra', () => {
+    const vs = stockAhora(con(4), new Set(), [])
+    expect(cercaDelLimite(vs.values(), items, 1)).toHaveLength(0)
+  })
+
+  it('sin depósito no entra: no hay de dónde bajar', () => {
+    const vs = stockAhora(con(2, 0), new Set(), [])
+    expect(cercaDelLimite(vs.values(), items, 1)).toHaveLength(0)
+  })
+
+  it('el margen se mueve con el umbral', () => {
+    const vs = stockAhora(con(4), new Set(), [])
+    expect(cercaDelLimite(vs.values(), items, 2)).toHaveLength(1)
+  })
+
+  it('🔑 primero lo que a este ritmo se acaba hoy: vendió hoy lo que le queda en el local', () => {
+    // p1 vendió 3 y le quedan 3 ⇒ se acaba, AUNQUE es el que MÁS tiene · p2 tiene 2 y no vendió ·
+    // p3 vendió 1 y le quedan 2. Si el orden fuera sólo por lo que queda, p1 iría último.
+    const base = [...con(6, 5, 'p1'), ...con(2, 5, 'p2'), ...con(3, 5, 'p3')]
+    const lineas = [venta({ pid: 'p1', unidades: 3 }), venta({ pid: 'p3', unidades: 1 })]
+    const r = cercaDelLimite(stockAhora(base, new Set(), lineas).values(), items, 1)
+    expect(r.map((x) => [x.nombre, x.alRitmo])).toEqual([['TOP ZARA', true], ['TOP MIST', false], ['SWEATER MONROE', false]])
   })
 })
 

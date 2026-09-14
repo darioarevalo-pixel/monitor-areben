@@ -27,6 +27,8 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
   `docs/secciones/liquidacion.md`.
 - 🔴 **La lista es sólo de productos que ya están en el local**: sin eso eran 153 talles y 138 de 48
   productos enteros en depósito. Oráculo por psql antes de abrir: **15 talles a reponer con umbral 1**.
+- ✅ **Bruno la vio en prod** (14-sep) y pidió lo que está **cerca de cruzar la línea** ⇒ tabla «Cerca
+  del límite» debajo: hasta 2 por encima del umbral, con depósito, primero lo que a este ritmo se acaba hoy.
 - ▶️ **Sin caminar en prod**: abrir Feria → Reposición y ver que dé ~15 antes de ventas · que se refresque
   sola · apretar «Releer stock de GN» y comparar una variante contra GN · que lo repuesto salga de la lista.
 

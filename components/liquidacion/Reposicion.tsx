@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import type { Liquidacion as Campania, LiquidacionItem } from '@/lib/liquidacion'
 import {
-  agotadosSinDeposito, aReponer, nuncaEnLocal, stockAhora, ventasDelDia,
+  agotadosSinDeposito, aReponer, cercaDelLimite, nuncaEnLocal, stockAhora, ventasDelDia,
   type FilaStock, type LineaReposicion, type ParaReponer,
 } from '@/lib/liquidacion/reposicion'
 import { leerReposicionCampania } from '@/lib/liquidacion/ventas'
@@ -155,6 +155,7 @@ export function Reposicion({
     const vs = [...stockAhora(base.filas, base.incluidas, lineas, pidsSet).values()]
     return {
       reponer: aReponer(vs, items, umbral),
+      cerca: cercaDelLimite(vs, items, umbral),
       agotados: agotadosSinDeposito(vs, items),
       nunca: nuncaEnLocal(vs, items),
       hoy: ventasDelDia(lineas, hoy),
@@ -245,6 +246,38 @@ export function Reposicion({
         </TableWrap>
       )}
 
+      {/*
+        🔑 Lo que conviene bajar DE PASO, en el mismo viaje al depósito. Va a la vista y ⛔ no plegado
+        (Bruno lo pidió para verlo), pero debajo: lo urgente es la tabla de arriba.
+      */}
+      {calculo.cerca.length > 0 && (
+        <>
+          <div style={{ fontSize: font.sm, margin: `${space[5]} 0 ${space[2]}`, lineHeight: 1.6 }}>
+            <b>Cerca del límite · {calculo.cerca.length}</b>{' '}
+            <span style={{ color: color.mut }}>
+              — hasta 2 por encima de la línea y con depósito. Arriba, los que a este ritmo se acaban hoy.
+            </span>
+          </div>
+          <TableWrap>
+            <THead>
+              <Tr>
+                <Th>Producto</Th>
+                <Th>Talle / color</Th>
+                <Th align="right">Local</Th>
+                <Th align="right">Depósito</Th>
+                <Th align="right">Vendidas</Th>
+                <Th align="right">Bajar</Th>
+              </Tr>
+            </THead>
+            <TBody>
+              {calculo.cerca.map((f) => (
+                <FilaReponer key={`${f.pid}_${f.sid}`} fila={f} onFoto={setFoto} alRitmo={f.alRitmo} />
+              ))}
+            </TBody>
+          </TableWrap>
+        </>
+      )}
+
       {calculo.agotados.length > 0 && (
         <Card style={{ marginTop: space[5], background: color.bg2 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: space[3], fontSize: font.sm }}>
@@ -309,7 +342,7 @@ function conCategorias(filas: ParaReponer[]): (ParaReponer | { categoria: string
   return out
 }
 
-function FilaReponer({ fila, onFoto }: { fila: ParaReponer; onFoto: (src: string) => void }) {
+function FilaReponer({ fila, onFoto, alRitmo }: { fila: ParaReponer; onFoto: (src: string) => void; alRitmo?: boolean }) {
   return (
     <Tr>
       <Td>
@@ -328,6 +361,11 @@ function FilaReponer({ fila, onFoto }: { fila: ParaReponer; onFoto: (src: string
             <div style={{ width: 40, height: 40 }} />
           )}
           <span style={{ fontWeight: weight.medium }}>{fila.nombre}</span>
+          {alRitmo && (
+            <span style={{ fontSize: font.xs, color: color.warning, whiteSpace: 'nowrap' }} title="Hoy vendió al menos lo que le queda en el local">
+              se acaba hoy
+            </span>
+          )}
         </div>
       </Td>
       <Td>{fila.talle}</Td>
