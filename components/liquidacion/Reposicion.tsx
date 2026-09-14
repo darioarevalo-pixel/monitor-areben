@@ -195,7 +195,7 @@ export function Reposicion({
           Stock de base: <b>{base?.fuente === 'vivo' ? 'Gestión Nube' : 'espejo'}</b> de las {horaAR(base?.leidoEn ?? null)} ·
           ventas actualizadas a las {horaAR(actualizado)} · se refresca sola cada 5 min
         </span>
-        <Button size="sm" onClick={() => void traer(true)} loading={trayendo}>Traer ventas ahora</Button>
+        <Button size="sm" onClick={() => void traer(true)} loading={trayendo}>Cargar las ventas de hoy</Button>
         <Button size="sm" variant="soft" onClick={() => void releer()} loading={releyendo}>
           Releer stock de Gestión Nube
         </Button>
