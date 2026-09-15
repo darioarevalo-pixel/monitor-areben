@@ -43,7 +43,10 @@ if (!CUENTA || !AVISO) {
 }
 
 const linea = (s = '') => console.log(s)
-const corto = (o) => JSON.stringify(o, null, 1).slice(0, 1500)
+const corto = (o) => JSON.stringify(o).slice(0, 600)
+// 🔴 Validar un creativo de VIDEO tarda más que los 8 s de `TIMEOUT_MS`: la 1ª corrida del 15-sep dio
+// timeout en las 7 variantes, que no es un rechazo sino no saber.
+const TIMEOUT_VALIDAR_MS = 60000
 
 // ── 1. Lo que ya existe: el aviso, su creativo y con qué mejoras nació ──────────────────────────
 const ad = await graph(`${AVISO}?fields=id,name,creative{id}`)
@@ -61,7 +64,12 @@ linea(`url_tags actuales: ${cr.data.url_tags || '(ninguno)'}`)
 // Aislado en su propia llamada: un campo bloqueado anula la consulta entera (ver `CAMPOS_RECETA`).
 const dof = await graph(`?ids=${creativeId}&fields=degrees_of_freedom_spec`)
 linea('\n━━ 1. CON QUÉ MEJORAS NACIÓ (degrees_of_freedom_spec leído) ━━')
-linea(dof.ok ? corto(dof.data[creativeId] && dof.data[creativeId].degrees_of_freedom_spec) : `no se pudo leer: ${mensajeError(dof)}`)
+if (!dof.ok) linea(`no se pudo leer: ${mensajeError(dof)}`)
+else {
+  const feats = ((dof.data[creativeId] || {}).degrees_of_freedom_spec || {}).creative_features_spec || {}
+  // Una línea por mejora: el JSON entero no entra en el log y la 1ª corrida cortó justo el catálogo.
+  for (const [k, v] of Object.entries(feats)) linea(`  ${(v && v.enroll_status) || JSON.stringify(v)}  ${k}`)
+}
 
 if (!video.video_id) { console.error('El aviso no es de video: el spike necesita uno de video.'); process.exit(1) }
 const th = await graph(`${video.video_id}/thumbnails?fields=uri,is_preferred`, 2)
@@ -116,7 +124,7 @@ const VARIANTES = [
 
 linea('\n━━ 2 y 3. VARIANTES (validate_only) ━━')
 for (const v of VARIANTES) {
-  const r = await graphPost(`act_${CUENTA}/adcreatives`, { ...v.cuerpo, name: `ensayo validate_only · ${v.nombre}`, ...VALIDAR_SOLO })
+  const r = await graphPost(`act_${CUENTA}/adcreatives`, { ...v.cuerpo, name: `ensayo validate_only · ${v.nombre}`, ...VALIDAR_SOLO }, TIMEOUT_VALIDAR_MS)
   linea(`${r.ok ? '✅ ACEPTA ' : '⛔ RECHAZA'} · ${v.nombre}`)
   if (!r.ok) {
     const e = r.error || {}
