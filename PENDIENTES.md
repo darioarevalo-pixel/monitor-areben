@@ -37,6 +37,25 @@ abre la cámara → poner precio → «Agregar el producto» → volver y reabri
 ninguna prueba desde acá puede ver es la cámara.
 ▶️ Afuera por el plazo: alta de promesas desde la calle y mostrar qué recomprarle parado en el local.
 
+### ▶️ Lo que quedó sin hacer cuando Bruno cortó (15-sep, 17 h)
+1. **Verificar que el deploy de `1768b9d9` llegó a Vercel** (un push puede ⛔ no llegar, callado):
+   buscar «Productos que me gustaron» en el bundle servido, con una cadena vieja de control. El CI
+   ⛔ se miró.
+2. **Decidir qué hacer con las FOTOS** (Bruno cortó antes de contestar). Las tres salidas:
+   - **Plan B, recomendado: subir las fotos de Recorridas a Supabase** (~1 h, sin costo, ⛔ no
+     depende del Blob de Darío). Bucket **público** propio en el Supabase de BDI (p. ej.
+     `prm-fotos`, como `piezas-meta` de hoy) · acción nueva `foto.subir` en `api/_prm.js`, con el
+     permiso `PARA_CALLE`, que recibe el data URL ya achicado y lo sube con el cliente de servicio ·
+     `SacarFoto.tsx` llama a esa acción en vez de `subirBlob` (el achique queda igual) · probar con
+     una imagen chica contra prod y eliminarla. ⚠️ **En el repo no hay NINGUNA subida a Supabase
+     Storage** (el bucket de Meta se hizo a mano) ⇒ es código nuevo, ⛔ no se reusa nada. Crear el
+     bucket puede pedir la mano de Bruno (el clasificador frena escrituras de infra).
+   - **Esperar a Vercel**: dijo que el acceso vuelve «15/09/26», y a las 16:59 seguía caído.
+   - **Que Darío destrabe el Blob** (Pro o desbloqueo): arregla TODO el monitor —canjes,
+     reclamos, manuales—, pero cuesta plata. Ver `project_monitor_blob_suspendido` en la memoria.
+3. **Probarlo en el celular** (la cámara sólo se ve ahí): «Nuevo local» → «Sacar foto» → precio →
+   «Agregar el producto» → volver y reabrir. Sin Blob, la foto va a dar error; lo demás se guarda.
+
 ---
 
 ## ▶️ META SIN ADS MANAGER: EL AVISO DE CERO YA ESTÁ, LO QUE SIGUE QUEDA EN ESPERA — 15-sep-2026 (dictado por Bruno)
