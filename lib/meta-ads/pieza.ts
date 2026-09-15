@@ -8,6 +8,12 @@
  */
 
 import {
+  ajustesDelAviso as ajustesDelAvisoJs,
+  copyDelFormulario as copyDelFormularioJs,
+  CTAS as CTAS_JS,
+  MEJORAS_APAGADAS as MEJORAS_APAGADAS_JS,
+  soloAjustes as soloAjustesJs,
+  validarUrlTags as validarUrlTagsJs,
   CAMPOS_CREATIVO_MODELO as CAMPOS_CREATIVO_MODELO_JS,
   claseDePieza as claseDePiezaJs,
   CLASE_POR_EXTENSION as CLASE_POR_EXTENSION_JS,
@@ -71,7 +77,22 @@ export interface CopyDeAviso {
   destino: string
   /** El botón del modelo. `null` = no tenía, y no se le inventa uno. */
   cta: string | null
+  /** Los UTM elegidos. Ausente o `null` = sin UTM. */
+  urlTags?: string | null
 }
+
+/**
+ * Lo que se ELIGE del aviso además del texto (aviso de cero, 15-sep-2026). Clave ausente = queda lo
+ * del modelo. Cada una pasa por su guard en `ajustesDelAviso` — el destino, sólo la tienda de la línea.
+ */
+export type AjustesDelAviso = Partial<{
+  destino: string
+  cta: string
+  pageId: string
+  /** `''` o `null` = sale sin Instagram. */
+  instagramId: string | null
+  urlTags: string
+}>
 
 /**
  * Los textos que alguien escribió desde el monitor. **Sólo estas tres claves**: la página, el destino
@@ -145,4 +166,27 @@ export const puedeUsarLaPagina = puedeUsarLaPaginaJs as (
 
 export const validarPiezas = validarPiezasJs as (
   piezas: unknown,
-) => { ok: true; piezas: PiezaCargada[] } | Falla
+) => { ok: true; piezas: (PiezaCargada & { ajustes?: AjustesDelAviso })[] } | Falla
+
+/** Los botones que se pueden elegir. Lista cerrada. */
+export const CTAS = CTAS_JS as string[]
+/** Las mejoras de Advantage+ que cada creativo nuevo manda apagadas. */
+export const MEJORAS_APAGADAS = MEJORAS_APAGADAS_JS as { creative_features_spec: Record<string, { enroll_status: 'OPT_OUT' }> }
+
+export const validarUrlTags = validarUrlTagsJs as (v: string | null | undefined) => { ok: true; urlTags: string | null } | Falla
+
+/** El copy con lo elegido encima (destino, botón, página, Instagram, UTM), cada uno con su guard. */
+export const ajustesDelAviso = ajustesDelAvisoJs as (
+  copy: CopyDeAviso | null,
+  ajustes: AjustesDelAviso | null | undefined,
+  linea: string,
+  donde?: string,
+) => { ok: true; copy: CopyDeAviso } | Falla
+
+/** El copy SIN aviso modelo: página, destino y texto son obligatorios. */
+export const copyDelFormulario = copyDelFormularioJs as (
+  formulario: AjustesDelAviso & TextosDelAviso,
+  linea: string,
+) => { ok: true; copy: CopyDeAviso } | Falla
+
+export const soloAjustes = soloAjustesJs as (t: unknown) => AjustesDelAviso | null

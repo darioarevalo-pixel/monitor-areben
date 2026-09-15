@@ -43,6 +43,11 @@
 //                                               por aviso, embudo, serie, y el cruce contra los
 //                                               PEDIDOS REALES de la tienda. Texto plano listo
 //                                               para copiar. Ver `api/_meta-parte.js`.
+//   GET /api/meta-ads?recurso=destinos&linea=<bdi|zattia|stunned>[&url=<https://…>]
+//                                             → las COLECCIONES de la tienda (del menú público, sin
+//                                               token) y las páginas/IG del token, para el aviso de
+//                                               cero. Con `url`: el guard del destino y cuántos
+//                                               productos muestra. Ver `api/_meta-destinos.js`.
 //   POST /api/meta-ads?recurso=favorito       → marcar/desmarcar una pieza. No toca Meta.
 //   GET /api/meta-ads?recurso=diagnostico     → ¿el token puede ESCRIBIR? (solo admin)
 //   GET /api/meta-ads?recurso=auditoria       → QUIÉN accionó sobre la pauta y cómo quedó. Ver
@@ -105,6 +110,7 @@ import tendenciaGet from './_meta-tendencia.js';
 import rendimientoGet from './_meta-rendimiento.js';
 import publicosGet from './_meta-publicos.js';
 import parteGet from './_meta-parte.js';
+import destinosGet from './_meta-destinos.js';
 
 // La lista de períodos y las dos ventanas del censo viven en `lib/meta-ads/ventana.core.js`: eran
 // cuatro copias de la misma decisión y las cuatro contestaban otra ventana en silencio cuando les
@@ -171,6 +177,9 @@ export default async function handler(req, res) {
   // que va arriba del guard por el mismo motivo que las reglas y el registro. El POST tampoco toca
   // Meta: guarda un HTML, lo publica o lo borra.
   if (req.method === 'GET' && (recurso === 'informes' || recurso === 'informe')) return await informesGet(res, perfil, req.query || {});
+  // Los DESTINOS del aviso de cero: la mitad sale del menú público de la tienda, sin token. Arriba del
+  // guard por eso; las páginas (Graph) vuelven vacías con su motivo si el token no está.
+  if (req.method === 'GET' && recurso === 'destinos') return await destinosGet(res, perfil, req.query || {});
   if (req.method === 'POST' && recurso === 'informe') return await informesPost(req, res, perfil);
 
   if (!tokenMeta()) return res.status(500).json({ error: 'Meta Ads no configurado' });

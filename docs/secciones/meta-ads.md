@@ -45,11 +45,19 @@ token de Meta**: lee la foto) · `avanzar-planes-meta.yml` cada hora a las :20 (
   la base y a los permisos de Zattia — igual que `sku_map` con `store='stunned'`. Sin ese helper,
   `puedeVer(perfil, 'stunned')` da false y contesta 403 sin que se entienda.
 - Piezas usa `api/blob-upload.js` (otra de las 7 funciones) y `lib/drive/`.
-- 🔴 **En Piezas el copy se escribe, pero sólo el TEXTO** (desde el 12-sep-2026): texto, título y
-  descripción, para la tanda y **por pieza**. La página, el botón y el destino salen **siempre** del
-  aviso modelo — `textosDelCopy()` (`pieza.core.js`) ignora cualquier otra clave, y
-  `puedeUsarLaPagina()` se corre sobre el copy del modelo. Un texto vacío frena. El cliente manda
-  **sólo lo que alguien tocó**: lo precargado se lee con otra cadena de respaldos que la del servidor.
+- 🔴 **En Piezas el AVISO se arma de cero desde el 15-sep-2026** («aviso de cero»): texto, título y
+  descripción (tanda y **por pieza**, desde el 12-sep) **y además destino, botón, página/Instagram y
+  UTM**. El aviso modelo pasó a ser **opcional** («Copiar de un aviso»: sólo precarga).
+  - 🔴 **Meta ACEPTA un destino de cualquier dominio** (medido con `validate_only`, run 35011222530):
+    el único freno es `validarDestino()` (`lib/meta-ads/destinos.core.js`), que corre en el servidor
+    con la línea de la CAMPAÑA vía `ajustesDelAviso()`, también por pieza en `armarPlanPiezas`.
+  - Los destinos se leen del **menú público** de la tienda (`?recurso=destinos`, arriba del guard del
+    token) y la pantalla avisa cuántos productos muestra la página elegida.
+  - Cada creativo nuevo manda `degrees_of_freedom_spec` con **funciones individuales en OPT_OUT**
+    (`MEJORAS_APAGADAS`): Meta las acepta y rechaza el viejo `standard_enhancements` (subcode
+    3858504). Medido: los creativos del motor ya NACÍAN con las 82 mejoras en OPT_OUT; se manda igual.
+  - `puedeUsarLaPagina()` corre sobre el copy YA ajustado. El cliente manda **sólo lo que alguien
+    tocó**. El spike es `scripts/ensayo-creativo-meta.mjs` (`ensayo-meta.yml`, input `aviso`).
 - ⚠️ **`lib/gerencial/detectores/ads.ts` NO usa nada de esto**: atribuye por totales de cuenta con una
   regex sobre el nombre. Quedó así a sabiendas. Bajarlo a nivel campaña es otra tanda.
 

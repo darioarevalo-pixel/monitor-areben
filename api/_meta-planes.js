@@ -36,7 +36,8 @@ import {
   TIMEOUT_PASO_MS, TIPOS_PASO, TIPOS_PLAN,
 } from '../lib/meta-ads/planes.core.js';
 import {
-  CAMPOS_CREATIVO_MODELO, copyDeCreativo, cuerpoDeCreativo, puedeUsarLaPagina, soloTextos, validarPiezas,
+  ajustesDelAviso, CAMPOS_CREATIVO_MODELO, copyDeCreativo, copyDelFormulario, cuerpoDeCreativo,
+  puedeUsarLaPagina, soloAjustes, soloTextos, validarPiezas,
 } from '../lib/meta-ads/pieza.core.js';
 import { contextoDeEscalon, correrEscalon } from '../lib/meta-ads/correr-escalon.core.js';
 import { contextoDePoda, correrPoda } from '../lib/meta-ads/correr-poda.core.js';
@@ -546,9 +547,17 @@ async function prepararPiezas(perfil, b, marcador) {
   if (!/^\d+$/.test(campaniaDestino)) {
     return { ok: false, status: 400, error: 'Falta la campaña donde van los conjuntos nuevos.' };
   }
+  // 🔑 **El aviso modelo es OPCIONAL desde el aviso de cero (15-sep-2026).** Con modelo, precarga
+  // página, destino, botón y texto, y lo elegido en `b.aviso` pisa encima con su guard. Sin modelo,
+  // todo sale de `b.aviso` + `b.textos` (`copyDelFormulario`). Lo que no se abrió: un id que llega y
+  // no es numérico sigue siendo un 400, no «sin modelo».
   const modeloId = String(b.modeloId || '');
-  if (!/^\d+$/.test(modeloId)) {
-    return { ok: false, status: 400, error: 'Falta el aviso modelo: es de donde sale el texto.' };
+  if (modeloId && !/^\d+$/.test(modeloId)) {
+    return { ok: false, status: 400, error: 'El aviso modelo no es un id de Meta.' };
+  }
+  const ajustesTanda = soloAjustes(b.aviso);
+  if (!modeloId && !ajustesTanda) {
+    return { ok: false, status: 400, error: 'Falta elegir la página y el destino del aviso, o un aviso del que copiarlos.' };
   }
 
   const ref = await graph(`${referencia}?fields=${CAMPOS_RECETA}`);
@@ -583,15 +592,27 @@ async function prepararPiezas(perfil, b, marcador) {
   const permiso = permitePlan(perfil, 'piezas', linea.linea);
   if (!permiso.ok) return { ok: false, ...permiso };
 
-  const mod = await graph(`${modeloId}?fields=id,name,creative{${CAMPOS_CREATIVO_MODELO}}`);
-  if (!mod.ok) {
-    const code = codigoError(mod);
-    return {
-      ok: false, status: code === 100 ? 400 : 502,
-      error: code === 100 ? 'Ese id no parece ser un aviso de Meta.' : 'No se pudo leer el aviso modelo en Meta, así que no se armó nada.',
-    };
+  let leido;
+  let modeloNombre = '';
+  if (modeloId) {
+    const mod = await graph(`${modeloId}?fields=id,name,creative{${CAMPOS_CREATIVO_MODELO}}`);
+    if (!mod.ok) {
+      const code = codigoError(mod);
+      return {
+        ok: false, status: code === 100 ? 400 : 502,
+        error: code === 100 ? 'Ese id no parece ser un aviso de Meta.' : 'No se pudo leer el aviso modelo en Meta, así que no se armó nada.',
+      };
+    }
+    modeloNombre = String(mod.data.name || '');
+    const delModelo = copyDeCreativo((mod.data && mod.data.creative) || null);
+    if (!delModelo.ok) return delModelo;
+    // Lo elegido pisa al modelo, con la línea de la CAMPAÑA: el destino se valida contra la tienda de
+    // la marca que paga, no contra la que diga el cliente.
+    leido = ajustesDelAviso(delModelo.copy, ajustesTanda, linea.linea, 'de la tanda');
+  } else {
+    const t = soloTextos(b.textos) || {};
+    leido = copyDelFormulario({ ...ajustesTanda, mensaje: t.mensaje, titulo: t.titulo, descripcion: t.descripcion }, linea.linea);
   }
-  const leido = copyDeCreativo((mod.data && mod.data.creative) || null);
   if (!leido.ok) return leido;
 
   // 🔑 La página, preguntada por el canal correcto. Que el system user no la maneje se arregla en el
@@ -619,11 +640,11 @@ async function prepararPiezas(perfil, b, marcador) {
   const entrada = {
     referenciaId: referencia, referenciaNombre: String(ref.data.name || ''),
     campaignId: campaniaDestino, campaniaNombre: String(dest.data.name || ''),
-    modeloId, modeloNombre: String(mod.data.name || ''),
+    modeloId: modeloId || null, modeloNombre,
     cuentaId, nombre, linea: linea.linea,
     presupuestoCrudo: diarioPedido,
-    // 🔴 La página se validó arriba sobre el copy del MODELO, y `textosDelCopy` no la deja pisar: los
-    // textos escritos desde el monitor cambian qué dice el aviso, nunca de dónde sale ni adónde lleva.
+    // 🔴 La página se validó arriba sobre el copy YA AJUSTADO (modelo + lo elegido). Los textos no la
+    // pisan; el destino y el botón por pieza los vuelve a pasar por `ajustesDelAviso` el núcleo.
     piezas: val.piezas, copy: leido.copy, textos: soloTextos(b.textos), paginaNombre: puede.nombre || '',
     receta: rec.receta,
     avisos: [...new Set(rec.receta.notas || [])],

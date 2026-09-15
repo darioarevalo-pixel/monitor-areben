@@ -1,18 +1,113 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ajustesDelAviso,
   claseDePieza,
   copyDeCreativo,
+  copyDelFormulario,
+  CTAS,
   cuerpoDeCreativo,
   destinoDe,
   LARGO_TEXTOS,
   puedeUsarLaPagina,
+  soloAjustes,
   textosDelCopy,
   TOPE_PIEZAS,
   validarPiezas,
+  validarUrlTags,
   type CopyDeAviso,
   type CreativoLeido,
 } from '@/lib/meta-ads/pieza'
 import { piezaDe } from '@/lib/meta-ads/creativos.core.js'
+
+/**
+ * El aviso de cero: lo que se ELIGE además del texto. El riesgo que ordena los casos es el mismo del
+ * destino: **Meta acepta un destino de cualquier dominio** (medido el 15-sep-2026), así que lo que se
+ * fija acá es qué no pasa el guard.
+ */
+describe('ajustesDelAviso — destino, botón, página y UTM, cada uno con su guard', () => {
+  const base: CopyDeAviso = {
+    pageId: '264601567300555', instagramId: '17841404229291199', mensaje: 'hola', titulo: null,
+    descripcion: null, destino: 'https://bdiaccesorios.com.ar/fundas/girlhood-collection/', cta: 'SHOP_NOW',
+  }
+
+  it('pisa el destino del modelo con uno de la tienda de la línea', () => {
+    const r = ajustesDelAviso(base, { destino: 'https://bdiaccesorios.com.ar/fundas/moods-collection' }, 'bdi')
+    expect(r.ok && r.copy.destino).toBe('https://bdiaccesorios.com.ar/fundas/moods-collection/')
+  })
+
+  it('🔴 un destino de otro dominio NO pasa, aunque Meta lo acepte', () => {
+    expect(ajustesDelAviso(base, { destino: 'https://example.com/' }, 'bdi')).toMatchObject({ ok: false, status: 409 })
+  })
+
+  it('🔴 el destino se valida contra la línea que PAGA: la tienda de Zattia no pasa en una tanda de BDI', () => {
+    expect(ajustesDelAviso(base, { destino: 'https://zattia.com.ar/' }, 'bdi')).toMatchObject({ ok: false, status: 409 })
+  })
+
+  it('el botón sólo de la lista cerrada, y en mayúsculas', () => {
+    const r = ajustesDelAviso(base, { cta: 'learn_more' }, 'bdi')
+    expect(r.ok && r.copy.cta).toBe('LEARN_MORE')
+    expect(ajustesDelAviso(base, { cta: 'CALL_NOW' }, 'bdi')).toMatchObject({ ok: false, status: 400 })
+    expect(CTAS).toContain('SHOP_NOW')
+  })
+
+  it('la página y el Instagram sólo como ids; Instagram vacío = sale sin Instagram', () => {
+    expect(ajustesDelAviso(base, { pageId: 'mi pagina' }, 'bdi')).toMatchObject({ ok: false, status: 400 })
+    const r = ajustesDelAviso(base, { instagramId: '' }, 'bdi')
+    expect(r.ok && r.copy.instagramId).toBeNull()
+  })
+
+  it('sin ajustes, el copy sale IDÉNTICO', () => {
+    const r = ajustesDelAviso(base, null, 'bdi')
+    expect(r.ok && r.copy).toEqual(base)
+  })
+
+  it('soloAjustes deja afuera las claves que no se pueden pisar', () => {
+    expect(soloAjustes({ destino: 'x', mensaje: 'no', access_token: 'no', cta: 'SHOP_NOW' })).toEqual({ destino: 'x', cta: 'SHOP_NOW' })
+    expect(soloAjustes({})).toBeNull()
+  })
+})
+
+describe('validarUrlTags — pares clave=valor', () => {
+  it('acepta UTM con macros de Meta y vacío', () => {
+    expect(validarUrlTags('utm_source=meta&utm_campaign={{campaign.name}}')).toEqual({ ok: true, urlTags: 'utm_source=meta&utm_campaign={{campaign.name}}' })
+    expect(validarUrlTags('')).toEqual({ ok: true, urlTags: null })
+  })
+  it('⛔ rechaza «?» adelante, espacios y lo que no son pares', () => {
+    expect(validarUrlTags('?utm_source=meta').ok).toBe(false)
+    expect(validarUrlTags('utm_source=meta ads').ok).toBe(false)
+    expect(validarUrlTags('utm_source').ok).toBe(false)
+  })
+})
+
+describe('copyDelFormulario — el aviso SIN modelo', () => {
+  const ok = { pageId: '264601567300555', destino: 'https://bdiaccesorios.com.ar/new-in/', mensaje: 'New items ✨' }
+
+  it('arma el copy con botón Comprar por defecto', () => {
+    const r = copyDelFormulario(ok, 'bdi')
+    expect(r.ok && r.copy).toMatchObject({ pageId: '264601567300555', destino: 'https://bdiaccesorios.com.ar/new-in/', cta: 'SHOP_NOW', mensaje: 'New items ✨', instagramId: null })
+  })
+
+  it('⛔ sin página, sin destino o sin texto no se arma', () => {
+    expect(copyDelFormulario({ ...ok, pageId: '' }, 'bdi').ok).toBe(false)
+    expect(copyDelFormulario({ ...ok, destino: '' }, 'bdi').ok).toBe(false)
+    expect(copyDelFormulario({ ...ok, mensaje: '  ' }, 'bdi').ok).toBe(false)
+  })
+
+  it('🔴 el guard del destino corre igual sin modelo', () => {
+    expect(copyDelFormulario({ ...ok, destino: 'https://example.com/' }, 'bdi')).toMatchObject({ ok: false, status: 409 })
+  })
+
+  it('el copy armado se convierte en creativo', () => {
+    const r = copyDelFormulario({ ...ok, urlTags: 'utm_source=meta' }, 'bdi')
+    if (!r.ok) throw new Error(r.error)
+    const c = cuerpoDeCreativo(r.copy, { clase: 'video', videoId: '9', miniatura: 'https://x.ar/t.jpg' })
+    expect(c.ok).toBe(true)
+    if (c.ok) {
+      expect(JSON.parse(c.cuerpo.object_story_spec).video_data.call_to_action).toEqual({ type: 'SHOP_NOW', value: { link: 'https://bdiaccesorios.com.ar/new-in/' } })
+      expect(c.cuerpo.url_tags).toBe('utm_source=meta')
+    }
+  })
+})
 
 /**
  * El guard de la pieza nueva.
@@ -257,11 +352,30 @@ describe('cuerpoDeCreativo — la pieza cambia, el copy no', () => {
     expect(s.video_data.call_to_action.value.link).toBe('https://stunned.com.ar/nueva')
   })
 
-  it('⛔ nunca arrastra `degrees_of_freedom_spec`, que es lo que hace rechazar las copias', () => {
+  it('🔑 apaga el catálogo y el texto EXPLÍCITO, con funciones individuales (medido el 15-sep)', () => {
     const r = cuerpoDeCreativo(copy(MODELO_IMAGEN), { clase: 'imagen', url: 'https://x.ar/a.jpg' })
     expect(r.ok).toBe(true)
-    if (r.ok) expect(Object.keys(r.cuerpo)).toEqual(['object_story_spec'])
+    if (!r.ok) return
+    const dof = JSON.parse(r.cuerpo.degrees_of_freedom_spec)
+    expect(dof.creative_features_spec.product_extensions).toEqual({ enroll_status: 'OPT_OUT' })
+    expect(dof.creative_features_spec.text_optimizations).toEqual({ enroll_status: 'OPT_OUT' })
+    // Nada adentro puede estar prendido: una tanda de test con el catálogo prendido no mide la pieza.
+    expect(Object.values(dof.creative_features_spec).every((v) => (v as { enroll_status: string }).enroll_status === 'OPT_OUT')).toBe(true)
+  })
+
+  it('⛔ nunca manda `standard_enhancements`: Meta lo rechaza (code 100 · subcode 3858504)', () => {
+    const r = cuerpoDeCreativo(copy(MODELO_IMAGEN), { clase: 'imagen', url: 'https://x.ar/a.jpg' })
+    if (r.ok) expect(r.cuerpo.degrees_of_freedom_spec).not.toContain('standard_enhancements')
+    // Y el spec de la historia sigue sin arrastrarlo: va aparte, arriba del creativo.
     expect(spec(r).degrees_of_freedom_spec).toBeUndefined()
+  })
+
+  it('manda los UTM sólo si hay', () => {
+    const conUtm = { ...copy(MODELO_IMAGEN), urlTags: 'utm_source=meta&utm_medium=paid' }
+    const r1 = cuerpoDeCreativo(conUtm, { clase: 'imagen', url: 'https://x.ar/a.jpg' })
+    if (r1.ok) expect(r1.cuerpo.url_tags).toBe('utm_source=meta&utm_medium=paid')
+    const r2 = cuerpoDeCreativo(copy(MODELO_IMAGEN), { clase: 'imagen', url: 'https://x.ar/a.jpg' })
+    if (r2.ok) expect(r2.cuerpo.url_tags).toBeUndefined()
   })
 
   it('⛔ el `name` NO sale de acá: lo pone el motor porque lleva la marca del paso', () => {

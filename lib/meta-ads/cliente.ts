@@ -21,6 +21,7 @@ import type { Calibracion, ClavePreset, ClaveUmbral, Hallazgo, Regla, RespuestaR
 import type { RespuestaTendencia } from './tendencia'
 import type { RespuestaZona } from './rendimiento'
 import type { RespuestaPublicos } from './publicos'
+import type { RespuestaDestino, RespuestaDestinos } from './destinos'
 
 /** Lo que contesta `?recurso=parte`: el texto listo para copiar y qué no se pudo leer. */
 /**
@@ -168,6 +169,19 @@ export function traerConjuntos(campaignId: string, dias?: number): Promise<Lectu
   const qs = new URLSearchParams({ recurso: 'conjuntos', campania: campaignId })
   if (dias) qs.set('dias', String(dias))
   return pedir<RespuestaConjuntos>(qs)
+}
+
+/**
+ * Las colecciones de la tienda de una línea y las páginas/IG del token, para el aviso de cero.
+ * La mitad de la tienda sale del menú público: contesta aunque Meta no esté configurado.
+ */
+export function traerDestinos(linea: string): Promise<Lectura<RespuestaDestinos>> {
+  return pedir<RespuestaDestinos>(new URLSearchParams({ recurso: 'destinos', linea }))
+}
+
+/** El guard de UN destino y cuántos productos muestra esa página. No decide: el que manda corre al armar. */
+export function traerDestino(linea: string, url: string): Promise<Lectura<RespuestaDestino>> {
+  return pedir<RespuestaDestino>(new URLSearchParams({ recurso: 'destinos', linea, url }))
 }
 
 /**

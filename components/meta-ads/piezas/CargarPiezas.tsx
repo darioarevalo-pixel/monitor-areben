@@ -10,14 +10,16 @@
  * se lleva casi todo a los dos días— y la que quedó sin entrega **no perdió, no jugó**. Con un
  * conjunto cada una, cada pieza tiene su propio presupuesto y el número final se puede comparar.
  *
- * # 🔑 Se elige la pieza y se escribe el texto; lo demás se hereda, y es a propósito
+ * # 🔑 El AVISO se arma de cero; la SEGMENTACIÓN todavía se copia
  *
- * El botón, el destino y la página salen de un **aviso modelo**; la segmentación, la optimización,
- * el cobro y el píxel salen de un **conjunto de referencia**. Los dos de la misma campaña, o sea de
- * algo que Meta ya aceptó y que hoy está entregando. Es la misma decisión que toma `ModalCrear` y por
- * el mismo motivo: el `targeting spec` y la matriz de *objetivo × optimización × cobro* son la
- * fuente número uno de rechazos, y un formulario con esos campos es pedirle a una persona que adivine
- * qué combinaciones son legales.
+ * Desde el 15-sep-2026 (el «aviso de cero»): **destino, botón, página y UTM se eligen**, y copiar de
+ * un aviso es opcional —sólo precarga—. El destino sale de las colecciones de la tienda y el servidor
+ * lo rechaza si no es de la tienda de la marca (`ajustesDelAviso`): Meta acepta cualquier dominio.
+ * Lo empujó la TANDA 12, que no tenía ningún aviso apuntando a su colección.
+ *
+ * La segmentación, la optimización, el cobro y el píxel siguen saliendo de un **conjunto de
+ * referencia**, por el motivo de siempre: el `targeting spec` y la matriz de *objetivo × optimización
+ * × cobro* son la fuente número uno de rechazos. Armarlos de cero es la tanda siguiente (T2).
  *
  * **El texto, el título y la descripción sí se escriben** (desde el 12-sep-2026): se precargan del
  * modelo, se pueden cambiar para toda la tanda y **cada pieza puede llevar el suyo**. El copy es del
@@ -42,12 +44,15 @@ import { useSubirPiezas } from '@/components/meta-ads/piezas/useSubirPiezas'
 import { ProgresoPlan } from '@/components/meta-ads/planes/ProgresoPlan'
 import { avanzarHasta } from '@/components/meta-ads/planes/usePlanes'
 import {
-  cancelarPlan, crearPlan, reintentarPaso, traerConjuntos, traerCreativos, traerEtapas,
+  cancelarPlan, crearPlan, reintentarPaso, traerConjuntos, traerCreativos, traerDestino, traerDestinos, traerEtapas,
 } from '@/lib/meta-ads/cliente'
 import { elegirDeDrive, hayDrive } from '@/lib/drive/picker'
 import { aCrudo, aMonto, LARGO_NOMBRE } from '@/lib/meta-ads/acciones'
 import { nuevoIdemPlan, type Plan } from '@/lib/meta-ads/planes'
-import { LARGO_TEXTOS, TOPE_PIEZAS, type TextosDelAviso } from '@/lib/meta-ads/pieza'
+import {
+  CTAS, LARGO_TEXTOS, TOPE_PIEZAS, validarUrlTags, type AjustesDelAviso, type TextosDelAviso,
+} from '@/lib/meta-ads/pieza'
+import type { RespuestaDestinos } from '@/lib/meta-ads/destinos'
 import type { AvisoCreativo, CampañaEtapa, ConjuntoMeta } from '@/lib/meta-ads/tipos'
 import {
   Button, Card, Field, Input, Notice, NumberField, SectionCard, Select, color, font, radius, space,
@@ -110,6 +115,13 @@ export function CargarPiezas() {
   const [textosTanda, setTextosTanda] = useState<TextosDelAviso>({})
   // Por `key` de la pieza. Que haya entrada = la pieza lleva texto propio.
   const [textosPorPieza, setTextosPorPieza] = useState<Record<string, TextosDelAviso>>({})
+  // De qué línea es cada campaña: el censo viene agrupado por línea y `CampañaEtapa` no la trae.
+  // Es la que decide qué tienda vale como destino (el servidor lo vuelve a decidir con la suya).
+  const [lineaPorCampania, setLineaPorCampania] = useState<Record<string, string>>({})
+  const [destinos, setDestinos] = useState<RespuestaDestinos | null>(null)
+  const [falloDestinos, setFalloDestinos] = useState<string | null>(null)
+  // Lo que se ELIGIÓ del aviso además del texto. Clave ausente = lo del aviso copiado (o el default).
+  const [aviso, setAviso] = useState<AjustesDelAviso>({})
 
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState<number | ''>('')
@@ -129,6 +141,9 @@ export function CargarPiezas() {
       if (!r.ok) { setFalloCenso(r.motivo); setCampanias([]); return }
       const todas = Object.values(r.dato.lineas || {}).flat().filter(Boolean) as CampañaEtapa[]
       setCampanias(todas)
+      setLineaPorCampania(Object.fromEntries(
+        Object.entries(r.dato.lineas || {}).flatMap(([l, cs]) => (cs || []).map((c) => [c.id, l])),
+      ))
       setMonedas(Object.fromEntries(r.dato.cuentas.map((c) => [c.id, c.moneda || 'ARS'])))
     })
     return () => { vivo = false }
@@ -145,6 +160,20 @@ export function CargarPiezas() {
     return () => { vivo = false }
   }, [campaniaId])
 
+  // Los destinos y las páginas son de la LÍNEA, no de la campaña: se piden una vez por marca.
+  const lineaCampania = lineaPorCampania[campaniaId] || ''
+  useEffect(() => {
+    if (!lineaCampania) return
+    let vivo = true
+    void traerDestinos(lineaCampania).then((r) => {
+      if (!vivo) return
+      if (!r.ok) { setFalloDestinos(r.motivo); setDestinos(null); return }
+      setFalloDestinos(null)
+      setDestinos(r.dato)
+    })
+    return () => { vivo = false }
+  }, [lineaCampania])
+
   /**
    * ⛔ **Cambiar de campaña olvida la referencia, el modelo y el presupuesto.** Dejar una referencia
    * de la campaña anterior es exactamente cómo se arma una tanda en el lugar equivocado sin que
@@ -154,7 +183,8 @@ export function CargarPiezas() {
   const elegirCampania = (id: string) => {
     setCampaniaId(id)
     setConjuntos(null); setAvisos(null); setReferenciaId(''); setModeloId(''); setMonto('')
-    setTextosTanda({})
+    // El destino y la página elegidos son de la marca de la campaña anterior: se olvidan igual.
+    setTextosTanda({}); setAviso({})
   }
 
   /**
@@ -189,8 +219,18 @@ export function CargarPiezas() {
   const propios = subida.listas.filter((p) => textosPorPieza[p.key])
   const textosMal = textosInvalidos(textosTanda) || propios.some((p) => textosInvalidos(textosPorPieza[p.key]))
 
+  // Sin copiar de un aviso, lo que el modelo daba lo tiene que dar la pantalla: página, destino y texto.
+  // Son los mismos tres obligatorios de `copyDelFormulario`; acá sólo se adelantan.
+  const faltanSinModelo = modeloId ? [] : [
+    ...(aviso.pageId ? [] : ['la página']),
+    ...(aviso.destino ? [] : ['el destino']),
+    ...((textosTanda.mensaje || '').trim() ? [] : ['el texto']),
+  ]
+  const utmMal = !!aviso.urlTags && !validarUrlTags(aviso.urlTags).ok
+
   const listo = !!limpio && !nombreLargo && !montoInvalido && !!campaniaId && !!referenciaId
-    && !!modeloId && subida.listas.length > 0 && !subida.subiendo && !subida.demasiadas && !textosMal
+    && faltanSinModelo.length === 0 && !utmMal
+    && subida.listas.length > 0 && !subida.subiendo && !subida.demasiadas && !textosMal
 
   const armar = async () => {
     setEnPlan(true)
@@ -200,7 +240,9 @@ export function CargarPiezas() {
       idem,
       campaignId: campaniaId,
       referenciaId,
-      modeloId,
+      ...(modeloId ? { modeloId } : {}),
+      // Sólo lo que alguien eligió: lo ausente lo hereda el servidor del aviso copiado.
+      aviso,
       textos: textosTanda,
       nombre: limpio,
       piezas: subida.listas.map(({ key, nombre: n, url }) => ({
@@ -294,20 +336,45 @@ export function CargarPiezas() {
                 <Notice tone="warning">Esa campaña no tiene conjuntos legibles: elegí otra.</Notice>
               )}
 
-              <Field label="Aviso modelo" hint="De acá salen la página, el botón y el destino, y se precarga el texto.">
+              <Field label="Copiar de un aviso (opcional)" hint="Precarga el texto, la página, el botón y el destino. Todo se puede cambiar abajo.">
                 <Select value={modeloId} onChange={(e) => elegirModelo(e.target.value)}>
-                  <option value="">{avisos ? 'Elegí un aviso…' : 'Cargando…'}</option>
+                  <option value="">{avisos ? 'Sin copiar: lo armo de cero' : 'Cargando…'}</option>
                   {(avisos || []).map((a) => (
                     <option key={a.id} value={a.id}>{a.nombre}</option>
                   ))}
                 </Select>
               </Field>
-              {modelo && (
+
+              <AdondeLleva
+                linea={lineaCampania}
+                destinos={destinos}
+                fallo={falloDestinos}
+                modelo={modelo}
+                valor={aviso}
+                onCambio={(k, v) => setAviso((a) => {
+                  const sale = { ...a }
+                  if (v === undefined) delete sale[k]
+                  else sale[k] = v
+                  return sale
+                })}
+              />
+
+              {modelo ? (
                 <TextoDeLaTanda
                   modelo={modelo}
                   escrito={textosTanda}
                   onCambio={(k, v) => setTextosTanda((t) => ({ ...t, [k]: v }))}
                 />
+              ) : (
+                <TextoSinModelo
+                  escrito={textosTanda}
+                  onCambio={(k, v) => setTextosTanda((t) => ({ ...t, [k]: v }))}
+                />
+              )}
+              {faltanSinModelo.length > 0 && (
+                <Notice tone="warning">
+                  Sin copiar de un aviso, falta{faltanSinModelo.length > 1 ? 'n' : ''}: <b>{faltanSinModelo.join(', ')}</b>.
+                </Notice>
               )}
             </>
           )}
@@ -317,9 +384,9 @@ export function CargarPiezas() {
       <SectionCard title="Los archivos">
         <ZonaDeArchivos
           subida={subida}
-          // Lo que precarga un texto propio: el de la tanda tal como se ve. Sin modelo elegido todavía
-          // no hay nada que precargar, y el botón no aparece.
-          textoTanda={modelo ? conEscrito(delModelo(modelo), textosTanda) : null}
+          // Lo que precarga un texto propio: el de la tanda tal como se ve. Sin aviso copiado precarga
+          // lo escrito para la tanda, y si no hay nada escrito, vacío.
+          textoTanda={conEscrito(delModelo(modelo), textosTanda)}
           textosPorPieza={textosPorPieza}
           onPropio={(key, valores) => setTextosPorPieza((t) => {
             const sale = { ...t }
@@ -415,13 +482,171 @@ function TextoDeLaTanda({ modelo, escrito, onCambio }: {
               Viene de este aviso y lo podés cambiar: va a todas las piezas que no tengan texto propio.
             </div>
             <div style={{ fontSize: font.sm, color: color.mut }}>
-              No se cambian: {modelo.cta ? <>botón <b>{modelo.cta}</b>, </> : 'sin botón propio, '}
-              {modelo.destino ? <>va a <span style={{ wordBreak: 'break-all' }}>{modelo.destino}</span></> : 'sin destino legible'}
-              {' '}y la página del aviso.
+              El destino, el botón y la página se eligen arriba; lo que no elijas sale de este aviso.
             </div>
           </div>
         </div>
         <CamposDeTexto valores={conEscrito(delModelo(modelo), escrito)} onCambio={onCambio} />
+      </div>
+    </Card>
+  )
+}
+
+/** Cómo se lee cada botón en la pantalla. El valor que viaja es el de Meta. */
+const ROTULO_CTA: Record<string, string> = {
+  SHOP_NOW: 'Comprar', LEARN_MORE: 'Más información', BUY_NOW: 'Comprar ya', ORDER_NOW: 'Pedir ahora', SEE_MORE: 'Ver más',
+}
+
+/** El valor del `<select>` que abre el campo para escribir la dirección a mano. */
+const OTRA_DIRECCION = '__otra'
+
+/**
+ * **Adónde lleva y desde dónde sale** — lo que antes salía sí o sí del aviso modelo.
+ *
+ * 🔴 Esta tarjeta NO valida: adelanta. El guard que manda es `ajustesDelAviso` en el servidor, con la
+ * línea de la campaña, y rechaza cualquier destino que no sea de la tienda de esa marca aunque se
+ * escriba a mano. Lo que agrega acá es **decir cuántos productos muestra la página antes de gastar**:
+ * la TANDA 12 (15-sep-2026) casi sale a una colección sin la funda del video.
+ */
+function AdondeLleva({ linea, destinos, fallo, modelo, valor, onCambio }: {
+  linea: string
+  destinos: RespuestaDestinos | null
+  fallo: string | null
+  modelo: AvisoCreativo | null
+  valor: AjustesDelAviso
+  /** `undefined` = vuelve a lo del aviso copiado. */
+  onCambio: (k: keyof AjustesDelAviso, v: string | undefined) => void
+}) {
+  const [chequeo, setChequeo] = useState<{ url: string; productos: number | null; responde: boolean; error: string | null } | null>(null)
+  const listados = destinos?.destinos || []
+  const [aMano, setAMano] = useState(false)
+  const escritoAMano = aMano || (!!valor.destino && !listados.some((d) => d.url === valor.destino))
+  const paginas = destinos?.paginas || []
+  const pagina = paginas.find((p) => p.id === valor.pageId) || null
+  const utm = valor.urlTags ? validarUrlTags(valor.urlTags) : null
+
+  // Se pregunta por el destino ELEGIDO, no por cada tecla: el campo a mano confirma al salir.
+  useEffect(() => {
+    if (!linea || !valor.destino) return
+    let vivo = true
+    const url = valor.destino
+    void traerDestino(linea, url).then((r) => {
+      if (!vivo) return
+      setChequeo(r.ok
+        ? { url, productos: r.dato.productos, responde: r.dato.responde, error: null }
+        : { url, productos: null, responde: false, error: r.motivo })
+    })
+    return () => { vivo = false }
+  }, [linea, valor.destino])
+
+  const vigente = chequeo && chequeo.url === valor.destino ? chequeo : null
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <div style={{ fontWeight: 600 }}>Adónde lleva y desde dónde sale</div>
+        {fallo && <Notice tone="warning">No se pudieron leer las colecciones de la tienda: {fallo} Podés escribir la dirección.</Notice>}
+        {destinos?.sinDestinos && <Notice tone="warning">{destinos.sinDestinos} Podés escribir la dirección.</Notice>}
+
+        <Field label="Destino" hint="Las colecciones salen del menú de la tienda. Sólo se acepta la tienda de esta marca.">
+          <Select
+            value={escritoAMano ? OTRA_DIRECCION : (valor.destino ?? '')}
+            onChange={(e) => {
+              if (e.target.value === OTRA_DIRECCION) { setAMano(true); return }
+              setAMano(false)
+              onCambio('destino', e.target.value || undefined)
+            }}
+          >
+            <option value="">{modelo ? `El del aviso copiado${modelo.destino ? ` (${modelo.destino})` : ''}` : 'Elegí adónde lleva…'}</option>
+            {listados.map((d) => (
+              <option key={d.url} value={d.url}>{d.nombre} · {d.ruta}</option>
+            ))}
+            <option value={OTRA_DIRECCION}>Otra dirección de la tienda…</option>
+          </Select>
+        </Field>
+        {escritoAMano && (
+          <Input
+            defaultValue={valor.destino || ''}
+            placeholder="https://…/productos/…"
+            onBlur={(e) => onCambio('destino', e.target.value.trim() || undefined)}
+          />
+        )}
+        {vigente?.error && <Notice tone="danger">{vigente.error}</Notice>}
+        {vigente && !vigente.error && !vigente.responde && (
+          <Notice tone="warning">La tienda no contestó esa página. Revisá la dirección antes de armar.</Notice>
+        )}
+        {vigente && vigente.responde && vigente.productos === 0 && (
+          <Notice tone="danger">
+            <b>Esa página no muestra ningún producto.</b> Un aviso que lleva ahí entrega, gasta y no vende.
+          </Notice>
+        )}
+        {vigente && vigente.responde && !!vigente.productos && (
+          <div style={{ fontSize: font.sm, color: color.mut }}>
+            Muestra {vigente.productos} producto{vigente.productos === 1 ? '' : 's'}: fijate que esté el del video.
+          </div>
+        )}
+
+        <Field label="Botón">
+          <Select value={valor.cta ?? ''} onChange={(e) => onCambio('cta', e.target.value || undefined)}>
+            <option value="">{modelo ? `El del aviso copiado${modelo.cta ? ` (${modelo.cta})` : ''}` : 'Comprar'}</option>
+            {CTAS.map((c) => (
+              <option key={c} value={c}>{ROTULO_CTA[c] || c}</option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Página" hint="Las que el Monitor puede usar para publicar. El Instagram sale de la página.">
+          <Select
+            value={valor.pageId ?? ''}
+            onChange={(e) => {
+              const p = paginas.find((x) => x.id === e.target.value)
+              onCambio('pageId', e.target.value || undefined)
+              onCambio('instagramId', e.target.value ? (p?.instagram?.id || '') : undefined)
+            }}
+          >
+            <option value="">{modelo ? 'La del aviso copiado' : 'Elegí la página…'}</option>
+            {paginas.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre}{p.instagram?.usuario ? ` · Instagram @${p.instagram.usuario}` : ''}</option>
+            ))}
+          </Select>
+        </Field>
+        {destinos?.sinPaginas && <Notice tone="warning">{destinos.sinPaginas}</Notice>}
+        {pagina && !pagina.instagram && (
+          <Notice tone="warning">
+            Esa página no tiene Instagram que el Monitor pueda usar: el aviso sale <b>sólo por Facebook</b>.
+          </Notice>
+        )}
+
+        <Field
+          label="UTM (opcional)"
+          hint="Pares clave=valor separados por &. Por ejemplo: utm_source=meta&utm_medium=paid"
+          error={utm && !utm.ok ? utm.error : undefined}
+        >
+          <Input
+            defaultValue={valor.urlTags || ''}
+            onBlur={(e) => onCambio('urlTags', e.target.value.trim() || undefined)}
+          />
+        </Field>
+      </div>
+    </Card>
+  )
+}
+
+/** El texto de la tanda cuando no se copia de ningún aviso: arranca vacío y el texto es obligatorio. */
+function TextoSinModelo({ escrito, onCambio }: {
+  escrito: TextosDelAviso
+  onCambio: (k: ClaveTexto, v: string) => void
+}) {
+  return (
+    <Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space[3] }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space[1] }}>
+          <div style={{ fontWeight: 600 }}>Texto de la tanda</div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>
+            Va a todas las piezas que no tengan texto propio.
+          </div>
+        </div>
+        <CamposDeTexto valores={conEscrito(delModelo(null), escrito)} onCambio={onCambio} />
       </div>
     </Card>
   )
