@@ -1,39 +1,82 @@
 /**
- * Candidatos a ocultar en TiendaNube: productos AGOTADOS (stock GN = 0) que siguen
- * PUBLICADOS en la tienda. El agotado sale del ETL (GN, fuente de verdad); el `id` y el
- * `published` de TN salen del índice del audit, cruzando por SKU/nombre con `matchTn`.
+ * Los dos sentidos de la visibilidad en TiendaNube: ocultar lo que la tienda ya no puede vender
+ * y volver a mostrar lo que sí puede. Puro y testeable.
  *
- * Solo productos ENTEROS agotados (nunca se toca uno que aún tiene stock en alguna
- * variante), así el criterio es seguro tanto si el color es un producto aparte como si
- * es una variante interna. Devuelve ambos nombres (GN y TN) para poder verificar el
- * match —que es difuso— antes de ocultar. Puro y testeable.
+ * 🔴 **Deciden con el stock DE LA TIENDA, no con el de Gestión Nube** (15-sep-2026). Hasta acá
+ * cruzaban el stock total de GN con `matchTn`, y medido en BDI andaba mal en los dos sentidos:
+ *   - **no aparecía lo que sí figura sin stock**: 19 de 20 productos en 0 en la tienda tenían
+ *     unidades sólo en el Local. GN sumaba Local + Depósito Minorista y los daba por vivos.
+ *   - **y aparecía lo que se está vendiendo**: 14 de 15 candidatos a ocultar tenían stock en la
+ *     tienda (STAR CASE, 932). Un producto viejo de GN con el mismo nombre y stock 0 matcheaba al
+ *     mismo de la tienda, y alcanzaba con ése para proponerlo.
+ *
+ * El stock de TN es de UN depósito, distinto por marca (ver `lib/tncat/stock-variante.ts`), y por
+ * eso no sirve para decidir qué fotografiar. Para esto es exactamente lo que hace falta: es lo que
+ * la tienda deja comprar, o sea lo que el cliente ve como «sin stock».
+ *
+ * Solo productos ENTEROS: uno con stock en alguna variante nunca se oculta (TN no oculta una
+ * variante suelta; `published` existe sólo a nivel producto).
  */
 
 import type { Producto } from '@/lib/etl/tipos'
 import { matchTn, type IndiceTn } from '@/lib/tn'
+import type { ProductoFchk } from './tipos'
 
-export type CandidatoAgotado = {
+export type CandidatoVisibilidad = {
   tnId: string | number
-  gnNombre: string
-  tnNombre: string
+  nombre: string
   sku: string | null
+  /** Unidades en la tienda (suma de las variantes). */
   stock: number
 }
 
-export function candidatosAOcultar(productos: Producto[], idx: IndiceTn): CandidatoAgotado[] {
-  return cruzar(productos, idx, { stockCero: true, publicado: true })
+/**
+ * Unidades que la tienda deja comprar. `null` = no se sabe, y ⛔ nunca se lee como 0:
+ * sin variantes (el payload liviano no las trae) o con alguna variante sin gestión de stock
+ * (`stock: null` en TN es ilimitado). Un negativo cuenta como 0.
+ */
+export function stockEnTienda(p: ProductoFchk): number | null {
+  const vs = p.variantes
+  if (!vs || vs.length === 0) return null
+  let total = 0
+  for (const v of vs) {
+    if (v.stock == null) return null
+    total += Math.max(0, v.stock)
+  }
+  return total
+}
+
+/** Publicados en la tienda con todas sus variantes en 0. */
+export function candidatosAOcultar(productos: ProductoFchk[]): CandidatoVisibilidad[] {
+  return filtrar(productos, (publicado, stock) => publicado && stock === 0)
 }
 
 /**
- * El movimiento inverso: productos **con stock** que están DESPUBLICADOS en la tienda.
+ * El movimiento inverso: productos **con stock en la tienda** que están DESPUBLICADOS.
  *
  * Es el que faltaba. Ocultar agotados es fácil de recordar —lo hacés cuando se termina algo—
  * pero volver a mostrarlos cuando reingresa mercadería no lo dispara nada: el producto
  * queda invisible en la tienda con stock disponible, o sea plata quieta. El "Deshacer" de
  * ocultar solo sirve en la misma sesión; esto lo encuentra siempre.
  */
-export function candidatosAMostrar(productos: Producto[], idx: IndiceTn): CandidatoAgotado[] {
-  return cruzar(productos, idx, { stockCero: false, publicado: false })
+export function candidatosAMostrar(productos: ProductoFchk[]): CandidatoVisibilidad[] {
+  return filtrar(productos, (publicado, stock) => !publicado && stock > 0)
+}
+
+function filtrar(
+  productos: ProductoFchk[],
+  entra: (publicado: boolean, stock: number) => boolean,
+): CandidatoVisibilidad[] {
+  const out: CandidatoVisibilidad[] = []
+  for (const p of productos) {
+    const stock = stockEnTienda(p)
+    if (stock === null) continue
+    // `published` puede venir undefined en el audit: se asume publicado (es el default de TN).
+    if (!entra(p.published !== false, stock)) continue
+    out.push({ tnId: p.id, nombre: p.name, sku: p.sku ?? null, stock })
+  }
+  out.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  return out
 }
 
 /**
@@ -71,29 +114,5 @@ export function ventas90PorProductoTn(productos: Producto[], idx: IndiceTn): Map
     const key = String(tn.id)
     out.set(key, (out.get(key) ?? 0) + (p.sales90 || 0))
   }
-  return out
-}
-
-/** El cruce GN⨯TN compartido por los dos sentidos (mismo match difuso, mismo dedupe). */
-function cruzar(
-  productos: Producto[],
-  idx: IndiceTn,
-  filtro: { stockCero: boolean; publicado: boolean },
-): CandidatoAgotado[] {
-  const out: CandidatoAgotado[] = []
-  const vistos = new Set<string>() // dedupe: varios productos GN pueden matchear el mismo TN
-  for (const p of productos) {
-    if (filtro.stockCero ? p.stock !== 0 : p.stock <= 0) continue
-    const tn = matchTn({ sku: p.sku, name: p.name }, idx)
-    if (!tn || tn.id == null) continue
-    // `published` puede venir undefined en el audit: se asume publicado (es el default de TN).
-    const publicado = tn.published !== false
-    if (publicado !== filtro.publicado) continue
-    const key = String(tn.id)
-    if (vistos.has(key)) continue
-    vistos.add(key)
-    out.push({ tnId: tn.id, gnNombre: p.name, tnNombre: tn.name || p.name, sku: p.sku, stock: p.stock })
-  }
-  out.sort((a, b) => a.gnNombre.localeCompare(b.gnNombre, 'es'))
   return out
 }

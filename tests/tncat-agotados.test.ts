@@ -1,51 +1,59 @@
 import { describe, it, expect } from 'vitest'
-import { candidatosAOcultar } from '@/lib/tncat/agotados'
-import { indexarTn, type TnProducto } from '@/lib/tn'
-import type { Fase, Producto } from '@/lib/etl/tipos'
+import { candidatosAOcultar, stockEnTienda } from '@/lib/tncat/agotados'
+import type { ProductoFchk, VarianteFchk } from '@/lib/tncat/tipos'
 
-const MADUREZ: Fase = { label: 'madurez', cls: '' }
-
-const prod = (over: Partial<Producto>): Producto => ({
-  id: '1', name: 'Prod', sku: null, proveedor: null, category: null,
-  retailer_price: 0, unit_cost: 0, sinCosto: false, margin: null, markup: null, ingresoMes: null, ingresoFecha: null, diasVivo: null,
-  firstSale: null, lastSale: null, daysSinceLast: 0, sales7: 0, sales15: 0, sales30: 0,
-  sales60: 0, sales90: 0, totalSales: 0, monthlySales: [], stock: 0, lifespan: 0,
-  lifespanFirst: 0, phase: MADUREZ, ...over,
+const tn = (over: Partial<ProductoFchk>, stocks: (number | null)[]): ProductoFchk => ({
+  id: 111,
+  name: 'Funda A',
+  sku: 'A',
+  published: true,
+  variantes: stocks.map((stock): VarianteFchk => ({ stock })),
+  ...over,
 })
 
-const idxDe = (tn: TnProducto[]) => indexarTn(tn)
+describe('stockEnTienda', () => {
+  it('suma las variantes', () => {
+    expect(stockEnTienda(tn({}, [0, 3, 2]))).toBe(5)
+  })
+
+  it('un negativo cuenta como 0', () => {
+    expect(stockEnTienda(tn({}, [-1, 0]))).toBe(0)
+  })
+
+  it('una variante sin gestión de stock (null = ilimitado) → no se sabe, ⛔ no 0', () => {
+    expect(stockEnTienda(tn({}, [0, null]))).toBeNull()
+  })
+
+  it('sin variantes (payload liviano) → no se sabe', () => {
+    expect(stockEnTienda({ id: 1, name: 'X' })).toBeNull()
+    expect(stockEnTienda(tn({}, []))).toBeNull()
+  })
+})
 
 describe('candidatosAOcultar', () => {
-  it('agotado (stock 0) + publicado en TN → candidato, con el id de TN', () => {
-    const idx = idxDe([{ id: 111, sku: 'A', name: 'Funda A', published: true }])
-    const out = candidatosAOcultar([prod({ sku: 'A', name: 'Funda A', stock: 0 })], idx)
-    expect(out).toHaveLength(1)
-    expect(out[0].tnId).toBe(111)
-    expect(out[0].sku).toBe('A')
+  it('publicado con todas las variantes en 0 → candidato, con el id de TN', () => {
+    const out = candidatosAOcultar([tn({}, [0, 0])])
+    expect(out).toEqual([{ tnId: 111, nombre: 'Funda A', sku: 'A', stock: 0 }])
   })
 
-  it('con stock → NO es candidato', () => {
-    const idx = idxDe([{ id: 111, sku: 'A', name: 'Funda A', published: true }])
-    expect(candidatosAOcultar([prod({ sku: 'A', name: 'Funda A', stock: 3 })], idx)).toEqual([])
+  it('con stock en UNA variante → NO es candidato (TN no oculta variantes sueltas)', () => {
+    expect(candidatosAOcultar([tn({}, [0, 0, 1])])).toEqual([])
   })
 
-  it('agotado pero ya despublicado en TN → NO es candidato', () => {
-    const idx = idxDe([{ id: 111, sku: 'A', name: 'Funda A', published: false }])
-    expect(candidatosAOcultar([prod({ sku: 'A', name: 'Funda A', stock: 0 })], idx)).toEqual([])
+  it('agotado pero ya despublicado → NO es candidato', () => {
+    expect(candidatosAOcultar([tn({ published: false }, [0])])).toEqual([])
   })
 
-  it('agotado sin match en TN → NO es candidato', () => {
-    const idx = idxDe([{ id: 111, sku: 'Z', name: 'Otra cosa', published: true }])
-    expect(candidatosAOcultar([prod({ sku: 'A', name: 'Producto sólo en GN', stock: 0 })], idx)).toEqual([])
+  it('published undefined se asume publicado (default de TN)', () => {
+    expect(candidatosAOcultar([tn({ published: undefined }, [0])])).toHaveLength(1)
   })
 
-  it('dedup: dos productos GN que matchean el mismo TN → un solo candidato', () => {
-    const idx = idxDe([{ id: 111, name: 'Funda azul iphone', published: true }])
-    const out = candidatosAOcultar([
-      prod({ id: 'g1', sku: null, name: 'Funda azul iphone', stock: 0 }),
-      prod({ id: 'g2', sku: null, name: 'Funda azul iphone 13', stock: 0 }),
-    ], idx)
-    expect(out).toHaveLength(1)
-    expect(out[0].tnId).toBe(111)
+  it('stock sin gestionar → NO es candidato', () => {
+    expect(candidatosAOcultar([tn({}, [null])])).toEqual([])
+  })
+
+  it('ordena por nombre', () => {
+    const out = candidatosAOcultar([tn({ id: 2, name: 'Zeta' }, [0]), tn({ id: 1, name: 'Alfa' }, [0])])
+    expect(out.map((c) => c.nombre)).toEqual(['Alfa', 'Zeta'])
   })
 })

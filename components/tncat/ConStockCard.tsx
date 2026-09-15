@@ -1,18 +1,17 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
-import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { indexarTn, type IndiceTn } from '@/lib/tn'
-import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
+import { auditVariantes, bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAMostrar } from '@/lib/tncat/agotados'
+import type { ProductoFchk } from '@/lib/tncat/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import { Button, Card, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, useConfirmar } from '@/components/ui'
 
 /**
- * Mostrar con stock: productos **despublicados** en la tienda que hoy tienen stock en
- * Gestión Nube. Es el espejo de "Ocultar agotados" y el que faltaba.
+ * Mostrar con stock: productos **despublicados** que hoy tienen stock en la tienda. Es el
+ * espejo de "Ocultar agotados" y el que faltaba. Los dos deciden con el stock de la tienda,
+ * no con el de Gestión Nube → `lib/tncat/agotados.ts:1`.
  *
  * Ocultar lo agotado sale solo, porque lo dispara que se termine algo. Volver a mostrarlo
  * cuando reingresa mercadería no lo dispara nada: el producto queda invisible en la tienda
@@ -23,8 +22,8 @@ import { Button, Card, TBody, THead, TableWrap, Td, Th, Tr, color, font, space, 
  */
 export function ConStockCard({ marca }: { marca: Marca }) {
   const { confirmar } = useConfirmar()
-  const { datos } = useDatosMonitor()
-  const [idx, setIdx] = useState<IndiceTn | null>(null)
+  const [productos, setProductos] = useState<ProductoFchk[] | null>(null)
+  const [errorTienda, setErrorTienda] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [publicados, setPublicados] = useState<Set<string>>(new Set())
   const [ultimoLote, setUltimoLote] = useState<(string | number)[]>([])
@@ -33,17 +32,21 @@ export function ConStockCard({ marca }: { marca: Marca }) {
 
   useEffect(() => {
     let vivo = true
-    asegurarTnPromo(marca)
-      .then((i) => vivo && setIdx(i))
-      .catch(() => vivo && setIdx(indexarTn([])))
+    auditVariantes(marca)
+      .then((p) => {
+        if (!vivo) return
+        setProductos(p)
+        setErrorTienda(false)
+      })
+      .catch(() => vivo && setErrorTienda(true))
     return () => {
       vivo = false
     }
   }, [marca])
 
-  const todos = useMemo(() => (idx && datos ? candidatosAMostrar(datos.allProductos, idx) : []), [idx, datos])
+  const todos = useMemo(() => (productos ? candidatosAMostrar(productos) : []), [productos])
   const lista = todos.filter((c) => !publicados.has(String(c.tnId)))
-  const cargando = !idx || !datos
+  const cargando = !productos
 
   const toggle = (id: string) =>
     setSel((prev) => {
@@ -107,9 +110,9 @@ export function ConStockCard({ marca }: { marca: Marca }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>Mostrar con stock</div>
         <InfoPopover titulo="Mostrar con stock">
-          Productos que están <b>ocultos</b> en la tienda pero hoy tienen stock en Gestión Nube — normalmente
+          Productos que están <b>ocultos</b> en la tienda pero hoy tienen stock cargado en la tienda — normalmente
           porque se agotaron, se despublicaron y después reingresaron. Publicarlos los vuelve a hacer visibles
-          (es reversible). El match tienda↔sistema es aproximado: verificá el nombre antes.
+          (es reversible).
         </InfoPopover>
       </div>
 
@@ -124,8 +127,10 @@ export function ConStockCard({ marca }: { marca: Marca }) {
         </div>
       )}
 
-      {cargando ? (
-        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
+      {errorTienda ? (
+        <div style={{ color: color.dangerInk, fontSize: 14, padding: '10px 2px' }}>No se pudo leer la tienda. Volvé a entrar en un rato.</div>
+      ) : cargando ? (
+        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando la tienda…</div>
       ) : lista.length === 0 ? (
         <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>No hay productos con stock ocultos en la tienda.</div>
       ) : (
@@ -165,10 +170,8 @@ export function ConStockCard({ marca }: { marca: Marca }) {
                       <input type="checkbox" checked={sel.has(id)} onChange={() => toggle(id)} style={{ accentColor: 'var(--mo-brand-solid)', cursor: 'pointer' }} />
                     </Td>
                     <Td tall wrap>
-                      <div style={{ fontWeight: 600, color: color.ink }}>{c.gnNombre}</div>
-                      <div style={{ fontSize: font.sm, color: color.mut2 }}>
-                        {c.sku ? `SKU ${c.sku} · ` : ''}en tienda: {c.tnNombre}
-                      </div>
+                      <div style={{ fontWeight: 600, color: color.ink }}>{c.nombre}</div>
+                      {c.sku && <div style={{ fontSize: font.sm, color: color.mut2 }}>SKU {c.sku}</div>}
                     </Td>
                     <Td align="right">
                       <span style={{ fontSize: font.xs, fontWeight: 700, color: color.successInk, background: color.successBg, borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap' }}>

@@ -104,7 +104,8 @@ Esta sección está **muy documentada adentro**. La ficha no lo repite: acá va 
 - **El selector de categorías muestra la RUTA**, porque dos categorías con el mismo nombre existen de
   verdad (`JEANS` duplicada en Zattia) → `components/tncat/AsignarCard.tsx:14`.
 - **Los dos sentidos de la visibilidad** —ocultar lo agotado y volver a mostrar lo que reingresó— y
-  por qué el segundo no lo dispara nadie → `components/tncat/ConStockCard.tsx:13`.
+  por qué el segundo no lo dispara nadie, y por qué los dos deciden con el stock DE LA TIENDA y no
+  con el de Gestión Nube → `lib/tncat/agotados.ts:1`.
 - **Por qué existe la ficha de producto en grande**: nadie puede mirar una foto y decir de qué color
   es → `components/tncat/FichaProducto.tsx:3`.
 - **Las tres decisiones que ordenan la pantalla de fotos** (publicaciones, buscador fuera de los

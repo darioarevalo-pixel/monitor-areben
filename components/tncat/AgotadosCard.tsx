@@ -1,25 +1,23 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
-import { asegurarTnPromo } from '@/components/productos/useTnImages'
 import { InfoPopover } from '@/components/ui/InfoPopover'
-import { indexarTn, type IndiceTn } from '@/lib/tn'
-import { bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
+import { auditVariantes, bustAudit, despublicar, publicar } from '@/lib/tncat/cliente'
 import { candidatosAOcultar } from '@/lib/tncat/agotados'
+import type { ProductoFchk } from '@/lib/tncat/tipos'
 import type { Marca } from '@/lib/nav.datos'
 import { Card, color, useConfirmar } from '@/components/ui'
 
 /**
- * Ocultar agotados (card 5 de tncat): lista los productos sin stock (GN) que siguen
- * publicados en la tienda y permite despublicarlos — reversible (deshacer republica).
- * Escritura EN VIVO sobre TiendaNube. Solo productos ENTEROS agotados; la variante
- * puntual queda para más adelante (el audit no expone id/stock por variante).
+ * Ocultar agotados (card 5 de tncat): lista los productos que la tienda muestra sin stock
+ * (todas las variantes en 0) y siguen publicados, y permite despublicarlos — reversible
+ * (deshacer republica). Escritura EN VIVO sobre TiendaNube. Por qué decide con el stock de
+ * la tienda y no con el de Gestión Nube → `lib/tncat/agotados.ts:1`.
  */
 export function AgotadosCard({ marca }: { marca: Marca }) {
   const { confirmar } = useConfirmar()
-  const { datos } = useDatosMonitor()
-  const [idx, setIdx] = useState<IndiceTn | null>(null)
+  const [productos, setProductos] = useState<ProductoFchk[] | null>(null)
+  const [errorTienda, setErrorTienda] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [ocultados, setOcultados] = useState<Set<string>>(new Set())
   const [ultimoLote, setUltimoLote] = useState<(string | number)[]>([])
@@ -28,23 +26,22 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
 
   useEffect(() => {
     let vivo = true
-    // El setState va en el callback de la promesa (no en el cuerpo del effect). No
-    // reseteamos a null: `datos` ya es null mientras el store cambia de marca, así que
-    // el estado "cargando" se muestra igual y evitamos el render en cascada.
-    asegurarTnPromo(marca)
-      .then((i) => vivo && setIdx(i))
-      .catch(() => vivo && setIdx(indexarTn([])))
+    // El setState va en el callback de la promesa (no en el cuerpo del effect).
+    auditVariantes(marca)
+      .then((p) => {
+        if (!vivo) return
+        setProductos(p)
+        setErrorTienda(false)
+      })
+      .catch(() => vivo && setErrorTienda(true))
     return () => {
       vivo = false
     }
   }, [marca])
 
-  const todos = useMemo(
-    () => (idx && datos ? candidatosAOcultar(datos.allProductos, idx) : []),
-    [idx, datos],
-  )
+  const todos = useMemo(() => (productos ? candidatosAOcultar(productos) : []), [productos])
   const lista = todos.filter((c) => !ocultados.has(String(c.tnId)))
-  const cargando = !idx || !datos
+  const cargando = !productos
 
   const toggle = (id: string) => {
     setSel((prev) => {
@@ -108,9 +105,9 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>Ocultar agotados</div>
         <InfoPopover titulo="Ocultar agotados">
-          Productos sin stock (según Gestión Nube) que siguen visibles en la tienda. Ocultarlos los
-          despublica (no los elimina): si algún día reingresan, se vuelven a mostrar con “Deshacer” o
-          desde la carga de imágenes. El match tienda↔sistema es aproximado: verificá el nombre antes.
+          Productos que en la tienda figuran sin stock (todas sus variantes en 0) y siguen visibles. Ocultarlos
+          los despublica (no los elimina): si algún día reingresan, aparecen en “Mostrar con stock”. Un producto
+          con stock en alguna variante no aparece acá.
         </InfoPopover>
       </div>
 
@@ -125,8 +122,12 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
         </div>
       )}
 
-      {cargando ? (
-        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando productos y tienda…</div>
+      {errorTienda ? (
+        <div style={{ color: color.dangerInk, fontSize: 14, padding: '10px 2px' }}>
+          No se pudo leer la tienda. Volvé a entrar en un rato.
+        </div>
+      ) : cargando ? (
+        <div style={{ color: color.mut2, padding: '10px 2px' }}>Cargando la tienda…</div>
       ) : lista.length === 0 ? (
         <div style={{ color: color.successInk, fontSize: 14, padding: '10px 2px' }}>
           No hay productos agotados publicados en la tienda.
@@ -160,10 +161,8 @@ export function AgotadosCard({ marca }: { marca: Marca }) {
                 >
                   <input type="checkbox" checked={sel.has(id)} onChange={() => toggle(id)} />
                   <div style={{ flex: 1, minWidth: 180 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{c.gnNombre}</div>
-                    <div style={{ fontSize: 12, color: color.mut2 }}>
-                      {c.sku ? `SKU ${c.sku} · ` : ''}en tienda: {c.tnNombre}
-                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{c.nombre}</div>
+                    {c.sku && <div style={{ fontSize: 12, color: color.mut2 }}>SKU {c.sku}</div>}
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: color.dangerInk, background: color.dangerBg, borderRadius: 6, padding: '2px 8px' }}>
                     sin stock
