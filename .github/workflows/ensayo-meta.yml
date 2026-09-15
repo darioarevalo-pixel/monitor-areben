@@ -41,6 +41,10 @@ on:
         description: 'true = le mete un defecto a la relectura para probar que el ensayo lo caza. Verde = lo cazó.'
         required: false
         default: 'false'
+      aviso:
+        description: 'Id de un aviso de VIDEO armado por el motor: corre el spike del creativo (sólo validate_only, no crea nada). Pide también cuenta.'
+        required: false
+        default: ''
 
 jobs:
   ensayo:
@@ -68,7 +72,14 @@ jobs:
           ENTRADA_CREAR: ${{ inputs.crear }}
           ENTRADA_DEJAR: ${{ inputs.dejar }}
           ENTRADA_PROBAR_ROJO: ${{ inputs.probar_rojo }}
+          ENTRADA_AVISO: ${{ inputs.aviso }}
         run: |
+          # El spike del creativo va aparte y primero: sólo valida, así que no se mezcla con el ensayo
+          # que crea un conjunto de verdad. Ver la cabecera de `scripts/ensayo-creativo-meta.mjs`.
+          if [ -n "$ENTRADA_AVISO" ]; then
+            node scripts/ensayo-creativo-meta.mjs --cuenta "$ENTRADA_CUENTA" --aviso "$ENTRADA_AVISO"
+            exit 0
+          fi
           args=""
           if [ -n "$ENTRADA_CONJUNTO" ]; then
             args="--conjunto $ENTRADA_CONJUNTO"
