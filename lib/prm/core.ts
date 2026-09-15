@@ -60,6 +60,35 @@ export function nuevoId(prefijo: string): string {
   return `${prefijo}${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+/**
+ * El usuario de Instagram tal como se guarda: sin `@` y sin el link. En la calle se pega cualquiera
+ * de las tres formas (`@luma.studio`, `luma.studio`, `https://instagram.com/luma.studio/`).
+ * ⛔ Lo que no se reconoce ⛔ no se tira: se guarda como vino, recortado.
+ */
+export function usuarioDeInstagram(s: string | null | undefined): string | null {
+  let t = String(s ?? '').trim()
+  const link = t.match(/instagram\.com\/([^/?#\s]+)/i)
+  if (link) t = link[1]
+  t = t.replace(/^@+/, '').trim()
+  return t || null
+}
+
+/**
+ * El precio tipeado en la galería, en pesos. `null` = no se puso · `undefined` = no se entiende.
+ *
+ * 🔴 **`12.500` son doce mil quinientos, ⛔ no doce con cincuenta.** Así se escribe un precio acá, y
+ * `Number('12.500')` da 12,5: el precio quedaría mil veces más barato, plausible y callado. El punto
+ * se lee como miles cuando agrupa de a tres; la coma, siempre como decimal.
+ */
+export function leerPrecio(s: string | null | undefined): number | null | undefined {
+  let t = String(s ?? '').replace(/[$\s]/g, '')
+  if (!t) return null
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '')
+  if (!/^\d+(\.\d+)?$/.test(t)) return undefined
+  return Number(t)
+}
+
 /** Para comparar nombres tipeados dos veces: sin tildes, sin puntuación, sin mayúsculas. */
 export function normalizarNombre(s: string | null | undefined): string {
   return String(s ?? '')

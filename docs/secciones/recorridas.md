@@ -60,6 +60,22 @@ Todo el dominio y el handler son de `prm`. Ver `docs/secciones/prm.md` § «Lo q
   📌 **Límite conocido y escrito**: un título de la nota («FLORES - EFICIENCIA EN VIAJES - …») entra
   como candidato y se saca a mano. Es mejor que un parser que adivina encabezados y se come uno real.
 
+- 🔑 **Un local se abre también FUERA de un viaje** (`LocalSuelto.tsx`): tocando su nombre en la
+  lista, o recién cargado con **«Nuevo local»** (nombre + Instagram, lo demás opcional). Es la
+  MISMA pantalla `Parada` con una parada armada en el cliente (`recorrida_id` vacío), y con ella la
+  visita ⛔ no manda `parada_id`. Lo previo sale de la ficha (`action=local`).
+- 🔑 **«Productos que me gustaron» se guarda de a UNO y en el momento** (`interes.crear`), ⛔ no
+  con «Guardar la visita»: foto + qué es + precio. El producto a medio tipear vive en el mismo
+  borrador de `localStorage` y sobrevive a guardar la visita.
+- 🔴 **`12.500` son doce mil quinientos** (`leerPrecio`, `lib/prm/core.ts`): `Number('12.500')` da
+  12,5, mil veces más barato y plausible. Lo que no se entiende ⛔ se guarda: se pide de nuevo.
+- 🔴 **La foto: `SacarFoto.tsx`, y ahí están los dos defectos que la tenían muerta** hasta el
+  15-sep-2026, sin que nadie lo supiera porque nadie la había usado: el input vivía adentro de un
+  `<label>` envolviendo un `<button>` —tocar un botón dentro de un label ⛔ no le llega al input,
+  así que **no abría nada**— y la foto se subía **cruda** (4-8 MB contra el techo de 1,5 MB de
+  `blob-upload`) ⇒ 413. Ahora `ref.click()` y `achicarADataUrl` antes de subir. Son **dos**
+  inputs: «Sacar foto» con `capture` y «De la galería» sin él (la lección de `ReclamoPublico`).
+
 ## Lo que ya se rompió acá
 
 Ver `docs/secciones/prm.md` § «Lo que ya se rompió»: la provincia clavada del geocoder y el punto
@@ -67,6 +83,9 @@ del CSV de Maps que se perdía callado. Las dos salieron construyendo esta panta
 
 ## Pendiente
 
+- ▶️ **Dar de alta una promesa desde la calle** (`compromiso.crear` existe y ninguna pantalla lo
+  llama) y **mostrar parado en el local qué conviene recomprarle** (las estrellas y el stock del PRM).
+  Quedaron afuera del cambio del 15-sep por el viaje del 16.
 - ▶️ **Falta el primer viaje de verdad.** Todo lo de la calle está probado en test y en el navegador,
   ⛔ no caminando Flores. Lo que más chance tiene de estar mal es el tamaño de los botones y qué se
   ve sin scrollear.

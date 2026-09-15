@@ -13,6 +13,32 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 RECORRIDAS PARA EL VIAJE A BUENOS AIRES — 15-sep-2026 (dictado, y hecho)
+
+> «Estaria bueno poder cargar proveedor, con nombre, instagram, y fotos de productos que gustaron.
+> ademas eso de si pasamos, que agregar foto abra camara y permita guardar el precio del producot.
+> manana viajo con zattia a buenos aires, por eso me interesa»
+
+🏁 **Está**: **«Nuevo local»** (nombre + Instagram), **tocar un local de la lista lo abre**, y en la
+pantalla del local **«Productos que me gustaron»**: foto + qué es + precio, guardado de a uno.
+
+🔴 **La foto estaba muerta y nadie lo sabía**: el botón ⛔ no abría la cámara (un botón dentro de un
+label) y aunque la abriera, la foto cruda del celular era un 413 contra el techo de 1,5 MB. Las dos
+cosas, arregladas. El relato, en `docs/secciones/recorridas.md`.
+
+✅ **Ejercido contra producción**: alta de un local con Instagram y de un producto con foto y precio
+(`12500`), releídos de la ficha y eliminados.
+🔴 **La subida de la foto ⛔ NO se pudo ejercer: el Blob de Vercel está SUSPENDIDO** (15-sep, «This
+store has been suspended», cuota Hobby de Darío). Mientras dure, **ninguna foto del monitor sube**
+—y las ya subidas ⛔ se ven—. El producto se guarda igual con qué es y el precio; la foto, no.
+
+▶️ 🔴 **Falta que Bruno lo pruebe EN EL CELULAR antes de salir**: «Nuevo local» → «Sacar foto»
+abre la cámara → poner precio → «Agregar el producto» → volver y reabrir el local. Lo único que
+ninguna prueba desde acá puede ver es la cámara.
+▶️ Afuera por el plazo: alta de promesas desde la calle y mostrar qué recomprarle parado en el local.
+
+---
+
 ## ▶️ META SIN ADS MANAGER: EL AVISO DE CERO YA ESTÁ, LO QUE SIGUE QUEDA EN ESPERA — 15-sep-2026 (dictado por Bruno)
 
 Bruno, 15-sep: *«que falta de codigo para tener total independencia en monitor meta y que eso se

@@ -12,12 +12,16 @@
  * cae, y un formulario que se vacía con un error rojo es la última vez que alguien anota algo. Lo
  * tipeado se guarda en `localStorage` por parada mientras se escribe y se limpia recién cuando el
  * servidor confirmó. ⚠️ Esto **no es offline de verdad**: una carga en frío sin señal no abre nada.
+ *
+ * 🔑 **Una parada puede ser «suelta»** (`recorrida_id` vacío): un local abierto desde la lista o
+ * recién cargado en la calle, fuera de un viaje. Ahí la visita se guarda sin `parada_id`.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, Field, Input, Notice, SectionCard, color, space } from '@/components/ui'
+import { Badge, Button, Field, Input, Lightbox, Notice, SectionCard, color, space } from '@/components/ui'
 import { escribir, type ParadaViva } from '@/lib/prm/cliente'
-import { abiertosOrdenados, nuevoId } from '@/lib/prm/core'
-import { subirBlob } from '@/lib/imagenes'
+import { abiertosOrdenados, leerPrecio, nuevoId } from '@/lib/prm/core'
+import type { Interes } from '@/lib/prm/tipos'
+import { SacarFoto } from './SacarFoto'
 
 type Props = {
   marca: string
@@ -25,10 +29,20 @@ type Props = {
   hoy: string
   onVolver: () => void
   onCambio: () => void
+  volverA?: string
 }
 
-type Borrador = { opinion: string; puntaje: string; compre: boolean; queCompre: string }
-const VACIO: Borrador = { opinion: '', puntaje: '', compre: false, queCompre: '' }
+type Borrador = {
+  opinion: string
+  puntaje: string
+  compre: boolean
+  queCompre: string
+  /** El producto que se está anotando: se guarda aparte, uno por uno. */
+  productoQue: string
+  productoPrecio: string
+  productoFoto: string
+}
+const VACIO: Borrador = { opinion: '', puntaje: '', compre: false, queCompre: '', productoQue: '', productoPrecio: '', productoFoto: '' }
 
 const CLAVE = (id: string) => `prm:borrador:${id}`
 
@@ -60,13 +74,20 @@ function borrarBorrador(id: string) {
 
 const TONO_SITUACION = { vencido: 'danger', hoy: 'warning', por_venir: 'neutral', sin_fecha: 'neutral', cumplido: 'success' } as const
 
-export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
+const miniatura = { width: 64, height: 64, objectFit: 'cover', borderRadius: 8, cursor: 'zoom-in', flexShrink: 0 } as const
+
+const pesos = (n: number) => `$${n.toLocaleString('es-AR')}`
+
+export function Parada({ marca, parada, hoy, onVolver, onCambio, volverA = 'Volver a la recorrida' }: Props) {
   const local = parada.local
   const [b, setB] = useState<Borrador>(VACIO)
   const [guardando, setGuardando] = useState(false)
+  const [agregando, setAgregando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fotos, setFotos] = useState<string[]>([])
-  const [subiendo, setSubiendo] = useState(false)
+  // Los productos guardados en esta pantalla: se muestran ya, sin volver a pedir la recorrida.
+  const [anotados, setAnotados] = useState<Interes[]>([])
+  const [ampliada, setAmpliada] = useState<string | null>(null)
 
   // Se lee en un efecto y no en el `useState` inicial: `localStorage` no existe en el SSR y leerlo
   // ahí sería un mismatch de hidratación. Y va adentro de una IIFE con bandera `vivo` porque un
@@ -79,6 +100,7 @@ export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
       if (!vivo) return
       setB(guardado)
       setFotos([])
+      setAnotados([])
       setError(null)
     })()
     return () => {
@@ -98,24 +120,45 @@ export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
   )
 
   const compromisos = abiertosOrdenados(parada.compromisos, hoy)
+  const intereses = [...anotados, ...parada.intereses]
+  const precio = leerPrecio(b.productoPrecio)
 
-  async function sumarFoto(archivo: File | null) {
-    if (!archivo) return
-    setSubiendo(true)
+  async function agregarProducto() {
+    if (!local) return
+    const descripcion = b.productoQue.trim()
+    if (!descripcion) return setError('Escribí qué es el producto (por ejemplo «jean wide leg celeste»).')
+    if (precio === undefined) return setError(`No entiendo el precio «${b.productoPrecio}». Escribilo como 12500 o 12.500.`)
+    setAgregando(true)
     setError(null)
+    const fila: Interes = {
+      id: nuevoId('pi'),
+      local_id: local.id,
+      visita_id: null,
+      descripcion,
+      foto: b.productoFoto || null,
+      precio_visto: precio,
+      visto_en: hoy,
+      marca: marca === 'bdi' || marca === 'zattia' ? marca : null,
+      estado: 'mirando',
+      nota: null,
+      creado_en: new Date().toISOString(),
+    }
     try {
-      const dataUrl = await new Promise<string>((res, rej) => {
-        const fr = new FileReader()
-        fr.onload = () => res(String(fr.result))
-        fr.onerror = () => rej(new Error('No se pudo leer la foto.'))
-        fr.readAsDataURL(archivo)
+      await escribir(marca, 'interes.crear', {
+        id: fila.id,
+        local_id: fila.local_id,
+        descripcion: fila.descripcion,
+        foto: fila.foto,
+        precio_visto: fila.precio_visto,
+        visto_en: fila.visto_en,
+        marca: fila.marca,
       })
-      const url = await subirBlob(dataUrl, 'prm')
-      setFotos((f) => [...f, url])
+      setAnotados((a) => [fila, ...a])
+      cambiar({ productoQue: '', productoPrecio: '', productoFoto: '' })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo subir la foto.')
+      setError(e instanceof Error ? `${e.message} — lo que escribiste quedó acá.` : 'No se pudo guardar. Lo que escribiste quedó acá.')
     } finally {
-      setSubiendo(false)
+      setAgregando(false)
     }
   }
 
@@ -127,7 +170,8 @@ export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
       await escribir(marca, 'visita.crear', {
         id: nuevoId('pv'),
         local_id: local.id,
-        parada_id: parada.id,
+        // Una parada suelta no existe en `recorrida_parada`: ⛔ no se manda.
+        ...(parada.recorrida_id ? { parada_id: parada.id } : {}),
         fecha: hoy,
         opinion: b.opinion,
         puntaje: b.puntaje || null,
@@ -136,8 +180,11 @@ export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
         fotos,
       })
       // Recién ahora: mientras el servidor no confirmó, lo tipeado sigue siendo lo único que existe.
-      borrarBorrador(parada.id)
-      setB(VACIO)
+      // El producto a medio anotar ⛔ se conserva: no es parte de la visita.
+      const siguiente = { ...VACIO, productoQue: b.productoQue, productoPrecio: b.productoPrecio, productoFoto: b.productoFoto }
+      if (siguiente.productoQue || siguiente.productoPrecio || siguiente.productoFoto) guardarBorrador(parada.id, siguiente)
+      else borrarBorrador(parada.id)
+      setB(siguiente)
       setFotos([])
       onCambio()
     } catch (e) {
@@ -174,34 +221,87 @@ export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
 
   return (
     <div style={{ display: 'grid', gap: space[3], padding: space[3], maxWidth: 680, margin: '0 auto' }}>
-      <Button variant="ghost" onClick={onVolver} style={{ justifySelf: 'start' }}>← Volver a la recorrida</Button>
+      <Button variant="ghost" onClick={onVolver} style={{ justifySelf: 'start' }}>← {volverA}</Button>
 
       <div>
         <h2 style={{ margin: 0, fontSize: 20 }}>{local.nombre}</h2>
         <div style={{ color: color.mut, fontSize: 13 }}>
           {[local.galeria, local.direccion, local.entre_calles].filter(Boolean).join(' · ') || 'Sin dirección cargada'}
         </div>
-        {comoLlegar && (
-          <a href={comoLlegar} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>
-            Cómo llegar
-          </a>
-        )}
+        <div style={{ display: 'flex', gap: space[3], fontSize: 13, marginTop: 2 }}>
+          {comoLlegar && (
+            <a href={comoLlegar} target="_blank" rel="noreferrer">
+              Cómo llegar
+            </a>
+          )}
+          {local.instagram && (
+            <a href={`https://instagram.com/${encodeURIComponent(local.instagram)}`} target="_blank" rel="noreferrer">
+              @{local.instagram}
+            </a>
+          )}
+        </div>
       </div>
 
-      {parada.intereses.length > 0 && (
-        <SectionCard title="Qué me interesa de acá">
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {parada.intereses.map((i) => (
-              <li key={i.id} style={{ fontSize: 13, marginBottom: 4 }}>
-                {i.descripcion}
-                {i.precio_visto != null && (
-                  <span style={{ color: color.mut }}>
-                    {' '}— ${i.precio_visto} el {i.visto_en}
-                  </span>
+      {error && <Notice tone="danger" onClose={() => setError(null)}>{error}</Notice>}
+
+      <SectionCard title="Productos que me gustaron">
+        <div style={{ display: 'grid', gap: space[3] }}>
+          <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+            {b.productoFoto && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={b.productoFoto} alt="" style={miniatura} onClick={() => setAmpliada(b.productoFoto)} />
+            )}
+            <SacarFoto
+              etiqueta={b.productoFoto ? 'Cambiar foto' : 'Sacar foto'}
+              onFoto={(url) => cambiar({ productoFoto: url })}
+              onError={setError}
+            />
+          </div>
+          <Field label="Qué es">
+            <Input
+              value={b.productoQue}
+              placeholder="jean wide leg celeste"
+              onChange={(e) => cambiar({ productoQue: e.target.value })}
+              style={{ fontSize: 16 }}
+            />
+          </Field>
+          <Field
+            label="Precio"
+            hint={precio === undefined ? 'No lo entiendo: escribilo como 12500 o 12.500.' : precio != null ? pesos(precio) : 'Opcional.'}
+          >
+            <Input
+              value={b.productoPrecio}
+              inputMode="decimal"
+              placeholder="12.500"
+              invalid={precio === undefined}
+              onChange={(e) => cambiar({ productoPrecio: e.target.value })}
+              style={{ fontSize: 16 }}
+            />
+          </Field>
+          <Button onClick={() => void agregarProducto()} disabled={agregando} fullWidth size="lg">
+            {agregando ? 'Guardando…' : 'Agregar el producto'}
+          </Button>
+        </div>
+      </SectionCard>
+
+      {intereses.length > 0 && (
+        <SectionCard title={`Qué me interesa de acá (${intereses.length})`}>
+          <div style={{ display: 'grid', gap: space[2] }}>
+            {intereses.map((i) => (
+              <div key={i.id} style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+                {i.foto && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={i.foto} alt="" style={miniatura} onClick={() => setAmpliada(i.foto)} />
                 )}
-              </li>
+                <div style={{ fontSize: 14 }}>
+                  {i.descripcion}
+                  <div style={{ color: color.mut, fontSize: 12 }}>
+                    {i.precio_visto != null ? `${pesos(Number(i.precio_visto))} · ` : ''}visto el {i.visto_en}
+                  </div>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </SectionCard>
       )}
 
@@ -265,28 +365,29 @@ export function Parada({ marca, parada, hoy, onVolver, onCambio }: Props) {
             </Field>
           )}
 
-          <div>
-            <label>
-              <Button variant="outline" disabled={subiendo}>
-                {subiendo ? 'Subiendo…' : `Agregar foto${fotos.length ? ` (${fotos.length})` : ''}`}
-              </Button>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: 'none' }}
-                onChange={(e) => void sumarFoto(e.target.files?.[0] ?? null)}
-              />
-            </label>
+          <div style={{ display: 'grid', gap: space[2] }}>
+            {fotos.length > 0 && (
+              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                {fotos.map((f) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={f} src={f} alt="" style={miniatura} onClick={() => setAmpliada(f)} />
+                ))}
+              </div>
+            )}
+            <SacarFoto
+              etiqueta={fotos.length ? `Sacar otra foto del local (${fotos.length})` : 'Sacar foto del local'}
+              onFoto={(url) => setFotos((f) => [...f, url])}
+              onError={setError}
+            />
           </div>
-
-          {error && <Notice tone="danger">{error}</Notice>}
 
           <Button onClick={() => void anotar()} disabled={guardando} fullWidth size="lg">
             {guardando ? 'Guardando…' : 'Guardar la visita'}
           </Button>
         </div>
       </SectionCard>
+
+      <Lightbox src={ampliada} alt="" onCerrar={() => setAmpliada(null)} />
     </div>
   )
 }

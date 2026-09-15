@@ -42,6 +42,8 @@ import { escribir } from '@/lib/prm/cliente'
 import { nuevoId, normalizarNombre } from '@/lib/prm/core'
 import { useRecorridas } from './useRecorridas'
 import { Importar } from './Importar'
+import { LocalSuelto } from './LocalSuelto'
+import { NuevoLocal } from './NuevoLocal'
 import { Viaje } from './Viaje'
 
 const ESTADOS = [
@@ -64,6 +66,8 @@ export function Recorridas() {
   const [vista, setVista] = useState<'locales' | 'viajes'>('locales')
   const [viaje, setViaje] = useState<string | null>(null)
   const [importando, setImportando] = useState(false)
+  const [cargandoUno, setCargandoUno] = useState(false)
+  const [suelto, setSuelto] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
   const [estado, setEstado] = useState('')
   const [zona, setZona] = useState('')
@@ -146,6 +150,7 @@ export function Recorridas() {
 
   if (!marca) return null
   if (viaje) return <Viaje marca={marca} id={viaje} hoy={hoyLocal()} onVolver={() => { setViaje(null); recargar() }} />
+  if (suelto) return <LocalSuelto marca={marca} id={suelto} hoy={hoyLocal()} onVolver={() => { setSuelto(null); recargar() }} />
 
   return (
     <div style={{ padding: space[4], display: 'grid', gap: space[3] }}>
@@ -182,7 +187,8 @@ export function Recorridas() {
           </FilterBar>
 
           <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            <Button onClick={() => setImportando(true)}>Cargar en tanda</Button>
+            <Button onClick={() => setCargandoUno(true)}>Nuevo local</Button>
+            <Button variant="outline" onClick={() => setImportando(true)}>Cargar en tanda</Button>
             <Button variant="outline" disabled={!elegidos.size || trabajando} onClick={() => void armarRecorrida()}>
               Armar recorrida con {elegidos.size}
             </Button>
@@ -218,7 +224,15 @@ export function Recorridas() {
                       <input type="checkbox" checked={elegidos.has(l.id)} onChange={() => alternar(l.id)} />
                     </Td>
                     <Td strong>
-                      {l.nombre}
+                      <a
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setSuelto(l.id)
+                        }}
+                      >
+                        {l.nombre}
+                      </a>
                       {l.rubro && <span style={{ color: color.mut2, fontSize: 11 }}> · {l.rubro}</span>}
                     </Td>
                     <Td wrap>
@@ -278,6 +292,18 @@ export function Recorridas() {
             </TableWrap>
           )}
         </>
+      )}
+
+      {cargandoUno && (
+        <NuevoLocal
+          marca={marca}
+          existentes={locales}
+          onCerrar={() => setCargandoUno(false)}
+          onCreado={(id) => {
+            setCargandoUno(false)
+            setSuelto(id)
+          }}
+        />
       )}
 
       {importando && marca && (
