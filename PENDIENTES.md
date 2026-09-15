@@ -13,6 +13,43 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ META SIN ADS MANAGER: EL AVISO DE CERO YA ESTÁ, LO QUE SIGUE QUEDA EN ESPERA — 15-sep-2026 (dictado por Bruno)
+
+Bruno, 15-sep: *«que falta de codigo para tener total independencia en monitor meta y que eso se
+pueda hacer sin necesidad de estar duplicando un anuncio parecido»*. Plan aprobado, en
+`~/.claude/plans/para-antes-quisiera-saber-noble-fern.md`. ⏸ **Después de T1, Bruno: «dejalo en
+pendientes, que no lo voy a hacer ahora».**
+
+**🏁 T1 · Aviso de cero — HECHO y en producción** (commit `3eb91510`). En «Anuncio nuevo» el
+destino (de las colecciones de la tienda), el botón, la página/IG y los UTM se eligen; copiar de un
+aviso es opcional. Detalle en `docs/secciones/meta-ads.md` § «Lo que comparte».
+
+**▶️ Manos de Bruno:** borrar en Ads Manager el conjunto y el aviso **«PRUEBA AVISO DE CERO 15/9»**
+(`120251883687880478` / `120251883690690478`, pausados, $0). Fue la prueba real; el monitor no borra.
+
+**⏸ Lo que queda, en orden:**
+- **T2 · Conjunto de cero**: segmentación (ubicación, edad, género, intereses, públicos),
+  ubicaciones, evento, puja y fechas **sin conjunto de referencia**. Lecturas nuevas por `?recurso=`
+  (`targetingsearch`, `customaudiences`, `adspixels`) y **plantillas propias** guardadas en la base
+  (ej. «BDI broad IG 18-65») que reemplazan a la referencia.
+- **T3 · Campaña de cero**: objetivo elegido, CBO o ABO, tope de gasto; `is_adset_budget_sharing_enabled`
+  en `false` fijo (la trampa del 20%) y nombre con fecha obligatoria.
+- **T4 · Editar lo que ya corre**: cambiar segmentación, fecha de fin, puja y texto (creativo nuevo +
+  cambiarlo en el aviso) con aviso de «reinicia el aprendizaje»; pausar/renombrar **avisos** desde la
+  tabla (el backend ya lo permite); botón de **mover plata** (el plan existe sin botón); paso que
+  **limpia el sufijo `· #marcador`** de conjuntos y avisos.
+- **T5 · Formatos**: carrusel, varios videos o imágenes por aviso, miniatura propia.
+- **T6 · «Conoce nuestros sistemas»**: la tanda de test como tipo de plan (calendario y decisión en
+  `meta_ads_decision` solos), el bloque de beneficios leído de la tienda, chequeo de stock del destino.
+
+**🔴 Dos cosas vistas al pasar, sin arreglar:**
+- El cartel de espera del plan dice «se mueve de nuevo a las 15/9/2026, **04:22:33**» cuando eran las
+  16:22: formato de 12 h sin AM/PM (`cuando()` en `api/_meta-planes.js`).
+- **Las piezas no se pueden subir desde el monitor mientras el Blob siga suspendido** (T0, lo resuelve
+  Bruno aparte). Para la TANDA 12 y la prueba se usó el bucket público `piezas-meta` de Supabase BDI.
+
+---
+
 ## 🏁 FERIA ZATTIA: LOS 17 AGOTADOS Y LA PESTAÑA «REPOSICIÓN» — 14-sep-2026 (dictado, y hecho)
 
 > «me pregunto qué sería lo de 17 agotados que no da la cuenta» · «me gustaría una pestaña para ver
