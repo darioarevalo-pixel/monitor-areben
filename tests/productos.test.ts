@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computarDatos } from '@/lib/etl/computar'
 import { LIFESPAN_SIN_DATO, type Producto } from '@/lib/etl/tipos'
-import { lifespanDays, lifespanDaysGeneric } from '@/lib/etl/helpers'
+import { daysSince, lifespanDays, lifespanDaysGeneric } from '@/lib/etl/helpers'
 import {
   filtrarProductos,
   lifespanDaysByMode,
@@ -11,6 +11,9 @@ import {
   colorStock,
   fechaCorta,
   antiguedad,
+  canalInicial,
+  conCanal,
+  vidaUtilConCanal,
 } from '@/lib/productos'
 import { PAGE_SIZE, paginar, sortList, totalPaginas } from '@/lib/tabla'
 import { leerFixture } from './legacy-etl'
@@ -28,6 +31,7 @@ function prod(over: Partial<Producto>): Producto {
     sales7: 0, sales15: 0, sales30: 0, sales60: 0, sales90: 0, totalSales: 0,
     monthlySales: [], stock: 0, lifespan: LIFESPAN_SIN_DATO, lifespanFirst: LIFESPAN_SIN_DATO,
     phase: { label: 'madurez', cls: 'badge-info' },
+    ventasMin: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null }, ventasMay: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null }, minOnline: 0, minLocal: 0,
     ...over,
   }
 }
@@ -246,4 +250,54 @@ describe('paridad · sobre el ETL real', () => {
       })
     })
   }
+})
+
+describe('conCanal (el selector Todos / Minorista / Mayorista)', () => {
+  const HOY = new Date('2026-09-17T12:00:00')
+  const p = prod({
+    id: 'moods', stock: 350, diasVivo: 7,
+    sales7: 396, sales15: 396, sales30: 396, sales90: 396, totalSales: 396,
+    firstSale: '2026-09-11', lastSale: '2026-09-16', daysSinceLast: 1,
+    ventasMin: { total: 8, s7: 8, s15: 8, s30: 8, s90: 8, first: '2026-09-15', last: '2026-09-16' },
+    ventasMay: { total: 388, s7: 388, s15: 388, s30: 388, s90: 388, first: '2026-09-11', last: '2026-09-15' },
+  })
+
+  it('«todos» es el número de siempre, sin tocar nada', () => {
+    expect(conCanal(p, 'todos', HOY)).toBe(p)
+  })
+
+  it('«minorista» pisa las columnas de ventas con las del público', () => {
+    const m = conCanal(p, 'minorista', HOY)
+    expect([m.sales7, m.sales30, m.sales90, m.totalSales]).toEqual([8, 8, 8, 8])
+    expect(m.firstSale).toBe('2026-09-15')
+    expect(m.lastSale).toBe('2026-09-16')
+    // Mismo reloj que el ETL (`daysSince`): la columna de siempre y la del canal se leen igual.
+    expect(m.daysSinceLast).toBe(daysSince('2026-09-16', HOY))
+    // Vida útil con el ritmo MINORISTA: 350 u a 8 u en 7 días de vida ⇒ 306 días, ⛔ no 6.
+    expect(vidaUtilConCanal(m, '7d', 'minorista')).toBe(306)
+    expect(vidaUtilConCanal(conCanal(p, 'todos', HOY), '7d', 'todos')).toBe(6)
+    // Desde la 1ª venta minorista (15-sep), ⛔ no desde el alta.
+    expect(m.lifespanFirst).toBe(Math.round((350 / 8) * daysSince('2026-09-15', HOY)))
+  })
+
+  it('«mayorista» muestra sus ventas y ⛔ no inventa vida útil (el stock no incluye su depósito)', () => {
+    const y = conCanal(p, 'mayorista', HOY)
+    expect(y.sales30).toBe(388)
+    expect(y.lastSale).toBe('2026-09-15')
+    expect(vidaUtilConCanal(y, '30d', 'mayorista')).toBeNull()
+    expect(vidaUtilConCanal(y, 'firstSale', 'mayorista')).toBeNull()
+  })
+
+  it('sin ventas del lado elegido, la última venta queda vacía y no hereda la del otro lado', () => {
+    const sinMin = prod({ ...p, ventasMin: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null } })
+    const m = conCanal(sinMin, 'minorista', HOY)
+    expect(m.lastSale).toBeNull()
+    expect(m.daysSinceLast).toBe(999)
+    expect(m.lifespanFirst).toBe(LIFESPAN_SIN_DATO)
+  })
+
+  it('BDI arranca en minorista; Zattia sigue en todos', () => {
+    expect(canalInicial('bdi')).toBe('minorista')
+    expect(canalInicial('zattia')).toBe('todos')
+  })
 })

@@ -40,6 +40,7 @@ import {
   num,
 } from './helpers'
 import { LIFESPAN_SIN_DATO } from './tipos'
+import { canalDe, ladoDeCanal } from '../liquidacion/resultado'
 import type {
   Agotamiento,
   ColorAgotamiento,
@@ -48,6 +49,7 @@ import type {
   EntradaETL,
   EstadisticaMensual,
   Producto,
+  VentasCanal,
   ProductoProveedor,
   Variante,
   VentaColor,
@@ -71,6 +73,7 @@ type VentasProducto = {
 
 /** Fábricas, no constantes: cada acumulador necesita su propio `byMonth`. */
 const vacioProd = () => ({ total: 0, s7: 0, s15: 0, s30: 0, s60: 0, s90: 0, byMonth: {} as Record<string, number>, last: null, first: null })
+const vacioCanal = (): VentasCanal => ({ total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null })
 const vacioVar = () => ({ total: 0, s7: 0, s15: 0, s30: 0, s60: 0, s90: 0, byMonth: {} as Record<string, number>, last: null })
 
 export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
@@ -129,9 +132,19 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
 
   // Mapa sale_id → date_sale para unir detalles con su fecha de venta
   const ventasMap: Record<string, string | null> = {}
+  const canalMap: Record<string, string | null> = {}
   ;(ventas || []).forEach((v) => {
     ventasMap[String(v.id)] = v.date_sale
+    canalMap[String(v.id)] = v.channel
   })
+
+  // ── Ventas por LADO del corte (minorista / mayorista) ────────────────────────
+  // ⚠️ Agregado sobre el port, ⛔ no parte de él: corre al lado del acumulador del legacy y no lo
+  // toca, así la paridad sigue midiendo lo mismo. Ver `Producto.ventasMin` en `tipos.ts`.
+  const vmin: Record<string, VentasCanal> = {}
+  const vmay: Record<string, VentasCanal> = {}
+  const minOnline: Record<string, number> = {}
+  const minLocal: Record<string, number> = {}
 
   ;(detalles || []).forEach((item) => {
     const fecha = (ventasMap[String(item.sale_id)] || '').substring(0, 10)
@@ -154,6 +167,25 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
     if (fechaObj >= cutoff90) vprod[pid].s90 += qty
     if (!vprod[pid].last || fecha > vprod[pid].last) vprod[pid].last = fecha
     if (!vprod[pid].first || fecha < vprod[pid].first) vprod[pid].first = fecha
+
+    const canal = canalMap[String(item.sale_id)] ?? null
+    const lado = ladoDeCanal(canal)
+    if (lado) {
+      const acc = lado === 'minorista' ? vmin : vmay
+      const c = (acc[pid] ??= vacioCanal())
+      c.total += qty
+      if (fechaObj >= cutoff7) c.s7 += qty
+      if (fechaObj >= cutoff15) c.s15 += qty
+      if (fechaObj >= cutoff30) c.s30 += qty
+      if (fechaObj >= cutoff90) c.s90 += qty
+      if (!c.last || fecha > c.last) c.last = fecha
+      if (!c.first || fecha < c.first) c.first = fecha
+      if (lado === 'minorista') {
+        const sub = canalDe(canal)
+        if (sub === 'online') minOnline[pid] = (minOnline[pid] || 0) + qty
+        else if (sub === 'local') minLocal[pid] = (minLocal[pid] || 0) + qty
+      }
+    }
 
     if (!vvar[vid]) vvar[vid] = { ...vacioVar(), name, size, pid, sid }
     vvar[vid].total += qty
@@ -238,6 +270,10 @@ export function computarDatos(entrada: EntradaETL, ctx: ContextoETL): DatosETL {
       lifespan: ls === null ? LIFESPAN_SIN_DATO : ls,
       lifespanFirst: lsFirst === null ? LIFESPAN_SIN_DATO : lsFirst,
       phase: getPhase(d.s60, d.s30, dsl, diasVivo),
+      ventasMin: vmin[pid] || vacioCanal(),
+      ventasMay: vmay[pid] || vacioCanal(),
+      minOnline: minOnline[pid] || 0,
+      minLocal: minLocal[pid] || 0,
     }
   })
 

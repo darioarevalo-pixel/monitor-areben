@@ -13,6 +13,36 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 BDI: VENTAS PARTIDAS EN MAYORISTA Y MINORISTA + «GANADORES POR TANDA» — 17-sep-2026 (dictado, y hecho)
+
+> «como analisis de ventas en bdi se puede sectorizar entre mayorista y minorista, asi no se produce
+> un cesgo en el analisi. lo necesitaria para poder hacer la publicidad a los productos ganadores, pq
+> sin historial usamos el minorista, pero luego se tiene que poder crear su propio historial el
+> monirista»
+
+Decisiones de Bruno: **sin historia, el mayorista es el anticipo** · el público toma el control
+**por unidades, no por días** · va **en Análisis → Por producto**.
+
+🏁 **Está** (el relato, en `docs/secciones/productos.md`):
+- **Selector Minorista / Mayorista / Todos** en Por producto. BDI arranca en **Minorista**; Zattia,
+  en Todos. En Mayorista la vida útil es «—» (el stock no incluye su depósito).
+- **Pestaña «Ganadores por tanda»** (productos con la misma alta en GN): ranking de los dos lados,
+  cuál manda y por qué, y cuántos puestos lo sube o lo baja el público contra el mayorista.
+- 📊 **El umbral está medido**: 10 u/modelo, calibrado sobre las 11 tandas de BDI con 30 días de
+  historia (`scripts/calibrar-umbral-ganadores.mjs`, solo lectura).
+- ✅ Oráculo: Moods al 16-sep por el ETL real = lo medido a mano (39 al público = 36 TN + 3 local,
+  2.666 al mayorista, CHERRY HEART 3ª en el público y 18ª en mayorista).
+
+🔴 **El sesgo sigue vivo en el resto del análisis** — `sales30` y compañía suman el mayorista
+(88 % de las unidades de BDI) en Resumen, Gerencial, Caducados, Marketing («Los que más salieron»),
+Liquidación (`ritmoPrevio`) y las vistas de Fundas. ▶️ **Mano de Bruno: decidir si esas pantallas
+pasan a minorista por defecto** (les mueve los números a quien ya las lee).
+▶️ «En sale 30d» se esconde fuera de «Todos»: su dato (`api/_liquidacion.js`) no tiene canal.
+▶️ Moods hoy: **39 de 260** u al público ⇒ ordena el mayorista. A este ritmo (~25/día) el público
+toma el control en ~9 días; mirar la pestaña ese día.
+
+---
+
 ## 🏁 RECORRIDAS PARA EL VIAJE A BUENOS AIRES — 15-sep-2026 (dictado, y hecho)
 
 > «Estaria bueno poder cargar proveedor, con nombre, instagram, y fotos de productos que gustaron.

@@ -7,8 +7,57 @@
  */
 
 import { LIFESPAN_SIN_DATO, type Producto } from './etl/tipos'
-import { lifespanDaysEfectivo } from './etl/helpers'
+import { daysSince, lifespanDaysEfectivo, lifespanDaysFromFirst } from './etl/helpers'
 import { matcheaTexto } from './tabla'
+
+/** Qué ventas mira la tabla. `todos` es el número de siempre (los dos lados sumados). */
+export type CanalVista = 'todos' | 'minorista' | 'mayorista'
+
+/**
+ * El canal con el que arranca la tabla en cada marca.
+ *
+ * 🔑 **BDI arranca en minorista**: el mayorista es el 88 % de sus unidades, así que «Todos» es en
+ * los hechos el ranking del mayorista (pedido de Bruno, 17-sep-2026). Zattia sigue en `todos`
+ * porque ahí nadie pidió el cambio y mover el default le cambia los números a quien ya los lee.
+ */
+export function canalInicial(marca: string): CanalVista {
+  return marca === 'bdi' ? 'minorista' : 'todos'
+}
+
+/**
+ * El producto visto desde un canal: las columnas de ventas (`sales7/15/30/90`, `totalSales`,
+ * `firstSale`, `lastSale`, `daysSinceLast`, `lifespanFirst`) se pisan con las del lado elegido, y
+ * todo lo de abajo —orden, vida útil, filas— sigue leyendo los mismos campos sin enterarse.
+ *
+ * ⚠️ **`sales60` y `monthlySales` NO se parten** (el ETL no los corta por lado) y **`phase` tampoco**:
+ * la fase sigue siendo la de los dos lados. La pantalla lo dice.
+ *
+ * 🔴 **En `mayorista` la vida útil ⛔ no se calcula**: el stock del análisis EXCLUYE el Depósito
+ * Mayorista, así que dividirlo por ventas mayoristas daría un número que no describe nada. Queda
+ * `lifespanFirst` en el centinela y `vidaUtilConCanal` devuelve null.
+ */
+export function conCanal(p: Producto, canal: CanalVista, today: Date): Producto {
+  if (canal === 'todos') return p
+  const v = canal === 'minorista' ? p.ventasMin : p.ventasMay
+  const lsFirst = canal === 'minorista' ? lifespanDaysFromFirst(p.stock, v.total, v.first, today) : null
+  return {
+    ...p,
+    sales7: v.s7,
+    sales15: v.s15,
+    sales30: v.s30,
+    sales90: v.s90,
+    totalSales: v.total,
+    firstSale: v.first,
+    lastSale: v.last,
+    daysSinceLast: v.last ? daysSince(v.last, today) : 999,
+    lifespanFirst: lsFirst === null ? LIFESPAN_SIN_DATO : lsFirst,
+  }
+}
+
+/** Vida útil respetando el canal: en `mayorista` no hay (ver `conCanal`). */
+export function vidaUtilConCanal(p: Producto, mode: ModoVidaUtil, canal: CanalVista): number | null {
+  return canal === 'mayorista' ? null : lifespanDaysByMode(p, mode)
+}
 
 /** Los 4 modos del selector de vida útil (index.html:396-400). */
 export type ModoVidaUtil = '7d' | '15d' | '30d' | 'firstSale'

@@ -164,6 +164,30 @@ export type Producto = {
   lifespan: number
   lifespanFirst: number
   phase: Fase
+  /**
+   * Las ventas partidas por lado del corte (`ladoDeCanal`). Los campos de arriba (`sales30`,
+   * `totalSales`…) **suman los dos lados** y quedan así porque la paridad con el legacy los amarra.
+   *
+   * 🔑 En BDI el mayorista es el 88 % de las unidades: un ranking con los campos de arriba es el
+   * ranking del mayorista. `ventasMin + ventasMay` ⛔ no siempre da el total: los canjes
+   * (canal Influencer) cuentan en el total y en ningún lado.
+   */
+  ventasMin: VentasCanal
+  ventasMay: VentasCanal
+  /** Unidades minoristas totales por Tienda Nube / online, y por el local. El resto es `otro`. */
+  minOnline: number
+  minLocal: number
+}
+
+/** Las ventas de un lado del corte. Mismas ventanas que las columnas de `Producto`. */
+export type VentasCanal = {
+  total: number
+  s7: number
+  s15: number
+  s30: number
+  s90: number
+  first: string | null
+  last: string | null
 }
 
 export type Variante = {

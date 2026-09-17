@@ -43,6 +43,7 @@ function prod(over: Partial<Producto> = {}): Producto {
     lifespan: 90,
     lifespanFirst: LIFESPAN_SIN_DATO,
     phase: { label: 'dormido', cls: '' },
+    ventasMin: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null }, ventasMay: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null }, minOnline: 0, minLocal: 0,
     ...over,
   }
 }

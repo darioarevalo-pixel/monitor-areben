@@ -209,6 +209,9 @@ ya tienen ficha:
 - Retornos (lo que estamos esperando que vuelva) → **leer `docs/secciones/retornos.md`** antes de
   tocar `components/retornos/`, `lib/reclamos/retornos.ts` o la vista `retornos` de
   `api/_reclamos.js`. ⛔ **No es Envíos**, que es lo que SALE.
+- Por producto y Ganadores por tanda → **leer `docs/secciones/productos.md`** antes de tocar
+  `components/productos/`, `lib/productos.ts` o `lib/ganadores/`. ⛔ **`sales30` y compañía SUMAN
+  el mayorista** (88 % de las unidades de BDI); el corte vive en `ventasMin`/`ventasMay` del ETL.
 
 ## Mapa de secciones
 

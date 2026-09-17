@@ -10,7 +10,7 @@ const prod = (over: Partial<Producto>): Producto => ({
   retailer_price: 0, unit_cost: 0, sinCosto: false, margin: null, markup: null, ingresoMes: null, ingresoFecha: null, diasVivo: null,
   firstSale: null, lastSale: null, daysSinceLast: 0, sales7: 0, sales15: 0, sales30: 0,
   sales60: 0, sales90: 0, totalSales: 0, monthlySales: [], stock: 0, lifespan: 0,
-  lifespanFirst: 0, phase: MADUREZ, ...over,
+  lifespanFirst: 0, phase: MADUREZ, ventasMin: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null }, ventasMay: { total: 0, s7: 0, s15: 0, s30: 0, s90: 0, first: null, last: null }, minOnline: 0, minLocal: 0, ...over,
 })
 
 const mkVar = (over: Partial<Variante>): Variante => ({

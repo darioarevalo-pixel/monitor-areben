@@ -8,6 +8,7 @@ import { Lightbox } from '@/components/productos/Lightbox'
 import { asegurarTnPromo, useTnImages, useTnPromo } from '@/components/productos/useTnImages'
 import { generarReporteSale } from '@/components/productos/reporteSale'
 import { BotonActualizarInventario } from '@/components/productos/BotonActualizarInventario'
+import { GanadoresTanda } from '@/components/productos/GanadoresTanda'
 import { CeldaEnSale } from '@/components/liquidacion/CeldaEnSale'
 import { MandarALiquidacion } from '@/components/liquidacion/MandarALiquidacion'
 import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
@@ -23,13 +24,16 @@ import type { DatosETL, Producto } from '@/lib/etl/tipos'
 import { LIFESPAN_SIN_DATO } from '@/lib/etl/tipos'
 import {
   antiguedad,
+  canalInicial,
   colorStock,
+  conCanal,
   fechaCorta,
   filtrarProductos,
-  lifespanDaysByMode,
   mesLabel,
   mesesIngreso,
   proveedores,
+  vidaUtilConCanal,
+  type CanalVista,
   type ModoVidaUtil,
 } from '@/lib/productos'
 import { imagenDe, imagenesDe, type IndiceTn } from '@/lib/tn'
@@ -38,6 +42,7 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import {
   BuscarInput,
   Button,
+  Chips,
   DatosGate,
   EmptyState,
   FaseBadge,
@@ -48,6 +53,7 @@ import {
   Paginacion,
   Select,
   SelectorLinea,
+  Tabs,
   TBody,
   THead,
   TableWrap,
@@ -89,6 +95,18 @@ type ColOrden = 'name' | 'lastSale' | 'sales7' | 'sales30' | 'sales90' | 'enSale
  */
 type FiltroSale = '' | 'con' | 'sin' | 'hoy'
 
+type Vista = 'tabla' | 'ganadores'
+
+/**
+ * El selector de canal (17-sep-2026). En BDI el mayorista es el 88 % de las unidades: sin esto,
+ * «Ventas 30d» es el ranking del mayorista. Ver `conCanal` en `lib/productos.ts`.
+ */
+const OPCIONES_CANAL: { key: CanalVista; label: string; title: string }[] = [
+  { key: 'minorista', label: 'Minorista', title: 'Tienda Nube, el local y los demás canales al público' },
+  { key: 'mayorista', label: 'Mayorista', title: 'Sólo el canal Mayorista. La vida útil no se calcula: el stock no incluye su depósito' },
+  { key: 'todos', label: 'Todos los canales', title: 'Los dos lados sumados, como antes' },
+]
+
 /** Cómo se ve un producto que ya está en la campaña activa. `aplicado` no llega desde acá. */
 const ROTULO_EN_CAMPANIA: Record<EstadoItem, string> = {
   pendiente: 'ya está · sin definir',
@@ -121,6 +139,10 @@ export function ProductosTable() {
   // para toda la tabla, no uno por fila. Ver `components/destacados/MarcaEstrella.tsx`.
   const destacados = useDestacados(marca, null)
 
+  const [vista, setVista] = useFiltroUrl<Vista>('vista', 'tabla')
+  const [canal, setCanal] = useFiltroUrl<CanalVista>('canal', canalInicial(marca))
+  // Un solo «hoy» por montaje: los días desde la última venta no tienen que moverse entre renders.
+  const [hoy] = useState(() => new Date())
   const [busqueda, setBusqueda] = useFiltroUrl<string>('q', '')
   const [estado, setEstado] = useFiltroUrl<string>('estado', '')
   const [enCampania, setEnCampania] = useState<'' | 'faltan' | 'estan'>('')
@@ -145,13 +167,16 @@ export function ProductosTable() {
   const [outletSel, setOutletSel] = useState<Set<string>>(new Set())
   const [generando, setGenerando] = useState(false)
 
+  // `productos` es el de siempre (los dos lados sumados): es el que viaja a Liquidación y al PDF,
+  // que congelan ventas y ⛔ no tienen que cambiar según el selector. `enCanal` es lo que se mira.
   const productos = useMemo(() => datos?.allProductos ?? [], [datos])
+  const enCanal = useMemo(() => productos.map((p) => conCanal(p, canal, hoy)), [productos, canal, hoy])
   const listaProv = useMemo(() => proveedores(productos), [productos])
   const meses = useMemo(() => mesesIngreso(productos), [productos])
 
   // Volver a la página 1 cuando cambia el conjunto filtrado (el legacy resetea pageState
   // en cada handler de filtro). Un effect sobre la firma de los filtros.
-  const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}|${camp.liq}|${enCampania}|${filtroSale}`
+  const firmaFiltros = `${busqueda}|${estado}|${proveedor}|${[...ingresos].sort().join(',')}|${ocultarSinStock}|${modoVU}|${camp.liq}|${enCampania}|${filtroSale}|${canal}`
   const primeraRef = useRef(true)
   useEffect(() => {
     if (primeraRef.current) {
@@ -164,8 +189,8 @@ export function ProductosTable() {
   // Los seis filtros de siempre. El de campaña se aplica aparte porque los contadores de la barra
   // se cuentan sobre esto: filtrando por "sin mandar", "N de M ya están" se leería siempre 0 de M.
   const filtradaBase = useMemo(
-    () => filtrarProductos(productos, { busqueda, estado, proveedor, ingresos, ocultarSinStock }),
-    [productos, busqueda, estado, proveedor, ingresos, ocultarSinStock],
+    () => filtrarProductos(enCanal, { busqueda, estado, proveedor, ingresos, ocultarSinStock }),
+    [enCanal, busqueda, estado, proveedor, ingresos, ocultarSinStock],
   )
 
   const porFaltar = useMemo(
@@ -205,11 +230,11 @@ export function ProductosTable() {
   const ordenada = useMemo(() => {
     const conLifespan = filtrada.map((p) => ({
       ...p,
-      lifespan: lifespanDaysByMode(p, modoVU) ?? LIFESPAN_SIN_DATO,
+      lifespan: vidaUtilConCanal(p, modoVU, canal) ?? LIFESPAN_SIN_DATO,
       enSale30: vendido?.porPid.get(p.id)?.s30 ?? 0,
     }))
     return sortList(conLifespan, col, dir)
-  }, [filtrada, modoVU, col, dir, vendido])
+  }, [filtrada, modoVU, col, dir, vendido, canal])
 
   const paginas = totalPaginas(ordenada.length)
   const pageClamp = Math.min(page, Math.max(1, paginas))
@@ -300,7 +325,23 @@ export function ProductosTable() {
               </Button>
             </HeaderAcciones>
 
+            <Tabs
+              variant="underline"
+              value={vista}
+              onChange={(k) => setVista(k as Vista)}
+              style={{ marginBottom: space[3] }}
+              items={[
+                { key: 'tabla', label: 'Todos los productos' },
+                { key: 'ganadores', label: 'Ganadores por tanda', hint: 'Qué productos de un mismo ingreso venden mejor, para elegir a cuáles hacerles publicidad' },
+              ]}
+            />
+
+            {vista === 'ganadores' ? (
+              <GanadoresTanda productos={productos} tnIdx={tnIdx} />
+            ) : (
+            <>
             <FilterBar>
+              <Chips opciones={OPCIONES_CANAL} value={canal} onChange={setCanal} />
               <BuscarInput value={busqueda} onChange={setBusqueda} placeholder="Buscar por nombre, SKU o proveedor…" />
               <Select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 180 }} aria-label="Estado">
                 <option value="">Todos los estados</option>
@@ -482,7 +523,9 @@ export function ProductosTable() {
                       {th('sales7', 'Ventas 7d', 'right')}
                       {th('sales30', 'Ventas 30d', 'right')}
                       {th('sales90', 'Ventas 90d', 'right')}
-                      {th('enSale30', 'En sale 30d', 'right')}
+                      {/* «En sale» cuenta los dos lados (lo arma `api/_liquidacion.js` sin canal):
+                          al lado de una columna minorista diría «9 de 3». Se ve sólo con «Todos». */}
+                      {canal === 'todos' && th('enSale30', 'En sale 30d', 'right')}
                       {th('lifespan', 'Vida útil est.')}
                       {th('stock', 'Stock', 'right')}
                       <Th>Estado</Th>
@@ -494,6 +537,7 @@ export function ProductosTable() {
                         key={p.id}
                         p={p}
                         modoVU={modoVU}
+                        canal={canal}
                         tnIdx={tnIdx}
                         enSale={vendido?.porPid.get(p.id) ?? null}
                         ofertaHoy={enOfertaHoy.has(p.id)}
@@ -515,6 +559,9 @@ export function ProductosTable() {
               </>
             )}
 
+            </>
+            )}
+
             {lightbox && <Lightbox imagenes={lightbox.imagenes} nombre={lightbox.nombre} onClose={() => setLightbox(null)} />}
           </>
         )}
@@ -526,6 +573,7 @@ export function ProductosTable() {
 function FilaProducto({
   p,
   modoVU,
+  canal,
   tnIdx,
   enSale,
   ofertaHoy,
@@ -541,6 +589,7 @@ function FilaProducto({
 }: {
   p: Producto
   modoVU: ModoVidaUtil
+  canal: CanalVista
   tnIdx: IndiceTn | null
   /** Lo que este producto vendió con la oferta puesta, o `null` si nunca estuvo en una campaña. */
   enSale: EnSale | null
@@ -560,7 +609,7 @@ function FilaProducto({
   onFoto: (imagenes: string[]) => void
 }) {
   const meta = [p.sku, p.proveedor].filter(Boolean).join(' · ')
-  const lsStr = formatLifespan(lifespanDaysByMode(p, modoVU), p.stock)
+  const lsStr = canal === 'mayorista' ? '—' : formatLifespan(vidaUtilConCanal(p, modoVU, canal), p.stock)
   const foto = tnIdx ? imagenDe(p, tnIdx) : null
   // Se atenúa pero **el checkbox sigue vivo**: el mismo tilde alimenta "Generar sale", y un
   // producto que ya está en la campaña puede querer salir igual en el PDF. Mandarlo dos veces no
@@ -658,9 +707,11 @@ function FilaProducto({
           {p.sales30}
         </Td>
         <Td align="right">{p.sales90}</Td>
-        <Td align="right">
-          <CeldaEnSale enSale={enSale} total30={p.sales30} ofertaHoy={ofertaHoy} />
-        </Td>
+        {canal === 'todos' && (
+          <Td align="right">
+            <CeldaEnSale enSale={enSale} total30={p.sales30} ofertaHoy={ofertaHoy} />
+          </Td>
+        )}
         {/*
           Sin subtexto: la antigüedad que explica sobre cuántos días está hecha esta cuenta ya está
           debajo del nombre, y para TODOS los productos, no sólo los nuevos. Repetirla acá era el
@@ -677,7 +728,7 @@ function FilaProducto({
       </Tr>
       {expandido && (
         <Tr>
-          <Td colSpan={11} style={{ padding: 0, background: color.bg, height: 'auto' }}>
+          <Td colSpan={canal === 'todos' ? 12 : 11} style={{ padding: 0, background: color.bg, height: 'auto' }}>
             <DetalleVariante allVvar={datos.allVvar} allVariantes={datos.allVariantes} pid={p.id} />
           </Td>
         </Tr>

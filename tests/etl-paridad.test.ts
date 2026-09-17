@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { vi } from 'vitest'
 import { computarDatos } from '@/lib/etl/computar'
+import { cortesDeVentas } from '@/lib/etl/helpers'
+import { ladoDeCanal } from '@/lib/liquidacion/resultado'
 import type { DatosETL } from '@/lib/etl/tipos'
 import { computarLegacy, normalizar, leerFixture } from './legacy-etl'
 
@@ -83,9 +85,44 @@ describe.each(['bdi', 'zattia'])('ETL %s: legacy vs port', (cuenta) => {
         delete copia.diasVivo
         delete copia.ingresoFecha
         delete copia.phase
+        delete copia.ventasMin
+        delete copia.ventasMay
+        delete copia.minOnline
+        delete copia.minLocal
         return copia
       })
     expect(normalizar(sinNuevos(port.allProductos))).toEqual(normalizar(sinNuevos(legacy.allProductos)))
+  })
+
+  // El corte minorista/mayorista (17-sep-2026) no está en el legacy. Lo que sí se puede atar: los dos
+  // lados más lo que no es de ninguno (técnicas ya excluidas + canjes) dan EXACTAMENTE el total de
+  // siempre, producto por producto — si el corte perdiera o duplicara una línea, esto lo ve.
+  it('ventasMin + ventasMay + sin lado = totalSales, en cada ventana', () => {
+    const sinLado = new Map<string, { total: number; s30: number }>()
+    const canalDeVenta = new Map(fixture.entrada.ventas.map((v) => [String(v.id), v.channel]))
+    const fechaDeVenta = new Map(fixture.entrada.ventas.map((v) => [String(v.id), v.date_sale]))
+    const { c30 } = cortesDeVentas(AHORA)
+    for (const l of fixture.entrada.detalles) {
+      if (ladoDeCanal(canalDeVenta.get(String(l.sale_id)) ?? null)) continue
+      const pid = String(l.product_id || '')
+      const acc = sinLado.get(pid) ?? { total: 0, s30: 0 }
+      acc.total += l.quantity || 1
+      if (new Date((fechaDeVenta.get(String(l.sale_id)) || '').substring(0, 10)) >= c30) acc.s30 += l.quantity || 1
+      sinLado.set(pid, acc)
+    }
+    let conMin = 0
+    for (const p of port.allProductos) {
+      const s = sinLado.get(p.id) ?? { total: 0, s30: 0 }
+      expect(p.ventasMin.total + p.ventasMay.total + s.total).toBe(p.totalSales)
+      expect(p.ventasMin.s30 + p.ventasMay.s30 + s.s30).toBe(p.sales30)
+      expect(p.minOnline + p.minLocal).toBeLessThanOrEqual(p.ventasMin.total)
+      if (p.ventasMin.total > 0) conMin++
+    }
+    expect(conMin).toBeGreaterThan(0) // si nadie tuviera minorista, esto no probaría nada
+    if (cuenta === 'bdi') {
+      // Y el corte tiene que partir de verdad: en BDI los dos lados existen.
+      expect(port.allProductos.some((p) => p.ventasMay.total > 0)).toBe(true)
+    }
   })
 
   // La fase sigue siendo la del legacy en todo producto que NO sea nuevo. Sin esto, sacar `phase`

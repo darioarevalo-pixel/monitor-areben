@@ -30,6 +30,7 @@ import {
   CANALES_MINORISTA as CANALES_MINORISTA_JS,
   ETIQUETA_CANAL as ETIQUETA_CANAL_JS,
   canalDe as canalDeJs,
+  ladoDeCanal as ladoDeCanalJs,
 } from './canal.core.js'
 import type { EstadoItem, LiquidacionItem } from './tipos'
 import type { LineaVenta } from './ventas'
@@ -57,6 +58,9 @@ export const CANALES = CANALES_JS as readonly Canal[]
  * pueden importar TypeScript. Acá sólo se le pone el tipo, una vez.
  */
 export const canalDe: (nombre: string | null) => Canal = canalDeJs
+
+/** De qué lado del corte cae una venta; `null` = técnica o canje. Vive en `canal.core.js`. */
+export const ladoDeCanal: (nombre: string | null) => 'minorista' | 'mayorista' | null = ladoDeCanalJs
 
 /**
  * Cómo se llama cada canal en la pantalla. **El rótulo vive en `canal.core.js`** por lo mismo que
