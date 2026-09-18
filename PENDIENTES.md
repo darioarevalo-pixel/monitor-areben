@@ -240,6 +240,23 @@ Base medida en la propia cuenta (7 días de agosto, `STUNNED - Tráfico a Perfil
 visitas al perfil a $28,27 → 118 seguimientos brutos − 27 bajas − ~73 orgánicos = **~45 nuevos de
 la pauta ⇒ $338 por seguidor incremental**.
 
+🔴 **Los «~73 orgánicos por semana» YA NO VALEN, y restarlos casi mata una pauta que funciona**
+(18-sep-2026). La serie diaria real de @stunned.co —`MetricaDia` de MAKETA, 41 días— dice que la
+cuenta venía **PERDIENDO** seguidores: 3.299 el 14-ago → **3.249 el 12-sep**, ~−2/día. La base
+orgánica es **negativa, ⛔ no +73**. Con el 73 la cuenta daba «cero o negativo incremental» y la
+conclusión fue **apagar la campaña**; era el resto lo que estaba mal, ⛔ no la campaña.
+
+✅ **Lo que midió la pauta del 12-sep, contra Instagram y ⛔ no contra Ads Manager**: 3.249 el 12-sep
+→ **3.305 el 17-sep = +56 netos en 5 días** (+8, +14, +15, +11, +8). Los 4 días previos, con MAKETA
+ya publicando y sin pauta, fueron **+2 en total** ⇒ el quiebre cae exacto en el 1er día completo de
+la pauta: **es la pauta, ⛔ no el contenido**. $24.826 ÷ 56 = **$443 por seguidor incremental**.
+📌 Meta declaró 66 seguimientos brutos contra 56 netos reales: su atribución acá está **honesta**,
+la diferencia son bajas.
+
+⇒ contra el $338 de agosto es **31% más caro**, y a ~11 seguidores/día llegar a 10.000 son **~20
+meses y $2,97 M** (la tabla de abajo dice ~15 meses y $2,3 M). **Se vuelve a medir con la serie de
+Instagram, ⛔ nunca con el contador de Ads Manager** — ver abajo por qué.
+
 | | seguidores a comprar | a $338 | a $5.000/día |
 |---|---|---|---|
 | 3.300 → 10.000 | 6.700 | **$2,3 M** | ~15 meses |
@@ -247,6 +264,13 @@ la pauta ⇒ $338 por seguidor incremental**.
 
 ⇒ **el plan vive o muere en bajar el $338**, ⛔ no en el presupuesto. Palancas ya medidas en esta
 cuenta: **broad y ⛔ no intereses** (CPM $992 contra $3.163 = 3,2×) y **destino sólo perfil de IG**.
+
+🔴 **Y el «Seguidores» del monitor CONTABA «ME GUSTA» DE PUBLICACIÓN** hasta el 18-sep-2026:
+`RE_SEGUIDOR` cerraba con `(^|\.)like$` y el `action_type` `like` a secas entraba por ahí. En
+pantalla decía **14 seguidores a $1.773 cada uno** cuando eran **56 a $443**: 4× arriba, y sobre una
+métrica que ⛔ ni siquiera era la que nombraba. Arreglado; ahora da **0**, que es el valor honesto
+—la cuenta ⛔ no devuelve NINGÚN `action_type` de seguimiento ni de visita al perfil, se miraron las
+32 que sí trae— y la pantalla lo dibuja como «Sin visitas ni seguidores».
 
 🔴 **El costo por seguidor ⛔ NO sale de Ads Manager**: `visitas_perfil` viene en 0 por API y las
 visitas salen de la columna «Resultados»; **los seguidores se leen en las estadísticas de Instagram
