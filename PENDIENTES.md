@@ -4461,12 +4461,35 @@ usaba *desde el escalón*. Ahora hay **una** (`lectura()`), y al cierre un contr
 diagnosticar desde cero lo que Bruno había hecho el día anterior. Ahora se cuelgan también **las
 decisiones de la campaña**, porque un CBO se decide a ese nivel y el parte recorre conjuntos.
 
-### 🔴 Un día RECIÉN CERRADO no está terminado, y el parte lo juzgaba
+### ⛔ «Un día RECIÉN CERRADO no está terminado» — ERA FALSO, corregido el 19-sep-2026
 
-Medido el 12-sep contra los pedidos reales de la tienda: el **11-sep Meta atribuía 3 de 9 (33%)**,
+~~Medido el 12-sep contra los pedidos reales de la tienda: el **11-sep Meta atribuía 3 de 9 (33%)**,
 mientras los días ya maduros van **67-93%**. El CPA de ayer salía **$19.355** contra un techo de
 $8.513 — un número que en 3 días va a ser otro, y que manda a apagar objetos sanos. El parte ahora
-lo dice con el porcentaje de cobertura. Es la misma razón por la que existe `DIAS_RELECTURA = 4`.
+lo dice con el porcentaje de cobertura. Es la misma razón por la que existe `DIAS_RELECTURA = 4`.~~
+
+🔴🔑 **NO HAY CURVA DE MADURACIÓN, y esta nota hizo que el parte discutiera la atribución TRES
+mañanas seguidas.** Medido el 19-sep sobre 30 días de BDI, agrupando por **edad del día**:
+**1-4 días → 81% · 5-10 → 79% · 11-30 → 77%.** Un día de ayer atribuye **igual —si acaso más—** que
+uno de hace tres semanas. A 60 días, sólo días de 8+ pedidos: **72% agregado, mediana diaria 73%**.
+
+⛔ **La evidencia de esta nota era UN día de 6 pedidos.** El «3 de 9 (33%)» del 11-sep hoy figura
+**3 de 6 = 50%**: el denominador estaba a medio cargar y la muestra era mínima. El ratio **diario**
+va de **30% a 94%** ⇒ un día suelto ⛔ no puede decir nada; el ~77% sólo existe al agregar. Es
+[[feedback_areben_ventana_mas_corta_que_el_fenomeno]] otra vez, y el «verificado» era circular como
+en el § de más arriba.
+
+⇒ **La brecha contra los pedidos de la tienda es venta ORGÁNICA, ⛔ no atribución pendiente.** Es
+exactamente lo que ya había corregido Bruno el **5-sep** para el monitor (ver el § «Dos varas con el
+mismo nombre en la misma pantalla», `lib/meta-ads/rendimiento.core.js`): *«los pedidos reales pueden
+ser de otros canales que no sean Meta, por ese motivo, solo tiene que ser META»*. **El parte del día
+nunca se había enterado** — la corrección vivía en el monitor y el parte es otro repo.
+
+🏁 **Cerrado en `analista-meta`**: el renglón ahora imprime «la pauta explica 10 (77%) ⇒ 3 orgánicos
+│ normal 78% (26 días de 8+ pedidos)», sin 🔴 y sin «el CPA va a BAJAR», y avisa **sólo** cuando el
+ratio se sale de su banda. La regla quedó también en `~/.claude/commands/pauta.md` § 2.
+⚠️ `DIAS_RELECTURA = 4` **se queda**: la reatribución tardía existe como **goteo** (un aviso pausado
+cobra una compra días después), pero ⛔ no es la brecha.
 
 ### 🔴 EL CRON DE LA MAÑANA LLEGA ~4 HORAS TARDE — ⛔ SIN ARREGLAR, decide Bruno
 
@@ -4486,12 +4509,44 @@ cualquier horario nuevo es una adivinanza, y adelantarlo le saca horas de reatri
 la mañana — que es justo lo que el encabezado del workflow eligió a propósito. ▶️ **Decisión de
 Bruno**: dejarlo (el auto-disparo ya cubre el parte) o adelantar los dos crons juntos.
 
-### ▶️ ABIERTO Y SIN MEDIR: Meta cuenta MENOS compras que la tienda, y todos los CPA salen de Meta
+### 🏁 MEDIDO el 19-sep-2026: Meta cuenta menos compras que la tienda porque **el resto es ORGÁNICO**
 
-Media de 7 días para BDI: **Meta 10,4 compras/día · la tienda 14,1 pedidos/día**. Todos los CPA y
-todos los techos del parte se calculan contra **las compras de Meta**. Si la brecha es estable, cada
-CPA del informe está corrido hacia arriba. ⛔ No se tocó nada: **hay que medirlo antes**, separando
-lo que Meta no atribuye de lo que es venta orgánica. Bruno el 12-sep: «ahora no, dejalo anotado».
+~~▶️ ABIERTO Y SIN MEDIR. Media de 7 días para BDI: **Meta 10,4 compras/día · la tienda 14,1
+pedidos/día**. Si la brecha es estable, cada CPA del informe está corrido hacia arriba. ⛔ No se
+tocó nada: **hay que medirlo antes**, separando lo que Meta no atribuye de lo que es venta
+orgánica. Bruno el 12-sep: «ahora no, dejalo anotado».~~
+
+**Se midió.** La pregunta era si la brecha es *atribución que falta* (⇒ los CPA están inflados) o
+*venta que no vino por Meta* (⇒ están bien). **Es lo segundo.**
+
+El corte que lo decide es **por EDAD del día**: si fuera atribución pendiente, los días frescos
+tendrían que atribuir MENOS que los viejos y después «alcanzarlos».
+
+| edad del día | días | Meta / tienda | % que explica la pauta |
+|---|---|---|---|
+| 1-4 días | 4 | 55 / 68 | **81%** |
+| 5-10 días | 6 | 56 / 71 | **79%** |
+| 11-30 días | 20 | 223 / 291 | **77%** |
+
+**⛔ No hay curva.** Un día de ayer explica tanto como uno de hace tres semanas ⇒ la brecha ⛔ no se
+cierra nunca porque **⛔ no es un faltante**: es venta orgánica, mail, directo y WhatsApp. Es lo que
+Bruno ya había dicho el 5-sep (§ «Dos varas con el mismo nombre en la misma pantalla»).
+
+A 60 días, sólo días de 8+ pedidos (36 días): **72% agregado · mediana diaria 73% · rango 30%-94%**
+⇒ 🔴 **el ratio DIARIO es ruido** y sólo sirve agregado. Ese rango es la razón por la que un día
+suelto ⛔ nunca puede usarse para concluir nada (fue justo el error de la nota de más arriba, que
+se apoyaba en un día de 6 pedidos).
+
+⇒ **Los CPA del parte ⛔ NO están corridos: están bien.** El veredicto de un objeto se juzga con
+Meta contra su techo, y los pedidos de la tienda quedan como la pregunta del negocio —la que
+dimensiona la **elasticidad 0,54** y el **muro ~24/día**, que por eso **⛔ no se pasan a Meta**.
+
+🏁 **Implementado en `analista-meta`** (el renglón da el orgánico y un baseline de 30 días) y la
+regla quedó en `~/.claude/commands/pauta.md` § 2.
+✅ **Y salió un instrumento gratis**: con el baseline, una **caída del ratio** ya es accionable.
+Calibrado contra 90 días, la banda dispara **7 veces de 36 días útiles, y las 7 son del 7 al 17 de
+agosto** —justo antes del CAPI del 18-ago, cuando Meta explicaba ~40%—: **cero disparos en los
+últimos 30 días**. O sea, caza un cambio de régimen del píxel/CAPI sin hacer ruido.
 
 ### 🔑 TODO CONJUNTO Y TODO AVISO LLEVA FECHA EN EL NOMBRE — regla de Bruno, 12-sep-2026
 
