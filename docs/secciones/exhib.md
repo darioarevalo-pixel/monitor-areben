@@ -11,6 +11,7 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 | dónde queda | **la base**, con la categoría recorrida (19-sep-2026) | **la base**, con el lugar de cada escaneo |
 | qué contesta | qué quedó sin escanear, con triage y PDF | qué se escaneó en cada lugar **y qué falta colgar** |
 | faltantes | los calcula sobre la categoría entera | **sólo los hermanos de lo que tocó** (ver abajo) |
+| repetidos | **suman una unidad** (19-sep-2026) | **suman una unidad** (19-sep-2026) |
 
 ## Dónde vive
 
@@ -18,11 +19,12 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 `ExhibLibre.tsx` · `useExhibLibre.ts` · **`useColaEscaneos.ts` la cola que usan LOS DOS** ·
 `ParaColgar.tsx`) · `lib/exhib/` (`core.ts` puro y
 compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
-`datos.ts` la bajada · `cliente.ts` · `pdf.ts` · `tipos.ts`) ·
+`datos.ts` la bajada · `cliente.ts` · `pdf.ts` · **`analisis.ts` el conteo del final** · `tipos.ts`) ·
 `api/_exhib.js` por `api/datos.js?recurso=exhib` · tablas `exhib_recorrido` y `exhib_escaneo`
 (`sql/migrate-exhib-libre.sql` + `sql/migrate-exhib-categoria.sql`, **sólo en el Supabase de
 Zattia**) ·
-`tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts`.
+`tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts` +
+`tests/exhib-analisis.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -36,6 +38,28 @@ Zattia**) ·
   caminata por categoría **y** la libre.
 
 ## Reglas que el código no dice
+
+- 🆕 🔴 🔑 **EL RECORRIDO CUENTA UNIDADES, Y POR ESO SON DOS PREGUNTAS Y ⛔ NO UNA** (19-sep-2026).
+  Hasta esa tarde el repetido **rebotaba** —el único de la base es (recorrido, lugar, variante)—
+  así que dos prendas iguales colgadas contaban como **una**: el recorrido contestaba «apareció / ⛔
+  no apareció» y ⛔ nunca **cuántas**. Bruno: *«que te permita escanear todo aunque vaya repetido…
+  que se pueda anotar que hay dos repetidos, pero te deje»*.
+  - **Qué falta colgar** (`colgar.ts`) = variantes de las que ⛔ **no se vio ninguna**. Es un
+    **mandado**: alguien va al guardado con esa lista.
+  - **El conteo** (`analisis.ts`) = de las que sí se vieron, cuántas hay contra lo que dice el
+    sistema. Es un **dato**.
+  🔴 **Mezclarlas rompe la útil.** Una línea «vi 1 y el sistema dice 5» en la lista de colgar manda
+  al local a buscar algo **que ya está colgado** —las otras 4 pueden estar dobladas, y está bien que
+  lo estén—, y una sola línea así quema la lista entera. El test que lo cuida está en
+  `tests/exhib-colgar.test.ts`: las variantes **vistas** ⛔ no entran en `paraColgar`.
+  ⚠️ **La fila sigue siendo UNA por (recorrido, lugar, variante)**: lo que sube es un contador
+  (`veces`). Un log de un evento por escaneo habría hecho que **el rebote del lector sea una prenda
+  más**.
+- 🆕 🔴 **600 ms: el corte entre «hay dos colgadas» y «el aparato disparó dos veces».** 📊 Medido
+  sobre los **166 escaneos reales** de los dos recorridos del 19-sep: el intervalo humano más corto
+  fue **997 ms** y sólo 9 de 164 bajaron de 2 s. El lector entra como teclado y puede repetir el
+  Enter solo, en decenas de ms. ⚠️ Vale **sólo para el mismo código**, y el descarte **se dice en
+  pantalla**: callarlo sería inventar —o perder— una unidad.
 
 - 🔑 **Los precios salen de Tienda Nube y ⛔ no de nuestras campañas de Liquidación.** Medido el
   15-ago-2026: GN tenía 404 promos vivas en Zattia y la bitácora del Monitor conocía 262. Leyendo lo

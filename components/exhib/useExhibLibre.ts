@@ -21,7 +21,10 @@ const clave = (m: Marca) => 'monitor_exhib_libre_' + m
 /** Lo que contesta un escaneo, para el feedback de la pantalla. */
 export type ResultadoLibre =
   | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre }
-  | { tipo: 'repetido'; it: ExhibItem | null; e: EscaneoLibre }
+  /** Ya estaba en este lugar y **se le sumó una unidad**: hay dos colgadas, y eso es el dato. */
+  | { tipo: 'sumado'; it: ExhibItem | null; e: EscaneoLibre; veces: number }
+  /** El aparato repitió el Enter solo (menos de `DOBLE_LECTURA_MS`): ⛔ no se contó. */
+  | { tipo: 'doble-lectura'; it: ExhibItem | null; e: EscaneoLibre; veces: number }
   /** Existe y está colgada, pero el sistema la tiene en cero. Se guarda como `encontrado`, con qty 0. */
   | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre }
   /** El código ⛔ no cruzó con nada. `parecidos` = cuántos había, cuando eran demasiados para mostrar. */
@@ -52,7 +55,11 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
   const registrar = useCallback(
     (it: ExhibItem | null, codigo: string, lugar: string): ResultadoLibre => {
       const e = aEscaneo(it, codigo, lugar)
-      if (!cola.registrar(e)) return { tipo: 'repetido', it, e }
+      const r = cola.registrar(e)
+      // 🔴 **El repetido ⛔ ya no rebota: suma una unidad** (19-sep-2026). Lo único que ⛔ no se
+      // cuenta es el rebote del propio aparato, y se dice.
+      if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, e, veces: r.veces }
+      if (r.que === 'sumado') return { tipo: 'sumado', it, e, veces: r.veces }
       if (!it) return { tipo: 'no-cruzo', e }
       return it.qty <= 0 ? { tipo: 'stock-cero', it, e } : { tipo: 'ok', it, e }
     },

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { abrirRecorrido, cerrarRecorrido, eliminarRecorrido, sacarEscaneo, subirEscaneos } from '@/lib/exhib/cliente'
-import { claveEscaneo, yaEscaneado, type EscaneoLibre } from '@/lib/exhib/libre'
+import { claveEscaneo, esDobleLectura, sumarUna, vecesDe, type EscaneoLibre } from '@/lib/exhib/libre'
 
 /**
  * **El recorrido que se camina con el aparato en la mano**: borrador en el teléfono, cola de
@@ -149,50 +149,65 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
   )
 
   /**
-   * Agrega el escaneo al borrador y lo manda a subir. **Es la única puerta que escribe.**
-   *
-   * Devuelve `false` si esa clave ya estaba: el único de la base es (recorrido, lugar, variante) y
-   * lo rechazaría **en silencio**, así que se dice acá, que es donde la persona todavía tiene la
-   * prenda en la mano.
-   */
-  const registrar = useCallback(
-    (e: EscaneoLibre): boolean => {
-      const k = claveEscaneo(e)
-      const b = ref.current
-      if (yaEscaneado(b.escaneos, k)) return false
-      guardar({ ...b, escaneos: [...b.escaneos, e], pendientes: [...b.pendientes, k] })
-      void subir()
-      return true
-    },
-    [guardar, subir],
-  )
-
-  /**
    * Reemplaza un escaneo que ya estaba (misma clave) — lo usa el triage por categoría, donde la
    * persona cambia de opinión: «no se encuentra» pasa a «solucionado» sobre la misma variante.
    *
    * ⚠️ En la base es un **upsert que ignora duplicados**, así que la fila vieja gana: por eso se
    * saca primero del servidor y después se manda la nueva. ⛔ No alcanza con pisarla en el teléfono.
    */
-  const reemplazar = useCallback(
-    (e: EscaneoLibre) => {
+  const reemplazarFila = (e: EscaneoLibre) => {
+    const k = claveEscaneo(e)
+    const b = ref.current
+    guardar({
+      ...b,
+      escaneos: [...b.escaneos.filter((x) => claveEscaneo(x) !== k), e],
+      pendientes: [...b.pendientes.filter((x) => x !== k), k],
+    })
+    if (b.id) {
+      void sacarEscaneo(marca, b.id, e.lugar, e.variante_id)
+        .catch(() => {})
+        .then(() => subir())
+    } else {
+      void subir()
+    }
+  }
+
+  /**
+   * Agrega el escaneo al borrador y lo manda a subir. **Es la única puerta que escribe.**
+   *
+   * 🔴 **El repetido SUMA una unidad; ⛔ no rebota.** Hasta el 19-sep-2026 devolvía «repetido» y ⛔
+   * no guardaba nada, porque el único de la base es (recorrido, lugar, variante). Bruno: *«que te
+   * permita escanear todo aunque vaya repetido… que se pueda anotar que hay dos repetidos, pero te
+   * deje»*. La fila sigue siendo **una sola**: lo que sube es el contador, así que el único ⛔ no se
+   * toca y en el Excel sigue habiendo un renglón por prenda.
+   *
+   * ⚠️ **Salvo el rebote del aparato** (`esDobleLectura`): el lector entra como teclado y puede
+   * repetir el Enter solo. Ése ⛔ no se cuenta, y se dice —callarlo sería inventar una prenda—.
+   */
+  const registrar = useCallback(
+    (e: EscaneoLibre, ahora: number = Date.now()): { que: 'nuevo' | 'sumado' | 'doble-lectura'; veces: number } => {
       const k = claveEscaneo(e)
       const b = ref.current
-      guardar({
-        ...b,
-        escaneos: [...b.escaneos.filter((x) => claveEscaneo(x) !== k), e],
-        pendientes: [...b.pendientes.filter((x) => x !== k), k],
-      })
-      if (b.id) {
-        void sacarEscaneo(marca, b.id, e.lugar, e.variante_id)
-          .catch(() => {})
-          .then(() => subir())
-      } else {
+      const previo = b.escaneos.find((x) => claveEscaneo(x) === k)
+      if (!previo) {
+        guardar({ ...b, escaneos: [...b.escaneos, e], pendientes: [...b.pendientes, k] })
         void subir()
+        return { que: 'nuevo', veces: 1 }
       }
+      if (esDobleLectura(previo, ahora)) return { que: 'doble-lectura', veces: vecesDe(previo) }
+      // La fila crece; y como el upsert del servidor ignora duplicados, la vieja se saca primero.
+      const sumado = sumarUna(previo, ahora)
+      reemplazarFila(sumado)
+      return { que: 'sumado', veces: vecesDe(sumado) }
     },
-    [marca, guardar, subir],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [guardar, subir],
   )
+
+  // ⚠️ Una sola implementación: `registrar` la necesita para sumarle una unidad al repetido, y
+  // dos cuerpos iguales es la copia que se despega el día que uno se corrige.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const reemplazar = useCallback((e: EscaneoLibre) => reemplazarFila(e), [marca, guardar, subir])
 
   const sacar = useCallback(
     (e: EscaneoLibre) => {

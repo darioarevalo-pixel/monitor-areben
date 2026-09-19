@@ -6,7 +6,7 @@
 
 import { compartirODescargarPDF } from '../pdf'
 import { agruparPDF, exhibId } from './core'
-import { resumenRecorrido, type EscaneoLibre } from './libre'
+import { resumenRecorrido, vecesDe, type EscaneoLibre } from './libre'
 import type { ExhibErrores, ExhibEstados, ExhibItem } from './tipos'
 
 /**
@@ -58,12 +58,21 @@ export async function generarReporteExhib({ lista, persona, catLabel, estados, e
   // «alguna vez» y el reporte ⛔ no sirve para mandar a nadie a hacer nada.
   const r = resumenRecorrido(escaneos)
   if (r.desde) line('Recorrido: de ' + horaDe(r.desde) + ' a ' + horaDe(r.hasta ?? undefined) + '  ·  ' + r.escaneos + ' marcas')
+  // 🔑 **Prendas y unidades son dos números distintos** desde que el repetido suma (19-sep-2026):
+  // decir sólo «97 marcas» esconde que en el perchero había 103 prendas colgadas.
+  if (r.unidades > r.escaneos) line('Unidades contadas: ' + r.unidades + ' (hubo repetidos)')
   y += 2
   line(`Exhibido: ${grupos.exhibido.length}  ·  Solucionado: ${grupos.solucionado.length}  ·  Una sola unidad: ${grupos['una-unidad'].length}  ·  No se encuentra: ${grupos['no-encuentra'].length}` + (grupos['sin-marcar'].length ? `  ·  Sin revisar: ${grupos['sin-marcar'].length}` : ''), { bold: true })
 
   // La hora de cada marca, por variante: lo que convierte «exhibido» en «exhibido a las 10:47».
   const cuando: Record<string, string> = {}
-  for (const e of escaneos) if (e.estado) cuando[e.variante_id] = e.escaneado_en
+  /** Las unidades contadas de cada variante. Sólo se imprime cuando pasa de 1: el 1 ⛔ no informa. */
+  const cuantas: Record<string, number> = {}
+  for (const e of escaneos) {
+    if (!e.estado) continue
+    cuando[e.variante_id] = e.escaneado_en
+    cuantas[e.variante_id] = vecesDe(e)
+  }
 
   const seccion = (titulo: string, items: ExhibItem[], color: [number, number, number]) => {
     if (!items.length) return
@@ -75,7 +84,9 @@ export async function generarReporteExhib({ lista, persona, catLabel, estados, e
     line(titulo + ' (' + items.length + ')', { bold: true, fs: 11, color })
     items.forEach((it) =>
       line(
-        '•  ' + it.name + ' · ' + it.size + ' · SKU: ' + (it.sku || '—') + (cuando[exhibId(it)] ? '  (' + horaDe(cuando[exhibId(it)]) + ')' : ''),
+        '•  ' + it.name + ' · ' + it.size + ' · SKU: ' + (it.sku || '—') +
+          (cuantas[exhibId(it)] > 1 ? '  ×' + cuantas[exhibId(it)] : '') +
+          (cuando[exhibId(it)] ? '  (' + horaDe(cuando[exhibId(it)]) + ')' : ''),
         { fs: 9, x: M + 3 },
       ),
     )

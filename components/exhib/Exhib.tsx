@@ -12,6 +12,7 @@ import { puedeVer } from '@/lib/permisos'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhib, type ResultadoMarca } from './useExhib'
 import { ExhibLibre } from './ExhibLibre'
+import { Analisis } from './Analisis'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, Field, Input, Notice, Select, color, font, formatMoney, space, useConfirmar, useToast, weight } from '@/components/ui'
 
@@ -400,6 +401,18 @@ export function Exhib() {
                 Ese código no está en la lista ({fb.code})
               </Notice>
             )}
+            {/* 🔴 El repetido ⛔ no frena: suma una unidad y sigue. Es lo que deja pasar el perchero
+                entero sin que la pantalla pregunte nada. */}
+            {fb?.tipo === 'sumado' && (
+              <Notice tone="brand" icon="＋">
+                <b>Van {fb.veces}</b> de {fb.it.name}{fb.it.size ? ` · ${fb.it.size}` : ''}.
+              </Notice>
+            )}
+            {fb?.tipo === 'doble-lectura' && (
+              <Notice tone="neutral" icon="↺">
+                Doble lectura del aparato: no se contó. Siguen siendo <b>{fb.veces}</b>.
+              </Notice>
+            )}
             {/* ⛔ Sin recorrido abierto ⛔ no hay dónde guardar la tilde. Puede pasar si se entra por
                 «Retomar» a un recorrido que ya se cerró. */}
             {fb?.tipo === 'sin-recorrido' && (
@@ -471,6 +484,10 @@ export function Exhib() {
       {/* ── Sin escanear ── */}
       {fase === 'triage' && (
         <Card>
+          {/* 🔑 El conteo, arriba del triage: es lo que contesta «de ésta vi 2 y el sistema dice 9»,
+              que ⛔ no es lo mismo que «no apareció» y por eso ⛔ no está en la lista de abajo. */}
+          <Analisis escaneos={ex.escaneos} items={ex.items} />
+
           <Subtitulo>Sin escanear: marcá qué pasó con cada uno</Subtitulo>
 
           {/*

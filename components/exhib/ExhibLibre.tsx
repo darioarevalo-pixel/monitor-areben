@@ -10,6 +10,7 @@ import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
 import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
+import { Analisis } from './Analisis'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 
@@ -65,6 +66,8 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   /** Lo que quedó sin colgar del mueble que se acaba de dejar, y lo del recorrido entero al cerrar. */
   const [cierreLugar, setCierreLugar] = useState<{ lugar: string; lista: Colgar[] } | null>(null)
   const [cierreFinal, setCierreFinal] = useState<Colgar[]>([])
+  /** Los escaneos congelados al cerrar: de ellos sale el conteo, y `cerrar` limpia el borrador. */
+  const [cierreEscaneos, setCierreEscaneos] = useState<EscaneoLibre[]>([])
   const [verColgarAca, setVerColgarAca] = useState(false)
   const scanRef = useRef<HTMLInputElement>(null)
   const lugarRef = useRef<HTMLInputElement>(null)
@@ -117,6 +120,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
     // La lista se calcula ANTES de cerrar: `cerrar` limpia el borrador del teléfono y con él se
     // irían los escaneos de los que sale.
     const quedan = paraColgar(lib.escaneos, items)
+    // ⚠️ Los escaneos se congelan por lo mismo que la lista: `cerrar` limpia el borrador del
+    // teléfono, y el conteo sale justamente de ellos.
+    const caminados = lib.escaneos
     try {
       await lib.cerrar()
     } catch (e) {
@@ -127,7 +133,8 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
     cargarPrevios()
     setCierreLugar(null)
     setCierreFinal(quedan)
-    setFase(quedan.length ? 'cierre' : 'config')
+    setCierreEscaneos(caminados)
+    setFase(quedan.length || caminados.length ? 'cierre' : 'config')
   }
 
   async function eliminar() {
@@ -407,9 +414,18 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
                 </Button>
               </Notice>
             )}
-            {fb?.tipo === 'repetido' && (
+            {/* 🔴 El repetido ⛔ ya no frena nada: suma y sigue. El cartel es para que la persona
+                vea que quedó contado —«van 3»—, que es justo lo que antes ⛔ no se podía anotar. */}
+            {fb?.tipo === 'sumado' && (
+              <Notice tone="brand" icon="＋">
+                <b>Van {fb.veces}</b> de esta prenda en «{fb.e.lugar}»{fb.it ? ` · ${fb.it.name}${fb.it.size ? ' · ' + fb.it.size : ''}` : ''}.
+              </Notice>
+            )}
+            {/* ⚠️ El lector entra como teclado y repite el Enter solo. Ese rebote ⛔ no es una
+                segunda prenda, y contarlo sería inventar una unidad que no está colgada. */}
+            {fb?.tipo === 'doble-lectura' && (
               <Notice tone="neutral" icon="↺">
-                Ya lo habías escaneado en «{fb.e.lugar}»{fb.it ? ` · ${fb.it.name}` : ''}.
+                Doble lectura del aparato: no se contó. Siguen siendo <b>{fb.veces}</b>. Si hay otra de verdad, pasala de nuevo.
               </Notice>
             )}
           </div>
@@ -471,7 +487,10 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             titulo="Terminaste. Para colgar"
             archivo={`para-colgar-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`}
           />
-          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setFase('config') }}>
+          {/* 🔑 El conteo va DEBAJO del mandado y ⛔ no arriba: lo primero que hay que hacer al
+              terminar es ir a buscar lo que no está colgado; el conteo es para mirar después. */}
+          <Analisis escaneos={cierreEscaneos} items={items} titulo="El conteo de lo que caminaste" />
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreEscaneos([]); setFase('config') }}>
             Listo
           </Button>
         </Card>
@@ -511,6 +530,7 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             lista={colgarDelRecorrido}
             archivo={`para-colgar-${marca}-${viendo.recorrido.creado_en.slice(0, 10)}.xlsx`}
           />
+          <Analisis escaneos={viendo.escaneos} items={items} />
 
           {agruparPorLugar(viendo.escaneos).map((g) => (
             <div key={g.lugar} style={{ marginBottom: space[4] }}>

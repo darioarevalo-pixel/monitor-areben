@@ -53,6 +53,13 @@ function filaDeEscaneo(recorridoId, e) {
     // subirse mucho después. `now()` diría cuándo se pudo subir, ⛔ no cuándo se escaneó. Si viene
     // vacía o ilegible se cae al default de la tabla, que es lo único que queda.
     escaneado_en: texto(e.escaneado_en),
+    // 🔴 **El contador de unidades** (19-sep-2026): el repetido ⛔ ya no rebota, suma. Se sanea acá
+    // como todo lo demás —entero, mínimo 1— y con **tope 99**: viene del teléfono, y un número
+    // absurdo por un cliente roto quedaría en la columna con la que se compara el stock. 99 prendas
+    // iguales colgadas en un mismo mueble ⛔ no existen: el perchero más cargado del Local tenía 9.
+    veces: Math.min(99, Math.max(1, Math.trunc(Number(e.veces)) || 1)),
+    // La hora de la última unidad sumada; la primera queda en `escaneado_en`.
+    ultimo_en: texto(e.ultimo_en),
     // 🔴 Lista blanca de los cuatro estados del triage: lo que venga fuera de eso entra **null**,
     // que es «escaneo del modo libre». La columna decide qué dice el reporte —«exhibido» contra «no
     // se encuentra» son dos mandados distintos— así que un valor inventado por un cliente viejo o

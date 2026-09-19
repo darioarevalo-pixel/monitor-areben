@@ -46,6 +46,28 @@ export type EscaneoLibre = {
   /** ISO. El reloj del teléfono: la cola puede subirse mucho después. */
   escaneado_en: string
   /**
+   * **Cuántas unidades de esta variante se vieron en este lugar.** Ausente = 1 (las filas de antes
+   * del 19-sep-2026 a la tarde).
+   *
+   * 🔑 **El recorrido cuenta UNIDADES y ⛔ no «si apareció».** Lo pidió Bruno: *«que te permita
+   * escanear todo aunque vaya repetido… que se pueda anotar que hay dos repetidos, pero te deje»*.
+   * Con un sí/no, un perchero con 2 de las 3 que el sistema dice sale «exhibido» y la que falta ⛔
+   * no la ve nadie; contando, el faltante es **medido** —vistas contra stock— y ⛔ no inferido.
+   *
+   * ⚠️ La fila sigue siendo **una sola** por (recorrido, lugar, variante): el único de la base ⛔ no
+   * se toca, lo que sube es el contador. Así el repetido ⛔ no puede ensuciar la lista de lo que se
+   * caminó, y sigue habiendo un solo renglón por prenda en el Excel.
+   */
+  veces?: number
+  /**
+   * ISO de la **última** vez que se sumó una. La primera queda en `escaneado_en`.
+   *
+   * 🔑 Las dos horas y ⛔ no una: `escaneado_en` es cuándo se pasó por ese perchero —lo que ordena
+   * la caminata— y `ultimo_en` es lo que deja ver un repetido que llegó media hora después, que ⛔
+   * no es la misma prenda mirada dos veces sino una vuelta al mismo mueble.
+   */
+  ultimo_en?: string | null
+  /**
    * Sólo en el recorrido **por categoría**: qué pasó con esa variante.
    *
    * `null`/ausente = escaneo del modo **libre**, que ⛔ no tiene triage. `'exhibido'` = pasó por el
@@ -93,6 +115,51 @@ export function estadosDe(escaneos: EscaneoLibre[]): Record<string, EstadoTriage
     cuando[e.variante_id] = e.escaneado_en
   }
   return out
+}
+
+/** Las unidades que registra un escaneo. Las filas viejas ⛔ no tienen el campo, y valen 1. */
+export function vecesDe(e: Pick<EscaneoLibre, 'veces'>): number {
+  const n = Math.trunc(Number(e.veces))
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
+/**
+ * 🔴 **El corte entre «hay dos colgadas» y «el aparato disparó dos veces».**
+ *
+ * 📊 **Medido, ⛔ no estimado** (19-sep-2026, los 166 escaneos de los dos recorridos reales de
+ * Zattia): el intervalo **más corto entre dos escaneos de una persona fue de 997 ms**, y sólo 9 de
+ * 164 bajaron de 2 s. Un doble disparo del lector —que entra como teclado y repite el Enter— es de
+ * decenas de milisegundos. Se corta en **600 ms**: deja 400 ms de aire contra la persona más rápida
+ * que hubo, y ningún rebote del aparato llega tan lejos.
+ *
+ * ⚠️ Vale **sólo para el MISMO código**: dos prendas distintas seguidas ⛔ no se tocan nunca.
+ */
+export const DOBLE_LECTURA_MS = 600
+
+export function esDobleLectura(previo: Pick<EscaneoLibre, 'escaneado_en' | 'ultimo_en'>, ahora: number): boolean {
+  const ultimo = Date.parse(previo.ultimo_en || previo.escaneado_en)
+  return Number.isFinite(ultimo) && ahora - ultimo < DOBLE_LECTURA_MS
+}
+
+/**
+ * **Las unidades vistas por variante en todo el recorrido**, que es el número contra el que se
+ * compara el stock. Sólo cuenta lo que **pasó por el lector**: un triage ⛔ no vio nada.
+ *
+ * 🔑 Del recorrido ENTERO y ⛔ no de un lugar: la misma prenda puede estar colgada en dos muebles,
+ * y para «cuántas hay en el salón» las dos cuentan.
+ */
+export function unidadesVistas(escaneos: EscaneoLibre[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const e of escaneos) {
+    if (!pasoPorElLector(e)) continue
+    out.set(e.variante_id, (out.get(e.variante_id) || 0) + vecesDe(e))
+  }
+  return out
+}
+
+/** Suma una unidad a un escaneo que ya estaba: es lo que pasa cuando el repetido ⛔ no se rechaza. */
+export function sumarUna(e: EscaneoLibre, ahora: number = Date.now()): EscaneoLibre {
+  return { ...e, veces: vecesDe(e) + 1, ultimo_en: new Date(ahora).toISOString() }
 }
 
 /** La cabecera de un recorrido. Espeja `exhib_recorrido`. */
@@ -250,12 +317,15 @@ export function agruparPorLugar(escaneos: EscaneoLibre[]): GrupoLugar[] {
  * ⚠️ `desde`/`hasta` salen del **reloj del teléfono que escaneó** (`escaneado_en`) y ⛔ no de
  * cuándo se subió: un recorrido sin señal sube entero media hora después.
  */
-export type ResumenRecorrido = { escaneos: number; lugares: number; desde: string | null; hasta: string | null; enCero: number; noCruzo: number }
+export type ResumenRecorrido = { escaneos: number; unidades: number; lugares: number; desde: string | null; hasta: string | null; enCero: number; noCruzo: number }
 
 export function resumenRecorrido(escaneos: EscaneoLibre[]): ResumenRecorrido {
   const horas = escaneos.map((e) => e.escaneado_en).sort((a, b) => a.localeCompare(b))
   return {
     escaneos: escaneos.length,
+    // 🔑 **Prendas** (filas) y **unidades** (con los repetidos) son dos números distintos, y los dos
+    // se muestran: «97 prendas · 103 unidades» dice algo que ninguno de los dos dice solo.
+    unidades: escaneos.reduce((n, e) => n + vecesDe(e), 0),
     lugares: lugaresDe(escaneos).length,
     desde: horas[0] ?? null,
     hasta: horas.at(-1) ?? null,
@@ -294,7 +364,10 @@ export function lugaresSugeridos(delServidor: string[], deEsteRecorrido: string[
 /** Cuántos escaneos hay en este lugar (el contador de la pantalla mientras se camina). */
 export function contarEnLugar(escaneos: EscaneoLibre[], lugar: string): number {
   const l = lugar.trim()
-  return escaneos.filter((e) => e.lugar === l).length
+  // 🔑 **Unidades y ⛔ no filas**: el número que mira la persona parada en el perchero es «cuántas
+  // pasé», y desde que el repetido suma, dos prendas iguales son 2. Contando filas diría 1 y ⛔ no
+  // cuadraría contra lo que tiene colgado adelante.
+  return escaneos.filter((e) => e.lugar === l).reduce((n, e) => n + vecesDe(e), 0)
 }
 
 /**
@@ -332,10 +405,13 @@ export const HEADER_EXPORT = [
   // 🔑 Va **última** y ⛔ no al lado del nombre: las nueve de arriba son las que Bruno ya cruza a
   // mano contra el salón, y moverlas de columna rompe la comparación con los recorridos anteriores.
   'Hallazgo',
+  // 🆕 19-sep-2026. Va **después** de Hallazgo por lo mismo: las diez de arriba ⛔ no se mueven.
+  // Es cuántas unidades de esa prenda se contaron en ese mueble — el repetido ⛔ ya no rebota.
+  'Unidades contadas',
 ] as const
 
 /** Anchos de columna del `.xlsx`, en caracteres. */
-export const ANCHOS_EXPORT = [22, 40, 8, 16, 18, 42, 11, 14, 18, 12]
+export const ANCHOS_EXPORT = [22, 40, 8, 16, 18, 42, 11, 14, 18, 12, 18]
 
 /**
  * Las filas del `.xlsx` que se baja al terminar: **es el dato con el que se compara por afuera**.
@@ -372,6 +448,7 @@ export function filasExport(escaneos: EscaneoLibre[]): Filas {
         aCobrar ?? '',
         e.escaneado_en,
         hallazgoDe(e),
+        vecesDe(e),
       ])
     }
   }

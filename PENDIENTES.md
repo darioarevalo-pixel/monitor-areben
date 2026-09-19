@@ -1884,6 +1884,31 @@ vive en un test del repo entero, que ⛔ no nombra la sección que se tocó.
 ▶️ Y después: **caminarlo en el local** —el oráculo es que el PDF diga la hora al lado de cada
 prenda— y decidir si la pantalla vuelve a abrir en categoría (hoy abre en libre).
 
+**9. 🆕 🔴 🔑 EL REPETIDO REBOTABA ⇒ EL RECORRIDO ⛔ NO PODÍA DECIR «CUÁNTAS», SÓLO «SI APARECIÓ».**
+Lo trajo Bruno el 19-sep a la tarde: *«la idea es escanear todo tops, y que te permita escanear todo
+aunque vaya repetido, y luego al final, que vaya el análisis con lo que pueda faltar y además que se
+pueda anotar que hay dos repetidos, pero te deje»*.
+🔑 **Ahora el repetido SUMA una unidad** (`veces` en `exhib_escaneo`), y aparecieron dos preguntas
+que antes eran una sola:
+- **Qué falta colgar** (`colgar.ts`) = variantes de las que ⛔ no se vio **ninguna**. Es el
+  **mandado**, y ⛔ no se tocó.
+- **El conteo** (`analisis.ts`, nuevo) = de las que sí se vieron, cuántas hay contra lo que dice el
+  sistema ⇒ «pueden faltar» y, lo que antes era **invisible**, «hay de más».
+🔴 **Mezclarlas rompía la útil**: un «vi 1 y el sistema dice 5» en la lista de colgar manda al local
+a buscar algo **que ya está colgado** — me lo frenó el test de `paraColgar` cuando las junté, y por
+eso quedaron separadas.
+🔑 **La fila sigue siendo UNA por (recorrido, lugar, variante)** y lo que sube es el contador: un log
+de un evento por escaneo habría hecho que **el rebote del lector sea una prenda más**.
+📊 **600 ms es el corte del rebote, MEDIDO**: sobre los **166 escaneos reales** de los dos recorridos
+del 19-sep, el intervalo humano más corto fue **997 ms** (9 de 164 por debajo de 2 s). El descarte se
+dice en pantalla: callarlo sería inventar o perder una unidad.
+📌 Verde: typecheck, lint y **la suite ENTERA (7.940)**, con `tests/exhib-analisis.test.ts` nuevo
+(13 casos). ⚠️ Los 13 rojos de `crm-paridad` son los conocidos, de la otra sesión.
+🔴 ▶️ **LA MIGRACIÓN VA ANTES DEL DEPLOY, otra vez**: toda fila pasa a viajar con `veces`, así que
+sin la columna **rebota también el modo libre**. `node scripts/aplicar-sql.mjs
+sql/migrate-exhib-unidades.sql exhib_escaneo` — lo bloquea el clasificador, lo corre Bruno con `!`.
+▶️ Y sigue faltando **caminarlo en el local**.
+
 📊 **La escala, para dimensionar:** el Local tiene **1.074 variantes con stock**; el recorrido de
 tops cubrió **296**; quedan **777**.
 

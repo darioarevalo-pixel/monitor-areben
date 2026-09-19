@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -109,9 +109,18 @@ describe('resumenRecorrido', () => {
     aEscaneo(null, '779999', 'mesa entrada', Date.parse('2026-09-19T15:20:00Z')),
   ]
 
+  it('las unidades ⛔ no son las filas cuando hubo repetidos', () => {
+    const conRepetido = [sumarUna(escaneos[0], Date.parse('2026-09-19T15:11:00Z')), escaneos[1], escaneos[2]]
+    const r = resumenRecorrido(conRepetido)
+    expect([r.escaneos, r.unidades]).toEqual([3, 4])
+  })
+
   it('cuenta lo que hasta ahora sólo viajaba al Excel', () => {
     expect(resumenRecorrido(escaneos)).toEqual({
       escaneos: 3,
+      // 🔑 **Prendas y unidades son dos números distintos**: desde que el repetido suma, tres filas
+      // pueden ser cuatro unidades. Acá ninguna se escaneó dos veces, así que coinciden.
+      unidades: 3,
       lugares: 2,
       // 🔑 De punta a punta por el RELOJ del escaneo, ⛔ no por el orden en que llegaron las filas:
       // la cola sin señal sube toda junta y desordenada.
@@ -169,8 +178,10 @@ describe('filasExport', () => {
    * 🔑 La columna con la que se filtra. Los dos renglones que hay que ir a mirar son pocos entre
    * cientos, y buscarlos leyendo nombre por nombre es lo mismo que no tenerlos.
    */
-  it('la última columna dice el hallazgo, y distingue el cero de la lectura mala', () => {
-    const h = HEADER_EXPORT.length - 1
+  it('la columna del hallazgo distingue el cero de la lectura mala', () => {
+    // ⚠️ El índice sale del NOMBRE y ⛔ no de «la última»: el 19-sep se agregó «Unidades contadas»
+    // detrás, y un test atado a la última columna se rompe cada vez que crece la planilla.
+    const h = HEADER_EXPORT.indexOf('Hallazgo')
     expect(filas[0][h]).toBe('Hallazgo')
     expect(filas[1][h]).toBe('') // Top Bianca, 2 u
     expect(filas[3][h]).toBe('NO CRUZÓ')
@@ -178,6 +189,13 @@ describe('filasExport', () => {
     // La que está en cero tiene nombre, talle y stock 0: ⛔ no es un código huérfano.
     expect(filas[4][1]).toBe('Top Zoe')
     expect(filas[4][6]).toBe(0)
+  })
+
+  it('la planilla dice cuántas unidades se contaron de cada prenda', () => {
+    const u = HEADER_EXPORT.indexOf('Unidades contadas')
+    expect(filas[0][u]).toBe('Unidades contadas')
+    // Ninguna de las de arriba se escaneó dos veces ⇒ todas valen 1, también las viejas sin campo.
+    expect(filas.slice(1).map((f) => f[u])).toEqual([1, 1, 1, 1])
   })
 
   it('la columna de categorías lleva TODAS, separadas por " / "', () => {

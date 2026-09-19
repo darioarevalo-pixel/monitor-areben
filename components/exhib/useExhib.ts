@@ -45,6 +45,10 @@ export type ResultadoMarca =
   | { tipo: 'stock-cero'; it: ExhibItem }
   /** ⛔ No hay recorrido abierto: sin él ⛔ no hay dónde guardar la tilde. */
   | { tipo: 'sin-recorrido' }
+  /** Ya estaba marcada y **se le sumó una unidad**: hay dos colgadas de ésa. */
+  | { tipo: 'sumado'; it: ExhibItem; veces: number }
+  /** El aparato repitió el Enter solo: ⛔ no se contó. */
+  | { tipo: 'doble-lectura'; it: ExhibItem; veces: number }
 
 /**
  * Estado del chequeo de exhibición **por categoría**.
@@ -166,7 +170,18 @@ export function useExhib(marca: Marca, productos: Producto[]) {
       if (!it) return { tipo: 'no-encontrado', code }
       if (it.qty <= 0) return { tipo: 'stock-cero', it }
       if (!cola.id) return { tipo: 'sin-recorrido' }
-      cola.reemplazar(filaDe(it, 'exhibido', code))
+      const fila = filaDe(it, 'exhibido', code)
+      // 🔴 **Acá también cuenta unidades** (19-sep-2026): el que venía marcado «no se encuentra» y
+      // aparece se **pisa** —cambió de estado, ⛔ no es una segunda prenda— y el que ya estaba
+      // «exhibido» **suma**, que es lo que pidió Bruno para poder escanear el perchero entero.
+      const previo = cola.escaneos.find((x) => x.variante_id === fila.variante_id && x.lugar === fila.lugar)
+      if (previo && previo.estado && previo.estado !== 'exhibido') {
+        cola.reemplazar(fila)
+      } else {
+        const r = cola.registrar(fila)
+        if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, veces: r.veces }
+        if (r.que === 'sumado') return { tipo: 'sumado', it, veces: r.veces }
+      }
       return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it }
     },
     [buscables, cola, filaDe],

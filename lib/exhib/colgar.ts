@@ -26,7 +26,7 @@
 
 import type { Filas } from '../excel'
 import { exhibId, normCode } from './core'
-import { pasoPorElLector, type EscaneoLibre } from './libre'
+import { pasoPorElLector, unidadesVistas, type EscaneoLibre } from './libre'
 import type { ExhibItem } from './tipos'
 
 /** Una variante que hay que ir a colgar, y dónde están sus hermanas. */
@@ -36,6 +36,7 @@ export type Colgar = {
   lugar: string
   /** Cuándo se escaneó ese primer hermano (ISO). Ordena la lista como se caminó. */
   cuando: string
+
   /**
    * ⚠️ Comparte SKU con otra variante con stock ⇒ si alguien **tipeó el SKU a mano** en vez de
    * pasar el lector, pudo haber enganchado a la hermana y ésta quedaría marcada como no escaneada
@@ -77,13 +78,19 @@ export function paraColgar(escaneos: EscaneoLibre[], conStock: ExhibItem[]): Col
     if (!ordenLugar.has(e.lugar)) ordenLugar.set(e.lugar, ordenLugar.size)
   }
 
-  // 🔴 Las escaneadas se miran del recorrido ENTERO y ⛔ no del lugar: la misma prenda puede estar
-  // colgada en otro mueble, y ahí ⛔ no falta nada. Si no, la lista pediría colgar algo que está
-  // colgado, que es el error que hace que se le deje de creer.
-  // ⚠️ Acá entran **todas**, también las del triage: una variante que alguien ya marcó «no se
-  // encuentra» hay que **buscarla**, ⛔ no traerla del guardado, y pedir las dos cosas a la vez es
-  // mandar a alguien a un viaje que ya se hizo.
-  const escaneadas = new Set(escaneos.map((e) => e.variante_id))
+  // 🔴 Lo visto se mira del recorrido ENTERO y ⛔ no del lugar: la misma prenda puede estar colgada
+  // en otro mueble, y ahí ⛔ no falta nada. Si no, la lista pediría colgar algo que está colgado,
+  // que es el error que hace que se le deje de creer.
+  // 🔴 🔑 **ACÁ ENTRA LA QUE ⛔ NO SE VIO NINGUNA VEZ, y ⛔ NO la que se vio menos veces que el
+  // stock.** Es la línea que separa el **mandado** del **análisis**: «vi 1 y el sistema dice 5» es
+  // un dato de stock —las otras 4 pueden estar dobladas, y está bien que lo estén—, pero como
+  // renglón de esta lista sería **pedir colgar algo que ya está colgado**, y una sola línea así
+  // quema la lista entera para el local. La comparación por unidades vive en `analisisUnidades`.
+  const vistas = unidadesVistas(escaneos)
+  // ⚠️ Las del triage salen de la lista: una variante que alguien marcó «no se encuentra» hay que
+  // **buscarla**, ⛔ no traerla del guardado, y pedir las dos cosas a la vez es mandar a alguien a
+  // un viaje que ya se hizo.
+  const buscadas = new Set(escaneos.filter((e) => !pasoPorElLector(e)).map((e) => e.variante_id))
 
   const cuantasConEseSku = new Map<string, number>()
   for (const it of conStock) {
@@ -93,7 +100,7 @@ export function paraColgar(escaneos: EscaneoLibre[], conStock: ExhibItem[]): Col
   }
 
   return conStock
-    .filter((it) => it.qty > 0 && primero.has(it.productId) && !escaneadas.has(exhibId(it)))
+    .filter((it) => it.qty > 0 && primero.has(it.productId) && !vistas.has(exhibId(it)) && !buscadas.has(exhibId(it)))
     .map((it) => {
       const p = primero.get(it.productId)!
       const amb = !!it.sku && (cuantasConEseSku.get(normCode(it.sku)) || 0) > 1
