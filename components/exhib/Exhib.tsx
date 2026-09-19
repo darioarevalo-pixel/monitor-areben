@@ -340,7 +340,7 @@ export function Exhib() {
                 <span>
                   Hay <b>{ex.viejas}</b> marcas viejas en este teléfono, de antes de que el recorrido se guardara. No tienen fecha, así que no se usan.
                 </span>
-                <Button size="sm" variant="outline" onClick={ex.borrarViejas}>Sacarlas</Button>
+                <Button size="sm" variant="outline" onClick={ex.sacarViejas}>Sacarlas</Button>
               </div>
             </Notice>
           )}

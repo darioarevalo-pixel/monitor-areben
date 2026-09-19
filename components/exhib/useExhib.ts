@@ -208,7 +208,7 @@ export function useExhib(marca: Marca, productos: Producto[]) {
   )
 
   /** Saca las tildes viejas del teléfono: las de antes del cambio, que ⛔ no tienen cuándo. */
-  const borrarViejas = useCallback(() => {
+  const sacarViejas = useCallback(() => {
     guardarLS(keyEstados(marca), {})
     setViejas(0)
   }, [marca])
@@ -223,7 +223,7 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     cargando,
     errorMsg,
     viejas,
-    borrarViejas,
+    sacarViejas,
     // El recorrido, igual que en el libre
     recorridoId: cola.id,
     categoria: cola.extra,
