@@ -9,17 +9,18 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 |---|---|---|
 | unidad de trabajo | una categoría de Tienda Nube | un mueble del salón («perchero tops») |
 | dónde queda | `localStorage` del teléfono | **la base**, con el lugar de cada escaneo |
-| qué contesta | qué quedó sin escanear, con triage y PDF | qué se escaneó en cada lugar, con Excel |
-| faltantes | los calcula | ⛔ **no los calcula**, a propósito |
+| qué contesta | qué quedó sin escanear, con triage y PDF | qué se escaneó en cada lugar **y qué falta colgar** |
+| faltantes | los calcula sobre la categoría entera | **sólo los hermanos de lo que tocó** (ver abajo) |
 
 ## Dónde vive
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
-`ExhibLibre.tsx` · `useExhibLibre.ts`) · `lib/exhib/` (`core.ts` puro y compartido por los dos ·
-`libre.ts` puro del libre · `datos.ts` la bajada · `cliente.ts` · `pdf.ts` · `tipos.ts`) ·
+`ExhibLibre.tsx` · `useExhibLibre.ts` · `ParaColgar.tsx`) · `lib/exhib/` (`core.ts` puro y
+compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
+`datos.ts` la bajada · `cliente.ts` · `pdf.ts` · `tipos.ts`) ·
 `api/_exhib.js` por `api/datos.js?recurso=exhib` · tablas `exhib_recorrido` y `exhib_escaneo`
 (`sql/migrate-exhib-libre.sql`, **sólo en el Supabase de Zattia**) ·
-`tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts`.
+`tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -38,6 +39,20 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
   15-ago-2026: GN tenía 404 promos vivas en Zattia y la bitácora del Monitor conocía 262. Leyendo lo
   nuestro, **más de un tercio de las etiquetas a controlar aparecería «sin oferta» teniéndola** y el
   recorrido pasaría de largo en silencio. → `lib/exhib/tipos.ts`
+- 🔴 **«Para colgar» sólo mira los HERMANOS de lo que el recorrido tocó, y ése es el contrato
+  entero** (`lib/exhib/colgar.ts`, 19-sep-2026). Un producto entra sólo si tuvo **al menos un
+  escaneo que cruzó** —incluso uno en cero— y entonces se listan sus otras variantes **con stock**
+  que ⛔ no pasaron por el lector. ⛔ **Sobre un mueble que nadie caminó ⛔ no se afirma nada**: el
+  reporte por categoría pedía **20 corsets** que nadie había ido a mirar, y Bruno ese mismo día:
+  *«todas las camisas, blusas y tops hizo; corsets no»*. La primera vez que el local va a buscar
+  algo que estaba colgado, deja de creerle a la lista entera.
+  📊 Medido sobre el primer recorrido real (97 escaneos, «Tops»): **46 variantes · 143 unidades ·
+  32 productos**, y **39 de esas 46 salían «EXHIBIDO CORRECTAMENTE» en el PDF**. El caso normal ⛔ no
+  es «falta un color raro»: **se cuelga un color y el resto queda en el guardado**.
+  ⚠️ El stock se mira en el **inventario** y ⛔ no en el escaneo —un escaneo puede venir con `qty` 0—,
+  y las escaneadas se miran del **recorrido entero**: la misma prenda puede estar colgada en otro
+  mueble. ⚠️ **El orden de caminata lo dice el reloj del escaneo**, ⛔ no el orden del array: leída de
+  la base, o subida de una cola sin señal, la lista viene desordenada.
 - 🔑 **El modo libre guarda el código que NO cruza** (`encontrado = false`). Antes la pantalla decía
   «ese código no está en la lista» y el dato se perdía. Una prenda colgada que ⛔ no figura con stock
   en el Local —stock mal cargado, prenda de otra marca, devolución sin ingresar— **es el hallazgo
@@ -132,8 +147,8 @@ pregunta**. Números arriba, en «Reglas que el código no dice».
 
 ## Cómo se prueba
 
-`npx vitest run tests/exhib-core.test.ts tests/exhib-libre.test.ts --reporter=dot` — el núcleo de los
-dos modos, sin red. ⚠️ **Y `tests/espejo-servidor.test.ts`**, que tiene la consulta de `datos.ts`
+`npx vitest run tests/exhib-core.test.ts tests/exhib-libre.test.ts tests/exhib-colgar.test.ts
+--reporter=dot` — el núcleo de los dos modos y el de «para colgar», sin red. ⚠️ **Y `tests/espejo-servidor.test.ts`**, que tiene la consulta de `datos.ts`
 copiada palabra por palabra: tocarla sin tocar esa línea es un **400 en producción**.
 Lo que el test ⛔ no puede ver y hay que ejercer a mano:
 
@@ -150,3 +165,6 @@ Lo que el test ⛔ no puede ver y hay que ejercer a mano:
   contra producción, o en BDI, que sí tiene la key.
 - **La caminata con datos**: lugar, 3-4 prendas con el lector, cambiar de lugar, 2 más, terminar y
   abrir el Excel. Mirar la pantalla **con datos**, ⛔ no la vacía.
+- **«Para colgar» contra el recorrido real**: con las funciones de verdad y los datos de producción,
+  `ex1789825143664_abbjt3` tiene que dar **46 variantes · 143 unidades · 32 productos**, con
+  **2** marcadas por SKU compartido y **cero corsets**. Es el oráculo: si cambia, cambió la regla.

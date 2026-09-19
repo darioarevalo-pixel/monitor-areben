@@ -8,6 +8,8 @@ import { descargarXlsx } from '@/lib/excel'
 import { exhibId, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
 import { agruparPorLugar, ANCHOS_EXPORT, filasExport, hallazgoDe, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
+import { ParaColgar } from './ParaColgar'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 
@@ -20,12 +22,21 @@ import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
  * «TOPS Y BODIES», un bolsón de 291 que se come tops, bodies, blusas, camisas, corsets y
  * musculosas. Acá la unidad de trabajo es el mueble que uno tiene delante.
  *
- * ⛔ **Esta pantalla NO dice qué falta, y es una decisión.** Entrega el dato de qué se escaneó en
- * cada lugar —con TODAS las categorías de cada prenda— y la comparación se hace por afuera, con el
- * Excel. La app ⛔ no decide qué debería estar colgado en cada perchero.
+ * 🔑 **Desde el 19-sep-2026 sí contesta UNA cosa: qué falta colgar** (`lib/exhib/colgar.ts`) —los
+ * **hermanos** de las prendas que este recorrido tocó, que tienen stock y ⛔ no pasaron por el
+ * lector—. Lo pidió Bruno mirando el reporte: *«son 3 colores, sólo se escanearon dos y me dice que
+ * no pasa nada»*.
+ * ⛔ **Lo que sigue sin hacer es decidir qué DEBERÍA estar colgado en cada perchero**: sobre un
+ * mueble que nadie caminó ⛔ no se afirma nada. Ésa es la línea, y es lo que hace que a la lista se
+ * le pueda creer.
  */
 
-type Fase = 'config' | 'scan' | 'ver'
+/**
+ * `cierre` es la fase de después de guardar: la caminata terminó y lo que queda por contestar es
+ * **qué hay que ir a colgar**. Va como fase propia y ⛔ no como un cartel en «Configurar» porque
+ * `cerrar` limpia el borrador del teléfono: si la lista no se congela acá, se la lleva el guardado.
+ */
+type Fase = 'config' | 'scan' | 'cierre' | 'ver'
 
 const fechaHora = (iso: string | null | undefined) =>
   iso
@@ -44,6 +55,10 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   const [fb, setFb] = useState<ResultadoLibre | null>(null)
   const [previos, setPrevios] = useState<RecorridoLibre[] | null>(null)
   const [viendo, setViendo] = useState<{ recorrido: RecorridoLibre; escaneos: EscaneoLibre[] } | null>(null)
+  /** Lo que quedó sin colgar del mueble que se acaba de dejar, y lo del recorrido entero al cerrar. */
+  const [cierreLugar, setCierreLugar] = useState<{ lugar: string; lista: Colgar[] } | null>(null)
+  const [cierreFinal, setCierreFinal] = useState<Colgar[]>([])
+  const [verColgarAca, setVerColgarAca] = useState(false)
   const scanRef = useRef<HTMLInputElement>(null)
   const lugarRef = useRef<HTMLInputElement>(null)
 
@@ -76,10 +91,25 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
       foco(lugarRef)
       return
     }
+    /*
+     * 🔑 **El cierre del mueble se dispara con el PRIMER escaneo del siguiente, ⛔ no al tipear el
+     * lugar.** El campo «Lugar» cambia letra por letra mientras se escribe —ahí el lugar todavía no
+     * es nada—, y el momento en que de verdad se dejó un mueble es cuando ya se está escaneando en
+     * otro. Es también cuando la persona todavía puede volver tres pasos.
+     */
+    const previo = lib.escaneos.at(-1)?.lugar
     setFb(lib.escanear(c, lib.lugar))
+    if (previo && previo !== lib.lugar.trim()) {
+      const quedo = colgarEnLugar(paraColgar(lib.escaneos, items), previo)
+      setCierreLugar(quedo.length ? { lugar: previo, lista: quedo } : null)
+      setVerColgarAca(false)
+    }
   }
 
   async function terminar() {
+    // La lista se calcula ANTES de cerrar: `cerrar` limpia el borrador del teléfono y con él se
+    // irían los escaneos de los que sale.
+    const quedan = paraColgar(lib.escaneos, items)
     try {
       await lib.cerrar()
     } catch (e) {
@@ -88,7 +118,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
     }
     toast.ok('Recorrido guardado')
     cargarPrevios()
-    setFase('config')
+    setCierreLugar(null)
+    setCierreFinal(quedan)
+    setFase(quedan.length ? 'cierre' : 'config')
   }
 
   async function eliminar() {
@@ -136,6 +168,16 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
 
   const grupos = useMemo(() => agruparPorLugar(lib.escaneos), [lib.escaneos])
   const deEsteLugar = useMemo(() => grupos.find((g) => g.lugar === lib.lugar.trim())?.escaneos ?? [], [grupos, lib.lugar])
+  /**
+   * Lo que falta colgar **de este mueble**, en vivo.
+   *
+   * ⚠️ Va como **contador con un botón**, ⛔ no como una lista desplegada que se rearma a cada
+   * escaneo: mientras se camina el perchero, cada color que todavía ⛔ no pasó por el lector figura
+   * como faltante, así que desplegarla sería ruido puro justo cuando hay que mirar el lector. Se
+   * abre cuando la persona quiere, y se corrige sola en cuanto el color aparece.
+   */
+  const colgarAca = useMemo(() => colgarEnLugar(paraColgar(lib.escaneos, items), lib.lugar), [lib.escaneos, items, lib.lugar])
+  const colgarDelRecorrido = useMemo(() => (viendo ? paraColgar(viendo.escaneos, items) : []), [viendo, items])
 
   return (
     <>
@@ -373,6 +415,31 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             </Notice>
           )}
 
+          {/* El mueble que se acaba de dejar, con lo que quedó sin colgar: se avisa cuando todavía
+              se puede volver tres pasos, ⛔ no al final del recorrido. */}
+          {cierreLugar && (
+            <div style={{ position: 'relative' }}>
+              <ParaColgar lista={cierreLugar.lista} titulo={`Antes de irte de «${cierreLugar.lugar}»`} plegable />
+              <Button size="sm" variant="ghost" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => setCierreLugar(null)}>
+                Listo
+              </Button>
+            </div>
+          )}
+
+          {colgarAca.length > 0 && (
+            <Notice tone="neutral" icon="🧺" style={{ marginBottom: space[3] }}>
+              <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>
+                  De lo que colgaste acá faltan <b>{colgarAca.length}</b> {colgarAca.length === 1 ? 'color o talle' : 'colores o talles'} ({resumenColgar(colgarAca).unidades} u).
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setVerColgarAca((v) => !v)}>
+                  {verColgarAca ? 'Ocultar' : 'Ver cuáles'}
+                </Button>
+              </div>
+            </Notice>
+          )}
+          {verColgarAca && <ParaColgar lista={colgarAca} titulo={`Falta colgar en «${lib.lugar.trim()}»`} plegable />}
+
           <Subtitulo>
             {lib.enEsteLugar} {lib.enEsteLugar === 1 ? 'escaneo acá' : 'escaneos acá'} · {lib.escaneos.length} en el recorrido
             {lib.sinSubir > 0 && ` · ${lib.sinSubir} sin subir`}
@@ -389,6 +456,20 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
         </Card>
       )}
 
+      {/* ── El cierre de la caminata: qué hay que ir a colgar ── */}
+      {fase === 'cierre' && (
+        <Card>
+          <ParaColgar
+            lista={cierreFinal}
+            titulo="Terminaste. Para colgar"
+            archivo={`para-colgar-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`}
+          />
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setFase('config') }}>
+            Listo
+          </Button>
+        </Card>
+      )}
+
       {/* ── Ver uno guardado ── */}
       {fase === 'ver' && viendo && (
         <Card>
@@ -397,6 +478,14 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             <b>{viendo.escaneos.length}</b> {viendo.escaneos.length === 1 ? 'escaneo' : 'escaneos'} ·{' '}
             {viendo.recorrido.estado === 'cerrado' ? 'cerrado' : 'sin cerrar'}
           </Notice>
+
+          {/* 🔑 Arriba de los escaneos: es lo que se viene a buscar cuando se abre un recorrido de
+              otro día desde otra máquina. Lo escaneado queda abajo, como respaldo de por qué. */}
+          <ParaColgar
+            lista={colgarDelRecorrido}
+            archivo={`para-colgar-${marca}-${viendo.recorrido.creado_en.slice(0, 10)}.xlsx`}
+          />
+
           {agruparPorLugar(viendo.escaneos).map((g) => (
             <div key={g.lugar} style={{ marginBottom: space[4] }}>
               <Subtitulo>{g.lugar} ({g.escaneos.length})</Subtitulo>
