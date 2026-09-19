@@ -216,7 +216,7 @@ export default async function handler(req, res) {
         // a comparar el salón, y ⛔ no hay verbo de vuelta: que se pueda eliminar de un toque desde el
         // teléfono es exactamente el accidente que ⛔ no se puede deshacer.
         if (recorrido.estado === 'cerrado') {
-          return res.status(409).json({ error: 'Ese recorrido ya está cerrado: ⛔ no se descarta.' })
+          return res.status(409).json({ error: 'Ese recorrido ya está cerrado: no se puede eliminar.' })
         }
         // Los escaneos caen solos por el `on delete cascade` de la tabla.
         const { error } = await sb.from('exhib_recorrido').delete().eq('id', recorrido.id)
