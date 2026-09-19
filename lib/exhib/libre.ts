@@ -169,6 +169,33 @@ export function agruparPorLugar(escaneos: EscaneoLibre[]): GrupoLugar[] {
   }))
 }
 
+/**
+ * El titular de un recorrido: **quién ⛔ no, eso vive en la cabecera; acá va lo que sale de los
+ * escaneos**.
+ *
+ * 🔑 **Es lo que hasta el 19-sep-2026 sólo viajaba al Excel.** La pantalla mostraba las filas y
+ * nada más, así que para saber a qué hora se caminó, cuántos muebles se tocaron o cuántos
+ * hallazgos hubo había que **bajar la planilla** — y eso ⛔ no se hace desde el teléfono en el
+ * local. Bruno: *«el Excel no sé si es buena opción, habría que mejorarlo como el libre, y que
+ * tenga registro de hora, día y quién»*.
+ *
+ * ⚠️ `desde`/`hasta` salen del **reloj del teléfono que escaneó** (`escaneado_en`) y ⛔ no de
+ * cuándo se subió: un recorrido sin señal sube entero media hora después.
+ */
+export type ResumenRecorrido = { escaneos: number; lugares: number; desde: string | null; hasta: string | null; enCero: number; noCruzo: number }
+
+export function resumenRecorrido(escaneos: EscaneoLibre[]): ResumenRecorrido {
+  const horas = escaneos.map((e) => e.escaneado_en).sort((a, b) => a.localeCompare(b))
+  return {
+    escaneos: escaneos.length,
+    lugares: lugaresDe(escaneos).length,
+    desde: horas[0] ?? null,
+    hasta: horas.at(-1) ?? null,
+    enCero: escaneos.filter((e) => hallazgoDe(e) === 'EN CERO').length,
+    noCruzo: escaneos.filter((e) => hallazgoDe(e) === 'NO CRUZÓ').length,
+  }
+}
+
 /** Los lugares del recorrido, en orden de aparición. */
 export function lugaresDe(escaneos: EscaneoLibre[]): string[] {
   return agruparPorLugar(escaneos).map((g) => g.lugar)

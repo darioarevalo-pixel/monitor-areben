@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, claveEscaneo, contarEnLugar, filasExport, hallazgoDe, HEADER_EXPORT, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, claveEscaneo, contarEnLugar, filasExport, hallazgoDe, HEADER_EXPORT, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -99,6 +99,31 @@ describe('agruparPorLugar', () => {
     expect(lugaresDe(escaneos)).toEqual(['perchero tops', 'mesa entrada'])
     expect(contarEnLugar(escaneos, 'perchero tops')).toBe(2)
     expect(contarEnLugar(escaneos, ' mesa entrada ')).toBe(1)
+  })
+})
+
+describe('resumenRecorrido', () => {
+  const escaneos: EscaneoLibre[] = [
+    aEscaneo(TOP, '779001', 'perchero tops', Date.parse('2026-09-19T15:10:00Z')),
+    aEscaneo(it0({ barcode: '779004', name: 'Top Zoe', qty: 0 }), '779004', 'mesa entrada', Date.parse('2026-09-19T15:00:00Z')),
+    aEscaneo(null, '779999', 'mesa entrada', Date.parse('2026-09-19T15:20:00Z')),
+  ]
+
+  it('cuenta lo que hasta ahora sólo viajaba al Excel', () => {
+    expect(resumenRecorrido(escaneos)).toEqual({
+      escaneos: 3,
+      lugares: 2,
+      // 🔑 De punta a punta por el RELOJ del escaneo, ⛔ no por el orden en que llegaron las filas:
+      // la cola sin señal sube toda junta y desordenada.
+      desde: '2026-09-19T15:00:00.000Z',
+      hasta: '2026-09-19T15:20:00.000Z',
+      enCero: 1,
+      noCruzo: 1,
+    })
+  })
+
+  it('un recorrido vacío ⛔ no inventa horas', () => {
+    expect(resumenRecorrido([])).toMatchObject({ escaneos: 0, lugares: 0, desde: null, hasta: null })
   })
 })
 

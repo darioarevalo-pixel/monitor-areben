@@ -7,7 +7,7 @@ import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, us
 import { descargarXlsx } from '@/lib/excel'
 import { exhibId, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
-import { agruparPorLugar, ANCHOS_EXPORT, filasExport, hallazgoDe, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { agruparPorLugar, ANCHOS_EXPORT, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -38,10 +38,17 @@ import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
  */
 type Fase = 'config' | 'scan' | 'cierre' | 'ver'
 
+/** Todo en hora de Buenos Aires: el reloj del teléfono es el del local, y el servidor guarda UTC. */
+const EN_AR = { timeZone: 'America/Argentina/Buenos_Aires' } as const
+
 const fechaHora = (iso: string | null | undefined) =>
-  iso
-    ? new Date(iso).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-    : '—'
+  iso ? new Date(iso).toLocaleString('es-AR', { ...EN_AR, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+
+const fechaDe = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString('es-AR', { ...EN_AR, weekday: 'long', day: '2-digit', month: '2-digit' }) : '—'
+
+const hora = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' }) : '—'
 
 export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selector }: { items: ExhibItem[]; buscables: ExhibItem[]; enCero: number; cargando: boolean; errorMsg: string | null; selector: React.ReactNode }) {
   const { marca } = useSesion()
@@ -473,10 +480,29 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
       {/* ── Ver uno guardado ── */}
       {fase === 'ver' && viendo && (
         <Card>
+          {/*
+            🔑 **El titular que antes sólo estaba en la planilla.** Quién, qué día, de qué hora a
+            qué hora, cuántos muebles y cuántos hallazgos: para saberlo había que bajar el Excel, y
+            eso ⛔ no se hace parado en el local. Bruno: *«que tenga registro de hora, día y quién»*.
+            ⚠️ Las horas son del **reloj del teléfono que escaneó**, ⛔ no de cuándo subió la cola.
+          */}
           <Notice tone="neutral" icon="📋" style={{ marginBottom: space[4] }}>
-            Recorrido del <b>{fechaHora(viendo.recorrido.creado_en)}</b> · {viendo.recorrido.persona || 'sin nombre'} ·{' '}
-            <b>{viendo.escaneos.length}</b> {viendo.escaneos.length === 1 ? 'escaneo' : 'escaneos'} ·{' '}
-            {viendo.recorrido.estado === 'cerrado' ? 'cerrado' : 'sin cerrar'}
+            <div style={{ fontWeight: 700 }}>
+              {fechaDe(viendo.recorrido.creado_en)} · {viendo.recorrido.persona || 'sin nombre'} ·{' '}
+              {viendo.recorrido.estado === 'cerrado' ? 'cerrado' : 'sin cerrar'}
+            </div>
+            {(() => {
+              const r = resumenRecorrido(viendo.escaneos)
+              return (
+                <div style={{ fontSize: font.sm }}>
+                  <b>{r.escaneos}</b> {r.escaneos === 1 ? 'escaneo' : 'escaneos'} en <b>{r.lugares}</b>{' '}
+                  {r.lugares === 1 ? 'lugar' : 'lugares'}
+                  {r.desde && <> · de <b>{hora(r.desde)}</b> a <b>{hora(r.hasta)}</b></>}
+                  {r.enCero > 0 && <> · <b>{r.enCero}</b> en cero</>}
+                  {r.noCruzo > 0 && <> · <b>{r.noCruzo}</b> sin cruzar</>}
+                </div>
+              )
+            })()}
           </Notice>
 
           {/* 🔑 Arriba de los escaneos: es lo que se viene a buscar cuando se abre un recorrido de
@@ -530,7 +556,9 @@ function FilaEscaneo({ e, onSacar }: { e: EscaneoLibre; onSacar?: (e: EscaneoLib
           {hallazgo && <span style={{ fontSize: font.xs, fontWeight: 700, marginLeft: 6 }}>· {hallazgo}</span>}
         </div>
         <div style={{ fontSize: font.xs, color: color.mut }}>
-          {e.encontrado ? `SKU: ${e.sku || '—'} · Local: ${e.qty ?? '—'}` : 'No cruzó con el inventario del Local'}
+          {/* La hora de CADA escaneo, que hasta ahora sólo viajaba al Excel: es lo que deja
+              reconstruir la caminata —y ver dónde se frenó— sin bajar nada. */}
+          {hora(e.escaneado_en)} · {e.encontrado ? `SKU: ${e.sku || '—'} · Local: ${e.qty ?? '—'}` : 'No cruzó con el inventario del Local'}
           {e.cats.length > 0 && ` · ${e.cats.join(' / ')}`}
         </div>
       </div>
