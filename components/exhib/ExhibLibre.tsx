@@ -101,8 +101,11 @@ export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: Exh
     try {
       await lib.eliminar()
     } catch (e) {
-      toast.error('No se pudo eliminar: ' + (e as Error).message)
-      return
+      // 🔑 «Ese recorrido no está» ⛔ no es una falla: pasa cuando nunca llegó a subir (sin señal),
+      // y el borrador del teléfono ya se limpió igual. Cortar acá dejaba la pantalla trabada en el
+      // recorrido, con un cartel rojo, sobre algo que sí se eliminó.
+      const msg = (e as Error).message
+      if (!/no está/i.test(msg)) toast.error('No se pudo eliminar: ' + msg)
     }
     setFase('config')
     cargarPrevios()
@@ -211,11 +214,25 @@ export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: Exh
       {/* ── Recorrer ── */}
       {fase === 'scan' && (
         <Card>
-          <Field label="¿En qué lugar estás?" hint="Por ejemplo: perchero tops, mesa de la entrada, vidriera" width={320}>
+          <Field label="¿En qué lugar estás?" hint="Por ejemplo: perchero tops. Cuando termines de escribirlo, tocá Enter y ya podés escanear." width={320}>
             <Input
               ref={lugarRef}
               value={lib.lugar}
               onChange={(e) => lib.setLugar(e.target.value)}
+              /*
+               * 🔴 **El lector de códigos TIPEA, y termina con Enter.** Si el foco quedó acá, el
+               * código de barras entra como si fuera el nombre del lugar: el escaneo se pierde y
+               * ⛔ nadie se entera —no hay error, el campo simplemente dice «7790001234567»—. Por
+               * eso Enter y salir del campo mandan el foco al escaneo, que es donde tiene que
+               * estar todo el tiempo que se camina.
+               */
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  foco(scanRef)
+                }
+              }}
+              onBlur={() => lib.lugar.trim() && foco(scanRef)}
               // 🔑 `datalist` y ⛔ no un desplegable: el salón se reacomoda, y una lista cerrada que
               // no tiene el perchero de hoy obliga a elegir uno que miente.
               list="mo-exhib-lugares"
