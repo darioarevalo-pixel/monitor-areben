@@ -174,7 +174,7 @@ describe('revisarParams — las consultas reales del repo pasan', () => {
   const REALES: [string, string, string][] = [
     ['lib/datos.ts (ETL)', 'inventario', 'select=product_id,product_name,size_id,size_name,available_quantity,store_name,sku,barcode&order=product_id&limit=1000&offset=0'],
     ['lib/datos.ts (ETL, el reintento corto)', 'inventario', 'select=product_id,product_name,size_id,size_name,available_quantity,store_name&order=product_id'],
-    ['lib/exhib/datos.ts', 'inventario', 'select=product_id,product_name,size_name,sku,barcode,available_quantity&store_name=eq.Local&available_quantity=gt.0'],
+    ['lib/exhib/datos.ts', 'inventario', 'select=product_id,product_name,size_name,sku,barcode,available_quantity&store_name=eq.Local'],
     ['lib/ubicaciones/cliente.ts', 'inventario', `select=product_id,product_name,sku,store_name,observation&store_name=eq.${encodeURIComponent('Deposito Minorista')}&order=product_id,size_id`],
     ['lib/reposicion/cliente.ts (BDI, con observation)', 'inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name,observation'],
     ['lib/reposicion/cliente.ts (Zattia, sin observation)', 'inventario', 'select=product_id,product_name,size_id,size_name,sku,available_quantity,store_name'],

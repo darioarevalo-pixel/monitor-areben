@@ -1735,6 +1735,40 @@ el perchero equivocado. **Eso es exactamente el pedido del 7-sep, ahora con núm
 
 ### 🔧 LO QUE QUEDA DE CÓDIGO (medido el 19-sep con la app usándose, ⛔ no estimado)
 
+🏁 **HECHOS EL 19-SEP A LA TARDE: el 1, el 5 y el 4** (y el 2 por la mitad). Todo medido con las
+funciones de la app contra producción, ⛔ no estimado. Lo que sigue abierto es el **3**, el **6** y
+el **7**, tal cual están escritos abajo.
+
+**El 1 — la prenda aparece en TODAS sus categorías.** La lista sale de `cleanCats` (`perteneceA` en
+`lib/exhib/core.ts`) y `cat` quedó como etiqueta de pantalla. Lo que cambió, en variantes con stock
+del Local: **BLUSAS 0 → 66** (27 productos) · **SHORTS 0 → 31** (10) · **BERMUDAS 0 → 13** (3) ·
+**BLAZER 0 → 1** · DENIM 65 → 103 · SHORTS, MINIS y FALDAS 41 → 80 · JEANS 18 → 59 · SWEATERS
+24 → 43 · CORSETS 3 → 19 · TOPS Y BODIES 383 → 403 (190 → 199 productos). El desplegable pasó de
+**19 a 21 opciones**.
+
+**El 2, la mitad que se podía hacer sin IDs.** La comparación ya ⛔ no distingue grafía
+(`SHORTS, MINIS y FALDAS` = `…Y FALDAS`): se juntan en el desplegable, filtran juntas y el **cruce
+falso se apagó**. 🔴 Lo que sigue abierto es el **3**: `limpiarCats` sigue devolviendo nombres, así
+que **cuántas categorías hay de verdad ⛔ no se ve acá**.
+
+**El 5 — el cero se puede registrar.** La bajada perdió `available_quantity=gt.0`: el Local entero
+son **2.188 filas, 1.083 con stock y 1.105 en cero o negativo** ⇒ **la mitad del salón era
+inescaneable**. Ahora son dos listas: `items` (qty > 0, lo que hay que chequear) y `buscables` (todo,
+lo que el lector engancha). Una prenda colgada en cero se guarda **`encontrado = true, qty = 0`**
+⇒ ⛔ no hizo falta tocar la tabla ni el handler. 🏁 Ejercido contra producción: MONITO CAPRY llegó
+con `encontrado=true qty=0`, leído por `action=recorrido`.
+
+**El 4 — el código parcial pregunta.** `buscarItem` ⛔ NO se aflojó. Sin match exacto,
+`candidatosPorCodigo` muestra las que contienen ese pedazo y **confirma la persona**. Medido sobre
+las 2.188: `0150NG` → **1** (TOP ZOE) · `698` → **2** (CORPIÑO AYLA y TOP HADES) · **`NG` → 440**,
+que es por qué hay mínimo de 3 caracteres y tope de 8. 🔴 Un panel sin resolver **se guarda solo
+como «no cruzó»** al escaneo siguiente o al cerrar: preguntar ⛔ no puede costar un escaneo.
+
+**Y el Excel tiene una décima columna, «Hallazgo»** (vacío · **EN CERO** · **NO CRUZÓ**), que es la
+que se filtra. El que ⛔ no cruzó dejó de decir «sin stock en el Local» —ahora eso significa otra
+cosa— y dice **«no cruzó con el inventario»**.
+
+
 **1. 🔴 `construirItems` usa `cleanCats[0]` ⇒ la lista del recorrido por categoría VIENE CORTA.**
 Medido hoy con las funciones de la app: TN tiene **291 productos en «TOPS Y BODIES»** y el recorrido
 pidió **274**. Los otros **17 son invisibles** —quedaron enganchados bajo BLUSAS Y CAMISAS (8), BEST

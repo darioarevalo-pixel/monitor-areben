@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { buscarItem } from '@/lib/exhib/core'
+import { buscarItem, candidatosPorCodigo, TOPE_CANDIDATOS } from '@/lib/exhib/core'
 import { abrirRecorrido, eliminarRecorrido, cerrarRecorrido, leerLugares, sacarEscaneo, subirEscaneos } from '@/lib/exhib/cliente'
 import { aEscaneo, claveEscaneo, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -61,9 +61,17 @@ function guardarLS(m: Marca, b: Borrador) {
 export type ResultadoLibre =
   | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre }
   | { tipo: 'repetido'; it: ExhibItem | null; e: EscaneoLibre }
-  | { tipo: 'sin-stock'; e: EscaneoLibre }
+  /** Existe y está colgada, pero el sistema la tiene en cero. Se guarda como `encontrado`, con qty 0. */
+  | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre }
+  /** El código ⛔ no cruzó con nada. `parecidos` = cuántos había, cuando eran demasiados para mostrar. */
+  | { tipo: 'no-cruzo'; e: EscaneoLibre; parecidos?: number }
+  /**
+   * ⚠️ **El único que ⛔ NO guarda todavía**: el código ⛔ no enganchó exacto pero se parece a unos
+   * pocos, y decide la persona (`confirmar` / `descartar`).
+   */
+  | { tipo: 'candidatos'; codigo: string; lugar: string; candidatos: ExhibItem[] }
 
-export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
+export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
   const [bor, setBor] = useState<Borrador>(VACIO)
   const [lugaresServidor, setLugaresServidor] = useState<string[]>([])
   const [subiendo, setSubiendo] = useState(false)
@@ -170,10 +178,9 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
     [guardar],
   )
 
-  /** Escanea un código en el lugar vigente. El que ⛔ no cruza se guarda igual. */
-  const escanear = useCallback(
-    (codigo: string, lugar: string): ResultadoLibre => {
-      const it = buscarItem(items, codigo)
+  /** Guarda el escaneo (con prenda o sin ella) y lo manda a subir. Es la única puerta que escribe. */
+  const registrar = useCallback(
+    (it: ExhibItem | null, codigo: string, lugar: string): ResultadoLibre => {
       const e = aEscaneo(it, codigo, lugar)
       const k = claveEscaneo(e)
       const b = ref.current
@@ -182,9 +189,71 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
       if (yaEscaneado(b.escaneos, k)) return { tipo: 'repetido', it, e }
       guardar({ ...b, escaneos: [...b.escaneos, e], pendientes: [...b.pendientes, k] })
       void subir()
-      return it ? { tipo: 'ok', it, e } : { tipo: 'sin-stock', e }
+      if (!it) return { tipo: 'no-cruzo', e }
+      return it.qty <= 0 ? { tipo: 'stock-cero', it, e } : { tipo: 'ok', it, e }
     },
-    [items, guardar, subir],
+    [guardar, subir],
+  )
+
+  /**
+   * El código parcial que está esperando que alguien confirme cuál de los candidatos era.
+   *
+   * 🔴 **Se guarda solo como «no cruzó» apenas llega otro escaneo o se cierra el recorrido.** Es la
+   * regla que hace que preguntar ⛔ no pueda costar un dato: la persona está caminando con el lector
+   * y el siguiente código llega en dos segundos, así que un panel sin resolver que desaparece en
+   * silencio es exactamente el escaneo perdido que este recorrido existe para no perder. Lo peor
+   * que puede pasar es que quede como quedaba antes de preguntar.
+   */
+  const sinResolver = useRef<{ codigo: string; lugar: string } | null>(null)
+
+  const resolverSolo = useCallback(() => {
+    const p = sinResolver.current
+    sinResolver.current = null
+    if (p) registrar(null, p.codigo, p.lugar)
+  }, [registrar])
+
+  /**
+   * Escanea un código en el lugar vigente. El que ⛔ no cruza se guarda igual.
+   *
+   * 🔑 **`buscarItem` sigue pidiendo el código COMPLETO.** Lo parcial ⛔ no engancha solo: se
+   * ofrecen los candidatos y confirma quien tiene la prenda en la mano. Aflojarlo a un match
+   * parcial mudo marcaría **la prenda equivocada**, que con gente usándolo es peor que no marcar.
+   */
+  const escanear = useCallback(
+    (codigo: string, lugar: string): ResultadoLibre => {
+      resolverSolo()
+      const it = buscarItem(buscables, codigo)
+      if (it) return registrar(it, codigo, lugar)
+
+      const candidatos = candidatosPorCodigo(buscables, codigo)
+      if (candidatos.length && candidatos.length <= TOPE_CANDIDATOS) {
+        sinResolver.current = { codigo, lugar }
+        return { tipo: 'candidatos', codigo, lugar, candidatos }
+      }
+      // Ninguno, o demasiados para mirarlos de parado: se guarda como siempre, diciendo cuántos
+      // parecidos había — que es la diferencia entre «no existe» y «escaneá de nuevo».
+      const r = registrar(null, codigo, lugar)
+      return r.tipo === 'no-cruzo' ? { ...r, parecidos: candidatos.length } : r
+    },
+    [buscables, registrar, resolverSolo],
+  )
+
+  /** «Es ésta»: guarda el escaneo con la prenda elegida y el código crudo tal como se tipeó. */
+  const confirmar = useCallback(
+    (it: ExhibItem, codigo: string, lugar: string): ResultadoLibre => {
+      sinResolver.current = null
+      return registrar(it, codigo, lugar)
+    },
+    [registrar],
+  )
+
+  /** «Ninguna de éstas»: queda como hallazgo sin cruzar, que es lo que hacía antes de preguntar. */
+  const descartar = useCallback(
+    (codigo: string, lugar: string): ResultadoLibre => {
+      sinResolver.current = null
+      return registrar(null, codigo, lugar)
+    },
+    [registrar],
   )
 
   const sacar = useCallback(
@@ -205,6 +274,9 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
 
   /** Cierra el recorrido: primero sube lo que quede, después lo sella y limpia el borrador. */
   const cerrar = useCallback(async () => {
+    // Un candidato sin confirmar al momento de cerrar se guarda como «no cruzó»: sellar el
+    // recorrido dejándolo afuera lo perdería para siempre, y el salón ya se caminó.
+    resolverSolo()
     await subir()
     const b = ref.current
     if (!b.id) return
@@ -214,7 +286,7 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
     await cerrarRecorrido(marca, b.id)
     guardar(VACIO)
     abierto.current = ''
-  }, [marca, subir, guardar])
+  }, [marca, subir, guardar, resolverSolo])
 
   /**
    * Elimina el recorrido: el borrador del teléfono **y** la fila del servidor.
@@ -248,6 +320,8 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
     iniciar,
     setLugar,
     escanear,
+    confirmar,
+    descartar,
     sacar,
     cerrar,
     eliminar,

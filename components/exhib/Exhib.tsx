@@ -204,7 +204,7 @@ export function Exhib() {
   // El modo libre es una pantalla entera aparte —otro recorrido, otro almacenamiento— y ⛔ no un
   // `if` adentro de ésta. Los ítems se le pasan ya cruzados: la bajada es la misma para los dos.
   if (modo === 'libre') {
-    return <ExhibLibre items={ex.items} cargando={ex.cargando} errorMsg={ex.errorMsg} selector={selector} />
+    return <ExhibLibre items={ex.items} buscables={ex.buscables} enCero={ex.enCero} cargando={ex.cargando} errorMsg={ex.errorMsg} selector={selector} />
   }
 
   return (
@@ -265,7 +265,10 @@ export function Exhib() {
             </Notice>
           ) : (
             <Notice tone="warning" icon="📅" style={{ marginBottom: space[4] }}>
-              <b>{ex.items.length}</b> variantes con stock en Local. Los datos son de la última sincronización diaria y pueden tener unas horas: conviene chequear en momentos de baja venta.
+              <b>{ex.items.length}</b> variantes con stock en Local
+              {/* Las en cero ⛔ no entran a la lista —no son faltantes de nadie— pero el lector sí
+                  las engancha, y decirlo es la diferencia con «ese código no existe». */}
+              {ex.enCero > 0 && <> (hay <b>{ex.enCero}</b> más en cero: ⛔ no se chequean, pero si escaneás una te lo digo)</>}. Los datos son de la última sincronización diaria y pueden tener unas horas: conviene chequear en momentos de baja venta.
             </Notice>
           )}
 
@@ -343,6 +346,18 @@ export function Exhib() {
             {fb?.tipo === 'no-encontrado' && (
               <Notice tone="danger" icon="✗">
                 Ese código no está en la lista ({fb.code})
+              </Notice>
+            )}
+            {/* 🔑 Existe, está colgada, y el sistema la tiene en cero ⇒ ⛔ no está en esta lista y no
+                se marca: un estado sobre algo que esta pantalla no muestra no lo mira nadie. Lo que
+                corresponde es decirlo. El recorrido LIBRE sí lo guarda, con su lugar. */}
+            {fb?.tipo === 'stock-cero' && (
+              <Notice tone="warning" icon="⚠">
+                <div style={{ fontWeight: 700 }}>{fb.it.name} · {fb.it.size} figura en CERO en el sistema</div>
+                <div style={{ margin: '2px 0' }}>
+                  <PrecioEtiqueta it={fb.it} />
+                </div>
+                <div>Está colgada y el stock está mal. Acá ⛔ no se chequea: para dejarlo anotado, hacelo en «Libre por lugar».</div>
               </Notice>
             )}
             {fb?.tipo === 'ok' && (

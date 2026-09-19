@@ -16,9 +16,15 @@ export type ExhibItem = {
   size: string
   qty: number
   img: string | null
-  /** Categoría TN "limpia" elegida (o reasignada por un error marcado). */
+  /**
+   * La categoría que se **muestra** (la primera limpia, o la reasignada por un error marcado).
+   *
+   * ⚠️ **Es una etiqueta para la pantalla y ⛔ no lo que decide la lista del recorrido.** Eso es
+   * `cleanCats`, por `catsDeItem`/`perteneceA` de `core.ts`: armar la lista con `cat` es lo que
+   * hacía que BLUSAS, SHORTS y BERMUDAS mostraran CERO hasta el 19-sep-2026.
+   */
   cat: string
-  /** Todas las categorías TN limpias del producto (para detectar cruces de categoría). */
+  /** TODAS las categorías TN limpias del producto: es lo que decide en cuál se lo recorre. */
   cleanCats: string[]
   tnId: string | number | null
   /**

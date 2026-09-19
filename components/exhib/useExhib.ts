@@ -27,7 +27,12 @@ function guardarLS(k: string, v: unknown) {
 }
 
 /** Resultado de escanear/tipear un código. */
-export type ResultadoMarca = { tipo: 'no-encontrado'; code: string } | { tipo: 'ok'; it: ExhibItem } | { tipo: 'cruce'; it: ExhibItem; catSel: string }
+export type ResultadoMarca =
+  | { tipo: 'no-encontrado'; code: string }
+  | { tipo: 'ok'; it: ExhibItem }
+  | { tipo: 'cruce'; it: ExhibItem; catSel: string }
+  /** Existe y está colgada, pero el sistema la tiene en cero ⇒ ⛔ no está en la lista a chequear. */
+  | { tipo: 'stock-cero'; it: ExhibItem }
 
 /**
  * Estado del chequeo de exhibición: ítems (Supabase↔TN), estados de escaneo y errores
@@ -81,7 +86,24 @@ export function useExhib(marca: Marca, productos: Producto[]) {
    * reasignar la categoría marcada. Escribirlo dos veces era la copia que se despega.
    */
   const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
-  const items = useMemo(() => construirItems(crudos.inv, prodMap, errores), [crudos.inv, prodMap, errores])
+
+  /**
+   * 🔑 **Dos listas del mismo crudo, y la diferencia es de fondo (19-sep-2026).**
+   *
+   * `buscables` es **todo el Local**: lo que el lector puede enganchar. `items` es lo que hay que
+   * **chequear** —las que tienen stock—, y es la que arma la lista, el triage, el PDF y los
+   * contadores.
+   *
+   * 🔴 Antes eran una sola, filtrada por `available_quantity > 0` en la bajada, y por eso una
+   * prenda colgada con el stock en cero ⛔ no se podía registrar: el lector no la encontraba y el
+   * escaneo caía en «no cruzó», mezclado con las lecturas malas. Medido en producción: **1.083 con
+   * stock contra 1.093 en cero** — la mitad del salón.
+   * ⚠️ Meterlas en `items` sería el error espejo: el recorrido pasaría a pedir 2.188 prendas, y las
+   * 1.093 que el sistema no tiene ⛔ no son faltantes de nadie.
+   */
+  const buscables = useMemo(() => construirItems(crudos.inv, prodMap, errores), [crudos.inv, prodMap, errores])
+  const items = useMemo(() => buscables.filter((it) => it.qty > 0), [buscables])
+  const enCero = buscables.length - items.length
   const cats = useMemo(() => ordenarCats(items), [items])
 
   const recargar = useCallback(async () => {
@@ -109,13 +131,20 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     persistEstados({ ...estados, [id]: estado })
   }, [estados, persistEstados])
 
-  /** Marca 'exhibido' por código; devuelve el resultado para el feedback de la UI. */
+  /**
+   * Marca 'exhibido' por código; devuelve el resultado para el feedback de la UI.
+   *
+   * ⚠️ Busca en `buscables` —todo el Local— pero **la que está en cero ⛔ no se marca**: no está en
+   * la lista de esta pantalla, así que un estado ahí es peso muerto que nadie va a mirar. Lo que
+   * corresponde es **decirlo**: la prenda está colgada y el sistema la tiene en cero.
+   */
   const marcarPorCodigo = useCallback((code: string, catSel: string): ResultadoMarca => {
-    const it = buscarItem(items, code)
+    const it = buscarItem(buscables, code)
     if (!it) return { tipo: 'no-encontrado', code }
+    if (it.qty <= 0) return { tipo: 'stock-cero', it }
     persistEstados({ ...estados, [exhibId(it)]: 'exhibido' })
     return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it }
-  }, [items, estados, persistEstados])
+  }, [buscables, estados, persistEstados])
 
   /**
    * "Va acá → corregir TN": registra el error y reasigna la categoría del ítem.
@@ -141,5 +170,5 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     persistErrores({})
   }, [persistEstados, persistErrores])
 
-  return { items, cats, estados, errores, cargando, errorMsg, setEstado, marcarPorCodigo, marcarErrorCat, quitarError, reiniciar, recargar }
+  return { items, buscables, enCero, cats, estados, errores, cargando, errorMsg, setEstado, marcarPorCodigo, marcarErrorCat, quitarError, reiniciar, recargar }
 }

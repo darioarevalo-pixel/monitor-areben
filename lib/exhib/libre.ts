@@ -24,7 +24,12 @@ export type EscaneoLibre = {
   lugar: string
   /** `exhibId()`, o `'?'+normCode(codigo)` cuando el código ⛔ no cruzó con el inventario. */
   variante_id: string
-  /** `false` = se escaneó algo que ⛔ no figura con stock en el Local. Se guarda igual. */
+  /**
+   * `false` = el código ⛔ no cruzó con ninguna variante del Local. Se guarda igual.
+   *
+   * ⚠️ `true` con `qty` en **0** ⛔ no es lo mismo: ésa es una prenda que existe, está colgada, y el
+   * sistema la tiene en cero. Ver `hallazgoDe`.
+   */
   encontrado: boolean
   codigo_crudo: string
   barcode: string | null
@@ -74,6 +79,11 @@ export function nuevoRecorridoId(): string {
  * está en la lista» y el dato se perdía. Pero escanear en el salón algo que ⛔ no figura con stock
  * en el Local **es** un hallazgo del recorrido —stock mal cargado, prenda de otra marca, una
  * devolución sin ingresar— y es el único que nadie puede reconstruir después.
+ *
+ * 🔑 **Y la prenda en CERO entra por la otra puerta**: `it` con `qty` en 0 es un escaneo
+ * `encontrado`, con su nombre, su SKU y sus categorías. ⛔ No hace falta una columna nueva en la
+ * tabla: en la base el caso se lee `encontrado and qty <= 0`, y en la pantalla y el Excel lo dice
+ * `hallazgoDe`.
  */
 export function aEscaneo(it: ExhibItem | null, codigoCrudo: string, lugar: string, ahora: number = Date.now()): EscaneoLibre {
   const codigo = String(codigoCrudo || '').trim()
@@ -192,6 +202,28 @@ export function contarEnLugar(escaneos: EscaneoLibre[], lugar: string): number {
   return escaneos.filter((e) => e.lugar === l).length
 }
 
+/**
+ * Los tres finales posibles de un escaneo, en una palabra.
+ *
+ * 🔴 **Antes eran DOS y uno se comía al otro.** Hasta el 19-sep-2026 el recorrido sólo veía las
+ * variantes con stock, así que una prenda colgada que el sistema tiene en **cero** caía en «no
+ * cruzó», exactamente igual que una lectura a medias del lector. Son dos hallazgos distintos y el
+ * del cero es el que más vale —stock mal cargado, devolución sin ingresar—: es el único que ⛔ no
+ * se descubre de ninguna otra forma.
+ *
+ * 🔑 **Una sola función para la pantalla y para el Excel.** Si el badge de la fila y la columna del
+ * export decidieran cada uno por su cuenta, el día que cambie el criterio van a discrepar sobre la
+ * misma prenda, y quien compare no tiene cómo saber cuál de los dos miente.
+ */
+export type Hallazgo = '' | 'EN CERO' | 'NO CRUZÓ'
+
+export function hallazgoDe(e: Pick<EscaneoLibre, 'encontrado' | 'qty'>): Hallazgo {
+  if (!e.encontrado) return 'NO CRUZÓ'
+  // El negativo entra acá también: 12 variantes del Local están abajo de cero, y «colgada con el
+  // stock mal» es lo mismo que se quiere ver.
+  return e.qty != null && e.qty <= 0 ? 'EN CERO' : ''
+}
+
 export const HEADER_EXPORT = [
   'Lugar',
   'Producto',
@@ -202,10 +234,13 @@ export const HEADER_EXPORT = [
   'Stock Local',
   'Precio a cobrar',
   'Escaneado',
+  // 🔑 Va **última** y ⛔ no al lado del nombre: las nueve de arriba son las que Bruno ya cruza a
+  // mano contra el salón, y moverlas de columna rompe la comparación con los recorridos anteriores.
+  'Hallazgo',
 ] as const
 
 /** Anchos de columna del `.xlsx`, en caracteres. */
-export const ANCHOS_EXPORT = [22, 40, 8, 16, 18, 42, 11, 14, 18]
+export const ANCHOS_EXPORT = [22, 40, 8, 16, 18, 42, 11, 14, 18, 12]
 
 /**
  * Las filas del `.xlsx` que se baja al terminar: **es el dato con el que se compara por afuera**.
@@ -217,6 +252,10 @@ export const ANCHOS_EXPORT = [22, 40, 8, 16, 18, 42, 11, 14, 18]
  *
  * 🔑 El que ⛔ no cruzó entra igual, con el código crudo en lugar del nombre y la aclaración al
  * lado: sacarlo del Excel sería perder justo el renglón que hay que ir a mirar.
+ *
+ * 🔑 **La columna «Hallazgo» es la que se filtra.** Los dos renglones que hay que ir a mirar —la
+ * prenda colgada con el stock en cero y el código que ⛔ no cruzó— son pocos entre cientos, y
+ * buscarlos leyendo nombre por nombre es lo mismo que no tenerlos.
  */
 export function filasExport(escaneos: EscaneoLibre[]): Filas {
   const filas: Filas = [[...HEADER_EXPORT]]
@@ -227,7 +266,9 @@ export function filasExport(escaneos: EscaneoLibre[]): Filas {
       const { aCobrar } = precioDeGondola(e)
       filas.push([
         e.lugar,
-        e.encontrado ? (e.product_name ?? '') : `${e.codigo_crudo} — sin stock en el Local`,
+        // «sin stock en el Local» ya ⛔ no alcanza como motivo: desde que el cero se puede
+        // registrar, hay prendas con nombre y stock 0 en esta misma planilla.
+        e.encontrado ? (e.product_name ?? '') : `${e.codigo_crudo} — no cruzó con el inventario`,
         e.size ?? '',
         e.sku ?? '',
         e.barcode ?? e.codigo_crudo,
@@ -235,6 +276,7 @@ export function filasExport(escaneos: EscaneoLibre[]): Filas {
         e.qty ?? '',
         aCobrar ?? '',
         e.escaneado_en,
+        hallazgoDe(e),
       ])
     }
   }

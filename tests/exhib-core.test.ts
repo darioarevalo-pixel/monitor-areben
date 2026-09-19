@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPDF, armarProdMap, buscarItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
+import { agruparPDF, armarProdMap, buscarItem, candidatosPorCodigo, catsDeItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, perteneceA, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstados, type ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, precio: null, promo: null, ...over })
@@ -51,8 +51,37 @@ describe('construirItems', () => {
 
 describe('ordenarCats', () => {
   it('alfabético con (Sin categoría) al final', () => {
-    const items = [it0({ cat: 'Collares' }), it0({ cat: SIN_CATEGORIA }), it0({ cat: 'Anillos' })]
+    const items = [it0({ cleanCats: ['Collares'] }), it0({ cleanCats: [] }), it0({ cleanCats: ['Anillos'] })]
     expect(ordenarCats(items)).toEqual(['Anillos', 'Collares', SIN_CATEGORIA])
+  })
+
+  /**
+   * 🔴 El pendiente 1, medido el 19-sep-2026: la lista salía de `cat` (que es `cleanCats[0]`), así
+   * que una categoría que nunca es primera **⛔ no existía en el desplegable**. Con datos reales,
+   * BLUSAS, SHORTS y BERMUDAS mostraban CERO y se leía como «no hay nada que chequear».
+   */
+  it('lista TODAS las categorías de cada prenda, no sólo la primera', () => {
+    const items = [it0({ cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES', 'BLUSAS Y CAMISAS'] })]
+    expect(ordenarCats(items)).toEqual(['BLUSAS Y CAMISAS', 'TOPS Y BODIES'])
+  })
+
+  it('las dos grafías del mismo nombre son UNA sola opción', () => {
+    const items = [it0({ cleanCats: ['SHORTS, MINIS y FALDAS'] }), it0({ cleanCats: ['SHORTS, MINIS Y FALDAS'] })]
+    expect(ordenarCats(items)).toEqual(['SHORTS, MINIS y FALDAS'])
+  })
+})
+
+describe('catsDeItem / perteneceA', () => {
+  it('sin categorías TN la prenda vive en (Sin categoría) y se puede recorrer', () => {
+    expect(catsDeItem(it0({ cleanCats: [] }))).toEqual([SIN_CATEGORIA])
+    expect(perteneceA(it0({ cleanCats: [] }), SIN_CATEGORIA)).toBe(true)
+  })
+  it('la misma categoría escrita distinto es la misma', () => {
+    expect(perteneceA(it0({ cleanCats: ['SHORTS, MINIS y FALDAS'] }), 'SHORTS, MINIS Y FALDAS')).toBe(true)
+    expect(perteneceA(it0({ cleanCats: ['JEANS'] }), '  jeans  ')).toBe(true)
+  })
+  it('y una ajena sigue siendo ajena', () => {
+    expect(perteneceA(it0({ cleanCats: ['JEANS'] }), 'BERMUDAS')).toBe(false)
   })
 })
 
@@ -81,13 +110,72 @@ describe('esCruce', () => {
     expect(esCruce(it0({}), '')).toBe(false)
     expect(esCruce(it0({}), SIN_CATEGORIA)).toBe(false)
   })
+  /**
+   * 🔴 El cruce falso: en el catálogo conviven `SHORTS, MINIS y FALDAS` (41 variantes) y
+   * `SHORTS, MINIS Y FALDAS` (23). Comparando letra por letra, la mitad del perchero se acusaba de
+   * estar mal colgada.
+   */
+  it('⛔ no es cruce por la grafía: son la misma categoría', () => {
+    expect(esCruce(it0({ cleanCats: ['SHORTS, MINIS y FALDAS'] }), 'SHORTS, MINIS Y FALDAS')).toBe(false)
+  })
+  it('y la prenda de varias categorías ⛔ no cruza en ninguna de ellas', () => {
+    expect(esCruce(it0({ cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES', 'BLUSAS Y CAMISAS'] }), 'BLUSAS Y CAMISAS')).toBe(false)
+  })
+})
+
+/**
+ * Los códigos son los **reales** del primer día de uso (19-sep-2026): 2 de 97 escaneos ⛔ no
+ * cruzaron y los dos eran lecturas a medias, ⛔ no problemas de stock.
+ */
+describe('candidatosPorCodigo', () => {
+  const local = [
+    it0({ productId: '1', name: 'CORPIÑO AYLA - CHERRY', sku: 'BKC-0001-CH-M', barcode: '1296698' }),
+    it0({ productId: '2', name: 'TOP HADES', sku: 'RTO-0049-MA', barcode: '1123698' }),
+    it0({ productId: '3', name: 'TOP ZOE', sku: 'RTO-0150-NG', barcode: 'RTO0150NG' }),
+    it0({ productId: '4', name: 'TOP EMBER', sku: 'RTO-0013-BL', barcode: '703517' }),
+  ]
+
+  it('«0150NG» encuentra a TOP ZOE, que es RTO-0150-NG sin prefijo ni guiones', () => {
+    expect(candidatosPorCodigo(local, '0150NG').map((x) => x.productId)).toEqual(['3'])
+  })
+
+  it('«698», un pedazo de código de barras, devuelve los DOS parecidos y ⛔ no elige', () => {
+    expect(candidatosPorCodigo(local, '698').map((x) => x.productId).sort()).toEqual(['1', '2'])
+  })
+
+  it('un código completo ⛔ no necesita candidatos: `buscarItem` ya lo engancha exacto', () => {
+    expect(buscarItem(local, 'RTO-0150-NG')?.productId).toBe('3')
+  })
+
+  it('menos de 3 caracteres ⛔ no propone nada: «NG» da 440 sobre el Local real', () => {
+    expect(candidatosPorCodigo(local, 'NG')).toEqual([])
+    expect(candidatosPorCodigo(local, '')).toEqual([])
+  })
+
+  it('el más parecido primero: el código más corto es el que sobra menos', () => {
+    // `0150` matchea el barcode de TOP ZOE (9) y el SKU de TOP EMBER (RTO-0013-BL no; usamos 015).
+    const mixto = [it0({ productId: 'largo', sku: '', barcode: '9999901509999' }), it0({ productId: 'corto', sku: '', barcode: '0150' })]
+    expect(candidatosPorCodigo(mixto, '0150').map((x) => x.productId)).toEqual(['corto', 'largo'])
+  })
 })
 
 describe('filtrado / triage', () => {
-  const items = [it0({ productId: 'a', cat: 'Anillos' }), it0({ productId: 'b', cat: 'Collares' })]
+  const items = [it0({ productId: 'a', cat: 'Anillos', cleanCats: ['Anillos'] }), it0({ productId: 'b', cat: 'Collares', cleanCats: ['Collares'] })]
   it('filtrarPorCat vacío = todos', () => {
     expect(filtrarPorCat(items, '')).toHaveLength(2)
     expect(filtrarPorCat(items, 'Anillos')).toHaveLength(1)
+  })
+
+  /** 🔴 El caso de los 17 invisibles de «TOPS Y BODIES»: la prenda aparece en las DOS. */
+  it('una prenda de dos categorías se recorre en las dos', () => {
+    const dos = [it0({ productId: 'c', cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES', 'BLUSAS Y CAMISAS'] })]
+    expect(filtrarPorCat(dos, 'TOPS Y BODIES')).toHaveLength(1)
+    expect(filtrarPorCat(dos, 'BLUSAS Y CAMISAS')).toHaveLength(1)
+  })
+
+  it('y las dos grafías del mismo nombre filtran juntas', () => {
+    const grafias = [it0({ productId: 'd', cleanCats: ['SHORTS, MINIS y FALDAS'] }), it0({ productId: 'e', cleanCats: ['SHORTS, MINIS Y FALDAS'] })]
+    expect(filtrarPorCat(grafias, 'SHORTS, MINIS Y FALDAS')).toHaveLength(2)
   })
   it('faltantes = los no exhibido', () => {
     const estados: ExhibEstados = { [exhibId(items[0])]: 'exhibido' }

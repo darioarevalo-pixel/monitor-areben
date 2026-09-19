@@ -44,7 +44,17 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
   que nadie puede reconstruir después**, porque el salón ya se caminó.
 - 🔑 **El escaneo guarda TODAS las categorías TN del producto (`cleanCats`), ⛔ no la primera.** Es
   la columna entera del pedido: el perchero de tops contra lo que TN dice de cada prenda. Con
-  `cleanCats[0]` —que es lo que usa el modo por categoría— la comparación ⛔ no se puede hacer.
+  `cleanCats[0]` la comparación ⛔ no se puede hacer.
+- 🔴 **Y la LISTA del recorrido también sale de `cleanCats`, ⛔ no de `cat`** (19-sep-2026). `cat` es
+  `cleanCats[0]` y quedó como **etiqueta de pantalla**; quien decide en qué categoría se recorre una
+  prenda es `perteneceA` (`core.ts`), que mira todas. Armar la lista con `cat` hacía que una
+  categoría que nunca es primera **⛔ no existiera**: medido con la app, **BLUSAS 0 → 66 variantes
+  (27 productos), SHORTS 0 → 31, BERMUDAS 0 → 13**, DENIM 65 → 103 y JEANS 18 → 59. Una pantalla
+  vacía se lee como «no hay nada que chequear».
+- 🔑 **Dos categorías con la misma grafía son UNA** (`normCat`, sin mayúsculas ni espacios de más).
+  En el catálogo conviven `SHORTS, MINIS y FALDAS` y `SHORTS, MINIS Y FALDAS` —distintas por ID en
+  TN— y comparándolas letra por letra, elegir una listaba la mitad y la otra mitad daba **cruce
+  falso**: la pantalla acusaba a una prenda bien colgada.
 - 🔑 **El único de `exhib_escaneo` es (recorrido, LUGAR, variante).** La misma prenda colgada en dos
   percheros son DOS filas y eso es información. `claveEscaneo` en `lib/exhib/libre.ts` tiene que
   seguir diciendo lo mismo que el índice, o la pantalla muestra uno menos de lo que la base guardó.
@@ -70,14 +80,27 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
   muerto y ⛔ no se portó. 🔴 **Y el lector TIPEA**: si el foco queda en el campo «Lugar», el código
   entra como nombre del lugar y el escaneo se pierde **sin un solo error en pantalla**. Por eso Enter
   y el blur de ese campo mandan el foco al escaneo — ⛔ no es cosmético.
-- 🔴 **Un SKU tipeado A MANO, incompleto, ⛔ no engancha — y se guarda como hallazgo.** Medido en el
-  primer uso real (19-sep): `0150NG` es `RTO-0150-NG` sin prefijo ni guiones, y `buscarItem` pide
-  **barcode o SKU completo** (`normCode` saca espacios, guiones y ceros a la izquierda, ⛔ no
-  prefijos). Queda anotado como «no está en el Local», que se lee como un problema de stock.
-  ⛔ **⛔ NO aflojar el criterio a un match parcial**: con gente usándolo, enganchar **la prenda
-  equivocada** es peor que no enganchar. Si algún día se toca, va con el candidato a la vista y que
-  la persona confirme.
-- ⚠️ **`store_name = 'Local'` y `available_quantity > 0`**: el recorrido ⛔ no ve el depósito.
+- 🔴 **`buscarItem` sigue pidiendo el código COMPLETO, y eso ⛔ no se afloja.** `normCode` saca
+  espacios, guiones y ceros a la izquierda, ⛔ no prefijos: `0150NG` es `RTO-0150-NG` sin el suyo.
+  Con gente usándolo, enganchar **la prenda equivocada** en silencio es peor que no enganchar.
+  🔑 **Lo parcial se pregunta** (19-sep-2026): sin match exacto, `candidatosPorCodigo` ofrece las
+  que **contienen** ese pedazo y **confirma la persona**, que tiene la prenda en la mano. Con datos
+  reales: `0150NG` → 1 candidato (TOP ZOE), `698` → 2 (CORPIÑO AYLA y TOP HADES), **`NG` → 440** ⇒
+  por eso hay `MIN_PARCIAL` (3 caracteres) y `TOPE_CANDIDATOS` (8): arriba de eso se dice cuántos
+  parecidos hay y se pide de nuevo.
+  🔴 **Un panel de candidatos sin resolver se guarda solo como «no cruzó»** apenas llega otro
+  escaneo o se cierra el recorrido. Preguntar ⛔ no puede costar un escaneo: lo peor que puede pasar
+  es que quede como quedaba antes de preguntar.
+- ⚠️ **`store_name = 'Local'`, y desde el 19-sep-2026 SIN filtro de stock**: el recorrido ⛔ no ve el
+  depósito, pero sí ve el Local entero —**2.188 filas: 1.083 con stock y 1.105 en cero o negativo**—.
+  🔑 **Son dos listas y ⛔ no una**: `items` (qty > 0) es lo que hay que **chequear** —la lista, el
+  triage, el PDF— y `buscables` (todo) es lo que el **lector puede enganchar**. Antes eran la misma
+  y por eso una prenda colgada con el stock en cero ⛔ no se podía registrar: caía en «no cruzó»,
+  idéntica a una lectura mala. Meterlas en `items` sería el error espejo — las 1.105 que el sistema
+  ⛔ no tiene no son faltantes de nadie.
+- 🔑 **Tres finales, ⛔ no dos** (`hallazgoDe` en `libre.ts`, la misma función para la pantalla y
+  para la columna «Hallazgo» del Excel): vacío · **EN CERO** (`encontrado` con `qty <= 0`) ·
+  **NO CRUZÓ** (`encontrado = false`). En la base ⛔ no hizo falta una columna nueva.
 
 ## Lo que ya se rompió acá
 
@@ -91,17 +114,16 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 
 ## Pendiente
 
-Los tres son del modo **por categoría**, están medidos sobre los 770 productos del audit del
-7-sep-2026 y ⛔ **no se tocaron**. El modo libre los esquiva por diseño —⛔ no usa categorías para
-armar la lista— pero el otro sigue mintiendo:
+🏁 **Hecho el 19-sep-2026** (medido con las funciones de la app contra producción, ⛔ no estimado):
+la lista sale de **todas** las categorías, el **cero se puede registrar** y el **código parcial
+pregunta**. Números arriba, en «Reglas que el código no dice».
 
-- 🔴 **`construirItems` mete cada prenda en `cleanCats[0]`**, su primera categoría y nada más ⇒
-  **BLUSAS (26), SHORTS (10) y BERMUDAS (8) muestran CERO**, y JEANS lista 40 de 79. Elegir esa
-  categoría da pantalla vacía, que se lee como «no hay nada que chequear».
-- 🔴 **`esCruce` compara con `includes` exacto** ⇒ `SHORTS, MINIS y FALDAS` contra `…Y FALDAS` da
-  **cruce falso**.
 - 🔴 **`limpiarCats` devuelve NOMBRES y ⛔ no IDs**: en TN hay 35 categorías y no 25 —JEANS existe
   tres veces—, así que las tres le parecen una sola. El desorden se ve en `/tncat`, ⛔ nunca acá.
+  ⚠️ **Medio tapado**: comparando por grafía, las repetidas se juntan en el desplegable y la lista
+  sale completa igual. Lo que sigue sin verse acá es **cuántas categorías hay de verdad**.
+- ⚠️ **298 variantes con stock (96 productos) ⛔ no cruzan con TN** ⇒ salen en «(Sin categoría)». Al
+  modo libre ⛔ no lo frena, pero en el Excel les sale **vacía la columna con la que se compara**.
 - ▶️ **El modo por categoría sigue muriendo en el teléfono.** La tabla tiene `modo` justamente para
   que pueda subir algún día; hoy siempre entra `'libre'`. 🔴 Y por eso **la pantalla abre en libre**:
   el 19-sep abría en categoría y el local recorrió media hora sin que llegara una sola fila.
@@ -110,13 +132,19 @@ armar la lista— pero el otro sigue mintiendo:
 
 ## Cómo se prueba
 
-`npx vitest run tests/exhib-libre.test.ts --reporter=dot` — el núcleo del libre entero, sin red.
+`npx vitest run tests/exhib-core.test.ts tests/exhib-libre.test.ts --reporter=dot` — el núcleo de los
+dos modos, sin red. ⚠️ **Y `tests/espejo-servidor.test.ts`**, que tiene la consulta de `datos.ts`
+copiada palabra por palabra: tocarla sin tocar esa línea es un **400 en producción**.
 Lo que el test ⛔ no puede ver y hay que ejercer a mano:
 
 - **Los cinco verbos que escriben**, contra producción, con el header `x-monitor-auth`:
-  `abrir` → `escanear` (una fila encontrada y una no) → `escanear` la misma otra vez (el único ⛔ no
-  duplica) → `sacar-escaneo` → `cerrar`, y `eliminar` sobre uno sin cerrar. **El oráculo es leerlo
-  por `action=recorrido`**, que es el otro camino — y `eliminar` se comprueba con el 404 de después.
+  `abrir` → `escanear` (**una con stock, una EN CERO y una que ⛔ no cruza**) → `escanear` la misma
+  otra vez (el único ⛔ no duplica) → `sacar-escaneo` → `cerrar`, y `eliminar` sobre uno sin cerrar.
+  **El oráculo es leerlo por `action=recorrido`**, que es el otro camino — y `eliminar` se comprueba
+  con el 404 de después. ⚠️ **Y ⛔ no cerrar el recorrido de prueba**: uno cerrado contesta 409 al
+  eliminar y queda para siempre en la lista que mira el local (ya pasó una vez).
+  🏁 Ejercido así el 19-sep-2026: FAJA CLEO `encontrado=true qty=3` · MONITO CAPRY
+  **`encontrado=true qty=0`** · `ZZZ-NO-EXISTE-99` `encontrado=false`.
 - 🔴 **En esta Mac ⛔ no se puede escribir en Zattia**: falta `ZATTIA_SUPABASE_SERVICE_KEY` en el
   `.env` y un script local contesta `permission denied` (42501). En Vercel sí está ⇒ se ejerce
   contra producción, o en BDI, que sí tiene la key.

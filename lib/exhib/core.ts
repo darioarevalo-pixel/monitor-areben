@@ -111,16 +111,57 @@ export function precioDeGondola(it: Pick<ExhibItem, 'precio' | 'promo'>): Oferta
   return ofertaVigente(it.precio, it.promo)
 }
 
+/**
+ * La categoría, comparable: sin mayúsculas y sin espacios de más.
+ *
+ * 🔑 **En el catálogo conviven las dos grafías del mismo nombre.** Medido el 19-sep-2026:
+ * `SHORTS, MINIS y FALDAS` (41 variantes) y `SHORTS, MINIS Y FALDAS` (23) son categorías distintas
+ * por ID en Tienda Nube y **la misma categoría a los ojos de quien camina el local**. Comparando
+ * letra por letra, elegir una lista 41 de 64 y escanear cualquiera de las otras 23 da **cruce
+ * falso**: la pantalla acusa a una prenda que está bien colgada.
+ */
+const normCat = (c: string) => String(c || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+/**
+ * En qué categorías vive esta prenda **para el recorrido**: TODAS las suyas, ⛔ no la primera.
+ *
+ * 🔴 **Ésta es la corrección del 19-sep-2026, y era una lista que venía corta y callada.** El
+ * recorrido armaba la lista con `cat` —que es `cleanCats[0]`— así que una prenda existía sólo en su
+ * primera categoría. Medido con la app: TN tiene **291 productos en «TOPS Y BODIES» y el recorrido
+ * pedía 274**; los otros 17 quedaban enganchados bajo BLUSAS Y CAMISAS, BEST SELLERS, CORSETS,
+ * CAMPERAS y SWEATERS, **5 de ellos con stock en el Local**, y nadie los chequeó. Peor todavía:
+ * BLUSAS, SHORTS y BERMUDAS —que nunca son primeras— mostraban **CERO**, que se lee como «no hay
+ * nada que chequear».
+ *
+ * ⚠️ Sin categorías es `(Sin categoría)` y ⛔ no una lista vacía: esa prenda tiene que poder
+ * elegirse y recorrerse igual, que es lo que hace visible a las 413 que ⛔ no cruzan con TN.
+ */
+export function catsDeItem(it: Pick<ExhibItem, 'cleanCats'>): string[] {
+  return it.cleanCats.length ? it.cleanCats : [SIN_CATEGORIA]
+}
+
+/**
+ * ¿Esta prenda es de esta categoría? **La regla vive acá sola**: la usan la lista del recorrido
+ * (`filtrarPorCat`) y el aviso de cruce (`esCruce`), que son las dos puntas de la misma pregunta.
+ * Escritas por separado, una dice que la prenda no es de la categoría que la otra le acaba de dar.
+ */
+export function perteneceA(it: Pick<ExhibItem, 'cleanCats'>, cat: string): boolean {
+  const n = normCat(cat)
+  return catsDeItem(it).some((c) => normCat(c) === n)
+}
+
 /** Categorías presentes, alfabético con "(Sin categoría)" siempre al final. Port de catsOrden @7624. */
 export function ordenarCats(items: ExhibItem[]): string[] {
-  const cats = new Set<string>()
-  items.forEach((it) => cats.add(it.cat))
-  return [...cats].sort((a, b) => Number(a === SIN_CATEGORIA) - Number(b === SIN_CATEGORIA) || a.localeCompare(b, 'es'))
+  // Map y ⛔ no Set: la clave es la comparable y el valor la grafía que se muestra, así que las dos
+  // formas de escribir la misma categoría son UNA opción del desplegable (gana la primera vista).
+  const cats = new Map<string, string>()
+  items.forEach((it) => catsDeItem(it).forEach((c) => cats.has(normCat(c)) || cats.set(normCat(c), c)))
+  return [...cats.values()].sort((a, b) => Number(a === SIN_CATEGORIA) - Number(b === SIN_CATEGORIA) || a.localeCompare(b, 'es'))
 }
 
 /** Ítems de una categoría (o todos si vacío). Port de _exhibFiltrados. */
 export function filtrarPorCat(items: ExhibItem[], cat: string): ExhibItem[] {
-  return cat ? items.filter((it) => it.cat === cat) : items
+  return cat ? items.filter((it) => perteneceA(it, cat)) : items
 }
 
 /** Normaliza un código: saca espacios/guiones, ceros a la izquierda, a minúscula. Port de norm() @7747. */
@@ -144,7 +185,47 @@ export function buscarItem(items: ExhibItem[], code: string): ExhibItem | null {
 
 /** ¿El ítem escaneado NO pertenece a la categoría recorrida (según TN)? Port de `cruce` @7759. */
 export function esCruce(it: ExhibItem, catSel: string): boolean {
-  return !!catSel && catSel !== SIN_CATEGORIA && !it.cleanCats.includes(catSel)
+  return !!catSel && normCat(catSel) !== normCat(SIN_CATEGORIA) && !perteneceA(it, catSel)
+}
+
+/**
+ * Mínimo de código para animarse a proponer candidatos.
+ *
+ * Medido sobre las 2.188 variantes del Local (19-sep-2026): `NG` devuelve **440**. Dos caracteres
+ * ⛔ no preguntan nada — ofrecer media tienda es la misma nada que no ofrecer, con más ruido.
+ */
+export const MIN_PARCIAL = 3
+/** Cuántos candidatos se pueden mirar de parado con la prenda en la mano. Arriba de esto, se pide de nuevo. */
+export const TOPE_CANDIDATOS = 8
+
+/**
+ * Las prendas cuyo código **contiene** el pedazo tipeado. Se pregunta SÓLO cuando `buscarItem`
+ * ⛔ no encontró nada exacto.
+ *
+ * 🔴 **Esto ⛔ NO afloja `buscarItem`, y la diferencia es todo.** Con gente usándolo, enganchar la
+ * prenda equivocada en silencio es peor que no enganchar: un match parcial mudo marca exhibida una
+ * prenda que nadie vio. Acá ⛔ no se elige nada — se muestran los candidatos y **confirma la
+ * persona**, que tiene la prenda en la mano.
+ *
+ * El caso que lo trajo (primer día de uso, 2 de 97 escaneos): `0150NG` es `RTO-0150-NG` sin el
+ * prefijo ni los guiones —TOP ZOE, 1 candidato— y `698` es un pedazo de código de barras —2
+ * candidatos, CORPIÑO AYLA `1296698` y TOP HADES `1123698`—. Los dos quedaban anotados como «no
+ * está en el Local», que se lee como un problema de stock y ⛔ no como lo que es: una lectura a
+ * medias.
+ *
+ * ⚠️ Devuelve **todos** los que matchean, ⛔ no los primeros ocho: el tope lo aplica la pantalla,
+ * que es la que tiene que poder decir «hay 47 parecidos, escaneá de nuevo» en vez de mostrar ocho
+ * al azar como si fueran la respuesta.
+ */
+export function candidatosPorCodigo(items: ExhibItem[], code: string): ExhibItem[] {
+  const nc = normCode(code)
+  if (nc.length < MIN_PARCIAL) return []
+  const codigoDe = (x: ExhibItem) => (x.barcode && normCode(x.barcode).includes(nc) ? normCode(x.barcode) : normCode(x.sku))
+  return items
+    .filter((x) => (!!x.barcode && normCode(x.barcode).includes(nc)) || (!!x.sku && normCode(x.sku).includes(nc)))
+    // El código más corto es el más parecido: `150` contra `RTO0150NG` sobra en 6 caracteres y
+    // contra un barcode de 13 sobra en 10. Empatados, por nombre, para que la lista no baile.
+    .sort((a, b) => codigoDe(a).length - codigoDe(b).length || a.name.localeCompare(b.name, 'es'))
 }
 
 /** Faltantes de la categoría: los que no están 'exhibido'. Port @7821/7850. */

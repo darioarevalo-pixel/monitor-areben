@@ -5,9 +5,9 @@ import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, useConfirmar, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
-import { precioDeGondola } from '@/lib/exhib/core'
+import { exhibId, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
-import { agruparPorLugar, ANCHOS_EXPORT, filasExport, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { agruparPorLugar, ANCHOS_EXPORT, filasExport, hallazgoDe, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 
@@ -32,11 +32,13 @@ const fechaHora = (iso: string | null | undefined) =>
     ? new Date(iso).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : '—'
 
-export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: ExhibItem[]; cargando: boolean; errorMsg: string | null; selector: React.ReactNode }) {
+export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selector }: { items: ExhibItem[]; buscables: ExhibItem[]; enCero: number; cargando: boolean; errorMsg: string | null; selector: React.ReactNode }) {
   const { marca } = useSesion()
   const { confirmar } = useConfirmar()
   const toast = useToast()
-  const lib = useExhibLibre(marca, items)
+  // 🔑 El lector engancha contra TODO el Local —`buscables`—, ⛔ no contra lo que tiene stock: una
+  // prenda colgada que el sistema tiene en cero es un hallazgo, y antes caía en «no cruzó».
+  const lib = useExhibLibre(marca, buscables)
 
   const [fase, setFase] = useState<Fase>('config')
   const [fb, setFb] = useState<ResultadoLibre | null>(null)
@@ -175,7 +177,10 @@ export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: Exh
           ) : (
             <Notice tone="neutral" icon="🏷️" style={{ marginBottom: space[4] }}>
               Escaneás lo que hay en cada lugar del local —un perchero, una mesa, la vidriera— y todo queda guardado con ese lugar.
-              Tenés <b>{items.length}</b> variantes con stock en Local contra las que cruzar.
+              Tenés <b>{items.length}</b> variantes con stock en Local contra las que cruzar
+              {/* 🔑 Las en cero se dicen acá: son la mitad del salón y **también se pueden escanear**.
+                  Callarlas dejaba creer que una prenda sin stock no se podía registrar. */}
+              {enCero > 0 && <> · <b>{enCero}</b> más figuran en cero y también se pueden escanear</>}.
             </Notice>
           )}
 
@@ -288,13 +293,69 @@ export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: Exh
                 <div style={{ marginTop: 2 }}><PrecioEtiqueta it={fb.it} /></div>
               </Notice>
             )}
-            {/* 🔑 El que no cruza se GUARDA, y el cartel lo dice. Antes se contestaba «ese código no
-                está en la lista» y el dato se perdía: una prenda colgada que no figura con stock en
-                el Local es justo lo que después nadie puede reconstruir. */}
-            {fb?.tipo === 'sin-stock' && (
+            {/* 🔑 La prenda EN CERO es un hallazgo con nombre y apellido, ⛔ no un código huérfano:
+                existe, está colgada, y el sistema la tiene en cero. Hasta el 19-sep-2026 el lector
+                ni siquiera la encontraba y caía en «no cruzó», junto con las lecturas malas. */}
+            {fb?.tipo === 'stock-cero' && (
               <Notice tone="warning" icon="⚠">
-                <div style={{ fontWeight: 700 }}>{fb.e.codigo_crudo} no figura con stock en el Local</div>
-                <div>Queda anotado igual, con este lugar: está colgado y el sistema no lo tiene.</div>
+                <div style={{ fontWeight: 700 }}>{fb.it.name}{fb.it.size ? ` · ${fb.it.size}` : ''} — el sistema la tiene en CERO</div>
+                <div style={{ margin: '2px 0' }}><PrecioEtiqueta it={fb.it} /></div>
+                <div>Queda anotada con este lugar: está colgada y el stock está mal.</div>
+              </Notice>
+            )}
+            {/* 🔑 El que no cruza se GUARDA, y el cartel lo dice. Antes se contestaba «ese código no
+                está en la lista» y el dato se perdía: una prenda colgada que no figura en el Local
+                es justo lo que después nadie puede reconstruir. */}
+            {fb?.tipo === 'no-cruzo' && (
+              <Notice tone="warning" icon="⚠">
+                <div style={{ fontWeight: 700 }}>{fb.e.codigo_crudo} no cruzó con el inventario del Local</div>
+                <div>
+                  {fb.parecidos
+                    ? `Queda anotado igual. Hay ${fb.parecidos} códigos parecidos: si fue una lectura a medias, escaneá de nuevo o tipealo completo.`
+                    : 'Queda anotado igual, con este lugar: está colgado y el sistema no lo tiene.'}
+                </div>
+              </Notice>
+            )}
+            {/*
+              🔴 **El único cartel que todavía NO guardó nada.** `buscarItem` sigue pidiendo el
+              código completo —aflojarlo engancharía la prenda equivocada, que es peor—, así que lo
+              parcial se muestra y confirma la persona, que tiene la prenda en la mano.
+              ⚠️ Si llega otro escaneo o se cierra el recorrido sin tocar nada, esto se guarda solo
+              como «no cruzó»: preguntar ⛔ no puede costar un escaneo.
+            */}
+            {fb?.tipo === 'candidatos' && (
+              <Notice tone="brand" icon="?">
+                <div style={{ fontWeight: 700 }}>«{fb.codigo}» no es un código completo. ¿Es alguna de éstas?</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '8px 0' }}>
+                  {fb.candidatos.map((c) => (
+                    <Button
+                      key={exhibId(c)}
+                      size="sm"
+                      variant="outline"
+                      tone="brand"
+                      // `height:auto` + `white-space:normal`: `.shell-content button` fija altura y
+                      // `.mo-btn` es `nowrap`, así que un nombre largo se saldría de la caja en el
+                      // teléfono, que es donde se usa esto.
+                      style={{ height: 'auto', whiteSpace: 'normal', textAlign: 'left', justifyContent: 'flex-start', padding: '8px 10px' }}
+                      onClick={() => {
+                        setFb(lib.confirmar(c, fb.codigo, fb.lugar))
+                        foco(scanRef)
+                      }}
+                    >
+                      {c.name}{c.size ? ` · ${c.size}` : ''} — {c.sku || 'sin SKU'}{c.barcode ? ` · ${c.barcode}` : ''} · Local: {c.qty}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setFb(lib.descartar(fb.codigo, fb.lugar))
+                    foco(scanRef)
+                  }}
+                >
+                  Ninguna de éstas
+                </Button>
               </Notice>
             )}
             {fb?.tipo === 'repetido' && (
@@ -369,14 +430,18 @@ function Subtitulo({ children }: { children: React.ReactNode }) {
 }
 
 function FilaEscaneo({ e, onSacar }: { e: EscaneoLibre; onSacar?: (e: EscaneoLibre) => void }) {
+  // 🔑 El mismo `hallazgoDe` que escribe la columna del Excel: la pantalla y la planilla ⛔ no
+  // pueden decir cosas distintas de la misma prenda.
+  const hallazgo = hallazgoDe(e)
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 4px', borderBottom: `1px solid ${color.line}`, flexWrap: 'wrap' }}>
       <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: font.base, color: e.encontrado ? color.ink : color.warningInk }}>
-          {e.encontrado ? `${e.product_name}${e.size ? ` · ${e.size}` : ''}` : `${e.codigo_crudo} · sin stock en el Local`}
+        <div style={{ fontWeight: 600, fontSize: font.base, color: hallazgo ? color.warningInk : color.ink }}>
+          {e.encontrado ? `${e.product_name}${e.size ? ` · ${e.size}` : ''}` : `${e.codigo_crudo} · no cruzó`}
+          {hallazgo && <span style={{ fontSize: font.xs, fontWeight: 700, marginLeft: 6 }}>· {hallazgo}</span>}
         </div>
         <div style={{ fontSize: font.xs, color: color.mut }}>
-          {e.encontrado ? `SKU: ${e.sku || '—'} · Local: ${e.qty ?? '—'}` : 'No cruzó con el inventario'}
+          {e.encontrado ? `SKU: ${e.sku || '—'} · Local: ${e.qty ?? '—'}` : 'No cruzó con el inventario del Local'}
           {e.cats.length > 0 && ` · ${e.cats.join(' / ')}`}
         </div>
       </div>

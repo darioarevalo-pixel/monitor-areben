@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, claveEscaneo, contarEnLugar, filasExport, HEADER_EXPORT, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, claveEscaneo, contarEnLugar, filasExport, hallazgoDe, HEADER_EXPORT, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -38,6 +38,29 @@ describe('aEscaneo', () => {
 
   it('recorta el lugar: «perchero tops » y «perchero tops» son el mismo mueble', () => {
     expect(aEscaneo(TOP, '779001', ' perchero tops ').lugar).toBe('perchero tops')
+  })
+
+  /**
+   * 🔴 La prenda colgada que el sistema tiene en CERO entra como **encontrada**, con su nombre y
+   * sus categorías. Hasta el 19-sep-2026 el lector ni la veía —la bajada pedía `available_quantity
+   * > 0`— y el escaneo caía en «no cruzó», mezclado con las lecturas malas. En la base el caso se
+   * lee `encontrado and qty <= 0`: ⛔ no hizo falta una columna nueva.
+   */
+  it('la prenda EN CERO se guarda como encontrada, con qty 0', () => {
+    const e = aEscaneo(it0({ barcode: '779004', name: 'TOP ZOE', qty: 0 }), '779004', 'perchero tops')
+    expect(e.encontrado).toBe(true)
+    expect(e.qty).toBe(0)
+    expect(e.product_name).toBe('TOP ZOE')
+  })
+})
+
+describe('hallazgoDe', () => {
+  it('los tres finales posibles, que son tres cosas distintas', () => {
+    expect(hallazgoDe({ encontrado: true, qty: 2 })).toBe('')
+    expect(hallazgoDe({ encontrado: true, qty: 0 })).toBe('EN CERO')
+    // 12 variantes del Local están abajo de cero: es el mismo hallazgo, el stock está mal.
+    expect(hallazgoDe({ encontrado: true, qty: -3 })).toBe('EN CERO')
+    expect(hallazgoDe({ encontrado: false, qty: null })).toBe('NO CRUZÓ')
   })
 })
 
@@ -94,11 +117,29 @@ describe('filasExport', () => {
     aEscaneo(TOP, '779001', 'perchero tops', Date.parse('2026-09-19T15:00:00Z')),
     aEscaneo(it0({ barcode: '779003', name: 'Blusa Vera', size: 'S', qty: 1, cleanCats: ['TOPS Y BODIES', 'BLUSAS Y CAMISAS'], precio: 39990, promo: 27993 }), '779003', 'perchero tops', Date.parse('2026-09-19T15:10:00Z')),
     aEscaneo(null, '779999', 'mesa entrada', Date.parse('2026-09-19T15:20:00Z')),
+    aEscaneo(it0({ barcode: '779005', name: 'Top Zoe', size: 'M', qty: 0 }), '779005', 'mesa entrada', Date.parse('2026-09-19T15:30:00Z')),
   ]
   const filas = filasExport(escaneos)
 
   it('el header es el acordado', () => {
     expect(filas[0]).toEqual([...HEADER_EXPORT])
+    // Un ancho por columna: sin esto la columna nueva sale con el ancho de la anterior.
+    expect(ANCHOS_EXPORT).toHaveLength(HEADER_EXPORT.length)
+  })
+
+  /**
+   * 🔑 La columna con la que se filtra. Los dos renglones que hay que ir a mirar son pocos entre
+   * cientos, y buscarlos leyendo nombre por nombre es lo mismo que no tenerlos.
+   */
+  it('la última columna dice el hallazgo, y distingue el cero de la lectura mala', () => {
+    const h = HEADER_EXPORT.length - 1
+    expect(filas[0][h]).toBe('Hallazgo')
+    expect(filas[1][h]).toBe('') // Top Bianca, 2 u
+    expect(filas[3][h]).toBe('NO CRUZÓ')
+    expect(filas[4][h]).toBe('EN CERO')
+    // La que está en cero tiene nombre, talle y stock 0: ⛔ no es un código huérfano.
+    expect(filas[4][1]).toBe('Top Zoe')
+    expect(filas[4][6]).toBe(0)
   })
 
   it('la columna de categorías lleva TODAS, separadas por " / "', () => {
@@ -112,7 +153,9 @@ describe('filasExport', () => {
 
   it('el que NO cruzó entra igual, con el código y el motivo en el lugar del nombre', () => {
     expect(filas[3][0]).toBe('mesa entrada')
-    expect(filas[3][1]).toBe('779999 — sin stock en el Local')
+    // «sin stock en el Local» ya ⛔ no alcanza como motivo: en esta misma planilla hay prendas con
+    // nombre y stock 0. Lo que le pasó a éste es que ⛔ no cruzó con nada.
+    expect(filas[3][1]).toBe('779999 — no cruzó con el inventario')
     expect(filas[3][4]).toBe('779999')
     expect(filas[3][7]).toBe('')
   })
