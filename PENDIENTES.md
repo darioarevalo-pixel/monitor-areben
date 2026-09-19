@@ -1733,6 +1733,45 @@ el perchero equivocado. **Eso es exactamente el pedido del 7-sep, ahora con núm
 
 ### ▶️ Lo que falta
 
+### 🔧 LO QUE QUEDA DE CÓDIGO (medido el 19-sep con la app usándose, ⛔ no estimado)
+
+**1. 🔴 `construirItems` usa `cleanCats[0]` ⇒ la lista del recorrido por categoría VIENE CORTA.**
+Medido hoy con las funciones de la app: TN tiene **291 productos en «TOPS Y BODIES»** y el recorrido
+pidió **274**. Los otros **17 son invisibles** —quedaron enganchados bajo BLUSAS Y CAMISAS (8), BEST
+SELLERS (6), CORSETS, CAMPERAS y SWEATERS—, y **5 de ellos tienen stock en el Local**: BODY VEGAS 3u,
+CAMISA MIRAGE 3u, BLUSA AZALEA 2u, BLUSA ANTHEA 1u, CAMISA JUST 1u. ⛔ Nadie los chequeó y la
+pantalla ⛔ no lo dijo. ⇒ **una prenda tiene que aparecer en TODAS sus categorías, ⛔ no en la primera.**
+
+**2. 🔴 `esCruce` compara con `includes` exacto** ⇒ `SHORTS, MINIS y FALDAS` contra `…Y FALDAS` da
+cruce falso. ⚠️ Y hoy se vio **por qué importa**: en el catálogo conviven **las dos grafías**
+(`SHORTS, MINIS y FALDAS` con `y` minúscula, 41 variantes · `SHORTS, MINIS Y FALDAS` con `Y`, 23) —
+son categorías **distintas por ID** con el mismo nombre a los ojos de una persona.
+
+**3. 🔴 `limpiarCats` devuelve NOMBRES y ⛔ no IDs** ⇒ las tres JEANS parecen una sola (35 categorías
+reales contra 25 por nombre).
+
+**4. 🆕 🔴 Un código PARCIAL ⛔ no engancha, y se guarda como si fuera un hallazgo.** 2 de 97 escaneos
+del primer día: `698` es un pedazo de código de barras (matchea `1296698` de CORPIÑO AYLA y
+`1123698` de TOP HADES) y `0150NG` es `RTO0150NG` (TOP ZOE) sin el prefijo. Quedan anotados como «no
+está en el Local», que se lee como un problema de stock y ⛔ no como lo que es: una lectura a medias.
+⇒ **distinguir «⛔ no encontré nada» de «encontré varios parecidos» y pedir confirmación.**
+⛔ **⛔ NO aflojar `buscarItem` a un match parcial mudo**: enganchar la prenda equivocada es peor.
+
+**5. 🆕 🔴 El recorrido sólo ve `available_quantity > 0`** (`lib/exhib/datos.ts`) ⇒ **una prenda
+colgada que el sistema tiene en CERO ⛔ no se puede registrar**: cae en «no cruzó», idéntica a una
+lectura mala. 🔑 **Y ése es justo el caso que más vale la pena cazar** —stock mal cargado, devolución
+sin ingresar— porque es el único que ⛔ no se descubre de ninguna otra forma. Medido: **0 de 97
+escaneos** pudieron quedar en esa categoría, por construcción.
+
+**6. ⚠️ 413 de las 1.074 variantes con stock del Local ⛔ no cruzan con TN** ⇒ salen en «(Sin
+categoría)». Al modo libre ⛔ no lo frena —escanea igual— pero **el Excel les sale con la columna de
+categorías vacía**, que es la columna con la que se compara.
+
+**7. ▶️ El modo por categoría sigue sin guardar en la base.** `exhib_recorrido.modo` existe para eso.
+
+📊 **La escala, para dimensionar:** el Local tiene **1.074 variantes con stock**; el recorrido de
+tops cubrió **296**; quedan **777**.
+
 - ▶️ **El perchero de CORSETS en libre**: es el que contesta de una si el englobado explica las 20.
 - ▶️ **Sacar el recorrido de prueba** `ex1789823479266_verif` (2 escaneos «PRUEBA», firmados Bruno):
   `delete from exhib_recorrido where id = 'ex1789823479266_verif';`
