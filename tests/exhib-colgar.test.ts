@@ -78,6 +78,25 @@ describe('paraColgar', () => {
     expect(l.map((c) => c.it.size)).toEqual(['CHOCOLATE', 'BLANCO'])
   })
 
+  /**
+   * 🔴 El recorrido por categoría marca variantes que **⛔ no pasaron por el lector**: «no se
+   * encuentra» quiere decir que alguien la buscó y ⛔ no estaba. Esa prenda ⛔ no se vio, así que sus
+   * hermanas ⛔ no se pueden pedir — y ella misma es **BUSCAR**, ⛔ no colgar.
+   */
+  it('una marca de triage ⛔ NO toca el producto', () => {
+    const triage = { ...aEscaneo(UNIT_NG, '111', 'TOPS Y BODIES', t(0)), estado: 'no-encuentra' as const }
+    expect(paraColgar([triage], LOCAL)).toEqual([])
+  })
+
+  it('pero sí cuenta como «ya revisada»: ⛔ no se pide colgar lo que alguien ya fue a buscar', () => {
+    const esc = [
+      { ...aEscaneo(UNIT_NG, '111', 'TOPS Y BODIES', t(0)), estado: 'exhibido' as const },
+      { ...aEscaneo(UNIT_BL, '112', 'TOPS Y BODIES', t(1)), estado: 'no-encuentra' as const },
+    ]
+    // Queda CHOCOLATE: BLANCO ya se buscó y ⛔ no apareció.
+    expect(paraColgar(esc, LOCAL).map((c) => c.it.size)).toEqual(['CHOCOLATE'])
+  })
+
   it('un código que ⛔ no cruzó ⛔ no toca nada', () => {
     expect(paraColgar([aEscaneo(null, 'ZZZ999', 'perchero tops', t(0))], LOCAL)).toEqual([])
   })

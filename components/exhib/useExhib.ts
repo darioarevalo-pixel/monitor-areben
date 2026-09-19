@@ -5,10 +5,20 @@ import type { Marca } from '@/lib/nav'
 import type { Producto } from '@/lib/etl/tipos'
 import { bajarExhib, type CrudosExhib } from '@/lib/exhib/datos'
 import { armarProdMap, buscarItem, construirItems, esCruce, exhibId, ordenarCats } from '@/lib/exhib/core'
+import { aEscaneo, estadosDe, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibErrores, ExhibEstado, ExhibEstados, ExhibItem } from '@/lib/exhib/tipos'
+import { useColaEscaneos } from './useColaEscaneos'
 
 const keyEstados = (m: Marca) => 'monitor_exhib_' + m
 const keyErrores = (m: Marca) => 'monitor_exhib_err_' + m
+const keyCola = (m: Marca) => 'monitor_exhib_cat_' + m
+
+/**
+ * ⛔ **La categoría vacía («Todas») necesita un lugar igual**: el único de la base es
+ * (recorrido, lugar, variante) y el servidor rechaza un lugar en blanco. En este modo el «lugar»
+ * **es la categoría que se recorrió** —su unidad de trabajo, igual que el mueble en el libre—.
+ */
+const TODAS = 'Todas las categorías'
 
 function leerLS<T>(k: string, fallback: T): T {
   try {
@@ -33,29 +43,45 @@ export type ResultadoMarca =
   | { tipo: 'cruce'; it: ExhibItem; catSel: string }
   /** Existe y está colgada, pero el sistema la tiene en cero ⇒ ⛔ no está en la lista a chequear. */
   | { tipo: 'stock-cero'; it: ExhibItem }
+  /** ⛔ No hay recorrido abierto: sin él ⛔ no hay dónde guardar la tilde. */
+  | { tipo: 'sin-recorrido' }
 
 /**
- * Estado del chequeo de exhibición: ítems (Supabase↔TN), estados de escaneo y errores
- * de categoría, ambos persistidos en localStorage con las MISMAS claves del iframe
- * (`monitor_exhib_<marca>` / `_err_`) → sin migración de datos. El flujo activo es el
- * lector físico (`marcarPorCodigo`); la cámara ZXing del legacy era código muerto.
+ * Estado del chequeo de exhibición **por categoría**.
+ *
+ * 🔴 **Desde el 19-sep-2026 el recorrido GUARDA EN LA BASE, como el libre.** Antes cada tilde era
+ * una entrada en el `localStorage` del teléfono —**sin fecha, sin persona y sin recorrido**, y no
+ * se limpiaba nunca—, así que el reporte decía «EXHIBIDO CORRECTAMENTE (245)» queriendo decir
+ * **«alguien lo marcó alguna vez»**. Medido contra el recorrido libre del mismo día: de los
+ * productos escaneados ahí, **46 variantes con stock (143 u) ⛔ no pasaron por el lector y 39 salían
+ * «exhibido correctamente»**. Bruno: *«habría que mejorarlo como el libre, y que tenga registro de
+ * hora, día y quién»*.
+ *
+ * 🔑 **Los estados pasan a DERIVARSE de los escaneos** (`estadosDe`). El `localStorage` sigue,
+ * pero como **borrador de la cola** y ⛔ no como la verdad: la verdad es la fila, con su hora.
+ *
+ * ⚠️ **Los «errores de categoría» siguen siendo locales**, y está bien: ⛔ no son del recorrido sino
+ * una lista de cosas a corregir en Tienda Nube, que se resuelve mirando el reporte.
  */
 export function useExhib(marca: Marca, productos: Producto[]) {
   const [crudos, setCrudos] = useState<CrudosExhib>({ inv: [], tnProducts: [] })
-  const [estados, setEstados] = useState<ExhibEstados>({})
   const [errores, setErrores] = useState<ExhibErrores>({})
+  const [viejas, setViejas] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Cargar estados/errores de localStorage al cambiar de marca (antes de bajar datos).
+  const cola = useColaEscaneos<string>(marca, keyCola(marca), '', 'categoria')
+
   useEffect(() => {
     let vivo = true
     void (async () => {
-      const est = leerLS<ExhibEstados>(keyEstados(marca), {})
       const err = leerLS<ExhibErrores>(keyErrores(marca), {})
+      // Las tildes de antes del cambio: ⛔ no se suben —no tienen ni fecha ni recorrido, que es
+      // justo lo que las vuelve inservibles— pero se dice cuántas son y se pueden borrar.
+      const antiguas = Object.keys(leerLS<ExhibEstados>(keyEstados(marca), {})).length
       if (!vivo) return
-      setEstados(est)
       setErrores(err)
+      setViejas(antiguas)
       setCargando(true)
       setErrorMsg(null)
       try {
@@ -75,36 +101,20 @@ export function useExhib(marca: Marca, productos: Producto[]) {
 
   /**
    * 🔴 **El cruce es DERIVADO, ⛔ no un resultado guardado — y ésa es la corrección del 7-sep-2026.**
+   * El catálogo del ETL (`productos`) llega **después** de que esta pantalla monta, así que
+   * cruzarlo una vez dejaba las 870 prendas en «(Sin categoría)» para siempre.
    *
-   * El catálogo del ETL (`productos`) llega **después** de que esta pantalla monta: el store lo
-   * publica asincrónico. Mientras la bajada guardaba los ítems ya cruzados, cruzaba contra una
-   * lista vacía y ahí se quedaba —las 870 prendas del Local en «(Sin categoría)», el desplegable
-   * con dos opciones, sin foto y sin precio de góndola—, porque nada volvía a cruzar cuando el
-   * catálogo llegaba. Derivándolo, el día que `productos` aparece los ítems se rearman solos.
-   *
-   * ⚠️ Los `errores` entran acá y ⛔ no se aplican a mano en otro lado: `construirItems` ya sabe
-   * reasignar la categoría marcada. Escribirlo dos veces era la copia que se despega.
+   * 🔑 **Dos listas**: `buscables` es todo el Local —lo que el lector puede enganchar— e `items` lo
+   * que hay que **chequear** (con stock). Ver `lib/exhib/datos.ts`.
    */
   const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
-
-  /**
-   * 🔑 **Dos listas del mismo crudo, y la diferencia es de fondo (19-sep-2026).**
-   *
-   * `buscables` es **todo el Local**: lo que el lector puede enganchar. `items` es lo que hay que
-   * **chequear** —las que tienen stock—, y es la que arma la lista, el triage, el PDF y los
-   * contadores.
-   *
-   * 🔴 Antes eran una sola, filtrada por `available_quantity > 0` en la bajada, y por eso una
-   * prenda colgada con el stock en cero ⛔ no se podía registrar: el lector no la encontraba y el
-   * escaneo caía en «no cruzó», mezclado con las lecturas malas. Medido en producción: **1.083 con
-   * stock contra 1.093 en cero** — la mitad del salón.
-   * ⚠️ Meterlas en `items` sería el error espejo: el recorrido pasaría a pedir 2.188 prendas, y las
-   * 1.093 que el sistema no tiene ⛔ no son faltantes de nadie.
-   */
   const buscables = useMemo(() => construirItems(crudos.inv, prodMap, errores), [crudos.inv, prodMap, errores])
   const items = useMemo(() => buscables.filter((it) => it.qty > 0), [buscables])
   const enCero = buscables.length - items.length
   const cats = useMemo(() => ordenarCats(items), [items])
+
+  /** El estado de cada variante, **derivado de los escaneos del recorrido** (`estadosDe`, con test). */
+  const estados = useMemo<ExhibEstados>(() => estadosDe(cola.escaneos), [cola.escaneos])
 
   const recargar = useCallback(async () => {
     setCargando(true)
@@ -118,33 +128,59 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     }
   }, [marca])
 
-  const persistEstados = useCallback((next: ExhibEstados) => {
-    setEstados(next)
-    guardarLS(keyEstados(marca), next)
-  }, [marca])
-  const persistErrores = useCallback((next: ExhibErrores) => {
-    setErrores(next)
-    guardarLS(keyErrores(marca), next)
-  }, [marca])
+  const persistErrores = useCallback(
+    (next: ExhibErrores) => {
+      setErrores(next)
+      guardarLS(keyErrores(marca), next)
+    },
+    [marca],
+  )
 
-  const setEstado = useCallback((id: string, estado: ExhibEstado) => {
-    persistEstados({ ...estados, [id]: estado })
-  }, [estados, persistEstados])
+  /** Abre el recorrido de una categoría. Sin esto ⛔ no hay dónde guardar una tilde. */
+  const iniciarRecorrido = useCallback(
+    (categoria: string) => {
+      const lugar = categoria.trim() || TODAS
+      cola.iniciar(nuevoRecorridoId(), lugar, { categoria: lugar })
+    },
+    [cola],
+  )
+
+  /** La fila de una variante marcada: el mismo `aEscaneo` del libre, con el estado encima. */
+  const filaDe = useCallback(
+    (it: ExhibItem, estado: ExhibEstado, codigo: string): EscaneoLibre => ({
+      ...aEscaneo(it, codigo, cola.extra || TODAS),
+      estado,
+    }),
+    [cola.extra],
+  )
 
   /**
    * Marca 'exhibido' por código; devuelve el resultado para el feedback de la UI.
    *
    * ⚠️ Busca en `buscables` —todo el Local— pero **la que está en cero ⛔ no se marca**: no está en
-   * la lista de esta pantalla, así que un estado ahí es peso muerto que nadie va a mirar. Lo que
-   * corresponde es **decirlo**: la prenda está colgada y el sistema la tiene en cero.
+   * la lista de esta pantalla, así que un estado ahí es peso muerto que nadie va a mirar.
    */
-  const marcarPorCodigo = useCallback((code: string, catSel: string): ResultadoMarca => {
-    const it = buscarItem(buscables, code)
-    if (!it) return { tipo: 'no-encontrado', code }
-    if (it.qty <= 0) return { tipo: 'stock-cero', it }
-    persistEstados({ ...estados, [exhibId(it)]: 'exhibido' })
-    return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it }
-  }, [buscables, estados, persistEstados])
+  const marcarPorCodigo = useCallback(
+    (code: string, catSel: string): ResultadoMarca => {
+      const it = buscarItem(buscables, code)
+      if (!it) return { tipo: 'no-encontrado', code }
+      if (it.qty <= 0) return { tipo: 'stock-cero', it }
+      if (!cola.id) return { tipo: 'sin-recorrido' }
+      cola.reemplazar(filaDe(it, 'exhibido', code))
+      return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it }
+    },
+    [buscables, cola, filaDe],
+  )
+
+  /** El triage de lo que ⛔ no apareció: se guarda como fila, con su hora, igual que una tilde. */
+  const setEstado = useCallback(
+    (id: string, estado: ExhibEstado) => {
+      const it = items.find((x) => exhibId(x) === id)
+      if (!it || !cola.id) return
+      cola.reemplazar(filaDe(it, estado, it.barcode || ''))
+    },
+    [items, cola, filaDe],
+  )
 
   /**
    * "Va acá → corregir TN": registra el error y reasigna la categoría del ítem.
@@ -152,23 +188,57 @@ export function useExhib(marca: Marca, productos: Producto[]) {
    * La reasignación ⛔ no se escribe acá: `errores` alimenta `construirItems`, así que guardar el
    * error **es** cambiar la categoría del ítem y las cats se reordenan solas.
    */
-  const marcarErrorCat = useCallback((pid: string, catCorrecta: string) => {
-    const it = items.find((x) => x.productId === pid)
-    if (!it) return
-    persistErrores({ ...errores, [pid]: { name: it.name, sku: it.sku || '', tnId: it.tnId || null, catTN: it.cat, catCorrecta } })
-    persistEstados({ ...estados, [exhibId(it)]: 'exhibido' })
-  }, [items, errores, estados, persistErrores, persistEstados])
+  const marcarErrorCat = useCallback(
+    (pid: string, catCorrecta: string) => {
+      const it = items.find((x) => x.productId === pid)
+      if (!it) return
+      persistErrores({ ...errores, [pid]: { name: it.name, sku: it.sku || '', tnId: it.tnId || null, catTN: it.cat, catCorrecta } })
+      if (cola.id) cola.reemplazar(filaDe(it, 'exhibido', it.barcode || ''))
+    },
+    [items, errores, persistErrores, cola, filaDe],
+  )
 
-  const quitarError = useCallback((pid: string) => {
-    const next = { ...errores }
-    delete next[pid]
-    persistErrores(next)
-  }, [errores, persistErrores])
+  const quitarError = useCallback(
+    (pid: string) => {
+      const next = { ...errores }
+      delete next[pid]
+      persistErrores(next)
+    },
+    [errores, persistErrores],
+  )
 
-  const reiniciar = useCallback(() => {
-    persistEstados({})
-    persistErrores({})
-  }, [persistEstados, persistErrores])
+  /** Saca las tildes viejas del teléfono: las de antes del cambio, que ⛔ no tienen cuándo. */
+  const borrarViejas = useCallback(() => {
+    guardarLS(keyEstados(marca), {})
+    setViejas(0)
+  }, [marca])
 
-  return { items, buscables, enCero, cats, estados, errores, cargando, errorMsg, setEstado, marcarPorCodigo, marcarErrorCat, quitarError, reiniciar, recargar }
+  return {
+    items,
+    buscables,
+    enCero,
+    cats,
+    estados,
+    errores,
+    cargando,
+    errorMsg,
+    viejas,
+    borrarViejas,
+    // El recorrido, igual que en el libre
+    recorridoId: cola.id,
+    categoria: cola.extra,
+    escaneos: cola.escaneos,
+    sinSubir: cola.sinSubir,
+    subiendo: cola.subiendo,
+    errorCola: cola.errorMsg,
+    iniciarRecorrido,
+    cerrar: cola.cerrar,
+    eliminar: cola.eliminar,
+    reintentar: cola.reintentar,
+    setEstado,
+    marcarPorCodigo,
+    marcarErrorCat,
+    quitarError,
+    recargar,
+  }
 }

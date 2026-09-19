@@ -23,8 +23,9 @@ type Fase = 'config' | 'scan' | 'triage'
  * 🔑 **`libre` ⛔ no reemplaza a `categoria`, convive con él** (decisión de Bruno, 19-sep-2026). La
  * categoría sirve para chequear una puntual; el libre es el que se parece al salón, donde una misma
  * categoría está colgada en varios lugares y «TOPS Y BODIES» engloba tops, bodies, blusas, camisas,
- * corsets y musculosas. Son dos recorridos distintos y ⛔ no dos vistas del mismo: el libre guarda
- * en la base por LUGAR, el de categoría sigue viviendo en el `localStorage` del teléfono.
+ * corsets y musculosas. Son dos recorridos distintos y ⛔ no dos vistas del mismo: **el libre
+ * guarda por LUGAR y el de categoría por CATEGORÍA**, pero desde el 19-sep-2026 los dos escriben en
+ * la base, con su hora y su persona, y comparten la cola (`useColaEscaneos`).
  */
 type Modo = 'categoria' | 'libre'
 
@@ -61,8 +62,13 @@ function PrecioEtiqueta({ it }: { it: ExhibItem }) {
  *
  * Recorrer el Local con el lector físico confirmando que cada variante con stock está
  * colgada; después triage de faltantes + reporte PDF + registro de categorías a corregir
- * en TN. Read-only sobre Supabase/TN; solo escribe localStorage (mismas claves que el
- * legacy). No escribe stock ni GN.
+ * en TN. Read-only sobre el inventario; ⛔ no escribe stock ni GN.
+ *
+ * 🔴 **Desde el 19-sep-2026 el recorrido se guarda en la base** (`exhib_recorrido` con
+ * `modo='categoria'`), como el libre: cada tilde es una fila **con su hora y su persona**. Antes
+ * vivía en el `localStorage` sin fecha y sin limpiarse nunca, así que «EXHIBIDO CORRECTAMENTE
+ * (245)» quería decir «alguien lo marcó alguna vez» — y con eso ⛔ no se puede mandar a nadie a
+ * colgar nada.
  *
  * Rediseño jul-2026 (patrón Flujo operativo): las tres fases —configurar, recorrer,
  * faltantes— existían pero no se veían; ahora hay una barra de pasos, así se sabe dónde
@@ -127,10 +133,27 @@ export function Exhib() {
   function foco() {
     setTimeout(() => scanRef.current?.focus(), 150)
   }
+  /**
+   * 🔴 **Empezar es ABRIR UN RECORRIDO, ⛔ no cambiar de pantalla.** Desde el 19-sep-2026 cada tilde
+   * es una fila con su hora y su persona; sin recorrido abierto ⛔ no habría dónde guardarla, y ése
+   * era exactamente el problema: «245 exhibidos» sin poder decir de cuándo ni de quién.
+   */
   function iniciar() {
+    if (!ex.recorridoId) ex.iniciarRecorrido(catSel)
     setFase('scan')
     setFb(null)
     foco()
+  }
+
+  async function terminar() {
+    try {
+      await ex.cerrar()
+    } catch (e) {
+      toast.error((e as Error).message)
+      return
+    }
+    toast.ok('Recorrido guardado')
+    setFase('config')
   }
   function marcar(code: string) {
     const c = code.trim()
@@ -142,17 +165,22 @@ export function Exhib() {
     setFb(null)
   }
 
-  async function reiniciar() {
-    if (Object.keys(ex.estados).length || Object.keys(ex.errores).length) {
-      const ok = await confirmar({
-        titulo: 'Reiniciar el chequeo',
-        tono: 'danger',
-        ok: 'Eliminar y empezar',
-        mensaje: `Se elimina el chequeo en curso (${enCurso} ${enCurso === 1 ? 'ítem marcado' : 'ítems marcados'}) y se empieza de cero.`,
-      })
-      if (!ok) return
+  async function eliminarRecorrido() {
+    const ok = await confirmar({
+      titulo: '¿Eliminar este recorrido?',
+      tono: 'danger',
+      ok: 'Eliminar',
+      mensaje: `Se van las ${enCurso} ${enCurso === 1 ? 'marca' : 'marcas'} de este recorrido, acá y en el servidor. No se puede deshacer.`,
+    })
+    if (!ok) return
+    try {
+      await ex.eliminar()
+    } catch (e) {
+      // «Ese recorrido no está» ⛔ no es una falla: pasa cuando nunca llegó a subir (sin señal), y
+      // el borrador del teléfono ya se limpió igual.
+      const msg = (e as Error).message
+      if (!/no está/i.test(msg)) toast.error('No se pudo eliminar: ' + msg)
     }
-    ex.reiniciar()
     setFase('config')
   }
 
@@ -183,7 +211,7 @@ export function Exhib() {
       })
       if (!ok) return
     }
-    await generarReporteExhib({ lista, persona: personaVal || '(sin nombre)', catLabel: catSel || 'Todas las categorías', estados: ex.estados, errores: ex.errores, marca })
+    await generarReporteExhib({ lista, persona: personaVal || '(sin nombre)', catLabel: catSel || 'Todas las categorías', estados: ex.estados, errores: ex.errores, marca, escaneos: ex.escaneos })
   }
 
   /**
@@ -215,7 +243,12 @@ export function Exhib() {
             <Button variant="outline" onClick={() => void traerGN()} loading={!!syncLabel} title="Trae lo más nuevo de GN (stock y productos recién llegados) y recarga la lista (~2-4 min)">
               {syncLabel || 'Cargar de GN'}
             </Button>
-            <Button variant="solid" tone="brand" onClick={iniciar} disabled={ex.cargando || !lista.length}>Iniciar recorrido</Button>
+            {ex.recorridoId && (
+              <Button variant="outline" onClick={iniciar}>Retomar</Button>
+            )}
+            <Button variant="solid" tone="brand" onClick={iniciar} disabled={ex.cargando || !lista.length || !!ex.recorridoId}>
+              Iniciar recorrido
+            </Button>
           </>
         )}
         {fase === 'scan' && (
@@ -230,8 +263,13 @@ export function Exhib() {
         )}
         {fase === 'triage' && (
           <>
-            <Button variant="ghost" onClick={() => void reiniciar()}>
-              Reiniciar
+            <Button variant="ghost" tone="danger" onClick={() => void eliminarRecorrido()}>
+              Eliminar
+            </Button>
+            {/* Cerrar es lo que sella el recorrido con su hora. Va acá y ⛔ no al generar el PDF:
+                el reporte se puede volver a generar, el recorrido se cierra una sola vez. */}
+            <Button variant="outline" onClick={() => void terminar()} loading={ex.subiendo}>
+              Terminar y guardar
             </Button>
             <Button
               variant="outline"
@@ -293,6 +331,20 @@ export function Exhib() {
             {catSel ? ' de esta categoría' : ''}. Cada una debería estar colgada en el local.
           </p>
 
+          {/* 🔑 Las tildes de antes del cambio: ⛔ no se suben —no tienen ni fecha ni recorrido, que es
+              justo lo que las vuelve inservibles— pero callarlas sería peor: alguien las está
+              viendo desaparecer de la pantalla. */}
+          {ex.viejas > 0 && (
+            <Notice tone="neutral" icon="🕓" style={{ marginTop: space[4] }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+                <span>
+                  Hay <b>{ex.viejas}</b> marcas viejas en este teléfono, de antes de que el recorrido se guardara. No tienen fecha, así que no se usan.
+                </span>
+                <Button size="sm" variant="outline" onClick={ex.borrarViejas}>Sacarlas</Button>
+              </div>
+            </Notice>
+          )}
+
           {enCurso > 0 && (
             <Notice tone="brand" icon="↩" style={{ marginTop: space[4] }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
@@ -348,6 +400,13 @@ export function Exhib() {
                 Ese código no está en la lista ({fb.code})
               </Notice>
             )}
+            {/* ⛔ Sin recorrido abierto ⛔ no hay dónde guardar la tilde. Puede pasar si se entra por
+                «Retomar» a un recorrido que ya se cerró. */}
+            {fb?.tipo === 'sin-recorrido' && (
+              <Notice tone="warning" icon="⚠">
+                Este recorrido ya se cerró. Volvé a «Configurar» y empezá uno nuevo.
+              </Notice>
+            )}
             {/* 🔑 Existe, está colgada, y el sistema la tiene en cero ⇒ ⛔ no está en esta lista y no
                 se marca: un estado sobre algo que esta pantalla no muestra no lo mira nadie. Lo que
                 corresponde es decirlo. El recorrido LIBRE sí lo guarda, con su lugar. */}
@@ -389,6 +448,14 @@ export function Exhib() {
               </Notice>
             )}
           </div>
+
+          {ex.errorCola && (
+            <Notice tone="warning" icon="📡" style={{ marginBottom: space[3] }}>
+              <div style={{ fontWeight: 700 }}>Hay {ex.sinSubir} {ex.sinSubir === 1 ? 'marca' : 'marcas'} sin subir</div>
+              <div style={{ margin: '2px 0 8px' }}>Seguí escaneando: no se pierde nada, queda guardado en el teléfono hasta que suba. ({ex.errorCola})</div>
+              <Button size="sm" variant="outline" onClick={() => void ex.reintentar()} loading={ex.subiendo}>Reintentar</Button>
+            </Notice>
+          )}
 
           <Subtitulo>Pendientes de escanear ({pendientes.length})</Subtitulo>
           <div style={{ maxHeight: 340, overflowY: 'auto' }}>

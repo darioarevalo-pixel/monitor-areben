@@ -8,18 +8,20 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |
 |---|---|---|
 | unidad de trabajo | una categoría de Tienda Nube | un mueble del salón («perchero tops») |
-| dónde queda | `localStorage` del teléfono | **la base**, con el lugar de cada escaneo |
+| dónde queda | **la base**, con la categoría recorrida (19-sep-2026) | **la base**, con el lugar de cada escaneo |
 | qué contesta | qué quedó sin escanear, con triage y PDF | qué se escaneó en cada lugar **y qué falta colgar** |
 | faltantes | los calcula sobre la categoría entera | **sólo los hermanos de lo que tocó** (ver abajo) |
 
 ## Dónde vive
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
-`ExhibLibre.tsx` · `useExhibLibre.ts` · `ParaColgar.tsx`) · `lib/exhib/` (`core.ts` puro y
+`ExhibLibre.tsx` · `useExhibLibre.ts` · **`useColaEscaneos.ts` la cola que usan LOS DOS** ·
+`ParaColgar.tsx`) · `lib/exhib/` (`core.ts` puro y
 compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
 `datos.ts` la bajada · `cliente.ts` · `pdf.ts` · `tipos.ts`) ·
 `api/_exhib.js` por `api/datos.js?recurso=exhib` · tablas `exhib_recorrido` y `exhib_escaneo`
-(`sql/migrate-exhib-libre.sql`, **sólo en el Supabase de Zattia**) ·
+(`sql/migrate-exhib-libre.sql` + `sql/migrate-exhib-categoria.sql`, **sólo en el Supabase de
+Zattia**) ·
 `tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
@@ -149,9 +151,18 @@ pregunta**. Números arriba, en «Reglas que el código no dice».
   sale completa igual. Lo que sigue sin verse acá es **cuántas categorías hay de verdad**.
 - ⚠️ **298 variantes con stock (96 productos) ⛔ no cruzan con TN** ⇒ salen en «(Sin categoría)». Al
   modo libre ⛔ no lo frena, pero en el Excel les sale **vacía la columna con la que se compara**.
-- ▶️ **El modo por categoría sigue muriendo en el teléfono.** La tabla tiene `modo` justamente para
-  que pueda subir algún día; hoy siempre entra `'libre'`. 🔴 Y por eso **la pantalla abre en libre**:
-  el 19-sep abría en categoría y el local recorrió media hora sin que llegara una sola fila.
+- 🏁 **El modo por categoría ya guarda en la base** (19-sep-2026, a la tarde): entra por las MISMAS
+  `exhib_recorrido` / `exhib_escaneo` con `modo='categoria'`, el `lugar` **es la categoría
+  recorrida** y el triage viaja en `exhib_escaneo.estado`. Los estados de la pantalla pasaron a
+  **derivarse de los escaneos**: el `localStorage` quedó como borrador de la cola y ⛔ no como la
+  verdad. 🔴 **Lo que lo empujó**: el flag viejo ⛔ no tenía fecha y ⛔ no se limpiaba nunca, así que
+  «EXHIBIDO CORRECTAMENTE (245)» quería decir «alguien lo marcó alguna vez». Medido contra el
+  recorrido libre del mismo día: **46 variantes con stock (143 u) ⛔ no pasaron por el lector y 39
+  salían «exhibido correctamente»**.
+  ⚠️ **Las tildes viejas ⛔ no se migran** —no tienen ni fecha ni persona, que es justo lo que las
+  vuelve inservibles—: la pantalla dice cuántas hay y deja borrarlas.
+  ▶️ **Falta caminarlo en el local** y decidir si la pantalla vuelve a abrir en categoría (hoy abre
+  en libre, porque el 19-sep a la mañana el local recorrió media hora sin que llegara una fila).
 - ▶️ **El PDF del modo por categoría ⛔ no dice DÓNDE apareció cada prenda** y el libre sí. Cruzar los
   dos se hace **por SKU**, que es lo único que comparten.
 

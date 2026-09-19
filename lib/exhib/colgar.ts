@@ -26,7 +26,7 @@
 
 import type { Filas } from '../excel'
 import { exhibId, normCode } from './core'
-import type { EscaneoLibre } from './libre'
+import { pasoPorElLector, type EscaneoLibre } from './libre'
 import type { ExhibItem } from './tipos'
 
 /** Una variante que hay que ir a colgar, y dónde están sus hermanas. */
@@ -58,7 +58,10 @@ export type Colgar = {
  * **una variante en cero ⛔ no se puede colgar**: no hay nada en el guardado que traer.
  */
 export function paraColgar(escaneos: EscaneoLibre[], conStock: ExhibItem[]): Colgar[] {
-  const cruzados = escaneos.filter((e) => e.encontrado && e.product_id)
+  // 🔴 **Toca el producto el que PASÓ POR EL LECTOR**, ⛔ no el que tiene una marca de triage: en el
+  // recorrido por categoría, «no se encuentra» quiere decir que alguien la buscó y ⛔ no estaba, así
+  // que su prenda ⛔ no se vio y sus hermanas ⛔ no se pueden pedir. Ver `pasoPorElLector`.
+  const cruzados = escaneos.filter((e) => pasoPorElLector(e) && e.product_id)
   if (!cruzados.length) return []
 
   // 🔑 **El orden de caminata lo dice el RELOJ del escaneo, ⛔ no el orden del array.** Los dos
@@ -77,6 +80,9 @@ export function paraColgar(escaneos: EscaneoLibre[], conStock: ExhibItem[]): Col
   // 🔴 Las escaneadas se miran del recorrido ENTERO y ⛔ no del lugar: la misma prenda puede estar
   // colgada en otro mueble, y ahí ⛔ no falta nada. Si no, la lista pediría colgar algo que está
   // colgado, que es el error que hace que se le deje de creer.
+  // ⚠️ Acá entran **todas**, también las del triage: una variante que alguien ya marcó «no se
+  // encuentra» hay que **buscarla**, ⛔ no traerla del guardado, y pedir las dos cosas a la vez es
+  // mandar a alguien a un viaje que ya se hizo.
   const escaneadas = new Set(escaneos.map((e) => e.variante_id))
 
   const cuantasConEseSku = new Map<string, number>()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, filasExport, hallazgoDe, HEADER_EXPORT, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -208,5 +208,59 @@ describe('nuevoRecorridoId', () => {
     const a = nuevoRecorridoId()
     expect(a.startsWith('ex')).toBe(true)
     expect(a).not.toBe(nuevoRecorridoId())
+  })
+})
+
+/**
+ * 🔴 **El estado de la pantalla y del PDF sale de ACÁ desde el 19-sep-2026**, ⛔ no de un flag del
+ * `localStorage` sin fecha. Es la corrección que trajo Bruno mirando el PDF: «EXHIBIDO
+ * CORRECTAMENTE (245)» quería decir «alguien lo marcó alguna vez».
+ */
+describe('estadosDe — el estado se DERIVA de los escaneos del recorrido', () => {
+  const marca = (v: string, estado: EscaneoLibre['estado'], iso: string): EscaneoLibre => ({
+    ...aEscaneo({ ...TOP, barcode: v }, v, 'TOPS Y BODIES', Date.parse(iso)),
+    estado,
+  })
+
+  it('un escaneo del modo LIBRE (sin estado) ⛔ no entra: ahí no hay triage', () => {
+    expect(estadosDe([aEscaneo(TOP, '779001', 'perchero tops')])).toEqual({})
+  })
+
+  it('cada variante queda con lo que se marcó', () => {
+    const e = [marca('A1', 'exhibido', '2026-09-19T13:00:00Z'), marca('B2', 'no-encuentra', '2026-09-19T13:01:00Z')]
+    expect(estadosDe(e)).toEqual({ A1: 'exhibido', B2: 'no-encuentra' })
+  })
+
+  /**
+   * 🔑 Gana el RELOJ y ⛔ no el orden del array: la cola sube y se relee en cualquier orden, así que
+   * el orden de llegada ⛔ no es el orden de los hechos. Acá la fila vieja va ÚLTIMA a propósito.
+   */
+  it('con dos marcas de la misma variante gana la MÁS NUEVA, aunque llegue primero', () => {
+    const nueva = marca('A1', 'solucionado', '2026-09-19T13:40:00Z')
+    const vieja = marca('A1', 'no-encuentra', '2026-09-19T13:05:00Z')
+    expect(estadosDe([nueva, vieja])).toEqual({ A1: 'solucionado' })
+    expect(estadosDe([vieja, nueva])).toEqual({ A1: 'solucionado' })
+  })
+})
+
+/**
+ * 🔴 **«No se encuentra» ⛔ NO es haber visto la prenda**: alguien la buscó y ⛔ no estaba. De eso
+ * depende «qué falta colgar» —sus hermanas ⛔ no se pueden pedir— y por eso la pregunta es una
+ * función y ⛔ no un `e.encontrado` suelto en cada lado.
+ */
+describe('pasoPorElLector', () => {
+  it('el libre (sin estado) y el «exhibido» SÍ pasaron', () => {
+    expect(pasoPorElLector({ encontrado: true, estado: null })).toBe(true)
+    expect(pasoPorElLector({ encontrado: true, estado: 'exhibido' })).toBe(true)
+  })
+
+  it('los tres del triage ⛔ NO', () => {
+    for (const estado of ['no-encuentra', 'una-unidad', 'solucionado'] as const) {
+      expect(pasoPorElLector({ encontrado: true, estado })).toBe(false)
+    }
+  })
+
+  it('un código que ⛔ no cruzó ⛔ tampoco, tenga el estado que tenga', () => {
+    expect(pasoPorElLector({ encontrado: false, estado: 'exhibido' })).toBe(false)
   })
 })

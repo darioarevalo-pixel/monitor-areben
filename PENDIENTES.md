@@ -1835,6 +1835,52 @@ categorías vacía**, que es la columna con la que se compara.
 
 **7. ▶️ El modo por categoría sigue sin guardar en la base.** `exhib_recorrido.modo` existe para eso.
 
+**8. 🆕 🔴 «EXHIBIDO» ES UN FLAG SIN FECHA QUE NUNCA SE LIMPIA ⇒ EL PDF ⛔ NO DICE «SE ESCANEÓ HOY».**
+Lo trajo Bruno el 19-sep mirando el PDF: *«de la alerta para reponer exhibición me falta un TOP UNIT,
+pq son 3 colores, sólo se escanearon dos y me dice que no pasa… tiene que tener en cuenta la
+variante»* · *«lo mismo con TOP ZARA»*.
+🔑 **La variante SÍ se tiene en cuenta**: `exhibId` es por variante y sobre las 1.083 con stock del
+Local hay **1.083 ids distintos, 0 colisiones** (los barcodes son únicos por color). Lo que falla es
+otra cosa: `useExhib` guarda `{varianteId: estado}` en el `localStorage` del teléfono **sin fecha y
+sin recorrido**, y sólo lo borra «Reiniciar el chequeo» ⇒ «EXHIBIDO CORRECTAMENTE (245)» quiere decir
+**«alguien lo marcó alguna vez»**, ⛔ no «pasó por el lector en esta caminata». El faltante que sale
+del PDF es «nunca se marcó», que ⛔ no es la pregunta de reponer.
+📊 **Medido contra el recorrido libre de ese mismo día** (lugar «Tops», 97 escaneos, 10:39-10:48, que
+fue una pasada COMPLETA del perchero: **86 de sus 95 cruces ya estaban en «exhibido»**): de los
+productos que sí se escanearon ahí, **46 variantes con stock en el Local (143 unidades) ⛔ no pasaron
+por el lector**, y **39 de ellas salen «exhibido correctamente» en el PDF**. Los dos que marcó Bruno:
+TOP UNIT **2 de 3 colores** (BLANCO, 2u) y TOP ZARA **1 de 3** (BLANCO 4u + NEGRO 9u, y el NEGRO es la
+variante con más stock del perchero).
+⇒ **La alerta de reponer tiene que salir del RECORRIDO —escaneos con fecha, `exhib_escaneo`— y ⛔ no
+del flag**: por variante, «tiene stock en el Local y ⛔ no se escaneó en este recorrido». El modo
+libre ya guarda el dato; lo que falta es el cruce (y el pendiente 7, para que el modo por categoría
+también escriba).
+⚠️ **Lo que ⛔ no se puede saber del PDF**: si esas 39 se marcaron hoy en la vuelta por categoría o
+hace semanas. El flag ⛔ no tiene cuándo, y por eso la pregunta ⛔ no se contesta con él.
+
+🏁 **HECHO EN EL ÁRBOL, SIN COMMITEAR — 19-sep 12:50.** El modo por categoría entra por las MISMAS
+`exhib_recorrido` / `exhib_escaneo` con `modo='categoria'`: el `lugar` **es la categoría recorrida**
+y el triage viaja en `exhib_escaneo.estado` (lista blanca de cuatro en `api/_exhib.js`; lo que venga
+fuera entra `null` = escaneo del libre). La cola de subida que evita perder un escaneo quedó **en un
+solo lugar** (`components/exhib/useColaEscaneos.ts`), usada por los dos modos, y los estados de la
+pantalla **se derivan de los escaneos** (`estadosDe` en `lib/exhib/libre.ts`, con test: gana el
+RELOJ y ⛔ no el orden del array). «No se encuentra» **⛔ ya no toca el producto** en «qué falta
+colgar» (`pasoPorElLector`): alguien la buscó y ⛔ no estaba, así que sus hermanas ⛔ no se piden. El
+PDF imprime **la hora de cada marca** y de cuándo a cuándo se caminó. Las tildes viejas del teléfono
+**⛔ no se migran** —no tienen ni fecha ni persona— y la pantalla dice cuántas son y deja borrarlas.
+📌 Medido: `typecheck` y `lint` limpios, **88 tests de exhib verdes** (eran 82).
+
+🔴 ▶️ **LO QUE LO FRENA: LA MIGRACIÓN ⛔ NO ESTÁ APLICADA.** Medido contra la base de Zattia el
+19-sep 12:46: `exhib_recorrido` tiene `modo` pero **⛔ no `categoria`**, y `exhib_escaneo` **⛔ no
+tiene `estado`**. ⚠️ **Deployar así rompe TAMBIÉN el modo libre**, que ya lo usa el local: desde este
+cambio **toda** fila viaja con `estado`, y la columna que no existe hace rebotar el insert.
+⇒ **Primero se corre, y después se commitea**: `node scripts/aplicar-sql.mjs
+sql/migrate-exhib-categoria.sql exhib_escaneo`. 🔴 **Lo bloquea el clasificador** ([Production
+Deploy]) ⇒ lo corre Bruno con `!`. Oráculo: volver a preguntar por `information_schema` y ver las
+**dos** columnas.
+▶️ Y después: **caminarlo en el local** —el oráculo es que el PDF diga la hora al lado de cada
+prenda— y decidir si la pantalla vuelve a abrir en categoría (hoy abre en libre).
+
 📊 **La escala, para dimensionar:** el Local tiene **1.074 variantes con stock**; el recorrido de
 tops cubrió **296**; quedan **777**.
 

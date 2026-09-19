@@ -59,8 +59,15 @@ export async function leerLugares(marca: string): Promise<string[]> {
  *
  * ⚠️ La **persona** ⛔ no viaja: la pone el servidor desde el perfil logueado.
  */
-export async function abrirRecorrido(marca: string, id: string, nota?: string): Promise<void> {
-  await escribir(marca, 'abrir', { id, nota: nota ?? null })
+export async function abrirRecorrido(marca: string, id: string, opts?: { modo?: 'libre' | 'categoria'; categoria?: string | null; nota?: string | null }): Promise<void> {
+  await escribir(marca, 'abrir', {
+    id,
+    // ⚠️ El `modo` viaja y ⛔ no se asume: desde el 19-sep-2026 el recorrido por categoría entra por
+    // estas mismas tablas, y es lo único que los distingue en la lista de recorridos.
+    modo: opts?.modo ?? 'libre',
+    categoria: opts?.categoria ?? null,
+    nota: opts?.nota ?? null,
+  })
 }
 
 /**

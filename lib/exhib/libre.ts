@@ -16,7 +16,7 @@
 
 import type { Filas } from '../excel'
 import { normCode, exhibId, precioDeGondola } from './core'
-import type { ExhibItem } from './tipos'
+import type { ExhibEstado, ExhibItem } from './tipos'
 
 /** Un escaneo del recorrido libre: la prenda, y **dónde** apareció. Espeja `exhib_escaneo`. */
 export type EscaneoLibre = {
@@ -45,6 +45,54 @@ export type EscaneoLibre = {
   promo: number | null
   /** ISO. El reloj del teléfono: la cola puede subirse mucho después. */
   escaneado_en: string
+  /**
+   * Sólo en el recorrido **por categoría**: qué pasó con esa variante.
+   *
+   * `null`/ausente = escaneo del modo **libre**, que ⛔ no tiene triage. `'exhibido'` = pasó por el
+   * lector; los otros tres son la marca de lo que ⛔ no apareció y **⛔ no pasó por el lector**.
+   *
+   * 🔴 **Esa diferencia la usa `paraColgar`**: un triage ⛔ no «toca» el producto —nadie lo vio— y
+   * una variante marcada «no se encuentra» es **BUSCAR**, ⛔ no colgar.
+   */
+  estado?: EstadoTriage | null
+}
+
+/**
+ * Lo que se puede marcar en el recorrido por categoría.
+ *
+ * 🔑 **Es el mismo tipo de `tipos.ts` y ⛔ no una copia**: la lista de estados la conocen la
+ * pantalla, el PDF y ahora la base, y tres listas iguales escritas aparte es la que se despega.
+ */
+export type EstadoTriage = ExhibEstado
+
+/** ¿Este escaneo pasó de verdad por el lector? El triage ⛔ no: es una marca sobre lo que faltó. */
+export function pasoPorElLector(e: Pick<EscaneoLibre, 'encontrado' | 'estado'>): boolean {
+  return e.encontrado && (e.estado == null || e.estado === 'exhibido')
+}
+
+/**
+ * El estado de cada variante **derivado de los escaneos del recorrido**, que es lo que la pantalla
+ * y el PDF pintan desde el 19-sep-2026.
+ *
+ * 🔴 **La regla vive acá y ⛔ no en el hook**: es la que decide qué dice «EXHIBIDO CORRECTAMENTE»,
+ * y adentro de un `useMemo` ⛔ no se puede ejercer. Antes era un `localStorage` sin fecha que ⛔ no
+ * se limpiaba nunca.
+ *
+ * 🔑 **Gana la marca MÁS NUEVA, por el reloj del escaneo y ⛔ no por el orden del array.** La misma
+ * variante puede marcarse dos veces —«no se encuentra» y, cuando aparece, «solucionado»—, y la cola
+ * puede subir y releerse en cualquier orden. El orden de llegada ⛔ no es el orden de los hechos.
+ */
+export function estadosDe(escaneos: EscaneoLibre[]): Record<string, EstadoTriage> {
+  const out: Record<string, EstadoTriage> = {}
+  const cuando: Record<string, string> = {}
+  for (const e of escaneos) {
+    if (!e.estado) continue
+    const previo = cuando[e.variante_id]
+    if (previo && previo > e.escaneado_en) continue
+    out[e.variante_id] = e.estado
+    cuando[e.variante_id] = e.escaneado_en
+  }
+  return out
 }
 
 /** La cabecera de un recorrido. Espeja `exhib_recorrido`. */

@@ -23,6 +23,8 @@ import { leerTodo } from '../lib/supabase/paginar.core.js'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
 const numero = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v))
+/** Los estados del triage del recorrido POR CATEGORÍA. `null` = escaneo del modo libre. */
+const ESTADOS = new Set(['exhibido', 'solucionado', 'una-unidad', 'no-encuentra'])
 
 /**
  * Una fila de escaneo, saneada. ⛔ No se guarda lo que venga: `recorrido_id` lo pone el servidor
@@ -51,6 +53,11 @@ function filaDeEscaneo(recorridoId, e) {
     // subirse mucho después. `now()` diría cuándo se pudo subir, ⛔ no cuándo se escaneó. Si viene
     // vacía o ilegible se cae al default de la tabla, que es lo único que queda.
     escaneado_en: texto(e.escaneado_en),
+    // 🔴 Lista blanca de los cuatro estados del triage: lo que venga fuera de eso entra **null**,
+    // que es «escaneo del modo libre». La columna decide qué dice el reporte —«exhibido» contra «no
+    // se encuentra» son dos mandados distintos— así que un valor inventado por un cliente viejo o
+    // por un reintento raro ⛔ no puede entrar y quedar ahí para siempre.
+    estado: ESTADOS.has(e.estado) ? e.estado : null,
   }
 }
 
@@ -149,10 +156,17 @@ export default async function handler(req, res) {
       if (accion === 'abrir') {
         const id = String(b.id || '').trim()
         if (!id) return res.status(400).json({ error: 'falta el id del recorrido' })
+        // 🔑 La lista blanca de `modo` vive acá: lo que no sea uno de los dos entra como 'libre',
+        // que es el que ⛔ no cambia cómo se lee el recorrido. Un modo inventado partiría en dos la
+        // lista de recorridos sin que nadie se entere.
+        const modo = b.modo === 'categoria' ? 'categoria' : 'libre'
         const row = {
           id,
           store,
-          modo: 'libre',
+          modo,
+          // La categoría de TN que se recorrió. Sólo la usa el modo por categoría; en el libre es
+          // null y la unidad de trabajo es el lugar de cada escaneo.
+          categoria: modo === 'categoria' ? texto(b.categoria) : null,
           // 🔑 La firma sale de `perfil.name` y NUNCA del body: si saliera del POST, un recorrido se
           // podría firmar con el nombre de otro cambiando un campo (`api/_conteos-deposito.js:46`).
           persona: perfil.name || null,
