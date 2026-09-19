@@ -10,8 +10,10 @@
  * 🏁 19-sep-2026, `3b6b15f4`: 123 chunks, control ✓ y los tres oráculos en `0jznf_tcccgw_.js`.
  */
 const BASE = 'https://monitorareben.vercel.app'
-const ORACULOS = ['Terminar y guardar', 'Este recorrido ya se cerr', 'marcas viejas en este']
-const CONTROL = 'Iniciar recorrido'
+const ORACULOS = ['Doble lectura del aparato', 'Pueden faltar en el salón', 'Hay de m']
+// El de control ya estaba en prod desde el deploy anterior de hoy: sin él, un 0 del oráculo ⛔ no
+// distingue «no se deployó» de «el crawl no llegó al chunk».
+const CONTROL = 'Terminar y guardar'
 const RUTA = /static\/immutable\/chunks\/[a-zA-Z0-9_.-]+\.js/g
 const bajar = async (u) => { const r = await fetch(`${BASE}/_next/${u}`); return r.ok ? await r.text() : '' }
 const html = await (await fetch(`${BASE}/exhib`)).text()
