@@ -3,7 +3,7 @@
 //   GET  ?recurso=exhib&store=…&action=recorridos       → los recorridos, con cuántos escaneos tiene cada uno
 //   GET  ?recurso=exhib&store=…&action=recorrido&id=…   → UNO entero: cabecera + TODOS sus escaneos
 //   GET  ?recurso=exhib&store=…&action=lugares          → los lugares ya usados, para sugerir
-//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'sacar-escaneo', … }
+//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'sacar-escaneo'|'eliminar', … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=exhib`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas; una ruta nueva sería la octava por un solo recurso.
@@ -209,7 +209,22 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true })
       }
 
-      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar o sacar-escaneo)` })
+      if (accion === 'eliminar') {
+        const recorrido = await recorridoDeLaMarca(String(b.id || ''))
+        if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
+        // 🔴 Sólo se descarta uno SIN CERRAR. Un recorrido cerrado es el dato con el que alguien va
+        // a comparar el salón, y ⛔ no hay verbo de vuelta: que se pueda eliminar de un toque desde el
+        // teléfono es exactamente el accidente que ⛔ no se puede deshacer.
+        if (recorrido.estado === 'cerrado') {
+          return res.status(409).json({ error: 'Ese recorrido ya está cerrado: ⛔ no se descarta.' })
+        }
+        // Los escaneos caen solos por el `on delete cascade` de la tabla.
+        const { error } = await sb.from('exhib_recorrido').delete().eq('id', recorrido.id)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true })
+      }
+
+      return res.status(400).json({ error: `action inválida (usá abrir, escanear, cerrar, sacar-escaneo o eliminar)` })
     }
 
     return res.status(405).json({ error: 'método no permitido' })

@@ -57,6 +57,11 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
   que ignora duplicados: el recorrido tiene que poder arrancar sin haber hablado con el servidor. El
   precio de eso es que el id viaja en el body ⇒ `recorridoDeLaMarca` verifica el `store` en **cada**
   escritura; el gate de la puerta solo ⛔ no alcanza. → `api/_exhib.js`
+- 🔑 **«Eliminar» borra las DOS puntas, y sólo funciona en uno SIN CERRAR.** Limpiar sólo el
+  teléfono dejaba un recorrido abierto para siempre en la lista, con escaneos a medias y sin nadie
+  que lo pudiera cerrar — y el que lo mirara después ⛔ no tendría cómo saber que fue un arranque en
+  falso. Uno **cerrado** contesta 409: ése es el dato con el que alguien va a comparar el salón y no
+  puede irse de un toque desde el teléfono.
 - 🔑 **La hora del escaneo la manda el teléfono.** `now()` diría cuándo se pudo subir, ⛔ no cuándo
   se escaneó.
 - 🔑 **El lugar es texto libre con sugerencias, ⛔ no un catálogo.** El salón se reacomoda, y una
@@ -96,9 +101,10 @@ armar la lista— pero el otro sigue mintiendo:
 `npx vitest run tests/exhib-libre.test.ts --reporter=dot` — el núcleo del libre entero, sin red.
 Lo que el test ⛔ no puede ver y hay que ejercer a mano:
 
-- **Los cuatro verbos que escriben**, contra producción, con el header `x-monitor-auth`:
+- **Los cinco verbos que escriben**, contra producción, con el header `x-monitor-auth`:
   `abrir` → `escanear` (una fila encontrada y una no) → `escanear` la misma otra vez (el único ⛔ no
-  duplica) → `cerrar`. **El oráculo es leerlo por `action=recorrido`**, que es el otro camino.
+  duplica) → `sacar-escaneo` → `cerrar`, y `eliminar` sobre uno sin cerrar. **El oráculo es leerlo
+  por `action=recorrido`**, que es el otro camino — y `eliminar` se comprueba con el 404 de después.
 - 🔴 **En esta Mac ⛔ no se puede escribir en Zattia**: falta `ZATTIA_SUPABASE_SERVICE_KEY` en el
   `.env` y un script local contesta `permission denied` (42501). En Vercel sí está ⇒ se ejerce
   contra producción, o en BDI, que sí tiene la key.

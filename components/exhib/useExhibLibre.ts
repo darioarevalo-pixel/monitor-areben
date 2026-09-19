@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { buscarItem } from '@/lib/exhib/core'
-import { abrirRecorrido, cerrarRecorrido, leerLugares, sacarEscaneo, subirEscaneos } from '@/lib/exhib/cliente'
+import { abrirRecorrido, eliminarRecorrido, cerrarRecorrido, leerLugares, sacarEscaneo, subirEscaneos } from '@/lib/exhib/cliente'
 import { aEscaneo, claveEscaneo, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 
@@ -216,11 +216,19 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
     abierto.current = ''
   }, [marca, subir, guardar])
 
-  /** Tira el borrador del teléfono. ⚠️ Lo ya subido queda en el servidor, que es lo correcto. */
-  const descartar = useCallback(() => {
+  /**
+   * Elimina el recorrido: el borrador del teléfono **y** la fila del servidor.
+   *
+   * 🔑 Borrar las dos puntas y ⛔ no sólo el teléfono. Limpiar de un lado dejaba un recorrido
+   * abierto para siempre en la lista, con escaneos a medias y sin nadie que lo pueda cerrar — y el
+   * que lo mirara después ⛔ no tendría cómo saber que fue un arranque en falso.
+   */
+  const eliminar = useCallback(async () => {
+    const b = ref.current
     guardar(VACIO)
     abierto.current = ''
-  }, [guardar])
+    if (b.id) await eliminarRecorrido(marca, b.id)
+  }, [marca, guardar])
 
   const sugerencias = useMemo(
     () => lugaresSugeridos(lugaresServidor, bor.escaneos.map((e) => e.lugar)),
@@ -242,7 +250,7 @@ export function useExhibLibre(marca: Marca, items: ExhibItem[]) {
     escanear,
     sacar,
     cerrar,
-    descartar,
+    eliminar,
     reintentar: subir,
   }
 }

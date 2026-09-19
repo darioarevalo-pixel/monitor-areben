@@ -75,6 +75,16 @@ export async function cerrarRecorrido(marca: string, id: string, nota?: string):
   await escribir(marca, 'cerrar', { id, nota: nota ?? null })
 }
 
+/**
+ * Descarta un recorrido **sin cerrar**, con sus escaneos.
+ *
+ * 🔴 El servidor rechaza el que ya está cerrado: ése es el dato con el que alguien va a comparar el
+ * salón y ⛔ no hay verbo de vuelta.
+ */
+export async function eliminarRecorrido(marca: string, id: string): Promise<void> {
+  await escribir(marca, 'eliminar', { id })
+}
+
 /** Saca un escaneo (te equivocaste de lugar). Se borra por su clave, la misma que el único. */
 export async function sacarEscaneo(marca: string, recorridoId: string, lugar: string, varianteId: string): Promise<void> {
   await escribir(marca, 'sacar-escaneo', { recorrido_id: recorridoId, lugar, variante_id: varianteId })

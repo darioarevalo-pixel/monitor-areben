@@ -89,18 +89,21 @@ export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: Exh
     setFase('config')
   }
 
-  async function descartar() {
+  async function eliminar() {
+    const n = lib.escaneos.length
     const ok = await confirmar({
-      titulo: 'Descartar el recorrido',
+      titulo: '¿Eliminar este recorrido?',
       tono: 'danger',
-      ok: 'Descartar',
-      mensaje:
-        lib.sinSubir > 0
-          ? `Quedan ${lib.sinSubir} escaneos sin subir y se pierden. Lo que ya se subió queda guardado en el recorrido.`
-          : 'Se borra del teléfono. Lo ya subido queda guardado en el recorrido, que va a quedar sin cerrar.',
+      ok: 'Eliminar',
+      mensaje: `Se van los ${n} ${n === 1 ? 'escaneo' : 'escaneos'} con sus lugares, acá y en el servidor. No se puede deshacer.`,
     })
     if (!ok) return
-    lib.descartar()
+    try {
+      await lib.eliminar()
+    } catch (e) {
+      toast.error('No se pudo eliminar: ' + (e as Error).message)
+      return
+    }
     setFase('config')
     cargarPrevios()
   }
@@ -144,7 +147,7 @@ export function ExhibLibre({ items, cargando, errorMsg, selector }: { items: Exh
         )}
         {fase === 'scan' && (
           <>
-            <Button variant="ghost" onClick={() => void descartar()}>Descartar</Button>
+            <Button variant="ghost" tone="danger" onClick={() => void eliminar()}>Eliminar</Button>
             <Button variant="outline" onClick={() => void bajarExcel(lib.escaneos, new Date().toISOString())}>Excel</Button>
             <Button variant="solid" tone="brand" onClick={() => void terminar()} loading={lib.subiendo}>Terminar y guardar</Button>
           </>
