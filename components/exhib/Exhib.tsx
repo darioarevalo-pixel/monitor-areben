@@ -95,7 +95,16 @@ export function Exhib() {
     [cola.pendientes, cola.leidoEn],
   )
 
-  const [modo, setModo] = useState<Modo>('categoria')
+  /*
+   * 🔴 **Abre en LIBRE, y ⛔ no en el modo por categoría.** El 19-sep-2026, a media hora de
+   * publicarlo, el local se puso a recorrer y **⛔ no llegó una sola fila a la base**: entraron, la
+   * pantalla abrió en «Por categoría» —que muere en el teléfono— y se pusieron a escanear como
+   * siempre. ⛔ No hay error posible ahí: el modo viejo funciona, sólo que no guarda.
+   * 🔑 **El default lo paga el que ⛔ no elige**, y entre los dos errores ⛔ no hay empate: abrir en
+   * el viejo pierde una caminata entera y en silencio; abrir en el nuevo cuesta **un toque** al que
+   * de verdad quería chequear una categoría puntual.
+   */
+  const [modo, setModo] = useState<Modo>('libre')
   const [fase, setFase] = useState<Fase>('config')
   const [persona, setPersona] = useState('')
   const [catSel, setCatSel] = useState('')
