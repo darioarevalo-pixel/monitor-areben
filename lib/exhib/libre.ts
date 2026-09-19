@@ -7,9 +7,9 @@
  * corsets y musculosas—. Acá se escanea donde uno está parado («perchero tops») y cada escaneo se
  * guarda **con su lugar**, en la base, para poder compararlo después contra lo que corresponda.
  *
- * ⛔ **Este archivo NO calcula faltantes, y es una decisión.** Lo que se pidió es el dato de qué se
- * escaneó en cada lugar; la comparación se hace por afuera. La app ⛔ no decide qué debería estar
- * colgado en cada perchero.
+ * ⛔ **Este archivo NO calcula faltantes.** Es el dato de qué se escaneó en cada lugar y nada más.
+ * Lo único que la app deriva —**los hermanos de lo que el recorrido tocó**— vive aparte, en
+ * `colgar.ts`, y sigue ⛔ sin decidir qué debería estar colgado en cada perchero.
  *
  * Todo lo de acá es puro: se ejerce entero en `tests/exhib-libre.test.ts` sin red ni base.
  */
@@ -127,6 +127,26 @@ export function aEscaneo(it: ExhibItem | null, codigoCrudo: string, lugar: strin
     precio: it.precio,
     promo: it.promo,
   }
+}
+
+/**
+ * Las categorías de un escaneo **como se muestran**: sin repetir la misma escrita distinto.
+ *
+ * 🔴 **Se vio en producción el 19-sep-2026**: la columna decía «TOPS Y BODIES / TOPS Y BODIES».
+ * ⛔ No es un bug del escaneo —el producto está de verdad en **dos categorías de TN con el mismo
+ * nombre y distinto ID**, de las 13 que alguien creó de una sentada sin borrar las viejas— pero en
+ * la columna con la que se compara el perchero se lee como un error de la app y ⛔ no agrega nada.
+ *
+ * ⚠️ Es **presentación**: lo guardado ⛔ no se toca. El día que `limpiarCats` trabaje por ID (el
+ * pendiente 3), esto deja de hacer falta solo.
+ */
+export function catsVisibles(cats: string[]): string[] {
+  const vistas = new Map<string, string>()
+  for (const c of cats || []) {
+    const k = String(c ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+    if (k && !vistas.has(k)) vistas.set(k, String(c).trim())
+  }
+  return [...vistas.values()]
 }
 
 /**
@@ -299,7 +319,7 @@ export function filasExport(escaneos: EscaneoLibre[]): Filas {
         e.size ?? '',
         e.sku ?? '',
         e.barcode ?? e.codigo_crudo,
-        e.cats.join(' / '),
+        catsVisibles(e.cats).join(' / '),
         e.qty ?? '',
         aCobrar ?? '',
         e.escaneado_en,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, claveEscaneo, contarEnLugar, filasExport, hallazgoDe, HEADER_EXPORT, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, filasExport, hallazgoDe, HEADER_EXPORT, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -124,6 +124,19 @@ describe('resumenRecorrido', () => {
 
   it('un recorrido vacío ⛔ no inventa horas', () => {
     expect(resumenRecorrido([])).toMatchObject({ escaneos: 0, lugares: 0, desde: null, hasta: null })
+  })
+})
+
+describe('catsVisibles', () => {
+  /**
+   * 🔴 Visto en producción: la columna decía «TOPS Y BODIES / TOPS Y BODIES». ⛔ No es un bug del
+   * escaneo —el producto está en dos categorías de TN con el mismo nombre y distinto ID— pero en la
+   * columna con la que se compara el perchero se lee como un error de la app.
+   */
+  it('junta la misma categoría escrita distinto, y ⛔ no toca el resto', () => {
+    expect(catsVisibles(['TOPS Y BODIES', 'TOPS Y BODIES', 'NEW IN'])).toEqual(['TOPS Y BODIES', 'NEW IN'])
+    expect(catsVisibles(['SHORTS, MINIS y FALDAS', 'SHORTS, MINIS Y FALDAS'])).toEqual(['SHORTS, MINIS y FALDAS'])
+    expect(catsVisibles([])).toEqual([])
   })
 })
 

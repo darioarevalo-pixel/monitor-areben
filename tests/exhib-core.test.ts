@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPDF, armarProdMap, buscarItem, candidatosPorCodigo, catsDeItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, perteneceA, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
+import { agruparPDF, armarProdMap, buscarItem, candidatosPorCodigo, coincidencias, catsDeItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, perteneceA, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstados, type ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, precio: null, promo: null, ...over })
@@ -150,6 +150,26 @@ describe('candidatosPorCodigo', () => {
   it('menos de 3 caracteres ⛔ no propone nada: «NG» da 440 sobre el Local real', () => {
     expect(candidatosPorCodigo(local, 'NG')).toEqual([])
     expect(candidatosPorCodigo(local, '')).toEqual([])
+  })
+
+  /**
+   * 🔴 8 grupos / 20 variantes con stock comparten SKU (`4008` es TOP MIA BLANCO y CHOCOLATE).
+   * `buscarItem` se queda con la primera; el recorrido libre pregunta con `coincidencias`.
+   */
+  it('un SKU compartido engancha las DOS, y quedarse con la primera es mentir callado', () => {
+    const mia = [
+      it0({ productId: 'bl', name: 'TOP MIA BLANCO', sku: '4008', barcode: 'RTO0391BL' }),
+      it0({ productId: 'ct', name: 'TOP MIA CHOCOLATE', sku: '4008', barcode: 'RTO0391CT' }),
+    ]
+    expect(coincidencias(mia, '4008').map((x) => x.productId)).toEqual(['bl', 'ct'])
+    expect(buscarItem(mia, '4008')?.productId).toBe('bl')
+    // Con el lector ⛔ no pasa: el barcode es distinto y engancha una sola.
+    expect(coincidencias(mia, 'RTO0391CT').map((x) => x.productId)).toEqual(['ct'])
+  })
+
+  it('el barcode gana sobre el SKU, y ⛔ no se mezclan los dos escalones', () => {
+    const items = [it0({ productId: 'a', barcode: '4008', sku: 'ZZ-1' }), it0({ productId: 'b', barcode: '9999', sku: '4008' })]
+    expect(coincidencias(items, '4008').map((x) => x.productId)).toEqual(['a'])
   })
 
   it('el más parecido primero: el código más corto es el que sobra menos', () => {

@@ -106,6 +106,16 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   🔴 **Un panel de candidatos sin resolver se guarda solo como «no cruzó»** apenas llega otro
   escaneo o se cierra el recorrido. Preguntar ⛔ no puede costar un escaneo: lo peor que puede pasar
   es que quede como quedaba antes de preguntar.
+  🔴 **Y un match EXACTO también pregunta cuando engancha más de una** (`coincidencias`): **8 grupos
+  / 20 variantes con stock comparten SKU** (`4008` es TOP MIA BLANCO **y** CHOCOLATE; `areben` son 6
+  variantes de AYLA). Con el lector ⛔ no pasa —los barcodes son distintos, y de 97 escaneos reales
+  los 97 engancharon por barcode— pero **un SKU tipeado a mano** marcaba la prenda equivocada en
+  silencio. `buscarItem` sigue devolviendo la primera y lo usa el modo por categoría, donde un
+  enganche malo ⛔ no escribe en la base.
+- ⚠️ **Las categorías se muestran con `catsVisibles`**: el mismo nombre escrito igual ⛔ no se repite.
+  En producción se vio «TOPS Y BODIES / TOPS Y BODIES» —el producto está en las **dos** categorías
+  TN con ese nombre— y en la columna con la que se compara el perchero eso se lee como un error de
+  la app. Es presentación: lo guardado ⛔ no se toca.
 - ⚠️ **`store_name = 'Local'`, y desde el 19-sep-2026 SIN filtro de stock**: el recorrido ⛔ no ve el
   depósito, pero sí ve el Local entero —**2.188 filas: 1.083 con stock y 1.105 en cero o negativo**—.
   🔑 **Son dos listas y ⛔ no una**: `items` (qty > 0) es lo que hay que **chequear** —la lista, el

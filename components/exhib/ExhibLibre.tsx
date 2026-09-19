@@ -7,7 +7,7 @@ import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, us
 import { descargarXlsx } from '@/lib/excel'
 import { exhibId, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
-import { agruparPorLugar, ANCHOS_EXPORT, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -559,7 +559,7 @@ function FilaEscaneo({ e, onSacar }: { e: EscaneoLibre; onSacar?: (e: EscaneoLib
           {/* La hora de CADA escaneo, que hasta ahora sólo viajaba al Excel: es lo que deja
               reconstruir la caminata —y ver dónde se frenó— sin bajar nada. */}
           {hora(e.escaneado_en)} · {e.encontrado ? `SKU: ${e.sku || '—'} · Local: ${e.qty ?? '—'}` : 'No cruzó con el inventario del Local'}
-          {e.cats.length > 0 && ` · ${e.cats.join(' / ')}`}
+          {e.cats.length > 0 && ` · ${catsVisibles(e.cats).join(' / ')}`}
         </div>
       </div>
       {onSacar && (

@@ -172,15 +172,34 @@ export function normCode(s: string | number | null | undefined): string {
     .toLowerCase()
 }
 
-/** Busca la variante por código: barcode exacto → barcode normalizado → SKU normalizado. Port @7750. */
-export function buscarItem(items: ExhibItem[], code: string): ExhibItem | null {
+/**
+ * **Todas** las variantes que ese código engancha, por el escalón que enganchó: barcode exacto →
+ * barcode normalizado → SKU normalizado. Se devuelve el primer escalón que da algo, ⛔ no la mezcla.
+ *
+ * 🔴 **Existe porque un código puede enganchar MÁS DE UNA, y elegir la primera es mentir en
+ * silencio.** Medido sobre el Local (19-sep-2026): **8 grupos / 20 variantes con stock comparten
+ * SKU** — `4008` son TOP MIA BLANCO y CHOCOLATE, `areben` son 6 variantes de AYLA—. Con el lector
+ * ⛔ no pasa nunca (los barcodes son distintos y de 97 escaneos reales, 97 engancharon por barcode
+ * exacto), pero **un SKU tipeado a mano** marcaba la prenda equivocada sin decir una palabra.
+ */
+export function coincidencias(items: ExhibItem[], code: string): ExhibItem[] {
   const nc = normCode(code)
-  return (
-    items.find((x) => x.barcode === code) ||
-    items.find((x) => !!x.barcode && normCode(x.barcode) === nc) ||
-    items.find((x) => !!x.sku && normCode(x.sku) === nc) ||
-    null
-  )
+  const porBarcodeExacto = items.filter((x) => x.barcode === code)
+  if (porBarcodeExacto.length) return porBarcodeExacto
+  const porBarcode = items.filter((x) => !!x.barcode && normCode(x.barcode) === nc)
+  if (porBarcode.length) return porBarcode
+  return items.filter((x) => !!x.sku && normCode(x.sku) === nc)
+}
+
+/**
+ * Busca la variante por código: barcode exacto → barcode normalizado → SKU normalizado. Port @7750.
+ *
+ * ⚠️ Cuando hay varias se queda con la primera, y por eso el recorrido libre ⛔ no lo usa solo:
+ * pregunta con `coincidencias`. Acá se conserva para el modo por categoría, donde un código que
+ * engancha mal ⛔ no escribe nada en la base.
+ */
+export function buscarItem(items: ExhibItem[], code: string): ExhibItem | null {
+  return coincidencias(items, code)[0] || null
 }
 
 /** ¿El ítem escaneado NO pertenece a la categoría recorrida (según TN)? Port de `cruce` @7759. */

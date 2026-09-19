@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { buscarItem, candidatosPorCodigo, TOPE_CANDIDATOS } from '@/lib/exhib/core'
+import { candidatosPorCodigo, coincidencias, TOPE_CANDIDATOS } from '@/lib/exhib/core'
 import { abrirRecorrido, eliminarRecorrido, cerrarRecorrido, leerLugares, sacarEscaneo, subirEscaneos } from '@/lib/exhib/cliente'
 import { aEscaneo, claveEscaneo, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, yaEscaneado, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -222,8 +222,15 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
   const escanear = useCallback(
     (codigo: string, lugar: string): ResultadoLibre => {
       resolverSolo()
-      const it = buscarItem(buscables, codigo)
-      if (it) return registrar(it, codigo, lugar)
+      const exactas = coincidencias(buscables, codigo)
+      if (exactas.length === 1) return registrar(exactas[0], codigo, lugar)
+      // 🔴 Enganchó **varias**: pasa con un SKU tipeado a mano que dos variantes comparten (20 con
+      // stock). Quedarse con la primera marcaría la prenda equivocada sin decir una palabra ⇒ se
+      // pregunta, igual que con el código parcial.
+      if (exactas.length > 1) {
+        sinResolver.current = { codigo, lugar }
+        return { tipo: 'candidatos', codigo, lugar, candidatos: exactas }
+      }
 
       const candidatos = candidatosPorCodigo(buscables, codigo)
       if (candidatos.length && candidatos.length <= TOPE_CANDIDATOS) {
