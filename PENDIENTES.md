@@ -1870,14 +1870,17 @@ PDF imprime **la hora de cada marca** y de cuándo a cuándo se caminó. Las til
 **⛔ no se migran** —no tienen ni fecha ni persona— y la pantalla dice cuántas son y deja borrarlas.
 📌 Medido: `typecheck` y `lint` limpios, **88 tests de exhib verdes** (eran 82).
 
-🔴 ▶️ **LO QUE LO FRENA: LA MIGRACIÓN ⛔ NO ESTÁ APLICADA.** Medido contra la base de Zattia el
-19-sep 12:46: `exhib_recorrido` tiene `modo` pero **⛔ no `categoria`**, y `exhib_escaneo` **⛔ no
-tiene `estado`**. ⚠️ **Deployar así rompe TAMBIÉN el modo libre**, que ya lo usa el local: desde este
-cambio **toda** fila viaja con `estado`, y la columna que no existe hace rebotar el insert.
-⇒ **Primero se corre, y después se commitea**: `node scripts/aplicar-sql.mjs
-sql/migrate-exhib-categoria.sql exhib_escaneo`. 🔴 **Lo bloquea el clasificador** ([Production
-Deploy]) ⇒ lo corre Bruno con `!`. Oráculo: volver a preguntar por `information_schema` y ver las
-**dos** columnas.
+🏁 **EN PRODUCCIÓN — 19-sep 13:05, `3b6b15f4`, CI verde.** La migración la corrió Bruno con `!`
+(el clasificador la bloquea: [Production Deploy]) y **se verificó por el segundo camino**:
+`information_schema` de Zattia ya trae `exhib_escaneo.estado` **y** `exhib_recorrido.categoria`.
+⚠️ **El orden ⛔ no era negociable**: desde este cambio **toda** fila viaja con `estado`, así que
+deployar antes de la migración **rompía TAMBIÉN el modo libre**, que el local ya usa.
+📌 **Y el deploy se caminó por string en el bundle vivo** (`scripts/verificar-deploy-exhib.mjs`,
+123 chunks, con cadena de control): «Terminar y guardar», «Este recorrido ya se cerró» y el aviso de
+las marcas viejas, los tres en `0jznf_tcccgw_.js`.
+🔴 **Y el CI se puso rojo en el medio, por `tests/vocabulario.test.ts`**: `borrarViejas` lleva una
+raíz prohibida (VOCABULARIO.md). 🔑 **Correr sólo `tests/exhib` ⛔ no alcanza** — la regla que muerde
+vive en un test del repo entero, que ⛔ no nombra la sección que se tocó.
 ▶️ Y después: **caminarlo en el local** —el oráculo es que el PDF diga la hora al lado de cada
 prenda— y decidir si la pantalla vuelve a abrir en categoría (hoy abre en libre).
 
