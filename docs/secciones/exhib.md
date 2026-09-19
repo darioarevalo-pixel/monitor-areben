@@ -67,7 +67,16 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 - 🔑 **El lugar es texto libre con sugerencias, ⛔ no un catálogo.** El salón se reacomoda, y una
   lista cerrada que no tiene el perchero de hoy obliga a elegir uno que miente.
 - ⚠️ **El escaneo es con lector físico** (input + Enter). La cámara ZXing del legacy era código
-  muerto y ⛔ no se portó.
+  muerto y ⛔ no se portó. 🔴 **Y el lector TIPEA**: si el foco queda en el campo «Lugar», el código
+  entra como nombre del lugar y el escaneo se pierde **sin un solo error en pantalla**. Por eso Enter
+  y el blur de ese campo mandan el foco al escaneo — ⛔ no es cosmético.
+- 🔴 **Un SKU tipeado A MANO, incompleto, ⛔ no engancha — y se guarda como hallazgo.** Medido en el
+  primer uso real (19-sep): `0150NG` es `RTO-0150-NG` sin prefijo ni guiones, y `buscarItem` pide
+  **barcode o SKU completo** (`normCode` saca espacios, guiones y ceros a la izquierda, ⛔ no
+  prefijos). Queda anotado como «no está en el Local», que se lee como un problema de stock.
+  ⛔ **⛔ NO aflojar el criterio a un match parcial**: con gente usándolo, enganchar **la prenda
+  equivocada** es peor que no enganchar. Si algún día se toca, va con el candidato a la vista y que
+  la persona confirme.
 - ⚠️ **`store_name = 'Local'` y `available_quantity > 0`**: el recorrido ⛔ no ve el depósito.
 
 ## Lo que ya se rompió acá
@@ -94,7 +103,10 @@ armar la lista— pero el otro sigue mintiendo:
 - 🔴 **`limpiarCats` devuelve NOMBRES y ⛔ no IDs**: en TN hay 35 categorías y no 25 —JEANS existe
   tres veces—, así que las tres le parecen una sola. El desorden se ve en `/tncat`, ⛔ nunca acá.
 - ▶️ **El modo por categoría sigue muriendo en el teléfono.** La tabla tiene `modo` justamente para
-  que pueda subir algún día; hoy siempre entra `'libre'`.
+  que pueda subir algún día; hoy siempre entra `'libre'`. 🔴 Y por eso **la pantalla abre en libre**:
+  el 19-sep abría en categoría y el local recorrió media hora sin que llegara una sola fila.
+- ▶️ **El PDF del modo por categoría ⛔ no dice DÓNDE apareció cada prenda** y el libre sí. Cruzar los
+  dos se hace **por SKU**, que es lo único que comparten.
 
 ## Cómo se prueba
 

@@ -1690,11 +1690,56 @@ se entera. La pantalla dice cuántos quedan sin subir en vez de callarse.
 `components/exhib/ExhibLibre.tsx` + `useExhibLibre.ts` · `tests/exhib-libre.test.ts` ·
 📌 **ficha nueva: `docs/secciones/exhib.md`**, que hasta hoy la sección ⛔ no tenía.
 
+### 🏁 Se usó EL MISMO DÍA, y el uso real enseñó tres cosas
+
+Migración corrida y deployado el 19-sep a las ~10:20. Los cinco verbos que escriben se ejercieron
+contra producción y se leyeron por el otro camino (`action=recorrido`): **20 de 20**. A las 10:38
+**Camila ya estaba recorriendo el local**.
+
+🔴 **Y ⛔ NO llegó una sola fila en la primera media hora.** La pantalla abría en **«Por categoría»**
+—el modo viejo, que muere en el `localStorage`— y ella entró y escaneó como siempre. ⛔ No hay error
+posible ahí: el modo viejo anda, sólo que ⛔ no guarda. 🔑 **El default lo paga el que ⛔ no elige**, y
+entre los dos errores ⛔ no hay empate: abrir en el viejo pierde una caminata entera y **en silencio**;
+abrir en el nuevo le cuesta **un toque** al que de verdad quería una categoría puntual. ⇒ abre en
+**libre**.
+
+🔴 **El lector TIPEA, y el foco arrancaba en «¿En qué lugar estás?»** ⇒ el primer código de barras
+entraba **como nombre del lugar**: el escaneo se perdía y ⛔ nadie se enteraba —el campo queda
+diciendo `7790001234567`—. Ahora Enter y salir del campo mandan el foco al escaneo.
+⚠️ **Los dos se cazaron ANTES de que mordieran fuerte porque se estaba MIRANDO la base mientras
+trabajaban**, ⛔ no por un test.
+
+⚠️ **Un SKU tipeado a mano ⛔ no engancha, y se guarda como hallazgo.** De 97 escaneos, dos ⛔ no
+cruzaron: `698` (lectura a medias) y **`0150NG`, que es `RTO-0150-NG` sin el prefijo ni los guiones**
+—TOP ZOE negro, que ya estaba dado por exhibido—. `buscarItem` pide **barcode o SKU completo**, y un
+pedazo se anota como «no está en el Local». ▶️ **⛔ NO se aflojó el criterio**: con gente usándolo, un
+match parcial puede enganchar **la prenda equivocada**, que es peor que no enganchar.
+
+### 📊 El primer cruce real: la categoría SÍ estaba mintiendo
+
+Camila cerró el recorrido por categoría **a mitad de camino** (donde Bruno le dijo que cambiara de
+modo) y siguió el mismo perchero en libre: **97 escaneos, lugar «Tops»**.
+
+| | |
+|---|---|
+| el PDF por categoría (TOPS Y BODIES, 297 variantes) | 245 exhibidas · 35 ya solucionadas · **14 no se encuentran** · 3 sin revisar |
+| de esas 17 pendientes, el libre encontró | **5 colgadas ahí mismo** (DUBAI-CT, UNIT-NG, GENESIS-NG, MOVE-NG, KYOTO-NG) |
+| siguen sin aparecer | 12 — pero **9 son tops** y **3 (1 body + 2 CORSET BERNA) están en otro mueble que nadie recorrió** |
+
+🔑 **De las 35 «no exhibidas» del PDF, 20 son CORSETS** (BERNA ×7, NAPOLES ×4, FRANK ×3, KYLIE ×2…).
+⛔ No es que falten: **⛔ no son tops**. TN los mete adentro de «TOPS Y BODIES» —un bolsón de 291 con
+tops 201, bodies 34, blusas 29, camisas 12, corsets 8 y musculosas 3— y el recorrido se los pidió en
+el perchero equivocado. **Eso es exactamente el pedido del 7-sep, ahora con número.**
+
 ### ▶️ Lo que falta
 
-- 🔴 **Correr `sql/migrate-exhib-libre.sql` en el Supabase de ZATTIA.** Hasta que esté, la pantalla
-  abre y escanea, pero cada subida rebota y el contador «sin subir» crece. El script es idempotente
-  y trae adentro su verificación y su rollback.
+- ▶️ **El perchero de CORSETS en libre**: es el que contesta de una si el englobado explica las 20.
+- ▶️ **Sacar el recorrido de prueba** `ex1789823479266_verif` (2 escaneos «PRUEBA», firmados Bruno):
+  `delete from exhib_recorrido where id = 'ex1789823479266_verif';`
+- ⚠️ **Todo se firmó `camilaquintana`**, ⛔ no `local` — sirvió para saber quién caminó. Si entran con
+  el puesto compartido, ese dato se pierde.
+- 🏁 **`sql/migrate-exhib-libre.sql` CORRIDO en ZATTIA** (19-sep, lo corrió Bruno con `!`: el
+  clasificador de la Mac frena hasta un `select 1` contra la base de producción).
 - ▶️ **Novedad**, cuando la migración esté corrida y se haya caminado el local una vez.
 - ⚠️ **El modo por categoría sigue muriendo en el teléfono.** `exhib_recorrido.modo` existe
   justamente para que pueda subir algún día; hoy siempre entra `'libre'`.
