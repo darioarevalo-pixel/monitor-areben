@@ -1735,6 +1735,38 @@ el perchero equivocado. **Eso es exactamente el pedido del 7-sep, ahora con núm
 
 ### 🔧 LO QUE QUEDA DE CÓDIGO (medido el 19-sep con la app usándose, ⛔ no estimado)
 
+🏁 **19-SEP A LA TARDE, SEGUNDA TANDA: «PARA COLGAR», LA PANTALLA CON HORA Y QUIÉN, Y EL CÓDIGO
+AMBIGUO.** Todo verificado en producción, ⛔ no sólo en tests.
+
+**«Para colgar» (`lib/exhib/colgar.ts`).** Contesta el pedido de Bruno —*«me falta un TOP UNIT,
+son 3 colores, sólo se escanearon dos y me dice que no pasa nada»*—: los **hermanos** de lo que el
+recorrido tocó, que tienen stock y ⛔ no pasaron por el lector. 📊 Sobre el recorrido de Camila:
+**46 variantes · 143 unidades · 32 productos**, con TOP ZARA 13u (NEGRO 9 + BLANCO 4) y TOP RISE
+15u arriba. 🔴 **El alcance es la regla entera**: sólo prendas que ESTE recorrido tocó ⇒ **cero
+corsets** (el mueble que nadie caminó), que es lo que hacía que el PDF pidiera 20 faltantes falsos.
+Se ve en vivo mientras se camina (contador con botón, ⛔ no una lista que se rearma a cada escaneo),
+al dejar un mueble, al terminar, y al abrir el recorrido desde otra máquina, con planilla.
+
+**La pantalla del recorrido, con registro de hora, día y quién.** Lo pidió Bruno: *«el Excel no sé
+si es buena opción, habría que mejorarlo como el libre, y que tenga registro de hora, día y
+quién»*. Ahora el recorrido guardado dice **«sábado 19-09 · camilaquintana · cerrado · 97 escaneos
+en 1 lugar · de 10:39 a 10:48 · 2 sin cruzar»** y cada fila lleva su hora. La planilla queda como
+extra. ⚠️ **La persona es del RECORRIDO, ⛔ no del escaneo**: con el puesto compartido ese dato dice
+«local» (el 19-sep se firmó `camilaquintana` porque entró con su usuario).
+
+**Un código que engancha DOS prendas ahora pregunta.** Medido: **8 grupos / 20 variantes con stock
+comparten SKU** (`4008` es TOP MIA BLANCO **y** CHOCOLATE; `areben`, 6 variantes de AYLA) y
+`buscarItem` se quedaba con la primera, callado. ⚠️ **Con el lector ⛔ no pasa** —los barcodes son
+distintos y de los 97 escaneos reales los 97 engancharon por barcode— pero un **SKU tipeado a mano**
+marcaba la prenda equivocada. 🔑 Y la columna de categorías dejó de decir «TOPS Y BODIES / TOPS Y
+BODIES»: es el producto que está en las dos categorías TN con el mismo nombre.
+
+▶️ **Lo que queda, y es lo grande**: que el **modo por categoría guarde en la base como el libre**
+(pendientes 7 y 8 juntos) ⇒ cada tilde con su hora y su persona, y el PDF pudiendo decir de cuándo
+es. Necesita una migración chica (`estado` en `exhib_escaneo`, `categoria` en `exhib_recorrido`) que
+corre Bruno con `!`.
+
+
 🏁 **HECHOS EL 19-SEP A LA TARDE: el 1, el 5 y el 4** (y el 2 por la mitad). Todo medido con las
 funciones de la app contra producción, ⛔ no estimado. Lo que sigue abierto es el **3**, el **6** y
 el **7**, tal cual están escritos abajo.
