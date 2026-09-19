@@ -11,10 +11,22 @@ import { sinEtiquetar } from '@/lib/etiquetas/cola'
 import { puedeVer } from '@/lib/permisos'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhib, type ResultadoMarca } from './useExhib'
+import { ExhibLibre } from './ExhibLibre'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, Field, Input, Notice, Select, color, font, formatMoney, space, useConfirmar, useToast, weight } from '@/components/ui'
 
 type Fase = 'config' | 'scan' | 'triage'
+
+/**
+ * Las dos maneras de recorrer el local.
+ *
+ * 🔑 **`libre` ⛔ no reemplaza a `categoria`, convive con él** (decisión de Bruno, 19-sep-2026). La
+ * categoría sirve para chequear una puntual; el libre es el que se parece al salón, donde una misma
+ * categoría está colgada en varios lugares y «TOPS Y BODIES» engloba tops, bodies, blusas, camisas,
+ * corsets y musculosas. Son dos recorridos distintos y ⛔ no dos vistas del mismo: el libre guarda
+ * en la base por LUGAR, el de categoría sigue viviendo en el `localStorage` del teléfono.
+ */
+type Modo = 'categoria' | 'libre'
 
 /**
  * El precio que la etiqueta de esta prenda tendría que decir hoy.
@@ -83,6 +95,7 @@ export function Exhib() {
     [cola.pendientes, cola.leidoEn],
   )
 
+  const [modo, setModo] = useState<Modo>('categoria')
   const [fase, setFase] = useState<Fase>('config')
   const [persona, setPersona] = useState('')
   const [catSel, setCatSel] = useState('')
@@ -164,6 +177,27 @@ export function Exhib() {
     await generarReporteExhib({ lista, persona: personaVal || '(sin nombre)', catLabel: catSel || 'Todas las categorías', estados: ex.estados, errores: ex.errores, marca })
   }
 
+  /**
+   * El cambio de modo. Va arriba de todo en Configurar y ⛔ no en el header de acciones: ⛔ no es
+   * algo que se hace, es de qué recorrido estamos hablando — y por eso sólo aparece antes de
+   * empezar, nunca a mitad de una caminata.
+   */
+  const selector = (
+    <div style={{ display: 'flex', gap: space[2], marginBottom: space[4], flexWrap: 'wrap' }}>
+      {([['categoria', 'Por categoría'], ['libre', 'Libre por lugar']] as const).map(([k, etiqueta]) => (
+        <Button key={k} size="sm" variant={modo === k ? 'solid' : 'outline'} tone={modo === k ? 'brand' : 'neutral'} onClick={() => setModo(k)}>
+          {etiqueta}
+        </Button>
+      ))}
+    </div>
+  )
+
+  // El modo libre es una pantalla entera aparte —otro recorrido, otro almacenamiento— y ⛔ no un
+  // `if` adentro de ésta. Los ítems se le pasan ya cruzados: la bajada es la misma para los dos.
+  if (modo === 'libre') {
+    return <ExhibLibre items={ex.items} cargando={ex.cargando} errorMsg={ex.errorMsg} selector={selector} />
+  }
+
   return (
     <>
       <HeaderAcciones>
@@ -210,6 +244,8 @@ export function Exhib() {
       {/* ── Configurar ── */}
       {fase === 'config' && (
         <Card>
+          {selector}
+
           {ex.errorMsg ? (
             <Notice tone="danger" icon="⚠" style={{ marginBottom: space[4] }}>
               Error cargando inventario: {ex.errorMsg}

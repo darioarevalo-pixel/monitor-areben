@@ -1638,6 +1638,73 @@ solo**. Bruno marcó el deshilachado en la conversación y **se publicó igual**
 guardado en la base era el texto viejo ⇒ **antes de publicar se relee el texto contra lo que ya se
 dijo**, ⛔ no contra la fila. Se republicó corregido el mismo día.
 
+## 🏁 «QUE EL CHEQUEO DE EXHIBICIÓN SEA LIBRE, NO POR CATEGORÍA» — 19-sep-2026 (dictado, y hecho)
+
+> «necesito hacer cambios en chequeo exhibición que sea libre, es decir que no sea por categoría,
+> sino que sea libre, que escanee, y que me llegue el dato, y luego comparo… pq tengo un problema
+> pq ahora está como categoría, pero a veces las categorías están exhibidas en distintos lugares»
+
+🔑 **Lo que pidió NO fue un cálculo, fue el DATO.** Preguntado explícitamente contra qué comparar,
+contestó: *«inicialmente necesitamos el dato de que se escaneó en ese lugar, y luego se compara por
+afuera con lo que faltaría. Ejemplo: perchero exclusivo tops se escanea, y luego lo comparo con los
+tops, pq hoy la categoría dice tops y bodies, entonces me lo engloba mal»* ⇒ **la app ⛔ no decide
+qué debería estar colgado en cada perchero**, y eso es una decisión, ⛔ no un pendiente.
+
+### Las cuatro decisiones (contestadas por Bruno)
+
+| | |
+|---|---|
+| el lugar | **se anota, elegido a mano** — *«sí, con lugar elegido, ejemplo perchero tops o algo así»* |
+| el recorrido | **una sesión por vuelta** |
+| la comparación | **por afuera**, con el Excel. ⛔ No se calculan faltantes |
+| el modo viejo | **se queda al lado**, sin tocar |
+
+### 🔑 Escanear YA era libre por dentro — lo que faltaba era que el dato llegara
+
+`buscarItem` siempre buscó contra **todo** el inventario del Local, ⛔ no contra la categoría: la
+categoría sólo decidía qué lista se dibuja y si avisaba «cruce». Lo que ⛔ no existía era la otra
+mitad, la que este pendiente ya tenía escrita cuatro secciones más abajo: **`Exhib.tsx` no tenía un
+solo `fetch` de escritura**.
+
+🏁 **Ahora hay un segundo modo, «Libre por lugar»**, con su tabla: se escribe dónde estás parado
+(texto libre, con sugerencias de los lugares ya usados), se escanea, y **cada escaneo va a la base
+con su lugar**. Al terminar sale un **Excel** con `Lugar · Producto · Talle · SKU · Código de
+barras · Categorías en Tienda Nube · Stock Local · Precio a cobrar · Escaneado`, y los recorridos
+guardados se abren **desde cualquier máquina**.
+
+🔑 **La columna que contesta el pedido es «Categorías en Tienda Nube», y lleva TODAS.** Con
+`cleanCats[0]` —la primera y nada más, que es lo que usa el modo por categoría— la comparación del
+perchero contra el englobado de «TOPS Y BODIES» ⛔ no se puede hacer.
+
+🔑 **El código que NO cruza se guarda igual.** Antes la pantalla decía «ese código no está en la
+lista» y el dato se perdía. Una prenda colgada que ⛔ no figura con stock en el Local —stock mal
+cargado, prenda de otra marca, una devolución sin ingresar— es **el hallazgo que nadie puede
+reconstruir después**, porque el salón ya se caminó.
+
+🔴 **El borrador del teléfono se limpia SÓLO cuando el servidor confirmó**, y **cerrar con
+pendientes está prohibido**: sellar un recorrido incompleto lo deja incompleto para siempre y nadie
+se entera. La pantalla dice cuántos quedan sin subir en vez de callarse.
+
+**Dónde vive**: `sql/migrate-exhib-libre.sql` (tablas `exhib_recorrido` + `exhib_escaneo`) ·
+`api/_exhib.js` por `?recurso=exhib` · `lib/exhib/libre.ts` (puro) + `lib/exhib/cliente.ts` ·
+`components/exhib/ExhibLibre.tsx` + `useExhibLibre.ts` · `tests/exhib-libre.test.ts` ·
+📌 **ficha nueva: `docs/secciones/exhib.md`**, que hasta hoy la sección ⛔ no tenía.
+
+### ▶️ Lo que falta
+
+- 🔴 **Correr `sql/migrate-exhib-libre.sql` en el Supabase de ZATTIA.** Hasta que esté, la pantalla
+  abre y escanea, pero cada subida rebota y el contador «sin subir» crece. El script es idempotente
+  y trae adentro su verificación y su rollback.
+- ▶️ **Novedad**, cuando la migración esté corrida y se haya caminado el local una vez.
+- ⚠️ **El modo por categoría sigue muriendo en el teléfono.** `exhib_recorrido.modo` existe
+  justamente para que pueda subir algún día; hoy siempre entra `'libre'`.
+- 🔴 **Los tres bugs de la lista por categoría ⛔ NO se tocaron** (`construirItems` con `cleanCats[0]`,
+  `esCruce` con `includes` exacto, `limpiarCats` por nombre y no por ID). Siguen abajo, medidos. El
+  modo libre los esquiva por diseño —⛔ no usa categorías para armar la lista— pero el otro sigue
+  mostrando **CERO** en BLUSAS, SHORTS y BERMUDAS.
+
+---
+
 ## 🆕 «NO EXISTEN CATEGORÍAS CLARAS PARA CUBRIR TODAS LAS OPCIONES» — 7-sep-2026 (dictado, medido, sin tocar nada)
 
 > «miremos, se están realizando chequeos de exhibición, qué resultados están dando, para ver el tema
@@ -1691,6 +1758,9 @@ Sacada del catálogo mismo (primera palabra del nombre, 39 tipos reales contra 7
 ▶️ **Falta decidir el árbol nuevo con Bruno.** ⛔ No se propuso ninguno todavía.
 
 ### 🔴 Lo que el chequeo de exhibición ⛔ no puede contestar
+
+🏁 **La primera mitad se cerró el 19-sep-2026** con el modo **libre por lugar**, que sí guarda en la
+base (ver la sección de arriba). Lo de abajo sigue valiendo **tal cual para el modo por categoría**.
 
 **El recorrido no guarda nada**: estados y errores de categoría viven en el `localStorage` del
 aparato que escanea (`monitor_exhib_<cuenta>`, `monitor_exhib_err_<cuenta>`). `Exhib.tsx` ⛔ no tiene

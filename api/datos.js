@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|modelos|precios|destacados&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|modelos|precios|destacados|exhib&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -47,6 +47,7 @@ import acreedores from './_acreedores.js';
 import compromisos from './_compromisos.js';
 import precios from './_precios.js';
 import destacados from './_destacados.js';
+import exhib from './_exhib.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -175,6 +176,12 @@ const RECURSOS = {
   // de `precios` porque se marca desde TRES pantallas de dos áreas distintas (la lista de precios,
   // la campaña por dentro y Análisis → Por producto), y `precios` es de sólo lectura.
   destacados,
+  // El chequeo de exhibición LIBRE: el recorrido del local por LUGAR («perchero tops»), que hasta
+  // el 19-sep-2026 ⛔ no escribía una sola fila —vivía entero en el localStorage del teléfono que
+  // escaneaba—. Entra por acá y no por un archivo de ruta propio, como todo el resto (12 funciones
+  // de Hobby). Sí valida `store`: sus dos tablas viven en la base de CADA marca, como el espejo de
+  // inventario contra el que se escanea.
+  exhib,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

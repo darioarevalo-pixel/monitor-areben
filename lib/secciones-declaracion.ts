@@ -107,6 +107,15 @@ export const PROPIAS: Record<string, Propia> = {
     'cada color al primer sellout. Es de Zattia. ⛔ No escribe nada: es lectura del store del ETL.',
     porque: 'no-dice-si-escribe',
   },
+  exhib: {
+    texto:
+    'Recorrer el Local con el lector confirmando que cada prenda con stock está colgada, de dos ' +
+    'maneras: por categoría de Tienda Nube, o LIBRE por lugar («perchero tops»). ⛔ El de categoría ' +
+    'no sale del teléfono. El libre SÍ guarda en la base, con el lugar de cada escaneo, y de ahí ' +
+    'sale el Excel para comparar. ⛔ No toca stock, ni Gestión Nube, ni Tienda Nube: las categorías ' +
+    'a corregir se anotan para editarlas a mano allá.',
+    porque: 'no-dice-si-escribe',
+  },
 }
 
 /**

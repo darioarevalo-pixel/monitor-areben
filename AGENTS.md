@@ -105,6 +105,10 @@ ya tienen ficha:
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar
   `components/conteo-deposito/`, `lib/conteo-deposito/` o `api/_conteos-deposito.js`.
   ⛔ **`lib/conteo-deposito/core.ts` es de las CUATRO pantallas de conteo**, que ajustan stock.
+- Chequeo de exhibición → **leer `docs/secciones/exhib.md`** antes de tocar `components/exhib/`,
+  `lib/exhib/`, `api/_exhib.js` o `sql/migrate-exhib-libre.sql`. ⛔ **Son DOS recorridos**: el de
+  categoría muere en el `localStorage` del teléfono, el **libre** guarda en la base **por LUGAR** y
+  ⛔ no calcula faltantes a propósito. ⛔ El precio que controla es el MISMO que imprime Etiquetas.
 - Canjes → **leer `docs/secciones/canjes.md`** antes de tocar `components/canjes/`, `lib/canjes/`,
   `api/_canjes.js`, `api/_canje-portal.js` o `components/cupones/CanjesLocal.tsx` (la pestaña del
   mostrador, que vive en Cupones y entrega canjes creando una venta en GN).
