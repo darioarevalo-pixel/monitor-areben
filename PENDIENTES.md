@@ -1909,6 +1909,66 @@ sin la columna **rebota también el modo libre**. `node scripts/aplicar-sql.mjs
 sql/migrate-exhib-unidades.sql exhib_escaneo` — lo bloquea el clasificador, lo corre Bruno con `!`.
 ▶️ Y sigue faltando **caminarlo en el local**.
 
+**10. 🆕 🔴 UNA FILA CON LA HORA VACÍA SE LLEVA PUESTA LA TANDA ENTERA — Y DEJA AL QUE CAMINA SIN
+PODER CERRAR EL RECORRIDO.** Encontrado el 19-sep a la noche **ejerciendo el API contra producción**,
+⛔ no leyendo el código: el conteo que se deployó a las 13:36 ⛔ no lo había ejercido nadie (el último
+escaneo real del día es de las 12:38).
+
+📊 **Medido en producción**: `escanear` con **4 filas buenas + 1 sin hora** ⇒ **500 y 0 guardadas**
+(`null value in column "escaneado_en" violates not-null constraint`). Con una hora ilegible, igual
+(`invalid input syntax for type timestamp with time zone: "ayer a la tarde"`).
+🔑 **La causa es una frase que el propio archivo daba por cierta y ⛔ no lo era**: el comentario decía
+que si la hora viene vacía «se cae al default de la tabla». `escaneado_en` es `not null default
+now()`, pero **el default sólo corre cuando la columna ⛔ no viaja en el insert** — un `null`
+explícito la rechaza, y `texto('')` manda exactamente eso.
+🔴 **Y ⛔ no se pierde un renglón: se pierde la caminata.** La tanda es **un solo insert de N filas**,
+así que la mala se lleva a las buenas; la cola deja **todo** en «sin subir» y reintenta contra el
+mismo error para siempre, y **cerrar con pendientes está prohibido** ⇒ el que está en el salón ⛔ no
+puede cerrar el recorrido y ⛔ nada le dice por qué.
+⚠️ **Hoy el cliente siempre manda la hora** (`nuevoEscaneo`, y el tipo la exige) ⇒ ⛔ no mordió a
+nadie. Lo que lo vuelve alcanzable es que el borrador se rehidrata del `localStorage` **sin validar**.
+🏁 **Arreglado en el núcleo** (`hora()` en `filaDeEscaneo`, `api/_exhib.js`): la hora ilegible o vacía
+cae al reloj del servidor —lo mismo que hubiera hecho el default, sólo que ahora sí pasa— y
+`ultimo_en` cae a `null`, que la columna admite. ⛔ **Ninguna fila puede salir de `filaDeEscaneo` en
+un estado que la base rechace**, que es la regla del archivo y ⛔ no un parche del caso.
+🔑 **Y la reparación se puede CONTAR**: la respuesta trae `sinHora` cuando hubo alguna. ⛔ Todavía ⛔ no
+la muestra ninguna pantalla — una reparación que ⛔ no se puede contar de ningún lado es
+indistinguible de que nunca haya hecho falta.
+📌 **Lo que lo tapaba: `api/_exhib.js` ⛔ NO TENÍA UN SOLO TEST.** Los 88 de la sección prueban
+`lib/exhib/*` —lo puro— y `filaDeEscaneo`, que es **el único lugar donde se decide qué de lo que
+manda el aparato entra a la tabla**, estaba afuera. 🏁 `tests/exhib-handler.test.ts`, 13 casos
+(hora, contador, triage, la firma, la marca ajena). ⚠️ La base falsa ⛔ no tiene el `not null`, así
+que **el oráculo del test es la FORMA de la fila** y el 500 es el de producción.
+
+### 🏁 LO QUE SÍ ANDA DEL DEPLOY DE LAS 13:36 — ejercido contra producción el 19-sep a la noche
+
+Los cinco verbos, por el otro camino (`action=recorrido`), con recorridos de prueba eliminados después:
+
+| | |
+|---|---|
+| el repetido | **`veces` sube a 2 en la BASE** y sigue habiendo **una sola fila**; `ultimo_en` guarda la hora de la segunda |
+| el saneo del contador | `veces=500` → **99** · `'dos'` → 1 · `0` → 1 · `-3` → 1 · `2.7` → 2 |
+| el triage | un estado inventado entra **null**; `no-encuentra` pasa |
+| el modo por categoría | `modo='categoria'` y `categoria` **se guardan** (⛔ nunca se había escrito una fila así) |
+| eliminar | el recorrido de prueba ⛔ ya no está (404 por el otro camino) |
+
+🔴 **Pero eso ⛔ no es «se caminó el local»**: sigue abierto el ▶️ de siempre —el oráculo es **el PDF
+diciendo la hora al lado de cada prenda**, con una persona escaneando—.
+
+### 📊 Lo que hay en la base hoy (19-sep 22:30, leído de producción)
+
+| recorrido | modo | persona | cuándo | escaneos | estado |
+|---|---|---|---|---|---|
+| `ex1789831447505_f1p7l0` | libre | Dario Arevalo | 12:24 → 12:38 | 69, lugar **«PRUEBA perchero»** | 🔴 **en_curso desde hace 10 h** |
+| `ex1789825143664_abbjt3` | libre | camilaquintana | 10:39 → 10:48 | 97, lugar «Tops» | cerrado |
+| `ex1789823479266_verif` | libre | Bruno Arevalo | 10:11 | 2 «PRUEBA» | cerrado |
+
+🔴 **⛔ NO hay ni un recorrido `modo='categoria'`** ⇒ lo que se deployó a las 13:05 ⛔ no se caminó.
+▶️ **Y el de Darío quedó abierto**: mientras siga `en_curso` ⛔ no es dato cerrado, y es el único que
+todavía se puede eliminar (un cerrado ⛔ no se elimina, a propósito). **Decisión de Bruno: ¿se cierra
+o se elimina?** — el lugar dice «PRUEBA perchero», pero son **69 escaneos de 14 minutos**, que ⛔ no
+es una prueba de dos toques.
+
 📊 **La escala, para dimensionar:** el Local tiene **1.074 variantes con stock**; el recorrido de
 tops cubrió **296**; quedan **777**.
 

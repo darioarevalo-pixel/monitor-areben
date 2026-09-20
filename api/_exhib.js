@@ -23,6 +23,26 @@ import { leerTodo } from '../lib/supabase/paginar.core.js'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
 const numero = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v))
+/**
+ * Una hora que **mandó el teléfono**, o el respaldo si vino vacía o ilegible.
+ *
+ * 🔴 **Un `null` explícito ⛔ NO cae al default de la columna.** `escaneado_en` es
+ * `not null default now()`, pero el default sólo corre cuando la columna ⛔ no viaja en el insert:
+ * mandarle `null` la rechaza. Y como la tanda entera es **un solo insert de N filas**, esa fila
+ * mala **se lleva puestas a todas las buenas** — y del otro lado no es un renglón perdido: la cola
+ * deja TODO en «sin subir», reintenta para siempre contra el mismo error, y **cerrar con pendientes
+ * está prohibido** ⇒ el que está caminando el local ⛔ no puede cerrar el recorrido y ⛔ nada le dice
+ * por qué.
+ * 📊 Medido contra producción el 19-sep-2026: **4 filas buenas + 1 sin hora = 0 guardadas**, 500.
+ * Lo mismo con una hora ilegible (`invalid input syntax for type timestamp with time zone`).
+ *
+ * 🔑 Por eso el saneo es acá y ⛔ no en el cliente: éste es el punto donde ya se sanea todo lo demás,
+ * y **⛔ ninguna fila puede salir de `filaDeEscaneo` en un estado que la base rechace**.
+ */
+const hora = (v, respaldo = null) => {
+  const s = texto(v)
+  return s && !Number.isNaN(Date.parse(s)) ? s : respaldo
+}
 /** Los estados del triage del recorrido POR CATEGORÍA. `null` = escaneo del modo libre. */
 const ESTADOS = new Set(['exhibido', 'solucionado', 'una-unidad', 'no-encuentra'])
 
@@ -52,14 +72,18 @@ function filaDeEscaneo(recorridoId, e) {
     // 🔑 La hora la manda el teléfono y ⛔ no es `now()`: el local puede quedarse sin señal y la cola
     // subirse mucho después. `now()` diría cuándo se pudo subir, ⛔ no cuándo se escaneó. Si viene
     // vacía o ilegible se cae al default de la tabla, que es lo único que queda.
-    escaneado_en: texto(e.escaneado_en),
+    // ⚠️ El respaldo es el reloj DEL SERVIDOR, que es lo único que queda cuando el teléfono ⛔ no
+    // mandó la suya: dice cuándo se pudo subir y ⛔ no cuándo se escaneó. Es exactamente lo que
+    // hubiera puesto el default de la tabla, sólo que ahora sí pasa (ver `hora`).
+    escaneado_en: hora(e.escaneado_en, new Date().toISOString()),
     // 🔴 **El contador de unidades** (19-sep-2026): el repetido ⛔ ya no rebota, suma. Se sanea acá
     // como todo lo demás —entero, mínimo 1— y con **tope 99**: viene del teléfono, y un número
     // absurdo por un cliente roto quedaría en la columna con la que se compara el stock. 99 prendas
     // iguales colgadas en un mismo mueble ⛔ no existen: el perchero más cargado del Local tenía 9.
     veces: Math.min(99, Math.max(1, Math.trunc(Number(e.veces)) || 1)),
-    // La hora de la última unidad sumada; la primera queda en `escaneado_en`.
-    ultimo_en: texto(e.ultimo_en),
+    // La hora de la última unidad sumada; la primera queda en `escaneado_en`. Acá el respaldo es
+    // `null` —la columna lo admite— porque un escaneo de una sola unidad ⛔ no tiene «última».
+    ultimo_en: hora(e.ultimo_en),
     // 🔴 Lista blanca de los cuatro estados del triage: lo que venga fuera de eso entra **null**,
     // que es «escaneo del modo libre». La columna decide qué dice el reporte —«exhibido» contra «no
     // se encuentra» son dos mandados distintos— así que un valor inventado por un cliente viejo o
@@ -191,7 +215,8 @@ export default async function handler(req, res) {
       if (accion === 'escanear') {
         const recorrido = await recorridoDeLaMarca(String(b.recorrido_id || ''))
         if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
-        const filas = (Array.isArray(b.escaneos) ? b.escaneos : []).map((e) => filaDeEscaneo(recorrido.id, e)).filter(Boolean)
+        const crudos = Array.isArray(b.escaneos) ? b.escaneos : []
+        const filas = crudos.map((e) => filaDeEscaneo(recorrido.id, e)).filter(Boolean)
         if (!filas.length) return res.status(400).json({ error: 'no vino ningún escaneo con lugar y variante' })
         // 🔑 Entra un ARRAY y ⛔ no un escaneo por pedido: así la cola que se juntó sin señal se
         // vacía en un viaje. `ignoreDuplicates` porque el único es (recorrido, lugar, variante) y
@@ -200,7 +225,11 @@ export default async function handler(req, res) {
           .from('exhib_escaneo')
           .upsert(filas, { onConflict: 'recorrido_id,lugar,variante_id', ignoreDuplicates: true })
         if (error) throw new Error(error.message)
-        return res.status(200).json({ ok: true, recibidos: filas.length })
+        // ⚠️ Cuántas venían **sin hora legible** y se guardaron con el reloj del servidor. ⛔ Todavía
+        // ⛔ no lo muestra ninguna pantalla, pero queda en la respuesta: una reparación que ⛔ no se
+        // puede contar de ningún lado es indistinguible de que nunca haya hecho falta.
+        const sinHora = crudos.filter((e) => e && !hora(e.escaneado_en)).length
+        return res.status(200).json({ ok: true, recibidos: filas.length, ...(sinHora ? { sinHora } : {}) })
       }
 
       if (accion === 'cerrar') {
