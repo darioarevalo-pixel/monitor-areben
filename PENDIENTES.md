@@ -3771,9 +3771,44 @@ ver si algo se despertó o se murió, ⛔ nunca solo para recortar.
 recortes**, y `BROAD X FUNDAS POPSTAR` —que figuraba para −20%— tiene el **7d en 84%, debajo del
 techo**: recortarlo habría sido un error del instrumento.
 
-▶️ **ABIERTO, sin decidir: el presupuesto está PLANO toda la semana** mientras el sábado cuesta
-**2,1× lo que cuesta el martes**. Falta dimensionar un reparto por día de semana. Bruno lo dejó
-para después de las manos del 20-sep.
+### 🏁 DIMENSIONADO el reparto por día de semana — **no conviene hacerlo** (20-sep-2026)
+
+El ▶️ de arriba pedía dimensionar el reparto. **Medido, y el premio es chico.** Sólo campañas de
+VENTAS de BDI (el tráfico se excluye: ⛔ no se juzga por compras), 60 días: hoy **$356.083/semana →
+48,9 compras → CPA $7.279 = 85% del techo**. Con la elasticidad medida (0,54):
+
+| escenario | compras/sem | CPA |
+|---|---|---|
+| hoy | 48,9 | 85% del techo |
+| 1 paso del 20%: sáb y jue −20% → mar y mié +20% | **49,6 (+0,7)** | 84% |
+| 2 pasos: sáb y jue −36% → mar y mié +36% | 50,0 (+1,0) | 83% |
+| **óptimo teórico, reparto libre** | **50,4 (+1,5)** | 83% |
+
+**El techo de toda la idea es +3%.** Sensibilidad: +1,8% con ε=0,40 · +5,8% con ε=0,70 · +12% con
+ε=0,85. 🔑 **El 2,1× ⛔ no se traduce en 2,1× porque el martes es barato JUSTAMENTE por gastar
+poco**: con ε=0,54 duplicarle el gasto trae 45% más compras, no el doble, y la ventaja se
+autoconsume hasta que los dos días empatan en ~$7.400.
+
+🔴🔴 **Y el costo de cobrarlo lo vuelve negativo.** Un presupuesto diario **es el mismo todos los
+días**: para variarlo por día de semana sólo hay dos caminos.
+1. **A mano, cada día** ⇒ ~4 cambios por semana por conjunto. Pero **cada cambio reinicia el
+   aprendizaje** y la ventana de lectura ⛔ no puede cruzar un cambio (ver el § siguiente) ⇒ con 4
+   cambios semanales **⛔ nunca más hay una ventana limpia de 2 días sobre nada**. Se rompe el
+   sistema de decisión entero para ganar 1,4%.
+2. **Programación de anuncios (dayparting)**, que Meta exige con presupuesto TOTAL en vez de
+   diario: se configura una vez y ⛔ no resetea nada. Pero todas las reglas de acá —el paso del
+   20%, la puerta del test, las cuatro ventanas— están armadas sobre presupuesto **diario**.
+
+✅ **DECISIÓN: no se hace por ahora.** Un +3% estimado con un modelo ⛔ no paga reestructurar el
+manejo de los conjuntos, y ya está anotado que **el marginal lineal no extrapola**. ▶️ Si se quiere
+perseguir, el paso barato es **probar dayparting en UN conjunto** (el que más gaste los sábados)
+dos semanas y **medirlo**, ⛔ no estimarlo.
+
+⚠️ **Lo que el modelo dice del NIVEL, y por qué ⛔ no se acciona**: con ε=0,54 el marginal es
+`CPA ÷ ε`, o sea **166% del techo en toda la cuenta** y arriba del techo **todos los días**
+—incluso el martes, 122%—. Eso ⛔ no es nuevo (ya estaba: «cruzó el techo por los 10,6 pedidos/día»),
+pero **choca con el marginal medido con escalones reales, $3.600-$4.385**. Dos números que no
+cierran ⇒ **⛔ ninguna decisión de nivel con esto**: hay que medirlo con un escalón de verdad.
 
 ### 🔑 La regla del ESCALADO — la VENTANA no puede cruzar un cambio de presupuesto (3-sep-2026)
 
