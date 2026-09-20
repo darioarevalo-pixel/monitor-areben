@@ -3732,6 +3732,49 @@ test no es una puerta: dice cuánto AIRE tiene la celda para escalar.** Con la e
 tocar el techo — y el `TOPE_ESCALONES = 6` del código la frena en 3× ($3.308, 43% del techo).
 ⚠️ Ese 18× es optimista: la elasticidad se midió sobre la cuenta entera, y **una celda sola satura
 su público más rápido**. ▶️ Vale revisar el tope para celdas que arrancan muy abajo.
+### 🔴🔑 El CPA depende del DÍA DE SEMANA, y eso sesga la ventana de 3d (medido el 20-sep-2026)
+
+Lo levantó Bruno: *«es muy raro, el miércoles tuvimos el mejor día de pauta y luego se cayó todo»*.
+**⛔ No se cayó nada.** Medido sobre 60 días de BDI, con el gasto casi idéntico en cada día de la
+semana (~$470k por cada uno de los 9 lunes, 9 martes, …):
+
+| | mar | mié | lun | vie | dom | jue | **sáb** |
+|---|---|---|---|---|---|---|---|
+| compras | 84 | 75 | 66 | 60 | 58 | 50 | **40** |
+| CPA | $5.654 | $6.321 | $6.693 | $7.822 | $8.304 | $9.980 | **$11.800** |
+| % del techo | 66% | 74% | 78% | 91% | 97% | 117% | **138%** |
+
+🔴 **El sábado se gasta lo mismo que el martes y se compra la MITAD.** Los pedidos de la tienda
+dicen lo mismo por su cuenta (medias: mar 13,3 · mié 12,2 · lun 11,4 · dom 10,5 · vie 9,9 · jue 8,6
+· **sáb 7,3**), así que ⛔ no es un efecto de atribución: es cuándo compra la gente.
+
+⚠️ **Y el «derrumbe» del 17-sep no existió**: el miércoles 16 hizo **24 pedidos — el 6% superior de
+los 60 días** y el jueves 17 hizo **7, que es la MEDIANA EXACTA de un jueves**. Días de ≤7 pedidos
+hay **26 en 60 (42%)**. El embudo lo confirma: CPM, CTR, visitas→carrito y carrito→checkout
+quedaron iguales; lo único que se movió fue checkout→compra, o sea el volumen, ⛔ no la pauta.
+Es [[feedback_areben_baseline_misma_forma]]: sin igualar el día de semana, la caída la inventa el
+corte.
+
+🔴🔴 **CONSECUENCIA PARA LAS DECISIONES — la ventana de 3d NO es neutral**, porque jue-vie-sáb son
+los tres peores días y lun-mar-mié los tres mejores. CPA medio de la ventana de 3d **según el día
+en que se lee el parte**:
+
+| parte del | mié | jue | mar | sáb | **dom** | vie | lun |
+|---|---|---|---|---|---|---|---|
+| su 3d | **74%** | 81% | 88% | 104% | **102%** | 105% | **122%** |
+
+⇒ **la misma pauta parece 28-48 puntos peor leída un domingo o un lunes que un miércoles.** Un
+recorte disparado por 3d en fin de semana está mirando el calendario, ⛔ no el objeto.
+✅ **Regla: los domingos y lunes se decide con el 7d**, que cubre la semana entera. El 3d sirve para
+ver si algo se despertó o se murió, ⛔ nunca solo para recortar.
+📌 Ya mordió el 20-sep: el parte pedía **4 pausas y 4 recortes**; con 7d quedaron **1 pausa y 3
+recortes**, y `BROAD X FUNDAS POPSTAR` —que figuraba para −20%— tiene el **7d en 84%, debajo del
+techo**: recortarlo habría sido un error del instrumento.
+
+▶️ **ABIERTO, sin decidir: el presupuesto está PLANO toda la semana** mientras el sábado cuesta
+**2,1× lo que cuesta el martes**. Falta dimensionar un reparto por día de semana. Bruno lo dejó
+para después de las manos del 20-sep.
+
 ### 🔑 La regla del ESCALADO — la VENTANA no puede cruzar un cambio de presupuesto (3-sep-2026)
 
 **Escalar pide las TRES de siempre** —CPA < 75% del techo, entrega ≥ 85% en días cerrados,
