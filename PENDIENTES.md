@@ -3631,6 +3631,34 @@ regla está COMPLETA: no queda nada abierto en las puertas.** El 26% de falsos m
 aceptado, y es el error barato: matar una pieza buena cuesta la oportunidad, escalar una mala quema
 plata todos los días.
 
+🔴🔴 **Y el CÓDIGO no aplicaba esta regla — corregido el 19-sep-2026.** «Compras acumuladas **al 2º
+día**» estaba escrito acá desde el 26-ago, pero `analista-meta/herramientas/parte-del-dia.mjs`
+calculaba bien el día de vencimiento y después contaba **toda la vida de la celda** (`x.fecha <=
+AYER`). Como el umbral sigue congelado en $20.000, **una celda que nadie cerró se auto-asciende
+sola**: sigue sumando compras contra una vara que no se mueve. ⇒ 🔑 **el sesgo es de un solo lado —
+así, la puerta ⛔ NUNCA mataba, sólo inflaba.**
+
+**Medido sobre las 6 celdas abiertas ese día: 5 de 6 cambiaban de veredicto, y las 5 para ABAJO.**
+
+| celda | al 2º día (la regla) | lo que imprimía | CPA hoy |
+|---|---|---|---|
+| Fundas complemento | $33.057 · 2 c · 🔴 MUERE | 🟢🟢 ESCALAR | 118% |
+| me llegaron 3 fundas | $31.443 · 4 c · 🟡 sigue | 🟢🟢 ESCALAR | 100% |
+| Styling my Case | $29.573 · 5 c · 🟡 sigue | 🟢🟢 ESCALAR | 87% |
+| new items | $23.736 · 5 c · 🟢 APROBADO | 🟢🟢 ESCALAR | 61% |
+| encontraste tus | $22.081 · 5 c · 🟢 APROBADO | 🟢🟢 ESCALAR | 52% |
+
+✅ **REGLA NUEVA, decidida por Bruno el 19-sep: las compras se NORMALIZAN a los $20.000.** Al 2º día
+las celdas llevan **$29-33k, ⛔ no $20.000** —el gasto diario es grueso— y la tabla de Poisson de
+arriba supone $20.000. Sin normalizar, **una celda cara se compra el veredicto**: con 1,65× la plata
+tiene 1,65× las chances de pasar. Se compara `compras × 20.000 / gasto`, con los mismos cortes
+corridos a continuo: **<2 muere · <4 sigue · <6 aprobado · 6+ escalar**.
+
+🔑 **Y la puerta ⛔ NO compite con el techo, que era la contradicción aparente**: la puerta decide si
+la celda **VIVE**; el escalado decide si **recibe plata**, y ése pide siempre las tres condiciones
+(CPA < 75% del techo, entrega ≥ 85%, frecuencia). **Un 🟢🟢 de la puerta es un CANDIDATO, ⛔ no una
+orden**, y el parte ahora lo dice en el encabezado de la sección.
+
 🔴 **El 1er día de una celda creada ESE MISMO día es PARCIAL y no cuenta.** `TEST IP AZUL BROAD` se
 creó el 25-ago y gastó $3.612 de sus $10.000 (36%): su primer día completo fue el 26. Leerlo como
 «dos días, 0 compras ⇒ muere» es matarlo antes de que corra el test.
