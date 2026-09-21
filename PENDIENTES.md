@@ -3719,6 +3719,35 @@ la celda **VIVE**; el escalado decide si **recibe plata**, y ése pide siempre l
 (CPA < 75% del techo, entrega ≥ 85%, frecuencia). **Un 🟢🟢 de la puerta es un CANDIDATO, ⛔ no una
 orden**, y el parte ahora lo dice en el encabezado de la sección.
 
+### 🔴🔑 EL DÍA EN QUE SE LANZA UNA CELDA CAMBIA SU VEREDICTO 1,61× — lanzar DOMINGO o LUNES
+
+Consecuencia directa del § «El CPA depende del día de semana» (20-sep-2026), y **muerde justo
+cuando se prende una tanda nueva**. Una celda gasta $10.000/día × **2 días completos**, y el 1er
+día —el de creación— es PARCIAL y ⛔ no cuenta ⇒ **los dos días que la juzgan dependen de cuándo se
+lanzó**:
+
+| se lanza el… | días juzgados | compras esperadas por $20.000 | CPA | índice |
+|---|---|---|---|---|
+| **lunes** | mar+mié | **3,51** | 66% del techo | 100% |
+| **domingo** | lun+mar | **3,44** | 68% | 98% |
+| sábado | dom+lun | 2,86 | 82% | 81% |
+| martes | mié+jue | 2,70 | 87% | 77% |
+| miércoles | jue+vie | 2,39 | 98% | 68% |
+| jueves | vie+sáb | 2,24 | 104% | 64% |
+| **viernes** | sáb+dom | **2,18** | 107% | 62% |
+
+🔴 **Y la puerta corta en 2 (muere) y en 4 (aprobado).** Una pieza del montón lanzada un **viernes**
+espera **2,18 compras, a un pelo de la línea de muerte**; **la misma pieza** lanzada un **lunes**
+espera 3,51 y roza el aprobado. ⇒ **el calendario mata piezas buenas y asciende malas**, y como el
+1er día ya se descarta por parcial, nadie lo ve.
+
+✅ **REGLA: las tandas de test se lanzan DOMINGO o LUNES.** Lanzar miércoles, jueves o viernes le
+saca a la celda un tercio de sus compras esperadas contra una vara que ⛔ no se mueve.
+⚠️ Si hay que lanzar igual un jueves o viernes, **⛔ no se aplica la puerta tal cual**: se le da la
+2ª tanda o se espera a que acumule 2 días buenos.
+▶️ Lo limpio sería **normalizar la puerta por el día de semana** (igual que ya se normaliza por los
+$20.000). Sin decidir: agrega un factor más a una regla que Bruno declaró completa.
+
 🔴 **El 1er día de una celda creada ESE MISMO día es PARCIAL y no cuenta.** `TEST IP AZUL BROAD` se
 creó el 25-ago y gastó $3.612 de sus $10.000 (36%): su primer día completo fue el 26. Leerlo como
 «dos días, 0 compras ⇒ muere» es matarlo antes de que corra el test.
