@@ -72,3 +72,27 @@ export async function dispararSyncStock(marca: Marca, setLabel: (t: string) => v
   }
   return false
 }
+
+/**
+ * **De cuándo es el stock que estamos mirando**: el último sync que terminó bien.
+ *
+ * 🔴 **Hace falta porque el espejo ⛔ no es tiempo real y eso ⛔ no se ve.** El sync diario de Zattia
+ * corre **una vez por día, a las 3 de la mañana** (`sync-diario-zattia.yml`), y el local vende
+ * **~160 unidades por día** (medido sobre las dos semanas al 19-sep-2026, con un pico de 433). Un
+ * balance hecho a las 4 de la tarde contra la foto de las 3 AM manda a buscar al depósito prendas
+ * que se vendieron a la mañana — y **nada en la pantalla lo delataba**.
+ *
+ * ⚠️ Devuelve `null` si ⛔ no se puede preguntar. Quien lo usa tiene que decir «⛔ no se sabe» y ⛔
+ * nunca «está al día»: de las dos formas de equivocarse, ésta es la única que ⛔ no miente.
+ */
+export async function ultimoSyncStock(marca: Marca): Promise<Date | null> {
+  try {
+    const r = await apiFetch(`${SYNC_API}?store=${marca}&nc=${Math.random()}`)
+    const d = (await r.json()) as { run?: { created_at?: string; conclusion?: string } }
+    const t = d.run && d.run.conclusion === 'success' ? d.run.created_at : null
+    const fecha = t ? new Date(t) : null
+    return fecha && !Number.isNaN(fecha.getTime()) ? fecha : null
+  } catch {
+    return null
+  }
+}

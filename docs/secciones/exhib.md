@@ -42,6 +42,24 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
 
 ## Reglas que el código no dice
 
+- 🆕 🔴 **EL STOCK CONTRA EL QUE SE COMPARA ⛔ NO ES TIEMPO REAL, Y ESO SE DICE EN PANTALLA**
+  (20-sep-2026). Lo preguntó Bruno: *«¿la comparación la hace en tiempo real? capaz que toma un
+  sync viejo»*. El recorrido lee el **espejo** de Supabase, y el sync diario de Zattia corre **una
+  vez por día, a las 06:00 UTC** (`sync-diario-zattia.yml`) — o sea las 3 de la mañana.
+  📊 **Y el local vende ~160 unidades por día** (medido sobre las dos semanas al 19-sep-2026: 433 ·
+  210 · 162 · 167 · 147 · 154; promedio 104 contando los días flojos). ⇒ un balance hecho a las 4 de
+  la tarde contra la foto de las 3 AM **manda a buscar al depósito prendas que se vendieron a la
+  mañana**, y ⛔ nada lo delataba: la lista salía con la misma cara de correcta.
+  🔑 **Por eso el balance muestra SIEMPRE de cuándo es el stock** y ofrece «Cargar el stock de
+  ahora» (el mismo `dispararSyncStock` del botón «Cargar de GN», 2-4 min). Arriba de **2 horas** el
+  cartel se pone en alerta: a 160 u/día, dos horas de local abierto son unas 20 prendas que la foto
+  ⛔ no conoce. ⚠️ **Y ⛔ no saber ⛔ no es estar al día**: si la consulta falla, avisa igual.
+  ⚠️ **Se descartó congelar la foto al cerrar el recorrido** (opción A, 20-sep): obligaba a la
+  empleada a esperar los 2-4 min del sync al finalizar. Bruno: *«desde que ella me avisa yo hago en
+  el momento la comparación, no es que espere un par de días»* ⇒ con la brecha en minutos, cargar el
+  stock al abrir el balance da la misma foto sin frenar a nadie. 🔴 **Si ese flujo cambia** —si los
+  balances empiezan a hacerse al otro día— **esto vuelve a estar mal y hay que congelar**.
+
 - 🆕 🔴 🔑 **EL BALANCE DEL SECTOR LO HACE UNA PERSONA, DESPUÉS, Y LA APP SÓLO PONE EL NÚMERO**
   (20-sep-2026, `lib/exhib/balance.ts`). «Para colgar» es la lista **siempre verdadera pero corta**
   —los hermanos de lo que el recorrido tocó—; el balance es el otro lado: *«caminé el sector ENTERO,

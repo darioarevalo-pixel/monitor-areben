@@ -54,7 +54,7 @@ const fechaDe = (iso: string | null | undefined) =>
 const hora = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' }) : '—'
 
-export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selector }: { items: ExhibItem[]; buscables: ExhibItem[]; enCero: number; cargando: boolean; errorMsg: string | null; selector: React.ReactNode }) {
+export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selector, onTraerStock, trayendo }: { items: ExhibItem[]; buscables: ExhibItem[]; enCero: number; cargando: boolean; errorMsg: string | null; selector: React.ReactNode; onTraerStock: () => Promise<void>; trayendo: boolean }) {
   const { marca } = useSesion()
   const { confirmar } = useConfirmar()
   const toast = useToast()
@@ -612,6 +612,8 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             marca={marca}
             recorridoId={viendo.recorrido.id}
             cobertura={viendo.recorrido.cobertura}
+            onTraerStock={onTraerStock}
+            trayendo={trayendo}
             onGuardada={(c) => {
               setViendo({ ...viendo, recorrido: { ...viendo.recorrido, cobertura: c } })
               // La lista de atrás muestra cuáles ya tienen balance: sin esto, volver mostraría el

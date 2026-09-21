@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button, Notice, color, font, space, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
 import { buscarEnDeposito, coberturaPorCat, filasBuscar, resumenBuscar, sinCategoriaSinVer, HEADER_BUSCAR } from '@/lib/exhib/balance'
@@ -9,6 +9,7 @@ import { normCat } from '@/lib/exhib/core'
 import type { Cobertura, EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { Marca } from '@/lib/nav'
+import { ultimoSyncStock } from '@/lib/sync-gn'
 
 /**
  * **El balance del sector**, la pantalla de quien decide.
@@ -34,6 +35,8 @@ export function BalanceSector({
   recorridoId,
   cobertura,
   onGuardada,
+  onTraerStock,
+  trayendo,
 }: {
   escaneos: EscaneoLibre[]
   /** El Local **con stock**: es el universo contra el que se compara. */
@@ -42,10 +45,40 @@ export function BalanceSector({
   recorridoId: string
   cobertura: Cobertura | null | undefined
   onGuardada: (c: Cobertura) => void
+  /** Carga el stock de ahora desde Gestión Nube y recarga `items`. Tarda 2-4 minutos. */
+  onTraerStock: () => Promise<void>
+  trayendo: boolean
 }) {
   const toast = useToast()
   const [elegidas, setElegidas] = useState<string[]>(cobertura?.cats ?? [])
   const [guardando, setGuardando] = useState(false)
+
+  /**
+   * 🔴 **De cuándo es el stock contra el que se está comparando.** El espejo se actualiza **una vez
+   * por día, a las 3 de la mañana**, y el local vende **~160 unidades por día**: un balance hecho a
+   * la tarde contra esa foto manda a buscar al depósito prendas que se vendieron a la mañana. Esto
+   * ⛔ no se veía en ningún lado, y el mandado salía igual de confiado.
+   *
+   * ⚠️ Se vuelve a preguntar cuando `items` cambia, que es lo que pasa después de traer el stock:
+   * así el cartel se corrige solo en vez de quedar mostrando la hora vieja.
+   */
+  const [stockDe, setStockDe] = useState<{ fecha: Date; horas: number } | null | undefined>(undefined)
+  useEffect(() => {
+    let vivo = true
+    void ultimoSyncStock(marca).then((fecha) => {
+      // ⚠️ La antigüedad se calcula **acá**, cuando se pregunta, y ⛔ no en el render: leer el reloj
+      // mientras se dibuja da un número que cambia solo en cada re-dibujo (y el lint lo prohíbe).
+      if (vivo) setStockDe(fecha ? { fecha, horas: (Date.now() - fecha.getTime()) / 36e5 } : null)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [marca, items])
+
+  // 🔑 Dos horas es el corte, y sale de la venta real: a ~160 unidades por día, dos horas de local
+  // abierto son unas 20 prendas que la foto ⛔ no conoce. Abajo de eso, el ruido ⛔ no cambia un
+  // mandado; arriba, sí. ⚠️ Y **no saber ⛔ no es estar al día**: sin dato, se avisa igual.
+  const stockViejo = !stockDe || stockDe.horas > 2
 
   const cats = useMemo(() => coberturaPorCat(escaneos, items), [escaneos, items])
   const lista = useMemo(() => buscarEnDeposito(escaneos, items, elegidas), [escaneos, items, elegidas])
@@ -79,6 +112,41 @@ export function BalanceSector({
       <div style={{ fontSize: font.sm, marginBottom: space[3] }}>
         Marcá las categorías que este recorrido caminó <b>enteras</b>. Con eso se arma la lista de lo que hay que ir a buscar al
         depósito del local. Si sólo se caminó un mueble suelto, dejalo sin marcar.
+      </div>
+
+      {/* 🔴 Va ANTES de las categorías: es la pregunta previa a cualquier tilde. Un mandado armado
+          contra una foto de ayer es peor que no armarlo, porque sale con la misma cara de correcto. */}
+      <div
+        style={{
+          fontSize: font.sm,
+          padding: `${space[2]}px ${space[3]}px`,
+          marginBottom: space[3],
+          borderRadius: 8,
+          background: stockViejo ? color.warningBg : color.successBg,
+          color: color.ink,
+        }}
+      >
+        <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>
+            {stockDe === undefined
+              ? 'Averiguando de cuándo es el stock…'
+              : stockDe === null
+                ? // ⛔ «No se pudo preguntar» ⛔ NO es «está al día»: de las dos formas de
+                  // equivocarse, ésta es la única que ⛔ no miente.
+                  '⛔ No se pudo saber de cuándo es el stock con el que se compara.'
+                : stockDe.horas < 1
+                  ? `✓ El stock es de recién (${stockDe.fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}).`
+                  : `⚠️ El stock con el que se compara es de hace ${Math.round(stockDe.horas)} ${Math.round(stockDe.horas) === 1 ? 'hora' : 'horas'} (${stockDe.fecha.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}).`}
+          </span>
+          <Button size="sm" variant={stockViejo ? 'solid' : 'outline'} tone={stockViejo ? 'brand' : undefined} onClick={() => void onTraerStock()} loading={trayendo}>
+            Cargar el stock de ahora
+          </Button>
+        </div>
+        {stockViejo && stockDe !== undefined && (
+          <div style={{ fontSize: font.xs, marginTop: 4 }}>
+            El local vende unas 160 prendas por día. Si no lo cargás ahora, el mandado puede mandar a buscar cosas que ya se vendieron.
+          </div>
+        )}
       </div>
 
       {cats.map((c) => {

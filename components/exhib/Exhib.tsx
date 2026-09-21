@@ -245,7 +245,21 @@ export function Exhib() {
   // El modo libre es una pantalla entera aparte —otro recorrido, otro almacenamiento— y ⛔ no un
   // `if` adentro de ésta. Los ítems se le pasan ya cruzados: la bajada es la misma para los dos.
   if (modo === 'libre') {
-    return <ExhibLibre items={ex.items} buscables={ex.buscables} enCero={ex.enCero} cargando={ex.cargando} errorMsg={ex.errorMsg} selector={selector} />
+    // 🔑 `traerGN` es del contenedor y ⛔ no se duplica adentro del libre: es el MISMO botón
+    // «Cargar de GN» que ya existía —dispara el sync y recarga el inventario—, ahora también al
+    // alcance del balance, que es donde de verdad importa que el stock sea de ahora.
+    return (
+      <ExhibLibre
+        items={ex.items}
+        buscables={ex.buscables}
+        enCero={ex.enCero}
+        cargando={ex.cargando}
+        errorMsg={ex.errorMsg}
+        selector={selector}
+        onTraerStock={traerGN}
+        trayendo={!!syncLabel}
+      />
+    )
   }
 
   return (
