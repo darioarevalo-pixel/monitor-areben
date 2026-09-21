@@ -42,6 +42,19 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
 
 ## Reglas que el código no dice
 
+- 🆕 🔑 **LA VELOCIDAD DEL ESCANEO ⛔ NO ES LA CUENTA, ES LO QUE SE DIBUJA** (20-sep-2026, lo
+  preguntó Bruno antes de salir a caminar un sector entero). 📊 **Medido con los datos reales del
+  Local**, con **400 escaneos** ya cargados: buscar el código entre las 2.188 del Local **0,02 ms**,
+  guardar el borrador **0,4 ms** (132 KB), recalcular «falta colgar» **0,3 ms** ⇒ **0,4 ms el
+  escaneo entero**, ~3 ms en un celular. Contra los **997 ms** del intervalo humano más corto que se
+  midió, la cuenta ⛔ no se ve. ⇒ **optimizar la lógica acá sería trabajo desperdiciado.**
+  🔴 **Lo que sí pesa es la LISTA de lo escaneado**, que se rearma en cada lectura: el sector entero
+  son cientos de filas —cada una con su botón— redibujándose mientras la persona ya está pasando la
+  prenda siguiente. Por eso se dibujan **las últimas 25** (`TOPE_FILAS`) con un «ver los N de este
+  lugar» a mano, y al escanear se vuelve solo a la vista corta. ⚠️ **El contador de arriba sigue
+  diciendo el total**: se dibuja menos, ⛔ no se esconde nada — y quien escanea sólo mira **la
+  última**, para confirmar que enganchó.
+
 - 🆕 🔴 **EL STOCK CONTRA EL QUE SE COMPARA ⛔ NO ES TIEMPO REAL, Y ESO SE DICE EN PANTALLA**
   (20-sep-2026). Lo preguntó Bruno: *«¿la comparación la hace en tiempo real? capaz que toma un
   sync viejo»*. El recorrido lee el **espejo** de Supabase, y el sync diario de Zattia corre **una

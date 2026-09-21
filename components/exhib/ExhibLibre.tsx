@@ -42,6 +42,14 @@ import { avisar, estadoSonido, prepararSonido, type EstadoSonido } from '@/lib/s
  */
 type Fase = 'config' | 'scan' | 'cierre' | 'ver'
 
+/**
+ * Cuántos escaneos se dibujan mientras se camina.
+ *
+ * 🔑 **25 es lo que entra en una pantalla de teléfono con margen**, y alcanza de sobra para lo
+ * único que se mira de esta lista con el lector en la mano: **que la última prenda enganchó**.
+ */
+const TOPE_FILAS = 25
+
 /** Todo en hora de Buenos Aires: el reloj del teléfono es el del local, y el servidor guarda UTC. */
 const EN_AR = { timeZone: 'America/Argentina/Buenos_Aires' } as const
 
@@ -66,6 +74,8 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   /** Lo que el teléfono pudo hacer con el sonido, para poder DECIRLO. Ver `lib/sonido.ts`. */
   const [audio, setAudio] = useState<EstadoSonido | null>(null)
   const [fb, setFb] = useState<ResultadoLibre | null>(null)
+  /** Ver la lista entera del lugar: se pide a mano, ⛔ no se dibuja sola mientras se escanea. */
+  const [verTodosLosEscaneos, setVerTodosLosEscaneos] = useState(false)
   const [previos, setPrevios] = useState<RecorridoLibre[] | null>(null)
   const [viendo, setViendo] = useState<{ recorrido: RecorridoLibre; escaneos: EscaneoLibre[] } | null>(null)
   /** Lo que quedó sin colgar del mueble que se acaba de dejar, y lo del recorrido entero al cerrar. */
@@ -162,6 +172,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
      */
     const previo = lib.escaneos.at(-1)?.lugar
     setFb(sonando(lib.escanear(c, lib.lugar)))
+    // Al escanear se vuelve a la vista corta: si quedó abierta la lista entera de un mueble, cada
+    // lectura siguiente pagaría el dibujo completo otra vez.
+    setVerTodosLosEscaneos(false)
     if (previo && previo !== lib.lugar.trim()) {
       const quedo = colgarEnLugar(paraColgar(lib.escaneos, items), previo)
       setCierreLugar(quedo.length ? { lugar: previo, lista: quedo } : null)
@@ -545,9 +558,27 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             {lib.enEsteLugar} {lib.enEsteLugar === 1 ? 'escaneo acá' : 'escaneos acá'} · {lib.escaneos.length} en el recorrido
             {lib.sinSubir > 0 && ` · ${lib.sinSubir} sin subir`}
           </Subtitulo>
+          {/* 🔴 **Se dibujan las ÚLTIMAS, ⛔ no todas, y es por velocidad.** Esta lista se rearma en
+              CADA escaneo: con el sector entero adentro serían cientos de filas —cada una con su
+              botón— redibujándose mientras la persona ya está pasando la prenda siguiente. Medido
+              el 20-sep-2026, la cuenta de un escaneo con 400 ya escaneados tarda **0,4 ms**; lo que
+              pesa ⛔ no es calcular, es dibujar. Y quien escanea sólo mira **la última** para
+              confirmar que enganchó: el resto está en el Excel y en la base.
+              ⚠️ El contador de arriba sigue diciendo el total, así que ⛔ no se esconde nada. */}
           <div style={{ maxHeight: 340, overflowY: 'auto' }}>
             {deEsteLugar.length ? (
-              deEsteLugar.map((e) => <FilaEscaneo key={e.variante_id} e={e} onSacar={lib.sacar} />)
+              <>
+                {deEsteLugar.slice(0, verTodosLosEscaneos ? undefined : TOPE_FILAS).map((e) => (
+                  <FilaEscaneo key={e.variante_id} e={e} onSacar={lib.sacar} />
+                ))}
+                {!verTodosLosEscaneos && deEsteLugar.length > TOPE_FILAS && (
+                  <div style={{ padding: '10px 4px', textAlign: 'center' }}>
+                    <Button size="sm" variant="ghost" onClick={() => setVerTodosLosEscaneos(true)}>
+                      Ver los {deEsteLugar.length} de este lugar
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : (
               <div style={{ color: color.mut, padding: 14, textAlign: 'center' }}>
                 {lib.lugar.trim() ? 'Nada escaneado en este lugar todavía.' : 'Escribí el lugar y empezá a escanear.'}
