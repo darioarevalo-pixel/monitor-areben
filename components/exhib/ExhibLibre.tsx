@@ -14,7 +14,7 @@ import { Analisis } from './Analisis'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { avisoDe } from '@/lib/exhib/aviso'
-import { avisar, prepararSonido } from '@/lib/sonido'
+import { avisar, estadoSonido, prepararSonido, type EstadoSonido } from '@/lib/sonido'
 
 /**
  * Chequeo de exhibición **libre**: se camina el local escaneando por LUGAR («perchero tops»), y
@@ -62,6 +62,8 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   const lib = useExhibLibre(marca, buscables)
 
   const [fase, setFase] = useState<Fase>('config')
+  /** Lo que el teléfono pudo hacer con el sonido, para poder DECIRLO. Ver `lib/sonido.ts`. */
+  const [audio, setAudio] = useState<EstadoSonido | null>(null)
   const [fb, setFb] = useState<ResultadoLibre | null>(null)
   const [previos, setPrevios] = useState<RecorridoLibre[] | null>(null)
   const [viendo, setViendo] = useState<{ recorrido: RecorridoLibre; escaneos: EscaneoLibre[] } | null>(null)
@@ -119,6 +121,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
    */
   function escucharAvisos() {
     prepararSonido()
+    // ⚠️ Se pregunta DESPUÉS de un respiro: reanudar el audio es asíncrono, y preguntando en el
+    // mismo suspiro diría «bloqueado» sobre un teléfono que está por sonar perfecto.
+    window.setTimeout(() => setAudio(estadoSonido()), 400)
     const demo: Array<{ tipo: string; veces?: number }> = [
       { tipo: 'ok' },
       { tipo: 'sumado', veces: 2 },
@@ -296,6 +301,17 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>
+            {/* 🔴 **«Se oye la voz pero no los pitidos» es un síntoma con nombre**, y pasó la primera
+                noche: en iPhone el interruptor de silencio del costado apaga los pitidos y deja
+                pasar la voz. Decirlo acá es la diferencia entre resolverlo en diez segundos y
+                caminar el local entero a medias. */}
+            {audio && (
+              <div style={{ fontSize: font.sm, marginTop: space[2], color: audio === 'listo' ? color.mut : color.ink }}>
+                {audio === 'listo' && <>Si escuchás la voz pero <b>no los pitidos</b>, es el <b>interruptor de silencio</b> del costado del teléfono: la voz lo ignora y los pitidos no.</>}
+                {audio === 'bloqueado' && <>El teléfono todavía ⛔ no deja sonar. Subí el volumen, sacalo de silencio y tocá de nuevo.</>}
+                {audio === 'sin-audio' && <>Este navegador ⛔ no puede hacer sonidos. La voz puede andar igual.</>}
+              </div>
+            )}
           </Notice>
 
           {lib.recorridoId && (

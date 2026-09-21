@@ -55,21 +55,57 @@ const VIBRA: Record<Aviso, number | number[]> = {
 let ctx: AudioContext | null = null
 
 /**
+ * 🔴 **El interruptor de silencio del iPhone apaga el pitido y deja pasar la voz**, y ésa es
+ * exactamente la falla que reportó Bruno la primera noche (20-sep-2026): *«se escucha bien, pero no
+ * escucho los pitidos»*. ⛔ No son el mismo camino de audio — la voz del sistema suena igual con el
+ * teléfono en silencio, y **todo lo que pasa por Web Audio, no**.
+ *
+ * `audioSession.type = 'playback'` es lo que le dice a Safari que esto es contenido que **la
+ * persona vino a escuchar**, y entonces ⛔ no lo silencia el interruptor. Existe desde Safari 16.4;
+ * donde ⛔ no existe, esta línea ⛔ no hace nada y no molesta.
+ */
+function sesionDeAudio() {
+  try {
+    const s = (navigator as unknown as { audioSession?: { type: string } }).audioSession
+    if (s && s.type !== 'playback') s.type = 'playback'
+  } catch {
+    /* navegador sin sesión de audio */
+  }
+}
+
+/**
  * El audio del navegador arranca **bloqueado** hasta que la persona toca algo, y el Enter del lector
  * ⛔ no siempre alcanza para desbloquearlo. Por eso esto se llama desde el botón que empieza el
  * recorrido, que es un toque de verdad: sin ese enganche, el primer escaneo del día ⛔ no suena.
  */
 export function prepararSonido(): void {
   try {
+    sesionDeAudio()
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     if (!ctx) ctx = new AC()
-    if (ctx.state === 'suspended') void ctx.resume()
+    if (ctx.state !== 'running') void ctx.resume()
     // La voz también quiere su permiso, y pedirlo con algo vacío ⛔ no dice nada por el parlante.
     window.speechSynthesis?.getVoices()
   } catch {
     /* sin audio: el recorrido sigue igual */
   }
 }
+
+/** Para que la pantalla pueda **decir** por qué no se oye, en vez de dejar a alguien probando a ciegas. */
+export type EstadoSonido = 'listo' | 'bloqueado' | 'sin-audio'
+
+export function estadoSonido(): EstadoSonido {
+  if (!ctx) return 'sin-audio'
+  return ctx.state === 'running' ? 'listo' : 'bloqueado'
+}
+
+/**
+ * 🔑 **El volumen es más alto de lo que parece necesario a propósito.** Esto se oye en un local con
+ * música y gente, con el teléfono en el bolsillo o colgando del cuello, y compitiendo contra el
+ * click del propio lector. Un pitido que hay que buscar ⛔ no sirve: la persona termina mirando la
+ * pantalla, que es lo que se vino a evitar.
+ */
+const VOLUMEN = 0.25
 
 function tono(hz: number, ms: number, enMs: number) {
   if (!ctx) return
@@ -80,7 +116,7 @@ function tono(hz: number, ms: number, enMs: number) {
   const t = ctx.currentTime + enMs / 1000
   // La rampa corta saca el "clic" del corte seco, que con 100 escaneos seguidos cansa.
   g.gain.setValueAtTime(0.0001, t)
-  g.gain.exponentialRampToValueAtTime(0.07, t + 0.01)
+  g.gain.exponentialRampToValueAtTime(VOLUMEN, t + 0.01)
   g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000)
   o.connect(g)
   g.connect(ctx.destination)
@@ -88,12 +124,26 @@ function tono(hz: number, ms: number, enMs: number) {
   o.stop(t + ms / 1000 + 0.02)
 }
 
+/**
+ * 🔴 **Reanudar es ASÍNCRONO, y hasta que termina el reloj del audio está congelado.** Ésta era la
+ * otra mitad del bug de la primera noche: `prepararSonido()` pedía el `resume()` y el pitido se
+ * programaba **en el mismo suspiro**, contra un `currentTime` que todavía ⛔ no corría ⇒ el tono
+ * quedaba agendado en un instante que ya pasó y ⛔ no sonaba nunca. La voz ⛔ no depende de este
+ * reloj, y por eso se oía sola: **un aviso a medias es peor que ninguno**, porque parece que anduvo.
+ *
+ * ⚠️ Es un `then` y ⛔ no un `await`: quien llama está atendiendo un escaneo y ⛔ no puede esperar.
+ */
 export function pitar(aviso: Aviso): void {
   try {
     prepararSonido()
+    if (!ctx) return
     const t = TONOS[aviso]
-    tono(t.hz, t.ms, 0)
-    if (t.luego) tono(t.luego.hz, t.luego.ms, t.ms + 30)
+    const emitir = () => {
+      tono(t.hz, t.ms, 0)
+      if (t.luego) tono(t.luego.hz, t.luego.ms, t.ms + 30)
+    }
+    if (ctx.state === 'running') emitir()
+    else void ctx.resume().then(emitir).catch(() => {})
   } catch {
     /* sin audio */
   }
