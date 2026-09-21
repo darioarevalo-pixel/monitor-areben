@@ -17,14 +17,16 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
 `ExhibLibre.tsx` · `useExhibLibre.ts` · **`useColaEscaneos.ts` la cola que usan LOS DOS** ·
-`ParaColgar.tsx`) · `lib/exhib/` (`core.ts` puro y
+`ParaColgar.tsx`) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
+(**`aviso.ts`** qué se oye en cada final · `core.ts` puro y
 compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
 `datos.ts` la bajada · `cliente.ts` · `pdf.ts` · **`analisis.ts` el conteo del final** · `tipos.ts`) ·
 `api/_exhib.js` por `api/datos.js?recurso=exhib` · tablas `exhib_recorrido` y `exhib_escaneo`
 (`sql/migrate-exhib-libre.sql` + `sql/migrate-exhib-categoria.sql`, **sólo en el Supabase de
 Zattia**) ·
 `tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts` +
-`tests/exhib-analisis.test.ts`.
+`tests/exhib-analisis.test.ts` + **`tests/exhib-por-variante.test.ts`** (la regla de que una variante
+⛔ no marca a sus hermanas, cruzando los cuatro módulos) + `tests/exhib-aviso.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -38,6 +40,50 @@ Zattia**) ·
   caminata por categoría **y** la libre.
 
 ## Reglas que el código no dice
+
+- 🆕 🔴 🔑 **EL RECORRIDO SE CAMINA DE OÍDO** (20-sep-2026, lo pidió Bruno: *«que haga el pitido y
+  además diga uno, para que la persona tenga el celular cerca pero no esté viéndolo
+  constantemente»*). Cada escaneo **pita, vibra y dice una palabra**: quien camina tiene el lector
+  en una mano y la prenda en la otra, y mirar la pantalla después de cada lectura es lo que hace
+  lento el recorrido.
+  🔴 **Los tonos ⛔ no son decoración: son el mensaje, y lo que EXIGE mirar suena distinto de lo que
+  anduvo.** Si «anduvo» y «elegí cuál es» se parecen, la persona sigue caminando y **deja atrás la
+  prenda sin resolver** —y ese escaneo se guarda solo como «no cruzó»—. Son cinco: agudo corto =
+  *uno* · dos agudos = *dos* (el repetido que sumó) · medio largo = *en cero* · grave = *no figura*
+  · **dos tonos que SUBEN** = *elegí cuál* / *otra categoría*, los únicos que piden la vista.
+  🔑 **La decisión está separada de lo que suena**: `lib/exhib/aviso.ts` (puro, con test) dice qué
+  aviso le toca a cada final y `lib/sonido.ts` lo toca. Los **dos modos** usan el mismo mapa: el
+  mismo escaneo ⛔ no puede sonar distinto según por qué pantalla se entró.
+  ⚠️ **Los números se cantan, ⛔ no se leen** («dos», no «2»): la voz del navegador lee los dígitos
+  distinto según la voz instalada, y en inglés si la de español ⛔ no está.
+  🔴 **La voz cancela a la anterior antes de hablar.** El lector dispara cada ~1,5 s y hablar tarda
+  ~0,5 s: encolando, a los diez escaneos estaría cantando el número de hace quince segundos, sobre
+  la prenda que la persona tiene en la mano **ahora**. Gana siempre el último.
+  ⚠️ **El audio del navegador arranca BLOQUEADO** hasta un toque de verdad, y el Enter del lector ⛔
+  no siempre alcanza: por eso «Iniciar recorrido» y «Retomar» lo destraban, y el **«listo»** que se
+  oye al empezar ⛔ no es un adorno —hablar dentro del toque es lo que destraba la voz en iPhone, y
+  es la prueba de que el teléfono ⛔ no está en silencio—.
+  🔑 **Y por eso hay «Escuchar los avisos»** en la pantalla de configurar: esto sirve sólo si se
+  reconocen **de oído**, y leer en la pantalla que «el grave es no figura» ⛔ no sirve parado en el
+  salón. ⛔ **Nada de esto se puede probar con un test**: el mapa sí (`tests/exhib-aviso.test.ts`),
+  el parlante ⛔ no.
+
+- 🆕 🔴 🔑 **EL CHEQUEO ES POR VARIANTE: marcar una ⛔ NO marca a sus hermanas** (20-sep-2026, lo
+  pidió Bruno antes de salir a caminar el local). ⛔ No es el caso raro: **285 de los 467 productos**
+  del Local tienen más de una variante con stock, y en Zattia **el color viaja en el talle** —TOP
+  ORSA es Chocolate, Beige y Negro como tres `size_name` del mismo `product_id`—.
+  📊 **Medido contra producción, ⛔ no estimado** (20-sep-2026, las **2.188** filas del Local):
+  **cero colisiones de `exhibId`**, cero códigos de barras repetidos, y de las 8 sin código de
+  barras, ninguna repite producto+talle ⇒ hoy **ninguna variante puede confundirse con otra**.
+  📊 Y ya pasó en el salón: el recorrido real `ex1789825143664_abbjt3` dio **97 escaneos ⇒ 97
+  variantes distintas sobre 67 productos**, con **24 productos escaneados en varias variantes por
+  separado, cada una con su hora** (TOP ORSA Chocolate 10:42:17 · Beige 10:42:26 · Negro 10:46:58).
+  🔴 **La regla cruza los cuatro módulos** —el id (`exhibId`), la clave de la cola y del único de la
+  base (`claveEscaneo`), lo que falta colgar y el conteo— y por eso su test está **aparte**, en
+  `tests/exhib-por-variante.test.ts`: ejercida por pedazos, el pedazo que se rompe es el del módulo
+  que nadie tocó. Verificado que muerde: rompiendo `exhibId` a propósito, **10 de sus 14 casos
+  fallan**. ⚠️ **Los dos caminos por los que se rompería** son el SKU compartido (arriba) y una
+  variante **sin código de barras** cuyo talle repita el de una hermana.
 
 - 🆕 🔴 🔑 **EL RECORRIDO CUENTA UNIDADES, Y POR ESO SON DOS PREGUNTAS Y ⛔ NO UNA** (19-sep-2026).
   Hasta esa tarde el repetido **rebotaba** —el único de la base es (recorrido, lugar, variante)—
@@ -132,12 +178,16 @@ Zattia**) ·
   🔴 **Un panel de candidatos sin resolver se guarda solo como «no cruzó»** apenas llega otro
   escaneo o se cierra el recorrido. Preguntar ⛔ no puede costar un escaneo: lo peor que puede pasar
   es que quede como quedaba antes de preguntar.
-  🔴 **Y un match EXACTO también pregunta cuando engancha más de una** (`coincidencias`): **8 grupos
-  / 20 variantes con stock comparten SKU** (`4008` es TOP MIA BLANCO **y** CHOCOLATE; `areben` son 6
-  variantes de AYLA). Con el lector ⛔ no pasa —los barcodes son distintos, y de 97 escaneos reales
-  los 97 engancharon por barcode— pero **un SKU tipeado a mano** marcaba la prenda equivocada en
-  silencio. `buscarItem` sigue devolviendo la primera y lo usa el modo por categoría, donde un
-  enganche malo ⛔ no escribe en la base.
+  🔴 **Y un match EXACTO también pregunta cuando engancha más de una** (`coincidencias`): **7 grupos
+  / 18 variantes con stock comparten SKU** (medido el 20-sep-2026; `4008` es TOP MIA BLANCO **y**
+  CHOCOLATE, `areben` son 6 variantes de AYLA). Con el lector ⛔ no pasa —los barcodes son distintos,
+  y de 97 escaneos reales los 97 engancharon por barcode— pero **un SKU tipeado a mano** marcaba la
+  prenda equivocada en silencio.
+  ⚠️ **`buscarItem` sigue devolviendo la primera, y lo usa el modo por categoría — que desde el
+  19-sep-2026 SÍ escribe en la base.** Esta ficha decía lo contrario: era cierto a la mañana y dejó
+  de serlo esa misma tarde, cuando el modo por categoría pasó a guardar. ⇒ **ahí un enganche malo
+  ya no es inofensivo**, y encima ⛔ no se nota: con el repetido sumando, contesta «van 2 de TOP MIA
+  CHOCOLATE» con el BLANCO en la mano. Pasarlo a `coincidencias` es el pendiente ▶️ de abajo.
 - ⚠️ **Las categorías se muestran con `catsVisibles`**: el mismo nombre escrito igual ⛔ no se repite.
   En producción se vio «TOPS Y BODIES / TOPS Y BODIES» —el producto está en las **dos** categorías
   TN con ese nombre— y en la columna con la que se compara el perchero eso se lee como un error de
@@ -160,6 +210,13 @@ Zattia**) ·
   categoría)» **para siempre**, porque nada volvía a cruzar cuando el ETL llegaba. ⇒ **lo que se
   baja y lo que se cruza son dos cosas y viven separadas**, y el cruce es derivado.
   → `lib/exhib/datos.ts` y `components/exhib/useExhib.ts`
+- 🔴 **«Va acá → corregir TN» marcaba a una HERMANA, ⛔ no a la prenda escaneada** (arreglado el
+  20-sep-2026). `marcarErrorCat` recibía el `productId` y resolvía con `items.find(productId ===
+  pid)`, que devuelve **la primera variante de ese producto**: se escaneaba TOP ORSA **Beige** y
+  quedaba exhibido el **Chocolate**, que nadie vio, mientras el Beige seguía figurando como
+  faltante. ⛔ No era el caso raro: **285 de los 467 productos** del Local tienen más de una variante
+  con stock. Ahora recibe la variante entera — el **error de categoría** sigue siendo del producto,
+  **la tilde es de la variante**. → `components/exhib/useExhib.ts` + `components/exhib/Exhib.tsx`
 - 🔴 **`tnAdminUrl` era la SEXTA copia de «cuál es el admin de cada tienda»** y se le escapó a la
   consolidación. Ahora el dominio sale de `lib/tienda.core.js`. → `lib/exhib/core.ts`
 
@@ -193,7 +250,7 @@ pregunta**. Números arriba, en «Reglas que el código no dice».
 ## Cómo se prueba
 
 `npx vitest run tests/exhib-core.test.ts tests/exhib-libre.test.ts tests/exhib-colgar.test.ts
---reporter=dot` — el núcleo de los dos modos y el de «para colgar», sin red. ⚠️ **Y `tests/espejo-servidor.test.ts`**, que tiene la consulta de `datos.ts`
+tests/exhib-por-variante.test.ts --reporter=dot` — el núcleo de los dos modos y el de «para colgar», sin red. ⚠️ **Y `tests/espejo-servidor.test.ts`**, que tiene la consulta de `datos.ts`
 copiada palabra por palabra: tocarla sin tocar esa línea es un **400 en producción**.
 Lo que el test ⛔ no puede ver y hay que ejercer a mano:
 

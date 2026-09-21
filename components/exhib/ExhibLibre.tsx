@@ -13,6 +13,8 @@ import { ParaColgar } from './ParaColgar'
 import { Analisis } from './Analisis'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
+import { avisoDe } from '@/lib/exhib/aviso'
+import { avisar, prepararSonido } from '@/lib/sonido'
 
 /**
  * Chequeo de exhibición **libre**: se camina el local escaneando por LUGAR («perchero tops»), y
@@ -87,10 +89,55 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   }
 
   function iniciar() {
+    // ⚠️ El audio del navegador arranca bloqueado hasta que la persona toca algo de verdad, y el
+    // Enter del lector ⛔ no siempre alcanza: sin este enganche, el primer escaneo ⛔ no suena.
+    // 🔑 **Y el «listo» ⛔ no es un adorno**: hablar DENTRO del toque es lo que destraba la voz en
+    // iPhone, y de paso es la prueba de que el teléfono ⛔ no está en silencio — que es la forma más
+    // fácil de caminar el local entero sin oír nada y no enterarse.
+    prepararSonido()
+    avisar('ok', 'listo')
     lib.iniciar()
     setFb(null)
     setFase('scan')
     foco(lugarRef)
+  }
+
+  /**
+   * 🔑 **Todo lo que contesta el escaneo pasa por acá, y por eso el sonido ⛔ no se puede olvidar en
+   * una rama.** Quien camina el local ⛔ no mira el teléfono: un final que ⛔ no suena es un final
+   * que ⛔ no existe. Ver `lib/exhib/aviso.ts`, que decide qué pitido le toca a cada uno.
+   */
+  /**
+   * **Escuchar los cinco avisos antes de salir a caminar.**
+   *
+   * 🔑 Todo esto sirve sólo si la persona los **reconoce de oído**: leer en la pantalla que «el
+   * grave es no figura» ⛔ no sirve de nada parado en el salón con el lector en la mano. Y es
+   * además el único momento en que se comprueba que el teléfono **no está en silencio**, que es la
+   * forma más fácil de que el recorrido entero pase mudo sin que nadie se entere.
+   *
+   * ⚠️ Van espaciados ~1,2 s: encimados ⛔ no se distinguen, que es justo lo que se viene a probar.
+   */
+  function escucharAvisos() {
+    prepararSonido()
+    const demo: Array<{ tipo: string; veces?: number }> = [
+      { tipo: 'ok' },
+      { tipo: 'sumado', veces: 2 },
+      { tipo: 'stock-cero' },
+      { tipo: 'no-cruzo' },
+      { tipo: 'candidatos' },
+    ]
+    demo.forEach((d, i) => {
+      window.setTimeout(() => {
+        const a = avisoDe(d)
+        avisar(a.aviso, a.voz)
+      }, i * 1200)
+    })
+  }
+
+  function sonando(r: ResultadoLibre): ResultadoLibre {
+    const a = avisoDe(r)
+    avisar(a.aviso, a.voz)
+    return r
   }
 
   function marcar(code: string) {
@@ -108,7 +155,7 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
      * otro. Es también cuando la persona todavía puede volver tres pasos.
      */
     const previo = lib.escaneos.at(-1)?.lugar
-    setFb(lib.escanear(c, lib.lugar))
+    setFb(sonando(lib.escanear(c, lib.lugar)))
     if (previo && previo !== lib.lugar.trim()) {
       const quedo = colgarEnLugar(paraColgar(lib.escaneos, items), previo)
       setCierreLugar(quedo.length ? { lugar: previo, lista: quedo } : null)
@@ -199,7 +246,7 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
         {fase === 'config' && (
           <>
             {lib.recorridoId && (
-              <Button variant="outline" onClick={() => { setFase('scan'); foco(scanRef) }}>Retomar</Button>
+              <Button variant="outline" onClick={() => { prepararSonido(); setFase('scan'); foco(scanRef) }}>Retomar</Button>
             )}
             <Button variant="solid" tone="brand" onClick={iniciar} disabled={cargando || !items.length || !!lib.recorridoId}>
               Iniciar recorrido
@@ -239,6 +286,17 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
               {enCero > 0 && <> · <b>{enCero}</b> más figuran en cero y también se pueden escanear</>}.
             </Notice>
           )}
+
+          {/* 🔑 Los avisos se aprenden **antes** de caminar, ⛔ no en el primer perchero. */}
+          <Notice tone="neutral" icon="🔊" style={{ marginBottom: space[4] }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+              <span>
+                Cada escaneo <b>suena y te dice cuántas van</b>, así no tenés que mirar el teléfono. Subí el volumen y escuchá
+                los cinco: <b>anduvo</b> · <b>van dos</b> · <b>está en cero</b> · <b>no figura</b> · <b>mirá la pantalla</b>.
+              </span>
+              <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
+            </div>
+          </Notice>
 
           {lib.recorridoId && (
             <Notice tone="brand" icon="↩" style={{ marginBottom: space[4] }}>
@@ -394,7 +452,7 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
                       // teléfono, que es donde se usa esto.
                       style={{ height: 'auto', whiteSpace: 'normal', textAlign: 'left', justifyContent: 'flex-start', padding: '8px 10px' }}
                       onClick={() => {
-                        setFb(lib.confirmar(c, fb.codigo, fb.lugar))
+                        setFb(sonando(lib.confirmar(c, fb.codigo, fb.lugar)))
                         foco(scanRef)
                       }}
                     >
@@ -406,7 +464,7 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
                   size="sm"
                   variant="ghost"
                   onClick={() => {
-                    setFb(lib.descartar(fb.codigo, fb.lugar))
+                    setFb(sonando(lib.descartar(fb.codigo, fb.lugar)))
                     foco(scanRef)
                   }}
                 >
