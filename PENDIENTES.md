@@ -13,6 +13,48 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 LA FALLA SE DESCONTABA DE LA SECCIÓN, ⛔ NO DE DONDE ESTABA LA PRENDA — 21-sep-2026 (dictado, y hecho)
+
+> «Revisar esto: cuando se procesa un producto como falla en este caso me parece que toco el stock
+> del deposito» *(TOP ALAIA CELESTE: Local 2, **Depósito −1**)*
+
+📊 **Medido contra la base, ⛔ no deducido.** La falla es la **#21** de `fallas_deposito`
+(`ubicacion='deposito'`, `camilaquintana`, 11-sep 15:47), y su venta técnica es la **28688**:
+sucursal **Deposito**, cliente «Falla ZATTIA». TOP ALAIA ⛔ nunca vendió del depósito — sus 20
+ventas salieron del **Local**.
+
+🔴 **Los TRES negativos de depósito de Zattia eran las TRES fallas descontadas del depósito**:
+SHORT MAITE S (28587), TOP ALAIA CELESTE (28688) y TOP MONTANA Negro (21220, dic-2025). De las
+cuatro que cargó el **local**, **ninguna** dejó un negativo. **3 de 3.**
+
+🔴 **Y la pantalla ⛔ no tenía cómo avisar**: `BuscarArticuloGN` mostraba el stock **SUMADO** de las
+dos ubicaciones ⇒ decía **«stock 2»**, que eran las 2 del Local, con el depósito en 0.
+
+🏁 **Está** (la ficha nueva: `docs/secciones/fallas.md`):
+- **La ubicación sale de `ubicacionDeFalla`** (`lib/postventa/fallas/core.ts`), que **delega en el
+  `origenDe` de Sesión de fotos**: gana el stock cuando ubica la prenda de un solo lado; la sección
+  o el selector de Admin deciden sólo cuando alcanza en los dos. ⛔ **No se escribió una tercera
+  copia de la regla** — las dos anteriores tenían el mismo agujero (`3597dff3`).
+- ⚠️ **Divergencia deliberada**: cuando ⛔ no alcanza en **ninguno**, manda la sección. La unidad
+  está en la mano de quien la carga, y que el negativo quede de su lado es lo que deja arreglarlo.
+- **El buscador muestra `Local N · Dep N`** y el stock viaja partido. `ladoDeTienda` sabe que Zattia
+  escribe **`Deposito `** con espacio y que el **`Deposito Mayorista`** de BDI ⛔ **no es un lado del
+  que se descuente** (1.363 filas): contesta `null`, ⛔ no «depósito».
+- **El banner del Local/Depósito dejó de prometer la sección** — la lección de `8f1a0580`.
+- ✅ **Ensayado contra las 7 fallas reales antes de deployar** (`tests/fallas-ubicacion.test.ts`,
+  16 tests): las 4 del Local ⛔ no se mueven, las 3 del Depósito pasan al Local, y ninguna de las 7
+  sale de un lado que ⛔ no tiene la unidad. Suite entera: **380 verdes**.
+
+▶️ **Mano de Bruno, y el código ⛔ NO la hace**: las ventas **28688** y **28587** siguen mal en GN.
+Se arregla a mano —ajuste de stock de 1 u Local → Depósito en cada una, o anular y rehacer—: **GN
+⛔ no anula ni edita por API** (`api/crear-venta.js`). Después, `sync-inventario` a mano.
+▶️ **Sin hacer, misma forma**: `pasarAFallas`, `descontarReemplazo` y `descontarRegaladas`
+(`lib/reclamos/cliente.ts`) **siguen fijando `'deposito'`** ⇒ en BDI muerde igual.
+▶️ **Y el botón que falta**: si falta la credencial, la falla queda cargada **sin descontar** y la
+pantalla promete que *«se puede rehacer desde Administración»* — **ese botón ⛔ no existe**.
+
+---
+
 ## 🏁 «SON TODOS DE LOCAL» — el chip podía marcar contra el stock del sistema — 21-sep-2026 (dictado, y hecho)
 
 > «la lista de solicitud de sesion "INGRESOS 18 SEPT" son todos lo local · y los separo en deposito

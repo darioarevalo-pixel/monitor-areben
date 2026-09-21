@@ -23,6 +23,7 @@ import {
 } from '@/components/ui'
 import { cambiarEstadoFalla, confirmarFalla, crearFalla, eliminarFalla, leerFallas, recibirFalla, registrarVentaGN } from '@/lib/postventa/fallas/cliente'
 import { ESTADO_LABEL, UBICACION_LABEL, type FallaEstado, type FallaRow, type FallaUbicacion } from '@/lib/postventa/fallas/tipos'
+import { frasePorQue, ubicacionDeFalla } from '@/lib/postventa/fallas/core'
 import { EtiquetaFalla } from './EtiquetaFalla'
 import { EditarFalla } from './EditarFalla'
 import { Devoluciones } from '@/components/reclamos/Reclamos'
@@ -92,7 +93,13 @@ const FILTROS: ('todas' | FallaEstado)[] = ['todas', 'cargada', 'recibida', 'con
  */
 const obtenerCred = () => credencialConPrompt('del Monitor')
 
-const FORM0 = { producto: '', sku: '', variante: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', precio_lista: '', ubicacion: 'local', product_id: '', size_id: '' }
+/**
+ * ⚠️ `stockLoc`/`stockDep` viajan en el form **porque son la respuesta**, ⛔ no un adorno: desde el
+ * 21-sep-2026 de dónde se descuenta lo decide el stock (`ubicacionDeFalla`), y `null` significa
+ * «⛔ no se sabe» —falla libre, o un artículo que se tipeó sin pasar por el buscador—, que ⛔ no es
+ * lo mismo que cero.
+ */
+const FORM0 = { producto: '', sku: '', variante: '', cantidad: '1', motivo: '', valuacion_costo: '', valuacion_pvp_feria: '', precio_lista: '', ubicacion: 'local', product_id: '', size_id: '', stockLoc: null as number | null, stockDep: null as number | null }
 
 function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
   const { marca, perfil } = useSesion()
@@ -132,16 +139,35 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
     return () => { vivo = false }
   }, [marca])
 
+  /**
+   * El stock partido del artículo elegido, o **`null` = ⛔ no se sabe** (falla libre, o un artículo
+   * que ⛔ no pasó por el buscador). ⚠️ `null` ⛔ no es cero: con cero la regla decide, sin dato la
+   * decisión vuelve a ser la preferencia de la sección, que es lo que hacía siempre.
+   */
+  const stockDelForm = useMemo(
+    () => (form.stockLoc == null && form.stockDep == null ? null : { local: form.stockLoc || 0, deposito: form.stockDep || 0 }),
+    [form.stockLoc, form.stockDep],
+  )
+  /** De dónde sale la unidad, y por qué. Una sola vez: lo usan el aviso y el guardado. */
+  const decision = useMemo(
+    () => ubicacionDeFalla(stockDelForm, Math.max(1, parseInt(form.cantidad, 10) || 1), modo, form.ubicacion === 'deposito' ? 'deposito' : 'local'),
+    [stockDelForm, form.cantidad, modo, form.ubicacion],
+  )
+
   const elegirArticulo = useCallback((a: ArticuloGN) => {
-    setForm((s) => ({ ...s, producto: a.product_name || s.producto, sku: a.sku || '', variante: a.size_name || '', product_id: a.product_id, size_id: a.size_id, valuacion_costo: a.unit_cost != null ? String(a.unit_cost) : '', precio_lista: a.retailer_price != null ? String(a.retailer_price) : '' }))
+    setForm((s) => ({ ...s, producto: a.product_name || s.producto, sku: a.sku || '', variante: a.size_name || '', product_id: a.product_id, size_id: a.size_id, valuacion_costo: a.unit_cost != null ? String(a.unit_cost) : '', precio_lista: a.retailer_price != null ? String(a.retailer_price) : '', stockLoc: a.stock_local, stockDep: a.stock_deposito }))
   }, [])
 
   const agregar = useCallback(async () => {
     if (!form.producto.trim()) { setError('Elegí un artículo del buscador.'); return }
     // Producto solo por buscador (Local/Depósito y Admin normal). Solo la "falla libre" de Admin permite a mano.
     if (!(modo === 'admin' && fallaLibre) && !form.product_id) { setError('Elegí un artículo del buscador. Para cargar a mano usá "Falla libre" (Administración).'); return }
-    // Ubicación (de dónde descuenta): Depósito la fija por sección; Admin la elige; Local siempre 'local'.
-    const ubic: FallaUbicacion = modo === 'deposito' ? 'deposito' : modo === 'admin' ? (form.ubicacion === 'deposito' ? 'deposito' : 'local') : 'local'
+    /**
+     * Ubicación (de dónde descuenta). 🔴 **Ya ⛔ no la fija la sección**: manda el stock cuando ubica
+     * la prenda de un solo lado, y la sección (o el selector de Admin) decide sólo cuando alcanza
+     * en los dos o en ninguno. La regla vive en `ubicacionDeFalla` — ver el porqué ahí.
+     */
+    const ubic: FallaUbicacion = decision.origen
     const snap = {
       cantidad: Math.max(1, parseInt(form.cantidad, 10) || 1),
       product_id: form.product_id || null, size_id: form.size_id || null,
@@ -173,7 +199,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
       } else { setMsg(`Falla cargada${etiq}.`) }
       await recargar()
     } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
-  }, [form, modo, fallaLibre, marca, usuario, recargar])
+  }, [form, modo, fallaLibre, marca, usuario, recargar, decision])
 
   const recibir = useCallback(async (f: FallaRow) => {
     setOcupada(f.id); setError(null)
@@ -239,7 +265,11 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
         ) : (
           <div style={{ fontSize: font.xs, color: color.warning }}>Falla libre: cargá el producto a mano abajo. No pasa por el sistema (no descuenta stock de GN).</div>
         )}
-        {form.product_id && <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>✓ Artículo linkeado ({form.sku || form.product_id}). Al cargarla se descuenta de GN.</div>}
+        {form.product_id && (
+          <div style={{ fontSize: font.xs, color: color.success, marginTop: 4 }}>
+            ✓ Artículo linkeado ({form.sku || form.product_id}). {frasePorQue(decision, stockDelForm)}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Producto" required width={220} style={{ flex: '2 1 220px' }}>
@@ -368,7 +398,7 @@ function PostventaInner({ modo }: { modo: 'local' | 'admin' | 'deposito' }) {
               : <>Si el producto te llegó por correo de un cliente que compró online, no va acá: va en <b>Reclamos</b>.</>}
           />
 
-          {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cargá acá el producto con falla; descuenta el stock de <b>{modo === 'deposito' ? 'Depósito' : 'Local'}</b>. Administración recibe y confirma la falla.</div>}
+          {!esAdmin && <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>Cargá acá el producto con falla; descuenta de <b>{modo === 'deposito' ? 'Depósito' : 'Local'}</b> cuando la prenda está en los dos lados · si el sistema la tiene de un solo lado, se descuenta de ahí. Administración recibe y confirma la falla.</div>}
 
           {formCarga}
           {avisos}

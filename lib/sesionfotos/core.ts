@@ -285,6 +285,46 @@ export type VarElegida = { vid: string; sid: string | null; size: string; sku: s
 export type StockPartido = { local: number; deposito: number }
 
 /**
+ * **De qué lado del stock cuenta una fila de `inventario`**, por el nombre de la tienda.
+ *
+ * Es lo que hace falta para armar un `StockPartido` desde el espejo, y vive acá —y ⛔ no en cada
+ * pantalla— porque las dos marcas escriben el nombre distinto y una de las tres ubicaciones ⛔ **no
+ * descuenta**:
+ *
+ * 📊 Medido el 21-sep-2026 sobre los dos espejos: **Zattia tiene dos** (`Local` y **`Deposito `**,
+ * con el espacio al final) y **BDI tres** (`Local`, `Deposito Minorista` y `Deposito Mayorista`).
+ *
+ * 🔴 **`Deposito Mayorista` contesta `null` a propósito**: las ventas del Monitor salen de la
+ * sucursal **minorista** (13307 en `api/crear-venta.js`), así que sumar el mayorista al depósito
+ * diría que hay de dónde descontar donde ⛔ no lo hay — son 1.363 filas de BDI. `null` es
+ * *«existe, pero ⛔ no es ninguno de los dos lados de los que sale una unidad»*.
+ */
+export function ladoDeTienda(store: string | null | undefined): Origen | null {
+  const t = String(store || '').trim().toLowerCase()
+  if (t === 'local') return 'local'
+  if (!t.startsWith('deposito') && !t.startsWith('depósito')) return null
+  return /mayorista/.test(t) ? null : 'deposito'
+}
+
+/**
+ * El stock partido de un conjunto de filas de `inventario` de **una misma variante**.
+ *
+ * ⚠️ Lo que `ladoDeTienda` ⛔ no ubica queda afuera de los dos números, y por eso `otros` se
+ * devuelve aparte: una pantalla que muestre sólo Local y Depósito sobre una variante que además
+ * tiene mayorista estaría diciendo un total que ⛔ no es el total.
+ */
+export function partirStock(filas: Array<{ store_name?: string | null; available_quantity?: number | null }>): StockPartido & { otros: number } {
+  const out = { local: 0, deposito: 0, otros: 0 }
+  for (const f of filas || []) {
+    const n = Number(f?.available_quantity) || 0
+    const lado = ladoDeTienda(f?.store_name)
+    if (lado) out[lado] += n
+    else out.otros += n
+  }
+  return out
+}
+
+/**
  * ¿El stock del sistema ubica esta prenda de UN SOLO lado? Sólo entonces hay una respuesta que no
  * la tiene que poner una persona.
  */

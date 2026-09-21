@@ -89,6 +89,10 @@ ya tienen ficha:
   `lib/disenos/`, `api/_disenos*.js` o `sql/migrate-disenos*.sql`. ⛔ **`/votacion/<token>` es un
   portal ABIERTO**, y los resultados de la ronda no se escriben nunca en el diseño. ⛔ Los
   confirmados salen a Ingresos por `lib/ingresos/puente.ts`, que escribe en el KV de Darío.
+- Fallas (Post-venta) → **leer `docs/secciones/fallas.md`** antes de tocar
+  `components/postventa/`, `lib/postventa/fallas/` o `api/_fallas.js`. ⛔ **De dónde se descuenta lo
+  decide el STOCK, ⛔ no la sección** (`ubicacionDeFalla`, que delega en el `origenDe` de Sesión de
+  fotos): la sección como respuesta dejó los tres negativos de depósito de Zattia.
 - Envíos del día → **leer `docs/secciones/envios.md`** antes de tocar `components/envios/`,
   `lib/envios/`, `api/_envios.js` o `api/_cadete.js`.
 - Mensajes de clientes → **leer `docs/secciones/buzon.md`** antes de tocar `components/buzon/`,

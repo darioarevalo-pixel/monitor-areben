@@ -5,7 +5,13 @@
  * Busca por SKU o nombre sobre el mirror Supabase de la marca, joineando `inventario` (sku/barcode/
  * variante) con `productos` (precio de lista) por product_id. Lectura pura; no escribe nada.
  * Dedupea las filas por variante (inventario trae una fila por ubicación — Depósito/Local — y acá
- * interesa la variante, con el stock total sumado).
+ * interesa la variante).
+ *
+ * 🔴 **El stock viaja PARTIDO, ⛔ no sólo sumado** (21-sep-2026). `available_quantity` sigue siendo
+ * el total —lo leen las otras seis pantallas—, y al lado viajan `stock_local` y `stock_deposito`,
+ * que son los dos lados **de los que efectivamente se descuenta**. Sin eso, una falla cargada
+ * contra «stock 2» descontaba de un depósito en 0: las 2 estaban en el Local, y el buscador ⛔ no
+ * tenía cómo decirlo (TOP ALAIA CELESTE, venta GN 28688 — ver `lib/postventa/fallas/core.ts`).
  *
  * 🔴 **`unit_cost` sólo viene cuando `mostrarCosto` es `true`, y sólo si el servidor lo autoriza.**
  * Quien lo necesite para GUARDARLO no lo va a encontrar acá: el costo de un canje o de una falla lo
@@ -16,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CUENTAS } from '@/lib/cuentas'
 import { sbFetch } from '@/lib/supabase/rest'
 import { traerCostos } from '@/lib/costos'
+import { ladoDeTienda } from '@/lib/sesionfotos/core'
 import type { Marca } from '@/lib/nav.datos'
 import { color } from '@/components/ui'
 
@@ -27,6 +34,12 @@ export type ArticuloGN = {
   product_name: string | null
   size_name: string | null
   available_quantity: number | null
+  /** Sólo el Local. */
+  stock_local: number
+  /** Sólo el depósito del que salen las ventas del Monitor (⛔ no el Mayorista de BDI). */
+  stock_deposito: number
+  /** Lo que ⛔ no es ninguno de los dos (hoy: `Deposito Mayorista`). Para no mentir el total. */
+  stock_otros: number
   unit_cost: number | null
   retailer_price: number | null
 }
@@ -39,6 +52,7 @@ type FilaInv = {
   sku: string | null
   barcode: string | null
   available_quantity: number | null
+  store_name: string | null
 }
 type FilaProd = { id: number | string; retailer_price: number | string | null }
 
@@ -79,30 +93,36 @@ export function BuscarArticuloGN({
       const inv = await sbFetch<FilaInv>(
         CUENTAS[marca],
         'inventario',
-        `select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity&or=(sku.ilike.*${like}*,product_name.ilike.*${like}*,barcode.ilike.*${like}*)&limit=60`,
+        `select=product_id,product_name,size_id,size_name,sku,barcode,available_quantity,store_name&or=(sku.ilike.*${like}*,product_name.ilike.*${like}*,barcode.ilike.*${like}*)&limit=60`,
       )
-      // Dedupe por variante (product_id+size_id), sumando el stock de las ubicaciones.
+      // Dedupe por variante (product_id+size_id): el total se sigue sumando, y además se PARTE por
+      // ubicación con `ladoDeTienda`, que es quien sabe que Zattia escribe `Deposito ` con espacio
+      // y que el `Deposito Mayorista` de BDI no es un lado del que se descuente.
       const porVariante = new Map<string, ArticuloGN>()
       for (const r of inv) {
         if (r.size_id == null) continue
         const key = `${r.product_id}-${r.size_id}`
-        const prev = porVariante.get(key)
         const stock = r.available_quantity != null ? Number(r.available_quantity) : 0
-        if (prev) {
-          prev.available_quantity = (prev.available_quantity || 0) + stock
-        } else {
-          porVariante.set(key, {
-            product_id: String(r.product_id),
-            size_id: String(r.size_id),
-            sku: r.sku ?? null,
-            barcode: r.barcode ?? null,
-            product_name: r.product_name ?? null,
-            size_name: r.size_name ?? null,
-            available_quantity: stock,
-            unit_cost: null,
-            retailer_price: null,
-          })
+        const lado = ladoDeTienda(r.store_name)
+        const prev = porVariante.get(key) || {
+          product_id: String(r.product_id),
+          size_id: String(r.size_id),
+          sku: r.sku ?? null,
+          barcode: r.barcode ?? null,
+          product_name: r.product_name ?? null,
+          size_name: r.size_name ?? null,
+          available_quantity: 0,
+          stock_local: 0,
+          stock_deposito: 0,
+          stock_otros: 0,
+          unit_cost: null,
+          retailer_price: null,
         }
+        prev.available_quantity = (prev.available_quantity || 0) + stock
+        if (lado === 'local') prev.stock_local += stock
+        else if (lado === 'deposito') prev.stock_deposito += stock
+        else prev.stock_otros += stock
+        porVariante.set(key, prev)
       }
       const arts = [...porVariante.values()]
       // El precio de lista por producto (vive en `productos`, no en `inventario`).
@@ -191,7 +211,7 @@ export function BuscarArticuloGN({
               </div>
               <div style={{ fontSize: 11, color: color.mut, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'monospace' }}>{a.sku || 's/sku'}</span>
-                <span>stock {a.available_quantity ?? 0}</span>
+                <span>Local {a.stock_local} · Dep {a.stock_deposito}{a.stock_otros ? ` · otros ${a.stock_otros}` : ''}</span>
                 {mostrarCosto && <span>{a.unit_cost != null ? `costo $${a.unit_cost.toLocaleString('es-AR')}` : 'sin costo'}</span>}
               </div>
             </button>
