@@ -17,6 +17,10 @@
 //   node scripts/backfill-verif-sesion.mjs --store zattia --id s1789991477589_17455        # dry-run
 //   node scripts/backfill-verif-sesion.mjs --store zattia --id s179... --id s178... --aplicar
 //
+// Con `--origen-por-stock` además corrige el depósito/local de cada ítem contra el stock del
+// sistema, y SÓLO cuando el stock lo ubica de un solo lado (si alcanza en los dos, la elección de
+// quien armó la solicitud es el único dato que hay).
+//
 // Lee por el API de PRODUCCIÓN (⛔ no por Supabase directo) para pasar por los mismos permisos y el
 // mismo handler que la pantalla. Necesita `MONITOR_PASS` en el `.env`.
 //
@@ -41,6 +45,7 @@ const args = process.argv.slice(2)
 const store = args[args.indexOf('--store') + 1] || 'zattia'
 const ids = args.map((a, n) => (a === '--id' ? args[n + 1] : null)).filter(Boolean)
 const aplicar = args.includes('--aplicar')
+const porStock = args.includes('--origen-por-stock')
 
 if (!ids.length) {
   console.error('Falta al menos un --id. Uso: --store zattia --id s1789991477589_17455 [--aplicar]')
@@ -61,6 +66,32 @@ async function leerTodas() {
   if (!r.ok) throw new Error(`GET ${r.status}: ${(await r.text()).slice(0, 200)}`)
   const j = await r.json()
   return j.list || []
+}
+
+/**
+ * Cada ítem movido al lado donde el sistema dice que está la mercadería.
+ *
+ * 🔴 **Sólo cuando el stock lo ubica de un solo lado.** Si alcanza en los dos, el sistema ⛔ no
+ * puede saberlo y la elección de quien armó la solicitud es el único dato que hay: no se toca.
+ * Si no alcanza en ninguno, tampoco — ahí el origen lo puso una persona que tenía la prenda en la
+ * mano y el sistema es el que está desactualizado.
+ *
+ * El `vid` ⛔ no cambia, así que `verif`, `devuelto`, `fotos` y las bolsas siguen enganchadas.
+ */
+function origenPorStock(s) {
+  const cambios = []
+  const items = (s.items || []).map((i) => {
+    if (i.nuevo || i.manual) return i
+    const q = Math.max(1, Number(i.qty) || 1)
+    const dep = (Number(i.stockDep) || 0) >= q
+    const loc = (Number(i.stockLoc) || 0) >= q
+    if (dep === loc) return i // en los dos, o en ninguno: ⛔ no se decide solo
+    const donde = dep ? 'deposito' : 'local'
+    if (i.origen === donde) return i
+    cambios.push(`${i.nombre} · ${i.variante}: ${i.origen} → ${donde}`)
+    return { ...i, origen: donde }
+  })
+  return { sol: { ...s, items }, cambios }
 }
 
 /**
@@ -107,15 +138,23 @@ for (const id of ids) {
     continue
   }
 
+  if (porStock) {
+    const { cambios } = origenPorStock(s)
+    console.log(`   origen contra el stock: ${cambios.length} de ${items}`)
+    for (const c of cambios.slice(0, 5)) console.log(`      · ${c}`)
+    if (cambios.length > 5) console.log(`      · … y ${cambios.length - 5} más`)
+  }
+
   if (!aplicar) {
     console.log(`   [dry-run] quedaría: con tilde ${items} · estado preparada`)
     continue
   }
 
+  const { sol: conOrigen } = porStock ? origenPorStock(s) : { sol: s }
   const r = await fetch(`${BASE}/api/postventa?recurso=solicitudes`, {
     method: 'POST',
     headers: cabeceras,
-    body: JSON.stringify({ store, kind: 'sesionfotos', solicitud: preparada(s) }),
+    body: JSON.stringify({ store, kind: 'sesionfotos', solicitud: preparada(conOrigen) }),
   })
   if (!r.ok) {
     console.error(`   ❌ POST ${r.status}: ${(await r.text()).slice(0, 200)}`)
@@ -140,7 +179,15 @@ if (aplicar && escribi) {
     const con = Object.keys(s.verif || {}).length
     const completos = (s.items || []).filter((i) => (s.verif || {})[i.vid] >= i.qty).length
     const ok = con === items && completos === items && s.estado === 'preparada'
+    const contra = (s.items || []).filter((i) => {
+      const q = Math.max(1, Number(i.qty) || 1)
+      const dep = (Number(i.stockDep) || 0) >= q
+      const loc = (Number(i.stockLoc) || 0) >= q
+      return dep !== loc && i.origen !== (dep ? 'deposito' : 'local')
+    }).length
+    const porOrigen = (o) => (s.items || []).filter((i) => i.origen === o).length
     console.log(`   ${ok ? '✔' : '❌'} ${id}: con tilde ${con}/${items} · completos ${completos}/${items} · estado ${s.estado}`)
+    console.log(`      depósito ${porOrigen('deposito')} · local ${porOrigen('local')} · contra el stock ${contra}`)
   }
 }
 

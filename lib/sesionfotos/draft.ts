@@ -14,6 +14,7 @@
 
 import type { Producto, Variante } from '../etl/tipos'
 import { normCodigo, pareceCodigo } from './codigo'
+import { origenDe, ubicaSola } from './core'
 import { normBc, transicionEstado, vidDeBarcode } from './escaneo'
 import type { Disparador } from '../solicitudes/disparador'
 import type { ItemSolicitud, Origen, Solicitud, TipoSol } from './tipos'
@@ -257,7 +258,11 @@ export function escanearDraft(
   })
   const prod = prods.find((p) => p.pid === pid)!
   const v = prod.variantes.find((x) => x.vid === it!.id)!
-  return { draft: { ...d, prods }, resultado: { tipo: 'variante', nombre: prod.name, size: v.size, qty: v.qty, origen: origenSel } }
+  // 🔴 El feedback dice dónde cae DE VERDAD, ⛔ no qué chip estaba elegido: si el stock ubica la
+  // prenda de un solo lado, `procesarDraft` la va a mandar ahí. Cantar el chip sería que la
+  // pantalla afirme una cosa y la solicitud guarde otra — que es justo lo que nadie vio pasar 63
+  // veces el 21-sep.
+  return { draft: { ...d, prods }, resultado: { tipo: 'variante', nombre: prod.name, size: v.size, qty: v.qty, origen: ubicaSola(v, v.qty) ?? origenSel } }
 }
 
 /**
@@ -319,15 +324,9 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
       .filter((v) => v.sel)
       .forEach((v) => {
         const qty = Math.max(1, Number(v.qty) || 1)
-        const origen: Origen = v.origenManual
-          ? v.origenManual
-          : prioridad === 'local'
-            ? v.local >= qty
-              ? 'local'
-              : 'deposito'
-            : v.deposito >= qty
-              ? 'deposito'
-              : 'local'
+        // La regla vive en el núcleo (`origenDe`): el stock gana cuando ubica la prenda de un solo
+        // lado, y el chip del escáner decide sólo cuando el sistema ⛔ no puede saberlo.
+        const origen: Origen = origenDe(v, qty, prioridad, v.origenManual)
         items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen })
         // Topeado a `qty` porque la cantidad se puede bajar a mano DESPUÉS de escanear: preparado
         // nunca puede ser más que lo pedido (es la misma regla que `preparado()` en el núcleo).

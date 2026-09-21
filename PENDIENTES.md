@@ -13,6 +13,40 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «SON TODOS DE LOCAL» — el chip podía marcar contra el stock del sistema — 21-sep-2026 (dictado, y hecho)
+
+> «la lista de solicitud de sesion "INGRESOS 18 SEPT" son todos lo local · y los separo en deposito
+> y local · y es todo de local» *(Administración, 13:48)*
+
+**Medido**: de los 140 ítems, **63 con `origen: 'deposito'` y `stockDep: 0`** — marcados contra lo
+que el sistema mismo sabe. Por el orden de armado se ve el momento: **los primeros 74 casi todos en
+Depósito, los últimos 66 todos en Local**. El chip «Sacás de:» **arranca en Depósito** porque la
+config de Reposición de Zattia dice `prioridadRetiro: 'deposito'` (leído, 200) — para una marca cuyo
+stock vive en el Local. 🔴 **⛔ No era cosmético**: la venta de GN se crea **una por origen**, así que
+crear la venta descontaba **63 unidades de una sucursal que tiene 0**.
+
+📊 El número que decidió el diseño: en **Zattia el stock ubica 340 de 410** ítems de un solo lado; en
+**BDI, 95 de 114 están en los dos** (ahí el chip sí es una pregunta real). ⇒ 🏁 **gana el stock
+cuando ubica la prenda de un solo lado; el chip decide sólo cuando el sistema ⛔ no puede saberlo.**
+La regla estaba escrita **dos veces** con el mismo agujero y ahora vive una sola (`origenDe` en
+`core.ts`). ⚠️ Divergencia **deliberada** del legacy, que aplicaba `origenManual` siempre.
+
+🏁 **Y el botón que ⛔ no existía**: hasta hoy el depósito/local de un ítem ⛔ no se podía cambiar en
+ninguna pantalla, así que una lista mal repartida sólo se arreglaba **borrándola y rehaciéndola**
+(con 140 prendas, «no se puede» — la primera vez la corregí yo en la base). Ahora el detalle avisa
+cuántas están del lado equivocado y las acomoda de un click. ⛔ **Con la venta creada ⛔ no acomoda**:
+esa venta ya descontó de esa sucursal.
+
+✅ **7 mutantes, 7 muertos** —el que sobrevivió primero fue `contraElStock` ignorando el origen: mi
+test ⛔ no tenía una prenda **bien** ubicada—. La del 18/9 quedó **Local 140 · Depósito 0**, releyendo.
+
+📌 **Tres textos de pantalla pasaron a mentir y se corrigieron**: el banner («Depósito primero (si no
+hay stock, se retira de Local)»), el popover del borrador («Lo escaneado respeta la ubicación que
+elijas») y el chip («Sacás de:»). ⚠️ Cada vez que una regla se mueve, **lo que la pantalla afirma
+sobre ella queda viejo y ⛔ nada lo marca**.
+
+---
+
 ## 🏁 «ESCANEÉ TODO LO QUE SEPARAMOS Y NO ESTÁN TILDADOS COMO SEPARADOS» — 21-sep-2026 (dictado, y hecho)
 
 > «escanee todo lo que separamos para sesion de fotos en Monitor, usando la opcion "Ya separaste?

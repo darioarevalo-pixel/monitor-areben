@@ -1118,3 +1118,77 @@ dejado `qty: 2`. Las dos cosas ⛔ no cierran, y el bundle deployado se leyó pa
 producción tuviera otro código. ⇒ **falta preguntarle a Lorena si los productos le aparecieron en
 la caja «Nuevos escaneados (aún no en GN)»**, que es el único camino que explicaría el `qty: 1`.
 ⛔ No cambia el arreglo: con `escaneado` contando escaneos, cualquiera de los dos caminos tilda.
+
+## «Son todos de local» — el chip podía marcar contra el stock que el sistema mismo tiene (21-sep-2026)
+
+Segundo reporte de Administración, el mismo día y sobre la misma solicitud:
+
+> *«la lista de solicitud de sesion "INGRESOS 18 SEPT" son todos lo local · y los separo en deposito
+> y local · y es todo de local»*
+
+**Medido**: de los 140 ítems, **63 quedaron con `origen: 'deposito'` y `stockDep: 0`** — marcados
+contra lo que el sistema mismo sabe. Y se ve el momento: por el orden de armado, **los primeros 74
+salieron casi todos en Depósito y los últimos 66 todos en Local**; a mitad de camino cambió el chip.
+
+### Por qué arrancaba en Depósito
+
+El chip «Sacás de:» nace en `prioridad`, que sale de la config de **Reposición** (`leerPrioridadRetiro`,
+otro repo). **La de Zattia dice `prioridadRetiro: 'deposito'`** (leído el 21-sep, 200) — para una
+marca cuyo stock vive en el Local.
+
+### 🔴 Lo que costaba, y ⛔ no era cosmético
+
+La venta de GN se crea **una por origen** (`construirPedidosVenta` → `origenesVendibles`), así que
+crear la venta habría descontado **63 unidades de una sucursal que tiene 0**. Es la misma forma del
+agujero que dejó los tres negativos de depósito de Zattia por fallas.
+
+### La regla, y dónde vive
+
+📊 El número que decidió el diseño:
+
+| | el stock la ubica de **un solo lado** | en los **dos** (ahí hay que elegir) | marcadas **contra** el stock |
+|---|---|---|---|
+| Zattia | **340 de 410** | 70 | **63**, todas de esta sesión |
+| BDI | 19 de 114 | **95** | 0 |
+
+⇒ **el stock gana cuando ubica la prenda de un solo lado; el chip decide sólo cuando el sistema ⛔ no
+puede saberlo** (alcanza en los dos, o en ninguno). En Zattia el chip deja de poder equivocarse en
+340 de 410; en BDI, donde 95 de 114 tienen stock en los dos lados, sigue siendo la pregunta real.
+
+🔑 **La regla estaba escrita DOS veces** —`procesarDraft` y `itemDeVariante`, con el mismo agujero en
+las dos— y ahora vive una sola en `core.ts`: `ubicaSola()` contesta «¿hay una respuesta que no la
+tenga que poner una persona?» y `origenDe()` la usa. ⚠️ **Es una divergencia deliberada del legacy**,
+que aplicaba `origenManual` siempre.
+
+🔑 **Y el feedback del escaneo canta DÓNDE CAE, ⛔ no qué chip estaba puesto.** Si cantara el chip, la
+pantalla afirmaría una cosa y la solicitud guardaría otra — que es exactamente lo que nadie vio pasar
+63 veces.
+
+### El botón que ⛔ no existía
+
+Una vez creada la solicitud, el depósito/local de un ítem **⛔ no se podía cambiar en ninguna
+pantalla**: una lista mal repartida sólo se arreglaba borrándola y rehaciéndola. Con 140 prendas eso
+es «no se puede», y por eso la primera vez lo corregí yo en la base.
+
+Ahora, cuando hay algo que acomodar, el detalle lo dice —*«63 prendas están marcadas de un lado y el
+sistema las tiene del otro»*— con un botón **«Acomodar por stock»** (`acomodarPorStock`). Mueve sólo
+lo inequívoco, ⛔ no toca los `bc_`/`man_` (no existen en GN, no tienen stock que mirar), deja rastro
+en `cambios`, y **⛔ no pregunta motivo a propósito**: el motivo lo pone el sistema, no una persona.
+
+⛔ **Con la venta de GN creada ⛔ NO acomoda, y el guard vive en el núcleo**, ⛔ no en el botón: esa
+venta ya descontó de esa sucursal, así que mover el origen después ⛔ no mueve nada en Gestión Nube —
+sólo deja la pantalla diciendo una cosa y GN otra, y la devolución esperaría del lado equivocado.
+
+### Los tres textos que pasaron a mentir, y se corrigieron
+
+- El banner decía **«Depósito primero (si no hay stock, se retira de Local)»** ⇒ ahora *«Depósito
+  primero, **cuando la prenda está en los dos lados** · si el sistema la tiene de un solo lado, se
+  retira de ahí»*.
+- El popover del borrador decía *«Lo escaneado respeta la ubicación que elijas»* — hoy es falso.
+- El chip decía **«Sacás de:»** ⇒ *«Si está en los dos, sacás de:»*.
+
+### Verificado
+
+**7 mutantes, 7 muertos** — y el que **sobrevivió primero** fue `contraElStock` ignorando el origen:
+mi test contaba 2 y 2, porque ⛔ no tenía una prenda **bien** ubicada. Se agregó ese caso.
+✅ La solicitud del 18/9 quedó **Local 140 · Depósito 0 · contra el stock 0**, releyendo.

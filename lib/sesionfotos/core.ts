@@ -281,14 +281,104 @@ export function registrarCambio(s: Solicitud, c: Cambio): Solicitud {
 /** Variante elegida al agregar (misma forma que devuelve `buscarProductos`). */
 export type VarElegida = { vid: string; sid: string | null; size: string; sku: string; local: number; deposito: number }
 
+/** Lo que hace falta para ubicar una prenda: el stock partido y cuántas unidades se llevan. */
+export type StockPartido = { local: number; deposito: number }
+
+/**
+ * ¿El stock del sistema ubica esta prenda de UN SOLO lado? Sólo entonces hay una respuesta que no
+ * la tiene que poner una persona.
+ */
+export function ubicaSola(v: StockPartido, qty: number): Origen | null {
+  const q = Math.max(1, Number(qty) || 1)
+  const dep = (Number(v.deposito) || 0) >= q
+  const loc = (Number(v.local) || 0) >= q
+  if (dep === loc) return null // alcanza en los dos, o en ninguno
+  return dep ? 'deposito' : 'local'
+}
+
+/**
+ * **De dónde se retira una prenda.** La regla vive acá y ⛔ no en cada llamador: estaba escrita dos
+ * veces (`procesarDraft` y `itemDeVariante`) y las dos copias tenían el mismo agujero.
+ *
+ * 🔴 **El stock gana cuando ubica la prenda de un solo lado** (21-sep-2026, decisión de Bruno).
+ * `origenManual` —lo que eligió el chip «Sacás de:» del escáner— se aplica **sólo cuando el sistema
+ * ⛔ no puede saberlo**: si alcanza en los dos (en BDI son 95 de 114 ítems, ahí sí es una pregunta
+ * real) o si no alcanza en ninguno.
+ *
+ * El caso que lo trajo: Administración escaneó 140 prendas de Zattia con el chip en **Depósito**
+ * —donde arranca, porque la config de Reposición dice `prioridadRetiro: 'deposito'`— y **las 140
+ * tenían stock 0 en depósito**. 63 quedaron marcadas contra lo que el sistema mismo sabía, y crear
+ * la venta habría descontado 63 unidades de una sucursal que ⛔ no las tiene.
+ *
+ * ⚠️ **Es una divergencia DELIBERADA del legacy**, que aplicaba `origenManual` siempre.
+ */
+export function origenDe(v: StockPartido, qty: number, prioridad: Origen, origenManual?: Origen): Origen {
+  const solo = ubicaSola(v, qty)
+  if (solo) return solo
+  if (origenManual) return origenManual
+  const q = Math.max(1, Number(qty) || 1)
+  return prioridad === 'local' ? ((Number(v.local) || 0) >= q ? 'local' : 'deposito') : (Number(v.deposito) || 0) >= q ? 'deposito' : 'local'
+}
+
 /**
  * Construye el `ItemSolicitud` de una variante elegida, asignando el origen con la
- * misma lógica que `procesarDraft` (prioridad + fallback por stock). Para "agregar producto".
+ * misma regla que `procesarDraft` (`origenDe`). Para "agregar producto".
  */
 export function itemDeVariante(v: VarElegida, pid: string, nombre: string, qty: number, prioridad: Origen, origenManual?: Origen): ItemSolicitud {
   const q = Math.max(1, Number(qty) || 1)
-  const origen: Origen = origenManual ? origenManual : prioridad === 'local' ? (v.local >= q ? 'local' : 'deposito') : v.deposito >= q ? 'deposito' : 'local'
-  return { vid: v.vid, pid, sid: v.sid, nombre, variante: v.size, sku: v.sku, qty: q, stockDep: v.deposito, stockLoc: v.local, origen }
+  return { vid: v.vid, pid, sid: v.sid, nombre, variante: v.size, sku: v.sku, qty: q, stockDep: v.deposito, stockLoc: v.local, origen: origenDe(v, q, prioridad, origenManual) }
+}
+
+/**
+ * **Acomodar los orígenes contra el stock del sistema**, para una solicitud ya creada.
+ *
+ * Es el botón que ⛔ no existía: hasta hoy, una vez procesada la solicitud, el depósito/local de un
+ * ítem ⛔ no se podía cambiar en ninguna pantalla, así que una lista mal repartida sólo se arreglaba
+ * borrándola y rehaciéndola (140 prendas, el caso real).
+ *
+ * 🔴 **Mueve sólo lo que el stock ubica de un solo lado.** Lo que alcanza en los dos lo eligió una
+ * persona y ese es el único dato que hay; lo que no alcanza en ninguno lo puso alguien que tenía la
+ * prenda en la mano, y ahí el desactualizado es el sistema.
+ *
+ * 🔴 **El `vid` ⛔ no se toca**, así que `verif`, `devuelto`, `fotos` y las bolsas siguen enganchadas.
+ *
+ * ⛔ **Con la venta de GN creada ⛔ NO se acomoda**, y el guard vive acá y ⛔ no en el botón: la venta
+ * se crea **una por origen** y ya descontó de esa sucursal. Mover el origen después ⛔ no mueve nada
+ * en Gestión Nube — sólo hace que la pantalla diga una cosa y GN otra, y la devolución esperaría de
+ * vuelta del lado equivocado.
+ */
+export function acomodarPorStock(s: Solicitud, datos: DatosCambio): { sol: Solicitud; movidos: number } {
+  if (s.ventas && Object.keys(s.ventas).length > 0) return { sol: s, movidos: 0 }
+  const detalles: string[] = []
+  const items = (s.items || []).map((i) => {
+    if (i.nuevo || i.manual) return i // no existen en GN: no tienen stock que mirar
+    const donde = ubicaSola({ local: i.stockLoc || 0, deposito: i.stockDep || 0 }, i.qty)
+    if (!donde || donde === i.origen) return i
+    detalles.push(`${i.nombre} · ${i.variante}`)
+    return { ...i, origen: donde }
+  })
+  if (!detalles.length) return { sol: s, movidos: 0 }
+  const ns = { ...s, items }
+  const resumen = detalles.length <= 3 ? detalles.join(', ') : `${detalles.slice(0, 3).join(', ')} y ${detalles.length - 3} más`
+  return {
+    sol: registrarCambio(ns, {
+      ts: datos.ts,
+      por: datos.por,
+      accion: 'editó',
+      detalle: `Acomodó ${detalles.length} ${detalles.length === 1 ? 'prenda' : 'prendas'} al lado donde el sistema las tiene (${resumen})`,
+      motivo: datos.motivo,
+    }),
+    movidos: detalles.length,
+  }
+}
+
+/** Cuántos ítems están marcados de un lado que el stock del sistema contradice. */
+export function contraElStock(s: Solicitud): number {
+  return (s.items || []).filter((i) => {
+    if (i.nuevo || i.manual) return false
+    const donde = ubicaSola({ local: i.stockLoc || 0, deposito: i.stockDep || 0 }, i.qty)
+    return !!donde && donde !== i.origen
+  }).length
 }
 
 /** Agrega un ítem a la solicitud + registra el cambio. Si el vid ya está, suma la cantidad. */

@@ -366,7 +366,7 @@ describe('sesionfotos/core — separado vs retirado', () => {
   })
 })
 
-import { agregarItemSol, asignarBolsa, bloqueoEdicion, bolsasDe, cambiarCantidadSol, contarBolsas, itemDeVariante, maxBolsa } from '@/lib/sesionfotos/core'
+import { acomodarPorStock, agregarItemSol, asignarBolsa, bloqueoEdicion, bolsasDe, cambiarCantidadSol, contarBolsas, contraElStock, itemDeVariante, maxBolsa } from '@/lib/sesionfotos/core'
 
 describe('sesionfotos/core — edición (Fase C)', () => {
   it('bloqueoEdicion: solo bloquea si está cerrada', () => {
@@ -416,7 +416,77 @@ describe('sesionfotos/core — edición (Fase C)', () => {
     const v = { vid: '1_2', sid: '2', size: 'M', sku: 'X-M', local: 0, deposito: 5 }
     expect(itemDeVariante(v, '1', 'Rem', 3, 'local').origen).toBe('deposito') // local no alcanza
     expect(itemDeVariante({ ...v, local: 9 }, '1', 'Rem', 3, 'local').origen).toBe('local')
-    expect(itemDeVariante(v, '1', 'Rem', 1, 'local', 'local').origen).toBe('local') // origenManual gana
+  })
+
+  /**
+   * 🔴 **Divergencia DELIBERADA del legacy** (21-sep-2026), que aplicaba `origenManual` siempre.
+   * Administración escaneó 140 prendas de Zattia con el chip en Depósito —donde arranca— y las 140
+   * tenían stock 0 ahí: 63 quedaron marcadas contra lo que el sistema mismo sabía, y crear la venta
+   * habría descontado de una sucursal que no las tiene.
+   */
+  it('el stock GANA cuando ubica la prenda de un solo lado; el chip decide sólo si no puede', () => {
+    const v = { vid: '1_2', sid: '2', size: 'M', sku: 'X-M', local: 0, deposito: 5 }
+    // sólo en depósito: el chip en "local" ⛔ no la mueve
+    expect(itemDeVariante(v, '1', 'Rem', 1, 'local', 'local').origen).toBe('deposito')
+    // sólo en local: el chip en "depósito" tampoco — es el caso exacto de las 63
+    expect(itemDeVariante({ ...v, local: 3, deposito: 0 }, '1', 'Rem', 1, 'deposito', 'deposito').origen).toBe('local')
+    // alcanza en los DOS: ahí sí es una pregunta real y la contesta quien tuvo la prenda en la mano
+    expect(itemDeVariante({ ...v, local: 9, deposito: 9 }, '1', 'Rem', 1, 'deposito', 'local').origen).toBe('local')
+    // no alcanza en NINGUNO: el sistema es el desactualizado, manda la persona
+    expect(itemDeVariante({ ...v, local: 0, deposito: 0 }, '1', 'Rem', 1, 'deposito', 'local').origen).toBe('local')
+    // y sin chip, en los dos casos ambiguos sigue mandando la prioridad de siempre
+    expect(itemDeVariante({ ...v, local: 9, deposito: 9 }, '1', 'Rem', 1, 'deposito').origen).toBe('deposito')
+    expect(itemDeVariante({ ...v, local: 0, deposito: 0 }, '1', 'Rem', 1, 'local').origen).toBe('deposito')
+  })
+
+  /**
+   * El botón que ⛔ no existía: hasta el 21-sep una lista mal repartida sólo se arreglaba borrándola
+   * y rehaciéndola. Con 140 prendas, eso es "no se puede".
+   */
+  describe('acomodarPorStock', () => {
+    const datos = { por: 'bruno', motivo: '', ts: 1000 }
+    const enLocal = (over = {}) => item({ vid: 'a', origen: 'deposito', stockDep: 0, stockLoc: 3, qty: 1, ...over })
+
+    it('mueve lo que el sistema ubica de un solo lado y deja rastro', () => {
+      const { sol: ns, movidos } = acomodarPorStock(sol({ items: [enLocal(), enLocal({ vid: 'b' })] }), datos)
+      expect(movidos).toBe(2)
+      expect(ns.items.map((i) => i.origen)).toEqual(['local', 'local'])
+      expect(ns.cambios![0]).toMatchObject({ accion: 'editó', por: 'bruno' })
+    })
+
+    it('⛔ no toca lo que alcanza en los DOS ni lo que no alcanza en ninguno', () => {
+      const ambos = enLocal({ vid: 'x', stockDep: 9, stockLoc: 9 })
+      const ninguno = enLocal({ vid: 'y', stockDep: 0, stockLoc: 0 })
+      const { sol: ns, movidos } = acomodarPorStock(sol({ items: [ambos, ninguno] }), datos)
+      expect(movidos).toBe(0)
+      expect(ns.items.map((i) => i.origen)).toEqual(['deposito', 'deposito'])
+      expect(ns.cambios).toBeUndefined() // sin cambios ⇒ ⛔ ni una línea de historial
+    })
+
+    it('⛔ no toca los "nuevo" ni los "a mano": no existen en GN, no tienen stock que mirar', () => {
+      const { movidos } = acomodarPorStock(sol({ items: [enLocal({ vid: 'bc_1', nuevo: true }), enLocal({ vid: 'man_1', manual: true, nuevo: true })] }), datos)
+      expect(movidos).toBe(0)
+    })
+
+    it('🔴 con la venta de GN creada ⛔ NO acomoda: esa venta ya descontó de esa sucursal', () => {
+      const conVenta = sol({ items: [enLocal()], ventas: { deposito: { id: 1 } } })
+      const { sol: ns, movidos } = acomodarPorStock(conVenta, datos)
+      expect(movidos).toBe(0)
+      expect(ns).toBe(conVenta) // el mismo objeto: ⛔ ni una copia
+    })
+
+    it('contraElStock cuenta lo mismo que acomodarPorStock va a mover', () => {
+      const s = sol({
+        items: [
+          enLocal(), //                                              mal ubicada
+          enLocal({ vid: 'b', stockDep: 9, stockLoc: 9 }), //         ambigua: ⛔ no cuenta
+          enLocal({ vid: 'c' }), //                                   mal ubicada
+          enLocal({ vid: 'd', origen: 'local' }), //                  BIEN ubicada: ⛔ no cuenta
+        ],
+      })
+      expect(contraElStock(s)).toBe(acomodarPorStock(s, datos).movidos)
+      expect(contraElStock(s)).toBe(2) // ⛔ no 3: la que ya está del lado correcto ⛔ no es un problema
+    })
   })
 })
 

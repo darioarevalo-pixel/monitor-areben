@@ -67,6 +67,7 @@ import type { Producto, Variante } from '@/lib/etl/tipos'
 import {
   agregarItemSol,
   asignarBolsa,
+  acomodarPorStock,
   bloqueoBorrado,
   bloqueoEdicion,
   bolsasDe,
@@ -74,6 +75,7 @@ import {
   conZona,
   contarBolsas,
   contarCerradas,
+  contraElStock,
   maxBolsa,
   esperadoEn,
   faltantes,
@@ -972,6 +974,14 @@ function Detalle({
   }
   // Asignar bolsa: organizativo (no toca GN/stock), sin motivo. n = null limpia.
   const onAsignarBolsa = (it: ItemSolicitud, n: number | null) => setWork((w) => asignarBolsa(w, it.vid, n))
+  /**
+   * Acomodar los orígenes contra el stock. Sin picker de motivo **a propósito**: el motivo ⛔ no lo
+   * pone una persona, lo pone el sistema («el stock las ubica del otro lado»), y preguntarlo sería
+   * pedirle a alguien que justifique una corrección que no eligió.
+   */
+  const malUbicados = contraElStock(s)
+  const onAcomodar = () =>
+    setWork((w) => acomodarPorStock(w, { por: usuario, motivo: 'Acomodado por stock', ts: Date.now() }).sol)
   const grupos = bolsasDe(s)
   const nBolsas = contarBolsas(s)
   const proxBolsa = maxBolsa(s) + 1
@@ -1226,6 +1236,19 @@ function Detalle({
       </div>
 
       <Banner prioridad={prioridad} admin={admin} />
+
+      {/* 🔴 Lo marcado de un lado que el stock del sistema contradice. Se muestra sólo si hay algo
+          que acomodar, y ⛔ no aparece con la venta ya creada: ahí mover el origen sería mentir
+          sobre de dónde se descontó (el guard duro vive en `acomodarPorStock`). */}
+      {editable && malUbicados > 0 && !salio(s) ? (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12.5, color: color.warningInk, background: color.warningBg, border: `1px solid ${color.warningBorder}`, borderRadius: 8, padding: '7px 10px', marginBottom: 10 }}>
+          <span>
+            <b>{malUbicados}</b> {malUbicados === 1 ? 'prenda está marcada' : 'prendas están marcadas'} de un lado y el sistema{' '}
+            {malUbicados === 1 ? 'la tiene' : 'las tiene'} del otro.
+          </span>
+          <Button size="sm" variant="outline" onClick={onAcomodar}>Acomodar por stock</Button>
+        </div>
+      ) : null}
 
       {/* Destino + aprobación. Toda solicitud tiene destino, así que siempre se muestra. */}
       {s.tipo ? (
@@ -2001,7 +2024,7 @@ function Draft({
             entra sin marcar, para escanearlo después.
           </InfoPopover>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: color.mut }}>Sacás de:</span>
+            <span style={{ fontSize: 12, color: color.mut }}>Si está en los dos, sacás de:</span>
             {chipOrigen('deposito')}
             {chipOrigen('local')}
           </span>
@@ -2151,7 +2174,7 @@ function Draft({
       <div style={{ fontSize: 12, color: color.mut, display: 'flex', alignItems: 'center', gap: 5, margin: '16px 0 12px' }}>
         Prioridad de retiro: <b style={{ color: color.ink2 }}>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>
         <InfoPopover titulo="Prioridad de retiro">
-          De dónde se retira cada producto: <b>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b> (si no hay stock, del otro depósito). Lo escaneado respeta la ubicación que elijas; lo agregado a mano se asigna solo.{admin ? ' Se configura al completar la migración.' : ''}
+          De dónde se retira cada producto. Si el sistema tiene la prenda de <b>un solo lado</b>, se retira de ahí —lo escaneés como lo escaneés—. Cuando está en los <b>dos</b>, manda <b>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b>, o la ubicación que elijas al escanear.{admin ? ' Se configura al completar la migración.' : ''}
         </InfoPopover>
       </div>
 

@@ -111,9 +111,13 @@ describe('escanearDraft', () => {
   // fiel al legacy, se replicaba para el A/B del iframe (que ya no corre), y pedía el doble.
   it('escanear un barcode existente tilda la variante, cuenta UNA unidad y fija el origen', () => {
     const { draft, resultado } = escanearDraft(draftVacio(), '111', mapa, VARIANTES, 'local', PRODUCTOS)
-    expect(resultado).toMatchObject({ tipo: 'variante', size: 'S', qty: 1, origen: 'local' })
+    // 🔴 El feedback canta DÓNDE CAE, ⛔ no qué chip estaba puesto: la S tiene stock sólo en
+    // depósito, así que ahí va aunque se haya escaneado con el chip en Local.
+    expect(resultado).toMatchObject({ tipo: 'variante', size: 'S', qty: 1, origen: 'deposito' })
     const v = draft.prods[0].variantes.find((x) => x.vid === '1_10')!
     expect(v).toMatchObject({ sel: true, qty: 1, escaneado: 1, origenManual: 'local' })
+    // el chip queda guardado igual: es el único dato cuando el stock ⛔ no puede decidir
+    expect(procesarDraft(draft, 'local', { id: 'x', fecha: '2026-09-21', creado: 1, creadoPor: 'l' })!.items[0].origen).toBe('deposito')
   })
 
   it('escanear dos veces sigue sumando 1 por escaneo', () => {
@@ -220,10 +224,12 @@ describe('procesarDraft · lo escaneado nace preparado (21-sep-2026)', () => {
     for (const c of codigos) d = escanearDraft(d, c, mapa, VARIANTES, 'local', PRODUCTOS).draft
     const porBorrador = procesarDraft(d, 'local', meta)!
 
-    // Camino B: la misma solicitud sin escanear, y los mismos códigos por el detalle.
+    // Camino B: la misma solicitud sin escanear, y los mismos códigos por el detalle. Se pasa por
+    // los DOS orígenes porque en la pantalla cada sector escanea SU grupo, y un código que no es de
+    // ese grupo rebota sin tocar nada.
     const sinEscanear = { ...porBorrador, verif: undefined, estado: 'pendiente' as const }
     let porDetalle = sinEscanear as Solicitud
-    for (const c of codigos) porDetalle = escanearSol(porDetalle, 'local', 'retiro', c, mapa).sol
+    for (const o of ['deposito', 'local'] as const) for (const c of codigos) porDetalle = escanearSol(porDetalle, o, 'retiro', c, mapa).sol
 
     expect(porBorrador.verif).toEqual(porDetalle.verif)
     expect(porBorrador.estado).toBe(porDetalle.estado)
@@ -285,5 +291,42 @@ describe('procesarDraft · lo escaneado nace preparado (21-sep-2026)', () => {
     const marcadas = Object.values(sol.verif || {}).reduce((a, n) => a + n, 0)
     expect(escaneadasDraft(d)).toBe(marcadas)
     expect(totalDraft(d)).toBe(marcadas + 1) // la del buscador entra sin marcar
+  })
+})
+
+/**
+ * 🔴 **El caso de las 63** (21-sep-2026). Administración escaneó 140 prendas de Zattia con el chip
+ * «Sacás de:» en **Depósito** —donde arranca, porque la config de Reposición dice
+ * `prioridadRetiro: 'deposito'`— y **las 140 tenían stock 0 en depósito**: 63 quedaron marcadas en
+ * un lado que el sistema mismo contradecía, y crear la venta habría descontado de una sucursal que
+ * ⛔ no las tiene. Nadie avisó nada.
+ */
+describe('escanearDraft · el chip ⛔ no puede marcar contra el stock (21-sep-2026)', () => {
+  // Stock como el de Zattia: todo en el local, cero en depósito.
+  const ZATTIA: Variante[] = [
+    mkVar({ id: 'z_1', pid: 'z', sid: '1', name: 'BABY TEE ZEST', size: 'BLANCO', sku: 'RBT-0141-BL', local: 3, deposito: 0, barcode: '900' }),
+    mkVar({ id: 'z_2', pid: 'z', sid: '2', name: 'BABY TEE ZEST', size: 'NEGRO', sku: 'RBT-0141-NG', local: 5, deposito: 0, barcode: '901' }),
+  ]
+  const PRODS: Producto[] = [prod('z', 'BABY TEE ZEST')]
+  const mapa = construirMapaBc(ZATTIA)
+  const meta = { id: 's_63', fecha: '2026-09-21', creado: 1, creadoPor: 'lorena' }
+
+  it('escaneadas con el chip en Depósito, igual salen del Local', () => {
+    let d = draftVacio()
+    for (const c of ['900', '901']) d = escanearDraft(d, c, mapa, ZATTIA, 'deposito', PRODS).draft
+    const sol = procesarDraft(d, 'deposito', meta)!
+    expect(sol.items.map((i) => i.origen)).toEqual(['local', 'local'])
+    expect(sol.verif).toEqual({ z_1: 1, z_2: 1 }) // y siguen naciendo preparadas
+  })
+
+  it('el feedback del escaneo dice Local, ⛔ no el chip: si mintiera, nadie miraría la lista', () => {
+    const { resultado } = escanearDraft(draftVacio(), '900', mapa, ZATTIA, 'deposito', PRODS)
+    expect(resultado).toMatchObject({ tipo: 'variante', origen: 'local' })
+  })
+
+  it('pero si el stock alcanza en los DOS, manda el chip: ahí sí es una pregunta real', () => {
+    const AMBOS = ZATTIA.map((v) => ({ ...v, deposito: 9, local: 9, stock: 18 }))
+    const d = escanearDraft(draftVacio(), '900', construirMapaBc(AMBOS), AMBOS, 'deposito', PRODS).draft
+    expect(procesarDraft(d, 'local', meta)!.items[0].origen).toBe('deposito')
   })
 })
