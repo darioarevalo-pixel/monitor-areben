@@ -134,7 +134,18 @@ export function BalanceSector({
     }
   }
 
-  const sinGuardar = JSON.stringify(elegidas.map(tipoDePrenda).sort()) !== JSON.stringify((cobertura?.tipos ?? []).map(tipoDePrenda).sort())
+  /**
+   * 🔴 **Un balance declarado con el criterio VIEJO ⛔ no cuenta como declarado** (21-sep-2026).
+   * Hasta esa mañana un sector se declaraba con categorías de Tienda Nube, y el primer recorrido
+   * real quedó guardado así. Sin esto la pantalla abre con **⛔ ninguna casilla marcada y el botón
+   * diciendo «Balance guardado»**, que es exactamente lo que le pasó a Bruno: *«no entiendo qué
+   * tengo que hacer»*. Un cartel apagado que dice «ya está» cuando ⛔ no está es peor que no decir
+   * nada — y lo que está guardado es justo la declaración que salió mal.
+   */
+  const declaradoALaVieja = !cobertura?.tipos?.length && !!cobertura?.cats?.length
+
+  const sinGuardar =
+    declaradoALaVieja || JSON.stringify(elegidas.map(tipoDePrenda).sort()) !== JSON.stringify((cobertura?.tipos ?? []).map(tipoDePrenda).sort())
 
   return (
     <Notice tone="brand" icon="📋" style={{ marginBottom: space[4] }}>
@@ -182,6 +193,15 @@ export function BalanceSector({
       {/* 🔴 Ordenados por lo que PASÓ POR EL LECTOR y ⛔ no por porcentaje: ver `coberturaPorTipo`.
           Con el orden por porcentaje, un tipo de 9 prendas escaneadas enteras daba 100 % y se
           plantaba arriba del sector caminado de verdad — y eso fue el mandado vacío del 21-sep. */}
+      {/* 🔑 Se nombran las categorías viejas tal como se guardaron: quien mira tiene que reconocer
+          su propia declaración para entender por qué le estamos pidiendo que la haga de nuevo. */}
+      {declaradoALaVieja && (
+        <div style={{ fontSize: font.sm, padding: `${space[2]}px ${space[3]}px`, marginBottom: space[3], borderRadius: 8, background: color.warningBg, color: color.ink }}>
+          ⚠️ Este recorrido se había declarado con <b>categorías de Tienda Nube</b> ({(cobertura?.cats ?? []).join(', ')}). Ese criterio cambió: ahora se
+          marca por <b>tipo de prenda</b>. Marcá abajo los que se caminaron y guardá de nuevo.
+        </div>
+      )}
+
       {tipos.map((c) => {
         const puesta = elegidas.some((x) => tipoDePrenda(x) === c.tipo)
         const pct = Math.round(c.cubierto * 100)
@@ -231,7 +251,7 @@ export function BalanceSector({
 
       {/* 🔑 Quién lo declaró y cuándo: es una lista que manda a mover mercadería, y dentro de un mes
           hay que poder saber de quién fue la afirmación. */}
-      {cobertura?.por && !sinGuardar && (
+      {cobertura?.por && !sinGuardar && !declaradoALaVieja && (
         <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
           Lo declaró {cobertura.por} el {new Date(cobertura.cuando).toLocaleDateString('es-AR')}.
         </div>

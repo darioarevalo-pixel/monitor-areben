@@ -109,9 +109,11 @@ export function paraColgar(escaneos: EscaneoLibre[], conStock: ExhibItem[]): Col
     .sort(
       (a, b) =>
         (ordenLugar.get(a.lugar) ?? 0) - (ordenLugar.get(b.lugar) ?? 0) ||
-        // Lo que más vale primero: 9 unidades en el guardado ⛔ no son lo mismo que 1.
-        b.it.qty - a.it.qty ||
-        a.it.name.localeCompare(b.it.name, 'es'),
+        // 🔑 **Por nombre y ⛔ no por unidades** (21-sep-2026). Ordenar por stock ponía arriba «el
+        // que tiene 9» como si fuera más urgente, y ⛔ no lo es: de todas falta colgar UNA. Por
+        // nombre, los colores de la misma prenda caen juntos, que es como se busca en el guardado.
+        a.it.name.localeCompare(b.it.name, 'es') ||
+        a.it.size.localeCompare(b.it.size, 'es'),
     )
 }
 
@@ -147,10 +149,15 @@ export function agruparColgarPorProducto(lista: Colgar[]): GrupoColgar[] {
   return [...grupos.values()]
 }
 
-export const HEADER_COLGAR = ['Lugar', 'Prenda', 'Color / talle', 'SKU', 'Código de barras', 'Unidades en el Local', 'Aviso'] as const
+/**
+ * ⛔ **Sin «Unidades en el Local», y es del 21-sep-2026.** Ver `ParaColgar`: la tarea es colgar UNA
+ * de cada color, así que **la cuenta es la cantidad de renglones** y el número de stock invitaba a
+ * traer las diez del guardado. Misma regla que el mandado del balance (`filasBuscar`).
+ */
+export const HEADER_COLGAR = ['Lugar', 'Prenda', 'Color / talle', 'SKU', 'Código de barras', 'Aviso'] as const
 
 /** Anchos de columna del `.xlsx`, en caracteres. */
-export const ANCHOS_COLGAR = [22, 40, 16, 16, 18, 20, 34]
+export const ANCHOS_COLGAR = [22, 40, 16, 16, 18, 34]
 
 /** La planilla que se le pasa a quien va a colgar. Un renglón por variante, en orden de caminata. */
 export function filasColgar(lista: Colgar[]): Filas {
@@ -162,7 +169,6 @@ export function filasColgar(lista: Colgar[]): Filas {
       c.it.size,
       c.it.sku || '',
       c.it.barcode || '',
-      c.it.qty,
       c.skuAmbiguo ? 'Comparte SKU con otra variante: chequear con el lector' : '',
     ])
   }

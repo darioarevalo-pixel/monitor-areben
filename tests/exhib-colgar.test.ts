@@ -22,7 +22,9 @@ describe('paraColgar', () => {
   it('los colores que quedaron sin colgar de una prenda que SÍ se tocó', () => {
     const esc = [aEscaneo(UNIT_NG, '111', 'perchero tops', t(0))]
     const l = paraColgar(esc, LOCAL)
-    expect(l.map((c) => c.it.size)).toEqual(['CHOCOLATE', 'BLANCO']) // 5u antes que 2u
+    // ⚠️ **Por nombre y color, ⛔ no por unidades** (21-sep-2026): de todas falta colgar UNA, así
+    // que «el que tiene 5» ⛔ no es más urgente que «el que tiene 2». Ver `paraColgar`.
+    expect(l.map((c) => c.it.size)).toEqual(['BLANCO', 'CHOCOLATE'])
     expect(l.every((c) => c.lugar === 'perchero tops')).toBe(true)
     expect(resumenColgar(l)).toEqual({ variantes: 2, unidades: 7, productos: 1 })
   })
@@ -75,7 +77,7 @@ describe('paraColgar', () => {
   it('un escaneo EN CERO toca el producto igual', () => {
     const cero = v({ ...UNIT_NG, qty: 0 })
     const l = paraColgar([aEscaneo(cero, '111', 'perchero tops', t(0))], LOCAL)
-    expect(l.map((c) => c.it.size)).toEqual(['CHOCOLATE', 'BLANCO'])
+    expect(l.map((c) => c.it.size)).toEqual(['BLANCO', 'CHOCOLATE'])
   })
 
   /**
@@ -132,10 +134,16 @@ describe('agrupar, filtrar y exportar', () => {
     ])
   })
 
-  it('la planilla lleva el mueble, la prenda, el color y las unidades', () => {
+  /**
+   * 🔴 **⛔ Sin la columna de unidades** (21-sep-2026, Bruno: *«no me interesa el stock del local, me
+   * interesa que se exhiba»*): la cuenta es la cantidad de renglones, y el número invitaba a traer
+   * las cinco del guardado en vez de colgar una.
+   */
+  it('la planilla lleva el mueble, la prenda y el color, ⛔ no las unidades', () => {
     const filas = filasColgar(lista)
     expect(filas[0]).toEqual([...HEADER_COLGAR])
-    expect(filas[1]).toEqual(['perchero tops', 'TOP UNIT', 'CHOCOLATE', '', '113', 5, ''])
+    expect(filas[0]).not.toContain('Unidades en el Local')
+    expect(filas[1]).toEqual(['perchero tops', 'TOP UNIT', 'BLANCO', '', '112', ''])
     expect(filas).toHaveLength(4)
   })
 })
