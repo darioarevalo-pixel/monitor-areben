@@ -35,76 +35,50 @@ describe('enPalabras — el número se canta, ⛔ no se lee', () => {
   })
 })
 
-describe('avisoDe', () => {
+describe('avisoDe — son DOS avisos, y eso es todo lo que se oye', () => {
   /**
-   * 🔴 **El número que se canta es el AVANCE del recorrido, y ⛔ no cuántas van de esa prenda.**
-   * Bruno, 20-sep-2026: *«me interesa para saber que se escaneó correctamente sin necesidad de ver
-   * el celular: cuando sabés que te dijo un número creciente, significa que escaneó bien»*.
+   * 🔴 Bruno, 20-sep-2026: *«necesito que esta chica sólo escanee: si detecta un producto que diga
+   * el número de escaneo, y si no, que le diga que vuelva a escanear porque no lo detectó; lo
+   * repetido y demás entra en el balance»*.
    */
-  it('el escaneo normal canta el avance del recorrido', () => {
-    expect(avisoDe({ tipo: 'ok', avance: 1 })).toEqual({ aviso: 'ok', voz: 'uno' })
-    expect(avisoDe({ tipo: 'ok', avance: 47 })).toEqual({ aviso: 'ok', voz: 'cuarenta y siete' })
+  it('la detectó ⇒ el número del recorrido, que crece', () => {
+    expect(avisoDe({ tipo: 'ok', avance: 12 })).toEqual({ aviso: 'ok', voz: 'doce' })
+    expect(avisoDe({ tipo: 'ok', avance: 47 }).voz).toBe('cuarenta y siete')
   })
 
-  /** 🔑 El repetido **también** hace crecer el número: es otra unidad colgada. Lo distingue el pitido. */
-  it('el repetido sigue la cuenta, y se distingue por el pitido', () => {
-    const r = avisoDe({ tipo: 'sumado', veces: 2, avance: 48 })
-    expect(r.voz).toBe('cuarenta y ocho')
-    expect(r.aviso).toBe('suma')
+  /**
+   * 🔑 **Los cuatro casos «detectada» suenan IGUAL.** La prenda repetida y la que el sistema tiene
+   * en cero son hallazgos **del balance**: cantárselos a quien camina le pide entender —y recordar—
+   * palabras distintas para cosas sobre las que ⛔ no puede hacer nada en ese momento.
+   */
+  it('la repetida y la que está en cero suenan igual que cualquier escaneo bueno', () => {
+    const normal = avisoDe({ tipo: 'ok', avance: 48 })
+    expect(avisoDe({ tipo: 'sumado', veces: 2, avance: 48 })).toEqual(normal)
+    expect(avisoDe({ tipo: 'stock-cero', avance: 48 })).toEqual(normal)
   })
 
-  /** ⚠️ El número ⛔ no puede repetirse entre dos escaneos buenos: ahí se pierde la confirmación. */
-  it('dos escaneos seguidos cantan números distintos y crecientes', () => {
-    expect(avisoDe({ tipo: 'ok', avance: 12 }).voz).toBe('doce')
-    expect(avisoDe({ tipo: 'sumado', veces: 2, avance: 13 }).voz).toBe('trece')
+  /** ⚠️ El rebote del aparato **detectó** la prenda: lo único que ⛔ no pasó es que contara otra. */
+  it('el rebote del lector suena como uno bueno, con el número sin moverse', () => {
+    expect(avisoDe({ tipo: 'doble-lectura', avance: 48 })).toEqual({ aviso: 'ok', voz: 'cuarenta y ocho' })
+  })
+
+  /**
+   * 🔴 **Una sola causa audible: «⛔ no la detecté».** Código cortado, SKU que comparten dos prendas
+   * o prenda que ⛔ no figura son causas distintas con **la misma acción**: pasarla de nuevo.
+   */
+  it('⛔ no la detectó ⇒ «de nuevo», siempre lo mismo', () => {
+    expect(avisoDe({ tipo: 'no-cruzo' })).toEqual({ aviso: 'no', voz: 'de nuevo' })
+    expect(avisoDe({ tipo: 'no-cruzo', parecidos: 2 })).toEqual({ aviso: 'no', voz: 'de nuevo' })
+    // El mismo hecho por las dos pantallas: ⛔ no puede sonar distinto según por dónde se entró.
+    expect(avisoDe({ tipo: 'no-encontrado' })).toEqual(avisoDe({ tipo: 'no-cruzo' }))
+  })
+
+  it('los dos avisos ⛔ no se parecen entre sí', () => {
+    expect(avisoDe({ tipo: 'ok', avance: 3 }).aviso).not.toBe(avisoDe({ tipo: 'no-cruzo' }).aviso)
   })
 
   it('sin avance ⛔ no se inventa un número: queda sólo el pitido', () => {
     expect(avisoDe({ tipo: 'ok' }).voz).toBe('')
-  })
-
-  it('el rebote del aparato suena distinto del que contó', () => {
-    const doble = avisoDe({ tipo: 'doble-lectura' })
-    expect(doble.voz).toBe('repetido')
-    expect(doble.aviso).not.toBe('ok')
-    expect(doble.aviso).not.toBe('suma')
-  })
-
-  it('lo que no cruza suena mal, y lo dice corto', () => {
-    expect(avisoDe({ tipo: 'no-cruzo' })).toEqual({ aviso: 'no', voz: 'no figura' })
-    // Es el mismo hecho por las dos pantallas: ⛔ no puede sonar distinto según por dónde se entró.
-    expect(avisoDe({ tipo: 'no-encontrado' })).toEqual(avisoDe({ tipo: 'no-cruzo' }))
-  })
-
-  /**
-   * 🔴 **«⛔ No existe» y «salió a medias» ⛔ no son lo mismo, y lo que hay que hacer tampoco.** Si el
-   * código enganchaba a varias prendas, casi siempre es una lectura cortada y la prenda sigue en la
-   * mano: lo útil es **volver a pasarla**, ⛔ no anotarla como hallazgo y seguir.
-   */
-  it('el código que enganchaba a varias pide pasarla de nuevo, y ⛔ no suena a error', () => {
-    const aMedias = avisoDe({ tipo: 'no-cruzo', parecidos: 2 })
-    expect(aMedias.voz).toBe('de nuevo')
-    expect(aMedias.aviso).toBe('mira')
-    expect(aMedias.aviso).not.toBe('no')
-  })
-
-  it('la prenda en cero avisa sin sonar a error: está colgada, el stock está mal', () => {
-    const cero = avisoDe({ tipo: 'stock-cero' })
-    expect(cero.voz).toBe('en cero')
-    expect(cero.aviso).not.toBe('no')
-    expect(cero.aviso).not.toBe('ok')
-  })
-
-  /**
-   * 🔴 **El caso que justifica todo el módulo.** Si «anduvo» y «elegí cuál es» suenan parecido, la
-   * persona sigue caminando y deja atrás la prenda sin resolver — y ese escaneo se guarda solo como
-   * «no cruzó». El tono que pide la vista ⛔ no se comparte con ningún final que ya quedó resuelto.
-   */
-  it('los que EXIGEN mirar la pantalla tienen un tono propio', () => {
-    expect(avisoDe({ tipo: 'candidatos' }).aviso).toBe('mira')
-    expect(avisoDe({ tipo: 'cruce' }).aviso).toBe('mira')
-    const resueltos = ['ok', 'sumado', 'doble-lectura', 'stock-cero', 'no-cruzo'].map((tipo) => avisoDe({ tipo }).aviso)
-    expect(resueltos).not.toContain('mira')
   })
 
   it('un final que nadie sonorizó ⛔ no rompe el recorrido', () => {

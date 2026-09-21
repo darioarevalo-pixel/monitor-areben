@@ -102,6 +102,73 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   productos** del Local, de los cuales **36 son de Stunned**, que tiene su propia tienda y nunca va a
   cruzar. Callarlas haría leer el mandado como completo cuando ⛔ no lo es.
 
+- 🆕 🔴 🔑 **EL RECORRIDO SE CAMINA DE OÍDO, Y SON DOS AVISOS** (20-sep-2026). Quien camina tiene el
+  lector en una mano y la prenda en la otra: mirar la pantalla después de cada lectura es lo que
+  hace lento el recorrido. Bruno, al final del día: *«necesito que esta chica sólo escanee: si
+  detecta un producto que diga el número de escaneo, y si no, que le diga que vuelva a escanear
+  porque no lo detectó; lo repetido y demás entra en el balance»*.
+  - **La detectó** → pitido corto + **el número del recorrido**, que crece. **Si sube, entró.**
+  - **⛔ No la detectó** → pitido grave + **«de nuevo»**: la única acción posible con la prenda
+    todavía en la mano.
+  🔴 **Todo lo demás se sacó del oído A PROPÓSITO, y ésa es la decisión.** La prenda repetida, la que
+  el sistema tiene en cero y el código que engancha a dos **suenan igual que un escaneo bueno**: son
+  hallazgos **del balance**, que mira quien decide con la pantalla delante. Cantárselos a quien
+  camina le pedía entender —y recordar— cuatro palabras para cosas sobre las que ⛔ no puede hacer
+  nada en ese momento. ⚠️ **Los carteles de la pantalla ⛔ no se tocaron**: el que mira, ve; el que
+  camina, oye dos cosas. (Antes hubo cinco avisos distintos; duraron unas horas.)
+  🔴 **El número que se canta es el AVANCE del recorrido** y ⛔ no cuántas van de esa prenda: *«cuando
+  sabés que te dijo un número creciente, significa que escaneó bien»* ⇒ tiene que subir **siempre**,
+  también con el repetido, que es otra unidad colgada. ⚠️ Antes se cantaba «uno» en cada prenda
+  nueva: con un sector de 400 son 400 veces «uno», y la palabra dejaba de significar nada.
+  ⚠️ `avanceDelRecorrido` cuenta **unidades que pasaron por el lector** (un triage ⛔ no vio nada) y
+  se lee de la **ref de la cola**, ⛔ no del estado de React: `registrar` acaba de escribir y el
+  estado todavía ⛔ no se re-dibujó — de ahí saldría el número de la prenda **anterior**, cantado
+  sobre la que la persona tiene en la mano.
+  🔑 `enPalabras` llega hasta **999** por el tamaño real de un sector (Tops son 400 variantes), y
+  canta en español: la voz del navegador lee «47» según la voz instalada, y en inglés si la de
+  español ⛔ no está.
+  🔑 **La decisión está separada de lo que suena**: `lib/exhib/aviso.ts` (puro, con test) dice qué
+  aviso le toca a cada final y `lib/sonido.ts` lo toca. Los **dos modos** usan el mismo mapa.
+  🔴 **La voz cancela a la anterior antes de hablar.** El lector dispara cada ~1,5 s y hablar tarda
+  ~0,5 s: encolando, a los diez escaneos estaría cantando el número de hace quince segundos, sobre
+  la prenda que la persona tiene en la mano **ahora**. Gana siempre el último.
+  ⚠️ **El audio del navegador arranca BLOQUEADO** hasta un toque de verdad, y el Enter del lector ⛔
+  no siempre alcanza: por eso «Iniciar recorrido» y «Retomar» lo destraban, y el **«listo»** que se
+  oye al empezar ⛔ no es un adorno —hablar dentro del toque es lo que destraba la voz en iPhone, y
+  es la prueba de que el teléfono ⛔ no está en silencio—.
+  🔑 **Y por eso hay «Escuchar los avisos»** en la pantalla de configurar: esto sirve sólo si se
+  reconocen **de oído**. ⛔ **Nada de esto se puede probar con un test**: el mapa sí
+  (`tests/exhib-aviso.test.ts`), el parlante ⛔ no.
+
+- 🆕 🔴 🔑 **EL BALANCE DEL SECTOR LO HACE UNA PERSONA, DESPUÉS, Y LA APP SÓLO PONE EL NÚMERO**
+  (20-sep-2026, `lib/exhib/balance.ts`). «Para colgar» es la lista **siempre verdadera pero corta**
+  —los hermanos de lo que el recorrido tocó—; el balance es el otro lado: *«caminé el sector ENTERO,
+  decime todo lo que debería estar colgado acá»*.
+  🔴 **Que un recorrido haya cubierto un sector es un hecho del salón que la app ⛔ no puede ver**:
+  94 escaneos ⛔ no dicen si el sector tenía 94 prendas o 400. Afirmarlo sola es lo que dio los **20
+  corsets faltantes falsos**. ⇒ la pantalla muestra **«pasaron por el lector 94 de las 400 que el
+  sistema tiene en el local (24 %)»** y **tilda quien mira**. Un 24 % grita «caminó un perchero»; un
+  95 % dice «caminó el sector».
+  ⚠️ **Son DOS PERSONAS y DOS MOMENTOS, y así lo pidió Bruno**: *«no me parece erróneo que la
+  empleada haga el escaneo completo del sector y luego me avise cuando esté listo; entonces yo hago
+  el balance y le paso el reporte de qué falta buscar en depósito»*. La empleada ⛔ no decide nada —
+  ⛔ no se le agrega un solo paso—, y la declaración se guarda **firmada por el servidor** con la
+  sesión de quien la hizo (`exhib_recorrido.cobertura`, `sql/migrate-exhib-cobertura.sql`).
+  🔑 **«Lo que falta» tiene una dirección concreta: el DEPÓSITO DEL LOCAL.** En GN el Local es **una
+  sola ubicación** que junta el salón y el depósito del local (por eso el Conteo estándar cuenta
+  *exhibido + depósito*) ⇒ **stock en Local − lo que pasó por el lector = lo que tiene que estar
+  guardado ahí**, y si tampoco está, es un problema de stock. ⛔ No es un reproche: es un mandado.
+  🔑 **Las vistas se miran del recorrido ENTERO y ⛔ no del lugar**: un top que apareció en la
+  vidriera y se escaneó **está colgado** y ⛔ no se va a buscar al depósito.
+  ⚠️ **El bolsón se explica, ⛔ no se esconde**: cada línea dice en qué otra categoría está («CORSET
+  BERNA · también está en CORSETS»). Medido el 20-sep: declarando TOPS Y BODIES, **85 de los 306
+  renglones** traen una categoría de afuera. Una línea que parece un error le quita autoridad a las
+  otras cincuenta que están bien.
+  🔴 **Y lo que el balance ⛔ NO puede juzgar se dice SIEMPRE**: las prendas sin categoría en TN ⛔ no
+  entran en ningún universo —ni como presentes ni como faltantes—. Medido: **297 variantes / 95
+  productos** del Local, de los cuales **36 son de Stunned**, que tiene su propia tienda y nunca va a
+  cruzar. Callarlas haría leer el mandado como completo cuando ⛔ no lo es.
+
 - 🆕 🔴 🔑 **EL RECORRIDO SE CAMINA DE OÍDO** (20-sep-2026, lo pidió Bruno: *«que haga el pitido y
   además diga uno, para que la persona tenga el celular cerca pero no esté viéndolo
   constantemente»*). Cada escaneo **pita, vibra y dice una palabra**: quien camina tiene el lector

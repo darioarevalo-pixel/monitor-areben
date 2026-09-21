@@ -135,14 +135,12 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
     // ⚠️ Se pregunta DESPUÉS de un respiro: reanudar el audio es asíncrono, y preguntando en el
     // mismo suspiro diría «bloqueado» sobre un teléfono que está por sonar perfecto.
     window.setTimeout(() => setAudio(estadoSonido()), 400)
-    // ⚠️ Con avances de mentira **crecientes**: es justo lo que hay que reconocer de oído —que el
-    // número sube—, y con todos en el mismo número la prueba ⛔ no enseñaría nada.
-    const demo: Array<{ tipo: string; veces?: number; avance?: number }> = [
+    // ⚠️ Son **dos**, y el primero va con avances crecientes: lo único que hay que reconocer de oído
+    // es que el número sube. Con todos en el mismo número la prueba ⛔ no enseñaría nada.
+    const demo: Array<{ tipo: string; avance?: number }> = [
       { tipo: 'ok', avance: 12 },
-      { tipo: 'sumado', veces: 2, avance: 13 },
-      { tipo: 'stock-cero' },
+      { tipo: 'ok', avance: 13 },
       { tipo: 'no-cruzo' },
-      { tipo: 'candidatos' },
     ]
     demo.forEach((d, i) => {
       window.setTimeout(() => {
@@ -314,10 +312,12 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
           {/* 🔑 Los avisos se aprenden **antes** de caminar, ⛔ no en el primer perchero. */}
           <Notice tone="neutral" icon="🔊" style={{ marginBottom: space[4] }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+              {/* 🔑 Son dos cosas y se dicen en dos renglones: la persona que lo lee está por salir a
+                  caminar el salón, ⛔ no estudiando la pantalla. */}
               <span>
-                Cada escaneo <b>suena y canta cuántas prendas llevás</b> —doce, trece, catorce—, así sabés que entró sin mirar el
-                teléfono: <b>si el número sube, escaneó bien</b>. Subí el volumen y escuchá los cinco avisos:
-                <b> anduvo</b> · <b>otra igual</b> · <b>está en cero</b> · <b>no figura</b> · <b>mirá la pantalla</b>.
+                Mientras escaneás <b>no hace falta mirar el teléfono</b>. Son dos avisos:<br />
+                • <b>Un pitido y un número</b> (doce, trece, catorce…) = la detectó. <b>Si el número sube, escaneó bien.</b><br />
+                • <b>Un pitido grave y «de nuevo»</b> = ⛔ no la detectó: pasá la prenda otra vez.
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>

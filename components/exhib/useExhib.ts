@@ -49,7 +49,7 @@ export type ResultadoMarca =
   /** Ya estaba marcada y **se le sumó una unidad**: hay dos colgadas de ésa. */
   | { tipo: 'sumado'; it: ExhibItem; veces: number; avance: number }
   /** El aparato repitió el Enter solo: ⛔ no se contó. */
-  | { tipo: 'doble-lectura'; it: ExhibItem; veces: number }
+  | { tipo: 'doble-lectura'; it: ExhibItem; veces: number; avance: number }
 
 /**
  * Estado del chequeo de exhibición **por categoría**.
@@ -182,7 +182,7 @@ export function useExhib(marca: Marca, productos: Producto[]) {
         const r = cola.registrar(fila)
         // ⚠️ De la **ref**, ⛔ no del estado: `registrar` acaba de escribir y React todavía ⛔ no
         // re-dibujó — del estado saldría el número de la prenda anterior.
-        if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, veces: r.veces }
+        if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, veces: r.veces, avance: avanceDelRecorrido(cola.ref.current.escaneos) }
         if (r.que === 'sumado') return { tipo: 'sumado', it, veces: r.veces, avance: avanceDelRecorrido(cola.ref.current.escaneos) }
       }
       return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it, avance: avanceDelRecorrido(cola.ref.current.escaneos) }

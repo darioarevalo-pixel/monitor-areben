@@ -6,11 +6,19 @@
  * hay que poder ejercerla en un test, sin parlante. Los dos modos la comparten: el mismo escaneo
  * ⛔ no puede sonar distinto según por qué pantalla se entró.
  *
- * 🔴 **La regla de fondo: lo que EXIGE mirar tiene que sonar distinto de lo que anduvo.** Todo esto
- * existe para caminar sin mirar el teléfono; si «anduvo» y «elegí cuál es» suenan parecido, la
- * persona sigue caminando y **deja atrás la prenda sin resolver**, que es peor que no tener sonido.
- * Por eso el único caso que pide la vista —los candidatos— se lleva el tono que sube, que ⛔ no se
- * parece a ningún otro.
+ * 🔴 **SON DOS, Y ESO ES TODO LO QUE HAY QUE OÍR** (20-sep-2026, decisión de Bruno: *«necesito que
+ * esta chica sólo escanee: si detecta un producto que diga el número de escaneo, y si no, que le
+ * diga que vuelva a escanear porque no lo detectó; lo repetido y demás entra en el balance»*):
+ *
+ * - **la detectó** → el pitido corto y **el número**, que crece. Si sube, entró.
+ * - **⛔ no la detectó** → el pitido grave y **«de nuevo»**, que es la única acción posible con la
+ *   prenda todavía en la mano.
+ *
+ * 🔑 **Todo lo demás se sacó del oído a propósito.** La prenda repetida, la que el sistema tiene en
+ * cero, el código que engancha a dos: son hallazgos **del balance**, y quien decide los mira después
+ * con la pantalla delante. Cantárselos a quien camina le pedía entender —y recordar— cuatro
+ * palabras distintas para cosas sobre las que ⛔ no puede hacer nada en ese momento. ⚠️ Los carteles
+ * de la pantalla **⛔ no se tocaron**: el que mira, ve; el que camina, oye dos cosas.
  */
 
 import type { Aviso } from '../sonido'
@@ -83,32 +91,27 @@ export function enPalabras(n: number): string {
  */
 export function avisoDe(fin: FinDeEscaneo): AvisoEscaneo {
   switch (fin.tipo) {
-    // Lo normal, y es el que más se repite: pitido corto y **el número del recorrido**, que es todo
-    // lo que hace falta saber sin mirar. Sin avance ⛔ no se inventa un número: mejor sólo el pitido.
+    // 🔑 **DETECTADA**: entra el número y nada más. Da igual si era la segunda igual o si el sistema
+    // la tiene en cero — eso es del balance, ⛔ no de quien está caminando.
     case 'ok':
-      return { aviso: 'ok', voz: fin.avance ? enPalabras(fin.avance) : '' }
-    // 🔑 El repetido **también suma al avance** —es otra unidad colgada— y lo que lo distingue es el
-    // pitido doble, ⛔ no la palabra: así el número nunca deja de crecer.
     case 'sumado':
-      return { aviso: 'suma', voz: fin.avance ? enPalabras(fin.avance) : '' }
-    // ⚠️ El rebote del aparato ⛔ no contó nada, y callarlo se leería como «no anduvo»: suena
-    // distinto y lo dice, así quien pasó dos prendas de verdad la vuelve a pasar.
-    case 'doble-lectura':
-      return { aviso: 'ojo', voz: 'repetido' }
-    // Está colgada y el sistema la tiene en cero: se guarda igual, pero no es un escaneo normal.
     case 'stock-cero':
-      return { aviso: 'ojo', voz: 'en cero' }
-    // ⚠️ Enganchaba a varias ⇒ **pasala de nuevo**, que es lo único accionable con la prenda en la
-    // mano. Se lleva el tono que pide atención, y ⛔ no el de error: ⛔ no salió mal, salió a medias.
+    // ⚠️ El rebote del aparato también **detectó** la prenda: lo único que ⛔ no pasó es que contara
+    // una unidad más, así que el número se repite. Decir «repetido» acá era pedirle a quien camina
+    // que entienda la diferencia entre dos prendas iguales y un Enter duplicado.
+    case 'doble-lectura':
+      return { aviso: 'ok', voz: fin.avance ? enPalabras(fin.avance) : '' }
+
+    // 🔴 **⛔ NO DETECTADA**: lo único que hay para hacer es **pasarla de nuevo**, y es lo único que
+    // se dice. Da lo mismo por qué falló —código cortado, SKU que comparten dos prendas, prenda que
+    // ⛔ no figura—: son causas distintas con la misma acción, y el escaneo queda guardado igual.
     case 'no-cruzo':
     case 'no-encontrado':
-      return fin.parecidos ? { aviso: 'mira', voz: 'de nuevo' } : { aviso: 'no', voz: 'no figura' }
-    // 🔴 Los dos que PIDEN LA VISTA, y por eso comparten el tono que sube.
-    case 'candidatos':
-      return { aviso: 'mira', voz: 'elegí cuál' }
+      return { aviso: 'no', voz: 'de nuevo' }
+
+    // ── Sólo el modo POR CATEGORÍA, que ⛔ no es el que se camina por sector. ──────────────────
     case 'cruce':
       return { aviso: 'mira', voz: 'otra categoría' }
-    // El recorrido se cerró en otro lado: no hay dónde guardar y hay que volver a empezar.
     case 'sin-recorrido':
       return { aviso: 'no', voz: 'sin recorrido' }
     default:

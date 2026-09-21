@@ -24,8 +24,12 @@ export type ResultadoLibre =
   | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre; avance: number }
   /** Ya estaba en este lugar y **se le sumó una unidad**: hay dos colgadas, y eso es el dato. */
   | { tipo: 'sumado'; it: ExhibItem | null; e: EscaneoLibre; veces: number; avance: number }
-  /** El aparato repitió el Enter solo (menos de `DOBLE_LECTURA_MS`): ⛔ no se contó. */
-  | { tipo: 'doble-lectura'; it: ExhibItem | null; e: EscaneoLibre; veces: number }
+  /**
+   * El aparato repitió el Enter solo (menos de `DOBLE_LECTURA_MS`): ⛔ no se contó una unidad más.
+   * ⚠️ Lleva `avance` igual —**la prenda sí está detectada**— y por eso suena como cualquier
+   * escaneo bueno: el número se repite, que es exactamente lo que pasó.
+   */
+  | { tipo: 'doble-lectura'; it: ExhibItem | null; e: EscaneoLibre; veces: number; avance: number }
   /** Existe y está colgada, pero el sistema la tiene en cero. Se guarda como `encontrado`, con qty 0. */
   | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre; avance: number }
   /**
@@ -63,7 +67,7 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
       const avance = avanceDelRecorrido(cola.ref.current.escaneos)
       // 🔴 **El repetido ⛔ ya no rebota: suma una unidad** (19-sep-2026). Lo único que ⛔ no se
       // cuenta es el rebote del propio aparato, y se dice.
-      if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, e, veces: r.veces }
+      if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, e, veces: r.veces, avance }
       if (r.que === 'sumado') return { tipo: 'sumado', it, e, veces: r.veces, avance }
       if (!it) return { tipo: 'no-cruzo', e }
       return it.qty <= 0 ? { tipo: 'stock-cero', it, e, avance } : { tipo: 'ok', it, e, avance }
