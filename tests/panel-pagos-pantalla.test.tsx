@@ -320,11 +320,19 @@ describe('Pagos · la jerarquía de la pantalla', () => {
     expect(html).toContain('Se cayó')
   })
 
-  it('⚠️ los íconos llevan la frase entera en el title: un tilde solo es ambiguo', () => {
+  /**
+   * 🔑 **Y el rótulo NOMBRA de quién es la fila** (VOCABULARIO §3.3, 21-sep-2026). El `title` —el
+   * globito del mouse— lleva la frase sola, que es lo que hacía falta cuando se sacó la etiqueta.
+   * El `aria-label` no alcanza con eso: el que no ve la pantalla recorre ocho filas y escucha ocho
+   * veces "Ya entró", sin ninguna manera de saber cuál está tocando.
+   */
+  it('⚠️ los íconos llevan la frase entera, y el rótulo dice de quién es la fila', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).toContain('aria-label="Ya entró"')
-    expect(html).toContain('aria-label="Se cayó"')
+    expect(html).toContain('title="Ya entró"')
+    expect(html).toContain('title="Se cayó"')
+    expect(html).toContain('aria-label="Ya entró lo de «Nazarena Luciani»"')
+    expect(html).toContain('aria-label="Se cayó lo de «Nazarena Luciani»"')
   })
 
   it('un compromiso marcada desde la sección igual se puede confirmar acá', () => {
@@ -332,7 +340,7 @@ describe('Pagos · la jerarquía de la pantalla', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ estado: 'transferido' })] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     expect(html).toContain('Falta confirmar')
-    expect(html).toContain('aria-label="Ya entró"')
+    expect(html).toContain('title="Ya entró"')
   })
 
   it('sin nada esperando muestra un vacío que ocupa lugar, no un renglón gris', () => {

@@ -106,6 +106,45 @@ prometió, cuánto, a qué cuenta, y si ya pasó.
 - 🔴 **En el otro repo**: `POST /api/puente/pagos` **acepta cualquier monto sin compararlo con la
   deuda**. Es la red que hubiera atajado el ×100 antes del ledger.
 
+## ✅ 21-sep-2026 — pasada de diseño de la pestaña Pagos
+
+Sólo **cómo se ve y cómo se lee**: ni una regla de negocio cambió. Lo que hay que saber:
+
+- 🔑 **La pestaña tiene UN margen lateral** (`MARGEN`, en `Pagos.tsx`). Había tres —tarjetas a 20 px,
+  títulos a 12, avisos a 18— y en una columna de 350 px eso es lo que más se notaba. ⛔ Lo que se
+  agregue acá arranca en esa línea, no en una propia.
+- 🔑 **Filas a todo el ancho, como la solapa "Hoy"**, en vez de tarjetas flotantes. Las dos listas de
+  trabajo del mismo panel se dibujaban con convenciones opuestas, y el borde lateral se comía el
+  12 % del ancho para no separar de nada.
+- 🔑 **La franja de color de la izquierda es la única diferencia visible entre las dos listas**:
+  índigo = "te toca a vos" (mirar el banco), gris = "le toca al cliente". Antes las separaba sólo un
+  título de 12 px, y separarlas es el sentido de la pestaña.
+- 🔑 **El selector de vista está arriba y es `sticky`**, y es un control partido y no dos chips: se
+  veía igual que los filtros de "Hoy" (🔥 🟡 ⚪ 🧊), que filtran en vez de cambiar de pantalla.
+  ⛔ El nombre "A quién le debemos" **se queda** aunque con el chat adelante la pregunta sea "¿a
+  dónde le digo que transfiera?": lo bautizó el menú de Dirección y VOCABULARIO §3 no deja que la
+  pantalla lo llame de otra manera. ⚠️ Comparte el `top: 0` con el cartel de aviso del panel, que
+  tiene más z-index y le pasa por encima los segundos que dura.
+- **El total va ANTES del formulario**. Estaba en el medio, después del bloque de anotar. El
+  formulario sigue siendo lo primero que se puede tocar.
+- **Toda la plata pasa por `Monto`**, con `tabular-nums` y tres tamaños (`total` una sola vez por
+  pantalla). Sin cifras de ancho fijo, en una lista de seis las comas caen en lugares distintos.
+- **Los casilleros son los del kit** (`mo-input`), no bordes pintados a mano: foco, hover y alto
+  salen de un solo lugar. Los avisos son `Notice` y los vacíos `EmptyState`, por lo mismo.
+- 🔑 **`components/panel/DatosDeCuenta.tsx` es nuevo, y es el alias + banco + titular + CBU + los dos
+  botones de copiar** que estaban escritos **tres veces** (las dos listas de `VistaAcreedores` y el
+  formulario). Igual que `TarjetaDestino`, que era la misma tarjeta dos veces. Es la misma máquina
+  que fabricó los dos bugs de plata.
+- **El techo sólo se dice cuando no es el número grande**: sin nada comprometido, "faltan juntar
+  $380.000" abajo de "$380.000 se le puede pedir" es la misma cifra dos veces.
+- ⚠️ **Los `aria-label` de los dos íconos ahora nombran la fila** (`Ya entró lo de «Fulana»`),
+  VOCABULARIO §3.3: diez "Ya entró" apilados son diez botones idénticos para quien no ve la
+  pantalla. El `title` sigue llevando la frase sola. Los dos tests que lo fijaban se actualizaron.
+
+▶️ **Lo que quedó afuera**: `Chapa` y `Bloque` siguen duplicados entre `Pagos.tsx`,
+`PanelWhatsApp.tsx` y `AgendaDelDia.tsx` — se emparejaron las medidas (11 px / 600), pero juntarlos
+de verdad es mudarlos a un archivo común y eso toca las tres solapas.
+
 ## Cómo se prueba
 
 ```bash

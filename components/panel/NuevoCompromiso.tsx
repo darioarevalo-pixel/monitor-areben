@@ -54,9 +54,10 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Button, CopyButton } from '@/components/ui'
-import { color, font, radius } from '@/components/ui/tokens'
-import { datosParaMandar, type DestinoCompromiso } from '@/lib/compromisos/destino'
+import { Button, Notice } from '@/components/ui'
+import { color, font, radius, space } from '@/components/ui/tokens'
+import { DatosDeCuenta } from './DatosDeCuenta'
+import { type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
@@ -148,16 +149,15 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
             nombre que pongas y con este teléfono, y cuando lo cargues en Gestión Nube se engancha
             solo desde acá.
           </div>
+          {/* ⚠️ El casillero del kit (`mo-input`), como el resto del monitor: trae foco, hover y
+              alto de un solo lugar en vez de un borde pintado acá. */}
           <input
+            className="mo-input"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
             placeholder="¿Cómo se llama?"
             aria-label="¿Cómo se llama?"
-            style={{
-              width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: font.sm,
-              marginBottom: 8, border: `1px solid ${color.line}`, borderRadius: radius.md,
-              background: color.bg, color: color.ink,
-            }}
+            style={{ marginBottom: 8, fontSize: font.sm }}
           />
         </>
       )}
@@ -187,14 +187,23 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                 key={a.id}
                 type="button"
                 onClick={() => { setElegido(a.id === elegido ? null : a.id); setError(null) }}
+                /*
+                  ⚠️ **Dos renglones y no `nombre · hasta $X`.** El nombre es lo que se busca y el
+                  techo es el número que decide: en una sola línea con un punto en el medio los dos
+                  tienen el mismo peso y hay que leer la frase entera para encontrar cualquiera.
+                */
                 style={{
+                  height: 'auto', textAlign: 'left',
                   border: `1px solid ${a.id === elegido ? color.brandBorder : color.line}`,
-                  background: a.id === elegido ? color.brandBg : color.bg,
+                  background: a.id === elegido ? color.brandBg : color.surface,
                   color: a.id === elegido ? color.brand : color.ink,
-                  borderRadius: radius.md, padding: '6px 10px', fontSize: font.sm, cursor: 'pointer',
+                  borderRadius: radius.md, padding: '5px 10px', fontSize: font.sm, cursor: 'pointer',
                 }}
               >
-                {a.nombre} · hasta {plata(puedePedirse)}
+                <div style={{ fontWeight: 600 }}>{a.nombre}</div>
+                <div style={{ fontSize: font.xs, color: a.id === elegido ? color.brand : color.mut2, fontVariantNumeric: 'tabular-nums' }}>
+                  hasta {plata(puedePedirse)}
+                </div>
               </button>
             ))}
           </div>
@@ -202,31 +211,15 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
           {sel && (
             <>
               {cuenta ? (
-                <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8, lineHeight: 1.5 }}>
-                  Pasale <b style={{ color: color.ink }}>{cuenta.alias || cuenta.cbu}</b>
-                  {cuenta.banco ? ` · ${cuenta.banco}` : ''}
-                  {cuenta.titular ? ` · a nombre de ${cuenta.titular}` : ''}
-                  {cuenta.alias && cuenta.cbu ? (
-                    <div style={{ fontFamily: 'monospace', fontSize: font.xs }}>CBU {cuenta.cbu}</div>
-                  ) : null}
-                  {/*
-                    🔑 Copiar, acá, es el gesto principal de la pantalla: esto se está leyendo con
-                    el chat del cliente al lado y lo que sigue es pegárselo. Sin botón había que
-                    seleccionar el texto con el mouse adentro del panel, que es lo que lo hacía
-                    incómodo justo en el peor momento (lo levantó Bruno usándolo, 21-sep-2026).
-                    Los dos botones son los dos pedidos reales: "mandame los datos" y "pasame el
-                    alias".
-                  */}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                    <CopyButton
-                      getText={() => datosParaMandar(cuenta, sel.a.nombre)}
-                      label="Copiar los datos"
-                      copiedLabel="✓ Listo para pegar"
-                    />
-                    {cuenta.alias && (
-                      <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
-                    )}
-                  </div>
+                /*
+                  Los datos de la cuenta salen del mismo componente que la vista de acreedores
+                  (`DatosDeCuenta`): era el mismo bloque escrito por tercera vez, con su propia
+                  frase de puntitos. Y copiar es el gesto principal acá —esto se lee con el chat
+                  del cliente al lado y lo que sigue es pegárselo (Bruno, 21-sep-2026).
+                */
+                <div style={{ marginBottom: space[2] }}>
+                  <div style={{ fontSize: font.sm, color: color.mut2 }}>Pasale estos datos:</div>
+                  <DatosDeCuenta cuenta={cuenta} destino={sel.a.nombre} />
                 </div>
               ) : (
                 <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: 8 }}>
@@ -239,15 +232,12 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
 
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
+                  className={`mo-input${sePasa ? ' mo-input--invalid' : ''}`}
                   value={monto}
                   onChange={(e) => { setMonto(e.target.value); setError(null) }}
                   inputMode="decimal"
                   placeholder={`¿cuánto? hasta ${plata(sel.puedePedirse)}`}
-                  style={{
-                    flex: '1 1 150px', minWidth: 0, padding: '7px 9px', fontSize: font.sm,
-                    border: `1px solid ${sePasa ? color.dangerBorder : color.line}`,
-                    borderRadius: radius.md, background: color.bg, color: color.ink,
-                  }}
+                  style={{ flex: '1 1 150px', fontSize: font.sm, fontVariantNumeric: 'tabular-nums' }}
                 />
                 <Button
                   size="sm"
@@ -301,7 +291,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
         </>
       )}
 
-      {error && <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>{error}</div>}
+      {error && <Notice tone="danger" style={{ fontSize: font.xs, marginTop: space[2] }}>{error}</Notice>}
     </>
   )
 }

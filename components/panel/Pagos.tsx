@@ -40,14 +40,15 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Button, CopyButton, Icono } from '@/components/ui'
-import { color, font, radius, space } from '@/components/ui/tokens'
+import { Button, EmptyState, Icono, Notice } from '@/components/ui'
+import { color, font, radius, shadow, space } from '@/components/ui/tokens'
+import { DatosDeCuenta } from './DatosDeCuenta'
 import { useAcreedores } from '@/components/acreedores/useAcreedores'
 import { useCompromisos } from '@/components/acreedores/useCompromisos'
 import { NuevoCompromiso, type QuienPaga } from './NuevoCompromiso'
-import type { Acreedor } from '@/lib/acreedores/cliente'
+import type { Acreedor, CuentaBancaria } from '@/lib/acreedores/cliente'
 import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
-import { datosParaMandar, destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
+import { destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { useCuentas } from '@/components/acreedores/useCuentas'
 import {
   colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
@@ -59,6 +60,16 @@ import { hoyISO } from '@/lib/crm/seguimiento'
 /** De a cuántas cerradas se muestran. No es una lista de trabajo: es para mirar atrás un rato. */
 const CERRADAS = 10
 
+/**
+ * El único margen lateral de la pestaña.
+ *
+ * 🔑 **Existe porque había tres.** Las tarjetas arrancaban a 20 px del borde (8 de margen + 12 de
+ * padding), los títulos de sección a 12 y el aviso a 18: cada pieza estaba bien sola y la columna
+ * se leía despareja. En 350 px de ancho eso se nota más que cualquier otra cosa. ⛔ Todo lo que se
+ * dibuje acá adentro arranca en esta línea y no en una propia.
+ */
+const MARGEN = space[3]
+
 /** La fecha comprometida, en el idioma en que se piensa la cobranza. */
 function cuando(fecha: string | null, hoy: string): { txt: string; tarde: boolean } {
   const d = diasPara(fecha, hoy)
@@ -68,12 +79,21 @@ function cuando(fecha: string | null, hoy: string): { txt: string; tarde: boolea
   return { txt: `para dentro de ${d} ${d === 1 ? 'día' : 'días'}`, tarde: false }
 }
 
+/**
+ * Un bloque de la pestaña, a todo el ancho.
+ *
+ * ⛔ **Ya no es una tarjeta flotante.** Una columna de 350 px pierde 42 px —el 12 %— en márgenes y
+ * bordes laterales, y a cambio no gana nada: no hay nada al costado de lo que haya que separarse.
+ * Lo que separa un bloque del de arriba es la línea y el fondo blanco contra el gris de la página,
+ * igual que en la solapa "Hoy" — que es la otra lista de trabajo del mismo panel y hasta ahora se
+ * dibujaba con la convención contraria.
+ */
 function Bloque({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
     <section
       style={{
-        background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
-        padding: `${space[2]}px ${space[3]}px ${space[3]}px`, margin: `0 ${space[2]}px ${space[2]}px`,
+        background: color.surface, borderTop: `1px solid ${color.line2}`, borderBottom: `1px solid ${color.line2}`,
+        padding: `${space[2]}px ${MARGEN}px ${space[3]}px`, marginBottom: space[2],
       }}
     >
       {titulo && (
@@ -96,19 +116,27 @@ function Bloque({ titulo, children }: { titulo?: string; children: React.ReactNo
  */
 function Chapa({ children, tono = 'neutro' }: {
   children: React.ReactNode
-  tono?: 'neutro' | 'espera' | 'nuestro' | 'tarde'
+  tono?: 'neutro' | 'espera' | 'nuestro' | 'tarde' | 'entro'
 }) {
   const c =
     tono === 'nuestro'
       ? { fg: color.brand, bg: color.brandBg, bd: color.brandBorder }
       : tono === 'tarde'
         ? { fg: color.dangerInk, bg: color.dangerBg, bd: color.dangerBorder }
-        : tono === 'espera'
-          ? { fg: color.warningInk, bg: color.warningBg, bd: color.warningBorder }
-          : { fg: color.mut2, bg: color.bg2, bd: color.line2 }
+        : tono === 'entro'
+          ? { fg: color.successInk, bg: color.successBg, bd: color.successBorder }
+          : tono === 'espera'
+            ? { fg: color.warningInk, bg: color.warningBg, bd: color.warningBorder }
+            : { fg: color.mut2, bg: color.bg2, bd: color.line2 }
   return (
+    /*
+      ⚠️ **Las medidas son las del `Chip` de la ficha del cliente** (11 px / 600 / 2-8), no unas
+      propias. Eran 10 px / 700 / 1-7: la misma chapita a dos tamaños, en el mismo panel y a un
+      toque de distancia. ▶️ Las dos copias siguen siendo dos (ésta y la de `PanelWhatsApp.tsx`);
+      juntarlas de verdad es mudarlas a un archivo común, que es otra pasada.
+    */
     <span style={{
-      fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, whiteSpace: 'nowrap',
+      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
       border: `1px solid ${c.bd}`, background: c.bg, color: c.fg,
     }}>
       {children}
@@ -116,11 +144,69 @@ function Chapa({ children, tono = 'neutro' }: {
   )
 }
 
-function Titulo({ children, sub }: { children: React.ReactNode; sub?: string }) {
+/**
+ * La plata, en los tres tamaños que tiene la pestaña y con las cifras alineadas.
+ *
+ * 🔑 **`tabular-nums` no es un detalle**: sin eso, en una lista de seis montos las comas caen en
+ * lugares distintos y hay que leer número por número en vez de barrerlos de arriba abajo. Es lo
+ * mismo que hace `MoneyText` del kit, que acá no se puede usar directo porque el formato de los
+ * compromisos es el de `plata.core.js` (muestra centavos sólo cuando los hay).
+ *
+ * 🔑 **Y los tamaños son tres y no uno.** Antes el total de la pestaña, el monto de cada fila y el
+ * "se le puede pedir" de cada acreedor eran casi iguales y todos negros: como ninguno era
+ * claramente el más importante, ninguno lo era. `total` aparece **una sola vez por pantalla**.
+ */
+function Monto({ v, tam = 'fila', tono }: {
+  v: number
+  tam?: 'total' | 'fila' | 'chico'
+  tono?: string
+}) {
+  const fs = tam === 'total' ? font['2xl'] : tam === 'fila' ? font.xl : font.md
   return (
-    <div style={{ padding: `${space[2]}px ${space[3]}px 4px` }}>
-      <div style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>{children}</div>
-      {sub && <div style={{ fontSize: font.xs, color: color.mut2 }}>{sub}</div>}
+    <span style={{
+      fontSize: fs, fontWeight: 700, color: tono ?? color.ink, lineHeight: 1.15,
+      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+    }}>
+      {plata(v)}
+    </span>
+  )
+}
+
+/**
+ * El título de una lista, con cuántas hay.
+ *
+ * ⚠️ El número va apagado y no pegado con un punto: `Falta confirmar · 2` se leía como una frase
+ * de tres partes del mismo peso. Lo que se busca es la palabra; el número es el dato de al lado.
+ */
+function Titulo({ children, cuantas }: { children: React.ReactNode; cuantas?: number }) {
+  return (
+    <div style={{ padding: `${space[3]}px ${MARGEN}px ${space[2]}px` }}>
+      <div style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>
+        {children}
+        {cuantas !== undefined && (
+          <span style={{ marginLeft: 6, fontWeight: 600, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{cuantas}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Los renglones de "estoy buscando" y de "no tenés permiso".
+ *
+ * ⚠️ Quedan grises y chicos a propósito —no son noticias—, pero con el mismo margen que todo lo
+ * demás. Lo que ⛔ no puede quedar así es una FALLA: un renglón gris suelto se lee como una
+ * pantalla a medio cargar, y para eso está `Notice`.
+ */
+function Estado({ children }: { children: React.ReactNode }) {
+  return <div style={{ padding: `${space[3]}px ${MARGEN}px`, fontSize: font.sm, color: color.mut2 }}>{children}</div>
+}
+
+/** Un aviso con forma de aviso, con el margen de la pestaña. */
+function Cartel({ tono, children }: { tono: 'danger' | 'neutral'; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: `0 ${MARGEN}px`, marginBottom: space[2] }}>
+      <Notice tone={tono} style={{ fontSize: font.xs }}>{children}</Notice>
     </div>
   )
 }
@@ -144,8 +230,13 @@ function Titulo({ children, sub }: { children: React.ReactNode; sub?: string }) 
  * cuadrados rojos manda el ojo justo a lo único que no querés que se apriete. El relleno se lo
  * queda el tilde, que es la acción que se busca.
  */
-function BotonIcono({ que, onClick, fuerte }: {
+function BotonIcono({ que, de, onClick, fuerte }: {
   que: string
+  /**
+   * De quién es la fila. 🔑 **El rótulo nombra la cosa** (VOCABULARIO §3.3): diez `aria-label="Ya
+   * entró"` apilados son diez botones idénticos para quien no ve la pantalla.
+   */
+  de: string
   onClick: () => void
   fuerte?: boolean
 }) {
@@ -155,7 +246,7 @@ function BotonIcono({ que, onClick, fuerte }: {
       variant={fuerte ? 'solid' : 'outline'}
       tone={fuerte ? 'success' : 'danger'}
       title={que}
-      aria-label={que}
+      aria-label={`${que} lo de «${de}»`}
       // El texto sobre el índigo lo pone el kit; acá sólo se lo hace cuadrado.
       style={{ width: 30, minWidth: 30, height: 30, padding: 0, display: 'grid', placeItems: 'center' }}
       onClick={onClick}
@@ -201,21 +292,22 @@ function Confirmar({ c, onListo, onCancelar }: {
   const n = parsearMonto(monto)
   const falta = restanteTrasConfirmar(Number(c.monto), n)
 
-  const input: React.CSSProperties = {
-    minWidth: 0, padding: '6px 8px', fontSize: font.sm, border: `1px solid ${color.line2}`,
-    borderRadius: radius.md, background: color.bg, color: color.ink,
-  }
-
+  /*
+    ⚠️ **Los casilleros son los del kit (`mo-input`), no unos pintados a mano.** Eran cuadraditos
+    con borde propio: no se marcaban al pasar el mouse ni mostraban el anillo índigo al entrar,
+    justo al lado del calendario de la ficha del cliente, que sí es el del monitor. La clase trae
+    foco, hover, alto y estado inválido de un solo lugar.
+  */
   return (
     <div style={{ marginTop: 6, padding: space[2], background: color.bg2, borderRadius: radius.md }}>
       <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 6 }}>
         Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {c.acreedor_nombre}.
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal"
-          aria-label="¿Cuánto entró?" style={{ ...input, flex: '1 1 110px' }} />
-        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
-          aria-label="¿Qué día transfirió?" style={{ ...input, flex: '1 1 130px' }} />
+        <input className="mo-input" value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal"
+          aria-label="¿Cuánto entró?" style={{ flex: '1 1 110px', fontSize: font.sm }} />
+        <input className="mo-input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
+          aria-label="¿Qué día transfirió?" style={{ flex: '1 1 130px', fontSize: font.sm }} />
       </div>
 
       {/* Quién transfirió: el cliente por defecto, y el otro nombre a un clic. */}
@@ -223,11 +315,12 @@ function Confirmar({ c, onListo, onCancelar }: {
         {otro ? (
           <>
             <input
+              className="mo-input"
               value={titular}
               onChange={(e) => setTitular(e.target.value)}
               placeholder="¿a nombre de quién vino?"
               aria-label="¿A nombre de quién vino la transferencia?"
-              style={{ ...input, width: '100%', boxSizing: 'border-box' }}
+              style={{ fontSize: font.sm }}
             />
             <button type="button" onClick={() => { setOtro(false); setTitular('') }}
               style={{ height: 'auto', marginTop: 4, padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: color.brand, textDecoration: 'underline' }}>
@@ -280,6 +373,60 @@ function Confirmar({ c, onListo, onCancelar }: {
  * `yaPagadoSinDebitar`, que es plata ya mandada que el banco no debitó (un cheque entregado), y
  * está justamente para que nadie la mande dos veces.
  */
+/**
+ * Una cuenta a la que el cliente puede transferir: un acreedor del dashboard o una de acá.
+ *
+ * 🔑 **Es una sola y antes eran dos.** Las cuentas manuales y los acreedores se dibujaban con
+ * cuarenta líneas casi idénticas, una al lado de la otra: se veían iguales de casualidad y tocar
+ * una sola las separaba. Lo único que de verdad cambia es de dónde sale el techo y qué dice el
+ * renglón de abajo, así que eso entra por parámetro.
+ *
+ * ⚠️ **Los números de apoyo van como chapitas y no como una frase con puntitos.** Era
+ * `se le debe $200.000 · ya hay $80.000 comprometidos`, que en una columna angosta se lee como un
+ * renglón corrido del que hay que extraer dos cifras. Es el mismo criterio que las filas de
+ * compromisos ya habían adoptado y que acá había quedado sin aplicar.
+ */
+function TarjetaDestino({ nombre, sePuede, apoyos, detalle, deAca, cuenta, dondeSeCarga }: {
+  nombre: string
+  /** Lo que se le puede pedir HOY: el techo menos lo ya comprometido. Es el número que decide. */
+  sePuede: number
+  apoyos: React.ReactNode[]
+  detalle: string | null
+  deAca: boolean
+  cuenta: CuentaBancaria | null
+  dondeSeCarga: string
+}) {
+  return (
+    <article style={{
+      background: color.surface, borderTop: `1px solid ${color.line2}`,
+      padding: `${space[2]}px ${MARGEN}px ${space[3]}px`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>{nombre}</div>
+        {deAca && <Chapa>cuenta de acá</Chapa>}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+        <Monto v={sePuede} />
+        <span style={{ fontSize: font.xs, color: color.mut2 }}>se le puede pedir</span>
+      </div>
+
+      {apoyos.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>{apoyos}</div>
+      )}
+      {detalle && <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 4 }}>{detalle}</div>}
+
+      {cuenta ? (
+        <DatosDeCuenta cuenta={cuenta} destino={nombre} />
+      ) : (
+        <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk }}>
+          No tiene alias ni CBU, así que no hay nada que pasarle. Se carga en {dondeSeCarga}.
+        </div>
+      )}
+    </article>
+  )
+}
+
 export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, error, aviso }: {
   acreedores: Acreedor[]
   /**
@@ -302,28 +449,30 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
 
   const hayManuales = manuales.length > 0
 
-  if (cargando && !hayManuales) {
-    return <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>Buscando a quién le debemos…</div>
-  }
+  if (cargando && !hayManuales) return <Estado>Buscando a quién le debemos…</Estado>
   /*
     🔴 **"No hay deudas" y "no pude leer" no se pueden decir con el mismo cartel**, y hasta acá se
     decían: sin dashboard la lista llega vacía y `error` viene en null, así que la pantalla anunciaba
     "No hay ninguna deuda con acreedores ahora" —una buena noticia falsa, de las que nadie reporta.
     Es el mismo defecto que la lista del día ya pagó (ver el encabezado de
     `tests/panel-pagos-pantalla.test.tsx`).
+
+    ⚠️ Y va con forma de aviso, no como un renglón gris: una falla que se dibuja igual que un
+    "cargando" se lee como que la pantalla todavía no terminó.
   */
   if ((error || aviso) && !hayManuales) {
     return (
-      <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
+      <Cartel tono="danger">
         No se pudo leer a quién le debemos. Los montos viven en el dashboard; probá de nuevo en un rato.
-      </div>
+      </Cartel>
     )
   }
   if (acreedores.length === 0 && !hayManuales) {
     return (
-      <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
-        No hay ninguna deuda con acreedores ahora.
-      </div>
+      <EmptyState
+        title="No hay ninguna deuda con acreedores ahora"
+        hint="Cuando el dashboard tenga un gasto con proveedor sin pagar, aparece acá con su alias."
+      />
     )
   }
 
@@ -332,126 +481,73 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
       {/* El dashboard no contestó, pero las cuentas de acá sí se pueden mostrar: se dice qué falta
           en vez de esconder la mitad que sí funciona. */}
       {(error || aviso) && (
-        <div style={{ padding: `0 ${space[3]}px ${space[2]}px`, fontSize: font.xs, color: color.mut2 }}>
-          No se pudo leer a quién le debemos: abajo están sólo las cuentas de acá.
-        </div>
+        <Cartel tono="neutral">No se pudo leer a quién le debemos: abajo están sólo las cuentas de acá.</Cartel>
       )}
 
       {manuales.map((d) => {
         const yaComprometido = comprometido.get(d.id) ?? 0
-        const sePuede = sePuedeComprometer(d.disponible, yaComprometido)
-        const cuenta = d.cuentas[0] ?? null
         return (
-          <article key={d.id} style={{
-            background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
-            margin: `0 ${space[2]}px ${space[2]}px`, padding: `${space[2]}px ${space[3]}px`,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>{d.nombre}</div>
-              <Chapa>cuenta de acá</Chapa>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-              <span style={{ fontSize: font.xl, fontWeight: 700, color: color.ink, lineHeight: 1.15 }}>
-                {plata(sePuede)}
-              </span>
-              <span style={{ fontSize: font.xs, color: color.mut2 }}>se le puede pedir</span>
-            </div>
-
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>
-              faltan juntar {plata(d.disponible)}
-              {yaComprometido > 0 && ` · ya hay ${plata(yaComprometido)} comprometidos`}
-              {d.detalle ? ` · ${d.detalle}` : ''}
-            </div>
-
-            {cuenta ? (
-              <div style={{ marginTop: 6, fontSize: font.sm, color: color.mut, lineHeight: 1.5 }}>
-                <b style={{ color: color.ink }}>{cuenta.alias || cuenta.cbu}</b>
-                {cuenta.banco ? ` · ${cuenta.banco}` : ''}
-                {cuenta.titular ? ` · a nombre de ${cuenta.titular}` : ''}
-                {cuenta.alias && cuenta.cbu && (
-                  <div style={{ fontFamily: 'monospace', fontSize: font.xs, color: color.mut2 }}>CBU {cuenta.cbu}</div>
-                )}
-                {/* El alias no está para leerlo: está para pasárselo al cliente. */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <CopyButton getText={() => datosParaMandar(cuenta, d.nombre)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
-                  {cuenta.alias && (
-                    <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk }}>
-                No tiene alias ni CBU. Se carga en Cobranza, en la ficha de la cuenta.
-              </div>
-            )}
-          </article>
+          <TarjetaDestino
+            key={d.id}
+            nombre={d.nombre}
+            deAca
+            sePuede={sePuedeComprometer(d.disponible, yaComprometido)}
+            /* ⚠️ **El techo sólo se dice cuando NO es el número de arriba.** Sin nada comprometido
+               los dos son iguales, y "faltan juntar $380.000" debajo de "$380.000 se le puede
+               pedir" es la misma cifra dos veces: ruido con forma de dato. */
+            apoyos={yaComprometido > 0 ? [
+              <Chapa key="falta">faltan juntar {plata(d.disponible)}</Chapa>,
+              <Chapa key="comp">ya hay {plata(yaComprometido)} comprometidos</Chapa>,
+            ] : []}
+            detalle={d.detalle}
+            cuenta={d.cuentas[0] ?? null}
+            dondeSeCarga="Cobranza, en la ficha de la cuenta"
+          />
         )
       })}
 
       {acreedores.map((a) => {
         const yaComprometido = comprometido.get(a.id) ?? 0
-        const sePuede = sePuedeComprometer(a.disponible, yaComprometido)
-        const cuenta = a.cuentas.find((x) => x.sugerida) ?? a.cuentas[0] ?? null
         return (
-          <article key={a.id} style={{
-            background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
-            margin: `0 ${space[2]}px ${space[2]}px`, padding: `${space[2]}px ${space[3]}px`,
-          }}>
-            <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>{a.nombre}</div>
-
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-              <span style={{ fontSize: font.xl, fontWeight: 700, color: color.ink, lineHeight: 1.15 }}>
-                {plata(sePuede)}
-              </span>
-              <span style={{ fontSize: font.xs, color: color.mut2 }}>se le puede pedir</span>
-            </div>
-
-            {/* De dónde sale ese número, para que no parezca sacado de la galera. */}
-            <div style={{ fontSize: font.xs, color: color.mut2 }}>
-              se le debe {plata(a.saldo)}
-              {yaComprometido > 0 && ` · ya hay ${plata(yaComprometido)} comprometidos`}
-            </div>
-
-            {/* 🔑 Plata ya mandada que el banco no debitó. Es lo que evita pagarle dos veces. */}
-            {a.yaPagadoSinDebitar > 0 && (
-              <div style={{ marginTop: 4 }}>
-                <Chapa tono="espera">ya se le mandó {plata(a.yaPagadoSinDebitar)} sin debitar</Chapa>
-              </div>
-            )}
-
-            {/* El alias, que es lo que se copia y se pega en el chat. */}
-            {cuenta ? (
-              <div style={{ marginTop: 6, fontSize: font.sm, color: color.mut, lineHeight: 1.5 }}>
-                <b style={{ color: color.ink }}>{cuenta.alias || cuenta.cbu}</b>
-                {cuenta.banco ? ` · ${cuenta.banco}` : ''}
-                {cuenta.titular ? ` · a nombre de ${cuenta.titular}` : ''}
-                {cuenta.alias && cuenta.cbu && (
-                  <div style={{ fontFamily: 'monospace', fontSize: font.xs, color: color.mut2 }}>CBU {cuenta.cbu}</div>
-                )}
-                {/* El alias no está para leerlo: está para pasárselo al cliente. */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <CopyButton getText={() => datosParaMandar(cuenta, a.nombre)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
-                  {cuenta.alias && (
-                    <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk }}>
-                No tiene ninguna cuenta cargada. Se carga en el dashboard, en Finanzas → Acreedores.
-              </div>
-            )}
-          </article>
+          <TarjetaDestino
+            key={a.id}
+            nombre={a.nombre}
+            deAca={false}
+            sePuede={sePuedeComprometer(a.disponible, yaComprometido)}
+            /* De dónde sale ese número, para que no parezca sacado de la galera. Y 🔑 lo ya mandado
+               sin debitar (un cheque entregado) va en ámbar: es lo que evita pagarle dos veces. */
+            apoyos={[
+              /* Lo mismo que en las cuentas de acá: la deuda explica el número grande sólo cuando
+                 no coincide con él. ⚠️ Un acreedor puede tener cheques en la calle, y ahí `saldo`
+                 y `disponible` ya son distintos aunque nadie haya comprometido nada. */
+              ...(yaComprometido > 0 || a.saldo !== a.disponible
+                ? [<Chapa key="debe">se le debe {plata(a.saldo)}</Chapa>] : []),
+              ...(yaComprometido > 0 ? [<Chapa key="comp">ya hay {plata(yaComprometido)} comprometidos</Chapa>] : []),
+              ...(a.yaPagadoSinDebitar > 0
+                ? [<Chapa key="cheque" tono="espera">ya se le mandó {plata(a.yaPagadoSinDebitar)} sin debitar</Chapa>]
+                : []),
+            ]}
+            detalle={null}
+            cuenta={a.cuentas.find((x) => x.sugerida) ?? a.cuentas[0] ?? null}
+            dondeSeCarga="el dashboard, en Finanzas → Acreedores"
+          />
         )
       })}
     </>
   )
 }
 
-function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado, onIrAlCliente }: {
+function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado, onIrAlCliente }: {
   c: Compromiso
   hoy: string
+  /**
+   * De quién es el trabajo de esta fila: `nuestro` es "mirá el banco y confirmalo", `espera` es
+   * "le toca al cliente". 🔑 **Es la franja de color de la izquierda, y es la única diferencia
+   * visible entre las dos listas.** Antes las dos dibujaban tarjetas idénticas y lo único que las
+   * separaba era un título de 12 px: bajando la pantalla eran ocho filas iguales, y separarlas es
+   * justamente el sentido de la pestaña (ver `colaDeCobranza`).
+   */
+  tono: 'nuestro' | 'espera'
   puede: { prometer: boolean; confirmar: boolean }
   abierta: boolean
   onConfirmarAbrir: (id: string | null) => void
@@ -468,16 +564,19 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
 
   return (
     <article style={{
-      background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
-      margin: `0 ${space[2]}px ${space[2]}px`, overflow: 'hidden',
+      background: color.surface, borderTop: `1px solid ${color.line2}`,
+      borderLeft: `3px solid ${tono === 'nuestro' ? color.brandSolid : color.line2}`,
     }}>
       {/*
         🔑 **Las acciones van al costado del monto, no en una barra abajo.**
-        La barra sumaba ~40 px a cada tarjeta para dos botones, y en una columna de 380 px eso es lo
+        La barra sumaba ~40 px a cada fila para dos botones, y en una columna de 380 px eso es lo
         que hacía que entraran tres filas donde entran cinco. Acá el ojo cae en el monto y la mano
         ya está al lado (Darío, 3-sep-2026: *"para acortar la vista"*).
+
+        ⚠️ El padding izquierdo descuenta los 3 px de la franja: el texto arranca en `MARGEN` como
+        todo lo demás de la pestaña, no 3 px más adentro.
       */}
-      <div style={{ display: 'flex', gap: space[2], padding: `${space[2]}px ${space[3]}px`, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: space[2], padding: `${space[2]}px ${MARGEN}px ${space[2]}px ${MARGEN - 3}px`, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           {/*
             ⛔ **La chapa de estado NO está**, y la sacó Darío el 3-sep-2026. Decía "se lo pedimos"
@@ -486,9 +585,7 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
             porque ésa no la dice ningún título — es de ESTA fila y cambia todos los días.
           */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: font.xl, fontWeight: 700, color: color.ink, lineHeight: 1.15, whiteSpace: 'nowrap' }}>
-              {plata(Number(c.monto))}
-            </span>
+            <Monto v={Number(c.monto)} />
             {fecha.tarde && <Chapa tono="tarde">{fecha.txt}</Chapa>}
           </div>
 
@@ -502,8 +599,12 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
               </button>
             ) : c.cliente_nombre}
           </div>
+          {/*
+            ⚠️ **"→ Contador" era notación, no idioma.** En el resto del panel eso se dice con
+            palabras, y son dos caracteres menos de traducción mental por fila.
+          */}
           <div style={{ fontSize: font.sm, color: color.mut, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            → {c.acreedor_nombre}
+            le transfiere a {c.acreedor_nombre}
           </div>
 
           {/*
@@ -538,14 +639,14 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
         */}
         {hayAcciones && !abierta && (
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            {puede.confirmar && <BotonIcono fuerte que="Ya entró" onClick={() => onConfirmarAbrir(c.id)} />}
-            {puede.prometer && <BotonIcono que="Se cayó" onClick={() => onEstado(c, 'cancelado')} />}
+            {puede.confirmar && <BotonIcono fuerte que="Ya entró" de={c.cliente_nombre} onClick={() => onConfirmarAbrir(c.id)} />}
+            {puede.prometer && <BotonIcono que="Se cayó" de={c.cliente_nombre} onClick={() => onEstado(c, 'cancelado')} />}
           </div>
         )}
       </div>
 
       {abierta && (
-        <div style={{ borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${space[3]}px ${space[3]}px` }}>
+        <div style={{ borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px ${space[3]}px ${MARGEN - 3}px` }}>
           <Confirmar c={c} onCancelar={() => onConfirmarAbrir(null)}
             onListo={(monto, f, titular) => onConfirmar(c, monto, f, titular)} />
         </div>
@@ -640,26 +741,25 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
     colgando de una sola línea en otro archivo.
   */
   if (cobros.cargando && cobros.compromisos.length === 0) {
-    return <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>Buscando los compromisos de pago…</div>
+    return <Estado>Buscando los compromisos de pago…</Estado>
   }
 
   if (!puede.ver) {
     return (
-      <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
-        Tu usuario no tiene habilitadas los compromisos de pago. Se activa en Usuarios.
-      </div>
+      <Estado>Tu usuario no tiene habilitados los compromisos de pago. Se activa en Usuarios.</Estado>
     )
   }
 
-  const lista = (titulo: string, filas: Compromiso[]) =>
+  const lista = (titulo: string, filas: Compromiso[], tono: 'nuestro' | 'espera') =>
     filas.length > 0 && (
       <>
-        <Titulo>{titulo} · {filas.length}</Titulo>
+        <Titulo cuantas={filas.length}>{titulo}</Titulo>
         {filas.map((c) => (
           <Fila
             key={c.id}
             c={c}
             hoy={hoy}
+            tono={tono}
             puede={puede}
             abierta={confirmando === c.id}
             onConfirmarAbrir={setConfirmando}
@@ -700,30 +800,68 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
 
   return (
     <div>
-      {/* El aviso, con fondo y arriba de todo. Suelto entre bloques competía con el contenido. */}
-      {aviso && (
-        <div style={{
-          margin: `0 ${space[2]}px ${space[2]}px`, padding: '6px 10px', borderRadius: radius.md,
-          fontSize: font.xs, fontWeight: 600,
-          background: aviso.mal ? color.dangerBg : color.successBg,
-          color: aviso.mal ? color.dangerInk : color.successInk,
-          border: `1px solid ${aviso.mal ? color.dangerBorder : color.successBorder}`,
-        }}>
-          {aviso.txt}
-          {aviso.deshacer && (
-            <button type="button" onClick={() => { const d = aviso.deshacer; setAviso(null); d?.() }}
-              style={{ height: 'auto', marginLeft: 6, padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: 'inherit', textDecoration: 'underline' }}>
-              deshacer
+      {/*
+        🔑 **El selector de vista, arriba de todo y fijo.** Estaba a media pantalla, abajo de hasta
+        tres carteles y del bloque de vincular: es lo que cambia de pantalla y había que ir a
+        buscarlo. Y al bajar por una lista larga se iba con el resto, así que dejabas de saber en
+        cuál de las dos estabas parado.
+
+        ⚠️ **Y es un control partido, no dos chips sueltos.** Se veía igual que los filtros de la
+        solapa "Hoy" (🔥 🟡 ⚪ 🧊) y hace otra cosa: allá filtran una lista, acá cambian de
+        pantalla. Dos gestos distintos con el mismo dibujo, en el mismo panel.
+
+        ⛔ **El nombre "A quién le debemos" se queda**, aunque con el chat adelante la pregunta sea
+        "¿a dónde le digo que transfiera?": es como se llama la sección en el menú de Dirección, y
+        VOCABULARIO §3 no deja que una pantalla la llame de otra manera adentro.
+
+        ⚠️ `top: 0` lo comparte con el cartel de aviso del panel (`Envoltorio`), que es sticky
+        también y tiene más z-index: mientras dura ese cartel —segundos— le pasa por encima.
+      */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 1, background: color.bg,
+        borderBottom: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px`, marginBottom: space[2],
+      }}>
+        <div style={{ display: 'flex', gap: 2, padding: 2, background: color.bg2, borderRadius: radius.pill, border: `1px solid ${color.line2}` }}>
+          {([['compromisos', `Compromisos${abiertas ? ` · ${abiertas}` : ''}`], ['acreedores', 'A quién le debemos']] as const).map(([k, txt]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setVista(k)}
+              aria-pressed={vista === k}
+              style={{
+                flex: 1, height: 'auto', padding: '4px 8px', borderRadius: radius.pill, fontSize: font.xs,
+                fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', border: 0,
+                background: vista === k ? color.surface : 'transparent',
+                color: vista === k ? color.brand : color.mut,
+                boxShadow: vista === k ? shadow.sm : 'none',
+              }}
+            >
+              {txt}
             </button>
-          )}
+          ))}
+        </div>
+      </div>
+
+      {/*
+        Los avisos, con la forma de aviso del kit y el margen de la pestaña. Eran tres banderitas
+        pintadas a mano, cada una con su borde y su padding: la de "listo" se veía distinta de la
+        de "no se pudo" y las dos distintas de la del dashboard, siendo las tres lo mismo.
+      */}
+      {aviso && (
+        <div style={{ padding: `0 ${MARGEN}px`, marginBottom: space[2] }}>
+          <Notice tone={aviso.mal ? 'danger' : 'success'} style={{ fontSize: font.xs, fontWeight: 600 }}>
+            {aviso.txt}
+            {aviso.deshacer && (
+              <button type="button" onClick={() => { const d = aviso.deshacer; setAviso(null); d?.() }}
+                style={{ height: 'auto', marginLeft: 6, padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: 'inherit', textDecoration: 'underline' }}>
+                deshacer
+              </button>
+            )}
+          </Notice>
         </div>
       )}
 
-      {cobros.error && (
-        <div style={{ margin: space[2], fontSize: font.xs, color: color.dangerInk, background: color.dangerBg, border: `1px solid ${color.dangerBorder}`, borderRadius: radius.sm, padding: '6px 8px' }}>
-          {cobros.error}
-        </div>
-      )}
+      {cobros.error && <Cartel tono="danger">{cobros.error}</Cartel>}
       {/*
         🔴 **`aviso` y no sólo `error`.** Cuando el dashboard no contesta, `leerAcreedores` NO tira:
         devuelve la lista vacía y el motivo en `aviso`. Mirando sólo `error`, la caída del dashboard
@@ -731,10 +869,10 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         abajo la contaban como "no hay ninguna deuda".
       */}
       {(deudas.error || deudas.aviso) && (
-        <div style={{ margin: space[2], fontSize: font.xs, color: color.mut, background: color.bg2, border: `1px solid ${color.line2}`, borderRadius: radius.sm, padding: '6px 8px' }}>
+        <Cartel tono="neutral">
           No se pudo leer a quién le debemos, así que no se puede anotar un compromiso nuevo. La lista
           de abajo anda igual.
-        </div>
+        </Cartel>
       )}
 
       {/*
@@ -761,33 +899,13 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
               }
               return porVincular.length === 1
                 ? `Listo: el compromiso quedó a nombre de ${cliente.nombre}.`
-                : `Listo: las ${porVincular.length} compromisos quedaron a nombre de ${cliente.nombre}.`
+                : `Listo: los ${porVincular.length} compromisos quedaron a nombre de ${cliente.nombre}.`
             })}
           >
             Sí, es {cliente.nombre || 'este cliente'}
           </Button>
         </Bloque>
       )}
-
-      {/* Las dos vistas. Chips, como los de la solapa "Hoy": es el mismo gesto en el mismo panel. */}
-      <div style={{ display: 'flex', gap: 4, padding: `${space[2]}px ${space[3]}px 0` }}>
-        {([['compromisos', `Compromisos${abiertas ? ` · ${abiertas}` : ''}`], ['acreedores', 'A quién le debemos']] as const).map(([k, txt]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setVista(k)}
-            style={{
-              height: 'auto', padding: '3px 10px', borderRadius: 999, fontSize: font.xs, fontWeight: 700,
-              cursor: 'pointer', whiteSpace: 'nowrap',
-              border: `1px solid ${vista === k ? color.brandSolid : color.line2}`,
-              background: vista === k ? color.brandBg : 'transparent',
-              color: vista === k ? color.brand : color.mut,
-            }}
-          >
-            {txt}
-          </button>
-        ))}
-      </div>
 
       {vista === 'acreedores' ? (
         <div style={{ marginTop: space[2] }}>
@@ -802,6 +920,21 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         </div>
       ) : (
        <>
+      {/*
+        🔑 **El total, como número y no como frase.** Es lo que resume la pantalla —cuánta plata hay
+        en la calle— y estaba en gris chico, pesando menos que el título de la sección de abajo.
+
+        ⚠️ **Y va ANTES del formulario, no después.** Estaba en el medio: el número que resume la
+        pestaña aparecía recién pasado el bloque de anotar. Es lo primero que se mira al entrar y
+        cuesta un renglón — el formulario sigue siendo lo primero que se puede tocar.
+      */}
+      {cola.totalAbierto > 0 && (
+        <div style={{ padding: `0 ${MARGEN}px ${space[3]}px` }}>
+          <Monto v={cola.totalAbierto} tam="total" />
+          <div style={{ fontSize: font.xs, color: color.mut2 }}>comprometidos y sin entrar</div>
+        </div>
+      )}
+
       {/*
         Anotar. Va arriba de todo cuando HAY con quién: es lo que se hace con el cliente adelante.
         🔑 **Sin chat abierto se encoge a un renglón**, y esa es la corrección de fondo del 3-sep:
@@ -821,23 +954,10 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
           />
         </Bloque>
       ) : (
-        <div style={{ padding: `${space[2]}px ${space[3]}px 0`, fontSize: font.xs, color: color.mut2 }}>
+        <div style={{ padding: `0 ${MARGEN}px ${space[2]}px`, fontSize: font.xs, color: color.mut2 }}>
           {buscandoCliente
             ? 'Buscando de quién es el chat…'
             : 'Abrí el chat de un cliente para anotarle un compromiso nuevo.'}
-        </div>
-      )}
-
-      {/*
-        🔑 **El total, como número y no como frase.** Es lo que resume la pantalla —cuánta plata hay
-        en la calle— y estaba en gris chico, pesando menos que el título de la sección de abajo.
-      */}
-      {cola.totalAbierto > 0 && (
-        <div style={{ padding: `${space[2]}px ${space[3]}px ${space[3]}px` }}>
-          <div style={{ fontSize: font['2xl'], fontWeight: 700, color: color.ink, lineHeight: 1.1 }}>
-            {plata(cola.totalAbierto)}
-          </div>
-          <div style={{ fontSize: font.xs, color: color.mut2 }}>comprometidos y sin entrar</div>
         </div>
       )}
 
@@ -846,23 +966,18 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         pantalla la primera vez y después eran dos renglones que se leen una sola vez en la vida.
         El título ya dice qué hay adentro.
       */}
-      {lista('Falta confirmar', cola.porConfirmar)}
-      {lista('Esperando que transfieran', cola.esperando)}
+      {lista('Falta confirmar', cola.porConfirmar, 'nuestro')}
+      {lista('Esperando que transfieran', cola.esperando, 'espera')}
 
       {/*
         El estado vacío ocupa lugar a propósito: es la mitad de la pantalla y decirlo en un renglón
         gris deja la sensación de que algo no cargó.
       */}
       {abiertas === 0 && (
-        <div style={{ padding: `${space[6]}px ${space[4]}px`, textAlign: 'center' }}>
-          <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>
-            No hay plata esperando
-          </div>
-          <div style={{ fontSize: font.sm, color: color.mut2, marginTop: 4, lineHeight: 1.5 }}>
-            Cuando un cliente se comprometa a transferirle a un acreedor, el compromiso aparece acá
-            hasta que entre.
-          </div>
-        </div>
+        <EmptyState
+          title="No hay plata esperando"
+          hint="Cuando un cliente se comprometa a transferirle a un acreedor, el compromiso aparece acá hasta que entre."
+        />
       )}
 
       {cola.cerradas.length > 0 && (
@@ -870,18 +985,29 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
           <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}`, borderBottom: `1px solid ${color.line2}`, marginTop: space[3] }} />
           {verCerradas ? (
             <>
-              <Titulo>Cerradas · {cola.cerradas.length}</Titulo>
-              {cola.cerradas.slice(0, CERRADAS).map((c) => (
-                <div key={c.id} style={{ borderTop: `1px solid ${color.line2}`, padding: `6px ${space[3]}px`, fontSize: font.sm, color: color.mut }}>
-                  <b style={{ color: c.estado === 'confirmado' ? color.successInk : color.mut2 }}>
-                    {c.estado === 'confirmado' ? 'entró' : 'se cayó'}
-                  </b>{' '}
-                  {plata(Number(c.estado === 'confirmado' ? (c.monto_confirmado ?? c.monto) : c.monto))} ·{' '}
-                  {c.cliente_nombre} → {c.acreedor_nombre}
-                </div>
-              ))}
+              <Titulo cuantas={cola.cerradas.length}>Cerradas</Titulo>
+              {/*
+                ⚠️ **Era el último renglón con puntitos**: `entró $12.000 · Fulana → Contador` metía
+                cuatro datos de distinto peso en una sola línea. El desenlace es una chapita, el
+                monto es un monto, y quién le transfirió a quién se dice con palabras.
+              */}
+              {cola.cerradas.slice(0, CERRADAS).map((c) => {
+                const entro = c.estado === 'confirmado'
+                return (
+                  <div key={c.id} style={{ background: color.surface, borderTop: `1px solid ${color.line2}`, padding: `6px ${MARGEN}px` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Chapa tono={entro ? 'entro' : 'neutro'}>{entro ? 'entró' : 'se cayó'}</Chapa>
+                      <Monto tam="chico" tono={entro ? undefined : color.mut2}
+                        v={Number(entro ? (c.monto_confirmado ?? c.monto) : c.monto)} />
+                    </div>
+                    <div style={{ fontSize: font.xs, color: color.mut2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.cliente_nombre} le transfiere a {c.acreedor_nombre}
+                    </div>
+                  </div>
+                )
+              })}
               {cola.cerradas.length > CERRADAS && (
-                <div style={{ padding: `6px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>
+                <div style={{ padding: `6px ${MARGEN}px`, fontSize: font.xs, color: color.mut2 }}>
                   Se muestran las {CERRADAS} últimas. El resto está en Dirección → “A quién le debemos”.
                 </div>
               )}
