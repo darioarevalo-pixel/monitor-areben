@@ -157,6 +157,22 @@ export function unidadesVistas(escaneos: EscaneoLibre[]): Map<string, number> {
   return out
 }
 
+/**
+ * **Cuántas unidades pasaron por el lector en todo el recorrido**: el número que se canta en voz
+ * alta después de cada escaneo.
+ *
+ * 🔴 **Es el avance, y tiene que CRECER SIEMPRE** — es lo que confirma, sin mirar el teléfono, que
+ * la prenda entró (Bruno, 20-sep-2026: *«cuando sabés que te dijo un número creciente, significa
+ * que escaneó bien»*). Por eso cuenta **unidades** y ⛔ no filas: el repetido de una prenda que ya
+ * estaba **también es una unidad más colgada**, y si ⛔ no sumara, el número se quedaría quieto
+ * justo cuando el escaneo sí anduvo.
+ *
+ * ⚠️ Sólo lo que **pasó por el lector**: una marca de triage ⛔ no vio nada.
+ */
+export function avanceDelRecorrido(escaneos: EscaneoLibre[]): number {
+  return escaneos.reduce((n, e) => n + (pasoPorElLector(e) ? vecesDe(e) : 0), 0)
+}
+
 /** Suma una unidad a un escaneo que ya estaba: es lo que pasa cuando el repetido ⛔ no se rechaza. */
 export function sumarUna(e: EscaneoLibre, ahora: number = Date.now()): EscaneoLibre {
   return { ...e, veces: vecesDe(e) + 1, ultimo_en: new Date(ahora).toISOString() }

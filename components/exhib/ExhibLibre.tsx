@@ -135,9 +135,11 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
     // ⚠️ Se pregunta DESPUÉS de un respiro: reanudar el audio es asíncrono, y preguntando en el
     // mismo suspiro diría «bloqueado» sobre un teléfono que está por sonar perfecto.
     window.setTimeout(() => setAudio(estadoSonido()), 400)
-    const demo: Array<{ tipo: string; veces?: number }> = [
-      { tipo: 'ok' },
-      { tipo: 'sumado', veces: 2 },
+    // ⚠️ Con avances de mentira **crecientes**: es justo lo que hay que reconocer de oído —que el
+    // número sube—, y con todos en el mismo número la prueba ⛔ no enseñaría nada.
+    const demo: Array<{ tipo: string; veces?: number; avance?: number }> = [
+      { tipo: 'ok', avance: 12 },
+      { tipo: 'sumado', veces: 2, avance: 13 },
       { tipo: 'stock-cero' },
       { tipo: 'no-cruzo' },
       { tipo: 'candidatos' },
@@ -151,6 +153,8 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   }
 
   function sonando(r: ResultadoLibre): ResultadoLibre {
+    // ⚠️ `avance` viaja adentro del resultado y ⛔ no se calcula acá: sale de la ref de la cola, que
+    // es la única que ya tiene el escaneo recién hecho (el estado de React todavía no).
     const a = avisoDe(r)
     avisar(a.aviso, a.voz)
     return r
@@ -310,8 +314,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
           <Notice tone="neutral" icon="🔊" style={{ marginBottom: space[4] }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
               <span>
-                Cada escaneo <b>suena y te dice cuántas van</b>, así no tenés que mirar el teléfono. Subí el volumen y escuchá
-                los cinco: <b>anduvo</b> · <b>van dos</b> · <b>está en cero</b> · <b>no figura</b> · <b>mirá la pantalla</b>.
+                Cada escaneo <b>suena y canta cuántas prendas llevás</b> —doce, trece, catorce—, así sabés que entró sin mirar el
+                teléfono: <b>si el número sube, escaneó bien</b>. Subí el volumen y escuchá los cinco avisos:
+                <b> anduvo</b> · <b>otra igual</b> · <b>está en cero</b> · <b>no figura</b> · <b>mirá la pantalla</b>.
               </span>
               <Button size="sm" variant="outline" onClick={escucharAvisos}>Escuchar los avisos</Button>
             </div>

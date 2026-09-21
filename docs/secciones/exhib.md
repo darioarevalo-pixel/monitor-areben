@@ -107,10 +107,22 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   constantemente»*). Cada escaneo **pita, vibra y dice una palabra**: quien camina tiene el lector
   en una mano y la prenda en la otra, y mirar la pantalla después de cada lectura es lo que hace
   lento el recorrido.
+  🔴 **EL NÚMERO QUE SE CANTA ES EL AVANCE DEL RECORRIDO** (20-sep-2026, a la noche), ⛔ no cuántas
+  unidades van de esa prenda: *«me interesa para saber que se escaneó correctamente sin necesidad de
+  ver el celular: cuando sabés que te dijo un número creciente, significa que escaneó bien»* (Bruno)
+  ⇒ **el número que sube ES la confirmación**, y por eso tiene que subir **siempre** —el repetido
+  también, que es otra unidad colgada—; lo que lo distingue es el **pitido doble**, ⛔ no la palabra.
+  ⚠️ **Antes se cantaba «uno» en cada prenda nueva**: con un sector de 400, eso son 400 veces «uno»,
+  la palabra dejaba de significar nada y la voz perdía la atención justo cuando tenía algo que decir.
+  ⚠️ `avanceDelRecorrido` cuenta **unidades que pasaron por el lector** (un triage ⛔ no vio nada), y
+  se lee de la **ref de la cola** y ⛔ no del estado de React: `registrar` acaba de escribir y el
+  estado todavía ⛔ no se re-dibujó — de ahí saldría el número de la prenda **anterior**, cantado
+  sobre la que la persona tiene en la mano.
+  🔑 `enPalabras` llega hasta **999** por el tamaño real de un sector (Tops son 400 variantes).
   🔴 **Los tonos ⛔ no son decoración: son el mensaje, y lo que EXIGE mirar suena distinto de lo que
   anduvo.** Si «anduvo» y «elegí cuál es» se parecen, la persona sigue caminando y **deja atrás la
-  prenda sin resolver** —y ese escaneo se guarda solo como «no cruzó»—. Son cinco: agudo corto =
-  *uno* · dos agudos = *dos* (el repetido que sumó) · medio largo = *en cero* · grave = *no figura*
+  prenda sin resolver** —y ese escaneo se guarda solo como «no cruzó»—. Son cinco: agudo corto = **el
+  número** · dos agudos = el número (el repetido que sumó) · medio largo = *en cero* · grave = *no figura*
   · **dos tonos que SUBEN** = *elegí cuál* / *otra categoría*, los únicos que piden la vista.
   🔑 **La decisión está separada de lo que suena**: `lib/exhib/aviso.ts` (puro, con test) dice qué
   aviso le toca a cada final y `lib/sonido.ts` lo toca. Los **dos modos** usan el mismo mapa: el

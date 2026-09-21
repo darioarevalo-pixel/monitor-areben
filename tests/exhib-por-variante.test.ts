@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { coincidencias, exhibId, faltantes, contarSinMarcar } from '../lib/exhib/core'
-import { aEscaneo, claveEscaneo, estadosDe, unidadesVistas, type EscaneoLibre } from '../lib/exhib/libre'
+import { aEscaneo, avanceDelRecorrido, claveEscaneo, estadosDe, sumarUna, unidadesVistas, type EscaneoLibre } from '../lib/exhib/libre'
 import { paraColgar } from '../lib/exhib/colgar'
 import { analisisUnidades } from '../lib/exhib/analisis'
 import type { ExhibItem } from '../lib/exhib/tipos'
@@ -151,5 +151,29 @@ describe('un código que engancha a las hermanas las devuelve a TODAS', () => {
 
   it('el SKU compartido engancha las tres, y ⛔ no se elige sola', () => {
     expect(coincidencias(LOCAL, 'ORSA').map((v) => v.size)).toEqual(['Beige', 'Crema', 'Negro'])
+  })
+})
+
+/**
+ * **El número que se canta después de cada escaneo.** Es la confirmación de que la prenda entró,
+ * para quien camina con el lector y ⛔ no mira el teléfono ⇒ **tiene que crecer siempre**.
+ */
+describe('el avance del recorrido', () => {
+  it('cuenta las unidades que pasaron por el lector, en todos los lugares', () => {
+    const es = [aEscaneo(BEIGE, BEIGE.barcode, 'tops'), aEscaneo(CREMA, CREMA.barcode, 'vidriera')]
+    expect(avanceDelRecorrido(es)).toBe(2)
+  })
+
+  /** 🔴 Si el repetido ⛔ no sumara, el número se quedaría quieto justo cuando el escaneo SÍ anduvo. */
+  it('el repetido de una prenda que ya estaba también hace crecer el número', () => {
+    const uno = aEscaneo(BEIGE, BEIGE.barcode, 'tops')
+    expect(avanceDelRecorrido([uno])).toBe(1)
+    expect(avanceDelRecorrido([sumarUna(uno)])).toBe(2)
+  })
+
+  /** ⚠️ Un triage ⛔ no vio nada: «no se encuentra» quiere decir que la buscaron y ⛔ no estaba. */
+  it('una marca de triage ⛔ no cuenta como avance', () => {
+    const e = aEscaneo(BEIGE, BEIGE.barcode, 'tops')
+    expect(avanceDelRecorrido([{ ...e, estado: 'no-encuentra' }])).toBe(0)
   })
 })

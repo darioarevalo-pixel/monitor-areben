@@ -5,7 +5,7 @@ import type { Marca } from '@/lib/nav'
 import type { Producto } from '@/lib/etl/tipos'
 import { bajarExhib, type CrudosExhib } from '@/lib/exhib/datos'
 import { armarProdMap, buscarItem, construirItems, esCruce, exhibId, ordenarCats } from '@/lib/exhib/core'
-import { aEscaneo, estadosDe, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
+import { aEscaneo, avanceDelRecorrido, estadosDe, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibErrores, ExhibEstado, ExhibEstados, ExhibItem } from '@/lib/exhib/tipos'
 import { useColaEscaneos } from './useColaEscaneos'
 
@@ -39,14 +39,15 @@ function guardarLS(k: string, v: unknown) {
 /** Resultado de escanear/tipear un código. */
 export type ResultadoMarca =
   | { tipo: 'no-encontrado'; code: string }
-  | { tipo: 'ok'; it: ExhibItem }
+  /** `avance` = unidades que van en el recorrido; es el número que se canta. Ver `avisoDe`. */
+  | { tipo: 'ok'; it: ExhibItem; avance: number }
   | { tipo: 'cruce'; it: ExhibItem; catSel: string }
   /** Existe y está colgada, pero el sistema la tiene en cero ⇒ ⛔ no está en la lista a chequear. */
   | { tipo: 'stock-cero'; it: ExhibItem }
   /** ⛔ No hay recorrido abierto: sin él ⛔ no hay dónde guardar la tilde. */
   | { tipo: 'sin-recorrido' }
   /** Ya estaba marcada y **se le sumó una unidad**: hay dos colgadas de ésa. */
-  | { tipo: 'sumado'; it: ExhibItem; veces: number }
+  | { tipo: 'sumado'; it: ExhibItem; veces: number; avance: number }
   /** El aparato repitió el Enter solo: ⛔ no se contó. */
   | { tipo: 'doble-lectura'; it: ExhibItem; veces: number }
 
@@ -179,10 +180,12 @@ export function useExhib(marca: Marca, productos: Producto[]) {
         cola.reemplazar(fila)
       } else {
         const r = cola.registrar(fila)
+        // ⚠️ De la **ref**, ⛔ no del estado: `registrar` acaba de escribir y React todavía ⛔ no
+        // re-dibujó — del estado saldría el número de la prenda anterior.
         if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, veces: r.veces }
-        if (r.que === 'sumado') return { tipo: 'sumado', it, veces: r.veces }
+        if (r.que === 'sumado') return { tipo: 'sumado', it, veces: r.veces, avance: avanceDelRecorrido(cola.ref.current.escaneos) }
       }
-      return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it }
+      return esCruce(it, catSel) ? { tipo: 'cruce', it, catSel } : { tipo: 'ok', it, avance: avanceDelRecorrido(cola.ref.current.escaneos) }
     },
     [buscables, cola, filaDe],
   )

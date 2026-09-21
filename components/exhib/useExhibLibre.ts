@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import { candidatosPorCodigo, coincidencias, TOPE_CANDIDATOS } from '@/lib/exhib/core'
 import { leerLugares } from '@/lib/exhib/cliente'
-import { aEscaneo, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
+import { aEscaneo, avanceDelRecorrido, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useColaEscaneos } from './useColaEscaneos'
 
@@ -20,13 +20,14 @@ const clave = (m: Marca) => 'monitor_exhib_libre_' + m
 
 /** Lo que contesta un escaneo, para el feedback de la pantalla. */
 export type ResultadoLibre =
-  | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre }
+  /** `avance` = unidades que van en el recorrido. Es el número que se canta. Ver `avisoDe`. */
+  | { tipo: 'ok'; it: ExhibItem; e: EscaneoLibre; avance: number }
   /** Ya estaba en este lugar y **se le sumó una unidad**: hay dos colgadas, y eso es el dato. */
-  | { tipo: 'sumado'; it: ExhibItem | null; e: EscaneoLibre; veces: number }
+  | { tipo: 'sumado'; it: ExhibItem | null; e: EscaneoLibre; veces: number; avance: number }
   /** El aparato repitió el Enter solo (menos de `DOBLE_LECTURA_MS`): ⛔ no se contó. */
   | { tipo: 'doble-lectura'; it: ExhibItem | null; e: EscaneoLibre; veces: number }
   /** Existe y está colgada, pero el sistema la tiene en cero. Se guarda como `encontrado`, con qty 0. */
-  | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre }
+  | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre; avance: number }
   /** El código ⛔ no cruzó con nada. `parecidos` = cuántos había, cuando eran demasiados para mostrar. */
   | { tipo: 'no-cruzo'; e: EscaneoLibre; parecidos?: number }
   /**
@@ -56,12 +57,16 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
     (it: ExhibItem | null, codigo: string, lugar: string): ResultadoLibre => {
       const e = aEscaneo(it, codigo, lugar)
       const r = cola.registrar(e)
+      // ⚠️ El avance se lee de la **ref** y ⛔ no del estado de React: `registrar` acaba de escribir
+      // el borrador, y el estado todavía ⛔ no se re-dibujó. Del estado saldría el número anterior
+      // —el de la prenda de antes— cantado sobre la que la persona tiene en la mano.
+      const avance = avanceDelRecorrido(cola.ref.current.escaneos)
       // 🔴 **El repetido ⛔ ya no rebota: suma una unidad** (19-sep-2026). Lo único que ⛔ no se
       // cuenta es el rebote del propio aparato, y se dice.
       if (r.que === 'doble-lectura') return { tipo: 'doble-lectura', it, e, veces: r.veces }
-      if (r.que === 'sumado') return { tipo: 'sumado', it, e, veces: r.veces }
+      if (r.que === 'sumado') return { tipo: 'sumado', it, e, veces: r.veces, avance }
       if (!it) return { tipo: 'no-cruzo', e }
-      return it.qty <= 0 ? { tipo: 'stock-cero', it, e } : { tipo: 'ok', it, e }
+      return it.qty <= 0 ? { tipo: 'stock-cero', it, e, avance } : { tipo: 'ok', it, e, avance }
     },
     [cola],
   )
