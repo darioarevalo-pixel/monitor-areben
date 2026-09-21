@@ -76,6 +76,18 @@ describe('avisoDe', () => {
     expect(avisoDe({ tipo: 'no-encontrado' })).toEqual(avisoDe({ tipo: 'no-cruzo' }))
   })
 
+  /**
+   * 🔴 **«⛔ No existe» y «salió a medias» ⛔ no son lo mismo, y lo que hay que hacer tampoco.** Si el
+   * código enganchaba a varias prendas, casi siempre es una lectura cortada y la prenda sigue en la
+   * mano: lo útil es **volver a pasarla**, ⛔ no anotarla como hallazgo y seguir.
+   */
+  it('el código que enganchaba a varias pide pasarla de nuevo, y ⛔ no suena a error', () => {
+    const aMedias = avisoDe({ tipo: 'no-cruzo', parecidos: 2 })
+    expect(aMedias.voz).toBe('de nuevo')
+    expect(aMedias.aviso).toBe('mira')
+    expect(aMedias.aviso).not.toBe('no')
+  })
+
   it('la prenda en cero avisa sin sonar a error: está colgada, el stock está mal', () => {
     const cero = avisoDe({ tipo: 'stock-cero' })
     expect(cero.voz).toBe('en cero')

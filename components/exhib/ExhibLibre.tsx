@@ -5,7 +5,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, useConfirmar, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
-import { exhibId, precioDeGondola } from '@/lib/exhib/core'
+import { candidatosPorCodigo, coincidencias, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
 import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
@@ -153,8 +153,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
   }
 
   function sonando(r: ResultadoLibre): ResultadoLibre {
-    // ⚠️ `avance` viaja adentro del resultado y ⛔ no se calcula acá: sale de la ref de la cola, que
-    // es la única que ya tiene el escaneo recién hecho (el estado de React todavía no).
+    // ⚠️ `avance` y `parecidos` viajan adentro del resultado y ⛔ no se calculan acá: el primero sale
+    // de la ref de la cola —la única que ya tiene el escaneo recién hecho— y el segundo decide entre
+    // «no figura» y «pasala de nuevo».
     const a = avisoDe(r)
     avisar(a.aviso, a.voz)
     return r
@@ -457,57 +458,20 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             )}
             {/* 🔑 El que no cruza se GUARDA, y el cartel lo dice. Antes se contestaba «ese código no
                 está en la lista» y el dato se perdía: una prenda colgada que no figura en el Local
-                es justo lo que después nadie puede reconstruir. */}
+                es justo lo que después nadie puede reconstruir.
+                🔴 **Y desde el 20-sep-2026 tampoco frena cuando el código engancha VARIAS.** Antes
+                abría un panel para elegir cuál era, y eso se lo preguntaba a quien tiene el lector
+                en la mano: «yo no la frenaría a la chica que escanea, luego prefiero hacer el
+                balance yo mismo» (Bruno). Lo que corresponde decirle es **pasala de nuevo**, que la
+                prenda todavía está ahí; quién era se resuelve después, mirando el recorrido. */}
             {fb?.tipo === 'no-cruzo' && (
               <Notice tone="warning" icon="⚠">
-                <div style={{ fontWeight: 700 }}>{fb.e.codigo_crudo} no cruzó con el inventario del Local</div>
+                <div style={{ fontWeight: 700 }}>{fb.e.codigo_crudo} no quedó identificado</div>
                 <div>
                   {fb.parecidos
-                    ? `Queda anotado igual. Hay ${fb.parecidos} códigos parecidos: si fue una lectura a medias, escaneá de nuevo o tipealo completo.`
+                    ? `Queda anotado igual, con este lugar. Ese código da con ${fb.parecidos} ${fb.parecidos === 1 ? 'prenda' : 'prendas'}: si podés, pasá la prenda de nuevo con el lector.`
                     : 'Queda anotado igual, con este lugar: está colgado y el sistema no lo tiene.'}
                 </div>
-              </Notice>
-            )}
-            {/*
-              🔴 **El único cartel que todavía NO guardó nada.** `buscarItem` sigue pidiendo el
-              código completo —aflojarlo engancharía la prenda equivocada, que es peor—, así que lo
-              parcial se muestra y confirma la persona, que tiene la prenda en la mano.
-              ⚠️ Si llega otro escaneo o se cierra el recorrido sin tocar nada, esto se guarda solo
-              como «no cruzó»: preguntar ⛔ no puede costar un escaneo.
-            */}
-            {fb?.tipo === 'candidatos' && (
-              <Notice tone="brand" icon="?">
-                <div style={{ fontWeight: 700 }}>«{fb.codigo}» no es un código completo. ¿Es alguna de éstas?</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '8px 0' }}>
-                  {fb.candidatos.map((c) => (
-                    <Button
-                      key={exhibId(c)}
-                      size="sm"
-                      variant="outline"
-                      tone="brand"
-                      // `height:auto` + `white-space:normal`: `.shell-content button` fija altura y
-                      // `.mo-btn` es `nowrap`, así que un nombre largo se saldría de la caja en el
-                      // teléfono, que es donde se usa esto.
-                      style={{ height: 'auto', whiteSpace: 'normal', textAlign: 'left', justifyContent: 'flex-start', padding: '8px 10px' }}
-                      onClick={() => {
-                        setFb(sonando(lib.confirmar(c, fb.codigo, fb.lugar)))
-                        foco(scanRef)
-                      }}
-                    >
-                      {c.name}{c.size ? ` · ${c.size}` : ''} — {c.sku || 'sin SKU'}{c.barcode ? ` · ${c.barcode}` : ''} · Local: {c.qty}
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setFb(sonando(lib.descartar(fb.codigo, fb.lugar)))
-                    foco(scanRef)
-                  }}
-                >
-                  Ninguna de éstas
-                </Button>
               </Notice>
             )}
             {/* 🔴 El repetido ⛔ ya no frena nada: suma y sigue. El cartel es para que la persona
@@ -665,6 +629,48 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
             archivo={`para-colgar-${marca}-${viendo.recorrido.creado_en.slice(0, 10)}.xlsx`}
           />
           <Analisis escaneos={viendo.escaneos} items={items} />
+
+          {/*
+            🔴 **Los códigos que quedaron sin identificar, con a qué prenda se parecen.**
+            Es la otra mitad de «⛔ no frenar a quien escanea» (20-sep-2026): si el panel de
+            candidatos ⛔ ya no aparece en el salón, la pregunta tiene que aparecer **acá**, donde
+            mira quien decide. Sin esto, «⛔ no frenarla» sería perder el dato en silencio.
+            ⚠️ Es informativo: dice **qué podía ser**, ⛔ no lo reasigna. Con el lector es raro —de 97
+            escaneos reales, 97 engancharon por código de barras y sólo 2 quedaron así—.
+          */}
+          {(() => {
+            const sinIdentificar = viendo.escaneos.filter((e) => !e.encontrado)
+            if (!sinIdentificar.length) return null
+            return (
+              <Notice tone="warning" icon="❓" style={{ marginBottom: space[4] }}>
+                <div style={{ fontWeight: weight.bold }}>
+                  {sinIdentificar.length} {sinIdentificar.length === 1 ? 'código' : 'códigos'} sin identificar
+                </div>
+                <div style={{ fontSize: font.sm, marginBottom: space[2] }}>
+                  Se escanearon y quedaron anotados, pero no se pudo saber qué prenda eran. Si alguna era una de las de abajo, esa
+                  prenda va a figurar igual en lo que falta colgar.
+                </div>
+                {sinIdentificar.map((e) => {
+                  // Las mismas dos puertas del escaneo: el código exacto que engancha a varias, o el
+                  // pedazo que se parece a unas pocas.
+                  const exactas = coincidencias(buscables, e.codigo_crudo)
+                  const posibles = exactas.length ? exactas : candidatosPorCodigo(buscables, e.codigo_crudo)
+                  return (
+                    <div key={e.variante_id} style={{ padding: '6px 2px', borderBottom: `1px solid ${color.line}` }}>
+                      <div style={{ fontSize: font.base, color: color.ink }}>
+                        <b>{e.codigo_crudo}</b> <span style={{ color: color.mut }}>· {e.lugar} · {hora(e.escaneado_en)}</span>
+                      </div>
+                      <div style={{ fontSize: font.xs, color: color.mut }}>
+                        {posibles.length
+                          ? 'Puede ser: ' + posibles.slice(0, 6).map((c) => `${c.name}${c.size ? ' · ' + c.size : ''}`).join('  |  ')
+                          : 'No se parece a ninguna prenda del Local: puede ser de otra marca, o stock sin ingresar.'}
+                      </div>
+                    </div>
+                  )
+                })}
+              </Notice>
+            )
+          })()}
 
           {agruparPorLugar(viendo.escaneos).map((g) => (
             <div key={g.lugar} style={{ marginBottom: space[4] }}>

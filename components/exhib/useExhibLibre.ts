@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { candidatosPorCodigo, coincidencias, TOPE_CANDIDATOS } from '@/lib/exhib/core'
+import { candidatosPorCodigo, coincidencias } from '@/lib/exhib/core'
 import { leerLugares } from '@/lib/exhib/cliente'
 import { aEscaneo, avanceDelRecorrido, contarEnLugar, lugaresSugeridos, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -28,13 +28,13 @@ export type ResultadoLibre =
   | { tipo: 'doble-lectura'; it: ExhibItem | null; e: EscaneoLibre; veces: number }
   /** Existe y está colgada, pero el sistema la tiene en cero. Se guarda como `encontrado`, con qty 0. */
   | { tipo: 'stock-cero'; it: ExhibItem; e: EscaneoLibre; avance: number }
-  /** El código ⛔ no cruzó con nada. `parecidos` = cuántos había, cuando eran demasiados para mostrar. */
-  | { tipo: 'no-cruzo'; e: EscaneoLibre; parecidos?: number }
   /**
-   * ⚠️ **El único que ⛔ NO guarda todavía**: el código enganchó varias, o ninguna exacta pero se
-   * parece a unas pocas, y decide la persona (`confirmar` / `descartar`).
+   * El código ⛔ no enganchó a UNA sola prenda. **Se guarda igual**, con el código crudo.
+   *
+   * `parecidos` = a cuántas enganchaba —varias con el mismo SKU, o parecidas a un código cortado—.
+   * ⚠️ Es la diferencia entre «ese código ⛔ no existe» y «pasala de nuevo», y por eso se dice.
    */
-  | { tipo: 'candidatos'; codigo: string; lugar: string; candidatos: ExhibItem[] }
+  | { tipo: 'no-cruzo'; e: EscaneoLibre; parecidos?: number }
 
 export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
   const cola = useColaEscaneos<string>(marca, clave(marca), '', 'libre')
@@ -72,70 +72,32 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
   )
 
   /**
-   * El código sin resolver que está esperando que alguien confirme cuál de los candidatos era.
+   * Escanea un código en el lugar vigente. **Nunca frena a quien está caminando.**
    *
-   * 🔴 **Se guarda solo como «no cruzó» apenas llega otro escaneo o se cierra el recorrido.** Es la
-   * regla que hace que preguntar ⛔ no pueda costar un dato: la persona está caminando con el lector
-   * y el siguiente código llega en dos segundos, así que un panel sin resolver que desaparece en
-   * silencio es exactamente el escaneo perdido que este recorrido existe para no perder. Lo peor
-   * que puede pasar es que quede como quedaba antes de preguntar.
-   */
-  const sinResolver = useRef<{ codigo: string; lugar: string } | null>(null)
-
-  const resolverSolo = useCallback(() => {
-    const p = sinResolver.current
-    sinResolver.current = null
-    if (p) registrar(null, p.codigo, p.lugar)
-  }, [registrar])
-
-  /**
-   * Escanea un código en el lugar vigente. El que ⛔ no cruza se guarda igual.
+   * 🔴 **El que ⛔ no engancha a UNA sola prenda se guarda sin identificar, y ⛔ no se pregunta**
+   * (20-sep-2026, decisión de Bruno: *«yo ⛔ no la frenaría a la chica que escanea; luego prefiero
+   * hacer el balance yo mismo»*). Hasta esa noche la pantalla abría un panel con los candidatos y
+   * esperaba que eligiera **quien tiene el lector en la mano**, que es justamente quien ⛔ no puede
+   * pararse a decidir: son **dos personas y dos momentos**, y el que decide mira después.
    *
-   * 🔑 **El código completo sigue siendo el criterio.** Lo parcial ⛔ no engancha solo y lo ambiguo
-   * ⛔ no se resuelve al primero: se ofrecen los candidatos y confirma quien tiene la prenda en la
-   * mano. Aflojarlo marcaría **la prenda equivocada**, que con gente usándolo es peor que no marcar.
+   * 🔑 **Y ⛔ no se elige la primera, que sería marcar la prenda equivocada en silencio** — el bug
+   * que `coincidencias` existe para evitar. Se guarda el **código crudo** con `encontrado = false`
+   * —el dato que nadie puede reconstruir después— y se dice **cuántas se parecían**: con el lector
+   * eso casi siempre es una lectura cortada, así que lo que corresponde es **volver a pasar la
+   * prenda**, que todavía está en la mano. 📊 Medido sobre el recorrido real de 97 escaneos: los 97
+   * engancharon por código de barras exacto y sólo **2** códigos ⛔ no cruzaron.
    */
   const escanear = useCallback(
     (codigo: string, lugar: string): ResultadoLibre => {
-      resolverSolo()
       const exactas = coincidencias(buscables, codigo)
       if (exactas.length === 1) return registrar(exactas[0], codigo, lugar)
-      // 🔴 Enganchó **varias**: pasa con un SKU tipeado a mano que dos variantes comparten (20 con
-      // stock). Quedarse con la primera marcaría la prenda equivocada sin decir una palabra.
-      if (exactas.length > 1) {
-        sinResolver.current = { codigo, lugar }
-        return { tipo: 'candidatos', codigo, lugar, candidatos: exactas }
-      }
-
-      const candidatos = candidatosPorCodigo(buscables, codigo)
-      if (candidatos.length && candidatos.length <= TOPE_CANDIDATOS) {
-        sinResolver.current = { codigo, lugar }
-        return { tipo: 'candidatos', codigo, lugar, candidatos }
-      }
-      // Ninguno, o demasiados para mirarlos de parado: se guarda como siempre, diciendo cuántos
-      // parecidos había — que es la diferencia entre «no existe» y «escaneá de nuevo».
+      // Varias exactas = un SKU compartido (20 variantes con stock lo comparten). Ninguna exacta =
+      // puede ser un pedazo de código. Los dos terminan igual: se guarda y se dice cuántas eran.
+      const parecidos = exactas.length > 1 ? exactas.length : candidatosPorCodigo(buscables, codigo).length
       const r = registrar(null, codigo, lugar)
-      return r.tipo === 'no-cruzo' ? { ...r, parecidos: candidatos.length } : r
+      return r.tipo === 'no-cruzo' ? { ...r, parecidos } : r
     },
-    [buscables, registrar, resolverSolo],
-  )
-
-  /** «Es ésta»: guarda el escaneo con la prenda elegida y el código crudo tal como se tipeó. */
-  const confirmar = useCallback(
-    (it: ExhibItem, codigo: string, lugar: string): ResultadoLibre => {
-      sinResolver.current = null
-      return registrar(it, codigo, lugar)
-    },
-    [registrar],
-  )
-
-  /** «Ninguna de éstas»: queda como hallazgo sin cruzar, que es lo que hacía antes de preguntar. */
-  const descartar = useCallback(
-    (codigo: string, lugar: string): ResultadoLibre => {
-      sinResolver.current = null
-      return registrar(null, codigo, lugar)
-    },
-    [registrar],
+    [buscables, registrar],
   )
 
   const iniciar = useCallback(() => {
@@ -143,11 +105,8 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
   }, [cola])
 
   const cerrar = useCallback(async () => {
-    // Un candidato sin confirmar al momento de cerrar se guarda como «no cruzó»: sellar el
-    // recorrido dejándolo afuera lo perdería para siempre, y el salón ya se caminó.
-    resolverSolo()
     await cola.cerrar()
-  }, [cola, resolverSolo])
+  }, [cola])
 
   const sugerencias = useMemo(
     () => lugaresSugeridos(lugaresServidor, cola.escaneos.map((e) => e.lugar)),
@@ -167,8 +126,6 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
     iniciar,
     setLugar: cola.setExtra,
     escanear,
-    confirmar,
-    descartar,
     sacar: cola.sacar,
     cerrar,
     eliminar: cola.eliminar,

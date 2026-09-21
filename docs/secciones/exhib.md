@@ -248,9 +248,19 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   reales: `0150NG` → 1 candidato (TOP ZOE), `698` → 2 (CORPIÑO AYLA y TOP HADES), **`NG` → 440** ⇒
   por eso hay `MIN_PARCIAL` (3 caracteres) y `TOPE_CANDIDATOS` (8): arriba de eso se dice cuántos
   parecidos hay y se pide de nuevo.
-  🔴 **Un panel de candidatos sin resolver se guarda solo como «no cruzó»** apenas llega otro
-  escaneo o se cierra el recorrido. Preguntar ⛔ no puede costar un escaneo: lo peor que puede pasar
-  es que quede como quedaba antes de preguntar.
+  🔴 **EL PANEL DE CANDIDATOS SE SACÓ DEL SALÓN** (20-sep-2026, a la noche). Le preguntaba «¿cuál de
+  éstas es?» a **quien tiene el lector en la mano**, que es justamente quien ⛔ no puede pararse a
+  decidir: *«yo ⛔ no la frenaría a la chica que escanea; luego prefiero hacer el balance yo mismo»*
+  (Bruno). Ahora el código que ⛔ no engancha a UNA sola prenda **se guarda sin identificar** con su
+  código crudo, y la voz dice **«de nuevo»** con el tono que pide atención —⛔ no el de error—:
+  enganchar a varias casi siempre es una **lectura cortada**, y lo único accionable con la prenda
+  todavía en la mano es volver a pasarla.
+  ⚠️ **Y ⛔ no se elige la primera**, que sería marcar la prenda equivocada en silencio: para eso
+  existe `coincidencias`.
+  🔑 **La pregunta ⛔ no desapareció: se mudó a donde mira el que decide.** La vista del recorrido
+  lista los códigos sin identificar **con a qué prendas se parecen** (`candidatosPorCodigo` sobre
+  `buscables`). Sin eso, «⛔ no frenarla» sería perder el dato en silencio. ⚠️ Es informativo: dice
+  qué **podía** ser, ⛔ no lo reasigna — ▶️ reasignar es el pendiente si aparece seguido.
   🔴 **Y un match EXACTO también pregunta cuando engancha más de una** (`coincidencias`): **7 grupos
   / 18 variantes con stock comparten SKU** (medido el 20-sep-2026; `4008` es TOP MIA BLANCO **y**
   CHOCOLATE, `areben` son 6 variantes de AYLA). Con el lector ⛔ no pasa —los barcodes son distintos,

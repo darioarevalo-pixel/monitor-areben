@@ -28,7 +28,20 @@ import type { Aviso } from '../sonido'
  * ⚠️ Antes se cantaba «uno» en cada prenda nueva. Con 400 prendas eso son **400 veces «uno»**: la
  * palabra dejaba de significar nada, y la voz perdía la atención justo cuando tenía algo que decir.
  */
-export type FinDeEscaneo = { tipo: string; veces?: number; avance?: number }
+export type FinDeEscaneo = {
+  tipo: string
+  veces?: number
+  avance?: number
+  /**
+   * Cuántas prendas enganchaba un código que ⛔ no identificó a una sola.
+   *
+   * 🔴 **Separa «ese código ⛔ no existe» de «pasala de nuevo», y son dos cosas distintas de hacer.**
+   * Si enganchaba a varias, casi siempre es una **lectura cortada** y la prenda todavía está en la
+   * mano: lo útil es volver a pasarla. Si ⛔ no enganchaba a ninguna, es un hallazgo de verdad
+   * —stock mal cargado, prenda de otra marca— y ⛔ no hay nada que reintentar.
+   */
+  parecidos?: number
+}
 
 export type AvisoEscaneo = { aviso: Aviso; voz: string }
 
@@ -85,9 +98,11 @@ export function avisoDe(fin: FinDeEscaneo): AvisoEscaneo {
     // Está colgada y el sistema la tiene en cero: se guarda igual, pero no es un escaneo normal.
     case 'stock-cero':
       return { aviso: 'ojo', voz: 'en cero' }
+    // ⚠️ Enganchaba a varias ⇒ **pasala de nuevo**, que es lo único accionable con la prenda en la
+    // mano. Se lleva el tono que pide atención, y ⛔ no el de error: ⛔ no salió mal, salió a medias.
     case 'no-cruzo':
     case 'no-encontrado':
-      return { aviso: 'no', voz: 'no figura' }
+      return fin.parecidos ? { aviso: 'mira', voz: 'de nuevo' } : { aviso: 'no', voz: 'no figura' }
     // 🔴 Los dos que PIDEN LA VISTA, y por eso comparten el tono que sube.
     case 'candidatos':
       return { aviso: 'mira', voz: 'elegí cuál' }
