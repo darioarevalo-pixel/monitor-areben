@@ -119,8 +119,13 @@ export function precioDeGondola(it: Pick<ExhibItem, 'precio' | 'promo'>): Oferta
  * por ID en Tienda Nube y **la misma categoría a los ojos de quien camina el local**. Comparando
  * letra por letra, elegir una lista 41 de 64 y escanear cualquiera de las otras 23 da **cruce
  * falso**: la pantalla acusa a una prenda que está bien colgada.
+ *
+ * ⚠️ **Exportada porque el balance del sector la necesita** (`balance.ts`, 20-sep-2026): ahí se
+ * compara la categoría que alguien **declaró** contra las de cada prenda, y con dos grafías vivas
+ * en el catálogo, compararlas letra por letra mandaría a buscar al depósito prendas que están
+ * colgadas. Es la misma regla, ⛔ no una copia.
  */
-const normCat = (c: string) => String(c || '').trim().toLowerCase().replace(/\s+/g, ' ')
+export const normCat = (c: string) => String(c || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 /**
  * En qué categorías vive esta prenda **para el recorrido**: TODAS las suyas, ⛔ no la primera.

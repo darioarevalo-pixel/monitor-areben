@@ -1,0 +1,37 @@
+-- Chequeo de exhibición: **el balance del sector**, o qué cubrió de verdad un recorrido.
+-- Correr en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
+-- Es idempotente.
+--
+-- 🔑 POR QUÉ EXISTE (20-sep-2026, pedido de Bruno). El recorrido contesta «esto pasó por el lector»,
+-- y «para colgar» agrega «y estos hermanos de lo que tocaste ⛔ no aparecieron»: una lista siempre
+-- verdadera pero corta, porque ⛔ no puede hablar de una prenda cuyo producto nadie escaneó. Lo que
+-- faltaba es el otro lado — *«caminé el sector ENTERO, decime todo lo que debería estar colgado acá
+-- y ⛔ no está»* — para poder mandar a alguien al **depósito del local** con esa lista.
+--
+-- 🔴 QUE UN RECORRIDO HAYA CUBIERTO UN SECTOR ES UN HECHO DEL SALÓN, Y LA APP ⛔ NO LO SABE. Ve 94
+-- escaneos y ⛔ no sabe si el sector tenía 94 prendas o 400. Afirmarlo por su cuenta es lo que dio
+-- los **20 corsets faltantes falsos** del 19-sep, de un mueble que nadie había caminado. Por eso lo
+-- declara una PERSONA, con el número delante («tocaste 94 de 400, el 24 %»), y **esta columna es esa
+-- declaración**: sin ella el balance sería una cuenta que alguien hizo una vez y se perdió.
+--
+-- ⚠️ EL FLUJO QUE GUARDA ESTO SON DOS PERSONAS Y DOS MOMENTOS: la empleada camina el sector y avisa
+-- cuando terminó; quien decide abre el recorrido después —esa tarde, al otro día, desde otra
+-- máquina— y hace el balance. Lo que se guarda acá es **quién lo declaró y cuándo**, que es lo que
+-- vuelve auditable una lista que manda a mover mercadería.
+--
+-- FORMA (jsonb, ⛔ no una tabla nueva: es un dato de la cabecera, como `modo` o `categoria`):
+--   { "cats": ["TOPS Y BODIES", "BLUSAS"], "por": "Bruno Arevalo", "cuando": "2026-09-20T23:10:00Z" }
+--   null = todavía ⛔ nadie hizo el balance ⇒ la pantalla muestra sólo la lista conservadora.
+--   cats vacío = alguien lo miró y dijo «esto ⛔ no cubrió un sector entero», que ⛔ no es lo mismo
+--   que no haberlo mirado nunca — y es justo lo que hay que poder distinguir el mes que viene.
+--
+-- PRECONDICIONES: `sql/migrate-exhib-libre.sql` (19-sep-2026, corrido en Zattia).
+--
+-- VERIFICACIÓN (correr después):
+--   select column_name, data_type from information_schema.columns
+--   where table_name = 'exhib_recorrido' and column_name = 'cobertura';
+--
+-- ROLLBACK (⛔ no toca ningún escaneo; se lleva sólo las declaraciones):
+--   alter table exhib_recorrido drop column if exists cobertura;
+
+alter table exhib_recorrido add column if not exists cobertura jsonb;

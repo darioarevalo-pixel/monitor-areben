@@ -17,16 +17,17 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
 `ExhibLibre.tsx` · `useExhibLibre.ts` · **`useColaEscaneos.ts` la cola que usan LOS DOS** ·
-`ParaColgar.tsx`) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
-(**`aviso.ts`** qué se oye en cada final · `core.ts` puro y
+`ParaColgar.tsx` · **`BalanceSector.tsx`** el balance del sector) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
+(**`aviso.ts`** qué se oye en cada final · **`balance.ts`** el mandado del depósito · `core.ts` puro y
 compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
 `datos.ts` la bajada · `cliente.ts` · `pdf.ts` · **`analisis.ts` el conteo del final** · `tipos.ts`) ·
 `api/_exhib.js` por `api/datos.js?recurso=exhib` · tablas `exhib_recorrido` y `exhib_escaneo`
-(`sql/migrate-exhib-libre.sql` + `sql/migrate-exhib-categoria.sql`, **sólo en el Supabase de
-Zattia**) ·
+(`sql/migrate-exhib-libre.sql` + `sql/migrate-exhib-categoria.sql` + **`sql/migrate-exhib-cobertura.sql`
+⏳ pendiente de correr**, **sólo en el Supabase de Zattia**) ·
 `tests/exhib-core.test.ts` + `tests/exhib-libre.test.ts` + `tests/exhib-colgar.test.ts` +
 `tests/exhib-analisis.test.ts` + **`tests/exhib-por-variante.test.ts`** (la regla de que una variante
-⛔ no marca a sus hermanas, cruzando los cuatro módulos) + `tests/exhib-aviso.test.ts`.
+⛔ no marca a sus hermanas, cruzando los cuatro módulos) + `tests/exhib-aviso.test.ts` +
+`tests/exhib-balance.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -40,6 +41,35 @@ Zattia**) ·
   caminata por categoría **y** la libre.
 
 ## Reglas que el código no dice
+
+- 🆕 🔴 🔑 **EL BALANCE DEL SECTOR LO HACE UNA PERSONA, DESPUÉS, Y LA APP SÓLO PONE EL NÚMERO**
+  (20-sep-2026, `lib/exhib/balance.ts`). «Para colgar» es la lista **siempre verdadera pero corta**
+  —los hermanos de lo que el recorrido tocó—; el balance es el otro lado: *«caminé el sector ENTERO,
+  decime todo lo que debería estar colgado acá»*.
+  🔴 **Que un recorrido haya cubierto un sector es un hecho del salón que la app ⛔ no puede ver**:
+  94 escaneos ⛔ no dicen si el sector tenía 94 prendas o 400. Afirmarlo sola es lo que dio los **20
+  corsets faltantes falsos**. ⇒ la pantalla muestra **«pasaron por el lector 94 de las 400 que el
+  sistema tiene en el local (24 %)»** y **tilda quien mira**. Un 24 % grita «caminó un perchero»; un
+  95 % dice «caminó el sector».
+  ⚠️ **Son DOS PERSONAS y DOS MOMENTOS, y así lo pidió Bruno**: *«no me parece erróneo que la
+  empleada haga el escaneo completo del sector y luego me avise cuando esté listo; entonces yo hago
+  el balance y le paso el reporte de qué falta buscar en depósito»*. La empleada ⛔ no decide nada —
+  ⛔ no se le agrega un solo paso—, y la declaración se guarda **firmada por el servidor** con la
+  sesión de quien la hizo (`exhib_recorrido.cobertura`, `sql/migrate-exhib-cobertura.sql`).
+  🔑 **«Lo que falta» tiene una dirección concreta: el DEPÓSITO DEL LOCAL.** En GN el Local es **una
+  sola ubicación** que junta el salón y el depósito del local (por eso el Conteo estándar cuenta
+  *exhibido + depósito*) ⇒ **stock en Local − lo que pasó por el lector = lo que tiene que estar
+  guardado ahí**, y si tampoco está, es un problema de stock. ⛔ No es un reproche: es un mandado.
+  🔑 **Las vistas se miran del recorrido ENTERO y ⛔ no del lugar**: un top que apareció en la
+  vidriera y se escaneó **está colgado** y ⛔ no se va a buscar al depósito.
+  ⚠️ **El bolsón se explica, ⛔ no se esconde**: cada línea dice en qué otra categoría está («CORSET
+  BERNA · también está en CORSETS»). Medido el 20-sep: declarando TOPS Y BODIES, **85 de los 306
+  renglones** traen una categoría de afuera. Una línea que parece un error le quita autoridad a las
+  otras cincuenta que están bien.
+  🔴 **Y lo que el balance ⛔ NO puede juzgar se dice SIEMPRE**: las prendas sin categoría en TN ⛔ no
+  entran en ningún universo —ni como presentes ni como faltantes—. Medido: **297 variantes / 95
+  productos** del Local, de los cuales **36 son de Stunned**, que tiene su propia tienda y nunca va a
+  cruzar. Callarlas haría leer el mandado como completo cuando ⛔ no lo es.
 
 - 🆕 🔴 🔑 **EL RECORRIDO SE CAMINA DE OÍDO** (20-sep-2026, lo pidió Bruno: *«que haga el pitido y
   además diga uno, para que la persona tenga el celular cerca pero no esté viéndolo

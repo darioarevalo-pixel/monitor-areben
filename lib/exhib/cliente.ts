@@ -8,7 +8,7 @@
  * recorridos distintos a propósito, y este archivo es sólo del libre.
  */
 import { apiFetch } from '@/lib/api-fetch'
-import type { EscaneoLibre, RecorridoLibre } from './libre'
+import type { Cobertura, EscaneoLibre, RecorridoLibre } from './libre'
 
 const API = '/api/datos?recurso=exhib'
 
@@ -80,6 +80,18 @@ export async function subirEscaneos(marca: string, recorridoId: string, escaneos
 
 export async function cerrarRecorrido(marca: string, id: string, nota?: string): Promise<void> {
   await escribir(marca, 'cerrar', { id, nota: nota ?? null })
+}
+
+/**
+ * **El balance**: declarar que este recorrido cubrió estas categorías enteras.
+ *
+ * 🔑 El **quién** ⛔ no viaja: lo firma el servidor con la sesión, que es lo que lo vuelve
+ * auditable. Y una lista vacía es una declaración válida —«esto ⛔ no cubrió un sector entero»—,
+ * distinta de no haberlo mirado nunca.
+ */
+export async function guardarCobertura(marca: string, id: string, cats: string[]): Promise<Cobertura> {
+  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'cobertura', { id, cats })
+  return d.cobertura
 }
 
 /**

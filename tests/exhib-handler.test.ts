@@ -29,6 +29,10 @@ function consulta(tabla: string) {
   q.then = (resolve: (v: { data: Fila[]; error: null }) => unknown) => resolve({ data: filas(), error: null })
   q.range = async () => ({ data: filas(), error: null })
   q.maybeSingle = async () => ({ data: filas()[0] ?? null, error: null })
+  q.update = (f: Fila) => {
+    base.escrituras.push({ tabla, verbo: 'update', filas: [f] })
+    return q
+  }
   q.upsert = async (f: Fila | Fila[]) => {
     base.escrituras.push({ tabla, verbo: 'upsert', filas: Array.isArray(f) ? f : [f] })
     return { error: null }
@@ -227,5 +231,49 @@ describe('lo que ⛔ no entra', () => {
     const cab = base.escrituras.find((e) => e.tabla === 'exhib_recorrido')?.filas?.[0]
     expect(cab?.modo).toBe('libre')
     expect(cab?.categoria).toBe(null)
+  })
+})
+
+/**
+ * **El balance del sector**: la declaración de que un recorrido cubrió estas categorías enteras.
+ *
+ * 🔴 Es lo que manda a alguien a mover mercadería del depósito del local, así que lo que importa
+ * probar ⛔ no es que se guarde: es **quién queda firmando** y que las categorías entren limpias.
+ */
+describe('el balance del sector', () => {
+  const guardar = (body: Record<string, unknown>) => correr(postear({ action: 'cobertura', id: REC, ...body }))
+  const guardada = () => base.escrituras.find((e) => e.tabla === 'exhib_recorrido' && e.verbo === 'update')?.filas?.[0]?.cobertura as
+    | { cats: string[]; por: string | null; cuando: string }
+    | undefined
+
+  it('guarda las categorías declaradas', async () => {
+    const res = await guardar({ cats: ['TOPS Y BODIES', 'BLUSAS'] })
+    expect(res.code).toBe(200)
+    expect(guardada()?.cats).toEqual(['TOPS Y BODIES', 'BLUSAS'])
+  })
+
+  it('🔴 la firma sale del perfil y NUNCA del body', async () => {
+    await guardar({ cats: ['TOPS Y BODIES'], por: 'El Gerente', cuando: '1999-01-01T00:00:00.000Z' })
+    expect(guardada()?.por).toBe('camilaquintana')
+    expect(guardada()?.cuando.startsWith('1999')).toBe(false)
+  })
+
+  it('las categorías entran limpias: sin vacías y sin repetir', async () => {
+    await guardar({ cats: ['TOPS Y BODIES', '  ', 'TOPS Y BODIES', ' BLUSAS '] })
+    expect(guardada()?.cats).toEqual(['TOPS Y BODIES', 'BLUSAS'])
+  })
+
+  /** ⚠️ Vacío es «alguien lo miró y dijo que esto ⛔ no cubrió un sector», ⛔ no «nadie lo miró». */
+  it('declarar NINGUNA categoría es una declaración válida', async () => {
+    const res = await guardar({ cats: [] })
+    expect(res.code).toBe(200)
+    expect(guardada()).toMatchObject({ cats: [], por: 'camilaquintana' })
+  })
+
+  it('🔴 un recorrido de OTRA marca ⛔ no se declara', async () => {
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'bdi', modo: 'libre', estado: 'cerrado' }]
+    const res = await guardar({ cats: ['TOPS Y BODIES'] })
+    expect(res.code).toBe(404)
+    expect(guardada()).toBeUndefined()
   })
 })

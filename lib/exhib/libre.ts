@@ -162,6 +162,15 @@ export function sumarUna(e: EscaneoLibre, ahora: number = Date.now()): EscaneoLi
   return { ...e, veces: vecesDe(e) + 1, ultimo_en: new Date(ahora).toISOString() }
 }
 
+/**
+ * **El balance del sector**: quién declaró que este recorrido cubrió estas categorías enteras, y
+ * cuándo. Lo escribe `api/_exhib.js` con la sesión; ver `lib/exhib/balance.ts`.
+ *
+ * ⚠️ `cats` vacío ⛔ no es lo mismo que `cobertura` en `null`: vacío es «alguien lo miró y dijo que
+ * esto ⛔ no cubrió un sector entero», null es «todavía nadie lo miró».
+ */
+export type Cobertura = { cats: string[]; por: string | null; cuando: string }
+
 /** La cabecera de un recorrido. Espeja `exhib_recorrido`. */
 export type RecorridoLibre = {
   id: string
@@ -172,6 +181,8 @@ export type RecorridoLibre = {
   nota: string | null
   creado_en: string
   cerrado_en: string | null
+  /** El balance del sector, si ya lo hizo alguien. Ver `Cobertura`. */
+  cobertura?: Cobertura | null
   /** Sólo en la lista de recorridos: cuántos escaneos tiene. */
   escaneos?: number
 }

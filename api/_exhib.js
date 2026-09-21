@@ -3,7 +3,7 @@
 //   GET  ?recurso=exhib&store=…&action=recorridos       → los recorridos, con cuántos escaneos tiene cada uno
 //   GET  ?recurso=exhib&store=…&action=recorrido&id=…   → UNO entero: cabecera + TODOS sus escaneos
 //   GET  ?recurso=exhib&store=…&action=lugares          → los lugares ya usados, para sugerir
-//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'sacar-escaneo'|'eliminar', … }
+//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'sacar-escaneo'|'eliminar', … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=exhib`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas; una ruta nueva sería la octava por un solo recurso.
@@ -241,6 +241,28 @@ export default async function handler(req, res) {
           .eq('id', recorrido.id)
         if (error) throw new Error(error.message)
         return res.status(200).json({ ok: true })
+      }
+
+      /**
+       * **El balance del sector**: quién declaró que este recorrido cubrió estas categorías enteras.
+       *
+       * 🔴 **La declaración la firma el SERVIDOR con la sesión**, igual que `persona` al abrir: es
+       * lo único que vuelve auditable una lista que manda a mover mercadería del depósito. Un
+       * «quién» que manda el cliente ⛔ no dice nada.
+       *
+       * 🔑 **`cats: []` ⛔ no es lo mismo que `null`.** Vacío quiere decir «alguien lo miró y dijo
+       * que esto ⛔ no cubrió un sector entero»; `null`, «todavía nadie lo miró». Distinguirlos es
+       * lo que hace que la lista de recorridos pueda decir cuáles quedan por balancear.
+       */
+      if (accion === 'cobertura') {
+        const recorrido = await recorridoDeLaMarca(String(b.id || ''))
+        if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
+        // ⚠️ Categorías saneadas: texto, sin vacías y sin repetir. Van a decidir qué se va a buscar.
+        const cats = [...new Set((Array.isArray(b.cats) ? b.cats : []).map((c) => String(c || '').trim()).filter(Boolean))]
+        const cobertura = { cats, por: perfil.name || null, cuando: new Date().toISOString() }
+        const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true, cobertura })
       }
 
       if (accion === 'sacar-escaneo') {

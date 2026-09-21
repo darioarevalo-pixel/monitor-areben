@@ -10,6 +10,7 @@ import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
 import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
+import { BalanceSector } from './BalanceSector'
 import { Analisis } from './Analisis'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
@@ -337,6 +338,9 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
                   </div>
                   <div style={{ fontSize: font.xs, color: color.mut }}>
                     {r.escaneos ?? 0} {r.escaneos === 1 ? 'escaneo' : 'escaneos'} · {r.estado === 'cerrado' ? 'cerrado' : 'sin cerrar'}
+                    {/* 🔑 El balance es de otra persona y de otro momento, así que la lista tiene
+                        que decir cuáles esperan que alguien los mire. */}
+                    {r.estado === 'cerrado' && (r.cobertura ? <> · <b>balance hecho</b></> : <> · sin balance</>)}
                   </div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => abrirPrevio(r.id)}>Ver</Button>
@@ -597,6 +601,24 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
               )
             })()}
           </Notice>
+
+          {/* 🔴 **El balance va PRIMERO**, y ⛔ no es orden de pantalla: es lo que se viene a hacer
+              cuando la empleada avisa que terminó el sector. «Para colgar» queda abajo porque es la
+              lista conservadora —los hermanos de lo que tocó—, que sigue valiendo aunque nadie
+              declare nada. */}
+          <BalanceSector
+            escaneos={viendo.escaneos}
+            items={items}
+            marca={marca}
+            recorridoId={viendo.recorrido.id}
+            cobertura={viendo.recorrido.cobertura}
+            onGuardada={(c) => {
+              setViendo({ ...viendo, recorrido: { ...viendo.recorrido, cobertura: c } })
+              // La lista de atrás muestra cuáles ya tienen balance: sin esto, volver mostraría el
+              // recorrido que se acaba de balancear como si siguiera pendiente.
+              cargarPrevios()
+            }}
+          />
 
           {/* 🔑 Arriba de los escaneos: es lo que se viene a buscar cuando se abre un recorrido de
               otro día desde otra máquina. Lo escaneado queda abajo, como respaldo de por qué. */}
