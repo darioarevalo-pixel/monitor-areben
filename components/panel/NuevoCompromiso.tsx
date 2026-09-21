@@ -219,7 +219,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                   */}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                     <CopyButton
-                      getText={() => datosParaMandar(cuenta)}
+                      getText={() => datosParaMandar(cuenta, sel.a.nombre)}
                       label="Copiar los datos"
                       copiedLabel="✓ Listo para pegar"
                     />

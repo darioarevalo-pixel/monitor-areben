@@ -84,23 +84,36 @@ export function destinoDeCuenta(c: CuentaManual): DestinoCompromiso | null {
 }
 
 /**
- * Los datos de la cuenta escritos para **pegar en el chat del cliente**.
+ * Los datos de la cuenta escritos para **pegar en el chat del cliente**: tres renglones, en el
+ * orden en que se leen —a quién, con qué alias, en qué banco— (lo pidió así Bruno, 21-sep-2026,
+ * mirándolo con una clienta esperando del otro lado).
  *
- * 🔑 Es un solo texto y no cuatro campos porque el gesto real es uno: el cliente pregunta a dónde
- * transfiere y hay que pasarle todo junto. Copiar el alias y después el CBU son dos viajes al
+ *     Mutual de Socios de la Asociación Médica
+ *     Alias: 18855350.5.mutual
+ *     Banco: Agil Pagos
+ *
+ * 🔑 Es un solo texto y no tres campos porque el gesto real es uno: el cliente pregunta a dónde
+ * transfiere y hay que pasarle todo junto. Copiar el alias y después el banco son dos viajes al
  * panel en medio de una conversación.
  *
- * ⚠️ Sin cabecera ni saludo a propósito: sirve igual para pegarlo en el chat que en el home
- * banking, y lo que se le dice al cliente lo escribe quien está hablando.
+ * ⚠️ **El CBU va sólo si no hay alias.** Si fuera siempre serían cuatro renglones de los cuales el
+ * cliente usa uno; pero un mensaje sin alias Y sin CBU no dice a dónde transferir, que es lo único
+ * que el mensaje tiene que lograr.
+ *
+ * ⚠️ Sin cabecera ni saludo a propósito: lo que se le dice al cliente lo escribe quien está
+ * hablando, y el mismo texto sirve para pegar en el home banking.
  */
-export function datosParaMandar(cuenta: {
-  alias: string | null; cbu: string | null; banco: string | null; titular: string | null
-}): string {
+export function datosParaMandar(
+  cuenta: { alias: string | null; cbu: string | null; banco: string | null; titular: string | null },
+  /** A quién se le paga: el nombre del acreedor o el de la cuenta. Va en el primer renglón. */
+  nombre?: string | null,
+): string {
   return [
-    cuenta.alias && `Alias: ${cuenta.alias}`,
-    cuenta.cbu && `CBU: ${cuenta.cbu}`,
+    // El titular manda cuando está cargado: es el nombre que el cliente va a ver en el banco, y si
+    // no coincide con el que le pasamos, la transferencia se frena por desconfianza.
+    cuenta.titular || nombre,
+    cuenta.alias ? `Alias: ${cuenta.alias}` : cuenta.cbu && `CBU: ${cuenta.cbu}`,
     cuenta.banco && `Banco: ${cuenta.banco}`,
-    cuenta.titular && `A nombre de: ${cuenta.titular}`,
   ].filter(Boolean).join('\n')
 }
 

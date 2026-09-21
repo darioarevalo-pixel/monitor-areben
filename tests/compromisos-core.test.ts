@@ -272,9 +272,19 @@ describe('los identificadores que el vocabulario NO puede tocar', () => {
  * nuestro.
  */
 describe('los datos para mandarle al cliente', () => {
-  it('van los cuatro campos, uno por renglón', () => {
-    expect(datosParaMandar({ alias: 'cuota.bdi', cbu: '0070', banco: 'Galicia', titular: 'Areben SRL' }))
-      .toBe('Alias: cuota.bdi\nCBU: 0070\nBanco: Galicia\nA nombre de: Areben SRL')
+  it('🔑 tres renglones: a quién, el alias y el banco', () => {
+    expect(datosParaMandar({ alias: '18855350.5.mutual', cbu: '0070', banco: 'Agil Pagos', titular: null }, 'Mutual de Socios'))
+      .toBe('Mutual de Socios\nAlias: 18855350.5.mutual\nBanco: Agil Pagos')
+  })
+
+  it('⚠️ el CBU aparece SÓLO cuando no hay alias: si no, el mensaje no dice a dónde transferir', () => {
+    expect(datosParaMandar({ alias: null, cbu: '0070599530000000123456', banco: 'Galicia', titular: null }, 'Cuota del crédito'))
+      .toBe('Cuota del crédito\nCBU: 0070599530000000123456\nBanco: Galicia')
+  })
+
+  it('el titular le gana al nombre: es el que el cliente va a ver en el banco', () => {
+    expect(datosParaMandar({ alias: 'cuota.bdi', cbu: null, banco: null, titular: 'Areben SRL' }, 'Cuota del crédito'))
+      .toBe('Areben SRL\nAlias: cuota.bdi')
   })
 
   it('lo que no está no deja el renglón vacío', () => {

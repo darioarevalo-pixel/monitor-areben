@@ -374,7 +374,7 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
                 )}
                 {/* El alias no está para leerlo: está para pasárselo al cliente. */}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <CopyButton getText={() => datosParaMandar(cuenta)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
+                  <CopyButton getText={() => datosParaMandar(cuenta, d.nombre)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
                   {cuenta.alias && (
                     <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
                   )}
@@ -431,7 +431,7 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
                 )}
                 {/* El alias no está para leerlo: está para pasárselo al cliente. */}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <CopyButton getText={() => datosParaMandar(cuenta)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
+                  <CopyButton getText={() => datosParaMandar(cuenta, a.nombre)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
                   {cuenta.alias && (
                     <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
                   )}

@@ -13,7 +13,12 @@
     </style>
   </head>
   <body>
-    <iframe id="panel" title="Ficha del cliente"></iframe>
+    <!-- ⚠️ `allow` es lo que deja copiar desde adentro del panel: sin esto el navegador rechaza
+         `navigator.clipboard` por venir de otro origen, y copiar el alias de una cuenta para
+         pasárselo a un cliente caía al cuadro de "copiá esto a mano" (21-sep-2026). El monitor
+         tiene un segundo camino que funciona igual sin este permiso, pero éste es el bueno.
+         ⛔ Cambiar esta línea pide RECARGAR la extensión en chrome://extensions. -->
+    <iframe id="panel" title="Ficha del cliente" allow="clipboard-write"></iframe>
     <div id="aviso">Abrí el chat de una persona en WhatsApp Web.</div>
     <script src="sidepanel.js"></script>
   </body>
