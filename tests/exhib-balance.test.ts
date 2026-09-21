@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buscarEnDeposito, coberturaPorCat, filasBuscar, resumenBuscar, sinCategoriaSinVer, vistasDelRecorrido } from '../lib/exhib/balance'
+import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, MOTIVOS, type Tachada } from '../lib/exhib/balance'
 import { aEscaneo, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
@@ -103,10 +103,15 @@ describe('buscarEnDeposito — el mandado', () => {
     expect(lista[0].tambienEn).toEqual(['CORSETS'])
   })
 
-  it('el Excel lleva el stock del local y la explicación', () => {
+  /**
+   * ⚠️ **La columna de unidades se fue el 21-sep-2026**, también acá: la tarea es colgar una de cada
+   * color/talle, y el número invitaba a traer las ocho del depósito.
+   */
+  it('el Excel lleva la explicación del bolsón y ⛔ ya no el stock', () => {
     const filas = filasBuscar(buscarEnDeposito(escanear([TOP_A]), LOCAL, [TOPS]))
-    expect(filas[0]).toContain('Unidades en el local')
-    expect(filas[1]).toEqual(['CORSET BERNA', 'M', '', 'b4', 4, 'CORSETS'])
+    expect(filas[0]).toContain('También está en')
+    expect(filas[0]).not.toContain('Unidades en el local')
+    expect(filas[1]).toEqual(['CORSET BERNA', 'M', '', 'b4', 'CORSETS'])
   })
 })
 
@@ -121,5 +126,156 @@ describe('lo que el balance ⛔ NO puede juzgar', () => {
 
   it('⛔ no se cuela en el mandado por más que se declare la categoría', () => {
     expect(buscarEnDeposito(escanear([TOP_A]), LOCAL, [TOPS]).some((b) => b.it.name === 'MUSCULOSA GOA')).toBe(false)
+  })
+})
+
+/**
+ * **Declarar por TIPO DE PRENDA** (21-sep-2026), que es el criterio vigente: el nombre y el stock
+ * salen los dos de Gestión Nube, así que la cuenta que importa ⛔ no depende de Tienda Nube.
+ */
+describe('coberturaPorTipo — el orden es lo que se caminó', () => {
+  /**
+   * 🔴 **El caso que lo trajo, tal como pasó en el salón.** Ordenando por porcentaje, un tipo
+   * chiquito escaneado entero da 100 % y se planta arriba del sector caminado de verdad: ese día se
+   * tildaron dos categorías de 15 y 9 prendas y el mandado salió vacío tras 415 unidades caminadas.
+   */
+  it('pone primero lo que más pasó por el lector, ⛔ no lo más cubierto', () => {
+    const chico = v({ productId: '9', name: 'POLLERA SOL', size: 'U', barcode: 'b9', qty: 1 })
+    const es = escanear([TOP_A, TOP_B, chico])
+    const t = coberturaPorTipo(es, [...LOCAL, chico])
+    // POLLERA está cubierta al 100 % y TOP al 66 %, pero TOP es lo que se caminó.
+    expect(t[0].tipo).toBe('TOP')
+    expect(t[0].vistas).toBe(2)
+    expect(t.find((x) => x.tipo === 'POLLERA')?.cubierto).toBe(1)
+  })
+
+  /**
+   * 🔴 **Se cuenta en PRENDAS y ⛔ no en unidades** (21-sep-2026, Bruno: *«no me interesa el stock
+   * del local, me interesa que se exhiba»*). Falta colgar UNA de cada color/talle: que el sistema
+   * tenga 3 en el depósito ⛔ no cambia la tarea.
+   */
+  it('el universo es del tipo entero, contado en prendas', () => {
+    const t = coberturaPorTipo(escanear([TOP_A]), LOCAL)
+    const top = t.find((x) => x.tipo === 'TOP')
+    expect(top).toMatchObject({ universo: 3, vistas: 1 })
+    // TOP_B y TOP_C quedaron sin ver: faltan 2 por exhibir, ⛔ no «4 unidades».
+    expect((top?.universo ?? 0) - (top?.vistas ?? 0)).toBe(2)
+  })
+
+  /** ⛔ Un tipo que el recorrido ⛔ no tocó ⛔ no se propone: sobre un mueble que nadie caminó ⛔ no se afirma nada. */
+  it('⛔ no propone tipos que el recorrido ⛔ no tocó', () => {
+    const t = coberturaPorTipo(escanear([TOP_A]), LOCAL)
+    expect(t.map((x) => x.tipo)).not.toContain('JEAN')
+  })
+
+  /** 🔑 Una prenda sin categoría en TN **sí** tiene tipo: por nombre ninguna es invisible. */
+  it('la prenda sin categoría en TN entra igual, porque tiene nombre', () => {
+    const t = coberturaPorTipo(escanear([MUSCULOSA]), LOCAL)
+    expect(t.map((x) => x.tipo)).toContain('MUSCULOSA')
+  })
+})
+
+describe('buscarPorTipo — el mandado del depósito', () => {
+  /** ⚠️ Ordenado por NOMBRE y ⛔ no por unidades: los colores de la misma prenda caen juntos. */
+  it('pide las del tipo declarado que ⛔ no pasaron por el lector, por nombre', () => {
+    const lista = buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP'])
+    expect(lista.map((b) => b.it.name + ' ' + b.it.size)).toEqual(['TOP NARA Blanco', 'TOP ORSA Negro'])
+  })
+
+  /** 🔑 Declarando por nombre ⛔ no hay bolsón: un corset ⛔ no se cuela en un mandado de tops. */
+  it('⛔ no arrastra prendas de otro tipo (el bolsón de TN ya ⛔ no existe)', () => {
+    const lista = buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP'])
+    expect(lista.some((b) => b.it.name.startsWith('CORSET'))).toBe(false)
+    expect(lista.every((b) => b.tambienEn.length === 0)).toBe(true)
+  })
+
+  it('sin nada declarado ⛔ no afirma nada', () => {
+    expect(buscarPorTipo(escanear([TOP_A]), LOCAL, [])).toEqual([])
+  })
+})
+
+/**
+ * 🔴 **El seguro contra el mandado vacío mentiroso.** Un mandado en cero puede querer decir «no
+ * falta nada» o «declaraste cualquier cosa», y hasta el 21-sep-2026 la pantalla ⛔ no las distinguía.
+ */
+describe('tocadoSinDeclarar', () => {
+  it('cuenta lo caminado que queda afuera de lo declarado', () => {
+    const es = escanear([TOP_A, CORSET, JEAN])
+    expect(tocadoSinDeclarar(es, LOCAL, ['TOP'])).toBe(2)
+    expect(tocadoSinDeclarar(es, LOCAL, ['TOP', 'CORSET', 'JEAN'])).toBe(0)
+  })
+
+  it('es CERO cuando ⛔ no se caminó nada de más', () => {
+    expect(tocadoSinDeclarar(escanear([TOP_A]), LOCAL, ['TOP'])).toBe(0)
+  })
+})
+
+describe('filasBuscar — la columna que se cae sola', () => {
+  it('⛔ no lleva «También está en» cuando ninguna fila tiene qué decir', () => {
+    const filas = filasBuscar(buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP']))
+    expect(filas[0]).not.toContain('También está en')
+    expect(filas[0]).toHaveLength(4)
+    expect(filas[1]).toHaveLength(4)
+  })
+
+  /** 🔴 Y ⛔ NUNCA lleva unidades: la tarea es colgar una, ⛔ no traer ocho. */
+  it('⛔ no lleva cuántas unidades hay', () => {
+    const filas = filasBuscar(buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP']))
+    expect(filas[0].join(' ')).not.toMatch(/unidad/i)
+    expect(filas[1]).toEqual(['TOP NARA', 'Blanco', '', 'b3'])
+  })
+
+  it('la lleva cuando alguna fila la usa (el mandado por categoría)', () => {
+    const filas = filasBuscar(buscarEnDeposito(escanear([TOP_A]), LOCAL, [TOPS]))
+    expect(filas[0]).toContain('También está en')
+  })
+})
+
+/**
+ * **Tachar una prenda del mandado con su motivo** (21-sep-2026). Los dos motivos los dictó el salón:
+ * una prenda colgada en OTRO sector que nadie caminó, y la mercadería nueva que se colgó DESPUÉS del
+ * escaneo. Ver `MotivoTachada`.
+ */
+describe('partirTachadas — lo sacado del mandado ⛔ no desaparece', () => {
+  const t = (varianteId: string, motivo: 'otro-lugar' | 'despues'): Tachada => ({
+    variante_id: varianteId, motivo, por: 'Bruno Arevalo', cuando: '2026-09-21T18:00:00.000Z',
+  })
+
+  it('saca del mandado lo tachado y lo devuelve aparte, con su motivo', () => {
+    const lista = buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP'])
+    // TOP_B ('b2') está colgado en el perchero de al lado.
+    const { mandado, sacadas } = partirTachadas(lista, [t('b2', 'otro-lugar')])
+    expect(mandado.map((b) => b.it.size)).toEqual(['Blanco'])
+    expect(sacadas).toHaveLength(1)
+    expect(sacadas[0].it.size).toBe('Negro')
+    expect(sacadas[0].tachada.motivo).toBe('otro-lugar')
+    expect(sacadas[0].tachada.por).toBe('Bruno Arevalo')
+  })
+
+  /** ⚠️ Nada se pierde: las dos listas juntas son siempre el mandado entero. */
+  it('mandado + sacadas es siempre la lista completa', () => {
+    const lista = buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP'])
+    const { mandado, sacadas } = partirTachadas(lista, [t('b2', 'despues')])
+    expect(mandado.length + sacadas.length).toBe(lista.length)
+  })
+
+  it('sin tachaduras el mandado queda entero', () => {
+    const lista = buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP'])
+    expect(partirTachadas(lista, []).mandado).toHaveLength(lista.length)
+    expect(partirTachadas(lista, []).sacadas).toEqual([])
+  })
+
+  /** ⚠️ Una tachadura de un recorrido viejo, de una prenda que ⛔ ya no falta, ⛔ no puede romper nada. */
+  it('una tachadura que ⛔ no está en la lista se ignora', () => {
+    const lista = buscarPorTipo(escanear([TOP_A]), LOCAL, ['TOP'])
+    const { mandado, sacadas } = partirTachadas(lista, [t('no-existe', 'otro-lugar')])
+    expect(mandado).toHaveLength(lista.length)
+    expect(sacadas).toEqual([])
+  })
+
+  /** 🔑 Los dos motivos se leen en palabras del local, ⛔ no en códigos. */
+  it('cada motivo tiene su texto para la pantalla', () => {
+    expect(MOTIVOS['otro-lugar']).toBe('ya está colgada, en otro lugar')
+    expect(MOTIVOS.despues).toBe('se colgó después del escaneo')
   })
 })

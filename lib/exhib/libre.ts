@@ -185,7 +185,32 @@ export function sumarUna(e: EscaneoLibre, ahora: number = Date.now()): EscaneoLi
  * ⚠️ `cats` vacío ⛔ no es lo mismo que `cobertura` en `null`: vacío es «alguien lo miró y dijo que
  * esto ⛔ no cubrió un sector entero», null es «todavía nadie lo miró».
  */
-export type Cobertura = { cats: string[]; por: string | null; cuando: string }
+/**
+ * **La declaración de qué cubrió un recorrido**, firmada por el servidor con quién la hizo.
+ *
+ * 🔴 **`tipos` es el criterio vigente y `cats` el viejo** (21-sep-2026). Hasta ese día un sector se
+ * declaraba con **categorías de Tienda Nube** y salió mal en el salón: se tildaron dos que
+ * explicaban el 6 % de lo escaneado y el mandado dio cero. Desde entonces se declara por **tipo de
+ * prenda**, que sale del nombre del producto en Gestión Nube — la misma base que el stock.
+ * ⚠️ **`cats` ⛔ no se borra**: hay declaraciones viejas guardadas y una lista que mandó a mover
+ * mercadería tiene que poder leerse dentro de un año tal como se hizo.
+ */
+export type Cobertura = {
+  cats: string[]
+  tipos?: string[]
+  /**
+   * Las prendas que alguien sacó del mandado, con su motivo. Ver `Tachada` en `balance.ts`.
+   *
+   * 🔑 **Viven adentro de `cobertura` y ⛔ no en una columna nueva**, porque son **lo mismo**: la
+   * declaración de quien hizo el balance de este recorrido. Guardar «caminé tops» y «esta ya está
+   * colgada en el perchero de sweaters» en dos lugares distintos parte en dos una sola afirmación.
+   * ⚠️ El servidor las **conserva** al guardar la declaración (`accion === 'cobertura'`): si las
+   * pisara, tildar un tipo más borraría veinte tachaduras sin avisar.
+   */
+  tachadas?: Array<{ variante_id: string; motivo: string; por: string | null; cuando: string }>
+  por: string | null
+  cuando: string
+}
 
 /** La cabecera de un recorrido. Espeja `exhib_recorrido`. */
 export type RecorridoLibre = {

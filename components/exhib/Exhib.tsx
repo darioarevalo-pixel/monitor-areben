@@ -253,6 +253,7 @@ export function Exhib() {
         items={ex.items}
         buscables={ex.buscables}
         enCero={ex.enCero}
+        deStunned={ex.deStunned}
         cargando={ex.cargando}
         errorMsg={ex.errorMsg}
         selector={selector}
@@ -333,7 +334,8 @@ export function Exhib() {
               <b>{ex.items.length}</b> variantes con stock en Local
               {/* Las en cero ⛔ no entran a la lista —no son faltantes de nadie— pero el lector sí
                   las engancha, y decirlo es la diferencia con «ese código no existe». */}
-              {ex.enCero > 0 && <> (hay <b>{ex.enCero}</b> más en cero: ⛔ no se chequean, pero si escaneás una te lo digo)</>}. Los datos son de la última sincronización diaria y pueden tener unas horas: conviene chequear en momentos de baja venta.
+              {ex.enCero > 0 && <> (hay <b>{ex.enCero}</b> más en cero: ⛔ no se chequean, pero si escaneás una te lo digo)</>}
+              {ex.deStunned > 0 && <>. Las <b>{ex.deStunned}</b> de <b>Stunned</b> quedan afuera: las revisa su propia pantalla</>}. Los datos son de la última sincronización diaria y pueden tener unas horas: conviene chequear en momentos de baja venta.
             </Notice>
           )}
 

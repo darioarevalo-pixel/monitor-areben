@@ -247,6 +247,107 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   Enter solo, en decenas de ms. ⚠️ Vale **sólo para el mismo código**, y el descarte **se dice en
   pantalla**: callarlo sería inventar —o perder— una unidad.
 
+- 🆕 🔴 🔑 **UNA PRENDA DEL MANDADO SE PUEDE TACHAR, Y CON MOTIVO** (21-sep-2026, `partirTachadas` +
+  `MotivoTachada` en `balance.ts`, acción `tachar` en `api/_exhib.js`). Salió del primer mandado
+  real: Bruno lo leyó prenda por prenda y sacó **22 de las 104** por dos razones que ⛔ no son
+  excusas sueltas —**son dos cosas que pasan todas las veces**—:
+  - **`otro-lugar`** · *«overlay sacalas, porque están exhibidas en el perchero de los sweaters»*.
+    La app ya sabe esto **adentro** de un recorrido —un top que aparece en la vidriera y se escanea
+    cuenta como colgado— pero ⛔ no puede saber nada de un sector que nadie caminó.
+  - **`despues`** · *«fueron productos nuevos que entraron el sábado y los exhibieron luego del
+    escaneo»*. **El recorrido es una foto de un momento** y el balance se hace horas más tarde; en
+    el medio el local trabaja. ⛔ No es el error de nadie.
+  🔑 **Se guarda el MOTIVO y ⛔ no sólo el tachón, y ése es todo el punto.** Acumulados contestan
+  preguntas que hoy ⛔ nadie puede contestar: muchas «en otro lugar» quieren decir que **el sector ⛔
+  no está donde el sistema cree**; muchas «se colgó después», que **el balance se hace demasiado
+  tarde**. Por eso el motivo se **valida contra la lista** en el servidor: uno escrito libre ⛔ no se
+  puede contar.
+  🔑 **Lo tachado se MUDA, ⛔ no desaparece**: sigue abajo, tachado, con su motivo y quién lo sacó, y
+  con «volver a ponerla». Quien mira tiene que poder ver **por qué el número bajó de 104 a 82** — una
+  lista que cambia sola es una lista que se deja de mirar.
+  📌 **Vive adentro de `cobertura` y ⛔ no en una columna nueva**: es la misma afirmación de quien
+  hizo el balance, y así ⛔ no hace falta una migración para algo que nació el mismo día que su
+  pantalla. 🔴 **El servidor CONSERVA las tachaduras al guardar la declaración** (test
+  `exhib-handler`): pisarlas haría que tildar un tipo más borre veinte motivos sin avisar, y del
+  otro lado eso se ve como **un mandado que creció solo**.
+  ⚠️ **Es leer-modificar-escribir**, así que dos personas tachando el MISMO recorrido a la vez se
+  pisan. Se banca porque el balance lo hace **una** persona con la pantalla delante —la sección está
+  diseñada así, dos personas y dos momentos— y lo que se pierde es un tachón que se vuelve a dar.
+  ⛔ No valdría para los escaneos, que van por su camino con su único en la base.
+  ⚠️ **Dos toques y ⛔ ningún menú flotante**: el motivo se elige en el renglón de la prenda. Con 82
+  renglones, un modal por prenda es la razón por la que nadie tacha nada y la lista termina
+  corregida a mano en un papel.
+
+- 🆕 🔴 🔑 **UN SECTOR SE DECLARA POR TIPO DE PRENDA, ⛔ NO POR CATEGORÍA DE TIENDA NUBE**
+  (21-sep-2026, `tipoDePrenda` en `core.ts` + `coberturaPorTipo`/`buscarPorTipo` en `balance.ts`).
+  Bruno: *«todos los productos que arranquen con ese nombre y que tengan stock en local deberían
+  estar colgados y contra esos productos debería ser la comparación»*, y antes: *«mi necesidad
+  principal del chequeo de exhibición es la comparación con el stock del local; lo de Tienda Nube es
+  un extra que sirve, pero no es lo que yo busco, porque es otro sector el que revisa eso»*.
+  🔑 **El motivo ⛔ no es de gusto: el nombre y el stock salen los DOS de Gestión Nube.** La cuenta
+  que le importa al que manda al depósito deja de depender de que Tienda Nube esté bien cargada.
+  🔴 **Lo que se rompió por comparar contra TN**, medido sobre el primer recorrido de sector entero
+  (21-sep, 415 unidades en 36 min):
+  - El catálogo tiene **pares de nombres casi iguales** —`BLUSAS Y CAMISAS` (15 prendas) al lado de
+    `BLUSAS` (66), `VESTIDOS` (9) al lado de `VESTIDOS Y MONOS` (31)—; la lista se ordenaba **por
+    porcentaje cubierto**, las chiquitas daban **100 %** y quedaban **arriba de todo**. Se tildaron
+    esas dos y **el mandado dio CERO**, que se lee como «no falta nada». Lo declarado explicaba
+    **24 de los 389 escaneos (6 %)**.
+  - **168 prendas con stock ⛔ no tienen categoría en TN** y eran invisibles para cualquier
+    declaración. **Por nombre, todas entran en algún tipo** ⇒ el cartel de «sin categoría» se pudo
+    sacar, porque ⛔ ya no hay nada que el balance no pueda juzgar.
+  🔴 **EL ORDEN ES POR LO QUE PASÓ POR EL LECTOR, ⛔ no por porcentaje** — es el arreglo de ese
+  error, ⛔ no un detalle: un tipo chico escaneado entero siempre va a dar 100 %. Hoy la pantalla
+  abre con `TOP 199 de 257 · BLUSA 58 de 66 · VESTIDO 26 de 30 · CAMISA 25 de 30 · BABY TEE 21 de 26
+  …` y los escaneos sueltos (una pollera, un strapless) quedan al final.
+  🔑 **Y un mandado vacío ⛔ ya no puede mentir**: `tocadoSinDeclarar` cuenta lo caminado que queda
+  fuera de lo declarado y la pantalla lo dice. Con la declaración equivocada de ese día habría
+  avisado **«tocaste 326 prendas de tipos que ⛔ no marcaste»**.
+  ⚠️ **BABY TEE son dos palabras** (`TIPOS_COMPUESTOS`, 303 productos). ⛔ **No se adivina cuál es
+  compuesto**: «si la primera palabra siempre viene seguida de la misma segunda» convierte en
+  compuesto a todo tipo de **un solo producto** —SAQUITO VENECIA, MONO TIARE— y el desplegable se
+  llena de modelos. Medido: 76 palabras iniciales en 2.819 productos, y sólo 4 compuestas.
+  ⚠️ **Las erratas del catálogo ⛔ no se corrigen**: `CHOCKER` (99) y `CHOKER` (6) conviven, `COPRIÑO`
+  es `CORPIÑO` mal escrito. Juntarlos sería inventar un dato que la base ⛔ no tiene; aparecen como
+  dos renglones con su cuenta —que es como se descubren— y el aviso de arriba cuida el olvido.
+  📌 **`cobertura.tipos` es el campo vigente y `cats` el viejo**: las declaraciones guardadas ⛔ no se
+  borran, una lista que mandó a mover mercadería tiene que poder leerse dentro de un año tal como se
+  hizo. 📌 **La columna «También está en» se cae sola** (`filasBuscar`): existía para explicar el
+  bolsón de TN, y declarando por nombre ⛔ no hay nada que explicar.
+  🔴 **Y SE CUENTA EN PRENDAS, ⛔ NO EN UNIDADES.** Bruno, mirando el primer mandado: *«todos los
+  productos que tienen stock en local deberían estar exhibidos, no sé por qué me dice la cantidad
+  total que hay del producto… no me tiene que decir son 309 items o algo así, porque no me interesa
+  el stock del local, me interesa que se exhiba»*. La tarea es **colgar UNA** de cada color/talle
+  que ⛔ no está colgado; que el sistema tenga 8 en el depósito ⛔ no la cambia, y el número
+  invitaba a traer las 8. ⇒ se fueron **las unidades del título, de cada renglón y del Excel**, y
+  el orden del mandado pasó de «el que tiene más stock» a **por nombre**, que junta los colores de
+  la misma prenda —como se busca en el depósito—. Cada renglón es una prenda a colgar y **la cuenta
+  es la cantidad de renglones**.
+  📊 **El mandado real del 21-sep**, declarando los 10 tipos que Bruno pidió: **faltan exhibir 104
+  prendas, de 65 modelos distintos**. Por tipo: TOP 58 · BLUSA 8 · CORSET 7 · REMERA 7 · CAMISA 5 ·
+  BABY TEE 5 · BODY 5 · VESTIDO 4 · MUSCULOSA 4 · PANTALON 1.
+
+- 🆕 🔴 🔑 **STUNNED ⛔ NO SE CHEQUEA ACÁ** (21-sep-2026, `seChequea` en `core.ts`). Bruno, mirando el
+  primer recorrido de sector entero: *«hay que sacar stunned»*. Comparte el Gestión Nube, la base y
+  el Local de Zattia —lo único que la separa es el prefijo de SKU (`lib/lineas.core.js`)— pero es
+  **otra tienda, la revisa otro sector y ya tiene su propia pantalla**, el Conteo estándar de Stunned.
+  📊 **Medido**: **117 variantes / 238 unidades / 36 productos** con stock en el Local, **todas buzos
+  (46) y remeras (71)**.
+  🔑 **Sale del UNIVERSO (`items`), ⛔ no del catálogo del lector (`buscables`).** Si alguien escanea
+  un buzo de Stunned el teléfono lo reconoce y canta el número; lo que ⛔ no hace es contar. Sacarlo
+  de `buscables` lo dejaría sonando **«de nuevo»** y la persona reescanearía hasta rendirse — el
+  mismo pozo que las prendas en cero antes del 19-sep.
+  ⚠️ **Por categoría de TN ya estaban medio afuera, pero por accidente**: Stunned tiene su propia
+  Tienda Nube, ⛔ no cruza, y sus 117 caían enteras en «(Sin categoría)». ⛔ No entraban en el
+  mandado, pero **sí inflaban lo que se lee**: el universo (1.066 → **949** variantes, 3.013 →
+  **2.775** unidades) y el cartel de las sin categoría sin ver (285 → **168**). El día que alguien
+  le ponga categorías a Stunned en TN, entran solas y nada avisa.
+  🔴 **Y por NOMBRE DE PRENDA —que es como Bruno mira el salón— ensucian de entrada**: de las 81
+  remeras con stock del Local **71 son de Stunned** ⇒ un recorrido que caminó las remeras de Zattia
+  se lee «3 de 81» y manda a buscar **78 remeras ajenas**.
+  ⚠️ **`enCero` se cuenta aparte y ⛔ no como `buscables.length - items.length`**: esa resta sumaría
+  las 117 de Stunned al cartel de las en cero.
+
 - 🔑 **Los precios salen de Tienda Nube y ⛔ no de nuestras campañas de Liquidación.** Medido el
   15-ago-2026: GN tenía 404 promos vivas en Zattia y la bitácora del Monitor conocía 262. Leyendo lo
   nuestro, **más de un tercio de las etiquetas a controlar aparecería «sin oferta» teniéndola** y el

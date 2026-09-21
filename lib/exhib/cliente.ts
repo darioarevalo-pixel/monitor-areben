@@ -89,8 +89,19 @@ export async function cerrarRecorrido(marca: string, id: string, nota?: string):
  * auditable. Y una lista vacía es una declaración válida —«esto ⛔ no cubrió un sector entero»—,
  * distinta de no haberlo mirado nunca.
  */
-export async function guardarCobertura(marca: string, id: string, cats: string[]): Promise<Cobertura> {
-  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'cobertura', { id, cats })
+export async function guardarCobertura(marca: string, id: string, tipos: string[]): Promise<Cobertura> {
+  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'cobertura', { id, tipos })
+  return d.cobertura
+}
+
+/**
+ * Tacha una prenda del mandado con su motivo, o la vuelve a poner con `motivo: null`.
+ *
+ * 🔑 **Contesta la cobertura entera** y ⛔ no «ok»: la pantalla se queda con lo que quedó guardado
+ * de verdad, así una tachadura que el servidor resolvió distinto ⛔ no se ve al revés en la pantalla.
+ */
+export async function tacharPrenda(marca: string, id: string, varianteId: string, motivo: string | null): Promise<Cobertura> {
+  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'tachar', { id, variante_id: varianteId, motivo })
   return d.cobertura
 }
 

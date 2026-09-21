@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Marca } from '@/lib/nav'
 import type { Producto } from '@/lib/etl/tipos'
 import { bajarExhib, type CrudosExhib } from '@/lib/exhib/datos'
-import { armarProdMap, buscarItem, construirItems, esCruce, exhibId, ordenarCats } from '@/lib/exhib/core'
+import { armarProdMap, buscarItem, construirItems, esCruce, exhibId, ordenarCats, seChequea } from '@/lib/exhib/core'
 import { aEscaneo, avanceDelRecorrido, estadosDe, nuevoRecorridoId, type EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibErrores, ExhibEstado, ExhibEstados, ExhibItem } from '@/lib/exhib/tipos'
 import { useColaEscaneos } from './useColaEscaneos'
@@ -110,12 +110,24 @@ export function useExhib(marca: Marca, productos: Producto[]) {
    * cruzarlo una vez dejaba las 870 prendas en «(Sin categoría)» para siempre.
    *
    * 🔑 **Dos listas**: `buscables` es todo el Local —lo que el lector puede enganchar— e `items` lo
-   * que hay que **chequear** (con stock). Ver `lib/exhib/datos.ts`.
+   * que hay que **chequear** (con stock y de esta tienda, ver `seChequea`). Ver `lib/exhib/datos.ts`.
+   *
+   * 🔴 **`items` es el UNIVERSO de la sección entera**: de acá salen la cobertura del balance, «para
+   * colgar», el mandado del depósito, el conteo de unidades y el desplegable de categorías. Lo que
+   * ⛔ no está acá ⛔ no se le reclama a nadie.
    */
   const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
   const buscables = useMemo(() => construirItems(crudos.inv, prodMap, errores), [crudos.inv, prodMap, errores])
-  const items = useMemo(() => buscables.filter((it) => it.qty > 0), [buscables])
-  const enCero = buscables.length - items.length
+  const items = useMemo(() => buscables.filter((it) => it.qty > 0 && seChequea(marca, it)), [buscables, marca])
+  /**
+   * ⚠️ **Se cuenta sobre `buscables` y ⛔ no como `buscables.length - items.length`.** Esa resta
+   * decía «en cero» hasta el 21-sep-2026, cuando `items` sólo sacaba las que ⛔ no tenían stock;
+   * desde que además saca Stunned, la misma resta sumaría **117 prendas de otra tienda al cartel de
+   * las en cero** y el número que la pantalla canta dejaría de ser el que dice ser.
+   */
+  const enCero = useMemo(() => buscables.filter((it) => it.qty <= 0 && seChequea(marca, it)).length, [buscables, marca])
+  /** Las de Stunned con stock en el Local: se dicen en pantalla, ⛔ no se esconden. */
+  const deStunned = useMemo(() => buscables.filter((it) => it.qty > 0 && !seChequea(marca, it)).length, [buscables, marca])
   const cats = useMemo(() => ordenarCats(items), [items])
 
   /** El estado de cada variante, **derivado de los escaneos del recorrido** (`estadosDe`, con test). */
@@ -241,6 +253,7 @@ export function useExhib(marca: Marca, productos: Producto[]) {
     items,
     buscables,
     enCero,
+    deStunned,
     cats,
     estados,
     errores,

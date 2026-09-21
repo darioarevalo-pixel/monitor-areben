@@ -22,6 +22,10 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
+// ⛔ Copia a mano de `MotivoTachada` (`lib/exhib/balance.ts`): un handler de `api/*.js` ⛔ no puede
+// importar TypeScript. Son dos strings y el test de la pantalla los ejerce; el día que sean muchos,
+// se mudan a un `.core.js` compartido, como ya hicieron `permisos` y `lineas`.
+const MOTIVOS_TACHADA = ['otro-lugar', 'despues']
 const numero = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v))
 /**
  * Una hora que **mandó el teléfono**, o el respaldo si vino vacía o ilegible.
@@ -257,9 +261,57 @@ export default async function handler(req, res) {
       if (accion === 'cobertura') {
         const recorrido = await recorridoDeLaMarca(String(b.id || ''))
         if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
-        // ⚠️ Categorías saneadas: texto, sin vacías y sin repetir. Van a decidir qué se va a buscar.
-        const cats = [...new Set((Array.isArray(b.cats) ? b.cats : []).map((c) => String(c || '').trim()).filter(Boolean))]
-        const cobertura = { cats, por: perfil.name || null, cuando: new Date().toISOString() }
+        // ⚠️ Saneado: texto, sin vacías y sin repetir. Va a decidir qué mercadería se mueve.
+        const limpiar = (v) => [...new Set((Array.isArray(v) ? v : []).map((c) => String(c || '').trim()).filter(Boolean))]
+        // 🔑 `tipos` es el criterio vigente (el tipo de prenda, sacado del nombre en GN) y `cats` el
+        // viejo (categorías de Tienda Nube). Se aceptan los DOS: una declaración guardada tiene que
+        // poder leerse tal como se hizo, y el que la mandó decide con cuál está hablando.
+        // 🔴 **Las tachaduras se CONSERVAN.** Son parte de la misma declaración pero se hacen de a
+        // una, mientras se mira la lista; pisarlas al tildar un tipo más borraría veinte motivos sin
+        // avisar, y del otro lado eso se ve como un mandado que creció solo.
+        const previas = Array.isArray(recorrido.cobertura && recorrido.cobertura.tachadas) ? recorrido.cobertura.tachadas : []
+        const cobertura = { cats: limpiar(b.cats), tipos: limpiar(b.tipos), tachadas: previas, por: perfil.name || null, cuando: new Date().toISOString() }
+        const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ ok: true, cobertura })
+      }
+
+      /**
+       * Tacha una prenda del mandado con su motivo, o la vuelve a poner (`motivo: null`).
+       *
+       * 🔑 **Va adentro de `cobertura` y ⛔ no en una columna nueva**: es la misma afirmación de
+       * quien hizo el balance. Así ⛔ no hace falta una migración para algo que nació el mismo día
+       * que la pantalla que lo usa.
+       * ⚠️ **Es un leer-modificar-escribir**, así que dos personas tachando el MISMO recorrido al
+       * mismo tiempo pueden pisarse. Se banca porque el balance lo hace **una** persona con la
+       * pantalla delante —así está diseñada la sección, dos personas y dos momentos— y porque lo
+       * que se pierde es un tachón que se vuelve a dar. ⛔ No vale lo mismo para los escaneos, que
+       * van por su propio camino con su único en la base.
+       * 🔴 **El motivo se valida contra la lista y ⛔ no se guarda lo que venga**: es el dato con el
+       * que después se va a contestar «¿por qué el sector ⛔ no está donde el sistema cree?», y un
+       * motivo escrito libre ⛔ no se puede contar.
+       */
+      if (accion === 'tachar') {
+        const recorrido = await recorridoDeLaMarca(String(b.id || ''))
+        if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
+        const varianteId = String(b.variante_id || '').trim()
+        if (!varianteId) return res.status(400).json({ error: 'falta la variante' })
+        const motivo = b.motivo == null ? null : String(b.motivo)
+        if (motivo !== null && !MOTIVOS_TACHADA.includes(motivo)) return res.status(400).json({ error: 'Ese motivo no existe.' })
+
+        const previa = recorrido.cobertura || {}
+        const tachadas = (Array.isArray(previa.tachadas) ? previa.tachadas : []).filter((t) => t && t.variante_id !== varianteId)
+        if (motivo) tachadas.push({ variante_id: varianteId, motivo, por: perfil.name || null, cuando: new Date().toISOString() })
+
+        const cobertura = {
+          cats: Array.isArray(previa.cats) ? previa.cats : [],
+          tipos: Array.isArray(previa.tipos) ? previa.tipos : [],
+          tachadas,
+          // ⚠️ `por`/`cuando` son de la DECLARACIÓN del sector, ⛔ no de la tachadura: cada tachada
+          // trae los suyos. Pisarlos acá haría que «lo declaró Fulano» cambie por tachar una prenda.
+          por: previa.por || null,
+          cuando: previa.cuando || new Date().toISOString(),
+        }
         const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
         if (error) throw new Error(error.message)
         return res.status(200).json({ ok: true, cobertura })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPDF, armarProdMap, buscarItem, candidatosPorCodigo, coincidencias, catsDeItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, perteneceA, precioDeGondola, sospechososNoExhibidos, tnAdminUrl } from '../lib/exhib/core'
+import { agruparPDF, armarProdMap, buscarItem, candidatosPorCodigo, coincidencias, catsDeItem, construirItems, contarSinMarcar, esCruce, exhibId, faltantes, filtrarPorCat, limpiarCats, normCode, ordenarCats, perteneceA, precioDeGondola, seChequea, sospechososNoExhibidos, tipoDePrenda, esDelTipo, tnAdminUrl } from '../lib/exhib/core'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstados, type ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'Anillos', cleanCats: ['Anillos'], tnId: null, precio: null, promo: null, ...over })
@@ -329,5 +329,84 @@ describe('armarProdMap — el cruce GN ↔ TN', () => {
     const gn2 = [...gn, { id: 6, name: 'Prenda que no está en la tienda', sku: 'ZZ-99' }]
     const inv2 = [...inv, { product_id: 6, product_name: 'Prenda que no está en la tienda', size_name: 'M', sku: 'ZZ-99', barcode: 780, available_quantity: 1 }]
     expect(ordenarCats(construirItems(inv2, armarProdMap(gn2, tn), {}))).toEqual(['Anillos', SIN_CATEGORIA])
+  })
+})
+
+/**
+ * **Stunned ⛔ no se chequea acá** (21-sep-2026, decisión de Bruno). Comparte el Local de Zattia
+ * pero es otra tienda con su propio sector que la revisa, y con sus 71 remeras adentro del universo
+ * el mandado del depósito pedía prendas ajenas.
+ */
+describe('seChequea — qué prendas entran en el chequeo', () => {
+  const it0 = (sku: string | null): { sku: string } => ({ sku: sku || '' })
+
+  it('deja afuera a Stunned en Zattia, por el prefijo del SKU', () => {
+    expect(seChequea('zattia', it0('STU-REM-0008-L'))).toBe(false)
+    expect(seChequea('zattia', it0('stu-buz-0001'))).toBe(false)
+  })
+
+  it('deja adentro lo de Zattia', () => {
+    expect(seChequea('zattia', it0('RTO-0306-NG'))).toBe(true)
+    expect(seChequea('zattia', it0('RCS-0012-OW-S'))).toBe(true)
+  })
+
+  /**
+   * 🔴 **En BDI el prefijo `STU` ⛔ no significa nada**, y por eso la regla mira la marca primero:
+   * preguntando sólo por el SKU, una funda de BDI se volvería de Stunned.
+   */
+  it('en BDI el prefijo STU ⛔ no saca a nadie', () => {
+    expect(seChequea('bdi', it0('STU-0001'))).toBe(true)
+  })
+
+  /**
+   * ⚠️ **Sin SKU sólo se puede contestar «es de Zattia»**, y eso se chequea. Medido el 21-sep-2026:
+   * de las 1.066 con stock en el Local, 3 ⛔ no tienen SKU y ninguna es de Stunned.
+   */
+  it('una prenda sin SKU se chequea (⛔ no hay otra señal en la base)', () => {
+    expect(seChequea('zattia', it0(null))).toBe(true)
+  })
+})
+
+/**
+ * **El tipo de prenda**, que desde el 21-sep-2026 es con lo que se declara un sector: sale del
+ * nombre del producto en Gestión Nube, la misma base que el stock.
+ */
+describe('tipoDePrenda — declarar por nombre y ⛔ no por categoría de TN', () => {
+  it('toma la primera palabra del nombre', () => {
+    expect(tipoDePrenda('TOP AKIRA')).toBe('TOP')
+    expect(tipoDePrenda('CORSET BERNA S - Azul')).toBe('CORSET')
+    expect(tipoDePrenda('BLUSA PAULA CHOCOLATE')).toBe('BLUSA')
+  })
+
+  /** 📊 303 productos del catálogo de Zattia. Es el único compuesto que pesa. */
+  it('BABY TEE son DOS palabras', () => {
+    expect(tipoDePrenda('BABY TEE BLUE NEGRO')).toBe('BABY TEE')
+    expect(tipoDePrenda('BABY TEE ICON BLACK')).toBe('BABY TEE')
+  })
+
+  it('no se marea con mayúsculas, espacios de más ni el nombre pelado', () => {
+    expect(tipoDePrenda('  top   orsa  ')).toBe('TOP')
+    expect(tipoDePrenda('BABY TEE')).toBe('BABY TEE')
+  })
+
+  /** ⚠️ Una prenda sin nombre existe (`construirItems` la deja en «—») y ⛔ no puede tumbar la lista. */
+  it('sin nombre contesta «—» y ⛔ no revienta', () => {
+    expect(tipoDePrenda(null)).toBe('—')
+    expect(tipoDePrenda('')).toBe('—')
+  })
+
+  /**
+   * 🔴 **Las erratas del catálogo ⛔ no se corrigen acá.** `CHOCKER` (99) y `CHOKER` (6) conviven en
+   * Zattia: juntarlos sería inventar un dato que la base ⛔ no tiene. Aparecen como dos renglones,
+   * que es como se descubren.
+   */
+  it('⛔ no junta las dos grafías de una errata', () => {
+    expect(tipoDePrenda('CHOCKER LUNA')).not.toBe(tipoDePrenda('CHOKER LUNA'))
+  })
+
+  it('esDelTipo compara tipo contra tipo, ⛔ no texto contra texto', () => {
+    expect(esDelTipo({ name: 'TOP ORSA' }, 'top')).toBe(true)
+    expect(esDelTipo({ name: 'TOP ORSA' }, 'TOP AKIRA')).toBe(true)
+    expect(esDelTipo({ name: 'BABY TEE ZEST' }, 'BABY')).toBe(false)
   })
 })

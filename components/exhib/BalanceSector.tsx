@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Notice, color, font, space, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
-import { buscarEnDeposito, coberturaPorCat, filasBuscar, resumenBuscar, sinCategoriaSinVer, HEADER_BUSCAR } from '@/lib/exhib/balance'
-import { guardarCobertura } from '@/lib/exhib/cliente'
-import { normCat } from '@/lib/exhib/core'
+import { buscarPorTipo, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, tocadoSinDeclarar, ANCHOS_BUSCAR, MOTIVOS, type MotivoTachada, type Tachada } from '@/lib/exhib/balance'
+import { guardarCobertura, tacharPrenda } from '@/lib/exhib/cliente'
+import { exhibId, tipoDePrenda } from '@/lib/exhib/core'
 import type { Cobertura, EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { Marca } from '@/lib/nav'
@@ -50,7 +50,7 @@ export function BalanceSector({
   trayendo: boolean
 }) {
   const toast = useToast()
-  const [elegidas, setElegidas] = useState<string[]>(cobertura?.cats ?? [])
+  const [elegidas, setElegidas] = useState<string[]>(cobertura?.tipos ?? [])
   const [guardando, setGuardando] = useState(false)
 
   /**
@@ -80,17 +80,47 @@ export function BalanceSector({
   // mandado; arriba, sí. ⚠️ Y **no saber ⛔ no es estar al día**: sin dato, se avisa igual.
   const stockViejo = !stockDe || stockDe.horas > 2
 
-  const cats = useMemo(() => coberturaPorCat(escaneos, items), [escaneos, items])
-  const lista = useMemo(() => buscarEnDeposito(escaneos, items, elegidas), [escaneos, items, elegidas])
-  const sinCat = useMemo(() => sinCategoriaSinVer(escaneos, items), [escaneos, items])
-  const resumen = resumenBuscar(lista)
+  const tipos = useMemo(() => coberturaPorTipo(escaneos, items), [escaneos, items])
+  const lista = useMemo(() => buscarPorTipo(escaneos, items, elegidas), [escaneos, items, elegidas])
+  /**
+   * 🔴 **El seguro contra el error del 21-sep-2026**: cuántas prendas caminadas quedan fuera de lo
+   * declarado. Un mandado vacío puede querer decir «no falta nada» o «declaraste cualquier cosa», y
+   * hasta ese día la pantalla ⛔ no distinguía las dos.
+   */
+  const afuera = useMemo(() => tocadoSinDeclarar(escaneos, items, elegidas), [escaneos, items, elegidas])
 
-  // Sin una sola categoría tocada ⛔ no hay nada que balancear (un recorrido de puros códigos que no
+  /**
+   * 🔴 **Las tachadas se mudan, ⛔ no desaparecen** (`partirTachadas`): quien mira tiene que poder
+   * ver por qué el número bajó de 104 a 82, y poder arrepentirse. Una lista que cambia sola es una
+   * lista que se deja de mirar.
+   */
+  const { mandado, sacadas } = useMemo(
+    () => partirTachadas(lista, (cobertura?.tachadas ?? []) as Tachada[]),
+    [lista, cobertura],
+  )
+  const [tachando, setTachando] = useState<string | null>(null)
+  /** La prenda a la que se le está eligiendo el motivo, ⛔ no un menú flotante: se elige en su renglón. */
+  const [eligiendo, setEligiendo] = useState<string | null>(null)
+  const resumen = resumenBuscar(mandado)
+
+  async function tachar(varianteId: string, motivo: MotivoTachada | null) {
+    setTachando(varianteId)
+    try {
+      onGuardada(await tacharPrenda(marca, recorridoId, varianteId, motivo))
+      setEligiendo(null)
+    } catch (e) {
+      toast.error('No se pudo guardar: ' + (e as Error).message)
+    } finally {
+      setTachando(null)
+    }
+  }
+
+  // Sin un solo tipo tocado ⛔ no hay nada que balancear (un recorrido de puros códigos que no
   // cruzaron, por ejemplo). Decirlo es más honesto que mostrar una caja vacía.
-  if (!cats.length) return null
+  if (!tipos.length) return null
 
-  const alternar = (cat: string) =>
-    setElegidas((prev) => (prev.some((c) => normCat(c) === normCat(cat)) ? prev.filter((c) => normCat(c) !== normCat(cat)) : [...prev, cat]))
+  const alternar = (tipo: string) =>
+    setElegidas((prev) => (prev.some((t) => tipoDePrenda(t) === tipoDePrenda(tipo)) ? prev.filter((t) => tipoDePrenda(t) !== tipoDePrenda(tipo)) : [...prev, tipo]))
 
   async function guardar() {
     setGuardando(true)
@@ -104,14 +134,14 @@ export function BalanceSector({
     }
   }
 
-  const sinGuardar = JSON.stringify(elegidas.map(normCat).sort()) !== JSON.stringify((cobertura?.cats ?? []).map(normCat).sort())
+  const sinGuardar = JSON.stringify(elegidas.map(tipoDePrenda).sort()) !== JSON.stringify((cobertura?.tipos ?? []).map(tipoDePrenda).sort())
 
   return (
     <Notice tone="brand" icon="📋" style={{ marginBottom: space[4] }}>
       <div style={{ fontWeight: weight.bold, fontSize: font.base }}>Balance del sector</div>
       <div style={{ fontSize: font.sm, marginBottom: space[3] }}>
-        Marcá las categorías que este recorrido caminó <b>enteras</b>. Con eso se arma la lista de lo que hay que ir a buscar al
-        depósito del local. Si sólo se caminó un mueble suelto, dejalo sin marcar.
+        Marcá los tipos de prenda que este recorrido caminó <b>enteros</b> —top, blusa, corset…—. Con eso se arma la lista de lo que hay
+        que ir a buscar al depósito del local. Si sólo se caminó un mueble suelto, dejalo sin marcar.
       </div>
 
       {/* 🔴 Va ANTES de las categorías: es la pregunta previa a cualquier tilde. Un mandado armado
@@ -149,22 +179,27 @@ export function BalanceSector({
         )}
       </div>
 
-      {cats.map((c) => {
-        const puesta = elegidas.some((x) => normCat(x) === normCat(c.cat))
+      {/* 🔴 Ordenados por lo que PASÓ POR EL LECTOR y ⛔ no por porcentaje: ver `coberturaPorTipo`.
+          Con el orden por porcentaje, un tipo de 9 prendas escaneadas enteras daba 100 % y se
+          plantaba arriba del sector caminado de verdad — y eso fue el mandado vacío del 21-sep. */}
+      {tipos.map((c) => {
+        const puesta = elegidas.some((x) => tipoDePrenda(x) === c.tipo)
         const pct = Math.round(c.cubierto * 100)
         return (
           <label
-            key={c.cat}
+            key={c.tipo}
             style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', padding: '8px 2px', borderBottom: `1px solid ${color.line}`, cursor: 'pointer' }}
           >
-            <input type="checkbox" checked={puesta} onChange={() => alternar(c.cat)} style={{ width: 20, height: 20, marginTop: 2, flex: '0 0 auto' }} />
+            <input type="checkbox" checked={puesta} onChange={() => alternar(c.tipo)} style={{ width: 20, height: 20, marginTop: 2, flex: '0 0 auto' }} />
             <span style={{ minWidth: 0 }}>
-              <span style={{ fontWeight: 600, color: color.ink }}>{c.cat}</span>
+              <span style={{ fontWeight: 600, color: color.ink }}>{c.tipo}</span>
               <span style={{ display: 'block', fontSize: font.sm, color: color.mut }}>
                 {/* 🔴 El número con el que se decide. Va en palabras de local: «de las N que el sistema
                     dice que hay acá», ⛔ no «universo». */}
                 Pasaron por el lector <b>{c.vistas}</b> de las <b>{c.universo}</b> que el sistema tiene en el local ({pct}%)
-                {c.universo > c.vistas && <> · quedan <b>{c.unidadesSinVer}</b> {c.unidadesSinVer === 1 ? 'unidad' : 'unidades'} sin ver</>}
+                {/* 🔴 Lo que falta se cuenta en PRENDAS y ⛔ no en unidades: la tarea es colgar una
+                    de cada color/talle que ⛔ no está colgado. Ver `filasBuscar`. */}
+                {c.universo > c.vistas && <> · faltan <b>{c.universo - c.vistas}</b> por exhibir</>}
               </span>
             </span>
           </label>
@@ -175,15 +210,17 @@ export function BalanceSector({
         <Button size="sm" variant="solid" tone="brand" onClick={() => void guardar()} loading={guardando} disabled={!sinGuardar}>
           {sinGuardar ? 'Guardar el balance' : 'Balance guardado'}
         </Button>
-        {!!lista.length && (
+        {!!mandado.length && (
           <Button
             size="sm"
             variant="outline"
             onClick={() =>
-              void descargarXlsx(filasBuscar(lista), {
-                archivo: `buscar-en-deposito-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+              void descargarXlsx(filasBuscar(mandado), {
+                archivo: `falta-exhibir-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
                 hoja: 'Buscar en depósito',
-                anchos: [40, 18, 18, 18, 14, 28],
+                // ⚠️ Los anchos se recortan con las columnas: `filasBuscar` tira la última cuando
+                // ⛔ no tiene nada que decir, y un ancho de más corre todo el Excel.
+                anchos: ANCHOS_BUSCAR.slice(0, filasBuscar(mandado)[0].length),
               })
             }
           >
@@ -202,40 +239,98 @@ export function BalanceSector({
 
       {!!elegidas.length && (
         <div style={{ marginTop: space[4] }}>
+          {/* 🔴 **UN número y que sea el que importa** (21-sep-2026, Bruno: «me interesa que se
+              exhiba»): cuántas prendas distintas ⛔ no están colgadas. Las unidades se sacaron —que
+              el sistema tenga 8 en el depósito ⛔ no cambia la tarea, que es colgar una—. */}
           <div style={{ fontWeight: weight.bold }}>
-            Buscar en el depósito del local: {resumen.productos} {resumen.productos === 1 ? 'prenda' : 'prendas'} · {resumen.variantes}{' '}
-            {resumen.variantes === 1 ? 'color/talle' : 'colores o talles'} · {resumen.unidades} {resumen.unidades === 1 ? 'unidad' : 'unidades'}
+            Faltan exhibir: {resumen.variantes} {resumen.variantes === 1 ? 'prenda' : 'prendas'}
+            <span style={{ fontWeight: weight.normal, color: color.mut }}>
+              {' '}(colores o talles con stock en el local que ⛔ no pasaron por el lector, de {resumen.productos}{' '}
+              {resumen.productos === 1 ? 'modelo' : 'modelos'} distintos)
+            </span>
           </div>
-          {!lista.length ? (
-            <div style={{ fontSize: font.sm }}>No falta nada: todo lo que el sistema tiene en el local de esas categorías pasó por el lector.</div>
+          {!mandado.length ? (
+            <div style={{ fontSize: font.sm }}>No falta nada: todo lo que el sistema tiene en el local de esos tipos de prenda pasó por el lector.</div>
           ) : (
             <div style={{ maxHeight: 360, overflowY: 'auto', marginTop: space[2] }}>
-              {lista.map((b) => (
-                <div key={b.it.barcode || b.it.productId + '|' + b.it.size} style={{ padding: '6px 2px', borderBottom: `1px solid ${color.line}` }}>
-                  <div style={{ fontSize: font.base, color: color.ink }}>
-                    {b.it.name} <span style={{ color: color.mut }}>· {b.it.size || '—'}</span>{' '}
-                    <b>{b.it.qty}</b> <span style={{ color: color.mut }}>{b.it.qty === 1 ? 'unidad' : 'unidades'}</span>
+              {mandado.map((b) => {
+                const id = exhibId(b.it)
+                return (
+                  <div key={id} style={{ padding: '6px 2px', borderBottom: `1px solid ${color.line}` }}>
+                    <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: font.base, color: color.ink, minWidth: 0 }}>
+                        {b.it.name} <span style={{ color: color.mut }}>· {b.it.size || '—'}</span>
+                      </span>
+                      {/* 🔑 **Dos toques y ⛔ ningún menú flotante**: el motivo se elige en el mismo
+                          renglón de la prenda. Con 82 renglones, un modal por prenda es la razón por
+                          la que nadie tacha nada y la lista se corrige a mano en un papel. */}
+                      {eligiendo === id ? (
+                        <span style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+                          {(Object.keys(MOTIVOS) as MotivoTachada[]).map((m) => (
+                            <Button key={m} size="sm" variant="outline" loading={tachando === id} onClick={() => void tachar(id, m)}>
+                              {MOTIVOS[m]}
+                            </Button>
+                          ))}
+                          <Button size="sm" variant="ghost" onClick={() => setEligiendo(null)}>
+                            cancelar
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => setEligiendo(id)}>
+                          ya está colgada
+                        </Button>
+                      )}
+                    </div>
+                    {/* Explica por qué aparece algo que no parece del sector, en vez de esconderlo: el
+                        bolsón «TOPS Y BODIES» se come 5 corsets y un saquito. */}
+                    {!!b.tambienEn.length && <div style={{ fontSize: font.xs, color: color.mut }}>también está en {b.tambienEn.join(' / ')}</div>}
                   </div>
-                  {/* Explica por qué aparece algo que no parece del sector, en vez de esconderlo: el
-                      bolsón «TOPS Y BODIES» se come 5 corsets y un saquito. */}
-                  {!!b.tambienEn.length && <div style={{ fontSize: font.xs, color: color.mut }}>también está en {b.tambienEn.join(' / ')}</div>}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
           <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
-            El Excel lleva {HEADER_BUSCAR.length} columnas, con el código de barras para buscarlas con el lector.
+            El Excel lleva una fila por prenda a colgar, con el código de barras para buscarlas con el lector.
           </div>
+
+          {/* 🔴 **Lo tachado se muestra, ⛔ no se borra.** Es la explicación de por qué el número
+              bajó, y el único lugar desde donde alguien puede arrepentirse. Y los motivos juntos son
+              el dato: muchas «en otro lugar» quieren decir que el sector ⛔ no está donde el sistema
+              cree; muchas «se colgó después», que el balance se hace demasiado tarde. */}
+          {!!sacadas.length && (
+            <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+              <div style={{ fontSize: font.sm, fontWeight: weight.semibold }}>
+                Sacadas del mandado: {sacadas.length} {sacadas.length === 1 ? 'prenda' : 'prendas'}
+              </div>
+              {sacadas.map((b) => {
+                const id = exhibId(b.it)
+                return (
+                  <div key={id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 2px' }}>
+                    <span style={{ fontSize: font.sm, color: color.mut, textDecoration: 'line-through' }}>
+                      {b.it.name} · {b.it.size || '—'}
+                    </span>
+                    <span style={{ fontSize: font.xs, color: color.mut }}>
+                      {MOTIVOS[b.tachada.motivo] || b.tachada.motivo}
+                      {b.tachada.por ? ` · ${b.tachada.por}` : ''}
+                    </span>
+                    <Button size="sm" variant="ghost" loading={tachando === id} onClick={() => void tachar(id, null)}>
+                      volver a ponerla
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 🔴 Lo que el balance ⛔ NO puede juzgar, dicho siempre. Callarlo haría leer el mandado como
-          completo cuando ⛔ no lo es, y nadie va a buscar algo que la lista ⛔ no nombró. */}
-      {!!sinCat.length && (
+      {/* 🔴 **El seguro del 21-sep-2026.** Reemplaza al cartel de «sin categoría en Tienda Nube»,
+          que declarando por nombre ⛔ ya no hace falta —toda prenda tiene nombre, así que ninguna es
+          invisible—. Lo que sí puede pasar es declarar de menos, y eso es lo que se dice acá. */}
+      {!!elegidas.length && afuera > 0 && (
         <div style={{ fontSize: font.sm, marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-          ⚠️ Hay <b>{sinCat.length}</b> {sinCat.length === 1 ? 'prenda' : 'prendas'} con stock en el local <b>sin categoría en Tienda Nube</b> que no pasaron
-          por el lector ({new Set(sinCat.map((i) => i.productId)).size} productos). No entran en esta cuenta ni para bien ni para mal: para que entren,
-          hay que vincularles una categoría en Tienda Nube.
+          ⚠️ Este recorrido tocó <b>{afuera}</b> {afuera === 1 ? 'prenda' : 'prendas'} de tipos que <b>no marcaste</b>. Si caminaste ese sector también,
+          marcalos: no van a aparecer en el mandado.
         </div>
       )}
     </Notice>

@@ -277,3 +277,71 @@ describe('el balance del sector', () => {
     expect(guardada()).toBeUndefined()
   })
 })
+
+/**
+ * **Tachar una prenda del mandado** (21-sep-2026). Viaja adentro de `cobertura` —es la misma
+ * afirmación de quien hizo el balance— y por eso el handler hace **leer-modificar-escribir**: el
+ * oráculo de estos casos es qué queda guardado en el jsonb, ⛔ no qué contestó.
+ */
+describe('tachar una prenda del mandado', () => {
+  const conCobertura = (cobertura: unknown) => {
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'zattia', modo: 'libre', estado: 'cerrado', cobertura }]
+  }
+  const guardada = () => base.escrituras.filter((e) => e.tabla === 'exhib_recorrido').at(-1)?.filas?.[0]?.cobertura as Record<string, unknown>
+
+  it('guarda la prenda con su motivo, quién y cuándo', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], por: 'Bruno Arevalo', cuando: '2026-09-21T16:32:00.000Z' })
+    const res = await correr(postear({ action: 'tachar', id: REC, variante_id: 'b2', motivo: 'otro-lugar' }))
+    expect(res.code).toBe(200)
+    const t = (guardada().tachadas as Record<string, unknown>[])[0]
+    expect(t).toMatchObject({ variante_id: 'b2', motivo: 'otro-lugar', por: 'camilaquintana' })
+    expect(String(t.cuando)).toMatch(/^\d{4}-/)
+  })
+
+  /**
+   * 🔴 `por`/`cuando` son de la DECLARACIÓN del sector y ⛔ no de la tachadura: pisarlos haría que
+   * «lo declaró Fulano» cambie de nombre por tachar una prenda. Cada tachada trae los suyos.
+   */
+  it('⛔ no le cambia el dueño a la declaración del sector', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], por: 'Bruno Arevalo', cuando: '2026-09-21T16:32:00.000Z' })
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b2', motivo: 'despues' }))
+    expect(guardada()).toMatchObject({ por: 'Bruno Arevalo', cuando: '2026-09-21T16:32:00.000Z', tipos: ['TOP'] })
+  })
+
+  it('volver a ponerla la saca de la lista (motivo null)', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], tachadas: [{ variante_id: 'b2', motivo: 'despues', por: 'x', cuando: 'y' }], por: null, cuando: 'z' })
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b2', motivo: null }))
+    expect(guardada().tachadas).toEqual([])
+  })
+
+  /** ⚠️ Tachar dos veces la misma prenda la deja UNA vez, con el último motivo. */
+  it('⛔ no duplica la misma prenda', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], tachadas: [{ variante_id: 'b2', motivo: 'despues', por: 'x', cuando: 'y' }], por: null, cuando: 'z' })
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b2', motivo: 'otro-lugar' }))
+    const ts = guardada().tachadas as Record<string, unknown>[]
+    expect(ts).toHaveLength(1)
+    expect(ts[0].motivo).toBe('otro-lugar')
+  })
+
+  /**
+   * 🔴 **El motivo se valida contra la lista.** Es el dato con el que después se va a contestar
+   * «¿por qué el sector ⛔ no está donde el sistema cree?», y un motivo libre ⛔ no se puede contar.
+   */
+  it('un motivo inventado se rechaza y ⛔ no escribe nada', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], por: null, cuando: 'z' })
+    const res = await correr(postear({ action: 'tachar', id: REC, variante_id: 'b2', motivo: 'porque-si' }))
+    expect(res.code).toBe(400)
+    expect(base.escrituras.filter((e) => e.tabla === 'exhib_recorrido')).toHaveLength(0)
+  })
+
+  /**
+   * 🔴 **Guardar la declaración ⛔ NO borra las tachaduras.** Si las pisara, tildar un tipo más
+   * borraría veinte motivos sin avisar — y del otro lado se ve como un mandado que creció solo.
+   */
+  it('🔴 declarar un tipo más conserva lo ya tachado', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], tachadas: [{ variante_id: 'b2', motivo: 'despues', por: 'x', cuando: 'y' }], por: null, cuando: 'z' })
+    await correr(postear({ action: 'cobertura', id: REC, tipos: ['TOP', 'BLUSA'] }))
+    expect(guardada().tipos).toEqual(['TOP', 'BLUSA'])
+    expect(guardada().tachadas).toHaveLength(1)
+  })
+})

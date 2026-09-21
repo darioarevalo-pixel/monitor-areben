@@ -30,7 +30,7 @@
  */
 
 import type { Filas } from '../excel'
-import { catsDeItem, exhibId, normCat, perteneceA } from './core'
+import { catsDeItem, esDelTipo, exhibId, normCat, perteneceA, tipoDePrenda } from './core'
 import { catsVisibles, pasoPorElLector, type EscaneoLibre } from './libre'
 import { SIN_CATEGORIA, type ExhibItem } from './tipos'
 
@@ -93,6 +93,88 @@ export function coberturaPorCat(escaneos: EscaneoLibre[], conStock: ExhibItem[])
     .sort((a, b) => b.cubierto - a.cubierto || b.universo - a.universo || a.cat.localeCompare(b.cat, 'es'))
 }
 
+/**
+ * Un **tipo de prenda** que el recorrido tocó, con cuánto de él cubrió. La contracara de
+ * `CoberturaCat`, contra el nombre del producto en vez de la categoría de Tienda Nube.
+ */
+export type CoberturaTipo = {
+  /** `TOP`, `BLUSA`, `BABY TEE`… tal como sale del nombre del producto. */
+  tipo: string
+  /** Variantes con stock en el Local de ese tipo. */
+  universo: number
+  /** De ésas, cuántas pasaron por el lector en este recorrido. */
+  vistas: number
+  cubierto: number
+}
+
+/**
+ * **Los tipos que el recorrido tocó, del más caminado al menos.**
+ *
+ * 🔴 **El orden es por lo que PASÓ POR EL LECTOR, ⛔ no por el porcentaje cubierto, y ése es el
+ * arreglo del 21-sep-2026.** Ordenando por porcentaje, un tipo del que hay 9 prendas en el local y
+ * se escanearon las 9 da **100 %** y se planta **arriba** del sector que se caminó de verdad. Pasó
+ * en el salón: el balance se declaró sobre dos categorías de 15 y 9 prendas que estaban primeras
+ * —dieron 100 %— y el mandado salió **vacío** después de una caminata de 415 unidades.
+ * ⇒ Primero va lo que la persona efectivamente caminó: hoy eso es `TOP 199 · BLUSA 58 · VESTIDO 26
+ * · CAMISA 25 · BABY TEE 21 …` y los escaneos sueltos (una pollera, un strapless) quedan al final,
+ * que es donde se leen como lo que son.
+ */
+export function coberturaPorTipo(escaneos: EscaneoLibre[], conStock: ExhibItem[]): CoberturaTipo[] {
+  const vistas = vistasDelRecorrido(escaneos)
+  const tocados = new Set<string>()
+  for (const it of conStock) if (vistas.has(exhibId(it))) tocados.add(tipoDePrenda(it.name))
+
+  return [...tocados]
+    .map((tipo) => {
+      const universo = conStock.filter((it) => esDelTipo(it, tipo))
+      const sinVer = universo.filter((it) => !vistas.has(exhibId(it)))
+      return {
+        tipo,
+        universo: universo.length,
+        vistas: universo.length - sinVer.length,
+        cubierto: universo.length ? (universo.length - sinVer.length) / universo.length : 0,
+      }
+    })
+    .sort((a, b) => b.vistas - a.vistas || b.universo - a.universo || a.tipo.localeCompare(b.tipo, 'es'))
+}
+
+/**
+ * **El mandado, por tipo de prenda**: lo que tiene stock en el Local de los tipos declarados y ⛔ no
+ * pasó por el lector en todo el recorrido.
+ *
+ * 🔑 **`tambienEn` va vacío a propósito.** Esa columna existía para explicar por qué un corset
+ * aparecía en un mandado de «TOPS Y BODIES» —el bolsón de TN se comía prendas de otro sector—.
+ * Declarando por nombre **el problema ⛔ no existe**: si el renglón dice CORSET BERNA es porque se
+ * declaró CORSET. Nada que explicar es mejor que explicarlo bien.
+ */
+export function buscarPorTipo(escaneos: EscaneoLibre[], conStock: ExhibItem[], tipos: string[]): Buscar[] {
+  if (!tipos.length) return []
+  const vistas = vistasDelRecorrido(escaneos)
+  return conStock
+    .filter((it) => !vistas.has(exhibId(it)) && tipos.some((t) => esDelTipo(it, t)))
+    .map((it) => ({ it, tambienEn: [] as string[] }))
+    // 🔑 **Por nombre y ⛔ no por unidades** (21-sep-2026). Ordenar por stock ponía arriba «el que
+    // tiene 10» como si fuera más urgente, y ⛔ no lo es: falta colgar UNA de cada una. Por nombre,
+    // los colores de la misma prenda caen juntos, que es como se busca en el depósito.
+    .sort((a, b) => a.it.name.localeCompare(b.it.name, 'es') || a.it.size.localeCompare(b.it.size, 'es'))
+}
+
+/**
+ * **Lo que pasó por el lector y ⛔ no está en lo declarado.** El seguro contra el error del
+ * 21-sep-2026.
+ *
+ * 🔴 **Un mandado vacío ⛔ no prueba que no falte nada: puede probar que se declaró cualquier cosa.**
+ * Ese día se tildaron dos categorías que explicaban **24 de los 389 escaneos (6 %)**, el mandado
+ * dio cero y la pantalla se quedó callada — que es la forma más cara de equivocarse acá, porque
+ * nadie va a ir a buscar lo que la lista ⛔ no nombró. Con este número la pantalla puede decir
+ * «declaraste esto, pero caminaste 365 prendas que ⛔ no entran», y el que mira lo ve **antes** de
+ * mandar a nadie al depósito.
+ */
+export function tocadoSinDeclarar(escaneos: EscaneoLibre[], conStock: ExhibItem[], tipos: string[]): number {
+  const vistas = vistasDelRecorrido(escaneos)
+  return conStock.filter((it) => vistas.has(exhibId(it)) && !tipos.some((t) => esDelTipo(it, t))).length
+}
+
 /** Una prenda a buscar en el depósito del local. */
 export type Buscar = {
   it: ExhibItem
@@ -129,6 +211,62 @@ export function buscarEnDeposito(escaneos: EscaneoLibre[], conStock: ExhibItem[]
     .sort((a, b) => b.it.qty - a.it.qty || a.it.name.localeCompare(b.it.name, 'es') || a.it.size.localeCompare(b.it.size, 'es'))
 }
 
+/**
+ * **Por qué una prenda del mandado se tacha.**
+ *
+ * 🔴 **Los dos motivos ⛔ no son excusas sueltas: son dos cosas que pasan TODAS las veces**, y las
+ * dijo Bruno el 21-sep-2026 mirando el primer mandado real, prenda por prenda:
+ * - `'otro-lugar'` — *«overlay sacalas, porque están exhibidas en el perchero de los sweaters»*. La
+ *   app sabe manejar esto **adentro** de un recorrido —un top que aparece en la vidriera y se
+ *   escanea cuenta como colgado— pero ⛔ no puede saber nada de un sector que nadie caminó.
+ * - `'despues'` — *«fueron productos nuevos que entraron el sábado y los exhibieron luego del
+ *   escaneo»*. El recorrido es **una foto de un momento** y el balance se hace horas después; en el
+ *   medio el local trabaja. ⛔ No es un error de nadie.
+ *
+ * 🔑 **Se guarda el motivo y ⛔ no sólo el tachón**, y eso es todo el punto: acumulados, los motivos
+ * contestan preguntas que hoy ⛔ nadie puede contestar. Si todos los meses aparecen prendas
+ * «colgadas en otro lugar», el sector ⛔ no está donde el sistema cree. Si aparecen muchas «se
+ * colgó después», el balance se está haciendo demasiado tarde.
+ */
+export type MotivoTachada = 'otro-lugar' | 'despues'
+
+/** Cómo se lee cada motivo en pantalla. ⛔ Sin tecnicismos: lo escribe y lo lee gente del local. */
+export const MOTIVOS: Record<MotivoTachada, string> = {
+  'otro-lugar': 'ya está colgada, en otro lugar',
+  despues: 'se colgó después del escaneo',
+}
+
+/** Una prenda que alguien sacó del mandado, con por qué, quién y cuándo. */
+export type Tachada = {
+  /** El id de la variante, el mismo `exhibId` con el que viaja un escaneo. */
+  variante_id: string
+  motivo: MotivoTachada
+  por: string | null
+  cuando: string
+}
+
+/**
+ * **El mandado partido en dos: lo que hay que ir a buscar y lo que alguien ya resolvió.**
+ *
+ * 🔑 **La tachada ⛔ no desaparece, se muda.** Borrarla de la pantalla dejaría a quien mira sin
+ * saber por qué el número bajó de 104 a 82 —y sin forma de arrepentirse—. Una lista que cambia sola
+ * es una lista que se deja de mirar.
+ */
+export function partirTachadas(
+  lista: Buscar[],
+  tachadas: Tachada[],
+): { mandado: Buscar[]; sacadas: Array<Buscar & { tachada: Tachada }> } {
+  const porId = new Map(tachadas.map((t) => [t.variante_id, t]))
+  const mandado: Buscar[] = []
+  const sacadas: Array<Buscar & { tachada: Tachada }> = []
+  for (const b of lista) {
+    const t = porId.get(exhibId(b.it))
+    if (t) sacadas.push({ ...b, tachada: t })
+    else mandado.push(b)
+  }
+  return { mandado, sacadas }
+}
+
 export type ResumenBalance = { variantes: number; unidades: number; productos: number }
 
 export function resumenBuscar(lista: Buscar[]): ResumenBalance {
@@ -155,13 +293,31 @@ export function sinCategoriaSinVer(escaneos: EscaneoLibre[], conStock: ExhibItem
     .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, 'es'))
 }
 
-export const HEADER_BUSCAR = ['Producto', 'Color / Talle', 'SKU', 'Código de barras', 'Unidades en el local', 'También está en']
+export const HEADER_BUSCAR = ['Producto', 'Color / Talle', 'SKU', 'Código de barras', 'También está en']
+/** El ancho de cada columna del Excel, en el orden de `HEADER_BUSCAR`. */
+export const ANCHOS_BUSCAR = [40, 18, 18, 18, 28]
 
-/** El Excel del mandado, para el que va al depósito del local con el teléfono o el papel. */
+/**
+ * El Excel del mandado, para el que va al depósito del local con el teléfono o el papel.
+ *
+ * 🔴 **⛔ NO lleva cuántas unidades hay, y eso es del 21-sep-2026.** Bruno, mirando el primer
+ * mandado: *«no me tiene que decir son 309 items o algo así, porque no me interesa el stock del
+ * local, me interesa que se exhiba»*. La tarea es **colgar una** de cada color/talle que ⛔ no está
+ * colgado; que el sistema tenga 8 en el depósito ⛔ no la cambia, y el número invitaba a traer 8.
+ * ⇒ **cada renglón es una prenda a colgar y la cuenta es la cantidad de renglones.**
+ *
+ * ⚠️ **La última columna se cae sola cuando ⛔ no tiene nada que decir.** «También está en» explica
+ * por qué aparece una prenda de otro sector, y eso sólo pasa declarando por categoría de Tienda
+ * Nube; declarando por tipo de prenda viene vacía en **todas** las filas, y una columna con
+ * encabezado y 86 celdas en blanco se lee como un dato que se perdió.
+ */
 export function filasBuscar(lista: Buscar[]): Filas {
-  const filas: Filas = [[...HEADER_BUSCAR]]
+  const conNota = lista.some((b) => b.tambienEn.length)
+  const cols = conNota ? HEADER_BUSCAR.length : HEADER_BUSCAR.length - 1
+  const filas: Filas = [HEADER_BUSCAR.slice(0, cols)]
   for (const b of lista) {
-    filas.push([b.it.name, b.it.size, b.it.sku || '', b.it.barcode || '', b.it.qty, b.tambienEn.join(' / ')])
+    const fila = [b.it.name, b.it.size, b.it.sku || '', b.it.barcode || '', b.tambienEn.join(' / ')]
+    filas.push(fila.slice(0, cols))
   }
   return filas
 }

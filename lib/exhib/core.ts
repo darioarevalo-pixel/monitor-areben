@@ -8,7 +8,8 @@
 import { CATS_GENERICAS, esFundaCat, esModeloCat, esPromo } from '../reposicion/grupos'
 import { indexarTn, matchTn, type ClaveGN, type TnProducto } from '../tn'
 import { adminBaseUrl, ofertaVigente, type OfertaVigente } from '../tienda'
-import type { Linea } from '../lineas'
+import { lineaDe, type Linea } from '../lineas'
+import type { Marca } from '../nav'
 import { SIN_CATEGORIA, type ExhibErrores, type ExhibEstado, type ExhibEstados, type ExhibItem } from './tipos'
 
 /** Id estable de una variante: barcode si hay, si no productId|talle. Port de _exhibId. */
@@ -205,6 +206,92 @@ export function coincidencias(items: ExhibItem[], code: string): ExhibItem[] {
  */
 export function buscarItem(items: ExhibItem[], code: string): ExhibItem | null {
   return coincidencias(items, code)[0] || null
+}
+
+/**
+ * **Los tipos de prenda que se escriben con dos palabras.**
+ *
+ * 🔑 **Es una lista corta y a mano, y está bien que lo sea.** 📊 Medido sobre los **2.819 productos**
+ * de Zattia el 21-sep-2026: las 76 palabras iniciales del catálogo son tipos de prenda de una sola
+ * palabra salvo estas cuatro. La única que pesa es **BABY TEE (303 productos)**; las otras tres son
+ * de 1 a 4. ⛔ **No se adivina**: una regla del tipo «si la primera palabra siempre viene seguida de
+ * la misma segunda, son dos» convierte en compuesto a todo tipo que tenga **un solo producto**
+ * —«SAQUITO VENECIA», «MONO TIARE», «PALAZO BRIANNA»— y el desplegable se llena de modelos.
+ */
+export const TIPOS_COMPUESTOS = ['BABY TEE', 'LONG TEE', 'TOTE BAG', 'SHOULDER BAG']
+
+/**
+ * **El tipo de prenda, sacado del nombre**: `TOP AKIRA` → `TOP`, `BABY TEE BLUE NEGRO` → `BABY TEE`.
+ *
+ * 🔴 **Es el reemplazo de la categoría de Tienda Nube para declarar un sector** (21-sep-2026,
+ * pedido de Bruno: *«todos los productos que arranquen con ese nombre y que tengan stock en local
+ * deberían estar colgados y contra esos productos debería ser la comparación»*). Y el motivo ⛔ no
+ * es de gusto: **el nombre y el stock salen los dos de Gestión Nube**, así que la comparación que a
+ * Bruno le importa ⛔ no depende de que Tienda Nube esté bien cargada.
+ *
+ * 📊 **Lo que se rompía comparando por categoría de TN**, medido sobre el recorrido real del
+ * 21-sep-2026 (415 unidades en 36 minutos):
+ * - El catálogo tiene **pares de nombres casi iguales** —`BLUSAS Y CAMISAS` (15 prendas) al lado de
+ *   `BLUSAS` (66), `VESTIDOS` (9) al lado de `VESTIDOS Y MONOS` (31)—, la lista se ordenaba por
+ *   porcentaje cubierto, las chiquitas daban **100 %** y quedaban **arriba de todo**. Se tildaron
+ *   esas dos y el mandado dio **CERO**, que se lee como «no falta nada». De los 389 escaneos, lo
+ *   declarado explicaba **24 (el 6 %)**.
+ * - **168 prendas con stock ⛔ no tienen categoría en TN** y eran invisibles para cualquier
+ *   declaración. Por nombre, **todas** entran en algún tipo.
+ *
+ * ⚠️ **Los tipos salen del catálogo tal cual está, con sus erratas.** Hoy conviven `CHOCKER` (99) y
+ * `CHOKER` (6), y `COPRIÑO` (1) es `CORPIÑO` mal escrito. ⛔ **No se corrigen acá**: juntarlos a
+ * mano sería inventar un dato que la base ⛔ no tiene. Aparecen como dos renglones con su cuenta al
+ * lado —que es como se descubren— y el aviso de «tocaste tipos que ⛔ no declaraste» cuida el caso
+ * de tildar uno y olvidarse del otro.
+ */
+export function tipoDePrenda(name: string | null | undefined): string {
+  const n = String(name || '').trim().toUpperCase().replace(/\s+/g, ' ')
+  if (!n) return '—'
+  const compuesto = TIPOS_COMPUESTOS.find((t) => n === t || n.startsWith(t + ' '))
+  return compuesto || n.split(' ')[0]
+}
+
+/** ¿Esta prenda es de este tipo? La contracara de `perteneceA`, para el universo por nombre. */
+export function esDelTipo(it: Pick<ExhibItem, 'name'>, tipo: string): boolean {
+  return tipoDePrenda(it.name) === tipoDePrenda(tipo)
+}
+
+/**
+ * ¿Esta prenda **entra en el chequeo de exhibición**?
+ *
+ * 🔴 **Stunned ⛔ NO se chequea acá, y es una decisión de Bruno del 21-sep-2026**: *«hay que sacar
+ * stunned»*. Comparte el Gestión Nube y el Local de Zattia pero es **otra tienda, con su propio
+ * sector que la revisa** — y ya tiene su propia pantalla, el Conteo estándar de Stunned.
+ * 📊 **Medido en producción ese día**: son **117 variantes / 238 unidades / 36 productos** con stock
+ * en el Local, **todas buzos (46) y remeras (71)**.
+ *
+ * ⚠️ **Por categoría de TN ya estaban medio afuera, y por accidente**: Stunned tiene **su propia
+ * Tienda Nube**, así que ⛔ no cruza y sus 117 caían enteras en «(Sin categoría)» — o sea que ⛔ no
+ * entraban en ningún mandado, pero **sí inflaban dos números que se leen**: el universo del Local
+ * (1.066 → **949** variantes, 3.013 → **2.775** unidades) y el cartel de las sin categoría sin ver
+ * (285 → **168**). Depender de que ⛔ no cruce es depender de un accidente: el día que alguien le
+ * ponga categorías a Stunned en TN, entran solas al mandado sin que nada avise.
+ * 🔴 **Y por el nombre de la prenda —que es como Bruno mira el salón— ensucian de entrada**: de las
+ * 81 remeras con stock del Local **71 son de Stunned**, así que un recorrido que caminó las remeras
+ * de Zattia se lee «3 de 81» y manda a buscar **78 remeras ajenas**. Una lista que pide prendas de
+ * otra tienda deja de creerse entera.
+ *
+ * 🔑 **Se saca del UNIVERSO, ⛔ no del catálogo del lector.** La prenda sigue en `buscables`: si
+ * alguien escanea un buzo de Stunned, el teléfono la reconoce y canta el número. Sacarla de ahí la
+ * dejaría sonando **«de nuevo»** —el aviso de «⛔ no la detecté»— y la persona reescanearía la misma
+ * prenda hasta rendirse, que es exactamente lo que pasaba con las prendas en cero antes del
+ * 19-sep-2026. Lo que ⛔ no hace es contar: ni en la cobertura, ni en «para colgar», ni en el mandado.
+ *
+ * 🔑 **La regla es `lineaDe` y ⛔ no un `startsWith('STU')` escrito acá.** Es la misma que usan el
+ * memo, Márgenes y el Conteo estándar, y `lib/lineas.core.js` cuenta por qué se comparte: «STU ⇒
+ * Stunned» llegó a estar escrita 3 veces haciendo 3 cosas distintas. ⚠️ **El separador es el SKU y
+ * puede faltar**: medido el 21-sep-2026, de las 1.066 con stock en el Local sólo **3 ⛔ no tienen
+ * SKU** (dos accesorios y VESTIDO KENYA Blanco) y ninguna es de Stunned — el día que carguen una de
+ * Stunned sin SKU, se va a chequear como si fuera de Zattia y nada va a fallar.
+ */
+export function seChequea(marca: Marca, it: Pick<ExhibItem, 'sku'>): boolean {
+  return lineaDe(marca, it.sku) !== 'stunned'
 }
 
 /** ¿El ítem escaneado NO pertenece a la categoría recorrida (según TN)? Port de `cruce` @7759. */

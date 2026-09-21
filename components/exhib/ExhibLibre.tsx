@@ -62,7 +62,7 @@ const fechaDe = (iso: string | null | undefined) =>
 const hora = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleTimeString('es-AR', { ...EN_AR, hour: '2-digit', minute: '2-digit' }) : '—'
 
-export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selector, onTraerStock, trayendo }: { items: ExhibItem[]; buscables: ExhibItem[]; enCero: number; cargando: boolean; errorMsg: string | null; selector: React.ReactNode; onTraerStock: () => Promise<void>; trayendo: boolean }) {
+export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, errorMsg, selector, onTraerStock, trayendo }: { items: ExhibItem[]; buscables: ExhibItem[]; enCero: number; deStunned: number; cargando: boolean; errorMsg: string | null; selector: React.ReactNode; onTraerStock: () => Promise<void>; trayendo: boolean }) {
   const { marca } = useSesion()
   const { confirmar } = useConfirmar()
   const toast = useToast()
@@ -306,6 +306,15 @@ export function ExhibLibre({ items, buscables, enCero, cargando, errorMsg, selec
               {/* 🔑 Las en cero se dicen acá: son la mitad del salón y **también se pueden escanear**.
                   Callarlas dejaba creer que una prenda sin stock no se podía registrar. */}
               {enCero > 0 && <> · <b>{enCero}</b> más figuran en cero y también se pueden escanear</>}.
+              {/* 🔑 Stunned se dice ACÁ y ⛔ no se calla: es otra tienda y la revisa otro sector, pero
+                  sus prendas están colgadas en el mismo salón. Quien camina tiene que saber que si
+                  escanea un buzo de Stunned el teléfono se lo va a tomar —y ⛔ no va a contar—, o el
+                  número de la cobertura se lee como si faltaran prendas que nadie tenía que mirar. */}
+              {deStunned > 0 && (
+                <>
+                  {' '}Las <b>{deStunned}</b> de <b>Stunned</b> ⛔ no se chequean acá (tienen su propia pantalla): si escaneás una, se registra pero ⛔ no cuenta.
+                </>
+              )}
             </Notice>
           )}
 
