@@ -83,6 +83,27 @@ export function destinoDeCuenta(c: CuentaManual): DestinoCompromiso | null {
   }
 }
 
+/**
+ * Los datos de la cuenta escritos para **pegar en el chat del cliente**.
+ *
+ * 🔑 Es un solo texto y no cuatro campos porque el gesto real es uno: el cliente pregunta a dónde
+ * transfiere y hay que pasarle todo junto. Copiar el alias y después el CBU son dos viajes al
+ * panel en medio de una conversación.
+ *
+ * ⚠️ Sin cabecera ni saludo a propósito: sirve igual para pegarlo en el chat que en el home
+ * banking, y lo que se le dice al cliente lo escribe quien está hablando.
+ */
+export function datosParaMandar(cuenta: {
+  alias: string | null; cbu: string | null; banco: string | null; titular: string | null
+}): string {
+  return [
+    cuenta.alias && `Alias: ${cuenta.alias}`,
+    cuenta.cbu && `CBU: ${cuenta.cbu}`,
+    cuenta.banco && `Banco: ${cuenta.banco}`,
+    cuenta.titular && `A nombre de: ${cuenta.titular}`,
+  ].filter(Boolean).join('\n')
+}
+
 /** Los destinos de una lista de cuentas manuales, sin las dormidas. */
 export function destinosDeCuentas(cuentas: CuentaManual[]): DestinoCompromiso[] {
   return cuentas.map(destinoDeCuenta).filter((d): d is DestinoCompromiso => d !== null)

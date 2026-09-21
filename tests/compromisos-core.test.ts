@@ -5,6 +5,7 @@ import {
   comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer, restanteTrasConfirmar, sinVincular,
   type Compromiso, type EstadoCompromiso,
 } from '@/lib/compromisos/core'
+import { datosParaMandar } from '@/lib/compromisos/destino'
 
 const c = (estado: EstadoCompromiso, monto: number, acreedor = 'a1', cliente: string | null = 'cli1') =>
   ({ estado, monto, acreedor_id: acreedor, cliente_id: cliente })
@@ -260,5 +261,28 @@ describe('los identificadores que el vocabulario NO puede tocar', () => {
   it('⛔ `fecha_prometida` es una columna: renombrarla es una migración, no un reemplazo', () => {
     const c = { fecha_prometida: '2026-09-10' } as unknown as Compromiso
     expect(diasPara(c.fecha_prometida, '2026-09-03')).toBe(7)
+  })
+})
+
+/**
+ * Los datos de la cuenta, escritos para pegar en el chat del cliente.
+ *
+ * ⚠️ Lo que se fija acá es que **no invente renglones vacíos**: una cuenta manual recién creada
+ * puede tener sólo alias, y un "Banco: " pelado en un mensaje a un cliente se lee como un error
+ * nuestro.
+ */
+describe('los datos para mandarle al cliente', () => {
+  it('van los cuatro campos, uno por renglón', () => {
+    expect(datosParaMandar({ alias: 'cuota.bdi', cbu: '0070', banco: 'Galicia', titular: 'Areben SRL' }))
+      .toBe('Alias: cuota.bdi\nCBU: 0070\nBanco: Galicia\nA nombre de: Areben SRL')
+  })
+
+  it('lo que no está no deja el renglón vacío', () => {
+    expect(datosParaMandar({ alias: 'cuota.bdi', cbu: null, banco: null, titular: null }))
+      .toBe('Alias: cuota.bdi')
+  })
+
+  it('sin nada cargado no manda un mensaje en blanco disfrazado', () => {
+    expect(datosParaMandar({ alias: null, cbu: null, banco: null, titular: null })).toBe('')
   })
 })

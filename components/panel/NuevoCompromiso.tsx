@@ -54,9 +54,9 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Button } from '@/components/ui'
+import { Button, CopyButton } from '@/components/ui'
 import { color, font, radius } from '@/components/ui/tokens'
-import type { DestinoCompromiso } from '@/lib/compromisos/destino'
+import { datosParaMandar, type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
@@ -209,6 +209,24 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                   {cuenta.alias && cuenta.cbu ? (
                     <div style={{ fontFamily: 'monospace', fontSize: font.xs }}>CBU {cuenta.cbu}</div>
                   ) : null}
+                  {/*
+                    🔑 Copiar, acá, es el gesto principal de la pantalla: esto se está leyendo con
+                    el chat del cliente al lado y lo que sigue es pegárselo. Sin botón había que
+                    seleccionar el texto con el mouse adentro del panel, que es lo que lo hacía
+                    incómodo justo en el peor momento (lo levantó Bruno usándolo, 21-sep-2026).
+                    Los dos botones son los dos pedidos reales: "mandame los datos" y "pasame el
+                    alias".
+                  */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                    <CopyButton
+                      getText={() => datosParaMandar(cuenta)}
+                      label="Copiar los datos"
+                      copiedLabel="✓ Listo para pegar"
+                    />
+                    {cuenta.alias && (
+                      <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: 8 }}>

@@ -40,14 +40,14 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Icono } from '@/components/ui'
+import { Button, CopyButton, Icono } from '@/components/ui'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { useAcreedores } from '@/components/acreedores/useAcreedores'
 import { useCompromisos } from '@/components/acreedores/useCompromisos'
 import { NuevoCompromiso, type QuienPaga } from './NuevoCompromiso'
 import type { Acreedor } from '@/lib/acreedores/cliente'
 import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
-import { destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
+import { datosParaMandar, destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { useCuentas } from '@/components/acreedores/useCuentas'
 import {
   colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
@@ -372,6 +372,13 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
                 {cuenta.alias && cuenta.cbu && (
                   <div style={{ fontFamily: 'monospace', fontSize: font.xs, color: color.mut2 }}>CBU {cuenta.cbu}</div>
                 )}
+                {/* El alias no está para leerlo: está para pasárselo al cliente. */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  <CopyButton getText={() => datosParaMandar(cuenta)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
+                  {cuenta.alias && (
+                    <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
+                  )}
+                </div>
               </div>
             ) : (
               <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk }}>
@@ -422,6 +429,13 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
                 {cuenta.alias && cuenta.cbu && (
                   <div style={{ fontFamily: 'monospace', fontSize: font.xs, color: color.mut2 }}>CBU {cuenta.cbu}</div>
                 )}
+                {/* El alias no está para leerlo: está para pasárselo al cliente. */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  <CopyButton getText={() => datosParaMandar(cuenta)} label="Copiar los datos" copiedLabel="✓ Listo para pegar" />
+                  {cuenta.alias && (
+                    <CopyButton getText={() => cuenta.alias || ''} label="Sólo el alias" variant="ghost" iconLeft="" />
+                  )}
+                </div>
               </div>
             ) : (
               <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk }}>
