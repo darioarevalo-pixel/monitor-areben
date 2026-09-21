@@ -202,15 +202,21 @@ export function useExhib(marca: Marca, productos: Producto[]) {
    *
    * La reasignación ⛔ no se escribe acá: `errores` alimenta `construirItems`, así que guardar el
    * error **es** cambiar la categoría del ítem y las cats se reordenan solas.
+   *
+   * 🔴 **Recibe la variante ESCANEADA y ⛔ no su `productId`, y ésa es la corrección del
+   * 20-sep-2026.** Buscaba el producto con `items.find(productId === pid)`, que devuelve **la
+   * primera variante de ese producto** — no la que está en la mano. Con 285 de los 467 productos
+   * del Local teniendo más de una variante con stock, el caso normal es que sean distintas: se
+   * escaneaba TOP ORSA **Beige** y quedaba marcado como exhibido el TOP ORSA **Chocolate**, que
+   * nadie vio, mientras el Beige seguía figurando como faltante. El error de categoría sí es del
+   * producto —la categoría en TN lo es—, pero **la tilde es de la variante**.
    */
   const marcarErrorCat = useCallback(
-    (pid: string, catCorrecta: string) => {
-      const it = items.find((x) => x.productId === pid)
-      if (!it) return
-      persistErrores({ ...errores, [pid]: { name: it.name, sku: it.sku || '', tnId: it.tnId || null, catTN: it.cat, catCorrecta } })
+    (it: ExhibItem, catCorrecta: string) => {
+      persistErrores({ ...errores, [it.productId]: { name: it.name, sku: it.sku || '', tnId: it.tnId || null, catTN: it.cat, catCorrecta } })
       if (cola.id) cola.reemplazar(filaDe(it, 'exhibido', it.barcode || ''))
     },
-    [items, errores, persistErrores, cola, filaDe],
+    [errores, persistErrores, cola, filaDe],
   )
 
   const quitarError = useCallback(

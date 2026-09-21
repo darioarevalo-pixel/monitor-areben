@@ -11,6 +11,8 @@ import { sinEtiquetar } from '@/lib/etiquetas/cola'
 import { puedeVer } from '@/lib/permisos'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhib, type ResultadoMarca } from './useExhib'
+import { avisoDe } from '@/lib/exhib/aviso'
+import { avisar, prepararSonido } from '@/lib/sonido'
 import { ExhibLibre } from './ExhibLibre'
 import { Analisis } from './Analisis'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -140,6 +142,9 @@ export function Exhib() {
    * era exactamente el problema: «245 exhibidos» sin poder decir de cuándo ni de quién.
    */
   function iniciar() {
+    // ⚠️ El toque que desbloquea el audio: el Enter del lector ⛔ no siempre alcanza. Ver
+    // `lib/sonido.ts`.
+    prepararSonido()
     if (!ex.recorridoId) ex.iniciarRecorrido(catSel)
     setFase('scan')
     setFb(null)
@@ -159,10 +164,17 @@ export function Exhib() {
   function marcar(code: string) {
     const c = code.trim()
     if (!c) return
-    setFb(ex.marcarPorCodigo(c, catSel))
+    // 🔑 Suena **todo** final, también el que sale mal: quien camina el local ⛔ no mira el
+    // teléfono, así que un final mudo es un final que ⛔ no existe. → `lib/exhib/aviso.ts`
+    const r = ex.marcarPorCodigo(c, catSel)
+    const a = avisoDe(r)
+    avisar(a.aviso, a.voz)
+    setFb(r)
   }
-  function vaAca(pid: string) {
-    ex.marcarErrorCat(pid, catSel)
+  // ⚠️ Va la variante escaneada entera y ⛔ no su `productId`: la tilde de exhibido es de **esta**
+  // prenda, no de la primera hermana que tenga el mismo producto (ver `marcarErrorCat`).
+  function vaAca(it: ExhibItem) {
+    ex.marcarErrorCat(it, catSel)
     setFb(null)
   }
 
@@ -451,7 +463,7 @@ export function Exhib() {
                 </div>
                 <div style={{ margin: '2px 0 8px' }}>En TN figura en «{fb.it.cat}». ¿Qué hacés?</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <Button size="sm" variant="solid" tone="brand" onClick={() => vaAca(fb.it.productId)}>
+                  <Button size="sm" variant="solid" tone="brand" onClick={() => vaAca(fb.it)}>
                     Va acá → corregir TN
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => setFb(null)}>
