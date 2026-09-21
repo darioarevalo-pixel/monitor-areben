@@ -1,7 +1,12 @@
 'use client'
 
 /**
- * Los compromisos de pago de un acreedor, adentro de su tarjeta.
+ * Los compromisos de pago de un DESTINO, adentro de su tarjeta.
+ *
+ * El destino son las dos cosas a las que un cliente le puede transferir: un **acreedor** del
+ * dashboard (el contador, el abogado) o una **cuenta manual** de acá (la cuota del crédito, las
+ * bolsas). Este bloque es el mismo para los dos y no se duplicó a propósito —`lib/compromisos/
+ * destino.ts` explica por qué—; lo que cambia es el techo, de dónde sale, y qué pasa al confirmar.
  *
  * # 🔑 El número que evita comprometer dos veces sobre la misma deuda
  *
@@ -31,7 +36,7 @@ import {
   mostrar as formatMoney, paraEditar, parsearMonto, restanteTrasConfirmar,
   type Compromiso,
 } from '@/lib/compromisos/core'
-import type { Acreedor } from '@/lib/acreedores/cliente'
+import type { DestinoCompromiso } from '@/lib/compromisos/destino'
 import { hoyISO } from '@/lib/crm/seguimiento'
 
 const TONO = {
@@ -48,25 +53,26 @@ const ROTULO = {
   cancelado: 'se cayó',
 } as const
 
-export function Compromisos({ acreedor, compromisos, puede, onCambio }: {
-  acreedor: Acreedor
-  /** Todas los compromisos; acá se filtran las de este acreedor. */
+export function Compromisos({ destino, compromisos, puede, onCambio }: {
+  destino: DestinoCompromiso
+  /** Todos los compromisos; acá se filtran los de este destino. */
   compromisos: Compromiso[]
   puede: PuedeCompromisos
   onCambio: () => void
 }) {
+  const esManual = destino.origen === 'manual'
   const [abriendo, setAbriendo] = useState(false)
   const [confirmando, setConfirmando] = useState<Compromiso | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
 
   const mios = useMemo(
-    () => compromisos.filter((c) => c.acreedor_id === acreedor.id),
-    [compromisos, acreedor.id],
+    () => compromisos.filter((c) => c.acreedor_id === destino.id),
+    [compromisos, destino.id],
   )
   const abiertos = mios.filter(estaAbierto)
-  const yaComprometido = comprometidoPorAcreedor(mios).get(acreedor.id) ?? 0
-  const sePuede = sePuedeComprometer(acreedor.disponible, yaComprometido)
+  const yaComprometido = comprometidoPorAcreedor(mios).get(destino.id) ?? 0
+  const sePuede = sePuedeComprometer(destino.disponible, yaComprometido)
 
   async function correr(fn: () => Promise<void>) {
     setError(null)
@@ -97,10 +103,10 @@ export function Compromisos({ acreedor, compromisos, puede, onCambio }: {
 
       {/* Cuando ya no se le puede pedir más, se dice por qué en vez de esconder el botón sin
           explicación: "no está el botón" se lee como un error del sistema. */}
-      {puede.prometer && sePuede <= 0 && acreedor.disponible > 0 && (
+      {puede.prometer && sePuede <= 0 && destino.disponible > 0 && (
         <p className="muted" style={{ fontSize: 12 }}>
-          Ya está comprometido todo lo que se le debe ({formatMoney(yaComprometido)}). Para pedirle a otro
-          cliente, primero confirmá o cancelá alguna de los compromisos de abajo.
+          Ya está comprometido todo {esManual ? 'lo que falta juntar' : 'lo que se le debe'} ({formatMoney(yaComprometido)}).
+          Para pedirle a otro cliente, primero confirmá o cancelá alguno de los compromisos de abajo.
         </p>
       )}
 
@@ -139,9 +145,9 @@ export function Compromisos({ acreedor, compromisos, puede, onCambio }: {
       {error && <Notice tone="danger"><span>{error}</span></Notice>}
       {aviso && <Notice tone="success"><span>{aviso}</span></Notice>}
 
-      <Modal abierto={abriendo} onCerrar={() => setAbriendo(false)} titulo={`Nuevo compromiso a ${acreedor.nombre}`}>
+      <Modal abierto={abriendo} onCerrar={() => setAbriendo(false)} titulo={`Nuevo compromiso a ${destino.nombre}`}>
         <FormCompromiso
-          acreedor={acreedor}
+          destino={destino}
           maximo={sePuede}
           onGuardar={async (datos) => {
             await correr(async () => {
@@ -161,11 +167,17 @@ export function Compromisos({ acreedor, compromisos, puede, onCambio }: {
               await correr(async () => {
                 const r = await confirmarCompromiso(confirmando.id, monto, fecha, titular)
                 setConfirmando(null)
-                setAviso(
-                  r.nueva
-                    ? `Listo: se registraron ${formatMoney(monto)} en el dashboard. Como entró menos de lo comprometido, quedó un compromiso nuevo por ${formatMoney(Number(r.nueva.monto))}.`
+                // Lo primero es siempre qué pasó con la plata; lo demás se agrega sólo cuando hay
+                // algo distinto que contar.
+                const partes = [
+                  esManual
+                    ? `Listo: quedaron anotados ${formatMoney(monto)} para ${destino.nombre}.`
                     : `Listo: se registraron ${formatMoney(monto)} en el dashboard.`,
-                )
+                ]
+                if (r.se_paso > 0) partes.push(`Entraron ${formatMoney(r.se_paso)} más de lo que faltaba: fijate en el banco.`)
+                if (r.cuenta_completa) partes.push('Ya se juntó todo: la cuenta quedó libre hasta que le cargues un monto nuevo.')
+                if (r.nueva) partes.push(`Como entró menos de lo comprometido, quedó un compromiso nuevo por ${formatMoney(Number(r.nueva.monto))}.`)
+                setAviso(partes.join(' '))
               })
             }}
             onCancelar={() => setConfirmando(null)}
@@ -178,13 +190,14 @@ export function Compromisos({ acreedor, compromisos, puede, onCambio }: {
 
 // ─── Anotar ───────────────────────────────────────────────────────────────────
 
-function FormCompromiso({ acreedor, maximo, onGuardar, onCancelar }: {
-  acreedor: Acreedor
+function FormCompromiso({ destino, maximo, onGuardar, onCancelar }: {
+  destino: DestinoCompromiso
   maximo: number
   onGuardar: (d: Parameters<typeof crearCompromiso>[0]) => Promise<void>
   onCancelar: () => void
 }) {
-  const sugerida = acreedor.cuentas.find((c) => c.sugerida) ?? acreedor.cuentas[0] ?? null
+  const esManual = destino.origen === 'manual'
+  const sugerida = destino.cuentas.find((c) => c.sugerida) ?? destino.cuentas[0] ?? null
   const [cliente, setCliente] = useState('')
   const [clienteId, setClienteId] = useState('')
   const [monto, setMonto] = useState('')
@@ -207,8 +220,9 @@ function FormCompromiso({ acreedor, maximo, onGuardar, onCancelar }: {
       ) : (
         <Notice tone="warning">
           <span>
-            Este acreedor no tiene ninguna cuenta cargada, así que el compromiso va a quedar sin decir a
-            dónde transferir. Cargala en el dashboard, en Finanzas → Acreedores.
+            {esManual
+              ? `${destino.nombre} no tiene alias ni CBU, así que el compromiso va a quedar sin decir a dónde transferir. Se edita en la ficha de la cuenta, acá mismo.`
+              : 'Este acreedor no tiene ninguna cuenta cargada, así que el compromiso va a quedar sin decir a dónde transferir. Cargala en el dashboard, en Finanzas → Acreedores.'}
           </span>
         </Notice>
       )}
@@ -219,7 +233,10 @@ function FormCompromiso({ acreedor, maximo, onGuardar, onCancelar }: {
       <Field label="Número de cliente en Gestión Nube (opcional)">
         <Input value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="para poder cruzarlo con su deuda" />
       </Field>
-      <Field label="¿Cuánto va a transferir?" hint={`Como mucho ${formatMoney(maximo)}, que es lo que se le debe y todavía no está comprometido.`}>
+      <Field
+        label="¿Cuánto va a transferir?"
+        hint={`Como mucho ${formatMoney(maximo)}, que es lo que ${esManual ? 'falta juntar' : 'se le debe'} y todavía no está comprometido.`}
+      >
         <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0" />
       </Field>
       <Field label="¿Para cuándo lo se comprometió? (opcional)">
@@ -232,9 +249,9 @@ function FormCompromiso({ acreedor, maximo, onGuardar, onCancelar }: {
       {sePasa && (
         <Notice tone="danger">
           <span>
-            Es más de lo que se le debe sin comprometer ({formatMoney(maximo)}). Si el cliente va a
-            mandar más, creá el resto como un compromiso a otro acreedor: así no se le manda de más a
-            éste.
+            Es más de lo que {esManual ? 'falta juntar' : 'se le debe'} sin comprometer ({formatMoney(maximo)}). Si el
+            cliente va a mandar más, creá el resto como un compromiso a otro destino: así acá no
+            entra de más.
           </span>
         </Notice>
       )}
@@ -247,8 +264,10 @@ function FormCompromiso({ acreedor, maximo, onGuardar, onCancelar }: {
             setGuardando(true)
             try {
               await onGuardar({
-                acreedor_id: acreedor.id,
-                acreedor_nombre: acreedor.nombre,
+                origen: destino.origen,
+                objetivo_id: destino.objetivoId,
+                acreedor_id: destino.id,
+                acreedor_nombre: destino.nombre,
                 cuenta_alias: sugerida?.alias ?? null,
                 cuenta_cbu: sugerida?.cbu ?? null,
                 cuenta_banco: sugerida?.banco ?? null,
@@ -302,8 +321,18 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
       <p className="muted" style={{ fontSize: 12 }}>
-        Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {compromiso.acreedor_nombre} y
-        queda anotado como plata de {compromiso.cliente_nombre}.
+        {compromiso.origen === 'manual' ? (
+          <>
+            Esto <b>no toca el dashboard</b>: queda anotado acá como plata que puso{' '}
+            {compromiso.cliente_nombre} para {compromiso.acreedor_nombre}. El pago en sí se carga en el
+            dashboard como siempre.
+          </>
+        ) : (
+          <>
+            Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {compromiso.acreedor_nombre} y
+            queda anotado como plata de {compromiso.cliente_nombre}.
+          </>
+        )}
       </p>
 
       <Field label="¿Cuánto entró de verdad?" hint={`Se había comprometido ${formatMoney(Number(compromiso.monto))}.`}>

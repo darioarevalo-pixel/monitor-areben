@@ -34,6 +34,20 @@ export const ESTADOS: EstadoCompromiso[] = ['prometido', 'transferido', 'confirm
 
 export type Compromiso = {
   id: string
+  /**
+   * De qué clase es el destino, y con eso qué pasa al confirmar.
+   *
+   * - `dashboard` se le paga a un acreedor de verdad: confirmar escribe el pago en su ledger.
+   * - `manual`    es una cuenta hecha a mano acá (la cuota del crédito, las bolsas): confirmar
+   *   no sale del Monitor, y cuando se junta todo la cuenta se apaga sola.
+   *
+   * 🔑 `acreedor_id` es "a quién se le paga" en los dos casos — un proveedor del dashboard o una
+   * cuenta manual—, así que toda la cuenta del circuito cuelga de la misma columna. Esto dice de
+   * quién es ese id.
+   */
+  origen: 'dashboard' | 'manual'
+  /** Para qué vuelta de una cuenta manual se junta esta plata. `null` en los del dashboard. */
+  objetivo_id: string | null
   acreedor_id: string
   acreedor_nombre: string
   cuenta_alias: string | null

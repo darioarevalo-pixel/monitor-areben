@@ -10,12 +10,19 @@
  * deudas. Para poder pedírselo hay que tener, en la misma pantalla y en el momento de la charla,
  * a quién le debemos, cuánto, y a qué cuenta.
  *
- * # ⛔ Acá no se carga nada
+ * # ⛔ De los ACREEDORES acá no se carga nada
  *
  * El saldo lo calcula **el dashboard** y acá se lo lee. No hay una segunda copia: si el Monitor
  * rehiciera la resta, el día que una de las dos apps cambie un criterio —qué pago cuenta, cuál
  * está sólo agendado— iban a mostrar números distintos y nadie iba a saber cuál creer.
  * Las cuentas bancarias también se cargan allá (Finanzas → Acreedores).
+ *
+ * # 🔑 Y abajo, lo que el dashboard NO conoce
+ *
+ * La segunda mitad de la pantalla son las **cuentas manuales** (`CuentasManuales.tsx`): la cuota
+ * del crédito, las bolsas. Se abren acá, se prenden con un monto y no le hablan al dashboard —ni
+ * para leer ni para escribir—, así que siguen andando cuando el dashboard no contesta. El circuito
+ * de compromisos es el MISMO para las dos mitades.
  *
  * # 🔑 Los dos números que no son el mismo
  *
@@ -27,8 +34,6 @@
 
 import { useState } from 'react'
 import {
-  Badge,
-  CopyButton,
   DatosGate,
   EmptyState,
   KpiCard,
@@ -40,15 +45,13 @@ import {
 import { useAcreedores } from './useAcreedores'
 import { useCompromisos } from './useCompromisos'
 import { Compromisos } from './Compromisos'
+import { CuentasManuales } from './CuentasManuales'
+import { CuentaLinea } from './CuentaLinea'
+import { destinoDeAcreedor } from '@/lib/compromisos/destino'
 import { comprometidoPorAcreedor } from '@/lib/compromisos/core'
 import type { Compromiso } from '@/lib/compromisos/core'
 import type { PuedeCompromisos } from '@/lib/compromisos/cliente'
-import type { Acreedor, CuentaBancaria } from '@/lib/acreedores/cliente'
-
-/** El CBU en dos bloques (8 + 14), que es como se lee y se dicta por teléfono. */
-function cbuLegible(cbu: string): string {
-  return cbu.length === 22 ? `${cbu.slice(0, 8)} ${cbu.slice(8)}` : cbu
-}
+import type { Acreedor } from '@/lib/acreedores/cliente'
 
 function mesLargo(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
@@ -134,6 +137,15 @@ export function Acreedores() {
           )
         }
       </DatosGate>
+
+      {/* 🔑 FUERA del gate a propósito: las cuentas manuales no dependen del dashboard, y si
+          quedaran adentro una caída de allá escondería la cuenta de la cuota del crédito —que es
+          de acá— junto con los acreedores. */}
+      <CuentasManuales
+        compromisos={cobros.compromisos}
+        puedeCompromisos={cobros.puede}
+        onCambioCompromisos={cobros.recargar}
+      />
     </div>
   )
 }
@@ -179,7 +191,7 @@ function FilaAcreedor({ acreedor, compromisos, puede, onCambio, abierto, onToggl
 
       <CuentasDe acreedor={acreedor} />
 
-      <Compromisos acreedor={acreedor} compromisos={compromisos} puede={puede} onCambio={onCambio} />
+      <Compromisos destino={destinoDeAcreedor(acreedor)} compromisos={compromisos} puede={puede} onCambio={onCambio} />
 
       {abierto && (
         <div style={{ marginTop: space[4] }}>
@@ -221,30 +233,6 @@ function CuentasDe({ acreedor }: { acreedor: Acreedor }) {
       {acreedor.cuentas.map((c) => (
         <CuentaLinea key={c.id} cuenta={c} />
       ))}
-    </div>
-  )
-}
-
-function CuentaLinea({ cuenta }: { cuenta: CuentaBancaria }) {
-  return (
-    <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-      {cuenta.sugerida && <Badge tone="success">la que se usa</Badge>}
-      {cuenta.alias && (
-        <>
-          <b>{cuenta.alias}</b>
-          <CopyButton getText={() => cuenta.alias || ''} label="alias" />
-        </>
-      )}
-      {cuenta.cbu && (
-        <>
-          <span style={{ fontFamily: 'monospace' }}>{cbuLegible(cuenta.cbu)}</span>
-          {/* Se copia el CBU PELADO, no el que se ve con el espacio: es lo que acepta el banco. */}
-          <CopyButton getText={() => cuenta.cbu || ''} label="CBU" />
-        </>
-      )}
-      <span className="muted">
-        {[cuenta.banco, cuenta.titular && `a nombre de ${cuenta.titular}`].filter(Boolean).join(' · ')}
-      </span>
     </div>
   )
 }

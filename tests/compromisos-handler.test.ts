@@ -15,13 +15,32 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
  */
 
 const filas: Record<string, Record<string, unknown>> = {}
+/** Las otras dos tablas que toca el camino de las cuentas manuales. */
+const objetivos: Record<string, Record<string, unknown>> = {}
+const cuentas: Record<string, Record<string, unknown>> = {}
 const insertados: Record<string, unknown>[] = []
 
+function almacen(nombre: string) {
+  if (nombre === 'cuentas_manuales_objetivos') return objetivos
+  if (nombre === 'cuentas_manuales') return cuentas
+  return filas
+}
+
 /** Un Supabase de mentira, con lo justo que usa el handler. */
-function tabla() {
+function tabla(nombre = 'compromisos_pago') {
+  const store = almacen(nombre)
   const q: Record<string, unknown> = {}
+  /** Las filas que cumplen todos los `.eq()` pedidos hasta acá. */
+  const filtradas = () => Object.values(store).filter(
+    (f) => Object.entries(q).every(([col, v]) => String(f[col]) === String(v)),
+  )
   const api: Record<string, unknown> = {
     select: () => api,
+    /**
+     * Una consulta que termina en `.eq()` y se espera con `await` —la que suma la plata de una
+     * vuelta— resuelve acá. Sin esto, el camino de las cuentas manuales no se puede probar.
+     */
+    then: (ok: (r: unknown) => void) => ok({ data: filtradas(), error: null }),
     // Guarda por COLUMNA y no siempre como id: el control de "cuánto ya se le comprometió" filtra
     // por `acreedor_id`, no por la clave.
     eq: (col: string, v: string) => { q[col] = v; return api },
@@ -39,20 +58,29 @@ function tabla() {
       )
       return { then: (ok: (r: unknown) => void) => ok({ data: filtradas, error: null }) }
     },
-    single: () => Promise.resolve({ data: filas[q.id as string] ?? null, error: filas[q.id as string] ? null : { message: 'no está' } }),
+    single: () => Promise.resolve({ data: store[q.id as string] ?? null, error: store[q.id as string] ? null : { message: 'no está' } }),
+    maybeSingle: () => Promise.resolve({ data: store[q.id as string] ?? null, error: null }),
     insert: (row: Record<string, unknown>) => {
       const id = `nueva-${insertados.length + 1}`
       const creada = { ...row, id, operacion_id: 'op-nueva' }
       insertados.push(creada)
-      filas[id] = creada
+      store[id] = creada
+      for (const k of Object.keys(q)) delete q[k]
       q.id = id            // para que el `.select().single()` de después devuelva la recién creada
       return api
     },
     update: (cambios: Record<string, unknown>) => {
       const api2: Record<string, unknown> = {
-        eq: (_c: string, v: string) => { q.id = v; Object.assign(filas[v] ?? {}, cambios); return api2 },
+        // ⚠️ Un update puede llevar más de un `.eq()` (el cierre de una vuelta filtra por id Y por
+        // estado, para que dos confirmaciones juntas la cierren una sola vez). Sólo el id elige la
+        // fila; los demás son condiciones.
+        eq: (c: string, v: string) => {
+          if (c === 'id') { q.id = v; Object.assign(store[v] ?? {}, cambios) }
+          return api2
+        },
         select: () => api2,
-        single: () => Promise.resolve({ data: filas[q.id as string], error: null }),
+        single: () => Promise.resolve({ data: store[q.id as string], error: null }),
+        then: (ok: (r: unknown) => void) => ok({ data: store[q.id as string] ?? null, error: null }),
       }
       return api2
     },
@@ -60,7 +88,7 @@ function tabla() {
   return api
 }
 
-vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: () => tabla() }) }))
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (t: string) => tabla(t) }) }))
 
 function resFalso() {
   const r = {
@@ -139,6 +167,8 @@ const COMPROMISO = {
 beforeEach(() => {
   process.env.DASHBOARD_PUENTE_SECRET = 'x'.repeat(64)
   for (const k of Object.keys(filas)) delete filas[k]
+  for (const k of Object.keys(objetivos)) delete objetivos[k]
+  for (const k of Object.keys(cuentas)) delete cuentas[k]
   insertados.length = 0
   Object.assign(filas, { c1: { ...COMPROMISO } })
 })
@@ -475,5 +505,144 @@ describe('no se le puede comprometer a un acreedor más de lo que se le debe', (
     expect(res.code).toBe(503)
     expect(String(res.body?.error)).toMatch(/no se puede anotar/i)
     expect(insertados).toHaveLength(0)
+  })
+})
+
+/**
+ * 🔴 **El otro destino posible: una cuenta manual** (la cuota del crédito, las bolsas).
+ *
+ * Lo que se fija acá es lo que la distingue de un acreedor, y son dos cosas que se rompen calladas:
+ *
+ *  1. **No le habla al dashboard.** Ni para saber cuánto falta —el techo lo da un monto cargado a
+ *     mano— ni para escribir el pago al confirmar. Si alguien "unifica" los dos caminos, la cuota
+ *     del crédito empezaría a escribir pagos en el ledger contra un acreedor que no existe.
+ *  2. **La cuenta se apaga al llegar al monto**, no al terminar el mes. Es lo que pidió Bruno con
+ *     todas las letras (21-sep-2026), y es lo que evita que quede pidiendo plata para algo que ya
+ *     se pagó.
+ */
+describe('cuentas manuales', () => {
+  const CUENTA = { id: 'cm-1', nombre: 'Cuota del crédito', cuenta_alias: 'cuota.bdi', cuenta_cbu: '0070', cuenta_banco: 'Galicia', cuenta_titular: 'Areben SRL' }
+  const OBJETIVO = { id: 'ob-1', cuenta_id: 'cm-1', monto: 500000, nota: 'cuota de septiembre', estado: 'juntando' }
+
+  const manual = (over: Record<string, unknown> = {}) => ({
+    ...COMPROMISO,
+    id: 'm1',
+    origen: 'manual',
+    objetivo_id: 'ob-1',
+    acreedor_id: 'cm-1',
+    acreedor_nombre: 'Cuota del crédito',
+    monto: 300000,
+    ...over,
+  })
+
+  beforeEach(() => {
+    Object.assign(cuentas, { 'cm-1': { ...CUENTA } })
+    Object.assign(objetivos, { 'ob-1': { ...OBJETIVO } })
+  })
+
+  it('anotar uno no le pregunta nada al dashboard, ni siquiera con el dashboard caído', async () => {
+    escenario(ADMIN, { ok: true, body: {} }, { caido: true })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: {
+        origen: 'manual', objetivo_id: 'ob-1', acreedor_id: 'cm-1',
+        acreedor_nombre: 'Cuota del crédito', cliente_nombre: 'Nazarena', monto: 200000,
+      },
+    }))
+    expect(res.code).toBe(200)
+    expect(alDashboard).toHaveLength(0)
+    // El alias se congela desde la base, no desde lo que mandó la pantalla.
+    expect(insertados[0].cuenta_alias).toBe('cuota.bdi')
+    expect(insertados[0].origen).toBe('manual')
+  })
+
+  it('🔑 no deja pedir más de lo que falta juntar', async () => {
+    filas.m1 = manual()                      // ya hay 300.000 comprometidos sobre 500.000
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: {
+        origen: 'manual', objetivo_id: 'ob-1', acreedor_id: 'cm-1',
+        acreedor_nombre: 'Cuota del crédito', cliente_nombre: 'Otra', monto: 250000,
+      },
+    }))
+    expect(res.code).toBe(409)
+    expect(res.body?.se_puede).toBe(200000)
+  })
+
+  it('⛔ la cuenta y la vuelta tienen que corresponderse', async () => {
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: {
+        origen: 'manual', objetivo_id: 'ob-1', acreedor_id: 'otra-cuenta',
+        acreedor_nombre: 'Cualquiera', cliente_nombre: 'Nazarena', monto: 1000,
+      },
+    }))
+    expect(res.code).toBe(400)
+  })
+
+  it('no se puede anotar contra una vuelta ya cerrada', async () => {
+    objetivos['ob-1'].estado = 'completo'
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: {
+        origen: 'manual', objetivo_id: 'ob-1', acreedor_id: 'cm-1',
+        acreedor_nombre: 'Cuota del crédito', cliente_nombre: 'Nazarena', monto: 1000,
+      },
+    }))
+    expect(res.code).toBe(409)
+  })
+
+  it('🔴 confirmar NO escribe en el dashboard y deja el compromiso confirmado', async () => {
+    filas.m1 = manual()
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'm1', monto_real: 300000, fecha: '2026-09-21' }))
+    expect(res.code).toBe(200)
+    expect(alDashboard).toHaveLength(0)
+    expect(filas.m1.estado).toBe('confirmado')
+    expect(filas.m1.monto_confirmado).toBe(300000)
+    // No se completó: faltan 200.000 de los 500.000.
+    expect(res.body?.cuenta_completa).toBe(false)
+    expect(objetivos['ob-1'].estado).toBe('juntando')
+  })
+
+  it('🔑 cuando se llega al monto, la vuelta se cierra sola', async () => {
+    filas.m1 = manual({ monto: 500000 })
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'm1', monto_real: 500000, fecha: '2026-09-21' }))
+    expect(res.body?.cuenta_completa).toBe(true)
+    expect(objetivos['ob-1'].estado).toBe('completo')
+    expect(objetivos['ob-1'].cerrado_en).toBeTruthy()
+  })
+
+  it('entrar de más se acepta y se avisa cuánto se pasó', async () => {
+    filas.m1 = manual({ monto: 500000 })
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'm1', monto_real: 560000, fecha: '2026-09-21' }))
+    expect(res.code).toBe(200)
+    expect(res.body?.se_paso).toBe(60000)
+    expect(res.body?.cuenta_completa).toBe(true)
+  })
+
+  it('si entró de menos y la vuelta sigue abierta, el resto queda anotado', async () => {
+    filas.m1 = manual()
+    escenario(ADMIN, { ok: true, body: {} })
+    await llamar(pedido({ action: 'confirmar', id: 'm1', monto_real: 120000, fecha: '2026-09-21' }))
+    const resto = insertados.find((x) => x.viene_de === 'm1')
+    expect(resto?.monto).toBe(180000)
+    // ⚠️ El resto es de la MISMA vuelta: sin esto nacería huérfano y no contaría para la cuota.
+    expect(resto?.objetivo_id).toBe('ob-1')
+    expect(resto?.origen).toBe('manual')
+  })
+
+  it('⛔ pero si la vuelta se completó, no se sigue reclamando el resto', async () => {
+    // Entra bastante más de lo que este cliente había comprometido: completa la cuota.
+    filas.m1 = manual({ monto: 300000 })
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'm1', monto_real: 500000, fecha: '2026-09-21' }))
+    expect(res.body?.cuenta_completa).toBe(true)
+    expect(insertados.find((x) => x.viene_de === 'm1')).toBeUndefined()
   })
 })

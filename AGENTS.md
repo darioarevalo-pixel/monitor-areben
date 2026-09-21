@@ -159,6 +159,12 @@ ya tienen ficha:
   `sql/migrate-recepciones.sql`. ⛔ **`_oc-webhook.js` NO pide sesión** —lo llama otro servidor y se
   defiende con la firma HMAC—, y ⛔ **el cuerpo se lee del STREAM, no de `req.body`**: la firma es
   sobre los bytes y reparsear el JSON la rompe.
+- Cobranza / «A quién le debemos» → **leer `docs/secciones/acreedores.md`** antes de tocar
+  `components/acreedores/`, `components/panel/Pagos.tsx`, `lib/compromisos/`, `lib/cuentas/`,
+  `api/_acreedores.js`, `api/_compromisos.js` o `api/_cuentas.js`. ⛔ **Confirmar un compromiso de
+  un ACREEDOR escribe un pago real en el ledger del otro repo**; el de una **cuenta manual** (la
+  cuota del crédito) ⛔ no sale del Monitor nunca. ⛔ Hacia un input de plata va `paraEditar(n)`,
+  jamás `String(n)`: así se mandaron cien veces el monto.
 - Clientes (CRM) y el panel de WhatsApp → **leer `docs/secciones/crm.md`** antes de tocar
   `components/crm/`, `components/panel/`, `lib/crm/` o la acción `panel` de `api/_crm.js`. ⛔ **La
   clave `crm:seg:bdi` no tiene backup**: 305 clientes y sus notas, reescritos enteros en cada

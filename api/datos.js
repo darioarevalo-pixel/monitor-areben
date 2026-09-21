@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|modelos|precios|destacados|exhib&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|modelos|precios|destacados|exhib&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -45,6 +45,7 @@ import modelos from './_modelos.js';
 import ocWebhook from './_oc-webhook.js';
 import acreedores from './_acreedores.js';
 import compromisos from './_compromisos.js';
+import cuentas from './_cuentas.js';
 import precios from './_precios.js';
 import destacados from './_destacados.js';
 import exhib from './_exhib.js';
@@ -165,6 +166,13 @@ const RECURSOS = {
   // lee y no escribe una fila; éste escribe, y su verbo `confirmar` mueve plata de verdad en el
   // ledger del dashboard. Mezclarlos es como se cuela un verbo que se olvidó de pedir permiso.
   compromisos,
+  // Las cuentas manuales: a dónde juntar plata para algo que el dashboard NO conoce (la cuota del
+  // crédito, las bolsas). Recurso propio y no un verbo de `compromisos` porque son dos cosas de
+  // dos vidas distintas: la ficha de la cuenta se abre una vez y dura años, el compromiso nace y
+  // muere en una semana. ⛔ Y porque `compromisos` tiene un verbo que mueve plata en el ledger del
+  // dashboard: las cuentas manuales no le hablan al dashboard NUNCA, y mezclarlas en el mismo
+  // handler es como se cuela un camino que sí lo hace.
+  cuentas,
   // La lista de precios de una campaña de liquidación, para MARKETING. Va SEPARADO de
   // `liquidacion` a propósito y por dos motivos que se refuerzan: aquel handler ya tiene cuatro
   // llaves y su test de autorización se apoya en que una llave ajena corte antes de las `action`;

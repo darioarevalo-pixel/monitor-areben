@@ -294,7 +294,7 @@ describe('Pagos · la jerarquía de la pantalla', () => {
     const html = renderToStaticMarkup(
       <Pagos cliente={{ tipo: 'erp', id: 77, nombre: 'Nazarena', telefono: null }} onIrAlCliente={null} />,
     )
-    expect(html).toContain('Que le pague a un acreedor')
+    expect(html).toContain('Que transfiera a una cuenta nuestra')
   })
 
   it('🔑 el tilde es el único lleno: es el que lleva a escribir plata en otro sistema', () => {
@@ -399,10 +399,11 @@ describe('Pagos · el dashboard caído no se cuenta como "no hay deudas"', () =>
   // ⚠️ Se monta la vista directo: la pestaña arranca en "Compromisos" y al chip de "A quién le
   // debemos" no se le puede hacer clic desde un render estático. De paso queda cubierta, que hasta
   // hoy no lo estaba — y era justo donde vivía el cartel equivocado.
-  const vista = (props: { acreedores?: unknown[]; error?: string | null; aviso?: string | null }) =>
+  const vista = (props: { acreedores?: unknown[]; manuales?: unknown[]; error?: string | null; aviso?: string | null }) =>
     renderToStaticMarkup(
       <VistaAcreedores
         acreedores={(props.acreedores ?? []) as never}
+        manuales={(props.manuales ?? []) as never}
         compromisos={[]}
         cargando={false}
         error={props.error ?? null}

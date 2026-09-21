@@ -56,7 +56,7 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui'
 import { color, font, radius } from '@/components/ui/tokens'
-import type { Acreedor } from '@/lib/acreedores/cliente'
+import type { DestinoCompromiso } from '@/lib/compromisos/destino'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
@@ -75,10 +75,15 @@ export type QuienPaga =
   | { tipo: 'erp'; id: number; nombre: string; telefono: string | null }
   | { tipo: 'sin-cargar'; nombre: string; telefono: string }
 
-export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, cargando, noSePudoLeer, onCreado }: {
+export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargando, noSePudoLeer, onCreado }: {
   /** Quién va a transferir. Sin chat abierto no hay a quién pedirle, y la pestaña dice eso en vez de mostrar esto. */
   cliente: QuienPaga
-  acreedores: Acreedor[]
+  /**
+   * A dónde puede transferir: los acreedores del dashboard y las cuentas manuales de acá (la cuota
+   * del crédito, las bolsas), ya traducidos a la misma forma. 🔑 Acá no se distinguen — lo único
+   * que importa para elegir es el nombre y cuánto se le puede pedir.
+   */
+  destinos: DestinoCompromiso[]
   compromisos: Compromiso[]
   puede: PuedeCompromisos
   cargando: boolean
@@ -110,8 +115,8 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
   )
   const nombreFinal = cliente.tipo === 'erp' ? cliente.nombre : nombre.trim()
 
-  // Sólo los que tienen deuda a la que imputar: comprometerle a uno saldado rebota en la puerta.
-  const conDeuda = acreedores
+  // Sólo los que tienen a qué imputar: comprometerle a uno saldado rebota en la puerta.
+  const conDeuda = destinos
     .map((a) => ({ a, puedePedirse: sePuedeComprometer(a.disponible, comprometidoAcreedor.get(a.id) ?? 0) }))
     .filter((x) => x.puedePedirse > 0)
 
@@ -133,8 +138,8 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
     <>
       {cliente.tipo === 'erp' ? (
         <div style={{ fontSize: font.sm, color: color.mut2, marginBottom: 8 }}>
-          Que <b style={{ color: color.ink }}>{cliente.nombre || `#${cliente.id}`}</b> le transfiera a
-          un acreedor nuestro. Con una transferencia se cancelan dos deudas.
+          Que <b style={{ color: color.ink }}>{cliente.nombre || `#${cliente.id}`}</b> transfiera a una
+          cuenta nuestra. Con una transferencia se cancelan dos deudas.
         </div>
       ) : (
         <>
@@ -171,7 +176,7 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
         <div style={{ fontSize: font.sm, color: color.mut2 }}>
           {noSePudoLeer
             ? 'No se pudo leer a quién le debemos. Probá de nuevo en un rato.'
-            : 'No hay ninguna deuda con acreedores a la que se pueda mandar plata ahora.'}
+            : 'No hay ninguna cuenta a la que se pueda mandar plata ahora.'}
         </div>
       ) : (
         <>
@@ -208,7 +213,9 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
               ) : (
                 <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: 8 }}>
                   Ojo: {sel.a.nombre} no tiene ninguna cuenta cargada, así que no hay alias que pasarle.
-                  Se carga en el dashboard, en Finanzas → Acreedores.
+                  {sel.a.origen === 'manual'
+                    ? ' Se carga en Cobranza, en la ficha de la cuenta.'
+                    : ' Se carga en el dashboard, en Finanzas → Acreedores.'}
                 </div>
               )}
 
@@ -231,6 +238,8 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
                     setGuardando(true); setError(null)
                     try {
                       await crearCompromiso({
+                        origen: sel.a.origen,
+                        objetivo_id: sel.a.objetivoId,
                         acreedor_id: sel.a.id,
                         acreedor_nombre: sel.a.nombre,
                         cuenta_alias: cuenta?.alias ?? null,
@@ -265,8 +274,8 @@ export function NuevoCompromiso({ cliente, acreedores, compromisos, puede, carga
 
               {sePasa && (
                 <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>
-                  Es más de lo que se le debe a {sel.a.nombre} sin comprometer. Si va a mandar más, el
-                  resto va como otro compromiso a otro acreedor.
+                  Es más de lo que {sel.a.origen === 'manual' ? 'falta juntar para' : 'se le debe a'} {sel.a.nombre} sin
+                  comprometer. Si va a mandar más, el resto va como otro compromiso a otra cuenta.
                 </div>
               )}
             </>

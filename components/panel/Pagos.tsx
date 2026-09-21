@@ -47,6 +47,8 @@ import { useCompromisos } from '@/components/acreedores/useCompromisos'
 import { NuevoCompromiso, type QuienPaga } from './NuevoCompromiso'
 import type { Acreedor } from '@/lib/acreedores/cliente'
 import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
+import { destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
+import { useCuentas } from '@/components/acreedores/useCuentas'
 import {
   colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
   mostrar as plata, paraEditar, parsearMonto, restanteTrasConfirmar,
@@ -278,8 +280,14 @@ function Confirmar({ c, onListo, onCancelar }: {
  * `yaPagadoSinDebitar`, que es plata ya mandada que el banco no debitó (un cheque entregado), y
  * está justamente para que nadie la mande dos veces.
  */
-export function VistaAcreedores({ acreedores, compromisos, cargando, error, aviso }: {
+export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, error, aviso }: {
   acreedores: Acreedor[]
+  /**
+   * Las cuentas manuales que están juntando plata (la cuota del crédito, las bolsas). Van en la
+   * misma lista porque para el que está hablando con el cliente son lo mismo: un lugar a dónde
+   * pedirle que transfiera. ⛔ Y NO dependen del dashboard: se muestran aunque él no conteste.
+   */
+  manuales: DestinoCompromiso[]
   compromisos: Compromiso[]
   cargando: boolean
   error: string | null
@@ -292,7 +300,9 @@ export function VistaAcreedores({ acreedores, compromisos, cargando, error, avis
 }) {
   const comprometido = useMemo(() => comprometidoPorAcreedor(compromisos), [compromisos])
 
-  if (cargando) {
+  const hayManuales = manuales.length > 0
+
+  if (cargando && !hayManuales) {
     return <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>Buscando a quién le debemos…</div>
   }
   /*
@@ -302,14 +312,14 @@ export function VistaAcreedores({ acreedores, compromisos, cargando, error, avis
     Es el mismo defecto que la lista del día ya pagó (ver el encabezado de
     `tests/panel-pagos-pantalla.test.tsx`).
   */
-  if (error || aviso) {
+  if ((error || aviso) && !hayManuales) {
     return (
       <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
         No se pudo leer a quién le debemos. Los montos viven en el dashboard; probá de nuevo en un rato.
       </div>
     )
   }
-  if (acreedores.length === 0) {
+  if (acreedores.length === 0 && !hayManuales) {
     return (
       <div style={{ padding: space[3], fontSize: font.sm, color: color.mut2 }}>
         No hay ninguna deuda con acreedores ahora.
@@ -319,6 +329,59 @@ export function VistaAcreedores({ acreedores, compromisos, cargando, error, avis
 
   return (
     <>
+      {/* El dashboard no contestó, pero las cuentas de acá sí se pueden mostrar: se dice qué falta
+          en vez de esconder la mitad que sí funciona. */}
+      {(error || aviso) && (
+        <div style={{ padding: `0 ${space[3]}px ${space[2]}px`, fontSize: font.xs, color: color.mut2 }}>
+          No se pudo leer a quién le debemos: abajo están sólo las cuentas de acá.
+        </div>
+      )}
+
+      {manuales.map((d) => {
+        const yaComprometido = comprometido.get(d.id) ?? 0
+        const sePuede = sePuedeComprometer(d.disponible, yaComprometido)
+        const cuenta = d.cuentas[0] ?? null
+        return (
+          <article key={d.id} style={{
+            background: color.surface, border: `1px solid ${color.line}`, borderRadius: radius.lg,
+            margin: `0 ${space[2]}px ${space[2]}px`, padding: `${space[2]}px ${space[3]}px`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>{d.nombre}</div>
+              <Chapa>cuenta de acá</Chapa>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: font.xl, fontWeight: 700, color: color.ink, lineHeight: 1.15 }}>
+                {plata(sePuede)}
+              </span>
+              <span style={{ fontSize: font.xs, color: color.mut2 }}>se le puede pedir</span>
+            </div>
+
+            <div style={{ fontSize: font.xs, color: color.mut2 }}>
+              faltan juntar {plata(d.disponible)}
+              {yaComprometido > 0 && ` · ya hay ${plata(yaComprometido)} comprometidos`}
+              {d.detalle ? ` · ${d.detalle}` : ''}
+            </div>
+
+            {cuenta ? (
+              <div style={{ marginTop: 6, fontSize: font.sm, color: color.mut, lineHeight: 1.5 }}>
+                <b style={{ color: color.ink }}>{cuenta.alias || cuenta.cbu}</b>
+                {cuenta.banco ? ` · ${cuenta.banco}` : ''}
+                {cuenta.titular ? ` · a nombre de ${cuenta.titular}` : ''}
+                {cuenta.alias && cuenta.cbu && (
+                  <div style={{ fontFamily: 'monospace', fontSize: font.xs, color: color.mut2 }}>CBU {cuenta.cbu}</div>
+                )}
+              </div>
+            ) : (
+              <div style={{ marginTop: 6, fontSize: font.xs, color: color.warningInk }}>
+                No tiene alias ni CBU. Se carga en Cobranza, en la ficha de la cuenta.
+              </div>
+            )}
+          </article>
+        )
+      })}
+
       {acreedores.map((a) => {
         const yaComprometido = comprometido.get(a.id) ?? 0
         const sePuede = sePuedeComprometer(a.disponible, yaComprometido)
@@ -493,6 +556,9 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
 }) {
   const deudas = useAcreedores()
   const cobros = useCompromisos()
+  // Las cuentas manuales viajan por su propia puerta: no dependen del dashboard y se tienen que
+  // poder ofrecer igual cuando él no contesta.
+  const manuales = useCuentas()
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [verCerradas, setVerCerradas] = useState(false)
   /**
@@ -517,6 +583,17 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
     window.setTimeout(() => setAviso(null), mal ? 8000 : deshacer ? 10000 : 4000)
   }, [])
 
+  /**
+   * A dónde puede transferir el cliente: los acreedores del dashboard y las cuentas de acá, en una
+   * sola lista. 🔑 Para el que está hablando por WhatsApp son lo mismo —un alias y un techo—, así
+   * que la diferencia se traduce una vez acá (`lib/compromisos/destino.ts`) y no en cada botón.
+   */
+  const destinosManuales = useMemo(() => destinosDeCuentas(manuales.cuentas), [manuales.cuentas])
+  const destinos = useMemo(
+    () => [...deudas.acreedores.map(destinoDeAcreedor), ...destinosManuales],
+    [deudas.acreedores, destinosManuales],
+  )
+
   const cola = useMemo(() => colaDeCobranza(cobros.compromisos), [cobros.compromisos])
   const abiertas = cola.porConfirmar.length + cola.esperando.length
   const puede = cobros.puede
@@ -534,6 +611,9 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
       // El saldo del acreedor lo calcula el dashboard: al confirmar bajó de verdad, y si no se
       // relee, la próxima compromiso se ofrecería contra un número viejo.
       deudas.recargar()
+      // Lo mismo del otro lado: una cuenta manual pudo haberse completado con esta confirmación,
+      // y si no se relee sigue ofreciéndose para pedir plata que ya no hace falta.
+      manuales.recargar()
     } catch (e) {
       decir(e instanceof Error ? e.message : 'No se pudo.', true)
     }
@@ -699,6 +779,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         <div style={{ marginTop: space[2] }}>
           <VistaAcreedores
             acreedores={deudas.acreedores}
+            manuales={destinosManuales}
             compromisos={cobros.compromisos}
             cargando={deudas.cargando}
             error={deudas.error}
@@ -714,13 +795,13 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         uso posible de la primera pantalla. Sin cliente, lo útil es la lista de abajo.
       */}
       {cliente ? (
-        <Bloque titulo="Que le pague a un acreedor">
+        <Bloque titulo="Que transfiera a una cuenta nuestra">
           <NuevoCompromiso
             cliente={cliente}
-            acreedores={deudas.acreedores}
+            destinos={destinos}
             compromisos={cobros.compromisos}
             puede={puede}
-            cargando={deudas.cargando}
+            cargando={deudas.cargando && manuales.cargando}
             noSePudoLeer={!!(deudas.error || deudas.aviso)}
             onCreado={(txt) => { decir(txt); cobros.recargar() }}
           />

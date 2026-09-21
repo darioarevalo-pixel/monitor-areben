@@ -14,6 +14,12 @@ const API = '/api/datos?recurso=compromisos'
 export type PuedeCompromisos = { ver: boolean; prometer: boolean; confirmar: boolean }
 
 export type NuevoCompromiso = {
+  /**
+   * `manual` = el destino es una cuenta de acá y no un acreedor del dashboard. Va junto con
+   * `objetivo_id`, que es contra qué se controla: las dos se mueven juntas o el servidor rebota.
+   */
+  origen?: 'dashboard' | 'manual'
+  objetivo_id?: string | null
   acreedor_id: string
   acreedor_nombre: string
   cuenta_alias?: string | null
@@ -101,7 +107,26 @@ export async function confirmarCompromiso(
   monto_real: number,
   fecha: string,
   titular_real?: string | null,
-): Promise<{ compromiso: Compromiso; nueva: Compromiso | null }> {
+): Promise<ResultadoConfirmar> {
   const d = await pedir({ action: 'confirmar', id, monto_real, fecha, titular_real: titular_real || null })
-  return { compromiso: d.compromiso as Compromiso, nueva: (d.nueva ?? null) as Compromiso | null }
+  return {
+    compromiso: d.compromiso as Compromiso,
+    nueva: (d.nueva ?? null) as Compromiso | null,
+    cuenta_completa: !!d.cuenta_completa,
+    se_paso: Number(d.se_paso || 0),
+  }
+}
+
+/**
+ * Lo que pasó al confirmar. Los dos últimos campos sólo vienen de una **cuenta manual**:
+ *
+ * - `cuenta_completa` se llegó al monto y la cuenta se apagó sola.
+ * - `se_paso`         entró más de lo que faltaba juntar. Se acepta igual (la plata ya se movió) y
+ *   la pantalla lo dice: en el banco hay plata de sobra y alguien tiene que enterarse.
+ */
+export type ResultadoConfirmar = {
+  compromiso: Compromiso
+  nueva: Compromiso | null
+  cuenta_completa: boolean
+  se_paso: number
 }
