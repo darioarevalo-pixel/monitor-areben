@@ -132,6 +132,20 @@ describe('inicio/core — pendientes de trabajo', () => {
     expect(r).toHaveLength(2)
   })
 
+  /**
+   * 🔴 Desde la convergencia TODA solicitud de fotos nace con `tipo` puesto, así que su estado
+   * inicial es `aprobada` — y `estadoFoto` ⛔ no tenía ese caso: caía al `default`, que imprime el
+   * estado crudo. La lista y el Inicio venían mostrando la palabra «aprobada» en minúscula, sin
+   * rótulo y sin la señal de GN. Fotos ⛔ no necesita aprobación: para ella `aprobada` es
+   * «pendiente de preparar».
+   */
+  it('una solicitud de FOTOS en «aprobada» se lee Pendiente, no la palabra cruda', () => {
+    const r = resumenFoto(sol({ estado: 'aprobada', tipo: 'retornable', motivo: 'Sesión de fotos' }), 'bdi')
+    expect(r.estadoLabel).toBe('Pendiente')
+    expect(r.estadoTag).toBe('sin venta GN')
+    expect(pendientesDeTrabajo([r])).toHaveLength(1)
+  })
+
   it('el título nombra la tarea del sector, no "solicitudes"', () => {
     expect(tituloPendientes(['local'])).toContain('local')
     expect(tituloPendientes(['deposito'])).toContain('depósito')

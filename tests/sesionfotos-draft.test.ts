@@ -3,13 +3,17 @@ import {
   buscarProductos,
   draftVacio,
   escanearDraft,
+  escaneadasDraft,
   expandirProductos,
   procesarDraft,
+  setVarQty,
   totalDraft,
+  traerVariante,
   type Draft,
 } from '@/lib/sesionfotos/draft'
-import { construirMapaBc } from '@/lib/sesionfotos/escaneo'
+import { construirMapaBc, escanearSol } from '@/lib/sesionfotos/escaneo'
 import type { Producto, Variante } from '@/lib/etl/tipos'
+import type { Solicitud } from '@/lib/sesionfotos/tipos'
 import { cargarExpandirLegacy, cargarProcesarLegacy } from './legacy-sesionfotos'
 
 function mkVar(o: { id: string; pid: string; sid?: string; name?: string; size?: string; sku?: string; local?: number; deposito?: number; barcode?: string }): Variante {
@@ -102,23 +106,33 @@ describe('buscarProductos', () => {
 describe('escanearDraft', () => {
   const mapa = construirMapaBc(VARIANTES)
 
-  // QUIRK FIEL AL LEGACY: expandirProductos/sfDraftDesdeProductos deja las variantes
-  // con stock en qty:1, y el escaneo reusa esa expansión y hace +1 → el primer
-  // escaneo de una variante CON stock queda en qty 2 (no 1). Se replica tal cual
-  // para no divergir del iframe en el A/B. (Una variante sin stock arrancaría en 1.)
-  it('escanear un barcode existente tilda la variante, suma y fija el origen', () => {
+  // 🔴 Hasta el 21-sep-2026 esto daba qty 2 por UN escaneo: `expandirProductos` deja las variantes
+  // con stock en `qty: 1` sin tildar —el default de la casilla— y el escaneo le sumaba encima. Era
+  // fiel al legacy, se replicaba para el A/B del iframe (que ya no corre), y pedía el doble.
+  it('escanear un barcode existente tilda la variante, cuenta UNA unidad y fija el origen', () => {
     const { draft, resultado } = escanearDraft(draftVacio(), '111', mapa, VARIANTES, 'local', PRODUCTOS)
-    expect(resultado).toMatchObject({ tipo: 'variante', size: 'S', qty: 2, origen: 'local' })
+    expect(resultado).toMatchObject({ tipo: 'variante', size: 'S', qty: 1, origen: 'local' })
     const v = draft.prods[0].variantes.find((x) => x.vid === '1_10')!
-    expect(v).toMatchObject({ sel: true, qty: 2, origenManual: 'local' })
+    expect(v).toMatchObject({ sel: true, qty: 1, escaneado: 1, origenManual: 'local' })
   })
 
   it('escanear dos veces sigue sumando 1 por escaneo', () => {
     let d = draftVacio()
-    d = escanearDraft(d, '111', mapa, VARIANTES, 'deposito', PRODUCTOS).draft // qty 2 (1 del expand + 1)
+    d = escanearDraft(d, '111', mapa, VARIANTES, 'deposito', PRODUCTOS).draft
     const { draft, resultado } = escanearDraft(d, '111', mapa, VARIANTES, 'deposito', PRODUCTOS)
-    expect(resultado).toMatchObject({ qty: 3 })
-    expect(draft.prods[0].variantes.find((x) => x.vid === '1_10')!.qty).toBe(3)
+    expect(resultado).toMatchObject({ qty: 2 })
+    const v = draft.prods[0].variantes.find((x) => x.vid === '1_10')!
+    expect(v).toMatchObject({ qty: 2, escaneado: 2 })
+  })
+
+  // Lo pedido a mano ⛔ no se pisa: el escaneo se le SUMA. Es la otra mitad de la regla de arriba,
+  // y sin este test «arrancar en 1» se podría escribir como «poner en 1».
+  it('si la variante YA estaba tildada con una cantidad, el escaneo se le suma', () => {
+    let d = expandirProductos(draftVacio(), ['1'], VARIANTES, PRODUCTOS)
+    d = { ...d, prods: d.prods.map((p) => ({ ...p, variantes: p.variantes.map((v) => (v.vid === '1_10' ? { ...v, sel: true, qty: 3 } : v)) })) }
+    const { draft } = escanearDraft(d, '111', mapa, VARIANTES, 'local', PRODUCTOS)
+    const v = draft.prods[0].variantes.find((x) => x.vid === '1_10')!
+    expect(v).toMatchObject({ qty: 4, escaneado: 1 })
   })
 
   it('un código desconocido cae a "nuevo" por código de barras', () => {
@@ -179,5 +193,97 @@ describe('procesarDraft · un «a mano» con forma de código guarda el código'
     const i = procesarDraft(d, 'deposito', meta)!.items[0]
     expect(i.nombre).toBe('Remera estampa X')
     expect(i.barcode).toBeUndefined()
+  })
+})
+
+/**
+ * 🔑 **Lo escaneado en el borrador nace PREPARADO** (21-sep-2026).
+ *
+ * Lo trajo Administración: escaneó 140 prendas ya separadas con «¿Ya los separaste? Escaneálos»,
+ * apretó Procesar y la solicitud salió con los 140 renglones **en `0/1`, sin un solo tilde**.
+ * `procesarDraft` armaba los `items` y tiraba el escaneo: `verif` —que es lo que dibuja el tilde y
+ * lo que decide qué sale en la venta de GN— nacía vacío.
+ *
+ * El oráculo es la EQUIVALENCIA, ⛔ no un `verif` esperado escrito a mano: escanear en el borrador
+ * y escanear en el detalle son el mismo hecho físico, así que tienen que dar la misma solicitud.
+ * Un `verif` hardcodeado acá se rompería igual que se rompió el código.
+ */
+describe('procesarDraft · lo escaneado nace preparado (21-sep-2026)', () => {
+  const mapa = construirMapaBc(VARIANTES)
+  const meta = { id: 's_prep', fecha: '2026-09-21', creado: 1, creadoPor: 'lorena' }
+
+  it('escanear en el borrador == crear y escanear en el detalle (verif y estado)', () => {
+    const codigos = ['111', '111', '222'] // dos unidades de la S y una del buzo
+
+    // Camino A: escanear en el borrador.
+    let d = draftVacio()
+    for (const c of codigos) d = escanearDraft(d, c, mapa, VARIANTES, 'local', PRODUCTOS).draft
+    const porBorrador = procesarDraft(d, 'local', meta)!
+
+    // Camino B: la misma solicitud sin escanear, y los mismos códigos por el detalle.
+    const sinEscanear = { ...porBorrador, verif: undefined, estado: 'pendiente' as const }
+    let porDetalle = sinEscanear as Solicitud
+    for (const c of codigos) porDetalle = escanearSol(porDetalle, 'local', 'retiro', c, mapa).sol
+
+    expect(porBorrador.verif).toEqual(porDetalle.verif)
+    expect(porBorrador.estado).toBe(porDetalle.estado)
+    // sanity: es el caso completo, así que los dos llegan a `preparada`
+    expect(porBorrador.estado).toBe('preparada')
+    expect(porBorrador.verif).toEqual({ '1_10': 2, '2_20': 1 })
+  })
+
+  it('mixto: lo del buscador NO lleva clave, y la solicitud no llega a preparada', () => {
+    let d = traerVariante(draftVacio(), '2', '2_20', VARIANTES, PRODUCTOS) // a mano, sin escanear
+    d = escanearDraft(d, '111', mapa, VARIANTES, 'local', PRODUCTOS).draft
+    const sol = procesarDraft(d, 'local', meta)!
+    expect(sol.verif).toEqual({ '1_10': 1 })
+    expect('2_20' in sol.verif!).toBe(false) // ⛔ ausente, NO un 0: un 0 significa "lo busqué y no está"
+    expect(sol.estado).not.toBe('preparada')
+  })
+
+  it('un borrador sin ningún escaneo ⛔ ni siquiera trae la clave `verif`', () => {
+    const d = traerVariante(draftVacio(), '1', '1_10', VARIANTES, PRODUCTOS)
+    const sol = procesarDraft(d, 'local', meta)!
+    expect('verif' in sol).toBe(false) // `{}` le cambiaría el JSON a toda solicitud, y el cajón diffea por JSON
+    expect(sol.estado).toBe('pendiente')
+  })
+
+  it('un código que todavía no está en GN también nace preparado', () => {
+    const d = escanearDraft(draftVacio(), '77777', mapa, VARIANTES, 'deposito', PRODUCTOS).draft
+    const sol = procesarDraft(d, 'deposito', meta)!
+    expect(sol.verif).toEqual({ bc_77777: 1 })
+  })
+
+  it('lo tipeado «sin código» ⛔ no se marca: nadie lo escaneó', () => {
+    const d: Draft = { ...draftVacio(), manuales: [{ mid: 'm1', desc: 'Remera estampa X', qty: 2 }] }
+    const sol = procesarDraft(d, 'deposito', meta)!
+    expect('verif' in sol).toBe(false)
+  })
+
+  it('bajar la cantidad a mano después de escanear topea lo preparado', () => {
+    let d = draftVacio()
+    for (let n = 0; n < 3; n++) d = escanearDraft(d, '111', mapa, VARIANTES, 'local', PRODUCTOS).draft
+    d = setVarQty(d, '1', '1_10', 1)
+    const sol = procesarDraft(d, 'local', meta)!
+    expect(sol.items[0].qty).toBe(1)
+    expect(sol.verif).toEqual({ '1_10': 1 }) // ⛔ no 3: preparado nunca es más que lo pedido
+  })
+
+  it('un CONSUMO escaneado entero sigue esperando aprobación', () => {
+    let d = draftVacio('Repuesto', 'consumo')
+    d = escanearDraft(d, '111', mapa, VARIANTES, 'local', PRODUCTOS).draft
+    const sol = procesarDraft(d, 'local', meta)!
+    expect(sol.verif).toEqual({ '1_10': 1 })
+    expect(sol.estado).toBe('pendiente') // escanear la mercadería ⛔ no es aprobar el gasto
+  })
+
+  it('escaneadasDraft cuenta lo mismo que procesarDraft marca', () => {
+    let d = traerVariante(draftVacio(), '2', '2_20', VARIANTES, PRODUCTOS)
+    d = escanearDraft(d, '111', mapa, VARIANTES, 'local', PRODUCTOS).draft
+    d = escanearDraft(d, '111', mapa, VARIANTES, 'local', PRODUCTOS).draft
+    const sol = procesarDraft(d, 'local', meta)!
+    const marcadas = Object.values(sol.verif || {}).reduce((a, n) => a + n, 0)
+    expect(escaneadasDraft(d)).toBe(marcadas)
+    expect(totalDraft(d)).toBe(marcadas + 1) // la del buscador entra sin marcar
   })
 })

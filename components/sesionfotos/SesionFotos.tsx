@@ -47,6 +47,7 @@ import {
   tildarVariantes,
   vidsAusentes,
   escanearDraft,
+  escaneadasDraft,
   procesarDraft,
   quitarManual,
   quitarPendiente,
@@ -1784,6 +1785,8 @@ function Draft({
   const [fbMan, setFbMan] = useState<string | null>(null)
 
   const total = totalDraft(draft)
+  // Lo que va a nacer tildado. La cuenta sale del núcleo, que es el mismo que escribe `verif`.
+  const escaneadas = escaneadasDraft(draft)
   const yaEn = useMemo(() => new Set(draft.prods.map((p) => p.pid)), [draft])
   const resultados = useMemo(() => buscarProductos(variantes, busqueda, yaEn), [variantes, busqueda, yaEn])
   const vacio = draft.prods.length === 0 && draft.pendientes.length === 0 && draft.manuales.length === 0
@@ -1992,7 +1995,10 @@ function Draft({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: color.ink2 }}>¿Ya los separaste? Escaneálos</span>
           <InfoPopover titulo="Cargar por escáner">
-            Si ya separaste los productos físicamente, escaneá el código de barras: se agregan solos con la ubicación elegida. Es una alternativa al buscador.
+            Si ya separaste los productos físicamente, escaneá el código de barras: se agregan solos con la ubicación elegida y
+            <b> quedan marcados como preparados</b>, así no hay que volver a escanearlos adentro de la solicitud. Como la venta
+            en Gestión Nube sale por lo preparado, escaneá sólo lo que de verdad separaste. Lo que agregues con el buscador
+            entra sin marcar, para escanearlo después.
           </InfoPopover>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: color.mut }}>Sacás de:</span>
@@ -2148,6 +2154,21 @@ function Draft({
           De dónde se retira cada producto: <b>{prioridad === 'local' ? 'Local primero' : 'Depósito primero'}</b> (si no hay stock, del otro depósito). Lo escaneado respeta la ubicación que elijas; lo agregado a mano se asigna solo.{admin ? ' Se configura al completar la migración.' : ''}
         </InfoPopover>
       </div>
+
+      {/* 🔑 Lo escaneado nace preparado, así que el mixto (parte escáner, parte buscador) hay que
+          poder leerlo ANTES de procesar y no descubrirlo adentro de la solicitud. */}
+      {escaneadas > 0 ? (
+        <div style={{ fontSize: 12.5, color: color.ink2, marginBottom: 10 }}>
+          {escaneadas === total ? (
+            <>Las <b>{total} u.</b> se escanearon: salen ya <b>marcadas como preparadas</b>.</>
+          ) : (
+            <>
+              <b>{escaneadas}</b> de {total} u. se escanearon: ésas salen <b>marcadas como preparadas</b>. Las otras{' '}
+              <b>{total - escaneadas}</b> se confirman adentro de la solicitud.
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button variant="solid" tone="brand" onClick={procesar} disabled={total === 0}>Procesar ({total} u.)</Button>

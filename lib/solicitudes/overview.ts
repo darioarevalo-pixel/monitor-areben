@@ -66,6 +66,12 @@ function estadoFoto(s: Solicitud): { label: string; tag?: string; grupo: GrupoEs
   const tieneVenta = !!s.ventas && Object.keys(s.ventas).length > 0
   switch (s.estado) {
     case 'pendiente':
+    // 🔴 **`aprobada` en una solicitud de FOTOS se lee «pendiente de preparar», ⛔ no «aprobada»**:
+    // fotos ⛔ no necesita aprobación (la pide el DESTINO, y el de fotos es retornable), pero desde
+    // la convergencia el borrador siempre trae `tipo` ⇒ **todas nacen `aprobada`**. Sin este `case`
+    // caían al `default`, que imprime el estado crudo: la lista y el Inicio venían mostrando la
+    // palabra «aprobada» en minúscula, sin rótulo ni señal de GN.
+    case 'aprobada':
       return { label: 'Pendiente', tag: 'sin venta GN', grupo: 'pendiente', ...AMBAR }
     case 'preparada':
       return { label: 'Preparada', tag: 'sin venta GN', grupo: 'enproceso', ...AZUL }

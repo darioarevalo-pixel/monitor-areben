@@ -14,7 +14,7 @@
 
 import type { Producto, Variante } from '../etl/tipos'
 import { normCodigo, pareceCodigo } from './codigo'
-import { normBc, vidDeBarcode } from './escaneo'
+import { normBc, transicionEstado, vidDeBarcode } from './escaneo'
 import type { Disparador } from '../solicitudes/disparador'
 import type { ItemSolicitud, Origen, Solicitud, TipoSol } from './tipos'
 
@@ -29,8 +29,22 @@ export type DraftVar = {
   qty: number
   /** Origen fijado por escaneo (el operario sabe de dónde lo sacó). */
   origenManual?: Origen
+  /**
+   * Unidades que se CONFIRMARON con el escáner del borrador («¿Ya los separaste?»): son las que
+   * nacen preparadas. Ausente = ninguna, que es el caso del buscador.
+   *
+   * 🔴 **⛔ No alcanza con `qty`**: `setVarQty` deja subir la cantidad a mano después de escanear,
+   * y entonces `qty` contaría como preparado algo que nadie tuvo en la mano. ⛔ **Tampoco con
+   * `origenManual`**, que dice de DÓNDE salió y ⛔ no cuántas.
+   */
+  escaneado?: number
 }
 export type DraftProd = { pid: string; name: string; cat: string; variantes: DraftVar[] }
+/**
+ * Un código escaneado que todavía ⛔ no existe en GN. ⛔ No lleva `escaneado`: su `qty` **sólo**
+ * crece por escaneo y la única edición es sacarlo entero (`quitarPendiente`), así que `qty` YA es
+ * la cuenta de escaneos.
+ */
 export type DraftPendiente = { barcode: string; qty: number; origenManual: Origen }
 export type DraftManual = { mid: string; desc: string; qty: number }
 export type Draft = {
@@ -177,6 +191,13 @@ export type ResultadoDraftScan =
  * guiones (`RVE-0047-NG`) y la etiqueta que se escanea es el mismo código sin ellos (`RVE0047NG`).
  * Con la comparación exacta sola, escanear el SKU de un producto que **sí existe** lo mandaba a la
  * caja de "nuevos sin cargar". El orden importa: lo exacto primero, esto como red.
+ *
+ * 🔴 **El primer escaneo de una variante SIN TILDAR arranca en 1, ⛔ no en 2** (21-sep-2026).
+ * `expandirProductos` deja todas las variantes del producto en `qty: 1` **sin tildar**: ese 1 es el
+ * valor por defecto de la casilla, ⛔ no una unidad pedida. Sumarle el escaneo daba **2 unidades
+ * por una sola prenda escaneada** — pedía el doble, y desde que lo escaneado nace preparado además
+ * dejaba el renglón en `1/2`, o sea **sin tilde justo en el camino que existe para tildarlo**. Era
+ * fiel al legacy y se replicaba a propósito para el A/B del iframe, que ya no corre.
  */
 export function escanearDraft(
   draft: Draft,
@@ -219,12 +240,38 @@ export function escanearDraft(
     let vs = tiene
       ? p.variantes
       : [...p.variantes, { vid: it!.id, sid: it!.sid, size: it!.size || '—', sku: it!.sku || '', local: it!.local || 0, deposito: it!.deposito || 0, sel: false, qty: 0 }]
-    vs = vs.map((v) => (v.vid === it!.id ? { ...v, sel: true, qty: (Number(v.qty) || 0) + 1, origenManual: origenSel } : v))
+    vs = vs.map((v) =>
+      v.vid === it!.id
+        ? {
+            ...v,
+            sel: true,
+            // Una variante sin tildar todavía ⛔ no tiene cantidad pedida: su `qty` es el default de
+            // la casilla. Tildada, se le suma el escaneo a lo que ya se pidió a mano.
+            qty: (v.sel ? Number(v.qty) || 0 : 0) + 1,
+            escaneado: (Number(v.escaneado) || 0) + 1,
+            origenManual: origenSel,
+          }
+        : v,
+    )
     return { ...p, variantes: vs }
   })
   const prod = prods.find((p) => p.pid === pid)!
   const v = prod.variantes.find((x) => x.vid === it!.id)!
   return { draft: { ...d, prods }, resultado: { tipo: 'variante', nombre: prod.name, size: v.size, qty: v.qty, origen: origenSel } }
+}
+
+/**
+ * Unidades del borrador que van a nacer PREPARADAS: las que pasaron por el escáner. La cuenta vive
+ * acá y ⛔ no en el componente porque es la misma que `procesarDraft` escribe en `verif` — dos
+ * cuentas serían dos verdades, y la pantalla estaría prometiendo un número que el núcleo no cumple.
+ */
+export function escaneadasDraft(draft: Draft): number {
+  const enProds = draft.prods.reduce(
+    (s, p) => s + p.variantes.filter((v) => v.sel).reduce((a, v) => a + Math.min(Number(v.escaneado) || 0, Math.max(1, Number(v.qty) || 1)), 0),
+    0,
+  )
+  const enPend = (draft.pendientes || []).reduce((a, p) => a + Math.max(1, Number(p.qty) || 1), 0)
+  return enProds + enPend
 }
 
 /** Total de unidades del borrador (para el botón "Procesar (N u.)"). */
@@ -253,9 +300,20 @@ export type MetaSolicitud = {
  * (prioridad='local' → local si alcanza, si no depósito; y al revés). Los "nuevos"
  * y los "a mano" no generan venta. Devuelve null si no hay nada que procesar.
  * Port de sfProcesar.
+ *
+ * 🔑 **Lo escaneado nace PREPARADO** (21-sep-2026). El panel se llama «¿Ya los separaste?
+ * Escaneálos»: quien escanea ahí ya tuvo la prenda en la mano, así que ese escaneo es el mismo
+ * hecho físico que el escaneo del detalle y ⛔ no puede dar un resultado distinto. El invariante
+ * que manda: **escanear N códigos acá y procesar == procesar sin escanear y después pasar los
+ * mismos N por `escanearSol`** — `verif` y `estado` idénticos. Antes el borrador tiraba el dato y
+ * la solicitud nacía en `0/N`, sin un solo tilde (reporte de Administración del 21-sep: 140 ítems).
  */
 export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicitud): Solicitud | null {
   const items: ItemSolicitud[] = []
+  // Lo confirmado por el escáner, por vid. ⚠️ Se llena SOLO con lo escaneado: un ítem que entró por
+  // el buscador ⛔ no lleva clave, y esa ausencia es la que distingue "nadie lo escaneó" de "lo
+  // busqué y no está" (un `0` explícito) — ver `salioSinEscanear` en `core.ts`.
+  const verif: Record<string, number> = {}
   draft.prods.forEach((p) =>
     p.variantes
       .filter((v) => v.sel)
@@ -271,11 +329,17 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
               ? 'deposito'
               : 'local'
         items.push({ vid: v.vid, pid: p.pid, sid: v.sid, nombre: p.name, variante: v.size, sku: v.sku, qty, stockDep: v.deposito, stockLoc: v.local, origen })
+        // Topeado a `qty` porque la cantidad se puede bajar a mano DESPUÉS de escanear: preparado
+        // nunca puede ser más que lo pedido (es la misma regla que `preparado()` en el núcleo).
+        const esc = Math.min(Number(v.escaneado) || 0, qty)
+        if (esc > 0) verif[v.vid] = esc
       }),
   )
   ;(draft.pendientes || []).forEach((pn) => {
     const qty = Math.max(1, Number(pn.qty) || 1)
     items.push({ vid: 'bc_' + pn.barcode, pid: null, sid: null, nombre: '(nuevo sin cargar)', variante: '', sku: '', barcode: pn.barcode, qty, origen: pn.origenManual || 'deposito', nuevo: true, pendiente: true })
+    // Un pendiente sólo existe porque alguien lo escaneó, y su `qty` ES la cuenta de escaneos.
+    verif['bc_' + pn.barcode] = qty
   })
   ;(draft.manuales || []).forEach((mn) => {
     const desc = String(mn.desc || '').trim()
@@ -297,13 +361,26 @@ export function procesarDraft(draft: Draft, prioridad: Origen, meta: MetaSolicit
   // Lo mismo con el evento: una clave con `undefined` ⛔ no es igual a una ausente para
   // `diffSolicitudes`, que compara por JSON.
   const ev = meta.eventoId ? { eventoId: meta.eventoId } : {}
-  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items, ...disp, ...ev }
+  // 🔴 **Por la misma razón que `disp` y `ev`: un `verif: {}` ⛔ no es lo mismo que ausente.**
+  // `diffSolicitudes` compara por JSON, así que la clave vacía le cambiaría la huella a TODA
+  // solicitud nueva armada con el buscador.
+  const vf = Object.keys(verif).length ? { verif } : {}
+  const base = { id: meta.id, fecha: meta.fecha, creado: meta.creado, creadoPor: meta.creadoPor, descripcion: draft.desc || '', items, ...disp, ...ev, ...vf }
   // Capa internas: si el borrador trae `tipo`, es una solicitud interna. El consumo nace
   // `pendiente` (necesita aprobación); el retornable nace `aprobada`. Fotos: `pendiente`.
-  if (draft.tipo != null) {
-    return { ...base, motivo: draft.motivo || 'Otro', tipo: draft.tipo, estado: draft.tipo === 'consumo' ? 'pendiente' : 'aprobada', devuelto: {} }
-  }
-  return { ...base, estado: 'pendiente' }
+  const sol: Solicitud =
+    draft.tipo != null
+      ? { ...base, motivo: draft.motivo || 'Otro', tipo: draft.tipo, estado: draft.tipo === 'consumo' ? 'pendiente' : 'aprobada', devuelto: {} }
+      : { ...base, estado: 'pendiente' }
+  // Si se escaneó TODO, la solicitud nace `preparada` — el mismo salto que da `escanearSol` en el
+  // detalle al completar la fase. Con el borrador mixto (parte buscador, parte escáner)
+  // `faseCompleta` da false y el estado se queda donde nació, que es lo correcto.
+  //
+  // 🔴 **El consumo ⛔ NO salta**: `pendiente` ahí ⛔ no significa "falta prepararlo" sino "falta que
+  // alguien lo apruebe" (`necesitaAprobacion` mira el destino, y el botón de crear la venta exige
+  // ese estado). Escanear la mercadería ⛔ no es aprobar el gasto: sacarlo de `pendiente` acá le
+  // abriría la puerta de GN a una baja definitiva que nadie autorizó.
+  return draft.tipo === 'consumo' ? sol : transicionEstado(sol, 'retiro')
 }
 
 // ── Actualizaciones inmutables pequeñas (para el estado de React) ────────────────

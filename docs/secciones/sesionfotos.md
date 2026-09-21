@@ -1026,3 +1026,95 @@ ambiguas (1) · sacar el código del ítem «a mano» en `procesarDraft` (1).
 3. Volver a leer la base y contar: **150 con `sku`**, y los 2 restantes tienen que ser `RMI0056` y
    `RMI0055CR`.
 4. Abrir **Solicitudes internas**: ahí ⛔ no tiene que cambiar ni guardarse nada.
+
+## El escáner del borrador ⛔ no marcaba preparado, y pedía el doble (21-sep-2026)
+
+Lo trajo Administración (Lorena Reyes), 9:02:
+
+> *«escanee todo lo que separamos para sesion de fotos en Monitor, usando la opcion "Ya separaste?
+> Escanea". Y cuando puse "Procesar" me genero la lista con todos los productos que separe pero no
+> estan tildados como separados»*
+
+**Medido antes de escribir**, por el API de producción:
+`s1789991477589_17455` «INGRESOS 18 DE SEPTIEMBRE», **140 ítems y `verif` con CERO claves**. Contra
+las 20 anteriores, que lo tienen casi completo (150/152, 17/18, 28/28): todas ésas se escanearon
+**en el detalle**.
+
+### 🔑 Son DOS escáneres, y sólo uno escribía el tilde
+
+| | borrador («¿Ya los separaste?») | detalle (fase retiro) |
+|---|---|---|
+| núcleo | `escanearDraft` (`draft.ts`) | `escanearSol` (`escaneo.ts`) |
+| qué escribía | `sel`, `qty`, `origenManual` | `verif[vid]` + `transicionEstado` → `preparada` |
+| sobrevivía a «Procesar» | **NO** — el `Draft` se descarta | sí |
+
+`procesarDraft` traducía el borrador a `items[]` y **tiraba el escaneo**. El tilde de la pantalla
+ES `verif`, así que los 140 salían en `0/1`. 🔴 **Y lo caro ⛔ no era el tilde**: la venta de Gestión
+Nube se arma por `preparado()`, o sea por `verif` — con el mapa vacío la venta sale **sin ítems**.
+Los ítems normales tampoco tienen −/+ en el detalle (son sólo de los «a mano»), así que la única
+salida era **volver a escanear los 140 uno por uno**.
+
+### La regla, y por qué el oráculo es una EQUIVALENCIA
+
+Escanear en el borrador y escanear en el detalle son **el mismo hecho físico**: la prenda estuvo en
+la mano. Entonces tienen que dar la misma solicitud, y eso es lo que fija el test:
+
+> escanear N códigos en el borrador y procesar **==** procesar sin escanear y después pasar los
+> mismos N por `escanearSol` — `verif` y `estado` idénticos.
+
+Un `verif` esperado escrito a mano en el test se habría roto igual que se rompió el código.
+
+- `DraftVar.escaneado` cuenta las unidades confirmadas por el escáner. ⛔ **No alcanza con `qty`**
+  (`setVarQty` deja subirla a mano después) ni con `origenManual` (dice de DÓNDE, ⛔ no cuántas).
+- `verif[vid] = min(escaneado, qty)`, y **sólo si es > 0**: la ausencia de la clave significa
+  «nadie lo escaneó» y un `0` explícito significa «lo busqué y no está» — `salioSinEscanear` vive
+  de esa diferencia.
+- Los `bc_` escaneados entran (su `qty` ES la cuenta de escaneos); los `man_` tipeados ⛔ no.
+- `verif` se **omite entero** si queda vacío, igual que `disparador` y `eventoId`: el cajón diffea
+  por JSON y un `{}` le cambiaría la huella a toda solicitud armada con el buscador.
+- 🔴 **El CONSUMO ⛔ no salta a `preparada`**: ahí `pendiente` ⛔ no significa «falta prepararlo» sino
+  «falta que alguien lo apruebe». Escanear la mercadería ⛔ no es aprobar el gasto.
+
+### 🔴 El segundo defecto, que sólo se vio al arreglar el primero: pedía el DOBLE
+
+`expandirProductos` deja todas las variantes del producto en `qty: 1` **sin tildar** —es el default
+de la casilla, ⛔ no una unidad pedida— y el escaneo le sumaba encima: **un escaneo dejaba `qty: 2`**.
+Era fiel al legacy y se replicaba a propósito para el A/B del iframe, que ya no corre. Con el tilde
+puesto encima, ese quirk dejaba el renglón en **`1/2`: sin tilde justo en el camino que existe para
+tildarlo**. Ahora el primer escaneo de una variante sin tildar arranca en 1, y si ya estaba tildada
+con una cantidad a mano el escaneo **se le suma**.
+
+### Lo que la pantalla dice ahora
+
+El escaneo pasó a tener una consecuencia que antes no tenía (habilita la venta de GN por esos
+ítems), así que se dice **antes** de procesar: el `InfoPopover` lo explica, y arriba del botón
+aparece **«N de M u. se escanearon: ésas salen marcadas como preparadas»** para que el caso mixto
+(parte escáner, parte buscador) se lea en el borrador y ⛔ no se descubra adentro de la solicitud.
+La cuenta sale de `escaneadasDraft`, **el mismo núcleo que escribe `verif`**: dos cuentas serían dos
+verdades.
+
+### De yapa: la palabra cruda «aprobada»
+
+`estadoFoto` (`lib/solicitudes/overview.ts`) ⛔ no tenía `case 'aprobada'` y caía al `default`, que
+imprime el estado crudo. Como desde la convergencia **toda** solicitud de fotos nace con `tipo`
+puesto, nace `aprobada` ⇒ `/solicitudes` e Inicio venían mostrando la palabra **«aprobada»** en
+minúscula, sin rótulo ni señal de GN. Fotos ⛔ no necesita aprobación: para ella eso es **Pendiente**.
+
+### El backfill, y la que ⛔ NO se tocó
+
+`scripts/backfill-verif-sesion.mjs` marca los ítems de una solicitud ya separada (lee y escribe por
+el API de producción, **dry-run por defecto**, y vuelve a leer para contar). Corrido el 21-sep sobre
+la del 18/9: **140/140 con tilde, estado `preparada`**, verificado releyendo.
+
+🔴 **La sesión «SESION DE FOTOS ESTUDIO 21.09» ⛔ no se tocó, y el motivo es la regla del script**:
+entre que se midió y se aplicó pasó a `cargada` con 8 de 12 escaneados —alguien la estaba
+trabajando— y **con la venta de GN creada `verif` ya ⛔ no es una anotación**: es lo que esa venta
+descontó y lo que la devolución espera de vuelta. El script saltea todo lo que ya salió.
+
+⚠️ **Lo que ⛔ no se pudo cerrar**: los 140 ítems tienen `qty: 1` y **63 tienen un origen que la
+asignación automática ⛔ no explica con ninguna prioridad** (`deposito` con `stockDep: 0`), o sea
+`origenManual`, que sólo pone el escáner. Pero con el quirk vivo ese escaneo tendría que haber
+dejado `qty: 2`. Las dos cosas ⛔ no cierran, y el bundle deployado se leyó para descartar que
+producción tuviera otro código. ⇒ **falta preguntarle a Lorena si los productos le aparecieron en
+la caja «Nuevos escaneados (aún no en GN)»**, que es el único camino que explicaría el `qty: 1`.
+⛔ No cambia el arreglo: con `escaneado` contando escaneos, cualquiera de los dos caminos tilda.

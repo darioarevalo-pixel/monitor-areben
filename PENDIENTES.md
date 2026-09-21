@@ -13,6 +13,43 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## 🏁 «ESCANEÉ TODO LO QUE SEPARAMOS Y NO ESTÁN TILDADOS COMO SEPARADOS» — 21-sep-2026 (dictado, y hecho)
+
+> «escanee todo lo que separamos para sesion de fotos en Monitor, usando la opcion "Ya separaste?
+> Escanea". Y cuando puse "Procesar" me genero la lista con todos los productos que separe pero no
+> estan tildados como separados» *(Administración, 9:02, sobre «INGRESOS 18 DE SEPTIEMBRE»)*
+
+**Medido antes de escribir**: `s1789991477589_17455`, **140 ítems y `verif` con CERO claves**,
+contra las 20 sesiones anteriores que lo tienen casi completo — todas ésas se escanearon **en el
+detalle**. Son **dos escáneres** y sólo el del detalle escribía el tilde: `procesarDraft` armaba los
+`items` y tiraba el escaneo del borrador. 🔴 **Lo caro ⛔ no era el tilde**: la venta de Gestión Nube
+se arma por `verif`, así que con el mapa vacío sale **sin ítems**.
+
+🏁 **Ahora lo escaneado nace preparado**, y el oráculo del test es una **equivalencia**: escanear en
+el borrador == crear y escanear los mismos códigos en el detalle. **7 mutantes, 7 muertos.**
+
+🔴 **Arreglarlo destapó un segundo defecto que nadie había visto: el borrador pedía el DOBLE.**
+`expandirProductos` deja las variantes en `qty: 1` sin tildar —el default de la casilla— y el
+escaneo le sumaba encima ⇒ **un escaneo dejaba `qty: 2`**. Era fiel al legacy, replicado a propósito
+para el A/B del iframe que ya no corre, y con el tilde encima dejaba el renglón en `1/2`.
+
+✅ **Backfill aplicado y verificado releyendo**: la del 18/9 quedó **140/140 con tilde, `preparada`**.
+🔴 **La del 21.09 ⛔ NO se tocó**: entre que se midió y se aplicó pasó a `cargada` con 8 de 12
+—alguien la estaba trabajando— y **con la venta creada `verif` ya ⛔ no es una anotación**: es lo que
+esa venta descontó. El script saltea todo lo que ya salió.
+
+▶️ **Lo que falta preguntar (una sola pregunta, a Lorena)**: los 140 ítems tienen `qty: 1` **y 63
+tienen `origenManual`** (origen `deposito` con `stockDep: 0`, que sólo pone el escáner) — pero con el
+quirk vivo ese escaneo tendría que haber dejado `qty: 2`. No cierra, y el bundle deployado se leyó
+para descartar que producción tuviera otro código. La pregunta que lo cierra: **¿los productos le
+aparecieron en la caja «Nuevos escaneados (aún no en GN)»?** ⛔ No cambia el arreglo.
+
+📌 **`lib/solicitudes-internas/draft.ts` tiene el gemelo del agujero y ⛔ no se tocó**: su pantalla
+⛔ no tiene escáner en el borrador (grep de `escanear|Scan|separaste`: cero), así que es código no
+alcanzable. Arreglarlo a ciegas era escribir sin poder ejercerlo.
+
+---
+
 ## 🏁 BDI: VENTAS PARTIDAS EN MAYORISTA Y MINORISTA + «GANADORES POR TANDA» — 17-sep-2026 (dictado, y hecho)
 
 > «como analisis de ventas en bdi se puede sectorizar entre mayorista y minorista, asi no se produce
