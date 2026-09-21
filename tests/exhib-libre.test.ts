@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, horasDe, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -280,5 +280,40 @@ describe('pasoPorElLector', () => {
 
   it('un código que ⛔ no cruzó ⛔ tampoco, tenga el estado que tenga', () => {
     expect(pasoPorElLector({ encontrado: false, estado: 'exhibido' })).toBe(false)
+  })
+})
+
+/**
+ * **La hora de cada lectura** (21-sep-2026, `sql/migrate-exhib-horas.sql`): lo que separa «dos
+ * prendas colgadas» de «la misma pasada dos veces».
+ */
+describe('horasDe / sumarUna — el detalle de cada lectura', () => {
+  const T0 = Date.parse('2026-09-21T13:00:00.000Z')
+  const it0 = { barcode: 'b1', sku: '', productId: '1', name: 'TOP ORSA', size: 'Beige', qty: 2, img: null, cat: 'X', cleanCats: ['X'], tnId: null, precio: null, promo: null }
+
+  it('un escaneo nuevo ya trae su primera lectura', () => {
+    expect(aEscaneo(it0, 'b1', 'tops', T0).horas).toEqual(['2026-09-21T13:00:00.000Z'])
+  })
+
+  /** ⚠️ `veces`, `ultimo_en` y `horas` son tres vistas del mismo hecho: se mueven juntas o mienten. */
+  it('sumar una unidad agrega su hora y mueve el contador', () => {
+    const e = sumarUna(aEscaneo(it0, 'b1', 'tops', T0), T0 + 5000)
+    expect(e.veces).toBe(2)
+    expect(e.ultimo_en).toBe('2026-09-21T13:00:05.000Z')
+    expect(e.horas).toEqual(['2026-09-21T13:00:00.000Z', '2026-09-21T13:00:05.000Z'])
+    const tercera = sumarUna(e, T0 + 9000)
+    expect(tercera.horas).toHaveLength(3)
+    expect(tercera.veces).toBe(3)
+  })
+
+  /**
+   * 🔴 **Las filas anteriores a la migración ⛔ no tienen `horas`**, y el respaldo vive en UN solo
+   * lugar: escrito en cada lector se despega, y el día que las viejas ⛔ ya no importen se borra acá.
+   */
+  it('una fila vieja arma sus horas con la primera y la última', () => {
+    expect(horasDe({ horas: null, escaneado_en: 'A', ultimo_en: 'B' })).toEqual(['A', 'B'])
+    expect(horasDe({ escaneado_en: 'A', ultimo_en: null })).toEqual(['A'])
+    // ⚠️ Una sola unidad puede traer `ultimo_en` igual a la primera: ⛔ no son dos lecturas.
+    expect(horasDe({ escaneado_en: 'A', ultimo_en: 'A' })).toEqual(['A'])
   })
 })

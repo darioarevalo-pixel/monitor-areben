@@ -15,6 +15,14 @@ type Fila = Record<string, unknown>
 const base = {
   tablas: {} as Record<string, Fila[]>,
   escrituras: [] as { tabla: string; verbo: string; filas?: Fila[] }[],
+  /**
+   * 🔑 **La base falsa acepta cualquier columna, así que hay que enseñarle a rechazar una.** Es la
+   * única forma de ejercer la ventana entre el deploy y la migración corrida a mano, que es cuando
+   * `horas` todavía ⛔ no existe — y es el único modo de falla de esto que llega al salón.
+   */
+  rechazarHoras: false,
+  /** Un error cualquiera del upsert, para comprobar que ⛔ no se lo confunde con el de la columna. */
+  romperUpsert: '' as string,
 }
 
 function consulta(tabla: string) {
@@ -34,7 +42,13 @@ function consulta(tabla: string) {
     return q
   }
   q.upsert = async (f: Fila | Fila[]) => {
-    base.escrituras.push({ tabla, verbo: 'upsert', filas: Array.isArray(f) ? f : [f] })
+    const filas = Array.isArray(f) ? f : [f]
+    if (base.romperUpsert) return { error: { code: '42501', message: base.romperUpsert } }
+    if (base.rechazarHoras && filas.some((x) => 'horas' in x)) {
+      // El error tal cual lo contesta PostgREST cuando la columna ⛔ no está en el esquema.
+      return { error: { code: 'PGRST204', message: "Could not find the 'horas' column of 'exhib_escaneo' in the schema cache" } }
+    }
+    base.escrituras.push({ tabla, verbo: 'upsert', filas })
     return { error: null }
   }
   return q
@@ -95,6 +109,8 @@ const subidas = () => base.escrituras.filter((e) => e.tabla === 'exhib_escaneo')
 beforeEach(() => {
   base.tablas = { exhib_recorrido: [{ id: REC, store: 'zattia', modo: 'libre', estado: 'en_curso' }] }
   base.escrituras = []
+  base.rechazarHoras = false
+  base.romperUpsert = ''
   // La sección es `brands: ['zattia']` ⇒ el handler pide la base de Zattia, ⛔ no la del monitor.
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
@@ -404,5 +420,50 @@ describe('decidir sobre una prenda colgada de más', () => {
     conCobertura({ cats: [], tipos: [], repetidas: [{ variante_id: 'b1', decision: 'sacar', por: 'x', cuando: 'y' }], por: null, cuando: 'z' })
     await correr(postear({ action: 'repetida', id: REC, variante_id: 'b1', decision: null }))
     expect(guardada().repetidas).toEqual([])
+  })
+})
+
+/**
+ * **La hora de cada lectura** (`sql/migrate-exhib-horas.sql`). Lo que se ejerce acá es lo único que
+ * puede romper el salón: que una columna que todavía ⛔ no existe **⛔ no se lleve puesta la tanda**.
+ */
+describe('las horas de cada lectura', () => {
+  it('se guardan saneadas y EN ORDEN', async () => {
+    await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ veces: 3, horas: ['2026-09-19T13:40:08.000Z', '2026-09-19T13:40:00.000Z', 'cualquier cosa', '2026-09-19T13:40:04.000Z'] })] }))
+    expect(subidas()[0].horas).toEqual(['2026-09-19T13:40:00.000Z', '2026-09-19T13:40:04.000Z', '2026-09-19T13:40:08.000Z'])
+  })
+
+  /** ⚠️ Vacío ⇒ `null`, que es «fila sin el detalle» y ⛔ no «ninguna lectura»: lo lee `horasDe`. */
+  it('sin horas legibles guarda null, ⛔ no una lista vacía', async () => {
+    await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ horas: ['nada'] }), escaneo({ variante_id: 'v2' })] }))
+    expect(subidas()[0].horas).toBe(null)
+    expect(subidas()[1].horas).toBe(null)
+  })
+
+  /**
+   * 🔴 **EL CASO QUE NO SE PUEDE PAGAR.** `migrate-exhib-horas.sql` se corre a mano en el Supabase
+   * de Zattia, así que entre el deploy y esa consulta hay una ventana en la que la columna ⛔ no
+   * existe. Una columna desconocida hace fallar **el upsert entero**, y eso ⛔ no es un renglón
+   * perdido: la cola deja TODO en «sin subir», reintenta para siempre contra el mismo error y
+   * **cerrar con pendientes está prohibido** ⇒ quien camina el local ⛔ no puede cerrar el
+   * recorrido. Es el mismo pozo del 19-sep con la fila sin hora, y ⛔ no se puede pagar por un dato
+   * que es un detalle de diagnóstico.
+   */
+  it('🔴 si la columna todavía ⛔ NO existe, la tanda entra igual sin ella', async () => {
+    base.rechazarHoras = true
+    const res = await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ veces: 2, horas: ['2026-09-19T13:40:00.000Z', '2026-09-19T13:40:05.000Z'] }), escaneo({ variante_id: 'v2' })] }))
+    expect(res.code).toBe(200)
+    // Las DOS filas entraron, y ⛔ ninguna trae la columna que la base ⛔ no conoce.
+    expect(subidas()).toHaveLength(2)
+    expect(subidas().every((f) => !('horas' in f))).toBe(true)
+    // Y lo demás quedó intacto: el contador ⛔ no se pierde por el reintento.
+    expect(subidas()[0].veces).toBe(2)
+  })
+
+  /** ⚠️ Un error que ⛔ NO es de la columna tiene que seguir siendo un error: ⛔ no se lo tapa. */
+  it('⛔ no se come cualquier error del upsert', async () => {
+    base.romperUpsert = 'permission denied for table exhib_escaneo'
+    const res = await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo()] }))
+    expect(res.code).toBe(500)
   })
 })

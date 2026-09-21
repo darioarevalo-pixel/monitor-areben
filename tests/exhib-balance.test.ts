@@ -360,3 +360,57 @@ describe('partirRepetidas — la decisión la toma una persona', () => {
     expect(filas[1]).toEqual(['TOP ORSA', 'Beige', 1, 'sector tops'])
   })
 })
+
+/**
+ * **¿Dos prendas colgadas, o la misma pasada dos veces?** (21-sep-2026). Lo preguntó Bruno mirando
+ * el primer recorrido de sector entero, y la respuesta honesta era «⛔ no se puede saber». Lo que
+ * lo separa es **qué se escaneó en el medio**, ⛔ no el hueco de tiempo.
+ */
+describe('otrasEnMedio — lo que la app puede y ⛔ no puede afirmar', () => {
+  const en = (it: ExhibItem, seg: number, lugar = 'sector tops'): EscaneoLibre =>
+    aEscaneo(it, it.barcode, lugar, Date.parse('2026-09-21T13:00:00.000Z') + seg * 1000)
+  /** Dos lecturas de la misma prenda, a los `a` y `b` segundos. */
+  const dos = (it: ExhibItem, a: number, b: number): EscaneoLibre => ({
+    ...en(it, a),
+    veces: 2,
+    ultimo_en: new Date(Date.parse('2026-09-21T13:00:00.000Z') + b * 1000).toISOString(),
+    horas: [a, b].map((s) => new Date(Date.parse('2026-09-21T13:00:00.000Z') + s * 1000).toISOString()),
+  })
+
+  it('con prendas escaneadas en el medio, son dos distintas', () => {
+    // TOP_A se lee a los 0s y a los 60s; en el medio pasaron TOP_C y CORSET.
+    const l = colgadasDeMas([dos(TOP_A, 0, 60), en(TOP_C, 20), en(CORSET, 40)])
+    expect(l[0]).toMatchObject({ otrasEnMedio: 2, segundos: 60 })
+  })
+
+  /** 🔴 El caso que ⛔ no se puede afirmar: entraron pegadas. */
+  it('sin nada en el medio, otrasEnMedio es CERO', () => {
+    const l = colgadasDeMas([dos(TOP_A, 0, 12), en(TOP_C, 40)])
+    expect(l[0]).toMatchObject({ otrasEnMedio: 0, segundos: 12 })
+  })
+
+  /**
+   * 🔴 **Una prenda leída 3 veces son TRES momentos en el salón, ⛔ no uno.** Contándola como una
+   * sola lectura, la ventana de la prenda de al lado saldría vacía cuando ⛔ no lo estaba — y una
+   * repetida real se marcaría como dudosa.
+   */
+  it('las lecturas del medio de OTRA prenda repetida también cuentan', () => {
+    const tres: EscaneoLibre = {
+      ...en(TOP_C, 10),
+      veces: 3,
+      horas: [10, 20, 30].map((s) => new Date(Date.parse('2026-09-21T13:00:00.000Z') + s * 1000).toISOString()),
+    }
+    const l = colgadasDeMas([dos(TOP_A, 0, 60), tres])
+    expect(l.find((c) => c.size === 'Beige')?.otrasEnMedio).toBe(3)
+  })
+
+  /**
+   * ⚠️ **Las filas viejas ⛔ no tienen `horas`** —la columna nació el 21-sep-2026— y la cuenta tiene
+   * que salir igual: se arma con `escaneado_en` y `ultimo_en`, que alcanzan para `veces = 2`.
+   */
+  it('una fila vieja, sin `horas`, se calcula con la primera y la última', () => {
+    const vieja: EscaneoLibre = { ...en(TOP_A, 0), veces: 2, horas: null, ultimo_en: new Date(Date.parse('2026-09-21T13:00:00.000Z') + 60000).toISOString() }
+    const l = colgadasDeMas([vieja, en(TOP_C, 20)])
+    expect(l[0]).toMatchObject({ otrasEnMedio: 1, segundos: 60 })
+  })
+})

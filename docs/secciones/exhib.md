@@ -247,6 +247,40 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   Enter solo, en decenas de ms. ⚠️ Vale **sólo para el mismo código**, y el descarte **se dice en
   pantalla**: callarlo sería inventar —o perder— una unidad.
 
+- 🆕 🔴 🔑 **«¿DOS PRENDAS COLGADAS, O LA MISMA PASADA DOS VECES?» — LO DECIDE QUÉ SE ESCANEÓ EN EL
+  MEDIO** (21-sep-2026, `otrasEnMedio` en `colgadasDeMas` + `horas` en `libre.ts` +
+  `sql/migrate-exhib-horas.sql`). Bruno, mirando las 23 colgadas de más: *«¿estás seguro que esos
+  productos están duplicados?»*. **La respuesta honesta era NO**: el dato prueba que el lector leyó
+  el mismo código dos veces, ⛔ no que hubiera dos prendas.
+  🔴 **El hueco de tiempo ⛔ no alcanza** —desenganchar una prenda puede llevar diez segundos—;
+  **lo que ⛔ no admite otra explicación es el trabajo hecho en el medio**. 📊 Medido sobre el
+  recorrido real: entre las dos lecturas de TOP MOVE blanco pasaron **43 prendas distintas** ⇒ ⛔ no
+  puede ser la misma percha. **20 de 23 tenían otras lecturas en el medio; 3 entraron pegadas**
+  (CAMISA ALESSA S off white 8 s, CAMISA ALTHEA M blanco 3 s, VESTIDO AIXA rojo 12 s).
+  🔑 **Y por qué una lectura de más puede colarse sin que nadie se entere**: si quien camina ⛔ no
+  escucha el pitido, vuelve a pasar la prenda — y **el repetido suena igual que un escaneo bueno**,
+  que es una decisión tomada a propósito (`aviso.ts`) ⇒ oye un número más grande y se queda
+  tranquila. ⚠️ **La prevención más barata ⛔ no es software**: decirle *«si ⛔ no escuchaste el
+  pitido, ⛔ no la pases de nuevo — mirá la pantalla, que muestra la última»*.
+  🔑 **Se dice en el renglón, ⛔ no se calla**: las que tienen prendas en el medio salen con «son
+  dos distintas» y las pegadas con «⚠ confirmalo mirando el perchero». Presentar las 23 con la
+  misma certeza es lo que hace que **la primera que resulte falsa se lleve puestas a las otras 22**.
+  📌 **`horas` guarda la hora de CADA lectura** y ⛔ no sólo la primera y la última: de una prenda
+  leída 3 veces, la del medio ⛔ no existía en ningún lado. ⚠️ **La cuenta anda igual sin la
+  columna** (`horasDe` cae a `escaneado_en`/`ultimo_en`), que es exacta para `veces = 2` — por eso
+  las 23 del 21-sep ya salen marcadas sin haber corrido nada.
+  🔴 **`veces`, `ultimo_en` y `horas` se mueven JUNTOS** (`sumarUna`): son tres vistas del mismo
+  hecho, y si una se actualizara sola el aviso hablaría de una prenda distinta de la que el
+  contador cuenta.
+  ⛔ **Y esto ⛔ NO convierte la tabla en un log de eventos**: la fila sigue siendo una por
+  (recorrido, lugar, variante). Esa otra forma haría que **el rebote del lector sea una prenda más**.
+  🔴 **PUENTE HASTA QUE LA MIGRACIÓN ESTÉ CORRIDA** (`api/_exhib.js`, con test): el SQL se corre a
+  mano en el Supabase de Zattia, así que entre el deploy y esa consulta hay una ventana — y **una
+  columna desconocida hace fallar el upsert ENTERO**, que ⛔ no es un renglón perdido: la cola deja
+  todo en «sin subir», reintenta para siempre y **cerrar con pendientes está prohibido** ⇒ quien
+  camina ⛔ no puede cerrar el recorrido. Es el pozo del 19-sep otra vez, y ⛔ no se paga por un
+  dato de diagnóstico. ⏳ **El puente se saca cuando la migración esté verificada.**
+
 - 🆕 🔴 🔑 **LA OTRA MITAD DEL BALANCE: LO QUE SOBRA EN EL SALÓN** (21-sep-2026, `colgadasDeMas` +
   `partirRepetidas` en `balance.ts`). Bruno, cerrando el día: *«el espacio del local es chico, por
   eso me interesa optimizar mucho eso»*. **El mandado trae del depósito lo que falta; esto manda al

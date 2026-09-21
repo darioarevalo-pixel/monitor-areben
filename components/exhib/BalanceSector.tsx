@@ -413,6 +413,20 @@ export function BalanceSector({
                 <b>{c.unidades}</b> colgadas · {c.nombre} <span style={{ color: color.mut }}>· {c.size || '—'}</span>
                 {/* La prenda que está en DOS muebles es el caso que ⛔ no se ve mirando uno solo. */}
                 {c.lugares.length > 1 && <span style={{ color: color.mut }}> · en {c.lugares.join(' y ')}</span>}
+                {/* 🔴 **Lo que la app NO puede afirmar, dicho en el renglón.** Con prendas
+                    escaneadas en el medio ⛔ no hay otra explicación que dos perchas; entrando
+                    pegadas, puede ser una pila de iguales o la misma pasada dos veces porque ⛔ no
+                    se escuchó el pitido. Callarlo presentaría las 23 con la misma certeza, y la
+                    primera que resulte falsa se lleva puesta la confianza en las otras veintidós. */}
+                {c.otrasEnMedio === 0 ? (
+                  <span style={{ display: 'block', fontSize: font.xs, color: color.warningInk }}>
+                    ⚠ las lecturas entraron seguidas ({c.segundos} s, sin ninguna otra prenda en el medio): confirmalo mirando el perchero
+                  </span>
+                ) : (
+                  <span style={{ display: 'block', fontSize: font.xs, color: color.mut }}>
+                    escaneó {c.otrasEnMedio} {c.otrasEnMedio === 1 ? 'prenda' : 'prendas'} en el medio, así que son dos distintas
+                  </span>
+                )}
               </span>
               {(Object.keys(DECISIONES) as DecisionRepetida[]).map((d) => (
                 <Button key={d} size="sm" variant="outline" loading={decidiendo === c.variante_id} onClick={() => void decidir(c.variante_id, d)}>

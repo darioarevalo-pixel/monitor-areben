@@ -31,7 +31,7 @@
 
 import type { Filas } from '../excel'
 import { catsDeItem, esDelTipo, exhibId, normCat, perteneceA, tipoDePrenda } from './core'
-import { catsVisibles, pasoPorElLector, unidadesVistas, type EscaneoLibre } from './libre'
+import { catsVisibles, horasDe, pasoPorElLector, unidadesVistas, type EscaneoLibre } from './libre'
 import { SIN_CATEGORIA, type ExhibItem } from './tipos'
 
 /** Las variantes de un recorrido que **pasaron por el lector**, en cualquiera de sus lugares. */
@@ -294,6 +294,23 @@ export type ColgadaDeMas = {
   deMas: number
   /** Dónde apareció. **Más de uno = está colgada en dos muebles distintos.** */
   lugares: string[]
+  /**
+   * **Cuántas prendas DISTINTAS se leyeron entre la primera y la última lectura de ésta.**
+   *
+   * 🔴 **Es lo único que separa «dos prendas colgadas» de «la misma pasada dos veces»**, y sale de
+   * la pregunta que hizo Bruno el 21-sep-2026: *«¿estás seguro que esos productos están
+   * duplicados?»*. El hueco de tiempo ⛔ no alcanza —quien camina puede tardar diez segundos en
+   * desenganchar una prenda—; lo que ⛔ no admite otra explicación es el trabajo hecho en el medio:
+   * si entre las dos lecturas de un TOP MOVE blanco pasaron **43 prendas distintas**, ⛔ no puede
+   * ser la misma percha.
+   * 📊 Medido sobre el recorrido del 21-sep: **20 de 23 tenían otras lecturas en el medio** (hasta
+   * 43) ⇒ firmes. **3 entraron pegadas** ⇒ pueden ser tres camisas iguales colgadas juntas, o una
+   * prenda pasada dos veces porque ⛔ no se escuchó el pitido —el repetido suena igual que un
+   * escaneo bueno, que es una decisión tomada a propósito (`lib/exhib/aviso.ts`)—.
+   */
+  otrasEnMedio: number
+  /** Segundos entre la primera y la última lectura. Para explicar, ⛔ no para decidir. */
+  segundos: number
 }
 
 /**
@@ -304,20 +321,48 @@ export type ColgadaDeMas = {
  */
 export function colgadasDeMas(escaneos: EscaneoLibre[]): ColgadaDeMas[] {
   const unidades = unidadesVistas(escaneos)
-  const datos = new Map<string, { nombre: string; size: string; lugares: Set<string> }>()
+  const datos = new Map<string, { nombre: string; size: string; lugares: Set<string>; horas: number[] }>()
   for (const e of escaneos) {
     if (!pasoPorElLector(e)) continue
-    const d = datos.get(e.variante_id) || { nombre: e.product_name || '—', size: e.size || '', lugares: new Set<string>() }
+    const d = datos.get(e.variante_id) || { nombre: e.product_name || '—', size: e.size || '', lugares: new Set<string>(), horas: [] }
     if (e.lugar) d.lugares.add(e.lugar)
+    for (const h of horasDe(e)) {
+      const t = Date.parse(h)
+      if (!Number.isNaN(t)) d.horas.push(t)
+    }
     datos.set(e.variante_id, d)
   }
+
+  /**
+   * 🔑 **La línea de tiempo son LECTURAS y ⛔ no filas**, y ésa es toda la diferencia. Una fila con
+   * `veces: 3` es **tres** momentos en el salón: contándola como uno, la ventana entre la primera y
+   * la última lectura de la prenda de al lado saldría vacía cuando ⛔ no lo estaba.
+   */
+  const linea: number[] = []
+  for (const d of datos.values()) linea.push(...d.horas)
+  linea.sort((a, b) => a - b)
 
   const out: ColgadaDeMas[] = []
   for (const [variante_id, n] of unidades) {
     if (n < 2) continue
     const d = datos.get(variante_id)
-    if (!d) continue
-    out.push({ variante_id, nombre: d.nombre, size: d.size, unidades: n, deMas: n - 1, lugares: [...d.lugares] })
+    if (!d || !d.horas.length) continue
+    const desde = Math.min(...d.horas)
+    const hasta = Math.max(...d.horas)
+    // Lo que pasó en el medio **sin contar las lecturas de esta misma prenda**: son las que
+    // definen la ventana, así que contarlas diría que siempre pasó algo.
+    const dentro = linea.filter((t) => t > desde && t < hasta).length
+    const propias = d.horas.filter((t) => t > desde && t < hasta).length
+    out.push({
+      variante_id,
+      nombre: d.nombre,
+      size: d.size,
+      unidades: n,
+      deMas: n - 1,
+      lugares: [...d.lugares],
+      otrasEnMedio: dentro - propias,
+      segundos: Math.round((hasta - desde) / 1000),
+    })
   }
   return out.sort((a, b) => b.deMas - a.deMas || a.nombre.localeCompare(b.nombre, 'es') || a.size.localeCompare(b.size, 'es'))
 }

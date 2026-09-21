@@ -61,6 +61,19 @@ const hora = (v, respaldo = null) => {
   const s = texto(v)
   return s && !Number.isNaN(Date.parse(s)) ? s : respaldo
 }
+/**
+ * Las horas de las lecturas de un escaneo, saneadas: legibles, ordenadas y con el tope de `veces`.
+ *
+ * ⚠️ **Se ordenan acá y ⛔ no se confía en el orden que vino.** La cuenta que las usa pregunta qué
+ * se escaneó **entre la primera y la última**, y con la lista desordenada esa ventana puede salir
+ * dada vuelta —y contestar que ⛔ no pasó nada en el medio justo cuando pasó todo—.
+ */
+const horasDeEscaneo = (e) => {
+  const crudas = Array.isArray(e && e.horas) ? e.horas : []
+  const limpias = crudas.map((h) => hora(h)).filter(Boolean).sort()
+  return limpias.length ? limpias.slice(0, 99) : null
+}
+
 /** Los estados del triage del recorrido POR CATEGORÍA. `null` = escaneo del modo libre. */
 const ESTADOS = new Set(['exhibido', 'solucionado', 'una-unidad', 'no-encuentra'])
 
@@ -102,6 +115,12 @@ function filaDeEscaneo(recorridoId, e) {
     // La hora de la última unidad sumada; la primera queda en `escaneado_en`. Acá el respaldo es
     // `null` —la columna lo admite— porque un escaneo de una sola unidad ⛔ no tiene «última».
     ultimo_en: hora(e.ultimo_en),
+    // 🔴 **La hora de CADA lectura** (21-sep-2026, `sql/migrate-exhib-horas.sql`): es lo que separa
+    // «dos prendas colgadas» de «la misma pasada dos veces», mirando qué se escaneó **en el medio**.
+    // Se sanea como todo: horas legibles, en orden, sin más de 99 —el mismo tope que `veces`, y por
+    // la misma razón: viene del teléfono—. ⚠️ Vacío ⇒ `null`, que es «fila sin el detalle» y ⛔ no
+    // «ninguna lectura»: la diferencia la lee `horasDe`, que ahí cae a `escaneado_en`/`ultimo_en`.
+    horas: horasDeEscaneo(e),
     // 🔴 Lista blanca de los cuatro estados del triage: lo que venga fuera de eso entra **null**,
     // que es «escaneo del modo libre». La columna decide qué dice el reporte —«exhibido» contra «no
     // se encuentra» son dos mandados distintos— así que un valor inventado por un cliente viejo o
@@ -239,9 +258,23 @@ export default async function handler(req, res) {
         // 🔑 Entra un ARRAY y ⛔ no un escaneo por pedido: así la cola que se juntó sin señal se
         // vacía en un viaje. `ignoreDuplicates` porque el único es (recorrido, lugar, variante) y
         // reintentar la cola tiene que ser inofensivo — el primer escaneo es el que vale.
-        const { error } = await sb
-          .from('exhib_escaneo')
-          .upsert(filas, { onConflict: 'recorrido_id,lugar,variante_id', ignoreDuplicates: true })
+        const guardar = (f) => sb.from('exhib_escaneo').upsert(f, { onConflict: 'recorrido_id,lugar,variante_id', ignoreDuplicates: true })
+        let { error } = await guardar(filas)
+        // 🔴 **PUENTE: si `horas` todavía ⛔ no existe en la base, se guarda sin ella.**
+        // `sql/migrate-exhib-horas.sql` se corre a mano en el Supabase de Zattia, así que entre el
+        // deploy y esa consulta hay una ventana — y en esa ventana **una columna desconocida hace
+        // fallar el upsert entero**, que ⛔ no es un renglón perdido: la cola deja TODO en «sin
+        // subir», reintenta para siempre contra el mismo error y **cerrar con pendientes está
+        // prohibido** ⇒ quien está caminando el local ⛔ no puede cerrar el recorrido. Es
+        // exactamente el pozo del 19-sep con la fila sin hora, y ⛔ no se puede pagar por un dato
+        // que es un detalle de diagnóstico.
+        // ⏳ **Se saca cuando la migración esté corrida** (verificar con el `select` de la migración).
+        if (error && (error.code === 'PGRST204' || /horas/i.test(error.message || ''))) {
+          // ⚠️ Se **saca la clave**, ⛔ no se manda en `undefined`: que `JSON.stringify` la tire es
+          // un detalle del serializador, y esto tiene que seguir andando si algún día ⛔ no lo es.
+          const sinHoras = filas.map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'horas')))
+          ;({ error } = await guardar(sinHoras))
+        }
         if (error) throw new Error(error.message)
         // ⚠️ Cuántas venían **sin hora legible** y se guardaron con el reloj del servidor. ⛔ Todavía
         // ⛔ no lo muestra ninguna pantalla, pero queda en la respuesta: una reparación que ⛔ no se

@@ -1,0 +1,43 @@
+-- Chequeo de exhibición: **la hora de CADA lectura** de una prenda, y ⛔ no sólo la primera y la
+-- última. Correr en el proyecto Supabase de ZATTIA (la sección `exhib` es `brands: ['zattia']`).
+-- Es idempotente.
+--
+-- 🔑 POR QUÉ EXISTE (21-sep-2026, pedido de Bruno: *«me gusta la opción 3»*). El primer recorrido de
+-- sector entero dio **23 prendas leídas más de una vez**, y Bruno preguntó lo único que importaba:
+-- *«¿estás seguro que esos productos están duplicados?»*. La respuesta honesta era **no**: el dato
+-- prueba que el lector leyó el mismo código dos veces, ⛔ no si eran dos prendas colgadas o la
+-- misma pasada dos veces.
+--
+-- 🔴 LO QUE SEPARA UNA COSA DE LA OTRA ES **QUÉ SE ESCANEÓ EN EL MEDIO**. Si entre las dos lecturas
+-- de un TOP MOVE blanco pasaron **43 prendas distintas**, ⛔ no hay forma de que sea la misma
+-- percha. Si entraron **una atrás de la otra**, puede ser una pila de tres camisas iguales o puede
+-- ser que quien camina ⛔ no escuchó el pitido y volvió a pasar la prenda —y ⛔ nunca se entera,
+-- porque **el repetido suena igual que un escaneo bueno**, que es una decisión tomada a propósito
+-- (ver `lib/exhib/aviso.ts`)—.
+-- 📊 Medido a mano sobre el recorrido del 21-sep: **20 de las 23 tenían otras lecturas en el medio**
+-- (hasta 43) y **3 entraron pegadas**. Esa cuenta es la que esta columna vuelve automática.
+--
+-- ⚠️ HOY LA CUENTA SE PUEDE APROXIMAR CON `escaneado_en` + `ultimo_en`, Y ALCANZA PARA `veces = 2`.
+-- Lo que se pierde es **el medio**: de una prenda leída 3 veces sólo se guardan la primera y la
+-- última, así que la tercera lectura ⛔ no existe en ningún lado. Por eso la app sigue funcionando
+-- sin esta columna —la marca de «entraron pegadas» se calcula igual— y lo que gana es exactitud.
+--
+-- FORMA (jsonb con las horas ISO de cada lectura, en orden; ⛔ no un array de timestamptz para que
+-- viaje igual que el resto de lo que manda el teléfono):
+--   ["2026-09-21T13:34:20.123Z", "2026-09-21T13:34:24.900Z", "2026-09-21T13:34:28.400Z"]
+--   null / ausente = fila vieja, anterior a esta migración ⇒ se usan `escaneado_en` y `ultimo_en`.
+--
+-- 🔑 LA FILA SIGUE SIENDO UNA POR (recorrido, lugar, variante) Y `veces` SIGUE SIENDO EL CONTADOR.
+-- Esto ⛔ NO convierte la tabla en un log de eventos: esa forma haría que **el rebote del lector sea
+-- una prenda más** (ver `migrate-exhib-unidades.sql`). Es el detalle de una fila que ya existe.
+--
+-- PRECONDICIONES: `sql/migrate-exhib-unidades.sql` (19-sep-2026, corrido en Zattia).
+--
+-- VERIFICACIÓN (correr después):
+--   select column_name, data_type from information_schema.columns
+--   where table_name = 'exhib_escaneo' and column_name = 'horas';
+--
+-- ROLLBACK (⛔ no toca ningún escaneo: `veces`, `escaneado_en` y `ultimo_en` siguen enteros):
+--   alter table exhib_escaneo drop column if exists horas;
+
+alter table exhib_escaneo add column if not exists horas jsonb;

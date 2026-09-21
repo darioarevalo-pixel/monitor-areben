@@ -68,6 +68,21 @@ export type EscaneoLibre = {
    */
   ultimo_en?: string | null
   /**
+   * **La hora de CADA lectura de esta prenda**, en orden (21-sep-2026, `sql/migrate-exhib-horas`).
+   *
+   * 🔴 **Es lo que separa «dos prendas colgadas» de «la misma pasada dos veces»**, que es la
+   * pregunta que hizo Bruno mirando el primer recorrido de sector entero: *«¿estás seguro que esos
+   * productos están duplicados?»*. Lo que decide ⛔ no es el hueco entre las dos lecturas sino
+   * **qué se escaneó en el medio**: si entre las dos lecturas de un TOP MOVE blanco pasaron 43
+   * prendas distintas, ⛔ no puede ser la misma percha.
+   *
+   * ⚠️ **Puede ⛔ no estar**, y el cálculo funciona igual: en las filas anteriores a la migración
+   * —y mientras la columna ⛔ no exista en la base— se usan `escaneado_en` y `ultimo_en`, que
+   * alcanzan para `veces = 2`. Lo que se pierde ahí es **el medio**: de una prenda leída 3 veces
+   * ⛔ no queda rastro de la segunda lectura. Ver `horasDe`.
+   */
+  horas?: string[] | null
+  /**
    * Sólo en el recorrido **por categoría**: qué pasó con esa variante.
    *
    * `null`/ausente = escaneo del modo **libre**, que ⛔ no tiene triage. `'exhibido'` = pasó por el
@@ -173,9 +188,30 @@ export function avanceDelRecorrido(escaneos: EscaneoLibre[]): number {
   return escaneos.reduce((n, e) => n + (pasoPorElLector(e) ? vecesDe(e) : 0), 0)
 }
 
-/** Suma una unidad a un escaneo que ya estaba: es lo que pasa cuando el repetido ⛔ no se rechaza. */
+/**
+ * **Las horas de todas las lecturas de un escaneo**, venga de donde venga la fila.
+ *
+ * 🔑 **Un solo lugar que sabe del respaldo.** Las filas anteriores al 21-sep-2026 ⛔ no tienen
+ * `horas`: de ésas se arma la lista con `escaneado_en` y `ultimo_en`, que es exacta cuando la
+ * prenda se leyó dos veces y **le falta el medio** cuando se leyó tres o más. Escrito en cada
+ * lector, ese respaldo se despega; escrito acá, el día que las filas viejas ⛔ ya no importen se
+ * borra de un lugar.
+ */
+export function horasDe(e: Pick<EscaneoLibre, 'horas' | 'escaneado_en' | 'ultimo_en'>): string[] {
+  if (Array.isArray(e.horas) && e.horas.length) return e.horas
+  return e.ultimo_en && e.ultimo_en !== e.escaneado_en ? [e.escaneado_en, e.ultimo_en] : [e.escaneado_en]
+}
+
+/**
+ * Suma una unidad a un escaneo que ya estaba: es lo que pasa cuando el repetido ⛔ no se rechaza.
+ *
+ * ⚠️ **`veces`, `ultimo_en` y `horas` se mueven JUNTOS.** Son tres vistas del mismo hecho y, si una
+ * se actualizara sin las otras, el aviso de «estas dos lecturas entraron pegadas» hablaría de una
+ * prenda distinta de la que el contador está contando.
+ */
 export function sumarUna(e: EscaneoLibre, ahora: number = Date.now()): EscaneoLibre {
-  return { ...e, veces: vecesDe(e) + 1, ultimo_en: new Date(ahora).toISOString() }
+  const cuando = new Date(ahora).toISOString()
+  return { ...e, veces: vecesDe(e) + 1, ultimo_en: cuando, horas: [...horasDe(e), cuando] }
 }
 
 /**
@@ -266,6 +302,9 @@ export function aEscaneo(it: ExhibItem | null, codigoCrudo: string, lugar: strin
     lugar: lugar.trim(),
     codigo_crudo: codigo,
     escaneado_en: new Date(ahora).toISOString(),
+    // La primera lectura ya es una lectura: arrancar la lista vacía obligaría a todo el resto a
+    // preguntarse si el ⛔ no tenerla significa «⛔ ninguna» o «fila vieja».
+    horas: [new Date(ahora).toISOString()],
   }
   if (!it) {
     return {
