@@ -580,15 +580,19 @@ function Banner({ prioridad, admin }: { prioridad: Origen; admin: boolean }) {
       }}
     >
       <b>Prioridad de retiro:</b>{' '}
+      {/* 🔴 Desde el 21-sep-2026 la prioridad decide SÓLO el empate: si el stock ubica la prenda de
+          un lado solo, va ahí. Decirlo importa — decía «Depósito primero» en Zattia, que tiene el
+          stock en el Local, y de ahí salieron 63 prendas marcadas del lado equivocado. */}
       {prioridad === 'local' ? (
         <span>
-          <b>Local primero</b> (si no hay stock, se retira de Depósito)
+          <b>Local primero</b>, cuando la prenda está en los dos lados
         </span>
       ) : (
         <span>
-          <b>Depósito primero</b> (si no hay stock, se retira de Local)
+          <b>Depósito primero</b>, cuando la prenda está en los dos lados
         </span>
       )}
+      <span style={{ color: color.mut2 }}>· si el sistema la tiene de un solo lado, se retira de ahí</span>
       {admin && (
         <>
           <select value={prioridad} disabled title={DISABLED_TITLE} style={{ padding: '4px 6px', border: `1px solid ${color.brandBorder}`, borderRadius: 6, background: '#fff' }}>

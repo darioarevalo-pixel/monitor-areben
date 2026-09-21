@@ -61,6 +61,9 @@ const SIMBOLOS = new Set([
   'leerBorrador',
   'bloqueoBorrado',
   'bloqueoQuitarItem',
+  // API del DOM, ⛔ no una palabra nuestra: `lib/portapapeles.ts` saca el `<textarea>` invisible del
+  // plan B de copiado. ⛔ No se puede renombrar — la pone el navegador.
+  'removeChild',
   'borr',
   'borra',
   'borrado',
