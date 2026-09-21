@@ -106,6 +106,15 @@ export async function tacharPrenda(marca: string, id: string, varianteId: string
 }
 
 /**
+ * Decide qué hacer con una prenda **colgada de más**: dejarla, sacarla al depósito, o volver a
+ * dejarla sin decidir (`decision: null`).
+ */
+export async function decidirRepetida(marca: string, id: string, varianteId: string, decision: string | null): Promise<Cobertura> {
+  const d = await escribir<{ ok: true; cobertura: Cobertura }>(marca, 'repetida', { id, variante_id: varianteId, decision })
+  return d.cobertura
+}
+
+/**
  * Descarta un recorrido **sin cerrar**, con sus escaneos.
  *
  * 🔴 El servidor rechaza el que ya está cerrado: ése es el dato con el que alguien va a comparar el

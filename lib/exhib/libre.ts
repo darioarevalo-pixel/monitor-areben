@@ -208,6 +208,14 @@ export type Cobertura = {
    * pisara, tildar un tipo más borraría veinte tachaduras sin avisar.
    */
   tachadas?: Array<{ variante_id: string; motivo: string; por: string | null; cuando: string }>
+  /**
+   * Lo que se decidió sobre cada prenda **colgada de más**. Ver `Repetida` en `balance.ts`.
+   *
+   * 🔑 **Es la otra mitad del balance y vive en el mismo lugar**: el mandado trae del depósito lo
+   * que falta, esto manda al depósito lo que sobra. Las dos son afirmaciones de quien miró el
+   * salón, así que se guardan juntas y se conservan juntas.
+   */
+  repetidas?: Array<{ variante_id: string; decision: string; por: string | null; cuando: string }>
   por: string | null
   cuando: string
 }

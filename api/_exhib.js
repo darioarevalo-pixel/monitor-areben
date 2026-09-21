@@ -3,7 +3,7 @@
 //   GET  ?recurso=exhib&store=…&action=recorridos       → los recorridos, con cuántos escaneos tiene cada uno
 //   GET  ?recurso=exhib&store=…&action=recorrido&id=…   → UNO entero: cabecera + TODOS sus escaneos
 //   GET  ?recurso=exhib&store=…&action=lugares          → los lugares ya usados, para sugerir
-//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'sacar-escaneo'|'eliminar', … }
+//   POST ?recurso=exhib&store=…  { action: 'abrir'|'escanear'|'cerrar'|'cobertura'|'tachar'|'repetida'|'sacar-escaneo'|'eliminar', … }
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=exhib`. El plan Hobby de
 // Vercel admite 12 funciones y hay 7 usadas; una ruta nueva sería la octava por un solo recurso.
@@ -22,10 +22,24 @@ import { cfgDeMarca } from './_recepciones-base.js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 
 const texto = (v) => (v == null || v === '' ? null : String(v))
-// ⛔ Copia a mano de `MotivoTachada` (`lib/exhib/balance.ts`): un handler de `api/*.js` ⛔ no puede
-// importar TypeScript. Son dos strings y el test de la pantalla los ejerce; el día que sean muchos,
-// se mudan a un `.core.js` compartido, como ya hicieron `permisos` y `lineas`.
-const MOTIVOS_TACHADA = ['otro-lugar', 'despues']
+/**
+ * **Las dos mitades del balance que se marcan de a una prenda**, con los valores que cada una
+ * acepta. Las dos viven adentro de `cobertura` y se guardan igual, así que se escriben UNA vez.
+ *
+ * - `tachar` → sacar una prenda **del mandado**: ya está colgada (en otro lugar, o se colgó después).
+ * - `repetida` → qué hacer con una **colgada de más**: se queda, o vuelve al depósito.
+ *
+ * 🔴 **Los valores se validan contra esta lista y ⛔ no se guarda lo que venga.** Son el dato con el
+ * que después se va a contestar «¿por qué el sector ⛔ no está donde el sistema cree?» y «¿cuánto
+ * espacio se está yendo en repetidos?», y algo escrito libre ⛔ no se puede contar.
+ * ⛔ Copia a mano de `MotivoTachada`/`DecisionRepetida` (`lib/exhib/balance.ts`): un handler de
+ * `api/*.js` ⛔ no puede importar TypeScript. El día que sean muchas, se mudan a un `.core.js`
+ * compartido, como ya hicieron `permisos` y `lineas`.
+ */
+const MARCAS = {
+  tachar: { lista: 'tachadas', campo: 'motivo', validos: ['otro-lugar', 'despues'] },
+  repetida: { lista: 'repetidas', campo: 'decision', validos: ['queda', 'sacar'] },
+}
 const numero = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v))
 /**
  * Una hora que **mandó el teléfono**, o el respaldo si vino vacía o ilegible.
@@ -269,48 +283,59 @@ export default async function handler(req, res) {
         // 🔴 **Las tachaduras se CONSERVAN.** Son parte de la misma declaración pero se hacen de a
         // una, mientras se mira la lista; pisarlas al tildar un tipo más borraría veinte motivos sin
         // avisar, y del otro lado eso se ve como un mandado que creció solo.
-        const previas = Array.isArray(recorrido.cobertura && recorrido.cobertura.tachadas) ? recorrido.cobertura.tachadas : []
-        const cobertura = { cats: limpiar(b.cats), tipos: limpiar(b.tipos), tachadas: previas, por: perfil.name || null, cuando: new Date().toISOString() }
+        const antes = recorrido.cobertura || {}
+        const cobertura = {
+          cats: limpiar(b.cats),
+          tipos: limpiar(b.tipos),
+          tachadas: Array.isArray(antes.tachadas) ? antes.tachadas : [],
+          repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
+          por: perfil.name || null,
+          cuando: new Date().toISOString(),
+        }
         const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
         if (error) throw new Error(error.message)
         return res.status(200).json({ ok: true, cobertura })
       }
 
       /**
-       * Tacha una prenda del mandado con su motivo, o la vuelve a poner (`motivo: null`).
+       * **Marca UNA prenda del balance**, en cualquiera de sus dos mitades (ver `MARCAS`): tachar
+       * una del mandado con su motivo, o decidir qué se hace con una colgada de más. Con el valor
+       * en `null` se deshace.
        *
-       * 🔑 **Va adentro de `cobertura` y ⛔ no en una columna nueva**: es la misma afirmación de
+       * 🔑 **Van adentro de `cobertura` y ⛔ no en columnas nuevas**: son la misma afirmación de
        * quien hizo el balance. Así ⛔ no hace falta una migración para algo que nació el mismo día
        * que la pantalla que lo usa.
-       * ⚠️ **Es un leer-modificar-escribir**, así que dos personas tachando el MISMO recorrido al
-       * mismo tiempo pueden pisarse. Se banca porque el balance lo hace **una** persona con la
-       * pantalla delante —así está diseñada la sección, dos personas y dos momentos— y porque lo
-       * que se pierde es un tachón que se vuelve a dar. ⛔ No vale lo mismo para los escaneos, que
-       * van por su propio camino con su único en la base.
-       * 🔴 **El motivo se valida contra la lista y ⛔ no se guarda lo que venga**: es el dato con el
-       * que después se va a contestar «¿por qué el sector ⛔ no está donde el sistema cree?», y un
-       * motivo escrito libre ⛔ no se puede contar.
+       * 🔑 **Y las dos entran por acá**, ⛔ no por un handler cada una: son el mismo guardado con
+       * otro nombre de lista, y dos copias de esto se despegan a la tercera vez que se toca una.
+       * ⚠️ **Es un leer-modificar-escribir**, así que dos personas marcando el MISMO recorrido a la
+       * vez pueden pisarse. Se banca porque el balance lo hace **una** persona con la pantalla
+       * delante —la sección está diseñada así, dos personas y dos momentos— y lo que se pierde es
+       * una marca que se vuelve a poner. ⛔ No valdría para los escaneos, que van por su propio
+       * camino con su único en la base.
        */
-      if (accion === 'tachar') {
+      if (MARCAS[accion]) {
+        const { lista, campo, validos } = MARCAS[accion]
         const recorrido = await recorridoDeLaMarca(String(b.id || ''))
         if (!recorrido) return res.status(404).json({ error: 'Ese recorrido no está.' })
         const varianteId = String(b.variante_id || '').trim()
         if (!varianteId) return res.status(400).json({ error: 'falta la variante' })
-        const motivo = b.motivo == null ? null : String(b.motivo)
-        if (motivo !== null && !MOTIVOS_TACHADA.includes(motivo)) return res.status(400).json({ error: 'Ese motivo no existe.' })
+        const valor = b[campo] == null ? null : String(b[campo])
+        if (valor !== null && !validos.includes(valor)) return res.status(400).json({ error: 'Ese valor no existe.' })
 
-        const previa = recorrido.cobertura || {}
-        const tachadas = (Array.isArray(previa.tachadas) ? previa.tachadas : []).filter((t) => t && t.variante_id !== varianteId)
-        if (motivo) tachadas.push({ variante_id: varianteId, motivo, por: perfil.name || null, cuando: new Date().toISOString() })
+        const antes = recorrido.cobertura || {}
+        const marcas = (Array.isArray(antes[lista]) ? antes[lista] : []).filter((m) => m && m.variante_id !== varianteId)
+        if (valor) marcas.push({ variante_id: varianteId, [campo]: valor, por: perfil.name || null, cuando: new Date().toISOString() })
 
         const cobertura = {
-          cats: Array.isArray(previa.cats) ? previa.cats : [],
-          tipos: Array.isArray(previa.tipos) ? previa.tipos : [],
-          tachadas,
-          // ⚠️ `por`/`cuando` son de la DECLARACIÓN del sector, ⛔ no de la tachadura: cada tachada
-          // trae los suyos. Pisarlos acá haría que «lo declaró Fulano» cambie por tachar una prenda.
-          por: previa.por || null,
-          cuando: previa.cuando || new Date().toISOString(),
+          cats: Array.isArray(antes.cats) ? antes.cats : [],
+          tipos: Array.isArray(antes.tipos) ? antes.tipos : [],
+          tachadas: Array.isArray(antes.tachadas) ? antes.tachadas : [],
+          repetidas: Array.isArray(antes.repetidas) ? antes.repetidas : [],
+          // ⚠️ `por`/`cuando` son de la DECLARACIÓN del sector, ⛔ no de esta marca: cada una trae
+          // los suyos. Pisarlos haría que «lo declaró Fulano» cambie por marcar una prenda.
+          por: antes.por || null,
+          cuando: antes.cuando || new Date().toISOString(),
+          [lista]: marcas,
         }
         const { error } = await sb.from('exhib_recorrido').update({ cobertura }).eq('id', recorrido.id)
         if (error) throw new Error(error.message)

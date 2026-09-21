@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, MOTIVOS, type Tachada } from '../lib/exhib/balance'
+import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, colgadasDeMas, partirRepetidas, filasSacar, HEADER_SACAR, MOTIVOS, type Tachada, type Repetida } from '../lib/exhib/balance'
 import { aEscaneo, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
@@ -277,5 +277,86 @@ describe('partirTachadas — lo sacado del mandado ⛔ no desaparece', () => {
   it('cada motivo tiene su texto para la pantalla', () => {
     expect(MOTIVOS['otro-lugar']).toBe('ya está colgada, en otro lugar')
     expect(MOTIVOS.despues).toBe('se colgó después del escaneo')
+  })
+})
+
+/**
+ * **La otra mitad del balance: lo que SOBRA en el salón** (21-sep-2026, Bruno: *«el espacio del
+ * local es chico, por eso me interesa optimizar mucho eso»*). El mandado trae del depósito lo que
+ * falta; esto manda al depósito lo que está colgado dos veces.
+ */
+describe('colgadasDeMas — las perchas que se pueden liberar', () => {
+  /** El contador `veces` sube cuando se escanea la misma prenda dos veces en el mismo mueble. */
+  const dosVeces = (it: ExhibItem, lugar = 'sector tops'): EscaneoLibre => ({ ...aEscaneo(it, it.barcode, lugar), veces: 2 })
+
+  it('cuenta las unidades de una prenda y cuántas sobran', () => {
+    const l = colgadasDeMas([dosVeces(TOP_A), ...escanear([TOP_C])])
+    expect(l).toHaveLength(1)
+    expect(l[0]).toMatchObject({ nombre: 'TOP ORSA', size: 'Beige', unidades: 2, deMas: 1 })
+  })
+
+  /**
+   * 🔴 **La misma prenda en DOS MUEBLES también ocupa dos perchas**, y es el caso que ⛔ no se ve
+   * mirando un mueble solo. El 21-sep ⛔ no se pudo medir porque se caminó un único lugar.
+   */
+  it('la misma prenda en dos lugares cuenta como colgada de más', () => {
+    const l = colgadasDeMas([...escanear([TOP_A], 'perchero tops'), ...escanear([TOP_A], 'vidriera')])
+    expect(l).toHaveLength(1)
+    expect(l[0].unidades).toBe(2)
+    expect(l[0].lugares).toEqual(['perchero tops', 'vidriera'])
+  })
+
+  it('una prenda colgada UNA vez ⛔ no aparece', () => {
+    expect(colgadasDeMas(escanear([TOP_A, TOP_C]))).toEqual([])
+  })
+
+  /** ⚠️ Un triage ⛔ no vio nada: no puede sumar una percha. */
+  it('un triage ⛔ no cuenta como colgada', () => {
+    const [e] = escanear([TOP_A])
+    expect(colgadasDeMas([{ ...e, estado: 'no-encuentra' }, e])).toEqual([])
+  })
+
+  it('primero la que más perchas ocupa', () => {
+    const tres: EscaneoLibre = { ...aEscaneo(TOP_C, TOP_C.barcode, 'sector tops'), veces: 3 }
+    const l = colgadasDeMas([dosVeces(TOP_A), tres])
+    expect(l.map((c) => c.deMas)).toEqual([2, 1])
+  })
+})
+
+describe('partirRepetidas — la decisión la toma una persona', () => {
+  const dosVeces = (it: ExhibItem): EscaneoLibre => ({ ...aEscaneo(it, it.barcode, 'sector tops'), veces: 2 })
+  const d = (varianteId: string, decision: 'queda' | 'sacar'): Repetida => ({
+    variante_id: varianteId, decision, por: 'Bruno Arevalo', cuando: '2026-09-21T19:00:00.000Z',
+  })
+
+  /**
+   * 🔴 **Dos unidades colgadas pueden ser una decisión de exhibición o espacio desperdiciado, y eso
+   * la app ⛔ no lo puede saber.** Misma regla que la cobertura del sector: la app pone el número.
+   */
+  it('lo no decidido queda aparte de lo decidido', () => {
+    const l = colgadasDeMas([dosVeces(TOP_A), dosVeces(TOP_C)])
+    const p = partirRepetidas(l, [d('b1', 'sacar')])
+    expect(p.sacar.map((c) => c.size)).toEqual(['Beige'])
+    expect(p.sinDecidir.map((c) => c.size)).toEqual(['Blanco'])
+    expect(p.quedan).toEqual([])
+  })
+
+  it('«está bien que estén las dos» la saca de lo pendiente sin mandarla al depósito', () => {
+    const l = colgadasDeMas([dosVeces(TOP_A)])
+    const p = partirRepetidas(l, [d('b1', 'queda')])
+    expect(p.quedan).toHaveLength(1)
+    expect(p.sacar).toEqual([])
+    expect(p.sinDecidir).toEqual([])
+  })
+
+  /**
+   * ⚠️ **Acá el número SÍ va y ⛔ no contradice la regla del mandado**: en el mandado era el stock
+   * del sistema —que ⛔ no cambia la tarea de colgar una—; acá es **cuántas sacar**, que es la tarea.
+   */
+  it('la planilla dice cuántas sacar y de qué mueble', () => {
+    const l = colgadasDeMas([dosVeces(TOP_A)])
+    const filas = filasSacar(l)
+    expect(filas[0]).toEqual([...HEADER_SACAR])
+    expect(filas[1]).toEqual(['TOP ORSA', 'Beige', 1, 'sector tops'])
   })
 })

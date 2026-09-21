@@ -3,8 +3,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Notice, color, font, space, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
-import { buscarPorTipo, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, tocadoSinDeclarar, ANCHOS_BUSCAR, MOTIVOS, type MotivoTachada, type Tachada } from '@/lib/exhib/balance'
-import { guardarCobertura, tacharPrenda } from '@/lib/exhib/cliente'
+import {
+  buscarPorTipo,
+  coberturaPorTipo,
+  colgadasDeMas,
+  filasBuscar,
+  filasSacar,
+  partirRepetidas,
+  partirTachadas,
+  resumenBuscar,
+  tocadoSinDeclarar,
+  ANCHOS_BUSCAR,
+  ANCHOS_SACAR,
+  DECISIONES,
+  MOTIVOS,
+  type DecisionRepetida,
+  type MotivoTachada,
+  type Repetida,
+  type Tachada,
+} from '@/lib/exhib/balance'
+import { decidirRepetida, guardarCobertura, tacharPrenda } from '@/lib/exhib/cliente'
 import { exhibId, tipoDePrenda } from '@/lib/exhib/core'
 import type { Cobertura, EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -112,6 +130,33 @@ export function BalanceSector({
       toast.error('No se pudo guardar: ' + (e as Error).message)
     } finally {
       setTachando(null)
+    }
+  }
+
+  /**
+   * 🔴 **La otra mitad del balance: lo que SOBRA en el salón** (21-sep-2026, Bruno: *«el espacio
+   * del local es chico, por eso me interesa optimizar mucho eso»*). El mandado trae del depósito lo
+   * que falta; esto manda al depósito lo que está colgado dos veces.
+   *
+   * 🔑 **⛔ No depende de los tipos declarados**, a diferencia del mandado: que una prenda esté
+   * colgada dos veces es un hecho del recorrido, ⛔ no una afirmación sobre un sector. Se ve aunque
+   * ⛔ no se haya declarado nada.
+   */
+  const repes = useMemo(() => colgadasDeMas(escaneos), [escaneos])
+  const { sinDecidir, quedan, sacar } = useMemo(
+    () => partirRepetidas(repes, (cobertura?.repetidas ?? []) as Repetida[]),
+    [repes, cobertura],
+  )
+  const [decidiendo, setDecidiendo] = useState<string | null>(null)
+
+  async function decidir(varianteId: string, decision: DecisionRepetida | null) {
+    setDecidiendo(varianteId)
+    try {
+      onGuardada(await decidirRepetida(marca, recorridoId, varianteId, decision))
+    } catch (e) {
+      toast.error('No se pudo guardar: ' + (e as Error).message)
+    } finally {
+      setDecidiendo(null)
     }
   }
 
@@ -339,6 +384,85 @@ export function BalanceSector({
                   </div>
                 )
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ LA OTRA MITAD DEL BALANCE: lo que SOBRA en el salón ═══
+          🔴 Va en la MISMA vista y ⛔ no en una pantalla aparte, y lo pidió así Bruno: quien está
+          mirando este recorrido ya tiene el salón en la cabeza, y decidir «falta» y «sobra» en dos
+          momentos distintos es releer la misma lista dos veces. */}
+      {!!repes.length && (
+        <div style={{ marginTop: space[4], paddingTop: space[3], borderTop: `2px solid ${color.line}` }}>
+          <div style={{ fontWeight: weight.bold }}>
+            Colgadas más de una vez: {repes.length} {repes.length === 1 ? 'prenda' : 'prendas'}
+            <span style={{ fontWeight: weight.normal, color: color.mut }}>
+              {' '}· {repes.reduce((n, c) => n + c.deMas, 0)} {repes.reduce((n, c) => n + c.deMas, 0) === 1 ? 'percha' : 'perchas'} que se podrían liberar
+            </span>
+          </div>
+          <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>
+            El mismo color y talle pasó dos veces por el lector, o apareció en dos muebles distintos. Decidí cada una: puede ser a propósito.
+          </div>
+
+          {/* 🔑 Lo no decidido primero: es el trabajo pendiente. Mezclado con lo resuelto, hay que
+              releer la lista entera cada vez que se vuelve. */}
+          {sinDecidir.map((c) => (
+            <div key={c.variante_id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '6px 2px', borderBottom: `1px solid ${color.line}` }}>
+              <span style={{ fontSize: font.base, color: color.ink }}>
+                <b>{c.unidades}</b> colgadas · {c.nombre} <span style={{ color: color.mut }}>· {c.size || '—'}</span>
+                {/* La prenda que está en DOS muebles es el caso que ⛔ no se ve mirando uno solo. */}
+                {c.lugares.length > 1 && <span style={{ color: color.mut }}> · en {c.lugares.join(' y ')}</span>}
+              </span>
+              {(Object.keys(DECISIONES) as DecisionRepetida[]).map((d) => (
+                <Button key={d} size="sm" variant="outline" loading={decidiendo === c.variante_id} onClick={() => void decidir(c.variante_id, d)}>
+                  {DECISIONES[d]}
+                </Button>
+              ))}
+            </div>
+          ))}
+
+          {!!sacar.length && (
+            <div style={{ marginTop: space[3] }}>
+              <div style={{ fontSize: font.sm, fontWeight: weight.semibold }}>
+                Devolver al depósito: {sacar.reduce((n, c) => n + c.deMas, 0)}{' '}
+                {sacar.reduce((n, c) => n + c.deMas, 0) === 1 ? 'unidad' : 'unidades'} de {sacar.length} {sacar.length === 1 ? 'prenda' : 'prendas'}
+              </div>
+              {sacar.map((c) => (
+                <div key={c.variante_id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 2px' }}>
+                  <span style={{ fontSize: font.sm, color: color.ink }}>
+                    {c.nombre} · {c.size || '—'} <span style={{ color: color.mut }}>· sacar {c.deMas}</span>
+                  </span>
+                  <Button size="sm" variant="ghost" loading={decidiendo === c.variante_id} onClick={() => void decidir(c.variante_id, null)}>
+                    deshacer
+                  </Button>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="outline"
+                style={{ marginTop: space[2] }}
+                onClick={() =>
+                  void descargarXlsx(filasSacar(sacar), {
+                    archivo: `devolver-al-deposito-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+                    hoja: 'Devolver al depósito',
+                    anchos: ANCHOS_SACAR,
+                  })
+                }
+              >
+                Descargar lo que vuelve al depósito
+              </Button>
+            </div>
+          )}
+
+          {/* 🔑 Lo que se dejó a propósito también se muestra: es una decisión tomada, y el que
+              vuelve dentro de un mes tiene que ver que ya se miró — si ⛔ no, la vuelve a mirar. */}
+          {!!quedan.length && (
+            <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[3] }}>
+              Se dejaron dobles a propósito: {quedan.map((c) => `${c.nombre} ${c.size}`).join(' · ')}.{' '}
+              <Button size="sm" variant="ghost" onClick={() => void decidir(quedan[0].variante_id, null)}>
+                volver a decidir la primera
+              </Button>
             </div>
           )}
         </div>

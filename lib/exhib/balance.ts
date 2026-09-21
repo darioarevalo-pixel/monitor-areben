@@ -31,7 +31,7 @@
 
 import type { Filas } from '../excel'
 import { catsDeItem, esDelTipo, exhibId, normCat, perteneceA, tipoDePrenda } from './core'
-import { catsVisibles, pasoPorElLector, type EscaneoLibre } from './libre'
+import { catsVisibles, pasoPorElLector, unidadesVistas, type EscaneoLibre } from './libre'
 import { SIN_CATEGORIA, type ExhibItem } from './tipos'
 
 /** Las variantes de un recorrido que **pasaron por el lector**, en cualquiera de sus lugares. */
@@ -265,6 +265,125 @@ export function partirTachadas(
     else mandado.push(b)
   }
   return { mandado, sacadas }
+}
+
+/**
+ * **Una prenda que está colgada más de una vez.**
+ *
+ * 🔴 **El espacio del salón es el recurso escaso, y ésta es la otra mitad del balance**
+ * (21-sep-2026, Bruno: *«el espacio del local es chico, por eso me interesa optimizar mucho eso»*).
+ * El mandado trae del depósito al salón lo que falta; esto manda del salón al depósito lo que
+ * sobra. 📊 Medido en el primer recorrido de sector entero: **23 prendas colgadas de más, 24
+ * perchas** sobre 413 unidades exhibidas — casi el 6 % del sector.
+ *
+ * 🔑 **Está colgada dos veces de DOS formas, y las dos cuentan.** Dos unidades del mismo color y
+ * talle en el mismo mueble (el contador `veces`), o **la misma prenda en dos muebles distintos**
+ * —el perchero y la vidriera—, que es una fila por lugar. La segunda ⛔ no se pudo ver el 21-sep
+ * porque se caminó un solo lugar, y es la que más va a aparecer cuando se caminen varios.
+ *
+ * ⚠️ **El rebote del lector ⛔ no entra**: dos lecturas del mismo código en menos de 600 ms se
+ * descartan en el teléfono, antes de llegar acá. Lo que queda son prendas de verdad.
+ */
+export type ColgadaDeMas = {
+  variante_id: string
+  nombre: string
+  size: string
+  /** Unidades de esa prenda que pasaron por el lector en todo el recorrido. Siempre 2 o más. */
+  unidades: number
+  /** Cuántas sobran: `unidades - 1`. Es lo que se puede devolver al depósito. */
+  deMas: number
+  /** Dónde apareció. **Más de uno = está colgada en dos muebles distintos.** */
+  lugares: string[]
+}
+
+/**
+ * **Las prendas colgadas más de una vez, de la que más perchas ocupa a la que menos.**
+ *
+ * 🔑 Se mira el **recorrido entero** y ⛔ no un lugar: la prenda que está en el perchero y en la
+ * vidriera ocupa dos perchas igual, y ése es justamente el caso que ⛔ no se ve mirando un mueble.
+ */
+export function colgadasDeMas(escaneos: EscaneoLibre[]): ColgadaDeMas[] {
+  const unidades = unidadesVistas(escaneos)
+  const datos = new Map<string, { nombre: string; size: string; lugares: Set<string> }>()
+  for (const e of escaneos) {
+    if (!pasoPorElLector(e)) continue
+    const d = datos.get(e.variante_id) || { nombre: e.product_name || '—', size: e.size || '', lugares: new Set<string>() }
+    if (e.lugar) d.lugares.add(e.lugar)
+    datos.set(e.variante_id, d)
+  }
+
+  const out: ColgadaDeMas[] = []
+  for (const [variante_id, n] of unidades) {
+    if (n < 2) continue
+    const d = datos.get(variante_id)
+    if (!d) continue
+    out.push({ variante_id, nombre: d.nombre, size: d.size, unidades: n, deMas: n - 1, lugares: [...d.lugares] })
+  }
+  return out.sort((a, b) => b.deMas - a.deMas || a.nombre.localeCompare(b.nombre, 'es') || a.size.localeCompare(b.size, 'es'))
+}
+
+/**
+ * **Qué se hace con una prenda colgada de más.**
+ *
+ * 🔴 **La app ⛔ no puede decidirlo y por eso pregunta** — es la misma regla que la cobertura del
+ * sector. Dos unidades del mismo color colgadas pueden ser **una decisión de exhibición** (una
+ * prenda que se vende y se quiere ver de los dos lados del salón) o **espacio desperdiciado**. Eso
+ * lo sabe quien arma el salón, ⛔ no el que cuenta.
+ */
+export type DecisionRepetida = 'queda' | 'sacar'
+
+/** Cómo se lee cada decisión en pantalla. ⛔ Sin tecnicismos: lo lee gente del local. */
+export const DECISIONES: Record<DecisionRepetida, string> = {
+  queda: 'está bien que estén las dos',
+  sacar: 'sacar la de más al depósito',
+}
+
+/** Lo que alguien decidió sobre una prenda colgada de más, firmado. */
+export type Repetida = {
+  variante_id: string
+  decision: DecisionRepetida
+  por: string | null
+  cuando: string
+}
+
+/**
+ * **Las colgadas de más, partidas por lo que se decidió.**
+ *
+ * 🔑 **`sinDecidir` va primero en la pantalla y es el trabajo pendiente.** Una lista donde lo
+ * resuelto y lo no resuelto se mezclan obliga a releerla entera cada vez que se vuelve.
+ */
+export function partirRepetidas(
+  lista: ColgadaDeMas[],
+  decisiones: Repetida[],
+): { sinDecidir: ColgadaDeMas[]; quedan: ColgadaDeMas[]; sacar: Array<ColgadaDeMas & { decidida: Repetida }> } {
+  const porId = new Map(decisiones.map((d) => [d.variante_id, d]))
+  const sinDecidir: ColgadaDeMas[] = []
+  const quedan: ColgadaDeMas[] = []
+  const sacar: Array<ColgadaDeMas & { decidida: Repetida }> = []
+  for (const c of lista) {
+    const d = porId.get(c.variante_id)
+    if (!d) sinDecidir.push(c)
+    else if (d.decision === 'sacar') sacar.push({ ...c, decidida: d })
+    else quedan.push(c)
+  }
+  return { sinDecidir, quedan, sacar }
+}
+
+/**
+ * ⚠️ **Acá el número de unidades SÍ va, y ⛔ no contradice la regla del mandado.** En el mandado el
+ * número era el **stock del local** —cuántas dice el sistema que hay—, que ⛔ no cambia la tarea de
+ * colgar una. Acá es **cuántas sacar**: es la tarea misma.
+ */
+export const HEADER_SACAR = ['Producto', 'Color / Talle', 'Unidades para sacar', 'Dónde está colgada']
+
+/** Anchos del `.xlsx`, en el orden de `HEADER_SACAR`. */
+export const ANCHOS_SACAR = [40, 18, 20, 30]
+
+/** La planilla de lo que vuelve al depósito. */
+export function filasSacar(lista: ColgadaDeMas[]): Filas {
+  const filas: Filas = [[...HEADER_SACAR]]
+  for (const c of lista) filas.push([c.nombre, c.size, c.deMas, c.lugares.join(' / ')])
+  return filas
 }
 
 export type ResumenBalance = { variantes: number; unidades: number; productos: number }

@@ -247,6 +247,37 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   Enter solo, en decenas de ms. ⚠️ Vale **sólo para el mismo código**, y el descarte **se dice en
   pantalla**: callarlo sería inventar —o perder— una unidad.
 
+- 🆕 🔴 🔑 **LA OTRA MITAD DEL BALANCE: LO QUE SOBRA EN EL SALÓN** (21-sep-2026, `colgadasDeMas` +
+  `partirRepetidas` en `balance.ts`). Bruno, cerrando el día: *«el espacio del local es chico, por
+  eso me interesa optimizar mucho eso»*. **El mandado trae del depósito lo que falta; esto manda al
+  depósito lo que está colgado dos veces.**
+  📊 **Medido en el primer recorrido de sector entero: 23 prendas colgadas de más, 24 perchas**
+  sobre 413 unidades exhibidas — **casi el 6 % del sector**. La peor, CAMISA ALESSA S off white
+  colgada **3 veces**. Por modelo: CAMISA ALTHEA ocupaba **8 perchas** y TOP ORSA **7**.
+  🔑 **Está colgada dos veces de DOS formas y las dos cuentan**: dos unidades del mismo color y
+  talle en el mismo mueble (el contador `veces`, que existe desde el 19-sep) **o la misma prenda en
+  dos muebles distintos** —el perchero y la vidriera—, que son dos filas. ⚠️ La segunda ⛔ no se
+  pudo ver el 21-sep porque se caminó **un solo lugar**, y es la que más va a aparecer cuando se
+  caminen varios.
+  🔴 **La app ⛔ NO decide: pregunta.** Dos unidades colgadas pueden ser **exhibición a propósito**
+  —una prenda que se quiere ver de los dos lados del salón— o **espacio desperdiciado**, y eso lo
+  sabe quien arma el salón. Es la misma regla que la cobertura del sector: la app pone el número.
+  Las opciones son dos: «está bien que estén las dos» y «sacar la de más al depósito», y lo sacado
+  baja en su propio Excel.
+  🔑 **Va en la MISMA vista del balance, y así lo pidió**: *«necesito lo mismo, en la misma vista
+  del chequeo, así como elijo que también quiero elegir acá»*. Quien mira el recorrido ya tiene el
+  salón en la cabeza; decidir «falta» y «sobra» en dos momentos distintos es releer la misma lista
+  dos veces. ⚠️ Y **⛔ no depende de los tipos declarados**, a diferencia del mandado: que una
+  prenda esté colgada dos veces es un **hecho del recorrido**, ⛔ no una afirmación sobre un sector.
+  ⚠️ **Acá el número de unidades SÍ va y ⛔ no contradice la regla del mandado**: allá era el stock
+  del sistema —que ⛔ no cambia la tarea de colgar una—; acá es **cuántas sacar**, que es la tarea.
+  📌 **Las dos mitades entran por el MISMO verbo del handler** (`MARCAS` en `api/_exhib.js`): es el
+  mismo guardado con otro nombre de lista, y dos copias se despegan a la tercera vez que se toca
+  una. 🔴 **Y las dos listas conviven sin pisarse** (test en `exhib-handler`): si decidir un
+  repetido borrara los motivos de lo tachado, del otro lado se vería como un mandado que creció solo.
+  ⚠️ El rebote del lector ⛔ no entra: las dos lecturas de menos de 600 ms se descartan en el
+  teléfono. Medido el 21-sep, las 23 reales están separadas entre **3 segundos y 6 minutos**.
+
 - 🆕 🔴 🔑 **UNA PRENDA DEL MANDADO SE PUEDE TACHAR, Y CON MOTIVO** (21-sep-2026, `partirTachadas` +
   `MotivoTachada` en `balance.ts`, acción `tachar` en `api/_exhib.js`). Salió del primer mandado
   real: Bruno lo leyó prenda por prenda y sacó **22 de las 104** por dos razones que ⛔ no son

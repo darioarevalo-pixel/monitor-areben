@@ -345,3 +345,64 @@ describe('tachar una prenda del mandado', () => {
     expect(guardada().tachadas).toHaveLength(1)
   })
 })
+
+/**
+ * **La otra mitad del balance**: qué se hace con una prenda colgada de más. Entra por el MISMO
+ * camino que `tachar` (ver `MARCAS`) y por eso lo que se ejerce acá es que las dos listas convivan
+ * sin pisarse — que es lo único que las diferencia.
+ */
+describe('decidir sobre una prenda colgada de más', () => {
+  const conCobertura = (cobertura: unknown) => {
+    base.tablas.exhib_recorrido = [{ id: REC, store: 'zattia', modo: 'libre', estado: 'cerrado', cobertura }]
+  }
+  const guardada = () => base.escrituras.filter((e) => e.tabla === 'exhib_recorrido').at(-1)?.filas?.[0]?.cobertura as Record<string, unknown>
+
+  it('guarda la decisión con quién y cuándo', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], por: 'Bruno Arevalo', cuando: '2026-09-21T16:32:00.000Z' })
+    const res = await correr(postear({ action: 'repetida', id: REC, variante_id: 'b1', decision: 'sacar' }))
+    expect(res.code).toBe(200)
+    expect((guardada().repetidas as Record<string, unknown>[])[0]).toMatchObject({ variante_id: 'b1', decision: 'sacar', por: 'camilaquintana' })
+  })
+
+  it('una decisión inventada se rechaza y ⛔ no escribe nada', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], por: null, cuando: 'z' })
+    const res = await correr(postear({ action: 'repetida', id: REC, variante_id: 'b1', decision: 'tirarla' }))
+    expect(res.code).toBe(400)
+    expect(base.escrituras.filter((e) => e.tabla === 'exhib_recorrido')).toHaveLength(0)
+  })
+
+  /**
+   * 🔴 **Las dos listas conviven.** Son el mismo guardado con otro nombre de lista: si una pisara a
+   * la otra, decidir sobre un repetido borraría los motivos de todo lo tachado —y del otro lado eso
+   * se ve como un mandado que creció solo—.
+   */
+  it('🔴 decidir un repetido ⛔ NO borra lo tachado, ni al revés', async () => {
+    conCobertura({ cats: [], tipos: ['TOP'], tachadas: [{ variante_id: 'b2', motivo: 'despues', por: 'x', cuando: 'y' }], por: null, cuando: 'z' })
+    await correr(postear({ action: 'repetida', id: REC, variante_id: 'b1', decision: 'queda' }))
+    expect(guardada().tachadas).toHaveLength(1)
+    expect(guardada().repetidas).toHaveLength(1)
+
+    conCobertura(guardada())
+    await correr(postear({ action: 'tachar', id: REC, variante_id: 'b3', motivo: 'otro-lugar' }))
+    expect(guardada().repetidas).toHaveLength(1)
+    expect(guardada().tachadas).toHaveLength(2)
+  })
+
+  it('guardar la declaración conserva las dos listas', async () => {
+    conCobertura({
+      cats: [], tipos: ['TOP'],
+      tachadas: [{ variante_id: 'b2', motivo: 'despues', por: 'x', cuando: 'y' }],
+      repetidas: [{ variante_id: 'b1', decision: 'sacar', por: 'x', cuando: 'y' }],
+      por: null, cuando: 'z',
+    })
+    await correr(postear({ action: 'cobertura', id: REC, tipos: ['TOP', 'BLUSA'] }))
+    expect(guardada().tachadas).toHaveLength(1)
+    expect(guardada().repetidas).toHaveLength(1)
+  })
+
+  it('deshacer la saca de la lista', async () => {
+    conCobertura({ cats: [], tipos: [], repetidas: [{ variante_id: 'b1', decision: 'sacar', por: 'x', cuando: 'y' }], por: null, cuando: 'z' })
+    await correr(postear({ action: 'repetida', id: REC, variante_id: 'b1', decision: null }))
+    expect(guardada().repetidas).toEqual([])
+  })
+})
