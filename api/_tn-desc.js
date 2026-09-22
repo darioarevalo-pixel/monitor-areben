@@ -640,7 +640,9 @@ export default async function handler(req, res) {
         rEsc = await fetch(CATALOGO + `?store=${store}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-monitor-auth': sobre },
-          body: JSON.stringify({ accion: 'descripcion-prosa', productId: tnId, nuevo, hashPrevio: dLeer.hash }),
+          // 🆕 `htmlTalles` viaja para que el catálogo sepa que REEMPLAZAR la tabla es a propósito:
+          // sin esto su guard exige la vieja byte a byte y rebota (TOP MERY, 22-sep-2026).
+          body: JSON.stringify({ accion: 'descripcion-prosa', productId: tnId, nuevo, hashPrevio: dLeer.hash, ...(htmlTalles ? { htmlTalles } : {}) }),
         });
         dEsc = await rEsc.json().catch(() => ({}));
       } catch (e) {
