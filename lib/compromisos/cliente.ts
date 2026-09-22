@@ -35,7 +35,6 @@ export type NuevoCompromiso = {
    * ⚠️ Casi nunca va: a nombre de quién viene la transferencia se pregunta al CONFIRMAR, mirando el
    * extracto. Sólo se manda cuando el cliente lo dijo en la charla ("te transfiere mi socio").
    */
-  titular_real?: string | null
   monto: number
   fecha_prometida?: string | null
   notas?: string | null
@@ -98,17 +97,17 @@ export async function cambiarEstado(id: string, estado: EstadoCompromiso): Promi
  * cuando pasa, el servidor cierra este compromiso por lo que entró y devuelve en `nueva` la
  * compromiso que anotó sola por lo que falta.
  *
- * 🔑 `titular_real` es **a nombre de quién vino la transferencia**, y se pasa acá y no al prometer:
- * es un dato que se lee del extracto, no que se adivina en la charla. Vacío = transfirió el
- * cliente, que es el caso más común.
+ * ⛔ **No lleva "a nombre de quién vino".** Existía y se sacó el 21-sep-2026: 0 de 9
+ * confirmaciones lo llenaron en 18 días, y el que confirma mira el comprobante en el chat del
+ * cliente, no el nombre del extracto. Que el parámetro no exista es lo que garantiza que los dos
+ * formularios de confirmar —el del panel y el de la sección— sigan pidiendo lo mismo.
  */
 export async function confirmarCompromiso(
   id: string,
   monto_real: number,
   fecha: string,
-  titular_real?: string | null,
 ): Promise<ResultadoConfirmar> {
-  const d = await pedir({ action: 'confirmar', id, monto_real, fecha, titular_real: titular_real || null })
+  const d = await pedir({ action: 'confirmar', id, monto_real, fecha })
   return {
     compromiso: d.compromiso as Compromiso,
     nueva: (d.nueva ?? null) as Compromiso | null,

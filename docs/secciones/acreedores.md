@@ -62,10 +62,21 @@ prometió, cuánto, a qué cuenta, y si ya pasó.
 - ⚠️ **El dashboard no sabe que hay plata comprometida.** Si alguien paga ese gasto desde allá, se
   enteran al confirmar, con la plata ya movida (queda saldo a favor, no se pierde). Por eso la
   pantalla muestra siempre *saldo del dashboard − lo comprometido acá*.
-- 🔑 **Quién DEBE y quién TRANSFIRIÓ son dos datos.** `pagador_nombre` es siempre el cliente;
-  `pagador_titular` sólo cuando la transferencia vino a nombre de otro (el novio, la razón social).
-  ⛔ El titular **no se pregunta al prometer** —ahí es una adivinanza— sino al confirmar, mirando el
-  extracto. Y ⛔ el resto de un cobro parcial **no lo hereda**: es otra transferencia.
+- 🏁 **"A nombre de quién vino la transferencia" SE SACÓ (21-sep-2026), y lo sacó el mismo que lo
+  había pedido el 3-sep.** Medido antes de tocar nada: **0 de 9 confirmaciones** lo llenaron en 18
+  días de uso real (12 compromisos; 0 cobros parciales, de paso). El motivo de Darío, que es el que
+  vale porque es el que confirma: *«no me interesa quién la manda, sino qué cliente mandó, porque
+  luego puedo conocer bien el comprobante cuando entro al chat; y si completo quién envió
+  efectivamente, se me hace un quilombo de carga»*. El nombre del extracto no contesta nada que el
+  chat no conteste mejor.
+  ⚠️ **La columna `titular_real` sigue en la base, vacía**: 0 filas, nada que migrar, y volver
+  atrás es dibujarla de nuevo. ⛔ El handler **ya no la acepta del cuerpo** —ni al crear ni al
+  confirmar— y `confirmarCompromiso` **no tiene el parámetro**: si algún día vuelve, tiene que
+  volver por los dos formularios a la vez y no por uno solo, que es la forma que ya fabricó los dos
+  bugs de plata. Al ledger viaja `titular: null` y la nota queda *«Transferencia de <el cliente>»*.
+- 🔑 **Lo que SÍ sigue siendo dos datos: el id del cliente y su nombre.** Los dos viajan al ledger,
+  porque el dashboard no resuelve ids de Gestión Nube: sin el nombre al lado, cuando el acreedor
+  dice que no le llegó, de quién era la deuda no se puede leer.
 - 🔑 **La llave del cliente que todavía no está en Gestión Nube es el TELÉFONO**, no el nombre. Con
   eso el panel ofrece reengancharlo solo cuando aparece en el ERP (acción `vincular`). ⛔ Un
   compromiso ya confirmado no se vincula: su pagador ya viajó al dashboard.
@@ -96,11 +107,16 @@ prometió, cuánto, a qué cuenta, y si ya pasó.
 ## Pendiente
 
 - ▶️ **Un solo formulario de confirmar** para el panel y la sección. Es la máquina que fabricó los
-  dos bugs de plata.
+  dos bugs de plata. ⚠️ **Siguen siendo dos, pero el 21-sep quedaron más cerca**: sacar "a nombre
+  de quién vino" los dejó pidiendo exactamente lo mismo —monto y día— y el parámetro ya no existe
+  en `confirmarCompromiso`, así que no se pueden volver a separar por ahí.
 - ▶️ **El grafo de estados en un solo lugar**: hoy en tres copias (`core.ts`, el handler, el CHECK
   del SQL), y la que tiene tests es la que no usa nadie (`puedeIr`/`porQueNo`).
 - ⚠️ El `GET` de compromisos corta en **500 filas sin filtrar por estado**: los abiertos más viejos
-  desaparecen solos (es el corte de 1.000 filas de siempre).
+  desaparecen solos (es el corte de 1.000 filas de siempre). 📊 Medido el 21-sep-2026: **12
+  compromisos en 18 días**, o sea que el corte está a años de distancia — ⛔ no es motivo para
+  frenar nada hoy. Lo que lo va a volver urgente es querer el historial completo de un cliente
+  (ver el bloque del 21-sep, a la tarde).
 - ⚠️ El panel **no puede cargar la fecha comprometida**, así que la cola por urgencia es decorativa.
   Y `cliente_store` queda siempre en `'bdi'`.
 - 🔴 **En el otro repo**: `POST /api/puente/pagos` **acepta cualquier monto sin compararlo con la
@@ -140,6 +156,28 @@ Sólo **cómo se ve y cómo se lee**: ni una regla de negocio cambió. Lo que ha
 - ⚠️ **Los `aria-label` de los dos íconos ahora nombran la fila** (`Ya entró lo de «Fulana»`),
   VOCABULARIO §3.3: diez "Ya entró" apilados son diez botones idénticos para quien no ve la
   pantalla. El `title` sigue llevando la frase sola. Los dos tests que lo fijaban se actualizaron.
+
+## ✅ 21-sep-2026 (tarde) — las cerradas sirven para volver al chat
+
+Salió de una pregunta de Darío mirando la pestaña: *«¿no estaría bueno filtrar en las cerradas, para
+tener el dato de quién transfirió a qué compromiso?»*.
+
+- 🔑 **El nombre del cliente manda la fila y SE TOCA**: abre su chat, igual que en las listas de
+  arriba. Era texto muerto — veías el nombre y tenías que ir a buscar la conversación a mano. Y es
+  todo lo que hace falta, porque **el comprobante vive en el chat**: lo que la fila tiene que dar es
+  a quién abrirle y qué buscar adentro.
+- **El día en que entró** (`confirmado_en`, con `elDia`) y **de cuánto era** cuando entró de menos.
+  Son las dos cosas que distinguen un comprobante de otro en la misma conversación.
+  ⚠️ La fecha se parte a mano: un `YYYY-MM-DD` pasado a `Date` se lee como UTC y en Argentina
+  muestra el día anterior. Es el mismo defecto que este circuito ya pagó dos veces.
+- **Un botón de "sólo las de este cliente"**, cuando hay chat abierto. ⚠️ Cruza por **las dos
+  llaves**: el id de Gestión Nube, o el teléfono cuando el compromiso se anotó antes de que el
+  cliente existiera. Con una sola, al mayorista nuevo no lo encuentra nunca.
+- ⚠️ **Filtra lo que llegó, no todo lo que existe, y la pantalla lo dice.** El `GET` trae las
+  últimas 500 con abiertas y cerradas en la misma bolsa. 📊 Al ritmo real —12 compromisos en 18
+  días— eso está a años, así que ⛔ no es motivo para frenar nada; pero el día que se quiera el
+  historial completo de un cliente, lo que hay que hacer es pedir las cerradas **por su propia
+  consulta**, y de paso se destraba que las abiertas viejas se caigan del corte.
 
 ▶️ **Lo que quedó afuera**: `Chapa` y `Bloque` siguen duplicados entre `Pagos.tsx`,
 `PanelWhatsApp.tsx` y `AgendaDelDia.tsx` — se emparejaron las medidas (11 px / 600), pero juntarlos

@@ -62,16 +62,12 @@ export type Compromiso = {
    * cliente existiera en Gestión Nube: es con lo que se reenganchan después.
    */
   cliente_telefono: string | null
-  /**
-   * A nombre de quién vino la transferencia, cuando NO es el cliente. `null` = la mandó él.
-   *
-   * 🔑 **Se llena al CONFIRMAR, no al comprometer** (Darío, 3-sep-2026): el compromiso es del cliente,
-   * pero la plata la manda muy seguido otro —el novio, el socio, la razón social— y en el momento
-   * de comprometer eso es una adivinanza. Al confirmar se está mirando el extracto, así que el nombre
-   * se lee en vez de predecirse. Puede venir desde antes si el cliente lo dijo en la charla, y en
-   * ese caso lo confirmado lo pisa: uno es lo que se dijo, el otro es lo que pasó.
-   */
-  titular_real: string | null
+  /*
+    ⛔ **`titular_real` NO está, y la columna sí existe.** Se pedía al confirmar —a nombre de quién
+    vino la transferencia— y se sacó el 21-sep-2026: 0 de 9 confirmaciones lo llenaron en 18 días,
+    y el que confirma mira el comprobante en el chat del cliente. Que el tipo no lo tenga es lo que
+    impide que una pantalla lo vuelva a dibujar sin que nadie lo vuelva a cargar.
+  */
   monto: number
   monto_confirmado: number | null
   estado: EstadoCompromiso

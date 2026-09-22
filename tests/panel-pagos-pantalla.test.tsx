@@ -254,25 +254,76 @@ describe('quienPaga', () => {
 })
 
 /**
- * A nombre de quién vino la transferencia, en el formulario de confirmar.
+ * ⛔ **A nombre de quién vino la transferencia ya no se pregunta** (21-sep-2026).
  *
- * 🔑 Se pregunta acá y no al comprometer (Darío, 3-sep-2026): el compromiso es del cliente, pero la plata
- * la manda muy seguido otro. Al confirmar se está mirando el extracto — el nombre se lee, no se
- * adivina. Y el caso normal tiene que salir apretando un botón: el default es el cliente.
+ * Existió del 3 al 21 de septiembre y lo mandó a sacar el mismo que lo había pedido, con la
+ * medición delante: **0 de 9 confirmaciones lo llenaron**. *"No me interesa quién la manda, sino
+ * qué cliente mandó, porque luego conozco bien el comprobante cuando entro al chat"* (Darío).
+ *
+ * 🔑 Los dos formularios de confirmar —el del panel y el de la sección— tienen que quedar pidiendo
+ * lo mismo. Que el parámetro no exista en `confirmarCompromiso` es lo que lo garantiza; el
+ * servidor además lo ignora si llega (`tests/compromisos-handler.test.ts`).
  */
-describe('Pagos · quién transfirió se pregunta al confirmar', () => {
-  it('el default dice que transfirió el cliente, sin ningún campo que completar', () => {
+describe('Pagos · confirmar pide el monto y el día, y nada más', () => {
+  it('el formulario de confirmar no pregunta a nombre de quién vino', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ estado: 'transferido' })] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     // El formulario está plegado hasta que se toca "Ya entró": lo que se ve es el botón.
     expect(html).toContain('Ya entró')
+    expect(html).not.toContain('a nombre de otro')
+    expect(html).not.toContain('vino a nombre')
   })
 
-  it('el formulario de anotar ya NO pregunta a nombre de quién', () => {
+  it('el formulario de anotar tampoco', () => {
     const html = renderToStaticMarkup(
       <Pagos cliente={{ tipo: 'erp', id: 77, nombre: 'Nazarena', telefono: null }} onIrAlCliente={null} />,
     )
     expect(html).not.toContain('a nombre de otro')
+  })
+
+  /**
+   * ⚠️ Se le pasa un `titular_real` cargado **a propósito**, que es lo que hay en las filas viejas
+   * del que lo haya llenado alguna vez: la fila no lo dibuja igual. Sin esto, el test pasaría sólo
+   * porque el dato no está en los datos de prueba.
+   */
+  it('⛔ y una fila con titular viejo no lo dibuja', () => {
+    compromisos.valor = {
+      ...compromisos.valor,
+      compromisos: [compromiso({ titular_real: 'Gabriel Sosa' })],
+    }
+    const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
+    expect(html).not.toContain('Gabriel Sosa')
+    // Lo que sí dice la fila es a qué cuenta va, que es lo que no repite ningún título.
+    expect(html).toContain('le transfiere a El contador')
+  })
+})
+
+/**
+ * Las cerradas: de qué cliente era, y poder saltar a su chat.
+ *
+ * 🔑 **El oráculo es para qué se mira una cerrada**: *"me interesa qué cliente mandó, porque luego
+ * conozco bien el comprobante cuando entro al chat"* (Darío, 21-sep-2026). O sea que el nombre no
+ * es un dato de contexto, es el punto de partida — y hasta acá era texto muerto.
+ *
+ * ⚠️ La lista vive detrás de "Ver las N que ya se cerraron" y `renderToStaticMarkup` no hace clic,
+ * así que lo que se puede fijar desde acá es el disparador y su cuenta.
+ */
+describe('Pagos · las cerradas', () => {
+  it('no se muestran solas: ocupan lugar y no son trabajo de hoy', () => {
+    compromisos.valor = {
+      ...compromisos.valor,
+      compromisos: [compromiso({ id: 'a', estado: 'confirmado' }), compromiso({ id: 'b', estado: 'cancelado' })],
+    }
+    const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
+    expect(html).toContain('Ver las 2 que ya se cerraron')
+    // Y el vacío de arriba sigue diciendo lo suyo: cerradas no son plata esperando.
+    expect(html).toContain('No hay plata esperando')
+  })
+
+  it('sin ninguna cerrada, no hay disparador', () => {
+    compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})] }
+    const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
+    expect(html).not.toContain('que ya se cerraron')
   })
 })
 

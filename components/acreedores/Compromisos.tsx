@@ -119,9 +119,6 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
               <Badge tone={TONO[c.estado]}>{ROTULO[c.estado]}</Badge>
               <b>{formatMoney(c.estado === 'confirmado' ? Number(c.monto_confirmado ?? c.monto) : Number(c.monto))}</b>
               <span>{c.cliente_nombre}</span>
-              {c.titular_real && c.titular_real !== c.cliente_nombre && (
-                <span className="muted">(transfiere {c.titular_real})</span>
-              )}
               {c.viene_de && <span className="muted">· resto de una anterior</span>}
 
               {estaAbierto(c) && puede.confirmar && (
@@ -163,9 +160,9 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
         {confirmando && (
           <FormConfirmar
             compromiso={confirmando}
-            onConfirmar={async (monto, fecha, titular) => {
+            onConfirmar={async (monto, fecha) => {
               await correr(async () => {
-                const r = await confirmarCompromiso(confirmando.id, monto, fecha, titular)
+                const r = await confirmarCompromiso(confirmando.id, monto, fecha)
                 setConfirmando(null)
                 // Lo primero es siempre qué pasó con la plata; lo demás se agrega sólo cuando hay
                 // algo distinto que contar.
@@ -294,7 +291,7 @@ function FormCompromiso({ destino, maximo, onGuardar, onCancelar }: {
 
 function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
   compromiso: Compromiso
-  onConfirmar: (monto: number, fecha: string, titular: string | null) => Promise<void>
+  onConfirmar: (monto: number, fecha: string) => Promise<void>
   onCancelar: () => void
 }) {
   /**
@@ -311,8 +308,6 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
   // en el panel, y tenía el mismo bug.
   const [monto, setMonto] = useState(paraEditar(compromiso.monto))
   const [fecha, setFecha] = useState(hoy)
-  const [otro, setOtro] = useState(!!compromiso.titular_real && compromiso.titular_real !== compromiso.cliente_nombre)
-  const [titular, setTitular] = useState(compromiso.titular_real || '')
   const [yendo, setYendo] = useState(false)
 
   const n = parsearMonto(monto)
@@ -343,24 +338,12 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
       </Field>
 
       {/*
-        🔑 A nombre de quién vino se pregunta ACÁ y no al prometer: el compromiso es del cliente, pero
-        la plata la manda muy seguido otro, y en la charla eso es una adivinanza. Mirando el
-        extracto se lee. El default es el cliente, así que el caso normal no obliga a escribir nada.
+        ⛔ **"A nombre de quién vino" se sacó el 21-sep-2026, y lo pidió el mismo que lo había
+        pedido.** Medido antes de sacarlo: **0 de 9 confirmaciones** lo llenaron en 18 días de uso
+        real. El motivo que dio Darío es el que importa — el comprobante lo mira en el chat del
+        cliente, así que el nombre del extracto no le resuelve nada y sí es una pregunta más en
+        cada confirmación. La columna sigue en la base, vacía: volver atrás es dibujarlo de nuevo.
       */}
-      {otro ? (
-        <Field label="¿A nombre de quién vino la transferencia?" hint="Es lo que muestra el extracto del banco.">
-          <Input value={titular} onChange={(e) => setTitular(e.target.value)} placeholder="Ej: Luciani SRL" autoFocus />
-          <Button variant="ghost" size="sm" style={{ marginTop: 4 }} onClick={() => { setOtro(false); setTitular('') }}>
-            No, transfirió {compromiso.cliente_nombre}
-          </Button>
-        </Field>
-      ) : (
-        <p className="muted" style={{ fontSize: 12 }}>
-          Va a quedar como que transfirió <b>{compromiso.cliente_nombre}</b>.{' '}
-          <Button variant="ghost" size="sm" onClick={() => setOtro(true)}>Vino a nombre de otro</Button>
-        </p>
-      )}
-
       {falta > 0 && (
         <Notice tone="brand">
           <span>
@@ -373,8 +356,8 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
       <div style={{ display: 'flex', gap: space[2], justifyContent: 'flex-end' }}>
         <Button variant="ghost" onClick={onCancelar}>Cancelar</Button>
         <Button
-          disabled={!Number.isFinite(n) || n <= 0 || (otro && !titular.trim()) || yendo}
-          onClick={async () => { setYendo(true); try { await onConfirmar(n, fecha, otro ? titular.trim() : null) } finally { setYendo(false) } }}
+          disabled={!Number.isFinite(n) || n <= 0 || yendo}
+          onClick={async () => { setYendo(true); try { await onConfirmar(n, fecha) } finally { setYendo(false) } }}
         >
           {yendo ? 'Registrando…' : 'Sí, entró'}
         </Button>

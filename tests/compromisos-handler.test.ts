@@ -158,7 +158,7 @@ const SOLO_PROMETE = {
 
 const COMPROMISO = {
   id: 'c1', acreedor_id: 'ac-1', acreedor_nombre: 'Contador', cliente_id: 'cli-9',
-  cliente_store: 'bdi', cliente_nombre: 'Nazarena', titular_real: 'Nazarena Luciani',
+  cliente_store: 'bdi', cliente_nombre: 'Nazarena',
   monto: 500000, estado: 'prometido', operacion_id: 'op-del-compromiso', creado_en: '2026-09-01',
   cuenta_alias: null, cuenta_cbu: null, cuenta_banco: null, cuenta_titular: null,
   monto_confirmado: null, fecha_prometida: null, notas: null, pagos_dashboard: null, viene_de: null,
@@ -221,50 +221,63 @@ describe('confirmar', () => {
   })
 
   /**
-   * 🔑 **Los DOS nombres, no uno** (Darío, 3-sep-2026). La deuda es de un cliente; la transferencia
-   * la puede mandar otro. Antes viajaba `titular_real || cliente_nombre`, así que si transfería un
-   * tercero el pago del ledger quedaba con el nombre del tercero y sólo el ID de la clienta — y el
-   * dashboard no resuelve ids de Gestión Nube, o sea que de quién era la deuda no se podía leer.
+   * 🔑 **De quién era la deuda viaja con el id Y con el nombre.** El id es de Gestión Nube y el
+   * dashboard no lo resuelve: sin el nombre al lado, cuando el acreedor dice que no le llegó, de
+   * quién era la deuda no se puede leer del ledger.
    */
-  it('manda de quién era la deuda Y a nombre de quién vino, separados', async () => {
-    escenario(ADMIN, { ok: true, body: { pagos: [] } })
-    await llamar(pedido({
-      action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02',
-      titular_real: 'Juan Pérez',
-    }))
-    const pagador = alDashboard[0].body.pagador as { cliente_id: string; nombre: string; titular: string | null }
-    expect(pagador.cliente_id).toBe('cli-9')
-    expect(pagador.nombre).toBe('Nazarena')      // el cliente: de quién era la deuda
-    expect(pagador.titular).toBe('Juan Pérez')   // el extracto: de quién es el movimiento
-  })
-
-  it('si transfirió el cliente, el titular va NULL y no repetido', async () => {
-    // Repetir el nombre obligaría a comparar las dos columnas para saber si hubo un tercero, y
-    // "hubo un tercero" es justo lo que se quiere ver de un vistazo.
-    filas.c1 = { ...COMPROMISO, titular_real: null }
+  it('manda de quién era la deuda con el id y con el nombre', async () => {
     escenario(ADMIN, { ok: true, body: { pagos: [] } })
     await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02' }))
-    const pagador = alDashboard[0].body.pagador as { nombre: string; titular: string | null }
+    const pagador = alDashboard[0].body.pagador as { cliente_id: string; nombre: string; titular: string | null }
+    expect(pagador.cliente_id).toBe('cli-9')
     expect(pagador.nombre).toBe('Nazarena')
     expect(pagador.titular).toBeNull()
   })
 
-  it('lo que se lee del extracto pisa lo que se había adivinado al comprometer', async () => {
-    // El compromiso decía "Nazarena Luciani"; en el banco vino a nombre del socio.
+  /**
+   * ⛔ **"A nombre de quién vino la transferencia" se sacó el 21-sep-2026**, y lo mandó a sacar el
+   * mismo que lo había pedido el 3-sep. Medido antes: **0 de 9 confirmaciones lo llenaron** en 18
+   * días de uso real. *"No me interesa quién la manda, sino qué cliente mandó, porque luego
+   * conozco bien el comprobante cuando entro al chat"* (Darío).
+   *
+   * 🔑 **Este test mira que el handler lo IGNORE aunque se lo manden**, y ésa es la parte que
+   * importa. Sacar el casillero de los dos formularios no alcanza: mientras el servidor lo siga
+   * aceptando, una pantalla puede volver a mandarlo sola y el dato vuelve a medias —cargado desde
+   * un formulario y no desde el otro—, que es exactamente la forma que ya fabricó los dos bugs de
+   * plata de este circuito.
+   *
+   * ⚠️ La columna sigue en la base, vacía. No se borró: son 0 filas y volver atrás no pide migrar.
+   */
+  it('⛔ ya no se pregunta a nombre de quién vino, y mandarlo no lo mete de vuelta', async () => {
     escenario(ADMIN, { ok: true, body: { pagos: [] } })
     await llamar(pedido({
-      action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02', titular_real: 'Luciani SRL',
+      action: 'confirmar', id: 'c1', monto_real: 500000, fecha: '2026-09-02',
+      titular_real: 'Luciani SRL',
     }))
-    expect((alDashboard[0].body.pagador as { titular: string }).titular).toBe('Luciani SRL')
-    expect(filas.c1.titular_real).toBe('Luciani SRL')
+    expect((alDashboard[0].body.pagador as { titular: string | null }).titular).toBeNull()
+    // Y la nota del ledger queda con el cliente solo, sin el paréntesis del tercero.
+    expect(alDashboard[0].body.notas).toBe('Transferencia de Nazarena')
+    expect(filas.c1.titular_real).toBeUndefined()
   })
 
-  it('⛔ el resto de un compromiso parcial NO hereda el titular: es otra transferencia', async () => {
+  it('⛔ tampoco se acepta al crear un compromiso', async () => {
     escenario(ADMIN, { ok: true, body: { pagos: [] } })
     await llamar(pedido({
-      action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-02', titular_real: 'Juan Pérez',
+      action: 'crear',
+      compromiso: {
+        acreedor_id: 'ac-1', acreedor_nombre: 'Contador', cliente_nombre: 'Nazarena',
+        monto: 1000, titular_real: 'Luciani SRL',
+      },
     }))
-    expect(insertados[0]).toMatchObject({ monto: 300000, titular_real: null })
+    expect(insertados[0]).toBeDefined()
+    expect(insertados[0].titular_real).toBeUndefined()
+  })
+
+  it('el resto de un compromiso parcial nace por lo que faltó', async () => {
+    escenario(ADMIN, { ok: true, body: { pagos: [] } })
+    await llamar(pedido({ action: 'confirmar', id: 'c1', monto_real: 200000, fecha: '2026-09-02' }))
+    expect(insertados[0]).toMatchObject({ monto: 300000 })
+    expect(insertados[0].titular_real).toBeUndefined()
   })
 
   it('si el dashboard rechaza, acá NO se marca nada', async () => {

@@ -88,6 +88,21 @@ function cuando(fecha: string | null, hoy: string): { txt: string; tarde: boolea
  * igual que en la solapa "Hoy" — que es la otra lista de trabajo del mismo panel y hasta ahora se
  * dibujaba con la convención contraria.
  */
+/**
+ * El día en que entró, en el idioma en que uno busca un comprobante: "el 18 de septiembre".
+ *
+ * ⚠️ Se parte a mano en vez de pasar el texto entero a `Date`: un `YYYY-MM-DD` suelto lo lee como
+ * UTC y en Argentina eso muestra el día anterior. Es el mismo defecto que ya se pagó dos veces en
+ * este circuito (la fecha que proponía mañana, y los tests que fallaban sólo en la Mac).
+ */
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+function elDia(iso: string | null): string | null {
+  if (!iso) return null
+  const [a, m, d] = iso.slice(0, 10).split('-').map(Number)
+  if (!a || !m || !d) return null
+  return `el ${d} de ${MESES[m - 1]}`
+}
+
 function Bloque({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
     <section
@@ -264,19 +279,21 @@ function BotonIcono({ que, de, onClick, fuerte }: {
  * entró y abre una nueva por el resto); la fecha porque **el cierre de mes del dashboard imputa
  * por ella**, y "hoy" no es necesariamente el día en que transfirió.
  *
- * # 🔑 Y acá se pregunta a nombre de quién vino, con el default puesto
+ * # ⛔ Y acá NO se pregunta a nombre de quién vino — se sacó el 21-sep-2026
  *
- * Es el lugar donde ese dato existe: se está mirando el extracto. Al comprometer era una adivinanza —
- * el compromiso es del cliente, pero la plata la manda muy seguido otro (Darío, 3-sep-2026).
+ * Lo pidió el 3-sep el mismo que lo mandó a sacar, y con el dato al lado: **0 de 9 confirmaciones
+ * lo llenaron** en 18 días de uso real. El motivo es el que vale — *"no me interesa quién la
+ * manda, sino qué cliente mandó, porque luego conozco bien el comprobante cuando entro al chat"*
+ * (Darío). El nombre del extracto no resuelve nada que el chat no resuelva mejor, y era una
+ * pregunta más en cada confirmación.
  *
- * **El caso normal es un botón y nada más.** Lo que se ve por defecto es "transfirió {el cliente}",
- * y con apretar "Sí, entró" su nombre viaja hasta el ledger. Sólo si fue otro hay que escribir, y
- * para eso está el enlace de al lado. Al revés —un campo vacío que hay que completar siempre—
- * el caso frecuente pagaría el precio del raro.
+ * ⚠️ **La columna `titular_real` sigue en la base**, vacía: no hay nada que migrar y volver atrás
+ * es dibujarlo de nuevo. Lo que se sacó es la pregunta, en los DOS formularios de confirmar, y el
+ * parámetro de `confirmarCompromiso` — para que ninguno de los dos pueda volver a mandarlo solo.
  */
 function Confirmar({ c, onListo, onCancelar }: {
   c: Compromiso
-  onListo: (monto: number, fecha: string, titular: string | null) => Promise<void>
+  onListo: (monto: number, fecha: string) => Promise<void>
   onCancelar: () => void
 }) {
   /**
@@ -286,8 +303,6 @@ function Confirmar({ c, onListo, onCancelar }: {
    */
   const [monto, setMonto] = useState(paraEditar(c.monto))
   const [fecha, setFecha] = useState(hoyISO())
-  const [otro, setOtro] = useState(!!c.titular_real && c.titular_real !== c.cliente_nombre)
-  const [titular, setTitular] = useState(c.titular_real || '')
   const [yendo, setYendo] = useState(false)
   const n = parsearMonto(monto)
   const falta = restanteTrasConfirmar(Number(c.monto), n)
@@ -310,33 +325,6 @@ function Confirmar({ c, onListo, onCancelar }: {
           aria-label="¿Qué día transfirió?" style={{ flex: '1 1 130px', fontSize: font.sm }} />
       </div>
 
-      {/* Quién transfirió: el cliente por defecto, y el otro nombre a un clic. */}
-      <div style={{ marginTop: 6, fontSize: font.xs, color: color.mut }}>
-        {otro ? (
-          <>
-            <input
-              className="mo-input"
-              value={titular}
-              onChange={(e) => setTitular(e.target.value)}
-              placeholder="¿a nombre de quién vino?"
-              aria-label="¿A nombre de quién vino la transferencia?"
-              style={{ fontSize: font.sm }}
-            />
-            <button type="button" onClick={() => { setOtro(false); setTitular('') }}
-              style={{ height: 'auto', marginTop: 4, padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: color.brand, textDecoration: 'underline' }}>
-              no, transfirió {c.cliente_nombre}
-            </button>
-          </>
-        ) : (
-          <>
-            Transfirió <b style={{ color: color.ink }}>{c.cliente_nombre}</b>.{' '}
-            <button type="button" onClick={() => setOtro(true)}
-              style={{ height: 'auto', padding: 0, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: color.brand, textDecoration: 'underline' }}>
-              vino a nombre de otro
-            </button>
-          </>
-        )}
-      </div>
       {falta > 0 && (
         <div style={{ fontSize: font.xs, color: color.mut, marginTop: 6 }}>
           Entró {plata(falta)} menos de lo comprometido. Ésta se cierra por lo que entró y queda una
@@ -344,8 +332,8 @@ function Confirmar({ c, onListo, onCancelar }: {
         </div>
       )}
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        <Button size="sm" variant="solid" tone="brand" disabled={!Number.isFinite(n) || n <= 0 || (otro && !titular.trim()) || yendo}
-          onClick={async () => { setYendo(true); try { await onListo(n, fecha, otro ? titular.trim() : null) } finally { setYendo(false) } }}>
+        <Button size="sm" variant="solid" tone="brand" disabled={!Number.isFinite(n) || n <= 0 || yendo}
+          onClick={async () => { setYendo(true); try { await onListo(n, fecha) } finally { setYendo(false) } }}>
           {yendo ? 'Registrando…' : 'Sí, entró'}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancelar}>Ahora no</Button>
@@ -551,7 +539,7 @@ function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onE
   puede: { prometer: boolean; confirmar: boolean }
   abierta: boolean
   onConfirmarAbrir: (id: string | null) => void
-  onConfirmar: (c: Compromiso, monto: number, fecha: string, titular: string | null) => Promise<void>
+  onConfirmar: (c: Compromiso, monto: number, fecha: string) => Promise<void>
   onEstado: (c: Compromiso, estado: 'prometido' | 'transferido' | 'cancelado') => void
   onIrAlCliente: ((c: Compromiso) => void) | null
 }) {
@@ -622,10 +610,9 @@ function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onE
             es una nota al pie —explica por qué ese compromiso no cruza con ninguna deuda— y antes
             salía en el color de alerta: era lo segundo que se veía, compitiendo con el monto.
           */}
-          {(!c.cliente_id || (c.titular_real && c.titular_real !== c.cliente_nombre) || c.viene_de) && (
+          {(!c.cliente_id || c.viene_de) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
               {!c.cliente_id && <Chapa>sin cargar en el sistema</Chapa>}
-              {c.titular_real && c.titular_real !== c.cliente_nombre && <Chapa>transfiere {c.titular_real}</Chapa>}
               {c.viene_de && <Chapa>resto de una anterior</Chapa>}
             </div>
           )}
@@ -648,7 +635,7 @@ function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onE
       {abierta && (
         <div style={{ borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px ${space[3]}px ${MARGEN - 3}px` }}>
           <Confirmar c={c} onCancelar={() => onConfirmarAbrir(null)}
-            onListo={(monto, f, titular) => onConfirmar(c, monto, f, titular)} />
+            onListo={(monto, f) => onConfirmar(c, monto, f)} />
         </div>
       )}
     </article>
@@ -676,6 +663,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
   const manuales = useCuentas()
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [verCerradas, setVerCerradas] = useState(false)
+  const [soloSuyas, setSoloSuyas] = useState(false)
   /**
    * Las dos preguntas de la pestaña, y son distintas: *"¿quién me tiene que pagar?"* (los compromisos)
    * y *"¿a quién le debemos y a qué alias?"* (los acreedores). Arranca en compromisos, que es la lista
@@ -710,6 +698,21 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
   )
 
   const cola = useMemo(() => colaDeCobranza(cobros.compromisos), [cobros.compromisos])
+
+  /**
+   * Las cerradas de la persona del chat.
+   *
+   * 🔑 **La llave no siempre es la misma**, y por eso no alcanza con comparar el id: al que todavía
+   * no está en Gestión Nube el compromiso lo guarda con el **teléfono** del chat y sin id. Son las
+   * mismas dos llaves con las que el formulario cuenta "cuánto ya le pedimos".
+   */
+  const puedeFiltrar = !!cliente && cola.cerradas.length > 0
+  const cerradas = useMemo(() => {
+    if (!soloSuyas || !cliente) return cola.cerradas
+    return cola.cerradas.filter((c) => (cliente.tipo === 'erp'
+      ? c.cliente_id === String(cliente.id)
+      : !c.cliente_id && c.cliente_telefono === cliente.telefono))
+  }, [cola.cerradas, soloSuyas, cliente])
   const abiertas = cola.porConfirmar.length + cola.esperando.length
   const puede = cobros.puede
   // Los compromisos de ESTE número que se anotaron antes de que el cliente existiera en Gestión Nube.
@@ -783,9 +786,9 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
                   })
                 : undefined,
             )}
-            onConfirmar={async (x, monto, fecha, titular) => {
+            onConfirmar={async (x, monto, fecha) => {
               await correr(async () => {
-                const r = await confirmarCompromiso(x.id, monto, fecha, titular)
+                const r = await confirmarCompromiso(x.id, monto, fecha)
                 setConfirmando(null)
                 return r.nueva
                   ? `Listo: ${plata(monto)} registrados en el dashboard. Como entró menos, quedó un compromiso nuevo por ${plata(Number(r.nueva.monto))}.`
@@ -985,28 +988,82 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
           <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}`, borderBottom: `1px solid ${color.line2}`, marginTop: space[3] }} />
           {verCerradas ? (
             <>
-              <Titulo cuantas={cola.cerradas.length}>Cerradas</Titulo>
+              <Titulo cuantas={cerradas.length}>{soloSuyas ? 'Cerradas de este cliente' : 'Cerradas'}</Titulo>
+
               {/*
-                ⚠️ **Era el último renglón con puntitos**: `entró $12.000 · Fulana → Contador` metía
-                cuatro datos de distinto peso en una sola línea. El desenlace es una chapita, el
-                monto es un monto, y quién le transfirió a quién se dice con palabras.
+                🔑 **El botón de "sólo las de este cliente"** (Darío, 21-sep-2026). Mirar para atrás
+                es casi siempre sobre la persona que se tiene adelante, y sin esto hay que recorrer
+                la lista de todos buscando su nombre.
+
+                ⚠️ **Filtra lo que llegó, no todo lo que existe**, y por eso el cartel de abajo lo
+                dice. El panel se trae los últimos 500 compromisos con los abiertos y los cerrados
+                en la misma bolsa. Al ritmo de hoy —12 en 18 días— eso está a años de distancia,
+                pero un buscador que se queda corto en silencio es exactamente el defecto que esta
+                pestaña ya pagó dos veces.
               */}
-              {cola.cerradas.slice(0, CERRADAS).map((c) => {
+              {puedeFiltrar && (
+                <div style={{ padding: `0 ${MARGEN}px ${space[2]}px` }}>
+                  <button type="button" onClick={() => setSoloSuyas((v) => !v)}
+                    style={{
+                      height: 'auto', padding: '3px 10px', borderRadius: radius.pill, fontSize: font.xs,
+                      fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                      border: `1px solid ${soloSuyas ? color.brandSolid : color.line2}`,
+                      background: soloSuyas ? color.brandBg : 'transparent',
+                      color: soloSuyas ? color.brand : color.mut,
+                    }}>
+                    {soloSuyas ? `✓ sólo las de ${cliente?.nombre || 'este cliente'}` : 'sólo las de este cliente'}
+                  </button>
+                </div>
+              )}
+
+              {cerradas.length === 0 && (
+                <div style={{ padding: `0 ${MARGEN}px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>
+                  De este cliente no hay ninguna cerrada entre las últimas que se trajeron.
+                </div>
+              )}
+
+              {/*
+                🔑 **El nombre del cliente manda, y se toca.** Era texto muerto: veías el nombre y
+                tenías que ir a buscar la conversación a mano. Y es todo lo que hace falta —
+                *"me interesa qué cliente mandó, porque luego conozco bien el comprobante cuando
+                entro al chat"* (Darío, 21-sep-2026). El día y el monto son para saber cuál de los
+                comprobantes del chat es éste.
+              */}
+              {cerradas.slice(0, CERRADAS).map((c) => {
                 const entro = c.estado === 'confirmado'
+                const entroMenos = entro && c.monto_confirmado != null && Number(c.monto_confirmado) < Number(c.monto)
+                const dia = elDia(entro ? c.confirmado_en : null)
+                const idCliente = Number(c.cliente_id)
+                const puedeIr = !!onIrAlCliente && (!!c.cliente_telefono || (Number.isFinite(idCliente) && idCliente > 0))
                 return (
                   <div key={c.id} style={{ background: color.surface, borderTop: `1px solid ${color.line2}`, padding: `6px ${MARGEN}px` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <Chapa tono={entro ? 'entro' : 'neutro'}>{entro ? 'entró' : 'se cayó'}</Chapa>
                       <Monto tam="chico" tono={entro ? undefined : color.mut2}
                         v={Number(entro ? (c.monto_confirmado ?? c.monto) : c.monto)} />
+                      {/* Entró de menos: cambia qué comprobante hay que buscar en el chat. */}
+                      {entroMenos && (
+                        <span style={{ fontSize: font.xs, color: color.mut2 }}>
+                          de {plata(Number(c.monto))}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: font.sm, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {puedeIr ? (
+                        <button type="button" onClick={() => onIrAlCliente(c)}
+                          title={c.cliente_telefono ? 'Abrir su chat' : 'Ver su ficha'}
+                          style={{ height: 'auto', padding: 0, background: 'none', border: 0, font: 'inherit', color: color.brand, cursor: 'pointer' }}>
+                          {c.cliente_nombre}
+                        </button>
+                      ) : c.cliente_nombre}
                     </div>
                     <div style={{ fontSize: font.xs, color: color.mut2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.cliente_nombre} le transfiere a {c.acreedor_nombre}
+                      {dia ? `${dia} · ` : ''}a la cuenta de {c.acreedor_nombre}
                     </div>
                   </div>
                 )
               })}
-              {cola.cerradas.length > CERRADAS && (
+              {cerradas.length > CERRADAS && (
                 <div style={{ padding: `6px ${MARGEN}px`, fontSize: font.xs, color: color.mut2 }}>
                   Se muestran las {CERRADAS} últimas. El resto está en Dirección → “A quién le debemos”.
                 </div>

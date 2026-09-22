@@ -3,7 +3,7 @@
 //   GET  ?recurso=compromisos                                → { ok, compromisos, puede }
 //   POST { recurso:'compromisos', action:'crear', compromiso }
 //   POST { recurso:'compromisos', action:'estado', id, estado }
-//   POST { recurso:'compromisos', action:'confirmar', id, monto_real, fecha, titular_real }
+//   POST { recurso:'compromisos', action:'confirmar', id, monto_real, fecha }
 //   POST { recurso:'compromisos', action:'vincular', id, cliente_id, cliente_nombre, cliente_store }
 //
 // Un compromiso es "este cliente le va a transferir a este acreedor". Se anota mientras la plata
@@ -66,7 +66,7 @@ function base() {
 
 const CAMPOS =
   'id, origen, objetivo_id, acreedor_id, acreedor_nombre, cuenta_alias, cuenta_cbu, cuenta_banco, cuenta_titular, ' +
-  'cliente_id, cliente_store, cliente_nombre, cliente_telefono, titular_real, monto, monto_confirmado, estado, ' +
+  'cliente_id, cliente_store, cliente_nombre, cliente_telefono, monto, monto_confirmado, estado, ' +
   'fecha_prometida, notas, operacion_id, pagos_dashboard, viene_de, creado_en, creado_por, ' +
   'confirmado_en, confirmado_por';
 
@@ -117,9 +117,6 @@ async function abrirElResto(c, montoReal, quien) {
       // ⚠️ El teléfono se copia también: sin él, el resto de un compromiso de alguien que
       // todavía no está en Gestión Nube nace huérfano y ya no se puede reenganchar.
       cliente_telefono: c.cliente_telefono,
-      // ⛔ El titular NO se hereda: el resto es OTRA transferencia y la puede mandar otra
-      // persona. Se vuelve a leer del extracto cuando esa entre.
-      titular_real: null,
       monto: falta,
       notas: `Lo que faltó del compromiso del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,
       viene_de: c.id,
@@ -316,9 +313,6 @@ export default async function handler(req, res) {
         // en Gestión Nube. Es con lo que se reengancha después (acción `vincular`). Llega ya
         // normalizado del panel: dos formas del mismo número no se comparan iguales.
         cliente_telefono: texto(c.cliente_telefono, 40),
-        // ⛔ `titular_real` NO se pide al prometer: ver el bloque de `confirmar`. Se acepta si
-        // viene —el cliente a veces lo dice en la charla— pero nadie lo tiene que adivinar.
-        titular_real: texto(c.titular_real, 160),
         monto,
         fecha_prometida: c.fecha_prometida || null,
         notas: texto(c.notas, 1000),
@@ -439,18 +433,17 @@ export default async function handler(req, res) {
       : new Date().toISOString().slice(0, 10);
 
     /**
-     * 🔑 **A nombre de quién vino la transferencia se pregunta ACÁ, no al comprometer**
-     * (planteado por Darío el 3-sep-2026).
+     * ⛔ **"A nombre de quién vino la transferencia" ya no se pregunta** (21-sep-2026). Lo pidió
+     * Darío el 3-sep y lo mandó a sacar él mismo, con la medición delante: **0 de 9 confirmaciones
+     * lo llenaron** en 18 días de uso real. *"No me interesa quién la manda, sino qué cliente
+     * mandó, porque luego conozco bien el comprobante cuando entro al chat."*
      *
-     * Al comprometer eso es una adivinanza: el compromiso la hace el cliente, pero la plata la manda muy
-     * seguido otro —el novio, el socio, la razón social— y en ese momento no se sabe cuál. Al
-     * confirmar sí se sabe, porque se está mirando el extracto: el nombre no se predice, se lee.
-     *
-     * ⚠️ Lo que llega acá **pisa** lo que se hubiera anotado al prometer, y está bien: uno es lo
-     * que se dijo y el otro es lo que pasó. Si no viene nada, queda lo que había (que puede ser
-     * nada, y entonces transfirió el cliente).
+     * ⚠️ **La columna `titular_real` sigue existiendo y queda siempre en null.** No se borró: son
+     * 0 filas, no hay nada que migrar, y el día que haga falta se vuelve a pedir sin tocar la base.
+     * ⛔ Y el handler **ya no la acepta del cuerpo**, ni al crear ni al confirmar: si volviera a
+     * pedirse, tiene que volver por los dos formularios a la vez y no por uno solo — que es
+     * exactamente la forma que ya fabricó los dos bugs de plata de este circuito.
      */
-    const titular = texto(body.titular_real, 160) ?? c.titular_real;
 
     /**
      * ── Cuenta manual: la plata entró y no hay a quién avisarle ──────────────
@@ -483,7 +476,6 @@ export default async function handler(req, res) {
         .update({
           estado: 'confirmado',
           monto_confirmado: montoReal,
-          titular_real: titular,
           // ⛔ `pagos_dashboard` queda en null y no es un olvido: no hubo pago del otro lado. El
           // CHECK de la base lo contempla desde `migrate-cuentas-manuales.sql`.
           confirmado_en: new Date().toISOString(),
@@ -536,19 +528,20 @@ export default async function handler(req, res) {
           fecha,
           instrumento: 'TRANSFERENCIA',
           /**
-           * 🔑 **Los DOS nombres, no uno.** Antes viajaba `titular_real || cliente_nombre`, o sea
-           * que si transfería un tercero el pago quedaba con el nombre del tercero y el id de la
-           * clienta — y de quién era la deuda no se podía leer, porque el dashboard no resuelve
-           * ids de Gestión Nube. Son las dos preguntas que se hacen cuando el acreedor dice que no
-           * le llegó: *de qué cliente era* y *de quién es este movimiento del extracto*.
+           * 🔑 **El cliente, con su id y con su nombre.** El id es de Gestión Nube y el dashboard
+           * no lo resuelve, así que sin el nombre al lado no se puede leer de quién era la deuda
+           * cuando el acreedor dice que no le llegó.
+           *
+           * ⛔ `titular` viaja siempre en null desde el 21-sep-2026: la puerta del dashboard lo
+           * sigue aceptando, pero acá ya no se pregunta a nombre de quién vino (ver arriba).
            */
           pagador: {
             cliente_id: c.cliente_id,
             nombre: c.cliente_nombre,
-            titular: titular && titular !== c.cliente_nombre ? titular : null,
+            titular: null,
           },
           pedido_por: quien,
-          notas: `Transferencia de ${c.cliente_nombre}${titular && titular !== c.cliente_nombre ? ` (a nombre de ${titular})` : ''}`,
+          notas: `Transferencia de ${c.cliente_nombre}`,
         }),
       });
       const d = await r.json().catch(() => null);
@@ -590,8 +583,6 @@ export default async function handler(req, res) {
       .update({
         estado: 'confirmado',
         monto_confirmado: montoReal,
-        // Lo que se leyó del extracto queda también acá: es lo que la lista de compromisos muestra.
-        titular_real: titular,
         pagos_dashboard: respuesta,
         confirmado_en: new Date().toISOString(),
         confirmado_por: quien,
