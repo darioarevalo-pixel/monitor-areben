@@ -7,6 +7,7 @@ import {
   buscarPorTipo,
   coberturaPorTipo,
   colgadasDeMas,
+  declaracionesFlojas,
   filasBuscar,
   filasSacar,
   partirRepetidas,
@@ -106,6 +107,13 @@ export function BalanceSector({
    * hasta ese día la pantalla ⛔ no distinguía las dos.
    */
   const afuera = useMemo(() => tocadoSinDeclarar(escaneos, items, elegidas), [escaneos, items, elegidas])
+
+  /**
+   * 🔴 **El aviso que faltaba el 21-sep** (`declaracionesFlojas`): qué tipos se declararon sin que
+   * el recorrido los haya caminado. El número ya estaba en pantalla —«77 %»— pero en un renglón de
+   * una lista de doce, y ⛔ no se lee como «este mandado va a pedir 58 prendas que están colgadas».
+   */
+  const flojas = useMemo(() => declaracionesFlojas(escaneos, items, elegidas), [escaneos, items, elegidas])
 
   /**
    * 🔴 **Las tachadas se mudan, ⛔ no desaparecen** (`partirTachadas`): quien mira tiene que poder
@@ -304,6 +312,28 @@ export function BalanceSector({
 
       {!!elegidas.length && (
         <div style={{ marginTop: space[4] }}>
+          {/* 🔴 **VA ARRIBA DEL NÚMERO, ⛔ no abajo ni al costado.** Quien mira esto está por bajar
+              el Excel y mandar a alguien al depósito: el aviso tiene que llegar antes que la lista,
+              porque después de leer «faltan exhibir 82» la decisión ya está tomada. */}
+          {!!flojas.length && (
+            <div style={{ fontSize: font.sm, padding: `${space[2]}px ${space[3]}px`, marginBottom: space[3], borderRadius: 8, background: color.warningBg, color: color.ink }}>
+              ⚠️ <b>Ojo con lo que declaraste.</b> Este recorrido ⛔ no caminó entero:
+              <ul style={{ margin: `${space[2]}px 0 0`, paddingLeft: 20 }}>
+                {flojas.map((f) => (
+                  <li key={f.tipo}>
+                    <b>{f.tipo}</b>: pasó por el lector el {Math.round(f.cubierto * 100)} %, así que <b>{f.sinVer}</b>{' '}
+                    {f.sinVer === 1 ? 'prenda' : 'prendas'} con stock ⛔ no {f.sinVer === 1 ? 'pasó' : 'pasaron'} por el lector.
+                  </li>
+                ))}
+              </ul>
+              <div style={{ marginTop: space[2] }}>
+                {/* 🔑 La consecuencia dicha en palabras del local, que es lo que ⛔ no decía el «77 %». */}
+                Esas prendas van a aparecer abajo como si estuvieran en el depósito, y muchas pueden estar <b>colgadas en otro mueble</b> que
+                nadie caminó. Si podés, pasá el lector por esos muebles antes de mandar a buscar nada.
+              </div>
+            </div>
+          )}
+
           {/* 🔴 **UN número y que sea el que importa** (21-sep-2026, Bruno: «me interesa que se
               exhiba»): cuántas prendas distintas ⛔ no están colgadas. Las unidades se sacaron —que
               el sistema tenga 8 en el depósito ⛔ no cambia la tarea, que es colgar una—. */}

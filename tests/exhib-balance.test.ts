@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, colgadasDeMas, partirRepetidas, filasSacar, HEADER_SACAR, MOTIVOS, type Tachada, type Repetida } from '../lib/exhib/balance'
+import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, colgadasDeMas, partirRepetidas, filasSacar, HEADER_SACAR, MOTIVOS, COBERTURA_FIABLE, declaracionesFlojas, type Tachada, type Repetida } from '../lib/exhib/balance'
 import { aEscaneo, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
@@ -412,5 +412,42 @@ describe('otrasEnMedio — lo que la app puede y ⛔ no puede afirmar', () => {
     const vieja: EscaneoLibre = { ...en(TOP_A, 0), veces: 2, horas: null, ultimo_en: new Date(Date.parse('2026-09-21T13:00:00.000Z') + 60000).toISOString() }
     const l = colgadasDeMas([vieja, en(TOP_C, 20)])
     expect(l[0]).toMatchObject({ otrasEnMedio: 1, segundos: 60 })
+  })
+})
+
+/**
+ * 🔴 **El aviso que faltaba el 21-sep-2026.** Se declaró TOP con 77 % caminado, el mandado salió con
+ * 58 tops que nunca habían pasado por el lector, y la chica volvió del depósito diciendo que muchos
+ * ⛔ no estaban: estaban colgados en otro mueble. Bruno: *«no es tan fiable el chequeo y necesito
+ * que sea fiable, porque sino me hace trabajar de más»*.
+ */
+describe('declaracionesFlojas — declarar lo que el recorrido ⛔ no caminó', () => {
+  it('avisa del tipo declarado que ⛔ no se caminó, con cuántas prendas quedaron sin ver', () => {
+    // De 3 TOP con stock se escaneó 1 ⇒ 33 %.
+    const f = declaracionesFlojas(escanear([TOP_A]), LOCAL, ['TOP'])
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({ tipo: 'TOP', sinVer: 2 })
+    expect(f[0].cubierto).toBeCloseTo(1 / 3)
+  })
+
+  it('⛔ no avisa del que se caminó entero', () => {
+    expect(declaracionesFlojas(escanear([TOP_A, TOP_B, TOP_C]), LOCAL, ['TOP'])).toEqual([])
+  })
+
+  /** ⚠️ El corte es 90 %: abajo de eso «⛔ no pasó por el lector» ⛔ no quiere decir «⛔ no está». */
+  it('el corte es COBERTURA_FIABLE', () => {
+    expect(COBERTURA_FIABLE).toBe(0.9)
+  })
+
+  it('primero el más flojo, que es el que más ensucia el mandado', () => {
+    const corsets = [CORSET, { ...CORSET, barcode: 'b7', size: 'L' }, { ...CORSET, barcode: 'b8', size: 'XL' }]
+    const local = [...LOCAL, ...corsets.slice(1)]
+    // TOP: 1 de 3 (33 %) · CORSET: 2 de 3 (66 %)
+    const f = declaracionesFlojas(escanear([TOP_A, CORSET, corsets[1]]), local, ['CORSET', 'TOP'])
+    expect(f.map((x) => x.tipo)).toEqual(['TOP', 'CORSET'])
+  })
+
+  it('sin nada declarado ⛔ no avisa nada', () => {
+    expect(declaracionesFlojas(escanear([TOP_A]), LOCAL, [])).toEqual([])
   })
 })

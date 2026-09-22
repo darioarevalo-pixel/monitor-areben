@@ -139,6 +139,47 @@ export function coberturaPorTipo(escaneos: EscaneoLibre[], conStock: ExhibItem[]
 }
 
 /**
+ * **Desde qué cobertura una declaración se puede creer.**
+ *
+ * 🔴 **Abajo de esto, «no pasó por el lector» ⛔ no quiere decir «⛔ no está colgado»** — quiere
+ * decir que nadie lo miró. Y ésa es la diferencia entre un mandado y una vuelta al pedo.
+ * 📊 **Pasó en el salón dos veces en dos días**: el 21-sep se declaró TOP con **77 %** caminado y el
+ * mandado salió con 58 tops que nunca habían pasado por el lector; la chica que fue al depósito
+ * volvió diciendo que **muchos no estaban** —estaban colgados en otro mueble—. Bruno: *«no es tan
+ * fiable el chequeo y necesito que sea fiable, porque sino me hace trabajar de más»*.
+ *
+ * 🔑 **El número no es nuevo: la pantalla ya lo mostraba.** Lo que faltaba era decir **la
+ * consecuencia**, y decirla donde se toma la decisión. Un «77 %» en un renglón de una lista de doce
+ * ⛔ no se lee como «este mandado va a mandar a buscar 58 prendas que están colgadas».
+ *
+ * ⚠️ **Avisa, ⛔ no bloquea**, y es a propósito: la regla de la sección es que **la app pone el
+ * número y la persona decide** (ver `coberturaPorTipo`). Puede haber razones para declarar al 80 %
+ * —un sector chico caminado entero donde el sistema tiene stock que ⛔ no está—, y la app ⛔ no las
+ * conoce. Lo que ⛔ no puede volver a pasar es que se declare al 77 % **sin enterarse**.
+ */
+export const COBERTURA_FIABLE = 0.9
+
+/** Un tipo declarado con poca cobertura, con cuántas prendas suyas ⛔ no pasaron por el lector. */
+export type DeclaracionFloja = { tipo: string; cubierto: number; sinVer: number }
+
+/**
+ * **Los tipos declarados que ⛔ no llegan a `COBERTURA_FIABLE`**, del más flojo al menos.
+ *
+ * 🔑 Devuelve **cuántas prendas suyas ⛔ no pasaron por el lector**, ⛔ no el porcentaje solo: es el
+ * número que la persona va a ver en el mandado dentro de diez segundos, y ponerlos uno al lado del
+ * otro es lo que convierte el aviso en una cuenta y ⛔ no en una advertencia genérica.
+ */
+export function declaracionesFlojas(escaneos: EscaneoLibre[], conStock: ExhibItem[], tipos: string[]): DeclaracionFloja[] {
+  if (!tipos.length) return []
+  const porTipo = new Map(coberturaPorTipo(escaneos, conStock).map((c) => [c.tipo, c]))
+  return tipos
+    .map((t) => porTipo.get(tipoDePrenda(t)))
+    .filter((c): c is CoberturaTipo => !!c && c.cubierto < COBERTURA_FIABLE)
+    .map((c) => ({ tipo: c.tipo, cubierto: c.cubierto, sinVer: c.universo - c.vistas }))
+    .sort((a, b) => a.cubierto - b.cubierto)
+}
+
+/**
  * **El mandado, por tipo de prenda**: lo que tiene stock en el Local de los tipos declarados y ⛔ no
  * pasó por el lector en todo el recorrido.
  *

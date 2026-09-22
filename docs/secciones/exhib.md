@@ -247,6 +247,25 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   Enter solo, en decenas de ms. ⚠️ Vale **sólo para el mismo código**, y el descarte **se dice en
   pantalla**: callarlo sería inventar —o perder— una unidad.
 
+- 🆕 🔴 🔑 **DECLARAR UN TIPO QUE EL RECORRIDO ⛔ NO CAMINÓ SE AVISA EN LA CARA** (22-sep-2026,
+  `COBERTURA_FIABLE` + `declaracionesFlojas`). 📊 **Costó una vuelta al pedo en el salón**: el
+  21-sep se declaró TOP con **78 %** caminado, el mandado salió con **55 tops** que nunca habían
+  pasado por el lector y la chica volvió del depósito diciendo que **muchos ⛔ no estaban** —estaban
+  colgados en otro mueble—. Bruno: *«no es tan fiable el chequeo y necesito que sea fiable, porque
+  sino me hace trabajar de más»*.
+  🔑 **El número YA estaba en pantalla.** Lo que faltaba era **la consecuencia**, dicha **arriba del
+  mandado y ⛔ no al costado**: un «78 %» en un renglón de una lista de doce ⛔ no se lee como «este
+  mandado va a pedir 55 prendas que están colgadas». Ahora dice, tipo por tipo, **cuántas prendas
+  con stock ⛔ no pasaron por el lector** y que pueden estar en otro mueble.
+  ⚠️ **Avisa y ⛔ no bloquea**, a propósito: la regla de la sección es que la app pone el número y la
+  persona decide, y puede haber razones para declarar al 80 %. Lo que ⛔ no puede volver a pasar es
+  declarar al 78 % **sin enterarse**.
+  📌 El corte es **90 %** (`COBERTURA_FIABLE`). Abajo de eso, «⛔ no pasó por el lector» ⛔ no quiere
+  decir «⛔ no está colgado»: quiere decir que **nadie lo miró**.
+  📊 Medido sobre los 6 recorridos que existen (779 filas, 812 unidades): **6 lecturas fallidas,
+  0,8 %**, y ⛔ ninguna se perdió en la subida. **El lector mide bien; lo que fallaba era la
+  inferencia.**
+
 - 🆕 🔴 🔑 **«¿DOS PRENDAS COLGADAS, O LA MISMA PASADA DOS VECES?» — LO DECIDE QUÉ SE ESCANEÓ EN EL
   MEDIO** (21-sep-2026, `otrasEnMedio` en `colgadasDeMas` + `horas` en `libre.ts` +
   `sql/migrate-exhib-horas.sql`). Bruno, mirando las 23 colgadas de más: *«¿estás seguro que esos
