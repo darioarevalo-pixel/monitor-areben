@@ -117,7 +117,14 @@ prometió, cuánto, a qué cuenta, y si ya pasó.
   compromisos en 18 días**, o sea que el corte está a años de distancia — ⛔ no es motivo para
   frenar nada hoy. Lo que lo va a volver urgente es querer el historial completo de un cliente
   (ver el bloque del 21-sep, a la tarde).
-- ⚠️ El panel **no puede cargar la fecha comprometida**, así que la cola por urgencia es decorativa.
+- ▶️ **El panel no puede cargar la fecha comprometida, y es el candidato más claro.** 📊 Medido el
+  22-sep-2026: **15 compromisos, 0 con fecha**, y **14 de los 15 se anotaron desde el panel** — el
+  único formulario que sí la tiene es el de la sección, que nadie usa para anotar. ⛔ Con eso queda
+  apagada maquinaria que YA está escrita y andando: la chapa roja de *«vencida hace N días»*, el
+  orden por urgencia (`porUrgencia`) y la línea de *«para dentro de N días»*. ⚠️ No es una feature
+  nueva: es un casillero que falta. El gesto que corresponde es el de los **plazos de la solapa
+  Cliente** (mañana · 3 · 7 · 15 · 30 + calendario), que es la pregunta real de la charla —
+  *«¿para cuándo me lo transferís?»*.
   Y `cliente_store` queda siempre en `'bdi'`.
 - 🔴 **En el otro repo**: `POST /api/puente/pagos` **acepta cualquier monto sin compararlo con la
   deuda**. Es la red que hubiera atajado el ×100 antes del ledger.
