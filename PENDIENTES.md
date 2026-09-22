@@ -13,6 +13,35 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ CATEGORÍAS DE LOS ÚLTIMOS INGRESOS DE ZATTIA — 22-sep-2026 (dictado, medido, ⛔ SIN APLICAR)
+
+Bruno: *«quiero ver si podemos asignar categorías a los productos de los últimos ingresos que no
+se le pusieron a algunos»*. Medido contra el audit con `refresh=1` (22-sep, 842 productos): **41
+prendas sin categoría de tipo** — 25 del **2-sep** con sólo `NEW IN`, y 16 del **19-sep** con
+**NINGUNA** (ni `NEW IN`, que el resto de su ingreso sí tiene). 21 y 22-sep: completos.
+
+▶️ **Lo que falta para aplicar: que Bruno diga «dale» y que NADIE esté editando en el admin de TN**
+([la lista completa se pisa](~/.claude/…/feedback_tn_categorias_lista_completa_se_pisan.md)).
+Se AGREGA sin sacar nada (`accion:'asignar'`, `POST bdi-catalogo/api/tn-categorias?store=zattia`
+con `authKv`), se guarda el audit ANTES, y se verifica con **dos relecturas** con `refresh=1`.
+
+| prendas | se agrega (ID, árbol VIEJO, ⛔ no el de WINTER SALE) |
+|---|---|
+| MINI: FLAME, RALPH, CALA, HUSH, GARNET, FEARLESS, SOLENA, CORALIE (son faldas: tienen talles) | `29904417` SHORTS, MINIS y FALDAS |
+| SHORT: BRICK, VITA, CHAPTER, MINT, CLYDE, CROC, ZEBRA, BLAKE, CLIFF, ANGELIC, GAIA, NATE, EDGE, TALIA, TULUM, CANNES, SOLEIL, GUST, NALA · SKORT DRIP | `29904417` |
+| los shorts de JEAN: CHAPTER, MINT, CROC, ZEBRA, BLAKE, CLIFF, ANGELIC, GAIA, NATE, EDGE (ficha: denim rígido) + CLYDE, TALIA (por foto) | además `32058681` DENIM + `35578455` SHORTS (la combinación de SHORT ARES/NIX/KAOS) |
+| BERMUDA: DARK CAMO, LIGHT CAMO, FOUR, PROYECT, ZAHA, AMBER, SEOUL (ficha: denim rígido) | `32058681` DENIM + `34086035` BERMUDAS |
+| MUSCULOSA: ALLEY, MYA, FLUTTER, GOA, OLYMPIA | `29904416` TOPS Y BODIES |
+| REMERA AVA | `29904418` REMERAS |
+| las 16 del 19-sep | además `26928851` NEW IN |
+
+⛔ **Afuera hasta que alguien los mire**: SOLEIL (estampa cebra), TULUM, CANNES, GUST (ocultos, sin
+foto) — ⛔ no se sabe si son jean ⇒ sólo `29904417`. BRICK (ecocuero) y NALA ⛔ van a DENIM.
+
+🔴 **Apareció un DENIM DUPLICADO NUEVO**: `41079779` DENIM → `41079780` JEANS. Los 4 jeans del 19-sep
+(GRIT, CAPRI, ELISE, AMBERLY) están AHÍ, y los otros 75 jeans + shorts + bermudas en el viejo
+`32058681` → `34086034` JEANS. ⛔ No tocar sin que Bruno diga **cuál de los dos está en el menú**.
+
 ## 🏁 LA FALLA SE DESCONTABA DE LA SECCIÓN, ⛔ NO DE DONDE ESTABA LA PRENDA — 21-sep-2026 (dictado, y hecho)
 
 > «Revisar esto: cuando se procesa un producto como falla en este caso me parece que toco el stock
