@@ -1573,6 +1573,19 @@ que la publica** y quien apretó ⛔ no llega a ver si se verificó. Misma lecci
 
 ▶️ 🔴 **LO QUE FALTA ES QUE BRUNO LA CAMINE**: publicar **uno** desde la tarjeta nueva. Es el único
 eslabón que ningún test puede ejercer, y el que dice si la fricción se fue o cambió de lugar.
+
+🆕 **22-sep-2026 — Bruno la caminó y trajo dos cosas** (dictado):
+> «no deja publicar si se repite algo de la ficha, pero eso no tiene mucho sentido […] y cuando
+> cambio algo, tampoco me deja publicar o me queda en un bug como que si me deja pero apreto y no carga»
+
+🏁 **Repetir un bullet ahora AVISA y ⛔ no frena** (`aviso: true` + `frenan()` en `formato.core.js`,
+la única cuenta que usan el botón y `desc-borradores.mjs`). Sigue pidiéndole el reintento al modelo.
+🏁 **El botón que «apreto y no carga»**: editar el párrafo y apretar Publicar dispara el blur ANTES
+que el click; el guardado del blur (que recarga la cola entera) ponía `guardando` y el click caía
+sobre un botón recién apagado. Ahora el botón ⛔ roba el foco (`onMouseDown` preventDefault), ⛔ se
+apaga por `guardando`, y si hay un guardado en viaje lo ESPERA antes de `revisar`.
+▶️ **Lo de «acortar la ficha»**: ya está hecho desde el 8-sep (`SE_PUBLICAN` = tela, tiro, detalle).
+Si Bruno quiere ir más lejos (sólo tela, o nada) es una decisión suya, ⛔ no deducirla.
 ▶️ **Lo que esto ⛔ NO resuelve, y sigue abierto**: la ficha sigue peleada con la foto en 4 de 20
 —la tarjeta hace que se VEA, ⛔ no que no pase— y **`escote` sigue con 23 «polera» contra 2 «mao»**,
 que es la 2ª cosa que él nombró el 7-sep y ⛔ no se tocó.

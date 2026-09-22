@@ -28,7 +28,7 @@
  */
 
 import { authKv, leerEnv } from './lib/kv-auth.mjs'
-import { validarParrafo, validarTip } from '../lib/tn-desc/formato.core.js'
+import { frenan, validarParrafo, validarTip } from '../lib/tn-desc/formato.core.js'
 import { bulletsDe, insumosDe, sinTela } from '../lib/tn-desc/atributos.core.js'
 import { prosaDe } from '../lib/tn-desc/prosa.core.js'
 import { familiaDe } from '../lib/tn-desc/atributos.core.js'
@@ -211,9 +211,12 @@ async function guardar() {
   // 🔴 EL VALIDADOR REAL, el mismo que exige el botón de aprobar. Si acá no pasa, no se guarda.
   const ctx = { variantes: valoresDe(p), nombre: p.name, bullets }
   const problemas = [...validarParrafo(parrafo, ctx), ...validarTip(tip, ctx)]
-  if (problemas.length) {
+  // ⚠️ Lo que es sólo AVISO (repetir un bullet, desde el 22-sep) se muestra y ⛔ no frena: es la
+  // misma cuenta que hace el botón de publicar, vía `frenan`.
+  for (const x of problemas) if (x.aviso) console.error(`   ⚠️ aviso, no frena — ${x.campo}: ${x.motivo}`)
+  if (frenan(problemas).length) {
     console.error(`⛔ ${p.name}: el validador lo rechaza, así que NO se guardó.`)
-    for (const x of problemas) console.error(`   - ${x.campo}: ${x.motivo}`)
+    for (const x of frenan(problemas)) console.error(`   - ${x.campo}: ${x.motivo}`)
     process.exit(1)
   }
 

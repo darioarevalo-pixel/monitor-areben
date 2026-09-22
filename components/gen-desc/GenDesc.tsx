@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   Badge, Button, Card, color, EmptyState, Field, font, Input, KpiCard, Lightbox, Notice, Select, Tabs, Toolbar, useToast,
 } from '@/components/ui'
@@ -8,7 +8,7 @@ import { useSesion } from '@/components/SesionProvider'
 import { useGenDesc, type FilaCola, type ProductoTn, type ResultadoIA } from './useGenDesc'
 import { partir } from '@/lib/tn-desc/bloques'
 import { MODELOS, MODELO_POR_DEFECTO } from '@/lib/tn-desc/redactor.core.js'
-import { MAX_PARRAFO, MAX_TIP, generarHtml, validarParrafo, validarTip, type Chivato } from '@/lib/tn-desc/formato'
+import { MAX_PARRAFO, MAX_TIP, frenan, generarHtml, validarParrafo, validarTip, type Chivato, type Problema } from '@/lib/tn-desc/formato'
 import { ATRIBUTOS, FAMILIAS, MAX_PROPUESTA, NO_APLICA, NO_SE, atributosDe, atributosExtra, bulletsDe, cargadosDe, esPalabraPropuesta, insumosDe, opcionesDe, sinTela, type Atributo, type Cargados, type Familia, type OpcionesAtributo } from '@/lib/tn-desc/atributos'
 import { GRUPOS, cuidadosDe } from '@/lib/tn-desc/cuidados.core.js'
 import { familiaDeProducto, listaDe, paraRevisar, paraVolverAMirar, sinFicha, sinMedidas, ultimasTandas, type Filtro } from '@/lib/tn-desc/lista.core'
@@ -396,6 +396,8 @@ function FilaProducto({
     () => [...validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }), ...validarTip(tip, { variantes: p.variantes })],
     [parrafo, tip, p.variantes, p.name, bullets],
   )
+  // 🆕 Lo que FRENA el botón: todo menos los avisos (repetir un bullet, desde el 22-sep-2026).
+  const bloquean = useMemo(() => frenan(problemas), [problemas])
   /** Los cuidados que le tocan a esta prenda por su tela. `null` si todavía no tiene ninguna. */
   const cuidados = useMemo(() => cuidadosDe(ficha), [ficha])
   /** 🔴 Sin tela no se redacta ni se publica: la tela es la que decide los cuidados. */
@@ -653,18 +655,9 @@ function FilaProducto({
                 <Input value={tip} onChange={(e) => setTip(e.target.value)} />
               </Field>
 
-              {!vacio && problemas.length > 0 && (
-                <Notice tone="warning">
-                  <b>Falta corregir:</b>
-                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                    {problemas.map((x, i) => (
-                      <li key={i}>{x.motivo}</li>
-                    ))}
-                  </ul>
-                </Notice>
-              )}
+              {!vacio && <Problemas problemas={problemas} />}
 
-              {!vacio && problemas.length === 0 && (
+              {!vacio && bloquean.length === 0 && (
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Cómo va a quedar</div>
                   <div
@@ -680,7 +673,7 @@ function FilaProducto({
                 </Button>
                 <Button
                   size="sm"
-                  disabled={guardando || vacio || problemas.length > 0 || !fila?.borrador}
+                  disabled={guardando || vacio || bloquean.length > 0 || !fila?.borrador}
                   onClick={() => void correr({ op: 'aprobar' })}
                 >
                   Aprobar
@@ -1103,6 +1096,8 @@ function TarjetaRevision({
     () => [...validarParrafo(parrafo, { variantes: p.variantes, nombre: p.name, bullets }), ...validarTip(tip, { variantes: p.variantes })],
     [parrafo, tip, p.variantes, p.name, bullets],
   )
+  // 🆕 Lo que FRENA el botón: todo menos los avisos (repetir un bullet, desde el 22-sep-2026).
+  const bloquean = useMemo(() => frenan(problemas), [problemas])
   const faltaTela = useMemo(() => sinTela(ficha), [ficha])
   const vacio = !parrafo.trim()
   const sucio = parrafo !== (fila?.borrador?.parrafo || '') || tip.trim() !== (fila?.borrador?.tip || '')
@@ -1120,11 +1115,24 @@ function TarjetaRevision({
     ...(fila?.borrador?.chivatos ? { chivatos: fila.borrador.chivatos } : {}),
   })
 
+  /**
+   * El guardado que está en viaje, si hay uno. Publicar lo ESPERA en vez de quedar gris.
+   *
+   * 🔴 Bruno, 22-sep-2026: «cuando cambio algo… me deja pero apreto y no carga». El guardado al
+   * salir del campo dura lo que tarda en recargar la cola entera, y mientras tanto `guardando`
+   * dejaba el botón deshabilitado: editar el párrafo y apretar Publicar dispara el blur ANTES que
+   * el click, así que el click caía sobre un botón que se acababa de apagar y no pasaba nada.
+   */
+  const enViaje = useRef<Promise<unknown> | null>(null)
+
   /** 🔑 Se guarda al SALIR del campo, sin botón. Si no cambió nada, ⛔ no se escribe. */
   const alSalir = async () => {
     if (!sucio || vacio) return
     setGuardando(true)
-    await onGuardarTexto(textoDeAhora())
+    const viaje = onGuardarTexto(textoDeAhora())
+    enViaje.current = viaje
+    await viaje
+    if (enViaje.current === viaje) enViaje.current = null
     setGuardando(false)
   }
 
@@ -1263,16 +1271,7 @@ function TarjetaRevision({
             </div>
           )}
 
-          {!vacio && problemas.length > 0 && (
-            <Notice tone="warning">
-              <b>Falta corregir:</b>
-              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                {problemas.map((x, i) => (
-                  <li key={i}>{x.motivo}</li>
-                ))}
-              </ul>
-            </Notice>
-          )}
+          {!vacio && <Problemas problemas={problemas} />}
           {faltaTela && (
             <Notice tone="warning">Sin tela cargada no sale a la tienda: la tela decide los cuidados de la prenda.</Notice>
           )}
@@ -1293,10 +1292,17 @@ function TarjetaRevision({
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button
               size="sm"
-              disabled={publicando || guardando || vacio || problemas.length > 0 || faltaTela}
+              disabled={publicando || vacio || bloquean.length > 0 || faltaTela}
+              // 🔑 Que apretarlo ⛔ le saque el foco al párrafo: `revisar` ya guarda el texto que
+              // está en pantalla, así que el guardado del blur sería un segundo viaje compitiendo
+              // con éste —y el que llega último deja la fila en «borrador»—.
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 void (async () => {
                   setPublicando(true)
+                  // Un guardado que salió antes (se salió del campo y recién después se apretó)
+                  // termina primero: si no, puede aterrizar DESPUÉS del aprobado y bajarlo.
+                  if (enViaje.current) await enViaje.current
                   await onPublicar(textoDeAhora(), conservarResiduo)
                   setPublicando(false)
                 })()
@@ -1409,4 +1415,33 @@ function Chivatos({
 function etiquetaDe(campo: string): string {
   const a = (ATRIBUTOS as Record<string, { label?: string }>)[campo]
   return (a && a.label) || campo
+}
+
+/**
+ * 🆕 Los problemas del texto, en dos cajas: lo que FRENA publicar y lo que es sólo un aviso.
+ * 🔴 Separados desde el 22-sep-2026: con los dos en la misma caja «Falta corregir», un aviso se lee
+ * como la razón por la que el botón está gris, y ⛔ lo es.
+ */
+function Problemas({ problemas }: { problemas: Problema[] }) {
+  const duros = frenan(problemas)
+  const avisos = problemas.filter((x) => x.aviso)
+  return (
+    <>
+      {duros.length > 0 && (
+        <Notice tone="warning">
+          <b>Falta corregir:</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {duros.map((x, i) => (
+              <li key={i}>{x.motivo}</li>
+            ))}
+          </ul>
+        </Notice>
+      )}
+      {avisos.length > 0 && (
+        <div style={{ fontSize: font.xs, color: color.mut }}>
+          {avisos.map((x) => x.motivo).join(' · ')} — no frena, se puede publicar igual.
+        </div>
+      )}
+    </>
+  )
 }

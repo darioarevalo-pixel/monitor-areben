@@ -23,6 +23,7 @@ import {
   validarTip as validarTipJs,
   MAX_TIP as MAX_TIP_JS,
   generarHtml as generarHtmlJs,
+  frenan as frenanJs,
 } from './formato.core.js'
 
 /** Un bullet ya compuesto. La etiqueta la decide `atributos.core.js`, no quien escribe. */
@@ -73,7 +74,13 @@ export type Contexto = {
   bullets?: Bullet[]
 }
 
-export type Problema = { campo: string; motivo: string }
+/** `aviso: true` = se muestra pero ⛔ no frena aprobar ni publicar (ver `frenan`). */
+export type Problema = { campo: string; motivo: string; aviso?: boolean }
+
+/** Los problemas que frenan aprobar y publicar: todos menos los avisos. */
+export function frenan(problemas: Problema[]): Problema[] {
+  return frenanJs(problemas) as Problema[]
+}
 
 /**
  * Los problemas del párrafo. Vacío = se puede aprobar. La implementación está en

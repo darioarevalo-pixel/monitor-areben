@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { validarParrafo, validarTip, generarHtml, tipoDe, MAX_PARRAFO, PRIMEROS } from '../lib/tn-desc/formato'
+import { validarParrafo, validarTip, generarHtml, tipoDe, frenan, MAX_PARRAFO, PRIMEROS } from '../lib/tn-desc/formato'
 import type { Contexto } from '../lib/tn-desc/formato'
 
 const ctx: Contexto = {
@@ -111,6 +111,20 @@ describe('🆕 no repite lo que ya dicen los bullets (27-ago-2026)', () => {
       bullets: [{ etiqueta: 'Detalle', texto: 'diseño asimétrico de un solo hombro' }],
     }
     expect(motivos('Top de un solo hombro con diseño asimetrico y caída fluida.', c)).toContain('repite')
+  })
+
+  it('🆕 22-sep-2026: repetir AVISA pero ⛔ NO FRENA publicar (Bruno: «no tiene mucho sentido»)', () => {
+    const ps = validarParrafo('Camisa de gasa liviana que resuelve el día.', ctx)
+    expect(ps.map((x) => x.motivo)).toContain('repite lo que ya dicen los bullets (gasa)')
+    expect(ps.find((x) => x.motivo.startsWith('repite'))?.aviso).toBe(true)
+    expect(frenan(ps)).toEqual([])
+  })
+
+  it('🆕 un aviso ⛔ tapa un problema duro: si además nombra un color, frena igual', () => {
+    const c: Contexto = { ...ctx, variantes: ['BLANCO'] }
+    const ps = validarParrafo('Camisa de gasa blanco que resuelve el día.', c)
+    expect(frenan(ps).map((x) => x.motivo).join(' ')).toContain('BLANCO')
+    expect(frenan(ps).some((x) => x.motivo.startsWith('repite'))).toBe(false)
   })
 
   it('las palabras cortas no cuentan: «de», «con» y «que» están en todos lados', () => {
