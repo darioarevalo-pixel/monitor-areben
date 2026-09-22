@@ -54,8 +54,9 @@ quien la carga, y que el negativo quede de ese lado es lo que después deja arre
 
 ## Lo que ya se rompió acá
 
-- **Las dos ventas mal ubicadas de Zattia siguen mal en GN** (28688 y 28587): el arreglo del código
-  ⛔ no las corrige. Es una mano en Gestión Nube.
+- **Las dos ventas mal ubicadas de Zattia (28688 y 28587) se arreglaron a mano**, con una
+  transferencia de 1 u Local → Depósito: el arreglo del código ⛔ no corrige lo ya escrito en GN.
+  ⚠️ **Queda TOP MONTANA Negro en −1** (venta 21220, dic-2025).
 - **«Se puede rehacer desde Administración» es una promesa falsa**: cuando falta la credencial la
   falla queda cargada y sin descontar, y ⛔ **no existe ningún botón que rehaga esa venta**.
 

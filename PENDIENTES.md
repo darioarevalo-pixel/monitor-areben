@@ -45,9 +45,13 @@ dos ubicaciones ⇒ decía **«stock 2»**, que eran las 2 del Local, con el dep
   16 tests): las 4 del Local ⛔ no se mueven, las 3 del Depósito pasan al Local, y ninguna de las 7
   sale de un lado que ⛔ no tiene la unidad. Suite entera: **380 verdes**.
 
-▶️ **Mano de Bruno, y el código ⛔ NO la hace**: las ventas **28688** y **28587** siguen mal en GN.
-Se arregla a mano —ajuste de stock de 1 u Local → Depósito en cada una, o anular y rehacer—: **GN
-⛔ no anula ni edita por API** (`api/crear-venta.js`). Después, `sync-inventario` a mano.
+✅ **Las dos ventas mal ubicadas, ARREGLADAS** (21-sep, Bruno, transferencia de 1 u Local →
+Depósito en cada una). Verificado **contra GN en vivo**, ⛔ no contra el espejo: TOP ALAIA CELESTE
+quedó `Deposito=0 · Local=1` y SHORT MAITE S `Deposito=0 · Local=0`. **GN ⛔ no anula ni edita por
+API** (`api/crear-venta.js`), así que era a mano o nada. ⚠️ El espejo del Monitor ⛔ no lo ve hasta
+que corra **`sync-inventario`, que es sólo a mano**.
+▶️ **Queda el tercero: TOP MONTANA Negro sigue en `Deposito=-1 · Local=1`** (venta 21220, dic-2025,
+cargada a mano en GN). Mismo arreglo, si se quiere.
 ▶️ **Sin hacer, misma forma**: `pasarAFallas`, `descontarReemplazo` y `descontarRegaladas`
 (`lib/reclamos/cliente.ts`) **siguen fijando `'deposito'`** ⇒ en BDI muerde igual.
 ▶️ **Y el botón que falta**: si falta la credencial, la falla queda cargada **sin descontar** y la
