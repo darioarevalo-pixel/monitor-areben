@@ -213,12 +213,19 @@ export function buscarItem(items: ExhibItem[], code: string): ExhibItem | null {
  *
  * 🔑 **Es una lista corta y a mano, y está bien que lo sea.** 📊 Medido sobre los **2.819 productos**
  * de Zattia el 21-sep-2026: las 76 palabras iniciales del catálogo son tipos de prenda de una sola
- * palabra salvo estas cuatro. La única que pesa es **BABY TEE (303 productos)**; las otras tres son
- * de 1 a 4. ⛔ **No se adivina**: una regla del tipo «si la primera palabra siempre viene seguida de
- * la misma segunda, son dos» convierte en compuesto a todo tipo que tenga **un solo producto**
- * —«SAQUITO VENECIA», «MONO TIARE», «PALAZO BRIANNA»— y el desplegable se llena de modelos.
+ * palabra salvo éstas. La que más pesa es **BABY TEE (303 productos)**. ⛔ **No se adivina**: una
+ * regla del tipo «si la primera palabra siempre viene seguida de la misma segunda, son dos»
+ * convierte en compuesto a todo tipo que tenga **un solo producto** —«SAQUITO VENECIA», «MONO
+ * TIARE», «PALAZO BRIANNA»— y el desplegable se llena de modelos.
+ *
+ * 🔴 **`MINI BAG` se sumó el 22-sep-2026, y lo encontró el salón.** Caminando el sector de minis, el
+ * mandado pedía colgar «MINI BAG DISTRICT Cherry», «MINI BAG GINEBRA Marrón» y «MINI BAG ZURICH
+ * Cherry»: **son carteras, ⛔ no minifaldas**. Sin esta línea entraban al universo de MINI —3 de las
+ * 75 con stock— y bajaban su cobertura mandando a buscar carteras a un perchero de faldas.
+ * ⚠️ **Así es como se descubre un compuesto nuevo**: alguien lee el mandado y ve una prenda que ⛔
+ * no es de ese sector. Por eso la lista se agranda de a una y con el caso real al lado.
  */
-export const TIPOS_COMPUESTOS = ['BABY TEE', 'LONG TEE', 'TOTE BAG', 'SHOULDER BAG']
+export const TIPOS_COMPUESTOS = ['BABY TEE', 'LONG TEE', 'MINI BAG', 'TOTE BAG', 'SHOULDER BAG']
 
 /**
  * **El tipo de prenda, sacado del nombre**: `TOP AKIRA` → `TOP`, `BABY TEE BLUE NEGRO` → `BABY TEE`.

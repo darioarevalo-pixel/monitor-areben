@@ -368,7 +368,11 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   🔑 **Y un mandado vacío ⛔ ya no puede mentir**: `tocadoSinDeclarar` cuenta lo caminado que queda
   fuera de lo declarado y la pantalla lo dice. Con la declaración equivocada de ese día habría
   avisado **«tocaste 326 prendas de tipos que ⛔ no marcaste»**.
-  ⚠️ **BABY TEE son dos palabras** (`TIPOS_COMPUESTOS`, 303 productos). ⛔ **No se adivina cuál es
+  ⚠️ **BABY TEE son dos palabras** (`TIPOS_COMPUESTOS`, 303 productos), y **MINI BAG también** —
+  ese lo encontró el salón el 22-sep: el mandado pedía colgar «MINI BAG DISTRICT Cherry» en un
+  perchero de faldas, y **son carteras**. Eran 3 de las 75 con stock y bajaban la cobertura de MINI.
+  🔑 **Así se descubre un compuesto nuevo**: alguien lee el mandado y ve una prenda que ⛔ no es del
+  sector. La lista se agranda de a una, con el caso real al lado. ⛔ **No se adivina cuál es
   compuesto**: «si la primera palabra siempre viene seguida de la misma segunda» convierte en
   compuesto a todo tipo de **un solo producto** —SAQUITO VENECIA, MONO TIARE— y el desplegable se
   llena de modelos. Medido: 76 palabras iniciales en 2.819 productos, y sólo 4 compuestas.

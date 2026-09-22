@@ -410,3 +410,24 @@ describe('tipoDePrenda — declarar por nombre y ⛔ no por categoría de TN', (
     expect(esDelTipo({ name: 'BABY TEE ZEST' }, 'BABY')).toBe(false)
   })
 })
+
+/**
+ * 🔴 **El compuesto que encontró el salón** (22-sep-2026): caminando el sector de minis, el mandado
+ * pedía colgar tres MINI BAG. Son **carteras**, ⛔ no minifaldas, y estaban bajando la cobertura de
+ * MINI y mandando a buscarlas a un perchero de faldas.
+ */
+describe('MINI BAG ⛔ no es una minifalda', () => {
+  it('MINI BAG es su propio tipo', () => {
+    expect(tipoDePrenda('MINI BAG DISTRICT Cherry')).toBe('MINI BAG')
+    expect(tipoDePrenda('MINI BAG ZURICH')).toBe('MINI BAG')
+  })
+
+  it('y una mini de verdad sigue siendo MINI', () => {
+    expect(tipoDePrenda('MINI ANNE NEGRO')).toBe('MINI')
+    expect(tipoDePrenda('MINI BAGUETTE')).toBe('MINI')
+  })
+
+  it('⛔ no entra en el universo de MINI', () => {
+    expect(esDelTipo({ name: 'MINI BAG GINEBRA' }, 'MINI')).toBe(false)
+  })
+})
