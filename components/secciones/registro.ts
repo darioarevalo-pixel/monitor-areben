@@ -61,6 +61,7 @@ const ConteoDeposito = dynamic(() => import('@/components/conteo-deposito/Conteo
 const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/ConteoEstandar').then((m) => m.ConteoEstandar), { loading: Cargando })
 const ConteoLocalBdi = dynamic(() => import('@/components/conteo-local-bdi/ConteoLocalBdi').then((m) => m.ConteoLocalBdi), { loading: Cargando })
 const Reposicion = dynamic(() => import('@/components/reposicion/Reposicion').then((m) => m.Reposicion), { loading: Cargando })
+const Cobranzas = dynamic(() => import('@/components/cobranzas/Cobranzas').then((m) => m.Cobranzas), { loading: Cargando })
 const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas').then((m) => m.VerifVentas), { loading: Cargando })
 const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), { loading: Cargando })
 const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exhib), { loading: Cargando })
@@ -257,6 +258,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   // va con paridad ejecutable. Reusa lib/reposicion (cfg+grupos ya usados por conteo).
   // Rollback: mover esta línea a SOMBRAS.
   reposicion: Reposicion,
+  cobranzas: Cobranzas,
   // El flip de Verificación de ventas (18-jul-2026, Tanda C #1): `/verif-ventas` lo
   // sirve el shell. Read-only: el cruce TN↔GN lo hace server-side `tiendanube-audit
   // ?verificar_ventas=1`; el cliente solo muestra + tilda el checklist de "ya anuladas

@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|modelos|precios|destacados|exhib&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|modelos|precios|destacados|exhib|cobranzas&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -49,6 +49,7 @@ import cuentas from './_cuentas.js';
 import precios from './_precios.js';
 import destacados from './_destacados.js';
 import exhib from './_exhib.js';
+import cobranzas from './_cobranzas.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -190,6 +191,9 @@ const RECURSOS = {
   // de Hobby). Sí valida `store`: sus dos tablas viven en la base de CADA marca, como el espejo de
   // inventario contra el que se escanea.
   exhib,
+  // Cobranzas: las órdenes de TN con medio de pago MANUAL y su cobro (`tn_cobros`, base de BDI).
+  // Escribe la nota interna de la orden por `bdi-catalogo` y le pone en cero el saldo al cadete.
+  cobranzas,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

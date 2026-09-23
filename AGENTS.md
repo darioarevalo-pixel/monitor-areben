@@ -169,6 +169,9 @@ ya tienen ficha:
   un ACREEDOR escribe un pago real en el ledger del otro repo**; el de una **cuenta manual** (la
   cuota del crédito) ⛔ no sale del Monitor nunca. ⛔ Hacia un input de plata va `paraEditar(n)`,
   jamás `String(n)`: así se mandaron cien veces el monto.
+- Cobranzas (órdenes de TN con pago manual) → **leer `docs/secciones/cobranzas.md`** antes de tocar
+  `components/cobranzas/`, `lib/cobranzas/` o `api/_cobranzas.js`. ⛔ **Cobrar le pone en cero el
+  saldo del cadete en `envios_reparto`**, y ⛔ TN no deja marcar pagado por API.
 - Clientes (CRM) y el panel de WhatsApp → **leer `docs/secciones/crm.md`** antes de tocar
   `components/crm/`, `components/panel/`, `lib/crm/` o la acción `panel` de `api/_crm.js`. ⛔ **La
   clave `crm:seg:bdi` no tiene backup**: 305 clientes y sus notas, reescritos enteros en cada

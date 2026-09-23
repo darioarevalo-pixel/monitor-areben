@@ -556,6 +556,23 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "cobranzas",
+    "area": "administracion",
+    "label": "Cobranzas",
+    "info": "Las compras de Tienda Nube con pago manual —transferencia a la cuenta de la empresa o efectivo al retirar— que Pago Nube no marca solo. Se ve cuáles faltan cobrar y hace cuántos días, se registra el cobro (cómo pagó, monto y número de operación) y queda anotado en la nota interna del pedido. ⚠️ Tienda Nube no deja marcar «pagado» desde afuera: después de cobrar, el pedido pasa a «Falta marcar en TN» con el link para apretarlo allá, y se cierra solo cuando Tienda Nube ya lo muestra pagado. Si el pedido va con el cadete, cobrarlo acá le saca ese saldo de la hoja.",
+    "brands": [
+      "bdi",
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "cobrar",
+        "label": "Puede registrar y anular cobros",
+        "info": "Sin este permiso la sección se ve entera pero sin los botones de cobrar ni anular, y el servidor lo rechaza igual. ⚠️ Este permiso NO se hereda de la función: hay que tildarlo a mano, en cada marca."
+      }
+    ]
+  },
+  {
     "key": "reposicion",
     "area": "administracion",
     "label": "Reposición",
@@ -1190,7 +1207,8 @@ export const NAV_CATS: NavCat[] = [
       "postventa",
       "reposicion",
       "caducados",
-      "insumos"
+      "insumos",
+      "cobranzas"
     ],
     "labels": {
       "solicitudes": "Solicitudes de todas las marcas"

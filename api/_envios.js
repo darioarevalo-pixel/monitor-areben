@@ -311,9 +311,36 @@ export default async function handler(req, res) {
       const vistos = new Set((yaEstan || []).map((x) => `${x.store}|${x.orden_numero}`));
       const nuevas = filas.filter((f) => !vistos.has(`${f.store}|${f.orden_numero}`));
 
+      // 🔴 Una orden que ya se COBRÓ en Cobranzas (`tn_cobros`) puede seguir `pending` en TN —el
+      // «pagado» de allá lo aprieta una persona—, y entonces `ordenAEnvio` le pone el total como
+      // saldo a cobrar en la puerta: el cadete le cobraría dos veces. Entra en cero, y el cobro se
+      // queda con el previo para devolvérselo si se anula (`api/_cobranzas.js`).
+      const conSaldo = nuevas.filter((f) => Number(f.monto_pedido_a_cobrar) > 0);
+      const aCobro = [];
+      if (conSaldo.length) {
+        const { data: cobros, error: eCob } = await supabase
+          .from('tn_cobros')
+          .select('id, store, numero')
+          .is('anulado_en', null)
+          .in('numero', conSaldo.map((f) => f.orden_numero));
+        // ⚠️ Si Cobranzas no contesta, traer los envíos igual: el camino de todos los días ⛔ se cae
+        // por una sección nueva. El costo es el de antes de que existiera (el saldo de TN entero).
+        if (eCob) console.warn('[envios] traer-tn: no se pudo leer tn_cobros:', eCob.message);
+        const cobrada = new Map((cobros || []).map((c) => [`${c.store}|${c.numero}`, c.id]));
+        for (const f of conSaldo) {
+          const id = cobrada.get(`${f.store}|${f.orden_numero}`);
+          if (!id) continue;
+          aCobro.push({ id, envio_id: f.id, envio_saldo_previo: Number(f.monto_pedido_a_cobrar) });
+          f.monto_pedido_a_cobrar = 0;
+        }
+      }
+
       if (nuevas.length) {
         const { error } = await supabase.from('envios_reparto').insert(nuevas);
         if (error) throw new Error(error.message);
+      }
+      for (const c of aCobro) {
+        await supabase.from('tn_cobros').update({ envio_id: c.envio_id, envio_saldo_previo: c.envio_saldo_previo }).eq('id', c.id);
       }
       // Se informan las dos cuentas: "traje 2 y 3 ya estaban" es una respuesta; "listo" no lo es.
       return res.status(200).json({ ok: true, agregados: nuevas.length, ya_estaban: filas.length - nuevas.length });
