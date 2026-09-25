@@ -5,12 +5,21 @@ estado, stock) y desde el 17-sep-2026 la vista **«Ganadores por tanda»**, que 
 qué productos de un ingreso hacerles publicidad. Es también la puerta de entrada de Liquidación (el
 tilde y «Enviar a liquidación») y del PDF de sale.
 
+Desde el 25-sep-2026, el botón **«⭐ Asignación rápida»** del header: pasa **lo que la tabla tiene
+filtrado, en su orden**, de a un producto con la foto grande — deslizar → es ⭐ (la general, la
+misma de la fila), ← es pasar, ↶ deshace. Pedido de Bruno: *«sino tengo que entrar a las fotos una
+por una […] se puede identificar favorito desde el inicio apostando por un producto»*, y **sin
+cambiar la estructura de la sección** (se descartó una pestaña de grilla).
+
 ## Dónde vive
 
 `components/productos/ProductosTable.tsx` (~720 líneas, leer por rango) · `GanadoresTanda.tsx` ·
 `lib/productos.ts` (filtros, vida útil, **`conCanal`**) · `lib/ganadores/` (`core.js` + `tipos.ts` +
 `cartel.ts`) · los datos salen del ETL (`lib/etl/computar.ts`, `allProductos`), sin handler propio ·
 tests `tests/productos.test.ts`, `tests/ganadores.test.ts`, `tests/etl-paridad.test.ts`.
+La Asignación rápida vive en `components/destacados/AsignacionRapida.tsx` + `lib/destacados/mazo.ts`
+(⛔ no en `components/productos/`: la tabla es del repo compartido con Darío) · tests
+`tests/destacados-mazo.test.ts`, `tests/destacados-asignacion-pantalla.test.tsx`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -51,6 +60,12 @@ tests `tests/productos.test.ts`, `tests/ganadores.test.ts`, `tests/etl-paridad.t
   la fecha de publicación en TN, y Moods se dio de alta 4 días antes de publicarse.
 - 🔑 **Los empatados comparten puesto** (1, 2, 2, 4): a pocas unidades casi todo empata, y un orden
   corrido inventaría una diferencia.
+
+- 🔑 **En la Asignación rápida, pasar ⛔ desmarca**: una ⭐ que ya estaba (de otra persona, o de otra
+  pasada) sobrevive al ←, y deshacer sólo revierte lo que ESA pasada escribió. Por eso `alternar`
+  de `useDestacados` acepta la acción explícita: la carta avanza sin esperar al servidor, y la lista
+  puede no haber vuelto cuando se aprieta ↶. El mazo es una foto de la tabla al abrir y ⛔ trae los
+  productos sin foto (se cuentan arriba como «salteados»).
 
 ## Lo que ya se rompió acá
 

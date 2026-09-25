@@ -28,8 +28,17 @@ export interface Destacados {
   porProducto: Map<string, Destacado>
   cargando: boolean
   error: string | null
-  /** Prende o apaga la estrella de un producto. Devuelve cuando el servidor contestó. */
-  alternar: (p: { id: number | string; nombre?: string | null; sku?: string | null }) => Promise<void>
+  /**
+   * Prende o apaga la estrella de un producto. Devuelve cuando el servidor contestó.
+   *
+   * `accion` fuerza el sentido en vez de deducirlo de la lista: lo usa la Asignación rápida, que
+   * sigue deslizando mientras el guardado viaja y ⛔ puede esperar a que la lista vuelva para saber
+   * si deshacer es «sacar» (ver `lib/destacados/mazo.ts`, decisión 3).
+   */
+  alternar: (
+    p: { id: number | string; nombre?: string | null; sku?: string | null },
+    accion?: 'marcar' | 'sacar',
+  ) => Promise<void>
 }
 
 const VACIO = new Map<string, Destacado>()
@@ -98,10 +107,10 @@ export function useDestacados(marca: Marca | null, liq: string | null = null): D
   }, [marca, liq, cargar])
 
   const alternar = useCallback(
-    async (p: { id: number | string; nombre?: string | null; sku?: string | null }) => {
+    async (p: { id: number | string; nombre?: string | null; sku?: string | null }, accion?: 'marcar' | 'sacar') => {
       if (!marca) return
       const pid = Number(p.id)
-      const estaba = porProducto.has(String(pid))
+      const estaba = accion ? accion === 'sacar' : porProducto.has(String(pid))
       // 🔴 **Sin respuesta optimista, a propósito.** La estrella es del EQUIPO: cualquiera la pone y
       // cualquiera la saca, así que dos personas pueden estar mirando la misma lista. Pintarla
       // antes de que el servidor conteste muestra una decisión que puede no haber quedado guardada

@@ -15,6 +15,7 @@ import { useCampaniaAbierta } from '@/components/liquidacion/useCampaniaAbierta'
 import { MarcaClavado } from '@/components/clavados/MarcaClavado'
 import { useClavados, type Clavados } from '@/components/clavados/useClavados'
 import { MarcaEstrella } from '@/components/destacados/MarcaEstrella'
+import { BotonAsignacionRapida } from '@/components/destacados/AsignacionRapida'
 import { useDestacados, type Destacados } from '@/components/destacados/useDestacados'
 import { useVendidoSale } from '@/components/liquidacion/useVendidoSale'
 import { faltantes, TOPE_SUMAR, type EstadoItem } from '@/lib/liquidacion'
@@ -305,6 +306,8 @@ export function ProductosTable() {
           <>
             <HeaderAcciones>
               <BotonActualizarInventario />
+              {/* Pasar lo filtrado de a uno, foto grande, ⭐ deslizando. Vive en components/destacados/. */}
+              <BotonAsignacionRapida productos={ordenada} tnIdx={tnIdx} destacados={destacados} />
               {/*
                 El PDF queda: sigue siendo la forma de mirar la selección en papel o de mandársela a
                 alguien. "Mandar a liquidación" es el camino nuevo —la campaña se guarda en la base y
