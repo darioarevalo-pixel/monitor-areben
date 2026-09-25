@@ -34,11 +34,13 @@
 
 import { useState } from 'react'
 import {
+  Card,
   DatosGate,
   EmptyState,
   KpiCard,
   Notice,
-  SectionCard,
+  color,
+  font,
   formatMoney,
   space,
 } from '@/components/ui'
@@ -47,6 +49,7 @@ import { useCompromisos } from './useCompromisos'
 import { Compromisos } from './Compromisos'
 import { CuentasManuales } from './CuentasManuales'
 import { CuentaLinea } from './CuentaLinea'
+import { EstadoCompromisos, FilaDestino, TituloGrupo } from './FilaDestino'
 import { destinoDeAcreedor } from '@/lib/compromisos/destino'
 import { comprometidoPorAcreedor } from '@/lib/compromisos/core'
 import type { Compromiso } from '@/lib/compromisos/core'
@@ -106,7 +109,7 @@ export function Acreedores() {
                 <KpiCard label="Cuentas con saldo" value={`${conDeuda.length} de ${lista.length}`} />
                 {enCamino > 0 && (
                   <KpiCard
-                    label="Comprometido y sin entrar"
+                    label="Pedido sin acreditar"
                     value={formatMoney(enCamino)}
                     sub="plata en camino que el dashboard todavía no ve"
                   />
@@ -120,19 +123,14 @@ export function Acreedores() {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gap: space[4] }}>
-                {lista.map((a) => (
-                  <FilaAcreedor
-                    key={a.id}
-                    acreedor={a}
-                    compromisos={cobros.compromisos}
-                    puede={cobros.puede}
-                    onCambio={cobros.recargar}
-                    abierto={abierto === a.id}
-                    onToggle={() => setAbierto(abierto === a.id ? null : a.id)}
-                  />
-                ))}
-              </div>
+              <ListaAcreedores
+                lista={lista}
+                compromisos={cobros.compromisos}
+                puede={cobros.puede}
+                onCambio={cobros.recargar}
+                abierto={abierto}
+                setAbierto={setAbierto}
+              />
             </div>
           )
         }
@@ -150,6 +148,68 @@ export function Acreedores() {
   )
 }
 
+/**
+ * Una fila por acreedor (25-sep-2026, ver `FilaDestino.tsx`). Arriba los que tienen saldo, de
+ * mayor a menor; los que están al día van plegados abajo —no hay nada que pedir para ellos—.
+ */
+function ListaAcreedores({ lista, compromisos, puede, onCambio, abierto, setAbierto }: {
+  lista: Acreedor[]
+  compromisos: Compromiso[]
+  puede: PuedeCompromisos
+  onCambio: () => void
+  abierto: string | null
+  setAbierto: (id: string | null) => void
+}) {
+  const [verAlDia, setVerAlDia] = useState(false)
+  const conSaldo = lista.filter((a) => a.saldo > 0).sort((a, b) => b.saldo - a.saldo)
+  const alDia = lista.filter((a) => a.saldo <= 0)
+  const alDiaAbiertos = verAlDia || conSaldo.length === 0
+
+  const fila = (a: Acreedor) => (
+    <FilaAcreedor
+      key={a.id}
+      acreedor={a}
+      compromisos={compromisos}
+      puede={puede}
+      onCambio={onCambio}
+      abierto={abierto === a.id}
+      onToggle={() => setAbierto(abierto === a.id ? null : a.id)}
+    />
+  )
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ marginTop: -1 }}>
+        {conSaldo.length > 0 && (
+          <>
+            <TituloGrupo n={conSaldo.length}>Con saldo</TituloGrupo>
+            {conSaldo.map(fila)}
+          </>
+        )}
+        {alDia.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setVerAlDia((v) => !v)}
+              disabled={conSaldo.length === 0}
+              style={{
+                // ⛔ `height: auto`: `.shell-content button` le fija la altura de un control.
+                height: 'auto', width: '100%', textAlign: 'left', cursor: 'pointer',
+                background: 'transparent', border: 'none', borderTop: `1px solid ${color.line}`,
+                padding: `${space[2]}px ${space[4]}px`, fontSize: font.xs, fontWeight: 700,
+                color: color.mut, textTransform: 'uppercase', letterSpacing: 0.4,
+              }}
+            >
+              {alDiaAbiertos ? '▾' : '▸'} Al día · {alDia.length}
+            </button>
+            {alDiaAbiertos && alDia.map(fila)}
+          </>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 function FilaAcreedor({ acreedor, compromisos, puede, onCambio, abierto, onToggle }: {
   acreedor: Acreedor
   compromisos: Compromiso[]
@@ -164,54 +224,63 @@ function FilaAcreedor({ acreedor, compromisos, puede, onCambio, abierto, onToggl
   const hayChequeEnLaCalle = acreedor.yaPagadoSinDebitar > 0
 
   return (
-    <SectionCard
-      title={acreedor.nombre}
-      subtitle={
-        alDia
-          ? 'Al día'
-          : `Se le debe ${formatMoney(acreedor.saldo)}${
-              acreedor.ultimoMovimiento ? ` · último pago ${fechaCorta(acreedor.ultimoMovimiento)}` : ''
-            }`
-      }
-      actions={
-        <button type="button" onClick={onToggle} className="btn btn-soft btn-sm">
-          {abierto ? 'Ocultar' : 'Ver detalle'}
-        </button>
-      }
-    >
-      {hayChequeEnLaCalle && (
-        <Notice tone="warning">
-          <span>
-          <b>Ojo: parte de esto ya está pagado.</b> Se le debe {formatMoney(acreedor.saldo)}, pero {formatMoney(acreedor.yaPagadoSinDebitar)} ya
-          salieron con un cheque que el banco todavía no debitó. Pedile al cliente como mucho{' '}
-          <b>{formatMoney(acreedor.disponible)}</b>, o se le va a pagar dos veces lo mismo.
+    <FilaDestino
+      nombre={acreedor.nombre}
+      detalle={acreedor.ultimoMovimiento ? `último pago ${fechaCorta(acreedor.ultimoMovimiento)}` : undefined}
+      abierto={abierto}
+      onToggle={onToggle}
+      cuenta={acreedor.cuentas[0] ?? null}
+      monto={
+        alDia ? (
+          <span style={{ color: color.mut2 }}>Al día</span>
+        ) : (
+          <span style={{ display: 'grid' }}>
+            <span>
+              Saldo <b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(acreedor.saldo)}</b>
+            </span>
+            {/* El cheque en la calle se avisa ya en la fila: es lo que evita pedir de más. */}
+            {hayChequeEnLaCalle && (
+              <span style={{ fontSize: font.xs, color: color.warningInk }}>
+                disponible {formatMoney(acreedor.disponible)}
+              </span>
+            )}
           </span>
-        </Notice>
-      )}
+        )
+      }
+      estado={alDia ? null : <EstadoCompromisos destinoId={acreedor.id} compromisos={compromisos} />}
+    >
+      <div style={{ display: 'grid', gap: space[3] }}>
+        {hayChequeEnLaCalle && (
+          <Notice tone="warning">
+            <span>
+            <b>Ojo: parte de esto ya está pagado.</b> Se le debe {formatMoney(acreedor.saldo)}, pero {formatMoney(acreedor.yaPagadoSinDebitar)} ya
+            salieron con un cheque que el banco todavía no debitó. Pedile al cliente como mucho{' '}
+            <b>{formatMoney(acreedor.disponible)}</b>, o se le va a pagar dos veces lo mismo.
+            </span>
+          </Notice>
+        )}
 
-      <CuentasDe acreedor={acreedor} />
+        <CuentasDe acreedor={acreedor} />
 
-      <Compromisos destino={destinoDeAcreedor(acreedor)} compromisos={compromisos} puede={puede} onCambio={onCambio} />
+        <Compromisos destino={destinoDeAcreedor(acreedor)} compromisos={compromisos} puede={puede} onCambio={onCambio} />
 
-      {abierto && (
-        <div style={{ marginTop: space[4] }}>
-          {acreedor.conceptos.length === 0 ? (
-            <p className="muted">No queda nada pendiente.</p>
-          ) : (
-            <ul style={{ display: 'grid', gap: space[1], listStyle: 'none', padding: 0, margin: 0 }}>
+        {acreedor.conceptos.length > 0 && (
+          <div>
+            <b style={{ fontSize: font.base }}>Detalle del saldo</b>
+            <ul style={{ display: 'grid', gap: space[1], listStyle: 'none', padding: 0, margin: `${space[2]}px 0 0`, maxWidth: 520 }}>
               {acreedor.conceptos.map((c) => (
-                <li key={c.id} style={{ display: 'flex', gap: space[2], justifyContent: 'space-between' }}>
+                <li key={c.id} style={{ display: 'flex', gap: space[2], justifyContent: 'space-between', fontSize: font.base }}>
                   <span>
                     {c.concepto} <span className="muted" style={{ textTransform: 'capitalize' }}>· {mesLargo(c.mes)}</span>
                   </span>
-                  <b>{formatMoney(c.saldo)}</b>
+                  <b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(c.saldo)}</b>
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-      )}
-    </SectionCard>
+          </div>
+        )}
+      </div>
+    </FilaDestino>
   )
 }
 
@@ -222,7 +291,7 @@ function FilaAcreedor({ acreedor, compromisos, puede, onCambio, abierto, onToggl
 function CuentasDe({ acreedor }: { acreedor: Acreedor }) {
   if (acreedor.cuentas.length === 0) {
     return (
-      <p className="muted">
+      <p className="muted" style={{ margin: 0 }}>
         No tiene ninguna cuenta cargada. Se carga en el dashboard, en Finanzas → Acreedores: sin eso
         no se le puede pedir a un cliente que le transfiera.
       </p>

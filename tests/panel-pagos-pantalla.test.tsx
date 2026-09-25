@@ -85,7 +85,7 @@ describe('Pagos · antes de tener los datos', () => {
 })
 
 describe('Pagos · la lista de trabajo', () => {
-  it('🔑 pone arriba lo que falta confirmar, que es lo que depende de nosotros', () => {
+  it('🔑 una sola lista de Pedidos, y un `transferido` viejo entra en ella (25-sep-2026)', () => {
     compromisos.valor = {
       ...compromisos.valor,
       compromisos: [
@@ -94,9 +94,10 @@ describe('Pagos · la lista de trabajo', () => {
       ],
     }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html.indexOf('Falta confirmar')).toBeGreaterThan(-1)
-    expect(html.indexOf('Falta confirmar')).toBeLessThan(html.indexOf('Esperando que transfieran'))
-    // Y el total es lo abierto de las dos listas juntas.
+    expect(html).toContain('Pedidos')
+    expect(html).not.toContain('Falta confirmar')
+    expect(html).toContain('Cliente que transfirió')
+    // Y el total es todo lo abierto.
     expect(html).toContain('130.000')
   })
 
@@ -122,9 +123,9 @@ describe('Pagos · los permisos los decide el servidor', () => {
       compromisos: [compromiso({ estado: 'transferido' })],
     }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).not.toContain('Ya entró')
+    expect(html).not.toContain('title="Confirmar"')
     // Pero lo que no mueve plata sigue estando.
-    expect(html).toContain('Se cayó')
+    expect(html).toContain('title="Cancelar"')
   })
 
   it('sin permiso de ver no se dibuja nada de la lista', () => {
@@ -268,8 +269,8 @@ describe('Pagos · confirmar pide el monto y el día, y nada más', () => {
   it('el formulario de confirmar no pregunta a nombre de quién vino', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ estado: 'transferido' })] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    // El formulario está plegado hasta que se toca "Ya entró": lo que se ve es el botón.
-    expect(html).toContain('Ya entró')
+    // El formulario está plegado hasta que se toca "Confirmar": lo que se ve es el botón.
+    expect(html).toContain('title="Confirmar"')
     expect(html).not.toContain('a nombre de otro')
     expect(html).not.toContain('vino a nombre')
   })
@@ -305,7 +306,7 @@ describe('Pagos · confirmar pide el monto y el día, y nada más', () => {
  * conozco bien el comprobante cuando entro al chat"* (Darío, 21-sep-2026). O sea que el nombre no
  * es un dato de contexto, es el punto de partida — y hasta acá era texto muerto.
  *
- * ⚠️ La lista vive detrás de "Ver las N que ya se cerraron" y `renderToStaticMarkup` no hace clic,
+ * ⚠️ La lista vive detrás de "Ver cerrados (N)" y `renderToStaticMarkup` no hace clic,
  * así que lo que se puede fijar desde acá es el disparador y su cuenta.
  */
 describe('Pagos · las cerradas', () => {
@@ -315,15 +316,15 @@ describe('Pagos · las cerradas', () => {
       compromisos: [compromiso({ id: 'a', estado: 'confirmado' }), compromiso({ id: 'b', estado: 'cancelado' })],
     }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).toContain('Ver las 2 que ya se cerraron')
+    expect(html).toContain('Ver cerrados (2)')
     // Y el vacío de arriba sigue diciendo lo suyo: cerradas no son plata esperando.
-    expect(html).toContain('No hay plata esperando')
+    expect(html).toContain('No hay pedidos abiertos')
   })
 
   it('sin ninguna cerrada, no hay disparador', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).not.toContain('que ya se cerraron')
+    expect(html).not.toContain('Ver cerrados')
   })
 })
 
@@ -352,9 +353,9 @@ describe('Pagos · la jerarquía de la pantalla', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     // El kit pinta el relleno con --_fg:#fff; la cruz es un outline sobre la superficie.
-    const hastaElTilde = html.slice(0, html.indexOf('Ya entró'))
+    const hastaElTilde = html.slice(0, html.indexOf('title="Confirmar"'))
     expect(hastaElTilde).toContain('--_fg:#fff')
-    expect(html).toContain('Se cayó')
+    expect(html).toContain('title="Cancelar"')
   })
 
   /**
@@ -367,36 +368,36 @@ describe('Pagos · la jerarquía de la pantalla', () => {
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     expect(html).not.toContain('Dice que transfirió')
     expect(html).not.toContain('No era')
-    expect(html).toContain('Ya entró')
-    expect(html).toContain('Se cayó')
+    expect(html).toContain('title="Confirmar"')
+    expect(html).toContain('title="Cancelar"')
   })
 
   /**
    * 🔑 **Y el rótulo NOMBRA de quién es la fila** (VOCABULARIO §3.3, 21-sep-2026). El `title` —el
    * globito del mouse— lleva la frase sola, que es lo que hacía falta cuando se sacó la etiqueta.
    * El `aria-label` no alcanza con eso: el que no ve la pantalla recorre ocho filas y escucha ocho
-   * veces "Ya entró", sin ninguna manera de saber cuál está tocando.
+   * veces "Confirmar", sin ninguna manera de saber cuál está tocando.
    */
   it('⚠️ los íconos llevan la frase entera, y el rótulo dice de quién es la fila', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).toContain('title="Ya entró"')
-    expect(html).toContain('title="Se cayó"')
-    expect(html).toContain('aria-label="Ya entró lo de «Nazarena Luciani»"')
-    expect(html).toContain('aria-label="Se cayó lo de «Nazarena Luciani»"')
+    expect(html).toContain('title="Confirmar"')
+    expect(html).toContain('title="Cancelar"')
+    expect(html).toContain('aria-label="Confirmar lo de «Nazarena Luciani»"')
+    expect(html).toContain('aria-label="Cancelar lo de «Nazarena Luciani»"')
   })
 
   it('un compromiso marcada desde la sección igual se puede confirmar acá', () => {
     // Sacar el botón no puede dejar huérfano al estado que la otra pantalla sí produce.
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({ estado: 'transferido' })] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).toContain('Falta confirmar')
-    expect(html).toContain('title="Ya entró"')
+    expect(html).toContain('Pedidos')
+    expect(html).toContain('title="Confirmar"')
   })
 
   it('sin nada esperando muestra un vacío que ocupa lugar, no un renglón gris', () => {
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).toContain('No hay plata esperando')
+    expect(html).toContain('No hay pedidos abiertos')
   })
 })
 
@@ -408,7 +409,7 @@ describe('Pagos · la vista de acreedores', () => {
   it('el selector está, y arranca en compromisos', () => {
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
     expect(html).toContain('A quién le debemos')
-    expect(html).toContain('No hay plata esperando')  // el vacío de compromisos, no el de acreedores
+    expect(html).toContain('No hay pedidos abiertos')  // el vacío de compromisos, no el de acreedores
   })
 })
 
@@ -420,8 +421,8 @@ describe('Pagos · lo que ya no se dibuja', () => {
   it('⛔ la chapa de estado no repite el título de la sección', () => {
     compromisos.valor = { ...compromisos.valor, compromisos: [compromiso({})] }
     const html = renderToStaticMarkup(<Pagos cliente={null} onIrAlCliente={null} />)
-    expect(html).toContain('Esperando que transfieran')
-    expect(html).not.toContain('se lo pedimos')
+    expect(html).toContain('Pedidos')
+    expect(html).not.toContain('>Pedido<')
   })
 
   it('⛔ "sin fecha" no se dibuja: una ausencia no es un dato', () => {

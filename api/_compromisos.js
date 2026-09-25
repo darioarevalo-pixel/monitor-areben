@@ -220,7 +220,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'No se encontró eso que se está juntando. Actualizá la pantalla.' });
       }
       if (objetivo.estado !== 'juntando') {
-        return res.status(409).json({ error: 'Esa cuenta ya dejó de juntar plata: se completó o se cerró. Cargale un monto nuevo si hace falta juntar más.' });
+        return res.status(409).json({ error: 'Esa cuenta está en pausa: se pagó o se pausó. Activala con un monto nuevo si hace falta.' });
       }
       // El id que manda la pantalla tiene que ser el de la cuenta de ESE objetivo. Sin esto, un
       // compromiso podría quedar contado en una cuenta y controlado contra otra.
@@ -243,8 +243,8 @@ export default async function handler(req, res) {
       if (monto > r.sePuedePedir + 0.005) {
         return res.status(409).json({
           error: r.comprometido > 0
-            ? `Para ${cuenta.nombre} se puede pedir hasta $${r.sePuedePedir.toLocaleString('es-AR')}: faltan juntar $${r.falta.toLocaleString('es-AR')} y ya hay $${r.comprometido.toLocaleString('es-AR')} comprometidos que todavía no entraron.`
-            : `Para ${cuenta.nombre} se puede pedir hasta $${r.sePuedePedir.toLocaleString('es-AR')}, que es lo que falta juntar.`,
+            ? `Para ${cuenta.nombre} hay disponible $${r.sePuedePedir.toLocaleString('es-AR')}: falta $${r.falta.toLocaleString('es-AR')} y ya hay $${r.comprometido.toLocaleString('es-AR')} pedidos sin acreditar.`
+            : `Para ${cuenta.nombre} hay disponible $${r.sePuedePedir.toLocaleString('es-AR')}, que es lo que falta.`,
           se_puede: r.sePuedePedir,
         });
       }
@@ -414,7 +414,7 @@ export default async function handler(req, res) {
       .from('compromisos_pago').select(CAMPOS).eq('id', body.id).single();
     if (eLeer || !c) return res.status(404).json({ error: 'No se encontró ese compromiso.' });
     if (c.estado === 'confirmado') {
-      return res.status(409).json({ error: 'Ese compromiso ya está confirmado.', compromiso: c });
+      return res.status(409).json({ error: 'Ese compromiso ya está acreditado.', compromiso: c });
     }
     if (c.estado === 'cancelado') {
       return res.status(409).json({ error: 'Ese compromiso está cancelado. Reabrilo antes de confirmarlo.' });
@@ -426,7 +426,7 @@ export default async function handler(req, res) {
     // números que no son exactamente el mismo.
     const montoReal = redondear(body.monto_real ?? c.monto);
     if (!Number.isFinite(montoReal) || montoReal <= 0) {
-      return res.status(400).json({ error: 'Poné cuánta plata entró de verdad.' });
+      return res.status(400).json({ error: 'Poné el monto acreditado.' });
     }
     const fecha = String(body.fecha || '').match(/^\d{4}-\d{2}-\d{2}$/)
       ? body.fecha

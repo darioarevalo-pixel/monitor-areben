@@ -253,7 +253,7 @@ export default async function handler(req, res) {
     // cerrarla. Si ya alcanza, lo que corresponde es cerrarla a mano — que es un botón al lado.
     if (monto < r.juntado - 0.005) {
       return res.status(409).json({
-        error: `Ya entraron $${r.juntado.toLocaleString('es-AR')}, así que el monto no puede ser menor. Si con eso ya está, cerralo con "ya está pagado".`,
+        error: `Ya se acreditaron $${r.juntado.toLocaleString('es-AR')}, así que el monto no puede ser menor. Si con eso ya está, cerrala con "Marcar pagada".`,
       });
     }
 

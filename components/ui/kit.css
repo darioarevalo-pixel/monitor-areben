@@ -100,6 +100,35 @@
   border-color: var(--mo-line2);
 }
 
+/* Fila de una lista que se abre al tocarla (Cobranza). El detalle va debajo, en la misma card. */
+.mo-fila-plegable {
+  cursor: pointer;
+  transition: background 0.1s ease;
+  display: grid;
+  /* Columnas FIJAS: con flex, el botón de una fila corría las demás columnas de esa fila. */
+  grid-template-columns: minmax(180px, 1.3fr) 210px minmax(200px, 1.2fr) 180px 140px;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+@media (max-width: 900px) {
+  .mo-fila-plegable {
+    grid-template-columns: 1fr auto;
+  }
+  /* En el teléfono el nombre va solo en su renglón: compartido, se cortaba a los diez caracteres. */
+  .mo-fila-plegable > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+.mo-fila-plegable:hover,
+.mo-fila-plegable[aria-expanded='true'] {
+  background: var(--mo-bg2);
+}
+.mo-fila-plegable:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--mo-ring);
+}
+
 /* ══ Controles de formulario ═════════════════════════════════ */
 .mo-input,
 .mo-select {

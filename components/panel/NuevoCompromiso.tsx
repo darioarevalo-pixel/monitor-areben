@@ -202,7 +202,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
               >
                 <div style={{ fontWeight: 600 }}>{a.nombre}</div>
                 <div style={{ fontSize: font.xs, color: a.id === elegido ? color.brand : color.mut2, fontVariantNumeric: 'tabular-nums' }}>
-                  hasta {plata(puedePedirse)}
+                  disponible {plata(puedePedirse)}
                 </div>
               </button>
             ))}
@@ -225,7 +225,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                 <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: 8 }}>
                   Ojo: {sel.a.nombre} no tiene ninguna cuenta cargada, así que no hay alias que pasarle.
                   {sel.a.origen === 'manual'
-                    ? ' Se carga en Cobranza, en la ficha de la cuenta.'
+                    ? ' Se carga en Cobranza, en Cuentas a pagar.'
                     : ' Se carga en el dashboard, en Finanzas → Acreedores.'}
                 </div>
               )}
@@ -236,7 +236,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                   value={monto}
                   onChange={(e) => { setMonto(e.target.value); setError(null) }}
                   inputMode="decimal"
-                  placeholder={`¿cuánto? hasta ${plata(sel.puedePedirse)}`}
+                  placeholder={`Monto, hasta ${plata(sel.puedePedirse)}`}
                   style={{ flex: '1 1 150px', fontSize: font.sm, fontVariantNumeric: 'tabular-nums' }}
                 />
                 <Button
@@ -270,7 +270,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                     }
                   }}
                 >
-                  {guardando ? 'Guardando…' : 'Crear el compromiso'}
+                  {guardando ? 'Guardando…' : 'Nuevo compromiso'}
                 </Button>
               </div>
 
@@ -282,8 +282,8 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
 
               {sePasa && (
                 <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>
-                  Es más de lo que {sel.a.origen === 'manual' ? 'falta juntar para' : 'se le debe a'} {sel.a.nombre} sin
-                  comprometer. Si va a mandar más, el resto va como otro compromiso a otra cuenta.
+                  Es más de lo disponible para {sel.a.nombre}. Si va a mandar más, el resto va como otro
+                  compromiso a otra cuenta.
                 </div>
               )}
             </>

@@ -258,44 +258,39 @@ function porReciente(a: Compromiso, b: Compromiso): number {
 }
 
 export type ColaDeCobranza = {
-  /** Dijeron que ya transfirieron: falta mirar el banco y confirmarlo. */
-  porConfirmar: Compromiso[]
-  /** Se lo pedimos y todavía no dijeron nada. */
-  esperando: Compromiso[]
-  /** Las que ya no ocupan plata: entraron o se cayeron. */
+  /** Se le pidió al cliente y todavía no se acreditó. */
+  pedidos: Compromiso[]
+  /** Las que ya no ocupan plata: se acreditaron o se cancelaron. */
   cerradas: Compromiso[]
-  /** Cuánta plata hay comprometida y sin entrar, en total. */
+  /** Cuánta plata hay pedida y sin acreditar, en total. */
   totalAbierto: number
 }
 
 /**
- * La lista de trabajo de cobranza, partida en las dos cosas distintas que hay para hacer.
+ * La lista de trabajo de cobranza: lo pedido arriba, lo cerrado aparte.
  *
- * 🔑 **`transferido` y `comprometido` no son dos escalones de lo mismo: son dos tareas de dos
- * personas distintas.** Un `transferido` espera que NOSOTROS miremos el banco y lo confirmemos —
- * es trabajo propio y sale de la lista con un clic. Un `comprometido` espera al cliente: lo único que
- * se puede hacer es volver a hablarle. Mezclados en una sola lista, lo que depende de uno queda
- * escondido entre lo que depende de otro.
+ * 🔄 **Hasta el 25-sep-2026 eran DOS listas abiertas**: "Falta confirmar" (`transferido`, el
+ * cliente avisó que ya mandó) y "Esperando que transfieran" (`prometido`). Darío lo simplificó a
+ * tres estados —Pedido, Acreditado, Cancelado—: el riesgo de que un aviso de transferencia sea
+ * falso es bajísimo y no justifica un paso. El botón que llevaba a `transferido` ya había salido
+ * del panel el 4-sep, así que esa lista estaba siempre vacía.
+ * ⚠️ **El estado `transferido` sigue en la base y en el grafo** (no se migró nada): un compromiso
+ * viejo en ese estado se trata como Pedido y se confirma igual.
  */
 export function colaDeCobranza(compromisos: Compromiso[]): ColaDeCobranza {
-  const porConfirmar: Compromiso[] = []
-  const esperando: Compromiso[] = []
+  const pedidos: Compromiso[] = []
   const cerradas: Compromiso[] = []
   let total = 0
   for (const c of compromisos) {
-    if (c.estado === 'transferido') {
-      porConfirmar.push(c)
-      total = centavos(total + Number(c.monto))
-    } else if (c.estado === 'prometido') {
-      esperando.push(c)
+    if (estaAbierto(c)) {
+      pedidos.push(c)
       total = centavos(total + Number(c.monto))
     } else {
       cerradas.push(c)
     }
   }
   return {
-    porConfirmar: porConfirmar.sort(porUrgencia),
-    esperando: esperando.sort(porUrgencia),
+    pedidos: pedidos.sort(porUrgencia),
     cerradas: cerradas.sort(porReciente),
     totalAbierto: total,
   }

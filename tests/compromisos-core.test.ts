@@ -129,16 +129,15 @@ describe('cuántos días faltan para lo comprometido', () => {
 })
 
 describe('la cola de cobranza', () => {
-  it('🔑 separa lo que espera trabajo nuestro de lo que espera al cliente', () => {
+  it('🔑 una sola lista de pedidos: un `transferido` viejo cuenta como pedido (25-sep-2026)', () => {
     const cola = colaDeCobranza([
       fila('a', 'prometido'),
       fila('b', 'transferido'),
       fila('c', 'confirmado'),
       fila('d', 'cancelado'),
     ])
-    // Un "dice que transfirió" se resuelve mirando el banco; un "prometido" sólo se puede reclamar.
-    expect(cola.porConfirmar.map((c) => c.id)).toEqual(['b'])
-    expect(cola.esperando.map((c) => c.id)).toEqual(['a'])
+    // El estado del medio salió de la pantalla pero no de la base: si quedó alguno, se confirma igual.
+    expect(cola.pedidos.map((c) => c.id).sort()).toEqual(['a', 'b'])
     expect(cola.cerradas.map((c) => c.id)).toEqual(['c', 'd'])
   })
 
@@ -148,7 +147,7 @@ describe('la cola de cobranza', () => {
       fila('para-el-10', 'prometido', { fecha: '2026-09-10' }),
       fila('vencida', 'prometido', { fecha: '2026-08-20' }),
     ])
-    expect(cola.esperando.map((c) => c.id)).toEqual(['vencida', 'para-el-10', 'sin-fecha'])
+    expect(cola.pedidos.map((c) => c.id)).toEqual(['vencida', 'para-el-10', 'sin-fecha'])
   })
 
   it('entre las que no tienen fecha, primero la más vieja: es la que más hace que no se mueve', () => {
@@ -156,7 +155,7 @@ describe('la cola de cobranza', () => {
       fila('nueva', 'prometido', { creado: '2026-09-02T10:00:00Z' }),
       fila('vieja', 'prometido', { creado: '2026-07-02T10:00:00Z' }),
     ])
-    expect(cola.esperando.map((c) => c.id)).toEqual(['vieja', 'nueva'])
+    expect(cola.pedidos.map((c) => c.id)).toEqual(['vieja', 'nueva'])
   })
 
   it('las cerradas se leen al revés: lo último que pasó, primero', () => {

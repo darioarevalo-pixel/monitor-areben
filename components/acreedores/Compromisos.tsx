@@ -39,18 +39,20 @@ import {
 import type { DestinoCompromiso } from '@/lib/compromisos/destino'
 import { hoyISO } from '@/lib/crm/seguimiento'
 
+// 🔑 Tres estados a la vista: Pedido, Acreditado, Cancelado (Darío, 25-sep-2026). `transferido`
+// sigue existiendo en la base; si queda alguno viejo, se muestra y se trata como Pedido.
 const TONO = {
   prometido: 'warning',
-  transferido: 'brand',
+  transferido: 'warning',
   confirmado: 'success',
   cancelado: 'neutral',
 } as const
 
 const ROTULO = {
-  prometido: 'se lo pedimos',
-  transferido: 'dice que ya transfirió',
-  confirmado: 'entró',
-  cancelado: 'se cayó',
+  prometido: 'Pedido',
+  transferido: 'Pedido',
+  confirmado: 'Acreditado',
+  cancelado: 'Cancelado',
 } as const
 
 export function Compromisos({ destino, compromisos, puede, onCambio }: {
@@ -87,16 +89,15 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
   return (
     <div style={{ display: 'grid', gap: space[2], marginTop: space[3] }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap' }}>
-        <b style={{ fontSize: 13 }}>Compromisos de pago</b>
+        <b style={{ fontSize: 13 }}>Compromisos</b>
         {yaComprometido > 0 && (
           <span className="muted" style={{ fontSize: 12 }}>
-            hay {formatMoney(yaComprometido)} comprometidos y sin entrar ·{' '}
-            <b>se le puede pedir {formatMoney(sePuede)} más</b>
+            Pedido {formatMoney(yaComprometido)} · <b>Disponible {formatMoney(sePuede)}</b>
           </span>
         )}
         {puede.prometer && sePuede > 0 && (
           <Button size="sm" variant="soft" onClick={() => setAbriendo(true)}>
-            Crear un compromiso
+            Nuevo compromiso
           </Button>
         )}
       </div>
@@ -105,7 +106,7 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
           explicación: "no está el botón" se lee como un error del sistema. */}
       {puede.prometer && sePuede <= 0 && destino.disponible > 0 && (
         <p className="muted" style={{ fontSize: 12 }}>
-          Ya está comprometido todo {esManual ? 'lo que falta juntar' : 'lo que se le debe'} ({formatMoney(yaComprometido)}).
+          Ya está pedido todo {esManual ? 'lo que falta' : 'lo que se le debe'} ({formatMoney(yaComprometido)}).
           Para pedirle a otro cliente, primero confirmá o cancelá alguno de los compromisos de abajo.
         </p>
       )}
@@ -119,19 +120,14 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
               <Badge tone={TONO[c.estado]}>{ROTULO[c.estado]}</Badge>
               <b>{formatMoney(c.estado === 'confirmado' ? Number(c.monto_confirmado ?? c.monto) : Number(c.monto))}</b>
               <span>{c.cliente_nombre}</span>
-              {c.viene_de && <span className="muted">· resto de una anterior</span>}
+              {c.viene_de && <span className="muted">· resto de uno anterior</span>}
 
               {estaAbierto(c) && puede.confirmar && (
-                <Button size="sm" onClick={() => setConfirmando(c)}>Ya entró</Button>
-              )}
-              {c.estado === 'prometido' && puede.prometer && (
-                <Button size="sm" variant="soft" onClick={() => correr(async () => { await cambiarEstado(c.id, 'transferido') })}>
-                  Dice que transfirió
-                </Button>
+                <Button size="sm" onClick={() => setConfirmando(c)}>Confirmar</Button>
               )}
               {estaAbierto(c) && puede.prometer && (
                 <Button size="sm" variant="ghost" onClick={() => correr(async () => { await cambiarEstado(c.id, 'cancelado') })}>
-                  Se cayó
+                  Cancelar
                 </Button>
               )}
             </li>
@@ -156,7 +152,7 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
         />
       </Modal>
 
-      <Modal abierto={!!confirmando} onCerrar={() => setConfirmando(null)} titulo="¿Cuánta plata entró?">
+      <Modal abierto={!!confirmando} onCerrar={() => setConfirmando(null)} titulo="Confirmar compromiso">
         {confirmando && (
           <FormConfirmar
             compromiso={confirmando}
@@ -168,12 +164,12 @@ export function Compromisos({ destino, compromisos, puede, onCambio }: {
                 // algo distinto que contar.
                 const partes = [
                   esManual
-                    ? `Listo: quedaron anotados ${formatMoney(monto)} para ${destino.nombre}.`
-                    : `Listo: se registraron ${formatMoney(monto)} en el dashboard.`,
+                    ? `Listo: ${formatMoney(monto)} acreditados en ${destino.nombre}.`
+                    : `Listo: ${formatMoney(monto)} acreditados y registrados en el dashboard.`,
                 ]
                 if (r.se_paso > 0) partes.push(`Entraron ${formatMoney(r.se_paso)} más de lo que faltaba: fijate en el banco.`)
-                if (r.cuenta_completa) partes.push('Ya se juntó todo: la cuenta quedó libre hasta que le cargues un monto nuevo.')
-                if (r.nueva) partes.push(`Como entró menos de lo comprometido, quedó un compromiso nuevo por ${formatMoney(Number(r.nueva.monto))}.`)
+                if (r.cuenta_completa) partes.push('Se completó el monto: la cuenta quedó pagada y en pausa.')
+                if (r.nueva) partes.push(`Como entró menos de lo pedido, quedó un compromiso nuevo por ${formatMoney(Number(r.nueva.monto))}.`)
                 setAviso(partes.join(' '))
               })
             }}
@@ -224,19 +220,19 @@ function FormCompromiso({ destino, maximo, onGuardar, onCancelar }: {
         </Notice>
       )}
 
-      <Field label="¿Qué cliente va a transferir?">
+      <Field label="Cliente">
         <Input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Ej: Nazarena Luciani" autoFocus />
       </Field>
       <Field label="Número de cliente en Gestión Nube (opcional)">
         <Input value={clienteId} onChange={(e) => setClienteId(e.target.value)} placeholder="para poder cruzarlo con su deuda" />
       </Field>
       <Field
-        label="¿Cuánto va a transferir?"
-        hint={`Como mucho ${formatMoney(maximo)}, que es lo que ${esManual ? 'falta juntar' : 'se le debe'} y todavía no está comprometido.`}
+        label="Monto"
+        hint={`Disponible: ${formatMoney(maximo)}.`}
       >
         <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0" />
       </Field>
-      <Field label="¿Para cuándo lo se comprometió? (opcional)">
+      <Field label="Fecha comprometida (opcional)">
         <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
       </Field>
       <Field label="Nota (opcional)">
@@ -246,7 +242,7 @@ function FormCompromiso({ destino, maximo, onGuardar, onCancelar }: {
       {sePasa && (
         <Notice tone="danger">
           <span>
-            Es más de lo que {esManual ? 'falta juntar' : 'se le debe'} sin comprometer ({formatMoney(maximo)}). Si el
+            Es más de lo disponible ({formatMoney(maximo)}). Si el
             cliente va a mandar más, creá el resto como un compromiso a otro destino: así acá no
             entra de más.
           </span>
@@ -330,10 +326,10 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
         )}
       </p>
 
-      <Field label="¿Cuánto entró de verdad?" hint={`Se había comprometido ${formatMoney(Number(compromiso.monto))}.`}>
+      <Field label="Monto acreditado" hint={`Pedido: ${formatMoney(Number(compromiso.monto))}.`}>
         <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoFocus />
       </Field>
-      <Field label="¿Qué día transfirió?" hint="No es hoy necesariamente: el cierre de mes usa esta fecha.">
+      <Field label="Fecha de la transferencia" hint="No es hoy necesariamente: el cierre de mes usa esta fecha.">
         <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
       </Field>
 
@@ -347,8 +343,8 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
       {falta > 0 && (
         <Notice tone="brand">
           <span>
-            Entró {formatMoney(falta)} menos de lo comprometido. Este compromiso se va a cerrar por lo que
-            entró, y se va a crear una nueva por {formatMoney(falta)} para poder seguir reclamándolo.
+            Entró {formatMoney(falta)} menos de lo pedido. Este compromiso se acredita por lo que entró
+            y queda uno nuevo por {formatMoney(falta)}.
           </span>
         </Notice>
       )}
@@ -359,7 +355,7 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
           disabled={!Number.isFinite(n) || n <= 0 || yendo}
           onClick={async () => { setYendo(true); try { await onConfirmar(n, fecha) } finally { setYendo(false) } }}
         >
-          {yendo ? 'Registrando…' : 'Sí, entró'}
+          {yendo ? 'Registrando…' : 'Confirmar'}
         </Button>
       </div>
     </div>

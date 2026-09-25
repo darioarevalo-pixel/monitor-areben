@@ -190,7 +190,7 @@ function Monto({ v, tam = 'fila', tono }: {
 /**
  * El título de una lista, con cuántas hay.
  *
- * ⚠️ El número va apagado y no pegado con un punto: `Falta confirmar · 2` se leía como una frase
+ * ⚠️ El número va apagado y no pegado con un punto: `Pedidos · 2` se leía como una frase
  * de tres partes del mismo peso. Lo que se busca es la palabra; el número es el dato de al lado.
  */
 function Titulo({ children, cuantas }: { children: React.ReactNode; cuantas?: number }) {
@@ -316,25 +316,27 @@ function Confirmar({ c, onListo, onCancelar }: {
   return (
     <div style={{ marginTop: 6, padding: space[2], background: color.bg2, borderRadius: radius.md }}>
       <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 6 }}>
-        Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {c.acreedor_nombre}.
+        {c.origen === 'manual'
+          ? <>Queda acreditado en {c.acreedor_nombre}; el pago en sí se carga en el dashboard.</>
+          : <>Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {c.acreedor_nombre}.</>}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <input className="mo-input" value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal"
-          aria-label="¿Cuánto entró?" style={{ flex: '1 1 110px', fontSize: font.sm }} />
+          aria-label="Monto acreditado" style={{ flex: '1 1 110px', fontSize: font.sm }} />
         <input className="mo-input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
-          aria-label="¿Qué día transfirió?" style={{ flex: '1 1 130px', fontSize: font.sm }} />
+          aria-label="Fecha de la transferencia" style={{ flex: '1 1 130px', fontSize: font.sm }} />
       </div>
 
       {falta > 0 && (
         <div style={{ fontSize: font.xs, color: color.mut, marginTop: 6 }}>
-          Entró {plata(falta)} menos de lo comprometido. Ésta se cierra por lo que entró y queda una
-          nueva por {plata(falta)} para poder seguir reclamándolo.
+          Entró {plata(falta)} menos de lo pedido. Éste se acredita por lo que entró y queda un
+          pedido nuevo por {plata(falta)}.
         </div>
       )}
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <Button size="sm" variant="solid" tone="brand" disabled={!Number.isFinite(n) || n <= 0 || yendo}
           onClick={async () => { setYendo(true); try { await onListo(n, fecha) } finally { setYendo(false) } }}>
-          {yendo ? 'Registrando…' : 'Sí, entró'}
+          {yendo ? 'Registrando…' : 'Confirmar'}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancelar}>Ahora no</Button>
       </div>
@@ -391,12 +393,12 @@ function TarjetaDestino({ nombre, sePuede, apoyos, detalle, deAca, cuenta, donde
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>{nombre}</div>
-        {deAca && <Chapa>cuenta de acá</Chapa>}
+        {deAca && <Chapa>cuenta a pagar</Chapa>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
         <Monto v={sePuede} />
-        <span style={{ fontSize: font.xs, color: color.mut2 }}>se le puede pedir</span>
+        <span style={{ fontSize: font.xs, color: color.mut2 }}>disponible</span>
       </div>
 
       {apoyos.length > 0 && (
@@ -484,12 +486,12 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
                los dos son iguales, y "faltan juntar $380.000" debajo de "$380.000 se le puede
                pedir" es la misma cifra dos veces: ruido con forma de dato. */
             apoyos={yaComprometido > 0 ? [
-              <Chapa key="falta">faltan juntar {plata(d.disponible)}</Chapa>,
-              <Chapa key="comp">ya hay {plata(yaComprometido)} comprometidos</Chapa>,
+              <Chapa key="falta">falta {plata(d.disponible)}</Chapa>,
+              <Chapa key="comp">pedido {plata(yaComprometido)}</Chapa>,
             ] : []}
             detalle={d.detalle}
             cuenta={d.cuentas[0] ?? null}
-            dondeSeCarga="Cobranza, en la ficha de la cuenta"
+            dondeSeCarga="Cobranza, en Cuentas a pagar"
           />
         )
       })}
@@ -509,8 +511,8 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
                  no coincide con él. ⚠️ Un acreedor puede tener cheques en la calle, y ahí `saldo`
                  y `disponible` ya son distintos aunque nadie haya comprometido nada. */
               ...(yaComprometido > 0 || a.saldo !== a.disponible
-                ? [<Chapa key="debe">se le debe {plata(a.saldo)}</Chapa>] : []),
-              ...(yaComprometido > 0 ? [<Chapa key="comp">ya hay {plata(yaComprometido)} comprometidos</Chapa>] : []),
+                ? [<Chapa key="debe">saldo {plata(a.saldo)}</Chapa>] : []),
+              ...(yaComprometido > 0 ? [<Chapa key="comp">pedido {plata(yaComprometido)}</Chapa>] : []),
               ...(a.yaPagadoSinDebitar > 0
                 ? [<Chapa key="cheque" tono="espera">ya se le mandó {plata(a.yaPagadoSinDebitar)} sin debitar</Chapa>]
                 : []),
@@ -525,22 +527,14 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
   )
 }
 
-function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado, onIrAlCliente }: {
+function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado, onIrAlCliente }: {
   c: Compromiso
   hoy: string
-  /**
-   * De quién es el trabajo de esta fila: `nuestro` es "mirá el banco y confirmalo", `espera` es
-   * "le toca al cliente". 🔑 **Es la franja de color de la izquierda, y es la única diferencia
-   * visible entre las dos listas.** Antes las dos dibujaban tarjetas idénticas y lo único que las
-   * separaba era un título de 12 px: bajando la pantalla eran ocho filas iguales, y separarlas es
-   * justamente el sentido de la pestaña (ver `colaDeCobranza`).
-   */
-  tono: 'nuestro' | 'espera'
   puede: { prometer: boolean; confirmar: boolean }
   abierta: boolean
   onConfirmarAbrir: (id: string | null) => void
   onConfirmar: (c: Compromiso, monto: number, fecha: string) => Promise<void>
-  onEstado: (c: Compromiso, estado: 'prometido' | 'transferido' | 'cancelado') => void
+  onEstado: (c: Compromiso, estado: 'prometido' | 'cancelado') => void
   onIrAlCliente: ((c: Compromiso) => void) | null
 }) {
   const fecha = cuando(c.fecha_prometida, hoy)
@@ -553,7 +547,6 @@ function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onE
   return (
     <article style={{
       background: color.surface, borderTop: `1px solid ${color.line2}`,
-      borderLeft: `3px solid ${tono === 'nuestro' ? color.brandSolid : color.line2}`,
     }}>
       {/*
         🔑 **Las acciones van al costado del monto, no en una barra abajo.**
@@ -561,14 +554,14 @@ function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onE
         que hacía que entraran tres filas donde entran cinco. Acá el ojo cae en el monto y la mano
         ya está al lado (Darío, 3-sep-2026: *"para acortar la vista"*).
 
-        ⚠️ El padding izquierdo descuenta los 3 px de la franja: el texto arranca en `MARGEN` como
-        todo lo demás de la pestaña, no 3 px más adentro.
+        La franja de color de la izquierda separaba las dos listas abiertas; desde el 25-sep hay
+        una sola (Pedidos) y la franja se fue con ella.
       */}
-      <div style={{ display: 'flex', gap: space[2], padding: `${space[2]}px ${MARGEN}px ${space[2]}px ${MARGEN - 3}px`, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: space[2], padding: `${space[2]}px ${MARGEN}px`, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           {/*
             ⛔ **La chapa de estado NO está**, y la sacó Darío el 3-sep-2026. Decía "se lo pedimos"
-            en cada fila de la lista que ya se titula "Esperando que transfieran": repetía el
+            en cada fila de la lista que ya se titula "Pedidos": repetía el
             encabezado en amarillo, una vez por fila. La única chapa que sobrevive es la de vencida,
             porque ésa no la dice ningún título — es de ESTA fila y cambia todos los días.
           */}
@@ -621,19 +614,19 @@ function Fila({ c, hoy, tono, puede, abierta, onConfirmarAbrir, onConfirmar, onE
         {/*
           ⛔ **"Dice que transfirió" no está, y lo sacó Darío**: era un clic que no cambiaba nada.
           Si te dice que transfirió, vas al banco y confirmás — el escalón del medio era trabajo
-          extra sin nada a cambio. El estado sigue existiendo (la sección grande lo usa), así que
-          la lista "Falta confirmar" aparece igual cuando alguien lo marca desde allá.
+          extra sin nada a cambio. El 25-sep salió también de la sección y el circuito quedó en tres
+          estados: Pedido, Acreditado, Cancelado (ver `colaDeCobranza`).
         */}
         {hayAcciones && !abierta && (
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            {puede.confirmar && <BotonIcono fuerte que="Ya entró" de={c.cliente_nombre} onClick={() => onConfirmarAbrir(c.id)} />}
-            {puede.prometer && <BotonIcono que="Se cayó" de={c.cliente_nombre} onClick={() => onEstado(c, 'cancelado')} />}
+            {puede.confirmar && <BotonIcono fuerte que="Confirmar" de={c.cliente_nombre} onClick={() => onConfirmarAbrir(c.id)} />}
+            {puede.prometer && <BotonIcono que="Cancelar" de={c.cliente_nombre} onClick={() => onEstado(c, 'cancelado')} />}
           </div>
         )}
       </div>
 
       {abierta && (
-        <div style={{ borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px ${space[3]}px ${MARGEN - 3}px` }}>
+        <div style={{ borderTop: `1px solid ${color.line2}`, padding: `${space[2]}px ${MARGEN}px ${space[3]}px` }}>
           <Confirmar c={c} onCancelar={() => onConfirmarAbrir(null)}
             onListo={(monto, f) => onConfirmar(c, monto, f)} />
         </div>
@@ -713,7 +706,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
       ? c.cliente_id === String(cliente.id)
       : !c.cliente_id && c.cliente_telefono === cliente.telefono))
   }, [cola.cerradas, soloSuyas, cliente])
-  const abiertas = cola.porConfirmar.length + cola.esperando.length
+  const abiertas = cola.pedidos.length
   const puede = cobros.puede
   // Los compromisos de ESTE número que se anotaron antes de que el cliente existiera en Gestión Nube.
   const porVincular = useMemo(
@@ -753,7 +746,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
     )
   }
 
-  const lista = (titulo: string, filas: Compromiso[], tono: 'nuestro' | 'espera') =>
+  const lista = (titulo: string, filas: Compromiso[]) =>
     filas.length > 0 && (
       <>
         <Titulo cuantas={filas.length}>{titulo}</Titulo>
@@ -762,7 +755,6 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
             key={c.id}
             c={c}
             hoy={hoy}
-            tono={tono}
             puede={puede}
             abierta={confirmando === c.id}
             onConfirmarAbrir={setConfirmando}
@@ -770,8 +762,8 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
               async () => {
                 await cambiarEstado(x.id, estado)
                 return estado === 'cancelado'
-                  ? `Listo: el compromiso de ${plata(Number(x.monto))} quedó como caído.`
-                  : 'Vuelve a quedar en pie.'
+                  ? `Listo: el compromiso de ${plata(Number(x.monto))} quedó cancelado.`
+                  : 'Volvió a Pedidos.'
               },
               /*
                 🔑 **El precio de haber achicado la cruz.** Con un ícono chico y sin etiqueta, el
@@ -782,7 +774,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
               estado === 'cancelado'
                 ? () => correr(async () => {
                     await cambiarEstado(x.id, 'prometido')
-                    return 'Listo, el compromiso vuelve a estar en pie.'
+                    return 'Listo, el compromiso volvió a Pedidos.'
                   })
                 : undefined,
             )}
@@ -791,8 +783,8 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
                 const r = await confirmarCompromiso(x.id, monto, fecha)
                 setConfirmando(null)
                 return r.nueva
-                  ? `Listo: ${plata(monto)} registrados en el dashboard. Como entró menos, quedó un compromiso nuevo por ${plata(Number(r.nueva.monto))}.`
-                  : `Listo: ${plata(monto)} registrados en el dashboard.`
+                  ? `Listo: ${plata(monto)} acreditados. Como entró menos, quedó un pedido nuevo por ${plata(Number(r.nueva.monto))}.`
+                  : `Listo: ${plata(monto)} acreditados.`
               })
             }}
             onIrAlCliente={onIrAlCliente}
@@ -934,7 +926,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
       {cola.totalAbierto > 0 && (
         <div style={{ padding: `0 ${MARGEN}px ${space[3]}px` }}>
           <Monto v={cola.totalAbierto} tam="total" />
-          <div style={{ fontSize: font.xs, color: color.mut2 }}>comprometidos y sin entrar</div>
+          <div style={{ fontSize: font.xs, color: color.mut2 }}>pedido y sin acreditar</div>
         </div>
       )}
 
@@ -969,8 +961,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
         pantalla la primera vez y después eran dos renglones que se leen una sola vez en la vida.
         El título ya dice qué hay adentro.
       */}
-      {lista('Falta confirmar', cola.porConfirmar, 'nuestro')}
-      {lista('Esperando que transfieran', cola.esperando, 'espera')}
+      {lista('Pedidos', cola.pedidos)}
 
       {/*
         El estado vacío ocupa lugar a propósito: es la mitad de la pantalla y decirlo en un renglón
@@ -978,8 +969,8 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
       */}
       {abiertas === 0 && (
         <EmptyState
-          title="No hay plata esperando"
-          hint="Cuando un cliente se comprometa a transferirle a un acreedor, el compromiso aparece acá hasta que entre."
+          title="No hay pedidos abiertos"
+          hint="Cuando le pidas a un cliente que transfiera, el pedido aparece acá hasta que se acredite."
         />
       )}
 
@@ -988,7 +979,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
           <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}`, borderBottom: `1px solid ${color.line2}`, marginTop: space[3] }} />
           {verCerradas ? (
             <>
-              <Titulo cuantas={cerradas.length}>{soloSuyas ? 'Cerradas de este cliente' : 'Cerradas'}</Titulo>
+              <Titulo cuantas={cerradas.length}>{soloSuyas ? 'Cerrados de este cliente' : 'Cerrados'}</Titulo>
 
               {/*
                 🔑 **El botón de "sólo las de este cliente"** (Darío, 21-sep-2026). Mirar para atrás
@@ -1018,7 +1009,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
 
               {cerradas.length === 0 && (
                 <div style={{ padding: `0 ${MARGEN}px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>
-                  De este cliente no hay ninguna cerrada entre las últimas que se trajeron.
+                  De este cliente no hay ningún cerrado entre los últimos que se trajeron.
                 </div>
               )}
 
@@ -1038,7 +1029,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
                 return (
                   <div key={c.id} style={{ background: color.surface, borderTop: `1px solid ${color.line2}`, padding: `6px ${MARGEN}px` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <Chapa tono={entro ? 'entro' : 'neutro'}>{entro ? 'entró' : 'se cayó'}</Chapa>
+                      <Chapa tono={entro ? 'entro' : 'neutro'}>{entro ? 'Acreditado' : 'Cancelado'}</Chapa>
                       <Monto tam="chico" tono={entro ? undefined : color.mut2}
                         v={Number(entro ? (c.monto_confirmado ?? c.monto) : c.monto)} />
                       {/* Entró de menos: cambia qué comprobante hay que buscar en el chat. */}
@@ -1065,14 +1056,14 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
               })}
               {cerradas.length > CERRADAS && (
                 <div style={{ padding: `6px ${MARGEN}px`, fontSize: font.xs, color: color.mut2 }}>
-                  Se muestran las {CERRADAS} últimas. El resto está en Dirección → “A quién le debemos”.
+                  Se muestran los {CERRADAS} últimos. El resto está en Dirección → “A quién le debemos”.
                 </div>
               )}
             </>
           ) : (
             <button type="button" onClick={() => setVerCerradas(true)}
               style={{ display: 'block', width: '100%', height: 'auto', padding: space[2], background: 'none', border: 0, cursor: 'pointer', fontSize: font.xs, fontWeight: 700, color: color.brand }}>
-              Ver las {cola.cerradas.length} que ya se cerraron
+              Ver cerrados ({cola.cerradas.length})
             </button>
           )}
         </>

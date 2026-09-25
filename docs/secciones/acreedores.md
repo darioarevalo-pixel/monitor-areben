@@ -190,6 +190,45 @@ tener el dato de quién transfirió a qué compromiso?»*.
 `PanelWhatsApp.tsx` y `AgendaDelDia.tsx` — se emparejaron las medidas (11 px / 600), pero juntarlos
 de verdad es mudarlos a un archivo común y eso toca las tres solapas.
 
+## ✅ 25-sep-2026 — una fila por destino, no una tarjeta
+
+Lo pidió Bruno antes de cargar ~30 cuentas manuales: *«la veo demasiado plana, si tengo que cargar
+30 cuentas me queda enorme todo»*. Cada destino era una tarjeta de ~230 px con todo a la vista
+aunque estuviera vacío. Sólo cambió cómo se ve: ni una regla ni una llamada al servidor.
+
+- 🔑 **`FilaDestino.tsx` es la fila de las dos mitades** (acreedores y cuentas manuales): nombre,
+  el número, **el alias con copiar** y cómo vienen los compromisos. Todo lo demás —CBU, el circuito,
+  lo anterior, editar/archivar— va en el detalle, **uno abierto por vez**.
+- 🔑 **Las cuentas se usan una vez por mes** (Bruno), así que casi todas están quietas: van
+  **plegadas abajo**, y el **«Empezar a juntar» está en la fila misma** — es el gesto de todos los
+  meses. ⚠️ Por eso su `Modal` vive FUERA de la fila: se abre con la fila cerrada.
+- Los acreedores **al día** también van plegados; los que tienen saldo, de mayor a menor. El cheque
+  en la calle se avisa ya en la fila (*«pedir como mucho…»*), no sólo adentro.
+- El buscador aparece desde 8 cuentas y **despliega las quietas que coinciden**.
+- ⛔ **La fila es una grilla de columnas fijas** (`.mo-fila-plegable` en `kit.css`), no flex: con
+  flex, el botón de una fila corría las columnas de esa fila y la lista quedaba desalineada. En el
+  teléfono (< 900 px) el nombre pasa a su propio renglón.
+
+## ✅ 25-sep-2026 — palabras definidas y tres estados (Darío)
+
+Darío, leyendo la pantalla nueva: *«muchos términos son mucho texto y poco palabras definidas»*.
+Cada estado era una frase; ahora es un nombre, **igual en la sección y en el panel**:
+
+- Compromiso: **Pedido → Acreditado**, o **Cancelado**. Botones **Confirmar** / **Cancelar** /
+  **Nuevo compromiso**.
+- 🔑 **"Dice que transfirió" (`transferido`) salió de la pantalla.** Darío: el riesgo de que un aviso
+  sea falso es bajísimo y no justifica un paso. Del panel ya había salido el 4-sep, así que la
+  lista "Falta confirmar" estaba siempre vacía: `colaDeCobranza` ahora devuelve **una sola lista,
+  `pedidos`**. ⚠️ El estado sigue en la base, en el CHECK y en el grafo del handler — **no se migró
+  nada**; un `transferido` viejo se muestra como Pedido y se confirma igual.
+- Cuentas manuales = **Cuentas a pagar** (nombre de Darío). Estados **Activa** / **En pausa** /
+  Archivada; botones **Activar**, **Editar monto**, **Marcar pagada**, **Pausar**. Historial:
+  **Pagada** / **Pausada**.
+- Acreedores: **Con saldo** / **Al día**; «Saldo $X» y «disponible $X» cuando hay cheque en la calle.
+- ⛔ **Sólo cambió el texto visible** (y los errores del servidor que se ven en pantalla). Las keys
+  de permisos (`acreedores.prometer`, `.confirmar`), los valores del CHECK y las columnas quedaron
+  igual: es la lección del rename `prometer` → `comprometer` del 4-sep.
+
 ## Cómo se prueba
 
 ```bash

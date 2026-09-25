@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * **Cuentas para juntar plata** — la mitad de "A quién le debemos" que NO sale del dashboard.
+ * **Cuentas a pagar** — la mitad de "A quién le debemos" que NO sale del dashboard.
  *
  * # Para qué está
  *
@@ -26,14 +26,22 @@
  * No le escribe un peso al dashboard. **El pago de verdad se sigue cargando allá como siempre**:
  * esto registra quién puso qué para juntarlo. Es el precio de que sea barata, y es lo que la deja
  * andar con el dashboard caído.
+ *
+ * # 🔑 Una fila por cuenta, y las quietas plegadas (25-sep-2026)
+ *
+ * Son ~30 cuentas que se usan **una vez por mes**: casi todas están quietas casi siempre. Arriba van
+ * las que están juntando; las quietas quedan plegadas abajo, con el **«Activar» en la
+ * fila misma**, porque ése es el gesto de todos los meses y no tiene que costar abrir nada.
+ * Buscar por nombre despliega las quietas que coinciden. Ver `FilaDestino.tsx`.
  */
 
 import { useState } from 'react'
 import {
-  Badge, Button, EmptyState, Field, Input, Modal, Notice, SectionCard, formatMoney, space,
+  Badge, Barra, BuscarInput, Button, Card, EmptyState, Field, Input, Modal, Notice, color, font, formatMoney, space,
 } from '@/components/ui'
 import { CuentaLinea } from './CuentaLinea'
 import { Compromisos } from './Compromisos'
+import { EstadoCompromisos, FilaDestino, TituloGrupo } from './FilaDestino'
 import { useCuentas } from './useCuentas'
 import { destinoDeCuenta } from '@/lib/compromisos/destino'
 import { mostrar as plata, paraEditar, parsearMonto, type Compromiso } from '@/lib/compromisos/core'
@@ -43,10 +51,17 @@ import {
   type CuentaManual, type DatosCuenta,
 } from '@/lib/cuentas/cliente'
 
+/** Con menos que esto el buscador es un casillero más para mirar. */
+const BUSCAR_DESDE = 8
+
 function fechaCorta(iso: string | null): string | null {
   if (!iso) return null
   const [y, m, d] = String(iso).slice(0, 10).split('-')
   return y && m && d ? `${d}/${m}/${y}` : iso
+}
+
+function normalizar(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
 
 export function CuentasManuales({ compromisos, puedeCompromisos, onCambioCompromisos }: {
@@ -58,11 +73,23 @@ export function CuentasManuales({ compromisos, puedeCompromisos, onCambioComprom
   const { cuentas, puede, cargando, error, recargar } = useCuentas()
   const [editando, setEditando] = useState<CuentaManual | 'nueva' | null>(null)
   const [verArchivadas, setVerArchivadas] = useState(false)
+  const [verQuietas, setVerQuietas] = useState(false)
+  const [abierta, setAbierta] = useState<string | null>(null)
+  const [buscar, setBuscar] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
   const [falla, setFalla] = useState<string | null>(null)
 
-  const alaVista = cuentas.filter((c) => (verArchivadas ? c.archivada : !c.archivada))
-  const archivadas = cuentas.filter((c) => c.archivada).length
+  const archivadas = cuentas.filter((c) => c.archivada)
+  const deSiempre = cuentas.filter((c) => !c.archivada)
+  const q = normalizar(buscar.trim())
+  const coincide = (c: CuentaManual) =>
+    !q || normalizar(`${c.nombre} ${c.para_que ?? ''} ${c.cuenta_alias ?? ''}`).includes(q)
+
+  const alaVista = (verArchivadas ? archivadas : deSiempre).filter(coincide)
+  const juntando = alaVista.filter((c) => !c.archivada && c.objetivo)
+  const quietas = alaVista.filter((c) => c.archivada || !c.objetivo)
+  // Buscando, las quietas que coinciden se muestran solas: esconderlas es buscar y no encontrar.
+  const quietasAbiertas = verArchivadas || verQuietas || !!q || juntando.length === 0
 
   async function correr(fn: () => Promise<string | void>) {
     setFalla(null)
@@ -77,21 +104,45 @@ export function CuentasManuales({ compromisos, puedeCompromisos, onCambioComprom
 
   if (cargando) return null
 
+  const fila = (c: CuentaManual) => (
+    <Cuenta
+      key={c.id}
+      cuenta={c}
+      puedeAdministrar={puede.administrar}
+      compromisos={compromisos}
+      puedeCompromisos={puedeCompromisos}
+      abierta={abierta === c.id}
+      onToggle={() => setAbierta(abierta === c.id ? null : c.id)}
+      onEditar={() => setEditando(c)}
+      onCambio={() => { recargar(); onCambioCompromisos() }}
+      correr={correr}
+    />
+  )
+
   return (
-    <div style={{ display: 'grid', gap: space[4] }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>Cuentas para juntar plata</h2>
-        <span className="muted" style={{ fontSize: 12 }}>
-          Para lo que no está en el dashboard: la cuota del crédito, las bolsas, el alquiler.
-        </span>
-        {puede.administrar && (
-          <Button size="sm" variant="soft" onClick={() => setEditando('nueva')}>Crear una cuenta</Button>
-        )}
-        {archivadas > 0 && (
-          <Button size="sm" variant="ghost" onClick={() => setVerArchivadas((v) => !v)}>
-            {verArchivadas ? 'Ver las de siempre' : `Ver las archivadas (${archivadas})`}
-          </Button>
-        )}
+    <div style={{ display: 'grid', gap: space[3] }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid' }}>
+          <h2 style={{ fontSize: font.lg, margin: 0 }}>Cuentas a pagar</h2>
+          <span className="muted" style={{ fontSize: font.sm }}>
+            Lo que no está en el dashboard: la cuota del crédito, las bolsas, el alquiler.
+          </span>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+          {deSiempre.length >= BUSCAR_DESDE && (
+            <div style={{ width: 220 }}>
+              <BuscarInput value={buscar} onChange={setBuscar} placeholder="Buscar una cuenta…" />
+            </div>
+          )}
+          {archivadas.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => { setVerArchivadas((v) => !v); setAbierta(null) }}>
+              {verArchivadas ? 'Ver las de siempre' : `Ver las archivadas (${archivadas.length})`}
+            </Button>
+          )}
+          {puede.administrar && (
+            <Button size="sm" variant="soft" onClick={() => setEditando('nueva')}>Crear una cuenta</Button>
+          )}
+        </div>
       </div>
 
       {error && <Notice tone="danger"><span>{error}</span></Notice>}
@@ -100,26 +151,53 @@ export function CuentasManuales({ compromisos, puedeCompromisos, onCambioComprom
 
       {alaVista.length === 0 ? (
         <EmptyState
-          title={verArchivadas ? 'No hay ninguna cuenta archivada' : 'Todavía no hay ninguna cuenta'}
+          title={
+            q ? `Ninguna cuenta se llama «${buscar.trim()}»`
+              : verArchivadas ? 'No hay ninguna cuenta archivada'
+                : 'Todavía no hay ninguna cuenta'
+          }
           hint={
-            verArchivadas
+            q || verArchivadas
               ? undefined
-              : 'Una cuenta es un lugar a dónde pedirle a un cliente que transfiera: la cuota del crédito, las bolsas. Se crea una vez y se usa cada vez que haga falta juntar plata.'
+              : 'Una cuenta es a dónde pedirle a un cliente que transfiera: la cuota del crédito, las bolsas. Se crea una vez y se activa cada vez que hay que pagarla.'
           }
         />
       ) : (
-        alaVista.map((c) => (
-          <Cuenta
-            key={c.id}
-            cuenta={c}
-            puedeAdministrar={puede.administrar}
-            compromisos={compromisos}
-            puedeCompromisos={puedeCompromisos}
-            onEditar={() => setEditando(c)}
-            onCambio={() => { recargar(); onCambioCompromisos() }}
-            correr={correr}
-          />
-        ))
+        // La primera fila no lleva borde arriba: el de la card ya separa.
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ marginTop: -1 }}>
+            {juntando.length > 0 && (
+              <>
+                <TituloGrupo n={juntando.length}>Activas</TituloGrupo>
+                {juntando.map(fila)}
+              </>
+            )}
+            {quietas.length > 0 && (
+              <>
+                {verArchivadas ? (
+                  <TituloGrupo n={quietas.length}>Archivadas</TituloGrupo>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setVerQuietas((v) => !v)}
+                    disabled={!!q || juntando.length === 0}
+                    style={{
+                      // ⛔ `height: auto`: `.shell-content button` le fija la altura de un control.
+                      height: 'auto', width: '100%', textAlign: 'left', cursor: 'pointer',
+                      background: 'transparent', border: 'none', borderTop: `1px solid ${color.line}`,
+                      padding: `${space[2]}px ${space[4]}px`, display: 'flex', gap: space[2], alignItems: 'baseline',
+                    }}
+                  >
+                    <span style={{ fontSize: font.xs, fontWeight: 700, color: color.mut, textTransform: 'uppercase', letterSpacing: 0.4, whiteSpace: 'nowrap' }}>
+                      {quietasAbiertas ? '▾' : '▸'} En pausa · {quietas.length}
+                    </span>
+                  </button>
+                )}
+                {quietasAbiertas && quietas.map(fila)}
+              </>
+            )}
+          </div>
+        </Card>
       )}
 
       <Modal
@@ -147,11 +225,13 @@ export function CuentasManuales({ compromisos, puedeCompromisos, onCambioComprom
 
 // ─── Una cuenta ───────────────────────────────────────────────────────────────
 
-function Cuenta({ cuenta, puedeAdministrar, compromisos, puedeCompromisos, onEditar, onCambio, correr }: {
+function Cuenta({ cuenta, puedeAdministrar, compromisos, puedeCompromisos, abierta, onToggle, onEditar, onCambio, correr }: {
   cuenta: CuentaManual
   puedeAdministrar: boolean
   compromisos: Compromiso[]
   puedeCompromisos: PuedeCompromisos
+  abierta: boolean
+  onToggle: () => void
   onEditar: () => void
   onCambio: () => void
   correr: (fn: () => Promise<string | void>) => Promise<void>
@@ -160,147 +240,156 @@ function Cuenta({ cuenta, puedeAdministrar, compromisos, puedeCompromisos, onEdi
   const [verHistorial, setVerHistorial] = useState(false)
   const o = cuenta.objetivo
   const destino = destinoDeCuenta(cuenta)
+  const tieneCuenta = !!(cuenta.cuenta_alias || cuenta.cuenta_cbu)
+  const bancaria = {
+    id: cuenta.id,
+    alias: cuenta.cuenta_alias,
+    cbu: cuenta.cuenta_cbu,
+    banco: cuenta.cuenta_banco,
+    titular: cuenta.cuenta_titular,
+    sugerida: true,
+  }
 
   return (
-    <SectionCard
-      title={cuenta.nombre}
-      subtitle={
-        o
-          ? `Faltan juntar ${formatMoney(o.falta)} de ${formatMoney(o.monto)}${o.nota ? ` · ${o.nota}` : ''}`
-          : cuenta.archivada
-            ? 'Archivada'
-            : 'No se está juntando nada ahora'
-      }
-      actions={
-        puedeAdministrar ? (
-          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            {!cuenta.archivada && !o && (
-              <Button size="sm" onClick={() => setMontoAbierto(true)}>Empezar a juntar</Button>
-            )}
-            {o && <Button size="sm" variant="soft" onClick={() => setMontoAbierto(true)}>Cambiar el monto</Button>}
-            <Button size="sm" variant="ghost" onClick={onEditar}>Editar</Button>
-            {!o && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => correr(async () => {
-                  await archivarCuenta(cuenta.id, !cuenta.archivada)
-                  return cuenta.archivada ? `${cuenta.nombre} volvió a la lista.` : `${cuenta.nombre} quedó archivada.`
-                })}
-              >
-                {cuenta.archivada ? 'Sacar de archivadas' : 'Archivar'}
-              </Button>
-            )}
+    <>
+    <FilaDestino
+      nombre={cuenta.nombre}
+      detalle={o?.nota || cuenta.para_que || undefined}
+      abierto={abierta}
+      onToggle={onToggle}
+      cuenta={tieneCuenta ? bancaria : null}
+      monto={
+        o ? (
+          <div style={{ display: 'grid', gap: 3 }}>
+            <span>
+              Falta <b style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(o.falta)}</b>{' '}
+              <span className="muted" style={{ fontSize: font.xs }}>de {formatMoney(o.monto)}</span>
+            </span>
+            <Barra pct={o.monto > 0 ? (o.juntado / o.monto) * 100 : 0} tono={color.success} ancho={150} />
           </div>
+        ) : (
+          <span style={{ color: color.mut2 }}>{cuenta.archivada ? 'Archivada' : 'En pausa'}</span>
+        )
+      }
+      estado={o ? <EstadoCompromisos destinoId={cuenta.id} compromisos={compromisos} /> : null}
+      accion={
+        puedeAdministrar && !o && !cuenta.archivada ? (
+          <Button size="sm" variant="soft" onClick={() => setMontoAbierto(true)}>Activar</Button>
         ) : undefined
       }
     >
-      {cuenta.para_que && <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{cuenta.para_que}</p>}
+      <div style={{ display: 'grid', gap: space[3] }}>
+        {o && cuenta.para_que && o.nota && (
+          <p className="muted" style={{ fontSize: font.sm, margin: 0 }}>{cuenta.para_que}</p>
+        )}
 
-      {cuenta.cuenta_alias || cuenta.cuenta_cbu ? (
-        <CuentaLinea
-          sinChapa
-          cuenta={{
-            id: cuenta.id,
-            alias: cuenta.cuenta_alias,
-            cbu: cuenta.cuenta_cbu,
-            banco: cuenta.cuenta_banco,
-            titular: cuenta.cuenta_titular,
-            sugerida: true,
-          }}
-        />
-      ) : (
-        <p className="muted" style={{ fontSize: 12 }}>
-          No tiene alias ni CBU cargado. Sin eso no hay qué pasarle al cliente: se carga con Editar.
-        </p>
-      )}
+        {tieneCuenta ? (
+          <CuentaLinea sinChapa cuenta={bancaria} />
+        ) : (
+          <p className="muted" style={{ fontSize: font.sm, margin: 0 }}>
+            No tiene alias ni CBU cargado. Sin eso no hay qué pasarle al cliente: se carga con Editar.
+          </p>
+        )}
 
-      {o && (
-        <div style={{ display: 'grid', gap: space[2], marginTop: space[3] }}>
-          <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
-            <span>Ya entraron <b>{plata(o.juntado)}</b></span>
-            {o.comprometido > 0 && <span className="muted">· {plata(o.comprometido)} comprometidos y sin entrar</span>}
-            <span className="muted">· se puede pedir hasta <b>{plata(o.sePuedePedir)}</b></span>
+        {o && (
+          <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'center', fontSize: font.base }}>
+            {/* Pedido y Disponible los dice el bloque de compromisos, justo abajo. */}
+            <span>Acreditado <b>{plata(o.juntado)}</b> de {plata(o.monto)}</span>
           </div>
+        )}
 
-          {puedeAdministrar && (
-            <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-              {/* Las dos salidas que no son "se juntó todo". La normal la hace sola el sistema
-                  cuando entra la última transferencia. */}
-              <Button
-                size="sm"
-                variant="soft"
-                onClick={() => correr(async () => {
-                  const r = await cerrarObjetivo(o.id, 'completo')
-                  onCambio()
-                  return r.abiertos > 0
-                    ? `Listo, ${cuenta.nombre} quedó libre. Ojo: quedan ${r.abiertos} compromisos sin entrar; cancelalos si ya no van.`
-                    : `Listo, ${cuenta.nombre} quedó libre.`
-                })}
-              >
-                Ya está pagado
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => correr(async () => {
-                  const r = await cerrarObjetivo(o.id, 'cancelado')
-                  onCambio()
-                  return r.abiertos > 0
-                    ? `Se dejó de juntar para ${cuenta.nombre}. Quedan ${r.abiertos} compromisos sin entrar: cancelalos si ya no van.`
-                    : `Se dejó de juntar para ${cuenta.nombre}.`
-                })}
-              >
-                Se paga de otra forma
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+        {destino && (
+          <Compromisos
+            destino={destino}
+            compromisos={compromisos}
+            puede={puedeCompromisos}
+            onCambio={onCambio}
+          />
+        )}
 
-      {destino && (
-        <Compromisos
-          destino={destino}
-          compromisos={compromisos}
-          puede={puedeCompromisos}
-          onCambio={onCambio}
-        />
-      )}
+        {cuenta.historial.length > 0 && (
+          <div>
+            <Button size="sm" variant="ghost" onClick={() => setVerHistorial((v) => !v)}>
+              {verHistorial ? 'Ocultar historial' : `Ver historial (${cuenta.historial.length})`}
+            </Button>
+            {verHistorial && (
+              <ul style={{ display: 'grid', gap: space[1], listStyle: 'none', padding: 0, margin: `${space[2]}px 0 0` }}>
+                {cuenta.historial.map((h) => (
+                  <li key={h.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.base }}>
+                    <Badge tone={h.estado === 'completo' ? 'success' : 'neutral'}>
+                      {h.estado === 'completo' ? 'Pagada' : 'Pausada'}
+                    </Badge>
+                    <b>{plata(h.juntado)}</b>
+                    <span className="muted">de {plata(h.monto)}</span>
+                    {h.nota && <span>· {h.nota}</span>}
+                    <span className="muted">· {fechaCorta(h.cerrado_en)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
-      {!o && !cuenta.archivada && (
-        <p className="muted" style={{ fontSize: 12, marginTop: space[3] }}>
-          Esta cuenta está quieta. Para volver a pedirle plata a un cliente, cargale cuánto hay que
-          juntar con <b>Empezar a juntar</b>.
-        </p>
-      )}
+        {puedeAdministrar && (
+          <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[3] }}>
+            {o && (
+              <>
+                <Button size="sm" variant="soft" onClick={() => setMontoAbierto(true)}>Editar monto</Button>
+                {/* Las dos salidas a mano. La normal la hace sola el sistema cuando se acredita
+                    la última transferencia. */}
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() => correr(async () => {
+                    const r = await cerrarObjetivo(o.id, 'completo')
+                    onCambio()
+                    return r.abiertos > 0
+                      ? `Listo, ${cuenta.nombre} quedó pagada. Ojo: quedan ${r.abiertos} pedidos abiertos; cancelalos si ya no van.`
+                      : `Listo, ${cuenta.nombre} quedó pagada.`
+                  })}
+                >
+                  Marcar pagada
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => correr(async () => {
+                    const r = await cerrarObjetivo(o.id, 'cancelado')
+                    onCambio()
+                    return r.abiertos > 0
+                      ? `${cuenta.nombre} quedó en pausa. Quedan ${r.abiertos} pedidos abiertos: cancelalos si ya no van.`
+                      : `${cuenta.nombre} quedó en pausa.`
+                  })}
+                >
+                  Pausar
+                </Button>
+              </>
+            )}
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: space[2] }}>
+              <Button size="sm" variant="ghost" onClick={onEditar}>Editar</Button>
+              {!o && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => correr(async () => {
+                    await archivarCuenta(cuenta.id, !cuenta.archivada)
+                    return cuenta.archivada ? `${cuenta.nombre} volvió a la lista.` : `${cuenta.nombre} quedó archivada.`
+                  })}
+                >
+                  {cuenta.archivada ? 'Sacar de archivadas' : 'Archivar'}
+                </Button>
+              )}
+            </span>
+          </div>
+        )}
+      </div>
+    </FilaDestino>
 
-      {cuenta.historial.length > 0 && (
-        <div style={{ marginTop: space[3] }}>
-          <Button size="sm" variant="ghost" onClick={() => setVerHistorial((v) => !v)}>
-            {verHistorial ? 'Ocultar lo anterior' : `Ver las ${cuenta.historial.length} veces anteriores`}
-          </Button>
-          {verHistorial && (
-            <ul style={{ display: 'grid', gap: space[1], listStyle: 'none', padding: 0, margin: `${space[2]}px 0 0` }}>
-              {cuenta.historial.map((h) => (
-                <li key={h.id} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
-                  <Badge tone={h.estado === 'completo' ? 'success' : 'neutral'}>
-                    {h.estado === 'completo' ? 'se juntó' : 'se dejó de juntar'}
-                  </Badge>
-                  <b>{plata(h.juntado)}</b>
-                  <span className="muted">de {plata(h.monto)}</span>
-                  {h.nota && <span>· {h.nota}</span>}
-                  <span className="muted">· {fechaCorta(h.cerrado_en)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
+      {/* Fuera de la fila: el «Activar» lo abre con la fila CERRADA. */}
       <Modal
         abierto={montoAbierto}
         onCerrar={() => setMontoAbierto(false)}
-        titulo={o ? `Cambiar cuánto hay que juntar` : `¿Cuánto hay que juntar para ${cuenta.nombre}?`}
+        titulo={o ? `Editar monto · ${cuenta.nombre}` : `Activar ${cuenta.nombre}`}
       >
         <FormMonto
           objetivo={o}
@@ -309,13 +398,13 @@ function Cuenta({ cuenta, puedeAdministrar, compromisos, puedeCompromisos, onEdi
               if (o) await cambiarMonto(o.id, monto, nota)
               else await empezarAJuntar(cuenta.id, monto, nota)
               setMontoAbierto(false)
-              return o ? undefined : `${cuenta.nombre} está juntando ${formatMoney(monto)}.`
+              return o ? undefined : `${cuenta.nombre} quedó activa por ${formatMoney(monto)}.`
             })
           }}
           onCancelar={() => setMontoAbierto(false)}
         />
       </Modal>
-    </SectionCard>
+    </>
   )
 }
 
@@ -411,28 +500,27 @@ function FormMonto({ objetivo, onGuardar, onCancelar }: {
   return (
     <div style={{ display: 'grid', gap: space[3] }}>
       <Field
-        label="¿Cuánto hay que juntar?"
-        hint={objetivo ? `Ya entraron ${plata(objetivo.juntado)}.` : 'Mientras haya un monto cargado, la cuenta aparece para pedirle plata a un cliente.'}
+        label="Monto a pagar"
+        hint={objetivo ? `Acreditado hasta ahora: ${plata(objetivo.juntado)}.` : 'Mientras esté activa, la cuenta aparece para pedirle a un cliente que transfiera.'}
       >
         <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0" autoFocus />
       </Field>
-      <Field label="¿Qué es? (opcional)" hint="Para reconocerlo después, cuando esto quede en la lista de lo anterior.">
+      <Field label="Nota (opcional)" hint="Para reconocerlo después en el historial.">
         <Input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej: cuota de septiembre" />
       </Field>
 
       {muyBajo && objetivo && (
         <Notice tone="danger">
           <span>
-            Ya entraron {plata(objetivo.juntado)}, así que el monto no puede ser menor. Si con eso ya
-            está, cerralo con <b>Ya está pagado</b>.
+            Ya se acreditaron {plata(objetivo.juntado)}, así que el monto no puede ser menor. Si con eso
+            ya está, cerrala con <b>Marcar pagada</b>.
           </span>
         </Notice>
       )}
 
       {!objetivo && (
         <p className="muted" style={{ fontSize: 12 }}>
-          Cuando lo que entre llegue a ese número, la cuenta se apaga sola y queda libre hasta que le
-          cargues un monto nuevo.
+          Cuando lo acreditado llegue a ese monto, la cuenta queda pagada y vuelve a pausa sola.
         </p>
       )}
 
@@ -449,7 +537,7 @@ function FormMonto({ objetivo, onGuardar, onCancelar }: {
             }
           }}
         >
-          {objetivo ? 'Guardar' : 'Empezar a juntar'}
+          {objetivo ? 'Guardar' : 'Activar'}
         </Button>
       </div>
     </div>
