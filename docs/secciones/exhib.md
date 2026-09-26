@@ -565,6 +565,15 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   **la tilde es de la variante**. → `components/exhib/useExhib.ts` + `components/exhib/Exhib.tsx`
 - 🔴 **`tnAdminUrl` era la SEXTA copia de «cuál es el admin de cada tienda»** y se le escapó a la
   consolidación. Ahora el dominio sale de `lib/tienda.core.js`. → `lib/exhib/core.ts`
+- 🔴 **El repetido podía perder su contador sin que nadie se entere** (arreglado el 26-sep-2026).
+  Se subía borrando primero la fila vieja; si el borrado fallaba, el upsert con `ignoreDuplicates`
+  dejaba «1 vez» en la base y contestaba `ok` ⇒ la que caminaba oía un número que el historial ⛔ no
+  tenía. Ahora **la fila del teléfono pisa a la de la base, salvo que la base tenga MÁS unidades**
+  (dos tandas pueden llegar al revés), y **al cerrar se compara** lo que contó el teléfono con lo
+  que quedó guardado (`compararConHistorial`): ✓ verde si coincide, cartel rojo con la prenda si
+  ⛔ no. Pedido de Bruno: *«si a ella le dice 198 quiero que haya 198»*. ⚠️ El número cuenta
+  **unidades** (la suma de `veces`), ⛔ líneas. → `api/_exhib.js`, `useColaEscaneos.ts`,
+  `ExhibLibre.tsx`, `lib/exhib/libre.ts`
 
 ## Pendiente
 

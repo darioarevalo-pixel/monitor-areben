@@ -188,6 +188,41 @@ export function avanceDelRecorrido(escaneos: EscaneoLibre[]): number {
   return escaneos.reduce((n, e) => n + (pasoPorElLector(e) ? vecesDe(e) : 0), 0)
 }
 
+/** Una prenda que el teléfono contó y el historial ⛔ no tiene (o tiene con menos unidades). */
+export type FaltaEnHistorial = { lugar: string; variante_id: string; nombre: string; talle: string | null; reconocida: boolean; faltan: number }
+
+/**
+ * **¿Lo que oyó la que caminaba es lo que quedó guardado?** Se corre al cerrar el recorrido, contra
+ * lo que el servidor devuelve después de subir todo.
+ *
+ * 🔑 Pedido de Bruno (26-sep-2026): *«si a ella le dice 198 quiero que haya 198»*. El número que
+ * se canta es `avanceDelRecorrido` del teléfono; del lado del historial se cuenta igual, así que
+ * los dos totales son comparables. ⚠️ Se compara **por fila y por unidades**, ⛔ no sólo el total:
+ * un total igual con una prenda de más y otra de menos diría «coincide» sobre un historial roto.
+ * Los «de nuevo» ⛔ suman al número pero también se revisan: son filas que tienen que estar.
+ */
+export function compararConHistorial(
+  telefono: EscaneoLibre[],
+  historial: EscaneoLibre[],
+): { telefono: number; historial: number; faltan: FaltaEnHistorial[] } {
+  const guardadas = new Map(historial.map((e) => [claveEscaneo(e), vecesDe(e)]))
+  const faltan: FaltaEnHistorial[] = []
+  for (const e of telefono) {
+    const d = vecesDe(e) - (guardadas.get(claveEscaneo(e)) ?? 0)
+    if (d > 0) {
+      faltan.push({
+        lugar: e.lugar,
+        variante_id: e.variante_id,
+        nombre: e.product_name || e.codigo_crudo,
+        talle: e.size,
+        reconocida: e.encontrado,
+        faltan: d,
+      })
+    }
+  }
+  return { telefono: avanceDelRecorrido(telefono), historial: avanceDelRecorrido(historial), faltan }
+}
+
 /**
  * **Las horas de todas las lecturas de un escaneo**, venga de donde venga la fila.
  *

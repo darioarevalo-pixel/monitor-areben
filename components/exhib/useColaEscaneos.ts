@@ -152,8 +152,10 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
    * Reemplaza un escaneo que ya estaba (misma clave) — lo usa el triage por categoría, donde la
    * persona cambia de opinión: «no se encuentra» pasa a «solucionado» sobre la misma variante.
    *
-   * ⚠️ En la base es un **upsert que ignora duplicados**, así que la fila vieja gana: por eso se
-   * saca primero del servidor y después se manda la nueva. ⛔ No alcanza con pisarla en el teléfono.
+   * 🔑 **Se manda y listo: el servidor pisa la fila vieja** (26-sep-2026). Antes se borraba primero
+   * del servidor, porque el upsert ignoraba duplicados; si ese borrado fallaba, la base se quedaba
+   * con el contador viejo y nadie se enteraba. Ahora la fila nueva gana salvo que la base ya tenga
+   * más unidades (ver `escanear` en `api/_exhib.js`).
    */
   const reemplazarFila = (e: EscaneoLibre) => {
     const k = claveEscaneo(e)
@@ -163,13 +165,7 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
       escaneos: [...b.escaneos.filter((x) => claveEscaneo(x) !== k), e],
       pendientes: [...b.pendientes.filter((x) => x !== k), k],
     })
-    if (b.id) {
-      void sacarEscaneo(marca, b.id, e.lugar, e.variante_id)
-        .catch(() => {})
-        .then(() => subir())
-    } else {
-      void subir()
-    }
+    void subir()
   }
 
   /**
@@ -195,7 +191,7 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
         return { que: 'nuevo', veces: 1 }
       }
       if (esDobleLectura(previo, ahora)) return { que: 'doble-lectura', veces: vecesDe(previo) }
-      // La fila crece; y como el upsert del servidor ignora duplicados, la vieja se saca primero.
+      // La fila crece y se vuelve a mandar entera: el servidor pisa la vieja.
       const sumado = sumarUna(previo, ahora)
       reemplazarFila(sumado)
       return { que: 'sumado', veces: vecesDe(sumado) }

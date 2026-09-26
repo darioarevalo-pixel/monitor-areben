@@ -34,6 +34,10 @@ function consulta(tabla: string) {
     filtros.push((f) => f[col] === val)
     return q
   }
+  q.in = (col: string, vals: unknown[]) => {
+    filtros.push((f) => vals.includes(f[col]))
+    return q
+  }
   q.then = (resolve: (v: { data: Fila[]; error: null }) => unknown) => resolve({ data: filas(), error: null })
   q.range = async () => ({ data: filas(), error: null })
   q.maybeSingle = async () => ({ data: filas()[0] ?? null, error: null })
@@ -465,5 +469,33 @@ describe('las horas de cada lectura', () => {
     base.romperUpsert = 'permission denied for table exhib_escaneo'
     const res = await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo()] }))
     expect(res.code).toBe(500)
+  })
+})
+
+describe('el repetido: la fila del teléfono pisa a la de la base', () => {
+  /**
+   * 🔴 **El agujero del 26-sep-2026.** El repetido se subía borrando primero la fila vieja; si ese
+   * borrado fallaba, el upsert con `ignoreDuplicates` dejaba «1 vez» en la base y contestaba `ok`.
+   * Ahora el teléfono manda la fila entera y la base la toma, salvo que ya tenga MÁS unidades.
+   */
+  it('🔴 «2 veces» entra sobre «1 vez» sin borrar nada antes', async () => {
+    base.tablas.exhib_escaneo = [{ recorrido_id: REC, lugar: 'Tops', variante_id: 'v1', veces: 1 }]
+    const res = await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ veces: 2 })] }))
+    expect(res.code).toBe(200)
+    expect(subidas()).toHaveLength(1)
+    expect(subidas()[0].veces).toBe(2)
+  })
+
+  it('⛔ una tanda vieja que llega tarde NO baja el contador', async () => {
+    base.tablas.exhib_escaneo = [{ recorrido_id: REC, lugar: 'Tops', variante_id: 'v1', veces: 3 }]
+    const res = await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ veces: 2 }), escaneo({ variante_id: 'v2' })] }))
+    expect(res.code).toBe(200)
+    expect(subidas().map((f) => f.variante_id)).toEqual(['v2'])
+  })
+
+  it('el mismo contador en otro lugar ⛔ se confunde', async () => {
+    base.tablas.exhib_escaneo = [{ recorrido_id: REC, lugar: 'Vidriera', variante_id: 'v1', veces: 5 }]
+    await correr(postear({ action: 'escanear', recorrido_id: REC, escaneos: [escaneo({ veces: 1 })] }))
+    expect(subidas()).toHaveLength(1)
   })
 })

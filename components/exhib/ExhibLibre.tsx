@@ -7,7 +7,7 @@ import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, us
 import { descargarXlsx } from '@/lib/excel'
 import { candidatosPorCodigo, coincidencias, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
-import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import { BalanceSector } from './BalanceSector'
@@ -83,6 +83,12 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   const [cierreFinal, setCierreFinal] = useState<Colgar[]>([])
   /** Los escaneos congelados al cerrar: de ellos sale el conteo, y `cerrar` limpia el borrador. */
   const [cierreEscaneos, setCierreEscaneos] = useState<EscaneoLibre[]>([])
+  /**
+   * 🔴 **¿Lo que se oyó es lo que quedó guardado?** (26-sep-2026, Bruno: *«si a ella le dice 198
+   * quiero que haya 198»*). Se lee el historial del servidor DESPUÉS de cerrar y se compara con lo
+   * que contó el teléfono. `null` = todavía ⛔ se sabe; `'sin-leer'` = ⛔ hubo señal para leerlo.
+   */
+  const [verificacion, setVerificacion] = useState<ReturnType<typeof compararConHistorial> | 'sin-leer' | null>(null)
   const [verColgarAca, setVerColgarAca] = useState(false)
   const scanRef = useRef<HTMLInputElement>(null)
   const lugarRef = useRef<HTMLInputElement>(null)
@@ -192,6 +198,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // ⚠️ Los escaneos se congelan por lo mismo que la lista: `cerrar` limpia el borrador del
     // teléfono, y el conteo sale justamente de ellos.
     const caminados = lib.escaneos
+    const id = lib.recorridoId
     try {
       await lib.cerrar()
     } catch (e) {
@@ -204,6 +211,12 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     setCierreFinal(quedan)
     setCierreEscaneos(caminados)
     setFase(quedan.length || caminados.length ? 'cierre' : 'config')
+    setVerificacion(null)
+    if (id && caminados.length) {
+      leerRecorrido(marca, id)
+        .then((r) => setVerificacion(compararConHistorial(caminados, r.escaneos)))
+        .catch(() => setVerificacion('sin-leer'))
+    }
   }
 
   async function eliminar() {
@@ -569,6 +582,28 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
       {/* ── El cierre de la caminata: qué hay que ir a colgar ── */}
       {fase === 'cierre' && (
         <Card>
+          {verificacion === 'sin-leer' && (
+            <Notice tone="warning" icon="📶" style={{ marginBottom: space[3] }}>
+              No se pudo comprobar el historial ahora. Buscá este recorrido en la lista y tocá «Ver» cuando haya señal.
+            </Notice>
+          )}
+          {verificacion && verificacion !== 'sin-leer' && (verificacion.faltan.length === 0 && verificacion.telefono === verificacion.historial ? (
+            <Notice tone="success" icon="✓" style={{ marginBottom: space[3] }}>
+              El teléfono contó <b>{verificacion.telefono}</b> · en el historial hay <b>{verificacion.historial}</b>. Quedó todo guardado.
+            </Notice>
+          ) : (
+            <Notice tone="danger" icon="⚠️" style={{ marginBottom: space[3] }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                El teléfono contó {verificacion.telefono} · en el historial hay {verificacion.historial}
+              </div>
+              {verificacion.faltan.length > 0 && (
+                <div style={{ fontSize: font.sm }}>
+                  Faltan en el historial:{' '}
+                  {verificacion.faltan.map((f) => `${f.nombre}${f.talle ? ` ${f.talle}` : ''}${f.reconocida ? '' : ' (no reconocida)'} en «${f.lugar}» (${f.faltan})`).join(', ')}.
+                </div>
+              )}
+            </Notice>
+          ))}
           <ParaColgar
             lista={cierreFinal}
             titulo="Terminaste. Para colgar"
@@ -577,7 +612,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
           {/* 🔑 El conteo va DEBAJO del mandado y ⛔ no arriba: lo primero que hay que hacer al
               terminar es ir a buscar lo que no está colgado; el conteo es para mirar después. */}
           <Analisis escaneos={cierreEscaneos} items={items} titulo="El conteo de lo que caminaste" />
-          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreEscaneos([]); setFase('config') }}>
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreEscaneos([]); setVerificacion(null); setFase('config') }}>
             Listo
           </Button>
         </Card>

@@ -256,10 +256,29 @@ export default async function handler(req, res) {
         const filas = crudos.map((e) => filaDeEscaneo(recorrido.id, e)).filter(Boolean)
         if (!filas.length) return res.status(400).json({ error: 'no vino ningún escaneo con lugar y variante' })
         // 🔑 Entra un ARRAY y ⛔ no un escaneo por pedido: así la cola que se juntó sin señal se
-        // vacía en un viaje. `ignoreDuplicates` porque el único es (recorrido, lugar, variante) y
-        // reintentar la cola tiene que ser inofensivo — el primer escaneo es el que vale.
-        const guardar = (f) => sb.from('exhib_escaneo').upsert(f, { onConflict: 'recorrido_id,lugar,variante_id', ignoreDuplicates: true })
-        let { error } = await guardar(filas)
+        // vacía en un viaje.
+        // 🔴 **La fila del teléfono PISA a la de la base, salvo que la base ya tenga MÁS unidades**
+        // (26-sep-2026). Hasta acá era `ignoreDuplicates` y el repetido se subía borrando primero la
+        // fila vieja: si ese borrado fallaba, la base se quedaba con «1 vez», el teléfono con «2», y
+        // la respuesta decía `ok` igual ⇒ la que caminaba oyó un número que el historial ⛔ no tenía.
+        // El teléfono manda siempre la fila ENTERA con su contador, así que pisar es seguro y
+        // reintentar sigue siendo inofensivo. Lo único que ⛔ se deja pisar es un contador más alto
+        // con uno más bajo: dos tandas pueden viajar a la vez y llegar al revés.
+        const yaEstan = new Map()
+        const ids = [...new Set(filas.map((f) => f.variante_id))]
+        for (let i = 0; i < ids.length; i += 200) {
+          const { data, error: e } = await sb
+            .from('exhib_escaneo')
+            .select('lugar, variante_id, veces')
+            .eq('recorrido_id', recorrido.id)
+            .in('variante_id', ids.slice(i, i + 200))
+          if (e) throw new Error(e.message)
+          for (const r of data || []) yaEstan.set(r.lugar + '\u0000' + r.variante_id, Number(r.veces) || 1)
+        }
+        const aGuardar = filas.filter((f) => !((yaEstan.get(f.lugar + '\u0000' + f.variante_id) || 0) > f.veces))
+        if (!aGuardar.length) return res.status(200).json({ ok: true, recibidos: filas.length })
+        const guardar = (f) => sb.from('exhib_escaneo').upsert(f, { onConflict: 'recorrido_id,lugar,variante_id' })
+        let { error } = await guardar(aGuardar)
         // 🔴 **PUENTE: si `horas` todavía ⛔ no existe en la base, se guarda sin ella.**
         // `sql/migrate-exhib-horas.sql` se corre a mano en el Supabase de Zattia, así que entre el
         // deploy y esa consulta hay una ventana — y en esa ventana **una columna desconocida hace
@@ -272,7 +291,7 @@ export default async function handler(req, res) {
         if (error && (error.code === 'PGRST204' || /horas/i.test(error.message || ''))) {
           // ⚠️ Se **saca la clave**, ⛔ no se manda en `undefined`: que `JSON.stringify` la tire es
           // un detalle del serializador, y esto tiene que seguir andando si algún día ⛔ no lo es.
-          const sinHoras = filas.map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'horas')))
+          const sinHoras = aGuardar.map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'horas')))
           ;({ error } = await guardar(sinHoras))
         }
         if (error) throw new Error(error.message)

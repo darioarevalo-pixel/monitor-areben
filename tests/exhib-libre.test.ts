@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, horasDe, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, compararConHistorial, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, horasDe, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -315,5 +315,32 @@ describe('horasDe / sumarUna — el detalle de cada lectura', () => {
     expect(horasDe({ escaneado_en: 'A', ultimo_en: null })).toEqual(['A'])
     // ⚠️ Una sola unidad puede traer `ultimo_en` igual a la primera: ⛔ no son dos lecturas.
     expect(horasDe({ escaneado_en: 'A', ultimo_en: 'A' })).toEqual(['A'])
+  })
+})
+
+describe('compararConHistorial', () => {
+  const t = Date.parse('2026-09-26T13:00:00Z')
+  const mery = aEscaneo(TOP, '779001', 'Tops', t)
+  const orsa = aEscaneo(it0({ barcode: '779002', name: 'Top Orsa' }), '779002', 'Tops', t)
+  const rota = aEscaneo(null, '416', 'Tops', t)
+
+  it('lo que oyó es lo que quedó: sin faltantes', () => {
+    const tel = [sumarUna(mery, t + 5000), orsa, rota]
+    const r = compararConHistorial(tel, tel)
+    expect(r).toEqual({ telefono: 3, historial: 3, faltan: [] })
+  })
+
+  it('🔴 el caso del agujero: el teléfono dice 2 veces y la base se quedó en 1', () => {
+    const r = compararConHistorial([sumarUna(mery, t + 5000), orsa], [mery, orsa])
+    expect(r.telefono).toBe(3)
+    expect(r.historial).toBe(2)
+    expect(r.faltan).toEqual([expect.objectContaining({ variante_id: '779001', lugar: 'Tops', faltan: 1, reconocida: true })])
+  })
+
+  it('⚠️ el «de nuevo» ⛔ suma al número pero su fila también tiene que estar', () => {
+    const r = compararConHistorial([orsa, rota], [orsa])
+    expect(r.telefono).toBe(1)
+    expect(r.historial).toBe(1)
+    expect(r.faltan).toEqual([expect.objectContaining({ nombre: '416', reconocida: false, faltan: 1 })])
   })
 })
