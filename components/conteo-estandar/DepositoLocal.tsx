@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
 import { estadoDe, nombreGrupo, ordenDeposito, skuDeProducto, visiblesDeGrupo } from '@/lib/conteo-estandar/core'
 import type { CeProducto, CeState } from '@/lib/conteo-estandar/tipos'
@@ -34,6 +35,7 @@ export function DepositoLocal({
   const [grupo, setGrupo] = useState<string>('')
   const [search, setSearch] = useState('')
   const contRef = useRef<HTMLDivElement>(null)
+  const [escribiendo, setEscribiendo] = useState(false)
 
   // Solo las categorías con algo para contar (stock en sistema o algo ya cargado).
   const conStock = grupos.map((g) => ({ ...g, vis: visiblesDeGrupo(state, g.productos) })).filter((g) => g.vis.length)
@@ -53,14 +55,7 @@ export function DepositoLocal({
   const saltar = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    const ins = Array.from(contRef.current?.querySelectorAll<HTMLInputElement>('input[data-dep]') || [])
-    const i = ins.indexOf(e.currentTarget)
-    const sig = ins[i + 1]
-    if (sig) {
-      sig.focus()
-      sig.select()
-      sig.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    } else e.currentTarget.blur()
+    mover(contRef.current, e.currentTarget, 1)
   }
 
   const terminados = (g: { vis: CeProducto[] }) => g.vis.filter((p) => estadoDe(state, p.pid) === 'terminado').length
@@ -139,12 +134,13 @@ export function DepositoLocal({
       {!visibles.length ? (
         <EmptyState icon="🔍" title="No hay productos que coincidan" dashed />
       ) : (
-        <div ref={contRef} style={{ display: 'flex', flexDirection: 'column', gap: space[3], maxWidth: 640 }}>
+        <div ref={contRef} onFocus={() => setEscribiendo(true)} onBlur={() => setEscribiendo(false)} style={{ display: 'flex', flexDirection: 'column', gap: space[3], maxWidth: 640 }}>
           {visibles.map((p) => (
             <TarjetaProducto key={p.pid} prod={p} st={state[p.pid]} estado={estadoDe(state, p.pid)} onDep={onDep} onAbrir={onAbrir} onEnter={saltar} />
           ))}
         </div>
       )}
+      {escribiendo && <BarraTeclado cont={contRef} />}
     </div>
   )
 }
@@ -253,5 +249,87 @@ function TarjetaProducto({
         )
       })}
     </div>
+  )
+}
+
+/** Pasa el foco a la casilla de depósito `delta` lugares más allá, y la deja centrada. */
+function mover(cont: HTMLElement | null, desde: Element | null, delta: number) {
+  const ins = Array.from(cont?.querySelectorAll<HTMLInputElement>('input[data-dep]') || [])
+  const i = desde ? ins.indexOf(desde as HTMLInputElement) : -1
+  const sig = ins[i + delta]
+  if (sig) {
+    sig.focus()
+    sig.select()
+    sig.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  } else if (desde instanceof HTMLElement && delta > 0) desde.blur()
+}
+
+/**
+ * 🔑 **El teclado numérico del iPhone no tiene Enter** (26-sep-2026, Bruno cargando desde el suyo:
+ * «no me da la posibilidad de bajar»). Esta barra se pega ARRIBA del teclado mientras hay una
+ * casilla con foco, con «Siguiente ↓» grande para bajar al talle siguiente sin tocar la lista.
+ *
+ * ⚠️ En iOS un `position: fixed; bottom: 0` queda TAPADO por el teclado: la altura real que queda
+ * a la vista sale de `visualViewport`, y con eso se calcula el `bottom`.
+ * ⚠️ Los botones hacen `preventDefault` en el `pointerdown`: si no, tocar el botón le saca el foco
+ * a la casilla, el teclado se cierra y la barra desaparece antes del click.
+ */
+function BarraTeclado({ cont }: { cont: React.RefObject<HTMLDivElement | null> }) {
+  const [abajo, setAbajo] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const calc = () => setAbajo(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    calc()
+    vv.addEventListener('resize', calc)
+    vv.addEventListener('scroll', calc)
+    return () => {
+      vv.removeEventListener('resize', calc)
+      vv.removeEventListener('scroll', calc)
+    }
+  }, [])
+  const sinPerderFoco = (e: React.PointerEvent | React.MouseEvent) => e.preventDefault()
+  const base: React.CSSProperties = {
+    height: 44,
+    borderRadius: 10,
+    border: `1px solid ${color.line2}`,
+    background: color.surface,
+    color: color.ink,
+    fontSize: 16,
+    fontWeight: 600,
+    padding: '0 14px',
+  }
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: abajo,
+        zIndex: 1000,
+        display: 'flex',
+        gap: 8,
+        padding: 8,
+        background: color.bg2,
+        borderTop: `1px solid ${color.line}`,
+      }}
+    >
+      <button type="button" aria-label="Casilla anterior" onPointerDown={sinPerderFoco} onMouseDown={sinPerderFoco} onClick={() => mover(cont.current, document.activeElement, -1)} style={base}>
+        ↑
+      </button>
+      <button
+        type="button"
+        onPointerDown={sinPerderFoco}
+        onMouseDown={sinPerderFoco}
+        onClick={() => mover(cont.current, document.activeElement, 1)}
+        style={{ ...base, flex: 1, background: color.brandSolid, color: '#fff', border: 'none', fontWeight: 700 }}
+      >
+        Siguiente ↓
+      </button>
+      <button type="button" onPointerDown={sinPerderFoco} onMouseDown={sinPerderFoco} onClick={() => (document.activeElement as HTMLElement | null)?.blur()} style={base}>
+        Listo
+      </button>
+    </div>,
+    document.body,
   )
 }
