@@ -10,6 +10,14 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > desde la pantalla. Se pierden con él el **PDF con triage** y el aviso de **prendas con precio nuevo
 > sin etiqueta** (`sospechososNoExhibidos`), que el libre ⛔ no tiene.
 
+> 🎨 **El balance se rediseñó el 26-sep-2026** (Bruno: *«mucho texto y poca definición»*): la
+> pantalla daba TRES respuestas a «¿qué falta?» (el balance, «Para colgar» y «El conteo» en
+> unidades). Ahora es una pregunta (los tipos como botones; **tocar guarda**), tres números
+> (faltan / sobran / escaneadas) y dos listas: **faltan colgar por MODELO** (`porModelo`, ⭐ =
+> otro color ya colgado) y sobran. Las explicaciones van en el `title` (ⓘ). «Para colgar» y «El
+> conteo» ⛔ salen en la vista del recorrido; «Para colgar» sigue en la caminata. ⛔ No volver a
+> poner párrafos arriba de las listas.
+
 **Son DOS recorridos distintos**, no dos vistas del mismo:
 
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |

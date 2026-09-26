@@ -11,7 +11,6 @@ import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, fil
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import { BalanceSector } from './BalanceSector'
-import { Analisis } from './Analisis'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { avisoDe } from '@/lib/exhib/aviso'
@@ -81,8 +80,6 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   /** Lo que quedó sin colgar del mueble que se acaba de dejar, y lo del recorrido entero al cerrar. */
   const [cierreLugar, setCierreLugar] = useState<{ lugar: string; lista: Colgar[] } | null>(null)
   const [cierreFinal, setCierreFinal] = useState<Colgar[]>([])
-  /** Los escaneos congelados al cerrar: de ellos sale el conteo, y `cerrar` limpia el borrador. */
-  const [cierreEscaneos, setCierreEscaneos] = useState<EscaneoLibre[]>([])
   /**
    * 🔴 **¿Lo que se oyó es lo que quedó guardado?** (26-sep-2026, Bruno: *«si a ella le dice 198
    * quiero que haya 198»*). Se lee el historial del servidor DESPUÉS de cerrar y se compara con lo
@@ -209,7 +206,6 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     cargarPrevios()
     setCierreLugar(null)
     setCierreFinal(quedan)
-    setCierreEscaneos(caminados)
     setFase(quedan.length || caminados.length ? 'cierre' : 'config')
     setVerificacion(null)
     if (id && caminados.length) {
@@ -273,7 +269,6 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
    * abre cuando la persona quiere, y se corrige sola en cuanto el color aparece.
    */
   const colgarAca = useMemo(() => colgarEnLugar(paraColgar(lib.escaneos, items), lib.lugar), [lib.escaneos, items, lib.lugar])
-  const colgarDelRecorrido = useMemo(() => (viendo ? paraColgar(viendo.escaneos, items) : []), [viendo, items])
 
   return (
     <>
@@ -609,10 +604,9 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             titulo="Terminaste. Para colgar"
             archivo={`para-colgar-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`}
           />
-          {/* 🔑 El conteo va DEBAJO del mandado y ⛔ no arriba: lo primero que hay que hacer al
-              terminar es ir a buscar lo que no está colgado; el conteo es para mirar después. */}
-          <Analisis escaneos={cierreEscaneos} items={items} titulo="El conteo de lo que caminaste" />
-          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreEscaneos([]); setVerificacion(null); setFase('config') }}>
+          {/* ⛔ «El conteo» en UNIDADES se sacó el 26-sep-2026: a Bruno le interesa que esté
+              exhibida, ⛔ cuántas hay (regla del 21-sep). `Analisis.tsx` queda sin usar en el libre. */}
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setVerificacion(null); setFase('config') }}>
             Listo
           </Button>
         </Card>
@@ -666,13 +660,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             }}
           />
 
-          {/* 🔑 Arriba de los escaneos: es lo que se viene a buscar cuando se abre un recorrido de
-              otro día desde otra máquina. Lo escaneado queda abajo, como respaldo de por qué. */}
-          <ParaColgar
-            lista={colgarDelRecorrido}
-            archivo={`para-colgar-${marca}-${viendo.recorrido.creado_en.slice(0, 10)}.xlsx`}
-          />
-          <Analisis escaneos={viendo.escaneos} items={items} />
+          {/* ⛔ «Para colgar» y «El conteo» se sacaron de acá el 26-sep-2026: daban otras dos
+              respuestas a «¿qué falta?». Lo de «Para colgar» vive ahora como ⭐ en el balance. */}
 
           {/*
             🔴 **Los códigos que quedaron sin identificar, con a qué prenda se parecen.**
@@ -689,10 +678,6 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               <Notice tone="warning" icon="❓" style={{ marginBottom: space[4] }}>
                 <div style={{ fontWeight: weight.bold }}>
                   {sinIdentificar.length} {sinIdentificar.length === 1 ? 'código' : 'códigos'} sin identificar
-                </div>
-                <div style={{ fontSize: font.sm, marginBottom: space[2] }}>
-                  Se escanearon y quedaron anotados, pero no se pudo saber qué prenda eran. Si alguna era una de las de abajo, esa
-                  prenda va a figurar igual en lo que falta colgar.
                 </div>
                 {sinIdentificar.map((e) => {
                   // Las mismas dos puertas del escaneo: el código exacto que engancha a varias, o el
@@ -716,12 +701,18 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             )
           })()}
 
-          {agruparPorLugar(viendo.escaneos).map((g) => (
-            <div key={g.lugar} style={{ marginBottom: space[4] }}>
-              <Subtitulo>{g.lugar} ({g.escaneos.length})</Subtitulo>
-              {g.escaneos.map((e) => <FilaEscaneo key={g.lugar + e.variante_id} e={e} />)}
-            </div>
-          ))}
+          {/* Los escaneos crudos son el respaldo, ⛔ lo que se viene a mirar: van plegados. */}
+          <details>
+            <summary style={{ cursor: 'pointer', fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>
+              Ver los {viendo.escaneos.length} escaneos
+            </summary>
+            {agruparPorLugar(viendo.escaneos).map((g) => (
+              <div key={g.lugar} style={{ marginBottom: space[4] }}>
+                <Subtitulo>{g.lugar} ({g.escaneos.length})</Subtitulo>
+                {g.escaneos.map((e) => <FilaEscaneo key={g.lugar + e.variante_id} e={e} />)}
+              </div>
+            ))}
+          </details>
         </Card>
       )}
     </>

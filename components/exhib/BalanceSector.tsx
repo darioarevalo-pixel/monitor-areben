@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Notice, color, font, space, useToast, weight } from '@/components/ui'
+import { Button, color, font, space, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
 import {
   buscarPorTipo,
@@ -174,303 +174,227 @@ export function BalanceSector({
   // cruzaron, por ejemplo). Decirlo es más honesto que mostrar una caja vacía.
   if (!tipos.length) return null
 
-  const alternar = (tipo: string) =>
-    setElegidas((prev) => (prev.some((t) => tipoDePrenda(t) === tipoDePrenda(tipo)) ? prev.filter((t) => tipoDePrenda(t) !== tipoDePrenda(tipo)) : [...prev, tipo]))
-
-  async function guardar() {
+  /**
+   * 🔴 **Tocar un tipo YA guarda** (26-sep-2026). Había un botón «Guardar el balance» que decía
+   * «Balance guardado» con ninguna casilla marcada: parecía terminado sin estarlo. Un toque = una
+   * declaración firmada por el servidor, como antes; sólo se sacó el paso del medio.
+   */
+  async function alternar(tipo: string) {
+    const next = elegidas.some((t) => tipoDePrenda(t) === tipoDePrenda(tipo))
+      ? elegidas.filter((t) => tipoDePrenda(t) !== tipoDePrenda(tipo))
+      : [...elegidas, tipo]
+    setElegidas(next)
     setGuardando(true)
     try {
-      onGuardada(await guardarCobertura(marca, recorridoId, elegidas))
-      toast.ok(elegidas.length ? 'Balance guardado' : 'Guardado: este recorrido no cubrió un sector entero')
+      onGuardada(await guardarCobertura(marca, recorridoId, next))
     } catch (e) {
       toast.error('No se pudo guardar: ' + (e as Error).message)
+      setElegidas(elegidas)
     } finally {
       setGuardando(false)
     }
   }
 
-  /**
-   * 🔴 **Un balance declarado con el criterio VIEJO ⛔ no cuenta como declarado** (21-sep-2026).
-   * Hasta esa mañana un sector se declaraba con categorías de Tienda Nube, y el primer recorrido
-   * real quedó guardado así. Sin esto la pantalla abre con **⛔ ninguna casilla marcada y el botón
-   * diciendo «Balance guardado»**, que es exactamente lo que le pasó a Bruno: *«no entiendo qué
-   * tengo que hacer»*. Un cartel apagado que dice «ya está» cuando ⛔ no está es peor que no decir
-   * nada — y lo que está guardado es justo la declaración que salió mal.
-   */
+  /** Un balance declarado con el criterio viejo (categorías de TN) ⛔ cuenta como declarado. */
   const declaradoALaVieja = !cobertura?.tipos?.length && !!cobertura?.cats?.length
 
-  const sinGuardar =
-    declaradoALaVieja || JSON.stringify(elegidas.map(tipoDePrenda).sort()) !== JSON.stringify((cobertura?.tipos ?? []).map(tipoDePrenda).sort())
+  const marcados = tipos.filter((c) => elegidas.some((x) => tipoDePrenda(x) === c.tipo))
+  const escaneadas = marcados.reduce((n, c) => n + c.vistas, 0)
+  const universo = marcados.reduce((n, c) => n + c.universo, 0)
+  const perchasDeMas = sacar.reduce((n, c) => n + c.deMas, 0)
 
+  const excelMandado = () =>
+    void descargarXlsx(filasBuscar(mandado), {
+      archivo: `falta-exhibir-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      hoja: 'Buscar en depósito',
+      // ⚠️ Los anchos se recortan con las columnas: `filasBuscar` tira la última cuando ⛔ no tiene
+      // nada que decir, y un ancho de más corre todo el Excel.
+      anchos: ANCHOS_BUSCAR.slice(0, filasBuscar(mandado)[0].length),
+    })
+
+  /*
+   * 🔴 **POCO TEXTO: una pregunta, tres números, dos listas** (26-sep-2026, Bruno: *«mucho texto y
+   * poca definición»*). Cada bloque arrastraba su párrafo de explicación y la pantalla daba tres
+   * respuestas distintas a «¿qué falta?». Lo que explica va en el `title` (el ⓘ); en pantalla queda
+   * lo que se decide. ⛔ No volver a poner párrafos arriba de las listas.
+   */
   return (
-    <Notice tone="brand" icon="📋" style={{ marginBottom: space[4] }}>
-      <div style={{ fontWeight: weight.bold, fontSize: font.base }}>Balance del sector</div>
-      <div style={{ fontSize: font.sm, marginBottom: space[3] }}>
-        Marcá los tipos de prenda que este recorrido caminó <b>enteros</b> —top, blusa, corset…—. Con eso se arma la lista de lo que hay
-        que ir a buscar al depósito del local. Si sólo se caminó un mueble suelto, dejalo sin marcar.
-      </div>
-
-      {/* 🔴 Va ANTES de las categorías: es la pregunta previa a cualquier tilde. Un mandado armado
-          contra una foto de ayer es peor que no armarlo, porque sale con la misma cara de correcto. */}
-      <div
-        style={{
-          fontSize: font.sm,
-          padding: `${space[2]}px ${space[3]}px`,
-          marginBottom: space[3],
-          borderRadius: 8,
-          background: stockViejo ? color.warningBg : color.successBg,
-          color: color.ink,
-        }}
-      >
-        <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
-          <span>
+    <div style={{ marginBottom: space[4], padding: space[4], borderRadius: 12, border: `1px solid ${color.line}`, background: color.surface }}>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <div style={{ fontWeight: weight.bold, fontSize: font.lg, color: color.ink }}>
+          Balance{' '}
+          <span
+            title="Marcá los tipos de prenda que este recorrido caminó enteros. Con eso se arma la lista de lo que hay que ir a buscar al depósito del local. Si sólo se caminó un mueble suelto, no marques nada."
+            style={{ fontSize: font.sm, color: color.mut, cursor: 'help' }}
+          >
+            ⓘ
+          </span>
+        </div>
+        {/* 🔴 De cuándo es el stock: una línea y un botón. Ver `stockViejo`. */}
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', fontSize: font.sm, color: stockViejo ? color.warningInk : color.mut }}>
+          <span
+            title="El local vende unas 160 prendas por día: con el stock viejo, la lista puede mandar a buscar cosas que ya se vendieron."
+          >
             {stockDe === undefined
-              ? 'Averiguando de cuándo es el stock…'
+              ? 'Stock…'
               : stockDe === null
-                ? // ⛔ «No se pudo preguntar» ⛔ NO es «está al día»: de las dos formas de
-                  // equivocarse, ésta es la única que ⛔ no miente.
-                  '⛔ No se pudo saber de cuándo es el stock con el que se compara.'
+                ? '⚠️ Stock de hora desconocida'
                 : stockDe.horas < 1
-                  ? `✓ El stock es de recién (${stockDe.fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}).`
-                  : `⚠️ El stock con el que se compara es de hace ${Math.round(stockDe.horas)} ${Math.round(stockDe.horas) === 1 ? 'hora' : 'horas'} (${stockDe.fecha.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}).`}
+                  ? '✓ Stock de recién'
+                  : `⚠️ Stock de hace ${Math.round(stockDe.horas)} h`}
           </span>
           <Button size="sm" variant={stockViejo ? 'solid' : 'outline'} tone={stockViejo ? 'brand' : undefined} onClick={() => void onTraerStock()} loading={trayendo}>
-            Cargar el stock de ahora
+            Actualizar stock
           </Button>
         </div>
-        {stockViejo && stockDe !== undefined && (
-          <div style={{ fontSize: font.xs, marginTop: 4 }}>
-            El local vende unas 160 prendas por día. Si no lo cargás ahora, el mandado puede mandar a buscar cosas que ya se vendieron.
-          </div>
-        )}
       </div>
 
-      {/* 🔴 Ordenados por lo que PASÓ POR EL LECTOR y ⛔ no por porcentaje: ver `coberturaPorTipo`.
-          Con el orden por porcentaje, un tipo de 9 prendas escaneadas enteras daba 100 % y se
-          plantaba arriba del sector caminado de verdad — y eso fue el mandado vacío del 21-sep. */}
-      {/* 🔑 Se nombran las categorías viejas tal como se guardaron: quien mira tiene que reconocer
-          su propia declaración para entender por qué le estamos pidiendo que la haga de nuevo. */}
-      {declaradoALaVieja && (
-        <div style={{ fontSize: font.sm, padding: `${space[2]}px ${space[3]}px`, marginBottom: space[3], borderRadius: 8, background: color.warningBg, color: color.ink }}>
-          ⚠️ Este recorrido se había declarado con <b>categorías de Tienda Nube</b> ({(cobertura?.cats ?? []).join(', ')}). Ese criterio cambió: ahora se
-          marca por <b>tipo de prenda</b>. Marcá abajo los que se caminaron y guardá de nuevo.
-        </div>
-      )}
-
-      {tipos.map((c) => {
-        const puesta = elegidas.some((x) => tipoDePrenda(x) === c.tipo)
-        const pct = Math.round(c.cubierto * 100)
-        return (
-          <label
-            key={c.tipo}
-            style={{ display: 'flex', gap: space[3], alignItems: 'flex-start', padding: '8px 2px', borderBottom: `1px solid ${color.line}`, cursor: 'pointer' }}
-          >
-            <input type="checkbox" checked={puesta} onChange={() => alternar(c.tipo)} style={{ width: 20, height: 20, marginTop: 2, flex: '0 0 auto' }} />
-            <span style={{ minWidth: 0 }}>
-              <span style={{ fontWeight: 600, color: color.ink }}>{c.tipo}</span>
-              <span style={{ display: 'block', fontSize: font.sm, color: color.mut }}>
-                {/* 🔴 El número con el que se decide. Va en palabras de local: «de las N que el sistema
-                    dice que hay acá», ⛔ no «universo». */}
-                Pasaron por el lector <b>{c.vistas}</b> de las <b>{c.universo}</b> que el sistema tiene en el local ({pct}%)
-                {/* 🔴 Lo que falta se cuenta en PRENDAS y ⛔ no en unidades: la tarea es colgar una
-                    de cada color/talle que ⛔ no está colgado. Ver `filasBuscar`. */}
-                {c.universo > c.vistas && <> · faltan <b>{c.universo - c.vistas}</b> por exhibir</>}
-              </span>
-            </span>
-          </label>
-        )
-      })}
-
-      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', margin: `${space[3]}px 0 0` }}>
-        <Button size="sm" variant="solid" tone="brand" onClick={() => void guardar()} loading={guardando} disabled={!sinGuardar}>
-          {sinGuardar ? 'Guardar el balance' : 'Balance guardado'}
-        </Button>
-        {!!mandado.length && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              void descargarXlsx(filasBuscar(mandado), {
-                archivo: `falta-exhibir-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
-                hoja: 'Buscar en depósito',
-                // ⚠️ Los anchos se recortan con las columnas: `filasBuscar` tira la última cuando
-                // ⛔ no tiene nada que decir, y un ancho de más corre todo el Excel.
-                anchos: ANCHOS_BUSCAR.slice(0, filasBuscar(mandado)[0].length),
-              })
-            }
-          >
-            Descargar el mandado
-          </Button>
-        )}
+      {/* ── La pregunta: qué se caminó entero ── */}
+      <div style={{ fontSize: font.sm, color: color.mut, margin: `${space[3]}px 0 ${space[2]}px` }}>
+        ¿Qué se caminó entero?{declaradoALaVieja && <span style={{ color: color.warningInk }}> · marcalo de nuevo (se había guardado con otro criterio)</span>}
       </div>
-
-      {/* 🔑 Quién lo declaró y cuándo: es una lista que manda a mover mercadería, y dentro de un mes
-          hay que poder saber de quién fue la afirmación. */}
-      {cobertura?.por && !sinGuardar && !declaradoALaVieja && (
-        <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
-          Lo declaró {cobertura.por} el {new Date(cobertura.cuando).toLocaleDateString('es-AR')}.
-        </div>
-      )}
+      {/* 🔴 Ordenados por lo que PASÓ POR EL LECTOR, ⛔ por porcentaje: ver `coberturaPorTipo`. */}
+      <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+        {tipos.map((c) => {
+          const puesta = elegidas.some((x) => tipoDePrenda(x) === c.tipo)
+          return (
+            <Button
+              key={c.tipo}
+              size="sm"
+              variant={puesta ? 'solid' : 'outline'}
+              tone={puesta ? 'brand' : 'neutral'}
+              disabled={guardando}
+              title={`Pasaron por el lector ${c.vistas} de las ${c.universo} que hay en el local`}
+              onClick={() => void alternar(c.tipo)}
+            >
+              {puesta ? '✓ ' : ''}
+              {c.tipo} <span style={{ opacity: 0.7, marginLeft: 4 }}>{c.vistas}/{c.universo}</span>
+            </Button>
+          )
+        })}
+      </div>
 
       {!!elegidas.length && (
-        <div style={{ marginTop: space[4] }}>
-          {/* 🔴 **VA ARRIBA DEL NÚMERO, ⛔ no abajo ni al costado.** Quien mira esto está por bajar
-              el Excel y mandar a alguien al depósito: el aviso tiene que llegar antes que la lista,
-              porque después de leer «faltan exhibir 82» la decisión ya está tomada. */}
-          {!!flojas.length && (
-            <div style={{ fontSize: font.sm, padding: `${space[2]}px ${space[3]}px`, marginBottom: space[3], borderRadius: 8, background: color.warningBg, color: color.ink }}>
-              ⚠️ <b>Ojo con lo que declaraste.</b> Este recorrido ⛔ no caminó entero:
-              <ul style={{ margin: `${space[2]}px 0 0`, paddingLeft: 20 }}>
-                {flojas.map((f) => (
-                  <li key={f.tipo}>
-                    <b>{f.tipo}</b>: pasó por el lector el {Math.round(f.cubierto * 100)} %, así que <b>{f.sinVer}</b>{' '}
-                    {f.sinVer === 1 ? 'prenda' : 'prendas'} con stock ⛔ no {f.sinVer === 1 ? 'pasó' : 'pasaron'} por el lector.
-                  </li>
-                ))}
-              </ul>
-              <div style={{ marginTop: space[2] }}>
-                {/* 🔑 La consecuencia dicha en palabras del local, que es lo que ⛔ no decía el «77 %». */}
-                Esas prendas van a aparecer abajo como si estuvieran en el depósito, y muchas pueden estar <b>colgadas en otro mueble</b> que
-                nadie caminó. Si podés, pasá el lector por esos muebles antes de mandar a buscar nada.
-              </div>
+        <>
+          {/* ── Tres números ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space[2], margin: `${space[4]}px 0` }}>
+            <Numero etiqueta="Faltan colgar" valor={resumen.variantes} tono={resumen.variantes ? 'warning' : 'ok'} />
+            <Numero etiqueta="Sobran" valor={perchasDeMas + sinDecidir.reduce((n, c) => n + c.deMas, 0)} tono="neutral" />
+            <Numero etiqueta="Escaneadas" valor={`${escaneadas}/${universo}`} tono="neutral" />
+          </div>
+
+          {/* 🔴 El aviso va ARRIBA de la lista: después de leer «faltan 82» la decisión ya está tomada. */}
+          {flojas.map((f) => (
+            <div key={f.tipo} style={{ fontSize: font.sm, color: color.warningInk, marginBottom: space[2] }}>
+              ⚠️ {f.tipo}: se escaneó el {Math.round(f.cubierto * 100)} %. Lo que falta puede estar en otro mueble.
+            </div>
+          ))}
+          {afuera > 0 && (
+            <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: space[2] }}>
+              ⚠️ {afuera} {afuera === 1 ? 'prenda escaneada es' : 'prendas escaneadas son'} de tipos sin marcar.
             </div>
           )}
 
-          {/* 🔴 **UN número y que sea el que importa** (21-sep-2026, Bruno: «me interesa que se
-              exhiba»): cuántas prendas distintas ⛔ no están colgadas. Las unidades se sacaron —que
-              el sistema tenga 8 en el depósito ⛔ no cambia la tarea, que es colgar una—. */}
-          <div style={{ fontWeight: weight.bold, fontSize: font.lg, color: color.ink }}>
-            Faltan colgar: {resumen.variantes} {resumen.variantes === 1 ? 'prenda' : 'prendas'}
-            <span style={{ fontWeight: weight.normal, fontSize: font.base, color: color.mut }}>
-              {' '}de {resumen.productos} {resumen.productos === 1 ? 'modelo' : 'modelos'}
-            </span>
-          </div>
-          {!mandado.length ? (
-            <div style={{ fontSize: font.sm }}>No falta nada: todo lo que hay en el local de esos tipos de prenda pasó por el lector.</div>
-          ) : (
-            <>
-              {modelos.some((m) => m.hermanaColgada) && (
-                <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2 }}>⭐ = otro color ya está colgado: esa va seguro en el depósito.</div>
-              )}
-              {/* 🔴 **Un renglón por MODELO, con los colores que faltan** (26-sep-2026, Bruno: «que
-                  el mensaje sea rápido por nombre»). Ver `porModelo`. Cada color se toca para
-                  tacharlo: los motivos se abren en el mismo renglón, ⛔ en un menú flotante. */}
-              <div style={{ maxHeight: 420, overflowY: 'auto', marginTop: space[2] }}>
-                {modelos.map((m) => {
-                  const abierto = m.faltan.find((b) => exhibId(b.it) === eligiendo)
-                  return (
-                    <div key={m.productId} style={{ padding: '8px 2px', borderBottom: `1px solid ${color.line}` }}>
-                      <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: weight.semibold, fontSize: font.base, color: color.ink }}>
-                          {m.hermanaColgada ? '⭐ ' : ''}
-                          {m.nombre}
-                        </span>
-                        {m.faltan.map((b) => {
-                          const id = exhibId(b.it)
-                          return (
-                            <Button
-                              key={id}
-                              size="sm"
-                              variant={eligiendo === id ? 'solid' : 'outline'}
-                              tone={eligiendo === id ? 'brand' : 'neutral'}
-                              title="Tocalo si ya está colgado"
-                              onClick={() => setEligiendo(eligiendo === id ? null : id)}
-                            >
-                              {b.it.size || '—'}
-                            </Button>
-                          )
-                        })}
-                      </div>
-                      {abierto && (
-                        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', marginTop: space[2] }}>
-                          <span style={{ fontSize: font.sm, color: color.mut }}>{abierto.it.size || '—'}:</span>
-                          {(Object.keys(MOTIVOS) as MotivoTachada[]).map((mo) => (
-                            <Button key={mo} size="sm" variant="outline" loading={tachando === eligiendo} onClick={() => void tachar(exhibId(abierto.it), mo)}>
-                              {MOTIVOS[mo]}
-                            </Button>
-                          ))}
-                          <Button size="sm" variant="ghost" onClick={() => setEligiendo(null)}>
-                            cancelar
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+          {/* ── Faltan colgar, por modelo ── */}
+          {!!mandado.length && (
+            <div style={{ display: 'flex', gap: space[2], alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
+              <div style={{ fontWeight: weight.semibold, color: color.ink }}>
+                Faltan colgar <span style={{ fontWeight: weight.normal, color: color.mut, fontSize: font.sm }}>· ⭐ otro color ya colgado</span>
               </div>
-            </>
+              <Button size="sm" variant="outline" onClick={excelMandado}>
+                Excel
+              </Button>
+            </div>
           )}
-          <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
-            El Excel lleva una fila por prenda a colgar, con el código de barras para buscarlas con el lector.
+          {/* 🔴 Un renglón por MODELO (26-sep-2026, Bruno: «que el mensaje sea rápido por nombre»).
+              Ver `porModelo`. Cada color se toca para tacharlo; los motivos se abren en el renglón. */}
+          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            {modelos.map((m) => {
+              const abierto = m.faltan.find((b) => exhibId(b.it) === eligiendo)
+              return (
+                <div key={m.productId} style={{ padding: '8px 2px', borderBottom: `1px solid ${color.line}` }}>
+                  <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: weight.semibold, fontSize: font.base, color: color.ink }}>
+                      {m.hermanaColgada ? '⭐ ' : ''}
+                      {m.nombre}
+                    </span>
+                    {m.faltan.map((b) => {
+                      const id = exhibId(b.it)
+                      return (
+                        <Button
+                          key={id}
+                          size="sm"
+                          variant={eligiendo === id ? 'solid' : 'outline'}
+                          tone={eligiendo === id ? 'brand' : 'neutral'}
+                          title="Tocalo si ya está colgado"
+                          onClick={() => setEligiendo(eligiendo === id ? null : id)}
+                        >
+                          {b.it.size || '—'}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                  {abierto && (
+                    <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', marginTop: space[2] }}>
+                      {(Object.keys(MOTIVOS) as MotivoTachada[]).map((mo) => (
+                        <Button key={mo} size="sm" variant="outline" loading={tachando === eligiendo} onClick={() => void tachar(exhibId(abierto.it), mo)}>
+                          {MOTIVOS[mo]}
+                        </Button>
+                      ))}
+                      <Button size="sm" variant="ghost" onClick={() => setEligiendo(null)}>
+                        cancelar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
-          {/* 🔴 **Lo tachado se muestra, ⛔ no se borra.** Es la explicación de por qué el número
-              bajó, y el único lugar desde donde alguien puede arrepentirse. Y los motivos juntos son
-              el dato: muchas «en otro lugar» quieren decir que el sector ⛔ no está donde el sistema
-              cree; muchas «se colgó después», que el balance se hace demasiado tarde. */}
+          {/* 🔴 Lo tachado se muestra, ⛔ se borra: es el único lugar desde donde arrepentirse. */}
           {!!sacadas.length && (
-            <div style={{ marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-              <div style={{ fontSize: font.sm, fontWeight: weight.semibold }}>
-                Sacadas del mandado: {sacadas.length} {sacadas.length === 1 ? 'prenda' : 'prendas'}
-              </div>
+            <div style={{ marginTop: space[3] }}>
+              <div style={{ fontSize: font.sm, color: color.mut }}>Ya colgadas ({sacadas.length})</div>
               {sacadas.map((b) => {
                 const id = exhibId(b.it)
                 return (
-                  <div key={id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 2px' }}>
+                  <div key={id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '2px' }}>
                     <span style={{ fontSize: font.sm, color: color.mut, textDecoration: 'line-through' }}>
                       {b.it.name} · {b.it.size || '—'}
                     </span>
-                    <span style={{ fontSize: font.xs, color: color.mut }}>
-                      {MOTIVOS[b.tachada.motivo] || b.tachada.motivo}
-                      {b.tachada.por ? ` · ${b.tachada.por}` : ''}
-                    </span>
+                    <span style={{ fontSize: font.xs, color: color.mut }}>{MOTIVOS[b.tachada.motivo] || b.tachada.motivo}</span>
                     <Button size="sm" variant="ghost" loading={tachando === id} onClick={() => void tachar(id, null)}>
-                      volver a ponerla
+                      deshacer
                     </Button>
                   </div>
                 )
               })}
             </div>
           )}
-        </div>
+        </>
       )}
 
-      {/* ═══ LA OTRA MITAD DEL BALANCE: lo que SOBRA en el salón ═══
-          🔴 Va en la MISMA vista y ⛔ no en una pantalla aparte, y lo pidió así Bruno: quien está
-          mirando este recorrido ya tiene el salón en la cabeza, y decidir «falta» y «sobra» en dos
-          momentos distintos es releer la misma lista dos veces. */}
+      {/* ═══ Lo que SOBRA: ⛔ depende de lo marcado, es un hecho del recorrido. ═══ */}
       {!!repes.length && (
-        <div style={{ marginTop: space[4], paddingTop: space[3], borderTop: `2px solid ${color.line}` }}>
-          <div style={{ fontWeight: weight.bold }}>
-            Colgadas más de una vez: {repes.length} {repes.length === 1 ? 'prenda' : 'prendas'}
-            <span style={{ fontWeight: weight.normal, color: color.mut }}>
-              {' '}· {repes.reduce((n, c) => n + c.deMas, 0)} {repes.reduce((n, c) => n + c.deMas, 0) === 1 ? 'percha' : 'perchas'} que se podrían liberar
+        <div style={{ marginTop: space[4], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
+          <div style={{ fontWeight: weight.semibold, color: color.ink, marginBottom: space[1] }}>
+            Sobran{' '}
+            <span
+              title="El mismo color y talle pasó dos veces por el lector, o apareció en dos muebles. Decidí cada una: puede ser a propósito."
+              style={{ fontSize: font.sm, color: color.mut, cursor: 'help' }}
+            >
+              ⓘ
             </span>
           </div>
-          <div style={{ fontSize: font.sm, color: color.mut, marginBottom: space[2] }}>
-            El mismo color y talle pasó dos veces por el lector, o apareció en dos muebles distintos. Decidí cada una: puede ser a propósito.
-          </div>
-
-          {/* 🔑 Lo no decidido primero: es el trabajo pendiente. Mezclado con lo resuelto, hay que
-              releer la lista entera cada vez que se vuelve. */}
           {sinDecidir.map((c) => (
             <div key={c.variante_id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '6px 2px', borderBottom: `1px solid ${color.line}` }}>
               <span style={{ fontSize: font.base, color: color.ink }}>
-                <b>{c.unidades}</b> colgadas · {c.nombre} <span style={{ color: color.mut }}>· {c.size || '—'}</span>
-                {/* La prenda que está en DOS muebles es el caso que ⛔ no se ve mirando uno solo. */}
+                <b>{c.nombre}</b> <span style={{ color: color.mut }}>{c.size || '—'} · ×{c.unidades}</span>
                 {c.lugares.length > 1 && <span style={{ color: color.mut }}> · en {c.lugares.join(' y ')}</span>}
-                {/* 🔴 **Lo que la app NO puede afirmar, dicho en el renglón.** Con prendas
-                    escaneadas en el medio ⛔ no hay otra explicación que dos perchas; entrando
-                    pegadas, puede ser una pila de iguales o la misma pasada dos veces porque ⛔ no
-                    se escuchó el pitido. Callarlo presentaría las 23 con la misma certeza, y la
-                    primera que resulte falsa se lleva puesta la confianza en las otras veintidós. */}
-                {c.otrasEnMedio === 0 ? (
-                  <span style={{ display: 'block', fontSize: font.xs, color: color.warningInk }}>
-                    ⚠ las lecturas entraron seguidas ({c.segundos} s, sin ninguna otra prenda en el medio): confirmalo mirando el perchero
-                  </span>
-                ) : (
-                  <span style={{ display: 'block', fontSize: font.xs, color: color.mut }}>
-                    escaneó {c.otrasEnMedio} {c.otrasEnMedio === 1 ? 'prenda' : 'prendas'} en el medio, así que son dos distintas
+                {/* 🔴 Lo que la app ⛔ puede afirmar: leídas pegadas pueden ser la misma pasada dos veces. */}
+                {c.otrasEnMedio === 0 && (
+                  <span style={{ fontSize: font.xs, color: color.warningInk }} title={`Las lecturas entraron seguidas (${c.segundos} s), sin otra prenda en el medio`}>
+                    {' '}· ⚠ confirmalo en el perchero
                   </span>
                 )}
               </span>
@@ -483,13 +407,25 @@ export function BalanceSector({
           ))}
 
           {!!sacar.length && (
-            <div style={{ marginTop: space[3] }}>
-              <div style={{ fontSize: font.sm, fontWeight: weight.semibold }}>
-                Devolver al depósito: {sacar.reduce((n, c) => n + c.deMas, 0)}{' '}
-                {sacar.reduce((n, c) => n + c.deMas, 0) === 1 ? 'unidad' : 'unidades'} de {sacar.length} {sacar.length === 1 ? 'prenda' : 'prendas'}
+            <div style={{ marginTop: space[2] }}>
+              <div style={{ display: 'flex', gap: space[2], alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: font.sm, color: color.mut }}>Devolver al depósito ({perchasDeMas})</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void descargarXlsx(filasSacar(sacar), {
+                      archivo: `devolver-al-deposito-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+                      hoja: 'Devolver al depósito',
+                      anchos: ANCHOS_SACAR,
+                    })
+                  }
+                >
+                  Excel
+                </Button>
               </div>
               {sacar.map((c) => (
-                <div key={c.variante_id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 2px' }}>
+                <div key={c.variante_id} style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap', padding: '2px' }}>
                   <span style={{ fontSize: font.sm, color: color.ink }}>
                     {c.nombre} · {c.size || '—'} <span style={{ color: color.mut }}>· sacar {c.deMas}</span>
                   </span>
@@ -498,45 +434,29 @@ export function BalanceSector({
                   </Button>
                 </div>
               ))}
-              <Button
-                size="sm"
-                variant="outline"
-                style={{ marginTop: space[2] }}
-                onClick={() =>
-                  void descargarXlsx(filasSacar(sacar), {
-                    archivo: `devolver-al-deposito-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`,
-                    hoja: 'Devolver al depósito',
-                    anchos: ANCHOS_SACAR,
-                  })
-                }
-              >
-                Descargar lo que vuelve al depósito
-              </Button>
             </div>
           )}
 
-          {/* 🔑 Lo que se dejó a propósito también se muestra: es una decisión tomada, y el que
-              vuelve dentro de un mes tiene que ver que ya se miró — si ⛔ no, la vuelve a mirar. */}
           {!!quedan.length && (
-            <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[3] }}>
-              Se dejaron dobles a propósito: {quedan.map((c) => `${c.nombre} ${c.size}`).join(' · ')}.{' '}
+            <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
+              Quedan dobles a propósito: {quedan.map((c) => `${c.nombre} ${c.size}`).join(' · ')}.{' '}
               <Button size="sm" variant="ghost" onClick={() => void decidir(quedan[0].variante_id, null)}>
-                volver a decidir la primera
+                deshacer
               </Button>
             </div>
           )}
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* 🔴 **El seguro del 21-sep-2026.** Reemplaza al cartel de «sin categoría en Tienda Nube»,
-          que declarando por nombre ⛔ ya no hace falta —toda prenda tiene nombre, así que ninguna es
-          invisible—. Lo que sí puede pasar es declarar de menos, y eso es lo que se dice acá. */}
-      {!!elegidas.length && afuera > 0 && (
-        <div style={{ fontSize: font.sm, marginTop: space[3], paddingTop: space[3], borderTop: `1px solid ${color.line}` }}>
-          ⚠️ Este recorrido tocó <b>{afuera}</b> {afuera === 1 ? 'prenda' : 'prendas'} de tipos que <b>no marcaste</b>. Si caminaste ese sector también,
-          marcalos: no van a aparecer en el mandado.
-        </div>
-      )}
-    </Notice>
+function Numero({ etiqueta, valor, tono }: { etiqueta: string; valor: number | string; tono: 'warning' | 'ok' | 'neutral' }) {
+  const fondo = tono === 'warning' ? color.warningBg : tono === 'ok' ? color.successBg : color.bg
+  return (
+    <div style={{ padding: `${space[2]}px ${space[3]}px`, borderRadius: 10, background: fondo }}>
+      <div style={{ fontSize: font.xs, color: color.mut }}>{etiqueta}</div>
+      <div style={{ fontSize: font['2xl'], fontWeight: weight.bold, color: color.ink }}>{valor}</div>
+    </div>
   )
 }
