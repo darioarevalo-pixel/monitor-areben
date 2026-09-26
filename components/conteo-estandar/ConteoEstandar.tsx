@@ -29,6 +29,7 @@ import {
 import type { CePreview, CeProducto, CeState, Linea } from '@/lib/conteo-estandar/tipos'
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
 import { useConteoEstandar } from './useConteoEstandar'
+import { avisar as avisarSonido, prepararSonido } from '@/lib/sonido'
 import { DepositoLocal } from './DepositoLocal'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -64,34 +65,6 @@ type Feedback = { tipo: 'ok' | 'error' | 'warn'; texto: string; size?: string; c
 const ahora = () => Date.now()
 
 const lineaLabel = (l: Linea) => (l === 'stunned' ? '👕 Stunned' : 'Zattia')
-
-let audioCtx: AudioContext | null = null
-function beep(ok: boolean) {
-  try {
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    if (!audioCtx) audioCtx = new AC()
-    const ctx = audioCtx
-    if (ctx.state === 'suspended') void ctx.resume()
-    const o = ctx.createOscillator()
-    const g = ctx.createGain()
-    o.type = 'square'
-    o.frequency.value = ok ? 880 : 200
-    g.gain.value = 0.06
-    o.connect(g)
-    g.connect(ctx.destination)
-    o.start()
-    o.stop(ctx.currentTime + (ok ? 0.09 : 0.28))
-  } catch {
-    /* sin audio */
-  }
-}
-function vibrate(ok: boolean) {
-  try {
-    navigator.vibrate?.(ok ? 55 : [90, 60, 90])
-  } catch {
-    /* sin vibración */
-  }
-}
 
 /**
  * Conteo estándar del Local (Zattia / Stunned).
@@ -147,8 +120,7 @@ export function ConteoEstandar() {
     const vid = resolverScan(byBc, raw)
     if (!vid) {
       setFeedback({ tipo: 'error', texto: 'Código desconocido: ' + bc })
-      beep(false)
-      vibrate(false)
+      avisarSonido('no', 'no figura')
       return
     }
     const pid = vid.split('_')[0]
@@ -156,8 +128,7 @@ export function ConteoEstandar() {
     if (!prod) return
     if (prod.linea !== linea) {
       setFeedback({ tipo: 'warn', texto: `${prod.name} es de la línea ${lineaLabel(prod.linea)}, no de ${lineaLabel(linea)}.` })
-      beep(false)
-      vibrate(false)
+      avisarSonido('mira', 'otra línea')
       return
     }
     const yaEscaneado = (state[pid]?.exhibido?.[vid] || 0) > 0
@@ -173,8 +144,10 @@ export function ConteoEstandar() {
     } else {
       setFeedback({ tipo: 'ok', texto: prod.name, size: v?.size, count })
     }
-    beep(true)
-    vibrate(true)
+    // Los mismos avisos que el Chequeo de exhibición (`lib/sonido.ts`): quien escanea no mira el
+    // teléfono. La voz dice cuántas van de ESE talle; el tono medio = el sistema lo tiene en 0.
+    const sis = next[pid].snap[vid] ?? v?.esperado ?? 0
+    avisarSonido(sis <= 0 ? 'ojo' : yaEscaneado ? 'suma' : 'ok', String(count))
     scanRef.current?.focus()
   }
 
@@ -556,6 +529,8 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
     <div style={{ marginBottom: space[3] }}>
       <input
         ref={scanRef}
+        onFocus={() => prepararSonido()}
+        onClick={() => prepararSonido()}
         className="mo-input"
         type="text"
         autoComplete="off"
@@ -596,7 +571,7 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
               </>
             ) : null}
             <div style={{ fontSize: font.base, marginTop: 2 }}>
-              exhibido: <b>{feedback.count}</b>
+              escaneados de este talle: <b style={{ fontSize: 28, verticalAlign: 'middle' }}>{feedback.count}</b>
             </div>
           </>
         ) : (

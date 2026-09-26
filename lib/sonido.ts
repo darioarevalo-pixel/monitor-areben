@@ -16,7 +16,9 @@
  * se habían despegado: el error de una pita a 200 Hz y el de la otra a 300, con vibraciones
  * distintas. Escribir una tercera era garantizar que «el pitido de error» quiera decir una cosa
  * distinta en cada pantalla del local.
- * ▶️ **Esas dos siguen con lo suyo y habría que traerlas acá.** ⛔ No se hizo en el mismo commit a
+ * ✅ `ConteoEstandar.tsx` ya se trajo (26-sep-2026, lo pidió Bruno para el conteo del local de la
+ * feria): la voz dice cuántas van de ese talle. ▶️ **`ConteoLocalBdi.tsx` sigue con lo suyo.**
+ * Lo que sigue se escribió cuando eran las dos: ⛔ No se hizo en el mismo commit a
  * propósito: son las pantallas que **ajustan stock**, tienen su propia ficha
  * (`docs/secciones/conteo-deposito.md`) y el sonido les cambiaría de un día para el otro a quien ya
  * lo tiene aprendido. Es un cambio de cinco minutos el día que se las camine con alguien del local

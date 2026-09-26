@@ -59,6 +59,7 @@ export function DepositoLocal({
     if (sig) {
       sig.focus()
       sig.select()
+      sig.scrollIntoView({ block: 'center', behavior: 'smooth' })
     } else e.currentTarget.blur()
   }
 
