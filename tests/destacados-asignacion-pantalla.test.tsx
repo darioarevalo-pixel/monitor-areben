@@ -6,15 +6,17 @@ import type { Destacado } from '@/lib/destacados/tipos'
 
 /**
  * **La «Asignación rápida» de ⭐ montada de verdad**, con el teclado: la pantalla ⛔ se puede abrir
- * desde acá (la sesión del monitor es el login de Google de Bruno), y el tramo entre el gesto y el
- * `alternar` con el pid correcto ⛔ lo mira el test del núcleo.
+ * desde acá (la sesión del monitor es el login de Google de Bruno).
+ *
+ * 🔴 El caso que manda: **las flechas ⛔ marcan**. La 1ª versión marcaba con → y Bruno, usando las
+ * flechas para moverse, dejó 7 productos con ⭐ sin querer (26-sep-2026).
  *
  * Mutantes que tienen que caer:
- *  1. → que llame a `alternar` sin la acción explícita (o con el producto de otra carta).
- *  2. ← que llame a `alternar`.
- *  3. El mazo con los productos sin foto adentro.
- *  4. «¿Ya tiene ⭐?» leído SÓLO de la lista (caminado en prod el 26-sep-2026): marcar, ↶ y → otra
- *     vez antes de que la lista vuelva ⇒ ⛔ se guardaba nada.
+ *  1. → o ← que llamen a `alternar`.
+ *  2. ← que avance (las dos flechas para adelante, que es lo que reportó Bruno).
+ *  3. ↑ sin acción explícita, o con el producto de otra carta.
+ *  4. Una tecla sostenida (`repeat`) que vuelva a alternar.
+ *  5. ↑ dos veces antes de que vuelva la lista: tiene que ser marcar y después sacar.
  */
 
 vi.mock('@/lib/tn', () => ({
@@ -51,49 +53,65 @@ async function montar() {
       </ToastProvider>,
     )
   })
-  const tecla = async (key: string) => {
-    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key })) })
+  const tecla = async (key: string, repeat = false) => {
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key, repeat })) })
   }
-  return { div, alternar, tecla, porProducto }
+  const acciones = () => alternar.mock.calls.map((c) => {
+    const [p, a] = c as unknown as [{ id: string }, string]
+    return `${a}:${p.id}`
+  })
+  return { div, alternar, tecla, acciones }
 }
 
 describe('Asignación rápida', () => {
-  it('pasa los productos con foto, → marca con su pid, ← no escribe', async () => {
+  it('las flechas mueven para los dos lados y ⛔ marcan nada', async () => {
     const { div, alternar, tecla } = await montar()
     expect(div.textContent).toContain('1 de 3')
     expect(div.textContent).toContain('1 sin foto, salteados')
-    expect(div.textContent).toContain('TOP MONTANA')
-
     await tecla('ArrowRight')
-    expect(alternar).toHaveBeenCalledTimes(1)
-    expect(alternar).toHaveBeenCalledWith({ id: '11', nombre: 'TOP MONTANA', sku: 'TM' }, 'marcar')
-    // El de sin foto se salteó: la 2ª carta es BABY TEE.
-    expect(div.textContent).toContain('BABY TEE HOT')
-
-    await tecla('ArrowLeft')
-    expect(alternar).toHaveBeenCalledTimes(1)
-
-    // CAMPERA ya tenía ⭐: → avanza sin escribir.
+    expect(div.textContent).toContain('BABY TEE HOT') // el de sin foto se salteó
+    await tecla('ArrowRight')
     expect(div.textContent).toContain('CAMPERA REVOLUTION')
+    await tecla('ArrowLeft')
+    expect(div.textContent).toContain('BABY TEE HOT')
+    await tecla('ArrowLeft')
+    await tecla('ArrowLeft')
+    expect(div.textContent).toContain('1 de 3')
+    expect(alternar).not.toHaveBeenCalled()
+  })
+
+  it('↑ marca el que se está mirando, sin moverse; Enter también', async () => {
+    const { div, alternar, tecla, acciones } = await montar()
+    await tecla('ArrowUp')
+    expect(alternar).toHaveBeenCalledWith({ id: '11', nombre: 'TOP MONTANA', sku: 'TM' }, 'marcar')
+    expect(div.textContent).toContain('1 de 3')
     await tecla('ArrowRight')
-    expect(alternar).toHaveBeenCalledTimes(1)
+    await tecla('Enter')
+    expect(acciones()).toEqual(['marcar:11', 'marcar:13'])
+  })
+
+  it('↑ sobre uno que ya tenía ⭐ la saca', async () => {
+    const { acciones, tecla } = await montar()
+    await tecla('ArrowRight')
+    await tecla('ArrowRight')
+    await tecla('ArrowUp')
+    expect(acciones()).toEqual(['sacar:14'])
+  })
+
+  it('↑ dos veces antes de que vuelva la lista: marcar y sacar; una tecla sostenida ⛔ repite', async () => {
+    const { acciones, tecla } = await montar()
+    await tecla('ArrowUp')
+    await tecla('ArrowUp', true)
+    await tecla('ArrowUp')
+    expect(acciones()).toEqual(['marcar:11', 'sacar:11'])
+  })
+
+  it('al final cuenta sólo las nuevas', async () => {
+    const { div, tecla } = await montar()
+    await tecla('ArrowUp')
+    await tecla('ArrowRight')
+    await tecla('ArrowRight')
+    await tecla('ArrowRight')
     expect(div.textContent).toContain('Marcaste 1 de 3')
-  })
-
-  it('deshacer una ⭐ propia la saca', async () => {
-    const { alternar, tecla } = await montar()
-    await tecla('ArrowRight')
-    await tecla('Backspace')
-    expect(alternar).toHaveBeenLastCalledWith({ id: '11', nombre: 'TOP MONTANA', sku: 'TM' }, 'sacar')
-  })
-
-  it('marcar, ↶ y → otra vez antes de que vuelva la lista vuelve a marcar', async () => {
-    // La lista ya volvió CON la ⭐ del → y todavía ⛔ volvió del «sacar» del ↶: es la ventana de ~1 s.
-    const { alternar, tecla, porProducto } = await montar()
-    await tecla('ArrowRight')
-    porProducto.set('11', { id: 'y' } as Destacado)
-    await tecla('Backspace')
-    await tecla('ArrowRight')
-    expect(alternar.mock.calls.map((c) => (c as unknown[])[1])).toEqual(['marcar', 'sacar', 'marcar'])
   })
 })

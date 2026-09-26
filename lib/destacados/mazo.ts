@@ -1,6 +1,6 @@
 /**
  * El mazo de la «Asignación rápida» de ⭐: pasar los productos de a uno, con la foto grande, y
- * deslizar a la derecha para marcarlo como producto estrella o a la izquierda para pasarlo.
+ * marcar los productos estrella sin entrar a cada uno.
  *
  * De dónde sale, dicho por Bruno (25-sep-2026): *«sino tengo que entrar a las fotos una por una de
  * cada producto, para ver cómo es, y si es un ganador. pq el ganador puede ser por ventas, es decir
@@ -13,44 +13,26 @@
  *
  * # Las decisiones
  *
- *  1. 🔴 **Pasar ⛔ es desmarcar.** Uno que ya tenía ⭐ y se desliza a la izquierda la conserva: el
- *     mazo es para APOSTAR rápido, y una estrella que puso otra persona (o uno mismo la semana
- *     pasada) no se borra por pasar de largo. Sacarla es un gesto explícito, con la ★ de la fila.
- *  2. **Marcar uno que ya estaba ⛔ escribe nada.** Avanza igual, pero ⛔ cuenta como marcado por
- *     esta pasada y deshacerlo ⛔ se la saca.
- *  3. **Deshacer sólo revierte lo que ESTA pasada escribió** — y por eso la acción viaja explícita
- *     (`marcar`/`sacar`), ⛔ derivada del estado de la lista: el guardado corre detrás mientras la
- *     persona sigue deslizando, y la lista puede no haber vuelto todavía.
- *  4. **Sin foto se saltea.** El modo existe para mirar; un producto sin foto se decide en la tabla.
+ *  1. 🔴 **MOVERSE ⛔ ESCRIBE.** ← y → son anterior y siguiente, nada más; la ⭐ es un gesto aparte
+ *     (↑ / Enter / el botón) que prende o apaga la del producto que se está mirando.
+ *     La 1ª versión (25-sep) era de Tinder —← pasar, → ⭐ y seguir— y **las dos flechas avanzaban**:
+ *     Bruno usó → para moverse, como en cualquier galería, y **marcó 7 productos sin querer** en 7
+ *     segundos (26-sep). *«me gusta usar la flecha para poder ir moviendo fácilmente»*.
+ *  2. **Sin foto se saltea.** El modo existe para mirar; un producto sin foto se decide en la tabla.
+ *  3. **«¿Tiene ⭐?» lo contesta primero lo que ESTA pasada escribió**, y después la lista del
+ *     servidor, que tarda ~1 s en volver: sin esto, apretar ↑ dos veces seguidas mandaba dos
+ *     «marcar» (caminado en prod el 26-sep con la versión anterior).
  */
 
-export type Gesto = 'estrella' | 'pasar'
-
-/** Lo que la pantalla tiene que escribir en la base después de un gesto. */
-export type Escritura = 'marcar' | 'sacar' | null
+/** Lo que la pantalla tiene que escribir en la base. */
+export type Escritura = 'marcar' | 'sacar'
 
 export interface Carta<T> {
   p: T
   imagenes: string[]
 }
 
-export interface Paso {
-  /** Índice de la carta sobre la que se hizo el gesto. */
-  i: number
-  gesto: Gesto
-  /** `true` si este gesto escribió una ⭐ nueva (y deshacerlo tiene que sacarla). */
-  escribio: boolean
-}
-
-export interface EstadoMazo {
-  /** La carta que se está mirando. `i === total` es «terminaste». */
-  i: number
-  historia: Paso[]
-}
-
-export const MAZO_INICIAL: EstadoMazo = { i: 0, historia: [] }
-
-/** Las cartas, en el orden en que vienen, salteando las que ⛔ tienen foto (decisión 4). */
+/** Las cartas, en el orden en que vienen, salteando las que ⛔ tienen foto (decisión 2). */
 export function armarMazo<T>(productos: T[], fotosDe: (p: T) => string[]): Carta<T>[] {
   const out: Carta<T>[] = []
   for (const p of productos) {
@@ -61,35 +43,27 @@ export function armarMazo<T>(productos: T[], fotosDe: (p: T) => string[]): Carta
 }
 
 /**
- * Un gesto sobre la carta actual. `yaTenia` es si ese producto ya tenía ⭐ antes del gesto.
- * Sin cartas por delante ⛔ hace nada.
+ * Anterior (−1) o siguiente (+1). `i === total` es la pantalla de «terminaste», a la que se llega
+ * con → desde la última carta; de ahí ← vuelve a la última. ⛔ Da la vuelta: llegar al final tiene
+ * que notarse.
  */
-export function decidir(
-  e: EstadoMazo,
-  total: number,
-  gesto: Gesto,
-  yaTenia: boolean,
-): { estado: EstadoMazo; escritura: Escritura } {
-  if (e.i >= total) return { estado: e, escritura: null }
-  const escribio = gesto === 'estrella' && !yaTenia
-  return {
-    estado: { i: e.i + 1, historia: [...e.historia, { i: e.i, gesto, escribio }] },
-    escritura: escribio ? 'marcar' : null,
-  }
+export function mover(i: number, total: number, delta: -1 | 1): number {
+  return Math.min(total, Math.max(0, i + delta))
 }
 
-/** Vuelve a la carta anterior. Si ese gesto había escrito una ⭐, hay que sacarla (decisión 3). */
-export function deshacer(e: EstadoMazo): { estado: EstadoMazo; escritura: Escritura; i: number | null } {
-  const ultimo = e.historia[e.historia.length - 1]
-  if (!ultimo) return { estado: e, escritura: null, i: null }
-  return {
-    estado: { i: ultimo.i, historia: e.historia.slice(0, -1) },
-    escritura: ultimo.escribio ? 'sacar' : null,
-    i: ultimo.i,
-  }
+/** ¿Tiene ⭐ este producto? Lo escrito en esta pasada gana sobre la lista (decisión 3). */
+export function tieneEstrella(pid: string, propias: ReadonlyMap<string, boolean>, lista: { has(pid: string): boolean }): boolean {
+  return propias.get(pid) ?? lista.has(pid)
 }
 
-/** Cuántas ⭐ nuevas puso esta pasada. */
-export function marcadas(e: EstadoMazo): number {
-  return e.historia.filter((h) => h.escribio).length
+/** El interruptor: qué hay que escribir para dar vuelta la ⭐ de un producto. */
+export function alternarEstrella(tiene: boolean): Escritura {
+  return tiene ? 'sacar' : 'marcar'
+}
+
+/** Cuántos productos quedaron con ⭐ por esta pasada y ⛔ la tenían al abrir. */
+export function marcadas(propias: ReadonlyMap<string, boolean>, teniaAlAbrir: ReadonlySet<string>): number {
+  let n = 0
+  for (const [pid, con] of propias) if (con && !teniaAlAbrir.has(pid)) n++
+  return n
 }

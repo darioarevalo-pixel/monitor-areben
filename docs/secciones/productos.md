@@ -6,8 +6,8 @@ qué productos de un ingreso hacerles publicidad. Es también la puerta de entra
 tilde y «Enviar a liquidación») y del PDF de sale.
 
 Desde el 25-sep-2026, el botón **«⭐ Asignación rápida»** del header: pasa **lo que la tabla tiene
-filtrado, en su orden**, de a un producto con la foto grande — deslizar → es ⭐ (la general, la
-misma de la fila), ← es pasar, ↶ deshace. Pedido de Bruno: *«sino tengo que entrar a las fotos una
+filtrado, en su orden**, de a un producto con la foto grande — ← → mueven, ↑ o Enter pone o saca
+la ⭐ (la general, la misma de la fila). Pedido de Bruno: *«sino tengo que entrar a las fotos una
 por una […] se puede identificar favorito desde el inicio apostando por un producto»*, y **sin
 cambiar la estructura de la sección** (se descartó una pestaña de grilla).
 
@@ -61,11 +61,12 @@ La Asignación rápida vive en `components/destacados/AsignacionRapida.tsx` + `l
 - 🔑 **Los empatados comparten puesto** (1, 2, 2, 4): a pocas unidades casi todo empata, y un orden
   corrido inventaría una diferencia.
 
-- 🔑 **En la Asignación rápida, pasar ⛔ desmarca**: una ⭐ que ya estaba (de otra persona, o de otra
-  pasada) sobrevive al ←, y deshacer sólo revierte lo que ESA pasada escribió. Por eso `alternar`
-  de `useDestacados` acepta la acción explícita: la carta avanza sin esperar al servidor, y la lista
-  puede no haber vuelto cuando se aprieta ↶. El mazo es una foto de la tabla al abrir y ⛔ trae los
-  productos sin foto (se cuentan arriba como «salteados»).
+- 🔴 **En la Asignación rápida, MOVERSE ⛔ ESCRIBE.** La 1ª versión (25-sep) era de Tinder —← pasar,
+  → ⭐ y seguir— y las dos flechas avanzaban: Bruno usó → para moverse y **marcó 7 productos sin
+  querer** en 7 segundos (26-sep). Ahora las flechas son una galería y la ⭐ es un interruptor
+  aparte (↑ / Enter), que ⛔ repite con la tecla sostenida. Lo escrito por la pasada gana sobre la
+  lista de ⭐ (que tarda ~1 s): por eso `alternar` de `useDestacados` acepta la acción explícita.
+  El mazo es una foto de la tabla al abrir y ⛔ trae los productos sin foto.
 
 ## Lo que ya se rompió acá
 

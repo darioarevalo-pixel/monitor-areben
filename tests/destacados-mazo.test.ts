@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { armarMazo, decidir, deshacer, marcadas, MAZO_INICIAL } from '@/lib/destacados/mazo'
+import { alternarEstrella, armarMazo, marcadas, mover, tieneEstrella } from '@/lib/destacados/mazo'
 
 /**
  * Las reglas de la «Asignación rápida» de ⭐ (`lib/destacados/mazo.ts`).
  *
  * Mutantes que tienen que caer:
  *  1. Dejar entrar productos sin foto.
- *  2. Que pasar a uno que ya tenía ⭐ escriba «sacar».
- *  3. Que marcar uno que ya tenía ⭐ escriba (y que deshacerlo se la saque).
- *  4. Que deshacer un «pasar» escriba algo.
+ *  2. `mover` que da la vuelta, o que se pasa del final / del principio.
+ *  3. Leer «¿tiene ⭐?» sólo de la lista (ignorando lo escrito en la pasada).
+ *  4. Contar como marcadas las que ya tenían ⭐ al abrir, o las que se apagaron.
  */
 
 describe('armarMazo', () => {
@@ -20,50 +20,32 @@ describe('armarMazo', () => {
   })
 })
 
-describe('decidir', () => {
-  it('→ sobre uno sin ⭐ escribe marcar y avanza', () => {
-    const r = decidir(MAZO_INICIAL, 3, 'estrella', false)
-    expect(r.escritura).toBe('marcar')
-    expect(r.estado.i).toBe(1)
-    expect(marcadas(r.estado)).toBe(1)
-  })
-
-  it('← ⛔ desmarca: pasar uno que ya tenía ⭐ no escribe nada', () => {
-    const r = decidir(MAZO_INICIAL, 3, 'pasar', true)
-    expect(r.escritura).toBeNull()
-    expect(r.estado.i).toBe(1)
-  })
-
-  it('→ sobre uno que ya tenía ⭐ avanza sin escribir ni contarlo', () => {
-    const r = decidir(MAZO_INICIAL, 3, 'estrella', true)
-    expect(r.escritura).toBeNull()
-    expect(marcadas(r.estado)).toBe(0)
-  })
-
-  it('con el mazo terminado no hace nada', () => {
-    const fin = { i: 2, historia: [] }
-    expect(decidir(fin, 2, 'estrella', false)).toEqual({ estado: fin, escritura: null })
+describe('mover', () => {
+  it('→ avanza hasta la pantalla final (i = total) y no más; ← no baja de 0', () => {
+    expect(mover(0, 3, 1)).toBe(1)
+    expect(mover(2, 3, 1)).toBe(3)
+    expect(mover(3, 3, 1)).toBe(3)
+    expect(mover(3, 3, -1)).toBe(2)
+    expect(mover(0, 3, -1)).toBe(0)
   })
 })
 
-describe('deshacer', () => {
-  it('deshacer un → propio saca la ⭐ y vuelve a esa carta', () => {
-    const a = decidir(MAZO_INICIAL, 3, 'pasar', false).estado
-    const b = decidir(a, 3, 'estrella', false).estado
-    const r = deshacer(b)
-    expect(r).toMatchObject({ escritura: 'sacar', i: 1 })
-    expect(r.estado.i).toBe(1)
-    expect(marcadas(r.estado)).toBe(0)
+describe('la ⭐', () => {
+  it('lo escrito en la pasada gana sobre la lista, en los dos sentidos', () => {
+    const lista = new Set(['1'])
+    expect(tieneEstrella('1', new Map(), lista)).toBe(true)
+    expect(tieneEstrella('1', new Map([['1', false]]), lista)).toBe(false)
+    expect(tieneEstrella('2', new Map([['2', true]]), lista)).toBe(true)
+    expect(tieneEstrella('2', new Map(), lista)).toBe(false)
   })
 
-  it('deshacer un ← o un → sobre una ⭐ ajena ⛔ escribe', () => {
-    const a = decidir(MAZO_INICIAL, 3, 'pasar', false).estado
-    expect(deshacer(a).escritura).toBeNull()
-    const b = decidir(MAZO_INICIAL, 3, 'estrella', true).estado
-    expect(deshacer(b).escritura).toBeNull()
+  it('es un interruptor', () => {
+    expect(alternarEstrella(false)).toBe('marcar')
+    expect(alternarEstrella(true)).toBe('sacar')
   })
 
-  it('sin historia no hace nada', () => {
-    expect(deshacer(MAZO_INICIAL)).toEqual({ estado: MAZO_INICIAL, escritura: null, i: null })
+  it('cuenta sólo las nuevas de esta pasada que siguen prendidas', () => {
+    const propias = new Map([['1', true], ['2', true], ['3', false]])
+    expect(marcadas(propias, new Set(['2']))).toBe(1)
   })
 })
