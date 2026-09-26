@@ -42,6 +42,8 @@ export type CeFilaAjuste = FilaAjuste & { exhibido: number; deposito: number }
 export type CeDetalleConteo = {
   inventory_id: number | string | null
   barcode: string
+  /** SKU de la variante (desde 26-sep-2026; los conteos anteriores no lo tienen). */
+  sku?: string
   producto: string
   variante: string
   sistema: number | null

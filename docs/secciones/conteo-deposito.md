@@ -59,6 +59,12 @@ termina **sólo los productos con algo cargado**; los que tienen stock en sistem
 quedan sin terminar y se listan en el aviso — terminarlos solos los mandaría a 0 sin que nadie
 los haya buscado.
 
+**«🧥 Para colgar»** (`lib/conteo-estandar/reporte.ts` + `ReporteColgar.tsx`): regla de Bruno,
+**uno exhibido por talle y color**. Sale del HISTORIAL del día (el `detalle` con exhibido y
+depósito por variante), no del conteo en curso, así sobrevive a «Reiniciar». Las marcas «No va» /
+«Colgado ✓» viven en el `localStorage` del dispositivo, por día y línea. Desde el 26-sep el
+`detalle` guarda también el `sku`; para los conteos anteriores lo busca en el stock actual.
+
 ## Lo que ya se rompió acá
 
 Los tres están comentados en el lugar exacto donde muerden; acá van para saber **qué mirar antes de

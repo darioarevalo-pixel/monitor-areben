@@ -31,6 +31,7 @@ import { ordenarModelo } from '@/lib/conteo-deposito/core'
 import { useConteoEstandar } from './useConteoEstandar'
 import { avisar as avisarSonido, prepararSonido } from '@/lib/sonido'
 import { DepositoLocal } from './DepositoLocal'
+import { ReporteColgar } from './ReporteColgar'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
@@ -57,7 +58,7 @@ import {
   useToast,
 } from '@/components/ui'
 
-type Vista = 'lista' | 'foco' | 'preview' | 'historial' | 'deposito'
+type Vista = 'lista' | 'foco' | 'preview' | 'historial' | 'deposito' | 'colgar'
 type Filtro = 'todos' | 'sin_previo' | 'contados' | 'en_progreso' | 'terminado'
 type Feedback = { tipo: 'ok' | 'error' | 'warn'; texto: string; size?: string; count?: number }
 
@@ -397,6 +398,9 @@ export function ConteoEstandar() {
             <Button variant="outline" onClick={() => setVista('deposito')}>
               ✍️ Depósito del local
             </Button>
+            <Button variant="outline" onClick={() => setVista('colgar')}>
+              🧥 Para colgar
+            </Button>
             <Button variant="outline" onClick={() => void onActualizarGN()} loading={ce.cargando}>
               Cargar stock de GN
             </Button>
@@ -436,7 +440,7 @@ export function ConteoEstandar() {
             )}
           </>
         )}
-        {vista === 'deposito' && (
+        {(vista === 'deposito' || vista === 'colgar') && (
           <Button variant="outline" onClick={() => setVista('lista')}>
             ← Volver a la lista
           </Button>
@@ -466,6 +470,8 @@ export function ConteoEstandar() {
         </Notice>
       ) : vista === 'historial' ? (
         <HistorialConteos hist={hist} titulo={`Historial · ${lineaLabel(linea)}`} unidad="Talle" />
+      ) : vista === 'colgar' ? (
+        <ReporteColgar marca={marca} linea={linea} feed={products} lineaLabel={lineaLabel(linea)} />
       ) : vista === 'deposito' ? (
         <DepositoLocal
           products={products.filter((p) => p.linea === linea)}

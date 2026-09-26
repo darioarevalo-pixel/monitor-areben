@@ -223,6 +223,7 @@ export function registroConteo(terminados: CeProducto[], state: CeState, vivo: R
       out.push({
         inventory_id: (live && live.inventory_id != null ? live.inventory_id : v.inventory_id) ?? null,
         barcode: (live && live.barcode) || v.barcode || '',
+        sku: v.sku || '',
         producto: p.name,
         variante: v.size,
         sistema: st?.snap && st.snap[v.vid] != null ? st.snap[v.vid] : v.esperado,
@@ -290,7 +291,7 @@ export function grupoSku(sku?: string): string {
   return out.join('-')
 }
 
-const cmpSku = (a: string, b: string) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' })
+export const cmpSku = (a: string, b: string) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' })
 
 /**
  * SKU del PRODUCTO: categoría + número, hasta el primer bloque con números inclusive
