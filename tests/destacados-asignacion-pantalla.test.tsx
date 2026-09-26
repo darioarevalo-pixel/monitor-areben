@@ -13,6 +13,8 @@ import type { Destacado } from '@/lib/destacados/tipos'
  *  1. → que llame a `alternar` sin la acción explícita (o con el producto de otra carta).
  *  2. ← que llame a `alternar`.
  *  3. El mazo con los productos sin foto adentro.
+ *  4. «¿Ya tiene ⭐?» leído SÓLO de la lista (caminado en prod el 26-sep-2026): marcar, ↶ y → otra
+ *     vez antes de que la lista vuelva ⇒ ⛔ se guardaba nada.
  */
 
 vi.mock('@/lib/tn', () => ({
@@ -52,7 +54,7 @@ async function montar() {
   const tecla = async (key: string) => {
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key })) })
   }
-  return { div, alternar, tecla }
+  return { div, alternar, tecla, porProducto }
 }
 
 describe('Asignación rápida', () => {
@@ -83,5 +85,15 @@ describe('Asignación rápida', () => {
     await tecla('ArrowRight')
     await tecla('Backspace')
     expect(alternar).toHaveBeenLastCalledWith({ id: '11', nombre: 'TOP MONTANA', sku: 'TM' }, 'sacar')
+  })
+
+  it('marcar, ↶ y → otra vez antes de que vuelva la lista vuelve a marcar', async () => {
+    // La lista ya volvió CON la ⭐ del → y todavía ⛔ volvió del «sacar» del ↶: es la ventana de ~1 s.
+    const { alternar, tecla, porProducto } = await montar()
+    await tecla('ArrowRight')
+    porProducto.set('11', { id: 'y' } as Destacado)
+    await tecla('Backspace')
+    await tecla('ArrowRight')
+    expect(alternar.mock.calls.map((c) => (c as unknown[])[1])).toEqual(['marcar', 'sacar', 'marcar'])
   })
 })

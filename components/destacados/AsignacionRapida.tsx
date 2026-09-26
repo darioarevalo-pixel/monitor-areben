@@ -21,6 +21,11 @@
  *     después, ⛔ dice qué quedó sin guardar.
  *  3. **Tocar la foto (sin arrastrar) pasa a la siguiente foto del MISMO producto.** Un producto
  *     se decide mirándolo entero, y la 1ª foto a veces es un detalle o una tira de colores.
+ *  4. 🔴 **«¿Ya tiene ⭐?» lo contesta primero lo que ESTA pasada escribió, y después la lista.**
+ *     Caminado en prod el 26-sep-2026: marcar, ↶ y volver a apretar → antes de que la lista
+ *     vuelva (~1 s) leía la ⭐ vieja ⇒ «ya la tenía» ⇒ ⛔ no se guardaba nada, y la carta mostraba
+ *     una ★ que ya se había sacado. La lista del servidor sigue mandando para lo que esta pasada
+ *     ⛔ tocó (las ⭐ de otra persona).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -90,17 +95,28 @@ export function MazoEstrellas({
   const [foto, setFoto] = useState(0)
   const [dx, setDx] = useState(0)
   const arrastre = useRef<{ x0: number; movio: boolean } | null>(null)
+  // Decisión 4: pid → cómo lo dejó esta pasada (true = con ⭐). Gana sobre la lista del servidor.
+  const [propias, setPropias] = useState<Map<string, boolean>>(() => new Map())
 
   const total = cartas.length
   const carta = cartas[estado.i]
-  const yaTiene = carta ? destacados.porProducto.has(String(carta.p.id)) : false
+  const tieneEstrella = (pid: string) => propias.get(pid) ?? destacados.porProducto.has(pid)
+  const yaTiene = carta ? tieneEstrella(String(carta.p.id)) : false
 
   // Decisión 2: el guardado corre detrás y avisa con nombre si falla.
   const escribir = useCallback(
     (p: ProductoMazo, accion: 'marcar' | 'sacar') => {
+      const pid = String(p.id)
+      setPropias((m) => new Map(m).set(pid, accion === 'marcar'))
       destacados
         .alternar({ id: p.id, nombre: p.name ?? null, sku: p.sku ?? null }, accion)
         .catch((e) => {
+          // Si no quedó guardado, la verdad vuelve a ser la de la lista.
+          setPropias((m) => {
+            const n = new Map(m)
+            n.delete(pid)
+            return n
+          })
           const por = e instanceof Error ? e.message : 'error'
           toast.error(accion === 'marcar' ? `No se guardó la ⭐ de ${p.name} (${por}).` : `No se pudo sacar la ⭐ de ${p.name} (${por}).`)
         })
@@ -213,6 +229,9 @@ export function MazoEstrellas({
               setDx(0)
             }}
           >
+            {/* La ★ y los puntitos van pegados a la FOTO, ⛔ al área: una foto angosta dejaba la ★
+                flotando afuera, a la derecha (caminado en prod el 26-sep-2026). */}
+            <div style={{ position: 'relative', display: 'inline-flex', maxWidth: '100%' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               key={`${carta.p.id}-${foto}`}
@@ -220,7 +239,7 @@ export function MazoEstrellas({
               alt={carta.p.name}
               draggable={false}
               style={{
-                maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: radius.lg,
+                maxWidth: '100%', maxHeight: 'calc(100dvh - 240px)', objectFit: 'contain', borderRadius: radius.lg,
                 boxShadow: '0 10px 50px rgba(0,0,0,0.5)', userSelect: 'none',
                 transform: `translateX(${dx}px) rotate(${dx / 25}deg)`,
                 transition: dx === 0 ? 'transform 0.15s' : 'none',
@@ -233,10 +252,11 @@ export function MazoEstrellas({
             {carta.imagenes.length > 1 && (
               <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5 }}>
                 {carta.imagenes.map((_, k) => (
-                  <span key={k} style={{ width: 7, height: 7, borderRadius: 4, background: k === foto ? '#fff' : 'rgba(255,255,255,0.35)' }} />
+                  <span key={k} style={{ width: 7, height: 7, borderRadius: 4, background: k === foto ? '#fff' : 'rgba(255,255,255,0.35)', boxShadow: '0 0 2px rgba(0,0,0,0.6)' }} />
                 ))}
               </div>
             )}
+            </div>
           </div>
 
           <div style={{ width: '100%', maxWidth: 520, marginTop: space[2], textAlign: 'center' }}>
