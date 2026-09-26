@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, colgadasDeMas, partirRepetidas, filasSacar, HEADER_SACAR, MOTIVOS, COBERTURA_FIABLE, declaracionesFlojas, type Tachada, type Repetida } from '../lib/exhib/balance'
+import { buscarEnDeposito, buscarPorTipo, coberturaPorCat, coberturaPorTipo, filasBuscar, partirTachadas, resumenBuscar, sinCategoriaSinVer, tocadoSinDeclarar, vistasDelRecorrido, colgadasDeMas, partirRepetidas, filasSacar, HEADER_SACAR, MOTIVOS, COBERTURA_FIABLE, declaracionesFlojas, porModelo, type Tachada, type Repetida } from '../lib/exhib/balance'
 import { aEscaneo, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
@@ -449,5 +449,25 @@ describe('declaracionesFlojas — declarar lo que el recorrido ⛔ no caminó', 
 
   it('sin nada declarado ⛔ no avisa nada', () => {
     expect(declaracionesFlojas(escanear([TOP_A]), LOCAL, [])).toEqual([])
+  })
+})
+
+describe('porModelo: el mandado leído por nombre', () => {
+  const t = Date.parse('2026-09-26T13:00:00Z')
+  const TOP_D = v({ productId: '2', name: 'TOP NARA', size: 'Negro', barcode: 'b7', qty: 1 })
+  const AAA = v({ productId: '9', name: 'TOP ABRIL', size: 'Rojo', barcode: 'b8', qty: 1 })
+
+  it('junta los colores de un mismo modelo en un renglón', () => {
+    const m = porModelo(buscarPorTipo([], [TOP_C, TOP_D], ['TOP']), [])
+    expect(m).toHaveLength(1)
+    expect(m[0].nombre).toBe('TOP NARA')
+    expect(m[0].faltan.map((b) => b.it.size)).toEqual(['Blanco', 'Negro'])
+  })
+
+  it('⭐ primero el modelo con otro color ya colgado, aunque por nombre vaya después', () => {
+    const escaneos = [aEscaneo(TOP_A, 'b1', 'Tops', t)]
+    const m = porModelo(buscarPorTipo(escaneos, [TOP_A, TOP_B, AAA], ['TOP']), escaneos)
+    expect(m.map((x) => [x.nombre, x.hermanaColgada])).toEqual([['TOP ORSA', true], ['TOP ABRIL', false]])
+    expect(m[0].faltan.map((b) => b.it.size)).toEqual(['Negro'])
   })
 })

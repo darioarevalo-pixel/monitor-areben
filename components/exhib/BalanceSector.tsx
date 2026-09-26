@@ -12,6 +12,7 @@ import {
   filasSacar,
   partirRepetidas,
   partirTachadas,
+  porModelo,
   resumenBuscar,
   tocadoSinDeclarar,
   ANCHOS_BUSCAR,
@@ -128,6 +129,7 @@ export function BalanceSector({
   /** La prenda a la que se le está eligiendo el motivo, ⛔ no un menú flotante: se elige en su renglón. */
   const [eligiendo, setEligiendo] = useState<string | null>(null)
   const resumen = resumenBuscar(mandado)
+  const modelos = useMemo(() => porModelo(mandado, escaneos), [mandado, escaneos])
 
   async function tachar(varianteId: string, motivo: MotivoTachada | null) {
     setTachando(varianteId)
@@ -337,52 +339,66 @@ export function BalanceSector({
           {/* 🔴 **UN número y que sea el que importa** (21-sep-2026, Bruno: «me interesa que se
               exhiba»): cuántas prendas distintas ⛔ no están colgadas. Las unidades se sacaron —que
               el sistema tenga 8 en el depósito ⛔ no cambia la tarea, que es colgar una—. */}
-          <div style={{ fontWeight: weight.bold }}>
-            Faltan exhibir: {resumen.variantes} {resumen.variantes === 1 ? 'prenda' : 'prendas'}
-            <span style={{ fontWeight: weight.normal, color: color.mut }}>
-              {' '}(colores o talles con stock en el local que ⛔ no pasaron por el lector, de {resumen.productos}{' '}
-              {resumen.productos === 1 ? 'modelo' : 'modelos'} distintos)
+          <div style={{ fontWeight: weight.bold, fontSize: font.lg, color: color.ink }}>
+            Faltan colgar: {resumen.variantes} {resumen.variantes === 1 ? 'prenda' : 'prendas'}
+            <span style={{ fontWeight: weight.normal, fontSize: font.base, color: color.mut }}>
+              {' '}de {resumen.productos} {resumen.productos === 1 ? 'modelo' : 'modelos'}
             </span>
           </div>
           {!mandado.length ? (
-            <div style={{ fontSize: font.sm }}>No falta nada: todo lo que el sistema tiene en el local de esos tipos de prenda pasó por el lector.</div>
+            <div style={{ fontSize: font.sm }}>No falta nada: todo lo que hay en el local de esos tipos de prenda pasó por el lector.</div>
           ) : (
-            <div style={{ maxHeight: 360, overflowY: 'auto', marginTop: space[2] }}>
-              {mandado.map((b) => {
-                const id = exhibId(b.it)
-                return (
-                  <div key={id} style={{ padding: '6px 2px', borderBottom: `1px solid ${color.line}` }}>
-                    <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: font.base, color: color.ink, minWidth: 0 }}>
-                        {b.it.name} <span style={{ color: color.mut }}>· {b.it.size || '—'}</span>
-                      </span>
-                      {/* 🔑 **Dos toques y ⛔ ningún menú flotante**: el motivo se elige en el mismo
-                          renglón de la prenda. Con 82 renglones, un modal por prenda es la razón por
-                          la que nadie tacha nada y la lista se corrige a mano en un papel. */}
-                      {eligiendo === id ? (
-                        <span style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-                          {(Object.keys(MOTIVOS) as MotivoTachada[]).map((m) => (
-                            <Button key={m} size="sm" variant="outline" loading={tachando === id} onClick={() => void tachar(id, m)}>
-                              {MOTIVOS[m]}
+            <>
+              {modelos.some((m) => m.hermanaColgada) && (
+                <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2 }}>⭐ = otro color ya está colgado: esa va seguro en el depósito.</div>
+              )}
+              {/* 🔴 **Un renglón por MODELO, con los colores que faltan** (26-sep-2026, Bruno: «que
+                  el mensaje sea rápido por nombre»). Ver `porModelo`. Cada color se toca para
+                  tacharlo: los motivos se abren en el mismo renglón, ⛔ en un menú flotante. */}
+              <div style={{ maxHeight: 420, overflowY: 'auto', marginTop: space[2] }}>
+                {modelos.map((m) => {
+                  const abierto = m.faltan.find((b) => exhibId(b.it) === eligiendo)
+                  return (
+                    <div key={m.productId} style={{ padding: '8px 2px', borderBottom: `1px solid ${color.line}` }}>
+                      <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: weight.semibold, fontSize: font.base, color: color.ink }}>
+                          {m.hermanaColgada ? '⭐ ' : ''}
+                          {m.nombre}
+                        </span>
+                        {m.faltan.map((b) => {
+                          const id = exhibId(b.it)
+                          return (
+                            <Button
+                              key={id}
+                              size="sm"
+                              variant={eligiendo === id ? 'solid' : 'outline'}
+                              tone={eligiendo === id ? 'brand' : 'neutral'}
+                              title="Tocalo si ya está colgado"
+                              onClick={() => setEligiendo(eligiendo === id ? null : id)}
+                            >
+                              {b.it.size || '—'}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                      {abierto && (
+                        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', alignItems: 'center', marginTop: space[2] }}>
+                          <span style={{ fontSize: font.sm, color: color.mut }}>{abierto.it.size || '—'}:</span>
+                          {(Object.keys(MOTIVOS) as MotivoTachada[]).map((mo) => (
+                            <Button key={mo} size="sm" variant="outline" loading={tachando === eligiendo} onClick={() => void tachar(exhibId(abierto.it), mo)}>
+                              {MOTIVOS[mo]}
                             </Button>
                           ))}
                           <Button size="sm" variant="ghost" onClick={() => setEligiendo(null)}>
                             cancelar
                           </Button>
-                        </span>
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => setEligiendo(id)}>
-                          ya está colgada
-                        </Button>
+                        </div>
                       )}
                     </div>
-                    {/* Explica por qué aparece algo que no parece del sector, en vez de esconderlo: el
-                        bolsón «TOPS Y BODIES» se come 5 corsets y un saquito. */}
-                    {!!b.tambienEn.length && <div style={{ fontSize: font.xs, color: color.mut }}>también está en {b.tambienEn.join(' / ')}</div>}
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            </>
           )}
           <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[2] }}>
             El Excel lleva una fila por prenda a colgar, con el código de barras para buscarlas con el lector.
