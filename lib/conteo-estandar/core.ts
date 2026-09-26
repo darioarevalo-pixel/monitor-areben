@@ -382,6 +382,7 @@ export function visiblesDeGrupo(state: CeState, productos: CeProducto[]): CeProd
  */
 export const NOMBRES_CATEGORIA: Record<string, string> = {
   ACS: 'Accesorios',
+  AFA: 'Accesorios faja',
   BAG: 'Carteras',
   BKB: 'Bikini bombacha',
   BKC: 'Bikini corpiño',
