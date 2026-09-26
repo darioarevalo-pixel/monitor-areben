@@ -30,7 +30,7 @@ const NINA_N = v({ productId: '1', name: 'SWEATER NINA', size: 'NEGRO', barcode:
 const OLIVIA = v({ productId: '2', name: 'SWEATER OLIVIA', size: 'GRIS', barcode: 'b3' })
 
 describe('BalanceSector en pantalla', () => {
-  it('con SWEATER marcado: tres números y un renglón por modelo, con ⭐ el que tiene otro color colgado', async () => {
+  it('con SWEATER marcado: tres números y un renglón por modelo, por nombre', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const escaneos = [aEscaneo(NINA_R, 'b1', 'Sweater', Date.now())]
@@ -52,13 +52,13 @@ describe('BalanceSector en pantalla', () => {
     })
     const t = host.textContent ?? ''
     expect(t).toContain('Faltan colgar')
-    expect(t).toContain('⭐ SWEATER NINA')
+    expect(t).toContain('SWEATER NINA')
+    expect(t).not.toContain('⭐')
     expect(t).toContain('SWEATER OLIVIA')
     expect(t).toContain('Stock de hace 18 h')
     // ⛔ Los párrafos viejos no vuelven.
     expect(t).not.toContain('El local vende unas 160 prendas')
     expect(t).not.toContain('Balance guardado')
-    // ⭐ primero aunque por nombre también vaya primero: el orden lo decide la hermana colgada.
     expect(t.indexOf('SWEATER NINA')).toBeLessThan(t.indexOf('SWEATER OLIVIA'))
   })
 })

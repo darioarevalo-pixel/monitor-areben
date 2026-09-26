@@ -458,16 +458,15 @@ describe('porModelo: el mandado leído por nombre', () => {
   const AAA = v({ productId: '9', name: 'TOP ABRIL', size: 'Rojo', barcode: 'b8', qty: 1 })
 
   it('junta los colores de un mismo modelo en un renglón', () => {
-    const m = porModelo(buscarPorTipo([], [TOP_C, TOP_D], ['TOP']), [])
+    const m = porModelo(buscarPorTipo([], [TOP_C, TOP_D], ['TOP']))
     expect(m).toHaveLength(1)
     expect(m[0].nombre).toBe('TOP NARA')
     expect(m[0].faltan.map((b) => b.it.size)).toEqual(['Blanco', 'Negro'])
   })
 
-  it('⭐ primero el modelo con otro color ya colgado, aunque por nombre vaya después', () => {
+  it('⛔ sin prioridad por hermana colgada: sólo por nombre', () => {
     const escaneos = [aEscaneo(TOP_A, 'b1', 'Tops', t)]
-    const m = porModelo(buscarPorTipo(escaneos, [TOP_A, TOP_B, AAA], ['TOP']), escaneos)
-    expect(m.map((x) => [x.nombre, x.hermanaColgada])).toEqual([['TOP ORSA', true], ['TOP ABRIL', false]])
-    expect(m[0].faltan.map((b) => b.it.size)).toEqual(['Negro'])
+    const m = porModelo(buscarPorTipo(escaneos, [TOP_A, TOP_B, AAA], ['TOP']))
+    expect(m.map((x) => x.nombre)).toEqual(['TOP ABRIL', 'TOP ORSA'])
   })
 })

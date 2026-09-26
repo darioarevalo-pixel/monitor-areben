@@ -13,8 +13,8 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > 🎨 **El balance se rediseñó el 26-sep-2026** (Bruno: *«mucho texto y poca definición»*): la
 > pantalla daba TRES respuestas a «¿qué falta?» (el balance, «Para colgar» y «El conteo» en
 > unidades). Ahora es una pregunta (los tipos como botones; **tocar guarda**), tres números
-> (faltan / sobran / escaneadas) y dos listas: **faltan colgar por MODELO** (`porModelo`, ⭐ =
-> otro color ya colgado) y sobran. Las explicaciones van en el `title` (ⓘ). «Para colgar» y «El
+> (faltan / sobran / escaneadas) y dos listas: **faltan colgar por MODELO**, por nombre
+> (`porModelo`; la ⭐ de «hermana colgada» se probó y Bruno la sacó el mismo día) y sobran. Las explicaciones van en el `title` (ⓘ). «Para colgar» y «El
 > conteo» ⛔ salen en la vista del recorrido; «Para colgar» sigue en la caminata. ⛔ No volver a
 > poner párrafos arriba de las listas.
 

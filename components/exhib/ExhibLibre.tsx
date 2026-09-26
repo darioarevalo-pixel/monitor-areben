@@ -661,7 +661,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
           />
 
           {/* ⛔ «Para colgar» y «El conteo» se sacaron de acá el 26-sep-2026: daban otras dos
-              respuestas a «¿qué falta?». Lo de «Para colgar» vive ahora como ⭐ en el balance. */}
+              respuestas a «¿qué falta?». */}
 
           {/*
             🔴 **Los códigos que quedaron sin identificar, con a qué prenda se parecen.**

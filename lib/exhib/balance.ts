@@ -309,32 +309,27 @@ export function partirTachadas(
 }
 
 /** Un modelo del mandado con los colores/talles que le faltan colgar. */
-export type ModeloAColgar = { productId: string; nombre: string; faltan: Buscar[]; hermanaColgada: boolean }
+export type ModeloAColgar = { productId: string; nombre: string; faltan: Buscar[] }
 
 /**
- * **El mandado leído por MODELO: un renglón por prenda con los colores que faltan.**
+ * **El mandado leído por MODELO: un renglón por prenda con los colores que faltan, por nombre.**
  *
  * 🔴 Pedido de Bruno (26-sep-2026), parado en el local: *«necesito que el mensaje sea rápido por
  * nombre»*. La lista de a una variante repetía «SWEATER NINA» cinco veces, y se leía como cinco
  * cosas distintas para ir a buscar.
  *
- * 🔑 **⭐ Primero los que tienen una hermana colgada** —otro color del mismo modelo pasó por el
- * lector—: es la prenda más segura de estar en el depósito, porque el modelo ya está exhibido y
- * sólo falta ese color. Es lo que antes decía el bloque «Para colgar», ahora adentro del mandado.
- * Después, por nombre.
+ * ⛔ **Sin ⭐ de «hermana colgada»**: se probó ese mismo día y Bruno lo sacó —*«no nos interesa si
+ * se colgaron las hermanas, nos interesa colgar lo que falta»*—. El orden es sólo por nombre.
  */
-export function porModelo(mandado: Buscar[], escaneos: EscaneoLibre[]): ModeloAColgar[] {
-  const colgados = new Set(escaneos.filter(pasoPorElLector).map((e) => String(e.product_id ?? '')))
+export function porModelo(mandado: Buscar[]): ModeloAColgar[] {
   const grupos = new Map<string, ModeloAColgar>()
   for (const b of mandado) {
     const pid = String(b.it.productId)
     const g = grupos.get(pid)
     if (g) g.faltan.push(b)
-    else grupos.set(pid, { productId: pid, nombre: b.it.name, faltan: [b], hermanaColgada: colgados.has(pid) })
+    else grupos.set(pid, { productId: pid, nombre: b.it.name, faltan: [b] })
   }
-  return [...grupos.values()].sort(
-    (a, b) => Number(b.hermanaColgada) - Number(a.hermanaColgada) || a.nombre.localeCompare(b.nombre, 'es'),
-  )
+  return [...grupos.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
 /**

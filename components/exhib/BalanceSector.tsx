@@ -129,7 +129,7 @@ export function BalanceSector({
   /** La prenda a la que se le está eligiendo el motivo, ⛔ no un menú flotante: se elige en su renglón. */
   const [eligiendo, setEligiendo] = useState<string | null>(null)
   const resumen = resumenBuscar(mandado)
-  const modelos = useMemo(() => porModelo(mandado, escaneos), [mandado, escaneos])
+  const modelos = useMemo(() => porModelo(mandado), [mandado])
 
   async function tachar(varianteId: string, motivo: MotivoTachada | null) {
     setTachando(varianteId)
@@ -299,7 +299,7 @@ export function BalanceSector({
           {!!mandado.length && (
             <div style={{ display: 'flex', gap: space[2], alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
               <div style={{ fontWeight: weight.semibold, color: color.ink }}>
-                Faltan colgar <span style={{ fontWeight: weight.normal, color: color.mut, fontSize: font.sm }}>· ⭐ otro color ya colgado</span>
+                Faltan colgar
               </div>
               <Button size="sm" variant="outline" onClick={excelMandado}>
                 Excel
@@ -315,7 +315,6 @@ export function BalanceSector({
                 <div key={m.productId} style={{ padding: '8px 2px', borderBottom: `1px solid ${color.line}` }}>
                   <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: weight.semibold, fontSize: font.base, color: color.ink }}>
-                      {m.hermanaColgada ? '⭐ ' : ''}
                       {m.nombre}
                     </span>
                     {m.faltan.map((b) => {
