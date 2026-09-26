@@ -26,6 +26,11 @@ legacy (`index.html:11549-12021`).
 - 🔑 **El ajuste es `nuevo = vivo + dif`, no `nuevo = contado`.** `dif` se congela al terminar el
   producto (contra el `snap` del sistema tomado al abrirlo), así que **las ventas que pasan durante
   el conteo no lo ensucian**. Es la razón de que exista `snap` y no se relea el stock al final.
+  ⚠️ **Pero el `snap` NO es el stock del momento de abrir**: es el `esperado` del feed, o sea el
+  de la última vez que se apretó «Cargar stock de GN» (el feed se cachea a nivel de módulo). Una
+  venta entre esa carga y el conteo **se descuenta dos veces**. En el depósito central (estático)
+  no pesa; en el **Local** sí. La regla operativa: cargar el stock con los pedidos armados y todo
+  en su lugar, y que no se mueva nada hasta terminar.
 - 🔴 **Candado de seguridad**: sólo ajusta la variante cuyo stock está confirmado **en vivo**
   (`inventory_id` no nulo en el feed y en la fila). Si no, va a `missing` = «revisar a mano». Sin
   eso, una variante del espejo desactualizado escribiría un stock inventado en GN.
@@ -43,6 +48,16 @@ legacy (`index.html:11549-12021`).
 - 🔑 **La firma sale de `perfil.name`, nunca del body.**
 - 🔴 **Si falla el guardado del historial, el Excel ya se generó igual** (el `catch` vacío es a
   propósito): lo que ajusta stock es el archivo, y perderlo por un 500 del historial sería peor.
+
+## Conteo estándar del Local: la vista «Depósito del local»
+
+El salón se **escanea** (vista lista/foco) y el depósito del local se **carga a mano** en
+`components/conteo-estandar/DepositoLocal.tsx`: todos los talles en una lista, **ordenada por SKU**
+porque así está ordenado el estante, y agrupada por el prefijo del SKU (`grupoSku`: `RBE-0010-34`
+→ RBE, `STU-REM-0001-S` → STU-REM), que es la categoría. «Terminar categoría» (`planTerminarGrupo`)
+termina **sólo los productos con algo cargado**; los que tienen stock en sistema y nada cargado
+quedan sin terminar y se listan en el aviso — terminarlos solos los mandaría a 0 sin que nadie
+los haya buscado.
 
 ## Lo que ya se rompió acá
 

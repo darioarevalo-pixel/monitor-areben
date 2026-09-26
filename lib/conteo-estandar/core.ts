@@ -266,3 +266,82 @@ export function ultimosPorProducto(conteos: ConteoHistorial[], products: CeProdu
   })
   return map
 }
+
+// ── Vista «Depósito del local»: cargar a mano en el orden del estante ────────────────
+//
+// El depósito del local está ordenado por SKU (de menor a mayor) dentro de cada categoría, y el
+// prefijo del SKU ES la categoría (`RBE-0010-34` → RBE, `STU-REM-0001-S` → STU-REM). Ordenar por
+// SKU es caminar el estante. Los productos sin SKU van al final, en su propio grupo.
+
+export const SIN_SKU = 'Sin SKU'
+
+/** Grupo (categoría) de un SKU: los segmentos del principio hasta el primero con números. */
+export function grupoSku(sku?: string): string {
+  const s = String(sku || '').trim().toUpperCase()
+  if (!s) return SIN_SKU
+  const segs = s.split('-')
+  const out: string[] = []
+  for (const seg of segs) {
+    if (/\d/.test(seg)) break
+    out.push(seg)
+  }
+  // SKU sin guiones tipo `RBT0109`: las letras del principio.
+  if (!out.length) return (s.match(/^[A-Z]+/) || [SIN_SKU])[0]
+  return out.join('-')
+}
+
+const cmpSku = (a: string, b: string) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' })
+
+/** El SKU más chico del producto (el que decide dónde cae en el estante), o '' si no tiene. */
+export function skuDeProducto(p: CeProducto): string {
+  const skus = p.variants.map((v) => String(v.sku || '').trim().toUpperCase()).filter(Boolean)
+  return skus.sort(cmpSku)[0] || ''
+}
+
+export type GrupoDeposito = { grupo: string; productos: CeProducto[] }
+
+/** Productos agrupados por categoría de SKU y ordenados como el estante. «Sin SKU» al final. */
+export function ordenDeposito(products: CeProducto[]): GrupoDeposito[] {
+  const porGrupo = new Map<string, { sku: string; p: CeProducto }[]>()
+  products.forEach((p) => {
+    const sku = skuDeProducto(p)
+    const g = grupoSku(sku)
+    if (!porGrupo.has(g)) porGrupo.set(g, [])
+    porGrupo.get(g)!.push({ sku, p })
+  })
+  return [...porGrupo.entries()]
+    .sort(([a], [b]) => (a === SIN_SKU ? 1 : b === SIN_SKU ? -1 : cmpSku(a, b)))
+    .map(([grupo, xs]) => ({
+      grupo,
+      productos: xs.sort((a, b) => cmpSku(a.sku, b.sku) || a.p.name.localeCompare(b.p.name, 'es')).map((x) => x.p),
+    }))
+}
+
+/** ¿Se cargó algo en el producto (algún talle escaneado o con depósito)? */
+export function productoTocado(st: CeEstadoProd | undefined, prod: CeProducto): boolean {
+  return !!st && prod.variants.some((v) => tocada(st, v.vid))
+}
+
+/** Carga el depósito de un talle abriendo el producto si hace falta (congela el snap). */
+export function cargarDeposito(state: CeState, prod: CeProducto, vid: string, val: string): CeState {
+  return setDeposito(abrir(state, prod), prod.pid, vid, val)
+}
+
+/**
+ * Lo que pasa al «Terminar categoría»: se terminan SOLO los productos con algo cargado (sus
+ * talles en blanco cuentan 0, igual que al terminar uno solo). Los que no tienen nada NO se tocan
+ * —puede ser que simplemente no estén en el depósito del local—, pero se separan los que el
+ * sistema dice que tienen stock, porque ésos son un faltante posible que alguien tiene que mirar.
+ */
+export function planTerminarGrupo(state: CeState, productos: CeProducto[]) {
+  const aTerminar = productos.filter((p) => estadoDe(state, p.pid) !== 'terminado' && productoTocado(state[p.pid], p))
+  const talles0 = aTerminar.reduce((n, p) => n + p.variants.filter((v) => !tocada(state[p.pid], v.vid)).length, 0)
+  const sinCargarConStock = productos.filter(
+    (p) => estadoDe(state, p.pid) !== 'terminado' && !productoTocado(state[p.pid], p) && p.variants.some((v) => v.esperado > 0),
+  )
+  return { aTerminar, talles0, sinCargarConStock }
+}
+
+export function terminarVarios(state: CeState, productos: CeProducto[], ahora: number): CeState {
+  return productos.reduce((s, p) => terminar(s, p, ahora), state)
+}

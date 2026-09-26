@@ -13,19 +13,23 @@ import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import {
   abrir,
   calcularAjuste,
+  cargarDeposito,
   escanear,
   estadoDe,
   normBc,
+  planTerminarGrupo,
   resolverScan,
   setDeposito,
   setExhibido,
   terminar,
+  terminarVarios,
   ultimoMs,
   volverSinTerminar,
 } from '@/lib/conteo-estandar/core'
 import type { CePreview, CeProducto, CeState, Linea } from '@/lib/conteo-estandar/tipos'
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
 import { useConteoEstandar } from './useConteoEstandar'
+import { DepositoLocal } from './DepositoLocal'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
@@ -52,9 +56,12 @@ import {
   useToast,
 } from '@/components/ui'
 
-type Vista = 'lista' | 'foco' | 'preview' | 'historial'
+type Vista = 'lista' | 'foco' | 'preview' | 'historial' | 'deposito'
 type Filtro = 'todos' | 'sin_previo' | 'contados' | 'en_progreso' | 'terminado'
 type Feedback = { tipo: 'ok' | 'error' | 'warn'; texto: string; size?: string; count?: number }
+
+// Fuera del componente: el lint de pureza marca `Date.now()` adentro de un handler que se pasa por props.
+const ahora = () => Date.now()
 
 const lineaLabel = (l: Linea) => (l === 'stunned' ? '👕 Stunned' : 'Zattia')
 
@@ -171,18 +178,61 @@ export function ConteoEstandar() {
     scanRef.current?.focus()
   }
 
-  const onOpen = (pid: string) => {
+  const onOpen = (pid: string, desde: 'lista' | 'deposito' = 'lista') => {
     const prod = prodDe(pid)
     if (!prod) return
+    setVolverA(desde)
     ce.aplicar(abrir(state, prod))
-    if (!inicio) ce.setInicio(Date.now())
+    if (!inicio) ce.setInicio(ahora())
     setFocusPid(pid)
     setVista('foco')
   }
+  // Desde el foco se vuelve a la vista de donde se abrió (la lista o el depósito del local).
+  const [volverA, setVolverA] = useState<'lista' | 'deposito'>('lista')
   const onBack = (pid: string) => {
     ce.aplicar(volverSinTerminar(state, pid))
     setFocusPid(null)
-    setVista('lista')
+    setVista(volverA)
+  }
+  const onDepLocal = (prod: CeProducto, vid: string, val: string) => {
+    ce.aplicar(cargarDeposito(state, prod, vid, val))
+    if (!inicio) ce.setInicio(Date.now())
+  }
+  const onTerminarGrupo = async (productos: CeProducto[], grupo: string) => {
+    const plan = planTerminarGrupo(state, productos)
+    if (!plan.aTerminar.length) {
+      await avisar(`En ${grupo} no hay productos con algo cargado para terminar.`)
+      return
+    }
+    const faltan = plan.sinCargarConStock
+    const ok = await confirmar({
+      titulo: `Terminar ${grupo}`,
+      tono: plan.talles0 || faltan.length ? 'warning' : undefined,
+      ok: `Terminar ${plan.aTerminar.length}`,
+      mensaje: (
+        <>
+          <p>
+            Se terminan <b>{plan.aTerminar.length}</b> {plan.aTerminar.length === 1 ? 'producto' : 'productos'} con algo cargado.
+            {plan.talles0 ? (
+              <>
+                {' '}
+                <b>{plan.talles0}</b> {plan.talles0 === 1 ? 'talle quedó' : 'talles quedaron'} en blanco y cuentan como 0.
+              </>
+            ) : null}
+          </p>
+          {faltan.length > 0 && (
+            <p style={{ marginTop: space[3] }}>
+              ⚠️ <b>{faltan.length}</b> {faltan.length === 1 ? 'producto tiene' : 'productos tienen'} stock en el sistema y no se les cargó nada: <b>no se terminan ni se ajustan</b>. Si de verdad no están,
+              abrilos y terminalos a mano: {faltan.slice(0, 8).map((p) => p.name).join(', ')}
+              {faltan.length > 8 ? ` y ${faltan.length - 8} más` : ''}.
+            </p>
+          )}
+        </>
+      ),
+    })
+    if (!ok) return
+    ce.aplicar(terminarVarios(state, plan.aTerminar, Date.now()))
+    toast.ok(`${grupo}: ${plan.aTerminar.length} ${plan.aTerminar.length === 1 ? 'producto terminado' : 'productos terminados'}`)
   }
   const onFinish = async (prod: CeProducto) => {
     const st = state[prod.pid]
@@ -198,7 +248,7 @@ export function ConteoEstandar() {
     }
     ce.aplicar(terminar(state, prod, Date.now()))
     setFocusPid(null)
-    setVista('lista')
+    setVista(volverA)
   }
   const onReset = async () => {
     const ok = await confirmar({
@@ -371,6 +421,9 @@ export function ConteoEstandar() {
             <Button variant="outline" onClick={() => void onHistorial()}>
               Historial
             </Button>
+            <Button variant="outline" onClick={() => setVista('deposito')}>
+              ✍️ Depósito del local
+            </Button>
             <Button variant="outline" onClick={() => void onActualizarGN()} loading={ce.cargando}>
               Cargar stock de GN
             </Button>
@@ -410,6 +463,11 @@ export function ConteoEstandar() {
             )}
           </>
         )}
+        {vista === 'deposito' && (
+          <Button variant="outline" onClick={() => setVista('lista')}>
+            ← Volver a la lista
+          </Button>
+        )}
         {vista === 'historial' && (
           <Button variant="outline" onClick={() => setVista('lista')}>
             ← Volver al conteo
@@ -435,6 +493,14 @@ export function ConteoEstandar() {
         </Notice>
       ) : vista === 'historial' ? (
         <HistorialConteos hist={hist} titulo={`Historial · ${lineaLabel(linea)}`} unidad="Talle" />
+      ) : vista === 'deposito' ? (
+        <DepositoLocal
+          products={products.filter((p) => p.linea === linea)}
+          state={state}
+          onDep={onDepLocal}
+          onTerminarGrupo={(ps, g) => void onTerminarGrupo(ps, g)}
+          onAbrir={(pid) => onOpen(pid, 'deposito')}
+        />
       ) : vista === 'preview' && preview ? (
         <PreviewView preview={preview} linea={linea} />
       ) : vista === 'foco' && solViendo ? (
