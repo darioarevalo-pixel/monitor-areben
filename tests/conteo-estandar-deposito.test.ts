@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cargarDeposito, escanear, grupoSku, ordenDeposito, planTerminarGrupo, SIN_SKU, terminarVarios } from '@/lib/conteo-estandar/core'
+import { cargarDeposito, escanear, grupoSku, skuBase, skuDeProducto, ordenDeposito, planTerminarGrupo, SIN_SKU, terminarVarios } from '@/lib/conteo-estandar/core'
 import type { CeProducto } from '@/lib/conteo-estandar/tipos'
 
 const prod = (pid: string, name: string, skus: (string | undefined)[], esperado = 1): CeProducto => ({
@@ -16,6 +16,17 @@ describe('grupoSku', () => {
     expect(grupoSku('RBT0109')).toBe('RBT')
     expect(grupoSku('')).toBe(SIN_SKU)
     expect(grupoSku(undefined)).toBe(SIN_SKU)
+  })
+})
+
+describe('skuBase', () => {
+  it('categoría + número; el resto es detalle de la variante', () => {
+    expect(skuBase('RTO-0013-NG')).toBe('RTO-0013')
+    expect(skuBase('RBE-0010-34')).toBe('RBE-0010')
+    expect(skuBase('STU-REM-0001-S')).toBe('STU-REM-0001')
+    expect(skuBase('RBT0109')).toBe('RBT0109')
+    expect(skuBase('')).toBe('')
+    expect(skuDeProducto(prod('x', 'X', ['RTO-0013-NG', 'RTO-0013-BL']))).toBe('RTO-0013')
   })
 })
 

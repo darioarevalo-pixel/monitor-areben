@@ -292,9 +292,22 @@ export function grupoSku(sku?: string): string {
 
 const cmpSku = (a: string, b: string) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' })
 
-/** El SKU más chico del producto (el que decide dónde cae en el estante), o '' si no tiene. */
+/**
+ * SKU del PRODUCTO: categoría + número, hasta el primer bloque con números inclusive
+ * (`RTO-0013-NG` → `RTO-0013`, `STU-REM-0001-S` → `STU-REM-0001`). Lo que sigue (talle, color) es
+ * detalle de la variante y no sirve para ubicar el producto en el estante.
+ */
+export function skuBase(sku?: string): string {
+  const s = String(sku || '').trim().toUpperCase()
+  if (!s) return ''
+  const segs = s.split('-')
+  const i = segs.findIndex((seg) => /\d/.test(seg))
+  return i < 0 ? s : segs.slice(0, i + 1).join('-')
+}
+
+/** El SKU del producto (el base más chico de sus variantes), o '' si no tiene. */
 export function skuDeProducto(p: CeProducto): string {
-  const skus = p.variants.map((v) => String(v.sku || '').trim().toUpperCase()).filter(Boolean)
+  const skus = p.variants.map((v) => skuBase(v.sku)).filter(Boolean)
   return skus.sort(cmpSku)[0] || ''
 }
 

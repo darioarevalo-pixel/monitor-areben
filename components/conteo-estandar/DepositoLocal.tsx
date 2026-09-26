@@ -1,11 +1,11 @@
 'use client'
 
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
-import { estadoDe, ordenDeposito } from '@/lib/conteo-estandar/core'
+import { estadoDe, ordenDeposito, skuDeProducto } from '@/lib/conteo-estandar/core'
 import type { CeProducto, CeState } from '@/lib/conteo-estandar/tipos'
 import { ChipEstado } from '@/components/conteos/comunes'
-import { BuscarInput, Button, Chips, EmptyState, FilterBar, Notice, TBody, THead, TableWrap, Td, Th, Tr, color, font, space } from '@/components/ui'
+import { BuscarInput, Button, Chips, EmptyState, FilterBar, Notice, color, font, space } from '@/components/ui'
 
 /**
  * «Depósito del local»: cargar el depósito a mano recorriendo el estante.
@@ -97,93 +97,119 @@ export function DepositoLocal({
       {!visibles.length ? (
         <EmptyState icon="🔍" title="No hay productos que coincidan" dashed />
       ) : (
-        <div ref={contRef}>
-          <TableWrap maxHeight="62vh">
-            <THead>
-              <Tr>
-                <Th>Talle</Th>
-                <Th align="center" width={60}>
-                  Sist.
-                </Th>
-                <Th align="center" width={60}>
-                  🔫 Exhib.
-                </Th>
-                <Th align="center" width={90}>
-                  ✍️ Depósito
-                </Th>
-                <Th align="center" width={56}>
-                  Dif
-                </Th>
-              </Tr>
-            </THead>
-            <TBody>
-              {visibles.map((p) => {
-                const st = state[p.pid]
-                const e = estadoDe(state, p.pid)
-                const vars = p.variants.slice().sort((a, b) => ordenarModelo(a.size, b.size))
-                return (
-                  <Fragment key={p.pid}>
-                    <Tr style={{ background: color.bg }}>
-                      <Td colSpan={5} wrap>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                          <span>
-                            <b style={{ color: color.ink }}>{p.name}</b>{' '}
-                            <span style={{ fontSize: font.xs, color: color.mut2 }}>{vars[0]?.sku || 'sin SKU'}</span>
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: space[2] }}>
-                            <ChipEstado e={e} />
-                            <Button size="sm" variant="ghost" onClick={() => onAbrir(p.pid)}>
-                              Abrir
-                            </Button>
-                          </span>
-                        </div>
-                      </Td>
-                    </Tr>
-                    {vars.map((v) => {
-                      const sis = st?.snap?.[v.vid] != null ? st.snap[v.vid] : v.esperado
-                      const ex = st?.exhibido?.[v.vid] || 0
-                      const dep = st?.deposito?.[v.vid] != null ? st.deposito[v.vid] : null
-                      const tocada = ex > 0 || dep != null
-                      const dif = tocada ? ex + (dep || 0) - sis : null
-                      const difCol = dif == null ? color.mut2 : dif === 0 ? color.successInk : dif < 0 ? color.dangerInk : color.warningInk
-                      return (
-                        <Tr key={v.vid}>
-                          <Td strong>{v.size}</Td>
-                          <Td align="center" style={{ color: color.mut2 }}>
-                            {sis}
-                          </Td>
-                          <Td align="center" style={{ color: ex ? color.ink2 : color.mut2 }}>
-                            {ex || '—'}
-                          </Td>
-                          <Td align="center" tall>
-                            <input
-                              data-dep=""
-                              className="mo-input mo-input--num"
-                              type="number"
-                              min={0}
-                              inputMode="numeric"
-                              enterKeyHint="next"
-                              value={dep != null ? dep : ''}
-                              placeholder="—"
-                              aria-label={`Depósito de ${p.name} talle ${v.size}`}
-                              onChange={(ev) => onDep(p, v.vid, ev.target.value)}
-                              onKeyDown={saltar}
-                              style={{ width: 72, textAlign: 'center', padding: '0 6px', fontWeight: 700 }}
-                            />
-                          </Td>
-                          <Td align="center" style={{ fontWeight: 700, color: difCol }}>
-                            {dif == null ? '—' : (dif > 0 ? '+' : '') + dif}
-                          </Td>
-                        </Tr>
-                      )
-                    })}
-                  </Fragment>
-                )
-              })}
-            </TBody>
-          </TableWrap>
+        <div ref={contRef} style={{ display: 'flex', flexDirection: 'column', gap: space[3], maxWidth: 640 }}>
+          {visibles.map((p) => (
+            <TarjetaProducto key={p.pid} prod={p} st={state[p.pid]} estado={estadoDe(state, p.pid)} onDep={onDep} onAbrir={onAbrir} onEnter={saltar} />
+          ))}
         </div>
       )}
+    </div>
+  )
+}
+
+const BORDE_ESTADO = { sin_iniciar: color.line2, en_progreso: color.warning, terminado: color.success } as const
+const COLS = '1fr 44px 52px 76px 44px'
+
+/**
+ * Un producto = una tarjeta. La franja de arriba lleva el SKU del producto grande (categoría +
+ * número, `RTO-0013`: es lo que está escrito en el estante) y el borde izquierdo el estado, así
+ * de un vistazo se ve dónde empieza cada producto y cuáles faltan.
+ */
+function TarjetaProducto({
+  prod,
+  st,
+  estado,
+  onDep,
+  onAbrir,
+  onEnter,
+}: {
+  prod: CeProducto
+  st: CeState[string] | undefined
+  estado: ReturnType<typeof estadoDe>
+  onDep: (prod: CeProducto, vid: string, val: string) => void
+  onAbrir: (pid: string) => void
+  onEnter: (e: React.KeyboardEvent<HTMLInputElement>) => void
+}) {
+  const vars = prod.variants.slice().sort((a, b) => ordenarModelo(a.size, b.size))
+  const sku = skuDeProducto(prod)
+  return (
+    <div
+      style={{
+        background: color.surface,
+        border: `1px solid ${color.line}`,
+        borderLeft: `5px solid ${BORDE_ESTADO[estado] || color.line2}`,
+        borderRadius: 'var(--mo-r-xl)',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], padding: `${space[2]} ${space[3]}`, background: color.brandBg, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            fontFamily: 'var(--mo-font-mono, ui-monospace, monospace)',
+            fontWeight: 800,
+            fontSize: font.md,
+            color: '#fff',
+            background: color.brandSolid,
+            borderRadius: 6,
+            padding: '2px 8px',
+            letterSpacing: 0.3,
+          }}
+        >
+          {sku || 'sin SKU'}
+        </span>
+        <b style={{ color: color.ink, fontSize: font.base, flex: 1, minWidth: 120 }}>{prod.name}</b>
+        <ChipEstado e={estado} />
+        <Button size="sm" variant="ghost" onClick={() => onAbrir(prod.pid)}>
+          Abrir
+        </Button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: space[2], padding: `6px ${space[3]} 2px`, fontSize: font.xs, color: color.mut2, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        <span>Talle</span>
+        <span style={{ textAlign: 'center' }}>Sist.</span>
+        <span style={{ textAlign: 'center' }}>Exhib.</span>
+        <span style={{ textAlign: 'center' }}>Depósito</span>
+        <span style={{ textAlign: 'center' }}>Dif</span>
+      </div>
+      {vars.map((v, i) => {
+        const sis = st?.snap?.[v.vid] != null ? st.snap[v.vid] : v.esperado
+        const ex = st?.exhibido?.[v.vid] || 0
+        const dep = st?.deposito?.[v.vid] != null ? st.deposito[v.vid] : null
+        const tocada = ex > 0 || dep != null
+        const dif = tocada ? ex + (dep || 0) - sis : null
+        const difCol = dif == null ? color.mut2 : dif === 0 ? color.successInk : dif < 0 ? color.dangerInk : color.warningInk
+        return (
+          <div
+            key={v.vid}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: COLS,
+              gap: space[2],
+              alignItems: 'center',
+              padding: `4px ${space[3]}`,
+              borderTop: i ? `1px solid ${color.line}` : undefined,
+            }}
+          >
+            <span style={{ fontWeight: 600, color: color.ink2 }}>{v.size}</span>
+            <span style={{ textAlign: 'center', color: color.mut }}>{sis}</span>
+            <span style={{ textAlign: 'center', color: ex ? color.ink2 : color.mut2 }}>{ex || '—'}</span>
+            <input
+              data-dep=""
+              className="mo-input mo-input--num"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              enterKeyHint="next"
+              value={dep != null ? dep : ''}
+              placeholder="—"
+              aria-label={`Depósito de ${prod.name} talle ${v.size}`}
+              onChange={(ev) => onDep(prod, v.vid, ev.target.value)}
+              onKeyDown={onEnter}
+              style={{ width: '100%', height: 40, textAlign: 'center', padding: '0 4px', fontWeight: 700, fontSize: 16 }}
+            />
+            <span style={{ textAlign: 'center', fontWeight: 700, color: difCol }}>{dif == null ? '—' : (dif > 0 ? '+' : '') + dif}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }

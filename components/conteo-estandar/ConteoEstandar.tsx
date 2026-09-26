@@ -658,7 +658,7 @@ function Lista({
   return (
     <div>
       <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
-        Línea: <b style={{ color: color.ink2 }}>{lineaLabel(linea)}</b>. El escaneo solo suma dentro de esta línea; el <b>Depósito local</b> se carga a mano abriendo cada producto.
+        Línea: <b style={{ color: color.ink2 }}>{lineaLabel(linea)}</b>. El escaneo solo suma dentro de esta línea; el depósito del local se carga a mano en <b>✍️ Depósito del local</b>, en el orden del estante.
       </p>
 
       <InstructivoConteo
