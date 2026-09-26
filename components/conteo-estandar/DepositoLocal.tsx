@@ -31,7 +31,7 @@ export function DepositoLocal({
   onTerminarGrupo: (productos: CeProducto[], grupo: string) => void
   onAbrir: (pid: string) => void
 }) {
-  const grupos = useMemo(() => ordenDeposito(products).map((g) => ({ ...g, nombre: nombreGrupo(g.productos) })), [products])
+  const grupos = useMemo(() => ordenDeposito(products).map((g) => ({ ...g, nombre: nombreGrupo(g.grupo) })), [products])
   const [grupo, setGrupo] = useState<string>('')
   const [search, setSearch] = useState('')
   const contRef = useRef<HTMLDivElement>(null)
@@ -91,7 +91,7 @@ export function DepositoLocal({
                 <option key={g.grupo} value={g.grupo}>
                   {t === g.vis.length ? '✓ ' : ''}
                   {g.grupo}
-                  {g.nombre ? ` · ${g.nombre}` : ''} — {t}/{g.vis.length}
+                  {g.nombre ? ` · ${g.nombre}` : ''} — {t} de {g.vis.length} prod.
                 </option>
               )
             })}
@@ -121,7 +121,7 @@ export function DepositoLocal({
                   {actual.grupo}
                   {actual.nombre ? ` · ${actual.nombre}` : ''}
                 </b>{' '}
-                · {terminados(actual)} de {actual.vis.length} terminados
+                · {terminados(actual)} de {actual.vis.length} {actual.vis.length === 1 ? 'producto terminado' : 'productos terminados'}
               </span>
               <Button size="sm" variant="solid" tone="brand" onClick={() => onTerminarGrupo(actual.vis, actual.grupo)}>
                 ✓ Terminar categoría

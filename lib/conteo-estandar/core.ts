@@ -375,24 +375,49 @@ export function visiblesDeGrupo(state: CeState, productos: CeProducto[]): CeProd
 }
 
 /**
- * Nombre legible de la categoría, sacado de los nombres de sus productos: casi todos empiezan con
- * el tipo (TOP EMBER, BERMUDA DOJA). Se toma la primera palabra más repetida y, si casi todos los
- * que la usan comparten también la segunda (BABY TEE), se suma. Sin datos, ''.
+ * Nombre de cada categoría por su prefijo de SKU, dictado por Bruno (26-sep-2026).
+ * ⛔ No se deduce del nombre de los productos: se probó, y ACS salía «Pañuelo» porque los dos
+ * accesorios con stock eran pañuelos. Un prefijo nuevo que no esté acá se muestra con el código
+ * solo, que es mejor que un nombre inventado.
  */
-export function nombreGrupo(productos: CeProducto[]): string {
-  const palabras = productos.map((p) => p.name.trim().toUpperCase().split(/\s+/)).filter((w) => w[0])
-  if (!palabras.length) return ''
-  const cuenta = (xs: string[]) => {
-    const m = new Map<string, number>()
-    xs.forEach((x) => m.set(x, (m.get(x) || 0) + 1))
-    return [...m.entries()].sort((a, b) => b[1] - a[1])[0]
-  }
-  const [w1] = cuenta(palabras.map((w) => w[0]))
-  const con = palabras.filter((w) => w[0] === w1 && w[1])
-  let out = w1
-  if (con.length >= 2) {
-    const [w2, n2] = cuenta(con.map((w) => w[1]))
-    if (n2 / con.length >= 0.8) out += ' ' + w2
-  }
-  return out.charAt(0) + out.slice(1).toLowerCase()
+export const NOMBRES_CATEGORIA: Record<string, string> = {
+  ACS: 'Accesorios',
+  BAG: 'Carteras',
+  BKB: 'Bikini bombacha',
+  BKC: 'Bikini corpiño',
+  CAM: 'Camperas',
+  CINTO: 'Cintos',
+  CNJ: 'Conjuntos',
+  RBE: 'Bermudas',
+  RBL: 'Blazers',
+  RBLU: 'Blusas',
+  RBT: 'Baby tees',
+  RBU: 'Buzos',
+  RBY: 'Bodys',
+  RCA: 'Camperas',
+  RCH: 'Chalecos',
+  RCS: 'Camisas',
+  RCST: 'Corsets',
+  RCT: 'Tops y bodies',
+  RFA: 'Faldas',
+  RJE: 'Jeans',
+  RMI: 'Minis',
+  RMO: 'Monos',
+  RMU: 'Musculosas',
+  RPA: 'Pantalones',
+  RPL: 'Polleras',
+  RPO: 'Poleras',
+  RRE: 'Remeras',
+  RSH: 'Shorts',
+  RST: 'Sets',
+  RSW: 'Sweaters',
+  RTO: 'Tops',
+  RVE: 'Vestidos',
+  SKR: 'Skorts',
+  'STU-REM': 'Remeras',
+  'STU-BUZ': 'Buzos',
+}
+
+export function nombreGrupo(grupo: string): string {
+  return NOMBRES_CATEGORIA[grupo] || ''
 }

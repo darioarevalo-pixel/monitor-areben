@@ -82,10 +82,10 @@ describe('lo que se ve de una categoría', () => {
     const s = cargarDeposito({}, sin, 'b_0', '3')
     expect(visiblesDeGrupo(s, [con, sin]).map((p) => p.pid)).toEqual(['a', 'b'])
   })
-  it('nombre de la categoría desde los productos', async () => {
+  it('nombre de la categoría por prefijo, sin inventar', async () => {
     const { nombreGrupo } = await import('@/lib/conteo-estandar/core')
-    expect(nombreGrupo([prod('1', 'TOP EMBER', []), prod('2', 'TOP KOBE', []), prod('3', 'STRAPLESS REBEL', [])])).toBe('Top')
-    expect(nombreGrupo([prod('1', 'BABY TEE BITCH', []), prod('2', 'BABY TEE MOVE', [])])).toBe('Baby tee')
-    expect(nombreGrupo([])).toBe('')
+    expect(nombreGrupo('ACS')).toBe('Accesorios')
+    expect(nombreGrupo('RTO')).toBe('Tops')
+    expect(nombreGrupo('ZZZ')).toBe('')
   })
 })
