@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
 import { leerInventarioVivo } from '@/lib/inventario-vivo/cliente'
@@ -10,16 +10,22 @@ import { ANCHOS_AJUSTE, aoaAjuste } from '@/lib/conteo-deposito/core'
 import { descargarXlsx } from '@/lib/excel'
 import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import {
+  agregarFalla,
   calcularAjusteModelo,
+  clasificarScan,
   contadoModelo,
   escanear,
   esperadoModelo,
+  leerPila,
+  limpiarFallas,
   limpiarModelo,
-  resolverScan,
+  normBc,
+  pareceCodigo,
   setContado,
+  textoFalla,
   tocadoModelo,
 } from '@/lib/conteo-local-bdi/core'
-import type { LbPreview, ModeloGrupo } from '@/lib/conteo-local-bdi/tipos'
+import type { LbPreview, LecturaFallida, ModeloGrupo } from '@/lib/conteo-local-bdi/tipos'
 import { useConteoLocalBdi } from './useConteoLocalBdi'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
@@ -57,6 +63,14 @@ import {
  * cinco `alert/confirm` nativos a diálogos y Toast del kit, la lista de modelos como
  * tarjetas con estado a la vista, y el instructivo y el historial ahora son los
  * compartidos con los otros dos conteos.
+ *
+ * 🔑 **Sep-2026: ninguna lectura se pierde en silencio.** En BDI se cuenta en la compu del
+ * local, con la música por los mismos parlantes: el beep no se oye y el cartel rojo duraba
+ * hasta la lectura siguiente. Ahora (1) una lectura rechazada FRENA la pantalla hasta que
+ * alguien la vea, (2) una franja avisa si el campo de escaneo perdió el foco, (3) los
+ * casilleros no aceptan un código de barras como cantidad, (4) lo no contado queda en una
+ * lista hasta el cierre, y (5) para cerrar se escribe cuántas fundas hay en la pila física,
+ * que tapa lo único que la pantalla no puede ver: lo escaneado con el cursor en otro programa.
  */
 
 type Vista = 'lista' | 'foco' | 'preview' | 'historial'
@@ -97,7 +111,7 @@ function fmtDia(ms: number): string {
 
 export function ConteoLocalBdi() {
   const { marca, perfil } = useSesion()
-  const { confirmar, avisar } = useConfirmar()
+  const { confirmar, avisar, pedirTexto } = useConfirmar()
   const toast = useToast()
   const usuario = perfil?.name || ''
   const puedeAplicar = esAdmin(perfil) || puedeSub(perfil, marca, 'conteo', 'aplicar')
@@ -110,29 +124,45 @@ export function ConteoLocalBdi() {
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [preview, setPreview] = useState<LbPreview | null>(null)
   const [cerrando, setCerrando] = useState(false)
+  // Lectura rechazada que frena la pantalla. `extra` = lecturas que llegaron con el cartel abierto.
+  const [bloqueo, setBloqueo] = useState<{ texto: string; extra: number } | null>(null)
+  const [escuchando, setEscuchando] = useState(false)
   const [hist, setHist] = useState<{ cargando: boolean; conteos: ConteoHistorial[]; error: string | null }>({ cargando: false, conteos: [], error: null })
   const scanRef = useRef<HTMLInputElement>(null)
 
   const grupoSel = useMemo(() => modelos.find((m) => m.modelo === modeloSel) || null, [modelos, modeloSel])
 
+  const fallasSel = (grupoSel && cf.fallas[grupoSel.modelo]) || []
+
+  /** Una lectura que no se sumó: queda en la lista y frena la pantalla. */
+  const rechazar = (f: LecturaFallida, texto: string) => {
+    if (!grupoSel) return
+    cf.aplicarFallas(agregarFalla(cf.fallas, grupoSel.modelo, f))
+    setFeedback({ tipo: 'error', texto })
+    setBloqueo((b) => (b ? { ...b, extra: b.extra + 1 } : { texto, extra: 0 }))
+    beep(false)
+    vibrate(false)
+  }
+
   const onScan = (raw: string) => {
     if (!grupoSel) return
-    const bc = raw.trim().toUpperCase()
+    const bc = normBc(raw)
     if (!bc) return
-    const vid = resolverScan(byBc, raw)
-    const v = vid ? varByVid[vid] : null
-    if (!v) {
-      setFeedback({ tipo: 'error', texto: 'Código desconocido: ' + bc })
-      beep(false)
-      vibrate(false)
+    const ts = Date.now()
+    if (bloqueo) {
+      rechazar({ bc, motivo: 'con-cartel', ts }, bloqueo.texto)
       return
     }
-    if (v.modelo !== grupoSel.modelo) {
-      setFeedback({ tipo: 'error', texto: `Esa funda es de ${v.modelo}, estás contando ${grupoSel.modelo}.` })
-      beep(false)
-      vibrate(false)
+    const res = clasificarScan(byBc, varByVid, raw, grupoSel.modelo)
+    if (res.tipo === 'desconocido') {
+      rechazar({ bc, motivo: 'desconocido', ts }, `Código ${bc}: el sistema no lo conoce.`)
       return
     }
+    if (res.tipo === 'otro-modelo') {
+      rechazar({ bc, motivo: 'otro-modelo', modeloDe: res.modeloDe, ts }, `Esta funda es de ${res.modeloDe} y estás contando ${grupoSel.modelo}.`)
+      return
+    }
+    const v = varByVid[res.vid]
     const yaTenia = (state[v.vid] || 0) > 0
     const next = escanear(state, v.vid)
     cf.aplicar(next)
@@ -147,10 +177,36 @@ export function ConteoLocalBdi() {
     scanRef.current?.focus()
   }
 
+  /** El escáner escribió en un casillero de la tabla: no es una cantidad, es una funda que no se contó. */
+  const onCasilleroCodigo = (val: string) => {
+    rechazar({ bc: normBc(val), motivo: 'casillero', ts: Date.now() }, 'El escáner escribió en un casillero de la tabla, no en el campo de escaneo.')
+    scanRef.current?.focus()
+  }
+
+  const seguirEscaneando = () => {
+    setBloqueo(null)
+    scanRef.current?.focus()
+  }
+
   const entrarModelo = (modelo: string) => {
     setModeloSel(modelo)
     setFeedback(null)
+    setBloqueo(null)
     setVista('foco')
+  }
+
+  const onCargarStock = async () => {
+    const hayAlgo = Object.keys(state).length > 0
+    if (hayAlgo) {
+      const ok = await confirmar({
+        titulo: '¿Cargar el stock de nuevo?',
+        tono: 'danger',
+        ok: 'Cargar y empezar de cero',
+        mensaje: 'Hay fundas escaneadas sin cerrar. Si cargás el stock de nuevo, se pierde todo lo escaneado de todos los modelos.',
+      })
+      if (!ok) return
+    }
+    await cf.traerStock(true)
   }
 
   const onCerrar = async () => {
@@ -159,10 +215,59 @@ export function ConteoLocalBdi() {
       await avisar('Todavía no escaneaste ninguna funda de este modelo.')
       return
     }
+    // La pila física, a ciegas: el número de la pantalla no se muestra acá a propósito.
+    const escaneadas = contadoModelo(state, grupoSel)
+    const txt = await pedirTexto(`Contá la pila de fundas de ${grupoSel.modelo} que escaneaste y escribí cuántas hay.`, '', {
+      titulo: `Antes de cerrar ${grupoSel.modelo}`,
+      placeholder: 'Cantidad de fundas en la pila',
+      ok: 'Seguir',
+    })
+    if (txt == null) {
+      scanRef.current?.focus()
+      return
+    }
+    const pila = leerPila(txt)
+    if (pila == null) {
+      await avisar('Escribí solo el número de fundas que hay en la pila (por ejemplo 120).')
+      scanRef.current?.focus()
+      return
+    }
+    if (pila !== escaneadas) {
+      const faltan = pila - escaneadas
+      const ok = await confirmar({
+        titulo: 'La pila no coincide con lo escaneado',
+        tono: 'danger',
+        ok: 'Cerrar igual',
+        cancelar: 'Volver a escanear',
+        mensaje: (
+          <>
+            <ConfirmDetalle label="Fundas en la pila" valor={pila} />
+            <ConfirmDetalle label="Se escanearon" valor={escaneadas} />
+            <p style={{ marginTop: space[3] }}>
+              {faltan > 0 ? (
+                <>
+                  Hay <b>{faltan}</b> {faltan === 1 ? 'funda que no se contó' : 'fundas que no se contaron'}. Buscalas en la pila y escanealas.
+                </>
+              ) : (
+                <>
+                  Se escanearon <b>{-faltan}</b> más de las que hay en la pila: puede que alguna se haya escaneado dos veces. Revisá los números de la tabla.
+                </>
+              )}
+            </p>
+            <p style={{ marginTop: space[2] }}>Si cerrás igual, queda anotado en el historial.</p>
+          </>
+        ),
+      })
+      if (!ok) {
+        scanRef.current?.focus()
+        return
+      }
+    }
     setCerrando(true)
     try {
       const d = await leerInventarioVivo(marca, 'local')
       const pv = calcularAjusteModelo(grupoSel, state, realMap(d.rows || []), d.store_name || 'Local', d.store || String(marca), stockTime)
+      pv.resumen.control = { pila, escaneadas, no_contadas: fallasSel.length }
       setPreview(pv)
       setVista('preview')
     } catch (e) {
@@ -209,6 +314,7 @@ export function ConteoLocalBdi() {
         /* si falla el historial, el Excel ya se generó */
       }
       cf.aplicar(limpiarModelo(state, grupoSel))
+      cf.aplicarFallas(limpiarFallas(cf.fallas, grupoSel.modelo))
       toast.ok(
         preview.rows.length
           ? `Excel generado (${preview.rows.length} ${preview.rows.length === 1 ? 'línea' : 'líneas'}) y conteo de ${preview.modelo} guardado. Subilo a GN → "Importar y Ajustar".`
@@ -242,6 +348,10 @@ export function ConteoLocalBdi() {
           con lo que contaste y arma el Excel de ajuste. Como el vivo se lee en el momento del cierre, las
           ventas que hubo mientras contabas no ensucian la diferencia.
           <br /><br />
+          Para cerrar hay que <b>contar la pila física</b> de fundas escaneadas: si no coincide con lo que
+          tomó el escáner, se avisa antes de generar el Excel. Las lecturas que no se sumaron (código
+          desconocido, otro modelo) frenan la pantalla y quedan en una lista hasta el cierre.
+          <br /><br />
           ⚠️ <b>El conteo en curso se guarda en este dispositivo.</b> Si empezaste en el celular, terminalo y
           cerralo en el celular: desde otra compu no está.
         </InfoPopover>
@@ -250,7 +360,7 @@ export function ConteoLocalBdi() {
             <Button variant="outline" onClick={() => void onHistorial()}>
               Historial
             </Button>
-            <Button variant="outline" onClick={() => void cf.traerStock(true)} loading={cf.cargando}>
+            <Button variant="outline" onClick={() => void onCargarStock()} loading={cf.cargando}>
               Cargar stock de GN
             </Button>
           </>
@@ -313,20 +423,27 @@ export function ConteoLocalBdi() {
       ) : vista === 'historial' ? (
         <HistorialConteos hist={hist} titulo="Historial de conteos de fundas" conVivo unidad="Talle" />
       ) : vista === 'preview' && preview ? (
-        <PreviewView preview={preview} />
+        <PreviewView preview={preview} fallas={fallasSel} />
       ) : vista === 'foco' && grupoSel ? (
         <Foco
           grupo={grupoSel}
           state={state}
+          fallas={fallasSel}
           scanRef={scanRef}
           feedback={feedback}
+          escuchando={escuchando}
+          bloqueado={!!bloqueo}
+          setEscuchando={setEscuchando}
           puedeAplicar={puedeAplicar}
           onScan={onScan}
           onSet={(vid, val) => cf.aplicar(setContado(state, vid, val))}
+          onCasilleroCodigo={onCasilleroCodigo}
         />
       ) : (
         <ListaModelos modelos={modelos} state={state} ultimos={ultimos} stockTime={stockTime} search={search} setSearch={setSearch} onEntrar={entrarModelo} />
       )}
+
+      {vista === 'foco' && bloqueo && <CartelNoContada texto={bloqueo.texto} extra={bloqueo.extra} onSeguir={seguirEscaneando} />}
     </>
   )
 }
@@ -418,7 +535,25 @@ function ListaModelos({
 
 // ── Foco: contar un modelo ─────────────────────────────────────────────────────
 
-function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLInputElement | null>; feedback: Feedback | null; onScan: (v: string) => void }) {
+function ScanBox({
+  scanRef,
+  feedback,
+  escuchando,
+  setEscuchando,
+  onScan,
+}: {
+  scanRef: React.RefObject<HTMLInputElement | null>
+  feedback: Feedback | null
+  escuchando: boolean
+  setEscuchando: (v: boolean) => void
+  onScan: (v: string) => void
+}) {
+  // Al entrar al modelo el campo queda listo: antes había que clickearlo, y la primera
+  // lectura sin clic no iba a ningún lado.
+  useEffect(() => {
+    scanRef.current?.focus()
+  }, [scanRef])
+
   const t =
     feedback?.tipo === 'ok'
       ? { bg: color.successBg, fg: color.successInk, bd: color.successBorder }
@@ -429,6 +564,9 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
           : { bg: color.bg, fg: color.mut2, bd: color.line }
   return (
     <div style={{ marginBottom: space[3] }}>
+      <div style={{ fontSize: font.sm, fontWeight: 700, marginBottom: space[1], color: escuchando ? color.successInk : color.mut }}>
+        {escuchando ? '🟢 Listo para escanear' : '⚪ En pausa — hacé click en el campo para seguir'}
+      </div>
       <input
         ref={scanRef}
         className="mo-input"
@@ -436,6 +574,8 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
         autoComplete="off"
         placeholder="Escaneá las fundas de este modelo…"
         aria-label="Código de barras a escanear"
+        onFocus={() => setEscuchando(true)}
+        onBlur={() => setEscuchando(false)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault()
@@ -444,7 +584,7 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
             onScan(v)
           }
         }}
-        style={{ height: 48, fontSize: 16, borderWidth: 2, borderColor: color.brandSolid }}
+        style={{ height: 48, fontSize: 16, borderWidth: 3, borderColor: escuchando ? color.successBorder : color.line }}
       />
       <div
         style={{ marginTop: space[2], padding: space[4], border: `1px solid ${t.bd}`, borderRadius: 'var(--mo-r-xl)', fontSize: font.md, textAlign: 'center', background: t.bg, color: t.fg }}
@@ -454,7 +594,7 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
           'Escaneá una funda para empezar…'
         ) : feedback.tipo === 'ok' ? (
           <>
-            ✓ <b style={{ fontSize: 18 }}>{feedback.texto}</b>
+            ✓ Última: <b style={{ fontSize: 18 }}>{feedback.texto}</b>
             {feedback.talle ? (
               <>
                 {' · '}
@@ -462,46 +602,227 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
               </>
             ) : null}
             <div style={{ fontSize: font.base, marginTop: 2 }}>
-              escaneadas: <b>{feedback.count}</b>
+              de esta funda llevás <b>{feedback.count}</b>
             </div>
           </>
         ) : (
-          (feedback.tipo === 'error' ? '🔴 ' : '⚠️ ') + feedback.texto
+          (feedback.tipo === 'error' ? '🔴 No se contó: ' : '⚠️ ') + feedback.texto
         )}
       </div>
     </div>
   )
 }
 
+/**
+ * El cartel que frena la pantalla cuando una lectura no se sumó. Mientras está abierto, las
+ * lecturas siguientes tampoco se suman (y se anotan): así un rojo no queda tapado por el
+ * verde de la funda siguiente.
+ *
+ * ⛔ **No es el `Modal` del kit, a propósito.** El Modal se lleva el foco adentro de la caja, y
+ * el escáner termina cada lectura con Enter: el Enter caía en el botón y cerraba el cartel
+ * solo, sin que nadie lo leyera. Acá el foco se queda en el campo de escaneo (`onMouseDown`
+ * con `preventDefault`), y el cartel se cierra solamente con un clic.
+ */
+function CartelNoContada({ texto, extra, onSeguir }: { texto: string; extra: number; onSeguir: () => void }) {
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Esta funda no se contó"
+      onMouseDown={(e) => e.preventDefault()}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: color.danger, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: space[4] }}
+    >
+      <div style={{ maxWidth: 560, textAlign: 'center' }}>
+        <div style={{ fontSize: 56, lineHeight: 1 }}>✋</div>
+        <div style={{ fontSize: 32, fontWeight: 800, marginTop: space[3] }}>Esta funda NO se contó</div>
+        <div style={{ fontSize: font.lg, marginTop: space[3] }}>{texto}</div>
+        <div style={{ fontSize: font.lg, marginTop: space[3], fontWeight: 600 }}>Separala en otra pila antes de seguir.</div>
+        {extra > 0 && (
+          <div style={{ fontSize: font.md, marginTop: space[3], padding: space[3], background: 'rgba(0,0,0,.2)', borderRadius: 'var(--mo-r-xl)' }}>
+            Además se {extra === 1 ? 'escaneó 1 funda' : `escanearon ${extra} fundas`} con este cartel abierto: tampoco{' '}
+            {extra === 1 ? 'se contó' : 'se contaron'}. Separalas también.
+          </div>
+        )}
+        <div style={{ marginTop: space[5] }}>
+          <Button variant="solid" tone="neutral" size="lg" onMouseDown={(e) => e.preventDefault()} onClick={onSeguir}>
+            Seguir escaneando
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Las lecturas que no se sumaron, con el motivo. Sirve para buscar esas fundas y para revisarlas en GN. */
+function ListaNoContadas({ fallas }: { fallas: LecturaFallida[] }) {
+  return (
+    <TableWrap maxHeight={240}>
+      <THead>
+        <Tr>
+          <Th>Código</Th>
+          <Th>Por qué no se contó</Th>
+          <Th align="center" width={70}>
+            Hora
+          </Th>
+        </Tr>
+      </THead>
+      <TBody>
+        {fallas.map((f, i) => (
+          <Tr key={i}>
+            <Td style={{ fontFamily: 'var(--mo-font-mono, monospace)' }}>{f.bc || '—'}</Td>
+            <Td wrap>{textoFalla(f)}</Td>
+            <Td align="center" style={{ color: color.mut }}>
+              {new Date(f.ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+            </Td>
+          </Tr>
+        ))}
+      </TBody>
+    </TableWrap>
+  )
+}
+
+/**
+ * Casillero de cantidad a mano. Se confirma con Enter o al salir, no tecla por tecla: el
+ * escáner "tipea" el código de a un carácter, y tecla por tecla cada pedazo (7, 77, 779…) ya
+ * se guardaba como cantidad. Si lo que quedó parece un código, no se carga.
+ */
+function NumCelda({
+  valor,
+  label,
+  onSet,
+  onCodigo,
+  onListo,
+}: {
+  valor: number
+  label: string
+  onSet: (val: string) => void
+  onCodigo: (val: string) => void
+  onListo: () => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const confirmarValor = () => {
+    if (draft == null) return
+    const v = draft
+    setDraft(null)
+    if (pareceCodigo(v)) onCodigo(v)
+    else onSet(v)
+  }
+  return (
+    <input
+      className="mo-input mo-input--num"
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      value={draft ?? (valor || '')}
+      onFocus={() => setDraft(valor ? String(valor) : '')}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={confirmarValor}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          confirmarValor()
+          onListo()
+        }
+      }}
+      placeholder="0"
+      aria-label={label}
+      style={{ width: 72, textAlign: 'center', padding: '0 6px' }}
+    />
+  )
+}
+
 function Foco({
   grupo,
   state,
+  fallas,
   scanRef,
   feedback,
+  escuchando,
+  bloqueado,
+  setEscuchando,
   puedeAplicar,
   onScan,
   onSet,
+  onCasilleroCodigo,
 }: {
   grupo: ModeloGrupo
   state: Record<string, number>
+  fallas: LecturaFallida[]
   scanRef: React.RefObject<HTMLInputElement | null>
   feedback: Feedback | null
+  escuchando: boolean
+  bloqueado: boolean
+  setEscuchando: (v: boolean) => void
   puedeAplicar: boolean
   onScan: (v: string) => void
   onSet: (vid: string, val: string) => void
+  onCasilleroCodigo: (val: string) => void
 }) {
+  const [verFallas, setVerFallas] = useState(false)
   const con = contadoModelo(state, grupo)
   const esp = esperadoModelo(grupo)
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
-        <h2 style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{grupo.modelo}</h2>
-        <span style={{ fontSize: font.sm, color: color.mut }}>
-          escaneadas <b style={{ color: color.warningInk }}>{con}</b> · sistema {esp}
-        </span>
+      {!escuchando && !bloqueado && (
+        <button
+          type="button"
+          onClick={() => scanRef.current?.focus()}
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 5,
+            width: '100%',
+            height: 'auto',
+            marginBottom: space[3],
+            padding: `${space[3]}px ${space[4]}px`,
+            background: color.danger,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 'var(--mo-r-xl)',
+            fontSize: font.md,
+            fontWeight: 700,
+            textAlign: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          🔴 El escáner NO está contando — hacé click acá para seguir
+        </button>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: space[3], flexWrap: 'wrap', marginBottom: space[3] }}>
+        <div>
+          <h2 style={{ fontSize: font.xl, fontWeight: 700, color: color.ink }}>{grupo.modelo}</h2>
+          <span style={{ fontSize: font.sm, color: color.mut }}>sistema {esp}</span>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: font.xs, color: color.mut, fontWeight: 600 }}>ESCANEADAS</div>
+          <div style={{ fontSize: 36, fontWeight: 800, lineHeight: 1.1, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>{con}</div>
+        </div>
       </div>
 
-      <ScanBox scanRef={scanRef} feedback={feedback} onScan={onScan} />
+      {fallas.length > 0 && (
+        <div style={{ marginBottom: space[3] }}>
+          <Notice tone="danger" icon="⚠">
+            <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+              <span>
+                <b>
+                  {fallas.length} {fallas.length === 1 ? 'lectura no se contó' : 'lecturas no se contaron'}
+                </b>{' '}
+                — esas fundas tienen que estar en la pila aparte.
+              </span>
+              <Button size="sm" variant="outline" tone="danger" onMouseDown={(e) => e.preventDefault()} onClick={() => setVerFallas((v) => !v)}>
+                {verFallas ? 'Ocultar' : 'Ver cuáles'}
+              </Button>
+            </div>
+          </Notice>
+          {verFallas && (
+            <div style={{ marginTop: space[2] }}>
+              <ListaNoContadas fallas={fallas} />
+            </div>
+          )}
+        </div>
+      )}
+
+      <ScanBox scanRef={scanRef} feedback={feedback} escuchando={escuchando} setEscuchando={setEscuchando} onScan={onScan} />
 
       <Notice tone="warning" icon="!" style={{ marginBottom: space[3] }}>
         Estás contando <b>{grupo.modelo}</b>. Al cerrar, las fundas de este modelo que <b>no escaneaste</b> quedan en <b>0</b>.
@@ -529,16 +850,12 @@ function Foco({
                   {v.esperado}
                 </Td>
                 <Td align="center" tall>
-                  <input
-                    className="mo-input mo-input--num"
-                    type="number"
-                    min={0}
-                    inputMode="numeric"
-                    value={c || ''}
-                    onChange={(e) => onSet(v.vid, e.target.value)}
-                    placeholder="0"
-                    aria-label={`Escaneado de ${v.producto}`}
-                    style={{ width: 72, textAlign: 'center', padding: '0 6px' }}
+                  <NumCelda
+                    valor={c}
+                    label={`Escaneado de ${v.producto}`}
+                    onSet={(val) => onSet(v.vid, val)}
+                    onCodigo={onCasilleroCodigo}
+                    onListo={() => scanRef.current?.focus()}
                   />
                 </Td>
               </Tr>
@@ -558,13 +875,31 @@ function Foco({
 
 // ── Preview del cierre ─────────────────────────────────────────────────────────
 
-function PreviewView({ preview }: { preview: LbPreview }) {
+function PreviewView({ preview, fallas }: { preview: LbPreview; fallas: LecturaFallida[] }) {
   const { rows, resumen, missing, registro } = preview
   const enCero = registro.filter((r) => (r.contado || 0) === 0).length
   const marcaU = (preview.store || '').toUpperCase()
+  const ctl = resumen.control
+  const difPila = ctl ? ctl.pila - ctl.escaneadas : 0
   return (
     <div>
       <h2 style={{ fontSize: font.lg, fontWeight: 700, color: color.ink, marginBottom: space[3] }}>Revisión del ajuste · {preview.modelo}</h2>
+
+      {ctl && (
+        <Notice tone={difPila === 0 ? 'success' : 'danger'} icon={difPila === 0 ? '✓' : '⚠'} style={{ marginBottom: space[3] }}>
+          Pila física: <b>{ctl.pila}</b> · escaneadas: <b>{ctl.escaneadas}</b>
+          {difPila === 0 ? ' — coinciden.' : <> — <b>se cierra con {Math.abs(difPila)} de diferencia</b> y queda anotado en el historial.</>}
+        </Notice>
+      )}
+
+      {fallas.length > 0 && (
+        <div style={{ marginBottom: space[3] }}>
+          <p style={{ fontSize: font.sm, color: color.dangerInk, fontWeight: 600, marginBottom: space[2] }}>
+            {fallas.length} {fallas.length === 1 ? 'lectura no se contó' : 'lecturas no se contaron'}. Con estos códigos se puede buscar en GN qué funda es:
+          </p>
+          <ListaNoContadas fallas={fallas} />
+        </div>
+      )}
 
       <Notice tone="brand" icon="🏷️" style={{ marginBottom: space[3] }}>
         Ajuste del <b>Local de {marcaU}</b> · <b>{preview.modelo}</b>. El Excel se sube <b>solo</b> al GN de {marcaU}.

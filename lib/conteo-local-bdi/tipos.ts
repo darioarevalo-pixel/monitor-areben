@@ -37,8 +37,34 @@ export type LbDetalleConteo = {
   nuevo_stock: number | null
 }
 
+/**
+ * Una lectura del escáner que NO se sumó. Se guarda para que no se pierda de vista: el
+ * cartel rojo dura un instante y en el local suena música, así que el aviso tiene que
+ * quedar escrito hasta el cierre.
+ *  - `desconocido`: el código no es de ninguna funda del Local.
+ *  - `otro-modelo`: es una funda, pero de otro modelo (`modeloDe`).
+ *  - `con-cartel`: se escaneó mientras el cartel de un error anterior seguía abierto.
+ *  - `casillero`: el escáner escribió en un casillero numérico en vez del campo de escaneo.
+ */
+export type LecturaFallida = {
+  bc: string
+  motivo: 'desconocido' | 'otro-modelo' | 'con-cartel' | 'casillero'
+  modeloDe?: string
+  ts: number
+}
+
+/** Lecturas no contadas, por modelo. */
+export type FallasState = Record<string, LecturaFallida[]>
+
+/**
+ * Control del cierre contra la pila física: quien cuenta escribe cuántas fundas hay en la
+ * pila de escaneadas, sin ver el número de la pantalla. `pila !== escaneadas` = se cerró
+ * igual con diferencia, y queda anotado para quien importa el Excel.
+ */
+export type LbControl = { pila: number; escaneadas: number; no_contadas: number }
+
 /** Resumen del conteo de un modelo (se sella `modo` + `modelo` para separar el historial). */
-export type LbResumen = ResumenAjuste & { modo: 'local-bdi'; modelo: string }
+export type LbResumen = ResumenAjuste & { modo: 'local-bdi'; modelo: string; control?: LbControl }
 
 /** Lo que devuelve el cierre de un modelo. `rows` = solo diferencias (Excel); `registro` = todo. */
 export type LbPreview = {

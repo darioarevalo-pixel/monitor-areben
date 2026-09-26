@@ -109,6 +109,9 @@ ya tienen ficha:
 - Conteo de depósito → **leer `docs/secciones/conteo-deposito.md`** antes de tocar
   `components/conteo-deposito/`, `lib/conteo-deposito/` o `api/_conteos-deposito.js`.
   ⛔ **`lib/conteo-deposito/core.ts` es de las CUATRO pantallas de conteo**, que ajustan stock.
+- Conteo de fundas (BDI, key `conteo`) → **leer `docs/secciones/conteo.md`** antes de tocar
+  `components/conteo-local-bdi/` o `lib/conteo-local-bdi/`. ⛔ Se cuenta con música de fondo: ⛔
+  ningún aviso puede depender del sonido, y la pila física se pide a ciegas.
 - Chequeo de exhibición → **leer `docs/secciones/exhib.md`** antes de tocar `components/exhib/`,
   `lib/exhib/`, `api/_exhib.js` o `sql/migrate-exhib-libre.sql`. ⛔ **Son DOS recorridos**: el de
   categoría muere en el `localStorage` del teléfono, el **libre** guarda en la base **por LUGAR** y

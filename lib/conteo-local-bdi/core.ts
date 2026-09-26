@@ -14,7 +14,7 @@ import type { FilaVivo } from '../inventario-vivo/tipos'
 import type { ConteoHistorial, FilaAjuste } from '../conteo-deposito/tipos'
 import { matchModelo } from '../etl/modelos'
 import { ordenarModelo } from '../reposicion/grupos'
-import type { FundaVar, FundasState, LbDetalleConteo, LbPreview, LbResumen, ModeloGrupo } from './tipos'
+import type { FallasState, FundaVar, FundasState, LbDetalleConteo, LbPreview, LbResumen, LecturaFallida, ModeloGrupo } from './tipos'
 
 /** Normaliza un código de barras (trim + mayúsculas). */
 export function normBc(b: unknown): string {
@@ -87,6 +87,70 @@ export function agruparFundas(realMap: Record<string, FilaVivo>): {
 /** barcode → vid (o null si no matchea). */
 export function resolverScan(byBc: Record<string, string>, raw: string): string | null {
   return byBc[normBc(raw)] || null
+}
+
+/**
+ * Qué hacer con una lectura mientras se cuenta `modelo`: sumarla (`ok`), o rechazarla porque
+ * el código no es de ninguna funda del Local o porque es de otro modelo.
+ */
+export type ResultadoScan =
+  | { tipo: 'ok'; vid: string }
+  | { tipo: 'desconocido' }
+  | { tipo: 'otro-modelo'; modeloDe: string }
+
+export function clasificarScan(
+  byBc: Record<string, string>,
+  varByVid: Record<string, FundaVar>,
+  raw: string,
+  modelo: string,
+): ResultadoScan {
+  const vid = resolverScan(byBc, raw)
+  const v = vid ? varByVid[vid] : null
+  if (!v) return { tipo: 'desconocido' }
+  if (v.modelo !== modelo) return { tipo: 'otro-modelo', modeloDe: v.modelo }
+  return { tipo: 'ok', vid: v.vid }
+}
+
+/**
+ * ¿Lo que quedó en un casillero numérico es una lectura del escáner y no una cantidad?
+ * Nadie tiene 10.000 fundas de un talle, y un código de barras son 8-13 caracteres (o trae
+ * letras): lo que no sea un número de hasta 4 dígitos no se toma como cantidad. Sin esto,
+ * escanear con el cursor en un casillero dejaba esa funda con "7798123456789" unidades.
+ */
+export function pareceCodigo(val: string): boolean {
+  return !/^\d{0,4}$/.test(String(val).trim())
+}
+
+/** La cantidad de la pila física: un número de 1 a 4 dígitos, o null si no es eso. */
+export function leerPila(val: string | null): number | null {
+  const s = String(val ?? '').trim()
+  return /^\d{1,4}$/.test(s) ? parseInt(s, 10) : null
+}
+
+/** Suma una lectura no contada a la lista del modelo. */
+export function agregarFalla(fallas: FallasState, modelo: string, f: LecturaFallida): FallasState {
+  return { ...fallas, [modelo]: [...(fallas[modelo] || []), f] }
+}
+
+/** Limpia las lecturas no contadas de un modelo (tras cerrarlo). */
+export function limpiarFallas(fallas: FallasState, modelo: string): FallasState {
+  const next = { ...fallas }
+  delete next[modelo]
+  return next
+}
+
+/** El motivo de una lectura no contada, en palabras. */
+export function textoFalla(f: LecturaFallida): string {
+  switch (f.motivo) {
+    case 'desconocido':
+      return 'código desconocido'
+    case 'otro-modelo':
+      return `es de ${f.modeloDe || 'otro modelo'}`
+    case 'con-cartel':
+      return 'escaneada con el cartel rojo abierto'
+    case 'casillero':
+      return 'cayó en un casillero, no en el campo de escaneo'
+  }
 }
 
 /** Un escaneo: +1 a la variante. */

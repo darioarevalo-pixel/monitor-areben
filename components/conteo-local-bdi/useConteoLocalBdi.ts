@@ -6,19 +6,20 @@ import { leerInventarioVivo } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
 import { agruparFundas, ultimosPorModelo } from '@/lib/conteo-local-bdi/core'
 import { leerHistorial } from '@/lib/conteo-deposito/cliente'
-import type { FundaVar, FundasState, ModeloGrupo } from '@/lib/conteo-local-bdi/tipos'
+import type { FallasState, FundaVar, FundasState, ModeloGrupo } from '@/lib/conteo-local-bdi/tipos'
 
 /**
  * Carga y persistencia del Conteo de Fundas de BDI. Lee el vivo del Local
  * (`leerInventarioVivo(marca,'local')`), aplana a variantes de funda agrupadas por
  * modelo, y guarda el conteo en progreso en localStorage (`monitor_conteofundas_<marca>`,
- * clave propia para no pisar los otros conteos). El historial (fecha por modelo) sale
+ * clave propia para no pisar los otros conteos), junto con las lecturas que NO se
+ * contaron (`fallas`, por modelo) para que sobrevivan a una recarga. El historial (fecha por modelo) sale
  * de `conteos_deposito` filtrando `modo==='local-bdi'`.
  */
 
 const key = (m: Marca) => `monitor_conteofundas_${m}`
 
-type Guardado = { stockTime?: number | null; prods?: FundasState }
+type Guardado = { stockTime?: number | null; prods?: FundasState; fallas?: FallasState }
 function cargarLs(m: Marca): Guardado {
   try {
     const s = JSON.parse(localStorage.getItem(key(m)) || '{}')
@@ -33,6 +34,7 @@ export type EstadoConteoFundas = {
   byBc: Record<string, string>
   varByVid: Record<string, FundaVar>
   state: FundasState
+  fallas: FallasState
   stockTime: number | null
   store: string | null
   ubicacion: string | null
@@ -41,6 +43,7 @@ export type EstadoConteoFundas = {
   error: string | null
   traerStock: (reset?: boolean) => Promise<void>
   aplicar: (next: FundasState) => void
+  aplicarFallas: (next: FallasState) => void
   refrescarUltimos: () => Promise<void>
 }
 
@@ -49,6 +52,7 @@ export function useConteoLocalBdi(marca: Marca): EstadoConteoFundas {
   const [byBc, setByBc] = useState<Record<string, string>>({})
   const [varByVid, setVarByVid] = useState<Record<string, FundaVar>>({})
   const [state, setState] = useState<FundasState>({})
+  const [fallas, setFallas] = useState<FallasState>({})
   const [stockTime, setStockTime] = useState<number | null>(null)
   const [store, setStore] = useState<string | null>(null)
   const [ubicacion, setUbicacion] = useState<string | null>(null)
@@ -62,11 +66,11 @@ export function useConteoLocalBdi(marca: Marca): EstadoConteoFundas {
   useEffect(() => {
     if (!hidratado) return
     try {
-      localStorage.setItem(key(marca), JSON.stringify({ stockTime, prods: state }))
+      localStorage.setItem(key(marca), JSON.stringify({ stockTime, prods: state, fallas }))
     } catch {
       /* cuota llena */
     }
-  }, [state, stockTime, marca, hidratado])
+  }, [state, fallas, stockTime, marca, hidratado])
 
   const traerStock = useCallback(
     async (reset = false) => {
@@ -83,6 +87,7 @@ export function useConteoLocalBdi(marca: Marca): EstadoConteoFundas {
         setByBc(byBc)
         setVarByVid(varByVid)
         setState(reset ? {} : savedState)
+        setFallas(reset ? {} : saved.fallas || {})
         setStockTime(st)
         setStore(d.store ?? String(marca))
         setUbicacion(d.store_name ?? 'Local')
@@ -129,6 +134,7 @@ export function useConteoLocalBdi(marca: Marca): EstadoConteoFundas {
   }, [marca])
 
   const aplicar = useCallback((next: FundasState) => setState(next), [])
+  const aplicarFallas = useCallback((next: FallasState) => setFallas(next), [])
 
-  return { modelos, byBc, varByVid, state, stockTime, store, ubicacion, ultimos, cargando, error, traerStock, aplicar, refrescarUltimos }
+  return { modelos, byBc, varByVid, state, fallas, stockTime, store, ubicacion, ultimos, cargando, error, traerStock, aplicar, aplicarFallas, refrescarUltimos }
 }

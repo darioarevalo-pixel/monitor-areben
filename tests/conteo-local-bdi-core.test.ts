@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
+  agregarFalla,
   agruparFundas,
+  clasificarScan,
+  leerPila,
+  limpiarFallas,
+  pareceCodigo,
+  textoFalla,
   calcularAjusteModelo,
   escanear,
   esFunda,
@@ -119,5 +125,53 @@ describe('ultimosPorModelo', () => {
     const map = ultimosPorModelo(conteos)
     expect(map['iPhone 11']).toBe(new Date('2026-07-20T10:00:00Z').getTime())
     expect(Object.keys(map)).toEqual(['iPhone 11'])
+  })
+})
+
+describe('lecturas que no se cuentan', () => {
+  const { byBc, varByVid } = agruparFundas(realMap(ROWS))
+
+  it('clasificarScan: suma la del modelo, rechaza la de otro modelo y la desconocida', () => {
+    expect(clasificarScan(byBc, varByVid, 'b1', 'iPhone 11')).toEqual({ tipo: 'ok', vid: '10_1' })
+    expect(clasificarScan(byBc, varByVid, 'B3', 'iPhone 11')).toEqual({ tipo: 'otro-modelo', modeloDe: 'iPhone 12' })
+    expect(clasificarScan(byBc, varByVid, '7798123456789', 'iPhone 11')).toEqual({ tipo: 'desconocido' })
+    // El cargador existe en el Local pero no es funda: para el escáner es desconocido.
+    expect(clasificarScan(byBc, varByVid, 'B5', 'iPhone 11')).toEqual({ tipo: 'desconocido' })
+  })
+
+  it('pareceCodigo: un código de barras en un casillero no es una cantidad', () => {
+    expect(pareceCodigo('')).toBe(false)
+    expect(pareceCodigo('3')).toBe(false)
+    expect(pareceCodigo(' 120 ')).toBe(false)
+    expect(pareceCodigo('9999')).toBe(false)
+    expect(pareceCodigo('7798123456789')).toBe(true)
+    expect(pareceCodigo('12345')).toBe(true)
+    expect(pareceCodigo('F-0012')).toBe(true)
+    expect(pareceCodigo('-3')).toBe(true)
+  })
+
+  it('leerPila: solo un número de 1 a 4 dígitos', () => {
+    expect(leerPila('120')).toBe(120)
+    expect(leerPila(' 0 ')).toBe(0)
+    expect(leerPila('')).toBeNull()
+    expect(leerPila(null)).toBeNull()
+    expect(leerPila('ciento veinte')).toBeNull()
+    expect(leerPila('7798123456789')).toBeNull()
+  })
+
+  it('agregarFalla / limpiarFallas: por modelo, sin tocar los otros', () => {
+    let f = agregarFalla({}, 'iPhone 11', { bc: 'X1', motivo: 'desconocido', ts: 1 })
+    f = agregarFalla(f, 'iPhone 11', { bc: 'B3', motivo: 'otro-modelo', modeloDe: 'iPhone 12', ts: 2 })
+    f = agregarFalla(f, 'iPhone 12', { bc: 'X2', motivo: 'con-cartel', ts: 3 })
+    expect(f['iPhone 11']).toHaveLength(2)
+    const g = limpiarFallas(f, 'iPhone 11')
+    expect(g['iPhone 11']).toBeUndefined()
+    expect(g['iPhone 12']).toHaveLength(1)
+    expect(f['iPhone 11']).toHaveLength(2) // no muta
+  })
+
+  it('textoFalla nombra el motivo', () => {
+    expect(textoFalla({ bc: 'B3', motivo: 'otro-modelo', modeloDe: 'iPhone 12', ts: 0 })).toBe('es de iPhone 12')
+    expect(textoFalla({ bc: 'X', motivo: 'casillero', ts: 0 })).toMatch(/casillero/)
   })
 })
