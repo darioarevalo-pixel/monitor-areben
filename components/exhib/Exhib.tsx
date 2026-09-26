@@ -113,7 +113,11 @@ export function Exhib() {
    * el viejo pierde una caminata entera y en silencio; abrir en el nuevo cuesta **un toque** al que
    * de verdad quería chequear una categoría puntual.
    */
-  const [modo, setModo] = useState<Modo>('libre')
+  // ⛔ **«Por categoría» está OCULTO desde el 26-sep-2026** (decisión de Bruno: *«siento que no me
+  // sirve»* — la categoría es de la tienda online, ⛔ no del salón; el sector se declara por NOMBRE
+  // de prenda en el balance del libre). El código queda por ahora: para volverlo a mostrar, basta
+  // con devolver el `setModo` y los botones de `selector`.
+  const [modo] = useState<Modo>('libre')
   const [fase, setFase] = useState<Fase>('config')
   const [persona, setPersona] = useState('')
   const [catSel, setCatSel] = useState('')
@@ -227,20 +231,8 @@ export function Exhib() {
     await generarReporteExhib({ lista, persona: personaVal || '(sin nombre)', catLabel: catSel || 'Todas las categorías', estados: ex.estados, errores: ex.errores, marca, escaneos: ex.escaneos })
   }
 
-  /**
-   * El cambio de modo. Va arriba de todo en Configurar y ⛔ no en el header de acciones: ⛔ no es
-   * algo que se hace, es de qué recorrido estamos hablando — y por eso sólo aparece antes de
-   * empezar, nunca a mitad de una caminata.
-   */
-  const selector = (
-    <div style={{ display: 'flex', gap: space[2], marginBottom: space[4], flexWrap: 'wrap' }}>
-      {([['categoria', 'Por categoría'], ['libre', 'Libre por lugar']] as const).map(([k, etiqueta]) => (
-        <Button key={k} size="sm" variant={modo === k ? 'solid' : 'outline'} tone={modo === k ? 'brand' : 'neutral'} onClick={() => setModo(k)}>
-          {etiqueta}
-        </Button>
-      ))}
-    </div>
-  )
+  // El cambio de modo iba acá (dos botones arriba de Configurar). Oculto con «Por categoría»: ver `modo`.
+  const selector = null
 
   // El modo libre es una pantalla entera aparte —otro recorrido, otro almacenamiento— y ⛔ no un
   // `if` adentro de ésta. Los ítems se le pasan ya cruzados: la bajada es la misma para los dos.

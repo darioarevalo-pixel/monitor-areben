@@ -3,6 +3,13 @@
 Sección `exhib`, área `local`, sólo Zattia. Caminar el Local con el lector confirmando que cada
 prenda con stock está colgada, y de paso controlar el cartelito de papel contra el precio de hoy.
 
+> ⛔ **«Por categoría» está OCULTO desde el 26-sep-2026.** Bruno: *«siento que no me sirve»*: la
+> categoría de TN es de la tienda online y ⛔ no del salón. La pantalla abre siempre en el libre y el
+> sector se declara por nombre de prenda en el balance. El código sigue en `Exhib.tsx` (sin
+> botón para llegar), así que el hallazgo de `buscarItem` que se lleva la primera ya ⛔ no se alcanza
+> desde la pantalla. Se pierden con él el **PDF con triage** y el aviso de **prendas con precio nuevo
+> sin etiqueta** (`sospechososNoExhibidos`), que el libre ⛔ no tiene.
+
 **Son DOS recorridos distintos**, no dos vistas del mismo:
 
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |
@@ -585,6 +592,12 @@ pregunta**. Números arriba, en «Reglas que el código no dice».
   en libre, porque el 19-sep a la mañana el local recorrió media hora sin que llegara una fila).
 - ▶️ **El PDF del modo por categoría ⛔ no dice DÓNDE apareció cada prenda** y el libre sí. Cruzar los
   dos se hace **por SKU**, que es lo único que comparten.
+- ⏸️ **Llevar al libre el aviso 🏷️ «precio cambiado y sin etiquetar»** (`sospechososNoExhibidos`),
+  que se fue al ocultar «Por categoría» el 26-sep-2026. Bruno: *«no me parece urgente y merece ser
+  bien pensado»* — ⛔ no se hace sin conversarlo. La idea sobre la mesa era marcar, dentro del
+  mandado del balance, las prendas con esa segunda señal (las más seguras de estar en depósito).
+  Lo que hay que pensar antes: sólo lo ve quien tiene permiso de Etiquetas; va por producto y el
+  mandado por prenda; el corte es de 3 días (`sinEtiquetar` en `lib/etiquetas/cola.core.js`).
 
 ## Cómo se prueba
 
