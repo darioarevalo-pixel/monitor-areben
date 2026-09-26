@@ -406,6 +406,41 @@ export function catsVisibles(cats: string[]): string[] {
  * ⚠️ Esta función y el índice de la base dicen lo mismo, y tienen que seguir diciéndolo: si acá se
  * dedupla por variante sola, la pantalla mostraría uno menos de lo que la base guardó.
  */
+/**
+ * **¿Esto tiene forma de código de barras de los nuestros?** Medido sobre los 781 escaneos reales
+ * de Zattia (26-sep-2026): letras y números pegados —`RMI0057NG`, `RBLU0015AZ`, `RSH010842`,
+ * `RMI0068`— o sólo números —`1307097`, `686405`—. Los lugares, en cambio, llevan espacios y
+ * minúsculas («Short y minis de noche»). ⚠️ Es el respaldo de `separarEscaneoDelLugar`: la señal
+ * principal es la velocidad, que sirve para cualquier formato.
+ */
+export function pareceCodigo(s: string): boolean {
+  const t = s.trim()
+  return /^[A-Z]{2,5}\d{3,}[A-Z]{0,6}$/.test(t) || /^\d{5,14}$/.test(t)
+}
+
+/** Más rápido que esto entre tecla y tecla, ⛔ lo tipeó una persona: lo escribió el lector. */
+export const RAFAGA_MS = 80
+
+/**
+ * 🔴 **El escaneo que cayó en el campo del LUGAR** (26-sep-2026). El lector tipea y termina con
+ * Enter: si el cursor quedó en «¿En qué lugar estás?», el código se pegaba al nombre del mueble
+ * —«perchero jeansRMI0057NG»—, el escaneo ⛔ se guardaba y ⛔ sonaba nada.
+ *
+ * 🔑 **La señal es la VELOCIDAD, ⛔ la forma**: `rafaga` es lo que entró de golpe justo antes del
+ * Enter (teclas a menos de `RAFAGA_MS`), y eso lo separa del nombre con cualquier formato de
+ * código. Si ⛔ hubo ráfaga (un teclado que ⛔ avisa las teclas), el respaldo es que el campo
+ * entero tenga forma de código (`pareceCodigo`). Devuelve `null` si ⛔ hay nada que separar.
+ */
+export function separarEscaneoDelLugar(valor: string, rafaga: string | null): { lugar: string; codigo: string } | null {
+  const r = (rafaga ?? '').trim()
+  if (r.length >= 3 && /\d/.test(r) && !/\s/.test(r)) {
+    const i = valor.lastIndexOf(r)
+    if (i >= 0) return { lugar: (valor.slice(0, i) + valor.slice(i + r.length)).trim(), codigo: r }
+  }
+  if (pareceCodigo(valor)) return { lugar: '', codigo: valor.trim() }
+  return null
+}
+
 export function claveEscaneo(e: Pick<EscaneoLibre, 'lugar' | 'variante_id'>): string {
   return e.lugar + '\u0000' + e.variante_id
 }

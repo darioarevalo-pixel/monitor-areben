@@ -573,6 +573,12 @@ compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta 
   **la tilde es de la variante**. → `components/exhib/useExhib.ts` + `components/exhib/Exhib.tsx`
 - 🔴 **`tnAdminUrl` era la SEXTA copia de «cuál es el admin de cada tienda»** y se le escapó a la
   consolidación. Ahora el dominio sale de `lib/tienda.core.js`. → `lib/exhib/core.ts`
+- 🔴 **El escaneo que caía en el campo del LUGAR se perdía** (arreglado el 26-sep-2026). El lector
+  tipea y termina con Enter: con el cursor en «¿En qué lugar estás?» quedaba «perchero
+  jeansRMI0057NG», sin escaneo ni sonido. Ahora `separarEscaneoDelLugar` lo saca del nombre y lo
+  escanea. 🔑 **La señal es la VELOCIDAD** (teclas a menos de `RAFAGA_MS`), que sirve para
+  cualquier formato; el respaldo es la forma (`pareceCodigo`, medida sobre 781 escaneos reales:
+  `RMI0057NG`, `RSH010842`, `1307097`…). Sin nombre escrito, va al último lugar usado.
 - 🔴 **El repetido podía perder su contador sin que nadie se entere** (arreglado el 26-sep-2026).
   Se subía borrando primero la fila vieja; si el borrado fallaba, el upsert con `ignoreDuplicates`
   dejaba «1 vez» en la base y contestaba `ok` ⇒ la que caminaba oía un número que el historial ⛔ no

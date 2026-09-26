@@ -7,7 +7,7 @@ import { Button, Card, Field, Input, Notice, color, font, formatMoney, space, us
 import { descargarXlsx } from '@/lib/excel'
 import { candidatosPorCodigo, coincidencias, precioDeGondola } from '@/lib/exhib/core'
 import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
-import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, filasExport, hallazgoDe, resumenRecorrido, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
+import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, filasExport, hallazgoDe, RAFAGA_MS, resumenRecorrido, separarEscaneoDelLugar, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import { BalanceSector } from './BalanceSector'
@@ -89,6 +89,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   const [verColgarAca, setVerColgarAca] = useState(false)
   const scanRef = useRef<HTMLInputElement>(null)
   const lugarRef = useRef<HTMLInputElement>(null)
+  /** Lo que entró de golpe en el campo del lugar: ver `separarEscaneoDelLugar`. */
+  const rafagaRef = useRef<{ texto: string; ultima: number }>({ texto: '', ultima: 0 })
 
   const cargarPrevios = useCallback(() => {
     void leerRecorridos(marca)
@@ -162,10 +164,11 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     return r
   }
 
-  function marcar(code: string) {
+  // ⚠️ `lugar` viene por parámetro cuando se acaba de corregir: el estado todavía ⛔ se re-dibujó.
+  function marcar(code: string, lugar: string = lib.lugar) {
     const c = code.trim()
     if (!c) return
-    if (!lib.lugar.trim()) {
+    if (!lugar.trim()) {
       toast.aviso('Escribí primero en qué lugar estás parado.')
       foco(lugarRef)
       return
@@ -177,11 +180,11 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
      * otro. Es también cuando la persona todavía puede volver tres pasos.
      */
     const previo = lib.escaneos.at(-1)?.lugar
-    setFb(sonando(lib.escanear(c, lib.lugar)))
+    setFb(sonando(lib.escanear(c, lugar)))
     // Al escanear se vuelve a la vista corta: si quedó abierta la lista entera de un mueble, cada
     // lectura siguiente pagaría el dibujo completo otra vez.
     setVerTodosLosEscaneos(false)
-    if (previo && previo !== lib.lugar.trim()) {
+    if (previo && previo !== lugar.trim()) {
       const quedo = colgarEnLugar(paraColgar(lib.escaneos, items), previo)
       setCierreLugar(quedo.length ? { lugar: previo, lista: quedo } : null)
       setVerColgarAca(false)
@@ -402,8 +405,25 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                * estar todo el tiempo que se camina.
                */
               onKeyDown={(e) => {
+                const ahora = performance.now()
+                if (e.key.length === 1) {
+                  const r = rafagaRef.current
+                  rafagaRef.current = ahora - r.ultima <= RAFAGA_MS ? { texto: r.texto + e.key, ultima: ahora } : { texto: e.key, ultima: ahora }
+                  return
+                }
                 if (e.key === 'Enter') {
                   e.preventDefault()
+                  const r = rafagaRef.current
+                  rafagaRef.current = { texto: '', ultima: 0 }
+                  // 🔴 El código que cayó acá se saca del nombre y se escanea igual.
+                  const sep = separarEscaneoDelLugar(e.currentTarget.value, ahora - r.ultima <= RAFAGA_MS ? r.texto : null)
+                  if (sep) {
+                    // Sin nombre escrito todavía, va al último mueble: el balance es por tipo de
+                    // prenda, así que un lugar de más ⛔ cambia la lista.
+                    const lugar = sep.lugar || lib.escaneos.at(-1)?.lugar || ''
+                    lib.setLugar(lugar)
+                    marcar(sep.codigo, lugar)
+                  }
                   foco(scanRef)
                 }
               }}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparPorLugar, aEscaneo, compararConHistorial, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, horasDe, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
+import { agruparPorLugar, aEscaneo, compararConHistorial, pareceCodigo, separarEscaneoDelLugar, ANCHOS_EXPORT, catsVisibles, claveEscaneo, contarEnLugar, estadosDe, filasExport, hallazgoDe, HEADER_EXPORT, horasDe, pasoPorElLector, resumenRecorrido, lugaresDe, lugaresSugeridos, nuevoRecorridoId, sumarUna, yaEscaneado, type EscaneoLibre } from '../lib/exhib/libre'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
 const it0 = (over: Partial<ExhibItem>): ExhibItem => ({ barcode: '', sku: '', productId: 'p', name: 'X', size: 'U', qty: 1, img: null, cat: 'TOPS Y BODIES', cleanCats: ['TOPS Y BODIES'], tnId: null, precio: null, promo: null, ...over })
@@ -342,5 +342,37 @@ describe('compararConHistorial', () => {
     expect(r.telefono).toBe(1)
     expect(r.historial).toBe(1)
     expect(r.faltan).toEqual([expect.objectContaining({ nombre: '416', reconocida: false, faltan: 1 })])
+  })
+})
+
+describe('el escaneo que cae en el campo del lugar', () => {
+  // Los formatos reales, medidos sobre los 781 escaneos de Zattia (26-sep-2026).
+  const CODIGOS = ['RMI0057NG', 'RSH010842', '1307097', 'RBLU0015AZ', 'RMI0099NGS', 'RMI0068', '686405', 'RMI0098M', 'RBLU0026CRS', '9999999999001', 'RMI0096VISM', 'RSW0039MAYLV', 'RBLU0020']
+  // Los lugares reales: ninguno puede pasar por código.
+  const LUGARES = ['Short y minis de noche', 'Sweater', 'Short de jean,mini de jean,bermudas,jeas', 'Tops', 'PRUEBA perchero', 'perchero jeans', 'mesa 2']
+
+  it.each(CODIGOS)('%s tiene forma de código', (c) => expect(pareceCodigo(c)).toBe(true))
+  it.each(LUGARES)('«%s» ⛔ tiene forma de código', (l) => expect(pareceCodigo(l)).toBe(false))
+
+  it('🔴 la ráfaga pegada al nombre se separa: el lugar queda limpio y el código se escanea', () => {
+    expect(separarEscaneoDelLugar('perchero jeansRMI0057NG', 'RMI0057NG')).toEqual({ lugar: 'perchero jeans', codigo: 'RMI0057NG' })
+  })
+
+  it('🔴 por velocidad sirve con cualquier formato, también uno que la forma ⛔ reconoce', () => {
+    expect(separarEscaneoDelLugar('SweaterAB-12', 'AB-12')).toEqual({ lugar: 'Sweater', codigo: 'AB-12' })
+  })
+
+  it('un nombre en mayúsculas pegado a un código ⛔ se come letras del código', () => {
+    expect(separarEscaneoDelLugar('SWEATERRMI0057NG', 'RMI0057NG')).toEqual({ lugar: 'SWEATER', codigo: 'RMI0057NG' })
+  })
+
+  it('sin ráfaga, el respaldo es la forma del campo entero', () => {
+    expect(separarEscaneoDelLugar('1307097', null)).toEqual({ lugar: '', codigo: '1307097' })
+  })
+
+  it('⛔ un nombre escrito a mano ⛔ se toca', () => {
+    for (const l of LUGARES) expect(separarEscaneoDelLugar(l, null)).toBeNull()
+    // Lo último tipeado rápido sin números (autocompletar, por ejemplo) ⛔ es un código.
+    expect(separarEscaneoDelLugar('perchero jeans', 'jeans')).toBeNull()
   })
 })
