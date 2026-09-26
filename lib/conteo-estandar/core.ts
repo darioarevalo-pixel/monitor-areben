@@ -358,3 +358,41 @@ export function planTerminarGrupo(state: CeState, productos: CeProducto[]) {
 export function terminarVarios(state: CeState, productos: CeProducto[], ahora: number): CeState {
   return productos.reduce((s, p) => terminar(s, p, ahora), state)
 }
+
+/** ¿El sistema dice que hay stock en algún talle? */
+export function tieneStock(p: CeProducto): boolean {
+  return p.variants.some((v) => v.esperado > 0)
+}
+
+/**
+ * Lo que se muestra de una categoría al contar: lo que el sistema dice que hay, más lo que ya se
+ * cargó o se terminó (un producto en 0 que apareció en el estante y se buscó entra a la lista en
+ * cuanto se le carga algo). Los productos viejos en 0 no se muestran: eran cientos de tarjetas
+ * vacías (RTO tenía 203) y no dejaban ver cuándo se terminaba una categoría.
+ */
+export function visiblesDeGrupo(state: CeState, productos: CeProducto[]): CeProducto[] {
+  return productos.filter((p) => tieneStock(p) || productoTocado(state[p.pid], p) || estadoDe(state, p.pid) === 'terminado')
+}
+
+/**
+ * Nombre legible de la categoría, sacado de los nombres de sus productos: casi todos empiezan con
+ * el tipo (TOP EMBER, BERMUDA DOJA). Se toma la primera palabra más repetida y, si casi todos los
+ * que la usan comparten también la segunda (BABY TEE), se suma. Sin datos, ''.
+ */
+export function nombreGrupo(productos: CeProducto[]): string {
+  const palabras = productos.map((p) => p.name.trim().toUpperCase().split(/\s+/)).filter((w) => w[0])
+  if (!palabras.length) return ''
+  const cuenta = (xs: string[]) => {
+    const m = new Map<string, number>()
+    xs.forEach((x) => m.set(x, (m.get(x) || 0) + 1))
+    return [...m.entries()].sort((a, b) => b[1] - a[1])[0]
+  }
+  const [w1] = cuenta(palabras.map((w) => w[0]))
+  const con = palabras.filter((w) => w[0] === w1 && w[1])
+  let out = w1
+  if (con.length >= 2) {
+    const [w2, n2] = cuenta(con.map((w) => w[1]))
+    if (n2 / con.length >= 0.8) out += ' ' + w2
+  }
+  return out.charAt(0) + out.slice(1).toLowerCase()
+}

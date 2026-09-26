@@ -2,17 +2,19 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
-import { estadoDe, ordenDeposito, skuDeProducto } from '@/lib/conteo-estandar/core'
+import { estadoDe, nombreGrupo, ordenDeposito, skuDeProducto, visiblesDeGrupo } from '@/lib/conteo-estandar/core'
 import type { CeProducto, CeState } from '@/lib/conteo-estandar/tipos'
 import { ChipEstado } from '@/components/conteos/comunes'
-import { BuscarInput, Button, Chips, EmptyState, FilterBar, Notice, color, font, space } from '@/components/ui'
+import { BuscarInput, Button, EmptyState, Notice, color, font, space } from '@/components/ui'
 
 /**
  * «Depósito del local»: cargar el depósito a mano recorriendo el estante.
  *
  * El depósito del local está ordenado por SKU dentro de cada categoría, así que acá va todo en
- * una sola lista con ese orden (`ordenDeposito`), un chip por categoría y la casilla de depósito
- * en cada talle —Enter salta a la siguiente—. Abrir producto por producto desde la lista era
+ * una sola lista con ese orden (`ordenDeposito`), una categoría por vez (un desplegable con
+ * anterior/siguiente: los chips ocupaban media pantalla del celular) y la casilla de depósito en
+ * cada talle —Enter salta a la siguiente—. Solo se ven los productos con stock o ya cargados
+ * (`visiblesDeGrupo`); el buscador llega a los que están en 0. Abrir producto por producto desde la lista era
  * eterno. Lo exhibido se sigue escaneando en la otra vista y acá sólo se ve.
  */
 export function DepositoLocal({
@@ -28,17 +30,23 @@ export function DepositoLocal({
   onTerminarGrupo: (productos: CeProducto[], grupo: string) => void
   onAbrir: (pid: string) => void
 }) {
-  const grupos = useMemo(() => ordenDeposito(products), [products])
-  const [grupo, setGrupo] = useState<string>(() => grupos[0]?.grupo || '')
+  const grupos = useMemo(() => ordenDeposito(products).map((g) => ({ ...g, nombre: nombreGrupo(g.productos) })), [products])
+  const [grupo, setGrupo] = useState<string>('')
   const [search, setSearch] = useState('')
   const contRef = useRef<HTMLDivElement>(null)
 
+  // Solo las categorías con algo para contar (stock en sistema o algo ya cargado).
+  const conStock = grupos.map((g) => ({ ...g, vis: visiblesDeGrupo(state, g.productos) })).filter((g) => g.vis.length)
+  const idx = Math.max(0, conStock.findIndex((g) => g.grupo === grupo))
+  const actual = conStock[idx]
+
+  // El buscador mira la categoría elegida, incluidos los productos en 0 (lo que apareció en el
+  // estante y el sistema no tiene). Si ahí no está, cae a todas las categorías.
   const q = search.trim().toLowerCase()
-  const actual = grupos.find((g) => g.grupo === grupo) || grupos[0]
-  // Con búsqueda se mira en todas las categorías; sin búsqueda, la del chip.
-  const visibles = q
-    ? grupos.flatMap((g) => g.productos).filter((p) => p.name.toLowerCase().includes(q) || p.variants.some((v) => String(v.sku || '').toLowerCase().includes(q)))
-    : actual?.productos || []
+  const coincide = (p: CeProducto) => p.name.toLowerCase().includes(q) || p.variants.some((v) => String(v.sku || '').toLowerCase().includes(q))
+  const enCategoria = q && actual ? grupos.find((g) => g.grupo === actual.grupo)!.productos.filter(coincide) : []
+  const enOtras = q && !enCategoria.length ? grupos.flatMap((g) => g.productos).filter(coincide) : []
+  const visibles = q ? (enCategoria.length ? enCategoria : enOtras) : actual?.vis || []
 
   if (!products.length) return <EmptyState icon="📦" title="Sin productos en el Local" dashed />
 
@@ -54,44 +62,77 @@ export function DepositoLocal({
     } else e.currentTarget.blur()
   }
 
-  const terminadosGrupo = actual ? actual.productos.filter((p) => estadoDe(state, p.pid) === 'terminado').length : 0
+  const terminados = (g: { vis: CeProducto[] }) => g.vis.filter((p) => estadoDe(state, p.pid) === 'terminado').length
+  const ir = (i: number) => {
+    const g = conStock[i]
+    if (!g) return
+    setGrupo(g.grupo)
+    setSearch('')
+  }
 
   return (
     <div>
       <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
-        Mismo orden que el estante: por SKU, de menor a mayor, una categoría por vez. Cargá lo que hay en el depósito del local; lo exhibido se escanea en la otra vista y acá solo se ve.
+        Mismo orden que el estante: una categoría por vez, por SKU de menor a mayor. Se ven los productos que el sistema dice que tienen stock; si aparece otro en el estante, buscalo y cargalo.
         La casilla en blanco cuenta como <b>0</b> cuando se termina el producto.
       </p>
 
-      <FilterBar>
-        <BuscarInput value={search} onChange={setSearch} placeholder="Buscá producto o SKU…" />
-      </FilterBar>
-      {!q && (
-        <div style={{ marginBottom: space[3] }}>
-          <Chips<string>
-            value={actual?.grupo || ''}
-            onChange={setGrupo}
-            opciones={grupos.map((g) => ({
-              key: g.grupo,
-              label: g.grupo,
-              n: g.productos.length,
-              title: `${g.productos.filter((p) => estadoDe(state, p.pid) === 'terminado').length} de ${g.productos.length} terminados`,
-            }))}
-          />
+      {actual && (
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', marginBottom: space[2] }}>
+          <Button variant="outline" onClick={() => ir(idx - 1)} disabled={idx === 0} aria-label="Categoría anterior">
+            ‹
+          </Button>
+          <select
+            className="mo-input"
+            value={actual.grupo}
+            onChange={(e) => ir(conStock.findIndex((g) => g.grupo === e.target.value))}
+            aria-label="Categoría"
+            style={{ flex: 1, minWidth: 0, height: 44, fontSize: 16, fontWeight: 600 }}
+          >
+            {conStock.map((g) => {
+              const t = terminados(g)
+              return (
+                <option key={g.grupo} value={g.grupo}>
+                  {t === g.vis.length ? '✓ ' : ''}
+                  {g.grupo}
+                  {g.nombre ? ` · ${g.nombre}` : ''} — {t}/{g.vis.length}
+                </option>
+              )
+            })}
+          </select>
+          <Button variant="outline" onClick={() => ir(idx + 1)} disabled={idx >= conStock.length - 1} aria-label="Categoría siguiente">
+            ›
+          </Button>
         </div>
       )}
 
-      {!q && actual && (
-        <Notice tone="neutral" icon="🗂️" style={{ marginBottom: space[3] }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
-            <span>
-              <b>{actual.grupo}</b> · {terminadosGrupo} de {actual.productos.length} terminados
-            </span>
-            <Button size="sm" variant="solid" tone="brand" onClick={() => onTerminarGrupo(actual.productos, actual.grupo)}>
-              ✓ Terminar categoría
-            </Button>
-          </div>
-        </Notice>
+      <div style={{ marginBottom: space[3] }}>
+        <BuscarInput value={search} onChange={setSearch} placeholder={actual ? `Buscar en ${actual.grupo} (también los que están en 0)…` : 'Buscá producto o SKU…'} />
+      </div>
+
+      {q ? (
+        !enCategoria.length && enOtras.length > 0 && actual ? (
+          <Notice tone="warning" icon="🔎" style={{ marginBottom: space[3] }}>
+            No está en {actual.grupo}. Esto coincide en otras categorías.
+          </Notice>
+        ) : null
+      ) : (
+        actual && (
+          <Notice tone={terminados(actual) === actual.vis.length ? 'success' : 'neutral'} icon="🗂️" style={{ marginBottom: space[3] }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+              <span>
+                <b>
+                  {actual.grupo}
+                  {actual.nombre ? ` · ${actual.nombre}` : ''}
+                </b>{' '}
+                · {terminados(actual)} de {actual.vis.length} terminados
+              </span>
+              <Button size="sm" variant="solid" tone="brand" onClick={() => onTerminarGrupo(actual.vis, actual.grupo)}>
+                ✓ Terminar categoría
+              </Button>
+            </div>
+          </Notice>
+        )
       )}
 
       {!visibles.length ? (

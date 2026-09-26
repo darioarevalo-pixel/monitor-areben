@@ -72,3 +72,20 @@ describe('terminar categoría', () => {
     expect(cargarDeposito(s, a, 'a_0', '2').a.estado).toBe('en_progreso')
   })
 })
+
+describe('lo que se ve de una categoría', () => {
+  it('solo con stock, más lo cargado', async () => {
+    const { visiblesDeGrupo } = await import('@/lib/conteo-estandar/core')
+    const con = prod('a', 'TOP A', ['RTO-1-S'], 2)
+    const sin = prod('b', 'TOP B', ['RTO-2-S'], 0)
+    expect(visiblesDeGrupo({}, [con, sin]).map((p) => p.pid)).toEqual(['a'])
+    const s = cargarDeposito({}, sin, 'b_0', '3')
+    expect(visiblesDeGrupo(s, [con, sin]).map((p) => p.pid)).toEqual(['a', 'b'])
+  })
+  it('nombre de la categoría desde los productos', async () => {
+    const { nombreGrupo } = await import('@/lib/conteo-estandar/core')
+    expect(nombreGrupo([prod('1', 'TOP EMBER', []), prod('2', 'TOP KOBE', []), prod('3', 'STRAPLESS REBEL', [])])).toBe('Top')
+    expect(nombreGrupo([prod('1', 'BABY TEE BITCH', []), prod('2', 'BABY TEE MOVE', [])])).toBe('Baby tee')
+    expect(nombreGrupo([])).toBe('')
+  })
+})
