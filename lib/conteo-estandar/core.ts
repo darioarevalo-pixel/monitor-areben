@@ -349,11 +349,24 @@ export function cargarDeposito(state: CeState, prod: CeProducto, vid: string, va
  */
 export function planTerminarGrupo(state: CeState, productos: CeProducto[]) {
   const aTerminar = productos.filter((p) => estadoDe(state, p.pid) !== 'terminado' && productoTocado(state[p.pid], p))
-  const talles0 = aTerminar.reduce((n, p) => n + p.variants.filter((v) => !tocada(state[p.pid], v.vid)).length, 0)
+  // 🔑 Sólo importan los blancos que el sistema dice que TIENEN stock: ésos son los que el ajuste
+  // va a descontar. Un blanco con sistema 0 queda en 0 y no cambia nada — contarlo en el aviso era
+  // ruido (Bruno, 27-sep-2026: «me dijo 19 van a ir en 0, pero ese dato no me interesa»).
+  const blancosConStock = aTerminar.flatMap((p) =>
+    p.variants
+      .filter((v) => !tocada(state[p.pid], v.vid))
+      .map((v) => ({ producto: p.name, talle: v.size, sistema: sistemaDe(state[p.pid], v) }))
+      .filter((x) => x.sistema > 0),
+  )
   const sinCargarConStock = productos.filter(
     (p) => estadoDe(state, p.pid) !== 'terminado' && !productoTocado(state[p.pid], p) && p.variants.some((v) => v.esperado > 0),
   )
-  return { aTerminar, talles0, sinCargarConStock }
+  return { aTerminar, blancosConStock, sinCargarConStock }
+}
+
+/** El sistema contra el que se compara el talle: el congelado si ya se abrió, si no el del stock traído. */
+export function sistemaDe(st: CeEstadoProd | undefined, v: { vid: string; esperado: number }): number {
+  return st?.snap?.[v.vid] != null ? st.snap[v.vid] : v.esperado
 }
 
 export function terminarVarios(state: CeState, productos: CeProducto[], ahora: number): CeState {

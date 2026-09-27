@@ -53,7 +53,7 @@ describe('terminar categoría', () => {
     s = escanear(s, b, 'b_0')
     const plan = planTerminarGrupo(s, [a, b, c])
     expect(plan.aTerminar.map((p) => p.pid)).toEqual(['a', 'b'])
-    expect(plan.talles0).toBe(1) // a_1 en blanco
+    expect(plan.blancosConStock).toEqual([{ producto: 'A', talle: '1', sistema: 2 }]) // a_1 en blanco
     expect(plan.sinCargarConStock).toEqual([])
     const fin = terminarVarios(s, plan.aTerminar, 1)
     expect(fin.a.dif).toEqual({ a_0: 0, a_1: -2 })
@@ -111,5 +111,17 @@ describe('lo que canta la voz al escanear', () => {
     s = escanear(s, b, 'b_0')
     s = escanear(s, st, 's_0')
     expect(totalEscaneados(s, [a, b, st], 'zattia')).toBe(3)
+  })
+})
+
+describe('el aviso de los blancos', () => {
+  it('solo los que el sistema dice que tienen stock', () => {
+    const a: CeProducto = { pid: 'a', name: 'A', linea: 'zattia', variants: [
+      { vid: 'a_0', sid: 0, size: '34', sku: 'RJE-1-34', inventory_id: 1, esperado: 1 },
+      { vid: 'a_1', sid: 1, size: '36', sku: 'RJE-1-36', inventory_id: 2, esperado: 0 },
+      { vid: 'a_2', sid: 2, size: '38', sku: 'RJE-1-38', inventory_id: 3, esperado: 2 },
+    ] }
+    const s = cargarDeposito({}, a, 'a_0', '1')
+    expect(planTerminarGrupo(s, [a]).blancosConStock).toEqual([{ producto: 'A', talle: '38', sistema: 2 }])
   })
 })

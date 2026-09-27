@@ -19,6 +19,7 @@ import {
   normBc,
   planTerminarGrupo,
   resolverScan,
+  sistemaDe,
   totalEscaneados,
   setDeposito,
   setExhibido,
@@ -178,18 +179,29 @@ export function ConteoEstandar() {
     if (plan.aTerminar.length) {
       const ok = await confirmar({
         titulo: `Terminar ${grupo}`,
-        tono: plan.talles0 ? 'warning' : undefined,
+        tono: plan.blancosConStock.length ? 'warning' : undefined,
         ok: `Terminar ${plan.aTerminar.length}`,
         mensaje: (
-          <p>
-            Se terminan <b>{plan.aTerminar.length}</b> {plan.aTerminar.length === 1 ? 'producto' : 'productos'} con algo cargado.
-            {plan.talles0 ? (
+          <>
+            <p>
+              Se terminan <b>{plan.aTerminar.length}</b> {plan.aTerminar.length === 1 ? 'producto' : 'productos'} con algo cargado.
+            </p>
+            {plan.blancosConStock.length > 0 && (
               <>
-                {' '}
-                <b>{plan.talles0}</b> {plan.talles0 === 1 ? 'talle quedó' : 'talles quedaron'} en blanco y cuentan como 0.
+                <p style={{ marginTop: space[2] }}>
+                  ⚠️ {plan.blancosConStock.length === 1 ? 'Este talle quedó' : 'Estos talles quedaron'} en blanco y el sistema dice que hay: <b>van a quedar en 0</b>.
+                </p>
+                <ul style={{ marginTop: space[1], paddingLeft: 18, fontSize: font.sm }}>
+                  {plan.blancosConStock.slice(0, 25).map((x, i) => (
+                    <li key={i}>
+                      {x.producto} · <b>{x.talle}</b> — el sistema dice {x.sistema}
+                    </li>
+                  ))}
+                  {plan.blancosConStock.length > 25 && <li>y {plan.blancosConStock.length - 25} más</li>}
+                </ul>
               </>
-            ) : null}
-          </p>
+            )}
+          </>
         ),
       })
       if (!ok) return
@@ -232,13 +244,14 @@ export function ConteoEstandar() {
   }
   const onFinish = async (prod: CeProducto) => {
     const st = state[prod.pid]
-    const sinCargar = prod.variants.filter((v) => !(st && ((st.exhibido[v.vid] || 0) > 0 || st.deposito[v.vid] != null))).length
-    if (sinCargar) {
+    // Sólo avisa por los blancos con stock en el sistema: un blanco con sistema 0 no cambia nada.
+    const blancos = prod.variants.filter((v) => !(st && ((st.exhibido[v.vid] || 0) > 0 || st.deposito[v.vid] != null)) && sistemaDe(st, v) > 0)
+    if (blancos.length) {
       const ok = await confirmar({
-        titulo: 'Hay talles sin tocar',
+        titulo: 'Hay talles en blanco con stock',
         tono: 'warning',
         ok: 'Terminar igual',
-        mensaje: `Quedan ${sinCargar} ${sinCargar === 1 ? 'talle' : 'talles'} sin cargar. Al terminar se toman como 0, o sea faltante total contra el sistema.`,
+        mensaje: `Van a quedar en 0: ${blancos.map((v) => `${v.size} (el sistema dice ${sistemaDe(st, v)})`).join(', ')}.`,
       })
       if (!ok) return
     }
@@ -329,12 +342,32 @@ export function ConteoEstandar() {
         hoja: 'Worksheet',
         anchos: ANCHOS_AJUSTE,
       })
-      try {
-        await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
-        await ce.refrescarUltimos()
-      } catch {
-        /* si falla el historial, el Excel ya se generó */
+      // 🔴 El Excel ya salió; si el historial falla, antes se tragaba el error en silencio y el
+      // reporte «Para colgar» quedaba con el guardado anterior sin que nadie lo supiera (conteo de
+      // jeans, 27-sep-2026). Ahora se avisa y se puede reintentar, y no se ofrece limpiar: limpiar
+      // sin haber guardado es perder el conteo.
+      let guardado = false
+      for (;;) {
+        try {
+          await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
+          guardado = true
+          break
+        } catch (e) {
+          const otra = await confirmar({
+            titulo: 'El conteo NO quedó guardado',
+            tono: 'danger',
+            ok: 'Reintentar',
+            cancelar: 'Seguir sin guardar',
+            mensaje: `El Excel se generó bien, pero no se pudo guardar en el historial (${(e as Error).message}). Sin guardar, el reporte «Para colgar» y el historial no lo van a tener.`,
+          })
+          if (!otra) break
+        }
       }
+      if (!guardado) {
+        toast.error('Excel generado, pero el conteo no quedó guardado en el historial.')
+        return
+      }
+      await ce.refrescarUltimos()
       toast.ok(`Excel generado (${preview.rows.length} ${preview.rows.length === 1 ? 'línea' : 'líneas'}) y conteo guardado. Subilo a GN → "Importar y Ajustar".`)
       const limpiar = await confirmar({
         titulo: 'Conteo guardado',

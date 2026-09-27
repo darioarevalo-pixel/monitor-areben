@@ -28,10 +28,21 @@ export type GuardarConteo = {
   detalle: Array<Record<string, unknown>>
 }
 
+/**
+ * 🔴 Tira error si el servidor no lo guardó. Antes no miraba la respuesta: un 500 o un 403 se
+ * daban por buenos y la pantalla decía «conteo guardado» (27-sep-2026, conteo de jeans).
+ */
 export async function guardarConteo(payload: GuardarConteo): Promise<void> {
-  await apiFetch('/api/deposito?recurso=conteos', {
+  const r = await apiFetch('/api/deposito?recurso=conteos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+  let d: { ok?: boolean; error?: string } | null = null
+  try {
+    d = await r.json()
+  } catch {
+    /* respuesta sin JSON */
+  }
+  if (!r.ok || !d || !d.ok) throw new Error((d && d.error) || `el servidor respondió ${r.status}`)
 }
