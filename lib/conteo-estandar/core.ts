@@ -423,3 +423,18 @@ export const NOMBRES_CATEGORIA: Record<string, string> = {
 export function nombreGrupo(grupo: string): string {
   return NOMBRES_CATEGORIA[grupo] || ''
 }
+
+/**
+ * Cuántas prendas se escanearon en el salón en toda la línea: el número que canta la voz.
+ * 🔑 Es el AVANCE del recorrido, igual que en el Chequeo de exhibición (`lib/exhib/aviso.ts`),
+ * ⛔ no cuántas van de ese talle: lo que le importa a quien escanea es saber que el escaneo entró
+ * sin mirar el teléfono, y un número que sube siempre es esa confirmación (Bruno, 27-sep-2026).
+ * Sale de sumar lo guardado, así una corrección a mano en Exhib. también se refleja.
+ */
+export function totalEscaneados(state: CeState, products: CeProducto[], linea: Linea): number {
+  return products.reduce((n, p) => {
+    if (p.linea !== linea) return n
+    const ex = state[p.pid]?.exhibido || {}
+    return n + Object.values(ex).reduce((m, x) => m + (Number(x) || 0), 0)
+  }, 0)
+}

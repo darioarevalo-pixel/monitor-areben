@@ -98,3 +98,18 @@ describe('ponerlos en 0', () => {
     expect(fin.a.dif).toEqual({ a_0: -1, a_1: -1 })
   })
 })
+
+describe('lo que canta la voz al escanear', () => {
+  it('el total de la línea, que sube también en el repetido', async () => {
+    const { totalEscaneados } = await import('@/lib/conteo-estandar/core')
+    const a = prod('a', 'A', ['RTO-1-S'], 1)
+    const b = prod('b', 'B', ['RTO-2-S'], 1)
+    const st = { ...prod('s', 'S', ['STU-REM-1-S'], 1), linea: 'stunned' as const }
+    let s = escanear({}, a, 'a_0')
+    expect(totalEscaneados(s, [a, b, st], 'zattia')).toBe(1)
+    s = escanear(s, a, 'a_0')
+    s = escanear(s, b, 'b_0')
+    s = escanear(s, st, 's_0')
+    expect(totalEscaneados(s, [a, b, st], 'zattia')).toBe(3)
+  })
+})

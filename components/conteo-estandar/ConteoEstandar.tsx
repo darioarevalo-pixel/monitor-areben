@@ -19,6 +19,7 @@ import {
   normBc,
   planTerminarGrupo,
   resolverScan,
+  totalEscaneados,
   setDeposito,
   setExhibido,
   terminar,
@@ -30,6 +31,7 @@ import type { CePreview, CeProducto, CeState, Linea } from '@/lib/conteo-estanda
 import { ordenarModelo } from '@/lib/conteo-deposito/core'
 import { useConteoEstandar } from './useConteoEstandar'
 import { avisar as avisarSonido, prepararSonido } from '@/lib/sonido'
+import { enPalabras } from '@/lib/exhib/aviso'
 import { DepositoLocal } from './DepositoLocal'
 import { ReporteColgar } from './ReporteColgar'
 import { HeaderAcciones } from '@/components/layout/acciones'
@@ -60,7 +62,7 @@ import {
 
 type Vista = 'lista' | 'foco' | 'preview' | 'historial' | 'deposito' | 'colgar'
 type Filtro = 'todos' | 'sin_previo' | 'contados' | 'en_progreso' | 'terminado'
-type Feedback = { tipo: 'ok' | 'error' | 'warn'; texto: string; size?: string; count?: number }
+type Feedback = { tipo: 'ok' | 'error' | 'warn'; texto: string; size?: string; count?: number; total?: number }
 
 // Fuera del componente: el lint de pureza marca `Date.now()` adentro de un handler que se pasa por props.
 const ahora = () => Date.now()
@@ -120,8 +122,8 @@ export function ConteoEstandar() {
     if (!bc) return
     const vid = resolverScan(byBc, raw)
     if (!vid) {
-      setFeedback({ tipo: 'error', texto: 'Código desconocido: ' + bc })
-      avisarSonido('no', 'no figura')
+      setFeedback({ tipo: 'error', texto: 'Código desconocido: ' + bc + ' — pasala de nuevo' })
+      avisarSonido('no', 'de nuevo')
       return
     }
     const pid = vid.split('_')[0]
@@ -132,23 +134,17 @@ export function ConteoEstandar() {
       avisarSonido('mira', 'otra línea')
       return
     }
-    const yaEscaneado = (state[pid]?.exhibido?.[vid] || 0) > 0
     const next = escanear(state, prod, vid)
     ce.aplicar(next)
     if (!inicio) ce.setInicio(Date.now())
     const v = prod.variants.find((x) => x.vid === vid)
     const count = next[pid].exhibido[vid]
-    if (yaEscaneado) {
-      // Re-escaneo de un talle ya contado: puede ser una 2ª unidad real o un doble
-      // escaneo por error. Se suma igual, pero avisa para que se note.
-      setFeedback({ tipo: 'warn', texto: `Ojo: ${prod.name}${v?.size ? ' · ' + v.size : ''} ya estaba escaneado — ahora van ${count}. Si es otra unidad, todo bien.`, size: v?.size, count })
-    } else {
-      setFeedback({ tipo: 'ok', texto: prod.name, size: v?.size, count })
-    }
-    // Los mismos avisos que el Chequeo de exhibición (`lib/sonido.ts`): quien escanea no mira el
-    // teléfono. La voz dice cuántas van de ESE talle; el tono medio = el sistema lo tiene en 0.
-    const sis = next[pid].snap[vid] ?? v?.esperado ?? 0
-    avisarSonido(sis <= 0 ? 'ojo' : yaEscaneado ? 'suma' : 'ok', String(count))
+    const total = totalEscaneados(next, products, linea)
+    setFeedback({ tipo: 'ok', texto: prod.name, size: v?.size, count, total })
+    // La misma regla que el Chequeo de exhibición (`lib/exhib/aviso.ts`): entró = pitido corto + el
+    // TOTAL del recorrido, que sube siempre (también en el repetido: es una prenda más que pasó por
+    // el lector). ⛔ No se canta cuántas van del talle: con 400 prendas eran 400 «uno».
+    avisarSonido('ok', enPalabras(total))
     scanRef.current?.focus()
   }
 
@@ -602,9 +598,8 @@ function ScanBox({ scanRef, feedback, onScan }: { scanRef: React.RefObject<HTMLI
                 <b>{feedback.size}</b>
               </>
             ) : null}
-            <div style={{ fontSize: font.base, marginTop: 2 }}>
-              escaneados de este talle: <b style={{ fontSize: 28, verticalAlign: 'middle' }}>{feedback.count}</b>
-            </div>
+            <div style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.1, marginTop: 4 }}>{feedback.total}</div>
+            <div style={{ fontSize: font.sm }}>escaneadas en total{feedback.count && feedback.count > 1 ? ` · de este talle van ${feedback.count}` : ''}</div>
           </>
         ) : (
           (feedback.tipo === 'error' ? '❓ ' : '⚠️ ') + feedback.texto

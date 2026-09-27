@@ -17,7 +17,7 @@
  * distintas. Escribir una tercera era garantizar que «el pitido de error» quiera decir una cosa
  * distinta en cada pantalla del local.
  * ✅ `ConteoEstandar.tsx` ya se trajo (26-sep-2026, lo pidió Bruno para el conteo del local de la
- * feria): la voz dice cuántas van de ese talle. ▶️ **`ConteoLocalBdi.tsx` sigue con lo suyo.**
+ * feria), con la regla de `lib/exhib/aviso.ts`: la voz canta el total del recorrido. ▶️ **`ConteoLocalBdi.tsx` sigue con lo suyo.**
  * Lo que sigue se escribió cuando eran las dos: ⛔ No se hizo en el mismo commit a
  * propósito: son las pantallas que **ajustan stock**, tienen su propia ficha
  * (`docs/secciones/conteo-deposito.md`) y el sonido les cambiaría de un día para el otro a quien ya
