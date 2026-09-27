@@ -19,6 +19,8 @@ create table if not exists conteo_no_va (
   primary key (store, clave)
 );
 
--- Igual que las demás tablas del monitor: el gate es el login server-side del endpoint
--- (service key), no RLS.
-alter table conteo_no_va disable row level security;
+-- RLS PRENDIDO y sin políticas: la anon key no ve nada. El endpoint escribe con la service key
+-- (ZATTIA_SUPABASE_SERVICE_KEY, cargada en Vercel), que se saltea RLS; el gate es su login
+-- server-side. (27-sep-2026: el SQL Editor avisó que la versión que lo apagaba dejaba la tabla
+-- abierta a la anon key, y tenía razón.)
+alter table conteo_no_va enable row level security;
