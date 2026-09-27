@@ -212,6 +212,7 @@ export function ConteoEstandar() {
     let enCero: CeProducto[] = []
     if (faltan.length) {
       const unidades = faltan.reduce((n, p) => n + p.variants.reduce((m, v) => m + Math.max(0, v.esperado), 0), 0)
+      const negativos = faltan.filter((p) => p.variants.some((v) => v.esperado < 0)).length
       const cero = await confirmar({
         titulo: `${faltan.length} ${faltan.length === 1 ? 'producto' : 'productos'} de ${grupo} sin cargar`,
         tono: 'warning',
@@ -220,7 +221,8 @@ export function ConteoEstandar() {
         mensaje: (
           <>
             <p>
-              El sistema dice que {faltan.length === 1 ? 'tiene' : 'tienen'} stock (<b>{unidades}</b> {unidades === 1 ? 'unidad' : 'unidades'} en total) y no se les cargó nada, ni en el salón ni en el depósito.
+              El sistema dice que {faltan.length === 1 ? 'tiene' : 'tienen'} stock (<b>{unidades}</b> {unidades === 1 ? 'unidad' : 'unidades'} en total
+              {negativos ? <>, y <b>{negativos}</b> con stock negativo</> : null}) y no se les cargó nada, ni en el salón ni en el depósito.
             </p>
             <p style={{ marginTop: space[2] }}>
               Si los buscaste y no están, <b>ponelos en 0</b>: se terminan como faltantes y el ajuste los descuenta. Si no los buscaste todavía, dejalos como están.
@@ -245,7 +247,7 @@ export function ConteoEstandar() {
   const onFinish = async (prod: CeProducto) => {
     const st = state[prod.pid]
     // Sólo avisa por los blancos con stock en el sistema: un blanco con sistema 0 no cambia nada.
-    const blancos = prod.variants.filter((v) => !(st && ((st.exhibido[v.vid] || 0) > 0 || st.deposito[v.vid] != null)) && sistemaDe(st, v) > 0)
+    const blancos = prod.variants.filter((v) => !(st && ((st.exhibido[v.vid] || 0) > 0 || st.deposito[v.vid] != null)) && sistemaDe(st, v) !== 0)
     if (blancos.length) {
       const ok = await confirmar({
         titulo: 'Hay talles en blanco con stock',

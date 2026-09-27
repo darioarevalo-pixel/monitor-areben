@@ -143,3 +143,13 @@ describe('candado del ajuste', () => {
     expect(pv.missing).toEqual([{ prod: 'TOP', size: 'M' }])
   })
 })
+
+describe('stock negativo', () => {
+  it('aparece en la lista, en el aviso y se corrige a lo contado', async () => {
+    const { visiblesDeGrupo } = await import('@/lib/conteo-estandar/core')
+    const neg = prod('n', 'NEG', ['RTO-9-S'], -1)
+    expect(visiblesDeGrupo({}, [neg]).map((p) => p.pid)).toEqual(['n'])
+    expect(planTerminarGrupo({}, [neg]).sinCargarConStock.map((p) => p.pid)).toEqual(['n'])
+    expect(terminarVarios({}, [neg], 1).n.dif).toEqual({ n_0: 1 }) // 0 contado − (−1)
+  })
+})

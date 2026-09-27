@@ -364,10 +364,10 @@ export function planTerminarGrupo(state: CeState, productos: CeProducto[]) {
     p.variants
       .filter((v) => !tocada(state[p.pid], v.vid))
       .map((v) => ({ producto: p.name, talle: v.size, sistema: sistemaDe(state[p.pid], v) }))
-      .filter((x) => x.sistema > 0),
+      .filter((x) => x.sistema !== 0),
   )
   const sinCargarConStock = productos.filter(
-    (p) => estadoDe(state, p.pid) !== 'terminado' && !productoTocado(state[p.pid], p) && p.variants.some((v) => v.esperado > 0),
+    (p) => estadoDe(state, p.pid) !== 'terminado' && !productoTocado(state[p.pid], p) && tieneStock(p),
   )
   return { aTerminar, blancosConStock, sinCargarConStock }
 }
@@ -381,9 +381,12 @@ export function terminarVarios(state: CeState, productos: CeProducto[], ahora: n
   return productos.reduce((s, p) => terminar(s, p, ahora), state)
 }
 
-/** ¿El sistema dice que hay stock en algún talle? */
+/**
+ * ¿El sistema tiene algo que corregir en algún talle? Stock positivo **o negativo**: un −1 siempre
+ * está mal, y si no aparecía en la lista nadie lo terminaba y quedaba en −1 (Bruno, 27-sep-2026).
+ */
 export function tieneStock(p: CeProducto): boolean {
-  return p.variants.some((v) => v.esperado > 0)
+  return p.variants.some((v) => v.esperado !== 0)
 }
 
 /**
