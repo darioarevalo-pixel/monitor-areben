@@ -11,7 +11,7 @@ import { leerNoVa, marcarNoVa } from '@/lib/conteo-estandar/no-va'
 import { Button, Chips, EmptyState, Esqueleto, Notice, color, font, space, useToast } from '@/components/ui'
 
 type Marca_ = 'ok' | 'no'
-type Filtro = 'pendientes' | 'colgados' | 'no_van' | 'sin_unidades'
+type Filtro = 'pendientes' | 'colgados' | 'no_van'
 
 const claveLs = (marca: Marca, linea: Linea, dia: string) => `monitor_colgar_${marca}_${linea}_${dia}`
 function leerMarcas(k: string): Record<string, Marca_> {
@@ -29,6 +29,10 @@ const fechaLarga = (dia: string) => {
 }
 
 /**
+ * ⛔ «Sin unidades» (ni en el salón ni en el depósito) se sacó de la pantalla el 27-sep-2026: a
+ * Bruno no le sirve —lo que no está se corrige en el AJUSTE, no colgando—. `armarReporte` lo sigue
+ * devolviendo por si otro uso lo pide.
+ *
  * «Para colgar»: después del conteo, cada talle y color de lo contado que no está en el salón.
  * La lógica es `lib/conteo-estandar/reporte.ts`; acá se elige el día, se marca a mano lo que a
  * propósito no va colgado («No va») y lo que se va reponiendo («Colgado ✓»), y se baja el Excel.
@@ -123,7 +127,7 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
   const pend = rep.paraColgar.filter((f) => !marcaDe(f.key))
   const colg = rep.paraColgar.filter((f) => marcaDe(f.key) === 'ok')
   const noVan = rep.paraColgar.filter((f) => marcaDe(f.key) === 'no')
-  const lista = filtro === 'pendientes' ? pend : filtro === 'colgados' ? colg : filtro === 'no_van' ? noVan : rep.sinUnidades
+  const lista = filtro === 'pendientes' ? pend : filtro === 'colgados' ? colg : noVan
 
   const bajarExcel = async () => {
     const filas = [
@@ -164,7 +168,7 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
       </div>
 
       <Notice tone="neutral" icon="🧥" style={{ marginBottom: space[3] }}>
-        Se contaron <b>{rep.productos}</b> productos ({rep.variantes} talles y colores). Sin colgar: <b>{rep.paraColgar.length}</b> con unidades en el depósito y <b>{rep.sinUnidades.length}</b> sin unidades.
+        Se contaron <b>{rep.productos}</b> productos ({rep.variantes} talles y colores). Sin colgar y con unidades en el depósito: <b>{rep.paraColgar.length}</b>.
       </Notice>
 
       <div style={{ marginBottom: space[3] }}>
@@ -175,21 +179,15 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
             { key: 'pendientes', label: 'Para colgar', n: pend.length },
             { key: 'colgados', label: 'Colgados', n: colg.length },
             { key: 'no_van', label: 'No van', n: noVan.length },
-            { key: 'sin_unidades', label: 'Sin unidades', n: rep.sinUnidades.length, title: 'No están ni en el salón ni en el depósito: no hay qué colgar' },
           ]}
         />
       </div>
 
-      {filtro === 'sin_unidades' && (
-        <Notice tone="warning" icon="ℹ️" style={{ marginBottom: space[3] }}>
-          No están en el salón ni en el depósito del local: no hay qué colgar. Si tendrían que estar, hay que traerlos del depósito central o reponerlos.
-        </Notice>
-      )}
 
       {!lista.length ? (
         <EmptyState icon={filtro === 'pendientes' ? '🎉' : '—'} title={filtro === 'pendientes' ? 'No queda nada para colgar' : 'Nada por acá'} dashed />
       ) : (
-        <ListaColgar filas={lista} marcaDe={marcaDe} conBotones={filtro !== 'sin_unidades'} onMarcar={marcar} />
+        <ListaColgar filas={lista} marcaDe={marcaDe} conBotones onMarcar={marcar} />
       )}
     </div>
   )
