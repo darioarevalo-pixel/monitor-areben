@@ -30,8 +30,9 @@
 import conteos from './_conteos-deposito.js';
 import inventario from './_inventario-vivo.js';
 import observaciones from './_observaciones.js';
+import noVa from './_conteo-no-va.js';
 
-const RECURSOS = { conteos, inventario, observaciones };
+const RECURSOS = { conteos, inventario, observaciones, 'no-va': noVa };
 
 /**
  * 🔴 **Esto vivía en `api/_inventario-vivo.js:107` y NO se estaba aplicando.**

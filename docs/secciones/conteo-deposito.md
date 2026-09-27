@@ -62,7 +62,10 @@ los haya buscado.
 **«🧥 Para colgar»** (`lib/conteo-estandar/reporte.ts` + `ReporteColgar.tsx`): regla de Bruno,
 **uno exhibido por talle y color**. Sale del HISTORIAL del día (el `detalle` con exhibido y
 depósito por variante), no del conteo en curso, así sobrevive a «Reiniciar». Las marcas «No va» /
-«Colgado ✓» viven en el `localStorage` del dispositivo, por día y línea. Desde el 26-sep el
+«Colgado ✓» del día viven en el `localStorage` del dispositivo, por día y línea. **«No va» se
+recuerda entre conteos**, por variante, en la tabla `conteo_no_va` (`sql/migrate-conteo-no-va.sql`,
+se corre a mano en el SQL Editor) vía `api/_conteo-no-va.js` (`?recurso=no-va` de `api/deposito.js`).
+Sin la tabla, cae al teléfono y la pantalla lo avisa. Desde el 26-sep el
 `detalle` guarda también el `sku`; para los conteos anteriores lo busca en el stock actual.
 
 ## Lo que ya se rompió acá

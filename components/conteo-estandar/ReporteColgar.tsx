@@ -7,6 +7,7 @@ import type { ConteoHistorial } from '@/lib/conteo-deposito/tipos'
 import { armarReporte, diasConReporte, type FilaColgar } from '@/lib/conteo-estandar/reporte'
 import type { CeProducto, Linea } from '@/lib/conteo-estandar/tipos'
 import { descargarXlsx } from '@/lib/excel'
+import { leerNoVa, marcarNoVa } from '@/lib/conteo-estandar/no-va'
 import { Button, Chips, EmptyState, Esqueleto, Notice, color, font, space, useToast } from '@/components/ui'
 
 type Marca_ = 'ok' | 'no'
@@ -32,8 +33,9 @@ const fechaLarga = (dia: string) => {
  * La lógica es `lib/conteo-estandar/reporte.ts`; acá se elige el día, se marca a mano lo que a
  * propósito no va colgado («No va») y lo que se va reponiendo («Colgado ✓»), y se baja el Excel.
  *
- * ⚠️ Las marcas viven en el `localStorage` de este dispositivo, por día y línea: sirven para ir
- * tildando mientras se repone, no se comparten entre teléfonos.
+ * «No va» se recuerda entre conteos, por variante y en el servidor (`lib/conteo-estandar/no-va.ts`).
+ * «Colgado ✓» es del día: vive en el `localStorage` de este dispositivo, por día y línea, y sirve
+ * para ir tildando mientras se repone.
  */
 export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca; linea: Linea; feed: CeProducto[]; lineaLabel: string }) {
   const toast = useToast()
@@ -60,16 +62,50 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
   const clave = diaSel ? claveLs(marca, linea, diaSel) : ''
   const marcas = useMemo(() => (clave ? leerMarcas(clave) : {}), [clave, version]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const marcar = (key: string, m: Marca_) => {
-    const next = { ...marcas }
-    if (next[key] === m) delete next[key]
-    else next[key] = m
+  // «No va» se recuerda entre conteos (por variante, en el servidor); «Colgado ✓» es del día.
+  const [noVa, setNoVa] = useState<{ claves: Set<string>; enServidor: boolean } | null>(null)
+  useEffect(() => {
+    let vivo = true
+    void leerNoVa(marca).then((r) => vivo && setNoVa(r))
+    return () => {
+      vivo = false
+    }
+  }, [marca])
+
+  const marcaDe = (key: string): Marca_ | undefined => (noVa?.claves.has(key) ? 'no' : marcas[key] === 'ok' ? 'ok' : undefined)
+
+  const guardarDia = (next: Record<string, Marca_>) => {
     try {
       localStorage.setItem(clave, JSON.stringify(next))
     } catch {
       /* sin almacenamiento: la marca no queda */
     }
     setVersion((v) => v + 1)
+  }
+  const cambiarNoVa = (f: FilaColgar, activo: boolean) => {
+    setNoVa((prev) => {
+      const claves = new Set(prev?.claves || [])
+      if (activo) claves.add(f.key)
+      else claves.delete(f.key)
+      return { claves, enServidor: prev?.enServidor ?? false }
+    })
+    void marcarNoVa(marca, { clave: f.key, producto: f.producto, variante: f.variante, sku: f.sku }, activo).then((ok) => {
+      if (!ok) setNoVa((prev) => (prev ? { ...prev, enServidor: false } : prev))
+    })
+  }
+  const marcar = (f: FilaColgar, m: Marca_) => {
+    const actual = marcaDe(f.key)
+    const dia = { ...marcas }
+    if (m === 'no') {
+      delete dia[f.key]
+      guardarDia(dia)
+      cambiarNoVa(f, actual !== 'no')
+      return
+    }
+    if (actual === 'no') cambiarNoVa(f, false)
+    if (actual === 'ok') delete dia[f.key]
+    else dia[f.key] = 'ok'
+    guardarDia(dia)
   }
 
   if (hist.cargando) return <Esqueleto forma="tabla" filas={6} />
@@ -84,9 +120,9 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
       />
     )
 
-  const pend = rep.paraColgar.filter((f) => !marcas[f.key])
-  const colg = rep.paraColgar.filter((f) => marcas[f.key] === 'ok')
-  const noVan = rep.paraColgar.filter((f) => marcas[f.key] === 'no')
+  const pend = rep.paraColgar.filter((f) => !marcaDe(f.key))
+  const colg = rep.paraColgar.filter((f) => marcaDe(f.key) === 'ok')
+  const noVan = rep.paraColgar.filter((f) => marcaDe(f.key) === 'no')
   const lista = filtro === 'pendientes' ? pend : filtro === 'colgados' ? colg : filtro === 'no_van' ? noVan : rep.sinUnidades
 
   const bajarExcel = async () => {
@@ -105,8 +141,14 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
     <div style={{ maxWidth: 720 }}>
       <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
         De lo que se contó, cada talle y color que <b>no está colgado en el salón</b>. En el local tiene que haber uno exhibido de cada uno. Marcá <b>No va</b> en lo que a propósito no se cuelga y{' '}
-        <b>Colgado ✓</b> a medida que lo reponen. Está en el orden del depósito.
+        <b>Colgado ✓</b> a medida que lo reponen. Está en el orden del depósito. Lo que marques <b>No va</b> se recuerda para los próximos conteos.
       </p>
+
+      {noVa && !noVa.enServidor && (
+        <Notice tone="warning" icon="📱" style={{ marginBottom: space[3] }}>
+          Por ahora los <b>No va</b> quedan guardados solo en este teléfono.
+        </Notice>
+      )}
 
       <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
         <select className="mo-input" value={diaSel} onChange={(e) => setDia(e.target.value)} aria-label="Día del conteo" style={{ height: 44, fontSize: 16, flex: 1, minWidth: 200 }}>
@@ -147,18 +189,18 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
       {!lista.length ? (
         <EmptyState icon={filtro === 'pendientes' ? '🎉' : '—'} title={filtro === 'pendientes' ? 'No queda nada para colgar' : 'Nada por acá'} dashed />
       ) : (
-        <ListaColgar filas={lista} marcas={marcas} conBotones={filtro !== 'sin_unidades'} onMarcar={marcar} />
+        <ListaColgar filas={lista} marcaDe={marcaDe} conBotones={filtro !== 'sin_unidades'} onMarcar={marcar} />
       )}
     </div>
   )
 }
 
-function ListaColgar({ filas, marcas, conBotones, onMarcar }: { filas: FilaColgar[]; marcas: Record<string, Marca_>; conBotones: boolean; onMarcar: (key: string, m: Marca_) => void }) {
+function ListaColgar({ filas, marcaDe, conBotones, onMarcar }: { filas: FilaColgar[]; marcaDe: (key: string) => Marca_ | undefined; conBotones: boolean; onMarcar: (f: FilaColgar, m: Marca_) => void }) {
   return (
     <div style={{ background: color.surface, border: `1px solid ${color.line}`, borderRadius: 'var(--mo-r-xl)', overflow: 'hidden' }}>
       {filas.map((f, i) => {
         const titulo = i === 0 || f.grupo !== filas[i - 1].grupo
-        const m = marcas[f.key]
+        const m = marcaDe(f.key)
         return (
           <div key={f.key}>
             {titulo && (
@@ -185,10 +227,10 @@ function ListaColgar({ filas, marcas, conBotones, onMarcar }: { filas: FilaColga
               </div>
               {conBotones && (
                 <div style={{ display: 'flex', gap: space[2] }}>
-                  <Button size="sm" variant={m === 'no' ? 'solid' : 'outline'} tone="neutral" onClick={() => onMarcar(f.key, 'no')}>
+                  <Button size="sm" variant={m === 'no' ? 'solid' : 'outline'} tone="neutral" onClick={() => onMarcar(f, 'no')}>
                     No va
                   </Button>
-                  <Button size="sm" variant={m === 'ok' ? 'solid' : 'outline'} tone="success" onClick={() => onMarcar(f.key, 'ok')}>
+                  <Button size="sm" variant={m === 'ok' ? 'solid' : 'outline'} tone="success" onClick={() => onMarcar(f, 'ok')}>
                     Colgado ✓
                   </Button>
                 </div>
