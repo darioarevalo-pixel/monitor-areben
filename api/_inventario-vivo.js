@@ -63,12 +63,15 @@ function _pickReal(a, b) {
   if (as !== bs) return as ? a : b;
   return Number(a.inventory_id) <= Number(b.inventory_id) ? a : b;
 }
-async function fetchInventarioCompleto(storeId, token) {
+async function fetchInventarioCompleto(storeId, token, budgetMs = 10000) {
   const base = `inventario/obtener?per_page=200&store_id=${storeId}`; // 200 es lo que GN soporta bien
   const byKey = new Map();
   const MAX_PASSES = 2;      // el espejo garantiza la lista completa; el vivo aporta stock fresco + inventory_id
   const start = Date.now();
-  const BUDGET_MS = 10000;   // tope de la lectura completa; deja margen para el relleno puntual y no timeoutear
+  // Tope de la lectura completa. 🔴 Con 10 s el Local de Zattia (~2.200 talles, ~11 páginas a ~1,6 s
+  // cada una) se cortaba en la página 6: volvían 1.200 en vivo y 977 del espejo, que el ajuste no
+  // puede usar (conteo del 27-sep-2026: 10 tops quedaron en −1). Lo decide el handler según el tiempo.
+  const BUDGET_MS = budgetMs;
   const vencido = () => (Date.now() - start) > BUDGET_MS;
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const before = byKey.size;
@@ -159,7 +162,10 @@ export default async function handler(req, res) {
 
   try {
     // Varias pasadas + unión por variante → nunca falta una (la paginación de GN es inestable). Ya viene deduplicado.
-    const rows = await fetchInventarioCompleto(storeId, token);
+    // Presupuesto total ~26 s de los 30 de `maxDuration`: la lectura completa se lleva hasta 19 s
+    // (una pasada entera del Local de Zattia) y el relleno puntual usa lo que sobre.
+    const handlerStart = Date.now();
+    const rows = await fetchInventarioCompleto(storeId, token, 19000);
     const dep = rows
       .map(r => ({
         inventory_id: r.inventory_id,   // == id_inventario del Excel de ajuste de GN
@@ -189,7 +195,7 @@ export default async function handler(req, res) {
     let fromDirecto = 0;
     const fillStart = Date.now();
     for (const pid of faltanPids) {
-      if (Date.now() - fillStart > 9000 || fromDirecto > 400) break;
+      if (Date.now() - handlerStart > 26000 || Date.now() - fillStart > 9000 || fromDirecto > 400) break;
       try {
         const vrows = await fetchProductoVivo(pid, storeId, token);
         vrows.forEach(r => { const k = r.product_id + '_' + r.size_id; if (!byKey.has(k)) { byKey.set(k, r); fromDirecto++; } });
