@@ -30,7 +30,12 @@ export type FilaColgar = {
   deposito: number
 }
 
-export type Reporte = { paraColgar: FilaColgar[]; sinUnidades: FilaColgar[]; productos: number; variantes: number }
+/**
+ * `deMas`: talles con 2 o más unidades en el salón (Bruno, 27-sep-2026). ⚠️ El conteo registra
+ * UNIDADES, no percheros: puede ser el mismo talle colgado dos veces o un doble escaneo — y en ese
+ * caso el stock quedó con una de más. Es para ir a mirar, no para corregir solo.
+ */
+export type Reporte = { paraColgar: FilaColgar[]; sinUnidades: FilaColgar[]; deMas: FilaColgar[]; productos: number; variantes: number }
 
 type Fila = Record<string, unknown>
 const num = (x: unknown) => (typeof x === 'number' ? x : Number(x) || 0)
@@ -115,6 +120,7 @@ export function armarReporte(conteos: ConteoHistorial[], linea: Linea, dia: stri
   return {
     paraColgar: sinExhibir.filter((f) => f.deposito > 0),
     sinUnidades: sinExhibir.filter((f) => f.deposito <= 0),
+    deMas: filas.filter((f) => f.exhibido >= 2),
     productos: new Set(filas.map((f) => f.producto)).size,
     variantes: filas.length,
   }

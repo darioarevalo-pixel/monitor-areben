@@ -11,7 +11,7 @@ import { leerNoVa, marcarNoVa } from '@/lib/conteo-estandar/no-va'
 import { Button, Chips, EmptyState, Esqueleto, Notice, color, font, space, useToast } from '@/components/ui'
 
 type Marca_ = 'ok' | 'no'
-type Filtro = 'pendientes' | 'colgados' | 'no_van'
+type Filtro = 'pendientes' | 'colgados' | 'no_van' | 'de_mas'
 
 const claveLs = (marca: Marca, linea: Linea, dia: string) => `monitor_colgar_${marca}_${linea}_${dia}`
 function leerMarcas(k: string): Record<string, Marca_> {
@@ -127,7 +127,7 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
   const pend = rep.paraColgar.filter((f) => !marcaDe(f.key))
   const colg = rep.paraColgar.filter((f) => marcaDe(f.key) === 'ok')
   const noVan = rep.paraColgar.filter((f) => marcaDe(f.key) === 'no')
-  const lista = filtro === 'pendientes' ? pend : filtro === 'colgados' ? colg : noVan
+  const lista = filtro === 'pendientes' ? pend : filtro === 'colgados' ? colg : filtro === 'no_van' ? noVan : rep.deMas
 
   const bajarExcel = async () => {
     const filas = [
@@ -179,15 +179,22 @@ export function ReporteColgar({ marca, linea, feed, lineaLabel }: { marca: Marca
             { key: 'pendientes', label: 'Para colgar', n: pend.length },
             { key: 'colgados', label: 'Colgados', n: colg.length },
             { key: 'no_van', label: 'No van', n: noVan.length },
+            { key: 'de_mas', label: 'Colgados de más', n: rep.deMas.length, title: 'Talles con 2 o más unidades en el salón' },
           ]}
         />
       </div>
 
 
+      {filtro === 'de_mas' && rep.deMas.length > 0 && (
+        <Notice tone="warning" icon="👀" style={{ marginBottom: space[3] }}>
+          Talles con <b>2 o más unidades en el salón</b>. Puede estar colgado dos veces a propósito, o puede ser una prenda escaneada dos veces: en ese caso el stock quedó con una de más. Conviene ir a mirarlos.
+        </Notice>
+      )}
+
       {!lista.length ? (
         <EmptyState icon={filtro === 'pendientes' ? '🎉' : '—'} title={filtro === 'pendientes' ? 'No queda nada para colgar' : 'Nada por acá'} dashed />
       ) : (
-        <ListaColgar filas={lista} marcaDe={marcaDe} conBotones onMarcar={marcar} />
+        <ListaColgar filas={lista} marcaDe={marcaDe} conBotones={filtro !== 'de_mas'} onMarcar={marcar} />
       )}
     </div>
   )
@@ -215,6 +222,12 @@ function ListaColgar({ filas, marcaDe, conBotones, onMarcar }: { filas: FilaColg
                 </div>
                 <div style={{ fontSize: font.sm, color: color.ink2 }}>
                   {f.variante}
+                  {f.exhibido >= 2 && (
+                    <span style={{ color: color.warningInk }}>
+                      {' '}
+                      · <b>{f.exhibido}</b> en el salón
+                    </span>
+                  )}
                   {f.deposito > 0 && (
                     <span style={{ color: color.mut }}>
                       {' '}

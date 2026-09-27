@@ -46,3 +46,15 @@ describe('reporte para colgar', () => {
     expect(r.paraColgar[0].skuProd).toBe('RTO-0013')
   })
 })
+
+describe('colgados de más', () => {
+  it('lista los talles con 2 o más en el salón', () => {
+    const r = armarReporte(
+      [conteo('2026-09-27T15:00:00Z', [fila({ inventory_id: 1, exhibido: 2, deposito: 3 }), fila({ inventory_id: 2, variante: 'Blanco', exhibido: 1, deposito: 0 })])],
+      'zattia',
+      '2026-09-27',
+      [],
+    )
+    expect(r.deMas.map((f) => [f.variante, f.exhibido])).toEqual([['Negro', 2]])
+  })
+})
