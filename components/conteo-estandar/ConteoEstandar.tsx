@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useSesion } from '@/components/SesionProvider'
 import { esAdmin, puedeSub } from '@/lib/permisos'
-import { leerInventarioVivo } from '@/lib/inventario-vivo/cliente'
+import { leerInventarioVivo, leerVivoProductos } from '@/lib/inventario-vivo/cliente'
 import { realMap } from '@/lib/inventario-vivo/core'
 import { ANCHOS_AJUSTE, aoaAjuste } from '@/lib/conteo-deposito/core'
 import { descargarXlsx } from '@/lib/excel'
@@ -293,7 +293,24 @@ export function ConteoEstandar() {
     setAplicando(true)
     try {
       const d = await leerInventarioVivo(marca, 'local')
-      const pv = calcularAjuste(terminados, state, realMap(d.rows || []), d.store_name || 'Local', d.store || marca, stockTime, linea)
+      const vivo = realMap(d.rows || [])
+      // Lo que la lectura completa no confirmó (vino del espejo, sin inventory_id) se pide producto
+      // por producto, que es la consulta de GN que sí contesta bien.
+      const faltan = new Set<string>()
+      terminados.forEach((p) =>
+        p.variants.forEach((v) => {
+          const dif = state[String(p.pid)]?.dif?.[v.vid]
+          const live = vivo[v.vid]
+          if (dif && (!live || live.inventory_id == null)) faltan.add(String(p.pid))
+        }),
+      )
+      if (faltan.size) {
+        const extra = await leerVivoProductos(marca, 'local', [...faltan])
+        extra.forEach((r) => {
+          if (r.inventory_id != null) vivo[r.product_id + '_' + r.size_id] = r
+        })
+      }
+      const pv = calcularAjuste(terminados, state, vivo, d.store_name || 'Local', d.store || marca, stockTime, linea)
       setPreview(pv)
       setVista('preview')
     } catch (e) {

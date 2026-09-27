@@ -138,6 +138,25 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Ver el stock vivo pide acceso a alguna pantalla de conteo de esta marca.' });
   }
 
+  // 🔑 MODO PUNTUAL (`?pids=1,2,3`): sólo esos productos, consulta por consulta — la que GN contesta
+  // bien. Lo usa el ajuste de los conteos para confirmar lo que la lectura completa no llegó a
+  // traer: en el Local de Zattia la lista entera no entra en el presupuesto y el relleno de 9 s no
+  // alcanzaba (conteo de Tops, 27-sep-2026: 52 talles quedaron "sin confirmar"). Devuelve lo que
+  // llegó a leer en ~22 s y `pendientes` con lo que no, para que el cliente pida la tanda siguiente.
+  const pidsQ = String(req.query.pids || '').split(',').map(x => x.trim()).filter(x => /^\d+$/.test(x)).slice(0, 200);
+  if (pidsQ.length) {
+    const inicio = Date.now();
+    const rows = [];
+    const pendientes = [];
+    for (const pid of pidsQ) {
+      if (Date.now() - inicio > 22000) { pendientes.push(pid); continue; }
+      try { rows.push(...await fetchProductoVivo(pid, storeId, token)); } catch { pendientes.push(pid); }
+      await sleep(40);
+    }
+    const storeName = (rows.length ? rows[0].store_name : null) || (MIRROR_STORE_NAME[store] && MIRROR_STORE_NAME[store][loc]) || null;
+    return res.status(200).json({ ok: true, store, loc, store_id: storeId, store_name: storeName, count: rows.length, from_directo: rows.length, pendientes, rows });
+  }
+
   try {
     // Varias pasadas + unión por variante → nunca falta una (la paginación de GN es inestable). Ya viene deduplicado.
     const rows = await fetchInventarioCompleto(storeId, token);

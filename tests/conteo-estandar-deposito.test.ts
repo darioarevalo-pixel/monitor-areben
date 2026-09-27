@@ -125,3 +125,21 @@ describe('el aviso de los blancos', () => {
     expect(planTerminarGrupo(s, [a]).blancosConStock).toEqual([{ producto: 'A', talle: '38', sistema: 2 }])
   })
 })
+
+describe('candado del ajuste', () => {
+  it('lo contado desde el espejo entra solo si el vivo de ahora coincide con el sistema congelado', async () => {
+    const { calcularAjuste } = await import('@/lib/conteo-estandar/core')
+    const a: CeProducto = { pid: '1', name: 'TOP', linea: 'zattia', variants: [
+      { vid: '1_1', sid: 1, size: 'S', sku: 'RTO-1-S', inventory_id: null, esperado: 2 },
+      { vid: '1_2', sid: 2, size: 'M', sku: 'RTO-1-M', inventory_id: null, esperado: 3 },
+    ] }
+    const s = terminarVarios(cargarDeposito(cargarDeposito({}, a, '1_1', '1'), a, '1_2', '1'), [a], 1)
+    const vivo = {
+      '1_1': { inventory_id: 11, product_id: '1', product_name: 'TOP', size_id: '1', size_name: 'S', store_name: 'Local', available_quantity: 2 },
+      '1_2': { inventory_id: 12, product_id: '1', product_name: 'TOP', size_id: '2', size_name: 'M', store_name: 'Local', available_quantity: 5 },
+    }
+    const pv = calcularAjuste([a], s, vivo, 'Local', 'zattia', null, 'zattia')
+    expect(pv.rows.map((r) => [r.variante, r.nuevo])).toEqual([['S', 1]])
+    expect(pv.missing).toEqual([{ prod: 'TOP', size: 'M' }])
+  })
+})

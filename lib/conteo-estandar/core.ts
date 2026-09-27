@@ -147,7 +147,15 @@ export function calcularAjuste(
       const dif = st?.dif ? st.dif[v.vid] : 0
       if (!dif) return
       const live = vivo[v.vid]
-      if (!live || live.inventory_id == null || v.inventory_id == null) {
+      // 🔒 Candado: sólo se ajusta lo confirmado EN VIVO ahora (inventory_id del vivo).
+      // Si al contar el talle vino del espejo (`v.inventory_id` nulo), su «sistema» salió del espejo y
+      // la diferencia podría estar mal: se acepta sólo si el vivo de ahora coincide con ese sistema
+      // (o sea, el espejo estaba al día). Antes se descartaba siempre, y en el Local de Zattia la
+      // lectura completa no llega a todo: 52 talles de Tops quedaron afuera (27-sep-2026).
+      const sisCongelado = st?.snap ? st.snap[v.vid] : undefined
+      const confiable =
+        !!live && live.inventory_id != null && (v.inventory_id != null || (sisCongelado != null && Number(live.available_quantity) === Number(sisCongelado)))
+      if (!confiable || !live || live.inventory_id == null) {
         missing.push({ prod: p.name, size: v.size })
         return
       }

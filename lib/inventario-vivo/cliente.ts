@@ -36,3 +36,29 @@ export async function leerInventarioVivo(marca: Marca, loc?: 'local'): Promise<R
   if (!d || !d.ok) throw new Error((d && d.error) || 'No se pudo leer el stock en vivo de GN.')
   return d
 }
+
+/**
+ * Stock en vivo de productos puntuales (`?pids=`), en tandas hasta traerlos a todos o cansarse.
+ * Es la consulta confiable de GN; la usa el ajuste para confirmar lo que la lectura completa no
+ * llegó a leer. Devuelve las filas encontradas (puede faltar alguno si GN no contesta).
+ */
+export async function leerVivoProductos(marca: Marca, loc: 'local' | undefined, pids: string[]): Promise<RespuestaVivo['rows']> {
+  let pendientes = [...new Set(pids.map(String))]
+  const filas: RespuestaVivo['rows'] = []
+  for (let vuelta = 0; pendientes.length && vuelta < 8; vuelta++) {
+    const tanda = pendientes.slice(0, 60)
+    const url = `/api/deposito?recurso=inventario&store=${marca}${loc ? `&loc=${loc}` : ''}&pids=${tanda.join(',')}&nc=${Date.now()}`
+    const r = await apiFetch(url)
+    const tipo = r.headers.get('content-type') || ''
+    if (!tipo.includes('application/json')) break
+    const d = (await r.json()) as RespuestaVivo & { pendientes?: string[] }
+    if (!d || !d.ok) break
+    filas.push(...(d.rows || []))
+    const noLeidos = new Set((d.pendientes || []).map(String))
+    // Lo que quedó sin leer de esta tanda vuelve a la cola; si no avanzó nada, no insiste.
+    const resto = pendientes.slice(60)
+    if (noLeidos.size === tanda.length) break
+    pendientes = [...tanda.filter((p) => noLeidos.has(p)), ...resto]
+  }
+  return filas
+}
