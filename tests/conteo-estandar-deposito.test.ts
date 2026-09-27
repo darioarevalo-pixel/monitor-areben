@@ -89,3 +89,12 @@ describe('lo que se ve de una categoría', () => {
     expect(nombreGrupo('ZZZ')).toBe('')
   })
 })
+
+describe('ponerlos en 0', () => {
+  it('terminar un producto sin nada cargado lo deja como faltante total', () => {
+    const a = prod('a', 'A', ['RTO-1-S', 'RTO-1-M'], 1)
+    const fin = terminarVarios({}, [a], 1)
+    expect(fin.a.estado).toBe('terminado')
+    expect(fin.a.dif).toEqual({ a_0: -1, a_1: -1 })
+  })
+})

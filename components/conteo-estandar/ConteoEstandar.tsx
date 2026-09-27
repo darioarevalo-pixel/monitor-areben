@@ -174,17 +174,17 @@ export function ConteoEstandar() {
   }
   const onTerminarGrupo = async (productos: CeProducto[], grupo: string) => {
     const plan = planTerminarGrupo(state, productos)
-    if (!plan.aTerminar.length) {
-      await avisar(`En ${grupo} no hay productos con algo cargado para terminar.`)
+    const faltan = plan.sinCargarConStock
+    if (!plan.aTerminar.length && !faltan.length) {
+      await avisar(`En ${grupo} no hay productos para terminar.`)
       return
     }
-    const faltan = plan.sinCargarConStock
-    const ok = await confirmar({
-      titulo: `Terminar ${grupo}`,
-      tono: plan.talles0 || faltan.length ? 'warning' : undefined,
-      ok: `Terminar ${plan.aTerminar.length}`,
-      mensaje: (
-        <>
+    if (plan.aTerminar.length) {
+      const ok = await confirmar({
+        titulo: `Terminar ${grupo}`,
+        tono: plan.talles0 ? 'warning' : undefined,
+        ok: `Terminar ${plan.aTerminar.length}`,
+        mensaje: (
           <p>
             Se terminan <b>{plan.aTerminar.length}</b> {plan.aTerminar.length === 1 ? 'producto' : 'productos'} con algo cargado.
             {plan.talles0 ? (
@@ -194,19 +194,45 @@ export function ConteoEstandar() {
               </>
             ) : null}
           </p>
-          {faltan.length > 0 && (
-            <p style={{ marginTop: space[3] }}>
-              ⚠️ <b>{faltan.length}</b> {faltan.length === 1 ? 'producto tiene' : 'productos tienen'} stock en el sistema y no se les cargó nada: <b>no se terminan ni se ajustan</b>. Si de verdad no están,
-              abrilos y terminalos a mano: {faltan.slice(0, 8).map((p) => p.name).join(', ')}
-              {faltan.length > 8 ? ` y ${faltan.length - 8} más` : ''}.
+        ),
+      })
+      if (!ok) return
+    }
+    // 🔑 Lo que el sistema dice que hay y nadie cargó: contando el local entero, casi siempre es que
+    // no está (Bruno, 27-sep-2026). Ponerlo en 0 es una DECISIÓN aparte y explícita: cerrar el
+    // cartel lo deja como está, así nada se pone en 0 sin que alguien lo haya elegido.
+    let enCero: CeProducto[] = []
+    if (faltan.length) {
+      const unidades = faltan.reduce((n, p) => n + p.variants.reduce((m, v) => m + Math.max(0, v.esperado), 0), 0)
+      const cero = await confirmar({
+        titulo: `${faltan.length} ${faltan.length === 1 ? 'producto' : 'productos'} de ${grupo} sin cargar`,
+        tono: 'warning',
+        ok: 'Ponerlos en 0',
+        cancelar: 'Dejarlos como están',
+        mensaje: (
+          <>
+            <p>
+              El sistema dice que {faltan.length === 1 ? 'tiene' : 'tienen'} stock (<b>{unidades}</b> {unidades === 1 ? 'unidad' : 'unidades'} en total) y no se les cargó nada, ni en el salón ni en el depósito.
             </p>
-          )}
-        </>
-      ),
-    })
-    if (!ok) return
-    ce.aplicar(terminarVarios(state, plan.aTerminar, Date.now()))
-    toast.ok(`${grupo}: ${plan.aTerminar.length} ${plan.aTerminar.length === 1 ? 'producto terminado' : 'productos terminados'}`)
+            <p style={{ marginTop: space[2] }}>
+              Si los buscaste y no están, <b>ponelos en 0</b>: se terminan como faltantes y el ajuste los descuenta. Si no los buscaste todavía, dejalos como están.
+            </p>
+            <p style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
+              {faltan.slice(0, 12).map((p) => p.name).join(' · ')}
+              {faltan.length > 12 ? ` y ${faltan.length - 12} más` : ''}
+            </p>
+          </>
+        ),
+      })
+      if (cero) enCero = faltan
+    }
+    const cerrar = [...plan.aTerminar, ...enCero]
+    if (!cerrar.length) return
+    ce.aplicar(terminarVarios(state, cerrar, Date.now()))
+    toast.ok(
+      `${grupo}: ${cerrar.length} ${cerrar.length === 1 ? 'producto terminado' : 'productos terminados'}` +
+        (enCero.length ? ` (${enCero.length} en 0)` : ''),
+    )
   }
   const onFinish = async (prod: CeProducto) => {
     const st = state[prod.pid]
