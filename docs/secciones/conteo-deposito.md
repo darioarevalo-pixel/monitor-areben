@@ -81,7 +81,18 @@ tocar**, no para repetirlos.
 - 🔴 **`maxDuration` huérfano**: vivía en `_inventario-vivo.js`, y Vercel sólo lo lee del archivo de
   **ruta**. Al pasarse, Depósito ve un `SyntaxError` en vez de un mensaje. → `api/deposito.js:37`
 
+- 🔴 **La lectura completa del stock vivo se cortaba a los 10 s** y el Local de Zattia (~2.200
+  talles) volvía con la mitad desde el espejo: el candado apartaba esos talles y el ajuste los
+  dejaba sin corregir (27-sep-2026, 9 tops quedaron en −1). Ahora 19 s + relleno hasta ~26 s;
+  medido: 2.204/2.204 en vivo en 24 s. Si el Local crece mucho, vuelve a pasar. → `api/_inventario-vivo.js`
+- 🔴 **`guardarConteo` no miraba la respuesta**: un guardado fallido se daba por bueno. Ahora tira
+  error y el conteo del Local lo muestra con «Reintentar». → `lib/conteo-deposito/cliente.ts`
+
 ## Pendiente
+- ⚠️ **El GET del historial trae el `detalle` completo de 50 conteos**: con varios conteos del
+  Local entero (~300 KB cada uno) se puede pasar de los 4,5 MB de respuesta de Vercel.
+- ⚠️ **`?pids=` (consulta puntual) es lenta si GN viene de una ráfaga** (límite de pedidos por
+  minuto): el ajuste la usa sólo para lo que falte, y hoy casi nunca falta nada.
 
 - ⚠️ **`ultimosPorProducto` matchea por `pid` y, como fallback, por NOMBRE**: dos productos con el
   mismo nombre comparten fecha de último conteo. Es del legacy y todavía no mordió.
