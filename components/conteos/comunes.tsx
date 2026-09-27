@@ -94,12 +94,18 @@ export function Dato({ label, valor, tono }: { label: string; valor: number; ton
 
 /** Tabla del detalle de un conteo guardado. `conVivo` agrega las columnas del ajuste real. */
 export function TablaDetalleConteo({ filas, conVivo, unidad = 'Variante' }: { filas: Record<string, number | string | null>[]; conVivo?: boolean; unidad?: string }) {
+  // El conteo del Local guarda el desglose salón / depósito de cada talle (`registroConteo`), pero
+  // la tabla sólo mostraba el total: sin eso no se podía ver qué quedó sin colgar (Bruno,
+  // 27-sep-2026). Sólo aparece si el conteo lo trae; los otros conteos no cambian.
+  const desglose = filas.some((d) => d.exhibido != null && d.deposito != null)
   return (
     <TableWrap maxHeight={360}>
       <THead>
         <Tr>
           <Th>Producto · {unidad}</Th>
           <Th align="center">Sist.</Th>
+          {desglose && <Th align="center">Salón</Th>}
+          {desglose && <Th align="center">Dep.</Th>}
           <Th align="center">Cont.</Th>
           <Th align="center">Dif</Th>
           {conVivo && <Th align="center">Vivo</Th>}
@@ -117,6 +123,8 @@ export function TablaDetalleConteo({ filas, conVivo, unidad = 'Variante' }: { fi
               <Td align="center" style={{ color: color.mut2 }}>
                 {d.sistema != null ? d.sistema : '—'}
               </Td>
+              {desglose && <Td align="center">{d.exhibido != null ? d.exhibido : '—'}</Td>}
+              {desglose && <Td align="center">{d.deposito != null ? d.deposito : '—'}</Td>}
               <Td align="center">{d.contado != null ? d.contado : '—'}</Td>
               <Td align="center" style={{ fontWeight: 700, color: dif < 0 ? color.dangerInk : dif > 0 ? color.warningInk : color.mut2 }}>
                 {dif > 0 ? '+' : ''}
