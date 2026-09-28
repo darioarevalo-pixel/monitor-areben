@@ -19,7 +19,7 @@ window.addEventListener('message', (e) => {
     chrome.runtime.sendMessage({ tipo: 'comunidad', datos: comunidad }).catch(() => {})
     return
   }
-  ultimo = { tel: e.data.tel || null, motivo: e.data.motivo || '' }
+  ultimo = { tel: e.data.tel || null, motivo: e.data.motivo || '', nombre: e.data.nombre || '' }
   // Si el panel está cerrado no hay quien reciba esto, y Chrome lo reporta como error. No es un
   // error: es el estado normal mientras nadie lo abrió.
   chrome.runtime.sendMessage({ tipo: 'chat', ...ultimo }).catch(() => {})

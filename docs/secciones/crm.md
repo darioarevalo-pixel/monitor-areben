@@ -1028,3 +1028,26 @@ mockeado, y el HTML servido con `app/tokens.css` + `globals.css` en un ancho de 
   Agustina Herrera hace 5): la regla de Darío es que el frío cambia cuando compra, y no cambió solo.
 
 ▶️ **Falta**: lo mismo en la tabla de Clientes del monitor (prospectos adentro, mismos estados).
+
+---
+
+# ✅ 28-sep-2026 — ¿Está en la comunidad? + sugerir el cliente por el nombre agendado
+
+**La comunidad** (`BDI Accesorios Mayorista`, 567 personas ese día). `extension/pagina.js` lee los
+participantes cada 60 s y los traduce a teléfono con los contactos (sin traducir: 0) →
+`content.js` → `sidepanel.js` → `components/panel/useComunidad.ts`, que marca la ficha (verde/rojo,
+abajo del nombre) y **guarda la foto en `crm:comunidad:bdi`** (`kind=crmcomunidad` en
+`bdi-catalogo/api/ingresos.js`) si cambió o tiene más de 20 h.
+- 🔑 **No se escribe `en_difusion`.** `useCRM` cruza la foto al LEER (`lib/crm/comunidad.ts`) y la
+  columna/filtro de Clientes pasan a ser el dato real. Las 120 marcas a mano quedan en `crm:seg`.
+- 🔑 Se miran **los dos números** del cliente: el del padrón y el de `crm:tel`.
+- ⛔ La guarda contra una foto a medias es del SERVIDOR: rechaza (409) si baja más de 30% de golpe.
+- ⚠️ Al actualizar la extensión hay que **recargar la pestaña de WhatsApp**; si no, el panel dice
+  "abrí el chat" con el chat abierto.
+
+**La sugerencia por nombre** (`lib/crm/nombre.core.js`). Medido: de 28 clientes recientes con el
+número de GN sin agendar, ~8 estaban agendados **con otro número**. La extensión pasa el nombre
+agendado del chat (`contact.name || pushname`) y "Número nuevo" ofrece los clientes cuyo nombre
+tiene todas las palabras del agendado (sin la ciudad después de " - ", sin "mayorista"). ⛔ **Sólo
+sugiere: engancha el toque de Darío** (`vincularTelefono`), nunca solo — los nombres se repiten.
+Con una sola palabra no sugiere.

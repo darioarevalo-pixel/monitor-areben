@@ -32,6 +32,9 @@ const ORIGEN = 'https://monitorareben.vercel.app'
 const iframe = document.getElementById('panel')
 const aviso = document.getElementById('aviso')
 let actual = null
+// El nombre con que está agendado el chat abierto. Va con el número para que el panel pueda
+// sugerir de quién es un número que no está en el CRM.
+let nombreActual = ''
 
 /**
  * Qué decir cuando no hay número.
@@ -70,7 +73,7 @@ iframe.addEventListener('load', () => {
  *
  * El `src` queda para la primera carga y para el caso en que el panel todavía no esté listo.
  */
-function mostrar(tel, motivo) {
+function mostrar(tel, motivo, nombre) {
   const limpio = (tel || '').replace(/\D/g, '')
   // El cartel se actualiza SIEMPRE, aunque el número no haya cambiado: pasar de un chat sin
   // teléfono a un grupo no cambia el panel pero sí el motivo, y el cartel es lo único que lo dice.
@@ -78,6 +81,7 @@ function mostrar(tel, motivo) {
   aviso.style.display = limpio ? 'none' : ''
   if (limpio === actual) return
   actual = limpio
+  nombreActual = nombre || ''
   if (!cargado || !iframe.contentWindow) {
     iframe.src = BASE + limpio
     return
@@ -109,7 +113,7 @@ function pedirComunidad() {
 /** Le pasa el número al panel. Se usa al cambiar de chat y cuando el panel lo pide al armarse. */
 function avisarAlPanel(numero) {
   if (!iframe.contentWindow) return
-  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'chat', tel: numero }, ORIGEN)
+  iframe.contentWindow.postMessage({ fuente: 'bdi-crm-panel', tipo: 'chat', tel: numero, nombre: nombreActual }, ORIGEN)
 }
 
 /**
@@ -161,7 +165,7 @@ window.addEventListener('message', (e) => {
 mostrar('', 'sin-chat')
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg && msg.tipo === 'chat') mostrar(msg.tel, msg.motivo)
+  if (msg && msg.tipo === 'chat') mostrar(msg.tel, msg.motivo, msg.nombre)
   if (msg && msg.tipo === 'comunidad' && msg.datos) pasarComunidad(msg.datos)
 })
 
@@ -174,6 +178,6 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     // `lastError` hay que TOCARLO aunque no se use: si no, Chrome lo escupe en la consola. Pasa
     // siempre que el panel se abre en una pestaña que no es WhatsApp, que no tiene content script.
     if (chrome.runtime.lastError) return
-    if (r) mostrar(r.tel, r.motivo)
+    if (r) mostrar(r.tel, r.motivo, r.nombre)
   })
 })

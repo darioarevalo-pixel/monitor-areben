@@ -50,6 +50,7 @@ import {
 import { AgendaDelDia } from './AgendaDelDia'
 import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunidad'
 import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
+import { coincideNombre, palabraParaBuscar, palabrasDelNombre } from '@/lib/crm/nombre.core.js'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { leerMapa } from '@/lib/kv/cliente'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
@@ -365,6 +366,8 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
    * funcione también abierto a mano.
    */
   const [telChat, setTelChat] = useState<string | null>(telInicial)
+  /** El nombre con que está agendado el chat. Sólo para sugerir de quién es un número nuevo. */
+  const [nombreChat, setNombreChat] = useState('')
 
   /**
    * A quién se pidió ver desde la lista del día, con su id.
@@ -394,6 +397,7 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
       if (!d || d.fuente !== 'bdi-crm-panel' || d.tipo !== 'chat') return
       const nuevo = String(d.tel || '') || null
       setTelChat(nuevo)
+      setNombreChat(String(d.nombre || ''))
       // El chat lo abrió WhatsApp; si es el que se pidió desde la lista, la ficha ya está puesta.
       setPedido((p) => (p && normalizeArgPhone(p.tel) === normalizeArgPhone(nuevo || '') ? p : null))
     }
@@ -420,17 +424,19 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
   // abrir (y después cada tanto), y no tiene que perderse porque en ese momento no había ficha.
   const { comunidad, aviso: avisoComunidad } = useComunidad()
 
-  return <PanelInterno tel={telChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} />
+  return <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} />
 }
 
 function PanelInterno({
   tel,
+  nombreChat,
   pedido,
   setPedido,
   comunidad,
   avisoComunidad,
 }: {
   tel: string | null
+  nombreChat: string
   pedido: { id: number; tel: string } | null
   setPedido: (p: { id: number; tel: string } | null) => void
   comunidad: Comunidad | null
@@ -879,7 +885,9 @@ function PanelInterno({
       <Envoltorio aviso={aviso}>
         {solapas}
         <NumeroNuevo
+          key={telNorm}
           tel={telNorm}
+          nombreAgendado={nombreChat}
           onCobranza={() => setSolapa('pagos')}
           onVinculado={async (cliente) => {
             // Se recarga la ficha por id: el número ya quedó guardado, pero el índice del servidor
@@ -1582,12 +1590,15 @@ function FichaLead({
  */
 function NumeroNuevo({
   tel,
+  nombreAgendado,
   onVinculado,
   onGuardado,
   onCobranza,
   onError,
 }: {
   tel: string
+  /** Con qué nombre está agendado este chat. Vacío si no se sabe. */
+  nombreAgendado: string
   onVinculado: (cliente: FilaCliente) => void
   onGuardado: (lead: Lead) => void
   /** Ya compró y hay que cobrarle, aunque todavía no esté cargado en Gestión Nube. */
@@ -1595,6 +1606,20 @@ function NumeroNuevo({
   onError: (t: string) => void
 }) {
   const [camino, setCamino] = useState<'elegir' | 'cliente' | 'lead'>('elegir')
+  const sugeridos = useSugeridosPorNombre(nombreAgendado)
+  const [enganchando, setEnganchando] = useState(false)
+
+  const enganchar = async (c: FilaCliente) => {
+    if (enganchando) return
+    setEnganchando(true)
+    const r = await vincularTelefono(c.id, tel)
+    setEnganchando(false)
+    if (!r.ok) {
+      onError('No se pudo guardar: ' + r.motivo)
+      return
+    }
+    onVinculado(c)
+  }
 
   if (camino === 'lead') return <NuevoLead tel={tel} onGuardado={onGuardado} onError={onError} onVolver={() => setCamino('elegir')} />
   if (camino === 'cliente')
@@ -1604,6 +1629,38 @@ function NumeroNuevo({
     <div style={{ padding: space[3] }}>
       <div style={{ fontSize: font.md, fontWeight: 700, color: color.ink }}>Número nuevo</div>
       <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 12 }}>{tel} · no está en el CRM</div>
+
+      {/*
+        🔑 **La sugerencia por nombre** (Darío, 28-sep-2026). Pasa seguido que el cliente escribe
+        desde otro número que el de Gestión Nube (8 de 28 medidos ese día), y Darío lo agenda con el
+        mismo nombre con que compra. El nombre SUGIERE; engancha sólo el toque de Darío — elegir solo
+        anotaría notas y fechas en la ficha de otra persona cuando el nombre se repite.
+      */}
+      {sugeridos.length > 0 && (
+        <div style={{ border: `1px solid ${color.successBorder}`, background: color.successBg, borderRadius: radius.sm, padding: 10, marginBottom: 12 }}>
+          <div style={{ fontSize: font.sm, fontWeight: 700, color: color.successInk, marginBottom: 2 }}>
+            {sugeridos.length === 1 ? '¿Es este cliente?' : '¿Es alguno de estos clientes?'}
+          </div>
+          <div style={{ fontSize: font.xs, color: color.mut, marginBottom: 8 }}>
+            Lo tenés agendado como «{nombreAgendado}». Tocalo y este número va a abrir su ficha.
+          </div>
+          {sugeridos.map((c) => (
+            <Button
+              key={c.id}
+              variant="outline"
+              fullWidth
+              disabled={enganchando}
+              style={{ justifyContent: 'flex-start', marginBottom: 6, textAlign: 'left', background: color.bg }}
+              onClick={() => enganchar(c)}
+            >
+              <span>
+                {c.name || `#${c.id}`}
+                <span style={{ color: color.mut2, fontSize: font.xs }}> · {c.city || 'sin ciudad'} · #{c.id}</span>
+              </span>
+            </Button>
+          ))}
+        </div>
+      )}
 
       <Button variant="outline" fullWidth style={{ marginBottom: 8, justifyContent: 'flex-start' }} onClick={() => setCamino('cliente')}>
         Ya es cliente mío, cambió de número
@@ -1625,6 +1682,29 @@ function NumeroNuevo({
       </Button>
     </div>
   )
+}
+
+/**
+ * Los clientes cuyo nombre coincide con el nombre agendado del chat (hasta 3). Busca en el servidor
+ * por la palabra más larga —suele ser el apellido— y se queda con los que tienen TODAS las palabras
+ * del nombre agendado. Con una sola palabra no sugiere nada: "Martina" sola son demasiadas.
+ */
+function useSugeridosPorNombre(nombre: string): FilaCliente[] {
+  const palabras = useMemo(() => palabrasDelNombre(nombre), [nombre])
+  const clave = palabras.join(' ')
+  const [res, setRes] = useState<{ clave: string; filas: FilaCliente[] } | null>(null)
+  useEffect(() => {
+    if (palabras.length < 2) return
+    let activo = true
+    ;(async () => {
+      const filas = await buscarClientesPorNombre(palabraParaBuscar(palabras))
+      if (activo) setRes({ clave, filas: filas.filter((c) => coincideNombre(palabras, c.name)).slice(0, 3) })
+    })()
+    return () => {
+      activo = false
+    }
+  }, [clave, palabras])
+  return res && res.clave === clave ? res.filas : []
 }
 
 /**

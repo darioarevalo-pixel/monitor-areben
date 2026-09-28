@@ -82,17 +82,20 @@
 
     // 1. El teléfono que cuelga del contacto de la conversación. Es el camino normal.
     const c = chat.contact
+    // El nombre con que está agendado (o el que la persona se puso, si no está agendado). Sirve
+    // SÓLO para sugerir en el panel de quién puede ser un número que no está en el CRM.
+    const nombre = String((c && (c.name || c.pushname)) || '')
     const delModelo = c && c.phoneNumber && (c.phoneNumber._serialized || c.phoneNumber.user || c.phoneNumber)
     const digitos = (x) => String(x || '').replace(/\D/g, '')
-    if (digitos(delModelo).length >= 8) return { tel: digitos(delModelo), motivo: '' }
+    if (digitos(delModelo).length >= 8) return { tel: digitos(delModelo), motivo: '', nombre }
 
     // 2. Las conversaciones viejas todavía se identifican con el teléfono en vez del LID.
-    if (jid.endsWith('@c.us') && digitos(jid).length >= 8) return { tel: digitos(jid), motivo: '' }
+    if (jid.endsWith('@c.us') && digitos(jid).length >= 8) return { tel: digitos(jid), motivo: '', nombre }
 
     // 3. Un número que no está agendado no tiene contacto, y ahí WhatsApp muestra el teléfono como
     //    título de la conversación. Es justo el caso que abre "guardar como lead".
     const titulo = (chat.formattedTitle || chat.name || '').trim()
-    if (/^\+?[\d\s().-]{9,}$/.test(titulo) && digitos(titulo).length >= 8) return { tel: digitos(titulo), motivo: '' }
+    if (/^\+?[\d\s().-]{9,}$/.test(titulo) && digitos(titulo).length >= 8) return { tel: digitos(titulo), motivo: '', nombre }
 
     return { tel: null, motivo: 'sin-telefono' }
   }
@@ -218,6 +221,6 @@
     ultimo = firma
     // Viaja por la ventana porque este mundo no tiene acceso a las APIs de la extensión. Lo levanta
     // `content.js`, que sí las tiene.
-    window.postMessage({ fuente: FUENTE, tipo: 'chat', tel: r.tel, motivo: r.motivo }, '*')
+    window.postMessage({ fuente: FUENTE, tipo: 'chat', tel: r.tel, motivo: r.motivo, nombre: r.nombre || '' }, '*')
   }, CADA)
 })()
