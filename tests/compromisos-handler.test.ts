@@ -105,6 +105,10 @@ function resFalso() {
 const sobre = (d: unknown) => Buffer.from(JSON.stringify(d), 'utf8').toString('base64')
 
 let alDashboard: { url: string; body: Record<string, unknown> }[] = []
+/** Los adelantos de sueldo: qué contesta el dashboard y cuántas veces se le pidió aplicar. */
+const EMPLEADOS = [{ id: 'emp-1', nombre: 'Candela Luis', cbu: '0000003100000000000001', banco: 'Galicia' }]
+const adelantosDash: { aplicados: { adelanto_id: string; monto: number; mes: string }[]; caido?: boolean } = { aplicados: [] }
+let pedidosDeAplicar: Record<string, unknown>[] = []
 
 /**
  * Lo que el dashboard dice que se le debe. Es la mitad izquierda del control de "cuánto se le puede
@@ -120,6 +124,7 @@ function escenario(
   deuda: { acreedores?: unknown[]; caido?: boolean } = {},
 ) {
   alDashboard = []
+  pedidosDeAplicar = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { body?: string }) => {
     if (String(url).includes('bdi-catalogo.vercel.app/api/usuarios')) {
       return { ok: true, json: async () => ({ ok: true, perfil }) }
@@ -129,6 +134,16 @@ function escenario(
     if (String(url).includes('puente/acreedores')) {
       if (deuda.caido) return { ok: false, status: 502, text: async () => 'se cayó' }
       return { ok: true, status: 200, json: async () => ({ acreedores: deuda.acreedores ?? DEUDA_DE_SOBRA }) }
+    }
+    // La puerta de los adelantos de sueldo: GET = empleados + lo aplicado; POST = "aplicá lo de este".
+    // ⛔ No va a `alDashboard`: no escribe un pago de acreedor. El POST se cuenta aparte.
+    if (String(url).includes('puente/adelantos')) {
+      if (adelantosDash.caido) return { ok: false, status: 502, json: async () => ({ error: 'se cayó' }) }
+      if ((init as { method?: string } | undefined)?.method === 'POST') {
+        pedidosDeAplicar.push(JSON.parse(init?.body ?? '{}'))
+        return { ok: true, status: 200, json: async () => ({ ok: true, aplicados: 0, montoAplicado: 0, pendiente: 0, aviso: null }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ empleados: EMPLEADOS, aplicados: adelantosDash.aplicados }) }
     }
     alDashboard.push({ url: String(url), body: JSON.parse(init?.body ?? '{}') })
     return { ok: puerta.ok, status: puerta.status ?? (puerta.ok ? 200 : 409), json: async () => puerta.body }
@@ -170,6 +185,8 @@ beforeEach(() => {
   for (const k of Object.keys(objetivos)) delete objetivos[k]
   for (const k of Object.keys(cuentas)) delete cuentas[k]
   insertados.length = 0
+  adelantosDash.aplicados = []
+  adelantosDash.caido = false
   Object.assign(filas, { c1: { ...COMPROMISO } })
 })
 afterEach(() => { vi.unstubAllGlobals(); delete process.env.DASHBOARD_PUENTE_SECRET })
@@ -657,5 +674,118 @@ describe('cuentas manuales', () => {
     const res = await llamar(pedido({ action: 'confirmar', id: 'm1', monto_real: 500000, fecha: '2026-09-21' }))
     expect(res.body?.cuenta_completa).toBe(true)
     expect(insertados.find((x) => x.viene_de === 'm1')).toBeUndefined()
+  })
+})
+
+describe('adelantos de sueldo (el empleado como destino)', () => {
+  const ADELANTO = {
+    ...COMPROMISO, id: 'ad1', origen: 'empleado', acreedor_id: 'emp-1', acreedor_nombre: 'Candela Luis',
+    monto: 100000, mes_sueldo: '2026-09', operacion_id: 'op-adelanto',
+  }
+
+  it('se anota sin techo, con el nombre y el CBU que dice el dashboard', async () => {
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: {
+        origen: 'empleado', acreedor_id: 'emp-1', acreedor_nombre: 'otro nombre', mes_sueldo: '2026-09',
+        cliente_nombre: 'Nazarena', monto: 5_000_000,
+      },
+    }))
+    expect(res.code).toBe(200)
+    const fila = insertados.at(-1)!
+    expect(fila.origen).toBe('empleado')
+    expect(fila.mes_sueldo).toBe('2026-09')
+    expect(fila.acreedor_nombre).toBe('Candela Luis')
+    expect(fila.cuenta_cbu).toBe('0000003100000000000001')
+    expect(alDashboard).toHaveLength(0)
+  })
+
+  it('sin mes de sueldo no se anota', async () => {
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: { origen: 'empleado', acreedor_id: 'emp-1', acreedor_nombre: 'Candela', cliente_nombre: 'N', monto: 1000 },
+    }))
+    expect(res.code).toBe(400)
+  })
+
+  it('un empleado que no está activo en el dashboard no se acepta', async () => {
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({
+      action: 'crear',
+      compromiso: { origen: 'empleado', acreedor_id: 'emp-x', acreedor_nombre: 'X', mes_sueldo: '2026-09', cliente_nombre: 'N', monto: 1000 },
+    }))
+    expect(res.code).toBe(409)
+  })
+
+  it('🔴 confirmar NO escribe un pago en el dashboard: guarda el día y le pide que aplique', async () => {
+    filas.ad1 = { ...ADELANTO }
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'ad1', monto_real: 100000, fecha: '2026-09-20' }))
+    expect(res.code).toBe(200)
+    expect(filas.ad1.estado).toBe('confirmado')
+    expect(filas.ad1.fecha_acreditado).toBe('2026-09-20')
+    expect(alDashboard).toHaveLength(0)
+    expect(pedidosDeAplicar).toEqual([{ empleado_id: 'emp-1' }])
+  })
+
+  it('si entró de menos, el resto sigue yendo al mismo sueldo', async () => {
+    filas.ad1 = { ...ADELANTO }
+    escenario(ADMIN, { ok: true, body: {} })
+    await llamar(pedido({ action: 'confirmar', id: 'ad1', monto_real: 60000, fecha: '2026-09-20' }))
+    const resto = insertados.at(-1)!
+    expect(resto.monto).toBe(40000)
+    expect(resto.mes_sueldo).toBe('2026-09')
+    expect(resto.origen).toBe('empleado')
+  })
+
+  it('con el dashboard caído, confirmar anota igual (entrará al liquidar)', async () => {
+    filas.ad1 = { ...ADELANTO }
+    adelantosDash.caido = true
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'confirmar', id: 'ad1', monto_real: 100000, fecha: '2026-09-20' }))
+    expect(res.code).toBe(200)
+    expect(filas.ad1.estado).toBe('confirmado')
+  })
+
+  it('🔑 un adelanto confirmado por error se cancela si todavía no entró en un sueldo', async () => {
+    filas.ad1 = { ...ADELANTO, estado: 'confirmado' }
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'estado', id: 'ad1', estado: 'cancelado' }))
+    expect(res.code).toBe(200)
+    expect(filas.ad1.estado).toBe('cancelado')
+  })
+
+  it('⛔ pero no si ya entró en una liquidación', async () => {
+    filas.ad1 = { ...ADELANTO, estado: 'confirmado' }
+    adelantosDash.aplicados = [{ adelanto_id: 'op-adelanto', monto: 100000, mes: '2026-09' }]
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'estado', id: 'ad1', estado: 'cancelado' }))
+    expect(res.code).toBe(409)
+    expect(filas.ad1.estado).toBe('confirmado')
+  })
+
+  it('⛔ ni si el dashboard no puede decir si entró', async () => {
+    filas.ad1 = { ...ADELANTO, estado: 'confirmado' }
+    adelantosDash.caido = true
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'estado', id: 'ad1', estado: 'cancelado' }))
+    expect(res.code).toBe(503)
+    expect(filas.ad1.estado).toBe('confirmado')
+  })
+
+  it('cancelar un adelanto confirmado pide el permiso de confirmar', async () => {
+    filas.ad1 = { ...ADELANTO, estado: 'confirmado' }
+    escenario(SOLO_PROMETE, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'estado', id: 'ad1', estado: 'cancelado' }))
+    expect(res.code).toBe(403)
+  })
+
+  it('un confirmado de ACREEDOR sigue sin poder cancelarse', async () => {
+    filas.c1.estado = 'confirmado'
+    escenario(ADMIN, { ok: true, body: {} })
+    const res = await llamar(pedido({ action: 'estado', id: 'c1', estado: 'cancelado' }))
+    expect(res.code).toBe(409)
   })
 })

@@ -18,8 +18,10 @@ export type NuevoCompromiso = {
    * `manual` = el destino es una cuenta de acá y no un acreedor del dashboard. Va junto con
    * `objetivo_id`, que es contra qué se controla: las dos se mueven juntas o el servidor rebota.
    */
-  origen?: 'dashboard' | 'manual'
+  origen?: 'dashboard' | 'manual' | 'empleado'
   objetivo_id?: string | null
+  /** Sólo en un adelanto de sueldo (`origen: 'empleado'`): a qué mes va, AAAA-MM. */
+  mes_sueldo?: string | null
   acreedor_id: string
   acreedor_nombre: string
   cuenta_alias?: string | null
@@ -113,6 +115,7 @@ export async function confirmarCompromiso(
     nueva: (d.nueva ?? null) as Compromiso | null,
     cuenta_completa: !!d.cuenta_completa,
     se_paso: Number(d.se_paso || 0),
+    adelanto: (d.adelanto ?? null) as ResultadoConfirmar['adelanto'],
   }
 }
 
@@ -128,4 +131,9 @@ export type ResultadoConfirmar = {
   nueva: Compromiso | null
   cuenta_completa: boolean
   se_paso: number
+  /**
+   * Sólo de un adelanto de sueldo: lo que contestó el dashboard al avisarle. Si la nómina de ese mes
+   * ya existía, `montoAplicado` dice cuánto entró en el momento; si no, 0 y entrará al liquidar.
+   */
+  adelanto: { aplicados?: number; montoAplicado?: number; pendiente?: number; aviso?: string | null } | null
 }

@@ -39,6 +39,8 @@ import { leerAcreedoresDelDashboard } from '../lib/acreedores/puente.core.js';
 // sola, escrita una vez, para las dos clases de destino.
 import { resumenObjetivo, seExcede } from '../lib/cuentas/core.core.js';
 import { CAMPOS_PLATA, cerrarSiSeCompleto } from '../lib/cuentas/base.js';
+// El tercer destino: el empleado (adelanto de sueldo). Ver `sql/migrate-adelantos-empleados.sql`.
+import { leerAdelantosDelDashboard, pedirQueAplique } from '../lib/adelantos/puente.core.js';
 
 const URL_PUENTE_PAGOS =
   process.env.DASHBOARD_PUENTE_PAGOS_URL || 'https://dashboard.arebensrl.com/api/puente/pagos';
@@ -68,7 +70,9 @@ const CAMPOS =
   'id, origen, objetivo_id, acreedor_id, acreedor_nombre, cuenta_alias, cuenta_cbu, cuenta_banco, cuenta_titular, ' +
   'cliente_id, cliente_store, cliente_nombre, cliente_telefono, monto, monto_confirmado, estado, ' +
   'fecha_prometida, notas, operacion_id, pagos_dashboard, viene_de, creado_en, creado_por, ' +
-  'confirmado_en, confirmado_por';
+  'confirmado_en, confirmado_por, mes_sueldo, fecha_acreditado';
+
+const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /** Ver la sección alcanza para leer; comprometer y confirmar son permisos aparte. */
 function permisos(perfil) {
@@ -120,6 +124,8 @@ async function abrirElResto(c, montoReal, quien) {
       monto: falta,
       notas: `Lo que faltó del compromiso del ${String(c.creado_en).slice(0, 10)}: se pidieron ${c.monto} y entraron ${montoReal}.`,
       viene_de: c.id,
+      // Lo que faltó de un adelanto sigue yendo al mismo sueldo.
+      mes_sueldo: c.mes_sueldo || null,
       creado_por: quien,
       actualizado_por: quien,
     })
@@ -195,6 +201,7 @@ export default async function handler(req, res) {
      * índice que deja **una sola vuelta abierta por cuenta manual**.
      */
     const esManual = String(c.origen || '') === 'manual';
+    const esEmpleado = String(c.origen || '') === 'empleado';
     // A dónde se manda la plata, congelado en el compromiso: si mañana cambia el CBU, esta fila
     // tiene que seguir diciendo a dónde se mandó, no a dónde se manda hoy.
     let congelado = {
@@ -204,8 +211,39 @@ export default async function handler(req, res) {
       cuenta_titular: texto(c.cuenta_titular, 120),
     };
     let objetivoId = null;
+    let mesSueldo = null;
+    let nombreDestino = texto(c.acreedor_nombre);
 
-    if (esManual) {
+    if (esEmpleado) {
+      /*
+       * Adelanto de sueldo (28-sep-2026). ⛔ **No hay techo, y es a propósito**: el sueldo todavía no
+       * se liquidó, así que no existe un número contra el cual controlar. Lo que se controla es que
+       * el empleado exista y esté activo en el dashboard, y a qué mes de sueldo va.
+       *
+       * Si se adelanta de más, no se frena acá: al liquidar entra hasta el neto y lo que sobra pasa
+       * al mes siguiente (decidido con Darío). Eso lo resuelve el dashboard.
+       */
+      mesSueldo = String(c.mes_sueldo || '');
+      if (!MES.test(mesSueldo)) {
+        return res.status(400).json({ error: 'Falta a qué mes de sueldo va el adelanto.' });
+      }
+      const dash = await leerAdelantosDelDashboard();
+      if (dash.aviso) {
+        return res.status(503).json({ error: `${dash.aviso} Sin eso no se puede saber si el empleado está activo.` });
+      }
+      const empleado = dash.empleados.find((e) => String(e.id) === String(c.acreedor_id));
+      if (!empleado) {
+        return res.status(409).json({ error: 'Ese empleado no figura activo en el dashboard.' });
+      }
+      // El nombre y la cuenta se congelan desde el dashboard, no desde lo que mandó la pantalla.
+      nombreDestino = texto(empleado.nombre);
+      congelado = {
+        cuenta_alias: null,
+        cuenta_cbu: texto(empleado.cbu, 30),
+        cuenta_banco: texto(empleado.banco, 80),
+        cuenta_titular: texto(empleado.nombre, 120),
+      };
+    } else if (esManual) {
       /*
        * Cuenta manual: la cuota del crédito, las bolsas, el alquiler. Acá NO se le pregunta nada al
        * dashboard —ni hace falta ni existe el dato— y por eso esto anda con el dashboard caído.
@@ -301,10 +339,11 @@ export default async function handler(req, res) {
     const { data, error } = await base()
       .from('compromisos_pago')
       .insert({
-        origen: esManual ? 'manual' : 'dashboard',
+        origen: esEmpleado ? 'empleado' : esManual ? 'manual' : 'dashboard',
         objetivo_id: objetivoId,
         acreedor_id: c.acreedor_id,
-        acreedor_nombre: texto(c.acreedor_nombre),
+        acreedor_nombre: nombreDestino,
+        mes_sueldo: mesSueldo,
         ...congelado,
         cliente_id: texto(c.cliente_id, 60),
         cliente_store: c.cliente_store === 'zattia' ? 'zattia' : 'bdi',
@@ -340,9 +379,32 @@ export default async function handler(req, res) {
     }
 
     const { data: actual, error: eLeer } = await base()
-      .from('compromisos_pago').select('estado').eq('id', body.id).single();
+      .from('compromisos_pago').select('estado, origen, operacion_id').eq('id', body.id).single();
     if (eLeer || !actual) return res.status(404).json({ error: 'No se encontró ese compromiso.' });
-    if (!(TRANSICIONES[actual.estado] || []).includes(estado)) {
+
+    /*
+     * 🔑 **Un adelanto confirmado SÍ se puede cancelar, mientras no haya entrado en un sueldo.** Con
+     * un acreedor, lo confirmado ya es un pago en el dashboard y se corrige allá. Un adelanto, antes
+     * de liquidar, no es nada del otro lado: si se confirmó por error, la única forma de corregirlo
+     * sería el SQL Editor. Se le pregunta al dashboard si ya se aplicó; si no puede contestar, no se
+     * cancela (cancelar algo ya aplicado dejaría un pago de nómina sin adelanto detrás).
+     */
+    const cancelarAdelanto = actual.origen === 'empleado' && actual.estado === 'confirmado' && estado === 'cancelado';
+    if (cancelarAdelanto) {
+      if (!puede.confirmar) {
+        return res.status(403).json({ error: 'Cancelar un adelanto confirmado pide el permiso de confirmar.' });
+      }
+      const dash = await leerAdelantosDelDashboard();
+      if (dash.aviso) return res.status(503).json({ error: `${dash.aviso} Sin eso no se sabe si ya entró en un sueldo.` });
+      const aplicado = dash.aplicados
+        .filter((a) => a.adelanto_id === actual.operacion_id)
+        .reduce((s, a) => s + Number(a.monto), 0);
+      if (aplicado > 0.005) {
+        return res.status(409).json({ error: 'Ese adelanto ya entró en una liquidación. Para sacarlo, borrá o editá la nómina en el dashboard.' });
+      }
+    }
+
+    if (!cancelarAdelanto && !(TRANSICIONES[actual.estado] || []).includes(estado)) {
       const motivo = actual.estado === 'confirmado'
         ? 'Ese compromiso ya impactó en el dashboard y no se puede volver atrás desde acá. Si hay que corregirla, se borra el pago en el dashboard.'
         : `No se puede pasar de "${actual.estado}" a "${estado}".`;
@@ -456,6 +518,44 @@ export default async function handler(req, res) {
      * ⛔ Y no le escribe un peso al dashboard, a propósito: el pago de la cuota se sigue cargando
      * allá como siempre. Esto registra quién puso qué para juntarla.
      */
+    /**
+     * ── Adelanto de sueldo: se anota acá y el dashboard lo toma al liquidar ──
+     *
+     * ⛔ **No se le escribe un pago al dashboard.** Liquidan el día 1 y un pago sin nómina a la que
+     * colgarse ensucia el ledger (Darío, 28-sep-2026). Lo único que se hace es avisarle "hay un
+     * adelanto nuevo de este empleado": si su nómina de ese mes ya existe (se confirmó tarde), entra
+     * en el momento; si no, no pasa nada y entrará al liquidar.
+     *
+     * 🔑 El aviso es DESPUÉS de anotar y no puede deshacer nada: si el dashboard no contesta, el
+     * adelanto queda confirmado igual y se engancha la próxima vez que se toque esa nómina.
+     */
+    if (c.origen === 'empleado') {
+      const { data, error } = await base()
+        .from('compromisos_pago')
+        .update({
+          estado: 'confirmado',
+          monto_confirmado: montoReal,
+          fecha_acreditado: fecha,
+          confirmado_en: new Date().toISOString(),
+          confirmado_por: quien,
+          actualizado_en: new Date().toISOString(),
+          actualizado_por: quien,
+        })
+        .eq('id', c.id)
+        .select(CAMPOS)
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+
+      const nueva = body.anotar_restante === false ? null : await abrirElResto(data, montoReal, quien);
+      const aplicado = await pedirQueAplique(c.acreedor_id);
+      return res.status(200).json({
+        ok: true,
+        compromiso: data,
+        nueva,
+        adelanto: aplicado.aviso ? { aviso: aplicado.aviso } : aplicado,
+      });
+    }
+
     if (c.origen === 'manual') {
       const { data: objetivo, error: eObj } = await base()
         .from('cuentas_manuales_objetivos')

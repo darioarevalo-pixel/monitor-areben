@@ -59,6 +59,8 @@ import { color, font, radius, space } from '@/components/ui/tokens'
 import { DatosDeCuenta } from './DatosDeCuenta'
 import { type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
+import { mesesParaElegir, nombreDelMes, type EmpleadoAdelanto } from '@/lib/adelantos/core'
+import { hoyISO } from '@/lib/crm/seguimiento'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
   mostrar as plata, parsearMonto,
@@ -76,7 +78,7 @@ export type QuienPaga =
   | { tipo: 'erp'; id: number; nombre: string; telefono: string | null }
   | { tipo: 'sin-cargar'; nombre: string; telefono: string }
 
-export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargando, noSePudoLeer, onCreado }: {
+export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos, puede, cargando, noSePudoLeer, onCreado }: {
   /** Quién va a transferir. Sin chat abierto no hay a quién pedirle, y la pestaña dice eso en vez de mostrar esto. */
   cliente: QuienPaga
   /**
@@ -85,6 +87,13 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
    * que importa para elegir es el nombre y cuánto se le puede pedir.
    */
   destinos: DestinoCompromiso[]
+  /**
+   * El tercer destino: un empleado, para un **adelanto de sueldo** (28-sep-2026). Va aparte de
+   * `destinos` y no traducido a su forma, porque se comporta distinto en lo que ahí importa: **no
+   * tiene techo** (el sueldo todavía no se liquidó, no hay contra qué controlar) y pide **a qué mes
+   * de sueldo va**. Forzarlo a `DestinoCompromiso` sería inventarle un `disponible`.
+   */
+  empleados?: EmpleadoAdelanto[]
   compromisos: Compromiso[]
   puede: PuedeCompromisos
   cargando: boolean
@@ -102,6 +111,9 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
   /** Sólo para el que no está en Gestión Nube: ahí el nombre se escribe, no se sabe. */
   const [nombre, setNombre] = useState(cliente.tipo === 'sin-cargar' ? cliente.nombre : '')
   const [guardando, setGuardando] = useState(false)
+  const [hoy] = useState(() => hoyISO())
+  const meses = useMemo(() => mesesParaElegir(hoy), [hoy])
+  const [mes, setMes] = useState(meses.actual)
   const [error, setError] = useState<string | null>(null)
 
   const comprometidoAcreedor = useMemo(() => comprometidoPorAcreedor(compromisos), [compromisos])
@@ -122,10 +134,12 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
     .filter((x) => x.puedePedirse > 0)
 
   const sel = conDeuda.find((x) => x.a.id === elegido) ?? null
+  // Un empleado elegido. La llave lleva prefijo para que un id no choque con el de un acreedor.
+  const emp = empleados.find((e) => `emp:${e.id}` === elegido) ?? null
   const cuenta = sel?.a.cuentas.find((c) => c.sugerida) ?? sel?.a.cuentas[0] ?? null
   const n = parsearMonto(monto)
   const sePasa = !!sel && Number.isFinite(n) && n > sel.puedePedirse + 0.005
-  const puedeGuardar = !!sel && Number.isFinite(n) && n > 0 && !sePasa && !guardando && !!nombreFinal
+  const puedeGuardar = (!!sel || !!emp) && Number.isFinite(n) && n > 0 && !sePasa && !guardando && !!nombreFinal
 
   if (!puede.prometer) {
     return (
@@ -172,7 +186,7 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
 
       {cargando ? (
         <div style={{ fontSize: font.sm, color: color.mut2 }}>Buscando a quién le debemos…</div>
-      ) : conDeuda.length === 0 ? (
+      ) : conDeuda.length === 0 && empleados.length === 0 ? (
         <div style={{ fontSize: font.sm, color: color.mut2 }}>
           {noSePudoLeer
             ? 'No se pudo leer a quién le debemos. Probá de nuevo en un rato.'
@@ -284,6 +298,127 @@ export function NuevoCompromiso({ cliente, destinos, compromisos, puede, cargand
                 <div style={{ fontSize: font.xs, color: color.dangerInk, marginTop: 6 }}>
                   Es más de lo disponible para {sel.a.nombre}. Si va a mandar más, el resto va como otro
                   compromiso a otra cuenta.
+                </div>
+              )}
+            </>
+          )}
+
+          {/*
+            🔑 **Adelanto de sueldo: el empleado como destino** (Darío, 28-sep-2026). Antes la plata
+            se le mandaba igual, y no quedaba ni cuánto, ni qué día, ni qué cliente la puso. Va en su
+            propio renglón y no mezclado con los acreedores: no dice "disponible", porque no tiene.
+          */}
+          {empleados.length > 0 && (
+            <>
+              <div style={{ fontSize: font.xs, color: color.mut2, margin: `${space[2]}px 0 6px` }}>
+                O un adelanto de sueldo:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {empleados.map((e) => {
+                  const k = `emp:${e.id}`
+                  const activo = k === elegido
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => { setElegido(activo ? null : k); setError(null) }}
+                      style={{
+                        height: 'auto', textAlign: 'left',
+                        border: `1px solid ${activo ? color.brandBorder : color.line}`,
+                        background: activo ? color.brandBg : color.surface,
+                        color: activo ? color.brand : color.ink,
+                        borderRadius: radius.md, padding: '5px 10px', fontSize: font.sm, cursor: 'pointer', fontWeight: 600,
+                      }}
+                    >
+                      {e.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {emp && (
+            <>
+              {emp.cbu ? (
+                <div style={{ marginBottom: space[2] }}>
+                  <div style={{ fontSize: font.sm, color: color.mut2 }}>Pasale estos datos:</div>
+                  <DatosDeCuenta
+                    cuenta={{ id: emp.id, alias: null, cbu: emp.cbu, banco: emp.banco, titular: emp.nombre, sugerida: true }}
+                    destino={emp.nombre}
+                  />
+                </div>
+              ) : (
+                <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: 8 }}>
+                  Ojo: {emp.nombre} no tiene el CBU cargado, así que no hay datos que pasarle. Se carga en
+                  el dashboard, en RR.HH. → Empleados.
+                </div>
+              )}
+
+              {/* A qué sueldo va. El anterior está porque se liquida el 1: lo de los primeros días
+                  suele ser del mes que terminó. */}
+              <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>¿De qué sueldo?</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {[meses.anterior, meses.actual, meses.siguiente].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMes(m)}
+                    aria-pressed={mes === m}
+                    style={{
+                      height: 'auto', padding: '3px 10px', borderRadius: radius.pill, fontSize: font.xs, fontWeight: 700,
+                      cursor: 'pointer', border: `1px solid ${mes === m ? color.brandSolid : color.line2}`,
+                      background: mes === m ? color.brandBg : 'transparent',
+                      color: mes === m ? color.brand : color.mut,
+                    }}
+                  >
+                    {nombreDelMes(m, hoy)}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  className="mo-input"
+                  value={monto}
+                  onChange={(e) => { setMonto(e.target.value); setError(null) }}
+                  inputMode="decimal"
+                  placeholder="Monto"
+                  aria-label="Monto del adelanto"
+                  style={{ flex: '1 1 150px', fontSize: font.sm, fontVariantNumeric: 'tabular-nums' }}
+                />
+                <Button
+                  size="sm"
+                  disabled={!puedeGuardar}
+                  onClick={async () => {
+                    setGuardando(true); setError(null)
+                    try {
+                      await crearCompromiso({
+                        origen: 'empleado',
+                        acreedor_id: emp.id,
+                        acreedor_nombre: emp.nombre,
+                        mes_sueldo: mes,
+                        cliente_id: cliente.tipo === 'erp' ? String(cliente.id) : null,
+                        cliente_nombre: nombreFinal,
+                        cliente_telefono: cliente.telefono || null,
+                        monto: n,
+                      })
+                      setMonto(''); setElegido(null)
+                      onCreado(`Listo: quedó el adelanto de ${plata(n)} a ${emp.nombre}, del sueldo de ${nombreDelMes(mes, hoy)}.`)
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'No se pudo guardar.')
+                    } finally {
+                      setGuardando(false)
+                    }
+                  }}
+                >
+                  {guardando ? 'Guardando…' : 'Nuevo compromiso'}
+                </Button>
+              </div>
+
+              {!nombreFinal && (
+                <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 6 }}>
+                  Poné un nombre arriba: es con lo que la vas a reconocer en la lista.
                 </div>
               )}
             </>
