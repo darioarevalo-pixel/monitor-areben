@@ -170,8 +170,12 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
         : VACIO
     if (!comunidad) return base
     const indice = indexarComunidad(comunidad.tels)
+    // Se miran los DOS números: el de Gestión Nube y el enganchado desde el panel ("cambió de
+    // número"). Pasa seguido que el cliente escribe desde otra línea (medido el 28-sep: 8 de 28
+    // "sin agendar" estaban agendados con otro número), y en la comunidad está con ése.
     const marcar = (c: (typeof base.activos)[number]) => {
-      const en = estaEnComunidad(indice, c.phone)
+      const r = [c.phone, crmTelOverride[String(c.id)]].map((t) => estaEnComunidad(indice, t))
+      const en = r.includes(true) ? true : r.includes(false) ? false : null
       return { ...c, en_comunidad: en, en_difusion: en ?? c.en_difusion }
     }
     return { activos: base.activos.map(marcar), descartados: base.descartados.map(marcar) }
