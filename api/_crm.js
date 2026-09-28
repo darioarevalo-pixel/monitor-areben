@@ -6,7 +6,7 @@
 //   POST { recurso:'crm', action:'detalles', ids:[…] }     → { ok, detalles:[{sale_id,…,unit_price,total}] }
 //   POST { recurso:'crm', action:'ventas', modo, flagged } → { ok, ventas:[{id,date_sale,total_price,…}] }
 //   POST { recurso:'crm', action:'panel', tel|clienteId }   → { ok, encontrado, cliente, ventas, detalles }
-//   POST { recurso:'crm', action:'lista', ids:[…], totales? } → { ok, clientes:[{id,name,phone,total_amount}] }
+//   POST { recurso:'crm', action:'lista', ids:[…], totales? } → { ok, clientes:[{id,name,phone,total_amount,ultima_compra}] }
 //   POST { recurso:'crm', action:'buscar', q, ids:[…] }     → { ok, clientes:[{id,name,city,phone}] }
 //
 // Los `ids` del primero son `client_id`; los del segundo, `sale_id`. Sin `action` se contesta el
@@ -422,28 +422,37 @@ async function listaDelPanel(supabase, body, res) {
   // un grupo entero y sólo lo ordena por fecha. Los únicos que lo necesitan son los 🧊 —que salen
   // por lo que compraron, igual que en la sección— y la lista del día, que los tiene adentro.
   if (body.totales === false) {
-    return res.status(200).json({ ok: true, clientes: (clientes || []).map((c) => ({ ...c, total_amount: 0 })) });
+    return res.status(200).json({ ok: true, clientes: (clientes || []).map((c) => ({ ...c, total_amount: 0, ultima_compra: null })) });
   }
 
   // El total comprado, para que la tanda de fríos salga en el mismo orden que en la sección.
+  // 🔑 Y la última compra, que viaja gratis: son las mismas filas. La fila del panel la muestra
+  // ("compró hace 18 días") porque es lo que decide a quién se le escribe primero.
   const totales = new Map();
+  const ultimas = new Map();
   for (let desde = 0; ; desde += PAGINA) {
     const { data, error: e2 } = await supabase
       .from('ventas')
-      .select('client_id, total_price')
+      .select('client_id, total_price, date_sale')
       .in('client_id', ids)
       .order('id', { ascending: true })
       .range(desde, desde + PAGINA - 1);
     if (e2) throw new Error(e2.message);
     for (const v of data || []) {
       totales.set(v.client_id, (totales.get(v.client_id) || 0) + (parseFloat(v.total_price) || 0));
+      const f = typeof v.date_sale === 'string' ? v.date_sale.slice(0, 10) : null;
+      if (f && (!ultimas.get(v.client_id) || f > ultimas.get(v.client_id))) ultimas.set(v.client_id, f);
     }
     if ((data || []).length < PAGINA) break;
   }
 
   return res.status(200).json({
     ok: true,
-    clientes: (clientes || []).map((c) => ({ ...c, total_amount: totales.get(c.id) || 0 })),
+    clientes: (clientes || []).map((c) => ({
+      ...c,
+      total_amount: totales.get(c.id) || 0,
+      ultima_compra: ultimas.get(c.id) || null,
+    })),
   });
 }
 

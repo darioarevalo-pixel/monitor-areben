@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { color, font, radius, space } from '@/components/ui/tokens'
 import { TEMP_UI } from '@/components/crm/temperatura'
 import { buscarClientesPorNombre, traerAgenda, traerPorFiltro, type FilaAgenda } from '@/lib/crm/panel'
-import { contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
+import { contarCola, contarPorTipo, vistaDe, type FiltroPanel, type VistaTemp } from '@/lib/crm/lista-dia'
+import { diasHasta, urgenciaFecha } from '@/lib/crm/core'
+import { hoyISO } from '@/lib/crm/seguimiento'
 import { leadsDelPanel, type LeadConSeg, type MapaLeads } from '@/lib/crm/leads'
 import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
 
@@ -40,68 +42,280 @@ import type { FilaCliente, MapaSeguimiento } from '@/lib/crm/tipos'
  * Por eso los dos conviven: no son dos caminos al mismo lugar.
  */
 
-const fmtMonto = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
+/** La plata corta, para un renglón de 350 px: "$5,8 M", "$450 mil", "$8.000". */
+function fmtCorto(n: number): string {
+  const v = Math.round(n)
+  if (v >= 1_000_000) return '$' + (v / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + ' M'
+  if (v >= 10_000) return '$' + Math.round(v / 1000).toLocaleString('es-AR') + ' mil'
+  return '$' + v.toLocaleString('es-AR')
+}
 
 /** De a cuántos se muestra. Ver `TOPE_LISTA`: allá es un corte de datos, acá uno que se ve. */
 const PAGINA = 25
 
-/** Hace cuánto vence, en el idioma en que se piensa la lista. */
-function cuando(dias: number | null): string {
-  if (dias === null) return 'sin agendar'
-  if (dias === 0) return 'vence hoy'
-  if (dias < 0) return `vencido hace ${-dias} ${-dias === 1 ? 'día' : 'días'}`
-  return `en ${dias} ${dias === 1 ? 'día' : 'días'}`
+/** Un solo margen lateral para toda la solapa, como en Pagos. */
+const MARGEN = space[3]
+
+/** Días entre una fecha `YYYY-MM-DD` y hoy. Positivo = pasado. */
+function haceDias(iso: string, today: Date): number {
+  const [a, m, d] = iso.slice(0, 10).split('-').map(Number)
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return Math.round((base.getTime() - new Date(a, m - 1, d).getTime()) / 86400000)
 }
 
-function Fila({ f, onAbrir }: { f: FilaAgenda; onAbrir: (id: number, tel: string) => void }) {
-  const t = TEMP_UI[vistaDe(f)]
-  const sinTel = !f.telefono
+const dias = (n: number) => `${n} ${n === 1 ? 'día' : 'días'}`
+
+/**
+ * Una fila de trabajo, venga de un cliente o de un prospecto.
+ *
+ * 🔑 **Los prospectos van en la MISMA lista** (Darío, 28-sep-2026). El 29-ago se habían dejado abajo
+ * y aparte —un lead no tiene temperatura, y mezclarlo decía que era lo mismo que un cliente—, y
+ * en la práctica quedaban debajo de 35 filas: los contactos más frescos eran los que nadie veía.
+ * Las dos objeciones se resuelven en la fila, no separando listas: el prospecto lleva su chapa en
+ * lugar de la temperatura, y en vez de "última compra" dice que todavía no compró. **Los datos
+ * siguen separados** (`crm:leads` y `crm:seg:bdi`); esto es sólo cómo se muestran.
+ */
+type Item = {
+  key: string
+  /** 0 = prospecto: el panel lo cruza por teléfono. Ver "`id: 0` = cruzalo por teléfono" en la ficha. */
+  id: number
+  telefono: string
+  nombre: string
+  dias: number | null
+  prospecto: boolean
+  vista: VistaTemp | null
+  /** El renglón principal: el ⏳ si hay, si no la última nota. */
+  principal: string
+  esPendiente: boolean
+  /** El renglón chico de abajo: la última compra, o que todavía no compró. */
+  meta: string
+  /** El escalón de temperatura para ordenar. El prospecto cuenta como templado: no tiene marca. */
+  orden: number
+}
+
+function itemDeCliente(f: FilaAgenda, today: Date): Item {
+  const partes: string[] = []
+  if (f.ultimaCompra) {
+    const n = haceDias(f.ultimaCompra, today)
+    partes.push(n <= 0 ? 'Compró hoy' : `Última compra hace ${dias(n)}`)
+  }
+  if (f.total > 0) partes.push(`${fmtCorto(f.total)} en total`)
+  return {
+    key: `c${f.id}`,
+    id: f.id,
+    telefono: f.telefono,
+    nombre: f.nombre,
+    dias: f.dias,
+    prospecto: false,
+    vista: vistaDe(f),
+    principal: f.pendiente || f.nota,
+    esPendiente: !!f.pendiente,
+    meta: partes.join(' · '),
+    orden: f.temperatura === 'caliente' ? 0 : 1,
+  }
+}
+
+function itemDeLead(l: LeadConSeg): Item {
+  return {
+    key: l.id,
+    id: 0,
+    telefono: l.telefono,
+    nombre: l.nombre || '(sin nombre)',
+    dias: l._seg.estado === 'none' || l._seg.estado === 'pendiente' ? null : l._seg.dias,
+    prospecto: true,
+    vista: null,
+    principal: (l.notas || [])[0]?.texto || '',
+    esPendiente: false,
+    meta: l.ciudad ? `${l.ciudad} · todavía no compró` : 'Todavía no compró',
+    orden: 1,
+  }
+}
+
+/**
+ * Una chapita. Las medidas son las de `Chapa` en `Pagos.tsx` y del `Chip` de la ficha (11 px / 600 /
+ * 2-8): el mismo panel no puede tener la misma chapita a dos tamaños.
+ */
+function Chapa({ children, tono = 'neutro' }: { children: React.ReactNode; tono?: 'neutro' | 'nuestro' | 'tarde' | 'espera' | 'hecho' }) {
+  const c =
+    tono === 'nuestro'
+      ? { fg: color.brand, bg: color.brandBg, bd: color.brandBorder }
+      : tono === 'tarde'
+        ? { fg: color.dangerInk, bg: color.dangerBg, bd: color.dangerBorder }
+        : tono === 'hecho'
+          ? { fg: color.successInk, bg: color.successBg, bd: color.successBorder }
+          : tono === 'espera'
+            ? { fg: color.warningInk, bg: color.warningBg, bd: color.warningBorder }
+            : { fg: color.mut2, bg: color.bg2, bd: color.line2 }
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', border: `1px solid ${c.bd}`, background: c.bg, color: c.fg }}>
+      {children}
+    </span>
+  )
+}
+
+/**
+ * El estado de la fila, **con nombre y no con frase**: Hoy / Atrasado / Sin fecha.
+ *
+ * 🔴 **El rojo es sólo para lo que se pasó de una semana.** Antes las 25 filas decían "vencido hace
+ * X días" en rojo, y un color que está en todas las filas no marca ninguna: 3 días y 34 días se
+ * veían iguales.
+ */
+function estadoDeFila(d: number | null): { txt: string; tono: 'neutro' | 'nuestro' | 'tarde' | 'espera' } {
+  if (d === null) return { txt: 'Sin fecha', tono: 'espera' }
+  if (d === 0) return { txt: 'Hoy', tono: 'nuestro' }
+  if (d < 0) return { txt: `Atrasado ${-d} d`, tono: -d > 7 ? 'tarde' : 'neutro' }
+  return { txt: `En ${d} d`, tono: 'neutro' }
+}
+
+/** La temperatura, chica y al lado del nombre. "Sin marcar" no dibuja nada: era ruido en 341 filas. */
+const EMOJI_TEMP: Record<VistaTemp, string> = { caliente: '🔥', templado: '🟡', frio: '🧊', sin_marcar: '' }
+
+function Fila({ it, onAbrir, hecho }: { it: Item; onAbrir: (id: number, tel: string) => void; hecho?: { dias: number | null } }) {
+  const sinTel = !it.telefono
+  const est = estadoDeFila(it.dias)
+  const emoji = it.vista ? EMOJI_TEMP[it.vista] : ''
   return (
     <button
       type="button"
       disabled={sinTel}
-      onClick={() => onAbrir(f.id, f.telefono)}
+      onClick={() => onAbrir(it.id, it.telefono)}
       title={sinTel ? 'No tiene teléfono cargado, así que no puedo abrir el chat' : 'Abrir el chat'}
       style={{
         display: 'block',
         width: '100%',
         height: 'auto',
         textAlign: 'left',
-        background: 'none',
+        background: color.surface,
         border: 0,
         borderTop: `1px solid ${color.line2}`,
-        padding: `${space[2]}px ${space[3]}px`,
+        padding: `${space[2]}px ${MARGEN}px`,
         cursor: sinTel ? 'default' : 'pointer',
-        opacity: sinTel ? 0.55 : 1,
+        opacity: sinTel || hecho ? 0.6 : 1,
         font: 'inherit',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontSize: font.sm, fontWeight: 700, color: color.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {f.nombre}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {emoji && (
+          <span title={it.vista ? TEMP_UI[it.vista].txt : undefined} style={{ fontSize: 11, lineHeight: 1 }}>
+            {emoji}
+          </span>
+        )}
+        <span style={{ fontSize: font.md, fontWeight: 700, color: color.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {it.nombre}
         </span>
-        <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999, border: `1px solid ${t.bd}`, background: t.bg, color: t.fg, whiteSpace: 'nowrap' }}>
-          {t.txt}
-        </span>
+        {it.prospecto && <Chapa>Prospecto</Chapa>}
+        <span style={{ flex: 1 }} />
+        {hecho ? (
+          <Chapa tono="hecho">✓ {hecho.dias !== null && hecho.dias > 0 ? `Vuelve en ${hecho.dias} d` : 'Hecho'}</Chapa>
+        ) : (
+          <Chapa tono={est.tono}>{est.txt}</Chapa>
+        )}
       </div>
-      <div style={{ fontSize: font.xs, color: f.dias !== null && f.dias < 0 ? color.dangerInk : color.mut2 }}>
-        {cuando(f.dias)}
-        {sinTel && ' · sin teléfono'}
-      </div>
-      {f.nota && (
-        <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          “{f.nota}”
+      {it.principal && (
+        <div
+          style={{
+            fontSize: font.sm,
+            color: color.ink,
+            marginTop: 3,
+            lineHeight: 1.35,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {it.esPendiente && '⏳ '}
+          {it.principal}
+        </div>
+      )}
+      {(it.meta || sinTel) && (
+        <div style={{ fontSize: font.xs, color: color.mut2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+          {it.meta}
+          {sinTel && (it.meta ? ' · ' : '') + 'sin teléfono'}
         </div>
       )}
     </button>
   )
 }
 
-function Titulo({ children, sub }: { children: React.ReactNode; sub?: string }) {
+/**
+ * El título de un grupo, que además lo pliega.
+ *
+ * ⚠️ El número va apagado y separado, no con un punto: `Atrasados · 337` se leía como una frase de
+ * tres partes del mismo peso. Lo que se busca es la palabra (mismo criterio que `Titulo` en Pagos).
+ */
+function Grupo({
+  titulo,
+  cuantas,
+  abierto,
+  onToggle,
+  primero,
+  children,
+}: {
+  titulo: string
+  cuantas: number
+  abierto: boolean
+  onToggle: () => void
+  primero?: boolean
+  children: React.ReactNode
+}) {
   return (
-    <div style={{ padding: `${space[3]}px ${space[3]}px ${space[2]}px` }}>
-      <div style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>{children}</div>
-      {sub && <div style={{ fontSize: font.xs, color: color.mut2 }}>{sub}</div>}
+    <section>
+      {!primero && <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}` }} />}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={abierto}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          width: '100%',
+          height: 'auto',
+          background: 'none',
+          border: 0,
+          borderTop: primero ? 0 : `1px solid ${color.line2}`,
+          padding: `${space[3]}px ${MARGEN}px ${space[2]}px`,
+          cursor: 'pointer',
+          font: 'inherit',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>{titulo}</span>
+        <span style={{ marginLeft: 6, fontSize: font.sm, fontWeight: 600, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{cuantas}</span>
+        <span style={{ flex: 1 }} />
+        {/* El ▾ de texto salía de 4 px con DM Sans: una flecha dibujada se ve igual en todos lados. */}
+        <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" style={{ color: color.mut2, transform: abierto ? 'none' : 'rotate(-90deg)', transition: 'transform 0.12s ease' }}>
+          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {abierto && children}
+    </section>
+  )
+}
+
+/** Un renglón gris adentro de un grupo: vacío, o el aviso de que hay más de lo que se ve. */
+function Aclaracion({ children }: { children: React.ReactNode }) {
+  return <div style={{ padding: `${space[1]}px ${MARGEN}px ${space[3]}px`, fontSize: font.xs, color: color.mut2 }}>{children}</div>
+}
+
+/**
+ * Los tres números de arriba: Para hoy · Atrasados · Hechos.
+ *
+ * 🔑 **Es lo que la lista no tenía: una forma de ver que avanza.** Antes el que atendía a alguien
+ * lo veía desaparecer y subir al siguiente, y la pantalla quedaba igual. Ahora "Hechos" sube.
+ */
+function Resumen({ hoy, atrasados, hechos }: { hoy: number; atrasados: number; hechos: number }) {
+  const celda = (n: number, txt: string, tono: string) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: font.xl, fontWeight: 700, color: tono, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{n}</div>
+      <div style={{ fontSize: font.xs, color: color.mut2 }}>{txt}</div>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', gap: space[2], padding: `${space[3]}px ${MARGEN}px`, borderTop: `1px solid ${color.line2}`, marginTop: space[2] }}>
+      {celda(hoy, 'Para hoy', color.brand)}
+      {celda(atrasados, 'Atrasados', atrasados ? color.ink : color.mut2)}
+      {celda(hechos, 'Hechos hoy', hechos ? color.successInk : color.mut2)}
     </div>
   )
 }
@@ -147,7 +361,7 @@ function Filtros({
   onFiltro: (f: FiltroPanel) => void
 }) {
   const chips: Array<{ k: FiltroPanel; txt: string; n?: number }> = [
-    { k: 'trabajo', txt: 'Hoy' },
+    { k: 'trabajo', txt: 'Lista del día' },
     { k: 'caliente', txt: '🔥', n: conteos.caliente },
     { k: 'templado', txt: '🟡', n: conteos.templado },
     { k: 'sin_marcar', txt: '⚪', n: conteos.sin_marcar },
@@ -276,67 +490,6 @@ function Buscador({ onAbrir }: { onAbrir: (id: number, tel: string) => void }) {
   )
 }
 
-/**
- * Los prospectos, **abajo y aparte**.
- *
- * 🔴 **Decisión de Bruno el 29-ago-2026: aparte, no mezclados con los botones.** Un lead no tiene
- * temperatura —es activo, comprado o descartado— así que no cabe adentro de 🔥/🟡/⚪/🧊 sin
- * inventarle una; y mezclarlo en la misma lista diría que un lead y un cliente son la misma cosa,
- * cuando de uno se sabe lo que compró y del otro nada todavía.
- */
-function Leads({ leads, today, onAbrirChat }: { leads: MapaLeads; today: Date; onAbrirChat: (id: number, tel: string) => void }) {
-  const lista: LeadConSeg[] = useMemo(() => leadsDelPanel(leads, today), [leads, today])
-  const [mostrar, setMostrar] = useState(PAGINA)
-  if (!lista.length) return null
-
-  return (
-    <>
-      <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}`, borderBottom: `1px solid ${color.line2}`, marginTop: space[3] }} />
-      <Titulo sub="Todavía no compraron. Los que no tienen fecha van al final.">Prospectos · {lista.length}</Titulo>
-      {lista.slice(0, mostrar).map((l) => {
-        const sinTel = !l.telefono
-        return (
-          <button
-            key={l.id}
-            type="button"
-            disabled={sinTel}
-            onClick={() => onAbrirChat(0, l.telefono)}
-            title={sinTel ? 'No tiene teléfono cargado, así que no puedo abrir el chat' : 'Abrir el chat'}
-            style={{
-              display: 'block',
-              width: '100%',
-              height: 'auto',
-              textAlign: 'left',
-              background: 'none',
-              border: 0,
-              borderTop: `1px solid ${color.line2}`,
-              padding: `${space[2]}px ${space[3]}px`,
-              cursor: sinTel ? 'default' : 'pointer',
-              opacity: sinTel ? 0.55 : 1,
-              font: 'inherit',
-            }}
-          >
-            <div style={{ fontSize: font.sm, fontWeight: 700, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {l.nombre || '(sin nombre)'}
-            </div>
-            <div style={{ fontSize: font.xs, color: l._seg.estado === 'vencido' ? color.dangerInk : color.mut2 }}>
-              {l._seg.estado === 'none' || l._seg.estado === 'pendiente' ? 'sin agendar' : cuando(l._seg.dias)}
-              {l.ciudad && ` · ${l.ciudad}`}
-              {sinTel && ' · sin teléfono'}
-            </div>
-            {(l.notas || [])[0] && (
-              <div style={{ fontSize: font.xs, color: color.mut, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                “{l.notas[0].texto}”
-              </div>
-            )}
-          </button>
-        )
-      })}
-      {lista.length > mostrar && <VerMas faltan={lista.length - mostrar} onClick={() => setMostrar((n) => n + PAGINA)} />}
-    </>
-  )
-}
-
 export function AgendaDelDia({
   crmSeg,
   crmLeads,
@@ -353,15 +506,24 @@ export function AgendaDelDia({
   const [filtro, setFiltro] = useState<FiltroPanel>('trabajo')
   const [mostrar, setMostrar] = useState(PAGINA)
   const [estado, setEstado] = useState<
-    { t: 'cargando' } | { t: 'error'; motivo: string } | { t: 'trabajo'; lista: FilaAgenda[]; frios: FilaAgenda[] } | { t: 'filtro'; filas: FilaAgenda[] }
+    { t: 'cargando' } | { t: 'error'; motivo: string } | { t: 'trabajo'; lista: FilaAgenda[]; frios: FilaAgenda[]; hechos: FilaAgenda[] } | { t: 'filtro'; filas: FilaAgenda[] }
   >({ t: 'cargando' })
 
   const conteos = useMemo(() => contarPorTipo(crmSeg, today), [crmSeg, today])
+  const cola = useMemo(() => contarCola(crmSeg, today), [crmSeg, today])
+  /**
+   * Qué grupos están abiertos. **Recuperar y Hechos nacen plegados**: los fríos son la segunda
+   * etapa del día, y lo hecho es para mirar de reojo. Se recuerda mientras el panel esté abierto,
+   * nada más — no es un dato.
+   */
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>({ hoy: true, atrasados: true, sinFecha: false, frios: false, hechos: false })
+  const alternar = (k: string) => setAbiertos((a) => ({ ...a, [k]: !a[k] }))
+  const [mostrarAtrasados, setMostrarAtrasados] = useState(PAGINA)
 
   const pedir = useCallback(async () => {
     if (filtro === 'trabajo') {
       const r = await traerAgenda(crmSeg, today)
-      return r.ok ? ({ t: 'trabajo', lista: r.lista, frios: r.frios } as const) : ({ t: 'error', motivo: r.motivo } as const)
+      return r.ok ? ({ t: 'trabajo', lista: r.lista, frios: r.frios, hechos: r.hechos } as const) : ({ t: 'error', motivo: r.motivo } as const)
     }
     const r = await traerPorFiltro(crmSeg, today, filtro)
     return r.ok ? ({ t: 'filtro', filas: r.filas } as const) : ({ t: 'error', motivo: r.motivo } as const)
@@ -457,11 +619,15 @@ export function AgendaDelDia({
           </div>
         ) : (
           <>
-            <Titulo sub={filtro === 'frio' ? 'Vencidos primero, y adentro el que más compró.' : 'Vencidos primero. Los que no vencen también están.'}>
-              {nombre} · {filas.length}
-            </Titulo>
+            <div style={{ padding: `${space[3]}px ${MARGEN}px ${space[2]}px`, borderTop: `1px solid ${color.line2}`, marginTop: space[2] }}>
+              <span style={{ fontSize: font.sm, fontWeight: 700, color: color.ink }}>{nombre}</span>
+              <span style={{ marginLeft: 6, fontSize: font.sm, fontWeight: 600, color: color.mut2, fontVariantNumeric: 'tabular-nums' }}>{filas.length}</span>
+              <div style={{ fontSize: font.xs, color: color.mut2 }}>
+                {filtro === 'frio' ? 'Atrasados primero, y adentro el que más compró.' : 'Atrasados primero. Los que no vencen también están.'}
+              </div>
+            </div>
             {filas.slice(0, mostrar).map((f) => (
-              <Fila key={f.id} f={f} onAbrir={onAbrirChat} />
+              <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} />
             ))}
             {filas.length > mostrar && <VerMas faltan={filas.length - mostrar} onClick={() => setMostrar((n) => n + PAGINA)} />}
           </>
@@ -471,9 +637,41 @@ export function AgendaDelDia({
   }
 
   // ── La cola de trabajo, que es el default ─────────────────────────────────
-  const { lista, frios } = estado
-  const leadsHay = leadsDelPanel(crmLeads, today).length > 0
-  if (!lista.length && !frios.length && !leadsHay)
+  const { lista, frios, hechos } = estado
+  const leads = leadsDelPanel(crmLeads, today).map(itemDeLead)
+  const hoyISOs = hoyISO(today)
+  const leadsHechos = Object.values(crmLeads || {})
+    .filter((l) => l && l.estado === 'activo' && l.ultimo_contacto === hoyISOs)
+    .map((l) => ({ it: itemDeLead({ ...l, _seg: { proximo: l.proximo_manual, estado: 'aldia', dias: diasHasta(l.proximo_manual, today) } }), dias: diasHasta(l.proximo_manual, today) }))
+
+  /**
+   * Para hoy = lo agendado para hoy, clientes y prospectos. Los clientes van primero: vienen ya
+   * ordenados por temperatura.
+   *
+   * ⚠️ **Los prospectos SIN FECHA no van acá, van a su propio grupo.** La idea era meterlos en
+   * "Para hoy" para empujar a agendarlos; con los datos reales del 28-sep eran **29 de 51** y
+   * llenaban el grupo entero de prospectos, tapando a los clientes. Plegados y aparte se ve cuántos
+   * son sin que se coman la lista.
+   */
+  const deClientes = lista.map((f) => itemDeCliente(f, today))
+  const paraHoy = [...deClientes.filter((i) => i.dias === 0), ...leads.filter((i) => i.dias === 0)].sort((a, b) => a.orden - b.orden)
+  const sinFecha = leads.filter((i) => i.dias === null)
+  /**
+   * Atrasados: el mismo orden que `listaDelDia` — 🔥 primero, y adentro el más reciente primero
+   * (`urgenciaFecha`, el del 27-ago). Los prospectos entran como templados, mezclados por fecha.
+   * ⚠️ Ordenar sólo por fecha mandaba a un 🔥 de hace 27 días debajo de veinte tibios de ayer.
+   */
+  const porOrden = (a: Item, b: Item) => a.orden - b.orden || urgenciaFecha(a.dias) - urgenciaFecha(b.dias)
+  const atrasados = [...deClientes.filter((i) => i.dias !== 0), ...leads.filter((i) => i.dias !== null && i.dias < 0)].sort(porOrden)
+  const leadsAtrasados = leads.filter((i) => i.dias !== null && i.dias < 0).length
+  const totalAtrasados = cola.atrasados + leadsAtrasados
+  const totalHoy = cola.hoy + leads.filter((i) => i.dias === 0).length
+  const hechosItems = [
+    ...hechos.map((f) => ({ it: itemDeCliente(f, today), dias: f.dias })),
+    ...leadsHechos,
+  ]
+
+  if (!paraHoy.length && !atrasados.length && !sinFecha.length && !frios.length && !hechosItems.length)
     return (
       <div>
         {cabecera}
@@ -488,33 +686,61 @@ export function AgendaDelDia({
     <div>
       {cabecera}
       {avisoExtension}
+      <Resumen hoy={totalHoy} atrasados={totalAtrasados} hechos={hechosItems.length} />
 
-      <Titulo sub="Tibios y calientes que ya vencen. Los de hoy primero.">Para contactar · {lista.length}</Titulo>
-      {lista.map((f) => (
-        <Fila key={f.id} f={f} onAbrir={onAbrirChat} />
-      ))}
-      {!lista.length && (
-        <div style={{ padding: `0 ${space[3]}px ${space[2]}px`, fontSize: font.xs, color: color.mut2 }}>
-          Nada pendiente. Terminaste la lista del día.
-        </div>
+      <Grupo titulo="Para hoy" cuantas={totalHoy} abierto={abiertos.hoy} onToggle={() => alternar('hoy')}>
+        {paraHoy.map((it) => (
+          <Fila key={it.key} it={it} onAbrir={onAbrirChat} />
+        ))}
+        {!paraHoy.length && <Aclaracion>No hay nadie agendado para hoy.</Aclaracion>}
+      </Grupo>
+
+      {atrasados.length > 0 && (
+        <Grupo titulo="Atrasados" cuantas={totalAtrasados} abierto={abiertos.atrasados} onToggle={() => alternar('atrasados')}>
+          {atrasados.slice(0, mostrarAtrasados).map((it) => (
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} />
+          ))}
+          {atrasados.length > mostrarAtrasados && (
+            <VerMas faltan={atrasados.length - mostrarAtrasados} onClick={() => setMostrarAtrasados((n) => n + PAGINA)} />
+          )}
+          {/*
+            ⚠️ La cola de clientes viene cortada en `TOPE_LISTA` desde `lista-dia.ts`: el título dice
+            la pila entera y esto dice que no se ve toda. Un corte que no se ve es el defecto que
+            esta lista ya pagó dos veces.
+          */}
+          {totalAtrasados > atrasados.length && (
+            <Aclaracion>
+              Se ven los {atrasados.length} más recientes. A medida que los agendás, suben los siguientes.
+            </Aclaracion>
+          )}
+        </Grupo>
+      )}
+
+      {sinFecha.length > 0 && (
+        <Grupo titulo="Prospectos sin fecha" cuantas={sinFecha.length} abierto={abiertos.sinFecha} onToggle={() => alternar('sinFecha')}>
+          {sinFecha.map((it) => (
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} />
+          ))}
+          <Aclaracion>No están en ninguna lista hasta que les pongas fecha. Abrí el chat y agendalos.</Aclaracion>
+        </Grupo>
       )}
 
       {frios.length > 0 && (
-        <>
-          <div style={{ height: 8, background: color.bg2, borderTop: `1px solid ${color.line2}`, borderBottom: `1px solid ${color.line2}`, marginTop: space[3] }} />
-          <Titulo sub={`La tanda de hoy. Primero el que más compró: ${fmtMonto(frios[0].total)} el primero.`}>
-            🧊 Recuperar · {frios.length}
-          </Titulo>
+        <Grupo titulo="🧊 Recuperar" cuantas={frios.length} abierto={abiertos.frios} onToggle={() => alternar('frios')}>
           {frios.map((f) => (
-            <Fila key={f.id} f={f} onAbrir={onAbrirChat} />
+            <Fila key={f.id} it={itemDeCliente(f, today)} onAbrir={onAbrirChat} />
           ))}
-          <div style={{ padding: `0 ${space[3]}px ${space[2]}px`, fontSize: font.xs, color: color.mut2 }}>
-            Para verlos a todos, tocá 🧊 acá arriba.
-          </div>
-        </>
+          <Aclaracion>La tanda de hoy, primero el que más compró. Para verlos a todos, tocá 🧊 arriba.</Aclaracion>
+        </Grupo>
       )}
 
-      <Leads leads={crmLeads} today={today} onAbrirChat={onAbrirChat} />
+      {hechosItems.length > 0 && (
+        <Grupo titulo="Hechos hoy" cuantas={hechosItems.length} abierto={abiertos.hechos} onToggle={() => alternar('hechos')}>
+          {hechosItems.map(({ it, dias: d }) => (
+            <Fila key={it.key} it={it} onAbrir={onAbrirChat} hecho={{ dias: d }} />
+          ))}
+        </Grupo>
+      )}
     </div>
   )
 }

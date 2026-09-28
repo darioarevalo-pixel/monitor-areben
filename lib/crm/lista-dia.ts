@@ -24,6 +24,7 @@
 import { diasHasta, urgenciaFecha } from './core'
 import type { EstadoSeg, MapaSeguimiento, Nota, Temperatura } from './tipos'
 import { TEMPERATURA_DEFAULT } from './core'
+import { hoyISO } from './seguimiento'
 
 /** Cuántos entran en la lista del panel. Ver `TANDA_FRIOS` para la segunda etapa. */
 export const TOPE_LISTA = 25
@@ -53,6 +54,14 @@ export type FilaListaDia = {
   marcada: boolean
   /** La última nota, que es lo que se lee antes de decidir si se le entra ahora. */
   nota: Nota | null
+  /**
+   * El ⏳ "para la próxima", si hay. **Le gana a la nota en el renglón principal de la fila**: la
+   * nota es lo que se hizo, el pendiente es lo que hay que decirle ahora — que es justo lo que se
+   * busca al elegir a quién escribirle.
+   */
+  pendiente: string | null
+  /** Cuándo se le escribió por última vez (`YYYY-MM-DD`). De acá sale "Hechos hoy". */
+  ultimoContacto: string | null
 }
 
 /**
@@ -106,6 +115,8 @@ function filas(crmSeg: MapaSeguimiento, today: Date, soloVencidos = true): FilaL
       temperatura: s.temperatura || TEMPERATURA_DEFAULT,
       marcada: !!s.temperatura,
       nota: notas[0] || null,
+      pendiente: s.pendiente || null,
+      ultimoContacto: s.ultimo_contacto || null,
     })
   }
   return out
@@ -135,6 +146,42 @@ export function listaDelDia(crmSeg: MapaSeguimiento, today: Date, tope: number =
         a.id - b.id,
     )
     .slice(0, tope)
+}
+
+/**
+ * Cuántos tibios y calientes vencen, **sin el tope de 25**, partidos en los de hoy y los atrasados.
+ *
+ * 🔑 **Existe para que el título diga la verdad.** La lista muestra 25, pero "Atrasados 25" con 337
+ * adentro es el mismo defecto de siempre: un corte que no se ve. El número es el de la pila entera;
+ * lo que se dibuja, los primeros.
+ */
+export function contarCola(crmSeg: MapaSeguimiento, today: Date): { hoy: number; atrasados: number } {
+  let hoy = 0
+  let atrasados = 0
+  for (const f of filas(crmSeg, today)) {
+    if (f.temperatura === 'frio') continue
+    if (f.dias === 0) hoy++
+    else atrasados++
+  }
+  return { hoy, atrasados }
+}
+
+/**
+ * Los que ya se atendieron hoy: `ultimo_contacto` es hoy.
+ *
+ * 🔑 **Es lo que hace que la lista se TERMINE.** Al agendarle la próxima, el cliente sale de la
+ * cola y antes desaparecía sin rastro: la pantalla nunca mostraba avance, sólo una pila que se
+ * rellenaba sola desde atrás. Acá queda anotado, plegado abajo.
+ *
+ * ⚠️ Sale del mismo campo que escriben los botones de "Volver a hablarle" (`agendar` en
+ * `seguimiento.ts` pone `ultimo_contacto: hoy`). Es el único gesto que marca "le escribí"
+ * desde que "¿Cómo te fue?" salió del panel (24-ago-2026).
+ */
+export function hechosHoy(crmSeg: MapaSeguimiento, today: Date): FilaListaDia[] {
+  const hoy = hoyISO(today) // la MISMA función que escribe `agendar`
+  return filas(crmSeg, today, false)
+    .filter((f) => f.ultimoContacto === hoy)
+    .sort((a, b) => a.id - b.id)
 }
 
 /**

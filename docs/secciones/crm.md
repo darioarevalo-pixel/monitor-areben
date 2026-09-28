@@ -983,3 +983,48 @@ ficha— se pone un plazo por defecto que queda a la vista y se corre de un toqu
   buscador tocan la temperatura de nadie: escribirle a un frío lo deja frío, que es lo pedido.
 - **No se probó en el navegador**: los cinco botones, el buscador, el "ver más" y el formulario de
   alta con la fecha están sin mirar por Bruno.
+
+---
+
+# ✅ 28-sep-2026 — la solapa "Hoy" del panel, rediseñada (criterio de Cobranza)
+
+Darío: *"los recontactos la verdad es una vista muy plana y no me convence"*, con la mejora de
+Cobranza (21/25-sep) como referencia. **No cambió quién entra en la cola ni en qué orden**
+(`listaDelDia` intacta): cambió cómo se lee.
+
+## Lo que estaba mal, visto sobre una captura real
+- Las 25 filas decían "vencido hace X días" **en rojo**: un color en todas las filas no marca
+  ninguna. Ahora el estado es un NOMBRE en chapa (**Hoy** / **Atrasado N d** / **Sin fecha**) y el
+  rojo queda para lo que se pasó de una semana.
+- Lo más llamativo era la chapa de temperatura, y "⚪ Sin marcar" se repetía en 341 filas. Ahora es
+  un emoji chico al lado del nombre, y sin marca no dibuja nada.
+- Lo útil (la nota: de qué le vas a hablar) estaba en gris chico. Ahora es el renglón principal, en
+  negro, y **el ⏳ pendiente le gana a la nota** (lo que hay que decir vs. lo que se hizo).
+- No había avance: al atender a alguien desaparecía y subía otro. Ahora hay **tres números arriba**
+  (Para hoy · Atrasados · Hechos hoy) y un grupo **Hechos hoy** plegado abajo
+  (`hechosHoy`: `ultimo_contacto` = hoy, el campo que escribe `agendar`).
+- El título decía 25 con 337 adentro. `contarCola` da la pila entera; lo que se dibuja sigue
+  cortado en `TOPE_LISTA`, y un renglón lo dice.
+
+## Los prospectos, en la misma lista
+Revierte la decisión del 29-ago ("abajo y aparte"): quedaban debajo de 35 filas y eran los
+contactos más frescos. Van **mezclados por fecha como templados**, con chapa "Prospecto" y "todavía
+no compró" en lugar de la última compra. **Los datos siguen separados** (`crm:leads` / `crm:seg`).
+⚠️ **Los prospectos SIN FECHA van a su propio grupo plegado**, no a "Para hoy": con datos reales
+eran 29 de 51 y llenaban el grupo entero tapando a los clientes.
+
+## Servidor
+`action:'lista'` devuelve además `ultima_compra` (max `date_sale`), sacado de las mismas filas que
+ya sumaban el total: ninguna consulta nueva. Con `totales:false` viene `null` y la fila no la muestra.
+
+## Cómo se miró sin entrar al panel
+Render en jsdom con el dump del KV del día y los nombres/ventas reales (service key), `apiFetch`
+mockeado, y el HTML servido con `app/tokens.css` + `globals.css` en un ancho de 350 px.
+
+## Lo que salió mirándolo con datos reales (sin tocar)
+- **"Para hoy" da 0**: nadie tiene fecha de hoy, los 337 tibios están todos atrasados. La vista
+  nueva no lo arregla; lo arregla reagendar la pila.
+- **Fríos que compraron hace días** (Antonella Colato hace 3, Mauro Rodríguez hace 6, Alicia
+  Agustina Herrera hace 5): la regla de Darío es que el frío cambia cuando compra, y no cambió solo.
+
+▶️ **Falta**: lo mismo en la tabla de Clientes del monitor (prospectos adentro, mismos estados).

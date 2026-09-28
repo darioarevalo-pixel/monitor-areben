@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TOPE_LISTA, friosDelDia, listaDelDia } from '@/lib/crm/lista-dia'
+import { TOPE_LISTA, contarCola, friosDelDia, hechosHoy, listaDelDia } from '@/lib/crm/lista-dia'
 import { estadoSeguimiento } from '@/lib/crm/core'
 import type { MapaSeguimiento, Seguimiento } from '@/lib/crm/tipos'
 
@@ -155,4 +155,38 @@ describe('paridad con la sección: el mismo dato, dos caminos', () => {
       }
     })
   }
+})
+
+describe('contarCola · el número del título es la pila entera, no lo que se dibuja', () => {
+  it('cuenta todos los atrasados aunque la lista corte en TOPE_LISTA', () => {
+    const mapa: MapaSeguimiento = {}
+    for (let i = 1; i <= TOPE_LISTA + 10; i++) mapa[i] = seg({ proximo_manual: '2026-08-20' })
+    mapa[900] = seg({ proximo_manual: '2026-08-23' })
+    mapa[901] = seg({ proximo_manual: '2026-08-01', temperatura: 'frio' })
+    mapa[902] = seg({ proximo_manual: '2026-08-01', descartado: true })
+    expect(listaDelDia(mapa, HOY)).toHaveLength(TOPE_LISTA)
+    // Los fríos son la otra etapa y los descartados no existen: ninguno de los dos cuenta acá.
+    expect(contarCola(mapa, HOY)).toEqual({ hoy: 1, atrasados: TOPE_LISTA + 10 })
+  })
+})
+
+describe('hechosHoy · lo que hace que la lista se termine', () => {
+  it('trae a los que se les escribió hoy, vengan o no de la cola', () => {
+    const mapa: MapaSeguimiento = {
+      1: seg({ ultimo_contacto: '2026-08-23', proximo_manual: '2026-08-30' }),
+      2: seg({ ultimo_contacto: '2026-08-22', proximo_manual: '2026-08-30' }),
+      3: seg({ ultimo_contacto: '2026-08-23', proximo_manual: '2026-09-10', temperatura: 'frio' }),
+      4: seg({ ultimo_contacto: '2026-08-23', descartado: true }),
+    }
+    expect(hechosHoy(mapa, HOY).map((f) => f.id)).toEqual([1, 3])
+  })
+
+  it('el pendiente viaja en la fila: le gana a la nota en el renglón principal', () => {
+    const mapa: MapaSeguimiento = {
+      7: seg({ proximo_manual: '2026-08-23', pendiente: 'Mandarle la lista nueva', notas: [{ fecha: '2026-08-20', texto: 'Le escribí' }] }),
+    }
+    const [f] = listaDelDia(mapa, HOY)
+    expect(f.pendiente).toBe('Mandarle la lista nueva')
+    expect(f.nota?.texto).toBe('Le escribí')
+  })
 })

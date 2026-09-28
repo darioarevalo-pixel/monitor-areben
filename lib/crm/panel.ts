@@ -21,7 +21,7 @@
 import { apiFetch } from '../api-fetch'
 import { guardarMapa, leerMapa } from '../kv/cliente'
 import { TANDA_FRIOS, TEMPERATURA_DEFAULT, calcularAgregado, normalizeArgPhone, resumenCompras, segmentoCliente } from './core'
-import { friosDelDia, grupoUrgencia, listaDelDia, porTemperatura, type FilaListaDia, type VistaTemp } from './lista-dia'
+import { friosDelDia, grupoUrgencia, hechosHoy, listaDelDia, porTemperatura, type FilaListaDia, type VistaTemp } from './lista-dia'
 import type {
   ClienteCRM,
   EstadoSeg,
@@ -192,13 +192,18 @@ export type FilaAgenda = {
   marcada: boolean
   estado: EstadoSeg
   nota: string
+  /** El ⏳ "para la próxima". Vacío si no hay. En la fila le gana a la nota. */
+  pendiente: string
   total: number
+  /** `YYYY-MM-DD` de la última venta. null si el servidor no la mandó (`totales: false`). */
+  ultimaCompra: string | null
 }
 
-type RespuestaLista = { ok?: boolean; clientes?: Array<{ id: number; name: string; phone: string; total_amount: number }>; error?: string }
+type ClienteLista = { id: number; name: string; phone: string; total_amount: number; ultima_compra?: string | null }
+type RespuestaLista = { ok?: boolean; clientes?: ClienteLista[]; error?: string }
 
 export type ResultadoAgenda =
-  | { ok: true; lista: FilaAgenda[]; frios: FilaAgenda[] }
+  | { ok: true; lista: FilaAgenda[]; frios: FilaAgenda[]; hechos: FilaAgenda[] }
   | { ok: false; motivo: string }
 
 /**
@@ -213,7 +218,7 @@ export type ResultadoAgenda =
  */
 export const LOTE_IDS = 250
 
-type Datos = Map<number, { id: number; name: string; phone: string; total_amount: number }>
+type Datos = Map<number, ClienteLista>
 
 /**
  * Nombre, teléfono y total de un montón de ids, **de a tandas**.
@@ -262,7 +267,9 @@ function armarFila(f: FilaListaDia, datos: Datos): FilaAgenda | null {
     marcada: f.marcada,
     estado: f.estado,
     nota: f.nota ? f.nota.texto : '',
+    pendiente: f.pendiente || '',
     total: c.total_amount || 0,
+    ultimaCompra: c.ultima_compra || null,
   }
 }
 
@@ -281,8 +288,11 @@ function armarFila(f: FilaListaDia, datos: Datos): FilaAgenda | null {
 export async function traerAgenda(crmSeg: MapaSeguimiento, today: Date): Promise<ResultadoAgenda> {
   const tibios = listaDelDia(crmSeg, today)
   const friosCrudos = friosDelDia(crmSeg, today)
-  const ids = [...tibios, ...friosCrudos].map((f) => f.id)
-  if (!ids.length) return { ok: true, lista: [], frios: [] }
+  // Los de "Hechos hoy" viajan en el mismo pedido: son pocos (lo que se trabajó en el día) y
+  // pedirlos aparte sería una segunda vuelta al servidor para una lista que nace plegada.
+  const hechosCrudos = hechosHoy(crmSeg, today)
+  const ids = [...new Set([...tibios, ...friosCrudos, ...hechosCrudos].map((f) => f.id))]
+  if (!ids.length) return { ok: true, lista: [], frios: [], hechos: [] }
 
   const r = await pedirDatos(ids)
   if (!r.ok) return r
@@ -295,8 +305,9 @@ export async function traerAgenda(crmSeg: MapaSeguimiento, today: Date): Promise
     .filter((f): f is FilaAgenda => !!f)
     .sort((a, b) => b.total - a.total)
     .slice(0, TANDA_FRIOS)
+  const hechos = hechosCrudos.map((f) => armarFila(f, r.datos)).filter((f): f is FilaAgenda => !!f)
 
-  return { ok: true, lista, frios }
+  return { ok: true, lista, frios, hechos }
 }
 
 /**
