@@ -340,18 +340,18 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
 
           {emp && (
             <>
-              {emp.cbu ? (
+              {emp.alias || emp.cbu ? (
                 <div style={{ marginBottom: space[2] }}>
                   <div style={{ fontSize: font.sm, color: color.mut2 }}>Pasale estos datos:</div>
                   <DatosDeCuenta
-                    cuenta={{ id: emp.id, alias: null, cbu: emp.cbu, banco: emp.banco, titular: emp.nombre, sugerida: true }}
+                    cuenta={{ id: emp.id, alias: emp.alias, cbu: emp.cbu, banco: emp.banco, titular: emp.nombre, sugerida: true }}
                     destino={emp.nombre}
                   />
                 </div>
               ) : (
                 <div style={{ fontSize: font.sm, color: color.warningInk, marginBottom: 8 }}>
-                  Ojo: {emp.nombre} no tiene el CBU cargado, así que no hay datos que pasarle. Se carga en
-                  el dashboard, en RR.HH. → Empleados.
+                  Ojo: {emp.nombre} no tiene alias ni CBU cargado, así que no hay datos que pasarle. Se carga
+                  en el dashboard, en RR.HH. → Empleados.
                 </div>
               )}
 

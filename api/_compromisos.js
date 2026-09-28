@@ -238,7 +238,7 @@ export default async function handler(req, res) {
       // El nombre y la cuenta se congelan desde el dashboard, no desde lo que mandó la pantalla.
       nombreDestino = texto(empleado.nombre);
       congelado = {
-        cuenta_alias: null,
+        cuenta_alias: texto(empleado.alias, 60),
         cuenta_cbu: texto(empleado.cbu, 30),
         cuenta_banco: texto(empleado.banco, 80),
         cuenta_titular: texto(empleado.nombre, 120),

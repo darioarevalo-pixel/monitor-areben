@@ -106,7 +106,7 @@ const sobre = (d: unknown) => Buffer.from(JSON.stringify(d), 'utf8').toString('b
 
 let alDashboard: { url: string; body: Record<string, unknown> }[] = []
 /** Los adelantos de sueldo: qué contesta el dashboard y cuántas veces se le pidió aplicar. */
-const EMPLEADOS = [{ id: 'emp-1', nombre: 'Candela Luis', cbu: '0000003100000000000001', banco: 'Galicia' }]
+const EMPLEADOS = [{ id: 'emp-1', nombre: 'Candela Luis', alias: 'cande.luis', cbu: '0000003100000000000001', banco: 'Galicia' }]
 const adelantosDash: { aplicados: { adelanto_id: string; monto: number; mes: string }[]; caido?: boolean } = { aplicados: [] }
 let pedidosDeAplicar: Record<string, unknown>[] = []
 
@@ -697,6 +697,7 @@ describe('adelantos de sueldo (el empleado como destino)', () => {
     expect(fila.origen).toBe('empleado')
     expect(fila.mes_sueldo).toBe('2026-09')
     expect(fila.acreedor_nombre).toBe('Candela Luis')
+    expect(fila.cuenta_alias).toBe('cande.luis')
     expect(fila.cuenta_cbu).toBe('0000003100000000000001')
     expect(alDashboard).toHaveLength(0)
   })

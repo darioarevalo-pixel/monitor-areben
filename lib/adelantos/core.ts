@@ -15,6 +15,8 @@ import type { Compromiso } from '@/lib/compromisos/core'
 export type EmpleadoAdelanto = {
   id: string
   nombre: string
+  /** Lo que se le pasa al cliente casi siempre (Darío: el CBU es secundario). */
+  alias: string | null
   cbu: string | null
   banco: string | null
 }
