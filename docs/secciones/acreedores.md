@@ -229,6 +229,37 @@ Cada estado era una frase; ahora es un nombre, **igual en la sección y en el pa
   de permisos (`acreedores.prometer`, `.confirmar`), los valores del CHECK y las columnas quedaron
   igual: es la lección del rename `prometer` → `comprometer` del 4-sep.
 
+## ✅ 28-sep-2026 — adelantos de sueldo: el empleado como TERCER destino
+
+Pedido por Darío: a Candela Luis se le mandaban transferencias de mayoristas a cuenta del sueldo
+de septiembre (que se liquida el 1 de octubre) y no quedaba **ni cuánto, ni qué día, ni qué cliente**.
+
+- 🔑 **`origen = 'empleado'`** en `compromisos_pago`, con `mes_sueldo` (AAAA-MM) y
+  `fecha_acreditado` (`sql/migrate-adelantos-empleados.sql`, base de BDI). `acreedor_id` = el id del
+  empleado en el dashboard. Mismo circuito: Pedido → Acreditado / Cancelado.
+- ⛔ **Sin techo**: el sueldo no está liquidado, no hay contra qué controlar. Se controla que el
+  empleado esté ACTIVO en el dashboard; nombre y CBU se congelan desde allá.
+- 🔴 **Confirmar NO escribe en el dashboard.** Decisión de Darío: *"liquidamos el 1, y si pasamos pagos
+  antes se haría un quilombo de pagos"*. Sólo le avisa (`POST /api/puente/adelantos`) por si la nómina
+  de ese mes ya existía.
+- 🔑 **La dirección es al revés que la de los acreedores**: al LIQUIDAR, el dashboard le pregunta al
+  Monitor (`?recurso=adelantos-puente`, sin sesión, con el sobre `x-puente-auth`) y cuelga los
+  adelantos como **pagos parciales de NOMINA** con la fecha real (`areben-dashboard/lib/adelantos.ts`).
+  Lo hacen las cuatro entradas: liquidar de a uno, la masiva, editar y borrar.
+- 🔑 **Lo aplicado NO se guarda acá**: se cuenta allá, de `pagos.adelanto_id` (mig 090 del dashboard).
+  Por eso: borrar la liquidación devuelve el adelanto a pendiente solo; **lo adelantado de más pasa al
+  mes siguiente** (también al editar un sueldo para abajo); un mes cerrado bloquea y avisa.
+- **Un adelanto confirmado se puede cancelar** mientras no haya entrado en un sueldo (pide
+  `acreedores.confirmar` y le pregunta al dashboard; si no contesta, no se cancela).
+- Pantalla: el panel ofrece los empleados abajo de las cuentas (*«O un adelanto de sueldo»*) con el
+  mes (anterior / actual / siguiente); **«A quién le debemos» arranca con la ficha por empleado**
+  (`components/panel/AdelantosEmpleados.tsx`). ⏭️ La sección (`components/acreedores/`) todavía no
+  la muestra.
+- ⚠️ Los 11 empleados tienen el CBU **vacío**: hasta que se cargue en RR.HH. → Empleados, el panel
+  avisa que no hay datos que pasar.
+- Tests: `tests/adelantos.test.ts` + el bloque final de `compromisos-handler`; en el dashboard
+  `__tests__/calc-adelantos.test.ts`.
+
 ## Cómo se prueba
 
 ```bash

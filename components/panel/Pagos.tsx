@@ -50,6 +50,9 @@ import type { Acreedor, CuentaBancaria } from '@/lib/acreedores/cliente'
 import { cambiarEstado, confirmarCompromiso, vincularCompromiso } from '@/lib/compromisos/cliente'
 import { destinoDeAcreedor, destinosDeCuentas, type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { useCuentas } from '@/components/acreedores/useCuentas'
+import { useAdelantos } from '@/components/acreedores/useAdelantos'
+import { AdelantosEmpleados } from './AdelantosEmpleados'
+import { adelantosPorEmpleado, nombreDelMes, type AdelantosDeEmpleado, type LineaAdelanto } from '@/lib/adelantos/core'
 import {
   colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
   mostrar as plata, paraEditar, parsearMonto, restanteTrasConfirmar,
@@ -417,8 +420,16 @@ function TarjetaDestino({ nombre, sePuede, apoyos, detalle, deAca, cuenta, donde
   )
 }
 
-export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, error, aviso }: {
+export function VistaAcreedores({
+  acreedores, manuales, compromisos, cargando, error, aviso,
+  adelantos = [], adelantosSinDashboard = false, puedeCancelarAdelanto = false, onCancelarAdelanto,
+}: {
   acreedores: Acreedor[]
+  /** Los adelantos de sueldo, por empleado (`adelantosPorEmpleado`). Van arriba de los acreedores. */
+  adelantos?: AdelantosDeEmpleado[]
+  adelantosSinDashboard?: boolean
+  puedeCancelarAdelanto?: boolean
+  onCancelarAdelanto?: (l: LineaAdelanto) => void
   /**
    * Las cuentas manuales que están juntando plata (la cuota del crédito, las bolsas). Van en la
    * misma lista porque para el que está hablando con el cliente son lo mismo: un lugar a dónde
@@ -438,6 +449,17 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
   const comprometido = useMemo(() => comprometidoPorAcreedor(compromisos), [compromisos])
 
   const hayManuales = manuales.length > 0
+  const [hoy] = useState(() => hoyISO())
+  const fichaAdelantos = (
+    <AdelantosEmpleados
+      grupos={adelantos}
+      hoy={hoy}
+      sinDashboard={adelantosSinDashboard}
+      puedeCancelar={puedeCancelarAdelanto && !!onCancelarAdelanto}
+      onCancelar={(l) => onCancelarAdelanto?.(l)}
+      margen={MARGEN}
+    />
+  )
 
   if (cargando && !hayManuales) return <Estado>Buscando a quién le debemos…</Estado>
   /*
@@ -452,12 +474,16 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
   */
   if ((error || aviso) && !hayManuales) {
     return (
-      <Cartel tono="danger">
-        No se pudo leer a quién le debemos. Los montos viven en el dashboard; probá de nuevo en un rato.
-      </Cartel>
+      <>
+        {fichaAdelantos}
+        <Cartel tono="danger">
+          No se pudo leer a quién le debemos. Los montos viven en el dashboard; probá de nuevo en un rato.
+        </Cartel>
+      </>
     )
   }
   if (acreedores.length === 0 && !hayManuales) {
+    if (adelantos.length > 0) return fichaAdelantos
     return (
       <EmptyState
         title="No hay ninguna deuda con acreedores ahora"
@@ -468,6 +494,7 @@ export function VistaAcreedores({ acreedores, manuales, compromisos, cargando, e
 
   return (
     <>
+      {fichaAdelantos}
       {/* El dashboard no contestó, pero las cuentas de acá sí se pueden mostrar: se dice qué falta
           en vez de esconder la mitad que sí funciona. */}
       {(error || aviso) && (
@@ -586,6 +613,7 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
           */}
           <div style={{ fontSize: font.sm, color: color.mut, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             le transfiere a {c.acreedor_nombre}
+            {c.origen === 'empleado' && c.mes_sueldo && ` · adelanto del sueldo de ${nombreDelMes(c.mes_sueldo, hoy)}`}
           </div>
 
           {/*
@@ -654,6 +682,8 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
   // Las cuentas manuales viajan por su propia puerta: no dependen del dashboard y se tienen que
   // poder ofrecer igual cuando él no contesta.
   const manuales = useCuentas()
+  // Adelantos de sueldo: a quién se le puede adelantar y cuánto ya entró en un sueldo (dashboard).
+  const adelantos = useAdelantos()
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [verCerradas, setVerCerradas] = useState(false)
   const [soloSuyas, setSoloSuyas] = useState(false)
@@ -691,6 +721,10 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
   )
 
   const cola = useMemo(() => colaDeCobranza(cobros.compromisos), [cobros.compromisos])
+  const porEmpleado = useMemo(
+    () => adelantosPorEmpleado(cobros.compromisos, adelantos.aplicados),
+    [cobros.compromisos, adelantos.aplicados],
+  )
 
   /**
    * Las cerradas de la persona del chat.
@@ -725,6 +759,8 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
       // Lo mismo del otro lado: una cuenta manual pudo haberse completado con esta confirmación,
       // y si no se relee sigue ofreciéndose para pedir plata que ya no hace falta.
       manuales.recargar()
+      // Un adelanto confirmado pudo haber entrado en una nómina que ya existía.
+      adelantos.recargar()
     } catch (e) {
       decir(e instanceof Error ? e.message : 'No se pudo.', true)
     }
@@ -782,6 +818,14 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
               await correr(async () => {
                 const r = await confirmarCompromiso(x.id, monto, fecha)
                 setConfirmando(null)
+                if (x.origen === 'empleado') {
+                  // Qué pasó con el sueldo: casi siempre todavía no se liquidó, y eso es lo normal.
+                  const entro = Number(r.adelanto?.montoAplicado || 0)
+                  const sueldo = nombreDelMes(x.mes_sueldo ?? '', hoy)
+                  return entro > 0
+                    ? `Listo: ${plata(monto)} acreditados. El sueldo de ${sueldo} ya estaba liquidado y entraron ${plata(entro)}.`
+                    : `Listo: ${plata(monto)} acreditados. Se descuenta del sueldo de ${sueldo} cuando se liquide.`
+                }
                 return r.nueva
                   ? `Listo: ${plata(monto)} acreditados. Como entró menos, quedó un pedido nuevo por ${plata(Number(r.nueva.monto))}.`
                   : `Listo: ${plata(monto)} acreditados.`
@@ -911,6 +955,13 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
             cargando={deudas.cargando}
             error={deudas.error}
             aviso={deudas.aviso}
+            adelantos={porEmpleado}
+            adelantosSinDashboard={adelantos.aplicados === null}
+            puedeCancelarAdelanto={puede.confirmar}
+            onCancelarAdelanto={(l) => correr(async () => {
+              await cambiarEstado(l.compromiso.id, 'cancelado')
+              return `Listo: el adelanto de ${plata(l.monto)} a ${l.compromiso.acreedor_nombre} quedó cancelado.`
+            })}
           />
         </div>
       ) : (
@@ -941,6 +992,7 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
           <NuevoCompromiso
             cliente={cliente}
             destinos={destinos}
+            empleados={adelantos.empleados}
             compromisos={cobros.compromisos}
             puede={puede}
             cargando={deudas.cargando && manuales.cargando}

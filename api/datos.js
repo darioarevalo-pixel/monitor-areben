@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|modelos|precios|destacados|exhib|cobranzas&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|cobranzas&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -46,6 +46,8 @@ import ocWebhook from './_oc-webhook.js';
 import acreedores from './_acreedores.js';
 import compromisos from './_compromisos.js';
 import cuentas from './_cuentas.js';
+import adelantos from './_adelantos.js';
+import adelantosPuente from './_adelantos-puente.js';
 import precios from './_precios.js';
 import destacados from './_destacados.js';
 import exhib from './_exhib.js';
@@ -174,6 +176,11 @@ const RECURSOS = {
   // dashboard: las cuentas manuales no le hablan al dashboard NUNCA, y mezclarlas en el mismo
   // handler es como se cuela un camino que sí lo hace.
   cuentas,
+  // Adelantos de sueldo: el empleado como tercer destino de un compromiso. Son DOS recursos a
+  // propósito: `adelantos` pide sesión (la pantalla) y `adelantos-puente` no pide sesión sino el
+  // sobre del dashboard, que es quien pregunta al liquidar. Mismo criterio que `votacion`.
+  adelantos,
+  'adelantos-puente': adelantosPuente,
   // La lista de precios de una campaña de liquidación, para MARKETING. Va SEPARADO de
   // `liquidacion` a propósito y por dos motivos que se refuerzan: aquel handler ya tiene cuatro
   // llaves y su test de autorización se apoya en que una llave ajena corte antes de las `action`;

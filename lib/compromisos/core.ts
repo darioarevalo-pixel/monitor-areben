@@ -44,8 +44,16 @@ export type Compromiso = {
    * 🔑 `acreedor_id` es "a quién se le paga" en los dos casos — un proveedor del dashboard o una
    * cuenta manual—, así que toda la cuenta del circuito cuelga de la misma columna. Esto dice de
    * quién es ese id.
+   *
+   * - `empleado`  es un adelanto de sueldo (28-sep-2026): `acreedor_id` es el empleado del
+   *   dashboard. No tiene techo y confirmar no le escribe nada al dashboard: el adelanto entra en
+   *   la nómina cuando se liquida (ver `lib/adelantos/core.ts`).
    */
-  origen: 'dashboard' | 'manual'
+  origen: 'dashboard' | 'manual' | 'empleado'
+  /** Sólo en los adelantos: a qué mes de sueldo va (AAAA-MM). */
+  mes_sueldo?: string | null
+  /** Sólo en los adelantos confirmados: qué día entró la transferencia. */
+  fecha_acreditado?: string | null
   /** Para qué vuelta de una cuenta manual se junta esta plata. `null` en los del dashboard. */
   objetivo_id: string | null
   acreedor_id: string
