@@ -7,6 +7,9 @@ import './globals.css'
 
 export const metadata = {
   title: 'Monitor AREBEN SRL',
+  // Nombre bajo el ícono al agregarlo a la pantalla de inicio del iPhone
+  // (el ícono sale solo de app/apple-icon.png).
+  appleWebApp: { title: 'Monitor' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
