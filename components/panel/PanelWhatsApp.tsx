@@ -285,9 +285,24 @@ function MarcaComunidad({ comunidad, aviso, tels }: { comunidad: Comunidad | nul
   const esta = respuestas.some((r) => r === true)
   const cuando = comunidad.enVivo ? 'recién leída de WhatsApp' : `lista de ${antiguedadFoto(comunidad.actualizado)}`
   return (
-    <span title={`Según la lista de la comunidad (${comunidad.indice.total} personas, ${cuando})`}>
-      <Chip tone={esta ? 'ok' : 'alerta'}>{esta ? '✅ Está en la comunidad' : '○ No está en la comunidad'}</Chip>
-    </span>
+    // 🔑 Va en el encabezado, abajo del nombre, y con color propio (verde / rojo). Como etiqueta
+    // amarilla junto a "Dormido" y "Volver a hablarle" no se veía (lo dijo Darío el 28-sep).
+    <div
+      title={`Según la lista de la comunidad (${comunidad.indice.total} personas, ${cuando})`}
+      style={{
+        display: 'inline-block',
+        marginTop: 6,
+        fontSize: font.sm,
+        fontWeight: 700,
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: `1px solid ${esta ? color.successBorder : color.dangerBorder}`,
+        background: esta ? color.successBg : color.dangerBg,
+        color: esta ? color.successInk : color.dangerInk,
+      }}
+    >
+      {esta ? '✅ Está en la comunidad' : '✕ No está en la comunidad'}
+    </div>
   )
 }
 
@@ -910,6 +925,11 @@ function PanelInterno({
               <div style={{ fontSize: font.xs, color: color.mut2 }}>
                 {c.city || 'sin ciudad'} · #{c.id}
               </div>
+              {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
+                  desde la lista, el chat todavía puede ser el anterior. */}
+              <div>
+                <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
+              </div>
               {/*
                 El Instagram, que hasta ahora sólo se podía ver y escribir desde la sección. Y es
                 acá donde uno se entera de cuál es: lo tenés en la conversación, no en el CRM.
@@ -953,9 +973,6 @@ function PanelInterno({
                 Volver a hablarle: {fmtFecha(c.proximo_contacto)}
               </Chip>
             )}
-            {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
-                desde la lista, el chat todavía puede ser el anterior. */}
-            <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
           </div>
         </Bloque>
 
@@ -1466,6 +1483,7 @@ function FichaLead({
               {lead.nombre || 'Sin nombre'}
             </div>
             <div style={{ fontSize: font.xs, color: color.mut2 }}>{lead.ciudad || 'sin ciudad'}</div>
+            <div>{marcaComunidad}</div>
             {/* Editable también acá: en un prospecto el Instagram es la mitad de lo que se sabe
                 de él, y muchas veces llega después de haberlo cargado. */}
             <Instagram
@@ -1479,7 +1497,6 @@ function FichaLead({
 
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           <Chip>Todavía no compró</Chip>
-          {marcaComunidad}
           {seg.proximo && (
             <Chip tone={seg.estado === 'vencido' ? 'alerta' : 'neutro'}>Volver a hablarle: {fmtFecha(seg.proximo)}</Chip>
           )}
