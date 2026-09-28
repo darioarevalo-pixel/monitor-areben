@@ -55,7 +55,7 @@ import { AdelantosEmpleados } from './AdelantosEmpleados'
 import { adelantosPorEmpleado, nombreDelMes, type AdelantosDeEmpleado, type LineaAdelanto } from '@/lib/adelantos/core'
 import {
   colaDeCobranza, diasPara, comprometidoPorAcreedor, sePuedeComprometer, sinVincular,
-  mostrar as plata, paraEditar, parsearMonto, restanteTrasConfirmar,
+  mostrar as plata, paraEditar, parsearMonto, escribirMonto, restanteTrasConfirmar,
   type Compromiso,
 } from '@/lib/compromisos/core'
 import { hoyISO } from '@/lib/crm/seguimiento'
@@ -324,7 +324,7 @@ function Confirmar({ c, onListo, onCancelar }: {
           : <>Esto <b>escribe el pago en el dashboard</b>: baja la deuda con {c.acreedor_nombre}.</>}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input className="mo-input" value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal"
+        <input className="mo-input" value={monto} onChange={(e) => setMonto(escribirMonto(e.target.value))} inputMode="decimal"
           aria-label="Monto acreditado" style={{ flex: '1 1 110px', fontSize: font.sm }} />
         <input className="mo-input" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
           aria-label="Fecha de la transferencia" style={{ flex: '1 1 130px', fontSize: font.sm }} />

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
-import { mostrar, paraEditar, parsearMonto, redondear, restante } from '@/lib/compromisos/plata.core.js'
+import { escribirMonto, mostrar, paraEditar, parsearMonto, redondear, restante } from '@/lib/compromisos/plata.core.js'
 
 /**
  * La plata de los compromisos.
@@ -84,8 +84,8 @@ describe('cómo se muestra', () => {
   })
 
   it('para editar va sin el signo: es lo que entra en el casillero', () => {
-    expect(paraEditar(500_000)).toBe('500.000')
-    expect(paraEditar(66_666.67)).toBe('66.666,67')
+    expect(paraEditar(500_000)).toBe('$ 500.000')
+    expect(paraEditar(66_666.67)).toBe('$ 66.666,67')
     expect(paraEditar(NaN)).toBe('')
   })
 })
@@ -173,6 +173,42 @@ describe('⛔ "hoy" sale del día local, no del de UTC', () => {
     const enUtc = /\.toISOString\(\)\.slice\(0, ?10\)/
     for (const f of CON_FECHAS) {
       expect(enUtc.test(readFileSync(f, 'utf8')), `${f}: usá hoyISO(), que da el día local`).toBe(false)
+    }
+  })
+})
+
+describe('escribirMonto: el casillero se reescribe mientras se tipea', () => {
+  /** Tipear de a una tecla, como una persona: cada vuelta parte de lo que quedó escrito. */
+  const tipear = (teclas: string) => [...teclas].reduce((v, t) => escribirMonto(v + t), '')
+
+  it('pone el signo y el punto de miles', () => {
+    expect(tipear('1500')).toBe('$ 1.500')
+    expect(tipear('1500000')).toBe('$ 1.500.000')
+    expect(tipear('15')).toBe('$ 15')
+  })
+
+  it('la coma es el decimal, con dos cifras como mucho', () => {
+    expect(tipear('1500,5')).toBe('$ 1.500,5')
+    expect(tipear('1500,567')).toBe('$ 1.500,56')
+  })
+
+  it('⚠️ un punto tipeado al final es la coma decimal (teclados que sólo tienen punto)', () => {
+    expect(tipear('1500.50')).toBe('$ 1.500,50')
+  })
+
+  it('borrar todo deja el casillero vacío, sin un "$" suelto', () => {
+    expect(escribirMonto('$ ')).toBe('')
+    expect(escribirMonto('')).toBe('')
+  })
+
+  it('pegar algo ya formateado queda igual', () => {
+    expect(escribirMonto('$ 66.666,67')).toBe('$ 66.666,67')
+    expect(escribirMonto(paraEditar(500_000))).toBe('$ 500.000')
+  })
+
+  it('🔴 lo que queda escrito se lee siempre como el número que se tipeó (nada de ×100)', () => {
+    for (const [teclas, n] of [['1500', 1500], ['66666,67', 66_666.67], ['1500.5', 1500.5], ['250000', 250_000], ['1234567', 1_234_567]] as const) {
+      expect(parsearMonto(tipear(teclas))).toBe(n)
     }
   })
 })

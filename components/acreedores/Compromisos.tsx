@@ -33,7 +33,7 @@ import {
   // 🔑 El mismo par de siempre, no el formateador general del kit: acá los montos pueden tener
   // centavos (el resto de un cobro parcial) y `formatMoney` los corta, que es lo que escondía la
   // diferencia entre lo que la lista mostraba y lo que el casillero de confirmar tenía adentro.
-  mostrar as formatMoney, paraEditar, parsearMonto, restanteTrasConfirmar,
+  mostrar as formatMoney, paraEditar, parsearMonto, escribirMonto, restanteTrasConfirmar,
   type Compromiso,
 } from '@/lib/compromisos/core'
 import type { DestinoCompromiso } from '@/lib/compromisos/destino'
@@ -230,7 +230,7 @@ function FormCompromiso({ destino, maximo, onGuardar, onCancelar }: {
         label="Monto"
         hint={`Disponible: ${formatMoney(maximo)}.`}
       >
-        <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0" />
+        <Input value={monto} onChange={(e) => setMonto(escribirMonto(e.target.value))} inputMode="decimal" placeholder="$ 0" />
       </Field>
       <Field label="Fecha comprometida (opcional)">
         <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -327,7 +327,7 @@ function FormConfirmar({ compromiso, onConfirmar, onCancelar }: {
       </p>
 
       <Field label="Monto acreditado" hint={`Pedido: ${formatMoney(Number(compromiso.monto))}.`}>
-        <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" autoFocus />
+        <Input value={monto} onChange={(e) => setMonto(escribirMonto(e.target.value))} inputMode="decimal" autoFocus />
       </Field>
       <Field label="Fecha de la transferencia" hint="No es hoy necesariamente: el cierre de mes usa esta fecha.">
         <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />

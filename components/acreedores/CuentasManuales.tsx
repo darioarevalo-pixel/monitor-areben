@@ -44,7 +44,7 @@ import { Compromisos } from './Compromisos'
 import { EstadoCompromisos, FilaDestino, TituloGrupo } from './FilaDestino'
 import { useCuentas } from './useCuentas'
 import { destinoDeCuenta } from '@/lib/compromisos/destino'
-import { mostrar as plata, paraEditar, parsearMonto, type Compromiso } from '@/lib/compromisos/core'
+import { mostrar as plata, paraEditar, parsearMonto, escribirMonto, type Compromiso } from '@/lib/compromisos/core'
 import type { PuedeCompromisos } from '@/lib/compromisos/cliente'
 import {
   archivarCuenta, cambiarMonto, cerrarObjetivo, crearCuenta, editarCuenta, empezarAJuntar,
@@ -503,7 +503,7 @@ function FormMonto({ objetivo, onGuardar, onCancelar }: {
         label="Monto a pagar"
         hint={objetivo ? `Acreditado hasta ahora: ${plata(objetivo.juntado)}.` : 'Mientras esté activa, la cuenta aparece para pedirle a un cliente que transfiera.'}
       >
-        <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="0" autoFocus />
+        <Input value={monto} onChange={(e) => setMonto(escribirMonto(e.target.value))} inputMode="decimal" placeholder="$ 0" autoFocus />
       </Field>
       <Field label="Nota (opcional)" hint="Para reconocerlo después en el historial.">
         <Input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej: cuota de septiembre" />

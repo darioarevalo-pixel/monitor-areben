@@ -62,7 +62,7 @@ import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/client
 import { type EmpleadoAdelanto } from '@/lib/adelantos/core'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
-  mostrar as plata, parsearMonto,
+  mostrar as plata, parsearMonto, escribirMonto,
   type Compromiso,
 } from '@/lib/compromisos/core'
 
@@ -245,7 +245,7 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
                 <input
                   className={`mo-input${sePasa ? ' mo-input--invalid' : ''}`}
                   value={monto}
-                  onChange={(e) => { setMonto(e.target.value); setError(null) }}
+                  onChange={(e) => { setMonto(escribirMonto(e.target.value)); setError(null) }}
                   inputMode="decimal"
                   placeholder={`Monto, hasta ${plata(sel.puedePedirse)}`}
                   style={{ flex: '1 1 150px', fontSize: font.sm, fontVariantNumeric: 'tabular-nums' }}
@@ -356,7 +356,7 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
                 <input
                   className="mo-input"
                   value={monto}
-                  onChange={(e) => { setMonto(e.target.value); setError(null) }}
+                  onChange={(e) => { setMonto(escribirMonto(e.target.value)); setError(null) }}
                   inputMode="decimal"
                   placeholder="Monto"
                   aria-label="Monto del adelanto"

@@ -6,6 +6,7 @@
 import {
   mostrar as mostrarJS,
   paraEditar as paraEditarJS,
+  escribirMonto as escribirMontoJS,
   parsearMonto as parsearMontoJS,
   redondear as redondearJS,
   restante as restanteJS,
@@ -25,6 +26,8 @@ import {
  */
 export const parsearMonto: (entrada: unknown) => number = parsearMontoJS
 export const paraEditar: (n: unknown) => string = paraEditarJS
+/** Reescribe lo tipeado en un casillero de plata como "$ 1.500,50" (ver `plata.core.js`). */
+export const escribirMonto: (texto: unknown) => string = escribirMontoJS
 export const mostrar: (n: unknown) => string = mostrarJS
 export const redondear: (n: unknown) => number = redondearJS
 
