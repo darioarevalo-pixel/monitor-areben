@@ -702,13 +702,21 @@ describe('adelantos de sueldo (el empleado como destino)', () => {
     expect(alDashboard).toHaveLength(0)
   })
 
-  it('sin mes de sueldo no se anota', async () => {
+  it('el mes no se pregunta: se anota con uno válido aunque la pantalla no lo mande', async () => {
     escenario(ADMIN, { ok: true, body: {} })
     const res = await llamar(pedido({
       action: 'crear',
       compromiso: { origen: 'empleado', acreedor_id: 'emp-1', acreedor_nombre: 'Candela', cliente_nombre: 'N', monto: 1000 },
     }))
-    expect(res.code).toBe(400)
+    expect(res.code).toBe(200)
+    expect(String(insertados.at(-1)!.mes_sueldo)).toMatch(/^\d{4}-\d{2}$/)
+  })
+
+  it('🔑 al confirmar, el sueldo es el del mes de la transferencia', async () => {
+    filas.ad1 = { ...ADELANTO, mes_sueldo: '2026-10' }
+    escenario(ADMIN, { ok: true, body: {} })
+    await llamar(pedido({ action: 'confirmar', id: 'ad1', monto_real: 100000, fecha: '2026-09-20' }))
+    expect(filas.ad1.mes_sueldo).toBe('2026-09')
   })
 
   it('un empleado que no está activo en el dashboard no se acepta', async () => {

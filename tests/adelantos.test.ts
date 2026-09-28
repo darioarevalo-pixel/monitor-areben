@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { adelantosPorEmpleado, mesesParaElegir, nombreDelMes } from '@/lib/adelantos/core'
+import { adelantosPorEmpleado, nombreDelMes } from '@/lib/adelantos/core'
 import type { Compromiso } from '@/lib/compromisos/core'
 
 /**
@@ -133,11 +133,6 @@ describe('adelantosPorEmpleado', () => {
 })
 
 describe('los meses', () => {
-  it('ofrece el anterior, el actual y el siguiente, cruzando el año', () => {
-    expect(mesesParaElegir('2026-01-03')).toEqual({ anterior: '2025-12', actual: '2026-01', siguiente: '2026-02' })
-    expect(mesesParaElegir('2026-12-31')).toEqual({ anterior: '2026-11', actual: '2026-12', siguiente: '2027-01' })
-  })
-
   it('el nombre lleva el año sólo si no es el de hoy', () => {
     expect(nombreDelMes('2026-09', '2026-09-28')).toBe('septiembre')
     expect(nombreDelMes('2027-01', '2026-12-31')).toBe('enero 2027')

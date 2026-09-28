@@ -74,6 +74,12 @@ const CAMPOS =
 
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+/** El mes de hoy en Argentina (AAAA-MM). ⛔ No `toISOString`: después de las 21 ya es mañana en UTC. */
+function mesDeHoy() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit' })
+    .format(new Date()).slice(0, 7);
+}
+
 /** Ver la sección alcanza para leer; comprometer y confirmar son permisos aparte. */
 function permisos(perfil) {
   const admin = esAdmin(perfil);
@@ -223,10 +229,13 @@ export default async function handler(req, res) {
        * Si se adelanta de más, no se frena acá: al liquidar entra hasta el neto y lo que sobra pasa
        * al mes siguiente (decidido con Darío). Eso lo resuelve el dashboard.
        */
-      mesSueldo = String(c.mes_sueldo || '');
-      if (!MES.test(mesSueldo)) {
-        return res.status(400).json({ error: 'Falta a qué mes de sueldo va el adelanto.' });
-      }
+      /*
+       * 🔑 **El mes NO se pregunta** (Darío, 28-sep-2026): sale de la fecha real de la transferencia,
+       * y se fija al CONFIRMAR. Una transferencia de septiembre es adelanto del sueldo de septiembre,
+       * que se liquida el 1 de octubre. Acá se anota el mes de hoy sólo porque la columna no puede
+       * quedar vacía; al confirmar se pisa con el de la fecha que se cargó.
+       */
+      mesSueldo = MES.test(String(c.mes_sueldo || '')) ? String(c.mes_sueldo) : mesDeHoy();
       const dash = await leerAdelantosDelDashboard();
       if (dash.aviso) {
         return res.status(503).json({ error: `${dash.aviso} Sin eso no se puede saber si el empleado está activo.` });
@@ -536,6 +545,8 @@ export default async function handler(req, res) {
           estado: 'confirmado',
           monto_confirmado: montoReal,
           fecha_acreditado: fecha,
+          // El sueldo al que va es el del mes en que entró la transferencia.
+          mes_sueldo: fecha.slice(0, 7),
           confirmado_en: new Date().toISOString(),
           confirmado_por: quien,
           actualizado_en: new Date().toISOString(),

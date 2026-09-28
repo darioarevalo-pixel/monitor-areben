@@ -57,22 +57,6 @@ export function nombreDelMes(mes: string, hoy?: string): string {
 }
 
 /**
- * Los meses que se ofrecen al anotar: el anterior, el actual y el siguiente, a partir de HOY en
- * hora local (`hoy` = AAAA-MM-DD, de `hoyISO()`; ⛔ nunca `toISOString`, que después de las 21 ya es
- * mañana). El anterior existe porque se liquida el 1: lo que se adelanta los primeros días del mes
- * suele ser del sueldo del mes que terminó.
- */
-export function mesesParaElegir(hoy: string): { anterior: string; actual: string; siguiente: string } {
-  const a = Number(hoy.slice(0, 4))
-  const m = Number(hoy.slice(5, 7))
-  const mes = (ai: number, mi: number) => {
-    const d = new Date(ai, mi - 1, 1)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  }
-  return { anterior: mes(a, m - 1), actual: mes(a, m), siguiente: mes(a, m + 1) }
-}
-
-/**
  * Los adelantos, agrupados por empleado. Entran los pedidos (para saber qué se espera) y los
  * confirmados (con cuánto entró en un sueldo); los cancelados no.
  *

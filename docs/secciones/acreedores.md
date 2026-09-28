@@ -251,8 +251,12 @@ de septiembre (que se liquida el 1 de octubre) y no quedaba **ni cuánto, ni qu�
   mes siguiente** (también al editar un sueldo para abajo); un mes cerrado bloquea y avisa.
 - **Un adelanto confirmado se puede cancelar** mientras no haya entrado en un sueldo (pide
   `acreedores.confirmar` y le pregunta al dashboard; si no contesta, no se cancela).
-- Pantalla: el panel ofrece los empleados abajo de las cuentas (*«O un adelanto de sueldo»*) con el
-  mes (anterior / actual / siguiente); **«A quién le debemos» arranca con la ficha por empleado**
+- 🔑 **El mes de sueldo NO se pregunta** (Darío, 28-sep, el mismo día): sale de la **fecha real de la
+  transferencia** al confirmar (`mes_sueldo = fecha.slice(0,7)`). Al crear se anota el mes de hoy en
+  Argentina sólo porque la columna no puede ir vacía. Precio aceptado: adelantar el sueldo del mes
+  que viene cae en el actual (lo que sobre pasa solo al siguiente).
+- Pantalla: el panel ofrece los empleados abajo de las cuentas (*«O un adelanto de sueldo»*), con su
+  alias para copiar; **«A quién le debemos» arranca con la ficha por empleado**
   (`components/panel/AdelantosEmpleados.tsx`). ⏭️ La sección (`components/acreedores/`) todavía no
   la muestra.
 - ⚠️ Los 11 empleados tienen el CBU **vacío**: hasta que se cargue en RR.HH. → Empleados, el panel

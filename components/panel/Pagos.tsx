@@ -613,7 +613,7 @@ function Fila({ c, hoy, puede, abierta, onConfirmarAbrir, onConfirmar, onEstado,
           */}
           <div style={{ fontSize: font.sm, color: color.mut, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             le transfiere a {c.acreedor_nombre}
-            {c.origen === 'empleado' && c.mes_sueldo && ` · adelanto del sueldo de ${nombreDelMes(c.mes_sueldo, hoy)}`}
+            {c.origen === 'empleado' && ' · adelanto de sueldo'}
           </div>
 
           {/*
@@ -821,7 +821,8 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
                 if (x.origen === 'empleado') {
                   // Qué pasó con el sueldo: casi siempre todavía no se liquidó, y eso es lo normal.
                   const entro = Number(r.adelanto?.montoAplicado || 0)
-                  const sueldo = nombreDelMes(x.mes_sueldo ?? '', hoy)
+                  // El sueldo es el del mes en que entró la transferencia (lo fija el servidor igual).
+                  const sueldo = nombreDelMes(fecha.slice(0, 7), hoy)
                   return entro > 0
                     ? `Listo: ${plata(monto)} acreditados. El sueldo de ${sueldo} ya estaba liquidado y entraron ${plata(entro)}.`
                     : `Listo: ${plata(monto)} acreditados. Se descuenta del sueldo de ${sueldo} cuando se liquide.`

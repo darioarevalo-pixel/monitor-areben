@@ -59,8 +59,7 @@ import { color, font, radius, space } from '@/components/ui/tokens'
 import { DatosDeCuenta } from './DatosDeCuenta'
 import { type DestinoCompromiso } from '@/lib/compromisos/destino'
 import { crearCompromiso, type PuedeCompromisos } from '@/lib/compromisos/cliente'
-import { mesesParaElegir, nombreDelMes, type EmpleadoAdelanto } from '@/lib/adelantos/core'
-import { hoyISO } from '@/lib/crm/seguimiento'
+import { type EmpleadoAdelanto } from '@/lib/adelantos/core'
 import {
   estaAbierto, comprometidoPorAcreedor, comprometidoPorCliente, comprometidoPorTelefono, sePuedeComprometer,
   mostrar as plata, parsearMonto,
@@ -90,8 +89,9 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
   /**
    * El tercer destino: un empleado, para un **adelanto de sueldo** (28-sep-2026). Va aparte de
    * `destinos` y no traducido a su forma, porque se comporta distinto en lo que ahí importa: **no
-   * tiene techo** (el sueldo todavía no se liquidó, no hay contra qué controlar) y pide **a qué mes
-   * de sueldo va**. Forzarlo a `DestinoCompromiso` sería inventarle un `disponible`.
+   * tiene techo** (el sueldo todavía no se liquidó, no hay contra qué controlar). Forzarlo a
+   * `DestinoCompromiso` sería inventarle un `disponible`. ⛔ El mes de sueldo NO se pregunta: sale de
+   * la fecha de la transferencia al confirmar (Darío, 28-sep-2026).
    */
   empleados?: EmpleadoAdelanto[]
   compromisos: Compromiso[]
@@ -111,9 +111,6 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
   /** Sólo para el que no está en Gestión Nube: ahí el nombre se escribe, no se sabe. */
   const [nombre, setNombre] = useState(cliente.tipo === 'sin-cargar' ? cliente.nombre : '')
   const [guardando, setGuardando] = useState(false)
-  const [hoy] = useState(() => hoyISO())
-  const meses = useMemo(() => mesesParaElegir(hoy), [hoy])
-  const [mes, setMes] = useState(meses.actual)
   const [error, setError] = useState<string | null>(null)
 
   const comprometidoAcreedor = useMemo(() => comprometidoPorAcreedor(compromisos), [compromisos])
@@ -355,28 +352,6 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
                 </div>
               )}
 
-              {/* A qué sueldo va. El anterior está porque se liquida el 1: lo de los primeros días
-                  suele ser del mes que terminó. */}
-              <div style={{ fontSize: font.xs, color: color.mut2, marginBottom: 4 }}>¿De qué sueldo?</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                {[meses.anterior, meses.actual, meses.siguiente].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMes(m)}
-                    aria-pressed={mes === m}
-                    style={{
-                      height: 'auto', padding: '3px 10px', borderRadius: radius.pill, fontSize: font.xs, fontWeight: 700,
-                      cursor: 'pointer', border: `1px solid ${mes === m ? color.brandSolid : color.line2}`,
-                      background: mes === m ? color.brandBg : 'transparent',
-                      color: mes === m ? color.brand : color.mut,
-                    }}
-                  >
-                    {nombreDelMes(m, hoy)}
-                  </button>
-                ))}
-              </div>
-
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
                   className="mo-input"
@@ -397,14 +372,13 @@ export function NuevoCompromiso({ cliente, destinos, empleados = [], compromisos
                         origen: 'empleado',
                         acreedor_id: emp.id,
                         acreedor_nombre: emp.nombre,
-                        mes_sueldo: mes,
                         cliente_id: cliente.tipo === 'erp' ? String(cliente.id) : null,
                         cliente_nombre: nombreFinal,
                         cliente_telefono: cliente.telefono || null,
                         monto: n,
                       })
                       setMonto(''); setElegido(null)
-                      onCreado(`Listo: quedó el adelanto de ${plata(n)} a ${emp.nombre}, del sueldo de ${nombreDelMes(mes, hoy)}.`)
+                      onCreado(`Listo: quedó el adelanto de ${plata(n)} a ${emp.nombre}. Se descuenta del sueldo del mes en que entre.`)
                     } catch (e) {
                       setError(e instanceof Error ? e.message : 'No se pudo guardar.')
                     } finally {
