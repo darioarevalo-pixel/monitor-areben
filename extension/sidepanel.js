@@ -85,6 +85,27 @@ function mostrar(tel, motivo) {
   avisarAlPanel(limpio)
 }
 
+/**
+ * La comunidad mayorista: la lista de teléfonos que `pagina.js` lee de WhatsApp. El panel decide
+ * con ella si el chat abierto está adentro, y la guarda para el CRM (él tiene la sesión; esto no).
+ */
+let comunidad = null
+function pasarComunidad(datos) {
+  comunidad = datos
+  if (!iframe.contentWindow) return
+  iframe.contentWindow.postMessage({ ...datos, fuente: 'bdi-crm-panel', tipo: 'comunidad' }, ORIGEN)
+}
+function pedirComunidad() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs && tabs[0]
+    if (!tab || !tab.id) return
+    chrome.tabs.sendMessage(tab.id, { tipo: 'que-comunidad' }, (r) => {
+      if (chrome.runtime.lastError) return
+      if (r) pasarComunidad(r)
+    })
+  })
+}
+
 /** Le pasa el número al panel. Se usa al cambiar de chat y cuando el panel lo pide al armarse. */
 function avisarAlPanel(numero) {
   if (!iframe.contentWindow) return
@@ -114,6 +135,14 @@ window.addEventListener('message', (e) => {
     return
   }
 
+  // La lista de la comunidad: el panel la pide al armarse. Si ya llegó, va la que hay; si no, se le
+  // pregunta a la pestaña (puede haberla leído antes de que el panel se abriera).
+  if (d.tipo === 'que-comunidad') {
+    if (comunidad) pasarComunidad(comunidad)
+    else pedirComunidad()
+    return
+  }
+
   if (d.tipo !== 'abrir-chat') return
   const numero = String(d.tel || '').replace(/\D/g, '')
   if (!numero) return
@@ -133,6 +162,7 @@ mostrar('', 'sin-chat')
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.tipo === 'chat') mostrar(msg.tel, msg.motivo)
+  if (msg && msg.tipo === 'comunidad' && msg.datos) pasarComunidad(msg.datos)
 })
 
 // Al abrirse, preguntar en qué chat está. El panel se abre con un clic en el ícono, y ese clic no

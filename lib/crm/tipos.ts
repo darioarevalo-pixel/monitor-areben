@@ -186,8 +186,16 @@ export type ClienteCRM = {
   seg_estado: EstadoSeg
   dias_proximo: number | null
   notas: Nota[]
-  /** Del seguimiento: si está en el canal de difusión de WhatsApp. */
+  /**
+   * Si está en el canal de difusión / la comunidad de WhatsApp. Con la lista de la comunidad
+   * cargada (`crm:comunidad`) es el DATO REAL; sin ella, la marca a mano de siempre.
+   */
   en_difusion: boolean
+  /**
+   * Lo que dice la lista de la comunidad, si hay lista y el teléfono sirve para comparar. Ausente o
+   * `null` = no se sabe (y ahí `en_difusion` es la marca a mano).
+   */
+  en_comunidad?: boolean | null
   /**
    * Del seguimiento, ya resuelta: si el cliente no tiene marca, acá llega
    * `TEMPERATURA_DEFAULT`. Se resuelve en el agregado (y no en cada lector) para que

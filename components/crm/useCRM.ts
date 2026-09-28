@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { leerMapa } from '@/lib/kv/cliente'
+import { leerComunidad, leerMapa } from '@/lib/kv/cliente'
+import { estaEnComunidad, indexarComunidad, type FotoComunidad } from '@/lib/crm/comunidad'
 import { guardarConRelectura } from '@/lib/crm/persistencia'
 import { useToast } from '@/components/ui'
 import { traerClientes, traerVentas, type ModoCanal } from '@/lib/crm/datos'
@@ -42,6 +43,8 @@ export type EstadoCRM = {
   ventas: FilaVenta[]
   crmSeg: MapaSeguimiento
   crmTelOverride: MapaTelefonos
+  /** La última lista de la comunidad de WhatsApp, o `null` si nunca llegó o no se pudo leer. */
+  comunidad: FotoComunidad | null
   /**
    * El día contra el que se calculó TODO el agregado, en `YYYY-MM-DD`. Sale de acá y no de
    * un `new Date()` del componente: si los filtros por día usaran otro reloj, "Hoy" podría
@@ -75,6 +78,8 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
   const [crmTelOverride, setCrmTelOverride] = useState<MapaTelefonos>({})
   const [cargado, setCargado] = useState(false)
   const [tick, setTick] = useState(0)
+  /** La última lista de la comunidad que mandó el panel de WhatsApp (`null` = nunca, o no se pudo leer). */
+  const [comunidad, setComunidad] = useState<FotoComunidad | null>(null)
 
   // TODAY del legacy (index.html:1914): congelado al montar. Los cortes de días
   // del agregado lo usan; las escrituras (hoyISO) usan el día real, aparte.
@@ -94,11 +99,14 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
       setError(null)
       try {
         // 1. El KV PRIMERO, siempre. Ver la trampa 1.
-        const [seg, tel] = await Promise.all([
+        const [seg, tel, com] = await Promise.all([
           leerMapa<MapaSeguimiento[string]>('crmseg', 'bdi'),
           leerMapa<string>('crmtel', 'bdi'),
+          leerComunidad<FotoComunidad>('bdi'),
         ])
         if (!vivo) return
+        // Si la comunidad no se pudo leer, se sigue con la marca a mano: no bloquea nada.
+        setComunidad(com.ok && com.dato && Array.isArray(com.dato.tels) ? com.dato : null)
 
         const okKv = seg.ok && tel.ok
         const mapaSeg = seg.ok ? seg.dato : {}
@@ -150,13 +158,24 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
   }, [modo, tick])
 
   // El agregado se recalcula solo cuando cambian las ventas cargadas o crmSeg.
-  const agregado = useMemo(
-    () =>
+  //
+  // 🔑 **La comunidad se aplica ENCIMA del agregado y no se escribe en `crm:seg`.** Con la lista
+  // cargada, `en_difusion` pasa a ser lo que dice WhatsApp; las 120 marcas a mano quedan en el KV
+  // intactas y vuelven a verse si la lista no está. Un cliente sin teléfono que sirva para comparar
+  // se queda con su marca a mano.
+  const agregado = useMemo(() => {
+    const base =
       ventas.length || Object.keys(clientes).length
         ? calcularAgregado({ ventas, clientes, crmSeg, crmTelOverride, today })
-        : VACIO,
-    [ventas, clientes, crmSeg, crmTelOverride, today],
-  )
+        : VACIO
+    if (!comunidad) return base
+    const indice = indexarComunidad(comunidad.tels)
+    const marcar = (c: (typeof base.activos)[number]) => {
+      const en = estaEnComunidad(indice, c.phone)
+      return { ...c, en_comunidad: en, en_difusion: en ?? c.en_difusion }
+    }
+    return { activos: base.activos.map(marcar), descartados: base.descartados.map(marcar) }
+  }, [ventas, clientes, crmSeg, crmTelOverride, today, comunidad])
 
   /**
    * 🔑 **El optimista se aplica sobre la copia local; lo que se GUARDA se arma sobre el mapa
@@ -198,5 +217,5 @@ export function useCRM(modo: ModoCanal): EstadoCRM {
    * 24-ago-2026 y ahora ese mapa lo escribe el panel de WhatsApp, de a un cliente por vez
    * (`vincularTelefono`).
    */
-  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg }
+  return { cargando, error, agregado, ventas, crmSeg, crmTelOverride, cargado, hoy, recargar, guardarSeg, comunidad }
 }

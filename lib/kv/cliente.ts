@@ -246,6 +246,31 @@ export async function leerBanco<T = unknown>(store: Marca): Promise<Lectura<T[]>
   return { ok: true, dato: bank }
 }
 
+/**
+ * La foto de la comunidad de WhatsApp (`kind=crmcomunidad`, forma `{comunidad}`). `null` es "todavía
+ * nadie la mandó", que es distinto de no haber podido leer.
+ *
+ * No lleva `cargado` ni la guarda de encogimiento de este archivo: no se arma a partir de lo leído
+ * (la extensión la trae entera de WhatsApp) y la guarda contra una foto a medias la hace el servidor,
+ * que es el único que ve la anterior en el momento de escribir.
+ */
+export async function leerComunidad<T = unknown>(store: Marca): Promise<Lectura<T | null>> {
+  const r = await pedir(`${API}?kind=crmcomunidad&store=${store}&nc=${Date.now()}`)
+  if (!r.ok) return r
+  const c = r.dato.comunidad
+  return { ok: true, dato: c && typeof c === 'object' ? (c as T) : null }
+}
+
+export async function guardarComunidad(store: Marca, comunidad: { tels: string[]; grupo: string; participantes: number }): Promise<Escritura> {
+  const r = await pedir(`${API}?kind=crmcomunidad&store=${store}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, comunidad }),
+  })
+  if (!r.ok) return r
+  return { ok: true, total: Number(r.dato.total ?? comunidad.tels.length) }
+}
+
 export type OpcionesGuardarBanco<T> = {
   store: Marca
   banco: T[]

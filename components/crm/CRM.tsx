@@ -46,7 +46,7 @@ const SEGMENTOS = [
   { v: 'riesgo', t: 'En riesgo' },
   { v: 'dormidos', t: 'Dormidos (90+ días)' },
   { v: 'nuevos', t: 'Nuevos' },
-  { v: 'sin-difusion', t: 'Sin difusión' },
+  { v: 'sin-difusion', t: 'Fuera de la comunidad' },
   { v: 'sin-tel', t: 'Sin teléfono (cargar)' },
 ]
 
@@ -93,7 +93,9 @@ type FilaProps = {
 
 function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPagina, onTemperatura }: FilaProps) {
   const esMayorista = !!seg.es_mayorista
-  const enDifusion = !!seg.en_difusion
+  // Con la lista de la comunidad cargada, lo que se muestra es el dato real (y no se toca a mano).
+  const segunLista = c.en_comunidad === true || c.en_comunidad === false
+  const enDifusion = segunLista ? !!c.en_comunidad : !!seg.en_difusion
   // Sigue haciendo falta aunque ya no haya botón de WhatsApp: es lo que marca "Sin teléfono".
   const waPhone = normalizeArgPhone(c.phone)
   const ult = c.dias_ultimo === null ? '—' : c.dias_ultimo === 0 ? 'hoy' : `hace ${c.dias_ultimo}d`
@@ -144,6 +146,14 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
         )}
       </Td>
       <Td align="center">
+        {segunLista ? (
+          <span
+            title={enDifusion ? 'Está en la comunidad de WhatsApp' : 'No está en la comunidad de WhatsApp'}
+            style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap', border: enDifusion ? `1px solid ${color.success}` : `1px dashed ${color.line2}`, background: enDifusion ? color.successBg : 'transparent', color: enDifusion ? color.success : color.mut2 }}
+          >
+            {enDifusion ? 'Sí' : 'No'}
+          </span>
+        ) : (
         <button
           // El stopPropagation va acá adentro, no en un `onClickCapture`: en captura corta el
           // recorrido del evento ANTES de que llegue al propio `onClick` del botón, así que lo
@@ -158,6 +168,7 @@ function Fila({ c, seg, verDescartados, onAbrir, onDifusion, onDescartado, onPag
         >
           {enDifusion ? 'Sí' : '+ Sumar'}
         </button>
+        )}
       </Td>
       <Td align="center">
         {(() => {
@@ -292,7 +303,7 @@ export function CRM() {
     { key: 'riesgo', label: 'En riesgo', n: kpis.riesgo },
     { key: 'dormidos', label: 'Dormidos', n: kpis.dormidos },
     { key: 'nuevos', label: 'Nuevos', n: kpis.nuevos },
-    { key: 'sin-difusion', label: 'Sin difusión', n: sinDifusion },
+    { key: 'sin-difusion', label: 'Fuera de la comunidad', n: sinDifusion },
     { key: 'sin-tel', label: 'Sin teléfono', n: kpis.sinTel },
   ]
 
@@ -461,7 +472,7 @@ export function CRM() {
                   <Th align="right" onClick={() => ordenarPor('last_sale')}>Último pedido</Th>
                   <Th onClick={() => ordenarPor('proximo')}>Próximo contacto</Th>
                   <Th>Última nota</Th>
-                  <Th align="center">Difusión</Th>
+                  <Th align="center">Comunidad</Th>
                   <Th align="center">Cómo viene</Th>
                   {verDescartados && <Th />}
                 </Tr>

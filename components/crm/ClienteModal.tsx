@@ -192,10 +192,17 @@ export function ClienteModal({ cliente: c, crmSeg, mutar, onCerrar }: Props) {
             ⭐ Cliente mayorista
           </label>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.success }}>
-            <input type="checkbox" checked={!!seg.en_difusion} onChange={(e) => mutar((s) => setDifusion(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: color.success }} />
-            En el canal de difusión
-          </label>
+          {/* Con la lista de la comunidad cargada se muestra lo que dice WhatsApp, y no se marca a mano. */}
+          {c.en_comunidad === true || c.en_comunidad === false ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13, fontWeight: 600, color: c.en_comunidad ? color.success : color.mut }}>
+              {c.en_comunidad ? '✅ Está en la comunidad de WhatsApp' : '○ No está en la comunidad de WhatsApp'}
+            </div>
+          ) : (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.success }}>
+              <input type="checkbox" checked={!!seg.en_difusion} onChange={(e) => mutar((s) => setDifusion(s, c.id, e.target.checked))} style={{ width: 16, height: 16, accentColor: color.success }} />
+              En el canal de difusión
+            </label>
+          )}
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: color.mut }}>
             <input type="checkbox" checked={esDescartado(c.id, crmSeg)} onChange={(e) => mutar((s) => setDescartado(s, c.id, e.target.checked))} style={{ width: 16, height: 16 }} />

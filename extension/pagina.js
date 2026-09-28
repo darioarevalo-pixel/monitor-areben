@@ -97,6 +97,119 @@
     return { tel: null, motivo: 'sin-telefono' }
   }
 
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  // LA COMUNIDAD MAYORISTA: quién está adentro
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // Medido el 25-ago-2026 sobre la cuenta de BDI: la comunidad tiene 458 participantes, **los 458
+  // vienen con LID** (ninguno con el teléfono a la vista) y **los 458 se traducen a teléfono** con
+  // el contacto agendado. Se sostiene porque Darío agenda a cada cliente; con otra cuenta sería
+  // otro número.
+  //
+  // ⚠️ Los participantes están vacíos hasta que la comunidad se abre una vez en la sesión. Eso se
+  // avisa como `sin-cargar` y el panel le dice a la persona qué hacer, en vez de decir "no está".
+  //
+  // 🔑 Sale sólo la lista de teléfonos. Nada de nombres, mensajes ni nada más del grupo.
+  const NOMBRE_COMUNIDAD = 'bdi accesorios mayorista'
+  const CADA_COMUNIDAD = 60000
+
+  const serial = (id) => String((id && (id._serialized || id)) || '')
+  const soloDigitos = (x) => String(x || '').replace(/\D/g, '')
+
+  function participantesDe(g) {
+    const p = g.groupMetadata && g.groupMetadata.participants
+    if (!p) return []
+    if (typeof p.getModelsArray === 'function') return p.getModelsArray()
+    return Array.isArray(p) ? p : []
+  }
+
+  // Pedirle a WhatsApp que traiga los participantes, una vez por grupo. Es lo que hace la propia
+  // aplicación al abrir la info del grupo. Si el módulo no existe o falla, queda el aviso de
+  // `sin-cargar` y alcanza con abrir la comunidad a mano.
+  const pedidos = new Set()
+  function pedirParticipantes(g) {
+    const id = serial(g.id)
+    if (pedidos.has(id)) return
+    pedidos.add(id)
+    try {
+      const col = window.require('WAWebGroupMetadataCollection')
+      const coleccion = col && (col.GroupMetadataCollection || col.default)
+      if (coleccion && typeof coleccion.find === 'function') coleccion.find(g.id).catch(() => {})
+    } catch {}
+  }
+
+  function leerComunidad() {
+    let chats, contactos
+    try {
+      chats = window.require('WAWebChatCollection').ChatCollection.getModelsArray()
+      contactos = window.require('WAWebContactCollection').ContactCollection
+    } catch {
+      return null
+    }
+    const grupos = chats.filter((c) => {
+      const titulo = String(c.formattedTitle || c.name || '').toLowerCase()
+      return serial(c.id).endsWith('@g.us') && titulo.includes(NOMBRE_COMUNIDAD)
+    })
+    if (!grupos.length) return { estado: 'no-encontrada' }
+
+    // La comunidad aparece como más de un grupo (el principal y el de avisos). Vale el que más
+    // gente tiene cargada.
+    let mejor = null
+    for (const g of grupos) {
+      const ps = participantesDe(g)
+      if (!mejor || ps.length > mejor.ps.length) mejor = { g, ps }
+    }
+    if (!mejor.ps.length) {
+      grupos.forEach(pedirParticipantes)
+      return { estado: 'sin-cargar' }
+    }
+
+    const tels = []
+    let sinTraducir = 0
+    for (const p of mejor.ps) {
+      const id = serial(p.id)
+      if (id.endsWith('@c.us')) {
+        tels.push(soloDigitos(id))
+        continue
+      }
+      let c = null
+      try {
+        c = contactos.get(p.id) || contactos.get(id)
+      } catch {}
+      const pn = c && c.phoneNumber && serial(c.phoneNumber)
+      const t = soloDigitos(pn)
+      // ⚠️ Distinto del LID, o no es una traducción: la primera medición contó "tiene 8 dígitos
+      // o más" y el LID tiene 15, así que daba 100% aunque no tradujera nada.
+      if (t.length >= 8 && t !== soloDigitos(id)) tels.push(t)
+      else sinTraducir++
+    }
+    return {
+      estado: 'ok',
+      grupo: String(mejor.g.formattedTitle || mejor.g.name || ''),
+      participantes: mejor.ps.length,
+      tels,
+      sinTraducir,
+    }
+  }
+
+  let firmaComunidad = ''
+  function avisarComunidad() {
+    const r = leerComunidad()
+    if (!r) return
+    const firma = r.estado + ':' + (r.tels ? r.tels.slice().sort().join(',') : '')
+    if (firma === firmaComunidad) return
+    firmaComunidad = firma
+    if (r.estado === 'ok') {
+      console.log('[BDI] comunidad: ' + r.tels.length + ' teléfonos de ' + r.participantes + ' (sin traducir: ' + r.sinTraducir + ')')
+    } else {
+      console.log('[BDI] comunidad: ' + r.estado)
+    }
+    window.postMessage({ fuente: FUENTE, tipo: 'comunidad', ...r }, '*')
+  }
+  // La primera a los 5 s: antes WhatsApp todavía está armando la lista de chats.
+  setTimeout(avisarComunidad, 5000)
+  setInterval(avisarComunidad, CADA_COMUNIDAD)
+
   let ultimo = 'arranque'
   setInterval(() => {
     const r = telefonoDelChatAbierto()
@@ -105,6 +218,6 @@
     ultimo = firma
     // Viaja por la ventana porque este mundo no tiene acceso a las APIs de la extensión. Lo levanta
     // `content.js`, que sí las tiene.
-    window.postMessage({ fuente: FUENTE, tel: r.tel, motivo: r.motivo }, '*')
+    window.postMessage({ fuente: FUENTE, tipo: 'chat', tel: r.tel, motivo: r.motivo }, '*')
   }, CADA)
 })()

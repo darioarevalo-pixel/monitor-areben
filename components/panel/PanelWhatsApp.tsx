@@ -48,6 +48,8 @@ import {
   type MapaLeads,
 } from '@/lib/crm/leads'
 import { AgendaDelDia } from './AgendaDelDia'
+import { useComunidad, type AvisoComunidad, type Comunidad } from './useComunidad'
+import { antiguedadFoto, estaEnComunidad } from '@/lib/crm/comunidad'
 import { indexarTelefonos, buscarPorTelefono, normalizeArgPhone } from '@/lib/crm/telefono.core.js'
 import { leerMapa } from '@/lib/kv/cliente'
 import type { FilaCliente, FilaDetalle, MapaSeguimiento, MapaTelefonos, Nota } from '@/lib/crm/tipos'
@@ -267,6 +269,29 @@ function Chip({ children, tone = 'neutro' }: { children: React.ReactNode; tone?:
 }
 
 /**
+ * ¿Está en la comunidad mayorista? Sale de la lista que la extensión lee de WhatsApp Web (ver
+ * `useComunidad`). Se compara contra más de un número y alcanza con que uno esté.
+ *
+ * Sin lista no dice nada, salvo que WhatsApp no la haya cargado todavía: eso tiene arreglo a mano
+ * (abrir la comunidad una vez) y por eso se avisa.
+ */
+function MarcaComunidad({ comunidad, aviso, tels }: { comunidad: Comunidad | null; aviso: AvisoComunidad; tels: (string | null | undefined)[] }) {
+  if (!comunidad) {
+    if (aviso === 'sin-cargar') return <Chip>Para ver si está en la comunidad, abrí la comunidad una vez en WhatsApp</Chip>
+    return null
+  }
+  const respuestas = tels.map((t) => estaEnComunidad(comunidad.indice, t))
+  if (respuestas.every((r) => r === null)) return null
+  const esta = respuestas.some((r) => r === true)
+  const cuando = comunidad.enVivo ? 'recién leída de WhatsApp' : `lista de ${antiguedadFoto(comunidad.actualizado)}`
+  return (
+    <span title={`Según la lista de la comunidad (${comunidad.indice.total} personas, ${cuando})`}>
+      <Chip tone={esta ? 'ok' : 'alerta'}>{esta ? '✅ Está en la comunidad' : '○ No está en la comunidad'}</Chip>
+    </span>
+  )
+}
+
+/**
  * Quién está del otro lado del chat, para la pestaña "Pagos".
  *
  * 🔑 **Los tres casos son cobrables, y hasta el 3-sep-2026 sólo uno lo era.** Un mayorista nuevo
@@ -376,17 +401,25 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
     return () => window.removeEventListener('message', alMensaje)
   }, [])
 
-  return <PanelInterno tel={telChat} pedido={pedido} setPedido={setPedido} />
+  // La comunidad se escucha acá arriba y no en la ficha: llega de la extensión una sola vez al
+  // abrir (y después cada tanto), y no tiene que perderse porque en ese momento no había ficha.
+  const { comunidad, aviso: avisoComunidad } = useComunidad()
+
+  return <PanelInterno tel={telChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} />
 }
 
 function PanelInterno({
   tel,
   pedido,
   setPedido,
+  comunidad,
+  avisoComunidad,
 }: {
   tel: string | null
   pedido: { id: number; tel: string } | null
   setPedido: (p: { id: number; tel: string } | null) => void
+  comunidad: Comunidad | null
+  avisoComunidad: AvisoComunidad
 }) {
   const [estado, setEstado] = useState<Estado>({ t: 'cargando' })
   const [crmSeg, setCrmSeg] = useState<MapaSeguimiento>({})
@@ -821,6 +854,7 @@ function PanelInterno({
           today={today}
           guardando={guardando}
           onMutar={(fn, exito) => mutarLead(estado.lead.id, fn, exito)}
+          marcaComunidad={<MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={[telNorm, estado.lead.telefono || '']} />}
         />
       </Envoltorio>
     )
@@ -919,6 +953,9 @@ function PanelInterno({
                 Volver a hablarle: {fmtFecha(c.proximo_contacto)}
               </Chip>
             )}
+            {/* Los dos números: el del chat es el que está en la comunidad, pero si la ficha se abrió
+                desde la lista, el chat todavía puede ser el anterior. */}
+            <MarcaComunidad comunidad={comunidad} aviso={avisoComunidad} tels={via === 'id' ? [c.phone] : [telNorm, c.phone]} />
           </div>
         </Bloque>
 
@@ -1409,11 +1446,13 @@ function FichaLead({
   today,
   guardando,
   onMutar,
+  marcaComunidad,
 }: {
   lead: Lead
   today: Date
   guardando: boolean
   onMutar: (fn: (m: MapaLeads) => MapaLeads, exito: string) => Promise<boolean>
+  marcaComunidad: React.ReactNode
 }) {
   const seg = leadEstadoSeg(lead, today)
   const notas = Array.isArray(lead.notas) ? lead.notas : []
@@ -1440,6 +1479,7 @@ function FichaLead({
 
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           <Chip>Todavía no compró</Chip>
+          {marcaComunidad}
           {seg.proximo && (
             <Chip tone={seg.estado === 'vencido' ? 'alerta' : 'neutro'}>Volver a hablarle: {fmtFecha(seg.proximo)}</Chip>
           )}
