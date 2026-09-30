@@ -5,7 +5,9 @@ import {
   armarUniverso, claveDe, criticos, curvaRota, ladoDeStore, paradoEnDeposito, recompra,
 } from '@/lib/parte/stock.core.js'
 import { abiertosPorCasilla, abiertosPorTitulo, fechaDe, limpiar } from '@/lib/parte/pendientes.core.js'
-import { armarParte, asuntoDe, plataCorta } from '@/lib/parte/mail.core.js'
+import { armarParte, plataCorta } from '@/lib/parte/mail.core.js'
+import { fotoDe, indiceDeFotos, miniatura } from '@/lib/parte/fotos.core.js'
+import { partirPorLinea } from '@/lib/parte/stock.core.js'
 
 /**
  * El parte de la mañana (`docs/secciones/parte-manana.md`). Todo lo que produce es TEXTO que llega
@@ -251,41 +253,197 @@ describe('lo sin terminar', () => {
   })
 })
 
+// ── Lo que marcó Bruno al leer el primero (30-sep) ──────────────────────────────────────────────
+
+describe('lo que no puede faltar mide la venta A PRECIO LLENO', () => {
+  const zattia = (precio: number) => armarUniverso({
+    base: 'zattia',
+    productos: [{ id: 1, name: 'BOMBACHA AYLA', sku: 'Z-1', proveedor: 'ZATTIA', retailer_price: 19990 }],
+    inventario: [{ product_id: 1, size_id: 1, size_name: 'S', store_name: 'Deposito ', available_quantity: 0 }],
+    ventas: [{ id: 1, date_sale: AYER, channel: 'Mi Local' }],
+    detalles: [{ sale_id: 1, product_id: 1, size_id: 1, size: 'S', quantity: 33, unit_price: precio }],
+    proveedorDe: null,
+    hoy: HOY,
+  })
+
+  it('lo que se agotó en la FERIA ⛔ pide reposición, y se cuenta', () => {
+    const [fam] = criticos('zattia', zattia(5590))
+    expect(fam.sinStock).toHaveLength(0)
+    expect(fam.rebajadas).toBe(33)
+  })
+
+  it('lo que se agotó a precio de lista sí', () => {
+    expect(criticos('zattia', zattia(19990))[0].sinStock).toHaveLength(1)
+  })
+
+  it('la cobertura también se mide con la venta a precio lleno', () => {
+    // 10 en stock, 100 vendidas en la Feria y 5 a precio lleno: a la velocidad de la Feria duraría
+    // menos de 3 días; a la de lista, 56. ⛔ Hay que pedir.
+    const u = armarUniverso({
+      base: 'zattia',
+      productos: [{ id: 1, name: 'BOMBACHA BORA', sku: 'Z-1', proveedor: 'ZATTIA', retailer_price: 19990 }],
+      inventario: [{ product_id: 1, size_id: 1, size_name: 'S', store_name: 'Deposito ', available_quantity: 10 }],
+      ventas: [{ id: 1, date_sale: AYER, channel: 'Mi Local' }, { id: 2, date_sale: AYER, channel: 'Mi Local' }],
+      detalles: [
+        { sale_id: 1, product_id: 1, size_id: 1, size: 'S', quantity: 95, unit_price: 5590 },
+        { sale_id: 2, product_id: 1, size_id: 1, size: 'S', quantity: 5, unit_price: 19990 },
+      ],
+      proveedorDe: null,
+      hoy: HOY,
+    })
+    const [fam] = criticos('zattia', u)
+    expect(fam.pedir).toHaveLength(0)
+    expect(fam.sinStock).toHaveLength(0)
+  })
+
+  it('los protectores de CÁMARA ⛔ son templados', () => {
+    const u = armarUniverso({
+      base: 'bdi',
+      productos: [{ id: 1, name: 'PROTECTOR DE CAMARA', category: 'VIDRIOS TEMPLADOS DE CÁMARA', retailer_price: 1000 }],
+      inventario: [{ product_id: 1, size_id: 1, store_name: 'Local', available_quantity: 0 }],
+      ventas: [{ id: 1, date_sale: AYER, channel: 'Mi Local' }],
+      detalles: [{ sale_id: 1, product_id: 1, size_id: 1, quantity: 3, unit_price: 1000 }],
+      proveedorDe: null,
+      hoy: HOY,
+    })
+    expect(criticos('bdi', u)[0].sinStock).toHaveLength(0)
+  })
+})
+
+describe('Stunned tiene su capítulo', () => {
+  it('partirPorLinea separa por el SKU', () => {
+    const u = armarUniverso({
+      base: 'zattia',
+      productos: [{ id: 1, name: 'TOP', sku: 'Z-1' }, { id: 2, name: 'REMERA VINTAGE', sku: 'STUNNED' }],
+      inventario: [{ product_id: 1, size_id: 1, store_name: 'Local', available_quantity: 1 }, { product_id: 2, size_id: 1, store_name: 'Local', available_quantity: 1 }],
+      ventas: [], detalles: [], proveedorDe: null, hoy: HOY,
+    })
+    const p = partirPorLinea(u) as Record<string, Array<{ pid: string }>>
+    expect(p.zattia.map((v: { pid: string }) => v.pid)).toEqual(['1'])
+    expect(p.stunned.map((v: { pid: string }) => v.pid)).toEqual(['2'])
+  })
+})
+
+describe('las fotos', () => {
+  const tn = [{ name: 'STELLAR CASE', images: ['https://dcdn-us.mitiendanube.com/x.jpg'] }, { name: 'SIN FOTO', images: [] }]
+
+  it('matchea por nombre y achica con weserv, en JPG y con https adentro', () => {
+    const u = fotoDe({ name: 'STELLAR CASE' }, indiceDeFotos(tn))
+    expect(u).toContain('images.weserv.nl')
+    expect(u).toContain(encodeURIComponent('https://dcdn-us.mitiendanube.com/x.jpg'))
+    expect(u).toContain('output=jpg')
+    expect(u).not.toContain('webp')
+  })
+
+  it('sin foto en Tienda Nube da null (y el mail pone la inicial)', () => {
+    expect(fotoDe({ name: 'SIN FOTO' }, indiceDeFotos(tn))).toBeNull()
+    expect(miniatura(null)).toBeNull()
+  })
+})
+
 // ── El mail ─────────────────────────────────────────────────────────────────────────────────────
 
-const ventaOk = (base: string, plata: number, completo: boolean | null = true) => ({
-  base, completo, minorista: { compras: 2, unidades: 3, plata }, minoristaAntes: { compras: 1, unidades: 1, plata: plata / 2 },
-  porCanal: { local: { compras: 2, unidades: 3, plata } }, porCanalAntes: null, lineas: {}, lineasAntes: {},
+const venta = (plata: number, completo: boolean | null = true) => ({
+  completo,
+  minorista: { compras: 2, unidades: 3, plata }, minoristaAntes: { compras: 1, unidades: 1, plata: plata / 2 },
+  porCanal: { local: { compras: 2, unidades: 3, plata } }, porCanalAntes: null,
+  lineas: { stunned: { facturado: 1000, unidades: 1, tickets: 1 } }, lineasAntes: {},
+  serie7: [{ fecha: '2026-09-23', plata: 1 }, { fecha: AYER, plata: 2 }], stunned7: [],
 })
-const stockVacio = (base: string) => ({ base, criticos: [], curva: { rotos: [], rebajadas: 0, mirados: 0 }, subir: [], recompra: [] })
+const variante = (pid: string, nombre: string, extra: Record<string, unknown> = {}) => ({
+  pid, sid: '1', talle: 'S', nombre, local: 0, deposito: 0, u28: 5, lleno28: 5, uLocal7: 1, dias: 2, ...extra,
+})
+const stock = (n = 1) => ({
+  criticos: [{
+    nombre: 'Templados', rebajadas: 0,
+    sinStock: Array.from({ length: n }, (_, i) => variante(`s${i}`, `TEMPLADO <b>${i}</b>`)),
+    pedir: Array.from({ length: n }, (_, i) => variante(`p${i}`, `PEDIR ${i}`, { local: 1, deposito: 1 })),
+    reponer: Array.from({ length: n }, (_, i) => variante(`r${i}`, `REPONER ${i}`, { deposito: 9 })),
+  }],
+  curva: { rebajadas: 0, mirados: 30, rotos: Array.from({ length: n }, (_, i) => ({ pid: `c${i}`, puesto: i + 1, nombre: `CURVA ${i}`, proveedor: 'CHINA', rotas: [variante(`c${i}`, 'x')] })) },
+  subir: Array.from({ length: n }, (_, i) => variante(`u${i}`, `SUBIR ${i}`, { deposito: 4 })),
+  recompra: Array.from({ length: Math.min(n, 8) }, (_, g) => ({ proveedor: `PROV ${g}`, u14: 10, productos: Array.from({ length: 5 }, (_, i) => ({ pid: `q${g}${i}`, nombre: `P ${i}`, u14: 3, stock: 9, dias: 20 })) })),
+})
+const capitulos = (n = 1) => [
+  { linea: 'bdi', base: 'bdi', venta: venta(1_063_783), stock: stock(n) },
+  { linea: 'zattia', base: 'zattia', venta: venta(809_178), stock: stock(n) },
+  { linea: 'stunned', base: 'zattia', venta: venta(809_178), stock: { ...stock(0), criticos: [] } },
+]
+const entrada = (over: Record<string, unknown> = {}) => ({
+  hoy: HOY, capitulos: capitulos(), fotos: { bdi: new Map([['s0', 'https://images.weserv.nl/?url=foto']]) },
+  pauta: null, pendientes: [], ...over,
+})
 
 describe('el parte', () => {
-  it('el asunto lleva el minorista por marca y la pauta', () => {
-    const a = asuntoDe({ ventas: [ventaOk('bdi', 2_900_000), ventaOk('zattia', 850_000)], stock: [], pauta: { cuantas: 3, quema: 1 } })
-    expect(a).toBe('Parte · ayer $ 3,8 M minorista (BDI $ 2,9 M · Zattia $ 850 mil) · 3 pauta (1 para pausar)')
+  it('el asunto lleva el minorista por marca, SIN sumar Stunned dos veces', () => {
+    const { asunto } = armarParte(entrada({ pauta: { cuantas: 3, quema: 1, renglones: [] } }))
+    expect(asunto).toBe('Parte · ayer $ 1,9 M minorista (BDI $ 1,1 M · Zattia $ 809 mil) · 4 productos sin stock · 3 pauta (1 para pausar)')
+    // El total exacto: Stunned (sus $ 1.000) ya está adentro de Zattia y ⛔ se suma otra vez.
+    expect(armarParte(entrada()).html).toContain('$ 1.872.961')
+  })
+
+  it('los tres capítulos van en orden, cada uno con su logo', () => {
+    const { html } = armarParte(entrada())
+    const i = (s: string) => html.indexOf(s, html.indexOf('>ZATTIA<') > 0 ? 0 : 0)
+    expect(html).toContain('alt="BDI"')
+    expect(html).toContain('alt="Zattia"')
+    expect(html).toContain('alt="Stunned"')
+    // Las franjas: después de la portada, BDI → Zattia → Stunned.
+    const franjas = [...html.matchAll(/alt="(BDI|Zattia|Stunned)" style="display:block/g)].map((m) => m[1])
+    expect(franjas).toEqual(['BDI', 'Zattia', 'Stunned'])
+    expect(i('x')).toBeGreaterThanOrEqual(0)
+  })
+
+  it('la foto va cuando matchea, y la inicial cuando ⛔', () => {
+    const { html } = armarParte(entrada())
+    expect(html).toContain('src="https://images.weserv.nl/?url=foto"')
+    expect(html).toMatch(/line-height:48px;text-align:center;font-weight:bold">P</)
+  })
+
+  it('Zattia aclara que incluye Stunned', () => {
+    expect(armarParte(entrada()).html).toContain('Incluye Stunned: $ 1.000.')
   })
 
   it('un día incompleto se dice en el asunto y en el cuerpo', () => {
-    const p = armarParte({ hoy: HOY, ventas: [ventaOk('bdi', 1000, false)], stock: [stockVacio('bdi')], pauta: null, pendientes: [] })
+    const caps = capitulos()
+    caps[0].venta = venta(1000, false)
+    const p = armarParte(entrada({ capitulos: caps }))
     expect(p.asunto).toContain('(parcial)')
-    expect(p.texto).toContain('PARCIAL')
+    expect(p.html).toMatch(/background:#fffbeb;color:#b45309;font-size:12px">⚠️ Parcial: el sync de hoy todavía no corrió/)
   })
 
-  it('una base que ⛔ se pudo leer aparece con su motivo, ⛔ desaparece', () => {
-    const p = armarParte({ hoy: HOY, ventas: [{ base: 'zattia', error: 'permission denied' }], stock: [{ base: 'zattia', error: 'permission denied' }], pauta: null, pendientes: [] })
-    expect(p.texto).toContain('Zattia: ⛔ se pudo leer la venta (permission denied)')
-    expect(p.asunto).toContain('⛔ se pudo leer la venta')
+  it('una base que ⛔ se pudo leer tiene su capítulo con el motivo', () => {
+    const p = armarParte(entrada({ capitulos: [{ linea: 'zattia', base: 'zattia', error: 'permission denied' }] }))
+    expect(p.html).toContain('permission denied')
+    expect(p.asunto).toContain('no se pudo leer la venta')
   })
 
-  it('un proyecto sin token dice que ⛔ está configurado', () => {
-    const p = armarParte({ hoy: HOY, ventas: [], stock: [], pauta: null, pendientes: [{ proyecto: 'Maketa', estado: 'no-configurado', motivo: 'falta el secret' }] })
-    expect(p.texto).toContain('⚠️ Maketa: falta el secret')
+  it('un proyecto sin token lo dice', () => {
+    const p = armarParte(entrada({ pendientes: [{ proyecto: 'Maketa', estado: 'no-configurado', motivo: 'falta el secret' }] }))
+    expect(p.html).toContain('Maketa</b>: falta el secret')
   })
 
   it('escapa el HTML de lo que viene de la base', () => {
-    const p = armarParte({ hoy: HOY, ventas: [], stock: [], pauta: null, pendientes: [{ proyecto: 'M', estado: 'ok', items: [{ titulo: '<b>x</b>', dias: 1 }] }] })
-    expect(p.html).toContain('&lt;b&gt;x&lt;/b&gt;')
-    expect(p.html).not.toContain('<b>x</b>')
+    const { html } = armarParte(entrada())
+    expect(html).toContain('TEMPLADO &lt;b&gt;0&lt;/b&gt;')
+    expect(html).not.toContain('TEMPLADO <b>0</b>')
+  })
+
+  it('el signo ⛔ de los comentarios ⛔ llega al texto del mail', () => {
+    const p = armarParte(entrada({ capitulos: [...capitulos(), { linea: 'bdi', base: 'bdi', error: 'x' }], pauta: { error: 'y' } }))
+    expect(p.html).not.toContain('⛔')
+    expect(p.texto).not.toContain('⛔')
+  })
+
+  it('las reglas de un mail: ⛔ svg, ⛔ base64, ⛔ flex', () => {
+    const { html } = armarParte(entrada())
+    expect(html).not.toMatch(/<svg|data:image|display:\s*flex|display:\s*grid/)
+  })
+
+  it('LLENO pesa menos de 90 KB: Gmail corta arriba de ~102', () => {
+    const pend = [{ proyecto: 'Monitor', estado: 'ok', items: Array.from({ length: 30 }, (_, i) => ({ titulo: `Algo largo abierto número ${i} `.repeat(4), dias: i })) }]
+    const { html } = armarParte(entrada({ capitulos: capitulos(40), pendientes: pend, pauta: { cuantas: 10, quema: 2, renglones: Array.from({ length: 10 }, () => ({ g: 'quema', nombre: 'TANDA', linea: 'BDI', cuando: 'hoy', motivo: 'm'.repeat(120), propone: 'pausarlo', ruta: 'https://x' })) } }))
+    expect(Buffer.byteLength(html) / 1024).toBeLessThan(90)
   })
 
   it('plata corta', () => {

@@ -5,6 +5,35 @@
 30-sep-2026: *«un mail de todo lo importante… un panorama real de todo, cosas que están
 incompletas, cosas sin terminar, como un estado del día… para empezar a ordenar la mañana»*.
 
+## 🆕 v2 (30-sep-2026, a la tarde): por marca, con logos y fotos
+
+Bruno leyó el primer mail y pidió tres cosas: *«está demasiado plano… me gustarían fotitos… cuando
+hay cambio de marca, necesito poner los logos»*, y que «no puede faltar» no se llene de lo vendido
+en la Feria.
+
+- **El mail se ordena por MARCA.** Una portada con el minorista de las tres marcas y un capítulo por
+  cada una, con la franja de su logo: BDI → Zattia → Stunned. Después vienen pauta y sin terminar.
+  El dibujo está en `lib/parte/html.core.js`; los formatos, en `formato.core.js`, para que
+  `mail.core.js` y `html.core.js` ⛔ se importen entre sí.
+- **Las fotos** salen del `tiendanube-audit` de bdi-catalogo (público) y se cruzan con `matchTn`.
+  Ese cruce se **mudó** a `lib/tn-match.core.js` y `lib/tn.ts` lo re-exporta tipado: ⛔ se copia.
+  El 30-sep matchearon 301 de los 476 productos de BDI (todos los activos con foto).
+  🔴 **weserv necesita la URL CON `https://`**: sin el protocolo, el CDN de Tienda Nube le contesta 400.
+- **Los logos**: BDI, el negro del Blob del mailer. Zattia, la «Z♥» con el nombre al lado.
+  Stunned, **blanco sobre franja negra**. Todos pasan por weserv con `trim`.
+- 🔴 **«No puede faltar» mide la venta A PRECIO LLENO (`lleno28`)**, igual que la curva. Lo vendido
+  con descuento se cuenta en `rebajadas` y el bloque lo dice. Los protectores de **cámara** salen
+  de templados.
+- 🔴 **Gmail corta arriba de ~102 KB.** Con todas las listas llenas el HTML pesaba 119 KB. La causa
+  eran los estilos inline repetidos (68 KB). Se bajó a 83 KB con tres cambios: estilos cortos,
+  **5 renglones por lista**, **4 talles por producto** («+N») y la **recompra sin foto**, en dos
+  renglones. Un test exige que pese menos de 90 KB.
+- 🔴 **El ⛔ de los comentarios ⛔ va al texto del mail**: en el mail se lee como un cartel rojo. Un
+  test lo exige.
+- **Para mirarlo**: `--html archivo`. En Actions, el simulacro lo sube como artefacto `parte-html`.
+  ⚠️ **Chrome headless ⛔ baja de 500 px de ancho**: para ver el mail a 390 px hay que meterlo en un
+  `<iframe>` de ese ancho, porque si no el «desborde» es del medidor.
+
 ## Qué trae, en orden (lo decidió Bruno)
 
 1. **Ventas de ayer.** Van por marca, con Stunned aparte. El **minorista** se compara contra el mismo día de la semana pasada, y el **mayorista va en su propio renglón**.

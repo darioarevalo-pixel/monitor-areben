@@ -12,7 +12,7 @@
 // sale ADENTRO del mail con su motivo: un parte que ⛔ llega porque se cayó la lectura de un repo
 // es peor que uno que llega diciendo «esto ⛔ se pudo leer». El workflow sí se tiñe de rojo, para
 // que se vea también desde afuera.
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 import { leerTodo } from '../lib/supabase/paginar.core.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
@@ -20,7 +20,8 @@ import { sumarDias, diasEntre } from '../lib/fechas/dia.core.js'
 import { agruparHallazgos } from '../lib/meta-ads/reglas.core.js'
 import { armarMail as armarPauta } from '../lib/meta-ads/mail-hallazgos.core.js'
 import { ayerCompleto, ventaDeAyer } from '../lib/parte/ventas.core.js'
-import { armarUniverso, criticos, curvaRota, paradoEnDeposito, recompra, claveDe, DIAS_VELOCIDAD } from '../lib/parte/stock.core.js'
+import { armarUniverso, criticos, curvaRota, paradoEnDeposito, partirPorLinea, recompra, claveDe, DIAS_VELOCIDAD } from '../lib/parte/stock.core.js'
+import { fotoDe, indiceDeFotos } from '../lib/parte/fotos.core.js'
 import { abiertosPorTitulo, abiertosPorCasilla } from '../lib/parte/pendientes.core.js'
 import { armarParte } from '../lib/parte/mail.core.js'
 import { mandarMail } from './lib/mail.mjs'
@@ -38,6 +39,9 @@ try {
 }
 
 const SIMULACRO = process.argv.includes('--simulacro') || process.env.ENTRADA_SIMULACRO === 'true'
+// `--html <archivo>` guarda el HTML del mail: es como se MIRA antes de mandarlo (el workflow lo sube
+// como artefacto de la corrida, porque Zattia sólo se lee desde Actions).
+const HTML_A = process.argv.includes('--html') ? process.argv[process.argv.indexOf('--html') + 1] : process.env.PARTE_HTML || null
 const MAIL_A = process.env.MAIL_HALLAZGOS_A || 'brunoarevalo@arebensrl.com'
 const HOY = diaArgentino(Date.now())
 const AYER = sumarDias(HOY, -1)
@@ -110,7 +114,24 @@ async function proveedoresBdi() {
   return out
 }
 
-async function venderYStock(base) {
+/** Las listas de stock de UNA línea. Los críticos se calculan sobre la base entera. */
+function stockDeLinea(base, universo, crit) {
+  const sinStockCritico = new Set(crit.flatMap((f) => f.sinStock.map(claveDe)))
+  const reponerCritico = new Set(crit.flatMap((f) => f.reponer.map(claveDe)))
+  return {
+    criticos: crit,
+    curva: curvaRota(universo, undefined, sinStockCritico),
+    subir: paradoEnDeposito(universo, reponerCritico),
+    recompra: recompra(universo),
+  }
+}
+
+/**
+ * La base entera: su venta, y el stock partido por línea. En la de Zattia sale también el capítulo
+ * de Stunned, que vive en el mismo Gestión Nube.
+ */
+async function leerCapitulos(base) {
+  const lineas = base === 'zattia' ? ['zattia', 'stunned'] : ['bdi']
   try {
     const d = await leerBase(base)
     const completo = ayerCompleto(d.syncState, HOY)
@@ -123,22 +144,49 @@ async function venderYStock(base) {
     }
     const universo = armarUniverso({ base, productos: d.productos, inventario: d.inventario, ventas: d.ventas, detalles: d.detalles, proveedorDe, hoy: HOY })
     const crit = criticos(base, universo)
-    const sinStockCritico = new Set(crit.flatMap((f) => f.sinStock.map(claveDe)))
-    const reponerCritico = new Set(crit.flatMap((f) => f.reponer.map(claveDe)))
-    const stock = {
-      base,
-      criticos: crit,
-      curva: curvaRota(universo, undefined, sinStockCritico),
-      subir: paradoEnDeposito(universo, reponerCritico),
-      recompra: recompra(universo),
-    }
+    const partes = partirPorLinea(universo)
     console.log(`  ${base}: ${d.ventas.length} ventas · ${d.detalles.length} renglones · ${d.inventario.length} filas de stock · ayer completo: ${completo}`)
-    if (completo !== true) anotar(`venta de ${base}`, `el día ${AYER} ⛔ está completo en el espejo (sync_state.diario = ${JSON.stringify(d.syncState.find((f) => f.clave === 'diario') || null)})`)
-    return { venta, stock }
+    if (completo !== true) anotar(`venta de ${base}`, `el día ${AYER} no está completo en el espejo (sync_state.diario = ${JSON.stringify(d.syncState.find((f) => f.clave === 'diario') || null)})`)
+    return {
+      productos: d.productos,
+      capitulos: lineas.map((linea) => ({
+        linea, base, venta,
+        // Los críticos son de la base: hoy ninguna familia de Stunned está en `CRITICOS`.
+        stock: stockDeLinea(base, partes[linea] || [], linea === 'stunned' ? [] : crit),
+      })),
+    }
   } catch (e) {
     anotar(`leer ${base}`, e.message)
-    return { venta: { base, error: e.message }, stock: { base, error: e.message } }
+    return { productos: [], capitulos: lineas.map((linea) => ({ linea, base, error: e.message })) }
   }
+}
+
+// ── Las fotos ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * El catálogo de Tienda Nube de una tienda, del mismo endpoint que usa la app. Es público: si un
+ * día pide login, esto devuelve `null`, el mail sale SIN FOTOS y el pie lo dice — ⛔ se rompe.
+ */
+async function catalogo(tienda) {
+  try {
+    const r = await fetch(`https://bdi-catalogo.vercel.app/api/tiendanube-audit?store=${tienda}`)
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    return Array.isArray(d && d.products) ? d.products : []
+  } catch (e) {
+    console.log(`  ✗ catálogo de Tienda Nube de ${tienda}: ${e.message}`)
+    return null
+  }
+}
+
+/** `Map pid → miniatura` de cada producto de la base que matchea con una foto. */
+function fotosDe(productos, indice) {
+  const out = new Map()
+  for (const p of productos) {
+    const u = fotoDe(p, indice)
+    if (u) out.set(String(p.id), u)
+  }
+  return out
 }
 
 // ── La pauta ───────────────────────────────────────────────────────────────────────────────────
@@ -174,7 +222,7 @@ async function pendientes() {
   try {
     out.push({ proyecto: 'Monitor', estado: 'ok', items: conDias(abiertosPorTitulo(readFileSync('PENDIENTES.md', 'utf8'), HOY)) })
   } catch (e) {
-    out.push({ proyecto: 'Monitor', estado: 'error', motivo: `⛔ se pudo leer PENDIENTES.md (${e.message})` })
+    out.push({ proyecto: 'Monitor', estado: 'error', motivo: `no se pudo leer PENDIENTES.md (${e.message})` })
   }
 
   // areben-produccion es público: se lee por raw, sin token.
@@ -183,7 +231,7 @@ async function pendientes() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     out.push({ proyecto: 'Producción', estado: 'ok', items: conDias(abiertosPorCasilla(await r.text(), HOY)) })
   } catch (e) {
-    out.push({ proyecto: 'Producción', estado: 'error', motivo: `⛔ se pudo leer PENDIENTES.md (${e.message})` })
+    out.push({ proyecto: 'Producción', estado: 'error', motivo: `no se pudo leer PENDIENTES.md (${e.message})` })
   }
 
   // areben-marketing (Maketa) es privado: pide un token de sólo lectura. Sin él se DICE.
@@ -199,7 +247,7 @@ async function pendientes() {
       out.push({ proyecto: 'Maketa', estado: 'ok', items: conDias(abiertosPorTitulo(await r.text(), HOY)) })
     } catch (e) {
       anotar('PENDIENTES de Maketa', e.message)
-      out.push({ proyecto: 'Maketa', estado: 'error', motivo: `⛔ se pudo leer PENDIENTES.md (${e.message})` })
+      out.push({ proyecto: 'Maketa', estado: 'error', motivo: `no se pudo leer PENDIENTES.md (${e.message})` })
     }
   }
   return out
@@ -211,14 +259,30 @@ async function main() {
   const t0 = Date.now()
   console.log(`Parte de la mañana · hoy ${HOY} · ayer ${AYER}${SIMULACRO ? ' · SIMULACRO' : ''}`)
 
-  const [bdi, zattia, hallazgos, pend] = await Promise.all([venderYStock('bdi'), venderYStock('zattia'), pauta(), pendientes()])
+  const [bdi, zattia, hallazgos, pend, tnBdi, tnZattia, tnStunned] = await Promise.all([
+    leerCapitulos('bdi'), leerCapitulos('zattia'), pauta(), pendientes(),
+    catalogo('bdi'), catalogo('zattia'), catalogo('stunned'),
+  ])
+  const notas = []
+  const fotos = {
+    bdi: fotosDe(bdi.productos, tnBdi ? indiceDeFotos(tnBdi) : null),
+    // Stunned tiene su propia Tienda Nube pero vive en el Gestión Nube de Zattia.
+    zattia: fotosDe(zattia.productos, tnZattia || tnStunned ? indiceDeFotos(tnZattia || [], tnStunned || []) : null),
+  }
+  const caidos = [['BDI', tnBdi], ['Zattia', tnZattia], ['Stunned', tnStunned]].filter(([, c]) => !c).map(([n]) => n)
+  if (caidos.length) notas.push(`Sin fotos de ${caidos.join(', ')}: el catálogo de Tienda Nube no contestó.`)
+  console.log(`  fotos: BDI ${fotos.bdi.size} de ${bdi.productos.length} · Zattia+Stunned ${fotos.zattia.size} de ${zattia.productos.length}`)
+
   const parte = armarParte({
     hoy: HOY,
-    ventas: [bdi.venta, zattia.venta],
-    stock: [bdi.stock, zattia.stock],
+    capitulos: [...bdi.capitulos, ...zattia.capitulos],
+    fotos,
     pauta: hallazgos,
     pendientes: pend,
+    notas,
   })
+  console.log(`  HTML: ${(Buffer.byteLength(parte.html) / 1024).toFixed(1)} KB`)
+  if (HTML_A) { writeFileSync(HTML_A, parte.html); console.log(`  HTML guardado en ${HTML_A}`) }
 
   if (SIMULACRO) {
     console.log(`\nMail [SIMULACRO, no se manda] → ${MAIL_A}\n  ${parte.asunto}\n`)

@@ -39,53 +39,18 @@ export type TnProducto = {
 
 export type IndiceTn = { bySku: Record<string, TnProducto>; byName: Record<string, TnProducto> }
 
-/**
- * Índice por SKU y por nombre (ambos lower+trim). `soloConImagenes` replica el mapa
- * de fotos del legacy, que sólo indexaba productos con al menos una imagen
- * (index.html:12857). Sin esa opción indexa todos (para el precio promo, P3).
- */
-export function indexarTn(products: TnProducto[], opts?: { soloConImagenes?: boolean }): IndiceTn {
-  const idx: IndiceTn = { bySku: {}, byName: {} }
-  for (const p of products) {
-    if (opts?.soloConImagenes && !(p.images || []).filter(Boolean).length) continue
-    if (p.sku) idx.bySku[p.sku.toLowerCase().trim()] = p
-    if (p.name) idx.byName[p.name.toLowerCase().trim()] = p
-  }
-  return idx
-}
-
 /** El producto GN mínimo para matchear: SKU y nombre. */
 export type ClaveGN = { sku?: string | null; name?: string | null }
 
-/**
- * Matchea un producto GN contra el índice TN. Port literal de _mktFindTN
- * (index.html:8832) / tnEntryForProducto (12879): SKU exacto → nombre exacto →
- * todas las palabras de ≥3 letras contenidas en algún nombre TN.
- */
-export function matchTn(p: ClaveGN, idx: IndiceTn): TnProducto | null {
-  if (p.sku) {
-    const h = idx.bySku[p.sku.toLowerCase().trim()]
-    if (h) return h
-  }
-  if (p.name) {
-    const nameLower = p.name.toLowerCase().trim()
-    if (idx.byName[nameLower]) return idx.byName[nameLower]
-    const palabras = nameLower.split(/\s+/).filter((w) => w.length >= 3)
-    if (palabras.length) {
-      for (const tnName of Object.keys(idx.byName)) {
-        if (palabras.every((w) => tnName.includes(w))) return idx.byName[tnName]
-      }
-    }
-  }
-  return null
-}
+// 🔑 La implementación vive en `lib/tn-match.core.js` (JS plano, la importa también el parte de la
+// mañana). Acá sólo se le ponen los tipos: ⛔ se copia.
+import * as nucleo from './tn-match.core.js'
 
-/** Todas las fotos del producto matcheado (index.html:12906). */
-export function imagenesDe(p: ClaveGN, idx: IndiceTn): string[] {
-  return (matchTn(p, idx)?.images || []).filter(Boolean)
-}
-
-/** La primera foto, o null (thumbnail de la tabla, index.html:12900). */
-export function imagenDe(p: ClaveGN, idx: IndiceTn): string | null {
-  return imagenesDe(p, idx)[0] || null
-}
+/** Índice por SKU y por nombre. Ver `lib/tn-match.core.js`. */
+export const indexarTn: (products: TnProducto[], opts?: { soloConImagenes?: boolean }) => IndiceTn = nucleo.indexarTn
+/** SKU exacto → nombre exacto → palabras. Ver `lib/tn-match.core.js`. */
+export const matchTn: (p: ClaveGN, idx: IndiceTn) => TnProducto | null = nucleo.matchTn
+/** Todas las fotos del producto matcheado. */
+export const imagenesDe: (p: ClaveGN, idx: IndiceTn) => string[] = nucleo.imagenesDe
+/** La primera foto, o null. */
+export const imagenDe: (p: ClaveGN, idx: IndiceTn) => string | null = nucleo.imagenDe

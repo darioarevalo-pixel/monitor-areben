@@ -94,4 +94,16 @@ jobs:
           # Lectura del PENDIENTES.md de areben-marketing (privado). Sin él, el bloque lo dice.
           PENDIENTES_TOKEN: ${{ secrets.PENDIENTES_TOKEN }}
           ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+          # El HTML del mail queda como artefacto de la corrida: es la forma de MIRARLO con los datos
+          # de Zattia, que sólo se leen desde acá (`gh run download <id> -n parte-html`).
+          PARTE_HTML: parte.html
         run: node scripts/parte-manana.mjs
+
+      - name: Guardar el HTML del mail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parte-html
+          path: parte.html
+          if-no-files-found: ignore
+          retention-days: 7
