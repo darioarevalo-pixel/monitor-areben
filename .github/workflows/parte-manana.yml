@@ -1,0 +1,97 @@
+name: Parte de la mañana
+
+# El mail de las 7 con la venta de ayer, el stock que no puede faltar, la curva rota, lo que hay que
+# subir del depósito, la recompra, la pauta y lo sin terminar. Ficha: `docs/secciones/parte-manana.md`.
+#
+# 🔴 **⛔ Tiene `schedule`, a propósito.** 📊 Medido el 30-sep-2026: los crons de GitHub de este repo
+# llegan HORAS tarde — `meta-reglas` (agendado 07:50) corrió entre las 11:44 y las 15:15, y los
+# syncs de las 03:00 entre las 07:30 y las 10:40. Un parte colgado de esos relojes llegaba a la
+# tarde. ⇒ Lo dispara desde afuera un reloj que sí es puntual (ver la ficha), y este workflow
+# **pone en fila todo lo que el mail necesita** en vez de esperar a que los crons lleguen:
+#
+#   syncs de Gestión Nube (BDI, después Zattia) ─┐
+#   foto de Meta → reglas de Meta ───────────────┴→ el mail
+#
+# Los syncs van UNO DETRÁS DEL OTRO porque comparten el candado `gestion-nube` (ver
+# `scripts/lib/disparar-y-esperar.sh`). Las dos filas corren en paralelo: ⛔ comparten candado.
+#
+# 🔑 **El mail sale AUNQUE algo de antes falle** (`if: always()`): un sync caído se dice ADENTRO
+# del mail —«PARCIAL: el sync de hoy todavía ⛔ corrió»—, que es mejor que ⛔ recibir nada.
+concurrency:
+  group: parte-manana
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: 'true = arma el mail y lo imprime, pero ⛔ NO lo manda'
+        required: false
+        default: 'false'
+      solo_mail:
+        description: 'true = ⛔ corre los syncs ni la pauta: arma el mail con lo que ya hay'
+        required: false
+        default: 'false'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  gestion-nube:
+    if: inputs.solo_mail != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync de BDI, después el de Zattia
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/lib/disparar-y-esperar.sh sync-diario.yml
+          bash scripts/lib/disparar-y-esperar.sh sync-diario-zattia.yml
+
+  meta:
+    if: inputs.solo_mail != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Foto de Meta, después las reglas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/lib/disparar-y-esperar.sh meta-snapshot.yml
+          bash scripts/lib/disparar-y-esperar.sh meta-reglas.yml
+
+  parte:
+    needs: [gestion-nube, meta]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Armar y mandar el parte
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          # El mismo SES que ya usan la pauta y el PRM (`scripts/lib/mail.mjs`).
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          MAIL_HALLAZGOS_A: ${{ vars.MAIL_HALLAZGOS_A }}
+          # Lectura del PENDIENTES.md de areben-marketing (privado). Sin él, el bloque lo dice.
+          PENDIENTES_TOKEN: ${{ secrets.PENDIENTES_TOKEN }}
+          ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
+        run: node scripts/parte-manana.mjs

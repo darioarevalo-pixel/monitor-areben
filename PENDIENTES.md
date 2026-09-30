@@ -42,6 +42,31 @@ foto) — ⛔ no se sabe si son jean ⇒ sólo `29904417`. BRICK (ecocuero) y NA
 (GRIT, CAPRI, ELISE, AMBERLY) están AHÍ, y los otros 75 jeans + shorts + bermudas en el viejo
 `32058681` → `34086034` JEANS. ⛔ No tocar sin que Bruno diga **cuál de los dos está en el menú**.
 
+## ▶️ EL PARTE DE LA MAÑANA: UN SOLO MAIL CON TODO — 30-sep-2026 (dictado por Bruno)
+
+> «quiero armar mails de reportes de estado de ventas, reposicion y demas… que de un panorama real
+> de todo, cosas que estan incompletas, cosas sin terminar… para las 7am»
+
+**Lo que decidió Bruno:**
+- Entran las ventas de ayer.
+- Entran los más vendidos **por proveedor con el stock al día**, para la recompra.
+- Entra **lo que no puede faltar en el local**: los templados de BDI y los productos Zattia.
+- Entra la **curva rota a precio lleno**: best sellers sin descuento que tienen una variante en 0.
+- Entra lo **vendido que está parado en el depósito**.
+- Entran los **PENDIENTES** de los proyectos.
+- **Se une con el mail de la pauta**: queda uno solo.
+- ⛔ **Quedaron afuera** lo abierto del equipo (reclamos, insumos) y Gerencial, porque no los eligió.
+
+**Estado:** el código está hecho, se probó contra las dos bases y se cotejó al peso. Todo lo demás está en
+`docs/secciones/parte-manana.md`.
+
+▶️ **Lo que falta, en orden:**
+1. **El reloj puntual.** Los crons de GitHub de este repo llegan horas tarde, así que hay que
+   disparar `parte-manana.yml` desde afuera. **Es una mano de Bruno.**
+2. **El primer envío real.** Bruno confirma que llegó a la BANDEJA y ⛔ no a spam.
+3. **Recién después**, sacarle el mail a `evaluar-reglas-meta.mjs`, para que quede uno solo.
+4. Opcional: el secret `PENDIENTES_TOKEN` para leer el `PENDIENTES.md` de Maketa.
+
 ## 🏁 LA FALLA SE DESCONTABA DE LA SECCIÓN, ⛔ NO DE DONDE ESTABA LA PRENDA — 21-sep-2026 (dictado, y hecho)
 
 > «Revisar esto: cuando se procesa un producto como falla en este caso me parece que toco el stock

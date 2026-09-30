@@ -229,6 +229,9 @@ ya tienen ficha:
 - Retornos (lo que estamos esperando que vuelva) → **leer `docs/secciones/retornos.md`** antes de
   tocar `components/retornos/`, `lib/reclamos/retornos.ts` o la vista `retornos` de
   `api/_reclamos.js`. ⛔ **No es Envíos**, que es lo que SALE.
+- Parte de la mañana (el mail diario, ⛔ es pantalla) → **leer `docs/secciones/parte-manana.md`**
+  antes de tocar `lib/parte/`, `scripts/parte-manana.mjs` o `parte-manana.yml`. ⛔ Lo dispara un
+  reloj de AFUERA: los crons de GitHub de este repo llegan horas tarde.
 - Por producto y Ganadores por tanda → **leer `docs/secciones/productos.md`** antes de tocar
   `components/productos/`, `lib/productos.ts` o `lib/ganadores/`. ⛔ **`sales30` y compañía SUMAN
   el mayorista** (88 % de las unidades de BDI); el corte vive en `ventasMin`/`ventasMay` del ETL.
