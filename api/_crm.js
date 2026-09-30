@@ -288,6 +288,18 @@ async function indiceDeTelefonos(supabase, ahora) {
   return indiceEnVuelo;
 }
 
+/** De estos ids, cuáles tienen al menos una venta (sin contar las técnicas). Son un puñado de ids. */
+export async function clientesConCompras(supabase, ids) {
+  const { data, error } = await supabase
+    .from('ventas')
+    .select(COLUMNAS_VENTAS)
+    .in('client_id', ids)
+    .order('id', { ascending: false })
+    .range(0, PAGINA - 1);
+  if (error) throw new Error(error.message);
+  return [...new Set((data || []).filter((v) => !esVentaTecnica(v)).map((v) => v.client_id))];
+}
+
 /** Las ventas de UN cliente, sin las técnicas. Son pocas: el que más tiene anda por 60. */
 async function ventasDelCliente(supabase, id) {
   const { data, error } = await supabase
@@ -378,13 +390,23 @@ async function panelPorTelefono(supabase, body, res) {
 
   if (!ids.length) return res.status(200).json({ ok: true, encontrado: false, via: '', ms: ms() });
 
+  // 🔑 **Con varios, se queda con el único que COMPRÓ, si hay uno solo** (30-sep-2026). Gestión Nube
+  // arma altas repetidas de la misma persona: Martina Macri tenía su número en CUATRO clientes, y
+  // tres eran altas del mismo día sin una sola venta. El panel preguntaba "¿cuál es?" entre cuatro
+  // "martina" sin forma de saber cuál era la buena. Un alta sin compras no tiene ficha que mostrar.
+  // Si compraron dos o más, sigue preguntando: ahí sí puede ser otra persona.
+  let elegido = ids.length === 1 ? ids[0] : null;
   if (ids.length > 1) {
-    const { data, error } = await supabase.from('clientes').select(COLUMNAS).in('id', ids);
-    if (error) throw new Error(error.message);
-    return res.status(200).json({ ok: true, encontrado: false, via, candidatos: data || [], ms: ms() });
+    const conCompras = await clientesConCompras(supabase, ids);
+    if (conCompras.length === 1) elegido = conCompras[0];
+    else {
+      const { data, error } = await supabase.from('clientes').select(COLUMNAS).in('id', ids);
+      if (error) throw new Error(error.message);
+      return res.status(200).json({ ok: true, encontrado: false, via, candidatos: data || [], ms: ms() });
+    }
   }
 
-  const ficha = await fichaDelPanel(supabase, ids[0]);
+  const ficha = await fichaDelPanel(supabase, elegido);
   return res.status(200).json({ ok: true, via, ms: ms(), ...ficha });
 }
 

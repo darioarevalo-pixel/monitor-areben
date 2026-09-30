@@ -1051,3 +1051,8 @@ agendado del chat (`contact.name || pushname`) y "Número nuevo" ofrece los clie
 tiene todas las palabras del agendado (sin la ciudad después de " - ", sin "mayorista"). ⛔ **Sólo
 sugiere: engancha el toque de Darío** (`vincularTelefono`), nunca solo — los nombres se repiten.
 Con una sola palabra no sugiere.
+
+**30-sep — repetidos con el mismo número.** Martina Macri tenía su teléfono en 4 clientes de GN (3
+altas del mismo día, sin ventas, mismo mail) y el panel preguntaba entre cuatro "martina". Ahora
+`panelPorTelefono` se queda con el **único que tiene alguna venta** (`clientesConCompras`, sin las
+técnicas); con dos o más compradores sigue preguntando.
