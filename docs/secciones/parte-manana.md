@@ -5,6 +5,10 @@
 30-sep-2026: *«un mail de todo lo importante… un panorama real de todo, cosas que están
 incompletas, cosas sin terminar, como un estado del día… para empezar a ordenar la mañana»*.
 
+## Estado (30-sep-2026)
+
+🏁 **Anda solo.** El reloj es `/api/cron/parte-monitor` de Maketa (09:40 UTC) y dispara este workflow con `MONITOR_DISPATCH_TOKEN`. La prueba de punta a punta tardó 14 minutos por el sync de Zattia. Bruno confirmó que llega a la bandeja. **El mail de las 07:50 de `evaluar-reglas-meta.mjs` se apagó**: la pauta va sólo acá.
+
 ## 🆕 v2 (30-sep-2026, a la tarde): por marca, con logos y fotos
 
 Bruno leyó el primer mail y pidió tres cosas: *«está demasiado plano… me gustarían fotitos… cuando

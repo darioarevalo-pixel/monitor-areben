@@ -70,15 +70,8 @@ jobs:
           ENTRADA_SIMULACRO: ${{ inputs.simulacro }}
           ENTRADA_LINEA: ${{ inputs.linea }}
           ENTRADA_DIAS: ${{ inputs.dias }}
-          # El mail de la mañana, por el MISMO SES que ya usa `areben-mailer` (us-east-1, dominio
-          # verificado con DKIM). ⚠️ **Su ausencia NO rompe la corrida a propósito**: sin las
-          # credenciales el script lo dice fuerte en el log y sale verde igual — el trabajo de este
-          # reloj son los hallazgos, y el mail es un rider. Con las credenciales puestas, un envío
-          # que falla SÍ tiñe de rojo.
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          MAIL_HALLAZGOS_A: ${{ vars.MAIL_HALLAZGOS_A }}
+          # ⛔ Ya no manda mail: la pauta va adentro del parte de la mañana (`parte-manana.yml`), que
+          # la lee de `meta_ads_hallazgo` después de que este reloj termina. Un solo mail, 30-sep-2026.
         run: |
           args=""
           [ "$ENTRADA_CALIBRAR" = "true" ] && args="$args --calibrar"
