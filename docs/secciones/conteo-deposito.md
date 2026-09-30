@@ -49,6 +49,17 @@ legacy (`index.html:11549-12021`).
 - 🔴 **Si falla el guardado del historial, el Excel ya se generó igual** (el `catch` vacío es a
   propósito): lo que ajusta stock es el archivo, y perderlo por un 500 del historial sería peor.
 
+## Zattia: la vista «Por estante (SKU)» (30-sep-2026)
+
+En Zattia la lista arranca en **«Por estante»** (`components/conteo-deposito/Estante.tsx`): el mismo
+molde que el «Depósito del local» de abajo —categoría por prefijo de SKU, orden de SKU, tarjetas
+con «Siguiente ↓»— con **una sola casilla** (lo contado). Reusa `ordenDeposito`/`skuDeProducto` de
+`lib/conteo-estandar/core` (genéricos) y suma a `core.ts` `cargarContado`, `visiblesDeGrupo`,
+`planTerminarGrupo` y `terminarVarios`. Solo se ven los productos con stock en sistema; el buscador
+llega a los que están en 0. «Terminar categoría» termina **sólo lo cargado**; lo que tiene stock y
+nadie tocó se pregunta aparte («Ponerlos en 0» / «Dejarlos como están»). BDI no la tiene: sigue
+la lista por nombre. El ajuste, el Excel y el historial son los de siempre.
+
 ## Conteo estándar del Local: la vista «Depósito del local»
 
 El salón se **escanea** (vista lista/foco) y el depósito del local se **carga a mano** en

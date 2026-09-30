@@ -38,6 +38,7 @@ export function agruparVivo(realMap: Record<string, FilaVivo>): CdepProducto[] {
       sid: r.size_id,
       size: r.size_name || '—',
       barcode: r.barcode,
+      sku: r.sku,
       inventory_id: r.inventory_id,
       esperado: Number(r.available_quantity) || 0,
     })
@@ -111,6 +112,55 @@ export function volverSinTerminar(state: CdepState, pid: string): CdepState {
   if (!prev || prev.estado === 'terminado') return state
   const any = Object.keys(prev.contado).length > 0
   return { ...state, [pid]: { ...prev, estado: any ? 'en_progreso' : 'sin_iniciar' } }
+}
+
+// ── Vista «Por estante» (solo Zattia): cargar recorriendo el estante por SKU ────────────
+//
+// Mismo molde que el «Depósito del local» del conteo estándar (orden y grupos de
+// `lib/conteo-estandar/core`), con UNA sola casilla por talle: lo contado.
+
+/** Carga lo contado de un talle abriendo el producto si hace falta (congela el snap). */
+export function cargarContado(state: CdepState, prod: CdepProducto, vid: string, val: string): CdepState {
+  return setCount(abrirProducto(state, prod), prod.pid, vid, val)
+}
+
+/** ¿Se cargó algo en el producto? */
+export function productoTocado(state: CdepState, prod: CdepProducto): boolean {
+  const st = state[prod.pid]
+  return !!st && prod.variants.some((v) => st.contado[v.vid] != null)
+}
+
+export function tieneStock(prod: CdepProducto): boolean {
+  return prod.variants.some((v) => v.esperado !== 0)
+}
+
+/**
+ * Lo que se ve de una categoría: lo que el sistema dice que hay, más lo ya cargado o
+ * terminado (un producto en 0 que apareció en el estante entra en cuanto se le carga algo).
+ */
+export function visiblesDeGrupo(state: CdepState, productos: CdepProducto[]): CdepProducto[] {
+  return productos.filter((p) => tieneStock(p) || productoTocado(state, p) || estadoDe(state, p.pid) === 'terminado')
+}
+
+/**
+ * «Terminar categoría»: se terminan SOLO los productos con algo cargado. Los que no tienen
+ * nada y el sistema dice que hay se separan: ponerlos en 0 es una decisión aparte.
+ */
+export function planTerminarGrupo(state: CdepState, productos: CdepProducto[]) {
+  const abiertos = productos.filter((p) => estadoDe(state, p.pid) !== 'terminado')
+  const aTerminar = abiertos.filter((p) => productoTocado(state, p))
+  const blancosConStock = aTerminar.flatMap((p) =>
+    p.variants
+      .filter((v) => state[p.pid]?.contado[v.vid] == null)
+      .map((v) => ({ producto: p.name, talle: v.size, sistema: state[p.pid]?.snap?.[v.vid] ?? v.esperado }))
+      .filter((x) => x.sistema !== 0),
+  )
+  const sinCargarConStock = abiertos.filter((p) => !productoTocado(state, p) && tieneStock(p))
+  return { aTerminar, blancosConStock, sinCargarConStock }
+}
+
+export function terminarVarios(state: CdepState, productos: CdepProducto[], ahora: number): CdepState {
+  return productos.reduce((st, p) => terminarProducto(abrirProducto(st, p), p, ahora), state)
 }
 
 /**

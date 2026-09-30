@@ -315,16 +315,17 @@ export function skuBase(sku?: string): string {
 }
 
 /** El SKU del producto (el base más chico de sus variantes), o '' si no tiene. */
-export function skuDeProducto(p: CeProducto): string {
+export function skuDeProducto(p: { variants: { sku?: string }[] }): string {
   const skus = p.variants.map((v) => skuBase(v.sku)).filter(Boolean)
   return skus.sort(cmpSku)[0] || ''
 }
 
-export type GrupoDeposito = { grupo: string; productos: CeProducto[] }
+export type GrupoDeposito<P = CeProducto> = { grupo: string; productos: P[] }
 
 /** Productos agrupados por categoría de SKU y ordenados como el estante. «Sin SKU» al final. */
-export function ordenDeposito(products: CeProducto[]): GrupoDeposito[] {
-  const porGrupo = new Map<string, { sku: string; p: CeProducto }[]>()
+// Genérico: lo usa también el Conteo de Depósito (vista «Por estante» de Zattia).
+export function ordenDeposito<P extends { name: string; variants: { sku?: string }[] }>(products: P[]): GrupoDeposito<P>[] {
+  const porGrupo = new Map<string, { sku: string; p: P }[]>()
   products.forEach((p) => {
     const sku = skuDeProducto(p)
     const g = grupoSku(sku)

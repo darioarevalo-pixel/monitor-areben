@@ -13,6 +13,7 @@ export type CdepVariante = {
   sid: number | string
   size: string
   barcode?: string
+  sku?: string
   inventory_id: number | string | null
   esperado: number
 }

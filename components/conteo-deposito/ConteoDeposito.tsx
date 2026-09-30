@@ -11,17 +11,21 @@ import {
   ANCHOS_AJUSTE,
   aoaAjuste,
   calcularAjuste,
+  cargarContado,
   estadoDe,
   ordenarModelo,
+  planTerminarGrupo,
   setCount,
   stockSistema,
   terminarProducto,
+  terminarVarios,
   ultimoMs,
   volverSinTerminar,
 } from '@/lib/conteo-deposito/core'
 import { guardarConteo, leerHistorial } from '@/lib/conteo-deposito/cliente'
 import type { CdepProducto, CdepState, ConteoHistorial, Preview } from '@/lib/conteo-deposito/tipos'
 import { useConteoDeposito } from './useConteoDeposito'
+import { Estante } from './Estante'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { InfoPopover } from '@/components/ui/InfoPopover'
 import { ChipEstado, HistorialConteos, InstructivoConteo, ResumenConteo, fechaLabel, stockLabel } from '@/components/conteos/comunes'
@@ -48,6 +52,7 @@ import {
 } from '@/components/ui'
 
 type Vista = 'lista' | 'foco' | 'preview' | 'historial'
+type ModoLista = 'estante' | 'nombre'
 type Filtro = 'todos' | 'sin_previo' | 'sin_previo_stock' | 'contados' | 'en_progreso' | 'terminado'
 
 /**
@@ -78,6 +83,10 @@ export function ConteoDeposito() {
   const [search, setSearch] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [orderAsc, setOrderAsc] = useState(true)
+  // «Por estante» (ordenado por SKU) es solo de Zattia: sus SKUs dicen la categoría y el orden
+  // del estante. BDI sigue con la lista por nombre.
+  const esZattia = marca === 'zattia'
+  const [modoLista, setModoLista] = useState<ModoLista>('estante')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [aplicando, setAplicando] = useState(false)
   const [hist, setHist] = useState<{ cargando: boolean; conteos: ConteoHistorial[]; error: string | null }>({ cargando: false, conteos: [], error: null })
@@ -99,6 +108,79 @@ export function ConteoDeposito() {
     setVista('lista')
   }
   const onSet = (pid: string, vid: string, val: string) => cd.aplicar(setCount(state, pid, vid, val))
+  const onSetEstante = (prod: CdepProducto, vid: string, val: string) => {
+    cd.aplicar(cargarContado(state, prod, vid, val))
+    if (!inicio) cd.setInicio(Date.now())
+  }
+  const onTerminarGrupo = async (productos: CdepProducto[], grupo: string) => {
+    const plan = planTerminarGrupo(state, productos)
+    const faltan = plan.sinCargarConStock
+    if (!plan.aTerminar.length && !faltan.length) {
+      await avisar(`En ${grupo} no hay productos para terminar.`)
+      return
+    }
+    if (plan.aTerminar.length) {
+      const ok = await confirmar({
+        titulo: `Terminar ${grupo}`,
+        tono: plan.blancosConStock.length ? 'warning' : undefined,
+        ok: `Terminar ${plan.aTerminar.length}`,
+        mensaje: (
+          <>
+            <p>
+              Se terminan <b>{plan.aTerminar.length}</b> {plan.aTerminar.length === 1 ? 'producto' : 'productos'} con algo cargado.
+            </p>
+            {plan.blancosConStock.length > 0 && (
+              <>
+                <p style={{ marginTop: space[2] }}>
+                  ⚠️ {plan.blancosConStock.length === 1 ? 'Este talle quedó' : 'Estos talles quedaron'} en blanco y el sistema dice que hay: <b>van a quedar en 0</b>.
+                </p>
+                <ul style={{ marginTop: space[1], paddingLeft: 18, fontSize: font.sm }}>
+                  {plan.blancosConStock.slice(0, 25).map((x, i) => (
+                    <li key={i}>
+                      {x.producto} · <b>{x.talle}</b> — el sistema dice {x.sistema}
+                    </li>
+                  ))}
+                  {plan.blancosConStock.length > 25 && <li>y {plan.blancosConStock.length - 25} más</li>}
+                </ul>
+              </>
+            )}
+          </>
+        ),
+      })
+      if (!ok) return
+    }
+    // Lo que el sistema dice que hay y nadie cargó: ponerlo en 0 es una decisión aparte y
+    // explícita (mismo criterio que el conteo del local). Cerrar el cartel lo deja como está.
+    let enCero: CdepProducto[] = []
+    if (faltan.length) {
+      const unidades = faltan.reduce((n, p) => n + p.variants.reduce((m, v) => m + Math.max(0, v.esperado), 0), 0)
+      const cero = await confirmar({
+        titulo: `${faltan.length} ${faltan.length === 1 ? 'producto' : 'productos'} de ${grupo} sin cargar`,
+        tono: 'warning',
+        ok: 'Ponerlos en 0',
+        cancelar: 'Dejarlos como están',
+        mensaje: (
+          <>
+            <p>
+              El sistema dice que {faltan.length === 1 ? 'tiene' : 'tienen'} stock (<b>{unidades}</b> {unidades === 1 ? 'unidad' : 'unidades'} en total) y no se les cargó nada.
+            </p>
+            <p style={{ marginTop: space[2] }}>
+              Si los buscaste y no están, <b>ponelos en 0</b>: se terminan como faltantes y el ajuste los descuenta. Si no los buscaste todavía, dejalos como están.
+            </p>
+            <p style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
+              {faltan.slice(0, 12).map((p) => p.name).join(' · ')}
+              {faltan.length > 12 ? ` y ${faltan.length - 12} más` : ''}
+            </p>
+          </>
+        ),
+      })
+      if (cero) enCero = faltan
+    }
+    const cerrar = [...plan.aTerminar, ...enCero]
+    if (!cerrar.length) return
+    cd.aplicar(terminarVarios(state, cerrar, Date.now()))
+    if (!inicio) cd.setInicio(Date.now())
+  }
   const onFinish = async (prod: CdepProducto) => {
     const st = state[prod.pid]
     const sinCargar = prod.variants.filter((v) => (st?.contado[v.vid] ?? null) == null).length
@@ -371,6 +453,10 @@ export function ConteoDeposito() {
           aplicando={aplicando}
           onOpen={onOpen}
           onAplicar={onAplicar}
+          modoLista={esZattia ? modoLista : 'nombre'}
+          setModoLista={esZattia ? setModoLista : null}
+          onSetEstante={onSetEstante}
+          onTerminarGrupo={(ps, g) => void onTerminarGrupo(ps, g)}
         />
       )}
     </>
@@ -391,6 +477,10 @@ function Lista({
   aplicando,
   onOpen,
   onAplicar,
+  modoLista,
+  setModoLista,
+  onSetEstante,
+  onTerminarGrupo,
 }: {
   products: CdepProducto[]
   state: CdepState
@@ -404,6 +494,11 @@ function Lista({
   aplicando: boolean
   onOpen: (pid: string) => void
   onAplicar: () => void
+  modoLista: ModoLista
+  /** null = sin selector (BDI: solo la lista por nombre). */
+  setModoLista: ((m: ModoLista) => void) | null
+  onSetEstante: (prod: CdepProducto, vid: string, val: string) => void
+  onTerminarGrupo: (productos: CdepProducto[], grupo: string) => void
 }) {
   const [ordenarStock, setOrdenarStock] = useState(false)
   const term = products.filter((p) => estadoDe(state, p.pid) === 'terminado').length
@@ -461,6 +556,23 @@ function Lista({
         </Notice>
       )}
 
+      {setModoLista && (
+        <div style={{ marginBottom: space[3] }}>
+          <Chips<ModoLista>
+            value={modoLista}
+            onChange={setModoLista}
+            opciones={[
+              { key: 'estante', label: 'Por estante (SKU)', title: 'Una categoría por vez, en el orden del estante' },
+              { key: 'nombre', label: 'Lista por nombre', title: 'Todos los productos, abriendo uno por uno' },
+            ]}
+          />
+        </div>
+      )}
+
+      {modoLista === 'estante' ? (
+        <Estante products={products} state={state} onSet={onSetEstante} onTerminarGrupo={onTerminarGrupo} onAbrir={onOpen} />
+      ) : (
+        <>
       <FilterBar>
         <BuscarInput value={search} onChange={setSearch} placeholder="Buscá un producto (ej: Cover Case)…" />
         <Chips<Filtro>
@@ -540,6 +652,8 @@ function Lista({
               Mostrando 400 de {lista.length}. Afiná la búsqueda.
             </p>
           )}
+        </>
+      )}
         </>
       )}
     </div>
