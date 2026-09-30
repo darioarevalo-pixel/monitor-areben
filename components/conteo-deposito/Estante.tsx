@@ -27,7 +27,8 @@ export function Estante({
   products: CdepProducto[]
   state: CdepState
   onSet: (prod: CdepProducto, vid: string, val: string) => void
-  onTerminarGrupo: (productos: CdepProducto[], grupo: string) => void
+  /** Devuelve el primer talle en blanco si no se pudo terminar (la casilla recibe el foco). */
+  onTerminarGrupo: (productos: CdepProducto[], grupo: string) => Promise<string | null>
   onAbrir: (pid: string) => void
 }) {
   const grupos = useMemo(() => ordenDeposito(products).map((g) => ({ ...g, nombre: nombreGrupo(g.grupo) })), [products])
@@ -55,6 +56,19 @@ export function Estante({
     mover(contRef.current, e.currentTarget, 1)
   }
   const terminados = (g: { vis: CdepProducto[] }) => g.vis.filter((p) => estadoDe(state, p.pid) === 'terminado').length
+  const terminarCategoria = async (g: { vis: CdepProducto[]; grupo: string }) => {
+    const vid = await onTerminarGrupo(g.vis, g.grupo)
+    if (!vid) return
+    setSearch('')
+    // Después de cerrar el aviso: llevar al primer talle en blanco.
+    setTimeout(() => {
+      const el = contRef.current?.querySelector<HTMLInputElement>(`input[data-vid="${CSS.escape(vid)}"]`)
+      if (el) {
+        el.focus()
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+    }, 50)
+  }
   const ir = (i: number) => {
     const g = conStock[i]
     if (!g) return
@@ -66,7 +80,7 @@ export function Estante({
     <div>
       <p style={{ fontSize: font.sm, color: color.mut, marginBottom: space[3] }}>
         Mismo orden que el estante: una categoría por vez, por SKU de menor a mayor. Se ven los productos que el sistema dice que tienen stock; si aparece otro en el estante, buscalo y cargalo.
-        La casilla en blanco cuenta como <b>0</b> cuando se termina el producto.
+        Todo talle que el sistema dice que tiene stock lleva un número: si no está, anotá <b>0</b>. La categoría no se termina mientras quede alguno en blanco.
       </p>
 
       {actual && (
@@ -119,7 +133,7 @@ export function Estante({
                 </b>{' '}
                 · {terminados(actual)} de {actual.vis.length} {actual.vis.length === 1 ? 'producto terminado' : 'productos terminados'}
               </span>
-              <Button size="sm" variant="solid" tone="brand" onClick={() => onTerminarGrupo(actual.vis, actual.grupo)}>
+              <Button size="sm" variant="solid" tone="brand" onClick={() => void terminarCategoria(actual)}>
                 ✓ Terminar categoría
               </Button>
             </div>
@@ -213,6 +227,7 @@ function Tarjeta({
             <span style={{ textAlign: 'center', color: color.mut }}>{sis}</span>
             <input
               data-dep=""
+              data-vid={v.vid}
               className="mo-input mo-input--num"
               type="number"
               min={0}

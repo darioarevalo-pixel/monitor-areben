@@ -56,8 +56,10 @@ molde que el «Depósito del local» de abajo —categoría por prefijo de SKU, 
 con «Siguiente ↓»— con **una sola casilla** (lo contado). Reusa `ordenDeposito`/`skuDeProducto` de
 `lib/conteo-estandar/core` (genéricos) y suma a `core.ts` `cargarContado`, `visiblesDeGrupo`,
 `planTerminarGrupo` y `terminarVarios`. Solo se ven los productos con stock en sistema; el buscador
-llega a los que están en 0. «Terminar categoría» termina **sólo lo cargado**; lo que tiene stock y
-nadie tocó se pregunta aparte («Ponerlos en 0» / «Dejarlos como están»). BDI no la tiene: sigue
+llega a los que están en 0. 🔑 «Terminar categoría» es **estricto** (Bruno, 30-sep: «la categoría se
+inicia y se termina»): no cierra mientras quede un talle en blanco con stock en sistema
+(`pendientesDeGrupo`), lo lista y lleva el foco al primero. Un blanco con sistema 0 no bloquea.
+⚠️ Es distinto del Local, que termina solo lo cargado y pregunta por el resto. BDI no la tiene: sigue
 la lista por nombre. El ajuste, el Excel y el historial son los de siempre.
 
 ## Conteo estándar del Local: la vista «Depósito del local»

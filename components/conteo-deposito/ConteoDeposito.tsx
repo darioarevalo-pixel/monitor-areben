@@ -14,7 +14,7 @@ import {
   cargarContado,
   estadoDe,
   ordenarModelo,
-  planTerminarGrupo,
+  pendientesDeGrupo,
   setCount,
   stockSistema,
   terminarProducto,
@@ -112,74 +112,41 @@ export function ConteoDeposito() {
     cd.aplicar(cargarContado(state, prod, vid, val))
     if (!inicio) cd.setInicio(Date.now())
   }
-  const onTerminarGrupo = async (productos: CdepProducto[], grupo: string) => {
-    const plan = planTerminarGrupo(state, productos)
-    const faltan = plan.sinCargarConStock
-    if (!plan.aTerminar.length && !faltan.length) {
-      await avisar(`En ${grupo} no hay productos para terminar.`)
-      return
+  // Devuelve el primer talle en blanco (para llevar el foco ahí) o null si se terminó.
+  const onTerminarGrupo = async (productos: CdepProducto[], grupo: string): Promise<string | null> => {
+    const abiertos = productos.filter((p) => estadoDe(state, p.pid) !== 'terminado')
+    if (!abiertos.length) {
+      await avisar(`${grupo} ya está terminada.`)
+      return null
     }
-    if (plan.aTerminar.length) {
-      const ok = await confirmar({
-        titulo: `Terminar ${grupo}`,
-        tono: plan.blancosConStock.length ? 'warning' : undefined,
-        ok: `Terminar ${plan.aTerminar.length}`,
-        mensaje: (
-          <>
-            <p>
-              Se terminan <b>{plan.aTerminar.length}</b> {plan.aTerminar.length === 1 ? 'producto' : 'productos'} con algo cargado.
-            </p>
-            {plan.blancosConStock.length > 0 && (
-              <>
-                <p style={{ marginTop: space[2] }}>
-                  ⚠️ {plan.blancosConStock.length === 1 ? 'Este talle quedó' : 'Estos talles quedaron'} en blanco y el sistema dice que hay: <b>van a quedar en 0</b>.
-                </p>
-                <ul style={{ marginTop: space[1], paddingLeft: 18, fontSize: font.sm }}>
-                  {plan.blancosConStock.slice(0, 25).map((x, i) => (
-                    <li key={i}>
-                      {x.producto} · <b>{x.talle}</b> — el sistema dice {x.sistema}
-                    </li>
-                  ))}
-                  {plan.blancosConStock.length > 25 && <li>y {plan.blancosConStock.length - 25} más</li>}
-                </ul>
-              </>
-            )}
-          </>
-        ),
-      })
-      if (!ok) return
-    }
-    // Lo que el sistema dice que hay y nadie cargó: ponerlo en 0 es una decisión aparte y
-    // explícita (mismo criterio que el conteo del local). Cerrar el cartel lo deja como está.
-    let enCero: CdepProducto[] = []
-    if (faltan.length) {
-      const unidades = faltan.reduce((n, p) => n + p.variants.reduce((m, v) => m + Math.max(0, v.esperado), 0), 0)
-      const cero = await confirmar({
-        titulo: `${faltan.length} ${faltan.length === 1 ? 'producto' : 'productos'} de ${grupo} sin cargar`,
+    const pend = pendientesDeGrupo(state, abiertos)
+    if (pend.length) {
+      await avisar({
+        titulo: `Faltan talles en ${grupo}`,
         tono: 'warning',
-        ok: 'Ponerlos en 0',
-        cancelar: 'Dejarlos como están',
+        ok: 'Ir al primero',
         mensaje: (
           <>
             <p>
-              El sistema dice que {faltan.length === 1 ? 'tiene' : 'tienen'} stock (<b>{unidades}</b> {unidades === 1 ? 'unidad' : 'unidades'} en total) y no se les cargó nada.
+              {pend.length === 1 ? 'Queda 1 talle' : `Quedan ${pend.length} talles`} en blanco que el sistema dice que tienen stock. Si no está, anotá <b>0</b>.
             </p>
-            <p style={{ marginTop: space[2] }}>
-              Si los buscaste y no están, <b>ponelos en 0</b>: se terminan como faltantes y el ajuste los descuenta. Si no los buscaste todavía, dejalos como están.
-            </p>
-            <p style={{ marginTop: space[2], fontSize: font.sm, color: color.mut }}>
-              {faltan.slice(0, 12).map((p) => p.name).join(' · ')}
-              {faltan.length > 12 ? ` y ${faltan.length - 12} más` : ''}
-            </p>
+            <ul style={{ marginTop: space[2], paddingLeft: 18, fontSize: font.sm }}>
+              {pend.slice(0, 15).map((x) => (
+                <li key={x.vid}>
+                  {x.producto} · <b>{x.talle}</b> — el sistema dice {x.sistema}
+                </li>
+              ))}
+              {pend.length > 15 && <li>y {pend.length - 15} más</li>}
+            </ul>
           </>
         ),
       })
-      if (cero) enCero = faltan
+      return pend[0].vid
     }
-    const cerrar = [...plan.aTerminar, ...enCero]
-    if (!cerrar.length) return
-    cd.aplicar(terminarVarios(state, cerrar, Date.now()))
+    cd.aplicar(terminarVarios(state, abiertos, Date.now()))
     if (!inicio) cd.setInicio(Date.now())
+    toast.ok(`${grupo} terminada (${abiertos.length} ${abiertos.length === 1 ? 'producto' : 'productos'})`)
+    return null
   }
   const onFinish = async (prod: CdepProducto) => {
     const st = state[prod.pid]
@@ -456,7 +423,7 @@ export function ConteoDeposito() {
           modoLista={esZattia ? modoLista : 'nombre'}
           setModoLista={esZattia ? setModoLista : null}
           onSetEstante={onSetEstante}
-          onTerminarGrupo={(ps, g) => void onTerminarGrupo(ps, g)}
+          onTerminarGrupo={onTerminarGrupo}
         />
       )}
     </>
@@ -498,7 +465,7 @@ function Lista({
   /** null = sin selector (BDI: solo la lista por nombre). */
   setModoLista: ((m: ModoLista) => void) | null
   onSetEstante: (prod: CdepProducto, vid: string, val: string) => void
-  onTerminarGrupo: (productos: CdepProducto[], grupo: string) => void
+  onTerminarGrupo: (productos: CdepProducto[], grupo: string) => Promise<string | null>
 }) {
   const [ordenarStock, setOrdenarStock] = useState(false)
   const term = products.filter((p) => estadoDe(state, p.pid) === 'terminado').length

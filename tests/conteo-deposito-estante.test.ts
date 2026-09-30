@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { agruparVivo, cargarContado, planTerminarGrupo, terminarVarios, visiblesDeGrupo } from '@/lib/conteo-deposito/core'
+import { agruparVivo, cargarContado, pendientesDeGrupo, terminarVarios, visiblesDeGrupo } from '@/lib/conteo-deposito/core'
 import { ordenDeposito } from '@/lib/conteo-estandar/core'
 import { realMap } from '@/lib/inventario-vivo/core'
 import type { FilaVivo } from '@/lib/inventario-vivo/tipos'
@@ -36,22 +36,34 @@ describe('Conteo de Depósito · por estante', () => {
     expect(visiblesDeGrupo(st, rto).map((p) => p.name)).toEqual(['REMERA A', 'REMERA B', 'REMERA C'])
   })
 
-  it('terminar categoría: termina lo cargado, y lo que no se tocó con stock queda aparte', () => {
+  it('terminar categoría es estricto: bloquea los talles en blanco con stock, no los que están en 0', () => {
     const rto = ordenDeposito(prods)[0].productos
     const b = rto.find((p) => p.name === 'REMERA B')!
+    const c = rto.find((p) => p.name === 'REMERA C')!
     const vS = b.variants.find((v) => v.size === 'S')!
-    const st = cargarContado({}, b, vS.vid, '3')
-    const plan = planTerminarGrupo(st, visiblesDeGrupo(st, rto))
-    expect(plan.aTerminar.map((p) => p.name)).toEqual(['REMERA B'])
-    // El talle M quedó en blanco con 2 en sistema: va a quedar en 0.
-    expect(plan.blancosConStock).toEqual([{ producto: 'REMERA B', talle: 'M', sistema: 2 }])
-    expect(plan.sinCargarConStock.map((p) => p.name)).toEqual(['REMERA C'])
+    let st = cargarContado({}, b, vS.vid, '3')
+    const vis = visiblesDeGrupo(st, rto)
+    // B·M (sistema 2) y C·S (sistema 1) en blanco: bloquean, en orden de estante.
+    expect(pendientesDeGrupo(st, vis).map((x) => `${x.producto} ${x.talle} ${x.sistema}`)).toEqual(['REMERA B M 2', 'REMERA C S 1'])
 
-    const fin = terminarVarios(st, [...plan.aTerminar, ...plan.sinCargarConStock], 1000)
+    const vM = b.variants.find((v) => v.size === 'M')!
+    st = cargarContado(st, b, vM.vid, '0')
+    st = cargarContado(st, c, c.variants[0].vid, '1')
+    expect(pendientesDeGrupo(st, vis)).toEqual([])
+
+    const fin = terminarVarios(st, vis, 1000)
     expect(fin[b.pid].estado).toBe('terminado')
     expect(Object.values(fin[b.pid].dif).sort()).toEqual([-2, 0])
-    const c = rto.find((p) => p.name === 'REMERA C')!
-    expect(fin[c.pid].estado).toBe('terminado')
-    expect(Object.values(fin[c.pid].dif)).toEqual([-1])
+    expect(Object.values(fin[c.pid].dif)).toEqual([0])
+  })
+
+  it('un talle en blanco con sistema 0 no bloquea', () => {
+    const p = agruparVivo(realMap([
+      fv({ inventory_id: 9, product_id: '9', product_name: 'TOP', sku: 'TOP-0001-S', size_id: 's', size_name: 'S', available_quantity: 2 }),
+      fv({ inventory_id: 10, product_id: '9', product_name: 'TOP', sku: 'TOP-0001-XL', size_id: 'x', size_name: 'XL', available_quantity: 0 }),
+    ]))
+    const vS = p[0].variants.find((v) => v.size === 'S')!
+    const st = cargarContado({}, p[0], vS.vid, '2')
+    expect(pendientesDeGrupo(st, p)).toEqual([])
   })
 })

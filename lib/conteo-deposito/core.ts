@@ -26,6 +26,7 @@ const prodVacio = (): EstadoDeProd => ({ estado: 'sin_iniciar', contado: {}, sna
 // `ordenarModelo` (=_repoModelSort) vive en lib/reposicion/grupos (hogar compartido).
 // Se re-exporta acá para no cambiar los imports de conteo-deposito/-estandar.
 export { ordenarModelo } from '../reposicion/grupos'
+import { ordenarModelo } from '../reposicion/grupos'
 
 /** Agrupa las filas reales del vivo en productos con sus variantes. Port de conteoDepInit @11648-11655. */
 export function agruparVivo(realMap: Record<string, FilaVivo>): CdepProducto[] {
@@ -143,20 +144,21 @@ export function visiblesDeGrupo(state: CdepState, productos: CdepProducto[]): Cd
 }
 
 /**
- * «Terminar categoría»: se terminan SOLO los productos con algo cargado. Los que no tienen
- * nada y el sistema dice que hay se separan: ponerlos en 0 es una decisión aparte.
+ * «Terminar categoría» es ESTRICTO (Bruno, 30-sep-2026: «la categoría se inicia y se termina»):
+ * no se cierra mientras quede un talle en blanco que el sistema dice que TIENE stock. Si no está,
+ * se anota 0. Un blanco con sistema 0 no bloquea: queda en 0 y no cambia nada.
  */
-export function planTerminarGrupo(state: CdepState, productos: CdepProducto[]) {
-  const abiertos = productos.filter((p) => estadoDe(state, p.pid) !== 'terminado')
-  const aTerminar = abiertos.filter((p) => productoTocado(state, p))
-  const blancosConStock = aTerminar.flatMap((p) =>
-    p.variants
-      .filter((v) => state[p.pid]?.contado[v.vid] == null)
-      .map((v) => ({ producto: p.name, talle: v.size, sistema: state[p.pid]?.snap?.[v.vid] ?? v.esperado }))
-      .filter((x) => x.sistema !== 0),
-  )
-  const sinCargarConStock = abiertos.filter((p) => !productoTocado(state, p) && tieneStock(p))
-  return { aTerminar, blancosConStock, sinCargarConStock }
+export function pendientesDeGrupo(state: CdepState, productos: CdepProducto[]) {
+  return productos
+    .filter((p) => estadoDe(state, p.pid) !== 'terminado')
+    .flatMap((p) =>
+      p.variants
+        .slice()
+        .sort((a, b) => ordenarModelo(a.size, b.size))
+        .filter((v) => state[p.pid]?.contado[v.vid] == null)
+        .map((v) => ({ pid: p.pid, vid: v.vid, producto: p.name, talle: v.size, sistema: state[p.pid]?.snap?.[v.vid] ?? v.esperado }))
+        .filter((x) => x.sistema !== 0),
+    )
 }
 
 export function terminarVarios(state: CdepState, productos: CdepProducto[], ahora: number): CdepState {
