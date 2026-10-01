@@ -1,18 +1,18 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
-import { useSesion } from '@/components/SesionProvider'
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, KpiCard, Notice, Plegable, SectionCard, Tabs, color, font, space, useToast } from '@/components/ui'
-import { bajarExhib, type CrudosExhib } from '@/lib/exhib/datos'
-import { armarProdMap, construirItems } from '@/lib/exhib/core'
-import { alertas as alertasDe, capacidadTotal, cuelga, estabilizar, estadoDeModulo, movimientos, prendasDelLocal, resumenPorTipo, ubicar, type EstadoModulo } from '@/lib/mapa-local/core'
+import { alertas as alertasDe, capacidadTotal, cuelga, estabilizar, estadoDeModulo, movimientos, resumenPorTipo, ubicar, type EstadoModulo } from '@/lib/mapa-local/core'
 import { hojaDeModulo, imprimirHojas } from '@/lib/mapa-local/hoja'
-import { guardarMapa, leerMapa } from '@/lib/mapa-local/cliente'
+import { guardarMapa } from '@/lib/mapa-local/cliente'
 import { MAPA_INICIAL } from '@/lib/mapa-local/inicial'
 import { proponerArmado } from '@/lib/mapa-local/proponer'
 import type { MapaLocal as Mapa, ModoCupo, Modulo, Pared as TipoPared } from '@/lib/mapa-local/tipos'
+import { QueSeCuelga } from '@/components/que-se-cuelga/QueSeCuelga'
+import { useMapaLocalDatos } from './useMapaLocalDatos'
 import { Plano } from './Plano'
 import { Pared } from './Pared'
 import { Detalle } from './Detalle'
@@ -41,63 +41,38 @@ const PAREDES: { key: TipoPared; label: string }[] = [
   { key: 'isla', label: 'Isla' },
 ]
 
+/**
+ * Dos vistas, una sección (misma key y mismo permiso): **«Percheros»** (`/mapa-local`, el plano y las
+ * barras) y **«Qué se cuelga»** (`/mapa-local/que-se-cuelga`, la temporada y qué queda afuera).
+ * Pedido de Bruno (1-oct-2026): la vista principal sigue siendo la de los percheros.
+ */
 export function MapaLocal() {
-  const { marca } = useSesion()
-  const { datos } = useDatosMonitor()
-  const toast = useToast()
-  const productos = useMemo(() => datos?.allProductos ?? [], [datos])
+  const params = useParams()
+  const partes = params.seccion
+  const vista = Array.isArray(partes) ? partes[1] : null
+  return vista === 'que-se-cuelga' ? <QueSeCuelga /> : <Percheros />
+}
 
-  const [crudos, setCrudos] = useState<CrudosExhib>({ inv: [], tnProducts: [] })
-  const [guardado, setGuardado] = useState<{ mapa: Mapa; en: string | null; por: string | null } | null>(null)
-  // El mapa contra el que se calcula «Mover»: el que estaba guardado al abrir la pantalla. ⛔ No se
-  // pisa al guardar, para que la lista y las hojas sigan ahí después del «Guardar».
-  const [base, setBase] = useState<Mapa | null>(null)
-  const [mapa, setMapa] = useState<Mapa>(MAPA_INICIAL)
-  const [editar, setEditar] = useState(false)
-  const [sinTabla, setSinTabla] = useState(false)
-  const [cargando, setCargando] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+function Percheros() {
+  const toast = useToast()
+  const { marca, hoy, prendas, sinCruzarTn, guardado, setGuardado, base, editar, sinTabla, cargando, error } = useMapaLocalDatos(MAPA_INICIAL)
+  // Lo editado; `null` = sin tocar, y entonces se ve el guardado (o el inicial mientras carga).
+  const [editado, setEditado] = useState<Mapa | null>(null)
+  const mapa = editado ?? guardado?.mapa ?? MAPA_INICIAL
+  const setMapa = (cambio: Mapa | ((m: Mapa) => Mapa)) => setEditado((ant) => (typeof cambio === 'function' ? cambio(ant ?? guardado?.mapa ?? MAPA_INICIAL) : cambio))
   const [guardando, setGuardando] = useState(false)
   const [modo, setModo] = useState<ModoCupo>('comodo')
   const [pared, setPared] = useState<TipoPared>('der')
   const [elegido, setElegido] = useState<string | null>(null)
   const [abierto, setAbierto] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    if (marca !== 'zattia') return
-    let vivo = true
-    void (async () => {
-      try {
-        const [m, c] = await Promise.all([leerMapa(), bajarExhib('zattia')])
-        if (!vivo) return
-        const base = m.mapa || MAPA_INICIAL
-        setGuardado({ mapa: base, en: m.actualizadoEn, por: m.actualizadoPor })
-        setBase(m.mapa)
-        setMapa(base)
-        setEditar(m.puede.editar)
-        setSinTabla(m.sinTabla)
-        setCrudos(c)
-      } catch (e) {
-        if (vivo) setError((e as Error).message)
-      } finally {
-        if (vivo) setCargando(false)
-      }
-    })()
-    return () => {
-      vivo = false
-    }
-  }, [marca])
-
-  // El cruce GN ↔ TN se recalcula cuando llega el ETL, que es después de montar (ver `useExhib`).
-  const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
-  const prendas = useMemo(() => prendasDelLocal(construirItems(crudos.inv, prodMap, {}), 'zattia'), [crudos.inv, prodMap])
   // Con un cambio de armado, la ubicación se reacomoda para mover lo menos posible (ver `estabilizar`).
   // 🔑 Sin un mapa guardado no hay «antes»: el armado inicial no es lo que está colgado.
-  const previa = useMemo(() => (base ? ubicar(prendas, base, modo) : null), [prendas, base, modo])
+  const previa = useMemo(() => (base ? ubicar(prendas, base, modo, hoy) : null), [prendas, base, modo, hoy])
   const u = useMemo(() => {
-    const cruda = ubicar(prendas, mapa, modo)
+    const cruda = ubicar(prendas, mapa, modo, hoy)
     return previa ? estabilizar(cruda, previa, mapa, modo) : cruda
-  }, [prendas, mapa, modo, previa])
+  }, [prendas, mapa, modo, previa, hoy])
   const movs = useMemo(() => (previa ? movimientos(previa, u) : []), [previa, u])
   const filas = useMemo(() => resumenPorTipo(prendas, mapa, u), [prendas, mapa, u])
   const avisos = useMemo(() => alertasDe(mapa), [mapa])
@@ -107,7 +82,6 @@ export function MapaLocal() {
   const capacidad = useMemo(() => capacidadTotal(mapa, 'comodo'), [mapa])
   const capacidadTope = useMemo(() => capacidadTotal(mapa, 'tope'), [mapa])
   const tiposSinTope = useMemo(() => new Set(prendas.filter((p) => cuelga(mapa, p.tipo) && mapa.tipos.find((t) => t.tipo === p.tipo)?.topePorM == null).map((p) => p.tipo)).size, [prendas, mapa])
-  const sinCruzarTn = productos.length === 0 && crudos.inv.length > 0
   const cambiado = !!guardado && JSON.stringify(guardado.mapa) !== JSON.stringify(mapa)
 
   const opcionesTipo = useMemo(() => {
@@ -121,7 +95,7 @@ export function MapaLocal() {
   const cambiarModulo = (m: Modulo) => setMapa((ant) => ({ ...ant, modulos: ant.modulos.map((x) => (x.codigo === m.codigo ? m : x)) }))
 
   function proponer() {
-    const p = proponerArmado(prendas, mapa, modo)
+    const p = proponerArmado(prendas, mapa, modo, hoy)
     setMapa(p.mapa)
     toast.ok(`Armado propuesto con el stock de hoy: ${p.modulos.nc} módulos de colección y ${p.modulos.sale} de sale. Revisalo antes de guardar.`)
   }
@@ -253,7 +227,10 @@ export function MapaLocal() {
               <Mover movs={movs} />
             </Plegable>
           )}
-          <Plegable abierto={!!abierto.noEntran} onToggle={() => toggle('noEntran')} titulo={`No entran (${u.noEntran.length})`} ayuda="Tienen una barra de su tipo y línea, pero ya está llena. Quedan afuera las de menos unidades en el Local.">
+          <Plegable abierto={!!abierto.noEntran} onToggle={() => toggle('noEntran')} titulo={`No entran (${u.noEntran.length})`} ayuda="Tienen una barra de su tipo y línea, pero ya está llena. Primero quedan afuera las que no vendieron en 30 días; lo que está fuera de temporada ni siquiera pide lugar.">
+            <div style={{ fontSize: font.sm, marginBottom: space[3] }}>
+              <Link href="/mapa-local/que-se-cuelga">Ver qué se cuelga y qué duerme por temporada →</Link>
+            </div>
             <Prendas prendas={u.noEntran} vacio="Entra todo." />
           </Plegable>
           <Plegable abierto={!!abierto.sinLugar} onToggle={() => toggle('sinLugar')} titulo={`Sin lugar (${u.sinLugar.length})`} ayuda="Ninguna barra acepta su tipo y su línea. Hay que sumarlo a alguna barra o marcar el tipo como que no se cuelga.">

@@ -197,6 +197,9 @@ export function Sidebar({
               )
             }
             const open = (abierto ?? grupoActivo) === cat.id
+            // Con la ruta en una entrada de subárea de este grupo (`/mapa-local/que-se-cuelga`), la key
+            // pelada de la misma sección ⛔ no se marca: si no, se prenden las dos a la vez.
+            const enEntrada = !!sub && [...cat.items, ...cat.grupos.flatMap((g) => g.items ?? [])].some((it) => rutaActiva(it, activa, sub))
             const opt = (k: string) => (
               <Link
                 key={k}
@@ -204,7 +207,7 @@ export function Sidebar({
                 // necesita decir de cuál se entró, o el encabezado muestra siempre el
                 // mismo (y era el de otro sector).
                 href={estaEnVariosGrupos(k) ? `/${k}?g=${cat.id}` : `/${k}`}
-                className={`nav-opt${k === activa ? ' active' : ''}${
+                className={`nav-opt${k === activa && !enEntrada ? ' active' : ''}${
                   cat.accent === 'marketing' ? ' nav-accent-mkt' : ''
                 }`}
                 onClick={onNavegar}

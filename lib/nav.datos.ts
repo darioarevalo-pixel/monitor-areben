@@ -1092,6 +1092,12 @@ export const NAV_CATS: NavCat[] = [
           "conteo",
           "exhib",
           "mapa-local"
+        ],
+        // «Qué se cuelga» es una vista del Mapa del local (misma key, mismo permiso): las entradas van
+        // después de las keys, así que queda justo debajo. Pedido de Bruno (1-oct-2026): la vista
+        // principal sigue siendo la de los percheros, y la decisión de qué va al salón vive aparte.
+        "items": [
+          { "ruta": "/mapa-local/que-se-cuelga", "label": "Qué se cuelga", "icono": "etapas", "key": "mapa-local" }
         ]
       }
     ]

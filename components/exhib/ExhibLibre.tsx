@@ -18,6 +18,7 @@ import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import { BalanceSector } from './BalanceSector'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
+import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
 import { avisoDe } from '@/lib/exhib/aviso'
 import { avisar, estadoSonido, prepararSonido, type EstadoSonido } from '@/lib/sonido'
 
@@ -125,7 +126,10 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     }
   }, [marca])
   // Cómodo, como abre la pantalla del mapa: es la misma ubicación que imprime la hoja del módulo.
-  const ubicacionMapa = useMemo(() => (mapaLocal ? ubicar(prendasDelLocal(items, 'zattia'), mapaLocal, 'comodo') : null), [mapaLocal, items])
+  // Con el mismo tramo y el mismo día que el Mapa del local (`useActividad`): si no, el control ordenaría
+  // distinto que la hoja del módulo.
+  const { hoy, actividad } = useActividad()
+  const ubicacionMapa = useMemo(() => (mapaLocal ? ubicar(prendasDelLocal(items, 'zattia', actividad), mapaLocal, 'comodo', hoy) : null), [mapaLocal, items, actividad, hoy])
 
   function foco(ref: React.RefObject<HTMLInputElement | null>) {
     setTimeout(() => ref.current?.focus(), 150)

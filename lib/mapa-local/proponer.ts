@@ -14,7 +14,7 @@
  * La isla no se toca (es la vidriera, se arma a mano), y los módulos de frente siguen de frente.
  */
 
-import { AIRE_CM, LARGO_CM, cfgDeTipo, cuelga, cupoDe, ubicar } from './core'
+import { AIRE_CM, LARGO_CM, cfgDeTipo, cuelga, cupoDe, despierta, ubicar } from './core'
 import { FAMILIAS } from './inicial'
 import type { LineaPrenda, MapaLocal, ModoCupo, Modulo, Nivel, Prenda } from './tipos'
 
@@ -51,15 +51,19 @@ export type Propuesta = {
   modulos: Record<LineaPrenda, number>
 }
 
-export function proponerArmado(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo): Propuesta {
-  const colgables = prendas.filter((p) => cuelga(mapa, p.tipo))
+/**
+ * 🔑 **Lo que duerme ⛔ no pide barras** (`despierta`, 1-oct-2026): si los sweaters contaran en verano,
+ * la familia de abrigos sería «la menos cubierta» y se llevaría módulos que van a quedar vacíos.
+ */
+export function proponerArmado(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo, hoy: string): Propuesta {
+  const colgables = prendas.filter((p) => cuelga(mapa, p.tipo) && despierta(mapa, p.tipo, hoy))
   const fams = familiasDe(mapa, [...new Set(colgables.map((p) => p.tipo))])
   const famDe = new Map(fams.flatMap((f, i) => f.tipos.map((t) => [t, i] as const)))
 
   // La isla queda como está: lo que ya cuelga ahí se descuenta antes de repartir.
   const fijos = mapa.modulos.filter((m) => m.pared === 'isla')
   const libres = mapa.modulos.filter((m) => m.pared !== 'isla').sort((a, b) => a.orden - b.orden || a.codigo.localeCompare(b.codigo))
-  const enFijos = ubicar(colgables, { ...mapa, modulos: fijos }, modo)
+  const enFijos = ubicar(colgables, { ...mapa, modulos: fijos }, modo, hoy)
   const colgadas = new Set(Object.values(enFijos.porBarra).flat().map((p) => p.clave))
 
   // Lo que falta colgar, por línea y familia. Sin línea conocida cuenta como colección.

@@ -11,7 +11,10 @@ import { hojaDeModulo, nombreBarra } from '../lib/mapa-local/hoja'
 import { MAPA_INICIAL } from '../lib/mapa-local/inicial'
 import type { MapaLocal, Nivel, Prenda } from '../lib/mapa-local/tipos'
 
-const prenda = (nombre: string, over: Partial<Prenda> = {}): Prenda => ({ clave: `${nombre}|`, productId: nombre, nombre, color: '', tipo: 'TOP', linea: 'nc', img: null, unidades: 1, ...over })
+/** Marzo es cambio de temporada: no duerme nada, así estos tests miran sólo el llenado de barras. */
+const HOY = '2026-03-15'
+
+const prenda = (nombre: string, over: Partial<Prenda> = {}): Prenda => ({ clave: `${nombre}|`, productId: nombre, nombre, color: '', tipo: 'TOP', linea: 'nc', img: null, unidades: 1, ventas30: null, ultimaVenta: null, alta: null, ritmo: null, tramo: 'vende', ...over })
 const nivel = (over: Partial<Nivel>): Nivel => ({ pos: 'simple', alturaCm: 160, linea: 'nc', tipos: ['TOP'], cupo: null, ...over })
 const mapaDe = (niveles: Nivel[][]): MapaLocal => ({
   version: 1,
@@ -23,8 +26,8 @@ const colgadas = (u: Ubicacion) => Object.values(u.porBarra).flat().map((p) => p
 
 /** El cambio de armado con el mismo stock, como lo hace la pantalla. */
 function cambio(prendas: Prenda[], antes: MapaLocal, despues: MapaLocal) {
-  const previa = ubicar(prendas, antes, 'comodo')
-  const cruda = ubicar(prendas, despues, 'comodo')
+  const previa = ubicar(prendas, antes, 'comodo', HOY)
+  const cruda = ubicar(prendas, despues, 'comodo', HOY)
   const u = estabilizar(cruda, previa, despues, 'comodo')
   return { previa, cruda, u, movs: movimientos(previa, u) }
 }
@@ -81,9 +84,9 @@ describe('estabilizar', () => {
     const antes2 = mapaDe([[nivel({ tipos: ['SWEATER'], cupo: 1 })], [nivel({ cupo: 2 })]])
     const despues2 = mapaDe([[nivel({ tipos: ['TOP'], cupo: 1 })], [nivel({ cupo: 2 })]])
     const ps = [prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 })]
-    const previa = ubicar(ps, antes2, 'comodo')
+    const previa = ubicar(ps, antes2, 'comodo', HOY)
     const conC = [...ps, prenda('C', { unidades: 1 })]
-    const cruda = ubicar(conC, despues2, 'comodo')
+    const cruda = ubicar(conC, despues2, 'comodo', HOY)
     expect(nombres(cruda, 'D1-simple')).toEqual(['A'])
     const u = estabilizar(cruda, previa, despues2, 'comodo')
     expect(nombres(u, 'D2-simple')).toEqual(['A', 'B'])
@@ -101,25 +104,25 @@ describe('ubicar hace lugar', () => {
   it('⛔ no manda al depósito lo que entra corriendo otra prenda a una barra suya', () => {
     // D1 acepta tops y sweaters; D2 sólo tops. Los tops llegan primero y llenan D1.
     const mapa = mapaDe([[nivel({ tipos: ['TOP', 'SWEATER'], cupo: 2 })], [nivel({ cupo: 2 })]])
-    const u = ubicar([prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 }), prenda('S', { tipo: 'SWEATER' })], mapa, 'comodo')
+    const u = ubicar([prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 }), prenda('S', { tipo: 'SWEATER' })], mapa, 'comodo', HOY)
     expect(u.noEntran).toEqual([])
     expect(nombres(u, 'D1-simple')).toContain('S')
   })
   it('en cadena: corre una de D1 a D2 y otra de D2 a D3', () => {
     const mapa = mapaDe([[nivel({ tipos: ['TOP', 'SWEATER'], cupo: 1 })], [nivel({ tipos: ['TOP', 'VESTIDO'], cupo: 1 })], [nivel({ tipos: ['VESTIDO'], cupo: 1 })]])
-    const u = ubicar([prenda('T', { unidades: 9 }), prenda('V', { tipo: 'VESTIDO', unidades: 8 }), prenda('S', { tipo: 'SWEATER' })], mapa, 'comodo')
+    const u = ubicar([prenda('T', { unidades: 9 }), prenda('V', { tipo: 'VESTIDO', unidades: 8 }), prenda('S', { tipo: 'SWEATER' })], mapa, 'comodo', HOY)
     expect(u.noEntran).toEqual([])
     expect([nombres(u, 'D1-simple'), nombres(u, 'D2-simple'), nombres(u, 'D3-simple')]).toEqual([['S'], ['T'], ['V']])
   })
   it('que no entre una de sale ⛔ deja afuera a las de colección del mismo tipo', () => {
     const mapa = mapaDe([[nivel({ cupo: 1 })], [nivel({ linea: 'sale', cupo: 1 })]])
-    const u = ubicar([prenda('S1', { linea: 'sale', unidades: 9 }), prenda('S2', { linea: 'sale', unidades: 8 }), prenda('N', { unidades: 1 })], mapa, 'comodo')
+    const u = ubicar([prenda('S1', { linea: 'sale', unidades: 9 }), prenda('S2', { linea: 'sale', unidades: 8 }), prenda('N', { unidades: 1 })], mapa, 'comodo', HOY)
     expect(u.noEntran.map((p) => p.nombre)).toEqual(['S2'])
     expect(nombres(u, 'D1-simple')).toEqual(['N'])
   })
   it('cuando no entran todas, siguen quedando afuera las de menos unidades', () => {
     const mapa = mapaDe([[nivel({ tipos: ['TOP', 'SWEATER'], cupo: 1 })], [nivel({ cupo: 1 })]])
-    const u = ubicar([prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 }), prenda('S', { tipo: 'SWEATER', unidades: 1 })], mapa, 'comodo')
+    const u = ubicar([prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 }), prenda('S', { tipo: 'SWEATER', unidades: 1 })], mapa, 'comodo', HOY)
     expect(u.noEntran.map((p) => p.nombre)).toEqual(['S'])
   })
 })
@@ -159,7 +162,7 @@ describe('hojaDeModulo', () => {
 
   it('sin cambio es la hoja de armar: nada marcado como nuevo ni para sacar', () => {
     const mapa = mapaDe([[nivel({ cupo: 2 })]])
-    const u = ubicar([prenda('A'), prenda('B')], mapa, 'comodo')
+    const u = ubicar([prenda('A'), prenda('B')], mapa, 'comodo', HOY)
     const h = hojaDeModulo(mapa, mapa.modulos[0], u, null, 'comodo')
     expect(h.barras[0].prendas.every((r) => !('viene' in r))).toBe(true)
     expect(h.barras[0].salen).toEqual([])

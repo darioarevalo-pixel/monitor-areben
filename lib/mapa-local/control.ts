@@ -39,7 +39,7 @@ export function claveDeEscaneo(e: Pick<EscaneoLibre, 'encontrado' | 'product_id'
 }
 
 /** Adónde la manda el mapa: un módulo, el depósito (no entra), o ninguna barra la acepta. */
-export type Destino = { tipo: 'modulo'; codigo: string } | { tipo: 'deposito' } | { tipo: 'sin-barra' } | { tipo: 'no-cuelga' } | { tipo: 'sin-stock' }
+export type Destino = { tipo: 'modulo'; codigo: string } | { tipo: 'deposito' } | { tipo: 'sin-barra' } | { tipo: 'no-cuelga' } | { tipo: 'durmiendo' } | { tipo: 'sin-stock' }
 
 export type Falta = { prenda: Prenda; /** Otros lugares del recorrido donde sí pasó por el lector. */ vistaEn: string[] }
 export type Sobra = { clave: string; nombre: string; color: string; destino: Destino }
@@ -62,6 +62,7 @@ function destinoDe(u: Ubicacion, codigoDe: Map<string, string>, clave: string): 
   if (u.noEntran.some((p) => p.clave === clave)) return { tipo: 'deposito' }
   if (u.sinLugar.some((p) => p.clave === clave)) return { tipo: 'sin-barra' }
   if (u.noCuelgan.some((p) => p.clave === clave)) return { tipo: 'no-cuelga' }
+  if (u.durmiendo.some((p) => p.clave === clave)) return { tipo: 'durmiendo' }
   // ⚠️ `prendasDelLocal` sólo arma las que tienen stock: una colgada que el sistema tiene en cero
   // (o una de Stunned) ⛔ no está en el mapa.
   return { tipo: 'sin-stock' }
@@ -173,6 +174,8 @@ export function textoDestino(d: Destino): string {
       return 'ninguna barra acepta su tipo'
     case 'no-cuelga':
       return 'no se cuelga'
+    case 'durmiendo':
+      return 'fuera de temporada: va a guardarse'
     case 'sin-stock':
       return 'el sistema no le da stock: no está en el mapa'
   }

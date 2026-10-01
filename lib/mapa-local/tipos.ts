@@ -57,7 +57,25 @@ export type TipoCfg = {
   topePorM: number | null
   /** `false` = no va colgado (bombachas, accesorios): no cuenta como demanda de barra. */
   cuelga: boolean
+  /**
+   * En qué temporada va al salón. Fuera de ella el tipo **duerme**: se guarda a propósito y ⛔ no
+   * pide percha (los sweaters en verano, las bikinis en invierno). Sin el campo vale lo del tipo en
+   * el armado inicial, o `'todo'` (un mapa guardado antes del 1-oct-2026 ⛔ no lo trae).
+   */
+  temporada?: Temporada
 }
+
+/** Cuándo va al salón un tipo de prenda. */
+export type Temporada = 'todo' | 'verano' | 'invierno'
+
+/** Un tramo del año, como `MM-DD`. Si `desde` es posterior a `hasta`, cruza el año nuevo. */
+export type RangoTemporada = { desde: string; hasta: string }
+
+/**
+ * Las fechas de cada temporada. 🔑 **Pueden pisarse, y el pedazo que se pisa es el CAMBIO de
+ * temporada**: ahí están despiertas las dos y compiten por la percha con las mismas reglas.
+ */
+export type Temporadas = { verano: RangoTemporada; invierno: RangoTemporada }
 
 /** Cómo se cuenta el cupo de una barra: cómodo (lo que conviene) o al tope (lo máximo que entra). */
 export type ModoCupo = 'comodo' | 'tope'
@@ -66,7 +84,18 @@ export type MapaLocal = {
   version: 1
   modulos: Modulo[]
   tipos: TipoCfg[]
+  /** Sin el campo valen `TEMPORADAS_INICIALES` (un mapa guardado antes del 1-oct-2026 ⛔ no lo trae). */
+  temporadas?: Temporadas
 }
+
+/**
+ * En qué tramo cae una prenda para quedarse en el salón cuando no entran todas (ver `prioridad`).
+ * - `nueva`: dada de alta hace 7 días o menos; tiene lugar asegurado.
+ * - `vende`: compite por ritmo (ventas por día). Incluye lo que ⛔ no se sabe (sin datos no se la castiga)
+ *   y lo que tiene menos de 30 días a la venta, aunque todavía no haya vendido.
+ * - `sin-rotacion`: cero ventas en 30 días, y a la venta hace más de 30.
+ */
+export type Tramo = 'nueva' | 'vende' | 'sin-rotacion'
 
 /**
  * Una prenda del salón: **un producto en un color**. Es lo que ocupa una percha, porque se exhibe
@@ -83,4 +112,16 @@ export type Prenda = {
   img: string | null
   /** Unidades en el Local sumando todos sus talles. */
   unidades: number
+  /**
+   * Unidades vendidas en 30 días, sumando sus talles y **todos los canales** (el ETL ⛔ no las parte por
+   * canal a nivel variante). `null` = ⛔ no se sabe: el ETL todavía no llegó o el producto ⛔ no cruzó.
+   */
+  ventas30: number | null
+  /** La última venta, `YYYY-MM-DD`, de cualquier talle. */
+  ultimaVenta: string | null
+  /** El alta en Gestión Nube, `YYYY-MM-DD`. `null` = ⛔ no se sabe. */
+  alta: string | null
+  /** Ventas por día desde que está a la venta (ver `ritmoDe`). `null` = ⛔ no se saben las ventas. */
+  ritmo: number | null
+  tramo: Tramo
 }

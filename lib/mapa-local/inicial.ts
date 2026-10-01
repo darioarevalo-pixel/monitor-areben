@@ -8,7 +8,7 @@
  * cambiadores. ⇒ colección adelante, un módulo de corte (D08) y el sale al fondo.
  */
 
-import type { LineaBarra, MapaLocal, Modulo, Nivel, TipoCfg } from './tipos'
+import type { LineaBarra, MapaLocal, Modulo, Nivel, Temporada, Temporadas, TipoCfg } from './tipos'
 
 const ARRIBA_CORTOS = ['TOP', 'BABY TEE', 'MUSCULOSA', 'REMERA', 'BODY', 'CORSET', 'STRAPLESS']
 const ABAJO_CORTOS = ['TOP', 'BABY TEE', 'MUSCULOSA', 'REMERA', 'BODY']
@@ -32,13 +32,32 @@ export const FAMILIAS: { nombre: string; tipos: string[] }[] = [
 const n = (pos: Nivel['pos'], alturaCm: number, linea: LineaBarra, tipos: string[], cupo: number | null = null): Nivel => ({ pos, alturaCm, linea, tipos, cupo })
 const der = (i: number, orden: number, niveles: Nivel[]): Modulo => ({ codigo: `D${String(i).padStart(2, '0')}`, pared: 'der', orden, anchoCm: 75, niveles })
 
-export const TIPOS_INICIALES: TipoCfg[] = [
+/**
+ * Las fechas de cada temporada con que arranca la sección. ⚠️ **Son una propuesta para corregir en
+ * pantalla** (1-oct-2026), ⛔ no un dato. Se pisan dos veces por año, y lo que se pisa es el cambio
+ * de temporada: en marzo y del 15-sep al 15-oct están despiertas las dos.
+ * 🔑 El invierno llega al **15-oct** y ⛔ al 30-sep por lo medido el 1-oct-2026: en las dos últimas
+ * semanas de septiembre el outlet colgado del local seguía vendiendo sweaters (ARIZONA 14 u, DALLAS 10,
+ * VIENNA 9).
+ */
+export const TEMPORADAS_INICIALES: Temporadas = {
+  verano: { desde: '09-15', hasta: '03-31' },
+  invierno: { desde: '03-01', hasta: '10-15' },
+}
+
+/** Los tipos que sólo van al salón en verano, y los que sólo en invierno (los abrigos). El resto, todo el año. */
+const DE_VERANO = ['MUSCULOSA', 'SHORT', 'SKORT', 'BERMUDA', 'BIKINI']
+const temporadaInicial = (tipo: string): Temporada => (DE_VERANO.includes(tipo) ? 'verano' : ABRIGOS.includes(tipo) ? 'invierno' : 'todo')
+
+const TIPOS_SIN_TEMPORADA: Omit<TipoCfg, 'temporada'>[] = [
   ...['TOP', 'BABY TEE', 'BODY', 'STRAPLESS'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 22, topePorM: null, cuelga: true })),
   { tipo: 'MUSCULOSA', largo: 'L1', perchasPorM: 24, topePorM: null, cuelga: true },
   { tipo: 'REMERA', largo: 'L1', perchasPorM: 18, topePorM: null, cuelga: true },
   { tipo: 'CORSET', largo: 'L1', perchasPorM: 18, topePorM: null, cuelga: true },
   ...['MINI', 'SHORT', 'SKORT'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 20, topePorM: null, cuelga: true })),
   { tipo: 'BERMUDA', largo: 'L1', perchasPorM: 18, topePorM: null, cuelga: true },
+  // ⚠️ El 1-oct-2026 ⛔ no había ninguna bikini en el Local: el tipo está para que en verano tenga temporada.
+  { tipo: 'BIKINI', largo: 'L1', perchasPorM: 20, topePorM: null, cuelga: true },
   // 🔑 el tope de BLUSA lo midió Bruno (30-sep): 38 en una barra de 0,75 m ⇒ 51/m (51 × 0,75 = 38,25).
   { tipo: 'BLUSA', largo: 'L2', perchasPorM: 18, topePorM: 51, cuelga: true },
   { tipo: 'CAMISA', largo: 'L2', perchasPorM: 16, topePorM: null, cuelga: true },
@@ -56,9 +75,12 @@ export const TIPOS_INICIALES: TipoCfg[] = [
   ...['BOMBACHA', 'CORPIÑO', 'FAJA', 'CINTO', 'ACCESORIO', 'PAÑUELO', 'MINI BAG', 'TOTE BAG', 'SHOULDER BAG', 'CHOKER', 'CHOCKER'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 20, topePorM: null, cuelga: false })),
 ]
 
+export const TIPOS_INICIALES: TipoCfg[] = TIPOS_SIN_TEMPORADA.map((t) => ({ ...t, temporada: temporadaInicial(t.tipo) }))
+
 export const MAPA_INICIAL: MapaLocal = {
   version: 1,
   tipos: TIPOS_INICIALES,
+  temporadas: TEMPORADAS_INICIALES,
   modulos: [
     { codigo: 'I01', pared: 'izq', orden: 1, anchoCm: 75, niveles: [n('frente', 175, 'nc', ['TOP', 'BABY TEE']), n('baja', 105, 'nc', CAMISAS)] },
     { codigo: 'I02', pared: 'izq', orden: 2, anchoCm: 75, niveles: [n('frente', 175, 'nc', ['TOP', 'BABY TEE']), n('baja', 105, 'nc', CAMISAS)] },

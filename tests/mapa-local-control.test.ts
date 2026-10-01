@@ -13,7 +13,10 @@ import { MAPA_INICIAL } from '../lib/mapa-local/inicial'
 import type { EscaneoLibre } from '../lib/exhib/libre'
 import type { MapaLocal, Nivel, Prenda } from '../lib/mapa-local/tipos'
 
-const prenda = (pid: string, over: Partial<Prenda> = {}): Prenda => ({ clave: `${pid}|`, productId: pid, nombre: pid, color: '', tipo: 'TOP', linea: 'nc', img: null, unidades: 1, ...over })
+/** Marzo es cambio de temporada: no duerme nada, así estos tests miran sólo el llenado de barras. */
+const HOY = '2026-03-15'
+
+const prenda = (pid: string, over: Partial<Prenda> = {}): Prenda => ({ clave: `${pid}|`, productId: pid, nombre: pid, color: '', tipo: 'TOP', linea: 'nc', img: null, unidades: 1, ventas30: null, ultimaVenta: null, alta: null, ritmo: null, tramo: 'vende', ...over })
 const nivel = (over: Partial<Nivel>): Nivel => ({ pos: 'simple', alturaCm: 160, linea: 'nc', tipos: ['TOP'], cupo: null, ...over })
 const mapaDe = (niveles: Nivel[][]): MapaLocal => ({
   version: 1,
@@ -54,7 +57,7 @@ describe('controlDeModulo', () => {
     prenda('S', { tipo: 'SWEATER' }),
     prenda('V', { tipo: 'VESTIDO' }), // ninguna barra lo acepta
   ]
-  const u = ubicar(prendas, mapa, 'comodo')
+  const u = ubicar(prendas, mapa, 'comodo', HOY)
   const d01 = mapa.modulos[0]
 
   it('el fixture cae como se espera (si no, el resto ⛔ no prueba nada)', () => {
@@ -102,7 +105,7 @@ describe('controlDeModulo', () => {
 
 describe('controlDelRecorrido', () => {
   const mapa = mapaDe([[nivel({ cupo: 2 })], [nivel({ cupo: 1 })], [nivel({ tipos: ['SWEATER'], cupo: 1 })]])
-  const u = ubicar([prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 }), prenda('C', { unidades: 7 }), prenda('S', { tipo: 'SWEATER' })], mapa, 'comodo')
+  const u = ubicar([prenda('A', { unidades: 9 }), prenda('B', { unidades: 8 }), prenda('C', { unidades: 7 }), prenda('S', { tipo: 'SWEATER' })], mapa, 'comodo', HOY)
 
   it('junta sólo los módulos caminados, en el orden del mapa, y nombra los que ⛔ se caminaron', () => {
     const r = controlDelRecorrido(mapa, u, [esc('D03', 'S'), esc('d1', 'A'), esc('vidriera', 'B')])

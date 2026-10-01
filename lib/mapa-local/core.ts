@@ -10,10 +10,13 @@
  * en vez de esconderla colgando de más.
  */
 
+import type { Producto, Variante } from '@/lib/etl/tipos'
 import { precioDeGondola, seChequea, tipoDePrenda } from '@/lib/exhib/core'
 import type { ExhibItem } from '@/lib/exhib/tipos'
+import { diasEntre } from '@/lib/fechas/dia'
 import type { Marca } from '@/lib/nav'
-import type { Largo, MapaLocal, ModoCupo, Modulo, Nivel, PosNivel, Prenda, TipoCfg } from './tipos'
+import { TEMPORADAS_INICIALES, TIPOS_INICIALES } from './inicial'
+import type { Largo, MapaLocal, ModoCupo, Modulo, Nivel, PosNivel, Prenda, Temporada, Temporadas, TipoCfg, Tramo } from './tipos'
 
 /**
  * Lo que mide colgada cada clase de largo, en cm, percha incluida. Es lo que decide si una barra
@@ -51,12 +54,83 @@ export function colorDeVariante(size: string | null | undefined): string {
 }
 
 /**
+ * Hasta cuántos días desde el alta una prenda tiene **lugar asegurado**: todavía no tuvo con qué
+ * vender. ⚠️ Regla elegida, ⛔ no medida.
+ * 🔴 **Eran 30 y se comían el salón** (medido el 1-oct-2026 con el stock real): en septiembre entraron
+ * 147 productos (251 prendas) y se llevaban **246 de 298 perchas**, dejando afuera 174 que vendían
+ * —una con 23 ventas en 30 días—. Bruno eligió entonces que compitan por **ritmo**.
+ */
+export const DIAS_NUEVA = 7
+
+/** La ventana de ventas del ETL (`sales30`). Es también el corte de «sin rotación». */
+export const DIAS_VENTANA = 30
+
+/** Lo que vendió una prenda (producto×color), sumando sus talles. */
+export type VentasPrenda = { ventas30: number; ultimaVenta: string | null }
+
+/**
+ * Lo que hace falta para el tramo de cada prenda: las ventas por producto×color, el alta de cada
+ * producto y el día de hoy. `null` en `prendasDelLocal` = el ETL todavía no llegó.
+ */
+export type Actividad = { hoy: string; ventas: Map<string, VentasPrenda>; altas: Map<string, string | null> }
+
+/**
+ * Las ventas del ETL llevadas a la percha: **producto×color**, con la misma clave que
+ * `prendasDelLocal`. ⛔ No recalcula ninguna venta: suma las de cada variante (`allVariantes`).
+ *
+ * 🔑 Toda variante que el ETL conoce entra, venda o no: así un producto sin ventas da **0**, que
+ * afirma, y uno que el ETL ⛔ no conoce queda afuera del mapa y da `null`, que ⛔ no afirma nada.
+ */
+export function actividadDelEtl(
+  variantes: Pick<Variante, 'pid' | 'size' | 'sales30' | 'lastSale'>[],
+  productos: Pick<Producto, 'id' | 'ingresoFecha'>[],
+  hoy: string,
+): Actividad {
+  const ventas = new Map<string, VentasPrenda>()
+  for (const v of variantes) {
+    const clave = `${v.pid}|${colorDeVariante(v.size)}`
+    const ya = ventas.get(clave) || { ventas30: 0, ultimaVenta: null }
+    ya.ventas30 += v.sales30 || 0
+    if (v.lastSale && (!ya.ultimaVenta || v.lastSale > ya.ultimaVenta)) ya.ultimaVenta = v.lastSale
+    ventas.set(clave, ya)
+  }
+  const altas = new Map(productos.map((p) => [String(p.id), p.ingresoFecha]))
+  return { hoy, ventas, altas }
+}
+
+/**
+ * El tramo de una prenda (ver `Tramo`). 🔑 **Cero ventas sólo cuenta cuando se SABE que es cero**:
+ * sin datos (`null`) la prenda va con las que venden, porque no saber ⛔ no es «no rota». Y una prenda
+ * con menos de 30 días a la venta ⛔ no es «sin rotación» todavía: compite por ritmo, aunque sea cero.
+ */
+export function tramoDe(alta: string | null, ventas30: number | null, hoy: string): Tramo {
+  const dias = alta ? diasEntre(alta.slice(0, 10), hoy) : null
+  if (dias != null && dias <= DIAS_NUEVA) return 'nueva'
+  if (ventas30 === 0 && (dias == null || dias > DIAS_VENTANA)) return 'sin-rotacion'
+  return 'vende'
+}
+
+/**
+ * **Ventas por día** desde que está a la venta, con tope en la ventana del ETL: una prenda dada de
+ * alta hace 10 días que vendió 3 (0,3/día) le gana a una vieja que vendió 5 en 30 (0,17/día). Sin el
+ * alta se cuentan los 30 días. `null` = ⛔ no se saben las ventas.
+ */
+export function ritmoDe(alta: string | null, ventas30: number | null, hoy: string): number | null {
+  if (ventas30 == null) return null
+  const dias = alta ? diasEntre(alta.slice(0, 10), hoy) : DIAS_VENTANA
+  return ventas30 / Math.max(1, Math.min(DIAS_VENTANA, dias))
+}
+
+/**
  * Las prendas del salón: **una por producto×color con stock en el Local**, sin Stunned.
  *
  * ⚠️ El Local de Gestión Nube junta el salón y el depósito del local, así que esto es «lo que
  * podría estar colgado», ⛔ no «lo que está colgado» (eso lo mide el Chequeo de exhibición).
+ *
+ * `actividad` es **obligatoria** aunque sea `null`: sin ventas todas caen en `vende` y el orden es el
+ * de antes (más unidades primero). Así ninguna pantalla se olvida de pasarla sin que se note.
  */
-export function prendasDelLocal(items: ExhibItem[], marca: Marca): Prenda[] {
+export function prendasDelLocal(items: ExhibItem[], marca: Marca, actividad: Actividad | null): Prenda[] {
   const porClave = new Map<string, Prenda>()
   for (const it of items) {
     if (!(it.qty > 0) || !seChequea(marca, it)) continue
@@ -69,6 +143,9 @@ export function prendasDelLocal(items: ExhibItem[], marca: Marca): Prenda[] {
       continue
     }
     const of = precioDeGondola(it)
+    const v = actividad?.ventas.get(clave)
+    const alta = actividad?.altas.get(it.productId) ?? null
+    const ventas30 = v ? v.ventas30 : null
     porClave.set(clave, {
       clave,
       productId: it.productId,
@@ -78,6 +155,11 @@ export function prendasDelLocal(items: ExhibItem[], marca: Marca): Prenda[] {
       linea: of.lista == null && of.aCobrar == null ? null : of.enOferta ? 'sale' : 'nc',
       img: it.img,
       unidades: it.qty,
+      ventas30,
+      ultimaVenta: v?.ultimaVenta ?? null,
+      alta,
+      ritmo: actividad ? ritmoDe(alta, ventas30, actividad.hoy) : null,
+      tramo: actividad ? tramoDe(alta, ventas30, actividad.hoy) : 'vende',
     })
   }
   return [...porClave.values()]
@@ -93,6 +175,59 @@ export function cfgDeTipo(mapa: Pick<MapaLocal, 'tipos'>, tipo: string): TipoCfg
 export function cuelga(mapa: Pick<MapaLocal, 'tipos'>, tipo: string): boolean {
   const c = cfgDeTipo(mapa, tipo)
   return c ? c.cuelga : true
+}
+
+/**
+ * La temporada de un tipo: la del mapa, o la del armado inicial si el mapa ⛔ no la trae (uno guardado
+ * antes del 1-oct-2026), o `'todo'`. Así un mapa viejo ⛔ no despierta los sweaters en verano.
+ */
+export function temporadaDe(mapa: Pick<MapaLocal, 'tipos'>, tipo: string): Temporada {
+  return cfgDeTipo(mapa, tipo)?.temporada ?? TIPOS_INICIALES.find((t) => t.tipo === tipo)?.temporada ?? 'todo'
+}
+
+export function temporadasDe(mapa: Pick<MapaLocal, 'temporadas'>): Temporadas {
+  return mapa.temporadas ?? TEMPORADAS_INICIALES
+}
+
+/** ¿`hoy` (`YYYY-MM-DD`) cae en el tramo? Un tramo con `desde` después de `hasta` cruza el año nuevo. */
+export function enRango(r: { desde: string; hasta: string }, hoy: string): boolean {
+  const md = hoy.slice(5, 10)
+  return r.desde <= r.hasta ? md >= r.desde && md <= r.hasta : md >= r.desde || md <= r.hasta
+}
+
+/** Qué temporadas corren hoy. Las dos = el cambio de temporada. */
+export function temporadasDeHoy(mapa: Pick<MapaLocal, 'temporadas'>, hoy: string): { verano: boolean; invierno: boolean } {
+  const t = temporadasDe(mapa)
+  return { verano: enRango(t.verano, hoy), invierno: enRango(t.invierno, hoy) }
+}
+
+/** Un cambio de temporadas: las fechas y/o la temporada de algunos tipos. ⛔ No toca nada más. */
+export type CambioTemporadas = { temporadas?: Temporadas; porTipo?: Record<string, Temporada> }
+
+/**
+ * El mapa con el cambio de temporadas aplicado, **sin tocar las barras**. 🔑 Lo usa «Qué se cuelga»
+ * sobre el mapa recién leído al guardar: así ⛔ no pisa un cambio de barras que alguien guardó desde
+ * «Percheros» mientras esta pantalla estaba abierta.
+ * Un tipo que el mapa ⛔ no tiene se agrega con lo del armado inicial (o lo mínimo), y su temporada.
+ */
+export function conTemporadas(mapa: MapaLocal, c: CambioTemporadas): MapaLocal {
+  const porTipo = c.porTipo ?? {}
+  const tipos = mapa.tipos.map((t) => (t.tipo in porTipo ? { ...t, temporada: porTipo[t.tipo] } : t))
+  for (const [tipo, temporada] of Object.entries(porTipo)) {
+    if (tipos.some((t) => t.tipo === tipo)) continue
+    const ini = TIPOS_INICIALES.find((t) => t.tipo === tipo)
+    tipos.push({ ...(ini ?? { tipo, largo: 'L2', perchasPorM: DENSIDAD_DEFAULT, topePorM: null, cuelga: true }), temporada })
+  }
+  return { ...mapa, tipos, temporadas: c.temporadas ?? temporadasDe(mapa) }
+}
+
+/**
+ * ¿Este tipo va al salón hoy? Fuera de su temporada **duerme**: se guarda a propósito, ⛔ no pide
+ * percha ni cuenta como «no entra». 🔑 `hoy` es obligatorio: la regla ⛔ no lee el reloj por su cuenta.
+ */
+export function despierta(mapa: Pick<MapaLocal, 'tipos' | 'temporadas'>, tipo: string, hoy: string): boolean {
+  const t = temporadaDe(mapa, tipo)
+  return t === 'todo' || temporadasDeHoy(mapa, hoy)[t]
 }
 
 /**
@@ -152,14 +287,38 @@ export type Ubicacion = {
   sinLugar: Prenda[]
   /** Tipos que no se cuelgan (bombachas, accesorios). */
   noCuelgan: Prenda[]
+  /** Fuera de temporada: se guardan a propósito y ⛔ no piden percha (ver `despierta`). */
+  durmiendo: Prenda[]
 }
 
+const ORDEN_TRAMO: Record<Tramo, number> = { nueva: 0, vende: 1, 'sin-rotacion': 2 }
+
 /**
- * La prioridad para quedarse en el salón cuando no entran todas: **más unidades en el Local
- * primero**, porque una prenda con más talles atrás vende más estando colgada. Desempata el nombre,
- * para que el resultado no cambie de un día a otro sin que cambie nada.
+ * La prioridad para quedarse en el salón cuando no entran todas (decisión de Bruno, 1-oct-2026):
+ * 1. **Nueva** (alta hace ≤ `DIAS_NUEVA` días), la más nueva primero: todavía no tuvo con qué vender.
+ * 2. **El resto compite por RITMO** (`ritmoDe`, ventas por día desde que está a la venta), de más a
+ *    menos. Así lo nuevo de 20 días ⛔ no se lleva la percha de algo viejo que vende 23 al mes, ni al
+ *    revés. Sin dato (`null`) va detrás de todo lo que vende.
+ * 3. **Sin rotación** (cero ventas en 30 días, a la venta hace más de 30): última, y la pantalla la
+ *    lista aparte para decidir.
+ *
+ * 🔑 **El outlet ⛔ no tiene trato aparte**: compite por la percha con lo nuevo según lo que vende.
+ * Medido el 1-oct-2026 en el local: por percha rendía igual (1,29 contra 1,26 u por producto en 14 d).
+ *
+ * Desempatan las unidades en el Local (con más talles atrás vende más estando colgada) y el nombre,
+ * para que el resultado ⛔ no cambie de un día a otro sin que cambie nada.
  */
 export function prioridad(a: Prenda, b: Prenda): number {
+  const t = ORDEN_TRAMO[a.tramo] - ORDEN_TRAMO[b.tramo]
+  if (t) return t
+  if (a.tramo === 'nueva') {
+    const al = (b.alta || '').localeCompare(a.alta || '')
+    if (al) return al
+  }
+  if (a.tramo === 'vende') {
+    const r = (b.ritmo ?? -1) - (a.ritmo ?? -1)
+    if (r) return r
+  }
   return b.unidades - a.unidades || a.nombre.localeCompare(b.nombre) || a.color.localeCompare(b.color)
 }
 
@@ -173,16 +332,20 @@ export function prioridad(a: Prenda, b: Prenda): number {
  * en cadena (`colgar`). Las prendas se siguen tomando por prioridad, así que entra la misma cantidad
  * o más, y ⛔ nunca una de menos prioridad en lugar de una de más.
  */
-export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo): Ubicacion {
+export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo, hoy: string): Ubicacion {
   const lista = barras(mapa, modo)
   const porBarra: Record<string, Prenda[]> = Object.fromEntries(lista.map((b) => [b.id, []]))
-  const out: Ubicacion = { porBarra, noEntran: [], sinLugar: [], noCuelgan: [] }
+  const out: Ubicacion = { porBarra, noEntran: [], sinLugar: [], noCuelgan: [], durmiendo: [] }
   // Si una prenda no encontró lugar, ninguna de su mismo tipo y línea lo va a encontrar después:
   // colgar más nunca abre un camino que no estaba.
   const trabadas = new Set<string>()
   for (const p of [...prendas].sort(prioridad)) {
     if (!cuelga(mapa, p.tipo)) {
       out.noCuelgan.push(p)
+      continue
+    }
+    if (!despierta(mapa, p.tipo, hoy)) {
+      out.durmiendo.push(p)
       continue
     }
     const candidatas = lista.filter((b) => acepta(b.nivel, p))
@@ -251,6 +414,7 @@ export type FilaTipo = {
   ubicadas: number
   noEntran: number
   sinLugar: number
+  durmiendo: number
 }
 
 /** La cuenta por tipo de prenda: cuántas hay, cuántas entran y cuántas no. Las que más faltan, arriba. */
@@ -259,7 +423,7 @@ export function resumenPorTipo(prendas: Prenda[], mapa: MapaLocal, u: Ubicacion)
   const fila = (tipo: string) => {
     let f = filas.get(tipo)
     if (!f) {
-      f = { tipo, configurado: !!cfgDeTipo(mapa, tipo), cuelga: cuelga(mapa, tipo), nc: 0, sale: 0, total: 0, ubicadas: 0, noEntran: 0, sinLugar: 0 }
+      f = { tipo, configurado: !!cfgDeTipo(mapa, tipo), cuelga: cuelga(mapa, tipo), nc: 0, sale: 0, total: 0, ubicadas: 0, noEntran: 0, sinLugar: 0, durmiendo: 0 }
       filas.set(tipo, f)
     }
     return f
@@ -273,6 +437,7 @@ export function resumenPorTipo(prendas: Prenda[], mapa: MapaLocal, u: Ubicacion)
   for (const ps of Object.values(u.porBarra)) for (const p of ps) fila(p.tipo).ubicadas++
   for (const p of u.noEntran) fila(p.tipo).noEntran++
   for (const p of u.sinLugar) fila(p.tipo).sinLugar++
+  for (const p of u.durmiendo) fila(p.tipo).durmiendo++
   return [...filas.values()].sort((a, b) => Number(b.cuelga) - Number(a.cuelga) || b.noEntran + b.sinLugar - (a.noEntran + a.sinLugar) || b.total - a.total)
 }
 

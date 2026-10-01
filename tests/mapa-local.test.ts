@@ -11,11 +11,14 @@ import { sanearMapa } from '../lib/mapa-local/validar.core.js'
 import type { MapaLocal, Nivel, Prenda } from '../lib/mapa-local/tipos'
 import type { ExhibItem } from '../lib/exhib/tipos'
 
+/** Marzo es cambio de temporada: no duerme nada, así estos tests miran sólo el llenado de barras. */
+const HOY = '2026-03-15'
+
 const item = (over: Partial<ExhibItem>): ExhibItem => ({
   barcode: '', sku: 'ZAT1', productId: 'p', name: 'TOP X', size: 'U', qty: 1, img: null,
   cat: '', cleanCats: [], tnId: null, precio: 1000, promo: null, ...over,
 })
-const prenda = (over: Partial<Prenda>): Prenda => ({ clave: over.clave || `${over.nombre || 'TOP X'}|`, productId: 'p', nombre: 'TOP X', color: '', tipo: 'TOP', linea: 'nc', img: null, unidades: 1, ...over })
+const prenda = (over: Partial<Prenda>): Prenda => ({ clave: over.clave || `${over.nombre || 'TOP X'}|`, productId: 'p', nombre: 'TOP X', color: '', tipo: 'TOP', linea: 'nc', img: null, unidades: 1, ventas30: null, ultimaVenta: null, alta: null, ritmo: null, tramo: 'vende', ...over })
 const nivel = (over: Partial<Nivel>): Nivel => ({ pos: 'simple', alturaCm: 160, linea: 'nc', tipos: ['TOP'], cupo: null, ...over })
 const mapaDe = (niveles: Nivel[][], tipos = MAPA_INICIAL.tipos): MapaLocal => ({
   version: 1,
@@ -42,11 +45,11 @@ describe('prendasDelLocal', () => {
       item({ productId: '1', name: 'CORSET FRANK', size: 'Verde - S', qty: 4 }),
       item({ productId: '2', name: 'CAMPERA ROCK - VIOLETA', size: 'M', qty: 1 }),
       item({ productId: '2', name: 'CAMPERA ROCK - VIOLETA', size: 'L', qty: 2 }),
-    ], 'zattia')
+    ], 'zattia', null)
     expect(ps.map((p) => [p.tipo, p.color, p.unidades])).toEqual([['CORSET', 'bordó', 9], ['CORSET', 'verde', 4], ['CAMPERA', '', 3]])
   })
   it('deja afuera lo que no tiene stock y lo de Stunned', () => {
-    const ps = prendasDelLocal([item({ productId: '1', qty: 0 }), item({ productId: '2', sku: 'STU-9' }), item({ productId: '3' })], 'zattia')
+    const ps = prendasDelLocal([item({ productId: '1', qty: 0 }), item({ productId: '2', sku: 'STU-9' }), item({ productId: '3' })], 'zattia', null)
     expect(ps.map((p) => p.productId)).toEqual(['3'])
   })
   it('la línea sale de la oferta vigente de Tienda Nube, y sin precio no se sabe', () => {
@@ -54,7 +57,7 @@ describe('prendasDelLocal', () => {
       item({ productId: '1', precio: 1000, promo: null }),
       item({ productId: '2', precio: 1000, promo: 700 }),
       item({ productId: '3', precio: null, promo: null }),
-    ], 'zattia')
+    ], 'zattia', null)
     expect([nc.linea, sale.linea, nada.linea]).toEqual(['nc', 'sale', null])
   })
 })
@@ -84,26 +87,26 @@ describe('acepta', () => {
 describe('ubicar', () => {
   it('nunca pasa el cupo: lo que sobra sale como «no entra», con las de más unidades adentro', () => {
     const mapa = mapaDe([[nivel({ cupo: 2 })]])
-    const u = ubicar([prenda({ nombre: 'A', unidades: 1 }), prenda({ nombre: 'B', unidades: 5 }), prenda({ nombre: 'C', unidades: 3 })], mapa, 'comodo')
+    const u = ubicar([prenda({ nombre: 'A', unidades: 1 }), prenda({ nombre: 'B', unidades: 5 }), prenda({ nombre: 'C', unidades: 3 })], mapa, 'comodo', HOY)
     expect(u.porBarra['D1-simple'].map((p) => p.nombre)).toEqual(['B', 'C'])
     expect(u.noEntran.map((p) => p.nombre)).toEqual(['A'])
   })
   it('llena en el orden del recorrido y pasa a la siguiente barra de su tipo', () => {
     const mapa = mapaDe([[nivel({ cupo: 1 })], [nivel({ cupo: 1 })]])
-    const u = ubicar([prenda({ nombre: 'A', unidades: 2 }), prenda({ nombre: 'B' })], mapa, 'comodo')
+    const u = ubicar([prenda({ nombre: 'A', unidades: 2 }), prenda({ nombre: 'B' })], mapa, 'comodo', HOY)
     expect(u.porBarra['D1-simple'].map((p) => p.nombre)).toEqual(['A'])
     expect(u.porBarra['D2-simple'].map((p) => p.nombre)).toEqual(['B'])
   })
   it('separa «sin lugar» (ninguna barra la acepta) de «no se cuelga»', () => {
     const mapa = mapaDe([[nivel({})]])
-    const u = ubicar([prenda({ tipo: 'BLUSA' }), prenda({ tipo: 'BOMBACHA' })], mapa, 'comodo')
+    const u = ubicar([prenda({ tipo: 'BLUSA' }), prenda({ tipo: 'BOMBACHA' })], mapa, 'comodo', HOY)
     expect(u.sinLugar.map((p) => p.tipo)).toEqual(['BLUSA'])
     expect(u.noCuelgan.map((p) => p.tipo)).toEqual(['BOMBACHA'])
   })
   it('el resumen por tipo cuadra con la ubicación', () => {
     const mapa = mapaDe([[nivel({ cupo: 1, linea: 'ambas' })]])
     const ps = [prenda({ nombre: 'A', unidades: 2 }), prenda({ nombre: 'B', linea: 'sale' }), prenda({ tipo: 'BLUSA' })]
-    const filas = resumenPorTipo(ps, mapa, ubicar(ps, mapa, 'comodo'))
+    const filas = resumenPorTipo(ps, mapa, ubicar(ps, mapa, 'comodo', HOY))
     const top = filas.find((f) => f.tipo === 'TOP')!
     const blusa = filas.find((f) => f.tipo === 'BLUSA')!
     expect([top.total, top.nc, top.sale, top.ubicadas, top.noEntran]).toEqual([2, 1, 1, 1, 1])
@@ -175,7 +178,7 @@ describe('estadoDeModulo', () => {
   it('lleno sin sobrantes de lo suyo es «lleno»; con sobrantes, «desborda»; poco, «vacio»', () => {
     const mapa = mapaDe([[nivel({ cupo: 1 })], [nivel({ cupo: 1, tipos: ['BLUSA'] })], [nivel({ cupo: 4, tipos: ['SHORT'] })]])
     const ps = [prenda({ nombre: 'A', unidades: 2 }), prenda({ nombre: 'B' }), prenda({ tipo: 'BLUSA' }), prenda({ tipo: 'SHORT' })]
-    const u = ubicar(ps, mapa, 'comodo')
+    const u = ubicar(ps, mapa, 'comodo', HOY)
     expect(mapa.modulos.map((m) => estadoDeModulo(mapa, m, u, 'comodo').estado)).toEqual(['desborda', 'lleno', 'vacio'])
   })
 })
@@ -201,8 +204,8 @@ describe('el tope', () => {
   it('al tope cuelgan más y quedan afuera menos', () => {
     const mapa = mapaDe([[nivel({ tipos: ['BLUSA'] })]])
     const ps = Array.from({ length: 30 }, (_, i) => prenda({ clave: `b${i}`, nombre: `BLUSA ${i}`, tipo: 'BLUSA' }))
-    expect(ubicar(ps, mapa, 'comodo').noEntran.length).toBe(17)
-    expect(ubicar(ps, mapa, 'tope').noEntran.length).toBe(0)
+    expect(ubicar(ps, mapa, 'comodo', HOY).noEntran.length).toBe(17)
+    expect(ubicar(ps, mapa, 'tope', HOY).noEntran.length).toBe(0)
   })
   it('el saneo guarda el tope, vacío es sin medir, y rechaza un tope menor que lo cómodo', () => {
     const conTope = (topePorM: unknown) => ({ ...MAPA_INICIAL, tipos: [{ tipo: 'TOP', largo: 'L1', perchasPorM: 22, topePorM, cuelga: true }] })
@@ -221,15 +224,15 @@ describe('proponerArmado', () => {
 
   it('reparte los módulos entre colección y sale según lo que pide cada una, colección adelante', () => {
     const ps = [...muchas(90, { tipo: 'TOP', linea: 'nc' }), ...muchas(30, { tipo: 'TOP', linea: 'sale' })]
-    const p = proponerArmado(ps, pared(8), 'comodo')
+    const p = proponerArmado(ps, pared(8), 'comodo', HOY)
     expect(p.modulos).toEqual({ nc: 6, sale: 2 })
     expect(p.mapa.modulos.map((m) => m.niveles[0].linea)).toEqual(['nc', 'nc', 'nc', 'nc', 'nc', 'nc', 'sale', 'sale'])
     expect(alertas(p.mapa).filter((a) => a.grave)).toEqual([])
   })
   it('⛔ no maximiza: los vestidos tienen lugar aunque los tops llenarían todo', () => {
     const ps = [...muchas(200, { tipo: 'TOP', linea: 'nc' }), ...muchas(40, { tipo: 'VESTIDO', linea: 'nc' })]
-    const p = proponerArmado(ps, pared(6), 'comodo')
-    const u = ubicar(ps, p.mapa, 'comodo')
+    const p = proponerArmado(ps, pared(6), 'comodo', HOY)
+    const u = ubicar(ps, p.mapa, 'comodo', HOY)
     const colgados = (t: string) => Object.values(u.porBarra).flat().filter((x) => x.tipo === t).length
     expect(colgados('VESTIDO')).toBeGreaterThan(0)
     // los largos van en barra simple (no entran en doble), y nada queda tapado ni tocando el piso
@@ -238,8 +241,8 @@ describe('proponerArmado', () => {
   })
   it('cada familia queda cubierta en una proporción parecida', () => {
     const ps = [...muchas(120, { tipo: 'TOP', linea: 'nc' }), ...muchas(60, { tipo: 'BLUSA', linea: 'nc' }), ...muchas(40, { tipo: 'MINI', linea: 'nc' })]
-    const p = proponerArmado(ps, pared(6), 'comodo')
-    const u = ubicar(ps, p.mapa, 'comodo')
+    const p = proponerArmado(ps, pared(6), 'comodo', HOY)
+    const u = ubicar(ps, p.mapa, 'comodo', HOY)
     const cob = (t: string, total: number) => Object.values(u.porBarra).flat().filter((x) => x.tipo === t).length / total
     const cobs = [cob('TOP', 120), cob('BLUSA', 60), cob('MINI', 40)]
     expect(Math.max(...cobs) - Math.min(...cobs)).toBeLessThan(0.35)
@@ -249,12 +252,12 @@ describe('proponerArmado', () => {
     const isla = { codigo: 'ISLA', pared: 'isla' as const, orden: 0, anchoCm: 150, niveles: [nivel({ tipos: ['TOP'], cupo: 18 })] }
     // los 18 tops caben en la isla ⇒ lo que queda por colgar son los vestidos, y el primer módulo es para ellos
     const ps = [...muchas(18, { tipo: 'TOP', linea: 'nc' }), ...muchas(10, { tipo: 'VESTIDO', linea: 'nc' })]
-    const p = proponerArmado(ps, { ...base, modulos: [isla, ...base.modulos] }, 'comodo')
+    const p = proponerArmado(ps, { ...base, modulos: [isla, ...base.modulos] }, 'comodo', HOY)
     expect(p.mapa.modulos[0]).toEqual(isla)
     expect(p.mapa.modulos[1].niveles.map((n) => [n.pos, n.tipos.includes('VESTIDO')])).toEqual([['simple', true]])
   })
   it('el armado propuesto pasa el saneo del servidor', () => {
     const ps = [...muchas(50, { tipo: 'TOP', linea: 'nc' }), ...muchas(20, { tipo: 'JEAN', linea: 'sale' }), ...muchas(20, { tipo: 'SWEATER', linea: 'sale' })]
-    expect(sanearMapa(proponerArmado(ps, MAPA_INICIAL, 'comodo').mapa)).toMatchObject({ ok: true })
+    expect(sanearMapa(proponerArmado(ps, MAPA_INICIAL, 'comodo', HOY).mapa)).toMatchObject({ ok: true })
   })
 })

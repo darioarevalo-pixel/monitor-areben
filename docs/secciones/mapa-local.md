@@ -7,8 +7,12 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 
 ## Dónde vive
 
-- **Pantalla:** `components/mapa-local/`.
-  - `MapaLocal.tsx` arma la pantalla.
+- **Pantalla:** `components/mapa-local/`. Son **dos vistas de la misma sección** (misma key, mismo
+  permiso), una debajo de la otra en el menú: **«Mapa del local»** (`/mapa-local`, los percheros) y
+  **«Qué se cuelga»** (`/mapa-local/que-se-cuelga`, `components/que-se-cuelga/QueSeCuelga.tsx`).
+  - `MapaLocal.tsx` despacha entre las dos vistas y arma la de los percheros.
+  - `useMapaLocalDatos.ts` carga lo que leen las dos (mapa, stock y ventas). `useActividad` también
+    lo usa el Chequeo de exhibición: el control ordena igual que la hoja.
   - `Plano.tsx` es el plano visto desde arriba.
   - `Pared.tsx` es la pared de frente, a escala en cm.
   - `Detalle.tsx` es un módulo y sus barras, que se pueden editar.
@@ -24,8 +28,8 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 - **Servidor:** `api/_mapa-local.js`, por `api/datos.js?recurso=mapa-local`.
 - **Base:** la tabla `mapa_local`, una fila jsonb por marca (`sql/migrate-mapa-local.sql`), sólo
   en el Supabase de Zattia.
-- **Tests:** `tests/mapa-local.test.ts`, `tests/mapa-local-mover.test.ts` y
-  `tests/mapa-local-handler.test.ts`.
+- **Tests:** `tests/mapa-local.test.ts`, `tests/mapa-local-mover.test.ts`,
+  `tests/mapa-local-handler.test.ts` y `tests/que-se-cuelga.test.ts` (temporada y ritmo).
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -55,9 +59,37 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 - 🔴 **Una percha es un producto×color, ⛔ no un producto.** En Gestión Nube el color va a veces en
   la variante («Bordó - S») y a veces en el nombre («CAMPERA ROCK - VIOLETA»). Contando por
   producto daban 444; por producto×color, 679. → `colorDeVariante`.
-- 🔑 **Cuando no entran todas, se quedan colgadas las que tienen más unidades en el Local**
-  (`prioridad`): con más talles atrás, venden más estando colgadas. Es una regla elegida, ⛔ no
-  medida. Si Bruno pide otra (por ejemplo «lo nuevo primero»), se cambia ahí.
+- 🔑 **Qué se queda colgado cuando no entran todas** (`prioridad`, decisión de Bruno del
+  1-oct-2026; antes era «más unidades primero»):
+  1. **Lo nuevo de 7 días o menos** (desde el alta en GN) tiene lugar asegurado.
+  2. **El resto compite por RITMO** (`ritmoDe`): ventas por día desde que está a la venta, con tope
+     en los 30 días del ETL. Sin ventas conocidas va detrás de todo lo que vende.
+  3. **Sin rotación** (cero ventas en 30 días y a la venta hace más de 30) va última.
+  Desempatan las unidades y el nombre. ⚠️ Los cortes 7/30 son reglas elegidas, ⛔ no medidas.
+- 🔴 **«Lo nuevo primero» por 30 días se comía el salón**, y por eso quedó el ritmo. Medido el
+  1-oct-2026 con el stock real: en septiembre entraron 147 productos (251 prendas) y se llevaban
+  **246 de 298 perchas**, con 174 que vendían afuera (una con 23 ventas en 30 días). Con el ritmo:
+  126 perchas para lo de septiembre, las 117 sin rotación afuera, y lo que más vende de lo que
+  queda afuera hace 4 en 30 días.
+- 🔑 **El outlet ⛔ no tiene trato aparte**: compite por percha con lo nuevo según lo que vende.
+  Medido el 1-oct-2026 en el local: por percha rendía igual (1,29 contra 1,26 u por producto en 14 d).
+- ⚠️ **Las ventas suman el local Y la tienda online** (`allVariantes` del ETL ⛔ no las parte por canal).
+- 🔑 **La temporada va por TIPO de prenda** (`temporada` en la tabla de tipos: verano, invierno o
+  todo el año) y **las fechas en el mapa** (`temporadas`). Fuera de su temporada el tipo **duerme**
+  (`despierta`, `Ubicacion.durmiendo`): ⛔ no pide percha, ⛔ no cuenta como «no entra» y «Proponer» ⛔ no le da
+  barras. Las fechas se pisan a propósito: **lo que se pisa es el cambio de temporada** y ahí
+  compiten las dos. ⚠️ Las fechas iniciales son una propuesta (verano 15-sep → 31-mar, invierno
+  1-mar → 15-oct; el 15-oct por los sweaters que seguían vendiendo a fines de septiembre).
+- 🔑 **Un mapa guardado antes del 1-oct-2026 ⛔ no trae temporada**: cae a la del armado inicial
+  (`temporadaDe`, `temporadasDe`). Así un mapa viejo ⛔ no despierta los sweaters en verano.
+- 🔴 **`hoy` es parámetro obligatorio de `ubicar`, `proponerArmado` y del tramo**: la regla ⛔ no lee el
+  reloj. La pantalla lo fija al abrir.
+- 🔑 **«Qué se cuelga» guarda SÓLO las temporadas** (`conTemporadas`): relee el mapa y le aplica el
+  cambio, para ⛔ no pisar un cambio de barras guardado desde los percheros. Sin un mapa guardado ⛔ no deja
+  guardar: guardaría el armado propuesto como «el mapa del local».
+- 📊 **Lo que duerme se lleva también lugar de barra**: el 16-oct se duermen 38 prendas de abrigo,
+  «No entran» baja 26 y las colgadas bajan 12 — las barras de abrigos quedan vacías hasta que
+  alguien aprieta «Proponer» o las cambia a mano.
 - 🔴 **Llenar en orden mentía «no entra»** (cazado el 1-oct-2026): si D1 acepta tops y sweaters,
   los tops se quedaban con D1 aunque tuvieran lugar en D2, y el sweater salía «al depósito».
   `ubicar` ahora corre una prenda ya colgada a otra barra suya, en cadena, antes de declararla
@@ -145,7 +177,11 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 
 ## Cómo se prueba
 
-- `npx vitest run tests/mapa-local.test.ts tests/mapa-local-handler.test.ts`.
+- `npx vitest run tests/mapa-local.test.ts tests/mapa-local-handler.test.ts tests/que-se-cuelga.test.ts`.
+- **El oráculo de la temporada y el ritmo (1-oct-2026):** con el stock del Local y las ventas de
+  todos los canales, la lógica de la sección y un conteo directo hecho aparte dieron lo mismo: 637
+  prendas, 602 que se cuelgan, 485 compiten por ritmo y 117 sin rotación; duermen 0 el 1-oct
+  (cambio de temporada), 38 el 16-oct y 71 el 15-jul.
 - **El oráculo de los números:** las 642 prendas, con 355 de colección, 275 de sale y 12 sin
   precio, salieron iguales por la lógica de la sección y por un conteo directo del inventario
   hecho aparte (30-sep-2026).

@@ -4,15 +4,26 @@ import { useState } from 'react'
 import { Lightbox, color, font, radius, space } from '@/components/ui'
 import type { Prenda } from '@/lib/mapa-local/tipos'
 
-/** Una grilla de fotos chicas con nombre y color: lo que va en una barra, o lo que no entra. */
-export function Prendas({ prendas, vacio }: { prendas: Prenda[]; vacio: string }) {
+/** Lo que vendió una prenda, en corto: «nueva», «9 v. en 30 d», o nada si ⛔ no se sabe. */
+export function textoVentas(p: Prenda): string | null {
+  if (p.tramo === 'nueva') return 'nueva'
+  if (p.ventas30 == null) return null
+  return p.ventas30 === 1 ? '1 venta en 30 d' : `${p.ventas30} ventas en 30 d`
+}
+
+/**
+ * Una grilla de fotos chicas con nombre y color: lo que va en una barra, o lo que no entra.
+ * `conVentas` suma lo que vendió cada una (la vista «Qué se cuelga»); en los percheros va sólo en el
+ * cartelito, para no cargar el plano.
+ */
+export function Prendas({ prendas, vacio, conVentas = false }: { prendas: Prenda[]; vacio: string; conVentas?: boolean }) {
   const [grande, setGrande] = useState<string | null>(null)
   if (!prendas.length) return <div style={{ fontSize: font.sm, color: color.mut }}>{vacio}</div>
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: space[2] }}>
         {prendas.map((p) => (
-          <div key={p.clave} style={{ fontSize: font.xs, color: color.ink2, minWidth: 0 }} title={`${p.nombre}${p.color ? ` · ${p.color}` : ''} · ${p.unidades} u en el Local`}>
+          <div key={p.clave} style={{ fontSize: font.xs, color: color.ink2, minWidth: 0 }} title={`${p.nombre}${p.color ? ` · ${p.color}` : ''} · ${p.unidades} u en el Local${textoVentas(p) ? ` · ${textoVentas(p)}` : ''}`}>
             <button
               type="button"
               onClick={() => p.img && setGrande(p.img)}
@@ -25,6 +36,7 @@ export function Prendas({ prendas, vacio }: { prendas: Prenda[]; vacio: string }
             <div style={{ color: color.mut, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {p.color || '—'} · {p.unidades} u{p.linea === 'sale' ? ' · sale' : ''}
             </div>
+            {conVentas && textoVentas(p) && <div style={{ color: p.tramo === 'nueva' ? color.brand : color.mut }}>{textoVentas(p)}</div>}
           </div>
         ))}
       </div>
