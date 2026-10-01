@@ -65,6 +65,7 @@ const Cobranzas = dynamic(() => import('@/components/cobranzas/Cobranzas').then(
 const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas').then((m) => m.VerifVentas), { loading: Cargando })
 const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), { loading: Cargando })
 const Exhib = dynamic(() => import('@/components/exhib/Exhib').then((m) => m.Exhib), { loading: Cargando })
+const MapaLocal = dynamic(() => import('@/components/mapa-local/MapaLocal').then((m) => m.MapaLocal), { loading: Cargando })
 const Usuarios = dynamic(() => import('@/components/usuarios/Usuarios').then((m) => m.Usuarios), { loading: Cargando })
 const MetaAds = dynamic(() => import('@/components/meta-ads/MetaAds').then((m) => m.MetaAds), { loading: Cargando })
 const Gerencial = dynamic(() => import('@/components/gerencial/Gerencial').then((m) => m.Gerencial), { loading: Cargando })
@@ -362,6 +363,7 @@ export const SECCIONES: Record<string, ComponentType> = {
   // portó el flujo de lector físico. Lógica pura con paridad (buscar/limpiarCats/agrupar).
   // Rollback: mover esta línea a SOMBRAS.
   exhib: Exhib,
+  'mapa-local': MapaLocal,
   // Meta Ads (19-jul-2026, sección NUEVA — no existe en el legacy): `/meta-ads` lo sirve
   // el shell. Read-only sobre la API de Marketing de Meta vía `/api/meta-ads` (token de
   // system user en env, scope ads_read). Descubre las cuentas con /me/adaccounts y muestra

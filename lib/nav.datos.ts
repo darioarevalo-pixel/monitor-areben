@@ -469,6 +469,22 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "mapa-local",
+    "area": "local",
+    "label": "Mapa del local",
+    "info": "Los percheros del salón dibujados como están: qué tipos de prenda van en cada barra, a qué altura y cuántas perchas entran cómodas. Cada prenda con stock en el Local cae sola en su barra, y lo que no entra se lista aparte. Sólo mira el stock: no lo toca. Guarda el armado en el monitor, y editarlo pide su permiso.",
+    "brands": [
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "editar",
+        "label": "Editar el armado",
+        "info": "Cambiar los tipos, la línea, la altura y el cupo de cada barra. Sin esto el mapa se mira pero no se guarda."
+      }
+    ]
+  },
+  {
     "key": "tncat",
     "area": "marketing",
     "label": "Tienda Nube",
@@ -1074,7 +1090,8 @@ export const NAV_CATS: NavCat[] = [
           "conteo-estandar-zattia",
           "conteo-estandar-stunned",
           "conteo",
-          "exhib"
+          "exhib",
+          "mapa-local"
         ]
       }
     ]

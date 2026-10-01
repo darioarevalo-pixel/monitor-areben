@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-65 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+66 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -45,6 +45,7 @@ en Envíos, que pregunta antes de dejar avanzar el paquete de esa orden) ·
 `atencion → components/atencion + lib/atencion` ·
 `conteo → components/conteo-local-bdi` · `conteo-estandar-zattia` y
 `conteo-estandar-stunned → components/conteo-estandar` · `cupones` · `etiquetas` · `exhib` ·
+`mapa-local → components/mapa-local + lib/mapa-local` (el armado de los percheros: se guarda el armado, ⛔ no dónde cae cada prenda) ·
 `ubicaciones` · `solicitudes` · `solicitudes-internas` · `postventa-local → components/postventa` ·
 `reclamos-local` y `cambios-local → components/reclamos + lib/reclamos`
 

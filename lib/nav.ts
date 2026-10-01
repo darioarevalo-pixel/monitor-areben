@@ -208,6 +208,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   'conteo-estandar-zattia': 'conteo',
   'conteo-estandar-stunned': 'conteo',
   exhib: 'exhib',
+  'mapa-local': 'ubicaciones',
   // Marketing
   // La cámara, la misma de la cola de fotos de Tienda Nube: es el mismo trabajo en dos momentos —
   // lo que la cola detecta que falta fotografiar se pide acá, y `components/tncat/ColaCard.tsx`
@@ -501,6 +502,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   insumos: 'Lo que se consume y no se vende: bolsas, rollos, papel. Qué hay en cada lugar, cuánto sale y cuánto dura.',
   modelos: 'El padrón de las modelos: quién es cada una, cómo se la contacta, quién la representa, qué talle usa y cuánto mide. El talle y la altura de acá son los que salen a la descripción del producto cuando la modelo se elige en la sesión de fotos.',
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
+  'mapa-local': 'Qué va en cada perchero del salón y cuánto entra.',
   conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',
   'conteo-deposito': 'Conteo físico del depósito a mano, con ajuste de stock por diferencia.',
   'conteo-estandar-zattia': 'Conteo del local de Zattia: exhibido por escáner + depósito a mano.',
