@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { ReclamoRow } from '@/lib/reclamos/tipos'
@@ -70,6 +70,14 @@ const apretarCargarCupon = async (respuestas: (string | null)[]) => {
 }
 
 describe('cargar el cupón', () => {
+  // 🔴 Las fechas de abajo están escritas a mano (`30/09/2026`) y la pantalla rechaza un vencimiento
+  // pasado contra el reloj de verdad: el 1-oct-2026 el test se puso rojo solo. Se fija el reloj.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-30T12:00:00'))
+  })
+  afterEach(() => vi.useRealTimers())
+
   it('🔴 pregunta el código Y el vencimiento, y manda los dos', async () => {
     const r = await apretarCargarCupon(['ABC123', '30/09/2026'])
     expect(r.visible).toContain('R-0022')

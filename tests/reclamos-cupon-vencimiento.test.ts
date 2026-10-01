@@ -189,8 +189,12 @@ describe('el handler: sellar el cupón', () => {
     mundo.escrito = null
     vi.stubEnv('SUPABASE_URL', 'https://ejemplo.supabase.co')
     vi.stubEnv('SUPABASE_KEY', 'llave-de-mentira')
+    // 🔴 El handler rechaza un vencimiento pasado contra el reloj de verdad: con `30/09/2026` escrito
+    // a mano, el test se puso rojo solo el 1-oct-2026. El reloj se fija en HOY (sólo `Date`).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(HOY)
   })
-  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
   it('🔴 sin vencimiento ⛔ NO sella, aunque el código esté', async () => {
     const res = await postear({ action: 'cupon-emitido', cupon_codigo: 'ABC123' })
