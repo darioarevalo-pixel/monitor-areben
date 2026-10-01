@@ -28,7 +28,10 @@ export default async function handler(req, res) {
   if (store !== 'zattia') return res.status(400).json({ error: 'El mapa del local es sólo de Zattia (store=zattia).' })
 
   // 🔴 `puedeVerAlguna` y ⛔ nunca `puedeVer` pelado: la `store` la elige el request.
-  if (!puedeVerAlguna(perfil, store, ['mapa-local'])) {
+  // 🔑 **Lo lee también el Chequeo de exhibición** (F4, 1-oct-2026): quien camina el local con el
+  // lector controla cada módulo contra el mapa, y ⛔ no tiene por qué ver la sección del mapa. El mapa ⛔ no
+  // lleva plata ni datos de nadie; guardar sigue pidiendo `mapa-local.editar`.
+  if (!puedeVerAlguna(perfil, store, ['mapa-local', 'exhib'])) {
     return res.status(403).json({ error: 'No tenés acceso al mapa del local.' })
   }
   const marca = marcaDePermisos(store)

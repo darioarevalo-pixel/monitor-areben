@@ -107,6 +107,19 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   todos los módulos; con un cambio, sólo los que toca. ⛔ Sin flechas: la Helvetica de jsPDF no las
   tiene.
 
+- 🔑 **F4: el control se hace en el Chequeo de exhibición, y el lugar SIGUE siendo texto libre.**
+  Los códigos de los módulos (`D01`…) se suman a las sugerencias del campo, y cuando lo escrito
+  **es** un módulo del mapa guardado (`D1`, `d01` y `D01` valen igual) aparece el control: cuántas
+  de las que el mapa pone ahí pasaron por el lector, cuáles **faltan** (con dónde se las vio en el
+  recorrido, si se las vio) y cuáles **sobran** (con a qué módulo van, o si van al depósito). Así
+  ⛔ no se da vuelta la regla de `exhib.md`: el salón se reacomoda y la vidriera sigue siendo un
+  lugar.
+- 🔑 **El control usa el mapa GUARDADO, en cómodo**: la misma ubicación que imprime la hoja del
+  módulo. Sin mapa guardado ⛔ no aparece, porque el armado inicial ⛔ no es lo que está colgado.
+- 🔴 **Lo lee también quien tiene sólo el Chequeo de exhibición**: el GET acepta `exhib` además de
+  `mapa-local` (el que camina con el lector ⛔ no tiene por qué ver la sección). El mapa ⛔ no lleva
+  plata ni datos de nadie, y guardar sigue pidiendo `mapa-local.editar`.
+
 ## Pendiente
 
 - ✅ La tabla `mapa_local` ya está en Zattia (verificado el 30-sep-2026: el API contesta
@@ -114,9 +127,11 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 - ▶️ **Medir:** el cupo cómodo de cada tipo, y el tope de los que comparten barra con las blusas.
 - ✅ **F3 — la orden al local:** la lista «Mover» y la hoja por módulo (1-oct-2026). ⚠️ El PDF
   ⛔ no se miró impreso todavía.
-- ▶️ **F4 — el control con el lector:** que el recorrido del Chequeo de exhibición elija el
-  módulo del mapa como lugar, y comparar lo que debería estar contra lo escaneado. ⚠️ Da vuelta una
-  regla de `exhib.md`: hoy el lugar es texto libre a propósito.
+- ✅ **F4 — el control con el lector** (1-oct-2026, `lib/mapa-local/control.ts` +
+  `components/exhib/ControlModulo.tsx`). ⚠️ ⛔ No se vio en prod: aparece recién cuando alguien
+  **guarde** un mapa.
+- ▶️ **Lo que F4 todavía ⛔ no hace:** juntar los controles de todos los módulos al cerrar el
+  recorrido, y decir a qué **barra** del módulo va cada prenda (el lector sólo sabe el módulo).
 
 ## Cómo se prueba
 

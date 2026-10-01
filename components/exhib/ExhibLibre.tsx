@@ -10,6 +10,11 @@ import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
 import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, filasExport, hallazgoDe, RAFAGA_MS, resumenRecorrido, separarEscaneoDelLugar, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
+import { ControlModulo } from './ControlModulo'
+import { leerMapa } from '@/lib/mapa-local/cliente'
+import { prendasDelLocal, ubicar } from '@/lib/mapa-local/core'
+import { controlDeModulo, moduloDelLugar } from '@/lib/mapa-local/control'
+import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import { BalanceSector } from './BalanceSector'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
@@ -101,6 +106,24 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   }, [marca])
 
   useEffect(cargarPrevios, [cargarPrevios])
+
+  /**
+   * El Mapa del local **guardado** (F4). 🔑 Sólo el guardado: el armado inicial es un borrador y ⛔ no
+   * es lo que está colgado. Sin mapa —o sin poder leerlo— el recorrido anda igual que antes.
+   */
+  const [mapaLocal, setMapaLocal] = useState<MapaLocal | null>(null)
+  useEffect(() => {
+    if (marca !== 'zattia') return
+    let vivo = true
+    void leerMapa()
+      .then((m) => vivo && setMapaLocal(m.mapa))
+      .catch(() => {})
+    return () => {
+      vivo = false
+    }
+  }, [marca])
+  // Cómodo, como abre la pantalla del mapa: es la misma ubicación que imprime la hoja del módulo.
+  const ubicacionMapa = useMemo(() => (mapaLocal ? ubicar(prendasDelLocal(items, 'zattia'), mapaLocal, 'comodo') : null), [mapaLocal, items])
 
   function foco(ref: React.RefObject<HTMLInputElement | null>) {
     setTimeout(() => ref.current?.focus(), 150)
@@ -272,6 +295,16 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
    * abre cuando la persona quiere, y se corrige sola en cuanto el color aparece.
    */
   const colgarAca = useMemo(() => colgarEnLugar(paraColgar(lib.escaneos, items), lib.lugar), [lib.escaneos, items, lib.lugar])
+  /** Si el lugar escrito es un módulo del mapa, lo que el mapa pone ahí contra lo que pasó por el lector. */
+  const controlAca = useMemo(() => {
+    const m = mapaLocal && moduloDelLugar(mapaLocal, lib.lugar)
+    return m && ubicacionMapa ? controlDeModulo(mapaLocal, ubicacionMapa, m, lib.escaneos, lib.lugar) : null
+  }, [mapaLocal, ubicacionMapa, lib.escaneos, lib.lugar])
+  // Los módulos del mapa se SUGIEREN, ⛔ no se imponen: el lugar sigue siendo texto libre.
+  const sugerencias = useMemo(() => {
+    const cods = [...(mapaLocal?.modulos ?? [])].sort((a, b) => a.orden - b.orden).map((m) => m.codigo)
+    return [...lib.sugerencias, ...cods.filter((c) => !lib.sugerencias.includes(c))]
+  }, [mapaLocal, lib.sugerencias])
 
   return (
     <>
@@ -437,7 +470,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             />
           </Field>
           <datalist id="mo-exhib-lugares">
-            {lib.sugerencias.map((l) => (
+            {sugerencias.map((l) => (
               <option key={l} value={l} />
             ))}
           </datalist>
@@ -545,6 +578,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               </Button>
             </div>
           )}
+
+          {controlAca && <ControlModulo key={controlAca.codigo} c={controlAca} />}
 
           {colgarAca.length > 0 && (
             <Notice tone="neutral" icon="🧺" style={{ marginBottom: space[3] }}>

@@ -43,6 +43,8 @@ function resFalso() {
 
 const sobre = (d: unknown) => Buffer.from(JSON.stringify(d), 'utf8').toString('base64')
 const QUE_MIRA = { name: 'camila', admin: false, cuenta: null, acceso: { zattia: { 'mapa-local': true } }, funcion: [] }
+const DEL_LOCAL = { name: 'vendedora', admin: false, cuenta: null, acceso: { zattia: { exhib: true } }, funcion: [] }
+const NADA = { name: 'otra', admin: false, cuenta: null, acceso: { zattia: { ventas: true } }, funcion: [] }
 const QUE_EDITA = { name: 'Bruno Arevalo', admin: false, cuenta: null, acceso: { zattia: { 'mapa-local': true, 'mapa-local.editar': true } }, funcion: [] }
 
 function sesionDe(perfil: unknown) {
@@ -89,6 +91,14 @@ describe('leer', () => {
     expect(r.code).toBe(200)
     expect(r.body).toMatchObject({ ok: true, mapa: null, sinTabla: true, puede: { editar: true } })
   })
+  it('lo lee quien camina el Chequeo de exhibición (F4), y quien ⛔ no ve ninguna de las dos ⛔ no lo lee', async () => {
+    sesionDe(DEL_LOCAL)
+    const r = await correr(req('GET'))
+    expect(r.code).toBe(200)
+    expect(r.body).toMatchObject({ ok: true, puede: { editar: false } })
+    sesionDe(NADA)
+    expect((await correr(req('GET'))).code).toBe(403)
+  })
   it('es sólo de Zattia', async () => {
     sesionDe(QUE_EDITA)
     expect((await correr(req('GET', undefined, 'bdi'))).code).toBe(400)
@@ -100,6 +110,11 @@ describe('guardar', () => {
     sesionDe(QUE_MIRA)
     const r = await correr(req('POST', { action: 'guardar', mapa: copia(), base: null }))
     expect(r.code).toBe(403)
+    expect(base.escrituras).toHaveLength(0)
+  })
+  it('quien sólo ve el Chequeo de exhibición ⛔ no guarda', async () => {
+    sesionDe(DEL_LOCAL)
+    expect((await correr(req('POST', { action: 'guardar', mapa: copia(), base: null }))).code).toBe(403)
     expect(base.escrituras).toHaveLength(0)
   })
   it('guarda el mapa saneado, firmado con la sesión y ⛔ no con el body', async () => {

@@ -28,6 +28,10 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 | faltantes | los calcula sobre la categoría entera | **sólo los hermanos de lo que tocó** (ver abajo) |
 | repetidos | **suman una unidad** (19-sep-2026) | **suman una unidad** (19-sep-2026) |
 
+> 🗺️ **Si el lugar escrito es un módulo del Mapa del local guardado (`D01`…), aparece el control
+> del módulo** (F4, 1-oct-2026): faltan y sobran contra el mapa. El lugar sigue siendo texto libre:
+> los módulos sólo se suman a las sugerencias. Ver `docs/secciones/mapa-local.md`.
+
 ## Dónde vive
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
