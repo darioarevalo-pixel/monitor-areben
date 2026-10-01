@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui'
 import { Aislado } from './Aislado'
 import { Pagos } from './Pagos'
+import { CalculadoraEnvio } from './CalculadoraEnvio'
 import type { QuienPaga } from './NuevoCompromiso'
 import { color, font, radius, space, type Tone } from '@/components/ui/tokens'
 import { TEMP_UI, vistaTemp } from '@/components/crm/temperatura'
@@ -424,7 +425,15 @@ export function PanelWhatsApp({ tel: telInicial }: { tel: string | null }) {
   // abrir (y después cada tanto), y no tiene que perderse porque en ese momento no había ficha.
   const { comunidad, aviso: avisoComunidad } = useComunidad()
 
-  return <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} />
+  return (
+    <>
+      <PanelInterno tel={telChat} nombreChat={nombreChat} pedido={pedido} setPedido={setPedido} comunidad={comunidad} avisoComunidad={avisoComunidad} />
+      {/* `key` = el chat: al pasar a otro cliente la cuenta arranca vacía. */}
+      <Aislado nombre="Calculadora">
+        <CalculadoraEnvio key={telChat || ''} />
+      </Aislado>
+    </>
+  )
 }
 
 function PanelInterno({
