@@ -32,6 +32,13 @@ export type Nivel = {
   tipos: string[]
   /** Cupo fijado a mano. `null` = se calcula por ancho × densidad. */
   cupo: number | null
+  /**
+   * Modelos elegidos a mano (`productId`, todos sus colores). 🔑 **Cuando la barra los tiene, manda
+   * el criterio y ⛔ no el tipo**: acepta sólo esos, y esos modelos ⛔ van a ninguna otra barra (si no
+   * entran, salen en «No entran»). Lo pidió Bruno el 1-oct-2026 para D01: los tops nuevos por ESTILO
+   * (brillos arriba, boho abajo), que ni el tipo ni el ritmo de venta saben distinguir.
+   */
+  modelos?: string[]
 }
 
 export type Modulo = {

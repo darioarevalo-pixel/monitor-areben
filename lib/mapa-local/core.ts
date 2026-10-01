@@ -262,6 +262,24 @@ export function acepta(nivel: Pick<Nivel, 'tipos' | 'linea'>, p: Pick<Prenda, 't
   return nivel.linea === 'ambas' || p.linea == null || nivel.linea === p.linea
 }
 
+/** Los modelos elegidos a mano en alguna barra del mapa (ver `Nivel.modelos`). */
+export function modelosElegidos(mapa: Pick<MapaLocal, 'modulos'>): Set<string> {
+  return new Set(mapa.modulos.flatMap((m) => m.niveles.flatMap((n) => n.modelos || [])))
+}
+
+/**
+ * `acepta` con los modelos elegidos a mano: una barra con modelos acepta sólo esos, y un modelo
+ * elegido ⛔ cae en ninguna otra barra por su tipo. 🔴 Todo lo que reparte prendas pasa por acá: si
+ * `ubicar` y `estabilizar` miraran reglas distintas, «Mover» mandaría un modelo elegido a otra barra.
+ */
+export function aceptaEn(mapa: Pick<MapaLocal, 'modulos'>): (nivel: Pick<Nivel, 'tipos' | 'linea' | 'modelos'>, p: Pick<Prenda, 'tipo' | 'linea' | 'productId'>) => boolean {
+  const elegidos = modelosElegidos(mapa)
+  return (nivel, p) => (nivel.modelos?.length ? nivel.modelos.includes(p.productId) : !elegidos.has(p.productId) && acepta(nivel, p))
+}
+
+/** Las prendas que abren los mismos caminos: mismo tipo y línea, o el mismo modelo elegido a mano. */
+const claseDe = (p: Prenda, elegidos: Set<string>) => (elegidos.has(p.productId) ? `modelo|${p.productId}` : `${p.tipo}|${p.linea}`)
+
 /** El orden en que se llenan las barras de un módulo: lo que se ve primero, primero. */
 const ORDEN_POS: Record<PosNivel, number> = { frente: 0, alta: 1, simple: 2, baja: 3 }
 
@@ -339,6 +357,8 @@ export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo, hoy: 
   // Si una prenda no encontró lugar, ninguna de su mismo tipo y línea lo va a encontrar después:
   // colgar más nunca abre un camino que no estaba.
   const trabadas = new Set<string>()
+  const elegidos = modelosElegidos(mapa)
+  const aceptaAca = aceptaEn(mapa)
   for (const p of [...prendas].sort(prioridad)) {
     if (!cuelga(mapa, p.tipo)) {
       out.noCuelgan.push(p)
@@ -348,13 +368,13 @@ export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo, hoy: 
       out.durmiendo.push(p)
       continue
     }
-    const candidatas = lista.filter((b) => acepta(b.nivel, p))
+    const candidatas = lista.filter((b) => aceptaAca(b.nivel, p))
     if (!candidatas.length) {
       out.sinLugar.push(p)
       continue
     }
-    const clase = `${p.tipo}|${p.linea}`
-    if (trabadas.has(clase) || !colgar(p, candidatas, lista, porBarra)) {
+    const clase = claseDe(p, elegidos)
+    if (trabadas.has(clase) || !colgar(p, candidatas, lista, porBarra, aceptaAca, elegidos)) {
       trabadas.add(clase)
       out.noEntran.push(p)
     }
@@ -367,7 +387,14 @@ export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo, hoy: 
  * que haga lugar —una prenda de una barra de `p` pasa a otra barra que la acepta, y así hasta una
  * con lugar— y la aplica. `false` = no hay forma sin sacar a alguien.
  */
-function colgar(p: Prenda, candidatas: BarraOrdenada[], lista: BarraOrdenada[], porBarra: Record<string, Prenda[]>): boolean {
+function colgar(
+  p: Prenda,
+  candidatas: BarraOrdenada[],
+  lista: BarraOrdenada[],
+  porBarra: Record<string, Prenda[]>,
+  aceptaAca: ReturnType<typeof aceptaEn>,
+  elegidos: Set<string>,
+): boolean {
   const libre = candidatas.find((b) => porBarra[b.id].length < b.cupo)
   if (libre) {
     porBarra[libre.id].push(p)
@@ -378,14 +405,14 @@ function colgar(p: Prenda, candidatas: BarraOrdenada[], lista: BarraOrdenada[], 
   const cola = candidatas.map((b) => b.id)
   while (cola.length) {
     const id = cola.shift()!
-    // Una sola prenda por tipo y línea: dos iguales abren los mismos caminos.
+    // Una sola prenda por clase: dos iguales abren los mismos caminos.
     const vistas = new Set<string>()
     for (const q of porBarra[id]) {
-      const k = `${q.tipo}|${q.linea}`
+      const k = claseDe(q, elegidos)
       if (vistas.has(k)) continue
       vistas.add(k)
       for (const c of lista) {
-        if (via.has(c.id) || !acepta(c.nivel, q)) continue
+        if (via.has(c.id) || !aceptaAca(c.nivel, q)) continue
         via.set(c.id, { de: id, q })
         if (porBarra[c.id].length < c.cupo) {
           let actual = c.id
@@ -509,7 +536,8 @@ export function estadoDeModulo(mapa: MapaLocal, m: Modulo, u: Ubicacion, modo: M
     cupo += cupoDe(mapa, m, n, modo)
   }
   const lleno = cupo > 0 && usadas >= cupo
-  const sobraLoSuyo = lleno && u.noEntran.some((p) => m.niveles.some((n) => acepta(n, p)))
+  const aceptaAca = aceptaEn(mapa)
+  const sobraLoSuyo = lleno && u.noEntran.some((p) => m.niveles.some((n) => aceptaAca(n, p)))
   const estado: EstadoModulo = sobraLoSuyo ? 'desborda' : lleno ? 'lleno' : usadas < cupo / 2 ? 'vacio' : 'ok'
   return { usadas, cupo, estado }
 }
@@ -533,6 +561,7 @@ export function estabilizar(nueva: Ubicacion, previa: Ubicacion, mapa: MapaLocal
   for (const [id, ps] of Object.entries(previa.porBarra)) for (const p of ps) antes.set(p.clave, id)
   const porBarra: Record<string, Prenda[]> = Object.fromEntries(Object.entries(nueva.porBarra).map(([id, ps]) => [id, [...ps]]))
   const enSuLugar = (p: Prenda, id: string) => antes.get(p.clave) === id
+  const aceptaAca = aceptaEn(mapa)
 
   let cambio = true
   while (cambio) {
@@ -543,7 +572,7 @@ export function estabilizar(nueva: Ubicacion, previa: Ubicacion, mapa: MapaLocal
         if (!porBarra[x].includes(p)) continue
         const y = antes.get(p.clave)
         const destino = y ? porId.get(y) : undefined
-        if (!y || y === x || !destino || !acepta(destino.nivel, p)) continue
+        if (!y || y === x || !destino || !aceptaAca(destino.nivel, p)) continue
         const origen = porId.get(x)!
         if (porBarra[y].length < destino.cupo) {
           porBarra[x] = porBarra[x].filter((o) => o !== p)
@@ -551,7 +580,7 @@ export function estabilizar(nueva: Ubicacion, previa: Ubicacion, mapa: MapaLocal
           cambio = true
           continue
         }
-        const q = porBarra[y].find((o) => !enSuLugar(o, y) && acepta(origen.nivel, o))
+        const q = porBarra[y].find((o) => !enSuLugar(o, y) && aceptaAca(origen.nivel, o))
         if (!q) continue
         porBarra[x] = porBarra[x].map((o) => (o === p ? q : o))
         porBarra[y] = porBarra[y].map((o) => (o === q ? p : o))

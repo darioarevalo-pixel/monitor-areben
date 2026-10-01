@@ -261,3 +261,30 @@ describe('proponerArmado', () => {
     expect(sanearMapa(proponerArmado(ps, MAPA_INICIAL, 'comodo', HOY).mapa)).toMatchObject({ ok: true })
   })
 })
+
+describe('modelos elegidos a mano', () => {
+  // D1 = tops por tipo, D2 = dos modelos elegidos (1-oct-2026: D01 de Zattia por estilo).
+  const mapa = mapaDe([[nivel({ cupo: 5 })], [nivel({ cupo: 3, tipos: [], modelos: ['a', 'b'] })]])
+  const top = (productId: string, color = '') => prenda({ clave: `${productId}|${color}`, productId, nombre: `TOP ${productId}`, color })
+
+  it('la barra con modelos lleva sólo esos, con todos sus colores, aunque otra barra acepte su tipo primero', () => {
+    const u = ubicar([top('a', 'negro'), top('a', 'crema'), top('b'), top('z')], mapa, 'comodo', HOY)
+    expect(u.porBarra['D2-simple'].map((p) => p.clave).sort()).toEqual(['a|crema', 'a|negro', 'b|'])
+    expect(u.porBarra['D1-simple'].map((p) => p.clave)).toEqual(['z|'])
+  })
+  it('un modelo elegido que no entra en su barra sale en «No entran», ⛔ no se cuela en otra por su tipo', () => {
+    const u = ubicar([top('a', '1'), top('a', '2'), top('a', '3'), top('b', '4')], mapa, 'comodo', HOY)
+    expect(u.porBarra['D1-simple']).toEqual([])
+    expect(u.noEntran.map((p) => p.clave)).toEqual(['b|4'])
+  })
+  it('un modelo elegido trabado ⛔ traba a los demás tops', () => {
+    const u = ubicar([top('a', '1'), top('a', '2'), top('a', '3'), top('a', '4'), top('z')], mapa, 'comodo', HOY)
+    expect(u.porBarra['D1-simple'].map((p) => p.clave)).toEqual(['z|'])
+  })
+  it('se guardan, y una barra sin modelos ⛔ trae el campo', () => {
+    const v = sanearMapa({ ...mapa, modulos: mapa.modulos.map((m, i) => (i ? { ...m, niveles: [{ ...m.niveles[0], modelos: ['a', 'a', ' b ', 'x y', 7] }] } : m)) })
+    if (!v.ok) throw new Error(v.error)
+    expect(v.mapa.modulos[1].niveles[0].modelos).toEqual(['a', 'b', '7'])
+    expect('modelos' in v.mapa.modulos[0].niveles[0]).toBe(false)
+  })
+})
