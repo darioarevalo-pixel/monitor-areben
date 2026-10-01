@@ -125,6 +125,10 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 - ✅ La tabla `mapa_local` ya está en Zattia (verificado el 30-sep-2026: el API contesta
   `sinTabla:false`). Todavía nadie guardó un armado.
 - ▶️ **Medir:** el cupo cómodo de cada tipo, y el tope de los que comparten barra con las blusas.
+  📏 1-oct-2026 (le pasaron a Bruno): **hoy hay ~37-38 perchas por barra de 0,75 m en todos los
+  percheros** (~2 cm por percha) — es el tope, ⛔ el cómodo, y Bruno lo ve sobrecargado. El armado
+  inicial supone ~16 por barra en tops (22/m). ⚠️ Falta saber si cuelgan **un talle por color o
+  todos**: el mapa cuenta una percha por producto×color.
 - ✅ **F3 — la orden al local:** la lista «Mover» y la hoja por módulo (1-oct-2026). ⚠️ El PDF
   ⛔ no se miró impreso todavía.
 - ✅ **F4 — el control con el lector** (1-oct-2026, `lib/mapa-local/control.ts` +
