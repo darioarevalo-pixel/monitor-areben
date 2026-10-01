@@ -46,8 +46,15 @@ legacy (`index.html:11549-12021`).
   que hace que un producto contado sin diferencia igual reciba fecha de último conteo. El Excel, en
   cambio, lleva sólo las diferencias.
 - 🔑 **La firma sale de `perfil.name`, nunca del body.**
-- 🔴 **Si falla el guardado del historial, el Excel ya se generó igual** (el `catch` vacío es a
-  propósito): lo que ajusta stock es el archivo, y perderlo por un 500 del historial sería peor.
+- 🔴 **Si falla el guardado del historial, el Excel ya se generó igual** (lo que ajusta stock es
+  el archivo), pero **ya no se traga el error**: hasta el 1-oct-2026 un `catch {}` lo escondía y la
+  pantalla decía «conteo guardado». Así se perdió el registro de Agustina del 30-sep (RSW+RTO+RCH,
+  reconstruido a mano desde el Excel: registro id 34). Ahora el preview queda abierto con el error
+  en rojo y «Reintentar guardar», que **no** vuelve a bajar el Excel (`excelHecho`).
+- 🔴 **Freno al doble ajuste** (`separarYaAjustados`, sólo en esta pantalla, DESPUÉS de
+  `calcularAjuste`): si el vivo de una variante ya es lo contado, el Excel ya se importó y sale del
+  ajuste. Sin esto, lo terminado que quedó en el teléfono sumaba la diferencia dos veces.
+  ⚠️ Una venta que deja el vivo justo en lo contado se confunde con «ya ajustado»: por eso se lista.
 
 ## Zattia: la vista «Por estante (SKU)» (30-sep-2026)
 

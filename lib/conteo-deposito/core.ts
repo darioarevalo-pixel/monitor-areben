@@ -226,6 +226,31 @@ export function calcularAjuste(
   return { rows, registro: registroConteo(terminados, state, vivo), resumen, missing, ubicacion, store }
 }
 
+/**
+ * 🔴 Freno contra el DOBLE ajuste (30-sep-2026): el registro del historial falló en silencio, el
+ * celular se limpió y lo terminado podía volver a «Generar el ajuste» con el Excel ya importado
+ * — `nuevo = vivo + dif` sumaba la diferencia otra vez. Si el stock vivo de una variante YA es lo
+ * contado, se saca del Excel y se lista aparte. Va DESPUÉS de `calcularAjuste` (que comparten
+ * las cuatro pantallas y está clavado contra el legacy) y sólo en el Conteo de Depósito.
+ * ⚠️ Un caso lo confunde: una venta que deja el vivo justo en lo contado. Por eso la lista se
+ * muestra con nombre y talle, para que quien aplica lo vea.
+ */
+export function separarYaAjustados(pv: Preview): Preview {
+  const ya = pv.rows.filter((r) => r.contado != null && r.vivo === r.contado)
+  if (!ya.length) return { ...pv, yaAjustados: [] }
+  const ids = new Set(ya.map((r) => String(r.inventory_id)))
+  const rows = pv.rows.filter((r) => !ids.has(String(r.inventory_id)))
+  const registro = pv.registro.map((x) => (x.inventory_id != null && ids.has(String(x.inventory_id)) ? { ...x, nuevo_stock: x.vivo_aplicado } : x))
+  const resumen: ResumenAjuste = {
+    ...pv.resumen,
+    mas: rows.filter((r) => r.dif > 0).length,
+    menos: rows.filter((r) => r.dif < 0).length,
+    lineas: rows.length,
+    unidades_ajustadas: rows.reduce((n, r) => n + Math.abs(r.dif), 0),
+  }
+  return { ...pv, rows, registro, resumen, yaAjustados: ya }
+}
+
 /** El header EXACTO de GN. No tocar: es lo que espera "Importar y Ajustar". */
 export const HEADER_AJUSTE = ['id_inventario', 'codigo_producto', 'producto', 'variante', 'ubicacion', 'codigo_barras', 'stock_actual', 'nuevo_stock'] as const
 

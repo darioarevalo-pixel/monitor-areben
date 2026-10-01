@@ -15,6 +15,7 @@ import {
   estadoDe,
   ordenarModelo,
   pendientesDeGrupo,
+  separarYaAjustados,
   setCount,
   stockSistema,
   terminarProducto,
@@ -89,6 +90,10 @@ export function ConteoDeposito() {
   const [modoLista, setModoLista] = useState<ModoLista>('estante')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [aplicando, setAplicando] = useState(false)
+  // El Excel de ESTE preview ya se bajó: no se vuelve a generar (reintentar sólo guarda).
+  const [excelHecho, setExcelHecho] = useState(false)
+  // El registro del historial falló: se muestra en rojo con «Reintentar» (antes se tragaba).
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null)
   const [hist, setHist] = useState<{ cargando: boolean; conteos: ConteoHistorial[]; error: string | null }>({ cargando: false, conteos: [], error: null })
 
   const prodDe = (pid: string) => products.find((p) => String(p.pid) === String(pid)) || null
@@ -198,8 +203,10 @@ export function ConteoDeposito() {
     setAplicando(true)
     try {
       const d = await leerInventarioVivo(marca)
-      const pv = calcularAjuste(terminados, state, realMap(d.rows || []), d.store_name || 'Deposito Minorista', d.store || marca, stockTime)
+      const pv = separarYaAjustados(calcularAjuste(terminados, state, realMap(d.rows || []), d.store_name || 'Deposito Minorista', d.store || marca, stockTime))
       setPreview(pv)
+      setExcelHecho(false)
+      setErrorGuardado(null)
       setVista('preview')
     } catch (e) {
       toast.error('No pude leer el stock vivo de GN: ' + (e as Error).message)
@@ -215,6 +222,35 @@ export function ConteoDeposito() {
     })
     cd.aplicar(next)
     if (!Object.values(next).some((s) => Object.keys(s.contado).length)) cd.setInicio(null)
+  }
+
+  /**
+   * Guarda el registro en el historial. 🔴 Si falla NO se da por guardado (30-sep-2026: el
+   * registro de Agustina se perdió en silencio y la pantalla decía «conteo guardado»): queda el
+   * preview abierto con el error en rojo y «Reintentar», que guarda sin volver a bajar el Excel.
+   */
+  const guardarRegistro = async (pv: Preview) => {
+    try {
+      await guardarConteo({ store: pv.store || marca, ubicacion: pv.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: pv.resumen, detalle: pv.registro })
+    } catch (e) {
+      const msg = (e as Error).message
+      setErrorGuardado(msg)
+      toast.error('El conteo NO quedó guardado en el historial: ' + msg)
+      return
+    }
+    setErrorGuardado(null)
+    await cd.refrescarUltimos()
+    toast.ok(pv.rows.length ? `Conteo guardado. Subí el Excel (${pv.rows.length} ${pv.rows.length === 1 ? 'línea' : 'líneas'}) a GN → "Importar y Ajustar".` : 'Conteo guardado en el historial (sin ajuste)')
+    const limpiar = await confirmar({
+      titulo: 'Conteo guardado',
+      ok: 'Limpiar terminados',
+      cancelar: 'Dejarlos',
+      mensaje: '¿Limpiamos los productos terminados, para dejar la lista lista para el próximo conteo?',
+    })
+    if (limpiar) limpiarTerminados()
+    setPreview(null)
+    setExcelHecho(false)
+    setVista('lista')
   }
 
   const onConfirmar = async () => {
@@ -245,25 +281,13 @@ export function ConteoDeposito() {
         hoja: 'Worksheet',
         anchos: ANCHOS_AJUSTE,
       })
-      try {
-        await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
-        await cd.refrescarUltimos()
-      } catch {
-        /* si falla el historial, el Excel ya se generó igual */
-      }
-      toast.ok(`Excel generado (${preview.rows.length} ${preview.rows.length === 1 ? 'línea' : 'líneas'}) y conteo guardado. Subilo a GN → "Importar y Ajustar".`)
-      const limpiar = await confirmar({
-        titulo: 'Conteo guardado',
-        ok: 'Limpiar terminados',
-        cancelar: 'Dejarlos',
-        mensaje: '¿Limpiamos los productos terminados que se ajustaron, para dejar la lista lista para el próximo conteo?',
-      })
-      if (limpiar) limpiarTerminados()
-      setPreview(null)
-      setVista('lista')
     } catch (e) {
       toast.error('Error al generar el Excel: ' + (e as Error).message)
+      return
     }
+    // 🔴 Si el historial falla, el Excel ya se generó igual: lo que ajusta stock es el archivo.
+    setExcelHecho(true)
+    await guardarRegistro(preview)
   }
 
   const onGuardarSinDif = async () => {
@@ -274,28 +298,33 @@ export function ConteoDeposito() {
       return
     }
     const marcaU = (preview.store || marca).toUpperCase()
+    const ya = preview.yaAjustados?.length || 0
     const ok = await confirmar({
       titulo: 'Guardar el conteo sin ajuste',
       ok: `Guardar ${productos.length}`,
-      mensaje: `Se registra el conteo de ${productos.length} ${productos.length === 1 ? 'producto' : 'productos'} de ${marcaU}. Coincidieron con el sistema, así que no se genera Excel.`,
+      mensaje: ya
+        ? `Se registra el conteo de ${productos.length} ${productos.length === 1 ? 'producto' : 'productos'} de ${marcaU}. Gestión Nube ya tiene lo contado, así que no se genera Excel.`
+        : `Se registra el conteo de ${productos.length} ${productos.length === 1 ? 'producto' : 'productos'} de ${marcaU}. Coincidieron con el sistema, así que no se genera Excel.`,
     })
     if (!ok) return
-    try {
-      await guardarConteo({ store: preview.store || marca, ubicacion: preview.ubicacion, usuario, fecha_inicio: inicio ? new Date(inicio).toISOString() : null, resumen: preview.resumen, detalle: preview.registro })
-      await cd.refrescarUltimos()
-      toast.ok('Conteo guardado en el historial (sin ajuste)')
-      const limpiar = await confirmar({
-        titulo: 'Conteo guardado',
-        ok: 'Limpiar terminados',
-        cancelar: 'Dejarlos',
-        mensaje: '¿Limpiamos los productos terminados que se registraron?',
+    await guardarRegistro(preview)
+  }
+
+  const onVolverPreview = async () => {
+    if (excelHecho && errorGuardado) {
+      const ok = await confirmar({
+        titulo: 'El conteo no quedó guardado',
+        tono: 'danger',
+        ok: 'Salir igual',
+        cancelar: 'Quedarme',
+        mensaje: 'El Excel ya se generó, pero el conteo no está en el historial. Si salís, no queda registro de qué se contó. Probá «Reintentar» antes.',
       })
-      if (limpiar) limpiarTerminados()
-      setPreview(null)
-      setVista('lista')
-    } catch (e) {
-      toast.error('No pude guardar el conteo: ' + (e as Error).message)
+      if (!ok) return
     }
+    setPreview(null)
+    setExcelHecho(false)
+    setErrorGuardado(null)
+    setVista('lista')
   }
 
   const onHistorial = async () => {
@@ -358,21 +387,20 @@ export function ConteoDeposito() {
         )}
         {vista === 'preview' && preview && (
           <>
-            <Button
-              variant="outline"
-              onClick={() => {
- setPreview(null)
- setVista('lista')
- }}
- >
- ← Volver</Button>
-            {preview.rows.length ? (
+            <Button variant="outline" onClick={() => void onVolverPreview()}>
+              ← Volver
+            </Button>
+            {errorGuardado ? (
+              <Button variant="solid" tone="danger" onClick={() => void guardarRegistro(preview)}>
+                Reintentar guardar
+              </Button>
+            ) : preview.rows.length && !excelHecho ? (
               <Button variant="solid" tone="brand" onClick={() => void onConfirmar()}>
                 Generar Excel y guardar
               </Button>
             ) : (
               <Button variant="solid" tone="brand" onClick={() => void onGuardarSinDif()}>
-                Guardar el conteo igual
+                {preview.yaAjustados?.length ? 'Guardar solo en el historial' : 'Guardar el conteo igual'}
               </Button>
             )}
           </>
@@ -403,7 +431,7 @@ export function ConteoDeposito() {
       ) : vista === 'historial' ? (
         <HistorialConteos hist={hist} titulo="Historial de conteos" conVivo />
       ) : vista === 'preview' && preview ? (
-        <PreviewView preview={preview} />
+        <PreviewView preview={preview} errorGuardado={errorGuardado} excelHecho={excelHecho} />
       ) : vista === 'foco' && solViendo ? (
         <Foco prod={solViendo} st={state[solViendo.pid]} orderAsc={orderAsc} onSet={onSet} />
       ) : (
@@ -698,8 +726,9 @@ function Foco({ prod, st, orderAsc, onSet }: { prod: CdepProducto; st: CdepState
 }
 
 // ── Vista PREVIEW ──
-function PreviewView({ preview }: { preview: Preview }) {
+function PreviewView({ preview, errorGuardado, excelHecho }: { preview: Preview; errorGuardado: string | null; excelHecho: boolean }) {
   const { rows, resumen, missing } = preview
+  const ya = preview.yaAjustados || []
   const marcaU = (preview.store || '').toUpperCase()
   return (
     <div>
@@ -714,6 +743,28 @@ function PreviewView({ preview }: { preview: Preview }) {
         <b style={{ color: color.dangerInk }}>{resumen.menos}</b> con faltante (−) · <b>{resumen.unidades_ajustadas}</b> u. de diferencia. El resto no se toca.
       </p>
 
+      {errorGuardado && (
+        <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
+          <b>El conteo NO quedó guardado en el historial</b> ({errorGuardado}).{' '}
+          {excelHecho ? 'El Excel ya se generó: no lo vuelvas a generar. ' : ''}
+          Tocá <b>«Reintentar guardar»</b> antes de salir; si sigue fallando, avisá antes de limpiar el conteo.
+        </Notice>
+      )}
+
+      {ya.length > 0 && (
+        <Notice tone="warning" icon="✋" style={{ marginBottom: space[3] }}>
+          {ya.length === 1 ? 'Esta variante ya tiene' : `Estas ${ya.length} variantes ya tienen`} en Gestión Nube <b>lo que se contó</b>: el ajuste ya se subió. <b>No van al Excel</b> (se ajustarían dos veces).
+          <ul style={{ marginTop: space[1], paddingLeft: 18, fontSize: font.sm }}>
+            {ya.slice(0, 15).map((r) => (
+              <li key={String(r.inventory_id)}>
+                {r.producto} · <b>{r.variante}</b> — contado {r.contado}, GN tiene {r.vivo}
+              </li>
+            ))}
+            {ya.length > 15 && <li>y {ya.length - 15} más</li>}
+          </ul>
+        </Notice>
+      )}
+
       {missing.length > 0 && (
         <Notice tone="danger" icon="⚠" style={{ marginBottom: space[3] }}>
           {missing.length} {missing.length === 1 ? 'variante' : 'variantes'} con diferencia <b>NO se ajustan</b>: no se pudo confirmar su stock en vivo. <b>Revisalas a mano.</b> Son:{' '}
@@ -724,7 +775,9 @@ function PreviewView({ preview }: { preview: Preview }) {
 
       {!rows.length ? (
         <Notice tone="success" icon="🎉">
-          No hay diferencias para ajustar: lo contado coincide con el sistema. Guardalo igual, así queda registrada la fecha del conteo.
+          {ya.length
+            ? 'No queda nada para ajustar: Gestión Nube ya tiene lo contado. Guardalo en el historial, así queda registrado qué se contó y cuándo.'
+            : 'No hay diferencias para ajustar: lo contado coincide con el sistema. Guardalo igual, así queda registrada la fecha del conteo.'}
         </Notice>
       ) : (
         <>

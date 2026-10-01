@@ -81,6 +81,11 @@ export type Preview = {
   missing: { prod: string; size: string }[]
   ubicacion: string
   store: string
+  /**
+   * Variantes con diferencia cuyo stock vivo YA es lo contado: el ajuste ya se subió a GN
+   * (`separarYaAjustados`). No van al Excel: sumarlas de nuevo las ajustaría dos veces.
+   */
+  yaAjustados?: FilaAjuste[]
 }
 
 /** Un conteo aplicado del historial (`/api/deposito?recurso=conteos`). */
