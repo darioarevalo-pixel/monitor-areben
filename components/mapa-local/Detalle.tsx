@@ -1,6 +1,6 @@
 'use client'
 
-import { Badge, Field, MenuMulti, Notice, NumberField, SectionCard, Select, color, font, space, weight } from '@/components/ui'
+import { Badge, Button, Field, MenuMulti, Notice, NumberField, SectionCard, Select, color, font, space, weight } from '@/components/ui'
 import { cupoDe, idNivel, type Alerta, type Ubicacion } from '@/lib/mapa-local/core'
 import type { LineaBarra, MapaLocal, ModoCupo, Modulo, Nivel, PosNivel } from '@/lib/mapa-local/tipos'
 import { Prendas } from './Prendas'
@@ -34,9 +34,10 @@ type Props = {
   opcionesTipo: { key: string; label: string; n: number }[]
   editar: boolean
   onCambiar: (m: Modulo) => void
+  onImprimir: () => void
 }
 
-export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, onCambiar }: Props) {
+export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, onCambiar, onImprimir }: Props) {
   const cambiarNivel = (pos: PosNivel, cambio: Partial<Nivel>) => onCambiar({ ...modulo, niveles: modulo.niveles.map((n) => (n.pos === pos ? { ...n, ...cambio } : n)) })
   const orden = { frente: 0, alta: 1, simple: 2, baja: 3 } as const
   return (
@@ -44,13 +45,18 @@ export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, 
       title={`Módulo ${modulo.codigo}`}
       subtitle={`${modulo.anchoCm} cm de ancho · ${modulo.orden}° en el recorrido`}
       actions={
-        editar ? (
-          <Select value={armadoDe(modulo)} onChange={(e) => onCambiar({ ...modulo, niveles: rearmar(modulo, e.target.value as Armado) })} aria-label="Armado del módulo">
-            <option value="doble">Doble barra</option>
-            <option value="simple">Barra simple</option>
-            <option value="frente">De frente + barra</option>
-          </Select>
-        ) : undefined
+        <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
+          <Button variant="outline" onClick={onImprimir}>
+            Imprimir la hoja
+          </Button>
+          {editar && (
+            <Select value={armadoDe(modulo)} onChange={(e) => onCambiar({ ...modulo, niveles: rearmar(modulo, e.target.value as Armado) })} aria-label="Armado del módulo">
+              <option value="doble">Doble barra</option>
+              <option value="simple">Barra simple</option>
+              <option value="frente">De frente + barra</option>
+            </Select>
+          )}
+        </div>
       }
     >
       {alertas.map((a, i) => (

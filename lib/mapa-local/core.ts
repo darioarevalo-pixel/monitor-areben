@@ -165,11 +165,21 @@ export function prioridad(a: Prenda, b: Prenda): number {
 
 /**
  * Dónde va cada prenda. Se llenan las barras en el orden del recorrido, sin pasar nunca el cupo.
+ *
+ * 🔴 **Llenar en orden y ya NO alcanza: miente «no entra».** Si D1 acepta tops y sweaters y los tops
+ * llegan primero, se quedan con D1 aunque tengan lugar en D2, y el sweater sale «al depósito» con
+ * lugar de sobra en el salón (lo cazó el test de «Mover», 1-oct-2026). ⇒ Cuando todas las barras de
+ * una prenda están llenas, se busca **correr una ya colgada a otra barra que también la acepte**,
+ * en cadena (`colgar`). Las prendas se siguen tomando por prioridad, así que entra la misma cantidad
+ * o más, y ⛔ nunca una de menos prioridad en lugar de una de más.
  */
 export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo): Ubicacion {
   const lista = barras(mapa, modo)
   const porBarra: Record<string, Prenda[]> = Object.fromEntries(lista.map((b) => [b.id, []]))
   const out: Ubicacion = { porBarra, noEntran: [], sinLugar: [], noCuelgan: [] }
+  // Si una prenda no encontró lugar, ninguna de su mismo tipo y línea lo va a encontrar después:
+  // colgar más nunca abre un camino que no estaba.
+  const trabadas = new Set<string>()
   for (const p of [...prendas].sort(prioridad)) {
     if (!cuelga(mapa, p.tipo)) {
       out.noCuelgan.push(p)
@@ -180,11 +190,55 @@ export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo): Ubic
       out.sinLugar.push(p)
       continue
     }
-    const libre = candidatas.find((b) => porBarra[b.id].length < b.cupo)
-    if (libre) porBarra[libre.id].push(p)
-    else out.noEntran.push(p)
+    const clase = `${p.tipo}|${p.linea}`
+    if (trabadas.has(clase) || !colgar(p, candidatas, lista, porBarra)) {
+      trabadas.add(clase)
+      out.noEntran.push(p)
+    }
   }
   return out
+}
+
+/**
+ * Cuelga `p` en la primera barra suya con lugar. Si están todas llenas, busca la cadena más corta
+ * que haga lugar —una prenda de una barra de `p` pasa a otra barra que la acepta, y así hasta una
+ * con lugar— y la aplica. `false` = no hay forma sin sacar a alguien.
+ */
+function colgar(p: Prenda, candidatas: BarraOrdenada[], lista: BarraOrdenada[], porBarra: Record<string, Prenda[]>): boolean {
+  const libre = candidatas.find((b) => porBarra[b.id].length < b.cupo)
+  if (libre) {
+    porBarra[libre.id].push(p)
+    return true
+  }
+  // Cómo se llegó a cada barra: desde qué barra se le pasaría qué prenda. `null` = es de `p`.
+  const via = new Map<string, { de: string; q: Prenda } | null>(candidatas.map((b) => [b.id, null]))
+  const cola = candidatas.map((b) => b.id)
+  while (cola.length) {
+    const id = cola.shift()!
+    // Una sola prenda por tipo y línea: dos iguales abren los mismos caminos.
+    const vistas = new Set<string>()
+    for (const q of porBarra[id]) {
+      const k = `${q.tipo}|${q.linea}`
+      if (vistas.has(k)) continue
+      vistas.add(k)
+      for (const c of lista) {
+        if (via.has(c.id) || !acepta(c.nivel, q)) continue
+        via.set(c.id, { de: id, q })
+        if (porBarra[c.id].length < c.cupo) {
+          let actual = c.id
+          for (let paso = via.get(actual); paso; paso = via.get(actual)) {
+            porBarra[paso.de] = porBarra[paso.de].filter((o) => o !== paso!.q)
+            porBarra[actual].push(paso.q)
+            actual = paso.de
+          }
+          porBarra[actual].push(p)
+          return true
+        }
+        cola.push(c.id)
+      }
+    }
+  }
+  return false
 }
 
 export type FilaTipo = {
@@ -293,4 +347,75 @@ export function estadoDeModulo(mapa: MapaLocal, m: Modulo, u: Ubicacion, modo: M
   const sobraLoSuyo = lleno && u.noEntran.some((p) => m.niveles.some((n) => acepta(n, p)))
   const estado: EstadoModulo = sobraLoSuyo ? 'desborda' : lleno ? 'lleno' : usadas < cupo / 2 ? 'vacio' : 'ok'
   return { usadas, cupo, estado }
+}
+
+/**
+ * La ubicación nueva reacomodada para que **se mueva lo menos posible** respecto de la anterior.
+ *
+ * 🔴 **`ubicar` sola no sirve para decir qué mover**: llena las barras en el orden del recorrido, así
+ * que sumarle TOP a la primera barra corre a TODOS los tops una barra más allá, y la lista «Mover»
+ * saldría con cien prendas que cambian de lugar sin que haga falta.
+ *
+ * 🔑 **Qué entra y qué no, ⛔ no se toca**: sólo se cambia EN QUÉ barra está cada prenda colgada, y
+ * nunca se pasa un cupo. Una prenda vuelve a su barra anterior si esa barra todavía la acepta y tiene
+ * lugar, o cambiándose con una que tampoco estaba en su lugar. Cada paso deja al menos una prenda más
+ * en su barra de antes, así que termina.
+ */
+export function estabilizar(nueva: Ubicacion, previa: Ubicacion, mapa: MapaLocal, modo: ModoCupo): Ubicacion {
+  const lista = barras(mapa, modo)
+  const porId = new Map(lista.map((b) => [b.id, b]))
+  const antes = new Map<string, string>()
+  for (const [id, ps] of Object.entries(previa.porBarra)) for (const p of ps) antes.set(p.clave, id)
+  const porBarra: Record<string, Prenda[]> = Object.fromEntries(Object.entries(nueva.porBarra).map(([id, ps]) => [id, [...ps]]))
+  const enSuLugar = (p: Prenda, id: string) => antes.get(p.clave) === id
+
+  let cambio = true
+  while (cambio) {
+    cambio = false
+    for (const x of Object.keys(porBarra)) {
+      for (const p of [...porBarra[x]]) {
+        // Lo que se movió en esta misma vuelta ya no está acá: se vuelve a mirar en la próxima.
+        if (!porBarra[x].includes(p)) continue
+        const y = antes.get(p.clave)
+        const destino = y ? porId.get(y) : undefined
+        if (!y || y === x || !destino || !acepta(destino.nivel, p)) continue
+        const origen = porId.get(x)!
+        if (porBarra[y].length < destino.cupo) {
+          porBarra[x] = porBarra[x].filter((o) => o !== p)
+          porBarra[y].push(p)
+          cambio = true
+          continue
+        }
+        const q = porBarra[y].find((o) => !enSuLugar(o, y) && acepta(origen.nivel, o))
+        if (!q) continue
+        porBarra[x] = porBarra[x].map((o) => (o === p ? q : o))
+        porBarra[y] = porBarra[y].map((o) => (o === q ? p : o))
+        cambio = true
+      }
+    }
+  }
+  for (const id of Object.keys(porBarra)) porBarra[id].sort(prioridad)
+  return { ...nueva, porBarra }
+}
+
+/** Una prenda que cambia de lugar. `null` es afuera del salón: el depósito, o que no tenía barra. */
+export type Movimiento = { prenda: Prenda; de: string | null; a: string | null }
+
+/**
+ * Lo que hay que mover para pasar de una ubicación a otra, con el mismo stock: en el orden del
+ * recorrido de la barra a la que va (el de `porBarra`, que sale de `barras`), y lo que va al
+ * depósito al final.
+ */
+export function movimientos(previa: Ubicacion, nueva: Ubicacion): Movimiento[] {
+  const donde = (u: Ubicacion) => {
+    const m = new Map<string, { p: Prenda; id: string }>()
+    for (const [id, ps] of Object.entries(u.porBarra)) for (const p of ps) m.set(p.clave, { p, id })
+    return m
+  }
+  const de = donde(previa)
+  const a = donde(nueva)
+  const out: Movimiento[] = []
+  for (const [clave, { p, id }] of a) if (de.get(clave)?.id !== id) out.push({ prenda: p, de: de.get(clave)?.id ?? null, a: id })
+  for (const [clave, { p, id }] of de) if (!a.has(clave)) out.push({ prenda: p, de: id, a: null })
+  return out
 }

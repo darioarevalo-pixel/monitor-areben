@@ -12,17 +12,20 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   - `Plano.tsx` es el plano visto desde arriba.
   - `Pared.tsx` es la pared de frente, a escala en cm.
   - `Detalle.tsx` es un módulo y sus barras, que se pueden editar.
+  - `Mover.tsx` es la lista «Mover».
   - `TablaTipos.tsx` y `Prendas.tsx` completan la pantalla.
 - **Lógica:** `lib/mapa-local/`.
   - `core.ts` es puro.
   - `proponer.ts` arma la propuesta con el stock de hoy.
+  - `hoja.ts` es la hoja por módulo, en PDF A4.
   - `inicial.ts` es el armado propuesto y la tabla de tipos.
   - `validar.core.js` hace el saneo y lo importa el handler.
   - `cliente.ts` habla con el servidor.
 - **Servidor:** `api/_mapa-local.js`, por `api/datos.js?recurso=mapa-local`.
 - **Base:** la tabla `mapa_local`, una fila jsonb por marca (`sql/migrate-mapa-local.sql`), sólo
   en el Supabase de Zattia.
-- **Tests:** `tests/mapa-local.test.ts` y `tests/mapa-local-handler.test.ts`.
+- **Tests:** `tests/mapa-local.test.ts`, `tests/mapa-local-mover.test.ts` y
+  `tests/mapa-local-handler.test.ts`.
 
 ## ⛔ Lo que comparte con otras secciones
 
@@ -55,6 +58,11 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 - 🔑 **Cuando no entran todas, se quedan colgadas las que tienen más unidades en el Local**
   (`prioridad`): con más talles atrás, venden más estando colgadas. Es una regla elegida, ⛔ no
   medida. Si Bruno pide otra (por ejemplo «lo nuevo primero»), se cambia ahí.
+- 🔴 **Llenar en orden mentía «no entra»** (cazado el 1-oct-2026): si D1 acepta tops y sweaters,
+  los tops se quedaban con D1 aunque tuvieran lugar en D2, y el sweater salía «al depósito».
+  `ubicar` ahora corre una prenda ya colgada a otra barra suya, en cadena, antes de declararla
+  afuera. Con el stock del 1-oct ⛔ no cambia ningún número (todas las barras están llenas): el
+  defecto muerde cuando sobra lugar en alguna barra.
 - 🔑 **El cupo lo pone el tipo MÁS GRUESO de la barra**, ⛔ no el promedio. Una barra que acepta
   tops y sweaters puede terminar llena de sweaters.
 - 🔑 **Dos densidades por tipo: cómoda y al TOPE** (`topePorM`). El tope es lo apretado, sin que
@@ -80,12 +88,32 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   yo sobre el plano y las fotos. Hasta que alguien lo guarde, la pantalla lo dice.
 - ⚠️ **Con la Feria Online viva (27-sep → 4-oct), «sale» incluye las promos de la feria.**
 
+- 🔑 **«Mover» compara el mapa guardado al abrir la pantalla contra el que se está viendo, con el
+  MISMO stock.** ⛔ No es «lo que está colgado contra lo que debería»: eso no lo sabe nadie hasta F4.
+  Sin un mapa guardado no aparece (el armado inicial no es lo que está colgado), y ⛔ no se vacía
+  al guardar, para poder imprimir después.
+- 🔴 **Para «Mover», `ubicar` sola no sirve**: llena en orden, así que un cambio en la primera barra
+  corre a todas las prendas de ese tipo una barra más allá. `estabilizar` deja cada prenda en su
+  barra de antes siempre que se pueda, ⛔ sin cambiar qué entra. Medido el 1-oct-2026 con el stock
+  real: sacarle TOP a la isla movía **125 prendas en crudo y 51 estabilizado**; «Proponer» sobre el
+  inicial, 288 contra 217, y de las 158 que pasan de barra a barra **147 son obligadas** (su barra
+  ya no las acepta).
+- ⚠️ **De un día al otro, la hoja de un módulo puede cambiar sin que nadie toque el mapa**: entra
+  stock, se vende una prenda y el llenado se corre. `estabilizar` sólo actúa contra el mapa
+  guardado, con el stock de hoy. Lo resuelve F4, que ve lo colgado de verdad.
+- 🔑 **La hoja por módulo** va barra por barra, en el orden en que se mira (de frente, arriba,
+  abajo), con un casillero por prenda. Si hay un cambio, lo nuevo sale en negrita con de dónde
+  viene, y abajo dice qué sacar y a dónde llevarlo. «Imprimir las hojas», sin cambio, imprime
+  todos los módulos; con un cambio, sólo los que toca. ⛔ Sin flechas: la Helvetica de jsPDF no las
+  tiene.
+
 ## Pendiente
 
 - ✅ La tabla `mapa_local` ya está en Zattia (verificado el 30-sep-2026: el API contesta
   `sinTabla:false`). Todavía nadie guardó un armado.
 - ▶️ **Medir:** el cupo cómodo de cada tipo, y el tope de los que comparten barra con las blusas.
-- ▶️ **F3 — la orden al local:** que cada cambio arme la lista «Mover» y la hoja por módulo.
+- ✅ **F3 — la orden al local:** la lista «Mover» y la hoja por módulo (1-oct-2026). ⚠️ El PDF
+  ⛔ no se miró impreso todavía.
 - ▶️ **F4 — el control con el lector:** que el recorrido del Chequeo de exhibición elija el
   módulo del mapa como lugar, y comparar lo que debería estar contra lo escaneado. ⚠️ Da vuelta una
   regla de `exhib.md`: hoy el lugar es texto libre a propósito.

@@ -7,7 +7,8 @@ import { HeaderAcciones } from '@/components/layout/acciones'
 import { Button, KpiCard, Notice, Plegable, SectionCard, Tabs, color, font, space, useToast } from '@/components/ui'
 import { bajarExhib, type CrudosExhib } from '@/lib/exhib/datos'
 import { armarProdMap, construirItems } from '@/lib/exhib/core'
-import { alertas as alertasDe, capacidadTotal, cuelga, estadoDeModulo, prendasDelLocal, resumenPorTipo, ubicar, type EstadoModulo } from '@/lib/mapa-local/core'
+import { alertas as alertasDe, capacidadTotal, cuelga, estabilizar, estadoDeModulo, movimientos, prendasDelLocal, resumenPorTipo, ubicar, type EstadoModulo } from '@/lib/mapa-local/core'
+import { hojaDeModulo, imprimirHojas } from '@/lib/mapa-local/hoja'
 import { guardarMapa, leerMapa } from '@/lib/mapa-local/cliente'
 import { MAPA_INICIAL } from '@/lib/mapa-local/inicial'
 import { proponerArmado } from '@/lib/mapa-local/proponer'
@@ -15,6 +16,7 @@ import type { MapaLocal as Mapa, ModoCupo, Modulo, Pared as TipoPared } from '@/
 import { Plano } from './Plano'
 import { Pared } from './Pared'
 import { Detalle } from './Detalle'
+import { Mover } from './Mover'
 import { Prendas } from './Prendas'
 import { TablaTipos } from './TablaTipos'
 
@@ -47,6 +49,9 @@ export function MapaLocal() {
 
   const [crudos, setCrudos] = useState<CrudosExhib>({ inv: [], tnProducts: [] })
   const [guardado, setGuardado] = useState<{ mapa: Mapa; en: string | null; por: string | null } | null>(null)
+  // El mapa contra el que se calcula «Mover»: el que estaba guardado al abrir la pantalla. ⛔ No se
+  // pisa al guardar, para que la lista y las hojas sigan ahí después del «Guardar».
+  const [base, setBase] = useState<Mapa | null>(null)
   const [mapa, setMapa] = useState<Mapa>(MAPA_INICIAL)
   const [editar, setEditar] = useState(false)
   const [sinTabla, setSinTabla] = useState(false)
@@ -67,6 +72,7 @@ export function MapaLocal() {
         if (!vivo) return
         const base = m.mapa || MAPA_INICIAL
         setGuardado({ mapa: base, en: m.actualizadoEn, por: m.actualizadoPor })
+        setBase(m.mapa)
         setMapa(base)
         setEditar(m.puede.editar)
         setSinTabla(m.sinTabla)
@@ -85,7 +91,14 @@ export function MapaLocal() {
   // El cruce GN ↔ TN se recalcula cuando llega el ETL, que es después de montar (ver `useExhib`).
   const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
   const prendas = useMemo(() => prendasDelLocal(construirItems(crudos.inv, prodMap, {}), 'zattia'), [crudos.inv, prodMap])
-  const u = useMemo(() => ubicar(prendas, mapa, modo), [prendas, mapa, modo])
+  // Con un cambio de armado, la ubicación se reacomoda para mover lo menos posible (ver `estabilizar`).
+  // 🔑 Sin un mapa guardado no hay «antes»: el armado inicial no es lo que está colgado.
+  const previa = useMemo(() => (base ? ubicar(prendas, base, modo) : null), [prendas, base, modo])
+  const u = useMemo(() => {
+    const cruda = ubicar(prendas, mapa, modo)
+    return previa ? estabilizar(cruda, previa, mapa, modo) : cruda
+  }, [prendas, mapa, modo, previa])
+  const movs = useMemo(() => (previa ? movimientos(previa, u) : []), [previa, u])
   const filas = useMemo(() => resumenPorTipo(prendas, mapa, u), [prendas, mapa, u])
   const avisos = useMemo(() => alertasDe(mapa), [mapa])
   const graves = useMemo(() => new Set(avisos.filter((a) => a.grave).map((a) => a.codigo)), [avisos])
@@ -113,6 +126,21 @@ export function MapaLocal() {
     toast.ok(`Armado propuesto con el stock de hoy: ${p.modulos.nc} módulos de colección y ${p.modulos.sale} de sale. Revisalo antes de guardar.`)
   }
 
+  /** Las hojas de los módulos pedidos; sin pedir, las de los que toca «Mover», o todas si no hay cambio. */
+  async function imprimir(codigos?: string[]) {
+    const tocados = new Set(movs.flatMap((m) => [m.de, m.a]).filter((id): id is string => !!id).map((id) => id.slice(0, id.lastIndexOf('-'))))
+    const lista = [...mapa.modulos]
+      .sort((a, b) => a.orden - b.orden)
+      .filter((m) => (codigos ? codigos.includes(m.codigo) : !movs.length || tocados.has(m.codigo)))
+    if (!lista.length) return toast.error('No hay módulos para imprimir.')
+    const cual = guardado?.en && !cambiado ? 'mapa guardado' : 'mapa sin guardar'
+    const cuando = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', dateStyle: 'short', timeStyle: 'short' })
+    await imprimirHojas(
+      lista.map((m) => hojaDeModulo(mapa, m, u, movs.length ? movs : null, modo)),
+      `Mapa del local · Zattia · ${cual} · stock del ${cuando}`,
+    )
+  }
+
   async function guardar() {
     if (!guardado) return
     setGuardando(true)
@@ -135,8 +163,12 @@ export function MapaLocal() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
-      {editar && (
-        <HeaderAcciones>
+      <HeaderAcciones>
+        <Button variant="outline" onClick={() => void imprimir()} disabled={cargando || !prendas.length}>
+          {movs.length ? 'Imprimir las hojas de lo que cambia' : 'Imprimir las hojas'}
+        </Button>
+        {editar && (
+          <>
           <Button variant="outline" onClick={proponer} disabled={cargando || !prendas.length}>
             Proponer con el stock de hoy
           </Button>
@@ -148,8 +180,9 @@ export function MapaLocal() {
           <Button variant="solid" tone="brand" onClick={() => void guardar()} loading={guardando} disabled={!cambiado || sinTabla}>
             Guardar el mapa
           </Button>
-        </HeaderAcciones>
-      )}
+          </>
+        )}
+      </HeaderAcciones>
 
       {cargando ? (
         <Notice>Cargando el mapa y el stock del Local…</Notice>
@@ -202,6 +235,7 @@ export function MapaLocal() {
                   opcionesTipo={opcionesTipo}
                   editar={editar}
                   onCambiar={cambiarModulo}
+                  onImprimir={() => void imprimir([moduloElegido.codigo])}
                 />
               ) : (
                 <Notice>Tocá un módulo en el plano o en la pared para ver sus barras y lo que va en cada una.</Notice>
@@ -209,6 +243,16 @@ export function MapaLocal() {
             </div>
           </div>
 
+          {base && (
+            <Plegable
+              abierto={!!abierto.mover}
+              onToggle={() => toggle('mover')}
+              titulo={`Mover (${movs.length})`}
+              ayuda="Lo que cambia de lugar entre el mapa guardado al abrir esta pantalla y el que estás viendo, con el stock de hoy. Se mueve lo menos posible."
+            >
+              <Mover movs={movs} />
+            </Plegable>
+          )}
           <Plegable abierto={!!abierto.noEntran} onToggle={() => toggle('noEntran')} titulo={`No entran (${u.noEntran.length})`} ayuda="Tienen una barra de su tipo y línea, pero ya está llena. Quedan afuera las de menos unidades en el Local.">
             <Prendas prendas={u.noEntran} vacio="Entra todo." />
           </Plegable>
