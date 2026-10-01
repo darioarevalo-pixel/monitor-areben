@@ -70,16 +70,19 @@ function destinoDe(u: Ubicacion, codigoDe: Map<string, string>, clave: string): 
 /**
  * El control de un módulo: lo que el mapa pone acá contra lo que pasó por el lector en `lugar`.
  *
+ * Cuenta como «acá» todo escaneo cuyo lugar nombra este módulo, escrito como sea (`D1`, `d01`).
+ *
  * `u` es la ubicación del mapa **guardado** con el stock de hoy (`ubicar(prendas, guardado, modo)`),
  * la misma que imprime la hoja del módulo. ⚠️ Con stock que entra y se vende, lo esperado se corre de
  * un día al otro sin que nadie toque el mapa (ver `mapa-local.md`).
  */
-export function controlDeModulo(mapa: MapaLocal, u: Ubicacion, modulo: Modulo, escaneos: EscaneoLibre[], lugar: string): ControlModulo {
+export function controlDeModulo(mapa: MapaLocal, u: Ubicacion, modulo: Modulo, escaneos: EscaneoLibre[]): ControlModulo {
   const codigoDe = new Map<string, string>()
   for (const m of mapa.modulos) for (const n of m.niveles) for (const p of u.porBarra[idNivel(m, n)] || []) codigoDe.set(p.clave, m.codigo)
 
   const esperadas = modulo.niveles.flatMap((n) => u.porBarra[idNivel(modulo, n)] || [])
-  const aca = lugar.trim()
+  // «Acá» es el MÓDULO, ⛔ el texto: `D1` y `d01` en el mismo recorrido son el mismo mueble.
+  const aca = normCodigo(modulo.codigo)
   const vistasAca = new Set<string>()
   const otrosLugares = new Map<string, Set<string>>()
   const sobran = new Map<string, Sobra>()
@@ -88,7 +91,7 @@ export function controlDeModulo(mapa: MapaLocal, u: Ubicacion, modulo: Modulo, e
 
   for (const e of escaneos) {
     const clave = claveDeEscaneo(e)
-    if (e.lugar.trim() !== aca) {
+    if (normCodigo(e.lugar) !== aca) {
       if (clave) {
         if (!otrosLugares.has(clave)) otrosLugares.set(clave, new Set())
         otrosLugares.get(clave)!.add(e.lugar.trim())
@@ -116,6 +119,46 @@ export function controlDeModulo(mapa: MapaLocal, u: Ubicacion, modulo: Modulo, e
     faltan,
     sobran: [...sobran.values()].sort((a, b) => a.nombre.localeCompare(b.nombre) || a.color.localeCompare(b.color)),
     sinJuzgar,
+  }
+}
+
+export type ControlRecorrido = {
+  /** Los módulos que pasaron por el lector, en el orden del mapa. */
+  modulos: ControlModulo[]
+  /** Los que nadie caminó: de esos ⛔ se afirma nada (ni que estén bien ni que falte algo). */
+  noCaminados: string[]
+  esperadas: number
+  bien: number
+  faltan: number
+  /**
+   * Prendas distintas que sobran en algún módulo caminado. 🔑 Se cuentan una vez: la misma prenda
+   * escaneada en dos módulos ajenos es UNA percha para mover, ⛔ dos.
+   */
+  sobran: number
+}
+
+/**
+ * F4 al cerrar el recorrido: **el control de todos los módulos caminados, juntos.** Un módulo está
+ * caminado si al menos un escaneo nombra su código (aunque ⛔ haya cruzado con el inventario).
+ *
+ * ⚠️ Los totales son **sólo de lo caminado**: sumar lo esperado de los módulos que nadie pasó por el
+ * lector los haría «faltar» enteros, y eso ⛔ es un dato, es un recorrido que ⛔ llegó hasta ahí.
+ */
+export function controlDelRecorrido(mapa: MapaLocal, u: Ubicacion, escaneos: EscaneoLibre[]): ControlRecorrido {
+  const caminados = new Set(escaneos.map((e) => moduloDelLugar(mapa, e.lugar)?.codigo).filter((c): c is string => !!c))
+  const modulos: ControlModulo[] = []
+  const noCaminados: string[] = []
+  for (const m of [...mapa.modulos].sort((a, b) => a.orden - b.orden)) {
+    if (caminados.has(m.codigo)) modulos.push(controlDeModulo(mapa, u, m, escaneos))
+    else noCaminados.push(m.codigo)
+  }
+  return {
+    modulos,
+    noCaminados,
+    esperadas: modulos.reduce((n, c) => n + c.esperadas, 0),
+    bien: modulos.reduce((n, c) => n + c.bien, 0),
+    faltan: modulos.reduce((n, c) => n + c.faltan.length, 0),
+    sobran: new Set(modulos.flatMap((c) => c.sobran.map((s) => s.clave))).size,
   }
 }
 

@@ -130,8 +130,14 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 - ✅ **F4 — el control con el lector** (1-oct-2026, `lib/mapa-local/control.ts` +
   `components/exhib/ControlModulo.tsx`). ⚠️ ⛔ No se vio en prod: aparece recién cuando alguien
   **guarde** un mapa.
-- ▶️ **Lo que F4 todavía ⛔ no hace:** juntar los controles de todos los módulos al cerrar el
-  recorrido, y decir a qué **barra** del módulo va cada prenda (el lector sólo sabe el módulo).
+- ✅ **Al cerrar el recorrido, el control de todos los módulos juntos** (1-oct-2026,
+  `controlDelRecorrido`): «caminaste N de M módulos», los totales **sólo de lo caminado**, el
+  control de cada módulo con su «Ver cuáles», y los módulos sin caminar nombrados ⛔ sin afirmar
+  nada sobre ellos. 🔑 Una prenda que sobra en dos módulos ajenos es **una** percha para mover. Y
+  «acá» pasó a ser el MÓDULO, ⛔ el texto: `D1` y `d01` en el mismo recorrido suman juntos.
+  ⚠️ Sólo en el cierre: al abrir un recorrido viejo ⛔ sale, porque el stock de hoy ⛔ es el de ese día.
+- ▶️ **Lo que F4 todavía ⛔ no hace:** decir a qué **barra** del módulo va cada prenda (el lector
+  sólo sabe el módulo).
 
 ## Cómo se prueba
 

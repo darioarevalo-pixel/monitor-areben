@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Notice, color, font, space } from '@/components/ui'
-import { textoDestino, type ControlModulo as Control } from '@/lib/mapa-local/control'
+import { textoDestino, type ControlModulo as Control, type ControlRecorrido } from '@/lib/mapa-local/control'
 
 /**
  * El control de un módulo del Mapa del local, mientras se lo camina con el lector (F4).
@@ -45,5 +45,33 @@ export function ControlModulo({ c }: { c: Control }) {
         </div>
       )}
     </Notice>
+  )
+}
+
+/**
+ * Al cerrar el recorrido: el control de **todos los módulos caminados**, juntos, y cuáles quedaron sin
+ * caminar. Cada módulo es el mismo control de arriba, con su «Ver cuáles».
+ *
+ * ⚠️ Los módulos sin caminar se nombran y nada más: ⛔ se afirma que les falte algo.
+ */
+export function ControlRecorridoPanel({ r }: { r: ControlRecorrido }) {
+  const n = r.modulos.length
+  const total = n + r.noCaminados.length
+  return (
+    <div style={{ marginBottom: space[4] }}>
+      <div style={{ fontWeight: 700, fontSize: font.md, color: color.ink, marginBottom: space[1] }}>Mapa del local</div>
+      <div style={{ fontSize: font.sm, color: color.ink, marginBottom: space[2] }}>
+        Caminaste <b>{n}</b> de {total} {total === 1 ? 'módulo' : 'módulos'}: <b>{r.bien}</b> de {r.esperadas} en su lugar · faltan <b>{r.faltan}</b> · sobran{' '}
+        <b>{r.sobran}</b>
+      </div>
+      {r.modulos.map((c) => (
+        <ControlModulo key={c.codigo} c={c} />
+      ))}
+      {r.noCaminados.length > 0 && (
+        <div style={{ fontSize: font.xs, color: color.mut }}>
+          Sin caminar (de esos no se sabe nada): {r.noCaminados.join(', ')}
+        </div>
+      )}
+    </div>
   )
 }

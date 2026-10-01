@@ -10,10 +10,10 @@ import { leerRecorrido, leerRecorridos } from '@/lib/exhib/cliente'
 import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, filasExport, hallazgoDe, RAFAGA_MS, resumenRecorrido, separarEscaneoDelLugar, type EscaneoLibre, type RecorridoLibre } from '@/lib/exhib/libre'
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
-import { ControlModulo } from './ControlModulo'
+import { ControlModulo, ControlRecorridoPanel } from './ControlModulo'
 import { leerMapa } from '@/lib/mapa-local/cliente'
 import { prendasDelLocal, ubicar } from '@/lib/mapa-local/core'
-import { controlDeModulo, moduloDelLugar } from '@/lib/mapa-local/control'
+import { controlDelRecorrido, controlDeModulo, moduloDelLugar, type ControlRecorrido } from '@/lib/mapa-local/control'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import { BalanceSector } from './BalanceSector'
 import type { ExhibItem } from '@/lib/exhib/tipos'
@@ -85,6 +85,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   /** Lo que quedó sin colgar del mueble que se acaba de dejar, y lo del recorrido entero al cerrar. */
   const [cierreLugar, setCierreLugar] = useState<{ lugar: string; lista: Colgar[] } | null>(null)
   const [cierreFinal, setCierreFinal] = useState<Colgar[]>([])
+  /** El control del Mapa del local de todos los módulos caminados, congelado al cerrar. */
+  const [cierreMapa, setCierreMapa] = useState<ControlRecorrido | null>(null)
   /**
    * 🔴 **¿Lo que se oyó es lo que quedó guardado?** (26-sep-2026, Bruno: *«si a ella le dice 198
    * quiero que haya 198»*). Se lee el historial del servidor DESPUÉS de cerrar y se compara con lo
@@ -221,6 +223,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // ⚠️ Los escaneos se congelan por lo mismo que la lista: `cerrar` limpia el borrador del
     // teléfono, y el conteo sale justamente de ellos.
     const caminados = lib.escaneos
+    const mapaCaminado = mapaLocal && ubicacionMapa ? controlDelRecorrido(mapaLocal, ubicacionMapa, caminados) : null
     const id = lib.recorridoId
     try {
       await lib.cerrar()
@@ -232,6 +235,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     cargarPrevios()
     setCierreLugar(null)
     setCierreFinal(quedan)
+    // Sin ningún módulo caminado ⛔ hay nada que juntar: el recorrido fue por lugares que ⛔ son del mapa.
+    setCierreMapa(mapaCaminado?.modulos.length ? mapaCaminado : null)
     setFase(quedan.length || caminados.length ? 'cierre' : 'config')
     setVerificacion(null)
     if (id && caminados.length) {
@@ -298,7 +303,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   /** Si el lugar escrito es un módulo del mapa, lo que el mapa pone ahí contra lo que pasó por el lector. */
   const controlAca = useMemo(() => {
     const m = mapaLocal && moduloDelLugar(mapaLocal, lib.lugar)
-    return m && ubicacionMapa ? controlDeModulo(mapaLocal, ubicacionMapa, m, lib.escaneos, lib.lugar) : null
+    return m && ubicacionMapa ? controlDeModulo(mapaLocal, ubicacionMapa, m, lib.escaneos) : null
   }, [mapaLocal, ubicacionMapa, lib.escaneos, lib.lugar])
   // Los módulos del mapa se SUGIEREN, ⛔ no se imponen: el lugar sigue siendo texto libre.
   const sugerencias = useMemo(() => {
@@ -654,6 +659,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               )}
             </Notice>
           ))}
+          {cierreMapa && <ControlRecorridoPanel r={cierreMapa} />}
           <ParaColgar
             lista={cierreFinal}
             titulo="Terminaste. Para colgar"
@@ -661,7 +667,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
           />
           {/* ⛔ «El conteo» en UNIDADES se sacó el 26-sep-2026: a Bruno le interesa que esté
               exhibida, ⛔ cuántas hay (regla del 21-sep). `Analisis.tsx` queda sin usar en el libre. */}
-          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setVerificacion(null); setFase('config') }}>
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreMapa(null); setVerificacion(null); setFase('config') }}>
             Listo
           </Button>
         </Card>
