@@ -10,7 +10,8 @@ import { armarProdMap, construirItems } from '@/lib/exhib/core'
 import { alertas as alertasDe, capacidadTotal, cuelga, estadoDeModulo, prendasDelLocal, resumenPorTipo, ubicar, type EstadoModulo } from '@/lib/mapa-local/core'
 import { guardarMapa, leerMapa } from '@/lib/mapa-local/cliente'
 import { MAPA_INICIAL } from '@/lib/mapa-local/inicial'
-import type { MapaLocal as Mapa, Modulo, Pared as TipoPared } from '@/lib/mapa-local/tipos'
+import { proponerArmado } from '@/lib/mapa-local/proponer'
+import type { MapaLocal as Mapa, ModoCupo, Modulo, Pared as TipoPared } from '@/lib/mapa-local/tipos'
 import { Plano } from './Plano'
 import { Pared } from './Pared'
 import { Detalle } from './Detalle'
@@ -26,6 +27,10 @@ import { TablaTipos } from './TablaTipos'
  *
  * 🔴 **Lo que no entra se dice, ⛔ no se cuelga de más.** Es la decisión que el local venía tomando sin
  * verla: medido el 30-sep-2026, ~640 prendas contra ~300 perchas cómodas.
+ *
+ * 🔑 **Dos cupos: cómodo y al tope.** El tope es lo que Bruno midió apretado (38 blusas por barra,
+ * sin que se deslicen). La pantalla se mira en uno de los dos modos; el cupo puesto a mano en una
+ * barra vale para los dos.
  */
 
 const PAREDES: { key: TipoPared; label: string }[] = [
@@ -48,6 +53,7 @@ export function MapaLocal() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [modo, setModo] = useState<ModoCupo>('comodo')
   const [pared, setPared] = useState<TipoPared>('der')
   const [elegido, setElegido] = useState<string | null>(null)
   const [abierto, setAbierto] = useState<Record<string, boolean>>({})
@@ -79,13 +85,15 @@ export function MapaLocal() {
   // El cruce GN ↔ TN se recalcula cuando llega el ETL, que es después de montar (ver `useExhib`).
   const prodMap = useMemo(() => armarProdMap(productos, crudos.tnProducts), [productos, crudos.tnProducts])
   const prendas = useMemo(() => prendasDelLocal(construirItems(crudos.inv, prodMap, {}), 'zattia'), [crudos.inv, prodMap])
-  const u = useMemo(() => ubicar(prendas, mapa), [prendas, mapa])
+  const u = useMemo(() => ubicar(prendas, mapa, modo), [prendas, mapa, modo])
   const filas = useMemo(() => resumenPorTipo(prendas, mapa, u), [prendas, mapa, u])
   const avisos = useMemo(() => alertasDe(mapa), [mapa])
   const graves = useMemo(() => new Set(avisos.filter((a) => a.grave).map((a) => a.codigo)), [avisos])
-  const estados = useMemo(() => Object.fromEntries(mapa.modulos.map((m) => [m.codigo, estadoDeModulo(mapa, m, u).estado])) as Record<string, EstadoModulo>, [mapa, u])
+  const estados = useMemo(() => Object.fromEntries(mapa.modulos.map((m) => [m.codigo, estadoDeModulo(mapa, m, u, modo).estado])) as Record<string, EstadoModulo>, [mapa, u, modo])
   const colgables = useMemo(() => prendas.filter((p) => cuelga(mapa, p.tipo)).length, [prendas, mapa])
-  const capacidad = useMemo(() => capacidadTotal(mapa), [mapa])
+  const capacidad = useMemo(() => capacidadTotal(mapa, 'comodo'), [mapa])
+  const capacidadTope = useMemo(() => capacidadTotal(mapa, 'tope'), [mapa])
+  const tiposSinTope = useMemo(() => new Set(prendas.filter((p) => cuelga(mapa, p.tipo) && mapa.tipos.find((t) => t.tipo === p.tipo)?.topePorM == null).map((p) => p.tipo)).size, [prendas, mapa])
   const sinCruzarTn = productos.length === 0 && crudos.inv.length > 0
   const cambiado = !!guardado && JSON.stringify(guardado.mapa) !== JSON.stringify(mapa)
 
@@ -98,6 +106,12 @@ export function MapaLocal() {
 
   const moduloElegido = mapa.modulos.find((m) => m.codigo === elegido) || null
   const cambiarModulo = (m: Modulo) => setMapa((ant) => ({ ...ant, modulos: ant.modulos.map((x) => (x.codigo === m.codigo ? m : x)) }))
+
+  function proponer() {
+    const p = proponerArmado(prendas, mapa, modo)
+    setMapa(p.mapa)
+    toast.ok(`Armado propuesto con el stock de hoy: ${p.modulos.nc} módulos de colección y ${p.modulos.sale} de sale. Revisalo antes de guardar.`)
+  }
 
   async function guardar() {
     if (!guardado) return
@@ -123,6 +137,9 @@ export function MapaLocal() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
       {editar && (
         <HeaderAcciones>
+          <Button variant="outline" onClick={proponer} disabled={cargando || !prendas.length}>
+            Proponer con el stock de hoy
+          </Button>
           {cambiado && (
             <Button variant="outline" onClick={() => guardado && setMapa(guardado.mapa)}>
               Descartar los cambios
@@ -144,8 +161,14 @@ export function MapaLocal() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: space[3] }}>
             <KpiCard label="Prendas para colgar" value={colgables} sub="una por producto y color con stock en el Local" />
             <KpiCard label="Perchas cómodas" value={capacidad} sub="lo que entra sin apretar, sumando todas las barras" />
-            <KpiCard label="No entran" value={u.noEntran.length} tone={u.noEntran.length ? 'danger' : 'success'} sub="tienen barra, pero está llena: van al depósito" />
+            <KpiCard label="Perchas al tope" value={capacidadTope} sub={tiposSinTope ? `apretadas · ${tiposSinTope} tipos sin tope medido cuentan como cómodo` : 'apretadas, sin que se deslicen'} />
+            <KpiCard label={modo === 'tope' ? 'No entran ni al tope' : 'No entran'} value={u.noEntran.length} tone={u.noEntran.length ? 'danger' : 'success'} sub="tienen barra, pero está llena: van al depósito" />
             <KpiCard label="Sin lugar" value={u.sinLugar.length} tone={u.sinLugar.length ? 'warning' : 'success'} sub="ninguna barra acepta su tipo y línea" />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap' }}>
+            <span style={{ fontSize: font.sm, color: color.mut }}>Contar las barras</span>
+            <Tabs items={[{ key: 'comodo', label: 'Cómodas' }, { key: 'tope', label: 'Al tope' }]} value={modo} onChange={(k) => setModo(k as ModoCupo)} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 340px) minmax(0, 1fr)', gap: space[5], alignItems: 'start' }} className="mapa-local-grid">
@@ -166,12 +189,13 @@ export function MapaLocal() {
               <SectionCard title="De frente" subtitle="Cada barra a su altura real y cada prenda con su largo">
                 <Tabs items={PAREDES.map((p) => ({ key: p.key, label: p.label }))} value={pared} onChange={(k) => setPared(k as TipoPared)} />
                 <div style={{ marginTop: space[3] }}>
-                  <Pared mapa={mapa} modulos={deLaPared} u={u} graves={graves} elegido={elegido} onElegir={setElegido} />
+                  <Pared mapa={mapa} modo={modo} modulos={deLaPared} u={u} graves={graves} elegido={elegido} onElegir={setElegido} />
                 </div>
               </SectionCard>
               {moduloElegido ? (
                 <Detalle
                   mapa={mapa}
+                  modo={modo}
                   modulo={moduloElegido}
                   u={u}
                   alertas={avisos.filter((a) => a.codigo === moduloElegido.codigo)}
@@ -191,7 +215,7 @@ export function MapaLocal() {
           <Plegable abierto={!!abierto.sinLugar} onToggle={() => toggle('sinLugar')} titulo={`Sin lugar (${u.sinLugar.length})`} ayuda="Ninguna barra acepta su tipo y su línea. Hay que sumarlo a alguna barra o marcar el tipo como que no se cuelga.">
             <Prendas prendas={u.sinLugar} vacio="Todas tienen una barra de su tipo." />
           </Plegable>
-          <Plegable abierto={!!abierto.tipos} onToggle={() => toggle('tipos')} titulo="Por tipo de prenda" ayuda="Cuántas hay de cada tipo, cuántas entran, y el largo y las perchas por metro con que se calcula el cupo.">
+          <Plegable abierto={!!abierto.tipos} onToggle={() => toggle('tipos')} titulo="Por tipo de prenda" ayuda="Cuántas hay de cada tipo, cuántas entran, y el largo y las perchas por metro —cómodas y al tope— con que se calcula el cupo.">
             <TablaTipos mapa={mapa} filas={filas} editar={editar} onCambiar={(tipos) => setMapa((m) => ({ ...m, tipos }))} />
           </Plegable>
 

@@ -2,7 +2,7 @@
 
 import { Badge, Field, MenuMulti, Notice, NumberField, SectionCard, Select, color, font, space, weight } from '@/components/ui'
 import { cupoDe, idNivel, type Alerta, type Ubicacion } from '@/lib/mapa-local/core'
-import type { LineaBarra, MapaLocal, Modulo, Nivel, PosNivel } from '@/lib/mapa-local/tipos'
+import type { LineaBarra, MapaLocal, ModoCupo, Modulo, Nivel, PosNivel } from '@/lib/mapa-local/tipos'
 import { Prendas } from './Prendas'
 
 const NOMBRE_POS: Record<PosNivel, string> = { alta: 'Barra de arriba', baja: 'Barra de abajo', simple: 'Barra simple', frente: 'De frente' }
@@ -26,6 +26,7 @@ function rearmar(m: Modulo, a: Armado): Nivel[] {
 
 type Props = {
   mapa: MapaLocal
+  modo: ModoCupo
   modulo: Modulo
   u: Ubicacion
   alertas: Alerta[]
@@ -35,7 +36,7 @@ type Props = {
   onCambiar: (m: Modulo) => void
 }
 
-export function Detalle({ mapa, modulo, u, alertas, opcionesTipo, editar, onCambiar }: Props) {
+export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, onCambiar }: Props) {
   const cambiarNivel = (pos: PosNivel, cambio: Partial<Nivel>) => onCambiar({ ...modulo, niveles: modulo.niveles.map((n) => (n.pos === pos ? { ...n, ...cambio } : n)) })
   const orden = { frente: 0, alta: 1, simple: 2, baja: 3 } as const
   return (
@@ -61,8 +62,8 @@ export function Detalle({ mapa, modulo, u, alertas, opcionesTipo, editar, onCamb
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
         {[...modulo.niveles].sort((a, b) => orden[a.pos] - orden[b.pos]).map((n) => {
           const prendas = u.porBarra[idNivel(modulo, n)] || []
-          const cupo = cupoDe(mapa, modulo, n)
-          const auto = cupoDe(mapa, modulo, { ...n, cupo: null })
+          const cupo = cupoDe(mapa, modulo, n, modo)
+          const auto = cupoDe(mapa, modulo, { ...n, cupo: null }, modo)
           return (
             <div key={n.pos}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
@@ -70,7 +71,7 @@ export function Detalle({ mapa, modulo, u, alertas, opcionesTipo, editar, onCamb
                 <span style={{ fontSize: font.sm, color: color.mut }}>a {n.alturaCm} cm</span>
                 <Badge tone={n.linea === 'sale' ? 'warning' : n.linea === 'nc' ? 'brand' : 'neutral'}>{NOMBRE_LINEA[n.linea]}</Badge>
                 <span style={{ fontSize: font.sm, color: prendas.length >= cupo ? color.warningInk : color.mut }}>
-                  {prendas.length} de {cupo} perchas
+                  {prendas.length} de {cupo} perchas{modo === 'tope' ? ' al tope' : ''}
                 </span>
               </div>
               {editar ? (

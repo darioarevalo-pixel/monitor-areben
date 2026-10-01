@@ -15,6 +15,7 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   - `TablaTipos.tsx` y `Prendas.tsx` completan la pantalla.
 - **Lógica:** `lib/mapa-local/`.
   - `core.ts` es puro.
+  - `proponer.ts` arma la propuesta con el stock de hoy.
   - `inicial.ts` es el armado propuesto y la tabla de tipos.
   - `validar.core.js` hace el saneo y lo importa el handler.
   - `cliente.ts` habla con el servidor.
@@ -56,6 +57,22 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   medida. Si Bruno pide otra (por ejemplo «lo nuevo primero»), se cambia ahí.
 - 🔑 **El cupo lo pone el tipo MÁS GRUESO de la barra**, ⛔ no el promedio. Una barra que acepta
   tops y sweaters puede terminar llena de sweaters.
+- 🔑 **Dos densidades por tipo: cómoda y al TOPE** (`topePorM`). El tope es lo apretado, sin que
+  las perchas se deslicen: Bruno midió **38 BLUSAS en una barra de 0,75 m** (30-sep-2026) ⇒ 51/m.
+  ⛔ **Un tope sin medir vale lo mismo que cómodo**: inventarlo sería decir que entra algo que nadie
+  probó colgar. 🔴 Por eso, con sólo BLUSA medida, **al tope da igual que cómodo** (298 contra 298):
+  las blusas comparten barra con CAMISA, FALDA y POLLERA, y en la barra manda el más grueso. El
+  número del tope aparece recién cuando se miden los tipos que comparten barra.
+- ⚠️ **El cupo cómodo sigue SIN MEDIR** (los números de la tabla los propuse yo). Bruno dijo que se
+  define otro día: ⛔ no darlo por cerrado.
+- 🔑 **«Proponer con el stock de hoy»** (`proponer.ts`, pedido de Bruno: *«ni todo doble ni fijo»*)
+  rearma los módulos de pared: reparte entre colección y sale según cuántas barras pide cada una
+  (colección adelante), y cada barra se la lleva **la familia con menos de lo suyo colgado**.
+  🔴 **⛔ No maximiza perchas**: con el doble de prendas que de lugar, maximizar llena todo de tops
+  y deja los vestidos sin barra. Es una regla elegida, ⛔ no medida. La isla no se toca y los
+  módulos de frente siguen de frente. Llena el editor; ⛔ no guarda.
+  Medido el 30-sep-2026 con el stock real: 8 módulos de colección y 6 de sale, **292 colgadas**
+  contra 298 del armado inicial, pero **0 sin lugar** contra 8.
 - ⚠️ **Las alertas de altura salen de una regla, ⛔ no de una medición.** Cada clase de largo mide
   colgada: corta 60 cm, media 90, larga 130, más 5 de aire. El caso de las fotos es una camisa
   arriba que tapa la barra de abajo.
@@ -65,8 +82,9 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
 
 ## Pendiente
 
-- ▶️ **Correr `sql/migrate-mapa-local.sql` en Zattia.** Hasta entonces la pantalla se puede mirar
-  y probar, pero ⛔ no guardar: el handler contesta 503, y está cubierto en el test.
+- ✅ La tabla `mapa_local` ya está en Zattia (verificado el 30-sep-2026: el API contesta
+  `sinTabla:false`). Todavía nadie guardó un armado.
+- ▶️ **Medir:** el cupo cómodo de cada tipo, y el tope de los que comparten barra con las blusas.
 - ▶️ **F3 — la orden al local:** que cada cambio arme la lista «Mover» y la hoja por módulo.
 - ▶️ **F4 — el control con el lector:** que el recorrido del Chequeo de exhibición elija el
   módulo del mapa como lugar, y comparar lo que debería estar contra lo escaneado. ⚠️ Da vuelta una

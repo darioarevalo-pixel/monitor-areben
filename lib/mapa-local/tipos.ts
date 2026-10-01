@@ -49,9 +49,18 @@ export type TipoCfg = {
   largo: Largo
   /** Perchas por metro lineal a densidad cómoda (que se deslicen con una mano). */
   perchasPorM: number
+  /**
+   * Perchas por metro lineal al TOPE: apretadas, sin que se deslicen. Es lo máximo que entra, ⛔ no
+   * lo que conviene. `null` = sin medir, y entonces el tope se toma igual al cómodo (⛔ no se inventa).
+   * Medido por Bruno el 30-sep-2026: 38 BLUSAS en una barra de 0,75 m.
+   */
+  topePorM: number | null
   /** `false` = no va colgado (bombachas, accesorios): no cuenta como demanda de barra. */
   cuelga: boolean
 }
+
+/** Cómo se cuenta el cupo de una barra: cómodo (lo que conviene) o al tope (lo máximo que entra). */
+export type ModoCupo = 'comodo' | 'tope'
 
 export type MapaLocal = {
   version: 1

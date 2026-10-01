@@ -2,7 +2,7 @@
 
 import { color } from '@/components/ui'
 import { cfgDeTipo, cupoDe, estadoDeModulo, idNivel, LARGO_CM, type Ubicacion } from '@/lib/mapa-local/core'
-import type { MapaLocal, Modulo } from '@/lib/mapa-local/tipos'
+import type { MapaLocal, ModoCupo, Modulo } from '@/lib/mapa-local/tipos'
 import { BORDE_ESTADO } from './Plano'
 
 /**
@@ -19,6 +19,7 @@ const ABAJO = 34
 
 type Props = {
   mapa: MapaLocal
+  modo: ModoCupo
   modulos: Modulo[]
   u: Ubicacion
   graves: Set<string>
@@ -26,7 +27,7 @@ type Props = {
   onElegir: (codigo: string) => void
 }
 
-export function Pared({ mapa, modulos, u, graves, elegido, onElegir }: Props) {
+export function Pared({ mapa, modo, modulos, u, graves, elegido, onElegir }: Props) {
   const ordenados = [...modulos].sort((a, b) => a.orden - b.orden)
   const xs = ordenados.map((_, i) => ordenados.slice(0, i).reduce((s, m) => s + m.anchoCm + MARGEN, MARGEN))
   const total = ordenados.reduce((s, m) => s + m.anchoCm + MARGEN, MARGEN)
@@ -36,7 +37,7 @@ export function Pared({ mapa, modulos, u, graves, elegido, onElegir }: Props) {
         <line x1={0} y1={ALTO} x2={total} y2={ALTO} style={{ stroke: color.line2 }} strokeWidth={2} />
         {ordenados.map((m, i) => {
           const x0 = xs[i]
-          const est = estadoDeModulo(mapa, m, u)
+          const est = estadoDeModulo(mapa, m, u, modo)
           const sel = elegido === m.codigo
           return (
             <g key={m.codigo} onClick={() => onElegir(m.codigo)} style={{ cursor: 'pointer' }}>
@@ -47,7 +48,7 @@ export function Pared({ mapa, modulos, u, graves, elegido, onElegir }: Props) {
               {m.niveles.map((n) => {
                 const yBarra = ALTO - n.alturaCm
                 const prendas = u.porBarra[idNivel(m, n)] || []
-                const cupo = Math.max(1, cupoDe(mapa, m, n))
+                const cupo = Math.max(1, cupoDe(mapa, m, n, modo))
                 const paso = (m.anchoCm - 6) / cupo
                 return (
                   <g key={n.pos}>

@@ -13,7 +13,7 @@
 import { precioDeGondola, seChequea, tipoDePrenda } from '@/lib/exhib/core'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { Marca } from '@/lib/nav'
-import type { Largo, MapaLocal, Modulo, Nivel, PosNivel, Prenda, TipoCfg } from './tipos'
+import type { Largo, MapaLocal, ModoCupo, Modulo, Nivel, PosNivel, Prenda, TipoCfg } from './tipos'
 
 /**
  * Lo que mide colgada cada clase de largo, en cm, percha incluida. Es lo que decide si una barra
@@ -96,15 +96,27 @@ export function cuelga(mapa: Pick<MapaLocal, 'tipos'>, tipo: string): boolean {
 }
 
 /**
- * Cuántas perchas entran cómodas en una barra.
+ * Las perchas por metro de un tipo en un modo. 🔑 **Al tope sin medir vale lo mismo que cómodo**:
+ * inventar un tope sería decir que entra algo que nadie probó colgar.
+ */
+export function densidadDe(c: Pick<TipoCfg, 'perchasPorM' | 'topePorM'>, modo: ModoCupo = 'comodo'): number {
+  return modo === 'tope' && c.topePorM != null ? Math.max(c.topePorM, c.perchasPorM) : c.perchasPorM
+}
+
+/**
+ * Cuántas perchas entran en una barra: cómodas, o al tope.
  *
  * 🔑 **Manda el tipo MÁS GRUESO de la barra** (la menor densidad), ⛔ no el promedio: una barra que
  * acepta tops y sweaters puede terminar llena de sweaters, y el cupo tiene que valer igual.
+ * El cupo puesto a mano es uno solo y vale para los dos modos.
  */
-export function cupoDe(mapa: Pick<MapaLocal, 'tipos'>, modulo: Pick<Modulo, 'anchoCm'>, nivel: Nivel): number {
+export function cupoDe(mapa: Pick<MapaLocal, 'tipos'>, modulo: Pick<Modulo, 'anchoCm'>, nivel: Nivel, modo: ModoCupo): number {
   if (nivel.cupo != null) return Math.max(0, Math.floor(nivel.cupo))
   if (nivel.pos === 'frente') return CUPO_FRENTE
-  const densidades = nivel.tipos.map((t) => cfgDeTipo(mapa, t)?.perchasPorM).filter((d): d is number => d != null && d > 0)
+  const densidades = nivel.tipos
+    .map((t) => cfgDeTipo(mapa, t))
+    .filter((c): c is TipoCfg => !!c && c.perchasPorM > 0)
+    .map((c) => densidadDe(c, modo))
   const densidad = densidades.length ? Math.min(...densidades) : DENSIDAD_DEFAULT
   return Math.floor((modulo.anchoCm / 100) * densidad)
 }
@@ -121,13 +133,13 @@ const ORDEN_POS: Record<PosNivel, number> = { frente: 0, alta: 1, simple: 2, baj
 export type BarraOrdenada = { id: string; modulo: Modulo; nivel: Nivel; cupo: number }
 
 /** Todas las barras, en el orden del recorrido del cliente. */
-export function barras(mapa: MapaLocal): BarraOrdenada[] {
+export function barras(mapa: MapaLocal, modo: ModoCupo): BarraOrdenada[] {
   return [...mapa.modulos]
     .sort((a, b) => a.orden - b.orden || a.codigo.localeCompare(b.codigo))
     .flatMap((m) =>
       [...m.niveles]
         .sort((a, b) => ORDEN_POS[a.pos] - ORDEN_POS[b.pos])
-        .map((n) => ({ id: idNivel(m, n), modulo: m, nivel: n, cupo: cupoDe(mapa, m, n) })),
+        .map((n) => ({ id: idNivel(m, n), modulo: m, nivel: n, cupo: cupoDe(mapa, m, n, modo) })),
     )
 }
 
@@ -154,8 +166,8 @@ export function prioridad(a: Prenda, b: Prenda): number {
 /**
  * Dónde va cada prenda. Se llenan las barras en el orden del recorrido, sin pasar nunca el cupo.
  */
-export function ubicar(prendas: Prenda[], mapa: MapaLocal): Ubicacion {
-  const lista = barras(mapa)
+export function ubicar(prendas: Prenda[], mapa: MapaLocal, modo: ModoCupo): Ubicacion {
+  const lista = barras(mapa, modo)
   const porBarra: Record<string, Prenda[]> = Object.fromEntries(lista.map((b) => [b.id, []]))
   const out: Ubicacion = { porBarra, noEntran: [], sinLugar: [], noCuelgan: [] }
   for (const p of [...prendas].sort(prioridad)) {
@@ -260,8 +272,8 @@ export function alertas(mapa: MapaLocal): Alerta[] {
 }
 
 /** La cuenta global: perchas cómodas contra prendas que se cuelgan. */
-export function capacidadTotal(mapa: MapaLocal): number {
-  return barras(mapa).reduce((s, b) => s + b.cupo, 0)
+export function capacidadTotal(mapa: MapaLocal, modo: ModoCupo): number {
+  return barras(mapa, modo).reduce((s, b) => s + b.cupo, 0)
 }
 
 export type EstadoModulo = 'vacio' | 'ok' | 'lleno' | 'desborda'
@@ -270,12 +282,12 @@ export type EstadoModulo = 'vacio' | 'ok' | 'lleno' | 'desborda'
  * Cómo está un módulo con las prendas de hoy. 🔑 **«Desborda» es lleno Y con prendas de lo suyo que
  * no entraron**: un módulo lleno al que no le sobra nada está bien armado, ⛔ no es una alarma.
  */
-export function estadoDeModulo(mapa: MapaLocal, m: Modulo, u: Ubicacion): { usadas: number; cupo: number; estado: EstadoModulo } {
+export function estadoDeModulo(mapa: MapaLocal, m: Modulo, u: Ubicacion, modo: ModoCupo): { usadas: number; cupo: number; estado: EstadoModulo } {
   let usadas = 0
   let cupo = 0
   for (const n of m.niveles) {
     usadas += (u.porBarra[idNivel(m, n)] || []).length
-    cupo += cupoDe(mapa, m, n)
+    cupo += cupoDe(mapa, m, n, modo)
   }
   const lleno = cupo > 0 && usadas >= cupo
   const sobraLoSuyo = lleno && u.noEntran.some((p) => m.niveles.some((n) => acepta(n, p)))

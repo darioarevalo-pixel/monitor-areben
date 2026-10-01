@@ -17,30 +17,43 @@ const CAMISAS = ['BLUSA', 'CAMISA', 'FALDA', 'POLLERA']
 const ABRIGOS = ['SWEATER', 'CARDIGAN', 'BUZO', 'CAMPERA', 'CHALECO']
 const LARGOS = ['VESTIDO', 'MONO', 'JEAN', 'PANTALON']
 
+/**
+ * Las familias de tipos que comparten barra. Las usa también el armado propuesto (`proponer.ts`),
+ * así que una barra propuesta acepta lo mismo que una del armado inicial.
+ */
+export const FAMILIAS: { nombre: string; tipos: string[] }[] = [
+  { nombre: 'Tops y remeras', tipos: ARRIBA_CORTOS },
+  { nombre: 'Minis y shorts', tipos: PARTE_DE_ABAJO },
+  { nombre: 'Blusas, camisas y faldas', tipos: CAMISAS },
+  { nombre: 'Abrigos', tipos: ABRIGOS },
+  { nombre: 'Vestidos y largos', tipos: LARGOS },
+]
+
 const n = (pos: Nivel['pos'], alturaCm: number, linea: LineaBarra, tipos: string[], cupo: number | null = null): Nivel => ({ pos, alturaCm, linea, tipos, cupo })
 const der = (i: number, orden: number, niveles: Nivel[]): Modulo => ({ codigo: `D${String(i).padStart(2, '0')}`, pared: 'der', orden, anchoCm: 75, niveles })
 
 export const TIPOS_INICIALES: TipoCfg[] = [
-  ...['TOP', 'BABY TEE', 'BODY', 'STRAPLESS'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 22, cuelga: true })),
-  { tipo: 'MUSCULOSA', largo: 'L1', perchasPorM: 24, cuelga: true },
-  { tipo: 'REMERA', largo: 'L1', perchasPorM: 18, cuelga: true },
-  { tipo: 'CORSET', largo: 'L1', perchasPorM: 18, cuelga: true },
-  ...['MINI', 'SHORT', 'SKORT'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 20, cuelga: true })),
-  { tipo: 'BERMUDA', largo: 'L1', perchasPorM: 18, cuelga: true },
-  { tipo: 'BLUSA', largo: 'L2', perchasPorM: 18, cuelga: true },
-  { tipo: 'CAMISA', largo: 'L2', perchasPorM: 16, cuelga: true },
-  { tipo: 'FALDA', largo: 'L2', perchasPorM: 18, cuelga: true },
-  { tipo: 'POLLERA', largo: 'L2', perchasPorM: 18, cuelga: true },
-  { tipo: 'SWEATER', largo: 'L2', perchasPorM: 10, cuelga: true },
-  { tipo: 'CARDIGAN', largo: 'L2', perchasPorM: 10, cuelga: true },
-  { tipo: 'BUZO', largo: 'L2', perchasPorM: 10, cuelga: true },
-  { tipo: 'CAMPERA', largo: 'L2', perchasPorM: 8, cuelga: true },
-  { tipo: 'CHALECO', largo: 'L2', perchasPorM: 12, cuelga: true },
-  { tipo: 'VESTIDO', largo: 'L3', perchasPorM: 16, cuelga: true },
-  { tipo: 'MONO', largo: 'L3', perchasPorM: 14, cuelga: true },
-  { tipo: 'JEAN', largo: 'L3', perchasPorM: 14, cuelga: true },
-  { tipo: 'PANTALON', largo: 'L3', perchasPorM: 14, cuelga: true },
-  ...['BOMBACHA', 'CORPIÑO', 'FAJA', 'CINTO', 'ACCESORIO', 'PAÑUELO', 'MINI BAG', 'TOTE BAG', 'SHOULDER BAG', 'CHOKER', 'CHOCKER'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 20, cuelga: false })),
+  ...['TOP', 'BABY TEE', 'BODY', 'STRAPLESS'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 22, topePorM: null, cuelga: true })),
+  { tipo: 'MUSCULOSA', largo: 'L1', perchasPorM: 24, topePorM: null, cuelga: true },
+  { tipo: 'REMERA', largo: 'L1', perchasPorM: 18, topePorM: null, cuelga: true },
+  { tipo: 'CORSET', largo: 'L1', perchasPorM: 18, topePorM: null, cuelga: true },
+  ...['MINI', 'SHORT', 'SKORT'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 20, topePorM: null, cuelga: true })),
+  { tipo: 'BERMUDA', largo: 'L1', perchasPorM: 18, topePorM: null, cuelga: true },
+  // 🔑 el tope de BLUSA lo midió Bruno (30-sep): 38 en una barra de 0,75 m ⇒ 51/m (51 × 0,75 = 38,25).
+  { tipo: 'BLUSA', largo: 'L2', perchasPorM: 18, topePorM: 51, cuelga: true },
+  { tipo: 'CAMISA', largo: 'L2', perchasPorM: 16, topePorM: null, cuelga: true },
+  { tipo: 'FALDA', largo: 'L2', perchasPorM: 18, topePorM: null, cuelga: true },
+  { tipo: 'POLLERA', largo: 'L2', perchasPorM: 18, topePorM: null, cuelga: true },
+  { tipo: 'SWEATER', largo: 'L2', perchasPorM: 10, topePorM: null, cuelga: true },
+  { tipo: 'CARDIGAN', largo: 'L2', perchasPorM: 10, topePorM: null, cuelga: true },
+  { tipo: 'BUZO', largo: 'L2', perchasPorM: 10, topePorM: null, cuelga: true },
+  { tipo: 'CAMPERA', largo: 'L2', perchasPorM: 8, topePorM: null, cuelga: true },
+  { tipo: 'CHALECO', largo: 'L2', perchasPorM: 12, topePorM: null, cuelga: true },
+  { tipo: 'VESTIDO', largo: 'L3', perchasPorM: 16, topePorM: null, cuelga: true },
+  { tipo: 'MONO', largo: 'L3', perchasPorM: 14, topePorM: null, cuelga: true },
+  { tipo: 'JEAN', largo: 'L3', perchasPorM: 14, topePorM: null, cuelga: true },
+  { tipo: 'PANTALON', largo: 'L3', perchasPorM: 14, topePorM: null, cuelga: true },
+  ...['BOMBACHA', 'CORPIÑO', 'FAJA', 'CINTO', 'ACCESORIO', 'PAÑUELO', 'MINI BAG', 'TOTE BAG', 'SHOULDER BAG', 'CHOKER', 'CHOCKER'].map((tipo) => ({ tipo, largo: 'L1' as const, perchasPorM: 20, topePorM: null, cuelga: false })),
 ]
 
 export const MAPA_INICIAL: MapaLocal = {
