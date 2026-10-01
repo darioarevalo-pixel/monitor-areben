@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 🔑 **`cache: 'npm'` no es una optimización, es lo que hace que el botón cumpla su promesa.**
       # El 4-sep-2026 `npm ci` pasó de 13 segundos a 7 MINUTOS (un mal momento del registry, nada
@@ -39,7 +39,7 @@ jobs:
       # Reposición mostró "actualizado" con el stock viejo. Se instalan 548 paquetes —Next, React,
       # recharts, jspdf, vitest— para correr un script que sólo importa `@supabase/supabase-js`:
       # mientras eso siga así, el caché es lo único que separa un sync de 40 s de uno de 8 minutos.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
