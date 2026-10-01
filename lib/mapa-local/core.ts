@@ -262,6 +262,16 @@ export function acepta(nivel: Pick<Nivel, 'tipos' | 'linea'>, p: Pick<Prenda, 't
   return nivel.linea === 'ambas' || p.linea == null || nivel.linea === p.linea
 }
 
+/**
+ * ¿La prenda coincide con lo buscado? Por nombre y color, sin mayúsculas ni tildes, y todas las
+ * palabras tienen que estar (`quartz crema`). Vacío = todas. Lo usa el buscador del módulo.
+ */
+export function coincide(p: Pick<Prenda, 'nombre' | 'color'>, q: string): boolean {
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const texto = norm(`${p.nombre} ${p.color}`)
+  return norm(q).split(/\s+/).filter(Boolean).every((w) => texto.includes(w))
+}
+
 /** Los modelos elegidos a mano en alguna barra del mapa (ver `Nivel.modelos`). */
 export function modelosElegidos(mapa: Pick<MapaLocal, 'modulos'>): Set<string> {
   return new Set(mapa.modulos.flatMap((m) => m.niveles.flatMap((n) => n.modelos || [])))

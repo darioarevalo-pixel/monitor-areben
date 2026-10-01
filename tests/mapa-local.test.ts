@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { acepta, alertas, barras, capacidadTotal, colorDeVariante, cupoDe, estadoDeModulo, prendasDelLocal, resumenPorTipo, ubicar } from '../lib/mapa-local/core'
+import { acepta, alertas, coincide, barras, capacidadTotal, colorDeVariante, cupoDe, estadoDeModulo, prendasDelLocal, resumenPorTipo, ubicar } from '../lib/mapa-local/core'
 import { MAPA_INICIAL } from '../lib/mapa-local/inicial'
 import { proponerArmado } from '../lib/mapa-local/proponer'
 import { sanearMapa } from '../lib/mapa-local/validar.core.js'
@@ -286,5 +286,15 @@ describe('modelos elegidos a mano', () => {
     if (!v.ok) throw new Error(v.error)
     expect(v.mapa.modulos[1].niveles[0].modelos).toEqual(['a', 'b', '7'])
     expect('modelos' in v.mapa.modulos[0].niveles[0]).toBe(false)
+  })
+})
+
+describe('coincide (el buscador del módulo)', () => {
+  const p = { nombre: 'TOP QUARTZ', color: 'crema' }
+  it('busca por nombre y color, sin mayúsculas ni tildes, con todas las palabras', () => {
+    expect(coincide(p, 'quartz')).toBe(true)
+    expect(coincide(p, 'Quártz CREMA')).toBe(true)
+    expect(coincide(p, 'quartz negro')).toBe(false)
+    expect(coincide(p, '  ')).toBe(true)
   })
 })

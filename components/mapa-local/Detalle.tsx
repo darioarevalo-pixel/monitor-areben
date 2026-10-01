@@ -1,7 +1,8 @@
 'use client'
 
-import { Badge, Button, Field, MenuMulti, Notice, NumberField, SectionCard, Select, color, font, space, weight } from '@/components/ui'
-import { cupoDe, idNivel, type Alerta, type Ubicacion } from '@/lib/mapa-local/core'
+import { useState } from 'react'
+import { Badge, BuscarInput, Button, Field, MenuMulti, Notice, NumberField, SectionCard, Select, color, font, space, weight } from '@/components/ui'
+import { coincide, cupoDe, idNivel, type Alerta, type Ubicacion } from '@/lib/mapa-local/core'
 import type { LineaBarra, MapaLocal, ModoCupo, Modulo, Nivel, PosNivel } from '@/lib/mapa-local/tipos'
 import { Prendas } from './Prendas'
 
@@ -40,6 +41,11 @@ type Props = {
 export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, onCambiar, onImprimir }: Props) {
   const cambiarNivel = (pos: PosNivel, cambio: Partial<Nivel>) => onCambiar({ ...modulo, niveles: modulo.niveles.map((n) => (n.pos === pos ? { ...n, ...cambio } : n)) })
   const orden = { frente: 0, alta: 1, simple: 2, baja: 3 } as const
+  // El buscador vale para el módulo abierto: al cambiar de módulo arranca vacío.
+  const [busqueda, setBusqueda] = useState({ codigo: modulo.codigo, q: '' })
+  const q = busqueda.codigo === modulo.codigo ? busqueda.q.trim() : ''
+  const todas = modulo.niveles.flatMap((n) => u.porBarra[idNivel(modulo, n)] || [])
+  const halladas = q ? todas.filter((p) => coincide(p, q)).length : 0
   return (
     <SectionCard
       title={`Módulo ${modulo.codigo}`}
@@ -65,6 +71,12 @@ export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, 
           {a.texto}
         </Notice>
       ))}
+      {todas.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: space[3], flexWrap: 'wrap', marginBottom: space[4] }}>
+          <BuscarInput value={q ? busqueda.q : ''} onChange={(v) => setBusqueda({ codigo: modulo.codigo, q: v })} placeholder={`Buscar en ${modulo.codigo}: modelo o color`} />
+          {q && <span style={{ fontSize: font.sm, color: halladas ? color.ink2 : color.warningInk }}>{halladas ? `${halladas} de ${todas.length} en ${modulo.codigo}` : `No está en ${modulo.codigo}`}</span>}
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space[5] }}>
         {[...modulo.niveles].sort((a, b) => orden[a.pos] - orden[b.pos]).map((n) => {
           const prendas = u.porBarra[idNivel(modulo, n)] || []
@@ -122,7 +134,7 @@ export function Detalle({ mapa, modo, modulo, u, alertas, opcionesTipo, editar, 
               ) : (
                 <div style={{ fontSize: font.sm, color: color.ink2, marginBottom: space[2] }}>{n.tipos.length ? n.tipos.join(' · ') : 'Sin tipos asignados'}</div>
               )}
-              <Prendas prendas={prendas} vacio="No cae ninguna prenda en esta barra." />
+              <Prendas prendas={q ? prendas.filter((p) => coincide(p, q)) : prendas} vacio={q ? 'Nada de lo buscado en esta barra.' : 'No cae ninguna prenda en esta barra.'} />
             </div>
           )
         })}
