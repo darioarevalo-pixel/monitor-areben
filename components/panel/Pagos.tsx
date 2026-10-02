@@ -39,7 +39,7 @@
  *    ni una consulta.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, Icono, Notice } from '@/components/ui'
 import { color, font, radius, shadow, space } from '@/components/ui/tokens'
 import { DatosDeCuenta } from './DatosDeCuenta'
@@ -684,6 +684,35 @@ export function Pagos({ cliente, buscandoCliente, onIrAlCliente }: {
   const manuales = useCuentas()
   // Adelantos de sueldo: a quién se le puede adelantar y cuánto ya entró en un sueldo (dashboard).
   const adelantos = useAdelantos()
+  /**
+   * 🔑 **Al volver a WhatsApp, se relee todo** (Darío, 2-oct-2026). El panel no se entera solo de
+   * lo que cambia en el dashboard —una nómina editada, un sueldo pagado—: antes había que cerrarlo y
+   * abrirlo. Ahora se relee cuando el panel vuelve a estar a la vista (se vuelve a la pestaña de
+   * WhatsApp, que es la única donde el panel está prendido) o cuando se hace clic adentro.
+   * Una vez cada 15 segundos como mucho: ir y venir rápido no tiene que golpear al dashboard.
+   */
+  const recargas = useRef({ deudas, cobros, manuales, adelantos })
+  useEffect(() => {
+    recargas.current = { deudas, cobros, manuales, adelantos }
+  })
+  useEffect(() => {
+    let ultima = Date.now()
+    const releer = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - ultima < 15_000) return
+      ultima = Date.now()
+      const r = recargas.current
+      r.cobros.recargar()
+      r.deudas.recargar()
+      r.manuales.recargar()
+      r.adelantos.recargar()
+    }
+    document.addEventListener('visibilitychange', releer)
+    window.addEventListener('focus', releer)
+    return () => {
+      document.removeEventListener('visibilitychange', releer)
+      window.removeEventListener('focus', releer)
+    }
+  }, [])
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [verCerradas, setVerCerradas] = useState(false)
   const [soloSuyas, setSoloSuyas] = useState(false)
