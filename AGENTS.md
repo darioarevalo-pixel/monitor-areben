@@ -178,6 +178,10 @@ ya tienen ficha:
 - Cobranzas (órdenes de TN con pago manual) → **leer `docs/secciones/cobranzas.md`** antes de tocar
   `components/cobranzas/`, `lib/cobranzas/` o `api/_cobranzas.js`. ⛔ **Cobrar le pone en cero el
   saldo del cadete en `envios_reparto`**, y ⛔ TN no deja marcar pagado por API.
+- Pagos recibidos (lo que entró a Mercado Pago, contra la app falsa) → **leer
+  `docs/secciones/pagos-recibidos.md`** antes de tocar `components/pagos-recibidos/`,
+  `lib/pagos-recibidos/` o `api/_pagos-recibidos.js`. 🔴 **El total es sólo para admin y lo corta
+  el SERVIDOR**, y ⛔ cuenta sólo lo que ENTRÓ aprobado: lo que sale viene en la misma búsqueda.
 - Clientes (CRM) y el panel de WhatsApp → **leer `docs/secciones/crm.md`** antes de tocar
   `components/crm/`, `components/panel/`, `lib/crm/` o la acción `panel` de `api/_crm.js`. ⛔ **La
   clave `crm:seg:bdi` no tiene backup**: 305 clientes y sus notas, reescritos enteros en cada

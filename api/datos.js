@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|cobranzas&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|cobranzas|pagos-recibidos&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -53,6 +53,7 @@ import destacados from './_destacados.js';
 import exhib from './_exhib.js';
 import mapaLocal from './_mapa-local.js';
 import cobranzas from './_cobranzas.js';
+import pagosRecibidos from './_pagos-recibidos.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -206,6 +207,10 @@ const RECURSOS = {
   // Cobranzas: las órdenes de TN con medio de pago MANUAL y su cobro (`tn_cobros`, base de BDI).
   // Escribe la nota interna de la orden por `bdi-catalogo` y le pone en cero el saldo al cadete.
   cobranzas,
+  // Pagos recibidos: lo que entró a la cuenta de Mercado Pago del local, para que la empleada
+  // verifique el cobro sin mirar el teléfono de la clienta. ⛔ Sólo LEE, y de MP directo: no hay
+  // tabla propia. El total y los otros días los ve sólo un admin (lo decide el handler).
+  'pagos-recibidos': pagosRecibidos,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a
