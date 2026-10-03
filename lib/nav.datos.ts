@@ -472,7 +472,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "pagos-recibidos",
     "area": "local",
     "label": "Pagos recibidos",
-    "info": "Los pagos que entraron a la cuenta de Mercado Pago del local hoy: monto, hora y si vino de otra cuenta de Mercado Pago, de otro banco o con tarjeta. Se actualiza solo cada 15 segundos y suena cuando entra uno. Sirve para entregar la compra sólo cuando el pago aparece acá, y no por lo que muestra el teléfono de la clienta (la estafa de la app falsa). No muestra el saldo de la cuenta. El total del día y los días anteriores los ven sólo los admin, para cruzarlos con el cierre de caja.",
+    "info": "Los pagos que entraron a la cuenta de Mercado Pago del local hoy: monto, hora y si vino de otra cuenta de Mercado Pago, de otro banco o con tarjeta. Se actualiza solo cada 15 segundos y suena cuando entra uno. Sirve para entregar la compra sólo cuando el pago aparece acá, y no por lo que muestra el teléfono de la clienta (la estafa de la app falsa). No muestra el saldo de la cuenta.",
     "brands": [
       "zattia"
     ]
