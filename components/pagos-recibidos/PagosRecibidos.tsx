@@ -90,6 +90,8 @@ export function PagosRecibidos() {
   // Sube al cambiar de cuenta: relee en el momento, sin esperar los 15 s.
   const [tick, setTick] = useState(0)
   const audio = useRef<AudioContext | null>(null)
+  // El intervalo lee el sonido de acá y no del estado: si no, se quedaría con el valor de cuando arrancó.
+  const conSonido = useRef(false)
   const vistos = useRef<{ clave: string; ids: Set<string> } | null>(null)
 
   const leer = useCallback(
@@ -115,7 +117,7 @@ export function PagosRecibidos() {
           llegaron.forEach((id) => n.set(id, t))
           return n
         })
-        if (audio.current) sonar(audio.current)
+        if (audio.current && conSonido.current) sonar(audio.current)
       } catch (e) {
         if (vivo()) setFallo({ clave, msg: e instanceof Error ? e.message : 'No se pudieron leer los pagos.' })
       }
@@ -149,7 +151,13 @@ export function PagosRecibidos() {
     if (!audio.current) audio.current = new AudioContext()
     void audio.current.resume()
     sonar(audio.current)
+    conSonido.current = true
     setSonido(true)
+  }
+
+  function silenciar() {
+    conSonido.current = false
+    setSonido(false)
   }
 
   const esHoy = dia == null
@@ -190,7 +198,12 @@ export function PagosRecibidos() {
             )}
             {esHoy &&
               (sonido ? (
-                <Badge tone="success">Sonido activado</Badge>
+                <>
+                  <Badge tone="success">Sonido activado</Badge>
+                  <Button size="sm" variant="outline" onClick={silenciar}>
+                    Silenciar
+                  </Button>
+                </>
               ) : (
                 <Button size="sm" onClick={activarSonido}>
                   Activar sonido
