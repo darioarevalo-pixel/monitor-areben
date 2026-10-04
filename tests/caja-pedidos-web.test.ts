@@ -203,7 +203,10 @@ const AHORA = Date.parse('2026-10-04T15:00:00Z')
 const todas = Object.values(O) as unknown as Parameters<typeof pedidosSinArmar>[0]
 
 describe('caja · pedidos web sin armar', () => {
-  it('sin armar = pagada, ⛔ cancelada y POR EMPAQUETAR (`unpacked`)', () => {
+  it('sin armar = POR EMPAQUETAR (`unpacked`) y ⛔ cancelada, pagada o SIN PAGAR (marcada aparte)', () => {
+    expect(estaSinArmar(O.pendientePago)).toBe(true)
+    expect(pedidosSinArmar([O.pendientePago] as never, AHORA)[0].sinPagar).toBe(true)
+    expect(pedidosSinArmar([O.sinArmar] as never, AHORA)[0].sinPagar).toBe(false)
     expect(estaSinArmar(O.sinArmar)).toBe(true)
     expect(estaSinArmar(O.vieja)).toBe(true)
   })
@@ -213,15 +216,16 @@ describe('caja · pedidos web sin armar', () => {
     expect(estaSinArmar(O.empaquetada)).toBe(false)
   })
 
-  it('⛔ cerrada, ⛔ cancelada, ⛔ sin pagar', () => {
+  it('⛔ cerrada, ⛔ cancelada, ⛔ reembolsada', () => {
     expect(estaSinArmar(O.cerrada)).toBe(false)
     expect(estaSinArmar(O.cancelada)).toBe(false)
-    expect(estaSinArmar(O.pendientePago)).toBe(false)
+    expect(estaSinArmar({ ...O.sinArmar, estado_pago: 'refunded' })).toBe(false)
   })
 
   it('del más viejo al más nuevo, con las horas desde que se pagó', () => {
     const p = pedidosSinArmar(todas, AHORA)
-    expect(p.map((x) => x.numero)).toEqual([6984, 7153])
+    // La #7158 (sin pagar, 4-oct 01:34) ⛔ tiene `pagado_en`: ordena por la fecha de la orden.
+    expect(p.map((x) => x.numero)).toEqual([6984, 7153, 7158])
     const aixa = p.find((x) => x.numero === 7153)!
     expect(aixa.horas).toBe(Math.floor((AHORA - Date.parse(O.sinArmar.pagado_en!)) / 3_600_000))
     expect(aixa.prendas).toEqual([expect.objectContaining({ sku: 'RVE-0022-RO', cantidad: 1 })])
@@ -239,7 +243,7 @@ describe('caja · pedidos web sin armar', () => {
       { numero: 1, prendas: [{ sku: 'A-1', cantidad: 1 }, { sku: 'A-1', cantidad: 2 }] },
       { numero: 2, prendas: [{ sku: 'A-1', cantidad: 1 }] },
     ] as never)
-    expect(por['A-1']).toEqual([{ numero: 1, cantidad: 3 }, { numero: 2, cantidad: 1 }])
+    expect(por['A-1']).toEqual([{ numero: 1, cantidad: 3, sinPagar: false }, { numero: 2, cantidad: 1, sinPagar: false }])
   })
 
   it('sin la hora de ahora ⛔ calcula (⛔ Date.now() adentro)', () => {
@@ -269,6 +273,17 @@ describe('caja · el aviso del renglón', () => {
   it('el SKU se compara sin mayúsculas ni espacios', () => {
     expect(claveSku('  rve-0022-ro ')).toBe('RVE-0022-RO')
     expect(avisoDeRenglon({ sku: ' rve-0022-ro', local: 3, enCarrito: 1, porSku })?.tipo).toBe('separada')
+  })
+
+  it('un pedido SIN PAGAR se nombra aparte, y si son todos sin pagar la prenda está «Reservada»', () => {
+    const por = indicePorSku([
+      { numero: 7160, sinPagar: true, prendas: [{ sku: 'B-1', cantidad: 1 }] },
+      { numero: 7153, sinPagar: false, prendas: [{ sku: 'C-1', cantidad: 1 }] },
+      { numero: 7161, sinPagar: true, prendas: [{ sku: 'C-1', cantidad: 1 }] },
+    ] as never)
+    expect(avisoDeRenglon({ sku: 'B-1', local: 0, enCarrito: 1, porSku: por })?.texto).toBe('Reservada online (pedido #7160 (sin pagar), sin armar): si la vendés, el pedido queda sin stock.')
+    expect(avisoDeRenglon({ sku: 'C-1', local: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/^Comprada online \(pedido #7153, #7161 \(sin pagar\)/)
+    expect(avisoDeRenglon({ sku: 'B-1', local: 2, enCarrito: 1, porSku: por })?.texto).toMatch(/#7160 \(sin pagar\) lleva esta prenda/)
   })
 
   it('una prenda en ningún pedido, o sin SKU ⇒ sin aviso', () => {

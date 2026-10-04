@@ -90,9 +90,10 @@ export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
-/** Un pedido de Tienda Nube pagado y por empaquetar (v2, W1). `horas` desde que se pagó. */
+/** Un pedido de Tienda Nube por empaquetar (v2, W1). `sinPagar`: «a convenir», paga al retirar. `horas` desde que se pagó (o se hizo). */
 export type PedidoWeb = {
   numero: number
+  sinPagar: boolean
   desde: string | null
   horas: number | null
   envioTipo: string | null
@@ -101,7 +102,7 @@ export type PedidoWeb = {
   sinSku: number
 }
 /** `porSku`: qué pedidos llevan cada variante. `noLeidas`: órdenes del rango que TN ⛔ devolvió. */
-export type PedidosWeb = { pedidos: PedidoWeb[]; porSku: Record<string, Array<{ numero: number; cantidad: number }>>; noLeidas: number; leidoEn: string }
+export type PedidosWeb = { pedidos: PedidoWeb[]; porSku: Record<string, Array<{ numero: number; cantidad: number; sinPagar: boolean }>>; noLeidas: number; leidoEn: string }
 export const leerPedidosWeb = () => get<PedidosWeb>('action=pedidos-web', 'No se pudieron leer los pedidos web.')
 
 export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; nombre?: string; talle?: string; foto?: string | null }

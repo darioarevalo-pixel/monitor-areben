@@ -77,11 +77,12 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   una venta de `esperando_pago`**: `reintentar`, el respaldo de la cola y `enviarVenta` se niegan.
 - ⚠️ `cancelada` = esperaba y ⛔ llegó. Cancelar una que ya cruzó ⇒ 409. Hay que volver a escanear.
 - 🔑 **Pedidos web sin armar (v2, W1)** (`lib/caja/pedidos-web.core.js`, `action=pedidos-web`): los de
-  TN **pagados y POR EMPAQUETAR** (`envio_estado === 'unpacked'`). ⛔ «pagada + abierta»: medido el 4-oct,
+  TN **POR EMPAQUETAR** (`envio_estado === 'unpacked'`), pagados o **sin pagar** («a convenir»: paga al
+  retirar), éstos marcados aparte —«(sin pagar)», y «Reservada» si todos lo son— (Bruno, 4-oct). ⛔ «pagada + abierta»: medido el 4-oct,
   daba 34 y 28 ya estaban empaquetadas esperando retiro. Se leen del audit de bdi-catalogo en 3 tramos
   de 3 días (corta en 200 por pedido) y lo que ⛔ llegó se dice. Caché de 60 s por instancia.
 - 🔴 **El stock del Local YA descontó el pedido web**: cada orden de TN entra a GN como venta del Local
-  (4 de 4, medido). ⇒ el aviso fuerte («si la vendés, el pedido queda sin stock») sale cuando lo libre
+  (4 de 4 pagados y 7 de 7 sin pagar, medido). ⇒ el aviso fuerte («si la vendés, el pedido queda sin stock») sale cuando lo libre
   menos lo del carrito da < 0; si alcanza, sólo «el pedido #N lleva esta prenda». El cruce es por SKU
   de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local (Bruno, 4-oct).
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en

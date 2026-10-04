@@ -595,7 +595,7 @@ describe('caja · pedidos web sin armar (W1)', () => {
   it('lee TRES tramos de 3 días, de a uno, reenviando la sesión, y devuelve sólo los por empaquetar', async () => {
     conSesion(CAJERA)
     tn.tramos = [
-      { status: 200, body: { ok: true, ordenes: [orden(7153, 'unpacked', 'RVE-0022-RO'), orden(7140, 'unshipped', 'RTO-1')], total_en_rango: 2 } },
+      { status: 200, body: { ok: true, ordenes: [orden(7153, 'unpacked', 'RVE-0022-RO'), orden(7140, 'unshipped', 'RTO-1'), orden(7152, 'unpacked', 'RTO-2', { estado_pago: 'pending', estado_orden: 'cancelled', cancelada: true })], total_en_rango: 3 } },
       { status: 200, body: { ok: true, ordenes: [orden(6984, 'unpacked', 'RTO-0149-BL', { pagado_en: '2026-09-28T02:45:00+0000' })], total_en_rango: 1 } },
       { status: 200, body: { ok: true, ordenes: [], total_en_rango: 0 } },
     ]

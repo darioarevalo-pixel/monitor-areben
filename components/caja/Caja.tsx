@@ -1043,6 +1043,7 @@ function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null; error:
   if (!datos) return null
   const n = datos.pedidos.length
   if (!n && !datos.noLeidas && !error) return null
+  const sinPagar = datos.pedidos.filter((p) => p.sinPagar).length
   const hace = (h: number | null) => (h == null ? '' : h < 1 ? 'hace menos de 1 h' : h < 48 ? `hace ${h} h` : `hace ${Math.floor(h / 24)} días`)
   return (
     <Notice tone={n ? 'warning' : 'neutral'}>
@@ -1054,6 +1055,7 @@ function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null; error:
           <b>
             {abierto ? '▾' : '▸'} {n === 1 ? '1 pedido web sin armar' : `${n} pedidos web sin armar`}
           </b>
+          {sinPagar > 0 && <span> ({sinPagar === n ? (n === 1 ? 'sin pagar' : 'todos sin pagar') : `${sinPagar} sin pagar`})</span>}
           {n > 0 && <span> · el más viejo {hace(datos.pedidos[0].horas)}</span>}
         </button>
         {datos.noLeidas > 0 && <span style={{ fontSize: font.sm }}>Tienda Nube no devolvió {datos.noLeidas} órdenes: puede haber más.</span>}
@@ -1063,6 +1065,7 @@ function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null; error:
             <div key={p.numero} style={{ display: 'grid', gap: space[0.5], fontSize: font.sm, borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
               <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
                 <b>#{p.numero}</b>
+                {p.sinPagar && <Badge tone="neutral">sin pagar</Badge>}
                 <span>{hace(p.horas)}</span>
                 <span style={{ color: color.mut }}>{p.envioTipo === 'pickup' ? `Retira: ${p.envio ?? ''}` : (p.envio ?? 'Envío')}</span>
               </div>
