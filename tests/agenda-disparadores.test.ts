@@ -1033,6 +1033,11 @@ describe('cargar un molde de sesión de fotos: el eje y el rango son de la plant
  * Lo que se prueba acá es lo que esta plantilla trajo de nuevo al motor: **una plantilla SIN EJE**.
  */
 describe('el lanzamiento: el 3º disparador, y la plantilla sin eje', () => {
+  // Las fechas de abajo son fijas (el 1-oct y sus offsets) y el núcleo frena un lanzamiento vencido:
+  // sin congelar el reloj, este bloque se puso rojo solo el 2-oct-2026.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-01T12:00:00-03:00')) })
+  afterEach(() => { vi.useRealTimers() })
+
   const moldeLanz = (over: Partial<Fila> = {}): Fila => ({
     ...molde(),
     id: 'l1',
