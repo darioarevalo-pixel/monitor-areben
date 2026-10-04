@@ -26,6 +26,7 @@
 import { abrirRollo, COLA, M, MIN, type Medidor, type OpBase } from '../rollo80'
 import { imprimirPdf } from '../etiquetas/pdf'
 import { OFFSET_AR_MS } from '../envios/portal.core.js'
+import { talleVisible } from './ticket-mail.core.js'
 
 export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number }
 export type PagoTicket = { cuenta: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
@@ -114,7 +115,8 @@ export function armarTicket(
   regla()
 
   for (const r of t.renglones) {
-    escribir(r.talle ? `${r.nombre} · ${r.talle}` : r.nombre, 9, false)
+    const talle = talleVisible(r.talle)
+    escribir(talle ? `${r.nombre} · ${talle}` : r.nombre, 9, false)
     par(`${r.cantidad} × ${plata(r.precio)}`, plata(r.importe), 9)
     y += 0.8
   }

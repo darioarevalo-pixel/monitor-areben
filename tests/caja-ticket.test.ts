@@ -43,6 +43,16 @@ function montoDe(ops: { k: string }[], concepto: string): string | undefined {
 }
 
 describe('caja · ticket contra la pantalla de cobro de GN', () => {
+  it('«Variante Única» ⛔ se imprime al lado del nombre; un talle real sí', () => {
+    const base = ticket([{ precio: 4990 }], [{ cuenta: 12921 }])
+    expect(base.txt).toContain('PRENDA 1 · S')
+    const unica = ticket([{ precio: 4990 }], [{ cuenta: 12921 }], {
+      renglones: [{ nombre: 'ACCESORIO NRO 1', talle: 'Variante Única', cantidad: 1, precio: 4990, importe: 4990 }],
+    })
+    expect(unica.txt).toContain('ACCESORIO NRO 1')
+    expect(unica.txt.join('|')).not.toContain('Variante')
+  })
+
   it('$4.990 en efectivo ⇒ descuento $748,50, redondeo −$41,50, total $4.200', () => {
     const { ops, txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }])
     expect(montoDe(ops, 'Subtotal')).toBe('$4.990')

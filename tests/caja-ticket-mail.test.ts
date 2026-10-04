@@ -3,7 +3,7 @@
 // 🔑 El oráculo es el ticket de papel de la venta real #30049 (4-oct-2026): accesorio de $4.990 en
 // Efectivo, paga con $5.000 ⇒ descuento $748,50, redondeo −$41,50, total $4.200, vuelto $800.
 import { describe, it, expect } from 'vitest'
-import { ticketParaMail, estadoDeRespuesta, mandarTicket } from '../lib/caja/ticket-mail.core.js'
+import { ticketParaMail, estadoDeRespuesta, mandarTicket, talleVisible } from '../lib/caja/ticket-mail.core.js'
 import { REGLAS_INICIALES } from '../lib/caja/core.core.js'
 
 const V30049 = {
@@ -46,6 +46,17 @@ describe('ticketParaMail', () => {
     const b = ticketParaMail(v, CFG)
     expect(b.ticket.renglones[0].nombre).toBe('Producto')
     expect(b.ticket.pagos[0].cuenta).toBe('Efectivo')
+  })
+})
+
+describe('talleVisible', () => {
+  it('«Variante Única» ⛔ es un talle: ⛔ sale en el ticket (venta #30050)', () => {
+    expect(talleVisible('Variante Única')).toBeNull()
+    expect(talleVisible('variante única ')).toBeNull()
+    expect(talleVisible('S')).toBe('S')
+    expect(talleVisible(null)).toBeNull()
+    const v = { ...V30049, renglones: [{ ...V30049.renglones[0], talle: 'Variante Única' }] }
+    expect(ticketParaMail(v, CFG).ticket.renglones[0].talle).toBeNull()
   })
 })
 
