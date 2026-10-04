@@ -9,11 +9,13 @@
 //   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe: { conStock, sinStock, masCon, masSin }
 //        con el stock del local de anoche (⛔ pega a GN: tipear ⛔ gasta el cupo de 60/min)
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
-//   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, email?, pagaCon? }
+//   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
 //   POST ?recurso=caja  { action: 'cancelar', id }         → una venta que esperaba la transferencia y ⛔ llegó
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
+//   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria? } → sólo admin: a qué cuenta van las
+//        transferencias y el modo feria (bajadas de línea: ⛔ las decide la cajera)
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=caja` (12 funciones de Hobby).
 //
@@ -42,7 +44,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, montoAEsperar, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
@@ -185,6 +187,21 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ politica_cambio: texto })
       }
+      if (accion === 'bajadas') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia a dónde van las transferencias o el modo feria.' })
+        const { reglas } = await leerConfig()
+        if (!reglas.medios) return res.status(409).json({ error: 'La Caja todavía ⛔ tiene las formas de pago: falta correr sql/migrate-caja-medios.sql.' })
+        const nuevas = { ...reglas }
+        if (b.transferenciaA != null) {
+          const t = Number(b.transferenciaA)
+          if (!reglas.medios.transferencia.opciones.includes(t)) return res.status(400).json({ error: `La cuenta ${b.transferenciaA} ⛔ es de transferencias.` })
+          nuevas.transferenciaA = t
+        }
+        if (b.feria != null) nuevas.feria = b.feria === true
+        const { error } = await sb.from('caja_config').update({ reglas: nuevas, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ reglas: nuevas })
+      }
       if (!token) return res.status(500).json({ error: 'Falta el token de Gestión Nube para escribir ventas.' })
 
       if (accion === 'confirmar') {
@@ -207,7 +224,12 @@ export default async function handler(req, res) {
         let filas, c, payload, espera
         try {
           filas = renglones(b.items)
-          c = cobro({ filas, pagos: b.pagos, reglas })
+          // 🔑 La cajera elige una forma de pago; detrás va una cuenta. Una cuenta que ⛔ está detrás de
+          // ninguna forma de pago ⛔ se cobra (Mercado Pago, Naranja X…: fuera de la Caja).
+          if (reglas.medios) for (const p of b.pagos || []) {
+            if (!medioDeCuenta(p.cuenta, reglas)) throw new Error(`La cuenta ${p.cuenta} ⛔ es una forma de pago de la Caja.`)
+          }
+          c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? null })
           espera = montoAEsperar(c.pagos, reglas)
           payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: id, fecha: fechaLocal(new Date()) })
         } catch (e) {
@@ -218,13 +240,14 @@ export default async function handler(req, res) {
         }
         const pagaCon = b.pagaCon == null || b.pagaCon === '' ? null : Number(b.pagaCon)
         // Lo que el ticket por mail necesita y la plata ⛔: el nombre de la prenda, el talle y la foto
-        // (los manda la pantalla), y el nombre de cada cuenta. Van a la fila, ⛔ al payload de GN.
+        // (los manda la pantalla), y la forma de pago de cada cuenta («Tarjeta de crédito»: la cuenta de
+        // GN es interna, Bruno 4-oct). Van a la fila, ⛔ al payload de GN.
         const aTexto = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '') || null
         const conNombre = filas.map((f, i) => {
           const it = b.items[i] || {}
           return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null }
         })
-        const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: reglas.cuentas[p.cuenta] ? reglas.cuentas[p.cuenta].nombre : null }))
+        const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
           id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
           paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null,

@@ -5,6 +5,9 @@ import {
   aplicarCuenta,
   armarVentaGN,
   cobro,
+  cuentaDeMedio,
+  medioDeCuenta,
+  nombreParaTicket,
   redondeo,
   renglones,
   subtotal,
@@ -73,7 +76,7 @@ describe('caja · contra ventas reales del POS de GN', () => {
   for (const o of ORACULO) {
     it(o.caso, () => {
       const filas = renglones(o.items)
-      const c = cobro({ filas, pagos: [{ cuenta: o.cuenta }], reglas: REGLAS_INICIALES })
+      const c = cobro({ filas, pagos: [{ cuenta: o.cuenta }], reglas: REGLAS_INICIALES, descuentoVenta: null })
       expect(c.pagos[0].descuento).toBe(o.descuentoCuenta)
       expect(c.pagos[0].redondeo).toBe(o.redondeo)
       expect(c.total).toBe(o.total)
@@ -120,7 +123,7 @@ describe('caja · piezas', () => {
     // ...y aunque alguien le cargue el recargo en la configuración, se rechaza con nombre.
     const conRecargo = { redondeo: 100, cuentas: { [FERIA_TC]: { nombre: 'Feria TC', descuento: -10 } } }
     expect(() => aplicarCuenta(10000, FERIA_TC, conRecargo)).toThrow(/Feria TC.*recargo/)
-    expect(() => cobro({ filas: renglones([prenda(10000)]), pagos: [{ cuenta: FERIA_TC }], reglas: conRecargo })).toThrow(/recargo/)
+    expect(() => cobro({ filas: renglones([prenda(10000)]), pagos: [{ cuenta: FERIA_TC }], reglas: conRecargo, descuentoVenta: null })).toThrow(/recargo/)
   })
 
   it('redondeo: al más cercano, el paso es obligatorio', () => {
@@ -141,7 +144,7 @@ describe('caja · piezas', () => {
 describe('caja · redondeo PARA ARRIBA sin descuento (⛔ alcanzan los billetes de $10)', () => {
   it('$4.990 con cuenta al 0 % ⇒ se cobran $5.000, y a GN va el renglón a $5.000 sin descuento', () => {
     const f = renglones([prenda(4990)])
-    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     expect(c.total).toBe(5000)
     expect(c.pagos[0]).toMatchObject({ monto: 5000, redondeo: 10 })
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
@@ -153,7 +156,7 @@ describe('caja · redondeo PARA ARRIBA sin descuento (⛔ alcanzan los billetes 
   it('con dos unidades, los pesos de más se reparten y cierran justo', () => {
     // 2 × $4.990 + $2.990 = $12.970 ⇒ $13.000: $30 de más entre tres renglones.
     const f = renglones([prenda(4990, 2), prenda(2990)])
-    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_TRANSFERENCIA }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_TRANSFERENCIA }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     expect(c.total).toBe(13000)
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     for (const it of p.items) {
@@ -164,7 +167,7 @@ describe('caja · redondeo PARA ARRIBA sin descuento (⛔ alcanzan los billetes 
   })
 
   it('...y redondear para abajo sigue igual', () => {
-    const c = cobro({ filas: renglones([prenda(4940)]), pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: renglones([prenda(4940)]), pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     expect(c.total).toBe(4900)
   })
 })
@@ -173,7 +176,7 @@ describe('caja · varios pagos', () => {
   it('cada pago se descuenta con SU cuenta y se redondea solo', () => {
     // $30.000 de lista: $10.000 en efectivo (−15 %) y el resto con débito (−10 %).
     const filas = renglones([prenda(30000)])
-    const c = cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     expect(c.pagos.map(p => [p.base, p.monto])).toEqual([[10000, 8500], [20000, 18000]])
     expect(c.total).toBe(26500)
     expect(c.descuentoVenta).toBe(3500)
@@ -185,15 +188,15 @@ describe('caja · varios pagos', () => {
 
   it('las bases tienen que cerrar con el subtotal', () => {
     const filas = renglones([prenda(10000)])
-    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: REGLAS_INICIALES })).toThrow(/más que el subtotal/)
-    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 4000 }, { cuenta: DEBITO, base: 6000 }], reglas: REGLAS_INICIALES })).toThrow(/sin base/)
-    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO }, { cuenta: DEBITO }], reglas: REGLAS_INICIALES })).toThrow(/base/)
-    expect(() => cobro({ filas, pagos: [], reglas: REGLAS_INICIALES })).toThrow(/pagos/)
+    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 10000 }, { cuenta: DEBITO }], reglas: REGLAS_INICIALES, descuentoVenta: null })).toThrow(/más que el subtotal/)
+    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 4000 }, { cuenta: DEBITO, base: 6000 }], reglas: REGLAS_INICIALES, descuentoVenta: null })).toThrow(/sin base/)
+    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO }, { cuenta: DEBITO }], reglas: REGLAS_INICIALES, descuentoVenta: null })).toThrow(/base/)
+    expect(() => cobro({ filas, pagos: [], reglas: REGLAS_INICIALES, descuentoVenta: null })).toThrow(/pagos/)
   })
 
   it('el pago es lo COBRADO, ⛔ lo que entregó la clienta (el vuelto ⛔ viaja a GN)', () => {
     const filas = renglones([prenda(4990)])
-    const c = cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     expect(vuelto(5000, c.total).vuelto).toBe(800)
     const p = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     expect(p.payments[0].amount).toBe(4200)
@@ -202,7 +205,7 @@ describe('caja · varios pagos', () => {
 
 describe('caja · payload de GN', () => {
   const filas = renglones([{ product_id: 1106847, size_id: 229042, cantidad: 1, precio: 25490 }])
-  const { pagos } = cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: REGLAS_INICIALES })
+  const { pagos } = cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
 
   it('modo Local de Zattia, deduplicable, con el renglón completo', () => {
     const p = armarVentaGN({ filas, pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'caja-abc', fecha: '2026-10-03' })
@@ -219,7 +222,7 @@ describe('caja · payload de GN', () => {
 
   it('cantidad 2 ⇒ dos renglones de 1 (cómo toma GN pesos × cantidad ⛔ está medido)', () => {
     const f = renglones([{ product_id: 7, size_id: 8, cantidad: 2, precio: 19990 }])
-    const c = cobro({ filas: f, pagos: [{ cuenta: EFECTIVO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: f, pagos: [{ cuenta: EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     expect(p.items.map(it => [it.size_id, it.quantity])).toEqual([[8, 1], [8, 1]])
     esEscribible(p)
@@ -229,7 +232,7 @@ describe('caja · payload de GN', () => {
   it('la prenda REBAJADA lleva su rebaja: el descuento se reparte por lo que vale cada una después', () => {
     // $10.000 con 50 % de rebaja + $10.000 sin rebaja, Feria Transferencia (0 %) ⇒ $15.000 justos.
     const f = renglones([prenda(10000, 1, 50), prenda(10000)])
-    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_TRANSFERENCIA }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_TRANSFERENCIA }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     expect(p.items.map(it => it.discount)).toEqual([5000, 0])
   })
@@ -237,7 +240,7 @@ describe('caja · payload de GN', () => {
   it('redondeo que SUBE con renglones mixtos: ninguno queda con descuento negativo', () => {
     // 15 % en la primera, nada en la segunda, cuenta al 0 %: $8.491,50 + $4.990 = $13.481,50 ⇒ $13.500.
     const f = renglones([prenda(9990, 1, 15), prenda(4990)])
-    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     expect(c.total).toBe(13500)
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     esEscribible(p)
@@ -246,7 +249,7 @@ describe('caja · payload de GN', () => {
 
   it('reparte a centavos y cierra exacto con tres renglones que ⛔ dividen justo', () => {
     const f = renglones([prenda(9990), prenda(9990), prenda(9990)])
-    const c = cobro({ filas: f, pagos: [{ cuenta: DEBITO }], reglas: REGLAS_INICIALES })
+    const c = cobro({ filas: f, pagos: [{ cuenta: DEBITO }], reglas: REGLAS_INICIALES, descuentoVenta: null })
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
     esEscribible(p)
     expect(totalSegunGN(p)).toBeCloseTo(c.total, 6)
@@ -259,5 +262,99 @@ describe('caja · payload de GN', () => {
     // @ts-expect-error — sin modo Local
     expect(() => armarVentaGN({ ...base, modoLocal: undefined })).toThrow(/modo Local/)
     expect(() => armarVentaGN({ ...base, pagos: [{ ...pagos[0], monto: 0 }] })).toThrow(/Pago 1/)
+  })
+})
+
+/** Formas de pago escuetas (Bruno, 4-oct): la cajera elige el medio, la cuenta de GN es interna. */
+describe('caja · cuentaDeMedio', () => {
+  // Las reglas como las guarda la base (sin los literales de `Object.freeze`): así se pueden variar.
+  type R_ = Parameters<typeof cuentaDeMedio>[1]['reglas']
+  const R = REGLAS_INICIALES as unknown as R_
+  const no = { promoCreditoHoy: false, esDelBanco: false, seisCuotas: false }
+  const q = (total: number, extra: Partial<typeof no> = {}, reglas: R_ = R) => ({ reglas, total, ...no, ...extra })
+
+  it('efectivo, débito y transferencia (a donde bajó el admin)', () => {
+    expect(cuentaDeMedio('efectivo', q(1000))).toBe(EFECTIVO)
+    expect(cuentaDeMedio('debito', q(1000))).toBe(DEBITO)
+    expect(cuentaDeMedio('transferencia', q(1000))).toBe(TRANSFERENCIA)
+    expect(cuentaDeMedio('transferencia', q(1000, {}, { ...R, transferenciaA: 20595 }))).toBe(20595)
+    expect(() => cuentaDeMedio('transferencia', q(1000, {}, { ...R, transferenciaA: 12921 }))).toThrow(/transferencias/)
+  })
+
+  it('modo feria: efectivo y transferencia van a las de precio final', () => {
+    const F = { ...R, feria: true }
+    expect(cuentaDeMedio('efectivo', q(1000, {}, F))).toBe(FERIA_EFECTIVO)
+    expect(cuentaDeMedio('transferencia', q(1000, {}, F))).toBe(FERIA_TRANSFERENCIA)
+    expect(cuentaDeMedio('debito', q(1000, {}, F))).toBe(DEBITO)
+  })
+
+  it('crédito: promo sólo si la tarjeta es del banco; 6 cuotas sólo por ENCIMA de $250.000', () => {
+    expect(cuentaDeMedio('credito', q(1000))).toBe(25188)
+    expect(cuentaDeMedio('credito', q(1000, { promoCreditoHoy: true, esDelBanco: true }))).toBe(25172)
+    expect(cuentaDeMedio('credito', q(1000, { promoCreditoHoy: true, esDelBanco: false }))).toBe(25188)
+    expect(cuentaDeMedio('credito', q(1000, { promoCreditoHoy: false, esDelBanco: true }))).toBe(25188)
+    expect(cuentaDeMedio('credito', q(250000, { seisCuotas: true }))).toBe(25188)
+    expect(cuentaDeMedio('credito', q(250001, { seisCuotas: true }))).toBe(25173)
+    expect(cuentaDeMedio('credito', q(300000, { seisCuotas: false }))).toBe(25188)
+  })
+
+  it('sin las respuestas o con un medio desconocido ⇒ error con nombre', () => {
+    expect(() => cuentaDeMedio('credito', { reglas: R, total: 1000 } as never)).toThrow(/respuestas/)
+    expect(() => cuentaDeMedio('mercadopago' as never, q(1000))).toThrow(/desconocida/)
+    expect(() => cuentaDeMedio('efectivo', q(1000, {}, { ...R, medios: undefined }))).toThrow(/formas de pago/)
+  })
+
+  it('el ticket dice el medio, ⛔ la cuenta; una cuenta sin medio ⇒ null', () => {
+    expect(medioDeCuenta(20595, R)).toBe('transferencia')
+    expect(medioDeCuenta(25173, R)).toBe('credito')
+    expect(medioDeCuenta(13014, R)).toBe(null)
+    expect(nombreParaTicket(25172, R)).toBe('Tarjeta de crédito')
+    expect(nombreParaTicket(20595, R)).toBe('Transferencia')
+  })
+})
+
+/** Descuentos a mano en cascada (Bruno, 4-oct): prenda ⇒ venta ⇒ forma de pago. */
+describe('caja · descuentos a mano', () => {
+  const R = REGLAS_INICIALES
+  const item = (precio: number, rebaja: { tipo: 'pct' | 'pesos'; valor: number } | null = null, cantidad = 1) =>
+    ({ product_id: 1, size_id: 1, cantidad, precio, rebaja })
+
+  it('el ejemplo de Bruno: $10.000 −20 % prenda −10 % venta, efectivo ⇒ $6.100', () => {
+    const c = cobro({ filas: renglones([item(10000, { tipo: 'pct', valor: 20 })]), pagos: [{ cuenta: EFECTIVO }], reglas: R, descuentoVenta: { tipo: 'pct', valor: 10 } })
+    expect(c.subtotal).toBe(8000)
+    expect(c.aVenta).toBe(800)
+    expect(c.pagos[0]).toMatchObject({ base: 8000, rebaja: 800, descuento: 1080, monto: 6100 })
+    expect(c.total).toBe(6100)
+  })
+
+  it('en pesos, en la prenda y en la venta', () => {
+    const c = cobro({ filas: renglones([item(10000, { tipo: 'pesos', valor: 1500 })]), pagos: [{ cuenta: 25188 }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 500 } })
+    expect([c.subtotal, c.aVenta, c.total]).toEqual([8500, 500, 8000])
+  })
+
+  it('el descuento a la venta se reparte entre los pagos y suma exacto', () => {
+    const filas = renglones([item(7000), item(3000)])
+    const c = cobro({ filas, pagos: [{ cuenta: EFECTIVO, base: 3333 }, { cuenta: 25188 }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 1000 } })
+    expect(c.pagos.map((p) => p.rebaja)).toEqual([333.3, 666.7])
+    expect(c.pagos.reduce((s, p) => s + p.rebaja, 0)).toBeCloseTo(1000, 6)
+  })
+
+  it('a GN va todo en pesos por renglón y la prenda rebajada lleva más descuento; Σ = pagos', () => {
+    const filas = renglones([item(10000, { tipo: 'pct', valor: 50 }), item(10000)])
+    const c = cobro({ filas, pagos: [{ cuenta: 25188 }], reglas: R, descuentoVenta: { tipo: 'pct', valor: 10 } })
+    expect(c.total).toBe(13500)
+    const v = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-04' })
+    const neto = v.items.map((i: { unit_price: number; discount: number }) => i.unit_price - i.discount)
+    expect(neto.reduce((s: number, x: number) => s + x, 0)).toBe(13500)
+    expect(neto[0]).toBeLessThan(neto[1])
+  })
+
+  it('topes: ⛔ negativo, ⛔ más que el importe, ⛔ dos descuentos en la misma prenda, y null es obligatorio', () => {
+    expect(() => renglones([item(1000, { tipo: 'pesos', valor: 1001 })])).toThrow(/pasa el precio/)
+    expect(() => renglones([item(1000, { tipo: 'pct', valor: -5 })])).toThrow(/inválido/)
+    expect(() => renglones([{ ...item(1000, { tipo: 'pct', valor: 5 }), descuento: 10 }])).toThrow(/dos descuentos/)
+    const filas = renglones([item(1000)])
+    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: R, descuentoVenta: { tipo: 'pesos', valor: 1001 } })).toThrow(/pasa el total/)
+    expect(() => cobro({ filas, pagos: [{ cuenta: EFECTIVO }], reglas: R } as never)).toThrow(/null si no hay/)
   })
 })

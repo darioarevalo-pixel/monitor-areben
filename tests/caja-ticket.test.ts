@@ -6,18 +6,19 @@
 import { describe, expect, it } from 'vitest'
 
 import { armarTicket, fechaTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
-import { REGLAS_INICIALES, cobro, renglones } from '@/lib/caja/core.core.js'
+import { REGLAS_INICIALES, cobro, nombreParaTicket, renglones } from '@/lib/caja/core.core.js'
 
 const medir = (txt: string) => txt.match(/.{1,40}/g) || ['']
 const AHORA = Date.parse('2026-10-04T22:04:00Z') // 19:04 en Argentina
 const ID = '3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c'
 const reglas = REGLAS_INICIALES as unknown as { redondeo: number; cuentas: Record<number, { nombre: string; descuento: number; efectivo?: boolean }> }
-const nombreCuenta = (c: number) => reglas.cuentas[c]?.nombre ?? String(c)
+const nombreCuenta = (c: number) => nombreParaTicket(c, REGLAS_INICIALES)
 const efectivo = (c: number) => !!reglas.cuentas[c]?.efectivo
 
-function ticket(items: { precio: number; cantidad?: number }[], pagos: { cuenta: number; base?: number }[], extra: Partial<DatosTicket> = {}) {
-  const filas = renglones(items.map((it, i) => ({ product_id: 1, size_id: i + 1, cantidad: it.cantidad ?? 1, precio: it.precio })))
-  const c = cobro({ filas, pagos, reglas })
+type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
+function ticket(items: { precio: number; cantidad?: number; rebaja?: Rebaja }[], pagos: { cuenta: number; base?: number }[], extra: Partial<DatosTicket> = {}, descuentoVenta: Rebaja | null = null) {
+  const filas = renglones(items.map((it, i) => ({ product_id: 1, size_id: i + 1, cantidad: it.cantidad ?? 1, precio: it.precio, rebaja: it.rebaja ?? null })))
+  const c = cobro({ filas, pagos, reglas, descuentoVenta })
   const datos: DatosTicket = {
     numero: 30048,
     id: ID,
@@ -56,7 +57,7 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
   it('$4.990 en efectivo ⇒ descuento $748,50, redondeo −$41,50, total $4.200', () => {
     const { ops, txt } = ticket([{ precio: 4990 }], [{ cuenta: 12921 }])
     expect(montoDe(ops, 'Subtotal')).toBe('$4.990')
-    expect(montoDe(ops, 'Descuento Efectivo 15%')).toBe('-$748,50')
+    expect(montoDe(ops, 'Descuento 15%')).toBe('-$748,50')
     expect(montoDe(ops, 'Redondeo')).toBe('-$41,50')
     expect(montoDe(ops, 'TOTAL')).toBe('$4.200')
     expect(montoDe(ops, 'Efectivo')).toBe('$4.200')
@@ -64,6 +65,18 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
     expect(txt).toContain('DOCUMENTO NO VÁLIDO COMO FACTURA')
     expect(txt).toContain('#30048')
     expect(txt).toContain('Gracias por tu compra')
+  })
+
+  it('cascada (Bruno, 4-oct): el de la prenda, «Descuento en la venta», y el de la forma de pago sin la cuenta', () => {
+    const { ops, txt } = ticket([{ precio: 10000, rebaja: { tipo: 'pct', valor: 20 } }], [{ cuenta: 20595 }], {}, { tipo: 'pct', valor: 10 })
+    expect(montoDe(ops, '1 × $10.000')).toBe('$10.000')
+    expect(montoDe(ops, 'Descuento')).toBe('-$2.000')
+    expect(montoDe(ops, 'Subtotal')).toBe('$8.000')
+    expect(montoDe(ops, 'Descuento en la venta')).toBe('-$800')
+    expect(montoDe(ops, 'Descuento 10%')).toBe('-$720')
+    expect(montoDe(ops, 'TOTAL')).toBe('$6.500')
+    expect(montoDe(ops, 'Transferencia')).toBe('$6.500')
+    expect(txt.join('|')).not.toMatch(/CG|Transferencia CG/)
   })
 
   it('con «paga con» sale el vuelto del efectivo', () => {
@@ -82,8 +95,9 @@ describe('caja · ticket contra la pantalla de cobro de GN', () => {
 
   it('varios pagos: un descuento por cuenta y el vuelto sólo sobre lo que fue en efectivo', () => {
     const { ops, c } = ticket([{ precio: 20000 }], [{ cuenta: 12921, base: 10000 }, { cuenta: 20196 }], { pagaCon: 10000 })
-    expect(montoDe(ops, 'Descuento Efectivo 15%')).toBe('-$1.500')
-    expect(montoDe(ops, 'Descuento Débito 10%')).toBe('-$1.000')
+    expect(montoDe(ops, 'Descuento 15%')).toBe('-$1.500')
+    expect(montoDe(ops, 'Descuento 10%')).toBe('-$1.000')
+    expect(montoDe(ops, 'Tarjeta de débito')).toBe('$9.000')
     expect(montoDe(ops, 'TOTAL')).toBe(plata(c.total))
     expect(montoDe(ops, 'Vuelto')).toBe('$1.500') // 10.000 − 8.500 de efectivo, ⛔ − el total
   })

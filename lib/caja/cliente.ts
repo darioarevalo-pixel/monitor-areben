@@ -8,7 +8,17 @@
 import { apiFetch } from '@/lib/api-fetch'
 
 export type ReglaCuenta = { nombre: string; descuento: number; efectivo?: boolean; esperaPago?: boolean }
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta> }
+export type Medio = 'efectivo' | 'transferencia' | 'debito' | 'credito'
+export type Medios = {
+  efectivo: { normal: number; feria: number }
+  transferencia: { opciones: number[]; feria: number }
+  debito: { normal: number }
+  credito: { normal: number; promo: number; seisCuotas: number; minSeisCuotas: number }
+}
+/** `medios` ⛔ está hasta que se corre `sql/migrate-caja-medios.sql`. */
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean }
+/** Un descuento a mano, a una prenda o a toda la venta. */
+export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 export type Config = { reglas: Reglas; politica_cambio: string | null }
 
 /** Una cuenta de cobro de GN. `regla` en null ⇒ la Caja ⛔ la cobra (sin %, o con recargo). */
@@ -24,8 +34,8 @@ export type Producto = { variante: Variante; stock: Stock } | { candidatos: Cand
 /** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. */
 export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada'
 /** Un renglón como quedó guardado: con lo que necesita el ticket. */
-export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; nombre: string | null; talle: string | null }
-export type PagoGuardado = { cuenta: number; base: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
+export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; importe?: number; nombre: string | null; talle: string | null }
+export type PagoGuardado = { cuenta: number; base: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 export type Venta = {
   id: string
   estado: EstadoVenta
@@ -79,13 +89,13 @@ export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
-export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; nombre?: string; talle?: string; foto?: string | null }
+export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; nombre?: string; talle?: string; foto?: string | null }
 export type PagoConfirmar = { cuenta: number; base?: number }
 
 /** `reintentable` sólo importa si la venta quedó en `error`. */
 export type Resultado = { venta: Venta; reintentable?: boolean }
 
-export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; email: string | null; pagaCon: number | null }) =>
+export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; descuentoVenta: Rebaja | null; email: string | null; pagaCon: number | null }) =>
   post<Resultado>({ action: 'confirmar', ...v }, 'No se pudo confirmar la venta.')
 
 /** Un pago de MP que puede ser el de la venta. ⛔ Trae datos de quien pagó. */
@@ -106,3 +116,7 @@ export const cancelarVenta = (id: string) => post<{ venta: Venta }>({ action: 'c
 export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reintentar', id }, 'No se pudo reintentar la venta.')
 
 export const guardarPolitica = (texto: string) => post<{ politica_cambio: string | null }>({ action: 'politica', texto }, 'No se pudo guardar la política de cambio.')
+
+/** Sólo admin: a qué cuenta van las transferencias y el modo feria (bajadas de línea). */
+export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean }) =>
+  post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

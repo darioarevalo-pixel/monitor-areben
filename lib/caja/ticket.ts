@@ -13,6 +13,10 @@
  * servidor y mandó a GN— y lo escribe. Un ticket que recalcule es un ticket que puede decir un total
  * distinto del de GN.
  *
+ * 🔑 **Los descuentos en cascada, cada uno en su renglón** (Bruno, 4-oct): el de la prenda debajo de
+ * la prenda, «Descuento en la venta» después del subtotal, y el de la forma de pago como «Descuento
+ * 15%» — ⛔ «Descuento Transferencia CG»: la cuenta de GN ⛔ se le muestra al cliente.
+ *
  * 🔴 **El redondeo para arriba se llama «Recargo por redondeo»** (Bruno, 4-oct): es como figura en los
  * tickets de GN. El que baja va como «Redondeo» con su menos.
  *
@@ -28,8 +32,10 @@ import { imprimirPdf } from '../etiquetas/pdf'
 import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
 
+/** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number }
-export type PagoTicket = { cuenta: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
+/** `rebaja` = la parte de este pago del descuento a mano a la VENTA (0 o ausente si ⛔ hubo). */
+export type PagoTicket = { cuenta: number; rebaja?: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 
 export type DatosTicket = {
   /** El número de la venta en GN; `null` si todavía ⛔ llegó. */
@@ -40,7 +46,8 @@ export type DatosTicket = {
   subtotal: number
   pagos: PagoTicket[]
   total: number
-  /** El nombre de cada cuenta de cobro, como lo muestra GN. */
+  /** Lo que la gente lee de cada cuenta: la forma de pago («Tarjeta de crédito»), ⛔ el nombre de la
+   *  cuenta de GN, que es interna (Bruno, 4-oct). Sale de `nombreParaTicket`. */
   nombreCuenta: (cuenta: number) => string
   /** Con cuánto pagó en efectivo; `null` si ⛔ se anotó. */
   pagaCon: number | null
@@ -117,14 +124,18 @@ export function armarTicket(
   for (const r of t.renglones) {
     const talle = talleVisible(r.talle)
     escribir(talle ? `${r.nombre} · ${talle}` : r.nombre, 9, false)
-    par(`${r.cantidad} × ${plata(r.precio)}`, plata(r.importe), 9)
+    const lista = Math.round(r.cantidad * r.precio * 100) / 100
+    par(`${r.cantidad} × ${plata(r.precio)}`, plata(lista), 9)
+    if (lista - r.importe > 0.004) par('Descuento', `-${plata(lista - r.importe)}`, 9)
     y += 0.8
   }
   regla()
 
   par('Subtotal', plata(t.subtotal), 10)
+  const aVenta = Math.round(t.pagos.reduce((s, p) => s + (p.rebaja || 0), 0) * 100) / 100
+  if (aVenta > 0) par('Descuento en la venta', `-${plata(aVenta)}`, 10)
   for (const p of t.pagos) {
-    if (p.descuento > 0) par(`Descuento ${t.nombreCuenta(p.cuenta)} ${p.porcentaje}%`, `-${plata(p.descuento)}`, 10)
+    if (p.descuento > 0) par(`Descuento ${p.porcentaje}%`, `-${plata(p.descuento)}`, 10)
     if (p.redondeo > 0) par('Recargo por redondeo', `+${plata(p.redondeo)}`, 10)
     if (p.redondeo < 0) par('Redondeo', `-${plata(p.redondeo)}`, 10)
   }

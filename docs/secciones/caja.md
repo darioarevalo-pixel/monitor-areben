@@ -43,6 +43,24 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **Se busca también por NOMBRE y talle** (`lib/caja/buscar.core.js`): sólo si el código y el SKU ⛔
   encontraron nada y hay letras. Cada palabra es comienzo de una del nombre o el talle entero, en
   cualquier orden. Elegir de la lista trae la variante por `product_id`+`size_id`, ⛔ por barcode.
+- 🔑 **La lista aparece MIENTRAS se escribe** (`action=buscar`, Bruno 4-oct): con 3 caracteres y alguna
+  letra (un código numérico del lector ⛔ la abre), con foto y precio de etiqueta. Por defecto sólo lo
+  que hay en el LOCAL (stock de anoche: ⛔ pega a GN, tipear ⛔ gasta el cupo); «Mostrar sin stock»
+  suma el resto para venderlo igual. El Enter sigue buscando por código primero.
+- 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
+  (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
+  Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` (13015 Areben Comercial, espera MP |
+  20595 Caja Gerencia, a mano: lo baja un ADMIN, ⛔ la cajera) · Crédito ⇒ 25172 (−10 %) sólo si la
+  Agenda tiene promo de crédito HOY **y** la cajera contesta que la tarjeta es de ese banco; 25173 «6
+  cuotas» si pasa $250.000 y lo pide; si no 25188 (lista). **Modo feria** (admin): efectivo y
+  transferencia van a las de feria (precio final). El servidor rechaza una cuenta sin forma de pago.
+- 🔑 **El ticket (papel y mail) dice el MEDIO y «Descuento 15%»**, ⛔ «Descuento Transferencia CG».
+  La fila guarda en `pagos[].nombre` el medio (`nombreParaTicket`). El mail lo arma `areben-mailer`
+  (`lib/email/ticket.ts`): un cambio de renglones allá se deploya a mano (`vercel --prod`).
+- 🔑 **Descuentos a mano en CASCADA** (Bruno, 4-oct): por prenda (`items[].rebaja`, % o $) ⇒ a la
+  venta (`descuentoVenta`, obligatorio en `cobro`: null si ⛔ hay) ⇒ el de la forma de pago, y después
+  el redondeo. El de la venta se reparte entre los pagos (`pagos[].rebaja`): ⛔ tiene columna propia.
+  ⚠️ Hoy cualquier cajera puede poner un descuento a mano: permiso o tope, a decidir.
 - 🔴 El stock se lee con `GN_TOKEN_ZATTIA`; `GN_TOKEN_VENTAS` ⛔ lee `inventario` (caía al espejo, callado).
 - ⚠️ Cada unidad viaja en su renglón con `quantity: 1`: con cantidad > 1, cómo toma GN el descuento
   en pesos ⛔ está medido.

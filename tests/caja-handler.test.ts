@@ -163,6 +163,49 @@ describe('caja · permiso', () => {
   })
 })
 
+describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {
+  const ADMIN_ = { name: 'admin', admin: true, cuenta: null, acceso: {}, funcion: [] }
+
+  it('una cuenta que ⛔ está detrás de ninguna forma de pago ⇒ 400 y ⛔ sale a GN', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 13014 }], total: 25500 }))
+    expect(r.code).toBe(400)
+    expect(String(r.body?.error)).toMatch(/forma de pago/)
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('la fila guarda el MEDIO, ⛔ el nombre de la cuenta de GN', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { ...VENTA, pagos: [{ cuenta: 25172 }], total: 22900, pagaCon: null }))
+    expect(r.code).toBe(200)
+    expect((base.ventas.get(ID)!.pagos as Fila[])[0]).toMatchObject({ cuenta: 25172, nombre: 'Tarjeta de crédito' })
+  })
+
+  it('el descuento a la venta se rearma en el servidor: el total de la pantalla tiene que coincidir', async () => {
+    conSesion(CAJERA)
+    const items = [{ product_id: 7, size_id: 8, cantidad: 1, precio: 10000, rebaja: { tipo: 'pct', valor: 20 } }]
+    const mal = await correr(req('POST', {}, { ...VENTA, items, total: 6800, descuentoVenta: { tipo: 'pct', valor: 10 } }))
+    expect(mal.code).toBe(409)
+    expect(gn.posts).toHaveLength(0)
+    const r = await correr(req('POST', {}, { ...VENTA, items, total: 6100, pagaCon: 6100, descuentoVenta: { tipo: 'pct', valor: 10 } }))
+    expect(r.code).toBe(200)
+    const p = gn.posts[0] as { items: Fila[]; payments: Fila[] }
+    expect(p.items[0]).toMatchObject({ unit_price: 10000, discount: 3900 })
+    expect(base.ventas.get(ID)).toMatchObject({ subtotal: 8000, total: 6100 })
+    expect((base.ventas.get(ID)!.pagos as Fila[])[0]).toMatchObject({ rebaja: 800, descuento: 1080 })
+  })
+
+  it('bajadas: sólo admin; la transferencia va sólo a una cuenta de transferencias', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 20595 }))).code).toBe(403)
+    conSesion(ADMIN_)
+    expect((await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 12921 }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'bajadas', transferenciaA: 20595, feria: true }))
+    expect(r.code).toBe(200)
+    expect((base.config as { reglas: Fila }).reglas).toMatchObject({ transferenciaA: 20595, feria: true })
+  })
+})
+
 describe('caja · confirmar', () => {
   it('guarda, manda a GN el descuento en pesos y queda en_gn con su número', async () => {
     conSesion(CAJERA)

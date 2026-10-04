@@ -35,7 +35,9 @@ import { construirPrecios } from '@/lib/etiquetas/core'
 import { imagenDe } from '@/lib/tn'
 import { esAdmin } from '@/lib/permisos'
 import { avisar, prepararSonido } from '@/lib/sonido'
-import { cobro, renglones } from '@/lib/caja/core.core.js'
+import { NOMBRE_MEDIO, cobro, cuentaDeMedio, nombreParaTicket, pesosDeRebaja, renglones } from '@/lib/caja/core.core.js'
+import { hoyIso, promosDe } from '@/lib/agenda'
+import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import {
@@ -45,25 +47,31 @@ import {
   confirmarVenta,
   cruzarVenta,
   elegirVariante,
+  guardarBajadas,
   guardarPolitica,
   leerConfig,
-  leerCuentas,
   leerPendientes,
   reintentarVenta,
   type Candidato,
   type Config,
   type Cruce,
   type ListaNombre,
-  type CuentaGN,
+  type Medio,
+  type Rebaja,
+  type Reglas,
   type Stock,
   type Variante,
   type Venta,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Input, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
-type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null }
-type PagoUI = { cuenta: number | null; base: string }
-type Borrador = { id: string; renglones: Renglon[]; email: string }
+type Renglon = { variante: Variante; stock: Stock; cantidad: number; precio: number | null; fueraDeTn: boolean; foto: string | null; rebaja?: Rebaja | null }
+/** La cajera elige la FORMA de pago; la cuenta de GN la resuelve `cuentaDeMedio` (Bruno, 4-oct). */
+type PagoUI = { medio: Medio | null; base: string }
+type Borrador = { id: string; renglones: Renglon[]; email: string; descuentoVenta?: Rebaja | null }
+
+/** Las cuatro formas de pago que ve la cajera, en el orden del mostrador. */
+const MEDIOS: Medio[] = ['efectivo', 'transferencia', 'debito', 'credito']
 
 const CLAVE = 'caja:borrador:zattia'
 const nuevoId = () => crypto.randomUUID()
@@ -74,7 +82,7 @@ const claveDe = (v: Variante) => `${v.product_id}_${v.size_id}`
 function leerBorrador(): Borrador {
   try {
     const d = JSON.parse(localStorage.getItem(CLAVE) || 'null') as Borrador | null
-    if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '' }
+    if (d && typeof d.id === 'string' && Array.isArray(d.renglones)) return { id: d.id, renglones: d.renglones, email: d.email || '', descuentoVenta: d.descuentoVenta ?? null }
   } catch {
     /* sin localStorage: el carrito vive en memoria */
   }
@@ -94,13 +102,13 @@ const aNumero = (s: string) => {
 }
 
 export function Caja() {
-  const { perfil } = useSesion()
+  const { perfil, marca } = useSesion()
+  const promos = useAgenda((st) => st.promos)
   const admin = esAdmin(perfil)
   const { datos } = useDatosMonitor()
   const tnIdx = useTnPromo('zattia')
 
   const [config, setConfig] = useState<Config | null>(null)
-  const [cuentas, setCuentas] = useState<CuentaGN[]>([])
   const [errCarga, setErrCarga] = useState<string | null>(null)
 
   const [bor, setBor] = useState<Borrador>(() => ({ id: '', renglones: [], email: '' }))
@@ -119,7 +127,10 @@ export function Caja() {
     if (bor.id) guardarBorrador(bor)
   }, [bor])
 
-  const [pagos, setPagos] = useState<PagoUI[]>([{ cuenta: null, base: '' }])
+  const [pagos, setPagos] = useState<PagoUI[]>([{ medio: null, base: '' }])
+  // Las dos preguntas del crédito (null = ⛔ contestada todavía).
+  const [esDelBanco, setEsDelBanco] = useState<boolean | null>(null)
+  const [seisCuotas, setSeisCuotas] = useState<boolean | null>(null)
   const [varios, setVarios] = useState(false)
   const [pagaCon, setPagaCon] = useState('')
   const [codigo, setCodigo] = useState('')
@@ -160,11 +171,8 @@ export function Caja() {
   }, [codigo])
 
   useEffect(() => {
-    Promise.all([leerConfig(), leerCuentas()])
-      .then(([c, q]) => {
-        setConfig(c)
-        setCuentas(q.cuentas)
-      })
+    leerConfig()
+      .then(setConfig)
       .catch((e) => setErrCarga(e.message))
   }, [])
 
@@ -180,8 +188,15 @@ export function Caja() {
   }, [refrescarPendientes])
 
   const reglas = config?.reglas ?? null
-  const cobrables = useMemo(() => cuentas.filter((c) => c.regla), [cuentas])
-  const nombreCuenta = useCallback((id: number) => cuentas.find((c) => c.id === id)?.nombre ?? reglas?.cuentas[id]?.nombre ?? `Cuenta ${id}`, [cuentas, reglas])
+  // Lo que lee la gente de una cuenta: la forma de pago, ⛔ el nombre de la cuenta de GN.
+  const nombreCuenta = useCallback((id: number) => nombreParaTicket(id, reglas), [reglas])
+  // 🔑 La promo bancaria de crédito de HOY sale de la Agenda (la misma de la banda de promos), ⛔ se le
+  // pregunta a la cajera si hay: sólo si la tarjeta es de ese banco.
+  const promoCredito = useMemo(
+    () => promosDe(promos, hoyIso(), { canal: 'mostrador', marca }).filter((p) => p.medio === 'credito' && p.beneficio.tipo === 'descuento'),
+    [promos, marca],
+  )
+  const bancosPromo = promoCredito.map((p) => p.banco).join(' o ')
   const esEfectivo = useCallback((id: number) => !!reglas?.cuentas[id]?.efectivo, [reglas])
 
   /** El precio de la etiqueta y la foto de un producto, con la regla de Etiquetas. */
@@ -204,7 +219,7 @@ export function Caja() {
         rs[i] = { ...rs[i], stock, cantidad: rs[i].cantidad + 1 }
         return { ...b, renglones: rs }
       }
-      return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, ...precioYFoto(variante.product_id) }] }
+      return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...precioYFoto(variante.product_id) }] }
     })
     const enCarrito = (bor.renglones.find((r) => claveDe(r.variante) === claveDe(variante))?.cantidad ?? 0) + 1
     if (stock.local - enCarrito <= 0) avisar('ojo', 'Última')
@@ -246,56 +261,82 @@ export function Caja() {
 
   // ── El cobro: el mismo núcleo que el servidor ──
   const sinPrecio = bor.renglones.some((r) => !(r.precio && r.precio > 0))
-  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0 }))
-  const filas = (() => {
+  const items = bor.renglones.map((r) => ({ product_id: r.variante.product_id, size_id: r.variante.size_id, cantidad: r.cantidad, precio: r.precio ?? 0, rebaja: r.rebaja ?? null }))
+  const descuentoVenta = bor.descuentoVenta ?? null
+  const armado = (() => {
     try {
-      return bor.renglones.length && !sinPrecio ? renglones(items) : null
+      if (!bor.renglones.length || sinPrecio) return { filas: null, error: null as string | null }
+      return { filas: renglones(items), error: null }
+    } catch (e) {
+      return { filas: null, error: (e as Error).message }
+    }
+  })()
+  const filas = armado.filas
+  // Lo que queda después de las rebajas a mano: es lo que decide si se ofrecen las 6 cuotas.
+  const aPagar = (() => {
+    if (!filas) return null
+    const sub = filas.reduce((s, f) => s + f.importe, 0)
+    try {
+      return Math.round((sub - pesosDeRebaja(descuentoVenta, sub)) * 100) / 100
     } catch {
       return null
     }
   })()
+  const sinMedios = !!reglas && !reglas.medios
+  const hayCredito = pagos.some((p) => p.medio === 'credito')
+  const preguntaBanco = hayCredito && promoCredito.length > 0
+  const preguntaCuotas = hayCredito && !!reglas?.medios && aPagar != null && aPagar > reglas.medios.credito.minSeisCuotas
+  const cuentaDe = (medio: Medio, rg: Reglas) =>
+    cuentaDeMedio(medio, { reglas: rg, total: aPagar ?? 0, promoCreditoHoy: promoCredito.length > 0, esDelBanco: esDelBanco === true, seisCuotas: seisCuotas === true })
 
-  /** El total de cada cuenta pagando todo con ella: lo que muestran las tarjetas. */
-  const totalPorCuenta = (() => {
-    const m: Record<number, number> = {}
-    if (!filas || !reglas) return m
-    for (const c of cobrables) {
+  /** El total de cada forma de pago pagando todo con ella: lo que muestran las tarjetas. */
+  const totalPorMedio = (() => {
+    const m: Partial<Record<Medio, number>> = {}
+    if (!filas || !reglas?.medios) return m
+    for (const medio of MEDIOS) {
       try {
-        m[c.id] = cobro({ filas, pagos: [{ cuenta: c.id }], reglas }).total
+        m[medio] = cobro({ filas, pagos: [{ cuenta: cuentaDe(medio, reglas) }], reglas, descuentoVenta }).total
       } catch {
-        /* sin regla: la tarjeta ⛔ se muestra */
+        /* sin regla: la tarjeta muestra — */
       }
     }
     return m
   })()
 
-  const pedidos = pagos.map((p, i) => (i === pagos.length - 1 ? { cuenta: p.cuenta ?? 0 } : { cuenta: p.cuenta ?? 0, base: aNumero(p.base) ?? 0 }))
   const elCobro = (() => {
-    if (!filas || !reglas || pagos.some((p) => p.cuenta == null)) return { c: null, error: null as string | null }
+    if (armado.error) return { c: null, pedidos: [], error: armado.error }
+    if (!filas || !reglas?.medios || pagos.some((p) => p.medio == null)) return { c: null, pedidos: [], error: null as string | null }
     try {
-      return { c: cobro({ filas, pagos: pedidos, reglas }), error: null }
+      const rg = reglas
+      const pedidos = pagos.map((p, i) => {
+        const cuenta = cuentaDe(p.medio as Medio, rg)
+        return i === pagos.length - 1 ? { cuenta } : { cuenta, base: aNumero(p.base) ?? 0 }
+      })
+      return { c: cobro({ filas, pagos: pedidos, reglas: rg, descuentoVenta }), pedidos, error: null }
     } catch (e) {
-      return { c: null, error: (e as Error).message }
+      return { c: null, pedidos: [], error: (e as Error).message }
     }
   })()
   const c = elCobro.c
+  const pedidos = elCobro.pedidos
+  const faltaContestar = (preguntaBanco && esDelBanco == null) || (preguntaCuotas && seisCuotas == null)
 
   const enEfectivo = c ? c.pagos.filter((p) => esEfectivo(p.cuenta)).reduce((s, p) => s + p.monto, 0) : 0
   const pagaConN = aNumero(pagaCon)
   const vuelto = pagaConN != null && enEfectivo > 0 ? Math.round((pagaConN - enEfectivo) * 100) / 100 : null
   const emailOk = !bor.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bor.email.trim())
-  const puedeConfirmar = !!c && !enviando && emailOk && (vuelto == null || vuelto >= 0)
+  const puedeConfirmar = !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
   function datosTicket(venta: Venta): DatosTicket {
     return {
       numero: venta.gn_number,
       id: venta.id,
-      renglones: bor.renglones.map((r) => ({
+      renglones: bor.renglones.map((r, i) => ({
         nombre: r.variante.product_name,
         talle: r.variante.size_name,
         cantidad: r.cantidad,
         precio: r.precio ?? 0,
-        importe: Math.round(r.cantidad * (r.precio ?? 0) * 100) / 100,
+        importe: filas?.[i]?.importe ?? Math.round(r.cantidad * (r.precio ?? 0) * 100) / 100,
       })),
       subtotal: venta.subtotal,
       pagos: venta.pagos,
@@ -315,7 +356,7 @@ export function Caja() {
         talle: r.talle,
         cantidad: r.cantidad,
         precio: r.precio,
-        importe: Math.round(r.cantidad * r.precio * 100) / 100,
+        importe: r.importe ?? Math.round(r.cantidad * r.precio * 100) / 100,
       })),
     }
   }
@@ -340,12 +381,15 @@ export function Caja() {
         items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, foto: r.foto })),
         pagos: pedidos,
         total: c.total,
+        descuentoVenta,
         email: bor.email.trim() || null,
         pagaCon: enEfectivo > 0 ? pagaConN : null,
       })
       // La venta quedó guardada (en GN, pendiente o esperando la transferencia): el carrito se cierra y nace otro id.
-      setBor({ id: nuevoId(), renglones: [], email: '' })
-      setPagos([{ cuenta: null, base: '' }])
+      setBor({ id: nuevoId(), renglones: [], email: '', descuentoVenta: null })
+      setPagos([{ medio: null, base: '' }])
+      setEsDelBanco(null)
+      setSeisCuotas(null)
       setVarios(false)
       setPagaCon('')
       if (r.venta.estado === 'esperando_pago') {
@@ -449,30 +493,39 @@ export function Caja() {
                 cargandoPrecios={!datos || !tnIdx}
                 onCantidad={(n) => (n <= 0 ? sacarRenglon(i) : cambiarRenglon(i, { cantidad: n }))}
                 onPrecio={(p) => cambiarRenglon(i, { precio: p })}
+                onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
+                importe={filas?.[i]?.importe ?? null}
                 onSacar={() => sacarRenglon(i)}
               />
             ))}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: space[3], fontSize: font.lg }}>
-            <span>Subtotal (precio de etiqueta)</span>
+            <span>Subtotal</span>
             <b>{filas ? plata(filas.reduce((s, f) => s + f.importe, 0)) : '—'}</b>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: space[2], gap: space[2], flexWrap: 'wrap' }}>
+            <span style={{ color: color.mut }}>Descuento a la venta</span>
+            <CampoRebaja valor={descuentoVenta} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
           </div>
         </SectionCard>
       )}
 
       {bor.renglones.length > 0 && (
         <SectionCard title="Cobrar">
-          {sinPrecio ? (
+          {sinMedios ? (
+            <Notice tone="danger">Faltan las formas de pago de la Caja: hay que correr sql/migrate-caja-medios.sql.</Notice>
+          ) : sinPrecio ? (
             <Notice tone="warning">Hay una prenda sin precio: escribilo en el renglón para poder cobrar.</Notice>
           ) : !varios ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: space[2] }}>
-              {cobrables.map((q) => {
-                const activa = pagos[0].cuenta === q.id
+              {MEDIOS.map((medio) => {
+                const activa = pagos[0].medio === medio
+                const regla = reglas?.medios ? reglas.cuentas[(() => { try { return cuentaDe(medio, reglas) } catch { return 0 } })()] : undefined
                 return (
                   <button
-                    key={q.id}
+                    key={medio}
                     type="button"
-                    onClick={() => setPagos([{ cuenta: q.id, base: '' }])}
+                    onClick={() => setPagos([{ medio, base: '' }])}
                     style={{
                       height: 'auto',
                       textAlign: 'left',
@@ -483,27 +536,34 @@ export function Caja() {
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{q.nombre}</div>
-                    <div style={{ fontSize: font.sm, color: color.mut }}>{q.regla && q.regla.descuento > 0 ? `${q.regla.descuento}% de descuento` : 'sin descuento'}</div>
+                    <div style={{ fontSize: font.md, fontWeight: weight.semibold, color: color.ink }}>{NOMBRE_MEDIO[medio]}</div>
+                    <div style={{ fontSize: font.sm, color: color.mut }}>{regla && regla.descuento > 0 ? `${regla.descuento}% de descuento` : 'sin descuento'}</div>
                     <div style={{ fontSize: font['2xl'], fontWeight: weight.bold, color: color.ink, marginTop: space[1] }}>
-                      {totalPorCuenta[q.id] != null ? plata(totalPorCuenta[q.id]) : '—'}
+                      {totalPorMedio[medio] != null ? plata(totalPorMedio[medio]) : '—'}
                     </div>
                   </button>
                 )
               })}
             </div>
           ) : (
-            <VariosPagos pagos={pagos} setPagos={setPagos} cobrables={cobrables} montos={c?.pagos.map((p) => p.monto) ?? null} />
+            <VariosPagos pagos={pagos} setPagos={setPagos} montos={c?.pagos.map((p) => p.monto) ?? null} />
           )}
 
-          {!sinPrecio && (
+          {!sinPrecio && !sinMedios && (preguntaBanco || preguntaCuotas) && (
+            <div style={{ display: 'grid', gap: space[2], marginTop: space[3] }}>
+              {preguntaBanco && <SiNo pregunta={`¿Es tarjeta de ${bancosPromo}?`} valor={esDelBanco} onCambio={setEsDelBanco} />}
+              {preguntaCuotas && <SiNo pregunta="¿En 6 cuotas?" valor={seisCuotas} onCambio={setSeisCuotas} />}
+            </div>
+          )}
+
+          {!sinPrecio && !sinMedios && (
             <div style={{ marginTop: space[3] }}>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setVarios(!varios)
-                  setPagos(varios ? [{ cuenta: null, base: '' }] : [{ cuenta: pagos[0].cuenta, base: '' }, { cuenta: null, base: '' }])
+                  setPagos(varios ? [{ medio: null, base: '' }] : [{ medio: pagos[0].medio, base: '' }, { medio: null, base: '' }])
                 }}
               >
                 {varios ? 'Un solo pago' : 'Varios pagos'}
@@ -552,6 +612,7 @@ export function Caja() {
         </SectionCard>
       )}
 
+      {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
       {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
     </div>
   )
@@ -648,12 +709,17 @@ function FilaRenglon({
   cargandoPrecios,
   onCantidad,
   onPrecio,
+  onRebaja,
+  importe,
   onSacar,
 }: {
   r: Renglon
   cargandoPrecios: boolean
   onCantidad: (n: number) => void
   onPrecio: (p: number | null) => void
+  onRebaja: (rb: Rebaja | null) => void
+  /** Lo que queda del renglón después de su descuento (null si ⛔ se puede calcular). */
+  importe: number | null
   onSacar: () => void
 }) {
   // Mientras se escribe, el texto; si ⛔ se está escribiendo, el precio del renglón.
@@ -710,6 +776,10 @@ function FilaRenglon({
         style={{ width: 120, textAlign: 'right' }}
         aria-label="Precio"
       />
+      <div style={{ display: 'grid', gap: space[0.5], justifyItems: 'end' }}>
+        <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} />
+        {r.rebaja && importe != null && <span style={{ fontSize: font.sm, color: color.mut }}>queda {plata(importe)}</span>}
+      </div>
       <Button size="sm" variant="ghost" tone="danger" onClick={onSacar}>
         Sacar
       </Button>
@@ -717,39 +787,29 @@ function FilaRenglon({
   )
 }
 
-function VariosPagos({
-  pagos,
-  setPagos,
-  cobrables,
-  montos,
-}: {
-  pagos: PagoUI[]
-  setPagos: (p: PagoUI[]) => void
-  cobrables: CuentaGN[]
-  montos: number[] | null
-}) {
+function VariosPagos({ pagos, setPagos, montos }: { pagos: PagoUI[]; setPagos: (p: PagoUI[]) => void; montos: number[] | null }) {
   const cambiar = (i: number, cambio: Partial<PagoUI>) => setPagos(pagos.map((p, j) => (j === i ? { ...p, ...cambio } : p)))
   return (
     <div style={{ display: 'grid', gap: space[2] }}>
       <span style={{ fontSize: font.sm, color: color.mut }}>
-        En cada pago va la parte del subtotal (a precio de etiqueta) que se paga con esa cuenta; el último se lleva el resto. Cada uno se descuenta y se redondea por separado.
+        En cada pago va la parte del subtotal que se paga con esa forma de pago; el último se lleva el resto. Cada uno se descuenta y se redondea por separado.
       </span>
       {pagos.map((p, i) => {
         const ultimo = i === pagos.length - 1
         return (
           <div key={i} style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
-            <Select value={p.cuenta ?? ''} onChange={(e) => cambiar(i, { cuenta: e.target.value ? Number(e.target.value) : null })} style={{ width: 220 }}>
-              <option value="">Cuenta…</option>
-              {cobrables.map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.nombre}
+            <Select value={p.medio ?? ''} onChange={(e) => cambiar(i, { medio: (e.target.value || null) as Medio | null })} style={{ width: 220 }}>
+              <option value="">Forma de pago…</option>
+              {MEDIOS.map((m) => (
+                <option key={m} value={m}>
+                  {NOMBRE_MEDIO[m]}
                 </option>
               ))}
             </Select>
             {ultimo ? (
               <span style={{ width: 140, color: color.mut }}>el resto</span>
             ) : (
-              <Input inputMode="decimal" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ de la etiqueta" style={{ width: 140 }} />
+              <Input inputMode="decimal" value={p.base} onChange={(e) => cambiar(i, { base: e.target.value })} placeholder="$ del subtotal" style={{ width: 140 }} />
             )}
             <b style={{ minWidth: 100 }}>{montos?.[i] != null ? `cobra ${plata(montos[i])}` : ''}</b>
             {pagos.length > 2 && (
@@ -761,7 +821,7 @@ function VariosPagos({
         )
       })}
       <div>
-        <Button size="sm" variant="outline" onClick={() => setPagos([...pagos.slice(0, -1), { cuenta: null, base: '' }, pagos[pagos.length - 1]])}>
+        <Button size="sm" variant="outline" onClick={() => setPagos([...pagos.slice(0, -1), { medio: null, base: '' }, pagos[pagos.length - 1]])}>
           Agregar pago
         </Button>
       </div>
@@ -769,7 +829,7 @@ function VariosPagos({
   )
 }
 
-function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; total: number; pagos: { cuenta: number; porcentaje: number; descuento: number; redondeo: number; monto: number }[] }; nombreCuenta: (id: number) => string }) {
+function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; aVenta: number; total: number; pagos: { cuenta: number; porcentaje: number; descuento: number; redondeo: number; monto: number }[] }; nombreCuenta: (id: number) => string }) {
   const linea = (izq: string, der: string, fuerte = false) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fuerte ? font['2xl'] : font.md, fontWeight: fuerte ? weight.bold : weight.normal }}>
       <span>{izq}</span>
@@ -779,9 +839,10 @@ function ResumenCobro({ c, nombreCuenta }: { c: { subtotal: number; total: numbe
   return (
     <div style={{ display: 'grid', gap: space[1], maxWidth: 420 }}>
       {linea('Subtotal', plata(c.subtotal))}
+      {c.aVenta > 0 && linea('Descuento en la venta', `-${plata(c.aVenta)}`)}
       {c.pagos.map((p, i) => (
         <div key={i}>
-          {p.descuento > 0 && linea(`Descuento ${nombreCuenta(p.cuenta)} ${p.porcentaje}%`, `-${plata(p.descuento)}`)}
+          {p.descuento > 0 && linea(`Descuento ${p.porcentaje}%${c.pagos.length > 1 ? ` (${nombreCuenta(p.cuenta)})` : ''}`, `-${plata(p.descuento)}`)}
           {p.redondeo > 0 && linea('Recargo por redondeo', `+${plata(p.redondeo)}`)}
           {p.redondeo < 0 && linea('Redondeo', `-${plata(p.redondeo)}`)}
         </div>
@@ -967,6 +1028,100 @@ function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: () => voi
         {error && <span>{error}</span>}
       </div>
     </Notice>
+  )
+}
+
+/**
+ * Un descuento a mano: % o $ (Bruno, 4-oct). Vacío = sin descuento. El tope (⛔ más que el importe)
+ * lo pone el núcleo, y la pantalla muestra su error.
+ */
+function CampoRebaja({ valor, onCambio }: { valor: Rebaja | null; onCambio: (rb: Rebaja | null) => void }) {
+  const [texto, setTexto] = useState<string | null>(null)
+  const tipo = valor?.tipo ?? 'pct'
+  const fijar = (t: string, tp: Rebaja['tipo']) => {
+    const n = aNumero(t)
+    onCambio(n != null && n > 0 ? { tipo: tp, valor: n } : null)
+  }
+  return (
+    <div style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
+      <Input
+        inputMode="decimal"
+        value={texto ?? (valor ? String(valor.valor) : '')}
+        placeholder="descuento"
+        onChange={(e) => setTexto(e.target.value)}
+        onBlur={() => {
+          if (texto != null) fijar(texto, tipo)
+          setTexto(null)
+        }}
+        style={{ width: 100, textAlign: 'right' }}
+        aria-label="Descuento"
+      />
+      <Select value={tipo} onChange={(e) => valor && onCambio({ ...valor, tipo: e.target.value as Rebaja['tipo'] })} style={{ width: 64 }} aria-label="En % o en $" disabled={!valor}>
+        <option value="pct">%</option>
+        <option value="pesos">$</option>
+      </Select>
+    </div>
+  )
+}
+
+/** Una pregunta de Sí/No del cobro con tarjeta de crédito. */
+function SiNo({ pregunta, valor, onCambio }: { pregunta: string; valor: boolean | null; onCambio: (v: boolean) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontWeight: weight.semibold, color: color.ink }}>{pregunta}</span>
+      <Button size="sm" variant={valor === true ? 'solid' : 'outline'} onClick={() => onCambio(true)}>
+        Sí
+      </Button>
+      <Button size="sm" variant={valor === false ? 'solid' : 'outline'} onClick={() => onCambio(false)}>
+        No
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * Sólo admin: las bajadas de línea del cobro. 🔑 **A qué cuenta van las transferencias ⛔ lo decide
+ * la cajera** (Bruno, 4-oct): «si dicen transfieran a cuenta Darío, va Caja Gerencia». Y el modo
+ * feria: efectivo y transferencia van a las cuentas de feria (precio final, sin descuento extra).
+ */
+function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reglas) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const NOMBRE_TRANSF: Record<number, string> = { 13015: 'Areben Comercial (se confirma sola con Mercado Pago)', 20595: 'Caja Gerencia (se confirma a mano)' }
+  async function guardar(b: { transferenciaA?: number; feria?: boolean }) {
+    setGuardando(true)
+    setMsg(null)
+    try {
+      const r = await guardarBajadas(b)
+      onGuardadas(r.reglas)
+      setMsg('Guardado: vale desde la próxima venta.')
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+  const opciones = reglas.medios?.transferencia.opciones ?? []
+  return (
+    <Plegable abierto={abierto} onToggle={() => setAbierto(!abierto)} titulo="Formas de pago" ayuda="A qué cuenta van las transferencias y el modo feria. Sólo lo cambia un admin.">
+      <div style={{ display: 'grid', gap: space[3], maxWidth: 560 }}>
+        <Field label="Las transferencias van a">
+          <Select value={String(reglas.transferenciaA ?? '')} disabled={guardando} onChange={(e) => guardar({ transferenciaA: Number(e.target.value) })} style={{ maxWidth: 420 }}>
+            {opciones.map((id) => (
+              <option key={id} value={id}>
+                {NOMBRE_TRANSF[id] ?? reglas.cuentas[id]?.nombre ?? `Cuenta ${id}`}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <label style={{ display: 'flex', gap: space[2], alignItems: 'center' }}>
+          <input type="checkbox" checked={reglas.feria === true} disabled={guardando} onChange={(e) => guardar({ feria: e.target.checked })} />
+          <span>Modo feria: efectivo y transferencia van a las cuentas de feria, sin descuento (los precios de feria son finales)</span>
+        </label>
+        {msg && <span style={{ fontSize: font.sm, color: color.mut }}>{msg}</span>}
+      </div>
+    </Plegable>
   )
 }
 

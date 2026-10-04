@@ -31,7 +31,7 @@ describe('ticketParaMail', () => {
       pagaCon: 5000, vuelto: 800, politica: 'Cambios dentro de los 30 días.',
     })
     expect(b.ticket.renglones).toEqual([{ nombre: 'ACCESORIO NRO 1', talle: 'LILA', cantidad: 1, precio: 4990, importe: 4990, foto: null }])
-    expect(b.ticket.pagos).toEqual([{ cuenta: 'Efectivo', porcentaje: 15, descuento: 748.5, redondeo: -41.5, monto: 4200 }])
+    expect(b.ticket.pagos).toEqual([{ cuenta: 'Efectivo', rebaja: 0, porcentaje: 15, descuento: 748.5, redondeo: -41.5, monto: 4200 }])
   })
 
   it('sin pago en efectivo ⛔ hay vuelto aunque se haya anotado «paga con»', () => {
