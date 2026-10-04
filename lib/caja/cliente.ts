@@ -101,8 +101,8 @@ export type PedidoWeb = {
   prendas: Array<{ sku: string; nombre: string; cantidad: number }>
   sinSku: number
 }
-/** `porSku`: qué pedidos llevan cada variante. `noLeidas`: órdenes del rango que TN ⛔ devolvió. */
-export type PedidosWeb = { pedidos: PedidoWeb[]; porSku: Record<string, Array<{ numero: number; cantidad: number; sinPagar: boolean }>>; noLeidas: number; leidoEn: string }
+/** `porSku`: qué pedidos llevan cada variante. `noLeidas`: órdenes del rango que TN ⛔ devolvió. `guardada`: la del aparato, mientras llega la nueva. */
+export type PedidosWeb = { pedidos: PedidoWeb[]; porSku: Record<string, Array<{ numero: number; cantidad: number; sinPagar: boolean }>>; noLeidas: number; leidoEn: string; guardada?: boolean }
 export const leerPedidosWeb = () => get<PedidosWeb>('action=pedidos-web', 'No se pudieron leer los pedidos web.')
 
 export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; rebaja?: Rebaja | null; nombre?: string; talle?: string; foto?: string | null }

@@ -104,6 +104,9 @@ const aNumero = (s: string) => {
   return Number.isFinite(n) && String(s).trim() !== '' ? n : null
 }
 
+/** La última lista de pedidos web (W1), para mostrarla al cargar mientras llega la nueva. */
+const CLAVE_PEDIDOS = 'caja:pedidos-web:zattia'
+
 export function Caja() {
   const { perfil, marca } = useSesion()
   const promos = useAgenda((st) => st.promos)
@@ -195,11 +198,27 @@ export function Caja() {
   const [pedidosWeb, setPedidosWeb] = useState<PedidosWeb | null>(null)
   const [errPedidos, setErrPedidos] = useState<string | null>(null)
   useEffect(() => {
+    // La última lista queda en el aparato: TN tarda ~8 s en frío y, sin esto, el aviso del renglón
+    // llegaba después del escaneo. Se usa al cargar mientras llega la nueva, y sólo si tiene menos de
+    // 30 min (el cartel dice de qué hora es). Adentro de un async: `localStorage` ⛔ existe en el servidor.
+    void Promise.resolve().then(() => {
+      try {
+        const d = JSON.parse(localStorage.getItem(CLAVE_PEDIDOS) || 'null') as PedidosWeb | null
+        if (d && Date.now() - Date.parse(d.leidoEn) < 30 * 60_000) setPedidosWeb((ya) => ya ?? { ...d, guardada: true })
+      } catch {
+        /* sin localStorage: se espera la lectura */
+      }
+    })
     const leer = () =>
       leerPedidosWeb()
         .then((d) => {
           setPedidosWeb(d)
           setErrPedidos(null)
+          try {
+            localStorage.setItem(CLAVE_PEDIDOS, JSON.stringify(d))
+          } catch {
+            /* sin localStorage: la próxima carga espera la lectura */
+          }
         })
         .catch((e) => setErrPedidos((e as Error).message))
     leer()
@@ -1066,6 +1085,7 @@ function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null; error:
           {n > 0 && <span> · el más viejo {hace(datos.pedidos[0].horas)}</span>}
         </button>
         {datos.noLeidas > 0 && <span style={{ fontSize: font.sm }}>Tienda Nube no devolvió {datos.noLeidas} órdenes: puede haber más.</span>}
+        {datos.guardada && !error && <span style={{ fontSize: font.sm }}>Lista de las {new Date(datos.leidoEn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}: actualizando…</span>}
         {error && <span style={{ fontSize: font.sm }}>No se pudo actualizar ({error}). Es la lista de las {new Date(datos.leidoEn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}.</span>}
         {abierto &&
           datos.pedidos.map((p) => (
