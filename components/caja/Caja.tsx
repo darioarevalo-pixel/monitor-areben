@@ -111,7 +111,9 @@ export function Caja() {
   const [varios, setVarios] = useState(false)
   const [pagaCon, setPagaCon] = useState('')
   const [codigo, setCodigo] = useState('')
-  const [buscando, setBuscando] = useState(false)
+  // Cuántas búsquedas hay en vuelo. 🔴 El campo ⛔ se deshabilita mientras busca: el lector tipea el
+  // código siguiente enseguida, y con el campo bloqueado ese escaneo se PERDÍA (visto en prod, 4-oct).
+  const [buscando, setBuscando] = useState(0)
   const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
   const [candidatos, setCandidatos] = useState<Variante[] | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -180,7 +182,7 @@ export function Caja() {
     setCodigo('')
     setAviso(null)
     setCandidatos(null)
-    setBuscando(true)
+    setBuscando((n) => n + 1)
     try {
       const r = await buscarProducto(c)
       if ('candidatos' in r) {
@@ -191,7 +193,7 @@ export function Caja() {
       avisar('no')
       setAviso({ tono: 'danger', texto: (e as Error).message })
     } finally {
-      setBuscando(false)
+      setBuscando((n) => n - 1)
       enfocar()
     }
   }
@@ -323,9 +325,8 @@ export function Caja() {
             onChange={(e) => setCodigo(e.target.value)}
             placeholder="Código de barras o SKU"
             style={{ fontSize: font.xl, flex: 1 }}
-            disabled={buscando}
           />
-          <Button type="submit" loading={buscando}>
+          <Button type="submit" loading={buscando > 0}>
             Agregar
           </Button>
         </form>
