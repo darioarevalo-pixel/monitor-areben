@@ -6,6 +6,8 @@
 //   GET  ?recurso=caja&action=producto&codigo=…   → la variante del código + stock Local / Depósito;
 //        si el código ⛔ está y tiene letras, busca por NOMBRE y talle ⇒ { candidatos, mas }
 //   GET  ?recurso=caja&action=producto&product_id=…&size_id=…  → la variante elegida de la lista
+//   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe: { conStock, sinStock, masCon, masSin }
+//        con el stock del local de anoche (⛔ pega a GN: tipear ⛔ gasta el cupo de 60/min)
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
@@ -45,7 +47,7 @@ import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
-import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda } from '../lib/caja/buscar.core.js'
+import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 
 const STORE = 'zattia'
@@ -152,6 +154,16 @@ export default async function handler(req, res) {
           stock = { ...espejo, fuente: 'espejo', motivo: sinSecretos(e && e.message) }
         }
         return res.status(200).json({ variante, stock })
+      }
+
+      if (accion === 'buscar') {
+        const palabras = palabrasDeBusqueda(String(req.query.q || ''))
+        const vacio = { conStock: [], sinStock: [], masCon: 0, masSin: 0 }
+        if (!palabras.length) return res.status(200).json(vacio)
+        const r = await variantesDelNombre(sb, palabras, listasPorStock, (x) => x.conStock.length + x.sinStock.length > 0)
+        if (!r) return res.status(200).json(vacio)
+        const plano = (g) => ({ ...g.variante, local: g.espejo.local })
+        return res.status(200).json({ conStock: r.conStock.map(plano), sinStock: r.sinStock.map(plano), masCon: r.masCon, masSin: r.masSin })
       }
 
       if (accion === 'pendientes') {
@@ -345,15 +357,15 @@ async function variantesExactas(sb, productId, sizeId) {
  * `buscar.core.js`. Si esa palabra ⛔ trae nada se prueba la siguiente: `ilike` ⛔ ignora las tildes,
  * y «corazon» ⛔ encuentra «CORAZÓN» (la de al lado sí puede).
  */
-async function variantesDelNombre(sb, palabras) {
+async function variantesDelNombre(sb, palabras, armar = filtrarPorNombre, hay = (r) => r.grupos.length > 0) {
   const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
   for (const p of ordenParaLaBase(palabras).slice(0, 3)) {
     const { data, error } = await sb.from('inventario').select(COLS).ilike('product_name', `%${p}%`).limit(1000)
     if (error) throw new Error(error.message)
-    const r = filtrarPorNombre(agrupar(data || []), palabras)
-    if (r.grupos.length) return r
+    const r = armar(agrupar(data || []), palabras)
+    if (hay(r)) return r
   }
-  return { grupos: [], mas: 0 }
+  return armar === filtrarPorNombre ? { grupos: [], mas: 0 } : null
 }
 
 function agrupar(filas) {

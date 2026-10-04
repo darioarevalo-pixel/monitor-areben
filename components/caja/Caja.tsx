@@ -36,8 +36,10 @@ import { imagenDe } from '@/lib/tn'
 import { esAdmin } from '@/lib/permisos'
 import { avisar, prepararSonido } from '@/lib/sonido'
 import { cobro, renglones } from '@/lib/caja/core.core.js'
+import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import {
+  buscarNombre,
   buscarProducto,
   cancelarVenta,
   confirmarVenta,
@@ -51,6 +53,7 @@ import {
   type Candidato,
   type Config,
   type Cruce,
+  type ListaNombre,
   type CuentaGN,
   type Stock,
   type Variante,
@@ -125,12 +128,36 @@ export function Caja() {
   const [buscando, setBuscando] = useState(0)
   const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
   const [candidatos, setCandidatos] = useState<{ lista: Candidato[]; mas: number } | null>(null)
+  // La lista que aparece MIENTRAS se escribe (Bruno, 4-oct). `vuelta` numera cada búsqueda: sólo se
+  // pinta la última (una respuesta lenta ⛔ pisa a la que ya llegó), y el Enter la anula.
+  const [sugeridas, setSugeridas] = useState<(ListaNombre & { q: string }) | null>(null)
+  const [verSinStock, setVerSinStock] = useState(false)
+  const vuelta = useRef(0)
   const [enviando, setEnviando] = useState(false)
   const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket } | null>(null)
   const [pendientes, setPendientes] = useState<Venta[]>([])
   const scanRef = useRef<HTMLInputElement>(null)
 
   const enfocar = () => setTimeout(() => scanRef.current?.focus(), 0)
+
+  // 🔑 Sólo con 3 letras o más y alguna LETRA: el lector tipea números y ⛔ tiene que abrir la lista.
+  useEffect(() => {
+    const n = ++vuelta.current
+    const q = codigo.trim()
+    if (q.length < 3 || !palabrasDeBusqueda(q).length) return
+    const t = setTimeout(() => {
+      buscarNombre(q)
+        .then((r) => {
+          if (vuelta.current !== n) return
+          setSugeridas({ ...r, q })
+          setVerSinStock(false)
+        })
+        .catch(() => {
+          /* la lista es una ayuda: el Enter sigue buscando y avisa si falla */
+        })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [codigo])
 
   useEffect(() => {
     Promise.all([leerConfig(), leerCuentas()])
@@ -188,6 +215,7 @@ export function Caja() {
     const c = texto.trim()
     if (!c && !elegida) return
     prepararSonido()
+    vuelta.current++
     setCodigo('')
     setAviso(null)
     setCandidatos(null)
@@ -384,21 +412,30 @@ export function Caja() {
             <Notice tone={aviso.tono}>{aviso.texto}</Notice>
           </div>
         )}
+        {sugeridas && sugeridas.q === codigo.trim() && !candidatos && (
+          <ListaPrendas
+            con={sugeridas.conStock}
+            masCon={sugeridas.masCon}
+            sin={sugeridas.sinStock}
+            masSin={sugeridas.masSin}
+            verSin={verSinStock}
+            onVerSin={() => setVerSinStock(true)}
+            precioYFoto={precioYFoto}
+            onElegir={elegirCandidato}
+          />
+        )}
         {candidatos && (
-          <div style={{ marginTop: space[3], display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            <span style={{ color: color.mut, fontSize: font.sm, width: '100%' }}>Elegí cuál.</span>
-            {candidatos.lista.map((v) => (
-              <Button key={claveDe(v)} variant="outline" onClick={() => elegirCandidato(v)}>
-                {v.product_name} · {v.size_name}
-                {v.local != null && <span style={{ color: color.mut }}>&nbsp;· {v.local > 0 ? `${v.local} en el local` : 'sin stock en el local'}</span>}
-              </Button>
-            ))}
-            {candidatos.mas > 0 && (
-              <span style={{ color: color.mut, fontSize: font.sm, width: '100%' }}>
-                Y {candidatos.mas} más: escribí el color o el talle para achicar la lista.
-              </span>
-            )}
-          </div>
+          <ListaPrendas
+            titulo="Ese código es de varias prendas: elegí cuál."
+            con={candidatos.lista}
+            masCon={candidatos.mas}
+            sin={[]}
+            masSin={0}
+            verSin={false}
+            onVerSin={() => {}}
+            precioYFoto={precioYFoto}
+            onElegir={elegirCandidato}
+          />
         )}
       </SectionCard>
 
@@ -516,6 +553,91 @@ export function Caja() {
       )}
 
       {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
+    </div>
+  )
+}
+
+/**
+ * Las prendas para elegir, con foto, precio de etiqueta y el stock del local (de anoche: el vivo se
+ * lee al elegir). Por defecto sólo las que hay en el local; «Mostrar sin stock» suma el resto, para
+ * poder vender una prenda que el sistema da en cero (Bruno, 4-oct).
+ */
+function ListaPrendas({
+  titulo,
+  con,
+  masCon,
+  sin,
+  masSin,
+  verSin,
+  onVerSin,
+  precioYFoto,
+  onElegir,
+}: {
+  titulo?: string
+  con: Candidato[]
+  masCon: number
+  sin: Candidato[]
+  masSin: number
+  verSin: boolean
+  onVerSin: () => void
+  precioYFoto: (productId: number) => { precio: number | null; foto: string | null }
+  onElegir: (v: Variante) => void
+}) {
+  const fila = (v: Candidato, apagada: boolean) => {
+    const { precio, foto } = precioYFoto(v.product_id)
+    return (
+      <button
+        key={claveDe(v)}
+        type="button"
+        onClick={() => onElegir(v)}
+        style={{
+          height: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: space[3],
+          padding: space[2],
+          textAlign: 'left',
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.md,
+          background: color.surface,
+          cursor: 'pointer',
+          opacity: apagada ? 0.6 : 1,
+        }}
+      >
+        {foto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={foto} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: radius.md, flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 48, height: 48, borderRadius: radius.md, background: color.line, flexShrink: 0 }} />
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: weight.semibold, color: color.ink }}>
+            {v.product_name} · {v.size_name}
+          </div>
+          <div style={{ fontSize: font.sm, color: color.mut }}>
+            {(v.local ?? 0) > 0 ? `${v.local} en el local` : 'sin stock en el local'}
+          </div>
+        </div>
+        <div style={{ fontWeight: weight.semibold, color: color.ink }}>{precio ? plata(precio) : '—'}</div>
+      </button>
+    )
+  }
+  const totalSin = sin.length + masSin
+  return (
+    <div style={{ marginTop: space[3], display: 'grid', gap: space[2] }}>
+      {titulo && <span style={{ color: color.mut, fontSize: font.sm }}>{titulo}</span>}
+      {con.length === 0 && !verSin && <span style={{ color: color.mut, fontSize: font.sm }}>Ninguna con stock en el local.</span>}
+      {con.map((v) => fila(v, false))}
+      {masCon > 0 && <span style={{ color: color.mut, fontSize: font.sm }}>Y {masCon} más: escribí el color o el talle para achicar la lista.</span>}
+      {verSin && sin.map((v) => fila(v, true))}
+      {verSin && masSin > 0 && <span style={{ color: color.mut, fontSize: font.sm }}>Y {masSin} más sin stock.</span>}
+      {!verSin && totalSin > 0 && (
+        <div>
+          <Button variant="ghost" size="sm" onClick={onVerSin}>
+            Mostrar sin stock ({totalSin})
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

@@ -324,6 +324,18 @@ describe('caja · lecturas', () => {
       expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 } })
     })
 
+    it('buscar (mientras se escribe): dos listas, con y sin stock en el LOCAL, ⛔ pega a GN', async () => {
+      conSesion(CAJERA)
+      base.inventario = [...fila(1, 1, 'CORSET FRANK Verde', 'M', 0), ...fila(1, 2, 'CORSET FRANK Verde', 'S', 2), ...fila(2, 1, 'TOP EVA', 'S', 5)]
+      const llamadas = gn.gets.length
+      const r = await correr(req('GET', { action: 'buscar', q: 'frank' }))
+      expect(r.code).toBe(200)
+      expect(r.body).toMatchObject({ conStock: [{ size_name: 'S', local: 2 }], sinStock: [{ size_name: 'M', local: 0 }], masCon: 0, masSin: 0 })
+      expect(gn.gets.length).toBe(llamadas)
+      expect((await correr(req('GET', { action: 'buscar', q: '000001' }))).body).toMatchObject({ conStock: [], sinStock: [] })
+      expect((await correr(req('GET', { action: 'buscar', q: 'zzz' }))).body).toMatchObject({ conStock: [], sinStock: [] })
+    })
+
     it('un número que ⛔ es código ⇒ 404, ⛔ se busca por nombre', async () => {
       conSesion(CAJERA)
       base.inventario = fila(1, 1, 'BABY TEE 38', 'U', 1)
