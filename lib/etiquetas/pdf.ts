@@ -9,6 +9,7 @@
  */
 
 import type { LabelItem, LineaEtiqueta, ModoEtiqueta, Promo, VarianteEti } from './tipos'
+import { claveDe, PREFIJO_ESTANTE } from '../ubicaciones-local/core.core.js'
 
 const FP_FS: Record<string, number> = { titulo: 11, subtitulo: 9, normal: 8, chico: 6.5 }
 
@@ -379,6 +380,13 @@ const BOLSA = {
   /** El pie con el nombre del producto: cuerpo fijo, y el aire que lo separa de los SKU. */
   fsPie: 11,
   gapPie: 5,
+  /**
+   * Las barras con la CLAVE del producto (`RBT-0137`), justo arriba del pie: es lo que lee el lector
+   * en «Ubicaciones depósito». Anchas a propósito: la bolsa es esmerilada y se escanea apilada.
+   */
+  barW: 84,
+  barH: 16,
+  gapBarras: 4,
 }
 
 /**
@@ -407,6 +415,23 @@ export function repartirSku<T>(vs: T[], tope = SKU_POR_BOLSA): T[][] {
 /** Una bolsa del depósito: un producto y los SKU que van pegados en ella. */
 export type BolsaSku = { producto: string; variantes: VarianteEti[] }
 
+/**
+ * Los SKU de una bolsa, partidos por producto según la regla del depósito (`claveDe`), en el orden
+ * en que llegaron.
+ *
+ * 🔑 **Una etiqueta lleva UNA sola clave en las barras**, porque escanearla dice «esta bolsa es de
+ * este producto». Las hermanas salen del producto de Gestión Nube (`pid`), y ahí a veces conviven
+ * SKU de bases distintas: juntarlos en una hoja dejaría barras que mienten sobre la mitad de la bolsa.
+ */
+export function partirPorClave(vs: VarianteEti[]): VarianteEti[][] {
+  const grupos = new Map<string, VarianteEti[]>()
+  for (const v of vs) {
+    const k = claveDe(v.sku)
+    grupos.set(k, [...(grupos.get(k) || []), v])
+  }
+  return [...grupos.values()]
+}
+
 /** Alto en mm de la tira de SKU con un cuerpo dado. Una variante sin color no gasta su renglón. */
 function altoBloques(vs: VarianteEti[], fs: number): number {
   const fsVar = Math.max(BOLSA.fsVarMin, fs * BOLSA.ratioVar)
@@ -426,11 +451,14 @@ function anchoMayor(pdf: Pdf, vs: VarianteEti[], fs: number): number {
   return vs.reduce((m: number, v) => Math.max(m, pdf.getTextWidth(v.sku || '')), 0)
 }
 
-function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku, JsBarcode: any | null) {
   const { W, Hh, M } = BOLSA
   const CX = W / 2
   const ancho = W - M * 2
   const vs = bolsa.variantes
+  // Con barras, la hoja ya viene partida por clave (`partirPorClave`): la de la primera es la de todas.
+  const barras = JsBarcode ? claveDe(vs[0]?.sku) || null : null
 
   // El pie se mide PRIMERO: el lugar que ocupa es el que los SKU no tienen, y son ellos los que se
   // achican. Al revés, un nombre de dos renglones les comía el borde de abajo sin avisar.
@@ -438,7 +466,8 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku) {
   pdf.setFontSize(BOLSA.fsPie)
   const pie = pdf.splitTextToSize((bolsa.producto || '—').toUpperCase(), ancho).slice(0, 2)
   const altoPie = pie.length * (BOLSA.fsPie * 0.42) + BOLSA.gapPie
-  const disponible = Hh - M * 2 - altoPie
+  const altoBarras = barras ? BOLSA.barH + BOLSA.gapBarras : 0
+  const disponible = Hh - M * 2 - altoPie - altoBarras
 
   let fs = BOLSA.fsMax
   while (fs > BOLSA.fsMin && (altoBloques(vs, fs) > disponible || anchoMayor(pdf, vs, fs) > ancho)) fs -= 1
@@ -464,6 +493,20 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku) {
   })
 
   const yPie = Hh - M - pie.length * (BOLSA.fsPie * 0.42)
+  // 📌 Sin el número abajo de las barras: los SKU de arriba ya lo dicen, más grande.
+  if (barras) {
+    const yBarras = yPie - BOLSA.gapPie - BOLSA.barH
+    try {
+      const canvas = document.createElement('canvas')
+      JsBarcode(canvas, barras, { format: 'CODE128', displayValue: false, width: 2, height: 60, margin: 0 })
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - BOLSA.barW / 2, yBarras, BOLSA.barW, BOLSA.barH)
+    } catch {
+      pdf.setTextColor(0)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(BOLSA.fsPie)
+      pdf.text(barras, CX, yBarras, { align: 'center', baseline: 'top' })
+    }
+  }
   pdf.setDrawColor(170)
   pdf.setLineWidth(0.3)
   pdf.line(M, yPie - BOLSA.gapPie / 2, W - M, yPie - BOLSA.gapPie / 2)
@@ -483,19 +526,79 @@ function dibujarBolsa(pdf: Pdf, bolsa: BolsaSku) {
  * ⚠️ **Una variante sin SKU no entra**, porque no habría nada que imprimir; una bolsa que se queda
  * sin ninguna se saltea entera. Con todas vacías devuelve `null` en vez de un PDF en blanco, que es
  * lo que se manda a la impresora sin que nadie se entere.
+ *
+ * 🔑 **`conClave`: las barras de «Ubicaciones depósito»** (sólo Zattia, que es donde existe ese
+ * depósito). Pone la clave del producto en barras arriba del pie y parte las hojas por clave. Apagado
+ * dibuja lo de siempre: en BDI 3 productos de 152 juntan dos bases de SKU y se partirían sin motivo.
  */
-export async function buildSkuGrandePdf(bolsas: BolsaSku[]): Promise<Pdf | null> {
+export async function buildSkuGrandePdf(bolsas: BolsaSku[], opts: { conClave?: boolean } = {}): Promise<Pdf | null> {
   const { jsPDF } = await import('jspdf')
+  const JsBarcode = opts.conClave ? (await import('jsbarcode')).default : null
   const { W, Hh } = BOLSA
   const hojas: BolsaSku[] = []
   for (const b of bolsas || []) {
-    for (const tanda of repartirSku((b.variantes || []).filter((v) => (v.sku || '').trim()))) hojas.push({ producto: b.producto, variantes: tanda })
+    const conSku = (b.variantes || []).filter((v) => (v.sku || '').trim())
+    for (const producto of opts.conClave ? partirPorClave(conSku) : [conSku]) {
+      for (const tanda of repartirSku(producto)) hojas.push({ producto: b.producto, variantes: tanda })
+    }
   }
   if (!hojas.length) return null
   const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'portrait' })
   hojas.forEach((hoja, i) => {
     if (i > 0) pdf.addPage([W, Hh], 'portrait')
-    dibujarBolsa(pdf, hoja)
+    dibujarBolsa(pdf, hoja, JsBarcode)
+  })
+  return pdf
+}
+
+// ── La etiqueta de estante: 10 × 15 cm con el nombre enorme y `EST-…` en barras ──
+
+const ESTANTE = { W: 100, Hh: 150, M: 8, fsRotulo: 16, fsNombre: 120, fsNombreMin: 40, barW: 84, barH: 26, gap: 8 }
+
+/**
+ * Las etiquetas de estante de «Ubicaciones depósito»: una hoja por estante, con «ESTANTE» arriba,
+ * el nombre enorme (se lee desde la puerta) y las barras `EST-A1`, que es lo que le dice al lector
+ * «lo que sigue va en este estante».
+ *
+ * 📌 Los nombres llegan ya validados (`nombresDeEstantes`). Sin ninguno devuelve `null`, igual que
+ * la etiqueta de bolsa: un PDF en blanco se manda a la impresora sin que nadie se entere.
+ */
+export async function buildEstantesPdf(nombres: string[]): Promise<Pdf | null> {
+  const lista = (nombres || []).map((n) => String(n || '').trim().toUpperCase()).filter(Boolean)
+  if (!lista.length) return null
+  const { jsPDF } = await import('jspdf')
+  const JsBarcode = (await import('jsbarcode')).default
+  const { W, Hh, M } = ESTANTE
+  const CX = W / 2
+  const pdf = new jsPDF({ unit: 'mm', format: [W, Hh], orientation: 'portrait' })
+  lista.forEach((nombre, i) => {
+    if (i > 0) pdf.addPage([W, Hh], 'portrait')
+    const codigo = PREFIJO_ESTANTE + nombre
+    pdf.setTextColor(90)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(ESTANTE.fsRotulo)
+    pdf.text('ESTANTE', CX, M, { align: 'center', baseline: 'top' })
+
+    // El nombre arranca enorme y baja hasta entrar a lo ancho («A1» entra a 120; «REJA12», no).
+    pdf.setTextColor(0)
+    pdf.setFont('helvetica', 'bold')
+    let fs = ESTANTE.fsNombre
+    pdf.setFontSize(fs)
+    while (fs > ESTANTE.fsNombreMin && pdf.getTextWidth(nombre) > W - M * 2) pdf.setFontSize((fs -= 4))
+    const yBarras = Hh - M - ESTANTE.barH
+    const arriba = M + ESTANTE.fsRotulo * 0.42
+    const yNombre = arriba + Math.max(0, (yBarras - ESTANTE.gap - arriba - fs * 0.42) / 2)
+    pdf.text(nombre, CX, yNombre, { align: 'center', baseline: 'top' })
+
+    try {
+      const canvas = document.createElement('canvas')
+      JsBarcode(canvas, codigo, { format: 'CODE128', displayValue: true, fontSize: 22, width: 2, height: 60, margin: 0 })
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', CX - ESTANTE.barW / 2, yBarras, ESTANTE.barW, ESTANTE.barH)
+    } catch {
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(ESTANTE.fsRotulo)
+      pdf.text(codigo, CX, yBarras, { align: 'center', baseline: 'top' })
+    }
   })
   return pdf
 }

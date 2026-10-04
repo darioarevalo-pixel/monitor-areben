@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparLecturas, claveDe, controles, leerCodigo, ubicacionesDe } from '@/lib/ubicaciones-local/core.core.js'
+import { agruparLecturas, claveDe, controles, leerCodigo, nombresDeEstantes, TOPE_ESTANTES, ubicacionesDe } from '@/lib/ubicaciones-local/core.core.js'
 import { skuBase } from '@/lib/conteo-estandar/core'
 
 /**
@@ -96,5 +96,23 @@ describe('controles contra el stock del Local', () => {
   it('un stock negativo de GN no tapa el de otra variante', () => {
     const r = controles([{ estante: 'A1', clave: 'RBT-0137' }], [fila('RBT-0137-BE', -1), fila('RBT-0137-CR', 2)])
     expect(r.bolsaSinStock).toEqual([])
+  })
+})
+
+describe('nombresDeEstantes: lo que se tipea para imprimir las etiquetas de estante', () => {
+  it('sueltos y rangos, con o sin la letra repetida, sin repetidos', () => {
+    expect(nombresDeEstantes('A1-A3, b1-2 REJA a2')).toEqual({ nombres: ['A1', 'A2', 'A3', 'B1', 'B2', 'REJA'], invalidos: [], recortado: false })
+  })
+  it("`EST-A1` es A1, y el `'` del lector en castellano es un guion", () => {
+    expect(nombresDeEstantes("EST-A1 EST'A2 A3..A4").nombres).toEqual(['A1', 'A2', 'A3', 'A4'])
+  })
+  it('🔴 lo que no entiende lo DEVUELVE, ⛔ no lo descarta callado', () => {
+    expect(nombresDeEstantes('A5-A2 A1-B3 ABCDEFGHI ok').invalidos).toEqual(['A5-A2', 'A1-B3', 'ABCDEFGHI'])
+  })
+  it('un rango desmedido es un error de tipeo, no 1000 hojas', () => {
+    expect(nombresDeEstantes('A1-A1000')).toEqual({ nombres: [], invalidos: ['A1-A1000'], recortado: false })
+    const r = nombresDeEstantes('A1-A40 B1-B40')
+    expect(r.nombres).toHaveLength(TOPE_ESTANTES)
+    expect(r.recortado).toBe(true)
   })
 })

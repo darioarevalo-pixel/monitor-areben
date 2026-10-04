@@ -27,7 +27,8 @@ import {
   categoriasDeCampania,
   variantesSinCodigo,
 } from '@/lib/etiquetas/core'
-import { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
+import { buildEstantesPdf, buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, imprimirPdf, SKU_POR_BOLSA, type BolsaSku, type CtxEtiqueta } from '@/lib/etiquetas/pdf'
+import { nombresDeEstantes, TOPE_ESTANTES } from '@/lib/ubicaciones-local/core.core.js'
 import {
   admiteFormasDePago,
   CONFIG_SKU_DEFAULT,
@@ -65,6 +66,11 @@ const keyFP = (marca: Marca) => `monitor_eti_fp_v3_${marca}`
 const keyCfgSku = (marca: Marca) => `monitor_eti_sku_cfg_${marca}`
 const keyCampaniaLiq = (marca: Marca) => `monitor_eti_campania_liq_${marca}`
 const keyCampaniaTirada = (marca: Marca) => `monitor_eti_campania_tirada_${marca}`
+/**
+ * La etiqueta de bolsa lleva la clave del producto en barras sólo donde existe «Ubicaciones depósito»
+ * (el depósito de atrás del local de Zattia): es lo que se escanea ahí.
+ */
+const conClave = (marca: Marca) => marca === 'zattia'
 function lsGet<T>(key: string, fallback: T): T {
   try {
     const r = localStorage.getItem(key)
@@ -321,7 +327,7 @@ export function Etiquetas() {
         ? // Una bolsa por etiqueta: la cantidad de la fila son **copias de la misma bolsa**. Juntar
           // los colores de un producto en una sola es cosa del escáner, que es donde hay una prenda
           // en la mano y un producto claro; acá cada fila es una variante y su número.
-          await buildSkuGrandePdf(imprimibles.flatMap((g) => Array.from({ length: g.cant }, (): BolsaSku => ({ producto: g.v.name || '', variantes: [g.v] }))))
+          await buildSkuGrandePdf(imprimibles.flatMap((g) => Array.from({ length: g.cant }, (): BolsaSku => ({ producto: g.v.name || '', variantes: [g.v] }))), { conClave: conClave(marca) })
         : await buildEtiquetasPdf(secuenciaLabels(imprimibles, opts), modo, ctxDe(slot))
     if (pdf) imprimirPdf(pdf)
     if (slot === 'cola') anotarEtiquetado(imprimibles)
@@ -352,7 +358,7 @@ export function Etiquetas() {
   const imprimirSku = async (lista: VarianteEti[]) => {
     if (!lista.length) return
     const pdf = cfgSku.grande
-      ? await buildSkuGrandePdf([{ producto: lista[0].name || '', variantes: lista }])
+      ? await buildSkuGrandePdf([{ producto: lista[0].name || '', variantes: lista }], { conClave: conClave(marca) })
       : await buildEtiquetasPdf(lista, 'sku', ctx)
     if (pdf) imprimirPdf(pdf)
     anotarEtiquetado(lista.map((v) => ({ v })))
@@ -403,7 +409,11 @@ export function Etiquetas() {
       {sub === 'cola' && desalineados.length > 0 && <AvisoDesalineados filas={desalineados} nombreDe={nombrePorPid} />}
 
       {sub === 'libre' ? (
-        <LibreEditor />
+        <>
+          <LibreEditor />
+          {/* El depósito de atrás del local es de Zattia (Stunned guarda en la misma zona, con su prefijo). */}
+          {marca === 'zattia' && <EstantesEditor />}
+        </>
       ) : sub === 'campania' ? (
         <PrecioDeCampania vars={vars} marca={marca} />
       ) : (
@@ -1560,6 +1570,69 @@ function LibreEditor() {
   )
 }
 
+// ── Etiquetas de estante (Ubicaciones depósito) ──
+
+/**
+ * Las etiquetas de los estantes del depósito de atrás del local: se tipean los nombres y salen
+ * todas de una vez, una hoja de 10 × 15 por estante.
+ *
+ * 🔑 **Las barras dicen `EST-A1`**: es lo que le avisa al lector de «Ubicaciones depósito» que
+ * empieza un estante. Por eso no se arman con la libre, donde el prefijo depende de que alguien se
+ * acuerde de tipearlo.
+ */
+function EstantesEditor() {
+  const { avisar } = useConfirmar()
+  const [texto, setTexto] = useState('')
+  const { nombres, invalidos, recortado } = useMemo(() => nombresDeEstantes(texto), [texto])
+  const construir = useCallback(() => buildEstantesPdf(nombres.slice(0, 1)), [nombres])
+
+  const imprimir = async () => {
+    if (invalidos.length) {
+      await avisar(`No entiendo ${invalidos.length === 1 ? 'este nombre' : 'estos nombres'}: ${invalidos.join(', ')}. Usá letras y números (hasta 8), o un rango como A1-A12.`)
+      return
+    }
+    const pdf = await buildEstantesPdf(nombres)
+    if (pdf) imprimirPdf(pdf)
+  }
+
+  return (
+    <Card style={{ marginTop: space[4] }}>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ flex: '1 1 280px' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>🗄️ Etiquetas de estante</div>
+          <div style={{ fontSize: 12, color: color.mut2, marginBottom: 14 }}>
+            Para el depósito de atrás del local. Cada estante lleva una etiqueta de 10 × 15 con su nombre grande y un código de barras: en{' '}
+            <b>Ubicaciones depósito</b> se escanea primero el estante y después sus bolsas.
+          </div>
+          <label style={{ fontSize: 12, color: color.mut, display: 'block' }}>
+            Estantes
+            <br />
+            <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="ej. A1-A12, B1-B6" className="mo-input" style={{ width: '100%', maxWidth: 360 }} />
+          </label>
+          <div style={{ fontSize: 12, color: invalidos.length ? color.danger : color.mut2, marginTop: 6 }}>
+            {invalidos.length
+              ? `No entiendo: ${invalidos.join(', ')}`
+              : nombres.length
+                ? `${nombres.length} ${nombres.length === 1 ? 'etiqueta' : 'etiquetas'}: ${nombres.join(' · ')}${recortado ? ` (se imprimen las primeras ${TOPE_ESTANTES})` : ''}`
+                : 'Separados por coma, o un rango como A1-A12.'}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Button variant="solid" tone="brand" disabled={!nombres.length} onClick={() => void imprimir()}>
+              Imprimir {nombres.length ? `${nombres.length} ${nombres.length === 1 ? 'etiqueta' : 'etiquetas'}` : ''}
+            </Button>
+          </div>
+        </div>
+        {nombres.length > 0 && (
+          <div style={{ minWidth: 134 }}>
+            <div style={{ fontSize: 12, color: color.mut, marginBottom: 6 }}>Así sale:</div>
+            <PreviaPdf construir={construir} retrato alt={`Vista previa de la etiqueta del estante ${nombres[0]}`} vacio="Dibujando…" />
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 function titulo(modo: ModoEtiqueta): string {
   return `${ETIQUETA[modo].emoji} Etiqueta de ${ETIQUETA[modo].nombre.toLowerCase()}`
 }
@@ -1646,6 +1719,7 @@ function VistaPrevia({
   agrupar: boolean
   varsSku: VarianteEti[]
 }) {
+  const { marca } = useSesion()
   // 🔑 **La previa muestra lo que un escaneo de ESA prenda produciría**, colores incluidos: con las
   // opciones de la bolsa prendidas, la etiqueta de una variante sola ya no es lo que se imprime.
   const bolsa = useMemo(
@@ -1655,8 +1729,8 @@ function VistaPrevia({
   const construir = useCallback(() => {
     const lista = bolsa.length ? bolsa : muestra ? [muestra] : []
     if (!lista.length) return null
-    return grande ? buildSkuGrandePdf([{ producto: lista[0].name || '', variantes: lista }]) : buildEtiquetasPdf(lista, modo, ctx)
-  }, [modo, muestra, ctx, grande, bolsa])
+    return grande ? buildSkuGrandePdf([{ producto: lista[0].name || '', variantes: lista }], { conClave: conClave(marca) }) : buildEtiquetasPdf(lista, modo, ctx)
+  }, [modo, muestra, ctx, grande, bolsa, marca])
 
   return (
     <div style={{ minWidth: grande ? 134 : 210 }}>

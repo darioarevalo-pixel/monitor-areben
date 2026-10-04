@@ -84,7 +84,7 @@ vi.stubGlobal('document', {
   createElement: () => ({ toDataURL: () => 'data:image/png;base64,XX' }),
 })
 
-const { buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf } = await import('@/lib/etiquetas/pdf')
+const { buildEstantesPdf, buildEtiquetasPdf, buildLibrePdf, buildSkuGrandePdf, partirPorClave } = await import('@/lib/etiquetas/pdf')
 type VarianteEti = import('@/lib/etiquetas/tipos').VarianteEti
 
 /** Un producto fijo. Nada de esto se toca: mover el fixture invalida la comparación. */
@@ -96,6 +96,11 @@ const SIN_SKU: VarianteEti = { ...PRENDA, id: 'v2', sku: '', name: 'Top Aurea', 
 /** Los colores de un mismo producto: la bolsa que la etiqueta de 10 × 15 vino a resolver. */
 const COLORES: VarianteEti[] = ['Negro', 'Blanco', 'Rojo', 'Azul'].map((c, i) => ({
   id: `c${i}`, pid: '202', name: 'Campera Puffer', size: c, sku: `CP-${c.slice(0, 3).toUpperCase()}`, barcode: `77900200${i}`, stock: 3,
+}))
+
+/** Los colores con SKU de verdad (`RBT-0137-…`): la clave del producto sale de ahí y va en barras. */
+const RBT: VarianteEti[] = ['NG', 'BE', 'AZ'].map((c, i) => ({
+  id: `r${i}`, pid: '303', name: 'Remera Basic', size: c, sku: `RBT-0137-${c}`, barcode: `77900300${i}`, stock: 5,
 }))
 
 const CTX = {
@@ -137,6 +142,12 @@ describe('el dibujo de las etiquetas no se mueve', () => {
     )
     // Sin color en la variante no se dibuja el renglón de abajo: no hay nada que decir.
     salida['sku-grande-sin-color'] = await grabar(() => buildSkuGrandePdf([{ producto: 'Campera Puffer', variantes: [{ ...COLORES[0], size: '' }] }]))
+    // Con la clave del producto en barras, arriba del pie: una sola para los tres colores.
+    salida['sku-grande-clave'] = await grabar(() => buildSkuGrandePdf([{ producto: 'Remera Basic', variantes: RBT }], { conClave: true }))
+    // Con dos bases de SKU en el mismo producto de GN: una hoja por clave.
+    salida['sku-grande-clave-mezcla'] = await grabar(() => buildSkuGrandePdf([{ producto: 'Remera Basic', variantes: [RBT[0], { ...RBT[1], sku: 'RBT-0140-BE' }] }], { conClave: true }))
+    // La etiqueta de estante: el nombre enorme, y uno largo que se achica para entrar.
+    salida['estantes'] = await grabar(() => buildEstantesPdf(['A1', 'REJA12']))
     salida['libre-chica'] = await grabar(() =>
       buildLibrePdf({ grande: false, copias: 2, barcode: '779000', precio: 12990, lineas: CTX.fpLines }),
     )
@@ -148,6 +159,27 @@ describe('el dibujo de las etiquetas no se mueve', () => {
       writeFileSync(CINTA, JSON.stringify(salida, null, 2) + '\n')
     }
     expect(salida).toEqual(JSON.parse(readFileSync(CINTA, 'utf8')))
+  })
+
+  it('🔑 una hoja de bolsa lleva UNA clave: dos bases en el mismo producto de GN salen en dos hojas', () => {
+    const mezcla = [RBT[0], { ...RBT[1], sku: 'RBT-0140-BE' }, RBT[2]]
+    expect(partirPorClave(mezcla).map((g) => g.map((v) => v.sku))).toEqual([['RBT-0137-NG', 'RBT-0137-AZ'], ['RBT-0140-BE']])
+  })
+
+  it('sin estantes no hay PDF: devuelve null', async () => {
+    expect(await buildEstantesPdf([])).toBeNull()
+    expect(await buildEstantesPdf(['  '])).toBeNull()
+  })
+
+  it('las barras del estante dicen EST- y el nombre; las de la bolsa, la clave', async () => {
+    const codigos: string[] = []
+    const espia = vi.spyOn(await import('jsbarcode'), 'default').mockImplementation(((_c: unknown, valor: string) => { codigos.push(valor) }) as never)
+    await buildEstantesPdf(['a1'])
+    await buildSkuGrandePdf([{ producto: 'Remera Basic', variantes: RBT }], { conClave: true })
+    await buildSkuGrandePdf([{ producto: 'Remera Basic', variantes: RBT }])
+    espia.mockRestore()
+    // La tercera es sin `conClave` (BDI): ⛔ ninguna barra.
+    expect(codigos).toEqual(['EST-A1', 'RBT-0137'])
   })
 
   it('la etiqueta libre vacía no dibuja nada: devuelve null', async () => {
