@@ -729,11 +729,9 @@ function ListaPrendas({
           <div style={{ fontWeight: weight.semibold, color: color.ink }}>
             {v.product_name} · {v.size_name}
           </div>
-          <div style={{ fontSize: font.sm, color: color.mut }}>
-            {/* El stock de la lista es el de ANOCHE (tipear ⛔ gasta el cupo de GN): lo vendido hoy —en el
-                mostrador o en la web— recién se ve al elegirla, que lee GN en vivo (Bruno, 4-oct). */}
-            {(v.local ?? 0) > 0 ? `${v.local} en el local anoche` : 'sin stock en el local anoche'}
-          </div>
+          {/* ⛔ Número de stock: el de la lista es el de ANOCHE (tipear ⛔ gasta el cupo de GN) y un número
+              viejo confunde. Sólo ordena —con stock arriba, el resto tras «Mostrar sin stock»—; el real lo
+              dice el renglón al elegirla, que lee GN en vivo (Bruno, 4-oct). */}
         </div>
         <div style={{ fontWeight: weight.semibold, color: color.ink }}>{precio ? plata(precio) : '—'}</div>
       </button>

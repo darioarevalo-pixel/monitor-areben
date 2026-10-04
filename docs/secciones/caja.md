@@ -47,7 +47,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **La lista aparece MIENTRAS se escribe** (`action=buscar`, Bruno 4-oct): con 3 caracteres y alguna
   letra (un código numérico del lector ⛔ la abre), con foto y precio de etiqueta. Por defecto sólo lo
   que hay en el LOCAL (stock de anoche: ⛔ pega a GN, tipear ⛔ gasta el cupo); «Mostrar sin stock»
-  suma el resto para venderlo igual. El Enter sigue buscando por código primero.
+  suma el resto para venderlo igual. ⛔ Muestra el número de anoche (confundía: lo vendido hoy ⛔ está):
+  el stock real lo dice el renglón al elegirla. El Enter sigue buscando por código primero.
 - 🔑 **La cajera ve CUATRO formas de pago; la cuenta de GN es INTERNA** (Bruno, 4-oct). `cuentaDeMedio`
   (`core.core.js`) la resuelve con `caja_config.reglas.medios` (`sql/migrate-caja-medios.sql`):
   Efectivo 12921 · Débito 20196 · Transferencia ⇒ `transferenciaA` (13015 Areben Comercial, espera MP |
