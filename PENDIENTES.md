@@ -13,6 +13,119 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ TEST BDI: GENTE QUE INTERACTUÓ EN INSTAGRAM, CON UN AVISO GANADOR — 2-oct-2026 (dictado por Bruno)
+
+Bruno: *«pautar meta con gente que interactuó en instagram es malo como público?»* → *«sí, BDI
+probaría, con algún anuncio ganador»*. **Nunca se probó**: desde mayo ningún conjunto apuntó a
+interacción de IG. El 7% «remarketing» de la pantalla Fría vs remarketing son los **SIMILAR**
+(lookalikes), ver el bug abajo.
+
+- **Lanzar el DOM 4-oct** (las tandas se lanzan dom o lun) · celda **$10.000/día × 2 días**, puerta
+  0-1 muere · 2-3 sigue · 4+ aprobado → veredicto **mar 6-oct**.
+- **Público**: interactuaron con la cuenta de IG de BDI, 365 d, **excluyendo compradores**. Mirar el
+  tamaño estimado en Ads Manager: con menos de ~30.000 personas, $10.000/día lo quema en el test.
+- **Aviso**: TANDA 14 · new items (`#063yuv6-5`, el mejor CPA de 30 d: 52% del techo, ROAS 6,6, y
+  «lo nuevo» es el mensaje para quien ya conoce la marca). Suplente: AD02 GIRLHOOD COLLECTION.
+  **Conjunto NUEVO**, ⛔ nunca sumarlo a uno que ya gasta; mirar que ⛔ no se prenda el catálogo.
+- **Lo crea Bruno en Ads Manager**: el monitor ⛔ no crea públicos personalizados.
+- 🔴 **Al leerlo**: la atribución le regala compras al remarketing (le muestra el aviso al que ya
+  venía decidido) ⇒ un buen CPA acá ⛔ no prueba incrementalidad. Escalarlo pide ver que suban los
+  **pedidos de la tienda**, ⛔ sólo las compras de Meta.
+
+### 🔴 Bug: «Fría vs remarketing» cuenta los LOOKALIKES como remarketing
+`publicoDe()` (`lib/meta-ads/publicos.core.js`) marca `remarketing` a todo conjunto con
+`custom_audiences`, y un similar ES un custom audience. Medido el 2-oct: el balde «remarketing» de
+BDI a 30 d ($183.859, 25 compras, 4 conjuntos) coincide **al peso** con los 4 `x SIMILAR`. Hace falta
+leer el `subtype` del público (`LOOKALIKE` ⇒ gente nueva). Y el 93% de la plata cae en
+«sin-clasificar» (23 de 26 conjuntos sin público leído).
+
+---
+
+## ▶️ PAUTA 4-OCT: LA FERIA TIENE MENOS TECHO — 4-oct-2026 (dictado por Bruno)
+
+🔑 **La regla (Bruno):** *«las que para mí tienen menos techo son las de feria, porque si no venden
+no vale la pena que el costo por compra sea alto, porque no tengo margen en esos productos»* ⇒ el
+techo de Zattia ($3.851, a precio de lista) ⛔ **no vale para un aviso de feria**.
+Medido 29-sep → 3-oct (venta − costo de GN, **bruto**: antes de IVA, comisión TN/pago y envío):
+- Feria ONLINE: $10.983/u − $9.127 costo = **$1.856/u (17%)** · 1,85 u/pedido ⇒ **~$3.400 por pedido**.
+- Precio lleno ONLINE: $31.323/u − $13.281 = **$18.042/u (58%)** — sólo 6 pedidos en 5 días.
+- LOCAL: feria 14% de margen · lleno 53%. El local vende **nueva temporada** (124 u lleno vs 129 feria
+  del 1 al 3-oct); el online casi nada (3 pedidos con precio lleno en esos 3 días, de 41).
+⇒ Con el CPA de Zattia en ~$2.900, **un pedido de feria deja para Meta todo el margen bruto** y,
+descontados comisión y envío, pierde. ▶️ Falta fijar el techo de feria (con comisión y envío reales).
+
+🔑 **La decisión de la Reunión de Gerencia del 3-oct (Bruno y Darío; `~/Documents/reunion-gerencia/
+2026-10-03 Aclaraciones.txt`, que prevalece sobre la transcripción):** Zattia se sigue pautando **sin
+exigir el CPA online como objetivo**, mientras la percepción sea que sirve —la pauta también lleva
+gente al LOCAL y eso Meta no lo mide—. Condición: buena oferta para mostrar. Gasto **~$30.000/día,
+APROXIMADO** (Bruno, 4-oct: si hay pauta que vende online, se puede pasar). Los $4.000 de margen
+fueron un ejemplo.
+🔴 **Regla (Bruno, 4-oct): ⛔ no se pausa sin antes ver si VENDE, online Y en el local** — unidades
+del producto del aviso por día, antes y después de prenderlo, por canal (`ventas.channel` «Mi Local» /
+«Tienda Nube» en la base de Zattia). El %techo y la puerta del test ⛔ no alcanzan para pausar en Zattia.
+
+Ejecutado 4-oct (Zattia queda en **$32.200/día**):
+- night-outfits **pausada** (#340) — 204% del techo después de su −20%.
+- sweaters-feria **−20% → $5.600** (#341): online 7→1→2→1 u/día y el local BAJÓ de ~7,5 a ~4/día. Se mira el mié 7.
+- corsets-feria **sigue en $7.000**: 22 u online en 4 días (0 antes) y el local subió de ~1,3 a ~3,5/día.
+- shorts-denim-ss27, meta-shorts, meta-blusas (nueva temporada): sin tocar.
+
+▶️ **BDI · test #334 (interacción IG) se corrió al LUN 5-oct** (el dom no se pudo) ⇒ veredicto jue 8.
+▶️ **Stunned · BROAD - PERFIL IG ($5.000/día) QUIETO: Bruno lo habla con el equipo** («a ver qué onda,
+si podemos armar algo»). El motor pide pausarlo por compras, que ⛔ no es su vara (es tráfico al perfil).
+Medido 4-oct: la venta de Stunned en el local ⛔ no sigue a la pauta — 3 semanas con $0 de gasto
+(24-ago→7-sep) vendieron 14 pedidos; la semana del 28-sep, con $56.470, vendió 2. Seguidores y visitas
+al perfil salen en 0 en la foto ⇒ su vara real se mira a mano en Instagram. El aviso nuevo para comparar
+⛔ no se llegó a testear.
+
+## ▶️ PAUTA 1-OCT: ZATTIA SE JUZGA POR NUEVA TEMPORADA, ⛔ NO POR COMPRAS — 1-oct-2026 (dictado por Bruno)
+
+🔑 **La regla (Bruno):** *«quiero ver si se está vendiendo nueva temporada o no, porque sino no
+sirve… puede vender un montón feria, pero no puedo mantener ese gasto»* ⇒ en Zattia, mientras dure
+la feria, **una compra de feria ⛔ no cuenta como acierto de la pauta**. El 🟢🟢 de la puerta del test
+cuenta compras de cualquier cosa y **dio ganadoras a las 4 de la TANDA 1 midiendo feria**.
+Medido en TN (27-30 sep): 208 pedidos, **196 sólo feria**, 12 con algo a precio lleno, contra 119
+compras de Meta de la TANDA 1. Ticket feria $22.012 · precio lleno $45-58k.
+
+Ejecutado y verificado en vivo (`meta_ads_decision` 328-332, se juzgan con vie 2 + sáb 3):
+- BDI · TANDA 12 encontraste tus fundas −20% → $7.680 (3d al 156%; **el parte no la listó en A BAJAR**).
+- Zattia · TANDA 1: **fits-by-zattia PAUSADA** · meta-blusas y night-outfits −20% → $5.600 · meta-shorts sigue en $7.000.
+- Stunned · TEST VENTA pausado (al 1er intento Meta aceptó y ⛔ no aplicó; al 2º sí).
+
+▶️ Pendiente:
+1. **Mañana vie 2 a la mañana, con el 1-oct cerrado**: +20% BDI · TANDA 14 MOODS x INTERESES
+   ($12.000 → $14.400) y GIRLHOOD FRIO ($7.963 → $9.555). Se frenan sólo si el 1-oct cierra en 0 **y** el 2 arranca mal.
+   🏁 **2-oct**: GIRLHOOD **escalado** a $9.555 (`meta_ads_decision` 333). TANDA 14 **⛔ NO**: compras
+   4→2→1, CPM +56% en 6 días, alcance a la mitad ⇒ se mira el lun 5 con 7d. TANDA 10 BLUE CASES
+   (102% del techo) **queda en $9.600** por decisión de Bruno, congelada hasta el lun 5 (#335).
+2. **`utm_content={{ad.name}}` en los avisos de Zattia** (Parámetros de URL): TN guarda `landing_url`
+   de cada pedido (180 de 208 lo traen), pero 149 entran por la home y el `fbclid` ⛔ trae el ad id ⇒
+   hoy **⛔ no se puede saber qué aviso vende nueva temporada**. Con el utm sí.
+3. **Stunned · tráfico a perfil sigue en $5.000** como base; Bruno testea un aviso nuevo para
+   comparar (el cuello es la diversidad creativa). 🔴 `visitas_perfil` y `seguidores` salen **en 0** en
+   `meta_ads_snapshot_dia` (campaña y conjunto) ⇒ hoy se compara sólo por costo por click ($49).
+4. **Bug del parte**: TANDA 12 · encontraste tus fundas (7d 116%, 3d 156%, congelamiento vencido el
+   30-sep) ⛔ no apareció en «A BAJAR».
+5. TANDA 2 de Zattia (prendida el mié 30): puerta el **sáb 3**. corsets-feria y sweaters-feria son de
+   feria ⇒ por la regla de arriba, aunque aprueben, ⛔ no escalar sin mirar qué venden.
+
+## ▶️ PAUTA: LO QUE QUEDÓ PARA HACER «TODO JUNTO MÁS TARDE» — 29-sep-2026 (dictado por Bruno)
+
+Del `/pauta` del martes 29. Ya ejecutado y verificado en vivo: TEST IP AZUL −20% ($4.032) y
+TANDA 10 BLUE CASES +20% ($9.600) — `meta_ads_decision` 320 y 321, se juzgan el jue 2-oct.
+
+1. **Stunned · `BROAD - PERFIL IG - 3 PIEZAS - 12/9`** (conjunto `120251633184700505`, $5.000/día):
+   el parte dice PAUSAR por 0 compras ($35.143 en 7 días), pero **manda al PERFIL, no a la tienda**
+   (0 visitas a la página el 28, 23 clicks) ⇒ la vara es otra. Decidir si sigue como tráfico a perfil.
+2. **Tanda de test nueva**: se lanza **dom 4 o lun 5-oct** (⛔ no martes: el día de lanzamiento
+   mueve la puerta 1,61×). Armarla antes.
+3. **Bug de `analista-meta/herramientas/parte-del-dia.mjs`**: `cerradosPendientes` descarta todo día
+   anterior al último `meta_ads_decision.fecha` ⇒ como hubo decisiones con fecha 28, **el domingo 27
+   no salió nunca** y el parte del 29 mostró sólo el lunes. Debería tomar los días posteriores a la
+   última corrida del parte, no a la última decisión.
+4. **BDI el lun 28: la tienda marca 3 pedidos contra 12 compras de Meta** (el dom 27 cuadró: 14 y
+   86%). Casi seguro espejo parcial del lunes; confirmar en el parte del 30.
+
 ## ▶️ CATEGORÍAS DE LOS ÚLTIMOS INGRESOS DE ZATTIA — 22-sep-2026 (dictado, medido, ⛔ SIN APLICAR)
 
 Bruno: *«quiero ver si podemos asignar categorías a los productos de los últimos ingresos que no
