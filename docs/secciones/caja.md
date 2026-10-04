@@ -38,6 +38,11 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔑 **Con GN caído se cobra igual**: el ticket sale con el número provisorio (8 letras del id) y la
   venta queda en el cartel rojo de Pendientes; la cola la reintenta cada 10 min.
 - 🔴 `referencias` trae el **saldo** de las cuentas de GN: al navegador va sólo id, nombre y regla.
+- 🔑 **El stock que se vende es el de LOCAL** (percha + el «depósito» de atrás del local). El Depósito de
+  GN ⛔ se vende desde la caja: sale como «para reponer» (Bruno, 4-oct).
+- 🔑 **Se busca también por NOMBRE y talle** (`lib/caja/buscar.core.js`): sólo si el código y el SKU ⛔
+  encontraron nada y hay letras. Cada palabra es comienzo de una del nombre o el talle entero, en
+  cualquier orden. Elegir de la lista trae la variante por `product_id`+`size_id`, ⛔ por barcode.
 - 🔴 El stock se lee con `GN_TOKEN_ZATTIA`; `GN_TOKEN_VENTAS` ⛔ lee `inventario` (caía al espejo, callado).
 - ⚠️ Cada unidad viaja en su renglón con `quantity: 1`: con cantidad > 1, cómo toma GN el descuento
   en pesos ⛔ está medido.

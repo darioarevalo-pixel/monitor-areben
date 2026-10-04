@@ -17,7 +17,9 @@ export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
 export type Variante = { product_id: number; size_id: number; product_name: string; size_name: string; sku: string | null; barcode: string | null }
 /** `vivo` = leído de GN recién; `espejo` = el de anoche, porque GN ⛔ contestó (`motivo`). */
 export type Stock = { local: number; deposito: number; fuente: 'vivo' | 'espejo'; motivo?: string }
-export type Producto = { variante: Variante; stock: Stock } | { candidatos: Variante[] }
+/** `candidatos`: el código es de varias prendas, o se buscó por nombre. `local` = stock del local de anoche; `mas` = las que no entraron. */
+export type Candidato = Variante & { local?: number }
+export type Producto = { variante: Variante; stock: Stock } | { candidatos: Candidato[]; mas?: number }
 
 /** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. */
 export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada'
@@ -69,7 +71,9 @@ const post = <T>(body: Record<string, unknown>, fallo: string) =>
 
 export const leerConfig = () => get<Config>('action=config', 'No se pudo leer la configuración de la Caja.')
 export const leerCuentas = () => get<{ cuentas: CuentaGN[] }>('action=referencias', 'No se pudieron leer las cuentas de cobro.')
-export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar el código.')
+export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar la prenda.')
+export const elegirVariante = (v: Variante) =>
+  get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
 export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; nombre?: string; talle?: string; foto?: string | null }

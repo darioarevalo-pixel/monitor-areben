@@ -42,11 +42,13 @@ import {
   cancelarVenta,
   confirmarVenta,
   cruzarVenta,
+  elegirVariante,
   guardarPolitica,
   leerConfig,
   leerCuentas,
   leerPendientes,
   reintentarVenta,
+  type Candidato,
   type Config,
   type Cruce,
   type CuentaGN,
@@ -122,7 +124,7 @@ export function Caja() {
   // código siguiente enseguida, y con el campo bloqueado ese escaneo se PERDÍA (visto en prod, 4-oct).
   const [buscando, setBuscando] = useState(0)
   const [aviso, setAviso] = useState<{ tono: 'danger' | 'warning'; texto: string } | null>(null)
-  const [candidatos, setCandidatos] = useState<Variante[] | null>(null)
+  const [candidatos, setCandidatos] = useState<{ lista: Candidato[]; mas: number } | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket } | null>(null)
   const [pendientes, setPendientes] = useState<Venta[]>([])
@@ -182,18 +184,18 @@ export function Caja() {
     else avisar('ok')
   }
 
-  async function escanear(texto: string) {
+  async function escanear(texto: string, elegida?: Variante) {
     const c = texto.trim()
-    if (!c) return
+    if (!c && !elegida) return
     prepararSonido()
     setCodigo('')
     setAviso(null)
     setCandidatos(null)
     setBuscando((n) => n + 1)
     try {
-      const r = await buscarProducto(c)
+      const r = await (elegida ? elegirVariante(elegida) : buscarProducto(c))
       if ('candidatos' in r) {
-        setCandidatos(r.candidatos)
+        setCandidatos({ lista: r.candidatos, mas: r.mas ?? 0 })
         avisar('mira')
       } else agregar(r.variante, r.stock)
     } catch (e) {
@@ -207,7 +209,7 @@ export function Caja() {
 
   async function elegirCandidato(v: Variante) {
     setCandidatos(null)
-    await escanear(v.barcode || v.sku || '')
+    await escanear('', v)
   }
 
   const cambiarRenglon = (i: number, cambio: Partial<Renglon>) =>
@@ -370,7 +372,7 @@ export function Caja() {
               e.preventDefault()
               escanear(codigo)
             }}
-            placeholder="Código de barras o SKU"
+            placeholder="Código de barras, SKU o nombre y talle"
             style={{ fontSize: font.xl, flex: 1 }}
           />
           <Button onClick={() => escanear(codigo)} loading={buscando > 0}>
@@ -384,12 +386,18 @@ export function Caja() {
         )}
         {candidatos && (
           <div style={{ marginTop: space[3], display: 'flex', gap: space[2], flexWrap: 'wrap' }}>
-            <span style={{ color: color.mut, fontSize: font.sm, width: '100%' }}>El código es de más de una prenda: elegí cuál.</span>
-            {candidatos.map((v) => (
+            <span style={{ color: color.mut, fontSize: font.sm, width: '100%' }}>Elegí cuál.</span>
+            {candidatos.lista.map((v) => (
               <Button key={claveDe(v)} variant="outline" onClick={() => elegirCandidato(v)}>
                 {v.product_name} · {v.size_name}
+                {v.local != null && <span style={{ color: color.mut }}>&nbsp;· {v.local > 0 ? `${v.local} en el local` : 'sin stock en el local'}</span>}
               </Button>
             ))}
+            {candidatos.mas > 0 && (
+              <span style={{ color: color.mut, fontSize: font.sm, width: '100%' }}>
+                Y {candidatos.mas} más: escribí el color o el talle para achicar la lista.
+              </span>
+            )}
           </div>
         )}
       </SectionCard>

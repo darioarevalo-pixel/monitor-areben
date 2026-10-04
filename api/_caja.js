@@ -3,7 +3,9 @@
 //
 //   GET  ?recurso=caja&action=config              → { reglas, politica_cambio } (la siembra si ⛔ hay)
 //   GET  ?recurso=caja&action=referencias         → { cuentas: [{ id, nombre, regla }] } — SIN saldos
-//   GET  ?recurso=caja&action=producto&codigo=…   → la variante del código + stock Local / Depósito
+//   GET  ?recurso=caja&action=producto&codigo=…   → la variante del código + stock Local / Depósito;
+//        si el código ⛔ está y tiene letras, busca por NOMBRE y talle ⇒ { candidatos, mas }
+//   GET  ?recurso=caja&action=producto&product_id=…&size_id=…  → la variante elegida de la lista
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
@@ -43,6 +45,7 @@ import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
+import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 
 const STORE = 'zattia'
@@ -116,10 +119,23 @@ export default async function handler(req, res) {
 
       if (accion === 'producto') {
         const codigo = String(req.query.codigo || '').trim()
-        if (!codigo) return res.status(400).json({ error: 'Falta el código.' })
-        const variantes = await variantesDelCodigo(sb, codigo)
-        if (!variantes.length) return res.status(404).json({ error: `El código ${codigo} ⛔ está en el inventario.` })
-        if (variantes.length > 1) return res.status(200).json({ candidatos: variantes.map(v => v.variante) })
+        const pid = Number(req.query.product_id), sid = Number(req.query.size_id)
+        let variantes
+        if (pid > 0 && sid > 0) {
+          // La elegida de la lista: por la variante EXACTA. Re-escanear su barcode volvía a dar la lista
+          // si el código lo comparten varias prendas.
+          variantes = await variantesExactas(sb, pid, sid)
+          if (!variantes.length) return res.status(404).json({ error: 'Esa prenda ⛔ está en el inventario.' })
+        } else {
+          if (!codigo) return res.status(400).json({ error: 'Falta el código.' })
+          variantes = await variantesDelCodigo(sb, codigo)
+          let mas = 0
+          const palabras = palabrasDeBusqueda(codigo)
+          if (!variantes.length && palabras.length) ({ grupos: variantes, mas } = await variantesDelNombre(sb, palabras))
+          if (!variantes.length) return res.status(404).json({ error: palabras.length ? `Ninguna prenda se llama «${codigo}».` : `El código ${codigo} ⛔ está en el inventario.` })
+          // Con la lista va el stock del LOCAL de anoche: alcanza para elegir; el vivo se lee al elegir.
+          if (variantes.length > 1) return res.status(200).json({ candidatos: variantes.map(v => ({ ...v.variante, local: v.espejo.local })), mas })
+        }
         const [{ variante, espejo }] = variantes
         let stock
         try {
@@ -315,6 +331,29 @@ async function variantesDelCodigo(sb, codigo) {
     if (data && data.length) return agrupar(data)
   }
   return []
+}
+
+async function variantesExactas(sb, productId, sizeId) {
+  const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
+  const { data, error } = await sb.from('inventario').select(COLS).eq('product_id', productId).eq('size_id', sizeId).limit(50)
+  if (error) throw new Error(error.message)
+  return agrupar(data || [])
+}
+
+/**
+ * Por nombre y talle: la base filtra por una palabra (la más larga primero) y el resto lo decide
+ * `buscar.core.js`. Si esa palabra ⛔ trae nada se prueba la siguiente: `ilike` ⛔ ignora las tildes,
+ * y «corazon» ⛔ encuentra «CORAZÓN» (la de al lado sí puede).
+ */
+async function variantesDelNombre(sb, palabras) {
+  const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
+  for (const p of ordenParaLaBase(palabras).slice(0, 3)) {
+    const { data, error } = await sb.from('inventario').select(COLS).ilike('product_name', `%${p}%`).limit(1000)
+    if (error) throw new Error(error.message)
+    const r = filtrarPorNombre(agrupar(data || []), palabras)
+    if (r.grupos.length) return r
+  }
+  return { grupos: [], mas: 0 }
 }
 
 function agrupar(filas) {

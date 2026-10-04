@@ -53,7 +53,12 @@ function consulta(tabla: string) {
   q.select = () => q
   q.eq = (c: string, v: unknown) => { filtros.push((f) => String(f[c]) === String(v)); return q }
   q.neq = (c: string, v: unknown) => { filtros.push((f) => f[c] !== v); return q }
-  q.ilike = (c: string, v: string) => { filtros.push((f) => String(f[c] || '').toLowerCase() === v.toLowerCase()); return q }
+  // Como Postgres: `%` es comodín, `\%` y `\_` son literales; ⛔ ignora tildes.
+  q.ilike = (c: string, v: string) => {
+    const re = new RegExp('^' + v.split(/(\\.|%)/).map((t) => (t === '%' ? '.*' : t.replace(/^\\/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('') + '$', 'is')
+    filtros.push((f) => re.test(String(f[c] || '')))
+    return q
+  }
   q.in = (c: string, v: unknown[]) => { filtros.push((f) => v.map(String).includes(String(f[c]))); return q }
   q.not = (c: string, op: string, v: unknown) => { filtros.push((f) => (op === 'is' && v === null ? f[c] != null : true)); return q }
   q.gte = (c: string, v: string) => { filtros.push((f) => String(f[c]) >= v); return q }
@@ -288,6 +293,42 @@ describe('caja · lecturas', () => {
     expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 }, stock: { local: 1, deposito: 4, fuente: 'vivo' } })
     // 🔴 el stock se lee con el token de Zattia: con el de ventas, en producción caía siempre al espejo
     expect(gn.authInventario).toEqual(['Bearer tok-zattia'])
+  })
+
+  describe('producto por nombre y talle (Bruno, 4-oct)', () => {
+    const fila = (pid: number, sid: number, nombre: string, talle: string, local: number, barcode = `${pid}${sid}`) =>
+      [{ product_id: pid, size_id: sid, product_name: nombre, size_name: talle, sku: null, barcode, available_quantity: local, store_name: 'Local' },
+        { product_id: pid, size_id: sid, product_name: nombre, size_name: talle, sku: null, barcode, available_quantity: 9, store_name: 'Deposito' }]
+
+    it('varias que coinciden ⇒ la lista, primero las que hay en el local, con su stock del LOCAL', async () => {
+      conSesion(CAJERA)
+      base.inventario = [...fila(1, 1, 'CORSET FRANK Verde', 'M', 0), ...fila(1, 2, 'CORSET FRANK Verde', 'S', 2), ...fila(2, 1, 'TOP EVA', 'S', 5)]
+      const r = await correr(req('GET', { action: 'producto', codigo: 'corset frank' }))
+      expect(r.code).toBe(200)
+      const candidatos = r.body?.candidatos as Array<{ size_name: string; local: number }>
+      expect(candidatos.map((c) => `${c.size_name}:${c.local}`)).toEqual(['S:2', 'M:0'])
+    })
+
+    it('una sola ⇒ entra derecho con el stock en vivo; el orden de las palabras ⛔ importa', async () => {
+      conSesion(CAJERA)
+      base.inventario = [...fila(7, 8, 'CORSET FRANK Verde', 'S', 3), ...fila(7, 9, 'CORSET FRANK Verde', 'M', 3)]
+      const r = await correr(req('GET', { action: 'producto', codigo: 's verde corset' }))
+      expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 }, stock: { fuente: 'vivo' } })
+    })
+
+    it('elegir de la lista trae la variante EXACTA aunque el barcode lo compartan dos', async () => {
+      conSesion(CAJERA)
+      base.inventario = [...fila(7, 8, 'CORSET FRANK', 'S', 3, '000001'), ...fila(5, 5, 'TOP EVA', 'S', 3, '000001')]
+      expect((await correr(req('GET', { action: 'producto', codigo: '000001' }))).body?.candidatos).toHaveLength(2)
+      const r = await correr(req('GET', { action: 'producto', product_id: '7', size_id: '8' }))
+      expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 } })
+    })
+
+    it('un número que ⛔ es código ⇒ 404, ⛔ se busca por nombre', async () => {
+      conSesion(CAJERA)
+      base.inventario = fila(1, 1, 'BABY TEE 38', 'U', 1)
+      expect((await correr(req('GET', { action: 'producto', codigo: '38' }))).code).toBe(404)
+    })
   })
 
   it('producto que ⛔ está ⇒ 404', async () => {
