@@ -1410,7 +1410,7 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
         actions={
           <div style={{ display: 'flex', gap: space[2] }}>
             <Button size="sm" variant="outline" onClick={() => setModo(modo === 'salida' ? 'nada' : 'salida')}>
-              Anotar salida
+              Cargar salida
             </Button>
             <Button size="sm" variant="outline" onClick={() => setModo(modo === 'cerrar' ? 'nada' : 'cerrar')}>
               Cerrar turno
