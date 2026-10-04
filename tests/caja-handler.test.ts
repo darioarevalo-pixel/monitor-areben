@@ -242,3 +242,26 @@ describe('caja · lecturas', () => {
     expect((await correr(req('GET', { action: 'producto', codigo: 'nada' }))).code).toBe(404)
   })
 })
+
+describe('caja · política de cambio del ticket', () => {
+  const ADMIN = { name: 'bruno', admin: true, cuenta: null, acceso: {}, funcion: [] }
+  it('🔴 la cajera ⛔ la cambia: 403 y la fila queda igual', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, { action: 'politica', texto: 'Sin cambios' }))
+    expect(r.code).toBe(403)
+    expect(base.config).toBeNull()
+  })
+  it('un admin la guarda (sembrando la fila si ⛔ estaba) y config la devuelve', async () => {
+    conSesion(ADMIN)
+    const r = await correr(req('POST', {}, { action: 'politica', texto: '  Cambios dentro de los 30 días con ticket.  ' }))
+    expect(r.code).toBe(200)
+    expect(base.config).toMatchObject({ politica_cambio: 'Cambios dentro de los 30 días con ticket.' })
+    const c = await correr(req('GET', { action: 'config' }))
+    expect(c.body).toMatchObject({ politica_cambio: 'Cambios dentro de los 30 días con ticket.' })
+  })
+  it('vacía ⇒ null (el ticket sale sin política, ⛔ con un renglón en blanco)', async () => {
+    conSesion(ADMIN)
+    await correr(req('POST', {}, { action: 'politica', texto: '   ' }))
+    expect(base.config).toMatchObject({ politica_cambio: null })
+  })
+})

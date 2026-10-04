@@ -62,6 +62,7 @@ const ConteoEstandar = dynamic(() => import('@/components/conteo-estandar/Conteo
 const ConteoLocalBdi = dynamic(() => import('@/components/conteo-local-bdi/ConteoLocalBdi').then((m) => m.ConteoLocalBdi), { loading: Cargando })
 const Reposicion = dynamic(() => import('@/components/reposicion/Reposicion').then((m) => m.Reposicion), { loading: Cargando })
 const Cobranzas = dynamic(() => import('@/components/cobranzas/Cobranzas').then((m) => m.Cobranzas), { loading: Cargando })
+const Caja = dynamic(() => import('@/components/caja/Caja').then((m) => m.Caja), { loading: Cargando })
 const PagosRecibidos = dynamic(() => import('@/components/pagos-recibidos/PagosRecibidos').then((m) => m.PagosRecibidos), { loading: Cargando })
 const VerifVentas = dynamic(() => import('@/components/verif-ventas/VerifVentas').then((m) => m.VerifVentas), { loading: Cargando })
 const Disenos = dynamic(() => import('@/components/disenos/Disenos').then((m) => m.Disenos), { loading: Cargando })
@@ -262,6 +263,8 @@ export const SECCIONES: Record<string, ComponentType> = {
   reposicion: Reposicion,
   cobranzas: Cobranzas,
   // Lo que entró a Mercado Pago (contra la app falsa). Sólo lee, de MP directo.
+  // El POS propio del local: cobra y manda la venta a Gestión Nube (`?recurso=caja`).
+  caja: Caja,
   'pagos-recibidos': PagosRecibidos,
   // El flip de Verificación de ventas (18-jul-2026, Tanda C #1): `/verif-ventas` lo
   // sirve el shell. Read-only: el cruce TN↔GN lo hace server-side `tiendanube-audit

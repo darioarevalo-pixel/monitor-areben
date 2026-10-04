@@ -7,6 +7,7 @@
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
+//   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=caja` (12 funciones de Hobby).
 //
@@ -25,7 +26,7 @@
 // ⛔ `price_list_id`: GN lo ignora en el POST (#30046).
 import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
-import { puedeVerAlguna } from '../lib/permisos.core.js'
+import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
@@ -135,6 +136,14 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       const b = req.body || {}
+      if (accion === 'politica') {
+        if (!esAdmin(perfil)) return res.status(403).json({ error: 'Sólo un admin cambia la política de cambio del ticket.' })
+        const texto = String(b.texto ?? '').trim().slice(0, 1000) || null
+        await leerConfig() // la fila tiene que existir: la siembra si ⛔ hay
+        const { error } = await sb.from('caja_config').update({ politica_cambio: texto, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
+        if (error) throw new Error(error.message)
+        return res.status(200).json({ politica_cambio: texto })
+      }
       if (!token) return res.status(500).json({ error: 'Falta el token de Gestión Nube para escribir ventas.' })
 
       if (accion === 'confirmar') {
@@ -188,7 +197,7 @@ export default async function handler(req, res) {
         if (data.estado === 'en_gn') return res.status(200).json({ venta: sinPayload(data) })
         return res.status(200).json(await enviar(data))
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, politica)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
