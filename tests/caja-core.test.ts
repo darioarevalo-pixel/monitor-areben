@@ -138,17 +138,32 @@ describe('caja · piezas', () => {
   })
 })
 
-describe('caja · el total ⛔ pasa el precio de lista', () => {
-  it('sin rebaja y con cuenta al 0 %: ⛔ redondea para arriba (GN ⛔ acepta descuento negativo)', () => {
+describe('caja · redondeo PARA ARRIBA sin descuento (⛔ alcanzan los billetes de $10)', () => {
+  it('$4.990 con cuenta al 0 % ⇒ se cobran $5.000, y a GN va el renglón a $5.000 sin descuento', () => {
     const f = renglones([prenda(4990)])
     const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES })
-    expect(c.total).toBe(4990)
-    expect(c.pagos[0]).toMatchObject({ monto: 4990, redondeo: 0 })
+    expect(c.total).toBe(5000)
+    expect(c.pagos[0]).toMatchObject({ monto: 5000, redondeo: 10 })
     const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
-    expect(p.items[0].discount).toBe(0)
+    expect(p.items).toEqual([expect.objectContaining({ unit_price: 5000, discount: 0, quantity: 1 })])
+    expect(p.discount_amount).toBe(0)
+    expect(totalSegunGN(p)).toBeCloseTo(5000, 6)
   })
 
-  it('...pero si redondea para abajo, redondea igual', () => {
+  it('con dos unidades, los pesos de más se reparten y cierran justo', () => {
+    // 2 × $4.990 + $2.990 = $12.970 ⇒ $13.000: $30 de más entre tres renglones.
+    const f = renglones([prenda(4990, 2), prenda(2990)])
+    const c = cobro({ filas: f, pagos: [{ cuenta: FERIA_TRANSFERENCIA }], reglas: REGLAS_INICIALES })
+    expect(c.total).toBe(13000)
+    const p = armarVentaGN({ filas: f, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: 'x', fecha: '2026-10-03' })
+    for (const it of p.items) {
+      expect(it.discount).toBe(0)
+      expect(Math.round(it.unit_price * 100) / 100).toBe(it.unit_price)
+    }
+    expect(totalSegunGN(p)).toBeCloseTo(13000, 6)
+  })
+
+  it('...y redondear para abajo sigue igual', () => {
     const c = cobro({ filas: renglones([prenda(4940)]), pagos: [{ cuenta: FERIA_EFECTIVO }], reglas: REGLAS_INICIALES })
     expect(c.total).toBe(4900)
   })
