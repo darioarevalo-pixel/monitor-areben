@@ -23,6 +23,8 @@ const gn = {
   delDia: { data: [] as Fila[] },
 }
 const mp = { busquedas: 0 }
+// W1: el audit de TN (bdi-catalogo). `tramos` = la respuesta de cada pedido, en orden; anota la URL y el sobre.
+const tn = { pedidos: [] as Array<{ url: string; sobre?: string }>, tramos: [] as Array<{ status: number; body: unknown }> }
 const mailer = { posts: [] as Array<{ body: Fila; key?: string; url: string }> }
 
 function consulta(tabla: string) {
@@ -107,6 +109,11 @@ function conSesion(perfil: unknown) {
       if (String(url).includes('/inventario/')) gn.authInventario.push(String(opts?.headers?.Authorization))
       if (String(url).includes('/inventario/')) return respuesta(200, { product_id: 7, variantes: [{ size_id: 8, stock_por_tienda: [{ store_id: 11780, available_quantity: 1 }, { store_id: 18210, available_quantity: 4 }] }] })
       return respuesta(404, {})
+    }
+    if (String(url).includes('tiendanube-audit')) {
+      tn.pedidos.push({ url: String(url), sobre: opts?.headers?.['x-monitor-auth'] })
+      const t = tn.tramos[tn.pedidos.length - 1] || { status: 200, body: { ok: true, ordenes: [], total_en_rango: 0 } }
+      return respuesta(t.status, t.body)
     }
     if (String(url).startsWith('https://api.mercadopago.com/v1/payments/search')) {
       mp.busquedas++
@@ -571,5 +578,63 @@ describe('caja · F5 transferencia', () => {
     await correr(req('POST', {}, TRANSF))
     const r = await correr(req('GET', { action: 'pendientes' }))
     expect((r.body?.ventas as Fila[]).map((v) => v.estado)).toEqual(['esperando_pago'])
+  })
+})
+
+describe('caja · pedidos web sin armar (W1)', () => {
+  const orden = (number: number, envio_estado: string, sku: string, extra: Fila = {}) => ({
+    number, estado_pago: 'paid', estado_orden: 'open', envio_estado, cancelada: false,
+    fecha: '2026-10-03T21:05:48+0000', pagado_en: '2026-10-03T21:05:48+0000', products: [{ sku, name: 'X', quantity: 1 }], ...extra,
+  })
+  beforeEach(async () => {
+    tn.pedidos = []; tn.tramos = []
+    const { olvidarPedidosWeb } = await import('../api/_caja.js')
+    olvidarPedidosWeb()
+  })
+
+  it('lee TRES tramos de 3 días, de a uno, reenviando la sesión, y devuelve sólo los por empaquetar', async () => {
+    conSesion(CAJERA)
+    tn.tramos = [
+      { status: 200, body: { ok: true, ordenes: [orden(7153, 'unpacked', 'RVE-0022-RO'), orden(7140, 'unshipped', 'RTO-1')], total_en_rango: 2 } },
+      { status: 200, body: { ok: true, ordenes: [orden(6984, 'unpacked', 'RTO-0149-BL', { pagado_en: '2026-09-28T02:45:00+0000' })], total_en_rango: 1 } },
+      { status: 200, body: { ok: true, ordenes: [], total_en_rango: 0 } },
+    ]
+    const r = await correr(req('GET', { action: 'pedidos-web' }))
+    expect(r.code).toBe(200)
+    expect(tn.pedidos).toHaveLength(3)
+    expect(tn.pedidos.every((p) => p.sobre === sobre({ user: 'x', pass: 'p' }))).toBe(true)
+    expect(tn.pedidos.every((p) => p.url.includes('store=zattia') && p.url.includes('limite=200'))).toBe(true)
+    expect((r.body?.pedidos as Fila[]).map((p) => p.numero)).toEqual([6984, 7153])
+    expect(Object.keys(r.body?.porSku as Fila).sort()).toEqual(['RTO-0149-BL', 'RVE-0022-RO'])
+    expect(r.body?.noLeidas).toBe(0)
+  })
+
+  it('🔴 el corte del audit (240 en el rango, 200 leídas) se CUENTA: ⛔ callado', async () => {
+    conSesion(CAJERA)
+    tn.tramos = [{ status: 200, body: { ok: true, ordenes: [orden(1, 'unpacked', 'A')], total_en_rango: 41 } }]
+    const r = await correr(req('GET', { action: 'pedidos-web' }))
+    expect(r.body?.noLeidas).toBe(40)
+  })
+
+  it('TN caído ⇒ 502 con el motivo, ⛔ una lista vacía que diga «no hay pedidos»', async () => {
+    conSesion(CAJERA)
+    tn.tramos = [{ status: 200, body: { ok: false, error: 'rate limit' } }]
+    const r = await correr(req('GET', { action: 'pedidos-web' }))
+    expect(r.code).toBe(502)
+    expect(String(r.body?.error)).toMatch(/rate limit/)
+  })
+
+  it('dos pantallas en el mismo minuto ⇒ UNA lectura a TN', async () => {
+    conSesion(CAJERA)
+    await correr(req('GET', { action: 'pedidos-web' }))
+    await correr(req('GET', { action: 'pedidos-web' }))
+    expect(tn.pedidos).toHaveLength(3)
+  })
+
+  it('sin el permiso de la Caja ⛔ lee pedidos', async () => {
+    conSesion(OTRA)
+    const r = await correr(req('GET', { action: 'pedidos-web' }))
+    expect(r.code).toBe(403)
+    expect(tn.pedidos).toHaveLength(0)
   })
 })

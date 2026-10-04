@@ -39,6 +39,7 @@ import { NOMBRE_MEDIO, cobro, cuentaDeMedio, nombreParaTicket, pesosDeRebaja, re
 import { hoyIso, promosDe } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
+import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import {
   buscarNombre,
@@ -62,6 +63,8 @@ import {
   type Stock,
   type Variante,
   type Venta,
+  leerPedidosWeb,
+  type PedidosWeb,
 } from '@/lib/caja/cliente'
 import { Badge, Button, Field, Input, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
@@ -187,6 +190,29 @@ export function Caja() {
     return () => clearInterval(t)
   }, [refrescarPendientes])
 
+  // v2, W1: los pedidos web por empaquetar, cada 2 min. Si TN ⛔ contesta queda el error a la vista
+  // (⛔ «0 pedidos»: un cero que ⛔ se midió afirma que ⛔ hay).
+  const [pedidosWeb, setPedidosWeb] = useState<PedidosWeb | null>(null)
+  const [errPedidos, setErrPedidos] = useState<string | null>(null)
+  useEffect(() => {
+    const leer = () =>
+      leerPedidosWeb()
+        .then((d) => {
+          setPedidosWeb(d)
+          setErrPedidos(null)
+        })
+        .catch((e) => setErrPedidos((e as Error).message))
+    leer()
+    const t = setInterval(leer, 120_000)
+    return () => clearInterval(t)
+  }, [])
+  /** El aviso del renglón: null sin pedidos leídos (el cartel de arriba ya dice que ⛔ se leyeron). */
+  const avisoWeb = useCallback(
+    (v: Variante, local: number, enCarrito: number) =>
+      pedidosWeb ? avisoDeRenglon({ sku: v.sku ?? '', local, enCarrito, porSku: pedidosWeb.porSku }) : null,
+    [pedidosWeb],
+  )
+
   const reglas = config?.reglas ?? null
   // Lo que lee la gente de una cuenta: la forma de pago, ⛔ el nombre de la cuenta de GN.
   const nombreCuenta = useCallback((id: number) => nombreParaTicket(id, reglas), [reglas])
@@ -222,7 +248,12 @@ export function Caja() {
       return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...precioYFoto(variante.product_id) }] }
     })
     const enCarrito = (bor.renglones.find((r) => claveDe(r.variante) === claveDe(variante))?.cantidad ?? 0) + 1
-    if (stock.local - enCarrito <= 0) avisar('ojo', 'Última')
+    const web = avisoWeb(variante, stock.local, enCarrito)
+    // La Caja ⛔ frena (gana el local, Bruno 4-oct): avisa, y el pedido se resuelve después.
+    if (web?.tipo === 'sin_stock') {
+      avisar('ojo', 'Comprada online')
+      setAviso({ tono: 'warning', texto: web.texto })
+    } else if (stock.local - enCarrito <= 0) avisar('ojo', 'Última')
     else avisar('ok')
   }
 
@@ -427,6 +458,8 @@ export function Caja() {
         <Pendientes ventas={pendientes.filter((v) => v.estado !== 'esperando_pago')} onCambio={refrescarPendientes} />
       )}
 
+      <PedidosWebSinArmar datos={pedidosWeb} error={errPedidos} />
+
       {ultima && <UltimaVenta venta={ultima.venta} onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())} />}
 
       <SectionCard title="Escanear">
@@ -496,6 +529,7 @@ export function Caja() {
                 onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
                 importe={filas?.[i]?.importe ?? null}
                 onSacar={() => sacarRenglon(i)}
+                avisoWeb={avisoWeb(r.variante, r.stock.local, r.cantidad)}
               />
             ))}
           </div>
@@ -712,6 +746,7 @@ function FilaRenglon({
   onRebaja,
   importe,
   onSacar,
+  avisoWeb,
 }: {
   r: Renglon
   cargandoPrecios: boolean
@@ -721,6 +756,8 @@ function FilaRenglon({
   /** Lo que queda del renglón después de su descuento (null si ⛔ se puede calcular). */
   importe: number | null
   onSacar: () => void
+  /** La prenda está en un pedido web sin armar (W1). */
+  avisoWeb: { tipo: 'separada' | 'sin_stock'; texto: string } | null
 }) {
   // Mientras se escribe, el texto; si ⛔ se está escribiendo, el precio del renglón.
   const [texto, setTexto] = useState<string | null>(null)
@@ -755,6 +792,11 @@ function FilaRenglon({
           {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· stock de anoche (Gestión Nube no contestó)</span>}
         </div>
         {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: el producto no cruza con Tienda Nube.</div>}
+        {avisoWeb && (
+          <div style={{ marginTop: space[1] }}>
+            <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
         <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad - 1)} aria-label="Una menos">
@@ -991,6 +1033,53 @@ function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta; onLle
 }
 
 /** Las ventas cobradas que todavía ⛔ están en GN. Rojo: hasta que lleguen, el stock y la caja de GN ⛔ cierran. */
+/**
+ * Los pedidos web pagados que todavía ⛔ se empaquetaron (W1): el más viejo primero. Es una alerta para
+ * armarlos a tiempo; ⛔ se arman desde acá. Sin pedidos ⇒ ⛔ ocupa lugar.
+ */
+function PedidosWebSinArmar({ datos, error }: { datos: PedidosWeb | null; error: string | null }) {
+  const [abierto, setAbierto] = useState(false)
+  if (error && !datos) return <Notice tone="warning">No se pudieron leer los pedidos web: {error}</Notice>
+  if (!datos) return null
+  const n = datos.pedidos.length
+  if (!n && !datos.noLeidas && !error) return null
+  const hace = (h: number | null) => (h == null ? '' : h < 1 ? 'hace menos de 1 h' : h < 48 ? `hace ${h} h` : `hace ${Math.floor(h / 24)} días`)
+  return (
+    <Notice tone={n ? 'warning' : 'neutral'}>
+      <div style={{ display: 'grid', gap: space[2] }}>
+        <button
+          onClick={() => setAbierto(!abierto)}
+          style={{ height: 'auto', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'inherit', fontSize: font.base }}
+        >
+          <b>
+            {abierto ? '▾' : '▸'} {n === 1 ? '1 pedido web sin armar' : `${n} pedidos web sin armar`}
+          </b>
+          {n > 0 && <span> · el más viejo {hace(datos.pedidos[0].horas)}</span>}
+        </button>
+        {datos.noLeidas > 0 && <span style={{ fontSize: font.sm }}>Tienda Nube no devolvió {datos.noLeidas} órdenes: puede haber más.</span>}
+        {error && <span style={{ fontSize: font.sm }}>No se pudo actualizar ({error}). Es la lista de las {new Date(datos.leidoEn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}.</span>}
+        {abierto &&
+          datos.pedidos.map((p) => (
+            <div key={p.numero} style={{ display: 'grid', gap: space[0.5], fontSize: font.sm, borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
+              <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap' }}>
+                <b>#{p.numero}</b>
+                <span>{hace(p.horas)}</span>
+                <span style={{ color: color.mut }}>{p.envioTipo === 'pickup' ? `Retira: ${p.envio ?? ''}` : (p.envio ?? 'Envío')}</span>
+              </div>
+              {p.prendas.map((x, i) => (
+                <span key={i}>
+                  {x.cantidad > 1 ? `${x.cantidad} × ` : ''}
+                  {x.nombre}
+                  {!x.sku && <span style={{ color: color.mut }}> (sin SKU: no se cruza con la Caja)</span>}
+                </span>
+              ))}
+            </div>
+          ))}
+      </div>
+    </Notice>
+  )
+}
+
 function Pendientes({ ventas, onCambio }: { ventas: Venta[]; onCambio: () => void }) {
   const [trabajando, setTrabajando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

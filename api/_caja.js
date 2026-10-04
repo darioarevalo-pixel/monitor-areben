@@ -9,6 +9,8 @@
 //   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe: { conStock, sinStock, masCon, masSin }
 //        con el stock del local de anoche (⛔ pega a GN: tipear ⛔ gasta el cupo de 60/min)
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
+//   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
+//        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
@@ -52,6 +54,7 @@ import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
+import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 
 const STORE = 'zattia'
 const LOCAL = 11780
@@ -65,6 +68,37 @@ const cabeceras = (token) => ({ Authorization: `Bearer ${token}`, Accept: 'appli
 
 /** Las cuentas de GN, cacheadas por instancia: cambian una vez por año. */
 let cacheCuentas = null
+
+// Los pedidos web se leen del audit de bdi-catalogo (el mismo de Envíos y Cobranzas) en TRAMOS de 3
+// días: el audit corta en 200 órdenes y 10 días de Zattia eran 240 (medido el 4-oct) ⇒ de un saque
+// se perdían las más viejas, que son las más urgentes. El pedido sin armar más viejo de ese día tenía
+// 6 días: 9 días alcanzan, y lo que ⛔ se leyó se cuenta en `noLeidas`.
+const AUDIT = process.env.CATALOGO_AUDIT_URL || 'https://bdi-catalogo.vercel.app/api/tiendanube-audit'
+const TRAMOS_PEDIDOS = [[0, 2], [3, 5], [6, 8]]
+const DIA_MS = 86_400_000
+/** 60 s por instancia: dos pantallas de caja ⛔ le duplican el pedido a TN. */
+let cachePedidos = null
+export const olvidarPedidosWeb = () => { cachePedidos = null }
+
+async function leerPedidosWeb(sobre, ahora) {
+  if (cachePedidos && ahora - cachePedidos.en < 60_000) return cachePedidos.datos
+  const porNumero = new Map()
+  let noLeidas = 0
+  for (const [a, b] of TRAMOS_PEDIDOS) {
+    // De a uno, ⛔ en paralelo: TN corta por cupo, y callado.
+    const qs = new URLSearchParams({ ordenes: '1', modo: 'lista', store: STORE, from: diaArgentino(ahora - b * DIA_MS), to: diaArgentino(ahora - a * DIA_MS), limite: '200' })
+    const r = await fetch(`${AUDIT}?${qs}`, { headers: { 'x-monitor-auth': sobre } })
+    const d = await r.json().catch(() => null)
+    if (!r.ok || !d || !d.ok) throw new Error(`Tienda Nube ⛔ contestó los pedidos (${(d && d.error) || r.status}).`)
+    const lista = Array.isArray(d.ordenes) ? d.ordenes : []
+    for (const o of lista) porNumero.set(o.number, o)
+    noLeidas += ordenesSinLeer(d, lista.length)
+  }
+  const pedidos = pedidosSinArmar([...porNumero.values()], ahora)
+  const datos = { pedidos, porSku: indicePorSku(pedidos), noLeidas, leidoEn: new Date(ahora).toISOString() }
+  cachePedidos = { en: ahora, datos }
+  return datos
+}
 
 async function leerJson(r) {
   const t = await r.text()
@@ -176,7 +210,14 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ ventas: data || [] })
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, pendientes)' })
+      if (accion === 'pedidos-web') {
+        try {
+          return res.status(200).json(await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now()))
+        } catch (e) {
+          return res.status(502).json({ error: sinSecretos(e && e.message) })
+        }
+      }
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, pendientes, pedidos-web)' })
     }
 
     if (req.method === 'POST') {

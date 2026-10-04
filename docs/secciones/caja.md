@@ -4,7 +4,8 @@ Sección `caja`, área `local`, sólo Zattia. El POS propio del local: se escane
 con su descuento, sale el vuelto y el ticket, y la venta queda en Gestión Nube con su número, en la
 cuenta de cobro y bajando el stock. Reemplaza al POS de GN (`/ventas/pos`), que ⛔ muestra el stock
 en el pedido, ⛔ tiene vuelto y ⛔ guarda el mail sin dar de alta al cliente (decidido el 3-oct-2026).
-El plan completo, por fases, vive afuera del repo: `~/Documents/reunion-gerencia/2026-10-03-POS-plan-v1.md`.
+El plan completo, por fases, vive afuera del repo: `~/Documents/reunion-gerencia/2026-10-03-POS-plan-v1.md`
+(v1) y `2026-10-04-POS-plan-v2.md` (v2).
 
 ## Dónde vive
 
@@ -75,6 +76,14 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - 🔴 **Un pago de MP confirma UNA venta**: `mp_pago_id` con índice único. Y **sólo `cruzar` saca
   una venta de `esperando_pago`**: `reintentar`, el respaldo de la cola y `enviarVenta` se niegan.
 - ⚠️ `cancelada` = esperaba y ⛔ llegó. Cancelar una que ya cruzó ⇒ 409. Hay que volver a escanear.
+- 🔑 **Pedidos web sin armar (v2, W1)** (`lib/caja/pedidos-web.core.js`, `action=pedidos-web`): los de
+  TN **pagados y POR EMPAQUETAR** (`envio_estado === 'unpacked'`). ⛔ «pagada + abierta»: medido el 4-oct,
+  daba 34 y 28 ya estaban empaquetadas esperando retiro. Se leen del audit de bdi-catalogo en 3 tramos
+  de 3 días (corta en 200 por pedido) y lo que ⛔ llegó se dice. Caché de 60 s por instancia.
+- 🔴 **El stock del Local YA descontó el pedido web**: cada orden de TN entra a GN como venta del Local
+  (4 de 4, medido). ⇒ el aviso fuerte («si la vendés, el pedido queda sin stock») sale cuando lo libre
+  menos lo del carrito da < 0; si alcanza, sólo «el pedido #N lleva esta prenda». El cruce es por SKU
+  de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local (Bruno, 4-oct).
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
   `caja_config` (ver `sql/migrate-caja-transferencia.sql`); ⛔ hay pantalla para eso.
 
