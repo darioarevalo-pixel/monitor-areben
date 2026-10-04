@@ -3,7 +3,7 @@
 /**
  * Caja (key `caja`, área Local, sólo Zattia): el POS propio del local.
  *
- * Se escanea ⇒ cada renglón dice cuántas QUEDAN en el local y en el depósito (o «ÚLTIMA») ⇒ se
+ * Se escanea ⇒ cada renglón dice cuántas QUEDAN en el local (o «ÚLTIMA») y cuántas hay para reponer ⇒ se
  * elige cómo paga ⇒ «paga con» y el vuelto ⇒ Confirmar: la venta viaja a Gestión Nube y sale el
  * ticket.
  *
@@ -548,10 +548,12 @@ function FilaRenglon({
             <Badge tone="warning">ÚLTIMA</Badge>
           ) : (
             <span>
-              quedan {quedan} acá
+              quedan {quedan} en el local
             </span>
           )}
-          <span>· {r.stock.deposito} en depósito</span>
+          {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
+              (18210) ⛔ vende desde la caja: sólo repone. */}
+          <span>· {r.stock.deposito} para reponer</span>
           {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· stock de anoche (Gestión Nube no contestó)</span>}
         </div>
         {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: el producto no cruza con Tienda Nube.</div>}
