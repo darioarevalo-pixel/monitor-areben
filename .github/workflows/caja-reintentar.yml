@@ -1,0 +1,33 @@
+# Respaldo de la cola de la Caja (POS del local de Zattia): reintenta las ventas que ⛔ llegaron a
+# Gestión Nube. Lo primario es la pantalla; esto cubre que la cierren con una venta colgada.
+# ⚠️ Los crons de GitHub llegan tarde: es un respaldo, ⛔ un reloj. En rojo = hay una venta que hace
+# más de 1 hora ⛔ está en GN (ver el log).
+name: Caja — reintentar ventas pendientes
+
+on:
+  schedule:
+    # Cada 10 minutos de 9 a 0 h de Argentina (12 a 3 UTC).
+    - cron: '*/10 12-23,0-2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: caja-reintentar
+  cancel-in-progress: false
+
+jobs:
+  reintentar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Reintentar
+        env:
+          ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
+          ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
+          GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
+        run: node scripts/caja-reintentar.mjs

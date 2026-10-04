@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|cobranzas|pagos-recibidos&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|cobranzas|pagos-recibidos|caja&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -54,6 +54,7 @@ import exhib from './_exhib.js';
 import mapaLocal from './_mapa-local.js';
 import cobranzas from './_cobranzas.js';
 import pagosRecibidos from './_pagos-recibidos.js';
+import caja from './_caja.js';
 import { soloMismoOrigen } from './_auth.js';
 
 // `meta-funnel`, `meta-rentabilidad` y `calendario` entran por acá y NO por api/meta-ads.js, aunque
@@ -211,6 +212,9 @@ const RECURSOS = {
   // verifique el cobro sin mirar el teléfono de la clienta. ⛔ Sólo LEE, y de MP directo: no hay
   // tabla propia. El total y los otros días los ve sólo un admin (lo decide el handler).
   'pagos-recibidos': pagosRecibidos,
+  // Caja: el POS propio del local de Zattia. Cobra con el descuento de cada cuenta y manda la venta a
+  // Gestión Nube con cola y reintento (tabla `caja_venta`, base de Zattia). ⛔ Archivo de ruta propio.
+  caja,
 };
 
 // El recurso `crm` es el que manda: con los 12.485 ids del modo «todos» son 25 consultas a

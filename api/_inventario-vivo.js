@@ -5,6 +5,7 @@
 // Seguridad: exige un usuario válido del Monitor (login server-side contra el KV).
 import { exigirUsuario, soloMismoOrigen } from './_auth.js';
 import { puedeContar } from '../lib/permisos.core.js';
+import { filasVivas } from '../lib/gn/inventario-vivo.core.js';
 
 const GN_BASE = 'https://www.gestionnube.com/api/v1';
 
@@ -96,15 +97,8 @@ async function fetchInventarioCompleto(storeId, token, budgetMs = 10000) {
 // Consulta puntual y CONFIABLE del stock en vivo de UN producto (GN responde bien a esto, a diferencia de
 // pedir la lista completa). Devuelve las variantes de la tienda pedida con inventory_id y stock reales.
 async function fetchProductoVivo(productId, storeId, token) {
-  const d = await gnFetch(`inventario/${productId}`, token);
-  const out = [];
-  (d.variantes || []).forEach(v => {
-    (v.stock_por_tienda || []).forEach(s => {
-      if (Number(s.store_id) !== storeId) return;
-      out.push({ inventory_id: s.inventory_id, product_id: d.product_id, product_name: d.product_name || null, product_code: d.product_code || null, size_id: v.size_id, size_name: v.size_name || null, store_name: s.store_name || null, sku: v.sku || null, barcode: v.barcode || null, available_quantity: s.available_quantity ?? 0, fuente: 'vivo' });
-    });
-  });
-  return out;
+  // La lectura de la respuesta vive en lib/gn/inventario-vivo.core.js: la comparte la Caja.
+  return filasVivas(await gnFetch(`inventario/${productId}`, token), [storeId]).map(({ store_id: _s, ...r }) => r);
 }
 
 // Varias pasadas de paginación pueden tardar → subimos el techo de tiempo de la función.
