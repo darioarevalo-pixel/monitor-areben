@@ -10,7 +10,7 @@
 // Los archivos con `_` no son rutas (Vercel los ignora), por eso el handler real vive en
 // `_tn-ignorados.js` y acá solo se despacha. La auth la valida cada handler.
 //
-//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|cobranzas|pagos-recibidos|caja&...
+//   GET/POST /api/datos?recurso=ignorados|disenos|disenos-rondas|votacion|norte|fotos-verificadas|tn-desc|tn-desc-ia|meta-funnel|meta-rentabilidad|calendario|liquidacion|atencion|sistema|organizacion|agenda|crm|costos|espejo|buzon|pedidos-clientes|ventas-diarias|clavados|recepciones|oc-webhook|prm|acreedores|compromisos|cuentas|adelantos|adelantos-puente|modelos|precios|destacados|exhib|mapa-local|ubicaciones-local|cobranzas|pagos-recibidos|caja&...
 import ignorados from './_tn-ignorados.js';
 import disenos from './_disenos.js';
 import disenosRondas from './_disenos-rondas.js';
@@ -52,6 +52,7 @@ import precios from './_precios.js';
 import destacados from './_destacados.js';
 import exhib from './_exhib.js';
 import mapaLocal from './_mapa-local.js';
+import ubicacionesLocal from './_ubicaciones-local.js';
 import cobranzas from './_cobranzas.js';
 import pagosRecibidos from './_pagos-recibidos.js';
 import caja from './_caja.js';
@@ -205,6 +206,8 @@ const RECURSOS = {
   // cupos). Entra por acá como todo el resto (12 funciones de Hobby). Una sola fila jsonb en la
   // base de Zattia; dónde cae cada prenda se deriva en la pantalla, ⛔ no se guarda.
   'mapa-local': mapaLocal,
+  // En qué estante del depósito de atrás del local de Zattia está cada producto (lo lee también la Caja).
+  'ubicaciones-local': ubicacionesLocal,
   // Cobranzas: las órdenes de TN con medio de pago MANUAL y su cobro (`tn_cobros`, base de BDI).
   // Escribe la nota interna de la orden por `bdi-catalogo` y le pone en cero el saldo al cadete.
   cobranzas,

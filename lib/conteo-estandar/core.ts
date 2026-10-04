@@ -7,6 +7,7 @@
  */
 
 import { esStunned } from '../lineas'
+import { claveDe } from '../ubicaciones-local/core.core.js'
 import type { FilaVivo } from '../inventario-vivo/tipos'
 import type { ConteoHistorial } from '../conteo-deposito/tipos'
 import type { CeDetalleConteo, CeEstadoProd, CeFilaAjuste, CePreview, CeProducto, CeResumen, CeState, Linea } from './tipos'
@@ -307,11 +308,8 @@ export const cmpSku = (a: string, b: string) => a.localeCompare(b, 'es', { numer
  * detalle de la variante y no sirve para ubicar el producto en el estante.
  */
 export function skuBase(sku?: string): string {
-  const s = String(sku || '').trim().toUpperCase()
-  if (!s) return ''
-  const segs = s.split('-')
-  const i = segs.findIndex((seg) => /\d/.test(seg))
-  return i < 0 ? s : segs.slice(0, i + 1).join('-')
+  // Una sola regla de «qué es el producto»: la misma clave que guarda «Ubicaciones depósito».
+  return claveDe(sku)
 }
 
 /** El SKU del producto (el base más chico de sus variantes), o '' si no tiene. */
