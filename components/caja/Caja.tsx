@@ -311,25 +311,27 @@ export function Caja() {
       {ultima && <UltimaVenta venta={ultima.venta} onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())} />}
 
       <SectionCard title="Escanear">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            escanear(codigo)
-          }}
-          style={{ display: 'flex', gap: space[2] }}
-        >
+        {/* 🔴 Sin <form>: el Enter del lector lo toma el campo. Con un form, el botón «Agregar» en
+            `loading` (deshabilitado) hacía que el navegador IGNORE el Enter, y el segundo escaneo
+            quedaba escrito sin entrar (visto en prod, 4-oct). */}
+        <div style={{ display: 'flex', gap: space[2] }}>
           <Input
             ref={scanRef}
             autoFocus
             value={codigo}
             onChange={(e) => setCodigo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              escanear(codigo)
+            }}
             placeholder="Código de barras o SKU"
             style={{ fontSize: font.xl, flex: 1 }}
           />
-          <Button type="submit" loading={buscando > 0}>
+          <Button onClick={() => escanear(codigo)} loading={buscando > 0}>
             Agregar
           </Button>
-        </form>
+        </div>
         {aviso && (
           <div style={{ marginTop: space[3] }}>
             <Notice tone={aviso.tono}>{aviso.texto}</Notice>
