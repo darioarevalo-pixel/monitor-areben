@@ -30,4 +30,7 @@ jobs:
           ZATTIA_SUPABASE_URL: ${{ secrets.ZATTIA_SUPABASE_URL }}
           ZATTIA_SUPABASE_SERVICE_KEY: ${{ secrets.ZATTIA_SUPABASE_SERVICE_KEY }}
           GN_TOKEN_ZATTIA: ${{ secrets.GN_TOKEN_ZATTIA }}
+          # El ticket por mail (F4): sin estos dos, los tickets que fallaron ⛔ se reintentan.
+          MAILER_URL: ${{ secrets.MAILER_URL }}
+          MAILER_TICKET_KEY: ${{ secrets.MAILER_TICKET_KEY }}
         run: node scripts/caja-reintentar.mjs

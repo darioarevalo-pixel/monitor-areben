@@ -18,6 +18,7 @@ const gn = {
   respuestaPost: { status: 201, body: { data: { id: 1600001, number: 30100 } } as unknown },
   delDia: { data: [] as Fila[] },
 }
+const mailer = { posts: [] as Array<{ body: Fila; key?: string; url: string }> }
 
 function consulta(tabla: string) {
   const filtros: Array<(f: Fila) => boolean> = []
@@ -89,6 +90,10 @@ function conSesion(perfil: unknown) {
       if (String(url).includes('/inventario/')) return respuesta(200, { product_id: 7, variantes: [{ size_id: 8, stock_por_tienda: [{ store_id: 11780, available_quantity: 1 }, { store_id: 18210, available_quantity: 4 }] }] })
       return respuesta(404, {})
     }
+    if (String(url).startsWith('https://mailer.test')) {
+      mailer.posts.push({ url: String(url), body: JSON.parse(String(opts?.body)), key: opts?.headers?.['x-ticket-key'] })
+      return respuesta(200, { encolado: true, runId: 'r1' })
+    }
     return { ok: true, json: async () => ({ ok: true, perfil }) }
   }))
 }
@@ -109,6 +114,7 @@ const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8
 
 beforeEach(() => {
   base.ventas = new Map(); base.config = null; base.inventario = []
+  mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
@@ -146,6 +152,32 @@ describe('caja · confirmar', () => {
     expect(fila).toMatchObject({ estado: 'en_gn', gn_sale_id: 1600001, gn_number: 30100, total: 21700, paga_con: 22000, usuario: 'cajera', intentos: 1 })
     // la configuración se sembró con la del POS de GN
     expect(base.config).toBeTruthy()
+  })
+
+  it('F4: con mail, ya en GN, pide el ticket al mailer (llave en el header) y el nombre ⛔ viaja a GN', async () => {
+    conSesion(CAJERA)
+    process.env.MAILER_URL = 'https://mailer.test'
+    process.env.MAILER_TICKET_KEY = 'llave'
+    const items = [{ ...VENTA.items[0], nombre: 'CORSET FRANK', talle: 'S', foto: 'https://cdn.test/f.jpg' }]
+    const r = await correr(req('POST', {}, { ...VENTA, items, email: 'Clienta@Ejemplo.com' }))
+    expect(r.code).toBe(200)
+    expect(JSON.stringify(gn.posts[0])).not.toContain('CORSET FRANK')
+    expect(mailer.posts).toHaveLength(1)
+    expect(mailer.posts[0]).toMatchObject({ url: 'https://mailer.test/api/externo/ticket', key: 'llave' })
+    const t = mailer.posts[0].body as { email: string; ticket: { numero: number; total: number; vuelto: number; renglones: Fila[]; pagos: Fila[] } }
+    expect(t.email).toBe('clienta@ejemplo.com')
+    expect(t.ticket).toMatchObject({ numero: 30100, total: 21700, vuelto: 300 })
+    expect(t.ticket.renglones[0]).toMatchObject({ nombre: 'CORSET FRANK', talle: 'S', foto: 'https://cdn.test/f.jpg', importe: 25490 })
+    expect(t.ticket.pagos[0]).toMatchObject({ cuenta: 'Efectivo', monto: 21700 })
+    expect(base.ventas.get(ID)).toMatchObject({ ticket_mail: 'encolado' })
+  })
+
+  it('F4: sin mail ⛔ se llama al mailer', async () => {
+    conSesion(CAJERA)
+    process.env.MAILER_URL = 'https://mailer.test'
+    process.env.MAILER_TICKET_KEY = 'llave'
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(200)
+    expect(mailer.posts).toHaveLength(0)
   })
 
   it('🔑 el total de la pantalla ⛔ coincide ⇒ 409 y ⛔ sale nada a GN', async () => {

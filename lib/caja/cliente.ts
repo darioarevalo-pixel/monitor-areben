@@ -30,6 +30,8 @@ export type Venta = {
   paga_con: number | null
   email: string | null
   gn_number: number | null
+  /** Cómo quedó el ticket por mail: `encolado`, `ya estaba`, `sin automation`, `error: …`, o null. */
+  ticket_mail?: string | null
   usuario: string | null
   intentos: number
   ultimo_error: string | null
@@ -62,7 +64,7 @@ export const leerCuentas = () => get<{ cuentas: CuentaGN[] }>('action=referencia
 export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar el código.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
-export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number }
+export type ItemConfirmar = { product_id: number; size_id: number; cantidad: number; precio: number; nombre?: string; talle?: string; foto?: string | null }
 export type PagoConfirmar = { cuenta: number; base?: number }
 
 /** `reintentable` sólo importa si la venta quedó en `error`. */

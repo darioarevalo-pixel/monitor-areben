@@ -78,7 +78,9 @@ export default async function handler(req, res) {
     return { reglas: REGLAS_INICIALES, politica_cambio: null }
   }
 
-  const enviar = (fila) => enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token })
+  // El ticket por mail (F4): sin `MAILER_URL` o `MAILER_TICKET_KEY` la venta sale igual, sin mail.
+  const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }
+  const enviar = (fila) => enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
 
   try {
     if (req.method === 'GET') {
@@ -175,8 +177,16 @@ export default async function handler(req, res) {
           return res.status(409).json({ error: `El total de la pantalla ($${b.total}) ⛔ coincide con el del servidor ($${c.total}). Recargá la Caja: puede haber cambiado un descuento.`, total: c.total })
         }
         const pagaCon = b.pagaCon == null || b.pagaCon === '' ? null : Number(b.pagaCon)
+        // Lo que el ticket por mail necesita y la plata ⛔: el nombre de la prenda, el talle y la foto
+        // (los manda la pantalla), y el nombre de cada cuenta. Van a la fila, ⛔ al payload de GN.
+        const aTexto = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '') || null
+        const conNombre = filas.map((f, i) => {
+          const it = b.items[i] || {}
+          return { ...f, nombre: aTexto(it.nombre, 120), talle: aTexto(it.talle, 60), foto: /^https:\/\//.test(String(it.foto || '')) ? aTexto(it.foto, 500) : null }
+        })
+        const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: reglas.cuentas[p.cuenta] ? reglas.cuentas[p.cuenta].nombre : null }))
         const fila = {
-          id, store, estado: 'borrador', renglones: filas, pagos: c.pagos, subtotal: c.subtotal, total: c.total,
+          id, store, estado: 'borrador', renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
           paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null,
         }
         const ins = await sb.from('caja_venta').insert(fila).select(COLUMNAS_ENVIO).single()

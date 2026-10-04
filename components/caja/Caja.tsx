@@ -276,7 +276,8 @@ export function Caja() {
     try {
       const r = await confirmarVenta({
         id: bor.id,
-        items,
+        // El nombre, el talle y la foto van para el ticket por mail; la plata ⛔ los mira.
+        items: bor.renglones.map((r, i) => ({ ...items[i], nombre: r.variante.product_name, talle: r.variante.size_name, foto: r.foto })),
         pagos: pedidos,
         total: c.total,
         email: bor.email.trim() || null,

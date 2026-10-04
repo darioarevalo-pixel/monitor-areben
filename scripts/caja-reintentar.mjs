@@ -15,12 +15,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { GN_BASE, GN_TOKENS, PAUSA_GN, dormir, gnFetch } from '../api/_gn.js';
 import { COLUMNAS_VENTA, enviarVenta } from '../lib/caja/enviar.core.js';
+import { mandarTicket } from '../lib/caja/ticket-mail.core.js';
 
 const url = process.env.ZATTIA_SUPABASE_URL;
 const key = process.env.ZATTIA_SUPABASE_SERVICE_KEY;
 const token = process.env.GN_TOKEN_VENTAS || GN_TOKENS.zattia;
 if (!url || !key || !token) { console.error('Faltan ZATTIA_SUPABASE_URL, ZATTIA_SUPABASE_SERVICE_KEY o el token de GN.'); process.exit(1); }
 const sb = createClient(url, key);
+// El ticket por mail (F4). Sin las dos variables, las ventas se reintentan igual y los tickets ⛔.
+const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch };
 
 // Las que se tocaron hace menos de 2 minutos pueden estar en vuelo desde la pantalla.
 const corte = new Date(Date.now() - 2 * 60 * 1000).toISOString();
@@ -34,7 +37,7 @@ const rechazadas = (data || []).length - pendientes.length;
 let ok = 0;
 for (const v of pendientes) {
   try {
-    const { venta } = await enviarVenta(v, { sb, gnFetch, base: GN_BASE, token });
+    const { venta } = await enviarVenta(v, { sb, gnFetch, base: GN_BASE, token, mailer });
     if (venta.estado === 'en_gn') { ok++; console.log(`✓ ${v.id.slice(0, 8)} → GN #${venta.gn_number}`); }
     else console.log(`✗ ${v.id.slice(0, 8)}: ${venta.ultimo_error}`);
   } catch (e) {
@@ -42,6 +45,22 @@ for (const v of pendientes) {
   }
   await dormir(PAUSA_GN);
 }
+
+// Los tickets por mail que ⛔ salieron (el mailer caído o lento cuando la venta llegó a GN). Las de
+// las últimas 48 h: más tarde, un comprobante ya ⛔ le sirve a nadie. El mailer deduplica por venta.
+let tickets = 0, ticketsMal = 0;
+if (mailer.url && mailer.key) {
+  const desde = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  const { data: sinTicket, error: e3 } = await sb.from('caja_venta').select(COLUMNAS_VENTA)
+    .eq('store', 'zattia').eq('estado', 'en_gn').not('email', 'is', null).gt('creada_en', desde).lt('actualizada_en', corte)
+    .or('ticket_mail.is.null,ticket_mail.like.error%').limit(50);
+  if (e3) { console.error('No se pudieron leer los tickets pendientes:', e3.message); ticketsMal++; }
+  for (const v of sinTicket || []) {
+    const estado = await mandarTicket(v, { sb, ...mailer });
+    if (estado && !estado.startsWith('error')) tickets++; else { ticketsMal++; console.log(`✗ ticket ${v.id.slice(0, 8)}: ${estado}`); }
+  }
+}
+console.log(`Tickets por mail: ${tickets} pedidos · ${ticketsMal} con error`);
 
 const { data: viejas, error: e2 } = await sb.from('caja_venta').select('id')
   .eq('store', 'zattia').neq('estado', 'en_gn').lt('creada_en', new Date(Date.now() - 60 * 60 * 1000).toISOString());
