@@ -14,6 +14,7 @@ const base = {
 const gn = {
   posts: [] as Fila[],
   gets: [] as string[],
+  authInventario: [] as string[],
   respuestaPost: { status: 201, body: { data: { id: 1600001, number: 30100 } } as unknown },
   delDia: { data: [] as Fila[] },
 }
@@ -78,12 +79,13 @@ const respuesta = (status: number, body: unknown) => ({
 })
 
 function conSesion(perfil: unknown) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: { method?: string; body?: string }) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: { method?: string; body?: string; headers?: Record<string, string> }) => {
     if (String(url).includes('gestionnube.com')) {
       if (opts?.method === 'POST') { gn.posts.push(JSON.parse(String(opts.body))); return respuesta(gn.respuestaPost.status, gn.respuestaPost.body) }
       gn.gets.push(String(url))
       if (String(url).includes('/ventas/obtener')) return respuesta(200, gn.delDia)
       if (String(url).includes('/ventas/referencias')) return respuesta(200, { cuentas: [{ id: 12921, name: 'Efectivo', balance: 114084283.83 }, { id: 99, name: 'Mercado Pago', balance: 5 }] })
+      if (String(url).includes('/inventario/')) gn.authInventario.push(String(opts?.headers?.Authorization))
       if (String(url).includes('/inventario/')) return respuesta(200, { product_id: 7, variantes: [{ size_id: 8, stock_por_tienda: [{ store_id: 11780, available_quantity: 1 }, { store_id: 18210, available_quantity: 4 }] }] })
       return respuesta(404, {})
     }
@@ -107,10 +109,11 @@ const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8
 
 beforeEach(() => {
   base.ventas = new Map(); base.config = null; base.inventario = []
-  gn.posts = []; gn.gets = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
+  gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
   process.env.GN_TOKEN_VENTAS = 'tok-ventas'
+  process.env.GN_TOKEN_ZATTIA = 'tok-zattia'
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -230,6 +233,8 @@ describe('caja · lecturas', () => {
     const r = await correr(req('GET', { action: 'producto', codigo: '692479' }))
     expect(r.code).toBe(200)
     expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 }, stock: { local: 1, deposito: 4, fuente: 'vivo' } })
+    // 🔴 el stock se lee con el token de Zattia: con el de ventas, en producción caía siempre al espejo
+    expect(gn.authInventario).toEqual(['Bearer tok-zattia'])
   })
 
   it('producto que ⛔ está ⇒ 404', async () => {

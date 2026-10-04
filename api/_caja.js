@@ -27,7 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { exigirUsuario } from './_auth.js'
 import { puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
-import { GN_BASE, gnFetch } from './_gn.js'
+import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
 import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
@@ -109,14 +109,17 @@ export default async function handler(req, res) {
         const [{ variante, espejo }] = variantes
         let stock
         try {
-          const resp = await gnFetch(`${GN_BASE}/inventario/${variante.product_id}`, { headers: cabeceras(token) }, 1)
-          if (!resp.ok) throw new Error(String(resp.status))
+          // 🔴 Con el token de LECTURA de Zattia, ⛔ el de ventas: en producción `GN_TOKEN_VENTAS` caía
+          // siempre al espejo (4-oct), y con éste `inventario/{id}` contesta 200 (es el de los Conteos).
+          const resp = await gnFetch(`${GN_BASE}/inventario/${variante.product_id}`, { headers: cabeceras(GN_TOKENS.zattia || token) }, 1)
+          if (!resp.ok) throw new Error(`Gestión Nube contestó ${resp.status}`)
           const filas = filasVivas(await leerJson(resp), [LOCAL, DEPOSITO]).filter(f => Number(f.size_id) === variante.size_id)
           const de = (s) => filas.filter(f => f.store_id === s).reduce((t, f) => t + Number(f.available_quantity || 0), 0)
           stock = { local: de(LOCAL), deposito: de(DEPOSITO), fuente: 'vivo' }
-        } catch {
-          // GN cortó (el tope de 60/min es compartido): el stock de anoche, y la pantalla lo dice.
-          stock = { ...espejo, fuente: 'espejo' }
+        } catch (e) {
+          // GN cortó (el tope de 60/min es compartido): el stock de anoche, y la pantalla lo dice. El
+          // motivo viaja: un catch callado escondió el 4-oct que el token ⛔ podía leer inventario.
+          stock = { ...espejo, fuente: 'espejo', motivo: sinSecretos(e && e.message) }
         }
         return res.status(200).json({ variante, stock })
       }
