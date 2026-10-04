@@ -34,7 +34,7 @@ import { useTnPromo } from '@/components/productos/useTnImages'
 import { construirPrecios } from '@/lib/etiquetas/core'
 import { imagenDe } from '@/lib/tn'
 import { esAdmin } from '@/lib/permisos'
-import { avisar, prepararSonido } from '@/lib/sonido'
+import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
 import { NOMBRE_MEDIO, cobro, cuentaDeMedio, nombreParaTicket, pesosDeRebaja, renglones } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDe } from '@/lib/agenda'
 import { useAgenda } from '@/store/useAgenda'
@@ -106,6 +106,8 @@ const aNumero = (s: string) => {
 
 /** La última lista de pedidos web (W1), para mostrarla al cargar mientras llega la nueva. */
 const CLAVE_PEDIDOS = 'caja:pedidos-web:zattia'
+/** «Con sonido / Sin sonido» de esta computadora (Bruno, 4-oct): el pitido y la voz de cada escaneo. */
+const CLAVE_SONIDO = 'caja:sonido'
 
 export function Caja() {
   const { perfil, marca } = useSesion()
@@ -116,6 +118,30 @@ export function Caja() {
 
   const [config, setConfig] = useState<Config | null>(null)
   const [errCarga, setErrCarga] = useState<string | null>(null)
+
+  // Con sonido por defecto; cada computadora recuerda lo suyo. Sin sonido ⛔ pita ni habla: la pantalla
+  // sigue diciendo todo (los avisos de la Caja ⛔ dependen del oído, la cajera la tiene delante).
+  const [conSonido, setConSonido] = useState(true)
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      try {
+        if (localStorage.getItem(CLAVE_SONIDO) === 'no') setConSonido(false)
+      } catch {
+        /* sin localStorage: con sonido */
+      }
+    })
+  }, [])
+  const cambiarSonido = (si: boolean) => {
+    setConSonido(si)
+    try {
+      localStorage.setItem(CLAVE_SONIDO, si ? 'si' : 'no')
+    } catch {
+      /* sin localStorage: dura hasta recargar */
+    }
+  }
+  const avisar = (aviso: Aviso, voz?: string) => {
+    if (conSonido) avisarSiempre(aviso, voz)
+  }
 
   const [bor, setBor] = useState<Borrador>(() => ({ id: '', renglones: [], email: '' }))
   // Se lee del aparato al montar, adentro de un async: `localStorage` ⛔ existe en el render del servidor.
@@ -481,7 +507,14 @@ export function Caja() {
 
       {ultima && <UltimaVenta venta={ultima.venta} onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())} />}
 
-      <SectionCard title="Escanear">
+      <SectionCard
+        title="Escanear"
+        actions={
+          <Button size="sm" variant="ghost" onClick={() => cambiarSonido(!conSonido)} aria-pressed={conSonido}>
+            {conSonido ? 'Con sonido' : 'Sin sonido'}
+          </Button>
+        }
+      >
         {/* 🔴 Sin <form>: el Enter del lector lo toma el campo. Con un form, el botón «Agregar» en
             `loading` (deshabilitado) hacía que el navegador IGNORE el Enter, y el segundo escaneo
             quedaba escrito sin entrar (visto en prod, 4-oct). */}

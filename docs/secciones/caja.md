@@ -87,6 +87,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   alcanza el Local ⇒ «el pedido #N lleva esta prenda»; ⛔ alcanza el Local pero sí el Depósito ⇒ ámbar
   «hay que traer N del depósito»; ⛔ alcanza ni con el Depósito ⇒ rojo «el pedido queda sin stock».
   El cruce es por SKU de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local.
+- 🔑 **«Con sonido / Sin sonido»** (botón en Escanear, Bruno 4-oct): apaga el pitido y la voz de la Caja en
+  ESA computadora (`localStorage` `caja:sonido`). Todos los avisos siguen en pantalla.
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
   `caja_config` (ver `sql/migrate-caja-transferencia.sql`); ⛔ hay pantalla para eso.
 
