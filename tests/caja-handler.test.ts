@@ -24,6 +24,8 @@ const gn = {
   authInventario: [] as string[],
   respuestaPost: { status: 201, body: { data: { id: 1600001, number: 30100 } } as unknown },
   delDia: { data: [] as Fila[] },
+  // W3b: `GET /ventas?account_id=…&include_payments=1` (los cobros de GN del turno).
+  lista: { status: 200, body: { data: [] as Fila[], meta: { has_more_pages: false } } as unknown },
 }
 const mp = { busquedas: 0 }
 // W1: el audit de TN (bdi-catalogo). `tramos` = la respuesta de cada pedido, en orden; anota la URL y el sobre.
@@ -123,6 +125,7 @@ function conSesion(perfil: unknown) {
       if (opts?.method === 'POST') { gn.posts.push(JSON.parse(String(opts.body))); return respuesta(gn.respuestaPost.status, gn.respuestaPost.body) }
       gn.gets.push(String(url))
       if (String(url).includes('/ventas/obtener')) return respuesta(200, gn.delDia)
+      if (String(url).includes('/ventas?')) return respuesta(gn.lista.status, gn.lista.body)
       if (String(url).includes('/ventas/referencias')) return respuesta(200, { cuentas: [{ id: 12921, name: 'Efectivo', balance: 114084283.83 }, { id: 99, name: 'Mercado Pago', balance: 5 }] })
       if (String(url).includes('/inventario/')) gn.authInventario.push(String(opts?.headers?.Authorization))
       if (String(url).includes('/inventario/')) return respuesta(200, { product_id: 7, variantes: [{ size_id: 8, stock_por_tienda: [{ store_id: 11780, available_quantity: 1 }, { store_id: 18210, available_quantity: 4 }] }] })
@@ -161,7 +164,7 @@ const ID = '3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c'
 // $25.490 en efectivo ⇒ $21.700 (la venta #30021 del POS de GN).
 const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8, cantidad: 1, precio: 25490 }], pagos: [{ cuenta: 12921 }], total: 21700, pagaCon: 22000 }
 
-beforeEach(() => {
+beforeEach(async () => {
   base.ventas = new Map(); base.config = null; base.inventario = []
   base.usos = [{ store: 'zattia', cuenta_id: CUENTA_MP, desde: '2026-10-01T12:00:00.000Z' }]
   base.llaves = [{ cuenta_id: CUENTA_MP, token: 'APP_USR-llave' }]
@@ -170,10 +173,13 @@ beforeEach(() => {
   base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
+  gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
   process.env.ZATTIA_SUPABASE_SERVICE_KEY = 'k'
   process.env.GN_TOKEN_VENTAS = 'tok-ventas'
   process.env.GN_TOKEN_ZATTIA = 'tok-zattia'
+  // Después de las variables: `_gn.js` lee los tokens al cargarse.
+  ;(await import('../api/_caja.js')).olvidarCobrosGN()
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -697,7 +703,7 @@ describe('caja · turno propio (v2, W3)', () => {
     expect((await correr(req('POST', {}, { action: 'salida', monto: 5000, motivo: 'Retiro para gerencia' }))).code).toBe(200)
     const t = await correr(req('GET', { action: 'turno' }))
     const turno = t.body?.turno as { resumen: { efectivo: Fila } }
-    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, salidas: 5000, esperado: 66700 })
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, cobradoGN: 0, salidas: 5000, esperado: 66700 })
     expect(JSON.stringify(t.body)).not.toMatch(/balance|114084283/)
 
     expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID }))).code).toBe(400)
@@ -714,6 +720,40 @@ describe('caja · turno propio (v2, W3)', () => {
     const u = await correr(req('GET', { action: 'turno' }))
     expect(u.body?.turno).toBeNull()
     expect((u.body?.ultimos as Fila[]).map((x) => x.id)).toEqual([TURNO_ID])
+  })
+
+  it('W3b: el efectivo cobrado EN GN durante el turno suma al esperado y entra en la foto del cierre', async () => {
+    conSesion(CAJERA)
+    // El turno abrió el 4-oct a las 9:00 (Argentina). Un pedido web cobrado a las 10:15 entra; uno de la
+    // víspera ⛔; una venta del POS de GN (canal 3) ⛔.
+    const pago = (id: number, created_at: string) => ({ id, amount: 38241, account_id: 12921, created_at })
+    gn.lista = { status: 200, body: { data: [
+      { number: 29981, channel_id: 16, tn_order: '7144', client_name: 'Melania', payments: [pago(1, '2026-10-04 10:15:00')] },
+      { number: 29900, channel_id: 16, payments: [pago(2, '2026-10-03 18:00:00')] },
+      { number: 29990, channel_id: 3, payments: [pago(3, '2026-10-04 10:30:00')] },
+    ], meta: { has_more_pages: false } } }
+    const t = await correr(req('GET', { action: 'turno' }))
+    const turno = t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: Fila[] } }
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 0, cobradoGN: 38241, salidas: 0, esperado: 88241 })
+    expect(turno.resumen.cobrosGN.map((c) => c.venta)).toEqual([29981])
+    // Se pide por cada cuenta de efectivo, con los cobros, 10 días de ventas para atrás.
+    const pedidas = gn.gets.filter((u) => u.includes('/ventas?'))
+    expect(pedidas.some((u) => u.includes('account_id=12921') && u.includes('include_payments=1') && u.includes('dateFrom=2026-09-24'))).toBe(true)
+
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 88241 }))
+    expect(c.code).toBe(200)
+    expect(base.turnos[0]).toMatchObject({ esperado: 88241, contado: 88241 })
+    expect((base.turnos[0].resumen as Fila).diferencia).toBe(0)
+  })
+
+  it('W3b: GN ⛔ contesta ⇒ el turno se ve igual, sin los cobros de GN, y lo dice', async () => {
+    conSesion(CAJERA)
+    gn.lista = { status: 500, body: { message: 'x' } }
+    const t = await correr(req('GET', { action: 'turno' }))
+    expect(t.code).toBe(200)
+    const r = (t.body?.turno as { resumen: { efectivo: Fila; cobrosGN: unknown } }).resumen
+    expect(r.cobrosGN).toBeNull()
+    expect(r.efectivo.esperado).toBe(50000)
   })
 
   it('sin el permiso `caja` ⇒ 403', async () => {

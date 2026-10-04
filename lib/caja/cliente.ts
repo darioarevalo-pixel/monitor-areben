@@ -90,12 +90,15 @@ export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
+export type CobroGN = { id: number; venta: number | null; tn: string | null; cliente: string | null; cuenta: number; monto: number; en: string }
 /** v2, W3: el turno propio de la Caja (`lib/caja/cierre.core.js`). */
 export type ResumenTurno = {
   porCuenta: { cuenta: number; nombre: string; efectivo: boolean; monto: number; cobros: number }[]
   total: number
   ventas: number
-  efectivo: { fondo: number; cobrado: number; salidas: number; esperado: number }
+  efectivo: { fondo: number; cobrado: number; cobradoGN: number; salidas: number; esperado: number }
+  /** W3b: el efectivo cobrado EN GN durante el turno que ⛔ es venta presencial. `null` = GN ⛔ contestó. */
+  cobrosGN: CobroGN[] | null
   esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
 }

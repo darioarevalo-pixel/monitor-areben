@@ -57,6 +57,7 @@ import {
   sacarEfectivo,
   cerrarTurno,
   type Turno,
+  type ResumenTurno,
   reintentarVenta,
   type Candidato,
   type Config,
@@ -1316,6 +1317,30 @@ const textoDiferencia = (d: number) => (d === 0 ? 'Cuadrado' : d > 0 ? `Sobran $
  * motivo, y se cierra contando sólo el efectivo. Sin turno abierto ⛔ se cobra. El turno de Gestión
  * Nube se deja de usar. Un día puede tener dos turnos: se cierra uno y se abre el otro.
  */
+/**
+ * W3b: el efectivo que entró como COBRO en Gestión Nube (el pedido web que se paga al retirar), ⛔ como
+ * venta en el local. Suma al efectivo que tiene que haber: la plata está en el cajón (Bruno, 4-oct).
+ */
+function CobrosGN({ r }: { r: ResumenTurno }) {
+  if (r.cobrosGN === null) {
+    return <span style={{ color: color.warning }}>No se pudieron leer los cobros de Gestión Nube: el efectivo de la caja no los incluye.</span>
+  }
+  if (r.cobrosGN.length === 0) return null
+  return (
+    <div style={{ display: 'grid', gap: space[0.5] }}>
+      <span>
+        {r.cobrosGN.length === 1 ? 'Un cobro' : `${r.cobrosGN.length} cobros`} en efectivo cargado{r.cobrosGN.length === 1 ? '' : 's'} en Gestión Nube (pedidos, no ventas del local):{' '}
+        <b>{plata(r.efectivo.cobradoGN)}</b> — suman al efectivo de la caja.
+      </span>
+      {r.cobrosGN.map((c) => (
+        <span key={c.id} style={{ color: color.mut }}>
+          {horaAr(c.en)} · {c.venta ? `venta #${c.venta}` : 'venta'}{c.tn ? ` (pedido #${c.tn})` : ''}{c.cliente ? ` · ${c.cliente}` : ''} · {plata(c.monto)}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | null; ultimos: Turno[]; onCambio: (t?: Turno) => void; onCerrado: () => void }) {
   const [fondo, setFondo] = useState('')
   const [modo, setModo] = useState<'nada' | 'salida' | 'cerrar'>('nada')
@@ -1444,7 +1469,10 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
                 </div>
               ))}
               <div style={{ borderTop: `2px solid ${color.line}`, paddingTop: space[1], display: 'grid', gap: space[0.5] }}>
-                <span>Fondo {plata(r.efectivo.fondo)} + efectivo cobrado {plata(r.efectivo.cobrado)} − salidas {plata(r.efectivo.salidas)}</span>
+                <span>
+                  Fondo {plata(r.efectivo.fondo)} + efectivo cobrado {plata(r.efectivo.cobrado)}
+                  {r.efectivo.cobradoGN > 0 && <> + cobrado en Gestión Nube {plata(r.efectivo.cobradoGN)}</>} − salidas {plata(r.efectivo.salidas)}
+                </span>
                 <b>= efectivo que tiene que haber: {plata(r.efectivo.esperado)}</b>
               </div>
               {(turno.salidas ?? []).map((m) => (
@@ -1464,6 +1492,7 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
               {r.sinGN.length === 1 ? 'Una venta cobrada todavía no está' : `${r.sinGN.length} ventas cobradas todavía no están`} en Gestión Nube (suman al turno igual).
             </span>
           )}
+          {r && <CobrosGN r={r} />}
 
           {modo === 'salida' && (
             <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
@@ -1507,6 +1536,8 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
                   Tiene que haber {plata(r.efectivo.esperado)} ⇒ <b>{textoDiferencia(Math.round((contadoN - r.efectivo.esperado) * 100) / 100)}</b>
                 </span>
               )}
+              {r.cobrosGN !== null && r.cobrosGN.length > 0 && <CobrosGN r={r} />}
+              {r.cobrosGN === null && <span style={{ color: color.warning }}>Al cerrar se vuelven a leer los cobros de Gestión Nube: si sigue sin contestar, el cierre queda sin ellos.</span>}
               {r.esperando.length > 0 && <span style={{ color: color.warning }}>Hay transferencias esperando: si llegan después del cierre, quedan en este turno pero no en el cierre.</span>}
               <div>
                 <Button

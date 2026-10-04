@@ -96,6 +96,15 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   🔴 **Sin turno abierto ⛔ se cobra** (409 `sinTurno`). Un solo turno abierto por marca (índice único
   parcial). La venta es del turno donde se COBRÓ (`caja_venta.turno_id`). El cierre guarda la foto
   (`esperado`, `resumen`) y ⛔ se reabre. Un día puede tener dos turnos.
+- 🔑 **Los cobros de GN suman al turno (v2, W3b, Bruno 4-oct)** (`cobrosDeGN`, `cierre.core.js`): el
+  pedido web que se paga al retirar se cobra **EN GN, a mano** —la API ⛔ deja agregarle un pago a una
+  venta que ya existe (sólo `POST /ventas` con `payments[]`; medido en la doc el 4-oct)—. El turno lee
+  de GN el efectivo que entró **como cobro, ⛔ como venta en el local**, y lo suma al esperado: cuentas
+  con `efectivo: true`, ⛔ canal 3 «Mi Local» (POS de GN), ⛔ `integration_source = 'monitor-caja'`.
+  Va al turno por la **hora del cobro** (`payments[].created_at`, SIN zona: es hora argentina).
+  🔴 El filtro de `GET /ventas` es por **día de la venta** y el pedido se cobra hasta 5 días después ⇒
+  se leen **10 días** para atrás. Caché de 60 s; el cierre lee fresco. GN caído ⇒ `cobrosGN: null`, el
+  turno se ve sin ellos y lo dice. ⚠️ Un cobro cargado en GN **sin turno abierto** ⛔ cae en ninguno.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
@@ -107,5 +116,5 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).
 - Una semana en paralelo con el POS de GN antes de apagarlo.
-- W3b: cobrar desde la Caja los pedidos web a retirar que pagan en el local (paso 0: ¿GN deja agregar un pago a una venta existente?).
+- W3b: ⛔ visto con un turno abierto real en prod (el primer día hábil: mirar que el cobro web aparezca en el turno).
 - ⛔ Probado `--kiosk-printing` en la PC del local (imprimir sin diálogo).

@@ -12,7 +12,7 @@
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
 //   GET  ?recurso=caja&action=turno               → el turno abierto (o null) con su resumen y salidas, y
-//        los últimos cerrados (v2, W3) — ver lib/caja/cierre.core.js
+//        los últimos cerrados (v2, W3), con el efectivo cobrado EN GN durante el turno (W3b) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
@@ -63,7 +63,7 @@ import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda }
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { diferencia, resumenTurno } from '../lib/caja/cierre.core.js'
+import { cobrosDeGN, diferencia, resumenTurno } from '../lib/caja/cierre.core.js'
 
 const STORE = 'zattia'
 const LOCAL = 11780
@@ -112,6 +112,14 @@ async function leerPedidosWeb(sobre, ahora) {
   cachePedidos = { en: ahora, datos }
   return datos
 }
+
+// Los cobros de GN del turno (W3b): el filtro de fechas de `GET /ventas` es por el día de la VENTA,
+// ⛔ del cobro, y el pedido web se paga al retirar: 16 de 22 cobros en efectivo de pedidos web se
+// cargaron OTRO día que la venta, hasta 5 después (medido el 4-oct sobre 60 días) ⇒ 10 días atrás.
+const DIAS_COBROS_GN = 10
+/** 60 s por instancia y por turno: la pantalla del turno ⛔ le gasta el cupo a GN. El cierre lee fresco. */
+let cacheCobrosGN = null
+export const olvidarCobrosGN = () => { cacheCobrosGN = null }
 
 async function leerJson(r) {
   const t = await r.text()
@@ -162,8 +170,41 @@ export default async function handler(req, res) {
     return data
   }
 
+  /**
+   * El efectivo cobrado en GN dentro del turno que ⛔ es venta presencial (W3b). `null` si GN ⛔ contesta:
+   * el turno se muestra igual y dice que faltan.
+   */
+  async function cobrosGNDelTurno(turno, reglas, fresco) {
+    const ahora = Date.now()
+    if (!fresco && cacheCobrosGN && cacheCobrosGN.turno === turno.id && ahora - cacheCobrosGN.en < 60_000) return cacheCobrosGN.datos
+    const cuentas = Object.entries(reglas.cuentas || {}).filter(([, r]) => r && r.efectivo).map(([id]) => Number(id))
+    const tok = GN_TOKENS.zattia || token
+    try {
+      const ventas = []
+      for (const cuenta of cuentas) {
+        for (let pag = 1; pag <= 5; pag++) {
+          const qs = new URLSearchParams({
+            account_id: String(cuenta), include_payments: '1', per_page: '200', page: String(pag),
+            dateFrom: diaArgentino(Date.parse(turno.abierto_en) - DIAS_COBROS_GN * DIA_MS), dateTo: diaArgentino(ahora),
+          })
+          const r = await gnFetch(`${GN_BASE}/ventas?${qs}`, { headers: cabeceras(tok) }, 1)
+          if (!r.ok) throw new Error(`GN ${r.status}`)
+          const d = await leerJson(r)
+          ventas.push(...(d && Array.isArray(d.data) ? d.data : []))
+          if (!(d && d.meta && d.meta.has_more_pages)) break
+        }
+      }
+      const hasta = turno.cerrado_en || new Date(ahora).toISOString()
+      const datos = cobrosDeGN({ ventas, desde: turno.abierto_en, hasta, cuentas })
+      cacheCobrosGN = { turno: turno.id, en: ahora, datos }
+      return datos
+    } catch {
+      return null
+    }
+  }
+
   /** El turno con lo que cobró, por cuenta, y sus salidas. Los nombres de las cuentas, los de GN si contesta. */
-  async function conResumen(turno) {
+  async function conResumen(turno, fresco = false) {
     const [ventas, salidas, { reglas }] = await Promise.all([
       sb.from('caja_venta').select('id, estado, pagos, total, creada_en').eq('turno_id', turno.id).limit(2000),
       sb.from('caja_turno_mov').select('id, tipo, monto, motivo, usuario, creado_en').eq('turno_id', turno.id).order('creado_en', { ascending: true }),
@@ -175,7 +216,8 @@ export default async function handler(req, res) {
     try {
       for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
     } catch { /* caen los nombres de las reglas */ }
-    const resumen = resumenTurno({ turno, ventas: ventas.data || [], salidas: salidas.data || [], reglas, nombres })
+    const cobrosGN = await cobrosGNDelTurno(turno, reglas, fresco)
+    const resumen = resumenTurno({ turno, ventas: ventas.data || [], salidas: salidas.data || [], reglas, nombres, cobrosGN })
     return { ...turno, resumen, salidas: salidas.data || [] }
   }
 
@@ -325,7 +367,8 @@ export default async function handler(req, res) {
         if (b.contado === '' || b.contado == null || !Number.isFinite(contado) || contado < 0) return res.status(400).json({ error: 'Falta el efectivo contado.' })
         const turno = await turnoAbierto()
         if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
-        const con = await conResumen(turno)
+        // Fresco: un cobro cargado en GN hace un minuto tiene que entrar en la foto del cierre.
+        const con = await conResumen(turno, true)
         const esperado = con.resumen.efectivo.esperado
         const dif = diferencia(contado, esperado)
         const nota = String(b.nota ?? '').trim().slice(0, 500) || null
