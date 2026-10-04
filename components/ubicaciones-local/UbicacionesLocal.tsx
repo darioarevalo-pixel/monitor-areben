@@ -91,7 +91,8 @@ export function UbicacionesLocal() {
 
   const puedeEscanear = !!foto?.puede.escanear
   const items = [
-    ...(puedeEscanear ? [{ key: 'escanear', label: 'Escanear' }] : []),
+    // Mientras carga se muestra: la vista arranca en Escanear y la pestaña ⛔ puede faltar debajo de ella.
+    ...(puedeEscanear || !foto ? [{ key: 'escanear', label: 'Escanear' }] : []),
     { key: 'estantes', label: 'Estantes', badge: foto ? foto.estantes.length : undefined },
     { key: 'controles', label: 'Controles' },
   ]
@@ -146,7 +147,7 @@ function Escanear({ foto, indice, listo, alGuardar }: { foto: Foto | null; indic
     try {
       const r = await guardarEstante(e.estante, e.lecturas.map((l) => l.codigo))
       const bolsas = r.productos.reduce((t, p) => t + p.bolsas, 0)
-      const extra = r.sinResolver.length ? ` · ${r.sinResolver.length} código${r.sinResolver.length === 1 ? '' : 's'} sin reconocer quedaron afuera` : ''
+      const extra = r.sinResolver.length ? ` · ${r.sinResolver.length} código${r.sinResolver.length === 1 ? ' sin reconocer quedó' : 's sin reconocer quedaron'} afuera` : ''
       toast.ok(`Estante ${e.estante} guardado: ${r.productos.length} productos, ${bolsas} bolsas${extra}.`)
       // Mientras viajaba el pedido pudo entrar otra lectura: se limpia sólo si sigue siendo el mismo estante.
       if (ref.current.estante === e.estante && ref.current.lecturas.length === e.lecturas.length) poner(VACIO)
