@@ -50,12 +50,15 @@ import {
   elegirVariante,
   guardarBajadas,
   guardarPolitica,
-  leerCierre,
   leerConfig,
   leerPendientes,
+  leerTurno,
+  abrirTurno,
+  sacarEfectivo,
+  cerrarTurno,
+  type Turno,
   reintentarVenta,
   type Candidato,
-  type Cierre,
   type Config,
   type Cruce,
   type ListaNombre,
@@ -220,6 +223,23 @@ export function Caja() {
     const t = setInterval(refrescarPendientes, 60_000)
     return () => clearInterval(t)
   }, [refrescarPendientes])
+
+  // v2, W3: el turno propio. `undefined` = todavía ⛔ se leyó; `null` = ⛔ hay turno abierto (⛔ se cobra).
+  const [turno, setTurno] = useState<Turno | null | undefined>(undefined)
+  const [ultimosTurnos, setUltimosTurnos] = useState<Turno[]>([])
+  const [errTurno, setErrTurno] = useState<string | null>(null)
+  const refrescarTurno = useCallback(() => {
+    leerTurno()
+      .then((r) => {
+        setTurno(r.turno)
+        setUltimosTurnos(r.ultimos)
+        setErrTurno(null)
+      })
+      .catch((e) => setErrTurno((e as Error).message))
+  }, [])
+  useEffect(() => {
+    refrescarTurno()
+  }, [refrescarTurno])
 
   // v2, W1: los pedidos web por empaquetar, cada 2 min. Si TN ⛔ contesta queda el error a la vista
   // (⛔ «0 pedidos»: un cero que ⛔ se midió afirma que ⛔ hay).
@@ -403,7 +423,7 @@ export function Caja() {
   const pagaConN = aNumero(pagaCon)
   const vuelto = pagaConN != null && enEfectivo > 0 ? Math.round((pagaConN - enEfectivo) * 100) / 100 : null
   const emailOk = !bor.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bor.email.trim())
-  const puedeConfirmar = !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
+  const puedeConfirmar = !!turno && !!c && !enviando && emailOk && !faltaContestar && (vuelto == null || vuelto >= 0)
 
   function datosTicket(venta: Venta): DatosTicket {
     return {
@@ -446,6 +466,7 @@ export function Caja() {
     avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
     imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
     refrescarPendientes()
+    refrescarTurno()
   }
 
   async function confirmar() {
@@ -474,6 +495,7 @@ export function Caja() {
         // ⛔ ticket todavía: sale cuando llega la transferencia (el cartel ámbar de arriba).
         setUltima(null)
         refrescarPendientes()
+        refrescarTurno()
         return
       }
       const ticket = datosTicket(r.venta)
@@ -481,9 +503,11 @@ export function Caja() {
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
       imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
+      refrescarTurno()
     } catch (e) {
       // ⛔ se renueva el id: el reintento tiene que llevar el MISMO, por si GN ya la tiene.
       avisar('no')
+      if ((e as { datos?: { sinTurno?: boolean } }).datos?.sinTurno) refrescarTurno()
       setAviso({ tono: 'danger', texto: (e as Error).message })
     } finally {
       setEnviando(false)
@@ -495,6 +519,9 @@ export function Caja() {
 
   return (
     <div style={{ display: 'grid', gap: space[4], maxWidth: 1100 }}>
+      {errTurno && <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice>}
+      {turno !== undefined && <TurnoCaja turno={turno} ultimos={ultimosTurnos} onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))} onCerrado={refrescarTurno} />}
+
       {pendientes
         .filter((v) => v.estado === 'esperando_pago')
         .map((v) => (
@@ -695,13 +722,13 @@ export function Caja() {
                 <Button size="lg" tone="success" disabled={!puedeConfirmar} loading={enviando} onClick={confirmar}>
                   Confirmar {plata(c.total)}
                 </Button>
+                {turno === null && <span style={{ marginLeft: space[3], color: color.danger }}>Abrí el turno (arriba) para cobrar.</span>}
               </div>
             </div>
           )}
         </SectionCard>
       )}
 
-      <CierreTurno />
       {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
       {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
     </div>
@@ -1280,98 +1307,233 @@ function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reg
   )
 }
 
+const horaAr = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+const diaAr = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+const textoDiferencia = (d: number) => (d === 0 ? 'Cuadrado' : d > 0 ? `Sobran ${plata(d)}` : `Faltan ${plata(-d)}`)
+
 /**
- * v2, W3: el cierre de turno. El turno se sigue abriendo y cerrando en Gestión Nube (su API ⛔ tiene
- * turnos); esto dice lo que cobró la Caja en ese horario, por cuenta, para compararlo con la columna
- * «+ Cobros» del arqueo de GN. La hora es la de Rosario (UTC−3, sin horario de verano).
+ * v2, W3: el TURNO PROPIO de la Caja (Bruno, 4-oct). Se abre con el fondo, se saca efectivo con
+ * motivo, y se cierra contando sólo el efectivo. Sin turno abierto ⛔ se cobra. El turno de Gestión
+ * Nube se deja de usar. Un día puede tener dos turnos: se cierra uno y se abre el otro.
  */
-function CierreTurno() {
-  const [abierto, setAbierto] = useState(false)
-  const horaAhora = () => new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-  const [dia, setDia] = useState(() => hoyIso())
-  const [desde, setDesde] = useState('09:00')
-  const [hasta, setHasta] = useState(horaAhora)
-  const [leyendo, setLeyendo] = useState(false)
+function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | null; ultimos: Turno[]; onCambio: (t?: Turno) => void; onCerrado: () => void }) {
+  const [fondo, setFondo] = useState('')
+  const [modo, setModo] = useState<'nada' | 'salida' | 'cerrar'>('nada')
+  const [monto, setMonto] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [contado, setContado] = useState('')
+  const [nota, setNota] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [cierre, setCierre] = useState<Cierre | null>(null)
-  const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
-  async function ver() {
-    setLeyendo(true)
+  const [cerrado, setCerrado] = useState<Turno | null>(null)
+  const [verDetalle, setVerDetalle] = useState(false)
+  const [verUltimos, setVerUltimos] = useState(false)
+
+  async function hacer(f: () => Promise<void>) {
+    setTrabajando(true)
     setError(null)
     try {
-      setCierre(await leerCierre(`${dia}T${desde}:00-03:00`, `${dia}T${hasta}:00-03:00`))
+      await f()
     } catch (e) {
-      setCierre(null)
       setError((e as Error).message)
+      onCambio(undefined)
     } finally {
-      setLeyendo(false)
+      setTrabajando(false)
     }
   }
-  return (
-    <Plegable
-      abierto={abierto}
-      onToggle={() => setAbierto(!abierto)}
-      titulo="Cierre de turno"
-      ayuda="El turno se abre y se cierra en Gestión Nube. Acá ves lo que cobró la Caja en ese horario, cuenta por cuenta, para compararlo con el arqueo."
-    >
-      <div style={{ display: 'grid', gap: space[3], maxWidth: 640 }}>
-        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Field label="Día">
-            <Input type="date" value={dia} onChange={(e) => setDia(e.target.value)} />
-          </Field>
-          <Field label="Abrió a las">
-            <Input type="time" value={desde} onChange={(e) => setDesde(e.target.value)} />
-          </Field>
-          <Field label="Cierra a las">
-            <Input type="time" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-          </Field>
-          <Button onClick={ver} loading={leyendo} disabled={!dia || !desde || !hasta}>
-            Ver
-          </Button>
-        </div>
-        {error && <Notice tone="danger">{error}</Notice>}
-        {cierre && (
-          <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
-            {cierre.porCuenta.length === 0 ? (
-              <span style={{ color: color.mut }}>La Caja no cobró nada en ese horario.</span>
-            ) : (
-              <>
-                {cierre.porCuenta.map((c) => (
-                  <div key={c.cuenta} style={{ display: 'flex', gap: space[3], borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
-                    <span style={{ flex: 1 }}>{c.nombre}</span>
-                    <span style={{ color: color.mut }}>{c.ventas === 1 ? '1 cobro' : `${c.ventas} cobros`}</span>
-                    <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(c.monto)}</b>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', gap: space[3], borderTop: `2px solid ${color.line}`, paddingTop: space[1] }}>
-                  <b style={{ flex: 1 }}>Total de la Caja ({cierre.ventas === 1 ? '1 venta' : `${cierre.ventas} ventas`})</b>
-                  <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(cierre.total)}</b>
-                </div>
-              </>
-            )}
-            <span style={{ color: color.mut }}>
-              Compará cada cuenta con «+ Cobros» del arqueo de Gestión Nube. Lo que se vendió por el POS de Gestión Nube está allá y acá no.
-              {cierre.nombresDe === 'reglas' && ' (Gestión Nube no contestó: los nombres de las cuentas pueden no ser iguales a los del arqueo.)'}
+
+  const ultimosPlegable = ultimos.length > 0 && (
+    <Plegable abierto={verUltimos} onToggle={() => setVerUltimos(!verUltimos)} titulo="Últimos turnos" ayuda="Los turnos cerrados: el efectivo que tenía que haber, el que se contó y la diferencia.">
+      <div style={{ display: 'grid', gap: space[1], fontSize: font.sm }}>
+        {ultimos.map((t) => (
+          <div key={t.id} style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
+            <span style={{ minWidth: 160 }}>
+              {diaAr(t.abierto_en)} {horaAr(t.abierto_en)}–{t.cerrado_en ? horaAr(t.cerrado_en) : ''}
             </span>
-            {cierre.sinGN.length > 0 && (
-              <Notice tone="warning">
-                <div style={{ display: 'grid', gap: space[1] }}>
-                  <b>
-                    {cierre.sinGN.length === 1 ? 'Una venta cobrada en ese horario todavía no está' : `${cierre.sinGN.length} ventas cobradas en ese horario todavía no están`} en Gestión Nube: el arqueo no las tiene.
-                  </b>
-                  {cierre.sinGN.map((v) => (
-                    <span key={v.id}>
-                      <span style={{ fontFamily: 'monospace' }}>{numeroProvisorio(v.id)}</span> · {hora(v.creada_en)} · {plata(v.total)} ·{' '}
-                      {v.estado === 'esperando_pago' ? 'esperando la transferencia' : 'sin llegar a Gestión Nube'}
-                    </span>
-                  ))}
-                </div>
-              </Notice>
-            )}
+            <span style={{ color: color.mut, minWidth: 110 }}>{t.abierto_por ?? ''}</span>
+            <span>Esperado {plata(Number(t.esperado))}</span>
+            <span>Contado {plata(Number(t.contado))}</span>
+            <b>{textoDiferencia(t.resumen?.diferencia ?? Number(t.contado) - Number(t.esperado))}</b>
+            {t.nota && <span style={{ color: color.mut }}>«{t.nota}»</span>}
           </div>
-        )}
+        ))}
       </div>
     </Plegable>
+  )
+
+  if (!turno) {
+    const fondoN = aNumero(fondo)
+    return (
+      <>
+        {cerrado && (
+          <Notice tone={cerrado.resumen?.diferencia ? 'warning' : 'success'}>
+            Turno cerrado a las {cerrado.cerrado_en ? horaAr(cerrado.cerrado_en) : ''}: tenía que haber {plata(Number(cerrado.esperado))} en efectivo, se
+            contaron {plata(Number(cerrado.contado))}. <b>{textoDiferencia(cerrado.resumen?.diferencia ?? 0)}</b>.
+          </Notice>
+        )}
+        <SectionCard title="Abrir turno">
+          <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field label="Fondo: el efectivo con que arranca la caja">
+              <Input value={fondo} onChange={(e) => setFondo(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 200 }} />
+            </Field>
+            <Button
+              tone="success"
+              loading={trabajando}
+              disabled={fondoN == null || fondoN < 0}
+              onClick={() =>
+                hacer(async () => {
+                  const r = await abrirTurno(fondoN as number)
+                  setFondo('')
+                  setCerrado(null)
+                  onCambio(r.turno)
+                })
+              }
+            >
+              Abrir turno
+            </Button>
+          </div>
+          <p style={{ margin: `${space[2]} 0 0`, color: color.mut, fontSize: font.sm }}>Sin un turno abierto la Caja no cobra.</p>
+          {error && <Notice tone="danger">{error}</Notice>}
+        </SectionCard>
+        {ultimosPlegable}
+      </>
+    )
+  }
+
+  const r = turno.resumen
+  const contadoN = aNumero(contado)
+  const montoN = aNumero(monto)
+  return (
+    <>
+      <SectionCard
+        title={`Turno abierto desde las ${horaAr(turno.abierto_en)}`}
+        actions={
+          <div style={{ display: 'flex', gap: space[2] }}>
+            <Button size="sm" variant="outline" onClick={() => setModo(modo === 'salida' ? 'nada' : 'salida')}>
+              Anotar salida
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setModo(modo === 'cerrar' ? 'nada' : 'cerrar')}>
+              Cerrar turno
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
+          <div style={{ display: 'flex', gap: space[4], flexWrap: 'wrap' }}>
+            <span>Abrió {turno.abierto_por ?? ''}</span>
+            {r && <span>{r.ventas === 1 ? '1 venta' : `${r.ventas} ventas`} · {plata(r.total)}</span>}
+            {r && (
+              <b>Efectivo en la caja: {plata(r.efectivo.esperado)}</b>
+            )}
+            {r && (
+              <button
+                onClick={() => setVerDetalle(!verDetalle)}
+                style={{ height: 'auto', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: color.mut, fontSize: font.sm }}
+              >
+                {verDetalle ? '▾ ocultar detalle' : '▸ ver detalle'}
+              </button>
+            )}
+          </div>
+          {r && verDetalle && (
+            <div style={{ display: 'grid', gap: space[1], maxWidth: 560 }}>
+              {r.porCuenta.map((c) => (
+                <div key={c.cuenta} style={{ display: 'flex', gap: space[3], borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
+                  <span style={{ flex: 1 }}>{c.nombre}</span>
+                  <span style={{ color: color.mut }}>{c.cobros === 1 ? '1 cobro' : `${c.cobros} cobros`}</span>
+                  <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(c.monto)}</b>
+                </div>
+              ))}
+              <div style={{ borderTop: `2px solid ${color.line}`, paddingTop: space[1], display: 'grid', gap: space[0.5] }}>
+                <span>Fondo {plata(r.efectivo.fondo)} + efectivo cobrado {plata(r.efectivo.cobrado)} − salidas {plata(r.efectivo.salidas)}</span>
+                <b>= efectivo que tiene que haber: {plata(r.efectivo.esperado)}</b>
+              </div>
+              {(turno.salidas ?? []).map((m) => (
+                <span key={m.id} style={{ color: color.mut }}>
+                  Salida {horaAr(m.creado_en)} · {plata(m.monto)} · {m.motivo} {m.usuario ? `(${m.usuario})` : ''}
+                </span>
+              ))}
+            </div>
+          )}
+          {r && r.esperando.length > 0 && (
+            <span style={{ color: color.warning }}>
+              {r.esperando.length === 1 ? 'Una venta espera' : `${r.esperando.length} ventas esperan`} la transferencia: no suma hasta que llegue.
+            </span>
+          )}
+          {r && r.sinGN.length > 0 && (
+            <span style={{ color: color.warning }}>
+              {r.sinGN.length === 1 ? 'Una venta cobrada todavía no está' : `${r.sinGN.length} ventas cobradas todavía no están`} en Gestión Nube (suman al turno igual).
+            </span>
+          )}
+
+          {modo === 'salida' && (
+            <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap', borderTop: `1px solid ${color.line}`, paddingTop: space[2] }}>
+              <Field label="Monto">
+                <Input value={monto} onChange={(e) => setMonto(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 160 }} />
+              </Field>
+              <Field label="Motivo">
+                <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Retiro para gerencia, compra de…" style={{ minWidth: 260 }} />
+              </Field>
+              <Button
+                loading={trabajando}
+                disabled={montoN == null || montoN <= 0 || !motivo.trim()}
+                onClick={() =>
+                  hacer(async () => {
+                    const x = await sacarEfectivo(montoN as number, motivo.trim())
+                    setMonto('')
+                    setMotivo('')
+                    setModo('nada')
+                    onCambio(x.turno)
+                  })
+                }
+              >
+                Registrar salida
+              </Button>
+            </div>
+          )}
+
+          {modo === 'cerrar' && r && (
+            <div style={{ display: 'grid', gap: space[2], borderTop: `1px solid ${color.line}`, paddingTop: space[2], maxWidth: 560 }}>
+              <span>Contá el efectivo de la caja (con el fondo incluido) y escribí cuánto hay.</span>
+              <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <Field label="Efectivo contado">
+                  <Input value={contado} onChange={(e) => setContado(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 180 }} />
+                </Field>
+                <Field label="Nota (opcional)">
+                  <Input value={nota} onChange={(e) => setNota(e.target.value)} style={{ minWidth: 240 }} />
+                </Field>
+              </div>
+              {contadoN != null && contadoN >= 0 && (
+                <span>
+                  Tiene que haber {plata(r.efectivo.esperado)} ⇒ <b>{textoDiferencia(Math.round((contadoN - r.efectivo.esperado) * 100) / 100)}</b>
+                </span>
+              )}
+              {r.esperando.length > 0 && <span style={{ color: color.warning }}>Hay transferencias esperando: si llegan después del cierre, quedan en este turno pero no en el cierre.</span>}
+              <div>
+                <Button
+                  tone="success"
+                  loading={trabajando}
+                  disabled={contadoN == null || contadoN < 0}
+                  onClick={() =>
+                    hacer(async () => {
+                      const x = await cerrarTurno(turno.id, contadoN as number, nota.trim())
+                      setContado('')
+                      setNota('')
+                      setModo('nada')
+                      setCerrado(x.turno)
+                      onCerrado()
+                    })
+                  }
+                >
+                  Cerrar turno
+                </Button>
+              </div>
+            </div>
+          )}
+          {error && <Notice tone="danger">{error}</Notice>}
+        </div>
+      </SectionCard>
+      {ultimosPlegable}
+    </>
   )
 }
 

@@ -90,16 +90,33 @@ export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
-/** v2, W3: lo cobrado por la Caja en un turno, por cuenta de GN (`lib/caja/cierre.core.js`). */
-export type Cierre = {
-  porCuenta: { cuenta: number; nombre: string; monto: number; ventas: number }[]
+/** v2, W3: el turno propio de la Caja (`lib/caja/cierre.core.js`). */
+export type ResumenTurno = {
+  porCuenta: { cuenta: number; nombre: string; efectivo: boolean; monto: number; cobros: number }[]
   total: number
   ventas: number
+  efectivo: { fondo: number; cobrado: number; salidas: number; esperado: number }
+  esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
-  nombresDe: 'gn' | 'reglas'
 }
-export const leerCierre = (desde: string, hasta: string) =>
-  get<Cierre>(`action=cierre&desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'No se pudo leer el cierre del turno.')
+export type SalidaTurno = { id: string; monto: number; motivo: string; usuario: string | null; creado_en: string }
+export type Turno = {
+  id: string
+  abierto_en: string
+  abierto_por: string | null
+  fondo: number
+  cerrado_en: string | null
+  cerrado_por: string | null
+  contado: number | null
+  esperado: number | null
+  nota: string | null
+  resumen?: ResumenTurno & { diferencia?: number }
+  salidas?: SalidaTurno[]
+}
+export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('action=turno', 'No se pudo leer el turno.')
+export const abrirTurno = (fondo: number) => post<{ turno: Turno }>({ action: 'abrir-turno', fondo }, 'No se pudo abrir el turno.')
+export const sacarEfectivo = (monto: number, motivo: string) => post<{ turno: Turno }>({ action: 'salida', monto, motivo }, 'No se pudo registrar la salida.')
+export const cerrarTurno = (id: string, contado: number, nota: string) => post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota }, 'No se pudo cerrar el turno.')
 
 /** Un pedido de Tienda Nube por empaquetar (v2, W1). `sinPagar`: «a convenir», paga al retirar. `horas` desde que se pagó (o se hizo). */
 export type PedidoWeb = {

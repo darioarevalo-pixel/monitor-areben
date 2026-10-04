@@ -11,12 +11,15 @@
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
-//   GET  ?recurso=caja&action=cierre&desde=ISO&hasta=ISO → lo cobrado en el turno por cuenta de GN (v2, W3):
-//        { porCuenta, total, ventas, sinGN } — ver lib/caja/cierre.core.js. El turno sigue en GN.
+//   GET  ?recurso=caja&action=turno               → el turno abierto (o null) con su resumen y salidas, y
+//        los últimos cerrados (v2, W3) — ver lib/caja/cierre.core.js
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
 //   POST ?recurso=caja  { action: 'cancelar', id }         → una venta que esperaba la transferencia y ⛔ llegó
+//   POST ?recurso=caja  { action: 'abrir-turno', fondo }   → abre el turno (uno solo abierto por marca)
+//   POST ?recurso=caja  { action: 'salida', monto, motivo } → saca efectivo del turno abierto
+//   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota? } → cierra con el efectivo contado
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
 //   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria? } → sólo admin: a qué cuenta van las
 //        transferencias y el modo feria (bajadas de línea: ⛔ las decide la cajera)
@@ -36,6 +39,9 @@
 // POS de GN. Medido el 3-oct sobre 15 renglones de Mi Local: 11 cobrados al precio de TN, 4 a un
 // número redondo tipeado a mano. `retailer_price` solo ⛔ sirve: en feria cobra el de antes.
 // ⛔ `price_list_id`: GN lo ignora en el POST (#30046).
+//
+// 🔑 EL TURNO ES DE LA CAJA (v2, W3, Bruno 4-oct): la API de GN ⛔ tiene turnos y el de GN se deja de
+// usar. Sin turno abierto ⛔ se cobra (409): cada venta queda en el turno donde se cobró (`turno_id`).
 //
 // 🔑 LA TRANSFERENCIA SE ESPERA (F5). Si el cobro tiene un pago en una cuenta con `esperaPago`
 // (Transferencia), la venta queda en `esperando_pago` y ⛔ sale a GN ni se imprime: la pantalla pide
@@ -57,7 +63,7 @@ import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda }
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { cierreDeTurno } from '../lib/caja/cierre.core.js'
+import { diferencia, resumenTurno } from '../lib/caja/cierre.core.js'
 
 const STORE = 'zattia'
 const LOCAL = 11780
@@ -149,6 +155,30 @@ export default async function handler(req, res) {
     return cacheCuentas
   }
 
+  /** El turno abierto de la marca, o null. Hay uno solo: lo asegura el índice único parcial. */
+  async function turnoAbierto() {
+    const { data, error } = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store).is('cerrado_en', null).maybeSingle()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  /** El turno con lo que cobró, por cuenta, y sus salidas. Los nombres de las cuentas, los de GN si contesta. */
+  async function conResumen(turno) {
+    const [ventas, salidas, { reglas }] = await Promise.all([
+      sb.from('caja_venta').select('id, estado, pagos, total, creada_en').eq('turno_id', turno.id).limit(2000),
+      sb.from('caja_turno_mov').select('id, tipo, monto, motivo, usuario, creado_en').eq('turno_id', turno.id).order('creado_en', { ascending: true }),
+      leerConfig(),
+    ])
+    if (ventas.error) throw new Error(ventas.error.message)
+    if (salidas.error) throw new Error(salidas.error.message)
+    const nombres = {}
+    try {
+      for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
+    } catch { /* caen los nombres de las reglas */ }
+    const resumen = resumenTurno({ turno, ventas: ventas.data || [], salidas: salidas.data || [], reglas, nombres })
+    return { ...turno, resumen, salidas: salidas.data || [] }
+  }
+
   // El ticket por mail (F4): sin `MAILER_URL` o `MAILER_TICKET_KEY` la venta sale igual, sin mail.
   const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }
   const enviar = (fila) => enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
@@ -233,34 +263,14 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: sinSecretos(e && e.message) })
         }
       }
-      if (accion === 'cierre') {
-        const desde = String(req.query.desde || ''), hasta = String(req.query.hasta || '')
-        const d = Date.parse(desde), h = Date.parse(hasta)
-        if (!Number.isFinite(d) || !Number.isFinite(h) || h <= d) return res.status(400).json({ error: 'El turno necesita desde y hasta (desde antes que hasta).' })
-        if (h - d > 2 * DIA_MS) return res.status(400).json({ error: 'Un turno ⛔ dura más de dos días: revisá desde y hasta.' })
-        const [desdeIso, hastaIso] = [new Date(d).toISOString(), new Date(h).toISOString()]
-        // Dos lecturas: las que LLEGARON a GN en el turno (la hora del arqueo) y las cobradas en el
-        // turno que todavía ⛔ llegaron. Una venta cobrada antes y llegada en el turno es del turno.
-        const COLS_CIERRE = 'id, estado, pagos, total, creada_en, en_gn_en, gn_number'
-        const [llegadas, sinLlegar] = await Promise.all([
-          sb.from('caja_venta').select(COLS_CIERRE).eq('store', store).eq('estado', 'en_gn').gte('en_gn_en', desdeIso).lt('en_gn_en', hastaIso).limit(1000),
-          sb.from('caja_venta').select(COLS_CIERRE).eq('store', store).neq('estado', 'en_gn').gte('creada_en', desdeIso).lt('creada_en', hastaIso).limit(1000),
-        ])
-        if (llegadas.error) throw new Error(llegadas.error.message)
-        if (sinLlegar.error) throw new Error(sinLlegar.error.message)
-        // El nombre de cada cuenta es el de GN (el que dice el arqueo). Si GN ⛔ contesta, el de las reglas.
-        const { reglas } = await leerConfig()
-        const nombres = {}
-        for (const [id, r] of Object.entries(reglas.cuentas || {})) nombres[id] = r.nombre
-        let nombresDe = 'reglas'
-        try {
-          for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
-          nombresDe = 'gn'
-        } catch { /* quedan los de las reglas, y la respuesta lo dice */ }
-        const out = cierreDeTurno({ ventas: [...(llegadas.data || []), ...(sinLlegar.data || [])], desde: desdeIso, hasta: hastaIso, nombres })
-        return res.status(200).json({ ...out, nombresDe })
+      if (accion === 'turno') {
+        const turno = await turnoAbierto()
+        const ultimos = await sb.from('caja_turno').select(COLS_TURNO).eq('store', store).not('cerrado_en', 'is', null)
+          .order('abierto_en', { ascending: false }).limit(10)
+        if (ultimos.error) throw new Error(ultimos.error.message)
+        return res.status(200).json({ turno: turno ? await conResumen(turno) : null, ultimos: ultimos.data || [] })
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, pendientes, pedidos-web, cierre)' })
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, pendientes, pedidos-web, turno)' })
     }
 
     if (req.method === 'POST') {
@@ -288,6 +298,47 @@ export default async function handler(req, res) {
         if (error) throw new Error(error.message)
         return res.status(200).json({ reglas: nuevas })
       }
+      if (accion === 'abrir-turno') {
+        const fondo = Number(b.fondo)
+        if (!Number.isFinite(fondo) || fondo < 0) return res.status(400).json({ error: 'El fondo tiene que ser un monto (0 o más).' })
+        const ins = await sb.from('caja_turno').insert({ store, fondo, abierto_por: perfil.name || null }).select(COLS_TURNO).single()
+        // El índice único: ya hay un turno abierto (otra pantalla lo abrió recién).
+        if (ins.error && ins.error.code === '23505') return res.status(409).json({ error: 'Ya hay un turno abierto. Recargá la Caja.' })
+        if (ins.error) throw new Error(ins.error.message)
+        return res.status(200).json({ turno: await conResumen(ins.data) })
+      }
+      if (accion === 'salida') {
+        const monto = Number(b.monto)
+        const motivo = String(b.motivo ?? '').trim().slice(0, 200)
+        if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: 'La salida tiene que ser un monto mayor a cero.' })
+        if (!motivo) return res.status(400).json({ error: 'Falta el motivo de la salida.' })
+        const turno = await turnoAbierto()
+        if (!turno) return res.status(409).json({ error: 'No hay un turno abierto.' })
+        const ins = await sb.from('caja_turno_mov').insert({ turno_id: turno.id, tipo: 'salida', monto, motivo, usuario: perfil.name || null })
+        if (ins.error) throw new Error(ins.error.message)
+        return res.status(200).json({ turno: await conResumen(turno) })
+      }
+      if (accion === 'cerrar-turno') {
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id de turno inválido.' })
+        const contado = Number(b.contado)
+        if (b.contado === '' || b.contado == null || !Number.isFinite(contado) || contado < 0) return res.status(400).json({ error: 'Falta el efectivo contado.' })
+        const turno = await turnoAbierto()
+        if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        const con = await conResumen(turno)
+        const esperado = con.resumen.efectivo.esperado
+        const dif = diferencia(contado, esperado)
+        const nota = String(b.nota ?? '').trim().slice(0, 500) || null
+        // 🔑 La foto del cierre queda guardada: si después se toca una venta, el cierre ⛔ cambia.
+        const resumen = { ...con.resumen, salidas: con.salidas, diferencia: dif }
+        const up = await sb.from('caja_turno')
+          .update({ cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, esperado, resumen, nota })
+          .eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
+        if (up.error) throw new Error(up.error.message)
+        if (!up.data) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        return res.status(200).json({ turno: up.data })
+      }
+
       if (!token) return res.status(500).json({ error: 'Falta el token de Gestión Nube para escribir ventas.' })
 
       if (accion === 'confirmar') {
@@ -306,6 +357,8 @@ export default async function handler(req, res) {
           return res.status(200).json(out)
         }
 
+        const turno = await turnoAbierto()
+        if (!turno) return res.status(409).json({ error: 'No hay un turno abierto: abrí el turno para cobrar.', sinTurno: true })
         const { reglas } = await leerConfig()
         let filas, c, payload, espera
         try {
@@ -336,7 +389,7 @@ export default async function handler(req, res) {
         const pagosConNombre = c.pagos.map(p => ({ ...p, nombre: nombreParaTicket(p.cuenta, reglas) }))
         const fila = {
           id, store, estado: espera > 0 ? 'esperando_pago' : 'borrador', espera_monto: espera > 0 ? espera : null, renglones: conNombre, pagos: pagosConNombre, subtotal: c.subtotal, total: c.total,
-          paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null,
+          paga_con: Number.isFinite(pagaCon) ? pagaCon : null, email, payload, usuario: perfil.name || null, turno_id: turno.id,
         }
         const ins = await sb.from('caja_venta').insert(fila).select(COLUMNAS_ENVIO).single()
         if (ins.error && ins.error.code === '23505') {
@@ -420,7 +473,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y ⛔ se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, abrir-turno, salida, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
@@ -429,6 +482,7 @@ export default async function handler(req, res) {
 }
 
 const COLUMNAS_ENVIO = `${COLUMNAS}, payload`
+const COLS_TURNO = 'id, abierto_en, abierto_por, fondo, cerrado_en, cerrado_por, contado, esperado, resumen, nota'
 /** Los estados de una venta COBRADA que todavía ⛔ está en GN: los únicos que se mandan. */
 const SIN_LLEGAR = ['borrador', 'enviando', 'error']
 const sinPayload = ({ payload: _p, ...v }) => v

@@ -14,6 +14,9 @@ const base = {
   usos: [] as Fila[],
   llaves: [] as Fila[],
   mpPagos: [] as Fila[],
+  // W3: el turno propio.
+  turnos: [] as Fila[],
+  movs: [] as Fila[],
 }
 const gn = {
   posts: [] as Fila[],
@@ -32,10 +35,24 @@ function consulta(tabla: string) {
   let accion: { tipo: 'select' } | { tipo: 'update'; cambios: Fila } | { tipo: 'insert'; fila: Fila } = { tipo: 'select' }
   const filas = (): Fila[] => {
     const todas = tabla === 'caja_venta' ? [...base.ventas.values()] : tabla === 'caja_config' ? (base.config ? [base.config] : [])
-      : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves : base.inventario
+      : tabla === 'mp_cuenta_uso' ? base.usos : tabla === 'mp_cuentas' ? base.llaves
+      : tabla === 'caja_turno' ? base.turnos : tabla === 'caja_turno_mov' ? base.movs : base.inventario
     return todas.filter((f) => filtros.every((p) => p(f)))
   }
   const ejecutar = () => {
+    if (accion.tipo === 'insert' && tabla === 'caja_turno') {
+      const nuevo = accion.fila
+      // El índice único parcial: un solo turno abierto por marca.
+      if (base.turnos.some((t) => t.store === nuevo.store && t.cerrado_en == null)) return { data: null, error: { code: '23505', message: 'duplicate key' } }
+      const t = { id: `0000000${base.turnos.length + 1}-0000-4000-8000-000000000000`.slice(-36), abierto_en: new Date().toISOString(), cerrado_en: null, ...accion.fila }
+      base.turnos.push(t)
+      return { data: [t], error: null }
+    }
+    if (accion.tipo === 'insert' && tabla === 'caja_turno_mov') {
+      const m = { id: `m${base.movs.length + 1}`, creado_en: new Date().toISOString(), ...accion.fila }
+      base.movs.push(m)
+      return { data: [m], error: null }
+    }
     if (accion.tipo === 'insert') {
       const f = accion.fila
       if (base.ventas.has(String(f.id))) return { data: null, error: { code: '23505', message: 'duplicate key' } }
@@ -61,6 +78,7 @@ function consulta(tabla: string) {
     filtros.push((f) => re.test(String(f[c] || '')))
     return q
   }
+  q.is = (c: string, v: unknown) => { filtros.push((f) => (v === null ? f[c] == null : f[c] === v)); return q }
   q.in = (c: string, v: unknown[]) => { filtros.push((f) => v.map(String).includes(String(f[c]))); return q }
   q.not = (c: string, op: string, v: unknown) => { filtros.push((f) => (op === 'is' && v === null ? f[c] != null : true)); return q }
   q.gte = (c: string, v: string) => { filtros.push((f) => String(f[c]) >= v); return q }
@@ -138,6 +156,7 @@ const req = (method: 'GET' | 'POST', query: Record<string, unknown>, body?: Reco
 })
 
 const CUENTA_MP = 136578181
+const TURNO_ID = '11111111-2222-4333-8444-555555555555'
 const ID = '3f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c'
 // $25.490 en efectivo ⇒ $21.700 (la venta #30021 del POS de GN).
 const VENTA = { action: 'confirmar', id: ID, items: [{ product_id: 7, size_id: 8, cantidad: 1, precio: 25490 }], pagos: [{ cuenta: 12921 }], total: 21700, pagaCon: 22000 }
@@ -147,6 +166,8 @@ beforeEach(() => {
   base.usos = [{ store: 'zattia', cuenta_id: CUENTA_MP, desde: '2026-10-01T12:00:00.000Z' }]
   base.llaves = [{ cuenta_id: CUENTA_MP, token: 'APP_USR-llave' }]
   base.mpPagos = []; mp.busquedas = 0
+  // Hay un turno abierto: las ventas de los tests de antes de W3 se cobran adentro de él.
+  base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
   process.env.ZATTIA_SUPABASE_URL = 'https://x.supabase.co'
@@ -639,35 +660,65 @@ describe('caja · pedidos web sin armar (W1)', () => {
   })
 })
 
-describe('caja · cierre de turno (v2, W3)', () => {
-  const T = (hhmm: string) => `2026-10-03T${hhmm}:00.000Z`
-  const fila = (id: string, estado: string, creada: string, enGn: string | null, pagos: Fila[]) =>
-    base.ventas.set(id, { id, store: 'zattia', estado, pagos, total: pagos.reduce((s, p) => s + Number(p.monto), 0), creada_en: creada, en_gn_en: enGn })
-
-  it('suma por cuenta lo que llegó a GN en el turno, con el nombre de GN y ⛔ su saldo', async () => {
+describe('caja · turno propio (v2, W3)', () => {
+  it('sin turno abierto ⛔ se cobra: 409 y ⛔ sale nada a GN ni a la base', async () => {
     conSesion(CAJERA)
-    fila('a', 'en_gn', T('17:30'), T('17:30'), [{ cuenta: 12921, monto: 21700 }])
-    fila('b', 'en_gn', T('16:50'), T('17:10'), [{ cuenta: 12921, monto: 5000 }]) // cobrada antes, llegó en el turno
-    fila('c', 'en_gn', T('12:00'), T('12:00'), [{ cuenta: 12921, monto: 999 }]) // otro turno
-    fila('d', 'error', T('18:00'), null, [{ cuenta: 12921, monto: 8000 }])
-    const r = await correr(req('GET', { action: 'cierre', desde: T('17:04'), hasta: T('22:06') }))
-    expect(r.code).toBe(200)
-    expect(r.body?.porCuenta).toEqual([{ cuenta: 12921, nombre: 'Efectivo', monto: 26700, ventas: 2 }])
-    expect(r.body?.total).toBe(26700)
-    expect((r.body?.sinGN as Fila[]).map((s) => s.id)).toEqual(['d'])
-    expect(r.body?.nombresDe).toBe('gn')
-    expect(JSON.stringify(r.body)).not.toMatch(/balance|114084283/)
+    base.turnos = []
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(409)
+    expect(r.body?.sinTurno).toBe(true)
+    expect(gn.posts).toHaveLength(0)
+    expect(base.ventas.size).toBe(0)
   })
 
-  it('sin desde/hasta o al revés ⇒ 400; más de dos días ⇒ 400', async () => {
+  it('la venta queda en el turno abierto', async () => {
     conSesion(CAJERA)
-    expect((await correr(req('GET', { action: 'cierre', desde: T('17:04') }))).code).toBe(400)
-    expect((await correr(req('GET', { action: 'cierre', desde: T('22:00'), hasta: T('17:00') }))).code).toBe(400)
-    expect((await correr(req('GET', { action: 'cierre', desde: '2026-09-01T00:00:00.000Z', hasta: T('17:00') }))).code).toBe(400)
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(200)
+    expect(base.ventas.get(ID)!.turno_id).toBe(TURNO_ID)
+  })
+
+  it('abrir con un turno ya abierto ⇒ 409 (el índice único); sin fondo válido ⇒ 400', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 1000 }))).code).toBe(409)
+    base.turnos = []
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: -1 }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 'x' }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'abrir-turno', fondo: 51900 }))
+    expect(r.code).toBe(200)
+    expect(base.turnos).toHaveLength(1)
+    expect(base.turnos[0]).toMatchObject({ fondo: 51900, abierto_por: 'cajera', cerrado_en: null })
+  })
+
+  it('el ciclo: venta en efectivo + salida ⇒ el cierre guarda esperado, contado, la foto y la diferencia', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, VENTA)) // $21.700 en efectivo
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 5000, motivo: '' }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 0, motivo: 'x' }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 5000, motivo: 'Retiro para gerencia' }))).code).toBe(200)
+    const t = await correr(req('GET', { action: 'turno' }))
+    const turno = t.body?.turno as { resumen: { efectivo: Fila } }
+    expect(turno.resumen.efectivo).toEqual({ fondo: 50000, cobrado: 21700, salidas: 5000, esperado: 66700 })
+    expect(JSON.stringify(t.body)).not.toMatch(/balance|114084283/)
+
+    expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID }))).code).toBe(400)
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 66500, nota: 'faltan 200' }))
+    expect(c.code).toBe(200)
+    expect(base.turnos[0]).toMatchObject({ contado: 66500, esperado: 66700, cerrado_por: 'cajera', nota: 'faltan 200' })
+    expect((base.turnos[0].resumen as Fila).diferencia).toBe(-200)
+    expect(base.turnos[0].cerrado_en).toBeTruthy()
+    // Cerrado: ⛔ se cierra dos veces, ⛔ se saca efectivo y ⛔ se cobra.
+    expect((await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 1 }))).code).toBe(409)
+    expect((await correr(req('POST', {}, { action: 'salida', monto: 1, motivo: 'x' }))).code).toBe(409)
+    expect((await correr(req('POST', {}, { ...VENTA, id: '9f1c2b9e-6a4d-4c1e-9b7a-2d5e8f0a1b3c' }))).code).toBe(409)
+    // Y queda en los últimos cerrados.
+    const u = await correr(req('GET', { action: 'turno' }))
+    expect(u.body?.turno).toBeNull()
+    expect((u.body?.ultimos as Fila[]).map((x) => x.id)).toEqual([TURNO_ID])
   })
 
   it('sin el permiso `caja` ⇒ 403', async () => {
     conSesion(OTRA)
-    expect((await correr(req('GET', { action: 'cierre', desde: T('17:04'), hasta: T('22:06') }))).code).toBe(403)
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 1 }))).code).toBe(403)
+    expect((await correr(req('GET', { action: 'turno' }))).code).toBe(403)
   })
 })

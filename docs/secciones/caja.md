@@ -89,14 +89,15 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   El cruce es por SKU de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local.
 - 🔑 **«Con sonido / Sin sonido»** (botón en Escanear, Bruno 4-oct): apaga el pitido y la voz de la Caja en
   ESA computadora (`localStorage` `caja:sonido`). Todos los avisos siguen en pantalla.
-- 🔑 **Cierre de turno (v2, W3)** (`lib/caja/cierre.core.js`, `action=cierre`): **el turno se sigue
-  abriendo y cerrando en GN** (Bruno, 4-oct) — su API ⛔ tiene turnos (medido: 27 rutas, ninguna). La
-  Caja muestra lo cobrado en un horario, por cuenta y con el nombre de GN, para compararlo con «+ Cobros»
-  del arqueo (`/turnos/ver/{id}`). La hora que cuenta es **`en_gn_en`**: el cobro nace en GN al llegar
-  el POST. Las cobradas que ⛔ llegaron a GN se listan aparte: el arqueo ⛔ las tiene.
-- 🟡 El arqueo de GN junta **por cuenta y horario, ⛔ por usuario** (un cobro de «Areben Comercial SRL»,
-  el usuario de la Caja, entró al turno de «Atencion al Cliente Zattia»: #29981 en el #8286). ⛔ Visto
-  todavía con una venta DE LA CAJA con un turno abierto.
+- 🔑 **El TURNO es de la Caja (v2, W3, Bruno 4-oct)** (`lib/caja/cierre.core.js`, `caja_turno` +
+  `caja_turno_mov`, `sql/migrate-caja-turno.sql`): la API de GN ⛔ tiene turnos y **el de GN se deja de
+  usar**. Se abre con el fondo, se anotan salidas de efectivo (motivo + monto) y se cierra contando
+  **sólo el efectivo**: `esperado = fondo + efectivo cobrado (cuentas con efectivo: true) − salidas`.
+  🔴 **Sin turno abierto ⛔ se cobra** (409 `sinTurno`). Un solo turno abierto por marca (índice único
+  parcial). La venta es del turno donde se COBRÓ (`caja_venta.turno_id`). El cierre guarda la foto
+  (`esperado`, `resumen`) y ⛔ se reabre. Un día puede tener dos turnos.
+- ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
+  turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
   `caja_config` (ver `sql/migrate-caja-transferencia.sql`); ⛔ hay pantalla para eso.
 
@@ -106,5 +107,5 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).
 - Una semana en paralelo con el POS de GN antes de apagarlo.
-- W3: ver con 1 venta real de la Caja (turno abierto) que entra al arqueo de GN.
+- W3b: cobrar desde la Caja los pedidos web a retirar que pagan en el local (paso 0: ¿GN deja agregar un pago a una venta existente?).
 - ⛔ Probado `--kiosk-printing` en la PC del local (imprimir sin diálogo).
