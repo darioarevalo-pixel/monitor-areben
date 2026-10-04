@@ -11,6 +11,10 @@ Darío. Reemplaza mirar la app de MP, a la que las empleadas no tienen acceso.
 el handler; `cliente.ts`, el navegador) · `api/_pagos-recibidos.js` por `?recurso=pagos-recibidos`
 · los pagos ⛔ se guardan: se leen de `/v1/payments/search` en cada pedido · `tests/pagos-recibidos.test.ts` y `-handler.test.ts` (base y MP de mentira).
 
+⛔ **La Caja también lee de acá** (F5, la transferencia que se confirma sola): `pagosDelDia` y
+`usosDe` se exportan del handler, y `cruzarTransferencia` vive en `core.core.js`. Qué pago «cuenta»
+acá decide qué venta se manda a GN allá. Ver `docs/secciones/caja.md`.
+
 Las cuentas viven en `mp_cuentas` + `mp_cuenta_uso` de la base de cada marca
 (`sql/migrate-mp-cuentas.sql`) y se cargan **desde la pantalla** (bloque «Cuenta de cobro», sólo
 admin). ⛔ No hay variable en Vercel: Darío pidió poder cambiar la cuenta de cobro sin tocar Vercel

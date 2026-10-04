@@ -21,6 +21,10 @@
  *
  * 🔴 **Con GN caído el ticket sale igual**, con el número provisorio, y la venta queda en
  * «Pendientes en Gestión Nube» con un cartel rojo hasta que llega.
+ *
+ * 🔑 **Por Transferencia, la venta ESPERA el pago** (F5): ⛔ sale a GN ni se imprime hasta que
+ * aparece en Mercado Pago una transferencia del monto exacto. Cada venta que espera tiene su cartel
+ * ámbar, que pregunta cada 5 s; con duda (dos pagos, dos ventas iguales) elige la cajera.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,13 +39,16 @@ import { cobro, renglones } from '@/lib/caja/core.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
 import {
   buscarProducto,
+  cancelarVenta,
   confirmarVenta,
+  cruzarVenta,
   guardarPolitica,
   leerConfig,
   leerCuentas,
   leerPendientes,
   reintentarVenta,
   type Config,
+  type Cruce,
   type CuentaGN,
   type Stock,
   type Variante,
@@ -269,6 +276,29 @@ export function Caja() {
     }
   }
 
+  /** El ticket de una venta ya guardada (la que esperaba la transferencia): el carrito ya ⛔ está. */
+  function ticketGuardado(venta: Venta): DatosTicket {
+    return {
+      ...datosTicket(venta),
+      renglones: (venta.renglones ?? []).map((r) => ({
+        nombre: r.nombre ?? `Producto ${r.product_id}`,
+        talle: r.talle,
+        cantidad: r.cantidad,
+        precio: r.precio,
+        importe: Math.round(r.cantidad * r.precio * 100) / 100,
+      })),
+    }
+  }
+
+  /** Llegó la transferencia y la venta salió a GN: recién ahora el ticket. */
+  function llegoTransferencia(venta: Venta) {
+    const ticket = ticketGuardado(venta)
+    setUltima({ venta, ticket })
+    avisar(venta.estado === 'en_gn' ? 'ok' : 'ojo')
+    imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
+    refrescarPendientes()
+  }
+
   async function confirmar() {
     if (!c) return
     setEnviando(true)
@@ -283,13 +313,19 @@ export function Caja() {
         email: bor.email.trim() || null,
         pagaCon: enEfectivo > 0 ? pagaConN : null,
       })
-      const ticket = datosTicket(r.venta)
-      setUltima({ venta: r.venta, ticket })
-      // La venta quedó guardada (en GN o pendiente): el carrito se cierra y nace otro id.
+      // La venta quedó guardada (en GN, pendiente o esperando la transferencia): el carrito se cierra y nace otro id.
       setBor({ id: nuevoId(), renglones: [], email: '' })
       setPagos([{ cuenta: null, base: '' }])
       setVarios(false)
       setPagaCon('')
+      if (r.venta.estado === 'esperando_pago') {
+        // ⛔ ticket todavía: sale cuando llega la transferencia (el cartel ámbar de arriba).
+        setUltima(null)
+        refrescarPendientes()
+        return
+      }
+      const ticket = datosTicket(r.venta)
+      setUltima({ venta: r.venta, ticket })
       avisar(r.venta.estado === 'en_gn' ? 'ok' : 'ojo')
       imprimirTicket(ticket, esEfectivo, ahora()).catch((e) => setAviso({ tono: 'danger', texto: `No se pudo imprimir el ticket: ${(e as Error).message}` }))
       refrescarPendientes()
@@ -307,7 +343,15 @@ export function Caja() {
 
   return (
     <div style={{ display: 'grid', gap: space[4], maxWidth: 1100 }}>
-      {pendientes.length > 0 && <Pendientes ventas={pendientes} onCambio={refrescarPendientes} />}
+      {pendientes
+        .filter((v) => v.estado === 'esperando_pago')
+        .map((v) => (
+          <EsperaTransferencia key={v.id} venta={v} onLlego={llegoTransferencia} onCambio={refrescarPendientes} />
+        ))}
+
+      {pendientes.some((v) => v.estado !== 'esperando_pago') && (
+        <Pendientes ventas={pendientes.filter((v) => v.estado !== 'esperando_pago')} onCambio={refrescarPendientes} />
+      )}
 
       {ultima && <UltimaVenta venta={ultima.venta} onReimprimir={() => imprimirTicket(ultima.ticket, esEfectivo, ahora())} />}
 
@@ -628,6 +672,124 @@ function UltimaVenta({ venta, onReimprimir }: { venta: Venta; onReimprimir: () =
         <Button size="sm" variant="outline" onClick={onReimprimir}>
           Imprimir ticket otra vez
         </Button>
+      </div>
+    </Notice>
+  )
+}
+
+const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+const TEXTO_ORIGEN: Record<string, string> = { mp: 'desde Mercado Pago', banco: 'desde otro banco', tarjeta: 'con tarjeta', otro: 'otro medio' }
+
+/**
+ * Una venta que espera la transferencia (F5). Pregunta cada 5 s si llegó; el servidor decide con
+ * `cruzarTransferencia` y, si llegó, ya la mandó a GN ⇒ acá sólo se imprime (`onLlego`).
+ */
+function EsperaTransferencia({ venta, onLlego, onCambio }: { venta: Venta; onLlego: (v: Venta) => void; onCambio: () => void }) {
+  const [cruce, setCruce] = useState<Cruce | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState<string | null>(null)
+  const [seguro, setSeguro] = useState(false)
+  const terminada = useRef(false)
+
+  const mirar = useCallback(
+    async (pago?: string) => {
+      if (terminada.current) return
+      try {
+        const r = await cruzarVenta(venta.id, pago)
+        setError(null)
+        if (r.cruce.estado === 'llego') {
+          terminada.current = true
+          onLlego(r.venta)
+          return
+        }
+        if (r.cruce.estado === 'ya' || r.cruce.estado === 'cancelada') {
+          terminada.current = true
+          onCambio()
+          return
+        }
+        setCruce(r.cruce)
+      } catch (e) {
+        setError((e as Error).message)
+      }
+    },
+    [venta.id, onLlego, onCambio],
+  )
+
+  useEffect(() => {
+    // La primera vez enseguida, fuera del render del efecto (el lint ⛔ deja un setState sincrónico ahí).
+    const t0 = setTimeout(() => void mirar(), 0)
+    const t = setInterval(() => void mirar(), 5_000)
+    return () => {
+      clearTimeout(t0)
+      clearInterval(t)
+    }
+  }, [mirar])
+
+  async function elegir(pago: string) {
+    setTrabajando(pago)
+    await mirar(pago)
+    setTrabajando(null)
+  }
+
+  async function cancelar() {
+    setTrabajando('cancelar')
+    try {
+      await cancelarVenta(venta.id)
+      terminada.current = true
+      onCambio()
+    } catch (e) {
+      setError((e as Error).message)
+      onCambio()
+    } finally {
+      setTrabajando(null)
+    }
+  }
+
+  const monto = venta.espera_monto ?? venta.total
+  return (
+    <Notice tone="warning">
+      <div style={{ display: 'grid', gap: space[2] }}>
+        <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
+          <b style={{ flex: 1, minWidth: 220 }}>
+            Esperando la transferencia de {plata(monto)} · venta {numeroProvisorio(venta.id)} de las {hora(venta.creada_en)}
+          </b>
+          {seguro ? (
+            <>
+              <span style={{ fontSize: font.sm }}>¿Cancelar la venta? ⛔ Se cobra.</span>
+              <Button size="sm" tone="danger" loading={trabajando === 'cancelar'} onClick={cancelar}>
+                Sí, cancelar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setSeguro(false)}>
+                No
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setSeguro(true)}>
+              Cancelar venta
+            </Button>
+          )}
+        </div>
+        <span style={{ fontSize: font.sm }}>
+          El ticket sale solo cuando la transferencia aparece en Mercado Pago. ⛔ Alcanza con el comprobante del teléfono.
+          {venta.total !== monto && ` El resto (${plata(venta.total - monto)}) se cobra aparte.`}
+        </span>
+        {cruce?.estado === 'elegir' && (
+          <div style={{ display: 'grid', gap: space[1] }}>
+            <span>{cruce.motivo}</span>
+            {cruce.candidatos.map((p) => (
+              <div key={p.id} style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm }}>
+                <span style={{ fontWeight: weight.semibold }}>{plata(p.monto)}</span>
+                <span>a las {hora(p.cuando)}</span>
+                <span style={{ color: color.mut }}>{TEXTO_ORIGEN[p.origen] ?? p.origen}</span>
+                <Button size="sm" tone="success" loading={trabajando === p.id} disabled={!!trabajando} onClick={() => elegir(p.id)}>
+                  Es ésta
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        {(cruce?.estado === 'sin_cuenta' || cruce?.estado === 'invalido') && <span>{cruce.motivo}</span>}
+        {error && <span style={{ color: color.danger }}>{error}</span>}
       </div>
     </Notice>
   )

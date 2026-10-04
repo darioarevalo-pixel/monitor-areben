@@ -20,6 +20,9 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   que dice la etiqueta colgada, y la cajera lo puede cambiar. Tocar esa regla cambia lo que se cobra.
 - `lib/gn/inventario-vivo.core.js` es también de `api/_inventario-vivo.js` (los Conteos).
 - `lib/rollo80.ts` es también del ticket y el recibo de Envíos.
+- **La transferencia se cruza con la MISMA lectura de Pagos recibidos** (`pagosDelDia` de
+  `api/_pagos-recibidos.js`, `cruzarTransferencia` de `lib/pagos-recibidos/core.core.js`): cambiar
+  qué cuenta como pago allá cambia qué confirma una venta acá.
 
 ## Reglas que el código no dice
 
@@ -39,11 +42,21 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
 - ⚠️ Cada unidad viaja en su renglón con `quantity: 1`: con cantidad > 1, cómo toma GN el descuento
   en pesos ⛔ está medido.
 - ⚠️ La política de cambio del pie del ticket la escribe un admin desde la pantalla (`caja_config`).
+- 🔑 **Por Transferencia la venta ESPERA el pago (F5)**: la cuenta con `esperaPago` en `caja_config`
+  (hoy sólo 13015) deja la venta en `esperando_pago` —⛔ GN, ⛔ ticket, ⛔ mail— hasta que aparece en
+  MP un pago aprobado del **monto exacto** (`espera_monto`, sólo la parte de la transferencia).
+  Sola, sólo sin duda: UN pago posterior y ninguna otra venta esperando ese monto. Con duda (o un
+  pago de hasta 10 min ANTES de confirmar) elige la cajera. ⛔ Alcanza el comprobante del teléfono.
+- 🔴 **Un pago de MP confirma UNA venta**: `mp_pago_id` con índice único. Y **sólo `cruzar` saca
+  una venta de `esperando_pago`**: `reintentar`, el respaldo de la cola y `enviarVenta` se niegan.
+- ⚠️ `cancelada` = esperaba y ⛔ llegó. Cancelar una que ya cruzó ⇒ 409. Hay que volver a escanear.
+- ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
+  `caja_config` (ver `sql/migrate-caja-transferencia.sql`); ⛔ hay pantalla para eso.
 
 ## Pendiente
 
-- F4: el ticket por mail y el alta en la base del mailer (`source:"pos"`). Hoy el mail se GUARDA en
-  `caja_venta.email` y ⛔ se manda nada.
-- F5: transferencia que se confirma sola contra Pagos recibidos.
+- F5: ⛔ probado con una transferencia real (la verificación del plan).
+- ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
+  del update, y ⛔ tiene test (el mock de la base es secuencial).
 - Una semana en paralelo con el POS de GN antes de apagarlo; definir si la Caja usa los turnos de GN.
 - ⛔ Probado `--kiosk-printing` en la PC del local (imprimir sin diálogo).

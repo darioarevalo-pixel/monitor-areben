@@ -117,6 +117,36 @@ async function ponerEnUso(sb, store, cuentaId, perfil) {
   if (error) throw error;
 }
 
+/**
+ * Lo que entró un día a las cuentas que estaban en uso, ya limpio (`limpiarPagos`), más nuevo primero.
+ * Lo usa también la Caja (`api/_caja.js`) para cruzar las transferencias: la MISMA lectura que ve
+ * la empleada en Pagos recibidos, ⛔ una copia. `usos` sale de `cuentasDe` (o de `usosDe`).
+ */
+export async function pagosDelDia(sb, usos, dia) {
+  const ids = cuentasDelDia(usos, dia);
+  const { data: llaves, error: eLl } = await sb.from('mp_cuentas').select('cuenta_id, token').in('cuenta_id', ids);
+  if (eLl) throw eLl;
+  const pagos = [];
+  const devueltos = [];
+  for (const ll of llaves || []) {
+    const crudos = await buscarDelDia(ll.token, dia);
+    const l = limpiarPagos(crudos, Number(ll.cuenta_id));
+    pagos.push(...l.pagos);
+    devueltos.push(...l.devueltos);
+  }
+  const porFecha = (a, b) => Date.parse(b.cuando) - Date.parse(a.cuando);
+  pagos.sort(porFecha);
+  devueltos.sort(porFecha);
+  return { pagos, devueltos };
+}
+
+/** Desde cuándo se usa cada cuenta de la marca. Vacío ⇒ ⛔ hay cuenta de MP conectada. */
+export async function usosDe(sb, store) {
+  const { data, error } = await sb.from('mp_cuenta_uso').select('cuenta_id, desde').eq('store', store).order('desde');
+  if (error) throw error;
+  return data || [];
+}
+
 export default async function handler(req, res) {
   const perfil = await exigirUsuario(req, res);
   if (!perfil) return;
@@ -181,21 +211,7 @@ export default async function handler(req, res) {
     // Sin cuenta no es un error: todavía no se cargó ninguna, y la pantalla lo dice.
     if (!usos.length) return res.status(200).json({ ok: true, conectada: false, dia, hoy, admin, ...(admin ? { cuentas } : {}) });
 
-    const ids = cuentasDelDia(usos, dia);
-    const { data: llaves, error: eLl } = await sb.from('mp_cuentas').select('cuenta_id, token').in('cuenta_id', ids);
-    if (eLl) throw eLl;
-    const pagos = [];
-    const devueltos = [];
-    for (const ll of llaves || []) {
-      const crudos = await buscarDelDia(ll.token, dia);
-      const l = limpiarPagos(crudos, Number(ll.cuenta_id));
-      pagos.push(...l.pagos);
-      devueltos.push(...l.devueltos);
-    }
-    const porFecha = (a, b) => Date.parse(b.cuando) - Date.parse(a.cuando);
-    pagos.sort(porFecha);
-    devueltos.sort(porFecha);
-
+    const { pagos, devueltos } = await pagosDelDia(sb, usos, dia);
     const r = { ok: true, conectada: true, dia, hoy, admin, pagos, leidoEn: new Date().toISOString() };
     if (admin) Object.assign(r, { total: totalDe(pagos), cantidad: pagos.length, devueltos, cuentas });
     res.setHeader('Cache-Control', 'no-store');

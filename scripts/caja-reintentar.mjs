@@ -25,10 +25,14 @@ const sb = createClient(url, key);
 // El ticket por mail (F4). Sin las dos variables, las ventas se reintentan igual y los tickets ⛔.
 const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch };
 
+// 🔴 Sólo las COBRADAS: una que espera la transferencia (F5) sale a GN cuando `cruzar` encuentra el
+// pago, y una cancelada ⛔ sale nunca. `.neq('en_gn')` las mandaba sin cruce.
+const SIN_LLEGAR = ['borrador', 'enviando', 'error'];
+
 // Las que se tocaron hace menos de 2 minutos pueden estar en vuelo desde la pantalla.
 const corte = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 const { data, error } = await sb.from('caja_venta').select(`${COLUMNAS_VENTA}, payload, actualizada_en`)
-  .eq('store', 'zattia').neq('estado', 'en_gn').lt('actualizada_en', corte)
+  .eq('store', 'zattia').in('estado', SIN_LLEGAR).lt('actualizada_en', corte)
   .order('creada_en', { ascending: true }).limit(50);
 if (error) { console.error('No se pudo leer caja_venta:', error.message); process.exit(1); }
 
@@ -63,6 +67,6 @@ if (mailer.url && mailer.key) {
 console.log(`Tickets por mail: ${tickets} pedidos · ${ticketsMal} con error`);
 
 const { data: viejas, error: e2 } = await sb.from('caja_venta').select('id')
-  .eq('store', 'zattia').neq('estado', 'en_gn').lt('creada_en', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+  .eq('store', 'zattia').in('estado', SIN_LLEGAR).lt('creada_en', new Date(Date.now() - 60 * 60 * 1000).toISOString());
 console.log(`Pendientes: ${pendientes.length} · llegaron: ${ok} · rechazadas por GN (⛔ se reintentan): ${rechazadas} · sin llegar hace +1 h: ${e2 ? '?' : viejas.length}`);
 if (e2 || viejas.length) process.exit(1);

@@ -7,7 +7,7 @@
 
 import { apiFetch } from '@/lib/api-fetch'
 
-export type ReglaCuenta = { nombre: string; descuento: number; efectivo?: boolean }
+export type ReglaCuenta = { nombre: string; descuento: number; efectivo?: boolean; esperaPago?: boolean }
 export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta> }
 export type Config = { reglas: Reglas; politica_cambio: string | null }
 
@@ -19,7 +19,10 @@ export type Variante = { product_id: number; size_id: number; product_name: stri
 export type Stock = { local: number; deposito: number; fuente: 'vivo' | 'espejo'; motivo?: string }
 export type Producto = { variante: Variante; stock: Stock } | { candidatos: Variante[] }
 
-export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error'
+/** `esperando_pago`: cobrada por transferencia, el pago todavía ⛔ apareció en MP (F5). `cancelada`: ⛔ llegó y la cajera la canceló. */
+export type EstadoVenta = 'borrador' | 'enviando' | 'en_gn' | 'error' | 'esperando_pago' | 'cancelada'
+/** Un renglón como quedó guardado: con lo que necesita el ticket. */
+export type RenglonGuardado = { product_id: number; size_id: number; cantidad: number; precio: number; nombre: string | null; talle: string | null }
 export type PagoGuardado = { cuenta: number; base: number; porcentaje: number; descuento: number; redondeo: number; monto: number }
 export type Venta = {
   id: string
@@ -37,6 +40,11 @@ export type Venta = {
   ultimo_error: string | null
   reintentable: boolean | null
   creada_en: string
+  renglones?: RenglonGuardado[]
+  /** Lo que tiene que llegar por transferencia; null si la venta ⛔ espera. */
+  espera_monto?: number | null
+  mp_pago_id?: string | null
+  mp_cruce?: 'solo' | 'cajera' | null
 }
 
 async function leer<T>(r: Response, fallo: string): Promise<T> {
@@ -72,6 +80,21 @@ export type Resultado = { venta: Venta; reintentable?: boolean }
 
 export const confirmarVenta = (v: { id: string; items: ItemConfirmar[]; pagos: PagoConfirmar[]; total: number; email: string | null; pagaCon: number | null }) =>
   post<Resultado>({ action: 'confirmar', ...v }, 'No se pudo confirmar la venta.')
+
+/** Un pago de MP que puede ser el de la venta. ⛔ Trae datos de quien pagó. */
+export type PagoMP = { id: string; monto: number; cuando: string; origen: 'mp' | 'banco' | 'tarjeta' | 'otro' }
+export type Cruce =
+  | { estado: 'esperando' }
+  | { estado: 'llego'; por: 'solo' | 'cajera'; pago: PagoMP }
+  | { estado: 'elegir'; candidatos: PagoMP[]; motivo: string }
+  | { estado: 'invalido' | 'sin_cuenta'; motivo: string }
+  | { estado: 'ya' | 'cancelada' }
+
+/** ¿Llegó la transferencia? Con `pago`, la cajera eligió cuál es. Si llegó, la venta ya salió a GN. */
+export const cruzarVenta = (id: string, pago?: string) =>
+  post<Resultado & { cruce: Cruce }>({ action: 'cruzar', id, ...(pago ? { pago } : {}) }, 'No se pudo mirar Mercado Pago.')
+
+export const cancelarVenta = (id: string) => post<{ venta: Venta }>({ action: 'cancelar', id }, 'No se pudo cancelar la venta.')
 
 export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reintentar', id }, 'No se pudo reintentar la venta.')
 
