@@ -12,7 +12,7 @@ el código no dice solo.
 
 ## El mapa
 
-68 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
+69 secciones. `key → components/… + lib/…`. Cuando no figura `lib/`, la lógica está en un archivo
 suelto de `lib/` con el mismo nombre (`resumen.ts`, `variantes.ts`, …).
 
 **Análisis** — `resumen` · `productos` · `variantes` · `ventas-mensuales` · `margenes` · `talles` ·
@@ -46,6 +46,7 @@ en Envíos, que pregunta antes de dejar avanzar el paquete de esa orden) ·
 `conteo → components/conteo-local-bdi` · `conteo-estandar-zattia` y
 `conteo-estandar-stunned → components/conteo-estandar` · `cupones` · `etiquetas` · `exhib` ·
 `mapa-local → components/mapa-local + lib/mapa-local` (el armado de los percheros: se guarda el armado, ⛔ no dónde cae cada prenda) ·
+`ubicaciones-local → components/ubicaciones-local + lib/ubicaciones-local` (en qué estante de atrás del local está cada producto, por `?recurso=ubicaciones-local`; tablas `ubicacion_local` y `ubicacion_local_lectura`) ·
 `caja → components/caja + lib/caja` (el POS propio del local de Zattia: cobra y manda la venta a GN por `?recurso=caja`; tablas `caja_venta` y `caja_config`) ·
 `pagos-recibidos → components/pagos-recibidos + lib/pagos-recibidos` (lo que entró a Mercado Pago, leído de MP en vivo por `?recurso=pagos-recibidos`; las cuentas de cobro en `mp_cuentas`) ·
 `ubicaciones` · `solicitudes` · `solicitudes-internas` · `postventa-local → components/postventa` ·

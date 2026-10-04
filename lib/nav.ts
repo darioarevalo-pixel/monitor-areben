@@ -209,6 +209,7 @@ const ICONO_POR_KEY: Record<string, string> = {
   'conteo-estandar-stunned': 'conteo',
   exhib: 'exhib',
   'mapa-local': 'ubicaciones',
+  'ubicaciones-local': 'ubicaciones',
   // Marketing
   // La cámara, la misma de la cola de fotos de Tienda Nube: es el mismo trabajo en dos momentos —
   // lo que la cola detecta que falta fotografiar se pide acá, y `components/tncat/ColaCard.tsx`
@@ -505,6 +506,7 @@ export const DESCRIPCIONES: Record<string, string> = {
   modelos: 'El padrón de las modelos: quién es cada una, cómo se la contacta, quién la representa, qué talle usa y cuánto mide. El talle y la altura de acá son los que salen a la descripción del producto cuando la modelo se elige en la sesión de fotos.',
   exhib: 'Recorrido con lector para verificar qué está colgado en el local.',
   'mapa-local': 'Qué va en cada perchero del salón y cuánto entra.',
+  'ubicaciones-local': 'En qué estante del depósito de atrás del local está cada producto.',
   caja: 'Cobrar en el local: se escanea, se elige cómo paga, sale el vuelto y el ticket, y la venta queda en Gestión Nube.',
   'pagos-recibidos': 'Los pagos que entraron hoy a la cuenta de Mercado Pago del local. Se entrega la compra cuando el pago aparece acá, no por lo que muestra el teléfono de la clienta.',
   conteo: 'Conteo de fundas por escaneo, agrupado por modelo de celular. Cerrás un modelo y ajusta contra el stock vivo de GN.',

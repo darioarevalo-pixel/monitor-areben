@@ -119,6 +119,9 @@ ya tienen ficha:
 - Mapa del local (percheros de Zattia) → **leer `docs/secciones/mapa-local.md`** antes de tocar
   `components/mapa-local/`, `lib/mapa-local/` o `api/_mapa-local.js`. ⛔ Se guarda el ARMADO, ⛔ no
   dónde cae cada prenda, y el cupo ⛔ nunca se pasa: lo que sobra sale como «No entran».
+- Ubicaciones depósito (estantes de atrás del local de Zattia) → **leer `docs/secciones/ubicaciones-local.md`**
+  antes de tocar `components/ubicaciones-local/`, `lib/ubicaciones-local/` o `api/_ubicaciones-local.js`.
+  ⛔ **`claveDe` es LA regla de «qué es el producto»**: la reusan el Conteo estándar y las etiquetas.
 - Canjes → **leer `docs/secciones/canjes.md`** antes de tocar `components/canjes/`, `lib/canjes/`,
   `api/_canjes.js`, `api/_canje-portal.js` o `components/cupones/CanjesLocal.tsx` (la pestaña del
   mostrador, que vive en Cupones y entrega canjes creando una venta en GN).

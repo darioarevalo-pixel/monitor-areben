@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparLecturas, claveDe, controles, leerCodigo, nombresDeEstantes, TOPE_ESTANTES, ubicacionesDe } from '@/lib/ubicaciones-local/core.core.js'
+import { agruparLecturas, claveDe, controles, indexarLocal, leerCodigo, resolverEnLocal, nombresDeEstantes, TOPE_ESTANTES, ubicacionesDe } from '@/lib/ubicaciones-local/core.core.js'
 import { skuBase } from '@/lib/conteo-estandar/core'
 
 /**
@@ -114,5 +114,33 @@ describe('nombresDeEstantes: lo que se tipea para imprimir las etiquetas de esta
     const r = nombresDeEstantes('A1-A40 B1-B40')
     expect(r.nombres).toHaveLength(TOPE_ESTANTES)
     expect(r.recortado).toBe(true)
+  })
+})
+
+describe('resolverEnLocal: la bolsa se reconoce en el teléfono, con la regla del servidor', () => {
+  const idx = indexarLocal([
+    { sku: 'RBT-0137-BE', barcode: 'RBT0137BE', name: 'Remera Bita', qty: 2, img: null },
+    { sku: 'RBT-0137-NG', barcode: '7790001', name: 'Remera Bita', qty: 3, img: 'https://x/1.jpg' },
+    { sku: 'PAN-0009-NG', barcode: '7790002', name: 'Pantalón', qty: 0 },
+    { sku: null, barcode: '7790003', name: 'Sin SKU', qty: 5 },
+  ])
+  const leer = (t: string) => leerCodigo(t) as { codigo: string; clave: string }
+
+  it('por la etiqueta de la bolsa: suma el stock de todos los colores y toma la primera foto', () => {
+    expect(resolverEnLocal(idx, leer('RBT-0137'))).toEqual({ clave: 'RBT-0137', nombre: 'Remera Bita', img: 'https://x/1.jpg', enLocal: 5 })
+  })
+  it("con el lector en castellano (' por -) también", () => {
+    expect(resolverEnLocal(idx, leer("RBT'0137"))?.clave).toBe('RBT-0137')
+  })
+  it('por el código de barras de la prenda, incluso el SKU sin guiones', () => {
+    expect(resolverEnLocal(idx, leer('7790001'))?.clave).toBe('RBT-0137')
+    expect(resolverEnLocal(idx, leer('RBT0137BE'))?.clave).toBe('RBT-0137')
+  })
+  it('con stock 0 se reconoce igual (es el aviso de «sin stock», no «no figura»)', () => {
+    expect(resolverEnLocal(idx, leer('PAN-0009'))?.enLocal).toBe(0)
+  })
+  it('lo que no tiene SKU o no está en el Local da null', () => {
+    expect(resolverEnLocal(idx, leer('7790003'))).toBeNull()
+    expect(resolverEnLocal(idx, leer('ZZZ-9999'))).toBeNull()
   })
 })

@@ -503,6 +503,22 @@ export const PERM_CAT: PermCat[] = [
     ]
   },
   {
+    "key": "ubicaciones-local",
+    "area": "local",
+    "label": "Ubicaciones depósito",
+    "info": "En qué estante del depósito de atrás del local está guardado cada producto. Se escanea la etiqueta del estante y después todas sus bolsas: guardar reemplaza lo que tenía ese estante. Se busca un producto y dice «A1 · A2». Controles contra el stock de anoche del Local: bolsa sin stock y stock sin bolsa. No toca el stock ni Gestión Nube.",
+    "brands": [
+      "zattia"
+    ],
+    "subs": [
+      {
+        "key": "escanear",
+        "label": "Escanear estantes",
+        "info": "Escanear un estante y guardarlo (reemplaza lo que tenía), y eliminar estantes. Sin esto los estantes y los controles se miran pero no se guarda nada."
+      }
+    ]
+  },
+  {
     "key": "tncat",
     "area": "marketing",
     "label": "Tienda Nube",
@@ -1111,7 +1127,8 @@ export const NAV_CATS: NavCat[] = [
           "conteo-estandar-stunned",
           "conteo",
           "exhib",
-          "mapa-local"
+          "mapa-local",
+          "ubicaciones-local"
         ],
         // «Qué se cuelga» es una vista del Mapa del local (misma key, mismo permiso): las entradas van
         // después de las keys, así que queda justo debajo. Pedido de Bruno (1-oct-2026): la vista
