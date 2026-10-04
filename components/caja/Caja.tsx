@@ -530,6 +530,7 @@ export function Caja() {
                 importe={filas?.[i]?.importe ?? null}
                 onSacar={() => sacarRenglon(i)}
                 avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
+                mirandoWeb={!pedidosWeb && !errPedidos}
               />
             ))}
           </div>
@@ -710,7 +711,9 @@ function ListaPrendas({
             {v.product_name} · {v.size_name}
           </div>
           <div style={{ fontSize: font.sm, color: color.mut }}>
-            {(v.local ?? 0) > 0 ? `${v.local} en el local` : 'sin stock en el local'}
+            {/* El stock de la lista es el de ANOCHE (tipear ⛔ gasta el cupo de GN): lo vendido hoy —en el
+                mostrador o en la web— recién se ve al elegirla, que lee GN en vivo (Bruno, 4-oct). */}
+            {(v.local ?? 0) > 0 ? `${v.local} en el local anoche` : 'sin stock en el local anoche'}
           </div>
         </div>
         <div style={{ fontWeight: weight.semibold, color: color.ink }}>{precio ? plata(precio) : '—'}</div>
@@ -747,6 +750,7 @@ function FilaRenglon({
   importe,
   onSacar,
   avisoWeb,
+  mirandoWeb,
 }: {
   r: Renglon
   cargandoPrecios: boolean
@@ -758,6 +762,8 @@ function FilaRenglon({
   onSacar: () => void
   /** La prenda está en un pedido web sin armar (W1). */
   avisoWeb: { tipo: 'separada' | 'reponer' | 'sin_stock'; texto: string } | null
+  /** Los pedidos web todavía ⛔ llegaron: sin esto, «sin aviso» parece «en ningún pedido». */
+  mirandoWeb: boolean
 }) {
   // Mientras se escribe, el texto; si ⛔ se está escribiendo, el precio del renglón.
   const [texto, setTexto] = useState<string | null>(null)
@@ -792,6 +798,7 @@ function FilaRenglon({
           {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· stock de anoche (Gestión Nube no contestó)</span>}
         </div>
         {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: el producto no cruza con Tienda Nube.</div>}
+        {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[0.5] }}>mirando pedidos web…</div>}
         {avisoWeb && (
           <div style={{ marginTop: space[1] }}>
             <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>

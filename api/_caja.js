@@ -82,14 +82,18 @@ export const olvidarPedidosWeb = () => { cachePedidos = null }
 
 async function leerPedidosWeb(sobre, ahora) {
   if (cachePedidos && ahora - cachePedidos.en < 60_000) return cachePedidos.datos
-  const porNumero = new Map()
-  let noLeidas = 0
-  for (const [a, b] of TRAMOS_PEDIDOS) {
-    // De a uno, ⛔ en paralelo: TN corta por cupo, y callado.
+  // Los tres EN PARALELO: de a uno tardaba ~4 s en frío y el aviso del renglón llegaba después del
+  // escaneo (visto en prod, 4-oct). Son 6 consultas a TN contra un cupo de 40; si corta, lo dice `noLeidas`.
+  const respuestas = await Promise.all(TRAMOS_PEDIDOS.map(async ([a, b]) => {
     const qs = new URLSearchParams({ ordenes: '1', modo: 'lista', store: STORE, from: diaArgentino(ahora - b * DIA_MS), to: diaArgentino(ahora - a * DIA_MS), limite: '200' })
     const r = await fetch(`${AUDIT}?${qs}`, { headers: { 'x-monitor-auth': sobre } })
     const d = await r.json().catch(() => null)
     if (!r.ok || !d || !d.ok) throw new Error(`Tienda Nube ⛔ contestó los pedidos (${(d && d.error) || r.status}).`)
+    return d
+  }))
+  const porNumero = new Map()
+  let noLeidas = 0
+  for (const d of respuestas) {
     const lista = Array.isArray(d.ordenes) ? d.ordenes : []
     for (const o of lista) porNumero.set(o.number, o)
     noLeidas += ordenesSinLeer(d, lista.length)
