@@ -255,24 +255,40 @@ describe('caja · el aviso del renglón', () => {
   const porSku = indicePorSku(pedidosSinArmar(todas, AHORA))
 
   it('el AIXA Rojo con 1 libre en el Local: está separada, lo libre alcanza', () => {
-    const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 1, enCarrito: 1, porSku })
+    const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 1, deposito: 0, enCarrito: 1, porSku })
     expect(a?.tipo).toBe('separada')
     expect(a?.texto).toMatch(/#7153/)
   })
 
   it('🔴 con 0 libres en el Local la de la percha ES la del pedido: el pedido queda sin stock', () => {
-    const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, enCarrito: 1, porSku })
+    const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 0, enCarrito: 1, porSku })
     expect(a?.tipo).toBe('sin_stock')
     expect(a?.texto).toMatch(/#7153.*queda sin stock/)
   })
 
+  it('el Local ⛔ alcanza pero el Depósito sí: se arma TRAYENDO del depósito (el AIXA Rojo del 4-oct: Local 0, 2 para reponer)', () => {
+    const a = avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 2, enCarrito: 1, porSku })
+    expect(a?.tipo).toBe('reponer')
+    expect(a?.texto).toBe('Comprada online (pedido #7153): para armarlo hay que traer 1 del depósito.')
+    expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 2, enCarrito: 2, porSku })?.texto).toMatch(/traer 2 del depósito/)
+    expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, deposito: 2, enCarrito: 3, porSku })?.tipo).toBe('sin_stock')
+  })
+
+  it('🔴 un Depósito NEGATIVO ⛔ cubre nada', () => {
+    expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 1, deposito: -1, enCarrito: 2, porSku })?.tipo).toBe('sin_stock')
+  })
+
+  it('sin el Depósito ⛔ adivina', () => {
+    expect(() => avisoDeRenglon({ sku: 'RVE-0022-RO', local: 0, enCarrito: 1, porSku } as never)).toThrow()
+  })
+
   it('cuenta las del carrito: la 2ª unidad de la misma prenda ya ⛔ alcanza', () => {
-    expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 1, enCarrito: 2, porSku })?.tipo).toBe('sin_stock')
+    expect(avisoDeRenglon({ sku: 'RVE-0022-RO', local: 1, deposito: 0, enCarrito: 2, porSku })?.tipo).toBe('sin_stock')
   })
 
   it('el SKU se compara sin mayúsculas ni espacios', () => {
     expect(claveSku('  rve-0022-ro ')).toBe('RVE-0022-RO')
-    expect(avisoDeRenglon({ sku: ' rve-0022-ro', local: 3, enCarrito: 1, porSku })?.tipo).toBe('separada')
+    expect(avisoDeRenglon({ sku: ' rve-0022-ro', local: 3, deposito: 0, enCarrito: 1, porSku })?.tipo).toBe('separada')
   })
 
   it('un pedido SIN PAGAR se nombra aparte, y si son todos sin pagar la prenda está «Reservada»', () => {
@@ -281,17 +297,17 @@ describe('caja · el aviso del renglón', () => {
       { numero: 7153, sinPagar: false, prendas: [{ sku: 'C-1', cantidad: 1 }] },
       { numero: 7161, sinPagar: true, prendas: [{ sku: 'C-1', cantidad: 1 }] },
     ] as never)
-    expect(avisoDeRenglon({ sku: 'B-1', local: 0, enCarrito: 1, porSku: por })?.texto).toBe('Reservada online (pedido #7160 (sin pagar), sin armar): si la vendés, el pedido queda sin stock.')
-    expect(avisoDeRenglon({ sku: 'C-1', local: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/^Comprada online \(pedido #7153, #7161 \(sin pagar\)/)
-    expect(avisoDeRenglon({ sku: 'B-1', local: 2, enCarrito: 1, porSku: por })?.texto).toMatch(/#7160 \(sin pagar\) lleva esta prenda/)
+    expect(avisoDeRenglon({ sku: 'B-1', local: 0, deposito: 0, enCarrito: 1, porSku: por })?.texto).toBe('Reservada online (pedido #7160 (sin pagar), sin armar): si la vendés, el pedido queda sin stock.')
+    expect(avisoDeRenglon({ sku: 'C-1', local: 0, deposito: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/^Comprada online \(pedido #7153, #7161 \(sin pagar\)/)
+    expect(avisoDeRenglon({ sku: 'B-1', local: 2, deposito: 0, enCarrito: 1, porSku: por })?.texto).toMatch(/#7160 \(sin pagar\) lleva esta prenda/)
   })
 
   it('una prenda en ningún pedido, o sin SKU ⇒ sin aviso', () => {
-    expect(avisoDeRenglon({ sku: 'RVE-0022-NG', local: 0, enCarrito: 1, porSku })).toBeNull()
-    expect(avisoDeRenglon({ sku: '', local: 0, enCarrito: 1, porSku })).toBeNull()
+    expect(avisoDeRenglon({ sku: 'RVE-0022-NG', local: 0, deposito: 0, enCarrito: 1, porSku })).toBeNull()
+    expect(avisoDeRenglon({ sku: '', local: 0, deposito: 0, enCarrito: 1, porSku })).toBeNull()
   })
 
   it('sin el stock o el carrito ⛔ adivina', () => {
-    expect(() => avisoDeRenglon({ sku: 'RVE-0022-RO', local: null, enCarrito: 1, porSku } as never)).toThrow()
+    expect(() => avisoDeRenglon({ sku: 'RVE-0022-RO', local: null, deposito: 0, enCarrito: 1, porSku } as never)).toThrow()
   })
 })

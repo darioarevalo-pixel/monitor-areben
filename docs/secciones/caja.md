@@ -82,9 +82,10 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   daba 34 y 28 ya estaban empaquetadas esperando retiro. Se leen del audit de bdi-catalogo en 3 tramos
   de 3 días (corta en 200 por pedido) y lo que ⛔ llegó se dice. Caché de 60 s por instancia.
 - 🔴 **El stock del Local YA descontó el pedido web**: cada orden de TN entra a GN como venta del Local
-  (4 de 4 pagados y 7 de 7 sin pagar, medido). ⇒ el aviso fuerte («si la vendés, el pedido queda sin stock») sale cuando lo libre
-  menos lo del carrito da < 0; si alcanza, sólo «el pedido #N lleva esta prenda». El cruce es por SKU
-  de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local (Bruno, 4-oct).
+  (4 de 4 pagados y 7 de 7 sin pagar, medido), y el Depósito ⛔ lo toca. Tres avisos (Bruno, 4-oct):
+  alcanza el Local ⇒ «el pedido #N lleva esta prenda»; ⛔ alcanza el Local pero sí el Depósito ⇒ ámbar
+  «hay que traer N del depósito»; ⛔ alcanza ni con el Depósito ⇒ rojo «el pedido queda sin stock».
+  El cruce es por SKU de variante (TN y GN usan el mismo). La Caja ⛔ frena: gana el local.
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
   `caja_config` (ver `sql/migrate-caja-transferencia.sql`); ⛔ hay pantalla para eso.
 

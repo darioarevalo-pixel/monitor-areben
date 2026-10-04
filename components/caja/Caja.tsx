@@ -208,8 +208,8 @@ export function Caja() {
   }, [])
   /** El aviso del renglón: null sin pedidos leídos (el cartel de arriba ya dice que ⛔ se leyeron). */
   const avisoWeb = useCallback(
-    (v: Variante, local: number, enCarrito: number) =>
-      pedidosWeb ? avisoDeRenglon({ sku: v.sku ?? '', local, enCarrito, porSku: pedidosWeb.porSku }) : null,
+    (v: Variante, stock: Stock, enCarrito: number) =>
+      pedidosWeb ? avisoDeRenglon({ sku: v.sku ?? '', local: stock.local, deposito: stock.deposito, enCarrito, porSku: pedidosWeb.porSku }) : null,
     [pedidosWeb],
   )
 
@@ -248,11 +248,11 @@ export function Caja() {
       return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...precioYFoto(variante.product_id) }] }
     })
     const enCarrito = (bor.renglones.find((r) => claveDe(r.variante) === claveDe(variante))?.cantidad ?? 0) + 1
-    const web = avisoWeb(variante, stock.local, enCarrito)
+    const web = avisoWeb(variante, stock, enCarrito)
     // La Caja ⛔ frena (gana el local, Bruno 4-oct): avisa, y el pedido se resuelve después.
-    if (web?.tipo === 'sin_stock') {
-      avisar('ojo', 'Comprada online')
-      setAviso({ tono: 'warning', texto: web.texto })
+    if (web && web.tipo !== 'separada') {
+      avisar('ojo', web.tipo === 'sin_stock' ? 'Comprada online' : 'Traer del depósito')
+      setAviso({ tono: web.tipo === 'sin_stock' ? 'danger' : 'warning', texto: web.texto })
     } else if (stock.local - enCarrito <= 0) avisar('ojo', 'Última')
     else avisar('ok')
   }
@@ -529,7 +529,7 @@ export function Caja() {
                 onRebaja={(rb) => cambiarRenglon(i, { rebaja: rb })}
                 importe={filas?.[i]?.importe ?? null}
                 onSacar={() => sacarRenglon(i)}
-                avisoWeb={avisoWeb(r.variante, r.stock.local, r.cantidad)}
+                avisoWeb={avisoWeb(r.variante, r.stock, r.cantidad)}
               />
             ))}
           </div>
@@ -757,7 +757,7 @@ function FilaRenglon({
   importe: number | null
   onSacar: () => void
   /** La prenda está en un pedido web sin armar (W1). */
-  avisoWeb: { tipo: 'separada' | 'sin_stock'; texto: string } | null
+  avisoWeb: { tipo: 'separada' | 'reponer' | 'sin_stock'; texto: string } | null
 }) {
   // Mientras se escribe, el texto; si ⛔ se está escribiendo, el precio del renglón.
   const [texto, setTexto] = useState<string | null>(null)
