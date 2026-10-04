@@ -638,3 +638,36 @@ describe('caja · pedidos web sin armar (W1)', () => {
     expect(tn.pedidos).toHaveLength(0)
   })
 })
+
+describe('caja · cierre de turno (v2, W3)', () => {
+  const T = (hhmm: string) => `2026-10-03T${hhmm}:00.000Z`
+  const fila = (id: string, estado: string, creada: string, enGn: string | null, pagos: Fila[]) =>
+    base.ventas.set(id, { id, store: 'zattia', estado, pagos, total: pagos.reduce((s, p) => s + Number(p.monto), 0), creada_en: creada, en_gn_en: enGn })
+
+  it('suma por cuenta lo que llegó a GN en el turno, con el nombre de GN y ⛔ su saldo', async () => {
+    conSesion(CAJERA)
+    fila('a', 'en_gn', T('17:30'), T('17:30'), [{ cuenta: 12921, monto: 21700 }])
+    fila('b', 'en_gn', T('16:50'), T('17:10'), [{ cuenta: 12921, monto: 5000 }]) // cobrada antes, llegó en el turno
+    fila('c', 'en_gn', T('12:00'), T('12:00'), [{ cuenta: 12921, monto: 999 }]) // otro turno
+    fila('d', 'error', T('18:00'), null, [{ cuenta: 12921, monto: 8000 }])
+    const r = await correr(req('GET', { action: 'cierre', desde: T('17:04'), hasta: T('22:06') }))
+    expect(r.code).toBe(200)
+    expect(r.body?.porCuenta).toEqual([{ cuenta: 12921, nombre: 'Efectivo', monto: 26700, ventas: 2 }])
+    expect(r.body?.total).toBe(26700)
+    expect((r.body?.sinGN as Fila[]).map((s) => s.id)).toEqual(['d'])
+    expect(r.body?.nombresDe).toBe('gn')
+    expect(JSON.stringify(r.body)).not.toMatch(/balance|114084283/)
+  })
+
+  it('sin desde/hasta o al revés ⇒ 400; más de dos días ⇒ 400', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('GET', { action: 'cierre', desde: T('17:04') }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'cierre', desde: T('22:00'), hasta: T('17:00') }))).code).toBe(400)
+    expect((await correr(req('GET', { action: 'cierre', desde: '2026-09-01T00:00:00.000Z', hasta: T('17:00') }))).code).toBe(400)
+  })
+
+  it('sin el permiso `caja` ⇒ 403', async () => {
+    conSesion(OTRA)
+    expect((await correr(req('GET', { action: 'cierre', desde: T('17:04'), hasta: T('22:06') }))).code).toBe(403)
+  })
+})

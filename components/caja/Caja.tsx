@@ -50,10 +50,12 @@ import {
   elegirVariante,
   guardarBajadas,
   guardarPolitica,
+  leerCierre,
   leerConfig,
   leerPendientes,
   reintentarVenta,
   type Candidato,
+  type Cierre,
   type Config,
   type Cruce,
   type ListaNombre,
@@ -699,6 +701,7 @@ export function Caja() {
         </SectionCard>
       )}
 
+      <CierreTurno />
       {admin && config?.reglas.medios && <Bajadas reglas={config.reglas} onGuardadas={(rg) => setConfig({ ...config, reglas: rg })} />}
       {admin && config && <PoliticaCambio inicial={config.politica_cambio} onGuardada={(t) => setConfig({ ...config, politica_cambio: t })} />}
     </div>
@@ -1272,6 +1275,101 @@ function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reg
           <span>Modo feria: efectivo y transferencia van a las cuentas de feria, sin descuento (los precios de feria son finales)</span>
         </label>
         {msg && <span style={{ fontSize: font.sm, color: color.mut }}>{msg}</span>}
+      </div>
+    </Plegable>
+  )
+}
+
+/**
+ * v2, W3: el cierre de turno. El turno se sigue abriendo y cerrando en Gestión Nube (su API ⛔ tiene
+ * turnos); esto dice lo que cobró la Caja en ese horario, por cuenta, para compararlo con la columna
+ * «+ Cobros» del arqueo de GN. La hora es la de Rosario (UTC−3, sin horario de verano).
+ */
+function CierreTurno() {
+  const [abierto, setAbierto] = useState(false)
+  const horaAhora = () => new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+  const [dia, setDia] = useState(() => hoyIso())
+  const [desde, setDesde] = useState('09:00')
+  const [hasta, setHasta] = useState(horaAhora)
+  const [leyendo, setLeyendo] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cierre, setCierre] = useState<Cierre | null>(null)
+  const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+  async function ver() {
+    setLeyendo(true)
+    setError(null)
+    try {
+      setCierre(await leerCierre(`${dia}T${desde}:00-03:00`, `${dia}T${hasta}:00-03:00`))
+    } catch (e) {
+      setCierre(null)
+      setError((e as Error).message)
+    } finally {
+      setLeyendo(false)
+    }
+  }
+  return (
+    <Plegable
+      abierto={abierto}
+      onToggle={() => setAbierto(!abierto)}
+      titulo="Cierre de turno"
+      ayuda="El turno se abre y se cierra en Gestión Nube. Acá ves lo que cobró la Caja en ese horario, cuenta por cuenta, para compararlo con el arqueo."
+    >
+      <div style={{ display: 'grid', gap: space[3], maxWidth: 640 }}>
+        <div style={{ display: 'flex', gap: space[3], flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Field label="Día">
+            <Input type="date" value={dia} onChange={(e) => setDia(e.target.value)} />
+          </Field>
+          <Field label="Abrió a las">
+            <Input type="time" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </Field>
+          <Field label="Cierra a las">
+            <Input type="time" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </Field>
+          <Button onClick={ver} loading={leyendo} disabled={!dia || !desde || !hasta}>
+            Ver
+          </Button>
+        </div>
+        {error && <Notice tone="danger">{error}</Notice>}
+        {cierre && (
+          <div style={{ display: 'grid', gap: space[2], fontSize: font.sm }}>
+            {cierre.porCuenta.length === 0 ? (
+              <span style={{ color: color.mut }}>La Caja no cobró nada en ese horario.</span>
+            ) : (
+              <>
+                {cierre.porCuenta.map((c) => (
+                  <div key={c.cuenta} style={{ display: 'flex', gap: space[3], borderTop: `1px solid ${color.line}`, paddingTop: space[1] }}>
+                    <span style={{ flex: 1 }}>{c.nombre}</span>
+                    <span style={{ color: color.mut }}>{c.ventas === 1 ? '1 cobro' : `${c.ventas} cobros`}</span>
+                    <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(c.monto)}</b>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: space[3], borderTop: `2px solid ${color.line}`, paddingTop: space[1] }}>
+                  <b style={{ flex: 1 }}>Total de la Caja ({cierre.ventas === 1 ? '1 venta' : `${cierre.ventas} ventas`})</b>
+                  <b style={{ minWidth: 110, textAlign: 'right' }}>{plata(cierre.total)}</b>
+                </div>
+              </>
+            )}
+            <span style={{ color: color.mut }}>
+              Compará cada cuenta con «+ Cobros» del arqueo de Gestión Nube. Lo que se vendió por el POS de Gestión Nube está allá y acá no.
+              {cierre.nombresDe === 'reglas' && ' (Gestión Nube no contestó: los nombres de las cuentas pueden no ser iguales a los del arqueo.)'}
+            </span>
+            {cierre.sinGN.length > 0 && (
+              <Notice tone="warning">
+                <div style={{ display: 'grid', gap: space[1] }}>
+                  <b>
+                    {cierre.sinGN.length === 1 ? 'Una venta cobrada en ese horario todavía no está' : `${cierre.sinGN.length} ventas cobradas en ese horario todavía no están`} en Gestión Nube: el arqueo no las tiene.
+                  </b>
+                  {cierre.sinGN.map((v) => (
+                    <span key={v.id}>
+                      <span style={{ fontFamily: 'monospace' }}>{numeroProvisorio(v.id)}</span> · {hora(v.creada_en)} · {plata(v.total)} ·{' '}
+                      {v.estado === 'esperando_pago' ? 'esperando la transferencia' : 'sin llegar a Gestión Nube'}
+                    </span>
+                  ))}
+                </div>
+              </Notice>
+            )}
+          </div>
+        )}
       </div>
     </Plegable>
   )

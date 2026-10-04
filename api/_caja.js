@@ -11,6 +11,8 @@
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
 //        { pedidos, porSku, noLeidas, leidoEn } — ver lib/caja/pedidos-web.core.js
+//   GET  ?recurso=caja&action=cierre&desde=ISO&hasta=ISO → lo cobrado en el turno por cuenta de GN (v2, W3):
+//        { porCuenta, total, ventas, sinGN } — ver lib/caja/cierre.core.js. El turno sigue en GN.
 //   POST ?recurso=caja  { action: 'confirmar', id, items, pagos, total, descuentoVenta, email?, pagaCon? }
 //   POST ?recurso=caja  { action: 'reintentar', id }
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
@@ -55,6 +57,7 @@ import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda }
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
+import { cierreDeTurno } from '../lib/caja/cierre.core.js'
 
 const STORE = 'zattia'
 const LOCAL = 11780
@@ -135,6 +138,17 @@ export default async function handler(req, res) {
     return { reglas: REGLAS_INICIALES, politica_cambio: null }
   }
 
+  /** Las cuentas de GN (id y nombre), cacheadas por instancia. Lanza si GN ⛔ contesta. */
+  async function cuentasGN() {
+    if (cacheCuentas) return cacheCuentas
+    const resp = await gnFetch(`${GN_BASE}/ventas/referencias`, { headers: cabeceras(token) }, 1)
+    if (!resp.ok) throw new Error(`Gestión Nube contestó ${resp.status} al pedir las cuentas.`)
+    const d = await leerJson(resp)
+    // 🔴 Lista blanca: `cuentas` trae el SALDO de cada cuenta (`balance`), que ⛔ va al navegador.
+    cacheCuentas = (d && Array.isArray(d.cuentas) ? d.cuentas : []).map(c => ({ id: Number(c.id), nombre: String(c.name || '') }))
+    return cacheCuentas
+  }
+
   // El ticket por mail (F4): sin `MAILER_URL` o `MAILER_TICKET_KEY` la venta sale igual, sin mail.
   const mailer = { url: process.env.MAILER_URL, key: process.env.MAILER_TICKET_KEY, fetch }
   const enviar = (fila) => enviarVenta(fila, { sb, gnFetch, base: GN_BASE, token, mailer })
@@ -144,12 +158,10 @@ export default async function handler(req, res) {
       if (accion === 'config') return res.status(200).json(await leerConfig())
 
       if (accion === 'referencias') {
-        if (!cacheCuentas) {
-          const resp = await gnFetch(`${GN_BASE}/ventas/referencias`, { headers: cabeceras(token) }, 1)
-          if (!resp.ok) return res.status(502).json({ error: `Gestión Nube contestó ${resp.status} al pedir las cuentas.` })
-          const d = await leerJson(resp)
-          // 🔴 Lista blanca: `cuentas` trae el SALDO de cada cuenta (`balance`), que ⛔ va al navegador.
-          cacheCuentas = (d && Array.isArray(d.cuentas) ? d.cuentas : []).map(c => ({ id: Number(c.id), nombre: String(c.name || '') }))
+        try {
+          await cuentasGN()
+        } catch (e) {
+          return res.status(502).json({ error: e.message })
         }
         const { reglas } = await leerConfig()
         const cuentas = cacheCuentas.map(c => {
@@ -221,7 +233,34 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: sinSecretos(e && e.message) })
         }
       }
-      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, pendientes, pedidos-web)' })
+      if (accion === 'cierre') {
+        const desde = String(req.query.desde || ''), hasta = String(req.query.hasta || '')
+        const d = Date.parse(desde), h = Date.parse(hasta)
+        if (!Number.isFinite(d) || !Number.isFinite(h) || h <= d) return res.status(400).json({ error: 'El turno necesita desde y hasta (desde antes que hasta).' })
+        if (h - d > 2 * DIA_MS) return res.status(400).json({ error: 'Un turno ⛔ dura más de dos días: revisá desde y hasta.' })
+        const [desdeIso, hastaIso] = [new Date(d).toISOString(), new Date(h).toISOString()]
+        // Dos lecturas: las que LLEGARON a GN en el turno (la hora del arqueo) y las cobradas en el
+        // turno que todavía ⛔ llegaron. Una venta cobrada antes y llegada en el turno es del turno.
+        const COLS_CIERRE = 'id, estado, pagos, total, creada_en, en_gn_en, gn_number'
+        const [llegadas, sinLlegar] = await Promise.all([
+          sb.from('caja_venta').select(COLS_CIERRE).eq('store', store).eq('estado', 'en_gn').gte('en_gn_en', desdeIso).lt('en_gn_en', hastaIso).limit(1000),
+          sb.from('caja_venta').select(COLS_CIERRE).eq('store', store).neq('estado', 'en_gn').gte('creada_en', desdeIso).lt('creada_en', hastaIso).limit(1000),
+        ])
+        if (llegadas.error) throw new Error(llegadas.error.message)
+        if (sinLlegar.error) throw new Error(sinLlegar.error.message)
+        // El nombre de cada cuenta es el de GN (el que dice el arqueo). Si GN ⛔ contesta, el de las reglas.
+        const { reglas } = await leerConfig()
+        const nombres = {}
+        for (const [id, r] of Object.entries(reglas.cuentas || {})) nombres[id] = r.nombre
+        let nombresDe = 'reglas'
+        try {
+          for (const c of await cuentasGN()) if (c.nombre) nombres[c.id] = c.nombre
+          nombresDe = 'gn'
+        } catch { /* quedan los de las reglas, y la respuesta lo dice */ }
+        const out = cierreDeTurno({ ventas: [...(llegadas.data || []), ...(sinLlegar.data || [])], desde: desdeIso, hasta: hastaIso, nombres })
+        return res.status(200).json({ ...out, nombresDe })
+      }
+      return res.status(400).json({ error: 'action inválida (config, referencias, producto, buscar, pendientes, pedidos-web, cierre)' })
     }
 
     if (req.method === 'POST') {

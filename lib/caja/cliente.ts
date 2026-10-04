@@ -90,6 +90,17 @@ export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
 export const leerPendientes = () => get<{ ventas: Venta[] }>('action=pendientes', 'No se pudieron leer las ventas pendientes.')
 
+/** v2, W3: lo cobrado por la Caja en un turno, por cuenta de GN (`lib/caja/cierre.core.js`). */
+export type Cierre = {
+  porCuenta: { cuenta: number; nombre: string; monto: number; ventas: number }[]
+  total: number
+  ventas: number
+  sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
+  nombresDe: 'gn' | 'reglas'
+}
+export const leerCierre = (desde: string, hasta: string) =>
+  get<Cierre>(`action=cierre&desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, 'No se pudo leer el cierre del turno.')
+
 /** Un pedido de Tienda Nube por empaquetar (v2, W1). `sinPagar`: «a convenir», paga al retirar. `horas` desde que se pagó (o se hizo). */
 export type PedidoWeb = {
   numero: number
