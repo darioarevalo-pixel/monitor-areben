@@ -26,7 +26,8 @@ export type CuentaGN = { id: number; nombre: string; regla: ReglaCuenta | null }
 
 export type Variante = { product_id: number; size_id: number; product_name: string; size_name: string; sku: string | null; barcode: string | null }
 /** `vivo` = leído de GN recién; `espejo` = el de anoche, porque GN ⛔ contestó (`motivo`). */
-export type Stock = { local: number; deposito: number; fuente: 'vivo' | 'espejo'; motivo?: string }
+/** `atras`: los estantes del depósito de atrás donde está el producto (Ubicaciones depósito); vacío = todo en percha. */
+export type Stock = { local: number; deposito: number; fuente: 'vivo' | 'espejo'; motivo?: string; atras?: string[] }
 /** `candidatos`: el código es de varias prendas, o se buscó por nombre. `local` = stock del local de anoche; `mas` = las que no entraron. */
 export type Candidato = Variante & { local?: number }
 export type Producto = { variante: Variante; stock: Stock } | { candidatos: Candidato[]; mas?: number }

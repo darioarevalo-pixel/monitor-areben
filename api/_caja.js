@@ -51,6 +51,7 @@ import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
+import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 
 const STORE = 'zattia'
 const LOCAL = 11780
@@ -155,6 +156,7 @@ export default async function handler(req, res) {
           // motivo viaja: un catch callado escondió el 4-oct que el token ⛔ podía leer inventario.
           stock = { ...espejo, fuente: 'espejo', motivo: sinSecretos(e && e.message) }
         }
+        stock.atras = await estantesDe(sb, store, variante.sku)
         return res.status(200).json({ variante, stock })
       }
 
@@ -407,4 +409,20 @@ function agrupar(filas) {
     else if (nombre.startsWith('deposito') || nombre.startsWith('depósito')) e.deposito += Number(f.available_quantity || 0)
   }
   return [...por.values()]
+}
+
+/**
+ * En qué estantes del depósito de atrás está el producto (Ubicaciones depósito): «atrás: A1 · A2».
+ * ⛔ Frena la venta: si la tabla ⛔ existe o la consulta falla, la Caja simplemente ⛔ lo dice.
+ */
+async function estantesDe(sb, store, sku) {
+  const clave = claveDe(sku)
+  if (!clave) return []
+  try {
+    const { data, error } = await sb.from('ubicacion_local').select('estante').eq('store', store).eq('clave', clave)
+    if (error) return []
+    return [...new Set((data || []).map((f) => f.estante))].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }))
+  } catch {
+    return []
+  }
 }

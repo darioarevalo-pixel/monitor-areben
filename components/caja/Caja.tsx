@@ -750,6 +750,8 @@ function FilaRenglon({
           {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
               (18210) ⛔ vende desde la caja: sólo repone. */}
           <span>· {r.stock.deposito} para reponer</span>
+          {/* Ubicaciones depósito: dónde buscarla atrás. Sin estante ⛔ se dice nada: está todo en percha. */}
+          {!!r.stock.atras?.length && <b style={{ color: color.ink }}>· atrás: {r.stock.atras.join(' · ')}</b>}
           {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· stock de anoche (Gestión Nube no contestó)</span>}
         </div>
         {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: el producto no cruza con Tienda Nube.</div>}

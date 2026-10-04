@@ -61,6 +61,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   venta (`descuentoVenta`, obligatorio en `cobro`: null si ⛔ hay) ⇒ el de la forma de pago, y después
   el redondeo. El de la venta se reparte entre los pagos (`pagos[].rebaja`): ⛔ tiene columna propia.
   ⚠️ Hoy cualquier cajera puede poner un descuento a mano: permiso o tope, a decidir.
+- 🔑 **«atrás: A1 · A2»** (`stock.atras`): los estantes de Ubicaciones depósito por `claveDe(sku)`. Si la
+  consulta falla, sale vacío y la venta sigue igual; sin estante ⛔ se dice nada (todo en percha).
 - 🔴 El stock se lee con `GN_TOKEN_ZATTIA`; `GN_TOKEN_VENTAS` ⛔ lee `inventario` (caía al espejo, callado).
 - ⚠️ Cada unidad viaja en su renglón con `quantity: 1`: con cantidad > 1, cómo toma GN el descuento
   en pesos ⛔ está medido.
