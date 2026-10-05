@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cobrosDeGN, diferencia, horaDeGN, resumenTurno } from '@/lib/caja/cierre.core.js'
+import { cobrosDeGN, diferencia, horaDeGN, puedeUsarPOS, resumenTurno, usuarioDe } from '@/lib/caja/cierre.core.js'
 
 /**
  * Caja v2 · W3: el turno propio (Bruno, 4-oct-2026). Se cuenta sólo el efectivo: fondo + lo cobrado
@@ -168,5 +168,29 @@ describe('resumenTurno con los cobros de GN', () => {
     const r = resumenTurno({ turno: TURNO, ventas: [], salidas: [], reglas: REGLAS, nombres: {}, cobrosGN: null })
     expect(r.cobrosGN).toBeNull()
     expect(r.efectivo.esperado).toBe(51900)
+  })
+})
+
+describe('puedeUsarPOS (fase C: sólo la cuenta que abrió la caja)', () => {
+  const T = { abierto_por: 'Sofi', abierto_por_usuario: 'sofi@zattia.com' }
+  it('la misma cuenta, por mail (sin mirar mayúsculas)', () => {
+    expect(puedeUsarPOS(T, { name: 'Sofi', email: 'Sofi@Zattia.com' })).toBe(true)
+  })
+  it('🔴 otra cuenta con el MISMO nombre ⛔: manda el mail', () => {
+    expect(puedeUsarPOS(T, { name: 'Sofi', email: 'otra@zattia.com' })).toBe(false)
+  })
+  it('🔴 un admin ⛔ es la excepción', () => {
+    expect(puedeUsarPOS(T, { name: 'Bruno', email: 'bruno@x.com', admin: true } as never)).toBe(false)
+  })
+  it('sin mail en el padrón, el nombre', () => {
+    expect(usuarioDe({ name: 'Cajera' })).toBe('cajera')
+    expect(puedeUsarPOS({ abierto_por: 'Cajera', abierto_por_usuario: 'cajera' }, { name: 'Cajera' })).toBe(true)
+  })
+  it('un turno de antes de la fase C (sin usuario) se compara por nombre; sin turno o sin perfil ⛔', () => {
+    expect(puedeUsarPOS({ abierto_por: 'Sofi' }, { name: 'Sofi' })).toBe(true)
+    expect(puedeUsarPOS({ abierto_por: 'Sofi' }, { name: 'Ana' })).toBe(false)
+    expect(puedeUsarPOS({ abierto_por: null }, { name: '' })).toBe(false)
+    expect(puedeUsarPOS(null, { name: 'Sofi' })).toBe(false)
+    expect(puedeUsarPOS(T, null)).toBe(false)
   })
 })

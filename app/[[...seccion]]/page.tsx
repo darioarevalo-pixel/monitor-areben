@@ -32,6 +32,9 @@ import { Cargando } from '@/components/secciones/Cargando'
  */
 const PanelWhatsApp = dynamic(() => import('@/components/panel/PanelWhatsApp').then((m) => m.PanelWhatsApp), { loading: Cargando })
 
+/** El POS de la Caja (`/pos`, fase C): con `dynamic` por lo mismo, arrastra el cobro entero. */
+const CajaPOS = dynamic(() => import('@/components/caja/CajaPOS').then((m) => m.CajaPOS), { loading: Cargando })
+
 /**
  * Sección por defecto. **Es Inicio, y es una decisión de producto, no una herencia.**
  *
@@ -80,7 +83,10 @@ export default function Seccion() {
   // Apagado en el panel de WhatsApp, que no dibuja sidebar: su iframe se recarga en cada cambio de
   // chat, así que serían tres pedidos por cambio (más un intervalo cada 3 minutos) para encender un
   // contador que esa pantalla no muestra.
-  useAvisosPoll(key !== 'panel')
+  //
+  // Y en el POS de la Caja (`/pos`), por lo mismo: pantalla sin sidebar. Las promos de la Agenda las
+  // pide el POS.
+  useAvisosPoll(key !== 'panel' && key !== 'pos')
 
   /**
    * Los links públicos (`/reclamo/<token>` para el cliente, `/canje/<token>` para la creadora) NO
@@ -116,6 +122,14 @@ export default function Seccion() {
    */
   const esPanel = key === 'panel'
 
+  /**
+   * `/pos` es el sexto: el POS de la Caja de Zattia (fase C, Bruno 5-oct), la pantalla del mostrador
+   * con SOLO el cobro, sin menú ni acceso al resto del monitor. Pide sesión y el permiso de **Caja**
+   * —el mismo `puedeVerAlguna` que `api/_caja.js`—, y adentro, que la cuenta sea la que abrió la caja
+   * (`puedeUsarPOS`). ⛔ No es una ruta de Next: cada ruta es una función y el tope de Hobby está lleno.
+   */
+  const esPOS = key === 'pos'
+
   // Si la sección no existe para esta marca o no hay permiso, al default.
   // Mismo criterio que aplicarVisibilidadTabs del legacy.
   //
@@ -145,9 +159,9 @@ export default function Seccion() {
           : puedeVer(perfil, marca, keyPermiso)))
 
   useEffect(() => {
-    if (esPortalCliente || esPanel) return
+    if (esPortalCliente || esPanel || esPOS) return
     if (!cargando && perfil && !permitida && key !== FALLBACK_TAB) router.replace(`/${FALLBACK_TAB}`)
-  }, [cargando, perfil, permitida, key, router, esPortalCliente, esPanel])
+  }, [cargando, perfil, permitida, key, router, esPortalCliente, esPanel, esPOS])
 
   // Va acá adentro y NO como ruta propia de Next porque cada ruta es una función serverless y el
   // proyecto está en el tope del plan Hobby (pasarse frena todos los deploys en silencio). Sale
@@ -196,6 +210,21 @@ export default function Seccion() {
       return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso a Clientes.</div>
     }
     return <PanelWhatsApp tel={Array.isArray(partes) ? (partes[1] ?? null) : null} />
+  }
+
+  // El POS, igual que el panel: después del login y sin el shell. Lleva los dos providers porque el
+  // shell los monta recién abajo («Vaciar pedido» pregunta antes).
+  if (esPOS) {
+    if (!puedeVerAlguna(perfil, 'zattia', ['caja'])) {
+      return <div style={{ padding: 16, fontSize: 13 }}>Tu usuario no tiene acceso a la Caja.</div>
+    }
+    return (
+      <ToastProvider>
+        <ConfirmProvider>
+          <CajaPOS />
+        </ConfirmProvider>
+      </ToastProvider>
+    )
   }
 
   // ⛔ El otro blanco del shell: acá el `useEffect` de arriba ya está mandando al fallback, pero

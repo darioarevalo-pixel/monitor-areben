@@ -20,6 +20,7 @@
 //   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
 //   POST ?recurso=caja  { action: 'salida', monto, motivo } → saca efectivo del turno abierto
 //   POST ?recurso=caja  { action: 'contar', id, conteo }   → conteo intermedio de billetes: ⛔ cierra ni mueve plata
+//        🔑 `confirmar` y `contar` sólo los hace la cuenta que abrió el turno (`puedeUsarPOS`, fase C): 403
 //   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota?, conteo? } → cierra con el efectivo contado
 //        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
 //        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
@@ -66,7 +67,7 @@ import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda }
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
-import { cobrosDeGN, diferencia, resumenTurno } from '../lib/caja/cierre.core.js'
+import { cobrosDeGN, diferencia, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
 
 const STORE = 'zattia'
@@ -375,7 +376,7 @@ export default async function handler(req, res) {
         const c = await conteoContra(b.conteo, fondo, 'el fondo')
         if (c && c.error) return res.status(400).json({ error: c.error })
         // `abierto_por_usuario`: el dato de la cuenta que ⛔ cambia (el mail del padrón): la fase C lo usa para el POS.
-        const fila = { store, fondo, abierto_por: perfil.name || null, abierto_por_usuario: perfil.email || perfil.name || null }
+        const fila = { store, fondo, abierto_por: perfil.name || null, abierto_por_usuario: usuarioDe(perfil) }
         if (c) fila.conteos = { apertura: c }
         const ins = await sb.from('caja_turno').insert(fila).select(COLS_TURNO).single()
         // El índice único: ya hay un turno abierto (otra pantalla lo abrió recién).
@@ -404,6 +405,7 @@ export default async function handler(req, res) {
         if (c.error) return res.status(400).json({ error: c.error })
         const turno = await turnoAbierto()
         if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede contar los billetes del turno.` })
         // Fresco, como el cierre: el conteo se compara con lo que tiene que haber AHORA.
         const con = await conResumen(turno, true)
         const esperado = con.resumen.efectivo.esperado
@@ -460,6 +462,8 @@ export default async function handler(req, res) {
 
         const turno = await turnoAbierto()
         if (!turno) return res.status(409).json({ error: 'No hay un turno abierto: abrí el turno para cobrar.', sinTurno: true })
+        // 🔑 Fase C (Bruno, 5-oct): cobra sólo la cuenta que abrió la caja. Cerrarla queda abierto a todos.
+        if (!puedeUsarPOS(turno, perfil)) return res.status(403).json({ error: `La caja la abrió ${turno.abierto_por || 'otra cuenta'}: sólo esa cuenta puede cobrar.`, otraCuenta: true })
         const { reglas } = await leerConfig()
         let filas, c, payload, espera
         try {

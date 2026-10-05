@@ -472,7 +472,7 @@ export const PERM_CAT: PermCat[] = [
     "key": "caja",
     "area": "local",
     "label": "Caja",
-    "info": "Cobrar en el local. Se escanea cada prenda y al lado dice cuántas quedan en el local y en el depósito (o «ÚLTIMA»). Se elige cómo paga —efectivo, transferencia, débito, crédito— y el total ya sale con el descuento de esa forma de pago; se pueden repartir varios pagos. Con efectivo, se anota con cuánto paga y sale el vuelto. Al confirmar, la venta queda en Gestión Nube con su número, en la cuenta de cobro correcta y bajando el stock, y se imprime el ticket. Si Gestión Nube no contesta, el ticket sale igual con un número provisorio y la venta queda en «Pendientes en Gestión Nube» hasta que llegue.",
+    "info": "El turno de la caja del local: se abre con el fondo (con la calculadora de billetes), se ve qué se cobró por cada forma de pago, se cuentan los billetes durante el día y se cierra contando el efectivo. Se cobra en el POS, una pantalla sin menú que se abre con «Abrir POS» y que usa solo la cuenta que abrió la caja. En el POS se escanea cada prenda y al lado dice cuántas quedan en el local y en el depósito (o «ÚLTIMA»). Se elige cómo paga —efectivo, transferencia, débito, crédito— y el total ya sale con el descuento de esa forma de pago; se pueden repartir varios pagos. Con efectivo, se anota con cuánto paga y sale el vuelto. Al confirmar, la venta queda en Gestión Nube con su número, en la cuenta de cobro correcta y bajando el stock, y se imprime el ticket. Si Gestión Nube no contesta, el ticket sale igual con un número provisorio y la venta queda en «Pendientes en Gestión Nube» hasta que llegue.",
     "brands": [
       "zattia"
     ]

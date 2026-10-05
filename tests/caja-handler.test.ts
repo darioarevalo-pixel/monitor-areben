@@ -170,7 +170,7 @@ beforeEach(async () => {
   base.llaves = [{ cuenta_id: CUENTA_MP, token: 'APP_USR-llave' }]
   base.mpPagos = []; mp.busquedas = 0
   // Hay un turno abierto: las ventas de los tests de antes de W3 se cobran adentro de él.
-  base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null }]; base.movs = []
+  base.turnos = [{ id: TURNO_ID, store: 'zattia', fondo: 50000, abierto_en: '2026-10-04T12:00:00.000Z', cerrado_en: null, abierto_por: 'cajera', abierto_por_usuario: 'cajera' }]; base.movs = []
   mailer.posts = []; delete process.env.MAILER_URL; delete process.env.MAILER_TICKET_KEY
   gn.posts = []; gn.gets = []; gn.authInventario = []; gn.respuestaPost = { status: 201, body: { data: { id: 1600001, number: 30100 } } }; gn.delDia = { data: [] }
   gn.lista = { status: 200, body: { data: [], meta: { has_more_pages: false } } }
@@ -853,5 +853,41 @@ describe('caja · calculadora de billetes (fase B)', () => {
     expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 64000, conteo: CONTEO }))).code).toBe(200)
     conSesion(CAJERA)
     expect((await correr(req('POST', {}, { action: 'bajadas', billetes: [1000] }))).code).toBe(403)
+  })
+})
+
+describe('caja · el POS es de la cuenta que abrió la caja (fase C)', () => {
+  const OTRA_CAJERA = { ...CAJERA, name: 'otra cajera', email: 'otra@zattia.test' }
+
+  it('🔑 otra cuenta con permiso de Caja ⛔ cobra: 403, ⛔ se guarda ni sale a GN', async () => {
+    conSesion(OTRA_CAJERA)
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(403)
+    expect(String(r.body?.error)).toContain('cajera')
+    expect(base.ventas.size).toBe(0)
+    expect(gn.posts).toHaveLength(0)
+  })
+
+  it('🔴 ni un admin', async () => {
+    conSesion({ ...OTRA_CAJERA, admin: true })
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(403)
+  })
+
+  it('otra cuenta ⛔ cuenta billetes, pero SÍ cierra la caja (Bruno: «desde los dos lados»)', async () => {
+    conSesion(OTRA_CAJERA)
+    expect((await correr(req('POST', {}, { action: 'contar', id: TURNO_ID, conteo: { 1000: 1 } }))).code).toBe(403)
+    expect(base.turnos[0].conteos).toBeUndefined()
+    const c = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000 }))
+    expect(c.code).toBe(200)
+    expect(base.turnos[0].cerrado_por).toBe('otra cajera')
+  })
+
+  it('el mismo mail con otra capitalización es la misma cuenta; quien abre queda dueño', async () => {
+    conSesion(OTRA_CAJERA)
+    base.turnos = []
+    await correr(req('POST', {}, { action: 'abrir-turno', fondo: 1000 }))
+    expect(base.turnos[0].abierto_por_usuario).toBe('otra@zattia.test')
+    conSesion({ ...OTRA_CAJERA, email: 'Otra@Zattia.test' })
+    expect((await correr(req('POST', {}, VENTA))).code).toBe(200)
   })
 })

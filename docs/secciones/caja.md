@@ -9,7 +9,8 @@ El plan completo, por fases, vive afuera del repo: `~/Documents/reunion-gerencia
 
 ## Dónde vive
 
-`components/caja/Caja.tsx` · `lib/caja/` (`core.core.js` el cobro, `gn.core.js` la respuesta de
+`components/caja/CajaPOS.tsx` (el POS, `/pos`) · `components/caja/Caja.tsx` (la pestaña: el
+informativo del turno) · `components/caja/partes.tsx` (lo que comparten) · `lib/caja/` (`core.core.js` el cobro, `gn.core.js` la respuesta de
 GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cliente.ts`) ·
 `api/_caja.js` por `?recurso=caja` · tablas `caja_venta` y `caja_config` en la base de **Zattia**
 (`sql/migrate-caja.sql`) · respaldo de la cola `scripts/caja-reintentar.mjs` +
@@ -116,6 +117,18 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   en la PC (`caja:conteo:zattia:<apertura|intermedio:id|cierre:id>`) y la calculadora arranca con lo
   más nuevo entre eso y lo guardado en la base (el último intermedio, si ⛔ la apertura).
   `abierto_por_usuario` (`perfil.email`, si ⛔ `name`: el perfil ⛔ trae el usuario) es para la fase C.
+- 🔑 **Se cobra en el POS, ⛔ en la pestaña (fase C, Bruno 5-oct)**: `/pos` es una rama de
+  `app/[[...seccion]]/page.tsx` (⛔ una ruta de Next: el tope de Hobby), sin menú, con el formato del POS
+  de GN: a la izquierda escanear/buscar con tarjetas, a la derecha el pedido fijo, el TOTAL y
+  «Continuar al cobro» (Alt+C). La pestaña Caja queda como el informativo del turno, la configuración
+  y «Pendientes en GN», con «Abrir POS» arriba. 🔴 **El POS lo usa SÓLO la cuenta que abrió la caja, ⛔
+  ni un admin** (`puedeUsarPOS`, `cierre.core.js`): lo preguntan la pantalla y el servidor —`confirmar`
+  y `contar` dan 403—. Quién es la cuenta: `caja_turno.abierto_por_usuario` = el mail del padrón (el
+  perfil ⛔ trae el usuario de login), si ⛔ tiene, el nombre; un turno sin esa columna se compara por
+  `abierto_por`. **La caja se cierra desde los dos lados**: en el POS la cuenta dueña, en la pestaña
+  cualquiera con permiso de Caja. Las transferencias que esperan se siguen EN EL POS (imprime el ticket
+  cuando llega). Sin el shell, el POS fuerza la marca Zattia antes de montar (el precio sale de sus
+  datos) y pide él las promos de la Agenda.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
@@ -128,6 +141,8 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   del update, y ⛔ tiene test (el mock de la base es secuencial).
 - Una semana en paralelo con el POS de GN antes de apagarlo.
 - W3b: ⛔ visto con un turno abierto real en prod (el primer día hábil: mirar que el cobro web aparezca en el turno).
+- Fase C: ⛔ vista en prod (el POS con la cuenta dueña y con otra; cerrar desde los dos lados).
+  ⛔ Comparado con el POS de GN en la PC del local (la demo `posHtml` ⛔ se miró: el armado sale del plan).
 - Fase B: ⛔ vista en prod (abrir con la calculadora, recargar y reabrir, un conteo intermedio).
   ⚠️ Dos `contar` a la vez pueden pisarse los intermedios (se lee y se escribe la lista entera): un
   turno cuenta dos o tres veces, ⛔ se cubrió. El `.is('cerrado_en', null)` del update ⛔ tiene test.
