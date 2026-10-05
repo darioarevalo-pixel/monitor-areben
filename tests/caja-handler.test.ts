@@ -87,6 +87,7 @@ function consulta(tabla: string) {
   q.lt = (c: string, v: string) => { filtros.push((f) => String(f[c]) < v); return q }
   q.order = () => q
   q.limit = () => q
+  q.range = () => q
   q.insert = (f: Fila) => { accion = { tipo: 'insert', fila: f }; return q }
   q.update = (c: Fila) => { accion = { tipo: 'update', cambios: c }; return q }
   q.upsert = async (f: Fila) => { if (!base.config) base.config = f; return { error: null } }
@@ -401,13 +402,14 @@ describe('caja · lecturas', () => {
       expect(r.body).toMatchObject({ variante: { product_id: 7, size_id: 8 } })
     })
 
-    it('buscar (mientras se escribe): dos listas, con y sin stock en el LOCAL, ⛔ pega a GN', async () => {
+    it('buscar (mientras se escribe): POR PRODUCTO, con y sin stock en el LOCAL, ⛔ pega a GN', async () => {
       conSesion(CAJERA)
       base.inventario = [...fila(1, 1, 'CORSET FRANK Verde', 'M', 0), ...fila(1, 2, 'CORSET FRANK Verde', 'S', 2), ...fila(2, 1, 'TOP EVA', 'S', 5)]
       const llamadas = gn.gets.length
       const r = await correr(req('GET', { action: 'buscar', q: 'frank' }))
       expect(r.code).toBe(200)
-      expect(r.body).toMatchObject({ conStock: [{ size_name: 'S', local: 2 }], sinStock: [{ size_name: 'M', local: 0 }], masCon: 0, masSin: 0 })
+      // Un producto, con la variante del local primero y la que ⛔ hay después (el modal la muestra aparte).
+      expect(r.body).toMatchObject({ conStock: [{ product_id: 1, local: 2, variantes: [{ size_name: 'S', local: 2 }, { size_name: 'M', local: 0 }] }], sinStock: [], masCon: 0, masSin: 0 })
       expect(gn.gets.length).toBe(llamadas)
       expect((await correr(req('GET', { action: 'buscar', q: '000001' }))).body).toMatchObject({ conStock: [], sinStock: [] })
       expect((await correr(req('GET', { action: 'buscar', q: 'zzz' }))).body).toMatchObject({ conStock: [], sinStock: [] })

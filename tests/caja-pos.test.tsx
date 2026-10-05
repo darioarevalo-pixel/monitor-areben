@@ -61,7 +61,7 @@ describe('POS (/pos)', () => {
   it('🔑 la cuenta que abrió la caja ve el POS: escanear, el pedido y «Cerrar turno»', async () => {
     const t = await montar(<CajaPOS />)
     expect(t).toContain('Escanear o buscar')
-    expect(t).toContain('Pedido (0)')
+    expect(t).toContain('Pedido · 0 prendas')
     expect(t).toContain('Cerrar turno')
     // Sólo una flecha (Bruno, 5-oct), ⛔ «Volver al monitor».
     expect(t).not.toContain('Volver al monitor')

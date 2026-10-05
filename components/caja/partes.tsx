@@ -32,8 +32,9 @@ import {
   type Variante,
   type Venta,
   type PedidosWeb,
+  type ProductoLista,
 } from '@/lib/caja/cliente'
-import { Badge, Button, Field, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
+import { Badge, Button, Field, Icono, Input, Modal, Notice, Plegable, SectionCard, Select, color, font, radius, space, weight } from '@/components/ui'
 
 
 /** Un renglón del pedido. */
@@ -100,9 +101,9 @@ export function ListaPrendas({
         >
           {foto ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={foto} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: radius.md }} />
+            <img src={foto} alt="" style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', borderRadius: radius.md }} />
           ) : (
-            <div style={{ width: '100%', aspectRatio: '1', borderRadius: radius.md, background: color.line }} />
+            <div style={{ width: '100%', aspectRatio: '4 / 5', borderRadius: radius.md, background: color.bg2 }} />
           )}
           <span style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.sm }}>
             {v.product_name} · {v.size_name}
@@ -152,7 +153,7 @@ export function ListaPrendas({
   // En grilla, los textos y el botón ocupan la fila entera.
   const ancho = grilla ? { gridColumn: '1 / -1' } : undefined
   return (
-    <div style={{ marginTop: space[3], display: 'grid', gap: space[2], ...(grilla ? { gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' } : {}) }}>
+    <div style={{ marginTop: space[3], display: 'grid', gap: space[2], ...(grilla ? { gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' } : {}) }}>
       {titulo && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>{titulo}</span>}
       {con.length === 0 && !verSin && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Ninguna con stock en el local.</span>}
       {con.map((v) => fila(v, false))}
@@ -167,6 +168,184 @@ export function ListaPrendas({
         </div>
       )}
     </div>
+  )
+}
+
+/** La foto de una tarjeta o un renglón: recortada, y un recuadro gris si ⛔ hay. */
+export function Foto({ src, ancho = '100%', proporcion = '4 / 5' }: { src: string | null; ancho?: number | string; proporcion?: string }) {
+  const caja: React.CSSProperties = { width: ancho, aspectRatio: proporcion, borderRadius: radius.md, flexShrink: 0, background: color.bg2 }
+  // eslint-disable-next-line @next/next/no-img-element
+  return src ? <img src={src} alt="" loading="lazy" style={{ ...caja, objectFit: 'cover' }} /> : <div style={caja} />
+}
+
+/**
+ * La grilla del POS POR PRODUCTO, como la de GN (Bruno, 5-oct): foto, nombre, precio y «Elegir
+ * variante» (o «Agregar al pedido» si tiene una sola). Los productos sin stock en el local, tras
+ * «Mostrar sin stock». ⛔ Lleva el número de stock: es el de anoche y confundía (Bruno, 4-oct).
+ */
+export function GrillaProductos({
+  con,
+  masCon,
+  sin,
+  masSin,
+  verSin,
+  onVerSin,
+  precioYFoto,
+  onElegir,
+}: {
+  con: ProductoLista[]
+  masCon: number
+  sin: ProductoLista[]
+  masSin: number
+  verSin: boolean
+  onVerSin: () => void
+  precioYFoto: (productId: number) => { precio: number | null; foto: string | null }
+  onElegir: (p: ProductoLista) => void
+}) {
+  const ancho = { gridColumn: '1 / -1' }
+  const tarjeta = (p: ProductoLista, apagada: boolean) => {
+    const { precio, foto } = precioYFoto(p.product_id)
+    const una = p.variantes.length === 1
+    return (
+      <button
+        key={p.product_id}
+        type="button"
+        onClick={() => onElegir(p)}
+        className="caja-tarjeta"
+        style={{
+          height: 'auto',
+          display: 'grid',
+          gap: space[1],
+          padding: space[2],
+          textAlign: 'left',
+          alignContent: 'start',
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.lg,
+          background: color.surface,
+          cursor: 'pointer',
+          opacity: apagada ? 0.6 : 1,
+        }}
+      >
+        <Foto src={foto} />
+        <span style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.sm, lineHeight: 1.25 }}>{p.product_name}</span>
+        <span style={{ fontWeight: weight.bold, color: color.brand, fontSize: font.md }}>{precio ? plata(precio) : '—'}</span>
+        <span
+          style={{
+            fontSize: font.xs,
+            fontWeight: weight.semibold,
+            borderRadius: radius.md,
+            padding: `${space[1]} ${space[2]}`,
+            background: una ? color.brandBg : color.warningBg,
+            color: una ? color.brand : color.warningInk,
+          }}
+        >
+          {una ? 'Agregar al pedido +' : `Elegir variante (${p.variantes.length}) ›`}
+        </span>
+      </button>
+    )
+  }
+  const totalSin = sin.length + masSin
+  return (
+    <div style={{ marginTop: space[3], display: 'grid', gap: space[2], gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+      {con.length === 0 && !verSin && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Con stock en el local: ninguno.</span>}
+      {con.map((p) => tarjeta(p, false))}
+      {masCon > 0 && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Y {masCon} más: sumar el color o el talle para achicar la lista.</span>}
+      {verSin && sin.map((p) => tarjeta(p, true))}
+      {verSin && masSin > 0 && <span style={{ ...ancho, color: color.mut, fontSize: font.sm }}>Y {masSin} más sin stock.</span>}
+      {!verSin && totalSin > 0 && (
+        <div style={ancho}>
+          <Button variant="ghost" size="sm" onClick={onVerSin}>
+            Mostrar sin stock ({totalSin})
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * «Elegir variante» (Bruno, 5-oct, como el modal de GN): la foto de cada color si Tienda Nube la
+ * tiene, las variantes del local primero y el resto tras «Mostrar sin stock». Con el teclado: ↑/↓ y
+ * Enter.
+ */
+export function ElegirVariante({
+  producto,
+  precio,
+  fotoDe,
+  onElegir,
+  onCerrar,
+}: {
+  producto: ProductoLista
+  precio: number | null
+  fotoDe: (v: Variante) => string | null
+  onElegir: (v: Variante) => void
+  onCerrar: () => void
+}) {
+  const con = producto.variantes.filter((v) => (v.local ?? 0) > 0)
+  const sin = producto.variantes.filter((v) => !((v.local ?? 0) > 0))
+  const [verSin, setVerSin] = useState(con.length === 0)
+  const lista = useRef<HTMLDivElement>(null)
+  const mover = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const botones = [...(lista.current?.querySelectorAll<HTMLButtonElement>('button[data-variante]') ?? [])]
+    const i = botones.indexOf(document.activeElement as HTMLButtonElement)
+    const j = e.key === 'ArrowDown' ? Math.min(botones.length - 1, i + 1) : Math.max(0, i - 1)
+    botones[j]?.focus()
+  }
+  const fila = (v: Candidato, i: number, apagada: boolean) => (
+    <button
+      key={claveDe(v)}
+      type="button"
+      data-variante
+      data-foco={i === 0 && !apagada ? true : undefined}
+      onClick={() => onElegir(v)}
+      className="caja-tarjeta"
+      style={{
+        height: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        gap: space[3],
+        padding: space[2],
+        textAlign: 'left',
+        border: `1px solid ${color.line}`,
+        borderRadius: radius.lg,
+        background: color.surface,
+        cursor: 'pointer',
+        opacity: apagada ? 0.6 : 1,
+      }}
+    >
+      <Foto src={fotoDe(v)} ancho={48} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: weight.semibold, color: color.ink, fontSize: font.md }}>{v.size_name}</div>
+        <div style={{ fontSize: font.xs, color: color.mut }}>{v.sku ?? v.barcode ?? ''}</div>
+      </div>
+      <div style={{ display: 'grid', justifyItems: 'end', gap: space[0.5] }}>
+        <b style={{ color: color.brand }}>{precio ? plata(precio) : '—'}</b>
+        {apagada ? <Badge tone="neutral">sin stock</Badge> : <Badge tone="success">en el local</Badge>}
+      </div>
+    </button>
+  )
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo="Elegir variante">
+      <div style={{ display: 'grid', gap: space[3] }} onKeyDown={mover}>
+        <div style={{ display: 'flex', gap: space[3], alignItems: 'center' }}>
+          <Foto src={fotoDe(producto.variantes[0])} ancho={56} />
+          <b style={{ fontSize: font.lg, color: color.ink }}>{producto.product_name}</b>
+        </div>
+        <div ref={lista} style={{ display: 'grid', gap: space[2] }}>
+          {con.map((v, i) => fila(v, i, false))}
+          {verSin && sin.map((v, i) => fila(v, i, true))}
+        </div>
+        {!verSin && sin.length > 0 && (
+          <div>
+            <Button variant="ghost" size="sm" onClick={() => setVerSin(true)}>
+              Mostrar sin stock ({sin.length})
+            </Button>
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -198,72 +377,76 @@ export function FilaRenglon({
   // Mientras se escribe, el texto; si ⛔ se está escribiendo, el precio del renglón.
   const [texto, setTexto] = useState<string | null>(null)
   const quedan = r.stock.local - r.cantidad
+  const lista = r.precio != null ? Math.round(r.cantidad * r.precio * 100) / 100 : null
+  // Con descuento a mano: el de lista tachado y el que queda al lado (Bruno, 5-oct).
+  const conRebaja = !!r.rebaja && importe != null && lista != null && lista - importe > 0.004
   return (
-    <div style={{ display: 'flex', gap: space[3], alignItems: 'center', padding: space[2], border: `1px solid ${color.line}`, borderRadius: radius.lg, flexWrap: 'wrap' }}>
-      {r.foto ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={r.foto} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: radius.md }} />
-      ) : (
-        <div style={{ width: 56, height: 56, borderRadius: radius.md, background: color.bg2 }} />
-      )}
-      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-        <div style={{ fontWeight: weight.semibold, color: color.ink }}>
-          {r.variante.product_name} · {r.variante.size_name}
+    <div style={{ display: 'grid', gap: space[2], padding: space[3], border: `1px solid ${color.line}`, borderRadius: radius.lg, background: color.surface }}>
+      <div style={{ display: 'flex', gap: space[3], alignItems: 'flex-start' }}>
+        <Foto src={r.foto} ancho={56} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: weight.bold, color: color.ink, textTransform: 'uppercase', fontSize: font.sm }}>{r.variante.product_name}</div>
+          <div style={{ color: color.ink2, fontSize: font.sm }}>{r.variante.size_name}</div>
+          <div style={{ color: color.mut2, fontSize: font.xs }}>{r.variante.sku ?? r.variante.barcode ?? ''}</div>
         </div>
-        <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.sm, color: color.mut, marginTop: space[0.5] }}>
-          {quedan < 0 ? (
-            <Badge tone="danger">Gestión Nube no tiene más en el local</Badge>
-          ) : quedan === 0 ? (
-            <Badge tone="warning">ÚLTIMA</Badge>
-          ) : (
-            <span>
-              quedan {quedan} en el local
-            </span>
-          )}
-          {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
-              (18210) ⛔ vende desde la caja: sólo repone. */}
-          <span>· {r.stock.deposito} para reponer</span>
-          {/* Ubicaciones depósito: dónde buscarla atrás. Sin estante ⛔ se dice nada: está todo en percha. */}
-          {!!r.stock.atras?.length && <b style={{ color: color.ink }}>· ubicación: {r.stock.atras.join(' · ')}</b>}
-          {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· stock de anoche (Gestión Nube no contestó)</span>}
-        </div>
-        {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: el producto no cruza con Tienda Nube.</div>}
-        {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut, marginTop: space[0.5] }}>mirando pedidos web…</div>}
-        {avisoWeb && (
-          <div style={{ marginTop: space[1] }}>
-            <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>
-          </div>
+        <Button size="sm" variant="ghost" onClick={onSacar} aria-label={`Eliminar ${r.variante.product_name} · ${r.variante.size_name}`} title="Eliminar">
+          <Icono nombre="cruz" />
+        </Button>
+      </div>
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap', fontSize: font.xs, color: color.mut }}>
+        {quedan < 0 ? (
+          <Badge tone="danger">Local: sin stock en Gestión Nube</Badge>
+        ) : quedan === 0 ? (
+          <Badge tone="warning">ÚLTIMA</Badge>
+        ) : (
+          <span>Local: quedan {quedan}</span>
         )}
+        {/* En el local «depósito» es el de atrás de la percha, que ya está en `local`. El Depósito de GN
+            (18210) ⛔ vende desde la caja: sólo repone. */}
+        <span>· Para reponer: {r.stock.deposito}</span>
+        {/* Ubicaciones depósito: dónde buscarla atrás. Sin estante ⛔ se dice nada: está todo en percha. */}
+        {!!r.stock.atras?.length && <b style={{ color: color.ink }}>· Ubicación: {r.stock.atras.join(' · ')}</b>}
+        {r.stock.fuente === 'espejo' && <span title={r.stock.motivo}>· Stock de anoche (Gestión Nube sin respuesta)</span>}
       </div>
-      <div style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
-        <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad - 1)} aria-label="Una menos">
-          −
-        </Button>
-        <span style={{ minWidth: 24, textAlign: 'center', fontWeight: weight.bold }}>{r.cantidad}</span>
-        <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad + 1)} aria-label="Una más">
-          +
-        </Button>
-      </div>
-      <Input
-        inputMode="decimal"
-        value={texto ?? (r.precio != null ? String(r.precio) : '')}
-        invalid={!(r.precio && r.precio > 0)}
-        placeholder={cargandoPrecios ? 'cargando…' : 'precio'}
-        onChange={(e) => setTexto(e.target.value)}
-        onBlur={() => {
-          if (texto != null) onPrecio(aNumero(texto))
-          setTexto(null)
-        }}
-        style={{ width: 120, textAlign: 'right' }}
-        aria-label="Precio"
-      />
-      <div style={{ display: 'grid', gap: space[0.5], justifyItems: 'end' }}>
+      {r.fueraDeTn && <div style={{ fontSize: font.xs, color: color.warningInk }}>Precio del espejo: producto sin cruce con Tienda Nube.</div>}
+      {mirandoWeb && <div style={{ fontSize: font.xs, color: color.mut }}>Pedidos web: leyendo…</div>}
+      {avisoWeb && (
+        <div>
+          <Badge tone={avisoWeb.tipo === 'sin_stock' ? 'danger' : 'warning'}>{avisoWeb.texto}</Badge>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', flexWrap: 'wrap' }}>
+        <Input
+          inputMode="decimal"
+          autoComplete="off"
+          value={texto ?? (r.precio != null ? String(r.precio) : '')}
+          invalid={!(r.precio && r.precio > 0)}
+          placeholder={cargandoPrecios ? 'cargando…' : 'precio'}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => {
+            if (texto != null) onPrecio(aNumero(texto))
+            setTexto(null)
+          }}
+          style={{ width: 110, textAlign: 'right', color: color.brand, fontWeight: weight.semibold }}
+          aria-label="Precio"
+        />
         <CampoRebaja valor={r.rebaja ?? null} onCambio={onRebaja} />
-        {r.rebaja && importe != null && <span style={{ fontSize: font.sm, color: color.mut }}>queda {plata(importe)}</span>}
       </div>
-      <Button size="sm" variant="ghost" tone="danger" onClick={onSacar} aria-label={`Eliminar ${r.variante.product_name} · ${r.variante.size_name}`}>
-        Eliminar
-      </Button>
+      <div style={{ display: 'flex', gap: space[2], alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
+          <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad - 1)} aria-label="Una menos">
+            −
+          </Button>
+          <span style={{ minWidth: 32, textAlign: 'center', fontWeight: weight.bold }}>{r.cantidad}</span>
+          <Button size="sm" variant="outline" onClick={() => onCantidad(r.cantidad + 1)} aria-label="Una más">
+            +
+          </Button>
+        </div>
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'baseline', fontVariantNumeric: 'tabular-nums' }}>
+          {conRebaja && <s style={{ color: color.mut, fontSize: font.sm }}>{plata(lista as number)}</s>}
+          <b style={{ fontSize: font.md, color: conRebaja ? color.successInk : color.ink }}>{importe != null ? plata(importe) : lista != null ? plata(lista) : '—'}</b>
+        </div>
+      </div>
     </div>
   )
 }
@@ -578,6 +761,7 @@ export function CampoRebaja({ valor, onCambio }: { valor: Rebaja | null; onCambi
     <div style={{ display: 'flex', gap: space[1], alignItems: 'center' }}>
       <Input
         inputMode="decimal"
+        autoComplete="off"
         value={texto ?? (valor ? String(valor.valor) : '')}
         placeholder="descuento"
         onChange={(e) => setTexto(e.target.value)}

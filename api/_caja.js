@@ -6,7 +6,8 @@
 //   GET  ?recurso=caja&action=producto&codigo=…   → la variante del código + stock Local / Depósito;
 //        si el código ⛔ está y tiene letras, busca por NOMBRE y talle ⇒ { candidatos, mas }
 //   GET  ?recurso=caja&action=producto&product_id=…&size_id=…  → la variante elegida de la lista
-//   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe: { conStock, sinStock, masCon, masSin }
+//   GET  ?recurso=caja&action=buscar&q=…         → la lista MIENTRAS se escribe, POR PRODUCTO: { conStock, sinStock, masCon, masSin }
+//        de `{ product_id, product_name, local, variantes[] }` (`productosPorStock`)
 //        con el stock del local de anoche (⛔ pega a GN: tipear ⛔ gasta el cupo de 60/min)
 //   GET  ?recurso=caja&action=pendientes          → las ventas que ⛔ llegaron a GN
 //   GET  ?recurso=caja&action=pedidos-web         → los pedidos de TN por empaquetar (v2, W1):
@@ -63,7 +64,7 @@ import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { pagosDelDia, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
 import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
-import { filtrarPorNombre, listasPorStock, ordenParaLaBase, palabrasDeBusqueda } from '../lib/caja/buscar.core.js'
+import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
@@ -309,10 +310,9 @@ export default async function handler(req, res) {
         const palabras = palabrasDeBusqueda(String(req.query.q || ''))
         const vacio = { conStock: [], sinStock: [], masCon: 0, masSin: 0 }
         if (!palabras.length) return res.status(200).json(vacio)
-        const r = await variantesDelNombre(sb, palabras, listasPorStock, (x) => x.conStock.length + x.sinStock.length > 0)
-        if (!r) return res.status(200).json(vacio)
-        const plano = (g) => ({ ...g.variante, local: g.espejo.local })
-        return res.status(200).json({ conStock: r.conStock.map(plano), sinStock: r.sinStock.map(plano), masCon: r.masCon, masSin: r.masSin })
+        // Por PRODUCTO (Bruno, 5-oct): la tarjeta es el producto y la variante se elige en el modal.
+        const r = await variantesDelNombre(sb, palabras, productosPorStock, (x) => x.conStock.length + x.sinStock.length > 0)
+        return res.status(200).json(r || vacio)
       }
 
       if (accion === 'pendientes') {
@@ -632,9 +632,17 @@ async function variantesExactas(sb, productId, sizeId) {
 async function variantesDelNombre(sb, palabras, armar = filtrarPorNombre, hay = (r) => r.grupos.length > 0) {
   const COLS = 'product_id, product_name, size_id, size_name, sku, barcode, available_quantity, store_name'
   for (const p of ordenParaLaBase(palabras).slice(0, 3)) {
-    const { data, error } = await sb.from('inventario').select(COLS).ilike('product_name', `%${p}%`).limit(1000)
-    if (error) throw new Error(error.message)
-    const r = armar(agrupar(data || []), palabras)
+    // 🔴 PostgREST corta en 1.000 filas SIN avisar, y una fila es variante × sucursal: «top» pasaba de
+    // largo y la lista salía recortada. Se pagina (hasta 5.000 filas).
+    const filas = []
+    for (let desde = 0; desde < 5000; desde += 1000) {
+      const { data, error } = await sb.from('inventario').select(COLS).ilike('product_name', `%${p}%`)
+        .order('product_id').order('size_id').order('store_name').range(desde, desde + 999)
+      if (error) throw new Error(error.message)
+      filas.push(...(data || []))
+      if (!data || data.length < 1000) break
+    }
+    const r = armar(agrupar(filas), palabras)
     if (hay(r)) return r
   }
   return armar === filtrarPorNombre ? { grupos: [], mas: 0 } : null

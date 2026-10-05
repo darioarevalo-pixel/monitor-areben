@@ -46,6 +46,8 @@ import { useDatosMonitor } from '@/components/fundas/useDatosMonitor'
 import { useTnPromo } from '@/components/productos/useTnImages'
 import { construirPrecios } from '@/lib/etiquetas/core'
 import { imagenDe } from '@/lib/tn'
+import { traerAudit } from '@/lib/tn-audit'
+import type { ProductoFchk } from '@/lib/tncat/tipos'
 import { avisar as avisarSiempre, prepararSonido, type Aviso } from '@/lib/sonido'
 import { NOMBRE_MEDIO, cobro, cuentaDeMedio, nombreParaTicket, pesosDeRebaja, renglones } from '@/lib/caja/core.core.js'
 import { hoyIso, promosDe } from '@/lib/agenda'
@@ -67,6 +69,7 @@ import {
   type Candidato,
   type Config,
   type ListaNombre,
+  type ProductoLista,
   type Medio,
   type PedidosWeb,
   type Rebaja,
@@ -82,6 +85,8 @@ import {
   CampoRebaja,
   EsperaTransferencia,
   FilaRenglon,
+  ElegirVariante,
+  GrillaProductos,
   ListaPrendas,
   MEDIOS,
   PedidosWebSinArmar,
@@ -192,6 +197,8 @@ function POS() {
   // pinta la última (una respuesta lenta ⛔ pisa a la que ya llegó), y el Enter la anula.
   const [sugeridas, setSugeridas] = useState<(ListaNombre & { q: string }) | null>(null)
   const [verSinStock, setVerSinStock] = useState(false)
+  // El producto cuyo modal «Elegir variante» está abierto.
+  const [eligiendo, setEligiendo] = useState<ProductoLista | null>(null)
   const vuelta = useRef(0)
   const [enviando, setEnviando] = useState(false)
   const [ultima, setUltima] = useState<{ venta: Venta; ticket: DatosTicket } | null>(null)
@@ -200,11 +207,12 @@ function POS() {
 
   const enfocar = () => setTimeout(() => scanRef.current?.focus(), 0)
 
-  // 🔑 Sólo con 3 letras o más y alguna LETRA: el lector tipea números y ⛔ tiene que abrir la lista.
+  // 🔑 Desde 2 caracteres con alguna LETRA (Bruno, 5-oct: «que no sea necesario apretar Enter»): el
+  // lector tipea números y ⛔ tiene que abrir la lista.
   useEffect(() => {
     const n = ++vuelta.current
     const q = codigo.trim()
-    if (q.length < 3 || !palabrasDeBusqueda(q).length) return
+    if (q.length < 2 || !palabrasDeBusqueda(q).length) return
     const t = setTimeout(() => {
       buscarNombre(q)
         .then((r) => {
@@ -316,6 +324,29 @@ function POS() {
     [datos, tnIdx],
   )
 
+  // 🔑 La foto del COLOR (Bruno, 5-oct): Tienda Nube trae la foto de cada variante con su SKU, que es el
+  // mismo de GN. Sin foto propia, la del producto.
+  const [fotoSku, setFotoSku] = useState<Record<string, string>>({})
+  useEffect(() => {
+    let vivo = true
+    traerAudit<ProductoFchk>('zattia', { variantes: true })
+      .then((ps) => {
+        const m: Record<string, string> = {}
+        for (const p of ps) for (const v of p.variantes ?? []) if (v.sku && v.image_url) m[v.sku.toLowerCase().trim()] = v.image_url
+        if (vivo) setFotoSku(m)
+      })
+      .catch(() => {
+        /* sin el detalle de TN, la foto del producto */
+      })
+    return () => {
+      vivo = false
+    }
+  }, [])
+  const fotoDe = useCallback(
+    (v: Variante) => (v.sku && fotoSku[v.sku.toLowerCase().trim()]) || precioYFoto(v.product_id).foto,
+    [fotoSku, precioYFoto],
+  )
+
   function agregar(variante: Variante, stock: Stock) {
     setBor((b) => {
       const i = b.renglones.findIndex((r) => claveDe(r.variante) === claveDe(variante))
@@ -324,7 +355,7 @@ function POS() {
         rs[i] = { ...rs[i], stock, cantidad: rs[i].cantidad + 1 }
         return { ...b, renglones: rs }
       }
-      return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...precioYFoto(variante.product_id) }] }
+      return { ...b, renglones: [...b.renglones, { variante, stock, cantidad: 1, rebaja: null, ...precioYFoto(variante.product_id), foto: fotoDe(variante) }] }
     })
     const enCarrito = (bor.renglones.find((r) => claveDe(r.variante) === claveDe(variante))?.cantidad ?? 0) + 1
     const web = avisoWeb(variante, stock, enCarrito)
@@ -362,7 +393,13 @@ function POS() {
 
   async function elegirCandidato(v: Variante) {
     setCandidatos(null)
+    setEligiendo(null)
     await escanear('', v)
+  }
+  /** Una tarjeta de producto: con una sola variante va directo al pedido; si no, el modal. */
+  function elegirProducto(p: ProductoLista) {
+    if (p.variantes.length === 1) void elegirCandidato(p.variantes[0])
+    else setEligiendo(p)
   }
 
   const cambiarRenglon = (i: number, cambio: Partial<Renglon>) =>
@@ -602,6 +639,8 @@ function POS() {
       <style>{`
         .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: ${space[4]}; padding: ${space[4]}; align-items: start; }
         .pos-der { position: sticky; top: ${space[4]}; max-height: calc(100vh - 2 * ${space[4]}); overflow: auto; }
+        .caja-tarjeta { transition: border-color .12s, box-shadow .12s; }
+        .caja-tarjeta:hover, .caja-tarjeta:focus-visible { border-color: ${color.brandBorder} !important; box-shadow: 0 2px 8px rgba(16,24,40,.08); }
         @media (max-width: 900px) { .pos-grid { grid-template-columns: 1fr; } .pos-der { position: static; max-height: none; } }
       `}</style>
       <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', padding: `${space[2]} ${space[4]}`, background: color.surface, borderBottom: `1px solid ${color.line}` }}>
@@ -761,7 +800,7 @@ function POS() {
                   {enEfectivo > 0 && (
                     <div style={{ display: 'flex', gap: space[4], alignItems: 'end', flexWrap: 'wrap' }}>
                       <Field label={`Paga con (efectivo: ${plata(enEfectivo)})`}>
-                        <Input inputMode="decimal" value={pagaCon} onChange={(e) => setPagaCon(e.target.value)} placeholder="$" style={{ fontSize: font.xl, width: 180 }} />
+                        <Input inputMode="decimal" autoComplete="off" value={pagaCon} onChange={(e) => setPagaCon(e.target.value)} placeholder="$" style={{ fontSize: font.xl, width: 180 }} />
                       </Field>
                       {vuelto != null && (
                         <div style={{ fontSize: font['3xl'], fontWeight: weight.heavy, color: vuelto < 0 ? color.danger : color.ink }}>
@@ -793,9 +832,17 @@ function POS() {
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter') return
                     e.preventDefault()
-                    escanear(codigo)
+                    // Con la lista de ESTE texto a la vista y un solo producto, el Enter abre «Elegir
+                    // variante». Si no (el lector, o la lista todavía ⛔ llegó), busca por código primero.
+                    const una = sugeridas && sugeridas.q === codigo.trim() && sugeridas.conStock.length === 1 && !sugeridas.sinStock.length && !sugeridas.masCon
+                    if (una) elegirProducto(sugeridas.conStock[0])
+                    else escanear(codigo)
                   }}
                   placeholder="Código de barras, SKU o nombre y talle"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   style={{ fontSize: font.xl, flex: 1 }}
                 />
                 <Button onClick={() => escanear(codigo)} loading={buscando > 0}>
@@ -808,8 +855,7 @@ function POS() {
                 </div>
               )}
               {sugeridas && sugeridas.q === codigo.trim() && !candidatos && (
-                <ListaPrendas
-                  grilla
+                <GrillaProductos
                   con={sugeridas.conStock}
                   masCon={sugeridas.masCon}
                   sin={sugeridas.sinStock}
@@ -817,7 +863,19 @@ function POS() {
                   verSin={verSinStock}
                   onVerSin={() => setVerSinStock(true)}
                   precioYFoto={precioYFoto}
+                  onElegir={elegirProducto}
+                />
+              )}
+              {eligiendo && (
+                <ElegirVariante
+                  producto={eligiendo}
+                  precio={precioYFoto(eligiendo.product_id).precio}
+                  fotoDe={fotoDe}
                   onElegir={elegirCandidato}
+                  onCerrar={() => {
+                    setEligiendo(null)
+                    enfocar()
+                  }}
                 />
               )}
               {candidatos && (
@@ -840,7 +898,7 @@ function POS() {
 
         <div className="pos-der">
           <SectionCard
-            title={`Pedido (${prendas})`}
+            title={`Pedido · ${prendas === 1 ? '1 prenda' : `${prendas} prendas`}`}
             actions={
               bor.renglones.length > 0 ? (
                 <Button size="sm" variant="ghost" onClick={vaciar}>
@@ -870,9 +928,9 @@ function POS() {
                   ))}
                 </div>
                 <Field label="Mail para el ticket (opcional)">
-                  <Input type="email" value={bor.email} invalid={!emailOk} onChange={(e) => setBor((b) => ({ ...b, email: e.target.value }))} placeholder="nombre@mail.com" />
+                  <Input type="email" autoComplete="off" spellCheck={false} value={bor.email} invalid={!emailOk} onChange={(e) => setBor((b) => ({ ...b, email: e.target.value }))} placeholder="nombre@mail.com" />
                 </Field>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.md }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: font.md, color: color.ink2 }}>
                   <span>Subtotal</span>
                   <b>{filas ? plata(filas.reduce((s, f) => s + f.importe, 0)) : '—'}</b>
                 </div>
@@ -880,15 +938,15 @@ function POS() {
                   <span style={{ color: color.mut }}>Descuento</span>
                   <CampoRebaja valor={descuentoVenta} onCambio={(rb) => setBor((b) => ({ ...b, descuentoVenta: rb }))} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `2px solid ${color.line}`, paddingTop: space[2], fontSize: font['2xl'], fontWeight: weight.heavy }}>
-                  <span>TOTAL</span>
-                  <span>{mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: color.brandBg, border: `1px solid ${color.brandBorder}`, borderRadius: radius.lg, padding: `${space[3]} ${space[4]}`, fontSize: font['2xl'], fontWeight: weight.heavy }}>
+                  <span style={{ color: color.ink }}>TOTAL</span>
+                  <span style={{ color: color.brand, fontVariantNumeric: 'tabular-nums' }}>{mostrarCobro && c ? plata(c.total) : aPagar != null ? plata(aPagar) : '—'}</span>
                 </div>
                 {!mostrarCobro && <span style={{ color: color.mut, fontSize: font.sm }}>El descuento de la forma de pago se ve al cobrar.</span>}
                 {sinPrecio && <Notice tone="warning">Prenda sin precio: escribirlo en el renglón.</Notice>}
                 {!mostrarCobro && (
-                  <Button size="lg" tone="brand" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)}>
-                    Continuar al cobro (Alt+C)
+                  <Button size="lg" tone="success" variant="solid" fullWidth disabled={!puedeCobrar} onClick={() => setEnCobro(true)}>
+                    Continuar al cobro <span style={{ fontSize: font.xs, opacity: 0.8, marginLeft: space[1] }}>Alt+C</span>
                   </Button>
                 )}
               </div>

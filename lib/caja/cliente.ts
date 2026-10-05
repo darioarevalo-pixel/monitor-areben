@@ -85,7 +85,9 @@ export const leerConfig = () => get<Config>('action=config', 'No se pudo leer la
 export const leerCuentas = () => get<{ cuentas: CuentaGN[] }>('action=referencias', 'No se pudieron leer las cuentas de cobro.')
 export const buscarProducto = (codigo: string) => get<Producto>(`action=producto&codigo=${encodeURIComponent(codigo)}`, 'No se pudo buscar la prenda.')
 /** La lista mientras se escribe: con stock en el local, y aparte las que ⛔ tienen (el botón «Mostrar sin stock»). */
-export type ListaNombre = { conStock: Candidato[]; sinStock: Candidato[]; masCon: number; masSin: number }
+/** Un producto de la lista del POS (Bruno, 5-oct): sus variantes que coinciden, las del local primero. `local` = de anoche. */
+export type ProductoLista = { product_id: number; product_name: string; local: number; variantes: Candidato[] }
+export type ListaNombre = { conStock: ProductoLista[]; sinStock: ProductoLista[]; masCon: number; masSin: number }
 export const buscarNombre = (q: string) => get<ListaNombre>(`action=buscar&q=${encodeURIComponent(q)}`, 'No se pudo buscar la prenda.')
 export const elegirVariante = (v: Variante) =>
   get<Producto>(`action=producto&product_id=${v.product_id}&size_id=${v.size_id}`, 'No se pudo traer la prenda.')
