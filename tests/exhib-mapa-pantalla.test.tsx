@@ -24,6 +24,7 @@ const { RelevamientoPanel } = await import('@/components/exhib/RelevamientoPanel
 const { ToastProvider } = await import('@/components/ui/Toast')
 const { ConfirmProvider } = await import('@/components/ui/Confirm')
 const { MAPA_INICIAL } = await import('@/lib/mapa-local/inicial')
+const { FinMapa } = await import('@/components/exhib/FinMapa')
 
 const boton = (host: HTMLElement, texto: string) => {
   const b = [...host.querySelectorAll('button')].find((x) => x.textContent?.trim() === texto)
@@ -127,6 +128,29 @@ describe('RelevamientoPanel', () => {
   it('sin permiso de editar el mapa, el botón ⛔ sale', async () => {
     const host = await montar(false)
     expect([...host.querySelectorAll('button')].some((b) => b.textContent?.includes('Guardar como mapa'))).toBe(false)
-    expect(host.textContent).toContain('Lo pasa al Mapa del local quien lo edita')
+  })
+})
+
+describe('FinMapa — el final de quien escaneó', () => {
+  const montar = async (relevamiento: React.ReactNode | null) => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    await act(async () => createRoot(host).render(<FinMapa hora="2026-10-05T19:42:00Z" escaneos={213} lugares={9} relevamiento={relevamiento} />))
+    return host
+  }
+
+  it('dice que terminó, a qué hora y que no hay nada más que hacer — y ⛔ falta ni sobra', async () => {
+    const host = await montar(null)
+    const t = host.textContent ?? ''
+    expect(t).toContain('Terminaste. Quedó guardado a las 16:42.')
+    expect(t).toContain('213 escaneos en 9 lugares. No tenés que hacer nada más.')
+    expect(t).not.toMatch(/Falta exhibir|Sobran|Guardar como mapa|Ver el relevamiento/)
+  })
+
+  it('quien edita el mapa abre el relevamiento con un botón', async () => {
+    const host = await montar(<div>EL RELEVAMIENTO</div>)
+    expect(host.textContent).not.toContain('EL RELEVAMIENTO')
+    await click(host, 'Ver el relevamiento')
+    expect(host.textContent).toContain('EL RELEVAMIENTO')
   })
 })

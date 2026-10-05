@@ -28,6 +28,10 @@ el mapa) ⛔ sirve mientras tanto. La dirección se da vuelta: **el escaneo RELE
   y mesas se escanean en el mismo recorrido (lugar a mano); por modelo×color; dice contra el stock de
   qué hora.
 - Guardar como mapa pide `mapa-local.editar`; la empleada usa `exhib` como hoy.
+- 🆕 **Quien escanea termina con un «listo» y nada más** (dictado el 5-oct): *«me preocupa que no le
+  aparezca nada, y que diga ya terminé, ¿tengo que apretar algo más?… lo de guardar mapa dejámelo a mí o
+  a Darío, junto con el comparador de si falta algo exhibir»* ⇒ `FinMapa.tsx`: «Terminaste. Quedó
+  guardado a las HH:MM. No tenés que hacer nada más.» El relevamiento sólo con `mapa-local.editar`.
 - 🏁 **Hecho el 5-oct** (`lib/mapa-local/relevamiento.ts`, `ElegirEspacio.tsx`, `RelevamientoPanel.tsx`):
   33 tests nuevos, 21 mutantes muertos, y el oráculo con 3 recorridos reales contra un conteo en Python
   dio igual. ▶️ **Falta la MANO**: que el local camine un módulo doble con «Chequeo + mapa» y que Bruno

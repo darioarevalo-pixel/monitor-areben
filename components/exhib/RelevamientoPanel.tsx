@@ -20,8 +20,9 @@ import { useEdadStock } from './useEdadStock'
  * 🔴 **«Falta exhibir» es una afirmación sobre el local ENTERO**: si quedó un módulo (o una altura)
  * sin relevar, se dice PROVISORIO y se nombra qué faltó caminar — lo que «falta» puede estar ahí.
  *
- * 🔑 **Guardar pide `mapa-local.editar`** (lo hace Bruno): sin ese permiso el botón ⛔ sale, y el
- * recorrido queda guardado igual como escaneos para que lo guarde quien pueda, abriéndolo desde la lista.
+ * 🔑 **El panel entero es de quien edita el Mapa del local** (Bruno o Darío, 5-oct-2026): quien
+ * escanea termina con un «listo» (`ExhibLibre`) y ⛔ ve este panel. El botón vuelve a pedir el permiso
+ * por si alguien lo monta en otro lado, y el servidor lo exige igual.
  */
 export function RelevamientoPanel({
   escaneos,
@@ -203,9 +204,6 @@ export function RelevamientoPanel({
         <Button variant="solid" tone="brand" onClick={() => void guardar()} loading={guardando} disabled={guardado.sinTabla}>
           Guardar como mapa del local
         </Button>
-      )}
-      {guardado && !guardado.puede.editar && r.modulos.length > 0 && (
-        <div style={{ fontSize: font.sm, color: color.mut }}>El recorrido quedó guardado. Lo pasa al Mapa del local quien lo edita, abriéndolo desde la lista.</div>
       )}
     </div>
   )

@@ -18,6 +18,7 @@ import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import { BalanceSector } from './BalanceSector'
 import { ElegirEspacio, otraAltura } from './ElegirEspacio'
 import { RelevamientoPanel } from './RelevamientoPanel'
+import { FinMapa } from './FinMapa'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
@@ -98,6 +99,14 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   const [conMapa, setConMapa] = useState(false)
   /** Los escaneos del recorrido «+ mapa» recién cerrado, congelados para el relevamiento. */
   const [cierreRelev, setCierreRelev] = useState<EscaneoLibre[] | null>(null)
+  /**
+   * 🔑 **Quien escanea termina con un «listo» y nada más** (Bruno, 5-oct-2026): *«me preocupa que no
+   * le aparezca nada, y que diga ya terminé, ¿tengo que apretar algo más?»*. La hora en que cerró y
+   * cuánto quedó guardado. El relevamiento, el «falta exhibir» y guardar el mapa son de quien edita el
+   * Mapa del local (Bruno o Darío), y se abren con un botón o desde la lista.
+   */
+  const [terminado, setTerminado] = useState<{ hora: string; escaneos: number; lugares: number } | null>(null)
+
   /**
    * 🔴 **¿Lo que se oyó es lo que quedó guardado?** (26-sep-2026, Bruno: *«si a ella le dice 198
    * quiero que haya 198»*). Se lee el historial del servidor DESPUÉS de cerrar y se compara con lo
@@ -254,6 +263,9 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     setCierreLugar(null)
     setCierreFinal(relevando ? [] : quedan)
     setCierreRelev(relevando && caminados.length ? caminados : null)
+    const res = resumenRecorrido(caminados)
+    setTerminado(relevando && caminados.length ? { hora: new Date().toISOString(), escaneos: res.escaneos, lugares: res.lugares } : null)
+
     // Sin ningún módulo caminado ⛔ hay nada que juntar: el recorrido fue por lugares que ⛔ son del mapa.
     setCierreMapa(mapaCaminado?.modulos.length ? mapaCaminado : null)
     setFase(quedan.length || caminados.length ? 'cierre' : 'config')
@@ -426,7 +438,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               </div>
               <div style={{ fontSize: font.sm, color: color.mut }}>
                 {conMapa
-                  ? 'Elegís el espacio con botones (lado, número, simple o doble, arriba o abajo) y escaneás. Al terminar ves cómo está armado el local, qué falta exhibir y qué sobra, y se puede guardar como el mapa del local.'
+                  ? 'Elegís el espacio con botones (lado, número, simple o doble, arriba o abajo) y escaneás. Cuando terminás, tocás «Terminar y guardar» y listo.'
                   : 'Escribís el lugar donde estás parado y escaneás.'}
               </div>
             </div>
@@ -700,10 +712,13 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               No se pudo comprobar el historial ahora. Buscá este recorrido en la lista y tocá «Ver» cuando haya señal.
             </Notice>
           )}
+          {/* En «+ mapa» el ✓ de arriba ya lo dice: la verificación sólo se muestra si algo NO cuadra. */}
           {verificacion && verificacion !== 'sin-leer' && (verificacion.faltan.length === 0 && verificacion.telefono === verificacion.historial ? (
+            terminado ? null : (
             <Notice tone="success" icon="✓" style={{ marginBottom: space[3] }}>
               El teléfono contó <b>{verificacion.telefono}</b> · en el historial hay <b>{verificacion.historial}</b>. Quedó todo guardado.
             </Notice>
+            )
           ) : (
             <Notice tone="danger" icon="⚠️" style={{ marginBottom: space[3] }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>
@@ -718,8 +733,16 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             </Notice>
           ))}
           {cierreMapa && <ControlRecorridoPanel r={cierreMapa} />}
-          {cierreRelev ? (
-            <RelevamientoPanel escaneos={cierreRelev} items={items} marca={marca} guardado={mapaGuardado} onGuardado={setMapaGuardado} onTraerStock={onTraerStock} trayendo={trayendo} />
+          {terminado ? (
+            // Quien escanea ve el «listo»; el relevamiento, sólo quien edita el mapa y a pedido.
+            <FinMapa
+              {...terminado}
+              relevamiento={
+                cierreRelev && mapaGuardado?.puede.editar ? (
+                  <RelevamientoPanel escaneos={cierreRelev} items={items} marca={marca} guardado={mapaGuardado} onGuardado={setMapaGuardado} onTraerStock={onTraerStock} trayendo={trayendo} />
+                ) : null
+              }
+            />
           ) : (
             <ParaColgar
               lista={cierreFinal}
@@ -729,7 +752,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
           )}
           {/* ⛔ «El conteo» en UNIDADES se sacó el 26-sep-2026: a Bruno le interesa que esté
               exhibida, ⛔ cuántas hay (regla del 21-sep). `Analisis.tsx` queda sin usar en el libre. */}
-          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreMapa(null); setCierreRelev(null); setVerificacion(null); setFase('config') }}>
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreMapa(null); setCierreRelev(null); setTerminado(null); setVerificacion(null); setFase('config') }}>
             Listo
           </Button>
         </Card>
@@ -770,7 +793,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
           {/* 🔑 Un recorrido «+ mapa» se mira con su relevamiento, ⛔ con el balance: serían dos
               respuestas a «¿qué falta?», y eso ya se sacó una vez (26-sep-2026). */}
           {viendo.recorrido.modo === 'mapa' ? (
-            <RelevamientoPanel escaneos={viendo.escaneos} items={items} marca={marca} guardado={mapaGuardado} onGuardado={setMapaGuardado} onTraerStock={onTraerStock} trayendo={trayendo} />
+            mapaGuardado?.puede.editar && <RelevamientoPanel escaneos={viendo.escaneos} items={items} marca={marca} guardado={mapaGuardado} onGuardado={setMapaGuardado} onTraerStock={onTraerStock} trayendo={trayendo} />
           ) : (
             <BalanceSector
               escaneos={viendo.escaneos}

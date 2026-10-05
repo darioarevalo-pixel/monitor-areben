@@ -27,7 +27,11 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 >    lugar, y la vidriera y las mesas se siguen escribiendo a mano.
 > 2. **Mientras se camina ⛔ se dice falta ni sobra** (decisión de Bruno): se esconden el control F4,
 >    «De lo que colgaste acá faltan» y «Antes de irte de…».
-> 3. **Al finalizar, y al abrirlo desde la lista, sale el RELEVAMIENTO** (`RelevamientoPanel.tsx`)
+> 3. **Quien escanea termina con un «listo»** (`FinMapa.tsx`): *«Terminaste. Quedó guardado a las
+>    16:42 · N escaneos en M lugares. No tenés que hacer nada más.»* — y ⛔ ve falta, sobra ni el mapa.
+>    Bruno: *«me preocupa que no le aparezca nada, y que diga ya terminé, ¿tengo que apretar algo
+>    más?»*. El RELEVAMIENTO es de quien tiene `mapa-local.editar` (Bruno o Darío): con un botón
+>    «Ver el relevamiento» en el final, o abriéndolo desde la lista. Sale
 >    en lugar de «Para colgar» y del balance: cómo está armado el local, qué hay en cada barra,
 >    **falta exhibir** (con stock y escaneado en NINGÚN lugar, por modelo×color), **sobran** (sin stock
 >    o en dos lugares) y **«Guardar como mapa del local»** (pide `mapa-local.editar`). La lógica vive en
