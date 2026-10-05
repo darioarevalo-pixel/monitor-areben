@@ -63,7 +63,7 @@ import { esAdmin, puedeVerAlguna } from '../lib/permisos.core.js'
 import { cfgDeMarca } from './_recepciones-base.js'
 import { GN_BASE, GN_TOKENS, gnFetch } from './_gn.js'
 import { filasVivas } from '../lib/gn/inventario-vivo.core.js'
-import { MODO_LOCAL_ZATTIA, REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
+import { REGLAS_INICIALES, armarVentaGN, cobro, exigirFeria, medioDeCuenta, montoAEsperar, nombreParaTicket, reglaDeCuenta, renglones } from '../lib/caja/core.core.js'
 import { cruzarTransferencia } from '../lib/pagos-recibidos/core.core.js'
 import { cuentasDe, pagosDelDia, ponerEnUso, usosDe } from './_pagos-recibidos.js'
 import { diaArgentino } from '../lib/envios/portal.core.js'
@@ -71,13 +71,14 @@ import { fechaLocal, normCode, sinSecretos } from '../lib/caja/gn.core.js'
 import { filtrarPorNombre, ordenParaLaBase, palabrasDeBusqueda, productosPorStock } from '../lib/caja/buscar.core.js'
 import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core.js'
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
+import { MARCA_POR_DEFECTO, marcaDeCaja } from '../lib/caja/marcas.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { cobrosDeGN, diferencia, puedeUsarPOS, resumenTurno, usuarioDe } from '../lib/caja/cierre.core.js'
 import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
 
-const STORE = 'zattia'
-const LOCAL = 11780
-const DEPOSITO = 18210
+// 🔑 La marca es CONFIGURACIÓN (rediseño, fase 5): el nombre, el local, el depósito y el modo Local
+// salen de `lib/caja/marcas.core.js`. Habilitada hoy: sólo Zattia.
+const STORE = MARCA_POR_DEFECTO
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -99,12 +100,12 @@ const DIA_MS = 86_400_000
 let cachePedidos = null
 export const olvidarPedidosWeb = () => { cachePedidos = null }
 
-async function leerPedidosWeb(sobre, ahora) {
-  if (cachePedidos && ahora - cachePedidos.en < 60_000) return cachePedidos.datos
+async function leerPedidosWeb(sobre, ahora, store = STORE) {
+  if (cachePedidos && cachePedidos.store === store && ahora - cachePedidos.en < 60_000) return cachePedidos.datos
   // Los tres EN PARALELO: de a uno tardaba ~4 s en frío y el aviso del renglón llegaba después del
   // escaneo (visto en prod, 4-oct). Son 6 consultas a TN contra un cupo de 40; si corta, lo dice `noLeidas`.
   const respuestas = await Promise.all(TRAMOS_PEDIDOS.map(async ([a, b]) => {
-    const qs = new URLSearchParams({ ordenes: '1', modo: 'lista', store: STORE, from: diaArgentino(ahora - b * DIA_MS), to: diaArgentino(ahora - a * DIA_MS), limite: '200' })
+    const qs = new URLSearchParams({ ordenes: '1', modo: 'lista', store, from: diaArgentino(ahora - b * DIA_MS), to: diaArgentino(ahora - a * DIA_MS), limite: '200' })
     const r = await fetch(`${AUDIT}?${qs}`, { headers: { 'x-monitor-auth': sobre } })
     const d = await r.json().catch(() => null)
     if (!r.ok || !d || !d.ok) throw new Error(`Tienda Nube no contestó los pedidos (${(d && d.error) || r.status}).`)
@@ -119,7 +120,7 @@ async function leerPedidosWeb(sobre, ahora) {
   }
   const pedidos = pedidosSinArmar([...porNumero.values()], ahora)
   const datos = { pedidos, porSku: indicePorSku(pedidos), noLeidas, leidoEn: new Date(ahora).toISOString() }
-  cachePedidos = { en: ahora, datos }
+  cachePedidos = { en: ahora, store, datos }
   return datos
 }
 
@@ -141,7 +142,8 @@ export default async function handler(req, res) {
   if (!perfil) return
 
   const store = String(req.query.store || (req.body && req.body.store) || STORE).toLowerCase()
-  if (store !== STORE) return res.status(400).json({ error: 'La Caja es sólo de Zattia.' })
+  const marca = marcaDeCaja(store)
+  if (!marca) return res.status(400).json({ error: 'La Caja es sólo de Zattia.' })
   // 🔴 `puedeVerAlguna` y ⛔ `puedeVer` pelado: es el gate del servidor (ver lib/permisos.core.js).
   if (!puedeVerAlguna(perfil, store, ['caja'])) return res.status(403).json({ error: 'No tenés acceso a la Caja.' })
 
@@ -303,9 +305,9 @@ export default async function handler(req, res) {
           // siempre al espejo (4-oct), y con éste `inventario/{id}` contesta 200 (es el de los Conteos).
           const resp = await gnFetch(`${GN_BASE}/inventario/${variante.product_id}`, { headers: cabeceras(GN_TOKENS.zattia || token) }, 1)
           if (!resp.ok) throw new Error(`Gestión Nube contestó ${resp.status}`)
-          const filas = filasVivas(await leerJson(resp), [LOCAL, DEPOSITO]).filter(f => Number(f.size_id) === variante.size_id)
+          const filas = filasVivas(await leerJson(resp), [marca.local, marca.deposito]).filter(f => Number(f.size_id) === variante.size_id)
           const de = (s) => filas.filter(f => f.store_id === s).reduce((t, f) => t + Number(f.available_quantity || 0), 0)
-          stock = { local: de(LOCAL), deposito: de(DEPOSITO), fuente: 'vivo' }
+          stock = { local: de(marca.local), deposito: de(marca.deposito), fuente: 'vivo' }
         } catch (e) {
           // GN cortó (el tope de 60/min es compartido): el stock de anoche, y la pantalla lo dice. El
           // motivo viaja: un catch callado escondió el 4-oct que el token ⛔ podía leer inventario.
@@ -340,7 +342,7 @@ export default async function handler(req, res) {
       }
       if (accion === 'pedidos-web') {
         try {
-          return res.status(200).json(await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now()))
+          return res.status(200).json(await leerPedidosWeb(req.headers && req.headers['x-monitor-auth'], Date.now(), store))
         } catch (e) {
           return res.status(502).json({ error: sinSecretos(e && e.message) })
         }
@@ -536,7 +538,7 @@ export default async function handler(req, res) {
           if (reglas.medios) exigirFeria({ filas, pagos: b.pagos || [], reglas })
           c = cobro({ filas, pagos: b.pagos, reglas, descuentoVenta: b.descuentoVenta ?? null })
           espera = montoAEsperar(c.pagos, reglas)
-          payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: MODO_LOCAL_ZATTIA, integrationId: id, fecha: fechaLocal(new Date()) })
+          payload = armarVentaGN({ filas, pagos: c.pagos, modoLocal: marca.modoLocal, integrationId: id, fecha: fechaLocal(new Date()) })
         } catch (e) {
           return res.status(400).json({ error: e.message })
         }

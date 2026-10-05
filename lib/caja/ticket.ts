@@ -34,6 +34,9 @@ import { abrirRollo, COLA, M, MIN, W, type Medidor, type OpBase } from '../rollo
 import { imprimirPdf } from '../etiquetas/pdf'
 import { OFFSET_AR_MS } from '../envios/portal.core.js'
 import { talleVisible } from './ticket-mail.core.js'
+import { MARCA_POR_DEFECTO, marcaDeCaja } from './marcas.core.js'
+
+const NOMBRE_POR_DEFECTO = marcaDeCaja(MARCA_POR_DEFECTO)?.nombre ?? ''
 
 /** `importe` es lo que queda después del descuento a mano de esa prenda (si lo hubo). */
 export type RenglonTicket = { nombre: string; talle?: string | null; cantidad: number; precio: number; importe: number }
@@ -59,6 +62,8 @@ export type DatosTicket = {
   logo?: LogoTicket | null
   /** El mail del ticket, si se cargó; si no, «Consumidor Final». */
   cliente?: string | null
+  /** El nombre de la marca, si ⛔ hay logo (rediseño, fase 5); sin él, la marca por defecto de la Caja. */
+  marca?: string
 }
 
 export type LogoTicket = { src: string; ancho: number; alto: number }
@@ -132,7 +137,7 @@ export function armarTicket(
     ops.push({ k: 'img', src: t.logo.src, x: (W - w) / 2, y, w, h })
     y += h + 2
   } else {
-    escribir('ZATTIA', 16, true, 'centro')
+    escribir((t.marca ?? NOMBRE_POR_DEFECTO).toUpperCase(), 16, true, 'centro')
     y += 1
   }
   escribir('COMPROBANTE', 12, true, 'centro')

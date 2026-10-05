@@ -201,6 +201,13 @@ describe('caja · permiso', () => {
     conSesion(CAJERA)
     expect((await correr(req('GET', { action: 'config', store: 'bdi' }))).code).toBe(400)
   })
+  // Rediseño fase 5: la marca es configuración (`lib/caja/marcas.core.js`). Zattia tiene que quedar IDÉNTICA.
+  it('la venta sale al modo Local de Zattia: local 11780, Consumidor Final 137131, canal 3', async () => {
+    conSesion(CAJERA)
+    const r = await correr(req('POST', {}, VENTA))
+    expect(r.code).toBe(200)
+    expect(gn.posts[0]).toMatchObject({ store_id: 11780, client_id: 137131, channel_id: 3 })
+  })
 })
 
 describe('caja · formas de pago y descuentos a mano (Bruno, 4-oct)', () => {

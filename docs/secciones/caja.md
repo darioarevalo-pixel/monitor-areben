@@ -174,6 +174,12 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   de `cobro()` con `pagosDeMedio('efectivo')` (`lib/caja/totem.ts`): el % de la cuenta, el redondeo y
   la traba de feria —una prenda de feria muestra su precio FINAL—. ⛔ «precio × 0,85» a mano. La prenda
   se resuelve con `buscarProducto`, como el POS (UNA lectura de GN por escaneo). Sólo lectura.
+- 🔑 **La marca es CONFIGURACIÓN (rediseño fase 5 = V4)**: nombre, Local (11780), Depósito (18210) y el
+  modo Local de GN viven en `lib/caja/marcas.core.js` (JS plano: lo lee el handler). El handler resuelve
+  `marcaDeCaja(store)` y contesta 400 si ⛔ está habilitada; el chip del POS, la pantalla de la clienta,
+  el tótem y el nombre del ticket sin logo salen de ahí (`lib/caja/marca.ts` le suma el color). 🔴
+  **Habilitada: sólo Zattia.** Para BDI faltan sus ids de GN, sus cuentas y las tablas de la Caja en su
+  base. ⚠️ Siguen fijos a Zattia: los tokens de GN, `ticket-mail.core.js` y `cliente.ts`.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Varias partes por transferencia en una venta se esperan como UNA transferencia por la suma.
@@ -186,6 +192,7 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   vuelta). ⛔ Decidido: tablet SUELTA (pide el pedido en el servidor) o segundo monitor.
 - Rediseño fase 4 (`/pos/totem`): ⛔ visto en prod con el lector real. ⛔ Decidido (paso 0 de V2): si
   es la misma tablet que la de la clienta, y si escanea con la cámara.
+- Rediseño fase 5: ⛔ BDI habilitada (faltan sus ids de GN, sus cuentas y su base) ni el color de cada marca.
 - F5: ⛔ probado con una transferencia real (la verificación del plan).
 - ⚠️ La carrera de dos pantallas cruzando la MISMA venta la cubre el `.eq('estado','esperando_pago')`
   del update, y ⛔ tiene test (el mock de la base es secuencial).

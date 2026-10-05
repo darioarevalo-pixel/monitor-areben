@@ -58,6 +58,7 @@ import { billetesDe } from '@/lib/caja/conteo.core.js'
 import { puedeUsarPOS } from '@/lib/caja/cierre.core.js'
 import { imprimirTicket, plata, type DatosTicket } from '@/lib/caja/ticket'
 import { CLAVE_MAIL, CLAVE_VISTA, leerMail, vistaParaCliente } from '@/lib/caja/pantalla-cliente'
+import { MARCA_CAJA } from '@/lib/caja/marca'
 import {
   buscarNombre,
   buscarProducto,
@@ -715,10 +716,10 @@ function POS() {
         <ButtonLink href="/caja" className="pos-tbtn icono" aria-label="Volver" title="Volver" style={{ height: 36 }}>
           <Icono nombre="atras" size={18} />
         </ButtonLink>
-        {/* El chip de la marca (prototipo del 5-oct). El POS es sólo de Zattia: multimarca es otra fase. */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 5px', borderRadius: radius.pill, background: color.brandBg, color: color.brand, fontWeight: weight.bold, fontSize: font.base, whiteSpace: 'nowrap' }}>
-          <b style={{ width: 19, height: 19, borderRadius: radius.pill, background: color.brand, color: color.brandBg, display: 'grid', placeItems: 'center', fontSize: font.xs }}>Z</b>
-          Caja Zattia
+        {/* El chip de la marca (prototipo del 5-oct): sale de la configuración (`lib/caja/marca.ts`). */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 5px', borderRadius: radius.pill, background: MARCA_CAJA.acentoBg, color: MARCA_CAJA.acento, fontWeight: weight.bold, fontSize: font.base, whiteSpace: 'nowrap' }}>
+          <b style={{ width: 19, height: 19, borderRadius: radius.pill, background: MARCA_CAJA.acento, color: MARCA_CAJA.acentoBg, display: 'grid', placeItems: 'center', fontSize: font.xs }}>{MARCA_CAJA.nombre[0]}</b>
+          Caja {MARCA_CAJA.nombre}
         </span>
         <span className="pos-turno" style={{ fontSize: font.base, color: color.sideInk2, whiteSpace: 'nowrap' }}>
           turno desde {horaAr(turno.abierto_en)} · {turno.abierto_por ?? ''}
