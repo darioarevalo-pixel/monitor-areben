@@ -104,9 +104,13 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
     [buscables, registrar],
   )
 
-  const iniciar = useCallback(() => {
-    cola.iniciar(nuevoRecorridoId(), '')
-  }, [cola])
+  /** `conMapa` = «Chequeo + mapa»: el mismo recorrido, que además releva el Mapa del local. */
+  const iniciar = useCallback(
+    (conMapa = false) => {
+      cola.iniciar(nuevoRecorridoId(), '', conMapa ? { modo: 'mapa' } : undefined)
+    },
+    [cola],
+  )
 
   const cerrar = useCallback(async () => {
     await cola.cerrar()
@@ -120,6 +124,8 @@ export function useExhibLibre(marca: Marca, buscables: ExhibItem[]) {
 
   return {
     recorridoId: cola.id,
+    /** El recorrido en curso es «Chequeo + mapa». Sobrevive a recargar el teléfono (va en el borrador). */
+    conMapa: cola.modo === 'mapa',
     lugar: cola.extra,
     escaneos: cola.escaneos,
     sinSubir: cola.sinSubir,

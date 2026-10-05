@@ -13,6 +13,26 @@ arrancar, `git commit -F msg -- <rutas>`, ⛔ nunca `git add -A`.
 
 ---
 
+## ▶️ CHEQUEO DE EXHIBICIÓN + MAPA: RELEVAR EL LOCAL POR BARRA — 5-oct-2026 (dictado por Bruno)
+
+Bruno: *«cambiamos cosas pero físicamente, en sistema todavía no cambió nada… lo de mapa no podemos
+confirmar nada de ubicación»* ⇒ el mapa guardado está **viejo** y el control F4 (falta/sobra contra
+el mapa) ⛔ sirve mientras tanto. La dirección se da vuelta: **el escaneo RELEVA y arma el mapa**.
+
+- **Dos modos en la MISMA pantalla** de Chequeo de exhibición: «Chequeo» (como hoy, lugar a mano) y
+  **«Chequeo + mapa»**: botones lado **D/I** → **número** → **simple/doble** → **arriba/abajo**, y escanear.
+- **Durante el recorrido ⛔ falta ni sobra**: se ven **al finalizar todo**.
+- **Al guardar, cada barra queda con los MODELOS EXACTOS escaneados** (opción A). Lo nuevo que entre
+  ⛔ tiene lugar hasta que Bruno lo asigne. Los cambios se hacen después, a distancia, desde el mapa.
+- **«Falta exhibir»** sale de haber escaneado todo: firme sólo si ⛔ queda módulo sin relevar; vidriera
+  y mesas se escanean en el mismo recorrido (lugar a mano); por modelo×color; dice contra el stock de
+  qué hora.
+- Guardar como mapa pide `mapa-local.editar`; la empleada usa `exhib` como hoy.
+- 🏁 **Hecho el 5-oct** (`lib/mapa-local/relevamiento.ts`, `ElegirEspacio.tsx`, `RelevamientoPanel.tsx`):
+  33 tests nuevos, 21 mutantes muertos, y el oráculo con 3 recorridos reales contra un conteo en Python
+  dio igual. ▶️ **Falta la MANO**: que el local camine un módulo doble con «Chequeo + mapa» y que Bruno
+  lo abra desde la lista y lo guarde como mapa. ⛔ Visto en prod con un recorrido de verdad todavía.
+
 ## ▶️ TEST BDI: GENTE QUE INTERACTUÓ EN INSTAGRAM, CON UN AVISO GANADOR — 2-oct-2026 (dictado por Bruno)
 
 Bruno: *«pautar meta con gente que interactuó en instagram es malo como público?»* → *«sí, BDI

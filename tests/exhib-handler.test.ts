@@ -252,6 +252,13 @@ describe('lo que ⛔ no entra', () => {
     expect(cab?.modo).toBe('libre')
     expect(cab?.categoria).toBe(null)
   })
+
+  it('«Chequeo + mapa» entra como `mapa`, sin categoría (5-oct-2026)', async () => {
+    await correr(postear({ action: 'abrir', id: 'ex_nuevo', modo: 'mapa', categoria: 'TOPS Y BODIES' }))
+    const cab = base.escrituras.find((e) => e.tabla === 'exhib_recorrido')?.filas?.[0]
+    expect(cab?.modo).toBe('mapa')
+    expect(cab?.categoria).toBe(null)
+  })
 })
 
 /**

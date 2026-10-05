@@ -25,6 +25,7 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   - `inicial.ts` es el armado propuesto y la tabla de tipos.
   - `validar.core.js` hace el saneo y lo importa el handler.
   - `cliente.ts` habla con el servidor.
+  - `relevamiento.ts` arma el mapa desde lo escaneado en «Chequeo + mapa».
 - **Servidor:** `api/_mapa-local.js`, por `api/datos.js?recurso=mapa-local`.
 - **Base:** la tabla `mapa_local`, una fila jsonb por marca (`sql/migrate-mapa-local.sql`), sólo
   en el Supabase de Zattia.
@@ -148,6 +149,23 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   lugar.
 - 🔑 **El control usa el mapa GUARDADO, en cómodo**: la misma ubicación que imprime la hoja del
   módulo. Sin mapa guardado ⛔ no aparece, porque el armado inicial ⛔ no es lo que está colgado.
+
+- 🔴 **El RELEVAMIENTO va al revés que F4: lo colgado arma el mapa** (5-oct-2026,
+  `lib/mapa-local/relevamiento.ts`, desde «Chequeo + mapa» en el Chequeo de exhibición). El local se
+  reacomodó a mano y el mapa guardado quedó viejo. Bruno: *«lo de mapa no podemos confirmar nada de
+  ubicación»*. Por eso en ese modo ⛔ corre F4.
+  - **Cada barra caminada se guarda con los MODELOS EXACTOS escaneados** (`Nivel.modelos`, opción A
+    de Bruno) y con **cupo = las perchas que había** (prendas distintas). Lo nuevo que entre ⛔ tiene
+    lugar en esas barras hasta que Bruno se lo dé.
+  - 🔴 **De lo que nadie caminó ⛔ se afirma nada**: un módulo sin relevar queda como estaba, y la
+    otra altura de un doble que nadie caminó (`relevada: false`) también. «Falta exhibir» sale
+    **provisorio** y nombra lo que quedó sin relevar.
+  - Un modelo escaneado en dos barras queda en la que más se lo vio, y se dice: `modelos` es por
+    producto, ⛔ por color.
+  - 🔴 **El orden del recorrido NO se rearma por lado**: en el mapa guardado la isla va primero e
+    I01/I02 caen entre D04 y D05. Lo que ya estaba conserva su `orden`; un módulo nuevo entra al lado
+    de su vecino de número.
+  - Simple o doble lo declara quien está parado ahí: el mapa sólo propone.
 - 🔴 **Lo lee también quien tiene sólo el Chequeo de exhibición**: el GET acepta `exhib` además de
   `mapa-local` (el que camina con el lector ⛔ no tiene por qué ver la sección). El mapa ⛔ no lleva
   plata ni datos de nadie, y guardar sigue pidiendo `mapa-local.editar`.
@@ -174,8 +192,18 @@ Antes de esta sección ningún lugar decía qué debería estar colgado en cada 
   ⚠️ Sólo en el cierre: al abrir un recorrido viejo ⛔ sale, porque el stock de hoy ⛔ es el de ese día.
 - ▶️ **Lo que F4 todavía ⛔ no hace:** decir a qué **barra** del módulo va cada prenda (el lector
   sólo sabe el módulo).
+- ✅ **Relevar barra por barra con el lector y guardarlo como el mapa** (5-oct-2026, «Chequeo +
+  mapa»). ⚠️ ⛔ Visto en prod con un recorrido de verdad: ▶️ **mano del local**: caminar un módulo
+  doble arriba y abajo, y **mano de Bruno**: abrirlo desde la lista y guardar.
 
 ## Cómo se prueba
+
+- `npx vitest run tests/mapa-local-relevamiento.test.ts tests/exhib-mapa-pantalla.test.tsx tests/exhib-cola-modo.test.tsx`.
+- **El oráculo del relevamiento (5-oct-2026):** los tres recorridos reales más grandes (Tops 391,
+  shorts y jeans 187, sweaters 42) con el lugar cambiado a `D01 arriba`/`D01 abajo`/`D02`/`vidriera`,
+  contra el stock del Local de ese día. La función y un conteo directo en Python, hecho aparte, dieron
+  lo mismo: 191/179/59 perchas, 110/103/59 modelos, 18 modelos en dos barras, falta exhibir 190
+  (759 u), 51 sin stock y 3 sin identificar.
 
 - `npx vitest run tests/mapa-local.test.ts tests/mapa-local-handler.test.ts tests/que-se-cuelga.test.ts`.
 - **El oráculo de la temporada y el ritmo (1-oct-2026):** con el stock del Local y las ventas de

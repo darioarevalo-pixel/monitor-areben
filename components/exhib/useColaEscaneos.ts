@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marca } from '@/lib/nav'
-import { abrirRecorrido, cerrarRecorrido, eliminarRecorrido, sacarEscaneo, subirEscaneos } from '@/lib/exhib/cliente'
+import { abrirRecorrido, cerrarRecorrido, eliminarRecorrido, sacarEscaneo, subirEscaneos, type ModoRecorrido } from '@/lib/exhib/cliente'
 import { claveEscaneo, esDobleLectura, sumarUna, vecesDe, type EscaneoLibre } from '@/lib/exhib/libre'
 
 /**
@@ -19,8 +19,17 @@ import { claveEscaneo, esDobleLectura, sumarUna, vecesDe, type EscaneoLibre } fr
  * recarga, la pantalla dice cuántos quedan y **cerrar con pendientes está prohibido**.
  */
 
+/**
+ * Lo que se manda en `abrir`, más allá de los escaneos.
+ *
+ * 🔴 **Viaja en el borrador y ⛔ sólo en memoria**: la apertura se reintenta en cada tanda (sin señal
+ * puede no haber llegado nunca), y si el teléfono se recargó en el medio, reabrir sin esto crearía el
+ * recorrido como `libre` aunque se haya empezado «+ mapa».
+ */
+export type AlAbrir = { categoria?: string | null; modo?: ModoRecorrido }
+
 /** El borrador que vive en el teléfono. `extra` es lo propio de cada modo (el lugar, la categoría). */
-export type Borrador<E> = { id: string; escaneos: EscaneoLibre[]; pendientes: string[]; extra: E }
+export type Borrador<E> = { id: string; escaneos: EscaneoLibre[]; pendientes: string[]; extra: E; alAbrir?: AlAbrir }
 
 function leerLS<E>(clave: string, vacio: Borrador<E>): Borrador<E> {
   try {
@@ -32,6 +41,7 @@ function leerLS<E>(clave: string, vacio: Borrador<E>): Borrador<E> {
       escaneos: Array.isArray(d.escaneos) ? d.escaneos : [],
       pendientes: Array.isArray(d.pendientes) ? d.pendientes : [],
       extra: (d.extra ?? vacio.extra) as E,
+      ...(d.alAbrir && typeof d.alAbrir === 'object' ? { alAbrir: d.alAbrir } : {}),
     }
   } catch {
     return vacio
@@ -46,7 +56,7 @@ function guardarLS<E>(clave: string, b: Borrador<E>) {
   }
 }
 
-export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, modo: 'libre' | 'categoria') {
+export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, modo: ModoRecorrido) {
   const VACIO: Borrador<E> = { id: '', escaneos: [], pendientes: [], extra: extraVacio }
   const [bor, setBor] = useState<Borrador<E>>(VACIO)
   const [subiendo, setSubiendo] = useState(false)
@@ -63,8 +73,8 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
   const ref = useRef<Borrador<E>>(VACIO)
   /** La apertura en el servidor, asegurada una vez por sesión de pantalla. */
   const abierto = useRef<string>('')
-  /** Lo que hay que mandar en `abrir` cuando la apertura se reintenta (la categoría del recorrido). */
-  const alAbrir = useRef<{ categoria?: string | null }>({})
+  /** Lo que hay que mandar en `abrir` cuando la apertura se reintenta. Ver `AlAbrir`. */
+  const alAbrir = useRef<AlAbrir>({})
 
   // Se lee del aparato al montar (y al cambiar de marca), ⛔ no de un request: es justamente lo que
   // tiene que estar antes de que haya red. Va adentro de un async porque `localStorage` ⛔ no existe
@@ -75,6 +85,7 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
       const b = leerLS(clave, VACIO)
       if (!vivo) return
       ref.current = b
+      alAbrir.current = b.alAbrir ?? {}
       setBor(b)
       setErrorMsg(null)
     })()
@@ -126,10 +137,10 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
   }, [marca, modo, guardar])
 
   const iniciar = useCallback(
-    (id: string, extra: E, opts?: { categoria?: string | null }) => {
+    (id: string, extra: E, opts?: AlAbrir) => {
       abierto.current = ''
-      alAbrir.current = { categoria: opts?.categoria ?? null }
-      guardar({ id, escaneos: [], pendientes: [], extra })
+      alAbrir.current = { categoria: opts?.categoria ?? null, ...(opts?.modo ? { modo: opts.modo } : {}) }
+      guardar({ id, escaneos: [], pendientes: [], extra, alAbrir: alAbrir.current })
       void abrirRecorrido(marca, id, { modo, ...alAbrir.current })
         .then(() => {
           abierto.current = id
@@ -252,6 +263,8 @@ export function useColaEscaneos<E>(marca: Marca, clave: string, extraVacio: E, m
 
   return {
     id: bor.id,
+    /** El modo con que se abrió el recorrido en curso (el del borrador manda sobre el del hook). */
+    modo: bor.id ? (bor.alAbrir?.modo ?? modo) : modo,
     escaneos: bor.escaneos,
     extra: bor.extra,
     sinSubir: bor.pendientes.length,

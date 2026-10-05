@@ -224,10 +224,11 @@ export default async function handler(req, res) {
       if (accion === 'abrir') {
         const id = String(b.id || '').trim()
         if (!id) return res.status(400).json({ error: 'falta el id del recorrido' })
-        // 🔑 La lista blanca de `modo` vive acá: lo que no sea uno de los dos entra como 'libre',
+        // 🔑 La lista blanca de `modo` vive acá: lo que no sea uno de estos entra como 'libre',
         // que es el que ⛔ no cambia cómo se lee el recorrido. Un modo inventado partiría en dos la
-        // lista de recorridos sin que nadie se entere.
-        const modo = b.modo === 'categoria' ? 'categoria' : 'libre'
+        // lista de recorridos sin que nadie se entere. `mapa` = el libre que además releva el Mapa
+        // del local (5-oct-2026): se escanea igual, y al verlo se ofrece guardarlo como el mapa.
+        const modo = b.modo === 'categoria' || b.modo === 'mapa' ? b.modo : 'libre'
         const row = {
           id,
           store,

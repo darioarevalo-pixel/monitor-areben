@@ -12,6 +12,13 @@ import type { Cobertura, EscaneoLibre, RecorridoLibre } from './libre'
 
 const API = '/api/datos?recurso=exhib'
 
+/**
+ * Cómo se camina el recorrido. `mapa` es el libre que además releva el Mapa del local: el lugar se
+ * elige con botones (`D01 arriba`) y al finalizar se puede guardar como el mapa. La lista blanca
+ * vive en `api/_exhib.js`.
+ */
+export type ModoRecorrido = 'libre' | 'categoria' | 'mapa'
+
 async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await apiFetch(url, init)
   const d = await r.json().catch(() => null)
@@ -59,7 +66,7 @@ export async function leerLugares(marca: string): Promise<string[]> {
  *
  * ⚠️ La **persona** ⛔ no viaja: la pone el servidor desde el perfil logueado.
  */
-export async function abrirRecorrido(marca: string, id: string, opts?: { modo?: 'libre' | 'categoria'; categoria?: string | null; nota?: string | null }): Promise<void> {
+export async function abrirRecorrido(marca: string, id: string, opts?: { modo?: ModoRecorrido; categoria?: string | null; nota?: string | null }): Promise<void> {
   await escribir(marca, 'abrir', {
     id,
     // ⚠️ El `modo` viaja y ⛔ no se asume: desde el 19-sep-2026 el recorrido por categoría entra por

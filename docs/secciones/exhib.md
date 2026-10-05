@@ -18,6 +18,24 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 > conteo» ⛔ salen en la vista del recorrido; «Para colgar» sigue en la caminata. ⛔ No volver a
 > poner párrafos arriba de las listas.
 
+> 🗺️ **«Chequeo + mapa» (5-oct-2026)**: un selector arriba de «Iniciar recorrido» elige entre el
+> chequeo de siempre y **«Chequeo + mapa»**. Es el MISMO recorrido libre (`modo = 'mapa'` en
+> `exhib_recorrido`, sin migración: la columna ya existía y la lista blanca está en `api/_exhib.js`),
+> con tres diferencias:
+> 1. **El lugar se elige con botones** (`ElegirEspacio.tsx`): lado D/I/ISLA → número → simple o
+>    doble → arriba o abajo. Los botones **escriben el mismo texto** (`D01 arriba`) en el campo del
+>    lugar, y la vidriera y las mesas se siguen escribiendo a mano.
+> 2. **Mientras se camina ⛔ se dice falta ni sobra** (decisión de Bruno): se esconden el control F4,
+>    «De lo que colgaste acá faltan» y «Antes de irte de…».
+> 3. **Al finalizar, y al abrirlo desde la lista, sale el RELEVAMIENTO** (`RelevamientoPanel.tsx`)
+>    en lugar de «Para colgar» y del balance: cómo está armado el local, qué hay en cada barra,
+>    **falta exhibir** (con stock y escaneado en NINGÚN lugar, por modelo×color), **sobran** (sin stock
+>    o en dos lugares) y **«Guardar como mapa del local»** (pide `mapa-local.editar`). La lógica vive en
+>    `lib/mapa-local/relevamiento.ts`; ver `mapa-local.md`.
+> 🔴 **El modo viaja en el borrador del teléfono** (`AlAbrir` en `useColaEscaneos.ts`): la apertura
+> se reintenta en cada tanda, y si el teléfono se recarga sin señal, reabrir sin el modo lo crearía
+> `libre`. Lo cuida `tests/exhib-cola-modo.test.tsx`.
+
 **Son DOS recorridos distintos**, no dos vistas del mismo:
 
 | | **Por categoría** (el viejo) | **Libre por lugar** (19-sep-2026) |
@@ -36,7 +54,7 @@ prenda con stock está colgada, y de paso controlar el cartelito de papel contra
 
 `components/exhib/` (`Exhib.tsx` 530 — el modo por categoría y el selector · `useExhib.ts` ·
 `ExhibLibre.tsx` · `useExhibLibre.ts` · **`useColaEscaneos.ts` la cola que usan LOS DOS** ·
-`ParaColgar.tsx` · **`BalanceSector.tsx`** el balance del sector) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
+`ParaColgar.tsx` · **`BalanceSector.tsx`** el balance del sector · **`ElegirEspacio.tsx`** y **`RelevamientoPanel.tsx`** el «Chequeo + mapa» · `useEdadStock.ts` de cuándo es el stock, para el balance y el relevamiento) · **`lib/sonido.ts`** (el pitido/vibración/voz, compartido) · `lib/exhib/`
 (**`aviso.ts`** qué se oye en cada final · **`balance.ts`** el mandado del depósito · `core.ts` puro y
 compartido por los dos · `libre.ts` puro del libre · `colgar.ts` **qué falta colgar** ·
 `datos.ts` la bajada · `cliente.ts` · `pdf.ts` · **`analisis.ts` el conteo del final** · `tipos.ts`) ·

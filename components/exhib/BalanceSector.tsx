@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button, color, font, space, useToast, weight } from '@/components/ui'
 import { descargarXlsx } from '@/lib/excel'
 import {
@@ -29,7 +29,7 @@ import { exhibId, tipoDePrenda } from '@/lib/exhib/core'
 import type { Cobertura, EscaneoLibre } from '@/lib/exhib/libre'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import type { Marca } from '@/lib/nav'
-import { ultimoSyncStock } from '@/lib/sync-gn'
+import { useEdadStock } from './useEdadStock'
 
 /**
  * **El balance del sector**, la pantalla de quien decide.
@@ -73,32 +73,8 @@ export function BalanceSector({
   const [elegidas, setElegidas] = useState<string[]>(cobertura?.tipos ?? [])
   const [guardando, setGuardando] = useState(false)
 
-  /**
-   * 🔴 **De cuándo es el stock contra el que se está comparando.** El espejo se actualiza **una vez
-   * por día, a las 3 de la mañana**, y el local vende **~160 unidades por día**: un balance hecho a
-   * la tarde contra esa foto manda a buscar al depósito prendas que se vendieron a la mañana. Esto
-   * ⛔ no se veía en ningún lado, y el mandado salía igual de confiado.
-   *
-   * ⚠️ Se vuelve a preguntar cuando `items` cambia, que es lo que pasa después de traer el stock:
-   * así el cartel se corrige solo en vez de quedar mostrando la hora vieja.
-   */
-  const [stockDe, setStockDe] = useState<{ fecha: Date; horas: number } | null | undefined>(undefined)
-  useEffect(() => {
-    let vivo = true
-    void ultimoSyncStock(marca).then((fecha) => {
-      // ⚠️ La antigüedad se calcula **acá**, cuando se pregunta, y ⛔ no en el render: leer el reloj
-      // mientras se dibuja da un número que cambia solo en cada re-dibujo (y el lint lo prohíbe).
-      if (vivo) setStockDe(fecha ? { fecha, horas: (Date.now() - fecha.getTime()) / 36e5 } : null)
-    })
-    return () => {
-      vivo = false
-    }
-  }, [marca, items])
-
-  // 🔑 Dos horas es el corte, y sale de la venta real: a ~160 unidades por día, dos horas de local
-  // abierto son unas 20 prendas que la foto ⛔ no conoce. Abajo de eso, el ruido ⛔ no cambia un
-  // mandado; arriba, sí. ⚠️ Y **no saber ⛔ no es estar al día**: sin dato, se avisa igual.
-  const stockViejo = !stockDe || stockDe.horas > 2
+  // 🔴 De cuándo es el stock contra el que se compara: ver `useEdadStock`.
+  const { stockViejo, texto: textoStock } = useEdadStock(marca, items)
 
   const tipos = useMemo(() => coberturaPorTipo(escaneos, items), [escaneos, items])
   const lista = useMemo(() => buscarPorTipo(escaneos, items, elegidas), [escaneos, items, elegidas])
@@ -235,13 +211,7 @@ export function BalanceSector({
           <span
             title="El local vende unas 160 prendas por día: con el stock viejo, la lista puede mandar a buscar cosas que ya se vendieron."
           >
-            {stockDe === undefined
-              ? 'Stock…'
-              : stockDe === null
-                ? '⚠️ Stock de hora desconocida'
-                : stockDe.horas < 1
-                  ? '✓ Stock de recién'
-                  : `⚠️ Stock de hace ${Math.round(stockDe.horas)} h`}
+            {textoStock}
           </span>
           <Button size="sm" variant={stockViejo ? 'solid' : 'outline'} tone={stockViejo ? 'brand' : undefined} onClick={() => void onTraerStock()} loading={trayendo}>
             Actualizar stock

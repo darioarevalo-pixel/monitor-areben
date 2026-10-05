@@ -11,11 +11,13 @@ import { agruparPorLugar, ANCHOS_EXPORT, catsVisibles, compararConHistorial, fil
 import { colgarEnLugar, paraColgar, resumenColgar, type Colgar } from '@/lib/exhib/colgar'
 import { ParaColgar } from './ParaColgar'
 import { ControlModulo, ControlRecorridoPanel } from './ControlModulo'
-import { leerMapa } from '@/lib/mapa-local/cliente'
+import { leerMapa, type MapaGuardado } from '@/lib/mapa-local/cliente'
 import { prendasDelLocal, ubicar } from '@/lib/mapa-local/core'
 import { controlDelRecorrido, controlDeModulo, moduloDelLugar, type ControlRecorrido } from '@/lib/mapa-local/control'
 import type { MapaLocal } from '@/lib/mapa-local/tipos'
 import { BalanceSector } from './BalanceSector'
+import { ElegirEspacio, otraAltura } from './ElegirEspacio'
+import { RelevamientoPanel } from './RelevamientoPanel'
 import type { ExhibItem } from '@/lib/exhib/tipos'
 import { useExhibLibre, type ResultadoLibre } from './useExhibLibre'
 import { useActividad } from '@/components/mapa-local/useMapaLocalDatos'
@@ -89,6 +91,14 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   /** El control del Mapa del local de todos los módulos caminados, congelado al cerrar. */
   const [cierreMapa, setCierreMapa] = useState<ControlRecorrido | null>(null)
   /**
+   * «Chequeo + mapa» (5-oct-2026): el mismo recorrido, eligiendo el espacio con botones, y al
+   * finalizar el relevamiento en vez de «Para colgar». Se elige antes de iniciar; el recorrido en
+   * curso lo recuerda solo (`lib.conMapa`, va en el borrador del teléfono).
+   */
+  const [conMapa, setConMapa] = useState(false)
+  /** Los escaneos del recorrido «+ mapa» recién cerrado, congelados para el relevamiento. */
+  const [cierreRelev, setCierreRelev] = useState<EscaneoLibre[] | null>(null)
+  /**
    * 🔴 **¿Lo que se oyó es lo que quedó guardado?** (26-sep-2026, Bruno: *«si a ella le dice 198
    * quiero que haya 198»*). Se lee el historial del servidor DESPUÉS de cerrar y se compara con lo
    * que contó el teléfono. `null` = todavía ⛔ se sabe; `'sin-leer'` = ⛔ hubo señal para leerlo.
@@ -114,12 +124,13 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
    * El Mapa del local **guardado** (F4). 🔑 Sólo el guardado: el armado inicial es un borrador y ⛔ no
    * es lo que está colgado. Sin mapa —o sin poder leerlo— el recorrido anda igual que antes.
    */
-  const [mapaLocal, setMapaLocal] = useState<MapaLocal | null>(null)
+  const [mapaGuardado, setMapaGuardado] = useState<MapaGuardado | null>(null)
+  const mapaLocal: MapaLocal | null = mapaGuardado?.mapa ?? null
   useEffect(() => {
     if (marca !== 'zattia') return
     let vivo = true
     void leerMapa()
-      .then((m) => vivo && setMapaLocal(m.mapa))
+      .then((m) => vivo && setMapaGuardado(m))
       .catch(() => {})
     return () => {
       vivo = false
@@ -143,7 +154,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // fácil de caminar el local entero sin oír nada y no enterarse.
     prepararSonido()
     avisar('ok', 'listo')
-    lib.iniciar()
+    lib.iniciar(conMapa)
     setFb(null)
     setFase('scan')
     foco(lugarRef)
@@ -213,7 +224,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // Al escanear se vuelve a la vista corta: si quedó abierta la lista entera de un mueble, cada
     // lectura siguiente pagaría el dibujo completo otra vez.
     setVerTodosLosEscaneos(false)
-    if (previo && previo !== lugar.trim()) {
+    // ⛔ En «+ mapa» no se dice qué falta mientras se camina: se ve al finalizar (Bruno, 5-oct-2026).
+    if (previo && previo !== lugar.trim() && !lib.conMapa) {
       const quedo = colgarEnLugar(paraColgar(lib.escaneos, items), previo)
       setCierreLugar(quedo.length ? { lugar: previo, lista: quedo } : null)
       setVerColgarAca(false)
@@ -227,7 +239,9 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     // ⚠️ Los escaneos se congelan por lo mismo que la lista: `cerrar` limpia el borrador del
     // teléfono, y el conteo sale justamente de ellos.
     const caminados = lib.escaneos
-    const mapaCaminado = mapaLocal && ubicacionMapa ? controlDelRecorrido(mapaLocal, ubicacionMapa, caminados) : null
+    const relevando = lib.conMapa
+    // 🔑 En «+ mapa» ⛔ se compara contra el mapa guardado: está viejo, y por eso se releva.
+    const mapaCaminado = !relevando && mapaLocal && ubicacionMapa ? controlDelRecorrido(mapaLocal, ubicacionMapa, caminados) : null
     const id = lib.recorridoId
     try {
       await lib.cerrar()
@@ -238,7 +252,8 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
     toast.ok('Recorrido guardado')
     cargarPrevios()
     setCierreLugar(null)
-    setCierreFinal(quedan)
+    setCierreFinal(relevando ? [] : quedan)
+    setCierreRelev(relevando && caminados.length ? caminados : null)
     // Sin ningún módulo caminado ⛔ hay nada que juntar: el recorrido fue por lugares que ⛔ son del mapa.
     setCierreMapa(mapaCaminado?.modulos.length ? mapaCaminado : null)
     setFase(quedan.length || caminados.length ? 'cierre' : 'config')
@@ -306,9 +321,10 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
   const colgarAca = useMemo(() => colgarEnLugar(paraColgar(lib.escaneos, items), lib.lugar), [lib.escaneos, items, lib.lugar])
   /** Si el lugar escrito es un módulo del mapa, lo que el mapa pone ahí contra lo que pasó por el lector. */
   const controlAca = useMemo(() => {
+    if (lib.conMapa) return null
     const m = mapaLocal && moduloDelLugar(mapaLocal, lib.lugar)
     return m && ubicacionMapa ? controlDeModulo(mapaLocal, ubicacionMapa, m, lib.escaneos) : null
-  }, [mapaLocal, ubicacionMapa, lib.escaneos, lib.lugar])
+  }, [mapaLocal, ubicacionMapa, lib.escaneos, lib.lugar, lib.conMapa])
   // Los módulos del mapa se SUGIEREN, ⛔ no se imponen: el lugar sigue siendo texto libre.
   const sugerencias = useMemo(() => {
     const cods = [...(mapaLocal?.modulos ?? [])].sort((a, b) => a.orden - b.orden).map((m) => m.codigo)
@@ -396,6 +412,26 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             )}
           </Notice>
 
+          {/* 🔑 Los dos modos, en la MISMA pantalla (Bruno, 5-oct-2026): «+ mapa» es el mismo
+              chequeo, eligiendo el espacio con botones, y al final arma el Mapa del local. */}
+          {marca === 'zattia' && !lib.recorridoId && (
+            <div style={{ marginBottom: space[4] }}>
+              <div style={{ display: 'flex', gap: space[2], flexWrap: 'wrap', marginBottom: space[2] }}>
+                <Button variant={conMapa ? 'outline' : 'solid'} tone={conMapa ? undefined : 'brand'} aria-pressed={!conMapa} onClick={() => setConMapa(false)}>
+                  Chequeo
+                </Button>
+                <Button variant={conMapa ? 'solid' : 'outline'} tone={conMapa ? 'brand' : undefined} aria-pressed={conMapa} onClick={() => setConMapa(true)}>
+                  Chequeo + mapa
+                </Button>
+              </div>
+              <div style={{ fontSize: font.sm, color: color.mut }}>
+                {conMapa
+                  ? 'Elegís el espacio con botones (lado, número, simple o doble, arriba o abajo) y escaneás. Al terminar ves cómo está armado el local, qué falta exhibir y qué sobra, y se puede guardar como el mapa del local.'
+                  : 'Escribís el lugar donde estás parado y escaneás.'}
+              </div>
+            </div>
+          )}
+
           {lib.recorridoId && (
             <Notice tone="brand" icon="↩" style={{ marginBottom: space[4] }}>
               Hay un recorrido en curso con <b>{lib.escaneos.length}</b> {lib.escaneos.length === 1 ? 'escaneo' : 'escaneos'}
@@ -419,9 +455,10 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
                   </div>
                   <div style={{ fontSize: font.xs, color: color.mut }}>
                     {r.escaneos ?? 0} {r.escaneos === 1 ? 'escaneo' : 'escaneos'} · {r.estado === 'cerrado' ? 'cerrado' : 'sin cerrar'}
+                    {r.modo === 'mapa' && <> · <b>+ mapa</b></>}
                     {/* 🔑 El balance es de otra persona y de otro momento, así que la lista tiene
                         que decir cuáles esperan que alguien los mire. */}
-                    {r.estado === 'cerrado' && (r.cobertura ? <> · <b>balance hecho</b></> : <> · sin balance</>)}
+                    {r.estado === 'cerrado' && r.modo !== 'mapa' && (r.cobertura ? <> · <b>balance hecho</b></> : <> · sin balance</>)}
                   </div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => abrirPrevio(r.id)}>Ver</Button>
@@ -434,7 +471,24 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
       {/* ── Recorrer ── */}
       {fase === 'scan' && (
         <Card>
-          <Field label="¿En qué lugar estás?" hint="Por ejemplo: perchero tops. Cuando termines de escribirlo, tocá Enter y ya podés escanear." width={320}>
+          {lib.conMapa && (
+            <>
+              <ElegirEspacio
+                mapa={mapaLocal}
+                lugar={lib.lugar}
+                onElegir={(l) => {
+                  lib.setLugar(l)
+                  foco(scanRef)
+                }}
+              />
+              {lib.lugar.trim() && <LugarActual lugar={lib.lugar} onCambiar={(l) => { lib.setLugar(l); foco(scanRef) }} />}
+            </>
+          )}
+          <Field
+            label={lib.conMapa ? 'O escribí el lugar' : '¿En qué lugar estás?'}
+            hint={lib.conMapa ? 'Para la vidriera, una mesa o lo que no sea un perchero del mapa.' : 'Por ejemplo: perchero tops. Cuando termines de escribirlo, tocá Enter y ya podés escanear.'}
+            width={320}
+          >
             <Input
               ref={lugarRef}
               value={lib.lugar}
@@ -473,7 +527,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               // 🔑 `datalist` y ⛔ no un desplegable: el salón se reacomoda, y una lista cerrada que
               // no tiene el perchero de hoy obliga a elegir uno que miente.
               list="mo-exhib-lugares"
-              placeholder="perchero tops"
+              placeholder={lib.conMapa ? 'vidriera' : 'perchero tops'}
               autoComplete="off"
               style={{ height: 44, fontSize: 16 }}
             />
@@ -590,7 +644,7 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
 
           {controlAca && <ControlModulo key={controlAca.codigo} c={controlAca} />}
 
-          {colgarAca.length > 0 && (
+          {colgarAca.length > 0 && !lib.conMapa && (
             <Notice tone="neutral" icon="🧺" style={{ marginBottom: space[3] }}>
               <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap' }}>
                 <span>
@@ -664,14 +718,18 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
             </Notice>
           ))}
           {cierreMapa && <ControlRecorridoPanel r={cierreMapa} />}
-          <ParaColgar
-            lista={cierreFinal}
-            titulo="Terminaste. Para colgar"
-            archivo={`para-colgar-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`}
-          />
+          {cierreRelev ? (
+            <RelevamientoPanel escaneos={cierreRelev} items={items} marca={marca} guardado={mapaGuardado} onGuardado={setMapaGuardado} onTraerStock={onTraerStock} trayendo={trayendo} />
+          ) : (
+            <ParaColgar
+              lista={cierreFinal}
+              titulo="Terminaste. Para colgar"
+              archivo={`para-colgar-${marca}-${new Date().toISOString().slice(0, 10)}.xlsx`}
+            />
+          )}
           {/* ⛔ «El conteo» en UNIDADES se sacó el 26-sep-2026: a Bruno le interesa que esté
               exhibida, ⛔ cuántas hay (regla del 21-sep). `Analisis.tsx` queda sin usar en el libre. */}
-          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreMapa(null); setVerificacion(null); setFase('config') }}>
+          <Button variant="solid" tone="brand" onClick={() => { setCierreFinal([]); setCierreMapa(null); setCierreRelev(null); setVerificacion(null); setFase('config') }}>
             Listo
           </Button>
         </Card>
@@ -709,21 +767,27 @@ export function ExhibLibre({ items, buscables, enCero, deStunned, cargando, erro
               cuando la empleada avisa que terminó el sector. «Para colgar» queda abajo porque es la
               lista conservadora —los hermanos de lo que tocó—, que sigue valiendo aunque nadie
               declare nada. */}
-          <BalanceSector
-            escaneos={viendo.escaneos}
-            items={items}
-            marca={marca}
-            recorridoId={viendo.recorrido.id}
-            cobertura={viendo.recorrido.cobertura}
-            onTraerStock={onTraerStock}
-            trayendo={trayendo}
-            onGuardada={(c) => {
-              setViendo({ ...viendo, recorrido: { ...viendo.recorrido, cobertura: c } })
-              // La lista de atrás muestra cuáles ya tienen balance: sin esto, volver mostraría el
-              // recorrido que se acaba de balancear como si siguiera pendiente.
-              cargarPrevios()
-            }}
-          />
+          {/* 🔑 Un recorrido «+ mapa» se mira con su relevamiento, ⛔ con el balance: serían dos
+              respuestas a «¿qué falta?», y eso ya se sacó una vez (26-sep-2026). */}
+          {viendo.recorrido.modo === 'mapa' ? (
+            <RelevamientoPanel escaneos={viendo.escaneos} items={items} marca={marca} guardado={mapaGuardado} onGuardado={setMapaGuardado} onTraerStock={onTraerStock} trayendo={trayendo} />
+          ) : (
+            <BalanceSector
+              escaneos={viendo.escaneos}
+              items={items}
+              marca={marca}
+              recorridoId={viendo.recorrido.id}
+              cobertura={viendo.recorrido.cobertura}
+              onTraerStock={onTraerStock}
+              trayendo={trayendo}
+              onGuardada={(c) => {
+                setViendo({ ...viendo, recorrido: { ...viendo.recorrido, cobertura: c } })
+                // La lista de atrás muestra cuáles ya tienen balance: sin esto, volver mostraría el
+                // recorrido que se acaba de balancear como si siguiera pendiente.
+                cargarPrevios()
+              }}
+            />
+          )}
 
           {/* ⛔ «Para colgar» y «El conteo» se sacaron de acá el 26-sep-2026: daban otras dos
               respuestas a «¿qué falta?». */}
@@ -797,6 +861,21 @@ function PrecioEtiqueta({ it }: { it: Pick<ExhibItem, 'precio' | 'promo'> }) {
         </span>
       )}
     </span>
+  )
+}
+
+/** Dónde se está escaneando, grande, con el cambio de altura a un toque («Pasar a abajo»). */
+function LugarActual({ lugar, onCambiar }: { lugar: string; onCambiar: (l: string) => void }) {
+  const otra = otraAltura(lugar)
+  return (
+    <div style={{ display: 'flex', gap: space[3], alignItems: 'center', flexWrap: 'wrap', marginBottom: space[3] }}>
+      <span style={{ fontSize: font.lg, fontWeight: weight.bold, color: color.ink }}>📍 {lugar.trim()}</span>
+      {otra && (
+        <Button variant="outline" onClick={() => onCambiar(otra.lugar)}>
+          {otra.label}
+        </Button>
+      )}
+    </div>
   )
 }
 
