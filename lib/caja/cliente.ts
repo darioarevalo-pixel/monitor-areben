@@ -16,7 +16,8 @@ export type Medios = {
   credito: { normal: number; promo: number; seisCuotas: number; minSeisCuotas: number }
 }
 /** `medios` ⛔ está hasta que se corre `sql/migrate-caja-medios.sql`. */
-export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean }
+/** `billetes`: los de la calculadora (fase B); sin la lista, `BILLETES_INICIALES` de `conteo.core.js`. */
+export type Reglas = { redondeo: number; cuentas: Record<number, ReglaCuenta>; medios?: Medios; transferenciaA?: number; feria?: boolean; billetes?: number[] }
 /** Un descuento a mano, a una prenda o a toda la venta. */
 export type Rebaja = { tipo: 'pct' | 'pesos'; valor: number }
 export type Config = { reglas: Reglas; politica_cambio: string | null }
@@ -102,24 +103,35 @@ export type ResumenTurno = {
   esperando: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
   sinGN: { id: string; estado: EstadoVenta; total: number; creada_en: string }[]
 }
+/** Fase B: cuántos billetes de cada valor (`{ "20000": 3 }`). El total lo rearma el servidor. */
+export type Conteo = Record<string, number>
+export type ConteoGuardado = { billetes: Conteo; total: number; en: string; por: string | null; esperado?: number; diferencia?: number }
+export type Conteos = { apertura?: ConteoGuardado; intermedios?: ConteoGuardado[]; cierre?: ConteoGuardado }
 export type SalidaTurno = { id: string; monto: number; motivo: string; usuario: string | null; creado_en: string }
 export type Turno = {
   id: string
   abierto_en: string
   abierto_por: string | null
+  /** Quién abrió, con un dato que ⛔ cambia (el mail del padrón): la fase C lo usa para el POS. */
+  abierto_por_usuario?: string | null
   fondo: number
   cerrado_en: string | null
   cerrado_por: string | null
   contado: number | null
   esperado: number | null
   nota: string | null
+  conteos?: Conteos | null
   resumen?: ResumenTurno & { diferencia?: number }
   salidas?: SalidaTurno[]
 }
 export const leerTurno = () => get<{ turno: Turno | null; ultimos: Turno[] }>('action=turno', 'No se pudo leer el turno.')
-export const abrirTurno = (fondo: number) => post<{ turno: Turno }>({ action: 'abrir-turno', fondo }, 'No se pudo abrir el turno.')
+export const abrirTurno = (fondo: number, conteo?: Conteo | null) =>
+  post<{ turno: Turno }>({ action: 'abrir-turno', fondo, ...(conteo ? { conteo } : {}) }, 'No se pudo abrir el turno.')
 export const sacarEfectivo = (monto: number, motivo: string) => post<{ turno: Turno }>({ action: 'salida', monto, motivo }, 'No se pudo registrar la salida.')
-export const cerrarTurno = (id: string, contado: number, nota: string) => post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota }, 'No se pudo cerrar el turno.')
+export const cerrarTurno = (id: string, contado: number, nota: string, conteo?: Conteo | null) =>
+  post<{ turno: Turno }>({ action: 'cerrar-turno', id, contado, nota, ...(conteo ? { conteo } : {}) }, 'No se pudo cerrar el turno.')
+/** El conteo intermedio: ⛔ cierra nada, queda en el turno con lo que tenía que haber. */
+export const contarBilletes = (id: string, conteo: Conteo) => post<{ turno: Turno }>({ action: 'contar', id, conteo }, 'No se pudo guardar el conteo.')
 
 /** Un pedido de Tienda Nube por empaquetar (v2, W1). `sinPagar`: «a convenir», paga al retirar. `horas` desde que se pagó (o se hizo). */
 export type PedidoWeb = {
@@ -165,5 +177,5 @@ export const reintentarVenta = (id: string) => post<Resultado>({ action: 'reinte
 export const guardarPolitica = (texto: string) => post<{ politica_cambio: string | null }>({ action: 'politica', texto }, 'No se pudo guardar la política de cambio.')
 
 /** Sólo admin: a qué cuenta van las transferencias y el modo feria (bajadas de línea). */
-export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean }) =>
+export const guardarBajadas = (b: { transferenciaA?: number; feria?: boolean; billetes?: number[] }) =>
   post<{ reglas: Reglas }>({ action: 'bajadas', ...b }, 'No se pudo guardar.')

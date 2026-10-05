@@ -17,12 +17,15 @@
 //   POST ?recurso=caja  { action: 'reintentar', id }
 //   POST ?recurso=caja  { action: 'cruzar', id, pago? }    → ¿llegó la transferencia? (F5) — `pago` lo elige la cajera
 //   POST ?recurso=caja  { action: 'cancelar', id }         → una venta que esperaba la transferencia y ⛔ llegó
-//   POST ?recurso=caja  { action: 'abrir-turno', fondo }   → abre el turno (uno solo abierto por marca)
+//   POST ?recurso=caja  { action: 'abrir-turno', fondo, conteo? }   → abre el turno (uno solo abierto por marca)
 //   POST ?recurso=caja  { action: 'salida', monto, motivo } → saca efectivo del turno abierto
-//   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota? } → cierra con el efectivo contado
+//   POST ?recurso=caja  { action: 'contar', id, conteo }   → conteo intermedio de billetes: ⛔ cierra ni mueve plata
+//   POST ?recurso=caja  { action: 'cerrar-turno', id, contado, nota?, conteo? } → cierra con el efectivo contado
+//        `conteo` (fase B, 5-oct): `{ [billete]: cantidad }` de la calculadora; el servidor rearma el
+//        total con `lib/caja/conteo.core.js` y, si ⛔ es el fondo o el contado, 400.
 //   POST ?recurso=caja  { action: 'politica', texto }      → sólo admin: la política de cambio del ticket
-//   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria? } → sólo admin: a qué cuenta van las
-//        transferencias y el modo feria (bajadas de línea: ⛔ las decide la cajera)
+//   POST ?recurso=caja  { action: 'bajadas', transferenciaA?, feria?, billetes? } → sólo admin: a qué cuenta van las
+//        transferencias, el modo feria (bajadas de línea: ⛔ las decide la cajera) y los billetes de la calculadora
 //
 // ⛔ Archivo `_`: NO es una ruta, entra por `api/datos.js` con `?recurso=caja` (12 funciones de Hobby).
 //
@@ -64,6 +67,7 @@ import { COLUMNAS_VENTA as COLUMNAS, enviarVenta } from '../lib/caja/enviar.core
 import { claveDe } from '../lib/ubicaciones-local/core.core.js'
 import { indicePorSku, ordenesSinLeer, pedidosSinArmar } from '../lib/caja/pedidos-web.core.js'
 import { cobrosDeGN, diferencia, resumenTurno } from '../lib/caja/cierre.core.js'
+import { billetesDe, limpiarConteo, normalizarBilletes, totalDeConteo } from '../lib/caja/conteo.core.js'
 
 const STORE = 'zattia'
 const LOCAL = 11780
@@ -203,6 +207,24 @@ export default async function handler(req, res) {
     }
   }
 
+  /**
+   * El conteo de billetes que mandó la pantalla, con el total RECALCULADO acá. `null` si ⛔ vino;
+   * `{ error }` si una cantidad está mal o, con `monto`, si el total ⛔ es ese monto (el fondo o el contado).
+   */
+  async function conteoContra(conteo, monto, que) {
+    if (conteo == null) return null
+    const billetes = billetesDe((await leerConfig()).reglas)
+    let limpio, total
+    try {
+      limpio = limpiarConteo(conteo, billetes)
+      total = totalDeConteo(limpio, billetes)
+    } catch (e) {
+      return { error: e.message }
+    }
+    if (monto != null && total !== monto) return { error: `Los billetes suman ${pesos(total)} y ${que} dice ${pesos(monto)}.` }
+    return { billetes: limpio, total, en: new Date().toISOString(), por: perfil.name || null }
+  }
+
   /** El turno con lo que cobró, por cuenta, y sus salidas. Los nombres de las cuentas, los de GN si contesta. */
   async function conResumen(turno, fresco = false) {
     const [ventas, salidas, { reglas }] = await Promise.all([
@@ -336,14 +358,26 @@ export default async function handler(req, res) {
           nuevas.transferenciaA = t
         }
         if (b.feria != null) nuevas.feria = b.feria === true
+        if (b.billetes != null) {
+          try {
+            nuevas.billetes = normalizarBilletes(b.billetes)
+          } catch (e) {
+            return res.status(400).json({ error: e.message })
+          }
+        }
         const { error } = await sb.from('caja_config').update({ reglas: nuevas, actualizado_por: perfil.name || null, actualizado_en: new Date().toISOString() }).eq('store', store)
         if (error) throw new Error(error.message)
         return res.status(200).json({ reglas: nuevas })
       }
       if (accion === 'abrir-turno') {
         const fondo = Number(b.fondo)
-        if (!Number.isFinite(fondo) || fondo < 0) return res.status(400).json({ error: 'El fondo tiene que ser un monto (0 o más).' })
-        const ins = await sb.from('caja_turno').insert({ store, fondo, abierto_por: perfil.name || null }).select(COLS_TURNO).single()
+        if (b.fondo === '' || b.fondo == null || !Number.isFinite(fondo) || fondo < 0) return res.status(400).json({ error: 'El fondo tiene que ser un monto (0 o más).' })
+        const c = await conteoContra(b.conteo, fondo, 'el fondo')
+        if (c && c.error) return res.status(400).json({ error: c.error })
+        // `abierto_por_usuario`: el dato de la cuenta que ⛔ cambia (el mail del padrón): la fase C lo usa para el POS.
+        const fila = { store, fondo, abierto_por: perfil.name || null, abierto_por_usuario: perfil.email || perfil.name || null }
+        if (c) fila.conteos = { apertura: c }
+        const ins = await sb.from('caja_turno').insert(fila).select(COLS_TURNO).single()
         // El índice único: ya hay un turno abierto (otra pantalla lo abrió recién).
         if (ins.error && ins.error.code === '23505') return res.status(409).json({ error: 'Ya hay un turno abierto. Recargá la Caja.' })
         if (ins.error) throw new Error(ins.error.message)
@@ -360,11 +394,33 @@ export default async function handler(req, res) {
         if (ins.error) throw new Error(ins.error.message)
         return res.status(200).json({ turno: await conResumen(turno) })
       }
+      // El conteo INTERMEDIO (fase B): cuántos billetes hay ahora contra lo que tiene que haber. ⛔ Cierra
+      // nada ni mueve plata: queda en `conteos.intermedios` para que se vea desde cualquier pantalla.
+      if (accion === 'contar') {
+        const id = String(b.id || '')
+        if (!UUID.test(id)) return res.status(400).json({ error: 'id de turno inválido.' })
+        if (b.conteo == null) return res.status(400).json({ error: 'Falta el conteo de billetes.' })
+        const c = await conteoContra(b.conteo, null, '')
+        if (c.error) return res.status(400).json({ error: c.error })
+        const turno = await turnoAbierto()
+        if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        // Fresco, como el cierre: el conteo se compara con lo que tiene que haber AHORA.
+        const con = await conResumen(turno, true)
+        const esperado = con.resumen.efectivo.esperado
+        const previos = (turno.conteos && Array.isArray(turno.conteos.intermedios)) ? turno.conteos.intermedios : []
+        const conteos = { ...(turno.conteos || {}), intermedios: [...previos, { ...c, esperado, diferencia: diferencia(c.total, esperado) }].slice(-MAX_INTERMEDIOS) }
+        const up = await sb.from('caja_turno').update({ conteos }).eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
+        if (up.error) throw new Error(up.error.message)
+        if (!up.data) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
+        return res.status(200).json({ turno: { ...con, conteos } })
+      }
       if (accion === 'cerrar-turno') {
         const id = String(b.id || '')
         if (!UUID.test(id)) return res.status(400).json({ error: 'id de turno inválido.' })
         const contado = Number(b.contado)
         if (b.contado === '' || b.contado == null || !Number.isFinite(contado) || contado < 0) return res.status(400).json({ error: 'Falta el efectivo contado.' })
+        const c = await conteoContra(b.conteo, contado, 'el efectivo contado')
+        if (c && c.error) return res.status(400).json({ error: c.error })
         const turno = await turnoAbierto()
         if (!turno || turno.id !== id) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
         // Fresco: un cobro cargado en GN hace un minuto tiene que entrar en la foto del cierre.
@@ -374,8 +430,10 @@ export default async function handler(req, res) {
         const nota = String(b.nota ?? '').trim().slice(0, 500) || null
         // 🔑 La foto del cierre queda guardada: si después se toca una venta, el cierre ⛔ cambia.
         const resumen = { ...con.resumen, salidas: con.salidas, diferencia: dif }
+        const cambios = { cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, esperado, resumen, nota }
+        if (c) cambios.conteos = { ...(turno.conteos || {}), cierre: { ...c, esperado, diferencia: dif } }
         const up = await sb.from('caja_turno')
-          .update({ cerrado_en: new Date().toISOString(), cerrado_por: perfil.name || null, contado, esperado, resumen, nota })
+          .update(cambios)
           .eq('id', id).is('cerrado_en', null).select(COLS_TURNO).maybeSingle()
         if (up.error) throw new Error(up.error.message)
         if (!up.data) return res.status(409).json({ error: 'Ese turno ya está cerrado. Recargá la Caja.' })
@@ -516,7 +574,7 @@ export default async function handler(req, res) {
         if (ya.data.estado === 'cancelada') return res.status(200).json({ venta: ya.data })
         return res.status(409).json({ error: 'La transferencia ya llegó: la venta está cobrada y no se cancela desde acá.', venta: ya.data })
       }
-      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, abrir-turno, salida, cerrar-turno)' })
+      return res.status(400).json({ error: 'action inválida (confirmar, reintentar, cruzar, cancelar, politica, bajadas, abrir-turno, salida, contar, cerrar-turno)' })
     }
     return res.status(405).json({ error: 'Método no permitido' })
   } catch (e) {
@@ -525,7 +583,11 @@ export default async function handler(req, res) {
 }
 
 const COLUMNAS_ENVIO = `${COLUMNAS}, payload`
-const COLS_TURNO = 'id, abierto_en, abierto_por, fondo, cerrado_en, cerrado_por, contado, esperado, resumen, nota'
+// 🔴 `conteos` y `abierto_por_usuario` son de `sql/migrate-caja-conteos.sql`: sin correrlo, el turno ⛔ carga.
+const COLS_TURNO = 'id, abierto_en, abierto_por, abierto_por_usuario, fondo, cerrado_en, cerrado_por, contado, esperado, resumen, nota, conteos'
+/** Los conteos intermedios que guarda un turno: los últimos. Un turno normal cuenta dos o tres veces. */
+const MAX_INTERMEDIOS = 50
+const pesos = (n) => `$${Number(n).toLocaleString('es-AR')}`
 /** Los estados de una venta COBRADA que todavía ⛔ está en GN: los únicos que se mandan. */
 const SIN_LLEGAR = ['borrador', 'enviando', 'error']
 const sinPayload = ({ payload: _p, ...v }) => v

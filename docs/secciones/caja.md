@@ -105,6 +105,17 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   🔴 El filtro de `GET /ventas` es por **día de la venta** y el pedido se cobra hasta 5 días después ⇒
   se leen **10 días** para atrás. Caché de 60 s; el cierre lee fresco. GN caído ⇒ `cobrosGN: null`, el
   turno se ve sin ellos y lo dice. ⚠️ Un cobro cargado en GN **sin turno abierto** ⛔ cae en ninguno.
+- 🔑 **La calculadora de billetes (fase B, Bruno 5-oct)** (`lib/caja/conteo.core.js`,
+  `components/caja/CalculadoraBilletes.tsx`, `caja_turno.conteos`, `sql/migrate-caja-conteos.sql`):
+  cantidad × billete ⇒ total, al abrir (el fondo), en el **conteo intermedio** («Contar billetes» del
+  turno abierto, acción `contar`: ⛔ cierra ni mueve plata) y al cerrar. 🔴 **El servidor rearma el
+  total con el MISMO núcleo** y, si ⛔ es el fondo o el contado, 400: el turno ⛔ queda con un conteo
+  que dice una cosa y un monto que dice otra. El input se sigue pudiendo escribir a mano: entonces va
+  sin billetes. Los billetes son `caja_config.reglas.billetes` (los cambia un admin en «Formas de
+  pago»); sin la lista, $20.000 a $100 sin monedas. **Los números se recuerdan**: cada cambio se anota
+  en la PC (`caja:conteo:zattia:<apertura|intermedio:id|cierre:id>`) y la calculadora arranca con lo
+  más nuevo entre eso y lo guardado en la base (el último intermedio, si ⛔ la apertura).
+  `abierto_por_usuario` (`perfil.email`, si ⛔ `name`: el perfil ⛔ trae el usuario) es para la fase C.
 - ⚠️ La que espera la transferencia ⛔ suma hasta que llega; si llega después del cierre queda en ese
   turno pero ⛔ en su foto. Las cobradas que ⛔ llegaron a GN SÍ suman (la clienta pagó).
 - ⚠️ Una sola transferencia por venta (`montoAEsperar`). Otra cuenta que espere: `jsonb_set` en
@@ -117,4 +128,7 @@ GN, `enviar.core.js` el envío compartido con la cola, `ticket.ts` el papel, `cl
   del update, y ⛔ tiene test (el mock de la base es secuencial).
 - Una semana en paralelo con el POS de GN antes de apagarlo.
 - W3b: ⛔ visto con un turno abierto real en prod (el primer día hábil: mirar que el cobro web aparezca en el turno).
+- Fase B: ⛔ vista en prod (abrir con la calculadora, recargar y reabrir, un conteo intermedio).
+  ⚠️ Dos `contar` a la vez pueden pisarse los intermedios (se lee y se escribe la lista entera): un
+  turno cuenta dos o tres veces, ⛔ se cubrió. El `.is('cerrado_en', null)` del update ⛔ tiene test.
 - ⛔ Probado `--kiosk-printing` en la PC del local (imprimir sin diálogo).

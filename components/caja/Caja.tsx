@@ -41,6 +41,8 @@ import { useAgenda } from '@/store/useAgenda'
 import { palabrasDeBusqueda } from '@/lib/caja/buscar.core.js'
 import { avisoDeRenglon } from '@/lib/caja/pedidos-web.core.js'
 import { imprimirTicket, numeroProvisorio, plata, type DatosTicket } from '@/lib/caja/ticket'
+import { BILLETES_INICIALES, billetesDe } from '@/lib/caja/conteo.core.js'
+import { CalculadoraBilletes } from '@/components/caja/CalculadoraBilletes'
 import {
   buscarNombre,
   buscarProducto,
@@ -56,6 +58,8 @@ import {
   abrirTurno,
   sacarEfectivo,
   cerrarTurno,
+  contarBilletes,
+  type Conteo,
   type Turno,
   type ResumenTurno,
   reintentarVenta,
@@ -521,7 +525,7 @@ export function Caja() {
   return (
     <div style={{ display: 'grid', gap: space[4], maxWidth: 1100 }}>
       {errTurno && <Notice tone="danger">No se pudo leer el turno: {errTurno}</Notice>}
-      {turno !== undefined && <TurnoCaja turno={turno} ultimos={ultimosTurnos} onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))} onCerrado={refrescarTurno} />}
+      {turno !== undefined && <TurnoCaja turno={turno} ultimos={ultimosTurnos} billetes={billetesDe(config?.reglas)} onCambio={(t) => (t === undefined ? refrescarTurno() : setTurno(t))} onCerrado={refrescarTurno} />}
 
       {pendientes
         .filter((v) => v.estado === 'esperando_pago')
@@ -1272,13 +1276,15 @@ function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reg
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const NOMBRE_TRANSF: Record<number, string> = { 13015: 'Areben Comercial (se confirma sola con Mercado Pago)', 20595: 'Caja Gerencia (se confirma a mano)' }
-  async function guardar(b: { transferenciaA?: number; feria?: boolean }) {
+  const [billetesTxt, setBilletesTxt] = useState(() => billetesDe(reglas).join(', '))
+  async function guardar(b: { transferenciaA?: number; feria?: boolean; billetes?: number[] }) {
     setGuardando(true)
     setMsg(null)
     try {
       const r = await guardarBajadas(b)
       onGuardadas(r.reglas)
-      setMsg('Guardado: vale desde la próxima venta.')
+      if (r.reglas.billetes) setBilletesTxt(r.reglas.billetes.join(', '))
+      setMsg(b.billetes ? 'Guardado: la calculadora cuenta con estos billetes.' : 'Guardado: vale desde la próxima venta.')
     } catch (e) {
       setMsg((e as Error).message)
     } finally {
@@ -1302,6 +1308,18 @@ function Bajadas({ reglas, onGuardadas }: { reglas: Reglas; onGuardadas: (r: Reg
           <input type="checkbox" checked={reglas.feria === true} disabled={guardando} onChange={(e) => guardar({ feria: e.target.checked })} />
           <span>Modo feria: efectivo y transferencia van a las cuentas de feria, sin descuento (los precios de feria son finales)</span>
         </label>
+        <div style={{ display: 'flex', gap: space[2], alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Field label={`Billetes de la calculadora (sin la lista: ${BILLETES_INICIALES.join(', ')})`}>
+            <Input value={billetesTxt} onChange={(e) => setBilletesTxt(e.target.value)} style={{ minWidth: 320 }} />
+          </Field>
+          <Button
+            size="sm"
+            loading={guardando}
+            onClick={() => guardar({ billetes: billetesTxt.split(/[\s,;]+/).filter(Boolean).map((t) => Number(t.replace(/\./g, ''))) })}
+          >
+            Guardar billetes
+          </Button>
+        </div>
         {msg && <span style={{ fontSize: font.sm, color: color.mut }}>{msg}</span>}
       </div>
     </Plegable>
@@ -1341,8 +1359,14 @@ function CobrosGN({ r }: { r: ResumenTurno }) {
   )
 }
 
-function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | null; ultimos: Turno[]; onCambio: (t?: Turno) => void; onCerrado: () => void }) {
+function TurnoCaja({ turno, ultimos, billetes, onCambio, onCerrado }: { turno: Turno | null; ultimos: Turno[]; billetes: number[]; onCambio: (t?: Turno) => void; onCerrado: () => void }) {
   const [fondo, setFondo] = useState('')
+  // Fase B: la calculadora abierta, y el conteo que completó el fondo o el contado. Viaja sólo si el
+  // input sigue diciendo SU total: si después se escribió otro número a mano, va sin billetes.
+  const [calc, setCalc] = useState<null | 'apertura' | 'intermedio' | 'cierre'>(null)
+  const [conteoFondo, setConteoFondo] = useState<{ conteo: Conteo; total: number } | null>(null)
+  const [conteoCierre, setConteoCierre] = useState<{ conteo: Conteo; total: number } | null>(null)
+  const [errCalc, setErrCalc] = useState<string | null>(null)
   const [modo, setModo] = useState<'nada' | 'salida' | 'cerrar'>('nada')
   const [monto, setMonto] = useState('')
   const [motivo, setMotivo] = useState('')
@@ -1401,14 +1425,18 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
             <Field label="Fondo: el efectivo con que arranca la caja">
               <Input value={fondo} onChange={(e) => setFondo(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 200 }} />
             </Field>
+            <Button variant="outline" onClick={() => setCalc('apertura')}>
+              Contar billetes
+            </Button>
             <Button
               tone="success"
               loading={trabajando}
               disabled={fondoN == null || fondoN < 0}
               onClick={() =>
                 hacer(async () => {
-                  const r = await abrirTurno(fondoN as number)
+                  const r = await abrirTurno(fondoN as number, conteoFondo && conteoFondo.total === fondoN ? conteoFondo.conteo : null)
                   setFondo('')
+                  setConteoFondo(null)
                   setCerrado(null)
                   onCambio(r.turno)
                 })
@@ -1417,9 +1445,26 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
               Abrir turno
             </Button>
           </div>
+          {conteoFondo && conteoFondo.total === fondoN && (
+            <p style={{ margin: `${space[2]} 0 0`, color: color.mut, fontSize: font.sm }}>Con el conteo de billetes: queda guardado en el turno.</p>
+          )}
           <p style={{ margin: `${space[2]} 0 0`, color: color.mut, fontSize: font.sm }}>Sin un turno abierto la Caja no cobra.</p>
           {error && <Notice tone="danger">{error}</Notice>}
         </SectionCard>
+        {calc === 'apertura' && (
+          <CalculadoraBilletes
+            momento="apertura"
+            billetes={billetes}
+            titulo="Contar el fondo"
+            accion="Usar este total"
+            onCerrar={() => setCalc(null)}
+            onUsar={(total, conteo) => {
+              setFondo(String(total))
+              setConteoFondo({ conteo, total })
+              setCalc(null)
+            }}
+          />
+        )}
         {ultimosPlegable}
       </>
     )
@@ -1428,12 +1473,19 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
   const r = turno.resumen
   const contadoN = aNumero(contado)
   const montoN = aNumero(monto)
+  const intermedios = turno.conteos?.intermedios ?? []
+  const ultimoConteo = intermedios.length ? intermedios[intermedios.length - 1] : null
+  // La calculadora del turno arranca con el último conteo guardado (o el del fondo).
+  const conteoBase = ultimoConteo ?? turno.conteos?.apertura ?? null
   return (
     <>
       <SectionCard
         title={`Turno abierto desde las ${horaAr(turno.abierto_en)}`}
         actions={
           <div style={{ display: 'flex', gap: space[2] }}>
+            <Button size="sm" variant="outline" onClick={() => { setErrCalc(null); setCalc('intermedio') }}>
+              Contar billetes
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setModo(modo === 'salida' ? 'nada' : 'salida')}>
               Cargar salida
             </Button>
@@ -1482,6 +1534,17 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
               ))}
             </div>
           )}
+          {ultimoConteo && (
+            <span>
+              Último conteo {horaAr(ultimoConteo.en)}: {plata(ultimoConteo.total)}
+              {ultimoConteo.esperado != null && (
+                <>
+                  {' '}· tenía que haber {plata(ultimoConteo.esperado)} · <b>{textoDiferencia(ultimoConteo.diferencia ?? 0)}</b>
+                </>
+              )}
+              {ultimoConteo.por ? <span style={{ color: color.mut }}> ({ultimoConteo.por})</span> : null}
+            </span>
+          )}
           {r && r.esperando.length > 0 && (
             <span style={{ color: color.warning }}>
               {r.esperando.length === 1 ? 'Una venta espera' : `${r.esperando.length} ventas esperan`} la transferencia: no suma hasta que llegue.
@@ -1527,6 +1590,9 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
                 <Field label="Efectivo contado">
                   <Input value={contado} onChange={(e) => setContado(e.target.value)} inputMode="decimal" placeholder="$" style={{ maxWidth: 180 }} />
                 </Field>
+                <Button variant="outline" onClick={() => setCalc('cierre')}>
+                  Contar billetes
+                </Button>
                 <Field label="Nota (opcional)">
                   <Input value={nota} onChange={(e) => setNota(e.target.value)} style={{ minWidth: 240 }} />
                 </Field>
@@ -1546,8 +1612,9 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
                   disabled={contadoN == null || contadoN < 0}
                   onClick={() =>
                     hacer(async () => {
-                      const x = await cerrarTurno(turno.id, contadoN as number, nota.trim())
+                      const x = await cerrarTurno(turno.id, contadoN as number, nota.trim(), conteoCierre && conteoCierre.total === contadoN ? conteoCierre.conteo : null)
                       setContado('')
+                      setConteoCierre(null)
                       setNota('')
                       setModo('nada')
                       setCerrado(x.turno)
@@ -1563,6 +1630,46 @@ function TurnoCaja({ turno, ultimos, onCambio, onCerrado }: { turno: Turno | nul
           {error && <Notice tone="danger">{error}</Notice>}
         </div>
       </SectionCard>
+      {calc === 'intermedio' && (
+        <CalculadoraBilletes
+          momento={`intermedio:${turno.id}`}
+          billetes={billetes}
+          guardado={conteoBase}
+          titulo="Contar billetes"
+          accion="Guardar conteo"
+          trabajando={trabajando}
+          error={errCalc}
+          onCerrar={() => setCalc(null)}
+          onUsar={async (_total, conteo) => {
+            setTrabajando(true)
+            setErrCalc(null)
+            try {
+              const x = await contarBilletes(turno.id, conteo)
+              setCalc(null)
+              onCambio(x.turno)
+            } catch (e) {
+              setErrCalc((e as Error).message)
+            } finally {
+              setTrabajando(false)
+            }
+          }}
+        />
+      )}
+      {calc === 'cierre' && (
+        <CalculadoraBilletes
+          momento={`cierre:${turno.id}`}
+          billetes={billetes}
+          guardado={conteoBase}
+          titulo="Contar el efectivo del cierre"
+          accion="Usar este total"
+          onCerrar={() => setCalc(null)}
+          onUsar={(total, conteo) => {
+            setContado(String(total))
+            setConteoCierre({ conteo, total })
+            setCalc(null)
+          }}
+        />
+      )}
       {ultimosPlegable}
     </>
   )

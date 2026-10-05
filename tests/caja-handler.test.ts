@@ -758,7 +758,100 @@ describe('caja · turno propio (v2, W3)', () => {
 
   it('sin el permiso `caja` ⇒ 403', async () => {
     conSesion(OTRA)
+    expect((await correr(req('POST', {}, { action: 'contar', id: TURNO_ID, conteo: { 1000: 1 } }))).code).toBe(403)
     expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 1 }))).code).toBe(403)
     expect((await correr(req('GET', { action: 'turno' }))).code).toBe(403)
+  })
+})
+
+describe('caja · calculadora de billetes (fase B)', () => {
+  // El oráculo, a mano: 3 × $20.000 + 4 × $1.000 + 1 × $500 = $64.500.
+  const CONTEO = { 20000: 3, 1000: 4, 500: 1 }
+  const CON_MAIL = { ...CAJERA, email: 'cajera@zattia.test' }
+
+  it('🔑 abrir con el conteo: el servidor lo rearma, ⛔ coincide con el fondo ⇒ 400 y ⛔ se abre nada', async () => {
+    conSesion(CON_MAIL)
+    base.turnos = []
+    const mal = await correr(req('POST', {}, { action: 'abrir-turno', fondo: 64000, conteo: CONTEO }))
+    expect(mal.code).toBe(400)
+    expect(String(mal.body?.error)).toMatch(/64\.500.*64\.000/)
+    expect(base.turnos).toHaveLength(0)
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 1000, conteo: { 1000: -1 } }))).code).toBe(400)
+    expect(base.turnos).toHaveLength(0)
+
+    const r = await correr(req('POST', {}, { action: 'abrir-turno', fondo: 64500, conteo: { ...CONTEO, 50: 9 } }))
+    expect(r.code).toBe(200)
+    const t = base.turnos[0]
+    expect(t).toMatchObject({ fondo: 64500, abierto_por: 'cajera', abierto_por_usuario: 'cajera@zattia.test' })
+    // El billete de $50 ⛔ está en la lista: ⛔ se guarda ni suma.
+    expect((t.conteos as { apertura: Fila }).apertura).toMatchObject({ total: 64500, por: 'cajera', billetes: { 20000: 3, 10000: 0, 2000: 0, 1000: 4, 500: 1, 200: 0, 100: 0 } })
+  })
+
+  it('abrir sin conteo sigue andando (el input a mano); sin mail en el padrón queda el nombre', async () => {
+    conSesion(CAJERA)
+    base.turnos = []
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 51900 }))).code).toBe(200)
+    expect(base.turnos[0].conteos).toBeUndefined()
+    expect(base.turnos[0].abierto_por_usuario).toBe('cajera')
+    base.turnos = []
+    // Antes, `Number('')` = 0 abría un turno con fondo cero.
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: '' }))).code).toBe(400)
+  })
+
+  it('🔑 contar: guarda el conteo con lo que tenía que haber y la diferencia; ⛔ cierra ni mueve plata', async () => {
+    conSesion(CAJERA)
+    await correr(req('POST', {}, VENTA)) // $21.700 en efectivo ⇒ tiene que haber $71.700
+    const r = await correr(req('POST', {}, { action: 'contar', id: TURNO_ID, conteo: { 20000: 3, 10000: 1, 1000: 1, 500: 1 } }))
+    expect(r.code).toBe(200)
+    const t = base.turnos[0]
+    expect(t.cerrado_en).toBeNull()
+    expect(t.contado).toBeUndefined()
+    expect(base.movs).toHaveLength(0)
+    const [i] = (t.conteos as { intermedios: Fila[] }).intermedios
+    expect(i).toMatchObject({ total: 71500, esperado: 71700, diferencia: -200 })
+    expect(((r.body?.turno as Fila).conteos as { intermedios: Fila[] }).intermedios).toHaveLength(1)
+    // El segundo se suma, ⛔ pisa al primero.
+    await correr(req('POST', {}, { action: 'contar', id: TURNO_ID, conteo: { 20000: 3, 10000: 1, 1000: 1, 500: 1, 200: 1 } }))
+    expect((base.turnos[0].conteos as { intermedios: Fila[] }).intermedios.map((x) => x.diferencia)).toEqual([-200, 0])
+  })
+
+  it('contar: sin conteo o con una cantidad mal ⇒ 400; turno cerrado u otro id ⇒ 409', async () => {
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'contar', id: TURNO_ID }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'contar', id: TURNO_ID, conteo: { 1000: 1.5 } }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'contar', id: 'x', conteo: { 1000: 1 } }))).code).toBe(400)
+    expect((await correr(req('POST', {}, { action: 'contar', id: ID, conteo: { 1000: 1 } }))).code).toBe(409)
+    base.turnos[0].cerrado_en = '2026-10-04T20:00:00.000Z'
+    expect((await correr(req('POST', {}, { action: 'contar', id: TURNO_ID, conteo: { 1000: 1 } }))).code).toBe(409)
+    expect(base.turnos[0].conteos).toBeUndefined()
+  })
+
+  it('🔑 cerrar con el conteo: ⛔ coincide con el contado ⇒ 400 y el turno sigue abierto; si coincide, queda junto a los intermedios', async () => {
+    conSesion(CAJERA)
+    base.turnos[0].conteos = { apertura: { total: 50000 }, intermedios: [{ total: 1 }] }
+    const mal = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 50000, conteo: CONTEO }))
+    expect(mal.code).toBe(400)
+    expect(base.turnos[0].cerrado_en).toBeNull()
+    const r = await correr(req('POST', {}, { action: 'cerrar-turno', id: TURNO_ID, contado: 64500, conteo: CONTEO }))
+    expect(r.code).toBe(200)
+    expect(base.turnos[0]).toMatchObject({ contado: 64500, esperado: 50000 })
+    const conteos = base.turnos[0].conteos as Record<string, Fila>
+    expect(conteos.cierre).toMatchObject({ total: 64500, esperado: 50000, diferencia: 14500 })
+    expect(conteos.apertura).toEqual({ total: 50000 })
+    expect(conteos.intermedios).toEqual([{ total: 1 }])
+  })
+
+  it('bajadas: un admin cambia los billetes (ordenados); uno de $0 ⇒ 400; el conteo usa la lista nueva', async () => {
+    conSesion({ ...CAJERA, admin: true })
+    base.config = { store: 'zattia', reglas: { cuentas: {}, medios: { transferencia: { opciones: [13015] } } } }
+    expect((await correr(req('POST', {}, { action: 'bajadas', billetes: [0, 100] }))).code).toBe(400)
+    const r = await correr(req('POST', {}, { action: 'bajadas', billetes: [1000, 20000] }))
+    expect(r.code).toBe(200)
+    expect((base.config.reglas as Fila).billetes).toEqual([20000, 1000])
+    base.turnos = []
+    // $500 ya ⛔ es billete: 3 × 20.000 + 4 × 1.000 = $64.000.
+    expect((await correr(req('POST', {}, { action: 'abrir-turno', fondo: 64000, conteo: CONTEO }))).code).toBe(200)
+    conSesion(CAJERA)
+    expect((await correr(req('POST', {}, { action: 'bajadas', billetes: [1000] }))).code).toBe(403)
   })
 })
